@@ -585,6 +585,37 @@
                 </div>
             </div>
         </div>
+
+        <div class="col-12 col-lg-6 d-flex" data-cp-group="reporting">
+            <div class="cp-reveal">
+                <div class="cp-card" data-cp-card="pendingspreadsheet">
+                    <div class="cp-card__icon"><i class="ti ti-file-spreadsheet"></i></div>
+                    <h3 class="cp-card__title" data-lang="cp-r-pcx-title">Pending Confirmations Spreadsheet Metrics</h3>
+                    <p class="cp-card__desc" data-lang="cp-r-pcx-desc">
+                        Saves the "PENDING - Outstanding Confirmation OTC.xlsx" spreadsheet to the
+                        Movimento share, overwriting the previous file — the Pending rows of the
+                        Pending Confirmation page, in the historical spreadsheet layout, with date
+                        columns as real dates (dd/mm/yyyy). Runs automatically every ANBIMA business
+                        day at 10:45 Brasília (7:15 PM IST); Run saves it now.
+                    </p>
+                    <!-- Desfecho do último disparo automático + próximo horário.
+                         Sem isto a única evidência de que a rotina rodou é uma
+                         linha de log no servidor. -->
+                    <div id="cp-pcx-status" class="cp-card__meta d-none"
+                         style="display:block;margin-top:.35rem;line-height:1.5;"></div>
+                    <div class="cp-card__foot">
+                        <span class="cp-card__meta">
+                            <i class="ti ti-calendar-time"></i><span data-lang="cp-pcx-meta">Daily 10:45 BRT → .xlsx on share</span>
+                        </span>
+                        <button type="button" class="cp-run-btn"
+                                data-endpoint="/api/control-panel/pending-spreadsheet/run">
+                            <i class="ti ti-player-play"></i>
+                            <span data-lang="cp-run">Run</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Off-screen stage: the Settlement Forecast Chart.js canvases are rendered
@@ -1106,6 +1137,56 @@ document.addEventListener('click', function (e) {
     });
 })();
 
+// ── Pending Confirmations Spreadsheet Metrics: status do disparo automático ──
+// O resultado gravado pelo servidor é estruturado ('saved:N' / 'error:...') e a
+// frase é montada aqui, no idioma da aplicação.
+(function () {
+    var stEl = document.getElementById('cp-pcx-status');
+    if (!stEl) return;
+    function esc(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (ch) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]; });
+    }
+    function loadStatus() {
+        fetch('/api/control-panel/pending-spreadsheet/status', { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (!d || !d.success) return;
+                var bits = [];
+                var last = d.last || {};
+                if (last.result) {
+                    var m = /^saved:(\d+)$/.exec(last.result);
+                    if (m) {
+                        bits.push('<span class="text-success"><i class="ti ti-file-check me-1"></i>' +
+                                  esc(last.at || last.slot || '') + ' · ' + m[1] + ' ' +
+                                  esc(t('cp-pcx-rows-saved', 'row(s) saved')) + '</span>');
+                    } else {
+                        bits.push('<span class="text-danger"><i class="ti ti-alert-triangle me-1"></i>' +
+                                  esc(last.at || last.slot || '') + ' · ' +
+                                  esc(last.result.replace(/^error:/, '')) + '</span>');
+                    }
+                } else {
+                    bits.push('<span class="text-muted">' +
+                              esc(t('cp-pcx-never', 'no run recorded yet')) + '</span>');
+                }
+                if (d.next) {
+                    bits.push('<span class="text-muted"><i class="ti ti-clock me-1"></i>' +
+                              esc(t('cp-dm2-next', 'next')) + ' ' + esc(d.next) + ' · ' +
+                              esc(t('cp-dm2-nowbr', 'now in Brazil')) + ' ' + esc(d.now_br || '') + '</span>');
+                }
+                stEl.innerHTML = bits.join('<br>');
+                stEl.classList.remove('d-none');
+            })
+            .catch(function () {});
+    }
+    loadStatus();
+    // O Run genérico (data-endpoint) não sabe deste status: recarrega ao voltar
+    // o clique, com uma folga para o servidor terminar de gravar.
+    var card = stEl.closest('.cp-card');
+    var btn = card ? card.querySelector('.cp-run-btn') : null;
+    if (btn) btn.addEventListener('click', function () { setTimeout(loadStatus, 4000); });
+})();
+
 // ── Pending Signature Confirmations — Collection (download .eml/.zip drafts) ──
 (function () {
     var btn = document.querySelector('[data-sigcoll-generate]');
@@ -1196,7 +1277,7 @@ document.addEventListener('click', function (e) {
                 if (u.indexOf('/control-panel#') === 0) allow[u.slice('/control-panel#'.length)] = 1;
             });
             // Hide the grid cell (column) of each card the user can't reach.
-            var CP_GROUP = { cetip: 'filesaving', daily: 'filesaving', forecast: 'reporting', contacts: 'reporting', dailymetric: 'reporting', weeklyescalation: 'reporting', signaturecollection: 'reporting', dealsmonitor: 'reporting' };
+            var CP_GROUP = { cetip: 'filesaving', daily: 'filesaving', forecast: 'reporting', contacts: 'reporting', dailymetric: 'reporting', weeklyescalation: 'reporting', signaturecollection: 'reporting', dealsmonitor: 'reporting', pendingspreadsheet: 'reporting' };
             document.querySelectorAll('[data-cp-card]').forEach(function (card) {
                 if (!allow[card.getAttribute('data-cp-card')]) {
                     var col = card.closest('.col-12') || card.closest('.cp-reveal') || card;

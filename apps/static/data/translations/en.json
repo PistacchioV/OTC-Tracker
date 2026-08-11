@@ -1719,5 +1719,10 @@
   "fi-cols-hint": "One column per line, exactly as the page's table header shows it. These are the options of the Source dropdown for this page.",
   "fi-discard-title": "Discard source edits?",
   "fi-discard-yes": "Yes, discard",
-  "fi-del-yes": "Yes, delete"
+  "fi-del-yes": "Yes, delete",
+  "cp-r-pcx-title": "Pending Confirmations Spreadsheet Metrics",
+  "cp-r-pcx-desc": "Saves the \"PENDING - Outstanding Confirmation OTC.xlsx\" spreadsheet to the Movimento share, overwriting the previous file — the Pending rows of the Pending Confirmation page, in the historical spreadsheet layout, with date columns as real dates (dd/mm/yyyy). Runs automatically every ANBIMA business day at 10:45 Brasília (7:15 PM IST); Run saves it now.",
+  "cp-pcx-meta": "Daily 10:45 BRT → .xlsx on share",
+  "cp-pcx-rows-saved": "row(s) saved",
+  "cp-pcx-never": "no run recorded yet"
 }

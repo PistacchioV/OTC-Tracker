@@ -314,6 +314,7 @@ _CONTROL_PANEL_CARDS = [
     {'id': 'weeklyescalation', 'label': 'Pending Confirmation — Weekly Escalation (CEM/EDG)'},
     {'id': 'signaturecollection', 'label': 'Pending Signature Confirmations — Collection'},
     {'id': 'dealsmonitor', 'label': 'Deals Monitor — Pending Action'},
+    {'id': 'pendingspreadsheet', 'label': 'Pending Confirmations Spreadsheet Metrics'},
 ]
 _CP_CARD_TOKENS = {'/control-panel#' + c['id'] for c in _CONTROL_PANEL_CARDS}
 # API endpoint → the card it belongs to (for server-side enforcement).
@@ -333,6 +334,8 @@ _CP_ENDPOINT_CARD = {
     '/api/control-panel/signature-collection/generate': 'signaturecollection',
     '/api/control-panel/deals-monitor/recipients': 'dealsmonitor',
     '/api/control-panel/deals-monitor/run': 'dealsmonitor',
+    '/api/control-panel/pending-spreadsheet/run': 'pendingspreadsheet',
+    '/api/control-panel/pending-spreadsheet/status': 'pendingspreadsheet',
 }
 
 
@@ -27991,6 +27994,319 @@ try:
     _ndm_pending_start_scheduler()
 except Exception:
     log.warning('[deals-monitor] could not start the pending scheduler')
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Control Panel — Pending Confirmations Spreadsheet Metrics
+# Grava a planilha "PENDING - Outstanding Confirmation OTC.xlsx" no share de
+# Movimento (sobrescrevendo a anterior), todo dia útil ANBIMA às 10:45 de
+# Brasília — o horário pedido foi 7:15 PM IST (Índia, UTC+5:30), que é 13:45
+# UTC = 10:45 em São Paulo. As linhas são as do chip Status = Pending da
+# página (situação recomputada na leitura, não o DB em que a linha mora), e as
+# colunas seguem o layout histórico da planilha — inclusive as que a página
+# NÃO tem (procuração, Vias, Devolvido Por, Controle Envio Draft), que saem
+# em branco de propósito: o cabeçalho preservado é o que deixa quem consome a
+# planilha continuar achando as colunas no lugar.
+# ──────────────────────────────────────────────────────────────────────────
+_PCX_DIR = os.getenv('PCX_SPREADSHEET_DIR',
+                     r'I:\Confirmation\Derivativos\Movimento\Pending Confirmation')
+_PCX_FILENAME = 'PENDING - Outstanding Confirmation OTC.xlsx'
+_PCX_TIME = os.getenv('PCX_SPREADSHEET_TIME', '10:45')      # BRT (= 19:15 IST)
+_PCX_CLAIM_FILE = os.path.join(_DAILY_METRIC_DIR, 'pcx_spreadsheet_sent.json')
+_PCX_STATUS_FILE = os.path.join(_DAILY_METRIC_DIR, 'pcx_spreadsheet_status.json')
+
+# (cabeçalho da planilha, coluna da página, é data?). Coluna None = a página
+# não tem o dado; a coluna sai vazia. "Document type" ← Signature Type é o
+# de-para mais próximo (o tipo de assinatura é o que define o documento);
+# "Overall Comments" ← Comments e "JP sending documentation" / "Client return
+# the document" ← Send Date / Return Date são os nomes da planilha para as
+# mesmas colunas da página.
+_PCX_COLUMNS = [
+    ('LOB',                                  'LOB',            False),
+    ('Client',                               'Client',         False),
+    ('Aging',                                'Aging',          False),
+    ('Status',                               'Status',         False),
+    ('Product Type',                         'Product Type',   False),
+    ('Trade Date',                           'Trade Date',     True),
+    ('Maturity Date',                        'Maturity Date',  True),
+    ('Trade Number',                         'Trade Number',   False),
+    ('Pending Status',                       'Pending Status', False),
+    ('Owner',                                'Owner',          False),
+    ('EA',                                   'EA',             False),
+    ('JP sending documentation',             'Send Date',      True),
+    ('Client return the document',           'Return Date',    True),
+    ('JP verify power of attorney SENT',     None,             True),
+    ('JP verify power of attorney received', None,             True),
+    ('Vias',                                 None,             False),
+    ('Devolvido Por',                        None,             False),
+    ('Controle Envio Draft',                 None,             True),
+    ('Break Reason',                         'Break Reason',   False),
+    ('Document type',                        'Signature Type', False),
+    ('Overall Comments',                     'Comments',       False),
+    ('Economic Group',                       'Economic Group', False),
+]
+
+
+def _pcx_rows():
+    """As linhas cuja situação ATUAL é Pending — a mesma resposta do chip
+    Status = Pending da página: os três DBs são lidos e a categoria vem
+    recomputada (`_pc_target_category`), porque uma linha que virou Ok pode
+    ainda morar fisicamente no DB de pending até o re-route diário."""
+    seen, rows = set(), []
+    for cat in ('backlog', 'pending', 'ok'):
+        for r in _pc_load_rows(cat):
+            if _pc_target_category(r) != 'pending':
+                continue
+            tn = str(r.get('Trade Number', '') or '')
+            key = tn or ('#%d' % len(rows))
+            if key in seen:
+                continue
+            seen.add(key)
+            rows.append(r)
+    return rows
+
+
+def _pcx_build_xlsx(rows):
+    """Workbook openpyxl com o layout da planilha (sem cabeçalho merged).
+
+    As colunas de data saem como DATA de verdade com number_format dd/mm/yyyy
+    (Short Date) — escrever o texto deixaria a célula General e o Excel do
+    consumidor sem ordenar/filtrar por data. Valor que não parseia (texto
+    livre numa coluna de data) sai como veio: sumir com ele seria pior."""
+    import openpyxl
+    from openpyxl.styles import Font
+    from openpyxl.utils import get_column_letter
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = 'PENDING'
+    bold = Font(bold=True)
+    for j, (header, _src, _is_date) in enumerate(_PCX_COLUMNS, start=1):
+        c = ws.cell(row=1, column=j, value=header)
+        c.font = bold
+    for i, r in enumerate(rows, start=2):
+        for j, (_header, src, is_date) in enumerate(_PCX_COLUMNS, start=1):
+            raw = str(r.get(src, '') or '').strip() if src else ''
+            if not raw:
+                continue
+            cell = ws.cell(row=i, column=j)
+            if is_date:
+                dt = _parse_date_any(raw)
+                if dt is not None:
+                    cell.value = datetime(dt.year, dt.month, dt.day)
+                    cell.number_format = 'DD/MM/YYYY'
+                else:
+                    cell.value = raw
+            elif raw.lstrip('-').isdigit():
+                cell.value = int(raw)                      # Aging ordena como número
+            else:
+                cell.value = raw
+    for j, (header, _src, _is_date) in enumerate(_PCX_COLUMNS, start=1):
+        ws.column_dimensions[get_column_letter(j)].width = max(12, min(len(header) + 4, 34))
+    ws.freeze_panes = 'A2'
+    return wb
+
+
+def _pcx_save_spreadsheet():
+    """Gera e grava (sobrescrevendo) a planilha no share. → (n linhas, caminho).
+
+    A escrita é em arquivo temporário + `os.replace`: quem abrir a planilha no
+    meio da gravação vê a versão anterior inteira, nunca um xlsx pela metade."""
+    rows = _pcx_rows()
+    wb = _pcx_build_xlsx(rows)
+    os.makedirs(_PCX_DIR, exist_ok=True)
+    fp = os.path.join(_PCX_DIR, _PCX_FILENAME)
+    tmp = fp + '.tmp'
+    wb.save(tmp)
+    os.replace(tmp, fp)
+    return len(rows), fp
+
+
+def _pcx_time():
+    """(hh, mm) do disparo em BRT. Entrada inválida cai no padrão — um typo na
+    variável de ambiente não pode matar a rotina."""
+    try:
+        hh, mm = (int(x) for x in str(_PCX_TIME).split(':')[:2])
+        if 0 <= hh <= 23 and 0 <= mm <= 59:
+            return hh, mm
+    except (ValueError, TypeError):
+        pass
+    return 10, 45
+
+
+def _pcx_is_bizday(d):
+    _load_anbima()
+    return d.weekday() < 5 and d.strftime('%Y-%m-%d') not in _ANBIMA_HOLIDAYS
+
+
+def _pcx_claim_slot(slot):
+    """Reserva o disparo do dia EM DISCO (mesma razão do Deals Monitor: com
+    mais de um processo, a trava em memória não impede gravação dupla — aqui o
+    arquivo é idempotente, mas o claim é o que faz o catch-up saber o que já
+    rodou)."""
+    with _cache_lock:
+        try:
+            with open(_PCX_CLAIM_FILE, encoding='utf-8') as fh:
+                sent = json.load(fh)
+            if not isinstance(sent, list):
+                sent = []
+        except (IOError, OSError, json.JSONDecodeError):
+            sent = []
+        if slot in sent:
+            return False
+        sent.append(slot)
+        try:
+            os.makedirs(_DAILY_METRIC_DIR, exist_ok=True)
+            _atomic_write_json(_PCX_CLAIM_FILE, sorted(sent)[-16:])
+        except Exception:                                   # noqa: BLE001
+            log.warning('[pending-spreadsheet] não consegui gravar o claim:\n%s',
+                        traceback.format_exc())
+        return True
+
+
+def _pcx_release_slot(slot):
+    """Devolve o slot quando a gravação falhou (share fora, arquivo aberto com
+    lock no Excel): o catch-up da próxima volta tenta de novo. Sem isto uma
+    falha transitória custava a planilha do dia inteiro."""
+    with _cache_lock:
+        try:
+            with open(_PCX_CLAIM_FILE, encoding='utf-8') as fh:
+                sent = json.load(fh)
+            if not isinstance(sent, list):
+                return
+        except (IOError, OSError, json.JSONDecodeError):
+            return
+        if slot not in sent:
+            return
+        try:
+            _atomic_write_json(_PCX_CLAIM_FILE, [s for s in sent if s != slot])
+        except Exception:                                   # noqa: BLE001
+            log.warning('[pending-spreadsheet] não consegui devolver o slot %s:\n%s',
+                        slot, traceback.format_exc())
+
+
+def _pcx_status_write(slot, result, when):
+    try:
+        os.makedirs(_DAILY_METRIC_DIR, exist_ok=True)
+        _atomic_write_json(_PCX_STATUS_FILE, {
+            'slot': slot, 'result': result,
+            'at': when.strftime('%d/%m/%Y %H:%M:%S'),
+        })
+    except Exception:                                       # noqa: BLE001
+        log.warning('[pending-spreadsheet] não consegui gravar o status:\n%s',
+                    traceback.format_exc())
+
+
+def _pcx_disparar(slot, fired):
+    """Grava a planilha do slot, se ninguém já gravou e o dia é útil ANBIMA."""
+    if not _pcx_is_bizday(fired):
+        return False
+    if not _pcx_claim_slot(slot):
+        return False
+    try:
+        n, fp = _pcx_save_spreadsheet()
+        log.info('[pending-spreadsheet] %s: %d linha(s) → %s', slot, n, fp)
+        _pcx_status_write(slot, 'saved:{}'.format(n), fired)
+    except Exception as e:                                  # noqa: BLE001
+        log.error('[pending-spreadsheet] gravação de %s falhou:\n%s',
+                  slot, traceback.format_exc())
+        _pcx_status_write(slot, 'error:{}: {}'.format(type(e).__name__, e), fired)
+        _pcx_release_slot(slot)
+    return True
+
+
+def _pcx_scheduler_loop():
+    hh, mm = _pcx_time()
+    while True:
+        try:
+            # Catch-up a cada volta (mesma mecânica do Deals Monitor): recupera
+            # o disparo do dia quando o processo subiu depois do horário — a
+            # instância reinicia várias vezes por dia — e RETENTA o slot que
+            # falhou e foi devolvido.
+            now = _br_now()
+            cand = now.replace(hour=hh, minute=mm, second=0, microsecond=0)
+            if cand <= now:
+                slot = '{} {:02d}:{:02d}'.format(now.strftime('%Y-%m-%d'), hh, mm)
+                if _pcx_disparar(slot, now):
+                    log.info('[pending-spreadsheet] disparo de %s recuperado no start', slot)
+                nxt = cand + timedelta(days=1)
+            else:
+                nxt = cand
+            now = _br_now()
+            time.sleep(max(1.0, min((nxt - now).total_seconds(), 3600)))
+        except Exception:
+            log.error('[pending-spreadsheet] scheduler error:\n%s', traceback.format_exc())
+            time.sleep(60)
+
+
+_pcx_scheduler_started = False
+_pcx_scheduler_lock = threading.Lock()
+
+
+def _pcx_start_scheduler():
+    global _pcx_scheduler_started
+    with _pcx_scheduler_lock:
+        if _pcx_scheduler_started:
+            return
+        _pcx_scheduler_started = True
+    threading.Thread(target=_pcx_scheduler_loop,
+                     name='pending-spreadsheet-scheduler', daemon=True).start()
+    log.info('[pending-spreadsheet] scheduler iniciado (%02d:%02d BRT = 19:15 IST · '
+             'dias úteis ANBIMA)', *_pcx_time())
+
+
+try:
+    _pcx_start_scheduler()
+except Exception:
+    log.warning('[pending-spreadsheet] could not start the scheduler')
+
+
+@blueprint.route('/api/control-panel/pending-spreadsheet/run', methods=['POST'])
+def api_cp_pcx_run():
+    """Gera e grava a planilha AGORA (botão Run do card). Roda mesmo em feriado
+    — quem clicou decidiu — e não consome o claim do disparo automático: o
+    arquivo é sobrescrito de qualquer jeito, gravar duas vezes não machuca."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    try:
+        n, fp = _pcx_save_spreadsheet()
+    except Exception as e:                                  # noqa: BLE001
+        log.error('[pending-spreadsheet] run manual falhou:\n%s', traceback.format_exc())
+        return jsonify({'success': False,
+                        'error': 'Could not save the spreadsheet: {}: {}. Check that the '
+                                 'share is reachable and the file is not open in Excel.'
+                                 .format(type(e).__name__, e)}), 500
+    _pcx_status_write('manual', 'saved:{}'.format(n), _br_now())
+    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                         'Pending Spreadsheet Saved', 'Control Panel',
+                         '{} row(s) → {}'.format(n, _PCX_FILENAME))
+    return jsonify({'success': True, 'rows': n, 'path': fp,
+                    'message': '{} row(s) saved to<br><code>{}</code>'.format(n, fp)})
+
+
+@blueprint.route('/api/control-panel/pending-spreadsheet/status')
+def api_cp_pcx_status():
+    """Desfecho do último disparo + próximo horário, para o card responder
+    "a planilha de hoje saiu?" sem ninguém abrir o log do servidor."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    last = {}
+    try:
+        with open(_PCX_STATUS_FILE, encoding='utf-8') as fh:
+            last = json.load(fh)
+        if not isinstance(last, dict):
+            last = {}
+    except (IOError, OSError, json.JSONDecodeError):
+        last = {}
+    hh, mm = _pcx_time()
+    now = _br_now()
+    nxt = now.replace(hour=hh, minute=mm, second=0, microsecond=0)
+    while nxt <= now or not _pcx_is_bizday(nxt):
+        nxt += timedelta(days=1)
+        nxt = nxt.replace(hour=hh, minute=mm, second=0, microsecond=0)
+    return jsonify({'success': True, 'last': last,
+                    'next': nxt.strftime('%d/%m/%Y %H:%M'),
+                    'now_br': now.strftime('%d/%m/%Y %H:%M'),
+                    'path': os.path.join(_PCX_DIR, _PCX_FILENAME)})
 
 
 def _find_generic_nd_deal(cfg, deal_name, client_name=None):
