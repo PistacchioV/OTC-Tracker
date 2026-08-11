@@ -21067,7 +21067,24 @@ def _load_subjacente_lookup():
         log.warning('[SUBJACENTE] Failed to load: %s', exc)
         return {}
 
-_SUBJACENTE_BY_CODE = _load_subjacente_lookup()
+
+# Cache por mtime, não dict de módulo: o Subjacente.json é editado pela tela
+# Index B3, e um dict carregado na subida servia o cadastro VELHO até o
+# próximo restart — com o Maturity Month/Year da Intrag saindo dele, um código
+# recém-cadastrado tem de valer no request seguinte (mesma regra dos mappings).
+_subjacente_cache = {'mtime': None, 'data': {}}
+
+
+def _subjacente_by_code():
+    fp = os.path.join(os.path.dirname(__file__), '..', 'static', 'data', 'Subjacente.json')
+    try:
+        mtime = os.path.getmtime(fp)
+    except OSError:
+        return _subjacente_cache['data']
+    if _subjacente_cache['mtime'] != mtime:
+        _subjacente_cache['data'] = _load_subjacente_lookup()
+        _subjacente_cache['mtime'] = mtime
+    return _subjacente_cache['data']
 
 _MONTH_ABBR = {
     'JAN': '01', 'FEB': '02', 'MAR': '03', 'APR': '04',
@@ -21113,26 +21130,42 @@ def _save_intrag_ndf_entry(deal):
     strike_str = f'{strike_effective:.4f}' if strike_val else ''
 
     underlying_asset = (deal.get('UnderlyingAsset', '') or '').strip()
-    subj = _SUBJACENTE_BY_CODE.get(underlying_asset.upper(), {})
+    subj = _subjacente_by_code().get(underlying_asset.upper(), {})
     reference_exchange = (subj.get('Bolsa de Negociacao') or '').strip()
     commodity = (deal.get('Commodities', '') or '').strip()
     unit = (subj.get('Unidade de Negociacao') or '').strip()
     strike_ccy = (deal.get('StrikeCurrency', '') or '').strip()
 
-    # Expiry month/year from Month field (e.g. "DEC26" → "12-2026")
+    # Maturity Month/Year: o vencimento do CONTRATO do subjacente, pelo cadastro
+    # da Index B3 (Mes/Ano Vencimento do Código do Ativo Subjacente). O `Month`
+    # do deal é o mês de pricing e nem sempre coincide com o mês embutido no
+    # código (AULF27 = jan/2027) — era dele que o campo saía, e saía errado
+    # quando os dois divergiam. Código sem cadastro cai no comportamento
+    # antigo (Month, depois Settlement), que é também o caminho dos deals
+    # antigos re-salvos.
     expiry_str = ''
-    month_raw = (deal.get('Month', '') or '').strip().upper()
-    m = re.match(r'^([A-Z]{3})(\d{2,4})$', month_raw)
-    if m:
-        mon_num = _MONTH_ABBR.get(m.group(1), '')
-        yr = m.group(2) if len(m.group(2)) == 4 else '20' + m.group(2)
-        if mon_num:
-            expiry_str = f'{mon_num}-{yr}'
-    elif re.match(r'^\d{4}-\d{2}$', month_raw):
-        parts = month_raw.split('-')
-        expiry_str = f'{parts[1]}-{parts[0]}'
-    elif sd:
-        expiry_str = sd.strftime('%m-%Y')
+    try:
+        mes_v = int(float(subj.get('Mes Vencimento') or 0))
+        ano_v = int(float(subj.get('Ano Vencimento') or 0))
+        # Faixa sã: o cadastro tem linhas com ano digitado errado (AGD1 →
+        # 2202), e '12-2202' num arquivo de registro é pior que o fallback.
+        if 1 <= mes_v <= 12 and 2000 <= ano_v <= 2099:
+            expiry_str = '{:02d}-{:04d}'.format(mes_v, ano_v)
+    except (ValueError, TypeError):
+        expiry_str = ''
+    if not expiry_str:
+        month_raw = (deal.get('Month', '') or '').strip().upper()
+        m = re.match(r'^([A-Z]{3})(\d{2,4})$', month_raw)
+        if m:
+            mon_num = _MONTH_ABBR.get(m.group(1), '')
+            yr = m.group(2) if len(m.group(2)) == 4 else '20' + m.group(2)
+            if mon_num:
+                expiry_str = f'{mon_num}-{yr}'
+        elif re.match(r'^\d{4}-\d{2}$', month_raw):
+            parts = month_raw.split('-')
+            expiry_str = f'{parts[1]}-{parts[0]}'
+        elif sd:
+            expiry_str = sd.strftime('%m-%Y')
 
     # ANBIMA biz days between FXConvDate and SettlementDate
     anbima_days = ''
@@ -21413,7 +21446,7 @@ def _save_intrag_opt_entry(deal, is_fxo=False):
     fixing_desc = ('D-' + fixing_days) if fixing_days != '' else ''
 
     underlying_asset = (deal.get('UnderlyingAsset', '') or '').strip()
-    subj = _SUBJACENTE_BY_CODE.get(underlying_asset.upper(), {})
+    subj = _subjacente_by_code().get(underlying_asset.upper(), {})
     exchange = (subj.get('Bolsa de Negociacao') or '').strip()
 
     spot = _parse_deal_date(deal.get('SpotDate', '') or '')
