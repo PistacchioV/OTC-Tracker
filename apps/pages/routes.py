@@ -28016,11 +28016,12 @@ _PCX_CLAIM_FILE = os.path.join(_DAILY_METRIC_DIR, 'pcx_spreadsheet_sent.json')
 _PCX_STATUS_FILE = os.path.join(_DAILY_METRIC_DIR, 'pcx_spreadsheet_status.json')
 
 # (cabeçalho da planilha, coluna da página, é data?). Coluna None = a página
-# não tem o dado; a coluna sai vazia. "Document type" ← Signature Type é o
-# de-para mais próximo (o tipo de assinatura é o que define o documento);
-# "Overall Comments" ← Comments e "JP sending documentation" / "Client return
-# the document" ← Send Date / Return Date são os nomes da planilha para as
-# mesmas colunas da página.
+# não tem o dado; a coluna sai vazia — vale para "Document type" também (o
+# Signature Type da página chegou a ser usado aqui, mas a mesa confirmou que
+# não é a mesma coisa). "Overall Comments" ← Comments e "JP sending
+# documentation" / "Client return the document" ← Send Date / Return Date são
+# os nomes da planilha para as mesmas colunas da página. EA é coluna de DATA
+# (a data da economic affirmation), não texto.
 _PCX_COLUMNS = [
     ('LOB',                                  'LOB',            False),
     ('Client',                               'Client',         False),
@@ -28032,7 +28033,7 @@ _PCX_COLUMNS = [
     ('Trade Number',                         'Trade Number',   False),
     ('Pending Status',                       'Pending Status', False),
     ('Owner',                                'Owner',          False),
-    ('EA',                                   'EA',             False),
+    ('EA',                                   'EA',             True),
     ('JP sending documentation',             'Send Date',      True),
     ('Client return the document',           'Return Date',    True),
     ('JP verify power of attorney SENT',     None,             True),
@@ -28041,7 +28042,7 @@ _PCX_COLUMNS = [
     ('Devolvido Por',                        None,             False),
     ('Controle Envio Draft',                 None,             True),
     ('Break Reason',                         'Break Reason',   False),
-    ('Document type',                        'Signature Type', False),
+    ('Document type',                        None,             False),
     ('Overall Comments',                     'Comments',       False),
     ('Economic Group',                       'Economic Group', False),
 ]
