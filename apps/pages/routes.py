@@ -28149,9 +28149,9 @@ except Exception:
 # Brasília — o horário pedido foi 7:15 PM IST (Índia, UTC+5:30), que é 13:45
 # UTC = 10:45 em São Paulo. As linhas são as do chip Status = Pending da
 # página (situação recomputada na leitura, não o DB em que a linha mora), e as
-# colunas seguem o layout histórico da planilha — inclusive as que a página
-# NÃO tem (procuração, Vias, Devolvido Por, Controle Envio Draft), que saem
-# em branco de propósito: o cabeçalho preservado é o que deixa quem consome a
+# colunas seguem a lista que o time global pediu por extenso (§256) —
+# inclusive as que a página NÃO tem (procuração, Vias, Abono…), que saem em
+# branco de propósito: o cabeçalho preservado é o que deixa quem consome a
 # planilha continuar achando as colunas no lugar.
 # ──────────────────────────────────────────────────────────────────────────
 _PCX_DIR = os.getenv('PCX_SPREADSHEET_DIR',
@@ -28161,13 +28161,16 @@ _PCX_TIME = os.getenv('PCX_SPREADSHEET_TIME', '10:45')      # BRT (= 19:15 IST)
 _PCX_CLAIM_FILE = os.path.join(_DAILY_METRIC_DIR, 'pcx_spreadsheet_sent.json')
 _PCX_STATUS_FILE = os.path.join(_DAILY_METRIC_DIR, 'pcx_spreadsheet_status.json')
 
-# (cabeçalho da planilha, coluna da página, é data?). Coluna None = a página
-# não tem o dado; a coluna sai vazia — vale para "Document type" também (o
-# Signature Type da página chegou a ser usado aqui, mas a mesa confirmou que
-# não é a mesma coisa). "Overall Comments" ← Comments e "JP sending
-# documentation" / "Client return the document" ← Send Date / Return Date são
-# os nomes da planilha para as mesmas colunas da página. EA é coluna de DATA
-# (a data da economic affirmation), não texto.
+# (cabeçalho da planilha, coluna da página, é data?). A LISTA INTEIRA — nomes
+# e ORDEM — é o layout que o time global pediu por extenso (§256): coluna com
+# `None` é as que a página não tem, e sai VAZIA de propósito, mantendo a
+# posição, para a query do consumidor continuar achando cada nome no lugar.
+# "Overall Comments" ← Comments e "JP sending documentation" / "Client return
+# the document" ← Send Date / Return Date são os nomes da planilha para as
+# mesmas colunas da página. EA é coluna de DATA (a data da economic
+# affirmation), não texto. "Document type" continua vazia (o Signature Type
+# chegou a ser usado nela e a mesa confirmou que NÃO é a mesma coisa — agora
+# ele tem a própria coluna, "Signature Type").
 _PCX_COLUMNS = [
     ('LOB',                                  'LOB',            False),
     ('Client',                               'Client',         False),
@@ -28184,13 +28187,22 @@ _PCX_COLUMNS = [
     ('Client return the document',           'Return Date',    True),
     ('JP verify power of attorney SENT',     None,             True),
     ('JP verify power of attorney received', None,             True),
+    ('Data Devolução 2º Via',                None,             True),
     ('Vias',                                 None,             False),
     ('Devolvido Por',                        None,             False),
     ('Controle Envio Draft',                 None,             True),
     ('Break Reason',                         'Break Reason',   False),
+    ('Controle 2º Via',                      None,             False),
+    ('Ano',                                  None,             False),
     ('Document type',                        None,             False),
     ('Overall Comments',                     'Comments',       False),
     ('Economic Group',                       'Economic Group', False),
+    ('Signature Type',                       'Signature Type', False),
+    ('Pending IS',                           None,             False),
+    ('Trade Number IS FEP WEB',              None,             False),
+    ('Baixa Sem Abono',                      None,             False),
+    ('Pendência',                            None,             False),
+    ('Abono',                                None,             False),
 ]
 
 
@@ -28214,40 +28226,37 @@ def _pcx_rows():
 
 
 def _pcx_build_xlsx(rows):
-    """Workbook openpyxl com o layout da planilha LEGADA, linha a linha.
+    """Workbook openpyxl no layout combinado com o time global, linha a linha.
 
     O layout inteiro é contrato com o consumidor — o time global de métricas
-    lê o arquivo via OLEDB (Confirmation_Latam), construído sobre a planilha
-    antiga — e cada divergência quebrou de um jeito diferente (§250/§253):
+    lê o arquivo via OLEDB (Confirmation_Latam) — e cada divergência quebrou
+    de um jeito diferente (§250/§253/§256):
 
       * a ABA é CONFIRMATIONS (com outro nome: "CONFIRMATIONS$ is not a
         valid name");
-      * a linha 1 é o TÍTULO MESCLADO da planilha antiga e os cabeçalhos
-        ficam na LINHA 2 — o leitor deles começa na linha 2, e com os
-        cabeçalhos na 1 ele encontrava DADOS onde esperava os nomes: as
-        colunas da query viravam parâmetros ("No value given for one or
-        more required parameters").
+      * os CABEÇALHOS ficam na LINHA 1 e os dados começam na 2, SEM o título
+        mesclado da planilha antiga: o consumidor refez a query sobre a lista
+        de colunas do §256 (o título da era legada — §253 — saiu do contrato
+        junto). Cabeçalho fora da linha que o leitor espera vira "No value
+        given for one or more required parameters";
+      * as COLUNAS — nomes e ordem — são exatamente as de `_PCX_COLUMNS`,
+        inclusive as vazias: tirá-las deslocaria as demais.
 
     As colunas de data saem como DATA de verdade com number_format dd/mm/yyyy
     (Short Date) — escrever o texto deixaria a célula General e o Excel do
     consumidor sem ordenar/filtrar por data. Valor que não parseia (texto
     livre numa coluna de data) sai como veio: sumir com ele seria pior."""
     import openpyxl
-    from openpyxl.styles import Alignment, Font
+    from openpyxl.styles import Font
     from openpyxl.utils import get_column_letter
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = 'CONFIRMATIONS'
     bold = Font(bold=True)
-    ws.merge_cells(start_row=1, start_column=1,
-                   end_row=1, end_column=len(_PCX_COLUMNS))
-    titulo = ws.cell(row=1, column=1, value='PENDING - Outstanding Confirmation OTC')
-    titulo.font = bold
-    titulo.alignment = Alignment(horizontal='center')
     for j, (header, _src, _is_date) in enumerate(_PCX_COLUMNS, start=1):
-        c = ws.cell(row=2, column=j, value=header)
+        c = ws.cell(row=1, column=j, value=header)
         c.font = bold
-    for i, r in enumerate(rows, start=3):
+    for i, r in enumerate(rows, start=2):
         for j, (_header, src, is_date) in enumerate(_PCX_COLUMNS, start=1):
             raw = str(r.get(src, '') or '').strip() if src else ''
             if not raw:
@@ -28266,7 +28275,7 @@ def _pcx_build_xlsx(rows):
                 cell.value = raw
     for j, (header, _src, _is_date) in enumerate(_PCX_COLUMNS, start=1):
         ws.column_dimensions[get_column_letter(j)].width = max(12, min(len(header) + 4, 34))
-    ws.freeze_panes = 'A3'          # título (1) + cabeçalho (2) congelados
+    ws.freeze_panes = 'A2'          # cabeçalho (linha 1) congelado
     return wb
 
 
@@ -30643,19 +30652,35 @@ def api_mc_upsert():
             if c in src and c not in _mc.DERIVED_COLUMNS:
                 row[c] = str(src.get(c) or '')
 
-        # ── Pending é derivada, MAS aceita dois valores à mão (§254) ──────────
+        # ── Pending é derivada, MAS aceita dois valores à mão (§254/§255) ─────
         # 'Pending Legal' é o hold manual (a linha sai da fila do OTC até alguém
-        # soltá-la) e 'Pending OTC' é o que solta o hold. Todo o resto — FepWeb,
-        # Ok, MO/FO — continua saindo SÓ da derivação: gravar 'Pending FepWeb' à
-        # mão afirmaria que a esteira terminou sem ninguém ter validado nada, e
-        # por isso qualquer outro valor é ignorado (a derivação recalcula).
+        # soltá-la) e 'Pending OTC' REABRE a esteira: a confirmação foi regerada
+        # e precisa ser validada de novo, então as datas de validação e o
+        # Enviado p/ cliente são limpos (os carimbos caem no undo logo abaixo) e
+        # a derivação a devolve à fila do OTC — cada mesa revalida e os carimbos
+        # novos substituem os antigos. Numa linha que só estava em hold Legal
+        # não há o que limpar, e o mesmo valor age como o release de antes. Todo
+        # o resto — FepWeb, Ok, MO/FO — continua saindo SÓ da derivação: gravar
+        # 'Pending FepWeb' à mão afirmaria que a esteira terminou sem ninguém
+        # ter validado nada, e por isso qualquer outro valor é ignorado.
         if 'Pending' in src:
             novo = str(src.get('Pending') or '').strip()
             if _mc.upper_norm(novo) == _mc.upper_norm(_mc.PENDING_LEGAL):
                 row['Pending'] = _mc.PENDING_LEGAL
-            elif (_mc.upper_norm(novo) == _mc.upper_norm(_mc.PENDING_OTC)
-                  and _mc.upper_norm(row.get('Pending')) == _mc.upper_norm(_mc.PENDING_LEGAL)):
-                row['Pending'] = ''          # solta o hold; a derivação decide
+            elif _mc.upper_norm(novo) == _mc.upper_norm(_mc.PENDING_OTC):
+                limpar = [c for c in ('Conferido OTC', 'VALIDADO p/ MO',
+                                      'VALIDADO p/ FO', _mc.SENT_COLUMN)
+                          if str(row.get(c, '') or '').strip()]
+                # Reabrir é desfazer validação alheia — ato da mesa de OTC Ops,
+                # como os dois botões do Monitor. Soltar um hold sem nada
+                # validado não apaga trabalho de ninguém e segue livre.
+                if limpar and not _mc_can_validate(_mc.STAGE_OTC):
+                    return jsonify({'success': False, 'stage_forbidden': True,
+                                    'stage': _mc.STAGE_OTC, 'key': key,
+                                    'message': _mc_stage_denied(_mc.STAGE_OTC)}), 403
+                row['Pending'] = ''          # a derivação decide (→ Pending OTC)
+                for c in limpar:
+                    row[c] = ''
 
         # ── Preencher a coluna de validação pela grade É VALIDAR ──────────────
         # A tela de validação passa pelo `mark_validated`, que carimba quem
