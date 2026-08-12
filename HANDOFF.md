@@ -10782,3 +10782,232 @@ O desenho, e por que ele é assim:
 Armadilha aprendida no processo: rodar 7 subagentes pesados em paralelo estourou o limite
 de sessão no meio do trabalho — as retomadas preservaram o contexto, mas o certo é
 escalonar em ondas.
+
+## §239 — A Parte A do FWD Start pedia para riscar uma entidade à mão
+
+O documento Word do FWD Start imprimia as duas entidades lado a lado — "<BANCO J.P. MORGAN S.A.> OR
+<J.P. Morgan Chase Bank, N.A. – Filial Brasileira>" — em nome, CNPJ e assinatura, esperando que alguém
+riscasse o lado errado à caneta. Agora `_conf_fwdstart_partea(picked, warnings)` resolve pela **LE dos
+deals do grupo** (JPM → Banco / MGT → Filial Brasileira) e o texto sai decidido nos três lugares.
+
+- **LE ausente, mista no grupo ou fora de JPM/MGT deixa a Parte A EM BRANCO com aviso** — o padrão da
+  casa: em branco pede preenchimento; um default afirmaria uma entidade errada num documento assinado.
+- O painel ganhou os campos de Parte A (nome + CNPJ, espelhados no documento como os da Parte B), e o
+  Save recusa Parte A vazia **nas duas pontas**: foco no campo no navegador, `400 missing_partea` no
+  servidor.
+- **Os textos vivem ao lado do template no `routes.py`, não num mapping — de propósito.** A grafia é a
+  do documento assinado, diferente da grafia do Reference Data que o `le-spn` guarda; cadastrá-la seria
+  uma segunda lista das mesmas entidades, envelhecendo sozinha. É uma exceção consciente à regra do §6.
+
+## §240 — A planilha de Pending que a mesa mantinha à mão virou card do Control Panel
+
+O card **Pending Confirmations Spreadsheet Metrics** grava a "PENDING - Outstanding Confirmation
+OTC.xlsx" em `I:\Confirmation\Derivativos\Movimento\Pending Confirmation`, sobrescrevendo a anterior.
+As linhas são as do chip **Status = Pending** da página (a categoria é recomputada na leitura, não o DB
+em que a linha mora), e as colunas seguem o **layout histórico da planilha** — inclusive as que a página
+não tem (procuração, Vias, Devolvido Por, Controle Envio Draft), que saem em branco com o cabeçalho
+preservado, para quem consome a planilha continuar achando as colunas no lugar.
+
+- **Datas saem como DATA** (`number_format dd/mm/yyyy`) — texto seria General e o Excel do consumidor
+  não ordenaria; texto livre numa coluna de data (`N/A`) é preservado.
+- **Disparo todo dia útil ANBIMA às 10:45 de Brasília** (o pedido foi 7:15 PM IST = 13:45 UTC), com a
+  mecânica do Deals Monitor: claim em disco, catch-up no restart e **slot devolvido quando a gravação
+  falha** (share fora, arquivo aberto no Excel) — a volta seguinte retenta em vez de perder o dia. A
+  escrita é temp + `os.replace`: ninguém abre um xlsx pela metade. O Run do card grava na hora (feriado
+  incluído — quem clicou decidiu) sem consumir o claim do automático, e a linha de status do card
+  responde "a planilha de hoje saiu?" sem abrir o log. (`_pcx_rows` → `_pcx_build_xlsx` →
+  `_pcx_save_spreadsheet`; scheduler `_pcx_scheduler_loop` + `_pcx_claim_slot`.)
+- **O primeiro arquivo gerado voltou da mesa com dois de-paras errados**, e é a lição: de-para de
+  planilha legada se prova contra o CONSUMIDOR, não contra o nome parecido. "Document type" saía do
+  Signature Type da página — não é a mesma coisa, e passou a ir em branco como as demais sem
+  contraparte; e **EA é a DATA da economic affirmation**, não texto — saía General, agora sai
+  `dd/mm/yyyy` como as outras colunas de data.
+
+## §241 — O recap interno abre no Monitor, e o Validate sai do New Deals
+
+Duas mudanças da mesma conversa — o Confirmations Monitor vira o lugar único de conferir e assinar:
+
+1. **O card ganha um chip para o e-mail de recap interno** que a mesa guarda na MESMA pasta do PDF,
+   identificado pelo nome (`_MC_MAIL_TOKENS = ('internal', 'recap')` cobre Internal Recap / Recap /
+   Internal, `.msg` ou `.eml`). O chip abre um **preview em tela** — um `.msg` como link baixaria o
+   arquivo e mandaria a pessoa ao Outlook, que é o passeio que o preview evita. O corpo do e-mail **não
+   entra no DOM da página**: o endpoint devolve o HTML com `Content-Security-Policy: sandbox` e o
+   Monitor o carrega num iframe sandboxado — script de e-mail não roda nem aberto numa aba. O cache de
+   pasta passou a guardar a **listagem inteira** (PDF e e-mail saem da mesma ida ao share), e o e-mail
+   passa pelo mesmo afunilamento por Trade ID/Ativo dos PDFs, **caindo para a lista completa quando nada
+   casa** — o recap costuma ser nomeado por contraparte/data, sem Trade ID, e o filtro não pode sumir
+   com ele. A resolução de arquivo do Electronic Inventory virou helper (`_ei_locate_file`) para o
+   preview usar a mesma guarda de path-traversal do `/file`.
+2. **Os diálogos de Confirmations das quatro páginas de New Deals** (FWD Start, NDF Comm, Opt Comm,
+   Opt FXO) **perdem o botão Validate**: toda validação é feita no Monitor, onde a esteira OTC → MO/FO
+   mora — dois lugares validando era ter duas respostas para a mesma pergunta. O checklist pós-geração
+   do editor fica: ele fecha o ciclo do DOCUMENTO, não a etapa da esteira.
+
+## §242 — O Maturity Month/Year da Intrag era o mês de pricing
+
+O campo da Intrag NDF (linhas espelhadas dos deals de NDF Commodities) saía do `Month` do deal — que é o
+mês de **pricing** e nem sempre coincide com o mês do contrato embutido no código do ativo subjacente
+(`AULF27` = jan/2027). Agora ele vem do cadastro da **Index B3**: Mes/Ano Vencimento do Código do Ativo
+Subjacente no `Subjacente.json`.
+
+- **Vencimento fora de faixa sã** (o cadastro tem ano digitado errado: `AGD1` → 2202) **ou código sem
+  linha caem no comportamento anterior** — `Month`, depois Settlement — em vez de imprimir um ano
+  impossível num arquivo de registro.
+- **O lookup do Subjacente virou cache por mtime** (`_subjacente_by_code`; era um dict carregado na
+  subida do processo): com o campo dependendo do cadastro, uma correção feita na tela Index B3 tem de
+  valer no request seguinte, sem restart — a mesma regra dos mappings. De quebra passou a valer também
+  para a Bolsa e a Unidade de Negociação, que já saíam de lá.
+- A Intrag **Option** não tem coluna de Maturity Month/Year — nada a mudar lá.
+
+## §243 — O registro do Other Publisher não quebrava em visão banco × visão Lawton
+
+O send-conecta genérico (`4478d38`) foi desenhado esperando que a API entregasse a perna espelho do
+Lawton como **deal próprio** (a convenção do ndf-commodities: perna com LE LAWTON e cliente = Banco).
+Ela **nunca chega** — o Athena manda só a visão banco —, então o balde LAWTON ficava vazio e o arquivo
+visão Lawton simplesmente não saía.
+
+O conserto é a convenção da TAXA do próprio Other Publisher (fixings): **UMA linha Lawton → DUAS
+visões**. No envio, todo deal do balde BANCO cujo Client contém LAWTON ganha um espelho sintetizado —
+`_nd_lawton_mirror` (LE = LAWTON, Client = Banco, direção invertida) passado pelo MESMO
+`_generic_ndf_ter_line`, então participante/papel/contraparte trocam e o resto da linha sai byte a byte
+igual. Três decisões:
+
+- **O par é por termos econômicos, não por Deal ID.** Cada perna de um trade intragrupo tem o SEU Deal
+  ID; a correlação possível é `_nd_lawton_sig` = (trade date, settlement, notional). Quando a perna
+  Lawton explícita vier no lote, ela **consome uma assinatura** (`explicit.remove`) e o espelho daquele
+  trade não é sintetizado — e é `remove` de UMA ocorrência de propósito: dois trades idênticos no mesmo
+  dia não podem dividir uma perna explícita só.
+- **`count` conta DEALS, não linhas** — a notificação e a resposta dizem quantas operações foram
+  registradas, não quantas linhas os arquivos têm.
+- **O preview de duplo clique mostra as duas visões** (Banco × Lawton e Lawton × Banco, 28vh cada) pelo
+  mesmo desvio no `buildConectaFields` — o que se vê é o que os dois arquivos levam.
+
+O **FWD Start herda a regra de graça**: o builder é compartilhado, e a mesma lacuna estava latente lá.
+
+## §244 — O ciclo do card de Confirmations termina no OTC
+
+Pedido da mesa: o e-mail de **Deals Monitor Pending Action** e o New Deals Monitor só cobram o que está
+**Pending OTC**. Confirmação que já passou para MO/FO é assunto do Confirmations Monitor — para a mesa
+de OTC ela está 100% concluída, e mantê-la aberta no card cobraria trabalho de outra mesa.
+
+- **Um ponto único de tradução**: `_conf_esteira_stages()` passa a devolver a etapa crua só quando ela é
+  `Pending OTC`; todo o resto (Pending MO, FO, MO/FO, vazio) vira `Ok`. Card, seção e e-mail leem o
+  mesmo snapshot (`_ndm_monitor_snapshot`), então mudam juntos — não há três lugares para esquecer.
+- No e-mail, `_ndm_pending_blocks` conta `('success', 'ok')` como concluído e o breakdown exclui os
+  dois — o que de quebra conserta um bug anterior: grupo em `Ok` contava como pendente do e-mail **para
+  sempre**, porque só `success` fechava a conta.
+- **A regra da menos avançada fica**: grupo com um trade ainda em Pending OTC continua aberto — dizer
+  `Ok` porque nove de dez passaram esconderia a décima.
+- `_CONF_STAGE_ORDER` mantém as etapas MO/FO defensivamente (se um dia a tradução mudar, a ordenação já
+  sabe o que fazer com elas). O CLAUDE.md §7 foi reescrito para a nova regra.
+
+## §245 — Ticket aberto agora avisa por e-mail
+
+O Support Center só avisava no **encerramento**. Agora `api_tickets_create` chama
+`_tk_send_opened_email(ticket)` — mesmo desenho do closed: template próprio
+(`email-template-ticket-opened.html`, clone do de encerramento com badge azul "Current Status" e as
+linhas Ticket ID / Subject / Opened By / Priority / Opened On / Tags), assunto
+`OTC Tracker — Ticket #NNNN opened by <nome>`, **From e Cc `SHARED_MAILBOX`**
+(otc.tracker@jpmorgan.com), **To `_TICKET_NEW_TO`** — env `TICKET_NEW_EMAIL_TO`, default
+giulliano.luccia@jpmorgan.com.
+
+**Best-effort de propósito**: o ticket já está persistido quando o e-mail sai; falha de SMTP só é logada
+e devolvida em `email_error` no JSON do create — abrir ticket nunca falha por causa do relay. O envio
+real só é testável na rede JPM (o SMTP é o relay interno).
+
+## §246 — Toda notificação nova precisa de destino no mapa (o clique morto do TED Release)
+
+"A notificação de TED Release do Other Products Summary não faz nada quando clico." O rótulo `page` de
+uma notificação é a chave que decide o destino do clique (sino, toast e push do sistema) e quem a
+enxerga no feed — e **nove páginas** gravavam notificação com rótulo que não existia em mapa nenhum:
+Other Products Summary, NDF Summary, Operations B3, OTM Settlements, Latam Desk Position, NDF Cockpit,
+Cognos, File Interface e Mapping. O aviso aparecia normal; o item só nascia como `<div>` em vez de
+`<a>`, sem erro em lugar nenhum.
+
+- As nove entraram nos **três mapas de uma vez** — `_NOTIF_PAGE_URL` (routes.py), `PAGE_URL` do
+  `partials/topbar.html` e `PAGE_URL` do `static/js/sw-push.js` —, com a URL do próprio menu
+  (Latam é `/other-products-swap-latamdeskposition`).
+- **A regra agora é presa por teste, não por lembrança**: `check_notif_page_url.py` ganhou o check 7,
+  que varre o `routes.py` por AST e exige que todo rótulo `page` LITERAL passado a
+  `_create_notification` resolva via `_notif_page_url`. Os checks 1–6 provavam que os três mapas
+  concordam ENTRE SI — era exatamente por fora deles que o rótulo órfão passava. Notificação nova em
+  página nova sem cadastrar o mapa = teste vermelho.
+- O padrão de sempre: **rode `check_notif_page_url.py` depois de mexer em notificação** (criar
+  `_create_notification` novo, renomear rótulo, adicionar página). O CLAUDE.md §7 ganhou o resumo.
+- De carona: a ação `TED Release Sent` ganhou ícone próprio no `ACTION_META` (send/verde) em vez do
+  sino genérico.
+
+## §247 — O Export completo (Copy · CSV · Excel · Print · PDF) virou padrão obrigatório
+
+O Export do Track Confirmations só oferecia CSV e Copy — export feito à mão sobre a matriz visível,
+enquanto o padrão das páginas de New Deals sempre foi o conjunto completo via DataTables Buttons.
+
+- **Track Confirmations**: o export manual (`visibleMatrix`/`toCsv`) saiu; entraram os plugins do
+  DataTables Buttons (buttons + bootstrap5 + jszip + pdfmake + vfs_fonts + html5 + print, com o snippet
+  síncrono de registro do JSZip copiado do New Deals — sem ele o Excel não sai) e uma instância
+  `new $.fn.dataTable.Buttons(table, …)` criada DEPOIS do init (a tabela não usa `buttons:` no init nem
+  é destruída/recriada, então a instância vive a página inteira). Os cinco itens do dropdown da toolbar
+  disparam por nome (`table.button('excel:name').trigger()`), preservando o visual da barra.
+- **Paridade com o export antigo mantida de propósito**: CSV com `fieldSeparator: ';'` e `bom: true`
+  (é o que faz o Excel pt-BR abrir com colunas separadas e acentos vivos, e era por isso que o export
+  manual usava `;` e BOM), nome de arquivo `track-confirmations`, e `exportOptions` com
+  `columns: idx >= OFFSET && visível` (checkbox e Actions fora) +
+  `modifier {search/order: 'applied', page: 'all'}` — exporta o que está NA TELA, como sempre.
+- **O padrão agora está escrito**: o bullet da Toolbar no CLAUDE.md §3 deixou de dizer "ao menos CSV e
+  Copy" e passou a exigir o conjunto completo **Copy · CSV · Excel · Print · PDF**, com a receita
+  (Buttons pós-init + trigger por nome) para páginas que montam a toolbar à mão. Página nova com botão
+  Export nasce com os cinco; página velha com menos é bug de consistência.
+
+## §248 — No Monitor, só o recap é clicável, e o Validate sem contrato fica riscado
+
+Pedido da mesa, em cima do §246/§241: nos cards do Confirmations Monitor o chip de PDF deixou de ser
+link — a confirmação se abre pelo **Validate** (tela de validação), e dois caminhos para o mesmo
+documento convidavam a "validar" sem passar pelo checklist. O chip continua na tela como INFORMAÇÃO
+(nome + ícone, cursor default); só o **e-mail de recap** (roxo) permanece clicável, abrindo em nova aba.
+
+- **Validate sem contrato na pasta**: quando o `/docs` responde e o grupo não tem PDF, o botão verde
+  vira neutro (`btn-secondary`), ganha um **risco transversal** (`.mc-val-off::after`, rotate(-10deg))
+  e o tooltip `noContractTip` ("no contract to validate yet", no `_TRANS` en/br/es — texto dinâmico não
+  passa pelo I18nManager). O clique é bloqueado por handler delegado E o `href`/`target` são removidos:
+  `preventDefault` não cobre o clique do meio, e `<a>` sem destino sai da navegação por teclado
+  (`aria-disabled` junto).
+- **Só quando o servidor OLHOU a pasta**: o `pinta(el, docs, checou)` só risca com `checou=true` (o
+  caminho de sucesso do fetch). No catch — servidor reiniciando, timeout — não se afirma nada: riscar
+  ali diria "não há contrato" para a fila inteira num soluço de rede.
+- O botão de SÓ LEITURA (View, de quem não é da mesa) não é tocado: ele já é a resposta a outra
+  pergunta (acompanhar, não assinar).
+
+## §249 — "Blank" no File Interface é Source FIXED com valor vazio (a Data de Fixing do FWD Start)
+
+"Ajustei o campo Data de Fixing do Ativo Subjacente do FWD Start para Blank e o preview/arquivo
+continuam mostrando a data." A edição não surtiu efeito porque **Source = Page significa "o GERADOR
+manda o valor"** — a coluna escolhida no dropdown é documentação de onde o valor vem, não o valor: o
+motor injeta o que o gerador calculou pelo `seq`, com o detalhe vazio ou não. Limpar o dropdown, ou
+trocar a origem para "—", não esvazia o campo; **o único jeito de cadastrar um campo em branco é
+Source = `Fixed` com o valor vazio** (é como o Other Publisher sempre esteve: Fixed, valor vazio, nota
+"Blank" — o motor preenche as 8 posições com espaço).
+
+- O override do `/new_deals-ndf-fwdstart` no campo 19 do `termo-multiclasses.json` (versionado) foi
+  trocado para `Fixed`/vazio/"Blank", igual ao do Other Publisher. Preview de duplo clique e geração
+  leem o mesmo cadastro (page-spec e `_fi_build_line` resolvem o override por página), então os dois
+  mudam juntos.
+- **O gerador continua calculando `fix_single`** e entregando ao motor: com o override Fixed ele é
+  ignorado, e re-apontar o cadastro para Page volta a mandar a data do fixing único sem tocar em
+  código — é a reversibilidade que o desenho promete.
+- Atenção no deploy: o JSON é VERSIONADO. Se a instância do time salvou uma edição local no mesmo
+  arquivo pela tela, o `git pull` vai parar em conflito — descarte a edição local
+  (`git checkout -- apps/static/data/file-interface/termo-multiclasses.json`) antes do pull, que a
+  versão do repo já traz o Blank.
+
+## §250 — A aba da planilha de Pending é CONFIRMATIONS (o nome da aba também é contrato)
+
+O time global de métricas quebrou lendo a "PENDING - Outstanding Confirmation OTC.xlsx":
+`"CONFIRMATIONS$ is not a valid name…"`. É o erro do driver OLEDB/Jet quando a QUERY pede uma aba que
+não existe no arquivo — o job deles faz `SELECT … FROM [CONFIRMATIONS$]`, a planilha legada tinha a
+aba `CONFIRMATIONS`, e a nossa nascia como `PENDING`.
+
+Mesma lição do §240 pela terceira via: o de-para com planilha legada se prova contra o CONSUMIDOR, e o
+contrato não é só o cabeçalho — **o nome da aba faz parte do layout**. `_pcx_build_xlsx` agora grava
+`ws.title = 'CONFIRMATIONS'`; colunas, datas e o resto ficam como estavam (os headers foram
+verificados byte a byte na mesma conversa — 100% ASCII, sem caractere invisível; o erro nunca foi de
+caractere, era a aba).

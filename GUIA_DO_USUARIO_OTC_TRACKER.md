@@ -357,8 +357,9 @@ Rotinas disponíveis:
 - Pending Confirmation — Weekly Escalation
 - Pending Signature Confirmations — Collection
 - Deals Monitor — Pending Action
+- Pending Confirmations Spreadsheet Metrics
 
-> **Nem todo card envia e-mail.** O *Daily Metric*, a *Weekly Escalation* e a *Collection* geram um **rascunho** — o navegador baixa um arquivo `.eml` que abre no Outlook já endereçado, para você revisar e enviar. Os demais mandam direto.
+> **Nem todo card envia e-mail.** O *Daily Metric*, a *Weekly Escalation* e a *Collection* geram um **rascunho** — o navegador baixa um arquivo `.eml` que abre no Outlook já endereçado, para você revisar e enviar. O *Pending Confirmations Spreadsheet Metrics* não envia e-mail: ele **grava a planilha** "PENDING - Outstanding Confirmation OTC.xlsx" no share, todo dia útil às 10:45. Os demais mandam direto.
 
 ---
 

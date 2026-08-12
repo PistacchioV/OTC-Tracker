@@ -156,8 +156,16 @@ Live Positions, o Track Confirmations e as três Recons).
   padding:.25rem .6rem`; hover `translateY(-1px)`, active `scale(.96)`), e as
   cores são fixas por função: **Columns** = `btn-soft-primary` (dropdown de
   checkboxes), **Add Row** = `btn-primary bg-gradient`, **Export** = `btn-info
-  bg-gradient` (dropdown com ao menos CSV e Copy; exporta o que está NA TELA —
-  filtros e ordenação aplicados, só colunas visíveis), **Import** = teal
+  bg-gradient` (dropdown com o conjunto COMPLETO, nesta ordem: **Copy · CSV ·
+  Excel · Print · PDF** — menos que isso é bug de consistência, foi o Track
+  Confirmations com só CSV e Copy. A implementação é DataTables Buttons como no
+  New Deals; numa tabela sem `buttons:` no init, crie
+  `new $.fn.dataTable.Buttons(table, …)` depois e dispare pelos itens do
+  dropdown com `table.button('<nome>:name').trigger()`. Exporta o que está NA
+  TELA — filtros e ordenação aplicados, só colunas visíveis. CSV com
+  `fieldSeparator: ';'` e `bom: true`, que é o que o Excel pt-BR precisa para
+  separar colunas e manter acentos; Excel exige o snippet síncrono de registro
+  do JSZip depois do `buttons.html5` — HANDOFF §247), **Import** = teal
   `#4a849b`, **Mapping/refresh** = `btn-success bg-gradient`, **Clear
   Filters** = `btn-outline-secondary`. `Show [N] entries` ao lado. A barra vai
   com **`mb-3`, não `mb-2`**: o DataTables desenha a própria caixa encostada no
@@ -824,6 +832,12 @@ seguinte e a fila de Pending OTC do Monitor ficava vazia por construção: o OTC
 não tinha onde conferir o que ele mesmo acabara de emitir, com o D+3 correndo em
 silêncio.
 
+**Validar é SÓ no Monitor.** O botão Validate saiu dos diálogos de
+Confirmations das quatro páginas de New Deals (FWD Start, NDF Comm, Opt Comm,
+Opt FXO) — dois lugares validando era ter duas respostas para a mesma pergunta.
+O que fica no New Deals é o checklist pós-geração acima, que fecha o ciclo do
+documento (HANDOFF §241).
+
 **Validar e Rejeitar vivem os dois na tela de validação**, não no card do
 Monitor. São as duas respostas à mesma pergunta — o documento está certo? — e as
 duas exigem tê-lo aberto; no card, o Reject ficava a um clique de quem nunca viu
@@ -884,16 +898,44 @@ escreva um script em `scripts/` para ela.
 - **Jobs agendados rodam no horário do Brasil, não no do servidor.**
   `_br_now()` (`zoneinfo` `America/Sao_Paulo`, caindo para `-03:00` fixo quando
   falta `tzdata` — o caso Windows) sustenta o e-mail de pendências das 19:00/
-  19:30 e a manutenção das 11:30 do Pending Confirmation. `datetime.now()` é o
+  19:30, a manutenção das 11:30 do Pending Confirmation e a planilha de
+  Pending das 10:45 (HANDOFF §240). `datetime.now()` é o
   relógio local do servidor e disparava tudo na hora errada, em silêncio. Como
   a instância reinicia várias vezes ao dia, `_ndm_pending_catch_up()` também
   dispara na subida as janelas já passadas do dia; o arquivo de claim em disco
   é o que impede isso de virar e-mail repetido.
+- **A API nunca entrega a perna Lawton como deal próprio.** O arquivo visão
+  Lawton do registro TER (Other Publisher e FWD Start) sai de um **espelho
+  sintetizado no envio** (`_nd_lawton_mirror` → o mesmo
+  `_generic_ndf_ter_line`): deal do balde BANCO com LAWTON no Client gera a
+  visão invertida. O par é por **termos econômicos** (`_nd_lawton_sig`: trade
+  date, settlement, notional), nunca por Deal ID — cada perna intragrupo tem o
+  seu —, e uma perna Lawton explícita no lote consome UMA assinatura para o
+  espelho daquele trade não duplicar (HANDOFF §243).
+- **Os textos da Parte A do FWD Start vivem no `routes.py` de propósito**
+  (Banco J.P. Morgan S.A. / Filial Brasileira, resolvidos pela LE do grupo):
+  a grafia é a do documento assinado, diferente da do Reference Data que o
+  `le-spn` guarda. Não os converta em mapping — seria uma segunda lista das
+  mesmas entidades (HANDOFF §239). LE ausente/mista deixa a Parte A em branco
+  com aviso, e o Save recusa (`400 missing_partea`).
 - **`reportlab` é importado preguiçosamente** (PDFs de confirmação e folha de
   liquidação do NDF Summary): sem a lib o e-mail sai *sem* o anexo, em vez de
   falhar.
 - **Só `isCancelled = true` significa cancelado** na Athena. `isDead` é estado
   interno e esses registros *são* importados (`_api_rec_is_cancelled`, §173).
+- **No File Interface, "campo em branco" se cadastra como Source `Fixed` com
+  valor VAZIO** — nunca como Page com o dropdown limpo ou origem "—": Source =
+  Page significa "o gerador manda o valor" (o motor injeta o calculado pelo
+  `seq`; o detalhe da origem é documentação), então limpar o detalhe não
+  esvazia nada, em silêncio. Foi a Data de Fixing do FWD Start (HANDOFF §249).
+- **Notificação nova exige o rótulo `page` nos TRÊS mapas de destino** —
+  `_NOTIF_PAGE_URL` (routes.py), `PAGE_URL` do `partials/topbar.html` e do
+  `static/js/sw-push.js`. Sem a entrada o aviso aparece normal e o clique não
+  vai a lugar nenhum (o item nasce `<div>` em vez de `<a>`, sem erro no
+  console) — foi o TED Release, e havia NOVE páginas assim. Depois de mexer em
+  `_create_notification` ou nos mapas, rode `check_notif_page_url.py`: o
+  check 7 varre o routes.py por AST e recusa rótulo literal fora do mapa
+  (HANDOFF §246).
 - **`Docs/` e `docs/` coexistem** (3 arquivos versionados no capitalizado, 47
   no minúsculo — artefato de filesystem case-insensitive). As capturas ficam em
   **`docs/sop-screenshots/`** minúsculo, que é o que o `SOP_PROCESSAMENTO_OTC.md`
