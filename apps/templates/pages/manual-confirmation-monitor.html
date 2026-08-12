@@ -230,42 +230,36 @@
 /* O botão responde ao toque: sem isso a lista parece congelada num clique. */
 #mc-monitor .mc-item__acts .btn:active { transform: scale(.97); }
 #mc-monitor .mc-docs { display: flex; flex-wrap: wrap; gap: .25rem; }
-#mc-monitor .mc-docs a {
+/* Só o e-mail de recap é clicável (abre em nova aba); o PDF virou chip
+   INFORMATIVO — a confirmação se abre pelo Validate, e dois caminhos para o
+   mesmo documento convidavam a "validar" sem passar pela tela de validação.
+   A cor continua separando: roxo é "e-mail", azul é "documento". */
+#mc-monitor .mc-docs a,
+#mc-monitor .mc-docs .mc-doc {
     font-size: .64rem; font-weight: 700; padding: .12rem .45rem; border-radius: 7px;
     border: 1px solid var(--ins-border-color); color: var(--vr-accent-1, #0066cc);
     text-decoration: none; max-width: 15rem; overflow: hidden;
     text-overflow: ellipsis; white-space: nowrap;
     transition: border-color 140ms var(--mc-ease), background 140ms var(--mc-ease);
 }
-#mc-monitor .mc-docs a:hover {
-    border-color: var(--vr-accent-1, #0066cc);
-    background: color-mix(in oklab, var(--vr-accent-1, #0066cc) 8%, transparent);
-}
-/* O e-mail de recap interno abre em PREVIEW na tela (não em nova aba), e a cor
-   o separa do PDF: roxo é "e-mail", azul é "documento". */
-#mc-monitor .mc-docs a.mc-mail { color: var(--vr-accent-3, #8b5cf6); cursor: pointer; }
+#mc-monitor .mc-docs .mc-doc { cursor: default; }
+#mc-monitor .mc-docs a.mc-mail { color: var(--vr-accent-3, #8b5cf6); }
 #mc-monitor .mc-docs a.mc-mail:hover {
     border-color: var(--vr-accent-3, #8b5cf6);
     background: color-mix(in oklab, var(--vr-accent-3, #8b5cf6) 8%, transparent);
 }
 
-/* Overlay do preview do e-mail — sobre o Monitor, sem abrir aba. O iframe é
-   sandboxado: o HTML é o corpo de um e-mail, não código nosso. */
-#mc-mail-overlay {
-    position: fixed; inset: 0; z-index: 1080; display: none;
-    background: rgba(14, 17, 42, .55); backdrop-filter: blur(2px);
+/* Validate sem contrato na pasta: o botão fica neutro e RISCADO na
+   transversal, com tooltip explicando — some com ele e a pessoa procura;
+   verde e clicável, ele abre uma tela de validação sem documento. O clique
+   é bloqueado no handler (o <a> não tem disabled). */
+#mc-monitor .mc-val-off {
+    position: relative; cursor: not-allowed; opacity: .55;
 }
-#mc-mail-overlay.open { display: flex; flex-direction: column; }
-#mc-mail-bar {
-    display: flex; align-items: center; gap: .6rem;
-    padding: .55rem .9rem; background: var(--vr-card-bg, #fff);
-    border-bottom: 1px solid var(--ins-border-color);
+#mc-monitor .mc-val-off::after {
+    content: ''; position: absolute; left: -6%; right: -6%; top: 50%;
+    border-top: 2px solid currentColor; transform: rotate(-10deg);
 }
-#mc-mail-bar .mc-mail-title {
-    flex: 1 1 auto; font-size: .8rem; font-weight: 700;
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-#mc-mail-frame { flex: 1 1 auto; border: 0; width: 100%; background: #fff; }
 
 /* A idade da pendência vira cor a partir do momento em que ela é um problema.
    Verde não entra: uma confirmação nova não é uma conquista, é o normal.
@@ -315,18 +309,6 @@
     <div class="row g-3" id="mc-cards"></div>
 </div>
 
-<!-- Preview em tela do e-mail de recap interno da pasta da confirmação -->
-<div id="mc-mail-overlay" role="dialog" aria-modal="true">
-    <div id="mc-mail-bar">
-        <i class="ti ti-mail" style="color:var(--vr-accent-3, #8b5cf6)"></i>
-        <span class="mc-mail-title" id="mc-mail-title"></span>
-        <button type="button" class="btn btn-sm btn-outline-secondary" id="mc-mail-close">
-            ✕ <span data-lang="mc-mail-close">Close</span>
-        </button>
-    </div>
-    <iframe id="mc-mail-frame" sandbox="" title="Internal recap e-mail preview"></iframe>
-</div>
-
 {% endblock %}
 
 {% block extra_javascript %}
@@ -357,7 +339,8 @@
               empty: 'Nothing pending at this stage.',
               nolink: 'no PDF in the confirmation folder',
               docsLoading: 'looking for the PDFs…',
-              mailTip: 'open the internal recap e-mail preview',
+              mailTip: 'open the internal recap e-mail in a new tab',
+              noContractTip: 'no contract to validate yet',
               warnMissing: 'No validation rule registered for: {p}. Until then these confirmations go through OTC and MO.',
               failTitle: 'Could not load the queue',
               failText: 'Refresh the page; if it persists the server may be restarting.' },
@@ -369,7 +352,8 @@
               empty: 'Nada pendente nesta etapa.',
               nolink: 'nenhum PDF na pasta da confirmação',
               docsLoading: 'procurando os PDFs…',
-              mailTip: 'abrir o preview do e-mail de recap interno',
+              mailTip: 'abrir o e-mail de recap interno em nova aba',
+              noContractTip: 'ainda não há contrato para validar',
               warnMissing: 'Sem cadastro de validação para: {p}. Enquanto isso essas confirmações seguem por OTC e MO.',
               failTitle: 'Não foi possível carregar a esteira',
               failText: 'Atualize a página; se persistir, o servidor pode estar reiniciando.' },
@@ -381,7 +365,8 @@
               empty: 'Nada pendiente en esta etapa.',
               nolink: 'ningún PDF en la carpeta de la confirmación',
               docsLoading: 'buscando los PDFs…',
-              mailTip: 'abrir la vista previa del e-mail de recap interno',
+              mailTip: 'abrir el e-mail de recap interno en una nueva pestaña',
+              noContractTip: 'aún no hay contrato para validar',
               warnMissing: 'Sin registro de validación para: {p}. Mientras tanto estas confirmaciones siguen por OTC y MO.',
               failTitle: 'No se pudo cargar la cola',
               failText: 'Actualice la página; si persiste, el servidor puede estar reiniciando.' }
@@ -511,20 +496,34 @@
                      data: el.attr('data-docs-data'),
                      trades: (el.attr('data-docs-trades') || '').split(',').filter(Boolean) };
         });
-        function pinta(el, docs) {
+        // `checou` distingue "o servidor olhou a pasta e não há contrato" (aí o
+        // Validate é riscado) de "a chamada falhou" (aí não se afirma nada: o
+        // catch pinta sem o flag e o botão fica como está).
+        function pinta(el, docs, checou) {
+            var acts = el.closest('.mc-item__acts');
+            var temPdf = (docs || []).some(function (d) { return !d.email; });
+            if (checou && !temPdf) {
+                // Sem href: preventDefault não cobre o clique do meio, e um <a>
+                // sem destino também sai da navegação por teclado.
+                acts.find('a.btn-success')
+                    .removeClass('btn-success').addClass('btn-secondary mc-val-off')
+                    .removeAttr('href target')
+                    .attr({ title: t('noContractTip'), 'aria-disabled': 'true' });
+            }
             if (!docs || !docs.length) { el.html(esc(t('nolink'))); return; }
             el.replaceWith('<div class="mc-docs">' + docs.map(function (d) {
                 if (d.email) {
-                    // O recap interno abre em PREVIEW sobre o Monitor — um .msg
-                    // como href baixaria o arquivo e mandaria a pessoa para o
-                    // Outlook, que é o passeio que o preview evita.
-                    return '<a class="mc-mail" data-mail-url="' + esc(d.url) + '" title="' +
-                           esc(t('mailTip')) + '"><i class="ti ti-mail me-1"></i>' +
-                           esc(d.name) + '</a>';
+                    // O recap interno é o ÚNICO chip clicável (abre em nova aba —
+                    // a URL é o endpoint de preview, o e-mail rendido como HTML
+                    // com CSP sandbox, não o .msg cru, que baixaria o arquivo e
+                    // mandaria a pessoa para o Outlook).
+                    return '<a class="mc-mail" href="' + esc(d.url) + '" target="_blank" ' +
+                           'rel="noopener" title="' + esc(t('mailTip')) + '">' +
+                           '<i class="ti ti-mail me-1"></i>' + esc(d.name) + '</a>';
                 }
-                return '<a href="' + esc(d.url) + '" target="_blank" rel="noopener" title="' +
-                       esc(d.name) + '"><i class="ti ti-file-type-pdf me-1"></i>' +
-                       esc(d.name) + '</a>';
+                // O PDF é só informação: a confirmação abre pelo Validate.
+                return '<span class="mc-doc" title="' + esc(d.name) + '">' +
+                       '<i class="ti ti-file-type-pdf me-1"></i>' + esc(d.name) + '</span>';
             }).join('') + '</div>');
         }
         // Timeout de 90 s: sem ele, uma resposta que nunca chega (o servidor
@@ -545,37 +544,16 @@
             .then(function (j) {
                 var listas = (j && j.docs) || [];
                 // A resposta vem na ORDEM em que os itens foram enviados.
-                els.forEach(function (el, i) { pinta(el, listas[i]); });
+                els.forEach(function (el, i) { pinta(el, listas[i], true); });
             })
             .catch(function () { els.forEach(function (el) { el.html(esc(t('nolink'))); }); })
             .finally(function () { if (timer) clearTimeout(timer); });
     }
 
-    // ── Preview do e-mail de recap interno, sobre o Monitor ─────────────
-    // Clique delegado: os chips nascem DEPOIS do fetch de /docs, um listener
-    // direto não os alcançaria. O iframe é sandboxado (atributo no markup) —
-    // o HTML é o corpo de um e-mail, não código nosso.
-    var mailOv = document.getElementById('mc-mail-overlay');
-    var mailFr = document.getElementById('mc-mail-frame');
-    var mailTitle = document.getElementById('mc-mail-title');
-    $(document).on('click', '#mc-cards a.mc-mail', function () {
-        var url = this.getAttribute('data-mail-url');
-        if (!mailOv || !mailFr) { window.open(url, '_blank'); return; }
-        if (mailTitle) mailTitle.textContent = (this.textContent || '').trim();
-        mailFr.src = url;
-        mailOv.classList.add('open');
-        document.body.style.overflow = 'hidden';
-    });
-    function mailClose() {
-        if (!mailOv) return;
-        mailOv.classList.remove('open');
-        if (mailFr) mailFr.src = 'about:blank';   // solta o documento do e-mail
-        document.body.style.overflow = '';
-    }
-    var mailCloseBtn = document.getElementById('mc-mail-close');
-    if (mailCloseBtn) mailCloseBtn.addEventListener('click', mailClose);
-    document.addEventListener('keydown', function (e) {
-        if (e.key === 'Escape') mailClose();
+    // O Validate riscado (sem contrato na pasta) não navega. Delegado: o
+    // estado nasce depois do fetch de /docs, um listener direto não o pegaria.
+    $(document).on('click', '#mc-cards a.mc-val-off', function (e) {
+        e.preventDefault();
     });
 
     function card(c) {

@@ -1723,6 +1723,5 @@
   "cp-r-pcx-desc": "Guarda la planilla \"PENDING - Outstanding Confirmation OTC.xlsx\" en el share de Movimento, sobrescribiendo la anterior — las líneas Pending de la página Pending Confirmation, en el layout histórico de la planilla, con las columnas de fecha como fechas reales (dd/mm/aaaa). Corre automáticamente cada día hábil ANBIMA a las 10:45 de Brasilia (19:15 IST); Run la guarda ahora.",
   "cp-pcx-meta": "Diaria 10:45 BRT → .xlsx en el share",
   "cp-pcx-rows-saved": "línea(s) guardada(s)",
-  "cp-pcx-never": "ninguna corrida registrada aún",
-  "mc-mail-close": "Cerrar"
+  "cp-pcx-never": "ninguna corrida registrada aún"
 }
