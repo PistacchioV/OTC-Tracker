@@ -264,6 +264,20 @@ _NOTIF_PAGE_URL = {
     # carregam: renomear deixaria o histórico do sino sem destino.
     'Confirmation': '/manual-confirmation/monitor',
     'Support': '/tickets-list',
+    # Nove páginas gravavam notificação SEM entrada aqui — o aviso aparecia no
+    # sino e o clique não ia a lugar nenhum (o TED Release do Other Products
+    # Summary foi como isso apareceu). Todo rótulo `page` passado a
+    # `_create_notification` TEM de existir neste mapa (e nas duas cópias do
+    # navegador) — `check_notif_page_url.py` agora prende isso.
+    'Other Products Summary': '/other-products-summary',
+    'NDF Summary':            '/ndf-summary',
+    'Operations B3':          '/operations-b3',
+    'OTM Settlements':        '/otm-settlements',
+    'Latam Desk Position':    '/other-products-swap-latamdeskposition',
+    'NDF Cockpit':            '/ndf-cockpit',
+    'Cognos':                 '/cognos',
+    'File Interface':         '/file-interface',
+    'Mapping':                '/mapping',
 }
 
 
@@ -28128,7 +28142,12 @@ def _pcx_build_xlsx(rows):
     from openpyxl.utils import get_column_letter
     wb = openpyxl.Workbook()
     ws = wb.active
-    ws.title = 'PENDING'
+    # O nome da ABA também é contrato com o consumidor, não só o cabeçalho: o
+    # time global de métricas lê o arquivo via OLEDB (SELECT ... FROM
+    # [CONFIRMATIONS$]) e a planilha legada tinha a aba CONFIRMATIONS. Com
+    # outro nome o driver falha com "CONFIRMATIONS$ is not a valid name" —
+    # foi o que aconteceu quando ela nasceu como PENDING.
+    ws.title = 'CONFIRMATIONS'
     bold = Font(bold=True)
     for j, (header, _src, _is_date) in enumerate(_PCX_COLUMNS, start=1):
         c = ws.cell(row=1, column=j, value=header)
@@ -28981,11 +29000,13 @@ def _generic_ndf_ter_line(deal, is_fwd):
     # (a última preenchida). Asiático deixa em branco — as datas da janela
     # vão nas linhas de verificação.
     fix_single = '' if asian_fix else (fix_end or fix_start)
-    # Other Publisher: a Data de Fixing do Ativo Subjacente vai SEMPRE em
-    # branco (as 8 posições do campo preenchidas com espaço) — no cadastro o
-    # campo 19 é Fixed em branco para a página. Só o FWD Start continua
-    # mandando a data do fixing único. `tipo_media` não depende deste campo —
-    # sai de `asian_fix` —, então zerar aqui não muda a classificação.
+    # Data de Fixing do Ativo Subjacente (campo 19): HOJE o cadastro manda
+    # branco para as DUAS páginas (Fixed vazio no termo-multiclasses — o FWD
+    # Start passou a Blank em 2026-08-12, a pedido da mesa; o OP sempre foi).
+    # O valor continua calculado e entregue ao motor: com o override Fixed ele
+    # é ignorado, e re-apontar o cadastro para Page volta a mandar a data sem
+    # tocar em código. `tipo_media` não depende deste campo — sai de
+    # `asian_fix` —, então o branco não muda a classificação.
     if not is_fwd:
         fix_single = ''
     tipo_media = 'A' if asian_fix else 'N'
@@ -31201,14 +31222,12 @@ def api_ei_file():
 
 @blueprint.route('/api/manual-confirmation/email-preview')
 def api_mc_email_preview():
-    """O e-mail de recap (.msg/.eml) da pasta da confirmação, como HTML para o
-    preview EM TELA do Monitor — abrir o arquivo baixaria o .msg e mandaria a
-    pessoa para o Outlook, que é o passeio que o preview existe para evitar.
+    """O e-mail de recap (.msg/.eml) da pasta da confirmação, como HTML — o
+    Monitor o abre numa aba nova. Abrir o arquivo cru baixaria o .msg e
+    mandaria a pessoa para o Outlook, que é o passeio que este endpoint evita.
 
-    O HTML do corpo é o que veio no e-mail, então ele NÃO entra no DOM da
-    página: o Monitor o carrega num iframe `sandbox` e a resposta ainda leva
-    `Content-Security-Policy: sandbox` — mesmo aberto numa aba, script de
-    e-mail não roda.
+    O HTML do corpo é o que veio no e-mail, então a resposta leva
+    `Content-Security-Policy: sandbox` — script de e-mail não roda na aba.
     """
     if not session.get('authenticated'):
         return jsonify({'success': False, 'message': 'unauthorized'}), 401

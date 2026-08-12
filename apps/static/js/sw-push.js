@@ -30,7 +30,16 @@ var PAGE_URL = {
     'Control Panel': '/control-panel', 'Accrual': '/accrual-swap', 'MtM': '/mtm-swap',
     'Intrag Option': '/intrag-option', 'Intrag NDF': '/intrag-ndf',
     'Intrag Swap': '/intrag-swap',
-    'Support': '/tickets-list'
+    'Support': '/tickets-list',
+    'Other Products Summary': '/other-products-summary',
+    'NDF Summary': '/ndf-summary',
+    'Operations B3': '/operations-b3',
+    'OTM Settlements': '/otm-settlements',
+    'Latam Desk Position': '/other-products-swap-latamdeskposition',
+    'NDF Cockpit': '/ndf-cockpit',
+    'Cognos': '/cognos',
+    'File Interface': '/file-interface',
+    'Mapping': '/mapping'
 };
 
 self.addEventListener('push', function (event) {

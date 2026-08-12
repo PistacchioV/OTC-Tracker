@@ -130,5 +130,32 @@ for arq, rot in (('apps/templates/partials/topbar.html', 'o topbar'),
     check('   e usa a chave traduzida no lookup' if rot == 'o topbar'
           else '   e usa a chave traduzida no lookup ', 'PAGE_URL[nPage]' in src, True)
 
+print('\n== 7. toda notificacao gravada tem destino no mapa ==')
+# O buraco pelo qual o TED Release passou: os checks 1-6 provam que os tres
+# mapas concordam ENTRE SI, mas nada prendia um `_create_notification` gravando
+# um rotulo que nao esta em mapa nenhum — o aviso aparecia no sino e o clique
+# nao ia a lugar nenhum (nove paginas estavam assim). Aqui o routes.py inteiro
+# e varrido por AST: todo rotulo `page` LITERAL passado a `_create_notification`
+# tem de resolver via `_notif_page_url`. Rotulo que vem de expressao
+# (cfg['label'], _NOTIF_DS_OTHERPUB, variavel) fica fora — as constantes ja
+# sao presas nos checks acima, e as demais expressoes carregam rotulos que o
+# proprio mapa lista.
+import ast
+
+_pages_sem_mapa = {}
+for node in ast.walk(ast.parse(SRC)):
+    if not isinstance(node, ast.Call):
+        continue
+    f = node.func
+    if getattr(f, 'id', getattr(f, 'attr', '')) != '_create_notification':
+        continue
+    if len(node.args) < 4 or not isinstance(node.args[3], ast.Constant):
+        continue
+    page = node.args[3].value
+    if not R._notif_page_url(page):
+        _pages_sem_mapa.setdefault(page, []).append(node.lineno)
+check('nenhum rotulo gravado fora do mapa',
+      sorted('%s (L%s)' % (p, ls[0]) for p, ls in _pages_sem_mapa.items()), [])
+
 print('\n' + ('FALHOU: ' + ', '.join(fails) if fails else 'TUDO OK'))
 sys.exit(1 if fails else 0)
