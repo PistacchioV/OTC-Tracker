@@ -11163,14 +11163,27 @@ MESMA do Track Confirmations e do Confirmations Monitor — `manual_conf.load_al
 derivado —, e não uma segunda leitura montada no card: um relatório que conta de outro jeito cobra
 uma fila que a tela não mostra, e a mesa deixa de acreditar nos dois.
 
-**Dois disparos, três listas de destinatários** (`confirmations_escalation_recipients.json`, no
-`control-panel/` que não é versionado):
+**Dois disparos e SETE listas de destinatários** (`confirmations_escalation_recipients.json`, no
+`control-panel/` que não é versionado). Uma lista por e-mail, e não uma por mesa: quem recebe a fila
+do EDG Corporate Swap não é quem recebe a do EDG Swap, e uma lista compartilhada mandaria a fila de
+um produto para quem cuida de outro.
 
 | Lista | Quando | Assunto |
 |---|---|---|
-| **TO — Sales Support** | rotina: seg e qui, 17:00 BRT | `Confirmações Pendentes de Validação - MO` |
-| **Escalation — Sales Support** | todo dia útil, 17:00 BRT | o mesmo assunto |
-| **TO — Front Office** | rotina: seg e qui, 17:00 BRT | um por grupo (abaixo) |
+| **TO — OTC Ops** | rotina: seg e qui, 17:00 BRT | `Confirmations Pending Validation - OTC` |
+| **TO — Sales Support** | rotina: seg e qui, 17:00 BRT | `Confirmations Pending Validation - MO` |
+| **Escalation — Sales Support** | todo dia útil, 17:00 BRT | o mesmo assunto do MO |
+| **TO — FO · CEM Swap** | rotina | `… - FO - CEM Swap` |
+| **TO — FO · EDG Swap** | rotina | `… - FO - EDG Swap` |
+| **TO — FO · EDG Corporate Swap** | rotina | `… - FO - EDG Swap` (o mesmo, por pedido da mesa) |
+| **TO — FO · EDG Option** | rotina | `… - FO - EDG Option` |
+
+Os assuntos são em **inglês**, como o corpo e como todo e-mail do app — chegaram a ser em português
+e a mesa voltou atrás. `otc_to` cobra a primeira parada da esteira (Pending OTC); **Pending Legal
+fica de fora**, porque é hold manual e cobrar o OTC por ele seria cobrar o trabalho errado.
+`fo_to`, a lista única do Front Office que existiu antes da quebra por produto, ainda é lida como
+**padrão** dos grupos sem lista própria — quem já a tinha preenchido não vê a cobrança parar sem
+aviso.
 
 - **Segunda e quinta ROLAM.** Caindo em feriado ANBIMA, o relatório sai no próximo dia útil (D+1). A
   pergunta é feita ao contrário — *que segunda/quinta desemboca em hoje?* (`_ce_is_routine_day`) —,
@@ -11182,12 +11195,13 @@ uma fila que a tela não mostra, e a mesa deixa de acreditar nos dois.
   do SLA acende também na véspera (`left == 1`) e essa fica de fora de propósito — escalar aí chega
   com a mesa ainda dentro do prazo. Lista própria porque é outro público: escalar diariamente para
   quem já recebe a rotina transforma a cobrança em ruído.
-- **Os grupos do Front Office** são produto × LOB, cada um com o assunto que a mesa pediu:
-  `SWAP × CEM` → *FO - CEM Swap*; `SWAP` **e** `SWAP CORPORATE` × EDG → *FO - EDG Swap* (mesmo
-  assunto = **um** e-mail; dois grupos mandariam duas mensagens com o mesmo título); `FXO × EDG` →
-  *FO - EDG Option*. ⚠️ **`OPTION EDG` não é um produto** — é a opção de câmbio na LOB EDG, e o tipo
-  dela é `FXO` (é o que o `upgrade` do `manual-conf-validation` faz com a linha antiga). Cadastrado
-  como produto, o grupo nunca casaria com linha nenhuma, sem erro no log.
+- **Os grupos do Front Office** são produto × LOB, um e-mail cada: `SWAP × CEM`, `SWAP × EDG`,
+  `SWAP CORPORATE × EDG` e `FXO × EDG`. Os dois de EDG Swap têm o **mesmo assunto** (é o que a mesa
+  pediu para o corporate) e são e-mails **separados** porque os destinatários mudam — distingui-los
+  no assunto é trocar uma linha em `_CE_FO_GROUPS`. ⚠️ **`OPTION EDG` não é um produto** — é a opção
+  de câmbio na LOB EDG, e o tipo dela é `FXO` (é o que o `upgrade` do `manual-conf-validation` faz
+  com a linha antiga). Cadastrado como produto, o grupo nunca casaria com linha nenhuma, sem erro
+  no log.
 - O produto casa pelo **tipo de confirmação** (`confirmation_type`), nunca pelo texto cru da coluna:
   é ele que traduz as nomenclaturas que convivem no banco (o `OPTION` do New Deals, o `NDF` ×
   COMMODITY da planilha legada) para os oito nomes únicos.
@@ -11198,8 +11212,9 @@ uma fila que a tela não mostra, e a mesa deixa de acreditar nos dois.
 - **Nada pendente, nada enviado** ('empty', como no Deals Monitor). Sem destinatário salvo o
   desfecho é `no_recipient`, distinto do `empty`: o primeiro é a rotina rodando bem, o segundo é
   cobrança que não saiu de casa — o card mostra os dois com cores diferentes.
-- **Um Run por e-mail** (`mode` = `mo`, `fo-<grupo>`, `escalation`, mais o `routine` do rodapé, que
-  manda o pacote): reenviar só o EDG Swap não pode obrigar a mesa a disparar os outros três. O Run
+- **Um Run por e-mail** (`mode` = `otc`, `mo`, `fo-<grupo>`, `escalation`, mais o `routine` do
+  rodapé, que manda o pacote): reenviar só o EDG Swap não pode obrigar a mesa a disparar os outros
+  cinco. O Run
   roda mesmo fora de segunda/quinta e **não consome o claim** do disparo automático — queimar o
   horário faria a rotina do dia não sair.
 - Claim/release/status em disco seguem a mecânica do Deals Monitor (§207/§222): a reserva é anterior
@@ -11212,9 +11227,15 @@ não serve num e-mail, e `request.url_root` não existe na thread do scheduler (
 waitress. **Defina a variável na instância do time**; o padrão só acerta se o hostname resolver na
 rede de quem lê o e-mail.
 
-O corpo é em inglês como todo e-mail do app (a assinatura pedida, *Regards — OTC Tracker — Brazil
-OTC Operations*, já vem assim); os **assuntos** são os que a mesa passou, em português, porque é por
-eles que ela filtra a caixa de entrada. Template único
+Corpo **e assunto** em inglês (a assinatura pedida, *Regards — OTC Tracker — Brazil OTC
+Operations*, já vem assim): o assunto chegou a ser em português e a mesa voltou atrás — um assunto
+acentuado sobre um corpo em inglês era a única coisa bilíngue do e-mail, e é sobre ele que se
+escreve regra de caixa de entrada. Template único
 (`pages/email-template-confirmations-escalation.html`) com as sete colunas pedidas — Trade Date,
 Client, Product, LOB, Trade ID, Asset e Sent for validation. A luz do SLA marca a linha vencida
-**dentro da coluna da data de envio** em vez de virar uma oitava coluna. Prazo: `scripts/tests/check_conf_escalation.py`.
+**dentro da coluna da data de envio** em vez de virar uma oitava coluna.
+
+**O botão é o do e-mail de conta ativada**: o `<a>` é que carrega `padding`, cor de fundo e raio,
+dentro de uma `<td align="center">`. A primeira versão pintava a CÉLULA e deixava o link só com o
+texto — sai um retângulo fino e apertado, porque a altura vem da linha de texto e não do padding do
+link. Prazo: `scripts/tests/check_conf_escalation.py`.
