@@ -329,6 +329,7 @@ _CONTROL_PANEL_CARDS = [
     {'id': 'signaturecollection', 'label': 'Pending Signature Confirmations — Collection'},
     {'id': 'dealsmonitor', 'label': 'Deals Monitor — Pending Action'},
     {'id': 'pendingspreadsheet', 'label': 'Pending Confirmations Spreadsheet Metrics'},
+    {'id': 'confescalation', 'label': 'Confirmations Escalation'},
 ]
 _CP_CARD_TOKENS = {'/control-panel#' + c['id'] for c in _CONTROL_PANEL_CARDS}
 # API endpoint → the card it belongs to (for server-side enforcement).
@@ -350,6 +351,8 @@ _CP_ENDPOINT_CARD = {
     '/api/control-panel/deals-monitor/run': 'dealsmonitor',
     '/api/control-panel/pending-spreadsheet/run': 'pendingspreadsheet',
     '/api/control-panel/pending-spreadsheet/status': 'pendingspreadsheet',
+    '/api/control-panel/confirmations-escalation/recipients': 'confescalation',
+    '/api/control-panel/confirmations-escalation/run': 'confescalation',
 }
 
 
@@ -28480,6 +28483,596 @@ def api_cp_pcx_status():
                     'next': nxt.strftime('%d/%m/%Y %H:%M'),
                     'now_br': now.strftime('%d/%m/%Y %H:%M'),
                     'path': os.path.join(_PCX_DIR, _PCX_FILENAME)})
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# Control Panel — Confirmations Escalation
+# ══════════════════════════════════════════════════════════════════════════
+# Cobra as validações paradas na esteira de confirmação manual. A base são as
+# MESMAS linhas do Track Confirmations e dos cards do Confirmations Monitor —
+# `manual_conf.load_all()` com o `Pending` DERIVADO —, e não uma segunda
+# leitura montada aqui: um relatório que conta de outro jeito passa a cobrar
+# uma fila que a tela não mostra, e a mesa deixa de acreditar nos dois.
+#
+# São DOIS disparos, com listas de destinatários próprias:
+#
+#   * ROTINA — segunda e quinta às 17:00 de Brasília. Caindo em feriado
+#     ANBIMA, rola para o próximo dia útil (D+1). Vai o retrato de quem está
+#     parado em cada mesa: UM e-mail para o Sales Support (as confirmações em
+#     Pending MO) e um por grupo de produto × LOB para o Front Office.
+#   * ESCALATION — todo dia útil, no mesmo horário. Só o que está no ÚLTIMO
+#     DIA do prazo de MO ou já vencido, e enquanto continuar vencido sai todo
+#     dia. Ele tem lista própria porque é outro público: escalar diariamente
+#     para quem já recebe a rotina transformaria a cobrança em ruído.
+#
+# Nada pendente, nada enviado — é o 'empty' do Deals Monitor, e pela mesma
+# razão: e-mail vazio é o jeito mais rápido de a mesa parar de ler a rotina.
+_CE_RECIPIENTS_FILE = os.path.join(_DAILY_METRIC_DIR,
+                                   'confirmations_escalation_recipients.json')
+_CE_CLAIM_FILE = os.path.join(_DAILY_METRIC_DIR, 'confirmations_escalation_sent.json')
+_CE_STATUS_FILE = os.path.join(_DAILY_METRIC_DIR, 'confirmations_escalation_status.json')
+_CE_TIME = os.getenv('CONF_ESCALATION_TIME', '17:00')       # BRT
+# Segunda (0) e quinta (3). Feriado rola para o próximo dia útil — ver
+# `_ce_is_routine_day`.
+_CE_WEEKDAYS = (0, 3)
+_CE_MONITOR_PATH = '/manual-confirmation/monitor'
+_CE_SUBJECT_MO = 'Confirmações Pendentes de Validação - MO'
+
+# Os grupos do Front Office: cada um é um e-mail, com o assunto que a mesa
+# pediu. `SWAP` e `SWAP CORPORATE` da EDG vão JUNTOS — é o mesmo assunto, e
+# separá-los mandaria dois e-mails com o mesmo título para a mesma pessoa.
+#
+# ⚠️ 'OPTION EDG' não é um produto: é a opção de CÂMBIO na LOB EDG, e o tipo de
+# confirmação dela é `FXO` (o `upgrade` do cadastro `manual-conf-validation`
+# converte a linha antiga exatamente assim). Cadastrar 'OPTION EDG' aqui como
+# produto faria o grupo nunca casar com linha nenhuma, em silêncio.
+_CE_FO_GROUPS = (
+    {'id': 'cem-swap', 'label': 'CEM Swap', 'lob': 'CEM',
+     'products': ('SWAP',),
+     'subject': 'Confirmações Pendentes de Validação - FO - CEM Swap'},
+    {'id': 'edg-swap', 'label': 'EDG Swap', 'lob': 'EDG',
+     'products': ('SWAP', 'SWAP CORPORATE'),
+     'subject': 'Confirmações Pendentes de Validação - FO - EDG Swap'},
+    {'id': 'edg-option', 'label': 'EDG Option', 'lob': 'EDG',
+     'products': ('FXO',),
+     'subject': 'Confirmações Pendentes de Validação - FO - EDG Option'},
+)
+
+
+def _otc_app_url(path='/'):
+    """Endereço ABSOLUTO de uma página do app, para o botão de um e-mail.
+
+    O app nunca precisou disto: todo link até hoje era interno. Um e-mail,
+    porém, é lido fora do navegador que abriu o app, então `url_for` (relativo)
+    não serve, e `request.url_root` também não — o disparo automático roda numa
+    thread sem request, e num Run feito na máquina de desenvolvimento ele
+    devolveria `http://localhost:5005`, que é um link morto para quem recebe.
+
+    Por isso o endereço é de CONFIGURAÇÃO (`OTC_TRACKER_URL` no .env). Sem ele
+    vale o hostname da máquina na porta de produção (`start-prod.bat` sobe a
+    waitress na 8050), que é como a mesa alcança a instância hoje.
+    """
+    base = (os.getenv('OTC_TRACKER_URL', '') or '').strip().rstrip('/')
+    if not base:
+        import socket
+        try:
+            host = socket.gethostname() or 'localhost'
+        except Exception:                                   # noqa: BLE001
+            host = 'localhost'
+        base = 'http://{}:{}'.format(host, os.getenv('OTC_TRACKER_PORT', '8050'))
+    return base + (path if str(path).startswith('/') else '/' + str(path))
+
+
+def _load_ce_recipients():
+    """As três listas do card. Cada uma é um público diferente — a rotina do
+    Sales Support, a escalação do Sales Support e a rotina do Front Office."""
+    vazio = {'sales_to': '', 'sales_escalation': '', 'fo_to': ''}
+    try:
+        with open(_CE_RECIPIENTS_FILE, encoding='utf-8') as fh:
+            d = json.load(fh)
+        if isinstance(d, dict):
+            return {k: str(d.get(k, '') or '') for k in vazio}
+    except Exception:                                       # noqa: BLE001
+        pass
+    return vazio
+
+
+def _save_ce_recipients(d):
+    os.makedirs(_DAILY_METRIC_DIR, exist_ok=True)
+    payload = {k: str((d or {}).get(k, '') or '').strip()
+               for k in ('sales_to', 'sales_escalation', 'fo_to')}
+    with open(_CE_RECIPIENTS_FILE, 'w', encoding='utf-8') as fh:
+        json.dump(payload, fh, ensure_ascii=False, indent=2)
+
+
+def _ce_sent_date(row):
+    """Quando a confirmação CHEGOU na mesa que está devendo a validação.
+
+    É a 'Data envio validação MO/FO', carimbada no instante em que o OTC
+    conferiu (`manual_conf.mark_validated`). As duas alternativas existem para
+    a linha antiga, que entrou na esteira antes desse carimbo: sem elas a
+    coluna sairia vazia justamente nas confirmações mais velhas — as que o
+    relatório existe para cobrar.
+    """
+    for col in ('Data envio validação MO/FO', 'Conferido OTC',
+                'Data envio validação OTC'):
+        v = str(row.get(col, '') or '').strip()
+        if v:
+            return v
+    return ''
+
+
+def _ce_fo_group_id(row):
+    """O grupo de Front Office da linha, ou '' quando ela não casa com nenhum.
+
+    O produto é comparado pelo TIPO DE CONFIRMAÇÃO (`confirmation_type`), nunca
+    pelo texto cru da coluna: é ele que traduz as nomenclaturas que convivem no
+    banco para os oito nomes únicos, e é assim que o cadastro de validação e a
+    pasta do Electronic Inventory também comparam.
+    """
+    from apps.pages import manual_conf as _mc
+    prod = _mc.confirmation_type(row.get('Produto'), row.get('LOB'))
+    lob = _mc.upper_norm(row.get('LOB'))
+    for g in _CE_FO_GROUPS:
+        if lob == g['lob'] and prod in g['products']:
+            return g['id']
+    return ''
+
+
+def _ce_report_rows(rows, stage, hoje=None):
+    """As linhas da tabela do e-mail, já na ordem da fila.
+
+    Mais antiga primeiro (pela data de envio para validação): é a fila, e quem
+    espera há mais tempo vem antes. Linha sem data de envio vai para o fim — ela
+    não tem como ser comparada, e jogá-la no topo empurraria para baixo o que
+    realmente está atrasado.
+
+    `level`/`left` são a luz do SLA daquela mesa; o e-mail usa para marcar em
+    vermelho o que venceu, e a escalação usa para escolher quem entra.
+    """
+    from apps.pages import manual_conf as _mc
+    out = []
+    for r in rows:
+        st = _mc.sla_state(r, stage, hoje)
+        out.append({
+            'trade_date': str(r.get('Data Operação', '') or ''),
+            'client': str(r.get('Cliente', '') or ''),
+            # O nome que as três telas mostram, e não o produto cru do banco.
+            'product': (_mc.confirmation_type(r.get('Produto'), r.get('LOB'))
+                        or str(r.get('Produto', '') or '')),
+            'lob': str(r.get('LOB', '') or ''),
+            'trade_id': str(r.get(_mc.KEY_COLUMN, '') or ''),
+            # 'Moeda' é a coluna do banco; o rótulo é ATIVO desde que ela passou
+            # a carregar a commodity da confirmação (OLEO, PLATTS…).
+            'asset': str(r.get('Moeda', '') or ''),
+            'sent': _ce_sent_date(r),
+            'deadline': _mc.fmt_date(st['deadline']),
+            'level': st['level'],
+            'left': st['left'],
+        })
+    out.sort(key=lambda x: (_mc.parse_date(x['sent']) or datetime.max.date(),
+                            x['client'].lower()))
+    return out
+
+
+def _ce_snapshot(hoje=None):
+    """(mo, grupos_fo, escalation, sem_grupo) — UMA leitura da esteira.
+
+    Uma leitura por e-mail abriria os dois DuckDB quatro vezes no mesmo disparo
+    e, pior, as listas contariam momentos diferentes: uma confirmação validada
+    entre a primeira e a última leitura sairia numa e não na outra.
+
+    `sem_grupo` são os pares Produto × LOB parados no FO que não casam com
+    nenhum grupo cadastrado. Eles NÃO somem calados: o card mostra e o log
+    registra — uma linha que desaparece sem dizer nada vira "sumiu uma
+    confirmação da cobrança".
+    """
+    from apps.pages import manual_conf as _mc
+    rows = _mc.load_all()
+    mo_src = [r for r in rows if r.get('Pending') in (_mc.PENDING_MO, _mc.PENDING_MOFO)]
+    fo_src = [r for r in rows if r.get('Pending') in (_mc.PENDING_FO, _mc.PENDING_MOFO)]
+
+    por_grupo, sem_grupo = {g['id']: [] for g in _CE_FO_GROUPS}, set()
+    for r in fo_src:
+        gid = _ce_fo_group_id(r)
+        if gid:
+            por_grupo[gid].append(r)
+        else:
+            sem_grupo.add('%s · %s' % (
+                _mc.confirmation_type(r.get('Produto'), r.get('LOB')) or '—',
+                str(r.get('LOB') or '—')))
+
+    mo = _ce_report_rows(mo_src, _mc.STAGE_MO, hoje)
+    grupos = [dict(g, rows=_ce_report_rows(por_grupo[g['id']], _mc.STAGE_FO, hoje))
+              for g in _CE_FO_GROUPS]
+    # Último dia = o prazo vence HOJE (`left == 0`). A véspera também acende
+    # `warn` (left == 1) e fica de fora de propósito: o pedido é escalar no
+    # último dia, e antecipar um dia faria a escalação chegar quando a mesa
+    # ainda tem prazo.
+    esc = [r for r in mo
+           if r['level'] == 'late' or (r['level'] == 'warn' and r['left'] == 0)]
+    return mo, grupos, esc, sorted(sem_grupo)
+
+
+def _ce_send_email(subject, scope, rows, to_list, ref, escalation=False):
+    """Monta e envia UM e-mail do card. True ou a mensagem do erro.
+
+    O contexto de aplicação envolve a MONTAGEM INTEIRA (não só o
+    `render_template`): o `_get_logo_path` lê `current_app.root_path`, e
+    envolver só o render troca um "Working outside of application context" por
+    outro três linhas abaixo. Dentro do request do botão Run isto é no-op.
+    """
+    from email.mime.image import MIMEImage
+    try:
+        with _app_context():
+            html = render_template(
+                'pages/email-template-confirmations-escalation.html',
+                ref_date_fmt=ref.strftime('%d/%m/%Y'), scope=scope, rows=rows,
+                escalation=escalation, monitor_url=_otc_app_url(_CE_MONITOR_PATH),
+                current_year=datetime.now().year)
+            msg = MIMEMultipart('related')
+            msg['Subject'] = subject
+            msg['From'] = SHARED_MAILBOX
+            msg['To'] = ', '.join(to_list)
+            alt = MIMEMultipart('alternative')
+            alt.attach(MIMEText('Please view this report in HTML.', 'plain', 'utf-8'))
+            alt.attach(MIMEText(html, 'html', 'utf-8'))
+            msg.attach(alt)
+            logo_path = _get_logo_path()
+            if logo_path:
+                with open(logo_path, 'rb') as f:
+                    limg = MIMEImage(f.read())
+                limg.add_header('Content-ID', '<otc_logo>')
+                limg.add_header('Content-Disposition', 'inline', filename='logo.png')
+                msg.attach(limg)
+            _attach_email_gradient(msg)
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=20) as server:
+            server.sendmail(SHARED_MAILBOX, to_list, msg.as_string())
+        log.info('[conf-escalation] %s enviado — %d confirmação(ões) · to=%s',
+                 scope, len(rows), to_list)
+        return True
+    except Exception as e:                                  # noqa: BLE001
+        log.error('[conf-escalation] %s FALHOU:\n%s', scope, traceback.format_exc())
+        return '{}: {}'.format(type(e).__name__, e)
+
+
+def _ce_deliver(out, subject, scope, rows, raw_to, ref, escalation=False):
+    """Um envio, com os dois motivos de NÃO enviar registrados no resumo.
+
+    'empty' (nada parado) e 'no_recipient' (lista em branco) são desfechos
+    diferentes e o card precisa distingui-los: o primeiro é a rotina rodando
+    bem, o segundo é cobrança que não saiu de casa.
+    """
+    if not rows:
+        out['skipped'].append({'scope': scope, 'subject': subject, 'reason': 'empty'})
+        return
+    to_list = _parse_emails(raw_to)
+    if not to_list:
+        out['skipped'].append({'scope': scope, 'subject': subject,
+                               'reason': 'no_recipient'})
+        return
+    res = _ce_send_email(subject, scope, rows, to_list, ref, escalation)
+    if res is True:
+        out['sent'].append({'scope': scope, 'subject': subject,
+                            'rows': len(rows), 'to': len(to_list)})
+    else:
+        out['errors'].append({'scope': scope, 'subject': subject, 'error': res})
+
+
+# Os modos do disparo. 'routine' e 'both' são os do AGENDAMENTO; os demais
+# existem para o botão Run de cada item do card mandar o seu e-mail sozinho —
+# reenviar só o EDG Swap não pode obrigar a mesa a disparar os outros três.
+_CE_MODES = (('routine', 'escalation', 'both', 'mo')
+             + tuple('fo-' + g['id'] for g in _CE_FO_GROUPS))
+
+
+def _ce_run(mode='routine', ref=None):
+    """Roda um modo e devolve o resumo.
+
+    'routine' = o pacote de segunda/quinta (MO + os três grupos de FO);
+    'escalation' = só a escalação; 'both' = os dois; 'mo' e 'fo-<grupo>' = um
+    e-mail só, que é o que o Run individual de cada item manda.
+
+    O resumo é ESTRUTURADO (o que saiu, o que foi pulado e por quê) porque a
+    frase é montada na tela, no idioma da aplicação — servidor manda a lista,
+    não a frase.
+    """
+    ref = ref or _br_now()
+    rec = _load_ce_recipients()
+    mo, grupos, esc, sem_grupo = _ce_snapshot()
+    out = {'sent': [], 'skipped': [], 'errors': [], 'unmatched': sem_grupo}
+    if sem_grupo:
+        log.warning('[conf-escalation] Pending FO sem grupo cadastrado: %s',
+                    ', '.join(sem_grupo))
+    rotina = mode in ('routine', 'both')
+    if rotina or mode == 'mo':
+        _ce_deliver(out, _CE_SUBJECT_MO, 'Sales Support · MO', mo, rec['sales_to'], ref)
+    for g in grupos:
+        if rotina or mode == 'fo-' + g['id']:
+            _ce_deliver(out, g['subject'], 'Front Office · ' + g['label'],
+                        g['rows'], rec['fo_to'], ref)
+    if mode in ('escalation', 'both'):
+        _ce_deliver(out, _CE_SUBJECT_MO, 'Escalation · MO', esc,
+                    rec['sales_escalation'], ref, escalation=True)
+    return out
+
+
+# ── O agendamento ───────────────────────────────────────────────────────────
+
+def _ce_time():
+    """(hh, mm) do disparo em BRT. Entrada inválida cai no padrão — um typo na
+    variável de ambiente não pode matar a rotina."""
+    try:
+        hh, mm = (int(x) for x in str(_CE_TIME).split(':')[:2])
+        if 0 <= hh <= 23 and 0 <= mm <= 59:
+            return hh, mm
+    except (ValueError, TypeError):
+        pass
+    return 17, 0
+
+
+def _ce_is_routine_day(d):
+    """Hoje é dia do relatório agendado?
+
+    Segunda e quinta, ROLANDO para o próximo dia útil quando o dia cai em
+    feriado ANBIMA — o pedido é "se não for dia útil, em D+1". A pergunta é
+    feita ao contrário (que segunda/quinta desemboca em HOJE?) porque é assim
+    que uma sexta-feira sabe que está pagando a quinta que foi feriado; olhar só
+    para o dia da semana de hoje perderia o relatório inteiro nessa semana.
+
+    Dois feriados seguidos rolam para o dia seguinte de novo, e uma quinta que
+    role até a segunda seguinte se encontra com a própria segunda — e sai UM
+    e-mail, porque o relatório é o retrato de agora, não um acumulado.
+    """
+    d = d.date() if isinstance(d, datetime) else d
+    if not _pcx_is_bizday(d):
+        return False
+    for back in range(8):
+        cand = d - timedelta(days=back)
+        if cand.weekday() not in _CE_WEEKDAYS:
+            continue
+        roll = cand
+        while not _pcx_is_bizday(roll):
+            roll += timedelta(days=1)
+        if roll == d:
+            return True
+    return False
+
+
+def _ce_next_runs(now=None):
+    """Os próximos horários de cada modo, para o card responder "quando sai o
+    próximo?" sem ninguém reproduzir a regra de cabeça."""
+    now = now or _br_now()
+    hh, mm = _ce_time()
+    nxt = {'routine': '', 'escalation': ''}
+    for i in range(0, 40):
+        cand = (now + timedelta(days=i)).replace(hour=hh, minute=mm,
+                                                 second=0, microsecond=0)
+        if cand <= now:
+            continue
+        if not nxt['escalation'] and _pcx_is_bizday(cand):
+            nxt['escalation'] = cand.strftime('%d/%m/%Y %H:%M')
+        if not nxt['routine'] and _ce_is_routine_day(cand):
+            nxt['routine'] = cand.strftime('%d/%m/%Y %H:%M')
+        if nxt['routine'] and nxt['escalation']:
+            break
+    return nxt
+
+
+def _ce_claim_slot(slot):
+    """Reserva um disparo EM DISCO (mesma mecânica do Deals Monitor: a trava em
+    memória não impede que dois processos mandem o mesmo e-mail)."""
+    with _cache_lock:
+        try:
+            with open(_CE_CLAIM_FILE, encoding='utf-8') as fh:
+                sent = json.load(fh)
+            if not isinstance(sent, list):
+                sent = []
+        except (IOError, OSError, json.JSONDecodeError):
+            sent = []
+        if slot in sent:
+            return False
+        sent.append(slot)
+        try:
+            os.makedirs(_DAILY_METRIC_DIR, exist_ok=True)
+            _atomic_write_json(_CE_CLAIM_FILE, sorted(sent)[-24:])
+        except Exception:                                   # noqa: BLE001
+            log.warning('[conf-escalation] não consegui gravar o claim:\n%s',
+                        traceback.format_exc())
+        return True
+
+
+def _ce_release_slot(slot):
+    """Devolve o slot quando o envio falhou, para o catch-up da próxima volta
+    tentar de novo — senão uma queda de SMTP às 17h custa a cobrança do dia."""
+    with _cache_lock:
+        try:
+            with open(_CE_CLAIM_FILE, encoding='utf-8') as fh:
+                sent = json.load(fh)
+            if not isinstance(sent, list):
+                return
+        except (IOError, OSError, json.JSONDecodeError):
+            return
+        if slot not in sent:
+            return
+        try:
+            _atomic_write_json(_CE_CLAIM_FILE, [s for s in sent if s != slot])
+        except Exception:                                   # noqa: BLE001
+            log.warning('[conf-escalation] não consegui devolver o slot %s:\n%s',
+                        slot, traceback.format_exc())
+
+
+def _ce_status_write(mode, slot, result, when):
+    """Desfecho do último disparo de cada modo. O log do servidor tem a resposta
+    e ninguém o lê — é isto que faz o card responder "a cobrança saiu?"."""
+    with _cache_lock:
+        try:
+            with open(_CE_STATUS_FILE, encoding='utf-8') as fh:
+                d = json.load(fh)
+            if not isinstance(d, dict):
+                d = {}
+        except (IOError, OSError, json.JSONDecodeError):
+            d = {}
+        d[mode] = {'slot': slot, 'result': result,
+                   'at': when.strftime('%d/%m/%Y %H:%M:%S')}
+        try:
+            os.makedirs(_DAILY_METRIC_DIR, exist_ok=True)
+            _atomic_write_json(_CE_STATUS_FILE, d)
+        except Exception:                                   # noqa: BLE001
+            log.warning('[conf-escalation] não consegui gravar o status:\n%s',
+                        traceback.format_exc())
+
+
+def _ce_read_status():
+    try:
+        with open(_CE_STATUS_FILE, encoding='utf-8') as fh:
+            d = json.load(fh)
+        return d if isinstance(d, dict) else {}
+    except (IOError, OSError, json.JSONDecodeError):
+        return {}
+
+
+def _ce_disparar(mode, slot, fired):
+    """Manda o que o modo pede, se ninguém já mandou. True = o slot era deste
+    processo.
+
+    Só o ERRO devolve o slot: 'empty' (nada parado) é desfecho legítimo e não
+    há o que reenviar, e sem destinatário o e-mail não sairia na retentativa
+    também — quem resolve isso é o card, não o scheduler."""
+    if not _ce_claim_slot(slot):
+        return False
+    out = _ce_run(mode, fired)
+    if out['errors']:
+        result = 'error:' + '; '.join(e['error'] for e in out['errors'])
+        _ce_release_slot(slot)
+    elif out['sent']:
+        result = 'sent:{}'.format(sum(s['rows'] for s in out['sent']))
+    elif any(s['reason'] == 'no_recipient' for s in out['skipped']):
+        result = 'no_recipient'
+    else:
+        result = 'empty'
+    log.info('[conf-escalation] %s de %s (BRT): %s', mode, slot, result)
+    _ce_status_write(mode, slot, result, fired)
+    return True
+
+
+def _ce_scheduler_loop():
+    while True:
+        try:
+            hh, mm = _ce_time()
+            now = _br_now()
+            cand = now.replace(hour=hh, minute=mm, second=0, microsecond=0)
+            if cand <= now:
+                # Catch-up a cada volta, como no Deals Monitor: recupera o
+                # disparo do dia quando o processo subiu depois do horário (a
+                # instância reinicia várias vezes ao dia) e RETENTA o slot cujo
+                # envio falhou e foi devolvido.
+                dia = now.strftime('%Y-%m-%d')
+                if _pcx_is_bizday(now):
+                    if _ce_is_routine_day(now):
+                        _ce_disparar('routine', '{} {:02d}:{:02d} routine'.format(dia, hh, mm), now)
+                    _ce_disparar('escalation', '{} {:02d}:{:02d} escalation'.format(dia, hh, mm), now)
+                nxt = cand + timedelta(days=1)
+            else:
+                nxt = cand
+            now = _br_now()
+            time.sleep(max(1.0, min((nxt - now).total_seconds(), 3600)))
+        except Exception:                                   # noqa: BLE001
+            log.error('[conf-escalation] scheduler error:\n%s', traceback.format_exc())
+            time.sleep(60)
+
+
+_ce_scheduler_started = False
+_ce_scheduler_lock = threading.Lock()
+
+
+def _ce_start_scheduler():
+    global _ce_scheduler_started
+    with _ce_scheduler_lock:
+        if _ce_scheduler_started:
+            return
+        _ce_scheduler_started = True
+    threading.Thread(target=_ce_scheduler_loop,
+                     name='conf-escalation-scheduler', daemon=True).start()
+    log.info('[conf-escalation] scheduler iniciado (%02d:%02d BRT · rotina seg/qui, '
+             'escalação todo dia útil ANBIMA)', *_ce_time())
+
+
+try:
+    _ce_start_scheduler()
+except Exception:                                           # noqa: BLE001
+    log.warning('[conf-escalation] could not start the scheduler')
+
+
+@blueprint.route('/api/control-panel/confirmations-escalation/recipients',
+                 methods=['GET', 'POST'])
+def api_cp_conf_escalation_recipients():
+    """GET → as três listas + o retrato da fila e o desfecho dos disparos;
+    POST → grava as listas."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    if request.method == 'POST':
+        try:
+            _save_ce_recipients(request.get_json(silent=True) or {})
+        except Exception as e:                              # noqa: BLE001
+            log.error('[conf-escalation] save recipients failed:\n%s',
+                      traceback.format_exc())
+            return jsonify({'success': False,
+                            'error': '{}: {}'.format(type(e).__name__, e)}), 500
+        return jsonify({'success': True})
+    try:
+        mo, grupos, esc, sem_grupo = _ce_snapshot()
+        counts = {'mo': len(mo), 'escalation': len(esc),
+                  'fo': [{'id': g['id'], 'label': g['label'], 'count': len(g['rows'])}
+                         for g in grupos],
+                  'unmatched': sem_grupo}
+    except Exception:                                       # noqa: BLE001
+        # A esteira fora do ar não pode derrubar o card: as listas de
+        # destinatários ainda precisam ser editáveis.
+        log.warning('[conf-escalation] não consegui ler a esteira:\n%s',
+                    traceback.format_exc())
+        counts = {}
+    now = _br_now()
+    return jsonify({'success': True, **_load_ce_recipients(),
+                    'counts': counts, 'last': _ce_read_status(),
+                    'next': _ce_next_runs(now),
+                    'now_br': now.strftime('%d/%m/%Y %H:%M'),
+                    'time': '{:02d}:{:02d}'.format(*_ce_time())})
+
+
+@blueprint.route('/api/control-panel/confirmations-escalation/run', methods=['POST'])
+def api_cp_conf_escalation_run():
+    """Dispara agora, sem esperar o horário — `mode` em `_CE_MODES`: o pacote
+    da rotina, a escalação, ou UM e-mail só (o Run individual de cada item).
+
+    Roda mesmo fora de segunda/quinta e mesmo em feriado: quem clicou decidiu.
+    E NÃO consome o claim do disparo automático — o Run é um teste ou um envio
+    fora de hora, e queimar o horário faria a rotina do dia não sair.
+    """
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    mode = str((request.get_json(silent=True) or {}).get('mode') or 'routine').strip()
+    if mode not in _CE_MODES:
+        mode = 'routine'
+    try:
+        out = _ce_run(mode, _br_now())
+    except Exception as e:                                  # noqa: BLE001
+        log.error('[conf-escalation] run manual falhou:\n%s', traceback.format_exc())
+        return jsonify({'success': False,
+                        'error': '{}: {}'.format(type(e).__name__, e)}), 500
+    # O desfecho do Run entra na FAMÍLIA do modo ('escalation' ou 'routine'),
+    # não numa chave por botão: o card mostra duas linhas de status, e uma
+    # chave 'fo-edg-swap' ficaria gravada sem ninguém para lê-la.
+    _ce_status_write('escalation' if mode == 'escalation' else 'routine', 'manual',
+                     ('error:' + '; '.join(e['error'] for e in out['errors'])) if out['errors']
+                     else ('sent:{}'.format(sum(s['rows'] for s in out['sent']))
+                           if out['sent'] else 'empty'), _br_now())
+    if out['sent']:
+        _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                             'Confirmations Escalation Sent', 'Control Panel',
+                             '{} e-mail(s) sent — {} confirmation(s)'.format(
+                                 len(out['sent']), sum(s['rows'] for s in out['sent'])))
+    return jsonify({'success': True, 'mode': mode, **out})
 
 
 def _find_generic_nd_deal(cfg, deal_name, client_name=None):

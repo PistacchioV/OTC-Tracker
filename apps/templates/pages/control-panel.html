@@ -180,6 +180,32 @@
 .cp-run-btn--alt:active { box-shadow: 0 1px 4px rgba(71,85,105,.3); }
 .cp-run-btn--alt:focus-visible { box-shadow: 0 0 0 4px rgba(100,116,139,.35); }
 
+/* Botão Run compacto — o de cada item do Confirmations Escalation. Mesma
+   geometria e cor do Run grande, na medida de uma linha de lista. */
+.cp-run-btn--sm {
+    font-size: .72rem !important; padding: .3rem .85rem !important;
+    gap: .35rem; box-shadow: 0 1px 5px rgba(0,102,204,.28);
+}
+.cp-run-btn--sm i { font-size: .9rem; }
+
+/* Lista de itens com envio individual (Confirmations Escalation) */
+.cp-ce-list { margin-top: 1.15rem; display: flex; flex-direction: column; gap: .3rem; }
+.cp-ce-item {
+    display: flex; align-items: center; justify-content: space-between; gap: .6rem;
+    padding: .38rem .6rem; border-radius: 10px;
+    background: var(--ins-tertiary-bg, var(--bs-tertiary-bg, #f8f9fa));
+}
+.cp-ce-item__lbl {
+    font-size: .78rem; font-weight: 600; color: var(--cp-ink);
+    display: inline-flex; align-items: baseline; gap: .4rem; min-width: 0;
+}
+[data-bs-theme="dark"] .cp-ce-item__lbl { color: #f5f5f7; }
+.cp-ce-item__n {
+    font-size: .72rem; font-weight: 700; color: var(--cp-blue);
+    font-variant-numeric: tabular-nums;
+}
+.cp-ce-item__sub { font-size: .68rem; font-weight: 500; color: var(--cp-faint); }
+
 /* Feedback: expanding ring pulse on press (Emil-style press affordance) */
 .cp-run-btn::after {
     content: ''; position: absolute; inset: 0; border-radius: inherit;
@@ -611,6 +637,107 @@
                                 data-endpoint="/api/control-panel/pending-spreadsheet/run">
                             <i class="ti ti-player-play"></i>
                             <span data-lang="cp-run">Run</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-lg-6 d-flex" data-cp-group="reporting">
+            <div class="cp-reveal">
+                <div class="cp-card" data-cp-card="confescalation">
+                    <div class="cp-card__icon"><i class="ti ti-mail-forward"></i></div>
+                    <h3 class="cp-card__title" data-lang="cp-r-ce-title">Confirmations Escalation</h3>
+                    <p class="cp-card__desc" data-lang="cp-r-ce-desc">
+                        E-mails the confirmations still pending validation on the Confirmations
+                        Monitor / Track Confirmations. Routine: Monday and Thursday at 17:00
+                        Brasília (rolled to the next ANBIMA business day) — one report for Sales
+                        Support (Pending MO) and one per product/LOB group for the Front Office.
+                        Escalation: every business day, only what is on the last day of the MO
+                        deadline or already overdue. Nothing pending, no e-mail. Each item can also
+                        be sent on its own with its Run button.
+                    </p>
+                    <div class="cp-field">
+                        <label data-lang="cp-ce-sales-to">TO — Sales Support</label>
+                        <input type="text" id="cp-ce-sales-to" class="form-control form-control-sm"
+                               placeholder="email1@jpmorgan.com; email2@jpmorgan.com">
+                    </div>
+                    <div class="cp-field">
+                        <label data-lang="cp-ce-sales-esc">Escalation — Sales Support</label>
+                        <input type="text" id="cp-ce-sales-esc" class="form-control form-control-sm"
+                               placeholder="email1@jpmorgan.com; email2@jpmorgan.com">
+                    </div>
+                    <div class="cp-field">
+                        <label data-lang="cp-ce-fo-to">TO — Front Office</label>
+                        <input type="text" id="cp-ce-fo-to" class="form-control form-control-sm"
+                               placeholder="email1@jpmorgan.com; email2@jpmorgan.com">
+                    </div>
+
+                    <!-- Um Run por e-mail: reenviar só o EDG Swap não pode
+                         obrigar a mesa a disparar os outros três. O número ao
+                         lado é quanto está parado naquela fila agora. -->
+                    <div class="cp-ce-list">
+                        <div class="cp-ce-item">
+                            <span class="cp-ce-item__lbl">
+                                <span data-lang="cp-ce-i-mo">Sales Support — MO</span>
+                                <span class="cp-ce-item__n" data-ce-count="mo">–</span>
+                            </span>
+                            <button type="button" class="cp-run-btn cp-run-btn--sm" data-ce-run="mo">
+                                <i class="ti ti-send"></i><span data-lang="cp-run">Run</span>
+                            </button>
+                        </div>
+                        <div class="cp-ce-item">
+                            <span class="cp-ce-item__lbl">
+                                <span data-lang="cp-ce-i-esc">Escalation — MO</span>
+                                <span class="cp-ce-item__sub" data-lang="cp-ce-i-esc-sub">last day / overdue</span>
+                                <span class="cp-ce-item__n" data-ce-count="escalation">–</span>
+                            </span>
+                            <button type="button" class="cp-run-btn cp-run-btn--sm" data-ce-run="escalation">
+                                <i class="ti ti-alert-triangle"></i><span data-lang="cp-run">Run</span>
+                            </button>
+                        </div>
+                        <div class="cp-ce-item">
+                            <span class="cp-ce-item__lbl">
+                                <span data-lang="cp-ce-i-fo">Front Office</span>
+                                <span class="cp-ce-item__sub">CEM Swap</span>
+                                <span class="cp-ce-item__n" data-ce-count="cem-swap">–</span>
+                            </span>
+                            <button type="button" class="cp-run-btn cp-run-btn--sm" data-ce-run="fo-cem-swap">
+                                <i class="ti ti-send"></i><span data-lang="cp-run">Run</span>
+                            </button>
+                        </div>
+                        <div class="cp-ce-item">
+                            <span class="cp-ce-item__lbl">
+                                <span data-lang="cp-ce-i-fo">Front Office</span>
+                                <span class="cp-ce-item__sub">EDG Swap</span>
+                                <span class="cp-ce-item__n" data-ce-count="edg-swap">–</span>
+                            </span>
+                            <button type="button" class="cp-run-btn cp-run-btn--sm" data-ce-run="fo-edg-swap">
+                                <i class="ti ti-send"></i><span data-lang="cp-run">Run</span>
+                            </button>
+                        </div>
+                        <div class="cp-ce-item">
+                            <span class="cp-ce-item__lbl">
+                                <span data-lang="cp-ce-i-fo">Front Office</span>
+                                <span class="cp-ce-item__sub">EDG Option</span>
+                                <span class="cp-ce-item__n" data-ce-count="edg-option">–</span>
+                            </span>
+                            <button type="button" class="cp-run-btn cp-run-btn--sm" data-ce-run="fo-edg-option">
+                                <i class="ti ti-send"></i><span data-lang="cp-run">Run</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Desfecho dos dois disparos automáticos + próximo horário. -->
+                    <div id="cp-ce-status" class="cp-card__meta d-none"
+                         style="display:block;margin-top:.55rem;line-height:1.5;"></div>
+                    <div class="cp-card__foot">
+                        <span class="cp-card__meta">
+                            <i class="ti ti-calendar-time"></i><span data-lang="cp-ce-meta">Mon &amp; Thu 17:00 BRT · escalation daily</span>
+                        </span>
+                        <button type="button" class="cp-run-btn" data-ce-run="routine">
+                            <i class="ti ti-player-play"></i>
+                            <span data-lang="cp-ce-run-all">Run all</span>
                         </button>
                     </div>
                 </div>
@@ -1187,6 +1314,165 @@ document.addEventListener('click', function (e) {
     if (btn) btn.addEventListener('click', function () { setTimeout(loadStatus, 4000); });
 })();
 
+// ── Confirmations Escalation: 3 listas persistidas + um Run por e-mail ───────
+// O servidor devolve o resumo ESTRUTURADO (o que saiu, o que foi pulado e por
+// quê); a frase é montada aqui, no idioma da aplicação.
+(function () {
+    var FIELDS = { sales_to: 'cp-ce-sales-to', sales_escalation: 'cp-ce-sales-esc',
+                   fo_to: 'cp-ce-fo-to' };
+    var els = {}, faltando = false;
+    Object.keys(FIELDS).forEach(function (k) {
+        els[k] = document.getElementById(FIELDS[k]);
+        if (!els[k]) faltando = true;
+    });
+    if (faltando) return;
+    var REC_URL = '/api/control-panel/confirmations-escalation/recipients';
+    var RUN_URL = '/api/control-panel/confirmations-escalation/run';
+    var stEl = document.getElementById('cp-ce-status');
+
+    function esc(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (ch) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]; });
+    }
+    function setCount(key, n) {
+        var el = document.querySelector('[data-ce-count="' + key + '"]');
+        if (el) el.textContent = (n == null ? '–' : n);
+    }
+    // Verde = saiu; azul = rodou e nao havia nada parado (desfecho legitimo);
+    // amarelo = sem destinatario salvo (a cobranca nao saiu de casa); vermelho =
+    // tentou e falhou — e nesse caso o horario e devolvido e o scheduler retenta.
+    function renderStatus(d) {
+        if (!stEl) return;
+        var last = d.last || {}, next = d.next || {}, bits = [];
+        [['routine', t('cp-ce-routine', 'routine')],
+         ['escalation', t('cp-ce-escalation', 'escalation')]].forEach(function (pair) {
+            var l = last[pair[0]];
+            if (!l || !l.result) return;
+            var r = String(l.result);
+            var ok = r.indexOf('sent:') === 0, empty = r === 'empty',
+                norec = r === 'no_recipient';
+            var cls = ok ? 'text-success' : (empty ? 'text-info'
+                        : (norec ? 'text-warning' : 'text-danger'));
+            var icon = ok ? 'ti-mail-check' : (empty ? 'ti-mail-off'
+                        : (norec ? 'ti-user-off' : 'ti-alert-triangle'));
+            var txt = ok ? (r.slice(5) + ' ' + t('cp-ce-confs', 'confirmation(s) sent'))
+                    : (empty ? t('cp-ce-empty', 'ran — nothing pending')
+                    : (norec ? t('cp-ce-norec', 'no recipient saved')
+                    : esc(r.replace(/^error:/, ''))));
+            bits.push('<span class="' + cls + '"><i class="ti ' + icon + ' me-1"></i>' +
+                      esc(pair[1]) + ' · ' + esc(l.slot || '') + ' · ' + txt + '</span>');
+        });
+        if (!bits.length) {
+            bits.push('<span class="text-muted">' +
+                      esc(t('cp-dm2-never', 'no automatic run recorded yet')) + '</span>');
+        }
+        if (next.routine || next.escalation) {
+            bits.push('<span class="text-muted"><i class="ti ti-clock me-1"></i>' +
+                      esc(t('cp-dm2-next', 'next')) + ' ' + esc(next.routine || '') +
+                      (next.escalation ? (' · ' + esc(t('cp-ce-escalation', 'escalation')) +
+                                          ' ' + esc(next.escalation)) : '') + '</span>');
+        }
+        var un = (d.counts || {}).unmatched || [];
+        if (un.length) {
+            // Pending FO que nao casa com nenhum grupo NAO some calado: sem este
+            // aviso, uma confirmacao simplesmente nunca seria cobrada.
+            bits.push('<span class="text-warning"><i class="ti ti-alert-triangle me-1"></i>' +
+                      esc(t('cp-ce-unmatched', 'pending FO with no group:')) + ' ' +
+                      esc(un.join(', ')) + '</span>');
+        }
+        stEl.innerHTML = bits.join('<br>');
+        stEl.classList.remove('d-none');
+    }
+
+    function loadRecipients() {
+        return fetch(REC_URL, { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (!d || !d.success) return;
+                Object.keys(FIELDS).forEach(function (k) { els[k].value = d[k] || ''; });
+                var c = d.counts || {};
+                setCount('mo', c.mo); setCount('escalation', c.escalation);
+                (c.fo || []).forEach(function (g) { setCount(g.id, g.count); });
+                renderStatus(d);
+            })
+            .catch(function () {});
+    }
+    loadRecipients();
+
+    function saveRecipients() {
+        var body = {};
+        Object.keys(FIELDS).forEach(function (k) { body[k] = els[k].value; });
+        return fetch(REC_URL, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin', body: JSON.stringify(body)
+        }).catch(function () {});
+    }
+    Object.keys(FIELDS).forEach(function (k) {
+        els[k].addEventListener('blur', saveRecipients);
+    });
+
+    function resumo(body) {
+        var out = [], sent = body.sent || [], skipped = body.skipped || [],
+            errors = body.errors || [];
+        sent.forEach(function (s) {
+            out.push('<b>' + esc(s.subject) + '</b>: ' + s.rows + ' ' +
+                     t('cp-ce-confs-to', 'confirmation(s) sent to') + ' ' + s.to +
+                     ' ' + t('cp-ce-recips', 'recipient(s)'));
+        });
+        skipped.forEach(function (s) {
+            out.push('<span class="text-muted">' + esc(s.scope) + ': ' +
+                     (s.reason === 'empty' ? t('cp-ce-skip-empty', 'nothing pending')
+                                           : t('cp-ce-skip-norec', 'no recipient saved')) +
+                     '</span>');
+        });
+        errors.forEach(function (e) {
+            out.push('<span class="text-danger">' + esc(e.scope) + ': ' + esc(e.error) + '</span>');
+        });
+        return out.join('<br>') || t('cp-nothing', 'Nothing to process.');
+    }
+
+    document.querySelectorAll('[data-ce-run]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            if (btn.disabled) return;
+            var mode = btn.getAttribute('data-ce-run');
+            var label = btn.querySelector('span'); var orig = label ? label.textContent : '';
+            var icon = btn.querySelector('i'); var origIcon = icon ? icon.className : '';
+            btn.disabled = true;
+            if (label) label.textContent = t('cp-running', 'Running…');
+            if (icon) icon.className = 'ti ti-loader-2 ti-spin';
+            saveRecipients().then(function () {
+                return fetch(RUN_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                        credentials: 'same-origin',
+                                        body: JSON.stringify({ mode: mode }) });
+            })
+            .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
+            .then(function (res) {
+                if (res.ok && res.body && res.body.success !== false) {
+                    var b = res.body;
+                    var falhou = (b.errors || []).length > 0;
+                    Swal.fire({ icon: falhou ? 'warning' : 'success',
+                                title: t('cp-done-title', 'Routine completed'),
+                                html: resumo(b), confirmButtonColor: '#0066cc' });
+                } else {
+                    Swal.fire({ icon: 'error', title: t('cp-err-title', 'Routine failed'),
+                                html: (res.body && res.body.error) || t('cp-err-msg', 'An error occurred while running the routine.'),
+                                confirmButtonColor: '#0066cc' });
+                }
+            })
+            .catch(function () {
+                Swal.fire({ icon: 'error', title: t('cp-err-title', 'Routine failed'),
+                            html: t('cp-err-net', 'Network error.'), confirmButtonColor: '#0066cc' });
+            })
+            .finally(function () {
+                btn.disabled = false;
+                if (label) label.textContent = orig;
+                if (icon) icon.className = origIcon || 'ti ti-player-play';
+                loadRecipients();
+            });
+        });
+    });
+})();
+
 // ── Pending Signature Confirmations — Collection (download .eml/.zip drafts) ──
 (function () {
     var btn = document.querySelector('[data-sigcoll-generate]');
@@ -1277,7 +1563,7 @@ document.addEventListener('click', function (e) {
                 if (u.indexOf('/control-panel#') === 0) allow[u.slice('/control-panel#'.length)] = 1;
             });
             // Hide the grid cell (column) of each card the user can't reach.
-            var CP_GROUP = { cetip: 'filesaving', daily: 'filesaving', forecast: 'reporting', contacts: 'reporting', dailymetric: 'reporting', weeklyescalation: 'reporting', signaturecollection: 'reporting', dealsmonitor: 'reporting', pendingspreadsheet: 'reporting' };
+            var CP_GROUP = { cetip: 'filesaving', daily: 'filesaving', forecast: 'reporting', contacts: 'reporting', dailymetric: 'reporting', weeklyescalation: 'reporting', signaturecollection: 'reporting', dealsmonitor: 'reporting', pendingspreadsheet: 'reporting', confescalation: 'reporting' };
             document.querySelectorAll('[data-cp-card]').forEach(function (card) {
                 if (!allow[card.getAttribute('data-cp-card')]) {
                     var col = card.closest('.col-12') || card.closest('.cp-reveal') || card;
