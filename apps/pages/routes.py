@@ -28516,11 +28516,20 @@ _CE_TIME = os.getenv('CONF_ESCALATION_TIME', '17:00')       # BRT
 # `_ce_is_routine_day`.
 _CE_WEEKDAYS = (0, 3)
 _CE_MONITOR_PATH = '/manual-confirmation/monitor'
-_CE_SUBJECT_MO = 'Confirmações Pendentes de Validação - MO'
+# Assunto em INGLÊS, como o corpo e como todo e-mail do app. A mesa pediu os
+# quatro em português e voltou atrás: é por eles que ela filtra a caixa de
+# entrada, e uma regra de Outlook com acento é a que quebra quando o cliente
+# reescreve o cabeçalho codificado.
+_CE_SUBJECT_MO = 'Confirmations Pending Validation - MO'
+# A primeira parada da esteira também é cobrada, e com lista própria: quem
+# confere pelo OTC é a mesa de OTC Ops, não o Sales Support.
+_CE_SUBJECT_OTC = 'Confirmations Pending Validation - OTC'
 
 # Os grupos do Front Office: cada um é um e-mail, com o assunto que a mesa
-# pediu. `SWAP` e `SWAP CORPORATE` da EDG vão JUNTOS — é o mesmo assunto, e
-# separá-los mandaria dois e-mails com o mesmo título para a mesma pessoa.
+# pediu e a LISTA DE DESTINATÁRIOS PRÓPRIA (`rec`). `SWAP` e `SWAP CORPORATE`
+# da EDG chegaram a ser um grupo só, por terem o mesmo assunto; são grupos
+# separados porque quem recebe cada um é diferente, e uma lista compartilhada
+# mandaria a fila do corporate para quem só cuida do swap comum.
 #
 # ⚠️ 'OPTION EDG' não é um produto: é a opção de CÂMBIO na LOB EDG, e o tipo de
 # confirmação dela é `FXO` (o `upgrade` do cadastro `manual-conf-validation`
@@ -28528,14 +28537,20 @@ _CE_SUBJECT_MO = 'Confirmações Pendentes de Validação - MO'
 # produto faria o grupo nunca casar com linha nenhuma, em silêncio.
 _CE_FO_GROUPS = (
     {'id': 'cem-swap', 'label': 'CEM Swap', 'lob': 'CEM',
-     'products': ('SWAP',),
-     'subject': 'Confirmações Pendentes de Validação - FO - CEM Swap'},
+     'products': ('SWAP',), 'rec': 'fo_cem_swap',
+     'subject': 'Confirmations Pending Validation - FO - CEM Swap'},
     {'id': 'edg-swap', 'label': 'EDG Swap', 'lob': 'EDG',
-     'products': ('SWAP', 'SWAP CORPORATE'),
-     'subject': 'Confirmações Pendentes de Validação - FO - EDG Swap'},
+     'products': ('SWAP',), 'rec': 'fo_edg_swap',
+     'subject': 'Confirmations Pending Validation - FO - EDG Swap'},
+    {'id': 'edg-corp-swap', 'label': 'EDG Corporate Swap', 'lob': 'EDG',
+     'products': ('SWAP CORPORATE',), 'rec': 'fo_edg_corp_swap',
+     # O assunto é o que a mesa pediu para o SWAP CORPORATE EDG, e ele é o
+     # mesmo do EDG Swap: são dois e-mails com o mesmo título, para públicos
+     # diferentes. Distingui-los é trocar esta linha.
+     'subject': 'Confirmations Pending Validation - FO - EDG Swap'},
     {'id': 'edg-option', 'label': 'EDG Option', 'lob': 'EDG',
-     'products': ('FXO',),
-     'subject': 'Confirmações Pendentes de Validação - FO - EDG Option'},
+     'products': ('FXO',), 'rec': 'fo_edg_option',
+     'subject': 'Confirmations Pending Validation - FO - EDG Option'},
 )
 
 
@@ -28563,24 +28578,38 @@ def _otc_app_url(path='/'):
     return base + (path if str(path).startswith('/') else '/' + str(path))
 
 
+# As listas do card, na ordem em que a tela as mostra: a do OTC Ops, as duas do
+# Sales Support e UMA POR GRUPO do Front Office — quem recebe a fila do EDG
+# Option não é quem recebe a do CEM Swap.
+_CE_REC_KEYS = (('otc_to', 'sales_to', 'sales_escalation')
+                + tuple(g['rec'] for g in _CE_FO_GROUPS))
+
+
 def _load_ce_recipients():
-    """As três listas do card. Cada uma é um público diferente — a rotina do
-    Sales Support, a escalação do Sales Support e a rotina do Front Office."""
-    vazio = {'sales_to': '', 'sales_escalation': '', 'fo_to': ''}
+    """As listas do card. Cada uma é um público diferente."""
+    vazio = {k: '' for k in _CE_REC_KEYS}
     try:
         with open(_CE_RECIPIENTS_FILE, encoding='utf-8') as fh:
             d = json.load(fh)
-        if isinstance(d, dict):
-            return {k: str(d.get(k, '') or '') for k in vazio}
+        if not isinstance(d, dict):
+            return vazio
+        out = {k: str(d.get(k, '') or '') for k in _CE_REC_KEYS}
+        # `fo_to` era UMA lista para o Front Office inteiro, antes de os
+        # destinatários passarem a mudar por produto. Ela vale como padrão do
+        # grupo que ainda não tem lista própria — senão quem já tinha preenchido
+        # o campo antigo veria a cobrança do FO parar de sair sem aviso.
+        legado = str(d.get('fo_to', '') or '')
+        if legado:
+            for g in _CE_FO_GROUPS:
+                out[g['rec']] = out[g['rec']] or legado
+        return out
     except Exception:                                       # noqa: BLE001
-        pass
-    return vazio
+        return vazio
 
 
 def _save_ce_recipients(d):
     os.makedirs(_DAILY_METRIC_DIR, exist_ok=True)
-    payload = {k: str((d or {}).get(k, '') or '').strip()
-               for k in ('sales_to', 'sales_escalation', 'fo_to')}
+    payload = {k: str((d or {}).get(k, '') or '').strip() for k in _CE_REC_KEYS}
     with open(_CE_RECIPIENTS_FILE, 'w', encoding='utf-8') as fh:
         json.dump(payload, fh, ensure_ascii=False, indent=2)
 
@@ -28656,7 +28685,7 @@ def _ce_report_rows(rows, stage, hoje=None):
 
 
 def _ce_snapshot(hoje=None):
-    """(mo, grupos_fo, escalation, sem_grupo) — UMA leitura da esteira.
+    """(otc, mo, grupos_fo, escalation, sem_grupo) — UMA leitura da esteira.
 
     Uma leitura por e-mail abriria os dois DuckDB quatro vezes no mesmo disparo
     e, pior, as listas contariam momentos diferentes: uma confirmação validada
@@ -28669,6 +28698,9 @@ def _ce_snapshot(hoje=None):
     """
     from apps.pages import manual_conf as _mc
     rows = _mc.load_all()
+    # Pending Legal fica de fora: é hold manual, a confirmação está parada por
+    # decisão de alguém e cobrar o OTC por ela seria cobrar o trabalho errado.
+    otc_src = [r for r in rows if r.get('Pending') == _mc.PENDING_OTC]
     mo_src = [r for r in rows if r.get('Pending') in (_mc.PENDING_MO, _mc.PENDING_MOFO)]
     fo_src = [r for r in rows if r.get('Pending') in (_mc.PENDING_FO, _mc.PENDING_MOFO)]
 
@@ -28682,6 +28714,9 @@ def _ce_snapshot(hoje=None):
                 _mc.confirmation_type(r.get('Produto'), r.get('LOB')) or '—',
                 str(r.get('LOB') or '—')))
 
+    # O prazo é o da mesa que está devendo: OTC D+3, MO D+4, FO D+6, todos
+    # contados do trade date.
+    otc = _ce_report_rows(otc_src, _mc.STAGE_OTC, hoje)
     mo = _ce_report_rows(mo_src, _mc.STAGE_MO, hoje)
     grupos = [dict(g, rows=_ce_report_rows(por_grupo[g['id']], _mc.STAGE_FO, hoje))
               for g in _CE_FO_GROUPS]
@@ -28691,7 +28726,7 @@ def _ce_snapshot(hoje=None):
     # ainda tem prazo.
     esc = [r for r in mo
            if r['level'] == 'late' or (r['level'] == 'warn' and r['left'] == 0)]
-    return mo, grupos, esc, sorted(sem_grupo)
+    return otc, mo, grupos, esc, sorted(sem_grupo)
 
 
 def _ce_send_email(subject, scope, rows, to_list, ref, escalation=False):
@@ -28761,17 +28796,18 @@ def _ce_deliver(out, subject, scope, rows, raw_to, ref, escalation=False):
 
 # Os modos do disparo. 'routine' e 'both' são os do AGENDAMENTO; os demais
 # existem para o botão Run de cada item do card mandar o seu e-mail sozinho —
-# reenviar só o EDG Swap não pode obrigar a mesa a disparar os outros três.
-_CE_MODES = (('routine', 'escalation', 'both', 'mo')
+# reenviar só o EDG Swap não pode obrigar a mesa a disparar os outros cinco.
+_CE_MODES = (('routine', 'escalation', 'both', 'otc', 'mo')
              + tuple('fo-' + g['id'] for g in _CE_FO_GROUPS))
 
 
 def _ce_run(mode='routine', ref=None):
     """Roda um modo e devolve o resumo.
 
-    'routine' = o pacote de segunda/quinta (MO + os três grupos de FO);
-    'escalation' = só a escalação; 'both' = os dois; 'mo' e 'fo-<grupo>' = um
-    e-mail só, que é o que o Run individual de cada item manda.
+    'routine' = o pacote de segunda/quinta (OTC + MO + os grupos de FO);
+    'escalation' = só a escalação; 'both' = os dois; 'otc', 'mo' e
+    'fo-<grupo>' = um e-mail só, que é o que o Run individual de cada item
+    manda.
 
     O resumo é ESTRUTURADO (o que saiu, o que foi pulado e por quê) porque a
     frase é montada na tela, no idioma da aplicação — servidor manda a lista,
@@ -28779,18 +28815,23 @@ def _ce_run(mode='routine', ref=None):
     """
     ref = ref or _br_now()
     rec = _load_ce_recipients()
-    mo, grupos, esc, sem_grupo = _ce_snapshot()
+    otc, mo, grupos, esc, sem_grupo = _ce_snapshot()
     out = {'sent': [], 'skipped': [], 'errors': [], 'unmatched': sem_grupo}
     if sem_grupo:
         log.warning('[conf-escalation] Pending FO sem grupo cadastrado: %s',
                     ', '.join(sem_grupo))
     rotina = mode in ('routine', 'both')
+    if rotina or mode == 'otc':
+        _ce_deliver(out, _CE_SUBJECT_OTC, 'OTC Ops · Pending OTC', otc,
+                    rec['otc_to'], ref)
     if rotina or mode == 'mo':
         _ce_deliver(out, _CE_SUBJECT_MO, 'Sales Support · MO', mo, rec['sales_to'], ref)
     for g in grupos:
         if rotina or mode == 'fo-' + g['id']:
+            # Lista PRÓPRIA do grupo: quem recebe a fila do EDG Corporate Swap
+            # não é quem recebe a do EDG Swap.
             _ce_deliver(out, g['subject'], 'Front Office · ' + g['label'],
-                        g['rows'], rec['fo_to'], ref)
+                        g['rows'], rec.get(g['rec'], ''), ref)
     if mode in ('escalation', 'both'):
         _ce_deliver(out, _CE_SUBJECT_MO, 'Escalation · MO', esc,
                     rec['sales_escalation'], ref, escalation=True)
@@ -29021,8 +29062,8 @@ def api_cp_conf_escalation_recipients():
                             'error': '{}: {}'.format(type(e).__name__, e)}), 500
         return jsonify({'success': True})
     try:
-        mo, grupos, esc, sem_grupo = _ce_snapshot()
-        counts = {'mo': len(mo), 'escalation': len(esc),
+        otc, mo, grupos, esc, sem_grupo = _ce_snapshot()
+        counts = {'otc': len(otc), 'mo': len(mo), 'escalation': len(esc),
                   'fo': [{'id': g['id'], 'label': g['label'], 'count': len(g['rows'])}
                          for g in grupos],
                   'unmatched': sem_grupo}

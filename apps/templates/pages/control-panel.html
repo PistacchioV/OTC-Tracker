@@ -651,12 +651,18 @@
                     <p class="cp-card__desc" data-lang="cp-r-ce-desc">
                         E-mails the confirmations still pending validation on the Confirmations
                         Monitor / Track Confirmations. Routine: Monday and Thursday at 17:00
-                        Brasília (rolled to the next ANBIMA business day) — one report for Sales
-                        Support (Pending MO) and one per product/LOB group for the Front Office.
-                        Escalation: every business day, only what is on the last day of the MO
-                        deadline or already overdue. Nothing pending, no e-mail. Each item can also
-                        be sent on its own with its Run button.
+                        Brasília (rolled to the next ANBIMA business day) — one report per desk:
+                        OTC Ops (Pending OTC), Sales Support (Pending MO) and one per product for
+                        the Front Office, each with its own recipient list. Escalation: every
+                        business day, only what is on the last day of the MO deadline or already
+                        overdue. Nothing pending, no e-mail. Each item can also be sent on its own
+                        with its Run button.
                     </p>
+                    <div class="cp-field">
+                        <label data-lang="cp-ce-otc-to">TO — OTC Ops</label>
+                        <input type="text" id="cp-ce-otc-to" class="form-control form-control-sm"
+                               placeholder="email1@jpmorgan.com; email2@jpmorgan.com">
+                    </div>
                     <div class="cp-field">
                         <label data-lang="cp-ce-sales-to">TO — Sales Support</label>
                         <input type="text" id="cp-ce-sales-to" class="form-control form-control-sm"
@@ -667,16 +673,42 @@
                         <input type="text" id="cp-ce-sales-esc" class="form-control form-control-sm"
                                placeholder="email1@jpmorgan.com; email2@jpmorgan.com">
                     </div>
+                    <!-- Uma lista POR PRODUTO do Front Office: quem recebe a
+                         fila do EDG Corporate Swap não é quem recebe a do EDG
+                         Swap. Cada campo vem com o Run do seu e-mail ao lado —
+                         reenviar um não pode obrigar a mesa a disparar os
+                         outros. O número é quanto está parado naquela fila. -->
                     <div class="cp-field">
-                        <label data-lang="cp-ce-fo-to">TO — Front Office</label>
-                        <input type="text" id="cp-ce-fo-to" class="form-control form-control-sm"
+                        <label data-lang="cp-ce-fo-cem-swap">TO — FO · CEM Swap</label>
+                        <input type="text" id="cp-ce-fo-cem-swap" class="form-control form-control-sm"
+                               placeholder="email1@jpmorgan.com; email2@jpmorgan.com">
+                    </div>
+                    <div class="cp-field">
+                        <label data-lang="cp-ce-fo-edg-swap">TO — FO · EDG Swap</label>
+                        <input type="text" id="cp-ce-fo-edg-swap" class="form-control form-control-sm"
+                               placeholder="email1@jpmorgan.com; email2@jpmorgan.com">
+                    </div>
+                    <div class="cp-field">
+                        <label data-lang="cp-ce-fo-edg-corp-swap">TO — FO · EDG Corporate Swap</label>
+                        <input type="text" id="cp-ce-fo-edg-corp-swap" class="form-control form-control-sm"
+                               placeholder="email1@jpmorgan.com; email2@jpmorgan.com">
+                    </div>
+                    <div class="cp-field">
+                        <label data-lang="cp-ce-fo-edg-option">TO — FO · EDG Option</label>
+                        <input type="text" id="cp-ce-fo-edg-option" class="form-control form-control-sm"
                                placeholder="email1@jpmorgan.com; email2@jpmorgan.com">
                     </div>
 
-                    <!-- Um Run por e-mail: reenviar só o EDG Swap não pode
-                         obrigar a mesa a disparar os outros três. O número ao
-                         lado é quanto está parado naquela fila agora. -->
                     <div class="cp-ce-list">
+                        <div class="cp-ce-item">
+                            <span class="cp-ce-item__lbl">
+                                <span data-lang="cp-ce-i-otc">OTC Ops — Pending OTC</span>
+                                <span class="cp-ce-item__n" data-ce-count="otc">–</span>
+                            </span>
+                            <button type="button" class="cp-run-btn cp-run-btn--sm" data-ce-run="otc">
+                                <i class="ti ti-send"></i><span data-lang="cp-run">Run</span>
+                            </button>
+                        </div>
                         <div class="cp-ce-item">
                             <span class="cp-ce-item__lbl">
                                 <span data-lang="cp-ce-i-mo">Sales Support — MO</span>
@@ -713,6 +745,16 @@
                                 <span class="cp-ce-item__n" data-ce-count="edg-swap">–</span>
                             </span>
                             <button type="button" class="cp-run-btn cp-run-btn--sm" data-ce-run="fo-edg-swap">
+                                <i class="ti ti-send"></i><span data-lang="cp-run">Run</span>
+                            </button>
+                        </div>
+                        <div class="cp-ce-item">
+                            <span class="cp-ce-item__lbl">
+                                <span data-lang="cp-ce-i-fo">Front Office</span>
+                                <span class="cp-ce-item__sub">EDG Corporate Swap</span>
+                                <span class="cp-ce-item__n" data-ce-count="edg-corp-swap">–</span>
+                            </span>
+                            <button type="button" class="cp-run-btn cp-run-btn--sm" data-ce-run="fo-edg-corp-swap">
                                 <i class="ti ti-send"></i><span data-lang="cp-run">Run</span>
                             </button>
                         </div>
@@ -1318,8 +1360,13 @@ document.addEventListener('click', function (e) {
 // O servidor devolve o resumo ESTRUTURADO (o que saiu, o que foi pulado e por
 // quê); a frase é montada aqui, no idioma da aplicação.
 (function () {
-    var FIELDS = { sales_to: 'cp-ce-sales-to', sales_escalation: 'cp-ce-sales-esc',
-                   fo_to: 'cp-ce-fo-to' };
+    // chave da lista no servidor → id do campo. Uma lista por e-mail do FO:
+    // os destinatários mudam por produto.
+    var FIELDS = { otc_to: 'cp-ce-otc-to',
+                   sales_to: 'cp-ce-sales-to', sales_escalation: 'cp-ce-sales-esc',
+                   fo_cem_swap: 'cp-ce-fo-cem-swap', fo_edg_swap: 'cp-ce-fo-edg-swap',
+                   fo_edg_corp_swap: 'cp-ce-fo-edg-corp-swap',
+                   fo_edg_option: 'cp-ce-fo-edg-option' };
     var els = {}, faltando = false;
     Object.keys(FIELDS).forEach(function (k) {
         els[k] = document.getElementById(FIELDS[k]);
@@ -1391,6 +1438,7 @@ document.addEventListener('click', function (e) {
                 if (!d || !d.success) return;
                 Object.keys(FIELDS).forEach(function (k) { els[k].value = d[k] || ''; });
                 var c = d.counts || {};
+                setCount('otc', c.otc);
                 setCount('mo', c.mo); setCount('escalation', c.escalation);
                 (c.fo || []).forEach(function (g) { setCount(g.id, g.count); });
                 renderStatus(d);

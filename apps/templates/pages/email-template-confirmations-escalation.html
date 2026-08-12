@@ -115,19 +115,22 @@
                 </tr>
 
                 <!-- ── Button → Confirmations Monitor ─────────── -->
-                {# Botão em TABELA, não um <a> com padding: o Word do Outlook
-                   ignora padding em link e o botão sairia como texto sublinhado.
-                   A célula pintada é o que ele sabe desenhar. #}
+                {# MESMA forma do botão do e-mail de conta ativada: o <a> é que
+                   carrega padding, cor e raio, dentro de uma <td align="center">.
+                   Pintar a CÉLULA e deixar o link só com o texto (a primeira
+                   versão) saía como um retângulo fino e apertado — a altura vinha
+                   da linha de texto, não do padding do link. #}
                 <tr>
-                    <td align="center" style="padding:22px 30px 4px;">
-                        <table role="presentation" cellspacing="0" cellpadding="0" border="0">
+                    <td style="padding:24px 30px 4px;">
+                        <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
                             <tr>
-                                <td bgcolor="#0d6efd" align="center"
-                                    style="background-color:#0d6efd;border-radius:8px;">
+                                <td align="center">
                                     <a href="{{ monitor_url }}" target="_blank"
-                                       style="display:inline-block;padding:12px 26px;font-size:13px;font-weight:700;
-                                              color:#ffffff;text-decoration:none;letter-spacing:0.2px;">
-                                        Open the Confirmations Monitor</a>
+                                       style="display: inline-block; padding: 12px 32px; background-color: #0d6efd;
+                                              color: #ffffff; font-size: 14px; font-weight: 700;
+                                              text-decoration: none; border-radius: 6px;">
+                                        Open the Confirmations Monitor
+                                    </a>
                                 </td>
                             </tr>
                         </table>

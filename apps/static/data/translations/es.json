@@ -1725,10 +1725,9 @@
   "cp-pcx-rows-saved": "línea(s) guardada(s)",
   "cp-pcx-never": "ninguna corrida registrada aún",
   "cp-r-ce-title": "Confirmations Escalation",
-  "cp-r-ce-desc": "Envía por correo las confirmaciones aún pendientes de validación en el Confirmations Monitor / Track Confirmations. Rutina: lunes y jueves a las 17:00 de Brasilia (se traslada al siguiente día hábil ANBIMA) — un informe para Sales Support (Pending MO) y uno por grupo de producto/LOB para el Front Office. Escalamiento: todos los días hábiles, solo lo que está en el último día del plazo de MO o ya vencido. Nada pendiente, nada enviado. Cada ítem también puede enviarse solo con su botón Run.",
+  "cp-r-ce-desc": "Envía por correo las confirmaciones aún pendientes de validación en el Confirmations Monitor / Track Confirmations. Rutina: lunes y jueves a las 17:00 de Brasilia (se traslada al siguiente día hábil ANBIMA) — un informe por mesa: OTC Ops (Pending OTC), Sales Support (Pending MO) y uno por producto para el Front Office, cada uno con su lista de destinatarios. Escalamiento: todos los días hábiles, solo lo que está en el último día del plazo de MO o ya vencido. Nada pendiente, nada enviado. Cada ítem también puede enviarse solo con su botón Run.",
   "cp-ce-sales-to": "TO — Sales Support",
   "cp-ce-sales-esc": "Escalation — Sales Support",
-  "cp-ce-fo-to": "TO — Front Office",
   "cp-ce-i-mo": "Sales Support — MO",
   "cp-ce-i-esc": "Escalamiento — MO",
   "cp-ce-i-esc-sub": "último día / vencido",
@@ -1744,5 +1743,11 @@
   "cp-ce-confs-to": "confirmación(es) enviada(s) a",
   "cp-ce-recips": "destinatario(s)",
   "cp-ce-skip-empty": "nada pendiente",
-  "cp-ce-skip-norec": "ningún destinatario guardado"
+  "cp-ce-skip-norec": "ningún destinatario guardado",
+  "cp-ce-otc-to": "TO — OTC Ops",
+  "cp-ce-i-otc": "OTC Ops — Pending OTC",
+  "cp-ce-fo-cem-swap": "TO — FO · CEM Swap",
+  "cp-ce-fo-edg-swap": "TO — FO · EDG Swap",
+  "cp-ce-fo-edg-corp-swap": "TO — FO · EDG Corporate Swap",
+  "cp-ce-fo-edg-option": "TO — FO · EDG Option"
 }

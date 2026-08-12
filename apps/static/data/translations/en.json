@@ -1726,10 +1726,9 @@
   "cp-pcx-rows-saved": "row(s) saved",
   "cp-pcx-never": "no run recorded yet",
   "cp-r-ce-title": "Confirmations Escalation",
-  "cp-r-ce-desc": "E-mails the confirmations still pending validation on the Confirmations Monitor / Track Confirmations. Routine: Monday and Thursday at 17:00 Brasília (rolled to the next ANBIMA business day) — one report for Sales Support (Pending MO) and one per product/LOB group for the Front Office. Escalation: every business day, only what is on the last day of the MO deadline or already overdue. Nothing pending, no e-mail. Each item can also be sent on its own with its Run button.",
+  "cp-r-ce-desc": "E-mails the confirmations still pending validation on the Confirmations Monitor / Track Confirmations. Routine: Monday and Thursday at 17:00 Brasília (rolled to the next ANBIMA business day) — one report per desk: OTC Ops (Pending OTC), Sales Support (Pending MO) and one per product for the Front Office, each with its own recipient list. Escalation: every business day, only what is on the last day of the MO deadline or already overdue. Nothing pending, no e-mail. Each item can also be sent on its own with its Run button.",
   "cp-ce-sales-to": "TO — Sales Support",
   "cp-ce-sales-esc": "Escalation — Sales Support",
-  "cp-ce-fo-to": "TO — Front Office",
   "cp-ce-i-mo": "Sales Support — MO",
   "cp-ce-i-esc": "Escalation — MO",
   "cp-ce-i-esc-sub": "last day / overdue",
@@ -1745,5 +1744,11 @@
   "cp-ce-confs-to": "confirmation(s) sent to",
   "cp-ce-recips": "recipient(s)",
   "cp-ce-skip-empty": "nothing pending",
-  "cp-ce-skip-norec": "no recipient saved"
+  "cp-ce-skip-norec": "no recipient saved",
+  "cp-ce-otc-to": "TO — OTC Ops",
+  "cp-ce-i-otc": "OTC Ops — Pending OTC",
+  "cp-ce-fo-cem-swap": "TO — FO · CEM Swap",
+  "cp-ce-fo-edg-swap": "TO — FO · EDG Swap",
+  "cp-ce-fo-edg-corp-swap": "TO — FO · EDG Corporate Swap",
+  "cp-ce-fo-edg-option": "TO — FO · EDG Option"
 }
