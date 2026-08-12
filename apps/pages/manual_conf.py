@@ -183,7 +183,20 @@ PENDING_OTC = 'Pending OTC'
 PENDING_MO = 'Pending MO'
 PENDING_FO = 'Pending FO'
 PENDING_MOFO = 'Pending MO/FO'
+# Estados fora das três mesas (§254):
+#   * Pending Legal — HOLD manual: a confirmação aguarda o jurídico e fica fora
+#     da fila do OTC até alguém soltá-la (grade/modal ou o card do Monitor). É o
+#     ÚNICO estado que se escreve à mão junto com o Pending OTC que o desfaz.
+#   * Pending FepWeb — DERIVADO: todas as validações feitas e o documento ainda
+#     não foi enviado ao cliente. Nunca se digita — nasce das colunas de
+#     validação e morre quando o 'Enviado p/ cliente' é preenchido.
+PENDING_LEGAL = 'Pending Legal'
+PENDING_FEPWEB = 'Pending FepWeb'
 STATUS_OK = 'Ok'
+
+# A coluna que fecha o ciclo: com ela preenchida (e as validações feitas) a
+# confirmação é Ok; sem ela, fica em Pending FepWeb aguardando o envio.
+SENT_COLUMN = 'Enviado p/ cliente (desbloqueado no fep)'
 
 REQUESTED = 'REQUESTED'
 EXEMPT = 'EXEMPT'
@@ -610,8 +623,16 @@ def pending_stage(row, rules=None):
 
     Deriva do estado, não de um campo digitado: uma coluna 'Pending' escrita à
     mão discordaria das datas ao lado dela no primeiro reject, e a tela mostraria
-    uma etapa que já passou.
+    uma etapa que já passou. As DUAS exceções são deliberadas (§254):
+
+      * 'Pending Legal' gravado na linha é um hold manual e VENCE a derivação —
+        a confirmação está fora da fila até alguém soltá-la;
+      * o fim da esteira tem dois degraus: validações feitas SEM o Enviado p/
+        cliente é 'Pending FepWeb' (aguardando envio); Ok exige a data do envio.
     """
+    if upper_norm(row.get('Pending')) == upper_norm(PENDING_LEGAL):
+        return PENDING_LEGAL
+
     rule, _found = rule_for(row.get('Produto'), row.get('LOB'), rules)
 
     if rule[STAGE_OTC] and not _filled(row, 'Conferido OTC'):
@@ -626,6 +647,8 @@ def pending_stage(row, rules=None):
         return PENDING_MOFO          # as duas ao mesmo tempo, não em fila
     if falta:
         return falta[0]
+    if not _filled(row, SENT_COLUMN):
+        return PENDING_FEPWEB
     return STATUS_OK
 
 
@@ -1165,6 +1188,40 @@ def _aging_int(v):
     return int(s) if s.lstrip('-').isdigit() else 0
 
 
+def _extra_card(stage, pending_value, rows, docs_for=None):
+    """Card do Monitor para um estado FORA das três mesas (Legal / FepWeb).
+
+    O mesmo agrupamento por documento dos cards de mesa, sem regra de validação
+    (o estado não é de mesa nenhuma) e sem SLA. Os `keys` do grupo são o que os
+    botões de ação dos cards usam (soltar para o OTC / marcar enviado)."""
+    grupos = {}
+    for r in rows:
+        if r.get('Pending') != pending_value:
+            continue
+        gk = group_key(r)
+        item = grupos.get(gk)
+        if item is None:
+            item = {k: r.get(k, '') for k in MONITOR_FIELDS}
+            item['Tipo'] = confirmation_type(r.get('Produto'), r.get('LOB'))
+            item.update({'stage': stage, 'keys': [], 'trades': [], 'docs': []})
+            if docs_for:
+                item['docs'] = docs_for(r) or []
+            grupos[gk] = item
+        k = str(r.get(KEY_COLUMN, '') or '')
+        if k:
+            item['keys'].append(k)
+            item['trades'].append(k)
+        if _aging_int(r.get('Aging Confirmação')) > _aging_int(item.get('Aging Confirmação')):
+            item['Aging Confirmação'] = r.get('Aging Confirmação', '')
+    itens = list(grupos.values())
+    for it in itens:
+        it['count'] = len(it['keys'])
+        it['key'] = it['keys'][0] if it['keys'] else ''
+    itens.sort(key=lambda i: -_aging_int(i.get('Aging Confirmação')))
+    return {'stage': stage, 'label': pending_value, 'count': len(itens),
+            'trades': sum(i['count'] for i in itens), 'items': itens}
+
+
 def monitor_payload(docs_for=None):
     """Os cards do Monitor: cada etapa com a sua lista de CONFIRMAÇÕES.
 
@@ -1241,6 +1298,12 @@ def monitor_payload(docs_for=None):
                       'count': len(itens),
                       'trades': sum(i['count'] for i in itens),
                       'items': itens})
+    # Os dois estados FORA das mesas (§254) viram cards nas pontas: Pending
+    # Legal ANTES do OTC (a confirmação ainda não entrou na fila) e Pending
+    # FepWeb DEPOIS do FO (validada, aguardando o envio ao cliente). Sem regra
+    # de mesa e sem SLA — não há prazo cadastrado para etapas que não assinam.
+    cards.insert(0, _extra_card('LEGAL', PENDING_LEGAL, rows, docs_for))
+    cards.append(_extra_card('FEPWEB', PENDING_FEPWEB, rows, docs_for))
     # A frase do aviso é montada NA TELA, no idioma selecionado — o servidor só
     # diz QUAIS produtos estão sem cadastro. `warnings` (em PT) permanece para
     # qualquer consumidor antigo.

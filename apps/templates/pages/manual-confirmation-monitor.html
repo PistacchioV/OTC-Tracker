@@ -58,6 +58,9 @@
 #mc-monitor .mc-c-otc .mc-card__ico { background: linear-gradient(100deg, #0066cc, #5e5ce6); box-shadow: 0 4px 12px rgba(0,102,204,.28); }
 #mc-monitor .mc-c-mo  .mc-card__ico { background: linear-gradient(100deg, #b07500, #f7b84b); box-shadow: 0 4px 12px rgba(176,117,0,.28); }
 #mc-monitor .mc-c-fo  .mc-card__ico { background: linear-gradient(100deg, #7c3aed, #d946ef); box-shadow: 0 4px 12px rgba(124,58,237,.28); }
+/* Os dois estados fora das mesas (§254): Legal antes do OTC, FepWeb no fim. */
+#mc-monitor .mc-c-legal .mc-card__ico { background: linear-gradient(100deg, #6d4c41, #a1887f); box-shadow: 0 4px 12px rgba(109,76,65,.28); }
+#mc-monitor .mc-c-fep   .mc-card__ico { background: linear-gradient(100deg, #0d7ea8, #4a849b); box-shadow: 0 4px 12px rgba(13,126,168,.28); }
 
 #mc-monitor .mc-card__title { font-size: .95rem; font-weight: 700; letter-spacing: -.01em; margin: 0; color: var(--ins-body-color); }
 /* O subtítulo diz quantas OPERAÇÕES estão dentro das confirmações do card: o
@@ -319,9 +322,11 @@
     'use strict';
 
     var STAGE_STYLE = {
-        OTC: { cls: 'mc-c-otc', icon: 'ti-user-check' },
-        MO:  { cls: 'mc-c-mo',  icon: 'ti-checkup-list' },
-        FO:  { cls: 'mc-c-fo',  icon: 'ti-briefcase' }
+        LEGAL:  { cls: 'mc-c-legal', icon: 'ti-scale' },
+        OTC:    { cls: 'mc-c-otc',   icon: 'ti-user-check' },
+        MO:     { cls: 'mc-c-mo',    icon: 'ti-checkup-list' },
+        FO:     { cls: 'mc-c-fo',    icon: 'ti-briefcase' },
+        FEPWEB: { cls: 'mc-c-fep',   icon: 'ti-send' }
     };
 
     // ── i18n dos textos montados em JS ──────────────────────────────────
@@ -341,6 +346,15 @@
               docsLoading: 'looking for the PDFs…',
               mailTip: 'open the internal recap e-mail in a new tab',
               noContractTip: 'no contract to validate yet',
+              legalRelease: 'Release to OTC',
+              legalTitle: 'Release to OTC?',
+              legalText: '{c} — {n} operation(s) will leave Pending Legal and enter the OTC queue, here and on the Pending Confirmation page.',
+              legalDone: 'Released to OTC',
+              fepSend: 'Mark as sent',
+              fepTitle: 'Mark as sent to the client?',
+              fepText: '{c} — "Enviado p/ cliente" will be stamped {d} on {n} operation(s); the confirmation turns Ok and the Pending Confirmation moves to Pending Digital Signature / Pending Original, per the signature type on the Reference Data.',
+              fepDone: 'Marked as sent',
+              actGo: 'Yes, proceed', actNo: 'Cancel',
               warnMissing: 'No validation rule registered for: {p}. Until then these confirmations go through OTC and MO.',
               failTitle: 'Could not load the queue',
               failText: 'Refresh the page; if it persists the server may be restarting.' },
@@ -354,6 +368,15 @@
               docsLoading: 'procurando os PDFs…',
               mailTip: 'abrir o e-mail de recap interno em nova aba',
               noContractTip: 'ainda não há contrato para validar',
+              legalRelease: 'Liberar p/ OTC',
+              legalTitle: 'Liberar para o OTC?',
+              legalText: '{c} — {n} operação(ões) saem de Pending Legal e entram na fila do OTC, aqui e na página Pending Confirmation.',
+              legalDone: 'Liberado para o OTC',
+              fepSend: 'Marcar enviado',
+              fepTitle: 'Marcar como enviado ao cliente?',
+              fepText: '{c} — o "Enviado p/ cliente" será carimbado com {d} em {n} operação(ões); a confirmação vira Ok e o Pending Confirmation passa a Pending Digital Signature / Pending Original, pelo tipo de assinatura do Reference Data.',
+              fepDone: 'Marcado como enviado',
+              actGo: 'Sim, seguir', actNo: 'Cancelar',
               warnMissing: 'Sem cadastro de validação para: {p}. Enquanto isso essas confirmações seguem por OTC e MO.',
               failTitle: 'Não foi possível carregar a esteira',
               failText: 'Atualize a página; se persistir, o servidor pode estar reiniciando.' },
@@ -367,6 +390,15 @@
               docsLoading: 'buscando los PDFs…',
               mailTip: 'abrir el e-mail de recap interno en una nueva pestaña',
               noContractTip: 'aún no hay contrato para validar',
+              legalRelease: 'Liberar p/ OTC',
+              legalTitle: '¿Liberar para el OTC?',
+              legalText: '{c} — {n} operación(es) salen de Pending Legal y entran en la cola del OTC, aquí y en la página Pending Confirmation.',
+              legalDone: 'Liberado para el OTC',
+              fepSend: 'Marcar enviado',
+              fepTitle: '¿Marcar como enviado al cliente?',
+              fepText: '{c} — el "Enviado p/ cliente" se sellará con {d} en {n} operación(es); la confirmación pasa a Ok y el Pending Confirmation pasa a Pending Digital Signature / Pending Original, según el tipo de firma del Reference Data.',
+              fepDone: 'Marcado como enviado',
+              actGo: 'Sí, seguir', actNo: 'Cancelar',
               warnMissing: 'Sin registro de validación para: {p}. Mientras tanto estas confirmaciones siguen por OTC y MO.',
               failTitle: 'No se pudo cargar la cola',
               failText: 'Actualice la página; si persiste, el servidor puede estar reiniciando.' }
@@ -463,6 +495,21 @@
     // confirmação faria o OTC deixar de ver o que o MO está conferindo, e a
     // recusa que importa é a do endpoint, não a do botão.
     function acao(stage, it) {
+        // Os cards fora das mesas (§254) têm ação própria, não a de validar:
+        // Legal SOLTA o hold (a confirmação entra na fila do OTC) e FepWeb
+        // marca o envio ao cliente. Os dois confirmam num SweetAlert antes, e
+        // quem não é da mesa de OTC Ops não vê o botão — o card fica
+        // informativo, e a trava de verdade é a do endpoint.
+        if (stage === 'LEGAL' || stage === 'FEPWEB') {
+            if (CAN_VALIDATE && CAN_VALIDATE[stage] === false) return '';
+            var cls = stage === 'LEGAL' ? 'btn-warning mc-act-legal' : 'btn-info mc-act-fep';
+            var ico = stage === 'LEGAL' ? 'ti-arrow-big-right-lines' : 'ti-send';
+            var lbl = stage === 'LEGAL' ? t('legalRelease') : t('fepSend');
+            return '<button type="button" class="btn btn-sm ' + cls + ' ms-auto" ' +
+                   'data-keys="' + esc((it.keys || []).join(',')) + '" ' +
+                   'data-cli="' + esc(it.Cliente || '') + '">' +
+                   '<i class="ti ' + ico + ' me-1"></i>' + esc(lbl) + '</button>';
+        }
         var href = '/manual-confirmation/validate?stage=' + encodeURIComponent(stage) +
                    '&keys=' + encodeURIComponent((it.keys || []).join(','));
         var pode = !CAN_VALIDATE || CAN_VALIDATE[stage] !== false;
@@ -554,6 +601,48 @@
     // estado nasce depois do fetch de /docs, um listener direto não o pegaria.
     $(document).on('click', '#mc-cards a.mc-val-off', function (e) {
         e.preventDefault();
+    });
+
+    // ── Ações dos cards Legal / FepWeb (§254) ───────────────────────────
+    // Delegado (os botões nascem no render) e com SweetAlert de confirmação:
+    // as duas ações mudam o estado de VÁRIAS operações de uma vez, aqui e no
+    // Pending Confirmation, e não têm desfazer.
+    function cardAction(btn, url, tituloKey, textoKey, feitoKey) {
+        var keys = (btn.getAttribute('data-keys') || '').split(',').filter(Boolean);
+        var cli = btn.getAttribute('data-cli') || '';
+        if (!keys.length) return;
+        var hoje = new Date();
+        var d = String(hoje.getDate()).padStart(2, '0') + '/' +
+                String(hoje.getMonth() + 1).padStart(2, '0') + '/' + hoje.getFullYear();
+        Swal.fire({
+            icon: 'question', title: t(tituloKey),
+            html: t(textoKey, { c: esc(cli), n: keys.length, d: d }),
+            showCancelButton: true, confirmButtonText: t('actGo'),
+            cancelButtonText: t('actNo'), confirmButtonColor: '#1a8a4a'
+        }).then(function (r) {
+            if (!r.isConfirmed) return;
+            fetch(url, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ keys: keys })
+            }).then(function (x) { return x.json(); }).then(function (j) {
+                if (!j.success) {
+                    Swal.fire({ icon: 'error', title: 'Confirmations Monitor', text: j.message || '' });
+                    return;
+                }
+                Swal.fire({ icon: 'success', title: t(feitoKey), timer: 1600, showConfirmButton: false });
+                load();
+            }).catch(function (e) {
+                Swal.fire({ icon: 'error', title: 'Confirmations Monitor', text: e.message });
+            });
+        });
+    }
+    $(document).on('click', '#mc-cards .mc-act-legal', function () {
+        cardAction(this, '/api/manual-confirmation/legal-release',
+                   'legalTitle', 'legalText', 'legalDone');
+    });
+    $(document).on('click', '#mc-cards .mc-act-fep', function () {
+        cardAction(this, '/api/manual-confirmation/fepweb-sent',
+                   'fepTitle', 'fepText', 'fepDone');
     });
 
     function card(c) {

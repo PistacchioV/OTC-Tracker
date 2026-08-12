@@ -58,29 +58,32 @@ for pat, code, exp in (
     check('%-12r x %-10r' % (pat, code), R._b3_code_matches(pat, code), exp)
 
 print('\n== 2. o que sai para cada subjacente ==')
+# O flag FIXED QUOTE foi aposentado (§252): o F/340 das linhas que eram YES
+# esta MATERIALIZADO nas colunas (o upgrade faz isso ao ler arquivo antigo);
+# coluna vazia ou subjacente sem linha cai no default unico A / 5 / 358.
 STUB = [
-    {'TYPE': 'FIXED', 'B3 CODE': 'NACX0005', 'FIXED QUOTE': 'YES'},
-    {'TYPE': 'PREFIX', 'B3 CODE': 'HO"MY"', 'FIXED QUOTE': ''},
-    {'TYPE': 'PREFIX', 'B3 CODE': 'C_"MY"', 'FIXED QUOTE': '',
+    {'TYPE': 'FIXED', 'B3 CODE': 'NACX0005', 'QUOTE TYPE NDF': 'F', 'INFO SOURCE': '340'},
+    {'TYPE': 'PREFIX', 'B3 CODE': 'HO"MY"'},
+    {'TYPE': 'PREFIX', 'B3 CODE': 'C_"MY"',
      'QUOTE TYPE NDF': 'X', 'QUOTE TYPE OPT': '9', 'INFO SOURCE': '999'},
-    {'TYPE': 'FIXED', 'B3 CODE': 'PTS005', 'FIXED QUOTE': 'YES',
+    {'TYPE': 'FIXED', 'B3 CODE': 'ZZFIX',
      'QUOTE TYPE NDF': '', 'QUOTE TYPE OPT': '', 'INFO SOURCE': ''},
 ]
 _orig = R._mapping_rows
 R._mapping_rows = lambda key: STUB if key == 'commodities-b3' else _orig(key)
 try:
-    check('fixed sem cadastro -> F/340', R._b3_quote_cfg('NACX0005'),
-          {'fixed': True, 'ndf': 'F', 'opt': '5', 'source': '340'})
-    check('normal sem cadastro -> A/358', R._b3_quote_cfg('HOZ6'),
-          {'fixed': False, 'ndf': 'A', 'opt': '5', 'source': '358'})
+    check('F/340 materializado na linha', R._b3_quote_cfg('NACX0005'),
+          {'ndf': 'F', 'opt': '5', 'source': '340'})
+    check('linha sem as colunas -> A/358', R._b3_quote_cfg('HOZ6'),
+          {'ndf': 'A', 'opt': '5', 'source': '358'})
     check('cadastrado manda', R._b3_quote_cfg('C Z7'),
-          {'fixed': False, 'ndf': 'X', 'opt': '9', 'source': '999'})
-    check('coluna VAZIA cai no historico', R._b3_quote_cfg('PTS005'),
-          {'fixed': True, 'ndf': 'F', 'opt': '5', 'source': '340'})
+          {'ndf': 'X', 'opt': '9', 'source': '999'})
+    check('coluna VAZIA cai no default', R._b3_quote_cfg('ZZFIX'),
+          {'ndf': 'A', 'opt': '5', 'source': '358'})
     check('subjacente sem linha nenhuma', R._b3_quote_cfg('NAO_EXISTE'),
-          {'fixed': False, 'ndf': 'A', 'opt': '5', 'source': '358'})
+          {'ndf': 'A', 'opt': '5', 'source': '358'})
     check('subjacente vazio', R._b3_quote_cfg(''),
-          {'fixed': False, 'ndf': 'A', 'opt': '5', 'source': '358'})
+          {'ndf': 'A', 'opt': '5', 'source': '358'})
 finally:
     R._mapping_rows = _orig
 
@@ -89,23 +92,35 @@ seed = R._MAPPING_DEFS['commodities-b3']['seed']
 falta = [r.get('B3 CODE') for r in seed
          if not all(k in r for k in ('QUOTE TYPE NDF', 'QUOTE TYPE OPT', 'INFO SOURCE'))]
 check('toda linha do seed tem as tres colunas', falta, [])
-errados = [(r.get('B3 CODE'), r.get('QUOTE TYPE NDF'), r.get('INFO SOURCE')) for r in seed
+# Os markets que eram FIXED QUOTE = YES carregam o F/340 escrito nas colunas;
+# o flag em si nao existe mais em linha nenhuma (§252).
+_ERAM_YES = {'FO_0.5%_ROT_BRG_FOB', 'FO_0.5%_SING_FOB', 'COAL_HCC_FOB_AUS_TSI'}
+errados = [(r.get('MARKET'), r.get('QUOTE TYPE NDF'), r.get('INFO SOURCE')) for r in seed
            if (r.get('QUOTE TYPE NDF'),
-               r.get('INFO SOURCE')) != (('F', '340') if str(r.get('FIXED QUOTE') or '').upper() == 'YES'
+               r.get('INFO SOURCE')) != (('F', '340') if r.get('MARKET') in _ERAM_YES
                                          else ('A', '358'))]
 check('e com o valor que o codigo usava', errados, [])
 check('a Opcao nasce com o 5', {r.get('QUOTE TYPE OPT') for r in seed}, {'5'})
+check('o flag aposentado nao esta no seed',
+      [r.get('B3 CODE') for r in seed if 'FIXED QUOTE' in r], [])
+check('os PTS* sairam do seed',
+      [r for r in seed if str(r.get('B3 CODE') or '').startswith('PTS')], [])
 
 antiga = [{'TYPE': 'FIXED', 'MARKET': 'X', 'B3 CODE': 'ABC', 'FIXED QUOTE': 'YES'}]
 up = R._commodities_b3_upgrade(antiga)
-check('linha antiga ganha as colunas',
+check('linha antiga ganha as colunas (o YES materializa F/340)',
       (up[0]['QUOTE TYPE NDF'], up[0]['QUOTE TYPE OPT'], up[0]['INFO SOURCE']),
       ('F', '5', '340'))
+check('   e o flag sai da linha', 'FIXED QUOTE' in up[0], False)
 limpa = [{'B3 CODE': 'ABC', 'FIXED QUOTE': 'YES', 'QUOTE TYPE NDF': '',
           'QUOTE TYPE OPT': '', 'INFO SOURCE': ''}]
 check('coluna apagada na tela continua apagada',
       [R._commodities_b3_upgrade(limpa)[0][k] for k in
        ('QUOTE TYPE NDF', 'QUOTE TYPE OPT', 'INFO SOURCE')], ['', '', ''])
+pts_antigo = [{'TYPE': 'FIXED', 'MARKET': '', 'B3 CODE': 'PTS005', 'FIXED QUOTE': 'YES'},
+              {'TYPE': 'FIXED', 'MARKET': 'NG_NYMEX', 'B3 CODE': 'NG1'}]
+check('os PTS* saem do arquivo antigo na migracao',
+      [r.get('B3 CODE') for r in R._commodities_b3_upgrade(pts_antigo)], ['NG1'])
 
 print('\n== 4. nenhum consumidor guarda mais o literal ==')
 src = io.open('apps/pages/routes.py', encoding='utf-8').read()

@@ -64,6 +64,7 @@
 #mc-page .mc-w-otc .mc-w__ico { background: linear-gradient(100deg, #0066cc, #5e5ce6); box-shadow: 0 4px 12px rgba(0,102,204,.28); }
 #mc-page .mc-w-mo  .mc-w__ico { background: linear-gradient(100deg, #b07500, #f7b84b); box-shadow: 0 4px 12px rgba(176,117,0,.28); }
 #mc-page .mc-w-fo  .mc-w__ico { background: linear-gradient(100deg, #7c3aed, #d946ef); box-shadow: 0 4px 12px rgba(124,58,237,.28); }
+#mc-page .mc-w-fep .mc-w__ico { background: linear-gradient(100deg, #0d7ea8, #4a849b); box-shadow: 0 4px 12px rgba(13,126,168,.28); }
 #mc-page .mc-w-ok  .mc-w__ico { background: linear-gradient(100deg, #1a8a4a, #34c759); box-shadow: 0 4px 12px rgba(26,138,74,.28); }
 
 #mc-page .mc-w__lbl { font-size: .78rem; font-weight: 700; letter-spacing: -.01em; margin: 0; color: var(--ins-body-color); }
@@ -81,6 +82,7 @@
     #mc-page .col-mc-w:nth-child(3) .mc-w { animation-delay: 90ms; }
     #mc-page .col-mc-w:nth-child(4) .mc-w { animation-delay: 135ms; }
     #mc-page .col-mc-w:nth-child(5) .mc-w { animation-delay: 180ms; }
+    #mc-page .col-mc-w:nth-child(6) .mc-w { animation-delay: 225ms; }
     @keyframes mcWIn { from { opacity:0; transform: translateY(8px) scale(.97); } to { opacity:1; transform:none; } }
 }
 
@@ -103,10 +105,14 @@
 }
 #mc-table td { font-size:.72rem; padding:6px 10px; vertical-align:middle; white-space:nowrap; text-align:center; }
 #mc-table_filter { display:none !important; }
-/* A coluna derivada é cinza-clara: dá para ver que ela existe e que não se
-   digita nela — escondê-la faria perguntarem onde foi parar. O tom é o
-   --ins-tertiary-bg; o secondary é BRANCO no tema claro, e a marca sumia. */
-#mc-table td.mc-derived { background: var(--ins-tertiary-bg, #f6f7fb); font-style: italic; }
+/* A coluna derivada segue a listra da linha (branco/cinza), como as demais —
+   o fundo cinza próprio destoava da tabela. O itálico fica como a marca de
+   "não se digita aqui". */
+#mc-table td.mc-derived { font-style: italic; }
+/* Nome fep carrega nomes de arquivo enormes e esticava a tabela inteira:
+   trava em ~1/4 da largura que o conteúdo pedia, com reticências. O texto
+   completo continua na célula (o Ctrl+C copia inteiro). */
+#mc-table td.mc-fep { max-width: 110px; overflow: hidden; text-overflow: ellipsis; }
 /* Dígitos de largura fixa na coluna de valor: sem isso as casas decimais não se
    alinham entre as linhas e a coluna fica serrilhada. */
 #mc-table td.mc-num { font-variant-numeric: tabular-nums; }
@@ -219,6 +225,12 @@
             <div class="mc-w mc-w-fo" data-pending="Pending FO">
                 <span class="mc-w__ico"><i class="ti ti-briefcase"></i></span>
                 <p class="mc-w__lbl">Pending FO</p><p class="mc-w__val" id="w-fo">—</p>
+            </div>
+        </div>
+        <div class="col-6 col-lg col-mc-w">
+            <div class="mc-w mc-w-fep" data-pending="Pending FepWeb">
+                <span class="mc-w__ico"><i class="ti ti-send"></i></span>
+                <p class="mc-w__lbl">Pending FepWeb</p><p class="mc-w__val" id="w-fep">—</p>
             </div>
         </div>
         <div class="col-6 col-lg col-mc-w">
@@ -407,6 +419,7 @@
               keyNeeded: 'Trade ID is required', keyWhy: 'It is the key of the row.',
               keyDup: 'This Trade ID already exists', keyDupWhy: 'Edit the existing row instead.',
               cancel: 'Cancel',
+              pendingManualOnly: 'Pending only accepts "Pending OTC" or "Pending Legal" — the other stages (including Pending FepWeb) are derived from the validation columns.',
               massTitle: 'Apply to {n} row(s)?',
               massText: 'The column <b>{c}</b> of every selected row becomes {v}. There is no undo.',
               massEmpty: 'empty', massOk: 'Apply', massDone: '{n} row(s) updated',
@@ -417,6 +430,7 @@
               keyNeeded: 'Falta o Trade ID', keyWhy: 'É ele que identifica a linha.',
               keyDup: 'Este Trade ID já existe', keyDupWhy: 'Edite a linha que já está na tabela.',
               cancel: 'Cancelar',
+              pendingManualOnly: 'Pending só aceita "Pending OTC" ou "Pending Legal" — as demais etapas (inclusive Pending FepWeb) são derivadas das colunas de validação.',
               massTitle: 'Aplicar em {n} linha(s)?',
               massText: 'A coluna <b>{c}</b> de todas as linhas marcadas passa a {v}. Não tem desfazer.',
               massEmpty: 'vazio', massOk: 'Aplicar', massDone: '{n} linha(s) atualizada(s)',
@@ -427,6 +441,7 @@
               keyNeeded: 'Falta el Trade ID', keyWhy: 'Es la clave de la fila.',
               keyDup: 'Este Trade ID ya existe', keyDupWhy: 'Edite la fila que ya está en la tabla.',
               cancel: 'Cancelar',
+              pendingManualOnly: 'Pending solo acepta "Pending OTC" o "Pending Legal" — las demás etapas (incluida Pending FepWeb) se derivan de las columnas de validación.',
               massTitle: '¿Aplicar en {n} fila(s)?',
               massText: 'La columna <b>{c}</b> de todas las filas marcadas pasa a {v}. No hay deshacer.',
               massEmpty: 'vacío', massOk: 'Aplicar', massDone: '{n} fila(s) actualizada(s)',
@@ -574,6 +589,10 @@
                 col.className = 'mc-derived text-center';
             } else if (isDerived(name)) {
                 col.className = 'mc-derived text-center';
+            } else if (name === 'Nome fep') {
+                // Nomes de arquivo enormes esticavam a coluna: trava com
+                // reticências (ver o CSS .mc-fep).
+                col.className = 'mc-fep text-center';
             }
             defs.push(col);
         });
@@ -616,9 +635,19 @@
     // Derivadas fora da lista: digitá-las cria um valor que a próxima gravação
     // desfaz. E o Trade ID também: é a CHAVE da linha — aplicar o mesmo número
     // em várias fundiria todas numa só, sem desfazer.
+    // Os valores de Pending que a MÃO pode aplicar (§254): Legal é o hold do
+    // jurídico, OTC é o que o solta. FepWeb e Ok são derivados — o servidor
+    // ignora qualquer outro valor.
+    var PENDING_MANUAL = ['Pending OTC', 'Pending Legal'];
+
     function buildMassColumnSelect() {
+        // Texto em inglês, como o Pending Confirmation ("Select Column to
+        // Apply") — o rótulo em português destoava com a aplicação em inglês.
         var sel = $('#mcMassColumn').empty()
-            .append('<option value="">— coluna a alterar —</option>');
+            .append('<option value="">Select Column to Apply</option>');
+        // Pending entra na lista mesmo sendo derivada: é o ÚNICO caminho para
+        // pôr/tirar o hold do jurídico pela tela.
+        sel.append($('<option>').val('Pending').text('Pending'));
         COLUMNS.filter(editable).forEach(function (c) {
             sel.append($('<option>').val(c).text(label(c) === c ? c : label(c) + ' (' + c + ')'));
         });
@@ -666,9 +695,30 @@
 
     function buildMassValueField(col) {
         var wrap = $('#mcMassValueWrap').empty();
-        if (!col) { $('#mcMassApply').prop('disabled', true); return; }
-        var input = fieldFor(col, '');
-        if (!OPTIONS[col] && !isDate(col)) input.attr('placeholder', 'novo valor');
+        if (!col) {
+            // O padrão do Pending Confirmation: sem coluna escolhida o campo
+            // existe, desabilitado, com o placeholder dizendo o que falta —
+            // um espaço vazio parecia defeito.
+            wrap.append('<input type="text" class="form-control form-control-sm" ' +
+                        'disabled placeholder="Select a column first…">');
+            $('#mcMassApply').prop('disabled', true);
+            return;
+        }
+        var input;
+        if (col === 'Pending') {
+            // Dropdown com autocomplete (datalist): só os dois valores manuais.
+            input = $('<input type="text" class="form-control form-control-sm" ' +
+                      'list="mc-pending-opts" placeholder="Pending OTC / Pending Legal" ' +
+                      'autocomplete="off">');
+            if (!document.getElementById('mc-pending-opts')) {
+                var dl = $('<datalist id="mc-pending-opts">');
+                PENDING_MANUAL.forEach(function (o) { dl.append($('<option>').attr('value', o)); });
+                $(document.body).append(dl);
+            }
+        } else {
+            input = fieldFor(col, '');
+            if (!OPTIONS[col] && !isDate(col)) input.attr('placeholder', 'New value…');
+        }
         input.attr('id', 'mcMassValue');
         wrap.append(input);
         updateApply();
@@ -739,7 +789,8 @@
         rows = payload.data || [];
         var c = payload.counts || {};
         $('#w-total').text(c.total || 0); $('#w-otc').text(c.otc || 0);
-        $('#w-mo').text(c.mo || 0); $('#w-fo').text(c.fo || 0); $('#w-ok').text(c.ok || 0);
+        $('#w-mo').text(c.mo || 0); $('#w-fo').text(c.fo || 0);
+        $('#w-fep').text(c.fepweb || 0); $('#w-ok').text(c.ok || 0);
         table.clear().rows.add(rows).draw();
         applyPendingFilter();
         updateApply();
@@ -786,6 +837,7 @@
         buildTable();
         buildColumnMenu();
         buildMassColumnSelect();
+        buildMassValueField('');    // nasce desabilitado com o placeholder (padrão PC)
         load();
 
         // Seleção de célula + Ctrl+C — padrão New Deals (checkbox e Actions fora)
@@ -803,6 +855,13 @@
             var col = $('#mcMassColumn').val(), val = $('#mcMassValue').val() || '';
             var keys = selectedKeys();
             if (!col || !keys.length) return;
+            // Pending só aceita os dois valores manuais — FepWeb e Ok são
+            // derivados e o servidor os ignoraria em silêncio; melhor dizer.
+            if (col === 'Pending' && PENDING_MANUAL.indexOf(val.trim()) === -1) {
+                Swal.fire({ icon: 'warning', title: 'Pending',
+                            text: t('pendingManualOnly') });
+                return;
+            }
             var rotulo = label(col);
             Swal.fire({
                 icon: 'question', title: t('massTitle', { n: keys.length }),

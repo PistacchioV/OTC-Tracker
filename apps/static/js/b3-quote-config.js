@@ -9,15 +9,16 @@
  * (§164).
  *
  * O que era literal no código e agora é cadastro (§177):
- *   Termo  (NDF Comm) → Tipo de Cotação 'F'/'A' e Fonte de Informação 340/358,
- *                       conforme o Fixed Quote
- *   Opção  (Opt Comm) → Tipo de Cotação '5', fixo
- * Coluna vazia — ou subjacente sem linha no cadastro — devolve exatamente esses
- * valores, então o comportamento só muda quando alguém edita a tabela.
+ *   Termo  (NDF Comm) → Tipo de Cotação e Fonte de Informação
+ *   Opção  (Opt Comm) → Tipo de Cotação
+ * Coluna vazia — ou subjacente sem linha no cadastro — devolve o default
+ * histórico ('A' / '5' / '358'). O flag FIXED QUOTE que escolhia F/340 foi
+ * aposentado (§252): os valores estão materializados nas colunas das linhas
+ * que eram YES.
  *
  * Uso:
  *   B3Quote.load();                          // uma vez, ao carregar a página
- *   var q = B3Quote.cfg(underlying);         // { ndf, opt, source, fixed }
+ *   var q = B3Quote.cfg(underlying);         // { ndf, opt, source }
  * ========================================================================== */
 window.B3Quote = (function () {
     'use strict';
@@ -59,12 +60,10 @@ window.B3Quote = (function () {
         for (var i = 0; ROWS && i < ROWS.length; i++) {
             if (matches(ROWS[i]['B3 CODE'], underlying)) { row = ROWS[i]; break; }
         }
-        var fixed = txt(row['FIXED QUOTE']).toUpperCase() === 'YES';
         return {
-            fixed:  fixed,
-            ndf:    txt(row['QUOTE TYPE NDF']) || (fixed ? 'F' : 'A'),
+            ndf:    txt(row['QUOTE TYPE NDF']) || 'A',
             opt:    txt(row['QUOTE TYPE OPT']) || OPT_DEFAULT,
-            source: txt(row['INFO SOURCE']) || (fixed ? '340' : '358')
+            source: txt(row['INFO SOURCE']) || '358'
         };
     }
 

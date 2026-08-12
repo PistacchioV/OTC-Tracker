@@ -167,7 +167,10 @@ var OTCFileUpload = (function () {
         'BRT_DTD':              'PCRUDTB1',
         'NG_NYMEX':             'NG1',
         'MFE_TSI':              'PFATIOCH',
-        'COAL_HCC_FOB_AUS_TSI': 'PMTCLAUS'
+        'COAL_HCC_FOB_AUS_TSI': 'PMTCLAUS',
+        // WTI asiático usa o contínuo CL1, literal ({A: …} = só asiática);
+        // a vanilla segue o padrão de contrato na PREFIX abaixo — §252.
+        'WTI_NYMEX':            { A: 'CL1' }
     };
 
     // Padrões: "MY" = mês/ano do contrato, _ = espaço (ver buildB3Code).
@@ -183,7 +186,7 @@ var OTCFileUpload = (function () {
         'SM_CBOT':        'SM"MY"',
         'CT_ICE':         'CT"MY"',
         'KC_ICE':         'KC"MY"',
-        'WTI_NYMEX':      'WTI"MY"', // not confirmed in B3 data; best guess
+        'WTI_NYMEX':      { V: 'WTI"MY"' },   // só vanilla; asiática é o CL1 FIXED (§252)
         'FCPO_BURSA_MYR': 'KO"MY"BNMK',
         // BRT_IPE vanilla tem linha PREFIX própria, restrita por trade type
         // ({V: …} = só vanilla; valor plano vale para os dois) — §251.

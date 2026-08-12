@@ -87,10 +87,11 @@ old = [
     {'TYPE': 'FIXED', 'MARKET': 'NG_NYMEX', 'B3 CODE': 'NG1'},
     {'TYPE': 'SPECIAL', 'MARKET': 'FCPO_BURSA_MYR', 'B3 CODE': ''},
     {'TYPE': 'SPECIAL', 'MARKET': 'BRT_IPE', 'B3 CODE': ''},
+    {'TYPE': 'PREFIX', 'MARKET': 'WTI_NYMEX', 'B3 CODE': 'WTI"MY"'},
     {'TYPE': 'PREFIX', 'MARKET': 'JA_CADASTRADO', 'B3 CODE': 'ZZ"MY"'},
 ]
 up = R._commodities_b3_upgrade([dict(r) for r in old])
-by = {r['MARKET']: r for r in up if r['MARKET'] != 'BRT_IPE'}
+by = {r['MARKET']: r for r in up if r['MARKET'] not in ('BRT_IPE', 'WTI_NYMEX')}
 check('prefixo simples',      by['HU_RBOB_NYMEX']['B3 CODE'], 'XB"MY"')
 check('espaco vira _',        by['C_CBOT']['B3 CODE'],        'C_"MY"')
 check('FIXED intocado',       by['NG_NYMEX']['B3 CODE'],      'NG1')
@@ -105,6 +106,12 @@ brt = [r for r in up if r['MARKET'] == 'BRT_IPE']
 check('BRT_IPE: uma linha por tipo',
       [(r['TYPE'], r['TRADE TYPE'], r['B3 CODE']) for r in brt],
       [('SPECIAL', 'ASIAN', 'CO"MY"'), ('PREFIX', 'VANILLA', 'CO"MY"')])
+# WTI (§252): a migracao restringe o PREFIX a vanilla e cria a linha FIXED
+# CL1 da asiatica.
+wti = [r for r in up if r['MARKET'] == 'WTI_NYMEX']
+check('WTI: uma linha por tipo',
+      [(r['TYPE'], r['TRADE TYPE'], r['B3 CODE']) for r in wti],
+      [('PREFIX', 'VANILLA', 'WTI"MY"'), ('FIXED', 'ASIAN', 'CL1')])
 # idempotencia: rodar de novo nao pode dobrar o "MY" nem re-somar a linha
 # vanilla do BRT_IPE
 again = R._commodities_b3_upgrade([dict(r) for r in up])
@@ -119,10 +126,12 @@ check('vanilla apagada nao volta',
 
 print('\n== 4. o codigo emitido nao mudou (menos o FCPO, de proposito) ==')
 # Prefixos como estavam ANTES, direto do codigo-fonte antigo.
+# WTI saiu daqui: a asiatica dele passou a ser o CL1 FIXED (§252, mudanca
+# pedida) — os checks explicitos dele estao logo abaixo.
 LEGACY_PREFIX = {
     'HU_RBOB_NYMEX': 'XB', 'HO_NYMEX': 'HO', 'SB_ICE': 'SB', 'C_CBOT': 'C ',
     'S_CBOT': 'S ', 'BO_CBOT': 'BO', 'CC_ICE': 'CC', 'W_CBOT': 'W ',
-    'SM_CBOT': 'SM', 'CT_ICE': 'CT', 'KC_ICE': 'KC', 'WTI_NYMEX': 'WTI',
+    'SM_CBOT': 'SM', 'CT_ICE': 'CT', 'KC_ICE': 'KC',
 }
 # Mapas montados do seed com a MESMA leitura por TRADE TYPE do
 # `_box_commodity_maps` ({mkt: {'V': …, 'A': …}}, §251) — o BRT_IPE tem duas
@@ -157,6 +166,12 @@ for contract in ('Dec26', 'May27', 'Jan30'):
 
 check('FCPO (mudanca pedida)', B.calculate_b3_id('FCPO_BURSA_MYR', 'Dec26', False, fixed, dyn),
       'KOZ6BNMK')
+# WTI (§252, mudanca pedida): vanilla segue o padrao de contrato; asiatica
+# usa o continuo CL1, literal, sem mes/ano.
+check('WTI vanilla segue o contrato',
+      B.calculate_b3_id('WTI_NYMEX', 'Dec26', True, fixed, dyn), 'WTIZ6')
+check('WTI asiatica e o CL1',
+      B.calculate_b3_id('WTI_NYMEX', 'Dec26', False, fixed, dyn), 'CL1')
 # O seed traz os dois codigos do BRT_IPE, agora um por TRADE TYPE (§251): a
 # linha SPECIAL (near/far) e SO da asiatica e a vanilla tem linha PREFIX
 # propria. O codigo emitido nao mudou: vanilla COZ6, asiatica sem data CO1-2.

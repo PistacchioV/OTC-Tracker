@@ -102,7 +102,17 @@ check('validado o OTC, vai para Pending MO', row['Pending'], M.PENDING_MO)
 check('   e o Conferido OTC é carimbado', bool(row['Conferido OTC']), True)
 check('   junto com a data de envio para MO/FO', bool(row['Data envio validação MO/FO']), True)
 row = M.mark_validated('T1', M.STAGE_MO, 'B222222')
-check('validado o MO, a esteira fecha', row['Pending'], M.STATUS_OK)
+# O fim da esteira tem DOIS degraus (§254): validações feitas SEM o Enviado
+# p/ cliente é Pending FepWeb (aguardando envio); Ok exige a data do envio.
+check('validado o MO, aguarda o envio (FepWeb)', row['Pending'], M.PENDING_FEPWEB)
+check('   e a linha AINDA é pendente', M.target_category(row), 'pending')
+check('   Pending FepWeb não se escreve à mão: é derivado',
+      M.pending_stage(dict(row, **{'Pending': ''})), M.PENDING_FEPWEB)
+r1 = M.find_row('T1')
+r1[M.SENT_COLUMN] = '12/08/2026'
+M.upsert_row(r1)
+row = M.find_row('T1')
+check('com o Enviado p/ cliente, fecha', row['Pending'], M.STATUS_OK)
 check('   e a linha migra para o banco ok', M.target_category(row), 'ok')
 check('   que é onde ela está mesmo',
       [x['Trade ID'] for x in M.load_rows('ok')], ['T1'])
@@ -119,7 +129,17 @@ check('as duas mesas ao mesmo tempo', M.find_row('T2')['Pending'], M.PENDING_MOF
 M.mark_validated('T2', M.STAGE_FO, 'C333333')
 check('validado só o FO, sobra o MO', M.find_row('T2')['Pending'], M.PENDING_MO)
 M.mark_validated('T2', M.STAGE_MO, 'B222222')
-check('validadas as duas, fecha', M.find_row('T2')['Pending'], M.STATUS_OK)
+check('validadas as duas, aguarda o envio', M.find_row('T2')['Pending'], M.PENDING_FEPWEB)
+# O hold do jurídico (§254) VENCE a derivação até alguém soltá-lo — é o único
+# valor de Pending que se escreve à mão, junto com o Pending OTC que o desfaz.
+r2 = M.find_row('T2')
+r2['Pending'] = M.PENDING_LEGAL
+M.upsert_row(r2)
+check('Pending Legal gravado vence a derivação', M.find_row('T2')['Pending'], M.PENDING_LEGAL)
+r2 = M.find_row('T2')
+r2['Pending'] = ''
+M.upsert_row(r2)
+check('   e solto, a derivação volta a mandar', M.find_row('T2')['Pending'], M.PENDING_FEPWEB)
 
 # Produto cujo OTC é EXEMPT começa direto nas duas mesas.
 novo('T3', produto='SWAP', lob='EDG')
@@ -209,8 +229,9 @@ check('dentro do prazo, valida sem motivo',
 print('\n== 7. o Monitor ==')
 p = M.monitor_payload()
 por_label = {c['label']: c for c in p['cards']}
-check('três cards, na ordem da esteira', [c['label'] for c in p['cards']],
-      [M.PENDING_OTC, M.PENDING_MO, M.PENDING_FO])
+check('cinco cards, na ordem da esteira (Legal antes, FepWeb depois — §254)',
+      [c['label'] for c in p['cards']],
+      [M.PENDING_LEGAL, M.PENDING_OTC, M.PENDING_MO, M.PENDING_FO, M.PENDING_FEPWEB])
 # T3 está em Pending MO/FO e tem de aparecer nos DOIS cards.
 nos_dois = [c['label'] for c in p['cards']
             if any(i['key'] == 'T3' for i in c['items'])]
@@ -242,12 +263,13 @@ for i in (1, 2, 3):
     r['Data Operação'] = '05/08/2026'
     M.upsert_row(r)
 p = M.monitor_payload()
-grp = next((i for i in p['cards'][0]['items'] if i['Data Operação'] == '05/08/2026'), None)
+card_otc = next(c for c in p['cards'] if c['label'] == M.PENDING_OTC)
+grp = next((i for i in card_otc['items'] if i['Data Operação'] == '05/08/2026'), None)
 check('as três operações do mesmo cliente/dia viram UM item', bool(grp), True)
 check('   com as três chaves juntas', sorted(grp['keys']), ['GRP1', 'GRP2', 'GRP3'])
 check('   e a contagem de operações', grp['count'], 3)
 check('o card conta CONFIRMAÇÕES no total',
-      p['cards'][0]['count'], len(p['cards'][0]['items']))
+      card_otc['count'], len(card_otc['items']))
 check('   e as operações à parte',
       p['cards'][0]['trades'], sum(i['count'] for i in p['cards'][0]['items']))
 # A LOB entra na chave: mesma contraparte e dia em LOBs diferentes são dois

@@ -18672,11 +18672,17 @@ def _commodities_b3_quote_defaults(rows):
     existe — linha antiga, gravada antes das colunas. Coluna que a tela gravou
     vazia continua vazia (e o consumidor cai no mesmo default), senão o cadastro
     brigaria com quem apagou o valor de propósito.
+
+    A coluna FIXED QUOTE foi APOSENTADA (§252): ela só escolhia entre F/340 e
+    A/358 quando as colunas de cotação estavam vazias, e esses valores agora
+    vivem nas próprias colunas. Num arquivo antigo o flag ainda é lido AQUI —
+    para materializar o F/340 das linhas YES antes de o flag sumir — e então
+    removido da linha.
     """
     for r in rows:
         if not isinstance(r, dict):
             continue
-        fixed = str(r.get('FIXED QUOTE', '') or '').strip().upper() == 'YES'
+        fixed = str(r.pop('FIXED QUOTE', '') or '').strip().upper() == 'YES'
         r.setdefault('QUOTE TYPE NDF', 'F' if fixed else 'A')
         r.setdefault('QUOTE TYPE OPT', _B3_QUOTE_OPT_DEFAULT)
         r.setdefault('INFO SOURCE', '340' if fixed else '358')
@@ -18726,11 +18732,15 @@ def _commodities_b3_upgrade(rows):
         r['B3 CODE'] = code.replace(' ', '_') + '"MY"'
 
     # TRADE TYPE (§251): linha sem a coluna vale para os dois tipos (BOTH) —
-    # exceto a SPECIAL do BRT_IPE, que sempre foi a regra da ASIÁTICA (a
-    # vanilla morava no ramo de código e ganha a própria linha PREFIX abaixo).
-    # Preencher só o que está vazio: quem editou pela tela manda.
-    brt_special_migrada = False
-    tem_brt_vanilla = False
+    # exceto as que sempre foram regra de UM tipo só: a SPECIAL do BRT_IPE é da
+    # ASIÁTICA (a vanilla morava no ramo de código e ganha a própria linha
+    # PREFIX abaixo) e o PREFIX do WTI vira da VANILLA (a asiática ganha a
+    # linha FIXED CL1 — §252). Preencher só o que está vazio: quem editou pela
+    # tela manda.
+    arquivo_antigo = any(isinstance(r, dict) and not str(r.get('TRADE TYPE') or '').strip()
+                         for r in rows)
+    brt_special_migrada = wti_prefix_migrado = False
+    tem_brt_vanilla = tem_wti_asian = False
     for r in rows:
         if not isinstance(r, dict):
             continue
@@ -18741,17 +18751,37 @@ def _commodities_b3_upgrade(rows):
             if mkt == 'BRT_IPE' and typ == 'SPECIAL':
                 r['TRADE TYPE'] = 'ASIAN'
                 brt_special_migrada = True
+            elif mkt == 'WTI_NYMEX' and 'PREFIX' in typ:
+                r['TRADE TYPE'] = 'VANILLA'
+                wti_prefix_migrado = True
             else:
                 r['TRADE TYPE'] = 'BOTH'
-        if mkt == 'BRT_IPE' and str(r.get('TRADE TYPE') or '').strip().upper() in ('VANILLA', 'BOTH'):
+        tt_final = str(r.get('TRADE TYPE') or '').strip().upper()
+        if mkt == 'BRT_IPE' and tt_final in ('VANILLA', 'BOTH'):
             tem_brt_vanilla = True
-    # A linha PREFIX da vanilla só entra quando a SPECIAL acabou de ser migrada
-    # (arquivo anterior à coluna) e nada cobre a vanilla — num arquivo já
-    # migrado, a ausência dela é decisão de quem editou, não formato antigo.
+        if mkt == 'WTI_NYMEX' and tt_final in ('ASIAN', 'BOTH'):
+            tem_wti_asian = True
+    # As linhas do tipo que faltou só entram quando a migração acabou de
+    # acontecer (arquivo anterior à coluna) e nada cobre aquele tipo — num
+    # arquivo já migrado, a ausência é decisão de quem editou, não formato
+    # antigo, e não volta.
     if brt_special_migrada and not tem_brt_vanilla:
         rows.append({'TYPE': 'PREFIX', 'MARKET': 'BRT_IPE', 'TRADE TYPE': 'VANILLA',
                      'B3 CODE': 'CO"MY"', 'B3 CODE FAR': '',
-                     'HOLIDAY CALENDAR': 'IPE', 'FIXED QUOTE': ''})
+                     'HOLIDAY CALENDAR': 'IPE'})
+    if wti_prefix_migrado and not tem_wti_asian:
+        rows.append({'TYPE': 'FIXED', 'MARKET': 'WTI_NYMEX', 'TRADE TYPE': 'ASIAN',
+                     'B3 CODE': 'CL1', 'B3 CODE FAR': '',
+                     'HOLIDAY CALENDAR': 'NYMEX'})
+    # Os PTS* saem junto com a migração (§252): eram linhas sem MARKET que só
+    # existiam para carregar o flag FIXED QUOTE, aposentado. Só no arquivo
+    # ANTIGO — quem recadastrar um PTS depois disso está mandando.
+    if arquivo_antigo:
+        _pts = ('PTS005', 'PTS002', 'PTS006', 'PTS003')
+        rows[:] = [r for r in rows
+                   if not (isinstance(r, dict)
+                           and not str(r.get('MARKET') or '').strip()
+                           and str(r.get('B3 CODE') or '').strip().upper() in _pts)]
     return _commodities_b3_quote_defaults(rows)
 
 
@@ -18831,22 +18861,20 @@ _MAPPING_DEFS = {
     #
     #   XB"MY"     → XBZ7        C_"MY" → 'C Z7'        KO"MY"BNMK → KOZ7BNMK
     #
-    # HOLIDAY CALENDAR = calendário de feriados do market. FIXED QUOTE =
-    # underlying de cotação FIXA — absorveu o antigo mapping fixed-underlyings,
-    # que era todo de escopo commodities; os PTS* não têm market na Athena e
-    # entram só com o código.
+    # HOLIDAY CALENDAR = calendário de feriados do market.
     #
-    # TIPO DE COTAÇÃO (§177): eram literais no código — 'F'/'A' conforme o Fixed
-    # Quote no arquivo de Termo, '5' fixo no de Opção — e por isso uma commodity
-    # nova com cotação diferente exigia alteração de código. Agora são cadastro,
-    # e a coluna guarda o **código do layout**, o que vai no arquivo. São duas
+    # TIPO DE COTAÇÃO (§177): eram literais no código e agora são cadastro —
+    # a coluna guarda o **código do layout**, o que vai no arquivo. São duas
     # colunas porque os DOIS LAYOUTS TÊM DOMÍNIOS DIFERENTES: o de Termo usa
-    # letra, o de Opção usa número, e a mesma commodity é negociada nos dois.
-    # FONTE INFO segue a mesma ideia (era 340/358 pelo Fixed Quote) e existe só
-    # no arquivo de Termo.
+    # letra ('F'/'A'), o de Opção usa número ('5'), e a mesma commodity é
+    # negociada nos dois. INFO SOURCE segue a mesma ideia (340/358) e existe só
+    # no arquivo de Termo. Coluna vazia = o default histórico (A / 5 / 358).
     #
-    # Coluna vazia = comportamento histórico, que é também o que o seed traz
-    # escrito linha a linha: cadastro e código dizem a mesma coisa hoje.
+    # O flag FIXED QUOTE foi APOSENTADO (§252): ele só escolhia F/340 vs A/358
+    # quando as colunas de cotação estavam vazias, e esses valores estão
+    # materializados nas colunas desde o §177. O `_commodities_b3_quote_defaults`
+    # ainda o lê de arquivo antigo (para materializar antes de removê-lo da
+    # linha). Os PTS* saíram junto — linhas sem MARKET que só carregavam o flag.
     'commodities-b3': {
         'label': 'Commodities × B3 Code',
         'columns': [
@@ -18861,10 +18889,9 @@ _MAPPING_DEFS = {
             {'key': 'B3 CODE', 'label': 'B3 Code / Prefix'},
             {'key': 'B3 CODE FAR', 'label': 'B3 Code — far contract (SPECIAL only)'},
             {'key': 'HOLIDAY CALENDAR', 'label': 'Holiday Calendar'},
-            {'key': 'FIXED QUOTE', 'label': 'Fixed Quote', 'type': 'select', 'options': ['', 'YES']},
-            {'key': 'QUOTE TYPE NDF', 'label': 'Tipo de Cotação — NDF (blank = F/A)'},
+            {'key': 'QUOTE TYPE NDF', 'label': 'Tipo de Cotação — NDF (blank = A)'},
             {'key': 'QUOTE TYPE OPT', 'label': 'Tipo de Cotação — Opção (blank = 5)'},
-            {'key': 'INFO SOURCE', 'label': 'Fonte de Informação — NDF (blank = 340/358)'},
+            {'key': 'INFO SOURCE', 'label': 'Fonte de Informação — NDF (blank = 358)'},
         ],
         'upgrade': _commodities_b3_upgrade,
         'seed': _commodities_b3_quote_defaults(
@@ -18885,12 +18912,18 @@ _MAPPING_DEFS = {
                 ('S_CBOT', 'S_"MY"', 'CBY_AGS'), ('BO_CBOT', 'BO"MY"', 'CBY_AGS'),
                 ('CC_ICE', 'CC"MY"', 'ICEAGS'), ('W_CBOT', 'W_"MY"', 'CBY_AGS'),
                 ('SM_CBOT', 'SM"MY"', 'CBY_AGS'), ('CT_ICE', 'CT"MY"', 'ICEAGS'),
-                ('KC_ICE', 'KC"MY"', 'ICEAGS'), ('WTI_NYMEX', 'WTI"MY"', 'NYMEX'),
+                ('KC_ICE', 'KC"MY"', 'ICEAGS'),
                 # Era SPECIAL com o código no código-fonte — e as duas cópias JS
                 # discordavam ('KOZ7BNMK' no otc-fileupload, '.KOZ7BNMK F' no
                 # deals-processing-table). Agora é um padrão só, aqui. §164
                 ('FCPO_BURSA_MYR', 'KO"MY"BNMK', 'BURSA'),
             )] +
+            # WTI também é um código por tipo (§252): a vanilla segue o padrão
+            # de contrato (WTI"MY") e a asiática usa o contínuo CL1, literal.
+            [{'TYPE': 'PREFIX', 'MARKET': 'WTI_NYMEX', 'TRADE TYPE': 'VANILLA',
+              'B3 CODE': 'WTI"MY"', 'HOLIDAY CALENDAR': 'NYMEX', 'FIXED QUOTE': ''},
+             {'TYPE': 'FIXED', 'MARKET': 'WTI_NYMEX', 'TRADE TYPE': 'ASIAN',
+              'B3 CODE': 'CL1', 'HOLIDAY CALENDAR': 'NYMEX', 'FIXED QUOTE': ''}] +
             # BRT_IPE tem DUAS linhas, separadas pelo Trade Type (§251):
             #   · SPECIAL, só ASIAN — near (CO"MY") quando o contrato é o mês
             #     seguinte à liquidação, far (CO1-2) a partir de dois meses (§212);
@@ -18900,9 +18933,9 @@ _MAPPING_DEFS = {
             [{'TYPE': 'SPECIAL', 'MARKET': 'BRT_IPE', 'TRADE TYPE': 'ASIAN', 'B3 CODE': 'CO"MY"',
               'B3 CODE FAR': 'CO1-2', 'HOLIDAY CALENDAR': 'IPE', 'FIXED QUOTE': ''},
              {'TYPE': 'PREFIX', 'MARKET': 'BRT_IPE', 'TRADE TYPE': 'VANILLA', 'B3 CODE': 'CO"MY"',
-              'HOLIDAY CALENDAR': 'IPE', 'FIXED QUOTE': ''}] +
-            [{'TYPE': 'FIXED', 'MARKET': '', 'TRADE TYPE': 'BOTH', 'B3 CODE': c, 'HOLIDAY CALENDAR': '', 'FIXED QUOTE': 'YES'} for c in
-             ('PTS005', 'PTS002', 'PTS006', 'PTS003')]
+              'HOLIDAY CALENDAR': 'IPE', 'FIXED QUOTE': ''}]
+            # Os PTS* saíram (§252): eram linhas sem MARKET que só existiam para
+            # carregar o flag FIXED QUOTE, aposentado junto.
         ),
     },
     # Publisher (feeder) da Athena → códigos B3 do TER das páginas Other
@@ -19561,10 +19594,10 @@ def _b3_code_matches(pattern, code):
 def _b3_quote_cfg(code):
     """Tipo de Cotação e Fonte de Informação do Ativo Subjacente, do cadastro.
 
-    Eram literais no código — 'F'/'A' e 340/358 conforme o Fixed Quote no
-    arquivo de Termo, '5' fixo no de Opção. Agora saem das colunas do mapping
-    Commodities × B3, e **coluna vazia (ou subjacente sem linha) devolve
-    exatamente o valor histórico**, que é também o que o seed escreve.
+    Saem das colunas do mapping Commodities × B3 (§177) — coluna vazia, ou
+    subjacente sem linha, devolve o default histórico ('A' / '5' / '358').
+    O flag FIXED QUOTE que escolhia F/340 foi aposentado (§252): esses valores
+    estão materializados nas colunas das linhas que eram YES.
 
     Devolve as três de uma vez porque a linha é a mesma: procurá-la três vezes
     percorreria o cadastro inteiro a cada campo, para cada deal do arquivo."""
@@ -19573,12 +19606,10 @@ def _b3_quote_cfg(code):
         if _b3_code_matches(r.get('B3 CODE'), code):
             row = r
             break
-    fixed = str(row.get('FIXED QUOTE', '') or '').strip().upper() == 'YES'
     return {
-        'fixed':  fixed,
-        'ndf':    str(row.get('QUOTE TYPE NDF', '') or '').strip() or ('F' if fixed else 'A'),
+        'ndf':    str(row.get('QUOTE TYPE NDF', '') or '').strip() or 'A',
         'opt':    str(row.get('QUOTE TYPE OPT', '') or '').strip() or _B3_QUOTE_OPT_DEFAULT,
-        'source': str(row.get('INFO SOURCE', '') or '').strip() or ('340' if fixed else '358'),
+        'source': str(row.get('INFO SOURCE', '') or '').strip() or '358',
     }
 
 
@@ -28183,28 +28214,40 @@ def _pcx_rows():
 
 
 def _pcx_build_xlsx(rows):
-    """Workbook openpyxl com o layout da planilha (sem cabeçalho merged).
+    """Workbook openpyxl com o layout da planilha LEGADA, linha a linha.
+
+    O layout inteiro é contrato com o consumidor — o time global de métricas
+    lê o arquivo via OLEDB (Confirmation_Latam), construído sobre a planilha
+    antiga — e cada divergência quebrou de um jeito diferente (§250/§253):
+
+      * a ABA é CONFIRMATIONS (com outro nome: "CONFIRMATIONS$ is not a
+        valid name");
+      * a linha 1 é o TÍTULO MESCLADO da planilha antiga e os cabeçalhos
+        ficam na LINHA 2 — o leitor deles começa na linha 2, e com os
+        cabeçalhos na 1 ele encontrava DADOS onde esperava os nomes: as
+        colunas da query viravam parâmetros ("No value given for one or
+        more required parameters").
 
     As colunas de data saem como DATA de verdade com number_format dd/mm/yyyy
     (Short Date) — escrever o texto deixaria a célula General e o Excel do
     consumidor sem ordenar/filtrar por data. Valor que não parseia (texto
     livre numa coluna de data) sai como veio: sumir com ele seria pior."""
     import openpyxl
-    from openpyxl.styles import Font
+    from openpyxl.styles import Alignment, Font
     from openpyxl.utils import get_column_letter
     wb = openpyxl.Workbook()
     ws = wb.active
-    # O nome da ABA também é contrato com o consumidor, não só o cabeçalho: o
-    # time global de métricas lê o arquivo via OLEDB (SELECT ... FROM
-    # [CONFIRMATIONS$]) e a planilha legada tinha a aba CONFIRMATIONS. Com
-    # outro nome o driver falha com "CONFIRMATIONS$ is not a valid name" —
-    # foi o que aconteceu quando ela nasceu como PENDING.
     ws.title = 'CONFIRMATIONS'
     bold = Font(bold=True)
+    ws.merge_cells(start_row=1, start_column=1,
+                   end_row=1, end_column=len(_PCX_COLUMNS))
+    titulo = ws.cell(row=1, column=1, value='PENDING - Outstanding Confirmation OTC')
+    titulo.font = bold
+    titulo.alignment = Alignment(horizontal='center')
     for j, (header, _src, _is_date) in enumerate(_PCX_COLUMNS, start=1):
-        c = ws.cell(row=1, column=j, value=header)
+        c = ws.cell(row=2, column=j, value=header)
         c.font = bold
-    for i, r in enumerate(rows, start=2):
+    for i, r in enumerate(rows, start=3):
         for j, (_header, src, is_date) in enumerate(_PCX_COLUMNS, start=1):
             raw = str(r.get(src, '') or '').strip() if src else ''
             if not raw:
@@ -28223,7 +28266,7 @@ def _pcx_build_xlsx(rows):
                 cell.value = raw
     for j, (header, _src, _is_date) in enumerate(_PCX_COLUMNS, start=1):
         ws.column_dimensions[get_column_letter(j)].width = max(12, min(len(header) + 4, 34))
-    ws.freeze_panes = 'A2'
+    ws.freeze_panes = 'A3'          # título (1) + cabeçalho (2) congelados
     return wb
 
 
@@ -30136,9 +30179,11 @@ def _mc_counts(rows):
     from apps.pages import manual_conf as _mc
     return {
         'total': len(rows),
+        'legal': sum(1 for r in rows if r.get('Pending') == _mc.PENDING_LEGAL),
         'otc': sum(1 for r in rows if r.get('Pending') == _mc.PENDING_OTC),
         'mo': sum(1 for r in rows if r.get('Pending') in (_mc.PENDING_MO, _mc.PENDING_MOFO)),
         'fo': sum(1 for r in rows if r.get('Pending') in (_mc.PENDING_FO, _mc.PENDING_MOFO)),
+        'fepweb': sum(1 for r in rows if r.get('Pending') == _mc.PENDING_FEPWEB),
         'ok': sum(1 for r in rows if r.get('Pending') == _mc.STATUS_OK),
     }
 
@@ -30334,6 +30379,9 @@ def api_mc_monitor():
         # é a página que troca o botão verde de Validar por um de só leitura.
         payload['can_validate'] = {s: _mc_can_validate(s)
                                    for s in (_mc.STAGE_OTC, _mc.STAGE_MO, _mc.STAGE_FO)}
+        # Os botões dos cards Legal/FepWeb são ações do OTC Ops: mesma trava.
+        payload['can_validate']['LEGAL'] = payload['can_validate'][_mc.STAGE_OTC]
+        payload['can_validate']['FEPWEB'] = payload['can_validate'][_mc.STAGE_OTC]
         payload['stage_role'] = dict(_MC_STAGE_ROLE)
         return jsonify(payload)
     except Exception as e:
@@ -30438,6 +30486,10 @@ _MC_STAGE_NOTIFY_ROLES = {
     'Pending FO': ('FO', 'BO', 'MASTER'),
     # As duas mesas ao mesmo tempo (elas correm em PARALELO, não em fila).
     'Pending MO/FO': ('MO', 'FO', 'BO', 'MASTER'),
+    # Os estados fora das mesas (§254) são do OTC Ops: é ele quem solta o hold
+    # do jurídico e quem envia o documento pelo FepWeb.
+    'Pending Legal': ('BO', 'MASTER'),
+    'Pending FepWeb': ('BO', 'MASTER'),
 }
 
 
@@ -30591,6 +30643,20 @@ def api_mc_upsert():
             if c in src and c not in _mc.DERIVED_COLUMNS:
                 row[c] = str(src.get(c) or '')
 
+        # ── Pending é derivada, MAS aceita dois valores à mão (§254) ──────────
+        # 'Pending Legal' é o hold manual (a linha sai da fila do OTC até alguém
+        # soltá-la) e 'Pending OTC' é o que solta o hold. Todo o resto — FepWeb,
+        # Ok, MO/FO — continua saindo SÓ da derivação: gravar 'Pending FepWeb' à
+        # mão afirmaria que a esteira terminou sem ninguém ter validado nada, e
+        # por isso qualquer outro valor é ignorado (a derivação recalcula).
+        if 'Pending' in src:
+            novo = str(src.get('Pending') or '').strip()
+            if _mc.upper_norm(novo) == _mc.upper_norm(_mc.PENDING_LEGAL):
+                row['Pending'] = _mc.PENDING_LEGAL
+            elif (_mc.upper_norm(novo) == _mc.upper_norm(_mc.PENDING_OTC)
+                  and _mc.upper_norm(row.get('Pending')) == _mc.upper_norm(_mc.PENDING_LEGAL)):
+                row['Pending'] = ''          # solta o hold; a derivação decide
+
         # ── Preencher a coluna de validação pela grade É VALIDAR ──────────────
         # A tela de validação passa pelo `mark_validated`, que carimba quem
         # assinou, cobra a justificativa fora do prazo e exige a mesa certa. A
@@ -30636,6 +30702,134 @@ def api_mc_upsert():
     for row in pendentes:
         _mc.upsert_row(row)
         saved.append(row)
+    _mc_pc_sync(saved)
+    return jsonify({'success': True, 'rows': saved})
+
+
+def _mc_pc_sync(rows):
+    """Espelha a etapa da esteira no Pending Status do Pending Confirmation.
+
+    A chave é a MESMA dos dois lados — o MC `Trade ID` e o PC `Trade Number`
+    nascem juntos no `_pc_save_from_deal` —, então toda gravação da esteira
+    (grade, validação, reject, os botões do Monitor) atualiza a linha irmã.
+
+    O estágio entra verbatim (Pending Legal/OTC/MO/FO/MO-FO/FepWeb). `Ok` — o
+    Enviado p/ cliente preenchido — vira **Pending Digital Signature** ou
+    **Pending Original** pelo Signature Type da contraparte no Reference Data
+    (§254): o documento saiu e o que se espera agora é a assinatura, no meio
+    que a contraparte usa.
+
+    Falha aqui só loga: o espelho não pode derrubar a gravação da esteira — e
+    linha sem irmã no PC (importada da planilha antiga) simplesmente não tem o
+    que espelhar.
+    """
+    from apps.pages import manual_conf as _mc
+    alvo = {}
+    for row in rows or []:
+        tn = str(row.get(_mc.KEY_COLUMN, '') or '').strip()
+        if tn:
+            alvo[tn] = str(row.get('Pending', '') or '').strip()
+    if not alvo:
+        return
+    try:
+        vistos, updates = set(), []
+        for cat in ('backlog', 'pending', 'ok'):
+            for pc in _pc_load_rows(cat):
+                tn = str(pc.get('Trade Number', '') or '').strip()
+                if tn not in alvo or tn in vistos:
+                    continue
+                vistos.add(tn)
+                pend = alvo[tn]
+                if pend == _mc.STATUS_OK:
+                    sig = _pc_norm(pc.get('Signature Type', ''))
+                    if not sig:
+                        rec = _pc_refdata_lookup({'SPN': pc.get('SPN', ''),
+                                                  'Client': pc.get('Client', '')},
+                                                 _fxo_refdata_by_spn(), _pc_refdata_by_name())
+                        sig = _pc_norm((rec or {}).get('SIGNATURE TYPE', ''))
+                    novo = 'Pending Digital Signature' if sig == 'digital' else 'Pending Original'
+                else:
+                    novo = pend
+                if novo and str(pc.get('Pending Status', '') or '').strip() != novo:
+                    pc['Pending Status'] = novo
+                    updates.append(pc)
+        for pc in updates:          # fora do laço de leitura: o upsert reescreve os DBs
+            _pc_upsert_row(pc)
+    except Exception:
+        log.warning('[manual-conf] espelho no Pending Confirmation falhou:\n%s',
+                    traceback.format_exc())
+
+
+@blueprint.route('/api/manual-confirmation/legal-release', methods=['POST'])
+def api_mc_legal_release():
+    """O botão do card Pending Legal do Monitor: solta o hold do jurídico e a
+    confirmação entra na fila do OTC — aqui e no Pending Confirmation (espelho).
+    A ação é da mesa de OTC Ops, a mesma trava da etapa OTC."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    from apps.pages import manual_conf as _mc
+    if not _mc_can_validate(_mc.STAGE_OTC):
+        return jsonify({'success': False, 'stage_forbidden': True,
+                        'message': _mc_stage_denied(_mc.STAGE_OTC)}), 403
+    payload = request.get_json(silent=True) or {}
+    keys = [str(k).strip() for k in (payload.get('keys') or []) if str(k or '').strip()]
+    saved = []
+    for k in keys:
+        row = _mc.find_row(k)
+        if row is None or _mc.upper_norm(row.get('Pending')) != _mc.upper_norm(_mc.PENDING_LEGAL):
+            continue                     # só solta o que está de fato no hold
+        row['Pending'] = ''              # a derivação decide a etapa real
+        _mc.refresh_derived(row)
+        _mc.upsert_row(row)
+        saved.append(row)
+    if not saved:
+        return jsonify({'success': False,
+                        'message': 'No confirmation in Pending Legal for these trades.'}), 404
+    _mc_pc_sync(saved)
+    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                         'Manual Confirmation', 'Confirmation',
+                         'Legal hold released · {}{}'.format(
+                             saved[0].get('Cliente', '') or keys[0],
+                             ' (%d ops)' % len(saved) if len(saved) > 1 else ''),
+                         target_role=_mc_notify_roles(saved))
+    return jsonify({'success': True, 'rows': saved})
+
+
+@blueprint.route('/api/manual-confirmation/fepweb-sent', methods=['POST'])
+def api_mc_fepweb_sent():
+    """O botão do card Pending FepWeb do Monitor: carimba o Enviado p/ cliente
+    com a data de hoje — a confirmação vira Ok na esteira e, no Pending
+    Confirmation, passa a aguardar a assinatura (Digital/Original pelo
+    Signature Type do Reference Data, via `_mc_pc_sync`)."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    from apps.pages import manual_conf as _mc
+    if not _mc_can_validate(_mc.STAGE_OTC):
+        return jsonify({'success': False, 'stage_forbidden': True,
+                        'message': _mc_stage_denied(_mc.STAGE_OTC)}), 403
+    payload = request.get_json(silent=True) or {}
+    keys = [str(k).strip() for k in (payload.get('keys') or []) if str(k or '').strip()]
+    hoje = datetime.now().strftime('%d/%m/%Y')
+    saved = []
+    for k in keys:
+        row = _mc.find_row(k)
+        if row is None or _mc.upper_norm(row.get('Pending')) != _mc.upper_norm(_mc.PENDING_FEPWEB):
+            continue                     # enviado é só para quem terminou a esteira
+        if not str(row.get(_mc.SENT_COLUMN, '') or '').strip():
+            row[_mc.SENT_COLUMN] = hoje
+        _mc.refresh_derived(row)
+        _mc.upsert_row(row)
+        saved.append(row)
+    if not saved:
+        return jsonify({'success': False,
+                        'message': 'No confirmation in Pending FepWeb for these trades.'}), 404
+    _mc_pc_sync(saved)
+    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                         'Manual Confirmation', 'Confirmation',
+                         'Sent to client (FepWeb) · {}{}'.format(
+                             saved[0].get('Cliente', '') or keys[0],
+                             ' (%d ops)' % len(saved) if len(saved) > 1 else ''),
+                         target_role=_mc_notify_roles(saved))
     return jsonify({'success': True, 'rows': saved})
 
 
@@ -30709,6 +30903,7 @@ def api_mc_validate():
                         'message': 'Validação fora do prazo: informe o motivo do atraso.'}), 409
     if not rows:
         return jsonify({'success': False, 'message': 'Confirmação não encontrada.'}), 404
+    _mc_pc_sync(rows)
     _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                          'Manual Confirmation', 'Confirmation',
                          # Em INGLÊS como todo o resto do sino: o detalhe é
@@ -30761,6 +30956,7 @@ def api_mc_reject():
     # outras esperando um papel que já foi devolvido.
     for k in keys:
         _mc.reject(k, stage, sid, comment)
+    _mc_pc_sync([r for r in (_mc.find_row(k) for k in keys) if r is not None])
     emailed = False
     try:
         from apps.pages.otc_emails import send_mc_reject_email

@@ -44,9 +44,10 @@ def check(label, got, exp):
 
 
 print('== 1. os rotulos das etapas batem com o manual_conf ==')
-check('as quatro etapas pendentes tem destinatario',
+check('as seis etapas pendentes tem destinatario (§254: +Legal e +FepWeb)',
       sorted(R._MC_STAGE_NOTIFY_ROLES),
-      sorted([M.PENDING_OTC, M.PENDING_MO, M.PENDING_FO, M.PENDING_MOFO]))
+      sorted([M.PENDING_OTC, M.PENDING_MO, M.PENDING_FO, M.PENDING_MOFO,
+              M.PENDING_LEGAL, M.PENDING_FEPWEB]))
 check('   e `Ok` NAO tem (o fim da esteira vai para todos)',
       M.STATUS_OK in R._MC_STAGE_NOTIFY_ROLES, False)
 
@@ -84,8 +85,12 @@ try:
     pos_otc = linha(**{'Conferido OTC': '10/08/2026'})
     pos_mo = linha(**{'Conferido OTC': '10/08/2026', 'VALIDADO p/ MO': '10/08/2026'})
     pos_fo = linha(**{'Conferido OTC': '10/08/2026', 'VALIDADO p/ FO': '10/08/2026'})
+    # Fechada de verdade exige TAMBEM o Enviado p/ cliente (§254): validado
+    # sem enviar e Pending FepWeb, que avisa o BO.
     fechada = linha(**{'Conferido OTC': '10/08/2026', 'VALIDADO p/ MO': '10/08/2026',
-                       'VALIDADO p/ FO': '10/08/2026'})
+                       'VALIDADO p/ FO': '10/08/2026', M.SENT_COLUMN: '11/08/2026'})
+    aguarda_envio = linha(**{'Conferido OTC': '10/08/2026', 'VALIDADO p/ MO': '10/08/2026',
+                             'VALIDADO p/ FO': '10/08/2026'})
 
     check('antes do OTC carimbar, o aviso e do BO',
           R._mc_notify_roles([so_otc]), 'BO,MASTER')
@@ -98,6 +103,8 @@ try:
           set(R._mc_notify_roles([pos_fo]).split(',')), {'MO', 'BO', 'MASTER'})
     check('confirmacao fechada volta a avisar TODOS',
           R._mc_notify_roles([fechada]), '')
+    check('validada sem enviar (FepWeb) avisa o BO',
+          R._mc_notify_roles([aguarda_envio]), 'BO,MASTER')
     # Um documento cobre varias operacoes e o cadastro e por Produto x LOB: o
     # lote pode cair em etapas diferentes. Recortar pela primeira linha deixaria
     # a outra mesa sem aviso.

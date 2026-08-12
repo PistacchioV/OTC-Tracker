@@ -39,6 +39,11 @@
     /* Tabela do mapping selecionado — alinhamento centralizado, padrão New Deals */
     #mapping-page #mapTable tbody td { font-size: 0.8rem; text-align: center; vertical-align: middle; }
     #mapping-page #mapTable thead th { white-space: nowrap; text-align: center !important; vertical-align: middle !important; }
+    /* Header ordenável: clique alterna asc/desc; a seta mostra o estado. */
+    #mapping-page #mapTable thead th.map-sort { cursor: pointer; user-select: none; }
+    #mapping-page #mapTable thead th.map-sort:hover { color: var(--vr-accent-1, #0066cc); }
+    #mapping-page #mapTable thead th.map-sort-asc::after  { content: ' ▲'; font-size: .6rem; opacity: .7; }
+    #mapping-page #mapTable thead th.map-sort-desc::after { content: ' ▼'; font-size: .6rem; opacity: .7; }
     /* Botões da toolbar — mesmo dimensionamento do New Deals */
     #mapping-page .btn-toolbar-all {
         font-size: .75rem !important; padding: .25rem .6rem !important;
@@ -285,6 +290,21 @@
     var EDIT = null;         // índice em edição (null = Add)
     var PAGE_LEN = 50;
     var PAGE = 0;            // página atual (0-based); volta a 0 em filtro/troca/salvar
+    // Ordenação por coluna: clique no header alterna asc/desc. null = a ordem
+    // padrão do mapping — que para o Commodities × B3 é MARKET A→Z, sempre
+    // (defaultSort); nos demais é a ordem do arquivo, como sempre foi. Só a
+    // EXIBIÇÃO ordena: o arquivo mantém a ordem de cadastro, e o data-idx das
+    // ações continua apontando para a linha certa.
+    var SORT = null;         // {col, dir} — escolha explícita do usuário
+
+    function defaultSort() {
+        var st = STATE[CUR];
+        if (!st || CUR !== 'commodities-b3') return null;
+        for (var i = 0; i < st.columns.length; i++) {
+            if (st.columns[i].key === 'MARKET') return { col: i, dir: 1 };
+        }
+        return null;
+    }
 
     var LANG = (localStorage.getItem('__OTC_TRACKER_LANG__') || 'en');
     var _TRANS = {};
@@ -373,7 +393,9 @@
         var head = document.getElementById('mapHead');
         head.innerHTML =
             '<tr><th style="width:76px" data-lang="map-actions">' + esc(t('map-actions', 'Actions')) + '</th>' +
-            st.columns.map(function (c) { return '<th>' + esc(c.label || c.key) + '</th>'; }).join('') + '</tr>' +
+            st.columns.map(function (c, i) {
+                return '<th class="map-sort" data-col="' + i + '">' + esc(c.label || c.key) + '</th>';
+            }).join('') + '</tr>' +
             '<tr class="map-filter-row"><th></th>' +
             st.columns.map(function (c, i) {
                 return '<th><input type="text" class="form-control form-control-sm map-col-filter" data-col="' + i + '" placeholder="' + esc(c.label || c.key) + '" autocomplete="off"></th>';
@@ -381,8 +403,32 @@
         head.querySelectorAll('.map-col-filter').forEach(function (inp) {
             inp.addEventListener('input', function () { PAGE = 0; drawBody(); });
         });
+        // Clique no header ordena; segundo clique inverte. O header NÃO é
+        // remontado no clique (os filtros digitados vivem nele) — só o
+        // indicador e o corpo mudam.
+        head.querySelectorAll('th.map-sort').forEach(function (th) {
+            th.addEventListener('click', function () {
+                var col = +th.getAttribute('data-col');
+                var cur = SORT || defaultSort();
+                SORT = (cur && cur.col === col) ? { col: col, dir: -cur.dir } : { col: col, dir: 1 };
+                PAGE = 0;
+                updateSortIndicators();
+                drawBody();
+            });
+        });
+        updateSortIndicators();
         drawBody();
         if (window.vrSyncStickyTables) window.vrSyncStickyTables();
+    }
+
+    function updateSortIndicators() {
+        var s = SORT || defaultSort();
+        document.querySelectorAll('#mapHead th.map-sort').forEach(function (th) {
+            th.classList.remove('map-sort-asc', 'map-sort-desc');
+            if (s && +th.getAttribute('data-col') === s.col) {
+                th.classList.add(s.dir === 1 ? 'map-sort-asc' : 'map-sort-desc');
+            }
+        });
     }
 
     function filteredRows() {
@@ -400,6 +446,15 @@
             // MESMA linha (o B3 CODE só é padrão quando o TYPE é PREFIX).
             if (ok) out.push({ idx: idx, cells: cells, row: row });
         });
+        // Só a exibição: `idx` continua sendo a posição no arquivo, então
+        // editar/excluir acha a linha certa com a tabela ordenada.
+        var s = SORT || defaultSort();
+        if (s) {
+            out.sort(function (a, b) {
+                return a.cells[s.col].localeCompare(b.cells[s.col], undefined,
+                    { numeric: true, sensitivity: 'base' }) * s.dir;
+            });
+        }
         return out;
     }
 
@@ -570,6 +625,7 @@
         if (item) {
             CUR = item.getAttribute('data-key');
             PAGE = 0;
+            SORT = null;   // volta à ordem padrão do mapping (defaultSort)
             buildRail();
             if (STATE[CUR] && STATE[CUR].loaded) render(); else { renderHeader(); load(CUR); }
             return;
