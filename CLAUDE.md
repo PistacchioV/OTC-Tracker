@@ -66,7 +66,12 @@ plugins de `node_modules` para `apps/static/plugins/`.
   `<v:rect>` do Outlook pintava o banner ora mais estreito que a célula (faixa
   sólida à direita), ora na largura da janela inteira. Ver o comentário em
   `partials/email-gradient-header.html`; `_attach_email_gradient` é no-op de
-  propósito.
+  propósito. A proibição é do BANNER, cuja largura tem de acompanhar a célula:
+  um `v:roundrect` de **largura fixa** para botão é o caso em que o VML se
+  comporta, e é o único jeito de o Outlook desktop arredondar canto. E botão
+  ganha altura com `height` + `line-height`, nunca com padding vertical —
+  o Word ignora padding em cima/embaixo de link e o botão sai magro
+  (HANDOFF §257).
 
 ---
 

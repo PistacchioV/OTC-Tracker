@@ -11235,7 +11235,16 @@ escreve regra de caixa de entrada. Template único
 Client, Product, LOB, Trade ID, Asset e Sent for validation. A luz do SLA marca a linha vencida
 **dentro da coluna da data de envio** em vez de virar uma oitava coluna.
 
-**O botão é o do e-mail de conta ativada**: o `<a>` é que carrega `padding`, cor de fundo e raio,
-dentro de uma `<td align="center">`. A primeira versão pintava a CÉLULA e deixava o link só com o
-texto — sai um retângulo fino e apertado, porque a altura vem da linha de texto e não do padding do
-link. Prazo: `scripts/tests/check_conf_escalation.py`.
+**O botão ficou magro DUAS vezes, e a causa é a mesma nas duas**: a altura estava vindo da linha de
+texto. Pintar a célula e deixar o `<a>` só com o texto não dá altura nenhuma; passar o `padding` para
+o próprio link resolve em quase todo cliente, mas **o Word do Outlook ignora padding vertical em
+link**. A forma que funciona é `height:52px` + `line-height:52px` no `<a>` (com o padding só na
+horizontal): o texto centraliza sozinho e a altura não depende de padding.
+
+Os cantos arredondados exigiram **`v:roundrect`** — o Outlook desktop não conhece `border-radius`, e
+é ele o cliente da mesa. Aqui o VML é seguro, ao contrário do banner do cabeçalho: a largura é FIXA
+em px (`width:340px`) e não precisa acompanhar a célula, e foi exatamente a largura variável que fez
+o `<v:rect>` do gradiente pintar ora estreito demais, ora na janela inteira (ver
+`partials/email-gradient-header.html`). `arcsize="50%"` é a pílula do `border-radius:26px` do link,
+e o `<a>` normal fica no ramo `[if !mso]` para não sair duplicado. Prazo:
+`scripts/tests/check_conf_escalation.py`.
