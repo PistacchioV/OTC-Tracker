@@ -343,11 +343,18 @@ check('o logo vem do cid, como nos outros e-mails', 'cid:otc_logo' in html, True
 check('o botão aponta para o Confirmations Monitor',
       'http://maquina:8050/manual-confirmation/monitor' in html, True)
 check('   e o rótulo dele é o da página', 'Open the Confirmations Monitor' in html, True)
-# O PRÓPRIO link carrega padding e fundo (a forma do e-mail de conta ativada).
-# Pintando a célula e deixando o <a> só com o texto, o botão sai um retângulo
-# fino: a altura vem da linha de texto, não do padding.
-check('   com padding e fundo no próprio <a>, não na célula',
-      'padding: 12px 32px; background-color:' in html, True)
+# A ALTURA do botão vem de height + line-height, e não de padding vertical: o
+# Word do Outlook ignora padding em cima/embaixo de link, e sem isso o botão
+# volta a ser o retângulo magro que a mesa reclamou duas vezes.
+check('   alto por height + line-height, não por padding vertical',
+      'height:52px;line-height:52px' in html, True)
+check('   e com canto de pílula', 'border-radius:26px' in html, True)
+# O Outlook desktop não conhece border-radius: sem o roundrect o canto sai
+# quadrado só nele — e é justamente o cliente da mesa.
+check('   com o v:roundrect para o Outlook desktop',
+      'v:roundrect' in html and 'arcsize="50%"' in html, True)
+check('   e o link normal escondido só do Outlook (mso-hide)',
+      'mso-hide:all' in html and '[if !mso]' in html, True)
 check('a assinatura é a da mesa',
       'OTC Tracker — Brazil OTC Operations' in html, True)
 check('a linha vencida sai marcada', 'overdue' in html, True)

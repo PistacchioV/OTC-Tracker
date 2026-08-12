@@ -115,25 +115,41 @@
                 </tr>
 
                 <!-- ── Button → Confirmations Monitor ─────────── -->
-                {# MESMA forma do botão do e-mail de conta ativada: o <a> é que
-                   carrega padding, cor e raio, dentro de uma <td align="center">.
-                   Pintar a CÉLULA e deixar o link só com o texto (a primeira
-                   versão) saía como um retângulo fino e apertado — a altura vinha
-                   da linha de texto, não do padding do link. #}
+                {# A ALTURA vem de `height` + `line-height`, não de padding
+                   vertical: o Word do Outlook ignora padding em cima/embaixo de
+                   link, e era isso que deixava o botão um retângulo magro —
+                   sobrava só a altura da linha de texto. Com line-height igual
+                   ao height o texto fica centrado sem depender de padding.
+
+                   O `v:roundrect` é a ÚNICA forma de o Outlook desktop mostrar
+                   canto arredondado (ele não conhece `border-radius`), e aqui
+                   ele é seguro ao contrário do banner do cabeçalho: a largura é
+                   FIXA em px e não tem de acompanhar a célula — foi justamente
+                   a largura variável que fez o `<v:rect>` do gradiente pintar
+                   ora estreito demais, ora na janela inteira (ver
+                   partials/email-gradient-header.html). `arcsize="50%"` é o
+                   mesmo raio de pílula do `border-radius` do link. #}
                 <tr>
-                    <td style="padding:24px 30px 4px;">
-                        <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
-                            <tr>
-                                <td align="center">
-                                    <a href="{{ monitor_url }}" target="_blank"
-                                       style="display: inline-block; padding: 12px 32px; background-color: #0d6efd;
-                                              color: #ffffff; font-size: 14px; font-weight: 700;
-                                              text-decoration: none; border-radius: 6px;">
-                                        Open the Confirmations Monitor
-                                    </a>
-                                </td>
-                            </tr>
-                        </table>
+                    <td align="center" style="padding:26px 30px 8px;text-align:center;">
+                        <!--[if mso]>
+                        <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml"
+                                     xmlns:w="urn:schemas-microsoft-com:office:word"
+                                     href="{{ monitor_url }}" arcsize="50%" stroke="f"
+                                     fillcolor="#0d6efd"
+                                     style="height:52px;width:340px;v-text-anchor:middle;">
+                            <w:anchorlock/>
+                            <center style="color:#ffffff;font-family:'Segoe UI',Arial,sans-serif;
+                                           font-size:15px;font-weight:bold;">
+                                Open the Confirmations Monitor</center>
+                        </v:roundrect>
+                        <![endif]-->
+                        <!--[if !mso]><!-- -->
+                        <a href="{{ monitor_url }}" target="_blank"
+                           style="display:inline-block;height:52px;line-height:52px;padding:0 36px;
+                                  background-color:#0d6efd;color:#ffffff;font-size:15px;font-weight:700;
+                                  text-decoration:none;border-radius:26px;
+                                  mso-hide:all;">Open the Confirmations Monitor</a>
+                        <!--<![endif]-->
                     </td>
                 </tr>
 
