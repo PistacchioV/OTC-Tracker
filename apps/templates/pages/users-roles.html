@@ -381,6 +381,15 @@
 {% block extra_javascript %}
 <script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/pages/custom-table.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/table-std.js"></script>
+<script>
+// Seleção de célula + Ctrl+C — padrão de TODA tabela do app (CLAUDE.md §3).
+// Skip: checkbox (0) e Actions (8). O helper delega no nó da tabela, então
+// sobrevive aos redraws do custom-table.js.
+document.addEventListener('DOMContentLoaded', function () {
+    if (window.otcCellCopy) otcCellCopy('#data-table', { skip: [0, 8] });
+});
+</script>
 <script>
 const currentUserRole = document.getElementById('session-role').dataset.role;
 
