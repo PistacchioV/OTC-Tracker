@@ -4,6 +4,7 @@
 
 {% block extra_css %}
 <link href="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.css" rel="stylesheet" type="text/css" />
 <style>
 /* ============================================================================
    Camada visual: tokens --ins-* (tema) e --vr-* (visual-refresh). Nunca --bs-*.
@@ -264,9 +265,15 @@
                 <button class="btn btn-sm btn-info bg-gradient btn-toolbar-all dropdown-toggle" data-bs-toggle="dropdown">
                     <i class="ti ti-download me-1"></i><span data-lang="map-export">Export</span>
                 </button>
+                <!-- O conjunto COMPLETO do padrão (Copy · CSV · Excel · Print ·
+                     PDF, o mesmo do New Deals): só CSV e Copy aqui era bug de
+                     consistência. Os itens disparam os DataTables Buttons. -->
                 <ul class="dropdown-menu">
-                    <li><a class="dropdown-item" href="#" id="mcExportCsv"><i class="ti ti-file-type-csv me-1"></i> CSV</a></li>
                     <li><a class="dropdown-item" href="#" id="mcExportCopy"><i class="ti ti-copy me-1"></i> Copy</a></li>
+                    <li><a class="dropdown-item" href="#" id="mcExportCsv"><i class="ti ti-file-type-csv me-1"></i> CSV</a></li>
+                    <li><a class="dropdown-item" href="#" id="mcExportExcel"><i class="ti ti-file-spreadsheet me-1"></i> Excel</a></li>
+                    <li><a class="dropdown-item" href="#" id="mcExportPrint"><i class="ti ti-printer me-1"></i> Print</a></li>
+                    <li><a class="dropdown-item" href="#" id="mcExportPdf"><i class="ti ti-file-text me-1"></i> PDF</a></li>
                 </ul>
             </div>
             <button class="btn btn-sm btn-secondary bg-gradient btn-toolbar-all" id="mcClearFilters">
@@ -335,6 +342,27 @@
 <script src="{{ config.ASSETS_ROOT }}/plugins/jquery/jquery.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.buttons.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/jszip.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/pdfmake.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/vfs_fonts.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.html5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.print.min.js"></script>
+<script>
+// Registro síncrono do JSZip (mesmo snippet do New Deals): o buttons.html5
+// expõe $.fn.dataTable.Buttons.jszip() e precisa da referência antes de
+// qualquer $(document).ready() — sem isso o Excel sai desabilitado.
+(function() {
+    var jz = (typeof JSZip !== 'undefined') ? JSZip : undefined;
+    if (!jz) return;
+    window.JSZip = jz;
+    if (typeof $ !== 'undefined' && $.fn.dataTable &&
+        $.fn.dataTable.Buttons && typeof $.fn.dataTable.Buttons.jszip === 'function') {
+        $.fn.dataTable.Buttons.jszip(jz);
+    }
+})();
+</script>
 <script src="{{ config.ASSETS_ROOT }}/js/table-std.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
@@ -731,22 +759,27 @@
     }
 
     // ── Export ──────────────────────────────────────────────────────────
-    // Exporta o que está NA TELA (filtros e ordenação aplicados), não a base
-    // inteira: quem filtrou e clicou em exportar quer o que está vendo.
-    function visibleMatrix() {
-        var idx = [];
-        COLUMNS.forEach(function (c, i) { if (table.column(i + OFFSET).visible()) idx.push(i); });
-        var out = [idx.map(function (i) { return label(COLUMNS[i]); })];
-        table.rows({ search: 'applied', order: 'applied' }).data().each(function (r) {
-            out.push(idx.map(function (i) { return String(r[COLUMNS[i]] == null ? '' : r[COLUMNS[i]]); }));
-        });
-        return out;
-    }
-
-    function toCsv(m) {
-        return m.map(function (line) {
-            return line.map(function (v) { return '"' + String(v).replace(/"/g, '""') + '"'; }).join(';');
-        }).join('\r\n');
+    // DataTables Buttons (o padrão do New Deals: Copy · CSV · Excel · Print ·
+    // PDF), disparados pelos itens do dropdown da toolbar. Exporta o que está
+    // NA TELA — filtros e ordenação aplicados, só colunas visíveis, e o valor
+    // como o display o mostra. Checkbox e Actions ficam fora (idx >= OFFSET).
+    function buildExportButtons() {
+        var opts = {
+            columns: function (idx) { return idx >= OFFSET && table.column(idx).visible(); },
+            modifier: { search: 'applied', order: 'applied', page: 'all' }
+        };
+        // O `;` e o BOM do CSV vêm do export antigo: é o que faz o Excel
+        // pt-BR abrir o arquivo com as colunas separadas e os acentos vivos.
+        new $.fn.dataTable.Buttons(table, { buttons: [
+            { extend: 'copyHtml5',  name: 'copy',  exportOptions: opts },
+            { extend: 'csvHtml5',   name: 'csv',   exportOptions: opts,
+              filename: 'track-confirmations', fieldSeparator: ';', bom: true },
+            { extend: 'excelHtml5', name: 'excel', exportOptions: opts,
+              filename: 'track-confirmations' },
+            { extend: 'print',      name: 'print', exportOptions: opts },
+            { extend: 'pdfHtml5',   name: 'pdf',   exportOptions: opts,
+              filename: 'track-confirmations', orientation: 'landscape', pageSize: 'A4' }
+        ] });
     }
 
     $(document).ready(function () {
@@ -850,21 +883,12 @@
             applyPendingFilter();
         });
 
-        $('#mcExportCsv').on('click', function (e) {
-            e.preventDefault();
-            var blob = new Blob(['﻿' + toCsv(visibleMatrix())],
-                                { type: 'text/csv;charset=utf-8;' });
-            var a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
-            a.download = 'track-confirmations.csv';
-            a.click();
-            URL.revokeObjectURL(a.href);
-        });
-        $('#mcExportCopy').on('click', function (e) {
-            e.preventDefault();
-            var txt = visibleMatrix().map(function (l) { return l.join('\t'); }).join('\n');
-            navigator.clipboard.writeText(txt).then(function () {
-                Swal.fire({ icon: 'success', title: 'Copiado', timer: 1200, showConfirmButton: false });
+        buildExportButtons();
+        [['#mcExportCopy', 'copy'], ['#mcExportCsv', 'csv'], ['#mcExportExcel', 'excel'],
+         ['#mcExportPrint', 'print'], ['#mcExportPdf', 'pdf']].forEach(function (par) {
+            $(par[0]).on('click', function (e) {
+                e.preventDefault();
+                table.button(par[1] + ':name').trigger();
             });
         });
 
