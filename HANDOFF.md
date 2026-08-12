@@ -11115,3 +11115,43 @@ Pedido da mesa, o maior redesenho da esteira desde o §217. O ciclo agora é:
 - Notificações: `_MC_STAGE_NOTIFY_ROLES` ganhou os dois estados (BO+MASTER — os dois são ações do
   OTC Ops). `check_manual_conf.py` e `check_mc_notify.py` reescritos para o ciclo novo (FepWeb antes
   do Ok, hold vence derivação, cinco cards).
+
+## §255 — 'Pending OTC' à mão REABRE a esteira (confirmação regerada), e os cinco cards lado a lado
+
+O §254 deixou o `Pending OTC` manual valendo só como release do hold Legal — em linha com validações
+preenchidas ele era silenciosamente ignorado, e a mesa não tinha como devolver à fila uma confirmação
+que foi **regerada** depois de validada (o documento novo precisa ser conferido de novo, pelas três
+mesas).
+
+- **Semântica nova, uma só**: gravar `Pending OTC` pela grade/edição em massa do Track significa "esta
+  confirmação volta para a fila do OTC". O `api_mc_upsert` limpa `Conferido OTC`, `VALIDADO p/ MO`,
+  `VALIDADO p/ FO` e o `Enviado p/ cliente` — os carimbos (Time Stamp) caem pelo undo que já existia
+  ("desfez a validação: o carimbo não sobrevive a ela") — e grava `Pending = ''` para a derivação
+  decidir. Cada mesa revalida e os carimbos novos substituem os antigos; os comentários de atraso
+  ficam (são história). O espelho no PC (`_mc_pc_sync`) leva o `Pending OTC` junto.
+- **Numa linha só em hold Legal não há o que limpar**, e o mesmo valor age exatamente como o release
+  de antes — por isso não são dois comandos.
+- **Reabrir é desfazer validação alheia**, então quando há algo a limpar a gravação exige a mesa de
+  OTC Ops (`_mc_can_validate(STAGE_OTC)`, 403 `stage_forbidden` — a mesma trava dos dois botões do
+  Monitor). Soltar um hold sem nada validado segue livre, como era.
+- **Monitor: os cinco cards lado a lado** — a coluna virou `col-12 col-md-6 col-xl` (o `col-xl` sem
+  número divide o flex por igual, porque 12/5 não fecha em coluna inteira) com `min-width: 0` no
+  filho do `#mc-cards`: flex item tem `min-width: auto`, e um nome de cliente comprido alargava um
+  card às custas dos vizinhos.
+
+## §256 — A planilha de Pending muda de contrato: cabeçalho na linha 1 e as 31 colunas por extenso
+
+O time global refez a leitura (Confirmation_Latam) e passou o layout novo por extenso: **cabeçalhos
+na linha 1, dados a partir da 2, SEM o título mesclado** — o §253 (que reintroduziu o título da
+planilha legada) deixa de valer — e **31 colunas com nome e ordem fixos**, de `LOB` a `Abono`.
+
+- A lista inteira vive em `_PCX_COLUMNS` (routes.py) e é o contrato: coluna que a página não tem sai
+  **vazia mantendo a posição** (tirá-la deslocaria as demais na query do consumidor). As novas com
+  dado da página: **Signature Type** (a derivada do RefData que o PC já tinha — e "Document type"
+  continua vazia: chegou a ser preenchida com o Signature Type e a mesa confirmou que NÃO é a mesma
+  coisa). As demais novas (`Data Devolução 2º Via`, `Controle 2º Via`, `Ano`, `Pending IS`,
+  `Trade Number IS FEP WEB`, `Baixa Sem Abono`, `Pendência`, `Abono`) saem em branco.
+- A aba segue `CONFIRMATIONS` (§250) e as datas seguem como data de verdade com `DD/MM/YYYY`.
+- O nome pedido veio com um espaço antes de `Trade Date` (`…Product Type; Trade Date;…`) — foi
+  tratado como typo do separador: cabeçalho com espaço inicial não sobrevive ao OLEDB e nenhum outro
+  nome da lista veio com espaço.

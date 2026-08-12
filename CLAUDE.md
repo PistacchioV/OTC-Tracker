@@ -756,8 +756,11 @@ lido **uma vez por request** e passado aos quatro cards: dentro do
 ### O ciclo da esteira tem cinco paradas, e duas não são de mesa (§254)
 
 `(Pending Legal, opcional) → Pending OTC → Pending MO e/ou FO → Pending FepWeb
-→ Ok`. **Pending Legal** é hold manual (vence a derivação até ser solto; é o
-único valor de Pending que se digita, junto com o Pending OTC que o desfaz).
+→ Ok`. **Pending Legal** é hold manual (vence a derivação até ser solto).
+**`Pending OTC` digitado REABRE a esteira** (§255): confirmação regerada volta
+para a fila do OTC — o upsert limpa as três validações e o Enviado p/ cliente
+(carimbos caem no undo; comentários ficam) e a mesa de OTC Ops é exigida quando
+há algo a limpar; numa linha só em hold ele age como o release de antes.
 **Pending FepWeb** é derivado e nunca se digita: validações feitas, envio
 pendente — **Ok exige o `Enviado p/ cliente` preenchido**. Toda gravação da
 esteira espelha no Pending Confirmation via `_mc_pc_sync` (chave MC `Trade ID`
