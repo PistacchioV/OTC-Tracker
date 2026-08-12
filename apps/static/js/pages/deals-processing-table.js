@@ -184,14 +184,18 @@ var OTCFileUpload = (function () {
         'CT_ICE':         'CT"MY"',
         'KC_ICE':         'KC"MY"',
         'WTI_NYMEX':      'WTI"MY"', // not confirmed in B3 data; best guess
-        'FCPO_BURSA_MYR': 'KO"MY"BNMK'
+        'FCPO_BURSA_MYR': 'KO"MY"BNMK',
+        // BRT_IPE vanilla tem linha PREFIX própria, restrita por trade type
+        // ({V: …} = só vanilla; valor plano vale para os dois) — §251.
+        'BRT_IPE':        { V: 'CO"MY"' }
     };
 
-    // SPECIAL: o código depende de LÓGICA (vanilla/asiática e a distância do
-    // contrato até a liquidação), mas os dois códigos em si são cadastro —
-    // `near` é a coluna B3 CODE e `far` a B3 CODE FAR. Fallback até o fetch.
+    // SPECIAL: o código depende de LÓGICA (a distância do contrato até a
+    // liquidação), mas os dois códigos em si são cadastro — `near` é a coluna
+    // B3 CODE e `far` a B3 CODE FAR. Fallback até o fetch. A linha do BRT_IPE
+    // é SÓ da asiática ({A: …}); a vanilla sai da PREFIX acima (§251).
     var MARKET_SPECIAL_CODES = {
-        'BRT_IPE': { near: 'CO"MY"', far: 'CO1-2' }
+        'BRT_IPE': { A: { near: 'CO"MY"', far: 'CO1-2' } }
     };
 
     // De-para agora cadastrado na página Mapping (Commodities × B3). Os
@@ -214,19 +218,24 @@ var OTCFileUpload = (function () {
                 var mkt  = String(row['MARKET'] || '').trim().toUpperCase();
                 var code = String(row['B3 CODE'] || '');   // sem trim: 'C ' tem espaço no código
                 var cal  = String(row['HOLIDAY CALENDAR'] || '').trim();
+                // TRADE TYPE (§251): a linha só vale para o(s) tipo(s) da
+                // coluna — 'V' vanilla, 'A' asiática; BOTH/vazio grava nas duas.
+                var tt = String(row['TRADE TYPE'] || '').trim().toUpperCase();
+                var flags = tt === 'VANILLA' ? ['V'] : tt === 'ASIAN' ? ['A'] : ['V', 'A'];
                 if (mkt && cal) MARKET_TO_FX_HOLIDAY[mkt] = cal;
                 if (typ === 'SPECIAL') {
-                    if (mkt) MARKET_SPECIAL_CODES[mkt] = {
-                        near: code, far: String(row['B3 CODE FAR'] || '').trim()
-                    };
+                    if (mkt) flags.forEach(function (f) {
+                        (MARKET_SPECIAL_CODES[mkt] = MARKET_SPECIAL_CODES[mkt] || {})[f] = {
+                            near: code, far: String(row['B3 CODE FAR'] || '').trim()
+                        };
+                    });
                     return;
                 }
                 if (!mkt || !code) return;
-                if (typ.indexOf('PREFIX') !== -1) {
-                    MARKET_DYNAMIC_PREFIX[mkt] = code;
-                } else {
-                    MARKET_FIXED_CODES[mkt] = code;
-                }
+                var alvo = typ.indexOf('PREFIX') !== -1 ? MARKET_DYNAMIC_PREFIX : MARKET_FIXED_CODES;
+                flags.forEach(function (f) {
+                    (alvo[mkt] = alvo[mkt] || {})[f] = code;
+                });
             });
         })
         .catch(function () {});
@@ -273,19 +282,31 @@ var OTCFileUpload = (function () {
         return (c.year - d.year) * 12 + (c.month - d.month);
     }
 
+    // Valor do mapa para este market E este trade type (§251): formato novo
+    // {mkt: {V: …, A: …}} — a coluna TRADE TYPE restringe a linha à vanilla
+    // ('V') ou à asiática ('A'). Valor plano (formato antigo) vale para os dois.
+    function b3MapEntry(mapping, mkt, isVanilla) {
+        var e = mapping[mkt];
+        if (e && typeof e === 'object' && ('V' in e || 'A' in e)) {
+            return e[isVanilla ? 'V' : 'A'];
+        }
+        return e;
+    }
+
     function calculateB3Id(market, contract, isVanilla, settleDate) {
         if (!market || !contract) return '';
         var mkt = market.toUpperCase().trim();
 
         // Fixed code — return immediately
-        if (MARKET_FIXED_CODES[mkt]) return MARKET_FIXED_CODES[mkt];
+        var fx = b3MapEntry(MARKET_FIXED_CODES, mkt, isVanilla);
+        if (fx) return fx;
 
-        // SPECIAL (hoje só o BRT_IPE): os dois códigos vêm do cadastro; qual dos
-        // dois sai é lógica. Vanilla usa sempre o do mês (CO"MY" → COH7).
-        // Asiática passou a depender da distância até a LIQUIDAÇÃO: contrato no
-        // mês seguinte usa o do mês, dois meses ou mais usa o distante (CO1-2).
-        // Antes toda asiática saía CO1-2 — certo só para o segundo caso. §212
-        var sp = MARKET_SPECIAL_CODES[mkt];
+        // SPECIAL: os dois códigos vêm do cadastro; qual dos dois sai é lógica.
+        // No BRT_IPE a linha SPECIAL é hoje SÓ da asiática (a vanilla tem linha
+        // PREFIX própria, CO"MY" — §251): contrato no mês seguinte à liquidação
+        // usa o do mês, dois meses ou mais usa o distante (CO1-2) — §212. O
+        // ramo isVanilla fica para linha SPECIAL cadastrada como BOTH/VANILLA.
+        var sp = b3MapEntry(MARKET_SPECIAL_CODES, mkt, isVanilla);
         if (sp) {
             if (isVanilla || monthsAhead(settleDate, contract) === 1) {
                 return buildB3Code(sp.near, contract) || sp.far;
@@ -294,7 +315,7 @@ var OTCFileUpload = (function () {
         }
 
         // Padrão do cadastro: parte fixa + mês/ano + parte fixa
-        var pattern = MARKET_DYNAMIC_PREFIX[mkt];
+        var pattern = b3MapEntry(MARKET_DYNAMIC_PREFIX, mkt, isVanilla);
         if (!pattern) {
             // Fallback: use part before first underscore
             var uIdx = mkt.indexOf('_');

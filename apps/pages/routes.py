@@ -18724,6 +18724,34 @@ def _commodities_b3_upgrade(rows):
             continue
         # Formato antigo: o mês/ano vinha sempre no fim, e o espaço era literal.
         r['B3 CODE'] = code.replace(' ', '_') + '"MY"'
+
+    # TRADE TYPE (§251): linha sem a coluna vale para os dois tipos (BOTH) —
+    # exceto a SPECIAL do BRT_IPE, que sempre foi a regra da ASIÁTICA (a
+    # vanilla morava no ramo de código e ganha a própria linha PREFIX abaixo).
+    # Preencher só o que está vazio: quem editou pela tela manda.
+    brt_special_migrada = False
+    tem_brt_vanilla = False
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        mkt = str(r.get('MARKET') or '').strip().upper()
+        typ = str(r.get('TYPE') or '').strip().upper()
+        tt = str(r.get('TRADE TYPE') or '').strip().upper()
+        if not tt:
+            if mkt == 'BRT_IPE' and typ == 'SPECIAL':
+                r['TRADE TYPE'] = 'ASIAN'
+                brt_special_migrada = True
+            else:
+                r['TRADE TYPE'] = 'BOTH'
+        if mkt == 'BRT_IPE' and str(r.get('TRADE TYPE') or '').strip().upper() in ('VANILLA', 'BOTH'):
+            tem_brt_vanilla = True
+    # A linha PREFIX da vanilla só entra quando a SPECIAL acabou de ser migrada
+    # (arquivo anterior à coluna) e nada cobre a vanilla — num arquivo já
+    # migrado, a ausência dela é decisão de quem editou, não formato antigo.
+    if brt_special_migrada and not tem_brt_vanilla:
+        rows.append({'TYPE': 'PREFIX', 'MARKET': 'BRT_IPE', 'TRADE TYPE': 'VANILLA',
+                     'B3 CODE': 'CO"MY"', 'B3 CODE FAR': '',
+                     'HOLIDAY CALENDAR': 'IPE', 'FIXED QUOTE': ''})
     return _commodities_b3_quote_defaults(rows)
 
 
@@ -18824,6 +18852,12 @@ _MAPPING_DEFS = {
         'columns': [
             {'key': 'TYPE', 'label': 'Type', 'type': 'select', 'options': ['FIXED', 'PREFIX', 'SPECIAL']},
             {'key': 'MARKET', 'label': 'Market (Athena)'},
+            # A linha vale para qual tipo de trade: BOTH (ou em branco) para os
+            # dois, VANILLA/ASIAN restringe. Permite um market ter códigos
+            # diferentes por tipo — o BRT_IPE é o caso: a linha SPECIAL
+            # (near/far) é só da asiática; a vanilla tem linha PREFIX CO"MY".
+            {'key': 'TRADE TYPE', 'label': 'Trade Type (blank = BOTH)', 'type': 'select',
+             'options': ['BOTH', 'VANILLA', 'ASIAN']},
             {'key': 'B3 CODE', 'label': 'B3 Code / Prefix'},
             {'key': 'B3 CODE FAR', 'label': 'B3 Code — far contract (SPECIAL only)'},
             {'key': 'HOLIDAY CALENDAR', 'label': 'Holiday Calendar'},
@@ -18834,7 +18868,7 @@ _MAPPING_DEFS = {
         ],
         'upgrade': _commodities_b3_upgrade,
         'seed': _commodities_b3_quote_defaults(
-            [{'TYPE': 'FIXED', 'MARKET': m, 'B3 CODE': c, 'HOLIDAY CALENDAR': h, 'FIXED QUOTE': q} for m, c, h, q in (
+            [{'TYPE': 'FIXED', 'MARKET': m, 'TRADE TYPE': 'BOTH', 'B3 CODE': c, 'HOLIDAY CALENDAR': h, 'FIXED QUOTE': q} for m, c, h, q in (
                 ('MPB_LME', 'LOPBDY', 'LME', ''), ('MCU_LME', 'LOCADY', 'LME', ''),
                 ('MAL_LME', 'LOAHDY', 'LME', ''), ('MZN_LME', 'LOZSDY', 'LME', ''),
                 ('MSN_LME', 'LOSNDY', 'LME', ''), ('MNI_LME', 'LONIDY', 'LME', ''),
@@ -18845,7 +18879,7 @@ _MAPPING_DEFS = {
                 ('NG_NYMEX', 'NG1', 'NYMEX', ''), ('MFE_TSI', 'PFATIOCH', 'PLATTS-ASIA', ''),
                 ('COAL_HCC_FOB_AUS_TSI', 'PMTCLAUS', 'PLATTS-ASIA', 'YES'),
             )] +
-            [{'TYPE': 'PREFIX', 'MARKET': m, 'B3 CODE': c, 'HOLIDAY CALENDAR': h, 'FIXED QUOTE': ''} for m, c, h in (
+            [{'TYPE': 'PREFIX', 'MARKET': m, 'TRADE TYPE': 'BOTH', 'B3 CODE': c, 'HOLIDAY CALENDAR': h, 'FIXED QUOTE': ''} for m, c, h in (
                 ('HU_RBOB_NYMEX', 'XB"MY"', 'NYMEX'), ('HO_NYMEX', 'HO"MY"', 'NYMEX'),
                 ('SB_ICE', 'SB"MY"', 'ICEAGS'), ('C_CBOT', 'C_"MY"', 'CBY_AGS'),
                 ('S_CBOT', 'S_"MY"', 'CBY_AGS'), ('BO_CBOT', 'BO"MY"', 'CBY_AGS'),
@@ -18857,14 +18891,17 @@ _MAPPING_DEFS = {
                 # deals-processing-table). Agora é um padrão só, aqui. §164
                 ('FCPO_BURSA_MYR', 'KO"MY"BNMK', 'BURSA'),
             )] +
-            # BRT_IPE: os DOIS códigos agora estão cadastrados. B3 CODE é o do
-            # contrato PRÓXIMO (padrão CO"MY" → COH7) e B3 CODE FAR é o do
-            # distante (CO1-2). Vanilla usa sempre o próximo; asiática usa o
-            # próximo quando o contrato é o mês seguinte à liquidação e o
-            # distante a partir de dois meses (§212).
-            [{'TYPE': 'SPECIAL', 'MARKET': 'BRT_IPE', 'B3 CODE': 'CO"MY"',
-              'B3 CODE FAR': 'CO1-2', 'HOLIDAY CALENDAR': 'IPE', 'FIXED QUOTE': ''}] +
-            [{'TYPE': 'FIXED', 'MARKET': '', 'B3 CODE': c, 'HOLIDAY CALENDAR': '', 'FIXED QUOTE': 'YES'} for c in
+            # BRT_IPE tem DUAS linhas, separadas pelo Trade Type (§251):
+            #   · SPECIAL, só ASIAN — near (CO"MY") quando o contrato é o mês
+            #     seguinte à liquidação, far (CO1-2) a partir de dois meses (§212);
+            #   · PREFIX, só VANILLA — CO"MY" padrão, como qualquer prefixo.
+            # O resultado é o mesmo de quando a lógica vanilla morava no ramo
+            # SPECIAL, mas agora cada tipo tem a SUA linha cadastrável.
+            [{'TYPE': 'SPECIAL', 'MARKET': 'BRT_IPE', 'TRADE TYPE': 'ASIAN', 'B3 CODE': 'CO"MY"',
+              'B3 CODE FAR': 'CO1-2', 'HOLIDAY CALENDAR': 'IPE', 'FIXED QUOTE': ''},
+             {'TYPE': 'PREFIX', 'MARKET': 'BRT_IPE', 'TRADE TYPE': 'VANILLA', 'B3 CODE': 'CO"MY"',
+              'HOLIDAY CALENDAR': 'IPE', 'FIXED QUOTE': ''}] +
+            [{'TYPE': 'FIXED', 'MARKET': '', 'TRADE TYPE': 'BOTH', 'B3 CODE': c, 'HOLIDAY CALENDAR': '', 'FIXED QUOTE': 'YES'} for c in
              ('PTS005', 'PTS002', 'PTS006', 'PTS003')]
         ),
     },
@@ -23572,8 +23609,23 @@ def _box_subjacente_index():
 
 def _box_commodity_maps():
     """Mapas Commodities × B3 vindos do CADASTRO (/mapping), não de literais —
-    é a mesma fonte que o JS consome via /api/mappings/commodities-b3 (§131)."""
+    é a mesma fonte que o JS consome via /api/mappings/commodities-b3 (§131).
+
+    Cada entrada é POR TRADE TYPE ({mkt: {'V': …, 'A': …}}): a coluna TRADE
+    TYPE restringe a linha à vanilla ou à asiática (BOTH/vazio = as duas), e é
+    isso que permite ao BRT_IPE ter a linha SPECIAL só da asiática e uma PREFIX
+    só da vanilla (§251). `calculate_b3_id` aceita também o formato antigo
+    (valor plano = vale para os dois), então mapa de teste/fixture não quebra."""
     fixed, dynamic, holiday, special = {}, {}, {}, {}
+
+    def _flags(row):
+        tt = str(row.get('TRADE TYPE') or '').strip().upper()
+        if tt == 'VANILLA':
+            return ('V',)
+        if tt == 'ASIAN':
+            return ('A',)
+        return ('V', 'A')                          # BOTH ou em branco
+
     for row in _mapping_rows('commodities-b3'):
         typ = str(row.get('TYPE') or '').upper()
         mkt = str(row.get('MARKET') or '').strip().upper()
@@ -23583,17 +23635,17 @@ def _box_commodity_maps():
             holiday[mkt] = cal
         if typ == 'SPECIAL' and mkt:
             # SPECIAL leva os DOIS códigos: o do mês (B3 CODE) e o distante
-            # (B3 CODE FAR). Qual dos dois sai é lógica — vanilla/asiática e a
-            # distância até a liquidação —, mas os códigos em si saem do
-            # cadastro, não do código-fonte.
-            special[mkt] = {'near': code, 'far': str(row.get('B3 CODE FAR') or '').strip()}
+            # (B3 CODE FAR). Qual dos dois sai é lógica — a distância até a
+            # liquidação —, mas os códigos em si saem do cadastro.
+            for f in _flags(row):
+                special.setdefault(mkt, {})[f] = {
+                    'near': code, 'far': str(row.get('B3 CODE FAR') or '').strip()}
             continue
         if not mkt or not code:
             continue
-        if 'PREFIX' in typ:
-            dynamic[mkt] = code
-        else:
-            fixed[mkt] = code
+        alvo = dynamic if 'PREFIX' in typ else fixed
+        for f in _flags(row):
+            alvo.setdefault(mkt, {})[f] = code
     return {'fixed': fixed, 'dynamic': dynamic, 'holiday': holiday, 'special': special}
 
 

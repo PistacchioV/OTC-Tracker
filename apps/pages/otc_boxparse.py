@@ -347,32 +347,50 @@ def months_ahead(settle_date, contract):
     return (c[1] - d[1]) * 12 + (c[0] - d[0])
 
 
+def _b3_map_entry(mapping, mkt, is_vanilla):
+    """Valor de um mapa Commodities × B3 para este market E este trade type.
+
+    Formato novo (§251): {mkt: {'V': …, 'A': …}} — a coluna TRADE TYPE do
+    cadastro restringe a linha à vanilla ('V') ou à asiática ('A'); BOTH grava
+    nas duas chaves. Formato antigo (valor plano, sem o nível do tipo) segue
+    aceito e vale para os dois — é o que mantém fixtures e um JS ainda não
+    recarregado funcionando. No SPECIAL o valor final é o dict {near, far},
+    que é distinguível do nível de tipo pelas chaves."""
+    e = (mapping or {}).get(mkt)
+    if isinstance(e, dict) and ('V' in e or 'A' in e):
+        return e.get('V' if is_vanilla else 'A')
+    return e
+
+
 def calculate_b3_id(market, contract, is_vanilla, fixed_codes, dynamic_prefix,
                     special=None, settle_date=''):
     """``calculateB3Id`` do JS. Os mapas vêm do cadastro Commodities × B3
-    (/mapping) — nada de literal aqui, ver HANDOFF §131."""
+    (/mapping) — nada de literal aqui, ver HANDOFF §131. A linha só entra se o
+    TRADE TYPE dela cobre o tipo do deal (§251)."""
     if not market or not contract:
         return ''
     mkt = str(market).upper().strip()
-    if mkt in fixed_codes:
-        return fixed_codes[mkt]
-    # SPECIAL (hoje só o BRT_IPE): DOIS códigos cadastrados, e qual dos dois sai
-    # é lógica, não de-para — por isso a linha continua SPECIAL.
+    fx = _b3_map_entry(fixed_codes, mkt, is_vanilla)
+    if fx:
+        return fx
+    # SPECIAL: DOIS códigos cadastrados, e qual dos dois sai é lógica, não
+    # de-para — por isso a linha continua SPECIAL.
     #
     #   B3 CODE      → o contrato PRÓXIMO (padrão CO"MY" → COH7)
     #   B3 CODE FAR  → o contrato distante (CO1-2)
     #
-    # Vanilla é sempre o próximo, como sempre foi. Asiática passou a depender da
-    # distância até a LIQUIDAÇÃO: contrato no mês seguinte usa o código do mês;
-    # dois meses ou mais, o CO1-2. Antes toda asiática saía CO1-2, o que estava
-    # certo só para a segunda situação.
-    sp = (special or {}).get(mkt)
+    # No BRT_IPE a linha SPECIAL é hoje SÓ da asiática (a vanilla tem linha
+    # PREFIX própria, CO"MY" padrão — §251): contrato no mês seguinte à
+    # liquidação usa o código do mês, dois meses ou mais usa o CO1-2 (§212).
+    # O ramo `is_vanilla` fica para linha SPECIAL cadastrada como BOTH/VANILLA:
+    # vanilla é sempre o próximo, como sempre foi.
+    sp = _b3_map_entry(special, mkt, is_vanilla)
     if sp:
         near, far = sp.get('near') or '', sp.get('far') or ''
         if is_vanilla or months_ahead(settle_date, contract) == 1:
             return build_b3_code(near, contract) or far
         return far
-    pattern = dynamic_prefix.get(mkt)
+    pattern = _b3_map_entry(dynamic_prefix, mkt, is_vanilla)
     if not pattern:
         u = mkt.find('_')
         pattern = mkt[:u] if u > 0 else mkt

@@ -245,12 +245,15 @@
     //   commodities-b3 › B3 CODE     "MY"   → mês/ano do contrato
     //   cetip-files    › SOURCE/DEST YYMMDD → data do arquivo
     //   api-links      › URL         YYYYMMDD → data de referência
-    // No B3 CODE só vale para linha PREFIX: em FIXED o código é literal e um
-    // "MY" ali seria texto mesmo.
+    // No B3 CODE vale para linha PREFIX e SPECIAL (o near do BRT_IPE é CO"MY"
+    // e aparecia com as aspas literais na tabela): em FIXED o código é literal
+    // e um "MY" ali seria texto mesmo. B3 CODE FAR entra pela simetria — um
+    // far com padrão ganha o mesmo destaque.
     var PATTERN_COLS = {
-        'commodities-b3': { cols: ['B3 CODE'], token: /"\s*MY\s*"/ig, show: 'MY',
+        'commodities-b3': { cols: ['B3 CODE', 'B3 CODE FAR'], token: /"\s*MY\s*"/ig, show: 'MY',
                             onlyWhen: function (row) {
-                                return String(row['TYPE'] || '').toUpperCase().indexOf('PREFIX') !== -1;
+                                var t = String(row['TYPE'] || '').toUpperCase();
+                                return t.indexOf('PREFIX') !== -1 || t.indexOf('SPECIAL') !== -1;
                             } },
         'cetip-files':    { cols: ['SOURCE', 'DEST'], token: /YYMMDD/ig, show: null },
         'api-links':      { cols: ['URL'], token: /YYYY[-\/. ]?MM[-\/. ]?DD/ig, show: null },

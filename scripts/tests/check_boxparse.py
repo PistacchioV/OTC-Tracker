@@ -45,6 +45,7 @@ pieces = [
     cut('B3_MY_RE',        r'var B3_MY_RE = [^\n]+'),
     cut('splitB3Pattern',  r'function splitB3Pattern\(.*?\n    \}'),
     cut('buildB3Code',     r'function buildB3Code\(.*?\n    \}'),
+    cut('b3MapEntry',      r'function b3MapEntry\(.*?\n    \}'),
     cut('calculateB3Id',    r'function calculateB3Id\(.*?\n    \}'),
     cut('isCentsFactor',    r'function isCentsFactor\(.*?\n    \}'),
     cut('parseFator',       r'function parseFator\(.*?\n    \}'),

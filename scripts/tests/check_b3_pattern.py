@@ -90,18 +90,32 @@ old = [
     {'TYPE': 'PREFIX', 'MARKET': 'JA_CADASTRADO', 'B3 CODE': 'ZZ"MY"'},
 ]
 up = R._commodities_b3_upgrade([dict(r) for r in old])
-by = {r['MARKET']: r for r in up}
+by = {r['MARKET']: r for r in up if r['MARKET'] != 'BRT_IPE'}
 check('prefixo simples',      by['HU_RBOB_NYMEX']['B3 CODE'], 'XB"MY"')
 check('espaco vira _',        by['C_CBOT']['B3 CODE'],        'C_"MY"')
 check('FIXED intocado',       by['NG_NYMEX']['B3 CODE'],      'NG1')
 check('FCPO vira PREFIX',     by['FCPO_BURSA_MYR']['TYPE'],   'PREFIX')
 check('FCPO ganha o padrao',  by['FCPO_BURSA_MYR']['B3 CODE'], 'KO"MY"BNMK')
-check('BRT_IPE segue SPECIAL', by['BRT_IPE']['TYPE'],         'SPECIAL')
 check('linha nova intocada',  by['JA_CADASTRADO']['B3 CODE'], 'ZZ"MY"')
-# idempotencia: rodar de novo nao pode dobrar o "MY"
-again = R._commodities_b3_upgrade(up)
+# TRADE TYPE (§251): linha antiga sem a coluna vale para os dois (BOTH); a
+# SPECIAL do BRT_IPE sempre foi a regra da asiatica e a migracao dela cria a
+# linha PREFIX da vanilla — os dois codigos, um por tipo.
+check('linha antiga vira BOTH', by['HU_RBOB_NYMEX']['TRADE TYPE'], 'BOTH')
+brt = [r for r in up if r['MARKET'] == 'BRT_IPE']
+check('BRT_IPE: uma linha por tipo',
+      [(r['TYPE'], r['TRADE TYPE'], r['B3 CODE']) for r in brt],
+      [('SPECIAL', 'ASIAN', 'CO"MY"'), ('PREFIX', 'VANILLA', 'CO"MY"')])
+# idempotencia: rodar de novo nao pode dobrar o "MY" nem re-somar a linha
+# vanilla do BRT_IPE
+again = R._commodities_b3_upgrade([dict(r) for r in up])
 check('idempotente', {r['MARKET']: r['B3 CODE'] for r in again},
       {r['MARKET']: r['B3 CODE'] for r in up})
+check('idempotente no numero de linhas', len(again), len(up))
+# quem APAGOU a linha vanilla pela tela (SPECIAL ja migrada) manda: nao re-nasce
+so_special = [{'TYPE': 'SPECIAL', 'MARKET': 'BRT_IPE', 'TRADE TYPE': 'ASIAN',
+               'B3 CODE': 'CO"MY"', 'B3 CODE FAR': 'CO1-2'}]
+check('vanilla apagada nao volta',
+      len(R._commodities_b3_upgrade([dict(r) for r in so_special])), 1)
 
 print('\n== 4. o codigo emitido nao mudou (menos o FCPO, de proposito) ==')
 # Prefixos como estavam ANTES, direto do codigo-fonte antigo.
@@ -110,13 +124,30 @@ LEGACY_PREFIX = {
     'S_CBOT': 'S ', 'BO_CBOT': 'BO', 'CC_ICE': 'CC', 'W_CBOT': 'W ',
     'SM_CBOT': 'SM', 'CT_ICE': 'CT', 'KC_ICE': 'KC', 'WTI_NYMEX': 'WTI',
 }
-seed = {r['MARKET']: r for r in R._MAPPING_DEFS['commodities-b3']['seed'] if r.get('MARKET')}
-fixed = {m: r['B3 CODE'] for m, r in seed.items() if r['TYPE'] == 'FIXED'}
-dyn = {m: r['B3 CODE'] for m, r in seed.items() if r['TYPE'] == 'PREFIX'}
-# Os SPECIAL levam DOIS codigos (proximo / distante) — a mesma leitura que o
-# `_box_commodity_maps` faz do cadastro.
-spc = {m: {'near': r['B3 CODE'], 'far': r.get('B3 CODE FAR', '')}
-       for m, r in seed.items() if r['TYPE'] == 'SPECIAL'}
+# Mapas montados do seed com a MESMA leitura por TRADE TYPE do
+# `_box_commodity_maps` ({mkt: {'V': …, 'A': …}}, §251) — o BRT_IPE tem duas
+# linhas (SPECIAL/ASIAN e PREFIX/VANILLA) e um dict por market esconderia uma.
+fixed, dyn, spc = {}, {}, {}
+
+
+def _tt_flags(r):
+    tt = str(r.get('TRADE TYPE') or '').strip().upper()
+    return ('V',) if tt == 'VANILLA' else ('A',) if tt == 'ASIAN' else ('V', 'A')
+
+
+for r in R._MAPPING_DEFS['commodities-b3']['seed']:
+    m = r.get('MARKET')
+    if not m:
+        continue
+    if r['TYPE'] == 'SPECIAL':
+        for f in _tt_flags(r):
+            spc.setdefault(m, {})[f] = {'near': r['B3 CODE'], 'far': r.get('B3 CODE FAR', '')}
+    elif r['TYPE'] == 'PREFIX':
+        for f in _tt_flags(r):
+            dyn.setdefault(m, {})[f] = r['B3 CODE']
+    else:
+        for f in _tt_flags(r):
+            fixed.setdefault(m, {})[f] = r['B3 CODE']
 for contract in ('Dec26', 'May27', 'Jan30'):
     p = B._contract_parts(contract)
     for mkt, old_prefix in LEGACY_PREFIX.items():
@@ -126,12 +157,25 @@ for contract in ('Dec26', 'May27', 'Jan30'):
 
 check('FCPO (mudanca pedida)', B.calculate_b3_id('FCPO_BURSA_MYR', 'Dec26', False, fixed, dyn),
       'KOZ6BNMK')
-# O seed passou a trazer os dois codigos do BRT_IPE (§212). Vanilla nao mudou;
-# asiatica sem data de liquidacao continua CO1-2, como era.
-check('o seed cadastra os dois codigos do BRT_IPE', spc.get('BRT_IPE'),
-      {'near': 'CO"MY"', 'far': 'CO1-2'})
+# O seed traz os dois codigos do BRT_IPE, agora um por TRADE TYPE (§251): a
+# linha SPECIAL (near/far) e SO da asiatica e a vanilla tem linha PREFIX
+# propria. O codigo emitido nao mudou: vanilla COZ6, asiatica sem data CO1-2.
+check('o seed cadastra a SPECIAL so para a asiatica', spc.get('BRT_IPE'),
+      {'A': {'near': 'CO"MY"', 'far': 'CO1-2'}})
+check('   e a PREFIX so para a vanilla', dyn.get('BRT_IPE'), {'V': 'CO"MY"'})
 check('BRT_IPE vanilla', B.calculate_b3_id('BRT_IPE', 'Dec26', True, fixed, dyn, spc), 'COZ6')
 check('BRT_IPE asian',   B.calculate_b3_id('BRT_IPE', 'Dec26', False, fixed, dyn, spc), 'CO1-2')
+# O filtro por tipo em si: uma linha VANILLA nao responde pela asiatica (cai na
+# regra generica de prefixo) e vice-versa; BOTH e formato antigo valem para os dois.
+TYPED = {'ZZ_FOO': {'V': 'ZV"MY"'}}
+check('linha VANILLA nao vale para asiatica',
+      B.calculate_b3_id('ZZ_FOO', 'Dec26', False, {}, TYPED), 'ZZZ6')
+check('   mas vale para vanilla',
+      B.calculate_b3_id('ZZ_FOO', 'Dec26', True, {}, TYPED), 'ZVZ6')
+check('formato antigo (plano) vale para os dois',
+      B.calculate_b3_id('ZZ_FOO', 'Dec26', False, {}, {'ZZ_FOO': 'ZP"MY"'}), 'ZPZ6')
+check('FIXED tipado tambem filtra',
+      B.calculate_b3_id('NG_NYMEX', 'Dec26', True, {'NG_NYMEX': {'A': 'NG1'}}, {}), 'NGZ6')
 # Consequencia de tirar a linha do cadastro, escrita aqui para nao virar
 # surpresa: sem a linha SPECIAL o market cai na regra generica de prefixo e sai
 # 'BRT' + mes/ano. E o mesmo que acontece com qualquer market sem cadastro, mas
@@ -214,7 +258,8 @@ if os.path.exists(JSC):
         src = io.open(jsfile, encoding='utf-8').read()
         need = []
         for fn in ('splitB3Pattern', 'buildB3Code', 'contractParts',
-                   'contractMonthYear', 'dateMonthYear', 'monthsAhead', 'calculateB3Id'):
+                   'contractMonthYear', 'dateMonthYear', 'monthsAhead',
+                   'b3MapEntry', 'calculateB3Id'):
             m = re.search(r'\n    function ' + fn + r'\(.*?\n    \}\n', src, re.S)
             assert m, '%s: nao achei %s' % (jsfile, fn)
             need.append(m.group(0))

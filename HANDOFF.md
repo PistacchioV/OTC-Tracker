@@ -11011,3 +11011,31 @@ contrato não é só o cabeçalho — **o nome da aba faz parte do layout**. `_p
 `ws.title = 'CONFIRMATIONS'`; colunas, datas e o resto ficam como estavam (os headers foram
 verificados byte a byte na mesma conversa — 100% ASCII, sem caractere invisível; o erro nunca foi de
 caractere, era a aba).
+
+## §251 — Commodities × B3 ganha TRADE TYPE, e o BRT_IPE vira duas linhas
+
+Alguns códigos de ativo subjacente mudam conforme o trade é vanilla ou asiático, e o cadastro não
+tinha onde dizer isso — a distinção do BRT_IPE morava no ramo SPECIAL do código. O mapping
+`commodities-b3` ganhou a coluna **TRADE TYPE** (`VANILLA` / `ASIAN` / `BOTH`; em branco = BOTH): a
+linha só responde pelo tipo que ela declara.
+
+- **BRT_IPE agora são DUAS linhas**: a `SPECIAL` ficou **só da asiática** (near `CO"MY"` quando o
+  contrato é o mês seguinte à liquidação, far `CO1-2` a partir de dois meses — §212) e a vanilla ganhou
+  linha `PREFIX` própria com `CO"MY"` padrão. O código emitido é o MESMO de antes (vanilla COH7,
+  asiática COH7/CO1-2 pela distância) — o que mudou é que cada tipo tem a sua linha cadastrável.
+- **Os mapas dos consumidores viraram por tipo** (`{mkt: {'V': …, 'A': …}}`) nas TRÊS cópias da regra:
+  `_box_commodity_maps`/`calculate_b3_id` (otc_boxparse.py), `otc-fileupload.js` (que serve os New
+  Deals de NDF Comm e Opt Comm via `OTCFileUpload.calculateB3Id` — as páginas já passavam o
+  `isVanilla`) e `deals-processing-table.js`. `b3MapEntry`/`_b3_map_entry` resolvem a entrada pelo
+  tipo, e **valor plano (formato antigo) segue valendo para os dois** — fixtures e fallback literal
+  não quebram. Linha VANILLA não responde pela asiática: sem outra linha, o market cai na regra
+  genérica de prefixo, como qualquer market sem cadastro.
+- **Upgrade na leitura**: linha antiga sem a coluna vira `BOTH`; a `SPECIAL` do BRT_IPE vira `ASIAN` e,
+  quando essa migração acontece (arquivo anterior à coluna), a linha `PREFIX`/`VANILLA` do BRT_IPE é
+  criada — num arquivo já migrado a ausência dela é decisão de quem editou, e não volta.
+- **A tela corrigiu o destaque do `MY`**: o `PATTERN_COLS` só destacava linha PREFIX, então o
+  `CO"MY"` da SPECIAL do BRT_IPE aparecia com as aspas literais. Agora PREFIX e SPECIAL destacam, e a
+  coluna B3 CODE FAR entrou por simetria.
+- Testes: `check_b3_pattern.py` cobre o filtro por tipo, o upgrade (inclusive "vanilla apagada não
+  volta") e a paridade das duas cópias JS (o recorte ganhou o `b3MapEntry`); `check_boxparse.py`,
+  `check_quote_type.py` e `check_co12_roll.py` seguem verdes.

@@ -400,10 +400,15 @@ São **25** mappings hoje: `currency-base`, `interbook-ndf`, `publisher-ndf`,
   **padrão**, não um literal: `"MY"` entre aspas é letra do mês B3 + ano
   (`X_"MY"` → `X Z7`), `_` é espaço literal, e `YYMMDD` num nome de arquivo
   CETIP é a Reference Date do card. O trecho `MY` é destacado na tabela para
-  ler separado da parte fixa (HANDOFF §164). `commodities-b3` carrega ainda o
-  **B3 CODE FAR** (a linha `SPECIAL` do BRT_IPE leva DOIS códigos: `B3 CODE` =
-  `CO"MY"` para o contrato do mês seguinte e `B3 CODE FAR` = `CO1-2` para dois
-  meses ou mais à frente; vanilla usa sempre o do mês — HANDOFF §212) e o
+  ler separado da parte fixa (HANDOFF §164). `commodities-b3` tem a coluna
+  **TRADE TYPE** (VANILLA / ASIAN / BOTH; em branco = BOTH): a linha só vale
+  para o tipo de trade que ela diz, e é o que permite um market ter códigos
+  diferentes por tipo — o BRT_IPE tem DUAS linhas: a `SPECIAL`, **só ASIAN**,
+  leva os dois códigos (`B3 CODE` = `CO"MY"` para o contrato do mês seguinte à
+  liquidação e `B3 CODE FAR` = `CO1-2` para dois meses ou mais — HANDOFF §212)
+  e a `PREFIX`, **só VANILLA**, o `CO"MY"` padrão (§251). Os mapas dos
+  consumidores são por tipo (`{mkt: {V, A}}` — `_box_commodity_maps` e os dois
+  JS), com valor plano do formato antigo valendo para os dois. Carrega ainda o
   **Tipo de Cotação / Fonte de Informação** escritos nos arquivos Conecta
   (`QUOTE TYPE NDF`, `QUOTE TYPE OPT`, `INFO SOURCE`): a coluna guarda o
   **código do layout**, e há duas colunas de tipo de cotação porque os layouts
