@@ -11039,3 +11039,79 @@ linha só responde pelo tipo que ela declara.
 - Testes: `check_b3_pattern.py` cobre o filtro por tipo, o upgrade (inclusive "vanilla apagada não
   volta") e a paridade das duas cópias JS (o recorte ganhou o `b3MapEntry`); `check_boxparse.py`,
   `check_quote_type.py` e `check_co12_roll.py` seguem verdes.
+
+## §252 — FIXED QUOTE aposentado, WTI por trade type, ordenação no /mapping e o copy das tabelas
+
+Quatro pedidos da mesma conversa sobre o Commodities × B3 e a tela de Mapping:
+
+- **FIXED QUOTE saiu do cadastro.** Desde o §177 ele só escolhia F/340 vs A/358 quando as colunas de
+  cotação estavam vazias — os valores de verdade já moram em `QUOTE TYPE NDF` / `INFO SOURCE`. O
+  `_commodities_b3_quote_defaults` ainda LÊ o flag de arquivo antigo (materializa o F/340 das linhas
+  YES nas colunas) e então o remove da linha; `_b3_quote_cfg` e o `b3-quote-config.js` passaram a ter
+  um default único (A / 5 / 358). **Os PTS**** saíram junto: eram linhas sem MARKET que só existiam
+  para carregar o flag. Atenção: coluna de cotação LIMPA pela tela agora cai em A/358 — o "histórico
+  por flag" não existe mais.
+- **WTI_NYMEX virou duas linhas**, no desenho do BRT_IPE (§251): `PREFIX`/VANILLA `WTI"MY"` e
+  `FIXED`/ASIAN **`CL1`** (o contínuo, literal — pedido da mesa). A migração no upgrade restringe o
+  PREFIX antigo à vanilla e cria a linha FIXED; fallbacks dos dois JS acompanham (`{V: …}`/`{A: …}`).
+- **O JSON versionado (`mappings/commodities-b3.json`) foi regravado no formato novo** — 29 linhas,
+  sem FIXED QUOTE, sem PTS, WTI e BRT divididos por tipo — para o pull entregar o formato pronto; o
+  upgrade continua cobrindo a instância cujo arquivo divergiu.
+- **A tabela do /mapping ordena por coluna**: clique no header alterna asc/desc (seta ▲/▼), e o
+  Commodities × B3 abre SEMPRE por MARKET A→Z (`defaultSort`; trocar de aba volta ao padrão). Só a
+  EXIBIÇÃO ordena — o arquivo mantém a ordem de cadastro, e o `data-idx` das ações continua apontando
+  para a linha certa porque o `filteredRows` carrega o índice original. O header não é remontado no
+  clique (os filtros digitados vivem nele); só o indicador e o corpo mudam.
+- **Auditoria do copy de célula** (Ctrl+C padrão): as 40 páginas com `<table>` foram varridas. Duas
+  páginas REAIS estavam sem o mecanismo e ganharam `table-std.js` + `otcCellCopy`: **Users**
+  (`users-roles`, skip checkbox+Actions) e **Ticket List** (`tickets-list`, que também ganhou o id
+  `tk-table`; skip Actions). O resto ou já tinha (inclusive via JS compartilhado do swapchar, que
+  cobre cinco páginas) ou é tabela DEMO do template comprado com dado fake hardcoded
+  (`file-interpreter`, `email`, `users-profile`, `dashboard-2`) — ali não há o que copiar.
+- Testes: `check_quote_type.py` reescrito para a semântica sem flag (inclui "PTS saem na migração" e
+  "o flag sai da linha"); `check_b3_pattern.py` ganhou os casos do WTI (vanilla WTIZ6 / asiática CL1,
+  upgrade em duas linhas). `check_boxparse.py` e `check_co12_roll.py` seguem verdes.
+
+## §253 — A planilha de Pending precisa do TÍTULO MESCLADO da legada (o segundo erro do time global)
+
+Depois da aba CONFIRMATIONS (§250), o job global quebrou de novo: `"No value given for one or more
+required parameters"` — o erro do OLEDB quando a query referencia colunas que ele não encontrou. A
+causa era a linha 1: a planilha LEGADA tem um título mesclado na linha 1 e os cabeçalhos na linha 2, e
+o leitor deles começa na 2 — com os nossos cabeçalhos na 1, ele achava DADOS onde esperava os nomes.
+`_pcx_build_xlsx` agora replica o layout legado linha a linha: A1:V1 mesclado com o título "PENDING -
+Outstanding Confirmation OTC", cabeçalhos na linha 2, dados da 3 em diante, freeze em A3. Terceira
+lição do §240, agora completa: **o CONTRATO com o consumidor é o arquivo INTEIRO** — aba, título,
+posição do cabeçalho e nomes de coluna.
+
+## §254 — A esteira ganha Pending Legal e Pending FepWeb, e passa a espelhar no Pending Confirmation
+
+Pedido da mesa, o maior redesenho da esteira desde o §217. O ciclo agora é:
+
+    (Pending Legal, opcional) → Pending OTC → Pending MO e/ou FO → Pending FepWeb → Ok
+
+- **Pending Legal é um HOLD manual** — a confirmação aguarda o jurídico, fora da fila do OTC. É o
+  ÚNICO valor de Pending que se escreve à mão (com o Pending OTC que o desfaz): gravado na linha, ele
+  VENCE a derivação até alguém soltá-lo. Entra pela edição em massa do Track (a coluna Pending entrou
+  no dropdown, com autocomplete dos DOIS valores manuais) ou sai pelo card do Monitor.
+- **Pending FepWeb é DERIVADO e não se digita**: todas as validações feitas e o `Enviado p/ cliente
+  (desbloqueado no fep)` ainda vazio. **Ok passou a exigir a data do envio** — validar não fecha mais
+  a esteira, enviar fecha. O upsert ignora qualquer outro valor manual de Pending (e a tela avisa).
+- **Toda gravação da esteira espelha no Pending Confirmation** (`_mc_pc_sync`): a chave é a mesma dos
+  dois lados (MC `Trade ID` = PC `Trade Number`, nascem juntos no `_pc_save_from_deal`). O estágio
+  entra verbatim no `Pending Status`; o `Ok` vira **Pending Digital Signature** ou **Pending
+  Original** pelo `SIGNATURE TYPE` do RefData — documento enviado, o que se espera é a assinatura.
+  Falha do espelho só loga: linha importada da planilha antiga não tem irmã no PC.
+- **Monitor com CINCO cards**: Pending Legal (início) e Pending FepWeb (fim), no padrão dos demais
+  (`_extra_card`: mesmo agrupamento por documento, sem regra de mesa e sem SLA). O botão do Legal
+  ("Release to OTC") solta o hold; o do FepWeb ("Mark as sent") carimba o Enviado p/ cliente com a
+  data de hoje — os dois com SweetAlert de confirmação, trava da mesa de OTC Ops
+  (`/api/manual-confirmation/legal-release` e `/fepweb-sent`, 403 para quem não é da mesa; sem
+  permissão o botão nem aparece e o card fica informativo).
+- **Track**: card Pending FepWeb (entre FO e Ok, filtro por clique como os demais); a coluna `Nome
+  fep` travada em ~1/4 da largura (reticências; o Ctrl+C copia inteiro); a coluna Aging Confirmação
+  perdeu o fundo cinza (segue a listra da linha; o itálico fica como marca de derivada); o mass edit
+  foi para o padrão do Pending Confirmation — "Select Column to Apply" e o campo de valor SEMPRE
+  visível, desabilitado com "Select a column first…" até a coluna ser escolhida.
+- Notificações: `_MC_STAGE_NOTIFY_ROLES` ganhou os dois estados (BO+MASTER — os dois são ações do
+  OTC Ops). `check_manual_conf.py` e `check_mc_notify.py` reescritos para o ciclo novo (FepWeb antes
+  do Ok, hold vence derivação, cinco cards).

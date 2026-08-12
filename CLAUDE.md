@@ -406,17 +406,22 @@ São **25** mappings hoje: `currency-base`, `interbook-ndf`, `publisher-ndf`,
   diferentes por tipo — o BRT_IPE tem DUAS linhas: a `SPECIAL`, **só ASIAN**,
   leva os dois códigos (`B3 CODE` = `CO"MY"` para o contrato do mês seguinte à
   liquidação e `B3 CODE FAR` = `CO1-2` para dois meses ou mais — HANDOFF §212)
-  e a `PREFIX`, **só VANILLA**, o `CO"MY"` padrão (§251). Os mapas dos
-  consumidores são por tipo (`{mkt: {V, A}}` — `_box_commodity_maps` e os dois
-  JS), com valor plano do formato antigo valendo para os dois. Carrega ainda o
-  **Tipo de Cotação / Fonte de Informação** escritos nos arquivos Conecta
-  (`QUOTE TYPE NDF`, `QUOTE TYPE OPT`, `INFO SOURCE`): a coluna guarda o
-  **código do layout**, e há duas colunas de tipo de cotação porque os layouts
-  de Termo e Opção usam domínios diferentes (letra vs número) para a mesma
-  mercadoria. Coluna em branco — ou subjacente sem linha — devolve o valor
-  histórico (`_b3_quote_cfg`), que é o que o seed grava; a cópia da regra no
-  navegador é o `static/js/b3-quote-config.js`, e `check_quote_type.py` prova
-  que as duas concordam (HANDOFF §177).
+  e a `PREFIX`, **só VANILLA**, o `CO"MY"` padrão (§251). O WTI segue o mesmo
+  desenho: `PREFIX`/VANILLA `WTI"MY"` e `FIXED`/ASIAN `CL1` (§252). Os mapas
+  dos consumidores são por tipo (`{mkt: {V, A}}` — `_box_commodity_maps` e os
+  dois JS), com valor plano do formato antigo valendo para os dois. Carrega
+  ainda o **Tipo de Cotação / Fonte de Informação** escritos nos arquivos
+  Conecta (`QUOTE TYPE NDF`, `QUOTE TYPE OPT`, `INFO SOURCE`): a coluna guarda
+  o **código do layout**, e há duas colunas de tipo de cotação porque os
+  layouts de Termo e Opção usam domínios diferentes (letra vs número) para a
+  mesma mercadoria. Coluna em branco — ou subjacente sem linha — devolve o
+  default histórico `A` / `5` / `358` (`_b3_quote_cfg`); o flag **FIXED QUOTE
+  foi aposentado** (§252): o F/340 das linhas que eram YES está materializado
+  nas colunas, e o upgrade faz isso ao ler arquivo antigo antes de remover o
+  flag. A cópia da regra no navegador é o `static/js/b3-quote-config.js`, e
+  `check_quote_type.py` prova que as duas concordam (HANDOFF §177). A tabela
+  do /mapping abre ordenada por MARKET A→Z (só a exibição; o arquivo mantém a
+  ordem de cadastro) e todo mapping ordena por clique no header.
 - **`api-links`** — o endpoint da Athena, uma linha por **uso × produto**
   (`New Deals` × NDF/FXO/Commodities/Swaps, mais `Unwinds`), com `YYYYMMDD`
   marcando a data de referência. Produto aqui é o parâmetro `product` da API,
@@ -747,6 +752,19 @@ foi validada esconderia as nove restantes —, e operação que ainda não entro
 esteira não conta, senão um documento recém-gerado nasceria vermelho. O índice é
 lido **uma vez por request** e passado aos quatro cards: dentro do
 `_conf_stage_counts` ele abriria os dois DuckDB oito vezes na mesma tela.
+
+### O ciclo da esteira tem cinco paradas, e duas não são de mesa (§254)
+
+`(Pending Legal, opcional) → Pending OTC → Pending MO e/ou FO → Pending FepWeb
+→ Ok`. **Pending Legal** é hold manual (vence a derivação até ser solto; é o
+único valor de Pending que se digita, junto com o Pending OTC que o desfaz).
+**Pending FepWeb** é derivado e nunca se digita: validações feitas, envio
+pendente — **Ok exige o `Enviado p/ cliente` preenchido**. Toda gravação da
+esteira espelha no Pending Confirmation via `_mc_pc_sync` (chave MC `Trade ID`
+= PC `Trade Number`): o estágio entra verbatim no Pending Status, e o Ok vira
+Pending Digital Signature / Pending Original pelo SIGNATURE TYPE do RefData.
+O Monitor tem CINCO cards (Legal e FepWeb nas pontas, botões de soltar/enviar
+com trava da mesa de OTC Ops).
 
 ### A esteira de confirmação manual é um gancho para a frente
 
