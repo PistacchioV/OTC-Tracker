@@ -655,9 +655,9 @@
               "source_note": "single fixing only (equal to FixingEndDate); blank for an Asian window (dates go on line type 2)"
             },
             "/new_deals-ndf-fwdstart": {
-              "source": "Page",
-              "source_detail": "Last Fixing Date",
-              "source_note": "single-fixing deals only; blank for an Asian window"
+              "source": "Fixed",
+              "source_detail": "",
+              "source_note": "Blank"
             },
             "/new_deals-ndf-otherpublisher": {
               "source": "Fixed",
