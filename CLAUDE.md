@@ -944,6 +944,14 @@ escreva um script em `scripts/` para ela.
   `le-spn` guarda. Não os converta em mapping — seria uma segunda lista das
   mesmas entidades (HANDOFF §239). LE ausente/mista deixa a Parte A em branco
   com aviso, e o Save recusa (`400 missing_partea`).
+- **Botão de e-mail precisa de endereço ABSOLUTO, e ele é configuração.**
+  `url_for` é relativo (não serve fora do navegador) e `request.url_root` não
+  existe na thread de um scheduler — num Run local ele devolveria
+  `http://localhost:5005`, link morto para quem recebe. `_otc_app_url()` lê
+  **`OTC_TRACKER_URL`** do `.env` e, sem ela, monta `http://<hostname>:8050`
+  (a porta da waitress do `start-prod.bat`). Defina a variável na instância do
+  time — o padrão só acerta se o hostname resolver na rede de quem lê o e-mail
+  (HANDOFF §257).
 - **`reportlab` é importado preguiçosamente** (PDFs de confirmação e folha de
   liquidação do NDF Summary): sem a lib o e-mail sai *sem* o anexo, em vez de
   falhar.

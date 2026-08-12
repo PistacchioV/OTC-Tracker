@@ -11155,3 +11155,66 @@ planilha legada) deixa de valer — e **31 colunas com nome e ordem fixos**, de 
 - O nome pedido veio com um espaço antes de `Trade Date` (`…Product Type; Trade Date;…`) — foi
   tratado como typo do separador: cabeçalho com espaço inicial não sobrevive ao OLEDB e nenhum outro
   nome da lista veio com espaço.
+
+## §257 — Confirmations Escalation: a cobrança das validações vira card do Control Panel
+
+Card novo (`confescalation`) que manda por e-mail as confirmações **paradas na esteira**. A base é a
+MESMA do Track Confirmations e do Confirmations Monitor — `manual_conf.load_all()` com o `Pending`
+derivado —, e não uma segunda leitura montada no card: um relatório que conta de outro jeito cobra
+uma fila que a tela não mostra, e a mesa deixa de acreditar nos dois.
+
+**Dois disparos, três listas de destinatários** (`confirmations_escalation_recipients.json`, no
+`control-panel/` que não é versionado):
+
+| Lista | Quando | Assunto |
+|---|---|---|
+| **TO — Sales Support** | rotina: seg e qui, 17:00 BRT | `Confirmações Pendentes de Validação - MO` |
+| **Escalation — Sales Support** | todo dia útil, 17:00 BRT | o mesmo assunto |
+| **TO — Front Office** | rotina: seg e qui, 17:00 BRT | um por grupo (abaixo) |
+
+- **Segunda e quinta ROLAM.** Caindo em feriado ANBIMA, o relatório sai no próximo dia útil (D+1). A
+  pergunta é feita ao contrário — *que segunda/quinta desemboca em hoje?* (`_ce_is_routine_day`) —,
+  porque olhar só o dia da semana de hoje perderia a semana inteira quando a quinta é feriado: a
+  sexta não é dia de rotina por si mesma, ela está pagando a quinta. Dois feriados seguidos rolam de
+  novo, e uma quinta que role até a segunda encontra a própria segunda: sai **um** e-mail, porque o
+  relatório é o retrato de agora, não um acumulado.
+- **A escalação é o ÚLTIMO DIA ou o vencido**, e depois todo dia enquanto continuar vencido. `warn`
+  do SLA acende também na véspera (`left == 1`) e essa fica de fora de propósito — escalar aí chega
+  com a mesa ainda dentro do prazo. Lista própria porque é outro público: escalar diariamente para
+  quem já recebe a rotina transforma a cobrança em ruído.
+- **Os grupos do Front Office** são produto × LOB, cada um com o assunto que a mesa pediu:
+  `SWAP × CEM` → *FO - CEM Swap*; `SWAP` **e** `SWAP CORPORATE` × EDG → *FO - EDG Swap* (mesmo
+  assunto = **um** e-mail; dois grupos mandariam duas mensagens com o mesmo título); `FXO × EDG` →
+  *FO - EDG Option*. ⚠️ **`OPTION EDG` não é um produto** — é a opção de câmbio na LOB EDG, e o tipo
+  dela é `FXO` (é o que o `upgrade` do `manual-conf-validation` faz com a linha antiga). Cadastrado
+  como produto, o grupo nunca casaria com linha nenhuma, sem erro no log.
+- O produto casa pelo **tipo de confirmação** (`confirmation_type`), nunca pelo texto cru da coluna:
+  é ele que traduz as nomenclaturas que convivem no banco (o `OPTION` do New Deals, o `NDF` ×
+  COMMODITY da planilha legada) para os oito nomes únicos.
+- **Pending FO que não casa com nenhum grupo NÃO some calado**: vai para `unmatched`, que o card
+  mostra em amarelo e o log registra. Silêncio aqui é confirmação que nunca é cobrada.
+- `Pending MO/FO` entra nos **dois** e-mails — é a mesma confirmação devendo duas assinaturas, e
+  mostrá-la só num esconde trabalho da outra mesa.
+- **Nada pendente, nada enviado** ('empty', como no Deals Monitor). Sem destinatário salvo o
+  desfecho é `no_recipient`, distinto do `empty`: o primeiro é a rotina rodando bem, o segundo é
+  cobrança que não saiu de casa — o card mostra os dois com cores diferentes.
+- **Um Run por e-mail** (`mode` = `mo`, `fo-<grupo>`, `escalation`, mais o `routine` do rodapé, que
+  manda o pacote): reenviar só o EDG Swap não pode obrigar a mesa a disparar os outros três. O Run
+  roda mesmo fora de segunda/quinta e **não consome o claim** do disparo automático — queimar o
+  horário faria a rotina do dia não sair.
+- Claim/release/status em disco seguem a mecânica do Deals Monitor (§207/§222): a reserva é anterior
+  ao envio, e só o **erro** devolve o slot para a volta seguinte do laço retentar.
+
+**O botão do e-mail precisou de um endereço absoluto**, que o app nunca teve: `url_for` é relativo e
+não serve num e-mail, e `request.url_root` não existe na thread do scheduler (num Run local sairia
+`http://localhost:5005`, link morto para quem recebe). `_otc_app_url()` lê **`OTC_TRACKER_URL`** do
+`.env` e, sem ele, monta `http://<hostname>:8050` — a porta em que o `start-prod.bat` sobe a
+waitress. **Defina a variável na instância do time**; o padrão só acerta se o hostname resolver na
+rede de quem lê o e-mail.
+
+O corpo é em inglês como todo e-mail do app (a assinatura pedida, *Regards — OTC Tracker — Brazil
+OTC Operations*, já vem assim); os **assuntos** são os que a mesa passou, em português, porque é por
+eles que ela filtra a caixa de entrada. Template único
+(`pages/email-template-confirmations-escalation.html`) com as sete colunas pedidas — Trade Date,
+Client, Product, LOB, Trade ID, Asset e Sent for validation. A luz do SLA marca a linha vencida
+**dentro da coluna da data de envio** em vez de virar uma oitava coluna. Prazo: `scripts/tests/check_conf_escalation.py`.
