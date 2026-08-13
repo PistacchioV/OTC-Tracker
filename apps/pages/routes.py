@@ -4580,15 +4580,38 @@ def _sig_esc(v):
 
 
 def _sigcoll_bankers_index():
-    """{ normalized banker name -> e-mail } from signature_collection_bankers.json."""
+    """{ nome normalizado → e-mail }, do cadastro **Mapping › Bankers E-mails**.
+
+    Era uma lista mantida à mão no `signature_collection_bankers.json`, com 58
+    nomes: banker novo só entrava por commit, e enquanto isso o e-mail de coleta
+    saía sem ele no Cc. O cadastro `bankers-email` aponta para o MESMO arquivo
+    (`file` no `_MAPPING_DEFS`), então continua havendo um arquivo só — o que
+    mudou é quem edita.
+    """
+    idx = {}
+    for r in _mapping_rows('bankers-email'):
+        nm, em = _pc_norm(r.get('BANKER', '')), str(r.get('EMAIL', '') or '').strip()
+        if nm and em:
+            idx[nm] = em
+    if idx:
+        return idx
+    # Rede de segurança de mão única: o arquivo passou de {"bankers": [...]} para
+    # a lista que o /mapping entende, e o carregador do mapping descarta o que não
+    # for lista — numa instância que ficasse com o formato antigo, o Cc perderia
+    # os 58 bankers EM SILÊNCIO. Aqui ele ainda é lido, e o aviso diz o que fazer.
     try:
         with open(os.path.join(_B3_DATA_DIR, 'signature_collection_bankers.json'),
                   encoding='utf-8') as fh:
             data = json.load(fh)
     except Exception:
         return {}
-    idx = {}
-    for c in (data.get('bankers') or []):
+    antigos = (data or {}).get('bankers') if isinstance(data, dict) else None
+    if not antigos:
+        return {}
+    log.warning('[sigcoll] signature_collection_bankers.json ainda no formato antigo '
+                '{"bankers": [...]}; abra Mapping > Bankers E-mails e salve uma vez '
+                'para convertê-lo.')
+    for c in antigos:
         nm, em = _pc_norm(c.get('name', '')), str(c.get('email', '') or '').strip()
         if nm and em:
             idx[nm] = em
@@ -19490,6 +19513,83 @@ _MAPPING_DEFS = {
             {'UP TO DAYS': '360', 'RATE': '20'},
             {'UP TO DAYS': '720', 'RATE': '17.5'},
             {'UP TO DAYS': '',    'RATE': '15'},
+        ],
+    },
+    # Nome do banker → e-mail. É o Cc do e-mail de coleta de assinatura: o
+    # `BANKER` do Reference Data traz o GRUPO por extenso ('Fulano e Sicrano'), e
+    # é esta lista que resolve cada nome num endereço.
+    #
+    # `file` aponta para o MESMO `signature_collection_bankers.json` que o e-mail
+    # já lia — um arquivo, um editor. Ele era mantido à mão, com 58 nomes, e
+    # banker novo só entrava por commit; agora entra pela tela e vale no request
+    # seguinte. O `seed` existe só para a instância que perder o arquivo.
+    'bankers-email': {
+        'label': 'Bankers E-mails',
+        'file': os.path.normpath(os.path.join(os.path.dirname(__file__), '..', 'static',
+                                              'data', 'signature_collection_bankers.json')),
+        'columns': [
+            {'key': 'BANKER', 'label': 'Banker'},
+            {'key': 'EMAIL', 'label': 'E-mail'},
+        ],
+        'seed': [
+            {'BANKER': 'Ana Katayama', 'EMAIL': 'ana.katayama@jpmchase.com'},
+            {'BANKER': 'Andre Regula', 'EMAIL': 'andre.regula@jpmorgan.com'},
+            {'BANKER': 'Andre Schwartzman', 'EMAIL': 'andre.schwartzman@jpmorgan.com'},
+            {'BANKER': 'Andreia Choi', 'EMAIL': 'andreia.choi@jpmorgan.com'},
+            {'BANKER': 'Antonio Mariz', 'EMAIL': 'antonio.v.mariz@jpmchase.com'},
+            {'BANKER': 'Arthur Pego', 'EMAIL': 'arthur.pego@jpmorgan.com'},
+            {'BANKER': 'Bruno Mello', 'EMAIL': 'bruno.mello@jpmorgan.com'},
+            {'BANKER': 'Camila Bludeni', 'EMAIL': 'camila.bludeni@jpmorgan.com'},
+            {'BANKER': 'Carolina Pires', 'EMAIL': 'carolinasena.o.pires@jpmorgan.com'},
+            {'BANKER': 'Claudio Junior', 'EMAIL': 'claudio.m.junior@jpmorgan.com'},
+            {'BANKER': 'Daniel Pineschi', 'EMAIL': 'daniel.pineschi@jpmchase.com'},
+            {'BANKER': 'Debora Darin', 'EMAIL': 'debora.darin@jpmorgan.com'},
+            {'BANKER': 'Diogo Yoshinaga', 'EMAIL': 'diogo.yoshinaga@jpmorgan.com'},
+            {'BANKER': 'Edoardo Freschet', 'EMAIL': 'edoardo.freschet@jpmorgan.com'},
+            {'BANKER': 'Erik Pontes', 'EMAIL': 'erik.p.pontes@jpmorgan.com'},
+            {'BANKER': 'Fabiano Fernandes', 'EMAIL': 'fabiano.fernandes@jpmchase.com'},
+            {'BANKER': 'Felipe Esper', 'EMAIL': 'felipe.esper@jpmorgan.com'},
+            {'BANKER': 'Felipe Ferraz', 'EMAIL': 'felipe.ferraz@jpmorgan.com'},
+            {'BANKER': 'Fernando Moreira', 'EMAIL': 'fernando.a.moreira@jpmorgan.com'},
+            {'BANKER': 'Gabriel Mendes', 'EMAIL': 'gabriel.mendes@jpmorgan.com'},
+            {'BANKER': 'Gabriel Sousa', 'EMAIL': 'gabriel.j.sousa@jpmorgan.com'},
+            {'BANKER': 'Giovana Alves', 'EMAIL': 'giovana.ds.alves@jpmchase.com'},
+            {'BANKER': 'Giulia Menegon', 'EMAIL': 'giulia.menegon@jpmorgan.com'},
+            {'BANKER': 'Guilherme Rissi', 'EMAIL': 'guilherme.rissi@jpmorgan.com'},
+            {'BANKER': 'Isabela Bacchi', 'EMAIL': 'isabela.p.bacchi@jpmorgan.com'},
+            {'BANKER': 'Isabela Ramos', 'EMAIL': 'isabela.ramos@jpmchase.com'},
+            {'BANKER': 'Isabella Brunele', 'EMAIL': 'isabella.brunele@jpmchase.com'},
+            {'BANKER': 'Isabella Giovanelli', 'EMAIL': 'isabella.giovanelli@jpmorgan.com'},
+            {'BANKER': 'Joao Camargo', 'EMAIL': 'joao.camargo@jpmorgan.com'},
+            {'BANKER': 'Joao Sousa', 'EMAIL': 'joao.sousa@jpmorgan.com'},
+            {'BANKER': 'Julia Chohfi', 'EMAIL': 'julia.chohfi@jpmorgan.com'},
+            {'BANKER': 'Lais Zacarias', 'EMAIL': 'lais.zacarias@jpmorgan.com'},
+            {'BANKER': 'Liana Pollastri', 'EMAIL': 'liana.pollastri@jpmorgan.com'},
+            {'BANKER': 'Lucca Maciel', 'EMAIL': 'lucca.maciel@jpmorgan.com'},
+            {'BANKER': 'Luciana Filoni', 'EMAIL': 'luciana.filoni@jpmorgan.com'},
+            {'BANKER': 'Luciana Furtado', 'EMAIL': 'luciana.furtado@jpmorgan.com'},
+            {'BANKER': 'Lucianna Lorenzo', 'EMAIL': 'lucianna.lorenzo@jpmorgan.com'},
+            {'BANKER': 'Marcelo Afonseca', 'EMAIL': 'marcelo.afonseca@jpmorgan.com'},
+            {'BANKER': 'Marcilio Zanoni', 'EMAIL': 'marcilio.zanonijunior@jpmorgan.com'},
+            {'BANKER': 'Michel Maluf', 'EMAIL': 'michel.berbari@jpmorgan.com'},
+            {'BANKER': 'Nathalia Ferreira', 'EMAIL': 'nathalia.ferreira@jpmorgan.com'},
+            {'BANKER': 'Nathalia Ramos', 'EMAIL': 'nathalia.ramos@jpmorgan.com'},
+            {'BANKER': 'Nicolas Belmonte', 'EMAIL': 'nicolas.belmonte@jpmorgan.com'},
+            {'BANKER': 'Nicolas Guevara', 'EMAIL': 'nicolas.a.guevara@jpmorgan.com'},
+            {'BANKER': 'Nikolas Dorto', 'EMAIL': 'nikolas.dorto@jpmorgan.com'},
+            {'BANKER': 'Paulo Samelo', 'EMAIL': 'paulo.samelo@jpmchase.com'},
+            {'BANKER': 'Rafael Matos', 'EMAIL': 'rafael.matos@jpmchase.com'},
+            {'BANKER': 'Rafaela Negrão', 'EMAIL': 'rafaela.negrao@jpmorgan.com'},
+            {'BANKER': 'Raone Turco', 'EMAIL': 'raone.turco@jpmorgan.com'},
+            {'BANKER': 'Rhadur Domingos', 'EMAIL': 'rhadur.domingos@jpmorgan.com'},
+            {'BANKER': 'Roberto Michels', 'EMAIL': 'roberto.michels@jpmorgan.com'},
+            {'BANKER': 'Rodrigo Carmo', 'EMAIL': 'rodrigo.carmo@jpmorgan.com'},
+            {'BANKER': 'Rodrigo Choi', 'EMAIL': 'rodrigo.h.choi@jpmorgan.com'},
+            {'BANKER': 'Thaina Picado', 'EMAIL': 'thaina.picado@jpmchase.com'},
+            {'BANKER': 'Thiago Eloy', 'EMAIL': 'thiago.eloy@jpmorgan.com'},
+            {'BANKER': 'Thiago Martinez', 'EMAIL': 'thiago.martinez@jpmorgan.com'},
+            {'BANKER': 'Vinicius Almeida', 'EMAIL': 'vinicius.almeida@jpmorgan.com'},
+            {'BANKER': 'Willian Melo', 'EMAIL': 'willian.hara@jpmorgan.com'},
         ],
     },
     'swap-index': {

@@ -379,13 +379,13 @@ e um item no array `TYPES` de `apps/templates/pages/mapping.html`.
   colunas extras do arquivo** (`STATUS`/`MAKER`/`CHECKER`): o POST reescreve o
   arquivo inteiro e derrubaria o que não estivesse declarado (HANDOFF §188).
 
-São **26** mappings hoje: `currency-base`, `interbook-ndf`, `publisher-ndf`,
+São **27** mappings hoje: `currency-base`, `interbook-ndf`, `publisher-ndf`,
 `le-accronym`, `le-spn`, `commodities-b3`, `bank-name`, `fxo-conv-rate`,
 `ndf-pdf-cpty`, `swap-curves`, `cetip-files`, `api-links`, `opb3-events`,
 `swap-ir-client`, `swap-ir-term`, `swap-index`, `swap-funcionalidade`,
 `swap-amortizacao`, `swap-code-labels`, `ndfc-ir-exempt`, `ndfc-advice-split`,
 `b3-omnibus-account`, `fxo-internal-cpty`, `fxo-book-disregard`,
-`manual-conf-validation`, `manual-conf-sla`.
+`bankers-email`, `manual-conf-validation`, `manual-conf-sla`.
 
 ### Os que têm regra fácil de quebrar pela tela
 
@@ -464,6 +464,15 @@ São **26** mappings hoje: `currency-base`, `interbook-ndf`, `publisher-ndf`,
   cadastro**: sai do Reference Data (`lookup_cnpj` indexa COUNTERPARTY, FX CASH
   ACCRONYM e SPN pelo mesmo TAX ID), porque um de-para paralelo seria uma segunda
   lista dos mesmos clientes e envelheceria sozinho.
+- **`bankers-email`** — nome do banker → e-mail, o Cc do e-mail de coleta de
+  assinatura. O `BANKER` do Reference Data traz o GRUPO por extenso ("Fulano e
+  Sicrano") e é esta lista que resolve cada nome num endereço. `file` aponta para
+  o **mesmo `signature_collection_bankers.json`** que o e-mail já lia — um
+  arquivo, um editor —, e por isso o arquivo mudou de `{"bankers": [...]}` para a
+  LISTA que o /mapping entende. O carregador do mapping descarta o que não for
+  lista, então uma instância que ficasse com o formato antigo perderia os 58
+  bankers do Cc em silêncio: `_sigcoll_bankers_index` ainda lê o formato velho
+  como rede de mão única, e **avisa no log** dizendo para abrir a tela e salvar.
 - **`fxo-book-disregard`** — a MESMA exclusão do cadastro acima, por outro
   identificador que não o nome da contraparte. A perna interbook é a mesa contra
   a mesa, não tem registro na CETIP e viraria `Unmatched Athena` todo dia. Cada
