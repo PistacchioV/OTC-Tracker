@@ -377,13 +377,13 @@ e um item no array `TYPES` de `apps/templates/pages/mapping.html`.
   colunas extras do arquivo** (`STATUS`/`MAKER`/`CHECKER`): o POST reescreve o
   arquivo inteiro e derrubaria o que não estivesse declarado (HANDOFF §188).
 
-São **25** mappings hoje: `currency-base`, `interbook-ndf`, `publisher-ndf`,
+São **26** mappings hoje: `currency-base`, `interbook-ndf`, `publisher-ndf`,
 `le-accronym`, `le-spn`, `commodities-b3`, `bank-name`, `fxo-conv-rate`,
 `ndf-pdf-cpty`, `swap-curves`, `cetip-files`, `api-links`, `opb3-events`,
 `swap-ir-client`, `swap-ir-term`, `swap-index`, `swap-funcionalidade`,
 `swap-amortizacao`, `swap-code-labels`, `ndfc-ir-exempt`, `ndfc-advice-split`,
-`b3-omnibus-account`, `fxo-internal-cpty`, `manual-conf-validation`,
-`manual-conf-sla`.
+`b3-omnibus-account`, `fxo-internal-cpty`, `fxo-book-disregard`,
+`manual-conf-validation`, `manual-conf-sla`.
 
 ### Os que têm regra fácil de quebrar pela tela
 
@@ -462,6 +462,31 @@ São **25** mappings hoje: `currency-base`, `interbook-ndf`, `publisher-ndf`,
   cadastro**: sai do Reference Data (`lookup_cnpj` indexa COUNTERPARTY, FX CASH
   ACCRONYM e SPN pelo mesmo TAX ID), porque um de-para paralelo seria uma segunda
   lista dos mesmos clientes e envelheceria sozinho.
+- **`fxo-book-disregard`** — a MESMA exclusão do cadastro acima, pelo outro
+  identificador: o **book**. A perna interbook não se reconhece pelo nome da
+  contraparte (é a mesa contra a mesa), e sim pelo par de books; ela não tem
+  registro na CETIP e viraria `Unmatched Athena` todo dia. A linha é uma
+  **conjunção** (Trading Book **e** Other Book **e** Int/Ext) com **campo em
+  branco como coringa**, igual ao `opb3-events` — dá para escrever "tudo que sai
+  deste trading book" numa linha só. Três coisas que não dão erro nenhum:
+  - **linha 100% em branco é ignorada.** Como coringa em tudo ela casaria com o
+    relatório inteiro, e a linha vazia criada por engano na tela apagaria o lado
+    da Athena da recon;
+  - a **coluna do relatório é procurada pela forma normalizada** do nome
+    (`TradingBook` ≡ `TRADING BOOK` ≡ `TRADING_BOOK`), porque a grafia depende de
+    quem gerou o arquivo e casar o literal não acha nada — em silêncio, que é o
+    pior desfecho para uma regra de exclusão;
+  - **regra que dependa de coluna ausente é PULADA com aviso**, nunca tratada
+    como coringa: tratando, o dia em que a Athena mudasse o cabeçalho a regra
+    deixaria de exigir aquele campo e passaria a derrubar tudo que casasse com os
+    outros dois.
+
+  O corte é **antes do merge**, pela mesma razão do outro cadastro (depois, o
+  DealID da linha cortada já teria ocupado a chave), e é **avisado** no painel.
+  O endpoint `/reconciliation-fxo/run` toca os **dois** cadastros antes de rodar,
+  só para materializar o seed: o motor lê o JSON direto (importar `routes` seria
+  circular) e não tem como semear — sem isso, na instância em que ninguém abriu a
+  tela de /mapping o arquivo não existe e as regras não valem, sem erro nenhum.
 - **`manual-conf-validation`** — quem valida a confirmação de cada produto
   (Produto × LOB → OTC / MO / FO, `REQUESTED` ou `EXEMPT`). **LOB em branco é
   coringa** do produto. MO e FO correm em **paralelo**, não em fila. Produto

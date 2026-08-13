@@ -1588,6 +1588,7 @@
   "map-tab-swap-amort": "Swap — Tipo de Amortização",
   "map-tab-swap-codes": "Swap — Sinal e Sim/Não",
   "map-tab-fxo-internal": "Recon FXO — Contraparte Interna",
+  "map-tab-fxo-book": "Recon FXO — Books da Athena a Desconsiderar",
   "ops-sub-cashflow": "Cashflow",
   "ops-sub-total": "Total",
   "ops-w-total": "Total",

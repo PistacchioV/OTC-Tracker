@@ -419,6 +419,84 @@ def ignored_cpty_names():
     return out
 
 
+# As três colunas do relatório da Athena que dizem de que BOOK a operação saiu.
+# À esquerda a chave do cadastro; à direita o nome do campo já normalizado por
+# `_nome_cru`. A coluna do arquivo é procurada pela forma NORMALIZADA e não pelo
+# texto literal: o mesmo campo aparece escrito `TradingBook`, `TRADING BOOK` ou
+# `TRADING_BOOK` conforme quem gerou o relatório, e casar o literal não acha nada
+# — em silêncio, que é o pior desfecho possível para uma regra de exclusão.
+_BOOK_FIELDS = (
+    ('TRADING BOOK', 'TRADINGBOOK'),
+    ('OTHER BOOK', 'OTHERBOOK'),
+    ('INT/EXT', 'INTEXT'),
+)
+
+
+def disregarded_book_rules():
+    """As combinações de book que saem do relatório da Athena antes do batimento.
+
+    Cadastro `fxo-book-disregard`, uma linha por regra, e a linha é uma
+    CONJUNÇÃO: Trading Book **e** Other Book **e** Int/Ext, todos os que
+    estiverem preenchidos. **Campo em branco é coringa** — o mesmo desenho do
+    `opb3-events` —, então dá para escrever "tudo que sai deste trading book"
+    sem repetir a regra por combinação.
+
+    A linha 100% em branco é DESCARTADA de propósito: como coringa em todos os
+    campos ela casaria com o relatório inteiro, e uma linha vazia criada por
+    engano na tela apagaria o lado da Athena da recon sem dizer nada.
+
+    A comparação passa por `_nome_cru` (cega a caixa, espaço e pontuação):
+    `BRL_FXO LAWTON` e `BRL FXO LAWTON` são o mesmo book escrito de dois jeitos.
+    """
+    regras = []
+    for r in _mapping_rows('fxo-book-disregard'):
+        regra = {}
+        for chave, _norm in _BOOK_FIELDS:
+            v = _nome_cru(r.get(chave))
+            if v:
+                regra[chave] = v
+        if regra:
+            regras.append(regra)
+    return regras
+
+
+def _book_disregard_mask(df_at):
+    """Máscara das linhas da Athena que o cadastro de books manda tirar.
+
+    Devolve `(mask_or_None, avisos)`. Uma regra que dependa de coluna que o
+    relatório não trouxe é PULADA com aviso, e nunca tratada como coringa: sem
+    esse cuidado, o dia em que a Athena mudasse o cabeçalho a regra deixaria de
+    exigir aquele campo e passaria a derrubar tudo que casasse com os outros
+    dois.
+    """
+    regras = disregarded_book_rules()
+    if not regras:
+        return None, []
+
+    por_norm = {}
+    for c in df_at.columns:
+        n = _nome_cru(c)
+        if n:
+            por_norm.setdefault(n, c)
+    reais = {chave: por_norm[norm] for chave, norm in _BOOK_FIELDS if norm in por_norm}
+    valores = {chave: df_at[col].apply(_nome_cru) for chave, col in reais.items()}
+
+    avisos, fora = [], pd.Series(False, index=df_at.index)
+    for regra in regras:
+        ausentes = [k for k in regra if k not in reais]
+        if ausentes:
+            avisos.append('O relatório da Athena veio sem a(s) coluna(s) %s — a regra '
+                          'de book cadastrada (%s) não pôde ser aplicada.'
+                          % (' / '.join(ausentes),
+                             ' + '.join('%s = %s' % (k, v) for k, v in regra.items())))
+            continue
+        casa = pd.Series(True, index=df_at.index)
+        for chave, alvo in regra.items():
+            casa = casa & (valores[chave] == alvo)
+        fora = fora | casa
+    return fora, avisos
+
+
 # =============================================================================
 # Normalizações e comparação
 # =============================================================================
@@ -869,6 +947,21 @@ def reconcile(df_dp, df_at):
                 avisos.append('%d linha(s) da Athena ficaram fora do batimento por '
                               'cadastro (Mapping › FXO Recon — Internal Counterparty, '
                               'coluna USE = Disregard).' % n_fora)
+
+    # E as pernas cadastradas por BOOK (`fxo-book-disregard`) saem no mesmo
+    # ponto, e pela mesma razão: é a perna interbook que não tem registro na
+    # CETIP e viraria `Unmatched Athena` todo dia. O corte tem de ser ANTES do
+    # merge — depois dele o DealID dessa linha já teria ocupado a chave e poderia
+    # ter roubado o par de uma operação de verdade.
+    fora_book, avisos_book = _book_disregard_mask(df_at)
+    avisos.extend(avisos_book)
+    if fora_book is not None:
+        n_fora = int(fora_book.sum())
+        if n_fora:
+            df_at = df_at[~fora_book].copy()
+            avisos.append('%d linha(s) da Athena ficaram fora do batimento por '
+                          'cadastro de book (Mapping › FXO Recon — Athena Books to '
+                          'Disregard).' % n_fora)
 
     # OUTER, e não LEFT: o left só enxergava a B3 sem par na Athena. A operação
     # que existe SÓ na Athena simplesmente não aparecia na tela — e é uma quebra

@@ -19338,6 +19338,35 @@ _MAPPING_DEFS = {
              'NOTES': 'Conta interna GEM — sai do batimento, não tem par na CETIP'},
         ],
     },
+    # A MESMA exclusão do cadastro acima, pelo outro identificador: o BOOK. A
+    # perna interbook não se reconhece pelo nome da contraparte (ela é a mesa
+    # contra a mesa), e sim pelo par de books da operação — ela não tem registro
+    # na CETIP e viraria `Unmatched Athena` todo dia.
+    #
+    # A linha é uma CONJUNÇÃO (Trading Book E Other Book E Int/Ext) e **campo em
+    # branco é coringa**, como no `opb3-events`: dá para escrever "tudo que sai
+    # deste trading book" numa linha só. Linha inteiramente em branco é ignorada
+    # — como coringa em tudo ela apagaria o lado da Athena da recon.
+    #
+    # A comparação é cega a caixa, espaço e pontuação, e a COLUNA do relatório é
+    # procurada pela forma normalizada do nome (`TradingBook` ≡ `TRADING BOOK` ≡
+    # `TRADING_BOOK`). Regra que dependa de coluna ausente é pulada COM AVISO no
+    # painel, nunca tratada como coringa.
+    'fxo-book-disregard': {
+        'label': 'FXO Recon — Athena Books to Disregard',
+        'columns': [
+            {'key': 'TRADING BOOK', 'label': 'Trading Book (blank = any)'},
+            {'key': 'OTHER BOOK', 'label': 'Other Book (blank = any)'},
+            {'key': 'INT/EXT', 'label': 'Int/Ext (blank = any)'},
+            {'key': 'NOTES', 'label': 'Notes'},
+        ],
+        'seed': [
+            {'TRADING BOOK': 'FSLTVNCT VNLA CETIP LAWTON',
+             'OTHER BOOK': 'BRL_FXO LAWTON',
+             'INT/EXT': 'INTERBOOK',
+             'NOTES': 'Perna interbook da Lawton — não tem par na CETIP'},
+        ],
+    },
     # Quais linhas do Operations B3 entram numa apuração de liquidação — de
     # qualquer produto. Era `swap-b3-events`, só com o Tipo Operação do swap;
     # hoje a linha é uma REGRA sobre as três colunas que decidem isso (Tipo
@@ -31880,6 +31909,13 @@ def reconciliation_fxo_run():
     recon_date = request.form.get('recon_date', '')
     try:
         from apps.pages.recon_fxo import run_fxo
+        # Toca os dois cadastros da recon para o SEED ser materializado em disco.
+        # O motor lê o JSON direto (importar `routes` de lá seria circular) e não
+        # tem como semear: sem isto, na instância em que ninguém abriu a tela de
+        # /mapping o arquivo não existe, o cadastro volta vazio e as regras de
+        # exclusão simplesmente não valem — sem erro nenhum.
+        _mapping_rows('fxo-internal-cpty')
+        _mapping_rows('fxo-book-disregard')
         files = request.files.getlist('files') if mode == 'manual' else None
         result = run_fxo(recon_date, files=files, mode=mode)
         if result.get('success'):

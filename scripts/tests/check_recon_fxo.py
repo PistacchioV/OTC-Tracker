@@ -120,7 +120,10 @@ def make_dposicao(rows):
 AT_COLS = ['DealID', 'MatchingDealID', 'OptionStyle', 'TransactionType', 'OptionType',
            'MatchingCounterpartyName', 'CounterpartyName', 'MatchingCounterpartySPN',
            'Quantity', 'Premium',
-           'Strike', 'TradeDate', 'SettlementDate', 'FixingDate', 'FirstFixingDate']
+           'Strike', 'TradeDate', 'SettlementDate', 'FixingDate', 'FirstFixingDate',
+           # As três do cadastro de books. Ficam vazias nas demais seções, e
+           # `_nome_cru('')` é None, então nenhuma regra casa por acidente.
+           'TradingBook', 'OtherBook', 'INT_EXT']
 
 
 def at_row(**kw):
@@ -316,6 +319,80 @@ check('   e a operação entre dois clientes fica', 'M2' in chaves, True)
 check('Disregard tira a linha das regras de renomeação',
       R.internal_cpty_rules(), ({}, []))
 write_map('fxo-internal-cpty', CAD_PADRAO)
+
+print('\n== 3b. o corte por BOOK (cadastro fxo-book-disregard) ==')
+# A perna INTERBOOK não se reconhece pelo nome da contraparte (é a mesa contra a
+# mesa): o que a identifica é o par de books. Ela não tem registro na CETIP e
+# viraria `Unmatched Athena` todo dia.
+BK = {'TradingBook': 'FSLTVNCT VNLA CETIP LAWTON',
+      'OtherBook': 'BRL_FXO LAWTON', 'INT_EXT': 'INTERBOOK'}
+REGRA = [{'TRADING BOOK': 'FSLTVNCT VNLA CETIP LAWTON',
+          'OTHER BOOK': 'BRL_FXO LAWTON', 'INT/EXT': 'INTERBOOK'}]
+
+write_map('fxo-book-disregard', REGRA)
+rows, _c, avisos = run(
+    [dp_row(**{'Combinação de operações': 'B1'})],
+    [at_row(DealID='B1', **BK),
+     at_row(DealID='B2', **BK),
+     at_row(DealID='B3', TradingBook='OUTRO BOOK', OtherBook='BRL_FXO LAWTON',
+            INT_EXT='INTERBOOK')])
+chaves = sorted(r['Combinação de operações'] for r in rows)
+check('a linha do book cadastrado sai do batimento', 'B2' in chaves, False)
+check('   a que casa só em parte da regra fica', 'B3' in chaves, True)
+check('   e o corte é avisado, não silencioso',
+      any('book' in a.lower() for a in avisos), True)
+
+# A comparação é cega a caixa, espaço e pontuação: `BRL_FXO` no cadastro e
+# `BRL FXO` no arquivo são o mesmo book.
+rows, _c, _w = run(
+    [dp_row(**{'Combinação de operações': 'B4'})],
+    [at_row(DealID='B4', TradingBook='fsltvnct  vnla cetip lawton',
+            OtherBook='BRL FXO LAWTON', INT_EXT='Interbook')])
+check('o corte é cego a caixa e pontuação', [r['Status'] for r in rows], ['Unmatched B3'])
+
+# Campo em branco é CORINGA: uma linha só cobre tudo que sai daquele book.
+write_map('fxo-book-disregard', [{'TRADING BOOK': 'FSLTVNCT VNLA CETIP LAWTON'}])
+rows, _c, _w = run(
+    [dp_row(**{'Combinação de operações': 'B5'})],
+    [at_row(DealID='B5', TradingBook='FSLTVNCT VNLA CETIP LAWTON',
+            OtherBook='QUALQUER OUTRO', INT_EXT='EXTERNAL')])
+check('campo em branco é coringa', [r['Status'] for r in rows], ['Unmatched B3'])
+
+# A linha 100% em branco NÃO é coringa de tudo: ela apagaria o lado da Athena
+# inteiro, e uma linha vazia criada por engano na tela é o caso provável.
+write_map('fxo-book-disregard', [{'TRADING BOOK': '', 'OTHER BOOK': '', 'INT/EXT': ''}])
+rows, _c, _w = run(
+    [dp_row(**{'Combinação de operações': 'B6'})],
+    [at_row(DealID='B6')])
+check('a linha em branco é ignorada, não apaga a Athena',
+      [r['Status'] for r in rows], ['Matched'])
+
+# Coluna ausente no relatório: a regra é PULADA com aviso. Tratá-la como coringa
+# faria a exclusão passar a valer pelos outros dois campos e derrubar demais.
+write_map('fxo-book-disregard', REGRA)
+_at_cols_orig = AT_COLS[:]
+AT_COLS.remove('INT_EXT')
+try:
+    rows, _c, avisos = run(
+        [dp_row(**{'Combinação de operações': 'B7'})],
+        [at_row(DealID='B7', TradingBook='FSLTVNCT VNLA CETIP LAWTON',
+                OtherBook='BRL_FXO LAWTON')])
+    check('sem a coluna, a regra não é aplicada', [r['Status'] for r in rows], ['Matched'])
+    check('   e o painel diz qual coluna faltou',
+          any('INT/EXT' in a for a in avisos), True)
+finally:
+    AT_COLS[:] = _at_cols_orig
+
+# O corte é ANTES do merge: o DealID da linha cortada não pode ter ocupado a
+# chave e roubado o par de uma operação de verdade.
+write_map('fxo-book-disregard', REGRA)
+rows, _c, _w = run(
+    [dp_row(**{'Combinação de operações': 'B8'})],
+    [at_row(DealID='B8', Quantity='999', **BK),
+     at_row(DealID='B8', Quantity='100')])
+check('o corte acontece antes do batimento', [r['ATH Amt'] for r in rows], ['100'])
+
+write_map('fxo-book-disregard', [])
 
 print('\n== 4. os tipos de comparação ==')
 # Direção, Put/Call e o de-para de CNPJ (com acento e espaço duplo no nome).

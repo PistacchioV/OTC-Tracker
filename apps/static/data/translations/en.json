@@ -1588,6 +1588,7 @@
   "map-tab-swap-amort": "Swap — Amortisation Type",
   "map-tab-swap-codes": "Swap — Sign & Yes/No",
   "map-tab-fxo-internal": "FXO Recon — Internal Counterparty",
+  "map-tab-fxo-book": "FXO Recon — Athena Books to Disregard",
   "ops-sub-cashflow": "Cashflow",
   "ops-sub-total": "Total",
   "ops-w-total": "Total",

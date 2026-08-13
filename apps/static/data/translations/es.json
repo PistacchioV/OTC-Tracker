@@ -1587,6 +1587,7 @@
   "map-tab-swap-amort": "Swap — Tipo de Amortización",
   "map-tab-swap-codes": "Swap — Signo y Sí/No",
   "map-tab-fxo-internal": "Recon FXO — Contraparte Interna",
+  "map-tab-fxo-book": "Conciliación FXO — Books de Athena a Descartar",
   "ops-sub-cashflow": "Cashflow",
   "ops-sub-total": "Total",
   "ops-w-total": "Total",
