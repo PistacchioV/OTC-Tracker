@@ -969,6 +969,34 @@ escreva um script em `scripts/` para ela.
   a instância reinicia várias vezes ao dia, `_ndm_pending_catch_up()` também
   dispara na subida as janelas já passadas do dia; o arquivo de claim em disco
   é o que impede isso de virar e-mail repetido.
+- **O Pending Status tem TRÊS donos, e eles não se pisam.** Quem escreve a coluna
+  do Pending Confirmation depende do produto:
+  1. **Só NDF Vanilla e NDF Other Publisher** caem na regra de **prazo e
+     assinatura** (`_pc_signature_pending_status`): prazo (Settlement − Trade)
+     ≤ 60 dias corridos → `Exception FepWeb`; senão, pelo SIGNATURE TYPE do
+     Reference Data — Internal → `Exception Digital Fep Web`, Digital →
+     `Pending Digital Signature`, Manual **e não cadastrado** → `Pending
+     Original`. É uma função só, chamada pelo New Deals, pela importação do
+     Pending Update e pela edição em massa da tela; eram três cópias e elas
+     divergiam em silêncio (o prazo curto saía com dois rótulos diferentes e o
+     ramo `internal` só existia num dos lados).
+  2. **Todo o resto passa pela esteira** de validação, e o Pending Status dele é
+     a **etapa** (`_PC_ESTEIRA_STATUSES`). Prazo e assinatura **não opinam**:
+     `_pc_signature_status` recebe o status atual e devolve a etapa intacta
+     quando ela é de esteira. Sem isso, mexer na data de uma linha em `Pending
+     MO` a devolvia para `Pending Original` e a confirmação sumia da fila da
+     mesa sem ninguém ter validado nada — a tela manda o Pending Status atual no
+     payload do `/derive` justamente para o servidor saber disso, e a importação
+     lê o estágio que cada Trade Number já tem antes do upsert. **FWD Start
+     entra na esteira mesmo com prazo curto**, e por isso o teste de produto vem
+     ANTES do de prazo em `_generic_nd_pending_status`.
+  3. **A regra do VENCIDO é a única universal** (`_pc_apply_auto_rules`):
+     Maturity ≤ hoje e status **não resolvido** → `Exception FepWeb` **e** Status
+     `Ok`, em qualquer produto e qualquer etapa, esteira inclusive. O teste é
+     `not _pc_is_ok_status(...)` e não "começa com Pending": *Abonado via PDF* e
+     *Client Treasury Allowance* também são pendências e ficavam de fora,
+     envelhecendo para sempre numa operação já liquidada. As duas colunas mudam
+     juntas — é isso que move a linha para o DB `ok`.
 - **A planilha de Pending de uma data anterior sobrescreve o arquivo de sempre,
   e isso é intencional.** O card Pending Confirmations Spreadsheet Metrics aceita
   uma **Reference date** (padrão hoje, futuro bloqueado). Hoje = a rotina de

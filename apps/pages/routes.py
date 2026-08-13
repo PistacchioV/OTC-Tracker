@@ -16575,14 +16575,17 @@ def _pc_derive_row(src):
     Status pelo arquivo e outro por uma edição na tela, sem nada acusando.
 
     `src` traz o que o usuário tem em mãos (SPN, Client, Trade Date, Maturity
-    Date). A resposta traz as seis colunas derivadas — quem chama decide quais
-    aplicar, porque isso depende de QUAL coluna foi alterada."""
+    Date) **e o Pending Status atual da linha** — sem ele, mexer na data de uma
+    confirmação que está em `Pending MO` a devolveria para `Pending Original` e
+    ela sumiria da fila da mesa. A resposta traz as seis colunas derivadas — quem
+    chama decide quais aplicar, porque isso depende de QUAL coluna foi alterada."""
     rec = _pc_refdata_lookup({'SPN': str(src.get('SPN', '') or ''),
                               'Client': str(src.get('Client', '') or '')},
                              _fxo_refdata_by_spn(), _pc_refdata_by_name())
     trade_dt = _parse_date_any(str(src.get('Trade Date', '') or ''))
     mat_dt = _parse_date_any(str(src.get('Maturity Date', '') or ''))
-    pending_status, status = _pc_signature_status(rec, trade_dt, mat_dt)
+    pending_status, status = _pc_signature_status(
+        rec, trade_dt, mat_dt, str(src.get('Pending Status', '') or ''))
     aging = (datetime.now().date() - trade_dt).days if trade_dt else None
     return {
         # SPN e Client saem juntos: escolher um preenche o outro, como no modal.
@@ -16632,11 +16635,9 @@ def api_pending_confirmation_delete():
 #   Settlement Date; Deal Name; Pending Status
 # Mapping to page columns: End Counterparty Desc → Client (+ SPN via RefData name),
 # Booking Date → Trade Date, Settlement Date → Maturity Date, Deal Name → Trade
-# Number, Product Type as-is. Status/Pending Status are DERIVED:
-#   • (Settlement − Trade) ≤ 60 days → Pending Status 'Exception Digital Fep Web',
-#     Status 'Ok' (→ ok DB).
-#   • > 60 days → signature type of the counterparty in RefData: DIGITAL → 'Pending
-#     Digital Signature', else MANUAL → 'Pending Original'; Status = aging band.
+# Number, Product Type as-is. Status/Pending Status são DERIVADOS por
+# `_pc_signature_status` — a linha já em etapa da esteira mantém a etapa; o resto
+# cai na regra de prazo (≤ 60 dias → Exception FepWeb) e tipo de assinatura.
 _PC_UPDATE_HEADERS = {
     'lob': 'LOB',
     'endcounterpartydesc': 'Client',
@@ -16653,15 +16654,54 @@ _XL_ERROR_TEXT = {'#NULL!', '#N/A', '#REF!', '#VALUE!', '#DIV/0!', '#NAME?', '#N
                   '#SPILL!', '#CALC!', '#GETTING_DATA'}
 
 
-def _pc_signature_status(rec, trade_dt, maturity_dt):
-    """(Pending Status, Status) per the Pending Update rules. `rec` is the RefData
-    record for the counterparty (or None)."""
-    diff = (maturity_dt - trade_dt).days if (trade_dt and maturity_dt) else None
-    if diff is not None and diff <= 60:
-        return _PC_PASTDUE_STATUS, 'Ok'          # Exception Digital Fep Web → ok DB
-    # > 60 (or unknown tenor) → depends on the counterparty's signature type.
+def _pc_signature_pending_status(rec, trade_dt, maturity_dt):
+    """Pending Status pelo PRAZO e pelo TIPO DE ASSINATURA.
+
+    Esta é a regra de **NDF Vanilla e NDF Other Publisher** — os únicos produtos
+    que não passam pela esteira de validação. Todo o resto entra na esteira e o
+    Pending Status dele é a ETAPA (ver `_pc_is_esteira_status`), que prazo e
+    assinatura não têm o que opinar.
+
+      * prazo (Settlement − Trade) ≤ 60 dias corridos → `Exception FepWeb`;
+      * senão, pelo SIGNATURE TYPE da contraparte no Reference Data:
+        Internal → `Exception Digital Fep Web`, Digital → `Pending Digital
+        Signature`, Manual **e não cadastrado** → `Pending Original`.
+
+    É a MESMA função que o New Deals chama (`_generic_nd_pending_status`). Eram
+    duas cópias, e elas divergiam em duas coisas em silêncio: o prazo curto saía
+    `Exception Digital Fep Web` por um caminho e `Exception FepWeb` pelo outro, e
+    o ramo `internal` só existia no lado do New Deals — a mesma contraparte
+    recebia respostas diferentes conforme a linha ter vindo do arquivo ou da tela.
+    """
+    if trade_dt and maturity_dt and (maturity_dt - trade_dt).days <= 60:
+        return _PC_TENOR_EXCEPTION
     sig = _pc_norm((rec or {}).get('SIGNATURE TYPE', ''))
-    pending_status = 'Pending Digital Signature' if sig == 'digital' else 'Pending Original'
+    if sig == 'internal':
+        return _PC_INTERNAL_EXCEPTION
+    if sig == 'digital':
+        return 'Pending Digital Signature'
+    return 'Pending Original'
+
+
+def _pc_signature_status(rec, trade_dt, maturity_dt, current=''):
+    """(Pending Status, Status) de uma linha do Pending Confirmation.
+
+    `current` é o Pending Status que a linha JÁ TEM. Quando ele é uma etapa da
+    esteira, ele fica: quem decide o estágio de uma confirmação em validação é o
+    Confirmations Monitor, e recalcular por prazo/assinatura aqui trocaria um
+    `Pending MO` por `Pending Original` — a linha sumiria da fila da mesa sem
+    ninguém ter validado nada. Sem etapa (NDF Vanilla / Other Publisher, ou linha
+    nova), vale a regra de prazo e assinatura.
+
+    O Status acompanha o Pending Status: `Ok` quando ele é resolvido, senão a
+    faixa de aging.
+    """
+    if _pc_is_esteira_status(current):
+        pending_status = str(current).strip()
+    else:
+        pending_status = _pc_signature_pending_status(rec, trade_dt, maturity_dt)
+    if _pc_is_ok_status(pending_status):
+        return pending_status, 'Ok'
     aging = (datetime.now().date() - trade_dt).days if trade_dt else None
     return pending_status, _pc_aging_band_label(aging)
 
@@ -16708,6 +16748,17 @@ def _pc_import_update(raw_bytes):
 
     # RefData maps built once: SPN + signature type by counterparty name.
     by_name = _pc_refdata_by_name()
+    # Pending Status que cada Trade Number JÁ TEM. A importação é um upsert: a
+    # linha que está numa etapa da esteira tem de sair dela com a etapa intacta,
+    # senão o arquivo do dia devolve para `Pending Original` toda confirmação que
+    # as mesas estão conferindo. Lido UMA vez — por linha seriam N leituras dos
+    # três DuckDBs.
+    atual = {}
+    for _cat in ('backlog', 'pending', 'ok'):
+        for _r in _pc_load_rows(_cat):
+            _tn = str(_r.get('Trade Number', '') or '').strip()
+            if _tn and _tn not in atual:
+                atual[_tn] = str(_r.get('Pending Status', '') or '')
 
     updated, skipped = 0, 0
     for row in rows_iter:
@@ -16724,7 +16775,8 @@ def _pc_import_update(raw_bytes):
         spn = str((rec or {}).get('SPN', '') or '').strip()
         trade_dt = _parse_date_any(cell(row, 'Trade Date'))
         maturity_dt = _parse_date_any(cell(row, 'Maturity Date'))
-        pending_status, status = _pc_signature_status(rec, trade_dt, maturity_dt)
+        pending_status, status = _pc_signature_status(rec, trade_dt, maturity_dt,
+                                                      atual.get(tn, ''))
         aging = (datetime.now().date() - trade_dt).days if trade_dt else None
         r = {c: '' for c in _PC_COLUMNS}
         r['LOB'] = str(cell(row, 'LOB') or '').strip()
@@ -16838,8 +16890,24 @@ def _pc_banker_for_spn(spn):
 # Pending Status values that mean the confirmation is RESOLVED → the row moves to
 # the 'ok' DB. (Concluded = Mark Concluded; plus the digitally-resolved states.)
 _PC_OK_STATUSES = {'concluded', 'signeddigitally', 'exceptiondigitalfepweb'}
-# Pending Status set by the past-due auto-rule (settlement date reached).
-_PC_PASTDUE_STATUS = 'Exception Digital Fep Web'
+# Pending Status do vencido (a regra universal) e do prazo curto (≤ 60 dias):
+# são a MESMA situação — a confirmação se resolve pelo FepWeb — e o mesmo rótulo.
+_PC_PASTDUE_STATUS = 'Exception FepWeb'
+_PC_TENOR_EXCEPTION = _PC_PASTDUE_STATUS
+# O `Internal` do SIGNATURE TYPE tem rótulo próprio: não é a mesma situação, é
+# contraparte que assina por dentro.
+_PC_INTERNAL_EXCEPTION = 'Exception Digital Fep Web'
+
+# As etapas da esteira de validação (§254). Uma linha em qualquer uma delas está
+# sendo conferida pelas mesas, e é a esteira quem manda no Pending Status dela —
+# prazo e tipo de assinatura não entram. Só NDF Vanilla e NDF Other Publisher não
+# passam pela esteira; todo o resto passa.
+_PC_ESTEIRA_STATUSES = {'pendinglegal', 'pendingotc', 'pendingmo', 'pendingfo',
+                        'pendingmofo', 'pendingfepweb'}
+
+
+def _pc_is_esteira_status(v):
+    return _pc_norm(v) in _PC_ESTEIRA_STATUSES
 
 
 def _pc_is_ok_status(v):
@@ -16857,15 +16925,25 @@ def _pc_cutoff_date():
 
 
 def _pc_apply_auto_rules(row):
-    """Keep a row current: (1) recompute Aging (today - Trade Date) and the Status
-    band label; (2) once the Maturity/Settlement Date is reached while the row is
-    still pending, auto-resolve it as 'Exception Digital Fep Web' — which is an ok
-    status, so the row then moves to the ok DB."""
+    """Mantém a linha em dia: (1) recalcula o Aging (hoje − Trade Date) e a faixa
+    do Status; (2) aplica a regra do VENCIDO.
+
+    A regra do vencido é a **única que vale para todo produto e todo estágio** —
+    esteira inclusive. Chegada a data de vencimento com a confirmação em qualquer
+    status que não seja resolvido, ela vira `Exception FepWeb` e o Status vira
+    `Ok`: não há mais o que confirmar de uma operação que já liquidou. As DUAS
+    colunas mudam juntas, e é isso que tira a linha da fila e a move para o DB ok.
+
+    O teste é `not _pc_is_ok_status(...)`, e não "começa com Pending": status como
+    *Abonado via PDF* ou *Client Treasury Allowance* também são pendências — não
+    começam com "Pending" e ficavam de fora da regra, envelhecendo para sempre
+    numa operação já vencida.
+    """
     td = _parse_date_any(row.get('Trade Date', ''))
     if td:
         row['Aging'] = str((datetime.now().date() - td).days)
     md = _parse_date_any(row.get('Maturity Date', ''))
-    if md and md <= datetime.now().date() and _pc_norm(row.get('Pending Status', '')).startswith('pending'):
+    if md and md <= datetime.now().date() and not _pc_is_ok_status(row.get('Pending Status', '')):
         row['Pending Status'] = _PC_PASTDUE_STATUS
     # Status column: 'Ok' once the confirmation is resolved (an ok Pending Status),
     # otherwise the aging-band label.
@@ -24998,25 +25076,25 @@ _GENERIC_ND_MC_SOURCE = {'fwd-start': 'NDF FWD START'}
 
 
 def _generic_nd_pending_status(product, deal):
-    """Pending Status for a mapped (Status→Success) generic-NDF deal.
-    Rules: (Settlement − Trade) ≤ 60 corridos → 'Exception FepWeb' (all three);
-    FWD Start → 'Pending OTC'; Other Publisher/Vanilla → by the counterparty's
-    SIGNATURE TYPE in RefData: Internal → Exception Digital Fep Web,
-    Digital → Pending Digital Signature, Manual (and unregistered) → Pending
-    Original."""
-    td = _parse_date_any(deal.get('TradeDate', ''))
-    md = _parse_date_any(deal.get('SettlementDate', ''))
-    if td and md and (md - td).days <= 60:
-        return 'Exception FepWeb'
+    """Pending Status de um deal genérico de NDF que virou Success.
+
+    **O FWD Start vem primeiro, e antes do prazo.** Ele passa pela esteira de
+    validação como todo produto que não seja Vanilla / Other Publisher, e a etapa
+    de quem entra na esteira é `Pending OTC` — o prazo curto não a substitui. Com
+    o teste de prazo na frente, um FWD Start de 30 dias nascia `Exception FepWeb`
+    (resolvido) no Pending Confirmation enquanto a esteira o mantinha na fila do
+    OTC: as duas telas contando coisas diferentes sobre a mesma confirmação.
+
+    Vanilla e Other Publisher não têm esteira, e por isso são os únicos que caem
+    na regra de prazo/assinatura — a MESMA função que a importação do Pending
+    Update e a edição em massa da tela usam.
+    """
     if product == 'fwd-start':
         return 'Pending OTC'
-    rec = _fxo_refdata_by_spn().get(_norm_spn(deal.get('SPN', '')), {})
-    sig = _pc_norm(rec.get('SIGNATURE TYPE', ''))
-    if sig == 'internal':
-        return _PC_PASTDUE_STATUS          # Exception Digital Fep Web
-    if sig == 'digital':
-        return 'Pending Digital Signature'
-    return 'Pending Original'
+    return _pc_signature_pending_status(
+        _fxo_refdata_by_spn().get(_norm_spn(deal.get('SPN', '')), {}),
+        _parse_date_any(deal.get('TradeDate', '')),
+        _parse_date_any(deal.get('SettlementDate', '')))
 
 
 def _generic_nd_pc_trigger(product, deal):

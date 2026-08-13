@@ -151,11 +151,12 @@ def dmy_fwd(days):
     return (today + timedelta(days=days)).strftime('%d/%m/%Y')
 
 
-# Prazo <= 60 -> Exception Digital Fep Web + Status Ok (a linha migra para o db
-# ok). E a regra do Pending Update, e ela vale aqui inteira.
+# Prazo <= 60 -> Exception FepWeb + Status Ok (a linha migra para o db ok). E a
+# regra de NDF Vanilla / Other Publisher, a mesma que o New Deals aplica — o
+# rotulo e UM so nos dois caminhos.
 d = derive(**{'Trade Date': dmy(5), 'Maturity Date': dmy_fwd(30)})
-check('prazo curto vira Exception Digital Fep Web', d.get('Pending Status'),
-      'Exception Digital Fep Web')
+check('prazo curto vira Exception FepWeb', d.get('Pending Status'),
+      'Exception FepWeb')
 check('   e Status Ok', d.get('Status'), 'Ok')
 check('   com o aging do Trade Date', d.get('Aging'), '5')
 # Prazo > 60 -> depende da assinatura da contraparte; sem cadastro, Original.
@@ -181,7 +182,26 @@ r = cl.post('/api/pending-confirmation/derive', json={'rows': [
 j = r.get_json() or {}
 check('o lote volta na mesma ordem',
       [x['Pending Status'] for x in j.get('rows', [])],
-      ['Exception Digital Fep Web', 'Pending Original'])
+      ['Exception FepWeb', 'Pending Original'])
+
+# A ETAPA DA ESTEIRA NAO E RECALCULADA. Tudo que nao e NDF Vanilla / Other
+# Publisher passa pela esteira de validacao, e quem manda no estagio e o
+# Confirmations Monitor: recalcular por prazo aqui trocava um 'Pending MO' por
+# 'Pending Original' e a confirmacao sumia da fila da mesa sem ninguem validar.
+for etapa in ('Pending OTC', 'Pending MO', 'Pending FO', 'Pending MO/FO',
+              'Pending Legal', 'Pending FepWeb'):
+    d = derive(**{'Trade Date': dmy(5), 'Maturity Date': dmy_fwd(30),
+                  'Pending Status': etapa})
+    check('a etapa %s sobrevive ao prazo curto' % etapa, d.get('Pending Status'), etapa)
+# O status de assinatura NAO e etapa: esse continua sendo recalculado.
+d = derive(**{'Trade Date': dmy(5), 'Maturity Date': dmy_fwd(30),
+              'Pending Status': 'Pending Original'})
+check('   mas Pending Original ainda e recalculado', d.get('Pending Status'),
+      'Exception FepWeb')
+# E a tela manda o Pending Status atual no payload — sem isso o servidor nao tem
+# como saber que a linha esta na esteira.
+pay = HTML_SRC.split('var payload = rows.map', 1)[1].split('});', 1)[0]
+check('a tela manda o Pending Status atual', "'Pending Status'" in pay, True)
 check('lista vazia responde vazio',
       (cl.post('/api/pending-confirmation/derive', json={'rows': []}).get_json() or {}).get('rows'), [])
 check('payload torto nao derruba',
@@ -190,7 +210,8 @@ check('payload torto nao derruba',
 print('\n== 5. a mesma regra que a importacao do Pending Update usa ==')
 SRC = read('apps/pages/routes.py')
 blkp = SRC.split('def _pc_derive_row', 1)[1].split('\n@blueprint', 1)[0]
-check('reusa o _pc_signature_status', '_pc_signature_status(rec, trade_dt, mat_dt)' in blkp, True)
+check('reusa o _pc_signature_status', '_pc_signature_status(' in blkp, True)
+check('   passando o Pending Status atual', "src.get('Pending Status'" in blkp, True)
 check('reusa o _pc_refdata_lookup', '_pc_refdata_lookup(' in blkp, True)
 check('e nao reescreve a faixa de aging', '< 10' in blkp, False)
 

@@ -2205,7 +2205,12 @@ $(document).ready(function() {
             var payload = rows.map(function(r) {
                 return {
                     'SPN': _pcStrip(r.d[4]), 'Client': _pcStrip(r.d[5]),
-                    'Trade Date': _pcStrip(r.d[8]), 'Maturity Date': _pcStrip(r.d[9])
+                    'Trade Date': _pcStrip(r.d[8]), 'Maturity Date': _pcStrip(r.d[9]),
+                    // O Pending Status ATUAL vai junto: se a linha está numa etapa
+                    // da esteira (Pending OTC/MO/FO/Legal/FepWeb), o servidor a
+                    // preserva em vez de recalcular por prazo e assinatura — quem
+                    // manda no estágio é o Confirmations Monitor.
+                    'Pending Status': _pcStrip(r.d[11])
                 };
             });
             var derive = cascade.length
@@ -2846,7 +2851,12 @@ $(document).ready(function() {
     var arEditTr = null; // null = add mode; <tr> element = edit mode
     var PENDING_STATUS_OPTS = [
         'Abonado via PDF','Client Treasury Allowance','Concluded',
-        'Exception','Exception Digital Fep Web','Exception Fepweb',
+        // 'Exception FepWeb' com esta grafia: é a que as regras gravam (prazo
+        // ≤ 60 dias e vencimento alcançado). A lista tinha 'Exception Fepweb', que
+        // nenhuma regra produz — o valor que o sistema escreve não estava entre os
+        // que a tela oferece. Para as regras as duas são a mesma (tudo passa por
+        // `_pc_norm`), então linhas com a grafia antiga seguem valendo.
+        'Exception','Exception Digital Fep Web','Exception FepWeb',
         'Pending Digital Signature','Pending FO','Pending Legal','Pending MO','Pending MO/FO',
         'Pending Original','Pending OTC','Pending POA',
         'Pending Signature Allowance','Signed Digitally'
