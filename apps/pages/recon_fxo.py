@@ -250,7 +250,11 @@ def _mapping_rows(key):
     # abriu o /mapping (ou abriu e não salvou), a coluna nova simplesmente não
     # existiria e a regra dela nunca valeria. É o mesmo tropeço que o cadastro da
     # esteira já custou uma vez.
-    return internal_cpty_upgrade(rows) if key == 'fxo-internal-cpty' else rows
+    if key == 'fxo-internal-cpty':
+        return internal_cpty_upgrade(rows)
+    if key == 'fxo-book-disregard':
+        return book_disregard_upgrade(rows)
+    return rows
 
 
 # A conta interna que a mesa pediu para tirar do batimento. Fica aqui, ao lado da
@@ -419,55 +423,82 @@ def ignored_cpty_names():
     return out
 
 
-# As três colunas do relatório da Athena que dizem de que BOOK a operação saiu.
-# À esquerda a chave do cadastro; à direita o nome do campo já normalizado por
-# `_nome_cru`. A coluna do arquivo é procurada pela forma NORMALIZADA e não pelo
-# texto literal: o mesmo campo aparece escrito `TradingBook`, `TRADING BOOK` ou
-# `TRADING_BOOK` conforme quem gerou o relatório, e casar o literal não acha nada
-# — em silêncio, que é o pior desfecho possível para uma regra de exclusão.
-_BOOK_FIELDS = (
-    ('TRADING BOOK', 'TRADINGBOOK'),
-    ('OTHER BOOK', 'OTHERBOOK'),
-    ('INT/EXT', 'INTEXT'),
-)
+# O cadastro de exclusão é uma lista de CRITÉRIOS: até três pares
+# `COLUMN n` (uma coluna do relatório, escolhida num dropdown) × `VALUE n`.
+# Nada aqui fixa QUAIS colunas podem ser usadas — a lista do dropdown é uma
+# conveniência da tela (`_ATHENA_FXO_COLUMNS`, no routes) e o motor aceita o
+# nome que estiver cadastrado. Foi assim que o desenho anterior errou: ele
+# supunha `TRADING BOOK` / `OTHER BOOK`, nomes que o relatório não tem.
+_BOOK_SLOTS = (('COLUMN 1', 'VALUE 1'), ('COLUMN 2', 'VALUE 2'), ('COLUMN 3', 'VALUE 3'))
+# O formato antigo, para o `upgrade` traduzir uma vez. O valor era o mesmo; o que
+# estava errado era o nome da coluna, e é justamente ele que agora se escolhe.
+_BOOK_LEGACY = ('TRADING BOOK', 'OTHER BOOK', 'INT/EXT')
+
+
+def book_disregard_upgrade(rows):
+    """Traz o cadastro de três colunas FIXAS para os pares coluna × valor.
+
+    Roda na LEITURA, como o `internal_cpty_upgrade`: a instância que já tem o
+    arquivo em disco nunca receberia o formato novo de outro jeito, e o motor lê
+    esse JSON a cada run. Os VALORES são preservados; o nome da coluna vai como
+    estava, porque quem sabe qual é a coluna certa do relatório é quem opera —
+    e é por isso que ela virou um dropdown. Linha que já está no formato novo
+    (tem `COLUMN 1`) não é tocada.
+    """
+    for r in rows:
+        if not isinstance(r, dict) or 'COLUMN 1' in r:
+            continue
+        antigos = [(c, r.pop(c)) for c in _BOOK_LEGACY
+                   if str(r.get(c) or '').strip()]
+        for c in _BOOK_LEGACY:
+            r.pop(c, None)
+        for (col_k, val_k), (col, val) in zip(_BOOK_SLOTS, antigos):
+            r[col_k], r[val_k] = col, val
+        for col_k, val_k in _BOOK_SLOTS:
+            r.setdefault(col_k, '')
+            r.setdefault(val_k, '')
+    return rows
 
 
 def disregarded_book_rules():
-    """As combinações de book que saem do relatório da Athena antes do batimento.
+    """As linhas da Athena que saem do batimento por cadastro, `fxo-book-disregard`.
 
-    Cadastro `fxo-book-disregard`, uma linha por regra, e a linha é uma
-    CONJUNÇÃO: Trading Book **e** Other Book **e** Int/Ext, todos os que
-    estiverem preenchidos. **Campo em branco é coringa** — o mesmo desenho do
-    `opb3-events` —, então dá para escrever "tudo que sai deste trading book"
-    sem repetir a regra por combinação.
+    Cada linha do cadastro é uma REGRA, e a regra é uma **conjunção** de até três
+    critérios `coluna = valor`: com um critério preenchido sai tudo que tem
+    aquele valor naquela coluna; com dois, só o que tem os dois; com três, só o
+    que tem os três. Par com coluna ou valor em branco simplesmente **não conta**
+    — é o que permite escrever a regra de um critério só sem inventar coringa.
 
-    A linha 100% em branco é DESCARTADA de propósito: como coringa em todos os
-    campos ela casaria com o relatório inteiro, e uma linha vazia criada por
-    engano na tela apagaria o lado da Athena da recon sem dizer nada.
+    A linha sem critério nenhum é DESCARTADA de propósito: sem nada a exigir ela
+    casaria com o relatório inteiro, e a linha vazia criada por engano na tela
+    apagaria o lado da Athena da recon sem dizer nada.
 
-    A comparação passa por `_nome_cru` (cega a caixa, espaço e pontuação):
-    `BRL_FXO LAWTON` e `BRL FXO LAWTON` são o mesmo book escrito de dois jeitos.
+    Os VALORES são comparados por `_nome_cru` (cego a caixa, espaço e
+    pontuação): `BRL_FXO LAWTON` e `BRL FXO LAWTON` são a mesma coisa escrita de
+    dois jeitos.
     """
     regras = []
     for r in _mapping_rows('fxo-book-disregard'):
-        regra = {}
-        for chave, _norm in _BOOK_FIELDS:
-            v = _nome_cru(r.get(chave))
-            if v:
-                regra[chave] = v
+        regra = []
+        for col_k, val_k in _BOOK_SLOTS:
+            col = str(r.get(col_k) or '').strip()
+            val = _nome_cru(r.get(val_k))
+            if col and val:
+                regra.append((col, val))
         if regra:
             regras.append(regra)
     return regras
 
 
 def _book_disregard_mask(df_at):
-    """Máscara das linhas da Athena que o cadastro de books manda tirar.
+    """Máscara das linhas da Athena que o cadastro manda tirar.
 
-    Devolve `(mask_or_None, avisos)`. Uma regra que dependa de coluna que o
-    relatório não trouxe é PULADA com aviso, e nunca tratada como coringa: sem
-    esse cuidado, o dia em que a Athena mudasse o cabeçalho a regra deixaria de
-    exigir aquele campo e passaria a derrubar tudo que casasse com os outros
-    dois.
+    Devolve `(mask_or_None, avisos)`. A coluna cadastrada é procurada no
+    relatório pela forma NORMALIZADA do nome (`INT_EXT` ≡ `Int Ext` ≡
+    `int-ext`), porque a grafia depende de quem gerou o arquivo. Regra que cite
+    coluna inexistente é PULADA com aviso, nunca ignorada em silêncio: ignorar o
+    critério faria a regra passar a exigir menos e derrubar mais linhas do que o
+    cadastro pediu.
     """
     regras = disregarded_book_rules()
     if not regras:
@@ -478,21 +509,22 @@ def _book_disregard_mask(df_at):
         n = _nome_cru(c)
         if n:
             por_norm.setdefault(n, c)
-    reais = {chave: por_norm[norm] for chave, norm in _BOOK_FIELDS if norm in por_norm}
-    valores = {chave: df_at[col].apply(_nome_cru) for chave, col in reais.items()}
 
-    avisos, fora = [], pd.Series(False, index=df_at.index)
+    avisos, fora, cache = [], pd.Series(False, index=df_at.index), {}
     for regra in regras:
-        ausentes = [k for k in regra if k not in reais]
+        ausentes = [col for col, _v in regra if _nome_cru(col) not in por_norm]
         if ausentes:
             avisos.append('O relatório da Athena veio sem a(s) coluna(s) %s — a regra '
-                          'de book cadastrada (%s) não pôde ser aplicada.'
+                          'cadastrada (%s) não pôde ser aplicada.'
                           % (' / '.join(ausentes),
-                             ' + '.join('%s = %s' % (k, v) for k, v in regra.items())))
+                             ' + '.join('%s = %s' % (c, v) for c, v in regra)))
             continue
         casa = pd.Series(True, index=df_at.index)
-        for chave, alvo in regra.items():
-            casa = casa & (valores[chave] == alvo)
+        for col, alvo in regra:
+            real = por_norm[_nome_cru(col)]
+            if real not in cache:
+                cache[real] = df_at[real].apply(_nome_cru)
+            casa = casa & (cache[real] == alvo)
         fora = fora | casa
     return fora, avisos
 

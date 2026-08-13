@@ -464,31 +464,40 @@ São **26** mappings hoje: `currency-base`, `interbook-ndf`, `publisher-ndf`,
   cadastro**: sai do Reference Data (`lookup_cnpj` indexa COUNTERPARTY, FX CASH
   ACCRONYM e SPN pelo mesmo TAX ID), porque um de-para paralelo seria uma segunda
   lista dos mesmos clientes e envelheceria sozinho.
-- **`fxo-book-disregard`** — a MESMA exclusão do cadastro acima, pelo outro
-  identificador: o **book**. A perna interbook não se reconhece pelo nome da
-  contraparte (é a mesa contra a mesa), e sim pelo par de books; ela não tem
-  registro na CETIP e viraria `Unmatched Athena` todo dia. A linha é uma
-  **conjunção** (Trading Book **e** Other Book **e** Int/Ext) com **campo em
-  branco como coringa**, igual ao `opb3-events` — dá para escrever "tudo que sai
-  deste trading book" numa linha só. Três coisas que não dão erro nenhum:
-  - **linha 100% em branco é ignorada.** Como coringa em tudo ela casaria com o
-    relatório inteiro, e a linha vazia criada por engano na tela apagaria o lado
-    da Athena da recon;
-  - a **coluna do relatório é procurada pela forma normalizada** do nome
-    (`TradingBook` ≡ `TRADING BOOK` ≡ `TRADING_BOOK`), porque a grafia depende de
-    quem gerou o arquivo e casar o literal não acha nada — em silêncio, que é o
-    pior desfecho para uma regra de exclusão;
-  - **regra que dependa de coluna ausente é PULADA com aviso**, nunca tratada
-    como coringa: tratando, o dia em que a Athena mudasse o cabeçalho a regra
-    deixaria de exigir aquele campo e passaria a derrubar tudo que casasse com os
-    outros dois.
+- **`fxo-book-disregard`** — a MESMA exclusão do cadastro acima, por outro
+  identificador que não o nome da contraparte. A perna interbook é a mesa contra
+  a mesa, não tem registro na CETIP e viraria `Unmatched Athena` todo dia. Cada
+  linha é uma **conjunção de até três critérios `coluna = valor`**, com a coluna
+  escolhida num dropdown do cabeçalho real do relatório
+  (`_ATHENA_FXO_COLUMNS`): um critério tira tudo que tem aquele valor naquela
+  coluna, dois tiram só o que tem os dois, três só o que tem os três.
+  - **A coluna é ESCOLHIDA, não fixada.** A primeira versão deste cadastro tinha
+    colunas fixas `TRADING BOOK` / `OTHER BOOK` — nomes que o relatório da Athena
+    **não tem** (ele tem `Portfolio`, `CounterpartyName`, `INT_EXT`…), e a regra
+    nunca casaria. Quem sabe em que coluna mora cada valor é quem opera; a lista
+    do dropdown é conveniência de tela e pode envelhecer sem quebrar nada, porque
+    o motor aceita o nome que estiver gravado.
+  - **Par pela metade não conta** (coluna sem valor, ou valor sem coluna): é o
+    que permite escrever a regra de um critério só sem inventar coringa. E a
+    linha SEM critério nenhum é **ignorada** — sem nada a exigir ela casaria com
+    o relatório inteiro, e a linha vazia criada por engano na tela apagaria o
+    lado da Athena da recon.
+  - O **valor** é comparado por `_nome_cru` (cego a caixa, espaço e pontuação) e
+    o **nome da coluna** também é resolvido normalizado (`INT_EXT` ≡ `int ext`),
+    porque a grafia depende de quem gerou o arquivo.
+  - **Regra que cite coluna inexistente é PULADA com aviso**, nunca com o
+    critério ignorado: ignorando, a regra passaria a exigir menos e derrubaria
+    mais linhas do que o cadastro pediu.
 
-  O corte é **antes do merge**, pela mesma razão do outro cadastro (depois, o
-  DealID da linha cortada já teria ocupado a chave), e é **avisado** no painel.
-  O endpoint `/reconciliation-fxo/run` toca os **dois** cadastros antes de rodar,
-  só para materializar o seed: o motor lê o JSON direto (importar `routes` seria
-  circular) e não tem como semear — sem isso, na instância em que ninguém abriu a
-  tela de /mapping o arquivo não existe e as regras não valem, sem erro nenhum.
+  O `upgrade` traduz o formato antigo (as três colunas fixas) para os pares,
+  preservando os VALORES e levando o nome antigo para o dropdown — de onde ele é
+  corrigido em um clique. O corte é **antes do merge**, pela mesma razão do outro
+  cadastro (depois, o DealID da linha cortada já teria ocupado a chave), e é
+  **avisado** no painel. O endpoint `/reconciliation-fxo/run` toca os **dois**
+  cadastros antes de rodar, só para materializar o seed: o motor lê o JSON direto
+  (importar `routes` seria circular) e não tem como semear — sem isso, na
+  instância em que ninguém abriu a tela de /mapping o arquivo não existe e as
+  regras não valem, sem erro nenhum.
 - **`manual-conf-validation`** — quem valida a confirmação de cada produto
   (Produto × LOB → OTC / MO / FO, `REQUESTED` ou `EXEMPT`). **LOB em branco é
   coringa** do produto. MO e FO correm em **paralelo**, não em fila. Produto

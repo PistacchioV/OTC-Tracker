@@ -18673,6 +18673,36 @@ def _fxo_internal_cpty_upgrade(rows):
     return _rf.internal_cpty_upgrade(rows)
 
 
+def _fxo_book_disregard_upgrade(rows):
+    from apps.pages import recon_fxo as _rf
+    return _rf.book_disregard_upgrade(rows)
+
+
+# O cabeçalho do relatório EOD de FXO da Athena, na ordem em que ele vem. Serve
+# SÓ para o dropdown do cadastro `fxo-book-disregard`: o motor aceita o nome que
+# estiver gravado e o procura no arquivo, então esta lista é conveniência de
+# tela, não regra. É por isso que ela pode envelhecer sem quebrar nada — uma
+# coluna nova no relatório só precisa entrar aqui para ficar escolhível.
+_ATHENA_FXO_COLUMNS = [
+    # Vazia na frente, como o `_MAP_OPB3_TITULOS`: é ela que deixa o critério 2 e
+    # o 3 realmente EM BRANCO. Sem a opção vazia o dropdown nasce na primeira
+    # coluna da lista, e a linha ficaria carregando um `ReportDate` que ninguém
+    # escolheu — inofensivo hoje (o par só conta com valor preenchido), mas é
+    # cadastro dizendo o que não foi dito.
+    '',
+    'ReportDate', 'ProductID', 'LegalEntity', 'ClientID', 'TradeDate', 'StartDate',
+    'MaturityDate', 'IndexCode', 'BasketIndicator', 'OptionType', 'OptionIndicator',
+    'DealID', 'OriginalPrincipalAmount', 'NotionalAmount', 'Quantity',
+    'GuaranteeIndicator', 'MTMAmountBRL', 'MTMAmountOriginalCCY', 'Premium',
+    'PremiumCurrency', 'TransactionType', 'OptionStyle', 'Strike', 'MatchingDealID',
+    'CounterpartyName', 'MatchingCounterpartySPN', 'MatchingCounterpartyName',
+    'Portfolio', 'SettlementLocation', 'FixingDate', 'SettlementDate', 'Days2Fixing',
+    'QuantityCurrency', 'OtherQuantityUnit', 'OtherQuantityCurrency', 'ExpirationCut',
+    'Barrier', 'BarrierDirection', 'BarrierInOut', 'RebateValue', 'PayTime',
+    'AverageType', 'FirstFixingDate', 'NumberofFixing', 'INT_EXT',
+]
+
+
 def _api_links_upgrade(rows):
     """Traz para o formato com PRODUCT os arquivos gravados antes da coluna.
 
@@ -19338,32 +19368,39 @@ _MAPPING_DEFS = {
              'NOTES': 'Conta interna GEM — sai do batimento, não tem par na CETIP'},
         ],
     },
-    # A MESMA exclusão do cadastro acima, pelo outro identificador: o BOOK. A
-    # perna interbook não se reconhece pelo nome da contraparte (ela é a mesa
-    # contra a mesa), e sim pelo par de books da operação — ela não tem registro
+    # A MESMA exclusão do cadastro acima, por OUTRO identificador que não o nome
+    # da contraparte: a perna interbook é a mesa contra a mesa, não tem registro
     # na CETIP e viraria `Unmatched Athena` todo dia.
     #
-    # A linha é uma CONJUNÇÃO (Trading Book E Other Book E Int/Ext) e **campo em
-    # branco é coringa**, como no `opb3-events`: dá para escrever "tudo que sai
-    # deste trading book" numa linha só. Linha inteiramente em branco é ignorada
-    # — como coringa em tudo ela apagaria o lado da Athena da recon.
+    # A linha é uma CONJUNÇÃO de até três critérios `coluna = valor`, com a
+    # coluna escolhida num dropdown do cabeçalho real do relatório: um critério
+    # preenchido tira tudo que tem aquele valor naquela coluna, dois tiram só o
+    # que tem os dois, três só o que tem os três. Par com coluna ou valor em
+    # branco não conta, e a linha SEM critério nenhum é ignorada — sem nada a
+    # exigir ela apagaria o lado da Athena da recon.
     #
-    # A comparação é cega a caixa, espaço e pontuação, e a COLUNA do relatório é
-    # procurada pela forma normalizada do nome (`TradingBook` ≡ `TRADING BOOK` ≡
-    # `TRADING_BOOK`). Regra que dependa de coluna ausente é pulada COM AVISO no
-    # painel, nunca tratada como coringa.
+    # A coluna é escolhida, e não fixada no código, porque a primeira versão
+    # deste cadastro supôs `TRADING BOOK` / `OTHER BOOK` — nomes que o relatório
+    # não tem. Quem sabe em que coluna mora cada valor é quem opera.
     'fxo-book-disregard': {
-        'label': 'FXO Recon — Athena Books to Disregard',
+        'label': 'FXO Recon — Athena Rows to Disregard',
+        'upgrade': _fxo_book_disregard_upgrade,
         'columns': [
-            {'key': 'TRADING BOOK', 'label': 'Trading Book (blank = any)'},
-            {'key': 'OTHER BOOK', 'label': 'Other Book (blank = any)'},
-            {'key': 'INT/EXT', 'label': 'Int/Ext (blank = any)'},
+            {'key': 'COLUMN 1', 'label': 'Column 1', 'type': 'select',
+             'options': _ATHENA_FXO_COLUMNS},
+            {'key': 'VALUE 1', 'label': 'Value 1'},
+            {'key': 'COLUMN 2', 'label': 'Column 2 (optional)', 'type': 'select',
+             'options': _ATHENA_FXO_COLUMNS},
+            {'key': 'VALUE 2', 'label': 'Value 2'},
+            {'key': 'COLUMN 3', 'label': 'Column 3 (optional)', 'type': 'select',
+             'options': _ATHENA_FXO_COLUMNS},
+            {'key': 'VALUE 3', 'label': 'Value 3'},
             {'key': 'NOTES', 'label': 'Notes'},
         ],
         'seed': [
-            {'TRADING BOOK': 'FSLTVNCT VNLA CETIP LAWTON',
-             'OTHER BOOK': 'BRL_FXO LAWTON',
-             'INT/EXT': 'INTERBOOK',
+            {'COLUMN 1': 'Portfolio', 'VALUE 1': 'FSLTVNCT VNLA CETIP LAWTON',
+             'COLUMN 2': 'CounterpartyName', 'VALUE 2': 'BRL_FXO LAWTON',
+             'COLUMN 3': 'INT_EXT', 'VALUE 3': 'INTERBOOK',
              'NOTES': 'Perna interbook da Lawton — não tem par na CETIP'},
         ],
     },

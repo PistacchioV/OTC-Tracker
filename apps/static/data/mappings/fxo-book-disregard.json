@@ -1,8 +1,11 @@
 [
   {
-    "TRADING BOOK": "FSLTVNCT VNLA CETIP LAWTON",
-    "OTHER BOOK": "BRL_FXO LAWTON",
-    "INT/EXT": "INTERBOOK",
+    "COLUMN 1": "Portfolio",
+    "VALUE 1": "FSLTVNCT VNLA CETIP LAWTON",
+    "COLUMN 2": "CounterpartyName",
+    "VALUE 2": "BRL_FXO LAWTON",
+    "COLUMN 3": "INT_EXT",
+    "VALUE 3": "INTERBOOK",
     "NOTES": "Perna interbook da Lawton — não tem par na CETIP"
   }
 ]

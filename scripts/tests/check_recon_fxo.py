@@ -121,9 +121,10 @@ AT_COLS = ['DealID', 'MatchingDealID', 'OptionStyle', 'TransactionType', 'Option
            'MatchingCounterpartyName', 'CounterpartyName', 'MatchingCounterpartySPN',
            'Quantity', 'Premium',
            'Strike', 'TradeDate', 'SettlementDate', 'FixingDate', 'FirstFixingDate',
-           # As três do cadastro de books. Ficam vazias nas demais seções, e
-           # `_nome_cru('')` é None, então nenhuma regra casa por acidente.
-           'TradingBook', 'OtherBook', 'INT_EXT']
+           # Colunas do relatório usadas pelo cadastro de exclusão. Ficam vazias
+           # nas demais seções, e `_nome_cru('')` é None, então nenhuma regra
+           # casa por acidente.
+           'Portfolio', 'INT_EXT']
 
 
 def at_row(**kw):
@@ -320,77 +321,115 @@ check('Disregard tira a linha das regras de renomeação',
       R.internal_cpty_rules(), ({}, []))
 write_map('fxo-internal-cpty', CAD_PADRAO)
 
-print('\n== 3b. o corte por BOOK (cadastro fxo-book-disregard) ==')
+print('\n== 3b. o corte por CRITÉRIO (cadastro fxo-book-disregard) ==')
 # A perna INTERBOOK não se reconhece pelo nome da contraparte (é a mesa contra a
-# mesa): o que a identifica é o par de books. Ela não tem registro na CETIP e
-# viraria `Unmatched Athena` todo dia.
-BK = {'TradingBook': 'FSLTVNCT VNLA CETIP LAWTON',
-      'OtherBook': 'BRL_FXO LAWTON', 'INT_EXT': 'INTERBOOK'}
-REGRA = [{'TRADING BOOK': 'FSLTVNCT VNLA CETIP LAWTON',
-          'OTHER BOOK': 'BRL_FXO LAWTON', 'INT/EXT': 'INTERBOOK'}]
+# mesa): o que a identifica é uma COMBINAÇÃO de campos do relatório. A linha do
+# cadastro são até três pares `coluna = valor`, e a coluna é ESCOLHIDA — a
+# primeira versão supunha `TRADING BOOK`/`OTHER BOOK`, nomes que o relatório da
+# Athena não tem, e a regra nunca casaria.
+BK = {'Portfolio': 'FSLTVNCT VNLA CETIP LAWTON',
+      'CounterpartyName': 'BRL_FXO LAWTON', 'INT_EXT': 'INTERBOOK'}
+REGRA3 = [{'COLUMN 1': 'Portfolio', 'VALUE 1': 'FSLTVNCT VNLA CETIP LAWTON',
+           'COLUMN 2': 'CounterpartyName', 'VALUE 2': 'BRL_FXO LAWTON',
+           'COLUMN 3': 'INT_EXT', 'VALUE 3': 'INTERBOOK'}]
 
-write_map('fxo-book-disregard', REGRA)
+write_map('fxo-book-disregard', REGRA3)
 rows, _c, avisos = run(
     [dp_row(**{'Combinação de operações': 'B1'})],
     [at_row(DealID='B1', **BK),
      at_row(DealID='B2', **BK),
-     at_row(DealID='B3', TradingBook='OUTRO BOOK', OtherBook='BRL_FXO LAWTON',
-            INT_EXT='INTERBOOK')])
+     at_row(DealID='B3', Portfolio='OUTRO BOOK',
+            CounterpartyName='BRL_FXO LAWTON', INT_EXT='INTERBOOK')])
 chaves = sorted(r['Combinação de operações'] for r in rows)
-check('a linha do book cadastrado sai do batimento', 'B2' in chaves, False)
+check('os três critérios juntos tiram a linha', 'B2' in chaves, False)
 check('   a que casa só em parte da regra fica', 'B3' in chaves, True)
 check('   e o corte é avisado, não silencioso',
-      any('book' in a.lower() for a in avisos), True)
+      any('cadastro' in a.lower() for a in avisos), True)
 
-# A comparação é cega a caixa, espaço e pontuação: `BRL_FXO` no cadastro e
-# `BRL FXO` no arquivo são o mesmo book.
+# UM critério só: sai tudo que tem aquele valor naquela coluna.
+write_map('fxo-book-disregard', [{'COLUMN 1': 'INT_EXT', 'VALUE 1': 'INTERBOOK'}])
 rows, _c, _w = run(
-    [dp_row(**{'Combinação de operações': 'B4'})],
-    [at_row(DealID='B4', TradingBook='fsltvnct  vnla cetip lawton',
-            OtherBook='BRL FXO LAWTON', INT_EXT='Interbook')])
-check('o corte é cego a caixa e pontuação', [r['Status'] for r in rows], ['Unmatched B3'])
+    [dp_row(**{'Combinação de operações': 'B4'}), dp_row(**{'Combinação de operações': 'B5'})],
+    [at_row(DealID='B4', INT_EXT='INTERBOOK', Portfolio='QUALQUER'),
+     at_row(DealID='B5', INT_EXT='EXTERNAL')])
+st = {r['Combinação de operações']: r['Status'] for r in rows}
+check('um critério só basta', st.get('B4'), 'Unmatched B3')
+check('   e não leva quem não casa nele', st.get('B5'), 'Matched')
 
-# Campo em branco é CORINGA: uma linha só cobre tudo que sai daquele book.
-write_map('fxo-book-disregard', [{'TRADING BOOK': 'FSLTVNCT VNLA CETIP LAWTON'}])
+# DOIS critérios: precisa dos dois. Com só um deles a linha fica.
+write_map('fxo-book-disregard', [{'COLUMN 1': 'INT_EXT', 'VALUE 1': 'INTERBOOK',
+                                  'COLUMN 2': 'Portfolio', 'VALUE 2': 'FSLTVNCT VNLA CETIP LAWTON'}])
 rows, _c, _w = run(
-    [dp_row(**{'Combinação de operações': 'B5'})],
-    [at_row(DealID='B5', TradingBook='FSLTVNCT VNLA CETIP LAWTON',
-            OtherBook='QUALQUER OUTRO', INT_EXT='EXTERNAL')])
-check('campo em branco é coringa', [r['Status'] for r in rows], ['Unmatched B3'])
+    [dp_row(**{'Combinação de operações': 'B6'}), dp_row(**{'Combinação de operações': 'B7'})],
+    [at_row(DealID='B6', INT_EXT='INTERBOOK', Portfolio='FSLTVNCT VNLA CETIP LAWTON'),
+     at_row(DealID='B7', INT_EXT='INTERBOOK', Portfolio='OUTRA COISA')])
+st = {r['Combinação de operações']: r['Status'] for r in rows}
+check('com dois critérios, os dois têm de casar', st.get('B6'), 'Unmatched B3')
+check('   e um só não basta', st.get('B7'), 'Matched')
 
-# A linha 100% em branco NÃO é coringa de tudo: ela apagaria o lado da Athena
-# inteiro, e uma linha vazia criada por engano na tela é o caso provável.
-write_map('fxo-book-disregard', [{'TRADING BOOK': '', 'OTHER BOOK': '', 'INT/EXT': ''}])
+# O VALOR é comparado cego a caixa, espaço e pontuação.
+write_map('fxo-book-disregard', [{'COLUMN 1': 'CounterpartyName', 'VALUE 1': 'BRL_FXO LAWTON'}])
 rows, _c, _w = run(
-    [dp_row(**{'Combinação de operações': 'B6'})],
-    [at_row(DealID='B6')])
-check('a linha em branco é ignorada, não apaga a Athena',
+    [dp_row(**{'Combinação de operações': 'B8'})],
+    [at_row(DealID='B8', CounterpartyName='brl fxo  lawton')])
+check('o valor é cego a caixa e pontuação', [r['Status'] for r in rows], ['Unmatched B3'])
+
+# Par pela metade (coluna sem valor, ou valor sem coluna) não conta como
+# critério — é o que permite escrever a regra de um critério só sem coringa.
+write_map('fxo-book-disregard', [{'COLUMN 1': 'INT_EXT', 'VALUE 1': 'INTERBOOK',
+                                  'COLUMN 2': 'Portfolio', 'VALUE 2': ''}])
+rows, _c, _w = run(
+    [dp_row(**{'Combinação de operações': 'B9'})],
+    [at_row(DealID='B9', INT_EXT='INTERBOOK', Portfolio='SEJA O QUE FOR')])
+check('par pela metade não conta como critério',
+      [r['Status'] for r in rows], ['Unmatched B3'])
+
+# Linha SEM critério nenhum é ignorada: sem nada a exigir ela apagaria o lado da
+# Athena inteiro, e a linha vazia criada por engano na tela é o caso provável.
+write_map('fxo-book-disregard', [{'COLUMN 1': '', 'VALUE 1': '', 'COLUMN 2': '', 'VALUE 2': ''}])
+rows, _c, _w = run(
+    [dp_row(**{'Combinação de operações': 'C1'})],
+    [at_row(DealID='C1')])
+check('a linha sem critério é ignorada, não apaga a Athena',
       [r['Status'] for r in rows], ['Matched'])
 
-# Coluna ausente no relatório: a regra é PULADA com aviso. Tratá-la como coringa
-# faria a exclusão passar a valer pelos outros dois campos e derrubar demais.
-write_map('fxo-book-disregard', REGRA)
-_at_cols_orig = AT_COLS[:]
-AT_COLS.remove('INT_EXT')
-try:
-    rows, _c, avisos = run(
-        [dp_row(**{'Combinação de operações': 'B7'})],
-        [at_row(DealID='B7', TradingBook='FSLTVNCT VNLA CETIP LAWTON',
-                OtherBook='BRL_FXO LAWTON')])
-    check('sem a coluna, a regra não é aplicada', [r['Status'] for r in rows], ['Matched'])
-    check('   e o painel diz qual coluna faltou',
-          any('INT/EXT' in a for a in avisos), True)
-finally:
-    AT_COLS[:] = _at_cols_orig
+# Coluna que não existe no relatório: a regra é PULADA com aviso. Ignorar o
+# critério faria a regra exigir menos e derrubar mais do que o cadastro pediu.
+write_map('fxo-book-disregard', [{'COLUMN 1': 'INT_EXT', 'VALUE 1': 'INTERBOOK',
+                                  'COLUMN 2': 'ColunaQueNaoExiste', 'VALUE 2': 'X'}])
+rows, _c, avisos = run(
+    [dp_row(**{'Combinação de operações': 'C2'})],
+    [at_row(DealID='C2', INT_EXT='INTERBOOK')])
+check('coluna inexistente pula a regra inteira', [r['Status'] for r in rows], ['Matched'])
+check('   e o painel diz qual coluna faltou',
+      any('ColunaQueNaoExiste' in a for a in avisos), True)
+
+# O nome da coluna cadastrada é casado pela forma normalizada: `INT EXT` acha a
+# `INT_EXT` do arquivo.
+write_map('fxo-book-disregard', [{'COLUMN 1': 'int ext', 'VALUE 1': 'INTERBOOK'}])
+rows, _c, _w = run(
+    [dp_row(**{'Combinação de operações': 'C3'})],
+    [at_row(DealID='C3', INT_EXT='INTERBOOK')])
+check('o nome da coluna também é normalizado', [r['Status'] for r in rows], ['Unmatched B3'])
 
 # O corte é ANTES do merge: o DealID da linha cortada não pode ter ocupado a
 # chave e roubado o par de uma operação de verdade.
-write_map('fxo-book-disregard', REGRA)
+write_map('fxo-book-disregard', REGRA3)
 rows, _c, _w = run(
-    [dp_row(**{'Combinação de operações': 'B8'})],
-    [at_row(DealID='B8', Quantity='999', **BK),
-     at_row(DealID='B8', Quantity='100')])
+    [dp_row(**{'Combinação de operações': 'C4'})],
+    [at_row(DealID='C4', Quantity='999', **BK),
+     at_row(DealID='C4', Quantity='100')])
 check('o corte acontece antes do batimento', [r['ATH Amt'] for r in rows], ['100'])
+
+# O formato ANTIGO (três colunas fixas) é traduzido na LEITURA: os valores são
+# preservados e viram os pares, para a coluna certa ser escolhida na tela.
+write_map('fxo-book-disregard', [{'TRADING BOOK': 'X1', 'OTHER BOOK': 'X2',
+                                  'INT/EXT': 'INTERBOOK', 'NOTES': 'legado'}])
+up = R._mapping_rows('fxo-book-disregard')[0]
+check('o formato antigo vira pares na leitura',
+      [up.get('COLUMN 1'), up.get('VALUE 1'), up.get('COLUMN 3'), up.get('VALUE 3')],
+      ['TRADING BOOK', 'X1', 'INT/EXT', 'INTERBOOK'])
+check('   e o NOTES sobrevive', up.get('NOTES'), 'legado')
 
 write_map('fxo-book-disregard', [])
 
