@@ -276,6 +276,12 @@ _NOTIF_PAGE_URL = {
     'Latam Desk Position':    '/other-products-swap-latamdeskposition',
     'NDF Cockpit':            '/ndf-cockpit',
     'Cognos':                 '/cognos',
+    # A tela chama-se **File Interpreter** desde a renomeação; o rótulo aqui
+    # continua 'File Interface' porque é o que as notificações JÁ GRAVADAS
+    # carregam, e é por ele que o clique acha o destino — mesma razão do
+    # 'Confirmation' lá em cima. Um segundo rótulo apontando para a mesma URL
+    # também não serve: `check_notif_page_url.py` recusa destino repetido, e com
+    # razão, porque aí o mesmo aviso teria duas chaves.
     'File Interface':         '/file-interface',
     'Mapping':                '/mapping',
 }
@@ -11007,7 +11013,7 @@ _NDFOP_FI_KEY = 'taxacambioter'   # File Interface template key
 _NDFOP_FI_PAGE = '/ndf-other-publisher'
 _NDFOP_PARTICIPANT = '73760009'   # bank participant account
 _NDFOP_LAWTON = '00041007'        # Lawton account → triggers the mirrored file
-_NDFOP_FI_ERROR = 'File Interface template missing/invalid — check /file-interface'
+_NDFOP_FI_ERROR = 'File Interpreter template missing/invalid — check /file-interface'
 
 
 def _ndfop_acct8(v):
@@ -14457,7 +14463,7 @@ def api_mtm_send_batch():
     except ValueError:
         log.error('[mtm] send-batch build failed:\n%s', traceback.format_exc())
         return jsonify({'success': False,
-                        'error': 'File Interface template missing/invalid — check /file-interface'}), 500
+                        'error': 'File Interpreter template missing/invalid — check /file-interface'}), 500
     except Exception:
         log.error('[mtm] send-batch build failed:\n%s', traceback.format_exc())
         return jsonify({'success': False, 'error': 'Generation failed.'}), 500
@@ -14495,7 +14501,7 @@ def api_mtm_row_preview():
     except ValueError:
         log.error('[mtm] row preview build failed:\n%s', traceback.format_exc())
         return jsonify({'success': False,
-                        'error': 'File Interface template missing/invalid — check /file-interface'}), 500
+                        'error': 'File Interpreter template missing/invalid — check /file-interface'}), 500
     except Exception:
         log.error('[mtm] row preview build failed:\n%s', traceback.format_exc())
         return jsonify({'success': False, 'error': 'Generation failed.'}), 500
@@ -15675,7 +15681,7 @@ def api_accrual_send_batch():
     except ValueError:
         log.error('[accrual] send-batch failed:\n%s', traceback.format_exc())
         return jsonify({'success': False,
-                        'error': 'File Interface template missing/invalid — check /file-interface'}), 500
+                        'error': 'File Interpreter template missing/invalid — check /file-interface'}), 500
     except Exception:
         log.error('[accrual] send-batch failed:\n%s', traceback.format_exc())
         return jsonify({'success': False, 'error': 'Failed to write the batch files.'}), 500
@@ -15717,7 +15723,7 @@ def api_accrual_validation():
     except ValueError:
         log.error('[accrual] validation generate failed:\n%s', traceback.format_exc())
         return jsonify({'success': False,
-                        'error': 'File Interface template missing/invalid — check /file-interface'}), 500
+                        'error': 'File Interpreter template missing/invalid — check /file-interface'}), 500
     except Exception:
         log.error('[accrual] validation generate failed:\n%s', traceback.format_exc())
         return jsonify({'success': False, 'error': 'Failed to write the batch files.'}), 500
@@ -20310,7 +20316,7 @@ def api_file_interface_template(key):
             except OSError as e:
                 return jsonify({'success': False, 'error': str(e)}), 500
         _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
-                             'File Interface Template Deleted', 'File Interface', key)
+                             'File Interpreter Template Deleted', 'File Interface', key)
         return jsonify({'success': True})
     clean, err = _fi_clean_template(key, request.get_json(silent=True) or {})
     if err:
@@ -20323,7 +20329,7 @@ def api_file_interface_template(key):
             log.error('[file-interface] save failed for %s:\n%s', key, traceback.format_exc())
             return jsonify({'success': False, 'error': '{}: {}'.format(type(e).__name__, e)}), 500
     _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
-                         'File Interface Template Updated', 'File Interface',
+                         'File Interpreter Template Updated', 'File Interface',
                          '{} ({} block(s))'.format(clean['name'], len(clean['blocks'])))
     return jsonify({'success': True, 'template': clean})
 
@@ -20921,7 +20927,7 @@ def api_fxo_send_conecta():
     _tpl = _fi_tpl_cached('opcoes-flexiveis-vcp')
     if _tpl is None or not {'header', 'registro', 'registro-media-asiatica'} <= {
             b.get('id') for b in _tpl.get('blocks', [])}:
-        return jsonify({'ok': False, 'error': 'File Interface template missing/invalid '
+        return jsonify({'ok': False, 'error': 'File Interpreter template missing/invalid '
                                               '— check /file-interface (opcoes-flexiveis-vcp)'}), 500
 
     today = _dt.datetime.today().strftime('%Y%m%d')
@@ -24070,7 +24076,7 @@ def api_send_conecta():
     _tpl = _fi_tpl_cached('opcoes-flexiveis-vcp')
     if _tpl is None or not {'header', 'registro', 'registro-media-asiatica'} <= {
             b.get('id') for b in _tpl.get('blocks', [])}:
-        return jsonify({'ok': False, 'error': 'File Interface template missing/invalid '
+        return jsonify({'ok': False, 'error': 'File Interpreter template missing/invalid '
                                               '— check /file-interface (opcoes-flexiveis-vcp)'}), 500
 
     today = _dt.datetime.today().strftime('%Y%m%d')
@@ -29879,7 +29885,7 @@ def _anbima_add_biz(start_dt, n):
 # não reformata nada. Template/bloco ausente vira erro claro no endpoint,
 # nunca arquivo montado do jeito velho em silêncio.
 _TER_FI_KEY = 'termo-multiclasses'
-_TER_FI_ERROR = 'File Interface template missing/invalid — check /file-interface'
+_TER_FI_ERROR = 'File Interpreter template missing/invalid — check /file-interface'
 _TER_PARTICIPANT_NAME = {
     'BANCO': 'JPMORGANBM',
     'LAWTON': 'INTRAGLAWTONFDO',

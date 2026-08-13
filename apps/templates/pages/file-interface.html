@@ -1,6 +1,6 @@
 {% extends 'layouts/vertical.html' %}
 
-{% block title %}File Interface{% endblock title %}
+{% block title %}File Interpreter{% endblock title %}
 
 {% block extra_css %}
 <link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet"/>
@@ -248,7 +248,7 @@
         <div class="d-flex align-items-center gap-3 flex-grow-1">
             <div class="fi-page-icon"><i data-lucide="blocks"></i></div>
             <div>
-                <h4 class="fs-xl fw-bold m-0" data-lang="fi-title">File Interface</h4>
+                <h4 class="fs-xl fw-bold m-0" data-lang="fi-title">File Interpreter</h4>
                 <span class="text-muted fs-xs" data-lang="fi-subtitle">B3 file layouts, block by block</span>
             </div>
         </div>
@@ -256,7 +256,7 @@
             <ol class="breadcrumb m-0 py-0">
                 <li class="breadcrumb-item"><a href="/">OTC Tracker</a></li>
                 <li class="breadcrumb-item"><a href="javascript:void(0);" data-lang="apps-title">Apps</a></li>
-                <li class="breadcrumb-item active" data-lang="fi-title">File Interface</li>
+                <li class="breadcrumb-item active" data-lang="fi-title">File Interpreter</li>
             </ol>
         </div>
     </div>
@@ -963,7 +963,7 @@
     document.getElementById('fiSrcSave').addEventListener('click', function () {
         collectSrcEdit();
         apiSave(CUR_TPL).then(function (j) {
-            if (!j.success) return Swal.fire({ icon: 'error', title: 'File Interface', text: j.error || 'Save failed' });
+            if (!j.success) return Swal.fire({ icon: 'error', title: 'File Interpreter', text: j.error || 'Save failed' });
             SRC_EDIT = false;
             toast(t('fi-saved', 'Template saved'));
             selectTplFresh();
@@ -1023,7 +1023,7 @@
         });
         entry.columns = cols;
         apiSave(CUR_TPL).then(function (j) {
-            if (!j.success) return Swal.fire({ icon: 'error', title: 'File Interface', text: j.error || 'Save failed' });
+            if (!j.success) return Swal.fire({ icon: 'error', title: 'File Interpreter', text: j.error || 'Save failed' });
             colsModal.hide();
             toast(t('fi-saved', 'Template saved'));
             selectTplFresh();
@@ -1079,7 +1079,7 @@
             tpl.linked_pages = pages;
             tpl.status = pages.length ? 'active' : 'library';
             apiSave(tpl).then(function (j) {
-                if (!j.success) return Swal.fire({ icon: 'error', title: 'File Interface', text: j.error || 'Save failed' });
+                if (!j.success) return Swal.fire({ icon: 'error', title: 'File Interpreter', text: j.error || 'Save failed' });
                 linkModal.hide();
                 toast(t('fi-saved', 'Template saved'));
                 refreshList();
@@ -1217,7 +1217,7 @@
             })
         };
         apiSave(tpl).then(function (j) {
-            if (!j.success) return Swal.fire({ icon: 'error', title: 'File Interface', text: j.error || 'Save failed' });
+            if (!j.success) return Swal.fire({ icon: 'error', title: 'File Interpreter', text: j.error || 'Save failed' });
             builderModal.hide();
             toast(t('fi-saved', 'Template saved'));
             CUR_KEY = key;
@@ -1239,7 +1239,7 @@
             fetch('/api/file-interface/templates/' + encodeURIComponent(key), { method: 'DELETE' })
                 .then(function (r) { return r.json(); })
                 .then(function (j) {
-                    if (!j.success) return Swal.fire({ icon: 'error', title: 'File Interface', text: j.error || 'Delete failed' });
+                    if (!j.success) return Swal.fire({ icon: 'error', title: 'File Interpreter', text: j.error || 'Delete failed' });
                     builderModal.hide();
                     CUR_KEY = null; CUR_TPL = null;
                     document.getElementById('fiHeadCard').style.display = 'none';

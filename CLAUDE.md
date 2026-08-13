@@ -1083,7 +1083,9 @@ escreva um script em `scripts/` para ela.
   falhar.
 - **Só `isCancelled = true` significa cancelado** na Athena. `isDead` é estado
   interno e esses registros *são* importados (`_api_rec_is_cancelled`, §173).
-- **No File Interface, "campo em branco" se cadastra como Source `Fixed` com
+- **No File Interpreter** (a tela; a URL segue `/file-interface`, e é por ela
+  que o `Page_Access` e o sino a alcançam — ver o comentário no
+  `_NOTIF_PAGE_URL`), **"campo em branco" se cadastra como Source `Fixed` com
   valor VAZIO** — nunca como Page com o dropdown limpo ou origem "—": Source =
   Page significa "o gerador manda o valor" (o motor injeta o calculado pelo
   `seq`; o detalhe da origem é documentação), então limpar o detalhe não
