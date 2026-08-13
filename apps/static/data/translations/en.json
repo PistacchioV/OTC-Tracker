@@ -1171,7 +1171,7 @@
   "about-feat-payrec-title": "Reconciliation Pay/Rec",
   "about-feat-payrec-desc": "Reconciles JPM/MGT payments and receipts against bank statements and SPB actuals, per counterparty net type, carrying forward unresolved rows and withholding the swap regressive tax so the internal gross side meets the net amount that actually left the account.",
   "about-feat-reconfxo-title": "Reconciliation FXO",
-  "about-feat-reconfxo-desc": "Matches the FX option position registered at B3 against the Athena EOD report, field by field — direction, type, counterparty, quantity, premium, strike, dates and the asian fixing schedule — keyed on DealID and on DealID only — with no counterpart, the trade comes out as Unmatched.",
+  "about-feat-reconfxo-desc": "Matches the FX option position registered at B3 against the Athena EOD report, field by field — direction, type, counterparty, quantity, premium, strike, dates and the asian fixing schedule — keyed on DealID and, when that key has no DealID at all, on a MatchingDealID that does have a matching B3 record.",
   "about-feat-fileint-title": "File Interpreter",
   "about-feat-fileint-desc": "Parses e-mail messages (.msg / HTML) to extract structured trade data from Outlook exports.",
   "about-feat-holidays-title": "Holidays Calendar",

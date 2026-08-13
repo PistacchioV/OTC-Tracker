@@ -8,10 +8,11 @@ perde num porte e não dá erro nenhum — sai um número errado, ou uma linha s
      dois faz a linha sumir da recon inteira sem aviso.
 
   2. **a chave do match**. `CETIP-` e `CETIP_` são o mesmo identificador escrito
-     de dois jeitos; sem normalizar, a operação sai órfã. E o batimento é pelo
-     `DealID` e SÓ por ele — o `MatchingDealID` identifica a perna do outro lado,
-     ou seja, outra operação, e casar por ele fecha a linha da CETIP contra
-     números que não são os dela, sem erro nenhum.
+     de dois jeitos; sem normalizar, a operação sai órfã. A prioridade é do
+     `DealID`, e o `MatchingDealID` é a segunda tentativa — mas só para os
+     valores que TÊM registro correspondente na B3: os demais identificam a perna
+     do outro lado sem par na CETIP e, entrando no join `outer`, viram
+     `Unmatched Athena` fantasmas, sem erro nenhum.
 
   3. **a perna interna**. `INVERT DIRECTION = No` renomeia sempre; `= Yes` só
      entra quando Ctpty E JPM Dir estão os dois NOK, que é a assinatura da perna
@@ -162,7 +163,7 @@ check('   as colunas da B3 saem vazias na órfã da Athena',
       [r['B3 Dir'] for r in rows if r['Combinação de operações'] == 'CETIP_3'], [''])
 check('   sobram duas ancoradas', counts['total'] - counts['no_match_ath'], 2)
 
-print('\n== 2. a chave: CETIP- ≡ CETIP_, e SÓ o DealID ==')
+print('\n== 2. a chave: CETIP- ≡ CETIP_, DealID na frente, MatchingDealID com B3 ==')
 rows, counts, _w = run(
     [dp_row(**{'Combinação de operações': 'CETIP-77'})],
     [at_row(DealID='CETIP_77')])
@@ -170,7 +171,8 @@ check('o traço casa com o underline', counts['no_match'], 0)
 check('   e a chave sai normalizada', rows[0]['Combinação de operações'], 'CETIP_77')
 
 # A MESMA chave existe como DealID de uma operação e como MatchingDealID de
-# outra. Só a linha do DealID entra no batimento.
+# outra. A prioridade é do DealID — senão a operação casaria duas vezes e o
+# desempate escolheria qualquer uma das duas linhas.
 rows, counts, _w = run(
     [dp_row(**{'Combinação de operações': 'K1', 'Quantidade': '100'})],
     [at_row(DealID='K1', Quantity='100'), at_row(DealID='Z9', MatchingDealID='K1', Quantity='777')])
@@ -183,26 +185,43 @@ check('   sem duplicar a operação',
 # Unmatched Athena. Antes o join era LEFT e ela simplesmente não aparecia.
 check('   e a operação só da Athena aparece', por['Z9']['Status'], 'Unmatched Athena')
 
-# Sem DealID correspondente NÃO há match: o MatchingDealID é o identificador da
-# perna do outro lado — de OUTRA operação —, e casar por ele comparava a linha da
-# CETIP contra números que não são os dela. As duas saem órfãs, cada uma do seu
-# lado, que é o que a recon existe para mostrar.
+# Sem DealID correspondente, o MatchingDealID é a segunda tentativa — e vale,
+# porque essa chave EXISTE do lado da B3: a linha da CETIP tem um par de verdade
+# do outro lado, alcançável só por essa coluna.
 rows, counts, _w = run(
     [dp_row(**{'Combinação de operações': 'K2'})],
     [at_row(DealID='Z1', MatchingDealID='K2')])
-st2 = {r['Combinação de operações']: r['Status'] for r in rows}
-check('o MatchingDealID NÃO casa', st2.get('K2'), 'Unmatched B3')
-check('   e a linha da Athena fica órfã do lado dela', st2.get('Z1'), 'Unmatched Athena')
-check('   sem nenhum match no diagnóstico', counts['match_dealid'], 0)
+por2 = {r['Combinação de operações']: r for r in rows}
+check('casa pelo MatchingDealID quando não há DealID', por2['K2']['Match'], 'MatchingDealID')
+check('   e conta no diagnóstico', counts['match_matching'], 1)
+# O MESMO registro da Athena continua entrando também pela sua própria chave, e
+# como o `Z1` não existe na CETIP ele sai `Unmatched Athena` ao lado do `K2` que
+# fechou. É o comportamento histórico do caminho secundário e está aqui escrito
+# para não passar por engano: quem casou por MatchingDealID aparece duas vezes.
+check('   e a mesma operação ainda aparece pelo DealID dela', por2['Z1']['Status'],
+      'Unmatched Athena')
 
-# O relatório da Athena sem a coluna MatchingDealID roda igual: ela saiu da
-# lista de colunas obrigatórias junto com a regra que a usava.
+# O MatchingDealID SEM B3 correlacionado é descartado antes do merge. Ele é o
+# identificador da perna do outro lado e quase nunca tem registro na CETIP:
+# entrando no join `outer`, cada um viraria um `Unmatched Athena` fantasma — a
+# MESMA operação da Athena repetida, agora pela chave da perna oposta.
+rows, counts, _w = run(
+    [dp_row(**{'Combinação de operações': 'A1'})],
+    [at_row(DealID='A1', MatchingDealID='NAO-EXISTE-NA-B3')])
+check('o MatchingDealID sem par na B3 é descartado', len(rows), 1)
+check('   e não vira um Unmatched Athena fantasma', counts['no_match_ath'], 0)
+check('   a operação casa pelo DealID', rows[0]['Match'], 'DealID')
+
+# A coluna é obrigatória no relatório: sem ela o caminho secundário sumiria em
+# silêncio, e a recon mostraria mais órfãs sem dizer por quê.
 df_dp = R.read_dposicao(make_dposicao([dp_row(**{'Combinação de operações': 'K3'})]))
 _at_cols_orig = AT_COLS[:]
 AT_COLS.remove('MatchingDealID')
 try:
-    _rows, _c, _w = R.reconcile(df_dp, R.read_athena(make_athena([at_row(DealID='K3')])))
-    check('roda sem a coluna MatchingDealID no arquivo', _rows[0]['Status'], 'Matched')
+    R.reconcile(df_dp, R.read_athena(make_athena([at_row(DealID='K3')])))
+    check('recusa o arquivo da Athena sem MatchingDealID', 'sem erro', 'KeyError')
+except KeyError as e:
+    check('recusa o arquivo da Athena sem MatchingDealID', 'MatchingDealID' in str(e), True)
 finally:
     AT_COLS[:] = _at_cols_orig
 

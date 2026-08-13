@@ -699,14 +699,18 @@ pode sair anônima.
 
 ### A Recon FXO tem DOIS lados órfãos, e o join precisa ser `outer`
 
-**A chave do batimento é o `DealID`, e SÓ ele.** O `MatchingDealID` foi uma
-segunda tentativa para as chaves sem par em DealID nenhum e **saiu**: ele é o
-identificador da perna do OUTRO lado — outra operação —, e casar por ele fechava
-a linha da CETIP contra os números de um trade que não é o dela, produzindo
-`Partial` sem sentido em vez do `Unmatched` verdadeiro. Sem par por DealID a
-resposta certa é órfã. Saiu junto o chip de diagnóstico da tela (cravado em zero
-para sempre, ainda sugeriria um segundo caminho de match) e a coluna deixou de
-ser obrigatória no relatório da Athena.
+**A chave é o `DealID`; o `MatchingDealID` é a segunda tentativa, e só entra
+quando ele existe do lado da B3.** Duas condições, e as duas importam. A
+prioridade do DealID evita a mesma operação casar duas vezes (com o desempate
+escolhendo qualquer uma). O filtro contra as `Combinação de operações` da base
+âncora é o que impede o **`Unmatched Athena` fantasma**: o MatchingDealID
+identifica a perna do OUTRO lado, quase nunca tem registro na CETIP, e cada valor
+sem par entrava no join `outer` como uma linha a mais da Athena sem
+correspondência — a MESMA operação repetida pela chave da perna oposta. Por isso
+`base_athena_para_match` recebe as chaves da B3: sem elas não há como saber o que
+descartar. Efeito colateral conhecido e histórico: quem casa por MatchingDealID
+**aparece duas vezes** — uma `Matched` naquela chave e uma `Unmatched Athena` na
+chave própria, que a CETIP não tem.
 
 O status da 1ª coluna tem quatro estados, na ordem da gravidade — que é também a
 ordenação padrão da tabela (por rank, não alfabética):
