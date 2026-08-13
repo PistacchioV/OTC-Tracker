@@ -30,9 +30,12 @@ O que saiu do script, e por quê:
     eram constantes e viraram cadastro (`fxo-internal-cpty`), editável em
     /mapping e válido no próximo run, sem restart.
 
-Chave do match: `Combinação de operações` (DPOSICAO) × `DealID` (Athena), com
-`MatchingDealID` como segunda tentativa e SÓ para as chaves que não existem em
-DealID — a prioridade é do DealID, senão uma mesma operação casaria duas vezes.
+Chave do match: `Combinação de operações` (DPOSICAO) × `DealID` (Athena), e **só
+o DealID**. O `MatchingDealID` (o identificador da PERNA DO OUTRO LADO) chegou a
+ser uma segunda tentativa, para as chaves que não existiam em DealID nenhum, e
+saiu do batimento: ele identifica outra operação, e casar por ele fazia a linha
+da CETIP fechar contra uma linha da Athena que não é a dela. Sem par por DealID,
+a resposta certa é `Unmatched` — que é o que a recon existe para mostrar.
 """
 
 import io
@@ -88,7 +91,6 @@ COL_DP_MEDIA_ASIAT = 'Média Asiática'
 COL_DP_FIX_ADATIVO = 'Data de fixing do ativo subjacente'
 
 COL_AT_CHAVE = 'DealID'
-COL_AT_MATCHING = 'MatchingDealID'
 COL_AT_OPTIONSTYLE = 'OptionStyle'
 COL_AT_CPTY_NAME = 'CounterpartyName'
 # As colunas que dizem QUEM É A CONTRAPARTE da linha da Athena. As duas entram no
@@ -747,33 +749,23 @@ COLUMNS = (['Status', COMMENT_COLUMN, 'Código IF', 'Combinação de operações
 # =============================================================================
 
 def base_athena_para_match(df_at):
-    """Athena expandida para o match, com PRIORIDADE do DealID.
+    """Athena chaveada para o match — pelo `DealID`, e só por ele.
 
-    A chave da CETIP pode bater com o `DealID` ou com o `MatchingDealID`. As duas
-    entram, mas a linha de MatchingDealID só é considerada quando aquela chave
-    NÃO existe em DealID nenhum — senão a mesma operação apareceria duas vezes e
-    o `drop_duplicates` escolheria qualquer uma das duas.
+    O `MatchingDealID` **não entra**: ele é o identificador da perna do outro
+    lado, ou seja, de OUTRA operação. Usá-lo como segunda tentativa fazia a linha
+    da CETIP casar com uma linha da Athena que não é a dela — e o par errado é
+    pior que a falta de par, porque os campos passam a ser comparados contra
+    números de outra operação e a divergência resultante não diz nada. Sem
+    DealID correspondente, a linha sai `Unmatched`, que é a resposta honesta.
+
+    O `drop_duplicates` continua: dois registros da Athena com o mesmo DealID
+    multiplicariam a linha no merge.
     """
-    chave_deal = df_at[COL_AT_CHAVE].apply(norm_txt)
-    chave_match = df_at[COL_AT_MATCHING].apply(norm_txt)
-    set_deal = set(chave_deal.dropna().unique())
-
-    base_deal = df_at.copy()
-    base_deal['_chave_norm'] = chave_deal.values
-    base_deal['match_athena_por'] = 'DealID'
-    base_deal['_prio'] = 1
-    base_deal = base_deal[base_deal['_chave_norm'].notna()].copy()
-
-    base_match = df_at.copy()
-    base_match['_chave_norm'] = chave_match.values
-    base_match['match_athena_por'] = 'MatchingDealID'
-    base_match['_prio'] = 2
-    base_match = base_match[base_match['_chave_norm'].notna()
-                            & ~base_match['_chave_norm'].isin(set_deal)].copy()
-
-    out = pd.concat([base_deal, base_match], ignore_index=True)
-    out = out.sort_values('_prio').drop_duplicates(subset=['_chave_norm'], keep='first')
-    return out
+    out = df_at.copy()
+    out['_chave_norm'] = df_at[COL_AT_CHAVE].apply(norm_txt).values
+    out['match_athena_por'] = 'DealID'
+    out = out[out['_chave_norm'].notna()].copy()
+    return out.drop_duplicates(subset=['_chave_norm'], keep='first')
 
 
 # =============================================================================
@@ -788,7 +780,7 @@ def reconcile(df_dp, df_at):
               COL_DP_MEDIA_ASIAT, COL_DP_FIX_ADATIVO):
         if c not in df_dp.columns:
             raise KeyError('Coluna %r não existe na DPOSICAO.' % c)
-    for c in (COL_AT_CHAVE, COL_AT_MATCHING, COL_AT_OPTIONSTYLE):
+    for c in (COL_AT_CHAVE, COL_AT_OPTIONSTYLE):
         if c not in df_at.columns:
             raise KeyError('Coluna %r não existe no relatório da Athena.' % c)
 
@@ -973,7 +965,8 @@ def reconcile(df_dp, df_at):
     _aplicar_perna_espelhada(saida, espelhadas, df_final['_veio_da_b3'].values
                              & ~df_final['sem_correspondencia_athena'].values)
 
-    # `Match` diz POR ONDE a operação casou. Na linha que só existe na Athena ela
+    # `Match` diz que a operação casou, e por onde — hoje só há um caminho, o
+    # DealID, e a coluna fica como o registro disso. Na linha que só existe na Athena ela
     # sai vazia: aquela linha veio da base da Athena e por isso carrega o
     # 'DealID' herdado do lado direito do join, mas não casou com nada — deixá-lo
     # inflaria o chip de diagnóstico com operações que não tiveram match nenhum.
@@ -1077,8 +1070,10 @@ def _contar(rows):
         'no_match': sum(1 for r in rows if r.get('Status') == ST_UNMATCHED_B3),
         'no_match_ath': sum(1 for r in rows if r.get('Status') == ST_UNMATCHED_ATH),
         'justified': sum(1 for r in rows if r.get('Status') == ST_JUSTIFIED),
+        # Quantas acharam par. O batimento é por DealID e só por ele, então este
+        # é o número de operações que casaram — incluindo as que casaram e
+        # divergem (`Partial`), que o card de `Matched` não conta.
         'match_dealid': sum(1 for r in rows if r.get('Match') == 'DealID'),
-        'match_matching': sum(1 for r in rows if r.get('Match') == 'MatchingDealID'),
         'dup_key': sum(1 for r in rows if r.get('Chave Duplicada') == 'Sim'),
     }
     counts['nok_por_campo'] = {c: sum(1 for r in rows if r.get(c) == 'NOK')

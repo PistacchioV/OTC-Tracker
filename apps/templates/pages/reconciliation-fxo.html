@@ -332,10 +332,12 @@
         </div>
     </div>
 
-    <!-- Diagnóstico: por onde a operação casou, e o alerta de chave repetida. -->
+    <!-- Diagnóstico: quantas casaram pelo DealID, e o alerta de chave repetida.
+         O chip de MatchingDealID saiu junto com a regra: o batimento é só pelo
+         DealID, e um chip cravado em zero para sempre é ruído que ainda sugere
+         que existe um segundo caminho de match. -->
     <div class="d-flex flex-wrap gap-2 mb-2" id="fxo-diag">
         <span class="fxo-chip"><i class="ti ti-key"></i> DealID <b id="d-dealid">0</b></span>
-        <span class="fxo-chip"><i class="ti ti-key-off"></i> MatchingDealID <b id="d-matching">0</b></span>
         <span class="fxo-chip"><i class="ti ti-copy"></i> <span data-lang="fxo-d-dup">Chave duplicada</span> <b id="d-dup">0</b></span>
     </div>
 
@@ -789,7 +791,6 @@
         $('#w-nomatch-ath').text(counts.no_match_ath || 0);
         $('#w-justified').text(counts.justified || 0);
         $('#d-dealid').text(counts.match_dealid || 0);
-        $('#d-matching').text(counts.match_matching || 0);
         $('#d-dup').text(counts.dup_key || 0);
         $('#fxo-ranat').text(payload.ran_at ? ('Última execução: ' + payload.ran_at) : '');
 

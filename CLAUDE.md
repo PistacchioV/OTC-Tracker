@@ -699,6 +699,15 @@ pode sair anônima.
 
 ### A Recon FXO tem DOIS lados órfãos, e o join precisa ser `outer`
 
+**A chave do batimento é o `DealID`, e SÓ ele.** O `MatchingDealID` foi uma
+segunda tentativa para as chaves sem par em DealID nenhum e **saiu**: ele é o
+identificador da perna do OUTRO lado — outra operação —, e casar por ele fechava
+a linha da CETIP contra os números de um trade que não é o dela, produzindo
+`Partial` sem sentido em vez do `Unmatched` verdadeiro. Sem par por DealID a
+resposta certa é órfã. Saiu junto o chip de diagnóstico da tela (cravado em zero
+para sempre, ainda sugeriria um segundo caminho de match) e a coluna deixou de
+ser obrigatória no relatório da Athena.
+
 O status da 1ª coluna tem quatro estados, na ordem da gravidade — que é também a
 ordenação padrão da tabela (por rank, não alfabética):
 

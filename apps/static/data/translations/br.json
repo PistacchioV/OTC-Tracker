@@ -1171,7 +1171,7 @@
   "about-feat-payrec-title": "Reconciliation Pay/Rec",
   "about-feat-payrec-desc": "Concilia pagamentos e recebimentos JPM/MGT contra os extratos e os efetivados do SPB, pelo tipo de net de cada contraparte, carregando as pendências do dia anterior e descontando o IR regressivo do swap para que o lado interno bruto encontre o valor líquido que de fato saiu da conta.",
   "about-feat-reconfxo-title": "Reconciliação de FXO",
-  "about-feat-reconfxo-desc": "Confronta a posição de opções de câmbio registrada na B3 com o relatório EOD da Athena, campo a campo — direção, tipo, contraparte, quantidade, prêmio, strike, datas e o cronograma de fixing da asiática —, casando pelo DealID e, quando ele não existe, pelo MatchingDealID.",
+  "about-feat-reconfxo-desc": "Confronta a posição de opções de câmbio registrada na B3 com o relatório EOD da Athena, campo a campo — direção, tipo, contraparte, quantidade, prêmio, strike, datas e o cronograma de fixing da asiática —, casando pelo DealID e só por ele — sem par, a operação sai como Unmatched.",
   "about-feat-fileint-title": "File Interpreter",
   "about-feat-fileint-desc": "Faz o parse de mensagens de e-mail (.msg / HTML) para extrair dados estruturados de operações a partir de exports do Outlook.",
   "about-feat-holidays-title": "Calendário de Feriados",
