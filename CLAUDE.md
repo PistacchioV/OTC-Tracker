@@ -935,7 +935,17 @@ Fundi-las obrigaria uma a carregar os dois modelos de chave.
 o `_mc_stamp_generated` continua. Carimbando, a confirmação nascia já na mesa
 seguinte e a fila de Pending OTC do Monitor ficava vazia por construção: o OTC
 não tinha onde conferir o que ele mesmo acabara de emitir, com o D+3 correndo em
-silêncio.
+silêncio. **E ele não avisa no sino**: os quatro `/validate` do New Deals
+emitiam um `Confirmation Validated`, e a mesma confirmação gerava DOIS itens
+dizendo validado — este, do documento, e o `Validated by OTC` da esteira, que é
+o que a mesa precisa ver (diz quem assinou, quantas operações e para quem). O
+ciclo do documento continua no card de Confirmations do New Deals Monitor, que é
+onde ele já era acompanhado.
+
+**O aviso da esteira leva ao Confirmations Monitor**, e não à página que emitiu
+o documento: quem recebe vai CONFERIR a confirmação, e conferir é lá. O rótulo
+`page` é `'Confirmation'` (o mesmo da esteira — ver `_NOTIF_PAGE_URL`); o
+produto vive no texto do aviso, que é onde ele continua legível.
 
 **Validar é SÓ no Monitor.** O botão Validate saiu dos diálogos de
 Confirmations das quatro páginas de New Deals (FWD Start, NDF Comm, Opt Comm,

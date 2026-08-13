@@ -26308,12 +26308,17 @@ def api_conf_ndfcomm_validate():
         entry['validated_at'] = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
         state[key] = entry
         _conf_state_save(ref, state)
-    acr, merc, fam = (key.split('|') + ['', '', ''])[:3]
     # O checklist fecha o ciclo do DOCUMENTO. A etapa do OTC na esteira NÃO é
     # carimbada aqui — ela é validada no Monitor. Ver o comentário onde o
     # `_mc_stamp_otc_validated` existia.
-    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
-                         'Confirmation Validated', 'NDF Comm', '{} · {}'.format(acr, merc))
+    #
+    # E ele NÃO gera aviso no sino. Gerava um 'Confirmation Validated', e o sino
+    # ficava com DOIS itens dizendo validado para a mesma confirmação: este, do
+    # documento, e o 'Validated by OTC' da esteira — que é o que a mesa precisa
+    # ver, porque diz quem assinou, quantas operações e para quem a confirmação
+    # foi. O ciclo do documento (New → Generated → Success) continua visível no
+    # card de Confirmations do New Deals Monitor, que é onde ele já era
+    # acompanhado; o que saiu foi só a linha no sino.
     return jsonify({'success': True, 'status': 'Success'})
 
 
@@ -26712,12 +26717,17 @@ def api_conf_optcomm_validate():
         entry['validated_at'] = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
         state[key] = entry
         _conf_state_save(ref, state, 'opt-comm')
-    acr, merc, fam = (key.split('|') + ['', '', ''])[:3]
     # O checklist fecha o ciclo do DOCUMENTO. A etapa do OTC na esteira NÃO é
     # carimbada aqui — ela é validada no Monitor. Ver o comentário onde o
     # `_mc_stamp_otc_validated` existia.
-    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
-                         'Confirmation Validated', 'Opt Comm', '{} · {}'.format(acr, merc))
+    #
+    # E ele NÃO gera aviso no sino. Gerava um 'Confirmation Validated', e o sino
+    # ficava com DOIS itens dizendo validado para a mesma confirmação: este, do
+    # documento, e o 'Validated by OTC' da esteira — que é o que a mesa precisa
+    # ver, porque diz quem assinou, quantas operações e para quem a confirmação
+    # foi. O ciclo do documento (New → Generated → Success) continua visível no
+    # card de Confirmations do New Deals Monitor, que é onde ele já era
+    # acompanhado; o que saiu foi só a linha no sino.
     return jsonify({'success': True, 'status': 'Success'})
 
 
@@ -27129,12 +27139,17 @@ def api_conf_optfxo_validate():
         entry['validated_at'] = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
         state[key] = entry
         _conf_state_save(ref, state, 'opt-fxo')
-    acr, merc, fam = (key.split('|') + ['', '', ''])[:3]
     # O checklist fecha o ciclo do DOCUMENTO. A etapa do OTC na esteira NÃO é
     # carimbada aqui — ela é validada no Monitor. Ver o comentário onde o
     # `_mc_stamp_otc_validated` existia.
-    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
-                         'Confirmation Validated', 'Opt FXO', '{} · {}'.format(acr, merc))
+    #
+    # E ele NÃO gera aviso no sino. Gerava um 'Confirmation Validated', e o sino
+    # ficava com DOIS itens dizendo validado para a mesma confirmação: este, do
+    # documento, e o 'Validated by OTC' da esteira — que é o que a mesa precisa
+    # ver, porque diz quem assinou, quantas operações e para quem a confirmação
+    # foi. O ciclo do documento (New → Generated → Success) continua visível no
+    # card de Confirmations do New Deals Monitor, que é onde ele já era
+    # acompanhado; o que saiu foi só a linha no sino.
     return jsonify({'success': True, 'status': 'Success'})
 
 # ==============================================================================
@@ -27597,12 +27612,17 @@ def api_conf_fwdstart_validate():
         entry['validated_at'] = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
         state[key] = entry
         _conf_state_save(ref, state, 'ndf-fwdstart')
-    acr, merc, fam = (key.split('|') + ['', '', ''])[:3]
     # O checklist fecha o ciclo do DOCUMENTO. A etapa do OTC na esteira NÃO é
     # carimbada aqui — ela é validada no Monitor. Ver o comentário onde o
     # `_mc_stamp_otc_validated` existia.
-    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
-                         'Confirmation Validated', 'NDF FWD Start', '{} · {}'.format(acr, merc))
+    #
+    # E ele NÃO gera aviso no sino. Gerava um 'Confirmation Validated', e o sino
+    # ficava com DOIS itens dizendo validado para a mesma confirmação: este, do
+    # documento, e o 'Validated by OTC' da esteira — que é o que a mesa precisa
+    # ver, porque diz quem assinou, quantas operações e para quem a confirmação
+    # foi. O ciclo do documento (New → Generated → Success) continua visível no
+    # card de Confirmations do New Deals Monitor, que é onde ele já era
+    # acompanhado; o que saiu foi só a linha no sino.
     return jsonify({'success': True, 'status': 'Success'})
 
 
