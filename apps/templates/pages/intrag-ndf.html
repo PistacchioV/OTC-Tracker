@@ -90,7 +90,7 @@ i.ti-spin, .ti-spin, i.ti-loader, i.ti-loader-2, i.ti-loader-3 { display: inline
     #intrag-ndf-table th:nth-child(2),
     #intrag-ndf-table td:nth-child(2),
     .dt-scroll-head thead th:nth-child(2),
-    .dataTables_scrollHead thead th:nth-child(2) { width: 140px;  min-width: 140px;  } /* Actions */
+    .dataTables_scrollHead thead th:nth-child(2) { width: 160px;  min-width: 160px;  } /* Actions */
 
     #intrag-ndf-table th:nth-child(3),
     #intrag-ndf-table td:nth-child(3),
@@ -287,6 +287,11 @@ i.ti-spin, .ti-spin, i.ti-loader, i.ti-loader-2, i.ti-loader-3 { display: inline
   #intrag-ndf-table .btn-sm.rounded-circle { width: 32px; height: 32px; flex: 0 0 32px; min-width: 32px; max-width: 32px; padding: 0; font-size: 1rem; display: flex; align-items: center; justify-content: center; border-radius: 10px !important; box-sizing: border-box; }  /* squircle padrão (spec .ops-row-act) */
   /* Wrapper das ações: não deixa o flex encolher os botões (mantém círculo perfeito) */
   #intrag-ndf-table td:nth-child(2) > div { flex-wrap: nowrap; }
+  /* A célula de ações NÃO leva o padding lateral do tema: com table-layout:fixed e
+     overflow:hidden, os 4 botões (4×32 + 3×4 de gap = 140px) ocupam a largura da
+     coluna inteira, e qualquer padding lateral come os botões dos dois extremos.
+     Zerado aqui, a largura da coluna deixa de depender do padding do tema. */
+  #intrag-ndf-table td:nth-child(2) { padding-left: 0 !important; padding-right: 0 !important; }
   /* Dark mode overrides */
   [data-bs-theme=dark] .smart-filter-wrapper { background: var(--ins-secondary-bg) !important; border-color: rgba(255,255,255,0.1) !important; }
   [data-bs-theme=dark] .smart-filter-wrapper:focus-within { border-color: #0066cc !important; }
