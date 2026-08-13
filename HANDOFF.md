@@ -11219,6 +11219,10 @@ aviso.
   horário faria a rotina do dia não sair.
 - Claim/release/status em disco seguem a mecânica do Deals Monitor (§207/§222): a reserva é anterior
   ao envio, e só o **erro** devolve o slot para a volta seguinte do laço retentar.
+- **O prazo é medido no dia do RELATÓRIO, não no relógio.** `_ce_run` passava o `ref` só para o
+  cabeçalho e chamava `_ce_snapshot()` sem data: no disparo real os dois coincidem, mas num Run
+  remarcado (ou no teste) o e-mail dizia uma data e pintava o vencido de outra — e a escalação, que
+  é escolhida pela luz do SLA, levava a fila de outro dia. Um `ref`, uma medida.
 
 **O botão do e-mail precisou de um endereço absoluto**, que o app nunca teve: `url_for` é relativo e
 não serve num e-mail, e `request.url_root` não existe na thread do scheduler (num Run local sairia
@@ -11248,3 +11252,13 @@ o `<v:rect>` do gradiente pintar ora estreito demais, ora na janela inteira (ver
 `partials/email-gradient-header.html`). `arcsize="50%"` é a pílula do `border-radius:26px` do link,
 e o `<a>` normal fica no ramo `[if !mso]` para não sair duplicado. Prazo:
 `scripts/tests/check_conf_escalation.py`.
+
+**O Guia do Usuário estava contando a esteira antiga.** O item 3.11 descrevia
+`OTC → MO e/ou FO → Ok` com três cards — o desenho anterior ao §254/§255 —, então
+quem seguia o guia não sabia que existe hold de Legal, que o `Pending FepWeb` só
+fecha com o *Enviado p/ cliente* e que escrever `Pending OTC` à mão **reabre** a
+esteira apagando as validações. Foi reescrito junto com o 3.15 (o card novo, as
+sete listas, o Run por e-mail, o rolar do feriado e a diferença entre *nada
+pendente* e *sem destinatário*), e o `.docx` regerado do `.md`, que é a fonte
+única. Documentação de tela que descreve um fluxo que mudou é pior que
+documentação faltando: ela é seguida.

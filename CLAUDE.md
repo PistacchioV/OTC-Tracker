@@ -843,6 +843,31 @@ campo. O motivo vai para a coluna daquela mesa (`OTC Comments`, `MO Comments`,
 campo único faria a segunda mesa sobrescrever a explicação da primeira. A tela é
 onde se pede; o endpoint é onde se garante.
 
+### A cobrança das validações é um card do Control Panel (§257)
+
+`confescalation` manda por e-mail o que está parado na esteira, e lê a **mesma**
+`manual_conf.load_all()` com o `Pending` derivado que o Track e o Monitor
+mostram — um relatório que conta de outro jeito cobra uma fila que a tela não
+tem, e a mesa deixa de acreditar nos dois. São **sete listas** de destinatários
+(`_CE_REC_KEYS`), uma por e-mail: OTC, Sales Support (rotina), Sales Support
+(escalação) e os quatro grupos de Front Office de `_CE_FO_GROUPS`. Quatro coisas
+que não dão erro nenhum quando se mexe:
+
+- o grupo de FO casa pelo **tipo de confirmação** (`confirmation_type`), nunca
+  pelo texto cru da coluna. **`OPTION EDG` não é produto** — é `FXO` × LOB
+  `EDG`; cadastrado como produto, o grupo nunca casa com linha nenhuma, em
+  silêncio;
+- **Pending FO sem grupo vai para `unmatched`** (amarelo no card e linha no
+  log), porque confirmação que some do relatório é confirmação que ninguém
+  cobra;
+- a rotina é segunda e quinta, e o feriado **ROLA** para o próximo dia útil —
+  `_ce_is_routine_day` pergunta ao contrário (*que segunda/quinta desemboca em
+  hoje?*), senão a semana inteira se perde quando a quinta é feriado;
+- a escalação leva o **último dia** (`left == 0`) e o vencido, nunca a véspera:
+  o `warn` do SLA acende em D-1, e escalar ali chega com a mesa ainda dentro do
+  prazo. `empty` (nada pendente) e `no_recipient` (lista vazia) são desfechos
+  **distintos** — o segundo é cobrança que não saiu de casa.
+
 ### Validar é abrir o documento, não clicar num botão
 
 O Validate do Monitor abre **`/manual-confirmation/validate`** (PDF do Electronic

@@ -262,13 +262,21 @@ Caminho no menu: **Documentation → Manual Confirmation → Confirmations Monit
 
 ![Confirmations Monitor](docs/sop-screenshots/manual-confirmation_monitor.png)
 
-A confirmação passa por uma esteira antes de sair: **OTC → MO e/ou FO → Ok**. Quem valida cada produto está cadastrado em **Mapping → Manual Confirmations — Validation Trail** (Produto × LOB); MO e FO validam em paralelo, não em fila.
+A confirmação passa por uma esteira antes de sair: **(Pending Legal) → Pending OTC → Pending MO e/ou FO → Pending FepWeb → Ok**. Quem valida cada produto está cadastrado em **Mapping → Manual Confirmations — Validation Trail** (Produto × LOB); MO e FO validam em paralelo, não em fila.
 
-1. O **Confirmations Monitor** tem um card por etapa (Pending OTC, Pending MO, Pending FO) com a fila de cada mesa.
+1. O **Confirmations Monitor** tem **cinco cards**, um por etapa, com a fila de cada uma.
 2. Cada item da fila é **uma confirmação**, não uma operação: o documento cobre todas as operações da mesma contraparte, produto, LOB e data de negociação, e o item diz quantas são.
 3. **Abrir** mostra o PDF que está gravado no Electronic Inventory — o papel que vai ao cliente.
 4. **Validar** carimba a etapa com a data, a hora e o SPN de quem validou, e a confirmação passa para a etapa seguinte.
 5. **Rejeitar** (MO e FO) pede um comentário, avisa o Brazil OTC Ops por e-mail e devolve a confirmação para o OTC. As validações já dadas são apagadas: o documento vai ser refeito.
+
+As duas pontas da esteira não são de validação:
+
+- **Pending Legal** é um **hold manual**: enquanto a confirmação estiver nele, ela não anda, mesmo com as validações em dia. O card tem o botão de **soltar**, que devolve a confirmação para a fila do OTC.
+- **Pending FepWeb** é **derivado**, nunca digitado: as validações estão feitas e falta **enviar ao cliente**. A confirmação só chega a **Ok** com a coluna *Enviado p/ cliente* preenchida — é o que o botão desse card faz.
+- Escrever **Pending OTC** à mão no Track Confirmations **reabre a esteira**: é o que se faz quando a confirmação foi **regerada** depois de validada. O sistema apaga as três validações e o envio ao cliente (os comentários ficam), e as três mesas conferem o documento novo. Como isso desfaz validação alheia, a gravação exige a mesa de **OTC Ops**.
+
+> A esteira é espelhada na página **Pending Confirmation** a cada gravação, então as duas telas contam a mesma coisa.
 
 > **Cada etapa é assinada pela mesa dela.** Pending OTC é do **Back Office**, Pending MO do **MO** e Pending FO do **FO** — o papel vem do seu cadastro em *Users & Roles*. Quem não é da mesa continua abrindo a confirmação e lendo o documento, mas o botão do card aparece como **View** e a tela de validação não mostra o *Validar* nem o *Devolver ao OTC*.
 
@@ -279,6 +287,8 @@ A confirmação passa por uma esteira antes de sair: **OTC → MO e/ou FO → Ok
 A tela **Track Confirmations** é a base inteira: filtro por coluna, atualização em massa por coluna, exportação do que estiver na tela (com o filtro e a ordenação aplicados) e os cards do topo funcionando como filtro por etapa. Ela abre ordenada pelo **Aging Confirmação**, do menor para o maior.
 
 > As operações de **NDF Commodities, Opção de Commodities, FXO e NDF FWD Start** entram nesta esteira sozinhas, quando a confirmação é gerada no New Deals.
+
+> **A fila parada é cobrada por e-mail.** O card *Confirmations Escalation* do **Control Panel** manda o que está pendente de validação para o OTC, para o Sales Support e para o Front Office (um e-mail por produto), toda segunda e quinta, e diariamente quando alguma operação está no último dia do prazo ou já vencida. Ver o item 3.15.
 
 ---
 
@@ -358,8 +368,33 @@ Rotinas disponíveis:
 - Pending Signature Confirmations — Collection
 - Deals Monitor — Pending Action
 - Pending Confirmations Spreadsheet Metrics
+- Confirmations Escalation
 
 > **Nem todo card envia e-mail.** O *Daily Metric*, a *Weekly Escalation* e a *Collection* geram um **rascunho** — o navegador baixa um arquivo `.eml` que abre no Outlook já endereçado, para você revisar e enviar. O *Pending Confirmations Spreadsheet Metrics* não envia e-mail: ele **grava a planilha** "PENDING - Outstanding Confirmation OTC.xlsx" no share, todo dia útil às 10:45. Os demais mandam direto.
+
+#### Confirmations Escalation — cobrar as validações paradas
+
+Este card manda por e-mail as confirmações que estão **pendentes de validação** na esteira do *Confirmations Monitor* (item 3.11). São **sete listas de destinatários**, uma por e-mail, porque quem recebe a fila de um produto não é quem recebe a de outro:
+
+| Lista | O que vai no e-mail | Quando sai |
+|---|---|---|
+| **TO — OTC Ops** | tudo em *Pending OTC* | segunda e quinta, 17h00 |
+| **TO — Sales Support** | tudo em *Pending MO* | segunda e quinta, 17h00 |
+| **ESCALATION — Sales Support** | só o que está **no último dia do prazo ou vencido** | **todo dia útil**, 17h00 |
+| **TO — FO · CEM Swap** | Swap da LOB CEM | segunda e quinta, 17h00 |
+| **TO — FO · EDG Swap** | Swap da LOB EDG | segunda e quinta, 17h00 |
+| **TO — FO · EDG Corporate Swap** | Swap Corporate da LOB EDG | segunda e quinta, 17h00 |
+| **TO — FO · EDG Option** | Opção de câmbio (FXO) da LOB EDG | segunda e quinta, 17h00 |
+
+1. Preencha as listas e saia do campo — salva sozinho, como nos demais cards.
+2. Cada linha da lista do card tem o **seu próprio Run**: reenviar o e-mail do EDG Swap não dispara os outros. O **Run all** do rodapé manda o pacote da rotina.
+3. O e-mail traz uma tabela com **Trade Date, Cliente, Produto, LOB, Trade ID, Ativo e a data em que a confirmação entrou para validação**, com a linha vencida marcada em vermelho, e um botão que abre o *Confirmations Monitor*.
+
+> **Segunda ou quinta em feriado ANBIMA sai no próximo dia útil**, não é pulada.
+>
+> **Sem nada pendente, o e-mail não é enviado** — e isso é diferente de *sem destinatário*, que o card mostra em amarelo: aí a cobrança deixou de sair porque a lista está vazia.
+>
+> Se aparecer o aviso amarelo de **produto sem grupo**, há confirmação em *Pending FO* de um produto × LOB que não está na quebra acima — ela não está sendo cobrada por ninguém. Peça a inclusão ao time de tecnologia.
 
 ---
 

@@ -28815,7 +28815,12 @@ def _ce_run(mode='routine', ref=None):
     """
     ref = ref or _br_now()
     rec = _load_ce_recipients()
-    otc, mo, grupos, esc, sem_grupo = _ce_snapshot()
+    # O prazo é medido no MESMO dia que o e-mail carimba no cabeçalho. Medindo
+    # contra o relógio e imprimindo o `ref`, um disparo remarcado sairia dizendo
+    # uma data e pintando o vencido de outra — e a escalação, que é escolhida
+    # pela luz do SLA, levaria uma fila que não é a do dia do relatório.
+    otc, mo, grupos, esc, sem_grupo = _ce_snapshot(
+        ref.date() if hasattr(ref, 'date') else ref)
     out = {'sent': [], 'skipped': [], 'errors': [], 'unmatched': sem_grupo}
     if sem_grupo:
         log.warning('[conf-escalation] Pending FO sem grupo cadastrado: %s',
