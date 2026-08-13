@@ -643,15 +643,40 @@ body.vr-nav-pinned .vr-pin-btn {
 }
 .logo-topbar .logo-lg { display: inline-flex !important; align-items: center; }
 
-/* Nav central horizontal com DROPDOWNS por seção */
+/* Nav central horizontal com DROPDOWNS por seção.
+   Ele fica NO FLUXO do flex da topbar, entre o grupo do logo e os controles da
+   direita. Era `position:absolute` + centralização por `transform`, e o preço
+   disso é que o nav não ocupa espaço nenhum no flex: assim que os atalhos não
+   cabem, ele passa POR CIMA do sino / tema / idioma / usuário — em silêncio, e
+   só na largura de tela de quem está usando. Como a quantidade de atalhos é
+   ESCOLHIDA pelo usuário (até 10), não existe largura em que a centralização
+   absoluta seja segura. Em fluxo, o pior caso é o nav rolar na horizontal.
+   A centralização óptica é mantida sem posicionamento absoluto: os dois grupos
+   laterais dividem a sobra igualmente (`flex: 1 1 0` mais abaixo), então o nav
+   fica no meio da barra sozinho. */
 .vr-topnav {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
+  position: static;
+  order: 1;
+  flex: 0 1 auto;
+  min-width: 0;                 /* sem isto o flex não deixa encolher */
   align-items: center;
+  justify-content: center;
   gap: 2px;
   z-index: 2;
+  margin: 0 0.5rem;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;        /* Firefox */
+}
+.vr-topnav::-webkit-scrollbar { display: none; }
+/* Os dois grupos laterais: `flex: 1 1 0` divide a sobra em partes iguais, e o
+   `min-width: auto` (padrão do flex) impede que qualquer um encolha abaixo do
+   próprio conteúdo — é o que garante que os controles da direita nunca sejam
+   espremidos para dar lugar ao nav. */
+.app-topbar .topbar-menu > div.d-flex { order: 0; flex: 1 1 0; }
+.app-topbar .topbar-menu > div.d-flex:last-of-type {
+  order: 2;
+  justify-content: flex-end;
 }
 /* Links simples do nav central (opção A) */
 .vr-topnav a {
@@ -677,27 +702,24 @@ body.vr-nav-pinned .vr-pin-btn {
   box-shadow: inset 0 0 0 1px var(--vr-card-border);
 }
 
-/* Janela estreita: o nav central deixa de ser absoluto (centrado na página) e
-   entra no fluxo flex ENTRE o grupo do logo e os controles da direita — pode
-   encolher (min-width: 0) e rolar na horizontal sem scrollbar visível, então
-   nunca sobrepõe o sino/tema/idioma/usuário. Acima de 1500px o layout
-   original (centralização absoluta perfeita) continua igual; abaixo de 992px
-   o nav já era escondido pelo d-lg-flex. */
-@media (max-width: 1499.98px) {
-  .vr-topnav {
-    position: static;
-    transform: none;
-    order: 1;
-    flex: 1 1 auto;
-    min-width: 0;
-    justify-content: center;
-    overflow-x: auto;
-    scrollbar-width: none;        /* Firefox */
-    margin: 0 0.5rem;
-  }
-  .vr-topnav::-webkit-scrollbar { display: none; }
-  .app-topbar .topbar-menu > div.d-flex { order: 0; }              /* logo/menu */
-  .app-topbar .topbar-menu > div.d-flex:last-of-type { order: 2; } /* controles */
+/* Telas menores: o atalho ENCOLHE antes de rolar. Rolar é o fundo do poço — o
+   nav não tem scrollbar visível, então o atalho que sai da vista some sem dizer
+   que está lá. Dois degraus de tipografia/padding compram largura suficiente
+   para os 10 atalhos caberem em telas de trabalho comuns (~1440px) antes disso.
+   Abaixo de 992px o nav já é escondido pelo `d-lg-flex` e a navegação inteira
+   passa a ser o drawer. */
+@media (max-width: 1699.98px) {
+  .vr-topnav a { padding: 0.45rem 0.7rem; font-size: 0.85rem; }
+  .vr-topnav { margin: 0 0.35rem; }
+}
+@media (max-width: 1399.98px) {
+  .vr-topnav a { padding: 0.4rem 0.5rem; font-size: 0.8rem; }
+  .vr-topnav { gap: 0; margin: 0 0.25rem; }
+  /* O nome do usuário sai; o avatar (que é o alvo do clique) fica. São ~90px
+     devolvidos ao nav, e o menu continua inteiro dentro do dropdown. */
+  .app-topbar #simple-user-dropdown .dropdown-toggle > .d-lg-flex { display: none !important; }
+  .app-topbar .topbar-menu { padding-inline: 0.6rem; }
+  .app-topbar { margin-inline: 12px !important; }
 }
 
 /* Botão de personalizar os atalhos do nav central */

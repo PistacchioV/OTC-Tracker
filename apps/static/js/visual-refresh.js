@@ -365,7 +365,7 @@
     if (!nav) return;
     var SID = (nav.getAttribute("data-sid") || "").trim().toUpperCase();
     var KEY = "otc_topnav_" + (SID || "anon");
-    var MAX = 8;   // atalhos customizados por usuário no topo
+    var MAX = 10;  // atalhos customizados por usuário no topo (era 7, depois 8)
     var DEFAULTS = ["/dashboard", "/live-position-ndf", "/pending-confirmation", "/reconciliation-payrec", "/reference-data"];
     var allowed = null; // {href:1} ou null = tudo liberado
 
@@ -507,9 +507,11 @@
       document.body.appendChild(backdrop);
       document.body.appendChild(panel);
 
-      // O número do texto vem SEMPRE do MAX daqui. A tradução é buscada sem
-      // cache-busting, então o JSON do navegador pode estar com o limite antigo
-      // (era 7): troca-se o placeholder e, se vier um número fixo, ele também.
+      // O número do texto vem SEMPRE do MAX daqui — as três traduções trazem o
+      // placeholder `{max}`, e nenhuma delas repete o limite. A tradução é
+      // buscada sem cache-busting, então o JSON que o navegador tem em cache
+      // pode ser de uma versão que ainda cravava o número: troca-se o
+      // placeholder e, se vier um número fixo, ele também.
       function fixHintMax() {
         var h = panel.querySelector(".vr-navcfg__hint");
         if (h) h.textContent = h.textContent.replace(/\{max\}/g, MAX).replace(/\b\d+\b/, MAX);
