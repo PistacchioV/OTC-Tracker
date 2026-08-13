@@ -4278,9 +4278,21 @@ def _build_daily_metric_eml(ref, to_list, cc_list, bcc_list):
                                       ref.strftime('%Y-%m-%d'), totals['total'])
         recent_m = monthly[-13:]
         month_bars = _pc_bar_series(recent_m, 'period', _fmt_month_lbl)
-        day_bars = _pc_bar_series(daily, 'date', _fmt_day_lbl)
+        # O gráfico do dia é do MÊS CORRENTE, como o título diz. A série de
+        # história vem inteira do disco e ia inteira para o gráfico: com dois
+        # meses de snapshot ele já mostrava 01/07 ao lado de 12/08 — e o rótulo
+        # `dd/mm` esconde isso, porque as barras continuam parecendo uma sequência.
+        # O corte é pelo mês do `ref` (não pelo de hoje), que é o mês que o e-mail
+        # inteiro reporta.
+        mes_ref = ref.strftime('%Y-%m')
+        daily_mes = [d for d in daily if str(d.get('date', '')).startswith(mes_ref)]
+        day_bars = _pc_bar_series(daily_mes, 'date', _fmt_day_lbl)
         latest_m = monthly[-1] if monthly else {}
         prev_m = monthly[-2] if len(monthly) >= 2 else {}
+        # O cartão e o `pct` continuam saindo da série COMPLETA: dia-sobre-dia no
+        # dia 1º compara com o último dia do mês anterior, que é o dia anterior de
+        # verdade. Medir dentro do recorte deixaria o primeiro e-mail do mês sem
+        # variação nenhuma.
         latest_d = daily[-1] if daily else {}
 
         # Header gradient: always the inline cid: attachment (_attach_email_gradient
