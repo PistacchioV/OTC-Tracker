@@ -35,6 +35,7 @@ para um diretório temporário e nada de rede é chamado.
 import io
 import json
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -284,8 +285,13 @@ check('a linha da GEM sai do batimento', 'D9' in chaves, False)
 check('   e a da B3 que dependia dela vira Unmatched B3',
       [r['Status'] for r in rows if r['Combinação de operações'] == 'D1'], ['Unmatched B3'])
 check('   a operação de cliente continua na recon', 'X1' in chaves, True)
+# Os avisos são ESTRUTURADOS (`{code, params}`) e não a frase pronta: a frase é
+# montada na tela, no idioma da aplicação. Com a frase escrita no servidor, o
+# painel saía em português com o app em inglês.
 check('   e o corte é avisado, não silencioso',
-      any('Disregard' in a for a in avisos), True)
+      [a['code'] for a in avisos], ['cut_cpty'])
+check('   com o número de linhas no aviso (as DUAS da GEM)',
+      [a['n'] for a in avisos], [2])
 
 # Pontuação diferente é o MESMO nome: o cadastro escreve 'S.A.' e o arquivo pode
 # vir 'S.A' — comparar o texto literal casaria silenciosamente nada.
@@ -344,7 +350,7 @@ chaves = sorted(r['Combinação de operações'] for r in rows)
 check('os três critérios juntos tiram a linha', 'B2' in chaves, False)
 check('   a que casa só em parte da regra fica', 'B3' in chaves, True)
 check('   e o corte é avisado, não silencioso',
-      any('cadastro' in a.lower() for a in avisos), True)
+      [a['code'] for a in avisos], ['cut_rows'])
 
 # UM critério só: sai tudo que tem aquele valor naquela coluna.
 write_map('fxo-book-disregard', [{'COLUMN 1': 'INT_EXT', 'VALUE 1': 'INTERBOOK'}])
@@ -402,7 +408,8 @@ rows, _c, avisos = run(
     [at_row(DealID='C2', INT_EXT='INTERBOOK')])
 check('coluna inexistente pula a regra inteira', [r['Status'] for r in rows], ['Matched'])
 check('   e o painel diz qual coluna faltou',
-      any('ColunaQueNaoExiste' in a for a in avisos), True)
+      [(a['code'], a['cols']) for a in avisos],
+      [('rule_missing_cols', 'ColunaQueNaoExiste')])
 
 # O nome da coluna cadastrada é casado pela forma normalizada: `INT EXT` acha a
 # `INT_EXT` do arquivo.
@@ -559,6 +566,19 @@ check('apagado o comentário, o status volta',
 check('o `_status` fica FORA das colunas da tela', R.STATUS_RAW_KEY in R.COLUMNS, False)
 check('a coluna do comentário vem logo depois do Status',
       R.COLUMNS[:2], ['Status', R.COMMENT_COLUMN])
+
+# Todo aviso que o servidor emite precisa de chave nos TRÊS idiomas do
+# `_TRANS` da página: sem ela o painel imprime o nome da chave (`w_cut_rows`) no
+# lugar da frase, sem erro nenhum. A lista de códigos sai do próprio recon_fxo.
+_pag = io.open(os.path.join(ROOT, 'apps/templates/pages/reconciliation-fxo.html'),
+               encoding='utf-8').read()
+_codigos = sorted(set(re.findall(r"'code':\s*'([a-z_]+)'",
+                                 io.open(os.path.join(ROOT, 'apps/pages/recon_fxo.py'),
+                                         encoding='utf-8').read())))
+check('o servidor emite os sete avisos conhecidos', len(_codigos), 7)
+_faltando = [c for c in _codigos
+             if _pag.count('w_%s:' % c) != 3]
+check('   e cada um tem chave nos três idiomas', _faltando, [])
 
 print('\n== 7. o contrato com a página ==')
 check('a primeira coluna é o Status', R.COLUMNS[0], 'Status')

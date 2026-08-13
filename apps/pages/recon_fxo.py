@@ -37,6 +37,12 @@ e SÓ quando aquele MatchingDealID existe do lado da B3. O MatchingDealID é o
 identificador da perna do outro lado, e o que não tem registro da CETIP
 correspondente é descartado antes do merge: entrando, viraria um `Unmatched
 Athena` fantasma, a mesma operação repetida pela chave da perna oposta.
+
+Os `warnings` do payload são ESTRUTURADOS — `{'code': ..., parâmetros}` —, e não
+a frase pronta. A frase é montada na tela, no idioma da aplicação; um texto já
+escrito aqui apareceria em português para quem está com o app em inglês, que foi
+exatamente o que aconteceu. Resultados em cache guardam o que era frase, então a
+tela aceita os dois formatos e imprime a string legada como veio.
 """
 
 import io
@@ -514,10 +520,9 @@ def _book_disregard_mask(df_at):
     for regra in regras:
         ausentes = [col for col, _v in regra if _nome_cru(col) not in por_norm]
         if ausentes:
-            avisos.append('O relatório da Athena veio sem a(s) coluna(s) %s — a regra '
-                          'cadastrada (%s) não pôde ser aplicada.'
-                          % (' / '.join(ausentes),
-                             ' + '.join('%s = %s' % (c, v) for c, v in regra)))
+            avisos.append({'code': 'rule_missing_cols',
+                           'cols': ' / '.join(ausentes),
+                           'rule': ' + '.join('%s = %s' % (c, v) for c, v in regra)})
             continue
         casa = pd.Series(True, index=df_at.index)
         for col, alvo in regra:
@@ -922,8 +927,7 @@ def reconcile(df_dp, df_at):
 
     mapa_cnpj = lookup_cnpj()
     if not mapa_cnpj:
-        avisos.append('O Reference Data não devolveu nenhum Tax ID — a coluna Ctpty '
-                      'vai comparar pelo nome simplificado dos dois lados.')
+        avisos.append({'code': 'no_taxid'})
     diretas, espelhadas = internal_cpty_rules()
 
     cols_bloco = list(df_dp.columns[IDX_BLOCO_FIXING_INI:IDX_BLOCO_FIXING_FIM + 1])
@@ -945,8 +949,7 @@ def reconcile(df_dp, df_at):
     df_anc = df_dp[cond_conta & cond_classe].copy()
 
     if df_anc.empty:
-        avisos.append('Nenhuma linha de opção de câmbio na conta %s — confira a data.'
-                      % FILTRO_PARTE_CONTA)
+        avisos.append({'code': 'empty_anchor', 'account': FILTRO_PARTE_CONTA})
 
     chave_dp = df_anc[COL_DP_CHAVE].apply(norm_txt)
     df_anc['_chave_norm'] = chave_dp.values
@@ -966,9 +969,8 @@ def reconcile(df_dp, df_at):
     if ignorados:
         cols_cpty = [c for c in COLS_AT_CPTY_DISREGARD if c in df_at.columns]
         if not cols_cpty:
-            avisos.append('O relatório da Athena veio sem as colunas %s — as '
-                          'contrapartes marcadas como Disregard não puderam ser '
-                          'retiradas.' % ' / '.join(COLS_AT_CPTY_DISREGARD))
+            avisos.append({'code': 'cpty_missing_cols',
+                           'cols': ' / '.join(COLS_AT_CPTY_DISREGARD)})
         else:
             fora = pd.Series(False, index=df_at.index)
             for c in cols_cpty:
@@ -976,9 +978,7 @@ def reconcile(df_dp, df_at):
             n_fora = int(fora.sum())
             if n_fora:
                 df_at = df_at[~fora].copy()
-                avisos.append('%d linha(s) da Athena ficaram fora do batimento por '
-                              'cadastro (Mapping › FXO Recon — Internal Counterparty, '
-                              'coluna USE = Disregard).' % n_fora)
+                avisos.append({'code': 'cut_cpty', 'n': n_fora})
 
     # E as pernas cadastradas por BOOK (`fxo-book-disregard`) saem no mesmo
     # ponto, e pela mesma razão: é a perna interbook que não tem registro na
@@ -991,9 +991,7 @@ def reconcile(df_dp, df_at):
         n_fora = int(fora_book.sum())
         if n_fora:
             df_at = df_at[~fora_book].copy()
-            avisos.append('%d linha(s) da Athena ficaram fora do batimento por '
-                          'cadastro de book (Mapping › FXO Recon — Athena Books to '
-                          'Disregard).' % n_fora)
+            avisos.append({'code': 'cut_rows', 'n': n_fora})
 
     # OUTER, e não LEFT: o left só enxergava a B3 sem par na Athena. A operação
     # que existe SÓ na Athena simplesmente não aparecia na tela — e é uma quebra
@@ -1036,9 +1034,7 @@ def reconcile(df_dp, df_at):
     try:
         ctx['col_spn_at'] = col_at('MatchingCounterpartySPN')
     except KeyError:
-        avisos.append('O relatório da Athena veio sem a coluna '
-                      'MatchingCounterpartySPN — a contraparte segue pela regra '
-                      'anterior (nome), sem o SPN.')
+        avisos.append({'code': 'no_match_spn'})
 
     saida = pd.DataFrame()
     saida['Código IF'] = df_final[col_dp(COL_DP_CODIGO_IF)].values

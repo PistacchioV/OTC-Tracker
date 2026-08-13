@@ -512,7 +512,14 @@
               notFoundX: 'Use <b>Manual Upload</b> if you already have the files.',
               runFailT: 'Could not reconcile', runFailX: 'Unknown error.',
               doneT: 'Reconciliation complete', callFailT: 'Request failed',
-              trades: 'trades' },
+              trades: 'trades',
+              w_rule_missing_cols: 'The Athena report came without the column(s) {cols} — the registered rule ({rule}) could not be applied.',
+              w_no_taxid: 'Reference Data returned no Tax ID — the Ctpty column will compare by simplified name on both sides.',
+              w_empty_anchor: 'No FX option row in account {account} — check the date.',
+              w_cpty_missing_cols: 'The Athena report came without the columns {cols} — counterparties marked Disregard could not be removed.',
+              w_cut_cpty: '{n} Athena row(s) left the match by registry (Mapping › FXO Recon — Internal Counterparty, USE = Disregard).',
+              w_cut_rows: '{n} Athena row(s) left the match by registry (Mapping › FXO Recon — Athena Rows to Disregard).',
+              w_no_match_spn: 'The Athena report came without the MatchingCounterpartySPN column — the counterparty follows the previous rule (name), without the SPN.' },
         br: { editComment: 'Comentário', save: 'Salvar', cancel: 'Cancelar',
               commentPh: 'Por que esta linha não casa?',
               saveFail: 'Não foi possível gravar o comentário', copied: 'Copiado',
@@ -524,7 +531,14 @@
               notFoundX: 'Use o <b>Manual Upload</b> se você já tem os arquivos.',
               runFailT: 'Não foi possível reconciliar', runFailX: 'Erro desconhecido.',
               doneT: 'Reconciliação concluída', callFailT: 'Falha na chamada',
-              trades: 'operações' },
+              trades: 'operações',
+              w_rule_missing_cols: 'O relatório da Athena veio sem a(s) coluna(s) {cols} — a regra cadastrada ({rule}) não pôde ser aplicada.',
+              w_no_taxid: 'O Reference Data não devolveu nenhum Tax ID — a coluna Ctpty vai comparar pelo nome simplificado dos dois lados.',
+              w_empty_anchor: 'Nenhuma linha de opção de câmbio na conta {account} — confira a data.',
+              w_cpty_missing_cols: 'O relatório da Athena veio sem as colunas {cols} — as contrapartes marcadas como Disregard não puderam ser retiradas.',
+              w_cut_cpty: '{n} linha(s) da Athena ficaram fora do batimento por cadastro (Mapping › FXO Recon — Internal Counterparty, coluna USE = Disregard).',
+              w_cut_rows: '{n} linha(s) da Athena ficaram fora do batimento por cadastro (Mapping › FXO Recon — Athena Rows to Disregard).',
+              w_no_match_spn: 'O relatório da Athena veio sem a coluna MatchingCounterpartySPN — a contraparte segue pela regra anterior (nome), sem o SPN.' },
         es: { editComment: 'Comentario', save: 'Guardar', cancel: 'Cancelar',
               commentPh: '¿Por qué esta línea no coincide?',
               saveFail: 'No se pudo guardar el comentario', copied: 'Copiado',
@@ -536,9 +550,31 @@
               notFoundX: 'Use <b>Manual Upload</b> si ya tiene los archivos.',
               runFailT: 'No se pudo conciliar', runFailX: 'Error desconocido.',
               doneT: 'Conciliación concluida', callFailT: 'Fallo en la llamada',
-              trades: 'operaciones' }
+              trades: 'operaciones',
+              w_rule_missing_cols: 'El informe de Athena vino sin la(s) columna(s) {cols} — la regla registrada ({rule}) no pudo aplicarse.',
+              w_no_taxid: 'Reference Data no devolvió ningún Tax ID — la columna Ctpty comparará por el nombre simplificado de ambos lados.',
+              w_empty_anchor: 'Ninguna fila de opción de cambio en la cuenta {account} — verifique la fecha.',
+              w_cpty_missing_cols: 'El informe de Athena vino sin las columnas {cols} — las contrapartes marcadas como Disregard no pudieron retirarse.',
+              w_cut_cpty: '{n} fila(s) de Athena quedaron fuera del cotejo por registro (Mapping › FXO Recon — Internal Counterparty, columna USE = Disregard).',
+              w_cut_rows: '{n} fila(s) de Athena quedaron fuera del cotejo por registro (Mapping › FXO Recon — Athena Rows to Disregard).',
+              w_no_match_spn: 'El informe de Athena vino sin la columna MatchingCounterpartySPN — la contraparte sigue por la regla anterior (nombre), sin el SPN.' }
     };
-    function t(k) { return (_TRANS[LANG] || _TRANS.en)[k] || _TRANS.en[k] || k; }
+    function t(k, vars) {
+        var s = (_TRANS[LANG] || _TRANS.en)[k] || _TRANS.en[k] || k;
+        if (vars) Object.keys(vars).forEach(function (v) { s = s.split('{' + v + '}').join(vars[v]); });
+        return s;
+    }
+
+    // O servidor manda os avisos ESTRUTURADOS (`{code, parâmetros}`) e a frase é
+    // montada aqui, no idioma da aplicação — frase pronta do servidor aparecia em
+    // português para quem está com o app em inglês. Resultado em CACHE guarda o
+    // que era string: ela é impressa como veio, senão a recon de uma data já
+    // rodada perderia os avisos dela.
+    function warnText(w) {
+        if (typeof w === 'string') return esc(w);
+        if (!w || !w.code) return '';
+        return esc(t('w_' + w.code, w));
+    }
 
     // O resumo do alerta de conclusão é montado AQUI, a partir de `counts`, e não
     // do `meta` que o servidor manda: `meta` é uma FRASE já escrita, e frase
@@ -847,7 +883,7 @@
         var warn = $('#fxo-warnings');
         if ((payload.warnings || []).length) {
             warn.removeClass('d-none').html(payload.warnings.map(function (w) {
-                return '<div>' + w + '</div>';
+                return '<div>' + warnText(w) + '</div>';
             }).join(''));
         } else {
             warn.addClass('d-none').empty();
@@ -1005,7 +1041,7 @@
             var blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
             var link = document.createElement('a');
             link.href = URL.createObjectURL(blob);
-            link.download = 'recon-fxo.csv';
+            link.download = nomeArquivo() + '.csv';
             link.click();
             URL.revokeObjectURL(link.href);
         });
@@ -1035,6 +1071,21 @@
         // que a página abriu.
         function titulo() { return 'Recon FXO ' + ($('#fxo-date').val() || ''); }
 
+        // O NOME DO ARQUIVO segue o padrão do app — o título da página —, que é o
+        // default do DataTables quando ninguém mexe (`filename: '*'`). Aqui ele
+        // precisa ser escrito de propósito: vendo `filename: '*'` ao lado de um
+        // `title` PRÓPRIO (a recon põe a data no cabeçalho do documento), o
+        // Buttons passa a usar o título como nome, e o arquivo saía
+        // `Recon FXO 2026-08-13.xlsx` em vez do padrão. Devolvendo '*' de dentro
+        // de uma função, quem resolve o coringa continua sendo o Buttons.
+        function nomeExport() { return '*'; }
+        // O CSV é montado à mão logo acima, então ele aplica a regra sozinho: o
+        // mesmo título e a mesma limpeza de caracteres que o Buttons faz.
+        function nomeArquivo() {
+            return (document.title || 'export')
+                .replace(/[^a-zA-Z0-9_\u00A1-\uFFFF\.,\-_ !\(\)]/g, '').trim();
+        }
+
         // O Buttons é criado SOB DEMANDA e amarrado à instância atual da tabela.
         // `buildTable` destrói e recria a DataTable quando as colunas chegam do
         // servidor, e um Buttons preso à instância anterior morre junto — sem
@@ -1045,10 +1096,10 @@
             if (btns) { try { btns.destroy(); } catch (e) {} }
             btns = new $.fn.dataTable.Buttons(table, {
                 buttons: [
-                    { extend: 'excel', title: titulo, filename: 'recon-fxo', exportOptions: expOpts },
+                    { extend: 'excel', title: titulo, filename: nomeExport, exportOptions: expOpts },
                     { extend: 'print', title: titulo, exportOptions: expOpts },
                     // A recon tem ~38 colunas: retrato cortaria a tabela em silêncio.
-                    { extend: 'pdf', title: titulo, filename: 'recon-fxo',
+                    { extend: 'pdf', title: titulo, filename: nomeExport,
                       orientation: 'landscape', pageSize: 'A3', exportOptions: expOpts,
                       customize: function (doc) {
                           doc.defaultStyle.fontSize = 6;
