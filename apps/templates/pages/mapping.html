@@ -334,8 +334,23 @@
     }
 
     // ── Rail esquerdo ────────────────────────────────────────────────────────
+    // A lista sai ordenada A→Z pelo rótulo QUE ESTÁ NA TELA, não pelo texto em
+    // inglês do TYPES: quem procura "Moeda Base" com a aplicação em português
+    // procura no M. Como o `applyLang` rechama o `buildRail` quando as traduções
+    // chegam, a ordem se acerta sozinha nos três idiomas.
+    //
+    // A ordenação é só da EXIBIÇÃO — `TYPES` não é tocado. Ele é a ordem de
+    // carga (`TYPES.forEach(load)`) e, sobretudo, `TYPES[0]` é o mapping que a
+    // página abre: ordenar o array trocaria a aba inicial sem ninguém pedir.
+    function railOrder() {
+        return TYPES.slice().sort(function (a, b) {
+            return t(a.lang, a.label).localeCompare(t(b.lang, b.label), undefined,
+                                                   { sensitivity: 'base' });
+        });
+    }
+
     function buildRail() {
-        document.getElementById('mapTypeList').innerHTML = TYPES.map(function (tp) {
+        document.getElementById('mapTypeList').innerHTML = railOrder().map(function (tp) {
             var n = STATE[tp.key] ? STATE[tp.key].rows.length : '…';
             return '<a class="map-type-item' + (tp.key === CUR ? ' is-active' : '') + '" data-key="' + tp.key + '">' +
                 '<i class="ti ' + tp.icon + ' map-type-ico"></i>' +
