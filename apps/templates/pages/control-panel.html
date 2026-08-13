@@ -115,6 +115,12 @@
 }
 .cp-cal-btn:hover { background-color: rgba(0,102,204,.10); color: var(--cp-blue); }
 .cp-cal-btn i { font-size: 1rem; }
+/* Ajuda de um campo — o que a escolha muda. Fica sob o campo, não na descrição
+   do card: a regra é do CAMPO (data de hoje × data anterior). */
+.cp-field__hint {
+    display: block; margin-top: .4rem;
+    font-size: .72rem; line-height: 1.45; color: var(--cp-faint);
+}
 
 /* Dropzone (Daily Settlement files) */
 .cp-dropzone {
@@ -243,6 +249,24 @@
    align-items:stretch makes both cards in a wrapped row equal height. */
 .cp-cards .cp-reveal { flex: 1; display: flex; }
 .cp-cards .cp-reveal > .cp-card { width: 100%; }
+/* O card das métricas de Pending é o mais curto do painel e dividia a linha com
+   o Confirmations Escalation, que carrega SETE listas de destinatário: esticado
+   à altura do vizinho, ele virava meia tela de branco. Passa a medir metade
+   dele — `height: 50%` resolve contra a coluna, que o flex já esticou à altura
+   da linha, ou seja, à do card mais alto.
+   Duas travas: `min-height: fit-content` (o piso de 480px e o corte do botão Run
+   ficam de fora — se o conteúdo não couber em 50%, o card cresce) e
+   `align-self: flex-start`, que é para onde o layout cai se a percentagem não
+   resolver: card do tamanho do conteúdo, nunca esticado de volta.
+   Só de `lg` para cima: abaixo disso a linha empilha (col-12) e "metade do
+   vizinho" deixa de querer dizer alguma coisa. */
+@media (min-width: 992px) {
+    .cp-cards .cp-reveal > .cp-card[data-cp-card="pendingspreadsheet"] {
+        height: 50%;
+        min-height: fit-content;
+        align-self: flex-start;
+    }
+}
 
 /* ── Nova realce (eyebrow em gradiente, ícones em gradiente, reveal +) ── */
 .cp-sec-label {
@@ -629,12 +653,34 @@
                          linha de log no servidor. -->
                     <div id="cp-pcx-status" class="cp-card__meta d-none"
                          style="display:block;margin-top:.35rem;line-height:1.5;"></div>
+                    <!-- Data de referência: hoje é a rotina de sempre (situação
+                         viva dos DBs); uma data anterior monta a planilha a
+                         partir do snapshot daquele dia e grava no MESMO arquivo
+                         do share — é assim que o time global puxa uma data
+                         anterior, pelo caminho de sempre. A próxima corrida
+                         devolve o arquivo à data corrente, e até lá o status
+                         acima diz que foto está lá. -->
+                    <div class="cp-field">
+                        <label data-lang="cp-ref-date">Reference date</label>
+                        <div class="cp-datefield" id="cpPcxDateWrap" data-default-today>
+                            <input type="text" id="cp-pcx-date" data-input readonly
+                                   class="form-control form-control-sm" placeholder="dd/mm/aaaa">
+                            <a class="cp-cal-btn" data-toggle title="Open calendar"><i class="ti ti-calendar"></i></a>
+                        </div>
+                        <span class="cp-field__hint" data-lang="cp-pcx-datehint">
+                            Today saves the current situation. An earlier date rebuilds the
+                            spreadsheet from that day's pending snapshot and overwrites the same
+                            file on the share, so the global team can pull it from the usual path —
+                            run it again with today's date to put the file back.
+                        </span>
+                    </div>
                     <div class="cp-card__foot">
                         <span class="cp-card__meta">
                             <i class="ti ti-calendar-time"></i><span data-lang="cp-pcx-meta">Daily 10:45 BRT → .xlsx on share</span>
                         </span>
                         <button type="button" class="cp-run-btn"
-                                data-endpoint="/api/control-panel/pending-spreadsheet/run">
+                                data-endpoint="/api/control-panel/pending-spreadsheet/run"
+                                data-date-input="cp-pcx-date">
                             <i class="ti ti-player-play"></i>
                             <span data-lang="cp-run">Run</span>
                         </button>
@@ -1329,6 +1375,15 @@ document.addEventListener('click', function (e) {
                         bits.push('<span class="text-success"><i class="ti ti-file-check me-1"></i>' +
                                   esc(last.at || last.slot || '') + ' · ' + m[1] + ' ' +
                                   esc(t('cp-pcx-rows-saved', 'row(s) saved')) + '</span>');
+                        // A planilha histórica sobrescreve o MESMO arquivo do
+                        // share. Esta linha é a única coisa que diz que o que
+                        // está lá agora não é a foto de hoje — ela some sozinha
+                        // na próxima gravação normal.
+                        if (last.ref) {
+                            bits.push('<span class="text-warning"><i class="ti ti-history me-1"></i>' +
+                                      esc(t('cp-pcx-refnote', 'the file on the share currently holds the snapshot of')) +
+                                      ' ' + esc(last.ref) + '</span>');
+                        }
                     } else {
                         bits.push('<span class="text-danger"><i class="ti ti-alert-triangle me-1"></i>' +
                                   esc(last.at || last.slot || '') + ' · ' +
@@ -1586,10 +1641,15 @@ document.addEventListener('click', function (e) {
     var _iso = '{{ cetip_default_date }}'.split('-');
     var _def = _iso.length === 3 ? new Date(+_iso[0], +_iso[1] - 1, +_iso[2]) : null;
     document.querySelectorAll('.cp-datefield:not([data-fixed])').forEach(function (wrap) {
+        // O padrão do painel é D-1 ANBIMA (as rotinas fecham o dia anterior). O
+        // campo marcado data-default-today nasce em HOJE e não deixa escolher o
+        // futuro: ele seleciona a FOTO de um dia, e amanhã não tem foto.
+        var today = wrap.hasAttribute('data-default-today');
         flatpickr(wrap, {
             wrap: true,             // <input data-input> + <a data-toggle> (the icon)
             dateFormat: 'd/m/Y',    // visible/stored value as dd/mm/yyyy
-            defaultDate: _def,      // local Date — no timezone shift
+            defaultDate: today ? new Date() : _def,   // local Date — no timezone shift
+            maxDate: today ? new Date() : null,
             allowInput: false,
             disableMobile: true
         });

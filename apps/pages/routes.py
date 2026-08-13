@@ -28228,6 +28228,53 @@ def _pcx_rows():
     return rows
 
 
+class _PcxNoSnapshot(Exception):
+    """Não existe foto do Pending daquele dia. Carrega o caminho procurado — a
+    mensagem tem de dizer ONDE se procurou, senão "sem snapshot" é indistinguível
+    de "a data está errada"."""
+
+    def __init__(self, path, ref):
+        super().__init__(path)
+        self.path = path
+        self.ref = ref
+
+
+def _pcx_snapshot_path(d):
+    """A foto diária do Pending Confirmation daquele dia
+    (`cache/pending-confirmation/AAAA/MM/DD/pending-confirmation_AAAAMMDD.json`),
+    gravada pela manutenção das 11:30 (`_pc_snapshot_pending`)."""
+    # normpath porque este caminho VAI PARA A TELA quando o snapshot não existe,
+    # e `.../pages/../static/...` faz quem lê procurar a pasta errada.
+    return os.path.normpath(
+        os.path.join(_PC_SNAPSHOT_DIR, d.strftime('%Y'), d.strftime('%m'),
+                     d.strftime('%d'),
+                     'pending-confirmation_{}.json'.format(d.strftime('%Y%m%d'))))
+
+
+def _pcx_rows_at(ref):
+    """As linhas Pending de `ref` — sem data, as de hoje; com data, as do snapshot.
+
+    Duas coisas que não dão erro nenhum se forem esquecidas:
+
+      * o snapshot **não** passa por `_pc_target_category`. Ele já É o balde
+        `pending` daquele dia; recomputar a categoria usaria o calendário de HOJE
+        (aging, vencimento) e devolveria a situação atual de linhas antigas —
+        exatamente o que a data de referência existe para não fazer;
+      * snapshot ausente é ERRO, nunca queda para os dados de hoje. Uma planilha
+        com o nome de 12/08 e o conteúdo de 13/08 é pior que planilha nenhuma:
+        ninguém tem como perceber pelo arquivo.
+    """
+    if ref is None:
+        return _pcx_rows()
+    path = _pcx_snapshot_path(ref)
+    try:
+        with open(path, encoding='utf-8') as fh:
+            rows = json.load(fh)
+    except (IOError, OSError, json.JSONDecodeError):
+        raise _PcxNoSnapshot(path, ref)
+    return [r for r in rows if isinstance(r, dict)] if isinstance(rows, list) else []
+
+
 def _pcx_build_xlsx(rows):
     """Workbook openpyxl no layout combinado com o time global, linha a linha.
 
@@ -28282,12 +28329,24 @@ def _pcx_build_xlsx(rows):
     return wb
 
 
-def _pcx_save_spreadsheet():
-    """Gera e grava (sobrescrevendo) a planilha no share. → (n linhas, caminho).
+def _pcx_save_spreadsheet(ref=None):
+    """Gera e grava a planilha no share. → (n linhas, caminho).
 
     A escrita é em arquivo temporário + `os.replace`: quem abrir a planilha no
-    meio da gravação vê a versão anterior inteira, nunca um xlsx pela metade."""
-    rows = _pcx_rows()
+    meio da gravação vê a versão anterior inteira, nunca um xlsx pela metade.
+
+    **Sempre o nome canônico**, com ou sem `ref` — é assim de propósito. O time
+    global de métricas lê ESSE arquivo por OLEDB (`Confirmation_Latam`), e é por
+    ele que a mesa entrega uma data anterior quando pedem: grava-se a foto do dia
+    pedido, o time puxa, e a próxima corrida (o Run de hoje ou a rotina das 10:45)
+    devolve o arquivo à data corrente. Um arquivo datado ao lado não seria visto
+    por quem consome — o consumidor tem um caminho só.
+
+    O preço é que, entre uma coisa e outra, o arquivo do share contém a foto de
+    outro dia. Quem diz isso é o **status do card** (`ref` no
+    `_pcx_status_write`): sem essa marca, nada na tela distinguiria o arquivo de
+    hoje do de 08/08."""
+    rows = _pcx_rows_at(ref)
     wb = _pcx_build_xlsx(rows)
     os.makedirs(_PCX_DIR, exist_ok=True)
     fp = os.path.join(_PCX_DIR, _PCX_FILENAME)
@@ -28360,12 +28419,20 @@ def _pcx_release_slot(slot):
                         slot, traceback.format_exc())
 
 
-def _pcx_status_write(slot, result, when):
+def _pcx_status_write(slot, result, when, ref=None):
+    """Desfecho da última gravação. `ref` é a data da FOTO que está no arquivo
+    agora — vazia quando é a situação corrente.
+
+    Como a planilha histórica sobrescreve o nome canônico, esta é a única coisa
+    que responde "o que está no share neste momento?". O arquivo é reescrito
+    inteiro a cada gravação, então a marca cai sozinha na próxima corrida
+    normal — que é exatamente o comportamento desejado."""
     try:
         os.makedirs(_DAILY_METRIC_DIR, exist_ok=True)
         _atomic_write_json(_PCX_STATUS_FILE, {
             'slot': slot, 'result': result,
             'at': when.strftime('%d/%m/%Y %H:%M:%S'),
+            'ref': ref.strftime('%d/%m/%Y') if ref else '',
         })
     except Exception:                                       # noqa: BLE001
         log.warning('[pending-spreadsheet] não consegui gravar o status:\n%s',
@@ -28440,23 +28507,66 @@ except Exception:
 def api_cp_pcx_run():
     """Gera e grava a planilha AGORA (botão Run do card). Roda mesmo em feriado
     — quem clicou decidiu — e não consome o claim do disparo automático: o
-    arquivo é sobrescrito de qualquer jeito, gravar duas vezes não machuca."""
+    arquivo é sobrescrito de qualquer jeito, gravar duas vezes não machuca.
+
+    O campo Reference date do card manda `date` (AAAA-MM-DD). Hoje (ou vazio) é
+    a rotina de sempre; uma data anterior monta a planilha a partir do snapshot
+    daquele dia e grava com o nome datado (ver `_pcx_save_spreadsheet`)."""
     if not session.get('authenticated'):
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+
+    hoje = _br_now().date()
+    ref = None
+    raw = str((request.get_json(silent=True) or {}).get('date') or '').strip()
+    if raw:
+        d = _parse_date_any(raw)
+        if d is None:
+            return jsonify({'success': False,
+                            'error': 'Invalid reference date: {}.'.format(raw)}), 400
+        if d > hoje:
+            # O snapshot é uma FOTO do passado; não há o que fotografar amanhã.
+            return jsonify({'success': False,
+                            'error': 'Reference date {} is in the future — the pending '
+                                     'snapshot only exists for days that have already '
+                                     'run.'.format(d.strftime('%d/%m/%Y'))}), 400
+        if d < hoje:
+            ref = d
+
     try:
-        n, fp = _pcx_save_spreadsheet()
+        n, fp = _pcx_save_spreadsheet(ref)
+    except _PcxNoSnapshot as e:
+        # 404 e não 500: o pedido está correto, o dia é que não tem foto (o
+        # snapshot começou depois, ou o dia não foi útil). Dizer o caminho
+        # procurado é o que separa "não tem" de "a data está errada".
+        log.warning('[pending-spreadsheet] sem snapshot para %s (%s)',
+                    e.ref.strftime('%Y-%m-%d'), e.path)
+        return jsonify({'success': False,
+                        'error': 'No pending snapshot for {} — nothing was written. '
+                                 'Expected:<br><code>{}</code>'
+                                 .format(e.ref.strftime('%d/%m/%Y'), e.path)}), 404
     except Exception as e:                                  # noqa: BLE001
         log.error('[pending-spreadsheet] run manual falhou:\n%s', traceback.format_exc())
         return jsonify({'success': False,
                         'error': 'Could not save the spreadsheet: {}: {}. Check that the '
                                  'share is reachable and the file is not open in Excel.'
                                  .format(type(e).__name__, e)}), 500
-    _pcx_status_write('manual', 'saved:{}'.format(n), _br_now())
+
+    # O status leva a data da foto: como o arquivo do share é o mesmo, é o card
+    # que responde "o que está lá agora?". A próxima corrida normal reescreve o
+    # status sem `ref` e a marca cai sozinha.
+    _pcx_status_write('manual', 'saved:{}'.format(n), _br_now(), ref)
     _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                          'Pending Spreadsheet Saved', 'Control Panel',
-                         '{} row(s) → {}'.format(n, _PCX_FILENAME))
+                         '{} row(s){} → {}'.format(
+                             n, ' ({})'.format(ref.strftime('%d/%m/%Y')) if ref else '',
+                             _PCX_FILENAME))
     return jsonify({'success': True, 'rows': n, 'path': fp,
-                    'message': '{} row(s) saved to<br><code>{}</code>'.format(n, fp)})
+                    'ref_date': ref.strftime('%d/%m/%Y') if ref else '',
+                    'source': 'snapshot' if ref else 'live',
+                    'message': '{} row(s){} saved to<br><code>{}</code>'.format(
+                        n,
+                        ' from the {} snapshot'.format(ref.strftime('%d/%m/%Y')) if ref else '',
+                        fp)})
 
 
 @blueprint.route('/api/control-panel/pending-spreadsheet/status')

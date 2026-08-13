@@ -1725,6 +1725,8 @@
   "cp-pcx-meta": "Diária 10:45 BRT → .xlsx no share",
   "cp-pcx-rows-saved": "linha(s) gravada(s)",
   "cp-pcx-never": "nenhuma gravação registrada ainda",
+  "cp-pcx-datehint": "Hoje grava a situação corrente. Uma data anterior remonta a planilha a partir do snapshot daquele dia e sobrescreve o MESMO arquivo do share, para o time global puxar pelo caminho de sempre — rode de novo com a data de hoje para devolver o arquivo.",
+  "cp-pcx-refnote": "o arquivo no share está com a foto de",
   "cp-r-ce-title": "Confirmations Escalation",
   "cp-r-ce-desc": "Envia por e-mail as confirmações ainda pendentes de validação no Confirmations Monitor / Track Confirmations. Rotina: segunda e quinta às 17:00 de Brasília (rolando para o próximo dia útil ANBIMA) — um relatório por mesa: OTC Ops (Pending OTC), Sales Support (Pending MO) e um por produto para o Front Office, cada um com a sua lista de destinatários. Escalação: todo dia útil, só o que está no último dia do prazo de MO ou já vencido. Nada pendente, nada enviado. Cada item também pode ser enviado sozinho pelo seu botão Run.",
   "cp-ce-sales-to": "TO — Sales Support",

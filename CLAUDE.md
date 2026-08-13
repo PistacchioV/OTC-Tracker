@@ -969,6 +969,25 @@ escreva um script em `scripts/` para ela.
   a instância reinicia várias vezes ao dia, `_ndm_pending_catch_up()` também
   dispara na subida as janelas já passadas do dia; o arquivo de claim em disco
   é o que impede isso de virar e-mail repetido.
+- **A planilha de Pending de uma data anterior sobrescreve o arquivo de sempre,
+  e isso é intencional.** O card Pending Confirmations Spreadsheet Metrics aceita
+  uma **Reference date** (padrão hoje, futuro bloqueado). Hoje = a rotina de
+  sempre, situação viva dos três DBs. Data anterior monta a planilha do
+  **snapshot** daquele dia (`cache/pending-confirmation/AAAA/MM/DD`, a foto que a
+  manutenção das 11:30 grava) e grava no **mesmo** `PENDING - Outstanding
+  Confirmation OTC.xlsx`: o time global de métricas lê esse caminho por OLEDB
+  (`Confirmation_Latam`) e tem um caminho só — um arquivo datado ao lado não
+  seria visto por quem consome. Pedida a data anterior, grava-se, o time puxa, e
+  a corrida seguinte (Run com a data de hoje, ou a rotina das 10:45) devolve o
+  arquivo. Três regras que não dão erro nenhum se caírem:
+  - o snapshot **não** é refiltrado por `_pc_target_category` — ele já é o balde
+    `pending` daquele dia, e recomputar responderia pelo calendário de hoje;
+  - snapshot ausente é **404**, nunca queda para os dados de hoje: como o nome do
+    arquivo é o mesmo, nada distinguiria a planilha certa da errada;
+  - o **`ref` do `_pcx_status_write`** é o que diz que foto está no share neste
+    momento (linha âmbar no card). Sem ela, o arquivo com dado de 08/08 é
+    indistinguível do de hoje — o preço de reusar o nome canônico. Ela cai
+    sozinha na gravação seguinte, que reescreve o status inteiro.
 - **A API nunca entrega a perna Lawton como deal próprio.** O arquivo visão
   Lawton do registro TER (Other Publisher e FWD Start) sai de um **espelho
   sintetizado no envio** (`_nd_lawton_mirror` → o mesmo

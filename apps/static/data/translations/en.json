@@ -1725,6 +1725,8 @@
   "cp-pcx-meta": "Daily 10:45 BRT → .xlsx on share",
   "cp-pcx-rows-saved": "row(s) saved",
   "cp-pcx-never": "no run recorded yet",
+  "cp-pcx-datehint": "Today saves the current situation. An earlier date rebuilds the spreadsheet from that day's pending snapshot and overwrites the same file on the share, so the global team can pull it from the usual path — run it again with today's date to put the file back.",
+  "cp-pcx-refnote": "the file on the share currently holds the snapshot of",
   "cp-r-ce-title": "Confirmations Escalation",
   "cp-r-ce-desc": "E-mails the confirmations still pending validation on the Confirmations Monitor / Track Confirmations. Routine: Monday and Thursday at 17:00 Brasília (rolled to the next ANBIMA business day) — one report per desk: OTC Ops (Pending OTC), Sales Support (Pending MO) and one per product for the Front Office, each with its own recipient list. Escalation: every business day, only what is on the last day of the MO deadline or already overdue. Nothing pending, no e-mail. Each item can also be sent on its own with its Run button.",
   "cp-ce-sales-to": "TO — Sales Support",
