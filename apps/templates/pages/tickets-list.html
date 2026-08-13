@@ -129,6 +129,23 @@
                         <button class="btn btn-primary" id="tk-new-btn" type="button">
                             <i class="ti ti-plus me-1"></i> <span data-lang="tk-new">New Ticket</span>
                         </button>
+                        <!-- Export no padrão da casa: info bg-gradient, e o conjunto
+                             COMPLETO nesta ordem (Copy · CSV · Excel · Print · PDF).
+                             Exporta o que está NA TELA — busca, filtros e ordenação
+                             aplicados —, todas as páginas, sem a coluna Actions. -->
+                        <div class="dropdown">
+                            <button class="btn btn-info bg-gradient dropdown-toggle" type="button"
+                                    id="tk-export-btn" data-bs-toggle="dropdown">
+                                <i class="ti ti-download me-1"></i><span data-lang="map-export">Export</span>
+                            </button>
+                            <ul class="dropdown-menu">
+                                <li><a class="dropdown-item" href="#" data-tk-export="copy"><i class="ti ti-copy me-1"></i> Copy</a></li>
+                                <li><a class="dropdown-item" href="#" data-tk-export="csv"><i class="ti ti-file-type-csv me-1"></i> CSV</a></li>
+                                <li><a class="dropdown-item" href="#" data-tk-export="excel"><i class="ti ti-file-spreadsheet me-1"></i> Excel</a></li>
+                                <li><a class="dropdown-item" href="#" data-tk-export="print"><i class="ti ti-printer me-1"></i> Print</a></li>
+                                <li><a class="dropdown-item" href="#" data-tk-export="pdf"><i class="ti ti-file-text me-1"></i> PDF</a></li>
+                            </ul>
+                        </div>
                     </div>
                     <div class="d-flex align-items-center gap-2">
                         <span class="me-2 fw-semibold" data-lang="tk-filter-by">Filter By:</span>
@@ -149,10 +166,11 @@
                         <!-- Records Per Page -->
                         <div>
                             <select class="form-select form-control my-1 my-md-0" id="tk-per-page">
-                                <option value="5">5</option>
-                                <option selected value="10">10</option>
-                                <option value="15">15</option>
-                                <option value="20">20</option>
+                                <option selected value="25">25</option>
+                                <option value="50">50</option>
+                                <option value="75">75</option>
+                                <option value="100">100</option>
+                                <option value="all" data-lang="tk-all">All</option>
                             </select>
                         </div>
                     </div>
@@ -176,6 +194,14 @@
                             <tbody class="text-nowrap" id="tk-tbody"></tbody>
                         </table>
                     </div>
+                    <!-- Tabela ESPELHO, só para o export: a tabela da tela é
+                         montada à mão (paginação, ordenação e filtros próprios),
+                         então não há DataTable em que pendurar os Buttons. Ela é
+                         preenchida com o resultado de `filtered()` no clique, o
+                         que garante que o arquivo saia com o que está na tela.
+                         Fora do fluxo por posição, e não `display:none` — o
+                         DataTables precisa medir a tabela para o Print e o PDF. -->
+                    <table id="tk-export-table" class="d-none"><thead><tr></tr></thead><tbody></tbody></table>
                     <div class="tk-empty d-none" id="tk-empty">
                         <i class="ti ti-ticket-off fs-24 d-block mb-2"></i>
                         <span data-lang="tk-none">No tickets yet. Use “New Ticket” to open one.</span>
@@ -196,6 +222,33 @@
 {% block extra_javascript %}
 <script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/table-std.js"></script>
+<!-- O export é o do padrão da casa (DataTables Buttons), mesmo a tabela da tela
+     sendo montada à mão: é o que dá CSV com `;` e BOM, xlsx de verdade (zip),
+     PDF e Print sem reescrever nada disso aqui. -->
+<script src="{{ config.ASSETS_ROOT }}/plugins/jquery/jquery.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.buttons.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/jszip.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/pdfmake.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/vfs_fonts.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.html5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.print.min.js"></script>
+<script>
+// Registro SÍNCRONO do JSZip (mesmo snippet do New Deals): o buttons.html5 expõe
+// $.fn.dataTable.Buttons.jszip() e precisa da referência antes de qualquer
+// $(document).ready() — sem isso o Excel sai desabilitado.
+(function () {
+    var jz = (typeof JSZip !== 'undefined') ? JSZip : undefined;
+    if (!jz) { return; }
+    window.JSZip = jz;
+    if (typeof $ !== 'undefined' && $.fn.dataTable &&
+        $.fn.dataTable.Buttons && typeof $.fn.dataTable.Buttons.jszip === 'function') {
+        $.fn.dataTable.Buttons.jszip(jz);
+    }
+})();
+</script>
 <script>
 // Seleção de célula + Ctrl+C — padrão de TODA tabela do app (CLAUDE.md §3).
 // Skip: Actions (8). Delegado no nó da tabela, sobrevive ao re-render do tbody.
@@ -226,8 +279,11 @@ document.addEventListener('DOMContentLoaded', function () {
     var USERS_ROOT = '{{ config.ASSETS_ROOT }}/images/users/';
     var STATE = { tickets: [], counts: {}, isMaster: false, me: {},
                   statuses: [], priorities: [], agent: 'OTC Tracker Team' };
-    var UI = { q: '', status: '', priority: '', page: 1, perPage: 10,
-               sort: 'seq', dir: 'desc' };
+    // `dir: 'asc'` — a lista abre do PRIMEIRO ticket para o último, na ordem em
+    // que foram abertos. `perPage` casa com o valor marcado no select; mudar um
+    // sem o outro faz a primeira pintura discordar do que o campo mostra.
+    var UI = { q: '', status: '', priority: '', page: 1, perPage: 25,
+               sort: 'seq', dir: 'asc' };
 
     var STATUS_CLASS = {
         'New':         'bg-primary-subtle text-primary',
@@ -578,8 +634,85 @@ document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('tk-filter-priority').addEventListener('change', function () {
         UI.priority = this.value; UI.page = 1; render();
     });
+
+    // ── Export ───────────────────────────────────────────────────────────────
+    // A tabela da tela é montada à mão, então não há DataTable em que pendurar
+    // os Buttons. Em vez de reescrever CSV/xlsx/PDF aqui (xlsx é um zip, o PDF
+    // precisa de layout), o export monta uma tabela ESPELHO invisível com o
+    // resultado de `filtered()` e deixa os Buttons do padrão fazerem o resto.
+    //
+    // O espelho é preenchido A CADA clique: o arquivo tem de sair com a busca, os
+    // filtros e a ordenação que estão na tela — e com TODAS as linhas, não só a
+    // página aberta, que é o que `modifier: {page:'all'}` faz nas demais telas.
+    // A coluna Actions fica de fora (são botões), como em toda exportação do app.
+    // Chave de tradução + rótulo em inglês, na ORDEM das colunas da tela. As
+    // chaves são as mesmas do <thead>, então o cabeçalho do arquivo sai no idioma
+    // da aplicação, como o da tela.
+    var EXPORT_COLS = [
+        ['tk-col-id', 'ID'], ['tk-col-requested', 'Requested By'],
+        ['tk-col-subject', 'Ticket Subject'], ['tk-col-agent', 'Assigned Agent'],
+        ['tk-col-priority', 'Priority'], ['tk-col-status', 'Status'],
+        ['tk-col-created', 'Date Created'], ['tk-col-due', 'Due Date']
+    ];
+    var _xdt = null, _xbtns = null;
+
+    function exportRow(tk) {
+        return ['#' + (tk.id || ''),
+                (tk.requester_name || tk.requester_sid || '') +
+                    (tk.requester_sid ? ' (' + tk.requester_sid + ')' : ''),
+                tk.subject || '',
+                STATE.agent || '',
+                tk.priority || '',
+                tk.status || '',
+                // Texto puro: `fmtDateTime` devolve HTML (o <small> da hora), e
+                // o Buttons exportaria a marcação junto.
+                String(tk.created_at || '').replace('T', ' ').slice(0, 16),
+                String(tk.due_date || '').slice(0, 10)];
+    }
+
+    function exportTable() {
+        if (_xdt) { return _xdt; }
+        if (!window.jQuery || !$.fn.dataTable) { return null; }
+        $('#tk-export-table thead tr').html(
+            EXPORT_COLS.map(function (c) { return '<th>' + esc(t(c[0], c[1])) + '</th>'; }).join(''));
+        _xdt = $('#tk-export-table').DataTable({
+            paging: false, searching: false, info: false, ordering: false,
+            autoWidth: false, destroy: true
+        });
+        _xbtns = new $.fn.dataTable.Buttons(_xdt, {
+            buttons: [
+                { extend: 'copyHtml5', name: 'copy' },
+                // `;` e BOM são o que o Excel pt-BR precisa para separar colunas
+                // e manter os acentos.
+                { extend: 'csvHtml5', name: 'csv', fieldSeparator: ';', bom: true },
+                { extend: 'excelHtml5', name: 'excel' },
+                { extend: 'print', name: 'print' },
+                { extend: 'pdfHtml5', name: 'pdf', orientation: 'landscape', pageSize: 'A4' }
+            ]
+        });
+        return _xdt;
+    }
+
+    document.querySelectorAll('[data-tk-export]').forEach(function (a) {
+        a.addEventListener('click', function (e) {
+            e.preventDefault();
+            var dt = exportTable();
+            if (!dt) { return; }
+            dt.clear();
+            dt.rows.add(filtered().map(exportRow));
+            dt.draw(false);
+            dt.button(a.getAttribute('data-tk-export') + ':name').trigger();
+        });
+    });
+
     document.getElementById('tk-per-page').addEventListener('change', function () {
-        UI.perPage = parseInt(this.value, 10) || 10; UI.page = 1; render();
+        // 'all' vira um número grande em vez de um caso especial: `Math.ceil` e
+        // `slice` continuam funcionando, a paginação some sozinha (1 página) e o
+        // "Showing 1–N of N" fecha, porque ele já usa `Math.min(..., total)`.
+        UI.perPage = this.value === 'all' ? Number.MAX_SAFE_INTEGER
+                                          : (parseInt(this.value, 10) || 25);
+        UI.page = 1;
+        render();
     });
 
     document.querySelectorAll('#tk-page th[data-tk-sort]').forEach(function (th) {

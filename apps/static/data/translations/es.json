@@ -1508,6 +1508,7 @@
   "tk-status": "Estado",
   "tk-priority": "Prioridad",
   "tk-col-id": "ID",
+  "tk-all": "Todos",
   "tk-col-requested": "Solicitado por",
   "tk-col-subject": "Asunto",
   "tk-col-agent": "Responsable",

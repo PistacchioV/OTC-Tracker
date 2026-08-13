@@ -1509,6 +1509,7 @@
   "tk-status": "Status",
   "tk-priority": "Priority",
   "tk-col-id": "ID",
+  "tk-all": "All",
   "tk-col-requested": "Requested By",
   "tk-col-subject": "Ticket Subject",
   "tk-col-agent": "Assigned Agent",
