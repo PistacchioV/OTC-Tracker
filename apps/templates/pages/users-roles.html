@@ -393,6 +393,45 @@ document.addEventListener('DOMContentLoaded', function () {
 <script>
 const currentUserRole = document.getElementById('session-role').dataset.role;
 
+// Texto montado em JS não passa pelo I18nManager (ele traduz os [data-lang] uma
+// vez, no load) — os SweetAlerts saem daqui, no idioma que o app guardou.
+const LANG = (localStorage.getItem('__OTC_TRACKER_LANG__') ||
+              localStorage.getItem('language') || 'en').toLowerCase();
+const _TRANS = {
+    en: { denied: 'Access denied',
+          deniedWhy: 'Only Admin users can remove users.',
+          delTitle: 'Remove user',
+          delAsk: 'Remove <strong>{name}</strong> ({sid})?',
+          delUndo: 'This cannot be undone.',
+          delOk: 'Yes, remove', cancel: 'Cancel',
+          removed: 'Removed', removedX: '{name} was removed.',
+          err: 'Error', netErr: 'Network error',
+          netErrX: 'The request failed. Try again.' },
+    br: { denied: 'Acesso negado',
+          deniedWhy: 'Apenas usuários com perfil Admin podem remover usuários.',
+          delTitle: 'Remover usuário',
+          delAsk: 'Remover <strong>{name}</strong> ({sid})?',
+          delUndo: 'Esta ação não pode ser desfeita.',
+          delOk: 'Sim, remover', cancel: 'Cancelar',
+          removed: 'Removido', removedX: '{name} foi removido.',
+          err: 'Erro', netErr: 'Erro de rede',
+          netErrX: 'Falha na requisição. Tente novamente.' },
+    es: { denied: 'Acceso denegado',
+          deniedWhy: 'Solo los usuarios con perfil Admin pueden eliminar usuarios.',
+          delTitle: 'Eliminar usuario',
+          delAsk: '¿Eliminar <strong>{name}</strong> ({sid})?',
+          delUndo: 'Esta acción no se puede deshacer.',
+          delOk: 'Sí, eliminar', cancel: 'Cancelar',
+          removed: 'Eliminado', removedX: '{name} fue eliminado.',
+          err: 'Error', netErr: 'Error de red',
+          netErrX: 'La solicitud falló. Inténtelo de nuevo.' }
+};
+function t(k, vars) {
+    let s = (_TRANS[LANG] || _TRANS.en)[k] || _TRANS.en[k] || k;
+    if (vars) Object.keys(vars).forEach(function (v) { s = s.split('{' + v + '}').join(vars[v]); });
+    return s;
+}
+
 const ROLE_DISPLAY = {
     'ADMIN': 'Admin',
     'BO': 'Back Office',
@@ -494,8 +533,8 @@ document.addEventListener('click', function (e) {
 
         if (currentUserRole !== 'ADMIN' && currentUserRole !== 'MASTER') {
             Swal.fire({
-                title: 'Acesso Negado',
-                text: 'Apenas usuários com perfil Admin podem remover usuários.',
+                title: t('denied'),
+                text: t('deniedWhy'),
                 icon: 'error',
                 confirmButtonColor: '#6c757d'
             });
@@ -507,14 +546,15 @@ document.addEventListener('click', function (e) {
         const name = row.querySelector('a[data-sort="user"]')?.textContent.trim() || sid;
 
         Swal.fire({
-            title: 'Remover Usuário',
-            html: 'Tem certeza que deseja remover <strong>' + name + '</strong> (' + sid + ')?<br><small class="text-muted">Esta ação não pode ser desfeita.</small>',
+            title: t('delTitle'),
+            html: t('delAsk', { name: name, sid: sid }) +
+                  '<br><small class="text-muted">' + t('delUndo') + '</small>',
             icon: 'warning',
             showCancelButton: true,
             confirmButtonColor: '#dc3545',
             cancelButtonColor: '#6c757d',
-            confirmButtonText: 'Sim, remover',
-            cancelButtonText: 'Cancelar'
+            confirmButtonText: t('delOk'),
+            cancelButtonText: t('cancel')
         }).then(function (result) {
             if (!result.isConfirmed) return;
 
@@ -531,8 +571,8 @@ document.addEventListener('click', function (e) {
                 if (data.success) {
                     row.remove();
                     Swal.fire({
-                        title: 'Removido!',
-                        text: name + ' foi removido com sucesso.',
+                        title: t('removed'),
+                        text: t('removedX', { name: name }),
                         icon: 'success',
                         timer: 2000,
                         showConfirmButton: false
@@ -540,13 +580,13 @@ document.addEventListener('click', function (e) {
                 } else {
                     deleteBtn.disabled = false;
                     deleteBtn.innerHTML = '<i class="ti ti-trash fs-lg"></i>';
-                    Swal.fire({ title: 'Erro', text: data.message, icon: 'error', confirmButtonColor: '#dc3545' });
+                    Swal.fire({ title: t('err'), text: data.message, icon: 'error', confirmButtonColor: '#dc3545' });
                 }
             })
             .catch(function () {
                 deleteBtn.disabled = false;
                 deleteBtn.innerHTML = '<i class="ti ti-trash fs-lg"></i>';
-                Swal.fire({ title: 'Erro de Rede', text: 'Falha na requisição. Tente novamente.', icon: 'error', confirmButtonColor: '#dc3545' });
+                Swal.fire({ title: t('netErr'), text: t('netErrX'), icon: 'error', confirmButtonColor: '#dc3545' });
             });
         });
         return;

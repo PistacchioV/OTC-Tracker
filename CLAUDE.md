@@ -61,7 +61,9 @@ plugins de `node_modules` para `apps/static/plugins/`.
   local com `t()`, lendo `localStorage['__OTC_TRACKER_LANG__']` — o padrão do
   swapchar e do Confirmations Monitor. Texto de servidor que a tela exibe deve
   vir **estruturado** (a lista, não a frase), para a frase ser montada no idioma
-  da aplicação.
+  da aplicação — o `meta` da Recon FXO era a frase pronta em português e por isso
+  o resumo do alerta é montado na tela a partir de `counts`, ficando o `meta`
+  só para a notificação do sino, que é texto gravado uma vez.
 - **E-mail: o cabeçalho é cor sólida + gradiente CSS, nunca imagem/VML.** O
   `<v:rect>` do Outlook pintava o banner ora mais estreito que a célula (faixa
   sólida à direita), ora na largura da janela inteira. Ver o comentário em

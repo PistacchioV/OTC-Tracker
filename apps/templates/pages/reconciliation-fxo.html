@@ -504,17 +504,53 @@
         en: { editComment: 'Comment', save: 'Save', cancel: 'Cancel',
               commentPh: 'Why does this line not match?',
               saveFail: 'Could not save the comment', copied: 'Copied',
-              empty: 'Run the reconciliation for the selected date.' },
+              empty: 'Run the reconciliation for the selected date.',
+              missFileT: 'A file is missing',
+              missFileX: 'Send both the B3 position and the Athena report.',
+              running: 'Reconciling…',
+              notFoundT: 'Daily file not found',
+              notFoundX: 'Use <b>Manual Upload</b> if you already have the files.',
+              runFailT: 'Could not reconcile', runFailX: 'Unknown error.',
+              doneT: 'Reconciliation complete', callFailT: 'Request failed',
+              trades: 'trades' },
         br: { editComment: 'Comentário', save: 'Salvar', cancel: 'Cancelar',
               commentPh: 'Por que esta linha não casa?',
               saveFail: 'Não foi possível gravar o comentário', copied: 'Copiado',
-              empty: 'Rode a reconciliação para a data escolhida.' },
+              empty: 'Rode a reconciliação para a data escolhida.',
+              missFileT: 'Faltou um arquivo',
+              missFileX: 'Envie a posição B3 e o relatório da Athena.',
+              running: 'Reconciliando…',
+              notFoundT: 'Arquivo do dia não encontrado',
+              notFoundX: 'Use o <b>Manual Upload</b> se você já tem os arquivos.',
+              runFailT: 'Não foi possível reconciliar', runFailX: 'Erro desconhecido.',
+              doneT: 'Reconciliação concluída', callFailT: 'Falha na chamada',
+              trades: 'operações' },
         es: { editComment: 'Comentario', save: 'Guardar', cancel: 'Cancelar',
               commentPh: '¿Por qué esta línea no coincide?',
               saveFail: 'No se pudo guardar el comentario', copied: 'Copiado',
-              empty: 'Ejecute la reconciliación para la fecha elegida.' }
+              empty: 'Ejecute la reconciliación para la fecha elegida.',
+              missFileT: 'Falta un archivo',
+              missFileX: 'Envíe la posición B3 y el informe de Athena.',
+              running: 'Conciliando…',
+              notFoundT: 'Archivo del día no encontrado',
+              notFoundX: 'Use <b>Manual Upload</b> si ya tiene los archivos.',
+              runFailT: 'No se pudo conciliar', runFailX: 'Error desconocido.',
+              doneT: 'Conciliación concluida', callFailT: 'Fallo en la llamada',
+              trades: 'operaciones' }
     };
     function t(k) { return (_TRANS[LANG] || _TRANS.en)[k] || _TRANS.en[k] || k; }
+
+    // O resumo do alerta de conclusão é montado AQUI, a partir de `counts`, e não
+    // do `meta` que o servidor manda: `meta` é uma FRASE já escrita, e frase
+    // pronta não tem como falar o idioma de quem está na tela — é a razão de o
+    // servidor mandar o dado estruturado. O `meta` segue existindo para a
+    // notificação do sino, que é texto gravado uma vez.
+    function metaLine(c) {
+        if (!c) return '';
+        return [c.total + ' ' + t('trades'), c.ok + ' Matched', c.nok + ' Partial',
+                c.no_match + ' Unmatched B3',
+                c.no_match_ath + ' Unmatched Athena'].join(' · ');
+    }
 
     function isStatusCol(name) { return /^Status /.test(name) || name === 'Status'; }
 
@@ -882,14 +918,13 @@
             var f1 = document.getElementById('fxo-file-dpos').files[0];
             var f2 = document.getElementById('fxo-file-athena').files[0];
             if (!f1 || !f2) {
-                Swal.fire({ icon: 'warning', title: 'Faltou um arquivo',
-                            text: 'Envie a posição B3 e o relatório da Athena.' });
+                Swal.fire({ icon: 'warning', title: t('missFileT'), text: t('missFileX') });
                 return;
             }
             fd.append('files', f1);
             fd.append('files', f2);
         }
-        Swal.fire({ title: 'Reconciliando…', allowOutsideClick: false,
+        Swal.fire({ title: t('running'), allowOutsideClick: false,
                     didOpen: function () { Swal.showLoading(); } });
         fetch('/reconciliation-fxo/run', { method: 'POST', body: fd })
             .then(function (r) { return r.json(); })
@@ -898,26 +933,27 @@
                 if (j.not_found) {
                     // Arquivo do dia ainda não chegou: o caminho procurado vai na
                     // mensagem, senão não há como saber se foi a data ou a pasta.
-                    Swal.fire({ icon: 'info', title: 'Arquivo do dia não encontrado',
+                    Swal.fire({ icon: 'info', title: t('notFoundT'),
                                 html: '<div style="font-size:.8rem;word-break:break-all">' +
                                       (j.detail || '') + '</div>' +
                                       '<p class="mt-2 mb-0" style="font-size:.8rem">' +
-                                      'Use o <b>Manual Upload</b> se você já tem os arquivos.</p>' });
+                                      t('notFoundX') + '</p>' });
                     return;
                 }
                 if (!j.success) {
-                    Swal.fire({ icon: 'error', title: 'Não foi possível reconciliar',
-                                text: j.error || 'Erro desconhecido.' });
+                    Swal.fire({ icon: 'error', title: t('runFailT'),
+                                text: j.error || t('runFailX') });
                     return;
                 }
                 bootstrap.Modal.getInstance(document.getElementById('fxoUploadModal'))?.hide();
                 paint(j);
-                Swal.fire({ icon: 'success', title: 'Reconciliação concluída',
-                            text: j.meta || '', timer: 2600, showConfirmButton: false });
+                Swal.fire({ icon: 'success', title: t('doneT'),
+                            text: metaLine(j.counts), timer: 2600,
+                            showConfirmButton: false });
             })
             .catch(function (e) {
                 Swal.close();
-                Swal.fire({ icon: 'error', title: 'Falha na chamada', text: String(e) });
+                Swal.fire({ icon: 'error', title: t('callFailT'), text: String(e) });
             });
     }
 

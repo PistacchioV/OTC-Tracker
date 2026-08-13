@@ -425,7 +425,10 @@
               massEmpty: 'empty', massOk: 'Apply', massDone: '{n} row(s) updated',
               delTitle: 'Delete {n} confirmation(s)?',
               delText: 'The rows leave the trail for good. There is no undo.',
-              delOk: 'Delete', delDone: '{n} row(s) deleted', delFail: 'Could not delete' },
+              delOk: 'Delete', delDone: '{n} row(s) deleted', delFail: 'Could not delete',
+              saveFail: 'Could not save',
+              delOneTitle: 'Delete this confirmation?',
+              delOneText: 'Trade ID {k}. There is no undo.' },
         br: { addTitle: 'Nova confirmação', editTitle: 'Editar confirmação',
               keyNeeded: 'Falta o Trade ID', keyWhy: 'É ele que identifica a linha.',
               keyDup: 'Este Trade ID já existe', keyDupWhy: 'Edite a linha que já está na tabela.',
@@ -436,7 +439,10 @@
               massEmpty: 'vazio', massOk: 'Aplicar', massDone: '{n} linha(s) atualizada(s)',
               delTitle: 'Excluir {n} confirmação(ões)?',
               delText: 'As linhas saem da esteira de vez. Não tem desfazer.',
-              delOk: 'Excluir', delDone: '{n} linha(s) excluída(s)', delFail: 'Não consegui excluir' },
+              delOk: 'Excluir', delDone: '{n} linha(s) excluída(s)', delFail: 'Não consegui excluir',
+              saveFail: 'Não foi possível gravar',
+              delOneTitle: 'Excluir esta confirmação?',
+              delOneText: 'Trade ID {k}. Não tem desfazer.' },
         es: { addTitle: 'Nueva confirmación', editTitle: 'Editar confirmación',
               keyNeeded: 'Falta el Trade ID', keyWhy: 'Es la clave de la fila.',
               keyDup: 'Este Trade ID ya existe', keyDupWhy: 'Edite la fila que ya está en la tabla.',
@@ -447,7 +453,10 @@
               massEmpty: 'vacío', massOk: 'Aplicar', massDone: '{n} fila(s) actualizada(s)',
               delTitle: '¿Eliminar {n} confirmación(es)?',
               delText: 'Las filas salen de la cadena definitivamente. No hay deshacer.',
-              delOk: 'Eliminar', delDone: '{n} fila(s) eliminada(s)', delFail: 'No se pudo eliminar' }
+              delOk: 'Eliminar', delDone: '{n} fila(s) eliminada(s)', delFail: 'No se pudo eliminar',
+              saveFail: 'No se pudo guardar',
+              delOneTitle: '¿Eliminar esta confirmación?',
+              delOneText: 'Trade ID {k}. No hay deshacer.' }
     };
     function t(k, vars) {
         var s = (_TRANS[LANG] || _TRANS.en)[k] || _TRANS.en[k] || k;
@@ -761,7 +770,7 @@
             body: JSON.stringify({ rows: payload })
         }).then(function (r) { return r.json(); }).then(function (j) {
             if (!j.success) {
-                Swal.fire({ icon: 'error', title: 'Não foi possível gravar', text: j.message || '' });
+                Swal.fire({ icon: 'error', title: t('saveFail'), text: j.message || '' });
                 return false;
             }
             // As derivadas (Pending, Aging) são recalculadas NO SERVIDOR e vêm de
@@ -1014,9 +1023,10 @@
         $(document).on('click', '[data-mc-del]', function () {
             var k = $(this).attr('data-mc-del');
             Swal.fire({
-                icon: 'warning', title: 'Excluir esta confirmação?',
-                text: 'Trade ID ' + k + '. Não tem desfazer.',
-                showCancelButton: true, confirmButtonText: 'Excluir',
+                icon: 'warning', title: t('delOneTitle'),
+                text: t('delOneText', { k: k }),
+                showCancelButton: true, confirmButtonText: t('delOk'),
+                cancelButtonText: t('cancel'),
                 // Vermelho do tema (--ins-danger), não o vermelho de fábrica do
                 // SweetAlert — é o mesmo botão em todas as telas do app.
                 confirmButtonColor: '#d93025', cancelButtonColor: '#6c757d'
