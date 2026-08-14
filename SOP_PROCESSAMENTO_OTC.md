@@ -215,7 +215,11 @@ Fila das operações com confirmação pendente, para o operador acompanhar e tr
 
 #### Manual Confirmation — Confirmations Monitor
 
-Fila de validação da confirmação manual, na ordem **OTC → MO e/ou FO → Ok** (quem valida cada produto sai do cadastro *Manual Confirmations — Validation Trail*, em Mapping). Cada item é **uma confirmação** — contraparte × produto × LOB × data de negociação —, e não uma operação: o botão *Abrir* mostra o PDF gravado no Electronic Inventory, *Validar* carimba a etapa com data, hora e SPN, e *Rejeitar* (MO/FO) pede comentário, avisa o Brazil OTC Ops e devolve a confirmação ao OTC.
+Fila da confirmação manual, na ordem **(Pending Legal) → Pending OTC → Pending MO e/ou FO → Pending FepWeb → Ok** (quem valida cada produto sai do cadastro *Manual Confirmations — Validation Trail*, em Mapping; MO e FO correm em paralelo). Cada item é **uma confirmação** — contraparte × produto × LOB × data de negociação —, e não uma operação: o botão *Abrir* mostra o PDF gravado no Electronic Inventory, *Validar* carimba a etapa com data, hora e SPN, e *Rejeitar* (MO/FO) pede comentário, avisa o Brazil OTC Ops e devolve a confirmação ao OTC.
+
+**A confirmação também é GERADA aqui.** Enquanto não há documento na pasta da contraparte, o botão do item de *Pending OTC* aparece como **Generate**: ele abre o editor da confirmação em aba nova, onde o único botão é *Salvar Word + PDF no Inventory*; gravado o documento, a tela de validação abre na sequência. Fechando sem validar, a confirmação continua em *Pending OTC* e o botão volta a ser *Validate*. As telas de New Deals não têm mais o botão *Confirmation* — gerar e validar são o mesmo trabalho e moram no mesmo lugar. Nas etapas de MO e FO, sem documento na pasta o botão continua riscado: essas mesas conferem o papel, não o produzem.
+
+As duas pontas não são de validação: **Pending Legal** é hold manual (o card tem o botão de soltar para o OTC) e **Pending FepWeb** é derivado — validações feitas, faltando o envio ao cliente, que é o que o botão desse card marca.
 
 **Cada etapa é assinada pela mesa dela**, pelo papel do usuário: Pending OTC é do Back Office, Pending MO do MO e Pending FO do FO. Quem não é da mesa abre a confirmação e lê o documento, mas não assina — o botão do card aparece como *View*. O **prazo** de cada mesa, em dias úteis contados da data da operação, é cadastrável em *Mapping → Manual Confirmations — SLA* (OTC D+3, MO D+4, FO D+6 de fábrica); validar fora do prazo exige justificativa, gravada na coluna daquela mesa.
 
@@ -223,7 +227,9 @@ Fila de validação da confirmação manual, na ordem **OTC → MO e/ou FO → O
 
 #### Manual Confirmation — Track Confirmations
 
-Base completa das confirmações manuais, com filtro por coluna, atualização em massa por coluna, inclusão manual de linha e exportação do que está na tela. Os cards do topo filtram por etapa da esteira, e a tabela abre ordenada pelo *Aging Confirmação*, do menor para o maior.
+Base completa das confirmações manuais, com filtro por coluna, atualização em massa por coluna, inclusão manual de linha e exportação do que está na tela. Os cards do topo filtram por etapa da esteira, e a tabela abre ordenada pelo *Aging*, do menor para o maior.
+
+Os títulos das colunas seguem o idioma da aplicação (*Settlement Date*, *Trade Date*, *Underlying Asset*, *Notional/Qty*, *Counterparty*). A coluna **Notional Amount CCY** traz a moeda do notional junto com o valor e é preenchida sozinha no mapeamento — ela é diferente do *Underlying Asset* ao lado, que em mercadoria guarda a commodity. Nos campos de filtro, **`blank`** lista as linhas em que aquela coluna está vazia.
 
 ![Manual Confirmation — Track Confirmations](docs/sop-screenshots/manual-confirmation_track.png)
 

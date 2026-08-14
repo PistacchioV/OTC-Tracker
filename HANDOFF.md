@@ -11262,3 +11262,274 @@ sete listas, o Run por e-mail, o rolar do feriado e a diferença entre *nada
 pendente* e *sem destinatário*), e o `.docx` regerado do `.md`, que é a fonte
 única. Documentação de tela que descreve um fluxo que mudou é pior que
 documentação faltando: ela é seguida.
+
+---
+
+## §258 — Gerar e validar passam a morar no MESMO lugar (o Confirmations Monitor)
+
+Gerar era um botão da barra de cada página de New Deals e validar era um card do Confirmations
+Monitor: as duas metades do mesmo trabalho em telas diferentes. A mesa de OTC precisava saber em
+**qual das quatro páginas** o documento nascia para, depois, procurá-lo no Monitor — e o caminho de
+volta não existia: o card dizia "sem contrato para validar" e parava ali.
+
+Agora o ciclo inteiro mora no Monitor.
+
+- **O botão `Confirmation` saiu das quatro páginas de New Deals** (FWD Start, NDF Comm, Opt Comm,
+  Opt FXO): o contêiner `.confirmationBtn` e o diálogo de grupos foram apagados, ~100 linhas por
+  página. Os endpoints `/api/new-deals/*/confirmations` **ficam** — quem os usa agora é o Monitor.
+- **No card de Pending OTC, sem PDF na pasta o botão vira `Generate`**; com PDF, continua `Validate`.
+  É a **mesma condição** que já riscava o botão (o `checou && !temPdf` do `loadDocs`), agora com um
+  destino em vez de um aviso. ⚠️ **Só na etapa do OTC.** Em MO e FO, sem contrato o botão continua
+  riscado: elas conferem o papel, não o produzem.
+- **`/manual-confirmation/generate?keys=…` é a tradução que faltava.** A esteira conhece a LINHA
+  (Trade ID, Produto, data da operação) e o New Deals conhece o GRUPO (contraparte × mercadoria ×
+  família), que é a unidade do documento. O casamento é pelos **Trade IDs** — os mesmos que o card de
+  Confirmations do New Deals Monitor já usa —, nunca por contraparte × mercadoria: seria um de-para
+  por texto entre dois cadastros que normalizam nomes de jeitos diferentes.
+- **Sem destino, 404 com a página que diz QUAL dos três motivos foi**
+  (`confirmations/manual-generate-error.html`): produto sem tela de geração, linha sem Data da
+  Operação, ou arquivo-dia sem a operação. Um 404 seco não distingue os três, e os três pedem ações
+  diferentes.
+
+**No editor sobrou UM botão.** O `🖨 Imprimir / Salvar PDF` saiu dos nove templates de confirmação: o
+PDF é gravado no Electronic Inventory, e imprimir por fora produzia um documento que a esteira não
+vê — um papel que existe para o cliente e não existe para o sistema.
+
+E quando o editor foi aberto pelo Monitor (a rota manda **`mc_keys`** na URL), a tela que abre depois
+de gravar é a validação da **ESTEIRA**, não o checklist do documento: é o mesmo ato — quem gerou está
+com o papel na frente e assina pela mesa de OTC. Validando, a confirmação segue para MO/FO; fechando
+sem validar, ela **continua em Pending OTC**, agora com o PDF na pasta, e o card volta a oferecer
+`Validate`. Sem `mc_keys` nada muda (abre o checklist do documento), e é por isso que o único ponto
+tocado nos nove arquivos é o `openValidate`.
+
+> **O ciclo do DOCUMENTO continua fechando sozinho.** `New → Generated → Success` é acompanhado no
+> card de Confirmations do New Deals Monitor, e lá **a etapa da esteira vence o status do
+> documento** quando existe — `_conf_esteira_stages` traduz toda etapa depois do OTC para `Ok`. Ou
+> seja: validar no Monitor fecha o card do New Deals sem ninguém marcar nada. Foi o que permitiu
+> trocar a tela pós-gravação sem quebrar o outro relógio.
+
+---
+
+## §259 — Track Confirmations: rótulos em inglês, `Notional Amount CCY` e o filtro `blank`
+
+**Os NOMES das colunas são os da planilha legada e não podem mudar** — eles são o esquema dos dois
+DuckDB, e renomear um quebraria o banco de quem já o tem em disco. Quem traduz é o `COLUMN_LABELS`,
+que por isso passou a ser a lista **COMPLETA** das colunas: coluna sem entrada apareceria na tela com
+o nome do banco, e é isso que a completude pega.
+
+`Data de vencimento` → **Settlement Date**, `Data Operação` → **Trade Date**, `Moeda` →
+**Underlying Asset**, `Notional` → **Notional/Qty**, `Cliente` → **Counterparty**, `Aging
+Confirmação` → **Aging**.
+
+A tradução br/es fica no `COLTR` do template, e **não** em `data-lang`: o cabeçalho é montado em JS
+depois do load, e o `I18nManager` traduz os `[data-lang]` UMA vez, no load. Nas LISTAS (edição em
+massa, painel de colunas) vale o `labelFull` — os três `Time Stamp` compartilham o rótulo curto de
+propósito, e só quando há empate o nome do banco entra, porque ele já diz a mesa. Antes o nome vinha
+sempre entre parênteses, o que agora encheria a lista de `Trade Date (Data Operação)`.
+
+**`Notional Amount CCY`** entra à direita de Notional/Qty: o código de 3 letras mais o notional, num
+texto só (`USD 1500000`). ⚠️ **A coluna `Moeda` ao lado NÃO serve para isso** — ela é o ATIVO da
+confirmação e em mercadoria guarda a commodity (`OLEO`, `PLATTS`), que não é moeda nenhuma. Era ela
+que a planilha do BACC vinha mandando na coluna de moeda.
+
+A moeda vem do campo que a carrega em CADA produto (`_MC_NOTIONAL_CCY_FIELD`), e não de uma cadeia de
+fallback — um `first(...)` genérico pegaria o primeiro campo preenchido, que nem sempre é o que a
+mesa chama de moeda do notional:
+
+| Produto | Campo |
+|---|---|
+| NDF Comm · Opt Comm · **FXO** | `StrikeCurrency` |
+| NDF Vanilla · Other Publisher · **FWD Start** | `QuantityCurrency` |
+
+O número vai **CRU** na célula (a máscara é ortogonal e mora na tela): gravar `1,500,000.00` obrigaria
+o relatório do BACC a desfazer a máscara para escrever um número no Excel. Quem reparte moeda e valor
+é **uma** função — `manual_conf.split_notional_ccy` —, e a moeda só vale como código se tiver 3
+letras: um valor solto na célula devolve moeda vazia e o texto inteiro como valor, em vez de comer o
+primeiro dígito. A coluna é escrita no **mapeamento**, então vale para as linhas novas; as antigas
+ficam em branco porque a moeda de mercadoria não existe em lugar nenhum da linha para ser derivada
+depois.
+
+**`blank` no filtro por coluna traz o que está VAZIO.** É o único jeito de procurar a ausência: o
+campo casa por conteúdo, e "nada" não se digita. O termo vira a regex `^\s*$` com o **smart search
+DESLIGADO** — ligado, o DataTables reescreve a expressão e ela deixa de casar a célula vazia. A
+palavra só é reservada quando é a **única** coisa no campo, senão uma contraparte chamada "Blank
+Trading" ficaria impossível de procurar; e o `title` do campo é onde ela se anuncia, porque num texto
+livre ninguém adivinha que existe.
+
+---
+
+## §260 — A coluna E-mail Subject se escreve sozinha (e o recap que era do vizinho)
+
+A coluna guarda o assunto do **recap interno** que está na pasta da confirmação, e quem sabe a
+resposta é o arquivo — não quem digita. Quem varre a pasta é o `_mc_confirmation_docs`, então a
+coluna se atualiza nos dois lugares que o chamam: o `/api/manual-confirmation/docs` (os chips de
+e-mail dos cards do Monitor) e a **tela de validação**.
+
+`_mc_email_subject` lê o assunto memorizado por **(caminho, mtime, tamanho)** — o caminho sozinho
+manteria o assunto do e-mail SUBSTITUÍDO pela vida do processo. `set_email_subjects` grava **só o que
+mudou**, num lote por chamada: sem o "só o que mudou", cada abertura do Monitor reescreveria a esteira
+inteira (o upsert apaga e reinsere a linha nos dois bancos); sem o lote, cada chave releria os dois
+DuckDB, e o Monitor manda até 200 itens de uma vez.
+
+**A primeira versão pegava o PRIMEIRO recap da pasta e o carimbava em todas as operações do grupo.**
+Duas coisas quebravam com isso, e nenhuma dava erro:
+
+- pasta com **um recap por operação** (o padrão da mesa: `Internal Recap DBH-1AAA.msg` ao lado do PDF
+  de cada trade) — a `DBH-1BBB` ficava com o e-mail da `DBH-1AAA`;
+- operação **sem recap próprio** — o `_afunila` cai para a listagem inteira quando nada casa, e a
+  pasta é cliente × dia × produto: a operação recebia o assunto do recap de OUTRA confirmação (OLEO e
+  PLATTS do mesmo dia dividem a pasta).
+
+O casamento passou a ser em **dois passos, e a ordem separa o certo do plausível**: (1) pelo Trade ID
+no NOME do arquivo, que é exato; (2) se nenhum arquivo nomeia operação, o recap **ÚNICO** da pasta,
+que é o do booking e vale para o grupo inteiro. Fora disso não se escreve nada e fica um INFO no log
+— célula vazia pede o dado, célula errada aponta para um e-mail que não confirma aquele trade.
+
+> Dois limites conhecidos: o arquivo só é reconhecido como recap se o NOME contém `internal` ou
+> `recap` (`_MC_MAIL_TOKENS`), e a coluna só se preenche quando alguém OLHA a confirmação. Linha que
+> já saiu da esteira (banco `ok`) não passa por nenhum dos dois gatilhos — o que deixou de importar
+> para o relatório do BACC quando ele passou a excluir o `Ok` (§261).
+
+---
+
+## §261 — BACC EA Metrics: o card das operações manuais das 16:00
+
+Card novo (`baccea`) que manda, **todo dia útil ANBIMA às 16:00 BRT**, um e-mail com as operações
+manuais em anexo `.xlsx`. TO e CC persistidos (`bacc_ea_metrics_recipients.json`, no `control-panel/`
+que não é versionado) e um Run manual. Assunto fixo — `Support to OTC Derivatives - EA Metrics` —,
+sem data e sem contagem: ele é contrato com quem recebe, que monta regra de caixa de entrada em cima
+dele.
+
+Ele fica **empilhado** com o *Pending Confirmations Spreadsheet Metrics*, e os dois juntos preenchem
+a altura do *Confirmations Escalation*, que divide a linha e é o card mais alto do painel. Com isso o
+`height: 50%` que segurava o card de Pending (§253) deixou de ser necessário: a coluna virou
+`flex-column` e os dois `.cp-reveal` (que já são `flex: 1`) repartem a altura sozinhos — o que se
+divide é a SOBRA, porque num contêiner em coluna o `min-height: auto` do flex impede que qualquer um
+encolha abaixo do próprio conteúdo.
+
+A fonte é a **MESMA** `manual_conf.load_all()` do Track Confirmations, com **dois cortes**:
+
+- **sem Data Callback**, e o teste é a CÉLULA em branco, não um status. O callback é a conferência
+  por telefone com o cliente e é ele que fecha a operação manual do ponto de vista da métrica; a
+  planilha é a lista do que ainda falta. A coluna vazia é exatamente o que a tela mostra — derivar de
+  um Pending criaria uma segunda regra, que discordaria dela no primeiro caso de borda;
+- **Pending diferente de `Ok`**, e este é o status, porque `Ok` é justamente o nome do fim da
+  esteira. De quebra, isso deixa o anexo restrito ao banco `pending` — o mesmo conjunto que o Monitor
+  mostra, e o único cujo E-mail Subject o app preenche sozinho (§260).
+
+Ordem pelo **Aging do maior para o menor**, com chave numérica: o aging é gravado como TEXTO, e por
+texto `'10'` viria antes de `'9'`. Vazio vai para o fim — linha sem idade não encabeça um relatório
+de atraso.
+
+**As doze colunas, e o notional ocupa três delas:**
+
+| # | Coluna | De onde vem |
+|---|---|---|
+| 1–6 | Trade ID · Product · Trade Date · Legal Entity · Conterparty Name · Aging | a coluna de mesmo sentido da esteira |
+| 7 | **Born Age** | sempre VAZIA (preenchida por quem consolida) |
+| 8 | **Notional/Qty** | o número cru da coluna de mesmo nome do Track |
+| 9 | **National Currency** | o CÓDIGO, repartido da `Notional Amount CCY` |
+| 10 | **Notional Amount** | o VALOR, repartido da mesma coluna |
+| 11 | **Comments** | o **E-mail Subject** — é por ele que o time acha a operação na caixa |
+| 12 | LOB | — |
+
+⚠️ **A grafia dos cabeçalhos é a que foi pedida, `Conterparty Name` e `National Currency`
+inclusive**: quem lê a planilha do outro lado casa pelo nome da coluna, e "corrigir" o typo aqui
+quebraria o casamento em silêncio. E `Born Age` fica no arquivo mesmo vazia, porque a **posição** das
+colunas é o contrato — tirá-la deslocaria as demais.
+
+- **O TIPO é declarado por coluna** (`text` / `num` / `money` / `date`), não adivinhado do conteúdo. A
+  primeira versão escrevia como inteiro tudo que "parecia dígito" e errava dos dois lados: um
+  notional com centavos (`250000.50`) não passava no teste e ia para o Excel como **TEXTO** — sem
+  somar e sem ordenar —, e um Trade ID todo numérico viraria número, perdendo o zero à esquerda.
+  `_bacc_num` aceita as duas escritas que convivem no banco (`1500000` e `1.500.000,00`).
+- **`money` leva a máscara de milhar; `num` não** — o Aging em `12,00` dias não quer dizer nada. E o
+  código da máscara é escrito na convenção **INVARIANTE** do formato de arquivo (`#,##0.00`, com `,`
+  de milhar e `.` de decimal), sempre: quem desenha a célula é o Excel de quem abre, com o separador
+  do idioma DELE, e num Excel pt-BR esse mesmo código sai `1.500.000,00`. ⚠️ Escrever `#.##0,00` — a
+  máscara como ela se lê em português — produziria um código malformado, com o ponto lido como
+  decimal, e o valor sairia errado sem erro nenhum. Valor que não parseia fica texto e **sem**
+  máscara: máscara sobre texto não faz nada, mas prometeria um número.
+- **A largura mede o que se VÊ.** `1500000` são 7 caracteres e a célula desenha `1.500.000,00`, que
+  são 12 — sem isso a coluna nasce estreita e o Excel mostra `####`, que é a forma mais fácil de um
+  relatório parecer quebrado sem estar. O auto-fit é contagem de caracteres com piso e teto (o
+  assunto em `Comments` tem 120 e sozinho empurraria as outras onze para fora da tela); o openpyxl
+  não tem auto-fit de verdade, porque quem mede o texto é o Excel na hora de desenhar.
+- **Planilha vazia VAI assim mesmo** — um dia sem operação manual é ele próprio a métrica. O único
+  motivo de não enviar é lista de TO em branco (`no_recipient`), que o card mostra em âmbar: é
+  relatório que não saiu de casa.
+- O corpo do e-mail **não repete a tabela**: ele nomeia o anexo e diz quantas linhas são, que é o que
+  distingue "não havia nada hoje" de "o anexo veio truncado". Claim/release/status em disco seguem a
+  mecânica do Deals Monitor (§207/§222).
+
+---
+
+## §262 — Support Center: a fila é da MESA, não da pessoa
+
+Cada um via só os próprios chamados e o master via todos. Isso escondia o time de si mesmo: o colega
+que abriu o mesmo pedido ontem não tinha como saber, e a mesa abria o chamado duas vezes.
+
+A unidade da visibilidade passou a ser o **papel de quem abriu** — quem é do Back Office vê os
+chamados abertos pelo Back Office, quem é do Middle vê os do Middle. O master continua vendo tudo.
+
+**Ver não é poder.** Editar, comentar e apagar continuam sendo do REQUESTER (e do master), então o
+chamado do colega abre em leitura — a tela já monta os controles a partir dos flags do servidor, e o
+`same_role` novo é o que a separa de "meu". Alargar a escrita seria outra decisão.
+
+- O papel fica **GRAVADO no ticket** (`requester_role`) e é o de quem abriu, não o que a pessoa tem
+  hoje: sair do BO para o MO não leva os chamados antigos para a fila nova.
+- O ticket **ANTERIOR** a essa coluna tem o papel resolvido no cadastro de usuários
+  (`_tk_roles_by_sid`), numa consulta **por LOTE** e com cache: por ticket, a listagem abriria o
+  DuckDB de usuários uma vez por linha da tela, e ele é conexão singleton atrás de um lock global
+  (CLAUDE.md §4). Sem esse resgate, a fila inteira de antes sumiria da mesa que a abriu — e um chamado
+  que some é pior do que um que aparece para gente demais.
+- ⚠️ **Papel VAZIO não casa com nada.** Dois usuários sem papel no cadastro não são uma mesa, e
+  tratá-los como uma abriria a fila de um para o outro. Ali vale a regra antiga: só o próprio.
+
+> **A asserção do gradiente do e-mail, no `check_tickets.py`, vivia vermelha** e foi alinhada à regra
+> que vale. Ela cobrava a imagem `cid:otc_gradient` do banner — abolida quando o cabeçalho virou cor
+> sólida + gradiente CSS (o `<v:rect>` que o Outlook pintava fora da célula). Agora ela prende o
+> contrário: bgcolor sólido, `linear-gradient` no style, e NENHUMA imagem ou VML. Teste que cobra a
+> regra revogada é pior que teste faltando — ele treina o time a ignorar o vermelho.
+
+---
+
+## §263 — Três dados que nasciam errados: a entidade do FXO, o Strike do FWD Start e o distrato
+
+**A confirmação de FXO chegava ao Track Confirmations sem Legal Entity.** Só as páginas genéricas de
+NDF trazem o campo `LE` no deal; mercadoria já caía num `JPM` fixo, e o FXO ficava **em branco**
+esperando que alguém cadastrasse a entidade linha a linha — só que a resposta é sempre a mesma: a
+mesa booka a opção de câmbio no Banco J.P. Morgan. Ele entrou no `_MC_JPM_SOURCES`, e a razão social
+sai do `le-spn` (`JPM` → `BANCO J.P MORGAN S.A`), nunca de um literal. ⚠️ A lista é a da **Legal
+Entity**, e não a de LOB (`_COMMODITY_SOURCES`): a FXO é CEM e ainda assim é bookada no Banco, então
+amarrar as duas perguntas na mesma resposta erraria uma das duas.
+
+**O Strike do NDF FWD Start derrubava para Amend um deal já Success.** O que a B3 registra é o
+**Strike Set Offset** — o spread sobre uma taxa que só se conhece no dia do fixing; o Strike da linha
+é a projeção dessa taxa no momento do booking, e a Athena a recalcula a cada pull. A operação não
+mudou, mudou o mercado, e sem isso **todo FWD Start já registrado voltava sozinho para a fila** e a
+mesa reconferia um registro que continuava certo. A célula continua destacada (o campo entra em
+`AmendChanged` como qualquer outro); o que não regride é o status. A lista é
+`_ND_AMEND_COSMETIC_BY_PRODUCT`, **por produto** — o Strike é econômico em todos os outros —, e por
+isso `_nd_api_amend` passou a receber o `product` de quem chama. Produto vazio ("não sei") vale só a
+lista geral: o default é econômico, porque um campo esquecido virando Amend custa uma revisão e o
+contrário custa uma operação registrada errada.
+
+**`TERMO DE RESILICAO` entrou nos Confirmation Types.** A lista é uma só e tem quatro consumidores
+(§217), então o tipo apareceu de uma vez no upload do Electronic Inventory, na pasta em que o
+documento é gravado, no cadastro Produto × LOB da esteira e no dropdown do Track. ⚠️ **Sem acento, e
+isso não é estilo**: `confirmation_type()` compara `upper_norm(produto)` com a tupla, e o
+`upper_norm` normaliza em NFKD e descarta as marcas de combinação — um `TERMO DE RESILIÇÃO` cadastrado
+com cedilha chegaria à comparação como `TERMO DE RESILICAO` e **nunca casaria consigo mesmo**: o tipo
+não resolveria e a pasta não seria achada (`_product_folder` faz o mesmo lookup), sem erro nenhum. O
+lado bom da mesma normalização é que quem digita "Termo de Resilição" com acento resolve para o
+código certo. Tipo novo mexe em **três** listas, e as três têm teste: `CONFIRMATION_TYPES`,
+`TYPE_FOLDER_LEGACY` (com tupla VAZIA quando o tipo nunca existiu sob outro nome — a entrada existe
+para um tipo ausente não se confundir com um histórico esquecido) e `VALIDATION_SEED`, sem a qual ele
+cairia no `DEFAULT_RULE` sem ninguém ter decidido nada.
+
+**O Guia do Usuário estava contando o fluxo antigo de geração.** O item 3.8 mandava clicar em
+*Confirmation* na barra do New Deals — botão que não existe mais — e o 3.11 descrevia o Monitor só
+como tela de validação. Os dois foram reescritos com o ciclo que vale (Generate no card de Pending
+OTC, um botão só no editor, a validação da esteira em seguida), junto com o 3.15, que ganhou o card
+do BACC. O `.docx` foi regerado do `.md`, que é a fonte única.

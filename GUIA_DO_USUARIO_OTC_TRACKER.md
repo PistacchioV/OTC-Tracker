@@ -198,16 +198,14 @@ O que acontece com cada operação:
 
 ### 3.8. Gerar confirmações e e-mails
 
-Disponível em **Opção FXO**, **Opção Commodities** e **NDF Commodities**. Os três botões ficam ao lado do **Show entries**.
+Disponível em **Opção FXO**, **Opção Commodities** e **NDF Commodities**. Os botões ficam ao lado do **Show entries**.
 
 ![New Deals — Opção FXO](docs/sop-screenshots/new_deals-opt-fxo.png)
 
-**Confirmation — documento da contraparte**
-
-1. Clique em **Confirmation**.
-2. Uma janela lista os grupos (contraparte × moeda × tipo de documento) e quantas operações cada um contém.
-3. Somente operações com status **Success** entram — a confirmação só é gerada depois do registro na B3.
-4. Abra o grupo, revise no painel lateral e gere. São produzidos o **Word**, o **PDF** e o **XML**, arquivados na pasta da contraparte.
+> **A confirmação da contraparte não é mais gerada aqui.** O botão *Confirmation* saiu das telas de
+> New Deals: gerar e validar viraram o mesmo trabalho, no mesmo lugar — o **Confirmations Monitor**
+> (item 3.11). Na prática você não perde nada: a confirmação continua nascendo só depois do registro
+> na B3, e o documento é o mesmo. O que mudou é por onde se começa.
 
 **Premium — aviso de pagamento de prêmio (D0)**
 
@@ -270,6 +268,27 @@ A confirmação passa por uma esteira antes de sair: **(Pending Legal) → Pendi
 4. **Validar** carimba a etapa com a data, a hora e o SPN de quem validou, e a confirmação passa para a etapa seguinte.
 5. **Rejeitar** (MO e FO) pede um comentário, avisa o Brazil OTC Ops por e-mail e devolve a confirmação para o OTC. As validações já dadas são apagadas: o documento vai ser refeito.
 
+**Gerar a confirmação — no card de Pending OTC**
+
+Enquanto o documento ainda não foi gerado, o botão do item aparece como **Generate** em vez de
+*Validate* (o sistema sabe disso porque não há PDF na pasta da contraparte). O ciclo inteiro acontece
+a partir daí:
+
+1. Clique em **Generate**. Abre uma aba nova com a confirmação já preenchida.
+2. Revise o documento. O único botão é **💾 Salvar Word + PDF no Inventory** — ele grava o Word, o
+   PDF e o XML na pasta da contraparte.
+3. Gravado, a **tela de validação abre na sequência**, com o PDF de um lado e o checklist do outro.
+   Validando ali, a confirmação segue para MO e/ou FO normalmente.
+4. Se você fechar sem validar, nada se perde: a confirmação **continua em Pending OTC**, agora com o
+   documento na pasta, e o botão do card volta a ser **Validate**.
+
+> **Só o OTC gera.** Nos cards de MO e FO, uma confirmação sem documento na pasta continua com o
+> botão riscado — essas mesas conferem o papel, não o produzem.
+>
+> Se o Generate abrir uma tela de erro, ela diz **qual** é o problema: o produto não tem tela de
+> geração no sistema, a linha está sem *Trade Date*, ou a operação não está no arquivo do dia
+> daquela data. Os três pedem ações diferentes.
+
 As duas pontas da esteira não são de validação:
 
 - **Pending Legal** é um **hold manual**: enquanto a confirmação estiver nele, ela não anda, mesmo com as validações em dia. O card tem o botão de **soltar**, que devolve a confirmação para a fila do OTC.
@@ -284,9 +303,20 @@ As duas pontas da esteira não são de validação:
 
 ![Track Confirmations](docs/sop-screenshots/manual-confirmation_track.png)
 
-A tela **Track Confirmations** é a base inteira: filtro por coluna, atualização em massa por coluna, exportação do que estiver na tela (com o filtro e a ordenação aplicados) e os cards do topo funcionando como filtro por etapa. Ela abre ordenada pelo **Aging Confirmação**, do menor para o maior.
+A tela **Track Confirmations** é a base inteira: filtro por coluna, atualização em massa por coluna, exportação do que estiver na tela (com o filtro e a ordenação aplicados) e os cards do topo funcionando como filtro por etapa. Ela abre ordenada pelo **Aging**, do menor para o maior.
 
-> As operações de **NDF Commodities, Opção de Commodities, FXO e NDF FWD Start** entram nesta esteira sozinhas, quando a confirmação é gerada no New Deals.
+- **Os títulos das colunas estão em inglês** e acompanham o idioma escolhido no topo da página, como
+  o resto do sistema: *Settlement Date*, *Trade Date*, *Underlying Asset*, *Notional/Qty*,
+  *Counterparty*, *Aging*.
+- **`Notional Amount CCY`** (ao lado de *Notional/Qty*) mostra a **moeda** do notional junto com o
+  valor — `USD 1.500.000,00`. Ela é preenchida sozinha quando a operação é mapeada, e é diferente do
+  *Underlying Asset* ao lado: em mercadoria, aquele traz a commodity (OLEO, PLATTS), que não é moeda.
+  Operações mapeadas antes desta coluna existir aparecem em branco.
+- **Digite `blank` num campo de filtro** para listar as linhas em que aquela coluna está **vazia** —
+  é assim que se acha, por exemplo, tudo que ainda está sem *Callback Date*. A palavra só vale
+  sozinha no campo; escrevendo mais que isso, o filtro procura o texto normalmente.
+
+> As operações de **NDF Commodities, Opção de Commodities, FXO e NDF FWD Start** entram nesta esteira sozinhas, assim que são mapeadas no New Deals — antes mesmo de o documento existir. É por isso que elas aparecem no card de *Pending OTC* já com o botão **Generate**.
 
 > **A fila parada é cobrada por e-mail.** O card *Confirmations Escalation* do **Control Panel** manda o que está pendente de validação para o OTC, para o Sales Support e para o Front Office (um e-mail por produto), toda segunda e quinta, e diariamente quando alguma operação está no último dia do prazo ou já vencida. Ver o item 3.15.
 
@@ -395,6 +425,21 @@ Este card manda por e-mail as confirmações que estão **pendentes de validaç�
 > **Sem nada pendente, o e-mail não é enviado** — e isso é diferente de *sem destinatário*, que o card mostra em amarelo: aí a cobrança deixou de sair porque a lista está vazia.
 >
 > Se aparecer o aviso amarelo de **produto sem grupo**, há confirmação em *Pending FO* de um produto × LOB que não está na quebra acima — ela não está sendo cobrada por ninguém. Peça a inclusão ao time de tecnologia.
+
+**BACC EA Metrics — a planilha diária das operações manuais**
+
+Todo dia útil (calendário ANBIMA) às **16h00**, o sistema manda um e-mail com uma planilha `.xlsx`
+anexa para as listas de **TO** e **CC** do card. Assunto: *Support to OTC Derivatives - EA Metrics*.
+
+1. Preencha TO e CC e saia do campo — salva sozinho, como nos demais cards.
+2. **Run** manda agora, sem esperar as 16h00, e não consome o disparo do dia.
+3. A planilha traz as operações do **Track Confirmations** que ainda estão **sem Callback Date** e
+   que não estão em *Ok*, ordenadas da mais antiga para a mais nova (*Aging* do maior para o menor).
+4. As colunas *Born Age* saem em branco de propósito: elas são preenchidas por quem consolida do
+   outro lado. A coluna *Comments* traz o **assunto do e-mail de recap** da operação.
+
+> **Um dia sem operação manual manda a planilha vazia mesmo assim** — a ausência é a métrica. O
+> único caso em que nada é enviado é a lista de TO em branco, e o card avisa isso em âmbar.
 
 ---
 
