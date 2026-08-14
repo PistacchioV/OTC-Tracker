@@ -938,11 +938,25 @@ O card **BACC EA Metrics** (Control Panel, empilhado com o de Pending
 Confirmations Spreadsheet Metrics — os dois juntos preenchem a altura do
 Confirmations Escalation, que divide a linha) manda, todo dia útil ANBIMA às
 **16:00 BRT**, um e-mail com as operações manuais em anexo `.xlsx`. A fonte é a
-MESMA `manual_conf.load_all()` que o Track Confirmations mostra, **sem filtro**:
-a planilha é a extração da TELA, e a tela mostra tudo até alguém clicar num card
-— filtrar no servidor criaria uma segunda definição de "operação manual" que
-ninguém veria na interface.
+MESMA `manual_conf.load_all()` que o Track Confirmations mostra, filtrada pelas
+linhas **sem Data Callback**.
 
+- **O filtro é a CÉLULA em branco, não um status.** O callback é a conferência
+  por telefone com o cliente e é ele que fecha a operação manual do ponto de
+  vista da métrica; a planilha é a lista do que ainda falta. O teste é a coluna
+  vazia porque é exatamente essa coluna que o Track Confirmations mostra —
+  derivar de um Pending ou de um estágio criaria uma segunda regra, que
+  discordaria da tela no primeiro caso de borda.
+- **A mesma falta vira badge no Monitor**, e só no card de **Pending FepWeb**:
+  ali a confirmação está validada esperando o envio ao cliente, e o callback é o
+  que precisa ter acontecido ANTES desse envio — nos outros estados a coluna
+  está em aberto por construção, e o vermelho só diria que a esteira mal
+  começou. O item traz `no_callback` como CONTAGEM (`_extra_card`), não como
+  bandeira: um documento cobre várias operações, e "falta callback" num grupo de
+  dez não diz se falta em uma ou nas dez — por isso o número aparece no badge a
+  partir de duas. A cor não reusa a do prazo (`.mc-sla-late`): as duas marcas
+  podem valer ao mesmo tempo, e o vermelho daqui diz que falta um passo, não que
+  estourou o relógio.
 - **Planilha vazia VAI assim mesmo.** Um dia sem operação manual é ele próprio a
   métrica, e o único motivo de não enviar é lista de TO em branco
   (`no_recipient`), que o card mostra em âmbar — é relatório que não saiu de casa.

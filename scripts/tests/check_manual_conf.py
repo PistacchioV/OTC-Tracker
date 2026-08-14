@@ -243,6 +243,27 @@ check('o item traz o que identifica a confirmação sem abrir',
       sorted(por_label[M.PENDING_OTC]['items'][0].keys()),
       sorted(list(M.MONITOR_FIELDS) +
              ['Tipo', 'sla', 'key', 'keys', 'trades', 'count', 'stage', 'docs']))
+
+# ── A falta de Data Callback nos cards fora das mesas ────────────────────────
+# É CONTAGEM e não bandeira: um documento cobre várias operações, e "falta
+# callback" num grupo de dez não diz se falta em uma ou nas dez. Só o card de
+# Pending FepWeb a mostra (a tela decide) — ali a confirmação está validada
+# esperando o envio, e o callback é o que precisa ter acontecido antes dele.
+def _fep(tid, cli, cb):
+    r = M.blank_row(**{'Trade ID': tid, 'Cliente': cli, 'Produto': 'FXO', 'LOB': 'CEM',
+                       'Moeda': 'USD', 'Data Operação': '05/08/2026', 'Data Callback': cb})
+    r['Pending'] = M.PENDING_FEPWEB
+    return r
+
+
+_cb_card = M._extra_card('FEPWEB', M.PENDING_FEPWEB, [
+    _fep('CB1', 'ACME', ''), _fep('CB2', 'ACME', ''),
+    _fep('CB3', 'BETA', '01/08/2026'), _fep('CB4', 'BETA', '01/08/2026'),
+    _fep('CB5', 'GAMA', ''), _fep('CB6', 'GAMA', '01/08/2026')])
+_cb = {i['Cliente']: i['no_callback'] for i in _cb_card['items']}
+check('o grupo sem callback nenhum conta as duas', _cb['ACME'], 2)
+check('   o grupo com callback nas duas não é marcado', _cb['BETA'], 0)
+check('   e o misto conta só a que falta', _cb['GAMA'], 1)
 check('   com a luz do prazo da ETAPA daquele card',
       sorted(por_label[M.PENDING_OTC]['items'][0]['sla'].keys()),
       ['deadline', 'left', 'level'])

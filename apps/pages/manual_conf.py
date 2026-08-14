@@ -1287,10 +1287,22 @@ def _extra_card(stage, pending_value, rows, docs_for=None):
             item['trades'].append(k)
         if _aging_int(r.get('Aging Confirmação')) > _aging_int(item.get('Aging Confirmação')):
             item['Aging Confirmação'] = r.get('Aging Confirmação', '')
+        # Quantas operações do grupo estão SEM Data Callback. É contagem e não
+        # bandeira porque o documento cobre várias operações: dizer só "falta
+        # callback" num grupo de dez esconde se falta em uma ou nas dez.
+        #
+        # O card que a mostra é o de **Pending FepWeb** (a tela decide): ali a
+        # confirmação está validada e esperando o envio ao cliente, e o callback
+        # é justamente o que precisa ter acontecido ANTES desse envio. Nos
+        # demais estados a coluna ainda está em aberto por construção, e um
+        # badge vermelho ali só diria que a esteira mal começou.
+        if not _filled(r, 'Data Callback'):
+            item['no_callback'] = item.get('no_callback', 0) + 1
     itens = list(grupos.values())
     for it in itens:
         it['count'] = len(it['keys'])
         it['key'] = it['keys'][0] if it['keys'] else ''
+        it.setdefault('no_callback', 0)
     itens.sort(key=lambda i: -_aging_int(i.get('Aging Confirmação')))
     return {'stage': stage, 'label': pending_value, 'count': len(itens),
             'trades': sum(i['count'] for i in itens), 'items': itens}

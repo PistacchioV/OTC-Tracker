@@ -149,6 +149,26 @@
 [data-bs-theme=dark] #mc-monitor .mc-sla-warn .mc-item__sla { background: #f2a417; color: #2a1c00; border-color: #ffbb3d; }
 [data-bs-theme=dark] #mc-monitor .mc-sla-late .mc-item__sla { background: #e5484d; color: #2a0508; border-color: #ff6166; }
 
+/* Sem Data Callback (só no card de Pending FepWeb). Mesma geometria do chip do
+   prazo — é a mesma linha e as duas marcas convivem —, e SÓLIDO vermelho pela
+   mesma razão: pastel some no meio das etiquetas.
+   Não reusa `.mc-sla-late` porque as duas coisas podem valer ao mesmo tempo, e
+   a cor do prazo é do PRAZO. Aqui o vermelho diz que falta um passo, não que
+   estourou o relógio. */
+#mc-monitor .mc-item__nocb {
+    display: inline-flex; align-items: center; gap: .3rem;
+    font-size: .64rem; font-weight: 800; letter-spacing: .02em;
+    padding: .14rem .5rem; border-radius: 999px;
+    background: #d32f2f; color: #fff; border: 1px solid #b71c1c;
+}
+[data-bs-theme=dark] #mc-monitor .mc-item__nocb {
+    background: #e5484d; color: #2a0508; border-color: #ff6166;
+}
+/* O item ganha só a MOLDURA vermelha, não o fundo: o card de FepWeb não tem luz
+   de prazo (o estado não é de mesa nenhuma), então a moldura é o que faz a
+   confirmação sem callback saltar ao correr o olho pela lista. */
+#mc-monitor .mc-item--nocb { border-color: rgba(211, 47, 47, .55); }
+
 /* A luz fica ATRÁS do item, na receita dos cards do New Deals Monitor: sombra em
    CAMADAS (contato + média + halo largo) e a moldura quase neutra. O item
    continua branco — tarja lateral e fundo em degradê pesavam a fila inteira e
@@ -354,6 +374,8 @@
               noContractTip: 'no contract to validate yet',
               generate: 'Generate',
               generateTip: 'the confirmation has not been generated yet — open the editor',
+              noCb: 'no callback',
+              noCbTip: 'Callback Date is empty — the client confirmation by phone is still missing',
               legalRelease: 'Release to OTC',
               legalTitle: 'Release to OTC?',
               legalText: '{c} — {n} operation(s) will leave Pending Legal and enter the OTC queue, here and on the Pending Confirmation page.',
@@ -378,6 +400,8 @@
               noContractTip: 'ainda não há contrato para validar',
               generate: 'Gerar',
               generateTip: 'a confirmação ainda não foi gerada — abrir o editor',
+              noCb: 'sem callback',
+              noCbTip: 'Data Callback em branco — falta a conferência por telefone com o cliente',
               legalRelease: 'Liberar p/ OTC',
               legalTitle: 'Liberar para o OTC?',
               legalText: '{c} — {n} operação(ões) saem de Pending Legal e entram na fila do OTC, aqui e na página Pending Confirmation.',
@@ -402,6 +426,8 @@
               noContractTip: 'aún no hay contrato para validar',
               generate: 'Generar',
               generateTip: 'la confirmación aún no fue generada — abrir el editor',
+              noCb: 'sin callback',
+              noCbTip: 'Fecha de Callback en blanco — falta la conferencia telefónica con el cliente',
               legalRelease: 'Liberar p/ OTC',
               legalTitle: '¿Liberar para el OTC?',
               legalText: '{c} — {n} operación(es) salen de Pending Legal y entran en la cola del OTC, aquí y en la página Pending Confirmation.',
@@ -489,7 +515,23 @@
               '<i class="ti ti-clock-hour-4"></i>' + esc(slaTxt) + '</span>'
             : '';
 
-        return '<div class="mc-item ' + slaCls + '">' +
+        // Falta de Data Callback, marcada só no card de Pending FepWeb: ali a
+        // confirmação está validada esperando o envio ao cliente, e o callback é
+        // o que precisa ter acontecido ANTES desse envio. Nos demais estados a
+        // coluna está em aberto por construção, e o vermelho só diria que a
+        // esteira mal começou.
+        //
+        // O número entra no badge quando o grupo tem MAIS DE UMA operação sem
+        // callback: um documento cobre várias, e "falta callback" num grupo de
+        // dez não diz se falta em uma ou nas dez.
+        var semCb = (stage === 'FEPWEB' && it.no_callback) ? it.no_callback : 0;
+        var cbBadge = semCb
+            ? '<span class="mc-item__nocb" title="' + esc(t('noCbTip')) + '">' +
+              '<i class="ti ti-phone-off"></i>' + esc(t('noCb')) +
+              (semCb > 1 ? ' (' + semCb + ')' : '') + '</span>'
+            : '';
+
+        return '<div class="mc-item ' + slaCls + (semCb ? ' mc-item--nocb' : '') + '">' +
             '<div class="mc-item__top">' +
                 '<span class="mc-item__cli">' + esc(it.Cliente || t('none')) + '</span>' +
                 '<span class="mc-item__age ' + ageClass(age) + '">' +
@@ -499,6 +541,7 @@
                 ' <span class="mc-item__ops"><i class="ti ti-layers-subtract"></i>' +
                 (it.count || 1) + ' ' + esc(t('ops')) + '</span>' +
             '</div>' +
+            (cbBadge ? '<div class="mc-item__slarow">' + cbBadge + '</div>' : '') +
             (slaChip ? '<div class="mc-item__slarow">' + slaChip + '</div>' : '') +
             '<div class="mc-item__acts">' + docs + acao(stage, it) +
             '</div></div>';

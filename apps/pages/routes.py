@@ -29604,14 +29604,20 @@ def _save_bacc_recipients(d):
 
 
 def _bacc_rows():
-    """As linhas do anexo — a esteira inteira, como o Track Confirmations abre.
+    """As linhas do anexo: as do Track Confirmations **sem Data Callback**.
 
-    Sem filtro de propósito: a planilha é a extração da TELA, e a tela mostra
-    tudo até alguém clicar num card. Filtrar aqui criaria uma segunda definição
-    de 'operação manual' que ninguém veria na interface.
+    O callback é a conferência por telefone com o cliente, e é ele que fecha a
+    operação manual do ponto de vista da métrica. A planilha é a lista do que
+    ainda falta — mandar a esteira inteira encheria o relatório de operação já
+    resolvida, e quem consolida teria de refazer o filtro do outro lado.
+
+    O teste é a célula em branco, não um status: o callback é uma DATA, e o
+    Track Confirmations mostra exatamente essa coluna vazia. Uma segunda regra
+    aqui (um Pending, um estágio) discordaria da tela no primeiro caso de borda.
     """
     from apps.pages import manual_conf as _mc
-    return _mc.load_all()
+    return [r for r in _mc.load_all()
+            if not str(r.get('Data Callback', '') or '').strip()]
 
 
 def _bacc_build_xlsx(rows):
