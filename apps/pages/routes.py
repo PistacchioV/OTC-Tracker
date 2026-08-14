@@ -29629,6 +29629,9 @@ def _bacc_amount(row):
 # um notional com centavos ('250000.50') não passava no teste e ia para o Excel
 # como TEXTO — sem somar, sem ordenar —, e um Trade ID todo numérico viraria um
 # número, perdendo o zero à esquerda.
+#
+# `num` é contagem (o Aging, inteiro e sem máscara); `money` é valor, e sai com
+# a máscara de milhar e duas casas (`_BACC_MONEY_FMT`).
 _BACC_COLUMNS = (
     ('Trade ID',          'Trade ID',           'text'),
     ('Product',           'Produto',            'text'),
@@ -29637,12 +29640,23 @@ _BACC_COLUMNS = (
     ('Conterparty Name',  'Cliente',            'text'),
     ('Aging',             'Aging Confirmação',  'num'),
     ('Born Age',          '',                   'text'),
-    ('Notional/Qty',      'Notional',           'num'),
+    ('Notional/Qty',      'Notional',           'money'),
     ('National Currency', _bacc_ccy,            'text'),
-    ('Notional Amount',   _bacc_amount,         'num'),
+    ('Notional Amount',   _bacc_amount,         'money'),
     ('Comments',          'E-mail Subject',     'text'),
     ('LOB',               'LOB',                'text'),
 )
+
+
+# A máscara dos valores. O código é escrito na convenção INVARIANTE do formato
+# de arquivo (`,` = milhar, `.` = decimal), sempre — não é o que se vê. Quem
+# desenha a célula é o Excel de quem abre, com o separador do idioma DELE: num
+# Excel pt-BR este mesmo código sai `1.500.000,00`, que é a máscara pedida.
+#
+# Escrever `#.##0,00` aqui (a máscara como ela se LÊ em português) produziria um
+# código malformado — o Excel leria o ponto como decimal —, e o valor sairia
+# errado sem erro nenhum.
+_BACC_MONEY_FMT = '#,##0.00'
 
 
 def _bacc_num(raw):
@@ -29765,12 +29779,20 @@ def _bacc_build_xlsx(rows):
                     raw = '00/00/0000'          # o que a célula OCUPA na tela
                 else:
                     cell.value = raw            # texto livre numa coluna de data
-            elif kind == 'num':
+            elif kind in ('num', 'money'):
                 n = _bacc_num(raw)
                 # Número que não parseia sai COMO VEIO: uma célula de texto no
                 # meio de uma coluna de números é menos ruim do que sumir com o
-                # valor que está no banco.
+                # valor que está no banco. E aí NÃO leva máscara — a máscara
+                # sobre um texto não faz nada, mas prometeria um número.
                 cell.value = raw if n is None else n
+                if n is not None and kind == 'money':
+                    cell.number_format = _BACC_MONEY_FMT
+                    # A largura tem de medir o que se VÊ, não o que está no
+                    # banco: '1500000' são 7 caracteres e a célula desenha
+                    # '1.500.000,00', que são 12. Sem isto a coluna nasce
+                    # estreita e o Excel mostra ####.
+                    raw = '{:,.2f}'.format(n)
             else:
                 cell.value = raw
             larguras[j - 1] = max(larguras[j - 1], len(raw))

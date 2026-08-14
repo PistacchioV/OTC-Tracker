@@ -976,12 +976,24 @@ fim, porque linha sem idade não encabeça um relatório de atraso).
   `Notional Amount` (o VALOR). A moeda **não sai da coluna `Moeda`**: aquela é o
   ATIVO da confirmação e em mercadoria guarda a commodity (OLEO, PLATTS), que
   não é moeda nenhuma — era isso que essa coluna dizia antes.
-- **O TIPO é declarado por coluna** (`text` / `num` / `date`), não adivinhado do
-  conteúdo. A versão anterior escrevia como inteiro tudo que "parecia dígito", e
-  errava dos dois lados: um notional com centavos (`250000.50`) não passava no
-  teste e ia para o Excel como TEXTO — sem somar e sem ordenar —, e um Trade ID
-  todo numérico viraria número, perdendo o zero à esquerda. `_bacc_num` aceita as
-  duas escritas que convivem no banco (`1500000` e `1.500.000,00`).
+- **O TIPO é declarado por coluna** (`text` / `num` / `money` / `date`), não
+  adivinhado do conteúdo. A versão anterior escrevia como inteiro tudo que
+  "parecia dígito", e errava dos dois lados: um notional com centavos
+  (`250000.50`) não passava no teste e ia para o Excel como TEXTO — sem somar e
+  sem ordenar —, e um Trade ID todo numérico viraria número, perdendo o zero à
+  esquerda. `_bacc_num` aceita as duas escritas que convivem no banco
+  (`1500000` e `1.500.000,00`).
+- **`money` é valor e leva a máscara de milhar; `num` é contagem e não leva** —
+  o Aging em `12,00` dias não quer dizer nada. E o código da máscara é escrito na
+  convenção INVARIANTE do formato de arquivo (`#,##0.00`, com `,` de milhar e
+  `.` de decimal), **sempre**: quem desenha a célula é o Excel de quem abre, com
+  o separador do idioma DELE, e num Excel pt-BR esse mesmo código sai
+  `1.500.000,00`. Escrever `#.##0,00` (a máscara como ela se lê em português)
+  produziria um código malformado e o valor sairia errado sem erro nenhum. Valor
+  que não parseia fica texto e **sem** máscara: máscara sobre texto não faz nada,
+  mas prometeria um número. A largura da coluna mede o que se VÊ — `1500000` são
+  7 caracteres e a célula desenha 12; sem isso a coluna nasce estreita e o Excel
+  mostra `####`.
 - **A mesma falta vira badge no Monitor**, e só no card de **Pending FepWeb**:
   ali a confirmação está validada esperando o envio ao cliente, e o callback é o
   que precisa ter acontecido ANTES desse envio — nos outros estados a coluna

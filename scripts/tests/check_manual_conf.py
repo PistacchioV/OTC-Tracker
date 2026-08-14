@@ -597,6 +597,22 @@ check('   e chega ao xlsx como número',
       [250000.5, 'BRL', 250000.5, 12])
 check('   Born Age continua sempre vazia',
       [r[6].value for r in _ws.iter_rows(min_row=2)], [None, None, None])
+# A máscara vai no CÓDIGO invariante do formato de arquivo (',' = milhar,
+# '.' = decimal). Quem desenha é o Excel de quem abre, com o separador do idioma
+# dele — num Excel pt-BR este código sai '1.500.000,00', que é a máscara pedida.
+# Escrever '#.##0,00' aqui produziria um código malformado, e o valor sairia
+# errado sem erro nenhum.
+check('as duas colunas de valor levam a máscara de milhar',
+      [_ws.cell(row=2, column=_hdr.index(c) + 1).number_format
+       for c in ('Notional/Qty', 'Notional Amount')], ['#,##0.00'] * 2)
+# O Aging é CONTAGEM, não valor: '12,00' dias não quer dizer nada.
+check('   e o Aging não leva',
+      _ws.cell(row=2, column=_hdr.index('Aging') + 1).number_format, 'General')
+# Máscara sobre texto não faz nada, mas prometeria um número.
+_ws2 = R._bacc_build_xlsx([_bacc_linha('T-X', '1', 'Pending OTC', 'EUR', 'n/a')]).active
+check('   valor que não parseia fica texto, e sem máscara',
+      (_ws2.cell(row=2, column=8).value, _ws2.cell(row=2, column=8).number_format),
+      ('n/a', 'General'))
 
 print('\n== 9b. o upgrade do cadastro de validação ==')
 ANTIGO = [
