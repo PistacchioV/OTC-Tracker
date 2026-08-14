@@ -467,6 +467,52 @@ check('o seed cobre todos os tipos',
       sorted({s['PRODUCT'] for s in R._MC_VALIDATION_SEED}),
       sorted(M.CONFIRMATION_TYPES))
 
+print('\n== 8b. o E-mail Subject sai do recap que está na pasta ==')
+# O casamento é em dois passos, e a ordem separa o certo do plausível. A versão
+# que pegava "o primeiro recap da pasta" carimbava o assunto da DBH-1AAA também
+# na DBH-1BBB, e dava a uma operação SEM recap próprio o e-mail de outra
+# confirmação — a pasta é cliente × dia × produto e guarda mais de uma.
+def _mail(nome, assunto):
+    return {'name': nome, 'email': True, 'subject': assunto, 'url': ''}
+
+
+_PDF = {'name': 'ACME - USD - DBH-1AAA', 'url': ''}
+_R1 = _mail('Internal Recap DBH-1AAA', 'Recap - DBH-1AAA')
+_R2 = _mail('Internal Recap DBH-1BBB', 'Recap - DBH-1BBB')
+_RU = _mail('Internal Recap ACME 05-08-2026', 'Recap - ACME 05/08')
+
+check('cada operação leva o recap que a NOMEIA',
+      R._mc_sync_email_subjects([_PDF, _R1, _R2], ['DBH-1AAA', 'DBH-1BBB']),
+      {'DBH-1AAA': 'Recap - DBH-1AAA', 'DBH-1BBB': 'Recap - DBH-1BBB'})
+# Recap único sem nome de operação é o do booking: vale para o grupo inteiro.
+check('   recap único sem nome de operação vale para o grupo',
+      R._mc_sync_email_subjects([_PDF, _RU], ['DBH-1AAA', 'DBH-1BBB']),
+      {'DBH-1AAA': 'Recap - ACME 05/08', 'DBH-1BBB': 'Recap - ACME 05/08'})
+# Vários recaps e nenhum nomeando operação é escolha às cegas: célula vazia pede
+# o dado, célula errada aponta para um e-mail que não confirma aquele trade.
+check('   vários recaps sem nome de operação não escrevem nada',
+      R._mc_sync_email_subjects([_PDF, _RU, _mail('Recap ACME reenvio', 'X')],
+                                ['DBH-1AAA']), {})
+check('   e a operação sem recap próprio também não',
+      R._mc_sync_email_subjects([_PDF, _R1, _R2], ['DBH-9ZZZ']), {})
+check('   PDF não é e-mail', R._mc_sync_email_subjects([_PDF], ['DBH-1AAA']), {})
+
+# A gravação só toca o que MUDOU: sem isso, cada abertura do Monitor reescreveria
+# a esteira inteira (o upsert apaga e reinsere a linha nos dois bancos).
+M.upsert_row(M.blank_row(**{'Trade ID': 'SUBJ1', 'Cliente': 'ACME',
+                            'Produto': 'FXO', 'LOB': 'CEM'}))
+check('grava o assunto na linha', M.set_email_subjects({'SUBJ1': 'Recap - X'}), 1)
+check('   e a célula ficou com ele',
+      M.find_row('SUBJ1')['E-mail Subject'], 'Recap - X')
+check('   reescrever o MESMO assunto não grava nada',
+      M.set_email_subjects({'SUBJ1': 'Recap - X'}), 0)
+check('   assunto novo sobrescreve (o e-mail é a fonte da coluna)',
+      (M.set_email_subjects({'SUBJ1': 'Recap - Y'}),
+       M.find_row('SUBJ1')['E-mail Subject']), (1, 'Recap - Y'))
+check('   chave inexistente não cria linha',
+      (M.set_email_subjects({'NAO-EXISTE': 'Z'}), M.find_row('NAO-EXISTE')), (0, None))
+M.delete_row('SUBJ1')
+
 print('\n== 9b. o upgrade do cadastro de validação ==')
 ANTIGO = [
     {'PRODUCT': 'NDF COMM', 'LOB': '', 'OTC': 'REQUESTED', 'MO': 'REQUESTED', 'FO': 'EXEMPT'},

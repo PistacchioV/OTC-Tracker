@@ -31905,17 +31905,42 @@ def _mc_sync_email_subjects(docs, trades):
     arquivo que está na pasta — não quem digita. Aqui é o único ponto do app em
     que o e-mail é aberto, então é daqui que a coluna se atualiza.
 
-    Só o PRIMEIRO recap conta. A pasta do dia pode ter mais de um e-mail (o
-    recap e um reenvio), e concatenar os assuntos encheria a célula com um texto
-    que não é o assunto de e-mail nenhum.
+    O casamento é em DOIS passos, e a ordem é o que separa o certo do plausível:
+
+      1. **pelo Trade ID no NOME do arquivo**, um recap por operação. É o caso
+         da mesa que salva `Internal Recap DBH-1AAA.msg` ao lado do PDF de cada
+         trade, e é EXATO — a primeira versão pegava o primeiro recap da pasta e
+         carimbava o mesmo assunto em todas as operações do grupo, o que dava a
+         DBH-1BBB o e-mail da DBH-1AAA;
+      2. **recap ÚNICO** — nenhum arquivo nomeia operação, mas só há um e-mail
+         na pasta da confirmação. Aí ele é o recap daquele booking e vale para o
+         grupo inteiro; é o caso do recap nomeado por contraparte/data.
+
+    Fora disso não se escreve nada. Vários recaps sem nome de operação é uma
+    escolha às cegas: a pasta é cliente × dia × produto e pode guardar duas
+    confirmações (OLEO e PLATTS do mesmo dia), e `_mc_confirmation_docs` cai
+    para a listagem inteira quando o funil não casa — foi assim que uma operação
+    sem recap próprio recebeu o assunto do e-mail de outra. Célula vazia pede o
+    dado; célula errada aponta para um e-mail que não confirma aquele trade.
     """
     ids = [str(k).strip() for k in (trades or []) if str(k or '').strip()]
-    if not ids:
+    mails = [d for d in (docs or [])
+             if d.get('email') and str(d.get('subject', '') or '').strip()]
+    if not ids or not mails:
         return {}
-    for d in docs or []:
-        assunto = str(d.get('subject', '') or '').strip() if d.get('email') else ''
-        if assunto:
-            return {k: assunto for k in ids}
+    out = {}
+    for k in ids:
+        alvo = k.upper()
+        for d in mails:
+            if alvo in str(d.get('name', '')).upper():
+                out[k] = str(d['subject']).strip()
+                break
+    if out:
+        return out
+    if len(mails) == 1:
+        return {k: str(mails[0]['subject']).strip() for k in ids}
+    log.info('[manual-conf] %d recaps na pasta e nenhum nomeia operação (%s) — '
+             'E-mail Subject não foi preenchido', len(mails), ', '.join(ids[:5]))
     return {}
 
 
@@ -32255,6 +32280,13 @@ def manual_confirmation_validate():
         if _mc._SLA_ORDEM.index(s['level']) > _mc._SLA_ORDEM.index(sla['level']):
             sla = s
     col_data, _col_stamp = _mc.STAGE_COLUMNS[stage]
+    # A tela de validação varre a MESMA pasta que o Monitor, então ela também
+    # atualiza o E-mail Subject: sem isto, a coluna só se preenchia para as
+    # confirmações que apareceram num card, e uma confirmação aberta direto pelo
+    # link ficava com a célula vazia com o recap na pasta.
+    _keys = [str(r.get(_mc.KEY_COLUMN, '') or '') for r in rows]
+    docs = _mc_confirmation_docs(row, _keys)
+    _mc_flush_email_subjects(_mc_sync_email_subjects(docs, _keys))
     return render_template(
         'confirmations/manual-validate.html',
         found=True,
@@ -32281,7 +32313,7 @@ def manual_confirmation_validate():
         sla_deadline=_mc.fmt_date(sla['deadline']),
         sla_days=_mc.sla_days().get(stage),
         comment=row.get(_mc.STAGE_COMMENT_COLUMN.get(stage, ''), ''),
-        docs=_mc_confirmation_docs(row, [str(r.get(_mc.KEY_COLUMN, '') or '') for r in rows]))
+        docs=docs)
 
 
 @blueprint.route('/api/manual-confirmation/upsert', methods=['POST'])

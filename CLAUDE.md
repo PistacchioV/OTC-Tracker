@@ -991,19 +991,43 @@ linhas **sem Data Callback**.
 ### A coluna E-mail Subject se escreve sozinha
 
 Ela guarda o assunto do **recap interno** que está na pasta da confirmação, e
-quem sabe a resposta é o arquivo — não quem digita. O único ponto do app que
-abre esse `.msg`/`.eml` é o `/api/manual-confirmation/docs` (os chips de e-mail
-dos cards do Monitor), então é de lá que a coluna se atualiza:
-`_mc_email_subject` lê o assunto memorizado por **(caminho, mtime, tamanho)** —
-o caminho sozinho manteria o assunto do e-mail substituído pela vida do processo
-—, `_mc_sync_email_subjects` junta `{Trade ID: assunto}` e
-`_mc.set_email_subjects` grava **só o que mudou**, num lote por chamada.
+quem sabe a resposta é o arquivo — não quem digita. Quem varre a pasta é
+`_mc_confirmation_docs`, então a coluna se atualiza nos dois lugares que o
+chamam: o `/api/manual-confirmation/docs` (os chips de e-mail dos cards do
+Monitor) e a **tela de validação**. `_mc_email_subject` lê o assunto memorizado
+por **(caminho, mtime, tamanho)** — o caminho sozinho manteria o assunto do
+e-mail substituído pela vida do processo —, `_mc_sync_email_subjects` junta
+`{Trade ID: assunto}` e `_mc.set_email_subjects` grava **só o que mudou**, num
+lote por chamada.
+
+**O casamento é em DOIS passos, e a ordem separa o certo do plausível:**
+
+1. **pelo Trade ID no NOME do arquivo** — a mesa salva
+   `Internal Recap DBH-1AAA.msg` ao lado do PDF de cada operação, e este passo é
+   exato;
+2. **recap ÚNICO na pasta** — ninguém nomeia operação, mas só há um e-mail; ele
+   é o recap daquele booking e vale para o grupo inteiro (é o recap nomeado por
+   contraparte/data).
+
+Fora disso **não se escreve nada**. A primeira versão pegava o *primeiro* recap
+da pasta e o carimbava em todas as operações do grupo: a `DBH-1BBB` ficava com o
+e-mail da `DBH-1AAA`, e uma operação **sem recap próprio** recebia o assunto de
+outra confirmação — porque a pasta é cliente × dia × produto e guarda mais de uma
+(OLEO e PLATTS do mesmo dia), e `_mc_confirmation_docs` cai para a listagem
+inteira quando o funil não casa. Célula vazia pede o dado; célula errada aponta
+para um e-mail que não confirma aquele trade.
 
 Três coisas que não dão erro nenhum: sem o "só o que mudou", cada abertura do
 Monitor reescreveria a esteira inteira; sem o lote, cada chave releria os dois
 DuckDB (o Monitor manda até 200 itens de uma vez); e a falha da gravação é
 engolida com log, porque listar documentos é o serviço que a página pediu — um
 banco travado não pode transformar o Monitor inteiro em "no PDF".
+
+Dois limites conhecidos: o arquivo só é reconhecido como recap se o NOME contém
+`internal` ou `recap` (`_MC_MAIL_TOKENS`) — salvo com outro nome ele não vira
+chip nem assunto —, e a coluna só se preenche quando alguém OLHA a confirmação
+(card do Monitor ou tela de validação). Linha que já saiu da esteira (banco `ok`)
+não passa por nenhum dos dois e fica com a célula como estava.
 
 ### Validar é abrir o documento, não clicar num botão
 
