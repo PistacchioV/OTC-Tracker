@@ -466,13 +466,13 @@ São **27** mappings hoje: `currency-base`, `interbook-ndf`, `publisher-ndf`,
   lista dos mesmos clientes e envelheceria sozinho.
 - **`bankers-email`** — nome do banker → e-mail, o Cc do e-mail de coleta de
   assinatura. O `BANKER` do Reference Data traz o GRUPO por extenso ("Fulano e
-  Sicrano") e é esta lista que resolve cada nome num endereço. `file` aponta para
-  o **mesmo `signature_collection_bankers.json`** que o e-mail já lia — um
-  arquivo, um editor —, e por isso o arquivo mudou de `{"bankers": [...]}` para a
-  LISTA que o /mapping entende. O carregador do mapping descarta o que não for
-  lista, então uma instância que ficasse com o formato antigo perderia os 58
-  bankers do Cc em silêncio: `_sigcoll_bankers_index` ainda lê o formato velho
-  como rede de mão única, e **avisa no log** dizendo para abrir a tela e salvar.
+  Sicrano") e é esta lista que resolve cada nome num endereço. Era o
+  `signature_collection_bankers.json`, mantido à mão: banker novo só entrava por
+  commit, e até lá o e-mail saía sem ele no Cc. Hoje o arquivo é o
+  `mappings/bankers-email.json`, como os demais cadastros, e mudou de
+  `{"bankers": [...]}` para a LISTA que o /mapping entende. Cadastro vazio deixa
+  o Cc só com as caixas fixas e o e-mail vai embora do mesmo jeito, então
+  `_sigcoll_bankers_index` **avisa no log** quando a lista volta vazia.
 - **`fxo-book-disregard`** — a MESMA exclusão do cadastro acima, por outro
   identificador que não o nome da contraparte. A perna interbook é a mesa contra
   a mesa, não tem registro na CETIP e viraria `Unmatched Athena` todo dia. Cada

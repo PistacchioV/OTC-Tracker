@@ -4564,8 +4564,9 @@ def api_cp_weekly_escalation_run():
 # by counterparty and builds one editable .eml draft per counterparty (zipped when
 # many). Mirrors the legacy Excel "MassEmail" macro but generates review drafts
 # instead of auto-sending. To = counterparty confirmation contacts (Counterparty
-# Details); Cc = that counterparty's bankers (from signature_collection_bankers.json,
-# matched to the RefData BANKER group) + Brazil OTC Ops + IS Trade Doc.
+# Details); Cc = that counterparty's bankers (registry `bankers-email`, i.e.
+# Mapping > Bankers E-mails, matched to the RefData BANKER group) + Brazil OTC
+# Ops + IS Trade Doc.
 _SIGCOLL_FROM = 'is.trade.doc@jpmchase.com'
 _SIGCOLL_CC_FIXED = ['brazil.otc.ops@jpmorgan.com', 'is.trade.doc@jpmchase.com']
 _SIGCOLL_PENDING = {'pendingdigitalsignature', 'pendingoriginal'}
@@ -4584,37 +4585,22 @@ def _sigcoll_bankers_index():
 
     Era uma lista mantida à mão no `signature_collection_bankers.json`, com 58
     nomes: banker novo só entrava por commit, e enquanto isso o e-mail de coleta
-    saía sem ele no Cc. O cadastro `bankers-email` aponta para o MESMO arquivo
-    (`file` no `_MAPPING_DEFS`), então continua havendo um arquivo só — o que
-    mudou é quem edita.
+    saía sem ele no Cc. Virou cadastro, e o arquivo mora hoje em
+    `static/data/mappings/bankers-email.json` como os outros — o que mudou é quem
+    edita, não quantas listas existem.
     """
     idx = {}
     for r in _mapping_rows('bankers-email'):
         nm, em = _pc_norm(r.get('BANKER', '')), str(r.get('EMAIL', '') or '').strip()
         if nm and em:
             idx[nm] = em
-    if idx:
-        return idx
-    # Rede de segurança de mão única: o arquivo passou de {"bankers": [...]} para
-    # a lista que o /mapping entende, e o carregador do mapping descarta o que não
-    # for lista — numa instância que ficasse com o formato antigo, o Cc perderia
-    # os 58 bankers EM SILÊNCIO. Aqui ele ainda é lido, e o aviso diz o que fazer.
-    try:
-        with open(os.path.join(_B3_DATA_DIR, 'signature_collection_bankers.json'),
-                  encoding='utf-8') as fh:
-            data = json.load(fh)
-    except Exception:
-        return {}
-    antigos = (data or {}).get('bankers') if isinstance(data, dict) else None
-    if not antigos:
-        return {}
-    log.warning('[sigcoll] signature_collection_bankers.json ainda no formato antigo '
-                '{"bankers": [...]}; abra Mapping > Bankers E-mails e salve uma vez '
-                'para convertê-lo.')
-    for c in antigos:
-        nm, em = _pc_norm(c.get('name', '')), str(c.get('email', '') or '').strip()
-        if nm and em:
-            idx[nm] = em
+    if not idx:
+        # Lista vazia é sempre um problema: o Cc do e-mail de coleta sai sem os
+        # bankers e ninguém percebe, porque o e-mail vai embora do mesmo jeito.
+        # O `_mapping_rows` semeia os 58 na primeira leitura, então cair aqui
+        # significa que alguém esvaziou o cadastro pela tela.
+        log.warning('[sigcoll] Mapping > Bankers E-mails está vazio — o Cc do e-mail '
+                    'de coleta de assinatura vai sair só com as caixas fixas.')
     return idx
 
 
@@ -19519,14 +19505,13 @@ _MAPPING_DEFS = {
     # `BANKER` do Reference Data traz o GRUPO por extenso ('Fulano e Sicrano'), e
     # é esta lista que resolve cada nome num endereço.
     #
-    # `file` aponta para o MESMO `signature_collection_bankers.json` que o e-mail
-    # já lia — um arquivo, um editor. Ele era mantido à mão, com 58 nomes, e
-    # banker novo só entrava por commit; agora entra pela tela e vale no request
-    # seguinte. O `seed` existe só para a instância que perder o arquivo.
+    # A lista era o `signature_collection_bankers.json`, mantida à mão com 58
+    # nomes: banker novo só entrava por commit, e enquanto isso o e-mail saía sem
+    # ele no Cc. Virou cadastro e o arquivo foi para `mappings/bankers-email.json`
+    # — o caminho padrão da chave, junto dos outros 26 —, então não há `file`
+    # aqui. O `seed` existe para a instância que perder o arquivo.
     'bankers-email': {
         'label': 'Bankers E-mails',
-        'file': os.path.normpath(os.path.join(os.path.dirname(__file__), '..', 'static',
-                                              'data', 'signature_collection_bankers.json')),
         'columns': [
             {'key': 'BANKER', 'label': 'Banker'},
             {'key': 'EMAIL', 'label': 'E-mail'},
