@@ -133,12 +133,17 @@ def get(ticket_id):
 
 
 def create(requester_sid, requester_name, requester_email, subject, priority,
-           tags, description):
+           tags, description, requester_role=''):
     """Cria o ticket e devolve o registro completo já gravado.
 
     Status e ID não vêm do cliente: status é sempre 'New' e o ID é o próximo da
     sequência. O requester também não — quem cria é sempre o dono, o chamador
     passa os dados da própria sessão.
+
+    O `requester_role` é o papel de quem abriu, e fica gravado NO TICKET em vez
+    de ser perguntado ao cadastro de usuários na hora de exibir: ele é o papel
+    de quem abriu o chamado, não o papel que a pessoa tem hoje. Sair do Back
+    Office para o Middle não leva os chamados antigos do BO para a fila do MO.
     """
     prio = priority if priority in PRIORITIES else 'Medium'
     with _lock:
@@ -150,6 +155,7 @@ def create(requester_sid, requester_name, requester_email, subject, priority,
             'requester_sid': (requester_sid or '').strip().upper(),
             'requester_name': (requester_name or '').strip(),
             'requester_email': (requester_email or '').strip(),
+            'requester_role': (requester_role or '').strip().upper(),
             'subject': (subject or '').strip(),
             'priority': prio,
             'status': 'New',

@@ -31145,8 +31145,103 @@ def _tk_is_requester(ticket, sid):
     return (ticket.get('requester_sid') or '').upper() == (sid or '').upper()
 
 
+# ── Quem enxerga o chamado de quem ──────────────────────────────────────────
+# O Support Center era estritamente pessoal: cada um via os PRÓPRIOS chamados e
+# o master via todos. Agora a unidade é a MESA — quem é do Back Office vê os
+# chamados abertos pelo Back Office, quem é do Middle vê os do Middle. A fila de
+# uma mesa é assunto da mesa: sem isso, o colega que abriu o mesmo chamado ontem
+# não tinha como saber, e o time abria o mesmo pedido duas vezes.
+#
+# O papel vem GRAVADO no ticket (`requester_role`), e é o de quem abriu, não o
+# que a pessoa tem hoje: quem sai do BO para o MO não leva os chamados antigos
+# para a fila nova.
+#
+# Papel VAZIO não casa com nada. Um usuário sem papel no cadastro casaria com
+# todos os outros sem papel, o que é uma mesa que não existe — nesse caso vale a
+# regra antiga, só o próprio.
+_TK_ROLE_TTL = 300.0
+_TK_ROLE_CACHE = {}
+_TK_ROLE_LOCK = threading.Lock()
+
+
+def _tk_roles_by_sid(sids):
+    """{SID: papel} do cadastro de usuários, para os SIDs pedidos.
+
+    Existe para os tickets ANTERIORES ao `requester_role` — sem ele, todos eles
+    ficariam invisíveis para a mesa de quem os abriu, e um chamado que some é
+    pior do que um chamado que aparece para gente demais.
+
+    UMA consulta para o lote inteiro, e o handle fecha no `finally`: a conexão
+    do DuckDB de usuários é singleton atrás de um lock global, e um `close()`
+    que não acontece trava o app para todo mundo (CLAUDE.md §4).
+    """
+    faltam, agora = [], time.time()
+    out = {}
+    with _TK_ROLE_LOCK:
+        for k in {str(x or '').strip().upper() for x in sids if str(x or '').strip()}:
+            hit = _TK_ROLE_CACHE.get(k)
+            if hit and (agora - hit[0]) < _TK_ROLE_TTL:
+                out[k] = hit[1]
+            else:
+                faltam.append(k)
+    if not faltam:
+        return out
+    try:
+        conn = get_db_connection()
+        try:
+            ph = ', '.join('?' for _ in faltam)
+            linhas = conn.execute(
+                'SELECT SID, Role FROM users WHERE UPPER(SID) IN ({})'.format(ph),
+                faltam).fetchall()
+        finally:
+            conn.close()
+    except Exception:
+        log.warning('[tickets] não consegui ler o papel dos requesters:\n%s',
+                    traceback.format_exc())
+        return out
+    achados = {str(r[0] or '').strip().upper(): str(r[1] or '').strip().upper()
+               for r in linhas}
+    with _TK_ROLE_LOCK:
+        for k in faltam:
+            # O SID que não está no cadastro entra no cache como '' — senão cada
+            # listagem pagaria a consulta de novo por um usuário que não existe.
+            v = achados.get(k, '')
+            _TK_ROLE_CACHE[k] = (agora, v)
+            out[k] = v
+    return out
+
+
+def _tk_session_role():
+    return str(session.get('user_role') or '').strip().upper()
+
+
+def _tk_same_role(ticket, papel_sessao, papeis=None):
+    """O ticket foi aberto por alguém da MESMA mesa que a sessão?
+
+    `papeis` é o mapa SID -> papel resolvido em lote por quem chama, para os
+    tickets antigos que não têm o papel gravado. Sem ele, esses tickets
+    respondem "não" — e uma listagem inteira de chamados anteriores ficaria
+    invisível para a mesa que os abriu.
+    """
+    if not papel_sessao:
+        return False
+    papel = str(ticket.get('requester_role') or '').strip().upper()
+    if not papel and papeis is not None:
+        papel = papeis.get((ticket.get('requester_sid') or '').strip().upper(), '')
+    return bool(papel) and papel == papel_sessao
+
+
 def _tk_can_view(ticket, sid):
-    return _session_is_master() or _tk_is_requester(ticket, sid)
+    if _session_is_master() or _tk_is_requester(ticket, sid):
+        return True
+    papel = _tk_session_role()
+    if not papel:
+        return False
+    # Um ticket só: resolve o papel do requester na hora quando ele não está
+    # gravado (ticket antigo). O cache faz isso custar uma consulta por SID.
+    papeis = ({} if ticket.get('requester_role')
+              else _tk_roles_by_sid([ticket.get('requester_sid')]))
+    return _tk_same_role(ticket, papel, papeis)
 
 
 def _tk_public(ticket, sid):
@@ -31163,13 +31258,26 @@ def _tk_public(ticket, sid):
     out['can_delete'] = is_master or mine
     out['can_comment'] = is_master or mine
     out['is_requester'] = mine
+    # A tela precisa distinguir o chamado PRÓPRIO do chamado do colega de mesa:
+    # os dois aparecem na lista, e só o primeiro se edita.
+    out['same_role'] = (not mine) and _tk_same_role(
+        ticket, _tk_session_role(),
+        None if ticket.get('requester_role')
+        else _tk_roles_by_sid([ticket.get('requester_sid')]))
     return out
 
 
 def _tk_visible_tickets(sid):
     tickets = otc_tickets.list_all()
     if not _session_is_master():
-        tickets = [t for t in tickets if _tk_is_requester(t, sid)]
+        papel = _tk_session_role()
+        # Os papéis que faltam saem numa consulta SÓ, para o lote inteiro: um
+        # `_tk_can_view` por ticket abriria o banco de usuários uma vez por
+        # linha da tela.
+        papeis = _tk_roles_by_sid([t.get('requester_sid') for t in tickets
+                                   if not t.get('requester_role')])
+        tickets = [t for t in tickets
+                   if _tk_is_requester(t, sid) or _tk_same_role(t, papel, papeis)]
     # Mais recente primeiro: o seq é monotônico, então ordena por ele e não pela
     # data (que é string e empata quando dois tickets nascem no mesmo segundo).
     tickets.sort(key=lambda t: t.get('seq') or 0, reverse=True)
@@ -31329,7 +31437,7 @@ def api_tickets_create():
     ticket = otc_tickets.create(
         requester_sid=sid, requester_name=name, requester_email=mail,
         subject=subject, priority=(data.get('priority') or '').strip(),
-        tags=tags, description=description)
+        tags=tags, description=description, requester_role=_tk_session_role())
     log.info('[tickets] %s created by %s (%s)', ticket['id'], name, sid)
     _tk_notify_master(sid, name, ticket)
     mail_result = _tk_send_opened_email(ticket)

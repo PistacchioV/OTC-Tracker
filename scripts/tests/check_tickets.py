@@ -108,20 +108,49 @@ check('sem assunto -> 400', st, 400)
 st, d = jpost(alice, '/api/tickets', {'subject': 'x', 'description': '  '})
 check('sem descricao -> 400', st, 400)
 
-print('\n== 4. visibilidade: master ve tudo, usuario ve so o dele ==')
+print('\n== 4. visibilidade: master ve tudo, a MESA ve a fila dela ==')
+# A unidade da visibilidade e a MESA, nao a pessoa: alice e bob sao os dois do
+# BO e enxergam os quatro chamados do BO. Sem isso, o colega que abriu o mesmo
+# pedido ontem nao tinha como saber, e o time abria o chamado duas vezes.
 st, d = jget(master, '/api/tickets')
 check('master ve 4', len(d['tickets']), 4)
 check('master flag', d['is_master'], True)
 st, d = jget(alice, '/api/tickets')
-check('alice ve 2 (os dela)', sorted(t['id'] for t in d['tickets']), ['OTC-0001', 'OTC-0003'])
+check('alice (BO) ve os 4 do BO',
+      sorted(t['id'] for t in d['tickets']),
+      ['OTC-0001', 'OTC-0002', 'OTC-0003', 'OTC-0004'])
 check('alice nao e master', d['is_master'], False)
 st, d = jget(bob, '/api/tickets')
-check('bob ve 2 (os dele)', sorted(t['id'] for t in d['tickets']), ['OTC-0002', 'OTC-0004'])
+check('bob (BO) ve os mesmos 4',
+      sorted(t['id'] for t in d['tickets']),
+      ['OTC-0001', 'OTC-0002', 'OTC-0003', 'OTC-0004'])
+# Ver nao e ser dono: a tela precisa separar o chamado proprio do chamado do
+# colega, porque so o primeiro se edita.
+_por_id = {t['id']: t for t in d['tickets']}
+check('   o dele vem como proprio',
+      (_por_id['OTC-0002']['is_requester'], _por_id['OTC-0002']['same_role']),
+      (True, False))
+check('   e o da alice como da mesa',
+      (_por_id['OTC-0001']['is_requester'], _por_id['OTC-0001']['same_role']),
+      (False, True))
+check('   sem poder editar o do colega',
+      (_por_id['OTC-0001']['can_edit_fields'], _por_id['OTC-0001']['can_delete'],
+       _por_id['OTC-0001']['can_comment']), (False, False, False))
 
 st, d = jget(bob, '/api/tickets/OTC-0001')
-check('bob nao abre ticket da alice -> 403', st, 403)
+check('bob abre o ticket da alice (mesma mesa) -> 200', st, 200)
 st, d = jget(master, '/api/tickets/OTC-0001')
 check('master abre qualquer um', st, 200)
+
+# Outra MESA nao ve nada disso. E o teste que importa: sem ele, "todo mundo ve
+# tudo" passaria em todos os anteriores. (Quem CRIA ticket vai para o fim do
+# arquivo: o ID e sequencial e as notificacoes sao acumuladas, entao um ticket a
+# mais aqui deslocaria todas as assercoes seguintes.)
+carol = client_for('C333333', 'Carol Dias', 'MO')
+st, d = jget(carol, '/api/tickets')
+check('carol (MO) nao ve a fila do BO', [t['id'] for t in d['tickets']], [])
+st, d = jget(carol, '/api/tickets/OTC-0001')
+check('   nem abre um deles -> 403', st, 403)
 
 print('\n== 5. status e due date: so o master ==')
 st, d = jpost(alice, '/api/tickets/OTC-0001', {'status': 'Resolved'})
@@ -274,10 +303,16 @@ check('corpo tem o assunto do ticket', 'Novo do bob' in html_part, True)
 check('corpo tem o agente', 'OTC Tracker Team' in html_part, True)
 check('corpo tem o status final', 'Resolved' in html_part, True)
 check('corpo tem o nome do requester', 'Bob Lima' in html_part, True)
-# grad_url vira URL absoluta dentro de um request e cai no cid: fora dele (ver
-# _inject_email_grad_url) — as duas formas valem, o que nao pode e nao ter nenhuma.
-check('gradiente do header referenciado',
-      ('cid:otc_gradient' in html_part) or ('email-header-gradient.png' in html_part), True)
+# O cabecalho e COR SOLIDA + gradiente CSS, nunca imagem nem VML (CLAUDE.md §2):
+# o <v:rect> do Outlook pintava o banner ora mais estreito que a celula (faixa
+# solida a direita), ora na largura da janela inteira. Esta assercao cobrava a
+# imagem — a regra anterior — e por isso vivia vermelha desde que o partial
+# mudou; agora ela prende a regra que vale.
+check('o header tem a cor solida de fallback', 'bgcolor="#4f8ae2"' in html_part, True)
+check('   e o gradiente em CSS', 'linear-gradient(' in html_part, True)
+check('   sem imagem de gradiente nem VML',
+      ('cid:otc_gradient' in html_part) or ('email-header-gradient.png' in html_part)
+      or ('<v:rect' in html_part), False)
 check('logo embutido', 'cid:otc_logo' in html_part, True)
 
 print('\n== 18. arquivo em disco: formato e seq ==')
@@ -286,7 +321,56 @@ check('tem seq', raw['seq'], 6)
 check('tem lista', isinstance(raw['tickets'], list), True)
 check('sem ticket sem id', all(t.get('id') for t in raw['tickets']), True)
 
-print('\n== 19. arquivo corrompido nao derruba a pagina ==')
+
+print('\n== 19. a mesa isola as duas pontas ==')
+# Fica no FIM porque cria tickets: o ID e sequencial e as notificacoes sao
+# acumuladas, entao no meio do arquivo isto deslocaria as assercoes seguintes.
+_antes = len(jget(alice, '/api/tickets')[1]['tickets'])
+st, d = jpost(carol, '/api/tickets', {'subject': 'MO abre um', 'description': 'd'})
+_id_mo = d['ticket']['id']
+check('o chamado nasce com o papel de quem abriu', d['ticket']['requester_role'], 'MO')
+st, d = jget(carol, '/api/tickets')
+check('   que ela passa a ver', _id_mo in [t['id'] for t in d['tickets']], True)
+st, d = jget(alice, '/api/tickets')
+check('   e o BO nao ve', _id_mo in [t['id'] for t in d['tickets']], False)
+check('   nem ganhou linha na fila dele', len(d['tickets']), _antes)
+
+# Papel VAZIO nao casa com nada: dois usuarios sem papel no cadastro nao sao uma
+# mesa, e trata-los como uma abriria a fila de um para o outro.
+sem1 = client_for('D444444', 'Dan Sem Papel', '')
+sem2 = client_for('E555555', 'Eva Sem Papel', '')
+st, d = jpost(sem1, '/api/tickets', {'subject': 'sem papel', 'description': 'd'})
+_id_sem = d['ticket']['id']
+st, d = jget(sem2, '/api/tickets')
+check('papel vazio nao vira mesa', [t['id'] for t in d['tickets']], [])
+st, d = jget(sem1, '/api/tickets')
+check('   mas o dono continua vendo o seu', [t['id'] for t in d['tickets']], [_id_sem])
+
+# Ticket ANTERIOR ao requester_role: o papel e resolvido no cadastro de
+# usuarios. Sem isso, toda a fila antiga sumiria da mesa que a abriu — e um
+# chamado que some e pior do que um que aparece para gente demais.
+_st = otc_tickets._read()
+for _t in _st['tickets']:
+    if _t['id'] == _id_mo:
+        _t.pop('requester_role', None)
+otc_tickets._write(_st)
+R._TK_ROLE_CACHE.clear()
+_ROLES = {'C333333': 'MO'}
+_orig_roles = R._tk_roles_by_sid
+R._tk_roles_by_sid = lambda sids: {str(x or '').strip().upper():
+                                   _ROLES.get(str(x or '').strip().upper(), '')
+                                   for x in sids if str(x or '').strip()}
+try:
+    st, d = jget(carol, '/api/tickets')
+    check('ticket antigo (sem papel gravado) volta pela mesa do requester',
+          _id_mo in [t['id'] for t in d['tickets']], True)
+    st, d = jget(alice, '/api/tickets')
+    check('   e continua fora da fila das outras',
+          _id_mo in [t['id'] for t in d['tickets']], False)
+finally:
+    R._tk_roles_by_sid = _orig_roles
+
+print('\n== 20. arquivo corrompido nao derruba a pagina ==')
 io.open(otc_tickets._FILE, 'w', encoding='utf-8').write(u'{{{ nao e json')
 check('list_all devolve vazio', otc_tickets.list_all(), [])
 check('a pagina ainda responde 200', master.get('/tickets-list').status_code, 200)

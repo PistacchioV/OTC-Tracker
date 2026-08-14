@@ -346,6 +346,23 @@ JS do menu, feed de notificações).
   `/api/page-access/<sid>` GET/POST persiste. A checklist é montada no
   navegador a partir do DOM vivo do menu, agrupada pela hierarquia completa,
   com o Control Panel explodido em seção própria.
+- **Support Center: a unidade da visibilidade é a MESA, não a pessoa.** Quem é
+  do Back Office vê os chamados abertos pelo Back Office, quem é do Middle vê os
+  do Middle — a fila de uma mesa é assunto da mesa, e antes o colega que abriu o
+  mesmo pedido ontem não tinha como saber. **Ver não é poder**: editar, comentar
+  e apagar continuam sendo do REQUESTER (e do master), então o chamado do colega
+  abre em leitura. Três detalhes que não dão erro nenhum:
+  - o papel fica **gravado no ticket** (`requester_role`), e é o de quem abriu,
+    não o que a pessoa tem hoje: sair do BO para o MO não leva os chamados
+    antigos para a fila nova;
+  - o ticket ANTERIOR a essa coluna tem o papel resolvido no cadastro de
+    usuários (`_tk_roles_by_sid`, uma consulta por LOTE e com cache — por
+    ticket, a listagem abriria o banco de usuários uma vez por linha da tela).
+    Sem esse resgate, a fila inteira de antes sumiria da mesa que a abriu, e um
+    chamado que some é pior do que um que aparece para gente demais;
+  - **papel vazio não casa com nada.** Dois usuários sem papel no cadastro não
+    são uma mesa, e tratá-los como uma abriria a fila de um para o outro — nesse
+    caso vale a regra antiga, só o próprio.
 
 ---
 
