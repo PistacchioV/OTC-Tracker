@@ -342,9 +342,19 @@ check('   e FXO é a mesma pasta de OPTION',
       ('FXO', 'FXO'))
 
 print('\n== 7b. o tipo de confirmação é UMA lista só ==')
-check('os oito tipos', list(M.CONFIRMATION_TYPES),
+check('os nove tipos', list(M.CONFIRMATION_TYPES),
       ['NDF VANILLA', 'NDF FWD START', 'NDF OTHER PUBLISHER', 'NDF COMM',
-       'OPTION COMM', 'FXO', 'SWAP', 'SWAP CORPORATE'])
+       'OPTION COMM', 'FXO', 'SWAP', 'SWAP CORPORATE', 'TERMO DE RESILICAO'])
+# Os códigos são ASCII, e não por estilo: `confirmation_type` compara
+# `upper_norm(produto)` com a tupla, e o upper_norm descarta as marcas de
+# combinação — um código acentuado não casaria consigo mesmo, em silêncio.
+check('   e sem acento, senão o tipo não casa consigo mesmo',
+      [t for t in M.CONFIRMATION_TYPES if M.upper_norm(t) != t], [])
+check('   e o tipo novo resolve de ida e volta',
+      (M.confirmation_type('TERMO DE RESILICAO'),
+       M.confirmation_type('Termo de Resilição'),
+       M.TYPE_FOLDER['TERMO DE RESILICAO']),
+      ('TERMO DE RESILICAO', 'TERMO DE RESILICAO', 'TERMO DE RESILICAO'))
 # O nome antigo ficou em cadastros já salvos e em pastas já gravadas. Traduzi-lo
 # é o que impede o `select` do mapping de abrir sem a opção da linha — e o
 # primeiro Save trocaria o produto dela sem ninguém pedir.

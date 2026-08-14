@@ -211,9 +211,17 @@ KEY_COLUMN = 'Trade ID'
 #
 # Ela mora aqui, e não no `routes.py`, porque este módulo não importa aquele (o
 # contrário seria circular) e porque é aqui que a esteira compara produtos.
+#
+# **SEM ACENTO**, e isso não é estilo. `confirmation_type()` compara
+# `upper_norm(produto)` com esta tupla, e o `upper_norm` normaliza em NFKD e
+# descarta as marcas de combinação — um 'TERMO DE RESILIÇÃO' cadastrado aqui
+# chegaria à comparação como 'TERMO DE RESILICAO' e NUNCA casaria consigo mesmo:
+# o tipo não resolveria, a pasta não seria achada (`_product_folder` faz o mesmo
+# lookup) e nada disso daria erro. Por isso o código é ASCII; o texto com acento
+# é assunto de rótulo, não de código.
 CONFIRMATION_TYPES = ('NDF VANILLA', 'NDF FWD START', 'NDF OTHER PUBLISHER',
                       'NDF COMM', 'OPTION COMM', 'FXO',
-                      'SWAP', 'SWAP CORPORATE')
+                      'SWAP', 'SWAP CORPORATE', 'TERMO DE RESILICAO')
 
 # Os três estágios, na ordem em que a esteira anda.
 STAGE_OTC, STAGE_MO, STAGE_FO = 'OTC', 'MO', 'FO'
@@ -546,6 +554,13 @@ VALIDATION_SEED = (
      'FO': 'REQUESTED', 'NOTES': ''},
     {'PRODUCT': 'SWAP CORPORATE', 'LOB': '', 'OTC': 'REQUESTED', 'MO': 'REQUESTED',
      'FO': 'REQUESTED', 'NOTES': ''},
+    # Termo de resilição — o distrato da operação. Entra no caminho da maioria
+    # (OTC + MO). É SEED, não regra fixa: quem sabe se o FO valida o distrato de
+    # um produto é a mesa, e a resposta se corrige em um clique no /mapping. O
+    # que o seed não pode é deixar o tipo sem linha, porque aí ele cairia no
+    # DEFAULT_RULE sem ninguém ter decidido nada.
+    {'PRODUCT': 'TERMO DE RESILICAO', 'LOB': '', 'OTC': 'REQUESTED', 'MO': 'REQUESTED',
+     'FO': 'EXEMPT', 'NOTES': 'Termo de resilição (distrato)'},
 )
 
 
@@ -1106,6 +1121,11 @@ TYPE_FOLDER_LEGACY = {
     'FXO':                 ('FX Options',),
     'SWAP':                ('Swap',),
     'SWAP CORPORATE':      ('Swap Corporate',),
+    # Tipo NOVO: nunca existiu com outro nome, então não há pasta antiga para
+    # varrer. A entrada existe (vazia) de propósito — a lista é declarada tipo a
+    # tipo, e um tipo AUSENTE daqui não se distingue de um tipo cujo histórico
+    # alguém esqueceu de declarar.
+    'TERMO DE RESILICAO':  (),
 }
 
 # Produto (o que está gravado na linha) → pasta. É o TYPE_FOLDER mais os apelidos

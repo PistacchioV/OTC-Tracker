@@ -518,15 +518,31 @@ São **27** mappings hoje: `currency-base`, `interbook-ndf`, `publisher-ndf`,
     ela), a **pasta** em que o documento é gravado (`TYPE_FOLDER`), este cadastro
     e o dropdown de Produto do Track Confirmations. Eram listas escritas à mão, e
     o cadastro dizia `OPTION` onde a tela de upload dizia `FXO`: o mesmo
-    documento com dois nomes. São **oito tipos, sempre em MAIÚSCULO** (é código,
-    não rótulo — a comparação entre as telas é feita sobre ele):
+    documento com dois nomes. São **nove tipos, sempre em MAIÚSCULO e SEM
+    ACENTO** (é código, não rótulo — a comparação entre as telas é feita sobre
+    ele):
 
     `NDF VANILLA` · `NDF FWD START` · `NDF OTHER PUBLISHER` · `NDF COMM` ·
-    `OPTION COMM` · `FXO` · `SWAP` · `SWAP CORPORATE`
+    `OPTION COMM` · `FXO` · `SWAP` · `SWAP CORPORATE` · `TERMO DE RESILICAO`
+
+    O **sem acento** não é estilo: `confirmation_type()` compara
+    `upper_norm(produto)` com a tupla, e o `upper_norm` normaliza em NFKD e
+    descarta as marcas de combinação. Um `TERMO DE RESILIÇÃO` cadastrado com
+    cedilha chegaria à comparação como `TERMO DE RESILICAO` e **nunca casaria
+    consigo mesmo** — o tipo não resolveria e a pasta não seria achada
+    (`_product_folder` faz o mesmo lookup), sem erro nenhum. O lado bom da mesma
+    normalização é que quem digita "Termo de Resilição" com acento no cadastro
+    resolve para o código certo.
 
     As três páginas de NDF do New Deals gravam o mesmo Product Type e têm cada
     uma o seu tipo aqui: o documento que sai de cada uma é diferente, e um `NDF`
     genérico obrigava a adivinhar qual delas gerou a linha.
+
+    **Tipo novo mexe em três listas**, e as três têm teste: `CONFIRMATION_TYPES`,
+    `TYPE_FOLDER_LEGACY` (com tupla VAZIA quando o tipo nunca existiu sob outro
+    nome — a entrada existe para um tipo ausente não se confundir com um
+    histórico esquecido) e `VALIDATION_SEED`, sem a qual o tipo cairia no
+    `DEFAULT_RULE` sem ninguém ter decidido nada.
   - **A pasta É o código do tipo** — `TYPE_FOLDER` é a identidade, e é ela que os
     quatro `save` do New Deals e o upload manual consultam em vez de escrever a
     string. Antes o app gravava num nome bonito (`FX Options`) e o upload no
