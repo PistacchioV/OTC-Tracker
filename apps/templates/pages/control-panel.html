@@ -251,22 +251,13 @@
 .cp-cards .cp-reveal > .cp-card { width: 100%; }
 /* O card das métricas de Pending é o mais curto do painel e dividia a linha com
    o Confirmations Escalation, que carrega SETE listas de destinatário: esticado
-   à altura do vizinho, ele virava meia tela de branco. Passa a medir metade
-   dele — `height: 50%` resolve contra a coluna, que o flex já esticou à altura
-   da linha, ou seja, à do card mais alto.
-   Duas travas: `min-height: fit-content` (o piso de 480px e o corte do botão Run
-   ficam de fora — se o conteúdo não couber em 50%, o card cresce) e
-   `align-self: flex-start`, que é para onde o layout cai se a percentagem não
-   resolver: card do tamanho do conteúdo, nunca esticado de volta.
-   Só de `lg` para cima: abaixo disso a linha empilha (col-12) e "metade do
-   vizinho" deixa de querer dizer alguma coisa. */
-@media (min-width: 992px) {
-    .cp-cards .cp-reveal > .cp-card[data-cp-card="pendingspreadsheet"] {
-        height: 50%;
-        min-height: fit-content;
-        align-self: flex-start;
-    }
-}
+   à altura do vizinho, ele virava meia tela de branco. Quem preenche o resto é o
+   **BACC EA Metrics**, empilhado na mesma coluna — e é por isso que aqui não há
+   mais regra nenhuma de altura: a coluna é `flex-column` e os dois `.cp-reveal`
+   já são `flex: 1`, então eles repartem a altura da linha sozinhos.
+   `flex: 1` é `1 1 0%`, e num contêiner em coluna o `min-height: auto` do flex
+   impede que qualquer um dos dois encolha abaixo do próprio conteúdo: o que se
+   divide é a SOBRA, não o card. */
 
 /* ── Nova realce (eyebrow em gradiente, ícones em gradiente, reveal +) ── */
 .cp-sec-label {
@@ -636,7 +627,13 @@
             </div>
         </div>
 
-        <div class="col-12 col-lg-6 d-flex" data-cp-group="reporting">
+        <!-- Esta coluna carrega DOIS cards empilhados: o das métricas de Pending
+             e o do BACC EA Metrics. Os dois juntos preenchem a altura do
+             Confirmations Escalation, que divide a linha e é o card mais alto do
+             painel — sozinho, o de Pending esticava até lá e virava meia tela de
+             branco. `flex-column` é o que faz os dois `.cp-reveal` (que já são
+             `flex: 1`) repartirem a altura da linha. -->
+        <div class="col-12 col-lg-6 d-flex flex-column gap-3 gap-xl-4" data-cp-group="reporting">
             <div class="cp-reveal">
                 <div class="cp-card" data-cp-card="pendingspreadsheet">
                     <div class="cp-card__icon"><i class="ti ti-file-spreadsheet"></i></div>
@@ -681,6 +678,44 @@
                         <button type="button" class="cp-run-btn"
                                 data-endpoint="/api/control-panel/pending-spreadsheet/run"
                                 data-date-input="cp-pcx-date">
+                            <i class="ti ti-player-play"></i>
+                            <span data-lang="cp-run">Run</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="cp-reveal">
+                <div class="cp-card" data-cp-card="baccea">
+                    <div class="cp-card__icon"><i class="ti ti-chart-histogram"></i></div>
+                    <h3 class="cp-card__title" data-lang="cp-r-bacc-title">BACC EA Metrics</h3>
+                    <p class="cp-card__desc" data-lang="cp-r-bacc-desc">
+                        E-mails the manual operations of the Track Confirmations page as an .xlsx
+                        attachment, with the columns the BACC metrics team consolidates. Runs
+                        automatically every ANBIMA business day at 16:00 Brasília; Run sends it now.
+                        An empty spreadsheet is still sent — a day with no manual operation is
+                        itself the metric.
+                    </p>
+                    <div class="cp-field">
+                        <label data-lang="cp-bacc-to">TO</label>
+                        <input type="text" id="cp-bacc-to" class="form-control form-control-sm"
+                               placeholder="email1@jpmorgan.com; email2@jpmorgan.com">
+                    </div>
+                    <div class="cp-field">
+                        <label data-lang="cp-bacc-cc">CC</label>
+                        <input type="text" id="cp-bacc-cc" class="form-control form-control-sm"
+                               placeholder="email1@jpmorgan.com; email2@jpmorgan.com">
+                    </div>
+                    <!-- Desfecho do último disparo automático. Sem isto a única
+                         evidência de que a rotina rodou é uma linha de log no
+                         servidor, e "não está funcionando" fica sem resposta. -->
+                    <div id="cp-bacc-status" class="cp-card__meta d-none"
+                         style="display:block;margin-top:.35rem;line-height:1.5;"></div>
+                    <div class="cp-card__foot">
+                        <span class="cp-card__meta">
+                            <i class="ti ti-calendar-time"></i><span data-lang="cp-bacc-meta">Daily 16:00 BRT &rarr; e-mail + .xlsx</span>
+                        </span>
+                        <button type="button" class="cp-run-btn" data-bacc-run>
                             <i class="ti ti-player-play"></i>
                             <span data-lang="cp-run">Run</span>
                         </button>
@@ -1411,6 +1446,117 @@ document.addEventListener('click', function (e) {
     if (btn) btn.addEventListener('click', function () { setTimeout(loadStatus, 4000); });
 })();
 
+// ── BACC EA Metrics: TO + CC persistidos, Run e status do disparo ───────────
+// Mesma mecânica do card acima: o servidor grava o resultado ESTRUTURADO
+// ('sent:N' / 'no_recipient' / 'error:…') e a frase é montada aqui, no idioma da
+// aplicação — texto inserido por JS não passa pelo I18nManager.
+(function () {
+    var toEl = document.getElementById('cp-bacc-to');
+    var ccEl = document.getElementById('cp-bacc-cc');
+    var stEl = document.getElementById('cp-bacc-status');
+    var btn  = document.querySelector('[data-bacc-run]');
+    if (!toEl || !ccEl) return;
+    var REC = '/api/control-panel/bacc-ea-metrics/recipients';
+    function esc(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (ch) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]; });
+    }
+    function pintaStatus(d) {
+        if (!stEl || !d) return;
+        var bits = [], last = d.last || {};
+        if (last.result) {
+            var m = /^sent:(\d+)$/.exec(last.result);
+            if (m) {
+                bits.push('<span class="text-success"><i class="ti ti-mail-check me-1"></i>' +
+                          esc(last.at || last.slot || '') + ' · ' + m[1] + ' ' +
+                          esc(t('cp-bacc-rows-sent', 'operation(s) sent')) + '</span>');
+            } else if (last.result === 'no_recipient') {
+                // Desfecho DIFERENTE de erro e de vazio: a rotina rodou e não
+                // tinha para quem mandar. Sem esta linha o card fica calado
+                // exatamente no caso em que o relatório não saiu de casa.
+                bits.push('<span class="text-warning"><i class="ti ti-user-off me-1"></i>' +
+                          esc(last.at || last.slot || '') + ' · ' +
+                          esc(t('cp-bacc-norec', 'no TO recipient saved — nothing was sent')) + '</span>');
+            } else {
+                bits.push('<span class="text-danger"><i class="ti ti-alert-triangle me-1"></i>' +
+                          esc(last.at || last.slot || '') + ' · ' +
+                          esc(String(last.result).replace(/^error:/, '')) + '</span>');
+            }
+        } else {
+            bits.push('<span class="text-muted">' +
+                      esc(t('cp-bacc-never', 'no run recorded yet')) + '</span>');
+        }
+        if (d.rows != null) {
+            bits.push('<span class="text-muted"><i class="ti ti-table me-1"></i>' +
+                      d.rows + ' ' + esc(t('cp-bacc-rows-now', 'operation(s) in the spreadsheet right now')) +
+                      ' · ' + esc(t('cp-bacc-at', 'daily at')) + ' ' + esc(d.time || '16:00') + ' BRT</span>');
+        }
+        stEl.innerHTML = bits.join('<br>');
+        stEl.classList.remove('d-none');
+    }
+    function load() {
+        fetch(REC, { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (!d || !d.success) return;
+                toEl.value = d.to || '';
+                ccEl.value = d.cc || '';
+                pintaStatus(d);
+            })
+            .catch(function () {});
+    }
+    // Grava ao sair do campo: as duas listas são de digitação livre e um card
+    // sem botão de salvar perderia o que foi escrito na primeira navegação.
+    function save() {
+        fetch(REC, { method: 'POST', credentials: 'same-origin',
+                     headers: { 'Content-Type': 'application/json' },
+                     body: JSON.stringify({ to: toEl.value, cc: ccEl.value }) })
+            .catch(function () {});
+    }
+    toEl.addEventListener('change', save);
+    ccEl.addEventListener('change', save);
+
+    if (btn) {
+        btn.addEventListener('click', function () {
+            var label = btn.querySelector('span');
+            var orig = label ? label.textContent : '';
+            // Salva ANTES de disparar: quem digitou o destinatário e clicou em
+            // Run sem tirar o foco do campo mandaria o e-mail para a lista
+            // anterior — e o card não teria como dizer isso.
+            save();
+            btn.disabled = true;
+            if (label) label.textContent = t('cp-running', 'Running…');
+            fetch('/api/control-panel/bacc-ea-metrics/run',
+                  { method: 'POST', credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json' }, body: '{}' })
+                .then(function (r) { return r.json().then(function (b) { return { ok: r.ok, b: b }; }); })
+                .then(function (res) {
+                    if (res.b && res.b.success) {
+                        Swal.fire({ title: t('cp-done', 'Done'), html: esc(res.b.message || ''),
+                                    icon: 'success', confirmButtonText: t('swal-ok', 'OK'),
+                                    confirmButtonColor: '#0066cc' });
+                    } else {
+                        Swal.fire({ title: t('swal-err-title', 'Error'),
+                                    html: esc((res.b && res.b.error) || 'Request failed.'),
+                                    icon: 'error', confirmButtonText: t('swal-ok', 'OK'),
+                                    confirmButtonColor: '#dc3545' });
+                    }
+                })
+                .catch(function (e) {
+                    Swal.fire({ title: t('swal-err-title', 'Error'), html: esc(e.message),
+                                icon: 'error', confirmButtonText: t('swal-ok', 'OK'),
+                                confirmButtonColor: '#dc3545' });
+                })
+                .finally(function () {
+                    btn.disabled = false;
+                    if (label) label.textContent = orig;
+                    load();
+                });
+        });
+    }
+    load();
+})();
+
 // ── Confirmations Escalation: 3 listas persistidas + um Run por e-mail ───────
 // O servidor devolve o resumo ESTRUTURADO (o que saiu, o que foi pulado e por
 // quê); a frase é montada aqui, no idioma da aplicação.
@@ -1671,7 +1817,7 @@ document.addEventListener('click', function (e) {
                 if (u.indexOf('/control-panel#') === 0) allow[u.slice('/control-panel#'.length)] = 1;
             });
             // Hide the grid cell (column) of each card the user can't reach.
-            var CP_GROUP = { cetip: 'filesaving', daily: 'filesaving', forecast: 'reporting', contacts: 'reporting', dailymetric: 'reporting', weeklyescalation: 'reporting', signaturecollection: 'reporting', dealsmonitor: 'reporting', pendingspreadsheet: 'reporting', confescalation: 'reporting' };
+            var CP_GROUP = { cetip: 'filesaving', daily: 'filesaving', forecast: 'reporting', contacts: 'reporting', dailymetric: 'reporting', weeklyescalation: 'reporting', signaturecollection: 'reporting', dealsmonitor: 'reporting', pendingspreadsheet: 'reporting', confescalation: 'reporting', baccea: 'reporting' };
             document.querySelectorAll('[data-cp-card]').forEach(function (card) {
                 if (!allow[card.getAttribute('data-cp-card')]) {
                     var col = card.closest('.col-12') || card.closest('.cp-reveal') || card;

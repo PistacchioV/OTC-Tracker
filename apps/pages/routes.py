@@ -336,6 +336,7 @@ _CONTROL_PANEL_CARDS = [
     {'id': 'dealsmonitor', 'label': 'Deals Monitor — Pending Action'},
     {'id': 'pendingspreadsheet', 'label': 'Pending Confirmations Spreadsheet Metrics'},
     {'id': 'confescalation', 'label': 'Confirmations Escalation'},
+    {'id': 'baccea',      'label': 'BACC EA Metrics'},
 ]
 _CP_CARD_TOKENS = {'/control-panel#' + c['id'] for c in _CONTROL_PANEL_CARDS}
 # API endpoint → the card it belongs to (for server-side enforcement).
@@ -359,6 +360,8 @@ _CP_ENDPOINT_CARD = {
     '/api/control-panel/pending-spreadsheet/status': 'pendingspreadsheet',
     '/api/control-panel/confirmations-escalation/recipients': 'confescalation',
     '/api/control-panel/confirmations-escalation/run': 'confescalation',
+    '/api/control-panel/bacc-ea-metrics/recipients': 'baccea',
+    '/api/control-panel/bacc-ea-metrics/run': 'baccea',
 }
 
 
@@ -17212,6 +17215,14 @@ def _lob_for_source(source):
     return 'COMMODITY' if _mc_mod.upper_norm(source) in _COMMODITY_SOURCES else 'CEM'
 
 
+# Produtos que a mesa booka SEMPRE no Banco J.P. Morgan — os que não trazem o
+# campo `LE` no deal e cuja entidade não depende do Settlement Location. É a
+# lista da Legal Entity, e não a de LOB: a FXO é CEM (não é mercadoria) e ainda
+# assim é bookada no Banco, então usar `_COMMODITY_SOURCES` para as duas coisas
+# amarraria duas perguntas diferentes na mesma resposta.
+_MC_JPM_SOURCES = _COMMODITY_SOURCES | {'OPTION'}
+
+
 def _mc_legal_entity(deal, source):
     """Legal Entity da linha espelhada na esteira.
 
@@ -17221,9 +17232,12 @@ def _mc_legal_entity(deal, source):
     `TradingBook` escrevia na coluna Legal Entity o nome do BOOK
     (`ALUM-BRAZIL-BANCO`, `BANCO_Crude_Brazil_NA`), que não é entidade nenhuma.
 
-    Mercadoria é sempre **JPM**: a mesa booka termo e opção de commodity no
-    Banco J.P. Morgan, e é uma entidade só. FXO fica em branco quando o deal não
-    diz — em branco pede cadastro, o nome do book afirmava uma entidade errada.
+    Mercadoria e **FXO** são sempre **JPM**: a mesa booka termo e opção de
+    commodity e a opção de câmbio no Banco J.P. Morgan, e é uma entidade só. A
+    FXO ficava em BRANCO aqui, esperando que alguém cadastrasse a entidade linha
+    a linha, e as confirmações de FXO que fechavam em Success no New Deals
+    chegavam ao Track Confirmations sem Legal Entity nenhuma — uma coluna vazia
+    que ninguém tinha como preencher, porque a resposta é sempre a mesma.
 
     A razão social sai do cadastro `le-spn` (LE → NAME), nunca de um literal
     aqui: é de lá que o resto do app lê a identidade da entidade, e a coluna
@@ -17231,7 +17245,7 @@ def _mc_legal_entity(deal, source):
     da planilha. Sem NAME cadastrado sobra a sigla, que ainda é uma entidade.
     """
     le = str(deal.get('LE', '') or '').strip().upper()
-    if not le and _mc_mod.upper_norm(source) in _COMMODITY_SOURCES:
+    if not le and _mc_mod.upper_norm(source) in _MC_JPM_SOURCES:
         le = 'JPM'
     if not le:
         return ''
@@ -18118,6 +18132,18 @@ _ND_AMEND_SKIP = {'Status', 'B3_ID', 'Maker', 'Checker', 'AmendChanged'}
 # operação registrada errada.
 _ND_AMEND_COSMETIC = {'OtherBook', 'TradingBook'}
 
+# A mesma ideia, mas quando o campo só é cosmético em UM produto. A chave é a do
+# `_GENERIC_ND_PRODUCTS`.
+#
+# **NDF FWD Start × Strike**: o que a B3 registra é o **Strike Set Offset** — o
+# spread sobre a taxa que só será conhecida no dia do fixing. O Strike da linha é
+# a projeção daquela taxa no momento do booking, e a Athena a recalcula a cada
+# pull: a operação não mudou, mudou o mercado. Sem esta exceção, todo FWD Start
+# já registrado voltava sozinho para a fila de Amend, e a mesa reconferia um
+# registro que continuava certo. A célula segue destacada (o campo entra em
+# `AmendChanged` como qualquer outro); o que não regride é o status.
+_ND_AMEND_COSMETIC_BY_PRODUCT = {'fwd-start': {'Strike'}}
+
 
 def _nd_amend_entity(acr):
     """Entidade de um accronym FX Cash. Duas fontes, nessa ordem: a LE cadastrada
@@ -18154,9 +18180,18 @@ def _nd_amend_flat(v):
     return str(v or '').strip()
 
 
-def _nd_amend_is_economic(field, old, new, stored, incoming):
-    """A mudança desse campo justifica derrubar um deal já Success para Amend?"""
+def _nd_amend_is_economic(field, old, new, stored, incoming, product=''):
+    """A mudança desse campo justifica derrubar um deal já Success para Amend?
+
+    `product` é a chave do `_GENERIC_ND_PRODUCTS` quando quem chama sabe de que
+    página o deal veio — é o que permite um campo ser cosmético em UM produto
+    (ver `_ND_AMEND_COSMETIC_BY_PRODUCT`). Vazio significa "não sei", e aí só a
+    lista geral vale: o default é econômico, porque um campo esquecido virando
+    Amend custa uma revisão e o contrário custa uma operação registrada errada.
+    """
     if field in _ND_AMEND_COSMETIC:
+        return False
+    if field in _ND_AMEND_COSMETIC_BY_PRODUCT.get(product, ()):
         return False
     if field in ('SPN', 'Client', 'TaxID'):
         # Os três são DERIVADOS da contraparte, e a contraparte é o accronym
@@ -18183,7 +18218,7 @@ def _nd_amend_is_economic(field, old, new, stored, incoming):
     return True
 
 
-def _nd_api_amend(stored, incoming):
+def _nd_api_amend(stored, incoming, product=''):
     """Bate um deal já importado com a versão atual da API. Campo de dado
     diferente → aplica o valor novo e registra o nome do campo em AmendChanged
     (o front destaca as células). Deal já Canceled não é reaberto. Retorna a
@@ -18212,7 +18247,7 @@ def _nd_api_amend(stored, incoming):
         if old != new:
             stored[k] = v
             changed.append(k)
-            if _nd_amend_is_economic(k, old, new, before, incoming):
+            if _nd_amend_is_economic(k, old, new, before, incoming, product):
                 economic = True
     if changed:
         if economic or not was_success:
@@ -20611,7 +20646,7 @@ def _generic_nd_persist_new_deals(product, deals):
             st = seen_files[fpath]
             row = _nd_amend_find(st, d)
             if row is not None:
-                if _nd_api_amend(row, d):
+                if _nd_api_amend(row, d, product):
                     amended.append(d.get('Deal') or '')
                 continue
             _nd_amend_register(st, d)
@@ -29498,6 +29533,423 @@ def api_cp_conf_escalation_run():
     return jsonify({'success': True, 'mode': mode, **out})
 
 
+# ==============================================================================
+# CONTROL PANEL — BACC EA METRICS
+# ==============================================================================
+# Todo dia útil ANBIMA às 16:00 (BRT) sai um e-mail com a planilha das operações
+# manuais em anexo. O consumidor é o time de métricas (BACC), que trabalha NO
+# ARQUIVO — por isso o corpo do e-mail não repete a tabela: ele diz o que veio
+# anexado e quantas linhas são, que é o que distingue "não havia nada hoje" de
+# "o anexo veio truncado".
+#
+# A fonte é a MESMA `manual_conf.load_all()` que o Track Confirmations mostra —
+# um relatório que conta de outro jeito descreve uma fila que a tela não tem, e a
+# mesa deixa de acreditar nos dois (é a mesma razão do card de escalação).
+_BACC_RECIPIENTS_FILE = os.path.join(_DAILY_METRIC_DIR, 'bacc_ea_metrics_recipients.json')
+_BACC_CLAIM_FILE = os.path.join(_DAILY_METRIC_DIR, 'bacc_ea_metrics_sent.json')
+_BACC_STATUS_FILE = os.path.join(_DAILY_METRIC_DIR, 'bacc_ea_metrics_status.json')
+_BACC_TIME = os.getenv('BACC_EA_METRICS_TIME', '16:00')     # BRT
+# O assunto é contrato com quem recebe (a caixa do time tem regra por assunto):
+# ele não leva data nem contagem, e é igual todo dia.
+_BACC_SUBJECT = 'Support to OTC Derivatives - EA Metrics'
+
+# As colunas do anexo, na ordem pedida: (cabeçalho, coluna da esteira, é data?).
+#
+# Coluna de origem VAZIA = coluna que sai sempre em branco, e as três foram
+# pedidas assim: `Born Age`, `Notional Amount` e `Notional Amount USD` são
+# preenchidas do outro lado, por quem consolida. Elas ficam no arquivo porque a
+# POSIÇÃO das colunas é o contrato — tirá-las deslocaria as demais.
+#
+# `Comments` carrega o **assunto do e-mail de recap** (a coluna E-mail Subject do
+# Track Confirmations): é por ele que o time acha a operação na caixa.
+#
+# A grafia dos cabeçalhos é a que foi pedida, `Conterparty Name` inclusive:
+# quem lê a planilha do outro lado casa pelo nome da coluna, e "corrigir" o
+# typo aqui quebraria o casamento em silêncio.
+_BACC_COLUMNS = (
+    ('Trade ID',            'Trade ID',           False),
+    ('Product',             'Produto',            False),
+    ('Trade Date',          'Data Operação',      True),
+    ('Legal Entity',        'Legal Entity',       False),
+    ('Conterparty Name',    'Cliente',            False),
+    ('Aging',               'Aging Confirmação',  False),
+    ('Born Age',            '',                   False),
+    ('Notional Amount',     '',                   False),
+    ('National Currency',   'Moeda',              False),
+    ('Notional Amount USD', '',                   False),
+    ('Comments',            'E-mail Subject',     False),
+    ('LOB',                 'LOB',                False),
+)
+
+
+def _load_bacc_recipients():
+    """As duas listas do card. TO e CC são públicos diferentes: o TO é quem
+    responde pela métrica, o CC é quem acompanha."""
+    vazio = {'to': '', 'cc': ''}
+    try:
+        with open(_BACC_RECIPIENTS_FILE, encoding='utf-8') as fh:
+            d = json.load(fh)
+        if not isinstance(d, dict):
+            return vazio
+        return {k: str(d.get(k, '') or '') for k in vazio}
+    except Exception:                                       # noqa: BLE001
+        return vazio
+
+
+def _save_bacc_recipients(d):
+    os.makedirs(_DAILY_METRIC_DIR, exist_ok=True)
+    payload = {k: str((d or {}).get(k, '') or '').strip() for k in ('to', 'cc')}
+    with open(_BACC_RECIPIENTS_FILE, 'w', encoding='utf-8') as fh:
+        json.dump(payload, fh, ensure_ascii=False, indent=2)
+
+
+def _bacc_rows():
+    """As linhas do anexo — a esteira inteira, como o Track Confirmations abre.
+
+    Sem filtro de propósito: a planilha é a extração da TELA, e a tela mostra
+    tudo até alguém clicar num card. Filtrar aqui criaria uma segunda definição
+    de 'operação manual' que ninguém veria na interface.
+    """
+    from apps.pages import manual_conf as _mc
+    return _mc.load_all()
+
+
+def _bacc_build_xlsx(rows):
+    """Workbook openpyxl com as colunas de `_BACC_COLUMNS`, largura ajustada ao
+    conteúdo.
+
+    O openpyxl não tem auto-fit de verdade (quem calcula a largura de um texto é
+    o Excel, na hora de desenhar), então a largura sai da CONTAGEM DE CARACTERES
+    da coluna inteira, cabeçalho incluído, com um piso e um teto. O teto existe
+    porque o assunto do e-mail em Comments tem 120 caracteres e, sem ele, essa
+    coluna sozinha empurraria as outras onze para fora da tela.
+
+    A Trade Date sai como DATA de verdade (number_format dd/mm/yyyy) e o Aging
+    como INTEIRO: escrever texto deixaria as duas colunas em General, e quem
+    recebe não conseguiria ordenar nem filtrar por elas. Valor que não parseia
+    sai como veio — sumir com ele seria pior.
+    """
+    import openpyxl
+    from openpyxl.styles import Font, Alignment
+    from openpyxl.utils import get_column_letter
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = 'EA METRICS'
+    bold = Font(bold=True)
+    larguras = []
+    for j, (header, _src, _is_date) in enumerate(_BACC_COLUMNS, start=1):
+        c = ws.cell(row=1, column=j, value=header)
+        c.font = bold
+        c.alignment = Alignment(horizontal='center', vertical='center')
+        larguras.append(len(header))
+    for i, r in enumerate(rows, start=2):
+        for j, (_header, src, is_date) in enumerate(_BACC_COLUMNS, start=1):
+            raw = str(r.get(src, '') or '').strip() if src else ''
+            if not raw:
+                continue
+            cell = ws.cell(row=i, column=j)
+            if is_date:
+                dt = _parse_date_any(raw)
+                if dt is not None:
+                    cell.value = datetime(dt.year, dt.month, dt.day)
+                    cell.number_format = 'DD/MM/YYYY'
+                    raw = '00/00/0000'          # o que a célula OCUPA na tela
+                else:
+                    cell.value = raw
+            elif raw.lstrip('-').isdigit():
+                cell.value = int(raw)
+            else:
+                cell.value = raw
+            larguras[j - 1] = max(larguras[j - 1], len(raw))
+    for j, w in enumerate(larguras, start=1):
+        ws.column_dimensions[get_column_letter(j)].width = max(10, min(w + 3, 48))
+    ws.freeze_panes = 'A2'
+    return wb
+
+
+def _bacc_attach_name(ref):
+    return 'EA Metrics - {}.xlsx'.format(ref.strftime('%Y%m%d'))
+
+
+def _bacc_send_email(rows, to_list, cc_list, ref):
+    """Monta e envia o e-mail com o anexo. True ou a mensagem do erro.
+
+    O contexto de aplicação envolve a MONTAGEM INTEIRA e não só o
+    `render_template`: o `_get_logo_path` lê `current_app.root_path`, e envolver
+    só o render troca um "Working outside of application context" por outro três
+    linhas abaixo. Dentro do request do botão Run isto é no-op — e é justamente
+    por isso que o Run funcionava e o automático morria em silêncio.
+    """
+    from email.mime.image import MIMEImage
+    from email.mime.application import MIMEApplication
+    nome = _bacc_attach_name(ref)
+    try:
+        with _app_context():
+            html = render_template('pages/email-template-bacc-ea-metrics.html',
+                                   ref_date_fmt=ref.strftime('%d/%m/%Y'),
+                                   rows_n=len(rows), attach_name=nome,
+                                   current_year=datetime.now().year)
+            msg = MIMEMultipart('mixed')
+            msg['Subject'] = _BACC_SUBJECT
+            msg['From'] = SHARED_MAILBOX
+            msg['To'] = ', '.join(to_list)
+            if cc_list:
+                msg['Cc'] = ', '.join(cc_list)
+            corpo = MIMEMultipart('related')
+            alt = MIMEMultipart('alternative')
+            alt.attach(MIMEText('Please view this report in HTML.', 'plain', 'utf-8'))
+            alt.attach(MIMEText(html, 'html', 'utf-8'))
+            corpo.attach(alt)
+            logo_path = _get_logo_path()
+            if logo_path:
+                with open(logo_path, 'rb') as f:
+                    limg = MIMEImage(f.read())
+                limg.add_header('Content-ID', '<otc_logo>')
+                limg.add_header('Content-Disposition', 'inline', filename='logo.png')
+                corpo.attach(limg)
+            _attach_email_gradient(corpo)
+            msg.attach(corpo)
+            buf = io.BytesIO()
+            _bacc_build_xlsx(rows).save(buf)
+            anexo = MIMEApplication(
+                buf.getvalue(),
+                _subtype='vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+            anexo.add_header('Content-Disposition', 'attachment', filename=nome)
+            msg.attach(anexo)
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30) as server:
+            server.sendmail(SHARED_MAILBOX, to_list + cc_list, msg.as_string())
+        log.info('[bacc-ea] enviado — %d linha(s) · to=%s · cc=%s', len(rows), to_list, cc_list)
+        return True
+    except Exception as e:                                  # noqa: BLE001
+        log.error('[bacc-ea] envio FALHOU:\n%s', traceback.format_exc())
+        return '{}: {}'.format(type(e).__name__, e)
+
+
+def _bacc_run(ref=None):
+    """Uma corrida. Devolve o resumo, com os desfechos separados.
+
+    'no_recipient' (lista de TO em branco) NÃO é a mesma coisa que um envio
+    vazio: o segundo é a rotina funcionando num dia sem operação manual, o
+    primeiro é um relatório que não saiu de casa. Lista vazia é o único motivo
+    de não enviar — a planilha sem linha nenhuma **vai assim mesmo**, porque a
+    ausência de operação manual no dia é ela própria a métrica.
+    """
+    ref = ref or _br_now()
+    rec = _load_bacc_recipients()
+    to_list = _parse_emails(rec.get('to'))
+    cc_list = [c for c in _parse_emails(rec.get('cc')) if c.lower() not in
+               {t.lower() for t in to_list}]
+    rows = _bacc_rows()
+    if not to_list:
+        return {'sent': False, 'reason': 'no_recipient', 'rows': len(rows),
+                'to': 0, 'cc': len(cc_list)}
+    res = _bacc_send_email(rows, to_list, cc_list, ref)
+    if res is True:
+        return {'sent': True, 'rows': len(rows), 'to': len(to_list), 'cc': len(cc_list)}
+    return {'sent': False, 'reason': 'error', 'error': res, 'rows': len(rows),
+            'to': len(to_list), 'cc': len(cc_list)}
+
+
+def _bacc_time():
+    """(hh, mm) do disparo em BRT. Entrada inválida cai no padrão — um typo na
+    variável de ambiente não pode matar a rotina."""
+    try:
+        hh, mm = (int(x) for x in str(_BACC_TIME).split(':')[:2])
+        if 0 <= hh <= 23 and 0 <= mm <= 59:
+            return hh, mm
+    except (ValueError, TypeError):
+        pass
+    return 16, 0
+
+
+def _bacc_claim_slot(slot):
+    """Reserva o disparo do dia EM DISCO — a instância reinicia várias vezes ao
+    dia e o catch-up precisa saber o que já saiu, senão o mesmo e-mail vai
+    embora a cada subida."""
+    with _cache_lock:
+        try:
+            with open(_BACC_CLAIM_FILE, encoding='utf-8') as fh:
+                sent = json.load(fh)
+            if not isinstance(sent, list):
+                sent = []
+        except (IOError, OSError, json.JSONDecodeError):
+            sent = []
+        if slot in sent:
+            return False
+        sent.append(slot)
+        try:
+            os.makedirs(_DAILY_METRIC_DIR, exist_ok=True)
+            _atomic_write_json(_BACC_CLAIM_FILE, sorted(sent)[-16:])
+        except Exception:                                   # noqa: BLE001
+            log.warning('[bacc-ea] não consegui gravar o claim:\n%s', traceback.format_exc())
+        return True
+
+
+def _bacc_release_slot(slot):
+    """Devolve o slot quando o envio falhou (SMTP fora do ar): o catch-up da
+    próxima volta tenta de novo. Sem isto uma falha transitória custava o
+    relatório do dia inteiro."""
+    with _cache_lock:
+        try:
+            with open(_BACC_CLAIM_FILE, encoding='utf-8') as fh:
+                sent = json.load(fh)
+            if not isinstance(sent, list):
+                return
+        except (IOError, OSError, json.JSONDecodeError):
+            return
+        if slot not in sent:
+            return
+        try:
+            _atomic_write_json(_BACC_CLAIM_FILE, [s for s in sent if s != slot])
+        except Exception:                                   # noqa: BLE001
+            log.warning('[bacc-ea] não consegui devolver o slot %s:\n%s',
+                        slot, traceback.format_exc())
+
+
+def _bacc_status_write(slot, result, when):
+    try:
+        os.makedirs(_DAILY_METRIC_DIR, exist_ok=True)
+        _atomic_write_json(_BACC_STATUS_FILE, {
+            'slot': slot, 'result': result,
+            'at': when.strftime('%d/%m/%Y %H:%M:%S')})
+    except Exception:                                       # noqa: BLE001
+        log.warning('[bacc-ea] não consegui gravar o status:\n%s', traceback.format_exc())
+
+
+def _bacc_read_status():
+    try:
+        with open(_BACC_STATUS_FILE, encoding='utf-8') as fh:
+            d = json.load(fh)
+        return d if isinstance(d, dict) else {}
+    except Exception:                                       # noqa: BLE001
+        return {}
+
+
+def _bacc_disparar(slot, fired):
+    """Manda o e-mail do slot, se ninguém já mandou e o dia é útil ANBIMA."""
+    if not _pcx_is_bizday(fired):
+        return False
+    if not _bacc_claim_slot(slot):
+        return False
+    out = _bacc_run(fired)
+    if out['sent']:
+        result = 'sent:{}'.format(out['rows'])
+    elif out.get('reason') == 'no_recipient':
+        # Sem destinatário o e-mail não sairia na retentativa também: quem
+        # resolve isso é o card, não o scheduler. O slot fica consumido.
+        result = 'no_recipient'
+    else:
+        result = 'error:' + str(out.get('error') or 'unknown')
+        _bacc_release_slot(slot)
+    log.info('[bacc-ea] %s: %s', slot, result)
+    _bacc_status_write(slot, result, fired)
+    return True
+
+
+def _bacc_scheduler_loop():
+    while True:
+        try:
+            hh, mm = _bacc_time()
+            now = _br_now()
+            cand = now.replace(hour=hh, minute=mm, second=0, microsecond=0)
+            if cand <= now:
+                # Catch-up a cada volta (mesma mecânica do Deals Monitor):
+                # recupera o disparo do dia quando o processo subiu depois do
+                # horário e RETENTA o slot que falhou e foi devolvido.
+                slot = '{} {:02d}:{:02d}'.format(now.strftime('%Y-%m-%d'), hh, mm)
+                if _bacc_disparar(slot, now):
+                    log.info('[bacc-ea] disparo de %s recuperado no start', slot)
+                nxt = cand + timedelta(days=1)
+            else:
+                nxt = cand
+            now = _br_now()
+            time.sleep(max(1.0, min((nxt - now).total_seconds(), 3600)))
+        except Exception:                                   # noqa: BLE001
+            log.error('[bacc-ea] scheduler error:\n%s', traceback.format_exc())
+            time.sleep(60)
+
+
+_bacc_scheduler_started = False
+_bacc_scheduler_lock = threading.Lock()
+
+
+def _bacc_start_scheduler():
+    global _bacc_scheduler_started
+    with _bacc_scheduler_lock:
+        if _bacc_scheduler_started:
+            return
+        _bacc_scheduler_started = True
+    threading.Thread(target=_bacc_scheduler_loop,
+                     name='bacc-ea-metrics-scheduler', daemon=True).start()
+    log.info('[bacc-ea] scheduler iniciado (%02d:%02d BRT · dias úteis ANBIMA)',
+             *_bacc_time())
+
+
+try:
+    _bacc_start_scheduler()
+except Exception:                                           # noqa: BLE001
+    log.warning('[bacc-ea] could not start the scheduler')
+
+
+@blueprint.route('/api/control-panel/bacc-ea-metrics/recipients',
+                 methods=['GET', 'POST'])
+def api_cp_bacc_recipients():
+    """GET → as duas listas, o desfecho do último disparo e quantas linhas o
+    anexo teria agora; POST → grava as listas."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    if request.method == 'POST':
+        try:
+            _save_bacc_recipients(request.get_json(silent=True) or {})
+        except Exception as e:                              # noqa: BLE001
+            log.error('[bacc-ea] save recipients failed:\n%s', traceback.format_exc())
+            return jsonify({'success': False,
+                            'error': '{}: {}'.format(type(e).__name__, e)}), 500
+        return jsonify({'success': True})
+    try:
+        n = len(_bacc_rows())
+    except Exception:                                       # noqa: BLE001
+        # A esteira fora do ar não pode derrubar o card: as listas de
+        # destinatários ainda precisam ser editáveis.
+        log.warning('[bacc-ea] não consegui ler a esteira:\n%s', traceback.format_exc())
+        n = None
+    return jsonify({'success': True, **_load_bacc_recipients(),
+                    'rows': n, 'last': _bacc_read_status(),
+                    'time': '{:02d}:{:02d}'.format(*_bacc_time())})
+
+
+@blueprint.route('/api/control-panel/bacc-ea-metrics/run', methods=['POST'])
+def api_cp_bacc_run():
+    """Manda o e-mail AGORA (botão Run do card).
+
+    Roda mesmo em feriado — quem clicou decidiu — e NÃO consome o claim do
+    disparo automático: o Run é um teste ou um envio fora de hora, e queimar o
+    horário faria o relatório do dia não sair.
+    """
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    try:
+        out = _bacc_run(_br_now())
+    except Exception as e:                                  # noqa: BLE001
+        log.error('[bacc-ea] run manual falhou:\n%s', traceback.format_exc())
+        return jsonify({'success': False,
+                        'error': '{}: {}'.format(type(e).__name__, e)}), 500
+    if not out['sent'] and out.get('reason') == 'no_recipient':
+        return jsonify({'success': False,
+                        'error': 'No TO recipient saved for this card — fill the TO field '
+                                 'and save before running.'}), 400
+    if not out['sent']:
+        return jsonify({'success': False, 'error': out.get('error') or 'unknown'}), 500
+    _bacc_status_write('manual', 'sent:{}'.format(out['rows']), _br_now())
+    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                         'BACC EA Metrics Sent', 'Control Panel',
+                         '{} operation(s) → {} recipient(s)'.format(out['rows'], out['to']))
+    return jsonify({'success': True, **out,
+                    'message': '{} operation(s) sent to {} recipient(s){}.'.format(
+                        out['rows'], out['to'],
+                        ' (+{} in copy)'.format(out['cc']) if out['cc'] else '')})
+
+
 def _find_generic_nd_deal(cfg, deal_name, client_name=None):
     """Locate a deal by Deal (+optional Client) across the product's cache files.
     Returns (file_path, list_index) or (None, None)."""
@@ -31281,6 +31733,56 @@ def _mc_folder_emails(folder):
     return out
 
 
+# O ASSUNTO de cada e-mail de recap, memorizado por (caminho, mtime, tamanho).
+# Ler o assunto custa abrir o arquivo no share — um parser OLE/CFB no .msg —, e
+# o Monitor pede a lista inteira a cada carregamento. A chave leva mtime e
+# tamanho para o recap SUBSTITUÍDO ser relido: o caminho sozinho manteria o
+# assunto do e-mail antigo pela vida do processo.
+_MC_SUBJECT_CACHE = {}
+_MC_SUBJECT_LOCK = threading.Lock()
+
+
+def _mc_email_subject(full):
+    """O assunto do e-mail de recap em `full`. '' quando não dá para ler.
+
+    Falha é sempre '' e nunca exceção: o assunto é um enfeite da coluna do Track
+    Confirmations, e um .msg corrompido não pode derrubar a lista de documentos
+    do Monitor inteira.
+    """
+    try:
+        st = os.stat(_ei_long_path(os.path.normpath(os.path.abspath(full))))
+        chave = (full, int(st.st_mtime), st.st_size)
+    except Exception:
+        return ''
+    with _MC_SUBJECT_LOCK:
+        if chave in _MC_SUBJECT_CACHE:
+            return _MC_SUBJECT_CACHE[chave]
+    assunto = ''
+    try:
+        # Mesmo teto do /api/parse-msg-html: o parser OLE/CFB não pode receber um
+        # arquivo sem limite de tamanho.
+        if st.st_size <= 25 * 1024 * 1024:
+            if full.lower().endswith('.msg'):
+                import extract_msg
+                assunto = str(getattr(extract_msg.openMsg(full), 'subject', '') or '')
+            else:
+                import email as _email
+                from email import policy as _policy
+                with open(full, 'rb') as fh:
+                    assunto = str(_email.message_from_binary_file(
+                        fh, policy=_policy.default).get('Subject', '') or '')
+    except Exception:
+        log.warning('[manual-conf] não consegui ler o assunto de %s', full)
+        assunto = ''
+    assunto = re.sub(r'\s+', ' ', assunto).strip()
+    with _MC_SUBJECT_LOCK:
+        # Poda simples: o share tem um recap por confirmação, não milhares por dia.
+        if len(_MC_SUBJECT_CACHE) > 2000:
+            _MC_SUBJECT_CACHE.clear()
+        _MC_SUBJECT_CACHE[chave] = assunto
+    return assunto
+
+
 def _mc_confirmation_docs(row, trades=None):
     """Os PDFs da confirmação daquela linha, no Electronic Inventory.
 
@@ -31334,6 +31836,10 @@ def _mc_confirmation_docs(row, trades=None):
                         continue
                     vistos.add(name.lower())
                     mails.append({'name': os.path.splitext(name)[0], 'email': True,
+                                  # O ASSUNTO, não o nome do arquivo: é ele que
+                                  # vai para a coluna E-mail Subject do Track
+                                  # Confirmations (ver `_mc_sync_email_subjects`).
+                                  'subject': _mc_email_subject(os.path.join(folder, name)),
                                   'url': ('/api/manual-confirmation/email-preview?client=' + quote(cliente) +
                                           '&rel=' + quote(rel + '/' + name))})
         if not out and not mails:
@@ -31385,6 +31891,47 @@ def _mc_confirmation_docs(row, trades=None):
         return []
 
 
+def _mc_sync_email_subjects(docs, trades):
+    """Junta {Trade ID: assunto} a partir dos documentos achados de UMA linha.
+
+    A coluna E-mail Subject do Track Confirmations existe para dizer por qual
+    e-mail aquela confirmação foi recapitulada, e quem sabe a resposta é o
+    arquivo que está na pasta — não quem digita. Aqui é o único ponto do app em
+    que o e-mail é aberto, então é daqui que a coluna se atualiza.
+
+    Só o PRIMEIRO recap conta. A pasta do dia pode ter mais de um e-mail (o
+    recap e um reenvio), e concatenar os assuntos encheria a célula com um texto
+    que não é o assunto de e-mail nenhum.
+    """
+    ids = [str(k).strip() for k in (trades or []) if str(k or '').strip()]
+    if not ids:
+        return {}
+    for d in docs or []:
+        assunto = str(d.get('subject', '') or '').strip() if d.get('email') else ''
+        if assunto:
+            return {k: assunto for k in ids}
+    return {}
+
+
+def _mc_flush_email_subjects(pares):
+    """Grava os assuntos coletados, sem deixar a falha chegar à tela.
+
+    A gravação é o EFEITO COLATERAL de listar os documentos, não o serviço que a
+    página pediu: um banco travado não pode transformar o Monitor inteiro em
+    'no PDF'.
+    """
+    if not pares:
+        return
+    try:
+        from apps.pages import manual_conf as _mc
+        n = _mc.set_email_subjects(pares)
+        if n:
+            log.info('[manual-conf] E-mail Subject atualizado em %d linha(s)', n)
+    except Exception:
+        log.warning('[manual-conf] não consegui gravar o assunto do recap:\n%s',
+                    traceback.format_exc())
+
+
 @blueprint.route('/api/manual-confirmation/monitor')
 def api_mc_monitor():
     """Os cards do Monitor — SEM os documentos.
@@ -31429,7 +31976,9 @@ def api_mc_docs():
            'Moeda': request.args.get('ativo', ''),
            'Data Operação': request.args.get('data', '')}
     trades = [t.strip() for t in (request.args.get('trades') or '').split(',') if t.strip()]
-    return jsonify({'docs': _mc_confirmation_docs(row, trades)})
+    docs = _mc_confirmation_docs(row, trades)
+    _mc_flush_email_subjects(_mc_sync_email_subjects(docs, trades))
+    return jsonify({'docs': docs})
 
 
 @blueprint.route('/api/manual-confirmation/docs', methods=['POST'])
@@ -31465,16 +32014,21 @@ def api_mc_docs_batch():
         # aquecia o cache era a página do Electronic Inventory; a fila do
         # Monitor não pode depender de alguém ter aberto outra tela.
         _ei_scan_root(grace=10.0)
-    out = []
+    out, assuntos = [], {}
     for it in itens[:200]:
         if not isinstance(it, dict):
             out.append([])
             continue
-        out.append(_mc_confirmation_docs({
+        trades = it.get('trades') or []
+        docs = _mc_confirmation_docs({
             'Cliente': it.get('cliente', ''), 'Produto': it.get('produto', ''),
             'LOB': it.get('lob', ''), 'Moeda': it.get('ativo', ''),
-            'Data Operação': it.get('data', '')},
-            it.get('trades') or []))
+            'Data Operação': it.get('data', '')}, trades)
+        out.append(docs)
+        assuntos.update(_mc_sync_email_subjects(docs, trades))
+    # UMA gravação para o lote inteiro: por item, cada uma releria os dois bancos
+    # para escrever uma célula, e o Monitor manda até 200 itens de uma vez.
+    _mc_flush_email_subjects(assuntos)
     return jsonify({'docs': out})
 
 
@@ -31565,6 +32119,101 @@ def _mc_stage_denied(stage):
     """A recusa, na voz de quem lê: qual mesa assina esta etapa."""
     return ('Só o {} valida uma confirmação em Pending {}.'
             .format(_MC_STAGE_ROLE.get(str(stage or '').strip().upper(), '—'), stage))
+
+
+# ── Gerar a confirmação a partir do Monitor ──────────────────────────────────
+# A geração era um botão da barra de cada página de New Deals, e a validação um
+# card do Confirmations Monitor: dois lugares para as duas metades do mesmo
+# trabalho, e a mesa de OTC tinha de saber em qual das quatro páginas o documento
+# nascia para depois procurá-lo no Monitor. Agora o ciclo inteiro mora no
+# Monitor — o card de Pending OTC oferece **Generate** enquanto não há documento
+# na pasta e **Validate** depois que há.
+#
+# O que este endpoint faz é a tradução que faltava: a esteira conhece a linha
+# (Trade ID, Produto, data da operação) e o New Deals conhece o GRUPO
+# (contraparte × mercadoria × família), que é a unidade do documento. O
+# casamento é pelos Trade IDs, os mesmos que o card de Confirmations do New Deals
+# Monitor já usa — casar por contraparte × mercadoria seria um de-para por texto
+# entre dois cadastros que normalizam nomes de jeitos diferentes.
+_MC_GENERATE_PRODUCTS = {
+    'NDF COMM':      (lambda ref: _conf_ndfcomm_groups(ref),  lambda: _CONF_FAMILY_TEMPLATES),
+    'OPTION COMM':   (lambda ref: _conf_optcomm_groups(ref),  lambda: _CONF_OPT_FAMILY_TEMPLATES),
+    'FXO':           (lambda ref: _conf_optfxo_groups(ref),   lambda: _CONF_FXO_FAMILY_TEMPLATES),
+    'NDF FWD START': (lambda ref: _conf_fwdstart_groups(ref), lambda: _CONF_FWDSTART_FAMILY_TEMPLATES),
+}
+
+
+def _mc_generate_url(row, keys):
+    """(url, motivo) do editor da confirmação daquela linha da esteira.
+
+    `url` vazia vem sempre com um motivo em português claro o bastante para
+    virar a mensagem da tela: quem clica em Generate e cai num 404 seco não tem
+    como saber se o problema é o produto, a data ou o arquivo-dia.
+    """
+    from apps.pages import manual_conf as _mc
+    tipo = _mc.confirmation_type(row.get('Produto'), row.get('LOB'))
+    alvo = _MC_GENERATE_PRODUCTS.get(tipo)
+    if alvo is None:
+        return '', ('O produto {} não tem tela de geração no OTC Tracker — a '
+                    'confirmação dele é montada fora do app.'.format(tipo or '(em branco)'))
+    ref = _parse_date_any(row.get('Data Operação', ''))
+    if not ref:
+        return '', ('A linha está sem Data da Operação, e é ela que diz em que '
+                    'arquivo-dia do New Deals a operação está.')
+    ref = datetime(ref.year, ref.month, ref.day)
+    grupos, _st, _tot = alvo[0](ref)
+    templates = alvo[1]()
+    # As chaves da esteira: o Trade ID da linha e as das demais operações do
+    # grupo do Monitor. O FWD Start é chaveado pelo B3 ID e os demais pelo Deal —
+    # o grupo do New Deals guarda os dois, então o cruzamento não precisa saber
+    # qual é qual.
+    procurados = {str(k).strip().upper() for k in keys if str(k or '').strip()}
+    procurados.add(str(row.get('Trade ID', '') or '').strip().upper())
+    procurados.discard('')
+    for g in grupos:
+        if not procurados & {str(t).strip().upper() for t in (g.get('trades') or ())}:
+            continue
+        if g['family'] not in templates:
+            return '', ('A família {} ainda não tem template de documento neste '
+                        'produto.'.format(g['family']))
+        return (templates[g['family']][1] + '?date=' + ref.strftime('%Y-%m-%d') +
+                '&acronym=' + quote(g['acronym']) +
+                '&mercadoria=' + quote(g['mercadoria'])), ''
+    return '', ('Nenhuma operação dessa confirmação foi encontrada no arquivo-dia '
+                'de {} do New Deals. Verifique se a data da operação da linha é a '
+                'mesma da importação.'.format(ref.strftime('%d/%m/%Y')))
+
+
+@blueprint.route('/manual-confirmation/generate')
+def manual_confirmation_generate():
+    """Abre o editor da confirmação de um item do Monitor (botão Generate).
+
+    Redireciona em vez de renderizar: a tela de geração é a mesma de sempre, e
+    duplicá-la aqui criaria um segundo documento para o mesmo produto. O que vai
+    junto é o `mc_keys` — é por ele que o editor sabe que, depois de gravar,
+    quem abre é a validação da ESTEIRA e não o checklist do documento.
+    """
+    if not session.get('authenticated'):
+        return redirect(url_for('pages_blueprint.sign_in_page'))
+    from apps.pages import manual_conf as _mc
+    keys = [k.strip() for k in (request.args.get('keys') or '').split(',') if k.strip()]
+    rows = [r for r in (_mc.find_row(k) for k in keys) if r is not None]
+    if not rows:
+        return render_template('confirmations/manual-validate.html',
+                               found=False, stage=_mc.STAGE_OTC, keys=keys), 404
+    url, motivo = '', ''
+    for row in rows:
+        url, motivo = _mc_generate_url(row, keys)
+        if url:
+            break
+    if not url:
+        log.warning('[manual-conf] Generate sem destino para %s: %s', keys, motivo)
+        return render_template('confirmations/manual-generate-error.html',
+                               keys=keys, motivo=motivo,
+                               cliente=rows[0].get('Cliente', ''),
+                               produto=rows[0].get('Produto', ''),
+                               data=rows[0].get('Data Operação', '')), 404
+    return redirect(url + '&mc_keys=' + quote(','.join(keys)))
 
 
 @blueprint.route('/manual-confirmation/validate')

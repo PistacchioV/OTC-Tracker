@@ -2516,8 +2516,6 @@ table.MsoTableGrid
 
   <button class="btn-add-row" onclick="addRow()">+ Adicionar Operação</button>
 
-  <button class="btn-print" onclick="window.print()">🖨 Imprimir / Salvar PDF</button>
-
   <button class="btn-print" style="background:#1a3a6e" onclick="saveToInventory(this)">💾 Salvar Word + PDF no Inventory</button>
   <div id="save-status" style="font-size:8pt;color:#9090b0;margin-top:6px;word-break:break-all;"></div>
 </div>
@@ -3754,7 +3752,24 @@ function saveToInventory(btn) {
 }
 
 // ── Validação sobre o editor ────────────────────────────────
+// O editor é aberto pelo **Confirmations Monitor** (botão Generate do card de
+// Pending OTC), que manda em `mc_keys` os Trade IDs da confirmação. Com eles a
+// tela que abre depois de gravar é a validação da ESTEIRA, e não o checklist do
+// documento: é o mesmo ato — quem gerou está com o papel na frente e assina
+// pela mesa de OTC. Validando, a confirmação segue para MO/FO; fechando sem
+// validar, ela continua em Pending OTC — só que agora com o PDF na pasta, e o
+// card volta a oferecer Validate no lugar do Generate.
+//
+// Sem `mc_keys` (o link direto de sempre) nada muda: abre o checklist do
+// documento que o servidor devolveu.
+function mcEsteiraKeys() {
+  var m = /[?&]mc_keys=([^&]*)/.exec(window.location.search);
+  return m ? decodeURIComponent(m[1].replace(/\+/g, ' ')) : '';
+}
+
 function openValidate(url) {
+  var keys = mcEsteiraKeys();
+  if (keys) url = '/manual-confirmation/validate?stage=OTC&keys=' + encodeURIComponent(keys);
   var ov = document.getElementById('validate-overlay');
   var fr = document.getElementById('validate-frame');
   if (!ov || !fr) { window.open(url, '_blank'); return; }   // overlay ausente → aba, como antes

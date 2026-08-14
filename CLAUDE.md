@@ -848,11 +848,17 @@ ficam de fora de propósito.
 **Só as páginas genéricas de NDF trazem a entidade no deal** (campo `LE`:
 JPM/MGT/LAWTON, resolvido do Settlement Location pelo `le-accronym`). Mercadoria
 e FXO não têm o campo, e o fallback para `TradingBook` escrevia o nome do BOOK
-(`ALUM-BRAZIL-BANCO`) na coluna Legal Entity. `_mc_legal_entity` resolve:
-mercadoria é sempre **JPM** (a mesa booka termo e opção de commodity no Banco
-J.P. Morgan, é uma entidade só) e FXO fica **em branco** quando o deal não diz —
-em branco pede cadastro, o nome do book afirmava uma entidade errada. A razão
-social sai do `le-spn` (LE → NAME), nunca de um literal.
+(`ALUM-BRAZIL-BANCO`) na coluna Legal Entity. `_mc_legal_entity` resolve pela
+lista `_MC_JPM_SOURCES`: mercadoria **e FXO** são sempre **JPM** — a mesa booka
+termo e opção de commodity e a opção de câmbio no Banco J.P. Morgan, e é uma
+entidade só. A FXO ficava em BRANCO esperando cadastro linha a linha, e as
+confirmações que fechavam em Success no New Deals chegavam ao Track
+Confirmations sem Legal Entity nenhuma — uma coluna vazia que ninguém tinha como
+preencher, porque a resposta é sempre a mesma. A lista é a da **Legal Entity**, e
+não a de LOB (`_COMMODITY_SOURCES`): a FXO é CEM e ainda assim é bookada no
+Banco, então amarrar as duas perguntas na mesma resposta erraria uma das duas. A
+razão social sai do `le-spn` (LE → NAME), nunca de um literal — `JPM` →
+`BANCO J.P MORGAN S.A`.
 
 ### O prazo da esteira, e por que ele é em dias ÚTEIS
 
@@ -926,6 +932,49 @@ que não dão erro nenhum quando se mexe:
   prazo. `empty` (nada pendente) e `no_recipient` (lista vazia) são desfechos
   **distintos** — o segundo é cobrança que não saiu de casa.
 
+### O BACC EA Metrics é a mesma esteira, extraída para o time de métricas
+
+O card **BACC EA Metrics** (Control Panel, empilhado com o de Pending
+Confirmations Spreadsheet Metrics — os dois juntos preenchem a altura do
+Confirmations Escalation, que divide a linha) manda, todo dia útil ANBIMA às
+**16:00 BRT**, um e-mail com as operações manuais em anexo `.xlsx`. A fonte é a
+MESMA `manual_conf.load_all()` que o Track Confirmations mostra, **sem filtro**:
+a planilha é a extração da TELA, e a tela mostra tudo até alguém clicar num card
+— filtrar no servidor criaria uma segunda definição de "operação manual" que
+ninguém veria na interface.
+
+- **Planilha vazia VAI assim mesmo.** Um dia sem operação manual é ele próprio a
+  métrica, e o único motivo de não enviar é lista de TO em branco
+  (`no_recipient`), que o card mostra em âmbar — é relatório que não saiu de casa.
+- As colunas de `_BACC_COLUMNS` são contrato com quem consolida, **grafia
+  incluída**: `Conterparty Name` está escrito assim de propósito. `Born Age`,
+  `Notional Amount` e `Notional Amount USD` saem sempre **vazias** (preenchidas
+  do outro lado) e continuam no arquivo porque a POSIÇÃO das colunas é o que o
+  consumidor casa. `Comments` carrega o **assunto do e-mail de recap**.
+- **Auto-fit é contagem de caracteres**, não medida de texto: o openpyxl não tem
+  auto-fit de verdade. Daí o teto por coluna — o assunto em `Comments` tem 120
+  caracteres e, sem ele, empurraria as outras onze para fora da tela.
+- O corpo do e-mail **não repete a tabela**: ele nomeia o anexo e diz quantas
+  linhas são, que é o que distingue "não havia nada hoje" de "o anexo veio
+  truncado".
+
+### A coluna E-mail Subject se escreve sozinha
+
+Ela guarda o assunto do **recap interno** que está na pasta da confirmação, e
+quem sabe a resposta é o arquivo — não quem digita. O único ponto do app que
+abre esse `.msg`/`.eml` é o `/api/manual-confirmation/docs` (os chips de e-mail
+dos cards do Monitor), então é de lá que a coluna se atualiza:
+`_mc_email_subject` lê o assunto memorizado por **(caminho, mtime, tamanho)** —
+o caminho sozinho manteria o assunto do e-mail substituído pela vida do processo
+—, `_mc_sync_email_subjects` junta `{Trade ID: assunto}` e
+`_mc.set_email_subjects` grava **só o que mudou**, num lote por chamada.
+
+Três coisas que não dão erro nenhum: sem o "só o que mudou", cada abertura do
+Monitor reescreveria a esteira inteira; sem o lote, cada chave releria os dois
+DuckDB (o Monitor manda até 200 itens de uma vez); e a falha da gravação é
+engolida com log, porque listar documentos é o serviço que a página pediu — um
+banco travado não pode transformar o Monitor inteiro em "no PDF".
+
 ### Validar é abrir o documento, não clicar num botão
 
 O Validate do Monitor abre **`/manual-confirmation/validate`** (PDF do Electronic
@@ -956,11 +1005,44 @@ o documento: quem recebe vai CONFERIR a confirmação, e conferir é lá. O rót
 `page` é `'Confirmation'` (o mesmo da esteira — ver `_NOTIF_PAGE_URL`); o
 produto vive no texto do aviso, que é onde ele continua legível.
 
+**GERAR também é só no Monitor**, e com isso o ciclo inteiro mora num lugar só.
+O botão **Confirmation** saiu da barra das quatro páginas de New Deals (o
+contêiner `.confirmationBtn` e o diálogo de grupos foram apagados): o card de
+**Pending OTC** oferece **Generate** enquanto não há PDF na pasta da confirmação
+e **Validate** depois que há — é a mesma condição que já riscava o botão, agora
+com um destino em vez de um aviso. Só o OTC (nas etapas de MO e FO, sem contrato
+o botão continua riscado: elas conferem o papel, não o produzem).
+
+O que traduz uma coisa na outra é **`/manual-confirmation/generate?keys=…`**: a
+esteira conhece a LINHA (Trade ID, Produto, data da operação) e o New Deals
+conhece o GRUPO (contraparte × mercadoria × família), que é a unidade do
+documento. O casamento é pelos **Trade IDs** — os mesmos do card de Confirmations
+do New Deals Monitor —, nunca por contraparte × mercadoria, que seria um de-para
+por texto entre dois cadastros que normalizam nomes de jeitos diferentes. Sem
+destino, a rota devolve 404 com a `manual-generate-error.html` dizendo o motivo
+exato (produto sem tela, linha sem data, arquivo-dia sem a operação); um 404 seco
+não diz qual dos três é.
+
+No editor sobrou **um botão**: o `Salvar Word + PDF no Inventory`. O
+`Imprimir / Salvar PDF` saiu dos nove templates de confirmação — o PDF é gravado
+no Inventory, e imprimir por fora produzia um documento que a esteira não vê. E
+quando o editor foi aberto pelo Monitor (a rota manda **`mc_keys`** na URL), a
+tela que abre depois de gravar é a validação da **ESTEIRA**, não o checklist do
+documento: é o mesmo ato — quem gerou está com o papel na frente e assina pela
+mesa de OTC. Validando, a confirmação segue para MO/FO; fechando sem validar, ela
+continua em Pending OTC, agora com o PDF na pasta, e o card volta a oferecer
+Validate. Sem `mc_keys` nada muda (abre o checklist do documento), e é por isso
+que o `openValidate` é o único ponto tocado nos nove arquivos.
+
+O ciclo do DOCUMENTO (New → Generated → Success) continua fechando no card de
+Confirmations do New Deals Monitor sem ninguém marcar nada: quando o grupo já tem
+linha na esteira, **a etapa dela vence o status do documento**, e
+`_conf_esteira_stages` traduz toda etapa depois do OTC para `Ok`.
+
 **Validar é SÓ no Monitor.** O botão Validate saiu dos diálogos de
 Confirmations das quatro páginas de New Deals (FWD Start, NDF Comm, Opt Comm,
-Opt FXO) — dois lugares validando era ter duas respostas para a mesma pergunta.
-O que fica no New Deals é o checklist pós-geração acima, que fecha o ciclo do
-documento (HANDOFF §241).
+Opt FXO) — dois lugares validando era ter duas respostas para a mesma pergunta
+(HANDOFF §241).
 
 **Validar e Rejeitar vivem os dois na tela de validação**, não no card do
 Monitor. São as duas respostas à mesma pergunta — o documento está certo? — e as
@@ -1010,6 +1092,29 @@ escreva um script em `scripts/` para ela.
 
 ### Outras
 
+- **O Strike do NDF FWD Start não derruba um Success para Amend.** O que a B3
+  registra é o **Strike Set Offset** — o spread sobre uma taxa que só se conhece
+  no dia do fixing; o Strike da linha é a projeção dessa taxa no momento do
+  booking, e a Athena a recalcula a cada pull. A operação não mudou, mudou o
+  mercado, e sem isso todo FWD Start já registrado voltava sozinho para a fila. A
+  célula continua destacada (o campo entra em `AmendChanged` como qualquer
+  outro); o que não regride é o status. A lista é
+  `_ND_AMEND_COSMETIC_BY_PRODUCT`, **por produto** — o Strike é econômico em
+  todos os outros —, e por isso `_nd_api_amend` recebe o `product` de quem
+  chama. Produto vazio ("não sei") vale só a lista geral: o default é econômico,
+  porque um campo esquecido virando Amend custa uma revisão e o contrário custa
+  uma operação registrada errada.
+- **Os NOMES das colunas da esteira são os da planilha legada, os RÓTULOS são
+  ingleses.** Os nomes (`Data de vencimento`, `Moeda`, `VALIDADO p/ MO`) são o
+  esquema dos dois DuckDB e não podem mudar — renomear um quebraria o banco de
+  quem já o tem em disco. Quem traduz é o `COLUMN_LABELS`, que por isso é a lista
+  **COMPLETA** das colunas: coluna sem entrada apareceria na tela com o nome do
+  banco. A tradução br/es fica no `COLTR` do template, e não em `data-lang`,
+  porque o cabeçalho é montado em JS depois do load — o I18nManager traduz os
+  `[data-lang]` uma vez, no load. Nas LISTAS (edição em massa, painel de colunas)
+  vale o `labelFull`: os três `Time Stamp` compartilham o rótulo curto de
+  propósito, e só quando há empate o nome do banco entra, porque ele já diz a
+  mesa.
 - **Thread de scheduler não tem application context.** `render_template` (o
   corpo dos e-mails) e `current_app` (o `_get_logo_path`) exigem um, e sem ele o
   disparo morre com *Working outside of application context*. O sintoma engana:

@@ -352,6 +352,8 @@
               docsLoading: 'looking for the PDFs…',
               mailTip: 'open the internal recap e-mail in a new tab',
               noContractTip: 'no contract to validate yet',
+              generate: 'Generate',
+              generateTip: 'the confirmation has not been generated yet — open the editor',
               legalRelease: 'Release to OTC',
               legalTitle: 'Release to OTC?',
               legalText: '{c} — {n} operation(s) will leave Pending Legal and enter the OTC queue, here and on the Pending Confirmation page.',
@@ -374,6 +376,8 @@
               docsLoading: 'procurando os PDFs…',
               mailTip: 'abrir o e-mail de recap interno em nova aba',
               noContractTip: 'ainda não há contrato para validar',
+              generate: 'Gerar',
+              generateTip: 'a confirmação ainda não foi gerada — abrir o editor',
               legalRelease: 'Liberar p/ OTC',
               legalTitle: 'Liberar para o OTC?',
               legalText: '{c} — {n} operação(ões) saem de Pending Legal e entram na fila do OTC, aqui e na página Pending Confirmation.',
@@ -396,6 +400,8 @@
               docsLoading: 'buscando los PDFs…',
               mailTip: 'abrir el e-mail de recap interno en una nueva pestaña',
               noContractTip: 'aún no hay contrato para validar',
+              generate: 'Generar',
+              generateTip: 'la confirmación aún no fue generada — abrir el editor',
               legalRelease: 'Liberar p/ OTC',
               legalTitle: '¿Liberar para el OTC?',
               legalText: '{c} — {n} operación(es) salen de Pending Legal y entran en la cola del OTC, aquí y en la página Pending Confirmation.',
@@ -456,7 +462,11 @@
                    // Os Trade IDs do grupo: o nome do PDF traz o número da
                    // operação, e é ele que escolhe o documento exato quando a
                    // pasta do dia tem vários.
-                   'data-docs-trades="' + esc((it.keys || []).join(',')) + '">' +
+                   'data-docs-trades="' + esc((it.keys || []).join(',')) + '" ' +
+                   // A etapa: sem PDF na pasta, o Pending OTC vira Generate e as
+                   // demais etapas continuam com o Validate riscado. Só o OTC
+                   // gera o documento — o MO e o FO conferem o que já existe.
+                   'data-docs-stage="' + esc(stage) + '">' +
                    '<i class="ti ti-loader-2 me-1 mc-docs-spin"></i>' + esc(t('docsLoading')) + '</span>';
 
         // O card tem UM botão só. Validar e Rejeitar são as duas respostas à
@@ -556,12 +566,30 @@
             var acts = el.closest('.mc-item__acts');
             var temPdf = (docs || []).some(function (d) { return !d.email; });
             if (checou && !temPdf) {
-                // Sem href: preventDefault não cobre o clique do meio, e um <a>
-                // sem destino também sai da navegação por teclado.
-                acts.find('a.btn-success')
-                    .removeClass('btn-success').addClass('btn-secondary mc-val-off')
-                    .removeAttr('href target')
-                    .attr({ title: t('noContractTip'), 'aria-disabled': 'true' });
+                var btn = acts.find('a.btn-success');
+                if (el.attr('data-docs-stage') === 'OTC' && btn.length) {
+                    // Sem documento na pasta, o que falta não é validar: é GERAR.
+                    // O botão troca de destino (o editor da confirmação, aba
+                    // nova) e o ciclo inteiro — gerar, gravar, validar — passa a
+                    // acontecer a partir daqui. Depois de gravado o PDF está na
+                    // pasta, e no próximo carregamento este mesmo item volta a
+                    // oferecer o Validate.
+                    //
+                    // Só o OTC: quem gera o documento é a mesa que o monta. Nas
+                    // etapas de MO e FO, sem contrato o botão continua riscado —
+                    // elas conferem o papel, não o produzem.
+                    btn.removeClass('btn-success').addClass('btn-warning mc-act-gen')
+                       .attr({ href: '/manual-confirmation/generate?keys=' +
+                                     encodeURIComponent(el.attr('data-docs-trades') || ''),
+                               title: t('generateTip') })
+                       .html('<i class="ti ti-file-plus me-1"></i>' + esc(t('generate')));
+                } else {
+                    // Sem href: preventDefault não cobre o clique do meio, e um <a>
+                    // sem destino também sai da navegação por teclado.
+                    btn.removeClass('btn-success').addClass('btn-secondary mc-val-off')
+                       .removeAttr('href target')
+                       .attr({ title: t('noContractTip'), 'aria-disabled': 'true' });
+                }
             }
             if (!docs || !docs.length) { el.html(esc(t('nolink'))); return; }
             el.replaceWith('<div class="mc-docs">' + docs.map(function (d) {

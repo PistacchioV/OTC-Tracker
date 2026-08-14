@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Generate confirmation — {{ cliente }}</title>
+{# ============================================================================
+   O Generate do Confirmations Monitor não achou o grupo do New Deals.
+
+   Página autônoma, no mesmo desenho da `manual-validate.html`: as duas abrem em
+   aba nova a partir do Monitor e não estendem o layout — o menu lateral só
+   tiraria espaço. Sem I18nManager aqui, o texto fixo nasce em inglês e é
+   traduzido pelo `_TRANS` local, lendo o mesmo
+   `localStorage['__OTC_TRACKER_LANG__']` do resto do app.
+
+   O **motivo** vem do servidor e fica em português de propósito: ele nomeia a
+   condição exata (produto sem tela, linha sem data, arquivo-dia sem a operação),
+   é o que o time cola no chamado, e traduzi-lo exigiria mandar a condição
+   estruturada para uma frase que ninguém lê duas vezes.
+   ============================================================================ #}
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, sans-serif; background: #12121f; color: #e0e0e0;
+         min-height: 100vh; display: flex; align-items: center; justify-content: center;
+         padding: 24px; }
+  #box { width: 100%; max-width: 560px; background: #1a1a2e; border: 1px solid #2a2a5a;
+         border-radius: 12px; padding: 26px 28px; box-shadow: 0 18px 40px rgba(0,0,0,.45); }
+  h1 { font-size: 14pt; color: #fff; margin-bottom: 4px; }
+  .sub { font-size: 9pt; color: #9090b0; border-bottom: 1px solid #333;
+         padding-bottom: 12px; margin-bottom: 16px; line-height: 1.6; }
+  .why { background: rgba(220,53,69,.13); border: 1px solid rgba(220,53,69,.5);
+         color: #f19aa2; border-radius: 8px; padding: 12px 14px; font-size: 9pt;
+         line-height: 1.6; margin-bottom: 16px; }
+  .meta { font-size: 8.5pt; color: #a0a0c0; line-height: 1.8; }
+  .meta b { color: #d0d0e8; }
+  .foot { margin-top: 18px; font-size: 8.5pt; color: #7a7a9a; line-height: 1.6; }
+</style>
+</head>
+<body>
+
+<div id="box">
+  <h1>✕ <span data-t="title">Confirmation could not be generated</span></h1>
+  <p class="sub" data-t="sub">
+    The trail knows this confirmation, but the matching New Deals group was not found.</p>
+
+  <div class="why">{{ motivo }}</div>
+
+  <div class="meta">
+    <b data-t="mCounterparty">Counterparty</b>: {{ cliente }}<br>
+    <b data-t="mProduct">Product</b>: {{ produto }}<br>
+    <b data-t="mTradeDate">Trade date</b>: {{ data }}<br>
+    <b data-t="mTrades">Trades</b>: {{ keys|join(', ') }}
+  </div>
+
+  <p class="foot" data-t="foot">
+    Close this tab and go back to the Confirmations Monitor. If the operation really is in the
+    day file, the trade date on the trail row is what points to it.</p>
+</div>
+
+<script>
+var LANG = (localStorage.getItem('__OTC_TRACKER_LANG__') ||
+            localStorage.getItem('language') || 'en').toLowerCase();
+var _TRANS = {
+    br: { title: 'Não foi possível gerar a confirmação',
+          sub: 'A esteira conhece esta confirmação, mas o grupo correspondente do New Deals não foi encontrado.',
+          mCounterparty: 'Contraparte', mProduct: 'Produto', mTradeDate: 'Data da operação',
+          mTrades: 'Operações',
+          foot: 'Feche esta aba e volte ao Confirmations Monitor. Se a operação está mesmo no arquivo-dia, é a data da operação da linha da esteira que aponta para ele.' },
+    es: { title: 'No se pudo generar la confirmación',
+          sub: 'La cadena conoce esta confirmación, pero no se encontró el grupo correspondiente en New Deals.',
+          mCounterparty: 'Contraparte', mProduct: 'Producto', mTradeDate: 'Fecha de operación',
+          mTrades: 'Operaciones',
+          foot: 'Cierre esta pestaña y vuelva al Confirmations Monitor. Si la operación está en el archivo del día, es la fecha de operación de la fila de la cadena la que lleva a él.' }
+};
+(function () {
+    var m = _TRANS[LANG];
+    if (!m) return;                       // inglês é o texto que já está no HTML
+    document.querySelectorAll('[data-t]').forEach(function (el) {
+        var v = m[el.getAttribute('data-t')];
+        if (v) el.textContent = v;
+    });
+})();
+</script>
+</body>
+</html>

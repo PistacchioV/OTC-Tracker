@@ -428,7 +428,8 @@
               delOk: 'Delete', delDone: '{n} row(s) deleted', delFail: 'Could not delete',
               saveFail: 'Could not save',
               delOneTitle: 'Delete this confirmation?',
-              delOneText: 'Trade ID {k}. There is no undo.' },
+              delOneText: 'Trade ID {k}. There is no undo.',
+              actions: 'Actions', openDoc: 'Open confirmation', edit: 'Edit', del: 'Delete' },
         br: { addTitle: 'Nova confirmação', editTitle: 'Editar confirmação',
               keyNeeded: 'Falta o Trade ID', keyWhy: 'É ele que identifica a linha.',
               keyDup: 'Este Trade ID já existe', keyDupWhy: 'Edite a linha que já está na tabela.',
@@ -442,7 +443,8 @@
               delOk: 'Excluir', delDone: '{n} linha(s) excluída(s)', delFail: 'Não consegui excluir',
               saveFail: 'Não foi possível gravar',
               delOneTitle: 'Excluir esta confirmação?',
-              delOneText: 'Trade ID {k}. Não tem desfazer.' },
+              delOneText: 'Trade ID {k}. Não tem desfazer.',
+              actions: 'Ações', openDoc: 'Abrir confirmação', edit: 'Editar', del: 'Excluir' },
         es: { addTitle: 'Nueva confirmación', editTitle: 'Editar confirmación',
               keyNeeded: 'Falta el Trade ID', keyWhy: 'Es la clave de la fila.',
               keyDup: 'Este Trade ID ya existe', keyDupWhy: 'Edite la fila que ya está en la tabla.',
@@ -456,7 +458,8 @@
               delOk: 'Eliminar', delDone: '{n} fila(s) eliminada(s)', delFail: 'No se pudo eliminar',
               saveFail: 'No se pudo guardar',
               delOneTitle: '¿Eliminar esta confirmación?',
-              delOneText: 'Trade ID {k}. No hay deshacer.' }
+              delOneText: 'Trade ID {k}. No hay deshacer.',
+              actions: 'Acciones', openDoc: 'Abrir confirmación', edit: 'Editar', del: 'Eliminar' }
     };
     function t(k, vars) {
         var s = (_TRANS[LANG] || _TRANS.en)[k] || _TRANS.en[k] || k;
@@ -478,7 +481,77 @@
 
     var table = null, rows = [], activePending = '', editing = null, adding = false;
 
-    function label(c) { return LABELS[c] || c; }
+    // ── O rótulo das colunas ────────────────────────────────────────────────
+    // O servidor manda o rótulo em INGLÊS (`COLUMN_LABELS`), que é como todo
+    // texto do app nasce. A tradução é aqui e não por `data-lang` porque o
+    // cabeçalho é montado em JS depois do load, e o I18nManager traduz os
+    // `[data-lang]` UMA vez, no load — o que o JS insere depois nunca passa por
+    // ele. Chave = o NOME da coluna no banco (que é o que o payload traz), não o
+    // rótulo: o rótulo pode mudar sem levar as três traduções junto.
+    //
+    // Coluna sem entrada aqui cai no rótulo inglês, que é o comportamento certo
+    // para uma coluna nova: ela aparece legível até alguém traduzi-la.
+    var COLTR = {
+        br: {
+            'Pending': 'Pendência', 'Aging Confirmação': 'Idade',
+            'Legal Entity': 'Entidade Legal', 'Cliente': 'Contraparte',
+            'E-mail Subject': 'Assunto do E-mail', 'Produto': 'Produto',
+            'Trade ID': 'Trade ID', 'Cetip ID': 'B3 ID',
+            'Moeda': 'Ativo Subjacente', 'Notional': 'Notional/Qtd',
+            'Data Operação': 'Data da Operação', 'Data de vencimento': 'Data de Vencimento',
+            'Data de envio validação Registro': 'Envio Validação Registro',
+            'Data validação Registro': 'Registro Validado',
+            'Data EA enviado p/ cliente': 'EA Enviado ao Cliente',
+            'Data Callback': 'Data do Callback',
+            'Data envio validação OTC': 'Envio Validação OTC',
+            'Conferido OTC': 'Validado pelo OTC', 'Time Stamp OTC': 'Carimbo',
+            'OTC Comments': 'Comentários OTC',
+            'Data envio validação MO/FO': 'Envio Validação MO/FO',
+            'VALIDADO p/ MO': 'Validado pelo MO', 'Time Stamp MO': 'Carimbo',
+            'MO Comments': 'Comentários MO',
+            'VALIDADO p/ FO': 'Validado pelo FO', 'Time Stamp FO': 'Carimbo',
+            'FO Comments': 'Comentários FO',
+            'Enviado p/ cliente (desbloqueado no fep)': 'Enviado ao Cliente (liberado no FepWeb)',
+            'Nome fep': 'Nome FepWeb'
+        },
+        es: {
+            'Pending': 'Pendiente', 'Aging Confirmação': 'Antigüedad',
+            'Legal Entity': 'Entidad Legal', 'Cliente': 'Contraparte',
+            'E-mail Subject': 'Asunto del Correo', 'Produto': 'Producto',
+            'Trade ID': 'Trade ID', 'Cetip ID': 'B3 ID',
+            'Moeda': 'Activo Subyacente', 'Notional': 'Notional/Cant.',
+            'Data Operação': 'Fecha de Operación', 'Data de vencimento': 'Fecha de Liquidación',
+            'Data de envio validação Registro': 'Envío Validación Registro',
+            'Data validação Registro': 'Registro Validado',
+            'Data EA enviado p/ cliente': 'EA Enviado al Cliente',
+            'Data Callback': 'Fecha de Callback',
+            'Data envio validação OTC': 'Envío Validación OTC',
+            'Conferido OTC': 'Validado por OTC', 'Time Stamp OTC': 'Sello',
+            'OTC Comments': 'Comentarios OTC',
+            'Data envio validação MO/FO': 'Envío Validación MO/FO',
+            'VALIDADO p/ MO': 'Validado por MO', 'Time Stamp MO': 'Sello',
+            'MO Comments': 'Comentarios MO',
+            'VALIDADO p/ FO': 'Validado por FO', 'Time Stamp FO': 'Sello',
+            'FO Comments': 'Comentarios FO',
+            'Enviado p/ cliente (desbloqueado no fep)': 'Enviado al Cliente (liberado en FepWeb)',
+            'Nome fep': 'Nombre FepWeb'
+        }
+    };
+    function label(c) {
+        var m = COLTR[LANG];
+        return (m && m[c]) || LABELS[c] || c;
+    }
+    // O rótulo para uma LISTA (o dropdown da edição em massa, o painel de
+    // colunas), onde as três colunas de carimbo se chamariam todas 'Time Stamp'
+    // e não haveria como escolher a certa. Só nesse caso o nome do banco entra —
+    // ele já diz a mesa ('Time Stamp OTC'). Antes o nome vinha SEMPRE entre
+    // parênteses, o que agora encheria a lista inteira de 'Trade Date (Data
+    // Operação)'.
+    function labelFull(c) {
+        var r = label(c), n = 0;
+        COLUMNS.forEach(function (o) { if (label(o) === r) n++; });
+        return n > 1 ? c : r;
+    }
     function isDate(c) { return DATES.indexOf(c) !== -1; }
     function isDerived(c) { return DERIVED.indexOf(c) !== -1; }
     // A chave é travada na EDIÇÃO e livre na criação: trocá-la numa linha que já
@@ -528,7 +601,7 @@
         var thead = $('#mc-table thead').empty();
         var head = $('<tr>').appendTo(thead);
         head.append('<th><input type="checkbox" id="mcAll" class="form-check-input"></th>');
-        head.append('<th>Actions</th>');
+        head.append($('<th>').text(t('actions')));
         COLUMNS.forEach(function (c) { head.append($('<th>').text(label(c))); });
 
         // A 2ª linha do thead JÁ montada aqui: ver o comentário do CSS.
@@ -553,12 +626,12 @@
                 // O de abrir só existe quando a linha sabe ONDE está o
                 // documento: um botão que abre nada parece defeito.
                 var open = row['Confirmation Link']
-                    ? '<a class="btn btn-primary btn-sm rounded-circle me-1" title="Abrir confirmação" target="_blank" rel="noopener" href="' +
+                    ? '<a class="btn btn-primary btn-sm rounded-circle me-1" title="' + esc(t('openDoc')) + '" target="_blank" rel="noopener" href="' +
                       esc(row['Confirmation Link']) + '"><i class="ti ti-external-link"></i></a>'
                     : '';
                 return open +
-                    '<button class="btn btn-info btn-sm rounded-circle me-1" title="Editar" data-mc-edit="' + k + '"><i class="ti ti-pencil"></i></button>' +
-                    '<button class="btn btn-danger btn-sm rounded-circle" title="Excluir" data-mc-del="' + k + '"><i class="ti ti-trash"></i></button>';
+                    '<button class="btn btn-info btn-sm rounded-circle me-1" title="' + esc(t('edit')) + '" data-mc-edit="' + k + '"><i class="ti ti-pencil"></i></button>' +
+                    '<button class="btn btn-danger btn-sm rounded-circle" title="' + esc(t('del')) + '" data-mc-del="' + k + '"><i class="ti ti-trash"></i></button>';
             }
         }];
         COLUMNS.forEach(function (name) {
@@ -658,7 +731,7 @@
         // pôr/tirar o hold do jurídico pela tela.
         sel.append($('<option>').val('Pending').text('Pending'));
         COLUMNS.filter(editable).forEach(function (c) {
-            sel.append($('<option>').val(c).text(label(c) === c ? c : label(c) + ' (' + c + ')'));
+            sel.append($('<option>').val(c).text(labelFull(c)));
         });
     }
 
@@ -973,7 +1046,7 @@
             var grid = $('#mcEditGrid').empty();
             COLUMNS.forEach(function (c) {
                 var col = $('<div class="col-12 col-md-4 col-xl-3">');
-                $('<label>').text(label(c) === c ? c : label(c) + ' (' + c + ')').appendTo(col);
+                $('<label>').text(labelFull(c)).appendTo(col);
                 var inp = fieldFor(c, row[c] || '').attr('data-col', c);
                 // Derivadas (e a chave, na edição) ficam visíveis mas travadas:
                 // escondê-las faria perguntarem onde foram parar; deixá-las

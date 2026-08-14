@@ -121,20 +121,58 @@ INTERNAL_COLUMNS = ['Confirmation Link']
 # O esquema do banco = o que a tela mostra + o que ela usa por baixo.
 DB_COLUMNS = COLUMNS + INTERNAL_COLUMNS
 
-# Rótulo curto de cada carimbo. A tela mostra 'Time Stamp' três vezes, do lado
-# do VALIDADO correspondente — é assim que a planilha era lida.
+# O RÓTULO de cada coluna, em INGLÊS — que é como todo texto visível do app
+# nasce (§2). Os NOMES das colunas continuam os da planilha legada, em
+# português, e não podem mudar: eles são o esquema dos dois DuckDB, e renomear
+# um quebraria o banco de quem já o tem em disco. Um mapa resolve os dois: o
+# banco fala 'Data de vencimento', a tela mostra 'Settlement Date'.
+#
+# Toda coluna entra aqui, inclusive as que já eram inglesas, para este mapa ser
+# a lista COMPLETA do que a tela mostra — assim a tradução br/es da tela
+# (`COLTR`, no template) tem um lugar só para casar, e uma coluna nova sem
+# rótulo salta aos olhos em vez de aparecer com o nome do banco.
 COLUMN_LABELS = {
-    'Time Stamp OTC': 'Time Stamp',
-    'Time Stamp MO': 'Time Stamp',
-    'Time Stamp FO': 'Time Stamp',
-    # Moeda virou ATIVO: para câmbio segue a moeda (USD), para commodities entra
-    # a commodity da confirmação (OLEO, PLATTS…) — é ela que separa os
-    # documentos de um mesmo cliente×dia e acha a confirmação EXATA na pasta.
-    'Moeda': 'Ativo',
+    'Pending': 'Pending',
+    'Aging Confirmação': 'Aging',
+    'Legal Entity': 'Legal Entity',
+    'Cliente': 'Counterparty',
+    'E-mail Subject': 'E-mail Subject',
+    'Produto': 'Product',
+    'LOB': 'LOB',
+    'Trade ID': 'Trade ID',
     # O nome da coluna é da planilha legada; o que o código escreve nela é, e
     # sempre foi, o `B3_ID` do deal. O rótulo passa a dizer o que está lá —
     # renomear a COLUNA quebraria o arquivo de quem já a tem no banco.
     'Cetip ID': 'B3 ID',
+    # Moeda virou o ATIVO SUBJACENTE: para câmbio segue a moeda (USD), para
+    # commodities entra a commodity da confirmação (OLEO, PLATTS…) — é ela que
+    # separa os documentos de um mesmo cliente×dia e acha a confirmação EXATA na
+    # pasta.
+    'Moeda': 'Underlying Asset',
+    # Notional em câmbio, QUANTIDADE em commodities (toneladas, barris): é a
+    # mesma coluna carregando as duas grandezas, e o rótulo diz as duas.
+    'Notional': 'Notional/Qty',
+    'Data Operação': 'Trade Date',
+    'Data de vencimento': 'Settlement Date',
+    'Data de envio validação Registro': 'Registration Validation Sent',
+    'Data validação Registro': 'Registration Validated',
+    'Data EA enviado p/ cliente': 'EA Sent to Client',
+    'Data Callback': 'Callback Date',
+    'Data envio validação OTC': 'OTC Validation Sent',
+    'Conferido OTC': 'Validated by OTC',
+    # Os três carimbos aparecem com o rótulo curto, encostados no VALIDADO
+    # correspondente — é assim que a planilha era lida.
+    'Time Stamp OTC': 'Time Stamp',
+    'OTC Comments': 'OTC Comments',
+    'Data envio validação MO/FO': 'MO/FO Validation Sent',
+    'VALIDADO p/ MO': 'Validated by MO',
+    'Time Stamp MO': 'Time Stamp',
+    'MO Comments': 'MO Comments',
+    'VALIDADO p/ FO': 'Validated by FO',
+    'Time Stamp FO': 'Time Stamp',
+    'FO Comments': 'FO Comments',
+    'Enviado p/ cliente (desbloqueado no fep)': 'Sent to Client (FepWeb released)',
+    'Nome fep': 'FepWeb Name',
 }
 
 # Colunas de data (a tela usa máscara nelas, e o import normaliza para dd/mm/aaaa).
@@ -900,6 +938,42 @@ def blank_row(**kw):
     row = {c: '' for c in DB_COLUMNS}
     row.update({k: v for k, v in kw.items() if k in row})
     return refresh_derived(row)
+
+
+def set_email_subjects(pairs):
+    """Grava o assunto do e-mail de recap nas linhas indicadas.
+
+    `pairs` é {Trade ID: assunto}. Recebe o LOTE inteiro de propósito: o Monitor
+    resolve dezenas de confirmações por carregamento, e um `find_row` por chave
+    releria os dois bancos dezenas de vezes para escrever meia dúzia de células.
+
+    O e-mail é a FONTE dessa coluna — ela se chama 'E-mail Subject' e guarda o
+    assunto do recap que está na pasta da confirmação. Por isso o valor é
+    reescrito quando muda, e não só quando a célula está vazia: se o recap foi
+    substituído, o assunto antigo passou a apontar para um e-mail que não existe
+    mais. Igual não escreve nada — sem isso, cada abertura do Monitor
+    reescreveria a esteira inteira sem uma célula mudar.
+
+    Devolve quantas linhas foram efetivamente gravadas.
+    """
+    alvo = {}
+    for k, v in (pairs or {}).items():
+        k = str(k or '').strip()
+        v = str(v or '').strip()
+        if k and v:
+            alvo[k] = v
+    if not alvo:
+        return 0
+    n = 0
+    for row in load_all():
+        chave = str(row.get(KEY_COLUMN, '') or '').strip()
+        novo = alvo.get(chave)
+        if not novo or str(row.get('E-mail Subject', '') or '').strip() == novo:
+            continue
+        row['E-mail Subject'] = novo
+        upsert_row(row)
+        n += 1
+    return n
 
 
 # =============================================================================

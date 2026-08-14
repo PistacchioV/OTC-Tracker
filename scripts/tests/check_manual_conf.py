@@ -391,8 +391,23 @@ check('o Trade ID repetido do arquivo virou uma só',
 check('os três Time Stamp têm nome próprio no banco',
       [c for c in M.COLUMNS if c.startswith('Time Stamp')],
       ['Time Stamp OTC', 'Time Stamp MO', 'Time Stamp FO'])
-check('   e o rótulo curto na tela (com Moeda como Ativo e Cetip ID como B3 ID)',
-      sorted(set(M.COLUMN_LABELS.values())), ['Ativo', 'B3 ID', 'Time Stamp'])
+# O rótulo da tela é INGLÊS e o mapa é COMPLETO: os nomes das colunas são os da
+# planilha legada (em português, e são o esquema dos dois DuckDB — renomeá-los
+# quebraria o banco de quem já o tem), então quem traduz é este mapa. Coluna sem
+# entrada apareceria na tela com o nome do banco, e é isso que a completude pega.
+check('   toda coluna tem rótulo',
+      [c for c in M.COLUMNS if c not in M.COLUMN_LABELS], [])
+check('   e o rótulo é o nome em inglês da coluna',
+      [M.COLUMN_LABELS[c] for c in ('Data de vencimento', 'Data Operação', 'Moeda',
+                                    'Notional', 'Cliente', 'Cetip ID',
+                                    'Aging Confirmação', 'Produto')],
+      ['Settlement Date', 'Trade Date', 'Underlying Asset', 'Notional/Qty',
+       'Counterparty', 'B3 ID', 'Aging', 'Product'])
+# Os três carimbos compartilham o rótulo curto de propósito: cada um aparece
+# encostado no VALIDADO da sua mesa, que é como a planilha era lida.
+check('   e os três carimbos dividem o rótulo curto',
+      sorted({M.COLUMN_LABELS[c] for c in M.COLUMNS if c.startswith('Time Stamp')}),
+      ['Time Stamp'])
 check('o link do documento fica FORA da tabela',
       ('Confirmation Link' in M.DB_COLUMNS, 'Confirmation Link' in M.COLUMNS),
       (True, False))
@@ -492,7 +507,17 @@ _boot = _json.loads(HTML.split('id="mc-boot">')[1].split('</script>')[0])
 check('a tela recebe as colunas do servidor', _boot['columns'], list(M.COLUMNS))
 check('   pelo bloco de dados, sem Jinja no meio do JS',
       ('var COLUMNS = BOOT.columns' in HTML, '{{' in HTML), (True, False))
-check('   e não tem uma lista própria', "'Conferido OTC'" in HTML, False)
+# A tela não pode ter uma LISTA de colunas própria — ela desalinharia do
+# servidor em silêncio na primeira coluna nova. O que ela tem é um mapa de
+# TRADUÇÃO (COLTR), chaveado pelos mesmos nomes que o payload traz e com
+# fallback para o rótulo inglês do servidor: um mapa que traduz não é uma
+# segunda lista, e coluna sem entrada nele aparece em inglês, não some.
+check('   e não monta a própria lista de colunas',
+      ('var COLUMNS = [' in HTML, 'COLUMNS = BOOT.columns' in HTML), (False, True))
+check('   o mapa de tradução cai no rótulo do servidor',
+      'return (m && m[c]) || LABELS[c] || c;' in HTML, True)
+check('   e traduz para os três idiomas', ('COLTR = {' in HTML,
+      HTML.count("'Data de vencimento':")), (True, 2))
 check('o Trade ID fica fora da edição em massa',
       "c !== KEY" in HTML and 'isDerived(c)' in HTML, True)
 # ── Cada etapa é assinada pela SUA mesa ─────────────────────────────────────
