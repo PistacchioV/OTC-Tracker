@@ -89,6 +89,13 @@ COLUMNS = [
     'Cetip ID',
     'Moeda',
     'Notional',
+    # O notional COM a moeda dele, como um texto só ('USD 1500000'). Não é a
+    # coluna `Moeda` ao lado: aquela é o ATIVO da confirmação, e em mercadoria
+    # ela guarda a commodity (OLEO, PLATTS) — que não é moeda nenhuma. Aqui a
+    # moeda vem de onde ela realmente mora em cada produto (ver
+    # `_mc_notional_ccy` no routes), e é ela que o relatório do BACC reparte em
+    # duas colunas.
+    'Notional Amount CCY',
     'Data Operação',
     'Data de vencimento',
     'Data de envio validação Registro',
@@ -152,6 +159,7 @@ COLUMN_LABELS = {
     # Notional em câmbio, QUANTIDADE em commodities (toneladas, barris): é a
     # mesma coluna carregando as duas grandezas, e o rótulo diz as duas.
     'Notional': 'Notional/Qty',
+    'Notional Amount CCY': 'Notional Amount CCY',
     'Data Operação': 'Trade Date',
     'Data de vencimento': 'Settlement Date',
     'Data de envio validação Registro': 'Registration Validation Sent',
@@ -669,6 +677,29 @@ def rule_for(produto, lob, rules=None):
 
 def _filled(row, col):
     return bool(str(row.get(col, '') or '').strip())
+
+
+def split_notional_ccy(v):
+    """(moeda, valor) da coluna `Notional Amount CCY`.
+
+    A coluna guarda os dois num texto só ('USD 1500000') porque é assim que ela
+    é lida na tela — o valor sem a moeda ao lado não diz nada em quem opera duas
+    moedas no mesmo dia. Quem precisa das partes separadas é o relatório do
+    BACC, que as manda para DUAS colunas da planilha, e é este o único lugar que
+    sabe reparti-las: um `split(' ')` espalhado pelos consumidores divergiria no
+    primeiro valor com espaço de milhar.
+
+    A moeda é o PRIMEIRO token e só vale se tiver 3 letras — é código ISO, e um
+    valor solto na célula (linha antiga, digitação à mão) devolve moeda vazia e
+    o texto inteiro como valor, em vez de comer o primeiro dígito.
+    """
+    t = re.sub(r'\s+', ' ', str(v or '')).strip()
+    if not t:
+        return '', ''
+    ccy, _sep, resto = t.partition(' ')
+    if len(ccy) == 3 and ccy.isalpha():
+        return ccy.upper(), resto.strip()
+    return '', t
 
 
 def pending_stage(row, rules=None):

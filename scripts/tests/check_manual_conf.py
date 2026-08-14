@@ -400,7 +400,7 @@ p = M.monitor_payload()
 check('produto sem cadastro vira aviso', any('PRODUTO NOVO' in w for w in p['warnings']), True)
 
 print('\n== 8. as colunas ==')
-check('30 colunas na tela', len(M.COLUMNS), 30)
+check('31 colunas na tela', len(M.COLUMNS), 31)
 # O `Athena ID` SAIU: para os produtos chaveados pelo Deal ele repetia o Trade ID
 # e no FWD Start vinha vazio — não acrescentava nada em linha nenhuma. A coluna
 # continua no banco (`ensure_db` só acrescenta), então o dado antigo está lá.
@@ -512,6 +512,91 @@ check('   assunto novo sobrescreve (o e-mail é a fonte da coluna)',
 check('   chave inexistente não cria linha',
       (M.set_email_subjects({'NAO-EXISTE': 'Z'}), M.find_row('NAO-EXISTE')), (0, None))
 M.delete_row('SUBJ1')
+
+print('\n== 8c. o Notional Amount CCY e o anexo do BACC ==')
+# A coluna guarda moeda e valor num texto só ('USD 1500000'), porque é assim que
+# ela é lida na tela — valor sem moeda ao lado não diz nada em quem opera duas
+# moedas no mesmo dia. Quem reparte é UMA função; um split espalhado pelos
+# consumidores divergiria no primeiro valor com separador de milhar.
+check('a coluna nasce à direita do Notional',
+      M.COLUMNS.index('Notional Amount CCY') - M.COLUMNS.index('Notional'), 1)
+check('   e reparte em (moeda, valor)',
+      [M.split_notional_ccy(v) for v in
+       ('USD 1500000', 'BRL  250000,50 ', '', '1500000', 'OLEO 10')],
+      [('USD', '1500000'), ('BRL', '250000,50'), ('', ''),
+       ('', '1500000'), ('', 'OLEO 10')])
+
+# A MOEDA sai do campo daquele produto, não de uma cadeia de fallback: cada um
+# guarda o valor num lugar, e o primeiro campo preenchido nem sempre é o que a
+# mesa chama de moeda do notional.
+_D = {'StrikeCurrency': 'USD', 'QuantityCurrency': 'BRL'}
+check('mercadoria e FXO usam o Strike Currency',
+      [R._mc_notional_ccy(_D, s, '1500000')
+       for s in ('NDF COMM', 'OPTION COMM', 'OPTION')],
+      ['USD 1500000'] * 3)
+check('   e o FWD Start o Quantity Currency',
+      R._mc_notional_ccy(_D, 'NDF FWD START', '1500000'), 'BRL 1500000')
+# Sem moeda a célula sai só com o número: em branco ela perderia o notional
+# junto, e o valor sem moeda ainda é o valor.
+check('   sem moeda no deal fica só o número',
+      R._mc_notional_ccy({}, 'OPTION', '1500000'), '1500000')
+check('   e sem notional não sobra nada',
+      R._mc_notional_ccy(_D, 'OPTION', ''), '')
+
+
+def _bacc_linha(tid, aging, pend, ccy, notional, cb=''):
+    r = M.blank_row(**{'Trade ID': tid, 'Cliente': 'ACME', 'Produto': 'FXO',
+                       'LOB': 'CEM', 'Notional': notional, 'Data Callback': cb,
+                       'Notional Amount CCY': ((ccy + ' ' + notional) if ccy else notional)})
+    r['Aging Confirmação'] = aging
+    r['Pending'] = pend
+    return r
+
+
+_FAKE = [_bacc_linha('T-A', '3', 'Pending OTC', 'USD', '1500000'),
+         _bacc_linha('T-B', '12', 'Pending MO', 'BRL', '250000.50'),
+         _bacc_linha('T-C', '', 'Pending FO', '', '999'),
+         _bacc_linha('T-D', '99', 'Ok', 'USD', '1'),
+         _bacc_linha('T-E', '40', 'Pending OTC', 'EUR', '77', cb='01/08/2026')]
+_orig_load = M.load_all
+M.load_all = lambda: _FAKE
+try:
+    _saida = R._bacc_rows()
+finally:
+    M.load_all = _orig_load
+# Dois cortes que respondem perguntas diferentes: o callback fecha a operação do
+# ponto de vista da métrica; o `Ok` é o fim da esteira. E a ordem é a da fila —
+# quem espera há mais tempo primeiro. Por texto, '3' viria depois de '12'.
+check('o anexo tira o Ok e o que já tem callback, e ordena pelo aging',
+      [r['Trade ID'] for r in _saida], ['T-B', 'T-A', 'T-C'])
+
+check('as doze colunas da planilha, na ordem pedida',
+      [h for h, _s, _k in R._BACC_COLUMNS],
+      ['Trade ID', 'Product', 'Trade Date', 'Legal Entity', 'Conterparty Name',
+       'Aging', 'Born Age', 'Notional/Qty', 'National Currency',
+       'Notional Amount', 'Comments', 'LOB'])
+# O notional ocupa TRÊS colunas, e as duas últimas saem repartidas da coluna
+# nova. A moeda não sai da coluna `Moeda`: aquela é o ATIVO, e em mercadoria
+# guarda a commodity (OLEO), que não é moeda nenhuma.
+check('   a moeda e o valor saem da coluna nova',
+      (R._bacc_ccy(_FAKE[0]), R._bacc_amount(_FAKE[0])), ('USD', '1500000'))
+check('   e a linha sem moeda sai com a célula da moeda vazia',
+      (R._bacc_ccy(_FAKE[2]), R._bacc_amount(_FAKE[2])), ('', '999'))
+# Número que não parseia sairia como TEXTO no Excel — sem somar e sem ordenar.
+# A versão anterior escrevia como inteiro só o que "parecia dígito", e um
+# notional com centavos não passava no teste.
+check('o valor vira número de verdade nas duas escritas',
+      [R._bacc_num(v) for v in ('1500000', '250000.50', '1.500.000,00', '', 'n/a')],
+      [1500000, 250000.5, 1500000, None, None])
+_ws = R._bacc_build_xlsx(_saida).active
+_hdr = [c.value for c in _ws[1]]
+_linha = {_hdr[i]: c.value for i, c in enumerate(_ws[2])}
+check('   e chega ao xlsx como número',
+      [_linha['Notional/Qty'], _linha['National Currency'],
+       _linha['Notional Amount'], _linha['Aging']],
+      [250000.5, 'BRL', 250000.5, 12])
+check('   Born Age continua sempre vazia',
+      [r[6].value for r in _ws.iter_rows(min_row=2)], [None, None, None])
 
 print('\n== 9b. o upgrade do cadastro de validação ==')
 ANTIGO = [

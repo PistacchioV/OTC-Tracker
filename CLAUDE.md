@@ -954,15 +954,34 @@ O card **BACC EA Metrics** (Control Panel, empilhado com o de Pending
 Confirmations Spreadsheet Metrics — os dois juntos preenchem a altura do
 Confirmations Escalation, que divide a linha) manda, todo dia útil ANBIMA às
 **16:00 BRT**, um e-mail com as operações manuais em anexo `.xlsx`. A fonte é a
-MESMA `manual_conf.load_all()` que o Track Confirmations mostra, filtrada pelas
-linhas **sem Data Callback**.
+MESMA `manual_conf.load_all()` que o Track Confirmations mostra, com DOIS cortes
+e ordenada pelo **Aging do maior para o menor** — quem espera há mais tempo vem
+primeiro, como na fila do Monitor (a chave da ordenação é numérica: o aging é
+gravado como TEXTO, e por texto `'10'` viria antes de `'9'`; vazio vai para o
+fim, porque linha sem idade não encabeça um relatório de atraso).
 
-- **O filtro é a CÉLULA em branco, não um status.** O callback é a conferência
-  por telefone com o cliente e é ele que fecha a operação manual do ponto de
-  vista da métrica; a planilha é a lista do que ainda falta. O teste é a coluna
-  vazia porque é exatamente essa coluna que o Track Confirmations mostra —
+- **Sem Data Callback**, e o teste é a CÉLULA em branco, não um status. O
+  callback é a conferência por telefone com o cliente e é ele que fecha a
+  operação manual do ponto de vista da métrica; a planilha é a lista do que
+  ainda falta. A coluna vazia é exatamente o que o Track Confirmations mostra —
   derivar de um Pending ou de um estágio criaria uma segunda regra, que
   discordaria da tela no primeiro caso de borda.
+- **Pending diferente de `Ok`**, e este é o status, porque `Ok` é justamente o
+  nome do fim da esteira: a confirmação que terminou saiu da fila. De quebra,
+  isso deixa o anexo restrito ao banco `pending` — o mesmo conjunto que o
+  Monitor mostra, e o único cujo E-mail Subject o app preenche sozinho.
+- **O notional ocupa TRÊS colunas**, e as duas últimas saem repartidas da coluna
+  `Notional Amount CCY` da esteira por `manual_conf.split_notional_ccy`:
+  `Notional/Qty` (o número cru), `National Currency` (o CÓDIGO) e
+  `Notional Amount` (o VALOR). A moeda **não sai da coluna `Moeda`**: aquela é o
+  ATIVO da confirmação e em mercadoria guarda a commodity (OLEO, PLATTS), que
+  não é moeda nenhuma — era isso que essa coluna dizia antes.
+- **O TIPO é declarado por coluna** (`text` / `num` / `date`), não adivinhado do
+  conteúdo. A versão anterior escrevia como inteiro tudo que "parecia dígito", e
+  errava dos dois lados: um notional com centavos (`250000.50`) não passava no
+  teste e ia para o Excel como TEXTO — sem somar e sem ordenar —, e um Trade ID
+  todo numérico viraria número, perdendo o zero à esquerda. `_bacc_num` aceita as
+  duas escritas que convivem no banco (`1500000` e `1.500.000,00`).
 - **A mesma falta vira badge no Monitor**, e só no card de **Pending FepWeb**:
   ali a confirmação está validada esperando o envio ao cliente, e o callback é o
   que precisa ter acontecido ANTES desse envio — nos outros estados a coluna
@@ -1158,6 +1177,26 @@ escreva um script em `scripts/` para ela.
   chama. Produto vazio ("não sei") vale só a lista geral: o default é econômico,
   porque um campo esquecido virando Amend custa uma revisão e o contrário custa
   uma operação registrada errada.
+- **`Notional Amount CCY` é a moeda DO NOTIONAL, e a coluna `Moeda` ao lado não
+  serve para isso**: aquela é o ATIVO da confirmação, e em mercadoria guarda a
+  commodity (OLEO, PLATTS). A moeda vem do campo que a carrega em CADA produto
+  (`_MC_NOTIONAL_CCY_FIELD`), e não de uma cadeia de fallback — um `first(...)`
+  genérico pegaria o primeiro campo preenchido, que nem sempre é o que a mesa
+  chama de moeda do notional: **Strike Currency** em termo e opção de mercadoria
+  e em opção de câmbio, **Quantity Currency** nos NDF genéricos. A célula guarda
+  os dois num texto só (`USD 1500000`) com o número CRU — a formatação é
+  ortogonal e mora na tela, e gravar `1,500,000.00` obrigaria o relatório do BACC
+  a desfazer a máscara para escrever um número no Excel. Ela é escrita no
+  MAPEAMENTO, então vale para as linhas novas; as antigas ficam em branco porque
+  a moeda de mercadoria não existe em lugar nenhum da linha para ser derivada
+  depois.
+- **`blank` no filtro por coluna traz o que está VAZIO.** É o único jeito de
+  procurar a ausência: o campo casa por conteúdo, e "nada" não se digita. O termo
+  vira a regex `^\s*$` com **smart search desligado** — ligado, o DataTables
+  reescreve a expressão e ela deixa de casar a célula vazia. A palavra só é
+  reservada quando é a ÚNICA coisa no campo, senão uma contraparte chamada
+  "Blank Trading" ficaria impossível de procurar; e o `title` do campo é onde ela
+  se anuncia, porque num texto livre ninguém adivinha que existe.
 - **Os NOMES das colunas da esteira são os da planilha legada, os RÓTULOS são
   ingleses.** Os nomes (`Data de vencimento`, `Moeda`, `VALIDADO p/ MO`) são o
   esquema dos dois DuckDB e não podem mudar — renomear um quebraria o banco de

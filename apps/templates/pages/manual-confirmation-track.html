@@ -429,7 +429,8 @@
               saveFail: 'Could not save',
               delOneTitle: 'Delete this confirmation?',
               delOneText: 'Trade ID {k}. There is no undo.',
-              actions: 'Actions', openDoc: 'Open confirmation', edit: 'Edit', del: 'Delete' },
+              actions: 'Actions', openDoc: 'Open confirmation', edit: 'Edit', del: 'Delete',
+              blankTip: 'Type blank to list the rows with this column empty' },
         br: { addTitle: 'Nova confirmação', editTitle: 'Editar confirmação',
               keyNeeded: 'Falta o Trade ID', keyWhy: 'É ele que identifica a linha.',
               keyDup: 'Este Trade ID já existe', keyDupWhy: 'Edite a linha que já está na tabela.',
@@ -444,7 +445,8 @@
               saveFail: 'Não foi possível gravar',
               delOneTitle: 'Excluir esta confirmação?',
               delOneText: 'Trade ID {k}. Não tem desfazer.',
-              actions: 'Ações', openDoc: 'Abrir confirmação', edit: 'Editar', del: 'Excluir' },
+              actions: 'Ações', openDoc: 'Abrir confirmação', edit: 'Editar', del: 'Excluir',
+              blankTip: 'Digite blank para listar as linhas com esta coluna vazia' },
         es: { addTitle: 'Nueva confirmación', editTitle: 'Editar confirmación',
               keyNeeded: 'Falta el Trade ID', keyWhy: 'Es la clave de la fila.',
               keyDup: 'Este Trade ID ya existe', keyDupWhy: 'Edite la fila que ya está en la tabla.',
@@ -459,7 +461,8 @@
               saveFail: 'No se pudo guardar',
               delOneTitle: '¿Eliminar esta confirmación?',
               delOneText: 'Trade ID {k}. No hay deshacer.',
-              actions: 'Acciones', openDoc: 'Abrir confirmación', edit: 'Editar', del: 'Eliminar' }
+              actions: 'Acciones', openDoc: 'Abrir confirmación', edit: 'Editar', del: 'Eliminar',
+              blankTip: 'Escriba blank para listar las filas con esta columna vacía' }
     };
     function t(k, vars) {
         var s = (_TRANS[LANG] || _TRANS.en)[k] || _TRANS.en[k] || k;
@@ -497,7 +500,7 @@
             'Legal Entity': 'Entidade Legal', 'Cliente': 'Contraparte',
             'E-mail Subject': 'Assunto do E-mail', 'Produto': 'Produto',
             'Trade ID': 'Trade ID', 'Cetip ID': 'B3 ID',
-            'Moeda': 'Ativo Subjacente', 'Notional': 'Notional/Qtd',
+            'Moeda': 'Ativo Subjacente', 'Notional': 'Notional/Qtd', 'Notional Amount CCY': 'Notional Amount CCY',
             'Data Operação': 'Data da Operação', 'Data de vencimento': 'Data de Vencimento',
             'Data de envio validação Registro': 'Envio Validação Registro',
             'Data validação Registro': 'Registro Validado',
@@ -519,7 +522,7 @@
             'Legal Entity': 'Entidad Legal', 'Cliente': 'Contraparte',
             'E-mail Subject': 'Asunto del Correo', 'Produto': 'Producto',
             'Trade ID': 'Trade ID', 'Cetip ID': 'B3 ID',
-            'Moeda': 'Activo Subyacente', 'Notional': 'Notional/Cant.',
+            'Moeda': 'Activo Subyacente', 'Notional': 'Notional/Cant.', 'Notional Amount CCY': 'Notional Amount CCY',
             'Data Operação': 'Fecha de Operación', 'Data de vencimento': 'Fecha de Liquidación',
             'Data de envio validação Registro': 'Envío Validación Registro',
             'Data validação Registro': 'Registro Validado',
@@ -583,6 +586,20 @@
         return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
 
+    // [moeda, valor] da célula 'USD 1500000'. Mesma regra do
+    // `manual_conf.split_notional_ccy` no servidor: o código é o PRIMEIRO token
+    // e só vale com 3 letras — um valor solto (linha antiga, digitação à mão)
+    // devolve moeda vazia e o texto inteiro como valor, em vez de comer o
+    // primeiro dígito.
+    function ccySplit(v) {
+        var t = String(v == null ? '' : v).replace(/\s+/g, ' ').trim();
+        if (!t) return ['', ''];
+        var i = t.indexOf(' ');
+        if (i === -1) return ['', t];
+        var c = t.slice(0, i);
+        return /^[A-Za-z]{3}$/.test(c) ? [c.toUpperCase(), t.slice(i + 1).trim()] : ['', t];
+    }
+
     function badge(p) {
         var m = { 'Pending OTC': 'text-bg-primary', 'Pending MO': 'text-bg-warning',
                   'Pending FO': 'text-bg-info', 'Pending MO/FO': 'text-bg-warning',
@@ -609,7 +626,12 @@
         filters.append('<th></th><th></th>');
         COLUMNS.forEach(function (c) {
             filters.append($('<th>').append(
-                $('<input type="text">').attr('placeholder', label(c))));
+                $('<input type="text">')
+                    .attr('placeholder', label(c))
+                    // A dica é onde a palavra reservada se anuncia — o campo é
+                    // um texto livre, e quem não souber que 'blank' existe nunca
+                    // vai adivinhar que dá para procurar a célula vazia.
+                    .attr('title', t('blankTip'))));
         });
 
         var defs = [{
@@ -655,6 +677,21 @@
                 col.render = function (d, t) {
                     if (t === 'sort' || t === 'type') return num(d);
                     return t === 'display' ? fmtValor(d) : (d == null ? '' : String(d));
+                };
+                col.className = 'mc-num text-center';
+            } else if (name === 'Notional Amount CCY') {
+                // A célula guarda 'USD 1500000' — o código e o número CRU, que é
+                // como o relatório do BACC os reparte. A máscara é ORTOGONAL,
+                // como no Notional ao lado: só o display. O sort sai pelo NÚMERO
+                // (senão 'USD 1,000.00' viria antes de 'USD 9.00', que é a ordem
+                // do texto) e o filtro pelo texto que está na tela, porque quem
+                // digita no campo copia o que vê.
+                col.render = function (d, t) {
+                    var p = ccySplit(d);
+                    if (t === 'sort' || t === 'type') return num(p[1]);
+                    if (t !== 'display') return d == null ? '' : String(d);
+                    if (!p[1]) return p[0];
+                    return (p[0] ? p[0] + ' ' : '') + fmtValor(p[1]);
                 };
                 col.className = 'mc-num text-center';
             } else if (name === AGING_COL) {
@@ -1000,9 +1037,24 @@
         // A linha de filtro foi montada antes do init, então o DataTables a levou
         // junto para o cabeçalho visível. O evento é delegado no documento
         // porque o nó é remontado a cada rebuild da tabela.
+        // `blank` traz o que está VAZIO naquela coluna. É o único jeito de
+        // procurar a ausência: um campo de texto casa por conteúdo, e "nada" não
+        // se digita. O termo vira a regex `^\s*$` (regex ligado, smart
+        // DESLIGADO — o smart search do DataTables reescreveria a expressão e
+        // deixaria de casar a célula vazia).
+        //
+        // A palavra é reservada só quando é a ÚNICA coisa no campo: quem procura
+        // por uma contraparte chamada 'Blank Trading' digita mais que isso e cai
+        // na busca normal.
+        function colSearch(col, termo) {
+            var t = String(termo == null ? '' : termo).trim();
+            if (t.toLowerCase() === 'blank') return col.search('^\\s*$', true, false);
+            return col.search(t);
+        }
+
         $(document).on('input', '.mc-col-filters input', function () {
             if (!table) return;
-            table.column($(this).closest('th').index()).search(this.value).draw();
+            colSearch(table.column($(this).closest('th').index()), this.value).draw();
         });
         // Clicar no campo não pode ordenar a coluna atrás dele.
         $(document).on('click', '.mc-col-filters input, .mc-col-filters th', function (e) {

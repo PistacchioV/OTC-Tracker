@@ -17222,6 +17222,41 @@ def _lob_for_source(source):
 # amarraria duas perguntas diferentes na mesma resposta.
 _MC_JPM_SOURCES = _COMMODITY_SOURCES | {'OPTION'}
 
+# De onde sai a MOEDA do notional, por produto. Não é uma cadeia de fallback:
+# cada produto guarda o valor num campo diferente e a resposta certa é a do
+# campo daquele produto — um `first(...)` genérico pegaria o primeiro que
+# estivesse preenchido, que nem sempre é o que a mesa chama de moeda do notional.
+#
+#   * termo e opção de MERCADORIA e opção de CÂMBIO → `StrikeCurrency`
+#   * os NDF genéricos (Vanilla, Other Publisher, FWD Start) → `QuantityCurrency`
+#
+# Produto fora da lista cai no `QuantityCurrency`, que é o campo da maioria.
+_MC_NOTIONAL_CCY_FIELD = {
+    'NDF COMM':      'StrikeCurrency',
+    'OPTION COMM':   'StrikeCurrency',
+    'OPTION':        'StrikeCurrency',
+    'NDF FWD START': 'QuantityCurrency',
+}
+
+
+def _mc_notional_ccy(deal, source, notional):
+    """`Notional Amount CCY` da linha: 'USD 1500000'.
+
+    O número vai CRU, como está na coluna Notional ao lado — a formatação é
+    ortogonal e mora na tela. Gravar '1,500,000.00' aqui obrigaria o relatório
+    do BACC a desfazer a máscara para escrever um número no Excel, e a máscara
+    do Excel do consumidor é dele, não nossa.
+
+    Sem moeda cadastrada no deal a célula sai só com o número: em branco ela
+    perderia o notional junto, e o valor sem moeda ainda é o valor.
+    """
+    campo = _MC_NOTIONAL_CCY_FIELD.get(_mc_mod.upper_norm(source), 'QuantityCurrency')
+    ccy = str(deal.get(campo, '') or '').strip().upper()
+    val = str(notional or '').strip()
+    if not val:
+        return ''
+    return (ccy + ' ' + val).strip() if len(ccy) == 3 and ccy.isalpha() else val
+
 
 def _mc_legal_entity(deal, source):
     """Legal Entity da linha espelhada na esteira.
@@ -17301,6 +17336,8 @@ def _mc_save_from_deal(deal, source, trade_number=None):
                       if source in ('NDF COMM', 'OPTION COMM')
                       else first('QuantityCurrency', 'StrikeCurrency', 'PremiumCCY', 'Currency')),
             'Notional': first('Notional', 'TotalNotional'),
+            'Notional Amount CCY': _mc_notional_ccy(
+                deal, source, first('Notional', 'TotalNotional')),
             'Data Operação': td.strftime('%d/%m/%Y') if td else first('TradeDate'),
             'Data de vencimento': md.strftime('%d/%m/%Y') if md else first('SettlementDate'),
         }))
@@ -29555,31 +29592,77 @@ _BACC_SUBJECT = 'Support to OTC Derivatives - EA Metrics'
 
 # As colunas do anexo, na ordem pedida: (cabeçalho, coluna da esteira, é data?).
 #
-# Coluna de origem VAZIA = coluna que sai sempre em branco, e as três foram
-# pedidas assim: `Born Age`, `Notional Amount` e `Notional Amount USD` são
-# preenchidas do outro lado, por quem consolida. Elas ficam no arquivo porque a
-# POSIÇÃO das colunas é o contrato — tirá-las deslocaria as demais.
+# A ORIGEM de cada coluna é o nome de uma coluna da esteira, uma FUNÇÃO da linha
+# ou `''` — que é a coluna que sai sempre em branco. Só `Born Age` é assim, e foi
+# pedida assim: ela é preenchida do outro lado, por quem consolida. Ela fica no
+# arquivo porque a POSIÇÃO das colunas é o contrato — tirá-la deslocaria as
+# demais.
+#
+# O NOTIONAL ocupa três colunas, e elas saem todas da esteira:
+#
+#   * `Notional/Qty`      — o número cru da coluna de mesmo nome do Track;
+#   * `National Currency` — o CÓDIGO da moeda, e
+#   * `Notional Amount`   — o VALOR,
+#
+# os dois últimos repartidos da coluna `Notional Amount CCY` ('USD 1500000') por
+# `manual_conf.split_notional_ccy`. A moeda não sai da coluna `Moeda`: aquela é o
+# ATIVO da confirmação e em mercadoria guarda a commodity (OLEO, PLATTS), que não
+# é moeda nenhuma — era isso que essa coluna dizia antes.
 #
 # `Comments` carrega o **assunto do e-mail de recap** (a coluna E-mail Subject do
 # Track Confirmations): é por ele que o time acha a operação na caixa.
 #
-# A grafia dos cabeçalhos é a que foi pedida, `Conterparty Name` inclusive:
-# quem lê a planilha do outro lado casa pelo nome da coluna, e "corrigir" o
-# typo aqui quebraria o casamento em silêncio.
+# A grafia dos cabeçalhos é a que foi pedida, `Conterparty Name` e
+# `National Currency` inclusive: quem lê a planilha do outro lado casa pelo nome
+# da coluna, e "corrigir" o typo aqui quebraria o casamento em silêncio.
+def _bacc_ccy(row):
+    return _mc_mod.split_notional_ccy(row.get('Notional Amount CCY'))[0]
+
+
+def _bacc_amount(row):
+    return _mc_mod.split_notional_ccy(row.get('Notional Amount CCY'))[1]
+
+
+#
+# O TIPO é declarado por coluna, e não adivinhado do conteúdo. A versão anterior
+# escrevia como inteiro tudo que "parecia dígito", o que errava dos dois lados:
+# um notional com centavos ('250000.50') não passava no teste e ia para o Excel
+# como TEXTO — sem somar, sem ordenar —, e um Trade ID todo numérico viraria um
+# número, perdendo o zero à esquerda.
 _BACC_COLUMNS = (
-    ('Trade ID',            'Trade ID',           False),
-    ('Product',             'Produto',            False),
-    ('Trade Date',          'Data Operação',      True),
-    ('Legal Entity',        'Legal Entity',       False),
-    ('Conterparty Name',    'Cliente',            False),
-    ('Aging',               'Aging Confirmação',  False),
-    ('Born Age',            '',                   False),
-    ('Notional Amount',     '',                   False),
-    ('National Currency',   'Moeda',              False),
-    ('Notional Amount USD', '',                   False),
-    ('Comments',            'E-mail Subject',     False),
-    ('LOB',                 'LOB',                False),
+    ('Trade ID',          'Trade ID',           'text'),
+    ('Product',           'Produto',            'text'),
+    ('Trade Date',        'Data Operação',      'date'),
+    ('Legal Entity',      'Legal Entity',       'text'),
+    ('Conterparty Name',  'Cliente',            'text'),
+    ('Aging',             'Aging Confirmação',  'num'),
+    ('Born Age',          '',                   'text'),
+    ('Notional/Qty',      'Notional',           'num'),
+    ('National Currency', _bacc_ccy,            'text'),
+    ('Notional Amount',   _bacc_amount,         'num'),
+    ('Comments',          'E-mail Subject',     'text'),
+    ('LOB',               'LOB',                'text'),
 )
+
+
+def _bacc_num(raw):
+    """O número de uma célula, ou None quando não é número.
+
+    Aceita as DUAS escritas que convivem no banco: a do New Deals ('1500000',
+    '250000.50') e a que veio da planilha legada ('1.500.000,00'). O desempate é
+    o mesmo do `num()` da tela — vírgula com uma ou duas casas no fim é decimal,
+    e aí o ponto é separador de milhar.
+    """
+    t = str(raw or '').strip()
+    if not t:
+        return None
+    t = (t.replace('.', '').replace(',', '.')
+         if re.search(r',\d{1,2}$', t) else t.replace(',', ''))
+    try:
+        n = float(t)
+    except ValueError:
+        return None
+    return int(n) if n.is_integer() else n
 
 
 def _load_bacc_recipients():
@@ -29604,20 +29687,40 @@ def _save_bacc_recipients(d):
 
 
 def _bacc_rows():
-    """As linhas do anexo: as do Track Confirmations **sem Data Callback**.
+    """As linhas do anexo, na ordem em que o relatório é lido.
 
-    O callback é a conferência por telefone com o cliente, e é ele que fecha a
-    operação manual do ponto de vista da métrica. A planilha é a lista do que
-    ainda falta — mandar a esteira inteira encheria o relatório de operação já
-    resolvida, e quem consolida teria de refazer o filtro do outro lado.
+    DOIS cortes, e eles respondem perguntas diferentes:
 
-    O teste é a célula em branco, não um status: o callback é uma DATA, e o
-    Track Confirmations mostra exatamente essa coluna vazia. Uma segunda regra
-    aqui (um Pending, um estágio) discordaria da tela no primeiro caso de borda.
+      * **sem Data Callback** — o callback é a conferência por telefone com o
+        cliente, e é ele que fecha a operação manual do ponto de vista da
+        métrica. O teste é a CÉLULA em branco e não um status: o callback é uma
+        data, e o Track Confirmations mostra exatamente essa coluna vazia;
+      * **Pending diferente de `Ok`** — a confirmação que terminou a esteira
+        saiu da fila, e o relatório é do que ainda pede ação. Este teste é o
+        status porque `Ok` é justamente o nome do fim da esteira; ele também
+        deixa o anexo restrito ao banco `pending`, que é o mesmo conjunto que o
+        Monitor mostra — e, de quebra, o único cujo E-mail Subject o app
+        preenche sozinho.
+
+    A ordem é o **Aging do maior para o menor**: quem espera há mais tempo vem
+    primeiro, como na fila do Monitor. O aging é gravado como TEXTO (e vem
+    vazio na linha sem data de operação), então a chave é numérica — por texto,
+    '10' viria antes de '9'. Vazio vai para o fim: linha sem idade não pode
+    encabeçar um relatório de atraso.
     """
     from apps.pages import manual_conf as _mc
-    return [r for r in _mc.load_all()
-            if not str(r.get('Data Callback', '') or '').strip()]
+
+    def idade(r):
+        try:
+            return int(float(str(r.get('Aging Confirmação', '') or '').strip()))
+        except (TypeError, ValueError):
+            return -10 ** 9
+
+    return sorted(
+        (r for r in _mc.load_all()
+         if not str(r.get('Data Callback', '') or '').strip()
+         and str(r.get('Pending', '') or '').strip() != _mc.STATUS_OK),
+        key=idade, reverse=True)
 
 
 def _bacc_build_xlsx(rows):
@@ -29643,27 +29746,31 @@ def _bacc_build_xlsx(rows):
     ws.title = 'EA METRICS'
     bold = Font(bold=True)
     larguras = []
-    for j, (header, _src, _is_date) in enumerate(_BACC_COLUMNS, start=1):
+    for j, (header, _src, _kind) in enumerate(_BACC_COLUMNS, start=1):
         c = ws.cell(row=1, column=j, value=header)
         c.font = bold
         c.alignment = Alignment(horizontal='center', vertical='center')
         larguras.append(len(header))
     for i, r in enumerate(rows, start=2):
-        for j, (_header, src, is_date) in enumerate(_BACC_COLUMNS, start=1):
-            raw = str(r.get(src, '') or '').strip() if src else ''
+        for j, (_header, src, kind) in enumerate(_BACC_COLUMNS, start=1):
+            raw = str(_bacc_value(r, src) or '').strip()
             if not raw:
                 continue
             cell = ws.cell(row=i, column=j)
-            if is_date:
+            if kind == 'date':
                 dt = _parse_date_any(raw)
                 if dt is not None:
                     cell.value = datetime(dt.year, dt.month, dt.day)
                     cell.number_format = 'DD/MM/YYYY'
                     raw = '00/00/0000'          # o que a célula OCUPA na tela
                 else:
-                    cell.value = raw
-            elif raw.lstrip('-').isdigit():
-                cell.value = int(raw)
+                    cell.value = raw            # texto livre numa coluna de data
+            elif kind == 'num':
+                n = _bacc_num(raw)
+                # Número que não parseia sai COMO VEIO: uma célula de texto no
+                # meio de uma coluna de números é menos ruim do que sumir com o
+                # valor que está no banco.
+                cell.value = raw if n is None else n
             else:
                 cell.value = raw
             larguras[j - 1] = max(larguras[j - 1], len(raw))
@@ -29671,6 +29778,14 @@ def _bacc_build_xlsx(rows):
         ws.column_dimensions[get_column_letter(j)].width = max(10, min(w + 3, 48))
     ws.freeze_panes = 'A2'
     return wb
+
+
+def _bacc_value(row, src):
+    """O valor de uma coluna do anexo. `src` é o nome de uma coluna da esteira,
+    uma função da linha, ou '' para a coluna que sai sempre em branco."""
+    if not src:
+        return ''
+    return src(row) if callable(src) else row.get(src, '')
 
 
 def _bacc_attach_name(ref):
