@@ -20894,6 +20894,39 @@ _MAPPING_DEFS = {
             {'FIELD': 'Sim/N\u00e3o', 'CODE': '1', 'LABEL': 'N\u00e3o'},
         ],
     },
+    # Cota\u00e7\u00f5es: **C\u00f3digo do Ativo Subjacente** (o mesmo do Index B3) \u2192 o s\u00edmbolo
+    # que a fonte de mercado entende. \u00c9 de-para, ent\u00e3o \u00e9 cadastro (\u00a72).
+    #
+    # A LISTA de instrumentos da tela N\u00c3O sai daqui: ela \u00e9 o Subjacente ao vivo
+    # (`_quotes_underlyings`), para um ativo novo cadastrado no Index B3
+    # aparecer em Cota\u00e7\u00f5es no mesmo dia. Este cadastro s\u00f3 TRADUZ, e por isso
+    # guarda apenas os c\u00f3digos que j\u00e1 t\u00eam s\u00edmbolo \u2014 as ~1.700 linhas restantes
+    # em branco seriam ru\u00eddo para quem edita a tabela.
+    #
+    # O `seed` vai VAZIO de prop\u00f3sito: os dois arquivos s\u00e3o versionados
+    # (471 equities e 70 commodities, semeados do `symbol_map` do app de
+    # desktop mais a regra dos tickers brasileiros \u2014 `PETR4` \u2192 `PETR4.SA`), e
+    # repetir centenas de pares aqui criaria uma segunda lista para divergir da
+    # primeira. Numa inst\u00e2ncia sem o pull o cadastro nasce vazio e a tela diz
+    # "n\u00e3o est\u00e1 no cadastro" \u2014 vis\u00edvel, diferente de um s\u00edmbolo errado.
+    'quotes-equity': {
+        'label': 'Quotes \u2014 Equities',
+        'columns': [
+            {'key': 'LABEL', 'label': 'Underlying Code (B3)'},
+            {'key': 'SYMBOL', 'label': 'Market Symbol'},
+            {'key': 'NOTES', 'label': 'Notes'},
+        ],
+        'seed': [],
+    },
+    'quotes-commodity': {
+        'label': 'Quotes \u2014 Commodities',
+        'columns': [
+            {'key': 'LABEL', 'label': 'Underlying Code (B3)'},
+            {'key': 'SYMBOL', 'label': 'Market Symbol'},
+            {'key': 'NOTES', 'label': 'Notes'},
+        ],
+        'seed': [],
+    },
 }
 
 _mapping_cache = {}
@@ -21175,6 +21208,135 @@ def _ndf_interbook_rules():
         if str(r.get('BOTH WAYS', '') or '').strip().upper() == 'YES':
             out.append((fa, vb, fb, va))
     return out
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  COTAÇÕES (Apps › Quotes) — PTAX, Equities e Commodities
+# ══════════════════════════════════════════════════════════════════════════
+#  Porte das três abas de busca do app de desktop. O trabalho de rede está no
+#  `apps/pages/quotes.py` (sessão Kerberos da Athena + proxy dos endpoints
+#  externos); aqui ficam sessão, cadastro e o formato que a tabela consome.
+#  As opções de Equities e Commodities são as MESMAS do Index B3 › Ativo
+#  Subjacente (`Subjacente.json`), separadas pelo campo `Classe`. Só a lista de
+#  moedas da PTAX é fixa — ela é o domínio do endpoint do BCB, não um cadastro.
+_QUOTES_KINDS = {
+    'equity':    ('quotes-equity',
+                  ('AÇÕES', 'AÇÕES INTERNACIONAIS', 'INDICES', 'INDICES INTERNACIONAIS')),
+    'commodity': ('quotes-commodity', ('COMMODITIES',)),
+}
+_quotes_underlying_cache = {'mtime': None, 'data': {}}
+
+
+def _quotes_underlyings(kind):
+    """[(código, símbolo cadastrado)] de uma classe, em ordem alfabética.
+
+    A lista vem do Subjacente **ao vivo** (cacheada por mtime, como o resto que
+    lê esse arquivo): ativo novo cadastrado no Index B3 aparece aqui no mesmo
+    dia, sem passar por release nem por um segundo cadastro.
+
+    Só os ACTIVE: um subjacente inativo não é escolha de tela — e ele continua
+    no arquivo justamente para o histórico não perder o código.
+
+    O símbolo vai JUNTO porque a tela mostra `AAPL34 → AAPL34.SA` na lista: sem
+    isso, quem escolhe não distingue o que está cadastrado do que ainda vai
+    falhar pedindo cadastro.
+    """
+    key, classes = _QUOTES_KINDS.get(kind) or ('', ())
+    if not key:
+        return []
+    fp = os.path.join(_B3_DATA_DIR, 'Subjacente.json')
+    try:
+        mt = os.path.getmtime(fp)
+    except OSError:
+        return []
+    if _quotes_underlying_cache['mtime'] != mt:
+        try:
+            with open(fp, encoding='utf-8') as fh:
+                data = json.load(fh) or []
+        except Exception:
+            log.warning('[quotes] Subjacente.json ilegível:\n%s', traceback.format_exc())
+            data = []
+        por_classe = {}
+        for rec in (data if isinstance(data, list) else []):
+            if str(rec.get('STATUS', '') or '').strip().upper() != 'ACTIVE':
+                continue
+            classe = str(rec.get('Classe', '') or '').strip()
+            code = str(rec.get('Codigo do Ativo Subjacente', '') or '').strip()
+            if classe and code:
+                por_classe.setdefault(classe, {}).setdefault(code.upper(), code)
+        _quotes_underlying_cache['mtime'] = mt
+        _quotes_underlying_cache['data'] = por_classe
+    from apps.pages import quotes as _q
+    simbolos = {_q._label_key(r.get('LABEL')): str(r.get('SYMBOL') or '').strip()
+                for r in _mapping_rows(key)}
+    vistos = {}
+    for classe in classes:
+        vistos.update(_quotes_underlying_cache['data'].get(classe) or {})
+    return [[code, simbolos.get(_q._label_key(code), '')]
+            for _k, code in sorted(vistos.items())]
+
+
+@blueprint.route('/quotes')
+def quotes_page():
+    if not session.get('authenticated'):
+        return redirect(url_for('pages_blueprint.sign_in_page'))
+    from apps.pages import quotes as _q
+    hoje = datetime.now()
+    return render_template(
+        'pages/quotes.html', segment='quotes',
+        # Padrão de um mês para trás, como no app de desktop: quem abre a tela
+        # quer o histórico recente, não um campo vazio pedindo duas datas.
+        date_from=(hoje - timedelta(days=30)).strftime('%Y-%m-%d'),
+        date_to=hoje.strftime('%Y-%m-%d'),
+        # A moeda é [código, símbolo] como as outras duas, para a tela tratar as
+        # três listas do mesmo jeito — na PTAX o código É o símbolo.
+        currencies=[[c, c] for c in _q.PTAX_CURRENCIES],
+        equities=_quotes_underlyings('equity'),
+        commodities=_quotes_underlyings('commodity'))
+
+
+@blueprint.route('/api/quotes/ptax')
+def api_quotes_ptax():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    from apps.pages import quotes as _q
+    try:
+        cols, rows = _q.fetch_ptax(request.args.get('currency', 'USD'),
+                                   request.args.get('from', ''),
+                                   request.args.get('to', ''))
+    except _q.QuotesError as e:
+        # 502 e não 500: o app está de pé, quem não respondeu foi a fonte — e a
+        # tela mostra o motivo por extenso em vez de "erro interno".
+        return jsonify({'success': False, 'error': str(e)}), 502
+    return jsonify({'success': True, 'columns': cols, 'rows': rows})
+
+
+@blueprint.route('/api/quotes/<kind>')
+def api_quotes_symbol(kind):
+    """Equities e Commodities: o mesmo endpoint, porque a diferença entre as
+    duas é só o CADASTRO de onde o símbolo sai — a fonte, as colunas e o
+    formato são idênticos. Duas funções seriam duas cópias da mesma coisa."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    if kind not in _QUOTES_KINDS:
+        return jsonify({'success': False, 'error': 'Unknown quotes kind.'}), 404
+    from apps.pages import quotes as _q
+    cadastro = _QUOTES_KINDS[kind][0]
+    label = str(request.args.get('instrument', '') or '').strip()
+    symbol = _q.symbol_for(_mapping_rows(cadastro), label)
+    if not symbol:
+        # Pede cadastro em vez de tentar o código como símbolo: 'AAPL34' e
+        # 'AA UN' não são tickers de mercado, e a resposta seria um 404 obscuro
+        # da fonte em vez de "falta cadastrar".
+        return jsonify({'success': False, 'mapping': cadastro,
+                        'error': ('{} has no market symbol registered in '
+                                  'Mapping > {}.'.format(label or '(empty)', cadastro))}), 404
+    try:
+        cols, rows = _q.fetch_ohlc(symbol, request.args.get('from', ''),
+                                   request.args.get('to', ''))
+    except _q.QuotesError as e:
+        return jsonify({'success': False, 'error': str(e)}), 502
+    return jsonify({'success': True, 'columns': cols, 'rows': rows, 'symbol': symbol})
 
 
 @blueprint.route('/mapping')

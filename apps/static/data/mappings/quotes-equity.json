@@ -1,0 +1,2357 @@
+[
+  {
+    "LABEL": "AA UN",
+    "SYMBOL": "AA",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "AAPL UN",
+    "SYMBOL": "AAPL",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "AAPL UQ",
+    "SYMBOL": "AAPL",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "AAPL US",
+    "SYMBOL": "AAPL",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "AAPL UW",
+    "SYMBOL": "AAPL",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "AAPL34",
+    "SYMBOL": "AAPL34.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "AAXJ UP",
+    "SYMBOL": "AAXJ",
+    "NOTES": "INDICES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "AAXJ UQ",
+    "SYMBOL": "AAXJ",
+    "NOTES": "INDICES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "AAXJ US",
+    "SYMBOL": "AAXJ",
+    "NOTES": "INDICES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "ABBV US",
+    "SYMBOL": "ABBV",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "ABCB4",
+    "SYMBOL": "ABCB4.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "ABEV3",
+    "SYMBOL": "ABEV3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "ADBE US",
+    "SYMBOL": "ADBE",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "ADBE34",
+    "SYMBOL": "ADBE34.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "AEM UN",
+    "SYMBOL": "AEM",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "AESB3",
+    "SYMBOL": "AESB3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "AGRO3",
+    "SYMBOL": "AGRO3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "AIR FP",
+    "SYMBOL": "AIR",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "AIR FP_PA",
+    "SYMBOL": "AIR",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "AIRB34",
+    "SYMBOL": "AIRB34.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "AKAM US",
+    "SYMBOL": "AKAM",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "ALOS3",
+    "SYMBOL": "ALOS3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "ALOS99",
+    "SYMBOL": "ALOS99.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "ALSO3",
+    "SYMBOL": "ALSO3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "ALUP11",
+    "SYMBOL": "ALUP11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "AMAR3",
+    "SYMBOL": "AMAR3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "AMBP3",
+    "SYMBOL": "AMBP3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "AMD UQ",
+    "SYMBOL": "AMD",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "AMD UR",
+    "SYMBOL": "AMD",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "AMD US",
+    "SYMBOL": "AMD",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "AMD UW",
+    "SYMBOL": "AMD",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "AMER3",
+    "SYMBOL": "AMER3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "AMZN UQ",
+    "SYMBOL": "AMZN",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "AMZN US",
+    "SYMBOL": "AMZN",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "AMZN UW",
+    "SYMBOL": "AMZN",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "AMZN UW_43",
+    "SYMBOL": "AMZN",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "AMZO34",
+    "SYMBOL": "AMZO34.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "ANIM3",
+    "SYMBOL": "ANIM3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "APD UN",
+    "SYMBOL": "APD",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "ARGE11",
+    "SYMBOL": "ARGE11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "ARGT39",
+    "SYMBOL": "ARGT39.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "ARML3",
+    "SYMBOL": "ARML3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "ASAI3",
+    "SYMBOL": "ASAI3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "ASML NA",
+    "SYMBOL": "ASML",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "ASML US",
+    "SYMBOL": "ASML",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "ASML34",
+    "SYMBOL": "ASML34.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "ATVI UW_43",
+    "SYMBOL": "ATVI",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "AU UN",
+    "SYMBOL": "AU",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "AUAU3",
+    "SYMBOL": "AUAU3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "AUAU99",
+    "SYMBOL": "AUAU99.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "AURA33",
+    "SYMBOL": "AURA33.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "AURE3",
+    "SYMBOL": "AURE3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "AVGO US",
+    "SYMBOL": "AVGO",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "AVGO UW",
+    "SYMBOL": "AVGO",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "AVGO34",
+    "SYMBOL": "AVGO34.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "AXIA3",
+    "SYMBOL": "AXIA3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "AZEV4",
+    "SYMBOL": "AZEV4.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "AZN LN",
+    "SYMBOL": "AZN",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "AZN UQ",
+    "SYMBOL": "AZN",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "AZN US",
+    "SYMBOL": "AZN",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "AZN UW",
+    "SYMBOL": "AZN",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "AZZA3",
+    "SYMBOL": "AZZA3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "BABA UN",
+    "SYMBOL": "BABA",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "BABA UN_43",
+    "SYMBOL": "BABA",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "BABA US",
+    "SYMBOL": "BABA",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "BABA34",
+    "SYMBOL": "BABA34.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "BAER39",
+    "SYMBOL": "BAER39.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "BALM4",
+    "SYMBOL": "BALM4.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "BBAS3",
+    "SYMBOL": "BBAS3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "BBDC3",
+    "SYMBOL": "BBDC3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "BBDC4",
+    "SYMBOL": "BBDC4.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "BBOI11",
+    "SYMBOL": "BBOI11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "BBSE3",
+    "SYMBOL": "BBSE3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "BCIA11",
+    "SYMBOL": "BCIA11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "BCPX39",
+    "SYMBOL": "BCPX39.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "BCRI11",
+    "SYMBOL": "BCRI11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "BEEF3",
+    "SYMBOL": "BEEF3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "BERK34",
+    "SYMBOL": "BERK34.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "BHIA3",
+    "SYMBOL": "BHIA3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "BIDI11",
+    "SYMBOL": "BIDI11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "BIDI4",
+    "SYMBOL": "BIDI4.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "BIDU34",
+    "SYMBOL": "BIDU34.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "BIEO39",
+    "SYMBOL": "BIEO39.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "BIJR39",
+    "SYMBOL": "BIJR39.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "BIOM3",
+    "SYMBOL": "BIOM3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "BITH11",
+    "SYMBOL": "BITH11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "BITI11",
+    "SYMBOL": "BITI11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "BIWM39",
+    "SYMBOL": "BIWM39.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "BIXC39",
+    "SYMBOL": "BIXC39.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "BIYE39",
+    "SYMBOL": "BIYE39.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "BKBR3",
+    "SYMBOL": "BKBR3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "BKNG34",
+    "SYMBOL": "BKNG34.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "BKWB39",
+    "SYMBOL": "BKWB39.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "BLAK34",
+    "SYMBOL": "BLAK34.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "BMEB4",
+    "SYMBOL": "BMEB4.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "BMGB4",
+    "SYMBOL": "BMGB4.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "BMOB3",
+    "SYMBOL": "BMOB3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "BNDA39",
+    "SYMBOL": "BNDA39.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "BOAC34",
+    "SYMBOL": "BOAC34.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "BOTZ UQ",
+    "SYMBOL": "BOTZ",
+    "NOTES": "INDICES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "BOTZ US",
+    "SYMBOL": "BOTZ",
+    "NOTES": "INDICES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "BOVA11",
+    "SYMBOL": "BOVA11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "BOVV11",
+    "SYMBOL": "BOVV11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "BOVX11",
+    "SYMBOL": "BOVX11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "BPAC11",
+    "SYMBOL": "BPAC11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "BPAN4",
+    "SYMBOL": "BPAN4.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "BRAP3",
+    "SYMBOL": "BRAP3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "BRAV3",
+    "SYMBOL": "BRAV3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "BRBI11",
+    "SYMBOL": "BRBI11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "BRDT3",
+    "SYMBOL": "BRDT3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "BRFS3",
+    "SYMBOL": "BRFS3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "BRIT3",
+    "SYMBOL": "BRIT3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "BRK/B UN",
+    "SYMBOL": "BRK-B",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "BRK/B UP",
+    "SYMBOL": "BRK-B",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "BRK/B US",
+    "SYMBOL": "BRK-B",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "BRKM5",
+    "SYMBOL": "BRKM5.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "BRPR3",
+    "SYMBOL": "BRPR3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "BRSR6",
+    "SYMBOL": "BRSR6.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "BRXC11",
+    "SYMBOL": "BRXC11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "BSIL39",
+    "SYMBOL": "BSIL39.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "BSLV39",
+    "SYMBOL": "BSLV39.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "BTCI11",
+    "SYMBOL": "BTCI11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "BTHF11",
+    "SYMBOL": "BTHF11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "BTLG11",
+    "SYMBOL": "BTLG11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "BUD UN",
+    "SYMBOL": "BUD",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "BUD US",
+    "SYMBOL": "BUD",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "BURA39",
+    "SYMBOL": "BURA39.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "BUTL39",
+    "SYMBOL": "BUTL39.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "C UN",
+    "SYMBOL": "BUSHELS",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "CACR11",
+    "SYMBOL": "CACR11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "CAFR31",
+    "SYMBOL": "CAFR31.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "CAML3",
+    "SYMBOL": "CAML3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "CAR US",
+    "SYMBOL": "CAR",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "CAR UW",
+    "SYMBOL": "CAR",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "CASH3",
+    "SYMBOL": "CASH3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "CBAV3",
+    "SYMBOL": "CBAV3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "CCME11",
+    "SYMBOL": "CCME11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "CCRO3",
+    "SYMBOL": "CCRO3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "CEAB3",
+    "SYMBOL": "CEAB3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "CHIP11",
+    "SYMBOL": "CHIP11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "CHVX34",
+    "SYMBOL": "CHVX34.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "CIEL3",
+    "SYMBOL": "CIEL3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "CLIN11",
+    "SYMBOL": "CLIN11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "CMIG3",
+    "SYMBOL": "CMIG3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "CMIG4",
+    "SYMBOL": "CMIG4.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "CMIN3",
+    "SYMBOL": "CMIN3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "COCA34",
+    "SYMBOL": "COCA34.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "COGN3",
+    "SYMBOL": "COGN3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "CORN11",
+    "SYMBOL": "CORN11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "COWC34",
+    "SYMBOL": "COWC34.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "CPFE3",
+    "SYMBOL": "CPFE3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "CPLE3",
+    "SYMBOL": "CPLE3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "CPLE6",
+    "SYMBOL": "CPLE6.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "CPTS11",
+    "SYMBOL": "CPTS11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "CRAA11",
+    "SYMBOL": "CRAA11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "CRFB3",
+    "SYMBOL": "CRFB3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "CSAN3",
+    "SYMBOL": "CSAN3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "CSED3",
+    "SYMBOL": "CSED3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "CTGP34",
+    "SYMBOL": "CTGP34.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "CURY3",
+    "SYMBOL": "CURY3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "CVCB3",
+    "SYMBOL": "CVCB3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "CXSE3",
+    "SYMBOL": "CXSE3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "CYRE3",
+    "SYMBOL": "CYRE3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "CYRE4",
+    "SYMBOL": "CYRE4.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "DEDZ0",
+    "SYMBOL": "DEDZ0.SA",
+    "NOTES": "INDICES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "DEDZ3",
+    "SYMBOL": "DEDZ3.SA",
+    "NOTES": "INDICES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "DEDZ9",
+    "SYMBOL": "DEDZ9.SA",
+    "NOTES": "INDICES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "DESK3",
+    "SYMBOL": "DESK3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "DEVA11",
+    "SYMBOL": "DEVA11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "DEXP3",
+    "SYMBOL": "DEXP3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "DIRR3",
+    "SYMBOL": "DIRR3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "DISB34",
+    "SYMBOL": "DISB34.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "DIVO11",
+    "SYMBOL": "DIVO11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "DOLA11",
+    "SYMBOL": "DOLA11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "DOTZ3",
+    "SYMBOL": "DOTZ3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "DTEX3",
+    "SYMBOL": "DTEX3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "DXCO3",
+    "SYMBOL": "DXCO3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "EA US",
+    "SYMBOL": "EA",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "EA UW",
+    "SYMBOL": "EA",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "EA UW_43",
+    "SYMBOL": "EA",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "ECOR3",
+    "SYMBOL": "ECOR3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "EGIE3",
+    "SYMBOL": "EGIE3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "ELET3",
+    "SYMBOL": "ELET3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "ELET6",
+    "SYMBOL": "ELET6.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "EMBJ3",
+    "SYMBOL": "EMBJ3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "EMBR3",
+    "SYMBOL": "EMBR3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "ENAT3",
+    "SYMBOL": "ENAT3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "ENEV3",
+    "SYMBOL": "ENEV3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "ENGI11",
+    "SYMBOL": "ENGI11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "ENJU3",
+    "SYMBOL": "ENJU3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "EQTL3",
+    "SYMBOL": "EQTL3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "ESTC3",
+    "SYMBOL": "ESTC3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "ETHE11",
+    "SYMBOL": "ETHE11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "EUCA4",
+    "SYMBOL": "EUCA4.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "EVEN3",
+    "SYMBOL": "EVEN3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "EVTC31",
+    "SYMBOL": "EVTC31.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "EXXO34",
+    "SYMBOL": "EXXO34.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "EZTC3",
+    "SYMBOL": "EZTC3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "FESA4",
+    "SYMBOL": "FESA4.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "FGAA11",
+    "SYMBOL": "FGAA11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "FLRY3",
+    "SYMBOL": "FLRY3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "FRAS3",
+    "SYMBOL": "FRAS3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "GARE11",
+    "SYMBOL": "GARE11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "GDXB39",
+    "SYMBOL": "GDXB39.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "GFSA3",
+    "SYMBOL": "GFSA3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "GGBR4",
+    "SYMBOL": "GGBR4.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "GGPS3",
+    "SYMBOL": "GGPS3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "GGRC11",
+    "SYMBOL": "GGRC11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "GLD UP",
+    "SYMBOL": "GLD",
+    "NOTES": "INDICES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "GLD US",
+    "SYMBOL": "GLD",
+    "NOTES": "INDICES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "GMAT3",
+    "SYMBOL": "GMAT3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "GMCO34",
+    "SYMBOL": "GMCO34.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "GOAU3",
+    "SYMBOL": "GOAU3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "GOAU4",
+    "SYMBOL": "GOAU4.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "GOGL34",
+    "SYMBOL": "GOGL34.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "GOLD11",
+    "SYMBOL": "GOLD11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "GOLL4",
+    "SYMBOL": "GOLL4.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "GOOG UQ",
+    "SYMBOL": "GOOG",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "GOOG US",
+    "SYMBOL": "GOOG",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "GOOG UW",
+    "SYMBOL": "GOOG",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "GOOGL UQ",
+    "SYMBOL": "GOOGL",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "GOOGL US",
+    "SYMBOL": "GOOGL",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "GOOGL UW",
+    "SYMBOL": "GOOGL",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "GRND3",
+    "SYMBOL": "GRND3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "GSGI34",
+    "SYMBOL": "GSGI34.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "GTWR11",
+    "SYMBOL": "GTWR11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "HAPV3",
+    "SYMBOL": "HAPV3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "HASH11",
+    "SYMBOL": "HASH11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "HBOR3",
+    "SYMBOL": "HBOR3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "HBRE3",
+    "SYMBOL": "HBRE3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "HBSA3",
+    "SYMBOL": "HBSA3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "HFOF11",
+    "SYMBOL": "HFOF11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "HGBS11",
+    "SYMBOL": "HGBS11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "HGLG11",
+    "SYMBOL": "HGLG11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "HGRE11",
+    "SYMBOL": "HGRE11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "HGRU11",
+    "SYMBOL": "HGRU11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "HODL11",
+    "SYMBOL": "HODL11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "HOSI11",
+    "SYMBOL": "HOSI11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "HSAF11",
+    "SYMBOL": "HSAF11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "HSML11",
+    "SYMBOL": "HSML11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "HYPE3",
+    "SYMBOL": "HYPE3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "IBOVESPA",
+    "SYMBOL": "^BVSP",
+    "NOTES": "INDICES"
+  },
+  {
+    "LABEL": "ICLN UP",
+    "SYMBOL": "ICLN",
+    "NOTES": "INDICES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "ICLN UQ",
+    "SYMBOL": "ICLN",
+    "NOTES": "INDICES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "ICLN US",
+    "SYMBOL": "ICLN",
+    "NOTES": "INDICES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "IFCM3",
+    "SYMBOL": "IFCM3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "IGTI11",
+    "SYMBOL": "IGTI11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "INBR32",
+    "SYMBOL": "INBR32.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "INTB3",
+    "SYMBOL": "INTB3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "IRBR3",
+    "SYMBOL": "IRBR3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "IRDM11",
+    "SYMBOL": "IRDM11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "IRIM11",
+    "SYMBOL": "IRIM11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "ISAE4",
+    "SYMBOL": "ISAE4.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "ITLC34",
+    "SYMBOL": "ITLC34.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "ITSA3",
+    "SYMBOL": "ITSA3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "ITSA4",
+    "SYMBOL": "ITSA4.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "ITUB3",
+    "SYMBOL": "ITUB3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "ITUB4",
+    "SYMBOL": "ITUB4.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "IVVB11",
+    "SYMBOL": "IVVB11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "JALL3",
+    "SYMBOL": "JALL3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "JBSS3",
+    "SYMBOL": "JBSS3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "JBSS32",
+    "SYMBOL": "JBSS32.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "JHSF3",
+    "SYMBOL": "JHSF3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "JNJ UN",
+    "SYMBOL": "JNJ",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "JNJB34",
+    "SYMBOL": "JNJB34.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "JPMC34",
+    "SYMBOL": "JPMC34.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "JSLG3",
+    "SYMBOL": "JSLG3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "KEPL3",
+    "SYMBOL": "KEPL3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "KLBN11",
+    "SYMBOL": "KLBN11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "KNCA11",
+    "SYMBOL": "KNCA11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "KNCR11",
+    "SYMBOL": "KNCR11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "KNHY11",
+    "SYMBOL": "KNHY11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "KNIP11",
+    "SYMBOL": "KNIP11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "KNRI11",
+    "SYMBOL": "KNRI11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "KNSC11",
+    "SYMBOL": "KNSC11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "KORE11",
+    "SYMBOL": "KORE11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "LAME4",
+    "SYMBOL": "LAME4.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "LAVV3",
+    "SYMBOL": "LAVV3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "LEVE3",
+    "SYMBOL": "LEVE3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "LIFE11",
+    "SYMBOL": "LIFE11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "LIGT3",
+    "SYMBOL": "LIGT3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "LILY34",
+    "SYMBOL": "LILY34.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "LJQQ3",
+    "SYMBOL": "LJQQ3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "LLY UN",
+    "SYMBOL": "LLY",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "LLY US",
+    "SYMBOL": "LLY",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "LOGG3",
+    "SYMBOL": "LOGG3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "LREN3",
+    "SYMBOL": "LREN3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "LULU UW",
+    "SYMBOL": "LULU",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "LVBI11",
+    "SYMBOL": "LVBI11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "LWSA3",
+    "SYMBOL": "LWSA3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "MBRF3",
+    "SYMBOL": "MBRF3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "MCDC34",
+    "SYMBOL": "MCDC34.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "MCRE11",
+    "SYMBOL": "MCRE11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "MDNE3",
+    "SYMBOL": "MDNE3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "MELI34",
+    "SYMBOL": "MELI34.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "MELK3",
+    "SYMBOL": "MELK3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "MGLU3",
+    "SYMBOL": "MGLU3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "MILS3",
+    "SYMBOL": "MILS3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "MOTV3",
+    "SYMBOL": "MOTV3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "MOVI3",
+    "SYMBOL": "MOVI3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "MRFG3",
+    "SYMBOL": "MRFG3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "MRVE3",
+    "SYMBOL": "MRVE3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "MSCD34",
+    "SYMBOL": "MSCD34.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "MSFT UQ",
+    "SYMBOL": "MSFT",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "MSFT US",
+    "SYMBOL": "MSFT",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "MSFT UW",
+    "SYMBOL": "MSFT",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "MSFT34",
+    "SYMBOL": "MSFT34.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "MT NA",
+    "SYMBOL": "MT",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "MT NA_PA",
+    "SYMBOL": "MT",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "MTRE3",
+    "SYMBOL": "MTRE3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "MULT3",
+    "SYMBOL": "MULT3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "MUTC34",
+    "SYMBOL": "MUTC34.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "MXRF11",
+    "SYMBOL": "MXRF11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "MYPK3",
+    "SYMBOL": "MYPK3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "NASD11",
+    "SYMBOL": "NASD11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "NATU3",
+    "SYMBOL": "NATU3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "NDX",
+    "SYMBOL": "^NDX",
+    "NOTES": "INDICES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "NEOE3",
+    "SYMBOL": "NEOE3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "NFLX34",
+    "SYMBOL": "NFLX34.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "NIKE34",
+    "SYMBOL": "NIKE34.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "NSLU11",
+    "SYMBOL": "NSLU11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "NTCO3",
+    "SYMBOL": "NTCO3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "NVDA UQ",
+    "SYMBOL": "NVDA",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "NVDA US",
+    "SYMBOL": "NVDA",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "NVDA UW",
+    "SYMBOL": "NVDA",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "NVDC34",
+    "SYMBOL": "NVDC34.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "NVO UN",
+    "SYMBOL": "NVO",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "NVO US",
+    "SYMBOL": "NVO",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "ODPV3",
+    "SYMBOL": "ODPV3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "ONCO3",
+    "SYMBOL": "ONCO3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "OPCT3",
+    "SYMBOL": "OPCT3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "ORCL34",
+    "SYMBOL": "ORCL34.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "ORVR3",
+    "SYMBOL": "ORVR3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "PAGS34",
+    "SYMBOL": "PAGS34.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "PANW UW",
+    "SYMBOL": "PANW",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "PCAR3",
+    "SYMBOL": "PCAR3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "PCIP11",
+    "SYMBOL": "PCIP11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "PETR4",
+    "SYMBOL": "PETR4.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "PFIZ34",
+    "SYMBOL": "PFIZ34.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "PGMN3",
+    "SYMBOL": "PGMN3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "PINE4",
+    "SYMBOL": "PINE4.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "PLPL3",
+    "SYMBOL": "PLPL3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "PNVL3",
+    "SYMBOL": "PNVL3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "POMO3",
+    "SYMBOL": "POMO3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "POMO4",
+    "SYMBOL": "POMO4.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "POSI3",
+    "SYMBOL": "POSI3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "PRIO3",
+    "SYMBOL": "PRIO3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "PSSA3",
+    "SYMBOL": "PSSA3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "PTBL3",
+    "SYMBOL": "PTBL3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "PVBI11",
+    "SYMBOL": "PVBI11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "PYPL34",
+    "SYMBOL": "PYPL34.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "QBTC11",
+    "SYMBOL": "QBTC11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "QETH11",
+    "SYMBOL": "QETH11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "QQQ UP",
+    "SYMBOL": "QQQ",
+    "NOTES": "INDICES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "QQQ UQ",
+    "SYMBOL": "QQQ",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "QQQ US",
+    "SYMBOL": "QQQ",
+    "NOTES": "INDICES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "QUAL3",
+    "SYMBOL": "QUAL3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "QUBT34",
+    "SYMBOL": "QUBT34.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "RAIL3",
+    "SYMBOL": "RAIL3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "RAIZ4",
+    "SYMBOL": "RAIZ4.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "RANI3",
+    "SYMBOL": "RANI3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "RAPT4",
+    "SYMBOL": "RAPT4.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "RBRY11",
+    "SYMBOL": "RBRY11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "RDOR3",
+    "SYMBOL": "RDOR3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "RECR11",
+    "SYMBOL": "RECR11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "RECV3",
+    "SYMBOL": "RECV3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "RENT3",
+    "SYMBOL": "RENT3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "RENT4",
+    "SYMBOL": "RENT4.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "RIAA3",
+    "SYMBOL": "RIAA3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "RIOT34",
+    "SYMBOL": "RIOT34.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "ROMI3",
+    "SYMBOL": "ROMI3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "ROXO34",
+    "SYMBOL": "ROXO34.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "RRRP3",
+    "SYMBOL": "RRRP3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "RURA11",
+    "SYMBOL": "RURA11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "RVBI11",
+    "SYMBOL": "RVBI11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "RZAK11",
+    "SYMBOL": "RZAK11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "RZTR11",
+    "SYMBOL": "RZTR11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "SANB11",
+    "SYMBOL": "SANB11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "SANB3",
+    "SYMBOL": "SANB3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "SANB4",
+    "SYMBOL": "SANB4.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "SAPR11",
+    "SYMBOL": "SAPR11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "SAPR3",
+    "SYMBOL": "SAPR3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "SAPR4",
+    "SYMBOL": "SAPR4.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "SBFG3",
+    "SYMBOL": "SBFG3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "SBSP3",
+    "SYMBOL": "SBSP3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "SCVB11",
+    "SYMBOL": "SCVB11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "SEER3",
+    "SYMBOL": "SEER3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "SEQL3",
+    "SYMBOL": "SEQL3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "SHOW3",
+    "SYMBOL": "SHOW3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "SHUL4",
+    "SYMBOL": "SHUL4.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "SIMH3",
+    "SYMBOL": "SIMH3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "SIMN34",
+    "SYMBOL": "SIMN34.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "SLCE3",
+    "SYMBOL": "SLCE3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "SMAC11",
+    "SYMBOL": "SMAC11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "SMAL11",
+    "SYMBOL": "SMAL11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "SMFT3",
+    "SYMBOL": "SMFT3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "SMTO3",
+    "SYMBOL": "SMTO3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "SNCI11",
+    "SYMBOL": "SNCI11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "SOJA3",
+    "SYMBOL": "SOJA3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "SOLH11",
+    "SYMBOL": "SOLH11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "SOMA3",
+    "SYMBOL": "SOMA3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "SPX QUANTO",
+    "SYMBOL": "^GSPC",
+    "NOTES": "INDICES"
+  },
+  {
+    "LABEL": "SPXB11",
+    "SYMBOL": "SPXB11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "SPXI11",
+    "SYMBOL": "SPXI11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "SPXR11",
+    "SYMBOL": "SPXR11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "SQIA3",
+    "SYMBOL": "SQIA3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "SRNA3",
+    "SYMBOL": "SRNA3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "STBP3",
+    "SYMBOL": "STBP3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "SUZB3",
+    "SYMBOL": "SUZB3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "SUZB5",
+    "SYMBOL": "SUZB5.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "SYNE3",
+    "SYMBOL": "SYNE3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "T UN",
+    "SYMBOL": "T",
+    "NOTES": "AÇÕES INTERNACIONAIS"
+  },
+  {
+    "LABEL": "TAEE11",
+    "SYMBOL": "TAEE11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "TAEE3",
+    "SYMBOL": "TAEE3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "TAEE4",
+    "SYMBOL": "TAEE4.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "TASA4",
+    "SYMBOL": "TASA4.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "TECK11",
+    "SYMBOL": "TECK11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "TEND3",
+    "SYMBOL": "TEND3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "TFCO4",
+    "SYMBOL": "TFCO4.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "TGAR11",
+    "SYMBOL": "TGAR11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "TIET11",
+    "SYMBOL": "TIET11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "TIMP3",
+    "SYMBOL": "TIMP3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "TIMS3",
+    "SYMBOL": "TIMS3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "TOTS3",
+    "SYMBOL": "TOTS3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "TRAD3",
+    "SYMBOL": "TRAD3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "TRIG11",
+    "SYMBOL": "TRIG11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "TRIS3",
+    "SYMBOL": "TRIS3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "TRPL4",
+    "SYMBOL": "TRPL4.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "TRXF11",
+    "SYMBOL": "TRXF11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "TSLA34",
+    "SYMBOL": "TSLA34.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "TSMC34",
+    "SYMBOL": "TSMC34.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "TTEN3",
+    "SYMBOL": "TTEN3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "TUPY3",
+    "SYMBOL": "TUPY3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "TVRI11",
+    "SYMBOL": "TVRI11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "UGPA3",
+    "SYMBOL": "UGPA3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "UNIP6",
+    "SYMBOL": "UNIP6.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "USIM5",
+    "SYMBOL": "USIM5.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "UTLL11",
+    "SYMBOL": "UTLL11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "VALE3",
+    "SYMBOL": "VALE3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "VAMO3",
+    "SYMBOL": "VAMO3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "VAMO99",
+    "SYMBOL": "VAMO99.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "VBBR3",
+    "SYMBOL": "VBBR3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "VGHF11",
+    "SYMBOL": "VGHF11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "VGIP11",
+    "SYMBOL": "VGIP11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "VGIR11",
+    "SYMBOL": "VGIR11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "VIIA3",
+    "SYMBOL": "VIIA3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "VINO11",
+    "SYMBOL": "VINO11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "VISA34",
+    "SYMBOL": "VISA34.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "VISC11",
+    "SYMBOL": "VISC11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "VIVA3",
+    "SYMBOL": "VIVA3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "VIVT3",
+    "SYMBOL": "VIVT3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "VLID3",
+    "SYMBOL": "VLID3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "VRTA11",
+    "SYMBOL": "VRTA11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "VULC3",
+    "SYMBOL": "VULC3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "VVAR3",
+    "SYMBOL": "VVAR3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "VVEO3",
+    "SYMBOL": "VVEO3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "WALM34",
+    "SYMBOL": "WALM34.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "WEGE3",
+    "SYMBOL": "WEGE3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "WFCO34",
+    "SYMBOL": "WFCO34.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "WIZC3",
+    "SYMBOL": "WIZC3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "WIZS3",
+    "SYMBOL": "WIZS3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "XBIT11",
+    "SYMBOL": "XBIT11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "XETH11",
+    "SYMBOL": "XETH11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "XFIX11",
+    "SYMBOL": "XFIX11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "XINA11",
+    "SYMBOL": "XINA11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "XPBR31",
+    "SYMBOL": "XPBR31.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "XPLG11",
+    "SYMBOL": "XPLG11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "XPML11",
+    "SYMBOL": "XPML11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "XPSF11",
+    "SYMBOL": "XPSF11.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "YDUQ3",
+    "SYMBOL": "YDUQ3.SA",
+    "NOTES": "AÇÕES"
+  },
+  {
+    "LABEL": "ZAMP3",
+    "SYMBOL": "ZAMP3.SA",
+    "NOTES": "AÇÕES"
+  }
+]

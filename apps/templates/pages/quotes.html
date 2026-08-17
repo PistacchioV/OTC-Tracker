@@ -1,0 +1,206 @@
+{% extends 'layouts/vertical.html' %}
+
+{% block title %}Quotes{% endblock title %}
+
+{% block extra_css %}
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.css" rel="stylesheet" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet" type="text/css" />
+<style>
+/* Widget próprio, NUNCA .card: o extra_css da página é carregado ANTES do
+   head-css.html, então o .card do tema venceria estas regras sem !important e o
+   cartão sairia branco no tema escuro (CLAUDE.md §7). */
+#quotes-page {
+    --qt-hairline: rgba(0,0,0,.08);
+    --qt-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+}
+[data-bs-theme="dark"] #quotes-page { --qt-hairline: rgba(255,255,255,.10); }
+
+#quotes-page .qt-card {
+    border: 1px solid var(--qt-hairline); border-radius: 14px;
+    background: var(--vr-card-bg, var(--ins-secondary-bg, #fff));
+    padding: 1rem 1.1rem; margin-top: .75rem;
+}
+
+/* Campos da busca */
+/* O combobox de instrumento nasce desabilitado — o cinza do :disabled é o que
+   diz, sem texto, que ainda falta escolher o tipo. */
+#quotes-page #qt-instrument:disabled { cursor: not-allowed; }
+#quotes-page .qt-field label {
+    display: block; font-size: .68rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: .04em; color: var(--bs-secondary-color); margin-bottom: .25rem;
+}
+#quotes-page .qt-datewrap { position: relative; width: 160px; }
+#quotes-page .qt-datewrap input { padding-right: 32px; cursor: pointer; }
+#quotes-page .qt-cal-btn {
+    position: absolute; top: 0; right: 0; bottom: 0; width: 30px; display: inline-flex;
+    align-items: center; justify-content: center; color: var(--bs-secondary-color); cursor: pointer;
+}
+#quotes-page .btn:active { transform: scale(.97); }
+#quotes-page .btn-toolbar-all { font-size: .75rem; padding: .25rem .6rem; }
+#quotes-page .btn-toolbar-all:hover { transform: translateY(-1px); }
+#quotes-page .btn-toolbar-all:active { transform: scale(.96); }
+
+/* Tabela — padrão da casa: header e corpo centralizados. scrollX é false, então
+   o cabeçalho NÃO é clonado e não há .dt-scroll-head a repetir aqui. */
+#quotes-table thead th {
+    text-align: center !important; vertical-align: middle !important;
+    font-size: .7rem; white-space: normal; padding: 8px 12px;
+}
+#quotes-table tbody td {
+    text-align: center; vertical-align: middle; font-size: .8rem; white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+#quotes-page .qt-empty { padding: 2.5rem 1rem; text-align: center; color: var(--bs-secondary-color); }
+#quotes-page .qt-empty i { font-size: 2rem; display: block; margin-bottom: .5rem; opacity: .5; }
+</style>
+{% endblock extra_css %}
+
+{% block page_content %}
+<div id="quotes-page" class="container-fluid"
+     data-date-from="{{ date_from }}" data-date-to="{{ date_to }}">
+    {% set title='Quotes' %}
+    {% set crumbs=['OTC Tracker', 'Apps', 'Quotes'] %}
+    {% include 'partials/page-title.html' %}
+
+    <!-- Busca: tipo → instrumento → período -->
+    <div class="qt-card">
+        <div class="row g-2 align-items-end">
+            <div class="col-12 col-md-3">
+                <div class="qt-field">
+                    <label for="qt-kind" data-lang="qt-kind">Quote type</label>
+                    <select id="qt-kind" class="form-select form-select-sm">
+                        <option value="" data-lang="qt-kind-pick">Select…</option>
+                        <option value="ptax" data-lang="qt-kind-ptax">PTAX</option>
+                        <option value="equity" data-lang="qt-kind-equity">Equities</option>
+                        <option value="commodity" data-lang="qt-kind-commodity">Commodities</option>
+                    </select>
+                </div>
+            </div>
+            <div class="col-12 col-md-4">
+                <div class="qt-field">
+                    <label for="qt-instrument" id="qtInstrumentLabel" data-lang="qt-instrument">Instrument</label>
+                    <!-- Combobox com type-ahead nativo: são ~1.300 ativos e ~900
+                         contratos, e um <select> comum obrigaria a rolar a lista.
+                         Fica DESABILITADO até o tipo ser escolhido. -->
+                    <input list="qtInstrumentList" id="qt-instrument" autocomplete="off" disabled
+                           class="form-control form-control-sm" placeholder="—">
+                    <datalist id="qtInstrumentList"></datalist>
+                </div>
+            </div>
+            <div class="col-6 col-md-2">
+                <div class="qt-field">
+                    <label for="qt-from" data-lang="qt-from">From</label>
+                    <div class="qt-datewrap">
+                        <input type="text" id="qt-from" class="form-control form-control-sm"
+                               readonly autocomplete="off" placeholder="dd/mm/aaaa">
+                        <span class="qt-cal-btn" title="Open calendar"><i class="ti ti-calendar"></i></span>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-2">
+                <div class="qt-field">
+                    <label for="qt-to" data-lang="qt-to">To</label>
+                    <div class="qt-datewrap">
+                        <input type="text" id="qt-to" class="form-control form-control-sm"
+                               readonly autocomplete="off" placeholder="dd/mm/aaaa">
+                        <span class="qt-cal-btn" title="Open calendar"><i class="ti ti-calendar"></i></span>
+                    </div>
+                </div>
+            </div>
+            <div class="col-12 col-md-1 d-flex">
+                <button class="btn btn-sm btn-primary bg-gradient btn-toolbar-all w-100" type="button"
+                        id="qtSearch" disabled>
+                    <i class="ti ti-search me-1"></i><span data-lang="qt-search">Search</span>
+                </button>
+            </div>
+        </div>
+        <div class="text-muted fs-xs mt-2" id="qtSymbolHint"></div>
+    </div>
+
+    <!-- Tabela -->
+    <div class="qt-card">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <div class="d-flex align-items-center gap-1">
+                    <label class="form-label mb-0 fs-xs text-muted" data-lang="qt-show">Show</label>
+                    <select class="form-select form-select-sm" id="qtPageLen" style="width:84px;">
+                        <option value="25">25</option>
+                        <option value="50" selected>50</option>
+                        <option value="100">100</option>
+                        <option value="-1" data-lang="qt-all">All</option>
+                    </select>
+                    <label class="form-label mb-0 fs-xs text-muted" data-lang="qt-entries">entries</label>
+                </div>
+                <div class="dropdown">
+                    <button class="btn btn-sm btn-soft-primary btn-toolbar-all dropdown-toggle" type="button"
+                            data-bs-toggle="dropdown" data-bs-auto-close="outside">
+                        <i class="ti ti-columns me-1"></i><span data-lang="qt-columns">Columns</span>
+                    </button>
+                    <div class="dropdown-menu p-2" id="qtColumnsMenu" style="min-width: 220px;"></div>
+                </div>
+                <div class="dropdown">
+                    <button class="btn btn-sm btn-info bg-gradient btn-toolbar-all dropdown-toggle" type="button"
+                            data-bs-toggle="dropdown">
+                        <i class="ti ti-download me-1"></i><span data-lang="qt-export">Export</span>
+                    </button>
+                    <div class="dropdown-menu">
+                        <a class="dropdown-item" href="#" data-export="copy"><i class="ti ti-copy me-1"></i> Copy</a>
+                        <a class="dropdown-item" href="#" data-export="csv"><i class="ti ti-file-type-csv me-1"></i> CSV</a>
+                        <a class="dropdown-item" href="#" data-export="excel"><i class="ti ti-file-spreadsheet me-1"></i> Excel</a>
+                        <a class="dropdown-item" href="#" data-export="print"><i class="ti ti-printer me-1"></i> Print</a>
+                        <a class="dropdown-item" href="#" data-export="pdf"><i class="ti ti-file-type-pdf me-1"></i> PDF</a>
+                    </div>
+                </div>
+                <button class="btn btn-sm btn-outline-secondary btn-toolbar-all" type="button" id="qtClearFilters">
+                    <i class="ti ti-filter-off me-1"></i><span data-lang="qt-clear-filters">Clear Filters</span>
+                </button>
+            </div>
+            <div class="text-muted fs-xs">
+                <span data-lang="qt-showing">Showing</span> <span id="qtCount">0</span>
+                <span data-lang="qt-rows">rows</span>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table id="quotes-table" class="table table-sm table-hover table-striped table-centered mb-0"
+                   style="width:100%">
+                <thead><tr id="qtHead"></tr><tr id="qtFilterRow"></tr></thead>
+                <tbody></tbody>
+            </table>
+        </div>
+        <div class="qt-empty" id="qtEmpty">
+            <i class="ti ti-chart-line"></i>
+            <span data-lang="qt-empty">Pick the period and press Search.</span>
+        </div>
+    </div>
+</div>
+{% endblock page_content %}
+
+{% block extra_javascript %}
+<script src="{{ config.ASSETS_ROOT }}/plugins/jquery/jquery.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/moment.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.buttons.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/jszip.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.html5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.print.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/pdfmake.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/vfs_fonts.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/table-std.js"></script>
+<script>
+// Os cadastros vêm renderizados: são 334 papéis e 108 contratos, e um fetch por
+// aba só para preencher o dropdown pagaria uma ida ao servidor para exibir uma
+// lista que já está na sessão.
+window.QT_OPTIONS = {
+    ptax:      {{ currencies | tojson }},
+    equity:    {{ equities | tojson }},
+    commodity: {{ commodities | tojson }}
+};
+</script>
+<script src="{{ config.ASSETS_ROOT }}/js/pages/quotes.js?v={{ asset_v('js/pages/quotes.js') }}"></script>
+{% endblock extra_javascript %}

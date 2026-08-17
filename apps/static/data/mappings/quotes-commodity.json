@@ -1,0 +1,352 @@
+[
+  {
+    "LABEL": "BOK6",
+    "SYMBOL": "ZLK26.CBT",
+    "NOTES": "SOJA"
+  },
+  {
+    "LABEL": "BON6",
+    "SYMBOL": "ZLN26.CBT",
+    "NOTES": "SOJA"
+  },
+  {
+    "LABEL": "BOQ6",
+    "SYMBOL": "ZLQ26.CBT",
+    "NOTES": "SOJA"
+  },
+  {
+    "LABEL": "BOU6",
+    "SYMBOL": "ZLU26.CBT",
+    "NOTES": "SOJA"
+  },
+  {
+    "LABEL": "BOV6",
+    "SYMBOL": "ZLV26.CBT",
+    "NOTES": "SOJA"
+  },
+  {
+    "LABEL": "C 1",
+    "SYMBOL": "BUSHELS",
+    "NOTES": "MILHO"
+  },
+  {
+    "LABEL": "C H7",
+    "SYMBOL": "BUSHELS",
+    "NOTES": "MILHO"
+  },
+  {
+    "LABEL": "C H8",
+    "SYMBOL": "BUSHELS",
+    "NOTES": "MILHO"
+  },
+  {
+    "LABEL": "C K6",
+    "SYMBOL": "ZCK26.CBT",
+    "NOTES": "MILHO"
+  },
+  {
+    "LABEL": "C K7",
+    "SYMBOL": "BUSHELS",
+    "NOTES": "MILHO"
+  },
+  {
+    "LABEL": "C K8",
+    "SYMBOL": "BUSHELS",
+    "NOTES": "MILHO"
+  },
+  {
+    "LABEL": "C N6",
+    "SYMBOL": "ZCN26.CBT",
+    "NOTES": "MILHO"
+  },
+  {
+    "LABEL": "C N7",
+    "SYMBOL": "BUSHELS",
+    "NOTES": "MILHO"
+  },
+  {
+    "LABEL": "C N8",
+    "SYMBOL": "BUSHELS",
+    "NOTES": "MILHO"
+  },
+  {
+    "LABEL": "C U6",
+    "SYMBOL": "ZCU26.CBT",
+    "NOTES": "MILHO"
+  },
+  {
+    "LABEL": "C U7",
+    "SYMBOL": "BUSHELS",
+    "NOTES": "MILHO"
+  },
+  {
+    "LABEL": "C U8",
+    "SYMBOL": "BUSHELS",
+    "NOTES": "MILHO"
+  },
+  {
+    "LABEL": "C Z6",
+    "SYMBOL": "ZCZ26.CBT",
+    "NOTES": "MILHO"
+  },
+  {
+    "LABEL": "C Z7",
+    "SYMBOL": "BUSHELS",
+    "NOTES": "MILHO"
+  },
+  {
+    "LABEL": "C Z8",
+    "SYMBOL": "BUSHELS",
+    "NOTES": "MILHO"
+  },
+  {
+    "LABEL": "CCZ6",
+    "SYMBOL": "CCZ26.NYB",
+    "NOTES": "CACAU"
+  },
+  {
+    "LABEL": "COJ6",
+    "SYMBOL": "COJ26.NYB",
+    "NOTES": "PETROLEO"
+  },
+  {
+    "LABEL": "COK6",
+    "SYMBOL": "COK26.NYB",
+    "NOTES": "PETROLEO"
+  },
+  {
+    "LABEL": "COM5",
+    "SYMBOL": "COM25.NYB",
+    "NOTES": "PETROLEO"
+  },
+  {
+    "LABEL": "COM6",
+    "SYMBOL": "COM26.NYB",
+    "NOTES": "PETROLEO"
+  },
+  {
+    "LABEL": "CON6",
+    "SYMBOL": "CON26.NYB",
+    "NOTES": "PETROLEO"
+  },
+  {
+    "LABEL": "COQ6",
+    "SYMBOL": "COQ26.NYB",
+    "NOTES": "PETROLEO"
+  },
+  {
+    "LABEL": "COU6",
+    "SYMBOL": "COU26.NYB",
+    "NOTES": "PETROLEO"
+  },
+  {
+    "LABEL": "COV6",
+    "SYMBOL": "COV26.NYB",
+    "NOTES": "PETROLEO"
+  },
+  {
+    "LABEL": "COX6",
+    "SYMBOL": "COX26.NYB",
+    "NOTES": "PETROLEO"
+  },
+  {
+    "LABEL": "COZ5",
+    "SYMBOL": "COZ25.NYB",
+    "NOTES": "PETROLEO"
+  },
+  {
+    "LABEL": "COZ6",
+    "SYMBOL": "COZ26.NYB",
+    "NOTES": "PETROLEO"
+  },
+  {
+    "LABEL": "CTZ6",
+    "SYMBOL": "CTZ26.NYB",
+    "NOTES": "ALGODAO"
+  },
+  {
+    "LABEL": "DFK6",
+    "SYMBOL": "DFK26.NYB",
+    "NOTES": "CAFE"
+  },
+  {
+    "LABEL": "KCH6",
+    "SYMBOL": "KCH26.NYB",
+    "NOTES": "CAFE"
+  },
+  {
+    "LABEL": "KCK6",
+    "SYMBOL": "KCK26.NYB",
+    "NOTES": "CAFE"
+  },
+  {
+    "LABEL": "KCN6",
+    "SYMBOL": "KCN26.NYB",
+    "NOTES": "CAFE"
+  },
+  {
+    "LABEL": "KCU6",
+    "SYMBOL": "KCU26.NYB",
+    "NOTES": "CAFE"
+  },
+  {
+    "LABEL": "KCZ6",
+    "SYMBOL": "KCZ26.NYB",
+    "NOTES": "CAFE"
+  },
+  {
+    "LABEL": "S 1",
+    "SYMBOL": "ZSK25.CBT",
+    "NOTES": "SOJA"
+  },
+  {
+    "LABEL": "S F7",
+    "SYMBOL": "ZSK25.CBT",
+    "NOTES": "SOJA"
+  },
+  {
+    "LABEL": "S F8",
+    "SYMBOL": "ZSK25.CBT",
+    "NOTES": "SOJA"
+  },
+  {
+    "LABEL": "S H7",
+    "SYMBOL": "ZSK25.CBT",
+    "NOTES": "SOJA"
+  },
+  {
+    "LABEL": "S H8",
+    "SYMBOL": "ZSK25.CBT",
+    "NOTES": "SOJA"
+  },
+  {
+    "LABEL": "S K6",
+    "SYMBOL": "ZSK26.CBT",
+    "NOTES": "SOJA"
+  },
+  {
+    "LABEL": "S K7",
+    "SYMBOL": "ZSK25.CBT",
+    "NOTES": "SOJA"
+  },
+  {
+    "LABEL": "S K8",
+    "SYMBOL": "ZSK25.CBT",
+    "NOTES": "SOJA"
+  },
+  {
+    "LABEL": "S N6",
+    "SYMBOL": "ZSN26.CBT",
+    "NOTES": "SOJA"
+  },
+  {
+    "LABEL": "S N7",
+    "SYMBOL": "ZSK25.CBT",
+    "NOTES": "SOJA"
+  },
+  {
+    "LABEL": "S N8",
+    "SYMBOL": "ZSK25.CBT",
+    "NOTES": "SOJA"
+  },
+  {
+    "LABEL": "S Q6",
+    "SYMBOL": "ZSK25.CBT",
+    "NOTES": "SOJA"
+  },
+  {
+    "LABEL": "S Q7",
+    "SYMBOL": "ZSK25.CBT",
+    "NOTES": "SOJA"
+  },
+  {
+    "LABEL": "S Q8",
+    "SYMBOL": "ZSK25.CBT",
+    "NOTES": "SOJA"
+  },
+  {
+    "LABEL": "S U6",
+    "SYMBOL": "ZSU26.CBT",
+    "NOTES": "SOJA"
+  },
+  {
+    "LABEL": "S U7",
+    "SYMBOL": "ZSK25.CBT",
+    "NOTES": "SOJA"
+  },
+  {
+    "LABEL": "S U8",
+    "SYMBOL": "ZSK25.CBT",
+    "NOTES": "SOJA"
+  },
+  {
+    "LABEL": "S X6",
+    "SYMBOL": "ZSX26.CBT",
+    "NOTES": "SOJA"
+  },
+  {
+    "LABEL": "S X7",
+    "SYMBOL": "ZSK25.CBT",
+    "NOTES": "SOJA"
+  },
+  {
+    "LABEL": "S X8",
+    "SYMBOL": "ZSK25.CBT",
+    "NOTES": "SOJA"
+  },
+  {
+    "LABEL": "SBH6",
+    "SYMBOL": "SBH26.NYB",
+    "NOTES": "ACUCAR"
+  },
+  {
+    "LABEL": "SBK6",
+    "SYMBOL": "SBK26.NYB",
+    "NOTES": "ACUCAR"
+  },
+  {
+    "LABEL": "SBN6",
+    "SYMBOL": "SBN26.NYB",
+    "NOTES": "ACUCAR"
+  },
+  {
+    "LABEL": "SBV6",
+    "SYMBOL": "SBV26.NYB",
+    "NOTES": "ACUCAR"
+  },
+  {
+    "LABEL": "W 1",
+    "SYMBOL": "ZWK25.CBT",
+    "NOTES": "TRIGO"
+  },
+  {
+    "LABEL": "W H7",
+    "SYMBOL": "ZWK25.CBT",
+    "NOTES": "TRIGO"
+  },
+  {
+    "LABEL": "W K6",
+    "SYMBOL": "ZWK25.CBT",
+    "NOTES": "TRIGO"
+  },
+  {
+    "LABEL": "W K7",
+    "SYMBOL": "ZWK25.CBT",
+    "NOTES": "TRIGO"
+  },
+  {
+    "LABEL": "W N6",
+    "SYMBOL": "ZWK25.CBT",
+    "NOTES": "TRIGO"
+  },
+  {
+    "LABEL": "W U6",
+    "SYMBOL": "ZWK25.CBT",
+    "NOTES": "TRIGO"
+  },
+  {
+    "LABEL": "W Z6",
+    "SYMBOL": "ZWK25.CBT",
+    "NOTES": "TRIGO"
+  }
+]
