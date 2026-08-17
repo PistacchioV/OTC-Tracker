@@ -608,11 +608,15 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     // ── Per-table setup ─────────────────────────────────────────────────────
-    // `orderCol` = índice da coluna que abre ordenada A→Z. Omitido, a tabela abre
-    // na ordem em que o servidor mandou as linhas, como sempre foi.
-    function initTable(id, dataCols, pageLen, orderCol) {
+    // `orderCols` = índice (ou LISTA de índices) das colunas que abrem ordenadas
+    // A→Z, na ordem de precedência. Omitido, a tabela abre na ordem em que o
+    // servidor mandou as linhas, como sempre foi. Aceita número para não obrigar
+    // quem só quer uma coluna a escrever um array de um elemento.
+    function initTable(id, dataCols, pageLen, orderCols) {
+        var ord = (orderCols == null ? []
+            : (Array.isArray(orderCols) ? orderCols : [orderCols]).map(function (c) { return [c, 'asc']; }));
         var dt = $('#' + id).DataTable({
-            order: (orderCol == null ? [] : [[orderCol, 'asc']]),
+            order: ord,
             autoWidth: false, scrollX: true, scrollY: '60vh', scrollCollapse: true, orderCellsTop: true, paging: true, pageLength: pageLen || 25,
             dom: "<'row'<'col-12'tr>>" + "<'d-md-flex justify-content-between align-items-center mt-2'ip>",
             columnDefs: [{ orderable: false, targets: [0, 1] }],
@@ -732,11 +736,13 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     var dtSummary = initTable('ops-summary-table', 9);   // 9 data cols (Counterparty…Observation)
-    // Trade Level abre ordenado por **Counterparty A→Z** (col 4: cb, Actions,
-    // Status, LOB, Counterparty). A linha derivada é texto puro, então a coluna
-    // ordena de verdade; e o cliente é o recorte por que a mesa procura, não a
-    // ordem em que a B3 devolveu os Títulos.
-    var dtTrade   = initTable('ops-trade-table', 10, 50, 4); // 10 data cols (LOB…Difference); default 50/page
+    // Trade Level abre ordenado por **Product → LOB → Counterparty**, nessa
+    // precedência (cols 7, 3 e 4 — cb, Actions, Status, LOB, Counterparty,
+    // Internal ID, B3 ID, Product…). É a leitura da mesa: o produto agrupa a
+    // conferência, a LOB separa a mesa dentro dele e o cliente ordena a lista
+    // final. Ordenar só por Counterparty intercalava swap, termo e opção do
+    // mesmo cliente, e a ordem em que a B3 devolveu os Títulos não agrupa nada.
+    var dtTrade   = initTable('ops-trade-table', 10, 50, [7, 3, 4]); // 10 data cols (LOB…Difference); default 50/page
 
     // Add-row modal Save → append the filled row to the active table (cells stay
     // inline-editable, seeded with the modal values).

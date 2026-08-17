@@ -237,11 +237,16 @@ check('_OPS_TRADE_COLS segue a mesma', from_py, EXPECTED)
 # A linha de filtros cobre Status + as 10 de dado; checkbox e Actions nao filtram.
 check('a linha de filtros tem uma caixa por coluna filtravel',
       trade.count('<input type="text" placeholder='), len(EXPECTED) + 1)
-# O 4o argumento e a coluna que abre ordenada A→Z: 4 = Counterparty (cb, Actions,
-# Status, LOB, Counterparty). Ele entra no teste porque um indice errado ordena a
-# tabela pela coluna vizinha sem erro nenhum.
+# O 4o argumento sao as colunas que abrem ordenadas A→Z, na precedencia pedida:
+# Product (7) → LOB (3) → Counterparty (4), contando cb, Actions, Status, LOB,
+# Counterparty, Internal ID, B3 ID, Product. Ele entra no teste porque um indice
+# errado ordena a tabela pela coluna vizinha sem erro nenhum.
 check('o DataTables sabe quantas colunas de dado ha',
-      "initTable('ops-trade-table', 10, 50, 4)" in HTML, True)
+      "initTable('ops-trade-table', 10, 50, [7, 3, 4])" in HTML, True)
+# Os indices tem de casar com o cabecalho real: sem isto, uma coluna nova no meio
+# desloca a ordenacao e a tabela abre agrupada pela coluna errada, calada.
+for nome, idx in (('product', 7), ('lob', 3), ('counterparty', 4)):
+    check('indice de ordenacao de %s' % nome, from_html[idx - 3], nome)
 
 print('\n== 5. os tres cadastros existem e o seed reproduz a formula ==')
 for key in ('opb3-events', 'swap-ir-client', 'swap-ir-term'):

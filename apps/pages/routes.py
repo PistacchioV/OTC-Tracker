@@ -6627,6 +6627,12 @@ def _opssum_rows(trade_rows, ref):
         if net_type == 'Total Net':
             recv, pay = (total, 0.0) if total >= 0 else (0.0, total)
         direction = 'RECEIVE' if total >= 0 else 'PAY'
+        # Linha que NETA ZERO sai com **0,00 no Receive**, não com as duas
+        # células vazias. Vazio se lê como "não deu para calcular", e aqui o zero
+        # é o resultado: a operação liquida por valores que se anulam. Fica no
+        # Receive porque é o lado que a Direction aponta (`total >= 0` →
+        # RECEIVE); pôr nos dois diria que a mesma linha paga e recebe zero.
+        zerado = not recv and not pay
         banking = _bank_norm((rec_cpd or {}).get('BANKING'))
         entry = meta.get(_opssum_key(cpty, lob, product)) or {}
         out.append({
@@ -6636,7 +6642,7 @@ def _opssum_rows(trade_rows, ref):
             'counterparty': cpty,
             'lob': lob,
             'product': product,
-            'receive': '{:,.2f}'.format(recv) if recv else '',
+            'receive': '{:,.2f}'.format(recv) if (recv or zerado) else '',
             'pay': '{:,.2f}'.format(pay) if pay else '',
             'net_type': net_type,
             'direction': direction,
