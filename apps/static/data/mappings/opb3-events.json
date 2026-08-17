@@ -21,6 +21,27 @@
     "NOTES": ""
   },
   {
+    "TIPO TITULO": "TER",
+    "TIPO OPERACAO": "RESGATE",
+    "STATUS B3": "",
+    "USE": "Consider",
+    "NOTES": "Liquidação do termo de mercadoria"
+  },
+  {
+    "TIPO TITULO": "OPC",
+    "TIPO OPERACAO": "RESGATE",
+    "STATUS B3": "",
+    "USE": "Consider",
+    "NOTES": "Liquidação/exercício da opção"
+  },
+  {
+    "TIPO TITULO": "OPC",
+    "TIPO OPERACAO": "PAGAMENTO DE PREMIO",
+    "STATUS B3": "",
+    "USE": "Consider",
+    "NOTES": "Pagamento de prêmio da opção"
+  },
+  {
     "TIPO TITULO": "",
     "TIPO OPERACAO": "",
     "STATUS B3": "CANCELADA: COMANDADA",

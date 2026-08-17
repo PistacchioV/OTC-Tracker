@@ -436,8 +436,8 @@ check('20,01 NAO bate', R._ops_recon([tr('SWAP', 100.0, 120.01)])['swap']['match
 src = open(os.path.join(ROOT, 'apps', 'pages', 'routes.py'), encoding='utf-8').read()
 check('nenhuma linha do Trade Level compara com literal',
       "abs(diff) < 0.01" in src, False)
-check('as duas familias usam a constante',
-      src.count("abs(diff) <= _OPS_RECON_TOL"), 2)
+check('as tres familias usam a constante',
+      src.count("abs(diff) <= _OPS_RECON_TOL"), 3)
 
 # Familia sem linha no Trade Level = `na`: nao ha divergencia, ha conta que ainda
 # nao e feita. Pintar de ambar leria como erro de dado.

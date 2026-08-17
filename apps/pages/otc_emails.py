@@ -1227,12 +1227,29 @@ def _swap_settlement_email(items, contraparte, le_class, premium, ref_date, cpd,
 #    · No Net            → um por trade;
 #    · e, para as contrapartes marcadas no cadastro `ndfc-advice-split`
 #      (Mondelez), cada um dos acima ainda quebra POR COMMODITY.
-def build_ndfc_settlement_emails(rows, headers, ref_date=None, split_commodity=None):
-    """Avisos de liquidação de Termo de Mercadoria.
+def build_ndfc_settlement_emails(rows, headers, ref_date=None, split_commodity=None,
+                                 product_label='Termo de Commodities'):
+    """Avisos de liquidação de Termo de Mercadoria — e de OPÇÃO.
 
-    `rows`: dicts de `routes._ndfadv_email_rows` — cells (já em BR, na ordem de
-    `headers`), counterparty, legal, spn, taxid, net_type, commodity, liquido.
+    `rows`: dicts de `routes._ndfadv_email_rows` (ou `_optadv_email_rows`) —
+    cells (já em BR, na ordem de `headers`), counterparty, legal, spn, taxid,
+    net_type, commodity, liquido.
     `split_commodity`: callable(nome) → bool; None = ninguém quebra por commodity.
+    `product_label`: o que vai entre parênteses no ASSUNTO — o DEFAULT do lote.
+    Uma linha pode trazer o seu próprio em `product_label`, e é assim que a
+    opção resolve o rótulo pela classe do subjacente ('Opção de Commodities',
+    'Opção de Taxas de Câmbio', 'Opção de <classe>'). O rótulo entra na CHAVE do
+    agrupamento: um assunto por documento, então classes diferentes nunca netam
+    no mesmo aviso — senão um dos dois rótulos mentiria.
+
+    `premium` por linha: prefixa `(Pagamento de Prêmio)` no assunto e também
+    separa o aviso, exatamente como no de Swap. Pagamento de prêmio e liquidação
+    da operação são caixas diferentes, e chamar o conjunto de prêmio esconderia o
+    outro.
+
+    Corpo, quebras, dados bancários, ficha em PDF e cadastro de destinatários são
+    os MESMOS do termo — duplicar a função para trocar quatro palavras no assunto
+    criaria duas fichas de liquidação para manter.
     """
     cpd = _build_cpdetails_index()
     ref_date = ref_date or _today_br()
@@ -1243,10 +1260,12 @@ def build_ndfc_settlement_emails(rows, headers, ref_date=None, split_commodity=N
         name = str(r.get('counterparty', '') or '').strip()
         if not name or _is_lawton(name) or _is_jpmorgan(name):
             continue
-        groups.setdefault((name, _ndf_legal_class(r.get('legal'))), []).append(r)
+        groups.setdefault((name, _ndf_legal_class(r.get('legal')),
+                           bool(r.get('premium')),
+                           str(r.get('product_label') or product_label)), []).append(r)
 
     drafts = []
-    for (name, le), items in sorted(groups.items()):
+    for (name, le, premium, label), items in sorted(groups.items()):
         nt = str(items[0].get('net_type', '') or 'Total Net')
         if nt == 'No Net':
             batches = [[t] for t in items]
@@ -1268,11 +1287,13 @@ def build_ndfc_settlement_emails(rows, headers, ref_date=None, split_commodity=N
                 split.extend([per[k] for k in sorted(per)])
             batches = split
         for batch in batches:
-            drafts.append(_ndfc_settlement_email(batch, name, le, ref_date, cpd, headers))
+            drafts.append(_ndfc_settlement_email(batch, name, le, ref_date, cpd, headers,
+                                                 label, premium))
     return drafts
 
 
-def _ndfc_settlement_email(items, contraparte, le_class, ref_date, cpd, headers):
+def _ndfc_settlement_email(items, contraparte, le_class, ref_date, cpd, headers,
+                           product_label='Termo de Commodities', premium=False):
     apurado = sum(float(t.get('apurado') or 0.0) for t in items)
     ir = sum(float(t.get('ir') or 0.0) for t in items)
     final = sum(float(t.get('liquido') or 0.0) for t in items)
@@ -1342,13 +1363,18 @@ def _ndfc_settlement_email(items, contraparte, le_class, ref_date, cpd, headers)
              _ep('Vimos confirmar a(s) liquidação(ões) da(s) operação(ões) de derivativos abaixo especificada(s):'))
     html = _email_shell('Liquidação de Operação de Derivativo', ref_date, intro, body_html)
 
-    subject = 'Liquidação de Operação de Derivativo (Termo de Commodities) - {} - {}'.format(
-        ref_date, contraparte)
+    subject = 'Liquidação de Operação de Derivativo ({}) - {} - {}'.format(
+        product_label, ref_date, contraparte)
     # Um aviso por commodity precisa se distinguir na caixa de entrada: três
     # assuntos idênticos no mesmo dia são três anexos que ninguém sabe separar.
     commodities = {str(t.get('commodity', '') or '') for t in items}
     if len(commodities) == 1 and commodities != {''}:
         subject += ' - ' + commodities.pop()
+    # Prefixo, e não sufixo: o assunto é lido da esquerda numa lista de e-mails, e
+    # é aí que "isto é prêmio, não é a liquidação" precisa aparecer. Mesma regra e
+    # mesmo texto do aviso de Swap.
+    if premium:
+        subject = '(Pagamento de Prêmio) ' + subject
     if le_class == 'MGT':
         subject += ' x JPMORGAN CHASE'
 

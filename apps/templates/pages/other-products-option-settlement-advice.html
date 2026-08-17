@@ -1,0 +1,602 @@
+{% extends 'layouts/vertical.html' %}
+
+{% block title %}Option Settlement Advice{% endblock title %}
+
+{% block extra_css %}
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.css" rel="stylesheet" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet" type="text/css" />
+<style>
+/* Página irmã de Swap Athena / Events / VCP: o MESMO visualizador genérico
+   (live-position-swap-characteristics.js), escolhido pelo `data-api`. O id
+   `swapchar-page` e a tabela `swapchar-table` não são cosméticos — são o
+   contrato com esse JS, que procura por eles. Trocar um deles deixa a página em
+   branco sem erro nenhum. */
+#swapchar-page {
+    --sc-hairline: rgba(0,0,0,.08);
+    --sc-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+}
+[data-bs-theme="dark"] #swapchar-page { --sc-hairline: rgba(255,255,255,.10); }
+
+/* ── Widgets (ops-widget model) ─────────────────────────────────────────── */
+#swapchar-page .sc-widgets .col { display: flex; margin-bottom: .5rem; }
+#swapchar-page .sc-widget {
+    flex: 1;
+    border: 1px solid var(--sc-hairline);
+    border-radius: 14px;
+    padding: 1rem 1.1rem;
+    background: var(--ins-secondary-bg, #fff);
+    transition: transform 220ms var(--sc-ease-out), box-shadow 220ms var(--sc-ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+    #swapchar-page .sc-widget:hover { transform: translateY(-3px); box-shadow: 0 12px 28px rgba(0,0,0,.10); }
+}
+#swapchar-page .sc-widget__head { display: flex; align-items: center; gap: .6rem; margin-bottom: .55rem; }
+#swapchar-page .sc-widget__icon {
+    width: 38px; height: 38px; border-radius: 10px;
+    display: inline-flex; align-items: center; justify-content: center; font-size: 1.15rem; flex-shrink: 0;
+}
+#swapchar-page .sc-widget__title { font-size: .82rem; font-weight: 700; letter-spacing: -.2px; margin: 0; }
+#swapchar-page .sc-widget__value { font-size: 1.7rem; font-weight: 700; line-height: 1; margin-left: auto; letter-spacing: -1px; }
+#swapchar-page .sc-widget__subs { border-top: 1px dashed var(--sc-hairline); padding-top: .5rem; margin-top: .1rem; }
+#swapchar-page .sc-widget__sub {
+    display: flex; align-items: center; gap: .35rem;
+    font-size: .74rem; color: var(--ins-secondary-color, #6e6e73); padding: .12rem 0;
+}
+#swapchar-page .sc-widget__sub .sc-sub-val { margin-left: auto; font-weight: 700; color: var(--ins-body-color); }
+#swapchar-page .sc-widget--total { background: linear-gradient(135deg, #0066cc 0%, #34369b 100%); border: 0; }
+#swapchar-page .sc-widget--total .sc-widget__title,
+#swapchar-page .sc-widget--total .sc-widget__value { color: #fff; }
+#swapchar-page .sc-widget--total .sc-widget__icon { background: rgba(255,255,255,.18); color: #fff; }
+
+/* ── Smart filter (New Deals model) ─────────────────────────────────────── */
+#swapchar-page .smart-filter-wrapper {
+    position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 4px;
+    border: 1px solid var(--sc-hairline); border-radius: 0.6875rem;
+    padding: 4px 8px; min-height: 38px; background: var(--ins-secondary-bg); cursor: text;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+#swapchar-page .smart-filter-wrapper:focus-within { border-color: #0066cc; box-shadow: 0 0 0 3px rgba(0,102,204,0.15); }
+#swapchar-page .smart-filter-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+#swapchar-page .smart-filter-chip {
+    display: inline-flex; align-items: center; gap: 5px; background: #6c757d; color: #fff;
+    border-radius: 50rem; padding: 2px 8px; font-size: 10px; font-weight: 500; white-space: nowrap;
+}
+#swapchar-page .smart-filter-chip .sf-chip-remove { cursor: pointer; opacity: .75; font-size: 13px; line-height: 1; margin-left: 2px; }
+#swapchar-page .smart-filter-input {
+    border: none; outline: none; flex: 1; min-width: 200px; font-size: 0.82rem;
+    background: transparent; color: var(--ins-body-color); padding: 2px 0;
+}
+#swapchar-page .smart-filter-dropdown {
+    position: absolute; top: calc(100% + 2px); left: 0; right: 0; z-index: 1055;
+    background: var(--ins-secondary-bg); border: 1px solid var(--ins-border-color); border-radius: 6px;
+    box-shadow: 0 6px 18px rgba(0,0,0,.25); max-height: 260px; overflow-y: auto; display: none; padding: 4px 0;
+}
+#swapchar-page .smart-filter-dropdown li {
+    padding: 6px 12px; cursor: pointer; font-size: 0.81rem; display: flex; align-items: center;
+    gap: 8px; list-style: none; color: var(--ins-body-color);
+}
+#swapchar-page .smart-filter-dropdown li:hover,
+#swapchar-page .smart-filter-dropdown li.active { background: rgba(0,102,204,.10); }
+#swapchar-page .sf-type-badge { font-size: 9px; padding: 1px 5px; border-radius: 3px; text-transform: uppercase; font-weight: 600; color: #fff; opacity: .85; }
+#swapchar-page .sf-type-text   { background: #6c757d; }
+#swapchar-page .sf-type-date   { background: #0284c7; }
+#swapchar-page .sf-type-value  { background: #b45309; }
+
+/* ── Reference date picker (Live Position model) ────────────────────────── */
+#swapchar-page .sc-datewrap { position: relative; width: 170px; }
+#swapchar-page .sc-datewrap input {
+    width: 100%; border: 1px solid var(--bs-border-color); border-radius: 10px;
+    padding: .3rem 2.1rem .3rem .7rem; font-size: .85rem; font-weight: 600;
+    color: var(--bs-body-color); background: var(--bs-secondary-bg, #fff); cursor: pointer;
+    transition: border-color 0.16s var(--sc-ease-out), box-shadow 0.16s var(--sc-ease-out);
+}
+#swapchar-page .sc-datewrap input:focus {
+    outline: none; border-color: var(--bs-primary); box-shadow: 0 0 0 3px rgba(var(--bs-primary-rgb), .18);
+}
+#swapchar-page .sc-cal-btn {
+    position: absolute; top: 0; right: 0; bottom: 0; width: 34px;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: var(--bs-secondary-color); cursor: pointer;
+}
+
+/* ── Toolbar acima da tabela ────────────────────────────────────────────────
+   O Columns e o Export são injetados pelo JS DEPOIS do render e o botão do
+   DataTables Buttons traz margem própria zerada, então a fila de botões
+   encostava no cabeçalho da tabela e nos cantos do card. Além do respiro
+   embaixo (que separa dos <th>), os botões precisam de altura própria: com
+   `line-height:1.2` e sem padding vertical eles ficam com a cara de "comidos". */
+#swapchar-page .card-body > .d-flex.justify-content-between {
+    padding: .35rem .25rem 1.15rem;
+    row-gap: .6rem;
+    column-gap: .5rem;
+}
+#swapchar-page .columnToggleWrapper,
+#swapchar-page .scExportWrapper { display: inline-flex; align-items: center; }
+#swapchar-page .columnToggleWrapper .btn,
+#swapchar-page .scExportWrapper .btn,
+#swapchar-page .scExportWrapper .dt-button,
+#swapchar-page .scExportWrapper .dt-buttons { margin: 0 !important; }
+/* Todos os botões da barra com a MESMA altura e o mesmo respiro interno —
+   Show/entries, Columns, Export, Clear filters e Print Advice vêm de origens
+   diferentes (template, DataTables Buttons e JS), cada uma com o seu default. */
+#swapchar-page .card-body > .d-flex .btn,
+#swapchar-page .card-body > .d-flex .dt-button {
+    padding: .34rem .7rem; line-height: 1.35; white-space: nowrap;
+}
+#swapchar-page .card-body > .d-flex .form-select-sm { padding-top: .28rem; padding-bottom: .28rem; }
+/* E respiro entre a barra e a tabela, para os <th> não colarem nos botões. */
+#swapchar-page .card-body > .table-responsive { padding-top: .15rem; }
+
+/* ── Table ──────────────────────────────────────────────────────────────── */
+#swapchar-table thead th {
+    white-space: nowrap; text-overflow: ellipsis; min-width: 120px; padding: 8px 12px;
+    text-align: center !important; vertical-align: middle !important; font-size: 0.7rem;
+}
+#swapchar-table tbody td { white-space: nowrap; font-size: 0.74rem; text-align: center; vertical-align: middle; }
+
+/* Larguras por coluna — com a coluna de Actions ligada o bloco fixo tem TRÊS
+   colunas: (1)=checkbox (2)=Actions (3)=Status; (4..14)=_OPTADV_COLUMNS. Contar
+   a partir de 3, como na tela sem Actions, desloca toda a fileira em uma coluna
+   e as larguras passam a valer para a vizinha — sem erro nenhum na tela. */
+#swapchar-table th:nth-child(1),  #swapchar-table td:nth-child(1)  { min-width: 38px;  width: 38px; }  /* checkbox */
+#swapchar-table th:nth-child(2),  #swapchar-table td:nth-child(2)  { min-width: 118px; width: 118px; } /* Actions */
+#swapchar-table th:nth-child(3),  #swapchar-table td:nth-child(3)  { min-width: 90px;  width: 90px; }  /* Status */
+#swapchar-table th:nth-child(4),  #swapchar-table td:nth-child(4)  { min-width: 260px; }              /* Contraparte */
+#swapchar-table th:nth-child(5),  #swapchar-table td:nth-child(5)  { min-width: 130px; }              /* B3 ID */
+#swapchar-table th:nth-child(6),  #swapchar-table td:nth-child(6)  { min-width: 150px; }              /* Nº da Confirmação */
+#swapchar-table th:nth-child(7),  #swapchar-table td:nth-child(7)  { min-width: 140px; }              /* Data de Início */
+#swapchar-table th:nth-child(8),  #swapchar-table td:nth-child(8)  { min-width: 180px; }              /* Ativo Subjacente */
+#swapchar-table th:nth-child(9),  #swapchar-table td:nth-child(9)  { min-width: 110px; }              /* Ptax */
+#swapchar-table th:nth-child(10), #swapchar-table td:nth-child(10) { min-width: 170px; }              /* Cotação Ativo Subjacente */
+#swapchar-table th:nth-child(11), #swapchar-table td:nth-child(11) { min-width: 150px; }              /* Quantidade da Operação */
+#swapchar-table th:nth-child(12), #swapchar-table td:nth-child(12) { min-width: 150px; }              /* Resultado Apurado */
+#swapchar-table th:nth-child(13), #swapchar-table td:nth-child(13) { min-width: 120px; }              /* IR 0,005% */
+#swapchar-table th:nth-child(14), #swapchar-table td:nth-child(14) { min-width: 150px; }              /* Resultado Líquido */
+
+/* Per-column filter row — New Deals style (subtle rounded inputs, Action Blue focus). */
+#swapchar-table thead tr.sc-th-filter th { padding: .3rem .4rem .5rem; border-top: 1px solid var(--sc-hairline); }
+#swapchar-table thead tr.sc-th-filter input.sc-col-filter {
+    width: 100%; min-width: 96px; height: 30px; font-size: .72rem; font-weight: 400;
+    text-align: center; padding: 3px 9px;
+    border: 1px solid var(--sc-hairline); border-radius: 8px;
+    background: var(--bs-tertiary-bg, #f8f9fa); color: var(--ins-body-color);
+    transition: border-color 150ms cubic-bezier(0.23,1,0.32,1),
+                box-shadow 150ms cubic-bezier(0.23,1,0.32,1),
+                background-color 150ms cubic-bezier(0.23,1,0.32,1);
+}
+#swapchar-table thead tr.sc-th-filter input.sc-col-filter::placeholder { color: var(--ins-secondary-color); opacity: .8; font-weight: 400; }
+@media (hover: hover) and (pointer: fine) {
+    #swapchar-table thead tr.sc-th-filter input.sc-col-filter:hover { border-color: rgba(0,102,204,.35); }
+}
+#swapchar-table thead tr.sc-th-filter input.sc-col-filter:focus {
+    outline: none; border-color: #0066cc;
+    background: var(--ins-secondary-bg, #fff);
+    box-shadow: 0 0 0 3px rgba(0,102,204,.15);
+}
+#swapchar-table thead tr.sc-th-filter input.sc-col-filter.sc-has-val {
+    border-color: rgba(0,102,204,.55); background: rgba(0,102,204,.06); font-weight: 500;
+}
+@media (prefers-reduced-motion: reduce) {
+    #swapchar-table thead tr.sc-th-filter input.sc-col-filter { transition: none; }
+}
+#swapchar-page .toggle-vis + label { cursor: pointer; }
+#swapchar-page .btn:active { transform: scale(0.97); }
+@media (prefers-reduced-motion: reduce) {
+    #swapchar-page * { transition: none !important; animation: none !important; }
+    #swapchar-page .btn:active { transform: none; }
+}
+
+/* Export collection dropdown — solid background + readable text (project standard).
+   NOT scoped to #swapchar-page: DataTables appends .dt-button-collection to <body>. */
+.dt-button-collection {
+    z-index: 2000;
+    background: #fff !important;
+    border: 1px solid rgba(0,0,0,.15) !important;
+    box-shadow: 0 4px 16px rgba(0,0,0,.18) !important;
+    border-radius: .375rem !important;
+    padding: .25rem 0 !important;
+    opacity: 1 !important;
+}
+[data-bs-theme="dark"] .dt-button-collection {
+    background: #2b2f3a !important;
+    border-color: rgba(255,255,255,.15) !important;
+}
+.dt-button-collection .dt-button,
+.dt-button-collection .dropdown-item {
+    display: flex; align-items: center;
+    background: transparent !important;
+    color: #212529 !important;
+    border: none !important;
+    width: 100% !important;
+    text-align: left !important;
+    padding: .4rem 1rem !important;
+    font-size: .84rem !important;
+    opacity: 1 !important;
+}
+[data-bs-theme="dark"] .dt-button-collection .dt-button,
+[data-bs-theme="dark"] .dt-button-collection .dropdown-item { color: #dee2e6 !important; }
+.dt-button-collection .dt-button:hover,
+.dt-button-collection .dt-button:focus,
+.dt-button-collection .dropdown-item:hover,
+.dt-button-collection .dropdown-item:focus {
+    background: rgba(13,110,253,.08) !important;
+    color: #0d6efd !important;
+}
+[data-bs-theme="dark"] .dt-button-collection .dt-button:hover,
+[data-bs-theme="dark"] .dt-button-collection .dropdown-item:hover {
+    background: rgba(255,255,255,.08) !important;
+    color: #6ea8fe !important;
+}
+
+/* ── Botões de ação da linha (Edit / Confirm / Delete) ──────────────────────
+   Quadrado arredondado, NÃO círculo. O `rounded-circle` do Bootstrap arredonda
+   os cantos em 50% da CAIXA — e a caixa do .btn-sm é mais larga que alta por
+   causa do padding lateral, então o resultado é uma elipse. Travar 32×32 é o
+   que faz o raio produzir um quadrado de cantos redondos, e é o mesmo padrão
+   do .ops-row-act do Other Products Summary — as duas telas mostram a mesma
+   linha de liquidação e não podem ter botões de formatos diferentes.
+
+   min/max junto de width/height: sem eles, um `min-width` de tema aplicado a
+   .btn volta a esticar um dos botões e a fileira sai desalinhada. */
+#swapchar-page .sc-row-act {
+    width: 32px; height: 32px;
+    min-width: 32px; max-width: 32px; min-height: 32px; max-height: 32px;
+    padding: 0; flex: 0 0 auto;
+    display: inline-flex; align-items: center; justify-content: center;
+    line-height: 1;
+    border-radius: 10px !important;
+}
+#swapchar-page .sc-row-act > i { font-size: 1rem; }
+#swapchar-page .sc-row-act {
+    transition: transform 140ms ease-out, box-shadow 140ms ease;
+}
+@media (hover: hover) and (pointer: fine) {
+    #swapchar-page .sc-row-act:hover { transform: translateY(-1px); }
+    #swapchar-page .btn-danger.sc-row-act:hover  { box-shadow: 0 2px 8px rgba(220,53,69,.38); }
+    #swapchar-page .btn-success.sc-row-act:hover { box-shadow: 0 2px 8px rgba(25,135,84,.38); }
+    #swapchar-page .btn-info.sc-row-act:hover    { box-shadow: 0 2px 8px rgba(13,202,240,.38); }
+}
+@media (prefers-reduced-motion: reduce) {
+    #swapchar-page .sc-row-act,
+    #swapchar-page .sc-row-act:hover { transition: none; transform: none; }
+}
+</style>
+{% endblock extra_css %}
+
+{% block page_content %}
+<!-- data-actions liga a coluna de Actions no visualizador compartilhado. Ele
+     serve cinco páginas: sem este atributo, as outras quatro continuam sem
+     a coluna e sem saber que ela existe. -->
+<div id="swapchar-page" class="container-fluid" data-content="" data-api="/api/other-products-option-settlement-advice/data" data-ref-date="{{ ref_date }}" data-actions="1">
+    {% set title='Option Settlement Advice' %}
+    {% set crumbs=['OTC Tracker', 'Daily Settlements', 'Other Products', 'Option', 'Settlement Advice'] %}
+    {% include 'partials/page-title.html' %}
+
+    <!-- Section 1: widget + smart filter + reference date -->
+    <div class="row sc-widgets row-cols-md-2 row-cols-1 g-2">
+        <div class="col">
+            <div class="sc-widget sc-widget--total">
+                <div class="sc-widget__head">
+                    <span class="sc-widget__icon"><i class="ti ti-receipt"></i></span>
+                    <h3 class="sc-widget__title" data-lang="sc-w-total">Total</h3>
+                    <span class="sc-widget__value" id="sc-w-total">0</span>
+                </div>
+                <div class="sc-widget__subs" style="border-top-color: rgba(255,255,255,.25);">
+                    <div class="sc-widget__sub" style="color: rgba(255,255,255,.85);">
+                        <i class="ti ti-calendar-event"></i><span data-lang="sc-total-asof">Settlement date as of</span>
+                        <span class="sc-sub-val" id="sc-total-asof" style="color:#fff;">—</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Smart filter + reference date -->
+    <div class="card mt-2">
+        <div class="card-body py-2">
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <div class="flex-grow-1 position-relative" style="min-width: 280px;">
+                    <div class="smart-filter-wrapper" id="scSmartFilter">
+                        <div class="smart-filter-chips" id="scChips"></div>
+                        <input type="text" class="smart-filter-input" id="scInput"
+                               placeholder="Filter by column…" data-lang-placeholder="sc-filter-ph" autocomplete="off">
+                        <ul class="smart-filter-dropdown mb-0 ps-0" id="scDropdown"></ul>
+                    </div>
+                </div>
+                <button class="btn btn-secondary bg-gradient btn-search" type="button" id="scSearchBtn">
+                    <i class="ti ti-search fs-xl me-1"></i><span data-lang="sc-search">Search</span>
+                </button>
+                <div class="vr d-none d-md-block"></div>
+                <label for="sc-date" class="text-muted fs-xs mb-0 text-nowrap" data-lang="sc-refdate">Reference date</label>
+                <div class="sc-datewrap" id="scDateWrap">
+                    <input type="text" id="sc-date" readonly autocomplete="off" placeholder="dd/mm/yyyy">
+                    <span class="sc-cal-btn" title="Open calendar"><i class="ti ti-calendar"></i></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Section 2: toolbar (Columns + Export) + table -->
+    <div class="card mt-2">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <div class="d-flex align-items-center gap-1">
+                        <label class="form-label mb-0 fs-xs text-muted" data-lang="sc-show">Show</label>
+                        <select class="form-select form-select-sm sc-page-len" style="width:76px;">
+                            <option value="10">10</option>
+                            <option value="25" selected>25</option>
+                            <option value="50">50</option>
+                            <option value="100">100</option>
+                            <option value="-1" data-lang="sc-all">All</option>
+                        </select>
+                        <label class="form-label mb-0 fs-xs text-muted" data-lang="sc-entries">entries</label>
+                    </div>
+                    <div class="columnToggleWrapper"></div>
+                    <div class="scExportWrapper"></div>
+                    <button class="btn btn-sm btn-soft-secondary" type="button" id="scClearFilters">
+                        <i class="ti ti-filter-off me-1"></i><span data-lang="sc-clear-filters">Clear filters</span>
+                    </button>
+                    <button class="btn btn-sm btn-primary bg-gradient" type="button" id="optPrintAdvice">
+                        <i class="ti ti-printer me-1"></i><span data-lang="sw-print-advice">Print Advice</span>
+                    </button>
+                </div>
+                <div class="text-muted fs-xs">
+                    <span data-lang="sc-showing">Showing</span> <span id="sc-count">0</span> <span>rows</span>
+                </div>
+            </div>
+            <div class="table-responsive">
+                <table id="swapchar-table" class="table table-sm table-hover table-striped table-centered mb-0" style="width:100%">
+                    <thead><tr id="swapchar-head"></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Modal de edição da linha ─────────────────────────────────────────────
+     Mesmo padrão do "Add/Edit row" das páginas de New Deals: os campos são
+     gerados a partir das colunas que o servidor mandou, então uma coluna nova
+     no aviso aparece aqui sozinha — sem uma segunda lista para manter. -->
+<div class="modal fade" id="optAdvEditModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h5 class="modal-title fs-sm">
+          <i class="ti ti-edit me-1"></i><span data-lang="sw-edit-title">Editar linha do aviso</span>
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="alert alert-info py-2 fs-xs" data-lang="sw-edit-hint">
+          A correção vale para o aviso deste dia — na tela e no documento impresso.
+          Os arquivos de origem não são alterados.
+        </div>
+        <div class="row g-2" id="optAdvEditFields"></div>
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-sm btn-light" data-bs-dismiss="modal"
+                data-lang="sw-edit-cancel">Cancelar</button>
+        <button type="button" class="btn btn-sm btn-primary bg-gradient" id="optAdvEditSave">
+          <i class="ti ti-device-floppy me-1"></i><span data-lang="sw-edit-save">Salvar</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock page_content %}
+
+{% block extra_javascript %}
+<script src="{{ config.ASSETS_ROOT }}/plugins/jquery/jquery.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/moment.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.buttons.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/jszip.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.html5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.print.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/table-std.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/pages/live-position-swap-characteristics.js?v=20260705"></script>
+<!-- Ações da linha (Edit / Confirm / Delete) — também em script PRÓPRIO. O
+     visualizador compartilhado desenha os botões e entrega o clique; o que cada
+     um FAZ é desta página, porque só ela tem endpoint para gravar. -->
+<script>
+(function () {
+    var page = document.getElementById('swapchar-page');
+    if (!page || !page.getAttribute('data-actions')) return;
+    var API = '/api/other-products-option-settlement-advice';
+    var KEY_COL = 1;                       // B3 ID — a chave da linha
+    var modalEl = document.getElementById('optAdvEditModal');
+    var fieldsEl = document.getElementById('optAdvEditFields');
+    var saveBtn = document.getElementById('optAdvEditSave');
+    var editing = null;                    // {contrato, cells, columns}
+
+    function alertBox(icon, title, text) {
+        if (window.Swal) Swal.fire({ icon: icon, title: title, text: text });
+        else alert(title + (text ? '\n' + text : ''));
+    }
+    // A data sai do MESMO campo que a tabela usa — ler a tela em vez de guardar
+    // um estado próprio evita gravar a edição no dia errado depois de trocar a data.
+    function currentYmd() {
+        var v = (document.getElementById('sc-date') || {}).value || '';
+        var m = v.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+        return m ? (m[3] + '-' + m[2] + '-' + m[1]) : (page.getAttribute('data-ref-date') || '');
+    }
+    function reload() { if (window.scLoad) window.scLoad(currentYmd()); }
+    function esc(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (ch) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]; });
+    }
+    function post(path, body) {
+        return fetch(API + path, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin', body: JSON.stringify(body)
+        }).then(function (r) { return r.json().catch(function () { return {}; }); });
+    }
+
+    function openEdit(cells, columns) {
+        editing = { contrato: String(cells[KEY_COL] || '').trim(), cells: cells, columns: columns };
+        fieldsEl.innerHTML = columns.map(function (label, i) {
+            // O B3 ID é a CHAVE do registro — editá-lo criaria uma linha órfã e
+            // deixaria a original intacta. Fica visível e travado.
+            var locked = (i === KEY_COL);
+            return '<div class="col-md-6">' +
+                '<label class="form-label form-label-sm mb-1">' + esc(label) +
+                (locked ? ' <span class="badge text-bg-secondary">chave</span>' : '') + '</label>' +
+                '<input type="text" class="form-control form-control-sm opt-edit-inp" ' +
+                'data-i="' + i + '" value="' + esc(cells[i]) + '"' + (locked ? ' readonly' : '') + '>' +
+                '</div>';
+        }).join('');
+        if (window.bootstrap && bootstrap.Modal) bootstrap.Modal.getOrCreateInstance(modalEl).show();
+    }
+
+    if (saveBtn) saveBtn.addEventListener('click', function () {
+        if (!editing) return;
+        // Só o que MUDOU vai no payload: gravar as 11 células congelaria a linha
+        // inteira nos valores de hoje, e amanhã ela deixaria de acompanhar os
+        // arquivos de origem.
+        var changed = {};
+        fieldsEl.querySelectorAll('.opt-edit-inp').forEach(function (inp) {
+            var i = parseInt(inp.getAttribute('data-i'), 10);
+            if (String(editing.cells[i] == null ? '' : editing.cells[i]) !== inp.value) {
+                changed[i] = inp.value;
+            }
+        });
+        if (!Object.keys(changed).length) {
+            if (window.bootstrap) bootstrap.Modal.getOrCreateInstance(modalEl).hide();
+            return;
+        }
+        saveBtn.disabled = true;
+        post('/row', { date: currentYmd(), contrato: editing.contrato, cells: changed })
+            .then(function (j) {
+                if (!j.ok) { alertBox('error', 'Editar', j.error || 'Falha ao gravar.'); return; }
+                if (window.bootstrap) bootstrap.Modal.getOrCreateInstance(modalEl).hide();
+                reload();
+            })
+            .catch(function () { alertBox('error', 'Editar', 'Falha de rede.'); })
+            .then(function () { saveBtn.disabled = false; });
+    });
+
+    // Chamado pelo visualizador compartilhado a cada clique num botão da linha.
+    window.scRowAction = function (act, i, cells, columns) {
+        var contrato = String(cells[KEY_COL] || '').trim();
+        if (act === 'edit') { openEdit(cells, columns); return; }
+        if (!contrato) { alertBox('warning', 'Ação', 'Linha sem B3 ID.'); return; }
+
+        if (act === 'confirm') {
+            // O status é por contraparte × LOB × produto (é assim que o aviso é
+            // emitido), então confirmar UMA linha confirma o aviso inteiro. Dizer
+            // isso antes evita a surpresa de ver várias linhas mudarem de cor.
+            post('/row/confirm', { date: currentYmd(), contrato: contrato })
+                .then(function (j) {
+                    if (!j.ok) { alertBox('error', 'Confirmar', j.error || 'Falha.'); return; }
+                    alertBox('success', 'Confirmado',
+                        'Aviso de ' + (j.counterparty || '') + ' marcado como Sent' +
+                        (j.rows > 1 ? ' (' + j.rows + ' linhas do mesmo aviso).' : '.'));
+                    reload();
+                })
+                .catch(function () { alertBox('error', 'Confirmar', 'Falha de rede.'); });
+            return;
+        }
+
+        if (act === 'delete') {
+            var ask = window.Swal
+                ? Swal.fire({ icon: 'warning', title: 'Remover do aviso?',
+                              text: 'B3 ID ' + contrato + ' sai do aviso deste dia. Os arquivos de origem não são alterados.',
+                              showCancelButton: true, confirmButtonText: 'Remover',
+                              cancelButtonText: 'Cancelar', confirmButtonColor: '#dc3545' })
+                    .then(function (r) { return r.isConfirmed; })
+                : Promise.resolve(window.confirm('Remover o B3 ID ' + contrato + ' do aviso deste dia?'));
+            ask.then(function (ok) {
+                if (!ok) return;
+                return post('/row/delete', { date: currentYmd(), contrato: contrato })
+                    .then(function (j) {
+                        if (!j.ok) { alertBox('error', 'Remover', j.error || 'Falha.'); return; }
+                        reload();
+                    });
+            }).catch(function () { alertBox('error', 'Remover', 'Falha de rede.'); });
+        }
+    };
+})();
+</script>
+<!-- Print Advice em script PRÓPRIO: o visualizador genérico é compartilhado com
+     Athena/Events/VCP e não pode ganhar um botão que só existe aqui. -->
+<script>
+(function () {
+    var btn = document.getElementById('optPrintAdvice');
+    if (!btn) return;
+    var page = document.getElementById('swapchar-page');
+
+    function b64ToBlob(b64, mime) {
+        var bin = atob(b64), bytes = new Uint8Array(bin.length);
+        for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        return new Blob([bytes], { type: mime || 'application/octet-stream' });
+    }
+    function saveBlob(blob, filename) {
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url; a.download = filename;
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(function () { URL.revokeObjectURL(url); }, 1500);
+    }
+    function alertBox(icon, title, text) {
+        if (window.Swal) Swal.fire({ icon: icon, title: title, text: text });
+        else alert(title + (text ? '\n' + text : ''));
+    }
+    // A data vem do MESMO campo que a tabela usa. Ler o dd/mm/yyyy da tela em vez
+    // de guardar um estado próprio evita o clássico: trocar a data, gerar, e o
+    // aviso sair do dia anterior.
+    function currentYmd() {
+        var v = (document.getElementById('sc-date') || {}).value || '';
+        var m = v.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+        return m ? (m[3] + '-' + m[2] + '-' + m[1]) : (page.getAttribute('data-ref-date') || '');
+    }
+
+    // Depois de gerar, a tabela recarrega: o status das linhas passou a Generated
+    // no servidor, e deixar a tela mostrando New seria mentira até o próximo F5.
+    function reload() { if (window.scLoad) window.scLoad(currentYmd()); }
+
+    btn.addEventListener('click', function () {
+        if (btn.disabled) return;
+        var orig = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Print Advice';
+        function done() { btn.disabled = false; btn.innerHTML = orig; }
+        fetch('/api/other-products-option-settlement-advice/emails', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ date: currentYmd() })
+        }).then(function (r) {
+            // Até 2 avisos voltam como JSON com os .eml em base64; 3+ vêm como
+            // um .zip binário. O content-type é o que separa os dois caminhos.
+            var ct = r.headers.get('Content-Type') || '';
+            if (ct.indexOf('application/json') >= 0) {
+                return r.json().then(function (j) {
+                    if (!j.ok) { alertBox('error', 'Print Advice', j.error || 'Falhou'); return; }
+                    if (!j.count) { alertBox('info', 'Print Advice', 'Nenhum aviso a gerar para esta data.'); return; }
+                    (j.files || []).forEach(function (f) {
+                        saveBlob(b64ToBlob(f.b64, 'message/rfc822'), f.filename);
+                    });
+                    alertBox('success', 'Print Advice', j.count + ' aviso(s) gerado(s).');
+                    reload();
+                });
+            }
+            var n = r.headers.get('X-Draft-Count') || '';
+            return r.blob().then(function (b) {
+                saveBlob(b, 'Avisos_Liquidacao_Opcao.zip');
+                alertBox('success', 'Print Advice', n + ' aviso(s) gerado(s).');
+                reload();
+            });
+        }).catch(function () {
+            alertBox('error', 'Print Advice', 'Falha na geração.');
+        }).then(done, done);
+    });
+})();
+</script>
+{% endblock extra_javascript %}

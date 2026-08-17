@@ -64,13 +64,35 @@ check('o antigo swap-b3-events saiu', "'swap-b3-events': {" in SRC, False)
 check('e o arquivo dele tambem',
       os.path.isfile(os.path.join(ROOT, 'apps/static/data/mappings/swap-b3-events.json')), False)
 seed = R._MAPPING_DEFS['opb3-events']['seed']
-check('quatro linhas de seed', len(seed), 4)
+check('sete linhas de seed', len(seed), 7)
 check('as tres do swap continuam la',
       sorted(r['TIPO OPERACAO'] for r in seed if r['TIPO TITULO'] == 'SWAP'),
       ['PAGAMENTO DE DIF. AMORTIZACAO', 'PAGAMENTO DE DIF. DE JUROS', 'PAGAMENTO DE PREMIO'])
+# TER e OPC ganharam a linha de RESGATE: a selecao do evento de termo estava FIXA
+# no `_ndfadv_collect` e virou cadastro, e a opcao nasce com a mesma regra. Sem
+# elas, "Tipo Titulo sem Consider nao e filtrado" deixaria TODO evento de termo
+# entrar no aviso no dia em que o codigo parou de testar 'resgate'.
+check('TER nasce com o RESGATE cadastrado',
+      [r['TIPO OPERACAO'] for r in seed if r['TIPO TITULO'] == 'TER'], ['RESGATE'])
+check('OPC nasce com RESGATE e o premio',
+      sorted(r['TIPO OPERACAO'] for r in seed if r['TIPO TITULO'] == 'OPC'),
+      ['PAGAMENTO DE PREMIO', 'RESGATE'])
 check('e a regra do cancelamento nasce sem Tipo Titulo (vale para todos)',
       [(r['TIPO TITULO'], r['USE']) for r in seed if r['STATUS B3']],
       [('', 'Disregard')])
+# O `upgrade` completa o arquivo JA em disco — sem ele a instancia que tem o
+# opb3-events.json de antes ficaria sem regra de TER/OPC.
+up = R._MAPPING_DEFS['opb3-events']['upgrade']
+antigo = [r for r in seed if r['TIPO TITULO'] in ('SWAP', '')]
+check('upgrade acrescenta TER e OPC ao arquivo antigo',
+      sorted((r['TIPO TITULO'], r['TIPO OPERACAO']) for r in up(antigo)
+             if r['TIPO TITULO'] in ('TER', 'OPC')),
+      [('OPC', 'PAGAMENTO DE PREMIO'), ('OPC', 'RESGATE'), ('TER', 'RESGATE')])
+check('e NAO sobrescreve quem ja configurou o TER',
+      [r['TIPO OPERACAO'] for r in up(antigo + [dict(seed[0], **{
+          'TIPO TITULO': 'TER', 'TIPO OPERACAO': 'PAGAMENTO DE EVENTO'})])
+       if r['TIPO TITULO'] == 'TER'],
+      ['PAGAMENTO DE EVENTO'])
 
 print('\n== 2. lista branca por Tipo Titulo ==')
 # SWAP tem Consider proprio -> so o registrado entra.
@@ -80,9 +102,17 @@ check('SWAP premio entra', R._opb3_settle_ok(rec('SWAP', 'PAGAMENTO DE PREMIO'))
 check('SWAP resgate NAO entra', R._opb3_settle_ok(rec('SWAP', 'RESGATE')), False)
 check('SWAP resgate antecipado NAO entra',
       R._opb3_settle_ok(rec('SWAP', 'RESGATE ANTECIPADO')), False)
-# TER e OPC nao tem Consider -> nao sao filtrados (e como a tela se comporta hoje).
+# TER e OPC ganharam Consider proprio -> viraram lista branca tambem. Era aqui
+# que o `_ndfadv_collect` testava 'resgate' por conta propria; a resposta passou
+# a ser uma so, do cadastro, para os tres Settlement Advice de Other Products.
 check('TER resgate entra', R._opb3_settle_ok(rec('TER', 'RESGATE')), True)
-check('OPC premio entra', R._opb3_settle_ok(rec('OPC', 'PAGAMENTO DE PREMIO')), True)
+check('TER pagamento de evento NAO entra (nao cadastrado)',
+      R._opb3_settle_ok(rec('TER', 'PAGAMENTO DE EVENTO')), False)
+check('OPC resgate entra', R._opb3_settle_ok(rec('OPC', 'RESGATE')), True)
+check('OPC premio entra (o aviso o distingue no assunto)',
+      R._opb3_settle_ok(rec('OPC', 'PAGAMENTO DE PREMIO')), True)
+check('OPC registro NAO entra', R._opb3_settle_ok(rec('OPC', 'REGISTRO')), False)
+# COE nao tem Consider nenhum -> nao e filtrado, que e como a tela se comporta.
 check('COE qualquer coisa entra', R._opb3_settle_ok(rec('COE', 'QUALQUER EVENTO')), True)
 
 print('\n== 3. Disregard vence, e o coringa vale para todo Tipo Titulo ==')

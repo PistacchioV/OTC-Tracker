@@ -6113,15 +6113,16 @@ def _ops_swap_trade_rows(settle_ref):
 #  cadastro `opb3-events` aprova (é o universo do Trade Level). Registrar mais
 #  um evento lá faz o card e a tabela crescerem JUNTOS — que é o ponto.
 #
-#  Família sem Trade Level ainda (Option, NDF Commodities, COE) volta `na: True`:
+#  Família sem Trade Level ainda (hoje só COE) volta `na: True`:
 #  a tela mostra um traço em vez de um "Check" âmbar, porque não há divergência —
 #  há conta que ainda não é feita. Pintar de âmbar leria como erro de dado.
 
 
 def _ops_recon(trade_rows):
     """{família → {b3_count, b3_value, int_count, int_value, diff_value, matched,
-    na}} + 'total'. Hoje só SWAP tem lado interno; as demais famílias entram
-    marcadas como `na` até as suas linhas do Trade Level existirem."""
+    na}} + 'total'. SWAP, NDF Commodities e Option têm lado interno; as demais
+    famílias entram marcadas como `na` até as suas linhas do Trade Level
+    existirem."""
     fams = ('swap', 'option', 'ndf', 'coe')
     acc = {k: {'b3_count': 0, 'b3_value': 0.0, 'int_count': 0, 'int_value': 0.0}
            for k in fams + ('total',)}
@@ -6183,6 +6184,44 @@ def _ops_ndfc_trade_rows(settle_ref):
             'id_b3': r.get('b3_id', ''),
             'product': 'TERMO',
             'type': r.get('commodity', ''),
+            'settlement': _ops_fmt_amt(internal),
+            'settlement_b3': _ops_fmt_amt(b3),
+            'tax_income': _ops_fmt_amt(r.get('ir')),
+            'difference': _ops_fmt_amt(diff),
+            '_settle_n': internal,
+            '_tax_n': r.get('ir'),
+            '_b3_n': b3,
+            '_legal': r.get('legal', ''),
+        })
+    return out
+
+
+def _ops_opt_trade_rows(settle_ref):
+    """Linhas de OPTION do Trade Level.
+
+    Saem das MESMAS linhas do Settlement Advice de Opção (`_optadv_items`, já com
+    as correções manuais do dia), pela mesma razão do termo: a tabela e o aviso
+    têm de mostrar o mesmo valor para o mesmo contrato. O que muda é só o
+    recorte das colunas.
+
+    Produto **OPTION** — é o que faz o card de reconciliação de Option deixar de
+    ser `na` e passar a contar. LOB = a classe do subjacente (COMMODITIES,
+    EQUITIES, MOEDA), Type = o ativo subjacente, Internal ID = o Nº da
+    Confirmação e B3 ID = o Código IF do Operations B3.
+    """
+    ref_dt = datetime(settle_ref.year, settle_ref.month, settle_ref.day)
+    out = []
+    for r in _optadv_items(ref_dt):
+        internal, b3 = r.get('apurado'), r.get('b3')
+        diff = None if (internal is None or b3 is None) else internal - b3
+        out.append({
+            'status': 'OK' if (diff is not None and abs(diff) <= _OPS_RECON_TOL) else 'Check',
+            'lob': r.get('lob', ''),
+            'counterparty': r.get('counterparty', ''),
+            'internal_id': r.get('internal_id', ''),
+            'id_b3': r.get('b3_id', ''),
+            'product': 'OPTION',
+            'type': r.get('underlying', ''),
             'settlement': _ops_fmt_amt(internal),
             'settlement_b3': _ops_fmt_amt(b3),
             'tax_income': _ops_fmt_amt(r.get('ir')),
@@ -6440,7 +6479,8 @@ def _ops_is_internal_cpty(name, spn=''):
 
 
 def _ops_trade_rows(settle_ref):
-    """TODAS as linhas do Trade Level da data — hoje SWAP + NDF Commodities.
+    """TODAS as linhas do Trade Level da data — hoje SWAP + NDF Commodities +
+    OPTION.
 
     É o único lugar que sabe quais famílias existem. A tela, os cards de
     reconciliação e o e-mail de TED chamam esta função; quando o Trade Level
@@ -6454,7 +6494,8 @@ def _ops_trade_rows(settle_ref):
     """
     rows = []
     for label, fn in (('swap', _ops_swap_trade_rows),
-                      ('NDF commodities', _ops_ndfc_trade_rows)):
+                      ('NDF commodities', _ops_ndfc_trade_rows),
+                      ('option', _ops_opt_trade_rows)):
         try:
             rows += fn(settle_ref)
         except Exception:
@@ -8749,8 +8790,12 @@ def _ndfadv_collect(ref):
         titulo = str(rec.get('Título', '') or '').strip()
         if not titulo or titulo.upper() in seen:
             continue
-        if _fcst_norm(rec.get('Tipo Operação', '')).strip() != 'resgate':
-            continue
+        # O EVENTO que liquida sai do cadastro `opb3-events` (o filtro já rodou
+        # em `_opb3_settle_rows`), não de um teste aqui. O 'resgate' estava fixo
+        # neste ponto e era a segunda resposta para a pergunta que o cadastro
+        # existe para responder — a mesa registrava um evento novo lá e o aviso
+        # continuava cego a ele, sem erro nenhum. O que fica é o recorte de
+        # PRODUTO, que é o assunto desta tela.
         if 'ter' not in _fcst_norm(rec.get('Tipo Título', '')):
             continue
         if 'commodit' not in _fcst_norm(_opb3_tipo_for(rec, tipo_maps)):
@@ -8953,11 +8998,602 @@ def api_ndf_settlement_advice_data():
         items = []
     items.sort(key=lambda r: (str(r['counterparty']).strip() == '',
                               _fcst_norm(str(r['counterparty']))))
+    # Status por linha, do MESMO overlay do Settlement Summary — o que o aviso de
+    # Swap já fazia. Sem esta chave o visualizador compartilhado cai no badge
+    # fixo 'In Custody', que é o rótulo da Live Position (a tela de onde o JS
+    # veio) e não diz nada sobre um aviso: o ciclo dele é New → Generated → Sent.
+    # A chave é a da linha do Summary a que o contrato pertence (contraparte ×
+    # LOB × produto), a mesma que `_ops_ndfc_trade_rows` grava.
+    _p, meta = _opssum_meta_load(ref)
+    statuses = [_opssum_status(meta, r['counterparty'], 'COMMODITIES', 'TERMO') for r in items]
     return jsonify({'success': True, 'columns': _NDFADV_COLUMNS,
-                    'rows': [r['cells'] for r in items],
+                    'rows': [r['cells'] for r in items], 'statuses': statuses,
                     'widgets': {'total': len(items)},
                     'ref_date': ref.strftime('%Y-%m-%d'),
                     'ref_date_fmt': ref.strftime('%d/%m/%Y')})
+
+
+# ── Other Products › Option › Settlement Advice ──────────────────────────────
+#  Irmão do aviso de Termo de Mercadoria, e de propósito: o caminho até o valor é
+#  o MESMO (Operations B3 → posição → OTM Settlements pelo sufixo do Trade Id),
+#  e por isso ele reusa `_ndfadv_otm_by_suffix`, `_ndfc_ir` e `_ndfadv_media_label`
+#  em vez de recopiar a conta — as duas telas têm de imprimir o mesmo imposto
+#  sobre o mesmo caixa.
+#
+#  O que muda é ONDE a posição guarda os dois identificadores: a posição de
+#  opções não tem `Contrato` nem `Codigo Identificador`.
+#
+#      NDF (DPOSICAO-TER)        Opção (DPOSICAO)
+#      ───────────────────────   ─────────────────────────────
+#      Contrato ............. →  Código IF                (B3 ID)
+#      Codigo Identificador . →  Combinação de operações  (Nº da Confirmação)
+#
+#  Quais linhas do Operations B3 entram é do cadastro `opb3-events` (Tipo Título
+#  = OPC), como nas outras duas telas — aqui não há teste de evento no código.
+_OPTADV_COLUMNS = ['Contraparte', 'B3 ID', 'Nº da Confirmação', 'Data de Início da Operação',
+                   'Ativo Subjacente', 'Ptax', 'Cotação Ativo Subjacente',
+                   'Quantidade da Operação', 'Resultado Apurado (R$)', 'IR 0,005% (R$)',
+                   'Resultado Líquido (R$)']
+# Opção de MOEDA não tem cotação de subjacente a imprimir: o subjacente É a taxa
+# de câmbio, que já sai na coluna Ptax ao lado. A célula vai 'N/A' e não vazia —
+# vazia se lê como "faltou o dado" e manda alguém procurar o que não existe.
+_OPTADV_FX_NA = 'N/A'
+
+
+def _optadv_product_label(classe):
+    """O que vai entre parênteses no ASSUNTO do aviso de opção.
+
+    Commodities e taxa de câmbio têm nome próprio no documento ('Opção de
+    Commodities', 'Opção de Taxas de Câmbio'); qualquer outra classe entra com o
+    texto que a posição de opções escreve na coluna `Classe do ativo subjacente`
+    (AÇÕES, ÍNDICE…). É de propósito que não há de-para de classes aqui: a B3
+    acrescenta classe sem avisar, e um mapa fechado mandaria a classe nova para um
+    rótulo genérico — dizer o nome que veio no arquivo é sempre verdade."""
+    if _optadv_is_commodity(classe):
+        return 'Opção de Commodities'
+    if _optadv_is_fx(classe):
+        return 'Opção de Taxas de Câmbio'
+    c = str(classe or '').strip()
+    return 'Opção de {}'.format(c) if c else 'Opção'
+
+
+def _optadv_is_commodity(classe):
+    """A classe do ativo subjacente da opção é COMMODITIES?
+
+    Teste de TOKEN, no espírito do `_fcst_lob`: é a classe — não a contraparte,
+    não o book — que decide se o Ativo Subjacente sai como
+    `MERCADORIA(SUBJACENTE)` ou só como o subjacente."""
+    return 'commodit' in _fcst_norm(classe)
+
+
+def _optadv_is_fx(classe):
+    """A classe do ativo subjacente da opção é TAXA DE CÂMBIO?
+
+    Mesma família de teste do `_optadv_is_commodity`, e por token: a B3 escreve
+    essa classe ora como MOEDA, ora como TAXA DE CÂMBIO, dependendo do arquivo —
+    comparar o texto inteiro simplesmente não casaria, sem erro nenhum."""
+    s = _fcst_norm(classe)
+    return any(tok in s for tok in ('cambio', 'moeda', 'currency'))
+
+
+def _optadv_subjacente(classe, mercadoria, subjacente):
+    """Coluna `Ativo Subjacente` do aviso de opção.
+
+    Em COMMODITIES a posição já diz a mercadoria por extenso (PETROLEO, MILHO,
+    SOJA) na coluna `Tipo de Mercadoria`, então a célula sai no mesmo formato do
+    termo — `MERCADORIA(SUBJACENTE)` —, mas sem passar pelo `Subjacente.json`:
+    aqui a resposta está na própria linha.
+
+    Fora de commodities (câmbio, equity) NÃO há mercadoria nenhuma, e a célula é
+    só o `Ativo subjacente / Moeda base`. Repetir a classe entre parênteses
+    diria duas vezes a mesma coisa."""
+    subj = str(subjacente or '').strip()
+    merc = str(mercadoria or '').strip()
+    if not _optadv_is_commodity(classe) or not merc:
+        return subj
+    return '{}({})'.format(merc.upper(), subj) if subj else merc.upper()
+
+
+_OPTADV_PRM_AMBIGUO = object()          # sentinela: dois trades na mesma chave
+
+
+def _optadv_cognos_prm(ref):
+    """{identificador → PRM Amount ASSINADO} do Cognos de `ref`, para a opção de
+    TAXA DE CÂMBIO.
+
+    O valor da opção de câmbio NÃO está no OTM Settlements: ele é o prêmio, e
+    quem o tem é o FXO Detail — o arquivo da página Cognos. O SINAL sai da coluna
+    `Direction`: RECEIVE é o banco recebendo (+), PAY é o banco pagando (−). O
+    relatório traz o módulo, e sem o sinal metade dos avisos sairia com a direção
+    invertida — o cliente lendo "vamos debitar" onde o banco é quem paga.
+
+    O índice é pelo **sufixo** do identificador (a mesma regra do OTM: os dois
+    sistemas escrevem o mesmo número com prefixos diferentes) e também pelo valor
+    INTEIRO, sobre as DUAS colunas de id do relatório (`Athena ID` e
+    `TSS Contract NO`) — qual delas casa depende de como a operação foi bookada, e
+    a que não casar simplesmente não aparece na busca.
+
+    Chave ambígua (dois trades caindo no mesmo sufixo) é DESCARTADA em vez de
+    resolvida por desempate: um valor plausível no aviso do cliente errado é pior
+    do que uma célula vazia pedindo conferência."""
+    _jp, data = _cog_load(ref)
+    out = {}
+    for rec in (data or []):
+        v = _conf_to_float(rec.get('PRM Amount'))
+        if v is None:
+            continue
+        direction = _fcst_norm(rec.get('Direction', '')).strip()
+        if direction.startswith('pay'):
+            v = -abs(v)
+        elif direction.startswith('receive'):
+            v = abs(v)
+        # Direction em branco ou desconhecida: o valor entra como veio. Zerar a
+        # linha esconderia o prêmio; inventar um sinal inventaria a direção.
+        for col in ('Athena ID', 'TSS Contract NO'):
+            raw = str(rec.get(col, '') or '').strip().upper()
+            if not raw:
+                continue
+            for k in {raw, raw.rsplit('-', 1)[-1]}:
+                if not k:
+                    continue
+                if k in out and out[k] != v:
+                    out[k] = _OPTADV_PRM_AMBIGUO
+                elif k not in out:
+                    out[k] = v
+    return out
+
+
+def _optadv_prm_for(prm, conf, titulo):
+    """PRM Amount da opção de câmbio, procurado pelo Nº da Confirmação e, se ele
+    não casar, pelo B3 ID. Nada casando (ou chave ambígua) devolve None — a célula
+    fica vazia e pede conferência, que é o desfecho desejado."""
+    for base in (conf, titulo):
+        b = str(base or '').strip().upper()
+        if not b:
+            continue
+        for k in (b, b.rsplit('-', 1)[-1]):
+            v = prm.get(k)
+            if v is _OPTADV_PRM_AMBIGUO:
+                log.warning('[opt-advice] PRM Amount ambíguo para a chave %s — '
+                            'a célula fica vazia em vez de escolher um dos dois', k)
+                return None
+            if v is not None:
+                return v
+    return None
+
+
+def _optadv_collect(ref):
+    """Linhas do Option Settlement Advice (commodities, equities e câmbio) da
+    data `ref`."""
+    # Peneirado pelo `opb3-events` UMA vez, no topo — mesma razão do aviso de
+    # termo: a lista de Títulos e a soma do Settlement B3 lá embaixo têm de
+    # enxergar as mesmas linhas.
+    opb3 = _opb3_settle_rows(ref)
+    if not opb3:
+        return []
+
+    titulos, seen = [], set()
+    for rec in opb3:
+        titulo = str(rec.get('Título', '') or '').strip()
+        if not titulo or titulo.upper() in seen:
+            continue
+        if 'opc' not in _fcst_norm(rec.get('Tipo Título', '')):
+            continue
+        seen.add(titulo.upper())
+        titulos.append((titulo, rec))
+    if not titulos:
+        return []
+
+    # Posição de opções pela TELA do Live Position: as datas já vêm dd/mm/yyyy e
+    # o bloco posicional das médias asiáticas já vem resolvido em colunas.
+    lp = _lpopt_collect(ref)
+    li = {c: i for i, c in enumerate(lp.get('columns') or [])}
+    by_codigo_if = {}
+    for row in lp.get('rows') or []:
+        k = str(row[li['Código IF']] if 'Código IF' in li else '').strip().upper()
+        if k:
+            by_codigo_if.setdefault(k, row)
+
+    otm_by_suffix, otm_spn = _ndfadv_otm_by_suffix(ref)
+    # Prêmio do FXO Detail — só a opção de TAXA DE CÂMBIO o consulta, mas o
+    # arquivo é lido UMA vez, aqui: dentro do laço ele seria reaberto por linha.
+    cog_prm = _optadv_cognos_prm(ref)
+    spn_by_name = _ndfsum_refdata_spn()
+    cpd = _cpd_load()
+
+    def _lcell(row, name):
+        i = li.get(name)
+        return '' if (row is None or i is None or i >= len(row)) else str(row[i] or '').strip()
+
+    out = []
+    for titulo, rec in titulos:
+        lrow = by_codigo_if.get(titulo.upper())
+        conf = _lcell(lrow, 'Combinação de operações')
+        suf = conf.rsplit('-', 1)[-1].upper() if conf else ''
+        # Contraparte: mesma ordem do aviso de termo. O **Cpty SPN** do OTM é um
+        # identificador na própria linha do fluxo e resolve o omnibus de graça;
+        # numa conta guarda-chuva o nome que vem da B3 é o do titular, não o do
+        # cliente, e mandar o aviso por ele é mandá-lo para o cliente errado.
+        cliente = _otm_cpty_name(otm_spn.get(suf, '')) if suf else ''
+        cnpj = ''.join(ch for ch in _lcell(lrow, 'CPF/CNPJ Cliente Contraparte') if ch.isdigit())
+        if not cliente and _b3_is_omnibus(rec.get('Conta Contraparte', '')) and cnpj:
+            cliente = _refdata_by_taxid().get(cnpj, '')
+        cliente = (cliente
+                   or _lcell(lrow, 'Contraparte (Nome simplificado)')
+                   or str(rec.get('Contraparte (Nome Simpl.)', '') or '').strip())
+
+        classe = _lcell(lrow, 'Classe do ativo subjacente')
+        # Cotação do subjacente: a data única do fixing; vazia (o caso da
+        # asiática), o mês/ano da 1ª data de verificação. O teste é "é câmbio?" e
+        # não "é commodity ou equity?": as três classes são o universo, e
+        # perguntar pela exceção deixa uma classe nova cair no lado que TEM
+        # cotação — o outro jeito a mandaria para 'N/A' calada.
+        cot = (_OPTADV_FX_NA if _optadv_is_fx(classe) else
+               (_lcell(lrow, 'Data de fixing do ativo subjacente')
+                or _ndfadv_media_label(_lcell(lrow, 'Média Asiática (data) 1'))))
+
+        # Resultado Apurado: em commodities e equity é a soma do OTM Settlements
+        # pelo sufixo (a regra do aviso de termo); em TAXA DE CÂMBIO é o PRM
+        # Amount do Cognos, já com o sinal da coluna Direction. Duas fontes porque
+        # são dois caixas diferentes — a opção de câmbio liquida o PRÊMIO, e ele
+        # não passa pelo OTM.
+        if _optadv_is_fx(classe):
+            apurado = _optadv_prm_for(cog_prm, conf, titulo)
+        else:
+            apurado = otm_by_suffix.get(suf) if suf else None
+        ir = _ndfc_ir(apurado, cliente)
+        # O IR retido sempre ENCOLHE o que se movimenta (regra do aviso de FX).
+        liq = None if apurado is None else (apurado - ir if apurado >= 0 else apurado + ir)
+
+        ref_rec = spn_by_name.get(_fcst_norm(cliente), {})
+        spn = str(otm_spn.get(suf, '') or '').strip() or ref_rec.get('spn', '')
+        net_type = _ndfsum_net_type(_cpd_find(cpd, spn) if spn else None)
+        subj = _optadv_subjacente(classe, _lcell(lrow, 'Tipo de Mercadoria'),
+                                  _lcell(lrow, 'Ativo subjacente / Moeda base'))
+
+        # Settlement B3: soma de TODAS as linhas daquele Título no Operations B3
+        # (o caixa do dia) — mesma regra do termo e do Trade Level de swap.
+        mine = [r for r in opb3
+                if str(r.get('Título', '') or '').strip().upper() == titulo.upper()]
+        b3_vals = [v for v in (_conf_to_float(r.get('Valor')) for r in mine) if v is not None]
+        # Prêmio: TODOS os eventos aprovados daquele Título são pagamento de
+        # prêmio. `evs == {premio}` e não "algum é prêmio", que é a mesma regra do
+        # aviso de Swap — um Título que traz prêmio E liquidação no mesmo dia não
+        # é um aviso de prêmio, e rotulá-lo assim esconderia a liquidação que está
+        # na mesma tabela.
+        evs = {_ops_norm_event(r.get('Tipo Operação', '')) for r in mine}
+        out.append({
+            'cells': [
+                cliente,
+                titulo,
+                conf,
+                _lcell(lrow, 'Data Início'),
+                subj,
+                _lcell(lrow, 'Data de fixing da moeda do ativo subjacente'),
+                cot,
+                _lcell(lrow, 'Quantidade') or _lcell(lrow, 'Valor base'),
+                _ops_fmt_amt(apurado),
+                _ops_fmt_amt(ir),
+                _ops_fmt_amt(liq),
+            ],
+            'counterparty': cliente,
+            'legal': _lcell(lrow, 'Parte (Nome simplificado)'),
+            'spn': spn,
+            'taxid': ref_rec.get('taxid', ''),
+            'net_type': net_type,
+            # LOB = a CLASSE do subjacente como a B3 a escreve (COMMODITIES,
+            # EQUITIES, MOEDA). É o mesmo texto que a coluna Type do Operations
+            # B3 mostra para OPC, e não um de-para novo: traduzi-lo aqui criaria
+            # um segundo vocabulário para a mesma coluna.
+            'lob': classe.strip().upper(),
+            'underlying': subj,
+            # Rótulo do produto no assunto do aviso, e `premium` — os dois são
+            # lidos pelo gerador de e-mail e entram na CHAVE do agrupamento, então
+            # um documento nunca mistura classe nem junta prêmio com liquidação.
+            'product_label': _optadv_product_label(classe),
+            'premium': bool(evs) and evs == {_ops_norm_event('PAGAMENTO DE PREMIO')},
+            'b3_id': titulo, 'internal_id': conf,
+            'apurado': apurado, 'ir': ir, 'liquido': liq,
+            'b3': sum(b3_vals) if b3_vals else None,
+        })
+    return out
+
+
+@blueprint.route('/other-products-option-settlement-advice')
+def other_products_option_settlement_advice():
+    if not session.get('authenticated'):
+        return redirect(url_for('pages_blueprint.sign_in_page'))
+    return render_template('pages/other-products-option-settlement-advice.html',
+                           segment='other-products-option-settlement-advice',
+                           ref_date=datetime.now().strftime('%Y-%m-%d'))
+
+
+@blueprint.route('/api/other-products-option-settlement-advice/data')
+def api_option_settlement_advice_data():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    ds = (request.args.get('date') or '').strip()
+    try:
+        ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
+    except ValueError:
+        ref = datetime.now()
+    try:
+        items = _optadv_items(ref)
+    except Exception:
+        log.error('[opt-advice] falha montando o aviso:\n%s', traceback.format_exc())
+        items = []
+    items.sort(key=lambda r: (str(r['counterparty']).strip() == '',
+                              _fcst_norm(str(r['counterparty']))))
+    _p, meta = _opssum_meta_load(ref)
+    statuses = [_opssum_status(meta, r['counterparty'], r.get('lob', ''), 'OPTION')
+                for r in items]
+    return jsonify({'success': True, 'columns': _OPTADV_COLUMNS,
+                    'rows': [r['cells'] for r in items], 'statuses': statuses,
+                    'widgets': {'total': len(items)},
+                    'ref_date': ref.strftime('%Y-%m-%d'),
+                    'ref_date_fmt': ref.strftime('%d/%m/%Y')})
+
+
+# ── Edições manuais do aviso de Opção ────────────────────────────────────────
+#  Mesmo desenho do aviso de Swap (`_swadv_edits_*`): a linha é derivada de três
+#  arquivos e, quando um deles vem errado, a mesa corrige a célula e manda o
+#  aviso assim mesmo. As correções ficam num overlay do DIA, fora dos arquivos de
+#  origem — reimportar o batch não as apaga.
+#
+#  A chave é o **B3 ID**, não a posição na tela: a tabela ordena por cliente e a
+#  posição muda a cada carga.
+_OPTADV_KEY_COL = 1
+# Célula editada que também é NÚMERO: sem isto a tela mostraria o valor corrigido
+# e o Settlement Summary continuaria somando o original.
+_OPTADV_NUM_FIELDS = {8: 'apurado', 9: 'ir', 10: 'liquido'}
+
+
+def _optadv_edits_path(ref):
+    return os.path.join(OTM_JSON_ROOT, ref.strftime('%Y'), ref.strftime('%m'),
+                        ref.strftime('%d'),
+                        'option-settlement-advice_{}.json'.format(ref.strftime('%Y%m%d')))
+
+
+def _optadv_edits_load(ref):
+    fp = _optadv_edits_path(ref)
+    try:
+        with open(fp, encoding='utf-8') as fh:
+            d = json.load(fh)
+        return (fp, d) if isinstance(d, dict) else (fp, {})
+    except Exception:
+        return fp, {}
+
+
+def _optadv_items(ref):
+    """As linhas do aviso JÁ com as edições manuais do dia aplicadas. É por aqui
+    que a tela e o Trade Level passam — os dois, sempre."""
+    edits = _optadv_edits_load(ref)[1]
+    items = _optadv_collect(ref)
+    if not edits:
+        return items
+    out = []
+    for r in items:
+        key = str(r['cells'][_OPTADV_KEY_COL] or '').strip()
+        e = edits.get(key) or {}
+        if e.get('deleted'):
+            continue
+        cells, rec = list(r['cells']), dict(r)
+        for idx_s, val in (e.get('cells') or {}).items():
+            try:
+                i = int(idx_s)
+            except (TypeError, ValueError):
+                continue
+            if not 0 <= i < len(cells):
+                continue
+            cells[i] = str(val)
+            fld = _OPTADV_NUM_FIELDS.get(i)
+            # `_conf_to_float` porque o operador digita ora US ('12,345.67'),
+            # ora BR ('12.345,67') — o parser tolerante entende os dois.
+            if fld:
+                rec[fld] = _conf_to_float(str(val))
+            elif i == 0:
+                rec['counterparty'] = str(val)
+        rec['cells'] = cells
+        out.append(rec)
+    return out
+
+
+def _optadv_ref_and_key(payload):
+    ds = str((payload or {}).get('date') or '').strip()
+    try:
+        ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
+    except ValueError:
+        ref = datetime.now()
+    return ref, str((payload or {}).get('contrato') or '').strip()
+
+
+@blueprint.route('/api/other-products-option-settlement-advice/row', methods=['POST'])
+def api_optadv_row_save():
+    """Grava a edição manual de uma linha do aviso de opção. Só as células que
+    vieram no payload — o resto continua saindo dos arquivos."""
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
+    payload = request.get_json(silent=True) or {}
+    ref, key = _optadv_ref_and_key(payload)
+    if not key:
+        return jsonify({'ok': False, 'error': 'Linha sem B3 ID — nada a gravar.'}), 400
+    cells = payload.get('cells') or {}
+    if not isinstance(cells, dict):
+        return jsonify({'ok': False, 'error': 'Payload inválido.'}), 400
+    # Ler → alterar → gravar sob o MESMO lock: dois operadores editando linhas
+    # diferentes do mesmo dia perderiam uma das duas edições.
+    with _cache_lock:
+        fp, edits = _optadv_edits_load(ref)
+        e = edits.setdefault(key, {})
+        cur = e.setdefault('cells', {})
+        for k, v in cells.items():
+            try:
+                i = int(k)
+            except (TypeError, ValueError):
+                continue
+            if 0 <= i < len(_OPTADV_COLUMNS):
+                cur[str(i)] = '' if v is None else str(v)
+        e['edited_by'] = session.get('user_sid', '')
+        e['edited_at'] = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+        try:
+            os.makedirs(os.path.dirname(fp), exist_ok=True)
+            _atomic_write_json(fp, edits)
+        except Exception as exc:                            # noqa: BLE001
+            log.error('[opt-advice] não consegui gravar a edição:\n%s', traceback.format_exc())
+            return jsonify({'ok': False, 'error': str(exc)}), 500
+    return jsonify({'ok': True})
+
+
+@blueprint.route('/api/other-products-option-settlement-advice/row/delete', methods=['POST'])
+def api_optadv_row_delete():
+    """Tira a linha do aviso do dia — marca no overlay, não mexe nos arquivos de
+    origem. `undo` traz de volta."""
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
+    payload = request.get_json(silent=True) or {}
+    ref, key = _optadv_ref_and_key(payload)
+    if not key:
+        return jsonify({'ok': False, 'error': 'Linha sem B3 ID.'}), 400
+    with _cache_lock:
+        fp, edits = _optadv_edits_load(ref)
+        e = edits.setdefault(key, {})
+        e['deleted'] = not payload.get('undo')
+        e['deleted_by'] = session.get('user_sid', '')
+        e['deleted_at'] = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+        try:
+            os.makedirs(os.path.dirname(fp), exist_ok=True)
+            _atomic_write_json(fp, edits)
+        except Exception as exc:                            # noqa: BLE001
+            log.error('[opt-advice] não consegui apagar a linha:\n%s', traceback.format_exc())
+            return jsonify({'ok': False, 'error': str(exc)}), 500
+    return jsonify({'ok': True})
+
+
+@blueprint.route('/api/other-products-option-settlement-advice/row/confirm', methods=['POST'])
+def api_optadv_row_confirm():
+    """Confirma a linha → status Sent.
+
+    O status vive no overlay do Settlement Summary e é por **contraparte × LOB ×
+    produto**, porque é assim que o aviso é emitido: um documento por
+    destinatário. Confirmar uma linha confirma o aviso a que ela pertence — e é
+    por isso que a resposta diz quantas linhas mudam junto."""
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
+    payload = request.get_json(silent=True) or {}
+    ref, key = _optadv_ref_and_key(payload)
+    try:
+        items = _optadv_items(ref)
+    except Exception:
+        log.error('[opt-advice] falha lendo as linhas:\n%s', traceback.format_exc())
+        return jsonify({'ok': False, 'error': 'Falha lendo as linhas do dia.'}), 500
+    row = next((r for r in items
+                if str(r['cells'][_OPTADV_KEY_COL] or '').strip() == key), None)
+    if row is None:
+        return jsonify({'ok': False, 'error': 'B3 ID não encontrado nesta data.'}), 404
+    cpty, lob = row.get('counterparty', ''), row.get('lob', '')
+    with _cache_lock:
+        _opssum_set_status(ref, [(cpty, lob, 'OPTION')], 'Sent')
+    n = sum(1 for r in items
+            if r.get('counterparty') == cpty and r.get('lob', '') == lob)
+    return jsonify({'ok': True, 'status': 'Sent', 'counterparty': cpty, 'rows': n})
+
+
+# O aviso impresso começa em "B3 ID": Contraparte é o DESTINATÁRIO, não conteúdo
+# do documento que ele recebe — mesma regra do aviso de termo.
+_OPTADV_EMAIL_FROM = 1
+
+
+def _optadv_email_headers():
+    return list(_OPTADV_COLUMNS[_OPTADV_EMAIL_FROM:])
+
+
+def _optadv_email_rows(ref):
+    """Linhas do aviso impresso de opção: as mesmas da tela, sem Contraparte, e
+    com os valores em BR (`R$ #.##0,00`, negativo entre parênteses). Formatadas a
+    partir do NÚMERO e não do texto da tela — o caminho inverso erraria no
+    primeiro valor com separador ambíguo."""
+    from apps.pages import otc_emails
+    money_at = {_OPTADV_COLUMNS.index(c): fld for c, fld in
+                (('Resultado Apurado (R$)', 'apurado'), ('IR 0,005% (R$)', 'ir'),
+                 ('Resultado Líquido (R$)', 'liquido'))}
+    out = []
+    for r in _optadv_items(ref):
+        cells = []
+        for i in range(_OPTADV_EMAIL_FROM, len(_OPTADV_COLUMNS)):
+            if i in money_at:
+                v = r.get(money_at[i])
+                cells.append(otc_emails._brl(v) if v is not None else '')
+            else:
+                cells.append(r['cells'][i])
+        # `commodity` é o que o gerador lê para quebrar o aviso por mercadoria e
+        # para desambiguar o assunto. Na opção o equivalente é o ATIVO
+        # SUBJACENTE, que é o mesmo texto que a coluna mostra.
+        out.append(dict(r, cells=cells, commodity=r.get('underlying', '')))
+    return out
+
+
+@blueprint.route('/api/other-products-option-settlement-advice/emails', methods=['POST'])
+def api_option_settlement_advice_emails():
+    """Print Advice da Opção: rascunhos .eml da data, quebrados por net type e —
+    para quem está no cadastro `ndfc-advice-split` — por ativo subjacente.
+
+    É o MESMO gerador do Termo de Mercadoria (`build_ndfc_settlement_emails`) e o
+    MESMO cadastro de quebra: o grupo Mondelez recebe um aviso por mercadoria, e
+    isso é uma decisão do CLIENTE, não do produto — uma segunda lista para a opção
+    divergiria da primeira no dia em que alguém entrasse só numa delas.
+
+    O assunto é a única diferença, e ele vem da LINHA (`product_label`, resolvido
+    da classe do subjacente, mais o prefixo `(Pagamento de Prêmio)`); o rótulo
+    passado aqui é só o default de quem chegar sem classe nenhuma."""
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
+    payload = request.get_json(silent=True) or {}
+    ds = str(payload.get('date', '') or '').strip()
+    try:
+        ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
+    except ValueError:
+        ref = datetime.now()
+    from apps.pages import otc_emails
+    try:
+        rows = _optadv_email_rows(ref)
+    except Exception:
+        log.error('[opt-advice] falha montando as linhas do aviso:\n%s', traceback.format_exc())
+        return jsonify({'ok': False, 'error': 'Falha lendo as fontes do dia'}), 500
+    drafts = otc_emails.build_ndfc_settlement_emails(
+        rows, _optadv_email_headers(), ref.strftime('%d/%m/%Y'),
+        split_commodity=_ndfc_split_by_commodity, product_label='Opção')
+    if not drafts:
+        return jsonify({'ok': True, 'count': 0})
+    cp_count = len({d.get('counterparty', '') for d in drafts})
+
+    # Status → Generated para as linhas que de fato viraram aviso. Best-effort DE
+    # PROPÓSITO: os rascunhos já foram produzidos, então uma falha aqui é logada
+    # mas não transforma uma geração bem-sucedida em erro na tela.
+    try:
+        done = {_fcst_norm(d.get('counterparty', '')) for d in drafts}
+        with _cache_lock:
+            _opssum_set_status(ref, [(r['counterparty'], r.get('lob', ''), 'OPTION')
+                                     for r in rows
+                                     if _fcst_norm(r.get('counterparty', '')) in done], 'Generated')
+    except Exception:
+        log.error('[opt-advice] generated-status save failed:\n%s', traceback.format_exc())
+
+    if len(drafts) <= 2:
+        files, seen = [], {}
+        for d in drafts:
+            base = otc_emails._safe_filename(d.get('subject', 'draft'))
+            n = seen.get(base, 0)
+            seen[base] = n + 1
+            entry = base if n == 0 else '{}_{}'.format(base, n + 1)
+            raw = otc_emails.build_eml_bytes(d, session.get('user_email'))
+            files.append({'filename': entry + '.eml',
+                          'b64': base64.b64encode(raw).decode('ascii')})
+        return jsonify({'ok': True, 'count': len(drafts),
+                        'counterparties': cp_count, 'files': files})
+    resp = _email_drafts_response(
+        drafts, zip_name='Avisos_Liquidacao_{}_Opcao'.format(ref.strftime('%d%m%y')))
+    resp.headers['X-Counterparty-Count'] = str(cp_count)
+    return resp
 
 
 # ── Other Products › Swap › Kapital Hybrids (BANCO_UPCOMING_PAYMENTS.csv) ─────
@@ -11399,13 +12035,37 @@ def _cog_collect(ref):
                 _cog_save(jp, data)
             except Exception:
                 pass
-        # Display sorted A→Z by Counterparty Name (case-insensitive; blanks last).
-        data = sorted(data, key=lambda r: (str(r.get('Counterparty Name', '') or '').strip() == '',
-                                           str(r.get('Counterparty Name', '') or '').strip().lower()))
-        for rec in data:
+        # Counterparty Name pelo **SPN**, não pelo texto do arquivo. O Cognos traz
+        # o nome como a Athena o escreve (abreviado, ora com sufixo de entidade,
+        # ora sem) enquanto o SPN ao lado é um identificador — e `_otm_cpty_name`
+        # é a resposta que o app já dá para essa pergunta: cadastro `le-spn`
+        # quando é entidade nossa, Reference Data quando é cliente. Resolver aqui
+        # e não na importação faz a correção do cadastro valer na hora, sem
+        # reimportar o dia (mesma regra do OTM Settlements). Sem SPN, ou sem
+        # cadastro, o nome do arquivo fica: a linha não pode sair anônima.
+        #
+        # O cache local existe porque `_otm_cpty_name` varre a lista do `le-spn`
+        # a cada chamada, e o Cognos costuma repetir a mesma contraparte em
+        # dezenas de linhas.
+        _name_cache = {}
+
+        def cpty_name(rec):
+            spn = str(rec.get('Counterparty SPN', '') or '').strip()
+            fallback = str(rec.get('Counterparty Name', '') or '').strip()
+            if not spn:
+                return fallback
+            if spn not in _name_cache:
+                _name_cache[spn] = _otm_cpty_name(spn)
+            return _name_cache[spn] or fallback
+
+        # Display sorted A→Z pelo nome JÁ RESOLVIDO (case-insensitive; blanks
+        # last) — ordenar pelo texto do arquivo deixaria a tela fora de ordem.
+        pairs = sorted(((rec, cpty_name(rec)) for rec in data),
+                       key=lambda t: (t[1].strip() == '', t[1].strip().lower()))
+        for rec, cpname in pairs:
             row = []
             for c in _COG_COLUMNS:
-                v = rec.get(c, '')
+                v = cpname if c == 'Counterparty Name' else rec.get(c, '')
                 if c in _COG_DATE_COLS:
                     v = _cog_fmt_date(v)
                 row.append('' if v is None else v)
@@ -18719,6 +19379,65 @@ _MAP_OPB3_STATUSES = [
 ]
 _MAP_OPB3_USE = ['Consider', 'Disregard']
 
+# As linhas com que o cadastro nasce. Todo Settlement Advice de Other Products
+# (Swap, NDF Commodities e Opção) pergunta a ELE quais eventos entram no aviso —
+# e, por consequência, no Settlement Summary e nos cards de reconciliação. A
+# seleção do termo estava FIXA no `_ndfadv_collect` (só RESGATE), o que era a
+# segunda resposta para a mesma pergunta.
+_MAP_OPB3_SEED = (
+    # As três do swap, como estavam em `swap-b3-events`. RESGATE e RESGATE
+    # ANTECIPADO ficam de fora de propósito: são vencimento/antecipação,
+    # não pagamento de diferencial.
+    {'TIPO TITULO': 'SWAP', 'TIPO OPERACAO': 'PAGAMENTO DE DIF. AMORTIZACAO',
+     'STATUS B3': '', 'USE': 'Consider', 'NOTES': ''},
+    {'TIPO TITULO': 'SWAP', 'TIPO OPERACAO': 'PAGAMENTO DE DIF. DE JUROS',
+     'STATUS B3': '', 'USE': 'Consider', 'NOTES': ''},
+    {'TIPO TITULO': 'SWAP', 'TIPO OPERACAO': 'PAGAMENTO DE PREMIO',
+     'STATUS B3': '', 'USE': 'Consider', 'NOTES': ''},
+    # Termo de mercadoria e opção: o RESGATE é a liquidação — no termo, o
+    # vencimento; na opção, o exercício. É o que o código fixava para o TER e o
+    # que passa a valer para o OPC, agora cadastrável pelos dois.
+    {'TIPO TITULO': 'TER', 'TIPO OPERACAO': 'RESGATE', 'STATUS B3': '',
+     'USE': 'Consider', 'NOTES': 'Liquidação do termo de mercadoria'},
+    {'TIPO TITULO': 'OPC', 'TIPO OPERACAO': 'RESGATE', 'STATUS B3': '',
+     'USE': 'Consider', 'NOTES': 'Liquidação/exercício da opção'},
+    # O prêmio da opção é caixa do dia como qualquer outro, e o aviso o distingue
+    # sozinho (assunto prefixado com "(Pagamento de Prêmio)"). No SWAP ele é um
+    # Consider próprio pela mesma razão.
+    {'TIPO TITULO': 'OPC', 'TIPO OPERACAO': 'PAGAMENTO DE PREMIO', 'STATUS B3': '',
+     'USE': 'Consider', 'NOTES': 'Pagamento de prêmio da opção'},
+    # A operação cancelada continua no arquivo da B3 com o valor cheio.
+    # Somá-la é contar um caixa que não vai acontecer.
+    {'TIPO TITULO': '', 'TIPO OPERACAO': '', 'STATUS B3': 'CANCELADA: COMANDADA',
+     'USE': 'Disregard', 'NOTES': 'Cancelada na B3 — fora de toda liquidação'},
+)
+
+
+def _opb3_events_upgrade(rows):
+    """Completa o arquivo já em disco com as linhas de Consider de TER e OPC.
+
+    Sem isto, a instância que já tem o `opb3-events.json` (o arquivo é
+    versionado, mas o da mesa pode ter sido editado) ficaria SEM regra para esses
+    dois títulos — e "Tipo Título sem nenhum Consider não é filtrado" faria TODO
+    evento de termo entrar no aviso no dia em que o `_ndfadv_collect` deixou de
+    testar 'resgate' por conta própria. Um aviso que ganha linhas sozinho é pior
+    do que um que falta.
+
+    Só completa o que FALTA: um Tipo Título que já tem Consider próprio foi
+    configurado por alguém, e sobrescrevê-lo apagaria a decisão da mesa."""
+    out = list(rows)
+    # Quais títulos JÁ têm Consider é medido ANTES de acrescentar qualquer coisa:
+    # medindo dentro do laço, a primeira linha de OPC que entra faz a segunda
+    # (o prêmio) parecer configurada e ela nunca é acrescentada.
+    tem_consider = {_opb3_ev_key(r.get('TIPO TITULO', '')) for r in out
+                    if not _fcst_norm(r.get('USE', '')).strip().startswith('disreg')}
+    for seed in _MAP_OPB3_SEED:
+        tit = _opb3_ev_key(seed['TIPO TITULO'])
+        if tit in ('ter', 'opc') and tit not in tem_consider:
+            out.append(dict(seed))
+    return out
+
+
 # Quem valida a confirmação: REQUESTED = precisa passar por essa mesa; EXEMPT =
 # não precisa. Fechado de propósito — um terceiro valor cairia no ramo do EXEMPT
 # e tiraria a mesa da esteira sem ninguém perceber.
@@ -19520,21 +20239,8 @@ _MAPPING_DEFS = {
              'options': _MAP_OPB3_USE},
             {'key': 'NOTES', 'label': 'Notes'},
         ],
-        'seed': [
-            # As três do swap, como estavam em `swap-b3-events`. RESGATE e RESGATE
-            # ANTECIPADO ficam de fora de propósito: são vencimento/antecipação,
-            # não pagamento de diferencial.
-            {'TIPO TITULO': 'SWAP', 'TIPO OPERACAO': 'PAGAMENTO DE DIF. AMORTIZACAO',
-             'STATUS B3': '', 'USE': 'Consider', 'NOTES': ''},
-            {'TIPO TITULO': 'SWAP', 'TIPO OPERACAO': 'PAGAMENTO DE DIF. DE JUROS',
-             'STATUS B3': '', 'USE': 'Consider', 'NOTES': ''},
-            {'TIPO TITULO': 'SWAP', 'TIPO OPERACAO': 'PAGAMENTO DE PREMIO',
-             'STATUS B3': '', 'USE': 'Consider', 'NOTES': ''},
-            # A operação cancelada continua no arquivo da B3 com o valor cheio.
-            # Somá-la é contar um caixa que não vai acontecer.
-            {'TIPO TITULO': '', 'TIPO OPERACAO': '', 'STATUS B3': 'CANCELADA: COMANDADA',
-             'USE': 'Disregard', 'NOTES': 'Cancelada na B3 — fora de toda liquidação'},
-        ],
+        'seed': list(_MAP_OPB3_SEED),
+        'upgrade': _opb3_events_upgrade,
     },
     # IR do swap, parte 1: as EXCEÇÕES por cliente, testadas antes de tudo. Vêm
     # do IF encadeado da planilha de avisos — bancos e as duas entidades JPM.
