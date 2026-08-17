@@ -608,8 +608,11 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     // ── Per-table setup ─────────────────────────────────────────────────────
-    function initTable(id, dataCols, pageLen) {
+    // `orderCol` = índice da coluna que abre ordenada A→Z. Omitido, a tabela abre
+    // na ordem em que o servidor mandou as linhas, como sempre foi.
+    function initTable(id, dataCols, pageLen, orderCol) {
         var dt = $('#' + id).DataTable({
+            order: (orderCol == null ? [] : [[orderCol, 'asc']]),
             autoWidth: false, scrollX: true, scrollY: '60vh', scrollCollapse: true, orderCellsTop: true, paging: true, pageLength: pageLen || 25,
             dom: "<'row'<'col-12'tr>>" + "<'d-md-flex justify-content-between align-items-center mt-2'ip>",
             columnDefs: [{ orderable: false, targets: [0, 1] }],
@@ -729,7 +732,11 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     var dtSummary = initTable('ops-summary-table', 9);   // 9 data cols (Counterparty…Observation)
-    var dtTrade   = initTable('ops-trade-table', 10, 50); // 10 data cols (LOB…Difference); default 50/page
+    // Trade Level abre ordenado por **Counterparty A→Z** (col 4: cb, Actions,
+    // Status, LOB, Counterparty). A linha derivada é texto puro, então a coluna
+    // ordena de verdade; e o cliente é o recorte por que a mesa procura, não a
+    // ordem em que a B3 devolveu os Títulos.
+    var dtTrade   = initTable('ops-trade-table', 10, 50, 4); // 10 data cols (LOB…Difference); default 50/page
 
     // Add-row modal Save → append the filled row to the active table (cells stay
     // inline-editable, seeded with the modal values).

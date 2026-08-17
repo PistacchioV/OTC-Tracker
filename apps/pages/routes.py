@@ -9112,14 +9112,20 @@ def _optadv_cog_key(v):
 
 
 def _optadv_cognos_prm(ref):
-    """{identificador → PRM Amount ASSINADO} do Cognos de `ref`, para a opção de
-    TAXA DE CÂMBIO.
+    """({identificador → PRM Amount ASSINADO}, {identificador → Counterparty SPN})
+    do Cognos de `ref`, para a opção de TAXA DE CÂMBIO.
 
     O valor da opção de câmbio NÃO está no OTM Settlements: ele é o prêmio, e
     quem o tem é o FXO Detail — o arquivo da página Cognos. O SINAL sai da coluna
     `Direction`: RECEIVE é o banco recebendo (+), PAY é o banco pagando (−). O
     relatório traz o módulo, e sem o sinal metade dos avisos sairia com a direção
     invertida — o cliente lendo "vamos debitar" onde o banco é quem paga.
+
+    O **SPN sai junto** porque é a mesma linha, e é ele que dá o NOME da
+    contraparte: em opção de câmbio não existe linha de OTM, então o nome caía no
+    apelido de conta da B3 ('INTRAGLAWTONFDO') em vez do cadastro. É a mesma razão
+    de o `_ndfadv_otm_by_suffix` devolver o Cpty SPN ao lado do valor — uma segunda
+    leitura do arquivo só para buscá-lo abriria espaço para as duas discordarem.
 
     A chave é o **`Athena ID` INTEIRO** (só o hífen trocado por underline, ver
     `_optadv_cog_key`), casado com a `Combinação de operações` da posição de
@@ -9134,8 +9140,17 @@ def _optadv_cognos_prm(ref):
     desempate: um valor plausível no aviso do cliente errado é pior do que uma
     célula vazia pedindo conferência."""
     _jp, data = _cog_load(ref)
-    out = {}
+    out, spn = {}, {}
     for rec in (data or []):
+        k = _optadv_cog_key(rec.get('Athena ID', ''))
+        if not k:
+            continue
+        # SPN: primeiro não vazio vence. As várias linhas de um trade são do mesmo
+        # cliente, e uma delas vir sem SPN não pode apagar o nome — e ele é
+        # colhido ANTES do teste de valor, porque a linha sem PRM Amount ainda
+        # sabe de quem é o trade.
+        if _spn_key(rec.get('Counterparty SPN', '')) and k not in spn:
+            spn[k] = str(rec.get('Counterparty SPN', '') or '').strip()
         v = _conf_to_float(rec.get('PRM Amount'))
         if v is None:
             continue
@@ -9146,14 +9161,11 @@ def _optadv_cognos_prm(ref):
             v = abs(v)
         # Direction em branco ou desconhecida: o valor entra como veio. Zerar a
         # linha esconderia o prêmio; inventar um sinal inventaria a direção.
-        k = _optadv_cog_key(rec.get('Athena ID', ''))
-        if not k:
-            continue
         if k in out and out[k] != v:
             out[k] = _OPTADV_PRM_AMBIGUO
         elif k not in out:
             out[k] = v
-    return out
+    return out, spn
 
 
 def _optadv_prm_for(prm, conf):
@@ -9269,9 +9281,9 @@ def _optadv_collect(ref):
             by_codigo_if.setdefault(k, row)
 
     otm_by_suffix, otm_spn = _ndfadv_otm_by_suffix(ref)
-    # Prêmio do FXO Detail — só a opção de TAXA DE CÂMBIO o consulta, mas o
+    # Prêmio e SPN do FXO Detail — só a opção de TAXA DE CÂMBIO os consulta, mas o
     # arquivo é lido UMA vez, aqui: dentro do laço ele seria reaberto por linha.
-    cog_prm = _optadv_cognos_prm(ref)
+    cog_prm, cog_spn = _optadv_cognos_prm(ref)
     spn_by_name = _ndfsum_refdata_spn()
     cpd = _cpd_load()
 
@@ -9284,11 +9296,25 @@ def _optadv_collect(ref):
         lrow = by_codigo_if.get(titulo.upper())
         conf = _lcell(lrow, 'Combinação de operações')
         suf = conf.rsplit('-', 1)[-1].upper() if conf else ''
-        # Contraparte: mesma ordem do aviso de termo. O **Cpty SPN** do OTM é um
-        # identificador na própria linha do fluxo e resolve o omnibus de graça;
-        # numa conta guarda-chuva o nome que vem da B3 é o do titular, não o do
-        # cliente, e mandar o aviso por ele é mandá-lo para o cliente errado.
-        cliente = _otm_cpty_name(otm_spn.get(suf, '')) if suf else ''
+        # A classe vem PRIMEIRO: ela decide de onde saem o valor, o SPN e as duas
+        # colunas de data. Resolvê-la no meio do laço já fez a linha de câmbio
+        # buscar o valor numa fonte e o nome noutra.
+        classe = _lcell(lrow, 'Classe do ativo subjacente')
+        e_fx = _optadv_is_fx(classe)
+
+        # Contraparte pelo **SPN**, sempre que houver um: é um identificador na
+        # própria linha do fluxo, resolve o omnibus de graça (numa conta
+        # guarda-chuva o nome que vem da B3 é o do titular, não o do cliente) e
+        # devolve a razão social do cadastro em vez do apelido de conta.
+        #
+        # A fonte do SPN depende do produto, e é a MESMA que deu o valor: o OTM em
+        # commodities e equity, o **Cognos** em taxa de câmbio. Sem o lado do
+        # Cognos a opção de câmbio não tinha SPN nenhum e caía no Nome Simplificado
+        # da B3 — a Lawton aparecia como 'INTRAGLAWTONFDO' no Settlement Summary,
+        # com o SPN dela já mapeado no `le-spn`.
+        cliente_spn = (cog_spn.get(_optadv_cog_key(conf), '') if e_fx
+                       else (otm_spn.get(suf, '') if suf else ''))
+        cliente = _otm_cpty_name(cliente_spn) if cliente_spn else ''
         cnpj = ''.join(ch for ch in _lcell(lrow, 'CPF/CNPJ Cliente Contraparte') if ch.isdigit())
         if not cliente and _b3_is_omnibus(rec.get('Conta Contraparte', '')) and cnpj:
             cliente = _refdata_by_taxid().get(cnpj, '')
@@ -9296,22 +9322,36 @@ def _optadv_collect(ref):
                    or _lcell(lrow, 'Contraparte (Nome simplificado)')
                    or str(rec.get('Contraparte (Nome Simpl.)', '') or '').strip())
 
-        classe = _lcell(lrow, 'Classe do ativo subjacente')
-        # Cotação do subjacente: a data única do fixing; vazia (o caso da
-        # asiática), o mês/ano da 1ª data de verificação. O teste é "é câmbio?" e
-        # não "é commodity ou equity?": as três classes são o universo, e
-        # perguntar pela exceção deixa uma classe nova cair no lado que TEM
-        # cotação — o outro jeito a mandaria para 'N/A' calada.
-        cot = (_OPTADV_FX_NA if _optadv_is_fx(classe) else
-               (_lcell(lrow, 'Data de fixing do ativo subjacente')
-                or _ndfadv_media_label(_lcell(lrow, 'Média Asiática (data) 1'))))
+        # As duas colunas de data trocam de papel na opção de CÂMBIO, e é a mesma
+        # razão nas duas: lá o subjacente É a taxa de câmbio.
+        #
+        #                    Ptax                              Cotação Ativo Subj.
+        #   câmbio    fixing do ATIVO SUBJACENTE               N/A
+        #   as demais fixing da MOEDA do ativo subjacente      fixing do subjacente
+        #
+        # Em câmbio, a PTAX que o aviso imprime é justamente o fixing do
+        # subjacente; a coluna de fixing da moeda é de conversão e não diz nada ali.
+        # E não há cotação de subjacente a imprimir — ela vai 'N/A', que é
+        # diferente de vazia ("faltou o dado").
+        #
+        # O teste é "é câmbio?" e não "é commodity ou equity?": as três classes são
+        # o universo, e perguntar pela exceção deixa uma classe nova cair no lado
+        # que TEM cotação — o outro jeito a mandaria para 'N/A' calada.
+        fix_subj = _lcell(lrow, 'Data de fixing do ativo subjacente')
+        if e_fx:
+            ptax, cot = fix_subj, _OPTADV_FX_NA
+        else:
+            ptax = _lcell(lrow, 'Data de fixing da moeda do ativo subjacente')
+            # Vazio é o caso da ASIÁTICA: não há data única, e o que vale é o
+            # mês/ano da 1ª data de verificação (a cotação é a média do período).
+            cot = fix_subj or _ndfadv_media_label(_lcell(lrow, 'Média Asiática (data) 1'))
 
         # Resultado Apurado: em commodities e equity é a soma do OTM Settlements
         # pelo SUFIXO do identificador (a regra do aviso de termo); em TAXA DE
         # CÂMBIO é o PRM Amount do Cognos, casado pelo `Athena ID` INTEIRO contra
         # a Combinação de operações. Duas fontes porque são dois caixas diferentes
         # — a opção de câmbio liquida o PRÊMIO, e ele não passa pelo OTM.
-        if _optadv_is_fx(classe):
+        if e_fx:
             apurado = _optadv_prm_for(cog_prm, conf)
         else:
             apurado = otm_by_suffix.get(suf) if suf else None
@@ -9320,7 +9360,9 @@ def _optadv_collect(ref):
         ir, liq = 0.0, apurado
 
         ref_rec = spn_by_name.get(_fcst_norm(cliente), {})
-        spn = str(otm_spn.get(suf, '') or '').strip() or ref_rec.get('spn', '')
+        # O SPN da fonte (o MESMO que deu o nome) vence o caminho de volta
+        # nome → SPN pelo Reference Data, que erra em toda diferença de pontuação.
+        spn = str(cliente_spn or '').strip() or ref_rec.get('spn', '')
         net_type = _ndfsum_net_type(_cpd_find(cpd, spn) if spn else None)
         subj = _optadv_subjacente(classe, _lcell(lrow, 'Tipo de Mercadoria'),
                                   _lcell(lrow, 'Ativo subjacente / Moeda base'))
@@ -9343,7 +9385,7 @@ def _optadv_collect(ref):
                 conf,
                 _lcell(lrow, 'Data Início'),
                 subj,
-                _lcell(lrow, 'Data de fixing da moeda do ativo subjacente'),
+                ptax,
                 cot,
                 _lcell(lrow, 'Quantidade') or _lcell(lrow, 'Valor base'),
                 _ops_fmt_amt(apurado),
