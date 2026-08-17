@@ -2534,12 +2534,14 @@ CETIP_DEST_ROOT   = os.getenv('CETIP_DEST_ROOT',
 CETIP_OTC_OPS_EMAIL       = os.getenv('CETIP_OTC_OPS_EMAIL',       'brazil.otc.ops@jpmorgan.com')
 CETIP_SALES_SUPPORT_EMAIL = os.getenv('CETIP_SALES_SUPPORT_EMAIL', 'brazil_sales_support_mo@jpmchase.com')
 # CEM Latam BA (Buenos Aires CIB Ops) — receive the Option Position .OPC file, cc OTC Ops.
-# Editable TO lists for the two distribution e-mails (Sales Support / CEM Latam),
-# persisted from the Save CETIP Files card. Empty/absent → the hardcoded defaults
-# below. The CC (OTC Ops) stays hardcoded on purpose.
+# Editable TO lists for the three distribution e-mails (Sales Support / CEM Latam /
+# BACC), persisted from the Save CETIP Files card. Empty/absent → the hardcoded
+# defaults below; BACC has NO default (see `_CETIP_BACC_ACCOUNTS`), so an empty list
+# there means "não envia", e o card diz isso. The CC (OTC Ops) stays hardcoded.
 _CETIP_RECIPIENTS_FILE = os.path.normpath(os.path.join(
     os.path.dirname(__file__), '..', 'static', 'data', 'control-panel',
     'cetip_distribution_recipients.json'))
+_CETIP_RECIPIENT_KEYS = ('ss_to', 'cem_to', 'bacc_to')
 
 
 def _load_cetip_recipients():
@@ -2547,17 +2549,36 @@ def _load_cetip_recipients():
         with open(_CETIP_RECIPIENTS_FILE, encoding='utf-8') as fh:
             d = json.load(fh)
         if isinstance(d, dict):
-            return {'ss_to': d.get('ss_to', '') or '', 'cem_to': d.get('cem_to', '') or ''}
+            return {k: d.get(k, '') or '' for k in _CETIP_RECIPIENT_KEYS}
     except Exception:
         pass
-    return {'ss_to': '', 'cem_to': ''}
+    return {k: '' for k in _CETIP_RECIPIENT_KEYS}
 
 
-def _save_cetip_recipients(ss_to, cem_to):
+def _save_cetip_recipients(rec):
+    """Grava as três listas. Recebe o DICIONÁRIO inteiro, não um argumento por
+    lista: com três chaves, uma assinatura posicional deixaria uma chamada de dois
+    argumentos apagar a terceira em silêncio — que é justamente o que o POST
+    fazia quando o payload vinha sem uma delas (ver `_cetip_merge_recipients`)."""
     os.makedirs(os.path.dirname(_CETIP_RECIPIENTS_FILE), exist_ok=True)
     with open(_CETIP_RECIPIENTS_FILE, 'w', encoding='utf-8') as fh:
-        json.dump({'ss_to': ss_to or '', 'cem_to': cem_to or ''},
+        json.dump({k: str((rec or {}).get(k, '') or '') for k in _CETIP_RECIPIENT_KEYS},
                   fh, ensure_ascii=False, indent=2)
+
+
+def _cetip_merge_recipients(payload):
+    """As listas salvas com as do payload por cima — só as chaves que VIERAM.
+
+    Sobrescrever as três com o que o payload traz apagaria a lista de quem não
+    está no corpo: o botão Run manda o que está na tela, e uma tela antiga (ou um
+    POST de fora) não conhece a chave nova. Devolve (rec, mudou)."""
+    rec = _load_cetip_recipients()
+    mudou = False
+    for k in _CETIP_RECIPIENT_KEYS:
+        if k in (payload or {}):
+            rec[k] = str(payload.get(k) or '').strip()
+            mudou = True
+    return rec, mudou
 
 
 CETIP_CEM_LATAM_EMAILS    = [e.strip() for e in os.getenv(
@@ -2605,6 +2626,13 @@ _CETIP_BEHAVIOUR = {
     'NDF Position (DPOSICAO C21)': {},
     'SWAP Position (DPOSICAO-SWAP)': {
         'attach_sales_support': True,      # SWAP position also e-mailed to Sales Support
+        # BACC: Participante (coluna D) × Contraparte (coluna H) — os nomes vêm do
+        # `_B3_SWAP_HEADERS['swap_position']`, que é o cabeçalho padrão deste
+        # arquivo (ele chega SEM cabeçalho).
+        'attach_bacc': True,
+        'bacc': {'has_header': False,
+                 'parte':       {'column': ['participante'], 'index': 3},
+                 'contraparte': {'column': ['contraparte'],  'index': 7}},
         'json': {'category': 'Swap', 'has_header': False, 'header_key': 'swap_position',
                  # de-dup: Conta Parte (coluna D = "Participante")
                  'filter': {'column': ['participante'], 'index': 3,
@@ -2612,6 +2640,16 @@ _CETIP_BEHAVIOUR = {
     'Option Position (OPC DPOSICAO)': {
         'attach_cem_latam': True,          # this .OPC file is e-mailed to CEM Latam BA
         'attach_sales_support': True,      # .OPC position also e-mailed to Sales Support
+        'attach_bacc': True,
+        # 'parte (conta)' é SUBSTRING de 'contraparte (conta)': o `avoid` é o que
+        # impede o lado da parte de casar com a coluna da contraparte quando ela
+        # vem antes no cabeçalho — sem ele o filtro compararia a mesma coluna duas
+        # vezes e deixaria passar linha de conta externa.
+        'bacc': {'has_header': True,
+                 'parte':       {'column': ['parte (conta)', 'parte(conta)', 'parte'],
+                                 'index': 4, 'avoid': 'contraparte'},
+                 'contraparte': {'column': ['contraparte (conta)', 'contraparte(conta)',
+                                            'contraparte'], 'index': 7}},
         'json': {'category': 'Option', 'has_header': True,
                  # de-dup: keep only our side (Parte/conta = coluna E)
                  'filter': {'column': ['parte (conta)', 'parte(conta)', 'parte'], 'index': 4,
@@ -2620,6 +2658,17 @@ _CETIP_BEHAVIOUR = {
     'Term Movement (DMOVIMENTO C21)': {},
     'SWAP Movement (DMOVIMENTO-SWAP)': {},
     'SWAP Flow (DFLUXO_SWAP)': {
+        # Este é o único dos quatro do BACC que não vai para mais ninguém: ele não
+        # tem `attach_sales_support`, então o BACC é a razão de ele ser anexado.
+        'attach_bacc': True,
+        'bacc': {'has_header': False,
+                 'parte':       {'column': ['código conta cetip parte',
+                                            'codigo conta cetip parte',
+                                            'conta cetip parte'],
+                                 'index': 2, 'avoid': 'contraparte'},
+                 'contraparte': {'column': ['código conta cetip contraparte',
+                                            'codigo conta cetip contraparte',
+                                            'conta cetip contraparte'], 'index': 5}},
         'json': {'category': 'Swap', 'has_header': False, 'header_key': 'swap_fluxo',
                  # de-dup: Conta Parte (coluna C = "Código Conta Cetip Parte")
                  'filter': {'column': ['código conta cetip parte', 'codigo conta cetip parte',
@@ -2652,6 +2701,12 @@ _CETIP_BEHAVIOUR = {
     'Accelerator Agent (MID DAGENTEACELERADOR)': {},
     'Term Position (DPOSICAO-TER)': {
         'attach_sales_support': True,      # .TER position also e-mailed to Sales Support
+        'attach_bacc': True,
+        'bacc': {'has_header': True,
+                 'parte':       {'column': ['código da parte', 'codigo da parte'],
+                                 'index': 1, 'avoid': 'contraparte'},
+                 'contraparte': {'column': ['código da contraparte',
+                                            'codigo da contraparte'], 'index': 3}},
         'json': {'category': 'NDF', 'has_header': True,
                  # de-dup: keep only our side (Código da Parte = coluna B)
                  'filter': {'column': ['código da parte', 'codigo da parte'], 'index': 1,
@@ -3168,14 +3223,123 @@ def _send_cetip_email(to_list, cc_list, subject, greeting, message_html,
         return '{}: {}'.format(type(e).__name__, e)   # error string surfaced to the UI
 
 
-def _cetip_distribute_emails(ref, dest_dir, send_mail, ss_to_list=None, cem_to_list=None):
+# ── BACC: os quatro arquivos, recortados para o INTRAGRUPO ───────────────────
+#  O BACC recebe DFLUXO swap, posição swap, posição OPC e posição TER — mas não o
+#  arquivo cheio: só as linhas em que PARTE e CONTRAPARTE são as três contas de
+#  casa. Uma linha com só um dos lados intragrupo é operação com cliente e não
+#  entra (o `and` é o pedido; um `or` mandaria a carteira inteira).
+#
+#  Onde está cada conta em cada arquivo mora no `_CETIP_BEHAVIOUR['…']['bacc']`,
+#  ao lado do resto do comportamento do tipo.
+_CETIP_BACC_ACCOUNTS = frozenset(('00041007',      # Lawton   00041.00-7
+                                  '73760009',      # Banco    73760.00-9
+                                  '85398005'))     # Atacama  85398.00-5
+
+
+def _cetip_acct_key(v):
+    """Conta comparável: só dígitos, completada com zeros à esquerda até 8.
+
+    O Lawton é `00041.00-7`; um exportador que trate a conta como NÚMERO devolve
+    `41007`, que sem o zfill não casaria com nada — e o recorte sairia vazio sem
+    erro nenhum."""
+    d = re.sub(r'\D', '', str(v or ''))
+    return d.zfill(8) if 0 < len(d) <= 8 else d
+
+
+def _cetip_bacc_col(header, spec):
+    """Índice da coluna da parte (ou da contraparte) no arquivo salvo.
+
+    Pelo NOME quando o arquivo traz cabeçalho; pelo índice quando não traz (aí o
+    cabeçalho é o padrão do código — `_B3_SWAP_HEADERS` —, e resolver por nome não
+    acrescentaria nada). O índice também é o último recurso quando o nome não casa,
+    que é o mesmo desenho do `_b3_filter_rows`.
+
+    `avoid` descarta a coluna cujo nome contenha aquele texto, e não é zelo: em
+    `'contraparte (conta)'` cabe `'parte (conta)'` inteiro, então sem ele o lado da
+    parte casaria com a coluna da contraparte quando ela vem antes no cabeçalho — o
+    filtro compararia a MESMA coluna duas vezes e deixaria passar linha de cliente.
+    """
+    if header:
+        alvo = [_fcst_norm(t) for t in (spec.get('column') or [])]
+        evitar = _fcst_norm(spec.get('avoid', ''))
+        nomes = [(i, _fcst_norm(h)) for i, h in enumerate(header)]
+        ok = lambda n: not (evitar and evitar in n)
+        for t in alvo:
+            for i, n in nomes:                       # nome exato primeiro
+                if n == t and ok(n):
+                    return i
+        for t in alvo:
+            for i, n in nomes:                       # depois por conteúdo
+                if t and t in n and ok(n):
+                    return i
+    idx = spec.get('index')
+    return idx if isinstance(idx, int) and idx >= 0 else None
+
+
+def _cetip_bacc_copy(src_path, cfg, out_dir):
+    """Cópia de `src_path` com só as linhas do intragrupo → (path, mantidas, total).
+
+    None quando o par de colunas não resolve: nesse caso o arquivo **não** é
+    anexado. Mandar o arquivo inteiro com o nome de um recorte é pior do que não
+    mandar — quem recebe não tem como perceber, e o painel diz que foi.
+
+    O arquivo é gravado em `out_dir` (temporário) com o MESMO nome do original:
+    o recorte não pode encostar no arquivo salvo na pasta de liquidação, que é o
+    que o KPI lê.
+    """
+    try:
+        with open(src_path, 'r', encoding='latin-1', newline='') as fh:
+            linhas = [ln for ln in fh.read().splitlines() if ln.strip()]
+    except Exception:
+        log.warning('[cetip] BACC: não consegui ler %s:\n%s', src_path, traceback.format_exc())
+        return None
+    if not linhas:
+        return None
+    tem_header = bool(cfg.get('has_header'))
+    header = [h.strip() for h in linhas[0].split(';')] if tem_header else []
+    dados = linhas[1:] if tem_header else linhas
+    i_parte = _cetip_bacc_col(header, cfg.get('parte') or {})
+    i_cpty = _cetip_bacc_col(header, cfg.get('contraparte') or {})
+    if i_parte is None or i_cpty is None:
+        log.warning('[cetip] BACC: colunas não resolvidas em %s (parte=%s contraparte=%s) '
+                    '— arquivo NÃO anexado', os.path.basename(src_path), i_parte, i_cpty)
+        return None
+
+    def _conta(campos, i):
+        return _cetip_acct_key(campos[i]) if i < len(campos) else ''
+
+    mantidas = [ln for ln in dados
+                if _conta(ln.split(';'), i_parte) in _CETIP_BACC_ACCOUNTS
+                and _conta(ln.split(';'), i_cpty) in _CETIP_BACC_ACCOUNTS]
+    out_path = os.path.join(out_dir, os.path.basename(src_path))
+    saida = ([linhas[0]] if tem_header else []) + mantidas
+    try:
+        # Latin-1 + CRLF: o mesmo formato do `_cetip_save_file`, para o recorte ser
+        # byte a byte o arquivo original menos as linhas de fora.
+        with open(out_path, 'w', encoding='latin-1', newline='') as fh:
+            fh.write('\r\n'.join(saida) + ('\r\n' if saida else ''))
+    except Exception:
+        log.warning('[cetip] BACC: não consegui gravar o recorte de %s:\n%s',
+                    os.path.basename(src_path), traceback.format_exc())
+        return None
+    log.info('[cetip] BACC: %s → %d de %d linha(s) intragrupo',
+             os.path.basename(src_path), len(mantidas), len(dados))
+    return out_path, len(mantidas), len(dados)
+
+
+def _cetip_distribute_emails(ref, dest_dir, send_mail, ss_to_list=None, cem_to_list=None,
+                             bacc_to_list=None):
     """Stage 2 of Save CETIP Files ("Send to other areas"): e-mail Sales Support
-    (SIC + Term/Option/SWAP positions) and CEM Latam BA (.OPC) with the files that
-    stage 1 already saved to dest_dir — no re-save. Attachment paths are rebuilt
-    from each rule's deterministic dest name for the reference date. TO lists come
-    from the card (persisted); empty → the hardcoded defaults. CC stays OTC Ops."""
+    (SIC + Term/Option/SWAP positions), CEM Latam BA (.OPC) and BACC (DFLUXO +
+    the three positions, RECORTADOS para o intragrupo — ver `_cetip_bacc_copy`)
+    with the files that stage 1 already saved to dest_dir — no re-save. Attachment
+    paths are rebuilt from each rule's deterministic dest name for the reference
+    date. TO lists come from the card (persisted); Sales Support e CEM Latam caem
+    nos endereços históricos quando a lista está vazia, o BACC **não** — ele não
+    tem default, e sem lista o e-mail dele simplesmente não sai. CC stays OTC Ops."""
     ss_to_list  = ss_to_list  or [CETIP_SALES_SUPPORT_EMAIL]
     cem_to_list = cem_to_list or CETIP_CEM_LATAM_EMAILS
+    bacc_to_list = bacc_to_list or []
     if not os.path.isdir(dest_dir):
         return jsonify({'success': False,
                         'error': 'No saved files found for this date. Run "Save CETIP Files" first.'}), 400
@@ -3183,8 +3347,14 @@ def _cetip_distribute_emails(ref, dest_dir, send_mail, ss_to_list=None, cem_to_l
     ref_fmt    = ref.strftime('%d/%m/%Y')
     attach_paths, attach_saved = [], []   # Sales Support (SIC + positions)
     opc_paths,    opc_saved    = [], []   # CEM Latam (.OPC)
+    bacc_paths,   bacc_saved   = [], []   # BACC (DFLUXO + 3 posições, recortados)
+    bacc_skipped               = []       # recorte que não saiu (coluna não resolvida)
+    # Os recortes do BACC são temporários de propósito: eles não podem encostar na
+    # pasta de liquidação, que é o que o KPI lê. Criado só se houver o que recortar.
+    bacc_tmp = None
     for rule in _cetip_rules():
-        if not (rule.get('attach_sales_support') or rule.get('attach_cem_latam')):
+        if not (rule.get('attach_sales_support') or rule.get('attach_cem_latam')
+                or rule.get('attach_bacc')):
             continue
         try:
             dest_name = rule['dest_name'](ref_yymmdd)
@@ -3198,13 +3368,28 @@ def _cetip_distribute_emails(ref, dest_dir, send_mail, ss_to_list=None, cem_to_l
             attach_paths.append(dest_path); attach_saved.append(entry)
         if rule.get('attach_cem_latam'):
             opc_paths.append(dest_path); opc_saved.append(entry)
+        if rule.get('attach_bacc') and bacc_to_list:
+            if bacc_tmp is None:
+                bacc_tmp = tempfile.mkdtemp(prefix='cetip-bacc-')
+            cut = _cetip_bacc_copy(dest_path, rule.get('bacc') or {}, bacc_tmp)
+            if cut is None:
+                bacc_skipped.append({'dest': dest_name, 'type': rule['label']})
+                continue
+            cut_path, kept, total = cut
+            bacc_paths.append(cut_path)
+            # A contagem vai na coluna Type da tabela do e-mail: quem recebe tem de
+            # ver que o anexo é um RECORTE, não o arquivo cheio.
+            bacc_saved.append({'src': dest_name, 'dest': dest_name,
+                               'type': '{} — {} of {} line(s)'.format(rule['label'], kept, total)})
 
-    if not attach_paths and not opc_paths:
+    if not attach_paths and not opc_paths and not bacc_paths:
+        if bacc_tmp:
+            shutil.rmtree(bacc_tmp, ignore_errors=True)
         return jsonify({'success': False,
                         'error': 'No position files found for {}. Run "Save CETIP Files" first.'
                         .format(ref_fmt)}), 400
 
-    mail_ss = mail_cem = None
+    mail_ss = mail_cem = mail_bacc = None
     if send_mail:
         ss_msg = ('Please find attached the position files (Contract/SIC — DPOSCONTRATOSIC, '
                   'Term — DPOSICAO-TER.TER, Option — DPOSICAO.OPC, and SWAP — DPOSICAO-SWAP), '
@@ -3225,38 +3410,72 @@ def _cetip_distribute_emails(ref, dest_dir, send_mail, ss_to_list=None, cem_to_l
             'Hello CEM Latam BA,', cem_msg,
             ref_fmt, opc_saved, attachments=opc_paths)
 
+        if bacc_paths:
+            bacc_msg = (
+                'Please find attached the SWAP flow (DFLUXO) and the Term, Option and '
+                'SWAP position files, as requested. <b>These are filtered copies:</b> only '
+                'the rows whose <i>party AND counterparty</i> are one of the intragroup '
+                'accounts (00041.00-7 Lawton, 73760.00-9 Banco J.P. Morgan, 85398.00-5 '
+                'Atacama) were kept — the line count of each file is shown below.')
+            if bacc_skipped:
+                bacc_msg += (' <b>{}</b> file(s) could not be filtered and were left out; '
+                             'OTC Ops was notified.'.format(len(bacc_skipped)))
+            mail_bacc = _send_cetip_email(
+                bacc_to_list, [CETIP_OTC_OPS_EMAIL],
+                'CETIP Intragroup Position - BACC - {}'.format(ref_yymmdd),
+                'Hello BACC,', bacc_msg,
+                ref_fmt, bacc_saved, attachments=bacc_paths, missing=bacc_skipped)
+
+    # Os recortes já foram lidos pelo `sendmail` — a pasta temporária sai agora.
+    if bacc_tmp:
+        shutil.rmtree(bacc_tmp, ignore_errors=True)
+
+    areas = ['Sales Support', 'CEM Latam'] + (['BACC'] if bacc_paths else [])
     _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                          'CETIP Files Distributed', 'Control Panel',
-                         'Sales Support + CEM Latam ({})'.format(ref.strftime('%Y-%m-%d')))
+                         '{} ({})'.format(' + '.join(areas), ref.strftime('%Y-%m-%d')))
 
     msg = 'Distribution e-mails sent for <b>{}</b>.'.format(ref_fmt)
     if send_mail:
-        probs = [v for v in (mail_ss, mail_cem) if v is not True and v is not None]
+        probs = [v for v in (mail_ss, mail_cem, mail_bacc) if v is not True and v is not None]
         if not probs:
-            msg = '<br>Distribution e-mails sent (Sales Support + CEM Latam).'
+            msg = '<br>Distribution e-mails sent ({}).'.format(' + '.join(areas))
+            # Lista de BACC vazia é desfecho legítimo (ninguém cadastrado), mas o
+            # painel tem de dizer — senão "enviado" some com o e-mail que não saiu.
+            if not bacc_to_list:
+                msg += ('<br><span class="text-muted">BACC: no TO saved — '
+                        'e-mail not sent.</span>')
+            elif bacc_skipped:
+                msg += ('<br><span class="text-warning">BACC: {} file(s) left out '
+                        '(column pair not resolved) — see the log.</span>'
+                        .format(len(bacc_skipped)))
         else:
             msg = ('<span class="text-warning">Some distribution e-mails failed: {}</span>'
                    .format(probs[0]))
     return jsonify({'success': True, 'message': msg,
-                    'email_sent': {'sales_support': mail_ss, 'cem_latam': mail_cem},
+                    'email_sent': {'sales_support': mail_ss, 'cem_latam': mail_cem,
+                                   'bacc': mail_bacc},
+                    'bacc_files': bacc_saved, 'bacc_skipped': bacc_skipped,
                     'destination': dest_dir})
 
 
 @blueprint.route('/api/control-panel/cetip-settlement/recipients', methods=['GET', 'POST'])
 def api_cp_cetip_recipients():
-    """GET → the TO lists for the two distribution e-mails (defaults shown when
-    nothing is saved yet); POST → persist them. CC (OTC Ops) is fixed in code."""
+    """GET → the TO lists for the three distribution e-mails (defaults shown when
+    nothing is saved yet; o BACC não tem default e volta vazio); POST → persist
+    them. CC (OTC Ops) is fixed in code."""
     if not session.get('authenticated'):
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
     if request.method == 'GET':
         rec = _load_cetip_recipients()
         return jsonify({'success': True,
                         'ss_to': rec['ss_to'] or CETIP_SALES_SUPPORT_EMAIL,
-                        'cem_to': rec['cem_to'] or '; '.join(CETIP_CEM_LATAM_EMAILS)})
+                        'cem_to': rec['cem_to'] or '; '.join(CETIP_CEM_LATAM_EMAILS),
+                        'bacc_to': rec['bacc_to']})
     payload = request.get_json(silent=True) or {}
     try:
-        _save_cetip_recipients((payload.get('ss_to') or '').strip(),
-                               (payload.get('cem_to') or '').strip())
+        rec, _mudou = _cetip_merge_recipients(payload)
+        _save_cetip_recipients(rec)
     except Exception as e:
         log.error('[cetip] save recipients failed:\n%s', traceback.format_exc())
         return jsonify({'success': False, 'error': '{}: {}'.format(type(e).__name__, e)}), 500
@@ -3293,17 +3512,18 @@ def api_cp_cetip_settlement():
     # TO lists: run payload (what's on the card) > saved > hardcoded default; when
     # the payload carries them they are persisted for the next runs.
     if stage == 'distribute':
-        rec = _load_cetip_recipients()
-        if 'ss_to' in payload or 'cem_to' in payload:
-            rec = {'ss_to': (payload.get('ss_to') or '').strip(),
-                   'cem_to': (payload.get('cem_to') or '').strip()}
+        # Merge, não substituição: o payload traz o que está na tela, e uma tela que
+        # não conhecesse uma das três chaves apagaria aquela lista ao rodar.
+        rec, mudou = _cetip_merge_recipients(payload)
+        if mudou:
             try:
-                _save_cetip_recipients(rec['ss_to'], rec['cem_to'])
+                _save_cetip_recipients(rec)
             except Exception:
                 log.error('[cetip] save recipients failed:\n%s', traceback.format_exc())
         return _cetip_distribute_emails(ref, dest_dir, send_mail,
                                         _parse_emails(rec['ss_to']),
-                                        _parse_emails(rec['cem_to']))
+                                        _parse_emails(rec['cem_to']),
+                                        _parse_emails(rec['bacc_to']))
 
     # Ensure the dated source folder exists (B3 daily drop). On Windows create it
     # in the standard layout if missing; on dev (POSIX) just error out cleanly.

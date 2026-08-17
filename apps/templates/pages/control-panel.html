@@ -340,6 +340,16 @@
                                placeholder="email1@jpmorgan.com; email2@jpmorgan.com">
                     </div>
                     <div class="cp-field">
+                        <label data-lang="cp-cetip-bacc-to">TO — BACC</label>
+                        <input type="text" id="cp-cetip-bacc-to" data-payload-key="bacc_to"
+                               class="form-control form-control-sm"
+                               placeholder="email1@jpmorgan.com; email2@jpmorgan.com">
+                        <small class="cp-field__hint" data-lang="cp-cetip-bacc-hint">
+                            DFLUXO + Term/Option/SWAP positions, filtered to the intragroup
+                            accounts (00041.00-7 · 73760.00-9 · 85398.00-5). Empty = not sent.
+                        </small>
+                    </div>
+                    <div class="cp-field">
                         <label data-lang="cp-ref-date">Reference date</label>
                         <div class="cp-datefield" id="cpDateWrap">
                             <input type="text" id="cp-cetip-date" data-input readonly
@@ -1195,29 +1205,39 @@ document.addEventListener('click', function (e) {
 })();
 
 // ── Save CETIP Files card: persisted TO per distribution e-mail ──────────────
-// Sales Support / CEM Latam TO lists load from the server (defaults = the old
-// hardcoded addresses) and save on blur; the Run buttons also send them in the
-// POST payload via data-payload-key, so the run always uses what's on screen.
+// Sales Support / CEM Latam / BACC TO lists load from the server (os dois
+// primeiros com os endereços históricos como default; o BACC volta vazio, porque
+// não tem default — sem lista o e-mail dele não sai) and save on blur; the Run
+// buttons also send them in the POST payload via data-payload-key, so the run
+// always uses what's on screen.
 (function () {
-    var ssEl  = document.getElementById('cp-cetip-ss-to');
-    var cemEl = document.getElementById('cp-cetip-cem-to');
-    if (!ssEl || !cemEl) return;
+    var KEYS = { ss_to: 'cp-cetip-ss-to', cem_to: 'cp-cetip-cem-to', bacc_to: 'cp-cetip-bacc-to' };
+    var els = {};
+    Object.keys(KEYS).forEach(function (k) { els[k] = document.getElementById(KEYS[k]); });
+    if (!els.ss_to || !els.cem_to) return;
     var REC_URL = '/api/control-panel/cetip-settlement/recipients';
 
     fetch(REC_URL, { credentials: 'same-origin' })
         .then(function (r) { return r.json(); })
-        .then(function (d) { if (!d || !d.success) return;
-                             ssEl.value = d.ss_to || ''; cemEl.value = d.cem_to || ''; })
+        .then(function (d) {
+            if (!d || !d.success) return;
+            Object.keys(KEYS).forEach(function (k) { if (els[k]) els[k].value = d[k] || ''; });
+        })
         .catch(function () {});
 
     function saveRecipients() {
+        var body = {};
+        // Só as chaves que existem na tela: o servidor faz merge, então mandar uma
+        // chave ausente como '' apagaria aquela lista.
+        Object.keys(KEYS).forEach(function (k) { if (els[k]) body[k] = els[k].value; });
         return fetch(REC_URL, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            credentials: 'same-origin',
-            body: JSON.stringify({ ss_to: ssEl.value, cem_to: cemEl.value })
+            credentials: 'same-origin', body: JSON.stringify(body)
         }).catch(function () {});
     }
-    [ssEl, cemEl].forEach(function (el) { el.addEventListener('blur', saveRecipients); });
+    Object.keys(KEYS).forEach(function (k) {
+        if (els[k]) els[k].addEventListener('blur', saveRecipients);
+    });
 })();
 
 // ── Weekly Escalation card: persisted TO/CC + Run (CEM/EDG > 30 days e-mail) ──

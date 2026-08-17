@@ -349,6 +349,8 @@
   "cp-sec-ds-desc": "Routines that process data sources and save the required files into the settlement folders.",
   "cp-r-cetip-title": "Save CETIP Files",
   "cp-r-cetip-desc": "Reads the raw CETIP files from the B3 daily download folder, renames them to the standard convention and saves them into the settlement folders used by the KPI.",
+  "cp-cetip-bacc-to": "TO — BACC",
+  "cp-cetip-bacc-hint": "DFLUXO + Term/Option/SWAP positions, filtered to the intragroup accounts (00041.00-7 · 73760.00-9 · 85398.00-5). Empty = not sent.",
   "cp-cetip-meta": "B3 → Settlement folders",
   "cp-cetip-run-save": "Save + OTC e-mail",
   "cp-cetip-run-dist": "Send to other areas",

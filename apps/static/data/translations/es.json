@@ -348,6 +348,8 @@
   "cp-sec-ds-desc": "Rutinas que procesan fuentes de datos y guardan los archivos necesarios en las carpetas de liquidación.",
   "cp-r-cetip-title": "Guardar Archivos CETIP",
   "cp-r-cetip-desc": "Lee los archivos sin procesar de CETIP de la carpeta diaria de descarga de B3, los renombra al estándar y los guarda en las carpetas de liquidación que usa el KPI.",
+  "cp-cetip-bacc-to": "TO — BACC",
+  "cp-cetip-bacc-hint": "DFLUXO + posiciones de Plazo/Opción/SWAP, filtradas a las cuentas del intragrupo (00041.00-7 · 73760.00-9 · 85398.00-5). Vacío = no se envía.",
   "cp-cetip-meta": "B3 → Carpetas de liquidación",
   "cp-cetip-run-save": "Guardar + correo OTC",
   "cp-cetip-run-dist": "Enviar a otras áreas",
