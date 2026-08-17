@@ -9162,6 +9162,70 @@ def _optadv_prm_for(prm, conf, titulo):
     return None
 
 
+_OPTADV_IR_COL = 9                             # 'IR 0,005% (R$)'
+_OPTADV_LIQ_COL = 10                           # 'Resultado Líquido (R$)'
+
+
+def _optadv_apply_ir(items):
+    """Aplica o IR de 0,005% às linhas do aviso de opção, IN PLACE.
+
+    O imposto da opção NÃO é da linha, e é aqui que ele difere do termo de
+    mercadoria (onde cada contrato paga o seu):
+
+    1. **Só o PAGAMENTO DE PRÊMIO paga.** Recompra e exercício não têm IR — é o
+       que a flag `premium` da linha carrega (e ela exige que TODOS os eventos
+       aprovados do Título sejam prêmio, ver `_optadv_collect`).
+    2. **A base é o NET por contraparte × data de liquidação**, não a operação.
+       Todo o `_optadv_collect` é de UMA data, então o net é por contraparte
+       dentro dele. Cobrar por linha faria dois prêmios que se anulam pagarem
+       imposto sobre um caixa que não existe.
+    3. **Só quando o net é positivo PARA A CONTRAPARTE**, isto é, quando o banco
+       paga (`net < 0`, que é a ótica de todos os valores desta tela). Net a favor
+       do banco não retém nada.
+
+    O net entra só com as linhas de prêmio: incluir o exercício aqui faria uma
+    operação sem IR mexer no IR de outra, o que contradiz a regra 1.
+
+    A isenção continua saindo do MESMO cadastro `ndfc-ir-exempt` do termo — é o
+    mesmo imposto sobre o mesmo cliente, e uma segunda lista divergiria com uma
+    tela retendo e a outra não.
+
+    O imposto é calculado sobre o net e depois RATEADO pelas linhas na proporção
+    do módulo de cada uma, com a sobra de arredondamento na última: a coluna é por
+    linha, e a soma que o aviso imprime tem de ser exatamente o imposto do net."""
+    grupos = {}
+    for r in items:
+        if not r.get('premium') or r.get('apurado') is None:
+            continue
+        grupos.setdefault(_fcst_norm(r.get('counterparty', '')).strip(), []).append(r)
+
+    for cliente, linhas in grupos.items():
+        net = sum(r['apurado'] for r in linhas)
+        if net >= 0 or _ndfc_ir_exempt(linhas[0].get('counterparty', '')):
+            continue
+        total = round(abs(net) * _NDFADV_IR_RATE, 2)
+        if not total:
+            continue
+        base = sum(abs(r['apurado']) for r in linhas)
+        acc = 0.0
+        for i, r in enumerate(linhas):
+            if i == len(linhas) - 1:
+                r['ir'] = round(total - acc, 2)          # a sobra fecha o total
+            else:
+                r['ir'] = round(total * abs(r['apurado']) / base, 2) if base else 0.0
+                acc += r['ir']
+
+    # Resultado Líquido e as duas células — o IR retido sempre ENCOLHE o que se
+    # movimenta, qualquer que seja o sinal (mesma regra do aviso de FX).
+    for r in items:
+        ap, ir = r.get('apurado'), r.get('ir') or 0.0
+        r['ir'] = ir
+        r['liquido'] = None if ap is None else (ap - ir if ap >= 0 else ap + ir)
+        r['cells'][_OPTADV_IR_COL] = _ops_fmt_amt(ir)
+        r['cells'][_OPTADV_LIQ_COL] = _ops_fmt_amt(r['liquido'])
+    return items
+
+
 def _optadv_collect(ref):
     """Linhas do Option Settlement Advice (commodities, equities e câmbio) da
     data `ref`."""
@@ -9241,9 +9305,9 @@ def _optadv_collect(ref):
             apurado = _optadv_prm_for(cog_prm, conf, titulo)
         else:
             apurado = otm_by_suffix.get(suf) if suf else None
-        ir = _ndfc_ir(apurado, cliente)
-        # O IR retido sempre ENCOLHE o que se movimenta (regra do aviso de FX).
-        liq = None if apurado is None else (apurado - ir if apurado >= 0 else apurado + ir)
+        # IR fica para DEPOIS do laço: na opção ele não é da linha, é do NET por
+        # contraparte (ver `_optadv_apply_ir`). Aqui a linha nasce sem imposto.
+        ir, liq = 0.0, apurado
 
         ref_rec = spn_by_name.get(_fcst_norm(cliente), {})
         spn = str(otm_spn.get(suf, '') or '').strip() or ref_rec.get('spn', '')
@@ -9296,7 +9360,9 @@ def _optadv_collect(ref):
             'apurado': apurado, 'ir': ir, 'liquido': liq,
             'b3': sum(b3_vals) if b3_vals else None,
         })
-    return out
+    # O IR é do NET por contraparte, então só dá para calculá-lo com as linhas do
+    # dia todas na mão — por isso ele é um passe depois do laço, e não parte dele.
+    return _optadv_apply_ir(out)
 
 
 @blueprint.route('/other-products-option-settlement-advice')
