@@ -31,7 +31,11 @@
     display: block; font-size: .68rem; font-weight: 600; text-transform: uppercase;
     letter-spacing: .04em; color: var(--bs-secondary-color); margin-bottom: .25rem;
 }
-#quotes-page .qt-datewrap { position: relative; width: 160px; }
+/* Largura pelo CONTEÚDO, não pela tela: o tipo cabe em "Commodities" e o
+   instrumento no maior código do cadastro. */
+#quotes-page #qt-kind { width: 150px; }
+#quotes-page #qt-instrument { width: 190px; }
+#quotes-page .qt-datewrap { position: relative; width: 140px; }
 #quotes-page .qt-datewrap input { padding-right: 32px; cursor: pointer; }
 #quotes-page .qt-cal-btn {
     position: absolute; top: 0; right: 0; bottom: 0; width: 30px; display: inline-flex;
@@ -66,55 +70,49 @@
 
     <!-- Busca: tipo → instrumento → período -->
     <div class="qt-card">
-        <div class="row g-2 align-items-end">
-            <div class="col-12 col-md-3">
-                <div class="qt-field">
-                    <label for="qt-kind" data-lang="qt-kind">Quote type</label>
-                    <select id="qt-kind" class="form-select form-select-sm">
-                        <option value="" data-lang="qt-kind-pick">Select…</option>
-                        <option value="ptax" data-lang="qt-kind-ptax">PTAX</option>
-                        <option value="equity" data-lang="qt-kind-equity">Equities</option>
-                        <option value="commodity" data-lang="qt-kind-commodity">Commodities</option>
-                    </select>
+        <!-- Alinhados à ESQUERDA, com largura própria: o grid de 12 colunas
+             esticava cada campo até a borda da tela, e um combobox de 500 px
+             para um código de seis caracteres só afasta os campos uns dos
+             outros. -->
+        <div class="d-flex flex-wrap align-items-end gap-2">
+            <div class="qt-field">
+                <label for="qt-kind" data-lang="qt-kind">Quote type</label>
+                <select id="qt-kind" class="form-select form-select-sm">
+                    <option value="" data-lang="qt-kind-pick">Select…</option>
+                    <option value="ptax" data-lang="qt-kind-ptax">PTAX</option>
+                    <option value="equity" data-lang="qt-kind-equity">Equities</option>
+                    <option value="commodity" data-lang="qt-kind-commodity">Commodities</option>
+                </select>
+            </div>
+            <div class="qt-field">
+                <label for="qt-instrument" id="qtInstrumentLabel" data-lang="qt-instrument">Instrument</label>
+                <!-- Combobox com type-ahead nativo: são ~1.300 ativos e ~900
+                     contratos, e um <select> comum obrigaria a rolar a lista.
+                     Fica DESABILITADO até o tipo ser escolhido. -->
+                <input list="qtInstrumentList" id="qt-instrument" autocomplete="off" disabled
+                       class="form-control form-control-sm" placeholder="—">
+                <datalist id="qtInstrumentList"></datalist>
+            </div>
+            <div class="qt-field">
+                <label for="qt-from" data-lang="qt-from">From</label>
+                <div class="qt-datewrap">
+                    <input type="text" id="qt-from" class="form-control form-control-sm"
+                           readonly autocomplete="off" placeholder="dd/mm/aaaa">
+                    <span class="qt-cal-btn" title="Open calendar"><i class="ti ti-calendar"></i></span>
                 </div>
             </div>
-            <div class="col-12 col-md-4">
-                <div class="qt-field">
-                    <label for="qt-instrument" id="qtInstrumentLabel" data-lang="qt-instrument">Instrument</label>
-                    <!-- Combobox com type-ahead nativo: são ~1.300 ativos e ~900
-                         contratos, e um <select> comum obrigaria a rolar a lista.
-                         Fica DESABILITADO até o tipo ser escolhido. -->
-                    <input list="qtInstrumentList" id="qt-instrument" autocomplete="off" disabled
-                           class="form-control form-control-sm" placeholder="—">
-                    <datalist id="qtInstrumentList"></datalist>
+            <div class="qt-field">
+                <label for="qt-to" data-lang="qt-to">To</label>
+                <div class="qt-datewrap">
+                    <input type="text" id="qt-to" class="form-control form-control-sm"
+                           readonly autocomplete="off" placeholder="dd/mm/aaaa">
+                    <span class="qt-cal-btn" title="Open calendar"><i class="ti ti-calendar"></i></span>
                 </div>
             </div>
-            <div class="col-6 col-md-2">
-                <div class="qt-field">
-                    <label for="qt-from" data-lang="qt-from">From</label>
-                    <div class="qt-datewrap">
-                        <input type="text" id="qt-from" class="form-control form-control-sm"
-                               readonly autocomplete="off" placeholder="dd/mm/aaaa">
-                        <span class="qt-cal-btn" title="Open calendar"><i class="ti ti-calendar"></i></span>
-                    </div>
-                </div>
-            </div>
-            <div class="col-6 col-md-2">
-                <div class="qt-field">
-                    <label for="qt-to" data-lang="qt-to">To</label>
-                    <div class="qt-datewrap">
-                        <input type="text" id="qt-to" class="form-control form-control-sm"
-                               readonly autocomplete="off" placeholder="dd/mm/aaaa">
-                        <span class="qt-cal-btn" title="Open calendar"><i class="ti ti-calendar"></i></span>
-                    </div>
-                </div>
-            </div>
-            <div class="col-12 col-md-1 d-flex">
-                <button class="btn btn-sm btn-primary bg-gradient btn-toolbar-all w-100" type="button"
-                        id="qtSearch" disabled>
-                    <i class="ti ti-search me-1"></i><span data-lang="qt-search">Search</span>
-                </button>
-            </div>
+            <button class="btn btn-sm btn-primary bg-gradient btn-toolbar-all" type="button"
+                    id="qtSearch" disabled>
+                <i class="ti ti-search me-1"></i><span data-lang="qt-search">Search</span>
+            </button>
         </div>
         <div class="text-muted fs-xs mt-2" id="qtSymbolHint"></div>
     </div>

@@ -14,13 +14,22 @@ Três decisões que não se leem no código:
 `trust_env=False` e o User-Agent que faz o ADFS negociar. É o que foi pedido —
 uma forma de autenticar para todas as APIs do app.
 
-**Mas o proxy volta, explícito.** O `build_session` desliga o `trust_env` de
-propósito, porque a Athena é host INTERNO e herdar o proxy corporativo dava
-`WinError 10061` (CLAUDE.md §8). BCB e Yahoo são o oposto: são internet, e sem
-o proxy corporativo a conexão simplesmente não sai da rede JPM. Por isso o proxy
-é escrito na sessão aqui — o mesmo `proxy.jpmchase.net:10443` que o app de
-desktop usava —, e não herdado do ambiente: herdado, ele voltaria a valer também
-para a Athena.
+**Mas o proxy volta, explícito — e é uma CADEIA, não um endereço.** O
+`build_session` desliga o `trust_env` de propósito, porque a Athena é host
+INTERNO e herdar o proxy corporativo dava `WinError 10061` (CLAUDE.md §8). BCB e
+Yahoo são o oposto: são internet, e em boa parte da rede JPM a conexão só sai
+pelo proxy. Só que o `proxy.jpmchase.net:10443` que o app de desktop usava **não
+atende em toda máquina** — na instância do time ele responde *connection refused*,
+que é o mesmo `WinError 10061` por outro motivo (ali não há nada escutando).
+
+Por isso a saída é tentada em ORDEM — proxy cadastrado, proxy do sistema
+(`getproxies()`, que no Windows lê as Opções de Internet), conexão direta — e a
+primeira que responder fica memorizada no processo. Uma máquina que sai direto e
+outra que só sai por proxy usam o mesmo código, sem `.env` por máquina. Duas
+consequências: o `trust_env` continua **desligado** (o proxy do sistema é copiado
+para a sessão, não herdado — herdado, voltaria a valer para a Athena), e erro de
+**rede** tenta a próxima rota enquanto erro de **HTTP** para na hora, porque aí a
+rota funcionou e o problema é a fonte.
 
 **Sem `yfinance`.** O app desktop usava `yf.download`, que não é dependência do
 OTC Tracker e arrastaria pandas-datareader e afins. O que ele faz para OHLCV
@@ -32,15 +41,26 @@ import logging
 import os
 import re
 from datetime import datetime, timedelta
+from urllib.request import getproxies
 
 from apps.pages import athena_api
 
 log = logging.getLogger('otc_tracker')
 
 # O proxy corporativo — só para os endpoints de INTERNET (BCB, Yahoo). Nunca
-# para a Athena: ela é interna e o proxy a recusa.
-QUOTES_PROXY = os.getenv('QUOTES_PROXY', 'http://proxy.jpmchase.net:10443')
+# para a Athena: ela é interna e o proxy a recusa. `QUOTES_PROXY=` (vazio) tira
+# esta rota da fila; ele é a PRIMEIRA tentativa, não a única.
+QUOTES_PROXY = os.getenv('QUOTES_PROXY', 'http://proxy.jpmchase.net:9443')
+# A porta que o app de desktop usava. Ela é tentada DEPOIS, e existe porque as
+# duas convivem na rede: a 10443 respondeu *connection refused* na instância do
+# time (WinError 10061 — não há nada escutando ali), e a 9443 é a que atende.
+# Quem trocar o `QUOTES_PROXY` não perde o segundo endereço por isso.
+_FALLBACK_PROXIES = ('http://proxy.jpmchase.net:10443',)
 QUOTES_TIMEOUT = int(os.getenv('QUOTES_TIMEOUT', '30') or 30)
+# O timeout de CONEXÃO é curto de propósito: ele é pago uma vez por rota morta,
+# e com os 30 s da leitura a fila inteira faria a tela esperar um minuto e meio
+# para dizer que não conectou.
+QUOTES_CONNECT_TIMEOUT = int(os.getenv('QUOTES_CONNECT_TIMEOUT', '6') or 6)
 
 # As moedas que o BCB publica na PTAX. Não é de-para: é o domínio do endpoint —
 # pedir uma moeda fora desta lista devolve vazio, não erro.
@@ -60,12 +80,65 @@ class QuotesError(Exception):
     """Falha que a tela mostra ao usuário — sempre com o motivo por extenso."""
 
 
-def _session():
-    """A sessão da Athena (Kerberos) com o proxy dos endpoints externos."""
+class _RouteError(Exception):
+    """Falha de REDE numa rota de saída — vale tentar a próxima.
+
+    Separada da `QuotesError` de propósito: um HTTP 404 da fonte não melhora
+    trocando de proxy, e insistir gastaria três tentativas para chegar à mesma
+    resposta."""
+
+
+def _session(proxies):
+    """A sessão da Athena (Kerberos) com a rota de saída pedida.
+
+    O `trust_env` continua desligado (é do `build_session`): o proxy do sistema,
+    quando é a vez dele, é COPIADO para a sessão. Herdado, ele voltaria a valer
+    também para a Athena, que é o host interno que o `trust_env=False` protege.
+    """
     session = athena_api.build_session()
-    if QUOTES_PROXY:
-        session.proxies.update({'http': QUOTES_PROXY, 'https': QUOTES_PROXY})
+    session.proxies.clear()
+    session.proxies.update(proxies or {})
     return session
+
+
+def _routes():
+    """As saídas a tentar, em ordem, sem repetir endereço.
+
+    Uma máquina que sai direto e outra que só sai por proxy usam o mesmo código:
+    a diferença é qual delas responde primeiro. A que responder fica memorizada
+    no processo (`_route_ok`) — sem isso, toda busca pagaria de novo o timeout
+    das rotas mortas que vêm antes dela.
+    """
+    rotas, vistos = [], set()
+
+    def add(nome, proxies):
+        chave = (proxies.get('http', ''), proxies.get('https', ''))
+        if chave in vistos:
+            return
+        vistos.add(chave)
+        rotas.append((nome, proxies))
+
+    if QUOTES_PROXY:
+        add('proxy ' + QUOTES_PROXY, {'http': QUOTES_PROXY, 'https': QUOTES_PROXY})
+    try:
+        sistema = getproxies()          # no Windows, as Opções de Internet
+    except Exception:                   # noqa: BLE001
+        sistema = {}
+    alvo = sistema.get('https') or sistema.get('http')
+    if alvo:
+        add('system proxy ' + alvo, {'http': sistema.get('http') or alvo,
+                                     'https': sistema.get('https') or alvo})
+    for url in _FALLBACK_PROXIES:
+        add('proxy ' + url, {'http': url, 'https': url})
+    add('direct connection', {})
+
+    nome_ok = _route_ok.get('name')
+    if nome_ok:
+        rotas.sort(key=lambda r: 0 if r[0] == nome_ok else 1)
+    return rotas
+
+
+_route_ok = {'name': None}
 
 
 def _parse_date(value, label):
@@ -195,30 +268,86 @@ def _row_date_key(row):
         return datetime.min
 
 
-def _get_json(url, params, fonte):
-    """GET com a sessão Kerberos + proxy, devolvendo JSON.
+def _short_error(exc):
+    """O motivo em UMA linha.
 
-    Toda falha vira `QuotesError` com o nome da FONTE: fora da rede JPM as três
-    abas falham, e "Yahoo Finance: timeout" responde a pergunta que um stack
-    trace na tela não responde."""
+    A mensagem crua do urllib3 tem 400 caracteres — URL, pool, endereço do
+    objeto —, e é ela que aparecia na tela: quem lê precisa saber que o proxy
+    recusou, não em que posição de memória isso aconteceu.
+    """
+    txt = str(exc)
+    baixo = txt.lower()
+    if 'unable to connect to proxy' in baixo:
+        return 'the proxy refused the connection'
+    if 'timed out' in baixo or 'timeout' in baixo:
+        return 'timed out'
+    if 'getaddrinfo' in baixo or 'name or service not known' in baixo \
+            or 'failed to resolve' in baixo or 'nodename nor servname' in baixo:
+        return 'host not resolved'
+    if 'certificate' in baixo or 'sslerror' in baixo:
+        return 'SSL failure'
+    if 'refused' in baixo:
+        return 'connection refused'
+    return type(exc).__name__
+
+
+def _fetch(url, params, proxies):
+    """Uma tentativa por uma rota. Erro de rede → `_RouteError` (tenta a
+    próxima); erro da FONTE → `QuotesError` (a rota funcionou, para aqui).
+
+    O 407 e os 502/504 são exceção: eles vêm DO PROXY, não da fonte, e por isso
+    contam como rota ruim — parar neles esconderia a saída que funciona.
+    """
     try:
-        session = _session()
+        session = _session(proxies)
     except RuntimeError as exc:                       # requests ausente
         raise QuotesError(str(exc))
     try:
-        resp = session.get(url, params=params, timeout=QUOTES_TIMEOUT)
-        resp.raise_for_status()
-        return resp.json()
-    except QuotesError:
-        raise
-    except Exception as exc:                          # noqa: BLE001
-        log.warning('[quotes] %s falhou (%s): %s', fonte, url, exc)
-        raise QuotesError('{}: {}'.format(fonte, exc))
+        try:
+            resp = session.get(url, params=params,
+                               timeout=(QUOTES_CONNECT_TIMEOUT, QUOTES_TIMEOUT))
+        except Exception as exc:                      # noqa: BLE001
+            raise _RouteError(_short_error(exc))
+        if resp.status_code in (407, 502, 504):
+            raise _RouteError('the proxy answered HTTP {}'.format(resp.status_code))
+        if resp.status_code >= 400:
+            raise QuotesError('HTTP {} from the source.'.format(resp.status_code))
+        try:
+            return resp.json()
+        except ValueError:
+            raise QuotesError('the source did not answer JSON (HTTP {}).'.format(
+                resp.status_code))
     finally:
         try:
             session.close()
         except Exception:                             # noqa: BLE001
             pass
+
+
+def _get_json(url, params, fonte):
+    """GET com a sessão Kerberos, tentando as rotas em ordem, devolvendo JSON.
+
+    Toda falha vira `QuotesError` com o nome da FONTE e o que cada rota
+    respondeu: fora da rede JPM as três abas falham, e "Yahoo Finance: the proxy
+    refused the connection; direct connection: timed out" responde a pergunta
+    que um stack trace na tela não responde."""
+    tentativas = []
+    for nome, proxies in _routes():
+        try:
+            data = _fetch(url, params, proxies)
+        except _RouteError as exc:
+            tentativas.append('{}: {}'.format(nome, exc))
+            log.warning('[quotes] %s por %s falhou: %s', fonte, nome, exc)
+            continue
+        if _route_ok.get('name') != nome:
+            log.info('[quotes] saída em uso: %s', nome)
+            _route_ok['name'] = nome
+        return data
+    # A rota memorizada morreu junto com as outras: esquece, para a próxima
+    # busca recomeçar pela ordem natural em vez de insistir na que caiu.
+    _route_ok['name'] = None
+    raise QuotesError('{}: could not reach the source ({}).'.format(
+        fonte, '; '.join(tentativas) or 'no route available'))
 
 
 def symbol_for(rows, label):

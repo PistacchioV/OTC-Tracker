@@ -34,6 +34,7 @@ Subjacente e o cadastro sao redirecionados para um tempfile.
 import io
 import json
 import os
+import re
 import sys
 import tempfile
 
@@ -245,19 +246,156 @@ finally:
     Q._get_json = _get_orig
 
 
-# ── 7. A sessao e a da Athena, com o proxy dos endpoints externos ─────────────
-print('\n7. Sessao — Kerberos da Athena + proxy explicito')
+# ── 7. A sessao e a da Athena; a SAIDA e uma cadeia de rotas ──────────────────
+print('\n7. Sessao — Kerberos da Athena + a fila de rotas de saida')
 
 src = read('apps/pages/quotes.py')
 check('a sessao sai do athena_api (uma forma de autenticar para todas as APIs)',
       'athena_api.build_session()' in src, True)
-check('o proxy e escrito na sessao, nao herdado do ambiente',
-      'session.proxies.update' in src, True)
+# O proxy e COPIADO para a sessao. Religar o trust_env faria o proxy do ambiente
+# valer tambem para a Athena, que e justo o host interno que ele protege.
+check('o proxy e escrito na sessao, e o trust_env nunca e religado',
+      ['session.proxies.update' in src,
+       bool(re.search(r'trust_env\s*=\s*True', src))], [True, False])
 # A dependencia e o que conta, nao a palavra: o cabecalho do modulo explica
 # justamente por que o `yf.download` do app de desktop nao foi portado.
 check('nao importa yfinance (uma dependencia a menos e um caminho de rede a menos)',
       [l for l in src.splitlines()
        if l.startswith(('import ', 'from ')) and 'yfinance' in l], [])
+
+# A ordem da fila: o cadastrado primeiro, o direto por ultimo. Uma maquina que
+# so sai por proxy e outra que sai direto usam o mesmo codigo.
+_pref, _fb, _ok = Q.QUOTES_PROXY, Q._FALLBACK_PROXIES, dict(Q._route_ok)
+Q.QUOTES_PROXY = 'http://proxy.exemplo:9443'
+Q._FALLBACK_PROXIES = ('http://proxy.exemplo:10443', 'http://proxy.exemplo:9443')
+Q._route_ok['name'] = None
+try:
+    nomes = [n for n, _p in Q._routes()]
+finally:
+    pass
+check('o QUOTES_PROXY e a PRIMEIRA rota', nomes[0], 'proxy http://proxy.exemplo:9443')
+check('a conexao direta e a ULTIMA', nomes[-1], 'direct connection')
+check('endereco repetido entra uma vez so (o 9443 esta nas duas listas)',
+      len(nomes), len(set(nomes)))
+check('a porta do app de desktop continua na fila, depois da cadastrada',
+      'proxy http://proxy.exemplo:10443' in nomes, True)
+
+Q._route_ok['name'] = 'direct connection'
+check('a rota que funcionou fica memorizada e passa para a frente da fila',
+      Q._routes()[0][0], 'direct connection')
+
+Q.QUOTES_PROXY = ''
+Q._FALLBACK_PROXIES = ()
+Q._route_ok['name'] = None
+check('QUOTES_PROXY vazio tira a rota da fila, e sobra a direta',
+      [n for n, _p in Q._routes() if 'exemplo' in n], [])
+
+# Rede x fonte: trocar de proxy nao conserta um 404, e parar num 407 esconderia
+# a saida que funciona.
+class _Resp(object):
+    def __init__(self, status, payload=None):
+        self.status_code = status
+        self._payload = payload
+
+    def json(self):
+        if self._payload is None:
+            raise ValueError('nao e json')
+        return self._payload
+
+
+class _Sess(object):
+    def __init__(self, comportamento):
+        self._c = comportamento
+        self.proxies = {}
+
+    def get(self, url, params=None, timeout=None):
+        if isinstance(self._c, Exception):
+            raise self._c
+        return self._c
+
+    def close(self):
+        pass
+
+
+def com_sessao(comportamentos):
+    """Uma sessao por rota, na ordem em que as rotas sao tentadas."""
+    fila = list(comportamentos)
+
+    def _mk(proxies):
+        return _Sess(fila.pop(0))
+    return _mk
+
+
+_sess_orig = Q._session
+Q._session = com_sessao([_Resp(404)])
+try:
+    Q._fetch('http://x', {}, {})
+    check('HTTP 404 da fonte para na hora (nao adianta trocar de rota)', 'nao levantou', 'QuotesError')
+except Q.QuotesError as e:
+    check('HTTP 404 da fonte para na hora (nao adianta trocar de rota)',
+          'HTTP 404' in str(e), True)
+except Q._RouteError:
+    check('HTTP 404 da fonte para na hora (nao adianta trocar de rota)',
+          '_RouteError', 'QuotesError')
+finally:
+    Q._session = _sess_orig
+
+Q._session = com_sessao([_Resp(407)])
+try:
+    Q._fetch('http://x', {}, {})
+    check('407 vem DO PROXY, entao vale tentar a proxima rota', 'nao levantou', '_RouteError')
+except Q._RouteError as e:
+    check('407 vem DO PROXY, entao vale tentar a proxima rota', 'HTTP 407' in str(e), True)
+except Q.QuotesError:
+    check('407 vem DO PROXY, entao vale tentar a proxima rota', 'QuotesError', '_RouteError')
+finally:
+    Q._session = _sess_orig
+
+# A fila anda: primeira rota morta, segunda responde.
+Q.QUOTES_PROXY = 'http://proxy.exemplo:9443'
+Q._FALLBACK_PROXIES = ()
+Q._route_ok['name'] = None
+Q._session = com_sessao([Exception('Unable to connect to proxy ... WinError 10061'),
+                         _Resp(200, {'ok': 1})])
+try:
+    got = Q._get_json('http://x', {}, 'Fonte')
+finally:
+    Q._session = _sess_orig
+check('proxy morto cai para a rota seguinte em vez de falhar a busca', got, {'ok': 1})
+check('e a rota que respondeu fica memorizada', Q._route_ok['name'], 'direct connection')
+
+# Nenhuma rota funciona: a mensagem diz o que cada uma respondeu, em UMA linha.
+Q._route_ok['name'] = None
+Q._session = com_sessao([Exception('Unable to connect to proxy'),
+                         Exception('read timed out')])
+try:
+    Q._get_json('http://x', {}, 'PTAX (BCB)')
+    check('sem rota, levanta QuotesError', 'nao levantou', 'QuotesError')
+except Q.QuotesError as e:
+    msg = str(e)
+    check('a mensagem nomeia a fonte', msg.startswith('PTAX (BCB):'), True)
+    check('e diz o que CADA rota respondeu',
+          ['proxy refused' in msg, 'timed out' in msg, 'direct connection' in msg],
+          [True, True, True])
+    check('sem o despejo do urllib3 (a mensagem crua tinha 400 caracteres)',
+          [len(msg) < 220, 'urllib3' in msg, 'object at 0x' in msg], [True, False, False])
+    check('a rota memorizada e esquecida quando todas caem', Q._route_ok['name'], None)
+finally:
+    Q._session = _sess_orig
+    Q.QUOTES_PROXY, Q._FALLBACK_PROXIES = _pref, _fb
+    Q._route_ok.update(_ok)
+
+check('proxy recusando vira uma linha legivel',
+      Q._short_error(Exception('HTTPSConnectionPool(host=...): Max retries exceeded '
+                               "(Caused by ProxyError('Unable to connect to proxy', ...))")),
+      'the proxy refused the connection')
+check('timeout vira uma linha legivel',
+      Q._short_error(Exception('HTTPSConnectionPool: Read timed out. (read timeout=30)')),
+      'timed out')
+check('DNS vira uma linha legivel',
+      Q._short_error(Exception('[Errno 8] nodename nor servname provided')), 'host not resolved')
+check('o timeout de CONEXAO e curto (a fila inteira nao pode fazer a tela esperar)',
+      Q.QUOTES_CONNECT_TIMEOUT <= 10, True)
 
 
 # ── 8. Rotas, pagina e menu ───────────────────────────────────────────────────
@@ -353,7 +491,6 @@ for lang in ('en', 'br', 'es'):
 
 # Toda chave data-lang da pagina precisa existir nas tres traducoes: sem a
 # entrada, o texto fica no ingles do template e a pagina sai bilingue.
-import re                                                      # noqa: E402
 usadas = sorted(set(re.findall(r'data-lang="([^"]+)"', html)))
 en = json.load(io.open(os.path.join(ROOT, 'apps', 'static', 'data', 'translations', 'en.json'),
                        encoding='utf-8'))
