@@ -293,17 +293,26 @@
     var PAGE_LEN = 50;
     var PAGE = 0;            // página atual (0-based); volta a 0 em filtro/troca/salvar
     // Ordenação por coluna: clique no header alterna asc/desc. null = a ordem
-    // padrão do mapping — que para o Commodities × B3 é MARKET A→Z, sempre
-    // (defaultSort); nos demais é a ordem do arquivo, como sempre foi. Só a
-    // EXIBIÇÃO ordena: o arquivo mantém a ordem de cadastro, e o data-idx das
-    // ações continua apontando para a linha certa.
+    // padrão do mapping — que para o Commodities × B3 é MARKET A→Z e para o
+    // Operations B3 Events é TIPO TÍTULO A→Z, sempre (defaultSort); nos demais é
+    // a ordem do arquivo, como sempre foi. Só a EXIBIÇÃO ordena: o arquivo
+    // mantém a ordem de cadastro, e o data-idx das ações continua apontando para
+    // a linha certa.
     var SORT = null;         // {col, dir} — escolha explícita do usuário
+
+    // mapping → coluna que abre ordenada A→Z. Um mapa e não um `if` encadeado:
+    // o próximo cadastro que quiser ordem própria entra com uma linha.
+    var DEFAULT_SORT_COL = {
+        'commodities-b3': 'MARKET',
+        'opb3-events': 'TIPO TITULO',
+    };
 
     function defaultSort() {
         var st = STATE[CUR];
-        if (!st || CUR !== 'commodities-b3') return null;
+        var key = DEFAULT_SORT_COL[CUR];
+        if (!st || !key) return null;
         for (var i = 0; i < st.columns.length; i++) {
-            if (st.columns[i].key === 'MARKET') return { col: i, dir: 1 };
+            if (st.columns[i].key === key) return { col: i, dir: 1 };
         }
         return null;
     }
