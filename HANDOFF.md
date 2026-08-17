@@ -11533,3 +11533,42 @@ cairia no `DEFAULT_RULE` sem ninguém ter decidido nada.
 como tela de validação. Os dois foram reescritos com o ciclo que vale (Generate no card de Pending
 OTC, um botão só no editor, a validação da esteira em seguida), junto com o 3.15, que ganhou o card
 do BACC. O `.docx` foi regerado do `.md`, que é a fonte única.
+
+---
+
+## §264 — Other Products Summary: o net zero se DIZ, e o Trade Level agrupa por produto
+
+Duas leituras que a mesa pediu, uma em cada tabela da página.
+
+**A linha que NETA ZERO saía com Receive e Pay VAZIOS.** O teste em `_opssum_rows` era `if recv`, e
+`0.0` é falso — então a operação cujos valores se anulam chegava à tela sem nenhum número nos dois
+lados. ⚠️ **Célula vazia se lê como "não deu para calcular"**, e aqui o zero é o RESULTADO: a
+liquidação existe e fecha em zero. A mesa não tinha como distinguir a linha que zerou da linha que
+não conseguiu apurar — as duas apareciam iguais.
+
+Passa a sair `0.00` no **Receive**, que é o lado que a `direction` já aponta (`total >= 0` →
+`RECEIVE`, a mesma expressão logo acima). O **Pay continua vazio**: preencher os dois diria que a
+mesma linha paga e recebe zero ao mesmo tempo, e a Direction ficaria desmentida pela própria linha.
+A condição virou `if (recv or zerado)`, com `zerado = not recv and not pay` calculado antes — o
+zero só vale quando os DOIS lados são zero, e não numa linha que só não tem o lado oposto.
+
+⚠️ **O gêmeo do NDF Summary (`_ndfsum_collect`) NÃO mudou.** A regra foi pedida para o Other
+Products, e as duas telas são lidas por gente diferente; igualá-las é outra decisão, tomada por
+quem usa a de NDF. Mexer nas duas "por simetria" teria mudado um relatório que ninguém revisou.
+
+**O Trade Level abria ordenado só por Counterparty**, e isso intercalava swap, termo e opção do
+mesmo cliente na mesma vizinhança — a conferência é por produto, e ela ia e voltava na tabela.
+Agora abre por **Product → LOB → Counterparty**, nessa precedência: o produto agrupa, a LOB separa
+a mesa dentro dele e o cliente ordena a lista final.
+
+Para isso o `initTable(id, dataCols, pageLen, orderCols)` da página passou a aceitar uma **LISTA**
+de índices, mantendo o número simples para quem só quer uma coluna e o **omitido** para quem não
+quer nenhuma — o Settlement Summary (`initTable('ops-summary-table', 9)`) continua abrindo na ordem
+em que o servidor mandou as linhas, que é como sempre foi. A chamada do Trade Level é
+`initTable('ops-trade-table', 10, 50, [7, 3, 4])`.
+
+⚠️ **Os índices são posicionais**, então uma coluna inserida no meio do cabeçalho passa a ordenar
+pela vizinha, em silêncio — a tabela ordena, só que pela coluna errada. O `check_ops_trade_swap.py`
+já fixava a string da chamada; além de atualizá-la, ele agora amarra os três índices ao **cabeçalho
+real** (`product` = 7, `lob` = 3, `counterparty` = 4, descontadas as três colunas de controle), o
+que transforma o deslocamento em FAIL em vez de numa ordenação plausível.

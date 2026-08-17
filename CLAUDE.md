@@ -722,6 +722,23 @@ vive uma vez só, no overlay do dia
 `other-products-summary_YYYYMMDD.json`, chaveado por **contraparte × LOB ×
 produto**, e as duas telas leem essa mesma chave (§183/§189/§190).
 
+**A linha que NETA ZERO diz `0.00` no Receive** (`_opssum_rows`), e não sai com
+as duas células em branco: vazio se lê como "não deu para calcular", e aqui o
+zero é o resultado — a operação liquida por valores que se anulam. Fica no
+Receive porque é o lado que a Direction já aponta (`total >= 0` → RECEIVE); o
+Pay continua vazio, senão a mesma linha diria que paga e recebe zero ao mesmo
+tempo. O gêmeo do NDF Summary (`_ndfsum_collect`) **não** mudou — a regra foi
+pedida para o Other Products, e igualar os dois é outra decisão (§264).
+
+**O Trade Level abre por Product → LOB → Counterparty**, nessa precedência, que
+é a da conferência: o produto agrupa, a LOB separa a mesa dentro dele e o
+cliente ordena a lista final. Só por Counterparty, swap, termo e opção do mesmo
+cliente ficavam intercalados. O `initTable` da página aceita um número **ou uma
+lista** de índices de ordenação; o Settlement Summary não passa nada e continua
+abrindo na ordem em que o servidor mandou. Os índices são posicionais, então
+`check_ops_trade_swap.py` confere que os três casam com o cabeçalho real —
+índice errado ordena pela coluna vizinha sem erro nenhum.
+
 **Equity é registrado na B3 como SWAP, então a linha já existe — o que falta é
 o outro lado.** O `br-onshore-settlements` (Swap Athena) é **só de CEM** e não
 tem equity: sem isso a linha saía com o nome curto da B3 (`SAFRABM`), sem
