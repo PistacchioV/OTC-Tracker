@@ -9097,6 +9097,20 @@ def _optadv_subjacente(classe, mercadoria, subjacente):
 _OPTADV_PRM_AMBIGUO = object()          # sentinela: dois trades na mesma chave
 
 
+def _optadv_cog_key(v):
+    """Chave de casamento entre o `Athena ID` do Cognos e a `Combinação de
+    operações` da posição de opções.
+
+    O MESMO identificador, com um separador diferente em cada sistema: o Cognos
+    escreve com HÍFEN e a B3 com UNDERLINE. Comparar o texto cru não casava nada —
+    e um filtro que não casa nada não dá erro, só deixa a coluna de valor vazia
+    para toda opção de câmbio.
+
+    Os DOIS lados passam por aqui, e não só o do Cognos: assim não importa qual
+    deles trouxe o hífen no dia em que um dos dois arquivos mudar de convenção."""
+    return str(v or '').strip().upper().replace('-', '_')
+
+
 def _optadv_cognos_prm(ref):
     """{identificador → PRM Amount ASSINADO} do Cognos de `ref`, para a opção de
     TAXA DE CÂMBIO.
@@ -9107,15 +9121,18 @@ def _optadv_cognos_prm(ref):
     relatório traz o módulo, e sem o sinal metade dos avisos sairia com a direção
     invertida — o cliente lendo "vamos debitar" onde o banco é quem paga.
 
-    O índice é pelo **sufixo** do identificador (a mesma regra do OTM: os dois
-    sistemas escrevem o mesmo número com prefixos diferentes) e também pelo valor
-    INTEIRO, sobre as DUAS colunas de id do relatório (`Athena ID` e
-    `TSS Contract NO`) — qual delas casa depende de como a operação foi bookada, e
-    a que não casar simplesmente não aparece na busca.
+    A chave é o **`Athena ID` INTEIRO** (só o hífen trocado por underline, ver
+    `_optadv_cog_key`), casado com a `Combinação de operações` da posição de
+    opções — e é por essa linha da posição que se chega ao B3 ID (`Código IF`).
+    Este join é mais simples que o do OTM Settlements de propósito: lá os dois
+    sistemas escrevem o mesmo número com prefixos diferentes e o casamento é pelo
+    SUFIXO; aqui as duas colunas carregam o mesmo identificador, então comparar o
+    valor inteiro é o certo — e um sufixo casaria trades diferentes que por acaso
+    terminam igual.
 
-    Chave ambígua (dois trades caindo no mesmo sufixo) é DESCARTADA em vez de
-    resolvida por desempate: um valor plausível no aviso do cliente errado é pior
-    do que uma célula vazia pedindo conferência."""
+    Chave repetida com valores DIFERENTES é descartada em vez de resolvida por
+    desempate: um valor plausível no aviso do cliente errado é pior do que uma
+    célula vazia pedindo conferência."""
     _jp, data = _cog_load(ref)
     out = {}
     for rec in (data or []):
@@ -9129,37 +9146,30 @@ def _optadv_cognos_prm(ref):
             v = abs(v)
         # Direction em branco ou desconhecida: o valor entra como veio. Zerar a
         # linha esconderia o prêmio; inventar um sinal inventaria a direção.
-        for col in ('Athena ID', 'TSS Contract NO'):
-            raw = str(rec.get(col, '') or '').strip().upper()
-            if not raw:
-                continue
-            for k in {raw, raw.rsplit('-', 1)[-1]}:
-                if not k:
-                    continue
-                if k in out and out[k] != v:
-                    out[k] = _OPTADV_PRM_AMBIGUO
-                elif k not in out:
-                    out[k] = v
+        k = _optadv_cog_key(rec.get('Athena ID', ''))
+        if not k:
+            continue
+        if k in out and out[k] != v:
+            out[k] = _OPTADV_PRM_AMBIGUO
+        elif k not in out:
+            out[k] = v
     return out
 
 
-def _optadv_prm_for(prm, conf, titulo):
-    """PRM Amount da opção de câmbio, procurado pelo Nº da Confirmação e, se ele
-    não casar, pelo B3 ID. Nada casando (ou chave ambígua) devolve None — a célula
-    fica vazia e pede conferência, que é o desfecho desejado."""
-    for base in (conf, titulo):
-        b = str(base or '').strip().upper()
-        if not b:
-            continue
-        for k in (b, b.rsplit('-', 1)[-1]):
-            v = prm.get(k)
-            if v is _OPTADV_PRM_AMBIGUO:
-                log.warning('[opt-advice] PRM Amount ambíguo para a chave %s — '
-                            'a célula fica vazia em vez de escolher um dos dois', k)
-                return None
-            if v is not None:
-                return v
-    return None
+def _optadv_prm_for(prm, conf):
+    """PRM Amount da opção de câmbio pela `Combinação de operações` da posição.
+
+    Nada casando (ou chave repetida com valores diferentes) devolve None — a
+    célula fica vazia e pede conferência, que é o desfecho desejado."""
+    k = _optadv_cog_key(conf)
+    if not k:
+        return None
+    v = prm.get(k)
+    if v is _OPTADV_PRM_AMBIGUO:
+        log.warning('[opt-advice] PRM Amount repetido com valores diferentes para o '
+                    'Athena ID %s — a célula fica vazia em vez de escolher um dos dois', k)
+        return None
+    return v
 
 
 _OPTADV_IR_COL = 9                             # 'IR 0,005% (R$)'
@@ -9297,12 +9307,12 @@ def _optadv_collect(ref):
                 or _ndfadv_media_label(_lcell(lrow, 'Média Asiática (data) 1'))))
 
         # Resultado Apurado: em commodities e equity é a soma do OTM Settlements
-        # pelo sufixo (a regra do aviso de termo); em TAXA DE CÂMBIO é o PRM
-        # Amount do Cognos, já com o sinal da coluna Direction. Duas fontes porque
-        # são dois caixas diferentes — a opção de câmbio liquida o PRÊMIO, e ele
-        # não passa pelo OTM.
+        # pelo SUFIXO do identificador (a regra do aviso de termo); em TAXA DE
+        # CÂMBIO é o PRM Amount do Cognos, casado pelo `Athena ID` INTEIRO contra
+        # a Combinação de operações. Duas fontes porque são dois caixas diferentes
+        # — a opção de câmbio liquida o PRÊMIO, e ele não passa pelo OTM.
         if _optadv_is_fx(classe):
-            apurado = _optadv_prm_for(cog_prm, conf, titulo)
+            apurado = _optadv_prm_for(cog_prm, conf)
         else:
             apurado = otm_by_suffix.get(suf) if suf else None
         # IR fica para DEPOIS do laço: na opção ele não é da linha, é do NET por
