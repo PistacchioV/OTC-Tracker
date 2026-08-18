@@ -12024,3 +12024,72 @@ Legal Entity · Counterparty** no CORPO e não em anexo: ela é o conteúdo do p
 casa linha a linha pelo Deal Id e responde no próprio e-mail. Assunto
 `Manual Deals Closed on dd/mm/yyyy — <rotina>`, com o nome da rotina no fim porque os dois e-mails
 podem sair no mesmo dia e sem ele o segundo parece um reenvio do primeiro.
+
+---
+
+## §274 — Print Advice do Settlement Summary, e o BLOCKER do valor não identificado
+
+Duas coisas, e a segunda é a que importa.
+
+**O botão.** O Settlement Summary é a visão de liquidação do dia inteiro, e o aviso é o documento
+que sai dela — mas gerar um produto de cada vez obrigava a abrir as TRÊS telas de Settlement Advice
+e clicar em três botões na mesma data. Bastava esquecer uma para o cliente ficar sem o aviso daquele
+produto, e nada na tela dizia. O **Print Advice** do Summary gera Swap + NDF Commodities + Opção de
+uma vez; as telas continuam com o botão delas, para gerar um produto só.
+
+Cada família reusa EXATAMENTE as funções que o botão da própria tela chama (montagem das linhas,
+gerador do e-mail, escrita do status): a regra continua morando num lugar só, e o endpoint do
+Summary é só o laço. Uma família que falhe não derruba as outras — o dia costuma ter as três, e
+perder as duas boas por causa de uma fonte ilegível seria pior do que entregar o que dá.
+
+⚠️ **O blocker.** As colunas de RESULTADO **são** o aviso: é por elas que o cliente paga ou recebe.
+Quando a fonte não devolve o valor, a célula sai em branco — e um aviso de liquidação com o valor
+em branco é **pior do que aviso nenhum**, porque não diz quanto e ainda assim parece completo, e
+vai assinado. Foi visto no aviso de NDF Commodities, com linhas da Mondelez em branco no Resultado
+Apurado e no Líquido.
+
+`_opsadv_block_incomplete` tira do lote a contraparte cujo aviso tem valor faltando, nas QUATRO
+entradas (as três telas e o Summary). Quatro decisões:
+
+- **o corte é da CONTRAPARTE INTEIRA, e não da linha furada.** O aviso é netado por contraparte (e
+  por commodity, para quem está no `ndfc-advice-split`): tirar só a linha mandaria um total que não
+  fecha com as operações do cliente — o erro que ninguém percebe, porque o documento continua
+  bonito;
+- **as colunas exigidas são o resultado BRUTO e o LÍQUIDO** (`Resultado Apurado`/`Resultado
+  Líquido` no termo e na opção; `Resultado Bruto`/`Valor Líquido` no swap). O **IR fica de fora de
+  propósito**: ele é derivado, e zero é um valor legítimo;
+- **coluna que não existe no cabeçalho não corta ninguém**, e avisa no log. Cortar pelo índice
+  errado tiraria a contraparte errada, que é pior do que não cortar;
+- **o bloqueio APARECE na tela**, no mesmo SweetAlert do resultado, dizendo contraparte, produto e
+  quais colunas faltaram. Uma contraparte que some do lote sem dizer por quê é uma contraparte que
+  ninguém vai cobrar. Sucesso COM bloqueio vira `warning`, não `success` — o verde faria a falta
+  passar batida —, e zero avisos COM bloqueio diz "nenhum aviso foi gerado", não "nada a gerar
+  para esta data", que são coisas diferentes.
+
+O disclaimer viaja por dois caminhos porque a resposta tem dois formatos: até 2 rascunhos ela é
+JSON (campo `blocked`); 3+ vêm num `.zip` binário, e aí o resumo vai no cabeçalho **`X-Blocked`**,
+em **base64** — nome de contraparte tem acento e cabeçalho HTTP é latin-1. A frase mora no
+`static/js/ops-advice-blocked.js`, um arquivo só para as quatro telas: quatro cópias divergiriam na
+primeira correção de texto.
+
+---
+
+## §275 — OTM Settlements abre pela fila: Pending primeiro, depois a contraparte
+
+A página é uma **fila de trabalho**, e abria ordenada por Cpty Name. Com o `Ok` misturado no meio,
+a pendência sumia numa lista de duzentas linhas. Agora a ordem padrão é **Status → Cpty Name →
+Trade Id**.
+
+A ordenação do Status é **por rank, não alfabética**: `Pending` (0) → `New` (1) → `Ok` (2). O `New`
+fica no meio porque é a linha que ainda não foi tocada; o `Ok` é o único estado que não pede nada e
+fica sempre por último. Status desconhecido vai para o fim — ele não é uma pendência conhecida, e
+encabeçar a lista com ele empurraria para baixo o que a mesa tem de fazer.
+
+Duas coisas que fariam a ordem sair errada em silêncio:
+
+- **ordenar pelo TEXTO do badge daria uma ordem por idioma** (`Pending`/`OK` em inglês,
+  `Pendente`/`OK` em português), e pelo HTML ordenaria pela classe do CSS. Por isso o badge carrega
+  o status CRU num **`data-st`**, e é dele que o rank sai;
+- **a ordenação é ORTOGONAL ao display**: o `render` devolve o rank só para `type === 'sort'` /
+  `'type'` e o badge para o resto. É o mesmo princípio dos números do padrão de tabela (CLAUDE.md
+  §3) — o que se vê e o que ordena são perguntas diferentes.

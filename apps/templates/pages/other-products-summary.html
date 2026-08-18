@@ -384,6 +384,13 @@
                         <button type="button" class="btn btn-sm btn-soft-primary" id="opsTeds">
                             <i class="ti ti-cash me-1"></i><span data-lang="ops-teds">TEDs</span>
                         </button>
+                        <!-- Print Advice do Summary: gera os avisos das TRÊS
+                             famílias (Swap, NDF Commodities e Opção) numa
+                             tacada. As telas de Settlement Advice continuam com
+                             o botão delas, para gerar um produto só. -->
+                        <button type="button" class="btn btn-sm btn-soft-primary" id="opsPrintAdvice">
+                            <i class="ti ti-printer me-1"></i><span data-lang="ops-print-advice">Print Advice</span>
+                        </button>
                         <button type="button" class="btn btn-sm btn-primary bg-gradient ops-add"><i class="ti ti-plus me-1"></i><span data-lang="ops-add-row">Add row</span></button>
                         <div class="dropdown d-inline-block"><button type="button" class="btn btn-sm btn-info bg-gradient dropdown-toggle ops-export" data-bs-toggle="dropdown"><i class="ti ti-download me-1"></i><span data-lang="map-export">Export</span></button><ul class="dropdown-menu"><li><a class="dropdown-item ops-export-csv" href="#"><i class="ti ti-file-type-csv me-1"></i> CSV</a></li><li><a class="dropdown-item ops-export-copy" href="#"><i class="ti ti-copy me-1"></i> Copy</a></li></ul></div>
                         <button type="button" class="btn btn-sm btn-soft-primary ops-colvis"><i class="ti ti-columns me-1"></i><span data-lang="ops-colvis">Columns</span></button>
@@ -539,6 +546,10 @@
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/moment.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.js"></script>
+<!-- O disclaimer do blocker dos avisos, compartilhado com as três telas de
+     Settlement Advice: quatro cópias da mesma frase divergiriam na primeira
+     correção de texto. -->
+<script src="/static/js/ops-advice-blocked.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/table-std.js"></script>
 <script>
@@ -1006,6 +1017,86 @@ document.addEventListener('DOMContentLoaded', function () {
                           text: t('ops-gen-fail', 'Request failed.'), confirmButtonColor: '#dc3545' });
           })
           .finally(function () { btn.disabled = false; btn.innerHTML = orig; });
+    });
+
+    // ── Print Advice: os avisos das TRÊS famílias de uma vez ────────────────
+    //  Swap, NDF Commodities e Opção na mesma data. Gerar um produto de cada vez
+    //  obrigava a abrir as três telas de Settlement Advice, e bastava esquecer
+    //  uma para o cliente ficar sem o aviso daquele produto — sem nada na tela
+    //  dizendo. As telas continuam com o botão delas, para gerar um só.
+    var advBtn = document.getElementById('opsPrintAdvice');
+    if (advBtn) advBtn.addEventListener('click', function () {
+        var btn = this;
+        if (btn.disabled) return;
+        var orig = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>' +
+                        t('ops-print-advice', 'Print Advice');
+        function saveBlob(blob, filename) {
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url; a.download = filename;
+            document.body.appendChild(a); a.click(); a.remove();
+            setTimeout(function () { URL.revokeObjectURL(url); }, 1500);
+        }
+        function b64ToBlob(b64, mime) {
+            var bin = atob(b64), bytes = new Uint8Array(bin.length);
+            for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+            return new Blob([bytes], { type: mime || 'application/octet-stream' });
+        }
+        // Depois de gerar, a tabela recarrega: o status das linhas passou a
+        // Generated no servidor, e deixar New na tela seria mentira até o F5.
+        function done(bloq, icon, html) {
+            Swal.fire({ icon: icon, title: t('ops-print-advice', 'Print Advice'),
+                        html: html + (bloq || ''),
+                        confirmButtonColor: bloq ? '#dc3545' : '#0066cc' });
+            if (window.opsLoadDate) window.opsLoadDate(currentYmd);
+        }
+        fetch('/api/other-products-summary/print-advice', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ date: currentYmd })
+        }).then(function (r) {
+            var B = window.opsAdviceBlocked || {};
+            // Até 2 rascunhos voltam como JSON com os .eml em base64; 3+ vêm
+            // como um .zip binário. Com as três famílias juntas o zip é o caso
+            // normal — e é justamente por isso que ele existe.
+            var ct = r.headers.get('Content-Type') || '';
+            if (ct.indexOf('application/json') >= 0) {
+                return r.json().then(function (j) {
+                    var bloq = B.html ? B.html(j.blocked) : '';
+                    if (!j.ok) {
+                        Swal.fire({ icon: 'error', title: t('swal-err-title', 'Error'),
+                                    text: j.error || t('ops-gen-fail', 'Request failed.'),
+                                    confirmButtonColor: '#dc3545' });
+                        return;
+                    }
+                    if (!j.count) {
+                        done(bloq, bloq ? 'warning' : 'info',
+                             bloq ? 'Nenhum aviso foi gerado.'
+                                  : t('ops-adv-none', 'Nenhum aviso a gerar para esta data.'));
+                        return;
+                    }
+                    (j.files || []).forEach(function (f) {
+                        saveBlob(b64ToBlob(f.b64, 'message/rfc822'), f.filename);
+                    });
+                    done(bloq, bloq ? 'warning' : 'success', j.count + ' aviso(s) gerado(s).');
+                });
+            }
+            var n = r.headers.get('X-Draft-Count') || '';
+            var fam = r.headers.get('X-Family-Counts') || '';
+            var bloq = B.fromHeader ? B.html(B.fromHeader(r)) : '';
+            return r.blob().then(function (b) {
+                saveBlob(b, 'Avisos_Liquidacao_Other_Products.zip');
+                // O detalhe por família é o que distingue "gerou tudo" de
+                // "gerou só o swap porque as outras duas não tinham linha".
+                var det = fam ? '<div style="font-size:.85em;opacity:.75;margin-top:.25rem;">' +
+                                fam.replace(/,/g, ' &middot; ') + '</div>' : '';
+                done(bloq, bloq ? 'warning' : 'success', n + ' aviso(s) gerado(s).' + det);
+            });
+        }).catch(function () {
+            Swal.fire({ icon: 'error', title: t('swal-err-title', 'Error'),
+                        text: t('ops-gen-fail', 'Request failed.'), confirmButtonColor: '#dc3545' });
+        }).finally(function () { btn.disabled = false; btn.innerHTML = orig; });
     });
 
     // Expose the batch loader so the reference-date picker (own <script> below)

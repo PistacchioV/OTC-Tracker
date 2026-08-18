@@ -1608,6 +1608,8 @@
   "ops-r-check": "Check",
   "ops-r-na": "n/a",
   "ops-teds": "TEDs",
+  "ops-print-advice": "Print Advice",
+  "ops-adv-none": "No advice to generate for this date.",
   "ops-ted-none-title": "No TEDs",
   "ops-ted-none": "Nothing to release for this date.",
   "ops-ted-ok-title": "TED release sent",

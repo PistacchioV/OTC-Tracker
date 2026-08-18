@@ -1607,6 +1607,8 @@
   "ops-r-check": "Verificar",
   "ops-r-na": "n/d",
   "ops-teds": "TEDs",
+  "ops-print-advice": "Print Advice",
+  "ops-adv-none": "Ningún aviso a generar para esta fecha.",
   "ops-ted-none-title": "Sin TEDs",
   "ops-ted-none": "Nada que liberar para esta fecha.",
   "ops-ted-ok-title": "Liberación de TED enviada",

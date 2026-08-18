@@ -525,6 +525,7 @@
     };
 })();
 </script>
+<script src="/static/js/ops-advice-blocked.js"></script>
 <!-- Print Advice em script PRÓPRIO: o visualizador genérico é compartilhado com
      Athena/Events/VCP e não pode ganhar um botão que só existe aqui. -->
 <script>
@@ -545,9 +546,21 @@
         document.body.appendChild(a); a.click(); a.remove();
         setTimeout(function () { URL.revokeObjectURL(url); }, 1500);
     }
-    function alertBox(icon, title, text) {
-        if (window.Swal) Swal.fire({ icon: icon, title: title, text: text });
-        else alert(title + (text ? '\n' + text : ''));
+    // `extra` e o disclaimer do blocker (HTML). Entra no MESMO Swal do resultado:
+    // quem gerou precisa ver, na mesma tela, o que saiu e o que NAO saiu — um
+    // segundo alerta seria fechado no automatico.
+    function alertBox(icon, title, text, extra) {
+        var B = window.opsAdviceBlocked;
+        if (window.Swal) {
+            if (extra) {
+                Swal.fire({ icon: icon, title: title,
+                            html: (B ? B.esc(text || '') : (text || '')) + extra });
+            } else {
+                Swal.fire({ icon: icon, title: title, text: text });
+            }
+        } else {
+            alert(title + (text ? '\n' + text : ''));
+        }
     }
     // A data vem do MESMO campo que a tabela usa. Ler o dd/mm/yyyy da tela em vez
     // de guardar um estado próprio evita o clássico: trocar a data, gerar, e o
@@ -577,19 +590,34 @@
             var ct = r.headers.get('Content-Type') || '';
             if (ct.indexOf('application/json') >= 0) {
                 return r.json().then(function (j) {
+                    var bloq = (window.opsAdviceBlocked || {}).html ?
+                               window.opsAdviceBlocked.html(j.blocked) : '';
                     if (!j.ok) { alertBox('error', 'Print Advice', j.error || 'Falhou'); return; }
-                    if (!j.count) { alertBox('info', 'Print Advice', 'Nenhum aviso a gerar para esta data.'); return; }
+                    if (!j.count) {
+                        // Zero avisos COM bloqueio nao e "nada a gerar": e tudo
+                        // bloqueado, e a tela tem de dizer isso.
+                        alertBox(bloq ? 'warning' : 'info', 'Print Advice',
+                                 bloq ? 'Nenhum aviso foi gerado.'
+                                      : 'Nenhum aviso a gerar para esta data.', bloq);
+                        return;
+                    }
                     (j.files || []).forEach(function (f) {
                         saveBlob(b64ToBlob(f.b64, 'message/rfc822'), f.filename);
                     });
-                    alertBox('success', 'Print Advice', j.count + ' aviso(s) gerado(s).');
+                    // Sucesso COM bloqueio vira `warning`: houve entrega, mas
+                    // faltou contraparte — e o verde faria a falta passar batida.
+                    alertBox(bloq ? 'warning' : 'success', 'Print Advice',
+                             j.count + ' aviso(s) gerado(s).', bloq);
                     reload();
                 });
             }
             var n = r.headers.get('X-Draft-Count') || '';
             return r.blob().then(function (b) {
                 saveBlob(b, 'Avisos_Liquidacao_Swap.zip');
-                alertBox('success', 'Print Advice', n + ' aviso(s) gerado(s).');
+                var bz = (window.opsAdviceBlocked || {}).fromHeader ?
+                         window.opsAdviceBlocked.html(window.opsAdviceBlocked.fromHeader(r)) : '';
+                alertBox(bz ? 'warning' : 'success', 'Print Advice',
+                         n + ' aviso(s) gerado(s).', bz);
                 reload();
             });
         }).catch(function () {

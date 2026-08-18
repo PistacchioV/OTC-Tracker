@@ -7359,6 +7359,208 @@ def api_ops_summary_mark_sent():
         return jsonify({'ok': False, 'error': '{}: {}'.format(type(e).__name__, e)}), 500
 
 
+# ── Print Advice do Settlement Summary: as TRÊS famílias de uma vez ──────────
+#  O Summary é a visão de liquidação do dia inteiro, e o aviso é o documento que
+#  sai dela. Gerar um produto de cada vez obrigava a abrir as três telas de
+#  Settlement Advice e clicar em três botões na mesma data — e bastava esquecer
+#  uma para o cliente ficar sem o aviso daquele produto, sem nada na tela dizendo.
+#
+#  Cada família reusa EXATAMENTE as funções que o botão da própria tela chama
+#  (montagem das linhas, gerador do e-mail, escrita do status): a regra continua
+#  morando num lugar só, e este endpoint é só o laço. Uma família que falhar não
+#  derruba as outras — o dia costuma ter as três, e perder as duas boas por causa
+#  de uma fonte ilegível seria pior do que entregar o que dá.
+_OPSADV_FAMILIES = ('swap', 'ndf', 'option')
+_OPSADV_LABEL = {'swap': 'Swap', 'ndf': 'NDF Commodities', 'option': 'Option'}
+
+# ── O BLOCKER: valor não identificado não vira aviso ─────────────────────────
+#  As colunas de RESULTADO são o aviso. Quando a fonte não devolve o valor, a
+#  célula sai em branco — e um aviso de liquidação com o valor em branco é pior
+#  do que aviso nenhum: ele é o documento pelo qual o cliente paga ou recebe, e
+#  em branco ele não diz quanto, mas parece completo.
+#
+#  O corte é pela CONTRAPARTE inteira, e não pela linha: o aviso é netado por
+#  contraparte (e por commodity, para quem está no `ndfc-advice-split`), então
+#  tirar só a linha furada mandaria um total que não fecha com as operações do
+#  cliente — o que é exatamente o erro que ninguém percebe.
+#
+#  As duas colunas por família são o resultado BRUTO e o LÍQUIDO. O IR fica de
+#  fora de propósito: ele é derivado, e zero é um valor legítimo.
+_OPSADV_REQUIRED = {
+    'ndf':    ('Resultado Apurado (R$)', 'Resultado Líquido (R$)'),
+    'option': ('Resultado Apurado (R$)', 'Resultado Líquido (R$)'),
+    # As duas variantes de cabeçalho do swap (com Vencimento / com Pagamento de
+    # Prêmio) têm estas colunas no MESMO lugar, então o índice de qualquer uma
+    # das duas serve.
+    'swap':   ('Resultado Bruto', 'Valor Líquido'),
+}
+
+
+def _opsadv_block_incomplete(family, rows, headers):
+    """(linhas_que_ficam, [bloqueadas]) — tira do aviso as contrapartes com valor
+    não identificado.
+
+    `bloqueadas` é `[{counterparty, product, columns, rows}]`, e é o que a tela
+    mostra no disclaimer: uma contraparte que some do aviso sem dizer por quê é
+    uma contraparte que ninguém vai cobrar."""
+    faltando = {}
+    idx = []
+    for nome in _OPSADV_REQUIRED.get(family, ()):
+        try:
+            idx.append((nome, headers.index(nome)))
+        except ValueError:
+            # Cabeçalho renomeado: o blocker não pode inventar um índice e cortar
+            # a contraparte errada. Avisa e deixa passar, como era antes.
+            log.warning('[ops-advice] %s: coluna %r não está no cabeçalho do aviso — '
+                        'o blocker não confere essa coluna', family, nome)
+    for r in rows:
+        cells = r.get('cells') or []
+        vazias = [nome for nome, i in idx
+                  if i >= len(cells) or not str(cells[i] or '').strip()]
+        if not vazias:
+            continue
+        cp = str(r.get('counterparty', '') or '').strip()
+        ent = faltando.setdefault(_fcst_norm(cp), {
+            'counterparty': cp, 'product': _OPSADV_LABEL.get(family, family),
+            'columns': [], 'rows': 0})
+        ent['rows'] += 1
+        for nome in vazias:
+            if nome not in ent['columns']:
+                ent['columns'].append(nome)
+    if not faltando:
+        return rows, []
+    kept = [r for r in rows
+            if _fcst_norm(str(r.get('counterparty', '') or '')) not in faltando]
+    for ent in faltando.values():
+        log.warning('[ops-advice] %s: aviso de %r BLOQUEADO — %d linha(s) com %s em branco',
+                    family, ent['counterparty'], ent['rows'], ', '.join(ent['columns']))
+    return kept, list(faltando.values())
+
+
+def _opsadv_blocked_header(blocked):
+    """O disclaimer para a resposta binária (.zip). Base64 de propósito: nome de
+    contraparte tem acento, e cabeçalho HTTP é latin-1."""
+    return base64.b64encode(json.dumps(blocked, ensure_ascii=False).encode('utf-8')).decode('ascii')
+
+
+def _opsadv_family_drafts(family, ref):
+    """Rascunhos de uma família + a escrita do status.
+    Devolve (drafts, erro, bloqueadas)."""
+    from apps.pages import otc_emails
+    try:
+        if family == 'swap':
+            rows = _swadv_email_rows(ref)
+            rows, blocked = _opsadv_block_incomplete(family, rows, _swadv_email_headers(False))
+            drafts = otc_emails.build_swap_settlement_emails(
+                rows, _swadv_email_headers(False), _swadv_email_headers(True),
+                ref.strftime('%d/%m/%Y'))
+            produto = 'SWAP'
+        elif family == 'ndf':
+            rows = _ndfadv_email_rows(ref)
+            rows, blocked = _opsadv_block_incomplete(family, rows, _ndfadv_email_headers())
+            drafts = otc_emails.build_ndfc_settlement_emails(
+                rows, _ndfadv_email_headers(), ref.strftime('%d/%m/%Y'),
+                split_commodity=_ndfc_split_by_commodity)
+            # O aviso de NDF Commodities não carimba Generated — nem aqui nem no
+            # botão da própria tela. Fazer diferente pelo Summary criaria duas
+            # respostas para a mesma pergunta, dependendo de onde se clicou.
+            produto = None
+        else:
+            rows = _optadv_email_rows(ref)
+            rows, blocked = _opsadv_block_incomplete(family, rows, _optadv_email_headers())
+            drafts = otc_emails.build_ndfc_settlement_emails(
+                rows, _optadv_email_headers(), ref.strftime('%d/%m/%Y'),
+                split_commodity=_ndfc_split_by_commodity, product_label='Opção')
+            produto = 'OPTION'
+    except Exception:
+        log.error('[ops-advice] %s: falha montando os avisos:\n%s', family, traceback.format_exc())
+        return [], _OPSADV_LABEL[family], []
+    if drafts and produto:
+        # Best-effort DE PROPÓSITO, como nos botões das telas: os rascunhos já
+        # foram produzidos, e uma falha aqui não pode transformar uma geração
+        # bem-sucedida em erro.
+        try:
+            done = {_fcst_norm(d.get('counterparty', '')) for d in drafts}
+            with _cache_lock:
+                _opssum_set_status(ref, [(r['counterparty'], r.get('lob', ''), produto)
+                                         for r in rows
+                                         if _fcst_norm(r.get('counterparty', '')) in done],
+                                   'Generated')
+        except Exception:
+            log.error('[ops-advice] %s: generated-status save failed:\n%s',
+                      family, traceback.format_exc())
+    return drafts, None, blocked
+
+
+@blueprint.route('/api/other-products-summary/print-advice', methods=['POST'])
+def api_ops_summary_print_advice():
+    """Print Advice do Settlement Summary: gera os avisos de TODOS os produtos do
+    Other Products (Swap, NDF Commodities e Opção) para a data.
+
+    Mesma entrega dos botões das telas — até 2 rascunhos vão como `.eml` em
+    base64 (abrem direto no Outlook), 3+ vão num `.zip`. Com as três famílias
+    juntas o zip é o caso normal, e é justamente por isso que ele existe.
+    """
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
+    from apps.pages import otc_emails
+    payload = request.get_json(silent=True) or {}
+    ds = str(payload.get('date', '') or '').strip()
+    try:
+        ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
+    except ValueError:
+        ref = datetime.now()
+    # Uma família pode ser pedida sozinha (`families`), mas o botão manda as três.
+    pedidas = payload.get('families')
+    if isinstance(pedidas, list) and pedidas:
+        familias = [f for f in _OPSADV_FAMILIES if f in {str(x).strip() for x in pedidas}]
+    else:
+        familias = list(_OPSADV_FAMILIES)
+    drafts, falhas, por_familia, bloqueadas = [], [], {}, []
+    for family in familias:
+        parte, erro, bloq = _opsadv_family_drafts(family, ref)
+        por_familia[family] = len(parte)
+        if erro:
+            falhas.append(erro)
+        bloqueadas.extend(bloq)
+        drafts.extend(parte)
+    # Todas as famílias falharam: aí sim é erro, e não "nada a gerar".
+    if falhas and not drafts and len(falhas) == len(familias):
+        return jsonify({'ok': False, 'error': 'Falha lendo as fontes do dia ({})'
+                        .format(', '.join(falhas))}), 500
+    if not drafts:
+        # Zero avisos COM bloqueio não é "nada a gerar": é tudo bloqueado, e a
+        # tela precisa dizer isso em vez de um "nenhum aviso para esta data".
+        return jsonify({'ok': True, 'count': 0, 'by_family': por_familia,
+                        'failed': falhas, 'blocked': bloqueadas})
+    cp_count = len({d.get('counterparty', '') for d in drafts})
+    if len(drafts) <= 2:
+        files, seen = [], {}
+        for d in drafts:
+            base = otc_emails._safe_filename(d.get('subject', 'draft'))
+            n = seen.get(base, 0)
+            seen[base] = n + 1
+            entry = base if n == 0 else '{}_{}'.format(base, n + 1)
+            raw = otc_emails.build_eml_bytes(d, session.get('user_email'))
+            files.append({'filename': entry + '.eml',
+                          'b64': base64.b64encode(raw).decode('ascii')})
+        return jsonify({'ok': True, 'count': len(drafts), 'counterparties': cp_count,
+                        'by_family': por_familia, 'failed': falhas,
+                        'blocked': bloqueadas, 'files': files})
+    resp = _email_drafts_response(
+        drafts, zip_name='Avisos_Liquidacao_{}_Other_Products'.format(ref.strftime('%d%m%y')))
+    resp.headers['X-Counterparty-Count'] = str(cp_count)
+    # O navegador precisa saber o que veio no zip para montar a frase — o corpo é
+    # binário e não tem onde carregar o resumo.
+    resp.headers['X-Family-Counts'] = ','.join(
+        '{}:{}'.format(f, por_familia.get(f, 0)) for f in familias)
+    if falhas:
+        resp.headers['X-Failed-Families'] = ', '.join(falhas)
+    if bloqueadas:
+        resp.headers['X-Blocked'] = _opsadv_blocked_header(bloqueadas)
+    return resp
+
+
 @blueprint.route('/api/other-products-summary/observation', methods=['POST'])
 def api_ops_summary_observation():
     """Observação livre por linha do Settlement Summary — mesmo overlay diário do
@@ -8907,11 +9109,16 @@ def api_swap_settlement_advice_emails():
     if isinstance(sel, list):
         wanted = {str(x).strip().upper() for x in sel if str(x).strip()}
         rows = [r for r in rows if str(r['cells'][0]).strip().upper() in wanted]
+    # Blocker: contraparte com Resultado Bruto ou Valor Líquido em branco NÃO
+    # vira aviso — o documento é o que o cliente paga, e em branco ele não diz
+    # quanto mas parece completo. O corte é da contraparte inteira porque o aviso
+    # é netado por ela (ver `_opsadv_block_incomplete`).
+    rows, blocked = _opsadv_block_incomplete('swap', rows, _swadv_email_headers(False))
     drafts = otc_emails.build_swap_settlement_emails(
         rows, _swadv_email_headers(False), _swadv_email_headers(True),
         ref.strftime('%d/%m/%Y'))
     if not drafts:
-        return jsonify({'ok': True, 'count': 0})
+        return jsonify({'ok': True, 'count': 0, 'blocked': blocked})
     cp_count = len({d.get('counterparty', '') for d in drafts})
 
     # Status → Generated para as linhas que de fato viraram aviso. Best-effort DE
@@ -8936,10 +9143,14 @@ def api_swap_settlement_advice_emails():
             files.append({'filename': entry + '.eml',
                           'b64': base64.b64encode(raw).decode('ascii')})
         return jsonify({'ok': True, 'count': len(drafts),
-                        'counterparties': cp_count, 'files': files})
+                        'counterparties': cp_count, 'blocked': blocked, 'files': files})
     resp = _email_drafts_response(
         drafts, zip_name='Avisos_Liquidacao_{}_Swap'.format(ref.strftime('%d%m%y')))
     resp.headers['X-Counterparty-Count'] = str(cp_count)
+    if blocked:
+        # O disclaimer tambem no caminho do .zip: o corpo e binario e nao
+        # tem onde carregar o resumo (base64 porque nome tem acento).
+        resp.headers['X-Blocked'] = _opsadv_blocked_header(blocked)
     return resp
 
 
@@ -9380,11 +9591,14 @@ def api_ndf_settlement_advice_emails():
     except Exception:
         log.error('[ndf-advice] falha montando as linhas do aviso:\n%s', traceback.format_exc())
         return jsonify({'ok': False, 'error': 'Falha lendo as fontes do dia'}), 500
+    # Blocker: ver `_opsadv_block_incomplete`. Foi aqui que ele nasceu — linhas
+    # da Mondelez saíam com Resultado Apurado e Líquido em branco.
+    rows, blocked = _opsadv_block_incomplete('ndf', rows, _ndfadv_email_headers())
     drafts = otc_emails.build_ndfc_settlement_emails(
         rows, _ndfadv_email_headers(), ref.strftime('%d/%m/%Y'),
         split_commodity=_ndfc_split_by_commodity)
     if not drafts:
-        return jsonify({'ok': True, 'count': 0})
+        return jsonify({'ok': True, 'count': 0, 'blocked': blocked})
     cp_count = len({d.get('counterparty', '') for d in drafts})
     if len(drafts) <= 2:
         files, seen = [], {}
@@ -9397,10 +9611,14 @@ def api_ndf_settlement_advice_emails():
             files.append({'filename': entry + '.eml',
                           'b64': base64.b64encode(raw).decode('ascii')})
         return jsonify({'ok': True, 'count': len(drafts),
-                        'counterparties': cp_count, 'files': files})
+                        'counterparties': cp_count, 'blocked': blocked, 'files': files})
     resp = _email_drafts_response(
         drafts, zip_name='Avisos_Liquidacao_{}_NDF_Commodities'.format(ref.strftime('%d%m%y')))
     resp.headers['X-Counterparty-Count'] = str(cp_count)
+    if blocked:
+        # O disclaimer tambem no caminho do .zip: o corpo e binario e nao
+        # tem onde carregar o resumo (base64 porque nome tem acento).
+        resp.headers['X-Blocked'] = _opsadv_blocked_header(blocked)
     return resp
 
 
@@ -10108,11 +10326,13 @@ def api_option_settlement_advice_emails():
     except Exception:
         log.error('[opt-advice] falha montando as linhas do aviso:\n%s', traceback.format_exc())
         return jsonify({'ok': False, 'error': 'Falha lendo as fontes do dia'}), 500
+    # Blocker: ver `_opsadv_block_incomplete`.
+    rows, blocked = _opsadv_block_incomplete('option', rows, _optadv_email_headers())
     drafts = otc_emails.build_ndfc_settlement_emails(
         rows, _optadv_email_headers(), ref.strftime('%d/%m/%Y'),
         split_commodity=_ndfc_split_by_commodity, product_label='Opção')
     if not drafts:
-        return jsonify({'ok': True, 'count': 0})
+        return jsonify({'ok': True, 'count': 0, 'blocked': blocked})
     cp_count = len({d.get('counterparty', '') for d in drafts})
 
     # Status → Generated para as linhas que de fato viraram aviso. Best-effort DE
@@ -10138,10 +10358,14 @@ def api_option_settlement_advice_emails():
             files.append({'filename': entry + '.eml',
                           'b64': base64.b64encode(raw).decode('ascii')})
         return jsonify({'ok': True, 'count': len(drafts),
-                        'counterparties': cp_count, 'files': files})
+                        'counterparties': cp_count, 'blocked': blocked, 'files': files})
     resp = _email_drafts_response(
         drafts, zip_name='Avisos_Liquidacao_{}_Opcao'.format(ref.strftime('%d%m%y')))
     resp.headers['X-Counterparty-Count'] = str(cp_count)
+    if blocked:
+        # O disclaimer tambem no caminho do .zip: o corpo e binario e nao
+        # tem onde carregar o resumo (base64 porque nome tem acento).
+        resp.headers['X-Blocked'] = _opsadv_blocked_header(blocked)
     return resp
 
 

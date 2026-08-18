@@ -1608,6 +1608,8 @@
   "ops-r-check": "Verificar",
   "ops-r-na": "n/d",
   "ops-teds": "TEDs",
+  "ops-print-advice": "Print Advice",
+  "ops-adv-none": "Nenhum aviso a gerar para esta data.",
   "ops-ted-none-title": "Sem TEDs",
   "ops-ted-none": "Nada a liberar para esta data.",
   "ops-ted-ok-title": "Liberação de TED enviada",
