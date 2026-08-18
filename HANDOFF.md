@@ -11899,3 +11899,128 @@ usa o nome HISTÓRICO de propósito: com os dois lados iguais, ele passaria sem 
 O TER é o caso que mostra por que os dois destinos são e-mails separados: ele vai **recortado** para
 o BACC e **inteiro** para o HUB, com o mesmo nome de origem — num e-mail só, os dois anexos
 brigariam pelo mesmo nome.
+
+---
+
+## §271 — A lista do combobox de Quotes: `datalist` nativo não aceita CSS
+
+A lista de instrumentos saía com a **altura da página inteira**, mais larga que o campo e fora de
+posição. Não era CSS errado: era um **`datalist` nativo**, e o popup dele é desenhado pelo
+NAVEGADOR — nenhuma regra alcança, nem largura, nem altura, nem posição. Funcionava razoavelmente
+com as 10 moedas da PTAX e ruía com os 904 contratos de commodity, que é onde ele foi visto.
+
+A lista passou a ser um `<div>` nosso, dentro de um `.qt-combo` com `position: relative`:
+`top: calc(100% + 4px)` e `width: 100%` sobre o wrapper de 190px (largura do campo por construção,
+não por número repetido), `max-height: 260px` com `overflow-y: auto` e
+`overscroll-behavior: contain` — rolar a lista até o fim não sai rolando a página atrás.
+
+Quatro detalhes que não aparecem no console:
+
+- **Só as 50 primeiras opções entram no DOM**, e o rodapé DIZ quantas ficaram de fora. Desenhar 904
+  nós a cada tecla é o que trava a digitação; e uma lista que cala o corte parece a lista inteira —
+  quem não achou o código concluiria que ele não existe.
+- **`mousedown`, não `click`, no item da lista.** O `click` só chega depois do `blur`, e aí o menu
+  já fechou sob o cursor: o item nunca seria escolhido. O `preventDefault` no `mousedown` é o que
+  mantém o foco no campo.
+- **Enter faz duas coisas.** Com um item destacado pelas setas, escolhe; sem destaque, busca — que é
+  o que preserva o gesto do datalist (digitar o código inteiro e apertar Enter).
+- **O menu não pode ter ancestral com `overflow: hidden`** — seria cortado. É mais um motivo para o
+  widget da página ser um `<div>` próprio e não o `.card` do tema (§7), que recorta.
+
+Vale para toda tela com muitos itens: `datalist` é ótimo para uma dezena de valores e não escala —
+e o sintoma não é um erro, é uma tela feia que ninguém liga a uma escolha de elemento.
+
+---
+
+## §272 — Recon Pay/Rec: o Total Net neta DENTRO do produto, e quem diz o produto é o GDT Code
+
+Sintoma: linhas de Lawton e Atacama caindo em *Pending* com a justificativa
+*"Netting não tratado pelo OTC Tracker"* — a mesa carimbando à mão todo dia o que a recon não
+conseguia casar.
+
+Causa: o lado do CLIENTE da recon é o extrato da conta interna (`rlctahis.csv`), e o único campo
+que diz de que produto é o lançamento é o **`nHistorico`**. O `_cli_rlctahis` classificava **tudo
+como NDF**, menos três códigos de swap fixos no código. Como `_net_client` agrupa por
+**(contraparte, LE, PRODUTO)**, o Total Net da Lawton somava opção de commodity + termo + NDF num
+valor só — e do lado do JPM esses produtos estão separados, cada um com o seu registro. O valor
+netado não batia com nada porque era a soma de coisas diferentes. Netar continua sendo netar; só
+que **dentro do produto**.
+
+O de-para virou cadastro: **`gdt-codes`** ("GDT Codes" no /mapping), com Description × Code ×
+Product. Product é `select` de domínio FECHADO — um produto digitado errado não dá erro, cria um
+grupo que não existe do outro lado e a linha vira uma pendência que ninguém explica.
+
+**A regra da coluna Product tem duas metades, e as duas importam:**
+
+- **preenchido** = o código liquida aquele produto **e a linha entra na recon**. É o que faz o
+  `9396`/`4424` (estorno TSS-FX) passarem a ser contados, e o `9386`/`4414` (TSS-FX) deixarem de
+  ser NDF para virarem FXO — eles já entravam, no balde errado;
+- **em branco** = documentado e **ignorado**. São as duas transferências entre contas (`5347`,
+  `0159`), que a mesa quer ver cadastradas para saber o que são e que não liquidam produto nenhum.
+
+Três coisas que não dão erro nenhum:
+
+- **`_SDCONTA_HIST_ALLOW` continua no código, como PISO.** O `4419` e o `AA` não estão no cadastro
+  e seguem entrando pela regra histórica (SWAP se estiver no `_SDCONTA_HIST_SWAP`, senão NDF).
+  Cadastro novo não pode apagar comportamento em silêncio;
+- **o remap do `5347` na conta `0512026-0` vem ANTES do cadastro.** Aquele lançamento específico
+  *é* um NDF e vira `9409`. Sem essa ordem, ele sairia junto com as outras transferências, que o
+  cadastro manda ignorar;
+- **o endpoint `/reconciliation-payrec/run` toca o cadastro antes de rodar**, só para materializar
+  o seed — o motor lê o JSON direto (importar `routes` seria circular) e não tem como semear. Sem
+  isso, na instância em que ninguém abriu a tela de /mapping o arquivo não existe, o de-para volta
+  vazio e todo lançamento volta a ser NDF, sem erro nenhum. É o mesmo cuidado do §... da Recon FXO.
+
+De quebra, as abas **Quotes — Equities/Commodities** do /mapping estavam sem chave de tradução
+desde o §266 (o rótulo caía no inglês do `label` nos três idiomas); entraram junto com a do GDT.
+
+---
+
+## §273 — Manual Deals EA: duas rotinas, duas datas de referência, e o Deal que sai é o do VANILLA
+
+Card novo no Control Panel. Ele manda para o **BACC HUB** (Cc na caixa da mesa) as operações
+fechadas à mão, pedindo que o **EA automático não as considere** e que entrem na métrica à parte.
+São duas rotinas no mesmo card, e a razão de serem duas é a **data de referência**:
+
+| Rotina | Quando | Sobre o quê |
+|---|---|---|
+| NDF Other Publisher | todo dia útil às **20:00** BRT | as operações do PRÓPRIO dia (D+0), só **contraparte externa** |
+| NDF FWD Start | **16:30** do dia da **Strike Set Date** | o re-booking em vanilla das que fixaram hoje |
+
+Um disparo único teria de escolher uma das duas datas e erraria a outra: o Other Publisher olha o
+dia que está acabando, o FWD Start olha operações bookadas semanas atrás que fixam hoje. Dois
+horários, dois botões Run, um status por rotina.
+
+⚠️ **O Deal do FWD Start é o do VANILLA, e essa é a armadilha da rotina.** No dia da fixação a mesa
+cancela o FWD Start e faz um booking novo, já como vanilla, com **Deal ID novo** — e é esse o número
+que o EA automático vê. Mandar o Deal do FWD Start original pediria para excluir uma operação que
+já não existe, **deixando dentro do EA justamente a que existe**. O par é calculado no pull
+(`_ndf_drop_fwdstart_rebooks`, §…) e agora **gravado** por `_mdea_rebook_record`, no arquivo do dia
+da fixação: em nenhum outro momento os dois lados se veem juntos — o vanilla não entra em
+arquivo-dia nenhum (é exatamente o que o pull evita) e o FWD Start mora no arquivo do dia em que foi
+bookado. Antes o par só ia para o log.
+
+Quatro coisas que não dão erro nenhum:
+
+- **Other Publisher só leva contraparte EXTERNA**, e o teste é o `_pc_is_internal_counterparty` —
+  o ECONOMIC GROUP do Reference Data, a mesma resposta que o Pending Confirmation já dá. NÃO é "o
+  nome começa em BANCO": isso derrubaria Banco Safra, Bradesco e Santander, que são clientes
+  (CLAUDE.md §7);
+- **lista vazia NÃO envia**, e aqui é o contrário do BACC EA Metrics: lá a planilha vazia é ela
+  própria a métrica, aqui o e-mail PEDE para excluir as operações abaixo — sem operação não há o
+  que pedir, e uma tabela vazia faria quem recebe procurar o que não existe. `empty` é desfecho
+  legítimo (cinza no card), distinto de `no_recipient` (âmbar: havia o que mandar e não havia para
+  quem);
+- **a Legal Entity sai do Reference Data** (`le-spn` → NAME), nunca de um literal — seria uma
+  segunda grafia das mesmas entidades, para divergir na primeira correção. LE sem cadastro mostra a
+  SIGLA, e não vazio: a coluna em branco esconderia de que entidade é a operação;
+- **o slot é reservado em disco e DEVOLVIDO quando o envio falha.** A instância reinicia várias
+  vezes ao dia; sem o claim o mesmo e-mail sairia a cada subida, e sem a devolução uma queda
+  transitória do SMTP custaria o e-mail do dia. `empty` e `no_recipient` consomem o slot — nenhum
+  dos dois melhora na retentativa.
+
+O e-mail tem template próprio (`email-template-manual-deals-ea.html`), com a tabela **Deal Id ·
+Legal Entity · Counterparty** no CORPO e não em anexo: ela é o conteúdo do pedido, e quem recebe
+casa linha a linha pelo Deal Id e responde no próprio e-mail. Assunto
+`Manual Deals Closed on dd/mm/yyyy — <rotina>`, com o nome da rotina no fim porque os dois e-mails
+podem sair no mesmo dia e sem ele o segundo parece um reenvio do primeiro.

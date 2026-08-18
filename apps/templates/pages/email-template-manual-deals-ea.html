@@ -1,0 +1,127 @@
+{# ============================================================================
+   Manual Deals EA — o e-mail que pede para o EA automático NÃO considerar as
+   operações fechadas à mão, e contá-las na métrica.
+
+   Params:
+     • routine       — 'NDF Other Publisher' ou 'NDF FWD Start' (a rotina que
+                       disparou; os dois e-mails saem no mesmo dia, e sem o nome
+                       o segundo parece um reenvio do primeiro)
+     • rows          — [{deal, le, cpty}], já filtradas e resolvidas pelo
+                       `_mdea_rows`. NUNCA vazia: sem operação o e-mail não sai
+                       (ver `_mdea_run`), porque não há o que pedir
+     • ref_date_fmt, current_year
+
+   ⚠️ A tabela é o CONTEÚDO do pedido, não um resumo: quem recebe casa linha a
+   linha pelo Deal Id. Por isso ela vem inteira no corpo e não em anexo — o
+   destinatário responde no próprio e-mail.
+
+   O corpo é em INGLÊS como todo texto do app (CLAUDE.md §2). O cabeçalho é cor
+   sólida + gradiente CSS, nunca imagem/VML — ver o comentário do
+   partials/email-gradient-header.html.
+   ========================================================================== #}
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>OTC Tracker – Manual Deals EA</title>
+    <!--[if mso]>
+    <style type="text/css">body, table, td { font-family: Arial, sans-serif !important; }</style>
+    <![endif]-->
+</head>
+<body style="margin:0;padding:0;font-family:'Segoe UI',Arial,sans-serif;background-color:#f4f6f9;color:#333333;">
+
+<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%"
+       style="background-color:#f4f6f9;padding:40px 0;">
+    <tr>
+        <td align="center">
+            <!--[if mso]>
+            <table role="presentation" align="center" border="0" cellpadding="0" cellspacing="0" width="720"><tr><td width="720" style="width:720px;">
+            <![endif]-->
+            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="720"
+                   style="max-width:720px;background-color:#ffffff;border-radius:10px;
+                          box-shadow:0 4px 14px rgba(0,0,0,0.08);overflow:hidden;">
+
+                <!-- ── Header ─────────────────────────────────── -->
+                {% set header_title = 'Support to OTC Derivatives — Manual Deals' %}
+                {% set header_subtitle = routine ~ ' &nbsp;·&nbsp; <strong style="color:#ffffff;">' ~ ref_date_fmt ~ '</strong>' %}
+                {% set header_logo_height = 64 %}
+                {% set header_width = 720 %}
+                {% include 'partials/email-gradient-header.html' %}
+
+                <!-- ── Body ───────────────────────────────────── -->
+                <tr>
+                    <td style="padding:26px 30px 4px;">
+                        <p style="color:#444;font-size:14px;line-height:1.6;margin:0 0 12px;">All,</p>
+                        <p style="color:#444;font-size:14px;line-height:1.6;margin:0;">
+                            Please <strong>do not consider the deal(s) below in the automatic EA</strong>
+                            and include them in the metric. They were closed manually on
+                            <strong>{{ ref_date_fmt }}</strong> ({{ routine }}).</p>
+                    </td>
+                </tr>
+
+                <!-- ── A tabela do pedido ─────────────────────────
+                     Deal Id · Legal Entity · Counterparty. O Deal Id vem em
+                     monoespaçada porque é por ele que o outro lado casa, e num
+                     Deal ID de oito caracteres a diferença entre O e 0 decide
+                     a operação. -->
+                <tr>
+                    <td style="padding:18px 30px 4px;">
+                        <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%"
+                               style="border-collapse:collapse;">
+                            <tr>
+                                <td style="padding:8px 10px;background-color:#f3f5f9;border:1px solid #e5e9f0;
+                                           font-size:11px;font-weight:700;text-transform:uppercase;
+                                           letter-spacing:0.05em;color:#5a6473;">Deal Id</td>
+                                <td style="padding:8px 10px;background-color:#f3f5f9;border:1px solid #e5e9f0;
+                                           font-size:11px;font-weight:700;text-transform:uppercase;
+                                           letter-spacing:0.05em;color:#5a6473;">Legal Entity</td>
+                                <td style="padding:8px 10px;background-color:#f3f5f9;border:1px solid #e5e9f0;
+                                           font-size:11px;font-weight:700;text-transform:uppercase;
+                                           letter-spacing:0.05em;color:#5a6473;">Counterparty</td>
+                            </tr>
+                            {% for r in rows %}
+                            <tr>
+                                <td style="padding:7px 10px;border:1px solid #e5e9f0;font-size:12px;
+                                           color:#333;font-family:'Courier New',monospace;">{{ r.deal }}</td>
+                                <td style="padding:7px 10px;border:1px solid #e5e9f0;font-size:12px;
+                                           color:#444;">{{ r.le }}</td>
+                                <td style="padding:7px 10px;border:1px solid #e5e9f0;font-size:12px;
+                                           color:#444;">{{ r.cpty }}</td>
+                            </tr>
+                            {% endfor %}
+                        </table>
+                        <p style="color:#6b7280;font-size:12px;line-height:1.6;margin:8px 0 0;">
+                            {{ rows|length }} deal(s).</p>
+                    </td>
+                </tr>
+
+                <!-- ── Signature ──────────────────────────────── -->
+                <tr>
+                    <td style="padding:20px 30px 26px;">
+                        <p style="font-size:14px;line-height:1.6;color:#333333;margin:0;">
+                            Regards,<br/>
+                            <strong>OTC Tracker — Brazil OTC Operations</strong>
+                        </p>
+                    </td>
+                </tr>
+
+                <!-- ── Footer ─────────────────────────────────── -->
+                <tr>
+                    <td style="background-color:#f8f9fa;padding:18px 32px;text-align:center;border-top:1px solid #e9ecef;">
+                        <p style="color:#999999;font-size:11px;margin:0;">
+                            &copy; {{ current_year }} OTC Tracker by JPMorganChase &amp; Co.</p>
+                        <p style="color:#bbbbbb;font-size:10px;margin:5px 0 0;">
+                            This is an automated notification. Do not reply to this email.</p>
+                    </td>
+                </tr>
+
+            </table>
+            <!--[if mso]>
+            </td></tr></table>
+            <![endif]-->
+        </td>
+    </tr>
+</table>
+</body>
+</html>

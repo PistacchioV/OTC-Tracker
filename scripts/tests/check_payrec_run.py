@@ -21,6 +21,7 @@ planilha e stub.
 """
 import io
 import os
+import shutil
 import sys
 import tempfile
 
@@ -173,6 +174,65 @@ SRC = read('apps/pages/recon_payrec.py')
 check('a aliquota vem do _ops_swap_ir_rate', 'from apps.pages.routes import _ops_swap_ir_rate' in SRC, True)
 check('e nao ha tabela de faixas recopiada aqui',
       ('22.5' in SRC or '0.225' in SRC or '17.5' in SRC), False)
+
+
+# ── GDT Codes: o nHistorico decide o PRODUTO, e o produto e chave de grupo ─────
+# `_net_client` agrupa por (contraparte, LE, PRODUTO). Enquanto todo lancamento do
+# extrato virava NDF, o Total Net da Lawton somava opcao de commodity com termo e
+# com NDF: um valor que nao bate com nada, porque do lado do JPM esses produtos
+# estao separados. Era a origem das linhas "Netting nao tratado pelo OTC Tracker".
+print('\n== GDT Codes: codigo do historico -> produto ==')
+import json as _json
+GDT = os.path.join(ROOT, 'apps', 'static', 'data', 'mappings', 'gdt-codes.json')
+if os.path.exists(GDT):
+    seed = _json.load(io.open(GDT, encoding='utf-8'))
+else:
+    from apps.pages import routes as _R
+    seed = _R._MAPPING_DEFS['gdt-codes']['seed']
+por_codigo = {r['CODE']: r['PRODUCT'] for r in seed}
+check('os quatro produtos do de-para',
+      [por_codigo.get(c) for c in ('9409', '9410', '9411', '9386')],
+      ['NDF', 'COMM TER', 'COMM OPT', 'FXO'])
+check('as transferencias entre contas ficam SEM produto',
+      [por_codigo.get('5347'), por_codigo.get('0159')], ['', ''])
+# Produto em branco = documentado e ignorado; o `_gdt_map` so devolve quem tem.
+_dir_orig = RP._MAPPINGS_DIR
+tmpmap = tempfile.mkdtemp(prefix='gdt-')
+io.open(os.path.join(tmpmap, 'gdt-codes.json'), 'w', encoding='utf-8').write(_json.dumps([
+    {'DESCRIPTION': 'D NDF', 'CODE': '9409', 'PRODUCT': 'NDF'},
+    {'DESCRIPTION': 'D OPC COMM', 'CODE': '9411', 'PRODUCT': 'COMM OPT'},
+    {'DESCRIPTION': 'ESTORNO FX', 'CODE': '9396', 'PRODUCT': 'FXO'},
+    {'DESCRIPTION': 'TRANSF', 'CODE': '5347', 'PRODUCT': ''},
+]))
+RP._MAPPINGS_DIR = tmpmap
+try:
+    m = RP._gdt_map()
+    check('so os codigos COM produto entram no de-para', sorted(m), ['9396', '9409', '9411'])
+
+    def linha(hist, val=1000.0, conta='0511600-3'):
+        return {'nHistorico': hist, 'nVlrLanc': val, 'sNomeTitular': 'LAWTON MULTIMERCADO EXCLUSIVO',
+                'sNumConta': conta, 'sDescricao': 'X'}
+    cols = ['nHistorico', 'nVlrLanc', 'sNomeTitular', 'sNumConta', 'sDescricao']
+    got = RP._cli_rlctahis([linha('9409'), linha('9411'), linha('9396')], cols)
+    check('o produto vem do cadastro, e nao mais "tudo NDF"',
+          [g['product'] for g in got], ['NDF', 'COMM OPT', 'FXO'])
+    # Codigo com produto em BRANCO nao entra: e transferencia entre contas, nao
+    # liquidacao. Antes ele ja ficava de fora por nao estar na lista historica —
+    # o cadastro tem de manter isso, senao a recon ganha uma linha inventada.
+    check('produto em branco continua FORA da recon', RP._cli_rlctahis([linha('0159')], cols), [])
+    check('   e o 5347 tambem', RP._cli_rlctahis([linha('5347')], cols), [])
+    # A excecao do 5347 na conta 0512026-0 e ANTERIOR ao cadastro: ela vira 9409.
+    got = RP._cli_rlctahis([linha('5347', conta='0512026-0')], cols)
+    check('o remap do 5347 naquela conta continua virando NDF',
+          [g['product'] for g in got], ['NDF'])
+    # O codigo que ainda nao tem linha no cadastro cai na regra historica: o
+    # cadastro novo nao pode apagar comportamento em silencio.
+    got = RP._cli_rlctahis([linha('4419'), linha('4406')], cols)
+    check('codigo sem linha no cadastro segue pela lista historica',
+          [g['product'] for g in got], ['NDF', 'SWAP'])
+finally:
+    RP._MAPPINGS_DIR = _dir_orig
+    shutil.rmtree(tmpmap, ignore_errors=True)
 
 print('\n%s' % ('TUDO OK' if not fails else 'FALHAS (%d): %r' % (len(fails), fails)))
 sys.exit(1 if fails else 0)

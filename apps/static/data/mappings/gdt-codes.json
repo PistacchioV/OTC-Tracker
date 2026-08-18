@@ -1,0 +1,77 @@
+[
+  {
+    "DESCRIPTION": "DEBITO NDF MANUAL",
+    "CODE": "9409",
+    "PRODUCT": "NDF"
+  },
+  {
+    "DESCRIPTION": "CREDITO NDF MANUAL",
+    "CODE": "4407",
+    "PRODUCT": "NDF"
+  },
+  {
+    "DESCRIPTION": "DEBITO NDF COMMODITIES MANUAL",
+    "CODE": "9410",
+    "PRODUCT": "COMM TER"
+  },
+  {
+    "DESCRIPTION": "CREDITO NDF COMMODITIES MANUAL",
+    "CODE": "4408",
+    "PRODUCT": "COMM TER"
+  },
+  {
+    "DESCRIPTION": "DEBITO OPCAO COMMODITIES MANUAL",
+    "CODE": "9411",
+    "PRODUCT": "COMM OPT"
+  },
+  {
+    "DESCRIPTION": "CREDITO OPCAO COMMODITIES MANUAL",
+    "CODE": "4409",
+    "PRODUCT": "COMM OPT"
+  },
+  {
+    "DESCRIPTION": "DEBITO SWAP AUTOMATICO",
+    "CODE": "4406",
+    "PRODUCT": "SWAP"
+  },
+  {
+    "DESCRIPTION": "EDG/SWAP CEM DEBITO",
+    "CODE": "9385",
+    "PRODUCT": "SWAP"
+  },
+  {
+    "DESCRIPTION": "EDG/SWAP CEM CREDITO",
+    "CODE": "4413",
+    "PRODUCT": "SWAP"
+  },
+  {
+    "DESCRIPTION": "DEBITO TSS-FX",
+    "CODE": "9386",
+    "PRODUCT": "FXO"
+  },
+  {
+    "DESCRIPTION": "CREDITO TSS-FX",
+    "CODE": "4414",
+    "PRODUCT": "FXO"
+  },
+  {
+    "DESCRIPTION": "ESTORNO DEBITO TSS-FX",
+    "CODE": "9396",
+    "PRODUCT": "FXO"
+  },
+  {
+    "DESCRIPTION": "ESTORNO CREDITO TSS-FX",
+    "CODE": "4424",
+    "PRODUCT": "FXO"
+  },
+  {
+    "DESCRIPTION": "DEB. TRANSF CTAS MM TITULARIDADE",
+    "CODE": "5347",
+    "PRODUCT": ""
+  },
+  {
+    "DESCRIPTION": "CRED. TRANS ENTRE CONTAS",
+    "CODE": "0159",
+    "PRODUCT": ""
+  }
+]

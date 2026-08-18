@@ -742,6 +742,53 @@
                         </button>
                     </div>
                 </div>
+                <!-- Manual Deals EA — duas rotinas, dois horários, dois Run.
+                     Empilhado com o BACC EA porque os dois falam com o mesmo
+                     time de métricas, e o card fica ao lado do Confirmations
+                     Escalation, que ocupa a linha inteira. -->
+                <div class="cp-card mt-3" data-cp-card="manualdealsea">
+                    <div class="cp-card__icon"><i class="ti ti-hand-stop"></i></div>
+                    <h3 class="cp-card__title" data-lang="cp-r-mdea-title">Manual Deals EA</h3>
+                    <p class="cp-card__desc" data-lang="cp-r-mdea-desc">
+                        E-mails the deals closed manually so the automatic EA does not consider
+                        them and the metrics team counts them apart. Two routines, each with its
+                        own reference date: <strong>NDF Other Publisher</strong> runs at 20:00
+                        Brasília with the deals of the day itself (external counterparties only),
+                        and <strong>NDF FWD Start</strong> runs at 16:30 on each deal's Strike Set
+                        Date, carrying the Deal Id of the vanilla re-booking. With no deal to
+                        report, no e-mail is sent.
+                    </p>
+                    <div class="cp-field">
+                        <label data-lang="cp-mdea-to">TO — BACC HUB</label>
+                        <input type="text" id="cp-mdea-to" class="form-control form-control-sm"
+                               placeholder="email1@jpmorgan.com; email2@jpmorgan.com">
+                    </div>
+                    <div class="cp-field">
+                        <label data-lang="cp-mdea-cc">CC</label>
+                        <input type="text" id="cp-mdea-cc" class="form-control form-control-sm"
+                               placeholder="email1@jpmorgan.com; email2@jpmorgan.com">
+                    </div>
+                    <!-- Desfecho do último disparo de CADA rotina. Sem isto a
+                         única evidência de que rodou é uma linha de log no
+                         servidor, e "não está funcionando" fica sem resposta. -->
+                    <div id="cp-mdea-status" class="cp-card__meta d-none"
+                         style="display:block;margin-top:.35rem;line-height:1.5;"></div>
+                    <div class="cp-card__foot">
+                        <span class="cp-card__meta">
+                            <i class="ti ti-calendar-time"></i><span data-lang="cp-mdea-meta">Other Publisher 20:00 &nbsp;·&nbsp; FWD Start 16:30 BRT</span>
+                        </span>
+                        <div class="cp-btn-row">
+                            <button type="button" class="cp-run-btn" data-mdea-run="otherpub">
+                                <i class="ti ti-player-play"></i>
+                                <span data-lang="cp-mdea-run-op">Run Other Publisher</span>
+                            </button>
+                            <button type="button" class="cp-run-btn" data-mdea-run="fwdstart">
+                                <i class="ti ti-player-play"></i>
+                                <span data-lang="cp-mdea-run-fs">Run FWD Start</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -1586,6 +1633,134 @@ document.addEventListener('click', function (e) {
                 });
         });
     }
+    load();
+})();
+
+// ── Manual Deals EA: TO/CC persistidos, DOIS Run e o status de cada rotina ───
+// Duas rotinas no mesmo card, com datas de referência diferentes (o Other
+// Publisher olha o dia de hoje; o FWD Start, as operações que fixam hoje), então
+// cada uma tem o seu botão e a sua linha de status. O `kind` viaja no
+// data-attribute do botão — um handler só para os dois.
+(function () {
+    var toEl = document.getElementById('cp-mdea-to');
+    var ccEl = document.getElementById('cp-mdea-cc');
+    var stEl = document.getElementById('cp-mdea-status');
+    var btns = document.querySelectorAll('[data-mdea-run]');
+    if (!toEl || !ccEl) return;
+    var REC = '/api/control-panel/manual-deals-ea/recipients';
+    var LABEL = { otherpub: 'Other Publisher', fwdstart: 'FWD Start' };
+    function esc(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (ch) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]; });
+    }
+    function linha(kind, d) {
+        var last = (d.last || {})[kind] || {};
+        var nome = esc(LABEL[kind] || kind);
+        var quando = esc(last.at || '');
+        var out;
+        if (!last.result) {
+            out = '<span class="text-muted">' + nome + ' · ' +
+                  esc(t('cp-mdea-never', 'no run recorded yet')) + '</span>';
+        } else {
+            var m = /^sent:(\d+)$/.exec(last.result);
+            if (m) {
+                out = '<span class="text-success"><i class="ti ti-mail-check me-1"></i>' +
+                      nome + ' · ' + quando + ' · ' + m[1] + ' ' +
+                      esc(t('cp-mdea-sent', 'deal(s) sent')) + '</span>';
+            } else if (last.result === 'empty') {
+                // Desfecho LEGÍTIMO, e por isso em cinza e não em vermelho: sem
+                // operação manual não há o que pedir para excluir do EA.
+                out = '<span class="text-muted"><i class="ti ti-mail-off me-1"></i>' +
+                      nome + ' · ' + quando + ' · ' +
+                      esc(t('cp-mdea-empty', 'no deal to report — e-mail not sent')) + '</span>';
+            } else if (last.result === 'no_recipient') {
+                // Diferente de vazio: aqui HAVIA o que mandar e não havia para
+                // quem. Sem esta linha o card fica calado no único caso em que
+                // o pedido não saiu de casa.
+                out = '<span class="text-warning"><i class="ti ti-user-off me-1"></i>' +
+                      nome + ' · ' + quando + ' · ' +
+                      esc(t('cp-mdea-norec', 'no TO recipient saved — nothing was sent')) + '</span>';
+            } else {
+                out = '<span class="text-danger"><i class="ti ti-alert-triangle me-1"></i>' +
+                      nome + ' · ' + quando + ' · ' +
+                      esc(String(last.result).replace(/^error:?/, '')) + '</span>';
+            }
+        }
+        var n = (d.counts || {})[kind];
+        if (n != null) {
+            out += ' <span class="text-muted">· ' + n + ' ' +
+                   esc(t('cp-mdea-now', 'now')) + ' · ' +
+                   esc(((d.times || {})[kind]) || '') + ' BRT</span>';
+        }
+        return out;
+    }
+    function pintaStatus(d) {
+        if (!stEl || !d) return;
+        stEl.innerHTML = ['otherpub', 'fwdstart'].map(function (k) { return linha(k, d); }).join('<br>');
+        stEl.classList.remove('d-none');
+    }
+    function load() {
+        fetch(REC, { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (!d || !d.success) return;
+                toEl.value = d.to || '';
+                ccEl.value = d.cc || '';
+                pintaStatus(d);
+            })
+            .catch(function () {});
+    }
+    // Grava ao sair do campo: as duas listas são de digitação livre e um card
+    // sem botão de salvar perderia o que foi escrito na primeira navegação.
+    function save() {
+        return fetch(REC, { method: 'POST', credentials: 'same-origin',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ to: toEl.value, cc: ccEl.value }) })
+            .catch(function () {});
+    }
+    toEl.addEventListener('change', save);
+    ccEl.addEventListener('change', save);
+
+    Array.prototype.forEach.call(btns, function (btn) {
+        btn.addEventListener('click', function () {
+            var kind = btn.getAttribute('data-mdea-run');
+            var label = btn.querySelector('span');
+            var orig = label ? label.textContent : '';
+            btn.disabled = true;
+            if (label) label.textContent = t('cp-running', 'Running…');
+            // O TO da TELA vai no corpo do Run: quem digitou e clicou sem tirar
+            // o foco do campo mandaria para a lista anterior, e o card não teria
+            // como dizer isso.
+            fetch('/api/control-panel/manual-deals-ea/run',
+                  { method: 'POST', credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ kind: kind, to: toEl.value, cc: ccEl.value }) })
+                .then(function (r) { return r.json().then(function (b) { return { ok: r.ok, b: b }; }); })
+                .then(function (res) {
+                    if (res.b && res.b.success) {
+                        Swal.fire({ title: t('cp-done', 'Done'), html: esc(res.b.message || ''),
+                                    icon: res.b.sent ? 'success' : 'info',
+                                    confirmButtonText: t('swal-ok', 'OK'),
+                                    confirmButtonColor: '#0066cc' });
+                    } else {
+                        Swal.fire({ title: t('swal-err-title', 'Error'),
+                                    html: esc((res.b && res.b.error) || 'Request failed.'),
+                                    icon: 'error', confirmButtonText: t('swal-ok', 'OK'),
+                                    confirmButtonColor: '#dc3545' });
+                    }
+                })
+                .catch(function (e) {
+                    Swal.fire({ title: t('swal-err-title', 'Error'), html: esc(e.message),
+                                icon: 'error', confirmButtonText: t('swal-ok', 'OK'),
+                                confirmButtonColor: '#dc3545' });
+                })
+                .finally(function () {
+                    btn.disabled = false;
+                    if (label) label.textContent = orig;
+                    load();
+                });
+        });
+    });
     load();
 })();
 

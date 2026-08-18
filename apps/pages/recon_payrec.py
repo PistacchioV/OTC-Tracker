@@ -92,11 +92,51 @@ _COMM_TER_FEE = 1 - 0.00005
 _IR_EXEMPT_CPTY = ('LAWTON MULTIMERCADO EXCLUSIVO', 'ATACAMA MULTIMERCADO')
 _JPM_ENTITIES = ('banco j.p. morgan s.a.', 'jpmorgan chase bank, n.a. - sao paulo')
 # rlctahis inclusion allowlist (Alteryx TextInput[175]) — the main row-reducer.
+# Hoje ele é o PISO, não a lista: o cadastro `gdt-codes` acrescenta os códigos que
+# têm produto (ver `_gdt_map`). Os dois que sobram só aqui (`4419` e `AA`) seguem
+# entrando pela regra histórica abaixo — cadastro novo não pode apagar
+# comportamento em silêncio.
 _SDCONTA_HIST_ALLOW = {'9409', '4407', '9410', '4408', '9411', '4419', '9385',
                        '4413', '9386', '4414', '4406', 'AA', '4409'}
 # rlctahis nHistorico codes that are SWAP settlements (not NDF). Everything else
 # in the allowlist stays NDF. These flows net against the JPM SWAP side.
+# FALLBACK: vale só para o código que ainda não tem linha no `gdt-codes`.
 _SDCONTA_HIST_SWAP = {'4406', '9385', '4413'}
+
+# ── GDT Codes (cadastro /mapping) — código do histórico → PRODUTO ─────────────
+# O lado do cliente da recon é o extrato da conta interna, e o único campo que diz
+# de que produto é o lançamento é o `nHistorico`. Sem o de-para, todo lançamento
+# virava NDF (menos os três de swap acima), e como `_net_client` agrupa por
+# **(contraparte, LE, PRODUTO)**, o Total Net da Lawton somava opção de commodity
+# com termo e com NDF — um valor que não bate com nada, porque do lado do JPM
+# esses produtos estão separados. Era a origem das linhas "Netting não tratado
+# pelo OTC Tracker". Netar continua sendo netar; só que DENTRO do produto.
+#
+# PRODUCT preenchido = o código liquida aquele produto e a linha ENTRA na recon.
+# PRODUCT em branco = documentado e IGNORADO (as transferências entre contas).
+#
+# Lido do disco a cada run, como os cadastros da Recon FXO: importar `routes`
+# daqui seria circular, e reler é o que faz a edição na tela valer no run
+# seguinte, sem restart.
+_MAPPINGS_DIR = os.path.normpath(os.path.join(_MODULE_DIR, '..', 'static', 'data', 'mappings'))
+
+
+def _gdt_map():
+    """{código do histórico → produto}, só as linhas COM produto."""
+    try:
+        with open(os.path.join(_MAPPINGS_DIR, 'gdt-codes.json'), encoding='utf-8') as fh:
+            rows = json.load(fh)
+    except Exception:
+        return {}
+    out = {}
+    for r in (rows if isinstance(rows, list) else []):
+        if not isinstance(r, dict):
+            continue
+        code = str(r.get('CODE', '') or '').strip()
+        prod = str(r.get('PRODUCT', '') or '').strip().upper()
+        if code and prod:
+            out[code] = prod
+    return out
 
 # RLDOCREC — received-TED report. Keep only rows credited to agência 98 and one of
 # the two house accounts (nCtCredtd); the receiving Legal Entity is read from
@@ -679,30 +719,46 @@ def _cli_finalize(val, desc, titular, conta, sistema, product='NDF'):
 
 
 def _cli_rlctahis(rows, cols):
-    """SDConta interna — nHistorico allowlist row-reducer."""
+    """SDConta interna — o `nHistorico` decide se a linha entra e de que produto é.
+
+    O produto sai do cadastro **GDT Codes** (`_gdt_map`), e é ele que faz o Total
+    Net da contraparte netar DENTRO do produto: `_net_client` agrupa por
+    (contraparte, LE, produto), então um lançamento de opção de commodity
+    classificado como NDF entrava no balde errado e o valor netado não batia com
+    nada do lado do JPM.
+    """
     c_val = _resolve(cols, 'nVlrLanc')
     c_desc = _resolve(cols, 'sDescricao')
     c_tit = _resolve(cols, 'sNomeTitular')
     c_conta = _resolve(cols, 'sNumConta')
     c_hist = _resolve(cols, 'nHistorico')
+    gdt = _gdt_map()
     out = []
     for r in rows:
         hist = str(r.get(c_hist, '') if c_hist else '').strip()
         conta = str(r.get(c_conta, '') if c_conta else '').strip()
         desc = str(r.get(c_desc, '') if c_desc else '')
-        if hist == '5347' and conta == '0512026-0':            # Formula[34] remap
+        # Formula[34] remap: este 5347 nesta conta É um NDF. Vem ANTES do
+        # cadastro de propósito — o 5347 está lá com produto em branco (é
+        # transferência entre contas), e sem o remap primeiro esta linha, que é
+        # a exceção, sairia junto com as outras.
+        if hist == '5347' and conta == '0512026-0':
             hist = '9409'; desc = 'DEBITO NDF'                 # → Receive (FX transfer row)
-        # Join[174] allowlist. (The Alteryx Filter[153]/Join[154] recapture of the
+        # A linha entra se o cadastro deu um produto a ela, ou se ela está na
+        # lista histórica. (The Alteryx Filter[153]/Join[154] recapture of the
         # 0511600-3 "DEB.TRANSF" entries is only a value-annotation on the TED
         # stream — it produces no display row — so it is intentionally omitted.)
-        if hist not in _SDCONTA_HIST_ALLOW:
+        product = gdt.get(hist)
+        if not product and hist not in _SDCONTA_HIST_ALLOW:
             continue
         val = _num(r.get(c_val, '') if c_val else 0)
         titular = str(r.get(c_tit, '') if c_tit else '').strip()
         if val < 1:
             titular = 'ZERAGEM DA CONTA'
-        # nHistorico 4406 / 9385 / 4413 are SWAP flows; the rest of the allowlist is NDF.
-        product = 'SWAP' if hist in _SDCONTA_HIST_SWAP else 'NDF'
+        if not product:
+            # Código sem linha no cadastro: regra histórica, para o `4419` e o
+            # `AA` continuarem exatamente como estavam.
+            product = 'SWAP' if hist in _SDCONTA_HIST_SWAP else 'NDF'
         rec = _cli_finalize(val, desc, titular, conta, sistema='', product=product)
         if rec:
             out.append(rec)

@@ -337,6 +337,7 @@ _CONTROL_PANEL_CARDS = [
     {'id': 'pendingspreadsheet', 'label': 'Pending Confirmations Spreadsheet Metrics'},
     {'id': 'confescalation', 'label': 'Confirmations Escalation'},
     {'id': 'baccea',      'label': 'BACC EA Metrics'},
+    {'id': 'manualdealsea', 'label': 'Manual Deals EA'},
 ]
 _CP_CARD_TOKENS = {'/control-panel#' + c['id'] for c in _CONTROL_PANEL_CARDS}
 # API endpoint → the card it belongs to (for server-side enforcement).
@@ -362,6 +363,8 @@ _CP_ENDPOINT_CARD = {
     '/api/control-panel/confirmations-escalation/run': 'confescalation',
     '/api/control-panel/bacc-ea-metrics/recipients': 'baccea',
     '/api/control-panel/bacc-ea-metrics/run': 'baccea',
+    '/api/control-panel/manual-deals-ea/recipients': 'manualdealsea',
+    '/api/control-panel/manual-deals-ea/run': 'manualdealsea',
 }
 
 
@@ -21145,6 +21148,58 @@ _MAPPING_DEFS = {
         ],
         'seed': [],
     },
+    # C\u00f3digo de hist\u00f3rico do GDT (`nHistorico` do `rlctahis.csv`) \u2192 PRODUTO, para
+    # a Recon Pay/Rec.
+    #
+    # O lado do cliente da recon \u00e9 o extrato da conta interna, e o \u00fanico campo
+    # que diz de que produto \u00e9 o lan\u00e7amento \u00e9 esse c\u00f3digo. Sem o de-para, o
+    # `_cli_rlctahis` classificava tudo como NDF (menos tr\u00eas c\u00f3digos de swap
+    # fixos no c\u00f3digo): o pagamento de uma op\u00e7\u00e3o de commodity da Lawton entrava
+    # no balde NDF, e como o `_net_client` agrupa por
+    # **(contraparte, LE, PRODUTO)**, o Total Net dela somava produtos que o lado
+    # do JPM tem separados. Da\u00ed as linhas "Netting n\u00e3o tratado pelo OTC Tracker":
+    # o valor netado n\u00e3o batia com nada porque era a soma de coisas diferentes.
+    # Netar continua sendo netar \u2014 s\u00f3 que DENTRO do produto.
+    #
+    # **PRODUCT preenchido = o c\u00f3digo liquida aquele produto, e a linha ENTRA na
+    # recon. PRODUCT em branco = o c\u00f3digo est\u00e1 documentado e \u00e9 IGNORADO** \u2014 \u00e9 o
+    # caso das duas transfer\u00eancias entre contas, que a mesa quer ver cadastradas
+    # para saber o que s\u00e3o, e que n\u00e3o s\u00e3o liquida\u00e7\u00e3o de produto nenhum.
+    #
+    # `_SDCONTA_HIST_ALLOW` continua no `recon_payrec` como piso: c\u00f3digo que
+    # ainda n\u00e3o tem linha aqui (o `4419` e o `AA`) segue entrando com a regra
+    # hist\u00f3rica, para o cadastro novo n\u00e3o apagar comportamento em sil\u00eancio.
+    'gdt-codes': {
+        'label': 'GDT Codes',
+        'columns': [
+            {'key': 'DESCRIPTION', 'label': 'Description'},
+            {'key': 'CODE', 'label': 'Code (nHistorico)'},
+            # Dom\u00ednio FECHADO: um produto digitado errado n\u00e3o d\u00e1 erro \u2014 ele cria
+            # um grupo que n\u00e3o existe do outro lado, e a linha vira uma pend\u00eancia
+            # que ningu\u00e9m explica. A op\u00e7\u00e3o vazia \u00e9 a primeira e aparece como "\u2014".
+            {'key': 'PRODUCT', 'label': 'Product (blank = ignore)', 'type': 'select',
+             'options': ['', 'NDF', 'COMM TER', 'COMM OPT', 'SWAP', 'FXO', 'EQUITIES']},
+        ],
+        'seed': [
+            {'DESCRIPTION': 'DEBITO NDF MANUAL', 'CODE': '9409', 'PRODUCT': 'NDF'},
+            {'DESCRIPTION': 'CREDITO NDF MANUAL', 'CODE': '4407', 'PRODUCT': 'NDF'},
+            {'DESCRIPTION': 'DEBITO NDF COMMODITIES MANUAL', 'CODE': '9410', 'PRODUCT': 'COMM TER'},
+            {'DESCRIPTION': 'CREDITO NDF COMMODITIES MANUAL', 'CODE': '4408', 'PRODUCT': 'COMM TER'},
+            {'DESCRIPTION': 'DEBITO OPCAO COMMODITIES MANUAL', 'CODE': '9411', 'PRODUCT': 'COMM OPT'},
+            {'DESCRIPTION': 'CREDITO OPCAO COMMODITIES MANUAL', 'CODE': '4409', 'PRODUCT': 'COMM OPT'},
+            {'DESCRIPTION': 'DEBITO SWAP AUTOMATICO', 'CODE': '4406', 'PRODUCT': 'SWAP'},
+            {'DESCRIPTION': 'EDG/SWAP CEM DEBITO', 'CODE': '9385', 'PRODUCT': 'SWAP'},
+            {'DESCRIPTION': 'EDG/SWAP CEM CREDITO', 'CODE': '4413', 'PRODUCT': 'SWAP'},
+            {'DESCRIPTION': 'DEBITO TSS-FX', 'CODE': '9386', 'PRODUCT': 'FXO'},
+            {'DESCRIPTION': 'CREDITO TSS-FX', 'CODE': '4414', 'PRODUCT': 'FXO'},
+            {'DESCRIPTION': 'ESTORNO DEBITO TSS-FX', 'CODE': '9396', 'PRODUCT': 'FXO'},
+            {'DESCRIPTION': 'ESTORNO CREDITO TSS-FX', 'CODE': '4424', 'PRODUCT': 'FXO'},
+            # As duas transfer\u00eancias entre contas: documentadas, sem produto \u2014
+            # n\u00e3o s\u00e3o liquida\u00e7\u00e3o e n\u00e3o entram na recon.
+            {'DESCRIPTION': 'DEB. TRANSF CTAS MM TITULARIDADE', 'CODE': '5347', 'PRODUCT': ''},
+            {'DESCRIPTION': 'CRED. TRANS ENTRE CONTAS', 'CODE': '0159', 'PRODUCT': ''},
+        ],
+    },
 }
 
 _mapping_cache = {}
@@ -22285,6 +22340,13 @@ def _ndf_api_pull(sid='API', actor_name='Athena API', ref_date=None):
                  '(contraparte %s · notional %s · vencimento %s)',
                  d.get('Deal') or '?', fwd_name or '?', d.get('Acronym') or '?',
                  d.get('Notional') or '?', d.get('SettlementDate') or '?')
+    # O par (vanilla ↔ FWD Start) é GRAVADO, e não só registrado no log. Ele é
+    # calculado aqui — o único lugar que vê os dois lados — e some em seguida: o
+    # vanilla não entra em arquivo-dia nenhum (é justamente o que esta função
+    # evita) e o FWD Start original está no arquivo do dia em que foi bookado,
+    # semanas atrás, sem o Deal ID novo. Quem precisa do par depois é o e-mail
+    # Manual Deals EA, que sai na Strike Set Date pedindo o Deal do VANILLA.
+    _mdea_rebook_record(rebooks, now)
 
     targets = {}
     for product, deals in routed.items():
@@ -31525,6 +31587,483 @@ def api_cp_bacc_run():
                         ' (+{} in copy)'.format(out['cc']) if out['cc'] else '')})
 
 
+# ══════════════════════════════════════════════════════════════════════════
+#  MANUAL DEALS EA (Control Panel) — o que o EA automático não pode considerar
+# ══════════════════════════════════════════════════════════════════════════
+#  Duas rotinas no mesmo card, porque a pergunta é a mesma ("que operações
+#  fecharam hoje e precisam sair do EA automático?") e a resposta muda de
+#  produto:
+#
+#    Other Publisher → todo dia às 20:00, com as operações do PRÓPRIO DIA (D+0);
+#    FWD Start       → às 16:30 do dia da **Strike Set Date**, com o re-booking.
+#
+#  São dois horários e dois botões Run, e não um só, porque as datas de
+#  referência são diferentes: o Other Publisher olha o dia que está acabando, o
+#  FWD Start olha as operações que fixaram hoje — que foram bookadas semanas
+#  atrás. Um disparo único teria de escolher uma das duas e erraria a outra.
+#
+#  ⚠️ **O Deal do FWD Start é o do VANILLA.** No dia da fixação a mesa cancela o
+#  FWD Start e faz um booking novo, já como vanilla, com Deal ID NOVO — e é esse
+#  o número que o EA automático vê. Mandar o Deal do FWD Start original pediria
+#  para excluir uma operação que já não existe, deixando a que existe dentro do
+#  EA. O par é calculado no pull (`_ndf_drop_fwdstart_rebooks`) e GRAVADO por
+#  `_mdea_rebook_record`, porque em nenhum outro momento os dois lados se veem
+#  juntos: o vanilla não entra em arquivo-dia nenhum (é o que o pull evita) e o
+#  FWD Start mora no arquivo do dia em que foi bookado.
+_MDEA_DIR = _DAILY_METRIC_DIR
+_MDEA_REC_FILE = os.path.join(_MDEA_DIR, 'manual_deals_ea_recipients.json')
+_MDEA_STATUS_FILE = os.path.join(_MDEA_DIR, 'manual_deals_ea_status.json')
+_MDEA_CLAIM_FILE = os.path.join(_MDEA_DIR, 'manual_deals_ea_sent.json')
+# O Cc nasce com a caixa da mesa, que é quem responde pelo pedido. É DEFAULT e
+# não constante: a lista gravada pelo card manda, inclusive vazia.
+_MDEA_CC_DEFAULT = 'brazil.otc.ops@jpmorgan.com'
+_MDEA_KINDS = ('otherpub', 'fwdstart')
+_MDEA_LABEL = {'otherpub': 'NDF Other Publisher', 'fwdstart': 'NDF FWD Start'}
+_MDEA_TIME = {'otherpub': (20, 0), 'fwdstart': (16, 30)}
+# Onde o par (vanilla ↔ FWD Start) é gravado, no arquivo do dia da FIXAÇÃO — que
+# é o dia em que o e-mail sai, e por isso a chave de leitura.
+_MDEA_REBOOK_DIR = os.path.join(NEW_DEALS_CACHE_ROOT, 'NDF', 'FwdStartRebooks')
+
+
+def _mdea_rebook_path(ref):
+    return os.path.join(_MDEA_REBOOK_DIR, ref.strftime('%Y'), ref.strftime('%m'),
+                        ref.strftime('%Y%m%d') + '_fwdstart_rebooks.json')
+
+
+def _mdea_rebook_record(rebooks, ref):
+    """Grava os pares (vanilla, FWD Start) do dia da fixação.
+
+    Read-modify-write sob o `_cache_lock`, como todo cache-dia: o pull roda em
+    thread de scheduler e pode encontrar o arquivo já escrito por uma corrida
+    anterior do mesmo dia (a API é puxada a cada 20 min). A chave da deduplicação
+    é o **Deal do vanilla** — o mesmo par reaparece em toda corrida seguinte
+    enquanto a API devolver o registro.
+    """
+    if not rebooks:
+        return
+    path = _mdea_rebook_path(ref)
+    with _cache_lock:
+        try:
+            with open(path, encoding='utf-8') as fh:
+                atual = json.load(fh)
+            if not isinstance(atual, list):
+                atual = []
+        except (IOError, OSError, json.JSONDecodeError):
+            atual = []
+        vistos = {str(r.get('Deal') or '') for r in atual if isinstance(r, dict)}
+        novos = 0
+        for d, fwd_name in rebooks:
+            deal = str(d.get('Deal') or '').strip()
+            if not deal or deal in vistos:
+                continue
+            vistos.add(deal)
+            novos += 1
+            atual.append({
+                'Deal': deal,
+                'FwdStartDeal': str(fwd_name or '').strip(),
+                'Client': str(d.get('Client') or '').strip(),
+                'Acronym': str(d.get('Acronym') or '').strip(),
+                'SPN': str(d.get('SPN') or '').strip(),
+                'LE': str(d.get('LE') or '').strip(),
+                'TradeDate': str(d.get('TradeDate') or '').strip(),
+                'SettlementDate': str(d.get('SettlementDate') or '').strip(),
+            })
+        if not novos:
+            return
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            _atomic_write_json(path, atual)
+        except Exception:                                   # noqa: BLE001
+            log.warning('[manual-deals-ea] não consegui gravar os re-bookings:\n%s',
+                        traceback.format_exc())
+
+
+def _mdea_rebook_rows(ref):
+    try:
+        with open(_mdea_rebook_path(ref), encoding='utf-8') as fh:
+            rows = json.load(fh)
+    except (IOError, OSError, json.JSONDecodeError):
+        return []
+    return [r for r in rows if isinstance(r, dict)] if isinstance(rows, list) else []
+
+
+def _mdea_le_names():
+    """{LE → razão social do Reference Data}, do cadastro `le-spn`.
+
+    O e-mail traz o nome por extenso porque quem recebe casa por ele, não pela
+    sigla — e o nome é o do Reference Data, nunca um literal daqui: seria uma
+    segunda grafia das mesmas entidades, para divergir na primeira correção."""
+    out = {}
+    for r in _mapping_rows('le-spn'):
+        le = str(r.get('LE', '') or '').strip().upper()
+        nome = str(r.get('NAME', '') or '').strip()
+        if le and nome and le not in out:
+            out[le] = nome
+    return out
+
+
+def _mdea_row(deal, le_names):
+    """Uma linha do e-mail: Deal Id · Legal Entity · Counterparty."""
+    le = str(deal.get('LE', '') or '').strip().upper()
+    return {
+        'deal': str(deal.get('Deal', '') or '').strip(),
+        # LE sem cadastro mostra a SIGLA em vez de vazio: a coluna em branco
+        # esconderia de que entidade é a operação, que é metade da pergunta.
+        'le': le_names.get(le, le),
+        'cpty': (str(deal.get('Client', '') or '').strip()
+                 or str(deal.get('Acronym', '') or '').strip()),
+    }
+
+
+def _mdea_day_deals(product, ref):
+    """Deals do arquivo-dia de um produto genérico de NDF."""
+    cfg = _generic_nd_cfg(product)
+    if not cfg:
+        return []
+    path = os.path.join(cfg['dir'], ref.strftime('%Y'), ref.strftime('%m'),
+                        ref.strftime('%Y%m%d') + cfg['suffix'])
+    try:
+        with open(path, encoding='utf-8') as fh:
+            data = json.load(fh)
+    except (IOError, OSError, json.JSONDecodeError):
+        return []
+    return [d for d in data if isinstance(d, dict)] if isinstance(data, list) else []
+
+
+def _mdea_rows(kind, ref):
+    """As linhas do e-mail do dia, por rotina."""
+    le_names = _mdea_le_names()
+    if kind == 'fwdstart':
+        # A referência é a Strike Set Date, e o arquivo do dia da fixação é
+        # justamente onde o par foi gravado. O Deal que sai é o do VANILLA.
+        return [_mdea_row(r, le_names) for r in _mdea_rebook_rows(ref)
+                if str(r.get('Deal') or '').strip()]
+    out = []
+    for d in _mdea_day_deals('other-publishers', ref):
+        if not str(d.get('Deal', '') or '').strip():
+            continue
+        # Só contraparte EXTERNA. A pergunta é a mesma que o Pending Confirmation
+        # já responde, então é a mesma função: o teste é o ECONOMIC GROUP do
+        # Reference Data, e não o nome começar em "BANCO" — que derrubaria Banco
+        # Safra, Bradesco e Santander, que são clientes (CLAUDE.md §7).
+        if _pc_is_internal_counterparty(d.get('Client', ''), d.get('SPN', '')):
+            continue
+        out.append(_mdea_row(d, le_names))
+    return out
+
+
+def _load_mdea_recipients():
+    try:
+        with open(_MDEA_REC_FILE, encoding='utf-8') as fh:
+            d = json.load(fh)
+        if isinstance(d, dict):
+            return {'to': str(d.get('to', '') or ''),
+                    'cc': str(d.get('cc', _MDEA_CC_DEFAULT) or '')}
+    except Exception:                                       # noqa: BLE001
+        pass
+    return {'to': '', 'cc': _MDEA_CC_DEFAULT}
+
+
+def _save_mdea_recipients(d):
+    os.makedirs(_MDEA_DIR, exist_ok=True)
+    atual = _load_mdea_recipients()
+    # Merge, não substituição: o payload traz o que está na tela, e uma tela que
+    # não conhecesse uma das chaves apagaria aquela lista ao gravar.
+    for k in ('to', 'cc'):
+        if k in (d or {}):
+            atual[k] = str((d or {}).get(k) or '').strip()
+    _atomic_write_json(_MDEA_REC_FILE, atual)
+
+
+def _mdea_subject(kind, ref):
+    """`Manual Deals Closed on dd/mm/yyyy — NDF Other Publisher`.
+
+    Em inglês como todo texto visível do app (CLAUDE.md §2), e com a ROTINA no
+    fim: os dois e-mails saem no mesmo dia, e sem isso o segundo parece uma
+    reenvio do primeiro na caixa de quem recebe."""
+    return 'Manual Deals Closed on {} — {}'.format(ref.strftime('%d/%m/%Y'),
+                                                   _MDEA_LABEL.get(kind, kind))
+
+
+def _mdea_send_email(kind, rows, to_list, cc_list, ref):
+    """Monta e envia. True, ou a mensagem do erro.
+
+    O `with _app_context()` envolve a MONTAGEM INTEIRA e não só o
+    `render_template`: o `_get_logo_path` lê `current_app.root_path`, e envolver
+    só o render troca um "Working outside of application context" por outro três
+    linhas abaixo. Dentro do request do botão Run é no-op — e é por isso que o
+    Run funciona e só o automático morreria (CLAUDE.md §7)."""
+    from email.mime.image import MIMEImage
+    try:
+        with _app_context():
+            html = render_template('pages/email-template-manual-deals-ea.html',
+                                   ref_date_fmt=ref.strftime('%d/%m/%Y'),
+                                   routine=_MDEA_LABEL.get(kind, kind),
+                                   rows=rows, current_year=datetime.now().year)
+            msg = MIMEMultipart('related')
+            msg['Subject'] = _mdea_subject(kind, ref)
+            msg['From'] = SHARED_MAILBOX
+            msg['To'] = ', '.join(to_list)
+            if cc_list:
+                msg['Cc'] = ', '.join(cc_list)
+            alt = MIMEMultipart('alternative')
+            alt.attach(MIMEText('Please view this message in HTML.', 'plain', 'utf-8'))
+            alt.attach(MIMEText(html, 'html', 'utf-8'))
+            msg.attach(alt)
+            logo_path = _get_logo_path()
+            if logo_path:
+                with open(logo_path, 'rb') as f:
+                    limg = MIMEImage(f.read())
+                limg.add_header('Content-ID', '<otc_logo>')
+                limg.add_header('Content-Disposition', 'inline', filename='logo.png')
+                msg.attach(limg)
+            _attach_email_gradient(msg)
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30) as server:
+            server.sendmail(SHARED_MAILBOX, to_list + cc_list, msg.as_string())
+        return True
+    except Exception as e:                                  # noqa: BLE001
+        log.error('[manual-deals-ea] envio falhou:\n%s', traceback.format_exc())
+        return '{}: {}'.format(type(e).__name__, e)
+
+
+def _mdea_run(kind, ref=None):
+    """Uma corrida de uma rotina. Devolve o resumo com os desfechos SEPARADOS.
+
+    **Lista vazia NÃO envia**, e aqui isso é o contrário do BACC EA Metrics: lá
+    a planilha vazia é ela própria a métrica; aqui o e-mail PEDE para excluir as
+    operações abaixo do EA automático, e sem operação nenhuma não há o que pedir.
+    Um e-mail com a tabela vazia faria quem recebe procurar o que não existe.
+    """
+    ref = ref or _br_now()
+    rec = _load_mdea_recipients()
+    to_list = _parse_emails(rec.get('to'))
+    cc_list = [c for c in _parse_emails(rec.get('cc'))
+               if c.lower() not in {t.lower() for t in to_list}]
+    rows = _mdea_rows(kind, ref)
+    if not rows:
+        return {'sent': False, 'reason': 'empty', 'rows': 0,
+                'to': len(to_list), 'cc': len(cc_list)}
+    if not to_list:
+        return {'sent': False, 'reason': 'no_recipient', 'rows': len(rows),
+                'to': 0, 'cc': len(cc_list)}
+    res = _mdea_send_email(kind, rows, to_list, cc_list, ref)
+    if res is True:
+        return {'sent': True, 'rows': len(rows), 'to': len(to_list), 'cc': len(cc_list)}
+    return {'sent': False, 'reason': 'error', 'error': res, 'rows': len(rows),
+            'to': len(to_list), 'cc': len(cc_list)}
+
+
+def _mdea_claim_slot(slot):
+    """Reserva o disparo EM DISCO — a instância reinicia várias vezes ao dia e o
+    catch-up precisa saber o que já saiu, senão o mesmo e-mail vai embora a cada
+    subida."""
+    with _cache_lock:
+        try:
+            with open(_MDEA_CLAIM_FILE, encoding='utf-8') as fh:
+                sent = json.load(fh)
+            if not isinstance(sent, list):
+                sent = []
+        except (IOError, OSError, json.JSONDecodeError):
+            sent = []
+        if slot in sent:
+            return False
+        sent.append(slot)
+        try:
+            os.makedirs(_MDEA_DIR, exist_ok=True)
+            _atomic_write_json(_MDEA_CLAIM_FILE, sorted(sent)[-32:])
+        except Exception:                                   # noqa: BLE001
+            log.warning('[manual-deals-ea] não consegui gravar o claim:\n%s',
+                        traceback.format_exc())
+        return True
+
+
+def _mdea_release_slot(slot):
+    """Devolve o slot quando o envio falhou (SMTP fora do ar): o catch-up da
+    próxima volta tenta de novo. Sem isto uma falha transitória custaria o
+    e-mail do dia."""
+    with _cache_lock:
+        try:
+            with open(_MDEA_CLAIM_FILE, encoding='utf-8') as fh:
+                sent = json.load(fh)
+            if not isinstance(sent, list):
+                return
+        except (IOError, OSError, json.JSONDecodeError):
+            return
+        if slot not in sent:
+            return
+        try:
+            _atomic_write_json(_MDEA_CLAIM_FILE, [s for s in sent if s != slot])
+        except Exception:                                   # noqa: BLE001
+            log.warning('[manual-deals-ea] não consegui devolver o slot %s:\n%s',
+                        slot, traceback.format_exc())
+
+
+def _mdea_status_write(kind, result, when):
+    try:
+        os.makedirs(_MDEA_DIR, exist_ok=True)
+        atual = _mdea_read_status()
+        atual[kind] = {'result': result, 'at': when.strftime('%d/%m/%Y %H:%M:%S')}
+        _atomic_write_json(_MDEA_STATUS_FILE, atual)
+    except Exception:                                       # noqa: BLE001
+        log.warning('[manual-deals-ea] não consegui gravar o status:\n%s',
+                    traceback.format_exc())
+
+
+def _mdea_read_status():
+    try:
+        with open(_MDEA_STATUS_FILE, encoding='utf-8') as fh:
+            d = json.load(fh)
+        return d if isinstance(d, dict) else {}
+    except Exception:                                       # noqa: BLE001
+        return {}
+
+
+def _mdea_disparar(kind, slot, fired):
+    """Manda o e-mail do slot, se ninguém já mandou e o dia é útil ANBIMA."""
+    if not _pcx_is_bizday(fired):
+        return False
+    if not _mdea_claim_slot(slot):
+        return False
+    out = _mdea_run(kind, fired)
+    if out['sent']:
+        result = 'sent:{}'.format(out['rows'])
+    elif out.get('reason') in ('empty', 'no_recipient'):
+        # Nenhum dos dois melhora na retentativa: sem operação não há e-mail, e
+        # sem destinatário quem resolve é o card. O slot fica consumido.
+        result = out['reason']
+    else:
+        # Falha de envio devolve o slot: a próxima volta do catch-up tenta de novo.
+        _mdea_release_slot(slot)
+        result = 'error'
+    log.info('[manual-deals-ea] %s de %s (BRT): %s', kind, slot, result)
+    _mdea_status_write(kind, result, fired)
+    return True
+
+
+def _mdea_scheduler_loop():
+    while True:
+        try:
+            now = _br_now()
+            dia = now.strftime('%Y-%m-%d')
+            prox = []
+            for kind in _MDEA_KINDS:
+                hh, mm = _MDEA_TIME[kind]
+                cand = now.replace(hour=hh, minute=mm, second=0, microsecond=0)
+                if cand <= now:
+                    # Catch-up como no Deals Monitor: recupera o disparo do dia
+                    # quando o processo subiu depois do horário (a instância
+                    # reinicia várias vezes ao dia) e RETENTA o que falhou.
+                    _mdea_disparar(kind, '{} {} {:02d}:{:02d}'.format(dia, kind, hh, mm), now)
+                    prox.append(cand + timedelta(days=1))
+                else:
+                    prox.append(cand)
+            now = _br_now()
+            time.sleep(max(1.0, min((min(prox) - now).total_seconds(), 3600)))
+        except Exception:                                   # noqa: BLE001
+            log.error('[manual-deals-ea] scheduler error:\n%s', traceback.format_exc())
+            time.sleep(60)
+
+
+_mdea_scheduler_started = False
+_mdea_scheduler_lock = threading.Lock()
+
+
+def _mdea_start_scheduler():
+    global _mdea_scheduler_started
+    with _mdea_scheduler_lock:
+        if _mdea_scheduler_started:
+            return
+        _mdea_scheduler_started = True
+    threading.Thread(target=_mdea_scheduler_loop,
+                     name='manual-deals-ea-scheduler', daemon=True).start()
+    log.info('[manual-deals-ea] scheduler iniciado (Other Publisher %02d:%02d · '
+             'FWD Start %02d:%02d BRT · dias úteis ANBIMA)',
+             *(_MDEA_TIME['otherpub'] + _MDEA_TIME['fwdstart']))
+
+
+try:
+    _mdea_start_scheduler()
+except Exception:                                           # noqa: BLE001
+    log.warning('[manual-deals-ea] could not start the scheduler')
+
+
+@blueprint.route('/api/control-panel/manual-deals-ea/recipients', methods=['GET', 'POST'])
+def api_cp_mdea_recipients():
+    """GET → TO/Cc, o desfecho do último disparo de cada rotina e quantas linhas
+    cada e-mail teria AGORA; POST → grava as listas."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    if request.method == 'POST':
+        try:
+            _save_mdea_recipients(request.get_json(silent=True) or {})
+        except Exception as e:                              # noqa: BLE001
+            log.error('[manual-deals-ea] save recipients failed:\n%s', traceback.format_exc())
+            return jsonify({'success': False,
+                            'error': '{}: {}'.format(type(e).__name__, e)}), 500
+        return jsonify({'success': True})
+    counts = {}
+    for kind in _MDEA_KINDS:
+        try:
+            counts[kind] = len(_mdea_rows(kind, _br_now()))
+        except Exception:                                   # noqa: BLE001
+            # Um arquivo-dia ilegível não pode derrubar o card: as listas de
+            # destinatários ainda precisam ser editáveis.
+            log.warning('[manual-deals-ea] não consegui contar %s:\n%s',
+                        kind, traceback.format_exc())
+            counts[kind] = None
+    return jsonify({'success': True, **_load_mdea_recipients(),
+                    'counts': counts, 'last': _mdea_read_status(),
+                    'times': {k: '{:02d}:{:02d}'.format(*_MDEA_TIME[k]) for k in _MDEA_KINDS}})
+
+
+@blueprint.route('/api/control-panel/manual-deals-ea/run', methods=['POST'])
+def api_cp_mdea_run():
+    """Manda o e-mail de UMA rotina agora (os dois botões Run do card).
+
+    Roda mesmo em feriado — quem clicou decidiu — e NÃO consome o claim do
+    disparo automático: o Run é um teste ou um envio fora de hora, e queimar o
+    horário faria o e-mail do dia não sair.
+    """
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    payload = request.get_json(silent=True) or {}
+    kind = str(payload.get('kind', '') or '').strip()
+    if kind not in _MDEA_KINDS:
+        return jsonify({'success': False, 'error': 'Unknown routine.'}), 400
+    # O TO que está na TELA vale para esta corrida e fica gravado — o mesmo
+    # contrato do card do CETIP, para o Run não usar uma lista antiga.
+    if 'to' in payload or 'cc' in payload:
+        try:
+            _save_mdea_recipients(payload)
+        except Exception:                                   # noqa: BLE001
+            log.error('[manual-deals-ea] save recipients failed:\n%s', traceback.format_exc())
+    try:
+        out = _mdea_run(kind, _br_now())
+    except Exception as e:                                  # noqa: BLE001
+        log.error('[manual-deals-ea] run manual falhou:\n%s', traceback.format_exc())
+        return jsonify({'success': False,
+                        'error': '{}: {}'.format(type(e).__name__, e)}), 500
+    if not out['sent'] and out.get('reason') == 'empty':
+        return jsonify({'success': True, **out,
+                        'message': 'No {} deal to report for today — e-mail not sent.'
+                                   .format(_MDEA_LABEL[kind])})
+    if not out['sent'] and out.get('reason') == 'no_recipient':
+        return jsonify({'success': False,
+                        'error': 'No TO recipient saved for this card — fill the TO field '
+                                 'and save before running.'}), 400
+    if not out['sent']:
+        return jsonify({'success': False, 'error': out.get('error') or 'unknown'}), 500
+    _mdea_status_write(kind, 'sent:{}'.format(out['rows']), _br_now())
+    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                         'Manual Deals EA Sent', 'Control Panel',
+                         '{} — {} deal(s) → {} recipient(s)'.format(
+                             _MDEA_LABEL[kind], out['rows'], out['to']))
+    return jsonify({'success': True, **out,
+                    'message': '{} — {} deal(s) sent to {} recipient(s){}.'.format(
+                        _MDEA_LABEL[kind], out['rows'], out['to'],
+                        ' (+{} in copy)'.format(out['cc']) if out['cc'] else '')})
+
+
 def _find_generic_nd_deal(cfg, deal_name, client_name=None):
     """Locate a deal by Deal (+optional Client) across the product's cache files.
     Returns (file_path, list_index) or (None, None)."""
@@ -33232,6 +33771,13 @@ def reconciliation_payrec_run():
     recon_date = request.form.get('recon_date', '')
     try:
         from apps.pages.recon_payrec import run_payrec
+        # Toca o cadastro GDT Codes para o SEED ser materializado em disco, pela
+        # mesma razão da Recon FXO: o motor lê o JSON direto (importar `routes`
+        # de lá seria circular) e não tem como semear. Sem isto, na instância em
+        # que ninguém abriu a tela de /mapping o arquivo não existe, o de-para
+        # volta vazio e todo lançamento do extrato volta a ser NDF — sem erro
+        # nenhum, e com a recon acusando netting que não existe.
+        _mapping_rows('gdt-codes')
         files = request.files.getlist('files') if mode == 'manual' else None
         result = run_payrec(recon_date, files=files, mode=mode)
         if result.get('success'):
