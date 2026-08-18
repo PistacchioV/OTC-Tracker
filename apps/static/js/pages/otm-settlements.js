@@ -66,11 +66,26 @@
   }
 
   // Standard status badge (project format): OK=success, Pending=warning, New=info.
+  // O `data-st` carrega o status CRU, e é por ele que a coluna ordena (ver
+  // `statusRank`). Ordenar pelo texto do badge daria uma ordem diferente em cada
+  // idioma — "Pending/OK" em inglês, "Pendente/OK" em português —, e ordenar
+  // pelo HTML ordenaria pela classe do CSS.
   function statusBadge(status) {
     var s = String(status || 'OK').toLowerCase();
-    if (s === 'pending') return '<span class="badge text-bg-warning bg-gradient">' + esc(t('pending')) + '</span>';
-    if (s === 'new')     return '<span class="badge bg-info text-white bg-gradient">' + esc(t('newst')) + '</span>';
-    return '<span class="badge text-bg-success bg-gradient">' + esc(t('ok')) + '</span>';
+    if (s === 'pending') return '<span data-st="pending" class="badge text-bg-warning bg-gradient">' + esc(t('pending')) + '</span>';
+    if (s === 'new')     return '<span data-st="new" class="badge bg-info text-white bg-gradient">' + esc(t('newst')) + '</span>';
+    return '<span data-st="ok" class="badge text-bg-success bg-gradient">' + esc(t('ok')) + '</span>';
+  }
+
+  // Ordem por URGÊNCIA, não alfabética: o que precisa de ação primeiro. `New` é
+  // a linha que ainda não foi tocada, então fica entre o pendente e o resolvido
+  // — e o `Ok`, que é o único estado que não pede nada, fica sempre por último.
+  var _ST_RANK = { pending: 0, new: 1, ok: 2 };
+  function statusRank(html) {
+    var m = /data-st="([a-z]+)"/.exec(String(html || ''));
+    // Status desconhecido vai para o fim: ele não é uma pendência conhecida, e
+    // encabeçar a lista com ele empurraria para baixo o que a mesa tem de fazer.
+    return m && (m[1] in _ST_RANK) ? _ST_RANK[m[1]] : 9;
   }
 
   function metaOf(r) {
@@ -114,11 +129,14 @@
     });
 
     if (dt) { dt.destroy(); }
-    // Ordenação padrão: Cpty Name A→Z e, dentro da contraparte, Trade Id A→Z.
+    // Ordenação padrão: STATUS primeiro (Pending → New → Ok), depois Cpty Name
+    // A→Z e, dentro da contraparte, Trade Id A→Z. O status vem na frente porque
+    // a página é uma fila de trabalho: quem abre quer ver o que falta, e com o
+    // Ok misturado no meio a pendência some numa lista de duzentas linhas.
     // Índices calculados pelo nome (+3 pelas colunas fixas checkbox/actions/status).
     var iCpty  = columns.indexOf('Cpty Name');
     var iTrade = columns.indexOf('Trade Id');
-    var defaultOrder = [];
+    var defaultOrder = [[2, 'asc']];
     if (iCpty  >= 0) defaultOrder.push([iCpty + 3, 'asc']);
     if (iTrade >= 0) defaultOrder.push([iTrade + 3, 'asc']);
     dt = jQuery('#otm-table').DataTable({
@@ -127,6 +145,13 @@
       columnDefs: [
         { orderable: false, className: 'text-center', targets: 0 },
         { orderable: false, searchable: false, className: 'text-center', targets: 1 },
+        // A ordenação da coluna Status é ORTOGONAL ao que ela mostra: `display`
+        // continua o badge, e só o `sort`/`type` vê o rank. Sem separar os dois,
+        // ordenar pela coluna ordenaria pelo HTML do badge.
+        { targets: 2, className: 'text-center',
+          render: function (d, type) {
+            return (type === 'sort' || type === 'type') ? statusRank(d) : d;
+          } },
       ],
       // No scrollX: one table → header/body never misalign; .table-responsive scrolls.
       scrollX: false, autoWidth: false, orderCellsTop: true, deferRender: true,
