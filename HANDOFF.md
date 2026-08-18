@@ -11822,13 +11822,56 @@ Quatro coisas que não dão erro nenhum:
   `_CETIP_BEHAVIOUR`, `_CETIP_FILES_SEED` e o `cetip-files.json` versionado —, e o
   `check_cetip_bacc.py` confere que todo tipo com `attach_hub` tem linha nos dois últimos.
 
-⚠️ **O nome de origem do arquivo de estratégia é uma DEDUÇÃO**: `CETIP21_YYMMDD_MID_DPOSICAOESTRATEGIA`,
-pelo padrão do `MID_DAGENTEACELERADOR`, que é o outro arquivo MID da mesma origem. Se a CETIP
-publicar com outra grafia, a correção é **uma célula no /mapping** e vale no request seguinte — é
-exatamente por isso que a lista de arquivos é cadastro e o comportamento é que é código. Até
-alguém conferir, o arquivo aparece como *Not found* no e-mail do HUB, que é a falha desejada.
+O arquivo de estratégia **já estava no cadastro do time**, como **`SWAP (Strategy)`** —
+`CETIP21_YYMMDD_DPOSICAOESTRATEGIA_MID` → `CETIP21_YYMMDD_DPOSICAOESTRATEGIA_MID.txt`. A primeira
+versão desta seção o inventou como `Strategy Position (MID DPOSICAOESTRATEGIA)`, deduzido do
+`MID_DAGENTEACELERADOR`: um TYPE que não existe é uma regra que **nunca casa**, e o e-mail sairia
+com três anexos para sempre. O DEST dele já termina em `.txt`, e é por isso que o nome do anexo
+passou a sair do **`_cetip_txt_name`** — que acrescenta o sufixo **uma vez só**. `…_MID.txt.txt` é
+um nome que ninguém escreveu de propósito, e o casamento do outro lado é pelo nome.
 
 O resto do encanamento já era genérico: `_CETIP_RECIPIENT_KEYS` ganhou `hub_to` e com isso
 `_load`/`_save`/`_cetip_merge_recipients` passaram a tratar as quatro listas sem mudança, e o JS do
 card itera o mapa `KEYS`. O merge continua sendo merge e não substituição — uma tela antiga, que não
 conhece a chave nova, apagaria aquela lista ao rodar.
+
+---
+
+## §269 — O TYPE do cadastro CETIP é DIGITADO, e a junção não pode depender do rótulo inteiro
+
+Sintoma: o `.TER` recortado **sumiu do e-mail do intragrupo (BACC)**. Sem erro, sem linha
+*Not found*, sem nada no painel — o arquivo continuava sendo salvo na pasta do dia, normalmente.
+
+Causa: `_cetip_rules` une o cadastro `cetip-files` ao `_CETIP_BEHAVIOUR` pela coluna **TYPE**, e o
+rótulo é TEXTO DIGITADO NA TELA. No código a posição de termo é `Term Position (DPOSICAO-TER)`; no
+cadastro do time ela foi renomeada para **`NDF Position (DPOSICAO-TER)`** — e a renomeação está
+*certa* do ponto de vista de quem opera, porque TER é termo e a mesa chama termo de NDF. Só que
+`_CETIP_BEHAVIOUR.get(label)` de uma chave que não existe devolve `{}`, que é **exatamente o que
+uma linha sem comportamento nenhum parece**. A linha perdeu de uma vez:
+
+- o recorte do BACC (`attach_bacc`) — o sintoma que apareceu;
+- o anexo do Sales Support (`attach_sales_support`);
+- e o **JSON de categoria NDF**, que alimenta o Settlement Forecast — este é o que dói de verdade,
+  porque não tem e-mail para ninguém notar que faltou.
+
+O prefixo do rótulo é DESCRIÇÃO; o que identifica o arquivo é o que está **entre parênteses** (o
+nome da CETIP). `_cetip_behaviour_for` casa pelo TYPE inteiro e, quando ele não bate, pelo
+parêntese — e `_cetip_paren_key` é o que extrai. Os parênteses são únicos nas 16 entradas, e
+`check_cetip_bacc.py` prova que continuam sendo: com dois iguais, o fallback entregaria o
+comportamento de qualquer um dos dois, e **regra errada é pior do que regra nenhuma**.
+
+Os dois desfechos agora **falam**, e em `log.warning` e não `log.info` porque na instância do time
+o log de módulo só sai a partir de WARNING — aviso que ninguém lê é o mesmo que não avisar:
+
+- rótulo resolvido pelo parêntese diz qual foi, e sugere renomear (ou não — o efeito é o mesmo);
+- rótulo que não casa por nenhum dos dois diz a frase que faltava: *o arquivo é SALVO, mas não vira
+  JSON nem é anexado a e-mail nenhum*.
+
+O **`CGD (NET)`** entrou como `{}` — salvo na rotina e nada mais, que é o que ele tem de fazer, e é
+o mesmo que dizem as outras entradas vazias do mapa. A entrada existe **por causa do aviso**: sem
+ela o CGD o acenderia todo dia por estar certo, e um aviso que sempre aparece deixa de ser lido.
+Vale para todo tipo novo: registrar `{}` é a forma de dizer "este é só salvo, de propósito".
+
+A lição vale para todo cadastro que casa por rótulo: **a tela convida a reescrever o texto**, e uma
+coluna que é chave de junção precisa ou de um identificador estável, ou de um fallback estrutural
+como este, ou de um aviso. Aqui ficaram os dois últimos.

@@ -411,7 +411,7 @@ Este card manda os arquivos da CETIP para **Sales Support**, **CEM Latam**, **BA
 | **Sales Support** | Contrato/SIC, posição de Termo, de Opção e de SWAP — os arquivos como saem |
 | **CEM Latam BA** | só a posição de Opção (`DPOSICAO.OPC`) — o arquivo como sai |
 | **BACC** | DFLUXO swap, posição swap, posição OPC e posição TER — **recortados** para as operações entre contas de casa (Lawton `00041.00-7`, Banco `73760.00-9`, Atacama `85398.00-5`) |
-| **BACC HUB EQT MO** | posição de Estratégia (MID), posição de Opção, posição de SWAP e Agenda de Prêmios — **inteiros, sem filtro nenhum**, para reconciliação de posição |
+| **BACC HUB EQT MO** | *SWAP (Strategy)*, posição de Opção, posição de SWAP e Agenda de Prêmios — **inteiros, sem filtro nenhum**, para reconciliação de posição |
 
 1. Preencha as **To** que forem usar — cada uma é um e-mail diferente, e as duas de BACC começam vazias.
 2. O anexo dos dois BACC **mantém o nome original do arquivo e ganha `.txt` no fim** — `73760_260817_DPOSICAO-SWAP.CETIP21.txt`. O nome inteiro fica porque é por ele que o outro lado reconhece qual arquivo é aquele; o `.txt` é o que faz o anexo abrir com um duplo clique (as extensões da CETIP não são associadas a programa nenhum). O conteúdo é o mesmo texto de sempre.
@@ -421,6 +421,8 @@ Este card manda os arquivos da CETIP para **Sales Support**, **CEM Latam**, **BA
 > **Sem endereço no To, o e-mail simplesmente não sai** — vale para os dois BACC, e o card mostra isso em vez de deixar você achando que foi enviado. Sales Support e CEM Latam têm endereço padrão.
 >
 > **"Not found" quer dizer coisas diferentes nos dois.** No BACC, o sistema não conseguiu localizar no arquivo as colunas de parte e contraparte, e por isso **não anexou** aquele arquivo — mandar o arquivo cheio com o nome de um recorte seria pior; avise o time de tecnologia. No BACC HUB, quer dizer que o arquivo **não estava na pasta do dia**: rode antes o *Save CETIP Files* e confira se a CETIP publicou aquele arquivo.
+>
+> **Um arquivo que some do e-mail sem dizer nada costuma ser o nome da linha em *Mapping → CETIP Files*.** O sistema liga cada linha do cadastro ao que ela faz (virar JSON, ir para o Sales Support, entrar no recorte do BACC) pelo **Type**, e o que identifica o arquivo ali é o trecho **entre parênteses** — `(DPOSICAO-TER)`, `(OPC DPOSICAO)`. O texto antes dos parênteses é só descrição e pode ser reescrito à vontade; **o que está entre parênteses, não**. Mudou, e o arquivo passa a ser só salvo: some dos e-mails e dos relatórios, calado.
 
 > **Nem todo card envia e-mail.** O *Daily Metric*, a *Weekly Escalation* e a *Collection* geram um **rascunho** — o navegador baixa um arquivo `.eml` que abre no Outlook já endereçado, para você revisar e enviar. O *Pending Confirmations Spreadsheet Metrics* não envia e-mail: ele **grava a planilha** "PENDING - Outstanding Confirmation OTC.xlsx" no share, todo dia útil às 10:45. Os demais mandam direto.
 

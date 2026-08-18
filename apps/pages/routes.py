@@ -2713,7 +2713,12 @@ _CETIP_BEHAVIOUR = {
     # JSON e não alimenta rotina nenhuma — é salvo na pasta do dia como os outros
     # e anexado inteiro. Sem a linha aqui e no cadastro, a rotina não conheceria o
     # arquivo e o e-mail sairia com três anexos em vez de quatro.
-    'Strategy Position (MID DPOSICAOESTRATEGIA)': {
+    #
+    # O nome do TIPO é o que está no cadastro do time — `SWAP (Strategy)`, e não
+    # um nome descritivo inventado aqui: `_cetip_rules` une os dois pela coluna
+    # TYPE, e um rótulo que não bate deixa a regra sem cadastro, ou seja, sem
+    # efeito nenhum, em silêncio.
+    'SWAP (Strategy)': {
         'attach_hub': True},               # BACC HUB EQT MO — arquivo INTEIRO, só renomeado
     'Term Position (DPOSICAO-TER)': {
         'attach_sales_support': True,      # .TER position also e-mailed to Sales Support
@@ -2730,6 +2735,12 @@ _CETIP_BEHAVIOUR = {
     'SIC Contract Position (DPOSCONTRATOSIC)': {
         'attach_sales_support': True},   # this file is e-mailed to Sales Support
     'Comitente Registry (DCADCOMITENTES)': {},
+    # Salvo e mais nada, DE PROPÓSITO — como os outros `{}` daqui. A entrada
+    # vazia não é decoração: `_cetip_behaviour_for` avisa em WARNING quando um
+    # TYPE do cadastro não casa com nada, justamente para um `attach_*` perdido
+    # não passar calado (§269). Sem a linha, o CGD acenderia esse aviso todo dia
+    # por estar certo, e um aviso que sempre aparece deixa de ser lido.
+    'CGD (NET)': {},
 }
 
 # Seed do cadastro: exatamente os 15 tipos que estavam no código, com o padrão
@@ -2760,13 +2771,12 @@ _CETIP_FILES_SEED = [
     {'TYPE': 'SWAP Premium Agenda (DAGENDAPREMIOS)',
      'SOURCE': 'CETIP21_YYMMDD_DAGENDAPREMIOS',
      'DEST': '73760_YYMMDD_DAGENDAPREMIOS.CETIP21', 'EXTRA DEST': ''},
-    # Estratégia (MID): o quarto arquivo do BACC HUB EQT MO. O nome segue o do
-    # MID_DAGENTEACELERADOR, que é o outro arquivo MID da mesma origem — se a
-    # CETIP publicar com outra grafia, a correção é UMA célula no /mapping, sem
-    # release: é justamente por isso que a lista é cadastro e não código.
-    {'TYPE': 'Strategy Position (MID DPOSICAOESTRATEGIA)',
-     'SOURCE': 'CETIP21_YYMMDD_MID_DPOSICAOESTRATEGIA',
-     'DEST': '73760_YYMMDD_MID_DPOSICAOESTRATEGIA.CETIP21', 'EXTRA DEST': ''},
+    # Estratégia (MID): o quarto arquivo do BACC HUB EQT MO. TYPE, SOURCE e DEST
+    # são os que já estavam no cadastro do time — o DEST dele **já termina em
+    # `.txt`**, que é por que `_cetip_txt_name` não acrescenta um segundo.
+    {'TYPE': 'SWAP (Strategy)',
+     'SOURCE': 'CETIP21_YYMMDD_DPOSICAOESTRATEGIA_MID',
+     'DEST': 'CETIP21_YYMMDD_DPOSICAOESTRATEGIA_MID.txt', 'EXTRA DEST': ''},
     {'TYPE': 'SWAP Indexers (INDEXADORESSWAP_VCP)',
      'SOURCE': 'CETIP21_YYMMDD_INDEXADORESSWAP_VCP',
      'DEST': 'CETIP21_YYMMDD_INDEXADORESSWAP_VCP.TXT', 'EXTRA DEST': ''},
@@ -2789,6 +2799,10 @@ _CETIP_FILES_SEED = [
      'SOURCE': 'SIC_YYMMDD_DCADCOMITENTES',
      # Keep the original SIC name so the Comitente reconciliation finds it unchanged.
      'DEST': 'SIC_YYMMDD_DCADCOMITENTES.txt', 'EXTRA DEST': ''},
+    # CGD: salvo na rotina e nada mais — não vira JSON e não vai para área nenhuma.
+    {'TYPE': 'CGD (NET)',
+     'SOURCE': 'CETIP21_YYMMDD_DPOSICAO-NET',
+     'DEST': 'CETIP21_YYMMDD_DPOSICAO-NET.txt', 'EXTRA DEST': ''},
 ]
 
 _CETIP_DATE_TOKEN = 'YYMMDD'
@@ -2845,10 +2859,66 @@ def _cetip_make_matcher(pattern, label):
     return _match
 
 
+def _cetip_paren_key(label):
+    """`'NDF Position (DPOSICAO-TER)'` → `'DPOSICAO-TER'`; sem parênteses, o
+    rótulo inteiro. É o NOME DO ARQUIVO da CETIP dentro do rótulo — a parte que
+    identifica de que arquivo a linha fala, ao contrário do prefixo descritivo,
+    que é como o time escolheu chamá-lo."""
+    m = re.search(r'\(([^)]*)\)\s*$', str(label or ''))
+    return (m.group(1) if m else str(label or '')).strip().upper()
+
+
+_CETIP_BEHAVIOUR_BY_PAREN = {_cetip_paren_key(k): v for k, v in _CETIP_BEHAVIOUR.items()}
+
+
+def _cetip_behaviour_for(label):
+    """Comportamento da linha do cadastro, pelo TYPE — e, se ele não bater, pelo
+    NOME DO ARQUIVO entre parênteses.
+
+    O rótulo é digitado na tela, e o prefixo dele é descrição: a mesma posição de
+    termo é `Term Position (DPOSICAO-TER)` no código e `NDF Position
+    (DPOSICAO-TER)` no cadastro do time (TER é termo, que a mesa chama de NDF —
+    a renomeação está CERTA do ponto de vista de quem opera). Com a junção só
+    pelo rótulo inteiro, essa linha perdia o comportamento por completo: o
+    arquivo continuava sendo salvo (SOURCE e DEST vêm do cadastro), mas não
+    virava JSON, não ia para o Sales Support e não entrava no recorte do BACC —
+    **sem erro nenhum**, porque `dict.get` de uma chave que não existe é um
+    dicionário vazio, que é exatamente o que uma linha sem comportamento parece.
+    Foi assim que o `.TER` sumiu do e-mail do intragrupo.
+
+    O que identifica o arquivo é o que está ENTRE PARÊNTESES, e ele é único nas
+    16 entradas (`check_cetip_bacc.py` prova). O prefixo pode ser reescrito à
+    vontade — que é o que uma coluna de texto numa tela convida a fazer.
+
+    Rótulo que não casa por nenhum dos dois é **avisado no log**: a linha existe
+    de propósito (há tipos sem comportamento nenhum, que só são salvos), mas um
+    `attach_*` que deixa de valer por causa de um parêntese perdido não pode
+    passar calado uma segunda vez.
+    """
+    label = str(label or '').strip()
+    if label in _CETIP_BEHAVIOUR:
+        return _CETIP_BEHAVIOUR[label]
+    achado = _CETIP_BEHAVIOUR_BY_PAREN.get(_cetip_paren_key(label))
+    # WARNING, e não INFO: na instância do time o log de módulo só sai a partir de
+    # WARNING, e um aviso que ninguém lê é o mesmo que não avisar.
+    if achado is not None:
+        log.warning('[cetip] %r não é um TYPE conhecido; o comportamento foi resolvido '
+                    'pelo nome do arquivo entre parênteses (%r). Renomeie a linha no '
+                    '/mapping para o TYPE do código, ou ignore — o efeito é o mesmo.',
+                    label, _cetip_paren_key(label))
+        return achado
+    log.warning('[cetip] %r não tem comportamento registrado: o arquivo é SALVO, mas '
+                'não vira JSON nem é anexado a e-mail nenhum. Se ele deveria ir para '
+                'alguma área, o TYPE não está batendo com o código.', label)
+    return {}
+
+
 def _cetip_rules():
     """Regras da rotina = cadastro (/mapping) + comportamento (código), unidos
-    pela coluna TYPE. Uma linha com padrão inválido é ignorada com aviso no log,
-    para um erro de digitação na tela não derrubar a rotina inteira."""
+    pela coluna TYPE — ou, quando ela não bate, pelo nome do arquivo entre
+    parênteses (ver `_cetip_behaviour_for`). Uma linha com padrão inválido é
+    ignorada com aviso no log, para um erro de digitação na tela não derrubar a
+    rotina inteira."""
     rules = []
     for row in _mapping_rows('cetip-files'):
         label = str(row.get('TYPE') or '').strip()
@@ -2865,7 +2935,7 @@ def _cetip_rules():
         if _CETIP_DATE_TOKEN not in dest.upper():
             log.warning('[cetip] %r: DEST %r não tem %s — o nome salvo não terá data',
                         label, dest, _CETIP_DATE_TOKEN)
-        rule = dict(_CETIP_BEHAVIOUR.get(label) or {})
+        rule = dict(_cetip_behaviour_for(label))
         rule.update({
             'label': label,
             'match': matcher,
@@ -3299,6 +3369,21 @@ def _cetip_bacc_col(header, spec):
     return idx if isinstance(idx, int) and idx >= 0 else None
 
 
+def _cetip_txt_name(src_path):
+    """Nome do anexo: o do arquivo salvo, com `.txt` no fim — e um só.
+
+    O `.txt` é ACRESCENTADO, não substituído: as extensões da CETIP (`.CETIP21`,
+    `.OPC`, `.TER`) não são associadas a programa nenhum e o anexo não abre com um
+    duplo clique, mas é pelo nome inteiro que o outro lado reconhece QUAL arquivo
+    é aquele — trocar `.OPC` por `.txt` apagaria justamente essa parte.
+
+    Quando o DEST cadastrado já termina em `.txt` (o `SWAP (Strategy)` é assim),
+    não ganha um segundo: `…_MID.txt.txt` é um nome que ninguém escreveu de
+    propósito, e o casamento do outro lado é pelo nome."""
+    nome = os.path.basename(src_path)
+    return nome if nome.lower().endswith('.txt') else nome + '.txt'
+
+
 def _cetip_bacc_copy(src_path, cfg, out_dir):
     """Cópia de `src_path` com só as linhas do intragrupo → (path, mantidas, total).
 
@@ -3342,7 +3427,7 @@ def _cetip_bacc_copy(src_path, cfg, out_dir):
     mantidas = [ln for ln in dados
                 if _conta(ln.split(';'), i_parte) in _CETIP_BACC_ACCOUNTS
                 and _conta(ln.split(';'), i_cpty) in _CETIP_BACC_ACCOUNTS]
-    out_path = os.path.join(out_dir, os.path.basename(src_path) + '.txt')
+    out_path = os.path.join(out_dir, _cetip_txt_name(src_path))
     saida = ([linhas[0]] if tem_header else []) + mantidas
     try:
         # Latin-1 + CRLF: o mesmo formato do `_cetip_save_file`, para o recorte ser
@@ -3367,15 +3452,14 @@ def _cetip_txt_copy(src_path, out_dir):
     e não um `open`/`write` como no recorte do BACC: sem reencodar, sem tocar em
     fim de linha, sem chance de o latin-1 do arquivo virar outra coisa no caminho.
 
-    O `.txt` é ACRESCENTADO pela mesma razão do recorte do BACC: as extensões da
-    CETIP (`.CETIP21`, `.OPC`) não abrem com um duplo clique, e trocá-las apagaria
-    a parte do nome que diz qual arquivo é aquele.
+    O nome sai do `_cetip_txt_name`, o mesmo do recorte do BACC — inclusive a
+    guarda do arquivo que JÁ é `.txt`, que é o caso do `SWAP (Strategy)`.
 
     A cópia vai para um temporário porque o anexo NÃO pode encostar na pasta de
     liquidação — é ela que o KPI lê.
     """
     try:
-        out_path = os.path.join(out_dir, os.path.basename(src_path) + '.txt')
+        out_path = os.path.join(out_dir, _cetip_txt_name(src_path))
         shutil.copy2(src_path, out_path)
         return out_path
     except Exception:

@@ -355,12 +355,15 @@ mm = R._cetip_make_matcher('CETIP21_YYMMDD_DPOSICAO-SWAP', 'test')
 check('data nao numerica nao casa', mm('cetip21_abcdef_dposicao-swap.txt'), False)
 check('nome curto demais nao casa', mm('dposicao-swap.txt'), False)
 
-print('\n== 7. as 15 regras continuam de pe ==')
+print('\n== 7. o seed e o comportamento cobrem os MESMOS tipos ==')
 tmp = tempfile.mkdtemp()
 R._MAPPINGS_DIR = tmp                    # nao encosta no arquivo real
 R._mapping_cache.pop('cetip-files', None)
 rules = R._cetip_rules()
-check('15 regras', len(rules), 15)
+# O numero cresce quando a CETIP publica um arquivo novo; o que nao pode
+# variar e a PARIDADE com o comportamento, conferida logo abaixo — um tipo
+# so no seed nunca vira anexo, e um so no codigo nunca roda.
+check('uma regra por linha do seed', len(rules), len(R._CETIP_FILES_SEED))
 check('todas com match', all(callable(r['match']) for r in rules), True)
 check('todas com dest_name', all(callable(r['dest_name']) for r in rules), True)
 labels = [r['label'] for r in rules]

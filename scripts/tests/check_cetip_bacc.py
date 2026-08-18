@@ -244,9 +244,17 @@ try:
     hub = sorted(k for k, v in R._CETIP_BEHAVIOUR.items() if v.get('attach_hub'))
     check('os quatro tipos do HUB', hub, [
         'Option Position (OPC DPOSICAO)',
+        'SWAP (Strategy)',
         'SWAP Position (DPOSICAO-SWAP)',
-        'SWAP Premium Agenda (DAGENDAPREMIOS)',
-        'Strategy Position (MID DPOSICAOESTRATEGIA)'])
+        'SWAP Premium Agenda (DAGENDAPREMIOS)'])
+    # O DEST do SWAP (Strategy) JA termina em .txt: um segundo sufixo daria
+    # `..._MID.txt.txt`, um nome que ninguem escreveu e que o outro lado nao casa.
+    check('nome de anexo: .txt e acrescentado uma vez so',
+          [R._cetip_txt_name('73760_260817_DPOSICAO-TER.TER'),
+           R._cetip_txt_name('CETIP21_260817_DPOSICAOESTRATEGIA_MID.txt'),
+           R._cetip_txt_name('X.TXT')],
+          ['73760_260817_DPOSICAO-TER.TER.txt',
+           'CETIP21_260817_DPOSICAOESTRATEGIA_MID.txt', 'X.TXT'])
     # Comportamento sem cadastro e regra que nunca roda: `_cetip_rules` une os
     # dois pela coluna TYPE, e um tipo so no codigo nao vira anexo nenhum.
     tipos_seed = {r['TYPE'] for r in R._CETIP_FILES_SEED}
@@ -259,8 +267,36 @@ try:
     # O HUB nao tem `bacc`: pedir os dois na mesma linha significaria dois anexos
     # com o mesmo nome de origem no mesmo dia.
     check('o tipo novo nao vira JSON nem recorte',
-          [k for k in R._CETIP_BEHAVIOUR['Strategy Position (MID DPOSICAOESTRATEGIA)']],
-          ['attach_hub'])
+          [k for k in R._CETIP_BEHAVIOUR['SWAP (Strategy)']], ['attach_hub'])
+
+    # ── 12. o rotulo do cadastro e DIGITADO, e o comportamento nao pode sumir ──
+    # O prefixo do TYPE e descricao: a mesma posicao de termo e `Term Position
+    # (DPOSICAO-TER)` no codigo e `NDF Position (DPOSICAO-TER)` no cadastro do
+    # time (TER e termo, que a mesa chama de NDF). Com a juncao so pelo rotulo
+    # inteiro, essa linha perdia TODO o comportamento sem erro nenhum — o arquivo
+    # continuava sendo salvo e sumia do e-mail do intragrupo, do Sales Support e
+    # do JSON. Foi assim que o .TER sumiu do anexo.
+    print('\n== 12. TYPE renomeado no cadastro nao pode perder o comportamento ==')
+    check('o parentetico e o nome do arquivo',
+          [R._cetip_paren_key('NDF Position (DPOSICAO-TER)'),
+           R._cetip_paren_key('SWAP (Strategy)'),
+           R._cetip_paren_key('sem parenteses')],
+          ['DPOSICAO-TER', 'STRATEGY', 'SEM PARENTESES'])
+    # Se dois comportamentos tivessem o mesmo parentetico, o fallback entregaria
+    # o de qualquer um deles — e a regra errada e pior que regra nenhuma.
+    parens = [R._cetip_paren_key(k) for k in R._CETIP_BEHAVIOUR]
+    check('nenhum parentetico repetido entre os comportamentos',
+          len(parens), len(set(parens)))
+    exato = R._cetip_behaviour_for('Term Position (DPOSICAO-TER)')
+    renomeado = R._cetip_behaviour_for('NDF Position (DPOSICAO-TER)')
+    check('o TYPE do codigo resolve', bool(exato.get('attach_bacc')), True)
+    check('e o TYPE renomeado pelo time resolve IGUAL', renomeado, exato)
+    check('   inclusive o anexo do Sales Support e o JSON',
+          [bool(renomeado.get('attach_sales_support')), bool(renomeado.get('json'))],
+          [True, True])
+    check('rotulo desconhecido devolve vazio, e nao explode',
+          R._cetip_behaviour_for('Coisa Nova (NAOEXISTE)'), {})
+    check('rotulo vazio idem', R._cetip_behaviour_for(''), {})
 
     check('o campo do HUB existe no card', 'id="cp-cetip-hub-to"' in TPL, True)
     check('   e vai no payload do Run', 'data-payload-key="hub_to"' in TPL, True)
