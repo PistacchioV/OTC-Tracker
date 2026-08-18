@@ -523,6 +523,20 @@ check('os dois cadastros estao no _MAPPING_DEFS',
 mp = read('apps/templates/pages/mapping.html')
 check('e os dois aparecem na tela de Mapping',
       ["'quotes-equity'" in mp, "'quotes-commodity'" in mp], [True, True])
+# O `"MY"` existe para o PARSER, nao para quem le: na tabela ele aparece como o
+# do Commodities x B3 — realce ambar (.map-var) e SEM as aspas. Sem isto a tela
+# mostrava `BO"MY"` cru, e o cadastro que economiza sessenta linhas parecia um
+# valor digitado errado.
+check('o "MY" do Quotes — Commodities tem o mesmo realce do Commodities x B3',
+      "'quotes-commodity': { cols: ['LABEL', 'SYMBOL'], token: /\"\\s*MY\\s*\"/ig, show: 'MY' }"
+      in mp, True)
+# Reusa a classe que ja existe, e ela tem o par de tema: cor so de tema claro
+# sumiria no escuro (CLAUDE.md §7).
+check('   e o realce e o .map-var que ja existe, com o par claro/escuro',
+      ['#mapping-page .map-var {' in mp,
+       '[data-bs-theme=dark] #mapping-page .map-var {' in mp,
+       'map-var-quotes' in mp],
+      [True, True, False])
 
 for key in ('quotes-equity', 'quotes-commodity'):
     fp = os.path.join(ROOT, 'apps', 'static', 'data', 'mappings', key + '.json')
