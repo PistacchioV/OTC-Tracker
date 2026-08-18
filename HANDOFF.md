@@ -12093,3 +12093,25 @@ Duas coisas que fariam a ordem sair errada em silêncio:
 - **a ordenação é ORTOGONAL ao display**: o `render` devolve o rank só para `type === 'sort'` /
   `'type'` e o badge para o resto. É o mesmo princípio dos números do padrão de tabela (CLAUDE.md
   §3) — o que se vê e o que ordena são perguntas diferentes.
+
+---
+
+## §276 — O assunto do aviso de liquidação leva CONTRAPARTE + CNPJ
+
+Os três avisos (`Termo de Moeda`, `Swap` e o compartilhado `Termo de Commodities` / `Opção`)
+terminavam o assunto no NOME da contraparte. O nome sozinho não identifica: o mesmo grupo tem
+várias entidades com nomes quase iguais — "Mondelez Brasil Ltda" e "Mondelez Brasil Norte Nordeste
+Ltda" chegam no mesmo dia, com avisos diferentes —, e quem arquiva do outro lado casa pelo
+cadastro, que é **por CNPJ**.
+
+    Liquidação de Operação de Derivativo (Swap) - 14/08/2026 - SUZANO SA 16.404.287/0001-55
+
+`_subject_cpty(contraparte, taxid)` é o único lugar que monta esse pedaço, e os três assuntos
+passam por ele — três formatações separadas divergiriam na primeira correção.
+
+**O CNPJ só entra MASCARADO.** `_fmt_cnpj` devolve o texto CRU quando não são 14 dígitos (é o
+comportamento dele em todo o resto do e-mail, onde o campo é rotulado); num ASSUNTO, terminar num
+pedaço de número seria pior do que não ter número. A máscara é a prova de que o documento foi
+reconhecido: sem ela, o assunto fica exatamente como sempre foi. É o caso do `CLIENTE B3` no teste,
+que não tem TAX ID no Reference Data — e é por isso que o `check_swap_advice.py` cobre os dois
+lados na mesma asserção.

@@ -288,15 +288,21 @@ drafts = otc_emails.build_swap_settlement_emails(email_rows, HD, HD_P, '27/07/20
 subs = sorted(d['subject'] for d in drafts)
 # SUZANO normal (A1) + SUZANO premio (N2, S5) + CLIENTE B3 premio (S6).
 check('um aviso por contraparte x entidade x premio', len(drafts), 3)
-check('assunto normal',
+# O assunto leva CONTRAPARTE + CNPJ: o nome sozinho nao identifica (o mesmo
+# grupo tem varias entidades com nomes quase iguais), e quem arquiva o aviso casa
+# pelo cadastro, que e por CNPJ. A SUZANO tem TAX ID no RefData e o CNPJ aparece;
+# o CLIENTE B3 nao tem, e o assunto fica como sempre foi — meio CNPJ no fim do
+# assunto seria pior do que nenhum.
+check('assunto normal, com o CNPJ da contraparte',
       [s for s in subs if not s.startswith('(')],
-      ['Liquidação de Operação de Derivativo (Swap) - 27/07/2026 - SUZANO SA'])
-check('assunto de premio',
+      ['Liquidação de Operação de Derivativo (Swap) - 27/07/2026 - '
+       'SUZANO SA 16.404.287/0001-55'])
+check('assunto de premio, e sem CNPJ quem nao tem TAX ID',
       [s for s in subs if s.startswith('(')],
       ['(Pagamento de Prêmio) Liquidação de Operação de Derivativo (Swap) - '
        '27/07/2026 - CLIENTE B3',
        '(Pagamento de Prêmio) Liquidação de Operação de Derivativo (Swap) - '
-       '27/07/2026 - SUZANO SA'])
+       '27/07/2026 - SUZANO SA 16.404.287/0001-55'])
 # O documento tem de trazer o cabecalho certo em cada versao.
 html_p = [d['html'] for d in drafts if d['subject'].startswith('(')][0]
 html_n = [d['html'] for d in drafts if not d['subject'].startswith('(')][0]

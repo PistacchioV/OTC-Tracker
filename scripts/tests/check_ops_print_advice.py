@@ -180,5 +180,30 @@ check('Pending vem antes de New, e Ok por ultimo',
       [p.strip() for p in (m.group(1) if m else '').split(',') if p.strip()],
       ['pending: 0', 'new: 1', 'ok: 2'])
 
+
+print('\n== 8. O assunto do aviso leva CONTRAPARTE + CNPJ ==')
+# O nome sozinho nao identifica: o mesmo grupo tem varias entidades com nomes
+# quase iguais ("Mondelez Brasil" x "Mondelez Brasil Norte Nordeste"), e quem
+# arquiva o aviso casa pelo cadastro, que e por CNPJ.
+from apps.pages import otc_emails as E                      # noqa: E402
+check('nome + CNPJ mascarado',
+      E._subject_cpty('MONDELEZ BRASIL LTDA', '12345678000199'),
+      'MONDELEZ BRASIL LTDA 12.345.678/0001-99')
+check('ja mascarado no cadastro nao duplica a mascara',
+      E._subject_cpty('MONDELEZ BRASIL LTDA', '12.345.678/0001-99'),
+      'MONDELEZ BRASIL LTDA 12.345.678/0001-99')
+# `_fmt_cnpj` devolve o texto CRU quando nao sao 14 digitos: um assunto
+# terminando num pedaco de numero seria pior do que nao ter numero nenhum.
+check('documento incompleto NAO entra no assunto',
+      [E._subject_cpty('BAYER S.A.', '123'), E._subject_cpty('BAYER S.A.', ''),
+       E._subject_cpty('BAYER S.A.', None)],
+      ['BAYER S.A.'] * 3)
+# Os TRES avisos usam o helper — um assunto que nao leva o CNPJ e o aviso que o
+# arquivo do cliente nao vai casar.
+SRCE = read('apps/pages/otc_emails.py')
+# O `)` no fim e o que separa as CHAMADAS da linha do `def` (que termina em `:`).
+check('os tres assuntos de liquidacao passam pelo helper',
+      SRCE.count('_subject_cpty(contraparte, taxid))'), 3)
+
 print('\n' + ('FALHOU: ' + ', '.join(fails) if fails else 'TUDO OK'))
 sys.exit(1 if fails else 0)

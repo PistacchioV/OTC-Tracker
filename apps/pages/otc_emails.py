@@ -364,6 +364,26 @@ def _date_br(s):
     return s
 
 
+def _subject_cpty(contraparte, taxid):
+    """`'NOME 12.345.678/0001-99'` — a contraparte como ela vai no ASSUNTO.
+
+    O CNPJ entra porque o nome sozinho não identifica: o mesmo grupo tem várias
+    entidades com nomes quase iguais ("Mondelez Brasil" × "Mondelez Brasil Norte
+    Nordeste"), e quem arquiva o aviso casa pelo cadastro, que é por CNPJ.
+
+    Só entra MASCARADO: `_fmt_cnpj` devolve o texto cru quando não são 14
+    dígitos, e um assunto terminando num pedaço de número seria pior do que não
+    ter o número. Sem CNPJ utilizável, o assunto fica como sempre foi.
+    """
+    nome = str(contraparte or '').strip()
+    doc = _fmt_cnpj(taxid)
+    # A máscara é a prova de que o documento foi reconhecido — `_fmt_cnpj` só a
+    # aplica com os 14 dígitos.
+    if doc and '/' in doc and '.' in doc:
+        return (nome + ' ' + doc).strip()
+    return nome
+
+
 def _fmt_cnpj(raw):
     digits = ''.join(ch for ch in str(raw or '') if ch.isdigit())
     if len(digits) != 14:
@@ -1053,7 +1073,8 @@ def _ndf_settlement_email(items, contraparte, le_class, ref_date, cpd):
 
     html = _email_shell('Liquidação de Operação de Derivativo', ref_date, intro, body_html)
 
-    subject = 'Liquidação de Operação de Derivativo (Termo de Moeda) - {} - {}'.format(ref_date, contraparte)
+    subject = 'Liquidação de Operação de Derivativo (Termo de Moeda) - {} - {}'.format(
+        ref_date, _subject_cpty(contraparte, taxid))
     if le_class == 'MGT':
         subject += ' x JPMORGAN CHASE'
 
@@ -1203,7 +1224,8 @@ def _swap_settlement_email(items, contraparte, le_class, premium, ref_date, cpd,
              _ep('Vimos confirmar a(s) liquidação(ões) da(s) operação(ões) de derivativos abaixo especificada(s):'))
     html = _email_shell('Liquidação de Operação de Derivativo', ref_date, intro, body_html)
 
-    subject = 'Liquidação de Operação de Derivativo (Swap) - {} - {}'.format(ref_date, contraparte)
+    subject = 'Liquidação de Operação de Derivativo (Swap) - {} - {}'.format(
+        ref_date, _subject_cpty(contraparte, taxid))
     if premium:
         subject = '(Pagamento de Prêmio) ' + subject
     if le_class == 'MGT':
@@ -1364,7 +1386,7 @@ def _ndfc_settlement_email(items, contraparte, le_class, ref_date, cpd, headers,
     html = _email_shell('Liquidação de Operação de Derivativo', ref_date, intro, body_html)
 
     subject = 'Liquidação de Operação de Derivativo ({}) - {} - {}'.format(
-        product_label, ref_date, contraparte)
+        product_label, ref_date, _subject_cpty(contraparte, taxid))
     # Um aviso por commodity precisa se distinguir na caixa de entrada: três
     # assuntos idênticos no mesmo dia são três anexos que ninguém sabe separar.
     commodities = {str(t.get('commodity', '') or '') for t in items}
