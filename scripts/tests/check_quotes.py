@@ -509,6 +509,33 @@ check('texto montado em JS sai do mapa _TRANS local, lendo o idioma do localStor
       '_TRANS' in js and '__OTC_TRACKER_LANG__' in js, True)
 check('o segundo combobox so habilita depois do tipo',
       'inp.disabled = !kind' in js, True)
+# O `<datalist>` nativo desenha o popup NO NAVEGADOR: nenhuma regra de CSS o
+# alcanca, e com os 904 contratos de commodity ele saia com a altura da pagina,
+# largura propria e fora de posicao. A lista passou a ser um elemento nosso.
+check('o combobox nao usa mais o datalist nativo',
+      ['<datalist' in html, 'qtInstrumentList' in html, 'qtInstrumentList' in js],
+      [False, False, False])
+check('a lista e um elemento nosso, ancorado no campo',
+      ['id="qtInstrumentMenu"' in html, 'class="qt-combo"' in html], [True, True])
+check('largura do campo, altura com teto e rolagem',
+      ['.qt-combo { position: relative; width: 190px; }' in html,
+       'width: 100%' in html.split('.qt-combo__menu {')[1][:400],
+       'max-height: 260px; overflow-y: auto;' in html], [True, True, True])
+# Desenhar 904 nos a cada tecla trava a digitacao — e uma lista de novecentos
+# itens nao se le rolando, se filtra. O corte tem de ser DITO: lista que cala o
+# que ficou de fora parece a lista inteira.
+check('so as primeiras opcoes entram no DOM, e o corte e dito',
+      ['MAX_OPCOES' in js, "t('more')" in js], [True, True])
+check('teclado: setas, Esc e Enter',
+      ["ev.key === 'ArrowDown'" in js, "ev.key === 'Escape'" in js,
+       "ev.key === 'Enter'" in js], [True, True, True])
+# `mousedown` e nao `click`: o clique so chegaria depois do blur, com o menu ja
+# fechado sob o cursor — o item nunca seria escolhido.
+check('o clique no item e por mousedown', "menu.addEventListener('mousedown'" in js, True)
+check('clique fora fecha', 'if (ev.target === inpInstr || menu.contains(ev.target)) return;'
+      in js, True)
+check('e o tema escuro tem o par das regras do menu',
+      '[data-bs-theme="dark"] #quotes-page .qt-combo__menu' in html, True)
 check('o codigo digitado e validado contra a lista do tipo antes de ir a rede',
       'function chosen()' in js, True)
 check('nao sobrou codigo das abas antigas',

@@ -46,7 +46,9 @@
           currency: 'Moeda', instrument: 'Instrumento',
           unknown: 'não está na lista do tipo escolhido.',
           nosymbol: 'sem símbolo cadastrado — cadastre em Mapping ›',
-          registered: 'com símbolo cadastrado' },
+          registered: 'com símbolo cadastrado',
+          nomatch: 'Nenhum código com esse texto.',
+          more: 'a mais — refine a busca' },
     es: { searching: 'Buscando…', norows: 'Sin cotizaciones en el período.',
           failed: 'No pude buscar', pick: 'Elija el instrumento.',
           empty: 'Elija el tipo, el instrumento y el período.',
@@ -54,7 +56,9 @@
           currency: 'Moneda', instrument: 'Instrumento',
           unknown: 'no está en la lista del tipo elegido.',
           nosymbol: 'sin símbolo registrado — regístrelo en Mapping ›',
-          registered: 'con símbolo registrado' },
+          registered: 'con símbolo registrado',
+          nomatch: 'Ningún código con ese texto.',
+          more: 'más — refine la búsqueda' },
     en: { searching: 'Searching…', norows: 'No quotes in the period.',
           failed: 'Could not fetch', pick: 'Pick the instrument.',
           empty: 'Pick the type, the instrument and the period.',
@@ -62,7 +66,9 @@
           currency: 'Currency', instrument: 'Instrument',
           unknown: 'is not in the list for the selected type.',
           nosymbol: 'has no symbol registered — add it in Mapping ›',
-          registered: 'with a registered symbol' }
+          registered: 'with a registered symbol',
+          nomatch: 'No code matches that text.',
+          more: 'more — narrow the search' }
   };
   function t(k) {
     var lang = 'en';
@@ -75,17 +81,107 @@
     return p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0] : '';
   }
 
+  // ── O combobox do instrumento ────────────────────────────────────────────
+  // Era um `<datalist>` nativo. O popup dele é desenhado pelo NAVEGADOR e não
+  // aceita CSS: com os 904 contratos de commodity ele saía com a altura da
+  // página, largura própria e fora de posição. Aqui a lista é nossa, então tem
+  // a largura do campo, teto de altura com rolagem e fica ancorada nele.
+  //
+  // Só as MAX_OPCOES primeiras entram no DOM. Desenhar 904 nós a cada tecla é o
+  // que trava a digitação — e uma lista de novecentos itens não se lê rolando,
+  // se filtra. Quando sobra coisa de fora, o rodapé DIZ quantas: uma lista que
+  // cala o corte parece a lista inteira, e quem não achou o código conclui que
+  // ele não existe.
+  var MAX_OPCOES = 50;
+  var menu, opcoesVisiveis = [], ativo = -1;
+
+  function chave(v) { return String(v || '').toUpperCase().replace(/\s+/g, ' ').trim(); }
+
+  function fechaMenu() {
+    if (!menu) return;
+    menu.hidden = true;
+    menu.innerHTML = '';
+    opcoesVisiveis = [];
+    ativo = -1;
+    document.getElementById('qt-instrument').setAttribute('aria-expanded', 'false');
+  }
+
+  function abreMenu(termo) {
+    var inp = document.getElementById('qt-instrument');
+    if (!menu || inp.disabled) return;
+    var alvo = chave(termo);
+    // Quem começa com o que foi digitado vem primeiro: digitando "BO" o que se
+    // procura é o contrato BO, não o AGBOX26 que também contém as duas letras.
+    var comeca = [], contem = [];
+    for (var i = 0; i < current.length; i++) {
+      var k = chave(current[i][0]);
+      if (!alvo || k.indexOf(alvo) === 0) comeca.push(current[i]);
+      else if (k.indexOf(alvo) !== -1) contem.push(current[i]);
+    }
+    var achados = comeca.concat(contem);
+    menu.innerHTML = '';
+    opcoesVisiveis = achados.slice(0, MAX_OPCOES);
+    ativo = -1;
+    if (!achados.length) {
+      var vazio = document.createElement('div');
+      vazio.className = 'qt-combo__note';
+      vazio.textContent = t('nomatch');
+      menu.appendChild(vazio);
+    }
+    opcoesVisiveis.forEach(function (par, idx) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'qt-combo__opt';
+      b.setAttribute('role', 'option');
+      b.dataset.idx = String(idx);
+      b.appendChild(document.createTextNode(par[0]));
+      if (par[1] && par[1] !== par[0]) {
+        var s = document.createElement('span');
+        s.className = 'qt-combo__sym';
+        s.textContent = ' → ' + par[1];
+        b.appendChild(s);
+      }
+      menu.appendChild(b);
+    });
+    if (achados.length > opcoesVisiveis.length) {
+      var mais = document.createElement('div');
+      mais.className = 'qt-combo__note';
+      mais.textContent = '+' + (achados.length - opcoesVisiveis.length) + ' ' + t('more');
+      menu.appendChild(mais);
+    }
+    menu.hidden = false;
+    menu.scrollTop = 0;
+    inp.setAttribute('aria-expanded', 'true');
+  }
+
+  function marcaAtivo(novo) {
+    var itens = menu.querySelectorAll('.qt-combo__opt');
+    if (!itens.length) return;
+    if (ativo >= 0 && itens[ativo]) itens[ativo].classList.remove('is-active');
+    ativo = (novo + itens.length) % itens.length;
+    itens[ativo].classList.add('is-active');
+    // `block:'nearest'` para o item escolhido entrar na área visível sem jogar a
+    // lista inteira para o meio da tela a cada seta.
+    itens[ativo].scrollIntoView({ block: 'nearest' });
+  }
+
+  function escolhe(idx) {
+    var par = opcoesVisiveis[idx];
+    if (!par) return;
+    document.getElementById('qt-instrument').value = par[0];
+    fechaMenu();
+  }
+
   // ── Tipo → instrumento ───────────────────────────────────────────────────
   function selectKind(kind) {
     state.kind = kind;
     current = OPTIONS[kind] || [];
     var inp = document.getElementById('qt-instrument');
     var lbl = document.getElementById('qtInstrumentLabel');
-    var list = document.getElementById('qtInstrumentList');
     var hint = document.getElementById('qtSymbolHint');
 
     inp.value = '';
-    list.innerHTML = '';
+    fechaMenu();
     inp.disabled = !kind;
     document.getElementById('qtSearch').disabled = !kind;
     if (lbl) lbl.textContent = (kind === 'ptax') ? t('currency') : t('instrument');
@@ -96,14 +192,6 @@
       clearTable(t('kind'));
       return;
     }
-    current.forEach(function (pair) {
-      var o = document.createElement('option');
-      o.value = pair[0];
-      // O símbolo aparece na própria lista: quem escolhe vê na hora o que está
-      // cadastrado e o que vai pedir cadastro.
-      if (pair[1] && pair[1] !== pair[0]) o.label = pair[0] + ' → ' + pair[1];
-      list.appendChild(o);
-    });
     inp.placeholder = current.length ? current[0][0] : '—';
     if (kind === 'ptax') inp.value = 'USD';
     var comSimbolo = current.filter(function (p) { return !!p[1]; }).length;
@@ -327,9 +415,58 @@
     selectKind(this.value);
   });
   document.getElementById('qtSearch').addEventListener('click', search);
-  document.getElementById('qt-instrument').addEventListener('keydown', function (ev) {
-    if (ev.key === 'Enter') search();
+
+  // ── Combobox: abrir, filtrar, navegar, escolher ──────────────────────────
+  menu = document.getElementById('qtInstrumentMenu');
+  var inpInstr = document.getElementById('qt-instrument');
+
+  // Abre com a lista inteira ao focar/clicar e refiltra a cada tecla. O clique
+  // conta separado do focus porque quem já está no campo e clica de novo espera
+  // a lista de volta.
+  inpInstr.addEventListener('focus', function () { abreMenu(this.value); });
+  inpInstr.addEventListener('click', function () { abreMenu(this.value); });
+  inpInstr.addEventListener('input', function () { abreMenu(this.value); });
+
+  inpInstr.addEventListener('keydown', function (ev) {
+    var aberto = menu && !menu.hidden;
+    if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
+      ev.preventDefault();                       // senão o cursor pula no texto
+      if (!aberto) { abreMenu(this.value); marcaAtivo(0); return; }
+      marcaAtivo(ativo + (ev.key === 'ArrowDown' ? 1 : -1));
+      return;
+    }
+    if (ev.key === 'Escape') { if (aberto) { ev.preventDefault(); fechaMenu(); } return; }
+    if (ev.key === 'Enter') {
+      // Enter com um item destacado ESCOLHE; sem destaque, busca. É o que
+      // permite digitar o código inteiro e apertar Enter direto, sem passar
+      // pela lista, que era o comportamento do datalist.
+      if (aberto && ativo >= 0) { ev.preventDefault(); escolhe(ativo); return; }
+      fechaMenu();
+      search();
+    }
   });
+
+  // `mousedown` e não `click`: o clique só chegaria depois do blur, e aí o menu
+  // já teria fechado sob o cursor.
+  menu.addEventListener('mousedown', function (ev) {
+    var alvo = ev.target.closest ? ev.target.closest('.qt-combo__opt') : null;
+    if (!alvo) return;
+    ev.preventDefault();                          // mantém o foco no campo
+    escolhe(parseInt(alvo.dataset.idx, 10));
+  });
+
+  // Clique fora fecha. No documento inteiro, porque a lista some sobre a tabela
+  // e sobre a toolbar — e um menu que fica aberto por cima do conteúdo é pior
+  // do que não ter menu.
+  document.addEventListener('mousedown', function (ev) {
+    if (!menu || menu.hidden) return;
+    if (ev.target === inpInstr || menu.contains(ev.target)) return;
+    fechaMenu();
+  });
+  // A lista é ancorada no campo (`position:absolute`), então ela acompanha a
+  // rolagem da página — mas não a de um contêiner interno nem o resize; fechar
+  // é mais honesto do que reposicionar em três lugares.
+  window.addEventListener('resize', fechaMenu);
   document.getElementById('qtPageLen').addEventListener('change', function () {
     if (dt) { dt.page.len(parseInt(this.value, 10)).draw(); adjust(); }
   });

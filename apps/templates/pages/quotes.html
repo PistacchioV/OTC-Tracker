@@ -34,7 +34,43 @@
 /* Largura pelo CONTEÚDO, não pela tela: o tipo cabe em "Commodities" e o
    instrumento no maior código do cadastro. */
 #quotes-page #qt-kind { width: 150px; }
-#quotes-page #qt-instrument { width: 190px; }
+#quotes-page .qt-combo { position: relative; width: 190px; }
+#quotes-page #qt-instrument { width: 100%; }
+
+/* A lista do combobox. O `datalist` nativo que estava aqui não aceita CSS
+   nenhum — a lista de commodities (904 códigos) saía com a altura da página e
+   uma largura própria, descolada do campo. Sendo um elemento nosso:
+   largura = a do campo (`width:100%` sobre o wrapper de 190px), altura com
+   teto e rolagem, e ancorada no campo (`top:100%`), que é o que a mantém no
+   lugar quando a página rola. */
+#quotes-page .qt-combo__menu {
+    position: absolute; top: calc(100% + 4px); left: 0; width: 100%;
+    z-index: 1060;                 /* acima do card e da toolbar da tabela */
+    max-height: 260px; overflow-y: auto;
+    overscroll-behavior: contain;  /* rolar a lista até o fim não rola a página */
+    background: var(--vr-card-bg, var(--ins-secondary-bg, #fff));
+    border: 1px solid var(--qt-hairline); border-radius: 10px;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, .16);
+    padding: .25rem;
+}
+#quotes-page .qt-combo__opt {
+    display: block; width: 100%; text-align: left; border: 0; background: none;
+    padding: .3rem .5rem; border-radius: 6px; font-size: .78rem; line-height: 1.3;
+    color: var(--bs-body-color); cursor: pointer;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+#quotes-page .qt-combo__opt:hover,
+#quotes-page .qt-combo__opt.is-active { background: rgba(13, 110, 253, .12); }
+/* O símbolo cadastrado ao lado do código, em tom secundário: quem escolhe vê na
+   hora o que está cadastrado e o que vai pedir cadastro. */
+#quotes-page .qt-combo__sym { color: var(--bs-secondary-color); }
+#quotes-page .qt-combo__note {
+    padding: .3rem .5rem; font-size: .72rem; font-style: italic;
+    color: var(--bs-secondary-color);
+}
+[data-bs-theme="dark"] #quotes-page .qt-combo__menu { box-shadow: 0 10px 28px rgba(0, 0, 0, .5); }
+[data-bs-theme="dark"] #quotes-page .qt-combo__opt:hover,
+[data-bs-theme="dark"] #quotes-page .qt-combo__opt.is-active { background: rgba(110, 168, 254, .18); }
 #quotes-page .qt-datewrap { position: relative; width: 140px; }
 #quotes-page .qt-datewrap input { padding-right: 32px; cursor: pointer; }
 #quotes-page .qt-cal-btn {
@@ -86,12 +122,20 @@
             </div>
             <div class="qt-field">
                 <label for="qt-instrument" id="qtInstrumentLabel" data-lang="qt-instrument">Instrument</label>
-                <!-- Combobox com type-ahead nativo: são ~1.300 ativos e ~900
-                     contratos, e um <select> comum obrigaria a rolar a lista.
+                <!-- Combobox com type-ahead. Era um `datalist` nativo, e o
+                     popup dele é DESENHADO PELO NAVEGADOR: nenhuma regra de CSS
+                     o alcança, então com ~900 contratos ele saía do tamanho da
+                     tela, mais largo que o campo e fora de posição. Aqui a lista
+                     é um `<div>` nosso — largura do campo, altura limitada com
+                     rolagem, e ancorada logo abaixo dele.
                      Fica DESABILITADO até o tipo ser escolhido. -->
-                <input list="qtInstrumentList" id="qt-instrument" autocomplete="off" disabled
-                       class="form-control form-control-sm" placeholder="—">
-                <datalist id="qtInstrumentList"></datalist>
+                <div class="qt-combo">
+                    <input id="qt-instrument" autocomplete="off" disabled
+                           role="combobox" aria-expanded="false" aria-autocomplete="list"
+                           aria-controls="qtInstrumentMenu"
+                           class="form-control form-control-sm" placeholder="—">
+                    <div class="qt-combo__menu" id="qtInstrumentMenu" role="listbox" hidden></div>
+                </div>
             </div>
             <div class="qt-field">
                 <label for="qt-from" data-lang="qt-from">From</label>
