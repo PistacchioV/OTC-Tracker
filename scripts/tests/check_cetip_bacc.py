@@ -107,8 +107,12 @@ try:
     check('devolveu (path, mantidas, total)', bool(got) and got[1:], (3, 5))
     check('so as linhas intragrupo', [ln.split(';')[2] for ln in lines_of(got[0])],
           ['C1', 'C2', 'C5'])
-    check('mesmo nome do arquivo original',
-          os.path.basename(got[0]), '73760_260817_DPOSICAO-SWAP.CETIP21')
+    # O nome do original e MANTIDO e ganha `.txt` no fim: as extensoes da CETIP
+    # (.CETIP21/.OPC/.TER) nao abrem com um duplo clique e sao as que o filtro de
+    # e-mail barra. Trocar a extensao em vez de acrescentar apagaria justamente a
+    # parte do nome que diz qual dos quatro arquivos e aquele.
+    check('nome do original + .txt',
+          os.path.basename(got[0]), '73760_260817_DPOSICAO-SWAP.CETIP21.txt')
     check('o arquivo salvo nao foi tocado', len(lines_of(src)), 5)
     check('gravado com CRLF',
           io.open(got[0], 'rb').read().count(b'\r\n') >= 3, True)

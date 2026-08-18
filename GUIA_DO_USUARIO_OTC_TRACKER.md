@@ -407,7 +407,7 @@ Rotinas disponíveis:
 Este card manda os arquivos da CETIP para **Sales Support**, **CEM Latam** e **BACC**. Os dois primeiros recebem os arquivos como saem; o **BACC recebe só as operações entre contas de casa** (Lawton `00041.00-7`, Banco `73760.00-9` e Atacama `85398.00-5`) nos quatro arquivos que interessam: DFLUXO swap, posição swap, posição OPC e posição TER.
 
 1. Preencha as três listas de **To** — cada uma é um e-mail diferente.
-2. O anexo do BACC **mantém o nome original do arquivo**, porque é por ele que o outro lado o reconhece. Quem diz que é um recorte é o corpo do e-mail, que traz a contagem em cada linha da tabela (*"— 12 of 480 line(s)"*).
+2. O anexo do BACC **mantém o nome original do arquivo e ganha `.txt` no fim** — `73760_260817_DPOSICAO-SWAP.CETIP21.txt`. O nome inteiro fica porque é por ele que o outro lado reconhece qual dos quatro arquivos é aquele; o `.txt` é o que faz o anexo abrir com um duplo clique (as extensões da CETIP não são associadas a programa nenhum). O conteúdo é o mesmo texto de sempre. Quem diz que é um recorte é o corpo do e-mail, que traz a contagem em cada linha da tabela (*"— 12 of 480 line(s)"*).
 
 > **Sem endereço no To do BACC, o e-mail simplesmente não sai** — e o card mostra isso, em vez de deixar você achando que foi enviado. É diferente dos outros dois destinos, que têm endereço padrão.
 >

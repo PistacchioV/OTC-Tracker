@@ -3283,9 +3283,17 @@ def _cetip_bacc_copy(src_path, cfg, out_dir):
     anexado. Mandar o arquivo inteiro com o nome de um recorte é pior do que não
     mandar — quem recebe não tem como perceber, e o painel diz que foi.
 
-    O arquivo é gravado em `out_dir` (temporário) com o MESMO nome do original:
-    o recorte não pode encostar no arquivo salvo na pasta de liquidação, que é o
-    que o KPI lê.
+    O arquivo é gravado em `out_dir` (temporário), nunca ao lado do arquivo salvo
+    na pasta de liquidação — que é o que o KPI lê.
+
+    O nome do original é MANTIDO e ganha **`.txt` no fim**
+    (`73760_260817_DPOSICAO-SWAP.CETIP21.txt`). As extensões da CETIP
+    (`.CETIP21`, `.OPC`, `.TER`) não são associadas a programa nenhum: o anexo
+    chega sem ícone, não abre com um duplo clique e é o tipo de arquivo que
+    filtro de e-mail costuma barrar. O `.txt` vai ACRESCENTADO e não no lugar da
+    extensão porque é pelo nome que o outro lado reconhece o arquivo — trocar
+    `.OPC` por `.txt` apagaria justamente a parte que diz qual dos quatro é.
+    O conteúdo não muda: já era texto (latin-1 + CRLF).
     """
     try:
         with open(src_path, 'r', encoding='latin-1', newline='') as fh:
@@ -3311,7 +3319,7 @@ def _cetip_bacc_copy(src_path, cfg, out_dir):
     mantidas = [ln for ln in dados
                 if _conta(ln.split(';'), i_parte) in _CETIP_BACC_ACCOUNTS
                 and _conta(ln.split(';'), i_cpty) in _CETIP_BACC_ACCOUNTS]
-    out_path = os.path.join(out_dir, os.path.basename(src_path))
+    out_path = os.path.join(out_dir, os.path.basename(src_path) + '.txt')
     saida = ([linhas[0]] if tem_header else []) + mantidas
     try:
         # Latin-1 + CRLF: o mesmo formato do `_cetip_save_file`, para o recorte ser
@@ -3378,8 +3386,11 @@ def _cetip_distribute_emails(ref, dest_dir, send_mail, ss_to_list=None, cem_to_l
             cut_path, kept, total = cut
             bacc_paths.append(cut_path)
             # A contagem vai na coluna Type da tabela do e-mail: quem recebe tem de
-            # ver que o anexo é um RECORTE, não o arquivo cheio.
-            bacc_saved.append({'src': dest_name, 'dest': dest_name,
+            # ver que o anexo é um RECORTE, não o arquivo cheio. E o nome da tabela
+            # é o do ANEXO (com o `.txt`), não o do arquivo salvo no share: a tabela
+            # e a lista de anexos ficam lado a lado no mesmo e-mail, e dois nomes
+            # para o mesmo arquivo fariam procurar um anexo que não existe.
+            bacc_saved.append({'src': dest_name, 'dest': os.path.basename(cut_path),
                                'type': '{} — {} of {} line(s)'.format(rule['label'], kept, total)})
 
     if not attach_paths and not opc_paths and not bacc_paths:

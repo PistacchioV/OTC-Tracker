@@ -11584,9 +11584,18 @@ para as operações **entre contas de casa** — `00041.00-7` (Lawton), `73760.0
 
 ⚠️ **O filtro é `and`, não `or`.** A linha só entra quando **PARTE e CONTRAPARTE** são as três
 contas. Com um dos lados fora, aquilo é operação com CLIENTE — e ela entraria num anexo que se
-chama intragrupo sem que ninguém tivesse como perceber, porque o nome do arquivo é o mesmo do
-original (é por ele que o consumidor casa). Quem diz que é recorte é o corpo do e-mail e a
-contagem em cada linha da tabela (*"— 12 of 480 line(s)"*).
+chama intragrupo sem que ninguém tivesse como perceber, porque o nome do arquivo é o do original
+(é por ele que o consumidor casa). Quem diz que é recorte é o corpo do e-mail e a contagem em cada
+linha da tabela (*"— 12 of 480 line(s)"*).
+
+O anexo leva o nome do original **mais `.txt` no fim** (`73760_260817_DPOSICAO-SWAP.CETIP21.txt`).
+As extensões da CETIP — `.CETIP21`, `.OPC`, `.TER` — não são associadas a programa nenhum: o anexo
+chega sem ícone, não abre com um duplo clique e é o tipo de arquivo que filtro de e-mail costuma
+barrar. O `.txt` é **acrescentado, não substituído**: trocar `.OPC` por `.txt` apagaria justamente
+a parte do nome que diz qual dos quatro é aquele. O conteúdo não muda — já era texto (latin-1 +
+CRLF), byte a byte o original menos as linhas de fora. E o nome que a TABELA do e-mail mostra é o
+do anexo, não o do arquivo salvo no share: a tabela e a lista de anexos ficam lado a lado na mesma
+mensagem, e dois nomes para o mesmo arquivo fariam procurar um anexo que não existe.
 
 Onde está cada conta em cada arquivo mora no `_CETIP_BEHAVIOUR['<tipo>']['bacc']`, junto do resto
 do comportamento do tipo; a LISTA de arquivos continua no cadastro `cetip-files` do /mapping. Cada
