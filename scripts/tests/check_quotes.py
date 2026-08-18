@@ -121,6 +121,69 @@ check('sem cadastro devolve vazio (a rota traduz em 404 pedindo cadastro)',
 check('_label_key normaliza os dois lados', Q._label_key(' aa  bb '), 'AA BB')
 
 
+# ── 2b. O de-para aceita PADRAO "MY", nao so codigo fechado ───────────────────
+print('\n2b. symbol_lookup — uma linha por mercadoria, nao por vencimento')
+
+PAD = [
+    {'LABEL': 'BO"MY"', 'SYMBOL': 'ZL"MY".CBT'},
+    {'LABEL': 'C_"MY"', 'SYMBOL': 'ZC"MY".CBT'},
+    {'LABEL': 'CO"MY"', 'SYMBOL': 'BZ"MY".NYM'},
+    {'LABEL': 'CC"MY"', 'SYMBOL': 'CC"MY".NYB'},
+    # Literal ao lado do padrao da MESMA mercadoria: e a excecao de um
+    # vencimento so, e ela tem de vencer a regra.
+    {'LABEL': 'C K6', 'SYMBOL': 'MANUAL.XX'},
+    # Simbolo SEM marcador: a mercadoria inteira responde por um continuo.
+    {'LABEL': 'W_"MY"', 'SYMBOL': 'ZW=F'},
+]
+f = Q.symbol_lookup(PAD)
+
+check('uma linha resolve qualquer vencimento', [f('BOK6'), f('BOZ8')],
+      ['ZLK26.CBT', 'ZLZ28.CBT'])
+# O ano tem larguras diferentes nos dois lados: a B3 escreve um digito ou dois,
+# o simbolo de mercado escreve sempre dois. Sem isso o de-para literal existiria
+# para sempre, so por causa do formato do ano.
+import datetime as _d                                          # noqa: E402
+HOJE = _d.datetime(2026, 8, 18)
+check('ano de UM digito vira DOIS (decada corrente)', Q._year2('6', HOJE), '26')
+check('ano recem-vencido nao pula uma decada (folga de um ano)', Q._year2('5', HOJE), '25')
+check('ano que cairia no passado vira a decada seguinte', Q._year2('1', HOJE), '31')
+check('ano de DOIS digitos passa direto (a B3 escreve das duas formas)',
+      f('COG29'), 'BZG29.NYM')
+check('o `_` do padrao e um espaco literal no codigo B3', f('C K6'), 'MANUAL.XX')
+check('e a linha LITERAL vence o padrao da mesma mercadoria',
+      [f('C K6'), f('C K7')], ['MANUAL.XX', 'ZCK27.CBT'])
+check('espaco no codigo e opcional dos dois lados', [f('CK7'), f('C  K7')],
+      ['ZCK27.CBT', 'ZCK27.CBT'])
+check('o "MY" do simbolo pode ficar no MEIO (o sufixo de bolsa vem depois)',
+      f('CCZ6'), 'CCZ26.NYB')
+# Prefixo mais longo primeiro: sem isso quem responde por 'COZ6' seria a ordem
+# do arquivo, e o Brent sairia com o simbolo do milho.
+check('prefixo mais longo vence (CO antes de C)', f('COZ6'), 'BZZ26.NYM')
+# O miolo TEM de ser mes+ano. Sem a exigencia, o prefixo de uma letra casaria
+# com a mercadoria vizinha e devolveria o simbolo errado EM SILENCIO.
+check('miolo que nao e mes+ano nao casa (CL/SM/SI nao viram milho nem soja)',
+      [f('CLZ6'), f('CRDZ6'), f('CO1-2')], ['', '', ''])
+check('simbolo sem "MY" fica literal (contrato continuo da mercadoria inteira)',
+      f('W Z6'), 'ZW=F')
+check('codigo sem contrato nenhum nao casa com padrao nenhum', f('BO'), '')
+
+# O cadastro versionado tem de resolver os codigos reais do Subjacente — e o
+# ganho e justamente nao haver uma linha por vencimento.
+com_rows = json.load(io.open(os.path.join(
+    ROOT, 'apps', 'static', 'data', 'mappings', 'quotes-commodity.json'), encoding='utf-8'))
+fc = Q.symbol_lookup(com_rows)
+check('o cadastro versionado resolve os vencimentos pelo padrao',
+      [fc('BOK6'), fc('C K6'), fc('KCZ6'), fc('SBH6'), fc('S X6'), fc('W Z6')],
+      ['ZLK26.CBT', 'ZCK26.CBT', 'KCZ26.NYB', 'SBH26.NYB', 'ZSX26.CBT', 'ZWZ26.CBT'])
+check('e cabe em menos linhas do que mercadorias x vencimentos', len(com_rows) < 25, True)
+# O sufixo de bolsa e o que o Yahoo entende: .CBT para os graos do CBOT, .NYB
+# para os softs da ICE US, .NYM para o Brent do NYMEX. Sufixo errado e 404.
+check('todo simbolo cadastrado sai com sufixo de bolsa ou continuo =F',
+      sorted({str(r['SYMBOL']).split('.')[-1] if '.' in str(r['SYMBOL'])
+              else str(r['SYMBOL'])[-2:] for r in com_rows}),
+      ['=F', 'CBT', 'NYB', 'NYM'])
+
+
 # ── 3. Periodo ────────────────────────────────────────────────────────────────
 print('\n3. Periodo — os dois formatos e a data invertida')
 

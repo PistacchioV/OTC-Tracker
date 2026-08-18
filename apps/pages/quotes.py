@@ -44,6 +44,7 @@ from datetime import datetime, timedelta
 from urllib.request import getproxies
 
 from apps.pages import athena_api
+from apps.pages.otc_boxparse import has_b3_marker, split_b3_pattern
 
 log = logging.getLogger('otc_tracker')
 
@@ -350,16 +351,117 @@ def _get_json(url, params, fonte):
         fonte, '; '.join(tentativas) or 'no route available'))
 
 
+# ══════════════════════════════════════════════════════════════════════════
+#  O de-para de símbolo aceita PADRÃO, não só código fechado
+# ══════════════════════════════════════════════════════════════════════════
+#  Um contrato futuro é a MESMA mercadoria em cada vencimento, e cadastrar linha
+#  por linha eram 70 linhas para 10 mercadorias — mais uma linha nova a cada
+#  vencimento que a B3 abre, para sempre. A notação é a mesma do cadastro
+#  Commodities × B3 (`"MY"` = letra do mês + ano, `_` = espaço literal), então
+#  quem edita os dois cadastros lê a coluna do mesmo jeito:
+#
+#      BO"MY"  →  ZL"MY".CBT       BOK6  → ZLK26.CBT
+#      C_"MY"  →  ZC"MY".CBT      'C K6' → ZCK26.CBT
+#
+#  Duas assimetrias que o padrão resolve sozinho, e que são a razão de o de-para
+#  literal existir para sempre se ficasse como estava:
+#
+#   · o ANO tem larguras diferentes nos dois lados. A B3 escreve um dígito
+#     (`BOK6`) ou dois (`AULZ29`); o símbolo de mercado escreve sempre dois
+#     (`ZLK26`). O dígito único é resolvido na DÉCADA corrente, virando para a
+#     próxima quando o ano cairia mais de um ano no passado — contrato futuro
+#     aponta para a frente, e `5` em 2026 é 2025 (o vencimento que acabou de
+#     passar), nunca 2015;
+#   · o `"MY"` do símbolo fica no MEIO (`ZL"MY".CBT`), porque o sufixo de bolsa
+#     vem depois do vencimento. Por isso o marcador é lido dos DOIS lados, e não
+#     só como prefixo.
+#
+#  Linha SEM `"MY"` continua sendo de-para literal, e ela **vence** o padrão: é
+#  o que permite cadastrar a exceção de um vencimento só sem desmontar a regra
+#  da mercadoria inteira. Equities não têm vencimento e são todas literais — o
+#  mesmo motor serve os dois cadastros sem nenhum ramo por tipo.
+_MONTH_LETTERS = 'FGHJKMNQUVXZ'
+_CONTRACT_RE = re.compile(r'^([' + _MONTH_LETTERS + r'])([0-9]{1,2})$')
+
+
+def _squeeze(v):
+    """Caixa alta e SEM espaço nenhum — a forma em que os dois lados casam.
+
+    O milho é `'C K6'` na B3 e `C_"MY"` no cadastro, cujo prefixo é `'C '`.
+    Comparar contando o espaço obrigaria a acertar quantos vieram da fonte; sem
+    ele, `'C  K6'` e `'CK6'` são o mesmo contrato."""
+    return re.sub(r'\s+', '', str(v or '')).upper()
+
+
+def _year2(digitos, hoje=None):
+    """Ano do contrato em DOIS dígitos, que é como o símbolo de mercado escreve.
+
+    Dois dígitos passam direto. O dígito único da B3 é ambíguo por dez anos, e
+    a desambiguação é a do mercado futuro: a década corrente, virando para a
+    seguinte quando o ano cairia mais de um ano atrás. A folga de um ano é de
+    propósito — o vencimento recém-liquidado ainda é consultado."""
+    if len(digitos) >= 2:
+        return digitos[-2:]
+    ano_hoje = (hoje or datetime.now()).year
+    ano = ano_hoje - ano_hoje % 10 + int(digitos)
+    if ano < ano_hoje - 1:
+        ano += 10
+    return '%02d' % (ano % 100)
+
+
+def symbol_lookup(rows):
+    """Devolve `f(código) → símbolo` para o cadastro `rows`.
+
+    É uma FUNÇÃO e não um dicionário porque o cadastro tem duas naturezas: a
+    linha literal vira índice, a linha com `"MY"` continua sendo regra e só se
+    resolve contra um código concreto. Entregá-la pronta é o que deixa a tela
+    resolver os ~900 subjacentes do dia lendo o cadastro uma vez só —
+    `symbol_for` é o atalho para quem tem uma consulta apenas."""
+    exatos, padroes = {}, []
+    for r in (rows or []):
+        rotulo, simbolo = str(r.get('LABEL') or ''), str(r.get('SYMBOL') or '').strip()
+        if not simbolo:
+            continue
+        if has_b3_marker(rotulo):
+            # Símbolo sem marcador é literal de propósito: a mercadoria inteira
+            # respondendo por um contínuo (`ZC=F`) é cadastro válido, e aplicar
+            # mês/ano nele produziria um ticker que não existe.
+            alvo = split_b3_pattern(simbolo) if has_b3_marker(simbolo) else None
+            cab, cau = split_b3_pattern(rotulo)
+            padroes.append((_squeeze(cab), _squeeze(cau), simbolo, alvo))
+        else:
+            exatos[_label_key(rotulo)] = simbolo
+    # Prefixo mais longo primeiro: `CO"MY"` tem de ganhar de `C_"MY"` em `COZ6`,
+    # senão quem responde pelo código seria a ordem do arquivo.
+    padroes.sort(key=lambda p: len(p[0]), reverse=True)
+
+    def _busca(label):
+        achado = exatos.get(_label_key(label))
+        if achado:
+            return achado
+        cod = _squeeze(label)
+        for cab, cau, simbolo, alvo in padroes:
+            if not (cod.startswith(cab) and cod.endswith(cau)):
+                continue
+            meio = cod[len(cab):len(cod) - len(cau)] if cau else cod[len(cab):]
+            # O miolo TEM de ser mês+ano de contrato. Sem essa exigência o
+            # prefixo `C` do milho casaria com `CCZ6` (cacau) e com `CLZ6`
+            # (WTI), devolvendo o símbolo da mercadoria errada em silêncio.
+            m = _CONTRACT_RE.match(meio)
+            if m:
+                if alvo is None:
+                    return simbolo
+                return alvo[0] + m.group(1) + _year2(m.group(2)) + alvo[1]
+        return ''
+    return _busca
+
+
 def symbol_for(rows, label):
     """Símbolo cadastrado para o rótulo escolhido na tela, ou ''.
 
     A comparação é cega a caixa e a espaço repetido: o rótulo vai e volta pela
     URL, e `'C  K5'` não pode deixar de casar com `'C K5'`."""
-    alvo = _label_key(label)
-    for r in (rows or []):
-        if _label_key(r.get('LABEL')) == alvo:
-            return str(r.get('SYMBOL') or '').strip()
-    return ''
+    return symbol_lookup(rows)(label)
 
 
 def _label_key(v):

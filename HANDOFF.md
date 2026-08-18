@@ -11572,3 +11572,202 @@ pela vizinha, em silêncio — a tabela ordena, só que pela coluna errada. O `c
 já fixava a string da chamada; além de atualizá-la, ele agora amarra os três índices ao **cabeçalho
 real** (`product` = 7, `lob` = 3, `counterparty` = 4, descontadas as três colunas de controle), o
 que transforma o deslocamento em FAIL em vez de numa ordenação plausível.
+
+---
+
+## §265 — Save CETIP Files ganha o TO do BACC, com os arquivos recortados para o intragrupo
+
+O card já mandava para **Sales Support** e **CEM Latam**. O BACC é o terceiro e-mail, e ele não
+recebe os arquivos cheios: leva **DFLUXO swap, posição swap, posição OPC e posição TER** filtrados
+para as operações **entre contas de casa** — `00041.00-7` (Lawton), `73760.00-9` (Banco) e
+`85398.00-5` (Atacama).
+
+⚠️ **O filtro é `and`, não `or`.** A linha só entra quando **PARTE e CONTRAPARTE** são as três
+contas. Com um dos lados fora, aquilo é operação com CLIENTE — e ela entraria num anexo que se
+chama intragrupo sem que ninguém tivesse como perceber, porque o nome do arquivo é o mesmo do
+original (é por ele que o consumidor casa). Quem diz que é recorte é o corpo do e-mail e a
+contagem em cada linha da tabela (*"— 12 of 480 line(s)"*).
+
+Onde está cada conta em cada arquivo mora no `_CETIP_BEHAVIOUR['<tipo>']['bacc']`, junto do resto
+do comportamento do tipo; a LISTA de arquivos continua no cadastro `cetip-files` do /mapping. Cada
+tipo tem o seu par de colunas, e é aí que estão as três armadilhas que erram **em silêncio** — as
+três presas por `check_cetip_bacc.py`:
+
+- ⚠️ **`'parte (conta)'` é SUBSTRING de `'contraparte (conta)'`.** A resolução da coluna é por
+  nome, tentando cada token contra todo o cabeçalho; sem o `avoid`, o lado da parte casa com a
+  coluna da contraparte quando ela vem antes no arquivo. O filtro passa a comparar a MESMA coluna
+  duas vezes — e aí toda linha satisfaz os dois lados, deixando passar operação de cliente.
+- ⚠️ **A conta é comparada só por DÍGITOS, com `zfill(8)`.** O Lawton é `00041.00-7`; um exportador
+  que trate a conta como número devolve `41007`, que sem o zfill não casa com nada. O anexo sairia
+  **vazio**, parecendo "não teve intragrupo hoje".
+- ⚠️ **Par de colunas que não resolve deixa o arquivo FORA do anexo** (marcado como *Not found* no
+  e-mail e no log). Mandar o arquivo inteiro com o nome de um recorte é pior do que não mandar.
+
+Os recortes são gravados numa pasta temporária, removida depois do envio: eles **não podem encostar
+na pasta de liquidação**, que é o que o KPI lê.
+
+Diferente dos outros dois destinos, o BACC **não tem endereço default** — lista vazia significa
+"não envia", e o painel diz isso em vez de sumir com o e-mail sem explicação.
+
+De quebra, o POST de destinatários virou **merge**. Ele substituía as listas pelo payload inteiro,
+então, com uma terceira chave, um Run vindo de uma tela que não a conhecesse apagaria aquela lista
+em silêncio.
+
+---
+
+## §266 — Quotes: PTAX, Equities e Commodities numa página só (e a saída para a internet é uma FILA)
+
+Porte das três abas de busca do app de desktop `cotaçoes.py` (CustomTkinter) para o OTC Tracker,
+em **Apps › Quotes**. Só a busca por período: DI, SOFR, IPCA, EURIBOR e as calculadoras ficaram de
+fora. O trabalho de rede está em `apps/pages/quotes.py`; `routes.py` fica com sessão, cadastro e o
+formato que a tabela consome.
+
+**Uma página, dois comboboxes em cascata.** O de cima é o tipo (PTAX · Equities · Commodities) e o
+de baixo **nasce desabilitado** — o cinza do `:disabled` é o que diz, sem texto, que ainda falta
+escolher o tipo. As moedas da PTAX são fixas (`PTAX_CURRENCIES`): ⚠️ **isso não é de-para, é o
+domínio do endpoint do BCB** — pedir uma moeda fora da lista devolve vazio, não erro. Equities e
+Commodities saem do **Ativo Subjacente do Index B3** (`Subjacente.json`), separados pelo campo
+`Classe` e só os `ACTIVE`: ativo cadastrado no Index B3 aparece aqui no mesmo dia, sem release e
+sem um segundo cadastro. O combobox é um `<input list=…>` porque são centenas de códigos e um
+`<select>` obrigaria a rolar a lista.
+
+**O código do subjacente NÃO é o ticker de mercado**, e é aí que entra o /mapping. `AAPL34` é o BDR
+na B3 e o Yahoo quer `AAPL34.SA`; `BRT_IPE` não é símbolo nenhum. Os dois cadastros novos —
+**`quotes-equity`** (471 linhas) e **`quotes-commodity`** (70) — são `LABEL → SYMBOL`, e o `seed`
+vai **vazio de propósito**: os arquivos são versionados, e repetir centenas de pares no `routes.py`
+criaria uma segunda lista para divergir da primeira. Código sem símbolo cadastrado devolve **404
+pedindo cadastro**, nunca tenta o código como se fosse ticker — a resposta seria um 404 obscuro da
+fonte em vez de "falta cadastrar". A lista da tela mostra `AAPL34 → AAPL34.SA` justamente para
+quem escolhe distinguir o que está cadastrado do que vai falhar.
+
+**A autenticação é a mesma da Athena** (`athena_api.build_session`: Kerberos SSO, `trust_env=False`,
+o User-Agent que faz o ADFS negociar) — foi o que se pediu, uma forma só de autenticar para todas as
+APIs do app.
+
+⚠️ **Mas o proxy volta, explícito, e é uma CADEIA — não um endereço.** O `build_session` desliga o
+`trust_env` porque a Athena é host INTERNO e herdar o proxy corporativo dava `WinError 10061`
+(CLAUDE.md §8). BCB e Yahoo são o oposto: são internet, e em boa parte da rede JPM a conexão só sai
+pelo proxy. Só que o `proxy.jpmchase.net:10443` do app de desktop **não atende em toda máquina** —
+na instância do time ele responde *connection refused*, que é o MESMO `WinError 10061` por outro
+motivo (ali não há nada escutando). A porta que atende é a **9443**.
+
+Por isso a saída é tentada **em ordem** e a primeira que responder fica memorizada no processo:
+
+`QUOTES_PROXY` (padrão `http://proxy.jpmchase.net:9443`) → **proxy do sistema**
+(`getproxies()`, que no Windows lê as Opções de Internet) → `_FALLBACK_PROXIES` (10443) →
+**conexão direta**.
+
+Quatro decisões que sustentam isso:
+
+- o `trust_env` continua **desligado**: o proxy do sistema é **copiado** para a sessão, não
+  herdado. Herdado, ele voltaria a valer também para a Athena — exatamente o que o `False` protege;
+- erro de **rede** (`_RouteError`) tenta a próxima rota; erro **HTTP** vira `QuotesError` e para na
+  hora, porque aí a rota funcionou e o problema é a fonte. **407, 502 e 504 são exceção**: vêm DO
+  PROXY, contam como rota ruim — parar neles esconderia a saída que funciona;
+- o timeout de **conexão** é curto (6 s, contra os 30 s de leitura). Ele é pago uma vez por rota
+  morta, e com os 30 s a fila inteira faria a tela esperar um minuto e meio para dizer que não
+  conectou;
+- quando a rota memorizada morre junto com as outras, a memória é **esquecida** — senão a busca
+  seguinte insistiria na que caiu antes de recomeçar pela ordem natural.
+
+**A mensagem de erro cabe numa linha.** O despejo cru do urllib3 tem ~400 caracteres (URL, pool,
+endereço do objeto) e era ele que aparecia no SweetAlert. `_short_error` traduz para o motivo
+(*the proxy refused the connection*, *timed out*, *host not resolved*, *SSL failure*) e o erro final
+nomeia **cada rota tentada**:
+
+```
+PTAX (BCB): could not reach the source (proxy http://proxy.jpmchase.net:9443: the proxy refused
+the connection; proxy http://proxy.jpmchase.net:10443: the proxy refused the connection; direct
+connection: timed out).
+```
+
+Quando alguma funciona, o log grava `[quotes] saída em uso: <rota>`. ⚠️ **Se a tela ainda mostrar o
+despejo antigo do urllib3, a instância está servindo Python velho** — o reloader é desligado lá, o
+template recarrega sozinho e o módulo não (CLAUDE.md §8). É preciso reiniciar o Flask/waitress.
+
+**Sem `yfinance`.** O app de desktop usava `yf.download`, que arrastaria pandas-datareader e afins.
+O que ele faz para OHLCV diário é uma chamada ao endpoint `chart` do Yahoo, que devolve JSON — feita
+aqui com a MESMA sessão. Uma dependência a menos e um caminho de rede a menos para divergir.
+
+Três detalhes de leitura das fontes, todos com teste em `check_quotes.py`:
+
+- a PTAX traz **só o boletim de Fechamento**: o BCB publica abertura e intermediários, e sem o
+  filtro o mesmo dia apareceria quatro vezes com valores diferentes. A data vai no endpoint em
+  **`mm-dd-aaaa`**, entre aspas;
+- o `period2` do Yahoo leva **um dia a mais**, porque o fim é EXCLUSIVO — sem isso o último dia do
+  período pedido some da tabela (é o mesmo `+1` que o `yf.download` fazia);
+- `None` da fonte vira célula **vazia**, nunca `0.00`: o Yahoo devolve `null` no dia sem pregão
+  daquele papel, e um zero ali afirmaria um preço que não existiu.
+
+A tela segue o padrão de tabela da casa (filtro por coluna montado **antes** do `.DataTable()` com
+`orderCellsTop: true`, `autoWidth: true`, toolbar com `mb-3`, Export completo — Copy · CSV · Excel ·
+Print · PDF —, `otcCellCopy` do `table-std.js`), o widget é `.qt-card` e **não `.card`** (§7), e os
+19 rótulos nasceram em inglês nos três `translations/*.json`. Os campos da busca ficam **alinhados à
+esquerda com largura própria**: o grid de 12 colunas esticava cada um até a borda da tela, e um
+combobox de 500 px para um código de seis caracteres só afasta os campos uns dos outros.
+
+---
+
+## §267 — Quotes Commodities: uma linha por MERCADORIA, não por vencimento
+
+O de-para de símbolo de commodity nasceu (§266) como código fechado: `BOK6 → ZLK26.CBT`,
+uma linha por vencimento. São **70 linhas para 10 mercadorias** — e uma linha nova a cada
+vencimento que a B3 abre, para sempre. Pior: o arquivo herdado do app de desktop já mostrava
+o que isso vira com o tempo. Vinte e nove das 70 linhas estavam com um valor de enchimento
+(`BUSHELS`, que não é ticker de nada) ou com o **mesmo** `ZSK25.CBT` repetido em dezoito
+linhas de vencimentos diferentes — quem cadastra uma linha por mês acaba copiando a de cima.
+
+As duas colunas passam a aceitar o padrão **`"MY"`**, que é a notação que o cadastro
+`commodities-b3` já usa há muito tempo (§164): `"MY"` é onde entram a letra do mês e o ano,
+`_` é um espaço literal. Uma linha vale para a mercadoria inteira:
+
+```
+   BO"MY"  →  ZL"MY".CBT          BOK6   →  ZLK26.CBT
+   C_"MY"  →  ZC"MY".CBT          C K6   →  ZCK26.CBT
+   CO"MY"  →  BZ"MY".NYM          COZ29  →  BZZ29.NYM
+```
+
+**17 linhas no lugar de 70, e a cobertura foi de 70 para 221** dos 904 subjacentes ativos da
+classe COMMODITIES — porque o vencimento que ninguém tinha cadastrado agora resolve sozinho.
+
+Quem expande é o **`quotes.symbol_lookup`**, e ele existe por duas assimetrias que fariam o
+de-para literal viver para sempre:
+
+- **o ANO tem larguras diferentes nos dois lados.** A B3 escreve um dígito (`BOK6`) ou dois
+  (`COZ29`); o símbolo de mercado escreve sempre dois (`ZLK26`). O dígito único é resolvido na
+  década corrente, virando para a próxima quando o ano cairia mais de um ano no passado —
+  contrato futuro aponta para a frente, e `5` em 2026 é 2025 (o vencimento recém-liquidado),
+  nunca 2015. A folga de um ano é de propósito: o vencimento que acabou de liquidar ainda é
+  consultado;
+- **o `"MY"` do símbolo fica no MEIO** (`ZL"MY".CBT`), porque o sufixo de bolsa vem depois do
+  vencimento. Por isso o marcador é lido dos dois lados, e não só como prefixo.
+
+Três regras que não dão erro nenhum se caírem:
+
+- **o miolo casado TEM de ser mês+ano de contrato.** Sem essa exigência o prefixo de uma letra
+  do milho (`C_"MY"`) casaria com `CCZ6` (cacau), `CLZ6` (WTI) e `CRDZ6`, devolvendo o preço da
+  mercadoria errada **em silêncio** — que é o pior desfecho possível numa tela de cotação;
+- **prefixo mais longo vence.** `CO"MY"` (Brent) tem de ganhar de `C_"MY"` em `COZ6`; sem a
+  ordenação, quem responde pelo código seria a ordem em que as linhas estão no arquivo;
+- **linha SEM `"MY"` continua literal, e vence o padrão.** É como se cadastra a exceção de um
+  vencimento só, e é o que os sete contratos **contínuos** usam (`C 1` → `ZC=F`). Símbolo sem
+  marcador também fica literal: a mercadoria inteira respondendo por um contínuo é cadastro
+  válido, e aplicar mês/ano nele produziria um ticker que não existe.
+
+O motor é **um só para os dois cadastros** — equities não têm vencimento e são todas literais,
+então não há ramo por tipo. E `symbol_lookup` devolve uma **função**, não um dicionário: a linha
+com `"MY"` é regra, não par, e só se resolve contra um código concreto. A tela chama o cadastro
+uma vez e resolve os ~900 subjacentes do dia com ele; `symbol_for` é o atalho de uma consulta só.
+`has_b3_marker` foi para o `otc_boxparse`, ao lado do `split_b3_pattern`, para o marcador ter um
+dono só em vez de uma segunda expressão regular para envelhecer sozinha.
+
+**Dois símbolos estavam errados e apareceram na migração.** `CO"MY".NYB` (Brent) responde 404 no
+Yahoo: o contrato é `BZ"MY".NYM` — *Brent Crude Oil Last Day Financial* —, conferido na fonte.
+E `DF"MY".NYB` continua **não confirmado**: `DFK26.NYB` e `DFH27.NYB` também são 404, e nenhuma
+fonte pública liga o `DF` da B3 a um contrato da ICE. A linha ficou como estava, com a ressalva
+escrita na coluna Notes — apagá-la esconderia a pergunta.
+
+O registro do de-para inteiro (sufixos de bolsa do Yahoo conferidos na página oficial, códigos
+de mês, as 17 linhas de commodity, as 471 de equity e as cinco pendências conhecidas) está em
+`DE_PARA_TICKERS_COTACOES.md`, com o Word gerado pelo `scripts/build_sop_docx.py` como o SOP e o
+Guia do Usuário. Testes novos na seção 2b do `check_quotes.py`.

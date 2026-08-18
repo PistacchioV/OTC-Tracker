@@ -261,6 +261,15 @@ def _contract_parts(contract):
 _B3_MY_RE = re.compile(r'"\s*MY\s*"', re.I)
 
 
+def has_b3_marker(pattern):
+    """O texto traz o marcador ``"MY"``, isto é, é PADRÃO e não literal?
+
+    Existe para o marcador ter um dono só: quem precisa distinguir padrão de
+    código fechado (o de-para de Cotações é o outro caso) pergunta aqui em vez
+    de escrever a segunda cópia da expressão, que envelheceria sozinha."""
+    return bool(_B3_MY_RE.search('' if pattern is None else str(pattern)))
+
+
 def split_b3_pattern(pattern):
     """``'KO"MY"BNMK'`` → ``('KO', 'BNMK')``; ``'XB'`` → ``('XB', '')``.
     O ``_`` vira espaço nas duas partes."""

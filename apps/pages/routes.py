@@ -20918,11 +20918,27 @@ _MAPPING_DEFS = {
         ],
         'seed': [],
     },
+    # Commodity \u00e9 o mesmo cadastro do Equities, com uma diferen\u00e7a que muda o
+    # tamanho da tabela: contrato futuro tem VENCIMENTO, e o de-para por c\u00f3digo
+    # fechado pedia uma linha por m\u00eas de cada mercadoria \u2014 70 linhas para 10
+    # mercadorias, mais uma linha nova a cada vencimento que a B3 abre.
+    #
+    # As duas colunas aceitam o PADR\u00c3O `"MY"` do cadastro Commodities \u00d7 B3
+    # (letra do m\u00eas + ano; `_` \u00e9 espa\u00e7o literal), e uma linha passa a valer para
+    # todos os vencimentos daquela mercadoria:
+    #
+    #     BO"MY"  \u2192  ZL"MY".CBT       BOK6  \u2192 ZLK26.CBT
+    #     C_"MY"  \u2192  ZC"MY".CBT      'C K6' \u2192 ZCK26.CBT
+    #
+    # Quem expande \u00e9 o `quotes.symbol_lookup` \u2014 inclusive o ano de UM d\u00edgito da
+    # B3 virando os DOIS que o s\u00edmbolo de mercado usa. Linha sem `"MY"` continua
+    # literal e vence o padr\u00e3o, que \u00e9 como se cadastra a exce\u00e7\u00e3o de um
+    # vencimento s\u00f3.
     'quotes-commodity': {
         'label': 'Quotes \u2014 Commodities',
         'columns': [
-            {'key': 'LABEL', 'label': 'Underlying Code (B3)'},
-            {'key': 'SYMBOL', 'label': 'Market Symbol'},
+            {'key': 'LABEL', 'label': 'Underlying Code (B3) \u2014 code or "MY" pattern'},
+            {'key': 'SYMBOL', 'label': 'Market Symbol \u2014 symbol or "MY" pattern'},
             {'key': 'NOTES', 'label': 'Notes'},
         ],
         'seed': [],
@@ -21267,13 +21283,15 @@ def _quotes_underlyings(kind):
         _quotes_underlying_cache['mtime'] = mt
         _quotes_underlying_cache['data'] = por_classe
     from apps.pages import quotes as _q
-    simbolos = {_q._label_key(r.get('LABEL')): str(r.get('SYMBOL') or '').strip()
-                for r in _mapping_rows(key)}
+    # O cadastro é lido UMA vez e vira uma função: em commodities ele tem linhas
+    # de PADRÃO (`BO"MY"` → `ZL"MY".CBT`), que só se resolvem contra o código
+    # concreto — um dicionário não daria conta, e reler o cadastro por
+    # subjacente o percorreria novecentas vezes na mesma tela.
+    simbolo = _q.symbol_lookup(_mapping_rows(key))
     vistos = {}
     for classe in classes:
         vistos.update(_quotes_underlying_cache['data'].get(classe) or {})
-    return [[code, simbolos.get(_q._label_key(code), '')]
-            for _k, code in sorted(vistos.items())]
+    return [[code, simbolo(code)] for _k, code in sorted(vistos.items())]
 
 
 @blueprint.route('/quotes')

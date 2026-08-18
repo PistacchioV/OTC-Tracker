@@ -1,352 +1,87 @@
 [
   {
-    "LABEL": "BOK6",
-    "SYMBOL": "ZLK26.CBT",
-    "NOTES": "SOJA"
-  },
-  {
-    "LABEL": "BON6",
-    "SYMBOL": "ZLN26.CBT",
-    "NOTES": "SOJA"
-  },
-  {
-    "LABEL": "BOQ6",
-    "SYMBOL": "ZLQ26.CBT",
-    "NOTES": "SOJA"
-  },
-  {
-    "LABEL": "BOU6",
-    "SYMBOL": "ZLU26.CBT",
-    "NOTES": "SOJA"
-  },
-  {
-    "LABEL": "BOV6",
-    "SYMBOL": "ZLV26.CBT",
-    "NOTES": "SOJA"
+    "LABEL": "BO1",
+    "SYMBOL": "ZL=F",
+    "NOTES": "OLEO DE SOJA — contrato continuo (1o vencimento). Linha LITERAL: vence o padrao BO\"MY\", que so casa mes+ano."
   },
   {
     "LABEL": "C 1",
-    "SYMBOL": "BUSHELS",
-    "NOTES": "MILHO"
+    "SYMBOL": "ZC=F",
+    "NOTES": "MILHO — contrato continuo (1o vencimento)"
   },
   {
-    "LABEL": "C H7",
-    "SYMBOL": "BUSHELS",
-    "NOTES": "MILHO"
+    "LABEL": "CC1",
+    "SYMBOL": "CC=F",
+    "NOTES": "CACAU — contrato continuo (1o vencimento)"
   },
   {
-    "LABEL": "C H8",
-    "SYMBOL": "BUSHELS",
-    "NOTES": "MILHO"
+    "LABEL": "CO1",
+    "SYMBOL": "BZ=F",
+    "NOTES": "PETROLEO BRENT — contrato continuo (1o vencimento)"
   },
   {
-    "LABEL": "C K6",
-    "SYMBOL": "ZCK26.CBT",
-    "NOTES": "MILHO"
-  },
-  {
-    "LABEL": "C K7",
-    "SYMBOL": "BUSHELS",
-    "NOTES": "MILHO"
-  },
-  {
-    "LABEL": "C K8",
-    "SYMBOL": "BUSHELS",
-    "NOTES": "MILHO"
-  },
-  {
-    "LABEL": "C N6",
-    "SYMBOL": "ZCN26.CBT",
-    "NOTES": "MILHO"
-  },
-  {
-    "LABEL": "C N7",
-    "SYMBOL": "BUSHELS",
-    "NOTES": "MILHO"
-  },
-  {
-    "LABEL": "C N8",
-    "SYMBOL": "BUSHELS",
-    "NOTES": "MILHO"
-  },
-  {
-    "LABEL": "C U6",
-    "SYMBOL": "ZCU26.CBT",
-    "NOTES": "MILHO"
-  },
-  {
-    "LABEL": "C U7",
-    "SYMBOL": "BUSHELS",
-    "NOTES": "MILHO"
-  },
-  {
-    "LABEL": "C U8",
-    "SYMBOL": "BUSHELS",
-    "NOTES": "MILHO"
-  },
-  {
-    "LABEL": "C Z6",
-    "SYMBOL": "ZCZ26.CBT",
-    "NOTES": "MILHO"
-  },
-  {
-    "LABEL": "C Z7",
-    "SYMBOL": "BUSHELS",
-    "NOTES": "MILHO"
-  },
-  {
-    "LABEL": "C Z8",
-    "SYMBOL": "BUSHELS",
-    "NOTES": "MILHO"
-  },
-  {
-    "LABEL": "CCZ6",
-    "SYMBOL": "CCZ26.NYB",
-    "NOTES": "CACAU"
-  },
-  {
-    "LABEL": "COJ6",
-    "SYMBOL": "COJ26.NYB",
-    "NOTES": "PETROLEO"
-  },
-  {
-    "LABEL": "COK6",
-    "SYMBOL": "COK26.NYB",
-    "NOTES": "PETROLEO"
-  },
-  {
-    "LABEL": "COM5",
-    "SYMBOL": "COM25.NYB",
-    "NOTES": "PETROLEO"
-  },
-  {
-    "LABEL": "COM6",
-    "SYMBOL": "COM26.NYB",
-    "NOTES": "PETROLEO"
-  },
-  {
-    "LABEL": "CON6",
-    "SYMBOL": "CON26.NYB",
-    "NOTES": "PETROLEO"
-  },
-  {
-    "LABEL": "COQ6",
-    "SYMBOL": "COQ26.NYB",
-    "NOTES": "PETROLEO"
-  },
-  {
-    "LABEL": "COU6",
-    "SYMBOL": "COU26.NYB",
-    "NOTES": "PETROLEO"
-  },
-  {
-    "LABEL": "COV6",
-    "SYMBOL": "COV26.NYB",
-    "NOTES": "PETROLEO"
-  },
-  {
-    "LABEL": "COX6",
-    "SYMBOL": "COX26.NYB",
-    "NOTES": "PETROLEO"
-  },
-  {
-    "LABEL": "COZ5",
-    "SYMBOL": "COZ25.NYB",
-    "NOTES": "PETROLEO"
-  },
-  {
-    "LABEL": "COZ6",
-    "SYMBOL": "COZ26.NYB",
-    "NOTES": "PETROLEO"
-  },
-  {
-    "LABEL": "CTZ6",
-    "SYMBOL": "CTZ26.NYB",
-    "NOTES": "ALGODAO"
-  },
-  {
-    "LABEL": "DFK6",
-    "SYMBOL": "DFK26.NYB",
-    "NOTES": "CAFE"
-  },
-  {
-    "LABEL": "KCH6",
-    "SYMBOL": "KCH26.NYB",
-    "NOTES": "CAFE"
-  },
-  {
-    "LABEL": "KCK6",
-    "SYMBOL": "KCK26.NYB",
-    "NOTES": "CAFE"
-  },
-  {
-    "LABEL": "KCN6",
-    "SYMBOL": "KCN26.NYB",
-    "NOTES": "CAFE"
-  },
-  {
-    "LABEL": "KCU6",
-    "SYMBOL": "KCU26.NYB",
-    "NOTES": "CAFE"
-  },
-  {
-    "LABEL": "KCZ6",
-    "SYMBOL": "KCZ26.NYB",
-    "NOTES": "CAFE"
+    "LABEL": "KC1",
+    "SYMBOL": "KC=F",
+    "NOTES": "CAFE — contrato continuo (1o vencimento)"
   },
   {
     "LABEL": "S 1",
-    "SYMBOL": "ZSK25.CBT",
-    "NOTES": "SOJA"
-  },
-  {
-    "LABEL": "S F7",
-    "SYMBOL": "ZSK25.CBT",
-    "NOTES": "SOJA"
-  },
-  {
-    "LABEL": "S F8",
-    "SYMBOL": "ZSK25.CBT",
-    "NOTES": "SOJA"
-  },
-  {
-    "LABEL": "S H7",
-    "SYMBOL": "ZSK25.CBT",
-    "NOTES": "SOJA"
-  },
-  {
-    "LABEL": "S H8",
-    "SYMBOL": "ZSK25.CBT",
-    "NOTES": "SOJA"
-  },
-  {
-    "LABEL": "S K6",
-    "SYMBOL": "ZSK26.CBT",
-    "NOTES": "SOJA"
-  },
-  {
-    "LABEL": "S K7",
-    "SYMBOL": "ZSK25.CBT",
-    "NOTES": "SOJA"
-  },
-  {
-    "LABEL": "S K8",
-    "SYMBOL": "ZSK25.CBT",
-    "NOTES": "SOJA"
-  },
-  {
-    "LABEL": "S N6",
-    "SYMBOL": "ZSN26.CBT",
-    "NOTES": "SOJA"
-  },
-  {
-    "LABEL": "S N7",
-    "SYMBOL": "ZSK25.CBT",
-    "NOTES": "SOJA"
-  },
-  {
-    "LABEL": "S N8",
-    "SYMBOL": "ZSK25.CBT",
-    "NOTES": "SOJA"
-  },
-  {
-    "LABEL": "S Q6",
-    "SYMBOL": "ZSK25.CBT",
-    "NOTES": "SOJA"
-  },
-  {
-    "LABEL": "S Q7",
-    "SYMBOL": "ZSK25.CBT",
-    "NOTES": "SOJA"
-  },
-  {
-    "LABEL": "S Q8",
-    "SYMBOL": "ZSK25.CBT",
-    "NOTES": "SOJA"
-  },
-  {
-    "LABEL": "S U6",
-    "SYMBOL": "ZSU26.CBT",
-    "NOTES": "SOJA"
-  },
-  {
-    "LABEL": "S U7",
-    "SYMBOL": "ZSK25.CBT",
-    "NOTES": "SOJA"
-  },
-  {
-    "LABEL": "S U8",
-    "SYMBOL": "ZSK25.CBT",
-    "NOTES": "SOJA"
-  },
-  {
-    "LABEL": "S X6",
-    "SYMBOL": "ZSX26.CBT",
-    "NOTES": "SOJA"
-  },
-  {
-    "LABEL": "S X7",
-    "SYMBOL": "ZSK25.CBT",
-    "NOTES": "SOJA"
-  },
-  {
-    "LABEL": "S X8",
-    "SYMBOL": "ZSK25.CBT",
-    "NOTES": "SOJA"
-  },
-  {
-    "LABEL": "SBH6",
-    "SYMBOL": "SBH26.NYB",
-    "NOTES": "ACUCAR"
-  },
-  {
-    "LABEL": "SBK6",
-    "SYMBOL": "SBK26.NYB",
-    "NOTES": "ACUCAR"
-  },
-  {
-    "LABEL": "SBN6",
-    "SYMBOL": "SBN26.NYB",
-    "NOTES": "ACUCAR"
-  },
-  {
-    "LABEL": "SBV6",
-    "SYMBOL": "SBV26.NYB",
-    "NOTES": "ACUCAR"
+    "SYMBOL": "ZS=F",
+    "NOTES": "SOJA — contrato continuo (1o vencimento)"
   },
   {
     "LABEL": "W 1",
-    "SYMBOL": "ZWK25.CBT",
-    "NOTES": "TRIGO"
+    "SYMBOL": "ZW=F",
+    "NOTES": "TRIGO — contrato continuo (1o vencimento)"
   },
   {
-    "LABEL": "W H7",
-    "SYMBOL": "ZWK25.CBT",
-    "NOTES": "TRIGO"
+    "LABEL": "BO\"MY\"",
+    "SYMBOL": "ZL\"MY\".CBT",
+    "NOTES": "OLEO DE SOJA — Soybean Oil (CBOT)"
   },
   {
-    "LABEL": "W K6",
-    "SYMBOL": "ZWK25.CBT",
-    "NOTES": "TRIGO"
+    "LABEL": "C_\"MY\"",
+    "SYMBOL": "ZC\"MY\".CBT",
+    "NOTES": "MILHO — Corn (CBOT)"
   },
   {
-    "LABEL": "W K7",
-    "SYMBOL": "ZWK25.CBT",
-    "NOTES": "TRIGO"
+    "LABEL": "CC\"MY\"",
+    "SYMBOL": "CC\"MY\".NYB",
+    "NOTES": "CACAU — Cocoa (ICE Futures US)"
   },
   {
-    "LABEL": "W N6",
-    "SYMBOL": "ZWK25.CBT",
-    "NOTES": "TRIGO"
+    "LABEL": "CO\"MY\"",
+    "SYMBOL": "BZ\"MY\".NYM",
+    "NOTES": "PETROLEO BRENT — Brent Last Day Financial (NYMEX). Era CO\"MY\".NYB, que o Yahoo nao tem."
   },
   {
-    "LABEL": "W U6",
-    "SYMBOL": "ZWK25.CBT",
-    "NOTES": "TRIGO"
+    "LABEL": "CT\"MY\"",
+    "SYMBOL": "CT\"MY\".NYB",
+    "NOTES": "ALGODAO — Cotton No. 2 (ICE Futures US)"
   },
   {
-    "LABEL": "W Z6",
-    "SYMBOL": "ZWK25.CBT",
-    "NOTES": "TRIGO"
+    "LABEL": "DF\"MY\"",
+    "SYMBOL": "DF\"MY\".NYB",
+    "NOTES": "CAFE — simbolo herdado do app de desktop, nao confirmado na fonte"
+  },
+  {
+    "LABEL": "KC\"MY\"",
+    "SYMBOL": "KC\"MY\".NYB",
+    "NOTES": "CAFE — Coffee C (ICE Futures US)"
+  },
+  {
+    "LABEL": "S_\"MY\"",
+    "SYMBOL": "ZS\"MY\".CBT",
+    "NOTES": "SOJA — Soybean (CBOT)"
+  },
+  {
+    "LABEL": "SB\"MY\"",
+    "SYMBOL": "SB\"MY\".NYB",
+    "NOTES": "ACUCAR — Sugar No. 11 (ICE Futures US)"
+  },
+  {
+    "LABEL": "W_\"MY\"",
+    "SYMBOL": "ZW\"MY\".CBT",
+    "NOTES": "TRIGO — Chicago SRW Wheat (CBOT)"
   }
 ]

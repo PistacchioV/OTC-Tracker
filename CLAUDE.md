@@ -396,13 +396,14 @@ e um item no array `TYPES` de `apps/templates/pages/mapping.html`.
   colunas extras do arquivo** (`STATUS`/`MAKER`/`CHECKER`): o POST reescreve o
   arquivo inteiro e derrubaria o que não estivesse declarado (HANDOFF §188).
 
-São **27** mappings hoje: `currency-base`, `interbook-ndf`, `publisher-ndf`,
+São **29** mappings hoje: `currency-base`, `interbook-ndf`, `publisher-ndf`,
 `le-accronym`, `le-spn`, `commodities-b3`, `bank-name`, `fxo-conv-rate`,
 `ndf-pdf-cpty`, `swap-curves`, `cetip-files`, `api-links`, `opb3-events`,
 `swap-ir-client`, `swap-ir-term`, `swap-index`, `swap-funcionalidade`,
 `swap-amortizacao`, `swap-code-labels`, `ndfc-ir-exempt`, `ndfc-advice-split`,
 `b3-omnibus-account`, `fxo-internal-cpty`, `fxo-book-disregard`,
-`bankers-email`, `manual-conf-validation`, `manual-conf-sla`.
+`bankers-email`, `manual-conf-validation`, `manual-conf-sla`, `quotes-equity`,
+`quotes-commodity`.
 
 ### Os que têm regra fácil de quebrar pela tela
 
@@ -617,6 +618,38 @@ São **27** mappings hoje: `currency-base`, `interbook-ndf`, `publisher-ndf`,
   confirmação de FXO asiática (Moeda Base → nome da taxa + Venda/Compra) e vem
   semeado só com USD → USD PTAX / Venda; moeda não cadastrada gera aviso no
   painel em vez de imprimir em branco (HANDOFF §139).
+- **`quotes-equity`** e **`quotes-commodity`** — o código do Ativo Subjacente do
+  Index B3 → o **símbolo de mercado** que o Yahoo entende (`AAPL34` →
+  `AAPL34.SA`). As OPÇÕES da tela não saem daqui: elas vêm do `Subjacente.json`
+  ao vivo, separadas pelo campo `Classe` e só as `ACTIVE` — este cadastro só
+  traduz. O `seed` vai **vazio de propósito**: os dois arquivos são versionados
+  (471 + 17 linhas) e repetir centenas de pares no `routes.py` criaria uma
+  segunda lista para divergir da primeira. Código sem símbolo devolve **404
+  pedindo cadastro** e nunca tenta o código como ticker — a resposta seria um
+  404 obscuro da fonte em vez de "falta cadastrar" (HANDOFF §266). A lista de
+  moedas da PTAX **não é cadastro**: é o domínio do endpoint do BCB.
+  - **Em commodities as DUAS colunas aceitam o padrão `"MY"`** — a mesma notação
+    do `commodities-b3` (letra do mês + ano; `_` = espaço literal), e uma linha
+    passa a valer para **todos os vencimentos** daquela mercadoria:
+    `BO"MY"` → `ZL"MY".CBT` resolve `BOK6` → `ZLK26.CBT`. Eram 70 linhas para 10
+    mercadorias, e mais uma linha a cada vencimento que a B3 abrisse. Quem
+    expande é o `quotes.symbol_lookup`, e ele resolve as duas assimetrias que
+    condenavam o de-para literal: o **ano** tem um dígito ou dois na B3 e sempre
+    dois no símbolo de mercado (o dígito único cai na década corrente, virando
+    para a seguinte quando o ano ficaria mais de um ano no passado — contrato
+    futuro aponta para a frente), e o `"MY"` do símbolo fica no **meio**
+    (`ZL"MY".CBT`), porque o sufixo de bolsa vem depois do vencimento.
+  - O miolo casado **tem de ser mês+ano de contrato**, e o prefixo mais longo
+    vence: sem as duas regras, `C_"MY"` (milho) casaria com `CCZ6` (cacau) e com
+    `COZ6` (Brent) e devolveria o preço da mercadoria errada, em silêncio.
+    Linha **sem** `"MY"` continua literal e **vence** o padrão — é assim que se
+    cadastra a exceção de um vencimento só, ou o contrato contínuo (`C 1` →
+    `ZC=F`). Equities não têm vencimento e são todas literais; o motor é um só,
+    sem ramo por tipo.
+  - O registro do de-para (sufixos de bolsa do Yahoo, códigos de mês, as 471
+    equities e as pendências conhecidas) está em
+    [`DE_PARA_TICKERS_COTACOES.md`](DE_PARA_TICKERS_COTACOES.md), gerado em Word
+    pelo `scripts/build_sop_docx.py` como o SOP e o Guia.
 
 ---
 
@@ -1397,6 +1430,20 @@ escreva um script em `scripts/` para ela.
   `requirements.txt` (só Windows) — instale na instância do JPM. O endpoint em
   si não é mais constante: vem do mapping `api-links`, com
   `BASE_URL`/`TRADES_ENDPOINT` sobrando como fallback do New Deals.
+- **API de internet (BCB e Yahoo, na página Quotes): mesma sessão da Athena, mas
+  o proxy volta — e é uma FILA.** A sessão é a mesma (`build_session`, Kerberos),
+  só que esses hosts são EXTERNOS: o `trust_env=False` que protege a Athena
+  também os deixa sem proxy, e em boa parte da rede JPM a conexão só sai por ele.
+  A saída é tentada em ordem — `QUOTES_PROXY` (padrão
+  `http://proxy.jpmchase.net:**9443**`) → proxy do sistema (`getproxies()`, as
+  Opções de Internet no Windows) → `10443` → conexão direta —, e a primeira que
+  responder fica memorizada no processo. O proxy do sistema é **copiado** para a
+  sessão, nunca herdado: com `trust_env=True` ele voltaria a valer para a Athena.
+  A **10443 é a porta do app de desktop e não atende em toda máquina** (responde
+  *connection refused*, o mesmo `WinError 10061` por outro motivo). Erro de rede
+  tenta a próxima rota, erro HTTP para na hora — menos 407/502/504, que vêm do
+  proxy. Nada disso exige `.env` por máquina; `QUOTES_PROXY=` vazio força o
+  direto (HANDOFF §266).
 - **A instância do time roda com o reloader desligado**: depois de um
   `git pull` que tocou `routes.py` ou um template, o Flask **tem de ser
   reiniciado** ou o código velho continua servindo. Vários "não está
