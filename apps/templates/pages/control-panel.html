@@ -350,6 +350,17 @@
                         </small>
                     </div>
                     <div class="cp-field">
+                        <label data-lang="cp-cetip-hub-to">TO — BACC HUB EQT MO</label>
+                        <input type="text" id="cp-cetip-hub-to" data-payload-key="hub_to"
+                               class="form-control form-control-sm"
+                               placeholder="email1@jpmorgan.com; email2@jpmorgan.com">
+                        <small class="cp-field__hint" data-lang="cp-cetip-hub-hint">
+                            Strategy (MID), Option, SWAP and Premium Agenda positions —
+                            complete files, no filter, attached as .txt for position
+                            reconciliation. Empty = not sent.
+                        </small>
+                    </div>
+                    <div class="cp-field">
                         <label data-lang="cp-ref-date">Reference date</label>
                         <div class="cp-datefield" id="cpDateWrap">
                             <input type="text" id="cp-cetip-date" data-input readonly
@@ -1205,13 +1216,14 @@ document.addEventListener('click', function (e) {
 })();
 
 // ── Save CETIP Files card: persisted TO per distribution e-mail ──────────────
-// Sales Support / CEM Latam / BACC TO lists load from the server (os dois
-// primeiros com os endereços históricos como default; o BACC volta vazio, porque
-// não tem default — sem lista o e-mail dele não sai) and save on blur; the Run
-// buttons also send them in the POST payload via data-payload-key, so the run
-// always uses what's on screen.
+// Sales Support / CEM Latam / BACC / BACC HUB EQT MO TO lists load from the server
+// (os dois primeiros com os endereços históricos como default; BACC e BACC HUB
+// voltam vazios, porque não têm default — sem lista o e-mail deles não sai) and
+// save on blur; the Run buttons also send them in the POST payload via
+// data-payload-key, so the run always uses what's on screen.
 (function () {
-    var KEYS = { ss_to: 'cp-cetip-ss-to', cem_to: 'cp-cetip-cem-to', bacc_to: 'cp-cetip-bacc-to' };
+    var KEYS = { ss_to: 'cp-cetip-ss-to', cem_to: 'cp-cetip-cem-to',
+                 bacc_to: 'cp-cetip-bacc-to', hub_to: 'cp-cetip-hub-to' };
     var els = {};
     Object.keys(KEYS).forEach(function (k) { els[k] = document.getElementById(KEYS[k]); });
     if (!els.ss_to || !els.cem_to) return;

@@ -24,6 +24,7 @@ o arquivo inteiro com o nome de um recorte e pior do que nao mandar.
 Nao encosta em dado real: os arquivos sao sinteticos, em tempfile.
 """
 import io
+import json
 import os
 import shutil
 import sys
@@ -181,16 +182,18 @@ try:
     check('zero de uma', bool(got) and got[1:], (0, 1))
     check('e o anexo tem so o cabecalho', lines_of(got[0]), [hdr])
 
-    print('\n== 9. as tres listas de TO, e o merge que nao apaga as outras ==')
-    check('tres chaves', sorted(R._CETIP_RECIPIENT_KEYS), ['bacc_to', 'cem_to', 'ss_to'])
+    print('\n== 9. as quatro listas de TO, e o merge que nao apaga as outras ==')
+    check('quatro chaves', sorted(R._CETIP_RECIPIENT_KEYS),
+          ['bacc_to', 'cem_to', 'hub_to', 'ss_to'])
     _real_load = R._load_cetip_recipients
     R._load_cetip_recipients = lambda: {'ss_to': 'ss@x.com', 'cem_to': 'cem@x.com',
-                                        'bacc_to': 'bacc@x.com'}
+                                        'bacc_to': 'bacc@x.com', 'hub_to': 'hub@x.com'}
     try:
         rec, mudou = R._cetip_merge_recipients({'ss_to': 'novo@x.com'})
         check('o payload sobrescreve o que veio', rec['ss_to'], 'novo@x.com')
         check('   e NAO apaga o cem', rec['cem_to'], 'cem@x.com')
         check('   nem o bacc', rec['bacc_to'], 'bacc@x.com')
+        check('   nem o hub', rec['hub_to'], 'hub@x.com')
         check('   e diz que mudou', mudou, True)
         rec, mudou = R._cetip_merge_recipients({})
         check('payload vazio nao muda nada', (rec['bacc_to'], mudou), ('bacc@x.com', False))
@@ -211,10 +214,72 @@ try:
     blk = SRC.split('def _cetip_distribute_emails', 1)[1].split('\n@blueprint', 1)[0]
     check('o e-mail do BACC sai com os recortes', 'attachments=bacc_paths' in blk, True)
     check('   com OTC Ops em copia', 'bacc_to_list, [CETIP_OTC_OPS_EMAIL]' in blk, True)
-    check('   e a pasta temporaria e removida', 'shutil.rmtree(bacc_tmp' in blk, True)
+    check('   e a pasta temporaria e removida', '_limpa_temp()' in blk, True)
     check('sem TO o recorte nem e montado', 'if rule.get(\'attach_bacc\') and bacc_to_list:' in blk, True)
     check('o ramo distribute passa a lista do bacc',
           "_parse_emails(rec['bacc_to'])" in SRC, True)
+
+    # ── 11. BACC HUB EQT MO — o outro destino, com os arquivos INTEIROS ────────
+    # O HUB e o BACC sao times diferentes do mesmo lado: o BACC recebe o recorte
+    # do intragrupo, o HUB recebe a posicao CHEIA para reconciliar. Sao duas
+    # listas e dois e-mails, e o que erra em silencio aqui e o HUB receber um
+    # arquivo filtrado — ele bateria contra uma posicao que nao e a da CETIP.
+    print('\n== 11. BACC HUB EQT MO: arquivos inteiros, em .txt ==')
+    src = write(tmp, '73760_260817_DPOSICAO-SWAP.CETIP21', [
+        swap_row(BANCO, LAWTON, '1'),
+        swap_row(BANCO, CLIENTE, '2'),      # cliente: o HUB leva esta tambem
+    ])
+    got = R._cetip_txt_copy(src, out)
+    check('nome do original + .txt',
+          os.path.basename(got or ''), '73760_260817_DPOSICAO-SWAP.CETIP21.txt')
+    check('o arquivo vai INTEIRO (a linha de cliente nao e cortada)',
+          len(lines_of(got)), 2)
+    check('copia byte a byte do original',
+          io.open(got, 'rb').read(), io.open(src, 'rb').read())
+    check('o arquivo salvo nao foi tocado', len(lines_of(src)), 2)
+    check('origem inexistente devolve None, nao explode',
+          R._cetip_txt_copy(os.path.join(tmp, 'nao-existe.CETIP21'), out), None)
+
+    # Os QUATRO arquivos do HUB, e so eles.
+    hub = sorted(k for k, v in R._CETIP_BEHAVIOUR.items() if v.get('attach_hub'))
+    check('os quatro tipos do HUB', hub, [
+        'Option Position (OPC DPOSICAO)',
+        'SWAP Position (DPOSICAO-SWAP)',
+        'SWAP Premium Agenda (DAGENDAPREMIOS)',
+        'Strategy Position (MID DPOSICAOESTRATEGIA)'])
+    # Comportamento sem cadastro e regra que nunca roda: `_cetip_rules` une os
+    # dois pela coluna TYPE, e um tipo so no codigo nao vira anexo nenhum.
+    tipos_seed = {r['TYPE'] for r in R._CETIP_FILES_SEED}
+    check('todo tipo do HUB tem linha no cadastro (seed)',
+          [t for t in hub if t not in tipos_seed], [])
+    tipos_json = {r.get('TYPE') for r in json.load(io.open(
+        os.path.join(ROOT, 'apps', 'static', 'data', 'mappings', 'cetip-files.json'),
+        encoding='utf-8'))}
+    check('   e no arquivo versionado', [t for t in hub if t not in tipos_json], [])
+    # O HUB nao tem `bacc`: pedir os dois na mesma linha significaria dois anexos
+    # com o mesmo nome de origem no mesmo dia.
+    check('o tipo novo nao vira JSON nem recorte',
+          [k for k in R._CETIP_BEHAVIOUR['Strategy Position (MID DPOSICAOESTRATEGIA)']],
+          ['attach_hub'])
+
+    check('o campo do HUB existe no card', 'id="cp-cetip-hub-to"' in TPL, True)
+    check('   e vai no payload do Run', 'data-payload-key="hub_to"' in TPL, True)
+    check('   e o JS le/grava a chave', "hub_to: 'cp-cetip-hub-to'" in TPL, True)
+    for lang in ('en', 'br', 'es'):
+        tr = read('apps/static/data/translations/%s.json' % lang)
+        check('traducao %s do rotulo e da dica' % lang,
+              ['"cp-cetip-hub-to"' in tr, '"cp-cetip-hub-hint"' in tr], [True, True])
+    check('o e-mail do HUB sai com as copias inteiras', 'attachments=hub_paths' in blk, True)
+    check('   com OTC Ops em copia', 'hub_to_list, [CETIP_OTC_OPS_EMAIL]' in blk, True)
+    # Sem TO, nem a copia e montada: o `quer_hub` ja carrega o teste da lista.
+    check('sem TO a copia nem e montada',
+          "quer_hub = bool(rule.get('attach_hub')) and bool(hub_to_list)" in blk, True)
+    # Arquivo que faltou no dia e DITO, nunca omitido: um e-mail com tres dos
+    # quatro se parece com um e-mail completo.
+    check('arquivo ausente entra em missing, e nao some',
+          ['missing=hub_skipped' in blk, 'hub_skipped.append' in blk], [True, True])
+    check('o ramo distribute passa a lista do hub',
+          "_parse_emails(rec['hub_to'])" in SRC, True)
 finally:
     shutil.rmtree(tmp, ignore_errors=True)
     shutil.rmtree(out, ignore_errors=True)

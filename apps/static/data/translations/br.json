@@ -351,6 +351,8 @@
   "cp-r-cetip-desc": "Lê os arquivos brutos da CETIP da pasta diária de download da B3, renomeia para o padrão e salva nas pastas de liquidação usadas pelo KPI.",
   "cp-cetip-bacc-to": "TO — BACC",
   "cp-cetip-bacc-hint": "DFLUXO + posições de Termo/Opção/SWAP, filtradas para as contas do intragrupo (00041.00-7 · 73760.00-9 · 85398.00-5). Em branco = não envia.",
+  "cp-cetip-hub-to": "TO — BACC HUB EQT MO",
+  "cp-cetip-hub-hint": "Posições de Estratégia (MID), Opção, SWAP e Agenda de Prêmios — arquivos inteiros, sem filtro, anexados em .txt para reconciliação de posição. Em branco = não envia.",
   "cp-cetip-meta": "B3 → Pastas de liquidação",
   "cp-cetip-run-save": "Salvar + e-mail OTC",
   "cp-cetip-run-dist": "Enviar às outras áreas",

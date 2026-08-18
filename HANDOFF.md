@@ -11780,3 +11780,55 @@ O registro do de-para inteiro (sufixos de bolsa do Yahoo conferidos na página o
 de mês, as 17 linhas de commodity, as 471 de equity e as cinco pendências conhecidas) está em
 `DE_PARA_TICKERS_COTACOES.md`, com o Word gerado pelo `scripts/build_sop_docx.py` como o SOP e o
 Guia do Usuário. Testes novos na seção 2b do `check_quotes.py`.
+
+---
+
+## §268 — Save CETIP Files: o quarto destino é o BACC HUB EQT MO, e ele recebe a posição CHEIA
+
+O card já mandava para Sales Support, CEM Latam e BACC (§265). O **BACC HUB EQT MO** é o quarto
+e-mail: leva **posição de Estratégia (MID DPOSICAOESTRATEGIA), posição de Opção, posição de SWAP e
+Agenda de Prêmios**, os quatro **inteiros** — sem recorte, sem filtro, sem releitura — anexados em
+`.txt`. É reconciliação de posição, e é isso que separa este destino do BACC.
+
+**BACC e BACC HUB são duas listas e dois e-mails de propósito.** São times do mesmo lado, mas o que
+cada um pede é o oposto: o BACC quer só o intragrupo (`_cetip_bacc_copy`), o HUB quer a posição
+completa. Um e-mail só com os dois conjuntos entregaria a cada lado um arquivo que ele não pediu —
+e, pior, o recorte e o arquivo cheio saem do MESMO arquivo de origem, então os dois anexos teriam o
+mesmo nome na mesma mensagem. A posição de Opção e a de SWAP estão nos dois destinos, e é aí que
+isso deixaria de ser teoria.
+
+`_cetip_txt_copy` é `shutil.copy2`, e não um `open`/`write` como o recorte do BACC: **byte a byte**,
+sem reencodar, sem tocar em fim de linha, sem chance de o latin-1 do arquivo virar outra coisa no
+caminho. Um arquivo de reconciliação que difere do original em um byte é um arquivo que não
+reconcilia. O `.txt` é acrescentado pela mesma razão do §267 (as extensões da CETIP não abrem com um
+duplo clique, e trocá-las apagaria a parte do nome que diz qual arquivo é aquele), e a cópia vai
+para um temporário porque o anexo não pode encostar na pasta de liquidação, que é o que o KPI lê.
+
+Quatro coisas que não dão erro nenhum:
+
+- **Arquivo que faltou no dia é DITO, não omitido.** Só o HUB tem `hub_skipped` para o arquivo
+  ausente: um e-mail de reconciliação com três dos quatro anexos se parece exatamente com um e-mail
+  completo, e a posição que falta é justamente a que ninguém vai conferir. Os outros destinos
+  seguem pulando em silêncio, que é o comportamento que eles sempre tiveram.
+- **Sem TO, a cópia nem é montada.** O `quer_hub` carrega o teste da lista, como o BACC já fazia —
+  copiar quatro arquivos para um e-mail que não vai sair é trabalho para o disco e uma pasta
+  temporária a mais. Lista vazia é desfecho legítimo e o painel diz, em cinza.
+- **A coluna Type da tabela vai SEM contagem de linhas.** No BACC ela diz `— 12 of 480 line(s)`
+  porque houve corte; escrever `480 of 480` aqui sugeriria que também houve um, e é a diferença
+  entre os dois e-mails.
+- **Comportamento sem cadastro é regra que nunca roda.** `_cetip_rules` une `_CETIP_BEHAVIOUR` ao
+  cadastro `cetip-files` pela coluna TYPE: um tipo que existe só no código não vira anexo nenhum, em
+  silêncio. Por isso o **`Strategy Position (MID DPOSICAOESTRATEGIA)`** entrou nos três lugares —
+  `_CETIP_BEHAVIOUR`, `_CETIP_FILES_SEED` e o `cetip-files.json` versionado —, e o
+  `check_cetip_bacc.py` confere que todo tipo com `attach_hub` tem linha nos dois últimos.
+
+⚠️ **O nome de origem do arquivo de estratégia é uma DEDUÇÃO**: `CETIP21_YYMMDD_MID_DPOSICAOESTRATEGIA`,
+pelo padrão do `MID_DAGENTEACELERADOR`, que é o outro arquivo MID da mesma origem. Se a CETIP
+publicar com outra grafia, a correção é **uma célula no /mapping** e vale no request seguinte — é
+exatamente por isso que a lista de arquivos é cadastro e o comportamento é que é código. Até
+alguém conferir, o arquivo aparece como *Not found* no e-mail do HUB, que é a falha desejada.
+
+O resto do encanamento já era genérico: `_CETIP_RECIPIENT_KEYS` ganhou `hub_to` e com isso
+`_load`/`_save`/`_cetip_merge_recipients` passaram a tratar as quatro listas sem mudança, e o JS do
+card itera o mapa `KEYS`. O merge continua sendo merge e não substituição — uma tela antiga, que não
+conhece a chave nova, apagaria aquela lista ao rodar.

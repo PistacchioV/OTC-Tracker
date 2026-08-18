@@ -2534,14 +2534,21 @@ CETIP_DEST_ROOT   = os.getenv('CETIP_DEST_ROOT',
 CETIP_OTC_OPS_EMAIL       = os.getenv('CETIP_OTC_OPS_EMAIL',       'brazil.otc.ops@jpmorgan.com')
 CETIP_SALES_SUPPORT_EMAIL = os.getenv('CETIP_SALES_SUPPORT_EMAIL', 'brazil_sales_support_mo@jpmchase.com')
 # CEM Latam BA (Buenos Aires CIB Ops) — receive the Option Position .OPC file, cc OTC Ops.
-# Editable TO lists for the three distribution e-mails (Sales Support / CEM Latam /
-# BACC), persisted from the Save CETIP Files card. Empty/absent → the hardcoded
-# defaults below; BACC has NO default (see `_CETIP_BACC_ACCOUNTS`), so an empty list
-# there means "não envia", e o card diz isso. The CC (OTC Ops) stays hardcoded.
+# Editable TO lists for the four distribution e-mails (Sales Support / CEM Latam /
+# BACC / BACC HUB EQT MO), persisted from the Save CETIP Files card. Empty/absent →
+# the hardcoded defaults below; BACC e BACC HUB NÃO têm default, então uma lista
+# vazia ali quer dizer "não envia", e o card diz isso. The CC (OTC Ops) stays
+# hardcoded.
+#
+# BACC e BACC HUB são destinos DIFERENTES do mesmo time, e é por isso que são duas
+# listas e dois e-mails: o BACC recebe o intragrupo RECORTADO (`_cetip_bacc_copy`),
+# o HUB recebe os arquivos de posição **inteiros**, para reconciliar posição. Um
+# e-mail só com os dois conjuntos entregaria a cada lado um arquivo que ele não
+# pediu — e o recorte e o arquivo cheio têm o mesmo nome de origem.
 _CETIP_RECIPIENTS_FILE = os.path.normpath(os.path.join(
     os.path.dirname(__file__), '..', 'static', 'data', 'control-panel',
     'cetip_distribution_recipients.json'))
-_CETIP_RECIPIENT_KEYS = ('ss_to', 'cem_to', 'bacc_to')
+_CETIP_RECIPIENT_KEYS = ('ss_to', 'cem_to', 'bacc_to', 'hub_to')
 
 
 def _load_cetip_recipients():
@@ -2626,6 +2633,7 @@ _CETIP_BEHAVIOUR = {
     'NDF Position (DPOSICAO C21)': {},
     'SWAP Position (DPOSICAO-SWAP)': {
         'attach_sales_support': True,      # SWAP position also e-mailed to Sales Support
+        'attach_hub': True,                # BACC HUB EQT MO — arquivo INTEIRO, só renomeado
         # BACC: Participante (coluna D) × Contraparte (coluna H) — os nomes vêm do
         # `_B3_SWAP_HEADERS['swap_position']`, que é o cabeçalho padrão deste
         # arquivo (ele chega SEM cabeçalho).
@@ -2641,6 +2649,7 @@ _CETIP_BEHAVIOUR = {
         'attach_cem_latam': True,          # this .OPC file is e-mailed to CEM Latam BA
         'attach_sales_support': True,      # .OPC position also e-mailed to Sales Support
         'attach_bacc': True,
+        'attach_hub': True,                # BACC HUB EQT MO — arquivo INTEIRO, só renomeado
         # 'parte (conta)' é SUBSTRING de 'contraparte (conta)': o `avoid` é o que
         # impede o lado da parte de casar com a coluna da contraparte quando ela
         # vem antes no cabeçalho — sem ele o filtro compararia a mesma coluna duas
@@ -2675,6 +2684,7 @@ _CETIP_BEHAVIOUR = {
                                        'conta cetip parte'], 'index': 2,
                             'allowed': ['73760009', '04880006']}}},
     'SWAP Premium Agenda (DAGENDAPREMIOS)': {
+        'attach_hub': True,                # BACC HUB EQT MO — arquivo INTEIRO, só renomeado
         'json': {'category': 'Swap', 'has_header': False, 'header_key': 'swap_premio',
                  # de-dup: Conta da Parte (coluna D = "Parte")
                  'filter': {'column': ['parte'], 'index': 3,
@@ -2699,6 +2709,12 @@ _CETIP_BEHAVIOUR = {
                  ]}},
     'COE (DRESUMOEMISSOR-COE)': {},
     'Accelerator Agent (MID DAGENTEACELERADOR)': {},
+    # Posição de estratégia (MID). Existe para o BACC HUB EQT MO: ele não vira
+    # JSON e não alimenta rotina nenhuma — é salvo na pasta do dia como os outros
+    # e anexado inteiro. Sem a linha aqui e no cadastro, a rotina não conheceria o
+    # arquivo e o e-mail sairia com três anexos em vez de quatro.
+    'Strategy Position (MID DPOSICAOESTRATEGIA)': {
+        'attach_hub': True},               # BACC HUB EQT MO — arquivo INTEIRO, só renomeado
     'Term Position (DPOSICAO-TER)': {
         'attach_sales_support': True,      # .TER position also e-mailed to Sales Support
         'attach_bacc': True,
@@ -2744,6 +2760,13 @@ _CETIP_FILES_SEED = [
     {'TYPE': 'SWAP Premium Agenda (DAGENDAPREMIOS)',
      'SOURCE': 'CETIP21_YYMMDD_DAGENDAPREMIOS',
      'DEST': '73760_YYMMDD_DAGENDAPREMIOS.CETIP21', 'EXTRA DEST': ''},
+    # Estratégia (MID): o quarto arquivo do BACC HUB EQT MO. O nome segue o do
+    # MID_DAGENTEACELERADOR, que é o outro arquivo MID da mesma origem — se a
+    # CETIP publicar com outra grafia, a correção é UMA célula no /mapping, sem
+    # release: é justamente por isso que a lista é cadastro e não código.
+    {'TYPE': 'Strategy Position (MID DPOSICAOESTRATEGIA)',
+     'SOURCE': 'CETIP21_YYMMDD_MID_DPOSICAOESTRATEGIA',
+     'DEST': '73760_YYMMDD_MID_DPOSICAOESTRATEGIA.CETIP21', 'EXTRA DEST': ''},
     {'TYPE': 'SWAP Indexers (INDEXADORESSWAP_VCP)',
      'SOURCE': 'CETIP21_YYMMDD_INDEXADORESSWAP_VCP',
      'DEST': 'CETIP21_YYMMDD_INDEXADORESSWAP_VCP.TXT', 'EXTRA DEST': ''},
@@ -3335,8 +3358,34 @@ def _cetip_bacc_copy(src_path, cfg, out_dir):
     return out_path, len(mantidas), len(dados)
 
 
+def _cetip_txt_copy(src_path, out_dir):
+    """Cópia de `src_path` em `out_dir` com o mesmo nome + `.txt`, ou None.
+
+    É o anexo do **BACC HUB EQT MO**: arquivo INTEIRO, sem recorte e sem
+    releitura — é reconciliação de posição, e um arquivo filtrado bateria contra
+    uma posição que não é a que a CETIP publicou. Por isso é `copy2` byte a byte,
+    e não um `open`/`write` como no recorte do BACC: sem reencodar, sem tocar em
+    fim de linha, sem chance de o latin-1 do arquivo virar outra coisa no caminho.
+
+    O `.txt` é ACRESCENTADO pela mesma razão do recorte do BACC: as extensões da
+    CETIP (`.CETIP21`, `.OPC`) não abrem com um duplo clique, e trocá-las apagaria
+    a parte do nome que diz qual arquivo é aquele.
+
+    A cópia vai para um temporário porque o anexo NÃO pode encostar na pasta de
+    liquidação — é ela que o KPI lê.
+    """
+    try:
+        out_path = os.path.join(out_dir, os.path.basename(src_path) + '.txt')
+        shutil.copy2(src_path, out_path)
+        return out_path
+    except Exception:
+        log.warning('[cetip] HUB: não consegui copiar %s:\n%s',
+                    os.path.basename(src_path), traceback.format_exc())
+        return None
+
+
 def _cetip_distribute_emails(ref, dest_dir, send_mail, ss_to_list=None, cem_to_list=None,
-                             bacc_to_list=None):
+                             bacc_to_list=None, hub_to_list=None):
     """Stage 2 of Save CETIP Files ("Send to other areas"): e-mail Sales Support
     (SIC + Term/Option/SWAP positions), CEM Latam BA (.OPC) and BACC (DFLUXO +
     the three positions, RECORTADOS para o intragrupo — ver `_cetip_bacc_copy`)
@@ -3348,6 +3397,7 @@ def _cetip_distribute_emails(ref, dest_dir, send_mail, ss_to_list=None, cem_to_l
     ss_to_list  = ss_to_list  or [CETIP_SALES_SUPPORT_EMAIL]
     cem_to_list = cem_to_list or CETIP_CEM_LATAM_EMAILS
     bacc_to_list = bacc_to_list or []
+    hub_to_list  = hub_to_list  or []
     if not os.path.isdir(dest_dir):
         return jsonify({'success': False,
                         'error': 'No saved files found for this date. Run "Save CETIP Files" first.'}), 400
@@ -3357,12 +3407,15 @@ def _cetip_distribute_emails(ref, dest_dir, send_mail, ss_to_list=None, cem_to_l
     opc_paths,    opc_saved    = [], []   # CEM Latam (.OPC)
     bacc_paths,   bacc_saved   = [], []   # BACC (DFLUXO + 3 posições, recortados)
     bacc_skipped               = []       # recorte que não saiu (coluna não resolvida)
-    # Os recortes do BACC são temporários de propósito: eles não podem encostar na
-    # pasta de liquidação, que é o que o KPI lê. Criado só se houver o que recortar.
-    bacc_tmp = None
+    hub_paths,    hub_saved    = [], []   # BACC HUB EQT MO (4 posições, INTEIRAS, .txt)
+    hub_skipped                = []       # arquivo que faltou no dia, ou cópia que falhou
+    # As cópias dos dois destinos são temporárias de propósito: elas não podem
+    # encostar na pasta de liquidação, que é o que o KPI lê. Criadas sob demanda.
+    bacc_tmp = hub_tmp = None
     for rule in _cetip_rules():
+        quer_hub = bool(rule.get('attach_hub')) and bool(hub_to_list)
         if not (rule.get('attach_sales_support') or rule.get('attach_cem_latam')
-                or rule.get('attach_bacc')):
+                or rule.get('attach_bacc') or quer_hub):
             continue
         try:
             dest_name = rule['dest_name'](ref_yymmdd)
@@ -3370,6 +3423,11 @@ def _cetip_distribute_emails(ref, dest_dir, send_mail, ss_to_list=None, cem_to_l
             continue
         dest_path = os.path.join(dest_dir, dest_name)
         if not os.path.isfile(dest_path):
+            # Só o HUB reclama do arquivo que faltou. É reconciliação de POSIÇÃO:
+            # um e-mail com três dos quatro arquivos se parece com um e-mail
+            # completo, e a posição que falta é a que ninguém vai conferir.
+            if quer_hub:
+                hub_skipped.append({'dest': dest_name, 'type': rule['label']})
             continue
         entry = {'src': dest_name, 'dest': dest_name, 'type': rule['label']}
         if rule.get('attach_sales_support'):
@@ -3392,15 +3450,31 @@ def _cetip_distribute_emails(ref, dest_dir, send_mail, ss_to_list=None, cem_to_l
             # para o mesmo arquivo fariam procurar um anexo que não existe.
             bacc_saved.append({'src': dest_name, 'dest': os.path.basename(cut_path),
                                'type': '{} — {} of {} line(s)'.format(rule['label'], kept, total)})
+        if quer_hub:
+            if hub_tmp is None:
+                hub_tmp = tempfile.mkdtemp(prefix='cetip-hub-')
+            hub_path = _cetip_txt_copy(dest_path, hub_tmp)
+            if hub_path is None:
+                hub_skipped.append({'dest': dest_name, 'type': rule['label']})
+            else:
+                hub_paths.append(hub_path)
+                # Sem contagem de linhas na coluna Type: aqui o arquivo é INTEIRO,
+                # e escrever "480 of 480" sugeriria que houve um corte.
+                hub_saved.append({'src': dest_name, 'dest': os.path.basename(hub_path),
+                                  'type': rule['label']})
 
-    if not attach_paths and not opc_paths and not bacc_paths:
-        if bacc_tmp:
-            shutil.rmtree(bacc_tmp, ignore_errors=True)
+    def _limpa_temp():
+        for d in (bacc_tmp, hub_tmp):
+            if d:
+                shutil.rmtree(d, ignore_errors=True)
+
+    if not attach_paths and not opc_paths and not bacc_paths and not hub_paths:
+        _limpa_temp()
         return jsonify({'success': False,
                         'error': 'No position files found for {}. Run "Save CETIP Files" first.'
                         .format(ref_fmt)}), 400
 
-    mail_ss = mail_cem = mail_bacc = None
+    mail_ss = mail_cem = mail_bacc = mail_hub = None
     if send_mail:
         ss_msg = ('Please find attached the position files (Contract/SIC — DPOSCONTRATOSIC, '
                   'Term — DPOSICAO-TER.TER, Option — DPOSICAO.OPC, and SWAP — DPOSICAO-SWAP), '
@@ -3437,18 +3511,37 @@ def _cetip_distribute_emails(ref, dest_dir, send_mail, ss_to_list=None, cem_to_l
                 'Hello BACC,', bacc_msg,
                 ref_fmt, bacc_saved, attachments=bacc_paths, missing=bacc_skipped)
 
-    # Os recortes já foram lidos pelo `sendmail` — a pasta temporária sai agora.
-    if bacc_tmp:
-        shutil.rmtree(bacc_tmp, ignore_errors=True)
+        if hub_paths:
+            hub_msg = (
+                'Please find attached the Strategy (MID DPOSICAOESTRATEGIA), Option '
+                '(DPOSICAO.OPC), SWAP (DPOSICAO-SWAP) and SWAP Premium Agenda '
+                '(DAGENDAPREMIOS) position files for position reconciliation. '
+                '<b>These are the complete files</b> — no filter was applied; they are '
+                'the same files saved to the settlement folder, renamed with a '
+                '<code>.txt</code> extension so they open with a double click.')
+            if hub_skipped:
+                hub_msg += (' <b>{}</b> file(s) were not available for the reference date '
+                            'and are listed below.'.format(len(hub_skipped)))
+            mail_hub = _send_cetip_email(
+                hub_to_list, [CETIP_OTC_OPS_EMAIL],
+                'CETIP Position Files - BACC HUB EQT MO - {}'.format(ref_yymmdd),
+                'Hello BACC HUB EQT MO,', hub_msg,
+                ref_fmt, hub_saved, attachments=hub_paths, missing=hub_skipped)
 
-    areas = ['Sales Support', 'CEM Latam'] + (['BACC'] if bacc_paths else [])
+    # As cópias já foram lidas pelo `sendmail` — as pastas temporárias saem agora.
+    _limpa_temp()
+
+    areas = (['Sales Support', 'CEM Latam']
+             + (['BACC'] if bacc_paths else [])
+             + (['BACC HUB EQT MO'] if hub_paths else []))
     _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                          'CETIP Files Distributed', 'Control Panel',
                          '{} ({})'.format(' + '.join(areas), ref.strftime('%Y-%m-%d')))
 
     msg = 'Distribution e-mails sent for <b>{}</b>.'.format(ref_fmt)
     if send_mail:
-        probs = [v for v in (mail_ss, mail_cem, mail_bacc) if v is not True and v is not None]
+        probs = [v for v in (mail_ss, mail_cem, mail_bacc, mail_hub)
+                 if v is not True and v is not None]
         if not probs:
             msg = '<br>Distribution e-mails sent ({}).'.format(' + '.join(areas))
             # Lista de BACC vazia é desfecho legítimo (ninguém cadastrado), mas o
@@ -3460,21 +3553,28 @@ def _cetip_distribute_emails(ref, dest_dir, send_mail, ss_to_list=None, cem_to_l
                 msg += ('<br><span class="text-warning">BACC: {} file(s) left out '
                         '(column pair not resolved) — see the log.</span>'
                         .format(len(bacc_skipped)))
+            if not hub_to_list:
+                msg += ('<br><span class="text-muted">BACC HUB EQT MO: no TO saved — '
+                        'e-mail not sent.</span>')
+            elif hub_skipped:
+                msg += ('<br><span class="text-warning">BACC HUB EQT MO: {} file(s) not '
+                        'found for this date.</span>'.format(len(hub_skipped)))
         else:
             msg = ('<span class="text-warning">Some distribution e-mails failed: {}</span>'
                    .format(probs[0]))
     return jsonify({'success': True, 'message': msg,
                     'email_sent': {'sales_support': mail_ss, 'cem_latam': mail_cem,
-                                   'bacc': mail_bacc},
+                                   'bacc': mail_bacc, 'hub': mail_hub},
                     'bacc_files': bacc_saved, 'bacc_skipped': bacc_skipped,
+                    'hub_files': hub_saved, 'hub_skipped': hub_skipped,
                     'destination': dest_dir})
 
 
 @blueprint.route('/api/control-panel/cetip-settlement/recipients', methods=['GET', 'POST'])
 def api_cp_cetip_recipients():
-    """GET → the TO lists for the three distribution e-mails (defaults shown when
-    nothing is saved yet; o BACC não tem default e volta vazio); POST → persist
-    them. CC (OTC Ops) is fixed in code."""
+    """GET → the TO lists for the four distribution e-mails (defaults shown when
+    nothing is saved yet; BACC e BACC HUB não têm default e voltam vazios);
+    POST → persist them. CC (OTC Ops) is fixed in code."""
     if not session.get('authenticated'):
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
     if request.method == 'GET':
@@ -3482,7 +3582,8 @@ def api_cp_cetip_recipients():
         return jsonify({'success': True,
                         'ss_to': rec['ss_to'] or CETIP_SALES_SUPPORT_EMAIL,
                         'cem_to': rec['cem_to'] or '; '.join(CETIP_CEM_LATAM_EMAILS),
-                        'bacc_to': rec['bacc_to']})
+                        'bacc_to': rec['bacc_to'],
+                        'hub_to': rec['hub_to']})
     payload = request.get_json(silent=True) or {}
     try:
         rec, _mudou = _cetip_merge_recipients(payload)
@@ -3524,7 +3625,7 @@ def api_cp_cetip_settlement():
     # the payload carries them they are persisted for the next runs.
     if stage == 'distribute':
         # Merge, não substituição: o payload traz o que está na tela, e uma tela que
-        # não conhecesse uma das três chaves apagaria aquela lista ao rodar.
+        # não conhecesse uma das quatro chaves apagaria aquela lista ao rodar.
         rec, mudou = _cetip_merge_recipients(payload)
         if mudou:
             try:
@@ -3534,7 +3635,8 @@ def api_cp_cetip_settlement():
         return _cetip_distribute_emails(ref, dest_dir, send_mail,
                                         _parse_emails(rec['ss_to']),
                                         _parse_emails(rec['cem_to']),
-                                        _parse_emails(rec['bacc_to']))
+                                        _parse_emails(rec['bacc_to']),
+                                        _parse_emails(rec['hub_to']))
 
     # Ensure the dated source folder exists (B3 daily drop). On Windows create it
     # in the standard layout if missing; on dev (POSIX) just error out cleanly.

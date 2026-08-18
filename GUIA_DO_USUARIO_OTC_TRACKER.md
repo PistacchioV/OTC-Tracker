@@ -402,16 +402,25 @@ Rotinas disponíveis:
 - Pending Confirmations Spreadsheet Metrics
 - Confirmations Escalation
 
-#### Save CETIP Files — três destinos, e o do BACC vai recortado
+#### Save CETIP Files — quatro destinos, cada um com o seu recorte
 
-Este card manda os arquivos da CETIP para **Sales Support**, **CEM Latam** e **BACC**. Os dois primeiros recebem os arquivos como saem; o **BACC recebe só as operações entre contas de casa** (Lawton `00041.00-7`, Banco `73760.00-9` e Atacama `85398.00-5`) nos quatro arquivos que interessam: DFLUXO swap, posição swap, posição OPC e posição TER.
+Este card manda os arquivos da CETIP para **Sales Support**, **CEM Latam**, **BACC** e **BACC HUB EQT MO**. Cada um é um e-mail diferente, com a sua própria lista de **To** e com OTC Ops sempre em cópia.
 
-1. Preencha as três listas de **To** — cada uma é um e-mail diferente.
-2. O anexo do BACC **mantém o nome original do arquivo e ganha `.txt` no fim** — `73760_260817_DPOSICAO-SWAP.CETIP21.txt`. O nome inteiro fica porque é por ele que o outro lado reconhece qual dos quatro arquivos é aquele; o `.txt` é o que faz o anexo abrir com um duplo clique (as extensões da CETIP não são associadas a programa nenhum). O conteúdo é o mesmo texto de sempre. Quem diz que é um recorte é o corpo do e-mail, que traz a contagem em cada linha da tabela (*"— 12 of 480 line(s)"*).
+| Destino | O que recebe |
+|---|---|
+| **Sales Support** | Contrato/SIC, posição de Termo, de Opção e de SWAP — os arquivos como saem |
+| **CEM Latam BA** | só a posição de Opção (`DPOSICAO.OPC`) — o arquivo como sai |
+| **BACC** | DFLUXO swap, posição swap, posição OPC e posição TER — **recortados** para as operações entre contas de casa (Lawton `00041.00-7`, Banco `73760.00-9`, Atacama `85398.00-5`) |
+| **BACC HUB EQT MO** | posição de Estratégia (MID), posição de Opção, posição de SWAP e Agenda de Prêmios — **inteiros, sem filtro nenhum**, para reconciliação de posição |
 
-> **Sem endereço no To do BACC, o e-mail simplesmente não sai** — e o card mostra isso, em vez de deixar você achando que foi enviado. É diferente dos outros dois destinos, que têm endereço padrão.
+1. Preencha as **To** que forem usar — cada uma é um e-mail diferente, e as duas de BACC começam vazias.
+2. O anexo dos dois BACC **mantém o nome original do arquivo e ganha `.txt` no fim** — `73760_260817_DPOSICAO-SWAP.CETIP21.txt`. O nome inteiro fica porque é por ele que o outro lado reconhece qual arquivo é aquele; o `.txt` é o que faz o anexo abrir com um duplo clique (as extensões da CETIP não são associadas a programa nenhum). O conteúdo é o mesmo texto de sempre.
+
+> **BACC e BACC HUB EQT MO são destinos diferentes, e o conteúdo é diferente.** O BACC recebe o **recorte** do intragrupo — quem diz isso é o corpo do e-mail, com a contagem em cada linha da tabela (*"— 12 of 480 line(s)"*). O BACC HUB recebe a **posição cheia**, sem contagem nenhuma na tabela, porque não houve corte: é com ela que a posição é reconciliada, e um arquivo filtrado bateria contra uma posição que não é a que a CETIP publicou.
 >
-> Se alguma linha aparecer como **"Not found"**, o sistema não conseguiu localizar no arquivo as colunas de parte e contraparte — e nesse caso ele **não anexa** aquele arquivo. Mandar o arquivo cheio com o nome de um recorte seria pior. Avise o time de tecnologia.
+> **Sem endereço no To, o e-mail simplesmente não sai** — vale para os dois BACC, e o card mostra isso em vez de deixar você achando que foi enviado. Sales Support e CEM Latam têm endereço padrão.
+>
+> **"Not found" quer dizer coisas diferentes nos dois.** No BACC, o sistema não conseguiu localizar no arquivo as colunas de parte e contraparte, e por isso **não anexou** aquele arquivo — mandar o arquivo cheio com o nome de um recorte seria pior; avise o time de tecnologia. No BACC HUB, quer dizer que o arquivo **não estava na pasta do dia**: rode antes o *Save CETIP Files* e confira se a CETIP publicou aquele arquivo.
 
 > **Nem todo card envia e-mail.** O *Daily Metric*, a *Weekly Escalation* e a *Collection* geram um **rascunho** — o navegador baixa um arquivo `.eml` que abre no Outlook já endereçado, para você revisar e enviar. O *Pending Confirmations Spreadsheet Metrics* não envia e-mail: ele **grava a planilha** "PENDING - Outstanding Confirmation OTC.xlsx" no share, todo dia útil às 10:45. Os demais mandam direto.
 
