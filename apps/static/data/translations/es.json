@@ -351,7 +351,7 @@
   "cp-cetip-bacc-to": "TO — BACC",
   "cp-cetip-bacc-hint": "DFLUXO + posiciones de Plazo/Opción/SWAP, filtradas a las cuentas del intragrupo (00041.00-7 · 73760.00-9 · 85398.00-5). Vacío = no se envía.",
   "cp-cetip-hub-to": "TO — BACC HUB EQT MO",
-  "cp-cetip-hub-hint": "Posiciones de Estrategia (MID), Opción, SWAP y Agenda de Primas — archivos completos, sin filtro, adjuntados en .txt para conciliación de posición. Vacío = no se envía.",
+  "cp-cetip-hub-hint": "Posiciones de Estrategia (MID), NDF/Plazo, Opción, SWAP y Agenda de Primas — archivos completos, sin filtro, adjuntados en .txt para conciliación de posición. Vacío = no se envía.",
   "cp-cetip-meta": "B3 → Carpetas de liquidación",
   "cp-cetip-run-save": "Guardar + correo OTC",
   "cp-cetip-run-dist": "Enviar a otras áreas",

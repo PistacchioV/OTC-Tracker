@@ -352,7 +352,7 @@
   "cp-cetip-bacc-to": "TO — BACC",
   "cp-cetip-bacc-hint": "DFLUXO + Term/Option/SWAP positions, filtered to the intragroup accounts (00041.00-7 · 73760.00-9 · 85398.00-5). Empty = not sent.",
   "cp-cetip-hub-to": "TO — BACC HUB EQT MO",
-  "cp-cetip-hub-hint": "Strategy (MID), Option, SWAP and Premium Agenda positions — complete files, no filter, attached as .txt for position reconciliation. Empty = not sent.",
+  "cp-cetip-hub-hint": "Strategy (MID), NDF/Term, Option, SWAP and Premium Agenda positions — complete files, no filter, attached as .txt for position reconciliation. Empty = not sent.",
   "cp-cetip-meta": "B3 → Settlement folders",
   "cp-cetip-run-save": "Save + OTC e-mail",
   "cp-cetip-run-dist": "Send to other areas",

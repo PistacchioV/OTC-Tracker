@@ -73,8 +73,8 @@ try:
     print('== 1. os quatro arquivos estao marcados para o BACC ==')
     marcados = sorted(k for k, v in R._CETIP_BEHAVIOUR.items() if v.get('attach_bacc'))
     check('sao exatamente quatro', marcados,
-          ['Option Position (OPC DPOSICAO)', 'SWAP Flow (DFLUXO_SWAP)',
-           'SWAP Position (DPOSICAO-SWAP)', 'Term Position (DPOSICAO-TER)'])
+          ['NDF Position (DPOSICAO-TER)', 'Option Position (OPC DPOSICAO)',
+           'SWAP Flow (DFLUXO_SWAP)', 'SWAP Position (DPOSICAO-SWAP)'])
     for k in marcados:
         cfg = R._CETIP_BEHAVIOUR[k].get('bacc') or {}
         check('%-32s tem o par de colunas' % k,
@@ -151,7 +151,7 @@ try:
     check('e so a linha intragrupo embaixo', [ln.split(';')[0] for ln in saida[1:]], ['IF1'])
 
     print('\n== 6. posicao TER (com cabecalho) ==')
-    cfg = R._CETIP_BEHAVIOUR['Term Position (DPOSICAO-TER)']['bacc']
+    cfg = R._CETIP_BEHAVIOUR['NDF Position (DPOSICAO-TER)']['bacc']
     hdr = ('Data do Arquivo;Codigo da Parte;Nome da Parte;Codigo da Contraparte;'
            'Nome da Contraparte;Contrato')
     def ter_row(parte, cpty, tag):
@@ -175,7 +175,7 @@ try:
           R._cetip_bacc_copy(write(tmp, 'vazio.TXT', []), ruim, out), None)
 
     print('\n== 8. recorte sem nenhuma linha ainda sai (com o cabecalho) ==')
-    cfg = R._CETIP_BEHAVIOUR['Term Position (DPOSICAO-TER)']['bacc']
+    cfg = R._CETIP_BEHAVIOUR['NDF Position (DPOSICAO-TER)']['bacc']
     src = write(tmp, '73760_260817_DPOSICAO-TER-SOCLIENTE.TER',
                 [hdr, ter_row(CLIENTE, '99999.00-9', '9')])
     got = R._cetip_bacc_copy(src, cfg, out)
@@ -242,11 +242,18 @@ try:
 
     # Os QUATRO arquivos do HUB, e so eles.
     hub = sorted(k for k, v in R._CETIP_BEHAVIOUR.items() if v.get('attach_hub'))
-    check('os quatro tipos do HUB', hub, [
+    check('os cinco tipos do HUB', hub, [
+        'NDF Position (DPOSICAO-TER)',
         'Option Position (OPC DPOSICAO)',
         'SWAP (Strategy)',
         'SWAP Position (DPOSICAO-SWAP)',
         'SWAP Premium Agenda (DAGENDAPREMIOS)'])
+    # O TER esta nos DOIS destinos, e com conteudo diferente: recortado no BACC e
+    # inteiro no HUB. E o caso que justifica os dois e-mails serem separados —
+    # num so, os dois anexos teriam o mesmo nome na mesma mensagem.
+    ter = R._CETIP_BEHAVIOUR['NDF Position (DPOSICAO-TER)']
+    check('o TER vai para o BACC recortado E para o HUB inteiro',
+          [bool(ter.get('attach_bacc')), bool(ter.get('attach_hub'))], [True, True])
     # O DEST do SWAP (Strategy) JA termina em .txt: um segundo sufixo daria
     # `..._MID.txt.txt`, um nome que ninguem escreveu e que o outro lado nao casa.
     check('nome de anexo: .txt e acrescentado uma vez so',
@@ -270,12 +277,16 @@ try:
           [k for k in R._CETIP_BEHAVIOUR['SWAP (Strategy)']], ['attach_hub'])
 
     # ── 12. o rotulo do cadastro e DIGITADO, e o comportamento nao pode sumir ──
-    # O prefixo do TYPE e descricao: a mesma posicao de termo e `Term Position
-    # (DPOSICAO-TER)` no codigo e `NDF Position (DPOSICAO-TER)` no cadastro do
-    # time (TER e termo, que a mesa chama de NDF). Com a juncao so pelo rotulo
-    # inteiro, essa linha perdia TODO o comportamento sem erro nenhum — o arquivo
-    # continuava sendo salvo e sumia do e-mail do intragrupo, do Sales Support e
-    # do JSON. Foi assim que o .TER sumiu do anexo.
+    # O prefixo do TYPE e descricao: a posicao de termo ja se chamou `Term
+    # Position (DPOSICAO-TER)` no codigo e `NDF Position (DPOSICAO-TER)` no
+    # cadastro do time (TER e termo, que a mesa chama de NDF). Com a juncao so
+    # pelo rotulo inteiro, essa linha perdia TODO o comportamento sem erro nenhum
+    # — o arquivo continuava sendo salvo e sumia do e-mail do intragrupo, do
+    # Sales Support e do JSON. Foi assim que o .TER sumiu do anexo.
+    #
+    # Os rotulos foram alinhados depois, mas o teste usa o nome HISTORICO de
+    # proposito: e ele que prova que o fallback funciona. Com os dois lados
+    # iguais o teste passaria sem testar nada.
     print('\n== 12. TYPE renomeado no cadastro nao pode perder o comportamento ==')
     check('o parentetico e o nome do arquivo',
           [R._cetip_paren_key('NDF Position (DPOSICAO-TER)'),
@@ -287,13 +298,19 @@ try:
     parens = [R._cetip_paren_key(k) for k in R._CETIP_BEHAVIOUR]
     check('nenhum parentetico repetido entre os comportamentos',
           len(parens), len(set(parens)))
-    exato = R._cetip_behaviour_for('Term Position (DPOSICAO-TER)')
-    renomeado = R._cetip_behaviour_for('NDF Position (DPOSICAO-TER)')
+    exato = R._cetip_behaviour_for('NDF Position (DPOSICAO-TER)')
     check('o TYPE do codigo resolve', bool(exato.get('attach_bacc')), True)
-    check('e o TYPE renomeado pelo time resolve IGUAL', renomeado, exato)
-    check('   inclusive o anexo do Sales Support e o JSON',
-          [bool(renomeado.get('attach_sales_support')), bool(renomeado.get('json'))],
-          [True, True])
+    # O nome HISTORICO tem de continuar resolvendo: a instancia que ainda nao
+    # renomeou a linha na tela nao pode perder o comportamento no pull.
+    for antigo in ('Term Position (DPOSICAO-TER)', 'Posicao de Termo (DPOSICAO-TER)'):
+        check('%r resolve IGUAL pelo parentetico' % antigo,
+              R._cetip_behaviour_for(antigo), exato)
+    check('   inclusive o Sales Support, o HUB e o JSON',
+          [bool(exato.get('attach_sales_support')), bool(exato.get('attach_hub')),
+           bool(exato.get('json'))], [True, True, True])
+    check('o Movement de termo tambem atende pelo nome antigo',
+          R._cetip_behaviour_for('Term Movement (DMOVIMENTO C21)'),
+          R._cetip_behaviour_for('NDF Movement (DMOVIMENTO C21)'))
     check('rotulo desconhecido devolve vazio, e nao explode',
           R._cetip_behaviour_for('Coisa Nova (NAOEXISTE)'), {})
     check('rotulo vazio idem', R._cetip_behaviour_for(''), {})

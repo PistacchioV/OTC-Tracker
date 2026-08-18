@@ -11786,16 +11786,16 @@ Guia do Usuário. Testes novos na seção 2b do `check_quotes.py`.
 ## §268 — Save CETIP Files: o quarto destino é o BACC HUB EQT MO, e ele recebe a posição CHEIA
 
 O card já mandava para Sales Support, CEM Latam e BACC (§265). O **BACC HUB EQT MO** é o quarto
-e-mail: leva **posição de Estratégia (MID DPOSICAOESTRATEGIA), posição de Opção, posição de SWAP e
-Agenda de Prêmios**, os quatro **inteiros** — sem recorte, sem filtro, sem releitura — anexados em
-`.txt`. É reconciliação de posição, e é isso que separa este destino do BACC.
+e-mail: leva **`SWAP (Strategy)`, posição de NDF/Termo, de Opção, de SWAP e a Agenda de Prêmios**,
+os cinco **inteiros** — sem recorte, sem filtro, sem releitura — anexados em `.txt`. É reconciliação
+de posição, e é isso que separa este destino do BACC.
 
 **BACC e BACC HUB são duas listas e dois e-mails de propósito.** São times do mesmo lado, mas o que
 cada um pede é o oposto: o BACC quer só o intragrupo (`_cetip_bacc_copy`), o HUB quer a posição
 completa. Um e-mail só com os dois conjuntos entregaria a cada lado um arquivo que ele não pediu —
 e, pior, o recorte e o arquivo cheio saem do MESMO arquivo de origem, então os dois anexos teriam o
-mesmo nome na mesma mensagem. A posição de Opção e a de SWAP estão nos dois destinos, e é aí que
-isso deixaria de ser teoria.
+mesmo nome na mesma mensagem. **Três dos cinco arquivos do HUB estão também no BACC** (NDF/Termo,
+Opção e SWAP), e é aí que isso deixa de ser teoria.
 
 `_cetip_txt_copy` é `shutil.copy2`, e não um `open`/`write` como o recorte do BACC: **byte a byte**,
 sem reencodar, sem tocar em fim de linha, sem chance de o latin-1 do arquivo virar outra coisa no
@@ -11875,3 +11875,27 @@ Vale para todo tipo novo: registrar `{}` é a forma de dizer "este é só salvo,
 A lição vale para todo cadastro que casa por rótulo: **a tela convida a reescrever o texto**, e uma
 coluna que é chave de junção precisa ou de um identificador estável, ou de um fallback estrutural
 como este, ou de um aviso. Aqui ficaram os dois últimos.
+
+---
+
+## §270 — Os arquivos de termo passam a se chamar NDF, e o nome antigo continua valendo
+
+Fechando o §269: em vez de manter dois vocabulários, os rótulos do cadastro CETIP foram alinhados
+com o da mesa. `Term Position (DPOSICAO-TER)` → **`NDF Position (DPOSICAO-TER)`** e
+`Term Movement (DMOVIMENTO C21)` → **`NDF Movement (DMOVIMENTO C21)`**, no `_CETIP_BEHAVIOUR`, no
+`_CETIP_FILES_SEED` e no `cetip-files.json`. TER é termo, a mesa chama termo de NDF, e o código
+falar outra língua era a causa do §269.
+
+Ficam **dois `NDF Position`** na lista — `(DPOSICAO C21)` e `(DPOSICAO-TER)` —, e está certo: o que
+distingue os dois é o que está entre parênteses, que é justamente o que a junção passou a usar.
+
+**O fallback do §269 não sai junto.** Ele não existia para aquele caso: existe porque uma coluna de
+texto numa tela convida a ser reescrita, e o próximo rename não pode custar outra caçada. Na
+prática, ele é o que faz o pull ser seguro — a instância que ainda tem `Term Position` gravado no
+`cetip-files.json` continua com o comportamento inteiro, e o log diz que ela pode renomear. O teste
+usa o nome HISTÓRICO de propósito: com os dois lados iguais, ele passaria sem testar nada.
+
+**O `.TER` também entrou no BACC HUB EQT MO** (`attach_hub`), e com isso o HUB são cinco arquivos.
+O TER é o caso que mostra por que os dois destinos são e-mails separados: ele vai **recortado** para
+o BACC e **inteiro** para o HUB, com o mesmo nome de origem — num e-mail só, os dois anexos
+brigariam pelo mesmo nome.

@@ -24,7 +24,7 @@
     "EXTRA DEST": ""
   },
   {
-    "TYPE": "Term Movement (DMOVIMENTO C21)",
+    "TYPE": "NDF Movement (DMOVIMENTO C21)",
     "SOURCE": "CETIP21_YYMMDD_DMOVIMENTO_C21",
     "DEST": "73760_YYMMDD_DMOVIMENTO.CETIP21",
     "EXTRA DEST": ""
@@ -84,7 +84,7 @@
     "EXTRA DEST": ""
   },
   {
-    "TYPE": "Term Position (DPOSICAO-TER)",
+    "TYPE": "NDF Position (DPOSICAO-TER)",
     "SOURCE": "TER_YYMMDD_DPOSICAO-TER",
     "DEST": "73760_YYMMDD_DPOSICAO-TER.TER",
     "EXTRA DEST": "I:\\CETIP_NDF"

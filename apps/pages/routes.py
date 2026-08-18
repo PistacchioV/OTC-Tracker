@@ -2664,7 +2664,7 @@ _CETIP_BEHAVIOUR = {
                  'filter': {'column': ['parte (conta)', 'parte(conta)', 'parte'], 'index': 4,
                             'allowed': ['73760009']}}},
     'Option Movement (OPC DMOVIMENTO)': {},
-    'Term Movement (DMOVIMENTO C21)': {},
+    'NDF Movement (DMOVIMENTO C21)': {},
     'SWAP Movement (DMOVIMENTO-SWAP)': {},
     'SWAP Flow (DFLUXO_SWAP)': {
         # Este é o único dos quatro do BACC que não vai para mais ninguém: ele não
@@ -2720,9 +2720,10 @@ _CETIP_BEHAVIOUR = {
     # efeito nenhum, em silêncio.
     'SWAP (Strategy)': {
         'attach_hub': True},               # BACC HUB EQT MO — arquivo INTEIRO, só renomeado
-    'Term Position (DPOSICAO-TER)': {
+    'NDF Position (DPOSICAO-TER)': {
         'attach_sales_support': True,      # .TER position also e-mailed to Sales Support
         'attach_bacc': True,
+        'attach_hub': True,                # BACC HUB EQT MO — arquivo INTEIRO, só renomeado
         'bacc': {'has_header': True,
                  'parte':       {'column': ['código da parte', 'codigo da parte'],
                                  'index': 1, 'avoid': 'contraparte'},
@@ -2759,7 +2760,7 @@ _CETIP_FILES_SEED = [
     {'TYPE': 'Option Movement (OPC DMOVIMENTO)',
      'SOURCE': 'OPC_YYMMDD_DMOVIMENTO',
      'DEST': '73760_YYMMDD_DMOVIMENTO_3.OPC', 'EXTRA DEST': ''},
-    {'TYPE': 'Term Movement (DMOVIMENTO C21)',
+    {'TYPE': 'NDF Movement (DMOVIMENTO C21)',
      'SOURCE': 'CETIP21_YYMMDD_DMOVIMENTO_C21',
      'DEST': '73760_YYMMDD_DMOVIMENTO.CETIP21', 'EXTRA DEST': ''},
     {'TYPE': 'SWAP Movement (DMOVIMENTO-SWAP)',
@@ -2789,7 +2790,7 @@ _CETIP_FILES_SEED = [
     {'TYPE': 'Accelerator Agent (MID DAGENTEACELERADOR)',
      'SOURCE': 'CETIP21_YYMMDD_MID_DAGENTEACELERADOR',
      'DEST': '73760_YYMMDD_MID_DAGENTEACELERADOR.CETIP21', 'EXTRA DEST': ''},
-    {'TYPE': 'Term Position (DPOSICAO-TER)',
+    {'TYPE': 'NDF Position (DPOSICAO-TER)',
      'SOURCE': 'TER_YYMMDD_DPOSICAO-TER',
      'DEST': '73760_YYMMDD_DPOSICAO-TER.TER', 'EXTRA DEST': CETIP_NDF_SHARE},
     {'TYPE': 'SIC Contract Position (DPOSCONTRATOSIC)',
@@ -2875,20 +2876,24 @@ def _cetip_behaviour_for(label):
     """Comportamento da linha do cadastro, pelo TYPE — e, se ele não bater, pelo
     NOME DO ARQUIVO entre parênteses.
 
-    O rótulo é digitado na tela, e o prefixo dele é descrição: a mesma posição de
-    termo é `Term Position (DPOSICAO-TER)` no código e `NDF Position
-    (DPOSICAO-TER)` no cadastro do time (TER é termo, que a mesa chama de NDF —
-    a renomeação está CERTA do ponto de vista de quem opera). Com a junção só
-    pelo rótulo inteiro, essa linha perdia o comportamento por completo: o
-    arquivo continuava sendo salvo (SOURCE e DEST vêm do cadastro), mas não
-    virava JSON, não ia para o Sales Support e não entrava no recorte do BACC —
-    **sem erro nenhum**, porque `dict.get` de uma chave que não existe é um
-    dicionário vazio, que é exatamente o que uma linha sem comportamento parece.
-    Foi assim que o `.TER` sumiu do e-mail do intragrupo.
+    O rótulo é digitado na tela, e o prefixo dele é DESCRIÇÃO. A posição de termo
+    já se chamou `Term Position (DPOSICAO-TER)` aqui e `NDF Position
+    (DPOSICAO-TER)` no cadastro do time — TER é termo, e a mesa chama termo de
+    NDF, então quem renomeou tinha razão. Com a junção só pelo rótulo inteiro,
+    essa linha perdia o comportamento por completo: o arquivo continuava sendo
+    salvo (SOURCE e DEST vêm do cadastro), mas não virava JSON, não ia para o
+    Sales Support e não entrava no recorte do BACC — **sem erro nenhum**, porque
+    `dict.get` de uma chave que não existe devolve um dicionário vazio, que é
+    exatamente o que uma linha sem comportamento parece. Foi assim que o `.TER`
+    sumiu do e-mail do intragrupo.
+
+    Os rótulos daqui já foram alinhados com os da mesa (`Term …` virou `NDF …`
+    nos dois arquivos de termo), mas o fallback FICA: ele não existe para aquele
+    caso, existe porque uma coluna de texto numa tela convida a ser reescrita, e
+    o próximo rename não pode custar outra caçada.
 
     O que identifica o arquivo é o que está ENTRE PARÊNTESES, e ele é único nas
-    16 entradas (`check_cetip_bacc.py` prova). O prefixo pode ser reescrito à
-    vontade — que é o que uma coluna de texto numa tela convida a fazer.
+    17 entradas (`check_cetip_bacc.py` prova). O prefixo pode mudar à vontade.
 
     Rótulo que não casa por nenhum dos dois é **avisado no log**: a linha existe
     de propósito (há tipos sem comportamento nenhum, que só são salvos), mas um
@@ -3597,9 +3602,9 @@ def _cetip_distribute_emails(ref, dest_dir, send_mail, ss_to_list=None, cem_to_l
 
         if hub_paths:
             hub_msg = (
-                'Please find attached the Strategy (MID DPOSICAOESTRATEGIA), Option '
-                '(DPOSICAO.OPC), SWAP (DPOSICAO-SWAP) and SWAP Premium Agenda '
-                '(DAGENDAPREMIOS) position files for position reconciliation. '
+                'Please find attached the Strategy (DPOSICAOESTRATEGIA_MID), NDF/Term '
+                '(DPOSICAO-TER), Option (DPOSICAO.OPC), SWAP (DPOSICAO-SWAP) and SWAP '
+                'Premium Agenda (DAGENDAPREMIOS) position files for position reconciliation. '
                 '<b>These are the complete files</b> — no filter was applied; they are '
                 'the same files saved to the settlement folder, renamed with a '
                 '<code>.txt</code> extension so they open with a double click.')

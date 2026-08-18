@@ -411,7 +411,9 @@ Este card manda os arquivos da CETIP para **Sales Support**, **CEM Latam**, **BA
 | **Sales Support** | Contrato/SIC, posição de Termo, de Opção e de SWAP — os arquivos como saem |
 | **CEM Latam BA** | só a posição de Opção (`DPOSICAO.OPC`) — o arquivo como sai |
 | **BACC** | DFLUXO swap, posição swap, posição OPC e posição TER — **recortados** para as operações entre contas de casa (Lawton `00041.00-7`, Banco `73760.00-9`, Atacama `85398.00-5`) |
-| **BACC HUB EQT MO** | *SWAP (Strategy)*, posição de Opção, posição de SWAP e Agenda de Prêmios — **inteiros, sem filtro nenhum**, para reconciliação de posição |
+| **BACC HUB EQT MO** | *SWAP (Strategy)*, posição de NDF/Termo, de Opção, de SWAP e Agenda de Prêmios — **inteiros, sem filtro nenhum**, para reconciliação de posição |
+
+> **A posição de NDF/Termo e a de Opção vão para os dois BACC, e o arquivo não é o mesmo.** No *Intragroup* ele vai recortado; no *HUB* vai inteiro. É por isso que são dois e-mails: num só, o recorte e o arquivo cheio chegariam com o mesmo nome na mesma mensagem.
 
 1. Preencha as **To** que forem usar — cada uma é um e-mail diferente, e as duas de BACC começam vazias.
 2. O anexo dos dois BACC **mantém o nome original do arquivo e ganha `.txt` no fim** — `73760_260817_DPOSICAO-SWAP.CETIP21.txt`. O nome inteiro fica porque é por ele que o outro lado reconhece qual arquivo é aquele; o `.txt` é o que faz o anexo abrir com um duplo clique (as extensões da CETIP não são associadas a programa nenhum). O conteúdo é o mesmo texto de sempre.

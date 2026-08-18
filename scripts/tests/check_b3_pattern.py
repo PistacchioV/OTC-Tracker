@@ -374,11 +374,11 @@ by_label = {r['label']: r for r in rules}
 # os offsets tem de ser os mesmos que estavam fixos no codigo
 OLD_DS = {'NDF Position (DPOSICAO C21)': 8, 'SWAP Position (DPOSICAO-SWAP)': 8,
           'Option Position (OPC DPOSICAO)': 4, 'Option Movement (OPC DMOVIMENTO)': 4,
-          'Term Movement (DMOVIMENTO C21)': 8, 'SWAP Movement (DMOVIMENTO-SWAP)': 8,
+          'NDF Movement (DMOVIMENTO C21)': 8, 'SWAP Movement (DMOVIMENTO-SWAP)': 8,
           'SWAP Flow (DFLUXO_SWAP)': 8, 'SWAP Premium Agenda (DAGENDAPREMIOS)': 8,
           'SWAP Indexers (INDEXADORESSWAP_VCP)': 8, 'Operations (DOPERACOES)': 8,
           'COE (DRESUMOEMISSOR-COE)': 8, 'Accelerator Agent (MID DAGENTEACELERADOR)': 8,
-          'Term Position (DPOSICAO-TER)': 4, 'SIC Contract Position (DPOSCONTRATOSIC)': 4,
+          'NDF Position (DPOSICAO-TER)': 4, 'SIC Contract Position (DPOSCONTRATOSIC)': 4,
           'Comitente Registry (DCADCOMITENTES)': 4}
 for label, ds in OLD_DS.items():
     check('offset %s' % label[:28], by_label[label]['date_start'], ds)
@@ -389,7 +389,7 @@ OLD_DEST = {
     'SWAP Position (DPOSICAO-SWAP)': '73760_260731_DPOSICAO-SWAP.CETIP21',
     'Option Position (OPC DPOSICAO)': '73760_260731_DPOSICAO.OPC',
     'Option Movement (OPC DMOVIMENTO)': '73760_260731_DMOVIMENTO_3.OPC',
-    'Term Movement (DMOVIMENTO C21)': '73760_260731_DMOVIMENTO.CETIP21',
+    'NDF Movement (DMOVIMENTO C21)': '73760_260731_DMOVIMENTO.CETIP21',
     'SWAP Movement (DMOVIMENTO-SWAP)': '73760_260731_DMOVIMENTO-SWAP.CETIP21',
     'SWAP Flow (DFLUXO_SWAP)': '73760_260731_DFLUXO.CETIP21',
     'SWAP Premium Agenda (DAGENDAPREMIOS)': '73760_260731_DAGENDAPREMIOS.CETIP21',
@@ -397,7 +397,7 @@ OLD_DEST = {
     'Operations (DOPERACOES)': '73760_260731_DOPERACOES.CETIP21',
     'COE (DRESUMOEMISSOR-COE)': 'CETIP21_260731_SP_DRESUMOEMISSOR-COE.TXT',
     'Accelerator Agent (MID DAGENTEACELERADOR)': '73760_260731_MID_DAGENTEACELERADOR.CETIP21',
-    'Term Position (DPOSICAO-TER)': '73760_260731_DPOSICAO-TER.TER',
+    'NDF Position (DPOSICAO-TER)': '73760_260731_DPOSICAO-TER.TER',
     'SIC Contract Position (DPOSCONTRATOSIC)': '73760_260731_DPOSCONTRATOSIC.txt',
     'Comitente Registry (DCADCOMITENTES)': 'SIC_260731_DCADCOMITENTES.txt',
 }
@@ -412,13 +412,13 @@ check('Indexers mantem vcp_update',
 check('OPC mantem anexo CEM',
       by_label['Option Position (OPC DPOSICAO)'].get('attach_cem_latam'), True)
 check('TER mantem anexo Sales Support',
-      by_label['Term Position (DPOSICAO-TER)'].get('attach_sales_support'), True)
+      by_label['NDF Position (DPOSICAO-TER)'].get('attach_sales_support'), True)
 check('Operations mantem os 2 filtros',
       len(by_label['Operations (DOPERACOES)']['json']['filters']), 2)
 check('OPC mantem extra_dest',
       bool(by_label['Option Position (OPC DPOSICAO)'].get('extra_dest')), True)
 check('TER mantem extra_dest',
-      bool(by_label['Term Position (DPOSICAO-TER)'].get('extra_dest')), True)
+      bool(by_label['NDF Position (DPOSICAO-TER)'].get('extra_dest')), True)
 check('sem extra_dest onde nao havia',
       'extra_dest' in by_label['COE (DRESUMOEMISSOR-COE)'], False)
 
