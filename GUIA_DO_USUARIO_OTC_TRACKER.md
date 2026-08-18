@@ -360,6 +360,8 @@ Tipos disponíveis:
 | Bank Name | Nome dos bancos |
 | FXO Conversion Rate | Taxa de conversão por moeda base |
 | Swap Curves (Athena × B3) | Curvas de swap |
+| Quotes — Equities | Código do ativo subjacente → símbolo de mercado (item 3.18) |
+| Quotes — Commodities | Código da mercadoria → símbolo de mercado (item 3.18) |
 
 > **Mapping não exige reinício do sistema.** A alteração vale já na próxima tela que você abrir.
 
@@ -399,6 +401,17 @@ Rotinas disponíveis:
 - Deals Monitor — Pending Action
 - Pending Confirmations Spreadsheet Metrics
 - Confirmations Escalation
+
+#### Save CETIP Files — três destinos, e o do BACC vai recortado
+
+Este card manda os arquivos da CETIP para **Sales Support**, **CEM Latam** e **BACC**. Os dois primeiros recebem os arquivos como saem; o **BACC recebe só as operações entre contas de casa** (Lawton `00041.00-7`, Banco `73760.00-9` e Atacama `85398.00-5`) nos quatro arquivos que interessam: DFLUXO swap, posição swap, posição OPC e posição TER.
+
+1. Preencha as três listas de **To** — cada uma é um e-mail diferente.
+2. O anexo do BACC **mantém o nome original do arquivo**, porque é por ele que o outro lado o reconhece. Quem diz que é um recorte é o corpo do e-mail, que traz a contagem em cada linha da tabela (*"— 12 of 480 line(s)"*).
+
+> **Sem endereço no To do BACC, o e-mail simplesmente não sai** — e o card mostra isso, em vez de deixar você achando que foi enviado. É diferente dos outros dois destinos, que têm endereço padrão.
+>
+> Se alguma linha aparecer como **"Not found"**, o sistema não conseguiu localizar no arquivo as colunas de parte e contraparte — e nesse caso ele **não anexa** aquele arquivo. Mandar o arquivo cheio com o nome de um recorte seria pior. Avise o time de tecnologia.
 
 > **Nem todo card envia e-mail.** O *Daily Metric*, a *Weekly Escalation* e a *Collection* geram um **rascunho** — o navegador baixa um arquivo `.eml` que abre no Outlook já endereçado, para você revisar e enviar. O *Pending Confirmations Spreadsheet Metrics* não envia e-mail: ele **grava a planilha** "PENDING - Outstanding Confirmation OTC.xlsx" no share, todo dia útil às 10:45. Os demais mandam direto.
 
@@ -469,6 +482,31 @@ Caminho no menu: **Reconciliations**.
 2. **Pay/Rec** — confronta pagamentos e recebimentos.
 3. **FXO** — confronta a posição da CETIP com a Athena, campo a campo. A **Reference date** abre em D-1 pelo calendário ANBIMA; os cards contam Total, OK, NOK e Sem match e filtram a tabela ao clique, e a faixa de chips diz **qual campo** está divergindo.
 4. As divergências aparecem destacadas na própria tabela.
+
+---
+
+### 3.18. Quotes — consultar cotações
+
+Caminho no menu: **Apps → Quotes**.
+
+Consulta o histórico de cotações de três fontes, numa tela só:
+
+| Tipo | Fonte | O que a tabela traz |
+|---|---|---|
+| **PTAX** | Banco Central (boletim de fechamento) | Data, moeda, cotação contra o real e contra o dólar |
+| **Equities** | Yahoo Finance | Data, Adj Close, Close, High, Low, Open e Volume |
+| **Commodities** | Yahoo Finance | as mesmas colunas de Equities |
+
+1. Escolha o **Quote type**. O campo ao lado só é liberado depois disso.
+2. Escolha o **instrumento** — na PTAX é a moeda; nos outros dois é o **ativo subjacente cadastrado no Index B3** (item 3.14). Pode digitar para filtrar a lista.
+3. Ajuste **From** e **To** — a tela já abre com o último mês.
+4. Clique em **Search**. A tabela sai do mais recente para o mais antigo e aceita filtro por coluna, seleção de célula para copiar e o **Export** completo (Copy · CSV · Excel · Print · PDF).
+
+> **A lista de ativos é a do Index B3**, e só os que estão *Active*. Ativo cadastrado lá aparece aqui no mesmo dia.
+>
+> **Se aparecer "has no market symbol registered in Mapping"**, o ativo existe no Index B3 mas ninguém disse ainda qual é o símbolo dele no mercado — o código da B3 (`AAPL34`) não é o mesmo que a fonte de cotação usa (`AAPL34.SA`). Cadastre em **Data Base → Mapping → Quotes — Equities** (ou *Quotes — Commodities*) e refaça a busca; vale na hora, sem reiniciar nada. Na lista de instrumentos, o que já está cadastrado aparece como `AAPL34 → AAPL34.SA`.
+>
+> **Se a mensagem falar em proxy ou em "could not reach the source"**, a busca não conseguiu sair para a internet — ela tenta várias saídas e diz o que cada uma respondeu. Isso é rede, não cadastro: leve a mensagem inteira para o time de tecnologia.
 
 ---
 
