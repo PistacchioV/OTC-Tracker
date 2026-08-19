@@ -204,9 +204,21 @@ try:
         '<div class="col-12 col-lg-6 d-flex" data-cp-group="reporting">', 1)[0]
     check('cada card empilhado tem o seu proprio .cp-reveal',
           [b.count('class="cp-card"') for b in col.split('<div class="cp-reveal">')[1:]],
-          [1, 1, 1])
+          [1, 1])
     check('   e o espacamento vem do gap da coluna, nao de margem no card',
           'cp-card mt-3' in col, False)
+    # A coluna empilhada tem DOIS cards (Pending Spreadsheet + BACC EA), que
+    # juntos fecham na altura do Confirmations Escalation ao lado. O Manual Deals
+    # EA saiu dali para uma LINHA PROPRIA: com tres, a coluna passava da altura
+    # do vizinho e sobrava branco.
+    check('a coluna empilhada tem so os dois cards de metricas',
+          [c for c in ('pendingspreadsheet', 'baccea', 'manualdealsea')
+           if 'data-cp-card="%s"' % c in col],
+          ['pendingspreadsheet', 'baccea'])
+    # E o Manual Deals EA vem DEPOIS do Confirmations Escalation, na sua linha.
+    check('o Manual Deals EA esta numa linha propria, depois do Escalation',
+          TPL.index('data-cp-card="manualdealsea"') > TPL.index('data-cp-card="confescalation"'),
+          True)
     check('   com UM botao Run por rotina',
           ['data-mdea-run="otherpub"' in TPL, 'data-mdea-run="fwdstart"' in TPL], [True, True])
     check('   e o campo TO — BACC HUB', 'id="cp-mdea-to"' in TPL, True)

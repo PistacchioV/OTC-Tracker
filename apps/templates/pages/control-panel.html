@@ -746,63 +746,6 @@
                     </div>
                 </div>
             </div>
-
-            <!-- Manual Deals EA — duas rotinas, dois horários, dois Run.
-                 Empilhado com o BACC EA porque os dois falam com o mesmo time de
-                 métricas, e a coluna inteira fica ao lado do Confirmations
-                 Escalation, que é o card mais alto do painel.
-
-                 ⚠️ `.cp-reveal` PRÓPRIO, e não um segundo `.cp-card` dentro do
-                 anterior: o `.cp-reveal` é `display: flex` em LINHA, então dois
-                 cards ali dentro ficam LADO A LADO — foi assim que este card
-                 nasceu desalinhado ao lado do BACC EA. Quem empilha é o
-                 `flex-column` da coluna, e o espaçamento é o `gap-3` dela (por
-                 isso o card não leva margem própria). -->
-            <div class="cp-reveal">
-                <div class="cp-card" data-cp-card="manualdealsea">
-                    <div class="cp-card__icon"><i class="ti ti-hand-stop"></i></div>
-                    <h3 class="cp-card__title" data-lang="cp-r-mdea-title">Manual Deals EA</h3>
-                    <p class="cp-card__desc" data-lang="cp-r-mdea-desc">
-                        E-mails the deals closed manually so the automatic EA does not consider
-                        them and the metrics team counts them apart. Two routines, each with its
-                        own reference date: <strong>NDF Other Publisher</strong> runs at 20:00
-                        Brasília with the deals of the day itself (external counterparties only),
-                        and <strong>NDF FWD Start</strong> runs at 16:30 on each deal's Strike Set
-                        Date, carrying the Deal Id of the vanilla re-booking. With no deal to
-                        report, no e-mail is sent.
-                    </p>
-                    <div class="cp-field">
-                        <label data-lang="cp-mdea-to">TO — BACC HUB</label>
-                        <input type="text" id="cp-mdea-to" class="form-control form-control-sm"
-                               placeholder="email1@jpmorgan.com; email2@jpmorgan.com">
-                    </div>
-                    <div class="cp-field">
-                        <label data-lang="cp-mdea-cc">CC</label>
-                        <input type="text" id="cp-mdea-cc" class="form-control form-control-sm"
-                               placeholder="email1@jpmorgan.com; email2@jpmorgan.com">
-                    </div>
-                    <!-- Desfecho do último disparo de CADA rotina. Sem isto a
-                         única evidência de que rodou é uma linha de log no
-                         servidor, e "não está funcionando" fica sem resposta. -->
-                    <div id="cp-mdea-status" class="cp-card__meta d-none"
-                         style="display:block;margin-top:.35rem;line-height:1.5;"></div>
-                    <div class="cp-card__foot">
-                        <span class="cp-card__meta">
-                            <i class="ti ti-calendar-time"></i><span data-lang="cp-mdea-meta">Other Publisher 20:00 &nbsp;·&nbsp; FWD Start 16:30 BRT</span>
-                        </span>
-                        <div class="cp-btn-row">
-                            <button type="button" class="cp-run-btn" data-mdea-run="otherpub">
-                                <i class="ti ti-player-play"></i>
-                                <span data-lang="cp-mdea-run-op">Run Other Publisher</span>
-                            </button>
-                            <button type="button" class="cp-run-btn" data-mdea-run="fwdstart">
-                                <i class="ti ti-player-play"></i>
-                                <span data-lang="cp-mdea-run-fs">Run FWD Start</span>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
         </div>
 
         <div class="col-12 col-lg-6 d-flex" data-cp-group="reporting">
@@ -946,6 +889,76 @@
                     </div>
                 </div>
             </div>
+        </div>
+
+        <!-- Manual Deals EA numa LINHA PRÓPRIA, sem card à direita.
+             Ele estava empilhado com o BACC EA, e os três juntos passavam da
+             altura do Confirmations Escalation, que divide a linha — a coluna
+             esticava e sobrava branco. Com dois cards de um lado e o
+             Escalation do outro, as duas colunas fecham na mesma altura, e o
+             Manual Deals EA ganha a linha de baixo inteira para si.
+
+             `col-lg-6` e não `col-12`: a largura é a mesma dos demais cards do
+             painel. Ocupando a linha toda ele sairia com o dobro da largura de
+             todos os vizinhos. -->
+        <div class="col-12 col-lg-6 d-flex" data-cp-group="reporting">
+
+        <!-- Manual Deals EA — duas rotinas, dois horários, dois Run.
+             Empilhado com o BACC EA porque os dois falam com o mesmo time de
+             métricas, e a coluna inteira fica ao lado do Confirmations
+             Escalation, que é o card mais alto do painel.
+
+             ⚠️ `.cp-reveal` PRÓPRIO, e não um segundo `.cp-card` dentro do
+             anterior: o `.cp-reveal` é `display: flex` em LINHA, então dois
+             cards ali dentro ficam LADO A LADO — foi assim que este card
+             nasceu desalinhado ao lado do BACC EA. Quem empilha é o
+             `flex-column` da coluna, e o espaçamento é o `gap-3` dela (por
+             isso o card não leva margem própria). -->
+        <div class="cp-reveal">
+            <div class="cp-card" data-cp-card="manualdealsea">
+                <div class="cp-card__icon"><i class="ti ti-hand-stop"></i></div>
+                <h3 class="cp-card__title" data-lang="cp-r-mdea-title">Manual Deals EA</h3>
+                <p class="cp-card__desc" data-lang="cp-r-mdea-desc">
+                    E-mails the deals closed manually so the automatic EA does not consider
+                    them and the metrics team counts them apart. Two routines, each with its
+                    own reference date: <strong>NDF Other Publisher</strong> runs at 20:00
+                    Brasília with the deals of the day itself (external counterparties only),
+                    and <strong>NDF FWD Start</strong> runs at 16:30 on each deal's Strike Set
+                    Date, carrying the Deal Id of the vanilla re-booking. With no deal to
+                    report, no e-mail is sent.
+                </p>
+                <div class="cp-field">
+                    <label data-lang="cp-mdea-to">TO — BACC HUB</label>
+                    <input type="text" id="cp-mdea-to" class="form-control form-control-sm"
+                           placeholder="email1@jpmorgan.com; email2@jpmorgan.com">
+                </div>
+                <div class="cp-field">
+                    <label data-lang="cp-mdea-cc">CC</label>
+                    <input type="text" id="cp-mdea-cc" class="form-control form-control-sm"
+                           placeholder="email1@jpmorgan.com; email2@jpmorgan.com">
+                </div>
+                <!-- Desfecho do último disparo de CADA rotina. Sem isto a
+                     única evidência de que rodou é uma linha de log no
+                     servidor, e "não está funcionando" fica sem resposta. -->
+                <div id="cp-mdea-status" class="cp-card__meta d-none"
+                     style="display:block;margin-top:.35rem;line-height:1.5;"></div>
+                <div class="cp-card__foot">
+                    <span class="cp-card__meta">
+                        <i class="ti ti-calendar-time"></i><span data-lang="cp-mdea-meta">Other Publisher 20:00 &nbsp;·&nbsp; FWD Start 16:30 BRT</span>
+                    </span>
+                    <div class="cp-btn-row">
+                        <button type="button" class="cp-run-btn" data-mdea-run="otherpub">
+                            <i class="ti ti-player-play"></i>
+                            <span data-lang="cp-mdea-run-op">Run Other Publisher</span>
+                        </button>
+                        <button type="button" class="cp-run-btn" data-mdea-run="fwdstart">
+                            <i class="ti ti-player-play"></i>
+                            <span data-lang="cp-mdea-run-fs">Run FWD Start</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
         </div>
     </div>
 
