@@ -12198,3 +12198,110 @@ de ontem ficava no meio do que está aberto hoje. O desempate por `seq` vale em 
 ordenação e sempre crescente, independente do `dir` da coluna: ele é a fila de atendimento, não uma
 segunda ordenação que se inverte junto — e sem ele, chamados do mesmo status saíam na ordem em que o
 servidor os devolveu, que muda a cada carga.
+
+---
+
+## §280 — MT300 depois do primeiro run: a coluna que não fechava, Position, Fixing Date e o cadastro que se autocompleta
+
+Quatro ajustes pedidos ao ver o e-mail rodando, mais um defeito de layout que o antecedeu.
+
+**O `<div>` da COLUNA do Manual Deals EA nunca era fechado** — sobra de quando o card foi movido
+para uma linha própria. Com a coluna aberta, a coluna do MT300 entrava **aninhada** nela em vez de
+ser irmã, e no grid do Bootstrap isso põe um card embaixo do outro: o MT300 aparecia abaixo, não à
+direita. É a classe de defeito que não acusa nada — o HTML é válido, o card renderiza, só o lugar
+está errado. O saldo de `<div>` da coluna fecha em 0, e os dois cards são irmãos com o Manual Deals
+EA à esquerda e o MT300 à direita, embaixo do Confirmations Escalation.
+
+Junto, o **`CP_GROUP` do JS de acesso por card não conhecia nenhum dos dois cards novos**. Ele só é
+consultado para decidir se o CABEÇALHO da seção some quando nenhum card do grupo está visível: um
+usuário com allowlist configurada que recebesse só o `mt300` veria o card sem o "Reporting" em cima
+dele. Card novo entra ali no mesmo commit em que nasce.
+
+**Position** — coluna à esquerda de Other Quantity, com a operação por extenso do lado da NOSSA
+entidade: `JPM sells USD / buys BRL`. Quem confere lê a linha inteira sem cruzar o sinal do Quantity
+com a direção de cabeça. Os dois verbos são **sempre opostos** (comprar uma moeda do par é vender a
+outra, e escrevê-los de forma independente deixaria a linha dizer que a mesa comprou as duas), a
+entidade sai da **LE do deal** e não de um literal — a mesma operação é bookada em entidades
+diferentes, e a mensagem é confirmada por quem a bookou —, e faltando uma das moedas a célula fica
+**vazia**: frase pela metade é pior do que célula em branco.
+
+**Fixing Date** — do campo `Last Fixing Date` do New Deals. Numa média o que interessa é a **última**
+fixação, quando a taxa fecha. A coluna vai entre Booking e Settlement, na ordem **cronológica** em
+que a operação acontece, que é como quem confere lê a linha.
+
+**Números e datas** seguem a regra da casa: `Quantity` e `Other Quantity` são dinheiro e saem em duas
+casas; `Rate` é **taxa** e sai em oito, porque duas fariam dois strikes distintos aparecerem iguais
+na mensagem. As datas em `dd/mm/aaaa`, como o resto do app — a mesa lê o e-mail ao lado das telas, e
+uma segunda grafia só aqui obrigaria a traduzir de cabeça.
+
+**O cadastro `mt300` se autocompleta do Reference Data.** Escolhido qualquer um dos três — nome, SPN
+ou Tax ID — os outros dois se preenchem. É o mesmo cliente escrito de três jeitos, e digitar os três
+à mão é criar a chance de o SPN de um cliente conviver com o nome de outro: a linha casaria por um
+identificador e apareceria no e-mail com o outro. O tipo de coluna `refdata` do /mapping é genérico
+(`/api/reference-data/counterparties`), então o próximo cadastro que precise disso não reescreve
+nada.
+
+---
+
+## §281 — A opção de EQUITY acha o valor no OTM, e o Latam passa a ler o relatório mais novo
+
+Dois defeitos que se encontram no mesmo lugar — o elo de equity —, e é por isso que estão na mesma
+seção.
+
+### A opção de ação ficava sem o valor interno
+
+O Resultado Apurado da opção sai do OTM Settlements pelo **sufixo da `Combinação de operações`** da
+Live Position de Opção. A opção de **ação** não preenche esse campo. Sem sufixo não havia valor, e o
+efeito era duplo e silencioso: a linha aparecia no **Trade Level com a célula vazia** e **sumia do
+Settlement Summary**, porque `_opssum_rows` descarta quem não tem o que liquidar (`_settle_n is
+None`). Uma operação que liquida existindo numa tela e não na outra.
+
+O plano B é o **mesmo elo que o swap de equity já usava** — Operations B3 (Título) → Latam Desk
+Position (`CLEARING_TRD_ID_*`) → OTM Settlements (`270WI`/`270WC` + `Deal_Ref`) —, e ele responde por
+**duas** coisas: o valor e o **SPN**. O SPN importa tanto quanto o número: é ele que troca o apelido
+de conta da B3 (`SAFRABM`) pela razão social do cadastro, que é o nome pelo qual o Settlement Summary
+agrupa.
+
+Três detalhes que não dão erro nenhum:
+
+- **o elo vem DEPOIS do sufixo, nunca antes.** Quando o sufixo existe, é um join direto e é o mais
+  confiável dos dois; inverter a ordem faria o elo sobrescrever um casamento exato;
+- **a chave é o Título em MAIÚSCULA**, a mesma forma que o swap usa (`key = titulo.upper()`). O
+  índice é construído assim, e consultá-lo com outra grafia não casaria nada — sem erro;
+- **o elo é resolvido UMA vez por linha** e serve o valor e o SPN. Procurá-lo duas vezes abriria
+  espaço para os dois virem de trades diferentes.
+
+### O Latam Desk Position ficava preso no relatório da manhã
+
+Sintoma relatado: *"não traz as informações se atualizamos no dia; tive que deletar o JSON"*.
+
+O import lia `sorted(...)[0]` — o **primeiro em ordem alfabética**, que é o mais **antigo**. O
+relatório é reemitido no mesmo dia, e quando é, a pasta passa a ter **dois** arquivos: o consumido de
+manhã só é apagado quando alguma linha entrou, e o novo chega ao lado. O import então regravava o
+JSON do dia com a posição da manhã dizendo *"sucesso, N linhas"* — o pior tipo de falha, a que se
+reporta como êxito.
+
+O caminho do **Save Daily Settlement** era pior ainda: processava os dois na ordem crua do
+`os.listdir`, então o vencedor dependia do sistema de arquivos e os dois caminhos podiam **discordar
+sobre qual é o relatório do dia**.
+
+`_latam_pick_source` é agora o seletor único dos dois: **mtime mais recente, nome só desempata**. Os
+preteridos **ficam em disco** — apagar um arquivo que não foi lido destrói a única cópia — e voltam
+na resposta em `ignored`, que o SweetAlert do import mostra nos três idiomas. Pasta com dois
+relatórios é exatamente o estado que produziu o defeito, e ele não podia continuar invisível.
+
+**Os dois assuntos são um só na prática:** o elo lê o **último** Latam disponível, então um Latam
+parado na manhã deixa a opção de equity sem valor mesmo com o plano B no lugar. Quem investigar um
+dos dois no futuro vai passar pelo outro.
+
+De quebra, a docstring do `_latam_import` estava mentindo — dizia que a origem NÃO é apagada, e ela é
+desde que `kept`.
+
+### Um teste que apodreceu com o calendário
+
+O `check_ops_summary` estava falhando **antes** dessas mudanças (confirmado rodando o HEAD anterior
+num worktree). A seção 16 gravava o snapshot de Opção numa data **fixa**, mas
+`_ops_src_latest_path` procura o arquivo nos **10 últimos dias úteis contados de hoje**: o fixture
+saiu dessa janela sozinho quando o calendário andou, as três contagens viraram 0 e o teste passou a
+acusar um defeito que não existia. Fixture de snapshot vai no **último dia útil**; o que precisa ser
+fixo é a **data de vencimento** das linhas, que é o que o teste exercita.

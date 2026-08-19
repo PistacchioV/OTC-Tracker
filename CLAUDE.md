@@ -389,6 +389,13 @@ e um item no array `TYPES` de `apps/templates/pages/mapping.html`.
 - `upgrade` opcional converte formatos antigos na leitura; `autofill` opcional
   numa coluna `select` faz o modal preencher outra coluna a partir das linhas
   já cadastradas.
+- O tipo de coluna **`refdata`** liga o campo ao Reference Data
+  (`/api/reference-data/counterparties`): escolhido **qualquer** um dos três —
+  nome, SPN ou Tax ID —, os outros dois se preenchem. É o mesmo cliente escrito
+  de três jeitos, e digitar os três à mão é criar a chance de o SPN de um
+  conviver com o nome de outro: a linha casaria por um identificador e apareceria
+  no consumidor com o outro. O tipo é genérico, então o próximo cadastro que
+  precise disso não reescreve nada (o `mt300` é o primeiro — HANDOFF §280).
 - **`file`** opcional aponta o registro para um JSON **já existente** em vez de
   `mappings/<key>.json`. `swap-index` usa isso para editar o mesmo
   `SwapIndex.json` que a página de Index Results edita — um arquivo, dois
@@ -798,6 +805,19 @@ produto continua `SWAP` — é como a B3 registra, e é dessa linha que sai o
 Settlement B3; quem rotula é a LOB (`EQUITIES` quando não há token cadastrado).
 Partir do OTM em vez do Título criava uma **segunda linha** para o mesmo trade
 (HANDOFF §227).
+
+**O mesmo elo é o plano B da OPÇÃO de equity** (`_optadv_collect`). Ali o
+Resultado Apurado sai do OTM pelo **sufixo da `Combinação de operações`** da Live
+Position de Opção — campo que a opção de **ação** não preenche. Sem sufixo não
+havia valor, e o efeito era duplo e calado: a linha aparecia no Trade Level com a
+célula **vazia** e **sumia do Settlement Summary**, que descarta quem não tem o
+que liquidar. O elo responde por **duas** coisas — o valor e o **SPN**, e é o SPN
+que troca o `SAFRABM` da B3 pela razão social do cadastro, que é por onde o
+Summary agrupa. Três coisas que não dão erro nenhum: ele vem **depois** do sufixo
+(quando o sufixo existe é join direto, e é o mais confiável dos dois), a chave é
+o **Título em MAIÚSCULA** (a mesma forma que o swap usa — outra grafia não casa
+nada, em silêncio) e é resolvido **uma vez por linha**, senão o valor e o SPN
+podem vir de trades diferentes (HANDOFF §281).
 
 **Perna interna não gera aviso**, e a regra NÃO é "o nome começa em BANCO" —
 isso derrubaria Banco Safra, Bradesco e Santander, que são clientes.
@@ -1242,6 +1262,25 @@ delas assinarem por uma conferência que não é sua.
 que lista as colunas explicitamente — falharia com *column not found*, derrubando
 as duas telas depois de um pull. **Coluna nova em `COLUMNS` é só isso**; não
 escreva um script em `scripts/` para ela.
+
+### O relatório do dia é o MAIS RECENTE, não o primeiro em ordem alfabética
+
+O Latam Desk Position é **reemitido no mesmo dia**, e quando é, a pasta passa a
+ter dois `FbiRptLatamDeskPostion-NY-*`: o consumido de manhã só é apagado quando
+alguma linha entrou (`kept`), e o novo chega ao lado. `sorted(...)[0]` pegava o
+**mais antigo** e regravava o JSON do dia com a posição da manhã dizendo
+*"sucesso, N linhas"* — falha que se reporta como êxito. O Save Daily Settlement
+era pior: processava os dois na ordem crua do `os.listdir`, então o vencedor
+dependia do sistema de arquivos e os dois caminhos podiam **discordar sobre qual
+é o relatório do dia**.
+
+`_latam_pick_source` é o seletor único dos dois — **mtime mais recente, nome só
+desempata**. Os preteridos **ficam em disco** (apagar um arquivo que não foi lido
+destrói a única cópia) e voltam em `ignored`, que o SweetAlert do import mostra:
+pasta com dois relatórios é o estado que produz o defeito, e ele não pode ficar
+invisível. Isso alcança mais do que a tela — `_latam_equity_b3_index` lê o
+**último** Latam disponível, então um Latam parado na manhã deixa o swap **e a
+opção** de equity sem valor (HANDOFF §281).
 
 ### Outras
 
