@@ -53,6 +53,12 @@ try:
 except Exception:                                    # pragma: no cover
     duckdb = None
 
+# Locks e transações dos bancos de arquivo: lock EXCLUSIVO no arquivo para
+# escrever (vale entre processos, não só entre threads) e COMPARTILHADO para
+# ler. O `duckdb is None` acima continua sendo o teste de "a lib não está aqui";
+# estes só são usados depois dele.
+from apps.pages.database_access import duckdb_read, duckdb_write
+
 _LOG = logging.getLogger(__name__)
 
 _MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -846,10 +852,10 @@ def ensure_db(path):
     novo = not os.path.isfile(path)
     try:
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        # close() em finally: uma conexão vazada segura o lock de escrita do
-        # DuckDB até o processo morrer, e aí a tela some para TODOS.
-        con = duckdb.connect(path)
-        try:
+        # O `with` fecha a conexão e solta o lock em QUALQUER saída, inclusive na
+        # exceção: uma conexão vazada segura o lock de escrita do DuckDB até o
+        # processo morrer, e aí a tela some para TODOS.
+        with duckdb_write(path) as con:
             cols = ', '.join('"{}" VARCHAR'.format(c) for c in DB_COLUMNS)
             con.execute('CREATE TABLE IF NOT EXISTS {} ({})'.format(TABLE, cols))
             existentes = {r[1] for r in con.execute(
@@ -862,8 +868,6 @@ def ensure_db(path):
                     con.execute('ALTER TABLE {} ADD COLUMN IF NOT EXISTS "{}" VARCHAR'
                                 .format(TABLE, c))
                     _LOG.info('[manual-conf] coluna %r acrescentada a %s', c, path)
-        finally:
-            con.close()
         if novo:
             _LOG.info('[manual-conf] banco vazio criado em %s', path)
     except Exception:
@@ -876,18 +880,14 @@ def load_rows(category):
     if duckdb is None or not os.path.isfile(path):
         return []
     try:
-        con = duckdb.connect(path, read_only=True)
-    except Exception:
-        _LOG.warning('[manual-conf] não consegui abrir %s', path)
-        return []
-    try:
-        cols = ', '.join('"{}"'.format(c) for c in DB_COLUMNS)
-        raw = con.execute('SELECT {} FROM {}'.format(cols, TABLE)).fetchall()
+        # `duckdb_read`: lock COMPARTILHADO (as leituras da tela não se excluem
+        # entre si) e fechamento garantido na saída do bloco.
+        with duckdb_read(path) as con:
+            cols = ', '.join('"{}"'.format(c) for c in DB_COLUMNS)
+            raw = con.execute('SELECT {} FROM {}'.format(cols, TABLE)).fetchall()
     except Exception:
         _LOG.warning('[manual-conf] consulta falhou em %s:\n%s', path, traceback.format_exc())
         return []
-    finally:
-        con.close()
     rules = validation_rules()
     out = []
     for r in raw:
@@ -908,31 +908,28 @@ def load_all():
 
 
 def _write_exec(category, ops):
-    """Roda (sql, params) numa conexão de escrita, com retentativa: as leituras
-    read-only da tela são rápidas mas frequentes, e o DuckDB recusa a escrita
-    enquanto uma delas está aberta."""
+    """Roda (sql, params) numa transação de escrita só.
+
+    O laço de retentativa que estava escrito aqui passou a ser do `duckdb_write`
+    — as leituras read-only da tela são rápidas mas frequentes, e o DuckDB recusa
+    a escrita enquanto uma delas está aberta; quem espera e volta a tentar agora
+    é o contexto, num lugar só e para todos os bancos.
+
+    E é UMA transação para o lote inteiro: metade das operações não fica gravada
+    quando a outra metade falha."""
     if duckdb is None:
         return False
     path = db_path(category)
     ensure_db(path)
-    for attempt in range(6):
-        try:
-            con = duckdb.connect(path)
-        except Exception:
-            time.sleep(0.05 * (2 ** attempt))
-            continue
-        try:
+    try:
+        with duckdb_write(path) as con:
             for sql, params in ops:
                 con.execute(sql, params)
-            return True
-        except Exception:
-            _LOG.warning('[manual-conf] escrita falhou em %s:\n%s', category,
-                         traceback.format_exc())
-            return False
-        finally:
-            con.close()
-    _LOG.warning('[manual-conf] desisti da escrita (banco ocupado) em %s', category)
-    return False
+        return True
+    except Exception:
+        _LOG.warning('[manual-conf] escrita falhou em %s:\n%s', category,
+                     traceback.format_exc())
+        return False
 
 
 def _delete_key(category, key):

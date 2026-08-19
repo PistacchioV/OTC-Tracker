@@ -9,11 +9,15 @@ Modos de execução:
 
 import logging
 import os
-import sqlite3
 import tempfile
 from datetime import datetime, date as _date, timedelta
 
 import pandas as pd
+
+# Locks e transações dos bancos de arquivo. O `sqlite_write` abre sob lock
+# EXCLUSIVO de arquivo (vale entre processos, não só entre threads) e comita na
+# saída do bloco; o `sqlite_read` usa lock compartilhado e abre read-only.
+from apps.pages.database_access import sqlite_read, sqlite_write
 
 try:
     from fuzzywuzzy import fuzz as _fuzz
@@ -296,10 +300,12 @@ def _has_required_missing(row):
 
 def _compare_with_db(df, db_path):
     try:
-        conn = sqlite3.connect(db_path)
-        db_df = pd.read_sql('SELECT * FROM comitentes', conn)
-        conn.close()
+        with sqlite_read(db_path) as conn:
+            db_df = pd.read_sql('SELECT * FROM comitentes', conn)
     except Exception:
+        # Banco ainda inexistente (primeira execução) ou ilegível: comparar
+        # contra um DataFrame vazio faz TODA linha nascer 'New', que é a
+        # resposta certa quando não há histórico com que comparar.
         db_df = pd.DataFrame(columns=df.columns)
     if 'index' in db_df.columns:
         db_df = db_df.drop(columns=['index'])
@@ -503,10 +509,28 @@ def run_reconciliation(file_b3_cgd, file_dcad, file_party, recon_date_str=None):
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     df = _compare_with_db(df, DB_PATH)
 
-    # Salva no SQLite
-    conn = sqlite3.connect(DB_PATH)
-    df.to_sql('comitentes', conn, if_exists='replace', index=False)
-    conn.close()
+    # Salva no SQLite, numa transação só.
+    #
+    # ⚠️ SQL explícito no lugar do `df.to_sql`, e a razão não é estilo: o
+    # `to_sql` do pandas COMITA por dentro. Dentro do `sqlite_write` — que abre
+    # a transação e comita na saída — o commit do pandas fecha a transação antes
+    # da hora, o nosso `COMMIT` encontra "no transaction is active" e o contexto
+    # levanta `TransactionOutcomeUnknown`. Ou seja: TODA gravação bem-sucedida
+    # devolveria à tela o alarme mais grave da rotina ("o resultado da gravação
+    # não pôde ser confirmado, não execute novamente"), num run que funcionou.
+    #
+    # As colunas são criadas SEM tipo declarado de propósito: no SQLite isso
+    # guarda cada valor como ele vem, e o round-trip (int volta int, float volta
+    # float) fica igual ao que o `to_sql` produzia.
+    cols = list(df.columns)
+    with sqlite_write(DB_PATH) as conn:
+        conn.execute('DROP TABLE IF EXISTS comitentes')
+        conn.execute('CREATE TABLE comitentes ({})'.format(
+            ', '.join('"{}"'.format(c) for c in cols)))
+        if len(df):
+            conn.executemany(
+                'INSERT INTO comitentes VALUES ({})'.format(', '.join('?' * len(cols))),
+                df.where(pd.notna(df), None).values.tolist())
 
     result = _build_response(df)
 
@@ -524,10 +548,12 @@ def load_from_db():
     if not os.path.exists(DB_PATH):
         return {'data': [], 'counts': {'total':0,'new':0,'check':0,'ok':0,'amend':0}}
     try:
-        conn = sqlite3.connect(DB_PATH)
-        conn.row_factory = sqlite3.Row
-        rows = [dict(r) for r in conn.execute('SELECT * FROM comitentes').fetchall()]
-        conn.close()
+        with sqlite_read(DB_PATH) as conn:
+            # `pd.read_sql` traria NaN para nulo e obrigaria a desfazer depois;
+            # o cursor cru com nomes de coluna é o que a função já esperava.
+            cur = conn.execute('SELECT * FROM comitentes')
+            names = [d[0] for d in cur.description]
+            rows = [dict(zip(names, r)) for r in cur.fetchall()]
         for r in rows:
             for k, v in r.items():
                 if v is None:
