@@ -130,8 +130,11 @@ def _legacy_generic_line(deal, is_fwd):
     fix_end   = _d8(deal.get('LastFixingDate', ''))
     asian_fix  = bool(fix_start and fix_end and fix_start != fix_end)
     fix_single = '' if asian_fix else (fix_end or fix_start)
-    if not is_fwd:
-        fix_single = ''
+    # A Data de Fixing do Ativo Subjacente sai em BRANCO nas DUAS páginas: o
+    # Other Publisher sempre foi assim e o FWD Start passou a Blank em §249,
+    # pelo cadastro (Source Fixed com valor vazio). O gerador continua
+    # calculando `fix_single` e entregando ao motor — o override é que o ignora.
+    fix_single = ''
     tipo_media = 'A' if asian_fix else 'N'
 
     if is_fwd:
@@ -146,10 +149,15 @@ def _legacy_generic_line(deal, is_fwd):
         forma_atu    = 'V'
         valor_perc   = _znum(_s(deal.get('StrikeSetOffset', '')) or '0', 4, 8)
     else:
+        # A inversão da moeda fraca é feita UMA vez, na importação: aqui só
+        # entram as casas do cadastro, pela perna fraca do par. O golden é da
+        # montagem da linha, não da regra de cotação — quando a regra muda, ele
+        # acompanha (ver check_weak_ccy_rate.py).
         rate_raw = R._fxo_num(_s(deal.get('Rate', '')))
         _inv = R._mapping_ccy_maps()[2]
-        if rate_raw and qty_ccy in _inv:
-            rate_val = round(1.0 / rate_raw, _inv[qty_ccy])
+        _leg = R._ndf_weak_leg(qty_ccy, oth_ccy)
+        if rate_raw and _leg in _inv:
+            rate_val = round(rate_raw, _inv[_leg])
         else:
             rate_val = rate_raw
         taxa_termo   = _znum(rate_val if rate_val is not None else '0', 12, 8)

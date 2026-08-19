@@ -30,6 +30,13 @@ from flask import (
 )
 from jinja2 import TemplateNotFound
 
+# Caminhos de infraestrutura (banco de usuários e raiz do share) saem do
+# `Config`, que os resolve para ABSOLUTOS e recusa um valor relativo. Era aqui
+# que eles nasciam: o `I:\...` cru é um caminho relativo em qualquer coisa que
+# não seja Windows, e o `os.makedirs` do dia a dia criava a árvore inteira
+# dentro do diretório de trabalho — foi assim que apareceram as pastas
+# `I:\Confirmation\...` na raiz do repositório.
+from apps.config import Config
 from apps.pages import blueprint
 # Porte Python do parser de booking recap (o mesmo que otc-fileupload.js faz no
 # navegador) — usado pela varredura agendada do box. Sem dependência externa.
@@ -514,7 +521,7 @@ def enforce_control_panel_cards():
 # CONFIGURAÇÕES
 # ==============================================================================
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "..", "static", "data", "db", "Users_OTCTracker.db")
+DB_PATH = Config.DATABASE_PATH
 CACHE_BASE_DIR = os.path.normpath(os.path.join(
     os.path.dirname(__file__), "..", "static", "data", "cache", "new deals", "Option", "Commodities"
 ))
@@ -523,14 +530,17 @@ OPT_FXO_CACHE_DIR = os.path.normpath(os.path.join(
     os.path.dirname(__file__), "..", "static", "data", "cache", "new deals", "Option", "FXO"
 ))
 SHARED_MAILBOX = "otc.tracker@jpmorgan.com"
-RETURN_PATH     = os.getenv('RETURN_PATH',     r'I:\Confirmation\Derivativos\OTC Tracker\Batch Conecta\Return')
-CONECTA_NEW_PATH = os.getenv('CONECTA_NEW_PATH', r'I:\Confirmation\Derivativos\OTC Tracker\Batch Conecta\New')
+RETURN_PATH = os.getenv('RETURN_PATH', os.path.join(
+    Config.SHARED_DRIVE_ROOT, 'Confirmation', 'Derivativos', 'OTC Tracker', 'Batch Conecta', 'Return'))
+CONECTA_NEW_PATH = os.getenv('CONECTA_NEW_PATH', os.path.join(
+    Config.SHARED_DRIVE_ROOT, 'Confirmation', 'Derivativos', 'OTC Tracker', 'Batch Conecta', 'New'))
 # Electronic Inventory: one folder per counterparty with Confirmations /
 # Transactional / SSI subfolders. Created here on Reference Data checker approval
 # and in bulk by scripts/create_counterparty_folders.py (kept in sync).
 ELECTRONIC_INVENTORY_ROOT = os.getenv(
     'ELECTRONIC_INVENTORY_ROOT',
-    r'I:\Confirmation\Derivativos\OTC Tracker\Electronic Inventory')
+    os.path.join(Config.SHARED_DRIVE_ROOT, 'Confirmation', 'Derivativos', 'OTC Tracker',
+                 'Electronic Inventory'))
 EI_SUBFOLDERS = ('Confirmations', 'Transactional', 'SSI')
 _EI_ILLEGAL = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 
@@ -2483,10 +2493,12 @@ def control_panel():
 #  (both keyed on the reference date; the file date in the rename still comes
 #   from the source filename via Substring)
 # ----------------------------------------------------------------------------
-CETIP_SOURCE_ROOT = os.getenv('CETIP_SOURCE_ROOT',
-                              r'I:\Confirmation\Derivativos\OTC Tracker\Alteryx\Posição B3\ARQUIVOS CETIP')
-CETIP_DEST_ROOT   = os.getenv('CETIP_DEST_ROOT',
-                              r'I:\Confirmation\Derivativos\OTC Tracker\CETIP Files\Position Files')
+CETIP_SOURCE_ROOT = os.getenv('CETIP_SOURCE_ROOT', os.path.join(
+    Config.SHARED_DRIVE_ROOT, 'Confirmation', 'Derivativos', 'OTC Tracker', 'Alteryx',
+    'Posição B3', 'ARQUIVOS CETIP'))
+CETIP_DEST_ROOT   = os.getenv('CETIP_DEST_ROOT', os.path.join(
+    Config.SHARED_DRIVE_ROOT, 'Confirmation', 'Derivativos', 'OTC Tracker', 'CETIP Files',
+    'Position Files'))
 # Use the PRIMARY SMTP address (jpmorgan.com) — the jpmchase.com one is a
 # secondary alias and the relay was not delivering to it.
 CETIP_OTC_OPS_EMAIL       = os.getenv('CETIP_OTC_OPS_EMAIL',       'brazil.otc.ops@jpmorgan.com')
@@ -2570,8 +2582,10 @@ _ensure_cetip_roots()
 
 # Network shares for the secondary (flat) copies of two types, mirroring the
 # Alteryx second outputs (commented date subfolder → flat folder).
-CETIP_OPTIONS_SHARE = os.getenv('CETIP_OPTIONS_SHARE', r'I:\CETIP_OPTIONS')
-CETIP_NDF_SHARE     = os.getenv('CETIP_NDF_SHARE',     r'I:\CETIP_NDF')
+CETIP_OPTIONS_SHARE = os.getenv('CETIP_OPTIONS_SHARE',
+                                os.path.join(Config.SHARED_DRIVE_ROOT, 'CETIP_OPTIONS'))
+CETIP_NDF_SHARE     = os.getenv('CETIP_NDF_SHARE',
+                                os.path.join(Config.SHARED_DRIVE_ROOT, 'CETIP_NDF'))
 
 # ── Quais arquivos a rotina Save CETIP Files considera ────────────────────────
 #
@@ -2925,8 +2939,9 @@ ACCRUAL_JSON_ROOT = os.path.join(os.path.dirname(__file__), '..', 'static', 'dat
 # Network folder the VCP / CEM / EDG / HYB source files are dropped into, per run.
 # Layout: ACCRUAL_SOURCE_ROOT\{YYYY}\{mm. Month}\{DD} (run = last ANBIMA bizday of the
 # month). Only reachable on the JPM environment; override with the env var off-site.
-ACCRUAL_SOURCE_ROOT = os.getenv('ACCRUAL_SOURCE_ROOT',
-                                r'I:\Confirmation\Derivativos\OTC Tracker\Regulatory\Accrual')
+ACCRUAL_SOURCE_ROOT = os.getenv('ACCRUAL_SOURCE_ROOT', os.path.join(
+    Config.SHARED_DRIVE_ROOT, 'Confirmation', 'Derivativos', 'OTC Tracker', 'Regulatory',
+    'Accrual'))
 
 # Standard column headers for the HEADERLESS SWAP-family files (';'-delimited),
 # in file order. These are the authoritative field names (the SWAP files ship with
@@ -5415,8 +5430,8 @@ def _import_client_contacts(filename, raw_bytes):
 
 # Network folder scanned for Daily Settlement source files when the dropzone is
 # left empty (see api_cp_daily_settlement_save).
-SETTLEMENTS_ROOT = os.getenv('SETTLEMENTS_ROOT',
-                             r'I:\Confirmation\Derivativos\OTC Tracker\Settlements')
+SETTLEMENTS_ROOT = os.getenv('SETTLEMENTS_ROOT', os.path.join(
+    Config.SHARED_DRIVE_ROOT, 'Confirmation', 'Derivativos', 'OTC Tracker', 'Settlements'))
 
 # Text-import specs translated from the VBA "ImportarTexto" (OpenText, TAB
 # delimited) — one per source file, EXCLUDING Settlement OTM (done on its own
@@ -8154,8 +8169,8 @@ def api_swapprem_data():
 #    static/data/cache/daily settlement/YYYY/MM/DD/otm-settlement_YYYYMMDD.json
 #  (today's date), deleting the consumed source file. Widgets' counting logic
 #  (RATES/EQUITIES/COMMODITIES) is pending (user will supply).
-OTM_SOURCE_ROOT = os.getenv('OTM_SOURCE_ROOT',
-                            r'I:\Confirmation\Derivativos\OTC Tracker\Settlement\OTM')
+OTM_SOURCE_ROOT = os.getenv('OTM_SOURCE_ROOT', os.path.join(
+    Config.SHARED_DRIVE_ROOT, 'Confirmation', 'Derivativos', 'OTC Tracker', 'Settlement', 'OTM'))
 OTM_JSON_ROOT = os.path.join(os.path.dirname(__file__), '..', 'static', 'data', 'cache', 'daily settlement')
 _OTM_COLUMNS = [
     'Trade Id', 'Currency', 'Amount', 'Value Date', 'Direction', 'Cpty SPN', 'Cpty Name',
@@ -15058,8 +15073,8 @@ def api_ndf_summary_ted_email():
 #  Disk : MTM_JSON_ROOT/YYYY/MM/DD/mtm_swap_YYYYMMDD.json
 #  Source folder: MTM_SOURCE_ROOT\YYYY\mm. Month\DD
 # ============================================================================
-MTM_SOURCE_ROOT = os.getenv('MTM_SOURCE_ROOT',
-                            r'I:\Confirmation\Derivativos\OTC Tracker\Regulatory\MTM')
+MTM_SOURCE_ROOT = os.getenv('MTM_SOURCE_ROOT', os.path.join(
+    Config.SHARED_DRIVE_ROOT, 'Confirmation', 'Derivativos', 'OTC Tracker', 'Regulatory', 'MTM'))
 MTM_JSON_ROOT = os.path.join(os.path.dirname(__file__), '..', 'static', 'data', 'cache', 'mtm')
 
 _MTM_ACCOUNT      = '73760009'               # col D house account (73760.00-9), digits only
@@ -21669,6 +21684,27 @@ def _mapping_ccy_maps():
     return ath, weak, inv
 
 
+def _ndf_weak_leg(qty_ccy, other_ccy):
+    """A moeda FRACA do par, quando existe uma — é ela que manda inverter o
+    strike, e é ela que diz com quantas casas o 1/taxa vai para o arquivo.
+
+    A convenção é do PAR, não da COLUNA. A API manda o strike da moeda fraca
+    como moeda/BRL (3,33 MXN por real) e a aplicação inteira trabalha com
+    R$/moeda — e qual das duas pernas carrega o notional depende de como a mesa
+    bookou, não da moeda. Testar só a `Other Quantity Units` deixava passar sem
+    inverter justamente a operação cotada NA moeda fraca: o BRL/CNH de
+    19/08/2026 saiu com 1,29567245 no lugar de 0,77179965, e com ele o
+    contravalor do MT300 e a taxa do arquivo Intrag, que leem o Rate como
+    R$/moeda.
+
+    Par com as DUAS pernas fracas não tem BRL para a convenção apontar — a
+    inversão seria um chute, e a linha fica como a API mandou."""
+    weak = _mapping_ccy_maps()[1]
+    pernas = [c for c in (str(qty_ccy or '').strip().upper(),
+                          str(other_ccy or '').strip().upper()) if c in weak]
+    return pernas[0] if len(pernas) == 1 else None
+
+
 def _ndf_le_from_location(loc):
     """Settlement Location da API → Legal Entity da página (mapping le-accronym).
     None quando não há linha cadastrada para aquela location."""
@@ -22426,9 +22462,10 @@ def _ndf_deal_from_api(rec, sid, refmap_acr, today_dmy, refmap_spn=None):
     # Moedas fracas cotam invertido vs BRL: a API manda o strike como
     # Moeda/BRL (ex.: 3,33 MXN por BRL) — a página e os arquivos (Conecta,
     # Intrag) trabalham com BRL por unidade da moeda (0,30...), então o Rate
-    # é gravado já invertido quando a perna cotada é uma moeda fraca (flag
-    # Weak Ccy da aba Currency Codes na tela Mapping).
-    if strike_v and other_ccy in _mapping_ccy_maps()[1]:
+    # é gravado já invertido quando o PAR tem uma moeda fraca (flag Weak Ccy
+    # do cadastro Currency Base), em qualquer das duas pernas — ver
+    # `_ndf_weak_leg`.
+    if strike_v and _ndf_weak_leg(qty_ccy, other_ccy):
         strike_v = 1.0 / strike_v
     instr     = str(get('INSTRUMENT TYPE') or '').strip()
     publisher = str(get('PUBLISHER') or '').strip()
@@ -23248,9 +23285,10 @@ INTRAG_SWAP_CACHE_DIR = os.path.normpath(os.path.join(
     os.path.dirname(__file__), "..", "static", "data", "cache", "new deals", "Intrag", "Swap"
 ))
 
-# Network share where generated Intrag NDF .txt files are written. Hardcoded
-# Windows path for the JPM machine (mirrors DB_PATH) — change per environment.
-INTRAG_NDF_SEND_DIR = r"I:\Confirmation\Derivativos\OTC Tracker\Intrag"
+# Network share where generated Intrag NDF .txt files are written; pende da
+# raiz do share (Config.SHARED_DRIVE_ROOT), como os demais destinos.
+INTRAG_NDF_SEND_DIR = os.path.join(
+    Config.SHARED_DRIVE_ROOT, 'Confirmation', 'Derivativos', 'OTC Tracker', 'Intrag')
 
 # English month names for the "mm. Mmmm" folder (e.g. "06. June") — fixed list
 # so the folder name never depends on the server locale.
@@ -30357,8 +30395,8 @@ except Exception:
 # branco de propósito: o cabeçalho preservado é o que deixa quem consome a
 # planilha continuar achando as colunas no lugar.
 # ──────────────────────────────────────────────────────────────────────────
-_PCX_DIR = os.getenv('PCX_SPREADSHEET_DIR',
-                     r'I:\Confirmation\Derivativos\Movimento\Pending Confirmation')
+_PCX_DIR = os.getenv('PCX_SPREADSHEET_DIR', os.path.join(
+    Config.SHARED_DRIVE_ROOT, 'Confirmation', 'Derivativos', 'Movimento', 'Pending Confirmation'))
 _PCX_FILENAME = 'PENDING - Outstanding Confirmation OTC.xlsx'
 _PCX_TIME = os.getenv('PCX_SPREADSHEET_TIME', '10:45')      # BRT (= 19:15 IST)
 _PCX_CLAIM_FILE = os.path.join(_DAILY_METRIC_DIR, 'pcx_spreadsheet_sent.json')
@@ -33535,12 +33573,21 @@ def _generic_ndf_ter_line(deal, is_fwd):
         data_aval    = ''
         valor_perc   = _znum(_s(deal.get('StrikeSetOffset', '')) or '0', 4, 8)
     else:
-        # Weak currencies quote inverted vs BRL: 1/rate arredondado pelas
-        # casas da aba Currency Codes (Inverse Decimals) da tela Mapping.
+        # O campo é a "Taxa a Termo (R$/Moeda)" e o Rate do deal JÁ está nessa
+        # convenção — a inversão da moeda fraca é feita UMA vez, na importação
+        # (`_ndf_weak_leg`). Aqui só entram as casas do cadastro (Inverse
+        # Decimals), que é a precisão com que o 1/taxa vai para a B3.
+        #
+        # Este bloco invertia de novo, e por QUANTITY CURRENCY: como a
+        # importação olhava a outra perna, as duas condições eram
+        # complementares e o arquivo saía certo por compensação — mas a coluna
+        # Rate da tela, o contravalor do MT300 e a taxa do Intrag ficavam com o
+        # valor cru sempre que a moeda fraca era a do notional.
         rate_raw = _fxo_num(_s(deal.get('Rate', '')))
         _inv = _mapping_ccy_maps()[2]
-        if rate_raw and qty_ccy in _inv:
-            rate_val = round(1.0 / rate_raw, _inv[qty_ccy])
+        _leg = _ndf_weak_leg(qty_ccy, oth_ccy)
+        if rate_raw and _leg in _inv:
+            rate_val = round(rate_raw, _inv[_leg])
         else:
             rate_val = rate_raw
         taxa_termo   = _znum(rate_val if rate_val is not None else '0', 12, 8)

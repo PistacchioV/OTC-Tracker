@@ -4085,14 +4085,34 @@ $(document).ready(function() {
         (d || []).forEach(function(x){ var k = (x && x.date) || x; if (k) _ANBIMA_HOLS[k] = true; });
     }).catch(function(){});
     var _MOEDA_CODES = {};
+    /* Casas do 1/taxa por moeda fraca (Weak Ccy + Inverse Decimals do mesmo
+       cadastro). Nasce com os valores históricos porque o fetch é assíncrono e
+       o preview pode ser montado antes dele voltar — cadastro que responde
+       substitui a lista inteira, moeda fraca nova inclusive. */
+    var _INV_DEC = { CNH: 4, MXN: 4, COP: 6, PEN: 4, CLP: 6 };
     fetch('/static/data/mappings/BaseMoeda.json').then(function(r){ return r.json(); }).then(function(d){
+        var inv = {}, achou = false;
         (d || []).forEach(function(x){
             var s = String(x['SIMBOLO'] || '').trim().toUpperCase();
             var cd = String(x['CODIGO DE CADASTRO'] || '').trim();
             if (s && cd && !_MOEDA_CODES[s]) _MOEDA_CODES[s] = cd;
+            var fraca = ['YES','Y','SIM','S','TRUE','1']
+                .indexOf(String(x['WEAK'] || '').trim().toUpperCase()) !== -1;
+            var dec = String(x['INV DECIMALS'] || '').trim();
+            if (s && fraca && /^\d+$/.test(dec)) { inv[s] = parseInt(dec, 10); achou = true; }
         });
+        if (achou) _INV_DEC = inv;
     }).catch(function(){});
     function _moedaCode(iso) { return _MOEDA_CODES[String(iso || '').trim().toUpperCase()] || ''; }
+    /* Casas da perna FRACA do par — null quando não há uma só (nenhuma fraca,
+       ou as duas, caso em que não há BRL para a convenção apontar). É o espelho
+       do `_ndf_weak_leg` do servidor. */
+    function _invDecimals(qtyCcy, othCcy) {
+        var pernas = [String(qtyCcy || '').trim().toUpperCase(),
+                      String(othCcy || '').trim().toUpperCase()]
+            .filter(function(c){ return _INV_DEC[c] !== undefined; });
+        return pernas.length === 1 ? _INV_DEC[pernas[0]] : null;
+    }
     function _isAnbimaBiz(d) {
         var dow = d.getDay();
         return dow !== 0 && dow !== 6 && !_ANBIMA_HOLS[_bizToYMDDash(d)];
@@ -4329,11 +4349,14 @@ $(document).ready(function() {
         var _diff = _bizDiffX(deal.LastFixingDate || '', deal.SettlementDate || '');
         // Publisher → códigos B3 e Fonte de Informação (mapping publisher-ndf).
         var _pub = _pubRow(deal.Publisher);
-        var _qc = String(deal.QuantityCurrency || '').toUpperCase();
         var _rateN = parseFloat(String(deal.Rate || '').replace(/,/g, ''));
-        var _INV = { CNH: 4, MXN: 4, COP: 6, PEN: 4, CLP: 6 };  // moedas fracas → 1/taxa
-        var _rateV = (!isNaN(_rateN) && _rateN && _INV[_qc] !== undefined)
-            ? (Math.round((1 / _rateN) * Math.pow(10, _INV[_qc])) / Math.pow(10, _INV[_qc]))
+        /* O Rate do deal já é R$/moeda — a inversão da moeda fraca acontece uma
+           vez só, na importação. Aqui entram as CASAS do cadastro (Inverse
+           Decimals), pela perna fraca do par, seja ela a do notional ou a
+           outra. */
+        var _dec = _invDecimals(deal.QuantityCurrency, deal.OtherQuantityCurrency);
+        var _rateV = (!isNaN(_rateN) && _rateN && _dec !== null)
+            ? (Math.round(_rateN * Math.pow(10, _dec)) / Math.pow(10, _dec))
             : _rateN;
         f[10] = '2';                                    // Classe do Ativo (arquivo: 19 espaços + 2)
         f[16] = '';                                     // Código do Ativo (arquivo: 10 espaços)

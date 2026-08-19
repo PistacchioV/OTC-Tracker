@@ -12305,3 +12305,67 @@ num worktree). A seção 16 gravava o snapshot de Opção numa data **fixa**, ma
 saiu dessa janela sozinho quando o calendário andou, as três contagens viraram 0 e o teste passou a
 acusar um defeito que não existia. Fixture de snapshot vai no **último dia útil**; o que precisa ser
 fixo é a **data de vencimento** das linhas, que é o que o teste exercita.
+
+## §282 — Moeda fraca: a inversão do strike é do PAR, não da coluna
+
+"Em New Deals › Other Publisher NDF, a moeda está cadastrada como weak currency e o strike não está
+sendo invertido." O BRL/CNH de 19/08/2026 saiu com **1,29567245** na coluna Rate, quando o cadastro
+manda mostrar **0,77179965** — a API entrega o strike da moeda fraca como *moeda/BRL* (1,2956 CNH por
+real) e a aplicação inteira trabalha com **R$/moeda**.
+
+### Duas regras complementares, e o arquivo saía certo por compensação
+
+A inversão existia em DOIS lugares, cada um olhando uma perna diferente:
+
+| Onde | Condição | Efeito |
+|---|---|---|
+| `_ndf_deal_from_api` (importação) | `Other Quantity Units` é fraca | grava `Rate = 1/strike` |
+| `_generic_ndf_ter_line` (arquivo TER) | `Quantity Currency` é fraca | escreve `1/Rate` arredondado |
+
+As duas condições são **mutuamente exclusivas** enquanto uma das pernas for BRL, então o arquivo
+Conecta sempre saiu com a Taxa a Termo certa — por compensação, não por acerto. O que ficava errado
+era tudo que lê o `Rate` gravado, no arranjo em que o **notional está na moeda fraca**:
+
+- a **coluna Rate da tela**, que é o que o usuário viu;
+- o **contravalor do MT300** (`other = qty × rate`): 35.000.000 × 1,2956 dava 45,3 milhões onde a
+  própria API declara `Other Quantity = 27.013.000` — que é 35.000.000 × 0,7718;
+- a **taxa do arquivo Intrag**, cujo comentário já dizia "taxa (R$/moeda)" e dividia o notional por
+  ela;
+- o **Strike gravado do FWD Start**, que segue a convenção do Rate por construção.
+
+### A pergunta certa é do par
+
+`_ndf_weak_leg(qty_ccy, other_ccy)` devolve a moeda **fraca do par**, esteja ela em qualquer das duas
+colunas — porque qual perna carrega o notional depende de como a mesa bookou, não da moeda. Com ele:
+
+- a **importação** inverte uma vez, e o `Rate` gravado é sempre R$/moeda;
+- o **arquivo TER** deixou de inverter: só arredonda pelas casas do cadastro (`INV DECIMALS`), que é
+  a precisão com que o 1/taxa vai para a B3;
+- o **preview do duplo clique** faz o mesmo, e perdeu o `_INV = { CNH: 4, MXN: 4, … }` fixo no
+  template — as casas passam a sair do mesmo `BaseMoeda.json` que a página já busca para os códigos
+  de moeda (com os literais antigos de fallback enquanto o fetch não volta).
+
+**Par com as DUAS pernas fracas devolve `None`**: sem BRL não há convenção para apontar, e inverter
+seria um chute.
+
+### Duas consequências no deploy
+
+1. **Arredondamento onde não havia.** No arranjo com o notional em BRL, o arquivo TER escrevia a taxa
+   já invertida com 8 casas (a condição do `qty_ccy` não casava) e agora escreve com as 4/6 do
+   cadastro. É a mesma precisão que o outro arranjo do mesmo par sempre teve — a coluna se chama
+   *Inverse Decimals* justamente por isso.
+2. **Os deals já gravados se corrigem no pull seguinte.** O `Rate` novo difere do gravado, então
+   `_nd_api_amend` aplica o valor e devolve a linha para **Amend**, com a célula realçada. Vale para
+   as operações do dia, que é o que a API devolve; operação de dia anterior fica com o valor cru no
+   arquivo-dia e, se alguém regerar o Conecta dela, sai sem a inversão — o TER não compensa mais.
+
+`check_weak_ccy_rate.py` cobre a regra nos dois arranjos (perna fraca achada nas duas posições, par
+sem moeda fraca, par com as duas fracas, o TER sem a segunda inversão e o contravalor do MT300
+fechando com o número da própria API).
+
+### Mais um golden que apodreceu
+
+O `check_fi_ter` falhava **antes** dessa mudança (confirmado no HEAD anterior, num worktree), nas
+duas linhas de FWD Start sem janela de fixing: o golden legado ainda mandava a **Data de Fixing do
+Ativo Subjacente**, que o §249 passou a Blank pelo cadastro. Golden de montagem de linha acompanha a
+mudança de cadastro — quem não acompanha vira ruído vermelho que ninguém lê.

@@ -231,8 +231,12 @@ Live Positions, o Track Confirmations e as três Recons).
 São dois bancos:
 
 - **DuckDB** (`Users_OTCTracker.db`) — tabelas `users` e `verification_codes`.
-  `DB_PATH` é **relativo**, resolvido a partir do diretório do módulo
-  (`apps/static/data/db/`), então funciona em qualquer máquina.
+  `DB_PATH` é o `Config.DATABASE_PATH`, resolvido a partir do diretório do
+  pacote (`apps/static/data/db/`) e **normalizado para absoluto**, então
+  funciona em qualquer máquina e não depende do diretório de trabalho. Mover o
+  banco para fora da aplicação é definir `DATABASE_PATH` no `.env` — caminho
+  relativo é **recusado na subida** (`must be an absolute path`), em vez de
+  virar uma árvore criada por engano dentro do cwd.
 - **SQLite** (`apps/db.sqlite3`) — Flask-SQLAlchemy. Hoje **não é usado** pela
   lógica da aplicação; `configure_database()` chama `db.create_all()` **uma vez
   na subida**, não a cada request.
@@ -1282,6 +1286,24 @@ invisível. Isso alcança mais do que a tela — `_latam_equity_b3_index` lê o
 **último** Latam disponível, então um Latam parado na manhã deixa o swap **e a
 opção** de equity sem valor (HANDOFF §281).
 
+### A inversão da moeda fraca é do PAR, não da coluna
+
+A API manda o strike da moeda fraca como **moeda/BRL** (3,33 MXN por real;
+1,2956 CNH por real) e a aplicação inteira trabalha com **R$/moeda**. Quem
+decide a inversão é `_ndf_weak_leg(qty_ccy, other_ccy)`: a moeda fraca **em
+qualquer das duas pernas**, porque qual delas carrega o notional depende de como
+a mesa bookou, não da moeda. Par com as **duas** pernas fracas devolve `None` —
+sem BRL não há convenção para apontar, e inverter seria chute.
+
+A inversão acontece **uma vez, na importação**; daí para a frente o `Rate`
+gravado é R$/moeda e ninguém mais mexe nele. O arquivo TER só **arredonda** pelas
+casas do cadastro (`INV DECIMALS`). Antes eram duas regras olhando pernas
+opostas — a importação a `Other Quantity Units`, o TER a `Quantity Currency` —, e
+como as condições são complementares o arquivo saía certo **por compensação**,
+enquanto a coluna Rate da tela, o contravalor do MT300 (`qty × rate`) e a taxa do
+Intrag ficavam com o valor cru sempre que o notional estava na moeda fraca
+(HANDOFF §282).
+
 ### Outras
 
 - **O Strike do NDF FWD Start não derruba um Success para Amend.** O que a B3
@@ -1458,6 +1480,15 @@ opção** de equity sem valor (HANDOFF §281).
 - **macOS: use `flask run --port=5005`.** A porta 5000 é do AirPlay Receiver e
   devolve 403 "AirTunes". O venv aqui é Python 3.12 (no diretório `.venv311`);
   `duckdb` e `flask-minify` são obrigatórios (ambos no `requirements.txt`).
+- **Fora do Windows, `OTC_SHARED_DRIVE_ROOT` é obrigatória.** Todo destino no
+  share pende dela (`Config.SHARED_DRIVE_ROOT`, o padrão é `I:\`), e o app
+  **recusa subir** com um valor relativo — que é o que o `I:\` é em qualquer
+  sistema que não seja Windows. Sem isso o `os.makedirs` do dia a dia criava a
+  árvore inteira dentro do diretório de trabalho: as pastas
+  `I:\Confirmation\...` na raiz do repositório vieram daí, e é por isso que a
+  falha agora é na subida e não em silêncio. Na instância do time a variável
+  não é necessária — `os.path.join('I:\\', 'Confirmation', …)` devolve o mesmo
+  literal que estava fixo antes, byte a byte.
 - **SMTP** usa `mailhost.jpmchase.net` (relay interno, porta 25, sem auth) —
   fora da rede JPM o envio falha silenciosamente.
 - **API `getTrades` da Athena** (`apps/pages/athena_api.py`): importa New Deals
