@@ -5661,6 +5661,16 @@ def api_cp_daily_settlement_save():
             return jsonify({'success': False,
                             'error': ('Nenhum arquivo encontrado para processamento — o dropzone está '
                                       'vazio e não há arquivos em {}.'.format(SETTLEMENTS_ROOT))}), 400
+        # Latam Desk Position: a pasta pode ter mais de um relatório (ele é
+        # reemitido no mesmo dia), e processar os dois deixaria o vencedor por
+        # conta da ordem do `os.listdir` — o JSON do dia sairia com a posição da
+        # manhã em uma máquina e com a da tarde em outra. Vale o MAIS RECENTE, o
+        # mesmo que o botão Import da página lê (`_latam_pick_source`); os demais
+        # ficam em disco, não processados, e vão para o log.
+        _lt_pick, _lt_old = _latam_pick_source(folder_files, SETTLEMENTS_ROOT)
+        if _lt_old:
+            folder_files = [f for f in folder_files if f not in set(_lt_old)]
+        folder_files.sort()                            # ordem estável para os demais tipos
         for name in folder_files:
             p = os.path.join(SETTLEMENTS_ROOT, name)
             try:
@@ -9935,6 +9945,11 @@ def _optadv_collect(ref):
             by_codigo_if.setdefault(k, row)
 
     otm_by_suffix, otm_spn = _ndfadv_otm_by_suffix(ref)
+    # O MESMO elo que o SWAP de equity usa (`_ops_equity_link`): Operations B3
+    # (Título) → Latam Desk Position → OTM Settlements. Ele é o plano B do valor
+    # e do SPN quando o caminho normal — o sufixo da Combinação de operações —
+    # não resolve. Ver o comentário no cálculo do `apurado`.
+    eqlink = _ops_equity_link(ref)
     # Prêmio e SPN do FXO Detail — só a opção de TAXA DE CÂMBIO os consulta, mas o
     # arquivo é lido UMA vez, aqui: dentro do laço ele seria reaberto por linha.
     cog_prm, cog_spn = _optadv_cognos_prm(ref)
@@ -9966,8 +9981,17 @@ def _optadv_collect(ref):
         # Cognos a opção de câmbio não tinha SPN nenhum e caía no Nome Simplificado
         # da B3 — a Lawton aparecia como 'INTRAGLAWTONFDO' no Settlement Summary,
         # com o SPN dela já mapeado no `le-spn`.
+        # O elo de equity, resolvido UMA vez por linha: ele responde pelo valor
+        # e pelo SPN, e procurá-lo duas vezes abriria espaço para os dois virem
+        # de trades diferentes.
+        # A chave é o Título em MAIÚSCULA, a mesma forma que o swap usa
+        # (`key = titulo.upper()`): o elo é indexado assim, e consultá-lo com
+        # outra grafia não casaria nada, em silêncio.
+        eq = None if e_fx else (eqlink.get(str(titulo or '').strip().upper()) or {})
         cliente_spn = (cog_spn.get(_optadv_cog_key(conf), '') if e_fx
                        else (otm_spn.get(suf, '') if suf else ''))
+        if not cliente_spn and eq:
+            cliente_spn = str(eq.get('spn', '') or '')
         cliente = _otm_cpty_name(cliente_spn) if cliente_spn else ''
         cnpj = ''.join(ch for ch in _lcell(lrow, 'CPF/CNPJ Cliente Contraparte') if ch.isdigit())
         if not cliente and _b3_is_omnibus(rec.get('Conta Contraparte', '')) and cnpj:
@@ -10009,6 +10033,18 @@ def _optadv_collect(ref):
             apurado = _optadv_prm_for(cog_prm, conf)
         else:
             apurado = otm_by_suffix.get(suf) if suf else None
+            # A OPÇÃO DE EQUITY costuma cair aqui. O caminho normal casa o sufixo
+            # da `Combinação de operações` com o do Trade Id do OTM, e depende de
+            # a Live Position de Opção ter esse campo preenchido — o que não
+            # acontece na opção de ação. Sem valor, a linha aparecia no Trade
+            # Level com a célula vazia e SUMIA do Settlement Summary, que
+            # descarta quem não tem o que liquidar (`_opssum_rows`).
+            #
+            # O plano B é o elo do SWAP de equity, pelo Título da B3. Ele vem
+            # DEPOIS e não antes porque o sufixo é um join direto: quando existe,
+            # é o mais confiável dos dois.
+            if apurado is None and eq:
+                apurado = eq.get('settlement')
         # IR fica para DEPOIS do laço: na opção ele não é da linha, é do NET por
         # contraparte (ver `_optadv_apply_ir`). Aqui a linha nasce sem imposto.
         ir, liq = 0.0, apurado
@@ -11033,6 +11069,37 @@ def _latam_ensure_meta(data, default_status='OK'):
     return changed
 
 
+def _latam_pick_source(names, root):
+    """Dos candidatos `FbiRptLatamDeskPostion-NY-*`, o do relatório MAIS RECENTE —
+    mtime primeiro, nome decrescente no empate.
+
+    O relatório é reemitido no mesmo dia, e quando ele é, a pasta passa a ter DOIS
+    arquivos: o consumido de manhã só é apagado quando alguma linha entrou, e o novo
+    chega ao lado. Escolher `sorted(...)[0]` (o primeiro em ordem alfabética) lia o
+    ANTIGO e regravava o JSON do dia com a posição da manhã — import "com sucesso",
+    N linhas, e a tela sem a atualização. A ordem do `os.listdir` no caminho do Save
+    Daily Settlement era pior ainda: sem ordem nenhuma, o vencedor dependia do
+    sistema de arquivos, e os dois caminhos podiam discordar sobre qual é o
+    relatório do dia.
+
+    Devolve (escolhido, preteridos) — os preteridos ficam em disco de propósito
+    (apagar um arquivo que não foi lido destrói a única cópia) e são registrados no
+    log, porque pasta com dois relatórios é o estado que produziu o bug."""
+    cands = [n for n in (names or []) if n.lower().startswith(_LATAM_FILE_PREFIX)]
+    if not cands:
+        return None, []
+    def _mtime(n):
+        try:
+            return os.path.getmtime(os.path.join(root, n))
+        except OSError:
+            return 0.0
+    cands.sort(key=lambda n: (_mtime(n), n), reverse=True)
+    if len(cands) > 1:
+        log.warning('[latam] %d relatórios em %s — lendo o mais recente (%s); ignorados: %s',
+                    len(cands), root, cands[0], ', '.join(cands[1:]))
+    return cands[0], cands[1:]
+
+
 def _latam_json_path(ref):
     return os.path.join(LATAM_JSON_ROOT, ref.strftime('%Y'), ref.strftime('%m'), ref.strftime('%d'),
                         '{}_{}.json'.format(_LATAM_JSON_BASE, ref.strftime('%Y%m%d')))
@@ -11273,19 +11340,21 @@ def _latam_extract(rows):
 
 
 def _latam_import(ref=None):
-    """Acha FbiRptLatamDeskPostion-NY-* em LATAM_SOURCE_ROOT, extrai e grava o
-    JSON da data de referência. O arquivo de origem NÃO é apagado: o relatório não
-    é diário e pode precisar ser reprocessado (o card Save Daily Settlement, que
-    segue a macro, é quem apaga)."""
+    """Acha o relatório MAIS RECENTE (`_latam_pick_source`) em LATAM_SOURCE_ROOT,
+    extrai e grava o JSON da data de referência. O arquivo lido é apagado depois —
+    como a macro faz —, mas SÓ quando alguma linha entrou: apagar um arquivo que
+    não foi lido (formato inesperado, header diferente) destruiria a única cópia
+    antes de dar para investigar. Os demais candidatos ficam em disco intactos e
+    voltam na resposta em `ignored`."""
     ref = ref or datetime.now()
     if not os.path.isdir(LATAM_SOURCE_ROOT):
         return {'success': False, 'error': 'Source folder not found: {}'.format(LATAM_SOURCE_ROOT)}
-    matches = sorted(f for f in os.listdir(LATAM_SOURCE_ROOT)
-                     if f.lower().startswith(_LATAM_FILE_PREFIX))
-    if not matches:
+    chosen, ignored = _latam_pick_source(os.listdir(LATAM_SOURCE_ROOT), LATAM_SOURCE_ROOT)
+    if not chosen:
         return {'success': False,
                 'error': 'No FbiRptLatamDeskPostion-NY-* found in {}'.format(LATAM_SOURCE_ROOT)}
-    src = os.path.join(LATAM_SOURCE_ROOT, matches[0])
+    matches = [chosen]
+    src = os.path.join(LATAM_SOURCE_ROOT, chosen)
     try:
         with open(src, 'rb') as fh:
             rows, fmt = _latam_read_rows(fh.read())
@@ -11316,7 +11385,7 @@ def _latam_import(ref=None):
             log.warning('[latam] could not delete source %s', src)
     return {'success': True, 'file': matches[0], 'rows': kept, 'filtered': filtered,
             'missing': missing, 'header_cols': len(rows[0]), 'read': len(rows) - 1,
-            'format': fmt, 'deleted': deleted,
+            'format': fmt, 'deleted': deleted, 'ignored': ignored,
             'date': ref.strftime('%Y-%m-%d'), 'date_fmt': ref.strftime('%d/%m/%Y')}
 
 

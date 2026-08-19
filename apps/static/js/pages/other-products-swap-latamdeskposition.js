@@ -33,7 +33,7 @@
   var _TRANS = {
     en: { filterPh: 'Filter…', ok: 'OK', pending: 'Pending', newst: 'New', importing: 'Importing…',
           noFile: 'No FbiRptLatamDeskPostion-NY-* file found in the Settlements folder.',
-          imported: 'Imported', rows: 'row(s)', updated: 'Updated', latest: 'latest available',
+          ignored: 'Other reports in the folder (not read)', imported: 'Imported', rows: 'row(s)', updated: 'Updated', latest: 'latest available',
           noData: 'No data for this date', lastAvailable: 'Last available',
           dataFrom: 'Data from', loadErr: 'Could not load the data',
           need404: 'API not found (HTTP 404) — the server still runs the old routes.py: restart Flask after the pull.',
@@ -45,7 +45,7 @@
           sameUser: 'A different user must confirm a row you changed.', err: 'Action failed.' },
     br: { filterPh: 'Filtrar…', ok: 'OK', pending: 'Pendente', newst: 'Novo', importing: 'Importando…',
           noFile: 'Nenhum arquivo FbiRptLatamDeskPostion-NY-* na pasta Settlements.',
-          imported: 'Importado', rows: 'linha(s)', updated: 'Atualizado', latest: 'último disponível',
+          ignored: 'Outros relatórios na pasta (não lidos)', imported: 'Importado', rows: 'linha(s)', updated: 'Atualizado', latest: 'último disponível',
           noData: 'Sem dados nesta data', lastAvailable: 'Último disponível',
           dataFrom: 'Dados de', loadErr: 'Não foi possível carregar os dados',
           need404: 'API não encontrada (HTTP 404) — o servidor ainda está com o routes.py antigo: reinicie o Flask depois do pull.',
@@ -57,7 +57,7 @@
           sameUser: 'Outro usuário precisa confirmar uma linha que você alterou.', err: 'Falha na ação.' },
     es: { filterPh: 'Filtrar…', ok: 'OK', pending: 'Pendiente', newst: 'Nuevo', importing: 'Importando…',
           noFile: 'Ningún archivo FbiRptLatamDeskPostion-NY-* en la carpeta Settlements.',
-          imported: 'Importado', rows: 'fila(s)', updated: 'Actualizado', latest: 'último disponible',
+          ignored: 'Otros informes en la carpeta (no leídos)', imported: 'Importado', rows: 'fila(s)', updated: 'Actualizado', latest: 'último disponible',
           noData: 'Sin datos en esta fecha', lastAvailable: 'Último disponible',
           dataFrom: 'Datos de', loadErr: 'No se pudieron cargar los datos',
           need404: 'API no encontrada (HTTP 404) — el servidor sigue con el routes.py anterior: reinicie Flask tras el pull.',
@@ -360,7 +360,7 @@
             if (info) { info.classList.remove('text-danger'); info.textContent = txt; }
             load(d.date);
             if (window.Swal) {
-              var warn = !d.rows || (d.missing && d.missing.length);
+              var warn = !d.rows || (d.missing && d.missing.length) || (d.ignored && d.ignored.length);
               var html = d.rows + ' ' + t('rows') + '<br><small>' + esc(d.read || 0) + ' ' + t('read') +
                          ' · ' + esc(d.filtered || 0) + ' ' + t('filtered') +
                          ' · ' + esc(d.header_cols || 0) + ' ' + t('cols') +
@@ -370,6 +370,13 @@
               if (d.missing && d.missing.length) {
                 html += '<br><br><small class="text-warning">' + esc(t('missing')) + ':<br>' +
                         esc(d.missing.join(', ')) + '</small>';
+              }
+              // Pasta com mais de um relatorio: foi lido o MAIS RECENTE, e os
+              // outros ficaram onde estavam. Dizer qual sobrou e o que separa
+              // "importei o arquivo certo" de "importei o de manha de novo".
+              if (d.ignored && d.ignored.length) {
+                html += '<br><br><small class="text-warning">' + esc(t('ignored')) + ':<br>' +
+                        esc(d.ignored.join(', ')) + '</small>';
               }
               Swal.fire({ icon: warn ? 'warning' : 'success', title: t('imported'), html: html,
                           timer: warn ? undefined : 2200, showConfirmButton: !!warn });
