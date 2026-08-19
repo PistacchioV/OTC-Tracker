@@ -349,6 +349,7 @@ _CONTROL_PANEL_CARDS = [
     {'id': 'confescalation', 'label': 'Confirmations Escalation'},
     {'id': 'baccea',      'label': 'BACC EA Metrics'},
     {'id': 'manualdealsea', 'label': 'Manual Deals EA'},
+    {'id': 'mt300',       'label': 'MT300'},
 ]
 _CP_CARD_TOKENS = {'/control-panel#' + c['id'] for c in _CONTROL_PANEL_CARDS}
 # API endpoint → the card it belongs to (for server-side enforcement).
@@ -376,6 +377,8 @@ _CP_ENDPOINT_CARD = {
     '/api/control-panel/bacc-ea-metrics/run': 'baccea',
     '/api/control-panel/manual-deals-ea/recipients': 'manualdealsea',
     '/api/control-panel/manual-deals-ea/run': 'manualdealsea',
+    '/api/control-panel/mt300/recipients': 'mt300',
+    '/api/control-panel/mt300/run': 'mt300',
 }
 
 
@@ -21348,6 +21351,41 @@ _MAPPING_DEFS = {
     #
     # Sentido em BRANCO cai no net type do Reference Data - e como se cadastra
     # "so o pagamento e excecao".
+    # Quem entra no e-mail MT300 (card do Control Panel, 19:30).
+    #
+    # A mensagem MT300 e confirmada por um grupo especifico de clientes, e a
+    # lista e da MESA: empresa nova do grupo entra pela tela, sem release. Sem
+    # linha aqui, ninguem entra — o e-mail so sai se o dia tiver operacao de
+    # alguem desta lista.
+    #
+    # O casamento tenta TRES identificadores, nesta ordem: CNPJ (so digitos),
+    # SPN e, por ultimo, o nome por tokens. O CNPJ vem primeiro porque e o
+    # unico que nao muda de grafia — o mesmo cliente chega como 'NESTLE BRASIL
+    # LTDA' num arquivo e 'NESTLE BRASIL LTDA.' noutro, e o SPN as vezes vem
+    # vazio. Basta UM dos tres casar.
+    'mt300': {
+        'label': 'MT300',
+        'columns': [
+            {'key': 'COUNTERPARTY', 'label': 'Counterparty'},
+            {'key': 'SPN', 'label': 'SPN'},
+            {'key': 'CNPJ', 'label': 'CNPJ'},
+            {'key': 'NOTES', 'label': 'Notes'},
+        ],
+        'seed': [
+            {'COUNTERPARTY': 'ABB AUTOMACAO LTDA', 'SPN': '2156027',
+             'CNPJ': '33.449.965/0001-15', 'NOTES': ''},
+            {'COUNTERPARTY': 'ABB ELETRIFICACAO LTDA', 'SPN': '2155922',
+             'CNPJ': '33.449.988/0001-20', 'NOTES': ''},
+            {'COUNTERPARTY': 'CHOCOLATES GAROTO SA', 'SPN': '8837805',
+             'CNPJ': '28.053.619/0001-83', 'NOTES': ''},
+            {'COUNTERPARTY': 'NESTLE BRASIL LTDA', 'SPN': '806544',
+             'CNPJ': '60.409.075/0001-52', 'NOTES': ''},
+            {'COUNTERPARTY': 'NESTLE NORDESTE ALIMENTOS E BEBIDAS LTDA', 'SPN': '8937851',
+             'CNPJ': '08.334.818/0001-52', 'NOTES': ''},
+            {'COUNTERPARTY': 'NESTLE WATERS BRASIL - BEBIDAS E ALIMENTOS LTDA',
+             'SPN': '8937847', 'CNPJ': '33.062.464/0001-81', 'NOTES': ''},
+        ],
+    },
     'settlement-exception': {
         'label': 'Settlement Exception',
         'columns': [
@@ -32315,6 +32353,380 @@ def api_cp_mdea_run():
     return jsonify({'success': True, **out,
                     'message': '{} — {} deal(s) sent to {} recipient(s){}.'.format(
                         _MDEA_LABEL[kind], out['rows'], out['to'],
+                        ' (+{} in copy)'.format(out['cc']) if out['cc'] else '')})
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  MT300 (Control Panel) — as mensagens do dia para o grupo confirmar
+# ══════════════════════════════════════════════════════════════════════════
+#  Todo dia útil às 19:30, um e-mail com as operações de **NDF Vanilla** do dia
+#  cujas contrapartes estão no cadastro `mt300`. A mensagem MT300 é confirmada
+#  por um grupo específico de clientes, e é o cadastro que diz quem — empresa
+#  nova do grupo entra pela tela, sem release.
+#
+#  **Sem operação de ninguém da lista, o e-mail NÃO sai.** Ele pede para casar o
+#  trade no DVP; sem trade não há o que casar, e uma tabela vazia faria quem
+#  recebe procurar o que não existe. É a mesma regra do Manual Deals EA, e o
+#  oposto do BACC EA Metrics, onde a planilha vazia é ela própria a métrica.
+_MT300_DIR = _DAILY_METRIC_DIR
+_MT300_REC_FILE = os.path.join(_MT300_DIR, 'mt300_recipients.json')
+_MT300_STATUS_FILE = os.path.join(_MT300_DIR, 'mt300_status.json')
+_MT300_CLAIM_FILE = os.path.join(_MT300_DIR, 'mt300_sent.json')
+_MT300_CC_DEFAULT = 'brazil.otc.ops@jpmorgan.com'
+_MT300_TIME = (19, 30)
+
+
+def _mt300_targets():
+    """[(cnpj_digitos, spn, [tokens do nome])] do cadastro."""
+    alvos = []
+    for r in _mapping_rows('mt300'):
+        cnpj = re.sub(r'\D', '', str(r.get('CNPJ', '') or ''))
+        spn = _norm_spn(r.get('SPN', ''))
+        tokens = [t for t in (_pc_norm(w) for w in str(r.get('COUNTERPARTY', '') or '').split()) if t]
+        if cnpj or spn or tokens:
+            alvos.append((cnpj, spn, tokens))
+    return alvos
+
+
+def _mt300_is_target(deal, alvos):
+    """O deal é de alguém da lista?
+
+    Três identificadores, e basta UM casar. O CNPJ vem primeiro porque é o único
+    que não muda de grafia — o mesmo cliente chega como 'NESTLE BRASIL LTDA' num
+    arquivo e 'NESTLE BRASIL LTDA.' noutro, e o SPN às vezes vem vazio. O nome é
+    o último recurso, por TOKENS (todas as palavras presentes), que é o que
+    sobrevive ao ponto final e ao 'E' que some do meio."""
+    cnpj = re.sub(r'\D', '', str(deal.get('TaxID', '') or ''))
+    spn = _norm_spn(deal.get('SPN', ''))
+    nome = _pc_norm(deal.get('Client', '') or deal.get('Acronym', '') or '')
+    for a_cnpj, a_spn, a_tokens in alvos:
+        if a_cnpj and cnpj and a_cnpj == cnpj:
+            return True
+        if a_spn and spn and a_spn == spn:
+            return True
+        if a_tokens and nome and all(t in nome for t in a_tokens):
+            return True
+    return False
+
+
+def _mt300_iso(dmy):
+    """`dd/mm/aaaa` → `aaaa-mm-dd`, que é como as datas saem na tabela do MT300."""
+    d = _parse_date_any(dmy)
+    return d.strftime('%Y-%m-%d') if d else str(dmy or '')
+
+
+def _mt300_rows(ref):
+    """As linhas do e-mail: NDF Vanilla do dia, só das contrapartes cadastradas."""
+    alvos = _mt300_targets()
+    if not alvos:
+        return []
+    cfg = _generic_nd_cfg('vanilla')
+    path = os.path.join(cfg['dir'], ref.strftime('%Y'), ref.strftime('%m'),
+                        ref.strftime('%Y%m%d') + cfg['suffix'])
+    try:
+        with open(path, encoding='utf-8') as fh:
+            data = json.load(fh)
+    except (IOError, OSError, json.JSONDecodeError):
+        return []
+    out = []
+    for d in (data if isinstance(data, list) else []):
+        if not isinstance(d, dict) or not _mt300_is_target(d, alvos):
+            continue
+        qty = _conf_to_float(d.get('Notional'))
+        rate = _conf_to_float(d.get('Rate'))
+        # O SINAL vem da DIREÇÃO da operação, não do arquivo: o notional é
+        # gravado sempre positivo, e no MT300 a venda é negativa. Sem isto as
+        # duas pontas do mesmo trade sairiam idênticas na mensagem.
+        if qty is not None and 'SELL' in str(d.get('Direction', '') or '').upper():
+            qty = -qty
+        # Other Quantity é o notional CONVERTIDO pela taxa — o contravalor em
+        # BRL. Ele não existe como campo: é derivado, e por isso segue o sinal
+        # do Quantity.
+        other = (qty * rate) if (qty is not None and rate is not None) else None
+        out.append({
+            'instrument': str(d.get('Instrument', '') or ''),
+            'deal': str(d.get('Deal', '') or ''),
+            'cpty': str(d.get('Client', '') or d.get('Acronym', '') or ''),
+            'booking': _mt300_iso(d.get('TradeDate')),
+            'settlement': _mt300_iso(d.get('SettlementDate')),
+            'other_qty': ('{:,.6f}'.format(other) if other is not None else ''),
+            'other_units': str(d.get('OtherQuantityCurrency', '') or ''),
+            'qty_ccy': str(d.get('QuantityCurrency', '') or ''),
+            'qty': ('{:,.2f}'.format(qty) if qty is not None else ''),
+            'rate': str(d.get('Rate', '') or ''),
+        })
+    return out
+
+
+def _load_mt300_recipients():
+    try:
+        with open(_MT300_REC_FILE, encoding='utf-8') as fh:
+            d = json.load(fh)
+        if isinstance(d, dict):
+            return {'to': str(d.get('to', '') or ''),
+                    'cc': str(d.get('cc', _MT300_CC_DEFAULT) or '')}
+    except Exception:                                       # noqa: BLE001
+        pass
+    return {'to': '', 'cc': _MT300_CC_DEFAULT}
+
+
+def _save_mt300_recipients(d):
+    os.makedirs(_MT300_DIR, exist_ok=True)
+    atual = _load_mt300_recipients()
+    # Merge, não substituição: uma tela que não conhecesse uma das chaves
+    # apagaria aquela lista ao gravar.
+    for k in ('to', 'cc'):
+        if k in (d or {}):
+            atual[k] = str((d or {}).get(k) or '').strip()
+    _atomic_write_json(_MT300_REC_FILE, atual)
+
+
+def _mt300_send_email(rows, to_list, cc_list, ref):
+    """Monta e envia. True, ou a mensagem do erro.
+
+    O `with _app_context()` envolve a montagem INTEIRA e não só o
+    `render_template`: o `_get_logo_path` lê `current_app.root_path`, e envolver
+    só o render troca um erro de contexto por outro três linhas abaixo. Dentro do
+    request do botão Run é no-op — é por isso que o Run funciona e só o
+    automático morreria (CLAUDE.md §7)."""
+    from email.mime.image import MIMEImage
+    try:
+        with _app_context():
+            html = render_template('pages/email-template-mt300.html',
+                                   ref_date_fmt=ref.strftime('%d/%m/%Y'),
+                                   rows=rows, current_year=datetime.now().year)
+            msg = MIMEMultipart('related')
+            msg['Subject'] = 'MT300 - {}'.format(ref.strftime('%d/%m/%Y'))
+            msg['From'] = SHARED_MAILBOX
+            msg['To'] = ', '.join(to_list)
+            if cc_list:
+                msg['Cc'] = ', '.join(cc_list)
+            alt = MIMEMultipart('alternative')
+            alt.attach(MIMEText('Please view this message in HTML.', 'plain', 'utf-8'))
+            alt.attach(MIMEText(html, 'html', 'utf-8'))
+            msg.attach(alt)
+            logo_path = _get_logo_path()
+            if logo_path:
+                with open(logo_path, 'rb') as f:
+                    limg = MIMEImage(f.read())
+                limg.add_header('Content-ID', '<otc_logo>')
+                limg.add_header('Content-Disposition', 'inline', filename='logo.png')
+                msg.attach(limg)
+            _attach_email_gradient(msg)
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30) as server:
+            server.sendmail(SHARED_MAILBOX, to_list + cc_list, msg.as_string())
+        return True
+    except Exception as e:                                  # noqa: BLE001
+        log.error('[mt300] envio falhou:\n%s', traceback.format_exc())
+        return '{}: {}'.format(type(e).__name__, e)
+
+
+def _mt300_run(ref=None):
+    """Uma corrida. Desfechos SEPARADOS: `empty` (nenhuma operação do grupo no
+    dia) não é a mesma coisa que `no_recipient` (havia o que mandar e não havia
+    para quem)."""
+    ref = ref or _br_now()
+    rec = _load_mt300_recipients()
+    to_list = _parse_emails(rec.get('to'))
+    cc_list = [c for c in _parse_emails(rec.get('cc'))
+               if c.lower() not in {t.lower() for t in to_list}]
+    rows = _mt300_rows(ref)
+    if not rows:
+        return {'sent': False, 'reason': 'empty', 'rows': 0,
+                'to': len(to_list), 'cc': len(cc_list)}
+    if not to_list:
+        return {'sent': False, 'reason': 'no_recipient', 'rows': len(rows),
+                'to': 0, 'cc': len(cc_list)}
+    res = _mt300_send_email(rows, to_list, cc_list, ref)
+    if res is True:
+        return {'sent': True, 'rows': len(rows), 'to': len(to_list), 'cc': len(cc_list)}
+    return {'sent': False, 'reason': 'error', 'error': res, 'rows': len(rows),
+            'to': len(to_list), 'cc': len(cc_list)}
+
+
+def _mt300_claim_slot(slot):
+    """Reserva o disparo EM DISCO: a instância reinicia várias vezes ao dia, e o
+    catch-up precisa saber o que já saiu."""
+    with _cache_lock:
+        try:
+            with open(_MT300_CLAIM_FILE, encoding='utf-8') as fh:
+                sent = json.load(fh)
+            if not isinstance(sent, list):
+                sent = []
+        except (IOError, OSError, json.JSONDecodeError):
+            sent = []
+        if slot in sent:
+            return False
+        sent.append(slot)
+        try:
+            os.makedirs(_MT300_DIR, exist_ok=True)
+            _atomic_write_json(_MT300_CLAIM_FILE, sorted(sent)[-16:])
+        except Exception:                                   # noqa: BLE001
+            log.warning('[mt300] não consegui gravar o claim:\n%s', traceback.format_exc())
+        return True
+
+
+def _mt300_release_slot(slot):
+    """Devolve o slot quando o envio falhou: uma queda transitória do SMTP não
+    pode custar o e-mail do dia."""
+    with _cache_lock:
+        try:
+            with open(_MT300_CLAIM_FILE, encoding='utf-8') as fh:
+                sent = json.load(fh)
+            if not isinstance(sent, list):
+                return
+        except (IOError, OSError, json.JSONDecodeError):
+            return
+        if slot in sent:
+            try:
+                _atomic_write_json(_MT300_CLAIM_FILE, [x for x in sent if x != slot])
+            except Exception:                               # noqa: BLE001
+                log.warning('[mt300] não consegui devolver o slot:\n%s', traceback.format_exc())
+
+
+def _mt300_status_write(result, when):
+    try:
+        os.makedirs(_MT300_DIR, exist_ok=True)
+        _atomic_write_json(_MT300_STATUS_FILE,
+                           {'result': result, 'at': when.strftime('%d/%m/%Y %H:%M:%S')})
+    except Exception:                                       # noqa: BLE001
+        log.warning('[mt300] não consegui gravar o status:\n%s', traceback.format_exc())
+
+
+def _mt300_read_status():
+    try:
+        with open(_MT300_STATUS_FILE, encoding='utf-8') as fh:
+            d = json.load(fh)
+        return d if isinstance(d, dict) else {}
+    except Exception:                                       # noqa: BLE001
+        return {}
+
+
+def _mt300_disparar(slot, fired):
+    if not _pcx_is_bizday(fired):
+        return False
+    if not _mt300_claim_slot(slot):
+        return False
+    out = _mt300_run(fired)
+    if out['sent']:
+        result = 'sent:{}'.format(out['rows'])
+    elif out.get('reason') in ('empty', 'no_recipient'):
+        # Nenhum dos dois melhora na retentativa: sem operação não há e-mail, e
+        # sem destinatário quem resolve é o card. O slot fica consumido.
+        result = out['reason']
+    else:
+        _mt300_release_slot(slot)
+        result = 'error'
+    log.info('[mt300] disparo de %s (BRT): %s', slot, result)
+    _mt300_status_write(result, fired)
+    return True
+
+
+def _mt300_scheduler_loop():
+    while True:
+        try:
+            hh, mm = _MT300_TIME
+            now = _br_now()
+            cand = now.replace(hour=hh, minute=mm, second=0, microsecond=0)
+            if cand <= now:
+                # Catch-up como no Deals Monitor: recupera o disparo do dia
+                # quando o processo subiu depois do horário, e RETENTA o que
+                # falhou e foi devolvido.
+                _mt300_disparar('{} {:02d}:{:02d}'.format(now.strftime('%Y-%m-%d'), hh, mm), now)
+                nxt = cand + timedelta(days=1)
+            else:
+                nxt = cand
+            now = _br_now()
+            time.sleep(max(1.0, min((nxt - now).total_seconds(), 3600)))
+        except Exception:                                   # noqa: BLE001
+            log.error('[mt300] scheduler error:\n%s', traceback.format_exc())
+            time.sleep(60)
+
+
+_mt300_scheduler_started = False
+_mt300_scheduler_lock = threading.Lock()
+
+
+def _mt300_start_scheduler():
+    global _mt300_scheduler_started
+    with _mt300_scheduler_lock:
+        if _mt300_scheduler_started:
+            return
+        _mt300_scheduler_started = True
+    threading.Thread(target=_mt300_scheduler_loop, name='mt300-scheduler', daemon=True).start()
+    log.info('[mt300] scheduler iniciado (%02d:%02d BRT · dias úteis ANBIMA)', *_MT300_TIME)
+
+
+try:
+    _mt300_start_scheduler()
+except Exception:                                           # noqa: BLE001
+    log.warning('[mt300] could not start the scheduler')
+
+
+@blueprint.route('/api/control-panel/mt300/recipients', methods=['GET', 'POST'])
+def api_cp_mt300_recipients():
+    """GET → TO/Cc, o desfecho do último disparo e quantas operações o e-mail
+    teria AGORA; POST → grava as listas."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    if request.method == 'POST':
+        try:
+            _save_mt300_recipients(request.get_json(silent=True) or {})
+        except Exception as e:                              # noqa: BLE001
+            log.error('[mt300] save recipients failed:\n%s', traceback.format_exc())
+            return jsonify({'success': False,
+                            'error': '{}: {}'.format(type(e).__name__, e)}), 500
+        return jsonify({'success': True})
+    try:
+        n = len(_mt300_rows(_br_now()))
+    except Exception:                                       # noqa: BLE001
+        # Um arquivo-dia ilegível não pode derrubar o card: as listas de
+        # destinatário ainda precisam ser editáveis.
+        log.warning('[mt300] não consegui contar as operações:\n%s', traceback.format_exc())
+        n = None
+    return jsonify({'success': True, **_load_mt300_recipients(),
+                    'rows': n, 'last': _mt300_read_status(),
+                    'time': '{:02d}:{:02d}'.format(*_MT300_TIME)})
+
+
+@blueprint.route('/api/control-panel/mt300/run', methods=['POST'])
+def api_cp_mt300_run():
+    """Manda o e-mail AGORA (botão Run do card).
+
+    Roda mesmo em feriado — quem clicou decidiu — e NÃO consome o claim do
+    disparo automático: o Run é um teste ou um envio fora de hora, e queimar o
+    horário faria o e-mail do dia não sair."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    payload = request.get_json(silent=True) or {}
+    if 'to' in payload or 'cc' in payload:
+        try:
+            _save_mt300_recipients(payload)
+        except Exception:                                   # noqa: BLE001
+            log.error('[mt300] save recipients failed:\n%s', traceback.format_exc())
+    try:
+        out = _mt300_run(_br_now())
+    except Exception as e:                                  # noqa: BLE001
+        log.error('[mt300] run manual falhou:\n%s', traceback.format_exc())
+        return jsonify({'success': False,
+                        'error': '{}: {}'.format(type(e).__name__, e)}), 500
+    if not out['sent'] and out.get('reason') == 'empty':
+        return jsonify({'success': True, **out,
+                        'message': 'No MT300 trade for the registered counterparties '
+                                   'today — e-mail not sent.'})
+    if not out['sent'] and out.get('reason') == 'no_recipient':
+        return jsonify({'success': False,
+                        'error': 'No TO recipient saved for this card — fill the TO field '
+                                 'and save before running.'}), 400
+    if not out['sent']:
+        return jsonify({'success': False, 'error': out.get('error') or 'unknown'}), 500
+    _mt300_status_write('sent:{}'.format(out['rows']), _br_now())
+    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                         'MT300 Sent', 'Control Panel',
+                         '{} trade(s) → {} recipient(s)'.format(out['rows'], out['to']))
+    return jsonify({'success': True, **out,
+                    'message': '{} trade(s) sent to {} recipient(s){}.'.format(
+                        out['rows'], out['to'],
                         ' (+{} in copy)'.format(out['cc']) if out['cc'] else '')})
 
 

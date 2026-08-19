@@ -396,14 +396,14 @@ e um item no array `TYPES` de `apps/templates/pages/mapping.html`.
   colunas extras do arquivo** (`STATUS`/`MAKER`/`CHECKER`): o POST reescreve o
   arquivo inteiro e derrubaria o que não estivesse declarado (HANDOFF §188).
 
-São **31** mappings hoje: `currency-base`, `interbook-ndf`, `publisher-ndf`,
+São **33** mappings hoje: `currency-base`, `interbook-ndf`, `publisher-ndf`,
 `le-accronym`, `le-spn`, `commodities-b3`, `bank-name`, `fxo-conv-rate`,
 `ndf-pdf-cpty`, `swap-curves`, `cetip-files`, `api-links`, `opb3-events`,
 `swap-ir-client`, `swap-ir-term`, `swap-index`, `swap-funcionalidade`,
 `swap-amortizacao`, `swap-code-labels`, `ndfc-ir-exempt`, `ndfc-advice-split`,
 `b3-omnibus-account`, `fxo-internal-cpty`, `fxo-book-disregard`,
 `bankers-email`, `manual-conf-validation`, `manual-conf-sla`, `quotes-equity`,
-`quotes-commodity`, `gdt-codes`, `settlement-exception`.
+`quotes-commodity`, `gdt-codes`, `settlement-exception`, `mt300`.
 
 ### Os que têm regra fácil de quebrar pela tela
 
@@ -536,12 +536,13 @@ São **31** mappings hoje: `currency-base`, `interbook-ndf`, `publisher-ndf`,
     ela), a **pasta** em que o documento é gravado (`TYPE_FOLDER`), este cadastro
     e o dropdown de Produto do Track Confirmations. Eram listas escritas à mão, e
     o cadastro dizia `OPTION` onde a tela de upload dizia `FXO`: o mesmo
-    documento com dois nomes. São **nove tipos, sempre em MAIÚSCULO e SEM
+    documento com dois nomes. São **doze tipos, sempre em MAIÚSCULO e SEM
     ACENTO** (é código, não rótulo — a comparação entre as telas é feita sobre
     ele):
 
     `NDF VANILLA` · `NDF FWD START` · `NDF OTHER PUBLISHER` · `NDF COMM` ·
-    `OPTION COMM` · `FXO` · `SWAP` · `SWAP CORPORATE` · `TERMO DE RESILICAO`
+    `OPTION COMM` · `FXO` · `SWAP` · `SWAP CORPORATE` · `TERMO DE RESILICAO` ·
+    `AMENDMENT` · `ADDENDUM` · `RERATIFICATION`
 
     O **sem acento** não é estilo: `confirmation_type()` compara
     `upper_norm(produto)` com a tupla, e o `upper_norm` normaliza em NFKD e

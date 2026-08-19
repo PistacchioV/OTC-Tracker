@@ -1,0 +1,38 @@
+[
+  {
+    "COUNTERPARTY": "ABB AUTOMACAO LTDA",
+    "SPN": "2156027",
+    "CNPJ": "33.449.965/0001-15",
+    "NOTES": ""
+  },
+  {
+    "COUNTERPARTY": "ABB ELETRIFICACAO LTDA",
+    "SPN": "2155922",
+    "CNPJ": "33.449.988/0001-20",
+    "NOTES": ""
+  },
+  {
+    "COUNTERPARTY": "CHOCOLATES GAROTO SA",
+    "SPN": "8837805",
+    "CNPJ": "28.053.619/0001-83",
+    "NOTES": ""
+  },
+  {
+    "COUNTERPARTY": "NESTLE BRASIL LTDA",
+    "SPN": "806544",
+    "CNPJ": "60.409.075/0001-52",
+    "NOTES": ""
+  },
+  {
+    "COUNTERPARTY": "NESTLE NORDESTE ALIMENTOS E BEBIDAS LTDA",
+    "SPN": "8937851",
+    "CNPJ": "08.334.818/0001-52",
+    "NOTES": ""
+  },
+  {
+    "COUNTERPARTY": "NESTLE WATERS BRASIL - BEBIDAS E ALIMENTOS LTDA",
+    "SPN": "8937847",
+    "CNPJ": "33.062.464/0001-81",
+    "NOTES": ""
+  }
+]

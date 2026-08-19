@@ -12142,3 +12142,59 @@ Monitor criou um card sozinho para ele, na seção *Others*, contando 3 "New": o
 aparecer no painel sem código. O par de re-booking não é um produto, é estado da rotina, e passou a
 morar em `cache/manual-deals-ea/fwdstart-rebooks/`. Quem já tiver a pasta antiga em disco pode
 apagá-la; o card some junto.
+
+---
+
+## §278 — MT300: o e-mail das 19:30, e quem entra nele é cadastro
+
+Card novo no Control Panel. Todo dia útil ANBIMA às **19:30**, um e-mail com as operações de **NDF
+Vanilla do dia** cujas contrapartes estão no cadastro **`mt300`** — a mensagem MT300 é confirmada
+por um grupo específico de clientes (Nestlé/Garoto/ABB), e é o cadastro que diz quem. Empresa nova
+do grupo entra pela tela, sem release. TO — BACC, Cc na caixa da mesa.
+
+O corpo é o do e-mail que o Confirmation Matching já mandava à mão, com as dez colunas da mensagem:
+Instrument Type · Deal Name · End Counterparty Desc · Booking Date · Settlement Date · Other
+Quantity · Other Quantity Units · Quantity Currency · Quantity · Rate. Assunto `MT300 - dd/mm/aaaa`.
+
+Quatro coisas que não dão erro nenhum:
+
+- **o casamento tenta TRÊS identificadores** — CNPJ (só dígitos), SPN e o nome por tokens — e basta
+  UM casar. O CNPJ vem primeiro porque é o único que não muda de grafia: no e-mail real a Garoto
+  chega como `CHOCOLATES GAROTO LTDA` e está cadastrada como `CHOCOLATES GAROTO SA`. Por nome ela
+  não casaria, e a operação sumiria da mensagem sem ninguém ver;
+- **o SINAL vem da DIREÇÃO**, não do arquivo: o notional é gravado sempre positivo e no MT300 a
+  venda é negativa. Sem isso as duas pontas do mesmo trade sairiam idênticas;
+- **`Other Quantity` é DERIVADO** (quantity × rate) e sai com **seis casas**. Ele não existe como
+  campo, e arredondá-lo faria a conferência do outro lado acusar diferença de centavos — os valores
+  do teste são os do e-mail real de 07/08/2026, conferidos dígito a dígito;
+- **as datas da TABELA saem em `aaaa-mm-dd`** (o assunto é que leva `dd/mm/aaaa`): é o formato da
+  mensagem SWIFT, e é por ele que o outro lado compara.
+
+**Sem operação de ninguém da lista, o e-mail NÃO sai** — ele pede para casar o trade no DVP, e sem
+trade não há o que casar. É a mesma regra do Manual Deals EA, e o oposto do BACC EA Metrics. `empty`
+e `no_recipient` são desfechos distintos no card: o segundo é o pedido que não saiu de casa.
+
+---
+
+## §279 — Três tipos de confirmação novos, e a ordem do Ticket List
+
+**Aditamento, Aditivo e Reratificação** entraram no Electronic Inventory como `AMENDMENT`,
+`ADDENDUM` e `RERATIFICATION` — os documentos que ALTERAM uma confirmação já emitida, em vez de
+confirmar uma operação nova. Em inglês, MAIÚSCULO e SEM ACENTO como os demais: o valor é **código**,
+comparado por `upper_norm`, e não rótulo de tela.
+
+Tipo novo mexe nas **três** listas (CLAUDE.md §6), e a falta de qualquer uma erra em silêncio:
+`CONFIRMATION_TYPES` (a lista única, com quatro consumidores), `TYPE_FOLDER_LEGACY` com tupla
+**vazia** — tipo ausente dali não se distingue de um cujo histórico alguém esqueceu de declarar — e
+`VALIDATION_SEED`, sem a qual o tipo cairia no `DEFAULT_RULE` sem ninguém ter decidido nada. Os três
+entram em OTC + MO, como o distrato; é SEED e não regra fixa, e a mesa corrige em um clique.
+
+A pasta é o próprio código do tipo, então o padrão de gravação (nome do arquivo, não sobrescrever)
+vale sem nenhuma mudança — é o que `TYPE_FOLDER` já garante para todos.
+
+**O Ticket List passou a abrir pela FILA**: status primeiro (New → In Progress → Pending → Resolved
+→ Closed) e, dentro do status, o **ID do mais antigo para o mais novo**. Abrindo por ID, o resolvido
+de ontem ficava no meio do que está aberto hoje. O desempate por `seq` vale em **qualquer**
+ordenação e sempre crescente, independente do `dir` da coluna: ele é a fila de atendimento, não uma
+segunda ordenação que se inverte junto — e sem ele, chamados do mesmo status saíam na ordem em que o
+servidor os devolveu, que muda a cada carga.

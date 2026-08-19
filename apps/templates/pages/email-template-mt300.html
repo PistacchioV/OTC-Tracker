@@ -1,0 +1,134 @@
+{# ============================================================================
+   MT300 — as mensagens do dia que o grupo precisa casar no DVP.
+
+   Params:
+     • rows          — [{instrument, deal, cpty, booking, settlement, other_qty,
+                        other_units, qty_ccy, qty, rate}], montadas pelo
+                       `_mt300_rows` a partir das operações de NDF Vanilla do dia
+                       cujas contrapartes estão no cadastro `mt300`.
+                       NUNCA vazia: sem operação o e-mail não sai (`_mt300_run`),
+                       porque o pedido é casar o trade e não haveria o que casar
+     • ref_date_fmt, current_year
+
+   ⚠️ A tabela é o CONTEÚDO do pedido, não um resumo: quem recebe confere linha a
+   linha contra a mensagem que chegou no DVP. Por isso ela vem inteira no corpo e
+   não em anexo — o destinatário responde no próprio e-mail.
+
+   As DATAS saem em `aaaa-mm-dd` (o assunto é que leva dd/mm/aaaa): é o formato
+   da mensagem SWIFT, e é por ele que o outro lado compara. Os NÚMEROS mantêm as
+   casas decimais da origem — `Other Quantity` com seis, porque é o contravalor
+   calculado, e arredondá-lo faria a conferência acusar diferença de centavos.
+
+   O cabeçalho é cor sólida + gradiente CSS, nunca imagem/VML — ver o comentário
+   do partials/email-gradient-header.html.
+   ========================================================================== #}
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>OTC Tracker – MT300</title>
+    <!--[if mso]>
+    <style type="text/css">body, table, td { font-family: Arial, sans-serif !important; }</style>
+    <![endif]-->
+</head>
+<body style="margin:0;padding:0;font-family:'Segoe UI',Arial,sans-serif;background-color:#f4f6f9;color:#333333;">
+
+<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%"
+       style="background-color:#f4f6f9;padding:40px 0;">
+    <tr>
+        <td align="center">
+            <!--[if mso]>
+            <table role="presentation" align="center" border="0" cellpadding="0" cellspacing="0" width="900"><tr><td width="900" style="width:900px;">
+            <![endif]-->
+            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="900"
+                   style="max-width:900px;background-color:#ffffff;border-radius:10px;
+                          box-shadow:0 4px 14px rgba(0,0,0,0.08);overflow:hidden;">
+
+                <!-- ── Header ─────────────────────────────────── -->
+                {% set header_title = 'Support to OTC Derivatives — MT300' %}
+                {% set header_subtitle = 'Messages to be confirmed &nbsp;·&nbsp; <strong style="color:#ffffff;">' ~ ref_date_fmt ~ '</strong>' %}
+                {% set header_logo_height = 64 %}
+                {% set header_width = 900 %}
+                {% include 'partials/email-gradient-header.html' %}
+
+                <!-- ── Body ───────────────────────────────────── -->
+                <tr>
+                    <td style="padding:26px 30px 4px;">
+                        <p style="color:#444;font-size:14px;line-height:1.6;margin:0 0 12px;">Hi all,</p>
+                        <p style="color:#444;font-size:14px;line-height:1.6;margin:0 0 12px;">
+                            Today we have some <strong>MT300 messages</strong> to be confirmed,
+                            find the details below.</p>
+                        <p style="color:#444;font-size:14px;line-height:1.6;margin:0;">
+                            Could you please <strong>match the trade in DVP</strong> if the details
+                            are correct?</p>
+                    </td>
+                </tr>
+
+                <!-- ── A tabela do pedido ─────────────────────────
+                     As dez colunas da mensagem, na ordem em que o outro lado as
+                     lê. Deal Name e os valores em monoespaçada: é por eles que a
+                     conferência casa, e num Deal ID a diferença entre O e 0
+                     decide a operação. -->
+                <tr>
+                    <td style="padding:18px 20px 4px;">
+                        <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%"
+                               style="border-collapse:collapse;font-size:11px;">
+                            <tr>
+                                {% for h in ['Instrument Type', 'Deal Name', 'End Counterparty Desc',
+                                             'Booking Date', 'Settlement Date', 'Other Quantity',
+                                             'Other Quantity Units', 'Quantity Currency',
+                                             'Quantity', 'Rate'] %}
+                                <td style="padding:7px 8px;background-color:#dbe5f1;border:1px solid #b8c6da;
+                                           font-weight:700;color:#1a1a2e;text-align:center;">{{ h }}</td>
+                                {% endfor %}
+                            </tr>
+                            {% for r in rows %}
+                            <tr>
+                                <td style="padding:6px 8px;border:1px solid #b8c6da;color:#333;text-align:center;">{{ r.instrument }}</td>
+                                <td style="padding:6px 8px;border:1px solid #b8c6da;color:#333;text-align:center;font-family:'Courier New',monospace;">{{ r.deal }}</td>
+                                <td style="padding:6px 8px;border:1px solid #b8c6da;color:#333;text-align:center;">{{ r.cpty }}</td>
+                                <td style="padding:6px 8px;border:1px solid #b8c6da;color:#333;text-align:center;">{{ r.booking }}</td>
+                                <td style="padding:6px 8px;border:1px solid #b8c6da;color:#333;text-align:center;">{{ r.settlement }}</td>
+                                <td style="padding:6px 8px;border:1px solid #b8c6da;color:#333;text-align:right;font-family:'Courier New',monospace;">{{ r.other_qty }}</td>
+                                <td style="padding:6px 8px;border:1px solid #b8c6da;color:#333;text-align:center;">{{ r.other_units }}</td>
+                                <td style="padding:6px 8px;border:1px solid #b8c6da;color:#333;text-align:center;">{{ r.qty_ccy }}</td>
+                                <td style="padding:6px 8px;border:1px solid #b8c6da;color:#333;text-align:right;font-family:'Courier New',monospace;">{{ r.qty }}</td>
+                                <td style="padding:6px 8px;border:1px solid #b8c6da;color:#333;text-align:right;font-family:'Courier New',monospace;">{{ r.rate }}</td>
+                            </tr>
+                            {% endfor %}
+                        </table>
+                        <p style="color:#6b7280;font-size:12px;line-height:1.6;margin:8px 0 0;">
+                            {{ rows|length }} trade(s).</p>
+                    </td>
+                </tr>
+
+                <!-- ── Signature ──────────────────────────────── -->
+                <tr>
+                    <td style="padding:20px 30px 26px;">
+                        <p style="font-size:14px;line-height:1.6;color:#333333;margin:0;">
+                            Regards,<br/>
+                            <strong>OTC Tracker — Brazil OTC Operations</strong>
+                        </p>
+                    </td>
+                </tr>
+
+                <!-- ── Footer ─────────────────────────────────── -->
+                <tr>
+                    <td style="background-color:#f8f9fa;padding:18px 32px;text-align:center;border-top:1px solid #e9ecef;">
+                        <p style="color:#999999;font-size:11px;margin:0;">
+                            &copy; {{ current_year }} OTC Tracker by JPMorganChase &amp; Co.</p>
+                        <p style="color:#bbbbbb;font-size:10px;margin:5px 0 0;">
+                            This is an automated notification. Do not reply to this email.</p>
+                    </td>
+                </tr>
+
+            </table>
+            <!--[if mso]>
+            </td></tr></table>
+            <![endif]-->
+        </td>
+    </tr>
+</table>
+</body>
+</html>
