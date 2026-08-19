@@ -342,9 +342,20 @@ check('   e FXO é a mesma pasta de OPTION',
       ('FXO', 'FXO'))
 
 print('\n== 7b. o tipo de confirmação é UMA lista só ==')
-check('os nove tipos', list(M.CONFIRMATION_TYPES),
+check('os doze tipos', list(M.CONFIRMATION_TYPES),
       ['NDF VANILLA', 'NDF FWD START', 'NDF OTHER PUBLISHER', 'NDF COMM',
-       'OPTION COMM', 'FXO', 'SWAP', 'SWAP CORPORATE', 'TERMO DE RESILICAO'])
+       'OPTION COMM', 'FXO', 'SWAP', 'SWAP CORPORATE', 'TERMO DE RESILICAO',
+       # Os tres documentos que ALTERAM uma confirmacao ja emitida, em vez de
+       # confirmar operacao nova.
+       'AMENDMENT', 'ADDENDUM', 'RERATIFICATION'])
+# Tipo novo mexe em TRES listas, e a falta de qualquer uma erra em silencio: sem
+# TYPE_FOLDER_LEGACY o tipo nao se distingue de um cujo historico alguem esqueceu
+# de declarar; sem VALIDATION_SEED ele cai no DEFAULT_RULE sem ninguem decidir.
+for _t in ('AMENDMENT', 'ADDENDUM', 'RERATIFICATION'):
+    check('   %s nas tres listas' % _t,
+          [_t in M.TYPE_FOLDER, _t in M.TYPE_FOLDER_LEGACY,
+           any(r['PRODUCT'] == _t for r in M.VALIDATION_SEED)],
+          [True, True, True])
 # Os códigos são ASCII, e não por estilo: `confirmation_type` compara
 # `upper_norm(produto)` com a tupla, e o upper_norm descarta as marcas de
 # combinação — um código acentuado não casaria consigo mesmo, em silêncio.

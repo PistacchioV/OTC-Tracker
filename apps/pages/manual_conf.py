@@ -235,7 +235,13 @@ KEY_COLUMN = 'Trade ID'
 # é assunto de rótulo, não de código.
 CONFIRMATION_TYPES = ('NDF VANILLA', 'NDF FWD START', 'NDF OTHER PUBLISHER',
                       'NDF COMM', 'OPTION COMM', 'FXO',
-                      'SWAP', 'SWAP CORPORATE', 'TERMO DE RESILICAO')
+                      'SWAP', 'SWAP CORPORATE', 'TERMO DE RESILICAO',
+                      # Os tres documentos que alteram uma confirmacao ja
+                      # existente, em vez de confirmar uma operacao nova. Em
+                      # INGLES como todo texto do app, e em MAIUSCULA e SEM
+                      # ACENTO como os demais: o valor e CODIGO, comparado por
+                      # `upper_norm`, e nao rotulo de tela.
+                      'AMENDMENT', 'ADDENDUM', 'RERATIFICATION')
 
 # Os três estágios, na ordem em que a esteira anda.
 STAGE_OTC, STAGE_MO, STAGE_FO = 'OTC', 'MO', 'FO'
@@ -575,6 +581,18 @@ VALIDATION_SEED = (
     # DEFAULT_RULE sem ninguém ter decidido nada.
     {'PRODUCT': 'TERMO DE RESILICAO', 'LOB': '', 'OTC': 'REQUESTED', 'MO': 'REQUESTED',
      'FO': 'EXEMPT', 'NOTES': 'Termo de resilição (distrato)'},
+    # Aditamento / Aditivo / Reratificação: documentos que ALTERAM uma
+    # confirmação já emitida. Entram no caminho da maioria (OTC + MO), como o
+    # distrato. É SEED, não regra fixa — quem sabe se o FO valida a alteração de
+    # um produto é a mesa, e a resposta se corrige em um clique no /mapping. O
+    # que o seed não pode é deixar o tipo SEM linha: aí ele cairia no
+    # DEFAULT_RULE sem ninguém ter decidido nada.
+    {'PRODUCT': 'AMENDMENT', 'LOB': '', 'OTC': 'REQUESTED', 'MO': 'REQUESTED',
+     'FO': 'EXEMPT', 'NOTES': 'Aditamento'},
+    {'PRODUCT': 'ADDENDUM', 'LOB': '', 'OTC': 'REQUESTED', 'MO': 'REQUESTED',
+     'FO': 'EXEMPT', 'NOTES': 'Aditivo'},
+    {'PRODUCT': 'RERATIFICATION', 'LOB': '', 'OTC': 'REQUESTED', 'MO': 'REQUESTED',
+     'FO': 'EXEMPT', 'NOTES': 'Reratificação'},
 )
 
 
@@ -1154,6 +1172,12 @@ TYPE_FOLDER_LEGACY = {
     # tipo, e um tipo AUSENTE daqui não se distingue de um tipo cujo histórico
     # alguém esqueceu de declarar.
     'TERMO DE RESILICAO':  (),
+    # Tipos NOVOS: nunca existiram sob outro nome, entao nao ha pasta antiga a
+    # varrer. A entrada vazia e obrigatoria — um tipo AUSENTE daqui nao se
+    # distingue de um tipo cujo historico alguem esqueceu de declarar.
+    'AMENDMENT':           (),
+    'ADDENDUM':            (),
+    'RERATIFICATION':      (),
 }
 
 # Produto (o que está gravado na linha) → pasta. É o TYPE_FOLDER mais os apelidos
