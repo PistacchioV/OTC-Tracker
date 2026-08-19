@@ -21256,21 +21256,21 @@ _MAPPING_DEFS = {
             {'FIELD': 'Sim/N\u00e3o', 'CODE': '1', 'LABEL': 'N\u00e3o'},
         ],
     },
-    # Cota\u00e7\u00f5es: **C\u00f3digo do Ativo Subjacente** (o mesmo do Index B3) \u2192 o s\u00edmbolo
-    # que a fonte de mercado entende. \u00c9 de-para, ent\u00e3o \u00e9 cadastro (\u00a72).
+    # Cotações: **Código do Ativo Subjacente** (o mesmo do Index B3) → o símbolo
+    # que a fonte de mercado entende. É de-para, então é cadastro (§2).
     #
-    # A LISTA de instrumentos da tela N\u00c3O sai daqui: ela \u00e9 o Subjacente ao vivo
+    # A LISTA de instrumentos da tela NÃO sai daqui: ela é o Subjacente ao vivo
     # (`_quotes_underlyings`), para um ativo novo cadastrado no Index B3
-    # aparecer em Cota\u00e7\u00f5es no mesmo dia. Este cadastro s\u00f3 TRADUZ, e por isso
-    # guarda apenas os c\u00f3digos que j\u00e1 t\u00eam s\u00edmbolo \u2014 as ~1.700 linhas restantes
-    # em branco seriam ru\u00eddo para quem edita a tabela.
+    # aparecer em Cotações no mesmo dia. Este cadastro só TRADUZ, e por isso
+    # guarda apenas os códigos que já têm símbolo — as ~1.700 linhas restantes
+    # em branco seriam ruído para quem edita a tabela.
     #
-    # O `seed` vai VAZIO de prop\u00f3sito: os dois arquivos s\u00e3o versionados
+    # O `seed` vai VAZIO de propósito: os dois arquivos são versionados
     # (471 equities e 70 commodities, semeados do `symbol_map` do app de
-    # desktop mais a regra dos tickers brasileiros \u2014 `PETR4` \u2192 `PETR4.SA`), e
+    # desktop mais a regra dos tickers brasileiros — `PETR4` → `PETR4.SA`), e
     # repetir centenas de pares aqui criaria uma segunda lista para divergir da
-    # primeira. Numa inst\u00e2ncia sem o pull o cadastro nasce vazio e a tela diz
-    # "n\u00e3o est\u00e1 no cadastro" \u2014 vis\u00edvel, diferente de um s\u00edmbolo errado.
+    # primeira. Numa instância sem o pull o cadastro nasce vazio e a tela diz
+    # "não está no cadastro" — visível, diferente de um símbolo errado.
     'quotes-equity': {
         'label': 'Quotes \u2014 Equities',
         'columns': [
@@ -21280,22 +21280,22 @@ _MAPPING_DEFS = {
         ],
         'seed': [],
     },
-    # Commodity \u00e9 o mesmo cadastro do Equities, com uma diferen\u00e7a que muda o
-    # tamanho da tabela: contrato futuro tem VENCIMENTO, e o de-para por c\u00f3digo
-    # fechado pedia uma linha por m\u00eas de cada mercadoria \u2014 70 linhas para 10
+    # Commodity é o mesmo cadastro do Equities, com uma diferença que muda o
+    # tamanho da tabela: contrato futuro tem VENCIMENTO, e o de-para por código
+    # fechado pedia uma linha por mês de cada mercadoria — 70 linhas para 10
     # mercadorias, mais uma linha nova a cada vencimento que a B3 abre.
     #
-    # As duas colunas aceitam o PADR\u00c3O `"MY"` do cadastro Commodities \u00d7 B3
-    # (letra do m\u00eas + ano; `_` \u00e9 espa\u00e7o literal), e uma linha passa a valer para
+    # As duas colunas aceitam o PADRÃO `"MY"` do cadastro Commodities × B3
+    # (letra do mês + ano; `_` é espaço literal), e uma linha passa a valer para
     # todos os vencimentos daquela mercadoria:
     #
-    #     BO"MY"  \u2192  ZL"MY".CBT       BOK6  \u2192 ZLK26.CBT
-    #     C_"MY"  \u2192  ZC"MY".CBT      'C K6' \u2192 ZCK26.CBT
+    #     BO"MY"  →  ZL"MY".CBT       BOK6  → ZLK26.CBT
+    #     C_"MY"  →  ZC"MY".CBT      'C K6' → ZCK26.CBT
     #
-    # Quem expande \u00e9 o `quotes.symbol_lookup` \u2014 inclusive o ano de UM d\u00edgito da
-    # B3 virando os DOIS que o s\u00edmbolo de mercado usa. Linha sem `"MY"` continua
-    # literal e vence o padr\u00e3o, que \u00e9 como se cadastra a exce\u00e7\u00e3o de um
-    # vencimento s\u00f3.
+    # Quem expande é o `quotes.symbol_lookup` — inclusive o ano de UM dígito da
+    # B3 virando os DOIS que o símbolo de mercado usa. Linha sem `"MY"` continua
+    # literal e vence o padrão, que é como se cadastra a exceção de um
+    # vencimento só.
     'quotes-commodity': {
         'label': 'Quotes \u2014 Commodities',
         'columns': [
@@ -21305,35 +21305,78 @@ _MAPPING_DEFS = {
         ],
         'seed': [],
     },
-    # C\u00f3digo de hist\u00f3rico do GDT (`nHistorico` do `rlctahis.csv`) \u2192 PRODUTO, para
+    # Código de histórico do GDT (`nHistorico` do `rlctahis.csv`) → PRODUTO, para
     # a Recon Pay/Rec.
     #
-    # O lado do cliente da recon \u00e9 o extrato da conta interna, e o \u00fanico campo
-    # que diz de que produto \u00e9 o lan\u00e7amento \u00e9 esse c\u00f3digo. Sem o de-para, o
-    # `_cli_rlctahis` classificava tudo como NDF (menos tr\u00eas c\u00f3digos de swap
-    # fixos no c\u00f3digo): o pagamento de uma op\u00e7\u00e3o de commodity da Lawton entrava
+    # O lado do cliente da recon é o extrato da conta interna, e o único campo
+    # que diz de que produto é o lançamento é esse código. Sem o de-para, o
+    # `_cli_rlctahis` classificava tudo como NDF (menos três códigos de swap
+    # fixos no código): o pagamento de uma opção de commodity da Lawton entrava
     # no balde NDF, e como o `_net_client` agrupa por
     # **(contraparte, LE, PRODUTO)**, o Total Net dela somava produtos que o lado
-    # do JPM tem separados. Da\u00ed as linhas "Netting n\u00e3o tratado pelo OTC Tracker":
-    # o valor netado n\u00e3o batia com nada porque era a soma de coisas diferentes.
-    # Netar continua sendo netar \u2014 s\u00f3 que DENTRO do produto.
+    # do JPM tem separados. Daí as linhas "Netting não tratado pelo OTC Tracker":
+    # o valor netado não batia com nada porque era a soma de coisas diferentes.
+    # Netar continua sendo netar — só que DENTRO do produto.
     #
-    # **PRODUCT preenchido = o c\u00f3digo liquida aquele produto, e a linha ENTRA na
-    # recon. PRODUCT em branco = o c\u00f3digo est\u00e1 documentado e \u00e9 IGNORADO** \u2014 \u00e9 o
-    # caso das duas transfer\u00eancias entre contas, que a mesa quer ver cadastradas
-    # para saber o que s\u00e3o, e que n\u00e3o s\u00e3o liquida\u00e7\u00e3o de produto nenhum.
+    # **PRODUCT preenchido = o código liquida aquele produto, e a linha ENTRA na
+    # recon. PRODUCT em branco = o código está documentado e é IGNORADO** — é o
+    # caso das duas transferências entre contas, que a mesa quer ver cadastradas
+    # para saber o que são, e que não são liquidação de produto nenhum.
     #
-    # `_SDCONTA_HIST_ALLOW` continua no `recon_payrec` como piso: c\u00f3digo que
-    # ainda n\u00e3o tem linha aqui (o `4419` e o `AA`) segue entrando com a regra
-    # hist\u00f3rica, para o cadastro novo n\u00e3o apagar comportamento em sil\u00eancio.
+    # `_SDCONTA_HIST_ALLOW` continua no `recon_payrec` como piso: código que
+    # ainda não tem linha aqui (o `4419` e o `AA`) segue entrando com a regra
+    # histórica, para o cadastro novo não apagar comportamento em silêncio.
+    # Excecoes de liquidacao da Recon Pay/Rec: net type DIRECIONAL por contraparte.
+    #
+    # O `NET` do Reference Data e UM valor por contraparte, e algumas liquidam de
+    # um jeito no que pagam e de outro no que recebem. Eram duas contrapartes
+    # FIXAS no `recon_payrec` (as duas Saint-Gobain); agora e cadastro, e a ordem
+    # de consulta e **excecao primeiro, Reference Data depois** - sem linha aqui,
+    # nada muda para a contraparte.
+    #
+    # A regra vale nos DOIS lados do batimento (JPM e cliente). Aplica-la so num
+    # deles faria a recon comparar coisas agrupadas de jeitos diferentes, que e a
+    # origem de metade das pendencias que ninguem explica.
+    #
+    # A ORDEM DAS LINHAS E A PRECEDENCIA: vence a primeira que casar, e o
+    # casamento e por TOKENS - todas as palavras do texto cadastrado tem de
+    # aparecer no nome da contraparte (cego a acento, caixa e pontuacao). Por isso
+    # a linha mais especifica vem ANTES da mais geral: `GOBAIN CANALIZACAO` antes
+    # de `GOBAIN BRASIL`, e o Mondelez do Norte/Nordeste antes do `MONDELEZ
+    # BRASIL`, que casaria com os dois. Era o que o codigo fixo fazia com um
+    # `not 'canalizacao'`; aqui a precedencia e visivel e editavel.
+    #
+    # Sentido em BRANCO cai no net type do Reference Data - e como se cadastra
+    # "so o pagamento e excecao".
+    'settlement-exception': {
+        'label': 'Settlement Exception',
+        'columns': [
+            {'key': 'COUNTERPARTY', 'label': 'Counterparty (all words must match)'},
+            {'key': 'PAY', 'label': 'Pay (blank = Reference Data)', 'type': 'select',
+             'options': ['', 'No Net', 'Pay/Rec', 'Total Net']},
+            {'key': 'RECEIVE', 'label': 'Receive (blank = Reference Data)', 'type': 'select',
+             'options': ['', 'No Net', 'Pay/Rec', 'Total Net']},
+            {'key': 'NOTES', 'label': 'Notes'},
+        ],
+        'seed': [
+            {'COUNTERPARTY': 'GOBAIN CANALIZACAO', 'PAY': 'Pay/Rec', 'RECEIVE': 'No Net',
+             'NOTES': 'Cada recebimento por si; os pagamentos numa perna so'},
+            {'COUNTERPARTY': 'GOBAIN BRASIL', 'PAY': 'No Net', 'RECEIVE': 'No Net',
+             'NOTES': 'Cada perna por si nos dois sentidos'},
+            {'COUNTERPARTY': 'MONDELEZ BRASIL NORTE NORDESTE', 'PAY': 'Pay/Rec',
+             'RECEIVE': 'No Net', 'NOTES': ''},
+            {'COUNTERPARTY': 'MONDELEZ BRASIL', 'PAY': 'Pay/Rec', 'RECEIVE': 'No Net',
+             'NOTES': ''},
+        ],
+    },
     'gdt-codes': {
         'label': 'GDT Codes',
         'columns': [
             {'key': 'DESCRIPTION', 'label': 'Description'},
             {'key': 'CODE', 'label': 'Code (nHistorico)'},
-            # Dom\u00ednio FECHADO: um produto digitado errado n\u00e3o d\u00e1 erro \u2014 ele cria
-            # um grupo que n\u00e3o existe do outro lado, e a linha vira uma pend\u00eancia
-            # que ningu\u00e9m explica. A op\u00e7\u00e3o vazia \u00e9 a primeira e aparece como "\u2014".
+            # Domínio FECHADO: um produto digitado errado não dá erro — ele cria
+            # um grupo que não existe do outro lado, e a linha vira uma pendência
+            # que ninguém explica. A opção vazia é a primeira e aparece como "—".
             {'key': 'PRODUCT', 'label': 'Product (blank = ignore)', 'type': 'select',
              'options': ['', 'NDF', 'COMM TER', 'COMM OPT', 'SWAP', 'FXO', 'EQUITIES']},
         ],
@@ -21351,8 +21394,8 @@ _MAPPING_DEFS = {
             {'DESCRIPTION': 'CREDITO TSS-FX', 'CODE': '4414', 'PRODUCT': 'FXO'},
             {'DESCRIPTION': 'ESTORNO DEBITO TSS-FX', 'CODE': '9396', 'PRODUCT': 'FXO'},
             {'DESCRIPTION': 'ESTORNO CREDITO TSS-FX', 'CODE': '4424', 'PRODUCT': 'FXO'},
-            # As duas transfer\u00eancias entre contas: documentadas, sem produto \u2014
-            # n\u00e3o s\u00e3o liquida\u00e7\u00e3o e n\u00e3o entram na recon.
+            # As duas transferências entre contas: documentadas, sem produto —
+            # não são liquidação e não entram na recon.
             {'DESCRIPTION': 'DEB. TRANSF CTAS MM TITULARIDADE', 'CODE': '5347', 'PRODUCT': ''},
             {'DESCRIPTION': 'CRED. TRANS ENTRE CONTAS', 'CODE': '0159', 'PRODUCT': ''},
         ],
@@ -34041,6 +34084,7 @@ def reconciliation_payrec_run():
         # volta vazio e todo lançamento do extrato volta a ser NDF — sem erro
         # nenhum, e com a recon acusando netting que não existe.
         _mapping_rows('gdt-codes')
+        _mapping_rows('settlement-exception')
         files = request.files.getlist('files') if mode == 'manual' else None
         result = run_payrec(recon_date, files=files, mode=mode)
         if result.get('success'):

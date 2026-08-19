@@ -1,0 +1,26 @@
+[
+  {
+    "COUNTERPARTY": "GOBAIN CANALIZACAO",
+    "PAY": "Pay/Rec",
+    "RECEIVE": "No Net",
+    "NOTES": "Cada recebimento por si; os pagamentos numa perna so"
+  },
+  {
+    "COUNTERPARTY": "GOBAIN BRASIL",
+    "PAY": "No Net",
+    "RECEIVE": "No Net",
+    "NOTES": "Cada perna por si nos dois sentidos"
+  },
+  {
+    "COUNTERPARTY": "MONDELEZ BRASIL NORTE NORDESTE",
+    "PAY": "Pay/Rec",
+    "RECEIVE": "No Net",
+    "NOTES": ""
+  },
+  {
+    "COUNTERPARTY": "MONDELEZ BRASIL",
+    "PAY": "Pay/Rec",
+    "RECEIVE": "No Net",
+    "NOTES": ""
+  }
+]

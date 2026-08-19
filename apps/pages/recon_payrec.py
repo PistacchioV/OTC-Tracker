@@ -356,42 +356,109 @@ def _net_type_for(net_map, cpty_name):
     return (net_map or {}).get(_norm(cpty_name), 'Total Net')
 
 
-# ── Saint-Gobain per-counterparty overrides ───────────────────────────────────
-# Two counterparties settle with a DIRECTION-SPECIFIC net type (hard business rule,
-# independent of CounterpartyDetails), applied on BOTH the JPM and the client side
-# via _reduce_net_values:
-#   Saint-Gobain do Brasil   → No Net on payments AND receipts (every leg on its own).
-#   Saint-Gobain Canalização → No Net on receipts (each receipt on its own) but
-#                              Pay/Rec on payments (all pays collapse into one leg).
-# Matched on the distinctive 'gobain' token (accent/space-insensitive via _norm);
-# Canalização is the more specific match, so 'do Brasil' explicitly excludes it.
-def _is_sg_canal(name):
-    n = _norm(name)
-    return 'gobain' in n and 'canalizacao' in n
+# ── Settlement Exception — net type DIRECIONAL, por contraparte ───────────────
+# Algumas contrapartes liquidam com um net type por SENTIDO: um jeito no que se
+# paga, outro no que se recebe. Isso não cabe no `NET` do Reference Data, que é
+# um valor só, e por isso eram duas contrapartes FIXAS no código (as duas
+# Saint-Gobain). Virou cadastro (`settlement-exception`, no /mapping), e a ordem
+# de consulta é: **exceção primeiro; sem linha, o que está no Reference Data**.
+#
+# A regra é aplicada nos DOIS lados (JPM e cliente) pelo `_reduce_net_values` —
+# aplicar só num deles faria o batimento comparar coisas agrupadas de jeitos
+# diferentes, que é a origem de metade das pendências inexplicáveis.
+#
+# CASAMENTO POR TOKENS, não pelo nome inteiro: o texto cadastrado casa quando
+# TODAS as suas palavras aparecem no nome da contraparte (cego a acento, caixa e
+# pontuação, via `_norm`). É o que o código fixo já fazia — `'gobain' in n and
+# 'brasil' in n` —, e é o que sobrevive ao mesmo cliente aparecer como
+# "SAINT-GOBAIN DO BRASIL PRODUTOS INDUSTRIAIS LTDA" num arquivo e
+# "SAINT GOBAIN BRASIL" noutro.
+#
+# ⚠️ **A ORDEM DAS LINHAS É A PRECEDÊNCIA**: vence a PRIMEIRA que casar. Por isso
+# a linha mais específica vem antes da mais geral — `GOBAIN CANALIZACAO` antes de
+# `GOBAIN BRASIL`, e o `MONDELEZ` do Norte/Nordeste antes do `MONDELEZ BRASIL`,
+# que casaria com os dois. Era o que o código fixo fazia com um `not
+# 'canalizacao'`; aqui quem decide é quem edita a tela, e a ordem é visível.
+_SETTLEMENT_EXCEPTION_KEY = 'settlement-exception'
 
 
-def _is_sg_brasil(name):
-    n = _norm(name)
-    return 'gobain' in n and 'brasil' in n and 'canalizacao' not in n
+def _mapping_rows(key):
+    """Linhas de um cadastro de /mapping, lidas do disco a cada chamada.
+
+    Mesmo padrão do `recon_fxo._mapping_rows` e do `_gdt_map`: importar `routes`
+    daqui seria circular, e reler a cada chamada é o que faz a edição na tela
+    valer no run seguinte, sem restart."""
+    try:
+        with open(os.path.join(_MAPPINGS_DIR, '%s.json' % key), encoding='utf-8') as fh:
+            rows = json.load(fh)
+    except Exception:
+        return []
+    return [r for r in rows if isinstance(r, dict)] if isinstance(rows, list) else []
+
+
+def _settlement_exceptions():
+    """[(tokens, pay, receive)] do cadastro, na ordem do arquivo.
+
+    Lido do disco a cada run, como os demais cadastros que o motor consome:
+    importar `routes` daqui seria circular, e reler é o que faz a edição na tela
+    valer no run seguinte, sem restart."""
+    out = []
+    for r in _mapping_rows(_SETTLEMENT_EXCEPTION_KEY):
+        tokens = [_norm(t) for t in str(r.get('COUNTERPARTY', '') or '').split()]
+        tokens = [t for t in tokens if t]
+        pay = str(r.get('PAY', '') or '').strip()
+        rec = str(r.get('RECEIVE', '') or '').strip()
+        # Linha sem nome, ou sem nenhum dos dois sentidos preenchidos, não é
+        # exceção nenhuma: sem tokens ela casaria com TODA contraparte, e sem
+        # net type não teria o que aplicar.
+        if tokens and (pay or rec):
+            out.append((tokens, pay, rec))
+    return out
+
+
+def _settlement_exception_for(cpty):
+    """(pay, receive) da primeira linha que casar, ou None."""
+    n = _norm(cpty)
+    if not n:
+        return None
+    for tokens, pay, rec in _settlement_exceptions():
+        if all(t in n for t in tokens):
+            return pay, rec
+    return None
+
+
+def _reduce_side(values, rule):
+    """Reduz UM sentido (só pagamentos ou só recebimentos) pela regra dele.
+
+    `No Net` mantém cada perna; qualquer outra regra soma o sentido inteiro numa
+    perna só — dentro de um sentido, `Total Net` e `Pay/Rec` dão o mesmo
+    resultado, porque não há sinal contrário para netar contra."""
+    nz = [v for v in values if abs(v) >= 1e-9]
+    if rule == 'No Net':
+        return nz
+    tot = sum(values)
+    return [tot] if abs(tot) >= 1e-9 else []
 
 
 def _reduce_net_values(cpty, values, net_type):
     """Signed output values for a counterparty group, honouring its settlement net
     type. Used identically by the JPM side (_emit_records) and the client side
-    (_net_client) so the net type is applied the same way on both ends. The two
-    Saint-Gobain direction-specific overrides are checked first, then the standard
-    Total Net / Pay/Rec / No Net rules. Near-zero results are dropped."""
+    (_net_client) so the net type is applied the same way on both ends.
+
+    A EXCEÇÃO vem primeiro: se a contraparte tem linha no cadastro
+    `settlement-exception`, o net type dela é por SENTIDO (um para o que se paga,
+    outro para o que se recebe) e substitui o do Reference Data. Sem linha, valem
+    as regras de sempre — Total Net / Pay/Rec / No Net. Resultados perto de zero
+    são descartados."""
     nz = [v for v in values if abs(v) >= 1e-9]
-    # Saint-Gobain do Brasil: No Net both ways → every leg on its own.
-    if _is_sg_brasil(cpty):
-        return nz
-    # Saint-Gobain Canalização: receipts No Net (individual); payments Pay/Rec
-    # (every pay summed into a single leg).
-    if _is_sg_canal(cpty):
-        out = [v for v in nz if v > 0]
-        pay = sum(v for v in values if v < 0)
-        if abs(pay) >= 1e-9:
-            out.append(pay)
+    exc = _settlement_exception_for(cpty)
+    if exc:
+        pay_rule, rec_rule = exc
+        # Cada lado é reduzido pela SUA regra, e o resultado é a soma dos dois.
+        # Sentido em branco no cadastro cai no net type do Reference Data — é
+        # como se cadastra "só o pagamento é exceção".
+        out = _reduce_side([v for v in values if v > 0], rec_rule or net_type)
+        out += _reduce_side([v for v in values if v < 0], pay_rule or net_type)
         return out
     if net_type == 'No Net':
         return nz
@@ -1268,18 +1335,19 @@ def _net_client(client, net_map):
         # Individual legs kept as-is (preserving each leg's own metadata):
         #   drop-if-unmatched noise; interbank SPB actuals (each LTR message is
         #   ALREADY netted — never sum them, and they have no name to group by);
-        #   Saint-Gobain do Brasil (No Net both ways); Saint-Gobain Canalização
-        #   RECEIPTS (No Net); any standard No Net cpty.
-        # Everything else (incl. Canalização PAYMENTS) is grouped and reduced below.
-        if c.get('drop_if_unmatched') or c.get('bank') or _is_sg_brasil(canon):
+        #   e o que a regra do SENTIDO daquela perna manda manter separado.
+        # O resto é agrupado e reduzido abaixo.
+        if c.get('drop_if_unmatched') or c.get('bank'):
             passthrough.append(c)
             continue
-        if _is_sg_canal(canon):
-            if val > 0:                                   # receipt → No Net (keep as-is)
-                passthrough.append(c)
-                continue
-            # payment → grouped so all pays collapse into one Pay/Rec leg
-        elif _net_type_for(net_map, canon) == 'No Net':
+        # A exceção do cadastro vale por sentido, então quem decide é o SINAL
+        # desta perna: um cliente pode ser No Net no que recebe e Pay/Rec no que
+        # paga (as duas Mondelez e a Saint-Gobain Canalização são assim).
+        exc = _settlement_exception_for(canon)
+        regra = (exc[0] if val < 0 else exc[1]) if exc else ''
+        if not regra:
+            regra = _net_type_for(net_map, canon)
+        if regra == 'No Net':
             passthrough.append(c)
             continue
         key = (_norm(canon), c.get('le', 'JPM'), c.get('product', 'NDF'))
