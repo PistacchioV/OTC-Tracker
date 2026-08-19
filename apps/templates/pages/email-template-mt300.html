@@ -2,8 +2,9 @@
    MT300 — as mensagens do dia que o grupo precisa casar no DVP.
 
    Params:
-     • rows          — [{instrument, deal, cpty, booking, settlement, other_qty,
-                        other_units, qty_ccy, qty, rate}], montadas pelo
+     • rows          — [{instrument, deal, cpty, booking, fixing, settlement,
+                        position, other_qty, other_units, qty_ccy, qty, rate}],
+                        montadas pelo
                        `_mt300_rows` a partir das operações de NDF Vanilla do dia
                        cujas contrapartes estão no cadastro `mt300`.
                        NUNCA vazia: sem operação o e-mail não sai (`_mt300_run`),
@@ -14,10 +15,11 @@
    linha contra a mensagem que chegou no DVP. Por isso ela vem inteira no corpo e
    não em anexo — o destinatário responde no próprio e-mail.
 
-   As DATAS saem em `aaaa-mm-dd` (o assunto é que leva dd/mm/aaaa): é o formato
-   da mensagem SWIFT, e é por ele que o outro lado compara. Os NÚMEROS mantêm as
-   casas decimais da origem — `Other Quantity` com seis, porque é o contravalor
-   calculado, e arredondá-lo faria a conferência acusar diferença de centavos.
+   As DATAS saem em `dd/mm/aaaa`, como no resto do app: a mesa lê o e-mail ao lado
+   das telas, e uma segunda grafia só aqui obrigaria a traduzir de cabeça. Os
+   NÚMEROS seguem a regra da casa (§3): VALOR em duas casas — `Quantity` e
+   `Other Quantity` são dinheiro e se leem em centavos — e TAXA em oito, porque
+   duas fariam dois strikes distintos aparecerem iguais na mensagem.
 
    O cabeçalho é cor sólida + gradiente CSS, nunca imagem/VML — ver o comentário
    do partials/email-gradient-header.html.
@@ -75,10 +77,13 @@
                         <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%"
                                style="border-collapse:collapse;font-size:11px;">
                             <tr>
+                                {# Booking → Fixing → Settlement, na ordem
+                                   CRONOLÓGICA: é como a operação acontece, e é
+                                   assim que quem confere lê a linha. #}
                                 {% for h in ['Instrument Type', 'Deal Name', 'End Counterparty Desc',
-                                             'Booking Date', 'Settlement Date', 'Other Quantity',
-                                             'Other Quantity Units', 'Quantity Currency',
-                                             'Quantity', 'Rate'] %}
+                                             'Booking Date', 'Fixing Date', 'Settlement Date',
+                                             'Position', 'Other Quantity', 'Other Quantity Units',
+                                             'Quantity Currency', 'Quantity', 'Rate'] %}
                                 <td style="padding:7px 8px;background-color:#dbe5f1;border:1px solid #b8c6da;
                                            font-weight:700;color:#1a1a2e;text-align:center;">{{ h }}</td>
                                 {% endfor %}
@@ -89,7 +94,9 @@
                                 <td style="padding:6px 8px;border:1px solid #b8c6da;color:#333;text-align:center;font-family:'Courier New',monospace;">{{ r.deal }}</td>
                                 <td style="padding:6px 8px;border:1px solid #b8c6da;color:#333;text-align:center;">{{ r.cpty }}</td>
                                 <td style="padding:6px 8px;border:1px solid #b8c6da;color:#333;text-align:center;">{{ r.booking }}</td>
+                                <td style="padding:6px 8px;border:1px solid #b8c6da;color:#333;text-align:center;">{{ r.fixing }}</td>
                                 <td style="padding:6px 8px;border:1px solid #b8c6da;color:#333;text-align:center;">{{ r.settlement }}</td>
+                                <td style="padding:6px 8px;border:1px solid #b8c6da;color:#333;text-align:center;white-space:nowrap;">{{ r.position }}</td>
                                 <td style="padding:6px 8px;border:1px solid #b8c6da;color:#333;text-align:right;font-family:'Courier New',monospace;">{{ r.other_qty }}</td>
                                 <td style="padding:6px 8px;border:1px solid #b8c6da;color:#333;text-align:center;">{{ r.other_units }}</td>
                                 <td style="padding:6px 8px;border:1px solid #b8c6da;color:#333;text-align:center;">{{ r.qty_ccy }}</td>

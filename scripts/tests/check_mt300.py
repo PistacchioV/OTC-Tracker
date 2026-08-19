@@ -12,9 +12,10 @@ O que erra em SILENCIO:
    positivo e no MT300 a venda e negativa. Sem isso as duas pontas do mesmo trade
    sairiam identicas na mensagem.
 
-3. **`Other Quantity` e DERIVADO** (quantity x rate), com seis casas. Nao existe
-   como campo, e arredonda-lo faria a conferencia do outro lado acusar diferenca
-   de centavos.
+3. **`Other Quantity` e DERIVADO** (quantity x rate). Ele nao existe como campo.
+   VALOR sai com duas casas e TAXA com oito: sao coisas diferentes — o
+   contravalor e dinheiro e se le em centavos, e a taxa e o que converte um no
+   outro, onde duas casas fariam dois strikes distintos aparecerem iguais.
 
 4. **Sem operacao das contrapartes cadastradas o e-mail NAO sai**: ele pede para
    casar o trade no DVP, e sem trade nao ha o que casar.
@@ -61,9 +62,10 @@ _orig = {'dir': R._GENERIC_ND_PRODUCTS['vanilla']['dir'], 'rec': R._MT300_REC_FI
 
 
 def deal(nome, cliente, cnpj, spn, notional, direction='SELL', rate='5.25470000'):
-    return {'Deal': nome, 'Client': cliente, 'TaxID': cnpj, 'SPN': spn,
+    return {'Deal': nome, 'Client': cliente, 'TaxID': cnpj, 'SPN': spn, 'LE': 'JPM',
             'Instrument': 'Avg Rate Forward', 'TradeDate': '07/08/2026',
             'SettlementDate': '27/01/2027', 'Notional': notional, 'Rate': rate,
+            'FirstFixingDate': '02/01/2027', 'LastFixingDate': '20/01/2027',
             'QuantityCurrency': 'USD', 'OtherQuantityCurrency': 'BRL',
             'Direction': direction}
 
@@ -102,20 +104,42 @@ try:
     # Conferidos contra o e-mail real de 2026-08-07.
     r0 = rows[0]
     check('quantity NEGATIVO na venda', r0['qty'], '-1,572,509.21')
-    check('other quantity = quantity x rate, com SEIS casas',
-          r0['other_qty'], '-8,263,064.145787')
-    check('   e a segunda linha tambem bate com o e-mail real',
-          rows[1]['other_qty'], '-29,454,152.411849')
+    check('other quantity = quantity x rate, em DUAS casas (e dinheiro)',
+          r0['other_qty'], '-8,263,064.15')
+    check('   e a segunda linha tambem', rows[1]['other_qty'], '-29,454,152.41')
+    # A TAXA vai em oito casas: duas fariam dois strikes distintos aparecerem
+    # iguais na mensagem.
+    check('a taxa em OITO casas', r0['rate'], '5.25470000')
     check('as moedas saem de campos distintos (quantity x other)',
           (r0['qty_ccy'], r0['other_units']), ('USD', 'BRL'))
-    # As datas saem em ISO: e o formato da mensagem SWIFT, e e por ele que o
-    # outro lado compara. O ASSUNTO e que leva dd/mm/aaaa.
-    check('datas em aaaa-mm-dd', (r0['booking'], r0['settlement']),
-          ('2026-08-07', '2027-01-27'))
+    # As datas saem no formato do resto do app — a mesa le o e-mail ao lado das
+    # telas, e uma segunda grafia so no MT300 obrigaria a traduzir de cabeca.
+    check('datas em dd/mm/aaaa', (r0['booking'], r0['settlement']),
+          ('07/08/2026', '27/01/2027'))
+    # Fixing Date = a coluna LAST Fixing Date do New Deals: numa media o que
+    # interessa e a ULTIMA fixacao, quando a taxa fecha.
+    check('fixing date vem do LastFixingDate', r0['fixing'], '20/01/2027')
+    # Position: a operacao por extenso, do lado da NOSSA entidade. Os dois verbos
+    # sao SEMPRE opostos — comprar uma moeda do par e vender a outra, e escreve-los
+    # de forma independente deixaria a linha dizer que a mesa comprou as duas.
+    check('position: venda', r0['position'], 'JPM sells USD / buys BRL')
     # A compra sai POSITIVA — o sinal e da direcao, nao do arquivo.
     io.open(os.path.join(d, '20260807_ndfvanilla.json'), 'w', encoding='utf-8').write(json.dumps([
         deal('D5VL-COMPRA', 'NESTLE BRASIL LTDA', '60.409.075/0001-52', '806544', '10.00', 'BUY')]))
-    check('a compra sai POSITIVA', R._mt300_rows(REF)[0]['qty'], '10.00')
+    r_compra = R._mt300_rows(REF)[0]
+    check('a compra sai POSITIVA', r_compra['qty'], '10.00')
+    check('   e a position se inverte junto', r_compra['position'], 'JPM buys USD / sells BRL')
+    # A entidade sai da LE do deal, nao de um literal: a mesma operacao e bookada
+    # em entidades diferentes, e a mensagem e confirmada por quem a bookou.
+    check('a entidade vem da LE do deal',
+          R._mt300_position({'LE': 'MGT', 'QuantityCurrency': 'USD',
+                             'OtherQuantityCurrency': 'BRL', 'Direction': 'SELL'}),
+          'MGT sells USD / buys BRL')
+    # Sem uma das moedas nao da para dizer a operacao: melhor a celula vazia do
+    # que uma frase pela metade.
+    check('sem moeda, a celula fica vazia',
+          R._mt300_position({'LE': 'JPM', 'QuantityCurrency': 'USD',
+                             'OtherQuantityCurrency': '', 'Direction': 'BUY'}), '')
 
     print('\n== 3. Sem operacao do grupo, o e-mail NAO sai ==')
     io.open(os.path.join(d, '20260807_ndfvanilla.json'), 'w', encoding='utf-8').write(json.dumps([
@@ -156,11 +180,11 @@ try:
     check('o card existe, com TO — BACC',
           ['data-cp-card="mt300"' in TPL, 'id="cp-mt300-to"' in TPL], [True, True])
     MAIL = read('apps/templates/pages/email-template-mt300.html')
-    check('o template tem as DEZ colunas da mensagem',
+    check('o template tem as DOZE colunas da mensagem',
           all(h in MAIL for h in ('Instrument Type', 'Deal Name', 'End Counterparty Desc',
-                                  'Booking Date', 'Settlement Date', 'Other Quantity',
-                                  'Other Quantity Units', 'Quantity Currency',
-                                  'Quantity', 'Rate')), True)
+                                  'Booking Date', 'Fixing Date', 'Settlement Date',
+                                  'Position', 'Other Quantity', 'Other Quantity Units',
+                                  'Quantity Currency', 'Quantity', 'Rate')), True)
     check('   e o pedido por extenso', 'match the trade in DVP' in MAIL, True)
     # Cabecalho e cor solida + gradiente CSS, nunca imagem/VML (CLAUDE.md §2).
     check('usa o header de gradiente da casa, sem VML',

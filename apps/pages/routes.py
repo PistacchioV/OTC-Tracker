@@ -9219,6 +9219,56 @@ def _spn_key(v):
     return re.sub(r'\D', '', s).lstrip('0')
 
 
+_REFDATA_TRIPLE_CACHE = {'mtime': None, 'rows': []}
+
+
+def _refdata_triples():
+    """[{name, spn, taxid}] do RefData.json, cacheado por mtime.
+
+    É o que alimenta o autocompletar do cadastro MT300: escolhido QUALQUER um dos
+    três, os outros dois se preenchem. Sem isso a mesa copiava SPN e CNPJ à mão
+    de outra tela — e um dígito errado ali não dá erro, só faz a operação sumir
+    do e-mail (o casamento é por esses campos).
+
+    Uma linha só com o nome não serve para completar nada, então entra apenas
+    quem tem nome E pelo menos um dos dois identificadores."""
+    path = os.path.join(_B3_DATA_DIR, 'RefData.json')
+    try:
+        mt = os.path.getmtime(path)
+    except OSError:
+        return []
+    if _REFDATA_TRIPLE_CACHE['mtime'] != mt:
+        try:
+            with open(path, encoding='utf-8') as fh:
+                data = json.load(fh) or []
+        except Exception:                                   # noqa: BLE001
+            data = []
+        vistos, out = set(), []
+        for rec in (data if isinstance(data, list) else []):
+            nome = str(rec.get('COUNTERPARTY', '') or '').strip()
+            spn = str(rec.get('SPN', '') or '').strip()
+            taxid = str(rec.get('TAX ID', '') or '').strip()
+            if not nome or not (spn or taxid):
+                continue
+            chave = (nome.upper(), spn, re.sub(r'\D', '', taxid))
+            if chave in vistos:
+                continue
+            vistos.add(chave)
+            out.append({'name': nome, 'spn': spn, 'taxid': taxid})
+        out.sort(key=lambda r: r['name'].upper())
+        _REFDATA_TRIPLE_CACHE['mtime'] = mt
+        _REFDATA_TRIPLE_CACHE['rows'] = out
+    return _REFDATA_TRIPLE_CACHE['rows']
+
+
+@blueprint.route('/api/reference-data/counterparties')
+def api_refdata_counterparties():
+    """Nome × SPN × Tax ID do Reference Data, para o autocompletar dos cadastros."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    return jsonify({'success': True, 'rows': _refdata_triples()})
+
+
 def _refdata_by_spn():
     """{SPN → COUNTERPARTY} do RefData.json, cacheado por mtime."""
     path = os.path.join(_B3_DATA_DIR, 'RefData.json')
@@ -21366,9 +21416,13 @@ _MAPPING_DEFS = {
     'mt300': {
         'label': 'MT300',
         'columns': [
-            {'key': 'COUNTERPARTY', 'label': 'Counterparty'},
-            {'key': 'SPN', 'label': 'SPN'},
-            {'key': 'CNPJ', 'label': 'CNPJ'},
+            # Os tres ligados ao Reference Data: preencher UM preenche os
+            # outros dois (ver `wireRefdata` no mapping.html). O dominio e
+            # ABERTO de proposito — cliente que ainda nao esta no RefData tem de
+            # poder ser cadastrado aqui.
+            {'key': 'COUNTERPARTY', 'label': 'Counterparty', 'refdata': 'name'},
+            {'key': 'SPN', 'label': 'SPN', 'refdata': 'spn'},
+            {'key': 'CNPJ', 'label': 'CNPJ', 'refdata': 'taxid'},
             {'key': 'NOTES', 'label': 'Notes'},
         ],
         'seed': [
@@ -32409,10 +32463,32 @@ def _mt300_is_target(deal, alvos):
     return False
 
 
-def _mt300_iso(dmy):
-    """`dd/mm/aaaa` → `aaaa-mm-dd`, que é como as datas saem na tabela do MT300."""
-    d = _parse_date_any(dmy)
-    return d.strftime('%Y-%m-%d') if d else str(dmy or '')
+def _mt300_position(d):
+    """`JPM buys USD / sells BRL` — a operação por extenso.
+
+    Os dois verbos são SEMPRE opostos: comprar uma moeda do par é vender a
+    outra, e escrevê-los de forma independente abriria espaço para a linha dizer
+    que a mesa comprou as duas. A direção é a do deal; as moedas são a do
+    Quantity e a do Other Quantity, na mesma ordem em que as colunas aparecem.
+    """
+    le = str(d.get('LE', '') or '').strip().upper() or 'JPM'
+    qty_ccy = str(d.get('QuantityCurrency', '') or '').strip()
+    other_ccy = str(d.get('OtherQuantityCurrency', '') or '').strip()
+    if not qty_ccy or not other_ccy:
+        return ''
+    compra = 'BUY' in str(d.get('Direction', '') or '').upper()
+    v1, v2 = ('buys', 'sells') if compra else ('sells', 'buys')
+    return '{} {} {} / {} {}'.format(le, v1, qty_ccy, v2, other_ccy)
+
+
+def _mt300_data(v):
+    """A data como a tabela do MT300 mostra: `dd/mm/aaaa`.
+
+    Passa pelo `_parse_date_any` em vez de repassar o texto: as fontes gravam a
+    data em mais de uma grafia, e é o mesmo formato do resto do app — a mesa lê
+    o e-mail ao lado das telas."""
+    d = _parse_date_any(v)
+    return d.strftime('%d/%m/%Y') if d else str(v or '')
 
 
 def _mt300_rows(ref):
@@ -32447,13 +32523,32 @@ def _mt300_rows(ref):
             'instrument': str(d.get('Instrument', '') or ''),
             'deal': str(d.get('Deal', '') or ''),
             'cpty': str(d.get('Client', '') or d.get('Acronym', '') or ''),
-            'booking': _mt300_iso(d.get('TradeDate')),
-            'settlement': _mt300_iso(d.get('SettlementDate')),
-            'other_qty': ('{:,.6f}'.format(other) if other is not None else ''),
+            'booking': _mt300_data(d.get('TradeDate')),
+            # Fixing Date = a coluna **Last Fixing Date** do New Deals. Numa
+            # média (Avg Rate Forward) o que interessa é a ÚLTIMA fixação, que é
+            # quando a taxa fecha; a primeira só abre a janela.
+            'fixing': _mt300_data(d.get('LastFixingDate')),
+            'settlement': _mt300_data(d.get('SettlementDate')),
+            # Position: a operação dita por extenso, do lado da NOSSA entidade —
+            # `JPM buys USD / sells BRL`. Quem confere lê a linha inteira sem ter
+            # de cruzar o sinal do Quantity com a direção na cabeça.
+            #
+            # A entidade sai da LE do deal (JPM/MGT/LAWTON), não de um literal:
+            # a mesma operação é bookada em entidades diferentes, e a mensagem é
+            # confirmada por quem a bookou.
+            'position': _mt300_position(d),
+            # VALOR em duas casas e TAXA em oito: são coisas diferentes. O
+            # contravalor é dinheiro e se lê em centavos; a taxa é o que converte
+            # um no outro, e duas casas fariam dois strikes distintos aparecerem
+            # iguais na mensagem (é a mesma regra do padrão de tabela, §3).
+            'other_qty': ('{:,.2f}'.format(other) if other is not None else ''),
             'other_units': str(d.get('OtherQuantityCurrency', '') or ''),
             'qty_ccy': str(d.get('QuantityCurrency', '') or ''),
             'qty': ('{:,.2f}'.format(qty) if qty is not None else ''),
-            'rate': str(d.get('Rate', '') or ''),
+            # Formatado a partir do NÚMERO, não repassado como texto: o campo já
+            # chega com oito casas, mas repassá-lo deixaria o formato preso à
+            # gravação de quem produziu o deal.
+            'rate': ('{:,.8f}'.format(rate) if rate is not None else ''),
         })
     return out
 

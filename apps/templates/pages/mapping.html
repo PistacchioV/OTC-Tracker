@@ -591,6 +591,16 @@
                     (c.options || []).map(function (o) {
                         return '<option value="' + esc(o) + '"' + (o === val ? ' selected' : '') + '>' + esc(o || '—') + '</option>';
                     }).join('') + '</select>';
+            } else if (c.refdata) {
+                /* Campo ligado ao Reference Data (ver `wireRefdata`): input com
+                   datalist — domínio ABERTO de propósito, porque um cliente que
+                   ainda não está no RefData tem de poder ser cadastrado aqui. As
+                   opções são sugestão; quem escolhe uma, ganha os outros dois
+                   campos preenchidos. */
+                fld = '<input type="text" class="form-control form-control-sm map-fld"' +
+                    ' list="mapRefdata' + esc(c.refdata) + '" data-refdata="' + esc(c.refdata) + '"' +
+                    ' data-i="' + i + '" value="' + esc(val) + '" autocomplete="off">' +
+                    '<datalist id="mapRefdata' + esc(c.refdata) + '"></datalist>';
             } else if (c.type === 'datalist') {
                 /* Domínio ABERTO: as opções são sugestões, não trava. O Status B3
                    e o Tipo Operação ganham valores novos sem aviso da B3 — um
@@ -608,7 +618,97 @@
             return '<div class="col-md-6"><label class="form-label fs-xs text-muted mb-1">' + esc(c.label || c.key) + '</label>' + fld + '</div>';
         }).join('');
         wireAutofill(st);
+        wireRefdata(st);
         if (window.bootstrap) bootstrap.Modal.getOrCreateInstance(document.getElementById('mapModal')).show();
+    }
+
+    /* Contrapartes do Reference Data, carregadas UMA vez por página. São ~440
+       linhas, e recarregá-las a cada abertura do modal faria a tela piscar sem
+       necessidade — o RefData não muda no meio de um cadastro. */
+    var REFDATA = null, REFDATA_PROM = null;
+    function refdataRows() {
+        if (REFDATA) return Promise.resolve(REFDATA);
+        if (!REFDATA_PROM) {
+            REFDATA_PROM = fetch('/api/reference-data/counterparties', { credentials: 'same-origin' })
+                .then(function (r) { return r.json(); })
+                .then(function (d) { REFDATA = (d && d.success && d.rows) || []; return REFDATA; })
+                .catch(function () { REFDATA = []; return REFDATA; });
+        }
+        return REFDATA_PROM;
+    }
+
+    /* Colunas com `refdata: 'name' | 'spn' | 'taxid'`: preencher UMA preenche as
+       outras duas, a partir do Reference Data.
+
+       A mesa copiava SPN e CNPJ à mão de outra tela, e um dígito errado ali não
+       dá erro nenhum — só faz a operação sumir do e-mail, porque o casamento é
+       justamente por esses campos.
+
+       Três decisões:
+         · o casamento do CNPJ é por DÍGITOS, dos dois lados: o mesmo documento
+           aparece com e sem máscara, e comparar o texto não casaria nada;
+         · o do nome é EXATO (cego a caixa e a espaço repetido), e não por
+           token: aqui o valor veio de uma lista fechada, e casar "por partes"
+           escolheria a primeira das várias entidades de um mesmo grupo;
+         · só se preenche o campo VAZIO. Quem digitou um valor à mão está
+           corrigindo o cadastro, e sobrescrevê-lo apagaria a correção. */
+    function wireRefdata(st) {
+        var campos = Array.prototype.slice.call(
+            document.querySelectorAll('#mapModalFields .map-fld[data-refdata]'));
+        if (!campos.length) return;
+        var porTipo = {};
+        campos.forEach(function (el) { porTipo[el.getAttribute('data-refdata')] = el; });
+
+        function digitos(v) { return String(v || '').replace(/\D/g, ''); }
+        function chaveNome(v) { return String(v || '').replace(/\s+/g, ' ').trim().toUpperCase(); }
+
+        refdataRows().then(function (rows) {
+            // Preenche os datalists com o que o campo daquele tipo oferece.
+            Object.keys(porTipo).forEach(function (tipo) {
+                var dl = document.getElementById('mapRefdata' + tipo);
+                if (!dl) return;
+                var vistos = {}, html = '';
+                rows.forEach(function (r) {
+                    var v = r[tipo];
+                    if (!v || vistos[v]) return;
+                    vistos[v] = 1;
+                    // O rótulo mostra o NOME junto: escolher um SPN de sete
+                    // dígitos sem saber de quem é seria escolher no escuro.
+                    html += '<option value="' + esc(v) + '"' +
+                            (tipo === 'name' ? '' : ' label="' + esc(r.name) + '"') + '></option>';
+                });
+                dl.innerHTML = html;
+            });
+
+            function acha(tipo, valor) {
+                if (!valor) return null;
+                var alvo = tipo === 'taxid' ? digitos(valor) : chaveNome(valor);
+                for (var i = 0; i < rows.length; i++) {
+                    var r = rows[i];
+                    var v = tipo === 'taxid' ? digitos(r.taxid) : chaveNome(r[tipo]);
+                    if (v && v === alvo) return r;
+                }
+                return null;
+            }
+
+            campos.forEach(function (el) {
+                var tipo = el.getAttribute('data-refdata');
+                function completa() {
+                    var rec = acha(tipo, el.value);
+                    if (!rec) return;
+                    Object.keys(porTipo).forEach(function (outro) {
+                        if (outro === tipo) return;
+                        var dst = porTipo[outro];
+                        // Só o campo VAZIO: quem digitou está corrigindo.
+                        if (dst && !dst.value.trim() && rec[outro]) dst.value = rec[outro];
+                    });
+                }
+                // `change` cobre o clique no datalist e a saída do campo; o
+                // `input` cobre quem colou o valor inteiro de uma vez.
+                el.addEventListener('change', completa);
+                el.addEventListener('input', completa);
+            });
+        });
     }
 
     /* Coluna com `autofill: 'OUTRA COLUNA'`: ao escolher o valor, copia para a
