@@ -282,8 +282,14 @@ document.addEventListener('DOMContentLoaded', function () {
     // `dir: 'asc'` — a lista abre do PRIMEIRO ticket para o último, na ordem em
     // que foram abertos. `perPage` casa com o valor marcado no select; mudar um
     // sem o outro faz a primeira pintura discordar do que o campo mostra.
+    // A lista abre pela FILA: STATUS primeiro (New → In Progress → Pending →
+    // Resolved → Closed) e, dentro do status, o ID do mais ANTIGO para o mais
+    // novo. Quem abre a tela quer ver o que falta atender, e o que já terminou
+    // no fim; abrindo por ID, o resolvido de ontem ficava no meio do que está
+    // aberto hoje. O desempate por `seq` é aplicado em QUALQUER ordenação (ver
+    // `filtered`), então o chamado mais antigo encabeça sempre.
     var UI = { q: '', status: '', priority: '', page: 1, perPage: 25,
-               sort: 'seq', dir: 'asc' };
+               sort: 'status', dir: 'asc' };
 
     var STATUS_CLASS = {
         'New':         'bg-primary-subtle text-primary',
@@ -386,7 +392,12 @@ document.addEventListener('DOMContentLoaded', function () {
             var va = sortValue(a, UI.sort), vb = sortValue(b, UI.sort);
             if (va < vb) { return UI.dir === 'asc' ? -1 : 1; }
             if (va > vb) { return UI.dir === 'asc' ? 1 : -1; }
-            return 0;
+            // Empate → o ID mais ANTIGO primeiro, SEMPRE em ordem crescente e
+            // independente do `dir` da coluna: o desempate é a fila de
+            // atendimento, não uma segunda ordenação que se inverte junto. Sem
+            // ele, chamados do mesmo status saíam na ordem em que o servidor os
+            // devolveu, que muda a cada carga.
+            return (a.seq || 0) - (b.seq || 0);
         });
         return out;
     }
