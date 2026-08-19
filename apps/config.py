@@ -38,6 +38,26 @@ class Config(object):
 
     USE_SQLITE  = True 
 
+    DATABASE_LOCAL_SEMAPHORE_TIMEOUT_SECONDS = float(
+        os.getenv('DATABASE_LOCAL_SEMAPHORE_TIMEOUT_SECONDS', '15')
+    )
+    DATABASE_READ_LOCK_TIMEOUT_SECONDS = float(os.getenv('DATABASE_READ_LOCK_TIMEOUT_SECONDS', '15'))
+    DATABASE_WRITE_LOCK_TIMEOUT_SECONDS = float(os.getenv('DATABASE_WRITE_LOCK_TIMEOUT_SECONDS', '30'))
+    DATABASE_SQLITE_BUSY_TIMEOUT_SECONDS = int(os.getenv('DATABASE_SQLITE_BUSY_TIMEOUT_SECONDS', '10000'))
+    DATABASE_SLOW_LOCK_WARNING_SECONDS = float(os.getenv('DATABASE_SLOW_LOCK_WARNING_SECONDS', '5'))
+    DATABASE_LOCK_RETRY_LIMIT = int(os.getenv('DATABASE_LOCK_RETRY_LIMIT', '2'))
+    DATABASE_READ_CONCURRENCY = int(os.getenv('DATABASE_READ_CONCURRENCY', '4'))
+    DATABASE_ACCESS_PATHS = (
+        os.path.join(basedir, 'static', 'data', 'db', 'Users_OTCTracker.db'),
+        os.path.join(basedir, 'static', 'data', 'db', 'pending-confirmation-backlog.db'),
+        os.path.join(basedir, 'static', 'data', 'db', 'pending-confirmation-pending.db'),
+        os.path.join(basedir, 'static', 'data', 'db', 'pending-confirmation-ok.db'),
+        os.path.join(basedir, 'static', 'data', 'db', 'manual_confirmations_pending.db'),
+        os.path.join(basedir, 'static', 'data', 'db', 'manual_confirmations_ok.db'),
+        os.path.join(basedir, 'static', 'data', 'db', 'matching_comitentes.db'),
+        os.path.join(basedir, 'db.sqlite3'),
+    )
+
     # try to set up a Relational DBMS
     if DB_ENGINE and DB_NAME and DB_USERNAME:
 

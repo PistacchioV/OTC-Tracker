@@ -16,7 +16,6 @@ import tempfile
 import base64
 import logging
 import time
-import duckdb
 from collections import Counter
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
@@ -38,6 +37,18 @@ from apps.pages import otc_boxparse
 # Armazenamento dos tickets do Support Center (camada de dados pura — sessão,
 # notificação e e-mail ficam aqui, nas rotas).
 from apps.pages import otc_tickets
+# Locks e transações dos bancos de arquivo (DuckDB/SQLite avulsos). Import no
+# TOPO, e não preguiçoso: as exceções são capturadas em `except` de rotas, e um
+# nome resolvido só na primeira chamada faria o `except` referenciar algo que
+# ainda não existe.
+from apps.pages.database_access import (
+    DatabaseCleanupError,
+    DatabaseLockTimeout,
+    TransactionOutcomeUnknown,
+    duckdb_read,
+    duckdb_write,
+    verify_sqlite_integrity,
+)
 # Os tipos de confirmação são UMA lista só, definida no módulo da esteira: ela
 # alimenta o Confirmation Type do upload do Electronic Inventory, o cadastro
 # Produto × LOB de `manual-conf-validation` e o dropdown de Produto do Track
@@ -719,12 +730,11 @@ ROLE_META = {
 # ==============================================================================
 # FUNÇÕES AUXILIARES — BANCO DE DADOS (DuckDB)
 # ==============================================================================
-# DuckDB only allows ONE connection per process to an on-disk database.
-# We use a singleton connection + a threading lock so concurrent requests
-# queue up rather than failing with BinderException.
-
-_duckdb_conn = None
-_duckdb_conn_lock = threading.Lock()
+# Quem abre os bancos de arquivo é o `database_access`: contexto (`with`) com
+# lock no ARQUIVO, que vale ENTRE PROCESSOS — o `threading.Lock` de módulo que
+# ficava aqui só protegia um. A conexão singleton, o lock de thread, o retry
+# manual e a reabertura com quarentena de WAL saíram junto: retry e backoff são
+# do contexto agora.
 
 # Lazy one-time schema init (see _ensure_db_initialized). Deferred so the
 # Werkzeug auto-reloader's supervisor process never opens the single-writer
@@ -735,11 +745,24 @@ _db_init_tls  = threading.local()     # per-thread "currently initializing" flag
 
 
 class _DuckDBHandle:
-    """Proxy that holds _duckdb_conn_lock for its lifetime; close() releases it."""
-    __slots__ = ('_conn', '_closed')
+    """Adaptador de compatibilidade para os chamadores antigos, que usam `close()`.
 
-    def __init__(self, conn):
-        self._conn = conn
+    O banco de usuários passou a ser aberto pelo `duckdb_write` do
+    `database_access` — um contexto (`with`) cujo lock é de ARQUIVO, e por isso
+    vale também ENTRE PROCESSOS. Os ~21 chamadores das rotas seguem o contrato
+    antigo (`conn = get_db_connection()` … `finally: conn.close()`), e reescrever
+    os 21 no mesmo commit seria trocar a disciplina de fechamento de todos de uma
+    vez; este adaptador é o que permite migrá-los aos poucos.
+
+    O `close()` é o `__exit__` do contexto: é ele que comita, fecha a conexão e
+    solta o lock. A regra do `finally` continua valendo palavra por palavra
+    (CLAUDE.md §4) — sem ela o lock não é liberado e o app trava para todos.
+    """
+    __slots__ = ('_context', '_conn', '_closed')
+
+    def __init__(self, context):
+        self._context = context
+        self._conn = context.__enter__()
         self._closed = False
 
     def __getattr__(self, name):
@@ -748,95 +771,24 @@ class _DuckDBHandle:
     def close(self):
         if not self._closed:
             self._closed = True
-            _duckdb_conn_lock.release()
+            self._context.__exit__(None, None, None)
+
+    def commit(self):
+        """O contexto de escrita comita quando o dono do handle o fecha."""
 
 
-def _duckdb_connect_resilient(path, **kwargs):
-    """``duckdb.connect`` that recovers from a corrupt/unreplayable WAL.
+def get_db_connection():
+    """Abre o banco de Usuários pelo contexto de transação exclusiva comum.
 
-    A WAL left in a bad state (process killed mid-write, or the DuckDB quirk
-    "Failure while replaying WAL … GetDefaultDatabase with no default database
-    set") makes ``connect`` raise and blocks the DB entirely — which, on the
-    Users DB, breaks even the lock/login flow. When that happens we quarantine
-    the ``.wal`` (rename it aside) and retry once: the file reopens from its last
-    checkpoint. Uncommitted WAL data is unrecoverable in this state anyway.
-
-    Read-only opens can't quarantine (nothing should be writing), so they just
-    propagate the original error.
+    Era uma conexão SINGLETON atrás de um `threading.Lock` de módulo, com retry,
+    backoff e reconexão quando ela adoecia. O lock de thread protegia UM
+    processo: um script de manutenção rodando ao lado do servidor abria o mesmo
+    arquivo sem pedir licença a ninguém. O `duckdb_write` põe o lock no ARQUIVO,
+    então a exclusão vale entre processos — e o retry, o backoff e a checagem de
+    saúde passam a ser dele, num lugar só, para todos os bancos.
     """
-    try:
-        return duckdb.connect(path, **kwargs)
-    except Exception as e:
-        msg = str(e).lower()
-        wal_path = str(path) + ".wal"
-        recoverable = ("wal" in msg or "replay" in msg) and os.path.exists(wal_path)
-        if kwargs.get("read_only") or not recoverable:
-            raise
-        quarantine = wal_path + ".corrupt-" + time.strftime("%Y%m%d-%H%M%S")
-        try:
-            os.rename(wal_path, quarantine)
-        except Exception:
-            log.error("DuckDB WAL replay failed and quarantine failed:\n%s",
-                      traceback.format_exc())
-            raise e
-        log.error("DuckDB WAL replay failed for %s (%s); quarantined WAL → %s and retried open",
-                  path, e.__class__.__name__, os.path.basename(quarantine))
-        return duckdb.connect(path, **kwargs)
-
-
-def _duckdb_open():
-    global _duckdb_conn
-    abs_path = os.path.abspath(DB_PATH)
-    _duckdb_conn = _duckdb_connect_resilient(
-        abs_path,
-        config={
-            "autoinstall_known_extensions": "false",
-            "autoload_known_extensions": "false",
-        }
-    )
-    log.debug("DuckDB singleton opened → %s", abs_path)
-    return _duckdb_conn
-
-
-def get_db_connection(max_retries=6, retry_delay=0.05):
-    global _duckdb_conn
     _ensure_db_initialized()        # lazy, one-time schema/migrations (no-op after first run)
-    last_exc = None
-    for attempt in range(max_retries):
-        try:
-            _duckdb_conn_lock.acquire()
-            try:
-                if _duckdb_conn is None:
-                    _duckdb_open()
-                else:
-                    try:
-                        _duckdb_conn.execute("SELECT 1")
-                    except Exception:
-                        log.warning("DuckDB singleton unhealthy, reconnecting…")
-                        try:
-                            _duckdb_conn.close()
-                        except Exception:
-                            pass
-                        _duckdb_open()
-            except Exception:
-                _duckdb_conn_lock.release()
-                raise
-            return _DuckDBHandle(_duckdb_conn)
-        except duckdb.IOException as e:
-            # The inner handler above already released the lock before re-raising,
-            # so we must NOT release it again here (that caused
-            # "RuntimeError: release unlocked lock" masking the real IOException).
-            last_exc = e
-            if attempt < max_retries - 1:
-                wait = retry_delay * (2 ** attempt)
-                log.warning("DuckDB locked (attempt %d/%d), retrying in %.0fms…",
-                            attempt + 1, max_retries, wait * 1000)
-                time.sleep(wait)
-        except Exception:
-            log.error("Failed to open DuckDB:\n%s", traceback.format_exc())
-            raise
-    log.error("DuckDB unavailable after %d retries", max_retries)
-    raise last_exc
+    return _DuckDBHandle(duckdb_write(DB_PATH))
 
 
 def init_db():
@@ -17910,15 +17862,13 @@ def _pc_ensure_db(path):
         return
     try:
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        # close() em finally: se o CREATE TABLE falhar, a conexão vazada mantém
-        # o lock de escrita do DuckDB até o processo morrer — e aí a página some
-        # para TODOS os usuários, não só para quem tropeçou no erro.
-        con = duckdb.connect(path)
-        try:
+        # O `with` fecha a conexão e solta o lock em QUALQUER saída, inclusive na
+        # exceção. Era `connect` + `finally: close()` escrito à mão: uma conexão
+        # vazada segura o lock de escrita do DuckDB pela vida do processo, e aí a
+        # página some para TODOS, não só para quem tropeçou no erro.
+        with duckdb_write(path) as con:
             cols = ', '.join('"{}" VARCHAR'.format(c) for c in _PC_COLUMNS)
             con.execute('CREATE TABLE IF NOT EXISTS {} ({})'.format(_PC_TABLE, cols))
-        finally:
-            con.close()
         log.info('[pending-confirmation] created empty DB %s', path)
     except Exception:
         log.warning('[pending-confirmation] could not create %s', path)
@@ -17930,13 +17880,11 @@ def _pc_load_rows(category):
     if not os.path.isfile(path):
         return []
     try:
-        con = duckdb.connect(path, read_only=True)
-    except Exception:
-        log.warning('[pending-confirmation] could not open %s', path)
-        return []
-    try:
-        cols = ', '.join('"{}"'.format(c) for c in _PC_COLUMNS)
-        rows = con.execute('SELECT {} FROM {}'.format(cols, _PC_TABLE)).fetchall()
+        # `duckdb_read`: lock de arquivo COMPARTILHADO (as leituras não se
+        # excluem entre si) e fechamento garantido na saída do bloco.
+        with duckdb_read(path) as con:
+            cols = ', '.join('"{}"'.format(c) for c in _PC_COLUMNS)
+            rows = con.execute('SELECT {} FROM {}'.format(cols, _PC_TABLE)).fetchall()
         out = [dict(zip(_PC_COLUMNS, r)) for r in rows]
         for r in out:                       # keep Aging/Status current at read time
             _pc_refresh_aging_status(r)
@@ -17944,8 +17892,6 @@ def _pc_load_rows(category):
     except Exception:
         log.warning('[pending-confirmation] query failed for %s:\n%s', path, traceback.format_exc())
         return []
-    finally:
-        con.close()
 
 
 @blueprint.route('/api/pending-confirmation/search', methods=['POST'])
@@ -18421,27 +18367,19 @@ def _pc_target_category(row):
 
 
 def _pc_write_exec(category, ops):
-    """Run (sql, params) ops in one read-write connection to a DB, retried around
-    the brief read-only search connections."""
+    """Run (sql, params) operations in one shared exclusive transaction."""
     path = os.path.join(_PC_DB_DIR, _PC_DBS[category])
     _pc_ensure_db(path)
-    for attempt in range(6):
-        try:
-            con = duckdb.connect(path)
-        except Exception:
-            time.sleep(0.05 * (2 ** attempt))
-            continue
-        try:
+    try:
+        # O retry/backoff que estava escrito aqui à mão passou a ser do
+        # `duckdb_write`, num lugar só e para todos os bancos.
+        with duckdb_write(path) as con:
             for sql, params in ops:
                 con.execute(sql, params)
-            return True
-        except Exception:
-            log.warning('[pending-confirmation] write failed on %s:\n%s', category, traceback.format_exc())
-            return False
-        finally:
-            con.close()
-    log.warning('[pending-confirmation] write gave up (DB busy) on %s', category)
-    return False
+        return True
+    except Exception:
+        log.warning('[pending-confirmation] write failed on %s:\n%s', category, traceback.format_exc())
+        return False
 
 
 def _pc_delete_tn(category, tn):
@@ -18478,26 +18416,21 @@ def _pc_rewrite_db(category, rows):
     path = os.path.join(_PC_DB_DIR, _PC_DBS[category])
     _pc_ensure_db(path)
     cols_ddl = ', '.join('"{}" VARCHAR'.format(c) for c in _PC_COLUMNS)
-    for attempt in range(6):
-        try:
-            con = duckdb.connect(path)
-        except Exception:
-            time.sleep(0.05 * (2 ** attempt))
-            continue
-        try:
+    try:
+        # DROP + CREATE + INSERT numa transação só: aqui o `with` importa mais do
+        # que nos outros, porque uma falha no meio deixaria o banco SEM a tabela
+        # que acabou de ser derrubada — a página abriria vazia.
+        with duckdb_write(path) as con:
             con.execute('DROP TABLE IF EXISTS {}'.format(_PC_TABLE))
             con.execute('CREATE TABLE {} ({})'.format(_PC_TABLE, cols_ddl))
             if rows:
                 ph = ', '.join('?' for _ in _PC_COLUMNS)
                 con.executemany('INSERT INTO {} VALUES ({})'.format(_PC_TABLE, ph),
                                 [[r.get(c, '') for c in _PC_COLUMNS] for r in rows])
-            return True
-        except Exception:
-            log.warning('[pending-confirmation] rewrite failed on %s:\n%s', category, traceback.format_exc())
-            return False
-        finally:
-            con.close()
-    return False
+        return True
+    except Exception:
+        log.warning('[pending-confirmation] rewrite failed on %s:\n%s', category, traceback.format_exc())
+        return False
 
 
 def _pc_snapshot_pending(rows_pending):
@@ -22485,20 +22418,29 @@ def _ndf_fwdstart_cached_keys(ref):
                         continue
                     k = _ndf_rebook_key(e, 'StrikeSetDate')
                     if k:
-                        keys.setdefault(k, str(e.get('Deal') or '').strip())
+                        # A TRADE DATE do FWD Start vai junto: o Manual Deals EA
+                        # precisa dela para tirar do e-mail o FWD Start que foi
+                        # bookado e fixou no MESMO dia (ver `_mdea_rows`). Só o
+                        # Deal ID não responde essa pergunta.
+                        keys.setdefault(k, {'deal': str(e.get('Deal') or '').strip(),
+                                            'trade': str(e.get('TradeDate') or '').strip()})
     return keys
 
 
 def _ndf_drop_fwdstart_rebooks(vanilla_deals, fixing_deals, ref):
     """Tira da lista de vanilla os re-bookings de FWD Start que fixaram.
-    Retorna (deals_que_ficam, [(deal_vanilla, deal_fwdstart_casado)])."""
+
+    Retorna (deals_que_ficam, [(deal_vanilla, info_do_fwdstart)]), com
+    `info_do_fwdstart` = `{'deal', 'trade'}` — o Deal ID e a Trade Date do FWD
+    Start original."""
     if not vanilla_deals:
         return vanilla_deals, []
     keys = _ndf_fwdstart_cached_keys(ref)
     for d in fixing_deals:
         k = _ndf_rebook_key(d, 'StrikeSetDate')
         if k:
-            keys.setdefault(k, str(d.get('Deal') or '').strip())
+            keys.setdefault(k, {'deal': str(d.get('Deal') or '').strip(),
+                                'trade': str(d.get('TradeDate') or '').strip()})
     if not keys:
         return vanilla_deals, []
     kept, dropped = [], []
@@ -22559,10 +22501,10 @@ def _ndf_api_pull(sid='API', actor_name='Athena API', ref_date=None):
     # novo — sai antes de qualquer gravação.
     routed['vanilla'], rebooks = _ndf_drop_fwdstart_rebooks(
         routed['vanilla'], fixing_today, now)
-    for d, fwd_name in rebooks:
+    for d, fwd in rebooks:
         log.info('[ndf-api] vanilla %s não importado: re-booking do FWD Start %s '
                  '(contraparte %s · notional %s · vencimento %s)',
-                 d.get('Deal') or '?', fwd_name or '?', d.get('Acronym') or '?',
+                 d.get('Deal') or '?', (fwd or {}).get('deal') or '?', d.get('Acronym') or '?',
                  d.get('Notional') or '?', d.get('SettlementDate') or '?')
     # O par (vanilla ↔ FWD Start) é GRAVADO, e não só registrado no log. Ele é
     # calculado aqui — o único lugar que vê os dois lados — e some em seguida: o
@@ -27928,8 +27870,7 @@ def _conf_pc_set_fepweb(trade_numbers, numero):
         if not os.path.isfile(path):
             continue
         try:
-            con = duckdb.connect(path)
-            try:
+            with duckdb_write(path) as con:
                 before = con.execute(
                     'SELECT count(*) FROM {} WHERE trim("Trade Number") IN ({})'
                     .format(_PC_TABLE, placeholders), tns).fetchone()[0]
@@ -27938,8 +27879,6 @@ def _conf_pc_set_fepweb(trade_numbers, numero):
                         'UPDATE {} SET "FepWeb ID" = ? WHERE trim("Trade Number") IN ({})'
                         .format(_PC_TABLE, placeholders), [numero] + tns)
                     updated += before
-            finally:
-                con.close()
         except Exception:
             log.warning('[conf] FepWeb ID update failed em %s:\n%s', fname,
                         traceback.format_exc())
@@ -31846,7 +31785,16 @@ _MDEA_LABEL = {'otherpub': 'NDF Other Publisher', 'fwdstart': 'NDF FWD Start'}
 _MDEA_TIME = {'otherpub': (20, 0), 'fwdstart': (16, 30)}
 # Onde o par (vanilla ↔ FWD Start) é gravado, no arquivo do dia da FIXAÇÃO — que
 # é o dia em que o e-mail sai, e por isso a chave de leitura.
-_MDEA_REBOOK_DIR = os.path.join(NEW_DEALS_CACHE_ROOT, 'NDF', 'FwdStartRebooks')
+#
+# ⚠️ FORA do `NEW_DEALS_CACHE_ROOT`. Este store nasceu lá dentro
+# (`NDF/FwdStartRebooks`) e o New Deals Monitor criou um card sozinho para ele,
+# na seção Others: o Monitor varre o cache e trata **todo diretório novo como um
+# produto**, que é o que faz um produto novo aparecer sem código. O par de
+# re-booking não é um produto — é estado da rotina Manual Deals EA —, e por isso
+# ele mora no cache DELA.
+_MDEA_REBOOK_DIR = os.path.normpath(os.path.join(
+    os.path.dirname(__file__), '..', 'static', 'data', 'cache', 'manual-deals-ea',
+    'fwdstart-rebooks'))
 
 
 def _mdea_rebook_path(ref):
@@ -31876,15 +31824,19 @@ def _mdea_rebook_record(rebooks, ref):
             atual = []
         vistos = {str(r.get('Deal') or '') for r in atual if isinstance(r, dict)}
         novos = 0
-        for d, fwd_name in rebooks:
+        for d, fwd in rebooks:
             deal = str(d.get('Deal') or '').strip()
             if not deal or deal in vistos:
                 continue
             vistos.add(deal)
             novos += 1
+            fwd = fwd if isinstance(fwd, dict) else {'deal': fwd}
             atual.append({
                 'Deal': deal,
-                'FwdStartDeal': str(fwd_name or '').strip(),
+                'FwdStartDeal': str(fwd.get('deal') or '').strip(),
+                # A Trade Date do FWD START (não a do vanilla): é ela que diz se
+                # a operação foi bookada e fixou no mesmo dia — ver `_mdea_rows`.
+                'FwdStartTradeDate': str(fwd.get('trade') or '').strip(),
                 'Client': str(d.get('Client') or '').strip(),
                 'Acronym': str(d.get('Acronym') or '').strip(),
                 'SPN': str(d.get('SPN') or '').strip(),
@@ -31926,6 +31878,17 @@ def _mdea_le_names():
     return out
 
 
+def _mdea_date_key(v):
+    """`dd/mm/aaaa` → `aaaa-mm-dd`, para comparar datas sem depender da grafia.
+
+    As duas datas comparadas vêm de arquivos diferentes (o registro do par e o
+    dia da rotina) e já apareceram com zero à esquerda de um jeito e de outro —
+    comparar o texto cru erraria em silêncio, que aqui significa deixar uma
+    operação dentro do e-mail (ou tirá-la) sem ninguém ver."""
+    d = _parse_date_any(v)
+    return d.strftime('%Y-%m-%d') if d else ''
+
+
 def _mdea_row(deal, le_names):
     """Uma linha do e-mail: Deal Id · Legal Entity · Counterparty."""
     le = str(deal.get('LE', '') or '').strip().upper()
@@ -31960,8 +31923,32 @@ def _mdea_rows(kind, ref):
     if kind == 'fwdstart':
         # A referência é a Strike Set Date, e o arquivo do dia da fixação é
         # justamente onde o par foi gravado. O Deal que sai é o do VANILLA.
-        return [_mdea_row(r, le_names) for r in _mdea_rebook_rows(ref)
-                if str(r.get('Deal') or '').strip()]
+        #
+        # FICA DE FORA o FWD Start cuja TRADE DATE é a própria Strike Set Date:
+        # bookado e fixado no mesmo dia, ele não é uma operação que ficou
+        # esperando o fixing — é um trade normal do dia, e o EA automático o
+        # enxerga como qualquer outro. Pedir para excluí-lo tiraria da métrica
+        # uma operação que não tem nada de manual.
+        #
+        # A data comparada é a do FWD START ORIGINAL, nunca a do vanilla: a do
+        # vanilla É a Strike Set Date por construção do pareamento
+        # (`_ndf_rebook_key`), então compará-la excluiria TODAS as linhas.
+        alvo = _mdea_date_key(ref.strftime('%d/%m/%Y'))
+        out = []
+        for r in _mdea_rebook_rows(ref):
+            if not str(r.get('Deal') or '').strip():
+                continue
+            fwd_trade = _mdea_date_key(r.get('FwdStartTradeDate'))
+            # Sem a data gravada não dá para afirmar que foi no mesmo dia, e o
+            # lado seguro é INCLUIR: uma operação a mais no pedido é revisada
+            # por quem recebe; uma a menos fica no EA sem ninguém ver.
+            if fwd_trade and fwd_trade == alvo:
+                log.info('[manual-deals-ea] FWD Start %s fora do e-mail: bookado e '
+                         'fixado no mesmo dia (%s)',
+                         r.get('FwdStartDeal') or r.get('Deal'), r.get('FwdStartTradeDate'))
+                continue
+            out.append(_mdea_row(r, le_names))
+        return out
     out = []
     for d in _mdea_day_deals('other-publishers', ref):
         if not str(d.get('Deal', '') or '').strip():
@@ -33908,9 +33895,19 @@ def reconciliation_comitente_data():
     try:
         from apps.pages.recon_comitente import load_from_db
         return jsonify(load_from_db())
+    except DatabaseLockTimeout:
+        # 503 e `retryable`, não 500: o banco está OCUPADO, não quebrado. A tela
+        # pode tentar de novo sozinha, e um 500 a faria desistir e mostrar erro.
+        return jsonify({
+            'error': 'O banco de reconciliação está ocupado. Tente novamente em instantes.',
+            'retryable': True,
+        }), 503
+    except DatabaseCleanupError:
+        log.exception('[recon_comitente_data] falha ao liberar recursos do banco')
+        return jsonify({'error': 'Falha ao finalizar o acesso ao banco de reconciliação.'}), 500
     except Exception as e:
-        log.error('[recon_comitente_data] %s', e)
-        return jsonify({'error': str(e)}), 500
+        log.exception('[recon_comitente_data] falha ao carregar dados')
+        return jsonify({'error': 'Não foi possível carregar os dados de reconciliação.'}), 500
 
 
 @blueprint.route('/reconciliation-comitente/run', methods=['POST'])
@@ -33957,9 +33954,51 @@ def reconciliation_comitente_run():
     except FileNotFoundError as e:
         log.warning('[reconciliation_comitente_run] arquivo não encontrado: %s', e)
         return jsonify({'not_found': True, 'missing': getattr(e, 'missing', None), 'detail': str(e)})
+    except DatabaseLockTimeout:
+        # Ocupado, não quebrado: 503 + `retryable` para a tela poder tentar de
+        # novo. Com 500 ela desiste e o operador reexecuta a rotina inteira.
+        return jsonify({
+            'error': 'O banco de reconciliação está ocupado. Tente novamente em instantes.',
+            'retryable': True,
+        }), 503
+    except TransactionOutcomeUnknown as e:
+        # O pior desfecho: a gravação PODE ter acontecido. Reexecutar às cegas
+        # duplicaria a reconciliação do dia; não reexecutar pode deixá-la pela
+        # metade. A resposta não escolhe por quem opera — ela diz que o
+        # resultado é DESCONHECIDO e devolve o `operation_id` para a conferência.
+        from apps.pages.recon_comitente import DB_PATH
+
+        try:
+            integrity_ok = verify_sqlite_integrity(DB_PATH)
+        except Exception:
+            # A própria verificação falhar é informação, não motivo de queda:
+            # `False` diz "não deu para confirmar", que é o que o operador tem
+            # de saber antes de decidir.
+            log.exception('[reconciliation_comitente_run] verificação de integridade falhou')
+            integrity_ok = False
+        log.error(
+            '[reconciliation_comitente_run] resultado da gravação é desconhecido '
+            'operation_id=%s integrity_ok=%s',
+            e.operation_id,
+            integrity_ok,
+        )
+        return jsonify({
+            'error': 'O resultado da gravação não pôde ser confirmado. '
+                     'Não execute novamente antes da verificação operacional.',
+            'outcome_unknown': True,
+            'operation_id': e.operation_id,
+            'integrity_ok': integrity_ok,
+        }), 500
+    except DatabaseCleanupError:
+        # A reconciliação TERMINOU; o que falhou foi soltar o recurso depois.
+        # A mensagem separa as duas coisas, senão o operador refaz um trabalho
+        # que já está feito.
+        log.exception('[reconciliation_comitente_run] falha ao liberar recursos do banco')
+        return jsonify({'error': 'A reconciliação foi concluída, mas houve falha ao '
+                                 'finalizar o acesso ao banco.'}), 500
     except Exception as e:
-        log.error('[reconciliation_comitente_run] %s', e)
-        return jsonify({'error': str(e)}), 500
+        log.exception('[reconciliation_comitente_run] falha na reconciliação')
+        return jsonify({'error': 'Não foi possível concluir a reconciliação.'}), 500
 
 
 # ── Reconciliation › Pay/Rec ──────────────────────────────────────────────────

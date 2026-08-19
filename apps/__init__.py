@@ -76,6 +76,24 @@ def create_app(config):
         app.jinja_env.auto_reload = True
         app.jinja_env.cache = {}
     
+    # Camada de lock/transação dos bancos de ARQUIVO (os DuckDB/SQLite avulsos:
+    # usuários, Pending Confirmation, esteira manual, comitentes). Ela é
+    # configurada AQUI, e antes dos blueprints, por duas razões:
+    #
+    #   · `configure_database_access` grava um global do módulo. Sem esta
+    #     chamada os `DATABASE_*` do `config.py` não valem nada — o módulo cai
+    #     nos defaults dele e o ajuste de timeout feito na configuração não tem
+    #     efeito nenhum, sem erro em lugar nenhum;
+    #   · `validate_database_paths` cria o diretório e o `.lock` ao lado de cada
+    #     banco. Falhar AQUI é o desejado: um lock que não pode ser escrito só
+    #     apareceria no primeiro request que tentasse gravar, no meio de uma
+    #     rotina, e como falha de banco.
+    from apps.pages.database_access import (
+        configure_database_access, validate_database_paths,
+    )
+    configure_database_access(app.config)
+    validate_database_paths(tuple(app.config.get('DATABASE_ACCESS_PATHS') or ()))
+
     register_extensions(app)
     register_blueprints(app)
     configure_database(app)

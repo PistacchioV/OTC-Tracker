@@ -91,3 +91,14 @@ devrun.py
 
 # Runtime DuckDB (users) criado ao subir o app localmente para captura
 apps/static/data/db/
+
+# Sidecars de lock entre processos dos bancos de arquivo (database_access.py).
+# O nome é `<caminho do banco>.lock`, então ele herda a extensão do banco:
+# `Users_OTCTracker.db.lock` mas `db.sqlite3.lock` — um padrão `*.db.lock` só
+# pegaria metade. São criados na subida, ao lado de cada banco (inclusive do
+# `apps/db.sqlite3`, que é versionado), e são estado de runtime da máquina.
+#
+# Os dois padrões são deliberados, em vez de um `*.lock`: o `bun.lock` do
+# front-end É versionado, e um curinga o varreria junto.
+*.db.lock
+*.sqlite3.lock

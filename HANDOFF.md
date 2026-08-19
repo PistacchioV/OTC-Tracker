@@ -12115,3 +12115,30 @@ pedaço de número seria pior do que não ter número. A máscara é a prova de 
 reconhecido: sem ela, o assunto fica exatamente como sempre foi. É o caso do `CLIENTE B3` no teste,
 que não tem TAX ID no Reference Data — e é por isso que o `check_swap_advice.py` cobre os dois
 lados na mesma asserção.
+
+---
+
+## §277 — Manual Deals EA: o FWD Start que fixa no dia em que foi bookado não entra
+
+Correção do §273. O e-mail de FWD Start sai na Strike Set Date com o Deal do re-booking em vanilla,
+mas **o FWD Start cujo trade date É a própria Strike Set Date fica de fora**: ele não ficou
+esperando o fixing, é um trade normal do dia — o EA automático o enxerga como qualquer outro, e
+pedir para excluí-lo tiraria da métrica uma operação que não tem nada de manual.
+
+⚠️ **A data comparada é a do FWD START ORIGINAL, nunca a do vanilla.** A do vanilla **é** a Strike
+Set Date por construção do pareamento (`_ndf_rebook_key` casa "Trade Date do vanilla = Strike Set
+Date do FWD Start"), então compará-la excluiria **todas** as linhas — o e-mail sairia sempre vazio,
+e "sem operação não envia" faria a rotina parecer que está funcionando.
+
+Para isso o par gravado passou a carregar a Trade Date do FWD Start
+(`_ndf_fwdstart_cached_keys` devolve `{'deal', 'trade'}` em vez de só o Deal ID). Sem a data
+gravada o lado seguro é **incluir**: uma operação a mais no pedido é revisada por quem recebe; uma
+a menos fica no EA sem ninguém ver. A comparação é normalizada (`_mdea_date_key`) porque as duas
+datas vêm de arquivos diferentes e já apareceram com zero à esquerda de um jeito e de outro.
+
+**E o store do par saiu do cache do New Deals.** Ele nasceu em `NDF/FwdStartRebooks` e o New Deals
+Monitor criou um card sozinho para ele, na seção *Others*, contando 3 "New": o Monitor varre aquela
+árvore e trata **todo diretório novo como um produto** — que é justamente o que faz um produto novo
+aparecer no painel sem código. O par de re-booking não é um produto, é estado da rotina, e passou a
+morar em `cache/manual-deals-ea/fwdstart-rebooks/`. Quem já tiver a pasta antiga em disco pode
+apagá-la; o card some junto.

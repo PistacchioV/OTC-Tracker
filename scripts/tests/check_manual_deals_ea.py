@@ -119,6 +119,41 @@ try:
     check('dia sem fixacao devolve lista vazia, e nao erro',
           R._mdea_rows('fwdstart', datetime(2026, 8, 12)), [])
 
+    # FWD Start bookado e fixado no MESMO dia nao entra: ele nao ficou esperando
+    # o fixing, e um trade normal do dia — o EA automatico o enxerga como
+    # qualquer outro, e pedir para exclui-lo tiraria da metrica uma operacao que
+    # nao tem nada de manual. A data comparada e a do FWD START ORIGINAL: a do
+    # vanilla E a Strike Set Date por construcao do pareamento, entao compara-la
+    # excluiria TODAS as linhas.
+    with app.test_request_context():
+        R._mdea_rebook_record([
+            ({'Deal': 'VAN-ANTIGO', 'Client': 'NATURA LTDA', 'LE': 'JPM'},
+             {'deal': 'FWD-ANTIGO', 'trade': '20/07/2026'}),
+            ({'Deal': 'VAN-MESMODIA', 'Client': 'BAYER S.A.', 'LE': 'JPM'},
+             {'deal': 'FWD-MESMODIA', 'trade': '11/08/2026'}),
+            ({'Deal': 'VAN-SEMDATA', 'Client': 'NUTRADE LTDA', 'LE': 'JPM'},
+             {'deal': 'FWD-SEMDATA', 'trade': ''}),
+        ], REF)
+        fs2 = [r['deal'] for r in R._mdea_rows('fwdstart', REF)]
+    check('o FWD Start bookado e fixado no mesmo dia fica FORA',
+          'VAN-MESMODIA' in fs2, False)
+    check('   e o bookado antes continua entrando', 'VAN-ANTIGO' in fs2, True)
+    # Sem a data gravada nao da para afirmar que foi no mesmo dia: o lado seguro
+    # e INCLUIR — uma operacao a mais e revisada por quem recebe, uma a menos
+    # fica no EA sem ninguem ver.
+    check('   e sem a data gravada, na duvida, ENTRA', 'VAN-SEMDATA' in fs2, True)
+    # As datas vem de arquivos diferentes e ja apareceram com zero a esquerda de
+    # um jeito e de outro: comparar o texto cru erraria em silencio.
+    check('a comparacao de data e normalizada, nao textual',
+          [R._mdea_date_key('11/08/2026'), R._mdea_date_key('2026-08-11'),
+           R._mdea_date_key(''), R._mdea_date_key('lixo')],
+          ['2026-08-11', '2026-08-11', '', ''])
+    # O store NAO pode morar no cache do New Deals: o Monitor varre aquela arvore
+    # e trata todo diretorio novo como um PRODUTO — foi assim que nasceu um card
+    # "NDF FwdStartRebooks" na secao Others.
+    check('o store do par fica FORA do cache do New Deals',
+          R.NEW_DEALS_CACHE_ROOT in _orig['rebook'], False)
+
     print('\n== 3. Os desfechos do envio sao TRES, e nao dois ==')
     enviados = []
     R._mdea_send_email = lambda kind, rows, to, cc, ref: (
@@ -162,6 +197,16 @@ try:
     print('\n== 6. O card, o template e os tres mapas de acesso ==')
     TPL = read('apps/templates/pages/control-panel.html')
     check('o card existe', 'data-cp-card="manualdealsea"' in TPL, True)
+    # `.cp-reveal` e `display: flex` em LINHA: dois cards dentro do mesmo ficam
+    # LADO A LADO, e foi assim que este card nasceu desalinhado com o BACC EA.
+    # Quem empilha e o `flex-column` da coluna — um card por reveal.
+    col = TPL.split('flex-column gap-3 gap-xl-4', 1)[1].split(
+        '<div class="col-12 col-lg-6 d-flex" data-cp-group="reporting">', 1)[0]
+    check('cada card empilhado tem o seu proprio .cp-reveal',
+          [b.count('class="cp-card"') for b in col.split('<div class="cp-reveal">')[1:]],
+          [1, 1, 1])
+    check('   e o espacamento vem do gap da coluna, nao de margem no card',
+          'cp-card mt-3' in col, False)
     check('   com UM botao Run por rotina',
           ['data-mdea-run="otherpub"' in TPL, 'data-mdea-run="fwdstart"' in TPL], [True, True])
     check('   e o campo TO — BACC HUB', 'id="cp-mdea-to"' in TPL, True)

@@ -27,5 +27,9 @@ duckdb>=1.0.0
 flask-minify>=0.42
 requests>=2.31.0
 reportlab>=4.0.0
+# Lock de arquivo entre PROCESSOS para os bancos avulsos (apps/pages/database_access.py).
+# O `_duckdb_conn_lock` do routes.py protege as threads de UM processo; este protege o
+# arquivo quando um script de manutenção roda ao lado do servidor.
+portalocker>=2.7.0
 # Athena API Kerberos SSO — Windows-only, install on the JPM instance:
 # requests-negotiate-sspi>=0.5.2

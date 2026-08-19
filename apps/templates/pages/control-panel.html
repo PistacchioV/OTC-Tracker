@@ -648,12 +648,15 @@
             </div>
         </div>
 
-        <!-- Esta coluna carrega DOIS cards empilhados: o das métricas de Pending
-             e o do BACC EA Metrics. Os dois juntos preenchem a altura do
+        <!-- Esta coluna carrega TRÊS cards empilhados: métricas de Pending,
+             BACC EA Metrics e Manual Deals EA. Juntos eles preenchem a altura do
              Confirmations Escalation, que divide a linha e é o card mais alto do
              painel — sozinho, o de Pending esticava até lá e virava meia tela de
-             branco. `flex-column` é o que faz os dois `.cp-reveal` (que já são
-             `flex: 1`) repartirem a altura da linha. -->
+             branco. `flex-column` é o que faz os `.cp-reveal` (que já são
+             `flex: 1`) repartirem a altura da linha.
+
+             Um card por `.cp-reveal`: o `.cp-reveal` é `display: flex` em LINHA,
+             então dois cards dentro do mesmo ficam lado a lado. -->
         <div class="col-12 col-lg-6 d-flex flex-column gap-3 gap-xl-4" data-cp-group="reporting">
             <div class="cp-reveal">
                 <div class="cp-card" data-cp-card="pendingspreadsheet">
@@ -742,11 +745,21 @@
                         </button>
                     </div>
                 </div>
-                <!-- Manual Deals EA — duas rotinas, dois horários, dois Run.
-                     Empilhado com o BACC EA porque os dois falam com o mesmo
-                     time de métricas, e o card fica ao lado do Confirmations
-                     Escalation, que ocupa a linha inteira. -->
-                <div class="cp-card mt-3" data-cp-card="manualdealsea">
+            </div>
+
+            <!-- Manual Deals EA — duas rotinas, dois horários, dois Run.
+                 Empilhado com o BACC EA porque os dois falam com o mesmo time de
+                 métricas, e a coluna inteira fica ao lado do Confirmations
+                 Escalation, que é o card mais alto do painel.
+
+                 ⚠️ `.cp-reveal` PRÓPRIO, e não um segundo `.cp-card` dentro do
+                 anterior: o `.cp-reveal` é `display: flex` em LINHA, então dois
+                 cards ali dentro ficam LADO A LADO — foi assim que este card
+                 nasceu desalinhado ao lado do BACC EA. Quem empilha é o
+                 `flex-column` da coluna, e o espaçamento é o `gap-3` dela (por
+                 isso o card não leva margem própria). -->
+            <div class="cp-reveal">
+                <div class="cp-card" data-cp-card="manualdealsea">
                     <div class="cp-card__icon"><i class="ti ti-hand-stop"></i></div>
                     <h3 class="cp-card__title" data-lang="cp-r-mdea-title">Manual Deals EA</h3>
                     <p class="cp-card__desc" data-lang="cp-r-mdea-desc">
