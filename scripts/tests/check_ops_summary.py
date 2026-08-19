@@ -629,7 +629,13 @@ tmp = tempfile.mkdtemp(prefix='ops-optcls-')
 _b3_root = R.B3_JSON_ROOT
 try:
     R.B3_JSON_ROOT = tmp
-    dref = R._prev_anbima_bizday(datetime(2026, 8, 5)).strftime('%y%m%d')
+    # O snapshot vai na ULTIMA data disponivel, nao na vespera da liquidacao:
+    # `_ops_src_latest_path` procura o arquivo nos 10 ultimos dias uteis contados
+    # de HOJE, e um fixture datado de 04/08/2026 saiu dessa janela sozinho quando
+    # o calendario andou — as tres contagens viraram 0 e o teste passou a falhar
+    # sem ninguem ter mexido no app. A DATA DE VENCIMENTO das linhas e que casa
+    # com a liquidacao consultada, e essa continua fixa (secao 17 ja fazia assim).
+    dref = R._prev_anbima_bizday(datetime.now()).strftime('%y%m%d')
     src = [s for s in R._FORECAST_SOURCES if s['key'] == 'opc'][0]
     base = {'Data de Vencimento': '20260805'}
     write_json(os.path.join(tmp, 'Option', R._b3_date_subpath(dref), src['file'](dref)),
