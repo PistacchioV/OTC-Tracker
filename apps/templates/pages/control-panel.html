@@ -895,12 +895,11 @@
              Ele estava empilhado com o BACC EA, e os três juntos passavam da
              altura do Confirmations Escalation, que divide a linha — a coluna
              esticava e sobrava branco. Com dois cards de um lado e o
-             Escalation do outro, as duas colunas fecham na mesma altura, e o
-             Manual Deals EA ganha a linha de baixo inteira para si.
+             Escalation do outro, as duas colunas fecham na mesma altura.
 
-             `col-lg-6` e não `col-12`: a largura é a mesma dos demais cards do
-             painel. Ocupando a linha toda ele sairia com o dobro da largura de
-             todos os vizinhos. -->
+             Esta linha de baixo leva o Manual Deals EA à ESQUERDA e o MT300 à
+             DIREITA (embaixo do Escalation): são dois e-mails de rotina, e
+             sozinho cada um deixava metade da linha em branco. -->
         <div class="col-12 col-lg-6 d-flex" data-cp-group="reporting">
 
         <!-- Manual Deals EA — duas rotinas, dois horários, dois Run. Divide a
@@ -954,6 +953,7 @@
                     </div>
                 </div>
             </div>
+        </div>
         </div>
 
         <div class="col-12 col-lg-6 d-flex" data-cp-group="reporting">
@@ -2198,7 +2198,7 @@ document.addEventListener('click', function (e) {
                 if (u.indexOf('/control-panel#') === 0) allow[u.slice('/control-panel#'.length)] = 1;
             });
             // Hide the grid cell (column) of each card the user can't reach.
-            var CP_GROUP = { cetip: 'filesaving', daily: 'filesaving', forecast: 'reporting', contacts: 'reporting', dailymetric: 'reporting', weeklyescalation: 'reporting', signaturecollection: 'reporting', dealsmonitor: 'reporting', pendingspreadsheet: 'reporting', confescalation: 'reporting', baccea: 'reporting' };
+            var CP_GROUP = { cetip: 'filesaving', daily: 'filesaving', forecast: 'reporting', contacts: 'reporting', dailymetric: 'reporting', weeklyescalation: 'reporting', signaturecollection: 'reporting', dealsmonitor: 'reporting', pendingspreadsheet: 'reporting', confescalation: 'reporting', baccea: 'reporting', manualdealsea: 'reporting', mt300: 'reporting' };
             document.querySelectorAll('[data-cp-card]').forEach(function (card) {
                 if (!allow[card.getAttribute('data-cp-card')]) {
                     var col = card.closest('.col-12') || card.closest('.cp-reveal') || card;
