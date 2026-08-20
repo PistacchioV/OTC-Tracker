@@ -4,19 +4,121 @@
  * Module/App (File Name): Apps Holidays Calendar
  */
 
-const HC_CAL_COLORS = {
-    'ANBIMA':        '#0d6efd',
-    'BURSA':         '#6c757d',
-    'CBY_AGS':       '#198754',
-    'EURIBOR':       '#dc3545',
-    'ICEAGS':        '#0dcaf0',
-    'IPE':           '#f59e0b',
-    'LME':           '#374151',
-    'NYMEX':         '#8b5cf6',
-    'PLATTS-ASIA':   '#14b8a6',
-    'PLATTS-EUROPE': '#6366f1',
-    'SOFR':          '#ec4899',
-};
+/**
+ * Os calendários vêm do REGISTRO (`/api/holidays/calendars`), não de literais:
+ * um calendário criado pela tela não teria como estar escrito aqui. A lista
+ * abaixo é o FALLBACK — os onze de sempre, idênticos ao seed do servidor —, e é
+ * o que a página usa se o fetch falhar: melhor a tela de antes do que uma barra
+ * lateral vazia.
+ */
+const HC_CAL_FALLBACK = [
+    {name: 'ANBIMA',        file: 'anbima.json',        color: '#0d6efd', class: 'bg-primary-subtle text-primary',     drag: 'bg-primary-subtle text-primary border-primary'},
+    {name: 'BURSA',         file: 'bursa.json',         color: '#6c757d', class: 'bg-secondary-subtle text-secondary', drag: 'bg-secondary-subtle text-secondary border-secondary'},
+    {name: 'CBY_AGS',       file: 'cby_ags.json',       color: '#198754', class: 'bg-success-subtle text-success',     drag: 'bg-success-subtle text-success border-success'},
+    {name: 'EURIBOR',       file: 'euribor.json',       color: '#dc3545', class: 'bg-danger-subtle text-danger',       drag: 'bg-danger-subtle text-danger border-danger'},
+    {name: 'ICEAGS',        file: 'iceags.json',        color: '#0dcaf0', class: 'bg-info-subtle text-info',           drag: 'bg-info-subtle text-info border-info'},
+    {name: 'IPE',           file: 'ipe.json',           color: '#f59e0b', class: 'bg-warning-subtle text-warning',     drag: 'bg-warning-subtle text-warning border-warning'},
+    {name: 'LME',           file: 'lme.json',           color: '#374151', class: 'bg-dark-subtle text-dark',           drag: 'bg-dark-subtle text-dark border-dark'},
+    {name: 'NYMEX',         file: 'nymex.json',         color: '#8b5cf6', class: 'bg-purple-subtle text-purple',       drag: 'bg-purple-subtle text-purple border-purple'},
+    {name: 'PLATTS-ASIA',   file: 'platts_asia.json',   color: '#14b8a6', class: 'bg-teal-subtle text-teal',           drag: 'bg-teal-subtle text-teal border-teal'},
+    {name: 'PLATTS-EUROPE', file: 'platts_europe.json', color: '#6366f1', class: 'bg-indigo-subtle text-indigo',       drag: 'bg-indigo-subtle text-indigo border-indigo'},
+    {name: 'SOFR',          file: 'sofr.json',          color: '#ec4899', class: 'bg-pink-subtle text-pink',           drag: 'bg-pink-subtle text-pink border-pink'},
+];
+
+/** nome → cor, preenchido a partir do registro (o popup do feriado usa). */
+const HC_CAL_COLORS = {};
+
+function hcEsc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+        return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c];
+    });
+}
+
+/** '#8b5cf6' → '139,92,246'. Devolve null no que não for hex de 6 dígitos. */
+function hcHexToRgb(hex) {
+    const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || '').trim());
+    if (!m) return null;
+    const n = parseInt(m[1], 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255].join(',');
+}
+
+/**
+ * CSS dos calendários criados pela tela. Os onze de sempre têm as classes
+ * escritas no `<style>` da página; um calendário novo não teria como ter, e é
+ * por isso que a regra dele nasce aqui, a partir da cor do registro — as MESMAS
+ * cinco regras dos built-in (pill, borda do evento, ponto e link da list view e
+ * a cor do pill do dayGrid), com o mesmo fundo a 15% de opacidade.
+ */
+function hcInjectCalendarCss(calendars) {
+    const partes = [];
+    calendars.forEach(function (c) {
+        const cls = String(c.class || '').trim();
+        if (!/^hc-cal-[a-z0-9_-]+$/.test(cls)) return;   // built-in: CSS já existe
+        const rgb = hcHexToRgb(c.color);
+        if (!rgb) return;
+        const hex = c.color;
+        partes.push(
+            '.' + cls + '{background-color:rgba(' + rgb + ',.15)!important;color:' + hex + '!important}' +
+            '.fc-event.' + cls + '{border-color:' + hex + '!important}' +
+            '.fc-event.' + cls + ' .fc-event-title{color:' + hex + '!important}' +
+            '.fc-list-event.' + cls + ' .fc-list-event-dot{border-color:' + hex + '!important}' +
+            '.fc-list-event.' + cls + ' .fc-list-event-title a,.fc-list-event.' + cls + ' a{color:' + hex + '!important}' +
+            '.fc-daygrid-event.' + cls + '{color:' + hex + '!important}'
+        );
+    });
+    let tag = document.getElementById('hc-cal-styles');
+    if (!tag) {
+        tag = document.createElement('style');
+        tag.id = 'hc-cal-styles';
+        document.head.appendChild(tag);
+    }
+    tag.textContent = partes.join('\n');
+}
+
+/** Pills da barra lateral e opções do modal — as duas do mesmo registro. */
+function hcRenderCalendarList(calendars) {
+    const box = document.getElementById('external-events');
+    const sel = document.getElementById('event-category');
+    if (box) {
+        box.querySelectorAll('.external-event').forEach(function (el) { el.remove(); });
+        calendars.forEach(function (c) {
+            const el = document.createElement('div');
+            el.className = 'external-event fc-event fw-semibold ' + String(c.class || '');
+            el.setAttribute('data-class', String(c.drag || c.class || ''));
+            el.innerHTML = '<i class="ti ti-circle-filled me-2"></i>' + hcEsc(c.name);
+            box.appendChild(el);
+        });
+    }
+    if (sel) {
+        const atual = sel.value;
+        sel.innerHTML = '<option disabled value="">Select a Calendar</option>' +
+            calendars.map(function (c) {
+                return '<option value="' + hcEsc(c.class) + '">' + hcEsc(c.name) + '</option>';
+            }).join('');
+        // Mantém a escolha de quem já tinha o modal aberto; senão, o primeiro.
+        sel.value = atual && sel.querySelector('option[value="' + CSS.escape(atual) + '"]')
+            ? atual : (calendars[0] ? calendars[0].class : '');
+    }
+}
+
+/** O registro, com queda para os literais quando o endpoint não responde. */
+async function hcLoadCalendars() {
+    let cals = HC_CAL_FALLBACK;
+    try {
+        const r = await fetch('/api/holidays/calendars');
+        const d = r.ok ? await r.json() : null;
+        if (d && d.ok && Array.isArray(d.calendars) && d.calendars.length) {
+            cals = d.calendars;
+        }
+    } catch (e) {
+        console.warn('[holidays] registro de calendários indisponível, usando o padrão', e);
+    }
+    Object.keys(HC_CAL_COLORS).forEach(function (k) { delete HC_CAL_COLORS[k]; });
+    cals.forEach(function (c) { HC_CAL_COLORS[c.name] = c.color; });
+    hcInjectCalendarCss(cals);
+    hcRenderCalendarList(cals);
+    return cals;
+}
 
 class CalendarSchedule {
 
@@ -169,6 +271,10 @@ class CalendarSchedule {
         const self = this;
         const externalEventContainerEl = document.getElementById('external-events');
 
+        // Pills, opções do modal, cores e CSS — tudo antes do Draggable, que
+        // precisa dos `.external-event` já no DOM para reconhecê-los.
+        self.calendars = await hcLoadCalendars();
+
         new FullCalendar.Draggable(externalEventContainerEl, {
             itemSelector: '.external-event',
             eventData: function (eventEl) {
@@ -179,95 +285,16 @@ class CalendarSchedule {
             }
         });
 
-        // Mapeamento de calendários para arquivos JSON e cores
-        const CALENDAR_CONFIG = {
-            'ANBIMA': {
-                file: 'anbima.json',
-                className: 'bg-primary-subtle text-primary'
-            },
-            'BURSA': {
-                file: 'bursa.json',
-                className: 'bg-secondary-subtle text-secondary'
-            },
-            'CBY_AGS': {
-                file: 'cby_ags.json',
-                className: 'bg-success-subtle text-success'
-            },
-            'EURIBOR': {
-                file: 'euribor.json',
-                className: 'bg-danger-subtle text-danger'
-            },
-            'ICEAGS': {
-                file: 'iceags.json',
-                className: 'bg-info-subtle text-info'
-            },
-            'IPE': {
-                file: 'ipe.json',
-                className: 'bg-warning-subtle text-warning'
-            },
-            'LME': {
-                file: 'lme.json',
-                className: 'bg-dark-subtle text-dark'
-            },
-            'NYMEX': {
-                file: 'nymex.json',
-                className: 'bg-purple-subtle text-purple'
-            },
-            'PLATTS-ASIA': {
-                file: 'platts_asia.json',
-                className: 'bg-teal-subtle text-teal'
-            },
-            'PLATTS-EUROPE': {
-                file: 'platts_europe.json',
-                className: 'bg-indigo-subtle text-indigo'
-            },
-            'SOFR': {
-                file: 'sofr.json',
-                className: 'bg-pink-subtle text-pink'
-            }
-        };
-
-        // Função para carregar feriados de todos os calendários
-        const loadHolidays = async () => {
-            const allEvents = [];
-            const baseURL = '/static/data/';
-            
-            for (const [calendarName, config] of Object.entries(CALENDAR_CONFIG)) {
-                try {
-                    const response = await fetch(baseURL + config.file);
-                    if (!response.ok) {
-                        console.warn(`⚠️ Arquivo não encontrado: ${config.file}`);
-                        continue;
-                    }
-                    
-                    const holidays = await response.json();
-                    
-                    // Converter cada feriado para formato FullCalendar
-                    const events = holidays.map(holiday => ({
-                        title: calendarName,
-                        start: holiday.date,
-                        allDay: true,
-                        className: config.className,
-                        extendedProps: {
-                            calendar: calendarName,
-                            description: holiday.description || holiday.title,
-                            holidayName: holiday.title
-                        }
-                    }));
-                    
-                    allEvents.push(...events);
-                    console.log(`✅ ${calendarName}: ${holidays.length} feriados carregados`);
-                    
-                } catch (error) {
-                    console.error(`❌ Erro ao carregar ${calendarName}:`, error);
-                }
-            }
-            
-            return allEvents;
-        };
-
-        // Carregar eventos dos JSONs
-        const defaultEvents = await loadHolidays();
+        // Carregar eventos dos JSONs. É o MESMO `fetchCalendarEvents` que o
+        // "Create New Calendar" usa para pôr o calendário novo na tela sem
+        // recarregar a página — duas conversões produziriam eventos diferentes
+        // para o mesmo arquivo.
+        const defaultEvents = [];
+        for (const cal of self.calendars) {
+            const evs = await self.fetchCalendarEvents(cal);
+            console.log(`✅ ${cal.name}: ${evs.length} feriados carregados`);
+            defaultEvents.push(...evs);
+        }
 
         // cal - init
         self.calendarObj = new FullCalendar.Calendar(self.calendar, {
@@ -498,6 +525,139 @@ class CalendarSchedule {
                 self.modal.hide();
             }
         });
+
+        self.initNewCalendar();
+    }
+
+    /**
+     * "Create New Calendar": nome + planilha na dropzone.
+     *
+     * A planilha tem UMA aba com três colunas (Holiday · Description · Holiday
+     * Type) e só as duas primeiras viram feriado — a data da coluna A e o texto
+     * da coluna B. Quem lê é o servidor (`/api/holidays/calendars`), que é onde
+     * o arquivo é gravado; o navegador só entrega os bytes.
+     */
+    initNewCalendar() {
+        const self = this;
+        const modalEl = document.getElementById('calendar-modal');
+        if (!modalEl) return;
+
+        const modal   = new bootstrap.Modal(modalEl, {backdrop: 'static'});
+        const dz      = document.getElementById('hc-dropzone');
+        const input   = document.getElementById('hc-cal-file');
+        const chip    = document.getElementById('hc-dz-file');
+        const nameEl  = document.getElementById('hc-cal-name');
+        const btnSave = document.getElementById('hc-cal-save');
+        const errEl   = document.getElementById('hc-cal-error');
+        let picked = null;
+
+        const showErr = (msg) => {
+            errEl.textContent = msg || '';
+            errEl.classList.toggle('d-none', !msg);
+        };
+        const setFile = (f) => {
+            picked = f || null;
+            chip.innerHTML = picked
+                ? '<i class="ti ti-file-spreadsheet me-1"></i>' + hcEsc(picked.name)
+                : '';
+            chip.classList.toggle('d-none', !picked);
+            if (picked) showErr('');
+        };
+
+        document.querySelectorAll('.btn-new-calendar').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                nameEl.value = '';
+                setFile(null);
+                showErr('');
+                input.value = '';
+                modal.show();
+            });
+        });
+
+        dz.addEventListener('click', () => input.click());
+        dz.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); input.click(); }
+        });
+        input.addEventListener('change', () => setFile(input.files[0]));
+        ['dragenter', 'dragover'].forEach(function (ev) {
+            dz.addEventListener(ev, function (e) {
+                e.preventDefault(); e.stopPropagation();
+                dz.classList.add('hc-dz-over');
+            });
+        });
+        ['dragleave', 'drop'].forEach(function (ev) {
+            dz.addEventListener(ev, function (e) {
+                e.preventDefault(); e.stopPropagation();
+                dz.classList.remove('hc-dz-over');
+            });
+        });
+        dz.addEventListener('drop', function (e) {
+            const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+            if (f) setFile(f);
+        });
+
+        btnSave.addEventListener('click', async function () {
+            const nome = (nameEl.value || '').trim();
+            if (!nome)   { showErr('Please give the calendar a name.'); nameEl.focus(); return; }
+            if (!picked) { showErr('Please drop the holidays spreadsheet.'); return; }
+
+            const original = btnSave.innerHTML;
+            btnSave.disabled = true;
+            btnSave.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Importing…';
+            try {
+                const fd = new FormData();
+                fd.append('name', nome);
+                fd.append('file', picked);
+                const r = await fetch('/api/holidays/calendars', {method: 'POST', body: fd});
+                const d = await r.json();
+                if (!d.ok) { showErr(d.error || 'Could not create the calendar.'); return; }
+
+                // Recarrega o registro (a pill, a opção do modal, a cor e o CSS
+                // do calendário novo saem dele) e só então põe os feriados na
+                // tela — sem recarregar a página.
+                self.calendars = await hcLoadCalendars();
+                const cal = self.calendars.find(c => c.name === d.calendar.name) || d.calendar;
+                const events = await self.fetchCalendarEvents(cal);
+                events.forEach(ev => self.calendarObj.addEvent(ev));
+
+                modal.hide();
+                Swal.fire({
+                    title: 'Calendar created',
+                    html: `<span style="font-size:.88rem"><strong>${hcEsc(cal.name)}</strong> · ${d.total} holiday(s) imported</span>`,
+                    icon: 'success',
+                    timer: 2400,
+                    timerProgressBar: true,
+                    showConfirmButton: false
+                });
+            } catch (e) {
+                showErr('Network error. Could not create the calendar.');
+            } finally {
+                btnSave.disabled = false;
+                btnSave.innerHTML = original;
+            }
+        });
+    }
+
+    /** Feriados de um calendário do registro, prontos para o FullCalendar. */
+    async fetchCalendarEvents(cal) {
+        try {
+            const r = await fetch('/static/data/' + cal.file, {cache: 'no-store'});
+            if (!r.ok) return [];
+            const holidays = await r.json();
+            return holidays.map(h => ({
+                title: cal.name,
+                start: h.date,
+                allDay: true,
+                className: cal.class,
+                extendedProps: {
+                    calendar: cal.name,
+                    description: h.description || h.title,
+                    holidayName: h.title
+                }
+            }));
+        } catch (e) {
+            return [];
+        }
     }
 
 }

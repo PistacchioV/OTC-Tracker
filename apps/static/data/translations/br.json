@@ -1823,5 +1823,16 @@
   "qt-clear-filters": "Limpar Filtros",
   "qt-showing": "Exibindo",
   "qt-rows": "linhas",
-  "qt-empty": "Escolha o tipo, o instrumento e o período."
+  "qt-empty": "Escolha o tipo, o instrumento e o período.",
+  "hc-new-holiday": "Criar Novo Feriado",
+  "hc-new-calendar": "Criar Novo Calendário",
+  "hc-new-calendar-title": "Criar Novo Calendário",
+  "hc-hint": "Arraste um calendário para uma data, ou clique numa data para criar um feriado.",
+  "hc-calendar": "Calendário",
+  "hc-cal-name": "Nome do Calendário",
+  "hc-cal-file": "Planilha de Feriados",
+  "hc-dz": "Solte o .xlsx aqui ou clique para procurar",
+  "hc-dz-spec": "Uma aba, três colunas: <strong>Holiday</strong> (coluna A, aaaa-mm-dd), <strong>Description</strong> (coluna B) e <strong>Holiday Type</strong>. Só as duas primeiras são importadas.",
+  "hc-close": "Fechar",
+  "hc-import": "Importar"
 }

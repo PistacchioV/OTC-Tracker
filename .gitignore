@@ -85,6 +85,12 @@ apps/static/data/recon-fxo-comments.json
 # a cada pull.
 apps/static/data/tickets/
 
+# Registro de calendários da tela de feriados. O app o SEMEIA com os onze de
+# sempre na primeira leitura, então versioná-lo não acrescenta nada — e traria
+# um conflito de merge toda vez que alguém criasse um calendário pela tela, que
+# é justamente o que reescreve o arquivo.
+apps/static/data/holiday-calendars.json
+
 # SOP local dev launcher (contém o bypass /dev-login — NUNCA versionar)
 /devrun.py
 devrun.py

@@ -12640,3 +12640,89 @@ Participante / Conta Contraparte (`04880109`, `73760102`, `00041007`…) seguem 
 `routes.py`, e o `_CETIP_BACC_ACCOUNTS` e os mapas conta → entidade do Save CETIP Files também.
 Elas agora existem no cadastro e poderiam sair dele — é a mesma tabela respondendo a mais uma
 pergunta —, mas mexer nisso é mexer no arquivo de registro da B3, e isso é decisão da mesa.
+
+---
+
+## §288 — Holidays Calendar: o calendário virou cadastro, e nasce de uma planilha
+
+"Preciso cadastrar mais um calendário no Holidays Calendar."
+
+A lista de calendários estava escrita à mão em **CINCO** lugares: o
+`_HOLIDAY_FILE_MAP` do `routes.py`, o `CALENDAR_CONFIG` e o `HC_CAL_COLORS` do
+`apps-holidays-calendar.js`, as pills da barra lateral e o `<select>` do modal. Nenhum deles pode
+conhecer um calendário criado pela tela — e o que aconteceria sem erro nenhum é o calendário novo
+não aparecer em lugar algum, com o `/api/holidays/save` respondendo *"Unknown calendar"* para um
+nome que a própria página teria acabado de mostrar.
+
+Agora a lista é **dado**: `apps/static/data/holiday-calendars.json`, semeado com os onze de sempre
+(arquivo, classes e cor **idênticos** aos que estavam fixos, para o comportamento ser o mesmo até
+alguém cadastrar o décimo segundo) e cacheado por mtime, como os mappings.
+
+- `GET /api/holidays/calendars` devolve o registro, e a página monta **tudo** dele: as pills, as
+  opções do `<select>`, o mapa de cores do popup do feriado e o CSS.
+- O JS mantém `HC_CAL_FALLBACK` — os mesmos onze — para o fetch que falha. `check_holiday_calendars.py`
+  compara seed × fallback **campo a campo**: divergindo, o fallback mostra uma tela que não é a de
+  ninguém.
+- `POST /api/holidays/calendars` (multipart `name` + `file`) cria o calendário a partir da planilha.
+
+### A planilha
+
+Uma aba, três colunas — **Holiday** (A), **Description** (B) e **Holiday Type** (C) —, e só as duas
+primeiras viram feriado. O cabeçalho é descartado por **não ser data**, nunca por posição: pular
+`rows[1:]` cegamente jogaria fora o primeiro feriado de uma planilha exportada sem cabeçalho, e o
+mesmo teste já descarta a linha em branco do fim e o rodapé de total. A data chega das **duas**
+formas que o Excel produz — `datetime` quando a célula é data de verdade e texto `yyyy-mm-dd`
+quando a coluna foi salva como texto (com ou sem hora junto); lendo só uma delas, metade das
+planilhas voltaria vazia. Linha sem descrição e data repetida saem fora.
+
+Planilha da qual não sai feriado nenhum é **recusada** dizendo o que se esperava ler, em vez de
+criar um calendário vazio — que é um calendário que ninguém vê e que ninguém entende por que não
+aparece.
+
+### A cor
+
+Sorteada de uma **paleta** (`_HOLIDAY_CAL_PALETTE`), não gerada por acaso: um `hsl` aleatório sai
+com saturação e luminosidade fora do padrão da tela e, mais cedo ou mais tarde, ilegível sobre o
+fundo `rgba(cor, .15)` que a pill usa. O sorteio evita as cores **já em uso** enquanto houver alguma
+livre — duas pills da mesma cor são dois calendários que se leem como um.
+
+**O CSS do calendário novo nasce no navegador** (`hcInjectCalendarCss`), a partir da cor do
+registro: as MESMAS cinco regras que os onze têm escritas no `<style>` da página (pill, borda do
+evento, ponto e link da list view, e a cor do pill do dayGrid). CSS de calendário criado hoje não
+teria como estar escrito no arquivo. A função só gera para as classes `hc-cal-<slug>` — built-in
+tem a sua e não é tocado.
+
+### Três coisas que não dão erro nenhum
+
+- **o `slug` vira caminho em disco E classe de CSS**, então só aceita `[a-z0-9_-]`: é ele que entra
+  num `os.path.join`, e `../../etc/passwd` como nome de calendário precisa sair `etc_passwd`;
+- **a checagem de duplicidade é refeita DENTRO do `_cache_lock`**, junto com a gravação: dois uploads
+  simultâneos do mesmo nome passariam os dois pelo teste feito do lado de fora, e o segundo apagaria
+  o primeiro. Arquivo que já existe sem linha no registro também é recusado — sobrescrever apagaria
+  uma agenda que alguém pode estar consumindo pelo FX holiday schedule;
+- **`holiday-calendars.json` entrou no `_SYSTEM_FILES`** do `/api/fx-holiday-schedules`. Ele mora na
+  mesma pasta e **não** é uma agenda de feriados; sem a linha, apareceria como opção de schedule.
+
+O registro está no **`.gitignore`**: o app o semeia na primeira leitura, então versioná-lo não
+acrescenta nada e traria conflito de merge toda vez que alguém criasse um calendário pela tela — que
+é justamente o que reescreve o arquivo.
+
+O aviso do sino ganhou o rótulo `Holidays Calendar` nos **três** mapas de destino (§246).
+
+**Anotado de passagem:** dos onze calendários, só `anbima.json` e `sofr.json` existem no repositório.
+Os outros nove (bursa, cby_ags, euribor, iceags, ipe, lme, nymex, platts_asia, platts_europe)
+aparecem na barra lateral e não têm arquivo — o JS avisa no console e segue. Eles agora podem ser
+preenchidos pelo próprio "Create New Calendar", desde que o nome do arquivo bata (o slug de `LME` é
+`lme`, e o endpoint recusa porque a linha do registro já existe); o caminho hoje é cadastrar o
+feriado avulso pelo modal, que grava no arquivo certo.
+
+---
+
+## §289 — Operations B3: o topo dos `th` ficava comido
+
+A barra de ferramentas já estava com `mb-3` (§233), e ainda assim o cabeçalho da tabela nascia
+colado nos botões. O respiro passou a morar no **container da tabela**
+(`#operations-b3-page .table-responsive { padding-top: .6rem }`), e não numa margem do irmão de
+cima: o DataTables desenha a própria caixa colada no elemento anterior e come a margem de quem vem
+antes, então `mb-*` na barra é uma medida que a tela não tem. Os `th` também ganharam 2 px a mais em
+cima (`padding: 10px 12px 8px`).

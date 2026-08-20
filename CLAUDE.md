@@ -757,6 +757,31 @@ para Opt FXO / Opt Commodities / NDF Commodities, que têm endpoints próprios.
 causou corrupção silenciosa de dados **duas vezes** (HANDOFF §132). A coluna
 Maker é alcançada pela constante `MAKER_COL_INDEX` — mantenha assim.
 
+### O Holidays Calendar monta a lista de calendários do REGISTRO
+
+Os calendários vêm de `apps/static/data/holiday-calendars.json` (semeado por
+`_HOLIDAY_CAL_SEED` com os onze de sempre, cacheado por mtime), e é dele que
+saem as **quatro** superfícies da tela: as pills da barra lateral, as opções do
+`<select>` do modal, o mapa de cores do popup do feriado e o CSS. Eram cinco
+listas escritas à mão — inclusive o `_HOLIDAY_FILE_MAP` que o
+`/api/holidays/save` consultava — e nenhuma delas podia conhecer um calendário
+criado pela tela (HANDOFF §288).
+
+- **Calendário novo nasce de uma planilha**, pelo botão *Create New Calendar*:
+  uma aba, coluna A a data e coluna B a descrição (a terceira, Holiday Type,
+  não entra). O cabeçalho é descartado por **não ser data**, nunca por posição.
+- A **cor é sorteada de uma paleta** (`_HOLIDAY_CAL_PALETTE`), preferindo as que
+  ninguém usa, e o **CSS dele nasce no navegador** (`hcInjectCalendarCss`) a
+  partir dessa cor — CSS de calendário criado hoje não estaria escrito no
+  arquivo. Os onze built-in mantêm as classes do `<style>` da página; a função
+  só gera para `hc-cal-<slug>`.
+- O **slug vira caminho em disco e classe de CSS**, então só aceita
+  `[a-z0-9_-]` — é ele que entra num `os.path.join`.
+- O JS mantém `HC_CAL_FALLBACK` (os mesmos onze) para o fetch que falha, e
+  `check_holiday_calendars.py` compara seed × fallback campo a campo.
+- O registro está no `.gitignore` — o seed o recria, e versioná-lo daria
+  conflito de merge a cada calendário criado pela tela.
+
 ### Duas armadilhas de tela que não aparecem no console (HANDOFF §218)
 
 - **A linha de filtro por coluna tem de ser montada ANTES do `.DataTable()`**,

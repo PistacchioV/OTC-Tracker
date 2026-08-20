@@ -359,6 +359,42 @@
 .external-event:active { transform: scale(0.95) !important; cursor: grabbing !important; }
 .btn-new-event.is-pressing,
 .btn-new-event:active  { transform: scale(0.96) !important; box-shadow: none !important; }
+.btn-new-calendar { border-radius: 999px !important; font-weight: 600 !important;
+                    transition: transform 100ms ease-out !important; }
+.btn-new-calendar:active { transform: scale(0.97) !important; }
+
+/* ── Dropzone do Create New Calendar ──────────────────────────────────
+   Tokens --ins-* (nativos do tema), nunca --bs-*: o tema não define os --bs-*,
+   eles caem no fallback claro e a dropzone sai branca no tema escuro
+   (HANDOFF §109). Mesmo desenho da Pay/Rec. */
+.hc-dropzone {
+    border: 1.5px dashed var(--ins-border-color, #ced4da); border-radius: 12px;
+    padding: 1.1rem 1rem; cursor: pointer; background: var(--ins-tertiary-bg, #f8f9fa);
+    text-align: center;
+    transition: border-color 150ms var(--hc-ease-out), background-color 150ms var(--hc-ease-out);
+}
+.hc-dropzone:hover, .hc-dropzone:focus-visible { border-color: #0066cc; outline: none; }
+.hc-dropzone.hc-dz-over { border-color: #0066cc; background: rgba(0,102,204,.06); }
+.hc-dz-hint {
+    display: flex; align-items: center; justify-content: center; gap: .5rem;
+    color: var(--ins-secondary-color); font-size: .82rem;
+}
+.hc-dz-hint i { font-size: 1.15rem; color: #0066cc; }
+.hc-dz-file {
+    display: inline-flex; align-items: center; margin-top: .6rem; font-size: .75rem;
+    background: var(--ins-secondary-bg, #fff); border: 1px solid var(--ins-border-color, #dee2e6);
+    border-radius: 50rem; padding: 2px 10px; color: var(--ins-body-color);
+    animation: hc-slide-in 200ms var(--hc-ease-out) both;
+}
+.hc-dz-spec {
+    font-size: .72rem; color: var(--ins-secondary-color, #6e6e73);
+    margin: .55rem 0 0; line-height: 1.45;
+}
+#calendar-modal .modal-content { border-radius: 14px !important; }
+#calendar-modal .btn { border-radius: 8px !important; transition: transform 100ms ease-out !important; }
+#calendar-modal .btn:active { transform: scale(0.97) !important; }
+#calendar-modal .btn-primary { background-color: #0066cc !important; border-color: #0066cc !important; }
+#calendar-modal .btn-primary:hover { background-color: #0051a8 !important; border-color: #0051a8 !important; }
 </style>
 {% endblock extra_css %}
 
@@ -388,62 +424,30 @@
             <div class="card-body">
                 <button class="btn btn-primary w-100 btn-new-event">
                     <i class="ti ti-plus me-2 align-middle"></i>
-                    Create New Holiday
+                    <span data-lang="hc-new-holiday">Create New Holiday</span>
                 </button>
+                <button class="btn btn-soft-primary w-100 mt-2 btn-new-calendar">
+                    <i class="ti ti-calendar-plus me-2 align-middle"></i>
+                    <span data-lang="hc-new-calendar">Create New Calendar</span>
+                </button>
+                {# As pills saem do REGISTRO (`/api/holidays/calendars`), montadas
+                   pelo JS: escritas aqui, um calendário criado pela tela nunca
+                   apareceria na lista. O `hc-sidebar-hint` fica no HTML porque é
+                   texto fixo e o JS só remove/insere os `.external-event`. #}
                 <div id="external-events">
-                    <p class="hc-sidebar-hint">Drag a calendar to a date, or click a date to create a new holiday.</p>
-                    <div class="external-event fc-event bg-primary-subtle text-primary fw-semibold"
-                        data-class="bg-primary-subtle text-primary border-primary">
-                        <i class="ti ti-circle-filled me-2"></i>ANBIMA
-                    </div>
-                    <div class="external-event fc-event bg-secondary-subtle text-secondary fw-semibold"
-                        data-class="bg-secondary-subtle text-secondary border-secondary">
-                        <i class="ti ti-circle-filled me-2"></i>BURSA
-                    </div>
-                    <div class="external-event fc-event bg-success-subtle text-success fw-semibold"
-                        data-class="bg-success-subtle text-success border-success">
-                        <i class="ti ti-circle-filled me-2"></i>CBY_AGS
-                    </div>
-                    <div class="external-event fc-event bg-danger-subtle text-danger fw-semibold"
-                        data-class="bg-danger-subtle text-danger border-danger">
-                        <i class="ti ti-circle-filled me-2"></i>EURIBOR
-                    </div>
-                    <div class="external-event fc-event bg-info-subtle text-info fw-semibold"
-                        data-class="bg-info-subtle text-info border-info">
-                        <i class="ti ti-circle-filled me-2"></i>ICEAGS
-                    </div>
-                    <div class="external-event fc-event bg-warning-subtle text-warning fw-semibold"
-                        data-class="bg-warning-subtle text-warning border-warning">
-                        <i class="ti ti-circle-filled me-2"></i>IPE
-                    </div>
-                    <div class="external-event fc-event bg-dark-subtle text-dark fw-semibold"
-                        data-class="bg-dark-subtle text-dark border-dark">
-                        <i class="ti ti-circle-filled me-2"></i>LME
-                    </div>
-                    <div class="external-event fc-event bg-purple-subtle text-purple fw-semibold"
-                        data-class="bg-purple-subtle text-purple border-purple">
-                        <i class="ti ti-circle-filled me-2"></i>NYMEX
-                    </div>
-                    <div class="external-event fc-event bg-teal-subtle text-teal fw-semibold"
-                        data-class="bg-teal-subtle text-teal border-teal">
-                        <i class="ti ti-circle-filled me-2"></i>PLATTS-ASIA
-                    </div>
-                    <div class="external-event fc-event bg-indigo-subtle text-indigo fw-semibold"
-                        data-class="bg-indigo-subtle text-indigo border-indigo">
-                        <i class="ti ti-circle-filled me-2"></i>PLATTS-EUROPE
-                    </div>
-                    <div class="external-event fc-event bg-pink-subtle text-pink fw-semibold"
-                        data-class="bg-pink-subtle text-pink border-pink">
-                        <i class="ti ti-circle-filled me-2"></i>SOFR
-                    </div>
+                    <p class="hc-sidebar-hint" data-lang="hc-hint">Drag a calendar to a date, or click a date to create a new holiday.</p>
                 </div>
             </div>
         </div> <!-- end card-->
         <div class="card h-100 mb-0 rounded-start-0 flex-grow-1 border-start-0 hc-cal-card">
-            <div class="d-lg-none d-inline-flex card-header">
+            <div class="d-lg-none d-inline-flex card-header gap-2">
                 <button class="btn btn-primary btn-new-event">
                     <i class="ti ti-plus me-2 align-middle"></i>
-                    Create New Holiday
+                    <span data-lang="hc-new-holiday">Create New Holiday</span>
+                </button>
+                <button class="btn btn-soft-primary btn-new-calendar">
+                    <i class="ti ti-calendar-plus me-2 align-middle"></i>
+                    <span data-lang="hc-new-calendar">Create New Calendar</span>
                 </button>
             </div>
             <div class="card-body" data-simplebar="" data-simplebar-md="" style="height: calc(100% - 350px);">
@@ -486,20 +490,12 @@
                             </div>
                             <div class="col-12">
                                 <div class="mb-2">
-                                    <label class="control-label form-label" for="event-category">Calendar</label>
+                                    <label class="control-label form-label" for="event-category" data-lang="hc-calendar">Calendar</label>
+                                    {# As opções são montadas pelo JS a partir do mesmo registro que
+                                       desenha as pills — duas listas escritas à mão divergiriam no dia
+                                       em que alguém cadastrasse um calendário. #}
                                     <select class="form-select" id="event-category" name="category" required="">
                                         <option disabled="" value="">Select a Calendar</option>
-                                        <option selected="" value="bg-primary-subtle text-primary">ANBIMA</option>
-                                        <option value="bg-secondary-subtle text-secondary">BURSA</option>
-                                        <option value="bg-success-subtle text-success">CBY_AGS</option>
-                                        <option value="bg-danger-subtle text-danger">EURIBOR</option>
-                                        <option value="bg-info-subtle text-info">ICEAGS</option>
-                                        <option value="bg-warning-subtle text-warning">IPE</option>
-                                        <option value="bg-dark-subtle text-dark">LME</option>
-                                        <option value="bg-purple-subtle text-purple">NYMEX</option>
-                                        <option value="bg-teal-subtle text-teal">PLATTS-ASIA</option>
-                                        <option value="bg-indigo-subtle text-indigo">PLATTS-EUROPE</option>
-                                        <option value="bg-pink-subtle text-pink">SOFR</option>
                                     </select>
                                     <div class="invalid-feedback">Please select a valid event category</div>
                                 </div>
@@ -518,6 +514,54 @@
                         </div>
                     </div>
                 </form>
+            </div>
+            <!-- end modal-content-->
+        </div>
+        <!-- end modal dialog-->
+    </div>
+    <!-- end modal-->
+
+    <!-- Modal Create New Calendar -->
+    <div class="modal fade" id="calendar-modal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content liquid-glass">
+                <div class="modal-header">
+                    <h4 class="modal-title" data-lang="hc-new-calendar-title">Create New Calendar</h4>
+                    <button aria-label="Close" class="btn-close" data-bs-dismiss="modal" type="button"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="control-label form-label" for="hc-cal-name" data-lang="hc-cal-name">Calendar Name</label>
+                        <input class="form-control" id="hc-cal-name" type="text" maxlength="40"
+                               placeholder="e.g. CME" autocomplete="off">
+                    </div>
+
+                    <label class="control-label form-label" data-lang="hc-cal-file">Holidays Spreadsheet</label>
+                    <div class="hc-dropzone" id="hc-dropzone" tabindex="0">
+                        <div class="hc-dz-hint">
+                            <i class="ti ti-cloud-upload"></i>
+                            <span data-lang="hc-dz">Drop the .xlsx here or click to browse</span>
+                        </div>
+                        <span class="hc-dz-file d-none" id="hc-dz-file"></span>
+                        <input type="file" id="hc-cal-file" hidden accept=".xlsx,.xlsm">
+                    </div>
+                    <p class="hc-dz-spec" data-lang="hc-dz-spec">
+                        One sheet, three columns: <strong>Holiday</strong> (column A, yyyy-mm-dd),
+                        <strong>Description</strong> (column B) and <strong>Holiday Type</strong>.
+                        Only the first two are imported.
+                    </p>
+
+                    <div class="alert alert-danger py-2 px-3 fs-xs d-none" id="hc-cal-error"></div>
+
+                    <div class="d-flex flex-wrap align-items-center gap-2 mt-3">
+                        <button class="btn btn-light ms-auto" data-bs-dismiss="modal" type="button" data-lang="hc-close">
+                            Close
+                        </button>
+                        <button class="btn btn-primary" id="hc-cal-save" type="button">
+                            <i class="ti ti-upload me-1"></i><span data-lang="hc-import">Import</span>
+                        </button>
+                    </div>
+                </div>
             </div>
             <!-- end modal-content-->
         </div>

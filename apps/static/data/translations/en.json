@@ -1823,5 +1823,16 @@
   "qt-clear-filters": "Clear Filters",
   "qt-showing": "Showing",
   "qt-rows": "rows",
-  "qt-empty": "Pick the type, the instrument and the period."
+  "qt-empty": "Pick the type, the instrument and the period.",
+  "hc-new-holiday": "Create New Holiday",
+  "hc-new-calendar": "Create New Calendar",
+  "hc-new-calendar-title": "Create New Calendar",
+  "hc-hint": "Drag a calendar to a date, or click a date to create a new holiday.",
+  "hc-calendar": "Calendar",
+  "hc-cal-name": "Calendar Name",
+  "hc-cal-file": "Holidays Spreadsheet",
+  "hc-dz": "Drop the .xlsx here or click to browse",
+  "hc-dz-spec": "One sheet, three columns: <strong>Holiday</strong> (column A, yyyy-mm-dd), <strong>Description</strong> (column B) and <strong>Holiday Type</strong>. Only the first two are imported.",
+  "hc-close": "Close",
+  "hc-import": "Import"
 }

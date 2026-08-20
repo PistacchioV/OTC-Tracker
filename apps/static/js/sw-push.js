@@ -39,7 +39,8 @@ var PAGE_URL = {
     'NDF Cockpit': '/ndf-cockpit',
     'Cognos': '/cognos',
     'File Interface': '/file-interface',
-    'Mapping': '/mapping'
+    'Mapping': '/mapping',
+    'Holidays Calendar': '/holidays-calendar'
 };
 
 self.addEventListener('push', function (event) {
