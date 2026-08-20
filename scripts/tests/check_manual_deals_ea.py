@@ -25,6 +25,7 @@ Nao encosta em rede (SMTP stubado) nem em dado real (arquivos-dia em tempfile).
 import io
 import json
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -200,25 +201,22 @@ try:
     # `.cp-reveal` e `display: flex` em LINHA: dois cards dentro do mesmo ficam
     # LADO A LADO, e foi assim que este card nasceu desalinhado com o BACC EA.
     # Quem empilha e o `flex-column` da coluna — um card por reveal.
-    col = TPL.split('flex-column gap-3 gap-xl-4', 1)[1].split(
-        '<div class="col-12 col-lg-6 d-flex" data-cp-group="affirmation">', 1)[0]
-    check('cada card empilhado tem o seu proprio .cp-reveal',
-          [b.count('class="cp-card"') for b in col.split('<div class="cp-reveal">')[1:]],
-          [1, 1])
+    # O card vive na secao Economic Affirmation, numa coluna PROPRIA — os tres
+    # cards dela (Manual Deals EA, BACC EA Metrics e MT300) tem alturas
+    # parecidas, entao nao ha o que empilhar. A coluna empilhada do painel e a
+    # da Intraday, e quem prende aquela geometria e o
+    # check_control_panel_sections.
+    _sec = TPL.split('data-cp-hdr="affirmation"', 1)[1]
+    check('o card esta na secao Economic Affirmation',
+          re.findall(r'data-cp-card="([^"]+)"', _sec.split('data-cp-hdr=', 1)[0]),
+          ['manualdealsea', 'baccea', 'mt300'])
+    # `.cp-reveal` e `display: flex` em LINHA: dois cards dentro do mesmo ficam
+    # LADO A LADO, e foi assim que este card nasceu desalinhado com o BACC EA.
+    _col = _sec.split('<div class="col-12 col-lg-6 d-flex" data-cp-group="affirmation">', 2)[1]
+    check('um card por .cp-reveal',
+          [b.count('class="cp-card"') for b in _col.split('<div class="cp-reveal">')[1:2]], [1])
     check('   e o espacamento vem do gap da coluna, nao de margem no card',
-          'cp-card mt-3' in col, False)
-    # Na secao Economic Affirmation a coluna empilhada leva Manual Deals EA +
-    # BACC EA Metrics, e os dois juntos fecham na altura do Confirmations
-    # Escalation, que divide a linha e e o card mais alto do painel. Um so ali
-    # esticava ate la e virava meia tela de branco.
-    check('a coluna empilhada tem os dois cards de EA',
-          [c for c in ('manualdealsea', 'baccea', 'confescalation')
-           if 'data-cp-card="%s"' % c in col],
-          ['manualdealsea', 'baccea'])
-    # A coluna empilhada vem a ESQUERDA, com o Escalation ao lado.
-    check('o Manual Deals EA vem antes do Escalation, na mesma linha',
-          TPL.index('data-cp-card="manualdealsea"') < TPL.index('data-cp-card="confescalation"'),
-          True)
+          'cp-card mt-3' in _col, False)
     check('   com UM botao Run por rotina',
           ['data-mdea-run="otherpub"' in TPL, 'data-mdea-run="fwdstart"' in TPL], [True, True])
     check('   e o campo TO — BACC HUB', 'id="cp-mdea-to"' in TPL, True)

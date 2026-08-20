@@ -160,7 +160,8 @@
           "description": "Tipo do Instrumento Financeiro",
           "source": "Fixed",
           "source_detail": "TER",
-          "source_note": ""
+          "source_note": "",
+          "source_by_page": {}
         },
         {
           "seq": "2",
@@ -172,7 +173,8 @@
           "description": "Tipo de linha Header = 0",
           "source": "Fixed",
           "source_detail": "0",
-          "source_note": ""
+          "source_note": "",
+          "source_by_page": {}
         },
         {
           "seq": "3",
@@ -184,7 +186,8 @@
           "description": "Código da operação: 0001 - Registro TER",
           "source": "Fixed",
           "source_detail": "0001",
-          "source_note": ""
+          "source_note": "",
+          "source_by_page": {}
         },
         {
           "seq": "4",
@@ -212,6 +215,11 @@
               "source": "Calculated",
               "source_detail": "",
               "source_note": "JPMORGANBM (BANCO), INTRAGLAWTONFDO (LAWTON), MORGANBC (MGT) per output file"
+            },
+            "/new_deals-ndf-vanilla": {
+              "source": "Calculated",
+              "source_detail": "",
+              "source_note": "JPMORGANBM (BANCO), INTRAGLAWTONFDO (LAWTON), MORGANBC (MGT) per output file"
             }
           }
         },
@@ -225,7 +233,8 @@
           "description": "Data da operação.",
           "source": "Calculated",
           "source_detail": "",
-          "source_note": "File generation date (today)"
+          "source_note": "File generation date (today)",
+          "source_by_page": {}
         },
         {
           "seq": "6",
@@ -237,7 +246,8 @@
           "description": "Versão de Layout.",
           "source": "Fixed",
           "source_detail": "00003",
-          "source_note": ""
+          "source_note": "",
+          "source_by_page": {}
         }
       ]
     },
@@ -256,7 +266,8 @@
           "description": "Tipo do Instrumento Financeiro",
           "source": "Fixed",
           "source_detail": "TER",
-          "source_note": ""
+          "source_note": "",
+          "source_by_page": {}
         },
         {
           "seq": "2",
@@ -268,7 +279,8 @@
           "description": "Tipo Linha \"Dados Fixos\"",
           "source": "Fixed",
           "source_detail": "1",
-          "source_note": ""
+          "source_note": "",
+          "source_by_page": {}
         },
         {
           "seq": "3",
@@ -280,7 +292,8 @@
           "description": "Código da operação: Registro TER",
           "source": "Fixed",
           "source_detail": "0001",
-          "source_note": ""
+          "source_note": "",
+          "source_by_page": {}
         },
         {
           "seq": "4",
@@ -292,7 +305,8 @@
           "description": "Número de identificação do lançamento realizado pelo Participante. Não é necessário que o número de controle interno seja o mesmo da contraparte.",
           "source": "Calculated",
           "source_detail": "",
-          "source_note": "Random 10-digit number per line"
+          "source_note": "Random 10-digit number per line",
+          "source_by_page": {}
         },
         {
           "seq": "5",
@@ -320,6 +334,11 @@
               "source": "Calculated",
               "source_detail": "",
               "source_note": "Lawton LE or J.P. Morgan client → 00041007 (Lawton file); MGT LE → 04880006; else 73760009 (Banco)"
+            },
+            "/new_deals-ndf-vanilla": {
+              "source": "Calculated",
+              "source_detail": "",
+              "source_note": "Lawton LE or J.P. Morgan client → 00041007 (Lawton file); MGT LE → 04880006; else 73760009 (Banco)"
             }
           }
         },
@@ -333,7 +352,8 @@
           "description": "Papel da parte na operação",
           "source": "Calculated",
           "source_detail": "Direction",
-          "source_note": "BUY → 0, else 1"
+          "source_note": "BUY → 0, else 1",
+          "source_by_page": {}
         },
         {
           "seq": "7",
@@ -345,7 +365,8 @@
           "description": "CPF/CNPJ da Parte.",
           "source": "Fixed",
           "source_detail": "",
-          "source_note": "Blank"
+          "source_note": "Blank",
+          "source_by_page": {}
         },
         {
           "seq": "8",
@@ -373,6 +394,11 @@
               "source": "Calculated",
               "source_detail": "",
               "source_note": "Lawton LE → 73760009; J.P. Morgan client → 73760009 (04880006 when LE = MGT); Lawton client → 00041007; MGT LE → 04880109; MGT client → 04880006; else 73760102 (client omnibus)"
+            },
+            "/new_deals-ndf-vanilla": {
+              "source": "Calculated",
+              "source_detail": "",
+              "source_note": "Lawton LE → 73760009; J.P. Morgan client → 73760009 (04880006 when LE = MGT); Lawton client → 00041007; MGT LE → 04880109; MGT client → 04880006; else 73760102 (client omnibus)"
             }
           }
         },
@@ -386,7 +412,8 @@
           "description": "CPF/CNPJ da Contraparte.",
           "source": "Page",
           "source_detail": "Tax ID",
-          "source_note": "digits only; blank for internal legs"
+          "source_note": "digits only; blank for internal legs",
+          "source_by_page": {}
         },
         {
           "seq": "10",
@@ -398,7 +425,8 @@
           "description": "Indicação informativa se o contrato registrado é amparado pelo Contrato Global de Derivativos.",
           "source": "Fixed",
           "source_detail": "S",
-          "source_note": ""
+          "source_note": "",
+          "source_by_page": {}
         },
         {
           "seq": "11",
@@ -423,6 +451,11 @@
               "source_note": "Taxas de Câmbio — the literal carries the right-alignment in 20 (the engine left-justifies X fields, so the 19 leading spaces are part of the Fixed value)"
             },
             "/new_deals-ndf-otherpublisher": {
+              "source": "Fixed",
+              "source_detail": "                   2",
+              "source_note": "Taxas de Câmbio — the literal carries the right-alignment in 20 (the engine left-justifies X fields, so the 19 leading spaces are part of the Fixed value)"
+            },
+            "/new_deals-ndf-vanilla": {
               "source": "Fixed",
               "source_detail": "                   2",
               "source_note": "Taxas de Câmbio — the literal carries the right-alignment in 20 (the engine left-justifies X fields, so the 19 leading spaces are part of the Fixed value)"
@@ -489,6 +522,11 @@
               "source": "Mapping",
               "source_detail": "currency-base",
               "source_note": "from Quantity Currency ISO; swapped with Moeda Cotada when Is BRR Fixed? = YES"
+            },
+            "/new_deals-ndf-vanilla": {
+              "source": "Mapping",
+              "source_detail": "currency-base",
+              "source_note": "from Quantity Currency ISO; swapped with Moeda Cotada when Is BRR Fixed? = YES"
             }
           }
         },
@@ -515,6 +553,11 @@
               "source_note": "from Other Quantity Currency ISO (CODIGO DE CADASTRO by SIMBOLO)"
             },
             "/new_deals-ndf-otherpublisher": {
+              "source": "Mapping",
+              "source_detail": "currency-base",
+              "source_note": "from Other Quantity Currency ISO; swapped with Moeda de Referência when Is BRR Fixed? = YES"
+            },
+            "/new_deals-ndf-vanilla": {
               "source": "Mapping",
               "source_detail": "currency-base",
               "source_note": "from Other Quantity Currency ISO; swapped with Moeda de Referência when Is BRR Fixed? = YES"
@@ -547,6 +590,11 @@
               "source": "Fixed",
               "source_detail": "",
               "source_note": "Blank"
+            },
+            "/new_deals-ndf-vanilla": {
+              "source": "Fixed",
+              "source_detail": "",
+              "source_note": "Blank"
             }
           }
         },
@@ -573,6 +621,11 @@
               "source_note": "rounded to integer, zero-padded to 14 digits + '00' (TotalNotional also accepted)"
             },
             "/new_deals-ndf-otherpublisher": {
+              "source": "Page",
+              "source_detail": "Notional",
+              "source_note": "rounded to integer, zero-padded to 14 digits + '00' (TotalNotional also accepted)"
+            },
+            "/new_deals-ndf-vanilla": {
               "source": "Page",
               "source_detail": "Notional",
               "source_note": "rounded to integer, zero-padded to 14 digits + '00' (TotalNotional also accepted)"
@@ -605,6 +658,11 @@
               "source": "Fixed",
               "source_detail": "",
               "source_note": "Blank"
+            },
+            "/new_deals-ndf-vanilla": {
+              "source": "Fixed",
+              "source_detail": "",
+              "source_note": "Blank"
             }
           }
         },
@@ -631,6 +689,11 @@
               "source_note": "Blank (the rate is fixed later, Termo a Termo)"
             },
             "/new_deals-ndf-otherpublisher": {
+              "source": "Page",
+              "source_detail": "Rate",
+              "source_note": "weak currencies inverted (1/rate) with decimals from currency-base INV DECIMALS"
+            },
+            "/new_deals-ndf-vanilla": {
               "source": "Page",
               "source_detail": "Rate",
               "source_note": "weak currencies inverted (1/rate) with decimals from currency-base INV DECIMALS"
@@ -663,6 +726,11 @@
               "source": "Fixed",
               "source_detail": "",
               "source_note": "Blank"
+            },
+            "/new_deals-ndf-vanilla": {
+              "source": "Fixed",
+              "source_detail": "",
+              "source_note": "Blank"
             }
           }
         },
@@ -676,7 +744,8 @@
           "description": "Data em que o Participante contratou a operação. Pode ser informada com até D-2 da data do registro, quando o contrato for com cliente (contas 10 e 20).",
           "source": "Page",
           "source_detail": "Trade Date",
-          "source_note": ""
+          "source_note": "",
+          "source_by_page": {}
         },
         {
           "seq": "21",
@@ -688,7 +757,8 @@
           "description": "Data de vencimento do contrato. Pode ser indicada em dia não útil, exceto finais de semana; nesse cenário a liquidação será no D+1 útil do sistema.",
           "source": "Page",
           "source_detail": "Settlement Date",
-          "source_note": ""
+          "source_note": "",
+          "source_by_page": {}
         },
         {
           "seq": "22",
@@ -713,6 +783,11 @@
               "source_note": "'3' (18:00 Fechamento) when Fonte de Informação = '0' (PTAX), else '1'"
             },
             "/new_deals-ndf-otherpublisher": {
+              "source": "Fixed",
+              "source_detail": "",
+              "source_note": "Blank"
+            },
+            "/new_deals-ndf-vanilla": {
               "source": "Fixed",
               "source_detail": "",
               "source_note": "Blank"
@@ -745,6 +820,11 @@
               "source": "Fixed",
               "source_detail": "",
               "source_note": "Blank"
+            },
+            "/new_deals-ndf-vanilla": {
+              "source": "Fixed",
+              "source_detail": "",
+              "source_note": "Blank"
             }
           }
         },
@@ -774,6 +854,11 @@
               "source": "Fixed",
               "source_detail": "",
               "source_note": "Blank"
+            },
+            "/new_deals-ndf-vanilla": {
+              "source": "Fixed",
+              "source_detail": "",
+              "source_note": "Blank"
             }
           }
         },
@@ -787,7 +872,8 @@
           "description": "Indica se possui cross-rate na apuração da cotação final para contratos de Termo de Moedas. Não permitido se uma das moedas for USD ou quando \"Fonte de Informação\" = SISBACEN; não permitido para os demais contratos de Termo.",
           "source": "Fixed",
           "source_detail": "",
-          "source_note": "Blank"
+          "source_note": "Blank",
+          "source_by_page": {}
         },
         {
           "seq": "26",
@@ -812,6 +898,11 @@
               "source_note": "Blank"
             },
             "/new_deals-ndf-otherpublisher": {
+              "source": "Mapping",
+              "source_detail": "publisher-ndf",
+              "source_note": "FONTE CONSULTA column for the deal's Publisher; no row = blank"
+            },
+            "/new_deals-ndf-vanilla": {
               "source": "Mapping",
               "source_detail": "publisher-ndf",
               "source_note": "FONTE CONSULTA column for the deal's Publisher; no row = blank"
@@ -844,6 +935,11 @@
               "source": "Mapping",
               "source_detail": "publisher-ndf",
               "source_note": "TELA CONSULTA column for the deal's Publisher, right-aligned"
+            },
+            "/new_deals-ndf-vanilla": {
+              "source": "Mapping",
+              "source_detail": "publisher-ndf",
+              "source_note": "TELA CONSULTA column for the deal's Publisher, right-aligned"
             }
           }
         },
@@ -857,7 +953,8 @@
           "description": "Local de negociação da moeda de referência.",
           "source": "Fixed",
           "source_detail": "",
-          "source_note": "Blank"
+          "source_note": "Blank",
+          "source_by_page": {}
         },
         {
           "seq": "29",
@@ -869,7 +966,8 @@
           "description": "Horário de verificação da taxa de câmbio.",
           "source": "Fixed",
           "source_detail": "",
-          "source_note": "Blank"
+          "source_note": "Blank",
+          "source_by_page": {}
         },
         {
           "seq": "30",
@@ -894,6 +992,11 @@
               "source_note": "Blank"
             },
             "/new_deals-ndf-otherpublisher": {
+              "source": "Fixed",
+              "source_detail": "1",
+              "source_note": "Venda"
+            },
+            "/new_deals-ndf-vanilla": {
               "source": "Fixed",
               "source_detail": "1",
               "source_note": "Venda"
@@ -926,6 +1029,11 @@
               "source": "Fixed",
               "source_detail": "3",
               "source_note": "Nenhum"
+            },
+            "/new_deals-ndf-vanilla": {
+              "source": "Fixed",
+              "source_detail": "3",
+              "source_note": "Nenhum"
             }
           }
         },
@@ -955,6 +1063,11 @@
               "source": "Page",
               "source_detail": "Last Fixing Date",
               "source_note": ""
+            },
+            "/new_deals-ndf-vanilla": {
+              "source": "Page",
+              "source_detail": "Last Fixing Date",
+              "source_note": ""
             }
           }
         },
@@ -968,7 +1081,8 @@
           "description": "Código da Paridade a ser utilizada no Cross-rate do contrato.",
           "source": "Fixed",
           "source_detail": "",
-          "source_note": "Blank"
+          "source_note": "Blank",
+          "source_by_page": {}
         },
         {
           "seq": "34",
@@ -980,7 +1094,8 @@
           "description": "Data de fixing da paridade cross do contrato (data efetiva da captura da cotação, sem deslocamento). Maior que a data de início e menor ou igual à data de vencimento.",
           "source": "Fixed",
           "source_detail": "",
-          "source_note": "Blank"
+          "source_note": "Blank",
+          "source_by_page": {}
         },
         {
           "seq": "35",
@@ -1005,6 +1120,11 @@
               "source_note": ""
             },
             "/new_deals-ndf-otherpublisher": {
+              "source": "Fixed",
+              "source_detail": "N",
+              "source_note": ""
+            },
+            "/new_deals-ndf-vanilla": {
               "source": "Fixed",
               "source_detail": "N",
               "source_note": ""
@@ -1037,6 +1157,11 @@
               "source": "Calculated",
               "source_detail": "",
               "source_note": "deal's StrikeSetDate (not shown on this page) advanced by the ANBIMA gap Last Fixing Date → Settlement Date; blank when empty"
+            },
+            "/new_deals-ndf-vanilla": {
+              "source": "Calculated",
+              "source_detail": "",
+              "source_note": "deal's StrikeSetDate (not shown on this page) advanced by the ANBIMA gap Last Fixing Date → Settlement Date; blank when empty"
             }
           }
         },
@@ -1063,6 +1188,11 @@
               "source_note": "Valor"
             },
             "/new_deals-ndf-otherpublisher": {
+              "source": "Fixed",
+              "source_detail": "",
+              "source_note": "Blank"
+            },
+            "/new_deals-ndf-vanilla": {
               "source": "Fixed",
               "source_detail": "",
               "source_note": "Blank"
@@ -1095,6 +1225,11 @@
               "source": "Calculated",
               "source_detail": "",
               "source_note": "deal's StrikeSetOffset (not shown on this page) when filled, 4 int + 8 dec digits, else blank"
+            },
+            "/new_deals-ndf-vanilla": {
+              "source": "Calculated",
+              "source_detail": "",
+              "source_note": "deal's StrikeSetOffset (not shown on this page) when filled, 4 int + 8 dec digits, else blank"
             }
           }
         },
@@ -1124,6 +1259,11 @@
               "source": "Fixed",
               "source_detail": "",
               "source_note": "Blank"
+            },
+            "/new_deals-ndf-vanilla": {
+              "source": "Fixed",
+              "source_detail": "",
+              "source_note": "Blank"
             }
           }
         },
@@ -1137,7 +1277,8 @@
           "description": "Indica se o valor base do contrato será atualizado no período a termo. Só possível SIM quando \"Termo a Termo\" = SIM.",
           "source": "Fixed",
           "source_detail": "N",
-          "source_note": ""
+          "source_note": "",
+          "source_by_page": {}
         },
         {
           "seq": "41",
@@ -1149,7 +1290,8 @@
           "description": "Para contrato Termo a Termo com atualização do valor base, cotação inicial da paridade utilizada para a atualização do valor base no período a termo.",
           "source": "Fixed",
           "source_detail": "",
-          "source_note": "Blank"
+          "source_note": "Blank",
+          "source_by_page": {}
         },
         {
           "seq": "42",
@@ -1161,7 +1303,8 @@
           "description": "Indica se o contrato possui Shift, ou seja, atualização da taxa a termo do contrato.",
           "source": "Fixed",
           "source_detail": "N",
-          "source_note": ""
+          "source_note": "",
+          "source_by_page": {}
         },
         {
           "seq": "43",
@@ -1173,7 +1316,8 @@
           "description": "Parâmetro que indica qual a ponta autorizada a realizar a alteração da taxa no período estipulado.",
           "source": "Fixed",
           "source_detail": "",
-          "source_note": "Blank"
+          "source_note": "Blank",
+          "source_by_page": {}
         },
         {
           "seq": "44",
@@ -1185,7 +1329,8 @@
           "description": "Indica o início do período estipulado para o ajuste de taxa pelo Participante indicado.",
           "source": "Fixed",
           "source_detail": "",
-          "source_note": "Blank"
+          "source_note": "Blank",
+          "source_by_page": {}
         },
         {
           "seq": "45",
@@ -1197,7 +1342,8 @@
           "description": "Indica o final do período estipulado para o ajuste de taxa pelo Participante indicado.",
           "source": "Fixed",
           "source_detail": "",
-          "source_note": "Blank"
+          "source_note": "Blank",
+          "source_by_page": {}
         },
         {
           "seq": "46",
@@ -1209,7 +1355,8 @@
           "description": "Indica que o contrato conta com limitadores de variação superior e/ou inferior de valorização do contrato.",
           "source": "Fixed",
           "source_detail": "",
-          "source_note": "Blank"
+          "source_note": "Blank",
+          "source_by_page": {}
         },
         {
           "seq": "47",
@@ -1221,7 +1368,8 @@
           "description": "Limite superior aplicado na apuração do resultado.",
           "source": "Fixed",
           "source_detail": "",
-          "source_note": "Blank"
+          "source_note": "Blank",
+          "source_by_page": {}
         },
         {
           "seq": "48",
@@ -1233,7 +1381,8 @@
           "description": "Limite inferior aplicado na apuração do resultado.",
           "source": "Fixed",
           "source_detail": "",
-          "source_note": "Blank"
+          "source_note": "Blank",
+          "source_by_page": {}
         },
         {
           "seq": "49",
@@ -1245,7 +1394,8 @@
           "description": "Indica a data em que será liquidado o prêmio informado. Pode ser de D0 do registro até D0 do vencimento do contrato.",
           "source": "Fixed",
           "source_detail": "",
-          "source_note": "Blank"
+          "source_note": "Blank",
+          "source_by_page": {}
         },
         {
           "seq": "50",
@@ -1257,7 +1407,8 @@
           "description": "Necessário para indicar a modalidade pela qual a operação de pagamento de prêmio cursará.",
           "source": "Fixed",
           "source_detail": "",
-          "source_note": "Blank"
+          "source_note": "Blank",
+          "source_by_page": {}
         },
         {
           "seq": "51",
@@ -1269,7 +1420,8 @@
           "description": "Valor do prêmio, em reais, a ser pago no contrato.",
           "source": "Fixed",
           "source_detail": "",
-          "source_note": "Blank"
+          "source_note": "Blank",
+          "source_by_page": {}
         },
         {
           "seq": "52",
@@ -1281,7 +1433,8 @@
           "description": "Para contratos a mercado, indica a modalidade de liquidação do prêmio liquidado em D0 do registro (BILATERAL ou BRUTA). Prêmio agendado: SEM MODALIDADE. Contratos a cliente (conta 10): SEM MODALIDADE.",
           "source": "Fixed",
           "source_detail": "",
-          "source_note": "Blank"
+          "source_note": "Blank",
+          "source_by_page": {}
         },
         {
           "seq": "53",
@@ -1293,7 +1446,8 @@
           "description": "Indica se o prêmio informado no campo \"Valor do Prêmio\" está expresso na moeda do ativo subjacente (moeda estrangeira).",
           "source": "Fixed",
           "source_detail": "",
-          "source_note": "Blank"
+          "source_note": "Blank",
+          "source_by_page": {}
         },
         {
           "seq": "54",
@@ -1305,7 +1459,8 @@
           "description": "Se o Prêmio em Moeda Estrangeira = SIM, informar a data de fixing da moeda para conversão do prêmio para BRL.",
           "source": "Fixed",
           "source_detail": "",
-          "source_note": "Blank"
+          "source_note": "Blank",
+          "source_by_page": {}
         },
         {
           "seq": "55",
@@ -1333,6 +1488,11 @@
               "source": "Calculated",
               "source_detail": "Is BRR Fixed?",
               "source_note": "'S' when YES, else blank"
+            },
+            "/new_deals-ndf-vanilla": {
+              "source": "Calculated",
+              "source_detail": "Is BRR Fixed?",
+              "source_note": "'S' when YES, else blank"
             }
           }
         },
@@ -1346,7 +1506,8 @@
           "description": "Campo tipo texto para indicar observações adicionais ao contrato.",
           "source": "Fixed",
           "source_detail": "",
-          "source_note": "Blank"
+          "source_note": "Blank",
+          "source_by_page": {}
         },
         {
           "seq": "57",
@@ -1371,6 +1532,11 @@
               "source_note": "last 14 characters, right-aligned"
             },
             "/new_deals-ndf-otherpublisher": {
+              "source": "Page",
+              "source_detail": "Deal",
+              "source_note": "last 14 characters, right-aligned"
+            },
+            "/new_deals-ndf-vanilla": {
               "source": "Page",
               "source_detail": "Deal",
               "source_note": "last 14 characters, right-aligned"
@@ -1403,6 +1569,11 @@
               "source": "Calculated",
               "source_detail": "",
               "source_note": "'A' when First Fixing Date and Last Fixing Date are both filled and different, else 'N'"
+            },
+            "/new_deals-ndf-vanilla": {
+              "source": "Calculated",
+              "source_detail": "",
+              "source_note": "'A' when First Fixing Date and Last Fixing Date are both filled and different, else 'N'"
             }
           }
         },
@@ -1432,6 +1603,11 @@
               "source": "Calculated",
               "source_detail": "",
               "source_note": "ANBIMA business days First Fixing Date → Last Fixing Date + 1 when Asian, else '000'"
+            },
+            "/new_deals-ndf-vanilla": {
+              "source": "Calculated",
+              "source_detail": "",
+              "source_note": "ANBIMA business days First Fixing Date → Last Fixing Date + 1 when Asian, else '000'"
             }
           }
         }
@@ -1452,7 +1628,8 @@
           "description": "Tipo do Instrumento Financeiro",
           "source": "Fixed",
           "source_detail": "TER",
-          "source_note": ""
+          "source_note": "",
+          "source_by_page": {}
         },
         {
           "seq": "2",
@@ -1464,7 +1641,8 @@
           "description": "Tipo Linha \"Dados Variáveis\"",
           "source": "Fixed",
           "source_detail": "2",
-          "source_note": ""
+          "source_note": "",
+          "source_by_page": {}
         },
         {
           "seq": "3",
@@ -1476,7 +1654,8 @@
           "description": "Código da operação: Registro TER",
           "source": "Fixed",
           "source_detail": "0001",
-          "source_note": ""
+          "source_note": "",
+          "source_by_page": {}
         },
         {
           "seq": "4",
@@ -1496,6 +1675,11 @@
               "source_note": "Not emitted from this page; only the verification-date count goes on line type 1, field 59"
             },
             "/new_deals-ndf-otherpublisher": {
+              "source": "",
+              "source_detail": "",
+              "source_note": "Not emitted from this page; only the verification-date count goes on line type 1, field 59"
+            },
+            "/new_deals-ndf-vanilla": {
               "source": "",
               "source_detail": "",
               "source_note": "Not emitted from this page; only the verification-date count goes on line type 1, field 59"
@@ -1523,6 +1707,11 @@
               "source": "",
               "source_detail": "",
               "source_note": "Not emitted from this page; only the verification-date count goes on line type 1, field 59"
+            },
+            "/new_deals-ndf-vanilla": {
+              "source": "",
+              "source_detail": "",
+              "source_note": "Not emitted from this page; only the verification-date count goes on line type 1, field 59"
             }
           }
         },
@@ -1544,6 +1733,11 @@
               "source_note": "Not emitted from this page; only the verification-date count goes on line type 1, field 59"
             },
             "/new_deals-ndf-otherpublisher": {
+              "source": "",
+              "source_detail": "",
+              "source_note": "Not emitted from this page; only the verification-date count goes on line type 1, field 59"
+            },
+            "/new_deals-ndf-vanilla": {
               "source": "",
               "source_detail": "",
               "source_note": "Not emitted from this page; only the verification-date count goes on line type 1, field 59"

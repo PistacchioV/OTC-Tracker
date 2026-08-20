@@ -350,14 +350,13 @@ _NAV_URLS = _load_nav_urls()
 # O que NÃO pode mudar é o `id`: ele é o token gravado no `Page_Access` de cada
 # usuário (`/control-panel#<id>`), então renomeá-lo revoga o acesso em silêncio.
 _CONTROL_PANEL_CARDS = [
-    # File-Saving Routines
-    {'id': 'cetip',       'label': 'Save CETIP Files'},
-    {'id': 'daily',       'label': 'Save Daily Settlement Files'},
     # Intraday Routines
+    {'id': 'cetip',       'label': 'Save CETIP Files'},
     {'id': 'dealsmonitor', 'label': 'Deals Monitor — Pending Action'},
+    {'id': 'confescalation', 'label': 'Confirmations Escalation'},
     # Settlement Reporting
+    {'id': 'daily',       'label': 'Save Daily Settlement Files'},
     {'id': 'forecast',    'label': 'Settlement Forecast'},
-    {'id': 'mt300',       'label': 'MT300'},
     # Pending Confirmation Routines
     {'id': 'dailymetric', 'label': 'Daily Metric — Outstanding Confirmation Brazil OTC'},
     {'id': 'pendingspreadsheet', 'label': 'Pending Confirmations Spreadsheet Metrics'},
@@ -366,7 +365,7 @@ _CONTROL_PANEL_CARDS = [
     # Economic Affirmation Routines
     {'id': 'manualdealsea', 'label': 'Manual Deals EA'},
     {'id': 'baccea',      'label': 'BACC EA Metrics'},
-    {'id': 'confescalation', 'label': 'Confirmations Escalation'},
+    {'id': 'mt300',       'label': 'MT300'},
     # Reference Data Routines
     {'id': 'contacts',    'label': 'Update Contacts'},
 ]

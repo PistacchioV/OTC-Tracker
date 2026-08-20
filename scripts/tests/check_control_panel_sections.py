@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""check_control_panel_sections.py — as SEIS secoes do Control Panel.
+"""check_control_panel_sections.py — as CINCO secoes do Control Panel.
 
 O painel cresceu ate virar uma parede de dez cards debaixo de um titulo so.
-Hoje sao seis secoes (File-Saving, Intraday, Settlement Reporting, Pending
+Hoje sao cinco secoes (Intraday, Settlement Reporting, Pending
 Confirmation, Economic Affirmation e Reference Data), e a secao de cada card e
 o DOM: o cabecalho, a `.row.cp-cards` logo abaixo dele, e os cards dentro dela.
 
@@ -83,8 +83,8 @@ check('e todo id tem um token de acesso',
       sorted('/control-panel#' + i for i in reg), True)
 
 print('\n== 2. toda secao tem card, todo card tem secao ==')
-check('o painel tem SEIS secoes', [s['key'] for s in secoes],
-      ['filesaving', 'intraday', 'reporting', 'pendingconf', 'affirmation', 'refdata'])
+check('o painel tem CINCO secoes', [s['key'] for s in secoes],
+      ['intraday', 'reporting', 'pendingconf', 'affirmation', 'refdata'])
 for s in secoes:
     check('%s: tem a .row de cards' % s['key'], s['row'], True)
     check('%s: nao esta vazia' % s['key'], bool(s['cards']), True)

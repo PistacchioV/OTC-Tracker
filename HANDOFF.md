@@ -12468,27 +12468,34 @@ Quatro coisas que não dão erro nenhum:
 
 ---
 
-## §285 — O Control Panel virou seis seções, e a seção de cada card passou a ser o DOM
+## §285 — O Control Panel virou cinco seções, e a seção de cada card passou a ser o DOM
 
 "Na página Control Panel já está ficando um pouco bagunçado com muitos cards." Eram **duas**
 seções para treze cards — *File-Saving Routines* com dois e *Settlement Reporting* com os outros
 **onze**, que na prática era um título só em cima de uma parede de cards sem relação entre si (a
 importação de contatos ao lado da escalação de confirmações ao lado do MT300).
 
-### As seis seções, e o que caiu em cada uma
+### As cinco seções, e o que caiu em cada uma
 
 | Seção | Rótulo | Cards |
 |---|---|---|
-| **File-Saving Routines** | Daily Settlements | Save CETIP Files · Save Daily Settlement Files |
-| **Intraday Routines** | Trading Day | Deals Monitor — Pending Action |
-| **Settlement Reporting** | Forecasts & Reports | Settlement Forecast · MT300 |
+| **Intraday Routines** | Trading Day | Save CETIP Files · Deals Monitor — Pending Action · Confirmations Escalation |
+| **Settlement Reporting** | Forecasts & Reports | Save Daily Settlement Files · Settlement Forecast |
 | **Pending Confirmation Routines** | Outstanding Confirmations | Daily Metric · Pending Confirmations Spreadsheet Metrics · Weekly Escalation (CEM/EDG) · Signature Collection |
-| **Economic Affirmation Routines** | Manual Confirmations | Manual Deals EA · BACC EA Metrics · Confirmations Escalation |
+| **Economic Affirmation Routines** | Manual Confirmations | Manual Deals EA · BACC EA Metrics · MT300 |
 | **Reference Data Routines** | Counterparties | Update Contacts |
 
-O MT300 ficou em *Settlement Reporting* porque o que ele manda é o lote do dia para o grupo
-**casar em DVP** — é matching de liquidação, não afirmação. O Deals Monitor abre a *Intraday*
-sozinho de propósito: é a rotina que olha o pregão do dia, e é ali que a próxima entra.
+**Não existe uma seção de salvamento de arquivo**, e isso é decisão da mesa: o que agrupa não é o
+que a rotina FAZ (salvar arquivo), é *quando* ela acontece e sobre o que ela responde. O Save CETIP
+Files roda ao longo do pregão, com os arquivos chegando, e por isso está na *Intraday* ao lado do
+Deals Monitor e do Confirmations Escalation; o Save Daily Settlement Files alimenta a liquidação e
+está com o Settlement Forecast. O MT300 saiu de *Settlement Reporting* para *Economic Affirmation*
+pela mesma régua: ele reporta as operações do dia para o grupo casar, que é a família da afirmação.
+
+A **coluna empilhada** mudou de seção junto: ela existe para dois cards curtos fecharem na altura do
+card mais alto do painel, o Confirmations Escalation — hoje são o Save CETIP Files e o Deals Monitor,
+na *Intraday*. A *Economic Affirmation* ficou com três cards de altura parecida e não empilha nada:
+empilhar dois ali faria o terceiro esticar até a soma dos dois e virar meia tela de branco.
 
 ### O mapa card → grupo saiu do JS
 
@@ -12521,3 +12528,39 @@ No mesmo bloco, dois defeitos que vinham junto:
 O `check_control_panel_sections.py` prende tudo isso: registro × template nos dois sentidos, seção
 sem card e card sem seção, os três rótulos de cada seção nos **três** idiomas, a ordem do registro e
 o JS sem o mapa à mão.
+
+---
+
+## §286 — File Interpreter: a NDF Vanilla estava ligada ao template, mas sem cadastro próprio
+
+"Estou fazendo alterações no item de New Deals NDF Vanilla e não está refletindo na página; ele está
+considerando o template de NDF Commodities."
+
+As quatro páginas de NDF dividem o MESMO template do File Interface, o `termo-multiclasses` — o que
+separa uma da outra é o **override por página** (`source_by_page`), e `_fi_field_src` cai no texto
+COMUM do campo quando a página não tem override. O comum deste template carrega os campos de
+mercadoria, e a Vanilla tinha **UM** override em 71 campos:
+
+| seq | Campo | Vanilla resolvia para | Deveria ser |
+|---|---|---|---|
+| 17 | Código do Ativo Subjacente | `Page: Underlying Asset` | em branco |
+| 19 | Data de fixing do Ativo Subjacente | `Page: Last Fixing Date` | em branco |
+| 23 | Tipo de Cotação | `Mapping: commodities-b3` | em branco |
+| 24 | Data de Fixing da Moeda | `Page: FXConvDate` | em branco |
+| 38 | Valor / Percentual Negociado | `Page: Strike Set Offset` (FWD Start) | `Calculated` |
+| 30/31 | Cotação Taxa de Câmbio / Paridade | em branco | `1` / `3` |
+
+A página **aparecia** ligada na tela (o `linked_pages` sempre teve a Vanilla, com as 25 colunas
+dela), e é por isso que a falha era muda: editar um campo *sem* override não mudava nada visível,
+porque o que a tela mostra é o comum — e o comum é de outro produto.
+
+O cadastro da Vanilla passou a ser o do **Other Publisher**, copiado campo a campo: é o mesmo
+produto (NDF de moeda), e as duas páginas têm a **mesma lista de 25 colunas**, então todo
+`Page: <coluna>` de lá é válido aqui. Hoje o `page-spec` das duas é idêntico, e a Vanilla difere do
+cadastro de mercadoria em 25 campos.
+
+**O que este item NÃO resolve:** os botões *Send to Conecta* da página de NDF Vanilla chamam
+`/api/new-deals/vanilla/send-conecta`, e o endpoint genérico recusa esse produto
+(`send-conecta not available for this product`, HTTP 404) — só `fwd-start` e `other-publishers`
+passam. O cadastro da Vanilla alimenta hoje só o **preview de duplo clique**; abrir a geração do
+arquivo é outra decisão, porque é registro na B3.

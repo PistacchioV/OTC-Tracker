@@ -305,18 +305,27 @@
         Central de rotinas operacionais
     </p>
 
-    <!-- ═══ ROTINAS — duas seções: header full-width + os cards da seção ═══ -->
-    <!-- ── Section: File-Saving Routines ────────────────────── -->
-    <div class="cp-reveal mb-2" data-cp-hdr="filesaving">
-        <div class="cp-sec-label" data-lang="cp-sec-ds-label">Daily Settlements</div>
-        <h2 class="cp-sec-title" data-lang="cp-sec-ds-title">File-Saving Routines</h2>
-        <p class="cp-sec-desc" data-lang="cp-sec-ds-desc">
-            Rotinas que processam fontes de dados e salvam os arquivos necessários nas pastas de liquidação.
+    <!-- ═══ ROTINAS — cinco secoes: header full-width + os cards da secao ═══ -->
+    <!-- ── Section: Intraday Routines ──────────────────── -->
+    <div class="cp-reveal mb-2" data-cp-hdr="intraday">
+        <div class="cp-sec-label" data-lang="cp-sec-id-label">Trading Day</div>
+        <h2 class="cp-sec-title" data-lang="cp-sec-id-title">Intraday Routines</h2>
+        <p class="cp-sec-desc" data-lang="cp-sec-id-desc">
+            Routines that run through the trading day — the files as they land and what is still pending action.
         </p>
     </div>
     <div class="row g-3 g-xl-4 mb-4 cp-cards">
 
-        <div class="col-12 col-lg-6 d-flex" data-cp-group="filesaving">
+        <!-- Esta coluna carrega DOIS cards empilhados: Save CETIP Files e
+             Deals Monitor. Juntos eles preenchem a altura do Confirmations
+             Escalation, que divide a linha e e o card mais alto do painel —
+             sozinho, qualquer um dos dois esticava ate la e virava meia tela de
+             branco. `flex-column` e o que faz os `.cp-reveal` (que ja sao
+             `flex: 1`) repartirem a altura da linha.
+
+             Um card por `.cp-reveal`: o `.cp-reveal` e `display: flex` em LINHA,
+             entao dois cards dentro do mesmo ficam LADO A LADO. -->
+        <div class="col-12 col-lg-6 d-flex flex-column gap-3 gap-xl-4" data-cp-group="intraday">
             <div class="cp-reveal">
                 <div class="cp-card" data-cp-card="cetip">
                     <div class="cp-card__icon"><i class="ti ti-file-export"></i></div>
@@ -389,55 +398,7 @@
                     </div>
                 </div>
             </div>
-        </div>
 
-        <div class="col-12 col-lg-6 d-flex" data-cp-group="filesaving">
-            <div class="cp-reveal">
-                <div class="cp-card" data-cp-card="daily">
-                    <div class="cp-card__icon"><i class="ti ti-folders"></i></div>
-                    <h3 class="cp-card__title" data-lang="cp-r-ds-title">Save Daily Settlement Files</h3>
-                    <p class="cp-card__desc" data-lang="cp-r-ds-desc">
-                        Processes ALL Daily Settlement files into JSONs — OTM cashflows, Operações JPM/MGT,
-                        Eventos Swap, TSS-FX, BR Onshore, Latam Desk (FbiRptLatamDeskPostion-NY-*). Drop files here,
-                        or leave empty to scan
-                        the Settlements folder. Each page can also process its own file individually.
-                    </p>
-                    <div class="cp-field">
-                        <label data-lang="cp-ds-files">Files</label>
-                        <div class="cp-dropzone" id="cpDsDrop" tabindex="0">
-                            <input type="file" id="cp-ds-files" multiple hidden>
-                            <div class="cp-dz-hint">
-                                <i class="ti ti-cloud-upload"></i>
-                                <span data-lang="cp-ds-dz">Drop files here or click to browse</span>
-                            </div>
-                            <ul class="cp-dz-list" id="cp-ds-list"></ul>
-                        </div>
-                    </div>
-                    <div class="cp-card__foot">
-                        <span class="cp-card__meta">
-                            <i class="ti ti-folder"></i><span data-lang="cp-ds-meta">Dropzone or Settlements folder</span>
-                        </span>
-                        <button type="button" class="cp-run-btn" id="cpDsSaveBtn">
-                            <i class="ti ti-player-play"></i>
-                            <span data-lang="cp-ds-run">Save files</span>
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- ── Section: Intraday Routines ──────────────────── -->
-    <div class="cp-reveal mb-2" data-cp-hdr="intraday">
-        <div class="cp-sec-label" data-lang="cp-sec-id-label">Trading Day</div>
-        <h2 class="cp-sec-title" data-lang="cp-sec-id-title">Intraday Routines</h2>
-        <p class="cp-sec-desc" data-lang="cp-sec-id-desc">
-            Routines that follow the day's trading and e-mail what is still pending action.
-        </p>
-    </div>
-    <div class="row g-3 g-xl-4 mb-4 cp-cards">
-
-        <div class="col-12 col-lg-6 d-flex" data-cp-group="intraday">
             <div class="cp-reveal">
                 <div class="cp-card" data-cp-card="dealsmonitor">
                     <div class="cp-card__icon"><i class="ti ti-clock-exclamation"></i></div>
@@ -475,6 +436,149 @@
                 </div>
             </div>
         </div>
+
+        <div class="col-12 col-lg-6 d-flex" data-cp-group="intraday">
+            <div class="cp-reveal">
+                <div class="cp-card" data-cp-card="confescalation">
+                    <div class="cp-card__icon"><i class="ti ti-mail-forward"></i></div>
+                    <h3 class="cp-card__title" data-lang="cp-r-ce-title">Confirmations Escalation</h3>
+                    <p class="cp-card__desc" data-lang="cp-r-ce-desc">
+                        E-mails the confirmations still pending validation on the Confirmations
+                        Monitor / Track Confirmations. Routine: Monday and Thursday at 17:00
+                        Brasília (rolled to the next ANBIMA business day) — one report per desk:
+                        OTC Ops (Pending OTC), Sales Support (Pending MO) and one per product for
+                        the Front Office, each with its own recipient list. Escalation: every
+                        business day, only what is on the last day of the MO deadline or already
+                        overdue. Nothing pending, no e-mail. Each item can also be sent on its own
+                        with its Run button.
+                    </p>
+                    <div class="cp-field">
+                        <label data-lang="cp-ce-otc-to">TO — OTC Ops</label>
+                        <input type="text" id="cp-ce-otc-to" class="form-control form-control-sm"
+                               placeholder="email1@jpmorgan.com; email2@jpmorgan.com">
+                    </div>
+                    <div class="cp-field">
+                        <label data-lang="cp-ce-sales-to">TO — Sales Support</label>
+                        <input type="text" id="cp-ce-sales-to" class="form-control form-control-sm"
+                               placeholder="email1@jpmorgan.com; email2@jpmorgan.com">
+                    </div>
+                    <div class="cp-field">
+                        <label data-lang="cp-ce-sales-esc">Escalation — Sales Support</label>
+                        <input type="text" id="cp-ce-sales-esc" class="form-control form-control-sm"
+                               placeholder="email1@jpmorgan.com; email2@jpmorgan.com">
+                    </div>
+                    <!-- Uma lista POR PRODUTO do Front Office: quem recebe a
+                         fila do EDG Corporate Swap não é quem recebe a do EDG
+                         Swap. Cada campo vem com o Run do seu e-mail ao lado —
+                         reenviar um não pode obrigar a mesa a disparar os
+                         outros. O número é quanto está parado naquela fila. -->
+                    <div class="cp-field">
+                        <label data-lang="cp-ce-fo-cem-swap">TO — FO · CEM Swap</label>
+                        <input type="text" id="cp-ce-fo-cem-swap" class="form-control form-control-sm"
+                               placeholder="email1@jpmorgan.com; email2@jpmorgan.com">
+                    </div>
+                    <div class="cp-field">
+                        <label data-lang="cp-ce-fo-edg-swap">TO — FO · EDG Swap</label>
+                        <input type="text" id="cp-ce-fo-edg-swap" class="form-control form-control-sm"
+                               placeholder="email1@jpmorgan.com; email2@jpmorgan.com">
+                    </div>
+                    <div class="cp-field">
+                        <label data-lang="cp-ce-fo-edg-corp-swap">TO — FO · EDG Corporate Swap</label>
+                        <input type="text" id="cp-ce-fo-edg-corp-swap" class="form-control form-control-sm"
+                               placeholder="email1@jpmorgan.com; email2@jpmorgan.com">
+                    </div>
+                    <div class="cp-field">
+                        <label data-lang="cp-ce-fo-edg-option">TO — FO · EDG Option</label>
+                        <input type="text" id="cp-ce-fo-edg-option" class="form-control form-control-sm"
+                               placeholder="email1@jpmorgan.com; email2@jpmorgan.com">
+                    </div>
+
+                    <div class="cp-ce-list">
+                        <div class="cp-ce-item">
+                            <span class="cp-ce-item__lbl">
+                                <span data-lang="cp-ce-i-otc">OTC Ops — Pending OTC</span>
+                                <span class="cp-ce-item__n" data-ce-count="otc">–</span>
+                            </span>
+                            <button type="button" class="cp-run-btn cp-run-btn--sm" data-ce-run="otc">
+                                <i class="ti ti-send"></i><span data-lang="cp-run">Run</span>
+                            </button>
+                        </div>
+                        <div class="cp-ce-item">
+                            <span class="cp-ce-item__lbl">
+                                <span data-lang="cp-ce-i-mo">Sales Support — MO</span>
+                                <span class="cp-ce-item__n" data-ce-count="mo">–</span>
+                            </span>
+                            <button type="button" class="cp-run-btn cp-run-btn--sm" data-ce-run="mo">
+                                <i class="ti ti-send"></i><span data-lang="cp-run">Run</span>
+                            </button>
+                        </div>
+                        <div class="cp-ce-item">
+                            <span class="cp-ce-item__lbl">
+                                <span data-lang="cp-ce-i-esc">Escalation — MO</span>
+                                <span class="cp-ce-item__sub" data-lang="cp-ce-i-esc-sub">last day / overdue</span>
+                                <span class="cp-ce-item__n" data-ce-count="escalation">–</span>
+                            </span>
+                            <button type="button" class="cp-run-btn cp-run-btn--sm" data-ce-run="escalation">
+                                <i class="ti ti-alert-triangle"></i><span data-lang="cp-run">Run</span>
+                            </button>
+                        </div>
+                        <div class="cp-ce-item">
+                            <span class="cp-ce-item__lbl">
+                                <span data-lang="cp-ce-i-fo">Front Office</span>
+                                <span class="cp-ce-item__sub">CEM Swap</span>
+                                <span class="cp-ce-item__n" data-ce-count="cem-swap">–</span>
+                            </span>
+                            <button type="button" class="cp-run-btn cp-run-btn--sm" data-ce-run="fo-cem-swap">
+                                <i class="ti ti-send"></i><span data-lang="cp-run">Run</span>
+                            </button>
+                        </div>
+                        <div class="cp-ce-item">
+                            <span class="cp-ce-item__lbl">
+                                <span data-lang="cp-ce-i-fo">Front Office</span>
+                                <span class="cp-ce-item__sub">EDG Swap</span>
+                                <span class="cp-ce-item__n" data-ce-count="edg-swap">–</span>
+                            </span>
+                            <button type="button" class="cp-run-btn cp-run-btn--sm" data-ce-run="fo-edg-swap">
+                                <i class="ti ti-send"></i><span data-lang="cp-run">Run</span>
+                            </button>
+                        </div>
+                        <div class="cp-ce-item">
+                            <span class="cp-ce-item__lbl">
+                                <span data-lang="cp-ce-i-fo">Front Office</span>
+                                <span class="cp-ce-item__sub">EDG Corporate Swap</span>
+                                <span class="cp-ce-item__n" data-ce-count="edg-corp-swap">–</span>
+                            </span>
+                            <button type="button" class="cp-run-btn cp-run-btn--sm" data-ce-run="fo-edg-corp-swap">
+                                <i class="ti ti-send"></i><span data-lang="cp-run">Run</span>
+                            </button>
+                        </div>
+                        <div class="cp-ce-item">
+                            <span class="cp-ce-item__lbl">
+                                <span data-lang="cp-ce-i-fo">Front Office</span>
+                                <span class="cp-ce-item__sub">EDG Option</span>
+                                <span class="cp-ce-item__n" data-ce-count="edg-option">–</span>
+                            </span>
+                            <button type="button" class="cp-run-btn cp-run-btn--sm" data-ce-run="fo-edg-option">
+                                <i class="ti ti-send"></i><span data-lang="cp-run">Run</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Desfecho dos dois disparos automáticos + próximo horário. -->
+                    <div id="cp-ce-status" class="cp-card__meta d-none"
+                         style="display:block;margin-top:.55rem;line-height:1.5;"></div>
+                    <div class="cp-card__foot">
+                        <span class="cp-card__meta">
+                            <i class="ti ti-calendar-time"></i><span data-lang="cp-ce-meta">Mon &amp; Thu 17:00 BRT · escalation daily</span>
+                        </span>
+                        <button type="button" class="cp-run-btn" data-ce-run="routine">
+                            <i class="ti ti-player-play"></i>
+                            <span data-lang="cp-ce-run-all">Run all</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- ── Section: Settlement Reporting ──────────────────── -->
@@ -482,10 +586,45 @@
         <div class="cp-sec-label" data-lang="cp-sec-fc-label">Forecasts &amp; Reports</div>
         <h2 class="cp-sec-title" data-lang="cp-sec-fc-title">Settlement Reporting</h2>
         <p class="cp-sec-desc" data-lang="cp-sec-fc-desc">
-            Routines that consolidate positions and report the upcoming settlements.
+            Routines that process the settlement files and report the settlements that come next.
         </p>
     </div>
     <div class="row g-3 g-xl-4 mb-4 cp-cards">
+
+        <div class="col-12 col-lg-6 d-flex" data-cp-group="reporting">
+            <div class="cp-reveal">
+                <div class="cp-card" data-cp-card="daily">
+                    <div class="cp-card__icon"><i class="ti ti-folders"></i></div>
+                    <h3 class="cp-card__title" data-lang="cp-r-ds-title">Save Daily Settlement Files</h3>
+                    <p class="cp-card__desc" data-lang="cp-r-ds-desc">
+                        Processes ALL Daily Settlement files into JSONs — OTM cashflows, Operações JPM/MGT,
+                        Eventos Swap, TSS-FX, BR Onshore, Latam Desk (FbiRptLatamDeskPostion-NY-*). Drop files here,
+                        or leave empty to scan
+                        the Settlements folder. Each page can also process its own file individually.
+                    </p>
+                    <div class="cp-field">
+                        <label data-lang="cp-ds-files">Files</label>
+                        <div class="cp-dropzone" id="cpDsDrop" tabindex="0">
+                            <input type="file" id="cp-ds-files" multiple hidden>
+                            <div class="cp-dz-hint">
+                                <i class="ti ti-cloud-upload"></i>
+                                <span data-lang="cp-ds-dz">Drop files here or click to browse</span>
+                            </div>
+                            <ul class="cp-dz-list" id="cp-ds-list"></ul>
+                        </div>
+                    </div>
+                    <div class="cp-card__foot">
+                        <span class="cp-card__meta">
+                            <i class="ti ti-folder"></i><span data-lang="cp-ds-meta">Dropzone or Settlements folder</span>
+                        </span>
+                        <button type="button" class="cp-run-btn" id="cpDsSaveBtn">
+                            <i class="ti ti-player-play"></i>
+                            <span data-lang="cp-ds-run">Save files</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
 
         <div class="col-12 col-lg-6 d-flex" data-cp-group="reporting">
             <div class="cp-reveal">
@@ -522,44 +661,6 @@
                         <button type="button" class="cp-run-btn"
                                 data-forecast-run
                                 data-date-input="cp-fcst-date">
-                            <i class="ti ti-player-play"></i>
-                            <span data-lang="cp-run">Run</span>
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-12 col-lg-6 d-flex" data-cp-group="reporting">
-            <div class="cp-reveal">
-                <div class="cp-card" data-cp-card="mt300">
-                    <div class="cp-card__icon"><i class="ti ti-message-2"></i></div>
-                    <h3 class="cp-card__title" data-lang="cp-r-mt300-title">MT300</h3>
-                    <p class="cp-card__desc" data-lang="cp-r-mt300-desc">
-                        E-mails the day's NDF Vanilla trades whose counterparty is registered in
-                        Mapping &rsaquo; MT300, so the group can match them in DVP. Runs every
-                        ANBIMA business day at 19:30 Brasília; Run sends it now. With no trade
-                        from the registered counterparties, no e-mail is sent.
-                    </p>
-                    <div class="cp-field">
-                        <label data-lang="cp-mt300-to">TO — BACC</label>
-                        <input type="text" id="cp-mt300-to" class="form-control form-control-sm"
-                               placeholder="email1@jpmorgan.com; email2@jpmorgan.com">
-                    </div>
-                    <div class="cp-field">
-                        <label data-lang="cp-mt300-cc">CC</label>
-                        <input type="text" id="cp-mt300-cc" class="form-control form-control-sm"
-                               placeholder="email1@jpmorgan.com; email2@jpmorgan.com">
-                    </div>
-                    <!-- Desfecho do último disparo automático: sem esta linha a
-                         única evidência de que a rotina rodou é o log. -->
-                    <div id="cp-mt300-status" class="cp-card__meta d-none"
-                         style="display:block;margin-top:.35rem;line-height:1.5;"></div>
-                    <div class="cp-card__foot">
-                        <span class="cp-card__meta">
-                            <i class="ti ti-calendar-time"></i><span data-lang="cp-mt300-meta">Daily 19:30 BRT &rarr; NDF Vanilla</span>
-                        </span>
-                        <button type="button" class="cp-run-btn" data-mt300-run>
                             <i class="ti ti-player-play"></i>
                             <span data-lang="cp-run">Run</span>
                         </button>
@@ -737,21 +838,12 @@
         <div class="cp-sec-label" data-lang="cp-sec-ea-label">Manual Confirmations</div>
         <h2 class="cp-sec-title" data-lang="cp-sec-ea-title">Economic Affirmation Routines</h2>
         <p class="cp-sec-desc" data-lang="cp-sec-ea-desc">
-            Routines around the manual confirmation workflow — chasing the validations and reporting the deals affirmed by hand.
+            Routines that report the deals affirmed by hand and the trades the group has to match.
         </p>
     </div>
     <div class="row g-3 g-xl-4 mb-4 cp-cards">
 
-        <!-- Esta coluna carrega DOIS cards empilhados: Manual Deals EA e BACC
-             EA Metrics. Juntos eles preenchem a altura do Confirmations
-             Escalation, que divide a linha e e o card mais alto do painel —
-             sozinho, qualquer um dos dois esticava ate la e virava meia tela de
-             branco. `flex-column` e o que faz os `.cp-reveal` (que ja sao
-             `flex: 1`) repartirem a altura da linha.
-
-             Um card por `.cp-reveal`: o `.cp-reveal` e `display: flex` em LINHA,
-             entao dois cards dentro do mesmo ficam LADO A LADO. -->
-        <div class="col-12 col-lg-6 d-flex flex-column gap-3 gap-xl-4" data-cp-group="affirmation">
+        <div class="col-12 col-lg-6 d-flex" data-cp-group="affirmation">
             <div class="cp-reveal">
                 <div class="cp-card" data-cp-card="manualdealsea">
                     <div class="cp-card__icon"><i class="ti ti-hand-stop"></i></div>
@@ -797,7 +889,9 @@
                     </div>
                 </div>
             </div>
+        </div>
 
+        <div class="col-12 col-lg-6 d-flex" data-cp-group="affirmation">
             <div class="cp-reveal">
                 <div class="cp-card" data-cp-card="baccea">
                     <div class="cp-card__icon"><i class="ti ti-chart-histogram"></i></div>
@@ -839,141 +933,36 @@
 
         <div class="col-12 col-lg-6 d-flex" data-cp-group="affirmation">
             <div class="cp-reveal">
-                <div class="cp-card" data-cp-card="confescalation">
-                    <div class="cp-card__icon"><i class="ti ti-mail-forward"></i></div>
-                    <h3 class="cp-card__title" data-lang="cp-r-ce-title">Confirmations Escalation</h3>
-                    <p class="cp-card__desc" data-lang="cp-r-ce-desc">
-                        E-mails the confirmations still pending validation on the Confirmations
-                        Monitor / Track Confirmations. Routine: Monday and Thursday at 17:00
-                        Brasília (rolled to the next ANBIMA business day) — one report per desk:
-                        OTC Ops (Pending OTC), Sales Support (Pending MO) and one per product for
-                        the Front Office, each with its own recipient list. Escalation: every
-                        business day, only what is on the last day of the MO deadline or already
-                        overdue. Nothing pending, no e-mail. Each item can also be sent on its own
-                        with its Run button.
+                <div class="cp-card" data-cp-card="mt300">
+                    <div class="cp-card__icon"><i class="ti ti-message-2"></i></div>
+                    <h3 class="cp-card__title" data-lang="cp-r-mt300-title">MT300</h3>
+                    <p class="cp-card__desc" data-lang="cp-r-mt300-desc">
+                        E-mails the day's NDF Vanilla trades whose counterparty is registered in
+                        Mapping &rsaquo; MT300, so the group can match them in DVP. Runs every
+                        ANBIMA business day at 19:30 Brasília; Run sends it now. With no trade
+                        from the registered counterparties, no e-mail is sent.
                     </p>
                     <div class="cp-field">
-                        <label data-lang="cp-ce-otc-to">TO — OTC Ops</label>
-                        <input type="text" id="cp-ce-otc-to" class="form-control form-control-sm"
+                        <label data-lang="cp-mt300-to">TO — BACC</label>
+                        <input type="text" id="cp-mt300-to" class="form-control form-control-sm"
                                placeholder="email1@jpmorgan.com; email2@jpmorgan.com">
                     </div>
                     <div class="cp-field">
-                        <label data-lang="cp-ce-sales-to">TO — Sales Support</label>
-                        <input type="text" id="cp-ce-sales-to" class="form-control form-control-sm"
+                        <label data-lang="cp-mt300-cc">CC</label>
+                        <input type="text" id="cp-mt300-cc" class="form-control form-control-sm"
                                placeholder="email1@jpmorgan.com; email2@jpmorgan.com">
                     </div>
-                    <div class="cp-field">
-                        <label data-lang="cp-ce-sales-esc">Escalation — Sales Support</label>
-                        <input type="text" id="cp-ce-sales-esc" class="form-control form-control-sm"
-                               placeholder="email1@jpmorgan.com; email2@jpmorgan.com">
-                    </div>
-                    <!-- Uma lista POR PRODUTO do Front Office: quem recebe a
-                         fila do EDG Corporate Swap não é quem recebe a do EDG
-                         Swap. Cada campo vem com o Run do seu e-mail ao lado —
-                         reenviar um não pode obrigar a mesa a disparar os
-                         outros. O número é quanto está parado naquela fila. -->
-                    <div class="cp-field">
-                        <label data-lang="cp-ce-fo-cem-swap">TO — FO · CEM Swap</label>
-                        <input type="text" id="cp-ce-fo-cem-swap" class="form-control form-control-sm"
-                               placeholder="email1@jpmorgan.com; email2@jpmorgan.com">
-                    </div>
-                    <div class="cp-field">
-                        <label data-lang="cp-ce-fo-edg-swap">TO — FO · EDG Swap</label>
-                        <input type="text" id="cp-ce-fo-edg-swap" class="form-control form-control-sm"
-                               placeholder="email1@jpmorgan.com; email2@jpmorgan.com">
-                    </div>
-                    <div class="cp-field">
-                        <label data-lang="cp-ce-fo-edg-corp-swap">TO — FO · EDG Corporate Swap</label>
-                        <input type="text" id="cp-ce-fo-edg-corp-swap" class="form-control form-control-sm"
-                               placeholder="email1@jpmorgan.com; email2@jpmorgan.com">
-                    </div>
-                    <div class="cp-field">
-                        <label data-lang="cp-ce-fo-edg-option">TO — FO · EDG Option</label>
-                        <input type="text" id="cp-ce-fo-edg-option" class="form-control form-control-sm"
-                               placeholder="email1@jpmorgan.com; email2@jpmorgan.com">
-                    </div>
-
-                    <div class="cp-ce-list">
-                        <div class="cp-ce-item">
-                            <span class="cp-ce-item__lbl">
-                                <span data-lang="cp-ce-i-otc">OTC Ops — Pending OTC</span>
-                                <span class="cp-ce-item__n" data-ce-count="otc">–</span>
-                            </span>
-                            <button type="button" class="cp-run-btn cp-run-btn--sm" data-ce-run="otc">
-                                <i class="ti ti-send"></i><span data-lang="cp-run">Run</span>
-                            </button>
-                        </div>
-                        <div class="cp-ce-item">
-                            <span class="cp-ce-item__lbl">
-                                <span data-lang="cp-ce-i-mo">Sales Support — MO</span>
-                                <span class="cp-ce-item__n" data-ce-count="mo">–</span>
-                            </span>
-                            <button type="button" class="cp-run-btn cp-run-btn--sm" data-ce-run="mo">
-                                <i class="ti ti-send"></i><span data-lang="cp-run">Run</span>
-                            </button>
-                        </div>
-                        <div class="cp-ce-item">
-                            <span class="cp-ce-item__lbl">
-                                <span data-lang="cp-ce-i-esc">Escalation — MO</span>
-                                <span class="cp-ce-item__sub" data-lang="cp-ce-i-esc-sub">last day / overdue</span>
-                                <span class="cp-ce-item__n" data-ce-count="escalation">–</span>
-                            </span>
-                            <button type="button" class="cp-run-btn cp-run-btn--sm" data-ce-run="escalation">
-                                <i class="ti ti-alert-triangle"></i><span data-lang="cp-run">Run</span>
-                            </button>
-                        </div>
-                        <div class="cp-ce-item">
-                            <span class="cp-ce-item__lbl">
-                                <span data-lang="cp-ce-i-fo">Front Office</span>
-                                <span class="cp-ce-item__sub">CEM Swap</span>
-                                <span class="cp-ce-item__n" data-ce-count="cem-swap">–</span>
-                            </span>
-                            <button type="button" class="cp-run-btn cp-run-btn--sm" data-ce-run="fo-cem-swap">
-                                <i class="ti ti-send"></i><span data-lang="cp-run">Run</span>
-                            </button>
-                        </div>
-                        <div class="cp-ce-item">
-                            <span class="cp-ce-item__lbl">
-                                <span data-lang="cp-ce-i-fo">Front Office</span>
-                                <span class="cp-ce-item__sub">EDG Swap</span>
-                                <span class="cp-ce-item__n" data-ce-count="edg-swap">–</span>
-                            </span>
-                            <button type="button" class="cp-run-btn cp-run-btn--sm" data-ce-run="fo-edg-swap">
-                                <i class="ti ti-send"></i><span data-lang="cp-run">Run</span>
-                            </button>
-                        </div>
-                        <div class="cp-ce-item">
-                            <span class="cp-ce-item__lbl">
-                                <span data-lang="cp-ce-i-fo">Front Office</span>
-                                <span class="cp-ce-item__sub">EDG Corporate Swap</span>
-                                <span class="cp-ce-item__n" data-ce-count="edg-corp-swap">–</span>
-                            </span>
-                            <button type="button" class="cp-run-btn cp-run-btn--sm" data-ce-run="fo-edg-corp-swap">
-                                <i class="ti ti-send"></i><span data-lang="cp-run">Run</span>
-                            </button>
-                        </div>
-                        <div class="cp-ce-item">
-                            <span class="cp-ce-item__lbl">
-                                <span data-lang="cp-ce-i-fo">Front Office</span>
-                                <span class="cp-ce-item__sub">EDG Option</span>
-                                <span class="cp-ce-item__n" data-ce-count="edg-option">–</span>
-                            </span>
-                            <button type="button" class="cp-run-btn cp-run-btn--sm" data-ce-run="fo-edg-option">
-                                <i class="ti ti-send"></i><span data-lang="cp-run">Run</span>
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Desfecho dos dois disparos automáticos + próximo horário. -->
-                    <div id="cp-ce-status" class="cp-card__meta d-none"
-                         style="display:block;margin-top:.55rem;line-height:1.5;"></div>
+                    <!-- Desfecho do último disparo automático: sem esta linha a
+                         única evidência de que a rotina rodou é o log. -->
+                    <div id="cp-mt300-status" class="cp-card__meta d-none"
+                         style="display:block;margin-top:.35rem;line-height:1.5;"></div>
                     <div class="cp-card__foot">
                         <span class="cp-card__meta">
-                            <i class="ti ti-calendar-time"></i><span data-lang="cp-ce-meta">Mon &amp; Thu 17:00 BRT · escalation daily</span>
+                            <i class="ti ti-calendar-time"></i><span data-lang="cp-mt300-meta">Daily 19:30 BRT &rarr; NDF Vanilla</span>
                         </span>
-                        <button type="button" class="cp-run-btn" data-ce-run="routine">
+                        <button type="button" class="cp-run-btn" data-mt300-run>
                             <i class="ti ti-player-play"></i>
-                            <span data-lang="cp-ce-run-all">Run all</span>
+                            <span data-lang="cp-run">Run</span>
                         </button>
                     </div>
                 </div>

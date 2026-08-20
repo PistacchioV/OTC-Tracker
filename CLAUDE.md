@@ -346,9 +346,13 @@ JS do menu, feed de notificações).
   `enforce_control_panel_cards` bloqueia o endpoint de cada rotina sem o card
   (`_CP_ENDPOINT_CARD`). Uma concessão legada da página inteira implica todos
   os cards.
-  - A página é dividida em **seis seções** — File-Saving, Intraday, Settlement
-    Reporting, Pending Confirmation, Economic Affirmation e Reference Data —, e
-    a seção de cada card **é o DOM**: o cabeçalho (`data-cp-hdr`), a
+  - A página é dividida em **cinco seções** — Intraday, Settlement Reporting,
+    Pending Confirmation, Economic Affirmation e Reference Data —, e o que
+    agrupa não é o que a rotina FAZ e sim *quando* ela acontece e sobre o que
+    responde: não há seção de "salvamento de arquivo", o Save CETIP Files está
+    na Intraday (roda ao longo do pregão) e o Save Daily Settlement Files na
+    Settlement Reporting. A seção de cada card **é o DOM**: o cabeçalho
+    (`data-cp-hdr`), a
     `.row.cp-cards` logo abaixo, e os cards dentro dela. Havia um mapa
     card → grupo escrito à mão no JS, e ele envelhecia calado no dia em que um
     card mudasse de seção: o cabeçalho ficava sozinho na tela, ou sumia com
@@ -1057,8 +1061,7 @@ que não dão erro nenhum quando se mexe:
 ### O BACC EA Metrics é a mesma esteira, extraída para o time de métricas
 
 O card **BACC EA Metrics** (Control Panel › *Economic Affirmation Routines*,
-empilhado com o Manual Deals EA — os dois juntos preenchem a altura do
-Confirmations Escalation, que divide a linha) manda, todo dia útil ANBIMA às
+ao lado do Manual Deals EA e do MT300) manda, todo dia útil ANBIMA às
 **16:00 BRT**, um e-mail com as operações manuais em anexo `.xlsx`. A fonte é a
 MESMA `manual_conf.load_all()` que o Track Confirmations mostra, com DOIS cortes
 e ordenada pelo **Aging do maior para o menor** — quem espera há mais tempo vem
