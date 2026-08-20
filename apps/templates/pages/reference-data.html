@@ -19,8 +19,18 @@
     td.editing .select2-container { width:100%!important; }
     /* Ações de linha no squircle padrão do app (spec .ops-row-act): 32×32, raio 10,
        colorido com tooltip colorido. */
-    .btn-act { width:32px; height:32px; min-width:32px; max-width:32px; padding:0; flex:0 0 auto; display:inline-flex; align-items:center; justify-content:center; line-height:1; border-radius:10px !important; }
-    .btn-act i { font-size:1rem; }
+    /* min/max travam a ALTURA também: uma regra de tema com `min-height` em
+       `.btn` deixava um botão maior que o vizinho, e 32×34 não é squircle. */
+    .btn-act {
+        width:32px; height:32px;
+        min-width:32px; max-width:32px; min-height:32px; max-height:32px;
+        padding:0; flex:0 0 auto; box-sizing:border-box;
+        display:inline-flex; align-items:center; justify-content:center;
+        line-height:1; border-radius:10px !important;
+    }
+    /* `!important` porque o `.fs-13` do tema também é: enquanto o ícone
+       carregava aquela classe ele saía com 13 px onde o app usa 16. */
+    .btn-act > i { font-size:1rem !important; }
     .edit-actions-wrap { display:flex; gap:4px; justify-content:center; }
     /* Tooltips coloridos — mesma paleta do New Deals */
     .tooltip-success .tooltip-inner { background-color:#198754; }
@@ -656,9 +666,9 @@ $(document).ready(function () {
     // com tooltip colorido do Bootstrap — Confirm=verde, Edit=info, Delete=danger.
     function actionBtns(idx, maker) {
         return '<div class="d-flex justify-content-center gap-1">' +
-            '<button class="btn btn-success btn-sm rounded-circle btn-act btn-rd-confirm" data-idx="' + idx + '" data-maker="' + (maker||'') + '" data-bs-toggle="tooltip" data-bs-placement="auto" data-bs-title="Confirm / Approve" data-bs-custom-class="tooltip-success"><i class="ti ti-check fs-13"></i></button>' +
-            '<button class="btn btn-info btn-sm rounded-circle btn-act btn-rd-edit" data-idx="' + idx + '" data-bs-toggle="tooltip" data-bs-placement="auto" data-bs-title="Edit" data-bs-custom-class="tooltip-info"><i class="ti ti-edit fs-13"></i></button>' +
-            '<button class="btn btn-danger btn-sm rounded-circle btn-act btn-rd-delete" data-idx="' + idx + '" data-bs-toggle="tooltip" data-bs-placement="auto" data-bs-title="Deactivate" data-bs-custom-class="tooltip-danger"><i class="ti ti-trash fs-13"></i></button>' +
+            '<button class="btn btn-success btn-sm rounded-circle btn-act btn-rd-confirm" data-idx="' + idx + '" data-maker="' + (maker||'') + '" data-bs-toggle="tooltip" data-bs-placement="auto" data-bs-title="Confirm / Approve" data-bs-custom-class="tooltip-success"><i class="ti ti-check"></i></button>' +
+            '<button class="btn btn-info btn-sm rounded-circle btn-act btn-rd-edit" data-idx="' + idx + '" data-bs-toggle="tooltip" data-bs-placement="auto" data-bs-title="Edit" data-bs-custom-class="tooltip-info"><i class="ti ti-edit"></i></button>' +
+            '<button class="btn btn-danger btn-sm rounded-circle btn-act btn-rd-delete" data-idx="' + idx + '" data-bs-toggle="tooltip" data-bs-placement="auto" data-bs-title="Deactivate" data-bs-custom-class="tooltip-danger"><i class="ti ti-trash"></i></button>' +
             '</div>';
     }
 

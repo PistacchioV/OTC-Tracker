@@ -27,13 +27,68 @@
     /* inline edit cells */
     td.editing input, td.editing select { font-size:0.78rem; width:100%; box-sizing:border-box; }
     td.editing .select2-container { width:100%!important; }
-    .edit-actions-wrap { display:flex; gap:4px; }
     .pill-badge { font-size:0.68rem; }
-    /* action buttons */
-    /* Squircle padrão do app (spec .ops-row-act): 32×32, raio 10 */
-    .btn-act { width:32px; height:32px; min-width:32px; max-width:32px; padding:0; flex:0 0 auto; display:inline-flex; align-items:center; justify-content:center; line-height:1; border-radius:10px !important; }
-    .btn-act i { font-size:1rem; }
+    /* ── Ações de linha: squircle padrão do app (spec .ops-row-act) ─────────
+       min/max travam a ALTURA também, não só a largura: uma regra de tema com
+       `min-height` em `.btn` deixava um botão maior que o vizinho, e um botão
+       de 32×34 não é mais um quadrado arredondado. `box-sizing:border-box`
+       porque a borda do `.btn` entraria por fora dos 32 px. */
+    .btn-act {
+        width:32px; height:32px;
+        min-width:32px; max-width:32px; min-height:32px; max-height:32px;
+        padding:0; flex:0 0 auto; box-sizing:border-box;
+        display:inline-flex; align-items:center; justify-content:center;
+        line-height:1; border-radius:10px !important;
+    }
+    /* `!important` porque o `.fs-13` do tema também é !important: enquanto o
+       ícone carregava essa classe, ele saía com 13 px onde o resto do app usa
+       16 — a diferença que fazia estes botões parecerem de outra tela. A classe
+       saiu do markup; o !important aqui é o cinto de segurança. */
+    .btn-act > i { font-size:1rem !important; }
+    .btn-act { transition: transform 120ms var(--nd-ease-out), box-shadow 140ms ease; }
+    .btn-act:active { transform: scale(0.97); }
+    @media (hover: hover) and (pointer: fine) {
+        .btn-act:hover { transform: translateY(-1px); box-shadow: 0 2px 8px rgba(0,0,0,.18); }
+    }
+    /* Wrapper padrão: `d-flex justify-content-center gap-1` no markup. A classe
+       fica como gancho para o modo de edição da linha. */
     .edit-actions-wrap { display:flex; gap:4px; justify-content:center; }
+
+    /* ── Colored tooltips (mesmo bloco das páginas de New Deals) ───────────── */
+    .tooltip-primary   .tooltip-inner { background-color: #6658dd; }
+    .tooltip-success   .tooltip-inner { background-color: #198754; }
+    .tooltip-info      .tooltip-inner { background-color: #0dcaf0; color: #000; }
+    .tooltip-danger    .tooltip-inner { background-color: #dc3545; }
+    .tooltip-teal      .tooltip-inner { background-color: #4a849b; }
+    .tooltip-secondary .tooltip-inner { background-color: #6c757d; }
+
+    /* Arrow — top placement (tooltip acima do elemento, seta aponta ↓) */
+    .tooltip-primary.bs-tooltip-top   .tooltip-arrow::before,
+    .tooltip-primary.bs-tooltip-auto[data-popper-placement^="top"] .tooltip-arrow::before   { border-top-color:    #6658dd !important; }
+    .tooltip-success.bs-tooltip-top   .tooltip-arrow::before,
+    .tooltip-success.bs-tooltip-auto[data-popper-placement^="top"] .tooltip-arrow::before   { border-top-color:    #198754 !important; }
+    .tooltip-info.bs-tooltip-top      .tooltip-arrow::before,
+    .tooltip-info.bs-tooltip-auto[data-popper-placement^="top"]    .tooltip-arrow::before   { border-top-color:    #0dcaf0 !important; }
+    .tooltip-danger.bs-tooltip-top    .tooltip-arrow::before,
+    .tooltip-danger.bs-tooltip-auto[data-popper-placement^="top"]  .tooltip-arrow::before   { border-top-color:    #dc3545 !important; }
+    .tooltip-teal.bs-tooltip-top      .tooltip-arrow::before,
+    .tooltip-teal.bs-tooltip-auto[data-popper-placement^="top"]    .tooltip-arrow::before   { border-top-color:    #4a849b !important; }
+    .tooltip-secondary.bs-tooltip-top .tooltip-arrow::before,
+    .tooltip-secondary.bs-tooltip-auto[data-popper-placement^="top"] .tooltip-arrow::before { border-top-color:    #6c757d !important; }
+
+    /* Arrow — bottom placement (tooltip abaixo do elemento, seta aponta ↑) */
+    .tooltip-primary.bs-tooltip-bottom   .tooltip-arrow::before,
+    .tooltip-primary.bs-tooltip-auto[data-popper-placement^="bottom"] .tooltip-arrow::before   { border-bottom-color: #6658dd !important; }
+    .tooltip-success.bs-tooltip-bottom   .tooltip-arrow::before,
+    .tooltip-success.bs-tooltip-auto[data-popper-placement^="bottom"] .tooltip-arrow::before   { border-bottom-color: #198754 !important; }
+    .tooltip-info.bs-tooltip-bottom      .tooltip-arrow::before,
+    .tooltip-info.bs-tooltip-auto[data-popper-placement^="bottom"]    .tooltip-arrow::before   { border-bottom-color: #0dcaf0 !important; }
+    .tooltip-danger.bs-tooltip-bottom    .tooltip-arrow::before,
+    .tooltip-danger.bs-tooltip-auto[data-popper-placement^="bottom"]  .tooltip-arrow::before   { border-bottom-color: #dc3545 !important; }
+    .tooltip-teal.bs-tooltip-bottom      .tooltip-arrow::before,
+    .tooltip-teal.bs-tooltip-auto[data-popper-placement^="bottom"]    .tooltip-arrow::before   { border-bottom-color: #4a849b !important; }
+    .tooltip-secondary.bs-tooltip-bottom .tooltip-arrow::before,
+    .tooltip-secondary.bs-tooltip-auto[data-popper-placement^="bottom"] .tooltip-arrow::before { border-bottom-color: #6c757d !important; }
     /* Add Row button (matches new_deals style) */
     .btn-toolbar-addrow { font-size:0.75rem!important; padding:0.25rem 0.6rem!important; white-space:nowrap!important; }
 
@@ -414,8 +469,8 @@
         </div>
       </div>
       <div class="modal-footer py-2">
-        <button type="button" class="btn btn-sm btn-danger" data-bs-dismiss="modal" title="Cancel"><i class="ti ti-x"></i></button>
-        <button type="button" class="btn btn-sm btn-success" id="sm-save-btn" title="Save"><i class="ti ti-device-floppy"></i></button>
+        <button type="button" class="btn btn-sm btn-secondary btn-act" data-bs-dismiss="modal" data-bs-toggle="tooltip" data-bs-placement="top" data-bs-title="Cancel" data-bs-custom-class="tooltip-secondary"><i class="ti ti-x"></i></button>
+        <button type="button" class="btn btn-sm btn-success btn-act" id="sm-save-btn" data-bs-toggle="tooltip" data-bs-placement="top" data-bs-title="Save" data-bs-custom-class="tooltip-success"><i class="ti ti-device-floppy"></i></button>
       </div>
     </div>
   </div>
@@ -443,8 +498,8 @@
         </div>
       </div>
       <div class="modal-footer py-2">
-        <button type="button" class="btn btn-sm btn-danger" data-bs-dismiss="modal" title="Cancel"><i class="ti ti-x"></i></button>
-        <button type="button" class="btn btn-sm btn-success" id="vm-save-btn" title="Save"><i class="ti ti-device-floppy"></i></button>
+        <button type="button" class="btn btn-sm btn-secondary btn-act" data-bs-dismiss="modal" data-bs-toggle="tooltip" data-bs-placement="top" data-bs-title="Cancel" data-bs-custom-class="tooltip-secondary"><i class="ti ti-x"></i></button>
+        <button type="button" class="btn btn-sm btn-success btn-act" id="vm-save-btn" data-bs-toggle="tooltip" data-bs-placement="top" data-bs-title="Save" data-bs-custom-class="tooltip-success"><i class="ti ti-device-floppy"></i></button>
       </div>
     </div>
   </div>
@@ -474,8 +529,8 @@
         </div>
       </div>
       <div class="modal-footer py-2">
-        <button type="button" class="btn btn-sm btn-danger" data-bs-dismiss="modal" title="Cancel"><i class="ti ti-x"></i></button>
-        <button type="button" class="btn btn-sm btn-success" id="dm-save-btn" title="Save"><i class="ti ti-device-floppy"></i></button>
+        <button type="button" class="btn btn-sm btn-secondary btn-act" data-bs-dismiss="modal" data-bs-toggle="tooltip" data-bs-placement="top" data-bs-title="Cancel" data-bs-custom-class="tooltip-secondary"><i class="ti ti-x"></i></button>
+        <button type="button" class="btn btn-sm btn-success btn-act" id="dm-save-btn" data-bs-toggle="tooltip" data-bs-placement="top" data-bs-title="Save" data-bs-custom-class="tooltip-success"><i class="ti ti-device-floppy"></i></button>
       </div>
     </div>
   </div>
@@ -499,8 +554,8 @@
         </div>
       </div>
       <div class="modal-footer py-2">
-        <button type="button" class="btn btn-sm btn-danger" data-bs-dismiss="modal" title="Cancel"><i class="ti ti-x"></i></button>
-        <button type="button" class="btn btn-sm btn-success" id="sw-save-btn" title="Save"><i class="ti ti-device-floppy"></i></button>
+        <button type="button" class="btn btn-sm btn-secondary btn-act" data-bs-dismiss="modal" data-bs-toggle="tooltip" data-bs-placement="top" data-bs-title="Cancel" data-bs-custom-class="tooltip-secondary"><i class="ti ti-x"></i></button>
+        <button type="button" class="btn btn-sm btn-success btn-act" id="sw-save-btn" data-bs-toggle="tooltip" data-bs-placement="top" data-bs-title="Save" data-bs-custom-class="tooltip-success"><i class="ti ti-device-floppy"></i></button>
       </div>
     </div>
   </div>
@@ -608,13 +663,19 @@ $(document).ready(function () {
         return '<span class="badge rounded-pill pill-badge ' + cls + '">' + lbl + '</span>';
     }
 
-    // Botões de ação no padrão do New Deals (NDF Vanilla): redondos, coloridos,
-    // Confirm=verde primeiro, Edit=info, Delete=danger.
+    // Botões de ação no padrão do app (spec .ops-row-act, referência
+    // new_deals-ndf-vanilla): squircle 32×32 colorido, ordem e cores fixas por
+    // função — Confirm/success → Edit/info → Delete/danger — com tooltip
+    // COLORIDO do Bootstrap, não o `title` nativo do navegador.
+    //
+    // O ícone NÃO leva `fs-13`: aquela classe do tema é `!important` e vencia a
+    // regra da página, deixando o ícone com 13 px onde o resto do app usa 16.
+    // Era essa a diferença que fazia estes botões parecerem de outra tela.
     function actionBtns(tableKey, idx, maker) {
-        return '<div class="edit-actions-wrap">' +
-            '<button class="btn btn-success btn-sm rounded-circle btn-act btn-confirm" title="Confirm/Approve" data-table="' + tableKey + '" data-idx="' + idx + '" data-maker="' + (maker||'') + '"><i class="ti ti-check fs-13"></i></button>' +
-            '<button class="btn btn-info btn-sm rounded-circle btn-act btn-edit" title="Edit" data-table="' + tableKey + '" data-idx="' + idx + '"><i class="ti ti-edit fs-13"></i></button>' +
-            '<button class="btn btn-danger btn-sm rounded-circle btn-act btn-delete" title="Delete" data-table="' + tableKey + '" data-idx="' + idx + '"><i class="ti ti-trash fs-13"></i></button>' +
+        return '<div class="edit-actions-wrap d-flex justify-content-center gap-1">' +
+            '<button class="btn btn-success btn-sm rounded-circle btn-act btn-confirm" data-bs-toggle="tooltip" data-bs-placement="auto" data-bs-title="Confirm" data-bs-custom-class="tooltip-success" data-table="' + tableKey + '" data-idx="' + idx + '" data-maker="' + (maker||'') + '"><i class="ti ti-check"></i></button>' +
+            '<button class="btn btn-info btn-sm rounded-circle btn-act btn-edit" data-bs-toggle="tooltip" data-bs-placement="auto" data-bs-title="Edit" data-bs-custom-class="tooltip-info" data-table="' + tableKey + '" data-idx="' + idx + '"><i class="ti ti-edit"></i></button>' +
+            '<button class="btn btn-danger btn-sm rounded-circle btn-act btn-delete" data-bs-toggle="tooltip" data-bs-placement="auto" data-bs-title="Delete" data-bs-custom-class="tooltip-danger" data-table="' + tableKey + '" data-idx="' + idx + '"><i class="ti ti-trash"></i></button>' +
             '</div>';
     }
 
@@ -745,6 +806,29 @@ $(document).ready(function () {
         btn.addEventListener('click', function() { addFn(dtInstance, tableKey); });
         wrapper.appendChild(btn);
     }
+
+    /* ── Tooltips ─────────────────────────────────────────────────────────
+       A página não inicializava tooltip NENHUM: os botões de ação traziam
+       `title`, que é o balão nativo do navegador (cinza, com atraso de um
+       segundo), e o "Add a new row" simplesmente não aparecia.
+
+       A criação é DELEGADA, no primeiro hover, e não num laço no load: os `<td>`
+       são reescritos a cada redraw do DataTables, então instanciar uma vez
+       pegaria só as linhas da primeira página — paginar, ordenar ou filtrar
+       devolveria botões sem tooltip. Delegado, cobre os quatro DataTables desta
+       tela sem um hook por tabela. O `show()` é preciso porque o mouseenter que
+       criaria o balão é justamente o que acabou de disparar aqui. */
+    $(document).on('mouseenter', '[data-bs-toggle="tooltip"]', function() {
+        if (!bootstrap.Tooltip.getInstance(this)) {
+            new bootstrap.Tooltip(this, { trigger: 'hover' }).show();
+        }
+    });
+    // Esconde o balão ao clicar: sem isto, o botão que some da tela (Delete,
+    // ou a linha redesenhada depois do Confirm) deixa o tooltip preso.
+    $(document).on('click', '[data-bs-toggle="tooltip"]', function() {
+        var inst = bootstrap.Tooltip.getInstance(this);
+        if (inst) inst.hide();
+    });
 
     /* ── API helpers ─────────────────────────────────────────────────────── */
     function apiCall(url, body, cb) {
