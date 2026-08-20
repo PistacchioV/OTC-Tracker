@@ -318,9 +318,13 @@ blk = SRC.split('def _ndfadv_collect', 1)[1].split('\ndef ', 1)[0]
 check('o termo de commodities tenta o SPN primeiro',
       blk.index('_otm_cpty_name(') < blk.index("_lcell(lrow, 'Nome da Contraparte')"), True)
 # O omnibus continua valendo como 2a tentativa: sem SPN no OTM, o nome que vem da
-# B3 e o do titular do guarda-chuva, e o cliente sai do CNPJ (§197).
+# B3 e o do titular do guarda-chuva, e o cliente sai do CNPJ (§197). Quem resolve
+# o CNPJ agora e a PROPRIA coluna do Live Position (§291) — ela ja devolve o nome
+# quando ha cadastro e o documento quando nao ha, e `_lp_is_taxid` separa os dois.
 check('   e o omnibus por CNPJ segue como segunda tentativa',
-      blk.index('_otm_cpty_name(') < blk.index('_refdata_by_taxid()'), True)
+      blk.index('_otm_cpty_name(') < blk.index('_lp_is_taxid(doc)'), True)
+check('   e ele NAO refaz o lookup por conta propria',
+      '_refdata_by_taxid()' in blk, False)
 # O SPN da linha tambem passa a sair do OTM, sem o caminho de volta nome -> SPN.
 check('   e o SPN da linha vem do OTM quando existe',
       "otm_spn.get(suf, '') or '').strip() or ref_rec.get('spn', '')" in blk, True)

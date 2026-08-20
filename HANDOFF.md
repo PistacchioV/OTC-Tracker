@@ -12726,3 +12726,130 @@ colado nos botões. O respiro passou a morar no **container da tabela**
 cima: o DataTables desenha a própria caixa colada no elemento anterior e come a margem de quem vem
 antes, então `mb-*` na barra é uma medida que a tela não tem. Os `th` também ganharam 2 px a mais em
 cima (`padding: 10px 12px 8px`).
+
+---
+
+## §290 — Index B3 Results e Reference Data: os botões de ação fora do padrão
+
+"Os formatos dos botões de action na página B3 Index Results não estão no padrão definido."
+
+O CSS das duas páginas **diz** que segue a spec `.ops-row-act` — o comentário está lá, o
+`border-radius:10px !important` está lá. O que estava errado é mais fino, e nenhuma das três falhas
+aparece no console:
+
+| | Estava | Spec |
+|---|---|---|
+| Ícone | **13 px** | 1rem (16 px) |
+| Tamanho travado | só a largura | os dois eixos |
+| Tooltip (Index B3) | `title` nativo do navegador | balão colorido do Bootstrap |
+
+### O ícone de 13 px
+
+O markup trazia `<i class="ti ti-check fs-13">`, e `.fs-13` é uma classe do **tema** declarada com
+`font-size: 13px !important`. A regra da página (`.btn-act i { font-size: 1rem }`) tem
+especificidade maior, mas `!important` não se resolve por especificidade — ela perdia. Os ícones
+saíam com **13 px onde o app inteiro usa 16**, e era essa a diferença que fazia esses botões
+parecerem de outra tela: o quadrado tem o tamanho certo e o desenho dentro dele é menor.
+
+A classe saiu do markup; a regra da página virou `.btn-act > i { font-size: 1rem !important }` como
+cinto de segurança, porque quem copiar um botão de outra página traz o `fs-13` junto.
+
+### O travamento em um eixo só
+
+`min-width`/`max-width` sem `min-height`/`max-height` — é meia trava. Basta uma regra de tema com
+`min-height` em `.btn` para um botão ficar mais alto que o vizinho, e **32×34 não é mais um quadrado
+arredondado**. Entrou também o `box-sizing: border-box`: sem ele a borda do `.btn` soma por fora dos
+32 px.
+
+### O tooltip que não existia
+
+O Index B3 Results **não inicializava tooltip nenhum**. Os botões traziam `title`, que é o balão
+cinza do navegador (com um segundo de atraso), e o `data-bs-toggle="tooltip"` do botão *Add Row*
+não fazia absolutamente nada — a página nunca chamou `new bootstrap.Tooltip`.
+
+A criação é **delegada, no primeiro hover**, e não num laço no load: os `<td>` são reescritos a cada
+redraw do DataTables, então instanciar uma vez pegaria só as linhas da primeira página — paginar,
+ordenar ou filtrar devolveria botões mudos. Delegado, cobre os **quatro** DataTables da tela sem um
+hook por tabela. O `.show()` na criação é necessário porque o `mouseenter` que mostraria o balão é
+justamente o que acabou de disparar. E há o `hide()` no clique: sem ele, o botão que some da tela
+(Delete, ou a linha redesenhada depois do Confirm) deixa o balão preso.
+
+### Junto
+
+- **Reference Data tinha as duas primeiras falhas idênticas** — mesma classe `.btn-act`, mesmo
+  `fs-13`, mesma trava pela metade. É a página irmã do Index B3 Results (a varredura de 2026-08-07
+  alinhou as duas), e corrigir uma só deixaria as duas telas que se comparam lado a lado ainda
+  diferentes. Os tooltips coloridos ela já tinha.
+- Os **quatro rodapés de modal** do Index B3 Results estavam com **Cancel em `danger`** — que na
+  tabela ao lado quer dizer *Delete*. Foram para o par da spec: Save `ti-device-floppy`/success +
+  Cancel `ti-x`/**secondary**, os dois como squircle e com tooltip colorido.
+- `.edit-actions-wrap` estava declarada **duas vezes** no mesmo `<style>`; a segunda só acrescentava
+  o `justify-content`, e a primeira ficava como ruído contraditório. O wrapper do markup passou a
+  ser o padrão da casa (`d-flex justify-content-center gap-1`).
+- Os botões ganharam o feedback de hover/active do padrão (`translateY(-1px)` + sombra, `scale(.97)`
+  no clique).
+
+`check_row_action_buttons.py` prende a spec nas duas páginas: os seis travamentos de geometria, o
+ícone em 1rem **e** a ausência do `fs-13` no markup, a ordem e as cores por função, o tooltip
+colorido com o CSS presente na página, a delegação do Index B3 Results e o par Save/Cancel dos
+modais.
+
+---
+
+## §291 — Live Position: a coluna de CPF/CNPJ da contraparte mostra o NOME
+
+Nas três Live Position — NDF (`CPF/CNPJ da Contraparte`), Option e Swap Characteristics
+(`CPF/CNPJ Cliente Contraparte`) — a coluna passou a resolver o nome da contraparte no
+`RefData.json`, em vez de imprimir o número.
+
+Três regras, e as três erram em silêncio se caírem:
+
+- **vazio continua vazio** — célula em branco não vira nome de ninguém nem documento de nada;
+- **documento SEM cadastro devolve o número mascarado**, e não branco: o número é o único dado que
+  a linha tem sobre a contraparte, e apagá-lo esconderia justamente quem falta cadastrar. A coluna
+  misturada é o que denuncia a lacuna;
+- **os dois lados normalizam o zero à esquerda** (`_lp_taxid_key`). O RefData guarda mascarado
+  (`00.514.820/0001-00`) e a posição da B3 guarda só números, às vezes sem o zero da frente —
+  comparar sem normalizar casa silenciosamente nada, a mesma armadilha do §197. **158 dos 553**
+  cadastros do RefData começam com zero: seria mais de um quarto da base saindo como número.
+
+A coluna da **PARTE** não foi tocada em nenhuma das telas. Ela é a nossa perna, e trocá-la pelo nome
+faria a célula repetir o `Nome da Parte` / `Parte (Nome simplificado)` que já está ao lado.
+
+### O que quase passou batido: essa coluna tem OUTROS leitores
+
+Os dois Settlement Advice — o de **NDF Commodities** (`_ndfadv_collect`) e o de **Opção**
+(`_optadv_collect`) — consomem a TELA do Live Position, e tiravam dessa mesma célula o CPF/CNPJ para
+resolver o cliente por trás da conta omnibus (§197). Trocar a célula pelo nome zerou esse lookup
+**sem erro nenhum**: o `''.join(dígitos)` de um nome não é um CNPJ, o `.get()` no RefData devolvia
+vazio, e o aviso sairia endereçado ao **titular do guarda-chuva** — que é exatamente a falha que o
+§197 existe para evitar. Foi o `check_ndf_advice.py` que pegou.
+
+A correção não desfaz nada: os dois avisos passaram a **usar a resolução da própria coluna**, que é
+a mesma pergunta que eles faziam. O que separa "resolveu" de "não resolveu" é `_lp_is_taxid`, e o
+teste dela é a ausência de LETRA — razão social com número (`3M DO BRASIL`) tem letra e nunca casa.
+Sem cadastro a célula volta como documento, o omnibus não resolve, e a linha cai para o nome da
+posição — **byte a byte o comportamento anterior**. Com cadastro, resolve como antes. E agora há uma
+resolução só: a tela e o aviso não têm como discordar de quem é a contraparte da mesma operação.
+
+Há **três** funções, e a divisão importa:
+
+| | O que faz |
+|---|---|
+| `_lp_taxid_key` | normaliza o documento (dígitos + zero-fill) — dos DOIS lados |
+| `_lp_cpty_name_by_taxid` | resolução CRUA: o nome, ou `''` sem cadastro — é a dos consumidores |
+| `_lp_cpty_by_taxid` | versão de EXIBIÇÃO: cai para o número mascarado |
+
+O índice (`_lp_taxid_names`) reindexa o `_refdata_by_taxid()` — que chaveia por dígitos crus — pela
+chave normalizada, e é um comprehension sobre um mapa **já cacheado por mtime**: o arquivo não é
+lido de novo, e o índice é refeito só quando aquele mapa troca de objeto, que é quando o RefData
+muda em disco.
+
+**O rótulo da coluna NÃO mudou.** Continua `CPF/CNPJ ...` porque é o nome do campo no arquivo da B3,
+e é por ele que o painel de colunas, os filtros e os exports que a mesa já usa se orientam. Se a
+mesa preferir "Contraparte (RefData)", é um rename de rótulo — e aí vale conferir os três lugares
+que listam colunas em cada tela.
+
+`check_lp_counterparty_name.py` prende as três telas com posição sintética em `tempfile` (nada de
+dado real), inclusive o caso do zero à esquerda comido, e a seção 7 prende o acoplamento com os dois
+avisos.

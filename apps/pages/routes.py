@@ -7799,6 +7799,86 @@ def _lp_fmt_cnpj(v):
     return v
 
 
+_LP_TAXID_NAME_CACHE = {'src': None, 'map': None}
+
+
+def _lp_taxid_key(v):
+    """CPF/CNPJ → chave de comparação: só dígitos, com o zero à esquerda
+    recuperado (12-13 → CNPJ, 10 → CPF), exatamente o que `_lp_fmt_cnpj` faz
+    para exibir.
+
+    Os DOIS lados têm de passar por aqui. O RefData guarda mascarado
+    (45.985.371/0001-08) e a posição da B3 guarda só números, às vezes sem o
+    zero da frente — comparar sem normalizar casa silenciosamente nada, que é a
+    mesma armadilha do §197."""
+    d = ''.join(ch for ch in str(v or '') if ch.isdigit())
+    if not d:
+        return ''
+    if 12 <= len(d) <= 14:
+        return d.zfill(14)
+    if 10 <= len(d) <= 11:
+        return d.zfill(11)
+    return d
+
+
+def _lp_taxid_names():
+    """{chave de CPF/CNPJ → nome da contraparte}, do RefData.
+
+    Reindexa o `_refdata_by_taxid()` — que chaveia por dígitos CRUS — pela chave
+    normalizada, para o lado do cadastro sofrer o mesmo zero-fill que o lado da
+    posição. É um comprehension sobre um mapa JÁ cacheado por mtime (o arquivo
+    não é lido de novo), refeito só quando aquele mapa troca de objeto, que é o
+    que acontece quando o RefData muda em disco."""
+    base = _refdata_by_taxid()
+    if _LP_TAXID_NAME_CACHE['src'] is not base:
+        m = {}
+        for digits, nome in base.items():
+            k = _lp_taxid_key(digits)
+            if k and k not in m:
+                m[k] = nome
+        _LP_TAXID_NAME_CACHE['src'] = base
+        _LP_TAXID_NAME_CACHE['map'] = m
+    return _LP_TAXID_NAME_CACHE['map']
+
+
+def _lp_is_taxid(v):
+    """A string é um CPF/CNPJ (cru ou mascarado) e não um nome?
+
+    Existe porque a coluna de CPF/CNPJ da contraparte passou a carregar as DUAS
+    coisas — o nome quando há cadastro, o documento quando não há — e quem lê a
+    coluna programaticamente precisa saber qual das duas veio. O teste é pela
+    ausência de letra: razão social com número (`3M DO BRASIL`) tem letra e
+    nunca casa aqui."""
+    s = str(v or '').strip()
+    if not s or any(ch not in '0123456789./- ' for ch in s):
+        return False
+    return 10 <= len(''.join(ch for ch in s if ch.isdigit())) <= 14
+
+
+def _lp_cpty_name_by_taxid(v):
+    """Nome da contraparte pelo CPF/CNPJ, ou '' quando não há cadastro.
+
+    É a resolução CRUA — sem queda para o número —, e é ela que os consumidores
+    programáticos usam. O Settlement Advice de NDF Commodities precisa saber a
+    diferença entre "resolveu" e "não resolveu" (§197): resolvendo, o nome é o do
+    cliente por trás do omnibus; não resolvendo, o aviso cai para o nome da
+    posição, como sempre fez."""
+    k = _lp_taxid_key(v)
+    return _lp_taxid_names().get(k, '') if k else ''
+
+
+def _lp_cpty_by_taxid(v):
+    """Versão de EXIBIÇÃO da coluna de CPF/CNPJ da contraparte.
+
+    Célula vazia continua vazia. Documento SEM cadastro devolve o CPF/CNPJ
+    mascarado, e não branco: o número é o único dado que a linha tem sobre a
+    contraparte, e apagá-lo esconderia justamente quem falta cadastrar — a
+    coluna misturada é o que denuncia a lacuna."""
+    if not str(v or '').strip():
+        return ''
+    return _lp_cpty_name_by_taxid(v) or _lp_fmt_cnpj(v)
+
+
 def _lp_bool_ptbr(raw):
     """Flag de swap → texto. Cadastro `swap-code-labels`, campo `Sim/Não`
     (00 → Sim, 01 → Não — sim, nessa ordem, é a especificação). Valor fora do
@@ -7905,6 +7985,11 @@ _SWAPCHAR_DISPLAY_IDX = [
 _SWAPCHAR_DISPLAY_LABELS = [_SWAPCHAR_LABELS[i] for i in _SWAPCHAR_DISPLAY_IDX]
 # Flag columns shown as Sim/Não (01 = Não, 00 = Sim; empty stays empty).
 _SWAPCHAR_BOOL_COLS = {'Reset', 'Amortiza sem Troca de Diferencial', 'Agenda de Prêmio'}
+# Coluna de CPF/CNPJ que a tela mostra como NOME da contraparte (xlookup no
+# RefData). É a da CONTRAPARTE — a da Parte é a nossa e continua o documento.
+# Chaveada pelo RÓTULO e não pelo índice: índice errado pega a coluna vizinha
+# sem erro nenhum, e aqui a vizinha é o nome simplificado.
+_SWAPCHAR_CPTY_NAME_COLS = {'CPF/CNPJ Cliente Contraparte'}
 
 
 def _swapchar_collect(ref):
@@ -7974,6 +8059,8 @@ def _swapchar_collect(ref):
                             else _swapchar_fmt_cell(raw, _SWAPCHAR_TYPES[i])))
             elif _SWAPCHAR_LABELS[i] in _SWAPCHAR_BOOL_COLS:
                 disp.append(_lp_bool_ptbr(raw))
+            elif _SWAPCHAR_LABELS[i] in _SWAPCHAR_CPTY_NAME_COLS:
+                disp.append(_lp_cpty_by_taxid(raw))
             else:
                 disp.append(_swapchar_fmt_cell(raw, _SWAPCHAR_TYPES[i]))
         rows_out.append(disp)
@@ -9550,9 +9637,15 @@ def _ndfadv_collect(ref):
         # fluxo, e resolve o omnibus de graça — a linha do OTM é do trade, não da
         # conta guarda-chuva.
         cliente = _otm_cpty_name(otm_spn.get(suf, '')) if suf else ''
-        cnpj = ''.join(ch for ch in _lcell(lrow, 'CPF/CNPJ da Contraparte') if ch.isdigit())
-        if not cliente and _b3_is_omnibus(rec.get('Conta Contraparte', '')) and cnpj:
-            cliente = _refdata_by_taxid().get(cnpj, '')
+        # A coluna 'CPF/CNPJ da Contraparte' do Live Position **já resolve** o
+        # nome no RefData, e é a mesma pergunta que se faz aqui — deixá-la
+        # respondida em dois lugares é deixá-los discordarem. Ela só volta como
+        # DOCUMENTO quando não há cadastro, e nesse caso o omnibus não resolve,
+        # exatamente como antes (o `.get(cnpj, '')` devolvia '' e caía para o
+        # nome da posição).
+        doc = _lcell(lrow, 'CPF/CNPJ da Contraparte')
+        if not cliente and _b3_is_omnibus(rec.get('Conta Contraparte', '')) and doc:
+            cliente = '' if _lp_is_taxid(doc) else doc
         cliente = (cliente
                    or _lcell(lrow, 'Nome da Contraparte')
                    or str(rec.get('Contraparte (Nome Simpl.)', '') or '').strip())
@@ -10050,9 +10143,13 @@ def _optadv_collect(ref):
         if not cliente_spn and eq:
             cliente_spn = str(eq.get('spn', '') or '')
         cliente = _otm_cpty_name(cliente_spn) if cliente_spn else ''
-        cnpj = ''.join(ch for ch in _lcell(lrow, 'CPF/CNPJ Cliente Contraparte') if ch.isdigit())
-        if not cliente and _b3_is_omnibus(rec.get('Conta Contraparte', '')) and cnpj:
-            cliente = _refdata_by_taxid().get(cnpj, '')
+        # Mesma leitura do aviso de termo: a coluna 'CPF/CNPJ Cliente
+        # Contraparte' do Live Position Option JÁ resolve o nome no RefData, e
+        # só volta como DOCUMENTO quando não há cadastro — caso em que o omnibus
+        # não resolve e a linha cai para o nome da posição, como sempre.
+        doc = _lcell(lrow, 'CPF/CNPJ Cliente Contraparte')
+        if not cliente and _b3_is_omnibus(rec.get('Conta Contraparte', '')) and doc:
+            cliente = '' if _lp_is_taxid(doc) else doc
         cliente = (cliente
                    or _lcell(lrow, 'Contraparte (Nome simplificado)')
                    or str(rec.get('Contraparte (Nome Simpl.)', '') or '').strip())
@@ -14032,6 +14129,10 @@ _LPNDF_VALUE_COLS = {c for c in _LPNDF_COLUMNS if c.startswith('Valor ')}
 _LPNDF_RATE_COLS = {'Taxa Forward', 'Taxa de Cambio'}
 # Columns shown as #,##0.00000000 (thousands + fixed 8 decimals).
 _LPNDF_DEC8_COLS = {'Taxa de Paridade', 'Cotacao Inicial'}
+# Coluna de CPF/CNPJ mostrada como NOME da contraparte (xlookup no RefData).
+# Só a da CONTRAPARTE: o 'CPF/CNPJ do Participante' é a NOSSA perna, e trocá-lo
+# pelo nome faria a coluna repetir o 'Nome da Parte' que já está ao lado.
+_LPNDF_CPTY_NAME_COLS = {'CPF/CNPJ da Contraparte'}
 # Max number of Asian-average fixing-date columns to surface (a contract can have
 # 100+ fixings; cap to keep the table sane).
 _LPNDF_MAX_ASIAN = 60
@@ -14151,6 +14252,8 @@ def _lpndf_collect(ref):
                         v = _lpndf_fmt_rate(v)
                     elif c in _LPNDF_DEC8_COLS:
                         v = _lp_fmt_dec8(v)
+                    elif c in _LPNDF_CPTY_NAME_COLS:
+                        v = _lp_cpty_by_taxid(v)
                     row.append('' if v is None else v)
                 for k in date_keys:                    # one dd/mm/yyyy column per fixing date
                     raw = str(rec.get(k, '') or '').strip()
@@ -14244,7 +14347,10 @@ _LPOPT_VALUE_COLS = {c for c in _LPOPT_COLUMNS if c.startswith('Valor ')}
 # 8-decimal (#,##0.00000000), 2-decimal (#,##0.00) and CPF/CNPJ-masked columns.
 _LPOPT_DEC8_COLS = {'Strike (valor)', 'Prêmio Unitário', 'Cotação Inicial do Ativo (em reais)'}
 _LPOPT_DEC2_COLS = {'Quantidade', 'Quantidade Antecipada'}
-_LPOPT_CNPJ_COLS = {'CPF/CNPJ Cliente Parte', 'CPF/CNPJ Cliente Contraparte'}
+# CPF/CNPJ mascarado: só a coluna da PARTE, que é a nossa perna. A da
+# CONTRAPARTE virou o NOME dela (xlookup no RefData) — ver `_LPOPT_CPTY_NAME_COLS`.
+_LPOPT_CNPJ_COLS = {'CPF/CNPJ Cliente Parte'}
+_LPOPT_CPTY_NAME_COLS = {'CPF/CNPJ Cliente Contraparte'}
 # Max number of dynamic Asian-average fixing-date columns to surface (cap).
 _LPOPT_MAX_ASIAN = 60
 # Asian-average fixing dates are a FIXED positional block in dposicao.opc: the
@@ -14333,6 +14439,8 @@ def _lpopt_collect(ref):
                         v = _swapchar_fmt_value(v)
                     elif c in _LPOPT_CNPJ_COLS:
                         v = _lp_fmt_cnpj(v)
+                    elif c in _LPOPT_CPTY_NAME_COLS:
+                        v = _lp_cpty_by_taxid(v)
                     row.append('' if v is None else v)
                 for k in date_keys:
                     raw = str(rec.get(k, '') or '').strip()

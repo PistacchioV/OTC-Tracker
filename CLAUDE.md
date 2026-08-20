@@ -149,9 +149,24 @@ Live Positions, o Track Confirmations e as três Recons).
   do `.DataTable()` com `orderCellsTop: true` (ver a armadilha em §7). Inputs
   pequenos (12px/28px), texto centralizado, placeholder = nome da coluna.
 - **Botões de ação da linha**: **squircle** colorido — geometria única no app
-  inteiro (spec `.ops-row-act`): **32×32 travado com min/max** (nenhuma regra
-  de tema pode esticar um botão), `padding:0`, `border-radius:10px !important`,
-  ícone Tabler `1rem`, tooltip colorido (`data-bs-custom-class="tooltip-{cor}"`).
+  inteiro (spec `.ops-row-act`): **32×32 travado com min/max nos DOIS eixos**
+  (`min/max-width` **e** `min/max-height`, mais `box-sizing:border-box` — com só
+  a largura travada, uma regra de tema com `min-height` em `.btn` deixa um botão
+  mais alto que o vizinho, e 32×34 não é um quadrado arredondado), `padding:0`,
+  `border-radius:10px !important`, ícone Tabler `1rem`, tooltip colorido
+  (`data-bs-custom-class="tooltip-{cor}"` — e o CSS de `tooltip-{cor}` tem de
+  estar na página).
+  - **O ícone nunca leva `.fs-13`.** É classe do tema com `font-size:13px
+    !important`, e `!important` não se resolve por especificidade: ela vence a
+    regra da página e o ícone sai com 13 px onde o app usa 16 — o quadrado fica
+    do tamanho certo e o desenho dentro dele, menor. Foi o que fez o Index B3
+    Results e o Reference Data parecerem de outra tela (HANDOFF §290). A regra da
+    página vai `.btn-act > i { font-size:1rem !important }`, como cinto de
+    segurança para quem copiar o markup de outro lugar.
+  - **Tooltip em botão que a tabela redesenha se inicializa DELEGADO**, no
+    primeiro hover — os `<td>` são reescritos a cada redraw do DataTables, então
+    um laço no load pega só as linhas da primeira página e paginar devolve botões
+    mudos. `title=` sozinho é o balão cinza do navegador, não o padrão.
   A classe `rounded-circle` ainda aparece no markup por história, mas **o CSS da
   página fixa o squircle** — sem o override o raio do tema sai OVAL, porque
   círculo só é círculo em botão já quadrado. Ordem e cores canônicas:
@@ -756,6 +771,26 @@ para Opt FXO / Opt Commodities / NDF Commodities, que têm endpoints próprios.
 `extractRowDeal`, `rowDataToNdfDeal`, `rowMaker`. Índice desatualizado aqui já
 causou corrupção silenciosa de dados **duas vezes** (HANDOFF §132). A coluna
 Maker é alcançada pela constante `MAKER_COL_INDEX` — mantenha assim.
+
+### A coluna de CPF/CNPJ da contraparte das Live Position mostra o NOME
+
+Nas três telas (NDF, Option e Swap Characteristics) essa coluna resolve o nome
+no `RefData.json`. Vazio continua vazio; documento **sem cadastro volta como
+número mascarado**, não em branco — apagá-lo esconderia quem falta cadastrar. A
+chave normaliza o zero à esquerda **dos dois lados** (`_lp_taxid_key`): 158 dos
+553 cadastros começam com zero, e comparar sem normalizar casa nada em silêncio
+(§197). A coluna da **Parte** não muda — é a nossa perna, e o nome dela já está
+na célula ao lado.
+
+**Essa coluna tem outros leitores, e eles não são a tela.** Os dois Settlement
+Advice (NDF Commodities e Opção) consomem o payload do Live Position e tiravam
+dali o CPF/CNPJ para resolver o cliente da conta omnibus. Hoje usam a resolução
+da própria coluna, e `_lp_is_taxid` é o que separa "resolveu" (nome) de "não
+resolveu" (documento) — o teste é a ausência de LETRA, porque razão social com
+número (`3M DO BRASIL`) não pode ser confundida com documento. São três funções
+de propósito: `_lp_cpty_name_by_taxid` é a resolução CRUA (`''` sem cadastro) que
+os consumidores usam, e `_lp_cpty_by_taxid` é a de EXIBIÇÃO, que cai para o
+número (HANDOFF §291).
 
 ### O Holidays Calendar monta a lista de calendários do REGISTRO
 
