@@ -81,8 +81,14 @@
 #operations-b3-page .ob-toolbar .btn i { font-size: .95em; }
 
 /* ── Table ──────────────────────────────────────────────────────────────── */
+/* O respiro entre a toolbar e o cabeçalho mora AQUI, no container da tabela, e
+   não numa margem do irmão de cima: o DataTables desenha a própria caixa colada
+   no elemento anterior e come a margem de quem vem antes (HANDOFF §233) — era
+   por isso que o topo dos `th` ficava comido mesmo com o `mb-3` na barra. */
+#operations-b3-page .table-responsive { padding-top: .6rem; }
+
 #opb3-table thead th {
-    white-space: nowrap; text-overflow: ellipsis; padding: 8px 12px;
+    white-space: nowrap; text-overflow: ellipsis; padding: 10px 12px 8px;
     text-align: center !important; vertical-align: middle !important; font-size: 0.7rem;
 }
 #opb3-table tbody td { white-space: nowrap; font-size: 0.74rem; text-align: center; vertical-align: middle; }
