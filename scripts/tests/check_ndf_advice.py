@@ -371,14 +371,18 @@ check('o Trade Level herda o cliente resolvido',
       by_t['C1']['counterparty'], 'AMG BRASIL S.A.')
 
 SRC2 = read('apps/pages/routes.py')
-check('cadastro de omnibus registrado', "'b3-omnibus-account': {" in SRC2, True)
+check('cadastro de contas B3 registrado', "'b3-accounts': {" in SRC2, True)
 check('aba no /mapping',
-      "key: 'b3-omnibus-account'" in read('apps/templates/pages/mapping.html'), True)
+      "key: 'b3-accounts'" in read('apps/templates/pages/mapping.html'), True)
 # A conta aparece ora 73760.10-2, ora com outra pontuacao: a comparacao e por
 # digitos, senao o omnibus deixa de ser reconhecido em silencio.
 check('73760.10-2 e omnibus', R._b3_is_omnibus('73760.10-2'), True)
 check('e a comparacao ignora a pontuacao', R._b3_is_omnibus('7376010 2'), True)
-check('outra conta nao e omnibus', R._b3_is_omnibus('73760.00-9'), False)
+# O cadastro passou a listar TODAS as contas B3, e quem responde e o TIPO: a
+# conta PROPRIA esta la e NAO e guarda-chuva. Se estar na tabela voltasse a ser
+# a resposta, a posicao da casa passaria a procurar cliente pelo CNPJ.
+check('a conta PROPRIA nao e omnibus', R._b3_is_omnibus('73760.00-9'), False)
+check('a de CLIENTE 2 e omnibus', R._b3_is_omnibus('73760.20-5'), True)
 check('conta vazia nao e omnibus', R._b3_is_omnibus(''), False)
 check('a toolbar do Live Position NDF ganhou respiro',
       '#live-position-ndf-page .card-body > .d-flex.justify-content-between'

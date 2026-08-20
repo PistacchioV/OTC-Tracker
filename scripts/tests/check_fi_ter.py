@@ -604,10 +604,12 @@ def main():
     canc['Status'] = 'Canceled'
     check('generic: deal Canceled devolve None', R._generic_ndf_ter_line(canc, True) is None)
 
-    # headers dos três arquivos
+    # headers dos três arquivos. O Participante deixou de ser um dicionário
+    # fixo e sai do cadastro `b3-accounts` pela LE da visão — o golden aqui é
+    # justamente o que prova que a linha não mudou um byte.
     legacy_h = _legacy_generic_headers(today)
     for bucket in ('BANCO', 'LAWTON', 'MGT'):
-        got = R._ter_file_header(R._TER_PARTICIPANT_NAME[bucket], today,
+        got = R._ter_file_header(R._TER_BUCKET_LE[bucket], today,
                                  '/new_deals-ndf-fwdstart')
         check('generic header ' + bucket + ' == golden', got == legacy_h[bucket],
               _first_diff(legacy_h[bucket], got))
@@ -639,8 +641,8 @@ def main():
           str(len(_asian_lines)))
 
     legacy_ch = _legacy_comm_headers(today)
-    for kind, participant in (('LAWTON', 'INTRAGLAWTONFDO'), ('BANCO', 'JPMORGANBM')):
-        got = R._ter_file_header(participant, today, '/new_deals-ndf-commodities')
+    for kind, le in (('LAWTON', 'LAWTON'), ('BANCO', 'JPM')):
+        got = R._ter_file_header(le, today, '/new_deals-ndf-commodities')
         check('commodities header ' + kind + ' == golden', got == legacy_ch[kind],
               _first_diff(legacy_ch[kind], got))
 

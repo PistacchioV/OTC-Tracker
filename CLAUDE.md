@@ -430,7 +430,7 @@ São **33** mappings hoje: `currency-base`, `interbook-ndf`, `publisher-ndf`,
 `ndf-pdf-cpty`, `swap-curves`, `cetip-files`, `api-links`, `opb3-events`,
 `swap-ir-client`, `swap-ir-term`, `swap-index`, `swap-funcionalidade`,
 `swap-amortizacao`, `swap-code-labels`, `ndfc-ir-exempt`, `ndfc-advice-split`,
-`b3-omnibus-account`, `fxo-internal-cpty`, `fxo-book-disregard`,
+`b3-accounts`, `fxo-internal-cpty`, `fxo-book-disregard`,
 `bankers-email`, `manual-conf-validation`, `manual-conf-sla`, `quotes-equity`,
 `quotes-commodity`, `gdt-codes`, `settlement-exception`, `mt300`.
 
@@ -639,11 +639,28 @@ São **33** mappings hoje: `currency-base`, `interbook-ndf`, `publisher-ndf`,
 - **`ndfc-advice-split`** — contrapartes que recebem **um aviso por mercadoria**
   (semeado com `MONDELEZ`). O split roda **depois** do split por tipo de net,
   então um Pay/Rec da Mondelez sai por direção *e* por mercadoria (§196).
-- **`b3-omnibus-account`** — contas B3 que **não** identificam o cliente
-  (`73760.10-2`). Nessas linhas o nome que vem da B3 é o do titular do omnibus;
-  o cliente é resolvido por **CNPJ** contra o `RefData.json`. As duas
-  comparações (CNPJ e conta) são **só de dígitos** — os lados guardam
-  pontuação diferente, e comparar string casa silenciosamente nada (§197).
+- **`b3-accounts`** — as contas B3 de cada entidade nossa (LE · Nome
+  Simplificado · Conta · Tipo), e ele responde DUAS perguntas. Era o
+  `b3-omnibus-account`, que listava só a conta guarda-chuva e onde **estar na
+  tabela era a resposta** (§287).
+  - **A conta identifica o cliente?** Só **CLIENT 1 / CLIENT 2** são
+    guarda-chuva: nelas o nome que vem da B3 é o do titular do omnibus, e o
+    cliente é resolvido por **CNPJ** contra o `RefData.json`. Com a conta
+    PRÓPRIA dentro da mesma tabela, quem responde passou a ser o **TIPO** — se
+    voltasse a ser a presença na lista, a posição da casa iria procurar cliente
+    pelo CNPJ onde não há cliente nenhum. As duas comparações (CNPJ e conta) são
+    **só de dígitos** — os lados guardam pontuação diferente, e comparar string
+    casa silenciosamente nada (§197). O tipo é um `select` e a leitura é cega a
+    caixa e acento (`Própria` ≡ `OWN`, `CLIENTE 1` ≡ `CLIENT 1`): digitado à
+    mão, um `Cliente1` viraria conta própria sem erro nenhum.
+  - **Quem é o Participante** do header dos arquivos TER (campo X(20), "Nome
+    Simplificado do Emissor"): `_ter_file_header(le, …)` resolve pela **LE da
+    visão** que está sendo gerada, e o motor completa com espaços até os 20
+    caracteres. Era o dicionário fixo `_TER_PARTICIPANT_NAME`, com a mesma
+    resposta repetida no `source_note` do File Interpreter. O que sobrou fixo é
+    a tradução `_TER_BUCKET_LE` — o gerador fala em balde (`BANCO`) e o cadastro
+    em LE (`JPM`). **LE sem Nome Simplificado levanta erro** dizendo qual falta,
+    em vez de mandar para a B3 um header com o campo em branco.
 - **`fxo-conv-rate`** — alimenta as duas colunas de Taxa de Conversão da
   confirmação de FXO asiática (Moeda Base → nome da taxa + Venda/Compra) e vem
   semeado só com USD → USD PTAX / Venda; moeda não cadastrada gera aviso no

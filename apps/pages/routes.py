@@ -9385,17 +9385,47 @@ def _refdata_by_taxid():
 
 
 def _b3_is_omnibus(account):
-    """A Conta Contraparte é uma conta guarda-chuva? Cadastro
-    `b3-omnibus-account`. Comparação por dígitos: a conta aparece ora
-    `73760.10-2`, ora `7376010 2`."""
+    """A Conta Contraparte é uma conta guarda-chuva? Cadastro `b3-accounts`.
+
+    Quem responde é o TIPO DA CONTA, não estar na tabela: o cadastro passou a
+    listar TODAS as contas B3 das nossas entidades, e a PRÓPRIA identifica quem
+    é — é a nossa. Só CLIENT 1 e CLIENT 2 são guarda-chuva, e nelas o nome que
+    vem da B3 é o do titular; o cliente sai do CNPJ.
+
+    Comparação por dígitos: a conta aparece ora `73760.10-2`, ora `7376010 2`."""
     d = ''.join(ch for ch in str(account or '') if ch.isdigit())
     if not d:
         return False
-    for row in _mapping_rows('b3-omnibus-account'):
+    for row in _mapping_rows('b3-accounts'):
         rd = ''.join(ch for ch in str(row.get('ACCOUNT', '') or '') if ch.isdigit())
         if rd and rd == d:
-            return True
+            return _b3_account_type(row.get('ACCOUNT TYPE', '')) in _B3_CLIENT_ACCOUNT_TYPES
     return False
+
+
+def _b3_participant_name(le):
+    """Nome Simplificado da entidade `le` no cadastro `b3-accounts` — o que vai
+    no campo Participante do header dos arquivos TER.
+
+    Era um dicionário fixo no código, e a mesma resposta estava escrita em dois
+    lugares (aqui e no `source_note` do File Interpreter). A conta PRÓPRIA vem
+    primeiro por ser a da entidade; qualquer linha da LE serve, já que o nome é
+    o da entidade e não o da conta. Sem cadastro devolve '' — quem chama é que
+    decide o que fazer, e o arquivo para a B3 não sai com o campo em branco."""
+    alvo = _fcst_norm(le).strip()
+    if not alvo:
+        return ''
+    fallback = ''
+    for row in _mapping_rows('b3-accounts'):
+        if _fcst_norm(row.get('LE', '')).strip() != alvo:
+            continue
+        nome = str(row.get('SIMPLIFIED NAME', '') or '').strip()
+        if not nome:
+            continue
+        if _b3_account_type(row.get('ACCOUNT TYPE', '')) == 'OWN':
+            return nome
+        fallback = fallback or nome
+    return fallback
 
 
 def _ndfc_split_by_commodity(client):
@@ -20449,6 +20479,65 @@ _ATHENA_FXO_COLUMNS = [
 ]
 
 
+# Os tipos de conta da B3, na grafia em que são gravados. É código, não rótulo:
+# a comparação é feita sobre ele, e por isso o `select` do cadastro tem esta
+# lista e nada mais. CLIENT 1 e CLIENT 2 são as contas GUARDA-CHUVA — a que
+# aparece na linha do Operations B3 não diz quem é o cliente.
+_B3_ACCOUNT_TYPES = ('OWN', 'CLIENT 1', 'CLIENT 2')
+_B3_CLIENT_ACCOUNT_TYPES = ('CLIENT 1', 'CLIENT 2')
+
+# Grafias que valem pelo mesmo tipo. A tabela nasceu em português (PRÓPRIA /
+# CLIENTE 1 / CLIENTE 2) e é assim que a mesa a lê no documento da B3; quem
+# digitar dessa forma na tela tem de ser entendido, senão a linha deixa de valer
+# sem erro nenhum — uma conta de cliente que não é reconhecida como guarda-chuva
+# passa a identificar o cliente pelo nome do titular do omnibus.
+_B3_ACCOUNT_TYPE_ALIASES = {
+    'PROPRIA': 'OWN', 'CONTA PROPRIA': 'OWN', 'OWN ACCOUNT': 'OWN', 'HOUSE': 'OWN',
+    'CLIENTE 1': 'CLIENT 1', 'CLIENTE1': 'CLIENT 1', 'CLIENT1': 'CLIENT 1',
+    'CLIENTE 2': 'CLIENT 2', 'CLIENTE2': 'CLIENT 2', 'CLIENT2': 'CLIENT 2',
+}
+
+
+def _b3_account_type(value):
+    """Tipo de conta na grafia canônica (`_B3_ACCOUNT_TYPES`) ou ''.
+
+    Cego a caixa, acento e espaço repetido: `Própria`, `PROPRIA` e `própria `
+    são o mesmo tipo."""
+    txt = unicodedata.normalize('NFKD', str(value or '').strip().upper())
+    txt = ''.join(c for c in txt if not unicodedata.combining(c))
+    txt = ' '.join(txt.split())
+    if txt in _B3_ACCOUNT_TYPES:
+        return txt
+    return _B3_ACCOUNT_TYPE_ALIASES.get(txt, '')
+
+
+def _b3_accounts_upgrade(rows):
+    """Formato antigo do `b3-omnibus-account` (só ACCOUNT + NOTES) → as contas
+    B3 completas, e a grafia do tipo normalizada.
+
+    A tabela antiga listava SÓ as contas guarda-chuva — estar nela era, por si
+    só, a resposta. Aqui o que responde é a coluna TIPO, então uma linha sem
+    tipo tem de virar CLIENT 1: lida como PRÓPRIA, ela deixaria de mandar o app
+    procurar o cliente pelo CNPJ e o aviso de liquidação sairia endereçado ao
+    titular do omnibus."""
+    out = []
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        r = dict(r)
+        tem_colunas = any(k in r for k in ('LE', 'SIMPLIFIED NAME', 'ACCOUNT TYPE'))
+        tipo = _b3_account_type(r.get('ACCOUNT TYPE', ''))
+        if not tipo and not tem_colunas:
+            tipo = 'CLIENT 1'          # linha do cadastro antigo: era omnibus
+        r['LE'] = str(r.get('LE', '') or '').strip()
+        r['SIMPLIFIED NAME'] = str(r.get('SIMPLIFIED NAME', '') or '').strip()
+        r['ACCOUNT'] = str(r.get('ACCOUNT', '') or '').strip()
+        r['ACCOUNT TYPE'] = tipo
+        r['NOTES'] = str(r.get('NOTES', '') or '').strip()
+        out.append(r)
+    return out
+
+
 def _api_links_upgrade(rows):
     """Traz para o formato com PRODUCT os arquivos gravados antes da coluna.
 
@@ -21412,18 +21501,47 @@ _MAPPING_DEFS = {
             {'CLIENT': 'J.P. MORGAN', 'MATCH': 'Starts with', 'NOTES': 'perna interna'},
         ],
     },
-    'b3-omnibus-account': {
-        'label': 'B3 Omnibus Accounts',
+    'b3-accounts': {
+        'label': 'B3 Accounts',
         'columns': [
+            {'key': 'LE', 'label': 'Legal Entity'},
+            {'key': 'SIMPLIFIED NAME', 'label': 'Simplified Name (B3)'},
             {'key': 'ACCOUNT', 'label': 'B3 Account'},
+            # O TIPO é o que decide a regra, então é `select`: digitado à mão,
+            # um "Cliente1" viraria conta PRÓPRIA em silêncio — e uma conta
+            # própria tratada como guarda-chuva manda o app procurar cliente
+            # pelo CNPJ onde não há cliente nenhum.
+            {'key': 'ACCOUNT TYPE', 'label': 'Account Type', 'type': 'select',
+             'options': list(_B3_ACCOUNT_TYPES)},
             {'key': 'NOTES', 'label': 'Notes'},
         ],
-        # Conta da B3 que NÃO identifica o cliente: é a conta guarda-chuva. Numa
-        # linha do Operations B3 com essa Conta Contraparte, o nome que vem da B3
-        # é o do titular do omnibus — quem é o cliente sai do CNPJ.
+        # As contas da B3 de cada entidade nossa: a PRÓPRIA (posição da casa) e
+        # as de CLIENTE, que são guarda-chuva. Duas perguntas saem daqui:
+        #
+        #  1. o Nome Simplificado do Participante no header dos arquivos TER —
+        #     antes um dicionário fixo no código, com a mesma resposta escrita
+        #     em dois lugares;
+        #  2. a conta identifica o cliente? CLIENT 1/CLIENT 2 NÃO identificam:
+        #     numa linha do Operations B3 com essa Conta Contraparte o nome que
+        #     vem da B3 é o do titular do guarda-chuva, e quem é o cliente sai
+        #     do CNPJ. A conta PRÓPRIA identifica — é a nossa.
         'seed': [
-            {'ACCOUNT': '73760.10-2', 'NOTES': 'omnibus — identificar o cliente pelo CNPJ'},
+            {'LE': 'MGT', 'SIMPLIFIED NAME': 'MORGANBC',
+             'ACCOUNT': '04880.00-6', 'ACCOUNT TYPE': 'OWN', 'NOTES': ''},
+            {'LE': 'MGT', 'SIMPLIFIED NAME': 'MORGANBC',
+             'ACCOUNT': '04880.10-9', 'ACCOUNT TYPE': 'CLIENT 1', 'NOTES': ''},
+            {'LE': 'JPM', 'SIMPLIFIED NAME': 'JPMORGANBM',
+             'ACCOUNT': '73760.00-9', 'ACCOUNT TYPE': 'OWN', 'NOTES': ''},
+            {'LE': 'JPM', 'SIMPLIFIED NAME': 'JPMORGANBM',
+             'ACCOUNT': '73760.10-2', 'ACCOUNT TYPE': 'CLIENT 1', 'NOTES': ''},
+            {'LE': 'JPM', 'SIMPLIFIED NAME': 'JPMORGANBM',
+             'ACCOUNT': '73760.20-5', 'ACCOUNT TYPE': 'CLIENT 2', 'NOTES': ''},
+            {'LE': 'LAWTON', 'SIMPLIFIED NAME': 'INTRAGLAWTONFDO',
+             'ACCOUNT': '00041.00-7', 'ACCOUNT TYPE': 'OWN', 'NOTES': ''},
+            {'LE': 'ATACAMA', 'SIMPLIFIED NAME': 'INTRAGATACAMAFDO',
+             'ACCOUNT': '85398.00-5', 'ACCOUNT TYPE': 'OWN', 'NOTES': ''},
         ],
+        'upgrade': _b3_accounts_upgrade,
     },
     'ndfc-advice-split': {
         'label': 'NDF Commodities Advice — Split by Commodity',
@@ -25424,14 +25542,15 @@ def api_ndf_send_conecta():
                 banco_lines.extend(ter_lines)
                 banco_count += 1
         # Headers differ by counterparty type; layout version is 00003 — tudo
-        # do bloco `header` do cadastro, só o participante e a data são daqui.
-        lawton_header = _ter_file_header('INTRAGLAWTONFDO', today,
+        # do bloco `header` do cadastro. O Participante sai do `b3-accounts`
+        # pela LE da visão: aqui a de Lawton e a do Banco J.P. Morgan.
+        lawton_header = _ter_file_header(_TER_BUCKET_LE['LAWTON'], today,
                                          '/new_deals-ndf-commodities')
-        banco_header  = _ter_file_header('JPMORGANBM', today,
+        banco_header  = _ter_file_header(_TER_BUCKET_LE['BANCO'], today,
                                          '/new_deals-ndf-commodities')
     except ValueError as exc:
-        log.error('[NDF COMM] send-conecta sem template: %s', exc)
-        return jsonify({'ok': False, 'error': _TER_FI_ERROR}), 500
+        log.error('[NDF COMM] send-conecta sem header: %s', exc)
+        return jsonify({'ok': False, 'error': str(exc) or _TER_FI_ERROR}), 500
 
     output_dir = CONECTA_NEW_PATH
     generated  = []
@@ -33527,20 +33646,38 @@ def _anbima_add_biz(start_dt, n):
 # nunca arquivo montado do jeito velho em silêncio.
 _TER_FI_KEY = 'termo-multiclasses'
 _TER_FI_ERROR = 'File Interpreter template missing/invalid — check /file-interface'
-_TER_PARTICIPANT_NAME = {
-    'BANCO': 'JPMORGANBM',
-    'LAWTON': 'INTRAGLAWTONFDO',
-    'MGT': 'MORGANBC',
+# O arquivo TER sai um por VISÃO, e a visão é a entidade dona dele. O balde é o
+# vocabulário do gerador ('BANCO' é como a mesa chama o Banco J.P. Morgan nos
+# arquivos da CETIP); a LE é o vocabulário do cadastro (`le-accronym`,
+# `b3-accounts`). Este mapa é a tradução entre os dois, e é a ÚNICA coisa que
+# sobrou fixa aqui: o Nome Simplificado em si vem do cadastro.
+_TER_BUCKET_LE = {
+    'BANCO': 'JPM',
+    'LAWTON': 'LAWTON',
+    'MGT': 'MGT',
 }
 
 
-def _ter_file_header(participant, today, page_url):
+def _ter_file_header(le, today, page_url):
     """Header (linha tipo 0) de um arquivo TER, pelo bloco `header` do
-    cadastro — só o Nome Simplificado do participante e a data são do
-    gerador; 'TER', tipo de linha, código de operação e versão de layout
-    saem do JSON."""
+    cadastro — só o Participante e a data são do gerador; 'TER', tipo de
+    linha, código de operação e versão de layout saem do JSON.
+
+    O Participante é o **Nome Simplificado** da entidade dona do arquivo, e ele
+    sai do cadastro `b3-accounts` (era um dicionário fixo aqui). O motor
+    completa com espaços até os 20 caracteres do X(20) — o valor do gerador
+    nunca é truncado nem reformatado.
+
+    LE sem Nome Simplificado cadastrado levanta ValueError dizendo qual: o
+    header é obrigatório, e um Participante em branco é um arquivo que a B3
+    recusa depois de a mesa já ter mandado."""
+    nome = _b3_participant_name(le)
+    if not nome:
+        raise ValueError(
+            'B3 Accounts: no Simplified Name registered for legal entity '
+            '{!r} — register it at /mapping › B3 Accounts'.format(le))
     return _fi_build_line(_TER_FI_KEY, 'header',
-                          {'4': participant, '5': today}, page_url=page_url)
+                          {'4': nome, '5': today}, page_url=page_url)
 
 
 def _generic_ndf_ter_line(deal, is_fwd):
@@ -33829,11 +33966,11 @@ def api_generic_nd_send_conecta(product):
             b2, l2 = made
             buckets[b2].append(l2)
             counts[b2] += 1
-        headers = {b: _ter_file_header(_TER_PARTICIPANT_NAME[b], today, page_url)
+        headers = {b: _ter_file_header(_TER_BUCKET_LE[b], today, page_url)
                    for b, lines in buckets.items() if lines}
     except ValueError as exc:
-        log.error('[ND %s] send-conecta sem template: %s', product, exc)
-        return jsonify({'ok': False, 'error': _TER_FI_ERROR}), 500
+        log.error('[ND %s] send-conecta sem header: %s', product, exc)
+        return jsonify({'ok': False, 'error': str(exc) or _TER_FI_ERROR}), 500
 
     generated = []
     try:

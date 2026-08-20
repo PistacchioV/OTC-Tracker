@@ -197,29 +197,29 @@
           "required": "SIM",
           "content": "",
           "description": "Nome Simplificado do Emissor",
-          "source": "Calculated",
-          "source_detail": "",
-          "source_note": "Simplified issuer name of the entity that owns the output file",
+          "source": "Mapping",
+          "source_detail": "b3-accounts",
+          "source_note": "Simplified Name of the entity that owns the output file, from the B3 Accounts mapping (LE of the view); space-padded to X(20)",
           "source_by_page": {
             "/new_deals-ndf-commodities": {
-              "source": "Calculated",
-              "source_detail": "",
-              "source_note": "JPMORGANBM (TCO_BANCO), INTRAGLAWTONFDO (TCO_LAWTON) per output file"
+              "source": "Mapping",
+              "source_detail": "b3-accounts",
+              "source_note": "Simplified Name of the entity that owns the output file, from the B3 Accounts mapping (LE of the view); space-padded to X(20) — JPM (BANCO) and LAWTON per output file"
             },
             "/new_deals-ndf-fwdstart": {
-              "source": "Calculated",
-              "source_detail": "",
-              "source_note": "JPMORGANBM (BANCO), INTRAGLAWTONFDO (LAWTON), MORGANBC (MGT) per output file"
+              "source": "Mapping",
+              "source_detail": "b3-accounts",
+              "source_note": "Simplified Name of the entity that owns the output file, from the B3 Accounts mapping (LE of the view); space-padded to X(20) — JPM (BANCO), LAWTON and MGT per output file"
             },
             "/new_deals-ndf-otherpublisher": {
-              "source": "Calculated",
-              "source_detail": "",
-              "source_note": "JPMORGANBM (BANCO), INTRAGLAWTONFDO (LAWTON), MORGANBC (MGT) per output file"
+              "source": "Mapping",
+              "source_detail": "b3-accounts",
+              "source_note": "Simplified Name of the entity that owns the output file, from the B3 Accounts mapping (LE of the view); space-padded to X(20) — JPM (BANCO), LAWTON and MGT per output file"
             },
             "/new_deals-ndf-vanilla": {
-              "source": "Calculated",
-              "source_detail": "",
-              "source_note": "JPMORGANBM (BANCO), INTRAGLAWTONFDO (LAWTON), MORGANBC (MGT) per output file"
+              "source": "Mapping",
+              "source_detail": "b3-accounts",
+              "source_note": "Simplified Name of the entity that owns the output file, from the B3 Accounts mapping (LE of the view); space-padded to X(20) — JPM (BANCO), LAWTON and MGT per output file"
             }
           }
         },

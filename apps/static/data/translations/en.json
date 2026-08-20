@@ -1625,7 +1625,7 @@
   "ops-sub-comm": "Commodities",
   "map-tab-ndfc-ir": "NDF Commodities IR — Exempt",
   "map-tab-ndfc-split": "NDF Commodities Advice — Split by Commodity",
-  "map-tab-b3-omnibus": "B3 Omnibus Accounts",
+  "map-tab-b3-accounts": "B3 Accounts",
   "about-feat-ndfvanilla-title": "NDF Vanilla",
   "about-feat-ndfvanilla-desc": "Vanilla NDF trades (PTAX) with import, validation, mass edit and the same approval and Conecta submission cycle as the other New Deals pages.",
   "about-feat-ndmonitor-title": "Deals Monitor",

@@ -1625,7 +1625,7 @@
   "ops-sub-comm": "Commodities",
   "map-tab-ndfc-ir": "IR NDF Commodities — Isentos",
   "map-tab-ndfc-split": "Aviso NDF Commodities — Quebra por Commodity",
-  "map-tab-b3-omnibus": "Contas Omnibus B3",
+  "map-tab-b3-accounts": "Contas B3",
   "about-feat-ndfvanilla-title": "NDF Vanilla",
   "about-feat-ndfvanilla-desc": "Operações de NDF vanilla (PTAX), com importação, validação, edição em massa e o mesmo ciclo de aprovação e envio ao Conecta das demais páginas de New Deals.",
   "about-feat-ndmonitor-title": "Deals Monitor",

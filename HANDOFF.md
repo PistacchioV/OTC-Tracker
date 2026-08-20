@@ -8949,6 +8949,10 @@ distintos), cacheado por mtime.
 `b3-omnibus-account` (`ACCOUNT` · `NOTES`), semeado com `73760.10-2`. Uma conta a mais amanhã se registra
 pela tela — nenhuma conta da B3 devia estar escrita em código.
 
+> **Superado pelo §287.** O cadastro virou `b3-accounts` e passou a listar TODAS as contas B3 das
+> nossas entidades, própria inclusive — então quem responde "é guarda-chuva?" deixou de ser a
+> presença na tabela e passou a ser a coluna `ACCOUNT TYPE` (`CLIENT 1` / `CLIENT 2`).
+
 ### Junto
 
 Toolbar do **Live Position NDF** ganhou o mesmo respiro do §190/§194.
@@ -12564,3 +12568,75 @@ cadastro de mercadoria em 25 campos.
 (`send-conecta not available for this product`, HTTP 404) — só `fwd-start` e `other-publishers`
 passam. O cadastro da Vanilla alimenta hoje só o **preview de duplo clique**; abrir a geração do
 arquivo é outra decisão, porque é registro na B3.
+
+---
+
+## §287 — B3 Omnibus Accounts → **B3 Accounts**: o cadastro que também diz quem é o Participante
+
+O cadastro `b3-omnibus-account` tinha uma coluna (`ACCOUNT`) e uma regra implícita: **estar na
+tabela era a resposta**. Ele listava só a conta guarda-chuva `73760.10-2`, e `_b3_is_omnibus`
+respondia `True` para qualquer linha cadastrada.
+
+Agora ele é a lista das **contas B3 de cada entidade nossa** — a própria e as de cliente —, com as
+sete linhas do documento da B3 e as colunas em inglês:
+
+| LE | SIMPLIFIED NAME | ACCOUNT | ACCOUNT TYPE |
+|---|---|---|---|
+| MGT | MORGANBC | 04880.00-6 | OWN |
+| MGT | MORGANBC | 04880.10-9 | CLIENT 1 |
+| JPM | JPMORGANBM | 73760.00-9 | OWN |
+| JPM | JPMORGANBM | 73760.10-2 | CLIENT 1 |
+| JPM | JPMORGANBM | 73760.20-5 | CLIENT 2 |
+| LAWTON | INTRAGLAWTONFDO | 00041.00-7 | OWN |
+| ATACAMA | INTRAGATACAMAFDO | 85398.00-5 | OWN |
+
+### O guarda-chuva passou a ser o TIPO, e isso não é detalhe
+
+Com a conta **PRÓPRIA** dentro da mesma tabela, "estar cadastrada" deixou de poder ser a resposta:
+a posição da casa passaria a procurar cliente pelo CNPJ onde não há cliente nenhum. `_b3_is_omnibus`
+responde pelo `ACCOUNT TYPE` — só **CLIENT 1** e **CLIENT 2**. A comparação da conta continua sendo
+**só de dígitos** (§197): ela aparece ora `73760.10-2`, ora `7376010 2`.
+
+O tipo é um **`select`** de propósito. Digitado à mão, um `Cliente1` não casaria com nada e a linha
+viraria conta própria em silêncio — o aviso de liquidação sairia endereçado ao titular do omnibus,
+com nome e valores preenchidos, parecendo certo. E `_b3_account_type` é **cego a caixa e acento**,
+aceitando as grafias em português (`PRÓPRIA`, `CLIENTE 1`): a tabela nasceu assim e é assim que a
+mesa a lê no documento da B3.
+
+O `upgrade` traz o formato antigo, e a linha sem colunas novas vira **CLIENT 1** — na tabela antiga
+estar nela *era* ser guarda-chuva, e lê-la como PRÓPRIA revogaria a regra do §197 sem erro nenhum.
+Já a linha que **tem** as colunas novas e o tipo em branco fica em branco: ali o vazio é escolha.
+
+### O Participante do header do TER saiu do código
+
+O campo 4 do bloco `header` (X(20), "Nome Simplificado do Emissor") vinha de um dicionário fixo,
+`_TER_PARTICIPANT_NAME`, e a MESMA resposta estava escrita de novo no `source_note` do File
+Interpreter — dois lugares para divergirem. Hoje o campo é **`Source = Mapping` → `b3-accounts`**
+nas quatro páginas de NDF, e `_ter_file_header(le, …)` resolve o Nome Simplificado pela **LE da
+visão**. A conta PRÓPRIA vence no lookup (é a da entidade), mas qualquer linha da LE serve: o nome
+é da entidade, não da conta.
+
+O que sobrou fixo é só a tradução de vocabulário, `_TER_BUCKET_LE`: o gerador fala em **balde**
+(`BANCO`, que é como a mesa chama o Banco J.P. Morgan nos arquivos da CETIP) e o cadastro fala em
+**LE** (`JPM`, o mesmo token do `le-accronym`).
+
+Três coisas que não dão erro nenhum:
+
+- **o motor completa com espaços até os 20 caracteres** (`_fi_build_line` já fazia isso para todo
+  valor de gerador, e nunca trunca nem reformata). Um `MORGANBC` sem preenchimento deslocaria a
+  data e a versão de layout, e o arquivo chegaria à B3 com tudo depois da posição 30 fora do lugar;
+- **LE sem Nome Simplificado levanta `ValueError` dizendo qual entidade falta** e para onde ir, em
+  vez de montar o header com o campo em branco. Os dois endpoints de send-conecta passaram a
+  devolver a **mensagem da exceção** no 500 — antes devolviam sempre o `_TER_FI_ERROR` genérico
+  ("template missing"), que aqui apontaria para o lugar errado;
+- o header continua **byte a byte** o de sempre, e é o golden do `check_fi_ter.py` que prova.
+
+`check_b3_accounts.py` prende o cadastro inteiro: as sete contas, o tipo cego a acento, o
+guarda-chuva pelo TIPO, o Participante pela LE, o header de 43 caracteres com o campo nas posições
+11-30, o erro da LE ausente e o `upgrade`.
+
+**Fora de escopo, e continua no código:** as CONTAS que o registro TER escreve nos campos Conta
+Participante / Conta Contraparte (`04880109`, `73760102`, `00041007`…) seguem calculadas no
+`routes.py`, e o `_CETIP_BACC_ACCOUNTS` e os mapas conta → entidade do Save CETIP Files também.
+Elas agora existem no cadastro e poderiam sair dele — é a mesma tabela respondendo a mais uma
+pergunta —, mas mexer nisso é mexer no arquivo de registro da B3, e isso é decisão da mesa.

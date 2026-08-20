@@ -1,0 +1,51 @@
+[
+  {
+    "LE": "MGT",
+    "SIMPLIFIED NAME": "MORGANBC",
+    "ACCOUNT": "04880.00-6",
+    "ACCOUNT TYPE": "OWN",
+    "NOTES": ""
+  },
+  {
+    "LE": "MGT",
+    "SIMPLIFIED NAME": "MORGANBC",
+    "ACCOUNT": "04880.10-9",
+    "ACCOUNT TYPE": "CLIENT 1",
+    "NOTES": ""
+  },
+  {
+    "LE": "JPM",
+    "SIMPLIFIED NAME": "JPMORGANBM",
+    "ACCOUNT": "73760.00-9",
+    "ACCOUNT TYPE": "OWN",
+    "NOTES": ""
+  },
+  {
+    "LE": "JPM",
+    "SIMPLIFIED NAME": "JPMORGANBM",
+    "ACCOUNT": "73760.10-2",
+    "ACCOUNT TYPE": "CLIENT 1",
+    "NOTES": ""
+  },
+  {
+    "LE": "JPM",
+    "SIMPLIFIED NAME": "JPMORGANBM",
+    "ACCOUNT": "73760.20-5",
+    "ACCOUNT TYPE": "CLIENT 2",
+    "NOTES": ""
+  },
+  {
+    "LE": "LAWTON",
+    "SIMPLIFIED NAME": "INTRAGLAWTONFDO",
+    "ACCOUNT": "00041.00-7",
+    "ACCOUNT TYPE": "OWN",
+    "NOTES": ""
+  },
+  {
+    "LE": "ATACAMA",
+    "SIMPLIFIED NAME": "INTRAGATACAMAFDO",
+    "ACCOUNT": "85398.00-5",
+    "ACCOUNT TYPE": "OWN",
+    "NOTES": ""
+  }
+]
