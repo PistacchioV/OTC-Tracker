@@ -427,12 +427,62 @@
         </div>
     </div>
 
-    <!-- ── Section: Settlement Reporting ────────────────────── -->
+    <!-- ── Section: Intraday Routines ──────────────────── -->
+    <div class="cp-reveal mb-2" data-cp-hdr="intraday">
+        <div class="cp-sec-label" data-lang="cp-sec-id-label">Trading Day</div>
+        <h2 class="cp-sec-title" data-lang="cp-sec-id-title">Intraday Routines</h2>
+        <p class="cp-sec-desc" data-lang="cp-sec-id-desc">
+            Routines that follow the day's trading and e-mail what is still pending action.
+        </p>
+    </div>
+    <div class="row g-3 g-xl-4 mb-4 cp-cards">
+
+        <div class="col-12 col-lg-6 d-flex" data-cp-group="intraday">
+            <div class="cp-reveal">
+                <div class="cp-card" data-cp-card="dealsmonitor">
+                    <div class="cp-card__icon"><i class="ti ti-clock-exclamation"></i></div>
+                    <h3 class="cp-card__title" data-lang="cp-r-dm2-title">Deals Monitor — Pending Action</h3>
+                    <p class="cp-card__desc" data-lang="cp-r-dm2-desc">
+                        Sent automatically at 19:00 and 19:30 with every Deals Monitor card that still
+                        has deals outside Success — by type (Registration / Confirmation / Intrag),
+                        product and detail. Nothing pending, no e-mail. Set the TO / CC once — they are
+                        saved and reused on every run.
+                    </p>
+                    <div class="cp-field">
+                        <label data-lang="cp-dm-to">TO</label>
+                        <input type="text" id="cp-dm2-to" class="form-control form-control-sm"
+                               placeholder="email1@jpmorgan.com; email2@jpmorgan.com">
+                    </div>
+                    <div class="cp-field">
+                        <label data-lang="cp-dm-cc">CC</label>
+                        <input type="text" id="cp-dm2-cc" class="form-control form-control-sm"
+                               placeholder="optional — separate with ;">
+                    </div>
+                    <!-- Desfecho do último disparo automático. Sem isto a única
+                         evidência de que a rotina rodou é uma linha de log no
+                         servidor, e "não está funcionando" fica sem resposta. -->
+                    <div id="cp-dm2-status" class="cp-card__meta d-none"
+                         style="display:block;margin-top:.35rem;line-height:1.5;"></div>
+                    <div class="cp-card__foot">
+                        <span class="cp-card__meta">
+                            <i class="ti ti-mail"></i><span data-lang="cp-dm2-meta">Daily 19:00 &amp; 19:30 → e-mail</span>
+                        </span>
+                        <button type="button" class="cp-run-btn" data-dealsmonitor-run>
+                            <i class="ti ti-player-play"></i>
+                            <span data-lang="cp-run">Run</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Section: Settlement Reporting ──────────────────── -->
     <div class="cp-reveal mb-2" data-cp-hdr="reporting">
         <div class="cp-sec-label" data-lang="cp-sec-fc-label">Forecasts &amp; Reports</div>
         <h2 class="cp-sec-title" data-lang="cp-sec-fc-title">Settlement Reporting</h2>
         <p class="cp-sec-desc" data-lang="cp-sec-fc-desc">
-            Rotinas que consolidam posições e geram relatórios analíticos enviados por e-mail.
+            Routines that consolidate positions and report the upcoming settlements.
         </p>
     </div>
     <div class="row g-3 g-xl-4 mb-4 cp-cards">
@@ -482,26 +532,34 @@
 
         <div class="col-12 col-lg-6 d-flex" data-cp-group="reporting">
             <div class="cp-reveal">
-                <div class="cp-card" data-cp-card="contacts">
-                    <div class="cp-card__icon"><i class="ti ti-address-book"></i></div>
-                    <h3 class="cp-card__title" data-lang="cp-r-contacts-title">Update Contacts</h3>
-                    <p class="cp-card__desc" data-lang="cp-r-contacts-desc">
-                        Imports the "CONTATO DE CLIENTES" spreadsheet and replaces each counterparty's
-                        contacts with the Active ones only (matched by SPN, leading zeros ignored).
-                        CGD and banking data are preserved.
+                <div class="cp-card" data-cp-card="mt300">
+                    <div class="cp-card__icon"><i class="ti ti-message-2"></i></div>
+                    <h3 class="cp-card__title" data-lang="cp-r-mt300-title">MT300</h3>
+                    <p class="cp-card__desc" data-lang="cp-r-mt300-desc">
+                        E-mails the day's NDF Vanilla trades whose counterparty is registered in
+                        Mapping &rsaquo; MT300, so the group can match them in DVP. Runs every
+                        ANBIMA business day at 19:30 Brasília; Run sends it now. With no trade
+                        from the registered counterparties, no e-mail is sent.
                     </p>
                     <div class="cp-field">
-                        <label data-lang="cp-contacts-file">Spreadsheet (.xlsx, .xlsm, .csv)</label>
-                        <input type="file" id="cp-contacts-file" accept=".xlsx,.xlsm,.csv"
-                               class="form-control form-control-sm">
+                        <label data-lang="cp-mt300-to">TO — BACC</label>
+                        <input type="text" id="cp-mt300-to" class="form-control form-control-sm"
+                               placeholder="email1@jpmorgan.com; email2@jpmorgan.com">
                     </div>
+                    <div class="cp-field">
+                        <label data-lang="cp-mt300-cc">CC</label>
+                        <input type="text" id="cp-mt300-cc" class="form-control form-control-sm"
+                               placeholder="email1@jpmorgan.com; email2@jpmorgan.com">
+                    </div>
+                    <!-- Desfecho do último disparo automático: sem esta linha a
+                         única evidência de que a rotina rodou é o log. -->
+                    <div id="cp-mt300-status" class="cp-card__meta d-none"
+                         style="display:block;margin-top:.35rem;line-height:1.5;"></div>
                     <div class="cp-card__foot">
                         <span class="cp-card__meta">
-                            <i class="ti ti-users"></i><span data-lang="cp-contacts-meta">Spreadsheet → Counterparties</span>
+                            <i class="ti ti-calendar-time"></i><span data-lang="cp-mt300-meta">Daily 19:30 BRT &rarr; NDF Vanilla</span>
                         </span>
-                        <button type="button" class="cp-run-btn"
-                                data-upload-endpoint="/api/control-panel/import-contacts"
-                                data-file-input="cp-contacts-file">
+                        <button type="button" class="cp-run-btn" data-mt300-run>
                             <i class="ti ti-player-play"></i>
                             <span data-lang="cp-run">Run</span>
                         </button>
@@ -509,8 +567,19 @@
                 </div>
             </div>
         </div>
+    </div>
 
-        <div class="col-12 col-lg-6 d-flex" data-cp-group="reporting">
+    <!-- ── Section: Pending Confirmation Routines ──────────────────── -->
+    <div class="cp-reveal mb-2" data-cp-hdr="pendingconf">
+        <div class="cp-sec-label" data-lang="cp-sec-pc-label">Outstanding Confirmations</div>
+        <h2 class="cp-sec-title" data-lang="cp-sec-pc-title">Pending Confirmation Routines</h2>
+        <p class="cp-sec-desc" data-lang="cp-sec-pc-desc">
+            Metrics, escalations and signature collection built from the Pending Confirmation base.
+        </p>
+    </div>
+    <div class="row g-3 g-xl-4 mb-4 cp-cards">
+
+        <div class="col-12 col-lg-6 d-flex" data-cp-group="pendingconf">
             <div class="cp-reveal">
                 <div class="cp-card" data-cp-card="dailymetric">
                     <div class="cp-card__icon"><i class="ti ti-mail-check"></i></div>
@@ -546,118 +615,7 @@
             </div>
         </div>
 
-        <div class="col-12 col-lg-6 d-flex" data-cp-group="reporting">
-            <div class="cp-reveal">
-                <div class="cp-card" data-cp-card="weeklyescalation">
-                    <div class="cp-card__icon"><i class="ti ti-alert-triangle"></i></div>
-                    <h3 class="cp-card__title" data-lang="cp-r-we-title">Pending Confirmation — Weekly Escalation (CEM/EDG)</h3>
-                    <p class="cp-card__desc" data-lang="cp-r-we-desc">
-                        Weekly (Friday) escalation of confirmations pending &gt; 30 days, split by LOB
-                        (CEM / EDG), grouped by banker and broken down by company. Builds it as an
-                        Outlook draft (.eml download) addressed to the saved recipients — open the file
-                        to review and send it yourself. Set the TO / CC once — they are saved and reused
-                        on every run.
-                    </p>
-                    <div class="cp-field">
-                        <label data-lang="cp-dm-to">TO</label>
-                        <input type="text" id="cp-we-to" class="form-control form-control-sm"
-                               placeholder="email1@jpmorgan.com; email2@jpmorgan.com">
-                    </div>
-                    <div class="cp-field">
-                        <label data-lang="cp-dm-cc">CC</label>
-                        <input type="text" id="cp-we-cc" class="form-control form-control-sm"
-                               placeholder="optional — separate with ;">
-                    </div>
-                    <div class="cp-card__foot">
-                        <span class="cp-card__meta">
-                            <i class="ti ti-mail"></i><span data-lang="cp-we-meta">CEM/EDG &gt; 30 days → .eml draft</span>
-                        </span>
-                        <button type="button" class="cp-run-btn" data-escalation-run>
-                            <i class="ti ti-player-play"></i>
-                            <span data-lang="cp-run">Run</span>
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-12 col-lg-6 d-flex" data-cp-group="reporting">
-            <div class="cp-reveal">
-                <div class="cp-card" data-cp-card="signaturecollection">
-                    <div class="cp-card__icon"><i class="ti ti-writing-sign"></i></div>
-                    <h3 class="cp-card__title" data-lang="cp-r-sc-title">Pending Signature Confirmations — Collection</h3>
-                    <p class="cp-card__desc" data-lang="cp-r-sc-desc">
-                        Builds one editable e-mail draft per counterparty for confirmations pending
-                        signature (Pending Digital Signature / Pending Original), segregated from the
-                        Pending Confirmation base. TO = the counterparty's confirmation contacts;
-                        CC = that counterparty's bankers + Brazil OTC Ops + IS Trade Doc. Downloads a
-                        .zip of .eml drafts — nothing is sent automatically.
-                    </p>
-                    <div class="cp-field">
-                        <span class="cp-card__meta" id="cp-sc-summary" data-lang="cp-sc-loading">Loading…</span>
-                    </div>
-                    <div class="cp-card__foot">
-                        <span class="cp-card__meta">
-                            <i class="ti ti-download"></i><span data-lang="cp-sc-meta">One .eml per counterparty → .zip</span>
-                        </span>
-                        <button type="button" class="cp-run-btn" data-sigcoll-generate>
-                            <i class="ti ti-download"></i>
-                            <span data-lang="cp-sc-generate">Generate drafts</span>
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-12 col-lg-6 d-flex" data-cp-group="reporting">
-            <div class="cp-reveal">
-                <div class="cp-card" data-cp-card="dealsmonitor">
-                    <div class="cp-card__icon"><i class="ti ti-clock-exclamation"></i></div>
-                    <h3 class="cp-card__title" data-lang="cp-r-dm2-title">Deals Monitor — Pending Action</h3>
-                    <p class="cp-card__desc" data-lang="cp-r-dm2-desc">
-                        Sent automatically at 19:00 and 19:30 with every Deals Monitor card that still
-                        has deals outside Success — by type (Registration / Confirmation / Intrag),
-                        product and detail. Nothing pending, no e-mail. Set the TO / CC once — they are
-                        saved and reused on every run.
-                    </p>
-                    <div class="cp-field">
-                        <label data-lang="cp-dm-to">TO</label>
-                        <input type="text" id="cp-dm2-to" class="form-control form-control-sm"
-                               placeholder="email1@jpmorgan.com; email2@jpmorgan.com">
-                    </div>
-                    <div class="cp-field">
-                        <label data-lang="cp-dm-cc">CC</label>
-                        <input type="text" id="cp-dm2-cc" class="form-control form-control-sm"
-                               placeholder="optional — separate with ;">
-                    </div>
-                    <!-- Desfecho do último disparo automático. Sem isto a única
-                         evidência de que a rotina rodou é uma linha de log no
-                         servidor, e "não está funcionando" fica sem resposta. -->
-                    <div id="cp-dm2-status" class="cp-card__meta d-none"
-                         style="display:block;margin-top:.35rem;line-height:1.5;"></div>
-                    <div class="cp-card__foot">
-                        <span class="cp-card__meta">
-                            <i class="ti ti-mail"></i><span data-lang="cp-dm2-meta">Daily 19:00 &amp; 19:30 → e-mail</span>
-                        </span>
-                        <button type="button" class="cp-run-btn" data-dealsmonitor-run>
-                            <i class="ti ti-player-play"></i>
-                            <span data-lang="cp-run">Run</span>
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Esta coluna carrega TRÊS cards empilhados: métricas de Pending,
-             BACC EA Metrics e Manual Deals EA. Juntos eles preenchem a altura do
-             Confirmations Escalation, que divide a linha e é o card mais alto do
-             painel — sozinho, o de Pending esticava até lá e virava meia tela de
-             branco. `flex-column` é o que faz os `.cp-reveal` (que já são
-             `flex: 1`) repartirem a altura da linha.
-
-             Um card por `.cp-reveal`: o `.cp-reveal` é `display: flex` em LINHA,
-             então dois cards dentro do mesmo ficam lado a lado. -->
-        <div class="col-12 col-lg-6 d-flex flex-column gap-3 gap-xl-4" data-cp-group="reporting">
+        <div class="col-12 col-lg-6 d-flex" data-cp-group="pendingconf">
             <div class="cp-reveal">
                 <div class="cp-card" data-cp-card="pendingspreadsheet">
                     <div class="cp-card__icon"><i class="ti ti-file-spreadsheet"></i></div>
@@ -708,6 +666,137 @@
                     </div>
                 </div>
             </div>
+        </div>
+
+        <div class="col-12 col-lg-6 d-flex" data-cp-group="pendingconf">
+            <div class="cp-reveal">
+                <div class="cp-card" data-cp-card="weeklyescalation">
+                    <div class="cp-card__icon"><i class="ti ti-alert-triangle"></i></div>
+                    <h3 class="cp-card__title" data-lang="cp-r-we-title">Pending Confirmation — Weekly Escalation (CEM/EDG)</h3>
+                    <p class="cp-card__desc" data-lang="cp-r-we-desc">
+                        Weekly (Friday) escalation of confirmations pending &gt; 30 days, split by LOB
+                        (CEM / EDG), grouped by banker and broken down by company. Builds it as an
+                        Outlook draft (.eml download) addressed to the saved recipients — open the file
+                        to review and send it yourself. Set the TO / CC once — they are saved and reused
+                        on every run.
+                    </p>
+                    <div class="cp-field">
+                        <label data-lang="cp-dm-to">TO</label>
+                        <input type="text" id="cp-we-to" class="form-control form-control-sm"
+                               placeholder="email1@jpmorgan.com; email2@jpmorgan.com">
+                    </div>
+                    <div class="cp-field">
+                        <label data-lang="cp-dm-cc">CC</label>
+                        <input type="text" id="cp-we-cc" class="form-control form-control-sm"
+                               placeholder="optional — separate with ;">
+                    </div>
+                    <div class="cp-card__foot">
+                        <span class="cp-card__meta">
+                            <i class="ti ti-mail"></i><span data-lang="cp-we-meta">CEM/EDG &gt; 30 days → .eml draft</span>
+                        </span>
+                        <button type="button" class="cp-run-btn" data-escalation-run>
+                            <i class="ti ti-player-play"></i>
+                            <span data-lang="cp-run">Run</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-lg-6 d-flex" data-cp-group="pendingconf">
+            <div class="cp-reveal">
+                <div class="cp-card" data-cp-card="signaturecollection">
+                    <div class="cp-card__icon"><i class="ti ti-writing-sign"></i></div>
+                    <h3 class="cp-card__title" data-lang="cp-r-sc-title">Pending Signature Confirmations — Collection</h3>
+                    <p class="cp-card__desc" data-lang="cp-r-sc-desc">
+                        Builds one editable e-mail draft per counterparty for confirmations pending
+                        signature (Pending Digital Signature / Pending Original), segregated from the
+                        Pending Confirmation base. TO = the counterparty's confirmation contacts;
+                        CC = that counterparty's bankers + Brazil OTC Ops + IS Trade Doc. Downloads a
+                        .zip of .eml drafts — nothing is sent automatically.
+                    </p>
+                    <div class="cp-field">
+                        <span class="cp-card__meta" id="cp-sc-summary" data-lang="cp-sc-loading">Loading…</span>
+                    </div>
+                    <div class="cp-card__foot">
+                        <span class="cp-card__meta">
+                            <i class="ti ti-download"></i><span data-lang="cp-sc-meta">One .eml per counterparty → .zip</span>
+                        </span>
+                        <button type="button" class="cp-run-btn" data-sigcoll-generate>
+                            <i class="ti ti-download"></i>
+                            <span data-lang="cp-sc-generate">Generate drafts</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Section: Economic Affirmation Routines ──────────────────── -->
+    <div class="cp-reveal mb-2" data-cp-hdr="affirmation">
+        <div class="cp-sec-label" data-lang="cp-sec-ea-label">Manual Confirmations</div>
+        <h2 class="cp-sec-title" data-lang="cp-sec-ea-title">Economic Affirmation Routines</h2>
+        <p class="cp-sec-desc" data-lang="cp-sec-ea-desc">
+            Routines around the manual confirmation workflow — chasing the validations and reporting the deals affirmed by hand.
+        </p>
+    </div>
+    <div class="row g-3 g-xl-4 mb-4 cp-cards">
+
+        <!-- Esta coluna carrega DOIS cards empilhados: Manual Deals EA e BACC
+             EA Metrics. Juntos eles preenchem a altura do Confirmations
+             Escalation, que divide a linha e e o card mais alto do painel —
+             sozinho, qualquer um dos dois esticava ate la e virava meia tela de
+             branco. `flex-column` e o que faz os `.cp-reveal` (que ja sao
+             `flex: 1`) repartirem a altura da linha.
+
+             Um card por `.cp-reveal`: o `.cp-reveal` e `display: flex` em LINHA,
+             entao dois cards dentro do mesmo ficam LADO A LADO. -->
+        <div class="col-12 col-lg-6 d-flex flex-column gap-3 gap-xl-4" data-cp-group="affirmation">
+            <div class="cp-reveal">
+                <div class="cp-card" data-cp-card="manualdealsea">
+                    <div class="cp-card__icon"><i class="ti ti-hand-stop"></i></div>
+                    <h3 class="cp-card__title" data-lang="cp-r-mdea-title">Manual Deals EA</h3>
+                    <p class="cp-card__desc" data-lang="cp-r-mdea-desc">
+                        E-mails the deals closed manually so the automatic EA does not consider
+                        them and the metrics team counts them apart. Two routines, each with its
+                        own reference date: <strong>NDF Other Publisher</strong> runs at 20:00
+                        Brasília with the deals of the day itself (external counterparties only),
+                        and <strong>NDF FWD Start</strong> runs at 16:30 on each deal's Strike Set
+                        Date, carrying the Deal Id of the vanilla re-booking. With no deal to
+                        report, no e-mail is sent.
+                    </p>
+                    <div class="cp-field">
+                        <label data-lang="cp-mdea-to">TO — BACC HUB</label>
+                        <input type="text" id="cp-mdea-to" class="form-control form-control-sm"
+                               placeholder="email1@jpmorgan.com; email2@jpmorgan.com">
+                    </div>
+                    <div class="cp-field">
+                        <label data-lang="cp-mdea-cc">CC</label>
+                        <input type="text" id="cp-mdea-cc" class="form-control form-control-sm"
+                               placeholder="email1@jpmorgan.com; email2@jpmorgan.com">
+                    </div>
+                    <!-- Desfecho do último disparo de CADA rotina. Sem isto a
+                         única evidência de que rodou é uma linha de log no
+                         servidor, e "não está funcionando" fica sem resposta. -->
+                    <div id="cp-mdea-status" class="cp-card__meta d-none"
+                         style="display:block;margin-top:.35rem;line-height:1.5;"></div>
+                    <div class="cp-card__foot">
+                        <span class="cp-card__meta">
+                            <i class="ti ti-calendar-time"></i><span data-lang="cp-mdea-meta">Other Publisher 20:00 &nbsp;·&nbsp; FWD Start 16:30 BRT</span>
+                        </span>
+                        <div class="cp-btn-row">
+                            <button type="button" class="cp-run-btn" data-mdea-run="otherpub">
+                                <i class="ti ti-player-play"></i>
+                                <span data-lang="cp-mdea-run-op">Run Other Publisher</span>
+                            </button>
+                            <button type="button" class="cp-run-btn" data-mdea-run="fwdstart">
+                                <i class="ti ti-player-play"></i>
+                                <span data-lang="cp-mdea-run-fs">Run FWD Start</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
             <div class="cp-reveal">
                 <div class="cp-card" data-cp-card="baccea">
@@ -748,7 +837,7 @@
             </div>
         </div>
 
-        <div class="col-12 col-lg-6 d-flex" data-cp-group="reporting">
+        <div class="col-12 col-lg-6 d-flex" data-cp-group="affirmation">
             <div class="cp-reveal">
                 <div class="cp-card" data-cp-card="confescalation">
                     <div class="cp-card__icon"><i class="ti ti-mail-forward"></i></div>
@@ -890,109 +979,46 @@
                 </div>
             </div>
         </div>
+    </div>
 
-        <!-- Manual Deals EA numa LINHA PRÓPRIA, sem card à direita.
-             Ele estava empilhado com o BACC EA, e os três juntos passavam da
-             altura do Confirmations Escalation, que divide a linha — a coluna
-             esticava e sobrava branco. Com dois cards de um lado e o
-             Escalation do outro, as duas colunas fecham na mesma altura.
+    <!-- ── Section: Reference Data Routines ──────────────────── -->
+    <div class="cp-reveal mb-2" data-cp-hdr="refdata">
+        <div class="cp-sec-label" data-lang="cp-sec-rd-label">Counterparties</div>
+        <h2 class="cp-sec-title" data-lang="cp-sec-rd-title">Reference Data Routines</h2>
+        <p class="cp-sec-desc" data-lang="cp-sec-rd-desc">
+            Routines that refresh the registers every other page reads.
+        </p>
+    </div>
+    <div class="row g-3 g-xl-4 mb-4 cp-cards">
 
-             Esta linha de baixo leva o Manual Deals EA à ESQUERDA e o MT300 à
-             DIREITA (embaixo do Escalation): são dois e-mails de rotina, e
-             sozinho cada um deixava metade da linha em branco. -->
-        <div class="col-12 col-lg-6 d-flex" data-cp-group="reporting">
-
-        <!-- Manual Deals EA — duas rotinas, dois horários, dois Run. Divide a
-             linha com o MT300: os dois são e-mails de rotina, e sozinho cada um
-             deixava metade da linha em branco.
-
-             ⚠️ `.cp-reveal` PRÓPRIO por card: o `.cp-reveal` é `display: flex`
-             em LINHA, então dois cards dentro do mesmo ficam LADO A LADO — foi
-             assim que este card nasceu desalinhado ao lado do BACC EA. -->
-        <div class="cp-reveal">
-            <div class="cp-card" data-cp-card="manualdealsea">
-                <div class="cp-card__icon"><i class="ti ti-hand-stop"></i></div>
-                <h3 class="cp-card__title" data-lang="cp-r-mdea-title">Manual Deals EA</h3>
-                <p class="cp-card__desc" data-lang="cp-r-mdea-desc">
-                    E-mails the deals closed manually so the automatic EA does not consider
-                    them and the metrics team counts them apart. Two routines, each with its
-                    own reference date: <strong>NDF Other Publisher</strong> runs at 20:00
-                    Brasília with the deals of the day itself (external counterparties only),
-                    and <strong>NDF FWD Start</strong> runs at 16:30 on each deal's Strike Set
-                    Date, carrying the Deal Id of the vanilla re-booking. With no deal to
-                    report, no e-mail is sent.
-                </p>
-                <div class="cp-field">
-                    <label data-lang="cp-mdea-to">TO — BACC HUB</label>
-                    <input type="text" id="cp-mdea-to" class="form-control form-control-sm"
-                           placeholder="email1@jpmorgan.com; email2@jpmorgan.com">
-                </div>
-                <div class="cp-field">
-                    <label data-lang="cp-mdea-cc">CC</label>
-                    <input type="text" id="cp-mdea-cc" class="form-control form-control-sm"
-                           placeholder="email1@jpmorgan.com; email2@jpmorgan.com">
-                </div>
-                <!-- Desfecho do último disparo de CADA rotina. Sem isto a
-                     única evidência de que rodou é uma linha de log no
-                     servidor, e "não está funcionando" fica sem resposta. -->
-                <div id="cp-mdea-status" class="cp-card__meta d-none"
-                     style="display:block;margin-top:.35rem;line-height:1.5;"></div>
-                <div class="cp-card__foot">
-                    <span class="cp-card__meta">
-                        <i class="ti ti-calendar-time"></i><span data-lang="cp-mdea-meta">Other Publisher 20:00 &nbsp;·&nbsp; FWD Start 16:30 BRT</span>
-                    </span>
-                    <div class="cp-btn-row">
-                        <button type="button" class="cp-run-btn" data-mdea-run="otherpub">
-                            <i class="ti ti-player-play"></i>
-                            <span data-lang="cp-mdea-run-op">Run Other Publisher</span>
-                        </button>
-                        <button type="button" class="cp-run-btn" data-mdea-run="fwdstart">
-                            <i class="ti ti-player-play"></i>
-                            <span data-lang="cp-mdea-run-fs">Run FWD Start</span>
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-        </div>
-
-        <div class="col-12 col-lg-6 d-flex" data-cp-group="reporting">
+        <div class="col-12 col-lg-6 d-flex" data-cp-group="refdata">
             <div class="cp-reveal">
-                <div class="cp-card" data-cp-card="mt300">
-                    <div class="cp-card__icon"><i class="ti ti-message-2"></i></div>
-                    <h3 class="cp-card__title" data-lang="cp-r-mt300-title">MT300</h3>
-                    <p class="cp-card__desc" data-lang="cp-r-mt300-desc">
-                        E-mails the day's NDF Vanilla trades whose counterparty is registered in
-                        Mapping &rsaquo; MT300, so the group can match them in DVP. Runs every
-                        ANBIMA business day at 19:30 Brasília; Run sends it now. With no trade
-                        from the registered counterparties, no e-mail is sent.
+                <div class="cp-card" data-cp-card="contacts">
+                    <div class="cp-card__icon"><i class="ti ti-address-book"></i></div>
+                    <h3 class="cp-card__title" data-lang="cp-r-contacts-title">Update Contacts</h3>
+                    <p class="cp-card__desc" data-lang="cp-r-contacts-desc">
+                        Imports the "CONTATO DE CLIENTES" spreadsheet and replaces each counterparty's
+                        contacts with the Active ones only (matched by SPN, leading zeros ignored).
+                        CGD and banking data are preserved.
                     </p>
                     <div class="cp-field">
-                        <label data-lang="cp-mt300-to">TO — BACC</label>
-                        <input type="text" id="cp-mt300-to" class="form-control form-control-sm"
-                               placeholder="email1@jpmorgan.com; email2@jpmorgan.com">
+                        <label data-lang="cp-contacts-file">Spreadsheet (.xlsx, .xlsm, .csv)</label>
+                        <input type="file" id="cp-contacts-file" accept=".xlsx,.xlsm,.csv"
+                               class="form-control form-control-sm">
                     </div>
-                    <div class="cp-field">
-                        <label data-lang="cp-mt300-cc">CC</label>
-                        <input type="text" id="cp-mt300-cc" class="form-control form-control-sm"
-                               placeholder="email1@jpmorgan.com; email2@jpmorgan.com">
-                    </div>
-                    <!-- Desfecho do último disparo automático: sem esta linha a
-                         única evidência de que a rotina rodou é o log. -->
-                    <div id="cp-mt300-status" class="cp-card__meta d-none"
-                         style="display:block;margin-top:.35rem;line-height:1.5;"></div>
                     <div class="cp-card__foot">
                         <span class="cp-card__meta">
-                            <i class="ti ti-calendar-time"></i><span data-lang="cp-mt300-meta">Daily 19:30 BRT &rarr; NDF Vanilla</span>
+                            <i class="ti ti-users"></i><span data-lang="cp-contacts-meta">Spreadsheet → Counterparties</span>
                         </span>
-                        <button type="button" class="cp-run-btn" data-mt300-run>
+                        <button type="button" class="cp-run-btn"
+                                data-upload-endpoint="/api/control-panel/import-contacts"
+                                data-file-input="cp-contacts-file">
                             <i class="ti ti-player-play"></i>
                             <span data-lang="cp-run">Run</span>
                         </button>
                     </div>
                 </div>
             </div>
-        </div>
         </div>
     </div>
 
@@ -2197,21 +2223,31 @@ document.addEventListener('click', function (e) {
             pages.forEach(function (u) {
                 if (u.indexOf('/control-panel#') === 0) allow[u.slice('/control-panel#'.length)] = 1;
             });
-            // Hide the grid cell (column) of each card the user can't reach.
-            var CP_GROUP = { cetip: 'filesaving', daily: 'filesaving', forecast: 'reporting', contacts: 'reporting', dailymetric: 'reporting', weeklyescalation: 'reporting', signaturecollection: 'reporting', dealsmonitor: 'reporting', pendingspreadsheet: 'reporting', confescalation: 'reporting', baccea: 'reporting', manualdealsea: 'reporting', mt300: 'reporting' };
+            function visivel(escopo) {
+                return Array.prototype.some.call(escopo.querySelectorAll('[data-cp-card]'),
+                    function (c) { return allow[c.getAttribute('data-cp-card')]; });
+            }
+            // Esconde o CARD, não a coluna: a coluna empilhada carrega dois, e
+            // esconder a coluna levava junto o card que a pessoa PODE ver.
             document.querySelectorAll('[data-cp-card]').forEach(function (card) {
                 if (!allow[card.getAttribute('data-cp-card')]) {
-                    var col = card.closest('.col-12') || card.closest('.cp-reveal') || card;
-                    col.hidden = true;
+                    (card.closest('.cp-reveal') || card).hidden = true;
                 }
             });
-            // Hide a section header once none of its group's cards remain.
+            // A coluna que ficou sem nenhum card visível sai depois, senão ela
+            // reserva metade da linha em branco.
+            document.querySelectorAll('.cp-cards > [class*="col-"]').forEach(function (col) {
+                if (!visivel(col)) col.hidden = true;
+            });
+            // Cabeçalho de seção sem card visível também sai. A seção de cada
+            // card sai do DOM (a .row logo abaixo do cabeçalho), e não de um mapa
+            // card → grupo escrito à mão: o mapa envelhecia calado no dia em que
+            // um card mudasse de seção, e aí um cabeçalho ficava sozinho na tela
+            // ou sumia com cards embaixo dele.
             document.querySelectorAll('[data-cp-hdr]').forEach(function (hdr) {
-                var g = hdr.getAttribute('data-cp-hdr');
-                var anyVisible = Array.prototype.some.call(document.querySelectorAll('[data-cp-card]'), function (c) {
-                    return CP_GROUP[c.getAttribute('data-cp-card')] === g && allow[c.getAttribute('data-cp-card')];
-                });
-                if (!anyVisible) { var col = hdr.closest('.col-12') || hdr; col.hidden = true; }
+                var row = hdr.nextElementSibling;
+                while (row && !row.classList.contains('cp-cards')) row = row.nextElementSibling;
+                if (!row || !visivel(row)) hdr.hidden = true;
             });
         })
         .catch(function () {});

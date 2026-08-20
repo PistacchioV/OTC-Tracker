@@ -397,9 +397,13 @@ check('   com o input correspondente no DOM',
       sorted(i for i in pares.values() if ('id="%s"' % i) not in CP), [])
 check('   e todos são modos que o servidor aceita',
       sorted(m for m in modos if m not in R._CE_MODES), [])
-check('o card aparece no mapa de grupos da tela',
-      'confescalation:' in CP.replace(' ', '').replace("'", '') or
-      'confescalation:' in CP, True)
+# A seção de cada card é o DOM, não um mapa card → grupo escrito à mão (que
+# envelhecia calado quando um card mudava de seção). O que prende isso para
+# TODOS os cards é o check_control_panel_sections; aqui basta o deste card.
+_sec = CP.split('data-cp-card="confescalation"', 1)[0]
+check('o card está dentro de uma seção do painel',
+      _sec.rfind('data-cp-hdr=') > 0 and
+      _sec.rfind('class="row g-3 g-xl-4 mb-4 cp-cards"') > _sec.rfind('data-cp-hdr='), True)
 
 print('\n%s' % ('TUDO OK' if not fails else 'FALHAS (%d): %r' % (len(fails), fails)))
 sys.exit(1 if fails else 0)

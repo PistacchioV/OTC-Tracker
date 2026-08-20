@@ -346,6 +346,20 @@ JS do menu, feed de notificações).
   `enforce_control_panel_cards` bloqueia o endpoint de cada rotina sem o card
   (`_CP_ENDPOINT_CARD`). Uma concessão legada da página inteira implica todos
   os cards.
+  - A página é dividida em **seis seções** — File-Saving, Intraday, Settlement
+    Reporting, Pending Confirmation, Economic Affirmation e Reference Data —, e
+    a seção de cada card **é o DOM**: o cabeçalho (`data-cp-hdr`), a
+    `.row.cp-cards` logo abaixo, e os cards dentro dela. Havia um mapa
+    card → grupo escrito à mão no JS, e ele envelhecia calado no dia em que um
+    card mudasse de seção: o cabeçalho ficava sozinho na tela, ou sumia com
+    cards embaixo dele. Card novo só precisa nascer dentro de uma seção.
+  - O que se esconde de quem não tem acesso é o **`.cp-reveal` do card**, e só
+    depois a coluna que ficou sem nenhum card visível: a coluna empilhada (dois
+    cards) levava junto o card que a pessoa PODE ver.
+  - O **`id` é o token** gravado no `Page_Access` (`/control-panel#<id>`) —
+    renomeá-lo revoga o acesso em silêncio. A **ordem** de
+    `_CONTROL_PANEL_CARDS` é a da tela, seção por seção, porque é ela que monta
+    a checklist do `/page-access` (HANDOFF §285).
 - **Tela de administração.** `/page-access` (admin/master) é o editor;
   `/api/page-access/<sid>` GET/POST persiste. A checklist é montada no
   navegador a partir do DOM vivo do menu, agrupada pela hierarquia completa,
@@ -1042,8 +1056,8 @@ que não dão erro nenhum quando se mexe:
 
 ### O BACC EA Metrics é a mesma esteira, extraída para o time de métricas
 
-O card **BACC EA Metrics** (Control Panel, empilhado com o de Pending
-Confirmations Spreadsheet Metrics — os dois juntos preenchem a altura do
+O card **BACC EA Metrics** (Control Panel › *Economic Affirmation Routines*,
+empilhado com o Manual Deals EA — os dois juntos preenchem a altura do
 Confirmations Escalation, que divide a linha) manda, todo dia útil ANBIMA às
 **16:00 BRT**, um e-mail com as operações manuais em anexo `.xlsx`. A fonte é a
 MESMA `manual_conf.load_all()` que o Track Confirmations mostra, com DOIS cortes
@@ -1306,6 +1320,16 @@ Intrag ficavam com o valor cru sempre que o notional estava na moeda fraca
 
 ### Outras
 
+- **`Sent` e `Success` só voltam para Amend por dado ECONÔMICO**
+  (`_ND_AMEND_KEEP_STATUS`). `Sent` é o arquivo de registro já enviado à B3 e vem
+  **antes** do `Success`, então a janela desprotegida era justamente a da espera
+  do retorno: um pull que trocasse o Other Book devolvia para a fila, sem
+  Checker, a operação que a mesa acabou de mandar registrar. A célula segue
+  **destacada** (`AmendChanged`) nos dois casos — o que não regride é o status —,
+  e os demais status caem para `Amend` sempre. A varredura do box de commodities
+  **não** tem essa proteção de propósito: a regra dela é a mesma do caminho do
+  navegador (`otc-fileupload.js`), e mexer num lado só faria o mesmo recap
+  amendar de dois jeitos (HANDOFF §283).
 - **O Strike do NDF FWD Start não derruba um Success para Amend.** O que a B3
   registra é o **Strike Set Offset** — o spread sobre uma taxa que só se conhece
   no dia do fixing; o Strike da linha é a projeção dessa taxa no momento do
@@ -1367,6 +1391,16 @@ Intrag ficavam com o valor cru sempre que o notional estava na moeda fraca
   a instância reinicia várias vezes ao dia, `_ndm_pending_catch_up()` também
   dispara na subida as janelas já passadas do dia; o arquivo de claim em disco
   é o que impede isso de virar e-mail repetido.
+- **Os três schedulers de IMPORTAÇÃO só trabalham entre 08:00 e 20:00 BRT** — a
+  API de NDF, a de FXO e a varredura do box de commodities. O **intervalo de
+  cada um continua sendo o dele** (20/60/30 min); o que a janela decide é se
+  aquele tique faz alguma coisa, e o `continue` fica **antes do `try`** — dentro
+  dele o poll já teria custado a ida à Athena. As duas pontas são **inclusivas**
+  (o tique das 20h em ponto ainda importa) e a janela é cadastrável em
+  `IMPORT_POLL_WINDOW`; valor malformado deixa a janela **sempre aberta** com
+  aviso no log, porque um `.env` digitado errado não pode desligar a importação
+  do dia em silêncio. Ela aparece no log de subida dos três, ao lado do
+  intervalo (HANDOFF §283).
 - **O Pending Status tem TRÊS donos, e eles não se pisam.** Quem escreve a coluna
   do Pending Confirmation depende do produto:
   1. **Só NDF Vanilla e NDF Other Publisher** caem na regra de **prazo e
@@ -1493,7 +1527,7 @@ Intrag ficavam com o valor cru sempre que o notional estava na moeda fraca
   fora da rede JPM o envio falha silenciosamente.
 - **API `getTrades` da Athena** (`apps/pages/athena_api.py`): importa New Deals
   de NDF/FXO (botão manual + schedulers no app, NDF a cada 20 min, FXO de hora
-  em hora). Precisa da rede JPM — fora dela o scheduler falha em silêncio
+  em hora, **os dois só entre 08:00 e 20:00 BRT** — ver §7). Precisa da rede JPM — fora dela o scheduler falha em silêncio
   (erros repetidos rebaixados para `debug`). `build_session()` marca
   `trust_env=False` **de propósito**: herdar o proxy corporativo foi o que
   causou o `WinError 10061` na máquina Windows do time. O SSO Kerberos no

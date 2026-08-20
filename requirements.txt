@@ -1,35 +1,66 @@
-flask==3.1.3
-Werkzeug==3.1.6
-jinja2==3.1.6
-flask_login==0.6.3
-flask_migrate==4.0.4
-WTForms==3.0.0
-flask_wtf==1.2.1
-flask_sqlalchemy==3.0.5
-sqlalchemy==2.0.21
-email_validator==2.1.1
-gunicorn==23.0.0
-waitress==3.0.1
-flask-restx==1.3.0
-python-dotenv==1.2.2
-extract-msg==0.55.0
-cryptography>=41.0.0
-pandas>=2.0.0
-fuzzywuzzy>=0.18.0
-python-Levenshtein>=0.25.0
-openpyxl>=3.1.0
-# .xls binário (Excel 97-2003) — o relatório Latam Desk Position chega nesse
-# formato; o openpyxl só lê .xlsx. xlrd 2.x é justamente o leitor de .xls.
-xlrd>=2.0.1
-matplotlib>=3.8.0
-seaborn>=0.13.0
-duckdb>=1.0.0
-flask-minify>=0.42
-requests>=2.31.0
-reportlab>=4.0.0
-# Lock de arquivo entre PROCESSOS para os bancos avulsos (apps/pages/database_access.py).
-# O `_duckdb_conn_lock` do routes.py protege as threads de UM processo; este protege o
-# arquivo quando um script de manutenção roda ao lado do servidor.
-portalocker>=2.7.0
-# Athena API Kerberos SSO — Windows-only, install on the JPM instance:
+# ==============================================================================
+# OTC Tracker - Python dependencies
+# Install with:  pip install -r requirements.txt
+# ==============================================================================
+
+# --- Web framework ------------------------------------------------------------
+Flask>=2.3
+Flask-SQLAlchemy>=3.0
+SQLAlchemy>=2.0
+Werkzeug>=2.3
+Jinja2>=3.1
+Flask-Migrate>=4.0        # importado no run.py (Migrate(app, db)) - sem ele o app nao sobe
+flask-minify>=0.42        # importado no run.py (Minify) - idem
+python-dotenv>=1.0        # run.py chama load_dotenv() antes de tudo
+
+# --- Data processing / Excel & CSV --------------------------------------------
+pandas>=2.0
+openpyxl>=3.1             # .xlsx read/write (load_workbook, styles)
+xlrd>=2.0.1               # .xls BINARIO (Excel 97-2003) - o Latam Desk Position vem assim
+extract-msg>=0.45         # parse Outlook .msg files
+duckdb>=0.10              # in-process analytical SQL
+portalocker==3.2.0        # cross-process shared/exclusive database file locks
+
+# --- HTTP ---------------------------------------------------------------------
+requests>=2.31            # Athena getTrades, relatorio EOD da Recon FXO, BCB/Yahoo, web push
+
+# --- PDF ----------------------------------------------------------------------
+reportlab>=4.0            # replicas dos documentos Word; import tardio (sem a lib o e-mail sai sem anexo)
+
+# --- Charts (Settlement Forecast e-mail) --------------------------------------
+matplotlib>=3.7
+seaborn>=0.13
+
+# --- Web Push (VAPID) ---------------------------------------------------------
+cryptography>=42.0
+
+# --- Date utilities -----------------------------------------------------------
+python-dateutil>=2.8      # dateutil.relativedelta
+
+# --- Fuzzy matching (comitente recon; either backend works) -------------------
+rapidfuzz>=3.0            # preferred, no C-extension build headaches
+# fuzzywuzzy>=0.18        # alternative backend (imported first, optional)
+# python-Levenshtein>=0.21 # speeds up fuzzywuzzy
+
+# --- Internal / vendored utility ----------------------------------------------
+# awmpy                   # private/internal - not on PyPI; install from internal artifact repo
+
+# ==============================================================================
+# Optional / environment-specific
+# ==============================================================================
+
+# Windows-only Outlook (MAPI) automation for auto box-scan & recon.
+# Degrades gracefully when absent (non-Windows / no Outlook).
+pywin32>=306; sys_platform == "win32"
+
+# Athena API Kerberos SSO - Windows-only, install on the JPM instance:
 # requests-negotiate-sspi>=0.5.2
+
+# Relational database drivers - only needed when DB_ENGINE is set
+# (falls back to SQLite otherwise). Uncomment the one you use:
+# PyMySQL>=1.1            # DB_ENGINE=mysql+pymysql
+# psycopg2-binary>=2.9    # DB_ENGINE=postgresql+psycopg2
+
+# --- Production WSGI server (recommended) -------------------------------------
+gunicorn>=21.2; sys_platform != "win32"
+waitress>=2.1; sys_platform == "win32"

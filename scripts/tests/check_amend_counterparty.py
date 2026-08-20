@@ -92,6 +92,41 @@ try:
     R._nd_api_amend(st, deal())
     check('nome novo no mesmo accronym mantem Success', st.get('Status'), 'Success')
 
+    print('\n== 2b. Sent tem a MESMA protecao do Success ==')
+    # `Sent` e o arquivo de registro ja enviado a B3, e vem ANTES do `Success`:
+    # a janela em que a operacao esperava o retorno era exatamente a que estava
+    # desprotegida. Trocar de book, ou passar a resolver a contraparte, devolvia
+    # para `Amend` sem Checker uma operacao que ja tinha saido da mesa.
+    check('a lista dos status protegidos', sorted(R._ND_AMEND_KEEP_STATUS),
+          ['Sent', 'Success'])
+
+    st = deal(Status='Sent', Checker='E930179', SPN='', Client='', TaxID='')
+    ch = R._nd_api_amend(st, deal())
+    check('Sent: os campos mudam', sorted(ch), ['Client', 'SPN', 'TaxID'])
+    check('Sent: o status e mantido', st.get('Status'), 'Sent')
+    check('Sent: a celula e destacada mesmo assim', st.get('AmendChanged'),
+          ['Client', 'SPN', 'TaxID'])
+    check('Sent: o Checker nao e perdido', st.get('Checker'), 'E930179')
+
+    st = deal(Status='Sent', OtherBook='ACME-BR')
+    R._nd_api_amend(st, deal(OtherBook='ACME-BR-2'))
+    check('Sent: troca de book e cosmetica', st.get('Status'), 'Sent')
+
+    st = deal(Status='Sent', LE='JPM', Acronym='ACMEBRA')
+    R._nd_api_amend(st, deal(LE='LAWTON', Acronym='OUTRACP', Client='OUTRA CONTRAPARTE SA',
+                             SPN='999', TaxID='00.000.000/0001-00'))
+    check('Sent: troca de entidade DERRUBA para Amend', st.get('Status'), 'Amend')
+
+    st = deal(Status='Sent', Notional='1.000,00')
+    R._nd_api_amend(st, deal(Notional='2.000,00'))
+    check('Sent: notional novo DERRUBA para Amend', st.get('Status'), 'Amend')
+
+    # Os demais status continuam caindo: so quem saiu da mesa e poupado.
+    for s in ('New', 'Amend', 'Pending', 'Error'):
+        st = deal(Status=s, OtherBook='ACME-BR')
+        R._nd_api_amend(st, deal(OtherBook='ACME-BR-2'))
+        check('%s continua indo para Amend' % s, st.get('Status'), 'Amend')
+
     print('\n== 3. Success CAI quando a contraparte muda de verdade ==')
     st = deal(Status='Success', LE='JPM', Acronym='ACMEBRA')
     R._nd_api_amend(st, deal(LE='LAWTON', Acronym='OUTRACP', Client='OUTRA CONTRAPARTE SA',

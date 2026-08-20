@@ -12369,3 +12369,155 @@ O `check_fi_ter` falhava **antes** dessa mudança (confirmado no HEAD anterior, 
 duas linhas de FWD Start sem janela de fixing: o golden legado ainda mandava a **Data de Fixing do
 Ativo Subjacente**, que o §249 passou a Blank pelo cadastro. Golden de montagem de linha acompanha a
 mudança de cadastro — quem não acompanha vira ruído vermelho que ninguém lê.
+
+---
+
+## §283 — Os schedulers de importação têm horário de mesa, e o `Sent` entrou na proteção do amend
+
+Dois pedidos da mesa no mesmo dia, e os dois são sobre **trabalho que a aplicação fazia sozinha fora
+de hora**.
+
+### A janela 08:00–20:00 BRT
+
+As três rotinas que trazem operação de fora rodavam **24 horas por dia**: a API de NDF a cada 20 min,
+a de FXO de hora em hora e a varredura do box de commodities a cada 30 min. De madrugada cada tique
+era uma ida à Athena — ou uma abertura do Outlook — para importar **zero** operação, porque a mesa
+não booka nesse horário.
+
+O **intervalo de cada uma continua sendo o dela**. O que a janela decide é se aquele tique faz
+alguma coisa: `_import_window_open()` é consultada no corpo do `while`, logo depois do `sleep` e
+**antes do `try`** — dentro do `try` o poll já teria acontecido, e a janela não teria economizado
+nada. É um `continue`, não um `sleep` calculado até a abertura: o laço continua tiquetaqueando no
+ritmo dele e a lógica cabe numa linha, sem um segundo relógio para manter sincronizado.
+
+Três detalhes que não dão erro nenhum:
+
+- **é horário de BRASÍLIA** (`_br_now`), como todo agendamento do app. A instância do time não roda
+  necessariamente em BRT, e uma janela medida no relógio do servidor abriria e fecharia na hora
+  errada, em silêncio — o mesmo defeito que parou o e-mail das 19h (§222);
+- **as duas pontas são inclusivas.** "Das 8h às 20h" tem de deixar passar o tique das 20h em ponto;
+  os intervalos não são alinhados com a hora cheia, e cortar em 19:59 perderia a última varredura do
+  dia sem que ninguém pedisse;
+- **cadastro malformado deixa a janela SEMPRE ABERTA**, com aviso no log. `_parse_hhmm_window`
+  devolve `None` para o que não entende, e `_import_window_open` responde `True`. O padrão de um
+  valor que não se lê é o comportamento anterior (importar): um `IMPORT_POLL_WINDOW` digitado errado
+  no `.env` não pode desligar a importação do dia inteiro sem dizer nada.
+
+A janela é `IMPORT_POLL_WINDOW` no `.env` (padrão `08:00-20:00`) e aparece no **log de subida** dos
+três schedulers, ao lado do intervalo — é ali que se descobre por que o poll das 6h da manhã não
+importou nada. Fim antes do começo (`20:00-08:00`) atravessa a meia-noite, em vez de nunca abrir.
+
+### `Sent` entrou em `_ND_AMEND_KEEP_STATUS`
+
+A regra do amend da API já poupava quem estava **`Success`**: só um dado **econômico** derruba uma
+operação registrada de volta para a fila (§176), e trocar o Other Book ou passar a resolver o
+accronym de uma perna interna destaca a célula e mantém o status.
+
+O **`Sent` estava de fora**, e era um buraco por onde passava exatamente o que a regra existe para
+evitar. `Sent` é o arquivo de registro **já enviado à B3**, e vem **antes** do `Success` — então a
+janela desprotegida era justamente a da espera do retorno. Nela, um pull da Athena que trocasse um
+book devolvia para `Amend` uma operação que a mesa acabou de mandar registrar: sem Checker, fora da
+lista de enviadas, e reconferida à toa.
+
+A lista virou a constante `_ND_AMEND_KEEP_STATUS = {'Success', 'Sent'}` e o resto da regra é o
+mesmo, de propósito:
+
+- mudança **econômica** (entidade, notional, strike, vencimento, direção…) derruba os dois do mesmo
+  jeito. O default continua sendo econômico — um campo em que ninguém pensou virando `Amend` custa
+  uma revisão, e o contrário custa uma operação registrada errada;
+- a célula segue **destacada** (`AmendChanged`) em qualquer um dos casos: o que não regride é o
+  status, não o aviso;
+- os demais status (`New`, `Amend`, `Pending`, `Error`) continuam caindo para `Amend` sempre — quem
+  ainda não saiu da mesa não tem o que preservar.
+
+**O que NÃO mudou, e é uma decisão:** a varredura do box de commodities (`_box_persist_deals`) tem a
+regra própria dela — qualquer campo diferente vira `Amend` e limpa o Checker. Ela está documentada
+como sendo "a MESMA regra do caminho do navegador" (`otc-fileupload.js`), e mexer só no servidor
+faria o mesmo recap e-mail amendar de um jeito pelo box scan e de outro pelo upload manual. Quem
+quiser a proteção lá tem de mover as duas pontas juntas.
+
+---
+
+## §284 — `new-otc-deploy.bat`: a cópia virou lista branca, e `static\data` não sobe
+
+O script que cria a próxima versão no share (`otc-source\vN` + o `link.txt` apontando para ela)
+copiava a origem inteira com um `robocopy /E`. Passou a copiar por **lista branca**: duas variáveis
+no topo — `DEPLOY_DIRS` (`pages static templates __pycache__`) e `DEPLOY_FILES` (`__init__.py`
+`config.py` `db.sqlite3` `db.sqlite3.lock` `requirements.txt` `run.py`) — e nada fora delas.
+
+**`static\data` fica de fora.** É o dado VIVO da instância: os mappings editados pela tela, o DuckDB
+de usuários, os arquivos-dia do New Deals, os caches. Ele pertence à pasta que roda; uma versão
+carregando a cópia da máquina de desenvolvimento sobrescreveria o que a mesa cadastrou.
+
+Quatro coisas que não dão erro nenhum:
+
+- **a exclusão é por CAMINHO COMPLETO** (`/XD "%ORIGIN_PATH%\static\data"`). Um `/XD data` casaria
+  com QUALQUER pasta chamada `data` em qualquer nível — e há várias dentro de `static\plugins` —, e
+  a versão subiria com pedaços de biblioteca faltando;
+- **pasta ou arquivo novo na aplicação tem de entrar na lista**, senão a versão sobe sem ele. É o
+  preço da lista branca, e é por isso que o script confere os itens contra a origem **antes** de
+  copiar e **avisa** o que não achou. O aviso não derruba o deploy: o `db.sqlite3.lock` só existe
+  com a aplicação rodando;
+- **a cópia agora são várias chamadas de robocopy**, uma por pasta mais uma para os arquivos da
+  raiz, e o código de saída é conferido em cada uma (`GEQ 8` = falha). Falhando no meio, a `vN`
+  parcial fica no share e o `link.txt` **não** é atualizado — a mensagem de erro imprime o caminho a
+  remover, porque a próxima corrida contaria a pasta parcial como versão existente e criaria a
+  `vN+1` ao lado;
+- o arquivo vai com **CRLF**, ao contrário dos outros dois `.bat` do repo: é um script com blocos
+  `for`/`if` aninhados, e o `cmd` é sabidamente sensível a quebra de linha só-LF nesse formato.
+
+---
+
+## §285 — O Control Panel virou seis seções, e a seção de cada card passou a ser o DOM
+
+"Na página Control Panel já está ficando um pouco bagunçado com muitos cards." Eram **duas**
+seções para treze cards — *File-Saving Routines* com dois e *Settlement Reporting* com os outros
+**onze**, que na prática era um título só em cima de uma parede de cards sem relação entre si (a
+importação de contatos ao lado da escalação de confirmações ao lado do MT300).
+
+### As seis seções, e o que caiu em cada uma
+
+| Seção | Rótulo | Cards |
+|---|---|---|
+| **File-Saving Routines** | Daily Settlements | Save CETIP Files · Save Daily Settlement Files |
+| **Intraday Routines** | Trading Day | Deals Monitor — Pending Action |
+| **Settlement Reporting** | Forecasts & Reports | Settlement Forecast · MT300 |
+| **Pending Confirmation Routines** | Outstanding Confirmations | Daily Metric · Pending Confirmations Spreadsheet Metrics · Weekly Escalation (CEM/EDG) · Signature Collection |
+| **Economic Affirmation Routines** | Manual Confirmations | Manual Deals EA · BACC EA Metrics · Confirmations Escalation |
+| **Reference Data Routines** | Counterparties | Update Contacts |
+
+O MT300 ficou em *Settlement Reporting* porque o que ele manda é o lote do dia para o grupo
+**casar em DVP** — é matching de liquidação, não afirmação. O Deals Monitor abre a *Intraday*
+sozinho de propósito: é a rotina que olha o pregão do dia, e é ali que a próxima entra.
+
+### O mapa card → grupo saiu do JS
+
+O bloco *Per-user card access* escondia os cabeçalhos consultando um `CP_GROUP` **escrito à mão**
+com os treze cards. Ele estava certo enquanto ninguém mexesse no layout — e este commit é
+exatamente o que ele não sobreviveria: um card mudando de seção deixaria o cabeçalho antigo
+sozinho na tela, ou faria o novo sumir com cards embaixo dele, sem erro nenhum.
+
+Agora a seção sai do **DOM**: do cabeçalho (`data-cp-hdr`) anda-se até a `.row.cp-cards` seguinte, e
+os cards dela são os cards da seção. Uma fonte de verdade, e card novo só precisa nascer dentro de
+uma seção.
+
+No mesmo bloco, dois defeitos que vinham junto:
+
+- **escondia a COLUNA, não o card.** `card.closest('.col-12')` numa coluna empilhada (dois cards)
+  levava junto o card que a pessoa PODE ver — quem tivesse só o BACC EA Metrics perdia os dois. Hoje
+  esconde-se o `.cp-reveal` do card, e a coluna sai **depois**, se tiver ficado sem nada visível
+  (senão ela reserva meia linha em branco);
+- a região tinha um **`</div>` órfão** (o `page_content` fechava em −1). O navegador tolerava; a
+  reconstrução da região o levou junto, e o bloco agora fecha em 0.
+
+### Duas coisas que não dão erro nenhum
+
+- **O `id` do card é o token do `Page_Access`** (`/control-panel#<id>`). Reagrupar é livre;
+  renomear um `id` revoga o acesso de quem já o tinha, em silêncio. Nada foi renomeado aqui.
+- **A ordem de `_CONTROL_PANEL_CARDS` é a da tela**, seção por seção — é ela que monta a checklist
+  do `/page-access`, e uma ordem diferente da do painel faz quem concede o acesso procurar o card
+  numa lista que não se parece com a página que ele vai liberar.
+
+O `check_control_panel_sections.py` prende tudo isso: registro × template nos dois sentidos, seção
+sem card e card sem seção, os três rótulos de cada seção nos **três** idiomas, a ordem do registro e
+o JS sem o mapa à mão.

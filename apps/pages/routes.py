@@ -343,20 +343,32 @@ _NAV_URLS = _load_nav_urls()
 # Control Panel is access-controlled at the card level: instead of the single
 # "/control-panel" page grant, each routine card can be granted on its own. Tokens
 # are stored in the same allowlist as page URLs ("/control-panel#<id>").
+#
+# A ORDEM aqui é a da tela, seção por seção — é ela que monta a checklist do
+# /page-access, e uma ordem diferente da do painel faz quem concede o acesso
+# procurar o card numa lista que não se parece com a página que ele vai liberar.
+# O que NÃO pode mudar é o `id`: ele é o token gravado no `Page_Access` de cada
+# usuário (`/control-panel#<id>`), então renomeá-lo revoga o acesso em silêncio.
 _CONTROL_PANEL_CARDS = [
+    # File-Saving Routines
     {'id': 'cetip',       'label': 'Save CETIP Files'},
     {'id': 'daily',       'label': 'Save Daily Settlement Files'},
+    # Intraday Routines
+    {'id': 'dealsmonitor', 'label': 'Deals Monitor — Pending Action'},
+    # Settlement Reporting
     {'id': 'forecast',    'label': 'Settlement Forecast'},
-    {'id': 'contacts',    'label': 'Update Contacts'},
+    {'id': 'mt300',       'label': 'MT300'},
+    # Pending Confirmation Routines
     {'id': 'dailymetric', 'label': 'Daily Metric — Outstanding Confirmation Brazil OTC'},
+    {'id': 'pendingspreadsheet', 'label': 'Pending Confirmations Spreadsheet Metrics'},
     {'id': 'weeklyescalation', 'label': 'Pending Confirmation — Weekly Escalation (CEM/EDG)'},
     {'id': 'signaturecollection', 'label': 'Pending Signature Confirmations — Collection'},
-    {'id': 'dealsmonitor', 'label': 'Deals Monitor — Pending Action'},
-    {'id': 'pendingspreadsheet', 'label': 'Pending Confirmations Spreadsheet Metrics'},
-    {'id': 'confescalation', 'label': 'Confirmations Escalation'},
-    {'id': 'baccea',      'label': 'BACC EA Metrics'},
+    # Economic Affirmation Routines
     {'id': 'manualdealsea', 'label': 'Manual Deals EA'},
-    {'id': 'mt300',       'label': 'MT300'},
+    {'id': 'baccea',      'label': 'BACC EA Metrics'},
+    {'id': 'confescalation', 'label': 'Confirmations Escalation'},
+    # Reference Data Routines
+    {'id': 'contacts',    'label': 'Update Contacts'},
 ]
 _CP_CARD_TOKENS = {'/control-panel#' + c['id'] for c in _CONTROL_PANEL_CARDS}
 # API endpoint → the card it belongs to (for server-side enforcement).
@@ -18637,6 +18649,70 @@ def _br_now():
     return datetime.now(_BR_TZ).replace(tzinfo=None)
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# Janela dos schedulers de importação
+# ──────────────────────────────────────────────────────────────────────────
+# As três rotinas que trazem operação de fora — a API de NDF, a de FXO e a
+# varredura do box de commodities — só valem enquanto a mesa opera. O INTERVALO
+# de cada uma continua sendo o dela (20 min, 60 min, 30 min); o que a janela
+# decide é se aquele tique faz alguma coisa. Fora dela, cada poll era uma ida à
+# Athena — ou uma abertura do Outlook — para importar zero operação.
+#
+# A janela é em horário de BRASÍLIA (`_br_now`), como todo agendamento do app:
+# a instância do time não roda necessariamente em BRT, e uma janela medida no
+# relógio do servidor abriria e fecharia na hora errada, em silêncio.
+_IMPORT_POLL_WINDOW = os.getenv('IMPORT_POLL_WINDOW', '08:00-20:00')
+
+
+def _parse_hhmm_window(txt):
+    """'08:00-20:00' → (480, 1200), em minutos desde a meia-noite.
+
+    Devolve None quando não dá para entender o valor — e aí a janela fica
+    SEMPRE ABERTA, que é o comportamento anterior: um `.env` malformado não
+    pode desligar a importação do dia sem ninguém pedir."""
+    def _min(parte):
+        h, _, mi = str(parte).strip().partition(':')
+        h, mi = int(h), int(mi or 0)
+        if not (0 <= h <= 23 and 0 <= mi <= 59):
+            raise ValueError(parte)
+        return h * 60 + mi
+
+    try:
+        ini, _, fim = str(txt or '').strip().partition('-')
+        return _min(ini), _min(fim)
+    except (ValueError, TypeError):
+        log.warning('[scheduler] IMPORT_POLL_WINDOW inválida (%r) — os '
+                    'schedulers de importação rodam o dia inteiro', txt)
+        return None
+
+
+_IMPORT_WINDOW = _parse_hhmm_window(_IMPORT_POLL_WINDOW)
+
+
+def _import_window_open(now=None):
+    """Estamos dentro da janela de importação?
+
+    As duas pontas são INCLUSIVAS — "das 8h às 20h" tem de deixar passar o tique
+    das 20h em ponto. Janela com o fim antes do começo (`20:00-08:00`) atravessa
+    a meia-noite, em vez de nunca abrir."""
+    if not _IMPORT_WINDOW:
+        return True
+    ini, fim = _IMPORT_WINDOW
+    agora = now or _br_now()
+    cur = agora.hour * 60 + agora.minute
+    return (ini <= cur <= fim) if ini <= fim else (cur >= ini or cur <= fim)
+
+
+def _import_window_label():
+    """Como a janela aparece no log de subida de cada scheduler — é ali que se
+    descobre por que o poll das 6h da manhã não importou nada."""
+    if not _IMPORT_WINDOW:
+        return '24h'
+    return '{:02d}:{:02d}-{:02d}:{:02d}'.format(
+        _IMPORT_WINDOW[0] // 60, _IMPORT_WINDOW[0] % 60,
+        _IMPORT_WINDOW[1] // 60, _IMPORT_WINDOW[1] % 60)
+
+
 _pc_scheduler_started = False
 _pc_scheduler_lock = threading.Lock()
 
@@ -19684,6 +19760,24 @@ _ND_AMEND_COSMETIC = {'OtherBook', 'TradingBook'}
 # `AmendChanged` como qualquer outro); o que não regride é o status.
 _ND_AMEND_COSMETIC_BY_PRODUCT = {'fwd-start': {'Strike'}}
 
+# Os status em que a operação JÁ SAIU DA MESA, e por isso só um dado ECONÔMICO
+# a devolve para a fila de Amend. `Sent` é o arquivo de registro enviado à B3 e
+# `Success` é o retorno com o B3 ID — nos dois casos a operação está registrada
+# (ou a caminho), e o trabalho de conferir já foi feito por alguém.
+#
+# O `Sent` estava de fora, e era um buraco por onde passava exatamente o que a
+# regra do `Success` existe para evitar: a Athena troca o Other Book, ou o
+# Reference Data passa a resolver o accronym de uma perna interna, e a operação
+# que a mesa acabou de mandar para a B3 voltava sozinha para `Amend` — sem
+# Checker, fora da lista de enviadas, e reconferida à toa. E o `Sent` vem ANTES
+# do `Success`, então a janela em que isso acontecia era justamente a de espera
+# do retorno da B3.
+#
+# O que NÃO muda: mudança econômica derruba os dois do mesmo jeito, e a célula
+# segue destacada (`AmendChanged`) em qualquer um dos casos — o que não regride
+# é o status.
+_ND_AMEND_KEEP_STATUS = {'Success', 'Sent'}
+
 
 def _nd_amend_entity(acr):
     """Entidade de um accronym FX Cash. Duas fontes, nessa ordem: a LE cadastrada
@@ -19765,15 +19859,16 @@ def _nd_api_amend(stored, incoming, product=''):
     lista de campos alterados.
 
     Status: a mudança normalmente joga o deal para 'Amend'. A exceção é quem já
-    está **Success** — esse só cai para Amend quando alguma informação
-    **econômica** mudou (contraparte/entidade, vencimento, notional, strike,
-    compra × venda, put × call, prêmio, data de pagamento do prêmio…). Mexer só
-    no Other Book, ou trocar o accronym dentro da mesma entidade, destaca a
-    célula e mantém o Success: são detalhes de booking, e devolver para a fila
-    uma operação já registrada gera retrabalho à toa."""
+    saiu da mesa — **Sent** e **Success** (`_ND_AMEND_KEEP_STATUS`) —, que só cai
+    para Amend quando alguma informação **econômica** mudou (contraparte/
+    entidade, vencimento, notional, strike, compra × venda, put × call, prêmio,
+    data de pagamento do prêmio…). Mexer só no Other Book, ou trocar o accronym
+    dentro da mesma entidade, destaca a célula e mantém o status: são detalhes de
+    booking, e devolver para a fila uma operação já enviada à B3 gera retrabalho
+    à toa."""
     if str(stored.get('Status', '') or '').strip() == 'Canceled':
         return []
-    was_success = str(stored.get('Status', '') or '').strip() == 'Success'
+    registrado = str(stored.get('Status', '') or '').strip() in _ND_AMEND_KEEP_STATUS
     # Foto do deal ANTES de qualquer escrita: o loop já gravou os campos
     # anteriores em `stored`, então perguntar a ele "a LE mudou?" no meio do
     # caminho responderia sempre que não.
@@ -19790,7 +19885,7 @@ def _nd_api_amend(stored, incoming, product=''):
             if _nd_amend_is_economic(k, old, new, before, incoming, product):
                 economic = True
     if changed:
-        if economic or not was_success:
+        if economic or not registrado:
             stored['Status'] = 'Amend'
         prev = stored.get('AmendChanged') or []
         stored['AmendChanged'] = sorted(set(prev) | set(changed))
@@ -20059,6 +20154,8 @@ def _fxo_api_scheduler_loop():
     last_err = None
     while True:
         time.sleep(max(60, _FXO_API_POLL_MIN * 60))
+        if not _import_window_open():
+            continue                    # fora do horário da mesa — `_import_window_open`
         try:
             res = _fxo_api_pull()
             if res.get('imported'):
@@ -20086,7 +20183,8 @@ def _fxo_api_start_scheduler():
         _fxo_api_scheduler_started = True
     threading.Thread(target=_fxo_api_scheduler_loop,
                      name='fxo-athena-api-scheduler', daemon=True).start()
-    log.info('[opt-fxo] Athena API scheduler started (every %d min)', _FXO_API_POLL_MIN)
+    log.info('[opt-fxo] Athena API scheduler started (every %d min · janela %s BRT)',
+             _FXO_API_POLL_MIN, _import_window_label())
 
 
 try:
@@ -22839,6 +22937,8 @@ def _ndf_api_scheduler_loop():
     last_err = None
     while True:
         time.sleep(max(60, _NDF_API_POLL_MIN * 60))
+        if not _import_window_open():
+            continue                    # fora do horário da mesa — `_import_window_open`
         try:
             res = _ndf_api_pull()
             imported = sum(t.get('imported', 0) for t in (res.get('targets') or {}).values())
@@ -22867,7 +22967,8 @@ def _ndf_api_start_scheduler():
         _ndf_api_scheduler_started = True
     threading.Thread(target=_ndf_api_scheduler_loop,
                      name='ndf-athena-api-scheduler', daemon=True).start()
-    log.info('[ndf] Athena API scheduler started (every %d min)', _NDF_API_POLL_MIN)
+    log.info('[ndf] Athena API scheduler started (every %d min · janela %s BRT)',
+             _NDF_API_POLL_MIN, _import_window_label())
 
 
 try:
@@ -26034,6 +26135,8 @@ def _box_scan_scheduler_loop():
     last_err = {}
     while True:
         time.sleep(max(60, _BOX_SCAN_POLL_MIN * 60))
+        if not _import_window_open():
+            continue                    # fora do horário da mesa — `_import_window_open`
         for product in _BOX_PRODUCTS:
             try:
                 _box_scan_pull(product)
@@ -26060,8 +26163,8 @@ def _box_scan_start_scheduler():
         _box_scan_scheduler_started = True
     threading.Thread(target=_box_scan_scheduler_loop,
                      name='box-scan-scheduler', daemon=True).start()
-    log.info('[boxscan] scheduler do box iniciado (a cada %d min · NDF Comm e Opt Comm)',
-             _BOX_SCAN_POLL_MIN)
+    log.info('[boxscan] scheduler do box iniciado (a cada %d min · janela %s BRT '
+             '· NDF Comm e Opt Comm)', _BOX_SCAN_POLL_MIN, _import_window_label())
 
 
 try:
