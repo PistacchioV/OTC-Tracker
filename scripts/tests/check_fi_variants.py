@@ -95,8 +95,11 @@ def main():
 
     variant = copy.deepcopy(base)
     # O par LAWTON x JPM é o que o gerador de fato produz para a linha
-    # LE MGT × cliente JPM (a perna espelhada do Lawton) — 'MGT x JPM' só
-    # existe nas páginas sem geração de arquivo (Vanilla, via pairSimple).
+    # LE MGT × cliente JPM (a perna espelhada do Lawton). O `pairSimple`
+    # ('MGT x JPM') continua no espelho do navegador, mas nenhuma página o usa
+    # desde que o Vanilla passou a gerar arquivo — lá o preview escolhe a
+    # variante pela mesma regra do gerador, senão a tela mostra um layout e a
+    # B3 recebe outro.
     variant['key'] = 'termo-multiclasses--lawton-x-jpm'
     variant['name'] = base['name'] + ' — LAWTON x JPM'
     variant['base_key'] = 'termo-multiclasses'

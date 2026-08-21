@@ -34846,12 +34846,15 @@ def api_generic_nd_send_conecta(product):
     data = request.get_json(silent=True) or {}
     # `download: true` (o botão do preview) devolve o CONTEÚDO do arquivo em
     # vez de gravar no Batch Conecta — mesmo gerador, byte a byte, sem
-    # notificação e IGNORANDO o status do deal. É também o único caminho em
-    # que o VANILLA entra: o registro dele é de outra ferramenta, então o app
-    # monta o arquivo (template/variante da própria página) sem nunca
-    # escrevê-lo no share.
+    # notificação e IGNORANDO o status do deal.
+    #
+    # O VANILLA gera arquivo como os outros dois. Ele já nascia no download (o
+    # registro dele era de outra ferramenta e o app só montava o arquivo), e a
+    # mesa passou a registrar por aqui: o que muda é o DESTINO, não o gerador —
+    # a mesma linha, o mesmo template do File Interpreter e as mesmas linhas de
+    # verificação, agora gravadas no Batch Conecta.
     download = bool(data.get('download'))
-    valid = ('fwd-start', 'other-publishers') + (('vanilla',) if download else ())
+    valid = ('fwd-start', 'other-publishers', 'vanilla')
     if product not in valid:
         return jsonify({'ok': False, 'error': 'send-conecta not available for this product'}), 404
     is_fwd = product == 'fwd-start'
@@ -34896,7 +34899,11 @@ def api_generic_nd_send_conecta(product):
                 bucket, re.sub(r'<[^>]+>', '', str(deal.get('Client', '') or '')).strip())
             dest['lines'].append(line)
             counts[fname] += 1
-            if download and product == 'vanilla':
+            # As linhas de verificação (tipo 2) do Vanilla saem nos DOIS
+            # caminhos. Emitir só no download faria o arquivo baixado para
+            # conferência diferir do que vai para a B3 — divergência que não
+            # aparece em lugar nenhum até a B3 recusar o registro.
+            if product == 'vanilla':
                 dest['lines'].extend(
                     _vanilla_verification_lines(deal, page_url, dest['pair']))
         # Quebra visão banco × visão Lawton: a linha do banco contra o Lawton

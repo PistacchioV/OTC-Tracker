@@ -1600,10 +1600,13 @@ Intrag ficavam com o valor cru sempre que o notional estava na moeda fraca
   cópia completa (mais campos podem virar Fixed — conta, Participante do
   header, que aí dispensa o `b3-accounts`) e pode cadastrar o **`file_name`**
   do arquivo gerado (em branco = `{PREFIX}_{BUCKET}.txt` de sempre). Três
-  coisas que não dão erro nenhum: o par do FWD Start/OP/Commodities usa a
-  regra do BUCKET (linha com cliente JPM é a perna espelhada → `LAWTON x
-  JPM`), enquanto o Vanilla — que não gera arquivo — usa LE × contraparte
-  (`pairSimple`), então `MGT x JPM` só casa lá; a cópia da regra no navegador
+  coisas que não dão erro nenhum: o par das **quatro** páginas que geram
+  arquivo (FWD Start, Other Publisher, Commodities e agora o **Vanilla**) usa a
+  regra do BUCKET — linha com cliente JPM é a perna espelhada → `LAWTON x JPM`
+  —, e o preview de cada uma escolhe a variante por essa MESMA regra, senão a
+  tela mostra um layout e a B3 recebe outro. O `pairSimple` (LE × contraparte,
+  `MGT x JPM`) segue no espelho do navegador mas nenhuma página o usa: ele era
+  do tempo em que o Vanilla só exibia. A cópia da regra no navegador
   é o `static/js/fi-ter-pair.js` e `check_fi_variants.py` prova que as duas
   concordam; e o modal de criação **achata o `source_by_page`** da página
   escolhida nos campos planos — sem isso o override herdado do base venceria
@@ -1641,9 +1644,10 @@ Intrag ficavam com o valor cru sempre que o notional estava na moeda fraca
   **Cotação para o Vencimento (campo 15 do TER) EFETIVA** (> 0 — Fixed da
   variante ou fórmula) **desloca as datas das linhas de verificação (tipo 2)
   N dias úteis para frente**, no calendário do deal: no gerador do NDF
-  Commodities, no download do Vanilla (o único caminho que emite tipo 2 no
-  genérico) e nos previews das duas páginas — hoje o campo nasce em branco,
-  então nada muda sem cadastro.
+  Commodities, no Vanilla (o único das três páginas genéricas que emite tipo 2,
+  e emite nos DOIS caminhos — download e Send Conecta, senão o arquivo baixado
+  para conferência difere do que vai para a B3) e nos previews das duas
+  páginas — hoje o campo nasce em branco, então nada muda sem cadastro.
 - **Notificação nova exige o rótulo `page` nos TRÊS mapas de destino** —
   `_NOTIF_PAGE_URL` (routes.py), `PAGE_URL` do `partials/topbar.html` e do
   `static/js/sw-push.js`. Sem a entrada o aviso aparece normal e o clique não

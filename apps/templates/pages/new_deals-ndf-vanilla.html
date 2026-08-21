@@ -4186,14 +4186,16 @@ $(document).ready(function() {
     }
     fiLoadSpec();
 
-    /* Spec efetivo de UM deal: a variante do par de pernas (LE × contraparte)
-       cadastrada no File Interpreter vence; sem variante vale o base. Esta
-       página não gera o arquivo, então o par é o que a mesa lê — LE ×
-       contraparte, sem a visão espelhada do Lawton (pairSimple). */
+    /* Spec efetivo de UM deal: a variante do par de pernas cadastrada no File
+       Interpreter vence; sem variante vale o base. O par é o do BUCKET
+       (`FiTer.pick`), o mesmo que o gerador usa — desde que esta página passou
+       a escrever o arquivo (Send Conecta), o preview tem de escolher a MESMA
+       variante que o arquivo, senão a tela mostra um layout e a B3 recebe
+       outro. Era `pairSimple`, de quando o app aqui só exibia. */
     function fiSpecFor(deal) {
         if (!window.FiTer || !FI_TPLS.length) return FI_SPEC;
-        return FiTer.pickByPair(FI_TPLS, 'termo-multiclasses',
-                                FiTer.pairSimple(deal && deal.LE, deal && deal.Client)) || FI_SPEC;
+        return FiTer.pick(FI_TPLS, 'termo-multiclasses',
+                          deal && deal.LE, deal && deal.Client) || FI_SPEC;
     }
 
     function fiBlock(id, deal) {
