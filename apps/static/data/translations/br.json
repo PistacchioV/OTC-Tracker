@@ -1862,5 +1862,8 @@
   "map-col-dce-ref-code": "Código de Referência",
   "map-col-dce-domain": "Domínio",
   "map-col-dce-category": "Categoria",
-  "map-col-dce-athena": "Athena Index Name"
+  "map-col-dce-athena": "Athena Index Name",
+  "fi-view-edit": "Editar",
+  "fi-view-confirm": "Confirmar",
+  "fi-view-close": "Fechar"
 }

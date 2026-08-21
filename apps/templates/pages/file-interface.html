@@ -462,6 +462,33 @@
         </div>
     </div>
 
+    <!-- ══════════ Modal: ver/editar o template de uma variante ══════════ -->
+    <div class="modal fade" id="fiTplViewModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content liquid-glass">
+                <div class="modal-header py-2">
+                    <h5 class="modal-title fs-6"><i class="ti ti-template me-1"></i><span id="fiTplViewName">—</span></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="d-flex flex-wrap gap-2 mb-3 align-items-center" id="fiTplViewMeta"></div>
+                    <div id="fiTplViewBody"></div>
+                </div>
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">
+                        <i class="ti ti-x me-1"></i><span data-lang="fi-view-close">Close</span>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-info bg-gradient" id="fiTplViewEdit">
+                        <i class="ti ti-pencil me-1"></i><span data-lang="fi-view-edit">Edit</span>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-success bg-gradient" id="fiTplViewConfirm" style="display:none;">
+                        <i class="ti ti-check me-1"></i><span data-lang="fi-view-confirm">Confirm</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- ══════════ Modal: Create / Edit template (builder) ══════════ -->
     <div class="modal fade" id="fiBuilderModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
@@ -603,6 +630,19 @@
         return m ? m.label : key;
     }
 
+    // Nome de exibição de uma variante SEM o par no fim ('Termo … — MGT x JPM'
+    // → 'Termo …'): o par aparece uma vez só, no badge/chip ao lado — repetido
+    // no texto ele saía duas vezes em toda listagem.
+    function variantDisplayName(m) {
+        var nm = String(m.name || m.key || '');
+        if (m.le_pair) {
+            var re = new RegExp('\\s*[—–-]\\s*' +
+                String(m.le_pair).replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*$', 'i');
+            nm = nm.replace(re, '');
+        }
+        return nm;
+    }
+
     // ── API ──────────────────────────────────────────────────────────────────
     function apiList() {
         return fetch('/api/file-interface/templates')
@@ -674,7 +714,7 @@
                    (!CUR_PAGE && m.key === CUR_KEY ? ' is-active' : '') + (live ? ' is-live' : '') +
                    '" data-key="' + esc(m.key) + '" title="' + esc(m.name) + '">' +
                    '<span class="fi-tpl-dot"></span>' +
-                   '<span class="fi-tpl-name">' + esc(m.name) + '</span>' +
+                   '<span class="fi-tpl-name">' + esc(variantDisplayName(m)) + '</span>' +
                    (variant && m.le_pair
                         ? '<span class="fi-tpl-pair">' + esc(m.le_pair) + '</span>'
                         : '<span class="fi-tpl-badge">' + (m.fields || 0) + '</span>') + '</a>';
@@ -803,7 +843,7 @@
             ? pagesFromList().filter(function (p) { return p.url === CUR_PAGE; })[0]
             : null;
         document.getElementById('fiCurTitle').textContent =
-            pageEntry ? pageEntry.label : (tpl.name || tpl.key);
+            pageEntry ? pageEntry.label : variantDisplayName(tpl);
         document.getElementById('fiCurDesc').textContent = tpl.description || '';
         var live = tpl.status === 'active';
         document.getElementById('fiCurStatus').innerHTML =
@@ -1268,7 +1308,7 @@
         document.getElementById('fiPageTplsSel').innerHTML = tpls.map(function (m) {
             var tag = m.le_pair ? m.le_pair : t('fi-var-default', 'Default');
             return '<option value="' + esc(m.key) + '"' + (m.key === preKey ? ' selected' : '') + '>' +
-                   esc(m.name) + ' — ' + esc(tag) + '</option>';
+                   esc(variantDisplayName(m)) + ' — ' + esc(tag) + '</option>';
         }).join('');
         pageTplsModal = pageTplsModal || new bootstrap.Modal(document.getElementById('fiPageTplsModal'));
         pageTplsModal.show();
@@ -1277,7 +1317,200 @@
         if (!PAGE_TPLS_CTX) return;
         var key = document.getElementById('fiPageTplsSel').value;
         pageTplsModal.hide();
-        selectPage(PAGE_TPLS_CTX.url, PAGE_TPLS_CTX.label, key);
+        openTplViewModal(key, PAGE_TPLS_CTX.url, PAGE_TPLS_CTX.label);
+    });
+
+    // ── Modal de visualização/edição do template da variante ─────────────────
+    //  Abre em LEITURA (Edit + Close); o Edit troca as colunas de origem por
+    //  editores e os botões por Confirm + Close. Editar uma VARIANTE grava os
+    //  campos planos (ela é de uma página só — qualquer source_by_page herdado
+    //  é descartado, senão venceria a edição em silêncio); editar o template
+    //  Default grava o override daquela página, como o Edit Sources da visão
+    //  de página. Só as colunas de origem se editam aqui — a estrutura
+    //  (seq/format/blocos) continua no builder.
+    var tplViewModal, VIEW = null;   // { key, tpl, pageUrl, pageLabel, edit }
+
+    function viewSrcOf(f) {
+        var s = (VIEW && VIEW.pageUrl && f.source_by_page && f.source_by_page[VIEW.pageUrl])
+            ? f.source_by_page[VIEW.pageUrl] : f;
+        return { source: s.source || '', source_detail: s.source_detail || '',
+                 source_note: s.source_note || '' };
+    }
+    function viewColumns() {
+        var tpl = VIEW && VIEW.tpl, cols = [];
+        ((tpl && tpl.linked_pages) || []).forEach(function (p) {
+            if (p.url === VIEW.pageUrl && p.columns) cols = p.columns;
+        });
+        if (!cols.length && tpl && tpl.base_key) {
+            var bm = LIST.filter(function (x) { return x.key === tpl.base_key; })[0];
+            ((bm && bm.linked_pages) || []).forEach(function (p) {
+                if (p.url === VIEW.pageUrl && p.columns) cols = p.columns;
+            });
+        }
+        return cols;
+    }
+    function viewDetailEditor(kind, value) {
+        kind = String(kind || '').toLowerCase();
+        if (kind === 'fixed' || kind === 'manual')
+            return '<input class="form-control fi-src-input fi-vw-srcd fi-src-value" placeholder="' +
+                   (kind === 'fixed' ? t('fi-fixed-ph', 'value…') : '') + '" value="' + esc(value) + '">';
+        if (kind === 'mapping') {
+            var opts = '<option value=""></option>' + MAPPINGS.map(function (m) {
+                return '<option value="' + esc(m.key) + '"' + (m.key === value ? ' selected' : '') + '>' + esc(m.label) + '</option>';
+            }).join('');
+            if (value && !MAPPINGS.some(function (m) { return m.key === value; }))
+                opts += '<option value="' + esc(value) + '" selected>' + esc(value) + '</option>';
+            return '<select class="form-select fi-src-input fi-vw-srcd">' + opts + '</select>';
+        }
+        if (kind === 'page' || kind === 'calculated') {
+            var cols = viewColumns();
+            var o = '<option value=""></option>' + cols.map(function (c) {
+                return '<option value="' + esc(c) + '"' + (c === value ? ' selected' : '') + '>' + esc(c) + '</option>';
+            }).join('');
+            if (value && cols.indexOf(value) === -1)
+                o += '<option value="' + esc(value) + '" selected>' + esc(value) + '</option>';
+            return '<select class="form-select fi-src-input fi-vw-srcd">' + o + '</select>';
+        }
+        return '<input class="form-control fi-src-input fi-vw-srcd" value="' + esc(value) + '" disabled>';
+    }
+    function renderTplView() {
+        var tpl = VIEW.tpl;
+        document.getElementById('fiTplViewName').textContent = variantDisplayName(tpl);
+        var meta = [];
+        if (VIEW.pageLabel)
+            meta.push('<span class="fi-meta-chip"><i class="ti ti-map-pin"></i>' + esc(VIEW.pageLabel) + '</span>');
+        meta.push('<span class="fi-meta-chip"><i class="ti ti-git-fork"></i><span class="fi-meta-k">' +
+                  t('fi-var-pair-k', 'LE') + '</span>' +
+                  esc(tpl.le_pair || t('fi-var-default', 'Default')) + '</span>');
+        if (tpl.base_key && VIEW.edit) {
+            meta.push('<span class="fi-meta-chip"><i class="ti ti-file-text"></i><span class="fi-meta-k">' +
+                      t('fi-var-file-k', 'File') + '</span>' +
+                      '<input class="form-control fi-src-input fi-src-value" id="fiTplViewFile" style="width:190px" ' +
+                      'placeholder="FWDSTART_MGT.txt" value="' + esc(tpl.file_name || '') + '"></span>');
+        } else if (tpl.file_name) {
+            meta.push('<span class="fi-meta-chip"><i class="ti ti-file-text"></i><span class="fi-meta-k">' +
+                      t('fi-var-file-k', 'File') + '</span>' + esc(tpl.file_name) + '</span>');
+        }
+        document.getElementById('fiTplViewMeta').innerHTML = meta.join('');
+
+        var total = (tpl.blocks || []).length;
+        var html = '';
+        (tpl.blocks || []).forEach(function (b, bi) {
+            var rows = (b.fields || []).map(function (f, fi) {
+                var src = viewSrcOf(f);
+                var srcCell, detCell;
+                if (VIEW.edit) {
+                    srcCell = '<select class="form-select fi-src-input fi-vw-src">' +
+                        SRC_OPTIONS.map(function (o) {
+                            return '<option value="' + o + '"' + (src.source === o ? ' selected' : '') + '>' + (o || '—') + '</option>';
+                        }).join('') + '</select>';
+                    detCell = viewDetailEditor(src.source, src.source_detail) +
+                        '<input class="form-control fi-src-input fi-vw-srcn mt-1" placeholder="' +
+                        t('fi-note-ph', 'note (optional)') + '" value="' + esc(src.source_note) + '">';
+                } else {
+                    srcCell = srcBadge(src.source);
+                    detCell = srcDetailCell(src);
+                }
+                return '<tr data-vb="' + bi + '" data-vf="' + fi + '">' +
+                    '<td class="fi-col-num">' + esc(f.seq) + '</td>' +
+                    '<td style="white-space:nowrap;">' + esc(f.field) + '</td>' +
+                    '<td class="fi-col-num">' + esc(f.format) + '</td>' +
+                    '<td class="fi-col-content">' + esc(f.content) + '</td>' +
+                    '<td class="fi-col-src">' + srcCell + '</td>' +
+                    '<td class="fi-col-srcd">' + detCell + '</td>' +
+                    '</tr>';
+            }).join('');
+            html +=
+                '<div class="fi-block ' + accClass(b, bi, total) + '">' +
+                '<div class="fi-block-head">' +
+                '<span class="fi-studs"><span></span><span></span><span></span></span>' +
+                '<h6 class="fi-block-title">' + esc(b.title) + '</h6>' +
+                '<span class="fi-block-count">' + (b.fields || []).length + ' ' + t('fi-fields', 'fields') + '</span>' +
+                '</div>' +
+                '<div class="table-responsive"><table class="table table-sm table-striped mb-0 align-middle fi-fields">' +
+                '<thead class="thead-sm text-uppercase fs-xxs"><tr>' +
+                [t('fi-th-seq', 'Seq'), t('fi-th-field', 'Field'), t('fi-th-format', 'Format'),
+                 t('fi-th-content', 'Content'), t('fi-th-source', 'Source'),
+                 t('fi-th-source-detail', 'Source Field / Value')].map(function (n) {
+                    return '<th>' + n + '</th>';
+                }).join('') +
+                '</tr></thead><tbody>' + rows + '</tbody></table></div></div>';
+        });
+        document.getElementById('fiTplViewBody').innerHTML = html;
+        document.getElementById('fiTplViewEdit').style.display = VIEW.edit ? 'none' : '';
+        document.getElementById('fiTplViewConfirm').style.display = VIEW.edit ? '' : 'none';
+    }
+    // Trocar o tipo de origem troca o editor do valor na hora (delegado — as
+    // linhas são remontadas a cada render).
+    document.getElementById('fiTplViewBody').addEventListener('change', function (ev) {
+        if (!ev.target.classList || !ev.target.classList.contains('fi-vw-src')) return;
+        var tr = ev.target.closest('tr');
+        var note = tr.querySelector('.fi-vw-srcn');
+        var noteHtml = note ? note.outerHTML : '';
+        tr.querySelector('.fi-col-srcd').innerHTML = viewDetailEditor(ev.target.value, '') + noteHtml;
+    });
+    function openTplViewModal(key, pageUrl, pageLabel) {
+        apiGet(key).then(function (tpl) {
+            if (!tpl) return;
+            VIEW = { key: key, tpl: tpl, pageUrl: pageUrl, pageLabel: pageLabel, edit: false };
+            renderTplView();
+            tplViewModal = tplViewModal || new bootstrap.Modal(document.getElementById('fiTplViewModal'));
+            tplViewModal.show();
+        });
+    }
+    document.getElementById('fiTplViewEdit').addEventListener('click', function () {
+        if (!VIEW) return;
+        VIEW.edit = true;
+        renderTplView();
+    });
+    document.getElementById('fiTplViewConfirm').addEventListener('click', function () {
+        if (!VIEW) return;
+        document.querySelectorAll('#fiTplViewBody tr[data-vb]').forEach(function (tr) {
+            var b = +tr.getAttribute('data-vb'), f = +tr.getAttribute('data-vf');
+            var fld = VIEW.tpl.blocks[b].fields[f];
+            var s = tr.querySelector('.fi-vw-src'), d = tr.querySelector('.fi-vw-srcd'),
+                n = tr.querySelector('.fi-vw-srcn');
+            if (!s || !d) return;
+            var note = n ? n.value : '';
+            if (VIEW.tpl.base_key) {
+                fld.source = s.value;
+                fld.source_detail = d.value;
+                fld.source_note = note;
+                delete fld.source_by_page;
+            } else if (VIEW.pageUrl) {
+                if (s.value === (fld.source || '') && d.value === (fld.source_detail || '') &&
+                        note === (fld.source_note || '')) {
+                    if (fld.source_by_page) {
+                        delete fld.source_by_page[VIEW.pageUrl];
+                        if (!Object.keys(fld.source_by_page).length) delete fld.source_by_page;
+                    }
+                } else {
+                    fld.source_by_page = fld.source_by_page || {};
+                    fld.source_by_page[VIEW.pageUrl] = { source: s.value, source_detail: d.value, source_note: note };
+                }
+            } else {
+                fld.source = s.value;
+                fld.source_detail = d.value;
+                fld.source_note = note;
+            }
+        });
+        var fn = document.getElementById('fiTplViewFile');
+        if (fn && VIEW.tpl.base_key) VIEW.tpl.file_name = fn.value.trim();
+        apiSave(VIEW.tpl).then(function (j) {
+            if (!j.success) return Swal.fire({ icon: 'error', title: 'File Interpreter', text: j.error || 'Save failed' });
+            toast(t('fi-saved', 'Template saved'));
+            VIEW.edit = false;
+            apiGet(VIEW.key).then(function (tpl) {
+                if (tpl) { VIEW.tpl = tpl; renderTplView(); }
+            });
+            refreshList();
+            if (CUR_KEY === VIEW.key) selectTplFresh();
+        });
+    });
+    // Fechar no meio de uma edição descarta o rascunho: o próximo open começa
+    // limpo, em leitura, com o template relido do servidor.
+    document.getElementById('fiTplViewModal').addEventListener('hidden.bs.modal', function () {
+        VIEW = null;
     });
     document.getElementById('fiLinkSave').addEventListener('click', function () {
         var key = document.getElementById('fiLinkTpl').value;
