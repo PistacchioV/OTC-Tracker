@@ -3308,9 +3308,17 @@ $(document).ready(function() {
         } else {
             td15.find('.missing-b3-badge').remove();
             $(tr).removeAttr('data-missing-asset');
-            if (!td15.find('.row-edit-field, .dt-cell-readonly').length && !td15.text().trim()) {
+            // O restore escreve o DADO da célula, não só o `<td>`. Quem lê a
+            // mercadoria depois é `row().data()` — o modal de Edit Deal, o
+            // export e o payload do save —, e texto posto só no DOM some no
+            // primeiro redraw (paginar, ordenar, filtrar).
+            if (!td15.find('.row-edit-field, .dt-cell-readonly').length) {
                 var restoredComm = code ? (_SUBJACENTE_MAP_NDF[code] || '') : '';
-                if (restoredComm) td15.text(restoredComm);
+                var cell15 = table.cell(tr, 15);
+                if (restoredComm && !_sh(cell15.data())) {
+                    cell15.data(restoredComm);
+                    td15.text(restoredComm);
+                }
             }
             // Restore DataTables filter cache + DOM for col 2
             var orig = _b3OrigStatusNDF[dtIdx];
@@ -3359,6 +3367,14 @@ $(document).ready(function() {
                     col2Cell.data(orig);
                     delete _b3OrigStatusNDF[dtIdx];
                 }
+            }
+            // Mercadoria vazia num ativo JÁ cadastrado: preenche o dado da
+            // linha aqui, no passe que varre a tabela inteira — o passe 2 só
+            // alcança o que está renderizado.
+            if (!_isAssetMissing(rawCode) && rawCode) {
+                var commCell = table.cell(dtIdx, 15);
+                var liveComm = _SUBJACENTE_MAP_NDF[rawCode] || '';
+                if (liveComm && !_sh(commCell.data())) commCell.data(liveComm);
             }
         });
         // Pass 2: update DOM for currently-rendered rows only (off-page nodes are null).
@@ -4767,7 +4783,11 @@ $(document).ready(function() {
             $('#ar-tradetype').val(_sh(d[12]));
             $('#ar-market').val(_sh(d[13]));
             $('#ar-underlying').val(_sh(d[14]));
-            $('#ar-commodities').val(_sh(d[15]));
+            // Célula vazia (deal importado antes do ativo entrar no Index B3)
+            // cai no cadastro do Subjacente: o campo é AUTO, e o modal é
+            // justamente onde a falta aparecia.
+            $('#ar-commodities').val(_sh(d[15]) ||
+                (_sh(d[14]) ? (_SUBJACENTE_MAP_NDF[_sh(d[14])] || '') : ''));
             $('#ar-fxholiday').val(_sh(d[16]));
             $('#ar-notional').val(_sh(d[17]));
             $('#ar-contract').val(_sh(d[19]));

@@ -256,7 +256,12 @@ window.MissingCounterparty = (function () {
         // registrar o accronym da perna interna no /mapping precisa ver o badge
         // sair sem recarregar a página inteira.
         this.loadLeAcr();
-        fetch(cfg.refDataUrl || '/static/data/RefData.json')
+        // `?_=` porque este fetch É o Reload: sem ele o navegador pode servir o
+        // RefData.json do próprio cache e o botão não recarrega nada — a
+        // contraparte recém-cadastrada continua "Missing Counterparty", sem
+        // erro nenhum.
+        fetch((cfg.refDataUrl || '/static/data/RefData.json') +
+              ((cfg.refDataUrl || '').indexOf('?') >= 0 ? '&' : '?') + '_=' + Date.now())
             .then(function (r) { return r.json(); })
             .then(function (d) {
                 if (cfg.setRefData) cfg.setRefData(d);
