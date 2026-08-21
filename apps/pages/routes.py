@@ -22683,6 +22683,105 @@ def _fi_seq_key(seq):
     return s.lstrip('0') or '0' if s.isdigit() else s
 
 
+# ── Cálculo CADASTRÁVEL de campo (Source Calculated) ────────────────────────
+#  O Source Field/Value pode carregar uma FÓRMULA em vez de texto livre, e aí o
+#  motor calcula o valor — nada de código novo para um campo derivado. O
+#  catálogo é pequeno e nomeado (argumentos separados por ';', campo = nome da
+#  COLUNA da página, casado com o campo do deal cego a caixa/espaço):
+#    FIELD(Campo)                       → o valor do campo, como está
+#    DATE(Campo)                        → o campo como data AAAAMMDD
+#    BIZDIFF(Campo A; Campo B)          → dias úteis ANBIMA entre A e B,
+#                                         zero-padded pela largura do format
+#                                         (9(01) → '3', 9(02) → '03')
+#    ADDBIZ(Campo; N)                   → data do campo + N dias úteis (AAAAMMDD)
+#    LOOKUP(mapping; COL IN; COL OUT; Campo) → linha do mapping cuja COL IN
+#                                         casa com o campo (normalizado exato),
+#                                         devolvendo COL OUT
+#  Texto que NÃO parseia como fórmula continua documentação: o valor do
+#  gerador vale, como sempre — é o que mantém todo cadastro existente
+#  byte a byte. A cópia do navegador é o FiTer.calc (fi-ter-pair.js).
+_FI_CALC_RE = re.compile(r'^\s*(BIZDIFF|ADDBIZ|DATE|FIELD|LOOKUP)\s*\((.*)\)\s*$',
+                         re.I | re.S)
+
+
+def _fi_deal_get(deal, name):
+    """Campo do deal pelo NOME DA COLUNA da página: 'Last Fixing Date' ≡
+    'LastFixingDate' — a comparação ignora caixa e tudo que não é letra ou
+    dígito. Sem campo, ''."""
+    want = re.sub(r'[^A-Z0-9]', '', str(name or '').upper())
+    if not want:
+        return ''
+    for k, v in (deal or {}).items():
+        if re.sub(r'[^A-Z0-9]', '', str(k).upper()) == want:
+            return re.sub(r'<[^>]+>', '', str(v or '')).strip()
+    return ''
+
+
+def _fi_calc_value(spec, deal, fmt=''):
+    """Executa uma fórmula cadastrada sobre o deal. None = não é fórmula (ou
+    argumento inválido): o chamador mantém o valor do gerador — a fórmula mal
+    cadastrada degrada para o comportamento de sempre, nunca derruba o
+    arquivo."""
+    m = _FI_CALC_RE.match(str(spec or ''))
+    if not m or deal is None:
+        return None
+    fn = m.group(1).upper()
+    args = [a.strip() for a in m.group(2).split(';')]
+    try:
+        if fn == 'FIELD':
+            return _fi_deal_get(deal, args[0])
+        if fn == 'DATE':
+            dt = _parse_date_any(_fi_deal_get(deal, args[0]))
+            return dt.strftime('%Y%m%d') if dt else ''
+        if fn == 'BIZDIFF':
+            a = _parse_date_any(_fi_deal_get(deal, args[0]))
+            b = _parse_date_any(_fi_deal_get(deal, args[1]))
+            s = str(_anbima_biz_diff(a, b))
+            w = _fi_width(fmt)
+            return s.zfill(w)[:w] if w else s
+        if fn == 'ADDBIZ':
+            dt = _parse_date_any(_fi_deal_get(deal, args[0]))
+            d2 = _anbima_add_biz(dt, int(args[1])) if dt else None
+            return d2.strftime('%Y%m%d') if d2 else ''
+        if fn == 'LOOKUP':
+            key, col_in, col_out, fld = (args + ['', '', '', ''])[:4]
+            alvo = re.sub(r'[^A-Z0-9]', '', _fi_deal_get(deal, fld).upper())
+            if not alvo:
+                return ''
+            for row in _mapping_rows(key):
+                v = re.sub(r'[^A-Z0-9]', '', str(row.get(col_in, '') or '').upper())
+                if v and v == alvo:
+                    return str(row.get(col_out, '') or '')
+            return ''
+    except Exception:
+        return None
+    return None
+
+
+def _fi_effective_seq_value(key, block_id, seq, values, page_url=None,
+                            le_pair=None, deal=None):
+    """Valor EFETIVO de um campo (por seq) como o motor o montaria: Fixed do
+    cadastro (variante/override da página) > fórmula cadastrada > valor do
+    gerador. É o que deixa OUTRA regra depender de um campo cadastrável — o
+    deslocamento das linhas de verificação lê aqui a Cotação para o
+    Vencimento."""
+    tpl = _fi_tpl_cached(_fi_variant_key(key, page_url, le_pair))
+    blk = _fi_block_of(tpl, block_id) or _fi_block_of(_fi_tpl_cached(key), block_id)
+    for f in (blk or {}).get('fields', []):
+        if _fi_seq_key(f.get('seq')) != _fi_seq_key(seq):
+            continue
+        src = _fi_field_src(f, page_url)
+        if str(src.get('source', '')) == 'Fixed':
+            return str(src.get('source_detail', ''))
+        calc = _fi_calc_value(src.get('source_detail'), deal, f.get('format'))
+        if calc is not None:
+            return calc
+        break
+    vals = {_fi_seq_key(k): ('' if v is None else str(v))
+            for k, v in (values or {}).items()}
+    return vals.get(_fi_seq_key(seq), '')
+
+
 def _fi_block_of(tpl, block_id):
     for b in (tpl or {}).get('blocks', []):
         if b.get('id') == block_id:
@@ -22690,7 +22789,7 @@ def _fi_block_of(tpl, block_id):
     return None
 
 
-def _fi_build_line(key, block_id, values, page_url=None, le_pair=None):
+def _fi_build_line(key, block_id, values, page_url=None, le_pair=None, deal=None):
     """Monta UMA linha do arquivo a partir do cadastro do File Interface.
 
     `values` = {seq: string JÁ formatada} dos campos não-Fixed ('4' e '04'
@@ -22724,6 +22823,12 @@ def _fi_build_line(key, block_id, values, page_url=None, le_pair=None):
         fixed = str(src.get('source', '')) == 'Fixed'
         val = str(src.get('source_detail', '')) if fixed \
             else vals.get(_fi_seq_key(f.get('seq')), '')
+        if not fixed and deal is not None:
+            # Fórmula cadastrada no Source Field/Value vence o valor do
+            # gerador; texto que não parseia continua documentação (None).
+            calc = _fi_calc_value(src.get('source_detail'), deal, f.get('format'))
+            if calc is not None:
+                val = calc
         if positional:
             w = _fi_width(f.get('format'))
             if w is not None and len(val) < w:
@@ -23481,6 +23586,7 @@ def api_fxo_send_conecta():
 
     data  = request.get_json(silent=True) or {}
     deals = data.get('deals', [])
+    download = bool(data.get('download'))   # preview: devolve o conteúdo, não grava
     if not deals:
         return jsonify({'ok': False, 'error': 'No deals provided'}), 400
 
@@ -23558,7 +23664,8 @@ def api_fxo_send_conecta():
     out_files  = {}
 
     for deal in deals:
-        if str(deal.get('Status', '') or '').strip() == 'Canceled':
+        # No download (preview) o status não importa — baixa até cancelado.
+        if not download and str(deal.get('Status', '') or '').strip() == 'Canceled':
             continue                    # cancelado via API: fora dos arquivos
         client     = _sh(deal.get('Client', ''))
         taxid      = _sh(deal.get('TaxID', ''))
@@ -23641,7 +23748,8 @@ def api_fxo_send_conecta():
 
         deal_count += 1
         dest.append(_fi_build_line('opcoes-flexiveis-vcp', 'registro', vals,
-                                   page_url='/new_deals-opt-fxo', le_pair=le_pair))
+                                   page_url='/new_deals-opt-fxo', le_pair=le_pair,
+                                   deal=deal))
 
         # Asian — one fixing line (line type 2) per business day in the window
         if asian and fix_start and fix_end:
@@ -23656,7 +23764,7 @@ def api_fxo_send_conecta():
                     dest.append(_fi_build_line(
                         'opcoes-flexiveis-vcp', 'registro-media-asiatica',
                         {'3': _cur2.strftime('%Y%m%d')}, page_url='/new_deals-opt-fxo',
-                        le_pair=le_pair))
+                        le_pair=le_pair, deal=deal))
                 _cur2 += _dt.timedelta(days=1)
 
     # O header do OPC não depende do par (participante Fixed no template + a
@@ -23667,6 +23775,11 @@ def api_fxo_send_conecta():
         out_files['FXO_Banco.txt'] = []   # lote só de cancelados: header, como sempre
 
     try:
+        if download:
+            files = [{'filename': fname, 'content': '\n'.join([header] + lines)}
+                     for fname, lines in out_files.items()]
+            return jsonify({'ok': True, 'count': deal_count, 'files': files,
+                            'filename': files[0]['filename'] if files else ''})
         os.makedirs(CONECTA_NEW_PATH, exist_ok=True)
         generated = []
         for fname, lines in out_files.items():
@@ -25797,11 +25910,29 @@ def _ndf_comm_ter_lines(deal):
     }
     lines = [_fi_build_line(_TER_FI_KEY, 'registro-dados-fixos', values,
                             page_url='/new_deals-ndf-commodities',
-                            le_pair=le_pair)]
+                            le_pair=le_pair, deal=deal)]
 
     # Asian fixing date rows (line type 2) — também pelo motor. O parse das
     # datas fica num try próprio: um ValueError do template tem de SUBIR até
     # o endpoint, não ser engolido junto com uma data malformada.
+    #
+    # Cotação para o Vencimento (campo 15) EFETIVA preenchida (> 0) desloca as
+    # DATAS das linhas de verificação N dias úteis PARA FRENTE, no MESMO
+    # calendário do deal — o campo é cadastrável (Fixed da variante ou
+    # fórmula), e hoje nasce em branco: sem cadastro, nada muda.
+    _cotv = _fi_effective_seq_value(_TER_FI_KEY, 'registro-dados-fixos', '15',
+                                    values, '/new_deals-ndf-commodities',
+                                    le_pair, deal).strip()
+    _shift_n = int(_cotv) if _cotv.isdigit() and int(_cotv) > 0 else 0
+
+    def _shift_biz(d0):
+        cur, left = d0, _shift_n
+        while left > 0:
+            cur += _dt.timedelta(days=1)
+            if cur.weekday() < 5 and cur.strftime('%Y-%m-%d') not in _deal_holidays:
+                left -= 1
+        return cur
+
     if asian and fix_start and fix_end:
         try:
             _s2 = _dt.datetime.strptime(fix_start, '%Y%m%d').date()
@@ -25811,13 +25942,13 @@ def _ndf_comm_ter_lines(deal):
         _cur2 = _s2
         while _cur2 is not None and _cur2 <= _e2:
             if _cur2.weekday() < 5 and _cur2.strftime('%Y-%m-%d') not in _deal_holidays:
-                _d  = _cur2.strftime('%Y%m%d')
+                _d  = _shift_biz(_cur2).strftime('%Y%m%d')
                 _fx = _d if brl else ''
                 lines.append(_fi_build_line(
                     _TER_FI_KEY, 'registro-dados-variaveis',
                     {'4': _pos(_d, 8),                    # Data Verificação
                      '6': _pos(_fx, 8) + _pos('', 10)},   # Data de Verificação da Moeda + filler
-                    page_url='/new_deals-ndf-commodities', le_pair=le_pair))
+                    page_url='/new_deals-ndf-commodities', le_pair=le_pair, deal=deal))
             _cur2 += _dt.timedelta(days=1)
     return is_jpmorgan, lines
 
@@ -25830,6 +25961,7 @@ def api_ndf_send_conecta():
 
     data  = request.get_json(silent=True) or {}
     deals = data.get('deals', [])
+    download = bool(data.get('download'))   # preview: devolve o conteúdo, não grava
     if not deals:
         return jsonify({'ok': False, 'error': 'No deals provided'}), 400
 
@@ -25864,6 +25996,13 @@ def api_ndf_send_conecta():
     output_dir = CONECTA_NEW_PATH
     generated  = []
     try:
+        if download:
+            generated = [{'filename': fname, 'count': d['count'],
+                          'content': '\n'.join([headers[fname]] + d['lines'])}
+                         for fname, d in out_files.items() if d['lines']]
+            return jsonify({'ok': True, 'count': sum(d['count'] for d in out_files.values()),
+                            'files': generated,
+                            'filename': generated[0]['filename'] if generated else ''})
         os.makedirs(output_dir, exist_ok=True)
         for fname, d in out_files.items():
             if not d['lines']:
@@ -26903,6 +27042,7 @@ def api_send_conecta():
 
     data  = request.get_json(silent=True) or {}
     deals = data.get('deals', [])
+    download = bool(data.get('download'))   # preview: devolve o conteúdo, não grava
     if not deals:
         return jsonify({'ok': False, 'error': 'No deals provided'}), 400
 
@@ -26986,7 +27126,8 @@ def api_send_conecta():
     out_files  = {}
 
     for deal in deals:
-        if str(deal.get('Status', '') or '').strip() == 'Canceled':
+        # No download (preview) o status não importa — baixa até cancelado.
+        if not download and str(deal.get('Status', '') or '').strip() == 'Canceled':
             continue                    # cancelado via API: fora dos arquivos
         client     = _sh(deal.get('Client', ''))
         taxid      = _sh(deal.get('TaxID', ''))
@@ -27080,7 +27221,7 @@ def api_send_conecta():
         deal_count += 1
         dest.append(_fi_build_line('opcoes-flexiveis-vcp', 'registro', vals,
                                    page_url='/new_deals-opt-commodities',
-                                   le_pair=le_pair))
+                                   le_pair=le_pair, deal=deal))
 
         if asian and fix_start and fix_end:
             try:
@@ -27095,7 +27236,8 @@ def api_send_conecta():
                     dest.append(_fi_build_line(
                         'opcoes-flexiveis-vcp', 'registro-media-asiatica',
                         {'3': _d, '4': _d if brl else ''},
-                        page_url='/new_deals-opt-commodities', le_pair=le_pair))
+                        page_url='/new_deals-opt-commodities', le_pair=le_pair,
+                        deal=deal))
                 _cur2 += _dt.timedelta(days=1)
 
     # O header do OPC não depende do par (participante Fixed no template + a
@@ -27107,6 +27249,11 @@ def api_send_conecta():
 
     output_dir = CONECTA_NEW_PATH
     try:
+        if download:
+            files = [{'filename': fname, 'content': '\n'.join([header] + lines)}
+                     for fname, lines in out_files.items()]
+            return jsonify({'ok': True, 'count': deal_count, 'files': files,
+                            'filename': files[0]['filename'] if files else ''})
         os.makedirs(output_dir, exist_ok=True)
         generated = []
         for fname, lines in out_files.items():
@@ -34344,7 +34491,7 @@ def _ter_file_header(le, today, page_url, le_pair=None):
                           le_pair=le_pair)
 
 
-def _generic_ndf_ter_line(deal, is_fwd):
+def _generic_ndf_ter_line(deal, is_fwd, page_url=None):
     """Linha tipo 1 (Dados Fixos) do TER de um deal FWD Start / Other
     Publisher. Devolve (bucket, linha) — bucket BANCO / LAWTON / MGT — ou
     None para deal cancelado. Os valores continuam calculados aqui, na
@@ -34545,10 +34692,13 @@ def _generic_ndf_ter_line(deal, is_fwd):
             _parse_date_any(_s(deal.get('LastFixingDate', ''))))
             + 1).zfill(3) if asian_fix else '000', 3),   # Qtde Datas Verificação
     }
-    page_url = '/new_deals-ndf-fwdstart' if is_fwd else '/new_deals-ndf-otherpublisher'
+    # O default é a página do produto; o download do Vanilla passa a DELE,
+    # para os overrides e variantes do cadastro daquela página valerem.
+    page_url = page_url or ('/new_deals-ndf-fwdstart' if is_fwd
+                            else '/new_deals-ndf-otherpublisher')
     le_pair = _ter_le_pair(_TER_BUCKET_LE[bucket], client)
     return bucket, _fi_build_line(_TER_FI_KEY, 'registro-dados-fixos', values,
-                                  page_url=page_url, le_pair=le_pair)
+                                  page_url=page_url, le_pair=le_pair, deal=deal)
 
 
 def _nd_lawton_mirror(deal):
@@ -34582,17 +34732,81 @@ def _nd_lawton_sig(deal):
     return (_dt8(deal.get('TradeDate')), _dt8(deal.get('SettlementDate')), val)
 
 
+def _vanilla_verification_lines(deal, page_url, le_pair):
+    """Linhas tipo 2 (Dados Variáveis) do DOWNLOAD do Vanilla — só ele as
+    emite: o registro oficial do Vanilla é de outra ferramenta, e o arquivo
+    dos demais produtos genéricos nunca as carregou (o asiático vai só na
+    contagem do campo 59). Uma linha por dia útil da janela de fixing, no
+    calendário do deal (FX Holiday Schedule; sem cadastro, Seg–Sex, como o
+    preview). Com a Cotação para o Vencimento EFETIVA preenchida (> 0 — Fixed
+    da variante ou fórmula cadastrada), cada data sai deslocada N dias úteis
+    PARA FRENTE, no mesmo calendário."""
+    def _s(v):
+        return re.sub(r'<[^>]+>', '', str(v or '')).strip()
+    a = _parse_date_any(_s(deal.get('FirstFixingDate')))
+    b = _parse_date_any(_s(deal.get('LastFixingDate')))
+    if not a or not b or a >= b:
+        return []
+    hols = set()
+    sched = re.sub(r'[^A-Za-z0-9_]', '',
+                   _s(deal.get('FXHolidaySchedule')).replace('-', '_').lower())
+    if sched:
+        try:
+            with open(os.path.join(_B3_DATA_DIR, sched + '.json'), encoding='utf-8') as fh:
+                hols = {(x.get('date') if isinstance(x, dict) else x)
+                        for x in json.load(fh)}
+        except Exception:
+            hols = set()
+    cotv = _fi_effective_seq_value(_TER_FI_KEY, 'registro-dados-fixos', '15', {},
+                                   page_url, le_pair, deal).strip()
+    shift = int(cotv) if cotv.isdigit() and int(cotv) > 0 else 0
+
+    def _is_biz(d):
+        return d.weekday() < 5 and d.strftime('%Y-%m-%d') not in hols
+
+    def _shifted(d):
+        cur, left = d, shift
+        while left > 0:
+            cur += timedelta(days=1)
+            if _is_biz(cur):
+                left -= 1
+        return cur
+
+    lines, cur = [], a
+    while cur <= b:
+        if _is_biz(cur):
+            d8 = _shifted(cur).strftime('%Y%m%d')
+            lines.append(_fi_build_line(
+                _TER_FI_KEY, 'registro-dados-variaveis',
+                {'4': d8.ljust(8), '6': ''.ljust(18)},
+                page_url=page_url, le_pair=le_pair, deal=deal))
+        cur += timedelta(days=1)
+    return lines
+
+
 @blueprint.route('/api/new-deals/<product>/send-conecta', methods=['POST'])
 def api_generic_nd_send_conecta(product):
     if not session.get('authenticated'):
         return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
-    if product not in ('fwd-start', 'other-publishers'):
+    data = request.get_json(silent=True) or {}
+    # `download: true` (o botão do preview) devolve o CONTEÚDO do arquivo em
+    # vez de gravar no Batch Conecta — mesmo gerador, byte a byte, sem
+    # notificação e IGNORANDO o status do deal. É também o único caminho em
+    # que o VANILLA entra: o registro dele é de outra ferramenta, então o app
+    # monta o arquivo (template/variante da própria página) sem nunca
+    # escrevê-lo no share.
+    download = bool(data.get('download'))
+    valid = ('fwd-start', 'other-publishers') + (('vanilla',) if download else ())
+    if product not in valid:
         return jsonify({'ok': False, 'error': 'send-conecta not available for this product'}), 404
     is_fwd = product == 'fwd-start'
-    prefix = 'FWDSTART' if is_fwd else 'OTHERPUBLISHER'
-    page_url = '/new_deals-ndf-fwdstart' if is_fwd else '/new_deals-ndf-otherpublisher'
+    prefix = {'fwd-start': 'FWDSTART', 'other-publishers': 'OTHERPUBLISHER',
+              'vanilla': 'VANILLA'}[product]
+    page_url = {'fwd-start': '/new_deals-ndf-fwdstart',
+                'other-publishers': '/new_deals-ndf-otherpublisher',
+                'vanilla': '/new_deals-ndf-vanilla'}[product]
 
-    deals = (request.get_json(silent=True) or {}).get('deals', [])
+    deals = data.get('deals', [])
     if not deals:
         return jsonify({'ok': False, 'error': 'No deals provided'}), 400
 
@@ -34616,7 +34830,9 @@ def api_generic_nd_send_conecta(product):
     try:
         made_by_deal = []
         for deal in deals:
-            made = _generic_ndf_ter_line(deal, is_fwd)
+            if download and isinstance(deal, dict):
+                deal = {k: v for k, v in deal.items() if k != 'Status'}
+            made = _generic_ndf_ter_line(deal, is_fwd, page_url=page_url)
             if made is None:
                 continue
             made_by_deal.append((deal, made[0]))
@@ -34625,6 +34841,9 @@ def api_generic_nd_send_conecta(product):
                 bucket, re.sub(r'<[^>]+>', '', str(deal.get('Client', '') or '')).strip())
             dest['lines'].append(line)
             counts[fname] += 1
+            if download and product == 'vanilla':
+                dest['lines'].extend(
+                    _vanilla_verification_lines(deal, page_url, dest['pair']))
         # Quebra visão banco × visão Lawton: a linha do banco contra o Lawton
         # gera também a visão Lawton (espelho sintetizado), A MENOS que o lote
         # já traga a perna explícita do mesmo trade — aí ela é a visão Lawton
@@ -34641,7 +34860,7 @@ def api_generic_nd_send_conecta(product):
                 explicit.remove(sig)
                 continue
             mirror = _nd_lawton_mirror(deal)
-            made = _generic_ndf_ter_line(mirror, is_fwd)
+            made = _generic_ndf_ter_line(mirror, is_fwd, page_url=page_url)
             if made is None:
                 continue
             b2, l2 = made
@@ -34659,6 +34878,14 @@ def api_generic_nd_send_conecta(product):
 
     generated = []
     try:
+        if download:
+            for fname, d in out_files.items():
+                if not d['lines']:
+                    continue
+                generated.append({'filename': fname, 'count': counts[fname],
+                                  'content': '\n'.join([headers[fname]] + d['lines'])})
+            return jsonify({'ok': True, 'count': len(made_by_deal), 'files': generated,
+                            'filename': generated[0]['filename'] if generated else ''})
         os.makedirs(CONECTA_NEW_PATH, exist_ok=True)
         for fname, d in out_files.items():
             if not d['lines']:

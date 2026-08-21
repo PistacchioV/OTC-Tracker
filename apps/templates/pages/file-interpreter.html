@@ -255,13 +255,22 @@
         padding: 3rem 1rem; font-size: .85rem;
     }
 
-    /* Botões do rodapé do modal de variante: MESMA largura para todos —
-       "Close" e "Edit" têm textos de comprimentos diferentes e cada botão
-       saía de um tamanho. */
+    /* Botões do rodapé do modal de variante: o MESMO tamanho para todos.
+       min-width iguala a largura ("Close" e "Edit" têm textos diferentes) e
+       height/padding/font com !important seguram a ALTURA — regra de tema em
+       .btn deixava o Close mais alto que os irmãos. */
     #fiTplViewModal .fi-vw-btn {
         min-width: 104px;
-        text-align: center;
+        height: 33px !important;
+        padding: .3rem .8rem !important;
+        font-size: .8rem !important;
+        line-height: 1.3 !important;
+        display: inline-flex; align-items: center; justify-content: center;
     }
+
+    /* Builder de fórmula do Source Calculated (Edit Sources e modal) */
+    #fi-page .fi-calc-wrap { display: inline-flex; flex-direction: column; gap: .25rem; min-width: 200px; }
+    #fi-page .fi-calc-wrap .fi-ca-args { display: inline-flex; flex-direction: column; gap: .25rem; }
 
     /* Variantes por par de pernas: item do rail indentado sob o base,
        badge com o par (MGT x JPM). */
@@ -1060,7 +1069,7 @@
                 opts += '<option value="' + esc(value) + '" selected>' + esc(value) + '</option>';
             return '<select class="form-select fi-src-input fi-in-srcd">' + opts + '</select>';
         }
-        if (kind === 'page' || kind === 'calculated') {
+        if (kind === 'page') {
             var cols = currentColumns();
             var opts = '<option value=""></option>' + cols.map(function (c) {
                 return '<option value="' + esc(c) + '"' + (c === value ? ' selected' : '') + '>' + esc(c) + '</option>';
@@ -1069,8 +1078,107 @@
                 opts += '<option value="' + esc(value) + '" selected>' + esc(value) + '</option>';
             return '<select class="form-select fi-src-input fi-in-srcd">' + opts + '</select>';
         }
+        if (kind === 'calculated')
+            return calcEditorHtml(value, currentColumns(), 'fi-in-srcd');
         return '<input class="form-control fi-src-input fi-in-srcd" value="' + esc(value) + '" disabled>';
     }
+
+    // ── Builder de fórmula do Source Calculated ──────────────────────────────
+    //  O cálculo se CADASTRA por dropdowns — qualquer pessoa monta, sem
+    //  código. O que se grava é a fórmula canônica (FIELD/DATE/BIZDIFF/
+    //  ADDBIZ/LOOKUP), a MESMA que o motor executa no servidor
+    //  (_fi_calc_value) e o FiTer.calc espelha no preview. A opção vazia
+    //  mantém o texto livre de hoje: documentação — vale o valor do gerador.
+    //  O valor vive num input HIDDEN com a classe que os coletores já leem
+    //  (fi-in-srcd / fi-vw-srcd), então salvar não mudou nada.
+    var CALC_FNS = [
+        { fn: '',        lang: 'fi-calc-generator', label: 'Generator value (free note)' },
+        { fn: 'FIELD',   lang: 'fi-calc-field',     label: 'Field value' },
+        { fn: 'DATE',    lang: 'fi-calc-date',      label: 'Field as date (AAAAMMDD)' },
+        { fn: 'BIZDIFF', lang: 'fi-calc-bizdiff',   label: 'Business days between A and B' },
+        { fn: 'ADDBIZ',  lang: 'fi-calc-addbiz',    label: 'Field A + N business days' },
+        { fn: 'LOOKUP',  lang: 'fi-calc-lookup',    label: 'Mapping lookup' }
+    ];
+    var FI_CALC_RE = /^\s*(BIZDIFF|ADDBIZ|DATE|FIELD|LOOKUP)\s*\(([\s\S]*)\)\s*$/i;
+    function calcColSel(cls, v, cols) {
+        var o = '<option value=""></option>' + cols.map(function (c) {
+            return '<option value="' + esc(c) + '"' + (c === v ? ' selected' : '') + '>' + esc(c) + '</option>';
+        }).join('');
+        if (v && cols.indexOf(v) === -1)
+            o += '<option value="' + esc(v) + '" selected>' + esc(v) + '</option>';
+        return '<select class="form-select fi-src-input ' + cls + '">' + o + '</select>';
+    }
+    function calcArgsHtml(fn, args, cols, free) {
+        fn = String(fn || '').toUpperCase();
+        if (!fn)
+            return '<input class="form-control fi-src-input fi-ca-free" placeholder="' +
+                   t('fi-calc-free-ph', 'note (generator computes)') + '" value="' + esc(free || '') + '">';
+        if (fn === 'FIELD' || fn === 'DATE')
+            return calcColSel('fi-ca-a', args[0] || '', cols);
+        if (fn === 'BIZDIFF')
+            return calcColSel('fi-ca-a', args[0] || '', cols) +
+                   calcColSel('fi-ca-b', args[1] || '', cols);
+        if (fn === 'ADDBIZ')
+            return calcColSel('fi-ca-a', args[0] || '', cols) +
+                   '<input type="number" class="form-control fi-src-input fi-ca-n" placeholder="' +
+                   t('fi-calc-n-ph', 'N (business days)') + '" value="' + esc(args[1] || '') + '">';
+        if (fn === 'LOOKUP') {
+            var opts = '<option value=""></option>' + MAPPINGS.map(function (m) {
+                return '<option value="' + esc(m.key) + '"' + (m.key === (args[0] || '') ? ' selected' : '') + '>' + esc(m.label) + '</option>';
+            }).join('');
+            if (args[0] && !MAPPINGS.some(function (m) { return m.key === args[0]; }))
+                opts += '<option value="' + esc(args[0]) + '" selected>' + esc(args[0]) + '</option>';
+            return '<select class="form-select fi-src-input fi-ca-map">' + opts + '</select>' +
+                   '<input class="form-control fi-src-input fi-ca-in" placeholder="' +
+                   t('fi-calc-in-ph', 'match column (IN)') + '" value="' + esc(args[1] || '') + '">' +
+                   '<input class="form-control fi-src-input fi-ca-out" placeholder="' +
+                   t('fi-calc-out-ph', 'result column (OUT)') + '" value="' + esc(args[2] || '') + '">' +
+                   calcColSel('fi-ca-a', args[3] || '', cols);
+        }
+        return '';
+    }
+    function calcEditorHtml(value, cols, hiddenClass) {
+        var m = FI_CALC_RE.exec(String(value || ''));
+        var fn = m ? m[1].toUpperCase() : '';
+        var args = m ? m[2].split(';').map(function (s) { return s.trim(); }) : [];
+        return '<span class="fi-calc-wrap">' +
+            '<input type="hidden" class="' + hiddenClass + '" value="' + esc(value || '') + '">' +
+            '<select class="form-select fi-src-input fi-ca-fn">' +
+            CALC_FNS.map(function (o) {
+                return '<option value="' + o.fn + '"' + (o.fn === fn ? ' selected' : '') + '>' +
+                       esc(t(o.lang, o.label)) + '</option>';
+            }).join('') + '</select>' +
+            '<span class="fi-ca-args">' + calcArgsHtml(fn, args, cols, m ? '' : value) + '</span>' +
+            '</span>';
+    }
+    function calcSync(wrap) {
+        var hid = wrap.querySelector('input[type="hidden"]');
+        var fnSel = wrap.querySelector('.fi-ca-fn');
+        if (!hid || !fnSel) return;
+        var fn = fnSel.value;
+        function v(c) { var el = wrap.querySelector(c); return el ? el.value.trim() : ''; }
+        if (!fn) hid.value = v('.fi-ca-free');
+        else if (fn === 'FIELD' || fn === 'DATE') hid.value = fn + '(' + v('.fi-ca-a') + ')';
+        else if (fn === 'BIZDIFF') hid.value = 'BIZDIFF(' + v('.fi-ca-a') + '; ' + v('.fi-ca-b') + ')';
+        else if (fn === 'ADDBIZ') hid.value = 'ADDBIZ(' + v('.fi-ca-a') + '; ' + v('.fi-ca-n') + ')';
+        else if (fn === 'LOOKUP') hid.value = 'LOOKUP(' + v('.fi-ca-map') + '; ' + v('.fi-ca-in') +
+                                              '; ' + v('.fi-ca-out') + '; ' + v('.fi-ca-a') + ')';
+    }
+    function wireCalcBuilder(containerId, colsFn) {
+        var el = document.getElementById(containerId);
+        if (!el) return;
+        function h(ev) {
+            var wrap = ev.target.closest && ev.target.closest('.fi-calc-wrap');
+            if (!wrap) return;
+            if (ev.type === 'change' && ev.target.classList.contains('fi-ca-fn'))
+                wrap.querySelector('.fi-ca-args').innerHTML =
+                    calcArgsHtml(ev.target.value, [], colsFn(), '');
+            calcSync(wrap);
+        }
+        el.addEventListener('change', h);
+        el.addEventListener('input', h);
+    }
+    wireCalcBuilder('fiBlocks', currentColumns);
     function enterSrcEdit() {
         if (!CUR_TPL) return;
         SRC_EDIT = true;
@@ -1401,7 +1509,7 @@
                 opts += '<option value="' + esc(value) + '" selected>' + esc(value) + '</option>';
             return '<select class="form-select fi-src-input fi-vw-srcd">' + opts + '</select>';
         }
-        if (kind === 'page' || kind === 'calculated') {
+        if (kind === 'page') {
             var cols = viewColumns();
             var o = '<option value=""></option>' + cols.map(function (c) {
                 return '<option value="' + esc(c) + '"' + (c === value ? ' selected' : '') + '>' + esc(c) + '</option>';
@@ -1410,8 +1518,11 @@
                 o += '<option value="' + esc(value) + '" selected>' + esc(value) + '</option>';
             return '<select class="form-select fi-src-input fi-vw-srcd">' + o + '</select>';
         }
+        if (kind === 'calculated')
+            return calcEditorHtml(value, viewColumns(), 'fi-vw-srcd');
         return '<input class="form-control fi-src-input fi-vw-srcd" value="' + esc(value) + '" disabled>';
     }
+    wireCalcBuilder('fiTplViewBody', viewColumns);
     function renderTplView() {
         var tpl = VIEW.tpl;
         document.getElementById('fiTplViewName').textContent = variantDisplayName(tpl);

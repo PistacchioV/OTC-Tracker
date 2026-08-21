@@ -4241,6 +4241,7 @@ $(document).ready(function() {
         .then(function(r) { return r.ok ? r.json() : null; })
         .then(function(d) {
             FI_TPLS = (d && d.templates) || [];
+            if (window.FiTer && FiTer.prime) FiTer.prime(FI_TPLS);   // calendário + mappings do FiTer.calc
             for (var i = 0; i < FI_TPLS.length; i++) {
                 if (FI_TPLS[i].key === 'opcoes-flexiveis-vcp') { FI_SPEC = FI_TPLS[i]; return; }
             }
@@ -4444,9 +4445,11 @@ $(document).ready(function() {
             var valuesBySeq = {};
             for (var vi = 0; vi < f.length; vi++) valuesBySeq[String(vi + 1)] = f[vi];
             return blk.fields.map(function(fld) {
+                // Fórmula cadastrada vence o valor do gerador (FiTer.calc).
+                var _calc = window.FiTer ? FiTer.calc(fld.source_detail, deal, fld.format) : null;
                 var val = fld.source === 'Fixed'
                     ? fiFixedValue(fld)
-                    : (valuesBySeq[fiSeqKey(fld.seq)] || '');
+                    : (_calc !== null ? _calc : (valuesBySeq[fiSeqKey(fld.seq)] || ''));
                 return { name: fld.field, value: val };
             });
         }
@@ -4578,7 +4581,7 @@ $(document).ready(function() {
                 html: tableHtml,
                 width: 760,
                 showConfirmButton: true,
-                confirmButtonText: '<i class="ti ti-brand-telegram"></i>',
+                confirmButtonText: '<i class="ti ti-download"></i>',
                 confirmButtonColor: '#6658dd',
                 showDenyButton: true,
                 denyButtonText: '<i class="ti ti-edit"></i>',
@@ -4597,38 +4600,34 @@ $(document).ready(function() {
                 },
                 didOpen: function() {
                     applyTranslationsIn(Swal.getPopup());
-                    if (rowStatus !== 'Approved') {
-                        var confirmBtn = Swal.getConfirmButton();
-                        if (confirmBtn) {
-                            confirmBtn.disabled = true;
-                            confirmBtn.style.opacity = '0.4';
-                            confirmBtn.style.cursor = 'not-allowed';
-                        }
-                    }
                 }
             }).then(function(result) {
                 if (result.isConfirmed) {
+                    // Download do arquivo B3 na pasta Downloads do usuário —
+                    // o servidor devolve o CONTEÚDO (o mesmo gerador do
+                    // arquivo oficial, template/variante do File Interpreter
+                    // incluídos), sem gravar no share, sem notificação e sem
+                    // mexer no status. Vale para QUALQUER status do deal.
+                    var _dl = Object.assign({}, deal);
+                    delete _dl.Status;
                     fetch('/api/new-deals/opt-fxo/send-conecta', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ deals: [deal] })
+                        body: JSON.stringify({ deals: [_dl], download: true })
                     }).then(function(r) { return r.json(); })
                     .then(function(res) {
                         if (res.ok) {
-                            var rowId = _sh(table.cell(tr, 3).data()) || '';
-                            if (rowId) {
-                                fetch('/api/new-deals/opt-fxo/cache/' + encodeURIComponent(rowId) + '?client=' + encodeURIComponent(_sh(table.cell(tr, 10).data())), {
-                                    method: 'PATCH',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ Checker: CURRENT_USER_SID, Status: 'Sent' })
-                                }).catch(function(err) { console.warn('Cache PATCH failed:', err); });
-                            }
-                            table.cell(tr, STATUS_COL_INDEX).data(
-                                '<span class="badge badge-sent bg-gradient">Sent</span>'
-                            );
-                            table.draw(false);
-                            var _opcFnames = (res.files||[]).map(function(f){return f.filename;}).join(', ') || res.filename || 'FXO_Banco.txt';
-                                    Swal.fire({ title: t('swal-sent-title', 'Sent'), text: res.count + ' ' + t('swal-deals-written', 'deal(s) written to') + ' ' + _opcFnames + '.', icon: 'success', timer: 2500, showConfirmButton: false });
+                            (res.files || []).forEach(function(f) {
+                                if (!f || !f.content) return;
+                                var a = document.createElement('a');
+                                a.href = URL.createObjectURL(new Blob([f.content], { type: 'text/plain' }));
+                                a.download = f.filename || 'B3_FILE.txt';
+                                document.body.appendChild(a);
+                                a.click();
+                                setTimeout(function() { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+                            });
+                            var _fnames2 = (res.files || []).map(function(f) { return f.filename; }).join(', ') || res.filename || '';
+                            Swal.fire({ title: t('swal-downloaded-title', 'Downloaded'), text: _fnames2, icon: 'success', timer: 2500, showConfirmButton: false });
                         } else {
                             Swal.fire({ title: t('swal-conecta-error-title', 'Conecta Error'), text: res.error || t('swal-file-gen-failed', 'File generation failed.'), icon: 'error', confirmButtonText: t('swal-ok', 'OK'), confirmButtonColor: '#dc3545' });
                         }

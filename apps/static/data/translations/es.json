@@ -1867,5 +1867,16 @@
   "fi-view-close": "Cerrar",
   "fi-view-delete": "Eliminar",
   "fi-view-del-text": "El layout se eliminará del registro; las operaciones del par vuelven al template Predeterminado.",
-  "fi-view-deleted": "Template eliminado"
+  "fi-view-deleted": "Template eliminado",
+  "swal-downloaded-title": "Descargado",
+  "fi-calc-generator": "Valor del generador (nota libre)",
+  "fi-calc-field": "Valor del campo",
+  "fi-calc-date": "Campo como fecha (AAAAMMDD)",
+  "fi-calc-bizdiff": "Días hábiles entre A y B",
+  "fi-calc-addbiz": "Campo A + N días hábiles",
+  "fi-calc-lookup": "Consulta a mapping",
+  "fi-calc-free-ph": "nota (el generador calcula)",
+  "fi-calc-n-ph": "N (días hábiles)",
+  "fi-calc-in-ph": "columna de búsqueda (IN)",
+  "fi-calc-out-ph": "columna de resultado (OUT)"
 }

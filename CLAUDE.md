@@ -1602,6 +1602,22 @@ Intrag ficavam com o valor cru sempre que o notional estava na moeda fraca
   concordam; e o modal de criação **achata o `source_by_page`** da página
   escolhida nos campos planos — sem isso o override herdado do base venceria
   a edição feita na variante, em silêncio.
+- **O Source Field/Value aceita FÓRMULA cadastrada** (builder por dropdowns no
+  Edit Sources e no modal da variante): `FIELD`, `DATE`, `BIZDIFF`, `ADDBIZ` e
+  `LOOKUP(mapping; IN; OUT; Campo)`, argumentos por `;`, campo casado com o
+  deal pelo nome da COLUNA cego a caixa/espaço. Fórmula **vence o valor do
+  gerador** (e Fixed vence tudo); texto que não parseia continua documentação
+  — é o que mantém todo cadastro existente byte a byte. Quem executa é
+  `_fi_calc_value` (hook `deal=` do `_fi_build_line`) e o espelho do preview
+  é `FiTer.calc` (com `FiTer.prime` carregando ANBIMA e os mappings do
+  LOOKUP); `check_fi_calc.py` compara as duas cópias. O BIZDIFF é
+  zero-padded pela LARGURA do format (9(01) → `3`, 9(02) → `03`). E a
+  **Cotação para o Vencimento (campo 15 do TER) EFETIVA** (> 0 — Fixed da
+  variante ou fórmula) **desloca as datas das linhas de verificação (tipo 2)
+  N dias úteis para frente**, no calendário do deal: no gerador do NDF
+  Commodities, no download do Vanilla (o único caminho que emite tipo 2 no
+  genérico) e nos previews das duas páginas — hoje o campo nasce em branco,
+  então nada muda sem cadastro.
 - **Notificação nova exige o rótulo `page` nos TRÊS mapas de destino** —
   `_NOTIF_PAGE_URL` (routes.py), `PAGE_URL` do `partials/topbar.html` e do
   `static/js/sw-push.js`. Sem a entrada o aviso aparece normal e o clique não
