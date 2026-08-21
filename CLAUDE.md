@@ -105,7 +105,13 @@ importados pelas rotas — nenhum tem blueprint próprio:
 correta. `opcao_fx_pdf()` monta o PDF a partir do *HTML já renderizado* do
 documento (a mesma string que vira o `.doc`), via `_WordHtmlToFlowables` — as
 duas saídas não têm como divergir. Documento novo deve nascer assim
-(HANDOFF §139).
+(HANDOFF §139) — e é o que a **Opção de palm oil** faz: `word_html_pdf(doc_html)`
+é a função genérica desse caminho, e o registro de quem usa qual é o
+`_CONF_OPT_PDF_FROM_HTML` (o `opcao_pdf`, réplica em reportlab, continua
+servindo só as duas famílias que nasceram antes). Ali isso não é estilo: o
+Anexo I do palm oil tem **19** colunas e o `opcao_pdf` imprime as 16 de sempre —
+o documento assinado sairia sem a Taxa de Conversão da Mercadoria, que é como o
+preço em MYR vira USD.
 
 **`otc_boxparse.py` é a segunda cópia de uma regra que também vive no
 navegador** (`static/js/pages/otc-fileupload.js`). As duas precisam concordar

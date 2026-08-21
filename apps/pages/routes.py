@@ -29360,10 +29360,23 @@ _CONF_OPT_FAMILY_TEMPLATES = {
     # strike; por isso a coluna de Data de Verificação da PTAX segue única aqui
     # (diferente do Termo em BRL, que tem a janela inicial/final).
     'brl':        ('confirmations/opt-comm-strike-brl.html', '/confirmation/opt-comm/strike-brl'),
+    # Palm oil: o Anexo I ganha três colunas (Código da Bloomberg, Taxa de
+    # Conversão da Mercadoria e a Data de Verificação dela) e o documento passa
+    # a ter Anexo II — as mesmas do TERMO - PALM OIL.doc, porque a mercadoria é
+    # cotada em MYR e o preço só vira USD dividido pela taxa de conversão.
+    'palm-oil':   ('confirmations/opt-comm-palmoil-strike-myrusd.html',
+                   '/confirmation/opt-comm/palmoil-strike-myrusd'),
 }
 
 # Família → variante do PDF (a réplica em reportlab). Sem entrada = 'usd'.
 _CONF_OPT_PDF_VARIANT = {'brl': 'brl'}
+
+# Famílias cujo PDF sai do HTML JÁ RENDERIZADO (`word_html_pdf`), e não da
+# réplica em reportlab. É o padrão desde a Opção de Câmbio (§139) e o que vale
+# para documento novo: o texto existe UMA vez, no template, em vez de ganhar uma
+# segunda transcrição em Python que diverge na primeira revisão do jurídico.
+# `opcao_pdf` continua servindo as duas famílias que nasceram antes disso.
+_CONF_OPT_PDF_FROM_HTML = {'palm-oil'}
 
 
 def _conf_load_optcomm(ref):
@@ -29473,12 +29486,16 @@ def _conf_opt_generation_page(family):
         bullet = bool(f_ini and f_fim and f_ini == f_fim)
         direction = str(deal.get('Direction') or '').strip().upper()
         instrument = str(deal.get('Instrument') or '').upper()
-        rows.append({
+        row = {
             'num':       str(deal.get('Deal') or '').strip(),
             'tipo':      'Venda' if 'PUT' in instrument else 'Compra',
             'forma':     'Europeia',
             'ticker':    ticker,
-            'bolsa':     'PLATTS' if family in ('platts', 'brl-platts') else str((subj or {}).get('bolsa') or '').strip(),
+            # No Palm Oil a bolsa é fixa, como no Termo: a macro escrevia a
+            # constante e o documento cita a Bursa nominalmente.
+            'bolsa':     'PLATTS' if family in ('platts', 'brl-platts')
+                         else _CONF_PALMOIL_BOLSA if family == 'palm-oil'
+                         else str((subj or {}).get('bolsa') or '').strip(),
             'qtd':       _conf_fmt_num(str(deal.get('TotalNotional') or '').replace('-', ''), dec=None),
             'ptax':      _conf_fmt_date(deal.get('FXConvDate')),
             'comprador': 'Parte B' if direction.startswith('S') else 'Parte A',
@@ -29492,7 +29509,16 @@ def _conf_opt_generation_page(family):
             'dtFim':     'Não Aplicável' if bullet else _conf_fmt_date(deal.get('FixingEndDate')),
             'dtExerc':   _conf_fmt_date(deal.get('FixingEndDate')) if bullet else 'Não Aplicável',
             'dtVenc':    _conf_fmt_date(deal.get('SettlementDate')),
-        })
+        }
+        if family == 'palm-oil':
+            # As três colunas a mais do Anexo I, na mesma leitura do Termo: a
+            # Data de Verificação da Taxa de Conversão é a Data Final de
+            # Verificação da Mercadoria (o fixing end), inclusive no bullet —
+            # ali é a Data de Exercício, e é a mesma data.
+            row['bbg'] = 'Não Aplicável'
+            row['taxaConv'] = _CONF_PALMOIL_TAXA_CONV
+            row['dtTaxaConv'] = _conf_fmt_date(deal.get('FixingEndDate'))
+        rows.append(row)
         if subj is None:
             warnings.append('Ativo {} sem cadastro no Subjacente (bolsa/fator ausentes).'.format(ua))
 
@@ -29524,6 +29550,11 @@ def confirmation_optcomm_strike_usd():
 @blueprint.route('/confirmation/opt-comm/strike-brl')
 def confirmation_optcomm_strike_brl():
     return _conf_opt_generation_page('brl')
+
+
+@blueprint.route('/confirmation/opt-comm/palmoil-strike-myrusd')
+def confirmation_optcomm_palmoil_strike_myrusd():
+    return _conf_opt_generation_page('palm-oil')
 
 
 @blueprint.route('/api/confirmation/opt-comm/save', methods=['POST'])
@@ -29565,18 +29596,24 @@ def api_conf_optcomm_save():
         'warnings':     [],
     }
 
+    # O HTML do documento é montado ANTES do PDF: nas famílias novas ele É a
+    # fonte do PDF (`word_html_pdf`), e nas antigas continua sendo só o `.doc`.
+    doc_html = render_template(_CONF_OPT_FAMILY_TEMPLATES[family][0],
+                               conf=conf, doc_only=True)
+
     try:
-        from apps.pages.confirmation_pdfs import opcao_pdf
-        pdf_bytes = opcao_pdf(conf, variant=_CONF_OPT_PDF_VARIANT.get(family, 'usd'))
+        if family in _CONF_OPT_PDF_FROM_HTML:
+            from apps.pages.confirmation_pdfs import word_html_pdf
+            pdf_bytes = word_html_pdf(doc_html)
+        else:
+            from apps.pages.confirmation_pdfs import opcao_pdf
+            pdf_bytes = opcao_pdf(conf, variant=_CONF_OPT_PDF_VARIANT.get(family, 'usd'))
     except ImportError:
         return jsonify({'success': False,
                         'message': 'reportlab is not installed — run pip install -r requirements.txt.'}), 500
     except Exception:
         log.error('[conf] PDF build failed:\n%s', traceback.format_exc())
         return jsonify({'success': False, 'message': 'PDF generation failed.'}), 500
-
-    doc_html = render_template(_CONF_OPT_FAMILY_TEMPLATES[family][0],
-                               conf=conf, doc_only=True)
 
     ref = _parse_date_any(payload.get('date')) or _parse_date_any(conf['data_neg']) or datetime.now()
     # Pasta da contraparte no Electronic Inventory (mesma árvore do upload
