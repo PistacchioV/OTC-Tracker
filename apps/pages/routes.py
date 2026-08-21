@@ -22397,7 +22397,8 @@ _FI_FIELD_KEYS = ('seq', 'field', 'format', 'position', 'required',
                   'source_note')
 _FI_META_KEYS = ('name', 'system_id', 'category', 'manual_section',
                  'manual_pages', 'manual_version', 'description',
-                 'file_name_rule', 'notes')
+                 'file_name_rule', 'notes', 'base_key', 'le_pair',
+                 'file_name')
 
 
 def _fi_path(key):
@@ -22428,6 +22429,10 @@ def _fi_clean_template(key, payload):
         out[k] = str(payload.get(k, '') or '')
     if not out['name'].strip():
         return None, 'name is required'
+    # `file_name` vira nome de arquivo em disco na geração: só o basename e
+    # só caracteres inofensivos — um '../' cadastrado não pode virar caminho.
+    out['file_name'] = re.sub(r'[^A-Za-z0-9._ -]', '',
+                              os.path.basename(out['file_name'])).strip()
     ft = str(payload.get('file_type', '') or '').strip().lower()
     out['file_type'] = ft if ft in ('positional', 'delimited') else 'positional'
     sep = payload.get('separator')
@@ -22513,6 +22518,63 @@ def _fi_tpl_cached(key):
     return data
 
 
+# ── Variantes por par de pernas (LE pair) ───────────────────────────────────
+#  Um template pode ser VARIANTE de outro: `base_key` aponta o template-mãe e
+#  `le_pair` diz para qual par de pernas ele vale ('MGT x JPM'). O gerador
+#  continua chamando o motor pela chave BASE — quem escolhe a variante é o
+#  motor, pelo par do deal. Sem par, ou sem variante cadastrada para o par,
+#  vale o base: o comportamento de sempre, byte a byte. A variante é uma
+#  cópia completa do layout, então nela mais campos podem virar Fixed (conta
+#  da parte/contraparte, Nome Simplificado do header) sem tocar em código.
+
+_FI_LE_PAIRS = ('JPM x MGT', 'JPM x CLI', 'MGT x CLI', 'JPM x ATACAMA',
+                'MGT x JPM', 'ATACAMA x JPM', 'LAWTON x JPM', 'JPM x LAWTON')
+
+
+def _fi_le_pair_norm(pair):
+    """'mgt × Jpm ' ≡ 'MGT x JPM' — comparação cega a caixa, espaço extra e ao
+    sinal de vezes. O que se grava é o texto do cadastro."""
+    s = str(pair or '').upper().replace('×', 'X')
+    return ' '.join(s.split())
+
+
+def _fi_variant_key(base_key, page_url=None, le_pair=None):
+    """Chave EFETIVA do template para (página, par de pernas). A variante
+    ligada à página vence a variante sem página nenhuma (coringa); variante
+    ligada só a OUTRAS páginas não vale aqui. Sem par ou sem variante → o
+    próprio base."""
+    want = _fi_le_pair_norm(le_pair)
+    if not want:
+        return base_key
+    wildcard = None
+    try:
+        names = sorted(os.listdir(_FILE_INTERFACE_DIR))
+    except OSError:
+        return base_key
+    for fn in names:
+        if not fn.endswith('.json'):
+            continue
+        t = _fi_tpl_cached(fn[:-5])
+        if not t or str(t.get('base_key', '') or '') != base_key:
+            continue
+        if _fi_le_pair_norm(t.get('le_pair')) != want:
+            continue
+        pages = [p.get('url') for p in (t.get('linked_pages') or [])]
+        if not pages:
+            wildcard = wildcard or t.get('key')
+        elif not page_url or page_url in pages:
+            return t.get('key')
+    return wildcard or base_key
+
+
+def _fi_variant_file_name(base_key, page_url=None, le_pair=None):
+    """`file_name` da variante efetiva — o nome do arquivo gerado quando o
+    cadastro define um. '' = usa o nome padrão do gerador."""
+    key = _fi_variant_key(base_key, page_url, le_pair)
+    tpl = _fi_tpl_cached(key)
+    return str((tpl or {}).get('file_name', '') or '').strip()
+
+
 def _fi_width(fmt):
     """Largura em caracteres de um formato do manual: X(n)/9(n) → n,
     9(a)V9(b) → a+b (o V é decimal implícito, não ocupa posição).
@@ -22536,7 +22598,14 @@ def _fi_seq_key(seq):
     return s.lstrip('0') or '0' if s.isdigit() else s
 
 
-def _fi_build_line(key, block_id, values, page_url=None):
+def _fi_block_of(tpl, block_id):
+    for b in (tpl or {}).get('blocks', []):
+        if b.get('id') == block_id:
+            return b
+    return None
+
+
+def _fi_build_line(key, block_id, values, page_url=None, le_pair=None):
     """Monta UMA linha do arquivo a partir do cadastro do File Interface.
 
     `values` = {seq: string JÁ formatada} dos campos não-Fixed ('4' e '04'
@@ -22547,15 +22616,21 @@ def _fi_build_line(key, block_id, values, page_url=None):
     nunca truncado nem reformatado. Posicional concatena; delimitado junta
     com o separator do template e fecha com token vazio (padrão OPC).
     Template/bloco ausente levanta ValueError: arquivo para a B3 não pode
-    sair meio montado em silêncio."""
-    tpl = _fi_tpl_cached(key)
-    block = None
-    for b in (tpl or {}).get('blocks', []):
-        if b.get('id') == block_id:
-            block = b
-            break
+    sair meio montado em silêncio.
+
+    `le_pair` escolhe a VARIANTE do template ('MGT x JPM'): a cadastrada para
+    o par vence; variante sem o bloco cai de volta no bloco do base — uma
+    variante criada antes de o base ganhar um bloco não pode derrubar a
+    geração inteira."""
+    eff_key = _fi_variant_key(key, page_url, le_pair)
+    tpl = _fi_tpl_cached(eff_key)
+    block = _fi_block_of(tpl, block_id)
+    if eff_key != key and (tpl is None or block is None):
+        eff_key = key
+        tpl = _fi_tpl_cached(key)
+        block = _fi_block_of(tpl, block_id)
     if tpl is None or block is None:
-        raise ValueError('file-interface template missing: {}/{}'.format(key, block_id))
+        raise ValueError('file-interface template missing: {}/{}'.format(eff_key, block_id))
     positional = tpl.get('file_type') != 'delimited'
     vals = {_fi_seq_key(k): ('' if v is None else str(v)) for k, v in (values or {}).items()}
     parts = []
@@ -22621,7 +22696,11 @@ def api_file_interface_page_spec():
                            'note': b.get('note', ''), 'fields': fields})
         out.append({'key': tpl.get('key'), 'name': tpl.get('name'),
                     'file_type': tpl.get('file_type'),
-                    'separator': tpl.get('separator'), 'blocks': blocks})
+                    'separator': tpl.get('separator'),
+                    'base_key': tpl.get('base_key', '') or '',
+                    'le_pair': tpl.get('le_pair', '') or '',
+                    'file_name': tpl.get('file_name', '') or '',
+                    'blocks': blocks})
     return jsonify({'success': True, 'url': url, 'templates': out})
 
 
@@ -22654,7 +22733,8 @@ def api_file_interface_list():
         items.append({k: t.get(k) for k in
                       ('key', 'name', 'system_id', 'category', 'file_type',
                        'separator', 'record_length', 'status', 'linked_pages',
-                       'manual_section', 'manual_pages')})
+                       'manual_section', 'manual_pages', 'base_key', 'le_pair',
+                       'file_name')})
         items[-1]['blocks'] = len(t.get('blocks') or [])
         items[-1]['fields'] = sum(len(b.get('fields') or [])
                                   for b in (t.get('blocks') or []))
@@ -25571,6 +25651,10 @@ def _ndf_comm_ter_lines(deal):
         biz_str = str(biz_count).zfill(3)
     my_number = str(random.randint(1000000000, 9999999999))
 
+    # Par de pernas → variante do template. A perna nossa é a MESMA regra do
+    # arquivo destino: cliente JPM = visão Lawton (TCO_LAWTON), senão Banco.
+    le_pair = _ter_le_pair('LAWTON' if is_jpmorgan else 'JPM', client)
+
     # Posicional (largura fixa, sem delimitador) — layout TER do cadastro.
     # Só os campos não-Fixed entram em `values` (seq do template); os
     # literais e os brancos saem do JSON.
@@ -25598,7 +25682,8 @@ def _ndf_comm_ter_lines(deal):
         '59': _pos(biz_str, 3),                       # Quantidade de Datas de Verificação
     }
     lines = [_fi_build_line(_TER_FI_KEY, 'registro-dados-fixos', values,
-                            page_url='/new_deals-ndf-commodities')]
+                            page_url='/new_deals-ndf-commodities',
+                            le_pair=le_pair)]
 
     # Asian fixing date rows (line type 2) — também pelo motor. O parse das
     # datas fica num try próprio: um ValueError do template tem de SUBIR até
@@ -25618,7 +25703,7 @@ def _ndf_comm_ter_lines(deal):
                     _TER_FI_KEY, 'registro-dados-variaveis',
                     {'4': _pos(_d, 8),                    # Data Verificação
                      '6': _pos(_fx, 8) + _pos('', 10)},   # Data de Verificação da Moeda + filler
-                    page_url='/new_deals-ndf-commodities'))
+                    page_url='/new_deals-ndf-commodities', le_pair=le_pair))
             _cur2 += _dt.timedelta(days=1)
     return is_jpmorgan, lines
 
@@ -25636,27 +25721,28 @@ def api_ndf_send_conecta():
 
     today = _dt.datetime.today().strftime('%Y%m%d')
 
-    lawton_lines = []
-    banco_lines  = []
-    lawton_count = 0
-    banco_count  = 0
-
+    # Um destino por ARQUIVO: o nome padrão é TCO_{LAWTON,BANCO}.txt e a
+    # variante do template (pelo par de pernas do deal) pode cadastrar outro
+    # em `file_name`. Headers pelo bloco `header` do cadastro (layout 00003);
+    # o Participante sai do `b3-accounts` pela LE da visão — ou do Fixed da
+    # variante, quando o cadastro o fixou.
+    page_url  = '/new_deals-ndf-commodities'
+    out_files = {}
     try:
         for deal in deals:
             is_jpmorgan, ter_lines = _ndf_comm_ter_lines(deal)
-            if is_jpmorgan:
-                lawton_lines.extend(ter_lines)
-                lawton_count += 1
-            else:
-                banco_lines.extend(ter_lines)
-                banco_count += 1
-        # Headers differ by counterparty type; layout version is 00003 — tudo
-        # do bloco `header` do cadastro. O Participante sai do `b3-accounts`
-        # pela LE da visão: aqui a de Lawton e a do Banco J.P. Morgan.
-        lawton_header = _ter_file_header(_TER_BUCKET_LE['LAWTON'], today,
-                                         '/new_deals-ndf-commodities')
-        banco_header  = _ter_file_header(_TER_BUCKET_LE['BANCO'], today,
-                                         '/new_deals-ndf-commodities')
+            bucket = 'LAWTON' if is_jpmorgan else 'BANCO'
+            client = re.sub(r'<[^>]+>', '', str(deal.get('Client', '') or '')).strip()
+            pair   = _ter_le_pair(_TER_BUCKET_LE[bucket], client)
+            fname  = (_fi_variant_file_name(_TER_FI_KEY, page_url, pair)
+                      or 'TCO_{}.txt'.format(bucket))
+            d = out_files.setdefault(fname, {'bucket': bucket, 'pair': pair,
+                                             'lines': [], 'count': 0})
+            d['lines'].extend(ter_lines)
+            d['count'] += 1
+        headers = {fname: _ter_file_header(_TER_BUCKET_LE[d['bucket']], today,
+                                           page_url, le_pair=d['pair'])
+                   for fname, d in out_files.items() if d['lines']}
     except ValueError as exc:
         log.error('[NDF COMM] send-conecta sem header: %s', exc)
         return jsonify({'ok': False, 'error': str(exc) or _TER_FI_ERROR}), 500
@@ -25665,17 +25751,14 @@ def api_ndf_send_conecta():
     generated  = []
     try:
         os.makedirs(output_dir, exist_ok=True)
-        if lawton_lines:
-            lawton_path = _unique_filepath(output_dir, 'TCO_LAWTON.txt')
-            with open(lawton_path, 'w', encoding='utf-8') as fh:
-                fh.write('\n'.join([lawton_header] + lawton_lines))
-            generated.append({'filename': os.path.basename(lawton_path), 'count': lawton_count})
-        if banco_lines:
-            banco_path = _unique_filepath(output_dir, 'TCO_BANCO.txt')
-            with open(banco_path, 'w', encoding='utf-8') as fh:
-                fh.write('\n'.join([banco_header] + banco_lines))
-            generated.append({'filename': os.path.basename(banco_path), 'count': banco_count})
-        total = lawton_count + banco_count
+        for fname, d in out_files.items():
+            if not d['lines']:
+                continue
+            path = _unique_filepath(output_dir, fname)
+            with open(path, 'w', encoding='utf-8') as fh:
+                fh.write('\n'.join([headers[fname]] + d['lines']))
+            generated.append({'filename': os.path.basename(path), 'count': d['count']})
+        total = sum(d['count'] for d in out_files.values())
         primary = generated[0]['filename'] if generated else ''
         if total > 0:
             _create_notification(session.get('user_sid', ''), session.get('user_name', ''), 'Sent to B3', 'NDF Comm', str(total) + ' deal' + ('' if total == 1 else 's') + ' sent')
@@ -34018,7 +34101,34 @@ _TER_BUCKET_LE = {
 }
 
 
-def _ter_file_header(le, today, page_url):
+def _ter_le_side(name):
+    """Lado de um par de pernas a partir de um nome (LE ou contraparte):
+    'JPM', 'MGT', 'LAWTON', 'ATACAMA' — ou None para cliente externo. Os
+    testes de substring são os mesmos que o gerador sempre usou para contas
+    (`_is_jpm`/`_is_mgt`/`_is_lawton`), para o par nunca discordar do bucket."""
+    u = str(name or '').upper()
+    if not u.strip():
+        return None
+    if 'LAWTON' in u:
+        return 'LAWTON'
+    if 'ATACAMA' in u:
+        return 'ATACAMA'
+    if 'MGT' in u:
+        return 'MGT'
+    if re.search(r'J\.?P\.?\s*MORGAN', u) or u.strip() in ('JPM', 'BANCO'):
+        return 'JPM'
+    return None
+
+
+def _ter_le_pair(our_side, client):
+    """Par 'NOSSA PERNA x CONTRAPARTE' que escolhe a variante do template
+    ('MGT x JPM', 'JPM x CLI', ...). Contraparte que não é entidade do grupo
+    é 'CLI'. A cópia desta regra no navegador é o `static/js/fi-ter-pair.js`
+    (o preview escolhe a mesma variante que o arquivo usa)."""
+    return '{} x {}'.format(our_side, _ter_le_side(client) or 'CLI')
+
+
+def _ter_file_header(le, today, page_url, le_pair=None):
     """Header (linha tipo 0) de um arquivo TER, pelo bloco `header` do
     cadastro — só o Participante e a data são do gerador; 'TER', tipo de
     linha, código de operação e versão de layout saem do JSON.
@@ -34030,14 +34140,26 @@ def _ter_file_header(le, today, page_url):
 
     LE sem Nome Simplificado cadastrado levanta ValueError dizendo qual: o
     header é obrigatório, e um Participante em branco é um arquivo que a B3
-    recusa depois de a mesa já ter mandado."""
+    recusa depois de a mesa já ter mandado.
+
+    Com `le_pair`, a VARIANTE do template pode fixar o Participante (Source
+    Fixed no campo 4 do header) — aí o cadastro `b3-accounts` deixa de ser
+    exigido, porque o valor que vai para o arquivo é o do próprio template."""
+    tpl = _fi_tpl_cached(_fi_variant_key(_TER_FI_KEY, page_url, le_pair))
+    participant_fixed = False
+    for f in (_fi_block_of(tpl, 'header') or {}).get('fields', []):
+        if _fi_seq_key(f.get('seq')) == '4':
+            participant_fixed = \
+                str(_fi_field_src(f, page_url).get('source', '')) == 'Fixed'
+            break
     nome = _b3_participant_name(le)
-    if not nome:
+    if not nome and not participant_fixed:
         raise ValueError(
             'B3 Accounts: no Simplified Name registered for legal entity '
             '{!r} — register it at /mapping › B3 Accounts'.format(le))
     return _fi_build_line(_TER_FI_KEY, 'header',
-                          {'4': nome, '5': today}, page_url=page_url)
+                          {'4': nome, '5': today}, page_url=page_url,
+                          le_pair=le_pair)
 
 
 def _generic_ndf_ter_line(deal, is_fwd):
@@ -34242,8 +34364,9 @@ def _generic_ndf_ter_line(deal, is_fwd):
             + 1).zfill(3) if asian_fix else '000', 3),   # Qtde Datas Verificação
     }
     page_url = '/new_deals-ndf-fwdstart' if is_fwd else '/new_deals-ndf-otherpublisher'
+    le_pair = _ter_le_pair(_TER_BUCKET_LE[bucket], client)
     return bucket, _fi_build_line(_TER_FI_KEY, 'registro-dados-fixos', values,
-                                  page_url=page_url)
+                                  page_url=page_url, le_pair=le_pair)
 
 
 def _nd_lawton_mirror(deal):
@@ -34293,8 +34416,21 @@ def api_generic_nd_send_conecta(product):
 
     today = datetime.today().strftime('%Y%m%d')
 
-    buckets = {'BANCO': [], 'LAWTON': [], 'MGT': []}
+    # Um destino por ARQUIVO de saída: o nome padrão é {prefix}_{bucket}.txt,
+    # e a variante do template (pelo par de pernas do deal) pode cadastrar
+    # outro em `file_name`. Deals do mesmo bucket com variantes de nomes
+    # diferentes saem em arquivos separados — é o que o cadastro pediu.
+    out_files = {}
     counts = Counter()
+
+    def _fi_dest(bucket, client):
+        pair = _ter_le_pair(_TER_BUCKET_LE[bucket], client)
+        fname = (_fi_variant_file_name(_TER_FI_KEY, page_url, pair)
+                 or '{}_{}.txt'.format(prefix, bucket))
+        if fname not in out_files:
+            out_files[fname] = {'bucket': bucket, 'pair': pair, 'lines': []}
+        return out_files[fname], fname
+
     try:
         made_by_deal = []
         for deal in deals:
@@ -34303,8 +34439,10 @@ def api_generic_nd_send_conecta(product):
                 continue
             made_by_deal.append((deal, made[0]))
             bucket, line = made
-            buckets[bucket].append(line)
-            counts[bucket] += 1
+            dest, fname = _fi_dest(
+                bucket, re.sub(r'<[^>]+>', '', str(deal.get('Client', '') or '')).strip())
+            dest['lines'].append(line)
+            counts[fname] += 1
         # Quebra visão banco × visão Lawton: a linha do banco contra o Lawton
         # gera também a visão Lawton (espelho sintetizado), A MENOS que o lote
         # já traga a perna explícita do mesmo trade — aí ela é a visão Lawton
@@ -34320,14 +34458,19 @@ def api_generic_nd_send_conecta(product):
             if sig in explicit:
                 explicit.remove(sig)
                 continue
-            made = _generic_ndf_ter_line(_nd_lawton_mirror(deal), is_fwd)
+            mirror = _nd_lawton_mirror(deal)
+            made = _generic_ndf_ter_line(mirror, is_fwd)
             if made is None:
                 continue
             b2, l2 = made
-            buckets[b2].append(l2)
-            counts[b2] += 1
-        headers = {b: _ter_file_header(_TER_BUCKET_LE[b], today, page_url)
-                   for b, lines in buckets.items() if lines}
+            dest, fname = _fi_dest(b2, str(mirror.get('Client', '') or ''))
+            dest['lines'].append(l2)
+            counts[fname] += 1
+        # O header é por ARQUIVO: a LE é a do bucket e a variante é a do par
+        # do primeiro deal que caiu nele (mesma perna nossa → mesmo header).
+        headers = {fname: _ter_file_header(_TER_BUCKET_LE[d['bucket']], today,
+                                           page_url, le_pair=d['pair'])
+                   for fname, d in out_files.items() if d['lines']}
     except ValueError as exc:
         log.error('[ND %s] send-conecta sem header: %s', product, exc)
         return jsonify({'ok': False, 'error': str(exc) or _TER_FI_ERROR}), 500
@@ -34335,13 +34478,13 @@ def api_generic_nd_send_conecta(product):
     generated = []
     try:
         os.makedirs(CONECTA_NEW_PATH, exist_ok=True)
-        for bucket in ('BANCO', 'LAWTON', 'MGT'):
-            if not buckets[bucket]:
+        for fname, d in out_files.items():
+            if not d['lines']:
                 continue
-            path = _unique_filepath(CONECTA_NEW_PATH, '{}_{}.txt'.format(prefix, bucket))
+            path = _unique_filepath(CONECTA_NEW_PATH, fname)
             with open(path, 'w', encoding='utf-8') as fh:
-                fh.write('\n'.join([headers[bucket]] + buckets[bucket]))
-            generated.append({'filename': os.path.basename(path), 'count': counts[bucket]})
+                fh.write('\n'.join([headers[fname]] + d['lines']))
+            generated.append({'filename': os.path.basename(path), 'count': counts[fname]})
         # `count` da resposta e da notificação = DEALS enviados; o espelho
         # sintetizado do Lawton é uma linha a mais no arquivo (conta no
         # per-file `files`), não um deal a mais.

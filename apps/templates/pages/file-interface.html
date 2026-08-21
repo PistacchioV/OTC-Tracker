@@ -238,6 +238,16 @@
         text-align: center; color: var(--ins-secondary-color);
         padding: 3rem 1rem; font-size: .85rem;
     }
+
+    /* Variantes por par de pernas: item do rail indentado sob o base,
+       badge com o par (MGT x JPM). */
+    #fi-page .fi-tpl-item.fi-tpl-variant { margin-left: 16px; }
+    #fi-page .fi-tpl-item .fi-tpl-pair {
+        margin-left: auto; font-size: .62rem; font-weight: 700; flex: 0 0 auto;
+        background: rgba(137, 87, 229, .14); color: #8957e5;
+        padding: .1rem .45rem; border-radius: 999px; white-space: nowrap;
+    }
+    [data-bs-theme=dark] #fi-page .fi-tpl-item .fi-tpl-pair { color: #b197fc; }
 </style>
 {% endblock extra_css %}
 
@@ -270,9 +280,6 @@
                         <div class="text-uppercase text-muted fw-semibold fs-xxs ps-1" data-lang="fi-list-title">Templates</div>
                     </div>
                     <div class="d-grid gap-1 mb-2">
-                        <button class="btn btn-sm btn-primary bg-gradient btn-toolbar-all" type="button" id="fiAddBtn">
-                            <i class="ti ti-plug-connected me-1"></i><span data-lang="fi-add-template">Add Template</span>
-                        </button>
                         <button class="btn btn-sm btn-info bg-gradient btn-toolbar-all" type="button" id="fiNewBtn">
                             <i class="ti ti-plus me-1"></i><span data-lang="fi-new-template">Create New Template</span>
                         </button>
@@ -294,6 +301,9 @@
                         <h4 class="header-title mb-0" id="fiCurTitle">—</h4>
                         <span id="fiCurStatus"></span>
                         <div class="ms-auto d-flex align-items-center gap-2 flex-wrap">
+                            <button class="btn btn-sm btn-primary bg-gradient btn-toolbar-all" type="button" id="fiAddBtn">
+                                <i class="ti ti-plug-connected me-1"></i><span data-lang="fi-add-template">Add Template</span>
+                            </button>
                             <button class="btn btn-sm btn-success bg-gradient btn-toolbar-all" type="button" id="fiLinkBtn">
                                 <i class="ti ti-link me-1"></i><span data-lang="fi-link-pages">Link Pages</span>
                             </button>
@@ -377,6 +387,76 @@
                 <div class="modal-footer py-2">
                     <button type="button" class="btn btn-sm btn-danger" data-bs-dismiss="modal" title="Cancel"><i class="ti ti-x"></i></button>
                     <button type="button" class="btn btn-sm btn-success" id="fiColsSave" title="Save"><i class="ti ti-device-floppy"></i></button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ══════════ Modal: Add Template (variante por par de pernas) ══════════ -->
+    <div class="modal fade" id="fiVariantModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content liquid-glass">
+                <div class="modal-header py-2">
+                    <h5 class="modal-title fs-6"><i class="ti ti-plug-connected me-1"></i><span data-lang="fi-var-title">Add Template — legal entity variant</span></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-2">
+                        <label class="form-label fs-xs fw-semibold" data-lang="fi-var-base">Base template</label>
+                        <input class="form-control form-control-sm" id="fiVarBase" disabled>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label fs-xs fw-semibold" data-lang="fi-var-page">Page</label>
+                        <select class="form-select form-select-sm" id="fiVarPage"></select>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label fs-xs fw-semibold" data-lang="fi-var-pair">Legal Entities (our leg x counterparty)</label>
+                        <select class="form-select form-select-sm" id="fiVarPair"></select>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label fs-xs fw-semibold" data-lang="fi-var-file">File Name</label>
+                        <input class="form-control form-control-sm" id="fiVarFile" placeholder="FWDSTART_MGT.txt">
+                        <div class="text-muted fs-xxs mt-1" data-lang="fi-var-file-hint">
+                            Name of the generated file for deals of this pair. Blank keeps the page's default name.
+                        </div>
+                    </div>
+                    <div class="mb-1">
+                        <label class="form-label fs-xs fw-semibold" data-lang="fi-var-copy">Copy layout from</label>
+                        <select class="form-select form-select-sm" id="fiVarCopy"></select>
+                    </div>
+                    <div class="text-muted fs-xxs mt-2" data-lang="fi-var-hint">
+                        Deals of this page whose legs match the pair will use this variant — Preview and generated
+                        file. Fix accounts and header names via Edit Sources; Page / Mapping / Calculated sources keep working.
+                    </div>
+                </div>
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-sm btn-danger" data-bs-dismiss="modal" title="Cancel"><i class="ti ti-x"></i></button>
+                    <button type="button" class="btn btn-sm btn-success" id="fiVarSave" title="Save"><i class="ti ti-device-floppy"></i></button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ══════════ Modal: templates usados por uma página ══════════ -->
+    <div class="modal fade" id="fiPageTplsModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content liquid-glass">
+                <div class="modal-header py-2">
+                    <h5 class="modal-title fs-6"><i class="ti ti-template me-1"></i><span data-lang="fi-ptpl-title">Templates of this page</span></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="fs-xs fw-semibold mb-2" id="fiPageTplsPage"></div>
+                    <label class="form-label fs-xs fw-semibold" data-lang="fi-ptpl-label">Template variant</label>
+                    <select class="form-select form-select-sm" id="fiPageTplsSel"></select>
+                    <div class="text-muted fs-xxs mt-2" data-lang="fi-ptpl-hint">
+                        The Default template serves every deal of the page; a legal-entity variant overrides it
+                        for deals whose legs match its pair.
+                    </div>
+                </div>
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-sm btn-danger" data-bs-dismiss="modal" title="Cancel"><i class="ti ti-x"></i></button>
+                    <button type="button" class="btn btn-sm btn-success" id="fiPageTplsOpen" title="Open"><i class="ti ti-eye"></i></button>
                 </div>
             </div>
         </div>
@@ -557,50 +637,56 @@
             .sort(function (a, b) { return a.label.localeCompare(b.label); });
     }
     function buildRail() {
+        // Só a BIBLIOTECA vive no rail: base por categoria, e as variantes por
+        // par de pernas aninhadas sob o próprio base. As páginas se alcançam
+        // pelos chips "Used by" do cabeçalho (modal de variantes da página).
         var box = document.getElementById('fiTplList');
         if (!box) return;
-        var html = '';
-        var pages = pagesFromList();
-        if (pages.length) {
-            html += '<div class="fi-cat-title">' + t('fi-rail-pages', 'Pages') + '</div>';
-            pages.forEach(function (p) {
-                html += '<a href="javascript:void(0);" class="fi-tpl-item is-live' +
-                        (CUR_PAGE === p.url ? ' is-active' : '') +
-                        '" data-page="' + esc(p.url) + '" data-label="' + esc(p.label) + '" title="' + esc(p.label) + '">' +
-                        '<span class="fi-tpl-dot"></span>' +
-                        '<span class="fi-tpl-name">' + esc(p.label) + '</span>' +
-                        '<span class="fi-tpl-badge">' + p.tpls.length + '</span></a>';
-            });
-        }
-        html += '<div class="fi-cat-title">' + t('fi-rail-library', 'Template Library') + '</div>';
-        var groups = {};
+        var html = '<div class="fi-cat-title">' + t('fi-rail-library', 'Template Library') + '</div>';
+        var bases = LIST.filter(function (m) { return !m.base_key; });
+        var varsBy = {};
         LIST.forEach(function (m) {
+            if (m.base_key) (varsBy[m.base_key] = varsBy[m.base_key] || []).push(m);
+        });
+        var groups = {};
+        bases.forEach(function (m) {
             var c = m.category || 'Other';
             (groups[c] = groups[c] || []).push(m);
+        });
+        // Variante órfã (base apagado): aparece na categoria dela mesma,
+        // senão sumiria da tela com o arquivo ainda no registro.
+        Object.keys(varsBy).forEach(function (bk) {
+            if (bases.some(function (b) { return b.key === bk; })) return;
+            varsBy[bk].forEach(function (m) {
+                var c = m.category || 'Other';
+                (groups[c] = groups[c] || []).push(m);
+            });
         });
         var cats = Object.keys(groups).sort(function (a, b) {
             var ia = CATEGORY_ORDER.indexOf(a), ib = CATEGORY_ORDER.indexOf(b);
             if (ia === -1) ia = 99; if (ib === -1) ib = 99;
             return ia - ib || a.localeCompare(b);
         });
+        function itemHtml(m, variant) {
+            var live = m.status === 'active';
+            return '<a href="javascript:void(0);" class="fi-tpl-item' +
+                   (variant ? ' fi-tpl-variant' : '') +
+                   (!CUR_PAGE && m.key === CUR_KEY ? ' is-active' : '') + (live ? ' is-live' : '') +
+                   '" data-key="' + esc(m.key) + '" title="' + esc(m.name) + '">' +
+                   '<span class="fi-tpl-dot"></span>' +
+                   '<span class="fi-tpl-name">' + esc(m.name) + '</span>' +
+                   (variant && m.le_pair
+                        ? '<span class="fi-tpl-pair">' + esc(m.le_pair) + '</span>'
+                        : '<span class="fi-tpl-badge">' + (m.fields || 0) + '</span>') + '</a>';
+        }
         cats.forEach(function (c) {
             html += '<div class="fi-cat-title fi-cat-sub">' + esc(c) + '</div>';
             groups[c].forEach(function (m) {
-                var live = m.status === 'active';
-                html += '<a href="javascript:void(0);" class="fi-tpl-item' +
-                        (!CUR_PAGE && m.key === CUR_KEY ? ' is-active' : '') + (live ? ' is-live' : '') +
-                        '" data-key="' + esc(m.key) + '" title="' + esc(m.name) + '">' +
-                        '<span class="fi-tpl-dot"></span>' +
-                        '<span class="fi-tpl-name">' + esc(m.name) + '</span>' +
-                        '<span class="fi-tpl-badge">' + (m.fields || 0) + '</span></a>';
+                html += itemHtml(m, !!m.base_key);
+                (varsBy[m.key] || []).forEach(function (v) { html += itemHtml(v, true); });
             });
         });
         box.innerHTML = html;
-        box.querySelectorAll('.fi-tpl-item[data-page]').forEach(function (el) {
-            el.addEventListener('click', function () {
-                selectPage(el.getAttribute('data-page'), el.getAttribute('data-label'));
-            });
-        });
         box.querySelectorAll('.fi-tpl-item[data-key]').forEach(function (el) {
             el.addEventListener('click', function () { selectTpl(el.getAttribute('data-key')); });
         });
@@ -740,6 +826,18 @@
                           t('fi-template', 'Template') + '</span>' + esc(tpl.name || tpl.key) + '</span>');
             }
         }
+        if (tpl.le_pair)
+            meta.push('<span class="fi-meta-chip"><i class="ti ti-git-fork"></i><span class="fi-meta-k">' +
+                      t('fi-var-pair-k', 'LE') + '</span>' + esc(tpl.le_pair) + '</span>');
+        if (tpl.file_name)
+            meta.push('<span class="fi-meta-chip"><i class="ti ti-file-text"></i><span class="fi-meta-k">' +
+                      t('fi-var-file-k', 'File') + '</span>' + esc(tpl.file_name) + '</span>');
+        if (tpl.base_key) {
+            var bm = LIST.filter(function (x) { return x.key === tpl.base_key; })[0];
+            if (bm) meta.push('<span class="fi-meta-chip" id="fiBaseChip" style="cursor:pointer" title="' +
+                              esc(bm.name) + '"><i class="ti ti-template"></i><span class="fi-meta-k">' +
+                              t('fi-var-base-k', 'Base') + '</span>' + esc(bm.name) + '</span>');
+        }
         if (tpl.system_id)
             meta.push('<span class="fi-meta-chip"><i class="ti ti-cpu"></i>' + esc(tpl.system_id) + '</span>');
         meta.push('<span class="fi-meta-chip"><i class="ti ti-' +
@@ -765,13 +863,16 @@
         document.getElementById('fiCurPages').innerHTML = pages.length
             ? '<span class="fs-xxs text-muted fw-semibold text-uppercase me-1">' + t('fi-used-by', 'Used by') + '</span>' + pages.join('')
             : '<span class="fs-xs text-muted fst-italic">' + t('fi-no-pages', 'No page linked yet — library template.') + '</span>';
-        // Clique num chip de página: troca o CONTEXTO da origem para aquela página
-        // (as colunas de Origem passam a dizer só o que aquela página faz).
+        // Clique num chip de página: abre o modal com as VARIANTES de template
+        // daquela página (Default + pares de pernas) — escolher uma troca o
+        // contexto para a página, com as colunas de Origem daquela variante.
         document.querySelectorAll('#fiCurPages [data-goto]').forEach(function (el) {
             el.addEventListener('click', function () {
-                selectPage(el.getAttribute('data-goto'), el.getAttribute('data-label'), tpl.key);
+                openPageTplsModal(el.getAttribute('data-goto'), el.getAttribute('data-label'), tpl.key);
             });
         });
+        var bChip = document.getElementById('fiBaseChip');
+        if (bChip) bChip.addEventListener('click', function () { selectTpl(tpl.base_key); });
         var sw = document.getElementById('fiTplSwitch');
         if (sw) sw.addEventListener('change', function () {
             guardSrcEdit(function () {
@@ -1060,8 +1161,124 @@
     }
     document.getElementById('fiLinkTpl').addEventListener('change', renderLinkPicker);
     document.getElementById('fiLinkSearch').addEventListener('input', renderLinkPicker);
-    document.getElementById('fiAddBtn').addEventListener('click', function () { openLinkModal(CUR_KEY); });
+    document.getElementById('fiAddBtn').addEventListener('click', function () { openVariantModal(); });
     document.getElementById('fiLinkBtn').addEventListener('click', function () { openLinkModal(CUR_KEY); });
+
+    // ── Modal Add Template: VARIANTE do template por par de pernas ───────────
+    //  Nasce pré-preenchida com o layout do modelo padrão (ou de outra
+    //  variante, pelo Copy from). O motor passa a usá-la para os deals da
+    //  página cujo par de pernas casa com o cadastrado; o resto continua no
+    //  base. As opções de par são as mesmas do servidor (_FI_LE_PAIRS).
+    var variantModal;
+    var LE_PAIRS = ['JPM x MGT', 'JPM x CLI', 'MGT x CLI', 'JPM x ATACAMA',
+                    'MGT x JPM', 'ATACAMA x JPM', 'LAWTON x JPM', 'JPM x LAWTON'];
+    function pairNorm(p) {
+        return String(p || '').toUpperCase().replace(/×/g, 'X').replace(/\s+/g, ' ').trim();
+    }
+    function variantBaseMeta() {
+        // A variante nasce do template em tela; se ELE já é variante, do base dele.
+        var key = CUR_TPL && (CUR_TPL.base_key || CUR_TPL.key);
+        return LIST.filter(function (m) { return m.key === key; })[0] || null;
+    }
+    function openVariantModal() {
+        var base = variantBaseMeta();
+        if (!base) return;
+        document.getElementById('fiVarBase').value = base.name || base.key;
+        var pages = base.linked_pages || [];
+        document.getElementById('fiVarPage').innerHTML = pages.map(function (p) {
+            return '<option value="' + esc(p.url) + '">' + esc(p.label || p.url) + '</option>';
+        }).join('');
+        document.getElementById('fiVarPair').innerHTML = LE_PAIRS.map(function (p) {
+            return '<option value="' + esc(p) + '">' + esc(p) + '</option>';
+        }).join('');
+        document.getElementById('fiVarFile').value = '';
+        var variants = LIST.filter(function (m) { return m.base_key === base.key; });
+        document.getElementById('fiVarCopy').innerHTML =
+            '<option value="">' + esc(base.name || base.key) + ' (' + t('fi-var-default', 'Default') + ')</option>' +
+            variants.map(function (m) {
+                return '<option value="' + esc(m.key) + '">' + esc(m.name) + '</option>';
+            }).join('');
+        variantModal = variantModal || new bootstrap.Modal(document.getElementById('fiVariantModal'));
+        variantModal.show();
+    }
+    document.getElementById('fiVarSave').addEventListener('click', function () {
+        var base = variantBaseMeta();
+        if (!base) return;
+        var pageUrl = document.getElementById('fiVarPage').value;
+        var pair = document.getElementById('fiVarPair').value;
+        var fname = document.getElementById('fiVarFile').value.trim();
+        if (!pageUrl)
+            return Swal.fire({ icon: 'warning', title: t('fi-var-need-page', 'Link the base template to a page first (Link Pages)') });
+        var dup = LIST.some(function (m) {
+            return m.base_key === base.key && pairNorm(m.le_pair) === pairNorm(pair) &&
+                   (m.linked_pages || []).some(function (p) { return p.url === pageUrl; });
+        });
+        if (dup)
+            return Swal.fire({ icon: 'warning', title: t('fi-var-exists', 'A variant for this pair already exists on this page') });
+        var key = base.key + '--' + slug(pair), n = 2;
+        while (LIST.some(function (m) { return m.key === key; }))
+            key = base.key + '--' + slug(pair) + '-' + (n++);
+        var srcKey = document.getElementById('fiVarCopy').value || base.key;
+        apiGet(srcKey).then(function (src) {
+            if (!src) return;
+            var tpl = JSON.parse(JSON.stringify(src));
+            tpl.key = key;
+            tpl.name = (base.name || base.key) + ' — ' + pair;
+            tpl.base_key = base.key;
+            tpl.le_pair = pair;
+            tpl.file_name = fname;
+            tpl.status = 'active';
+            // Achata o override por página da página escolhida nos campos
+            // planos e descarta o resto: a variante é de UMA página, e um
+            // source_by_page herdado do base venceria a edição feita na
+            // variante em silêncio (o motor resolve o override primeiro).
+            (tpl.blocks || []).forEach(function (b) {
+                (b.fields || []).forEach(function (f) {
+                    var ov = f.source_by_page && f.source_by_page[pageUrl];
+                    if (ov) {
+                        f.source = ov.source || '';
+                        f.source_detail = ov.source_detail || '';
+                        f.source_note = ov.source_note || '';
+                    }
+                    delete f.source_by_page;
+                });
+            });
+            // Ligada só à página escolhida, herdando as colunas cadastradas
+            // para ela (o dropdown de Origem daquela página).
+            var entry = (base.linked_pages || []).filter(function (p) { return p.url === pageUrl; })[0] ||
+                        { url: pageUrl, label: pageUrl };
+            tpl.linked_pages = [JSON.parse(JSON.stringify(entry))];
+            apiSave(tpl).then(function (j) {
+                if (!j.success) return Swal.fire({ icon: 'error', title: 'File Interpreter', text: j.error || 'Save failed' });
+                variantModal.hide();
+                toast(t('fi-saved', 'Template saved'));
+                apiList().then(function () { buildRail(); selectTpl(key); });
+            });
+        });
+    });
+
+    // ── Modal: as variantes de template de UMA página ────────────────────────
+    var pageTplsModal, PAGE_TPLS_CTX = null;
+    function openPageTplsModal(url, label, preKey) {
+        PAGE_TPLS_CTX = { url: url, label: label };
+        var tpls = LIST.filter(function (m) {
+            return (m.linked_pages || []).some(function (p) { return p.url === url; });
+        });
+        document.getElementById('fiPageTplsPage').textContent = label || url;
+        document.getElementById('fiPageTplsSel').innerHTML = tpls.map(function (m) {
+            var tag = m.le_pair ? m.le_pair : t('fi-var-default', 'Default');
+            return '<option value="' + esc(m.key) + '"' + (m.key === preKey ? ' selected' : '') + '>' +
+                   esc(m.name) + ' — ' + esc(tag) + '</option>';
+        }).join('');
+        pageTplsModal = pageTplsModal || new bootstrap.Modal(document.getElementById('fiPageTplsModal'));
+        pageTplsModal.show();
+    }
+    document.getElementById('fiPageTplsOpen').addEventListener('click', function () {
+        if (!PAGE_TPLS_CTX) return;
+        var key = document.getElementById('fiPageTplsSel').value;
+        pageTplsModal.hide();
+        selectPage(PAGE_TPLS_CTX.url, PAGE_TPLS_CTX.label, key);
+    });
     document.getElementById('fiLinkSave').addEventListener('click', function () {
         var key = document.getElementById('fiLinkTpl').value;
         apiGet(key).then(function (tpl) {
@@ -1250,16 +1467,15 @@
         });
     });
 
-    // ── Boot: abre pela primeira PÁGINA que usa arquivos ─────────────────────
+    // ── Boot: abre pelo primeiro template BASE da biblioteca ─────────────────
     fetch('/api/file-interface/options')
         .then(function (r) { return r.json(); })
         .then(function (j) { MAPPINGS = (j && j.mappings) || []; })
         .catch(function () {});
     apiList().then(function () {
         buildRail();
-        var firstPage = pagesFromList()[0];
-        if (firstPage) selectPage(firstPage.url, firstPage.label);
-        else if (LIST[0]) selectTpl(LIST[0].key);
+        var first = LIST.filter(function (m) { return !m.base_key; })[0] || LIST[0];
+        if (first) selectTpl(first.key);
     });
 })();
 </script>

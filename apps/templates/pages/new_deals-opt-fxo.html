@@ -995,7 +995,7 @@
           </div>
           <div class="col-md-4">
             <label class="form-label form-label-sm mb-1">Trade Date</label>
-            <input type="date" class="form-control form-control-sm" id="ar-tradedate">
+            <input type="text" class="form-control form-control-sm" id="ar-tradedate" placeholder="dd/mm/yyyy" autocomplete="off">
           </div>
           <div class="col-md-4">
             <label class="form-label form-label-sm mb-1">Month <small class="text-muted">(auto from Trade Date)</small></label>
@@ -1004,7 +1004,7 @@
 
           <div class="col-md-4">
             <label class="form-label form-label-sm mb-1">Settlement Date</label>
-            <input type="date" class="form-control form-control-sm" id="ar-settledate">
+            <input type="text" class="form-control form-control-sm" id="ar-settledate" placeholder="dd/mm/yyyy" autocomplete="off">
           </div>
           <div class="col-md-3">
             <label class="form-label form-label-sm mb-1">SPN</label>
@@ -1095,15 +1095,15 @@
           </div>
           <div class="col-md-2">
             <label class="form-label form-label-sm mb-1">Spot Date</label>
-            <input type="date" class="form-control form-control-sm" id="ar-spotdate">
+            <input type="text" class="form-control form-control-sm" id="ar-spotdate" placeholder="dd/mm/yyyy" autocomplete="off">
           </div>
           <div class="col-md-4">
             <label class="form-label form-label-sm mb-1">Fixing Start Date</label>
-            <input type="date" class="form-control form-control-sm" id="ar-fixstart">
+            <input type="text" class="form-control form-control-sm" id="ar-fixstart" placeholder="dd/mm/yyyy" autocomplete="off">
           </div>
           <div class="col-md-4">
             <label class="form-label form-label-sm mb-1">Fixing End Date</label>
-            <input type="date" class="form-control form-control-sm" id="ar-fixend">
+            <input type="text" class="form-control form-control-sm" id="ar-fixend" placeholder="dd/mm/yyyy" autocomplete="off">
           </div>
           <div class="col-md-4">
             <label class="form-label form-label-sm mb-1">Trading Book</label>
@@ -4737,6 +4737,38 @@ $(document).ready(function() {
             }
         }
 
+        // Datas do modal em dd/mm/yyyy (flatpickr d/m/Y, o mesmo do Reference
+        // Date da barra): o <input type="date"> nativo renderiza no formato do
+        // LOCALE do navegador — mm/dd/yyyy em en-US — e a tabela inteira fala
+        // dd/mm/yyyy. O valor vive no proprio input, ja em dd/mm/yyyy.
+        var AR_DATE_IDS = ['#ar-tradedate', '#ar-settledate', '#ar-spotdate', '#ar-fixstart', '#ar-fixend'];
+        if (typeof flatpickr !== 'undefined') {
+            AR_DATE_IDS.forEach(function (sel) {
+                var el = document.querySelector(sel);
+                if (el) flatpickr(el, { dateFormat: 'd/m/Y', allowInput: true, disableMobile: true });
+            });
+        }
+        // A edicao escreve por .val() e o modo Add limpa: sincroniza o estado
+        // interno do flatpickr na abertura, senao o calendario abre no dia da
+        // linha anterior.
+        (function () {
+            var m = document.getElementById('addRowModal');
+            if (!m) return;
+            m.addEventListener('show.bs.modal', function () {
+                // Depois dos handlers jQuery do mesmo evento (o modo Add limpa
+                // os campos num deles): so entao o input diz o valor final.
+                setTimeout(function () {
+                    AR_DATE_IDS.forEach(function (sel) {
+                        var el = document.querySelector(sel);
+                        if (el && el._flatpickr) {
+                            if (el.value) el._flatpickr.setDate(el.value, false, 'd/m/Y');
+                            else el._flatpickr.clear();
+                        }
+                    });
+                }, 0);
+            });
+        })();
+
         function arClearFields() {
             $('#ar-deal,#ar-notional,#ar-strike,#ar-tradingbook,#ar-otherbook').val('');
             $('#ar-premium,#ar-premiumppu,#ar-premiumccy').val('');
@@ -4761,9 +4793,9 @@ $(document).ready(function() {
             // Pre-fill all fields
             $('#ar-deal').val(_sh(d[3]));
             $('#ar-b3id').val(_sh(d[4]));
-            $('#ar-tradedate').val(dmy2isoLocal(_sh(d[5])));
+            $('#ar-tradedate').val(_sh(d[5]));
             $('#ar-month').val(_sh(d[6]));
-            $('#ar-settledate').val(dmy2isoLocal(_sh(d[7])));
+            $('#ar-settledate').val(_sh(d[7]));
             $('#ar-spn').val(_sh(d[8]));
             $('#ar-acronym').val(_sh(d[9]));
             $('#ar-client').val(_sh(d[10]));
@@ -4779,9 +4811,9 @@ $(document).ready(function() {
             $('#ar-premium').val(_sh(d[20]));
             $('#ar-premiumppu').val(_sh(d[21]));
             $('#ar-premiumccy').val(_sh(d[22]));
-            $('#ar-spotdate').val(dmy2isoLocal(_sh(d[23])));
-            $('#ar-fixstart').val(dmy2isoLocal(_sh(d[24])));
-            $('#ar-fixend').val(dmy2isoLocal(_sh(d[25])));
+            $('#ar-spotdate').val(_sh(d[23]));
+            $('#ar-fixstart').val(_sh(d[24]));
+            $('#ar-fixend').val(_sh(d[25]));
             $('#ar-tradingbook').val(_sh(d[26]));
             $('#ar-otherbook').val(_sh(d[27]));
 
@@ -4849,7 +4881,9 @@ $(document).ready(function() {
         // Trade Date → Month (auto)
         $(document).on('change', '#ar-tradedate', function () {
             if (this.value) {
-                var mo = parseInt(this.value.split('-')[1], 10) - 1;
+                var _p = this.value.indexOf('/') !== -1
+                    ? this.value.split('/') : this.value.split('-').reverse();
+                var mo = parseInt(_p[1], 10) - 1;
                 $('#ar-month').val(MONTH_FULL[mo] || '');
             } else {
                 $('#ar-month').val('');
