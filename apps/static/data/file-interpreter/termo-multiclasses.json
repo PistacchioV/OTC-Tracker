@@ -1682,7 +1682,7 @@
             "/new_deals-ndf-vanilla": {
               "source": "",
               "source_detail": "",
-              "source_note": "Not emitted from this page; only the verification-date count goes on line type 1, field 59"
+              "source_note": "Download only (this page does not register at B3): one line per business day of the fixing window, each date shifted forward by the effective 'Cotação para o Vencimento' (line type 1, field 15) when it is filled — blank there means the dates go as they are"
             }
           }
         },
@@ -1711,7 +1711,7 @@
             "/new_deals-ndf-vanilla": {
               "source": "",
               "source_detail": "",
-              "source_note": "Not emitted from this page; only the verification-date count goes on line type 1, field 59"
+              "source_note": "Download only: fixed zeros, as in the B3 layout"
             }
           }
         },
@@ -1740,7 +1740,7 @@
             "/new_deals-ndf-vanilla": {
               "source": "",
               "source_detail": "",
-              "source_note": "Not emitted from this page; only the verification-date count goes on line type 1, field 59"
+              "source_note": "Download only: always blank on this page"
             }
           }
         }
