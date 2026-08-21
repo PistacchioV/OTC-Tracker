@@ -1,0 +1,50 @@
+[
+  {
+    "REFERENCE CODE": "1",
+    "DOMAIN": "KNOCK IN"
+  },
+  {
+    "REFERENCE CODE": "2",
+    "DOMAIN": "KNOCK OUT"
+  },
+  {
+    "REFERENCE CODE": "3",
+    "DOMAIN": "KNOCK IN E KNOCK OUT"
+  },
+  {
+    "REFERENCE CODE": "4",
+    "DOMAIN": "LIMITADOR INFERIOR"
+  },
+  {
+    "REFERENCE CODE": "5",
+    "DOMAIN": "LIMITADOR SUPERIOR"
+  },
+  {
+    "REFERENCE CODE": "6",
+    "DOMAIN": "LIMITADOR INFERIOR E SUPERIOR"
+  },
+  {
+    "REFERENCE CODE": "7",
+    "DOMAIN": "KNOCK IN E LIMITADOR INFERIOR"
+  },
+  {
+    "REFERENCE CODE": "8",
+    "DOMAIN": "KNOCK IN E LIMITADOR SUPERIOR"
+  },
+  {
+    "REFERENCE CODE": "9",
+    "DOMAIN": "N.A."
+  },
+  {
+    "REFERENCE CODE": "10",
+    "DOMAIN": "KNOCK OUT E LIMITADOR SUPERIOR"
+  },
+  {
+    "REFERENCE CODE": "11",
+    "DOMAIN": "KNOCK OUT E LIMITADOR INFERIOR"
+  },
+  {
+    "REFERENCE CODE": "12",
+    "DOMAIN": "KNOCK IN OUT e LIMITADOR SUPERIOR e Inferior"
+  }
+]

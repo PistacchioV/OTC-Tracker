@@ -1,0 +1,66 @@
+[
+  {
+    "REFERENCE CODE": "1",
+    "DOMAIN": "TAXAS DE CAMBIO"
+  },
+  {
+    "REFERENCE CODE": "2",
+    "DOMAIN": "COMMODITIES"
+  },
+  {
+    "REFERENCE CODE": "3",
+    "DOMAIN": "INDICES"
+  },
+  {
+    "REFERENCE CODE": "4",
+    "DOMAIN": "ACOES"
+  },
+  {
+    "REFERENCE CODE": "5",
+    "DOMAIN": "CREDITO"
+  },
+  {
+    "REFERENCE CODE": "6",
+    "DOMAIN": "JUROS"
+  },
+  {
+    "REFERENCE CODE": "7",
+    "DOMAIN": "TITULOS PUBLICOS"
+  },
+  {
+    "REFERENCE CODE": "8",
+    "DOMAIN": "TITULOS PRIVADOS"
+  },
+  {
+    "REFERENCE CODE": "9",
+    "DOMAIN": "FUTURO DE COMMODITY"
+  },
+  {
+    "REFERENCE CODE": "10",
+    "DOMAIN": "FUTURO DE MOEDA"
+  },
+  {
+    "REFERENCE CODE": "11",
+    "DOMAIN": "FUTURO DE INDICE"
+  },
+  {
+    "REFERENCE CODE": "12",
+    "DOMAIN": "FUTURO DE JUROS"
+  },
+  {
+    "REFERENCE CODE": "13",
+    "DOMAIN": "FUTURO DE TITULOS PUBLICOS"
+  },
+  {
+    "REFERENCE CODE": "14",
+    "DOMAIN": "FUTURO DE ACOES"
+  },
+  {
+    "REFERENCE CODE": "15",
+    "DOMAIN": "COTA DE FUNDOS"
+  },
+  {
+    "REFERENCE CODE": "16",
+    "DOMAIN": "CESTA"
+  }
+]

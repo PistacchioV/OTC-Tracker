@@ -440,14 +440,21 @@ e um item no array `TYPES` de `apps/templates/pages/mapping.html`.
   colunas extras do arquivo** (`STATUS`/`MAKER`/`CHECKER`): o POST reescreve o
   arquivo inteiro e derrubaria o que não estivesse declarado (HANDOFF §188).
 
-São **33** mappings hoje: `currency-base`, `interbook-ndf`, `publisher-ndf`,
+São **40** mappings hoje: `currency-base`, `interbook-ndf`, `publisher-ndf`,
 `le-accronym`, `le-spn`, `commodities-b3`, `bank-name`, `fxo-conv-rate`,
 `ndf-pdf-cpty`, `swap-curves`, `cetip-files`, `api-links`, `opb3-events`,
 `swap-ir-client`, `swap-ir-term`, `swap-index`, `swap-funcionalidade`,
 `swap-amortizacao`, `swap-code-labels`, `ndfc-ir-exempt`, `ndfc-advice-split`,
 `b3-accounts`, `fxo-internal-cpty`, `fxo-book-disregard`,
 `bankers-email`, `manual-conf-validation`, `manual-conf-sla`, `quotes-equity`,
-`quotes-commodity`, `gdt-codes`, `settlement-exception`, `mt300`.
+`quotes-commodity`, `gdt-codes`, `settlement-exception`, `mt300`, e os sete
+`dce-*` dos domínios DCE (`dce-country`, `dce-type-of-derivative`,
+`dce-type-of-swap`, `dce-type-of-verification`, `dce-functionality`,
+`dce-underlying-asset-category`, `dce-underlying-asset`) — seeds vazios com os
+JSONs versionados, como os dois Quotes (o `dce-underlying-asset` tem ~14 mil
+linhas). As colunas dos `dce-*` carregam `lang` (chave i18n): o `colLabel` do
+mapping.html traduz cabeçalho, filtro, export e modal — coluna sem `lang`
+continua no label inglês.
 
 ### Os que têm regra fácil de quebrar pela tela
 
@@ -1562,6 +1569,22 @@ Intrag ficavam com o valor cru sempre que o notional estava na moeda fraca
   Page significa "o gerador manda o valor" (o motor injeta o calculado pelo
   `seq`; o detalhe da origem é documentação), então limpar o detalhe não
   esvazia nada, em silêncio. Foi a Data de Fixing do FWD Start (HANDOFF §249).
+- **Um template do File Interpreter pode ter VARIANTES por par de pernas**
+  (`base_key` + `le_pair`, criadas pelo Add Template do cabeçalho): o gerador
+  continua chamando o motor pela chave BASE e quem escolhe a variante é o
+  motor (`_fi_variant_key`), pelo par do deal — variante ligada à página vence
+  a sem página; sem variante para o par, vale o base byte a byte. A variante é
+  cópia completa (mais campos podem virar Fixed — conta, Participante do
+  header, que aí dispensa o `b3-accounts`) e pode cadastrar o **`file_name`**
+  do arquivo gerado (em branco = `{PREFIX}_{BUCKET}.txt` de sempre). Três
+  coisas que não dão erro nenhum: o par do FWD Start/OP/Commodities usa a
+  regra do BUCKET (linha com cliente JPM é a perna espelhada → `LAWTON x
+  JPM`), enquanto o Vanilla — que não gera arquivo — usa LE × contraparte
+  (`pairSimple`), então `MGT x JPM` só casa lá; a cópia da regra no navegador
+  é o `static/js/fi-ter-pair.js` e `check_fi_variants.py` prova que as duas
+  concordam; e o modal de criação **achata o `source_by_page`** da página
+  escolhida nos campos planos — sem isso o override herdado do base venceria
+  a edição feita na variante, em silêncio.
 - **Notificação nova exige o rótulo `page` nos TRÊS mapas de destino** —
   `_NOTIF_PAGE_URL` (routes.py), `PAGE_URL` do `partials/topbar.html` e do
   `static/js/sw-push.js`. Sem a entrada o aviso aparece normal e o clique não

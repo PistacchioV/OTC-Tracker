@@ -250,6 +250,13 @@
         { key: 'fxo-book-disregard',  icon: 'ti-book-off',          lang: 'map-tab-fxo-book',    label: 'FXO Recon — Athena Rows to Disregard' },
         { key: 'manual-conf-validation', icon: 'ti-checklist',   lang: 'map-tab-mc-validation', label: 'Manual Confirmations — Validation Trail' },
         { key: 'manual-conf-sla', icon: 'ti-clock-hour-4',    lang: 'map-tab-mc-sla',        label: 'Manual Confirmations — SLA' },
+        { key: 'dce-country',                 icon: 'ti-world',       lang: 'map-tab-dce-country',      label: 'DCE — Country' },
+        { key: 'dce-type-of-derivative',      icon: 'ti-category',    lang: 'map-tab-dce-derivative',   label: 'DCE — Type of Derivative' },
+        { key: 'dce-type-of-swap',            icon: 'ti-repeat',      lang: 'map-tab-dce-swap',         label: 'DCE — Type of Swap' },
+        { key: 'dce-type-of-verification',    icon: 'ti-checkbox',    lang: 'map-tab-dce-verification', label: 'DCE — Type of Verification' },
+        { key: 'dce-functionality',           icon: 'ti-adjustments', lang: 'map-tab-dce-functionality', label: 'DCE — Functionality' },
+        { key: 'dce-underlying-asset-category', icon: 'ti-tags',      lang: 'map-tab-dce-ua-category',  label: 'DCE — Underlying Asset Category' },
+        { key: 'dce-underlying-asset',        icon: 'ti-box',         lang: 'map-tab-dce-underlying',   label: 'DCE — Underlying Asset' },
     ];
 
     // Colunas cujo valor é um PADRÃO, não um literal: o trecho variável ganha
@@ -428,6 +435,11 @@
         document.getElementById('mapCurCount').textContent = st ? st.rows.length : 0;
     }
 
+    // Rótulo da coluna no idioma da aplicação: a chave i18n vem do registro
+    // (`lang` na coluna do _MAPPING_DEFS); sem chave — ou sem tradução — vale
+    // o label inglês, e por último a própria key.
+    function colLabel(c) { return t(c.lang, c.label || c.key); }
+
     function render() {
         var st = STATE[CUR];
         renderHeader();
@@ -436,11 +448,11 @@
         head.innerHTML =
             '<tr><th style="width:76px" data-lang="map-actions">' + esc(t('map-actions', 'Actions')) + '</th>' +
             st.columns.map(function (c, i) {
-                return '<th class="map-sort" data-col="' + i + '">' + esc(c.label || c.key) + '</th>';
+                return '<th class="map-sort" data-col="' + i + '">' + esc(colLabel(c)) + '</th>';
             }).join('') + '</tr>' +
             '<tr class="map-filter-row"><th></th>' +
             st.columns.map(function (c, i) {
-                return '<th><input type="text" class="form-control form-control-sm map-col-filter" data-col="' + i + '" placeholder="' + esc(c.label || c.key) + '" autocomplete="off"></th>';
+                return '<th><input type="text" class="form-control form-control-sm map-col-filter" data-col="' + i + '" placeholder="' + esc(colLabel(c)) + '" autocomplete="off"></th>';
             }).join('') + '</tr>';
         head.querySelectorAll('.map-col-filter').forEach(function (inp) {
             inp.addEventListener('input', function () { PAGE = 0; drawBody(); });
@@ -540,7 +552,7 @@
     // ── Export (client-side, sobre as linhas filtradas) ──────────────────────
     function exportMatrix() {
         var st = STATE[CUR];
-        var head = st.columns.map(function (c) { return c.label || c.key; });
+        var head = st.columns.map(colLabel);
         return [head].concat(filteredRows().map(function (r) { return r.cells; }));
     }
     function toCsv(matrix) {
@@ -615,7 +627,7 @@
             } else {
                 fld = '<input type="text" class="form-control form-control-sm map-fld" data-i="' + i + '" value="' + esc(val) + '" autocomplete="off">';
             }
-            return '<div class="col-md-6"><label class="form-label fs-xs text-muted mb-1">' + esc(c.label || c.key) + '</label>' + fld + '</div>';
+            return '<div class="col-md-6"><label class="form-label fs-xs text-muted mb-1">' + esc(colLabel(c)) + '</label>' + fld + '</div>';
         }).join('');
         wireAutofill(st);
         wireRefdata(st);

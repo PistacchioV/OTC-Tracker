@@ -1,0 +1,34 @@
+[
+  {
+    "REFERENCE CODE": "1",
+    "DOMAIN": "Contrato Futuro"
+  },
+  {
+    "REFERENCE CODE": "2",
+    "DOMAIN": "Contrato de Termo"
+  },
+  {
+    "REFERENCE CODE": "3",
+    "DOMAIN": "Opções"
+  },
+  {
+    "REFERENCE CODE": "4",
+    "DOMAIN": "Contrato de Swap"
+  },
+  {
+    "REFERENCE CODE": "5",
+    "DOMAIN": "Contrato de Swaption"
+  },
+  {
+    "REFERENCE CODE": "6",
+    "DOMAIN": "Contrato de CDS"
+  },
+  {
+    "REFERENCE CODE": "7",
+    "DOMAIN": "Contrato de CFD"
+  },
+  {
+    "REFERENCE CODE": "8",
+    "DOMAIN": "Contrato de Nota Estruturada"
+  }
+]

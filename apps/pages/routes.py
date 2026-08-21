@@ -21900,6 +21900,70 @@ _MAPPING_DEFS = {
             {'DESCRIPTION': 'CRED. TRANS ENTRE CONTAS', 'CODE': '0159', 'PRODUCT': ''},
         ],
     },
+    # ── DCE: os domínios do registro (Código de Referência → Domínio), um
+    #    mapping por Campo da planilha "Mapping DCE". Os seeds vão VAZIOS de
+    #    propósito, como os dois Quotes: os JSONs são versionados (o Underlying
+    #    Asset tem ~14 mil linhas) e repeti-los aqui criaria uma segunda lista
+    #    para divergir da primeira. O `lang` das colunas é a chave i18n que o
+    #    mapping.html usa no cabeçalho, no filtro, no export e no modal.
+    'dce-country': {
+        'label': 'DCE — Country',
+        'columns': [
+            {'key': 'REFERENCE CODE', 'label': 'Reference Code', 'lang': 'map-col-dce-ref-code'},
+            {'key': 'DOMAIN', 'label': 'Domain', 'lang': 'map-col-dce-domain'},
+        ],
+        'seed': [],
+    },
+    'dce-type-of-derivative': {
+        'label': 'DCE — Type of Derivative',
+        'columns': [
+            {'key': 'REFERENCE CODE', 'label': 'Reference Code', 'lang': 'map-col-dce-ref-code'},
+            {'key': 'DOMAIN', 'label': 'Domain', 'lang': 'map-col-dce-domain'},
+        ],
+        'seed': [],
+    },
+    'dce-type-of-swap': {
+        'label': 'DCE — Type of Swap',
+        'columns': [
+            {'key': 'REFERENCE CODE', 'label': 'Reference Code', 'lang': 'map-col-dce-ref-code'},
+            {'key': 'DOMAIN', 'label': 'Domain', 'lang': 'map-col-dce-domain'},
+        ],
+        'seed': [],
+    },
+    'dce-type-of-verification': {
+        'label': 'DCE — Type of Verification',
+        'columns': [
+            {'key': 'REFERENCE CODE', 'label': 'Reference Code', 'lang': 'map-col-dce-ref-code'},
+            {'key': 'DOMAIN', 'label': 'Domain', 'lang': 'map-col-dce-domain'},
+        ],
+        'seed': [],
+    },
+    'dce-functionality': {
+        'label': 'DCE — Functionality',
+        'columns': [
+            {'key': 'REFERENCE CODE', 'label': 'Reference Code', 'lang': 'map-col-dce-ref-code'},
+            {'key': 'DOMAIN', 'label': 'Domain', 'lang': 'map-col-dce-domain'},
+        ],
+        'seed': [],
+    },
+    'dce-underlying-asset-category': {
+        'label': 'DCE — Underlying Asset Category',
+        'columns': [
+            {'key': 'REFERENCE CODE', 'label': 'Reference Code', 'lang': 'map-col-dce-ref-code'},
+            {'key': 'DOMAIN', 'label': 'Domain', 'lang': 'map-col-dce-domain'},
+        ],
+        'seed': [],
+    },
+    'dce-underlying-asset': {
+        'label': 'DCE — Underlying Asset',
+        'columns': [
+            {'key': 'CATEGORY', 'label': 'Category', 'lang': 'map-col-dce-category'},
+            {'key': 'ATHENA INDEX NAME', 'label': 'Athena Index Name', 'lang': 'map-col-dce-athena'},
+            {'key': 'REFERENCE CODE', 'label': 'Reference Code', 'lang': 'map-col-dce-ref-code'},
+            {'key': 'DOMAIN', 'label': 'Domain', 'lang': 'map-col-dce-domain'},
+        ],
+        'seed': [],
+    },
 }
 
 _mapping_cache = {}

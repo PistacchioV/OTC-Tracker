@@ -1,0 +1,1014 @@
+[
+  {
+    "REFERENCE CODE": "0",
+    "DOMAIN": "PAIS DESCONHECIDO"
+  },
+  {
+    "REFERENCE CODE": "1",
+    "DOMAIN": "BRASIL"
+  },
+  {
+    "REFERENCE CODE": "2",
+    "DOMAIN": "AFEGANISTAO"
+  },
+  {
+    "REFERENCE CODE": "3",
+    "DOMAIN": "AFRICA DO SUL"
+  },
+  {
+    "REFERENCE CODE": "4",
+    "DOMAIN": "ALBANIA"
+  },
+  {
+    "REFERENCE CODE": "5",
+    "DOMAIN": "ALEMANHA"
+  },
+  {
+    "REFERENCE CODE": "6",
+    "DOMAIN": "ANDORRA"
+  },
+  {
+    "REFERENCE CODE": "7",
+    "DOMAIN": "ANGOLA"
+  },
+  {
+    "REFERENCE CODE": "8",
+    "DOMAIN": "ANTIGUA E BARBUBA"
+  },
+  {
+    "REFERENCE CODE": "9",
+    "DOMAIN": "ANTILHAS HOLANDESAS"
+  },
+  {
+    "REFERENCE CODE": "10",
+    "DOMAIN": "ARABIA SAUDITA"
+  },
+  {
+    "REFERENCE CODE": "11",
+    "DOMAIN": "ARGELIA"
+  },
+  {
+    "REFERENCE CODE": "12",
+    "DOMAIN": "ARGENTINA"
+  },
+  {
+    "REFERENCE CODE": "13",
+    "DOMAIN": "ARMENIA"
+  },
+  {
+    "REFERENCE CODE": "14",
+    "DOMAIN": "ARUBA"
+  },
+  {
+    "REFERENCE CODE": "15",
+    "DOMAIN": "AUSTRALIA"
+  },
+  {
+    "REFERENCE CODE": "16",
+    "DOMAIN": "AUSTRIA"
+  },
+  {
+    "REFERENCE CODE": "17",
+    "DOMAIN": "AZERBAIJAO"
+  },
+  {
+    "REFERENCE CODE": "18",
+    "DOMAIN": "BAHAMAS"
+  },
+  {
+    "REFERENCE CODE": "19",
+    "DOMAIN": "BAHREIN"
+  },
+  {
+    "REFERENCE CODE": "20",
+    "DOMAIN": "BANGLADESH"
+  },
+  {
+    "REFERENCE CODE": "21",
+    "DOMAIN": "BARBADOS"
+  },
+  {
+    "REFERENCE CODE": "22",
+    "DOMAIN": "BELARUS"
+  },
+  {
+    "REFERENCE CODE": "23",
+    "DOMAIN": "BELGICA"
+  },
+  {
+    "REFERENCE CODE": "24",
+    "DOMAIN": "BELIZE"
+  },
+  {
+    "REFERENCE CODE": "25",
+    "DOMAIN": "BENIN"
+  },
+  {
+    "REFERENCE CODE": "26",
+    "DOMAIN": "BERMUDAS"
+  },
+  {
+    "REFERENCE CODE": "27",
+    "DOMAIN": "BOLIVIA"
+  },
+  {
+    "REFERENCE CODE": "28",
+    "DOMAIN": "BOSNIA-HERZEGOVINA"
+  },
+  {
+    "REFERENCE CODE": "29",
+    "DOMAIN": "BOTSUANA"
+  },
+  {
+    "REFERENCE CODE": "30",
+    "DOMAIN": "BRITSH INDIAN OCEAN"
+  },
+  {
+    "REFERENCE CODE": "31",
+    "DOMAIN": "BRUNEI"
+  },
+  {
+    "REFERENCE CODE": "32",
+    "DOMAIN": "BULGARIA"
+  },
+  {
+    "REFERENCE CODE": "33",
+    "DOMAIN": "BURKINA FASSO"
+  },
+  {
+    "REFERENCE CODE": "34",
+    "DOMAIN": "BURUNDI"
+  },
+  {
+    "REFERENCE CODE": "35",
+    "DOMAIN": "BUTAO"
+  },
+  {
+    "REFERENCE CODE": "36",
+    "DOMAIN": "CABO VERDE"
+  },
+  {
+    "REFERENCE CODE": "37",
+    "DOMAIN": "CAMAROES"
+  },
+  {
+    "REFERENCE CODE": "38",
+    "DOMAIN": "CAMBOJA"
+  },
+  {
+    "REFERENCE CODE": "39",
+    "DOMAIN": "CANADA"
+  },
+  {
+    "REFERENCE CODE": "40",
+    "DOMAIN": "CAZAQUISTAO"
+  },
+  {
+    "REFERENCE CODE": "41",
+    "DOMAIN": "CHADE"
+  },
+  {
+    "REFERENCE CODE": "42",
+    "DOMAIN": "CHILE"
+  },
+  {
+    "REFERENCE CODE": "43",
+    "DOMAIN": "CHINA"
+  },
+  {
+    "REFERENCE CODE": "44",
+    "DOMAIN": "CHIPRE"
+  },
+  {
+    "REFERENCE CODE": "45",
+    "DOMAIN": "CHRISTMAS ISLAND"
+  },
+  {
+    "REFERENCE CODE": "46",
+    "DOMAIN": "CINGAPURA"
+  },
+  {
+    "REFERENCE CODE": "47",
+    "DOMAIN": "COLOMBIA"
+  },
+  {
+    "REFERENCE CODE": "48",
+    "DOMAIN": "CONGO"
+  },
+  {
+    "REFERENCE CODE": "49",
+    "DOMAIN": "COREIA DO NORTE"
+  },
+  {
+    "REFERENCE CODE": "50",
+    "DOMAIN": "COREIA DO SUL"
+  },
+  {
+    "REFERENCE CODE": "51",
+    "DOMAIN": "COSTA DO MARFIM"
+  },
+  {
+    "REFERENCE CODE": "52",
+    "DOMAIN": "COSTA RICA"
+  },
+  {
+    "REFERENCE CODE": "53",
+    "DOMAIN": "CROACIA"
+  },
+  {
+    "REFERENCE CODE": "54",
+    "DOMAIN": "CUBA"
+  },
+  {
+    "REFERENCE CODE": "55",
+    "DOMAIN": "DINAMARCA"
+  },
+  {
+    "REFERENCE CODE": "56",
+    "DOMAIN": "DJIBUTI"
+  },
+  {
+    "REFERENCE CODE": "57",
+    "DOMAIN": "DOMINICA"
+  },
+  {
+    "REFERENCE CODE": "58",
+    "DOMAIN": "EGITO"
+  },
+  {
+    "REFERENCE CODE": "59",
+    "DOMAIN": "EL SALVADOR"
+  },
+  {
+    "REFERENCE CODE": "60",
+    "DOMAIN": "EMIRADOS ARABES UNIDOS"
+  },
+  {
+    "REFERENCE CODE": "61",
+    "DOMAIN": "EQUADOR"
+  },
+  {
+    "REFERENCE CODE": "62",
+    "DOMAIN": "ESLOVAQUIA"
+  },
+  {
+    "REFERENCE CODE": "63",
+    "DOMAIN": "ESLOVENIA"
+  },
+  {
+    "REFERENCE CODE": "64",
+    "DOMAIN": "ESPANHA"
+  },
+  {
+    "REFERENCE CODE": "65",
+    "DOMAIN": "ESTADOS UNIDOS"
+  },
+  {
+    "REFERENCE CODE": "66",
+    "DOMAIN": "ESTONIA"
+  },
+  {
+    "REFERENCE CODE": "67",
+    "DOMAIN": "ETIOPIA"
+  },
+  {
+    "REFERENCE CODE": "68",
+    "DOMAIN": "FIJI"
+  },
+  {
+    "REFERENCE CODE": "69",
+    "DOMAIN": "FILIPINAS"
+  },
+  {
+    "REFERENCE CODE": "70",
+    "DOMAIN": "FINLANDIA"
+  },
+  {
+    "REFERENCE CODE": "71",
+    "DOMAIN": "FRANCA"
+  },
+  {
+    "REFERENCE CODE": "72",
+    "DOMAIN": "GABAO"
+  },
+  {
+    "REFERENCE CODE": "73",
+    "DOMAIN": "GAMBIA"
+  },
+  {
+    "REFERENCE CODE": "74",
+    "DOMAIN": "GANA"
+  },
+  {
+    "REFERENCE CODE": "75",
+    "DOMAIN": "GEORGIA"
+  },
+  {
+    "REFERENCE CODE": "76",
+    "DOMAIN": "GIBRALTAR"
+  },
+  {
+    "REFERENCE CODE": "77",
+    "DOMAIN": "GRANADA"
+  },
+  {
+    "REFERENCE CODE": "78",
+    "DOMAIN": "GRECIA"
+  },
+  {
+    "REFERENCE CODE": "79",
+    "DOMAIN": "GUADALUPE"
+  },
+  {
+    "REFERENCE CODE": "80",
+    "DOMAIN": "GUAM"
+  },
+  {
+    "REFERENCE CODE": "81",
+    "DOMAIN": "GUATEMALA"
+  },
+  {
+    "REFERENCE CODE": "82",
+    "DOMAIN": "GUIANA"
+  },
+  {
+    "REFERENCE CODE": "83",
+    "DOMAIN": "GUIANA FRANCESA"
+  },
+  {
+    "REFERENCE CODE": "84",
+    "DOMAIN": "GUINE"
+  },
+  {
+    "REFERENCE CODE": "85",
+    "DOMAIN": "GUINE EQUATORIAL"
+  },
+  {
+    "REFERENCE CODE": "86",
+    "DOMAIN": "GUINE-BISSAU"
+  },
+  {
+    "REFERENCE CODE": "87",
+    "DOMAIN": "HAITI"
+  },
+  {
+    "REFERENCE CODE": "88",
+    "DOMAIN": "HOLANDA"
+  },
+  {
+    "REFERENCE CODE": "89",
+    "DOMAIN": "HONDURAS"
+  },
+  {
+    "REFERENCE CODE": "90",
+    "DOMAIN": "HONG KONG"
+  },
+  {
+    "REFERENCE CODE": "91",
+    "DOMAIN": "HUNGRIA"
+  },
+  {
+    "REFERENCE CODE": "92",
+    "DOMAIN": "IEMEN"
+  },
+  {
+    "REFERENCE CODE": "93",
+    "DOMAIN": "ILHAS COMORES"
+  },
+  {
+    "REFERENCE CODE": "94",
+    "DOMAIN": "ILHAS MARSHALL"
+  },
+  {
+    "REFERENCE CODE": "95",
+    "DOMAIN": "ILHAS SALOMAO"
+  },
+  {
+    "REFERENCE CODE": "96",
+    "DOMAIN": "INDIA"
+  },
+  {
+    "REFERENCE CODE": "97",
+    "DOMAIN": "INDONESIA"
+  },
+  {
+    "REFERENCE CODE": "98",
+    "DOMAIN": "IRA"
+  },
+  {
+    "REFERENCE CODE": "99",
+    "DOMAIN": "IRAQUE"
+  },
+  {
+    "REFERENCE CODE": "100",
+    "DOMAIN": "IRLANDA"
+  },
+  {
+    "REFERENCE CODE": "101",
+    "DOMAIN": "ISLANDIA"
+  },
+  {
+    "REFERENCE CODE": "102",
+    "DOMAIN": "ISRAEL"
+  },
+  {
+    "REFERENCE CODE": "103",
+    "DOMAIN": "ITALIA"
+  },
+  {
+    "REFERENCE CODE": "104",
+    "DOMAIN": "IUGOSLAVIA"
+  },
+  {
+    "REFERENCE CODE": "105",
+    "DOMAIN": "JAMAICA"
+  },
+  {
+    "REFERENCE CODE": "106",
+    "DOMAIN": "JAPAO"
+  },
+  {
+    "REFERENCE CODE": "107",
+    "DOMAIN": "JORDANIA"
+  },
+  {
+    "REFERENCE CODE": "108",
+    "DOMAIN": "KIRIBATI"
+  },
+  {
+    "REFERENCE CODE": "109",
+    "DOMAIN": "KUWAIT"
+  },
+  {
+    "REFERENCE CODE": "110",
+    "DOMAIN": "LAOS"
+  },
+  {
+    "REFERENCE CODE": "111",
+    "DOMAIN": "LESOTO"
+  },
+  {
+    "REFERENCE CODE": "112",
+    "DOMAIN": "LETONIA"
+  },
+  {
+    "REFERENCE CODE": "113",
+    "DOMAIN": "LIBANO"
+  },
+  {
+    "REFERENCE CODE": "114",
+    "DOMAIN": "LIBERIA"
+  },
+  {
+    "REFERENCE CODE": "115",
+    "DOMAIN": "LIBIA"
+  },
+  {
+    "REFERENCE CODE": "116",
+    "DOMAIN": "LIECHTENSTEIN"
+  },
+  {
+    "REFERENCE CODE": "117",
+    "DOMAIN": "LITUANIA"
+  },
+  {
+    "REFERENCE CODE": "118",
+    "DOMAIN": "LUXEMBURGO"
+  },
+  {
+    "REFERENCE CODE": "119",
+    "DOMAIN": "MACAU"
+  },
+  {
+    "REFERENCE CODE": "120",
+    "DOMAIN": "MADAGASCAR"
+  },
+  {
+    "REFERENCE CODE": "121",
+    "DOMAIN": "MALASIA"
+  },
+  {
+    "REFERENCE CODE": "122",
+    "DOMAIN": "MALAWI"
+  },
+  {
+    "REFERENCE CODE": "123",
+    "DOMAIN": "MALDIVAS"
+  },
+  {
+    "REFERENCE CODE": "124",
+    "DOMAIN": "MALI"
+  },
+  {
+    "REFERENCE CODE": "125",
+    "DOMAIN": "MALTA"
+  },
+  {
+    "REFERENCE CODE": "126",
+    "DOMAIN": "MARROCOS"
+  },
+  {
+    "REFERENCE CODE": "127",
+    "DOMAIN": "MARTINICA"
+  },
+  {
+    "REFERENCE CODE": "128",
+    "DOMAIN": "MAURICIO"
+  },
+  {
+    "REFERENCE CODE": "129",
+    "DOMAIN": "MAURITANIA"
+  },
+  {
+    "REFERENCE CODE": "130",
+    "DOMAIN": "MEXICO"
+  },
+  {
+    "REFERENCE CODE": "131",
+    "DOMAIN": "MIANMAR"
+  },
+  {
+    "REFERENCE CODE": "132",
+    "DOMAIN": "MICRONESIA"
+  },
+  {
+    "REFERENCE CODE": "133",
+    "DOMAIN": "MOCAMBIQUE"
+  },
+  {
+    "REFERENCE CODE": "134",
+    "DOMAIN": "MOLDOVA"
+  },
+  {
+    "REFERENCE CODE": "135",
+    "DOMAIN": "MONACO"
+  },
+  {
+    "REFERENCE CODE": "136",
+    "DOMAIN": "MONGOLIA"
+  },
+  {
+    "REFERENCE CODE": "137",
+    "DOMAIN": "MONTSERRAT"
+  },
+  {
+    "REFERENCE CODE": "138",
+    "DOMAIN": "NAMIBIA"
+  },
+  {
+    "REFERENCE CODE": "139",
+    "DOMAIN": "NAURU"
+  },
+  {
+    "REFERENCE CODE": "140",
+    "DOMAIN": "NEPAL"
+  },
+  {
+    "REFERENCE CODE": "141",
+    "DOMAIN": "NICARAGUA"
+  },
+  {
+    "REFERENCE CODE": "142",
+    "DOMAIN": "NIGER"
+  },
+  {
+    "REFERENCE CODE": "143",
+    "DOMAIN": "NIGERIA"
+  },
+  {
+    "REFERENCE CODE": "144",
+    "DOMAIN": "NIUE"
+  },
+  {
+    "REFERENCE CODE": "145",
+    "DOMAIN": "NORUEGA"
+  },
+  {
+    "REFERENCE CODE": "146",
+    "DOMAIN": "NOVA CALEDONIA"
+  },
+  {
+    "REFERENCE CODE": "147",
+    "DOMAIN": "NOVA ZELANDIA"
+  },
+  {
+    "REFERENCE CODE": "148",
+    "DOMAIN": "OMA"
+  },
+  {
+    "REFERENCE CODE": "149",
+    "DOMAIN": "PALAU"
+  },
+  {
+    "REFERENCE CODE": "150",
+    "DOMAIN": "PANAMA"
+  },
+  {
+    "REFERENCE CODE": "151",
+    "DOMAIN": "PAPUA NOVA GUINE"
+  },
+  {
+    "REFERENCE CODE": "152",
+    "DOMAIN": "PAQUISTAO"
+  },
+  {
+    "REFERENCE CODE": "153",
+    "DOMAIN": "PARAGUAI"
+  },
+  {
+    "REFERENCE CODE": "154",
+    "DOMAIN": "PERU"
+  },
+  {
+    "REFERENCE CODE": "155",
+    "DOMAIN": "PITCAIRN"
+  },
+  {
+    "REFERENCE CODE": "156",
+    "DOMAIN": "POLINESIA FRANCESA"
+  },
+  {
+    "REFERENCE CODE": "157",
+    "DOMAIN": "POLONIA"
+  },
+  {
+    "REFERENCE CODE": "158",
+    "DOMAIN": "PORTO RICO"
+  },
+  {
+    "REFERENCE CODE": "159",
+    "DOMAIN": "PORTUGAL"
+  },
+  {
+    "REFERENCE CODE": "160",
+    "DOMAIN": "QATAR"
+  },
+  {
+    "REFERENCE CODE": "161",
+    "DOMAIN": "QUENIA"
+  },
+  {
+    "REFERENCE CODE": "162",
+    "DOMAIN": "QUIRGUISTAO"
+  },
+  {
+    "REFERENCE CODE": "163",
+    "DOMAIN": "REINO UNIDO"
+  },
+  {
+    "REFERENCE CODE": "164",
+    "DOMAIN": "REPUBLICA CENTRO-AFRICANA"
+  },
+  {
+    "REFERENCE CODE": "165",
+    "DOMAIN": "REPUBLICA DOMINICANA"
+  },
+  {
+    "REFERENCE CODE": "166",
+    "DOMAIN": "REPUBLICA TCHECA"
+  },
+  {
+    "REFERENCE CODE": "167",
+    "DOMAIN": "REUNIAO"
+  },
+  {
+    "REFERENCE CODE": "168",
+    "DOMAIN": "ROMENIA"
+  },
+  {
+    "REFERENCE CODE": "169",
+    "DOMAIN": "RUANDA"
+  },
+  {
+    "REFERENCE CODE": "170",
+    "DOMAIN": "RUSSIA"
+  },
+  {
+    "REFERENCE CODE": "171",
+    "DOMAIN": "SAARA OCIDENTAL"
+  },
+  {
+    "REFERENCE CODE": "172",
+    "DOMAIN": "SAMOA AMERICANA"
+  },
+  {
+    "REFERENCE CODE": "173",
+    "DOMAIN": "SAMOA OCIDENTAL"
+  },
+  {
+    "REFERENCE CODE": "174",
+    "DOMAIN": "SAN MARINO"
+  },
+  {
+    "REFERENCE CODE": "175",
+    "DOMAIN": "SANTA LUCIA"
+  },
+  {
+    "REFERENCE CODE": "176",
+    "DOMAIN": "SAO CRISTOVAO E NEVIS"
+  },
+  {
+    "REFERENCE CODE": "177",
+    "DOMAIN": "SAO PEDRO E MIQUELON"
+  },
+  {
+    "REFERENCE CODE": "178",
+    "DOMAIN": "SAO TOME E PRINCIPE"
+  },
+  {
+    "REFERENCE CODE": "179",
+    "DOMAIN": "SAO VICENTE E GRANADINAS"
+  },
+  {
+    "REFERENCE CODE": "180",
+    "DOMAIN": "SENEGAL"
+  },
+  {
+    "REFERENCE CODE": "181",
+    "DOMAIN": "SERRA LEOA"
+  },
+  {
+    "REFERENCE CODE": "182",
+    "DOMAIN": "SEYCHELLES"
+  },
+  {
+    "REFERENCE CODE": "183",
+    "DOMAIN": "SIRIA"
+  },
+  {
+    "REFERENCE CODE": "184",
+    "DOMAIN": "SOMALIA"
+  },
+  {
+    "REFERENCE CODE": "185",
+    "DOMAIN": "SRI LANKA"
+  },
+  {
+    "REFERENCE CODE": "186",
+    "DOMAIN": "SUAZILANDIA"
+  },
+  {
+    "REFERENCE CODE": "187",
+    "DOMAIN": "SUDAO"
+  },
+  {
+    "REFERENCE CODE": "188",
+    "DOMAIN": "SUECIA"
+  },
+  {
+    "REFERENCE CODE": "189",
+    "DOMAIN": "SUICA"
+  },
+  {
+    "REFERENCE CODE": "190",
+    "DOMAIN": "SURINAME"
+  },
+  {
+    "REFERENCE CODE": "191",
+    "DOMAIN": "TAILANDIA"
+  },
+  {
+    "REFERENCE CODE": "192",
+    "DOMAIN": "TAIWAN (FORMOSA)"
+  },
+  {
+    "REFERENCE CODE": "193",
+    "DOMAIN": "TAJIQUISTAO"
+  },
+  {
+    "REFERENCE CODE": "194",
+    "DOMAIN": "TANZANIA"
+  },
+  {
+    "REFERENCE CODE": "195",
+    "DOMAIN": "TIMOR"
+  },
+  {
+    "REFERENCE CODE": "196",
+    "DOMAIN": "TOGO"
+  },
+  {
+    "REFERENCE CODE": "197",
+    "DOMAIN": "TOKELAU"
+  },
+  {
+    "REFERENCE CODE": "198",
+    "DOMAIN": "TONGA"
+  },
+  {
+    "REFERENCE CODE": "199",
+    "DOMAIN": "TRINIDAD E TOBAGO"
+  },
+  {
+    "REFERENCE CODE": "200",
+    "DOMAIN": "TUNISIA"
+  },
+  {
+    "REFERENCE CODE": "201",
+    "DOMAIN": "TURCOMENISTAO"
+  },
+  {
+    "REFERENCE CODE": "202",
+    "DOMAIN": "TURQUIA"
+  },
+  {
+    "REFERENCE CODE": "203",
+    "DOMAIN": "TUVALU"
+  },
+  {
+    "REFERENCE CODE": "204",
+    "DOMAIN": "UCRANIA"
+  },
+  {
+    "REFERENCE CODE": "205",
+    "DOMAIN": "UGANDA"
+  },
+  {
+    "REFERENCE CODE": "206",
+    "DOMAIN": "URUGUAI"
+  },
+  {
+    "REFERENCE CODE": "207",
+    "DOMAIN": "UZBEQUISTAO"
+  },
+  {
+    "REFERENCE CODE": "208",
+    "DOMAIN": "VANUATU"
+  },
+  {
+    "REFERENCE CODE": "209",
+    "DOMAIN": "VATICANO"
+  },
+  {
+    "REFERENCE CODE": "210",
+    "DOMAIN": "VENEZUELA"
+  },
+  {
+    "REFERENCE CODE": "211",
+    "DOMAIN": "VIETNA"
+  },
+  {
+    "REFERENCE CODE": "212",
+    "DOMAIN": "ZAIRE"
+  },
+  {
+    "REFERENCE CODE": "213",
+    "DOMAIN": "ZAMBIA"
+  },
+  {
+    "REFERENCE CODE": "214",
+    "DOMAIN": "ZIMBABUE"
+  },
+  {
+    "REFERENCE CODE": "215",
+    "DOMAIN": "DESCONHECIDO"
+  },
+  {
+    "REFERENCE CODE": "216",
+    "DOMAIN": "ILHAS CAYMAN"
+  },
+  {
+    "REFERENCE CODE": "222",
+    "DOMAIN": "GUERNSEY"
+  },
+  {
+    "REFERENCE CODE": "223",
+    "DOMAIN": "ANGUILLA"
+  },
+  {
+    "REFERENCE CODE": "224",
+    "DOMAIN": "CAMPIONE D'ITALIA"
+  },
+  {
+    "REFERENCE CODE": "226",
+    "DOMAIN": "ILHA DA MADEIRA"
+  },
+  {
+    "REFERENCE CODE": "227",
+    "DOMAIN": "ILHA DE MAN"
+  },
+  {
+    "REFERENCE CODE": "229",
+    "DOMAIN": "ILHA DO CANAL (ALDERNEY)"
+  },
+  {
+    "REFERENCE CODE": "230",
+    "DOMAIN": "ILHA DO CANAL (JERSEY)"
+  },
+  {
+    "REFERENCE CODE": "231",
+    "DOMAIN": "ILHA DO CANAL (SARK)"
+  },
+  {
+    "REFERENCE CODE": "232",
+    "DOMAIN": "ILHA DO CANAL(GUERNSEY)"
+  },
+  {
+    "REFERENCE CODE": "233",
+    "DOMAIN": "ILHA NIUE"
+  },
+  {
+    "REFERENCE CODE": "234",
+    "DOMAIN": "ILHA NORFOLK"
+  },
+  {
+    "REFERENCE CODE": "235",
+    "DOMAIN": "ILHA PITCAIRN"
+  },
+  {
+    "REFERENCE CODE": "236",
+    "DOMAIN": "ILHA QUESHM"
+  },
+  {
+    "REFERENCE CODE": "238",
+    "DOMAIN": "ILHAS BERMUDAS"
+  },
+  {
+    "REFERENCE CODE": "240",
+    "DOMAIN": "ILHAS COOK"
+  },
+  {
+    "REFERENCE CODE": "241",
+    "DOMAIN": "ILHAS DE SANTA HELENA"
+  },
+  {
+    "REFERENCE CODE": "243",
+    "DOMAIN": "ILHAS MONTSERRAT"
+  },
+  {
+    "REFERENCE CODE": "244",
+    "DOMAIN": "ILHAS TURKS E CAICOS"
+  },
+  {
+    "REFERENCE CODE": "245",
+    "DOMAIN": "ILHAS VIRGENS AMERICANAS"
+  },
+  {
+    "REFERENCE CODE": "247",
+    "DOMAIN": "LEBUAN"
+  },
+  {
+    "REFERENCE CODE": "250",
+    "DOMAIN": "ERITREIA"
+  },
+  {
+    "REFERENCE CODE": "251",
+    "DOMAIN": "FALKLAND (ILHAS MALVINAS)"
+  },
+  {
+    "REFERENCE CODE": "252",
+    "DOMAIN": "GROENLANDIA"
+  },
+  {
+    "REFERENCE CODE": "253",
+    "DOMAIN": "ILHA DO CANAL GUERNSEY + ALDERNEY E SARK"
+  },
+  {
+    "REFERENCE CODE": "254",
+    "DOMAIN": "ILHA WAKE"
+  },
+  {
+    "REFERENCE CODE": "255",
+    "DOMAIN": "ILHAS CANARIAS"
+  },
+  {
+    "REFERENCE CODE": "256",
+    "DOMAIN": "ILHAS COCOS (KEELING)"
+  },
+  {
+    "REFERENCE CODE": "257",
+    "DOMAIN": "ILHAS FEROE"
+  },
+  {
+    "REFERENCE CODE": "258",
+    "DOMAIN": "ILHAS JOHNSTON"
+  },
+  {
+    "REFERENCE CODE": "259",
+    "DOMAIN": "ILHAS MIDWAY"
+  },
+  {
+    "REFERENCE CODE": "260",
+    "DOMAIN": "MACEDONIA, ANT.REP.IUGOSLAVA"
+  },
+  {
+    "REFERENCE CODE": "261",
+    "DOMAIN": "MARIANAS DO NORTE"
+  },
+  {
+    "REFERENCE CODE": "262",
+    "DOMAIN": "MONTENEGRO"
+  },
+  {
+    "REFERENCE CODE": "263",
+    "DOMAIN": "SERVIA"
+  },
+  {
+    "REFERENCE CODE": "264",
+    "DOMAIN": "PALESTINA"
+  },
+  {
+    "REFERENCE CODE": "265",
+    "DOMAIN": "REPUBLICA DEMOCRATICA DO CONGO"
+  }
+]
