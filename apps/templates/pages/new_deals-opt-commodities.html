@@ -1214,6 +1214,7 @@
 <script src="{{ config.ASSETS_ROOT }}/plugins/inputmask/inputmask.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/missing-counterparty.js?v={{ asset_v('js/missing-counterparty.js') }}"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/b3-quote-config.js?v={{ asset_v('js/b3-quote-config.js') }}"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/fi-ter-pair.js?v={{ asset_v('js/fi-ter-pair.js') }}"></script>
 
 <script>
 // ============================================================================
@@ -4141,20 +4142,32 @@ $(document).ready(function() {
     //    único no load — buildConectaFields segue síncrona. Se o fetch falhar,
     //    FI_SPEC fica null e a lista fixa acima continua valendo (mesmo padrão
     //    dos mappings: degrada para o comportamento anterior).
-    var FI_SPEC = null;
+    var FI_TPLS = [];     // base + variantes por par de pernas (File Interpreter)
+    var FI_SPEC = null;   // o template base — fallback quando não há variante
     fetch('/api/file-interface/page-spec?url=' + encodeURIComponent(window.location.pathname))
         .then(function(r) { return r.ok ? r.json() : null; })
         .then(function(d) {
-            var tpls = (d && d.templates) || [];
-            for (var i = 0; i < tpls.length; i++) {
-                if (tpls[i].key === 'opcoes-flexiveis-vcp') { FI_SPEC = tpls[i]; return; }
+            FI_TPLS = (d && d.templates) || [];
+            for (var i = 0; i < FI_TPLS.length; i++) {
+                if (FI_TPLS[i].key === 'opcoes-flexiveis-vcp') { FI_SPEC = FI_TPLS[i]; return; }
             }
-            FI_SPEC = tpls.length ? tpls[0] : null;
+            FI_SPEC = FI_TPLS.length ? FI_TPLS[0] : null;
         })
         .catch(function() { FI_SPEC = null; });
 
-    function fiBlock(id) {
-        var blocks = (FI_SPEC && FI_SPEC.blocks) || [];
+    /* Spec efetivo de UM deal: a variante do par de pernas cadastrada no File
+       Interpreter vence; sem variante vale o base — a mesma escolha do motor
+       no arquivo (pairOpc do fi-ter-pair.js, os testes de substring do
+       gerador OPC). */
+    function fiSpecFor(deal) {
+        if (!window.FiTer || !FI_TPLS.length) return FI_SPEC;
+        return FiTer.pickByPair(FI_TPLS, 'opcoes-flexiveis-vcp',
+                                FiTer.pairOpc(deal && deal.Client)) || FI_SPEC;
+    }
+
+    function fiBlock(id, deal) {
+        var spec = fiSpecFor(deal);
+        var blocks = (spec && spec.blocks) || [];
         for (var i = 0; i < blocks.length; i++) {
             if (blocks[i].id === id) return blocks[i];
         }
@@ -4333,7 +4346,7 @@ $(document).ready(function() {
         // deu certo; os VALORES continuam sendo os calculados acima (f[i] ↔
         // seq i+1 do bloco Registro — a transcrição do template foi feita
         // deste preview, a ordem bate um a um).
-        var blk = fiBlock('registro');
+        var blk = fiBlock('registro', deal);
         if (blk && blk.fields && blk.fields.length) {
             var valuesBySeq = {};
             for (var vi = 0; vi < f.length; vi++) valuesBySeq[String(vi + 1)] = f[vi];
@@ -4443,7 +4456,7 @@ $(document).ready(function() {
                 // Cabeçalho direto do bloco tipo 2 do cadastro quando ele
                 // existe (nomes de campo B3, não traduzidos de propósito);
                 // sem cadastro fica o cabeçalho fixo de sempre.
-                var fxBlk = fiBlock('registro-media-asiatica');
+                var fxBlk = fiBlock('registro-media-asiatica', deal);
                 var fxHead;
                 if (fxBlk && fxBlk.fields && fxBlk.fields.length === 5) {
                     fxHead = fxBlk.fields.map(function(fld, fi) {

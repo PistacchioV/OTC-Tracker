@@ -23520,7 +23520,9 @@ def api_fxo_send_conecta():
         return re.sub(r'[.\-/]', '', _sh(taxid))
 
     deal_count = 0
-    all_lines  = []
+    # Um destino por ARQUIVO: o padrão é FXO_Banco.txt, e a variante do
+    # template (pelo par de pernas do deal) pode cadastrar outro nome.
+    out_files  = {}
 
     for deal in deals:
         if str(deal.get('Status', '') or '').strip() == 'Canceled':
@@ -23597,9 +23599,16 @@ def api_fxo_send_conecta():
             '49': '0' if vanilla else (str(_biz) if _biz else ''),
         }
 
+        # Par de pernas → variante do template (Fixed das contas por par);
+        # sem variante, o base — byte a byte o de sempre.
+        le_pair = _opc_le_pair(client)
+        fname = (_fi_variant_file_name('opcoes-flexiveis-vcp', '/new_deals-opt-fxo', le_pair)
+                 or 'FXO_Banco.txt')
+        dest = out_files.setdefault(fname, [])
+
         deal_count += 1
-        all_lines.append(_fi_build_line('opcoes-flexiveis-vcp', 'registro', vals,
-                                        page_url='/new_deals-opt-fxo'))
+        dest.append(_fi_build_line('opcoes-flexiveis-vcp', 'registro', vals,
+                                   page_url='/new_deals-opt-fxo', le_pair=le_pair))
 
         # Asian — one fixing line (line type 2) per business day in the window
         if asian and fix_start and fix_end:
@@ -23611,25 +23620,33 @@ def api_fxo_send_conecta():
             _cur2 = _s2
             while _s2 and _cur2 <= _e2:
                 if _cur2.weekday() < 5 and _cur2.strftime('%Y-%m-%d') not in _deal_holidays:
-                    all_lines.append(_fi_build_line(
+                    dest.append(_fi_build_line(
                         'opcoes-flexiveis-vcp', 'registro-media-asiatica',
-                        {'3': _cur2.strftime('%Y%m%d')}, page_url='/new_deals-opt-fxo'))
+                        {'3': _cur2.strftime('%Y%m%d')}, page_url='/new_deals-opt-fxo',
+                        le_pair=le_pair))
                 _cur2 += _dt.timedelta(days=1)
 
-    header  = _fi_build_line('opcoes-flexiveis-vcp', 'header', {'4': today},
-                             page_url='/new_deals-opt-fxo')
-    content = '\n'.join([header] + all_lines)
+    # O header do OPC não depende do par (participante Fixed no template + a
+    # data): o mesmo header abre todos os arquivos.
+    header = _fi_build_line('opcoes-flexiveis-vcp', 'header', {'4': today},
+                            page_url='/new_deals-opt-fxo')
+    if not out_files:
+        out_files['FXO_Banco.txt'] = []   # lote só de cancelados: header, como sempre
 
     try:
         os.makedirs(CONECTA_NEW_PATH, exist_ok=True)
-        filepath = _unique_filepath(CONECTA_NEW_PATH, 'FXO_Banco.txt')
-        with open(filepath, 'w', encoding='utf-8') as fh:
-            fh.write(content)
+        generated = []
+        for fname, lines in out_files.items():
+            filepath = _unique_filepath(CONECTA_NEW_PATH, fname)
+            with open(filepath, 'w', encoding='utf-8') as fh:
+                fh.write('\n'.join([header] + lines))
+            generated.append(os.path.basename(filepath))
         if deal_count > 0:
             _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                                  'Sent to B3', 'Opt FXO',
                                  str(deal_count) + ' deal' + ('' if deal_count == 1 else 's') + ' sent')
-        return jsonify({'ok': True, 'filename': os.path.basename(filepath), 'count': deal_count})
+        return jsonify({'ok': True, 'filename': generated[0] if generated else '',
+                        'count': deal_count, 'files': generated})
     except Exception as exc:                          # noqa: BLE001
         return jsonify({'ok': False, 'error': str(exc)}), 500
 
@@ -26931,7 +26948,9 @@ def api_send_conecta():
 
     import json as _json
     deal_count = 0
-    all_lines  = []
+    # Um destino por ARQUIVO: o padrão é OPC_Banco.txt, e a variante do
+    # template (pelo par de pernas do deal) pode cadastrar outro nome.
+    out_files  = {}
 
     for deal in deals:
         if str(deal.get('Status', '') or '').strip() == 'Canceled':
@@ -27017,9 +27036,18 @@ def api_send_conecta():
             '49': '0' if vanilla else (str(_biz) if _biz else ''),
         }
 
+        # Par de pernas → variante do template (Fixed das contas por par);
+        # sem variante, o base — byte a byte o de sempre.
+        le_pair = _opc_le_pair(client)
+        fname = (_fi_variant_file_name('opcoes-flexiveis-vcp',
+                                       '/new_deals-opt-commodities', le_pair)
+                 or 'OPC_Banco.txt')
+        dest = out_files.setdefault(fname, [])
+
         deal_count += 1
-        all_lines.append(_fi_build_line('opcoes-flexiveis-vcp', 'registro', vals,
-                                        page_url='/new_deals-opt-commodities'))
+        dest.append(_fi_build_line('opcoes-flexiveis-vcp', 'registro', vals,
+                                   page_url='/new_deals-opt-commodities',
+                                   le_pair=le_pair))
 
         if asian and fix_start and fix_end:
             try:
@@ -27031,25 +27059,32 @@ def api_send_conecta():
             while _s2 and _cur2 <= _e2:
                 if _cur2.weekday() < 5 and _cur2.strftime('%Y-%m-%d') not in _deal_holidays:
                     _d = _cur2.strftime('%Y%m%d')
-                    all_lines.append(_fi_build_line(
+                    dest.append(_fi_build_line(
                         'opcoes-flexiveis-vcp', 'registro-media-asiatica',
                         {'3': _d, '4': _d if brl else ''},
-                        page_url='/new_deals-opt-commodities'))
+                        page_url='/new_deals-opt-commodities', le_pair=le_pair))
                 _cur2 += _dt.timedelta(days=1)
 
-    header  = _fi_build_line('opcoes-flexiveis-vcp', 'header', {'4': today},
-                             page_url='/new_deals-opt-commodities')
-    content = '\n'.join([header] + all_lines)
+    # O header do OPC não depende do par (participante Fixed no template + a
+    # data): o mesmo header abre todos os arquivos.
+    header = _fi_build_line('opcoes-flexiveis-vcp', 'header', {'4': today},
+                            page_url='/new_deals-opt-commodities')
+    if not out_files:
+        out_files['OPC_Banco.txt'] = []   # lote só de cancelados: header, como sempre
 
     output_dir = CONECTA_NEW_PATH
     try:
         os.makedirs(output_dir, exist_ok=True)
-        filepath = _unique_filepath(output_dir, 'OPC_Banco.txt')
-        with open(filepath, 'w', encoding='utf-8') as fh:
-            fh.write(content)
+        generated = []
+        for fname, lines in out_files.items():
+            filepath = _unique_filepath(output_dir, fname)
+            with open(filepath, 'w', encoding='utf-8') as fh:
+                fh.write('\n'.join([header] + lines))
+            generated.append(os.path.basename(filepath))
         if deal_count > 0:
             _create_notification(session.get('user_sid', ''), session.get('user_name', ''), 'Sent to B3', 'Opt Comm', str(deal_count) + ' deal' + ('' if deal_count == 1 else 's') + ' sent')
-        return jsonify({'ok': True, 'filename': os.path.basename(filepath), 'count': deal_count})
+        return jsonify({'ok': True, 'filename': generated[0] if generated else '',
+                        'count': deal_count, 'files': generated})
     except Exception as exc:
         return jsonify({'ok': False, 'error': str(exc)}), 500
 
@@ -34190,6 +34225,25 @@ def _ter_le_pair(our_side, client):
     é 'CLI'. A cópia desta regra no navegador é o `static/js/fi-ter-pair.js`
     (o preview escolhe a mesma variante que o arquivo usa)."""
     return '{} x {}'.format(our_side, _ter_le_side(client) or 'CLI')
+
+
+def _opc_le_pair(client):
+    """Par de pernas dos geradores OPC (Opt FXO / Opt Commodities). A perna
+    nossa segue os testes de SUBSTRING que o gerador sempre usou para as
+    contas ('BANCO J.P MORGAN' / 'JP MORGAN' — sem regex): cliente JPM nessa
+    grafia = visão Lawton. Grafia fora do padrão não casa par nenhum de grupo
+    e cai no template base — que é o comportamento hardcoded de sempre. A
+    cópia no navegador é o `pairOpc` do fi-ter-pair.js."""
+    c = str(client or '').upper()
+    is_jpm = 'BANCO J.P MORGAN' in c or 'JP MORGAN' in c
+    ours = 'LAWTON' if is_jpm else 'JPM'
+    if 'LAWTON' in c:
+        theirs = 'LAWTON'
+    elif is_jpm:
+        theirs = 'JPM'
+    else:
+        theirs = _ter_le_side(client) or 'CLI'
+    return '{} x {}'.format(ours, theirs)
 
 
 def _ter_file_header(le, today, page_url, le_pair=None):

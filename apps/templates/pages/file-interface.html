@@ -663,7 +663,7 @@
     }
 
     // ── Rail esquerdo: PÁGINAS que geram arquivos + biblioteca de templates ──
-    var CATEGORY_ORDER = ['NDF / Termo', 'Opções Flexíveis', 'Swap', 'MID'];
+    var CATEGORY_ORDER = ['NDF / Termo', 'Opções Flexíveis', 'Swap', 'DCE', 'MID'];
     function pagesFromList() {
         // Uma entrada por página vinculada, com os templates que ela usa.
         var by = {};
@@ -677,54 +677,41 @@
             .sort(function (a, b) { return a.label.localeCompare(b.label); });
     }
     function buildRail() {
-        // Só a BIBLIOTECA vive no rail: base por categoria, e as variantes por
-        // par de pernas aninhadas sob o próprio base. As páginas se alcançam
-        // pelos chips "Used by" do cabeçalho (modal de variantes da página).
+        // Só a BIBLIOTECA vive no rail, e só os templates BASE: as variantes
+        // por par de pernas são assunto da PÁGINA delas — aparecem no modal
+        // que o chip "Used by" abre, nunca como itens soltos aqui. A exceção
+        // é a variante órfã (base apagado), que entra na lista para não sumir
+        // da tela com o arquivo ainda no registro.
         var box = document.getElementById('fiTplList');
         if (!box) return;
         var html = '<div class="fi-cat-title">' + t('fi-rail-library', 'Template Library') + '</div>';
-        var bases = LIST.filter(function (m) { return !m.base_key; });
-        var varsBy = {};
-        LIST.forEach(function (m) {
-            if (m.base_key) (varsBy[m.base_key] = varsBy[m.base_key] || []).push(m);
-        });
+        var baseKeys = {};
+        LIST.forEach(function (m) { if (!m.base_key) baseKeys[m.key] = true; });
         var groups = {};
-        bases.forEach(function (m) {
+        LIST.forEach(function (m) {
+            if (m.base_key && baseKeys[m.base_key]) return;   // variante com base vivo: fora do rail
             var c = m.category || 'Other';
             (groups[c] = groups[c] || []).push(m);
-        });
-        // Variante órfã (base apagado): aparece na categoria dela mesma,
-        // senão sumiria da tela com o arquivo ainda no registro.
-        Object.keys(varsBy).forEach(function (bk) {
-            if (bases.some(function (b) { return b.key === bk; })) return;
-            varsBy[bk].forEach(function (m) {
-                var c = m.category || 'Other';
-                (groups[c] = groups[c] || []).push(m);
-            });
         });
         var cats = Object.keys(groups).sort(function (a, b) {
             var ia = CATEGORY_ORDER.indexOf(a), ib = CATEGORY_ORDER.indexOf(b);
             if (ia === -1) ia = 99; if (ib === -1) ib = 99;
             return ia - ib || a.localeCompare(b);
         });
-        function itemHtml(m, variant) {
+        function itemHtml(m) {
             var live = m.status === 'active';
             return '<a href="javascript:void(0);" class="fi-tpl-item' +
-                   (variant ? ' fi-tpl-variant' : '') +
                    (!CUR_PAGE && m.key === CUR_KEY ? ' is-active' : '') + (live ? ' is-live' : '') +
                    '" data-key="' + esc(m.key) + '" title="' + esc(m.name) + '">' +
                    '<span class="fi-tpl-dot"></span>' +
                    '<span class="fi-tpl-name">' + esc(variantDisplayName(m)) + '</span>' +
-                   (variant && m.le_pair
+                   (m.le_pair
                         ? '<span class="fi-tpl-pair">' + esc(m.le_pair) + '</span>'
                         : '<span class="fi-tpl-badge">' + (m.fields || 0) + '</span>') + '</a>';
         }
         cats.forEach(function (c) {
             html += '<div class="fi-cat-title fi-cat-sub">' + esc(c) + '</div>';
-            groups[c].forEach(function (m) {
-                html += itemHtml(m, !!m.base_key);
-                (varsBy[m.key] || []).forEach(function (v) { html += itemHtml(v, true); });
-            });
+            groups[c].forEach(function (m) { html += itemHtml(m); });
         });
         box.innerHTML = html;
         box.querySelectorAll('.fi-tpl-item[data-key]').forEach(function (el) {

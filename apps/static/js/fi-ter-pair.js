@@ -38,6 +38,20 @@
         return ours + ' x ' + (side(client) || 'CLI');
     }
 
+    /* Par dos geradores OPC (Opt FXO / Opt Commodities): a perna nossa segue
+       os testes de SUBSTRING que o gerador usa para as contas ('BANCO J.P
+       MORGAN' / 'JP MORGAN', sem regex) — grafia fora do padrão não casa par
+       de grupo e cai no template base, o comportamento de sempre. Cópia de
+       routes._opc_le_pair. */
+    function pairOpc(client) {
+        var c = String(client || '').toUpperCase();
+        var isJpm = c.indexOf('BANCO J.P MORGAN') !== -1 || c.indexOf('JP MORGAN') !== -1;
+        var ours = isJpm ? 'LAWTON' : 'JPM';
+        var theirs = c.indexOf('LAWTON') !== -1 ? 'LAWTON'
+            : (isJpm ? 'JPM' : (side(client) || 'CLI'));
+        return ours + ' x ' + theirs;
+    }
+
     /* Par SEM a perna espelhada: LE × contraparte como a mesa lê (MGT x JPM).
        É o par das páginas em que o app não escreve o arquivo (NDF Vanilla) —
        lá não existe visão Lawton sintetizada. */
@@ -65,5 +79,5 @@
     }
 
     window.FiTer = { side: side, norm: norm, pair: pairOf, pairSimple: pairSimple,
-                     pick: pick, pickByPair: pickByPair };
+                     pairOpc: pairOpc, pick: pick, pickByPair: pickByPair };
 })();
