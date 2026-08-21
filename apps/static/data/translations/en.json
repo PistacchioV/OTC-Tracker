@@ -1667,7 +1667,7 @@
   "fxo-w-nomatch-ath": "Unmatched Athena",
   "fxo-w-justified": "Justified",
   "fi-title": "File Interpreter",
-  "fi-subtitle": "B3 file layouts, block by block",
+  "fi-subtitle": "Layouts of the files, block by block",
   "fi-list-title": "Templates",
   "fi-list-hint": "Templates transcribe the B3 \"Enviar Arquivos\" manual. Nothing is hardcoded — edit here and the change is saved to the registry.",
   "fi-add-template": "Add Template",

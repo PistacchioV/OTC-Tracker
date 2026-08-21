@@ -292,7 +292,11 @@
             <div class="fi-page-icon"><i data-lucide="blocks"></i></div>
             <div>
                 <h4 class="fs-xl fw-bold m-0" data-lang="fi-title">File Interpreter</h4>
-                <span class="text-muted fs-xs" data-lang="fi-subtitle">B3 file layouts, block by block</span>
+                <!-- Não enumere aqui de que arquivos se trata (B3, Intrag, …)
+                     nem o que se faz com eles: a biblioteca cresce e o
+                     subtítulo envelhece calado — foi o que aconteceu com o
+                     "B3 file layouts". -->
+                <span class="text-muted fs-xs" data-lang="fi-subtitle">Layouts of the files, block by block</span>
             </div>
         </div>
         <div class="text-end">
@@ -929,8 +933,11 @@
         if (fam.length && !CUR_PAGE) {   // na visão de PÁGINA quem troca é o seletor acima
             var vopts = [{ key: famKey, label: t('fi-var-default', 'Default') }].concat(
                 fam.map(function (m) { return { key: m.key, label: variantOptionLabel(m) }; }));
+            // A contagem vai no rótulo porque o `select` FECHADO mostra só a
+            // versão atual: sem ela a tela diz "Versions Default" e parece que
+            // não há variação nenhuma cadastrada.
             meta.push('<span class="fi-meta-chip"><i class="ti ti-git-fork"></i><span class="fi-meta-k">' +
-                      t('fi-versions', 'Versions') + '</span>' +
+                      t('fi-versions', 'Versions') + ' ' + vopts.length + '</span>' +
                       '<select class="form-select form-select-sm fi-src-input" id="fiVarSwitch" ' +
                       'style="width:auto;border:0;background:transparent;font-weight:600;">' +
                       vopts.map(function (o) {

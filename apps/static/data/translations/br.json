@@ -1667,7 +1667,7 @@
   "fxo-w-nomatch-ath": "Unmatched Athena",
   "fxo-w-justified": "Justificado",
   "fi-title": "Interpretador de Arquivos",
-  "fi-subtitle": "Layouts dos arquivos B3, bloco a bloco",
+  "fi-subtitle": "Layouts dos arquivos, bloco a bloco",
   "fi-list-title": "Templates",
   "fi-list-hint": "Os templates transcrevem o manual \"Enviar Arquivos\" da B3. Nada é fixo no código — o que for editado aqui fica gravado no cadastro.",
   "fi-add-template": "Adicionar Template",

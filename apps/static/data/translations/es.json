@@ -1667,7 +1667,7 @@
   "fxo-w-justified": "Justificado",
   "file-interpreter": " Intérprete de Archivos ",
   "fi-title": "Intérprete de Archivos",
-  "fi-subtitle": "Layouts de los archivos B3, bloque a bloque",
+  "fi-subtitle": "Layouts de los archivos, bloque a bloque",
   "fi-list-title": "Plantillas",
   "fi-list-hint": "Las plantillas transcriben el manual \"Enviar Arquivos\" de B3. Nada está fijo en el código: lo editado aquí queda guardado en el registro.",
   "fi-add-template": "Agregar Plantilla",
