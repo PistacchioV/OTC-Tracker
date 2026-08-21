@@ -238,6 +238,17 @@ Live Positions, o Track Confirmations e as três Recons).
   `sort` sai pelo número cru (senão `1,000.00` vem antes de `9.00`) e o `filter`
   pelo texto que está na tela, porque quem digita no filtro copia o que vê.
 - **Status** sempre como badge pill `bg-gradient` (mapa de cores por status).
+- **Sugestão/autocomplete de domínio aberto NUNCA usa `<datalist>` nativo.** O
+  popup é do navegador: ignora o tema, não acompanha a largura do campo e, com
+  lista grande (as ~560 contrapartes do Reference Data), cobre a tela inteira —
+  foi o Counterparty do MT300 no /mapping. O padrão é o dropdown próprio
+  **abaixo do campo, com a MESMA largura e `max-height` (~220px) com rolagem**:
+  `mapAttachDrop`/`.map-ac-drop` no mapping.html (refdata e `type: 'datalist'`)
+  e `.ar-ac-drop` no Add/Edit Deal do New Deals. Detalhes que importam: o
+  clique do item é por **`mousedown`** (dispara antes do `blur` do input) e
+  reemite `input`/`change` — é o que deixa o `wireRefdata` completar os campos
+  irmãos —, e o esconder vem DEPOIS desses eventos, senão o próprio `input`
+  reabre a lista. O domínio continua aberto: a lista é sugestão, não trava.
 
 ---
 

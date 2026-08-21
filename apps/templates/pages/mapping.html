@@ -85,6 +85,27 @@
 
     #mapping-page .map-filter-row input { height: 30px; font-size: .72rem; font-weight: 400; }
     #mapping-page .mapExportWrapper .dropdown-menu { min-width: 9rem; }
+
+    /* Dropdown de sugestões do modal — o padrão da casa para domínio aberto:
+       a lista sai ABAIXO do campo, com a MESMA largura, altura limitada e
+       rolagem. O <datalist> nativo desenha o popup do navegador (sem tema,
+       sem largura, e com as ~560 contrapartes do RefData ele cobria a tela
+       inteira — era o Counterparty do MT300). */
+    #mapping-page .map-ac-wrap { position: relative; }
+    #mapping-page .map-ac-drop {
+        position: absolute; top: calc(100% + 2px); left: 0; width: 100%;
+        z-index: 30; max-height: 220px; overflow-y: auto;
+        background: var(--vr-card-bg, var(--ins-secondary-bg));
+        border: 1px solid var(--ins-border-color); border-radius: 8px;
+        box-shadow: 0 8px 22px rgba(0, 0, 0, .14);
+    }
+    #mapping-page .map-ac-item {
+        padding: .3rem .55rem; font-size: .78rem; cursor: pointer;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    #mapping-page .map-ac-item:hover { background: rgba(0, 102, 204, .10); }
+    [data-bs-theme=dark] #mapping-page .map-ac-item:hover { background: rgba(41, 151, 255, .16); }
+    #mapping-page .map-ac-sub { color: var(--ins-secondary-color); font-size: .68rem; }
 </style>
 {% endblock extra_css %}
 
@@ -605,25 +626,25 @@
                     }).join('') + '</select>';
             } else if (c.refdata) {
                 /* Campo ligado ao Reference Data (ver `wireRefdata`): input com
-                   datalist — domínio ABERTO de propósito, porque um cliente que
-                   ainda não está no RefData tem de poder ser cadastrado aqui. As
-                   opções são sugestão; quem escolhe uma, ganha os outros dois
-                   campos preenchidos. */
-                fld = '<input type="text" class="form-control form-control-sm map-fld"' +
-                    ' list="mapRefdata' + esc(c.refdata) + '" data-refdata="' + esc(c.refdata) + '"' +
+                   o dropdown padrão da casa (.map-ac-drop) — domínio ABERTO de
+                   propósito, porque um cliente que ainda não está no RefData
+                   tem de poder ser cadastrado aqui. As opções são sugestão;
+                   quem escolhe uma, ganha os outros dois campos preenchidos. */
+                fld = '<div class="map-ac-wrap">' +
+                    '<input type="text" class="form-control form-control-sm map-fld"' +
+                    ' data-refdata="' + esc(c.refdata) + '"' +
                     ' data-i="' + i + '" value="' + esc(val) + '" autocomplete="off">' +
-                    '<datalist id="mapRefdata' + esc(c.refdata) + '"></datalist>';
+                    '<div class="map-ac-drop" style="display:none"></div></div>';
             } else if (c.type === 'datalist') {
                 /* Domínio ABERTO: as opções são sugestões, não trava. O Status B3
                    e o Tipo Operação ganham valores novos sem aviso da B3 — um
                    `select` deixaria o cadastro do valor novo impossível pela
-                   tela, que é justamente onde ele precisa ser feito. */
-                var dlId = 'mapDl' + i;
-                fld = '<input type="text" list="' + dlId + '" class="form-control form-control-sm map-fld"' +
+                   tela, que é justamente onde ele precisa ser feito. A lista sai
+                   no dropdown padrão, nunca no popup nativo do navegador. */
+                fld = '<div class="map-ac-wrap">' +
+                    '<input type="text" class="form-control form-control-sm map-fld"' +
                     ' data-i="' + i + '" value="' + esc(val) + '" autocomplete="off">' +
-                    '<datalist id="' + dlId + '">' +
-                    (c.options || []).map(function (o) { return '<option value="' + esc(o) + '"></option>'; }).join('') +
-                    '</datalist>';
+                    '<div class="map-ac-drop" style="display:none"></div></div>';
             } else {
                 fld = '<input type="text" class="form-control form-control-sm map-fld" data-i="' + i + '" value="' + esc(val) + '" autocomplete="off">';
             }
@@ -631,7 +652,62 @@
         }).join('');
         wireAutofill(st);
         wireRefdata(st);
+        // Colunas de domínio aberto (type datalist): as mesmas sugestões, no
+        // dropdown padrão em vez do popup nativo.
+        st.columns.forEach(function (c, i) {
+            if (c.type !== 'datalist') return;
+            var el = document.querySelector('#mapModalFields .map-fld[data-i="' + i + '"]');
+            var opts = (c.options || []).map(function (o) { return { value: o }; });
+            if (el) mapAttachDrop(el, function () { return opts; });
+        });
         if (window.bootstrap) bootstrap.Modal.getOrCreateInstance(document.getElementById('mapModal')).show();
+    }
+
+    /* Dropdown de sugestões padrão da casa: a lista sai ABAIXO do campo, com a
+       MESMA largura e max-height com rolagem (.map-ac-drop). O <datalist>
+       nativo desenha o popup do navegador — sem tema, sem largura do campo e,
+       com lista grande, cobrindo a tela inteira (era o Counterparty do MT300).
+       Filtra por substring no valor E no rótulo, cega a caixa; o clique usa
+       mousedown (dispara antes do blur do input) e reemite input/change para o
+       wireRefdata completar os campos irmãos. Domínio segue ABERTO: a lista é
+       sugestão, não trava. */
+    function mapAttachDrop(inp, getOptions) {
+        var drop = inp.parentElement && inp.parentElement.querySelector('.map-ac-drop');
+        if (!drop) return;
+        var LIMIT = 300;   // com filtro, sobra de 300 é ruído, não opção
+        function render() {
+            var q = inp.value.trim().toUpperCase();
+            var opts = getOptions() || [];
+            var out = [];
+            for (var i = 0; i < opts.length && out.length < LIMIT; i++) {
+                var o = opts[i];
+                if (!q || (o.value + ' ' + (o.label || '')).toUpperCase().indexOf(q) !== -1) out.push(o);
+            }
+            if (!out.length) { drop.style.display = 'none'; return; }
+            drop.innerHTML = out.map(function (o) {
+                return '<div class="map-ac-item" data-v="' + esc(o.value) + '" title="' +
+                       esc(o.value + (o.label ? ' — ' + o.label : '')) + '">' + esc(o.value) +
+                       (o.label ? ' <span class="map-ac-sub">' + esc(o.label) + '</span>' : '') +
+                       '</div>';
+            }).join('');
+            drop.style.display = '';
+        }
+        inp.addEventListener('focus', render);
+        inp.addEventListener('input', render);
+        inp.addEventListener('blur', function () {
+            setTimeout(function () { drop.style.display = 'none'; }, 150);
+        });
+        drop.addEventListener('mousedown', function (ev) {
+            var it = ev.target.closest('.map-ac-item');
+            if (!it) return;
+            ev.preventDefault();
+            inp.value = it.getAttribute('data-v');
+            // input/change reabrem o render — o esconder vem DEPOIS deles,
+            // senão a lista volta a aparecer já com o valor escolhido.
+            inp.dispatchEvent(new Event('input', { bubbles: true }));
+            inp.dispatchEvent(new Event('change', { bubbles: true }));
+            drop.style.display = 'none';
+        });
     }
 
     /* Contrapartes do Reference Data, carregadas UMA vez por página. São ~440
@@ -675,21 +751,18 @@
         function chaveNome(v) { return String(v || '').replace(/\s+/g, ' ').trim().toUpperCase(); }
 
         refdataRows().then(function (rows) {
-            // Preenche os datalists com o que o campo daquele tipo oferece.
+            // Sugestões no dropdown padrão (mapAttachDrop), uma lista por tipo.
             Object.keys(porTipo).forEach(function (tipo) {
-                var dl = document.getElementById('mapRefdata' + tipo);
-                if (!dl) return;
-                var vistos = {}, html = '';
+                var vistos = {}, lista = [];
                 rows.forEach(function (r) {
                     var v = r[tipo];
                     if (!v || vistos[v]) return;
                     vistos[v] = 1;
                     // O rótulo mostra o NOME junto: escolher um SPN de sete
                     // dígitos sem saber de quem é seria escolher no escuro.
-                    html += '<option value="' + esc(v) + '"' +
-                            (tipo === 'name' ? '' : ' label="' + esc(r.name) + '"') + '></option>';
+                    lista.push({ value: v, label: tipo === 'name' ? '' : (r.name || '') });
                 });
-                dl.innerHTML = html;
+                mapAttachDrop(porTipo[tipo], function () { return lista; });
             });
 
             function acha(tipo, valor) {
