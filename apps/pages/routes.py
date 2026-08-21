@@ -22480,10 +22480,13 @@ _FI_KEY_RE = re.compile(r'^[a-z0-9][a-z0-9-]{1,63}$')
 _FI_FIELD_KEYS = ('seq', 'field', 'format', 'position', 'required',
                   'content', 'description', 'source', 'source_detail',
                   'source_note')
+# `variant_label` é o rótulo da variante quando ela NÃO é por par de pernas —
+# as da Intrag são por PRODUTO (NDF Commodities, Opt FXO). Só rótulo: quem o
+# motor consulta para escolher a variante continua sendo o `le_pair`.
 _FI_META_KEYS = ('name', 'system_id', 'category', 'manual_section',
                  'manual_pages', 'manual_version', 'description',
                  'file_name_rule', 'notes', 'base_key', 'le_pair',
-                 'file_name')
+                 'variant_label', 'file_name')
 
 
 def _fi_path(key):
@@ -22950,7 +22953,7 @@ def api_file_interpreter_list():
                       ('key', 'name', 'system_id', 'category', 'file_type',
                        'separator', 'record_length', 'status', 'linked_pages',
                        'manual_section', 'manual_pages', 'base_key', 'le_pair',
-                       'file_name')})
+                       'variant_label', 'file_name')})
         items[-1]['blocks'] = len(t.get('blocks') or [])
         items[-1]['fields'] = sum(len(b.get('fields') or [])
                                   for b in (t.get('blocks') or []))

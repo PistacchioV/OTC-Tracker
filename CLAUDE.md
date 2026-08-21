@@ -1602,6 +1602,21 @@ Intrag ficavam com o valor cru sempre que o notional estava na moeda fraca
   concordam; e o modal de criação **achata o `source_by_page`** da página
   escolhida nos campos planos — sem isso o override herdado do base venceria
   a edição feita na variante, em silêncio.
+- **Nem toda variante é por par de pernas.** Os arquivos da **Intrag** (seção
+  `Intrag` da biblioteca: `intrag-ndf` e `intrag-option`, `;`-delimitados, 30 e
+  38 colunas, sem header) se dividem por **PRODUTO**, e é o `variant_label` que
+  as nomeia — `le_pair` fica vazio. O rótulo é **só de tela**: quem o motor
+  consulta para escolher variante continua sendo o `le_pair`, então as quatro
+  versões (`NDF Commodities`, `NDF Vanilla / Other Publisher`, `Opt
+  Commodities`, `Opt FXO`) são **catálogo** — documentam o layout que
+  `_save_intrag_ndf_entry`, `_save_intrag_ndf_moeda_entry` e
+  `_save_intrag_opt_entry` gravam, e por isso nascem `status: library`. Sem o
+  rótulo as duas versões apareciam as duas como "Default" na tela, e a tabela
+  de moeda é a de mercadoria com **outro significado** da coluna Trade Price em
+  diante — cada divergência vive num `source_by_page` do base. Onde se alcança
+  a versão é o seletor **Versions** do cartão do template (a variante não vive
+  no rail), e ele é um `select` e não uma fileira de chips porque o Termo tem
+  quinze.
 - **O Source Field/Value aceita FÓRMULA cadastrada** (builder por dropdowns no
   Edit Sources e no modal da variante): `FIELD`, `DATE`, `BIZDIFF`, `ADDBIZ`,
   `LOOKUP(mapping; IN; OUT; Campo)` e `CASE(Campo; DE=PARA; …)`, argumentos por

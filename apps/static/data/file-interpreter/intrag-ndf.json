@@ -1,0 +1,1032 @@
+{
+  "key": "intrag-ndf",
+  "name": "Intrag NDF (Instrução NDF)",
+  "system_id": "INTRAG",
+  "category": "Intrag",
+  "manual_section": "",
+  "manual_pages": "",
+  "manual_version": "",
+  "description": "Instruction file the desk sends to Intrag with the intragroup NDF positions of the fund portfolio (INTRAGJP552). One line per contract, ';'-delimited, 30 columns, no header. Two versions: commodity forward (NDF Commodities) and currency forward (NDF Vanilla / Other Publisher against Lawton).",
+  "file_name_rule": "Intrag-NDF-AAAAMMDD.txt, written by the Send File button of the Intrag · NDF page into I:\\Confirmation\\Derivativos\\OTC Tracker\\Intrag\\AAAA\\mm. Mmmm\\dd; an existing name gets a \" (n)\" copy suffix.",
+  "notes": "The Intrag NDF file has NO header line: each selected row of the Intrag · NDF grid becomes one ';'-delimited line, in the column order above, and the rows are grouped by Registration Date — one file per date. This registry documents the layout and its two versions; the values themselves are written when the New Deals deal reaches Success (routes._save_intrag_ndf_entry for the commodity forward and _save_intrag_ndf_moeda_entry for the currency one), and the row can still be edited on the grid before it is sent (maker/checker). The currency version reuses the commodity columns with a different meaning from Trade Price onwards — that is why every divergent column carries its own source per page.",
+  "base_key": "",
+  "le_pair": "",
+  "variant_label": "",
+  "file_name": "",
+  "file_type": "delimited",
+  "separator": ";",
+  "record_length": null,
+  "status": "library",
+  "linked_pages": [
+    {
+      "label": "Intrag · NDF",
+      "url": "/intrag-ndf",
+      "columns": [
+        "Contract Type",
+        "CETIP Contract Code",
+        "Portfolio Code",
+        "Participant Position",
+        "Client Tax ID (Party)",
+        "Counterparty",
+        "Client Tax ID (Cpty)",
+        "Cpty Collateral Basket",
+        "Party Collateral Basket",
+        "Notional Value",
+        "Trade Date",
+        "Registration Date",
+        "Maturity Date",
+        "Currency",
+        "Reference Exchange",
+        "Commodity",
+        "Type (Form)",
+        "Quantity",
+        "Trading Unit",
+        "Trade Price",
+        "Settlement Parity",
+        "Maturity Month/Year",
+        "Spot Fixing",
+        "Forward Rate (R$/CCY)",
+        "Asian Fwd Avg Rate",
+        "Information Source",
+        "Comm Fixing",
+        "Adjustment Type",
+        "Observation",
+        "Discount Factor"
+      ]
+    },
+    {
+      "label": "New Deals · NDF Commodities",
+      "url": "/new_deals-ndf-commodities",
+      "columns": [
+        "Deal",
+        "B3 ID",
+        "Trade Date",
+        "Month",
+        "Settlement Date",
+        "SPN",
+        "Accronym",
+        "Client",
+        "Tax ID",
+        "Trade Type",
+        "Market",
+        "Underlying Asset",
+        "Commodities",
+        "FX Holiday Schedule",
+        "Total Notional",
+        "Instrument",
+        "Contract",
+        "Strike",
+        "Strike Currency",
+        "Direction",
+        "Spot FXRate",
+        "FXConvDate",
+        "FixingStartDate",
+        "FixingEndDate",
+        "TradingBook",
+        "OtherBook",
+        "Quoted in Cents?"
+      ]
+    },
+    {
+      "label": "New Deals · NDF Vanilla",
+      "url": "/new_deals-ndf-vanilla",
+      "columns": [
+        "LE",
+        "Deal",
+        "B3 ID",
+        "Trade Date",
+        "Month",
+        "Settlement Date",
+        "SPN",
+        "Accronym",
+        "Client",
+        "Tax ID",
+        "First Fixing Date",
+        "Last Fixing Date",
+        "Intrument",
+        "Trade Type",
+        "Direction",
+        "FX Pair",
+        "Quantity Currency",
+        "Other Quantity Currency",
+        "Publisher",
+        "Notional",
+        "Rate",
+        "Is BRR Fixed?",
+        "TradingBook",
+        "Other Book",
+        "Settlement Location"
+      ]
+    },
+    {
+      "label": "New Deals · NDF Other Publisher",
+      "url": "/new_deals-ndf-otherpublisher",
+      "columns": [
+        "LE",
+        "Deal",
+        "B3 ID",
+        "Trade Date",
+        "Month",
+        "Settlement Date",
+        "SPN",
+        "Accronym",
+        "Client",
+        "Tax ID",
+        "First Fixing Date",
+        "Last Fixing Date",
+        "Intrument",
+        "Trade Type",
+        "Direction",
+        "FX Pair",
+        "Quantity Currency",
+        "Other Quantity Currency",
+        "Publisher",
+        "Notional",
+        "Rate",
+        "Is BRR Fixed?",
+        "TradingBook",
+        "Other Book",
+        "Settlement Location"
+      ]
+    }
+  ],
+  "blocks": [
+    {
+      "id": "registro",
+      "title": "Registro",
+      "note": "One line per contract. No header line and no trailing separator.",
+      "fields": [
+        {
+          "seq": "1",
+          "field": "Contract Type",
+          "format": "",
+          "position": "",
+          "required": "",
+          "content": "NDF - TERMO MERCADORIA",
+          "description": "Contract family the row registers, as the Intrag instruction file names it.",
+          "source": "Fixed",
+          "source_detail": "NDF - TERMO MERCADORIA",
+          "source_note": "commodity forward",
+          "source_by_page": {
+            "/new_deals-ndf-commodities": {
+              "source": "Fixed",
+              "source_detail": "NDF - TERMO MERCADORIA",
+              "source_note": "commodity forward"
+            },
+            "/new_deals-ndf-otherpublisher": {
+              "source": "Fixed",
+              "source_detail": "NDF - TERMO DE MOEDAS",
+              "source_note": "currency forward"
+            },
+            "/new_deals-ndf-vanilla": {
+              "source": "Fixed",
+              "source_detail": "NDF - TERMO DE MOEDAS",
+              "source_note": "currency forward"
+            }
+          }
+        },
+        {
+          "seq": "2",
+          "field": "CETIP Contract Code",
+          "format": "",
+          "position": "",
+          "required": "",
+          "content": "2R4B00001234",
+          "description": "B3/CETIP contract number of the trade.",
+          "source": "Page",
+          "source_detail": "B3 ID",
+          "source_note": "",
+          "source_by_page": {
+            "/new_deals-ndf-commodities": {
+              "source": "Page",
+              "source_detail": "B3 ID",
+              "source_note": ""
+            },
+            "/new_deals-ndf-otherpublisher": {
+              "source": "Page",
+              "source_detail": "B3 ID",
+              "source_note": ""
+            },
+            "/new_deals-ndf-vanilla": {
+              "source": "Page",
+              "source_detail": "B3 ID",
+              "source_note": ""
+            }
+          }
+        },
+        {
+          "seq": "3",
+          "field": "Portfolio Code",
+          "format": "",
+          "position": "",
+          "required": "",
+          "content": "INTRAGJP552",
+          "description": "Fund portfolio the position is registered under.",
+          "source": "Fixed",
+          "source_detail": "INTRAGJP552",
+          "source_note": "",
+          "source_by_page": {
+            "/new_deals-ndf-commodities": {
+              "source": "Fixed",
+              "source_detail": "INTRAGJP552",
+              "source_note": ""
+            },
+            "/new_deals-ndf-otherpublisher": {
+              "source": "Fixed",
+              "source_detail": "INTRAGJP552",
+              "source_note": ""
+            },
+            "/new_deals-ndf-vanilla": {
+              "source": "Fixed",
+              "source_detail": "INTRAGJP552",
+              "source_note": ""
+            }
+          }
+        },
+        {
+          "seq": "4",
+          "field": "Participant Position",
+          "format": "",
+          "position": "",
+          "required": "",
+          "content": "COMPRADOR",
+          "description": "Side of the registered portfolio: COMPRADOR (long) or VENDEDOR (short).",
+          "source": "Calculated",
+          "source_detail": "CASE(Direction; SELL=VENDEDOR; BUY=COMPRADOR)",
+          "source_note": "the deal Direction is already the fund side on the commodities page",
+          "source_by_page": {
+            "/new_deals-ndf-commodities": {
+              "source": "Calculated",
+              "source_detail": "CASE(Direction; SELL=VENDEDOR; BUY=COMPRADOR)",
+              "source_note": "the deal Direction is already the fund side on the commodities page"
+            },
+            "/new_deals-ndf-otherpublisher": {
+              "source": "Calculated",
+              "source_detail": "CASE(Direction; SELL=COMPRADOR; BUY=VENDEDOR)",
+              "source_note": "INVERTED: the generic NDF row is the bank leg against Lawton, and the registered portfolio is the fund — bank SELL means the fund buys"
+            },
+            "/new_deals-ndf-vanilla": {
+              "source": "Calculated",
+              "source_detail": "CASE(Direction; SELL=COMPRADOR; BUY=VENDEDOR)",
+              "source_note": "INVERTED: the generic NDF row is the bank leg against Lawton, and the registered portfolio is the fund — bank SELL means the fund buys"
+            }
+          }
+        },
+        {
+          "seq": "5",
+          "field": "Client Tax ID (Party)",
+          "format": "",
+          "position": "",
+          "required": "",
+          "content": "",
+          "description": "CNPJ of the registered portfolio. Left blank — Intrag fills it.",
+          "source": "Fixed",
+          "source_detail": "",
+          "source_note": "always blank",
+          "source_by_page": {
+            "/new_deals-ndf-commodities": {
+              "source": "Fixed",
+              "source_detail": "",
+              "source_note": "always blank"
+            },
+            "/new_deals-ndf-otherpublisher": {
+              "source": "Fixed",
+              "source_detail": "",
+              "source_note": "always blank"
+            },
+            "/new_deals-ndf-vanilla": {
+              "source": "Fixed",
+              "source_detail": "",
+              "source_note": "always blank"
+            }
+          }
+        },
+        {
+          "seq": "6",
+          "field": "Counterparty",
+          "format": "",
+          "position": "",
+          "required": "",
+          "content": "JPM",
+          "description": "Counterparty of the intragroup leg.",
+          "source": "Fixed",
+          "source_detail": "JPM",
+          "source_note": "",
+          "source_by_page": {
+            "/new_deals-ndf-commodities": {
+              "source": "Fixed",
+              "source_detail": "JPM",
+              "source_note": ""
+            },
+            "/new_deals-ndf-otherpublisher": {
+              "source": "Fixed",
+              "source_detail": "JPM",
+              "source_note": ""
+            },
+            "/new_deals-ndf-vanilla": {
+              "source": "Fixed",
+              "source_detail": "JPM",
+              "source_note": ""
+            }
+          }
+        },
+        {
+          "seq": "7",
+          "field": "Client Tax ID (Cpty)",
+          "format": "",
+          "position": "",
+          "required": "",
+          "content": "",
+          "description": "CNPJ of the counterparty. Left blank — Intrag fills it.",
+          "source": "Fixed",
+          "source_detail": "",
+          "source_note": "always blank",
+          "source_by_page": {
+            "/new_deals-ndf-commodities": {
+              "source": "Fixed",
+              "source_detail": "",
+              "source_note": "always blank"
+            },
+            "/new_deals-ndf-otherpublisher": {
+              "source": "Fixed",
+              "source_detail": "",
+              "source_note": "always blank"
+            },
+            "/new_deals-ndf-vanilla": {
+              "source": "Fixed",
+              "source_detail": "",
+              "source_note": "always blank"
+            }
+          }
+        },
+        {
+          "seq": "8",
+          "field": "Cpty Collateral Basket",
+          "format": "",
+          "position": "",
+          "required": "",
+          "content": "NÃO",
+          "description": "Whether the counterparty posts a collateral basket.",
+          "source": "Fixed",
+          "source_detail": "NÃO",
+          "source_note": "",
+          "source_by_page": {
+            "/new_deals-ndf-commodities": {
+              "source": "Fixed",
+              "source_detail": "NÃO",
+              "source_note": ""
+            },
+            "/new_deals-ndf-otherpublisher": {
+              "source": "Fixed",
+              "source_detail": "NÃO",
+              "source_note": ""
+            },
+            "/new_deals-ndf-vanilla": {
+              "source": "Fixed",
+              "source_detail": "NÃO",
+              "source_note": ""
+            }
+          }
+        },
+        {
+          "seq": "9",
+          "field": "Party Collateral Basket",
+          "format": "",
+          "position": "",
+          "required": "",
+          "content": "NÃO",
+          "description": "Whether the registered portfolio posts a collateral basket.",
+          "source": "Fixed",
+          "source_detail": "NÃO",
+          "source_note": "",
+          "source_by_page": {
+            "/new_deals-ndf-commodities": {
+              "source": "Fixed",
+              "source_detail": "NÃO",
+              "source_note": ""
+            },
+            "/new_deals-ndf-otherpublisher": {
+              "source": "Fixed",
+              "source_detail": "NÃO",
+              "source_note": ""
+            },
+            "/new_deals-ndf-vanilla": {
+              "source": "Fixed",
+              "source_detail": "NÃO",
+              "source_note": ""
+            }
+          }
+        },
+        {
+          "seq": "10",
+          "field": "Notional Value",
+          "format": "",
+          "position": "",
+          "required": "",
+          "content": "1500000.00",
+          "description": "Contract notional, two decimals.",
+          "source": "Calculated",
+          "source_detail": "",
+          "source_note": "Total Notional × Strike (Strike ÷ 100 when Quoted in Cents = YES); blank when either side is missing",
+          "source_by_page": {
+            "/new_deals-ndf-commodities": {
+              "source": "Calculated",
+              "source_detail": "",
+              "source_note": "Total Notional × Strike (Strike ÷ 100 when Quoted in Cents = YES); blank when either side is missing"
+            },
+            "/new_deals-ndf-otherpublisher": {
+              "source": "Calculated",
+              "source_detail": "",
+              "source_note": "notional in the FOREIGN currency: Notional ÷ Rate when Quantity Currency is BRL, otherwise the Notional itself"
+            },
+            "/new_deals-ndf-vanilla": {
+              "source": "Calculated",
+              "source_detail": "",
+              "source_note": "notional in the FOREIGN currency: Notional ÷ Rate when Quantity Currency is BRL, otherwise the Notional itself"
+            }
+          }
+        },
+        {
+          "seq": "11",
+          "field": "Trade Date",
+          "format": "",
+          "position": "",
+          "required": "",
+          "content": "2026-08-21",
+          "description": "Trade date. Format AAAA-MM-DD.",
+          "source": "Page",
+          "source_detail": "Trade Date",
+          "source_note": "AAAA-MM-DD",
+          "source_by_page": {
+            "/new_deals-ndf-commodities": {
+              "source": "Page",
+              "source_detail": "Trade Date",
+              "source_note": "AAAA-MM-DD"
+            },
+            "/new_deals-ndf-otherpublisher": {
+              "source": "Page",
+              "source_detail": "Trade Date",
+              "source_note": "AAAA-MM-DD"
+            },
+            "/new_deals-ndf-vanilla": {
+              "source": "Page",
+              "source_detail": "Trade Date",
+              "source_note": "AAAA-MM-DD"
+            }
+          }
+        },
+        {
+          "seq": "12",
+          "field": "Registration Date",
+          "format": "",
+          "position": "",
+          "required": "",
+          "content": "2026-08-21",
+          "description": "Registration date. The app registers on the trade date itself.",
+          "source": "Page",
+          "source_detail": "Trade Date",
+          "source_note": "same as Trade Date, AAAA-MM-DD",
+          "source_by_page": {
+            "/new_deals-ndf-commodities": {
+              "source": "Page",
+              "source_detail": "Trade Date",
+              "source_note": "same as Trade Date, AAAA-MM-DD"
+            },
+            "/new_deals-ndf-otherpublisher": {
+              "source": "Page",
+              "source_detail": "Trade Date",
+              "source_note": "same as Trade Date, AAAA-MM-DD"
+            },
+            "/new_deals-ndf-vanilla": {
+              "source": "Page",
+              "source_detail": "Trade Date",
+              "source_note": "same as Trade Date, AAAA-MM-DD"
+            }
+          }
+        },
+        {
+          "seq": "13",
+          "field": "Maturity Date",
+          "format": "",
+          "position": "",
+          "required": "",
+          "content": "2026-11-30",
+          "description": "Settlement/maturity date. Format AAAA-MM-DD.",
+          "source": "Page",
+          "source_detail": "Settlement Date",
+          "source_note": "AAAA-MM-DD",
+          "source_by_page": {
+            "/new_deals-ndf-commodities": {
+              "source": "Page",
+              "source_detail": "Settlement Date",
+              "source_note": "AAAA-MM-DD"
+            },
+            "/new_deals-ndf-otherpublisher": {
+              "source": "Page",
+              "source_detail": "Settlement Date",
+              "source_note": "AAAA-MM-DD"
+            },
+            "/new_deals-ndf-vanilla": {
+              "source": "Page",
+              "source_detail": "Settlement Date",
+              "source_note": "AAAA-MM-DD"
+            }
+          }
+        },
+        {
+          "seq": "14",
+          "field": "Currency",
+          "format": "",
+          "position": "",
+          "required": "",
+          "content": "USD",
+          "description": "Currency of the forward. N/A on commodity forwards.",
+          "source": "Fixed",
+          "source_detail": "N/A",
+          "source_note": "",
+          "source_by_page": {
+            "/new_deals-ndf-commodities": {
+              "source": "Fixed",
+              "source_detail": "N/A",
+              "source_note": ""
+            },
+            "/new_deals-ndf-otherpublisher": {
+              "source": "Calculated",
+              "source_detail": "",
+              "source_note": "the FOREIGN leg of the pair: Other Quantity Currency when Quantity Currency is BRL, otherwise Quantity Currency"
+            },
+            "/new_deals-ndf-vanilla": {
+              "source": "Calculated",
+              "source_detail": "",
+              "source_note": "the FOREIGN leg of the pair: Other Quantity Currency when Quantity Currency is BRL, otherwise Quantity Currency"
+            }
+          }
+        },
+        {
+          "seq": "15",
+          "field": "Reference Exchange",
+          "format": "",
+          "position": "",
+          "required": "",
+          "content": "NYMEX",
+          "description": "Exchange the underlying quote comes from.",
+          "source": "Calculated",
+          "source_detail": "",
+          "source_note": "Bolsa de Negociacao of the Underlying Asset, read from the Index B3 register (Subjacente.json)",
+          "source_by_page": {
+            "/new_deals-ndf-commodities": {
+              "source": "Calculated",
+              "source_detail": "",
+              "source_note": "Bolsa de Negociacao of the Underlying Asset, read from the Index B3 register (Subjacente.json)"
+            },
+            "/new_deals-ndf-otherpublisher": {
+              "source": "Fixed",
+              "source_detail": "N/A",
+              "source_note": ""
+            },
+            "/new_deals-ndf-vanilla": {
+              "source": "Fixed",
+              "source_detail": "N/A",
+              "source_note": ""
+            }
+          }
+        },
+        {
+          "seq": "16",
+          "field": "Commodity",
+          "format": "",
+          "position": "",
+          "required": "",
+          "content": "OLEO",
+          "description": "Commodity of the forward.",
+          "source": "Page",
+          "source_detail": "Commodities",
+          "source_note": "",
+          "source_by_page": {
+            "/new_deals-ndf-commodities": {
+              "source": "Page",
+              "source_detail": "Commodities",
+              "source_note": ""
+            },
+            "/new_deals-ndf-otherpublisher": {
+              "source": "Fixed",
+              "source_detail": "N/A",
+              "source_note": ""
+            },
+            "/new_deals-ndf-vanilla": {
+              "source": "Fixed",
+              "source_detail": "N/A",
+              "source_note": ""
+            }
+          }
+        },
+        {
+          "seq": "17",
+          "field": "Type (Form)",
+          "format": "",
+          "position": "",
+          "required": "",
+          "content": "BRTQ7",
+          "description": "Underlying asset code (the B3 contract code of the commodity).",
+          "source": "Page",
+          "source_detail": "Underlying Asset",
+          "source_note": "",
+          "source_by_page": {
+            "/new_deals-ndf-commodities": {
+              "source": "Page",
+              "source_detail": "Underlying Asset",
+              "source_note": ""
+            },
+            "/new_deals-ndf-otherpublisher": {
+              "source": "Fixed",
+              "source_detail": "N/A",
+              "source_note": ""
+            },
+            "/new_deals-ndf-vanilla": {
+              "source": "Fixed",
+              "source_detail": "N/A",
+              "source_note": ""
+            }
+          }
+        },
+        {
+          "seq": "18",
+          "field": "Quantity",
+          "format": "",
+          "position": "",
+          "required": "",
+          "content": "25000",
+          "description": "Contract quantity in the trading unit.",
+          "source": "Page",
+          "source_detail": "Total Notional",
+          "source_note": "rounded to an integer",
+          "source_by_page": {
+            "/new_deals-ndf-commodities": {
+              "source": "Page",
+              "source_detail": "Total Notional",
+              "source_note": "rounded to an integer"
+            },
+            "/new_deals-ndf-otherpublisher": {
+              "source": "Fixed",
+              "source_detail": "N/A",
+              "source_note": ""
+            },
+            "/new_deals-ndf-vanilla": {
+              "source": "Fixed",
+              "source_detail": "N/A",
+              "source_note": ""
+            }
+          }
+        },
+        {
+          "seq": "19",
+          "field": "Trading Unit",
+          "format": "",
+          "position": "",
+          "required": "",
+          "content": "BBL",
+          "description": "Trading unit of the underlying.",
+          "source": "Calculated",
+          "source_detail": "",
+          "source_note": "Unidade de Negociacao of the Underlying Asset, read from the Index B3 register",
+          "source_by_page": {
+            "/new_deals-ndf-commodities": {
+              "source": "Calculated",
+              "source_detail": "",
+              "source_note": "Unidade de Negociacao of the Underlying Asset, read from the Index B3 register"
+            },
+            "/new_deals-ndf-otherpublisher": {
+              "source": "Fixed",
+              "source_detail": "0",
+              "source_note": ""
+            },
+            "/new_deals-ndf-vanilla": {
+              "source": "Fixed",
+              "source_detail": "0",
+              "source_note": ""
+            }
+          }
+        },
+        {
+          "seq": "20",
+          "field": "Trade Price",
+          "format": "",
+          "position": "",
+          "required": "",
+          "content": "65.4300",
+          "description": "Strike/traded price, four decimals.",
+          "source": "Page",
+          "source_detail": "Strike",
+          "source_note": "divided by 100 when Quoted in Cents = YES",
+          "source_by_page": {
+            "/new_deals-ndf-commodities": {
+              "source": "Page",
+              "source_detail": "Strike",
+              "source_note": "divided by 100 when Quoted in Cents = YES"
+            },
+            "/new_deals-ndf-otherpublisher": {
+              "source": "Fixed",
+              "source_detail": "0",
+              "source_note": "currency forwards carry the rate in Forward Rate instead"
+            },
+            "/new_deals-ndf-vanilla": {
+              "source": "Fixed",
+              "source_detail": "0",
+              "source_note": "currency forwards carry the rate in Forward Rate instead"
+            }
+          }
+        },
+        {
+          "seq": "21",
+          "field": "Settlement Parity",
+          "format": "",
+          "position": "",
+          "required": "",
+          "content": "USD",
+          "description": "Currency the price is expressed in.",
+          "source": "Page",
+          "source_detail": "Strike Currency",
+          "source_note": "",
+          "source_by_page": {
+            "/new_deals-ndf-commodities": {
+              "source": "Page",
+              "source_detail": "Strike Currency",
+              "source_note": ""
+            },
+            "/new_deals-ndf-otherpublisher": {
+              "source": "Fixed",
+              "source_detail": "BRL",
+              "source_note": ""
+            },
+            "/new_deals-ndf-vanilla": {
+              "source": "Fixed",
+              "source_detail": "BRL",
+              "source_note": ""
+            }
+          }
+        },
+        {
+          "seq": "22",
+          "field": "Maturity Month/Year",
+          "format": "",
+          "position": "",
+          "required": "",
+          "content": "11-2026",
+          "description": "Contract month of the underlying. Format MM-AAAA.",
+          "source": "Calculated",
+          "source_detail": "",
+          "source_note": "Mes/Ano Vencimento of the Underlying Asset code (Index B3 register); falls back to the deal Month and then to the Settlement Date when the code is not registered",
+          "source_by_page": {
+            "/new_deals-ndf-commodities": {
+              "source": "Calculated",
+              "source_detail": "",
+              "source_note": "Mes/Ano Vencimento of the Underlying Asset code (Index B3 register); falls back to the deal Month and then to the Settlement Date when the code is not registered"
+            },
+            "/new_deals-ndf-otherpublisher": {
+              "source": "Fixed",
+              "source_detail": "N/A",
+              "source_note": ""
+            },
+            "/new_deals-ndf-vanilla": {
+              "source": "Fixed",
+              "source_detail": "N/A",
+              "source_note": ""
+            }
+          }
+        },
+        {
+          "seq": "23",
+          "field": "Spot Fixing",
+          "format": "",
+          "position": "",
+          "required": "",
+          "content": "D-2",
+          "description": "Offset of the spot fixing, in ANBIMA business days.",
+          "source": "Calculated",
+          "source_detail": "BIZDIFF(FXConvDate; Settlement Date)",
+          "source_note": "written as 'D-n' — ANBIMA business days between the FX conversion date and the settlement date",
+          "source_by_page": {
+            "/new_deals-ndf-commodities": {
+              "source": "Calculated",
+              "source_detail": "BIZDIFF(FXConvDate; Settlement Date)",
+              "source_note": "written as 'D-n' — ANBIMA business days between the FX conversion date and the settlement date"
+            },
+            "/new_deals-ndf-otherpublisher": {
+              "source": "Fixed",
+              "source_detail": "N/A",
+              "source_note": ""
+            },
+            "/new_deals-ndf-vanilla": {
+              "source": "Fixed",
+              "source_detail": "N/A",
+              "source_note": ""
+            }
+          }
+        },
+        {
+          "seq": "24",
+          "field": "Forward Rate (R$/CCY)",
+          "format": "",
+          "position": "",
+          "required": "",
+          "content": "5.4321",
+          "description": "Forward rate in R$/currency, up to eight decimals (trailing zeros dropped).",
+          "source": "Fixed",
+          "source_detail": "0",
+          "source_note": "commodity forwards carry the price in Trade Price instead",
+          "source_by_page": {
+            "/new_deals-ndf-commodities": {
+              "source": "Fixed",
+              "source_detail": "0",
+              "source_note": "commodity forwards carry the price in Trade Price instead"
+            },
+            "/new_deals-ndf-otherpublisher": {
+              "source": "Page",
+              "source_detail": "Rate",
+              "source_note": "R$/currency — the pair is already inverted at import time"
+            },
+            "/new_deals-ndf-vanilla": {
+              "source": "Page",
+              "source_detail": "Rate",
+              "source_note": "R$/currency — the pair is already inverted at import time"
+            }
+          }
+        },
+        {
+          "seq": "25",
+          "field": "Asian Fwd Avg Rate",
+          "format": "",
+          "position": "",
+          "required": "",
+          "content": "N/A",
+          "description": "Average rate of an Asian currency forward.",
+          "source": "Fixed",
+          "source_detail": "N/A",
+          "source_note": "",
+          "source_by_page": {
+            "/new_deals-ndf-commodities": {
+              "source": "Fixed",
+              "source_detail": "N/A",
+              "source_note": ""
+            },
+            "/new_deals-ndf-otherpublisher": {
+              "source": "Fixed",
+              "source_detail": "N/A",
+              "source_note": ""
+            },
+            "/new_deals-ndf-vanilla": {
+              "source": "Fixed",
+              "source_detail": "N/A",
+              "source_note": ""
+            }
+          }
+        },
+        {
+          "seq": "26",
+          "field": "Information Source",
+          "format": "",
+          "position": "",
+          "required": "",
+          "content": "PTAX USD WMR 4",
+          "description": "Publisher of the rate used to settle.",
+          "source": "Fixed",
+          "source_detail": "N/A",
+          "source_note": "",
+          "source_by_page": {
+            "/new_deals-ndf-commodities": {
+              "source": "Fixed",
+              "source_detail": "N/A",
+              "source_note": ""
+            },
+            "/new_deals-ndf-otherpublisher": {
+              "source": "Page",
+              "source_detail": "Publisher",
+              "source_note": "pipes become spaces ('PTAX|BRR' → 'PTAX BRR'); blank falls back to PTAX"
+            },
+            "/new_deals-ndf-vanilla": {
+              "source": "Page",
+              "source_detail": "Publisher",
+              "source_note": "pipes become spaces ('PTAX|BRR' → 'PTAX BRR'); blank falls back to PTAX"
+            }
+          }
+        },
+        {
+          "seq": "27",
+          "field": "Comm Fixing",
+          "format": "",
+          "position": "",
+          "required": "",
+          "content": "D-5",
+          "description": "Offset of the commodity/currency fixing.",
+          "source": "Calculated",
+          "source_detail": "",
+          "source_note": "written as 'D-n' — WEEKDAY count (no calendar) between the settlement date and the fixing end date",
+          "source_by_page": {
+            "/new_deals-ndf-commodities": {
+              "source": "Calculated",
+              "source_detail": "",
+              "source_note": "written as 'D-n' — WEEKDAY count (no calendar) between the settlement date and the fixing end date"
+            },
+            "/new_deals-ndf-otherpublisher": {
+              "source": "Calculated",
+              "source_detail": "BIZDIFF(Last Fixing Date; Settlement Date)",
+              "source_note": "written as 'D-n' — ANBIMA business days between the last fixing date and the settlement date; D-2 when either date is missing"
+            },
+            "/new_deals-ndf-vanilla": {
+              "source": "Calculated",
+              "source_detail": "BIZDIFF(Last Fixing Date; Settlement Date)",
+              "source_note": "written as 'D-n' — ANBIMA business days between the last fixing date and the settlement date; D-2 when either date is missing"
+            }
+          }
+        },
+        {
+          "seq": "28",
+          "field": "Adjustment Type",
+          "format": "",
+          "position": "",
+          "required": "",
+          "content": "ASIATICO",
+          "description": "How the settlement price is formed: average (ASIATICO) or final (FINAL).",
+          "source": "Calculated",
+          "source_detail": "CASE(Trade Type; ASIAN=ASIATICO; VANILLA=FINAL)",
+          "source_note": "",
+          "source_by_page": {
+            "/new_deals-ndf-commodities": {
+              "source": "Calculated",
+              "source_detail": "CASE(Trade Type; ASIAN=ASIATICO; VANILLA=FINAL)",
+              "source_note": ""
+            },
+            "/new_deals-ndf-otherpublisher": {
+              "source": "Fixed",
+              "source_detail": "N/A",
+              "source_note": ""
+            },
+            "/new_deals-ndf-vanilla": {
+              "source": "Fixed",
+              "source_detail": "N/A",
+              "source_note": ""
+            }
+          }
+        },
+        {
+          "seq": "29",
+          "field": "Observation",
+          "format": "",
+          "position": "",
+          "required": "",
+          "content": "Strike em BRL",
+          "description": "Free note. Flags a strike quoted in BRL.",
+          "source": "Calculated",
+          "source_detail": "CASE(Strike Currency; BRL=Strike em BRL)",
+          "source_note": "blank for any other strike currency",
+          "source_by_page": {
+            "/new_deals-ndf-commodities": {
+              "source": "Calculated",
+              "source_detail": "CASE(Strike Currency; BRL=Strike em BRL)",
+              "source_note": "blank for any other strike currency"
+            },
+            "/new_deals-ndf-otherpublisher": {
+              "source": "Fixed",
+              "source_detail": "N/A",
+              "source_note": ""
+            },
+            "/new_deals-ndf-vanilla": {
+              "source": "Fixed",
+              "source_detail": "N/A",
+              "source_note": ""
+            }
+          }
+        },
+        {
+          "seq": "30",
+          "field": "Discount Factor",
+          "format": "",
+          "position": "",
+          "required": "",
+          "content": "N/A",
+          "description": "Discount factor applied to the contract.",
+          "source": "Fixed",
+          "source_detail": "N/A",
+          "source_note": "",
+          "source_by_page": {
+            "/new_deals-ndf-commodities": {
+              "source": "Fixed",
+              "source_detail": "N/A",
+              "source_note": ""
+            },
+            "/new_deals-ndf-otherpublisher": {
+              "source": "Fixed",
+              "source_detail": "N/A",
+              "source_note": ""
+            },
+            "/new_deals-ndf-vanilla": {
+              "source": "Fixed",
+              "source_detail": "N/A",
+              "source_note": ""
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

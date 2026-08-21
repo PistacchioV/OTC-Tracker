@@ -447,6 +447,14 @@
                         <select class="form-select form-select-sm" id="fiVarPair"></select>
                     </div>
                     <div class="mb-2">
+                        <label class="form-label fs-xs fw-semibold" data-lang="fi-var-label">Version label</label>
+                        <input class="form-control form-control-sm" id="fiVarLabel" placeholder="NDF Commodities">
+                        <div class="text-muted fs-xxs mt-1" data-lang="fi-var-label-hint">
+                            Only for versions that are not told apart by a leg pair — pick "Does not apply"
+                            above and name the version here (the Intrag files are split by product).
+                        </div>
+                    </div>
+                    <div class="mb-2">
                         <label class="form-label fs-xs fw-semibold" data-lang="fi-var-file">File Name</label>
                         <input class="form-control form-control-sm" id="fiVarFile" placeholder="FWDSTART_MGT.txt">
                         <div class="text-muted fs-xxs mt-1" data-lang="fi-var-file-hint">
@@ -677,21 +685,27 @@
             .map(function (p) { return p.label || p.url; })
             .join(', ')) || '';
     }
+    // O que DISTINGUE a variante do base. Quase sempre é o par de pernas; nos
+    // arquivos da Intrag é o PRODUTO (`variant_label`), que não tem par nenhum
+    // — sem essa queda as duas versões apareciam as duas como "Default".
+    function variantTag(m) {
+        return (m && (m.le_pair || m.variant_label)) || '';
+    }
     function variantOptionLabel(m) {
         var page = variantPageLabel(m);
-        var pair = m.le_pair || '';
-        if (page) return page + (pair ? ' — ' + pair : '');
-        return variantDisplayName(m) + (pair ? ' — ' + pair : '');
+        var tag = variantTag(m);
+        if (page) return page + (tag ? ' — ' + tag : '');
+        return variantDisplayName(m) + (tag ? ' — ' + tag : '');
     }
 
     // Nome de exibição de uma variante SEM o par no fim ('Termo … — MGT x JPM'
     // → 'Termo …'): o par aparece uma vez só, no badge/chip ao lado — repetido
     // no texto ele saía duas vezes em toda listagem.
     function variantDisplayName(m) {
-        var nm = String(m.name || m.key || '');
-        if (m.le_pair) {
+        var nm = String(m.name || m.key || ''), tag = variantTag(m);
+        if (tag) {
             var re = new RegExp('\\s*[—–-]\\s*' +
-                String(m.le_pair).replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*$', 'i');
+                String(tag).replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*$', 'i');
             nm = nm.replace(re, '');
         }
         return nm;
@@ -717,7 +731,7 @@
     }
 
     // ── Rail esquerdo: PÁGINAS que geram arquivos + biblioteca de templates ──
-    var CATEGORY_ORDER = ['NDF / Termo', 'Opções Flexíveis', 'Swap', 'DCE', 'MID'];
+    var CATEGORY_ORDER = ['NDF / Termo', 'Opções Flexíveis', 'Swap', 'DCE', 'MID', 'Intrag'];
     function pagesFromList() {
         // Uma entrada por página vinculada, com os templates que ela usa.
         var by = {};
@@ -759,8 +773,8 @@
                    '" data-key="' + esc(m.key) + '" title="' + esc(m.name) + '">' +
                    '<span class="fi-tpl-dot"></span>' +
                    '<span class="fi-tpl-name">' + esc(variantDisplayName(m)) + '</span>' +
-                   (m.le_pair
-                        ? '<span class="fi-tpl-pair">' + esc(m.le_pair) + '</span>'
+                   (variantTag(m)
+                        ? '<span class="fi-tpl-pair">' + esc(variantTag(m)) + '</span>'
                         : '<span class="fi-tpl-badge">' + (m.fields || 0) + '</span>') + '</a>';
         }
         cats.forEach(function (c) {
@@ -907,9 +921,29 @@
                           t('fi-template', 'Template') + '</span>' + esc(tpl.name || tpl.key) + '</span>');
             }
         }
-        if (tpl.le_pair)
+        // As VERSÕES da família (o base + as variantes dele) num seletor só. É
+        // por aqui que se alcança a versão, que não vive no rail — e é um
+        // seletor, não uma fileira de chips, porque o Termo tem quinze.
+        var famKey = tpl.base_key || tpl.key;
+        var fam = LIST.filter(function (m) { return m.base_key === famKey; });
+        if (fam.length && !CUR_PAGE) {   // na visão de PÁGINA quem troca é o seletor acima
+            var vopts = [{ key: famKey, label: t('fi-var-default', 'Default') }].concat(
+                fam.map(function (m) { return { key: m.key, label: variantOptionLabel(m) }; }));
             meta.push('<span class="fi-meta-chip"><i class="ti ti-git-fork"></i><span class="fi-meta-k">' +
-                      t('fi-var-pair-k', 'LE') + '</span>' + esc(tpl.le_pair) + '</span>');
+                      t('fi-versions', 'Versions') + '</span>' +
+                      '<select class="form-select form-select-sm fi-src-input" id="fiVarSwitch" ' +
+                      'style="width:auto;border:0;background:transparent;font-weight:600;">' +
+                      vopts.map(function (o) {
+                          return '<option value="' + esc(o.key) + '"' +
+                                 (o.key === tpl.key ? ' selected' : '') + '>' + esc(o.label) + '</option>';
+                      }).join('') + '</select></span>');
+        }
+        if ((!fam.length || CUR_PAGE) && variantTag(tpl)) {
+            meta.push('<span class="fi-meta-chip"><i class="ti ti-git-fork"></i><span class="fi-meta-k">' +
+                      t(tpl.le_pair ? 'fi-var-pair-k' : 'fi-var-label-k',
+                        tpl.le_pair ? 'LE' : 'Version') + '</span>' +
+                      esc(variantTag(tpl)) + '</span>');
+        }
         if (tpl.file_name)
             meta.push('<span class="fi-meta-chip"><i class="ti ti-file-text"></i><span class="fi-meta-k">' +
                       t('fi-var-file-k', 'File') + '</span>' + esc(tpl.file_name) + '</span>');
@@ -954,6 +988,8 @@
         });
         var bChip = document.getElementById('fiBaseChip');
         if (bChip) bChip.addEventListener('click', function () { selectTpl(tpl.base_key); });
+        var vsw = document.getElementById('fiVarSwitch');
+        if (vsw) vsw.addEventListener('change', function () { selectTpl(vsw.value); });
         var sw = document.getElementById('fiTplSwitch');
         if (sw) sw.addEventListener('change', function () {
             guardSrcEdit(function () {
@@ -1347,7 +1383,7 @@
             // Variante leva a PÁGINA no rótulo — sem ela, as três "— JPM x CLI"
             // do mesmo base são indistinguíveis no select.
             var label = m.base_key
-                ? variantDisplayName(m) + ' — ' + (m.le_pair || '') + ' · ' + variantPageLabel(m)
+                ? variantDisplayName(m) + ' — ' + variantTag(m) + ' · ' + variantPageLabel(m)
                 : m.name + (m.status === 'active' ? ' — ' + t('fi-status-active', 'Active') : '');
             return '<option value="' + esc(m.key) + '"' + (m.key === preKey ? ' selected' : '') + '>' +
                    esc(label) + '</option>';
@@ -1401,9 +1437,19 @@
         document.getElementById('fiVarPage').innerHTML = pages.map(function (p) {
             return '<option value="' + esc(p.url) + '">' + esc(p.label || p.url) + '</option>';
         }).join('');
-        document.getElementById('fiVarPair').innerHTML = LE_PAIRS.map(function (p) {
-            return '<option value="' + esc(p) + '">' + esc(p) + '</option>';
-        }).join('');
+        // A opção VAZIA é o que permite a variante por PRODUTO (Intrag): sem
+        // par de pernas, quem a distingue é o rótulo do campo abaixo.
+        document.getElementById('fiVarPair').innerHTML =
+            '<option value="">— ' + esc(t('fi-var-pair-na', 'Does not apply')) + ' —</option>' +
+            LE_PAIRS.map(function (p) {
+                return '<option value="' + esc(p) + '">' + esc(p) + '</option>';
+            }).join('');
+        // Base cujas versões já são por rótulo (Intrag) abre com o par em branco.
+        var byLabel = LIST.some(function (m) {
+            return m.base_key === base.key && !m.le_pair && m.variant_label;
+        });
+        document.getElementById('fiVarPair').value = byLabel ? '' : LE_PAIRS[0];
+        document.getElementById('fiVarLabel').value = '';
         document.getElementById('fiVarFile').value = '';
         var variants = LIST.filter(function (m) { return m.base_key === base.key; });
         // Todas as opções são do MESMO base, então o rótulo é a PÁGINA + o
@@ -1421,26 +1467,34 @@
         if (!base) return;
         var pageUrl = document.getElementById('fiVarPage').value;
         var pair = document.getElementById('fiVarPair').value;
+        var label = document.getElementById('fiVarLabel').value.trim();
         var fname = document.getElementById('fiVarFile').value.trim();
         if (!pageUrl)
             return Swal.fire({ icon: 'warning', title: t('fi-var-need-page', 'Link the base template to a page first (Link Pages)') });
+        // Sem par, a variante precisa do rótulo: é ele que a distingue do base
+        // na tela — duas versões "Default" seriam indistinguíveis.
+        if (!pair && !label)
+            return Swal.fire({ icon: 'warning', title: t('fi-var-need-tag', 'Pick a leg pair or name the version') });
+        var tag = pair || label;
         var dup = LIST.some(function (m) {
-            return m.base_key === base.key && pairNorm(m.le_pair) === pairNorm(pair) &&
+            return m.base_key === base.key &&
+                   pairNorm(m.le_pair || m.variant_label) === pairNorm(tag) &&
                    (m.linked_pages || []).some(function (p) { return p.url === pageUrl; });
         });
         if (dup)
             return Swal.fire({ icon: 'warning', title: t('fi-var-exists', 'A variant for this pair already exists on this page') });
-        var key = base.key + '--' + slug(pair), n = 2;
+        var key = base.key + '--' + slug(tag), n = 2;
         while (LIST.some(function (m) { return m.key === key; }))
-            key = base.key + '--' + slug(pair) + '-' + (n++);
+            key = base.key + '--' + slug(tag) + '-' + (n++);
         var srcKey = document.getElementById('fiVarCopy').value || base.key;
         apiGet(srcKey).then(function (src) {
             if (!src) return;
             var tpl = JSON.parse(JSON.stringify(src));
             tpl.key = key;
-            tpl.name = (base.name || base.key) + ' — ' + pair;
+            tpl.name = (base.name || base.key) + ' — ' + tag;
             tpl.base_key = base.key;
             tpl.le_pair = pair;
+            tpl.variant_label = pair ? '' : label;
             tpl.file_name = fname;
             tpl.status = 'active';
             // Achata o override por página da página escolhida nos campos
@@ -1481,7 +1535,7 @@
         });
         document.getElementById('fiPageTplsPage').textContent = label || url;
         document.getElementById('fiPageTplsSel').innerHTML = tpls.map(function (m) {
-            var tag = m.le_pair ? m.le_pair : t('fi-var-default', 'Default');
+            var tag = variantTag(m) || t('fi-var-default', 'Default');
             return '<option value="' + esc(m.key) + '"' + (m.key === preKey ? ' selected' : '') + '>' +
                    esc(variantDisplayName(m)) + ' — ' + esc(tag) + '</option>';
         }).join('');
@@ -1558,8 +1612,9 @@
         if (VIEW.pageLabel)
             meta.push('<span class="fi-meta-chip"><i class="ti ti-map-pin"></i>' + esc(VIEW.pageLabel) + '</span>');
         meta.push('<span class="fi-meta-chip"><i class="ti ti-git-fork"></i><span class="fi-meta-k">' +
-                  t('fi-var-pair-k', 'LE') + '</span>' +
-                  esc(tpl.le_pair || t('fi-var-default', 'Default')) + '</span>');
+                  t(tpl.variant_label && !tpl.le_pair ? 'fi-var-label-k' : 'fi-var-pair-k',
+                    tpl.variant_label && !tpl.le_pair ? 'Version' : 'LE') + '</span>' +
+                  esc(variantTag(tpl) || t('fi-var-default', 'Default')) + '</span>');
         if (tpl.base_key && VIEW.edit) {
             meta.push('<span class="fi-meta-chip"><i class="ti ti-file-text"></i><span class="fi-meta-k">' +
                       t('fi-var-file-k', 'File') + '</span>' +
@@ -1747,7 +1802,7 @@
         var key = VIEW.key;
         var base_key = VIEW.tpl.base_key || '';
         var nome = variantDisplayName(VIEW.tpl) +
-                   (VIEW.tpl.le_pair ? ' — ' + VIEW.tpl.le_pair : '');
+                   (variantTag(VIEW.tpl) ? ' — ' + variantTag(VIEW.tpl) : '');
         Swal.fire({
             icon: 'warning',
             title: t('fi-del-title', 'Delete this template?'),
