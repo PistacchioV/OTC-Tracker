@@ -2,7 +2,7 @@
 """TAXACAMBIOTER (Batch Conecta TAXA · NDF Other Publisher) — byte a byte.
 
 A montagem da linha saiu do código e passou para o cadastro do File Interface
-(`apps/static/data/file-interface/taxacambioter.json`). Este check prova que a
+(`apps/static/data/file-interpreter/taxacambioter.json`). Este check prova que a
 troca não mudou um byte: as funções `_legacy_*` abaixo são a cópia autocontida
 do gerador ANTIGO (a lista fixa de labels + concat posicional que vivia em
 `_ndfop_conecta_fields` / `api_ndfop_send`) e geram os goldens; a linha nova
@@ -151,7 +151,7 @@ check('header lawton',
       R._ndfop_conecta_header('INTRAGLAWTONFDO') == _legacy_header('INTRAGLAWTONFDO', 5))
 
 print('· o cadastro comanda: template editado muda a linha')
-_ORIG_DIR = R._FILE_INTERFACE_DIR
+_ORIG_DIR = R._FILE_INTERPRETER_DIR
 tmp = tempfile.mkdtemp(prefix='fi-taxacambioter-')
 try:
     with open(join(_ORIG_DIR, 'taxacambioter.json'), encoding='utf-8') as fh:
@@ -162,14 +162,14 @@ try:
     fld['source_detail'] = '999'
     with open(join(tmp, 'taxacambioter.json'), 'w', encoding='utf-8') as fh:
         json.dump(tpl, fh, ensure_ascii=False, indent=2)
-    R._FILE_INTERFACE_DIR = tmp
+    R._FILE_INTERPRETER_DIR = tmp
     R._fi_tpl_cache.clear()
     edited = new_line(BANCO)
     check('Fixed editado (000 → 999) aparece na linha',
           edited.endswith('999') and edited[:-3] == _legacy_line(BANCO)[:-3])
     shutil.rmtree(tmp)
     tmp = tempfile.mkdtemp(prefix='fi-taxacambioter-vazio-')
-    R._FILE_INTERFACE_DIR = tmp
+    R._FILE_INTERPRETER_DIR = tmp
     R._fi_tpl_cache.clear()
     try:
         R._ndfop_conecta_fields(BANCO)
@@ -177,7 +177,7 @@ try:
     except ValueError:
         check('template ausente → ValueError (nada de arquivo meio montado)', True)
 finally:
-    R._FILE_INTERFACE_DIR = _ORIG_DIR
+    R._FILE_INTERPRETER_DIR = _ORIG_DIR
     R._fi_tpl_cache.clear()
     shutil.rmtree(tmp, ignore_errors=True)
 

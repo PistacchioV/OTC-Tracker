@@ -1023,14 +1023,14 @@ td .btn-sm.rounded-circle i { font-size: 1rem; }
     }
 
     // ── File Interface: o cadastro comanda o preview de duplo clique ─────────
-    // Prefetch no load do spec do template (tela /file-interface); a lista de
+    // Prefetch no load do spec do template (tela /file-interpreter); a lista de
     // campos do preview sai do bloco de registro do cadastro — rótulo = `field`,
     // Fixed = `source_detail` padded pela largura (regra do motor: X → espaços à
     // direita, 9 → zeros à esquerda; Fixed vazio = espaços), não-Fixed = valor
     // calculado mapeado pela seq do template. Sem o spec (fetch falhou), o
     // preview degrada para a lista fixa histórica — mesmo padrão dos mappings.
     var FI_SPEC = null;
-    fetch('/api/file-interface/page-spec?url=/accrual-swap')
+    fetch('/api/file-interpreter/page-spec?url=/accrual-swap')
         .then(function (r) { return r.json(); })
         .then(function (j) {
             var tps = (j && j.templates) || [];

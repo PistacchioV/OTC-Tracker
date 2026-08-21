@@ -4144,13 +4144,13 @@ $(document).ready(function() {
        `B3Quote.cfg` devolve os mesmos F/A e 340/358 de antes. */
     B3Quote.load();
 
-    /* File Interface: o cadastro (/file-interface) comanda a lista de campos
+    /* File Interface: o cadastro (/file-interpreter) comanda a lista de campos
        do preview de duplo clique — GET page-spec no load, template
        `termo-multiclasses` (fallback templates[0]). Fetch que falha degrada
        para a lista fixa CONECTA_FIELD_NAMES, como nos mappings. */
     var FI_TPLS = [];     // base + variantes por par de pernas (File Interpreter)
     var FI_SPEC = null;   // o template base — fallback quando não há variante
-    fetch('/api/file-interface/page-spec?url=' + encodeURIComponent(window.location.pathname), { credentials: 'same-origin' })
+    fetch('/api/file-interpreter/page-spec?url=' + encodeURIComponent(window.location.pathname), { credentials: 'same-origin' })
         .then(function (r) { return r.json(); })
         .then(function (d) {
             FI_TPLS = (d && d.success && d.templates) || [];

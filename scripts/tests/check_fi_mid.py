@@ -2,7 +2,7 @@
 """MID (MtM · Registro de Informações de Derivativos · 0848) — byte a byte.
 
 A montagem da linha saiu do código e passou para o cadastro do File Interface
-(`apps/static/data/file-interface/mid-informacoes-derivativos.json`). Este
+(`apps/static/data/file-interpreter/mid-informacoes-derivativos.json`). Este
 check prova que a troca não mudou um byte: as funções `_legacy_*` abaixo são a
 cópia autocontida do gerador ANTIGO (`_mtm_swap_fields` / `_mtm_swap_header` /
 `_mtm_generate_book` / `_mtm_file_lines` como eram antes da refatoração) e
@@ -184,7 +184,7 @@ check('book desconhecido → nada', R._mtm_generate_book('COE', CEM_ROWS, YMD) =
 
 print('· preview: rótulos vêm do template, células fecham com a linha')
 prev = R._mtm_gen_preview(got)
-with open(join(R._FILE_INTERFACE_DIR, 'mid-informacoes-derivativos.json'), encoding='utf-8') as fh:
+with open(join(R._FILE_INTERPRETER_DIR, 'mid-informacoes-derivativos.json'), encoding='utf-8') as fh:
     tpl = json.load(fh)
 reg = next(b for b in tpl['blocks'] if b['id'] == 'registro-emissao')
 tpl_labels = [f['field'] for f in reg['fields']]
@@ -202,7 +202,7 @@ for pk in ('BANCO', 'LAWTON', 'ATACAMA'):
     check('header ' + pk, R._mtm_swap_header(pk, today) == _legacy_swap_header(pk, today))
 
 print('· o cadastro comanda: template editado muda a linha')
-_ORIG_DIR = R._FILE_INTERFACE_DIR
+_ORIG_DIR = R._FILE_INTERPRETER_DIR
 tmp = tempfile.mkdtemp(prefix='fi-mid-')
 try:
     blk = next(b for b in tpl['blocks'] if b['id'] == 'registro-emissao')
@@ -211,7 +211,7 @@ try:
     fld['source_detail'] = '0849'
     with open(join(tmp, 'mid-informacoes-derivativos.json'), 'w', encoding='utf-8') as fh:
         json.dump(tpl, fh, ensure_ascii=False, indent=2)
-    R._FILE_INTERFACE_DIR = tmp
+    R._FILE_INTERPRETER_DIR = tmp
     R._fi_tpl_cache.clear()
     edited = R._mtm_file_lines(R._mtm_generate_book('CEM', CEM_ROWS[:1], YMD)['MtM_BANCO-CEM'])[1]
     gold1 = _legacy_file_lines(_legacy_generate_book('CEM', CEM_ROWS[:1], YMD)['MtM_BANCO-CEM'])[1]
@@ -219,7 +219,7 @@ try:
           edited[6:10] == '0849' and edited[:6] == gold1[:6] and edited[10:] == gold1[10:])
     shutil.rmtree(tmp)
     tmp = tempfile.mkdtemp(prefix='fi-mid-vazio-')
-    R._FILE_INTERFACE_DIR = tmp
+    R._FILE_INTERPRETER_DIR = tmp
     R._fi_tpl_cache.clear()
     try:
         R._mtm_generate_book('CEM', CEM_ROWS[:1], YMD)
@@ -227,7 +227,7 @@ try:
     except ValueError:
         check('template ausente → ValueError (nada de arquivo meio montado)', True)
 finally:
-    R._FILE_INTERFACE_DIR = _ORIG_DIR
+    R._FILE_INTERPRETER_DIR = _ORIG_DIR
     R._fi_tpl_cache.clear()
     shutil.rmtree(tmp, ignore_errors=True)
 

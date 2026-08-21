@@ -38,7 +38,8 @@ var PAGE_URL = {
     'Latam Desk Position': '/other-products-swap-latamdeskposition',
     'NDF Cockpit': '/ndf-cockpit',
     'Cognos': '/cognos',
-    'File Interface': '/file-interface',
+    'File Interface': '/file-interpreter',
+    'File Interpreter': '/file-interpreter',
     'Mapping': '/mapping',
     'Holidays Calendar': '/holidays-calendar'
 };

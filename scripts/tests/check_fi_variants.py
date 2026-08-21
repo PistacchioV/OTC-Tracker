@@ -88,7 +88,7 @@ def main():
           R._fi_le_pair_norm(' mgt  ×  jpm ') == R._fi_le_pair_norm('MGT x JPM'))
 
     # ── Registro em tempfile: base real + variante MGT x JPM (FWD Start) ──
-    src_path = os.path.join(ROOT, 'apps', 'static', 'data', 'file-interface',
+    src_path = os.path.join(ROOT, 'apps', 'static', 'data', 'file-interpreter',
                             'termo-multiclasses.json')
     with open(src_path, encoding='utf-8') as fh:
         base = json.load(fh)
@@ -130,8 +130,8 @@ def main():
         base_mgt = _line(DEAL_MGT_JPM)[1]
         base_cli = _line(DEAL_JPM_CLI)[1]
 
-        old_dir = R._FILE_INTERFACE_DIR
-        R._FILE_INTERFACE_DIR = tmp
+        old_dir = R._FILE_INTERPRETER_DIR
+        R._FILE_INTERPRETER_DIR = tmp
         R._fi_tpl_cache.clear()
         try:
             # resolução da chave
@@ -192,7 +192,7 @@ def main():
                                           page_url='/new_deals-ndf-fwdstart')
             check('bloco ausente na variante → bloco do base', line2 == line2_base)
         finally:
-            R._FILE_INTERFACE_DIR = old_dir
+            R._FILE_INTERPRETER_DIR = old_dir
             R._fi_tpl_cache.clear()
     finally:
         shutil.rmtree(tmp, ignore_errors=True)

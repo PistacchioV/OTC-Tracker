@@ -1666,7 +1666,7 @@
   "mc-reject-ph": "What needs to be fixed?",
   "fxo-w-nomatch-ath": "Unmatched Athena",
   "fxo-w-justified": "Justified",
-  "file-interface": " File Interpreter ",
+  "file-interpreter": " File Interpreter ",
   "fi-title": "File Interpreter",
   "fi-subtitle": "B3 file layouts, block by block",
   "fi-list-title": "Templates",

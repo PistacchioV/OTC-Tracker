@@ -1573,10 +1573,16 @@ Intrag ficavam com o valor cru sempre que o notional estava na moeda fraca
   falhar.
 - **Só `isCancelled = true` significa cancelado** na Athena. `isDead` é estado
   interno e esses registros *são* importados (`_api_rec_is_cancelled`, §173).
-- **No File Interpreter** (a tela; a URL segue `/file-interface`, e é por ela
-  que o `Page_Access` e o sino a alcançam — ver o comentário no
-  `_NOTIF_PAGE_URL`), **"campo em branco" se cadastra como Source `Fixed` com
-  valor VAZIO** — nunca como Page com o dropdown limpo ou origem "—": Source =
+- **No File Interpreter** (a tela; TODO o nome é `file-interpreter` desde
+  2026-08-21 — página `/file-interpreter`, APIs `/api/file-interpreter/*` e
+  dados em `static/data/file-interpreter/`. O legado não quebra: a URL antiga
+  `/file-interface` redireciona, as APIs antigas são ALIAS das novas (aba
+  aberta com HTML de antes do deploy), o valor antigo no `Page_Access` é
+  normalizado na leitura (`_get_page_access`), o sino aceita os dois rótulos
+  nos três mapas, e a pasta antiga é MIGRADA na subida — template criado pela
+  tela na instância do time não está no git, e renomear diretório não pode
+  sumir com cadastro de runtime), **"campo em branco" se cadastra como Source
+  `Fixed` com valor VAZIO** — nunca como Page com o dropdown limpo ou origem "—": Source =
   Page significa "o gerador manda o valor" (o motor injeta o calculado pelo
   `seq`; o detalhe da origem é documentação), então limpar o detalhe não
   esvazia nada, em silêncio. Foi a Data de Fixing do FWD Start (HANDOFF §249).

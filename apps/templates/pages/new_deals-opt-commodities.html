@@ -4138,13 +4138,13 @@ $(document).ready(function() {
         'Trigger Proporção'
     ];
 
-    // ── File Interface: o preview lê o cadastro (/file-interface). Prefetch
+    // ── File Interface: o preview lê o cadastro (/file-interpreter). Prefetch
     //    único no load — buildConectaFields segue síncrona. Se o fetch falhar,
     //    FI_SPEC fica null e a lista fixa acima continua valendo (mesmo padrão
     //    dos mappings: degrada para o comportamento anterior).
     var FI_TPLS = [];     // base + variantes por par de pernas (File Interpreter)
     var FI_SPEC = null;   // o template base — fallback quando não há variante
-    fetch('/api/file-interface/page-spec?url=' + encodeURIComponent(window.location.pathname))
+    fetch('/api/file-interpreter/page-spec?url=' + encodeURIComponent(window.location.pathname))
         .then(function(r) { return r.ok ? r.json() : null; })
         .then(function(d) {
             FI_TPLS = (d && d.templates) || [];

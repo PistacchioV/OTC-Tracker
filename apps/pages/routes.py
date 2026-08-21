@@ -300,7 +300,8 @@ _NOTIF_PAGE_URL = {
     # 'Confirmation' lá em cima. Um segundo rótulo apontando para a mesma URL
     # também não serve: `check_notif_page_url.py` recusa destino repetido, e com
     # razão, porque aí o mesmo aviso teria duas chaves.
-    'File Interface':         '/file-interface',
+    'File Interface':         '/file-interpreter',
+    'File Interpreter':       '/file-interpreter',
     'Mapping':                '/mapping',
     'Holidays Calendar':      '/holidays-calendar',
 }
@@ -430,7 +431,11 @@ def _get_page_access(sid):
     try:
         arr = json.loads(raw)
         if isinstance(arr, list):
-            return (True, set(str(u) for u in arr))
+            # A tela do File Interpreter mudou de URL (/file-interface →
+            # /file-interpreter): o valor antigo gravado no cadastro segue
+            # valendo — renomear página não pode revogar acesso em silêncio.
+            return (True, set('/file-interpreter' if str(u) == '/file-interface'
+                              else str(u) for u in arr))
     except Exception:
         pass
     return (False, set())
@@ -12646,7 +12651,7 @@ def api_ndfop_row_delete():
 # ── Send to Conecta (Batch Conecta TAXA files) ────────────────────────────────
 #  One positional line per row. The record layout (field order, labels, widths
 #  and the fixed literals TER/1/0015/000) lives in the File Interface template
-#  `taxacambioter` — editing it on /file-interface changes the file and the
+#  `taxacambioter` — editing it on /file-interpreter changes the file and the
 #  double-click preview without touching code. This code only computes the
 #  per-row values, ported from the Excel column formulas: random 10-digit
 #  internal number (MID(RAND();3;10)), bank participant 73760009, counterparty
@@ -12662,7 +12667,7 @@ _NDFOP_FI_KEY = 'taxacambioter'   # File Interface template key
 _NDFOP_FI_PAGE = '/ndf-other-publisher'
 _NDFOP_PARTICIPANT = '73760009'   # bank participant account
 _NDFOP_LAWTON = '00041007'        # Lawton account → triggers the mirrored file
-_NDFOP_FI_ERROR = 'File Interpreter template missing/invalid — check /file-interface'
+_NDFOP_FI_ERROR = 'File Interpreter template missing/invalid — check /file-interpreter'
 
 
 def _ndfop_acct8(v):
@@ -12690,7 +12695,7 @@ def _ndfop_fi_block(block_id):
     for b in (tpl or {}).get('blocks', []):
         if b.get('id') == block_id:
             return b
-    raise ValueError('file-interface template missing: {}/{}'.format(_NDFOP_FI_KEY, block_id))
+    raise ValueError('file-interpreter template missing: {}/{}'.format(_NDFOP_FI_KEY, block_id))
 
 
 def _ndfop_conecta_fields(cells, swap=False):
@@ -15984,7 +15989,7 @@ def _mtm_fi_registro_fields():
     block = next((b for b in (tpl or {}).get('blocks', [])
                   if b.get('id') == 'registro-emissao'), None)
     if block is None:
-        raise ValueError('file-interface template missing: {}/registro-emissao'.format(_MTM_FI_KEY))
+        raise ValueError('file-interpreter template missing: {}/registro-emissao'.format(_MTM_FI_KEY))
     return block.get('fields', [])
 
 
@@ -16147,7 +16152,7 @@ def api_mtm_send_batch():
     except ValueError:
         log.error('[mtm] send-batch build failed:\n%s', traceback.format_exc())
         return jsonify({'success': False,
-                        'error': 'File Interpreter template missing/invalid — check /file-interface'}), 500
+                        'error': 'File Interpreter template missing/invalid — check /file-interpreter'}), 500
     except Exception:
         log.error('[mtm] send-batch build failed:\n%s', traceback.format_exc())
         return jsonify({'success': False, 'error': 'Generation failed.'}), 500
@@ -16185,7 +16190,7 @@ def api_mtm_row_preview():
     except ValueError:
         log.error('[mtm] row preview build failed:\n%s', traceback.format_exc())
         return jsonify({'success': False,
-                        'error': 'File Interpreter template missing/invalid — check /file-interface'}), 500
+                        'error': 'File Interpreter template missing/invalid — check /file-interpreter'}), 500
     except Exception:
         log.error('[mtm] row preview build failed:\n%s', traceback.format_exc())
         return jsonify({'success': False, 'error': 'Generation failed.'}), 500
@@ -17365,7 +17370,7 @@ def api_accrual_send_batch():
     except ValueError:
         log.error('[accrual] send-batch failed:\n%s', traceback.format_exc())
         return jsonify({'success': False,
-                        'error': 'File Interpreter template missing/invalid — check /file-interface'}), 500
+                        'error': 'File Interpreter template missing/invalid — check /file-interpreter'}), 500
     except Exception:
         log.error('[accrual] send-batch failed:\n%s', traceback.format_exc())
         return jsonify({'success': False, 'error': 'Failed to write the batch files.'}), 500
@@ -17407,7 +17412,7 @@ def api_accrual_validation():
     except ValueError:
         log.error('[accrual] validation generate failed:\n%s', traceback.format_exc())
         return jsonify({'success': False,
-                        'error': 'File Interpreter template missing/invalid — check /file-interface'}), 500
+                        'error': 'File Interpreter template missing/invalid — check /file-interpreter'}), 500
     except Exception:
         log.error('[accrual] validation generate failed:\n%s', traceback.format_exc())
         return jsonify({'success': False, 'error': 'Failed to write the batch files.'}), 500
@@ -22443,14 +22448,30 @@ def api_mappings(key):
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-#  FILE INTERFACE — os layouts dos arquivos B3 (Batch Conecta) como templates
-#  editáveis. Um JSON por template em static/data/file-interface/ (versionados:
+#  FILE INTERPRETER — os layouts dos arquivos B3 (Batch Conecta) como templates
+#  editáveis. Um JSON por template em static/data/file-interpreter/ (versionados:
 #  os seeds transcrevem o manual "Transferência de Arquivos – Enviar Arquivos").
 #  Nada de layout fixo no código: a página monta os blocos do que o JSON disser,
 #  e template novo/atualizado da B3 entra pela tela (Create New Template).
 # ═════════════════════════════════════════════════════════════════════════════
-_FILE_INTERFACE_DIR = os.path.normpath(os.path.join(
+_FILE_INTERPRETER_DIR = os.path.normpath(os.path.join(
+    os.path.dirname(__file__), '..', 'static', 'data', 'file-interpreter'))
+
+# A pasta chamava-se `file-interface` (o endereço antigo da página). Template
+# criado PELA TELA na instância do time não está no git: na subida, o que
+# ficou na pasta antiga é movido para a nova (sem sobrescrever o que já
+# existe) — renomear diretório não pode sumir com cadastro de runtime.
+_FI_LEGACY_DIR = os.path.normpath(os.path.join(
     os.path.dirname(__file__), '..', 'static', 'data', 'file-interface'))
+try:
+    if os.path.isdir(_FI_LEGACY_DIR):
+        os.makedirs(_FILE_INTERPRETER_DIR, exist_ok=True)
+        for _fn in os.listdir(_FI_LEGACY_DIR):
+            _dst = os.path.join(_FILE_INTERPRETER_DIR, _fn)
+            if _fn.endswith('.json') and not os.path.exists(_dst):
+                shutil.move(os.path.join(_FI_LEGACY_DIR, _fn), _dst)
+except OSError:
+    pass
 
 # A chave é também o nome do arquivo em disco: o regex é o que impede um
 # path traversal via URL (`../../`) além de padronizar o kebab-case.
@@ -22466,7 +22487,7 @@ _FI_META_KEYS = ('name', 'system_id', 'category', 'manual_section',
 
 
 def _fi_path(key):
-    return os.path.join(_FILE_INTERFACE_DIR, key + '.json')
+    return os.path.join(_FILE_INTERPRETER_DIR, key + '.json')
 
 
 def _fi_load(key):
@@ -22612,7 +22633,7 @@ def _fi_variant_key(base_key, page_url=None, le_pair=None):
         return base_key
     wildcard = None
     try:
-        names = sorted(os.listdir(_FILE_INTERFACE_DIR))
+        names = sorted(os.listdir(_FILE_INTERPRETER_DIR))
     except OSError:
         return base_key
     for fn in names:
@@ -22694,7 +22715,7 @@ def _fi_build_line(key, block_id, values, page_url=None, le_pair=None):
         tpl = _fi_tpl_cached(key)
         block = _fi_block_of(tpl, block_id)
     if tpl is None or block is None:
-        raise ValueError('file-interface template missing: {}/{}'.format(eff_key, block_id))
+        raise ValueError('file-interpreter template missing: {}/{}'.format(eff_key, block_id))
     positional = tpl.get('file_type') != 'delimited'
     vals = {_fi_seq_key(k): ('' if v is None else str(v)) for k, v in (values or {}).items()}
     parts = []
@@ -22717,15 +22738,24 @@ def _fi_build_line(key, block_id, values, page_url=None, le_pair=None):
     return sep.join(parts) + sep
 
 
-@blueprint.route('/file-interface')
-def file_interface_page():
+@blueprint.route('/file-interpreter')
+def file_interpreter_page():
     if not session.get('authenticated'):
         return redirect(url_for('pages_blueprint.sign_in_page'))
-    return render_template('pages/file-interface.html', segment='file-interface')
+    return render_template('pages/file-interpreter.html', segment='file-interpreter')
 
 
-@blueprint.route('/api/file-interface/page-spec', methods=['GET'])
-def api_file_interface_page_spec():
+@blueprint.route('/file-interface')
+def file_interface_legacy():
+    """URL antiga da tela (o nome sempre foi File Interpreter; a rota seguiu
+    o histórico 'file-interface' até 2026-08-21). Redireciona para o nome
+    atual — bookmark e link antigo não podem virar 404."""
+    return redirect('/file-interpreter')
+
+
+@blueprint.route('/api/file-interpreter/page-spec', methods=['GET'])
+@blueprint.route('/api/file-interface/page-spec', methods=['GET'])   # alias legado
+def api_file_interpreter_page_spec():
     """Spec dos templates vinculados a UMA página — o que o preview de duplo
     clique consome: ordem e rótulo dos campos, largura e os literais Fixed já
     resolvidos para aquela página. Editar o template pela tela muda o preview
@@ -22735,7 +22765,7 @@ def api_file_interface_page_spec():
     url = (request.args.get('url') or '').strip()
     out = []
     try:
-        names = sorted(os.listdir(_FILE_INTERFACE_DIR))
+        names = sorted(os.listdir(_FILE_INTERPRETER_DIR))
     except OSError:
         names = []
     for fn in names:
@@ -22768,8 +22798,9 @@ def api_file_interface_page_spec():
     return jsonify({'success': True, 'url': url, 'templates': out})
 
 
-@blueprint.route('/api/file-interface/options', methods=['GET'])
-def api_file_interface_options():
+@blueprint.route('/api/file-interpreter/options', methods=['GET'])
+@blueprint.route('/api/file-interface/options', methods=['GET'])   # alias legado
+def api_file_interpreter_options():
     """Opções dos dropdowns de Origem: os mappings existentes no registro.
     As colunas de página não saem daqui — vivem em `linked_pages[].columns`
     de cada template, cadastráveis pela própria tela."""
@@ -22779,13 +22810,14 @@ def api_file_interface_options():
         {'key': k, 'label': d.get('label', k)} for k, d in sorted(_MAPPING_DEFS.items())]})
 
 
-@blueprint.route('/api/file-interface/templates', methods=['GET'])
-def api_file_interface_list():
+@blueprint.route('/api/file-interpreter/templates', methods=['GET'])
+@blueprint.route('/api/file-interface/templates', methods=['GET'])   # alias legado
+def api_file_interpreter_list():
     if not session.get('authenticated'):
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
     items = []
     try:
-        names = sorted(os.listdir(_FILE_INTERFACE_DIR))
+        names = sorted(os.listdir(_FILE_INTERPRETER_DIR))
     except OSError:
         names = []
     for fn in names:
@@ -22805,8 +22837,9 @@ def api_file_interface_list():
     return jsonify({'success': True, 'templates': items})
 
 
-@blueprint.route('/api/file-interface/templates/<key>', methods=['GET', 'POST', 'DELETE'])
-def api_file_interface_template(key):
+@blueprint.route('/api/file-interpreter/templates/<key>', methods=['GET', 'POST', 'DELETE'])
+@blueprint.route('/api/file-interface/templates/<key>', methods=['GET', 'POST', 'DELETE'])   # alias legado
+def api_file_interpreter_template(key):
     if not session.get('authenticated'):
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
     if not _FI_KEY_RE.match(key or ''):
@@ -22825,20 +22858,20 @@ def api_file_interface_template(key):
             except OSError as e:
                 return jsonify({'success': False, 'error': str(e)}), 500
         _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
-                             'File Interpreter Template Deleted', 'File Interface', key)
+                             'File Interpreter Template Deleted', 'File Interpreter', key)
         return jsonify({'success': True})
     clean, err = _fi_clean_template(key, request.get_json(silent=True) or {})
     if err:
         return jsonify({'success': False, 'error': err}), 400
     with _cache_lock:
         try:
-            os.makedirs(_FILE_INTERFACE_DIR, exist_ok=True)
+            os.makedirs(_FILE_INTERPRETER_DIR, exist_ok=True)
             _atomic_write_json(_fi_path(key), clean)
         except Exception as e:
-            log.error('[file-interface] save failed for %s:\n%s', key, traceback.format_exc())
+            log.error('[file-interpreter] save failed for %s:\n%s', key, traceback.format_exc())
             return jsonify({'success': False, 'error': '{}: {}'.format(type(e).__name__, e)}), 500
     _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
-                         'File Interpreter Template Updated', 'File Interface',
+                         'File Interpreter Template Updated', 'File Interpreter',
                          '{} ({} block(s))'.format(clean['name'], len(clean['blocks'])))
     return jsonify({'success': True, 'template': clean})
 
@@ -23452,12 +23485,12 @@ def api_fxo_send_conecta():
         return jsonify({'ok': False, 'error': 'No deals provided'}), 400
 
     # O cadastro é a autoridade da linha: sem template (ou sem os blocos), o
-    # arquivo NÃO sai meio montado — erro claro pedindo o /file-interface.
+    # arquivo NÃO sai meio montado — erro claro pedindo o /file-interpreter.
     _tpl = _fi_tpl_cached('opcoes-flexiveis-vcp')
     if _tpl is None or not {'header', 'registro', 'registro-media-asiatica'} <= {
             b.get('id') for b in _tpl.get('blocks', [])}:
         return jsonify({'ok': False, 'error': 'File Interpreter template missing/invalid '
-                                              '— check /file-interface (opcoes-flexiveis-vcp)'}), 500
+                                              '— check /file-interpreter (opcoes-flexiveis-vcp)'}), 500
 
     today = _dt.datetime.today().strftime('%Y%m%d')
 
@@ -26881,7 +26914,7 @@ def api_send_conecta():
     if _tpl is None or not {'header', 'registro', 'registro-media-asiatica'} <= {
             b.get('id') for b in _tpl.get('blocks', [])}:
         return jsonify({'ok': False, 'error': 'File Interpreter template missing/invalid '
-                                              '— check /file-interface (opcoes-flexiveis-vcp)'}), 500
+                                              '— check /file-interpreter (opcoes-flexiveis-vcp)'}), 500
 
     today = _dt.datetime.today().strftime('%Y%m%d')
 
@@ -34187,7 +34220,7 @@ def _anbima_add_biz(start_dt, n):
 # não reformata nada. Template/bloco ausente vira erro claro no endpoint,
 # nunca arquivo montado do jeito velho em silêncio.
 _TER_FI_KEY = 'termo-multiclasses'
-_TER_FI_ERROR = 'File Interpreter template missing/invalid — check /file-interface'
+_TER_FI_ERROR = 'File Interpreter template missing/invalid — check /file-interpreter'
 # O arquivo TER sai um por VISÃO, e a visão é a entidade dona dele. O balde é o
 # vocabulário do gerador ('BANCO' é como a mesa chama o Banco J.P. Morgan nos
 # arquivos da CETIP); a LE é o vocabulário do cadastro (`le-accronym`,

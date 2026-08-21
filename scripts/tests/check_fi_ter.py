@@ -648,7 +648,7 @@ def main():
 
     # ── Editar um Fixed no cadastro muda a linha ───────────────────────────
     tmp = tempfile.mkdtemp(prefix='fi-ter-')
-    src = os.path.join(ROOT, 'apps', 'static', 'data', 'file-interface',
+    src = os.path.join(ROOT, 'apps', 'static', 'data', 'file-interpreter',
                        'termo-multiclasses.json')
     try:
         with open(src, encoding='utf-8') as fh:
@@ -662,15 +662,15 @@ def main():
                   encoding='utf-8') as fh:
             json.dump(tpl, fh, ensure_ascii=False, indent=2)
             fh.write('\n')
-        old_dir = R._FILE_INTERFACE_DIR
-        R._FILE_INTERFACE_DIR = tmp
+        old_dir = R._FILE_INTERPRETER_DIR
+        R._FILE_INTERPRETER_DIR = tmp
         R._fi_tpl_cache.clear()
         try:
             random.seed(4321)
             edited = R._generic_ndf_ter_line(
                 dict(GENERIC_DEALS['fwdstart asiático (janela de fixing)']), True)[1]
         finally:
-            R._FILE_INTERFACE_DIR = old_dir
+            R._FILE_INTERPRETER_DIR = old_dir
             R._fi_tpl_cache.clear()
         random.seed(4321)
         base = R._generic_ndf_ter_line(

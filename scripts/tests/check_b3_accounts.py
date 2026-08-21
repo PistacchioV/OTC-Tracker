@@ -140,7 +140,7 @@ check('e o erro diz QUAL entidade falta', "'XPTO'" in erro, True)
 check('e para onde ir', '/mapping' in erro, True)
 
 print('\n== 7. o File Interpreter aponta para o cadastro ==')
-TPL = json.loads(read('apps/static/data/file-interface/termo-multiclasses.json'))
+TPL = json.loads(read('apps/static/data/file-interpreter/termo-multiclasses.json'))
 blk = [b for b in TPL['blocks'] if b['id'] == 'header'][0]
 part = [f for f in blk['fields'] if f['seq'] == '4'][0]
 check('o campo 4 e o Participante', part['field'], 'Participante')
@@ -159,7 +159,7 @@ check('e todas apontam para o mesmo cadastro',
       [('Mapping', 'b3-accounts')])
 # `Mapping` so e opcao valida se a tela oferecer o tipo.
 check('a tela do File Interpreter tem a origem Mapping',
-      "'Mapping'" in read('apps/templates/pages/file-interface.html'), True)
+      "'Mapping'" in read('apps/templates/pages/file-interpreter.html'), True)
 
 print('\n== 8. o upgrade do formato antigo ==')
 # A tabela antiga listava SO as contas guarda-chuva: estar nela era a resposta.

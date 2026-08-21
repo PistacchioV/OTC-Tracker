@@ -15,7 +15,7 @@ final). Sao elas que geram os goldens: linha nova == golden, ramo a ramo.
 
 Nao encosta em dado real: so as funcoes de montagem de linha, nada de
 CONECTA_NEW_PATH; o teste de "editou Fixed -> linha muda" usa um template
-copiado para tempfile, com _FILE_INTERFACE_DIR monkeypatchado.
+copiado para tempfile, com _FILE_INTERPRETER_DIR monkeypatchado.
 """
 import json
 import os
@@ -290,7 +290,7 @@ check('header com 6 tokens', len(R._fi_build_line(KEY, 'header', {'4': '20260810
 
 print('\n== 5. o cadastro comanda: editar um Fixed muda a linha ==')
 tmp = tempfile.mkdtemp(prefix='fi-opc-')
-_orig_dir = R._FILE_INTERFACE_DIR
+_orig_dir = R._FILE_INTERPRETER_DIR
 try:
     shutil.copy(os.path.join(_orig_dir, KEY + '.json'), os.path.join(tmp, KEY + '.json'))
     with open(os.path.join(tmp, KEY + '.json'), encoding='utf-8') as fh:
@@ -303,7 +303,7 @@ try:
     with open(os.path.join(tmp, KEY + '.json'), 'w', encoding='utf-8') as fh:
         json.dump(tpl, fh, ensure_ascii=False, indent=2)
         fh.write('\n')
-    R._FILE_INTERFACE_DIR = tmp
+    R._FILE_INTERPRETER_DIR = tmp
     R._fi_tpl_cache.clear()
     edited = R._fi_build_line(KEY, 'registro', _vals_fxo(FXO_VANILLA), page_url=FXO_PAGE)
     check('Fixed editado sai na linha', edited.split(';')[16], '9')
@@ -311,7 +311,7 @@ try:
           [t for i, t in enumerate(edited.split(';')) if i != 16],
           [t for i, t in enumerate(line.split(';')) if i != 16])
 finally:
-    R._FILE_INTERFACE_DIR = _orig_dir
+    R._FILE_INTERPRETER_DIR = _orig_dir
     R._fi_tpl_cache.clear()
     shutil.rmtree(tmp, ignore_errors=True)
 

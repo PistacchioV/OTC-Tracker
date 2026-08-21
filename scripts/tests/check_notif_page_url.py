@@ -85,8 +85,18 @@ print('\n== 3. um rotulo por pagina ==')
 # dois rotulos, nao — mas o inverso (um rotulo para duas paginas) e impossivel
 # num dict. O que se prende aqui e o destino repetido, que sinaliza rotulo
 # duplicado sem querer.
-dupes = sorted({u for u in PY.values() if list(PY.values()).count(u) > 1})
-check('nenhum destino repetido', dupes, [])
+#
+# Excecao DELIBERADA: rotulo LEGADO de pagina renomeada. O aviso gravado no
+# sino carrega o rotulo antigo para sempre, entao ele fica nos mapas ao lado
+# do novo — 'File Interface' e o rotulo historico do File Interpreter
+# (a pagina mudou de /file-interface para /file-interpreter em 2026-08-21).
+LEGACY_ALIASES = {'File Interface'}
+vals = [u for k, u in PY.items() if k not in LEGACY_ALIASES]
+dupes = sorted({u for u in vals if vals.count(u) > 1})
+check('nenhum destino repetido (fora aliases legados)', dupes, [])
+check('todo alias legado aponta para pagina que tem rotulo atual',
+      sorted({PY[a] for a in LEGACY_ALIASES if a in PY} -
+             {u for k, u in PY.items() if k not in LEGACY_ALIASES}), [])
 
 print('\n== 4. o Daily Settlement tem o rotulo dele ==')
 check('a constante existe', hasattr(R, '_NOTIF_DS_OTHERPUB'), True)

@@ -2,7 +2,7 @@
 """ACCRUAL (CETIP SWAP Atualização de PU/Fator · 0015) — byte a byte.
 
 A montagem da linha saiu do código e passou para o cadastro do File Interface
-(`apps/static/data/file-interface/swap-atualizacao-pu-fator.json`). Este check
+(`apps/static/data/file-interpreter/swap-atualizacao-pu-fator.json`). Este check
 prova que a troca não mudou um byte: as funções `_legacy_*` abaixo são a cópia
 autocontida do gerador ANTIGO (`_acc_swap_header` / `_acc_swap_records` como
 eram antes da refatoração) e geram os goldens; a linha nova tem de ser idêntica
@@ -155,7 +155,7 @@ for view in ('BANCO', 'LAWTON', 'ATACAMA'):
     check('header ' + view, R._acc_swap_header(view, TODAY) == _legacy_header(view, TODAY))
 
 print('· o cadastro comanda: template editado muda a linha')
-_ORIG_DIR = R._FILE_INTERFACE_DIR
+_ORIG_DIR = R._FILE_INTERPRETER_DIR
 tmp = tempfile.mkdtemp(prefix='fi-accrual-')
 try:
     with open(join(_ORIG_DIR, 'swap-atualizacao-pu-fator.json'), encoding='utf-8') as fh:
@@ -166,7 +166,7 @@ try:
     fld['source_detail'] = '27'
     with open(join(tmp, 'swap-atualizacao-pu-fator.json'), 'w', encoding='utf-8') as fh:
         json.dump(tpl, fh, ensure_ascii=False, indent=2)
-    R._FILE_INTERFACE_DIR = tmp
+    R._FILE_INTERPRETER_DIR = tmp
     R._fi_tpl_cache.clear()
     edited = R._acc_swap_records(BANCO_ONLY, TODAY)[0]['line']
     gold = _legacy_records(BANCO_ONLY, TODAY)[0]['line']
@@ -174,7 +174,7 @@ try:
           edited[23:25] == '27' and edited[:23] == gold[:23] and edited[25:] == gold[25:])
     shutil.rmtree(tmp)
     tmp = tempfile.mkdtemp(prefix='fi-accrual-vazio-')
-    R._FILE_INTERFACE_DIR = tmp
+    R._FILE_INTERPRETER_DIR = tmp
     R._fi_tpl_cache.clear()
     try:
         R._acc_swap_records(BANCO_ONLY, TODAY)
@@ -182,7 +182,7 @@ try:
     except ValueError:
         check('template ausente → ValueError (nada de arquivo meio montado)', True)
 finally:
-    R._FILE_INTERFACE_DIR = _ORIG_DIR
+    R._FILE_INTERPRETER_DIR = _ORIG_DIR
     R._fi_tpl_cache.clear()
     shutil.rmtree(tmp, ignore_errors=True)
 

@@ -1666,7 +1666,7 @@
   "mc-reject-ph": "O que precisa ser corrigido?",
   "fxo-w-nomatch-ath": "Unmatched Athena",
   "fxo-w-justified": "Justificado",
-  "file-interface": " Interpretador de Arquivos ",
+  "file-interpreter": " Interpretador de Arquivos ",
   "fi-title": "Interpretador de Arquivos",
   "fi-subtitle": "Layouts dos arquivos B3, bloco a bloco",
   "fi-list-title": "Templates",
