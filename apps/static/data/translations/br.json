@@ -1865,5 +1865,8 @@
   "map-col-dce-athena": "Athena Index Name",
   "fi-view-edit": "Editar",
   "fi-view-confirm": "Confirmar",
-  "fi-view-close": "Fechar"
+  "fi-view-close": "Fechar",
+  "fi-view-delete": "Excluir",
+  "fi-view-del-text": "O layout será removido do registro; as operações do par voltam para o template Padrão.",
+  "fi-view-deleted": "Template excluído"
 }

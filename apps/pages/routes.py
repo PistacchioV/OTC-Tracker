@@ -34200,14 +34200,45 @@ _TER_BUCKET_LE = {
 }
 
 
+def _le_side_norm(s):
+    """Razão social normalizada para comparação: só letra e dígito, em caixa
+    alta — 'BANCO J.P. MORGAN S.A.' ≡ 'BANCO J.P MORGAN S.A'."""
+    return re.sub(r'[^A-Z0-9]', '', str(s or '').upper())
+
+
+def _le_spn_entity_side(name):
+    """Lado do par pelo CADASTRO le-spn, por razão social normalizada EXATA.
+    É o que resolve o nome que nenhuma heurística de substring saberia:
+    'JPMORGAN CHASE BANK, N.A. - SAO PAULO BRANCH' é a MGT — e o regex do JPM
+    casaria com o 'JPMORGAN' antes. Nome fora do cadastro devolve None e cai
+    nas heurísticas de sempre."""
+    alvo = _le_side_norm(name)
+    if not alvo:
+        return None
+    for row in _mapping_rows('le-spn'):
+        nm = _le_side_norm(row.get('NAME'))
+        if nm and nm == alvo:
+            le = str(row.get('LE', '') or '').upper()
+            for tok in ('LAWTON', 'ATACAMA', 'MGT', 'JPM'):
+                if tok in le:
+                    return tok
+    return None
+
+
 def _ter_le_side(name):
     """Lado de um par de pernas a partir de um nome (LE ou contraparte):
-    'JPM', 'MGT', 'LAWTON', 'ATACAMA' — ou None para cliente externo. Os
-    testes de substring são os mesmos que o gerador sempre usou para contas
-    (`_is_jpm`/`_is_mgt`/`_is_lawton`), para o par nunca discordar do bucket."""
+    'JPM', 'MGT', 'LAWTON', 'ATACAMA' — ou None para cliente externo. O
+    cadastro le-spn (razão social exata) vence; o resto são os mesmos testes
+    de substring que o gerador sempre usou para contas
+    (`_is_jpm`/`_is_mgt`/`_is_lawton`), para o par nunca discordar do bucket.
+    A cópia no navegador é o `side` do fi-ter-pair.js (entidades via
+    /api/mappings/le-spn)."""
     u = str(name or '').upper()
     if not u.strip():
         return None
+    ent = _le_spn_entity_side(name)
+    if ent:
+        return ent
     if 'LAWTON' in u:
         return 'LAWTON'
     if 'ATACAMA' in u:

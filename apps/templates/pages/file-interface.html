@@ -169,6 +169,13 @@
     #fi-page .fi-block table.fi-fields td.fi-col-content {
         max-width: 200px; font-size: .75rem;
     }
+    /* Texto de Content/Description QUEBRA dentro da própria célula: um token
+       comprido sem espaço (o nome de arquivo "AAAAMMDD_Cadastro_...") não tem
+       ponto de quebra natural e vazava por cima das colunas vizinhas. */
+    #fi-page .fi-block table.fi-fields td.fi-col-content,
+    #fi-page .fi-block table.fi-fields td.fi-col-prose {
+        white-space: normal; overflow-wrap: anywhere; word-break: break-word;
+    }
     #fi-page .fi-fmt-hint { display: block; font-size: .65rem; color: var(--ins-secondary-color); }
     #fi-page .fi-src-badge {
         display: inline-block; font-size: .65rem; font-weight: 700;
@@ -210,6 +217,15 @@
         font-size: .72rem; padding: .15rem .4rem; height: 26px;
         text-align: center;
     }
+    /* Num <select> o padding acima comia o espaço da setinha do .form-select
+       (o caret é background na direita) e ela caía em cima do texto: devolve
+       o respiro à direita e alinha o texto à esquerda, para os dois não
+       disputarem o centro. */
+    #fi-page select.fi-src-input {
+        text-align: left;
+        padding-right: 1.6rem;
+        background-position: right .45rem center;
+    }
     #fi-page td.fi-col-prose .fi-src-input,
     #fi-page td.fi-col-srcd .fi-src-input { text-align: left; }
     #fi-page input.fi-src-input.fi-src-value { font-family: var(--bs-font-monospace, monospace); }
@@ -237,6 +253,14 @@
     #fi-page .fi-empty {
         text-align: center; color: var(--ins-secondary-color);
         padding: 3rem 1rem; font-size: .85rem;
+    }
+
+    /* Botões do rodapé do modal de variante: MESMA largura para todos —
+       "Close" e "Edit" têm textos de comprimentos diferentes e cada botão
+       saía de um tamanho. */
+    #fiTplViewModal .fi-vw-btn {
+        min-width: 104px;
+        text-align: center;
     }
 
     /* Variantes por par de pernas: item do rail indentado sob o base,
@@ -468,6 +492,8 @@
             <div class="modal-content liquid-glass">
                 <div class="modal-header py-2">
                     <h5 class="modal-title fs-6"><i class="ti ti-template me-1"></i><span id="fiTplViewName">—</span></h5>
+                    <select class="form-select form-select-sm ms-3" id="fiTplViewSwitch"
+                            style="width:auto;max-width:360px;" title="Switch template variant"></select>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
@@ -475,13 +501,16 @@
                     <div id="fiTplViewBody"></div>
                 </div>
                 <div class="modal-footer py-2">
-                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">
+                    <button type="button" class="btn btn-sm btn-outline-danger fi-vw-btn me-auto" id="fiTplViewDelete" style="display:none;">
+                        <i class="ti ti-trash me-1"></i><span data-lang="fi-view-delete">Delete</span>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-secondary fi-vw-btn" data-bs-dismiss="modal">
                         <i class="ti ti-x me-1"></i><span data-lang="fi-view-close">Close</span>
                     </button>
-                    <button type="button" class="btn btn-sm btn-info bg-gradient" id="fiTplViewEdit">
+                    <button type="button" class="btn btn-sm btn-info bg-gradient fi-vw-btn" id="fiTplViewEdit">
                         <i class="ti ti-pencil me-1"></i><span data-lang="fi-view-edit">Edit</span>
                     </button>
-                    <button type="button" class="btn btn-sm btn-success bg-gradient" id="fiTplViewConfirm" style="display:none;">
+                    <button type="button" class="btn btn-sm btn-success bg-gradient fi-vw-btn" id="fiTplViewConfirm" style="display:none;">
                         <i class="ti ti-check me-1"></i><span data-lang="fi-view-confirm">Confirm</span>
                     </button>
                 </div>
@@ -628,6 +657,22 @@
     function mappingLabel(key) {
         var m = MAPPINGS.filter(function (x) { return x.key === key; })[0];
         return m ? m.label : key;
+    }
+
+    // Rótulo de uma variante em lista que MISTURA páginas (Copy layout from,
+    // Link Pages): a página vem junto — três variantes do mesmo par, uma por
+    // página, saíam com o MESMO texto e não havia como saber qual era a de
+    // Commodities e qual a de FWD Start.
+    function variantPageLabel(m) {
+        return ((m.linked_pages || [])
+            .map(function (p) { return p.label || p.url; })
+            .join(', ')) || '';
+    }
+    function variantOptionLabel(m) {
+        var page = variantPageLabel(m);
+        var pair = m.le_pair || '';
+        if (page) return page + (pair ? ' — ' + pair : '');
+        return variantDisplayName(m) + (pair ? ' — ' + pair : '');
     }
 
     // Nome de exibição de uma variante SEM o par no fim ('Termo … — MGT x JPM'
@@ -1163,8 +1208,13 @@
     function openLinkModal(preKey) {
         var sel = document.getElementById('fiLinkTpl');
         sel.innerHTML = LIST.map(function (m) {
+            // Variante leva a PÁGINA no rótulo — sem ela, as três "— JPM x CLI"
+            // do mesmo base são indistinguíveis no select.
+            var label = m.base_key
+                ? variantDisplayName(m) + ' — ' + (m.le_pair || '') + ' · ' + variantPageLabel(m)
+                : m.name + (m.status === 'active' ? ' — ' + t('fi-status-active', 'Active') : '');
             return '<option value="' + esc(m.key) + '"' + (m.key === preKey ? ' selected' : '') + '>' +
-                   esc(m.name) + (m.status === 'active' ? ' — ' + t('fi-status-active', 'Active') : '') + '</option>';
+                   esc(label) + '</option>';
         }).join('');
         renderLinkPicker();
         linkModal = linkModal || new bootstrap.Modal(document.getElementById('fiLinkModal'));
@@ -1220,10 +1270,12 @@
         }).join('');
         document.getElementById('fiVarFile').value = '';
         var variants = LIST.filter(function (m) { return m.base_key === base.key; });
+        // Todas as opções são do MESMO base, então o rótulo é a PÁGINA + o
+        // par — repetir o nome do template 19 vezes só esconderia a diferença.
         document.getElementById('fiVarCopy').innerHTML =
             '<option value="">' + esc(base.name || base.key) + ' (' + t('fi-var-default', 'Default') + ')</option>' +
             variants.map(function (m) {
-                return '<option value="' + esc(m.key) + '">' + esc(m.name) + '</option>';
+                return '<option value="' + esc(m.key) + '">' + esc(variantOptionLabel(m)) + '</option>';
             }).join('');
         variantModal = variantModal || new bootstrap.Modal(document.getElementById('fiVariantModal'));
         variantModal.show();
@@ -1426,7 +1478,60 @@
         document.getElementById('fiTplViewBody').innerHTML = html;
         document.getElementById('fiTplViewEdit').style.display = VIEW.edit ? 'none' : '';
         document.getElementById('fiTplViewConfirm').style.display = VIEW.edit ? '' : 'none';
+        document.getElementById('fiTplViewDelete').style.display = VIEW.edit ? '' : 'none';
+        renderTplViewSwitch();
     }
+    // Combobox do topo: o Default + todas as variantes do base em tela —
+    // troca a visualização sem fechar o modal. A página no rótulo separa as
+    // variantes de mesmo par (uma por página).
+    function renderTplViewSwitch() {
+        var sel = document.getElementById('fiTplViewSwitch');
+        if (!sel || !VIEW) return;
+        var baseKey = VIEW.tpl.base_key || VIEW.key;
+        var bm = LIST.filter(function (m) { return m.key === baseKey; })[0];
+        var opts = [];
+        if (bm) opts.push({ key: bm.key, label: (bm.name || bm.key) + ' (' + t('fi-var-default', 'Default') + ')' });
+        LIST.forEach(function (m) {
+            if (m.base_key === baseKey) opts.push({ key: m.key, label: variantOptionLabel(m) });
+        });
+        sel.innerHTML = opts.map(function (o) {
+            return '<option value="' + esc(o.key) + '"' + (o.key === VIEW.key ? ' selected' : '') + '>' +
+                   esc(o.label) + '</option>';
+        }).join('');
+    }
+    document.getElementById('fiTplViewSwitch').addEventListener('change', function () {
+        var sel = this;
+        if (!VIEW) return;
+        function go() {
+            apiGet(sel.value).then(function (tpl) {
+                if (!tpl) return;
+                // O contexto de página segue a variante escolhida (ela é de uma
+                // página só); o Default mantém a página de onde o modal abriu.
+                var pages = tpl.linked_pages || [];
+                var entry = pages.filter(function (p) { return p.url === VIEW.pageUrl; })[0] ||
+                            (tpl.base_key ? pages[0] : null);
+                VIEW = { key: sel.value, tpl: tpl,
+                         pageUrl: entry ? entry.url : VIEW.pageUrl,
+                         pageLabel: entry ? (entry.label || entry.url) : VIEW.pageLabel,
+                         edit: false };
+                renderTplView();
+            });
+        }
+        if (VIEW.edit) {
+            Swal.fire({
+                icon: 'warning',
+                title: t('fi-discard-title', 'Discard source edits?'),
+                text: t('fi-discard-sources', 'Unsaved changes to the Source columns will be lost.'),
+                showCancelButton: true,
+                confirmButtonText: t('fi-discard-yes', 'Yes, discard'),
+                cancelButtonText: t('fi-cancel', 'Cancel'),
+                confirmButtonColor: '#dc3545'
+            }).then(function (r) {
+                if (r.isConfirmed) go();
+                else sel.value = VIEW.key;
+            });
+        } else go();
+    });
     // Trocar o tipo de origem troca o editor do valor na hora (delegado — as
     // linhas são remontadas a cada render).
     document.getElementById('fiTplViewBody').addEventListener('change', function (ev) {
@@ -1494,6 +1599,45 @@
             if (CUR_KEY === VIEW.key) selectTplFresh();
         });
     });
+    // Delete do template em tela (só no modo edição): confirma no SweetAlert
+    // antes — apagar remove o layout do registro, e os deals do par voltam ao
+    // template Default na hora. A chave é capturada ANTES do hide, porque o
+    // hidden.bs.modal zera o VIEW.
+    document.getElementById('fiTplViewDelete').addEventListener('click', function () {
+        if (!VIEW) return;
+        var key = VIEW.key;
+        var base_key = VIEW.tpl.base_key || '';
+        var nome = variantDisplayName(VIEW.tpl) +
+                   (VIEW.tpl.le_pair ? ' — ' + VIEW.tpl.le_pair : '');
+        Swal.fire({
+            icon: 'warning',
+            title: t('fi-del-title', 'Delete this template?'),
+            text: t('fi-view-del-text', 'The layout will be removed from the registry; deals of its pair fall back to the Default template.') + ' (' + nome + ')',
+            showCancelButton: true,
+            confirmButtonText: t('fi-del-yes', 'Yes, delete'),
+            cancelButtonText: t('fi-cancel', 'Cancel'),
+            confirmButtonColor: '#dc3545'
+        }).then(function (res) {
+            if (!res.isConfirmed) return;
+            fetch('/api/file-interface/templates/' + encodeURIComponent(key), { method: 'DELETE' })
+                .then(function (r) { return r.json(); })
+                .then(function (j) {
+                    if (!j.success) return Swal.fire({ icon: 'error', title: 'File Interpreter', text: j.error || 'Delete failed' });
+                    tplViewModal.hide();
+                    toast(t('fi-view-deleted', 'Template deleted'));
+                    // O apagado pode ser o que está em tela: volta para o base
+                    // (ou o primeiro da biblioteca) em vez de ficar num fantasma.
+                    apiList().then(function () {
+                        buildRail();
+                        var next = (CUR_KEY === key)
+                            ? (base_key || (LIST.filter(function (m) { return !m.base_key; })[0] || {}).key)
+                            : CUR_KEY;
+                        if (next) selectTpl(next);
+                    });
+                });
+        });
+    });
+
     // Fechar no meio de uma edição descarta o rascunho: o próximo open começa
     // limpo, em leitura, com o template relido do servidor.
     document.getElementById('fiTplViewModal').addEventListener('hidden.bs.modal', function () {

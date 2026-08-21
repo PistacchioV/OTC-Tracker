@@ -74,6 +74,14 @@ def main():
     check("side: 'INTRAG LAWTON FDO' → LAWTON", R._ter_le_side('INTRAG LAWTON FDO') == 'LAWTON')
     check("side: 'ATACAMA COMERCIO' → ATACAMA", R._ter_le_side('ATACAMA COMERCIO LTDA') == 'ATACAMA')
     check("side: vazio → None", R._ter_le_side('  ') is None)
+    # O CADASTRO le-spn vence a heurística: a razão social da MGT contém
+    # 'JPMORGAN', que o regex do JPM casaria primeiro.
+    check("side: razão social da MGT (le-spn) → MGT",
+          R._ter_le_side('JPMORGAN CHASE BANK, N.A. - SAO PAULO BRANCH') == 'MGT')
+    check("side: razão social da MGT com pontuação diferente → MGT",
+          R._ter_le_side('JPMORGAN CHASE BANK NA SAO PAULO BRANCH') == 'MGT')
+    check("pair simples: JPM × razão social MGT",
+          R._ter_le_pair('JPM', 'JPMORGAN CHASE BANK, N.A. - SAO PAULO BRANCH') == 'JPM x MGT')
     check("pair: MGT × JPM", R._ter_le_pair('MGT', 'BANCO J.P. MORGAN S.A.') == 'MGT x JPM')
     check("pair: JPM × cliente → CLI", R._ter_le_pair('JPM', 'ACME EXPORTADORA S.A.') == 'JPM x CLI')
     check("norm: 'mgt  ×  jpm' ≡ 'MGT x JPM'",
@@ -195,6 +203,7 @@ def main():
         '/System/Library/Frameworks/JavaScriptCore.framework/Versions/A/Helpers/jsc'
     cases = [
         ('MGT',    'BANCO J.P. MORGAN S.A.'),
+        ('JPM',    'JPMORGAN CHASE BANK, N.A. - SAO PAULO BRANCH'),
         ('JPM',    'ACME EXPORTADORA S.A.'),
         ('JPM',    'MGT BANK LTDA'),
         ('JPM',    'INTRAG LAWTON FDO'),
@@ -220,7 +229,11 @@ def main():
     if os.path.exists(jsc):
         js = open(os.path.join(ROOT, 'apps', 'static', 'js', 'fi-ter-pair.js'),
                   encoding='utf-8').read()
-        harness = (js + '\nvar CASES = ' + json.dumps(cases) +
+        # As MESMAS entidades que o servidor lê (o navegador as busca em
+        # /api/mappings/le-spn; no jsc não há fetch, então o teste injeta).
+        entities = json.dumps(R._mapping_rows('le-spn'))
+        harness = (js + '\nFiTer.setEntities(' + entities + ');'
+                   '\nvar CASES = ' + json.dumps(cases) +
                    ';\nprint(JSON.stringify(CASES.map(function (c) '
                    '{ return [FiTer.pair(c[0], c[1]), FiTer.pairSimple(c[0], c[1])]; })));')
         out = subprocess.run([jsc, '-e', 'var window = this;\n' + harness],

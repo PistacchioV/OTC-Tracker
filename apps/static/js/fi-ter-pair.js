@@ -6,12 +6,45 @@
 (function () {
     'use strict';
 
+    /* Entidades do grupo pelo cadastro le-spn (LE → razão social): resolve o
+       nome que nenhuma heurística de substring saberia — 'JPMORGAN CHASE
+       BANK, N.A. - SAO PAULO BRANCH' é a MGT, e o regex do JPM casaria com o
+       'JPMORGAN' antes. Carregado uma vez por página; sem fetch (jsc) ou com
+       falha, ficam só as heurísticas. */
+    var ENTITIES = [];
+    function normName(s) {
+        return String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    }
+    function setEntities(rows) {
+        ENTITIES = [];
+        (rows || []).forEach(function (r) {
+            var nm = normName(r['NAME']);
+            var le = String(r['LE'] || '').toUpperCase();
+            if (!nm || !le) return;
+            var tok = ['LAWTON', 'ATACAMA', 'MGT', 'JPM'].filter(function (t) {
+                return le.indexOf(t) !== -1;
+            })[0];
+            if (tok) ENTITIES.push({ name: nm, side: tok });
+        });
+    }
+    if (typeof fetch === 'function') {
+        fetch('/api/mappings/le-spn', { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (d) { if (d && d.success && d.rows) setEntities(d.rows); })
+            .catch(function () {});
+    }
+
     /* Lado de um par a partir de um nome (LE ou contraparte): JPM, MGT,
-       LAWTON, ATACAMA — ou null para cliente externo. Substrings iguais às
-       dos testes de conta do gerador (_is_jpm/_is_mgt/_is_lawton). */
+       LAWTON, ATACAMA — ou null para cliente externo. O cadastro le-spn
+       (razão social exata, normalizada) vence; o resto são as substrings dos
+       testes de conta do gerador (_is_jpm/_is_mgt/_is_lawton). */
     function side(name) {
         var u = String(name || '').toUpperCase();
         if (!u.replace(/\s+/g, '')) return null;
+        var nm = normName(name);
+        for (var i = 0; i < ENTITIES.length; i++) {
+            if (ENTITIES[i].name === nm) return ENTITIES[i].side;
+        }
         if (u.indexOf('LAWTON') !== -1) return 'LAWTON';
         if (u.indexOf('ATACAMA') !== -1) return 'ATACAMA';
         if (u.indexOf('MGT') !== -1) return 'MGT';
@@ -79,5 +112,6 @@
     }
 
     window.FiTer = { side: side, norm: norm, pair: pairOf, pairSimple: pairSimple,
-                     pairOpc: pairOpc, pick: pick, pickByPair: pickByPair };
+                     pairOpc: pairOpc, pick: pick, pickByPair: pickByPair,
+                     setEntities: setEntities };
 })();
