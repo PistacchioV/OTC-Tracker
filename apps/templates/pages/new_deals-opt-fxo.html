@@ -4232,22 +4232,33 @@ $(document).ready(function() {
     ];
 
     // ── File Interface: o preview lê o cadastro (/file-interpreter). Prefetch
-    //    único no load — buildConectaFields segue síncrona. Se o fetch falhar,
-    //    FI_SPEC fica null e a lista fixa acima continua valendo (mesmo padrão
-    //    dos mappings: degrada para o comportamento anterior).
+    //    recarregado a cada abertura do preview (fiLoadSpec) —
+    //    buildConectaFields segue síncrona porque o reload acontece antes de
+    //    montar. Fetch que falha mantém o spec em memória; sem spec nenhum, a
+    //    lista fixa acima continua valendo (degrada para o anterior).
     var FI_TPLS = [];     // base + variantes por par de pernas (File Interpreter)
     var FI_SPEC = null;   // o template base — fallback quando não há variante
-    fetch('/api/file-interpreter/page-spec?url=' + encodeURIComponent(window.location.pathname))
-        .then(function(r) { return r.ok ? r.json() : null; })
-        .then(function(d) {
-            FI_TPLS = (d && d.templates) || [];
-            if (window.FiTer && FiTer.prime) FiTer.prime(FI_TPLS);   // calendário + mappings do FiTer.calc
-            for (var i = 0; i < FI_TPLS.length; i++) {
-                if (FI_TPLS[i].key === 'opcoes-flexiveis-vcp') { FI_SPEC = FI_TPLS[i]; return; }
-            }
-            FI_SPEC = FI_TPLS.length ? FI_TPLS[0] : null;
-        })
-        .catch(function() { FI_SPEC = null; });
+    /* Carrega o cadastro do File Interpreter, e RECARREGA a cada abertura do
+       preview (ver showPreview): template editado na outra tela passa a valer
+       no próximo duplo clique, sem refresh da página. Resposta ruim mantém o
+       que já está em memória — o preview nunca fica sem spec por causa de um
+       fetch que falhou. */
+    function fiLoadSpec() {
+        return fetch('/api/file-interpreter/page-spec?url=' + encodeURIComponent(window.location.pathname), { credentials: 'same-origin' })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (d) {
+                if (!d || !d.templates) return;
+                FI_TPLS = d.templates;
+                if (window.FiTer && FiTer.prime) FiTer.prime(FI_TPLS);
+                FI_SPEC = null;
+                for (var i = 0; i < FI_TPLS.length; i++) {
+                    if (FI_TPLS[i].key === 'opcoes-flexiveis-vcp') { FI_SPEC = FI_TPLS[i]; return; }
+                }
+                FI_SPEC = FI_TPLS[0] || null;
+            })
+            .catch(function () {});
+    }
+    fiLoadSpec();
 
     /* Spec efetivo de UM deal: a variante do par de pernas cadastrada no File
        Interpreter vence; sem variante vale o base — a mesma escolha do motor
@@ -4488,6 +4499,12 @@ $(document).ready(function() {
         })();
 
         function showPreview(bizDayCount, fixingRows, calInfo) {
+            // Recarrega o cadastro ANTES de montar a lista de campos — é o que
+            // faz o template alterado valer sem refresh da página.
+            var _fiArgs = arguments;
+            fiLoadSpec().then(function () { _showPreviewNow.apply(null, _fiArgs); });
+        }
+        function _showPreviewNow(bizDayCount, fixingRows, calInfo) {
             var rowStatusNode = table.cell(tr, STATUS_COL_INDEX).node();
             var rowStatus = rowStatusNode ? $(rowStatusNode).find('.badge').text().trim() : '';
             var fields = buildConectaFields(deal, bizDayCount);

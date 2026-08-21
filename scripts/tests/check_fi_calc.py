@@ -42,6 +42,7 @@ DEAL = {
     'LastFixingDate': '2026-08-21',      # sexta
     'SettlementDate': '2026-08-25',      # terça — 2 dias úteis depois
     'QuantityCurrency': 'USD',
+    'TradeType': 'ASIAN',
     'Deal': 'D5VL-1',
 }
 
@@ -58,6 +59,15 @@ def main():
     check('ADDBIZ +2 dias úteis', calc('ADDBIZ(Last Fixing Date; 2)', DEAL) == '20260825')
     check('LOOKUP currency-base USD → 220',
           calc('LOOKUP(currency-base; SIMBOLO; CODIGO DE CADASTRO; Quantity Currency)', DEAL) == '220')
+    # CASE: de-para em linha. Valor não listado sai VAZIO — e o motor o
+    # completa com espaços na largura, que é como se cadastra "no resto,
+    # branco" (o Tipo Média Asiático: ASIAN→A, VANILLA→espaço).
+    CASE = 'CASE(Trade Type; ASIAN=A; VANILLA=)'
+    check("CASE ASIAN → 'A'", calc(CASE, dict(DEAL, TradeType='ASIAN')) == 'A')
+    check("CASE VANILLA → '' (vira espaço na largura)",
+          calc(CASE, dict(DEAL, TradeType='VANILLA')) == '')
+    check('CASE cego a caixa/espaço', calc(CASE, dict(DEAL, TradeType=' asian ')) == 'A')
+    check('CASE valor fora da lista → vazio', calc(CASE, dict(DEAL, TradeType='SWAP')) == '')
     check('texto livre → None (vale o gerador)', calc('Direction', DEAL) is None)
     check('sem deal → None', calc('DATE(Settlement Date)', None) is None)
     check('argumento inválido degrada para None', calc('ADDBIZ(Last Fixing Date; xx)', DEAL) is None)
@@ -110,6 +120,7 @@ def main():
             ['BIZDIFF(Last Fixing Date; Settlement Date)', '9(02)'],
             ['ADDBIZ(Last Fixing Date; 2)', ''],
             ['LOOKUP(currency-base; SIMBOLO; CODIGO DE CADASTRO; Quantity Currency)', ''],
+            ['CASE(Trade Type; ASIAN=A; VANILLA=)', 'X(01)'],
             ['Direction', ''],
         ]
         harness = (js +

@@ -1097,9 +1097,10 @@
         { fn: 'DATE',    lang: 'fi-calc-date',      label: 'Field as date (AAAAMMDD)' },
         { fn: 'BIZDIFF', lang: 'fi-calc-bizdiff',   label: 'Business days between A and B' },
         { fn: 'ADDBIZ',  lang: 'fi-calc-addbiz',    label: 'Field A + N business days' },
-        { fn: 'LOOKUP',  lang: 'fi-calc-lookup',    label: 'Mapping lookup' }
+        { fn: 'LOOKUP',  lang: 'fi-calc-lookup',    label: 'Mapping lookup' },
+        { fn: 'CASE',    lang: 'fi-calc-case',      label: 'Value by field (from → to)' }
     ];
-    var FI_CALC_RE = /^\s*(BIZDIFF|ADDBIZ|DATE|FIELD|LOOKUP)\s*\(([\s\S]*)\)\s*$/i;
+    var FI_CALC_RE = /^\s*(BIZDIFF|ADDBIZ|DATE|FIELD|LOOKUP|CASE)\s*\(([\s\S]*)\)\s*$/i;
     function calcColSel(cls, v, cols) {
         var o = '<option value=""></option>' + cols.map(function (c) {
             return '<option value="' + esc(c) + '"' + (c === v ? ' selected' : '') + '>' + esc(c) + '</option>';
@@ -1122,6 +1123,23 @@
             return calcColSel('fi-ca-a', args[0] || '', cols) +
                    '<input type="number" class="form-control fi-src-input fi-ca-n" placeholder="' +
                    t('fi-calc-n-ph', 'N (business days)') + '" value="' + esc(args[1] || '') + '">';
+        if (fn === 'CASE') {
+            // Pares "quando o campo for X, escreva Y". O valor não listado sai
+            // VAZIO, e o motor o completa com espaços na largura do format —
+            // é assim que se cadastra "e no resto, branco".
+            var html = calcColSel('fi-ca-a', args[0] || '', cols);
+            for (var pi = 0; pi < 4; pi++) {
+                var par = (args[pi + 1] || ''), eq = par.indexOf('=');
+                var de = eq === -1 ? par : par.slice(0, eq);
+                var para = eq === -1 ? '' : par.slice(eq + 1);
+                html += '<span class="d-inline-flex gap-1">' +
+                    '<input class="form-control fi-src-input fi-ca-de" placeholder="' +
+                    t('fi-calc-from-ph', 'when it is…') + '" value="' + esc(de) + '">' +
+                    '<input class="form-control fi-src-input fi-ca-para" placeholder="' +
+                    t('fi-calc-to-ph', 'write…') + '" value="' + esc(para) + '"></span>';
+            }
+            return html;
+        }
         if (fn === 'LOOKUP') {
             var opts = '<option value=""></option>' + MAPPINGS.map(function (m) {
                 return '<option value="' + esc(m.key) + '"' + (m.key === (args[0] || '') ? ' selected' : '') + '>' + esc(m.label) + '</option>';
@@ -1163,6 +1181,16 @@
         else if (fn === 'ADDBIZ') hid.value = 'ADDBIZ(' + v('.fi-ca-a') + '; ' + v('.fi-ca-n') + ')';
         else if (fn === 'LOOKUP') hid.value = 'LOOKUP(' + v('.fi-ca-map') + '; ' + v('.fi-ca-in') +
                                               '; ' + v('.fi-ca-out') + '; ' + v('.fi-ca-a') + ')';
+        else if (fn === 'CASE') {
+            var des = wrap.querySelectorAll('.fi-ca-de');
+            var paras = wrap.querySelectorAll('.fi-ca-para');
+            var pares = [];
+            for (var i = 0; i < des.length; i++) {
+                var de = des[i].value.trim();
+                if (de) pares.push(de + '=' + paras[i].value.trim());
+            }
+            hid.value = 'CASE(' + v('.fi-ca-a') + (pares.length ? '; ' + pares.join('; ') : '') + ')';
+        }
     }
     function wireCalcBuilder(containerId, colsFn) {
         var el = document.getElementById(containerId);

@@ -1603,9 +1603,14 @@ Intrag ficavam com o valor cru sempre que o notional estava na moeda fraca
   escolhida nos campos planos — sem isso o override herdado do base venceria
   a edição feita na variante, em silêncio.
 - **O Source Field/Value aceita FÓRMULA cadastrada** (builder por dropdowns no
-  Edit Sources e no modal da variante): `FIELD`, `DATE`, `BIZDIFF`, `ADDBIZ` e
-  `LOOKUP(mapping; IN; OUT; Campo)`, argumentos por `;`, campo casado com o
-  deal pelo nome da COLUNA cego a caixa/espaço. Fórmula **vence o valor do
+  Edit Sources e no modal da variante): `FIELD`, `DATE`, `BIZDIFF`, `ADDBIZ`,
+  `LOOKUP(mapping; IN; OUT; Campo)` e `CASE(Campo; DE=PARA; …)`, argumentos por
+  `;`, campo casado com o deal pelo nome da COLUNA cego a caixa/espaço. No
+  `CASE`, valor fora da lista devolve VAZIO e o motor o completa com espaços na
+  largura — é assim que se cadastra "e no resto, branco" (o Tipo Média
+  Asiático em branco para VANILLA). E o page-spec é **relido a cada abertura
+  do preview** (`fiLoadSpec`), então template editado vale no próximo duplo
+  clique, sem refresh da página; fetch que falha mantém o spec em memória. Fórmula **vence o valor do
   gerador** (e Fixed vence tudo); texto que não parseia continua documentação
   — é o que mantém todo cadastro existente byte a byte. Quem executa é
   `_fi_calc_value` (hook `deal=` do `_fi_build_line`) e o espelho do preview

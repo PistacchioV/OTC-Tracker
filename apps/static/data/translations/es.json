@@ -1878,5 +1878,8 @@
   "fi-calc-free-ph": "nota (el generador calcula)",
   "fi-calc-n-ph": "N (días hábiles)",
   "fi-calc-in-ph": "columna de búsqueda (IN)",
-  "fi-calc-out-ph": "columna de resultado (OUT)"
+  "fi-calc-out-ph": "columna de resultado (OUT)",
+  "fi-calc-case": "Valor por campo (de → a)",
+  "fi-calc-from-ph": "cuando sea…",
+  "fi-calc-to-ph": "escriba…"
 }

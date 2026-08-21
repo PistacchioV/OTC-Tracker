@@ -22697,10 +22697,16 @@ def _fi_seq_key(seq):
 #    LOOKUP(mapping; COL IN; COL OUT; Campo) → linha do mapping cuja COL IN
 #                                         casa com o campo (normalizado exato),
 #                                         devolvendo COL OUT
+#    CASE(Campo; DE=PARA; DE=PARA; …)   → de-para em linha sobre o valor do
+#                                         campo (comparação normalizada). Valor
+#                                         não listado devolve VAZIO, que o motor
+#                                         completa com espaços na largura do
+#                                         format — é assim que se cadastra
+#                                         "e no resto, branco"
 #  Texto que NÃO parseia como fórmula continua documentação: o valor do
 #  gerador vale, como sempre — é o que mantém todo cadastro existente
 #  byte a byte. A cópia do navegador é o FiTer.calc (fi-ter-pair.js).
-_FI_CALC_RE = re.compile(r'^\s*(BIZDIFF|ADDBIZ|DATE|FIELD|LOOKUP)\s*\((.*)\)\s*$',
+_FI_CALC_RE = re.compile(r'^\s*(BIZDIFF|ADDBIZ|DATE|FIELD|LOOKUP|CASE)\s*\((.*)\)\s*$',
                          re.I | re.S)
 
 
@@ -22743,6 +22749,15 @@ def _fi_calc_value(spec, deal, fmt=''):
             dt = _parse_date_any(_fi_deal_get(deal, args[0]))
             d2 = _anbima_add_biz(dt, int(args[1])) if dt else None
             return d2.strftime('%Y%m%d') if d2 else ''
+        if fn == 'CASE':
+            alvo = re.sub(r'[^A-Z0-9]', '', _fi_deal_get(deal, args[0]).upper())
+            for par in args[1:]:
+                if '=' not in par:
+                    continue
+                de, para = par.split('=', 1)
+                if re.sub(r'[^A-Z0-9]', '', de.upper()) == alvo:
+                    return para
+            return ''
         if fn == 'LOOKUP':
             key, col_in, col_out, fld = (args + ['', '', '', ''])[:4]
             alvo = re.sub(r'[^A-Z0-9]', '', _fi_deal_get(deal, fld).upper())

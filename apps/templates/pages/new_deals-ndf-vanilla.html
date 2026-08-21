@@ -4160,21 +4160,31 @@ $(document).ready(function() {
     /* File Interface: o cadastro (/file-interpreter) passa a comandar a LISTA de
        campos do preview de duplo clique — ordem, rótulo e literais Fixed vêm do
        template 'termo-multiclasses' via page-spec (Fixed já resolvido para esta
-       página). Fetch uma vez no load; se falhar, FI_SPEC fica null e o preview
-       degrada para a lista fixa antiga — o mesmo padrão dos mappings. */
+       página). Recarregado a cada abertura do preview (fiLoadSpec); fetch que
+       falha degrada para a lista fixa antiga — o mesmo padrão dos mappings. */
     var FI_TPLS = [];     // base + variantes por par de pernas (File Interpreter)
     var FI_SPEC = null;   // o template base — fallback quando não há variante
-    fetch('/api/file-interpreter/page-spec?url=' + encodeURIComponent(window.location.pathname), { credentials: 'same-origin' })
-        .then(function (r) { return r.ok ? r.json() : null; })
-        .then(function (d) {
-            FI_TPLS = (d && d.success && d.templates) || [];
-            if (window.FiTer && FiTer.prime) FiTer.prime(FI_TPLS);   // calendário + mappings do FiTer.calc
-            for (var i = 0; i < FI_TPLS.length; i++) {
-                if (FI_TPLS[i].key === 'termo-multiclasses') { FI_SPEC = FI_TPLS[i]; return; }
-            }
-            FI_SPEC = FI_TPLS.length ? FI_TPLS[0] : null;
-        })
-        .catch(function () { FI_SPEC = null; });
+    /* Carrega o cadastro do File Interpreter, e RECARREGA a cada abertura do
+       preview (ver showPreview): template editado na outra tela passa a valer
+       no próximo duplo clique, sem refresh da página. Resposta ruim mantém o
+       que já está em memória — o preview nunca fica sem spec por causa de um
+       fetch que falhou. */
+    function fiLoadSpec() {
+        return fetch('/api/file-interpreter/page-spec?url=' + encodeURIComponent(window.location.pathname), { credentials: 'same-origin' })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (d) {
+                if (!d || !d.templates) return;
+                FI_TPLS = d.templates;
+                if (window.FiTer && FiTer.prime) FiTer.prime(FI_TPLS);
+                FI_SPEC = null;
+                for (var i = 0; i < FI_TPLS.length; i++) {
+                    if (FI_TPLS[i].key === 'termo-multiclasses') { FI_SPEC = FI_TPLS[i]; return; }
+                }
+                FI_SPEC = FI_TPLS[0] || null;
+            })
+            .catch(function () {});
+    }
+    fiLoadSpec();
 
     /* Spec efetivo de UM deal: a variante do par de pernas (LE × contraparte)
        cadastrada no File Interpreter vence; sem variante vale o base. Esta
@@ -4406,6 +4416,12 @@ $(document).ready(function() {
         })();
 
         function showPreview(bizDayCount, fixingRows, calInfo) {
+            // Recarrega o cadastro ANTES de montar a lista de campos — é o que
+            // faz o template alterado valer sem refresh da página.
+            var _fiArgs = arguments;
+            fiLoadSpec().then(function () { _showPreviewNow.apply(null, _fiArgs); });
+        }
+        function _showPreviewNow(bizDayCount, fixingRows, calInfo) {
             var rowStatusNode = table.cell(tr, STATUS_COL_INDEX).node();
             var rowStatus = rowStatusNode ? $(rowStatusNode).find('.badge').text().trim() : '';
             var fields = buildConectaFields(deal, bizDayCount);

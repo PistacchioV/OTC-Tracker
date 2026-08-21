@@ -1878,5 +1878,8 @@
   "fi-calc-free-ph": "note (generator computes)",
   "fi-calc-n-ph": "N (business days)",
   "fi-calc-in-ph": "match column (IN)",
-  "fi-calc-out-ph": "result column (OUT)"
+  "fi-calc-out-ph": "result column (OUT)",
+  "fi-calc-case": "Value by field (from → to)",
+  "fi-calc-from-ph": "when it is…",
+  "fi-calc-to-ph": "write…"
 }

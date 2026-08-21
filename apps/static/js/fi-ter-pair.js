@@ -118,7 +118,7 @@
        valor do gerador). BIZDIFF/ADDBIZ usam o calendário ANBIMA e LOOKUP as
        linhas do mapping — os dois carregados por prime(), chamado pelas
        páginas depois do page-spec. check_fi_calc.py compara as duas cópias. */
-    var CALC_RE = /^\s*(BIZDIFF|ADDBIZ|DATE|FIELD|LOOKUP)\s*\(([\s\S]*)\)\s*$/i;
+    var CALC_RE = /^\s*(BIZDIFF|ADDBIZ|DATE|FIELD|LOOKUP|CASE)\s*\(([\s\S]*)\)\s*$/i;
     var HOLS = {};       // 'YYYY-MM-DD' → true (ANBIMA)
     var MAP_ROWS = {};   // mapping key → rows
 
@@ -181,6 +181,16 @@
             if (fn === 'ADDBIZ') {
                 var d2 = parseDate(dealGet(deal, args[0]));
                 return d2 ? ymd8(addBiz(d2, parseInt(args[1], 10) || 0)) : '';
+            }
+            if (fn === 'CASE') {
+                var alvo = dealGet(deal, args[0]).toUpperCase().replace(/[^A-Z0-9]/g, '');
+                for (var ci = 1; ci < args.length; ci++) {
+                    var eq = args[ci].indexOf('=');
+                    if (eq === -1) continue;
+                    if (args[ci].slice(0, eq).toUpperCase().replace(/[^A-Z0-9]/g, '') === alvo)
+                        return args[ci].slice(eq + 1);
+                }
+                return '';
             }
             if (fn === 'LOOKUP') {
                 var rows = MAP_ROWS[args[0]] || [];
