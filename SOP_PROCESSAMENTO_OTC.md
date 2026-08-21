@@ -115,7 +115,9 @@ Página institucional com a identificação do sistema OTC Tracker e informaçõ
 
 #### Calendário de Feriados
 
-Calendário de feriados (base ANBIMA / câmara) que alimenta o cálculo de dias úteis. É a referência que o sistema usa para resolver automaticamente a Data Base (dia útil anterior) e para projetar liquidações.
+Calendário de feriados (base ANBIMA / câmara) que alimenta o cálculo de dias úteis. É a referência que o sistema usa para resolver automaticamente a Data Base (dia útil anterior) e para projetar liquidações. Cada calendário tem a sua cor na visão do mês.
+
+Feriado avulso entra pelo clique na data (ou pelo botão *Create New Holiday*), e o calendário da barra lateral também pode ser arrastado direto para o dia. **Calendário inteiro entra por planilha**, pelo botão *Create New Calendar*: nome + `.xlsx` de **uma aba**, com a data em `aaaa-mm-dd` na **coluna A** e a descrição na **coluna B** (a terceira coluna, *Holiday Type*, não é importada). A linha de cabeçalho, a linha em branco do fim e um eventual rodapé de total são descartados por não serem data; datas repetidas entram uma vez só. A cor do calendário novo é sorteada entre as que ainda não estão em uso, e a partir daí ele é um calendário como os outros — inclusive como *holiday schedule* nas telas que pedem um.
 
 ![Calendário de Feriados](docs/sop-screenshots/holidays-calendar.png)
 
@@ -127,7 +129,17 @@ Ferramenta de apoio para inspecionar e interpretar arquivos de posição e mensa
 
 #### Painel de Controle
 
-Hub das rotinas operacionais diárias. Contém "Save CETIP Files" (lê os arquivos brutos da B3, renomeia no padrão e salva nas pastas de liquidação), "Save Daily Settlement Files" (dropzone que processa todos os arquivos do dia em JSON), "Settlement Forecast" (projeta as liquidações dos próximos dias úteis e envia por e-mail) e "Update Contacts". Em cada cartão o operador define a Reference date (Data Base).
+Hub das rotinas operacionais diárias, dividido em **cinco seções** — e o que agrupa não é o que a rotina faz e sim *quando* ela acontece e sobre o que responde:
+
+| Seção | Rotinas |
+|---|---|
+| **Intraday Routines** | Save CETIP Files (lê os arquivos brutos da B3, renomeia no padrão e salva nas pastas de liquidação) · Deals Monitor — Pending Action · Confirmations Escalation |
+| **Settlement Reporting** | Save Daily Settlement Files (dropzone que processa todos os arquivos do dia em JSON) · Settlement Forecast (projeta as liquidações dos próximos dias úteis e envia por e-mail) |
+| **Pending Confirmation Routines** | Daily Metric — Outstanding Confirmation Brazil OTC · Pending Confirmations Spreadsheet Metrics · Pending Confirmation — Weekly Escalation (CEM/EDG) · Pending Signature Confirmations — Collection |
+| **Economic Affirmation Routines** | Manual Deals EA · BACC EA Metrics · MT300 |
+| **Reference Data Routines** | Update Contacts |
+
+Em cada cartão o operador define a Reference date (Data Base), as listas de **To**/**Cc**, e pode disparar a rotina na hora pelo **Run**. O acesso é concedido **por cartão** (tokens `/control-panel#<id>` no *Page Access*): quem não tem um cartão não o vê, e o cabeçalho da seção só aparece se houver ao menos um cartão visível nela.
 
 ![Painel de Controle](docs/sop-screenshots/control-panel.png)
 
@@ -165,17 +177,23 @@ Visão de detalhe das operações de Opção FX (FXO), com as datas e parâmetro
 
 Posição viva de NDF (somente leitura), com os widgets Vanilla / Other Publisher / T+0 / Commodities / Total e a tabela dos contratos em custódia na Data Base. Descarta o filtro de vencimento — conta a posição viva.
 
+> A coluna de **CPF/CNPJ da contraparte** mostra o **nome** dela, resolvido no Reference Data pelo documento. A célula só volta com o número quando aquele CPF/CNPJ **não está cadastrado** — o número fica de propósito, porque apagá-lo esconderia a contraparte que falta cadastrar. A coluna da Parte continua com o documento: ela é a nossa perna, e o nome está na coluna ao lado.
+
 ![Live Position — NDF](docs/sop-screenshots/live-position-ndf.png)
 
 #### Live Position — Swap (Características)
 
 Posição viva de Swap com as características de cada contrato em custódia na Data Base.
 
+> A coluna de **CPF/CNPJ da contraparte** mostra o **nome** dela, resolvido no Reference Data pelo documento. A célula só volta com o número quando aquele CPF/CNPJ **não está cadastrado** — o número fica de propósito, porque apagá-lo esconderia a contraparte que falta cadastrar. A coluna da Parte continua com o documento: ela é a nossa perna, e o nome está na coluna ao lado.
+
 ![Live Position — Swap (Características)](docs/sop-screenshots/live-position-swap-characteristics.png)
 
 #### Live Position — Option
 
 Posição viva das Opções em custódia na Data Base, com strike, barreiras, prêmio e situação do contrato.
+
+> A coluna de **CPF/CNPJ da contraparte** mostra o **nome** dela, resolvido no Reference Data pelo documento. A célula só volta com o número quando aquele CPF/CNPJ **não está cadastrado** — o número fica de propósito, porque apagá-lo esconderia a contraparte que falta cadastrar. A coluna da Parte continua com o documento: ela é a nossa perna, e o nome está na coluna ao lado.
 
 ![Live Position — Option](docs/sop-screenshots/live-position-option.png)
 

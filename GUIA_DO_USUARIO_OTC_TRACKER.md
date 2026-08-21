@@ -360,8 +360,16 @@ Tipos disponíveis:
 | Bank Name | Nome dos bancos |
 | FXO Conversion Rate | Taxa de conversão por moeda base |
 | Swap Curves (Athena × B3) | Curvas de swap |
+| B3 Accounts | As contas da B3 de cada entidade nossa — LE, Nome Simplificado, conta e tipo |
 | Quotes — Equities | Código do ativo subjacente → símbolo de mercado (item 3.18) |
 | Quotes — Commodities | Código da mercadoria → símbolo de mercado (item 3.18) |
+
+> **B3 Accounts** responde a duas perguntas de uma vez, e por isso o **Account Type** não é enfeite:
+>
+> - **OWN** é a conta própria da entidade — a posição da casa.
+> - **CLIENT 1** e **CLIENT 2** são contas guarda-chuva: nelas o nome que vem da B3 é o do **titular do guarda-chuva**, não o do cliente, e o sistema descobre o cliente pelo **CNPJ**. Cadastrar uma conta de cliente como *OWN* faz o aviso de liquidação sair endereçado ao titular, com tudo preenchido e parecendo certo.
+>
+> O **Simplified Name** é o nome que vai no campo *Participante* do cabeçalho dos arquivos de registro enviados à B3. Entidade sem esse nome cadastrado faz o envio parar com uma mensagem dizendo qual entidade falta — em vez de mandar um arquivo com o campo em branco.
 
 > **Mapping não exige reinício do sistema.** A alteração vale já na próxima tela que você abrir.
 
@@ -389,18 +397,17 @@ Cada card é uma rotina automática. Para configurar:
 2. Saia do campo — o sistema salva automaticamente.
 3. Use o botão **Run** para disparar a rotina na hora, sem esperar o horário automático.
 
-Rotinas disponíveis:
+Os cards são agrupados em **cinco seções**, e o que agrupa não é o que a rotina *faz* e sim **quando** ela acontece e sobre o que ela responde:
 
-- Save CETIP Files
-- Save Daily Settlement Files
-- Settlement Forecast
-- Update Contacts
-- Daily Metric — Outstanding Confirmation Brazil OTC
-- Pending Confirmation — Weekly Escalation
-- Pending Signature Confirmations — Collection
-- Deals Monitor — Pending Action
-- Pending Confirmations Spreadsheet Metrics
-- Confirmations Escalation
+| Seção | Rotinas |
+|---|---|
+| **Intraday Routines** | Save CETIP Files · Deals Monitor — Pending Action · Confirmations Escalation |
+| **Settlement Reporting** | Save Daily Settlement Files · Settlement Forecast |
+| **Pending Confirmation Routines** | Daily Metric — Outstanding Confirmation Brazil OTC · Pending Confirmations Spreadsheet Metrics · Pending Confirmation — Weekly Escalation (CEM/EDG) · Pending Signature Confirmations — Collection |
+| **Economic Affirmation Routines** | Manual Deals EA · BACC EA Metrics · MT300 |
+| **Reference Data Routines** | Update Contacts |
+
+> **Você pode ver menos cards do que a lista acima.** O acesso ao Control Panel é concedido **por rotina**, não pela página inteira: o administrador libera cada card no *Page Access*, e o cabeçalho de uma seção só aparece se você tiver ao menos um card dela. Se falta uma rotina que você precisa operar, o pedido é de acesso àquele card.
 
 #### Save CETIP Files — quatro destinos, cada um com o seu recorte
 
@@ -479,6 +486,12 @@ Caminho no menu: **Live Position → NDF** (e demais produtos).
 2. Os cards no topo classificam a carteira por tipo de operação.
 3. A tabela mostra os contratos em custódia. É uma tela **somente leitura**.
 
+> **A coluna de CPF/CNPJ da contraparte mostra o NOME dela**, não o número — em NDF, Option e Swap (Características). O sistema procura o documento no **Reference Data** e escreve a razão social ali.
+>
+> Quando a célula continua mostrando o **número**, é porque aquele CPF/CNPJ **não está cadastrado** no Reference Data. O número fica de propósito: apagá-lo esconderia justamente a contraparte que falta cadastrar. Cadastre em **Data Base → Reference Data** (item 3.12) e a coluna passa a mostrar o nome na consulta seguinte.
+>
+> A coluna da **Parte** continua mostrando o documento — ela é a nossa perna, e o nome dela já está na coluna ao lado.
+
 ---
 
 ### 3.17. Reconciliations — conciliar
@@ -520,6 +533,41 @@ Consulta o histórico de cotações de três fontes, numa tela só:
 > **Se aparecer "has no market symbol registered in Mapping"**, o ativo existe no Index B3 mas ninguém disse ainda qual é o símbolo dele no mercado — o código da B3 (`AAPL34`) não é o mesmo que a fonte de cotação usa (`AAPL34.SA`). Cadastre em **Data Base → Mapping → Quotes — Equities** (ou *Quotes — Commodities*) e refaça a busca; vale na hora, sem reiniciar nada. Na lista de instrumentos, o que já está cadastrado aparece como `AAPL34 → AAPL34.SA`.
 >
 > **Se a mensagem falar em proxy ou em "could not reach the source"**, a busca não conseguiu sair para a internet — ela tenta várias saídas e diz o que cada uma respondeu. Isso é rede, não cadastro: leve a mensagem inteira para o time de tecnologia.
+
+---
+
+### 3.19. Holidays Calendar — os feriados que o sistema usa
+
+Caminho no menu: **Apps → Holidays Calendar**.
+
+![Calendário de Feriados](docs/sop-screenshots/holidays-calendar.png)
+
+Esta tela guarda os calendários de feriados que o sistema usa para contar dias úteis — a Data Base (dia útil anterior), a projeção de liquidações e os prazos das mesas. Cada calendário tem a sua **cor**, e é por ela que você o reconhece no mês.
+
+**Para incluir um feriado avulso:** clique na data (ou em **Create New Holiday**), preencha a data, o nome do feriado e escolha o calendário. Também dá para **arrastar** o calendário da barra lateral direto para o dia.
+
+**Para criar um calendário inteiro a partir de uma planilha:**
+
+1. Clique em **Create New Calendar**.
+2. Dê um **nome** ao calendário — é como ele vai aparecer na barra lateral e na lista de escolha.
+3. Arraste o **.xlsx** para a área tracejada, ou clique nela para procurar o arquivo.
+4. Clique em **Import**.
+
+A planilha tem **uma aba** com três colunas, nesta ordem:
+
+| Coluna | Conteúdo | Entra? |
+|---|---|---|
+| **A — Holiday** | a data, no formato `aaaa-mm-dd` | sim |
+| **B — Description** | o nome do feriado | sim |
+| **C — Holiday Type** | o tipo | não |
+
+> **A linha de cabeçalho não atrapalha** — o sistema descarta o que não é data, e isso vale também para a linha em branco do fim e para um eventual rodapé de total. Datas repetidas entram uma vez só, e linha sem descrição é ignorada.
+>
+> **Se a resposta for "No holiday found"**, a coluna A não está sendo lida como data ou a coluna B está vazia. Confira se as datas estão em `aaaa-mm-dd` e se as duas colunas estão na ordem acima.
+>
+> **A cor do calendário novo é escolhida pelo sistema**, entre as que ainda não estão em uso — para dois calendários nunca se confundirem no mês.
+>
+> Depois de criado, ele é um calendário como qualquer outro: aparece na barra lateral, pode receber feriado avulso pelo modal e serve como agenda de feriados nas telas que pedem um *holiday schedule*.
 
 ---
 

@@ -138,6 +138,21 @@ DB_NAME=
 ASSETS_ROOT=/static
 ```
 
+> **Fora do Windows, `OTC_SHARED_DRIVE_ROOT` é obrigatória.** Todo destino no
+> share pende dela e o padrão é `I:\`, que em macOS/Linux é um caminho
+> **relativo** — o app **recusa subir** nesse caso, em vez de criar em silêncio
+> uma árvore `I:\Confirmation\...` dentro do diretório de trabalho.
+>
+> ```ini
+> OTC_SHARED_DRIVE_ROOT=/Users/voce/otc-share
+> ```
+>
+> O `env.sample` traz o conjunto completo, comentado uma a uma: `DATABASE_PATH`
+> (mover o DuckDB de usuários para fora do pacote), `OTC_TRACKER_URL` (endereço
+> absoluto que os botões dos e-mails usam), `IMPORT_POLL_WINDOW` (a janela
+> 08:00–20:00 BRT dos schedulers de importação), `QUOTES_PROXY` (a saída para o
+> BCB e o Yahoo) e as chaves VAPID do Web Push.
+
 ### 2. Configuração do Banco de Dados
 O projeto suporta tanto SQLite quanto bancos relacionais (PostgreSQL/MySQL):
 
