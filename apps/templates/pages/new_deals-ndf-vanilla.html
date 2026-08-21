@@ -4142,14 +4142,29 @@ $(document).ready(function() {
         return ('    ' + fi).slice(-4);
     }
 
-    /* File Interface: o cadastro (/file-interface) passa a comandar a LISTA de
+    /* Códigos B3 de moeda (cadastro Currency Base, SIMBOLO → CODIGO DE
+       CADASTRO) — os campos 13/14 do preview (Moeda de Referência/Cotada, o
+       Source Mapping do File Interpreter). Mesmo padrão do Other Publisher:
+       fetch uma vez; enquanto não responde (ou se falhar), vale o par
+       histórico USD/BRL, que é o desta página. */
+    var _MOEDA_CODES = { USD: '220', BRL: '790' };
+    fetch('/static/data/mappings/BaseMoeda.json').then(function(r){ return r.json(); }).then(function(d){
+        (d || []).forEach(function(x){
+            var s = String(x['SIMBOLO'] || '').trim().toUpperCase();
+            var cd = String(x['CODIGO DE CADASTRO'] || '').trim();
+            if (s && cd) _MOEDA_CODES[s] = cd;
+        });
+    }).catch(function(){});
+    function _moedaCode(iso) { return _MOEDA_CODES[String(iso || '').trim().toUpperCase()] || ''; }
+
+    /* File Interface: o cadastro (/file-interpreter) passa a comandar a LISTA de
        campos do preview de duplo clique — ordem, rótulo e literais Fixed vêm do
        template 'termo-multiclasses' via page-spec (Fixed já resolvido para esta
        página). Fetch uma vez no load; se falhar, FI_SPEC fica null e o preview
        degrada para a lista fixa antiga — o mesmo padrão dos mappings. */
     var FI_TPLS = [];     // base + variantes por par de pernas (File Interpreter)
     var FI_SPEC = null;   // o template base — fallback quando não há variante
-    fetch('/api/file-interface/page-spec?url=' + encodeURIComponent(window.location.pathname), { credentials: 'same-origin' })
+    fetch('/api/file-interpreter/page-spec?url=' + encodeURIComponent(window.location.pathname), { credentials: 'same-origin' })
         .then(function (r) { return r.ok ? r.json() : null; })
         .then(function (d) {
             FI_TPLS = (d && d.success && d.templates) || [];
@@ -4301,6 +4316,12 @@ $(document).ready(function() {
         f[9]  = 'S';
         f[10] = '4';
         f[11] = fonteInfo;
+        // Moeda de Referência/Cotada (campos 13/14): código B3 do cadastro
+        // Currency Base; com Is BRR Fixed? = YES as duas trocam de lugar —
+        // a estrangeira vira a Referência, como no gerador do servidor.
+        var _brlFixed = _sh(deal.IsBRRFixed || '').toUpperCase() === 'YES';
+        f[12] = _moedaCode(_brlFixed ? deal.OtherQuantityCurrency : deal.QuantityCurrency);
+        f[13] = _moedaCode(_brlFixed ? deal.QuantityCurrency : deal.OtherQuantityCurrency);
         // A coluna destes deals é Notional (TotalNotional é do NDF Commodities e
         // vinha undefined aqui — o campo saía vazio no preview).
         f[15] = _qtyView(deal.TotalNotional || deal.Notional || '');
