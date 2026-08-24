@@ -43,9 +43,10 @@ plugins de `node_modules` para `apps/static/plugins/`.
 - **A branch de trabalho é `visual-refresh`** (desde 26/07/2026; `apple-design`
   foi incorporada e aposentada). Todo commit e push vai para lá — nunca presuma
   `main`. **`visual-refresh-prod` é a branch que a instância do JPM roda**, e ela
-  é a `visual-refresh` MAIS um commit no `apps/config.py`: bancos e share em
+  é a `visual-refresh` MAIS um commit no `apps/config.py`: **dados**, bancos e
+  share em
   `\\Nawest.ad.jpmorganchase.com\lac\BRA\intra` em vez de dentro da aplicação e
-  `I:\`. A diferença é **um bloco de cinco linhas** (entre `── ENV:DEV ──` e
+  `I:\`. A diferença é **um bloco de seis linhas** (entre `── ENV:DEV ──` e
   `── /ENV ──`) e nada mais — código só nasce na dev e chega lá por merge
   (`/commit` publica na dev; `/commitjp` faz o merge e troca o bloco). Corrigir
   direto na prod é criar uma divergência que ninguém vê até o merge seguinte
@@ -346,6 +347,29 @@ São dois bancos:
   uma árvore criada por engano dentro do cwd. Mover tudo de lugar é uma coisa só:
   `OTC_DATABASE_DIR` no `.env` (ou o bloco de ENV do config na branch de prod —
   §2). `DATABASE_PATH` continua movendo só o banco de usuários.
+- **Os JSON** (cache dos arquivos-dia, cadastros do /mapping, tickets,
+  `RefData.json`, calendário, templates do File Interpreter) saem do
+  **`Config.DATA_DIR`**, e o caminho é montado pelo **`apps/pages/data_paths.py`**
+  — `data_path()` para ler, `data_write()` para gravar, `mapping_file(key, base)`
+  para um cadastro. **Nenhum módulo monta `static/data` por conta própria**, e o
+  `check_config_names.py` recusa por AST quem tentar.
+
+  Isso existe porque o cache é **gitignorado**: os módulos montavam o caminho a
+  partir do próprio `__file__`, o que amarra o dado ao diretório do CÓDIGO. Na
+  dev as duas pastas são a mesma e nada aparece; na instância do JPM não são, e
+  um checkout novo não tem arquivo-dia nenhum — a tela abre, a API responde
+  **200** e o gráfico vem vazio, como se não houvesse operação no dia. É a falha
+  que menos parece falha.
+
+  Duas garantias sustentam a troca: a **leitura cai para a cópia empacotada**
+  quando o arquivo não existe no `DATA_DIR` (`anbima.json`, `Subjacente.json`, as
+  seeds — sem isso, subir apontando para um share vazio apagaria os 42 cadastros
+  versionados), e a **escrita nunca cai** — gravar dentro do checkout é gravar
+  onde o próximo `git pull` conflita e a outra instância não enxerga. Na subida,
+  `_seed_data_dir()` copia para o `DATA_DIR` o que vem versionado e ainda não
+  está lá, **sem nunca sobrescrever**: o arquivo que já está no share é o que a
+  mesa editou pela tela, e ele vence. `db/` fica de fora — é do `DATABASE_DIR`,
+  e copiar banco por cima de banco corrompe dado.
 - **SQLite** (`apps/db.sqlite3`) — Flask-SQLAlchemy. Hoje **não é usado** pela
   lógica da aplicação; `configure_database()` chama `db.create_all()` **uma vez
   na subida**, não a cada request.
