@@ -86,7 +86,7 @@
             doneRows: '{n} row(s) exported', ok: 'OK',
             exporting: 'Exporting…', failTitle: 'Nothing exported',
             stepTable: 'Assembling the table ({n} rows)…', stepFilter: 'Applying the filters…',
-            stepFile: 'Building the file ({n} rows)…',
+            stepFile: 'Building the file ({n} rows)… the tab may stop responding until it is done',
             daysFailed: 'Could not read {n} day(s)',
             daysNoFile: '{n} day(s) with no file',
             daysDone: '{n} rows from {d} day(s)',
@@ -129,7 +129,7 @@
             doneRows: '{n} linha(s) exportada(s)', ok: 'OK',
             exporting: 'Exportando…', failTitle: 'Nada exportado',
             stepTable: 'Montando a tabela ({n} linhas)…', stepFilter: 'Aplicando os filtros…',
-            stepFile: 'Gerando o arquivo ({n} linhas)…',
+            stepFile: 'Gerando o arquivo ({n} linhas)… a aba pode ficar sem resposta até terminar',
             daysFailed: 'Não consegui ler {n} dia(s)',
             daysNoFile: '{n} dia(s) sem arquivo',
             daysDone: '{n} linhas de {d} dia(s)',
@@ -172,7 +172,7 @@
             doneRows: '{n} fila(s) exportada(s)', ok: 'OK',
             exporting: 'Exportando…', failTitle: 'Nada exportado',
             stepTable: 'Armando la tabla ({n} filas)…', stepFilter: 'Aplicando los filtros…',
-            stepFile: 'Generando el archivo ({n} filas)…',
+            stepFile: 'Generando el archivo ({n} filas)… la pestaña puede dejar de responder hasta terminar',
             daysFailed: 'No pude leer {n} día(s)',
             daysNoFile: '{n} día(s) sin archivo',
             daysDone: '{n} filas de {d} día(s)',
@@ -246,7 +246,13 @@
             // Seção desabilitada: fica à VISTA, apagada, com o motivo escrito.
             // Escondê-la faria a mesma tela parecer duas conforme a página.
             + '#' + MODAL_ID + ' .xa-off{opacity:.55}'
-            + '#' + MODAL_ID + ' .xa-off .xa-help{font-style:italic}';
+            + '#' + MODAL_ID + ' .xa-off .xa-help{font-style:italic}'
+            // A roda do SweetAlert de exportação. `will-change` a promove a
+            // camada própria, e aí quem gira a animação é o compositor: ela
+            // continua girando enquanto a thread principal está presa
+            // montando o arquivo. Só no popup da exportação — promover
+            // camada em todo SweetAlert da página seria custo sem motivo.
+            + '.xa-busy .swal2-loader{will-change:transform}';
         var el = document.createElement('style');
         el.id = STYLE_ID;
         el.textContent = css;
@@ -664,6 +670,17 @@
                         html: esc(t('daysBuilding', { n: n })),
                         allowOutsideClick: false, allowEscapeKey: false,
                         showConfirmButton: false,
+                        // SEM animação de entrada. A `swal2-show` vai de
+                        // `opacity:0` a 1 em 0,3 s e o trabalho começa no quadro
+                        // seguinte: a caixa congelava com ~5% de opacidade —
+                        // aparecia e "sumia", deixando só o desfundo desfocado
+                        // pelo tempo todo da geração. Sem animação, o primeiro
+                        // quadro pintado já é o popup inteiro.
+                        // O objeto SUBSTITUI o padrão (não se soma), então o
+                        // `backdrop` repete a classe de sempre — é ela que
+                        // carrega o escurecido e o blur do tema.
+                        showClass: { popup: '', backdrop: 'swal2-backdrop-show', icon: '' },
+                        customClass: { container: 'xa-busy' },
                         didOpen: function () { Swal.showLoading(); frame(resolve); }
                     });
                 });

@@ -334,6 +334,26 @@ def main():
     check('e o ymd do intervalo continua em UTC',
           'getUTC' in extract(src, 'ymd'), True)
 
+    print('\n== o spinner da exportação ==')
+    # O popup do spinner NÃO pode entrar animado. A `swal2-show` vai de
+    # `opacity:0` a 1 em 0,3 s e o trabalho síncrono começa no quadro seguinte:
+    # a caixa congela com ~5% de opacidade e a espera inteira se lê como "o
+    # SweetAlert apareceu e sumiu".
+    i = src.find("t('exporting')")
+    bloco = src[i:i + 1200] if i != -1 else ''
+    check('o popup do spinner abre sem animação',
+          "showClass: { popup: ''" in bloco, True)
+    # O `showClass` SUBSTITUI o padrão do SweetAlert, não se soma a ele: sem
+    # repetir a classe do backdrop, o desfundo perde o escurecido e o blur.
+    check('e o backdrop mantém a classe do tema',
+          "backdrop: 'swal2-backdrop-show'" in bloco, True)
+    # A roda promovida a camada continua girando pelo compositor enquanto a
+    # thread principal está presa montando o arquivo.
+    check('a roda é promovida a camada própria',
+          '.xa-busy .swal2-loader{will-change:transform}' in src, True)
+    check('e o popup carrega a classe que a alcança',
+          "customClass: { container: 'xa-busy' }" in bloco, True)
+
     print('\n== a trava do intervalo ==')
     check('o teto é o MAX_DAYS do arquivo', max_days >= 30, True)
 
