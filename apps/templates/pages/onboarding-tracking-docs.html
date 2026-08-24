@@ -1,0 +1,567 @@
+{% extends "layouts/vertical.html" %}
+
+{% block title %}Tracking Docs{% endblock title %}
+
+{% block extra_css %}
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<style>
+/* ============================================================================
+   Onboarding · Tracking Docs — a lista de CGDs do SharePoint.
+   Padrão de tabela da casa (CLAUDE.md): tudo centralizado, linha de filtro por
+   coluna, toolbar com Columns/Add Row/Export/Clear Filters, squircles de ação.
+   Tokens --ins-*/--vr-*, nunca --bs-*.
+   ============================================================================ */
+#ob-docs { --ob-ease: var(--vr-ease, cubic-bezier(0.22, 1, 0.36, 1)); }
+
+/* O widget NÃO é `.card`: o tema redeclara fundo, borda e raio depois do
+   extra_css e venceria sem !important. */
+#ob-docs .ob-panel {
+    background: var(--vr-card-bg, var(--ins-secondary-bg));
+    border: 1px solid var(--vr-card-border, var(--ins-border-color));
+    border-radius: var(--vr-card-radius, 18px);
+    box-shadow: var(--vr-card-shadow, 0 4px 14px rgba(15, 23, 42, .06));
+    padding: 1rem 1.1rem 1.15rem;
+}
+
+/* ── Cabeçalho e células: centralizado, e as MESMAS regras valem para o clone
+   que o DataTables cria com scrollX. Ele REMOVE o id da tabela clonada, então
+   `#ob-table th` não alcança o cabeçalho que se vê — daí os três seletores. */
+#ob-table thead th,
+.dt-scroll-head thead th,
+.dt-scroll-headInner thead th,
+.dataTables_scrollHeadInner thead th {
+    text-align: center !important; vertical-align: middle !important;
+    font-size: .7rem; white-space: normal;
+}
+#ob-table tbody td { text-align: center; vertical-align: middle; font-size: .8rem; white-space: nowrap; }
+/* Ellipsis nas colunas de texto longo — razão social e contatos estouram a
+   linha e empurram as colunas de data para fora da tela. */
+#ob-table tbody td.ob-ell { max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+
+/* A linha de filtro (2ª do thead) é montada ANTES do `.DataTable()`, com
+   `orderCellsTop: true`: no initComplete ela nasceria dentro do corpo rolável e
+   invisível. O texto e o placeholder centralizados vêm do visual-refresh.css. */
+#ob-table thead .ob-filters th,
+.dt-scroll-headInner thead .ob-filters th,
+.dataTables_scrollHeadInner thead .ob-filters th { padding: 4px 5px; }
+#ob-table thead .ob-filters input,
+.dt-scroll-headInner thead .ob-filters input,
+.dataTables_scrollHeadInner thead .ob-filters input {
+    width: 100%; font-size: 12px; height: 28px; padding: 2px 6px;
+    border: 1px solid var(--ins-border-color); border-radius: 6px;
+    background: var(--ins-secondary-bg); color: var(--ins-body-color);
+}
+
+/* ── Toolbar: as cores são fixas por função (Columns soft-primary, Add Row
+   primary, Export info, Clear Filters outline-secondary). `mb-3` e não `mb-2`:
+   o DataTables desenha a própria caixa encostada no elemento anterior e come a
+   margem do irmão de cima. */
+#ob-docs .btn-toolbar-all {
+    font-size: .75rem !important; padding: .25rem .6rem !important;
+    height: auto !important; line-height: 1.4 !important; white-space: nowrap !important;
+    transition: transform 140ms var(--ob-ease), box-shadow 140ms var(--ob-ease);
+}
+@media (hover: hover) and (pointer: fine) {
+    #ob-docs .btn-toolbar-all:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,.10); }
+}
+#ob-docs .btn-toolbar-all:active { transform: scale(.96) !important; }
+#ob-docs .ob-cols-menu { max-height: 320px; overflow-y: auto; min-width: 260px; }
+#ob-docs .ob-cols-menu label { font-size: .75rem; display: flex; align-items: center; gap: .4rem; margin: 0; padding: .15rem .25rem; cursor: pointer; }
+
+/* ── Botões de ação da linha: squircle 32×32 travado nos DOIS eixos.
+   Só a largura travada deixa um botão mais alto que o vizinho quando o tema
+   põe min-height no .btn — e 32×34 não é um quadrado arredondado. */
+#ob-docs .btn-act {
+    min-width: 32px !important; max-width: 32px !important;
+    min-height: 32px !important; max-height: 32px !important;
+    box-sizing: border-box !important; padding: 0 !important;
+    border-radius: 10px !important;
+    display: inline-flex; align-items: center; justify-content: center;
+}
+/* Cinto de segurança para quem copiar o markup: a `.fs-13` do tema tem
+   `font-size:13px !important` e deixaria o ícone menor que o quadrado. */
+#ob-docs .btn-act > i { font-size: 1rem !important; }
+.tooltip-info   .tooltip-inner { background-color: #0d7ea8; color: #fff; }
+.tooltip-info   .tooltip-arrow::before { border-top-color: #0d7ea8; }
+.tooltip-danger .tooltip-inner { background-color: #d93025; color: #fff; }
+.tooltip-danger .tooltip-arrow::before { border-top-color: #d93025; }
+.tooltip-success .tooltip-inner { background-color: #1a7f37; color: #fff; }
+.tooltip-success .tooltip-arrow::before { border-top-color: #1a7f37; }
+.tooltip-secondary .tooltip-inner { background-color: #64748b; color: #fff; }
+.tooltip-secondary .tooltip-arrow::before { border-top-color: #64748b; }
+
+/* ── Status: badge pill com gradiente, cor por status (padrão da casa). */
+.ob-badge {
+    display: inline-block; padding: .2rem .6rem; border-radius: 999px;
+    font-size: .68rem; font-weight: 700; color: #fff; white-space: nowrap; line-height: 1.35;
+}
+.ob-badge--active  { background-image: linear-gradient(100deg, #1a7f37, #34c759); }
+.ob-badge--legal   { background-image: linear-gradient(100deg, #6d4c41, #a1887f); }
+.ob-badge--otc     { background-image: linear-gradient(100deg, #0066cc, #5e5ce6); }
+.ob-badge--mo      { background-image: linear-gradient(100deg, #b07500, #f7b84b); }
+.ob-badge--wait    { background-image: linear-gradient(100deg, #4a5568, #94a3b8); }
+.ob-badge--danger  { background-image: linear-gradient(100deg, #b3261e, #ff453a); }
+
+/* Aging: número tabular, e a cor só nos extremos. */
+#ob-table td.ob-age { font-variant-numeric: tabular-nums; font-weight: 700; }
+#ob-table td.ob-age.ob-late { color: var(--ins-danger, #d93025); }
+#ob-table td.ob-age.ob-warn { color: #b07500; }
+
+/* A linha em edição: fundo suave para não se perder de vista ao rolar. */
+#ob-table tr.ob-editing > td { background: rgba(0, 102, 204, .06) !important; }
+#ob-table tr.ob-editing input { width: 100%; font-size: .75rem; height: 26px; padding: 1px 4px; text-align: center; }
+
+/* A faixa que diz de onde a tela leu — o banco e a última importação. */
+#ob-docs .ob-src {
+    display: flex; align-items: center; gap: .6rem; flex-wrap: wrap;
+    font-size: .7rem; color: var(--ins-secondary-color); margin-bottom: .75rem;
+}
+#ob-docs .ob-src code { font-size: .68rem; }
+</style>
+{% endblock extra_css %}
+
+{% block page_content %}
+<div class="container-fluid" id="ob-docs">
+
+    <div class="page-title-head d-flex align-items-center mb-3">
+        <div class="flex-grow-1 d-flex align-items-center gap-2">
+            <i data-lucide="file-stack" style="width:20px;height:20px;flex-shrink:0;" class="text-primary me-1"></i>
+            <h4 class="mb-0 fw-semibold" data-lang="ob-docs-title">Tracking Docs</h4>
+        </div>
+        <div class="text-end">
+            <a href="/onboarding" class="btn btn-sm btn-soft-primary btn-toolbar-all">
+                <i class="ti ti-layout-dashboard me-1"></i><span data-lang="ob-back-overview">Overview</span>
+            </a>
+        </div>
+    </div>
+
+    <div class="ob-panel">
+
+        <!-- O link com o banco: a tela LÊ este arquivo, e quando ele não existe
+             a mensagem diz o comando que o cria. "Sem documentos" e "ninguém
+             importou" são estados diferentes. -->
+        <div class="ob-src" id="ob-src"></div>
+
+        <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
+            <div class="dropdown">
+                <button class="btn btn-sm btn-soft-primary btn-toolbar-all dropdown-toggle"
+                        type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside">
+                    <i class="ti ti-columns-3 me-1"></i><span data-lang="ob-btn-columns">Columns</span>
+                </button>
+                <div class="dropdown-menu ob-cols-menu p-2" id="ob-cols-menu"></div>
+            </div>
+
+            <button class="btn btn-sm btn-primary bg-gradient btn-toolbar-all" id="ob-add">
+                <i class="ti ti-plus me-1"></i><span data-lang="ob-btn-add">Add Row</span>
+            </button>
+
+            <div class="dropdown">
+                <button class="btn btn-sm btn-info bg-gradient btn-toolbar-all dropdown-toggle"
+                        type="button" data-bs-toggle="dropdown">
+                    <i class="ti ti-download me-1"></i><span data-lang="ob-btn-export">Export</span>
+                </button>
+                <ul class="dropdown-menu" id="ob-export-menu">
+                    <li><a class="dropdown-item" href="#" data-exp="copy">Copy</a></li>
+                    <li><a class="dropdown-item" href="#" data-exp="csv">CSV</a></li>
+                    <li><a class="dropdown-item" href="#" data-exp="excel">Excel</a></li>
+                    <li><a class="dropdown-item" href="#" data-exp="print">Print</a></li>
+                    <li><a class="dropdown-item" href="#" data-exp="pdf">PDF</a></li>
+                </ul>
+            </div>
+
+            <button class="btn btn-sm btn-outline-secondary btn-toolbar-all" id="ob-clear">
+                <i class="ti ti-filter-off me-1"></i><span data-lang="ob-btn-clear">Clear Filters</span>
+            </button>
+
+            <div class="ms-auto d-flex align-items-center gap-2">
+                <span style="font-size:.72rem;" data-lang="ob-show">Show</span>
+                <select id="ob-len" class="form-select form-select-sm" style="width:auto;font-size:.75rem;height:31px;">
+                    <option value="25">25</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                    <option value="-1">All</option>
+                </select>
+                <span style="font-size:.72rem;" data-lang="ob-entries">entries</span>
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table id="ob-table" class="table table-hover table-sm w-100 mb-0">
+                <thead>
+                    <tr id="ob-head"></tr>
+                    <tr class="ob-filters" id="ob-head-filters"></tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock page_content %}
+
+{% block extra_javascript %}
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.buttons.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/jszip.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/pdfmake.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/vfs_fonts.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.html5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.print.min.js"></script>
+<script>
+// Registro SÍNCRONO do JSZip (o mesmo snippet do New Deals): o buttons.html5
+// expõe $.fn.dataTable.Buttons.jszip() e precisa da referência antes de
+// qualquer export de Excel — sem isto o item Excel não faz nada.
+(function () {
+    var jz = window.JSZip || (window.jszip);
+    if (jz && window.jQuery && jQuery.fn.dataTable &&
+        jQuery.fn.dataTable.Buttons && typeof jQuery.fn.dataTable.Buttons.jszip === 'function') {
+        jQuery.fn.dataTable.Buttons.jszip(jz);
+    }
+})();
+</script>
+<script src="{{ config.ASSETS_ROOT }}/js/export-advanced.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/table-std.js"></script>
+<script>
+(function ($) {
+    'use strict';
+
+    /* Texto montado em JS não passa pelo I18nManager (ele traduz os [data-lang]
+       uma vez, no load), então vive aqui. */
+    var _TRANS = {
+        en: { stage: 'Pending with', actions: 'Actions', edit: 'Edit', del: 'Delete',
+              save: 'Save', cancel: 'Cancel', confirmDel: 'Delete this document?',
+              confirmDelTxt: 'The row is removed from the app database. The SharePoint list is not touched.',
+              yes: 'Yes, delete', no: 'Cancel', saved: 'Saved', savedTxt: 'The row was updated.',
+              failed: 'Could not save', empty: 'No documents in the database yet.',
+              nodb: 'The CGD database was not found', nodbHint: 'run scripts/import_cgd_sharepoint.py',
+              src: 'Source', rows: 'row(s)', derived: 'derived from the stamps' },
+        br: { stage: 'Pendente em', actions: 'Ações', edit: 'Editar', del: 'Excluir',
+              save: 'Salvar', cancel: 'Cancelar', confirmDel: 'Excluir este documento?',
+              confirmDelTxt: 'A linha sai do banco do app. A lista do SharePoint não é tocada.',
+              yes: 'Sim, excluir', no: 'Cancelar', saved: 'Salvo', savedTxt: 'A linha foi atualizada.',
+              failed: 'Não consegui salvar', empty: 'Nenhum documento no banco ainda.',
+              nodb: 'O banco de CGDs não foi encontrado', nodbHint: 'rode scripts/import_cgd_sharepoint.py',
+              src: 'Fonte', rows: 'linha(s)', derived: 'derivado dos carimbos' },
+        es: { stage: 'Pendiente en', actions: 'Acciones', edit: 'Editar', del: 'Eliminar',
+              save: 'Guardar', cancel: 'Cancelar', confirmDel: '¿Eliminar este documento?',
+              confirmDelTxt: 'La fila sale de la base del app. La lista de SharePoint no se toca.',
+              yes: 'Sí, eliminar', no: 'Cancelar', saved: 'Guardado', savedTxt: 'La fila fue actualizada.',
+              failed: 'No se pudo guardar', empty: 'Aún no hay documentos en la base.',
+              nodb: 'No encontré la base de CGD', nodbHint: 'ejecute scripts/import_cgd_sharepoint.py',
+              src: 'Fuente', rows: 'fila(s)', derived: 'derivado de los sellos' }
+    };
+    function lang() {
+        try { return localStorage.getItem('__OTC_TRACKER_LANG__') || 'en'; }
+        catch (e) { return 'en'; }
+    }
+    function t(k) { return (_TRANS[lang()] || _TRANS.en)[k] || (_TRANS.en[k] || k); }
+    function esc(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+
+    var COLS = [];            // nomes das colunas do banco, na ordem
+    var IDCOL = '_id';
+    var DATECOLS = [];
+    var table = null;
+    var dados = [];
+
+    // Status → cor do badge. O texto vem do SharePoint e é livre, então o mapa
+    // casa por PALAVRA e o que não casar sai neutro — inventar cor por hash
+    // deixaria dois status parecidos com cores opostas.
+    function statusClass(s) {
+        var v = String(s || '').toUpperCase();
+        if (!v) { return 'ob-badge--wait'; }
+        if (v.indexOf('ACTIVE') !== -1) { return 'ob-badge--active'; }
+        if (v.indexOf('LEGAL') !== -1 || v.indexOf('SIGN') !== -1 || v.indexOf('ASSIN') !== -1) { return 'ob-badge--legal'; }
+        if (v.indexOf('OTC') !== -1) { return 'ob-badge--otc'; }
+        if (v.indexOf('MO') !== -1 || v.indexOf('CEM') !== -1) { return 'ob-badge--mo'; }
+        if (v.indexOf('CANCEL') !== -1 || v.indexOf('REJEIT') !== -1 || v.indexOf('REJECT') !== -1) { return 'ob-badge--danger'; }
+        return 'ob-badge--wait';
+    }
+    function badge(s) {
+        return s ? '<span class="ob-badge ' + statusClass(s) + '">' + esc(s) + '</span>' : '';
+    }
+
+    function acoes() {
+        // Ordem e cores canônicas do app: Edit (info) → Delete (danger).
+        // `rounded-circle` fica no markup por história; o CSS da página fixa o
+        // squircle — sem ele o raio do tema sai OVAL.
+        return '<div class="d-flex justify-content-center gap-1">' +
+            '<button class="btn btn-sm btn-info rounded-circle btn-act ob-edit" ' +
+                'data-bs-toggle="tooltip" data-bs-custom-class="tooltip-info" title="' + esc(t('edit')) + '">' +
+                '<i class="ti ti-edit"></i></button>' +
+            '<button class="btn btn-sm btn-danger rounded-circle btn-act ob-del" ' +
+                'data-bs-toggle="tooltip" data-bs-custom-class="tooltip-danger" title="' + esc(t('del')) + '">' +
+                '<i class="ti ti-trash"></i></button>' +
+        '</div>';
+    }
+
+    function ageCell(v) {
+        if (v === '' || v === null || typeof v === 'undefined') { return ''; }
+        return esc(v);
+    }
+
+    function montaCabecalho() {
+        // Checkbox · Pendente em · as colunas do banco · Ações
+        var th = ['<th style="width:34px"><input type="checkbox" id="ob-all"></th>',
+                  '<th>' + esc(t('stage')) + '</th>'];
+        var filtros = ['<th></th>', '<th><input type="text" data-col="1" placeholder="' + esc(t('stage')) + '"></th>'];
+        COLS.forEach(function (c, i) {
+            th.push('<th>' + esc(c) + '</th>');
+            filtros.push('<th><input type="text" data-col="' + (i + 2) + '" placeholder="' + esc(c) + '"></th>');
+        });
+        th.push('<th style="width:96px">' + esc(t('actions')) + '</th>');
+        filtros.push('<th></th>');
+        $('#ob-head').html(th.join(''));
+        $('#ob-head-filters').html(filtros.join(''));
+    }
+
+    function linha(r) {
+        var td = ['<td><input type="checkbox" class="ob-chk"></td>'];
+        var marca = r._stage_derived
+            ? ' <i class="ti ti-wand" title="' + esc(t('derived')) + '" style="opacity:.55"></i>' : '';
+        td.push('<td>' + (r._stage ? esc(r._stage) + marca : '') + '</td>');
+        COLS.forEach(function (c) {
+            var v = r[c];
+            if (c === 'Status') { td.push('<td>' + badge(v) + '</td>'); return; }
+            if (c === 'Aging') {
+                var cls = (typeof v === 'number' && v >= 15) ? ' ob-late'
+                        : (typeof v === 'number' && v >= 5) ? ' ob-warn' : '';
+                td.push('<td class="ob-age' + cls + '">' + ageCell(v) + '</td>');
+                return;
+            }
+            var ell = (c === 'Razão Social' || c === 'Contacts' || c === 'Grupo Economico'
+                       || c === 'Nome Garantidor') ? ' class="ob-ell"' : '';
+            td.push('<td' + ell + ' title="' + esc(v) + '">' + esc(v) + '</td>');
+        });
+        td.push('<td>' + acoes() + '</td>');
+        return '<tr data-id="' + esc(r[IDCOL]) + '">' + td.join('') + '</tr>';
+    }
+
+    function desenha() {
+        if (table) { table.destroy(); }
+        $('#ob-table tbody').html(dados.map(linha).join(''));
+        table = $('#ob-table').DataTable({
+            paging: true, pageLength: parseInt($('#ob-len').val(), 10) || 25,
+            lengthChange: false, searching: true, info: true,
+            orderCellsTop: true,          // a linha de filtro é a 2ª do thead
+            scrollX: true, autoWidth: true,
+            order: [],
+            columnDefs: [{ targets: 0, orderable: false }, { targets: -1, orderable: false }],
+            language: { emptyTable: t('empty') }
+        });
+
+        // Filtro por coluna. `blank` traz o que está VAZIO — é o único jeito de
+        // procurar a ausência, e vai com smart search DESLIGADO, senão o
+        // DataTables reescreve a regex e ela deixa de casar a célula vazia.
+        $('#ob-head-filters input').off('keyup change').on('keyup change', function () {
+            var i = parseInt($(this).data('col'), 10);
+            var v = String(this.value || '');
+            if (v.trim().toLowerCase() === 'blank') {
+                table.column(i).search('^\\s*$', true, false).draw();
+            } else {
+                table.column(i).search(v).draw();
+            }
+        }).attr('title', 'blank = ' + (lang() === 'en' ? 'empty cells' : 'células vazias'));
+
+        // Alinhamento valor × coluna: com scrollX o cabeçalho vive numa tabela
+        // irmã, e sem os três passes as duas medem larguras diferentes.
+        table.columns.adjust();
+        setTimeout(function () { table.columns.adjust().draw(false); }, 150);
+        $(window).off('resize.obdocs').on('resize.obdocs', function () { table.columns.adjust(); });
+
+        // Seleção de célula para copiar — em TODA tabela do app. Pula o
+        // checkbox e a coluna de Actions.
+        if (window.otcCellCopy) {
+            otcCellCopy('#ob-table', { skip: [0, COLS.length + 2] });
+        }
+        montaBotoes();
+        montaColunas();
+    }
+
+    function montaBotoes() {
+        // A tabela não nasce com `buttons:` no init, então a collection é criada
+        // aqui e disparada pelos itens do dropdown — o export é o do DataTables
+        // Buttons, o mesmo do New Deals: sai o que está NA TELA, com filtros e
+        // ordenação aplicados e só as colunas visíveis.
+        var comuns = { exportOptions: { columns: ':visible:not(:first-child):not(:last-child)' } };
+        var b = new $.fn.dataTable.Buttons(table, {
+            buttons: [
+                $.extend({ extend: 'copyHtml5', name: 'copy' }, comuns),
+                // `;` e BOM: é o que o Excel pt-BR precisa para separar colunas
+                // e manter os acentos.
+                $.extend({ extend: 'csvHtml5', name: 'csv', fieldSeparator: ';', bom: true }, comuns),
+                $.extend({ extend: 'excelHtml5', name: 'excel' }, comuns),
+                $.extend({ extend: 'print', name: 'print' }, comuns),
+                $.extend({ extend: 'pdfHtml5', name: 'pdf', orientation: 'landscape', pageSize: 'A3' }, comuns)
+            ]
+        });
+        $('#ob-export-menu').off('click').on('click', 'a[data-exp]', function (e) {
+            e.preventDefault();
+            table.button($(this).data('exp') + ':name').trigger();
+        });
+        // O Advanced Export é opt-in e no-op onde o helper não estiver carregado.
+        // Sem arquivo-dia esta tela não declara `daily`: a lista é o estado de
+        // AGORA, não uma série — e a seção nasce desabilitada dizendo isso.
+        if (window.otcExportAdvanced) {
+            otcExportAdvanced('#ob-table', { menu: '#ob-export-menu' });
+        }
+    }
+
+    function montaColunas() {
+        var html = COLS.map(function (c, i) {
+            return '<label><input type="checkbox" checked data-c="' + (i + 2) + '"> ' + esc(c) + '</label>';
+        }).join('');
+        $('#ob-cols-menu').html(html).off('change').on('change', 'input', function () {
+            table.column(parseInt($(this).data('c'), 10)).visible(this.checked);
+            table.columns.adjust();
+        });
+    }
+
+    function carrega() {
+        fetch('/api/onboarding/docs', { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (j) {
+                if (!j || !j.success) { return; }
+                COLS = j.columns || [];
+                IDCOL = j.id_column || '_id';
+                DATECOLS = j.date_columns || [];
+                dados = j.rows || [];
+                $('#ob-src').html(
+                    j.db_ready
+                        ? '<i class="ti ti-database"></i> <span>' + esc(t('src')) + ':</span> <code>' + esc(j.db) + '</code>' +
+                          '<span>· ' + esc(dados.length) + ' ' + esc(t('rows')) + '</span>'
+                        : '<i class="ti ti-database-off text-danger"></i> <span class="text-danger">' +
+                          esc(t('nodb')) + '</span> <code>' + esc(j.db) + '</code>' +
+                          '<span>— ' + esc(t('nodbHint')) + '</span>');
+                montaCabecalho();
+                desenha();
+            });
+    }
+
+    // ── Edição na linha ────────────────────────────────────────────────────
+    // A edição é NA GRADE (não em modal): são trinta colunas, e um modal com
+    // trinta campos esconde justamente a linha que se está corrigindo.
+    var editando = null;
+
+    function entraEdicao($tr) {
+        if (editando) { sai(); }
+        var id = $tr.data('id');
+        var r = dados.filter(function (x) { return String(x[IDCOL]) === String(id); })[0];
+        if (!r) { return; }
+        editando = { id: id, $tr: $tr, orig: $tr.html() };
+        var tds = $tr.children('td');
+        COLS.forEach(function (c, i) {
+            var v = (c === 'Aging') ? '' : (r[c] == null ? '' : r[c]);
+            if (c === 'Aging') { return; }        // derivado: não se digita
+            $(tds[i + 2]).html('<input type="text" data-col="' + esc(c) + '" value="' + esc(v) + '">');
+        });
+        $(tds[tds.length - 1]).html(
+            '<div class="d-flex justify-content-center gap-1">' +
+              '<button class="btn btn-sm btn-success rounded-circle btn-act ob-save" ' +
+                'data-bs-toggle="tooltip" data-bs-custom-class="tooltip-success" title="' + esc(t('save')) + '">' +
+                '<i class="ti ti-device-floppy"></i></button>' +
+              '<button class="btn btn-sm btn-secondary rounded-circle btn-act ob-cancel" ' +
+                'data-bs-toggle="tooltip" data-bs-custom-class="tooltip-secondary" title="' + esc(t('cancel')) + '">' +
+                '<i class="ti ti-x"></i></button>' +
+            '</div>');
+        $tr.addClass('ob-editing');
+        // Datas em dd/mm/aaaa mesmo na edição: `<input type="date">` visível é
+        // proibido (o campo nativo desenha no locale do SISTEMA, e no Windows do
+        // JP isso é mm/dd/yyyy). O helper degrada para texto se faltar.
+        if (window.otcDateField) {
+            DATECOLS.forEach(function (c) {
+                $tr.find('input[data-col="' + c + '"]').each(function () { otcDateField(this); });
+            });
+        }
+    }
+
+    function sai() {
+        if (!editando) { return; }
+        editando.$tr.removeClass('ob-editing').html(editando.orig);
+        editando = null;
+    }
+
+    function salva() {
+        if (!editando) { return; }
+        var vals = {};
+        editando.$tr.find('input[data-col]').each(function () {
+            vals[$(this).data('col')] = this.value;
+        });
+        fetch('/api/onboarding/docs/save', {
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: editando.id, values: vals })
+        }).then(function (r) { return r.json(); }).then(function (j) {
+            if (!j || !j.success) { throw new Error((j && j.error) || 'erro'); }
+            editando = null;
+            carrega();
+            if (window.Swal) {
+                Swal.fire({ icon: 'success', title: t('saved'), html: esc(t('savedTxt')),
+                            timer: 1400, showConfirmButton: false });
+            }
+        }).catch(function (e) {
+            if (window.Swal) {
+                Swal.fire({ icon: 'error', title: t('failed'), html: esc(String(e && e.message || e)),
+                            confirmButtonColor: '#0066cc' });
+            }
+        });
+    }
+
+    // Delegado no nó da tabela: o DataTables reescreve os <td> a cada redraw,
+    // então um laço no load pegaria só a primeira página.
+    $(document).on('click', '#ob-table .ob-edit', function () { entraEdicao($(this).closest('tr')); });
+    $(document).on('click', '#ob-table .ob-cancel', sai);
+    $(document).on('click', '#ob-table .ob-save', salva);
+    $(document).on('click', '#ob-table .ob-del', function () {
+        var id = $(this).closest('tr').data('id');
+        var go = function () {
+            fetch('/api/onboarding/docs/delete', {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: id })
+            }).then(function () { carrega(); });
+        };
+        if (!window.Swal) { if (window.confirm(t('confirmDel'))) { go(); } return; }
+        Swal.fire({ icon: 'warning', title: t('confirmDel'), html: esc(t('confirmDelTxt')),
+                    showCancelButton: true, confirmButtonText: t('yes'), cancelButtonText: t('no'),
+                    confirmButtonColor: '#d93025' })
+            .then(function (r) { if (r.isConfirmed) { go(); } });
+    });
+
+    // Tooltip DELEGADO, no primeiro hover: os <td> são reescritos a cada redraw
+    // e um laço no load deixaria os botões das outras páginas mudos.
+    $(document).on('mouseenter', '#ob-table [data-bs-toggle="tooltip"]', function () {
+        if (window.bootstrap && !this._tt) { this._tt = new bootstrap.Tooltip(this); this._tt.show(); }
+    });
+
+    $('#ob-all').on('change', function () {
+        $('#ob-table tbody .ob-chk').prop('checked', this.checked);
+    });
+    $(document).on('change', '#ob-all', function () {
+        $('#ob-table tbody .ob-chk').prop('checked', this.checked);
+    });
+    $('#ob-len').on('change', function () {
+        var n = parseInt(this.value, 10);
+        if (table) { table.page.len(n).draw(); }
+    });
+    $('#ob-clear').on('click', function () {
+        $('#ob-head-filters input').val('');
+        if (table) { table.search('').columns().search('').draw(); }
+    });
+    $('#ob-add').on('click', function () {
+        fetch('/api/onboarding/docs/save', {
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ values: {} })
+        }).then(function () { carrega(); });
+    });
+
+    $(carrega);
+})(jQuery);
+</script>
+{% endblock extra_javascript %}

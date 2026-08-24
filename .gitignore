@@ -77,6 +77,8 @@ apps/static/data/cache/pending-confirmation/**/*.json
 # são dado de runtime de cada instância: versionar traria a recon da máquina de
 # dev para produção, e a justificativa de um trade da mesa para o repositório.
 apps/static/data/cache/reconciliation/fxo/**/*.json
+# Cache do batimento de CGD (um JSON por dia de posição).
+apps/static/data/cache/reconciliation/cgd/**/*.json
 apps/static/data/recon-fxo-comments.json
 
 # Tickets do Support Center — dado de runtime de cada instância (o arquivo é

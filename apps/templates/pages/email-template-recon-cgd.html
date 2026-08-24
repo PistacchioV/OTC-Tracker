@@ -1,0 +1,176 @@
+{# ==========================================================================
+   Relatório do batimento de CGD — as MESMAS seções do layout do Alteryx, na
+   mesma ordem: saudação, pendentes de inclusão na B3, pendentes de ação,
+   justificados, só na B3, despedida.
+
+   E-mail é tabela + estilo INLINE: o Outlook desktop descarta <style> em boa
+   parte dos casos, e o que sobra é uma pilha de <div> sem formatação. O
+   cabeçalho é COR SÓLIDA + gradiente CSS, nunca imagem nem VML — o <v:rect>
+   pintava o banner ora mais estreito que a célula, ora na largura da janela
+   (CLAUDE.md §2).
+   ========================================================================== #}
+<div style="margin:0;padding:24px 0;background:#f4f6f8;font-family:Arial,Helvetica,sans-serif;">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#f4f6f8;">
+<tr><td align="center">
+
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="860"
+       style="width:860px;max-width:860px;background:#ffffff;border-radius:14px;overflow:hidden;
+              box-shadow:0 2px 10px rgba(15,23,42,.10);">
+
+    <tr>
+        <td style="background-color:#0066cc;
+                   background-image:linear-gradient(100deg,#0066cc 0%,#5e5ce6 55%,#8b5cf6 100%);
+                   padding:18px 26px;">
+            <span style="color:#ffffff;font-size:18px;font-weight:bold;letter-spacing:-.2px;">
+                CGD Matching
+            </span>
+            <span style="color:#e5ecff;font-size:13px;"> &nbsp;·&nbsp; {{ ref_fmt }}</span>
+        </td>
+    </tr>
+
+    <tr><td style="padding:22px 26px 4px;color:#1f2937;font-size:14px;">
+        Hi Team,
+    </td></tr>
+
+    {# ── 1. Pendentes de inclusão na B3 ─────────────────────────────────── #}
+    <tr><td style="padding:14px 26px 0;color:#1f2937;font-size:14px;">
+        <strong>{{ pending_b3|length }}</strong> CGD(s) are pending inclusion in B3.
+    </td></tr>
+    {% if pending_b3 %}
+    <tr><td style="padding:8px 26px 0;">
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
+               style="border-collapse:collapse;font-size:12px;">
+            <tr style="background:#eef2f7;">
+                <th align="left"   style="padding:7px 9px;border:1px solid #d7dde5;">Client</th>
+                <th align="center" style="padding:7px 9px;border:1px solid #d7dde5;">CNPJ</th>
+                <th align="center" style="padding:7px 9px;border:1px solid #d7dde5;">Status</th>
+                <th align="center" style="padding:7px 9px;border:1px solid #d7dde5;">Creation Date</th>
+                <th align="center" style="padding:7px 9px;border:1px solid #d7dde5;">Aging</th>
+            </tr>
+            {% for r in pending_b3 %}
+            <tr>
+                <td style="padding:6px 9px;border:1px solid #e3e8ee;">{{ r.client }}</td>
+                <td align="center" style="padding:6px 9px;border:1px solid #e3e8ee;">{{ r.cnpj }}</td>
+                <td align="center" style="padding:6px 9px;border:1px solid #e3e8ee;">{{ r.status }}</td>
+                <td align="center" style="padding:6px 9px;border:1px solid #e3e8ee;">{{ r.creation_date }}</td>
+                {# A cor do aging é a regra do PortfolioComposer: >= 5 avisa, >= 15 alarma. #}
+                <td align="center" style="padding:6px 9px;border:1px solid #e3e8ee;
+                    {% if r.aging_class == 'late' %}background:#fdecea;color:#b3261e;font-weight:bold;
+                    {% elif r.aging_class == 'warn' %}background:#fff6e5;color:#8a5b00;font-weight:bold;{% endif %}">
+                    {{ r.aging }}
+                </td>
+            </tr>
+            {% endfor %}
+        </table>
+    </td></tr>
+    {% endif %}
+
+    {# ── 2. Pendentes de ação (estão nos dois lados, sem CGD fechado) ────── #}
+    <tr><td style="padding:20px 26px 0;color:#1f2937;font-size:14px;">
+        Among the matched ones, <strong>{{ pending_action|length }}</strong> CNPJ(s) are pending action.
+    </td></tr>
+    {% if pending_action %}
+    <tr><td style="padding:8px 26px 0;">
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
+               style="border-collapse:collapse;font-size:12px;">
+            <tr style="background:#eef2f7;">
+                <th align="left"   style="padding:7px 9px;border:1px solid #d7dde5;">Client</th>
+                <th align="center" style="padding:7px 9px;border:1px solid #d7dde5;">CNPJ</th>
+                <th align="center" style="padding:7px 9px;border:1px solid #d7dde5;">Status</th>
+                <th align="center" style="padding:7px 9px;border:1px solid #d7dde5;">Creation Date</th>
+                <th align="center" style="padding:7px 9px;border:1px solid #d7dde5;">Aging</th>
+            </tr>
+            {% for r in pending_action %}
+            <tr>
+                <td style="padding:6px 9px;border:1px solid #e3e8ee;">{{ r.client }}</td>
+                <td align="center" style="padding:6px 9px;border:1px solid #e3e8ee;">{{ r.cnpj }}</td>
+                <td align="center" style="padding:6px 9px;border:1px solid #e3e8ee;">{{ r.status }}</td>
+                <td align="center" style="padding:6px 9px;border:1px solid #e3e8ee;">{{ r.creation_date }}</td>
+                <td align="center" style="padding:6px 9px;border:1px solid #e3e8ee;
+                    {% if r.aging_class == 'late' %}background:#fdecea;color:#b3261e;font-weight:bold;
+                    {% elif r.aging_class == 'warn' %}background:#fff6e5;color:#8a5b00;font-weight:bold;{% endif %}">
+                    {{ r.aging }}
+                </td>
+            </tr>
+            {% endfor %}
+        </table>
+    </td></tr>
+    {% endif %}
+
+    {# ── 3. Justificados: garantidor ou conta encerrada ──────────────────── #}
+    <tr><td style="padding:20px 26px 0;color:#1f2937;font-size:14px;">
+        <strong>{{ justified|length }}</strong> client(s) are either acting as guarantors for another
+        client or have closed accounts.
+    </td></tr>
+    {% if justified %}
+    <tr><td style="padding:8px 26px 0;">
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
+               style="border-collapse:collapse;font-size:12px;">
+            <tr style="background:#eef2f7;">
+                <th align="left"   style="padding:7px 9px;border:1px solid #d7dde5;">Client</th>
+                <th align="center" style="padding:7px 9px;border:1px solid #d7dde5;">CNPJ</th>
+                <th align="center" style="padding:7px 9px;border:1px solid #d7dde5;">Status</th>
+                <th align="center" style="padding:7px 9px;border:1px solid #d7dde5;">Substantiation</th>
+            </tr>
+            {% for r in justified %}
+            <tr>
+                <td style="padding:6px 9px;border:1px solid #e3e8ee;">{{ r.client }}</td>
+                <td align="center" style="padding:6px 9px;border:1px solid #e3e8ee;">{{ r.cnpj }}</td>
+                <td align="center" style="padding:6px 9px;border:1px solid #e3e8ee;">{{ r.status }}</td>
+                <td align="center" style="padding:6px 9px;border:1px solid #e3e8ee;">{{ r.obs }}</td>
+            </tr>
+            {% endfor %}
+        </table>
+    </td></tr>
+    {% endif %}
+
+    {# ── 4. Contagens do resto ───────────────────────────────────────────── #}
+    <tr><td style="padding:20px 26px 0;color:#1f2937;font-size:14px;">
+        There are <strong>{{ counts.get('matched', 0) }}</strong> CGD(s) matched and
+        <strong>{{ only_b3|length }}</strong> only in B3.
+    </td></tr>
+    {% if only_b3 %}
+    <tr><td style="padding:8px 26px 0;">
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
+               style="border-collapse:collapse;font-size:12px;">
+            <tr style="background:#eef2f7;">
+                <th align="left"   style="padding:7px 9px;border:1px solid #d7dde5;">Client</th>
+                <th align="center" style="padding:7px 9px;border:1px solid #d7dde5;">CNPJ</th>
+            </tr>
+            {% for r in only_b3 %}
+            <tr>
+                <td style="padding:6px 9px;border:1px solid #e3e8ee;">{{ r.client }}</td>
+                <td align="center" style="padding:6px 9px;border:1px solid #e3e8ee;">{{ r.cnpj }}</td>
+            </tr>
+            {% endfor %}
+        </table>
+    </td></tr>
+    {% endif %}
+
+    {# O que não deu para ler vai no e-mail, e não só no log: uma recon que
+       rodou sem um dos lados parece uma recon limpa. #}
+    {% if warnings %}
+    <tr><td style="padding:18px 26px 0;">
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
+               style="border-collapse:collapse;background:#fff6e5;border:1px solid #f2d9a8;border-radius:6px;">
+            <tr><td style="padding:10px 12px;color:#8a5b00;font-size:12px;">
+                <strong>Warnings</strong><br>
+                {% for w in warnings %}• {{ w }}<br>{% endfor %}
+            </td></tr>
+        </table>
+    </td></tr>
+    {% endif %}
+
+    <tr><td style="padding:22px 26px 6px;color:#1f2937;font-size:14px;">
+        Best regards,<br>OTC Back Office Team.
+    </td></tr>
+
+    <tr><td style="padding:14px 26px 20px;color:#8a94a6;font-size:11px;border-top:1px solid #eef0f4;">
+        OTC Tracker · {{ current_year }} · gerado automaticamente
+    </td></tr>
+
+</table>
+
+</td></tr>
+</table>
+</div>

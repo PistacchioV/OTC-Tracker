@@ -614,6 +614,12 @@
                             <span class="menu-text" data-lang="nav-recon-fxo">FXO</span>
                         </a>
                     </li>
+                    <li class="side-nav-item">
+                        <a href="/reconciliation-cgd" class="side-nav-link">
+                            <span class="menu-icon"><i data-lucide="file-check-2"></i></span>
+                            <span class="menu-text" data-lang="nav-recon-cgd">CGD</span>
+                        </a>
+                    </li>
                     <!-- Nova seção para OTC Docs e submenus -->
                      <!-- Nova seção para Documentation -->
                     <li class="side-nav-title" data-lang="Documentation">Documentation</li>
@@ -667,10 +673,26 @@
                     </li>
         
                     <li class="side-nav-item">
-                        <a href="/cgd" class="side-nav-link">
+                        <a data-bs-toggle="collapse" href="#onboardingMenu" aria-expanded="false"
+                           aria-controls="onboardingMenu" class="side-nav-link">
                             <span class="menu-icon"><i data-lucide="building-2"></i></span>
-                            <span class="menu-text" data-lang="nav-cgd">CGD</span>
+                            <span class="menu-text" data-lang="nav-onboarding">Onboarding</span>
+                            <span class="menu-arrow"></span>
                         </a>
+                        <div class="collapse" id="onboardingMenu">
+                            <ul class="sub-menu">
+                                <li class="side-nav-item">
+                                    <a href="/onboarding" class="side-nav-link">
+                                        <span class="menu-text" data-lang="nav-onb-overview">Overview</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/onboarding/tracking-docs" class="side-nav-link">
+                                        <span class="menu-text" data-lang="nav-onb-tracking">Tracking Docs</span>
+                                    </a>
+                                </li>
+                            </ul>
+                        </div>
                     </li>
         
                     <!-- Nova seção para Products -->
