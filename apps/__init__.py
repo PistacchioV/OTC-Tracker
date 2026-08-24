@@ -49,6 +49,33 @@ def configure_database(app):
         db.session.remove()
 
 
+# O que o código exige do `config.py` para subir. A lista é curta de propósito:
+# são as chaves que módulos de fora leem direto do `Config` (e não do
+# `app.config`), então uma que falte só se manifesta no import daquele módulo.
+# Nome novo aqui é nome novo no config — acrescente ao acrescentar.
+_REQUIRED_CONFIG_NAMES = (
+    'DATABASE_DIR',            # a pasta de TODOS os bancos (manual_conf, routes, recon_comitente)
+    'DATABASE_PATH',           # o DuckDB de usuários
+    'DATABASE_ACCESS_PATHS',   # a lista que o validate_database_paths confere
+    'SHARED_DRIVE_ROOT',       # a raiz do share
+)
+
+
+def _require_config_names(cfg):
+    """Recusa subir com um `config.py` anterior ao código, dizendo o que falta."""
+    faltando = [nome for nome in _REQUIRED_CONFIG_NAMES if nome not in cfg]
+    if not faltando:
+        return
+    raise RuntimeError(
+        'apps/config.py esta desatualizado: faltam ' + ', '.join(faltando) + '. '
+        'O arquivo costuma ficar modificado localmente na instancia, e nesse caso '
+        'o `git pull` nao o sobrescreve. Confira com `git status apps/config.py` e '
+        'traga a versao do repositorio (`git checkout -- apps/config.py`, ou guarde '
+        'o seu ajuste com `git stash` antes). Reinicie o Flask depois: o reloader '
+        'esta desligado na instancia do time.'
+    )
+
+
 def create_app(config):
     app = Flask(__name__)
     app.config.from_object(config)
@@ -75,7 +102,14 @@ def create_app(config):
         app.config['TEMPLATES_AUTO_RELOAD'] = True
         app.jinja_env.auto_reload = True
         app.jinja_env.cache = {}
-    
+
+    # O `config.py` é o arquivo que mais fica para trás numa instância — é o que
+    # se ajusta à mão, então um `git pull` não o sobrescreve e ele continua o de
+    # antes enquanto o resto do código já é o novo. Sem esta conferência a falha
+    # aparece como um `AttributeError` no meio de um import de módulo, a vinte
+    # frames de distância, sem dizer que arquivo está velho nem o que fazer.
+    _require_config_names(app.config)
+
     # Camada de lock/transação dos bancos de ARQUIVO (os DuckDB/SQLite avulsos:
     # usuários, Pending Confirmation, esteira manual, comitentes). Ela é
     # configurada AQUI, e antes dos blueprints, por duas razões:
