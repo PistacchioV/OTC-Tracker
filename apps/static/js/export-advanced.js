@@ -85,6 +85,8 @@
             doneTitle: 'Export finished', doneTitleWarn: 'Export finished with gaps',
             doneRows: '{n} row(s) exported', ok: 'OK',
             exporting: 'Exporting…', failTitle: 'Nothing exported',
+            stepTable: 'Assembling the table ({n} rows)…', stepFilter: 'Applying the filters…',
+            stepFile: 'Building the file ({n} rows)…',
             daysFailed: 'Could not read {n} day(s)',
             daysNoFile: '{n} day(s) with no file',
             daysDone: '{n} rows from {d} day(s)',
@@ -126,6 +128,8 @@
             doneTitle: 'Exportação concluída', doneTitleWarn: 'Exportação concluída com falhas',
             doneRows: '{n} linha(s) exportada(s)', ok: 'OK',
             exporting: 'Exportando…', failTitle: 'Nada exportado',
+            stepTable: 'Montando a tabela ({n} linhas)…', stepFilter: 'Aplicando os filtros…',
+            stepFile: 'Gerando o arquivo ({n} linhas)…',
             daysFailed: 'Não consegui ler {n} dia(s)',
             daysNoFile: '{n} dia(s) sem arquivo',
             daysDone: '{n} linhas de {d} dia(s)',
@@ -167,6 +171,8 @@
             doneTitle: 'Exportación finalizada', doneTitleWarn: 'Exportación finalizada con fallas',
             doneRows: '{n} fila(s) exportada(s)', ok: 'OK',
             exporting: 'Exportando…', failTitle: 'Nada exportado',
+            stepTable: 'Armando la tabla ({n} filas)…', stepFilter: 'Aplicando los filtros…',
+            stepFile: 'Generando el archivo ({n} filas)…',
             daysFailed: 'No pude leer {n} día(s)',
             daysNoFile: '{n} día(s) sin archivo',
             daysDone: '{n} filas de {d} día(s)',
@@ -645,36 +651,60 @@
            `requestAnimationFrame` em cima dele garante o quadro do próprio
            spinner. Sem SweetAlert na página sobra a linha do rodapé do modal,
            que é como era. */
-        function busy(n, fn) {
-            var go = function () {
-                // Uma rede só para as três etapas: fora da cadeia de promessas,
-                // um erro aqui não tem mais quem o pegue, e o spinner giraria
-                // para sempre — a mesma tela de travamento por outro motivo.
-                try { fn(); }
-                catch (err) {
-                    fail(t('daysFailed', { n: 0 }) +
-                         ((err && err.message) ? ' — ' + err.message : ''));
+        function busy(n) {
+            return new Promise(function (resolve) {
+                if (!window.Swal) {
+                    $el.find('#xaCount').text(t('daysBuilding', { n: n })).removeClass('xa-zero');
+                    setTimeout(resolve, 0);
+                    return;
                 }
-            };
-            if (!window.Swal) {
-                $el.find('#xaCount').text(t('daysBuilding', { n: n })).removeClass('xa-zero');
-                setTimeout(go, 0);
-                return;
-            }
-            hideThen(el, function () {
-                Swal.fire({
-                    title: t('exporting'),
-                    html: esc(t('daysBuilding', { n: n })),
-                    allowOutsideClick: false, allowEscapeKey: false,
-                    showConfirmButton: false,
-                    didOpen: function () {
-                        Swal.showLoading();
-                        if (window.requestAnimationFrame) {
-                            requestAnimationFrame(function () { requestAnimationFrame(go); });
-                        } else { setTimeout(go, 30); }
-                    }
+                hideThen(el, function () {
+                    Swal.fire({
+                        title: t('exporting'),
+                        html: esc(t('daysBuilding', { n: n })),
+                        allowOutsideClick: false, allowEscapeKey: false,
+                        showConfirmButton: false,
+                        didOpen: function () { Swal.showLoading(); frame(resolve); }
+                    });
                 });
             });
+        }
+
+        /* Um QUADRO de folga. O `didOpen` roda com o popup no DOM, não com ele
+           pintado: emendar o trabalho ali congela a aba com o spinner ainda a
+           meio caminho de aparecer — que é o "apareceu e sumiu". O par de
+           `requestAnimationFrame` só devolve depois de o navegador ter pintado
+           uma vez. */
+        function frame(fn) {
+            if (window.requestAnimationFrame) {
+                requestAnimationFrame(function () { requestAnimationFrame(fn); });
+            } else { setTimeout(fn, 30); }
+        }
+
+        /* Uma etapa pesada: escreve o que vai fazer, deixa a tela pintar e só
+           então faz. As três — montar a tabela do intervalo, filtrar e gerar o
+           arquivo — são síncronas, e emendadas num bloco só congelam a aba do
+           começo ao fim; separadas, o navegador repinta entre elas, o spinner
+           volta a girar e o texto avança. De quebra, o texto que estiver na
+           tela diz QUAL das três está demorando. */
+        function step(msg, fn) {
+            say(msg);
+            return new Promise(function (resolve, reject) {
+                frame(function () {
+                    try { resolve(fn()); } catch (e) { reject(e); }
+                });
+            });
+        }
+
+        /* O texto da etapa vai DIRETO no nó do popup, e não por `Swal.update()`:
+           o update re-renderiza a caixa e, sem botão nenhum, esconde as ações —
+           que é onde o loader mora. O spinner sumiria a cada troca de texto. */
+        function say(msg) {
+            if (window.Swal && Swal.isVisible() && Swal.getHtmlContainer()) {
+                Swal.getHtmlContainer().textContent = msg;
+            } else {
+                $el.find('#xaCount').text(msg).removeClass('xa-zero');
+            }
         }
 
         /* O desfecho ruim depois de o spinner estar de pé: o SweetAlert aberto
@@ -784,31 +814,47 @@
                     return;
                 }
                 // O "Reading" acabou e começa a parte que congela a aba: o
-                // spinner entra AQUI, no lugar dele.
-                busy(res.rows.length, function () {
-                    var tbl = buildDailyTable(res);
-                    // A tabela dos arquivos não tem checkbox nem Actions e ganha a
-                    // Reference Date na frente: o casamento com o que a pessoa
-                    // escolheu na tela é pelo RÓTULO, e a Reference Date entra
-                    // sempre — sem ela, um arquivo de vinte dias não diz de que dia
-                    // é cada linha.
-                    var keep = pick(o, tbl, function (c) {
-                        var i = res.columns.indexOf(c.label);
-                        return i === -1 ? null : i;
+                // spinner entra AQUI, no lugar dele, e as três etapas seguintes
+                // vão uma por quadro.
+                var tbl = null;
+                busy(res.rows.length).then(function () {
+                    return step(t('stepTable', { n: res.rows.length }), function () {
+                        tbl = buildDailyTable(res);
                     });
+                }).then(function () {
+                    return step(t('stepFilter'), function () {
+                        // A tabela dos arquivos não tem checkbox nem Actions e ganha
+                        // a Reference Date na frente: o casamento com o que a pessoa
+                        // escolheu na tela é pelo RÓTULO, e a Reference Date entra
+                        // sempre — sem ela, um arquivo de vinte dias não diz de que
+                        // dia é cada linha.
+                        return pick(o, tbl, function (c) {
+                            var i = res.columns.indexOf(c.label);
+                            return i === -1 ? null : i;
+                        });
+                    });
+                }).then(function (keep) {
                     if (!keep.length) { fail(t('noRows')); return; }
                     var cols = [0].concat(o.colLabels.map(function (l) {
                         return res.columns.indexOf(l);
                     }).filter(function (i) { return i > 0; }));
-                    run(tbl, jQuery.extend({}, o, { cols: cols }), keep);
-                    var dias_ok = res.rows.length ? (new Set(res.rows.map(function (r) { return r[0]; }))).size : 0;
-                    var resumo = t('daysDone', { n: keep.length, d: dias_ok });
-                    if (res.empty.length) resumo += ' · ' + t('daysNoFile', { n: res.empty.length });
-                    if (res.failed.length) {
-                        resumo += ' · ' + t('daysFailed', { n: res.failed.length }) +
-                                  (res.why ? ' (' + res.why + ')' : '');
-                    }
-                    finish(!!res.failed.length, o, resumo);
+                    return step(t('stepFile', { n: keep.length }), function () {
+                        run(tbl, jQuery.extend({}, o, { cols: cols }), keep);
+                        var dias_ok = res.rows.length ? (new Set(res.rows.map(function (r) { return r[0]; }))).size : 0;
+                        var resumo = t('daysDone', { n: keep.length, d: dias_ok });
+                        if (res.empty.length) resumo += ' · ' + t('daysNoFile', { n: res.empty.length });
+                        if (res.failed.length) {
+                            resumo += ' · ' + t('daysFailed', { n: res.failed.length }) +
+                                      (res.why ? ' (' + res.why + ')' : '');
+                        }
+                        finish(!!res.failed.length, o, resumo);
+                    });
+                }).catch(function (err) {
+                    // A rede das três etapas. Fora da cadeia da leitura, um erro
+                    // aqui não teria mais quem o pegue e o spinner giraria para
+                    // sempre — a tela de travamento por outro motivo.
+                    fail(t('daysFailed', { n: 0 }) +
+                         ((err && err.message) ? ' — ' + err.message : ''));
                 });
             }).catch(function (e) {
                 $el.find('#xaRun').prop('disabled', false);
@@ -857,9 +903,14 @@
                if (!lastKeep.length) return;
                // O mesmo spinner do intervalo: a tela do dia também pode ter
                // dezenas de milhares de linhas, e a montagem é a mesma.
-               busy(lastKeep.length, function () {
-                   run(dt, o, lastKeep);
-                   finish(false, o, t('doneRows', { n: lastKeep.length }));
+               busy(lastKeep.length).then(function () {
+                   return step(t('stepFile', { n: lastKeep.length }), function () {
+                       run(dt, o, lastKeep);
+                       finish(false, o, t('doneRows', { n: lastKeep.length }));
+                   });
+               }).catch(function (err) {
+                   fail(t('daysFailed', { n: 0 }) +
+                        ((err && err.message) ? ' — ' + err.message : ''));
                });
            });
 
