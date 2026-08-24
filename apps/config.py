@@ -55,10 +55,11 @@ class Config(object):
     # Os dois continuam podendo ser trocados por variável de ambiente
     # (`OTC_DATABASE_DIR`, `OTC_SHARED_DRIVE_ROOT`) sem tocar no arquivo.
     #
-    # ── ENV:DEV ──────────────────────────────────────────────────────────────
-    _DATABASE_DIR_DEFAULT = os.path.join(basedir, 'static', 'data', 'db')
-    _SHARED_DRIVE_DEFAULT = 'I:\\'
-    _SQLITE_DIR_DEFAULT = basedir
+    # ── ENV:PROD (instância do JPM) ──────────────────────────────────────────
+    _JPM_APP_ROOT = r'\\Nawest.ad.jpmorganchase.com\lac\BRA\intra\Confirmation\Derivativos\OTC Tracker\Application'
+    _DATABASE_DIR_DEFAULT = os.path.join(_JPM_APP_ROOT, 'static', 'data', 'db')
+    _SHARED_DRIVE_DEFAULT = r'\\Nawest.ad.jpmorganchase.com\lac\BRA\intra'
+    _SQLITE_DIR_DEFAULT = _JPM_APP_ROOT
     # ── /ENV ─────────────────────────────────────────────────────────────────
 
     # A PASTA dos bancos, e é dela que sai todo caminho de banco do app — o
