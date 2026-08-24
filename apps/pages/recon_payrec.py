@@ -37,17 +37,16 @@ import unicodedata
 from datetime import datetime
 
 # A raiz do share sai do Config (ver `_INPUT_BASE` abaixo).
+from apps.pages.data_paths import data_dir, data_path, data_write, mapping_file, mapping_write
 from apps.config import Config
 
 _LOG = logging.getLogger(__name__)
 _MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
 # Working cache (latest run per date + _last).
-_CACHE_DIR = os.path.normpath(os.path.join(
-    _MODULE_DIR, '..', 'static', 'data', 'cache', 'reconciliation', 'payrec'))
+_CACHE_DIR = data_write('cache', 'reconciliation', 'payrec')
 # Finalized-day history (written on End process):
 #   static/data/cache/payrec/yyyy/mm/dd/payrec_status_yyyymmdd.json
-_HISTORY_BASE = os.path.normpath(os.path.join(
-    _MODULE_DIR, '..', 'static', 'data', 'cache', 'payrec'))
+_HISTORY_BASE = data_write('cache', 'payrec')
 
 # Network folder holding the input files. A raiz vem do `Config`, como todo
 # destino de rede do app: escrita aqui, ela ficaria em `I:\` na instância que
@@ -124,13 +123,13 @@ _SDCONTA_HIST_SWAP = {'4406', '9385', '4413'}
 # Lido do disco a cada run, como os cadastros da Recon FXO: importar `routes`
 # daqui seria circular, e reler é o que faz a edição na tela valer no run
 # seguinte, sem restart.
-_MAPPINGS_DIR = os.path.normpath(os.path.join(_MODULE_DIR, '..', 'static', 'data', 'mappings'))
+_MAPPINGS_DIR = data_write('mappings')
 
 
 def _gdt_map():
     """{código do histórico → produto}, só as linhas COM produto."""
     try:
-        with open(os.path.join(_MAPPINGS_DIR, 'gdt-codes.json'), encoding='utf-8') as fh:
+        with open(mapping_file('gdt-codes', _MAPPINGS_DIR), encoding='utf-8') as fh:
             rows = json.load(fh)
     except Exception:
         return {}
@@ -317,8 +316,8 @@ def _norm_cpty(name):
 #   No Net    → every individual trade/cashflow settles on its own (no netting)
 # Resolved by joining the recon counterparty NAME → SPN (RefData.json) → NET.value
 # (CounterpartyDetails.json). Unconfigured / not-yet-approved → Total Net.
-_REFDATA_PATH = os.path.normpath(os.path.join(_MODULE_DIR, '..', 'static', 'data', 'RefData.json'))
-_CPD_PATH = os.path.normpath(os.path.join(_MODULE_DIR, '..', 'static', 'data', 'CounterpartyDetails.json'))
+_REFDATA_PATH = data_path('RefData.json')
+_CPD_PATH = data_path('CounterpartyDetails.json')
 _VALID_NET_TYPES = ('Total Net', 'Pay/Rec', 'No Net')
 
 
@@ -395,7 +394,7 @@ def _mapping_rows(key):
     daqui seria circular, e reler a cada chamada é o que faz a edição na tela
     valer no run seguinte, sem restart."""
     try:
-        with open(os.path.join(_MAPPINGS_DIR, '%s.json' % key), encoding='utf-8') as fh:
+        with open(mapping_file(key, _MAPPINGS_DIR), encoding='utf-8') as fh:
             rows = json.load(fh)
     except Exception:
         return []

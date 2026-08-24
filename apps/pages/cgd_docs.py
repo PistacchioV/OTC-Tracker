@@ -34,6 +34,7 @@ try:
 except Exception:                                          # pragma: no cover
     duckdb = None
 
+from apps.pages.data_paths import data_dir, data_path, data_write, mapping_file, mapping_write
 from apps.pages.database_access import duckdb_read, duckdb_write
 # Só o Config: importar o `routes` daqui seria circular (é ele quem importa este
 # módulo). O que se repete é a LEITURA da configuração, não o dado.
@@ -45,8 +46,7 @@ _MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
 # Os cadastros do /mapping. Constante de módulo (e não caminho montado dentro
 # da função) para o teste poder apontá-la para um diretório temporário sem
 # escrever no repositório.
-_MAPPINGS_DIR = os.path.normpath(os.path.join(
-    _MODULE_DIR, '..', 'static', 'data', 'mappings'))
+_MAPPINGS_DIR = data_write('mappings')
 
 DB_NAME = 'cgd_sharepoint.db'
 DB_PATH = os.path.normpath(os.path.join(Config.DATABASE_DIR, DB_NAME))
@@ -438,7 +438,7 @@ def _stage_map():
     Arquivo ausente devolve mapa vazio, e aí vale a derivação: a instância em que
     ninguém abriu o /mapping continua com a tela respondendo.
     """
-    path = os.path.join(_MAPPINGS_DIR, 'cgd-stage.json')
+    path = mapping_file('cgd-stage', _MAPPINGS_DIR)
     try:
         mt = os.path.getmtime(path)
     except OSError:

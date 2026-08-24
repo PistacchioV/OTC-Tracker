@@ -58,6 +58,7 @@ _REQUIRED_CONFIG_NAMES = (
     'DATABASE_PATH',           # o DuckDB de usuários
     'DATABASE_ACCESS_PATHS',   # a lista que o validate_database_paths confere
     'SHARED_DRIVE_ROOT',       # a raiz do share
+    'DATA_DIR',                # a pasta dos JSON (cache, cadastros, tickets)
 )
 
 
@@ -74,6 +75,52 @@ def _require_config_names(cfg):
         'o seu ajuste com `git stash` antes). Reinicie o Flask depois: o reloader '
         'esta desligado na instancia do time.'
     )
+
+
+def _seed_data_dir(app):
+    """Copia para o `DATA_DIR` o que vem versionado no repositório e ainda não
+    está lá.
+
+    Na dev as duas pastas são a MESMA e isto não faz nada. Na instância do JPM o
+    `DATA_DIR` aponta para o share, que numa subida nova está vazio: sem este
+    passo os cadastros do /mapping voltariam à seed, o `anbima.json` sumiria e o
+    File Interpreter abriria sem template nenhum — tudo sem erro, porque cada um
+    desses arquivos tem um caminho "arquivo ausente" que devolve vazio.
+
+    NUNCA sobrescreve: o arquivo que já está no share é o que a mesa editou pela
+    tela, e ele vence a cópia do repositório. É por isso que a operação é
+    idempotente e pode rodar em toda subida.
+    """
+    import shutil
+    from apps.pages.data_paths import PACKAGED_DIR
+
+    destino = app.config.get('DATA_DIR')
+    if not destino or os.path.normpath(destino) == PACKAGED_DIR:
+        return
+    copiados = 0
+    for raiz, _dirs, arquivos in os.walk(PACKAGED_DIR):
+        rel = os.path.relpath(raiz, PACKAGED_DIR)
+        # O `db/` é do `DATABASE_DIR`, que tem a sua própria configuração — e
+        # copiar banco por cima de banco é o tipo de ajuda que corrompe dado.
+        if rel.split(os.sep)[0] == 'db':
+            continue
+        alvo_dir = os.path.join(destino, rel) if rel != '.' else destino
+        for nome in arquivos:
+            # `.bak` e `.lock` são sujeira local de quem desenvolve, não dado.
+            if nome.endswith(('.bak', '.lock')):
+                continue
+            alvo = os.path.join(alvo_dir, nome)
+            if os.path.exists(alvo):
+                continue
+            try:
+                os.makedirs(alvo_dir, exist_ok=True)
+                shutil.copy2(os.path.join(raiz, nome), alvo)
+                copiados += 1
+            except OSError:
+                app.logger.warning('[data-dir] não consegui copiar %s', alvo)
+    if copiados:
+        app.logger.info('[data-dir] %d arquivo(s) versionado(s) copiado(s) para %s',
+                        copiados, destino)
 
 
 def create_app(config):
@@ -127,6 +174,11 @@ def create_app(config):
     )
     configure_database_access(app.config)
     validate_database_paths(tuple(app.config.get('DATABASE_ACCESS_PATHS') or ()))
+
+    # Antes dos blueprints: o `routes` resolve os caminhos de dados no IMPORT, e
+    # vários módulos leem cadastro logo na subida. Semear depois seria semear
+    # tarde.
+    _seed_data_dir(app)
 
     register_extensions(app)
     register_blueprints(app)

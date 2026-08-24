@@ -57,6 +57,7 @@ except Exception:                                    # pragma: no cover
 # escrever (vale entre processos, não só entre threads) e COMPARTILHADO para
 # ler. O `duckdb is None` acima continua sendo o teste de "a lib não está aqui";
 # estes só são usados depois dele.
+from apps.pages.data_paths import data_dir, data_path, data_write, mapping_file, mapping_write
 from apps.pages.database_access import duckdb_read, duckdb_write
 # Só o Config: importar o `routes` daqui seria circular (é ele quem importa este
 # módulo). O que se repete é a LEITURA da configuração, não o dado.
@@ -71,7 +72,7 @@ _MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
 _DB_DIR = Config.DATABASE_DIR
 # Os mappings continuam DENTRO da aplicação: são cadastro versionado, vêm no
 # pull e não são banco.
-_MAPPINGS_DIR = os.path.normpath(os.path.join(_MODULE_DIR, '..', 'static', 'data', 'mappings'))
+_MAPPINGS_DIR = data_write('mappings')
 
 DBS = {
     'pending': 'manual_confirmations_pending.db',
@@ -529,7 +530,7 @@ def stamp_now(sid):
 # =============================================================================
 
 def _mapping_path(key):
-    return os.path.join(_MAPPINGS_DIR, '%s.json' % key)
+    return mapping_file(key, _MAPPINGS_DIR)
 
 
 def _mapping_rows(key):
@@ -779,7 +780,7 @@ def _anbima_holidays():
     if _ANBIMA['feriados'] is None:
         import json
         try:
-            path = os.path.normpath(os.path.join(_MODULE_DIR, '..', 'static', 'data', 'anbima.json'))
+            path = data_path('anbima.json')
             with open(path, encoding='utf-8') as fh:
                 _ANBIMA['feriados'] = {d['date'] for d in (json.load(fh) or []) if d.get('date')}
         except Exception:

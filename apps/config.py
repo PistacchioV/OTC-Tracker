@@ -56,6 +56,7 @@ class Config(object):
     # (`OTC_DATABASE_DIR`, `OTC_SHARED_DRIVE_ROOT`) sem tocar no arquivo.
     #
     # ── ENV:DEV ──────────────────────────────────────────────────────────────
+    _DATA_DIR_DEFAULT = os.path.join(basedir, 'static', 'data')
     _DATABASE_DIR_DEFAULT = os.path.join(basedir, 'static', 'data', 'db')
     _SHARED_DRIVE_DEFAULT = 'I:\\'
     _SQLITE_DIR_DEFAULT = basedir
@@ -79,6 +80,24 @@ class Config(object):
     # route settings can still override their specific directory.
     SHARED_DRIVE_ROOT = _absolute_path_from_environment('OTC_SHARED_DRIVE_ROOT',
                                                         _SHARED_DRIVE_DEFAULT)
+
+    # A pasta dos DADOS em JSON — os arquivos-dia do cache, os cadastros do
+    # /mapping, os tickets, o RefData, o calendário. É o terceiro caminho que
+    # muda de lugar entre a dev e a instância do JPM, ao lado do `DATABASE_DIR`
+    # e do `SHARED_DRIVE_ROOT`.
+    #
+    # Ela existe porque o cache é GITIGNORADO: um checkout novo não traz nenhum
+    # arquivo-dia, e os módulos montavam esse caminho a partir do próprio
+    # `__file__` — então a instância do JPM lia a pasta do CÓDIGO, que numa
+    # máquina recém-atualizada está vazia. O sintoma é o pior possível: a tela
+    # abre, as APIs respondem 200 e os gráficos vêm sem nada, como se não
+    # houvesse operação no dia.
+    #
+    # A LEITURA cai para a cópia empacotada quando o arquivo não existe aqui
+    # (ver `apps/pages/data_paths.py`): é o que mantém funcionando o que vem
+    # versionado no repositório — `anbima.json`, `Subjacente.json`, as seeds dos
+    # cadastros — sem exigir que alguém as copie para o share antes de subir.
+    DATA_DIR = _absolute_path_from_environment('OTC_DATA_DIR', _DATA_DIR_DEFAULT)
 
     USE_SQLITE  = True
 
