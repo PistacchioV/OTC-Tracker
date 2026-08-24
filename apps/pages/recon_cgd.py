@@ -93,18 +93,28 @@ FEP_XLSX = os.getenv('CGD_FEP_XLSX', 'LISTA_CONTRATOS_CGD.xlsx')
 # copiar à mão todo dia (e, no dia em que esquecesse, a recon rodaria com a
 # lista da semana passada sem dizer nada).
 #
-# Lê-se o e-mail MAIS RECENTE da pasta: o relatório é reemitido e a pasta
-# acumula. E o assunto e a data do e-mail escolhido voltam no resultado, porque
-# "de que dia é esta lista" é a primeira pergunta de quem olha uma quebra.
+# A pasta é `Inbox > Automatico`, e ela recebe MAIS COISA do que este relatório:
+# quem identifica o e-mail certo é o ASSUNTO. Procurar pelo anexo mais recente da
+# pasta pegaria o `.xlsx` de qualquer outra rotina automática que caia ali.
+#
+# Lê-se o e-mail MAIS RECENTE entre os que casam: o relatório é reemitido e a
+# pasta acumula. E o assunto e a data do e-mail escolhido voltam no resultado,
+# porque "de que dia é esta lista" é a primeira pergunta de quem olha uma quebra.
+#
+# O assunto casa por PEDAÇO e normalizado (caixa, acento e espaço fora), que é o
+# que sobrevive a um `RES:` na frente, a uma data no fim e à grafia de quem
+# reencaminhou.
 #
 # Nada é apagado nem movido no box: a rotina só LÊ.
 FEP_MAILBOX = os.getenv('OTC_BOX_MAILBOX', 'brazil.otc.ops@jpmorgan.com')
 FEP_MAIL_FOLDER = tuple(
-    x for x in os.getenv(
-        'CGD_FEP_MAIL_FOLDER',
-        'Automatico|FEPWEB-CGD-ContratoGlobalDerivativos - SEM FILTRO DATAS'
-    ).split('|') if x.strip())
+    x for x in os.getenv('CGD_FEP_MAIL_FOLDER', 'Automatico').split('|') if x.strip())
+FEP_MAIL_SUBJECT = os.getenv(
+    'CGD_FEP_MAIL_SUBJECT',
+    'FEPWEB-CGD-ContratoGlobalDerivativos - SEM FILTRO DATAS')
 _FEP_MAIL_EXT = ('.xlsx', '.xlsm')
+# PidTagNormalizedSubjectW — o assunto como propriedade MAPI, para o Restrict.
+_MAPI_SUBJECT = 'http://schemas.microsoft.com/mapi/proptag/0x0E1D001F'
 
 # A árvore das posições CETIP é a de DESTINO da rotina Save CETIP Files
 # (`CETIP_DEST_ROOT`), e não a de origem: o que a B3 despeja na pasta de download
@@ -423,7 +433,7 @@ def _subpasta(folder, nome):
 
 
 def baixar_fep_do_box(avisos, destino=None):
-    """Salva o anexo `.xlsx` do e-mail MAIS RECENTE da pasta do FepWeb.
+    """Salva o anexo `.xlsx` do e-mail MAIS RECENTE cujo assunto é o do FepWeb.
 
     Devolve `(caminho, descricao)` — a descrição é o assunto e a data do e-mail
     lido, para o painel dizer DE QUE dia é a lista. `(None, '')` quando não deu
@@ -454,14 +464,27 @@ def baixar_fep_do_box(avisos, destino=None):
                 return None, ''
             pasta = sub
 
-        itens = pasta.Items
+        # O pré-filtro do MAPI evita percorrer uma pasta que recebe todo dia.
+        # Recusado (acontece em algumas caixas), varre-se tudo: o teste de assunto
+        # abaixo é o que decide, e ele roda nos dois caminhos.
+        try:
+            itens = pasta.Items.Restrict(
+                '@SQL="%s" LIKE \'%%%s%%\'' % (_MAPI_SUBJECT, FEP_MAIL_SUBJECT))
+        except Exception:
+            itens = pasta.Items
         # Mais recente primeiro. O relatório é reemitido e a pasta acumula:
         # pegar o primeiro da ordem natural devolveria o mais ANTIGO, e o
         # batimento rodaria com a lista de semanas atrás sem erro nenhum.
-        itens.Sort('[ReceivedTime]', True)
+        try:
+            itens.Sort('[ReceivedTime]', True)
+        except Exception:
+            _LOG.warning('[recon-cgd] não consegui ordenar a pasta por data')
+        alvo_assunto = _norm(FEP_MAIL_SUBJECT)
         for i in range(1, itens.Count + 1):
             try:
                 msg = itens.Item(i)
+                if alvo_assunto not in _norm(getattr(msg, 'Subject', '')):
+                    continue
                 anexos = msg.Attachments
                 for a in range(1, anexos.Count + 1):
                     at = anexos.Item(a)
@@ -482,7 +505,8 @@ def baixar_fep_do_box(avisos, destino=None):
                     return alvo, desc
             except Exception:
                 _LOG.exception('[recon-cgd] falha lendo um item da pasta do FepWeb')
-        avisos.append('Nenhum e-mail com anexo .xlsx em {}.'.format(caminho_txt))
+        avisos.append('Nenhum e-mail com assunto "{}" e anexo .xlsx em {}.'
+                      .format(FEP_MAIL_SUBJECT, caminho_txt))
         return None, ''
     finally:
         try:
