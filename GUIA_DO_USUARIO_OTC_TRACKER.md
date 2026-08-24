@@ -1082,6 +1082,18 @@ Abaixo, **quatro cartões verticais**, um por mesa da esteira, na ordem em que o
 | **OTC** | Assinado; falta o carimbo do OTC |
 | **CEM MO** | Falta o carimbo do Middle Office |
 
+**Para abrir uma solicitação:**
+
+1. Clique em **New Request**, no canto direito da faixa de números (o mesmo botão existe na barra do Tracking Docs).
+2. Preencha o formulário. Os campos com **\*** são obrigatórios; o sistema recusa o Save e marca em vermelho os que faltam.
+3. A **CGD - Solicitação** já vem com a data de hoje.
+4. **Razão Social** e **CNPJ** aceitam **todas as entidades do grupo** — são campos de várias linhas.
+5. **CGD - Tipo de Assinatura** é uma lista: *FepWeb*, *DocuSign* ou *Manual* (a assinatura física).
+6. Em **CGD - Domínio cliente**, se o cliente não tiver domínio, escreva `NA`.
+7. Clique em **Create request**. A solicitação entra na lista e aparece na fila da mesa correspondente.
+
+![Nova solicitação de CGD](docs/sop-screenshots/onboarding-new-request.png)
+
 **Os campos obrigatórios da solicitação** — enquanto um deles estiver em branco, o documento fica no Banking:
 
 | Campo do formulário | Coluna da lista |
@@ -1129,9 +1141,21 @@ Abaixo, **quatro cartões verticais**, um por mesa da esteira, na ordem em que o
 
 1. Filtre pelas caixinhas do cabeçalho — por **Status**, por **Razão Social**, por **Pending with**.
 2. Para corrigir um dado, clique em **Edit** na linha, altere e salve (4.9). O *Aging* não é editável: ele é calculado.
-3. **Add Row** inclui um documento que não veio na planilha.
+3. **New Request** abre o formulário de abertura de solicitação (o mesmo do Overview — ver 10.1).
 4. **Delete** apaga uma linha.
 5. **Overview**, no canto superior direito, volta ao painel.
+
+**Para alterar várias linhas de uma vez:**
+
+![Edição em massa no Tracking Docs](docs/sop-screenshots/padrao-edicao-massa.png)
+
+1. Marque a **caixa de seleção** das linhas — ou a do cabeçalho para marcar a página inteira.
+2. Os botões **Confirm** e **Delete** aparecem na barra de ferramentas, com o número de linhas selecionadas.
+3. Escolha a coluna em **Select Column to Apply**. O campo de valor ao lado se adapta: lista fechada no *Signature Type*, calendário nas colunas de data, texto no resto.
+4. Digite o valor e clique em **Confirm**. O sistema pergunta antes — a ação alcança linhas que o filtro escondeu, sobrescreve o que já estava gravado e **não tem desfazer**.
+5. **Delete** apaga todas as selecionadas, também com confirmação.
+
+> O **Aging** não aparece na lista de colunas: ele é recalculado a cada leitura, e um valor digitado ali seria desfeito na abertura seguinte da tela.
 
 > **A importação REESCREVE a tabela inteira.** Quando a lista do SharePoint é reimportada, o que você editou aqui é substituído pelo que está lá — a lista é a fonte, e o app é a leitura dela. Correção que precisa durar tem de ser feita no SharePoint.
 

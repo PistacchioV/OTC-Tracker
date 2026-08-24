@@ -154,6 +154,12 @@ nasce assim; página velha que divergir é bug de consistência (a varredura de
 2026-08-07 alinhou Reference Data, Index B3, Mapping, os dois Summaries, as
 Live Positions, o Track Confirmations e as três Recons).
 
+- **A página carrega o SweetAlert2 LOCAL** (`plugins/sweetalert2/sweetalert2.min.js`),
+  nunca o CDN: a instância do JPM roda sem internet, e do CDN a lib não chega.
+  Sem ela, todo `Swal.fire` da página morre com `Swal is not defined` DENTRO do
+  handler — e o que se perde não é o balão, é a **ação que vinha depois dele**: o
+  Delete da linha não apaga, o Run não avisa, e a tela não diz nada. Quarenta e
+  seis templates usam o caminho local; quatro ainda apontam para o CDN.
 - **A página carrega o `plugins/jquery/jquery.min.js` ANTES do bloco de
   DataTables.** O `vendors.min.js` do tema **não** expõe o jQuery, então sem essa
   linha todo plugin dali para baixo morre com `jQuery is not defined` e a página
@@ -944,6 +950,17 @@ estão:
   ele existe: o CGD que concluiu parou de envelhecer. O da planilha é do dia da
   exportação e envelheceria parado no banco por semanas. Sem `Data Solicitação`
   o aging fica **vazio**, nunca zero: zero se lê como "entrou hoje".
+- **O formulário de abertura vive no SERVIDOR** (`REQUEST_FORM`): rótulo, coluna
+  do banco, tipo, obrigatoriedade e dica de cada campo. Dele saem DUAS coisas — o
+  modal de *New Request* (partial `partials/onboarding-new-request.html`, incluído
+  pelo Overview e pelo Tracking Docs) e o `REQUEST_FIELDS` que segura o documento
+  no Banking. Escrito no template, o dia em que um campo deixasse de ser
+  obrigatório o modal pararia de pedi-lo e a fila continuaria cobrando. O
+  `REQUEST_FIELDS` fica ANTES do `STAGE_STAMP` no módulo, que o consome na
+  leitura: definido depois, o Banking nasceria com a lista vazia e a fila ficaria
+  permanentemente zerada, sem erro nenhum. E o `check_cgd_docs` confere que toda
+  coluna citada no formulário EXISTE — nome errado ali não dá erro, o
+  `update_row` ignora a chave e o campo preenchido some no caminho.
 - **A esteira tem QUATRO mesas, e o `Banking` é a PRIMEIRA**: Banking · Legal ·
   OTC · CEM MO. Banking é quem abre a solicitação, e o documento sai de lá quando
   os campos **obrigatórios do formulário** estão preenchidos (`REQUEST_FIELDS`:
