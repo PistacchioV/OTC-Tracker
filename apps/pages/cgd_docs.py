@@ -342,25 +342,6 @@ def counts(rows=None):
 #    faz a tela nascer respondendo antes de alguém cadastrar coisa nenhuma, e a
 #    resposta vem marcada como derivada para ninguém confundir com cadastro.
 
-# As mesas da esteira, NA ORDEM em que o documento passa por elas. `Banking` é a
-# primeira: é quem abre a solicitação do CGD. Era um cartão só, `Banking OTC`, e
-# ele juntava duas mesas que trabalham em momentos diferentes — a que pede o
-# contrato e a que o confere depois de assinado.
-STAGES = ('Banking', 'Legal', 'OTC', 'CEM MO')
-
-# Os campos OBRIGATÓRIOS do formulário de abertura da solicitação — os marcados
-# com `*`. Enquanto um deles estiver em branco o documento está no **Banking**: a
-# solicitação existe e ainda não está completa.
-#
-# Só os obrigatórios entram. `Grupo` e `CGD - Domínio cliente` são opcionais no
-# formulário (o domínio inclusive se preenche com `NA` quando o cliente não tem),
-# e cobrá-los aqui deixaria na fila do Banking uma solicitação que já pode seguir.
-#
-# A coluna do banco é o nome da LISTA do SharePoint, que nem sempre é o rótulo do
-# formulário: `CGD - Solicitação` é a `Data Solicitação` e `CGD - Tipo de
-# Assinatura` é o `Signature Type`.
-REQUEST_FIELDS = ('Data Solicitação', 'Razão Social', 'CNPJ', 'Signature Type')
-
 # O domínio do `CGD - Tipo de Assinatura` — como o cliente vai assinar o contrato.
 # São três, e o valor gravado é o código em inglês: `Manual` aparece como
 # *Física* na tela em português, mas é o MESMO valor (dois valores para a mesma
@@ -376,8 +357,47 @@ SIGNATURE_TYPES = ('FepWeb', 'DocuSign', 'Manual')
 # nome da coluna escrito em dois lugares.
 SIGNATURE_COLUMN = 'Signature Type'
 
+# O formulário de abertura da solicitação, na ORDEM em que ele é preenchido.
+# Cada campo diz o rótulo (o do formulário do SharePoint, que nem sempre é o
+# nome da coluna), a COLUNA do banco em que ele grava, o tipo do campo, se é
+# obrigatório e a dica que aparece embaixo do rótulo.
+#
+# É uma lista só, no servidor, porque ela tem dois consumidores — o modal de New
+# Request e a regra do Banking (`REQUEST_FIELDS` sai daqui) — e escrever os
+# campos no template deixaria a fila cobrando um campo que o formulário não pede
+# mais, sem erro nenhum.
+REQUEST_FORM = (
+    {'label': 'CGD - Solicitação', 'column': 'Data Solicitação', 'type': 'date',
+     'required': True, 'hint': ''},
+    {'label': 'Grupo', 'column': 'Grupo Economico', 'type': 'text',
+     'required': False, 'hint': 'Informar o nome de referência para a Razão Social'},
+    {'label': 'Razão Social', 'column': 'Razão Social', 'type': 'textarea',
+     'required': True, 'hint': 'Inserir todas as entidades do grupo'},
+    {'label': 'CNPJ', 'column': 'CNPJ', 'type': 'textarea',
+     'required': True, 'hint': 'Inserir todas as entidades do grupo'},
+    {'label': 'CGD - Tipo de Assinatura', 'column': SIGNATURE_COLUMN, 'type': 'select',
+     'required': True, 'hint': 'Selecionar a forma que o cliente assinará o CGD'},
+    {'label': 'CGD - Domínio cliente', 'column': 'Dominio', 'type': 'text',
+     'required': False, 'hint': 'Caso o cliente não tenha domínio preencher com NA'},
+)
+
+# Os obrigatórios do formulário, na ordem dele. Derivado do `REQUEST_FORM` e não
+# escrito à mão: duas listas divergiriam no dia em que um campo deixasse de ser
+# obrigatório, e a fila do Banking continuaria cobrando o que ninguém mais pede.
+REQUEST_FIELDS = tuple(f['column'] for f in REQUEST_FORM if f['required'])
+
+# As mesas da esteira, NA ORDEM em que o documento passa por elas. `Banking` é a
+# primeira: é quem abre a solicitação do CGD. Era um cartão só, `Banking OTC`, e
+# ele juntava duas mesas que trabalham em momentos diferentes — a que pede o
+# contrato e a que o confere depois de assinado.
+STAGES = ('Banking', 'Legal', 'OTC', 'CEM MO')
+
 # O carimbo que cada etapa deixa quando termina. A ORDEM é a da esteira: quem
 # procura onde o documento parou pega a primeira que ainda não carimbou.
+#
+# Vem DEPOIS do `REQUEST_FIELDS`, que ele consome na leitura do módulo: definido
+# antes, o Banking nasceria com a lista vazia e nunca casaria com nada — a fila
+# ficaria permanentemente zerada, sem erro nenhum.
 STAGE_STAMP = (
     ('Banking', REQUEST_FIELDS),
     ('Legal',   ('Emissão', 'Signature Date')),
@@ -401,7 +421,6 @@ ACTIVE_STATUS = 'ACTIVE'
 CLOSED_MARKS = ('INACTIV', 'INATIV', 'CANCEL')
 
 _STAGE_MAP = {'mtime': None, 'rows': None}
-
 
 def _norm(s):
     """Caixa, espaço e acento fora — a comparação de status é cega às três.
@@ -534,3 +553,4 @@ def overview(rows=None):
     # diferença era justamente o que tinha sumido das filas.
     return {'cards': cards, 'active': ativos, 'closed': encerrados,
             'pending': pendentes, 'total': len(rows)}
+

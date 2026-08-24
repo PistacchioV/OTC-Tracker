@@ -1919,5 +1919,11 @@
   "cgd-c-aging": "Aging",
   "ob-sum-closed": "Encerrados",
   "cgd-show": "Mostrar",
-  "cgd-entries": "registros"
+  "cgd-entries": "registros",
+  "ob-new-request": "Nova Solicitação",
+  "ob-mass-apply": "Confirmar",
+  "ob-mass-del": "Excluir",
+  "ob-req-title": "Nova Solicitação de CGD",
+  "ob-req-cancel": "Cancelar",
+  "ob-req-save": "Criar solicitação"
 }

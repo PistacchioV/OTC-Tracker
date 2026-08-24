@@ -3,6 +3,7 @@
 {% block title %}Onboarding Overview{% endblock title %}
 
 {% block extra_css %}
+<link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet" type="text/css" />
 <style>
 /* ============================================================================
    Onboarding · Overview — uma fila por mesa da esteira do CGD.
@@ -153,7 +154,11 @@
         <div><div class="ob-sum__n" id="ob-active">0</div><div class="ob-sum__l" data-lang="ob-sum-active">Active</div></div>
         <div><div class="ob-sum__n" id="ob-closed">0</div><div class="ob-sum__l" data-lang="ob-sum-closed">Closed</div></div>
         <div class="ob-sum__db">
-            <a href="/onboarding/tracking-docs" class="text-decoration-none">
+            <button type="button" class="btn btn-sm btn-primary bg-gradient btn-toolbar-all mb-2"
+                    id="ob-new-request">
+                <i class="ti ti-file-plus me-1"></i><span data-lang="ob-new-request">New Request</span>
+            </button>
+            <a href="/onboarding/tracking-docs" class="text-decoration-none d-block">
                 <i class="ti ti-table"></i> <span data-lang="ob-open-tracking">Open Tracking Docs</span>
             </a>
             <div id="ob-dbline" class="mt-1"></div>
@@ -163,9 +168,17 @@
     <div class="row g-3" id="ob-cards"></div>
 
 </div>
+
+{% include 'partials/onboarding-new-request.html' %}
 {% endblock page_content %}
 
 {% block extra_javascript %}
+{# SweetAlert2 é LOCAL, não o CDN: a instância do JPM roda sem internet, e do
+   CDN a lib não chega — todo `Swal.fire` da página vira `Swal is not defined`
+   e MORRE dentro do handler. O efeito não é só ficar sem o balão: a ação que
+   vinha depois dele (o Delete da linha, o aviso do Run) não acontece, e a tela
+   não diz nada. As três páginas do CGD nasceram sem esta linha. #}
+<script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
 <script>
 (function () {
     'use strict';
@@ -263,6 +276,10 @@
             '</div>' +
           '</div>';
     }
+
+    // O partial do modal chama isto depois de gravar — ele não sabe em que tela
+    // está, e cada uma se atualiza do seu jeito.
+    window.obRequestSaved = function () { load(); };
 
     function load() {
         fetch('/api/onboarding/overview', { credentials: 'same-origin' })

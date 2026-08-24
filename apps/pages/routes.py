@@ -38269,15 +38269,27 @@ def cgd_legacy():
     return redirect(url_for('pages_blueprint.onboarding_overview'))
 
 
+def _cgd_form_ctx():
+    """O formulário de New Request para o template.
+
+    Vem do MÓDULO, não escrito no HTML: o mesmo `REQUEST_FORM` define os campos
+    do modal e os obrigatórios que seguram o documento no Banking. Escritos no
+    template, o dia em que um campo deixasse de ser obrigatório o modal pararia
+    de pedi-lo e a fila continuaria cobrando."""
+    return {'cgd_form': _cgd_mod.REQUEST_FORM,
+            'cgd_signature_types': _cgd_mod.SIGNATURE_TYPES}
+
+
 @blueprint.route('/onboarding')
 def onboarding_overview():
-    return render_template('pages/onboarding-overview.html', segment='onboarding')
+    return render_template('pages/onboarding-overview.html', segment='onboarding',
+                           **_cgd_form_ctx())
 
 
 @blueprint.route('/onboarding/tracking-docs')
 def onboarding_tracking_docs():
     return render_template('pages/onboarding-tracking-docs.html',
-                           segment='onboarding-tracking-docs')
+                           segment='onboarding-tracking-docs', **_cgd_form_ctx())
 
 
 def _cgd_db_ready():
@@ -38332,6 +38344,19 @@ def api_onboarding_docs_save():
     valores = payload.get('values') or {}
     if not isinstance(valores, dict):
         return jsonify({'success': False, 'error': 'invalid_values'}), 400
+    # `ids` é a edição em MASSA — o mesmo valor em várias linhas, numa chamada só.
+    # Uma requisição por linha faria a tela abrir o banco N vezes e deixaria o
+    # lote pela metade se a rede caísse no meio: aqui ou grava tudo ou o erro é
+    # um só.
+    ids = payload.get('ids')
+    if isinstance(ids, list) and ids:
+        try:
+            for uid in ids:
+                _cgd_mod.update_row(str(uid).strip(), valores)
+        except Exception as exc:                              # pragma: no cover
+            log.exception('[onboarding] falha na gravação em massa')
+            return jsonify({'success': False, 'error': str(exc)}), 500
+        return jsonify({'success': True, 'count': len(ids)})
     try:
         if rid:
             _cgd_mod.update_row(rid, valores)
@@ -38347,7 +38372,22 @@ def api_onboarding_docs_save():
 def api_onboarding_docs_delete():
     if not session.get('authenticated'):
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
-    rid = str((request.get_json(silent=True) or {}).get('id') or '').strip()
+    payload = request.get_json(silent=True) or {}
+    # `ids` (lote) ou `id` (a linha). O `set` é o que importa aqui: o `_id` é a
+    # CHAVE da linha no banco (o `DELETE` casa por valor, não por posição), então
+    # a ordem é indiferente — mas um id repetido na lista faria a contagem
+    # devolvida mentir sobre quantos documentos saíram.
+    ids = payload.get('ids')
+    if isinstance(ids, list) and ids:
+        ids = sorted({str(x).strip() for x in ids if str(x).strip()})
+        try:
+            for uid in ids:
+                _cgd_mod.delete_row(uid)
+        except Exception as exc:                              # pragma: no cover
+            log.exception('[onboarding] falha ao apagar o lote')
+            return jsonify({'success': False, 'error': str(exc)}), 500
+        return jsonify({'success': True, 'count': len(ids)})
+    rid = str(payload.get('id') or '').strip()
     if not rid:
         return jsonify({'success': False, 'error': 'missing_id'}), 400
     try:

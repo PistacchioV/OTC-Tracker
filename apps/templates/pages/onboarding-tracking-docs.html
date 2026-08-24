@@ -3,6 +3,7 @@
 {% block title %}Tracking Docs{% endblock title %}
 
 {% block extra_css %}
+<link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet" type="text/css" />
 <link href="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.css" rel="stylesheet" type="text/css" />
 <link href="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.css" rel="stylesheet" type="text/css" />
 <style>
@@ -102,6 +103,9 @@
 #ob-table td.ob-age.ob-late { color: var(--ins-danger, #d93025); }
 #ob-table td.ob-age.ob-warn { color: #b07500; }
 
+/* A barra de edição em massa acompanha a altura dos botões da toolbar. */
+#ob-docs .ob-mass .form-select, #ob-docs .ob-mass .form-control { height: 31px; font-size: .75rem; }
+
 /* A linha em edição: fundo suave para não se perder de vista ao rolar. */
 #ob-table tr.ob-editing > td { background: rgba(0, 102, 204, .06) !important; }
 #ob-table tr.ob-editing input,
@@ -147,8 +151,12 @@
                 <div class="dropdown-menu ob-cols-menu p-2" id="ob-cols-menu"></div>
             </div>
 
-            <button class="btn btn-sm btn-primary bg-gradient btn-toolbar-all" id="ob-add">
-                <i class="ti ti-plus me-1"></i><span data-lang="ob-btn-add">Add Row</span>
+            {# Era um `Add Row` que criava uma linha VAZIA de trinta colunas —
+               a pessoa tinha de descobrir sozinha o que preencher. Agora abre o
+               formulário de abertura da solicitação, que é o que a mesa
+               realmente faz aqui (o partial é o mesmo do Overview). #}
+            <button class="btn btn-sm btn-primary bg-gradient btn-toolbar-all" id="ob-new-request">
+                <i class="ti ti-file-plus me-1"></i><span data-lang="ob-new-request">New Request</span>
             </button>
 
             <div class="dropdown">
@@ -167,6 +175,23 @@
 
             <button class="btn btn-sm btn-outline-secondary btn-toolbar-all" id="ob-clear">
                 <i class="ti ti-filter-off me-1"></i><span data-lang="ob-btn-clear">Clear Filters</span>
+            </button>
+
+            {# Edição em massa, no modelo do Track Confirmations e do Pending
+               Confirmation: escolhe-se a COLUNA e o campo de valor ao lado se
+               adapta ao tipo dela — nessa ordem, que é a em que se usam. Confirm
+               e Delete nascem escondidos e só aparecem com linha selecionada: um
+               Delete sempre visível numa tela sem desfazer é convite ao clique
+               errado. #}
+            <select class="form-select form-select-sm ob-mass" id="ob-mass-col"
+                    style="width:210px;font-size:.75rem;height:31px;"></select>
+            <div id="ob-mass-val" class="ob-mass" style="min-width:180px;"></div>
+            <button class="btn btn-sm btn-success bg-gradient btn-toolbar-all d-none" id="ob-mass-apply">
+                <i class="ti ti-check me-1"></i><span data-lang="ob-mass-apply">Confirm</span>
+                <span class="badge bg-light text-dark ms-1" id="ob-sel-count">0</span>
+            </button>
+            <button class="btn btn-sm btn-danger bg-gradient btn-toolbar-all d-none" id="ob-mass-del">
+                <i class="ti ti-trash me-1"></i><span data-lang="ob-mass-del">Delete</span>
             </button>
 
             <div class="ms-auto d-flex align-items-center gap-2">
@@ -191,6 +216,8 @@
             </table>
         </div>
     </div>
+
+{% include 'partials/onboarding-new-request.html' %}
 </div>
 {% endblock page_content %}
 
@@ -221,6 +248,12 @@
     }
 })();
 </script>
+{# SweetAlert2 é LOCAL, não o CDN: a instância do JPM roda sem internet, e do
+   CDN a lib não chega — todo `Swal.fire` da página vira `Swal is not defined`
+   e MORRE dentro do handler. O efeito não é só ficar sem o balão: a ação que
+   vinha depois dele (o Delete da linha, o aviso do Run) não acontece, e a tela
+   não diz nada. As três páginas do CGD nasceram sem esta linha. #}
+<script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/export-advanced.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/table-std.js"></script>
 <script>
@@ -231,6 +264,8 @@
        uma vez, no load), então vive aqui. */
     var _TRANS = {
         en: { stage: 'Pending with', actions: 'Actions', edit: 'Edit', del: 'Delete',
+              massCol: 'Select Column to Apply', massTitle: 'Apply to {n} row(s)?', massEmpty: '(empty)',
+              yesApply: 'Yes, apply', massDone: '{n} row(s) updated', massDelTitle: 'Delete {n} row(s)?',
               save: 'Save', cancel: 'Cancel', confirmDel: 'Delete this document?',
               confirmDelTxt: 'The row is removed from the app database. The SharePoint list is not touched.',
               yes: 'Yes, delete', no: 'Cancel', saved: 'Saved', savedTxt: 'The row was updated.',
@@ -238,6 +273,8 @@
               nodb: 'The CGD database was not found', nodbHint: 'run scripts/import_cgd_sharepoint.py',
               src: 'Source', rows: 'row(s)', derived: 'derived from the stamps' },
         br: { stage: 'Pendente em', actions: 'Ações', edit: 'Editar', del: 'Excluir',
+              massCol: 'Select Column to Apply', massTitle: 'Aplicar em {n} linha(s)?', massEmpty: '(vazio)',
+              yesApply: 'Sim, aplicar', massDone: '{n} linha(s) atualizada(s)', massDelTitle: 'Excluir {n} linha(s)?',
               save: 'Salvar', cancel: 'Cancelar', confirmDel: 'Excluir este documento?',
               confirmDelTxt: 'A linha sai do banco do app. A lista do SharePoint não é tocada.',
               yes: 'Sim, excluir', no: 'Cancelar', saved: 'Salvo', savedTxt: 'A linha foi atualizada.',
@@ -245,6 +282,8 @@
               nodb: 'O banco de CGDs não foi encontrado', nodbHint: 'rode scripts/import_cgd_sharepoint.py',
               src: 'Fonte', rows: 'linha(s)', derived: 'derivado dos carimbos' },
         es: { stage: 'Pendiente en', actions: 'Acciones', edit: 'Editar', del: 'Eliminar',
+              massCol: 'Select Column to Apply', massTitle: '¿Aplicar en {n} fila(s)?', massEmpty: '(vacío)',
+              yesApply: 'Sí, aplicar', massDone: '{n} fila(s) actualizada(s)', massDelTitle: '¿Eliminar {n} fila(s)?',
               save: 'Guardar', cancel: 'Cancelar', confirmDel: '¿Eliminar este documento?',
               confirmDelTxt: 'La fila sale de la base del app. La lista de SharePoint no se toca.',
               yes: 'Sí, eliminar', no: 'Cancelar', saved: 'Guardado', savedTxt: 'La fila fue actualizada.',
@@ -470,7 +509,9 @@
                           esc(t('nodb')) + '</span> <code>' + esc(j.db) + '</code>' +
                           '<span>— ' + esc(t('nodbHint')) + '</span>');
                 montaCabecalho();
+                montaMassa();
                 desenha();
+                atualizaSelecao();
             });
     }
 
@@ -592,11 +633,14 @@
         if (window.bootstrap && !this._tt) { this._tt = new bootstrap.Tooltip(this); this._tt.show(); }
     });
 
-    $('#ob-all').on('change', function () {
-        $('#ob-table tbody .ob-chk').prop('checked', this.checked);
-    });
+    // Marcar tudo. DELEGADO NO DOCUMENTO, e não em `#ob-table`: com `scrollX` o
+    // DataTables desenha o cabeçalho duas vezes, e a caixa que se VÊ está na
+    // tabela CLONE — que não tem o id. Um `.on()` pendurado em `#ob-table` nunca
+    // seria alcançado por ela: a página marcaria as linhas e o contador ficaria
+    // em zero, com os botões de lote escondidos.
     $(document).on('change', '#ob-all', function () {
         $('#ob-table tbody .ob-chk').prop('checked', this.checked);
+        atualizaSelecao();
     });
     $('#ob-len').on('change', function () {
         var n = parseInt(this.value, 10);
@@ -606,12 +650,121 @@
         $('#ob-head-filters input').val('');
         if (table) { table.search('').columns().search('').draw(); }
     });
-    $('#ob-add').on('click', function () {
-        fetch('/api/onboarding/docs/save', {
-            method: 'POST', credentials: 'same-origin',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ values: {} })
-        }).then(function () { carrega(); });
+    // O modal de New Request (partial) chama isto depois de gravar.
+    window.obRequestSaved = function () { carrega(); };
+
+
+    // ── Edição em massa ────────────────────────────────────────────────────
+    // Modelo do Track Confirmations: coluna → valor → Confirm, e o Delete ao
+    // lado. O `Aging` fica FORA da lista: ele é derivado a cada leitura, e
+    // digitá-lo cria um valor que a próxima abertura da tela desfaz — o usuário
+    // veria a alteração "não pegar", sem erro nenhum.
+    function colunasEditaveis() {
+        return COLS.filter(function (c) { return c !== 'Aging'; });
+    }
+
+    function montaMassa() {
+        var sel = $('#ob-mass-col').empty()
+            .append('<option value="">' + esc(t('massCol')) + '</option>');
+        colunasEditaveis().forEach(function (c) {
+            sel.append($('<option>').val(c).text(c));
+        });
+        campoMassa('');
+    }
+
+    // O campo de valor segue o TIPO da coluna: lista fechada no Tipo de
+    // Assinatura, campo de data com calendário nas colunas de data, texto no
+    // resto. Um lugar só para os três — o modal e a edição em massa oferecendo
+    // entradas diferentes da mesma coluna é como se cria um valor que só existe
+    // num dos caminhos.
+    function campoMassa(col) {
+        var $w = $('#ob-mass-val').empty();
+        if (SIGCOL && col === SIGCOL && SIGTYPES.length) {
+            var s = $('<select class="form-select form-select-sm" id="ob-mass-value">')
+                .append('<option value=""></option>');
+            SIGTYPES.forEach(function (o) { s.append($('<option>').val(o).text(o)); });
+            $w.append(s);
+            return;
+        }
+        var i = $('<input type="text" class="form-control form-control-sm" id="ob-mass-value">');
+        if (DATECOLS.indexOf(col) !== -1) {
+            i.attr('placeholder', 'dd/mm/aaaa').attr('autocomplete', 'off');
+            // Guard: sem o flatpickr o campo degrada para texto, não quebra.
+            setTimeout(function () {
+                if (typeof flatpickr !== 'undefined') {
+                    flatpickr(i[0], { dateFormat: 'd/m/Y', allowInput: true, disableMobile: true });
+                }
+            }, 0);
+        }
+        $w.append(i);
+    }
+
+    function selecionadas() {
+        return $('#ob-table tbody tr').filter(function () {
+            return $(this).find('.ob-chk').is(':checked');
+        }).map(function () { return String($(this).data('id')); }).get();
+    }
+
+    function atualizaSelecao() {
+        var n = selecionadas().length;
+        $('#ob-sel-count').text(n);
+        $('#ob-mass-apply, #ob-mass-del').toggleClass('d-none', n === 0);
+    }
+
+    $('#ob-mass-col').on('change', function () { campoMassa(this.value); });
+    $(document).on('change', '#ob-table .ob-chk', atualizaSelecao);
+
+    $('#ob-mass-apply').on('click', function () {
+        var col = $('#ob-mass-col').val();
+        var val = String($('#ob-mass-value').val() || '');
+        var ids = selecionadas();
+        if (!col || !ids.length) { return; }
+        // Aplicar em massa PERGUNTA antes: a ação alcança linhas que o filtro
+        // escondeu, sobrescreve o que já estava gravado, e a tela não tem
+        // desfazer.
+        Swal.fire({
+            icon: 'question', title: t('massTitle').replace('{n}', ids.length),
+            html: esc(col) + ' → ' + (val ? '<b>' + esc(val) + '</b>'
+                                          : '<i>' + esc(t('massEmpty')) + '</i>'),
+            showCancelButton: true, confirmButtonText: t('yesApply'), cancelButtonText: t('no'),
+            confirmButtonColor: '#1a8a4a', cancelButtonColor: '#6c757d'
+        }).then(function (r) {
+            if (!r.isConfirmed) { return; }
+            var vals = {}; vals[col] = val;
+            fetch('/api/onboarding/docs/save', {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ids: ids, values: vals })
+            }).then(function (r2) { return r2.json(); })
+              .then(function (j) {
+                  if (!j || !j.success) {
+                      Swal.fire({ icon: 'error', title: t('failed'),
+                                  text: (j && j.error) || '' });
+                      return;
+                  }
+                  carrega();
+                  Swal.fire({ icon: 'success', title: t('massDone').replace('{n}', ids.length),
+                              timer: 1600, showConfirmButton: false });
+              });
+        });
+    });
+
+    $('#ob-mass-del').on('click', function () {
+        var ids = selecionadas();
+        if (!ids.length) { return; }
+        Swal.fire({
+            icon: 'warning', title: t('massDelTitle').replace('{n}', ids.length),
+            text: t('confirmDelTxt'),
+            showCancelButton: true, confirmButtonText: t('yes'), cancelButtonText: t('no'),
+            confirmButtonColor: '#d33', cancelButtonColor: '#6c757d'
+        }).then(function (r) {
+            if (!r.isConfirmed) { return; }
+            fetch('/api/onboarding/docs/delete', {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ids: ids })
+            }).then(function () { carrega(); });
+        });
     });
 
     $(carrega);

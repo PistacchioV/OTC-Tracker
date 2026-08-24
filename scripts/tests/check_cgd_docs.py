@@ -147,6 +147,22 @@ check('tudo carimbado e ainda não Active fica na última mesa',
 check('o tipo de assinatura tem três opções',
       list(C.SIGNATURE_TYPES), ['FepWeb', 'DocuSign', 'Manual'])
 
+# O formulário de New Request grava NAS COLUNAS DO BANCO. Uma coluna com nome
+# errado aqui não dá erro: o `update_row` ignora a chave desconhecida e o campo
+# preenchido some no caminho — a solicitação nasceria sem o CNPJ que a pessoa
+# digitou. E os obrigatórios saem do próprio formulário, para as duas listas não
+# divergirem.
+check('todo campo do formulário aponta para uma coluna real',
+      [f['column'] for f in C.REQUEST_FORM if f['column'] not in C.COLUMNS], [])
+check('os obrigatórios saem do formulário',
+      list(C.REQUEST_FIELDS),
+      [f['column'] for f in C.REQUEST_FORM if f['required']])
+check('   e são os que seguram o documento no Banking',
+      list(C.STAGE_STAMP[0][1]), list(C.REQUEST_FIELDS))
+check('o Tipo de Assinatura é campo do formulário e coluna do banco',
+      C.SIGNATURE_COLUMN in C.COLUMNS
+      and C.SIGNATURE_COLUMN in [f['column'] for f in C.REQUEST_FORM], True)
+
 cadastro([{'STATUS': 'Pending Signature', 'STAGE': 'Legal'},
           {'STATUS': 'AGUARDANDO MO', 'STAGE': 'CEM MO'}])
 check('o cadastro VENCE a derivação',

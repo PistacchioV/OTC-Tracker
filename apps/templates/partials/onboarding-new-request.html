@@ -1,0 +1,212 @@
+{# ==========================================================================
+   PARTIAL: onboarding-new-request.html
+
+   O modal de abertura de uma solicitação de CGD — o formulário do SharePoint
+   dentro do app. Incluído pelo Overview e pelo Tracking Docs: as duas telas do
+   Onboarding abrem uma solicitação, e duplicar o markup seria manter dois
+   formulários que divergem no dia em que um campo mudar.
+
+   Os campos vêm do SERVIDOR (`cgd_docs.REQUEST_FORM`, passado pelas rotas), e
+   não escritos aqui: é a MESMA lista de onde saem os obrigatórios que seguram o
+   documento na fila do Banking. Escritos no HTML, o dia em que um campo deixasse
+   de ser obrigatório o modal pararia de pedi-lo e a fila continuaria cobrando.
+
+   O JS é VANILLA de propósito: o Overview não carrega jQuery, e um partial que
+   dependa dele funcionaria numa tela e morreria calado na outra.
+   ========================================================================== #}
+<div class="modal fade" id="ob-req-modal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" style="font-size:1rem;font-weight:700;">
+          <i class="ti ti-file-plus me-1"></i>
+          <span data-lang="ob-req-title">New CGD Request</span>
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+
+      <div class="modal-body">
+        <div class="ob-req-grid">
+          {% for f in cgd_form %}
+          <div class="ob-req-field" data-col="{{ f.column }}">
+            <label class="ob-req-label" for="ob-req-{{ loop.index }}">
+              {{ f.label }}{% if f.required %} <span class="ob-req-star">*</span>{% endif %}
+            </label>
+            {% if f.hint %}<div class="ob-req-hint">{{ f.hint }}</div>{% endif %}
+            {% if f.type == 'select' %}
+              <select class="form-select form-select-sm ob-req-input" id="ob-req-{{ loop.index }}"
+                      {% if f.required %}required{% endif %}>
+                <option value=""></option>
+                {% for o in cgd_signature_types %}<option value="{{ o }}">{{ o }}</option>{% endfor %}
+              </select>
+            {% elif f.type == 'textarea' %}
+              {# Razão Social e CNPJ pedem TODAS as entidades do grupo — são
+                 várias por linha, e um input de uma linha esconderia da pessoa
+                 o que ela acabou de digitar. #}
+              <textarea class="form-control form-control-sm ob-req-input" rows="3"
+                        id="ob-req-{{ loop.index }}"
+                        {% if f.required %}required{% endif %}></textarea>
+            {% elif f.type == 'date' %}
+              {# Data é SEMPRE dd/mm/aaaa na tela. O `type=date` nativo desenha no
+                 locale do sistema — no Windows em inglês vira mm/dd/yyyy, e a
+                 mesa lê 03/04 como 3 de abril onde o campo quis dizer 4 de
+                 março. O flatpickr é global (vendors.min.js), e o guard no JS
+                 degrada para texto comum se ele faltar. #}
+              <input type="text" class="form-control form-control-sm ob-req-input ob-req-date"
+                     id="ob-req-{{ loop.index }}" placeholder="dd/mm/aaaa" autocomplete="off"
+                     {% if f.required %}required{% endif %}>
+            {% else %}
+              <input type="text" class="form-control form-control-sm ob-req-input"
+                     id="ob-req-{{ loop.index }}" autocomplete="off"
+                     {% if f.required %}required{% endif %}>
+            {% endif %}
+          </div>
+          {% endfor %}
+        </div>
+        <div class="ob-req-err text-danger d-none" id="ob-req-err"></div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-sm btn-light" data-bs-dismiss="modal"
+                data-lang="ob-req-cancel">Cancel</button>
+        <button type="button" class="btn btn-sm btn-primary bg-gradient" id="ob-req-save">
+          <i class="ti ti-device-floppy me-1"></i><span data-lang="ob-req-save">Create request</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+#ob-req-modal .ob-req-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem 1.25rem; }
+@media (max-width: 640px) { #ob-req-modal .ob-req-grid { grid-template-columns: 1fr; } }
+/* Os campos de várias entidades ocupam a linha inteira: eles são listas. */
+#ob-req-modal .ob-req-field:has(textarea) { grid-column: 1 / -1; }
+#ob-req-modal .ob-req-label { font-size: .78rem; font-weight: 700; margin-bottom: .1rem; display: block; }
+#ob-req-modal .ob-req-star { color: var(--ins-danger, #d93025); }
+#ob-req-modal .ob-req-hint { font-size: .7rem; color: var(--ins-secondary-color); margin-bottom: .3rem; }
+#ob-req-modal .ob-req-input { font-size: .8rem; }
+/* Obrigatório em branco no Save: a borda diz QUAL, sem depender de ler o aviso. */
+#ob-req-modal .ob-req-input.is-invalid { border-color: var(--ins-danger, #d93025); }
+#ob-req-modal .ob-req-err { font-size: .75rem; margin-top: .8rem; }
+</style>
+
+<script>
+(function () {
+    'use strict';
+
+    var TRANS = {
+        en: { missing: 'Fill in the required fields ({n} missing).',
+              failed: 'Could not create the request.',
+              done: 'Request created' },
+        br: { missing: 'Preencha os campos obrigatórios (faltam {n}).',
+              failed: 'Não consegui criar a solicitação.',
+              done: 'Solicitação criada' },
+        es: { missing: 'Complete los campos obligatorios (faltan {n}).',
+              failed: 'No se pudo crear la solicitud.',
+              done: 'Solicitud creada' }
+    };
+    function lang() {
+        try { return localStorage.getItem('__OTC_TRACKER_LANG__') || 'en'; }
+        catch (e) { return 'en'; }
+    }
+    function t(k, n) {
+        var s = (TRANS[lang()] || TRANS.en)[k] || TRANS.en[k] || k;
+        return s.replace('{n}', n);
+    }
+
+    var modalEl = document.getElementById('ob-req-modal');
+    if (!modalEl) { return; }
+    var campos = [].slice.call(modalEl.querySelectorAll('.ob-req-field'));
+    var erro = document.getElementById('ob-req-err');
+    var bsModal = null;
+
+    // O flatpickr desenha o campo em dd/mm/aaaa. Sem ele o campo continua sendo
+    // um texto comum — a tela degrada, não quebra.
+    [].forEach.call(modalEl.querySelectorAll('.ob-req-date'), function (el) {
+        if (typeof flatpickr !== 'undefined') {
+            flatpickr(el, { dateFormat: 'd/m/Y', allowInput: true, disableMobile: true });
+        }
+    });
+
+    function entrada(f) { return f.querySelector('.ob-req-input'); }
+
+    function limpa() {
+        campos.forEach(function (f) {
+            var el = entrada(f);
+            el.classList.remove('is-invalid');
+            if (el._flatpickr) { el._flatpickr.clear(); }
+            el.value = '';
+        });
+        erro.classList.add('d-none');
+        erro.textContent = '';
+    }
+
+    function abre() {
+        limpa();
+        // A data da solicitação nasce com HOJE — é o dia em que ela está sendo
+        // aberta, e é o que o formulário do SharePoint já traz preenchido.
+        var hoje = new Date();
+        var dd = ('0' + hoje.getDate()).slice(-2);
+        var mm = ('0' + (hoje.getMonth() + 1)).slice(-2);
+        [].forEach.call(modalEl.querySelectorAll('.ob-req-date'), function (el) {
+            var v = dd + '/' + mm + '/' + hoje.getFullYear();
+            if (el._flatpickr) { el._flatpickr.setDate(v, false); } else { el.value = v; }
+        });
+        if (!bsModal && window.bootstrap) { bsModal = new bootstrap.Modal(modalEl); }
+        if (bsModal) { bsModal.show(); }
+    }
+
+    document.getElementById('ob-req-save').addEventListener('click', function () {
+        var vals = {}, faltando = 0;
+        campos.forEach(function (f) {
+            var el = entrada(f);
+            var v = String(el.value || '').trim();
+            var obrigatorio = el.hasAttribute('required');
+            el.classList.toggle('is-invalid', obrigatorio && !v);
+            if (obrigatorio && !v) { faltando++; }
+            vals[f.getAttribute('data-col')] = v;
+        });
+        if (faltando) {
+            erro.textContent = t('missing', faltando);
+            erro.classList.remove('d-none');
+            return;
+        }
+        var btn = this;
+        btn.disabled = true;
+        fetch('/api/onboarding/docs/save', {
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ values: vals })
+        }).then(function (r) { return r.json(); })
+          .then(function (j) {
+              btn.disabled = false;
+              if (!j || !j.success) {
+                  erro.textContent = (j && j.error) || t('failed');
+                  erro.classList.remove('d-none');
+                  return;
+              }
+              if (bsModal) { bsModal.hide(); }
+              // Quem incluiu o partial decide o que fazer depois: o Tracking Docs
+              // recarrega a tabela, o Overview recarrega as filas. O partial não
+              // sabe em qual tela está.
+              if (typeof window.obRequestSaved === 'function') { window.obRequestSaved(j); }
+              if (window.Swal) {
+                  Swal.fire({ icon: 'success', title: t('done'), timer: 1600,
+                              showConfirmButton: false });
+              }
+          })
+          .catch(function () {
+              btn.disabled = false;
+              erro.textContent = t('failed');
+              erro.classList.remove('d-none');
+          });
+    });
+
+    // Único ponto de entrada: qualquer botão com este id abre o modal, nas duas
+    // telas.
+    window.obOpenNewRequest = abre;
+    var botao = document.getElementById('ob-new-request');
+    if (botao) { botao.addEventListener('click', abre); }
+})();
+</script>
