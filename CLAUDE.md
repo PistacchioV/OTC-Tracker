@@ -457,7 +457,7 @@ e um item no array `TYPES` de `apps/templates/pages/mapping.html`.
   colunas extras do arquivo** (`STATUS`/`MAKER`/`CHECKER`): o POST reescreve o
   arquivo inteiro e derrubaria o que não estivesse declarado (HANDOFF §188).
 
-São **40** mappings hoje: `currency-base`, `interbook-ndf`, `publisher-ndf`,
+São **39** mappings hoje: `currency-base`, `interbook-ndf`, `publisher-ndf`,
 `le-accronym`, `le-spn`, `commodities-b3`, `bank-name`, `fxo-conv-rate`,
 `ndf-pdf-cpty`, `swap-curves`, `cetip-files`, `api-links`, `opb3-events`,
 `swap-ir-client`, `swap-ir-term`, `swap-index`, `swap-funcionalidade`,

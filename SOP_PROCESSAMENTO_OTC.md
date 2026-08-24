@@ -121,11 +121,11 @@ Feriado avulso entra pelo clique na data (ou pelo botão *Create New Holiday*), 
 
 ![Calendário de Feriados](docs/sop-screenshots/holidays-calendar.png)
 
-#### Interpretador de Arquivos
+#### File Interpreter (Interpretador de Arquivos)
 
-Ferramenta de apoio para inspecionar e interpretar arquivos de posição e mensagens (planilhas, .msg) antes do processamento, ajudando o operador a validar o conteúdo bruto recebido.
+Catálogo dos layouts dos arquivos que o sistema monta — os de registro na B3 (Termo, Opção, Swap, MID, DCE) e os de instrução da Intrag —, campo a campo: ordem, largura e a ORIGEM de cada valor (fixo, coluna da tela, cadastro do Mapping ou cálculo). É cadastro, não consulta: mudar um valor fixo, cadastrar um cálculo (dias úteis entre duas datas, de-para em linha) ou criar uma **versão** do layout — por par de entidades ou por produto — vale no próximo arquivo gerado e no próximo preview, sem release. O preview das telas de New Deals lê daqui.
 
-![Interpretador de Arquivos](docs/sop-screenshots/file-interpreter.png)
+![File Interpreter](docs/sop-screenshots/file-interpreter.png)
 
 #### Painel de Controle
 
@@ -266,6 +266,12 @@ Marcação a mercado (MtM) de Swap e COE. Importa o arquivo de posição e os ar
 ![MtM — Swap](docs/sop-screenshots/mtm-swap.png)
 
 ### Produtos — New Deals (Products)
+
+#### New Deals — NDF Vanilla
+
+Registro de novos negócios de NDF de moeda (vanilla). Mantém o cache de deals, gera o arquivo Conecta e o mapeamento do retorno da B3 — o envio passou a valer nesta página, que antes só exibia porque o registro era feito por outra ferramenta.
+
+![New Deals — NDF Vanilla](docs/sop-screenshots/new_deals-ndf-vanilla.png)
 
 #### New Deals — NDF Forward Start
 

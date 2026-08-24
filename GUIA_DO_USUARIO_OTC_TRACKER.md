@@ -162,7 +162,7 @@ Cada linha tem quatro botões na coluna **Actions**, nesta ordem:
 
 ### 3.6. Enviar para registro na B3
 
-Vale para **NDF FWD Start**, **NDF Other Publisher**, **NDF Commodities**, **Opção FXO** e **Opção Commodities**.
+Vale para **NDF Vanilla**, **NDF FWD Start**, **NDF Other Publisher**, **NDF Commodities**, **Opção FXO** e **Opção Commodities**.
 
 ![New Deals — NDF FWD Start](docs/sop-screenshots/new_deals-ndf-fwdstart.png)
 
@@ -170,7 +170,9 @@ Vale para **NDF FWD Start**, **NDF Other Publisher**, **NDF Commodities**, **Op�
 2. O sistema gera o arquivo **Conecta** e grava na pasta de envio.
 3. O status passa a **Sent** e você se torna o **Checker** da operação.
 
-> **Na página NDF Vanilla este passo não existe.** O registro na B3 é feito por outra ferramenta, então a operação segue direto para o mapeamento do retorno.
+> **A NDF Vanilla passou a enviar como as demais.** Antes o registro era feito por outra ferramenta e a operação seguia direto para o mapeamento do retorno; hoje o **Send** gera o arquivo Conecta também nela. Se a outra ferramenta continuar registrando em paralelo, o mesmo negócio vai à B3 duas vezes — combine com a mesa qual dos dois caminhos vale.
+
+> **Quer conferir o arquivo antes de enviar?** Dê **duplo clique na linha** para abrir o preview e use o botão de **download**: ele monta o arquivo exatamente como o Send montaria — mesmo layout do File Interpreter — e grava na sua pasta de Downloads, sem enviar nada e sem mexer no status da operação.
 
 ---
 
@@ -383,9 +385,28 @@ Caminho no menu: **Data Base → Index B3**.
 
 Aqui ficam os ativos subjacentes aceitos pela B3. Um ativo não cadastrado impede a aprovação da operação que o utiliza.
 
+> **Cadastrou o ativo com a operação já importada?** Volte à tela de New Deals e use o **Reload Data** (ele aparece no aviso *Asset Not Registered*). O selo *Missing Index B3* sai, e as colunas que dependem do cadastro — **Commodities** e **Quoted in Cents** — passam a mostrar o que você acabou de cadastrar, sem recarregar a página. Se a mercadoria continuar vazia depois do Reload, o que falta é a coluna **Commodity** na linha do Index B3: o sistema só preenche o que está lá.
+
 ---
 
-### 3.15. Control Panel — rotinas e destinatários de e-mail
+### 3.15. File Interpreter — os layouts dos arquivos
+
+Caminho no menu: **Apps → File Interpreter**.
+
+É o catálogo dos arquivos que o sistema monta, campo a campo: os de registro na B3 (Termo, Opção, Swap, MID, DCE) e os de instrução da Intrag. Cada template mostra a ordem dos campos, a largura de cada um e **de onde sai o valor** — um valor fixo, uma coluna da tela, um cadastro do Mapping ou um cálculo.
+
+O que se faz aqui, sem precisar de release:
+
+- **Ver o layout** — clique no template na lista à esquerda. Os blocos (header, registro, verificação) aparecem na ordem em que saem no arquivo.
+- **Trocar a origem de um campo** — *Edit Sources*. Um campo fixo passa a valer no próximo arquivo gerado e no próximo preview.
+- **Cadastrar um cálculo** — no campo de origem há um construtor por listas: diferença em dias úteis entre duas datas, data + N dias úteis, busca num cadastro do Mapping e de-para em linha (*se for ASIAN escreva A; se for VANILLA, deixe em branco*).
+- **Versões** — um mesmo arquivo pode ter mais de um layout: por par de entidades (JPM × MGT, LAWTON × JPM…) ou por produto, como nos arquivos da Intrag. O seletor **Versions** no alto do cartão mostra quantas existem e troca entre elas; *Add Template* cria a próxima a partir de uma que já existe.
+
+> **O preview das telas de New Deals lê este cadastro.** Editou aqui, feche e abra o preview de novo (duplo clique na linha) — ele relê o template, sem refresh da página.
+
+---
+
+### 3.16. Control Panel — rotinas e destinatários de e-mail
 
 Caminho no menu: **Apps → Control Panel**.
 
@@ -476,7 +497,7 @@ anexa para as listas de **TO** e **CC** do card. Assunto: *Support to OTC Deriva
 
 ---
 
-### 3.16. Live Position — conferir a posição em custódia
+### 3.17. Live Position — conferir a posição em custódia
 
 Caminho no menu: **Live Position → NDF** (e demais produtos).
 
@@ -494,7 +515,7 @@ Caminho no menu: **Live Position → NDF** (e demais produtos).
 
 ---
 
-### 3.17. Reconciliations — conciliar
+### 3.18. Reconciliations — conciliar
 
 Caminho no menu: **Reconciliations**.
 
@@ -511,7 +532,7 @@ Caminho no menu: **Reconciliations**.
 
 ---
 
-### 3.18. Quotes — consultar cotações
+### 3.19. Quotes — consultar cotações
 
 Caminho no menu: **Apps → Quotes**.
 
@@ -536,7 +557,7 @@ Consulta o histórico de cotações de três fontes, numa tela só:
 
 ---
 
-### 3.19. Holidays Calendar — os feriados que o sistema usa
+### 3.20. Holidays Calendar — os feriados que o sistema usa
 
 Caminho no menu: **Apps → Holidays Calendar**.
 

@@ -12853,3 +12853,268 @@ que listam colunas em cada tela.
 `check_lp_counterparty_name.py` prende as três telas com posição sintética em `tempfile` (nada de
 dado real), inclusive o caso do zero à esquerda comido, e a seção 7 prende o acoplamento com os dois
 avisos.
+
+---
+
+## §292 — File Interpreter: VARIANTES de template por par de pernas
+
+Um template do registro pode ser **variante** de outro: `base_key` aponta o template-mãe e
+`le_pair` diz para qual par de pernas ele vale (`MGT x JPM`). O gerador continua chamando o motor
+pela chave BASE — quem escolhe a variante é o motor (`_fi_variant_key`), pelo par do deal. Sem par,
+ou sem variante cadastrada, vale o base **byte a byte**: os goldens do TER e do OPC passam com as
+19 variantes semeadas ativas, e é essa a prova de que semear não mudou arquivo nenhum.
+
+A variante é **cópia completa** do layout, e é isso que a torna útil: nela mais campos podem virar
+`Fixed` (a conta da parte/contraparte, o Nome Simplificado do header — que aí dispensa o
+`b3-accounts`) sem tocar em código. Ela pode ainda cadastrar o **`file_name`** do arquivo gerado;
+em branco, vale o `{PREFIX}_{BUCKET}.txt` de sempre.
+
+Três coisas que não dão erro nenhum:
+
+- **o par do FWD Start / Other Publisher / Commodities usa a regra do BUCKET** — linha com cliente
+  JPM é a perna espelhada, e o par dela é `LAWTON x JPM`, não `MGT x JPM`. Foi o primeiro teste a
+  falhar, e falhou dizendo a verdade: eu tinha escrito `MGT x JPM` no golden;
+- a cópia da regra vive no navegador (`static/js/fi-ter-pair.js`), porque o preview escolhe a
+  variante antes de qualquer ida ao servidor. `check_fi_variants.py` roda a cópia JS no `jsc` e
+  compara com a do servidor, caso a caso;
+- **o modal de criação ACHATA o `source_by_page`** da página escolhida nos campos planos. A variante
+  é de uma página só; um `source_by_page` herdado do base venceria a edição feita nela, em silêncio,
+  porque o motor resolve o override primeiro.
+
+### O par não sai de um regex sobre o nome
+
+`MGT x JPM` estava sendo cadastrado e o motor usava o `JPM x CLI`. A causa: `JPMORGAN CHASE BANK,
+N.A. - SAO PAULO BRANCH` casa com o regex de JPM, e a entidade era resolvida por texto. Hoje
+`_ter_le_side` consulta o cadastro **`le-spn`** primeiro e só cai no regex quando o nome não está
+lá — a mesma fonte que o resto do app usa para dizer quem é entidade nossa.
+
+### Segregação por página
+
+Variante não aparece no rail: ela é assunto da PÁGINA dela, e o rail lista só os templates BASE. A
+exceção é a variante órfã (base apagado), que entra na lista para não sumir da tela com o arquivo
+ainda no registro. Clicar no chip de uma página abre o modal com as variantes **daquela** página —
+antes o template criado para o Vanilla aparecia ao clicar em Commodities.
+
+Foram semeadas as 19 variantes que a lógica hardcoded já produzia (Opt Comm, FXO, NDF Commodities,
+FWD Start e Other Publisher), para ninguém ter de recriá-las à mão.
+
+---
+
+## §293 — Os sete domínios DCE viram mappings, e os três layouts DCE entram na biblioteca
+
+A planilha `Mapping DCE` virou **sete cadastros** (`dce-country`, `dce-type-of-derivative`,
+`dce-type-of-swap`, `dce-type-of-verification`, `dce-functionality`,
+`dce-underlying-asset-category`, `dce-underlying-asset`), com os JSONs versionados e o `seed`
+vazio — o `dce-underlying-asset` tem ~14 mil linhas, e repeti-las no `routes.py` criaria uma segunda
+lista para divergir da primeira.
+
+As colunas carregam `lang` (chave i18n), e o `colLabel` do `mapping.html` traduz **cabeçalho, filtro,
+export e modal**. Coluna sem `lang` continua no rótulo inglês — é o que mantém os 33 cadastros
+antigos como estavam.
+
+Do manual "Enviar Arquivos" entraram também os três layouts de DCE (Registro pp. 553–557, Alteração
+558–562, Atualização 563–564). São **catálogo**: documentam o layout, não comandam gerador nenhum.
+
+---
+
+## §294 — Sugestão de domínio aberto NUNCA usa `<datalist>` nativo
+
+A lista de clientes do MT300 no `/mapping` saía no popup do navegador: ele ignora o tema, não
+acompanha a largura do campo e, com as ~560 contrapartes do Reference Data, cobre a tela inteira.
+
+O padrão passou a ser um dropdown próprio **abaixo do campo, com a MESMA largura e `max-height`
+(~220px) com rolagem** — `mapAttachDrop`/`.map-ac-drop` no mapping.html, irmão do `.ar-ac-drop` que o
+Add/Edit Deal do New Deals já tinha. Dois detalhes que só aparecem quando faltam: o clique do item é
+por **`mousedown`** (dispara antes do `blur` do input) e reemite `input`/`change` — é o que deixa o
+`wireRefdata` completar os campos irmãos —, e o esconder vem DEPOIS desses eventos, senão o próprio
+`input` reabre a lista. O domínio segue aberto: a lista é sugestão, não trava.
+
+---
+
+## §295 — `file-interface` → `file-interpreter`: o nome vale em TUDO
+
+A tela se chama **File Interpreter** e o código dizia `file-interface` — página, APIs, pasta de
+dados e identificadores. Renomear só o template deixaria a armadilha de pé: criar amanhã uma página
+"File Interface" confundiria o código inteiro.
+
+O legado não quebra, e são cinco proteções:
+
+- a URL antiga `/file-interface` **redireciona**;
+- as APIs antigas são **alias** das novas — aba aberta com o HTML de antes do deploy continua
+  salvando;
+- o valor antigo gravado no `Page_Access` é **normalizado na leitura** (`_get_page_access`);
+- o sino aceita os **dois rótulos** nos três mapas de destino;
+- a pasta `static/data/file-interface/` é **migrada na subida** para a nova, sem sobrescrever o que
+  já existe: template criado pela tela na instância do time não está no git, e renomear diretório
+  não pode sumir com cadastro de runtime.
+
+Havia ainda um `file-interpreter.html` **morto** no repo, do Initial commit, com dois links
+apontando para ele — era ele que eu estava editando quando o usuário disse "você está alterando o
+fileinterface, mas deveria ser o fileinterpreter". Apagado, links corrigidos, e aí sim o rename.
+
+---
+
+## §296 — O campo calculado vira CADASTRO, e o preview BAIXA o arquivo em vez de enviar
+
+Campo com Source `Mapping` ou `Calculated` tinha o cálculo no código. Agora o **Source Field/Value
+aceita FÓRMULA**, com builder por dropdowns no Edit Sources e no modal da variante:
+
+| | |
+|---|---|
+| `FIELD(Campo)` | o valor do campo, como está |
+| `DATE(Campo)` | o campo como data AAAAMMDD |
+| `BIZDIFF(A; B)` | dias úteis ANBIMA entre A e B, zero-padded pela LARGURA do format (9(01) → `3`, 9(02) → `03`) |
+| `ADDBIZ(Campo; N)` | a data do campo + N dias úteis |
+| `LOOKUP(mapping; IN; OUT; Campo)` | a linha do mapping cuja coluna IN casa com o campo |
+| `CASE(Campo; DE=PARA; …)` | de-para em linha; valor fora da lista devolve VAZIO, que o motor completa com espaços — é assim que se cadastra "e no resto, branco" |
+
+Argumentos por `;`, campo casado com o deal pelo **nome da COLUNA** cego a caixa e espaço. Texto que
+NÃO parseia como fórmula continua documentação e o valor do gerador vale — é o que mantém todo
+cadastro existente byte a byte. Fórmula vence o gerador; `Fixed` vence tudo.
+
+A cópia do navegador é `FiTer.calc` (com `FiTer.prime` carregando o ANBIMA e os mappings do LOOKUP)
+e `check_fi_calc.py` compara as duas, caso a caso, pelo `jsc`.
+
+Duas consequências que valem por si:
+
+- **a Cotação para o Vencimento (campo 15 do TER) EFETIVA desloca as datas das linhas de
+  verificação (tipo 2)** N dias úteis para frente, no calendário do deal. Hoje o campo nasce em
+  branco, então nada muda sem cadastro;
+- **o page-spec é relido a cada abertura do preview** (`fiLoadSpec`), então template editado vale no
+  próximo duplo clique, sem refresh da página. Fetch que falha mantém o spec em memória, em vez de
+  deixar o preview sem cadastro nenhum.
+
+O botão **Send** do preview virou **download** (só o ícone): o servidor devolve o CONTEÚDO do
+arquivo — mesmo gerador, byte a byte, template e variante incluídos — sem gravar no share, sem
+notificação e **ignorando o status do deal**. É a conferência que a mesa pedia sem inventar um
+segundo gerador.
+
+---
+
+## §297 — Os arquivos da Intrag entram na biblioteca do File Interpreter
+
+Seção **Intrag**, com dois templates base — `intrag-ndf` (30 colunas) e `intrag-option` (38), os
+dois `;`-delimitados e **sem linha de header** — e uma versão por página dentro de cada um.
+
+**Nem toda variante é por par de pernas.** As da Intrag se dividem por PRODUTO, e `NDF Commodities`
+não é um `le_pair`. Daí o **`variant_label`**: rótulo de tela, só isso — quem o motor consulta para
+escolher variante continua sendo o `le_pair`. Sem ele as versões apareciam todas como "Default" e
+não havia como distingui-las.
+
+O conteúdo transcreve o que `_save_intrag_ndf_entry`, `_save_intrag_ndf_moeda_entry` e
+`_save_intrag_opt_entry` gravam hoje, campo a campo. Duas coisas que o cadastro deixa visíveis pela
+primeira vez: na NDF, a versão de moeda diverge de **17 das 30** colunas (é a tabela de mercadoria
+com OUTRO significado da coluna Trade Price em diante, e a Participant Position sai **invertida** —
+a linha das páginas genéricas é a perna do banco contra o Lawton e a carteira registrada é a do
+fundo); na Option, divergem exatamente as **sete** colunas que o `is_fxo` sobrescreve. Cada
+divergência vive num `source_by_page` do base.
+
+Os seis nascem `status: library` — o arquivo continua sendo escrito pela tela da Intrag a partir da
+grade, e o cadastro documenta e edita o layout sem comandar a geração. Ligar o gerador ao cadastro
+(como o TER e o OPC já são) é outra decisão, e pede golden byte a byte.
+
+**O FWD Start não tem versão, e é de propósito**: o `routes.py` restringe a alimentação a
+`('vanilla', 'other-publishers')` porque *o strike só existe na strike set date, quando a operação
+rebooka como vanilla* — ela chega à Intrag pela versão do Vanilla. Criar a variante documentaria uma
+linha que nunca é gerada.
+
+O seletor **Versions** do cartão leva a contagem no rótulo ("Versions 4"): fechado ele mostra só a
+versão atual, e a tela dizia "Versions Default" — foi assim que as duas versões da Intrag Option
+pareceram não existir. E o subtítulo da página deixou de dizer "B3 file layouts": não vale enumerar
+os destinos ali, a lista envelhece calada no próximo arquivo.
+
+---
+
+## §298 — O Reload do Index B3 escrevia só o `<td>`, e a mercadoria sumia da linha
+
+Cadastrado o ativo no Index B3 depois da importação, o **Reload Data** limpava o badge mas o campo
+**Commodities** continuava vazio no Edit Deal. A causa é de uma linha: o restore fazia
+`td15.text(...)` e parava aí.
+
+Quem lê a mercadoria depois é **`row().data()`** — o modal de edição (`d[15]`), o export e o payload
+do save. E texto posto só no DOM ainda **some no primeiro redraw**, porque paginar, ordenar ou
+filtrar repinta a célula a partir do dado. O restore passou a gravar `cell().data()` e o `<td>`, e
+só quando a célula está vazia: valor que veio da API ou do upload não é atropelado.
+
+Três buracos vieram junto, e a varredura pediu as seis páginas de New Deals:
+
+- o restore só alcançava a página **visível** da grade (era o passe 2, sobre os nós renderizados).
+  Foi para o passe 1, que varre a tabela inteira — a operação costuma estar noutra página;
+- a **Opt Commodities não resolvia a mercadoria na montagem da linha**. O NDF Commodities já tinha
+  `deal.Commodities || _SUBJACENTE_MAP_NDF[ua]`; a de opção tinha só o valor gravado, então nem
+  recarregar a página inteira preenchia a célula;
+- **Opt Commodities e Opt FXO buscavam o `Subjacente.json` sem cache-busting** (o NDF Commodities já
+  usava `?_=`): o navegador podia servir a cópia velha e o botão não recarregava nada. O mesmo valia
+  para o `RefData.json` do aviso de contraparte.
+
+Mais duas de higiene na Opt Commodities, que a irmã de NDF já fazia: **zerar o mapa de Fator
+Conversão** antes de reconstruir (pela regra de merge o `0,01` cadastrado por engano sobrevivia à
+correção para `1,0`, e o Quoted in Cents continuava YES) e **limpar o cache do parser do box**, que
+senão segue com o mapa velho no próximo upload da mesma aba.
+
+As três páginas genéricas de NDF têm `reloadSubjacenteAndRefresh` **no-op de propósito** — a máquina
+de Index B3 não é carregada nelas, e o stub existe para o SweetAlert compartilhado não quebrar.
+
+O arquivo-dia no servidor continua com Commodities vazio até a linha ser salva: a tela resolve pelo
+cadastro em toda leitura e o servidor já faz o mesmo fallback onde importa (a família da confirmação
+lê `deal.Commodities or subj.mercadoria`).
+
+---
+
+## §299 — Opção de commodities de PALM OIL ganha o documento dela
+
+O arquivo que existia era o **HTML cru exportado do Word** — 3.118 linhas de `mso-*` e nenhum
+Jinja —, então registrar a família e apontar para ele mandaria ao cliente a linha de exemplo do
+`.doc` no lugar das operações. Portado a partir do `opt-comm-strike-usd.html`, que é o irmão dele: a
+comparação palavra a palavra fecha em **doze** diferenças, e o `check_conf_optcomm_palmoil.py`
+prende a décima terceira, que é cláusula mexida por engano.
+
+O Anexo I vai de 16 para **19 colunas** (Código da Bloomberg, Quantidade, Taxa de Conversão da
+Mercadoria e a Data de Verificação dela), e cabeçalho, linha do Jinja e painel de edição são
+travados na mesma ordem — desalinhar os três é entregar a coluna vizinha ao cliente.
+
+**O `.doc` cita "Anexo II" sete vezes e NÃO traz a seção**, inclusive na fórmula de liquidação. O
+anexo foi trazido do Termo de palm oil, que é da mesma mesa e o mesmo anexo: a alternativa era
+entregar um documento que manda ler um anexo inexistente. O teste trava que os dois sigam idênticos.
+
+**O PDF sai do HTML JÁ RENDERIZADO** (`word_html_pdf`), e não da réplica em reportlab — o padrão de
+documento novo desde a Opção de Câmbio (§139). Aqui não é estilo: o `opcao_pdf` imprime o Anexo I de
+16 colunas, e o documento assinado sairia sem a Taxa de Conversão da Mercadoria, que é justamente
+como o preço em MYR vira USD. `_CONF_OPT_PDF_FROM_HTML` é o registro de quem usa qual caminho, e o
+`doc_html` passou a ser montado ANTES do PDF porque agora ele é a fonte dele.
+
+No gerador, a bolsa sai da constante do documento (`_CONF_PALMOIL_BOLSA`) e a Data de Verificação da
+Taxa de Conversão é a Data Final de Verificação da Mercadoria, inclusive no bullet, onde ela é a
+própria Data de Exercício. `_conf_opt_family` já resolvia `palm-oil` pela mercadoria, então o card do
+New Deals e o Generate do Monitor passaram a oferecer o documento sem mais nada.
+
+---
+
+## §300 — Send Conecta passa a valer para o NDF Vanilla
+
+A página já tinha o fluxo inteiro no navegador — envio em lote e por linha, com a trava de
+maker/checker —, e quem recusava era o servidor: `vanilla` só entrava no `send-conecta` com
+`download: true`, porque **o registro dele era de outra ferramenta** e o app só montava o arquivo
+para conferência. A mesa passou a registrar por aqui; o que muda é o DESTINO e nada mais.
+
+Duas coisas vieram junto porque a mudança as torna obrigatórias:
+
+- **as linhas de verificação (tipo 2) saem nos dois caminhos.** Emitir só no download faria o
+  arquivo que a mesa baixa para conferir diferir do que vai para a B3 — divergência que não aparece
+  em lugar nenhum até a B3 recusar o registro;
+- **o preview escolhe a variante pela regra do BUCKET** (`FiTer.pick`), como as outras três. Ele
+  usava `pairSimple` (LE × contraparte, `MGT x JPM`) justamente porque "esta página não gera o
+  arquivo", o que deixou de ser verdade: com variante cadastrada para a perna espelhada, a tela
+  mostraria um layout e a B3 receberia outro. O `pairSimple` continua no espelho do navegador, sem
+  nenhuma página usando.
+
+O ciclo fecha sem mais nada: o **Mapping B3 ID** já é genérico por produto, então o retorno leva o
+deal de `Sent` para `Success`, e os gatilhos do Success do vanilla (Pending Confirmation e a Intrag
+NDF de moeda contra o Lawton) já existiam.
+
+Conferido no arquivo gerado: `VANILLA_BANCO.txt` com header + tipo 1 + as três linhas tipo 2, e
+`VANILLA_LAWTON.txt` quando a linha é a perna espelhada. Download e envio saem iguais byte a byte
+**menos os 10 dígitos do Nº de Controle Interno**, que é sorteado a cada geração — isso é de antes.
+
+⚠️ **Ressalva assumida:** se a outra ferramenta continuar registrando em paralelo, o mesmo trade vai
+à B3 duas vezes. A decisão de operar só por aqui é da mesa.
