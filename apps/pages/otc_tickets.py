@@ -25,10 +25,11 @@ import json
 import os
 import tempfile
 import threading
+from apps.pages.data_paths import data_dir, data_path, data_write, mapping_file, mapping_write
 from datetime import datetime
 
 _DIR = os.path.normpath(os.path.join(
-    os.path.dirname(__file__), '..', 'static', 'data', 'tickets'))
+    data_dir(), 'tickets'))
 _FILE = os.path.join(_DIR, 'tickets.json')
 
 # Lock próprio, separado do `_cache_lock` do routes.py: os dois protegem

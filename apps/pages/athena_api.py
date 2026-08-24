@@ -34,6 +34,7 @@ from __future__ import annotations
 import json
 import os
 import re
+from apps.pages.data_paths import data_dir, data_path, data_write, mapping_file, mapping_write
 from html.parser import HTMLParser
 from typing import Optional
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
@@ -105,10 +106,8 @@ def is_available():
 # importar `routes` daqui seria circular. Arquivo ausente/ilegível → fallback nas
 # constantes acima, que são também o seed da linha do New Deals.
 
-_MAPPINGS_DIR = os.path.normpath(
-    os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "static", "data", "mappings")
-)
-API_LINKS_FILE = os.path.join(_MAPPINGS_DIR, "api-links.json")
+_MAPPINGS_DIR = data_write("mappings")
+API_LINKS_FILE = mapping_file("api-links", _MAPPINGS_DIR)
 
 USE_NEW_DEALS = "New Deals"
 USE_UNWINDS = "Unwinds"

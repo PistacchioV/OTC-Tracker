@@ -31,12 +31,13 @@ import hashlib
 import logging
 import zipfile
 import unicodedata
+from apps.pages.data_paths import data_dir, data_path, data_write, mapping_file, mapping_write
 from datetime import datetime
 
 _LOG = logging.getLogger(__name__)
 from email.header import Header
 
-_DATA_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), '..', 'static', 'data'))
+_DATA_DIR = data_dir()
 
 JPM_B3_ACCOUNT   = '73760.00-9'           # JPMorgan's own CETIP account
 PREMIUM_CLIENT_B3 = '73760.10-2'          # premium "cliente" bucket — only these get the D0 premium notice
@@ -252,7 +253,7 @@ def _email_shell(title, ref_date, intro_html, body_html, footer_extra=''):
 # ──────────────────────────────────────────────────────────────────────────
 def _load_json(name):
     try:
-        with open(os.path.join(_DATA_DIR, name), encoding='utf-8') as fh:
+        with open(data_path(name), encoding='utf-8') as fh:
             return json.load(fh)
     except Exception:
         return []
@@ -806,7 +807,7 @@ def _ndf_pdf_set():
     zero contraparte tiraria o anexo de quem sempre recebeu.
     """
     try:
-        with open(os.path.join(_DATA_DIR, 'mappings', 'ndf-pdf-cpty.json'),
+        with open(mapping_file('ndf-pdf-cpty', _DATA_DIR + '/mappings'),
                   encoding='utf-8') as fh:
             rows = json.load(fh)
     except Exception:

@@ -229,6 +229,40 @@ check(not achados,
       'nenhum modulo de apps/ escreve raiz de rede a mao' +
       ('' if not achados else ' — ' + '; '.join(achados[:6])))
 
+
+# ── A pasta dos DADOS também sai do Config ──────────────────────────────────
+# `os.path.join(os.path.dirname(__file__), '..', 'static', 'data', ...)` amarra o
+# dado ao diretório do CÓDIGO. Isso passa despercebido na dev, onde as duas
+# pastas são a mesma, e some com tudo na instância do JPM, onde não são: o cache
+# é gitignorado, então um checkout novo não tem arquivo-dia nenhum e os gráficos
+# vêm vazios com a API respondendo 200. Quem monta esse caminho é o
+# `data_paths`, e é o único que pode escrever o literal.
+_DONOS_DO_LITERAL = ('config.py', 'data_paths.py')
+dados = []
+for caminho in alvos:
+    if os.path.basename(caminho) in _DONOS_DO_LITERAL:
+        continue
+    try:
+        texto = io.open(caminho, encoding='utf-8').read()
+        arvore = ast.parse(texto)
+    except Exception:
+        continue
+    fora = _docstrings(arvore)
+    # Uma constante 'static' seguida de uma 'data' na MESMA chamada é o padrão.
+    for no in ast.walk(arvore):
+        if not isinstance(no, ast.Call):
+            continue
+        vals = [a.value for a in no.args
+                if isinstance(a, ast.Constant) and isinstance(a.value, str)]
+        for i in range(len(vals) - 1):
+            if vals[i] == 'static' and vals[i + 1] == 'data':
+                dados.append('%s:%d' % (os.path.relpath(caminho, REPO), no.lineno))
+                break
+
+check(not dados,
+      'nenhum modulo de apps/ monta static/data a mao (use o data_paths)' +
+      ('' if not dados else ' — ' + '; '.join(dados[:6])))
+
 print()
 if falhas:
     print('{} falha(s)'.format(len(falhas)))

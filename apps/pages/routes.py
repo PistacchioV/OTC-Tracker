@@ -37,6 +37,7 @@ from jinja2 import TemplateNotFound
 # dentro do diretório de trabalho — foi assim que apareceram as pastas
 # `I:\Confirmation\...` na raiz do repositório.
 from apps.config import Config
+from apps.pages.data_paths import data_dir, data_path, data_write, mapping_file, mapping_write
 from apps.pages import blueprint
 # Porte Python do parser de booking recap (o mesmo que otc-fileupload.js faz no
 # navegador) — usado pela varredura agendada do box. Sem dependência externa.
@@ -546,11 +547,11 @@ def enforce_control_panel_cards():
 
 DB_PATH = Config.DATABASE_PATH
 CACHE_BASE_DIR = os.path.normpath(os.path.join(
-    os.path.dirname(__file__), "..", "static", "data", "cache", "new deals", "Option", "Commodities"
+    data_dir(), "cache", "new deals", "Option", "Commodities"
 ))
 # FXO has its own cache dir so the dashboard labels it "Option FXO" (not Commodities)
 OPT_FXO_CACHE_DIR = os.path.normpath(os.path.join(
-    os.path.dirname(__file__), "..", "static", "data", "cache", "new deals", "Option", "FXO"
+    data_dir(), "cache", "new deals", "Option", "FXO"
 ))
 SHARED_MAILBOX = "otc.tracker@jpmorgan.com"
 RETURN_PATH = os.getenv('RETURN_PATH', os.path.join(
@@ -2539,7 +2540,7 @@ CETIP_SALES_SUPPORT_EMAIL = os.getenv('CETIP_SALES_SUPPORT_EMAIL', 'brazil_sales
 # e-mail só com os dois conjuntos entregaria a cada lado um arquivo que ele não
 # pediu — e o recorte e o arquivo cheio têm o mesmo nome de origem.
 _CETIP_RECIPIENTS_FILE = os.path.normpath(os.path.join(
-    os.path.dirname(__file__), '..', 'static', 'data', 'control-panel',
+    data_dir(), 'control-panel',
     'cetip_distribution_recipients.json'))
 _CETIP_RECIPIENT_KEYS = ('ss_to', 'cem_to', 'bacc_to', 'hub_to')
 
@@ -2957,8 +2958,8 @@ def _cetip_rules():
 #   Option → OPC files          (DPOSICAO.OPC)         — file has its own header
 #   Swap   → SWAP position/flow/premium agenda          — HEADERLESS: column names
 #            come from _B3_SWAP_HEADERS (stored standard, keyed per file type)
-B3_JSON_ROOT = os.path.join(os.path.dirname(__file__), '..', 'static', 'data', 'cache', 'b3 files')
-ACCRUAL_JSON_ROOT = os.path.join(os.path.dirname(__file__), '..', 'static', 'data', 'cache', 'accrual')
+B3_JSON_ROOT = data_write('cache', 'b3 files')
+ACCRUAL_JSON_ROOT = data_write('cache', 'accrual')
 # Network folder the VCP / CEM / EDG / HYB source files are dropped into, per run.
 # Layout: ACCRUAL_SOURCE_ROOT\{YYYY}\{mm. Month}\{DD} (run = last ANBIMA bizday of the
 # month). Only reachable on the JPM environment; override with the env var off-site.
@@ -3183,7 +3184,7 @@ def _cetip_save_file(src_path, dest_path):
 # Existing VCP qualification table (Descrição/Classificação/STATUS per Qualification
 # ID) — the Save CETIP Files routine refreshes it in place from the
 # INDEXADORESSWAP_VCP file. Also read by the Swap Characteristics page and index-b3.
-VCP_JSON = os.path.join(os.path.dirname(__file__), '..', 'static', 'data', 'VCP.json')
+VCP_JSON = data_path('VCP.json')
 
 
 def _cetip_update_vcp_json(src_path):
@@ -4531,7 +4532,7 @@ def api_cp_forecast_email():
 # format) is still to be defined.
 # ──────────────────────────────────────────────────────────────────────────
 _DAILY_METRIC_DIR = os.path.normpath(os.path.join(
-    os.path.dirname(__file__), '..', 'static', 'data', 'control-panel'))
+    data_dir(), 'control-panel'))
 _DAILY_METRIC_RECIPIENTS_FILE = os.path.join(_DAILY_METRIC_DIR, 'daily_metric_recipients.json')
 # Settlement Forecast keeps its own saved TO/CC (same folder, no BCC) so the card
 # recipients replace the previously hardcoded OTC Ops / accrual-cc addresses.
@@ -8300,7 +8301,7 @@ def api_swapprem_data():
 #  (RATES/EQUITIES/COMMODITIES) is pending (user will supply).
 OTM_SOURCE_ROOT = os.getenv('OTM_SOURCE_ROOT', os.path.join(
     Config.SHARED_DRIVE_ROOT, 'Confirmation', 'Derivativos', 'OTC Tracker', 'Settlement', 'OTM'))
-OTM_JSON_ROOT = os.path.join(os.path.dirname(__file__), '..', 'static', 'data', 'cache', 'daily settlement')
+OTM_JSON_ROOT = data_write('cache', 'daily settlement')
 _OTM_COLUMNS = [
     'Trade Id', 'Currency', 'Amount', 'Value Date', 'Direction', 'Cpty SPN', 'Cpty Name',
     'Owner SPN', 'Trade Date', 'Asset Class', 'Owner Legal Entity', 'Owner Name',
@@ -10796,8 +10797,7 @@ def _swaphyb_extract(raw, ref):
 
 def _swaphyb_kap_to_cetip():
     """{Kapital ID (hybrids_id) → Cetip ID (b3_id)} from mapping_swap-hyb.json."""
-    path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                        '..', 'static', 'data', 'mapping_swap-hyb.json')
+    path = data_path('mapping_swap-hyb.json')
     out = {}
     try:
         with open(path, encoding='utf-8') as fh:
@@ -13878,7 +13878,7 @@ def _opb3_refdata_by_account():
     """Conta CETIP ('B3 ACCOUNT', ex. 74220.00-5) → nome da contraparte (RefData)."""
     out = {}
     try:
-        with open(os.path.join(os.path.dirname(__file__), '..', 'static', 'data', 'RefData.json'),
+        with open(data_path('RefData.json'),
                   encoding='utf-8') as fh:
             for r in json.load(fh) or []:
                 acc = str(r.get('B3 ACCOUNT', '') or '').strip()
@@ -15383,7 +15383,7 @@ def api_ndf_summary_ted_email():
 # ============================================================================
 MTM_SOURCE_ROOT = os.getenv('MTM_SOURCE_ROOT', os.path.join(
     Config.SHARED_DRIVE_ROOT, 'Confirmation', 'Derivativos', 'OTC Tracker', 'Regulatory', 'MTM'))
-MTM_JSON_ROOT = os.path.join(os.path.dirname(__file__), '..', 'static', 'data', 'cache', 'mtm')
+MTM_JSON_ROOT = data_write('cache', 'mtm')
 
 _MTM_ACCOUNT      = '73760009'               # col D house account (73760.00-9), digits only
 _MTM_FILTER_COL   = 3                         # col D
@@ -15542,7 +15542,7 @@ def _mtm_apply_edg_values(data, file_rows):
 # Hybrids MtM values file "Stream_level_MTM": col A = Trade Name, col E (idx 4) =
 # 'MTM in scaling currency'. SUMIF col E grouped by Trade Name, resolve the
 # mapping_swap-hyb.json B3 ID and set the Hybrids row (Código IF = B3 ID).
-_MTM_HYB_MAP_PATH  = os.path.join(os.path.dirname(__file__), '..', 'static', 'data', 'mapping_swap-hyb.json')
+_MTM_HYB_MAP_PATH  = data_path('mapping_swap-hyb.json')
 _MTM_HYB_VALUE_COL = 4                                # col E: MTM in scaling currency
 
 
@@ -18280,7 +18280,7 @@ _PC_COLUMNS = [
     'FepWeb ID', 'Pendência',
 ]
 # Daily JSON snapshots of the pending DB (YYYY/MM/DD), for a future metrics page.
-_PC_SNAPSHOT_DIR = os.path.join(os.path.dirname(__file__), '..', 'static', 'data',
+_PC_SNAPSHOT_DIR = os.path.join(data_dir(),
                                 'cache', 'pending-confirmation')
 
 
@@ -20598,7 +20598,7 @@ def _ndf_flat(s):
 #  valores que estavam no código: na primeira leitura o arquivo nasce com eles,
 #  então o comportamento não muda até alguém editar na tela. O loader cacheia
 #  por mtime — edição vale na requisição seguinte, sem restart do servidor.
-_MAPPINGS_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), '..', 'static', 'data', 'mappings'))
+_MAPPINGS_DIR = data_write('mappings')
 
 # Legal Entities do fluxo de NDF/FXO. Uma lista só, usada pelos dois mappings que
 # têm a LE como chave (le-accronym e le-spn), para não divergirem.
@@ -21732,8 +21732,7 @@ _MAPPING_DEFS = {
         # SwapIndex.json e não há como divergirem. As colunas são as chaves do
         # próprio arquivo (inclusive STATUS/MAKER/CHECKER, declaradas para que um
         # POST do /mapping, que reescreve o arquivo inteiro, não as apague).
-        'file': os.path.normpath(os.path.join(os.path.dirname(__file__), '..', 'static',
-                                              'data', 'SwapIndex.json')),
+        'file': data_write('SwapIndex.json'),
         'columns': [
             {'key': 'Codigo Referencia Externa', 'label': 'B3 Code'},
             {'key': 'Nome Curva', 'label': 'Curve Name'},
@@ -22743,14 +22742,14 @@ def api_mappings(key):
 #  e template novo/atualizado da B3 entra pela tela (Create New Template).
 # ═════════════════════════════════════════════════════════════════════════════
 _FILE_INTERPRETER_DIR = os.path.normpath(os.path.join(
-    os.path.dirname(__file__), '..', 'static', 'data', 'file-interpreter'))
+    data_dir(), 'file-interpreter'))
 
 # A pasta chamava-se `file-interface` (o endereço antigo da página). Template
 # criado PELA TELA na instância do time não está no git: na subida, o que
 # ficou na pasta antiga é movido para a nova (sem sobrescrever o que já
 # existe) — renomear diretório não pode sumir com cadastro de runtime.
 _FI_LEGACY_DIR = os.path.normpath(os.path.join(
-    os.path.dirname(__file__), '..', 'static', 'data', 'file-interface'))
+    data_dir(), 'file-interface'))
 try:
     if os.path.isdir(_FI_LEGACY_DIR):
         os.makedirs(_FILE_INTERPRETER_DIR, exist_ok=True)
@@ -24208,21 +24207,21 @@ def api_fxo_mapping_b3():
 # ==============================================================================
 
 NDF_COMM_CACHE_DIR = os.path.normpath(os.path.join(
-    os.path.dirname(__file__), "..", "static", "data", "cache", "new deals", "NDF", "Commodities"
+    data_dir(), "cache", "new deals", "NDF", "Commodities"
 ))
 
 NEW_DEALS_CACHE_ROOT = os.path.normpath(os.path.join(
-    os.path.dirname(__file__), "..", "static", "data", "cache", "new deals"
+    data_dir(), "cache", "new deals"
 ))
 
 INTRAG_NDF_CACHE_DIR = os.path.normpath(os.path.join(
-    os.path.dirname(__file__), "..", "static", "data", "cache", "new deals", "Intrag", "NDF"
+    data_dir(), "cache", "new deals", "Intrag", "NDF"
 ))
 INTRAG_OPT_CACHE_DIR = os.path.normpath(os.path.join(
-    os.path.dirname(__file__), "..", "static", "data", "cache", "new deals", "Intrag", "Option"
+    data_dir(), "cache", "new deals", "Intrag", "Option"
 ))
 INTRAG_SWAP_CACHE_DIR = os.path.normpath(os.path.join(
-    os.path.dirname(__file__), "..", "static", "data", "cache", "new deals", "Intrag", "Swap"
+    data_dir(), "cache", "new deals", "Intrag", "Swap"
 ))
 
 # Network share where generated Intrag NDF .txt files are written; pende da
@@ -24247,7 +24246,7 @@ def _load_anbima():
     if _anbima_loaded:
         return
     try:
-        path = os.path.join(os.path.dirname(__file__), '..', 'static', 'data', 'anbima.json')
+        path = data_path('anbima.json')
         with open(path, 'r', encoding='utf-8') as fh:
             data = json.load(fh)
         _ANBIMA_HOLIDAYS = {d['date'] for d in data}
@@ -24300,7 +24299,7 @@ def _weekday_bizdays_between(d1, d2):
 
 def _load_subjacente_lookup():
     try:
-        fp = os.path.join(os.path.dirname(__file__), '..', 'static', 'data', 'Subjacente.json')
+        fp = data_path('Subjacente.json')
         with open(fp, 'r', encoding='utf-8') as fh:
             rows = json.load(fh)
         result = {}
@@ -24322,7 +24321,7 @@ _subjacente_cache = {'mtime': None, 'data': {}}
 
 
 def _subjacente_by_code():
-    fp = os.path.join(os.path.dirname(__file__), '..', 'static', 'data', 'Subjacente.json')
+    fp = data_path('Subjacente.json')
     try:
         mtime = os.path.getmtime(fp)
     except OSError:
@@ -26151,10 +26150,7 @@ def _ndf_comm_ter_lines(deal):
         # Strip anything but word chars so a crafted FXHolidaySchedule
         # (e.g. '../../secret') can't escape the data dir (path traversal).
         _sched_file = re.sub(r'[^A-Za-z0-9_]', '', fx_holiday_sched.replace('-', '_'))
-        holiday_path = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)),
-            '..', 'static', 'data', f'{_sched_file}.json'
-        ) if _sched_file else None
+        holiday_path = data_path(f'{_sched_file}.json') if _sched_file else None
         try:
             with open(holiday_path, encoding='utf-8') as _hf:
                 _raw = _json.load(_hf)
@@ -26438,7 +26434,7 @@ def api_ndf_mapping_b3():
 # API — B3 JSON CRUD (Subjacente / VCP / Domínio / RefData)
 # ==============================================================================
 
-_B3_DATA_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), '..', 'static', 'data'))
+_B3_DATA_DIR = data_dir()
 _B3_FILE_MAP = {
     'subj':      'Subjacente.json',
     'vcp':       'VCP.json',
@@ -27056,7 +27052,7 @@ def _box_subjacente_index():
     código aparece com fatores conflitantes (§77.1)."""
     idx = {}
     try:
-        fp = os.path.join(os.path.dirname(__file__), '..', 'static', 'data', 'Subjacente.json')
+        fp = data_path('Subjacente.json')
         with open(fp, encoding='utf-8') as fh:
             rows = json.load(fh) or []
     except Exception:
@@ -27456,10 +27452,7 @@ def api_send_conecta():
         _deal_holidays = set()
         if not vanilla and fx_holiday_sched:
             _sched_file2 = fx_holiday_sched.replace('-', '_')
-            holiday_path = os.path.join(
-                os.path.dirname(os.path.abspath(__file__)),
-                '..', 'static', 'data', f'{_sched_file2}.json'
-            )
+            holiday_path = data_path(f'{_sched_file2}.json')
             try:
                 with open(holiday_path, encoding='utf-8') as _hf:
                     _raw = _json.load(_hf)
@@ -28523,7 +28516,7 @@ def _conf_subjacente_map():
     """Subjacente.json indexado pelo código do ativo → bolsa/fator/mercadoria.
     Cache por mtime (o arquivo muda pouco e tem ~8k registros)."""
     fp = os.path.normpath(os.path.join(os.path.dirname(__file__), '..',
-                                       'static', 'data', 'Subjacente.json'))
+                                       'Subjacente.json'))
     try:
         mt = os.path.getmtime(fp)
     except OSError:
@@ -28649,7 +28642,7 @@ def _conf_deal_family(deal, subj):
 # (acronym | mercadoria | família). Generated = Word+PDF salvos no Inventory;
 # Success = validado na janela de checklist com o preview do PDF.
 CONF_STATE_DIR = os.path.normpath(os.path.join(
-    os.path.dirname(__file__), "..", "static", "data", "cache", "confirmations", "ndf-comm"
+    data_dir(), "cache", "confirmations", "ndf-comm"
 ))
 
 
@@ -33321,7 +33314,7 @@ _MDEA_TIME = {'otherpub': (20, 0), 'fwdstart': (16, 30)}
 # re-booking não é um produto — é estado da rotina Manual Deals EA —, e por isso
 # ele mora no cache DELA.
 _MDEA_REBOOK_DIR = os.path.normpath(os.path.join(
-    os.path.dirname(__file__), '..', 'static', 'data', 'cache', 'manual-deals-ea',
+    data_dir(), 'cache', 'manual-deals-ea',
     'fwdstart-rebooks'))
 
 
@@ -38069,7 +38062,7 @@ def _initiate_2fa(sid, email, name):
 # ============================================================================
 _PC_METRICS_AGING_THRESHOLD = 30
 _PC_METRICS_HISTORY_FILE = os.path.join(
-    os.path.dirname(__file__), '..', 'static', 'data', 'pending-confirmation-metrics-history.json')
+    data_dir(), 'pending-confirmation-metrics-history.json')
 
 
 def _pc_metrics_int(v):

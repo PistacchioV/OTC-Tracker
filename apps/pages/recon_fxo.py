@@ -59,14 +59,15 @@ import pandas as pd
 # A raiz do share sai do Config, como todo destino de rede do app: na branch de
 # produção ela é o UNC, e um literal `I:\` aqui manteria ESTA recon presa à
 # letra mapeada enquanto o resto do app já fala com o servidor.
+from apps.pages.data_paths import data_dir, data_path, data_write, mapping_file, mapping_write
 from apps.config import Config
 
 _LOG = logging.getLogger(__name__)
 
 _MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
-_DATA_DIR = os.path.normpath(os.path.join(_MODULE_DIR, '..', 'static', 'data'))
-_MAPPINGS_DIR = os.path.join(_DATA_DIR, 'mappings')
-_CACHE_DIR = os.path.join(_DATA_DIR, 'cache', 'reconciliation', 'fxo')
+_DATA_DIR = data_dir()
+_MAPPINGS_DIR = data_write('mappings')
+_CACHE_DIR = data_write('cache', 'reconciliation', 'fxo')
 
 # Raiz das posições CETIP — a MESMA da rotina Save CETIP Files e da recon de
 # Comitente, pelo mesmo env var. Duas raízes seriam duas verdades sobre onde o
@@ -252,7 +253,7 @@ def _mapping_rows(key):
     de propósito: edição na tela vale no próximo run, sem restart.
     """
     try:
-        with open(os.path.join(_MAPPINGS_DIR, '%s.json' % key), encoding='utf-8') as fh:
+        with open(mapping_file(key, _MAPPINGS_DIR), encoding='utf-8') as fh:
             rows = json.load(fh)
     except Exception:
         return []
@@ -350,7 +351,7 @@ def _refdata_rows():
     própria aplicação, e um cache eterno faria a recon do dia seguinte continuar
     sem o cliente que alguém acabou de cadastrar.
     """
-    path = os.path.join(_DATA_DIR, 'RefData.json')
+    path = data_path('RefData.json')
     try:
         mtime = os.path.getmtime(path)
     except OSError:
@@ -1242,7 +1243,7 @@ def _contar(rows):
 # A chave é a `Combinação de operações`, que é o identificador pelo qual os dois
 # lados se procuram (a chave da CETIP, ou o DealID nas linhas só-Athena). Chavear
 # por Código IF perderia as linhas da Athena, que não têm um.
-_COMMENTS_PATH = os.path.join(_DATA_DIR, 'recon-fxo-comments.json')
+_COMMENTS_PATH = data_write('recon-fxo-comments.json')
 _COMMENTS_LOCK = threading.Lock()
 
 # Os estados que uma justificativa cobre. `Matched` fica de fora de propósito:

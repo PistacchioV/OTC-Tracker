@@ -66,14 +66,15 @@ import tempfile
 import unicodedata
 from datetime import date, datetime, timedelta
 
+from apps.pages.data_paths import data_dir, data_path, data_write, mapping_file, mapping_write
 from apps.config import Config
 
 _LOG = logging.getLogger(__name__)
 
 _MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
-_DATA_DIR = os.path.normpath(os.path.join(_MODULE_DIR, '..', 'static', 'data'))
-_MAPPINGS_DIR = os.path.join(_DATA_DIR, 'mappings')
-_CACHE_DIR = os.path.join(_DATA_DIR, 'cache', 'reconciliation', 'cgd')
+_DATA_DIR = data_dir()
+_MAPPINGS_DIR = data_write('mappings')
+_CACHE_DIR = data_write('cache', 'reconciliation', 'cgd')
 
 # ── Entradas ────────────────────────────────────────────────────────────────
 # A pasta de input do batimento (a lista do FEP). Env var como todo destino de
@@ -212,7 +213,7 @@ _ANBIMA = {'feriados': None}
 def _feriados():
     if _ANBIMA['feriados'] is None:
         try:
-            with open(os.path.join(_DATA_DIR, 'anbima.json'), encoding='utf-8') as fh:
+            with open(data_path('anbima.json'), encoding='utf-8') as fh:
                 _ANBIMA['feriados'] = {d['date'] for d in (json.load(fh) or []) if d.get('date')}
         except Exception:
             # Sem o arquivo o D-1 vira "ontem que não é fim de semana": erra por
@@ -272,7 +273,7 @@ def _mapping_rows(key):
     lista vazia — a instância em que ninguém abriu a tela de /mapping roda a
     recon do mesmo jeito, só sem as regras que ninguém cadastrou.
     """
-    path = os.path.join(_MAPPINGS_DIR, '{}.json'.format(key))
+    path = mapping_file(key, _MAPPINGS_DIR)
     try:
         mt = os.path.getmtime(path)
     except OSError:
