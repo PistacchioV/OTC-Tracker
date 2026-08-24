@@ -42,7 +42,14 @@ plugins de `node_modules` para `apps/static/plugins/`.
 
 - **A branch de trabalho é `visual-refresh`** (desde 26/07/2026; `apple-design`
   foi incorporada e aposentada). Todo commit e push vai para lá — nunca presuma
-  `main`.
+  `main`. **`visual-refresh-prod` é a branch que a instância do JPM roda**, e ela
+  é a `visual-refresh` MAIS um commit no `apps/config.py`: bancos e share em
+  `\\Nawest.ad.jpmorganchase.com\lac\BRA\intra` em vez de dentro da aplicação e
+  `I:\`. A diferença é **um bloco de cinco linhas** (entre `── ENV:DEV ──` e
+  `── /ENV ──`) e nada mais — código só nasce na dev e chega lá por merge
+  (`/commit` publica na dev; `/commitjp` faz o merge e troca o bloco). Corrigir
+  direto na prod é criar uma divergência que ninguém vê até o merge seguinte
+  conflitar.
 - **Nunca fixe um de-para novo no código.** Qualquer coisa mapeável tem de ser
   cadastrável pela tela `/mapping` — é regra permanente do usuário. Ver §6.
 - **O bloco DEV BYPASS (`/dev-login`) do `routes.py` nunca vai para o
@@ -288,12 +295,17 @@ Live Positions, o Track Confirmations e as três Recons).
 São dois bancos:
 
 - **DuckDB** (`Users_OTCTracker.db`) — tabelas `users` e `verification_codes`.
-  `DB_PATH` é o `Config.DATABASE_PATH`, resolvido a partir do diretório do
-  pacote (`apps/static/data/db/`) e **normalizado para absoluto**, então
-  funciona em qualquer máquina e não depende do diretório de trabalho. Mover o
-  banco para fora da aplicação é definir `DATABASE_PATH` no `.env` — caminho
-  relativo é **recusado na subida** (`must be an absolute path`), em vez de
-  virar uma árvore criada por engano dentro do cwd.
+  `DB_PATH` é o `Config.DATABASE_PATH`, e ele sai do **`Config.DATABASE_DIR`**,
+  que é a pasta de TODOS os bancos do app: os três do Pending Confirmation
+  (`_PC_DB_DIR`), os dois da esteira (`manual_conf._DB_DIR`), o de comitentes
+  (`recon_comitente.DB_PATH`) e os três scripts de migração. **Nenhum deles monta
+  o caminho por conta própria** — cada um que montasse ficaria lendo o banco
+  local no dia em que os outros fossem para o share, sem erro nenhum. Caminho
+  **normalizado para absoluto**, então não depende do diretório de trabalho;
+  relativo é **recusado na subida** (`must be an absolute path`), em vez de virar
+  uma árvore criada por engano dentro do cwd. Mover tudo de lugar é uma coisa só:
+  `OTC_DATABASE_DIR` no `.env` (ou o bloco de ENV do config na branch de prod —
+  §2). `DATABASE_PATH` continua movendo só o banco de usuários.
 - **SQLite** (`apps/db.sqlite3`) — Flask-SQLAlchemy. Hoje **não é usado** pela
   lógica da aplicação; `configure_database()` chama `db.create_all()` **uma vez
   na subida**, não a cada request.

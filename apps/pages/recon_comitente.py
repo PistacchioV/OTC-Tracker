@@ -30,9 +30,13 @@ except ImportError:
 _log = logging.getLogger(__name__)
 
 # ─── Path do banco ────────────────────────────────────────────────────────────
+# A pasta vem do Config (`DATABASE_DIR`), como a dos demais bancos: montá-la a
+# partir do diretório do pacote deixaria este banco para trás no dia em que os
+# outros forem para o share.
+from apps.config import Config
+
 _MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(_MODULE_DIR, '..', 'static', 'data', 'db', 'matching_comitentes.db')
-DB_PATH = os.path.normpath(DB_PATH)
+DB_PATH = os.path.normpath(os.path.join(Config.DATABASE_DIR, 'matching_comitentes.db'))
 
 # ─── Helpers de normalização ──────────────────────────────────────────────────
 

@@ -23,7 +23,22 @@ import unicodedata
 import duckdb
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DB_DIR = os.path.join(ROOT, 'apps', 'static', 'data', 'db')
+def _db_dir():
+    """A pasta dos bancos — a MESMA que a aplicação usa (`Config.DATABASE_DIR`).
+
+    Este script roda na instância do time depois do pull, e montar o caminho por
+    conta própria o faria migrar o banco LOCAL enquanto o app abre o do share:
+    a migração "dá certo" e a tela continua com o schema velho. O fallback existe
+    para o script continuar rodando fora do venv da aplicação."""
+    try:
+        sys.path.insert(0, ROOT)
+        from apps.config import Config
+        return Config.DATABASE_DIR
+    except Exception:
+        return os.path.join(ROOT, 'apps', 'static', 'data', 'db')
+
+
+DB_DIR = _db_dir()
 REFDATA = os.path.join(ROOT, 'apps', 'static', 'data', 'RefData.json')
 DBS = ['pending-confirmation-backlog.db',
        'pending-confirmation-pending.db',

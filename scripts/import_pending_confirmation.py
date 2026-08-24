@@ -41,7 +41,22 @@ from dateutil.relativedelta import relativedelta
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.dirname(SCRIPT_DIR)
-DB_DIR = os.path.join(REPO_ROOT, 'apps', 'static', 'data', 'db')
+def _db_dir():
+    """A pasta dos bancos — a MESMA que a aplicação usa (`Config.DATABASE_DIR`).
+
+    Este script roda na instância do time depois do pull, e montar o caminho por
+    conta própria o faria migrar o banco LOCAL enquanto o app abre o do share:
+    a migração "dá certo" e a tela continua com o schema velho. O fallback existe
+    para o script continuar rodando fora do venv da aplicação."""
+    try:
+        sys.path.insert(0, REPO_ROOT)
+        from apps.config import Config
+        return Config.DATABASE_DIR
+    except Exception:
+        return os.path.join(REPO_ROOT, 'apps', 'static', 'data', 'db')
+
+
+DB_DIR = _db_dir()
 REFDATA_PATH = os.path.join(REPO_ROOT, 'apps', 'static', 'data', 'RefData.json')
 DEFAULT_XLSX = os.path.join(SCRIPT_DIR, 'PENDING - Outstanding Confirmation OTC.xlsx')
 

@@ -3048,6 +3048,16 @@ def _b3_date_subpath(dref):
     return os.path.join(d.strftime('%Y'), d.strftime('%m'), d.strftime('%d'))
 
 
+def _b3_dref_to_iso(dref):
+    """YYMMDD → 'YYYY-MM-DD' ('' quando não há ref). É a data do ARQUIVO que foi
+    lido, e ela vai no payload das telas de posição para quem monta uma série
+    saber que dia está olhando de verdade."""
+    try:
+        return datetime.strptime(dref, '%y%m%d').strftime('%Y-%m-%d')
+    except (ValueError, TypeError):
+        return ''
+
+
 def _b3_filter_rows(rows, filt):
     """Keep only rows whose value in one column is in `filt['allowed']`.
     filt = {'column': [name-substrings], 'index': N, 'allowed': [...],
@@ -14253,10 +14263,15 @@ def _lpndf_fmt_rate(v):
     return out if out else '0'
 
 
-def _ndf_ter_path(ref, max_back=10):
-    """Newest existing DPOSICAO-TER (path, dref) walking back from `ref` (D-1 ANBIMA)."""
+def _ndf_ter_path(ref, max_back=10, exact=False):
+    """Newest existing DPOSICAO-TER (path, dref) walking back from `ref` (D-1 ANBIMA).
+
+    `exact=True` NÃO anda para trás: devolve o arquivo daquele dia ou nada. É o
+    que o Advanced Export pede — num intervalo, a busca para trás faria todo dia
+    sem arquivo devolver o do dia anterior, e a planilha sairia com o mesmo dia
+    repetido carimbado com datas diferentes."""
     cur = ref
-    for _ in range(max_back):
+    for _ in range(1 if exact else max_back):
         dref = cur.strftime('%y%m%d')
         p = os.path.join(B3_JSON_ROOT, 'NDF', _b3_date_subpath(dref),
                          '73760_{}_DPOSICAO-TER.json'.format(dref))
@@ -14266,9 +14281,9 @@ def _ndf_ter_path(ref, max_back=10):
     return None, None
 
 
-def _lpndf_collect(ref):
+def _lpndf_collect(ref, exact=False):
     widgets = {'total': 0, 'vanilla': 0, 'other_publisher': 0, 't0': 0, 'commodities': 0}
-    path, _ = _ndf_ter_path(ref)
+    path, _src_dref = _ndf_ter_path(ref, exact=exact)
     columns = list(_LPNDF_COLUMNS)
     rows_out = []
     if path:
@@ -14383,7 +14398,12 @@ def _lpndf_collect(ref):
                 elif classe_val == comm_norm:
                     widgets['commodities'] += 1
             widgets['total'] = len(data)      # Total = contagem da posição viva (todas as linhas)
-    return {'widgets': widgets, 'columns': columns, 'rows': rows_out}
+    # `source_date` é a data do ARQUIVO que foi lido, que nem sempre é a data
+    # pedida: sem `exact`, o resolvedor anda para trás até achar posição. Quem
+    # monta uma série precisa saber disso — senão o dia sem arquivo entra na
+    # planilha com o conteúdo do dia anterior e a data de hoje.
+    return {'widgets': widgets, 'columns': columns, 'rows': rows_out,
+            'source_date': _b3_dref_to_iso(_src_dref)}
 
 
 @blueprint.route('/live-position-ndf')
@@ -14403,7 +14423,13 @@ def api_lpndf_data():
         ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else _prev_anbima_bizday(datetime.now())
     except ValueError:
         ref = _prev_anbima_bizday(datetime.now())
-    payload = _lpndf_collect(ref)
+    # `exact=1` desliga a busca para trás: devolve o dia pedido ou nada. Quem
+    # pede é o Advanced Export, montando um intervalo — sem isso, todo dia sem
+    # arquivo devolveria o do dia anterior, e a planilha sairia com o mesmo dia
+    # repetido sob datas diferentes. A TELA continua sem mandar nada e com o
+    # fallback de sempre, que é o que a mantém populada.
+    exact = str(request.args.get('exact', '')).strip() in ('1', 'true', 'yes')
+    payload = _lpndf_collect(ref, exact=exact)
     payload.update({'success': True, 'ref_date': ref.strftime('%Y-%m-%d'),
                     'ref_date_fmt': ref.strftime('%d/%m/%Y')})
     return jsonify(payload)
@@ -14455,10 +14481,12 @@ _LPOPT_ASIAN_START = 80    # Excel column CC (0-based)
 _LPOPT_ASIAN_STEP = 3      # CC → CF → CI → … (skip the blank + "0" companions)
 
 
-def _opt_dposicao_path(ref, max_back=10):
-    """Newest existing Option DPOSICAO (path, dref) walking back from `ref`."""
+def _opt_dposicao_path(ref, max_back=10, exact=False):
+    """Newest existing Option DPOSICAO (path, dref) walking back from `ref`.
+
+    `exact=True` não anda para trás — ver `_ndf_ter_path`."""
     cur = ref
-    for _ in range(max_back):
+    for _ in range(1 if exact else max_back):
         dref = cur.strftime('%y%m%d')
         p = os.path.join(B3_JSON_ROOT, 'Option', _b3_date_subpath(dref),
                          '73760_{}_DPOSICAO.json'.format(dref))
@@ -14468,9 +14496,9 @@ def _opt_dposicao_path(ref, max_back=10):
     return None, None
 
 
-def _lpopt_collect(ref):
+def _lpopt_collect(ref, exact=False):
     widgets = {'total': 0, 'a': 0, 'b': 0, 'c': 0}
-    path, _ = _opt_dposicao_path(ref)
+    path, _src_dref = _opt_dposicao_path(ref, exact=exact)
     columns = list(_LPOPT_COLUMNS)
     rows_out = []
     if path:
@@ -14546,7 +14574,12 @@ def _lpopt_collect(ref):
                         row.append('')
                 rows_out.append(row)
             widgets['total'] = len(data)
-    return {'widgets': widgets, 'columns': columns, 'rows': rows_out}
+    # `source_date` é a data do ARQUIVO que foi lido, que nem sempre é a data
+    # pedida: sem `exact`, o resolvedor anda para trás até achar posição. Quem
+    # monta uma série precisa saber disso — senão o dia sem arquivo entra na
+    # planilha com o conteúdo do dia anterior e a data de hoje.
+    return {'widgets': widgets, 'columns': columns, 'rows': rows_out,
+            'source_date': _b3_dref_to_iso(_src_dref)}
 
 
 @blueprint.route('/live-position-option')
@@ -14566,7 +14599,13 @@ def api_lpopt_data():
         ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else _prev_anbima_bizday(datetime.now())
     except ValueError:
         ref = _prev_anbima_bizday(datetime.now())
-    payload = _lpopt_collect(ref)
+    # `exact=1` desliga a busca para trás: devolve o dia pedido ou nada. Quem
+    # pede é o Advanced Export, montando um intervalo — sem isso, todo dia sem
+    # arquivo devolveria o do dia anterior, e a planilha sairia com o mesmo dia
+    # repetido sob datas diferentes. A TELA continua sem mandar nada e com o
+    # fallback de sempre, que é o que a mantém populada.
+    exact = str(request.args.get('exact', '')).strip() in ('1', 'true', 'yes')
+    payload = _lpopt_collect(ref, exact=exact)
     payload.update({'success': True, 'ref_date': ref.strftime('%Y-%m-%d'),
                     'ref_date_fmt': ref.strftime('%d/%m/%Y')})
     return jsonify(payload)
@@ -18200,7 +18239,10 @@ def _deal_matches(deal, filters):
 # scripts/import_pending_confirmation.py). The smart filter's Status chip picks
 # which one: Ok → ok, Backlog → backlog, anything else (Pending / non-Ok) →
 # pending. All other chips filter the loaded rows via _deal_matches.
-_PC_DB_DIR = os.path.join(os.path.dirname(__file__), '..', 'static', 'data', 'db')
+# A pasta sai do Config (`DATABASE_DIR`), nunca do diretório do pacote: é ela
+# que muda quando os bancos vão para o share, e montar o caminho aqui deixaria
+# esta tela lendo o banco local enquanto o resto do app lê o do share.
+_PC_DB_DIR = Config.DATABASE_DIR
 _PC_DBS = {
     'backlog': 'pending-confirmation-backlog.db',
     'pending': 'pending-confirmation-pending.db',

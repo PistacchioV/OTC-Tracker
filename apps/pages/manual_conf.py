@@ -58,11 +58,19 @@ except Exception:                                    # pragma: no cover
 # ler. O `duckdb is None` acima continua sendo o teste de "a lib não está aqui";
 # estes só são usados depois dele.
 from apps.pages.database_access import duckdb_read, duckdb_write
+# Só o Config: importar o `routes` daqui seria circular (é ele quem importa este
+# módulo). O que se repete é a LEITURA da configuração, não o dado.
+from apps.config import Config
 
 _LOG = logging.getLogger(__name__)
 
 _MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
-_DB_DIR = os.path.normpath(os.path.join(_MODULE_DIR, '..', 'static', 'data', 'db'))
+# A pasta dos bancos vem do Config: ela muda de lugar quando a instância do time
+# aponta para o share, e os dois bancos da esteira têm de ir junto com os do
+# resto do app — metade no share e metade local é o pior dos dois mundos.
+_DB_DIR = Config.DATABASE_DIR
+# Os mappings continuam DENTRO da aplicação: são cadastro versionado, vêm no
+# pull e não são banco.
 _MAPPINGS_DIR = os.path.normpath(os.path.join(_MODULE_DIR, '..', 'static', 'data', 'mappings'))
 
 DBS = {

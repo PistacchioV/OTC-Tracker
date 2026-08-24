@@ -45,37 +45,64 @@ class Config(object):
     DB_PORT     = os.getenv('DB_PORT'     , None)
     DB_NAME     = os.getenv('DB_NAME'     , None)
 
+    # ══ AMBIENTE — o único bloco que difere entre as branches ═════════════════
+    #
+    # `visual-refresh` (desenvolvimento) aponta para dentro da aplicação;
+    # `visual-refresh-prod` (instância do JPM) aponta para o share. É a ÚNICA
+    # diferença entre as duas, e ela mora aqui de propósito: o resto do código
+    # pergunta ao Config e não sabe onde os bancos estão.
+    #
+    # Os dois continuam podendo ser trocados por variável de ambiente
+    # (`OTC_DATABASE_DIR`, `OTC_SHARED_DRIVE_ROOT`) sem tocar no arquivo.
+    #
+    # ── ENV:DEV ──────────────────────────────────────────────────────────────
+    _DATABASE_DIR_DEFAULT = os.path.join(basedir, 'static', 'data', 'db')
+    _SHARED_DRIVE_DEFAULT = 'I:\\'
+    _SQLITE_DIR_DEFAULT = basedir
+    # ── /ENV ─────────────────────────────────────────────────────────────────
+
+    # A PASTA dos bancos, e é dela que sai todo caminho de banco do app — o
+    # `Users_OTCTracker.db` das rotas, os três do Pending Confirmation, os dois
+    # da esteira e o de comitentes. Cada módulo montava o caminho por conta
+    # própria a partir do diretório do pacote, e mover o banco exigia achar os
+    # quatro lugares; agora é este.
+    DATABASE_DIR = _absolute_path_from_environment('OTC_DATABASE_DIR', _DATABASE_DIR_DEFAULT)
+
     # Primary DuckDB file used by the route layer. Set DATABASE_PATH to move
-    # the database outside the application directory.
+    # only this one; DATABASE_DIR move todos de uma vez.
     DATABASE_PATH = _absolute_path_from_environment(
         'DATABASE_PATH',
-        os.path.join(basedir, 'static', 'data', 'db', 'Users_OTCTracker.db'),
+        os.path.join(DATABASE_DIR, 'Users_OTCTracker.db'),
     )
 
     # Root of the JPM shared drive used by file-processing routes. Individual
     # route settings can still override their specific directory.
-    SHARED_DRIVE_ROOT = _absolute_path_from_environment('OTC_SHARED_DRIVE_ROOT', 'I:\\')
+    SHARED_DRIVE_ROOT = _absolute_path_from_environment('OTC_SHARED_DRIVE_ROOT',
+                                                        _SHARED_DRIVE_DEFAULT)
 
-    USE_SQLITE  = True 
+    USE_SQLITE  = True
 
     DATABASE_LOCAL_SEMAPHORE_TIMEOUT_SECONDS = float(
-        os.getenv('DATABASE_LOCAL_SEMAPHORE_TIMEOUT_SECONDS', '15')
+        os.getenv('DATABASE_LOCAL_SEMAPHORE_TIMEOUT_SECONDS', '45')
     )
-    DATABASE_READ_LOCK_TIMEOUT_SECONDS = float(os.getenv('DATABASE_READ_LOCK_TIMEOUT_SECONDS', '15'))
+    DATABASE_READ_LOCK_TIMEOUT_SECONDS = float(os.getenv('DATABASE_READ_LOCK_TIMEOUT_SECONDS', '45'))
     DATABASE_WRITE_LOCK_TIMEOUT_SECONDS = float(os.getenv('DATABASE_WRITE_LOCK_TIMEOUT_SECONDS', '30'))
     DATABASE_SQLITE_BUSY_TIMEOUT_SECONDS = int(os.getenv('DATABASE_SQLITE_BUSY_TIMEOUT_SECONDS', '10000'))
     DATABASE_SLOW_LOCK_WARNING_SECONDS = float(os.getenv('DATABASE_SLOW_LOCK_WARNING_SECONDS', '5'))
     DATABASE_LOCK_RETRY_LIMIT = int(os.getenv('DATABASE_LOCK_RETRY_LIMIT', '2'))
     DATABASE_READ_CONCURRENCY = int(os.getenv('DATABASE_READ_CONCURRENCY', '4'))
+    # Todo banco que o app abre. É esta lista que o `validate_database_paths`
+    # confere na subida (pasta gravável + arquivo de lock), então um banco que
+    # não estiver aqui só acusa problema no primeiro request que o abrir.
     DATABASE_ACCESS_PATHS = (
         DATABASE_PATH,
-        os.path.join(basedir, 'static', 'data', 'db', 'pending-confirmation-backlog.db'),
-        os.path.join(basedir, 'static', 'data', 'db', 'pending-confirmation-pending.db'),
-        os.path.join(basedir, 'static', 'data', 'db', 'pending-confirmation-ok.db'),
-        os.path.join(basedir, 'static', 'data', 'db', 'manual_confirmations_pending.db'),
-        os.path.join(basedir, 'static', 'data', 'db', 'manual_confirmations_ok.db'),
-        os.path.join(basedir, 'static', 'data', 'db', 'matching_comitentes.db'),
-        os.path.join(basedir, 'db.sqlite3'),
+        os.path.join(DATABASE_DIR, 'pending-confirmation-backlog.db'),
+        os.path.join(DATABASE_DIR, 'pending-confirmation-pending.db'),
+        os.path.join(DATABASE_DIR, 'pending-confirmation-ok.db'),
+        os.path.join(DATABASE_DIR, 'manual_confirmations_pending.db'),
+        os.path.join(DATABASE_DIR, 'manual_confirmations_ok.db'),
+        os.path.join(DATABASE_DIR, 'matching_comitentes.db'),
+        os.path.join(_SQLITE_DIR_DEFAULT, 'db.sqlite3'),
     )
 
     # try to set up a Relational DBMS
@@ -102,9 +129,12 @@ class Config(object):
 
     if USE_SQLITE:
 
-        # This will create a file in <app> FOLDER
-        SQLALCHEMY_DATABASE_URI = 'sqlite:///' + os.path.join(basedir, 'db.sqlite3')
-    
+        # O MESMO caminho que entra no DATABASE_ACCESS_PATHS: com os dois
+        # escritos à mão, o gerenciador de lock guardava um arquivo e o ORM
+        # abria outro — e nada acusaria isso.
+        SQLALCHEMY_DATABASE_URI = 'sqlite:///' + os.path.join(_SQLITE_DIR_DEFAULT, 'db.sqlite3')
+
+
 class ProductionConfig(Config):
     DEBUG = False
 
