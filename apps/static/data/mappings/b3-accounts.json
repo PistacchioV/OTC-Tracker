@@ -4,6 +4,8 @@
     "SIMPLIFIED NAME": "MORGANBC",
     "ACCOUNT": "04880.00-6",
     "ACCOUNT TYPE": "OWN",
+    "REFDATA NAME": "",
+    "MESSAGING": "Disregard",
     "NOTES": ""
   },
   {
@@ -11,6 +13,8 @@
     "SIMPLIFIED NAME": "MORGANBC",
     "ACCOUNT": "04880.10-9",
     "ACCOUNT TYPE": "CLIENT 1",
+    "REFDATA NAME": "",
+    "MESSAGING": "Disregard",
     "NOTES": ""
   },
   {
@@ -18,6 +22,8 @@
     "SIMPLIFIED NAME": "JPMORGANBM",
     "ACCOUNT": "73760.00-9",
     "ACCOUNT TYPE": "OWN",
+    "REFDATA NAME": "",
+    "MESSAGING": "Consider",
     "NOTES": ""
   },
   {
@@ -25,6 +31,8 @@
     "SIMPLIFIED NAME": "JPMORGANBM",
     "ACCOUNT": "73760.10-2",
     "ACCOUNT TYPE": "CLIENT 1",
+    "REFDATA NAME": "",
+    "MESSAGING": "Consider",
     "NOTES": ""
   },
   {
@@ -32,6 +40,8 @@
     "SIMPLIFIED NAME": "JPMORGANBM",
     "ACCOUNT": "73760.20-5",
     "ACCOUNT TYPE": "CLIENT 2",
+    "REFDATA NAME": "",
+    "MESSAGING": "Consider",
     "NOTES": ""
   },
   {
@@ -39,6 +49,8 @@
     "SIMPLIFIED NAME": "INTRAGLAWTONFDO",
     "ACCOUNT": "00041.00-7",
     "ACCOUNT TYPE": "OWN",
+    "REFDATA NAME": "",
+    "MESSAGING": "Disregard",
     "NOTES": ""
   },
   {
@@ -46,6 +58,8 @@
     "SIMPLIFIED NAME": "INTRAGATACAMAFDO",
     "ACCOUNT": "85398.00-5",
     "ACCOUNT TYPE": "OWN",
+    "REFDATA NAME": "",
+    "MESSAGING": "Disregard",
     "NOTES": ""
   }
 ]

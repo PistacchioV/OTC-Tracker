@@ -9496,6 +9496,60 @@ def _b3_is_omnibus(account):
     return False
 
 
+def _b3_account_row(account):
+    """A linha do cadastro `b3-accounts` daquela conta, ou None.
+
+    É a resposta para "esta conta é de uma entidade NOSSA?" — estar no cadastro
+    é ser interna, porque a tabela lista as contas B3 das nossas entidades
+    (Banco, MGT, Lawton, Atacama…) e nada mais. A comparação é por DÍGITOS: a
+    mesma conta aparece `73760.10-2` num arquivo e `7376010 2` no outro, e
+    comparar string casa silenciosamente nada."""
+    d = _acc_digits(account)
+    if not d:
+        return None
+    for row in _mapping_rows('b3-accounts'):
+        if _acc_digits(row.get('ACCOUNT', '')) == d:
+            return row
+    return None
+
+
+def _b3_msg_view_use(account):
+    """A mensageria do Operations B3 sai na visão desta conta?
+
+    Devolve `True` (gera), `False` (não gera) — e `True` também para a conta que
+    NÃO está no cadastro, que é a conta de terceiro: a mensagem que a mesa manda
+    hoje sai da visão do Banco contra o cliente, e travá-la por falta de linha
+    calaria a rotina inteira em qualquer instância que não tivesse aberto o
+    /mapping.
+
+    O que a coluna decide é a PONTA da liquidação intragrupo. O mesmo pagamento
+    chega pelos dois arquivos, espelhado (a visão do Banco e a da outra
+    entidade); as duas virando e-mail, o time cobraria duas vezes o que é uma
+    coisa só. Era uma regra escrita no código — casa == MGT e contraparte ==
+    Banco —, e ela só conhecia esse par: a visão de Lawton e a de Atacama
+    passavam direto."""
+    row = _b3_account_row(account)
+    if row is None:
+        return True
+    return not _fcst_norm(row.get('MESSAGING', '')).strip().startswith('disreg')
+
+
+def _b3_account_le(account):
+    """Legal Entity dona da conta no cadastro `b3-accounts` ('' se não é nossa).
+    É por aqui que a mensageria sabe que a contraparte é o Lawton ou a Atacama
+    sem depender da grafia do Nome Simplificado no arquivo da B3."""
+    row = _b3_account_row(account)
+    return str((row or {}).get('LE', '') or '').strip().upper()
+
+
+def _b3_account_refdata_name(account):
+    """Nome da entidade dona da conta como ele está no Reference Data ('' se não
+    cadastrado). O Nome Simplificado ao lado é o apelido de 20 caracteres da B3
+    e não serve para endereçar documento nenhum."""
+    row = _b3_account_row(account)
+    return str((row or {}).get('REFDATA NAME', '') or '').strip()
+
+
 def _b3_participant_name(le):
     """Nome Simplificado da entidade `le` no cadastro `b3-accounts` — o que vai
     no campo Participante do header dos arquivos TER.
@@ -13715,8 +13769,11 @@ _OPB3_MSG_RECIPIENTS_FILE = os.path.join(_DAILY_METRIC_DIR, 'operations_b3_mensa
 # BCC de compliance (GDT) dos intragrupo — ver regra no loop da geração.
 _OPB3_MSG_GDT_BCC = 'gdt.br.derivatives@restricted.chase.com'
 # Contas de casa dos dois arquivos que alimentam a página (ver _DS_IMPORTS):
-# operacoes-jpm = Banco J.P. Morgan, mgt.* = MGT. O mesmo negócio intragrupo
-# chega pelos dois, espelhado — a dedupe de grupos abaixo usa essas contas.
+# operacoes-jpm = Banco J.P. Morgan, mgt.* = MGT. Elas sobrevivem aqui porque o
+# `_OPB3_LEGAL_SIDES` traduz o LEGAL do Cockpit ("BANCOJP…") em conta, e essa é
+# uma pergunta sobre o texto do Cockpit, não sobre o cadastro de contas. QUE
+# VISÃO gera mensagem deixou de ser decidido aqui: é a coluna Messaging do
+# `b3-accounts` (ver `_b3_msg_view_use`).
 _OPB3_ACCT_BANCO = '73760009'
 _OPB3_ACCT_MGT = '04880006'
 # Status local de uma linha já transformada em e-mail de mensageria.
@@ -13948,29 +14005,35 @@ def api_opb3_mensageria():
     # o que ainda não foi gerado.
     picked = {str(i) for i in (p.get('ids') or []) if str(i).strip()}
 
-    # Intragrupo: a visão "MGT x Banco" (casa = MGT, contraparte = Banco) é a
-    # MESMA liquidação da visão "Banco x MGT", só com o fluxo invertido — o
-    # arquivo mgt.* traz a outra ponta do que já veio no operacoes-jpm. Ela nunca
-    # vira e-mail, nem marcando o checkbox: sem essa regra, o segundo clique
-    # gerava justamente o e-mail espelhado.
-    def _mgt_view(rec):
-        return (_acc_digits(rec.get('Conta', '')) == _OPB3_ACCT_MGT
-                and _acc_digits(rec.get('Conta Contraparte', '')) == _OPB3_ACCT_BANCO)
+    # De que VISÃO a mensagem sai — cadastro `b3-accounts`, coluna Messaging.
+    # A liquidação intragrupo chega pelos dois arquivos, espelhada (a visão do
+    # Banco e a da outra entidade nossa), e as duas virando e-mail o time
+    # cobraria duas vezes o mesmo pagamento. Era uma regra escrita aqui — casa
+    # == MGT e contraparte == Banco —, que conhecia esse par e só ele: a visão
+    # do Lawton e a da Atacama passavam direto.
+    def _view_off(rec):
+        return not _b3_msg_view_use(rec.get('Conta', ''))
 
     def _bilateral(rec):
         m = _fcst_norm(str(rec.get('Modalidade Liquidação', '') or ''))
         return m.startswith('bilateral') or m.startswith('bruta')
 
-    # Linhas elegíveis: aprovadas pelo cadastro `opb3-events`, Bilateral*/Bruta*,
-    # fora da visão MGT, ainda não geradas (ou marcadas para regerar). O cadastro
-    # entra aqui pelo mesmo motivo que entra nas telas: uma operação cancelada na
-    # B3 não pode virar mensagem pedindo o pagamento dela.
+    # Linhas elegíveis, e são QUATRO perguntas que precisam concordar:
+    #   1. o evento entra numa apuração de liquidação? — `opb3-events`, o mesmo
+    #      cadastro (e a mesma função) que o NDF Summary, o Other Products e os
+    #      avisos consultam: uma operação cancelada na B3 não pode virar
+    #      mensagem pedindo o pagamento dela;
+    #   2. a Modalidade de Liquidação é Bilateral*/Bruta*? — é o que a mensagem
+    #      cobre;
+    #   3. a mensagem sai na visão desta conta? — `b3-accounts`;
+    #   4. a linha ainda não virou e-mail (ou foi marcada para regerar).
+    # É um inner join: basta uma dizer não para a linha ficar de fora.
     ev_rules = _opb3_event_rules()
 
     def _eligible(rec):
         if not _opb3_settle_ok(rec, ev_rules):
             return False
-        if not _bilateral(rec) or _mgt_view(rec):
+        if not _bilateral(rec) or _view_off(rec):
             return False
         if str(rec.get('_ob_status', '') or '') == _OPB3_STATUS_GENERATED:
             return str(rec.get('_ob_id', '') or '') in picked
@@ -14014,7 +14077,14 @@ def api_opb3_mensageria():
         recs = g['recs']
         titn = _fcst_norm(str(recs[0].get('Tipo Título', '') or ''))
         opn = _fcst_norm(g['tipo_op'])
-        cpty = names.get(g['conta_cp']) or str(recs[0].get('Contraparte (Nome Simpl.)', '') or '—')
+        # Nome da contraparte, nesta ordem: Reference Data pela conta (o cliente
+        # de fora), o `Reference Data Name` do cadastro `b3-accounts` (a
+        # contraparte que é entidade NOSSA — ela não tem linha no Reference Data
+        # pela conta B3) e, por último, o Nome Simplificado que veio no arquivo,
+        # que é o apelido de 20 caracteres da B3 (`INTRAGLAWTONFDO`).
+        cpty = (names.get(g['conta_cp'])
+                or _b3_account_refdata_name(g['conta_cp'])
+                or str(recs[0].get('Contraparte (Nome Simpl.)', '') or '—'))
         total = sum(_ndfc_valnum(r.get('Valor')) or 0.0 for r in recs)
 
         # Lado interno: TER de MOEDA → SETTLEMENT do card Trade Level do NDF
@@ -14061,14 +14131,22 @@ def api_opb3_mensageria():
         to, cc = recips[rk]['to'], recips[rk]['cc']
         if not to:
             missing.add(rk.upper())
-        # BCC compliance (GDT): IntragAtacama* sempre; IntragLawton só quando
-        # Tipo Título = SWAP e a somatória é "Banco recebe do(a)" (≥ 0) — nos
-        # demais casos contra o Lawton o BCC fica em branco.
+        # BCC compliance (GDT): Atacama sempre; Lawton só quando Tipo Título =
+        # SWAP e a somatória é "Banco recebe do(a)" (≥ 0) — nos demais casos
+        # contra o Lawton o BCC fica em branco.
+        #
+        # Quem é a contraparte sai da CONTA no cadastro `b3-accounts`, e o Nome
+        # Simplificado do arquivo é o plano B: a conta é o identificador, o
+        # apelido de 20 caracteres é como aquele arquivo escreveu o nome — e uma
+        # entidade nova entra no cadastro, não aqui.
+        cp_le = _b3_account_le(g['conta_cp'])
         cp_simpl = str(recs[0].get('Contraparte (Nome Simpl.)', '') or '').strip().upper()
+        is_atacama = cp_le == 'ATACAMA' or (not cp_le and cp_simpl.startswith('INTRAGATACAMA'))
+        is_lawton = cp_le == 'LAWTON' or (not cp_le and cp_simpl.startswith('INTRAGLAWTON'))
         bcc = ''
-        if cp_simpl.startswith('INTRAGATACAMA'):
+        if is_atacama:
             bcc = _OPB3_MSG_GDT_BCC
-        elif cp_simpl.startswith('INTRAGLAWTON') and 'swap' in titn and total >= 0:
+        elif is_lawton and 'swap' in titn and total >= 0:
             bcc = _OPB3_MSG_GDT_BCC
         drafts.append(otc_emails.build_opb3_mensageria_email({
             'tipo': g['tipo'], 'tipo_titulo': recs[0].get('Tipo Título', ''),
@@ -14087,10 +14165,13 @@ def api_opb3_mensageria():
     for rec in used:
         rec['_ob_status'] = _OPB3_STATUS_GENERATED
         rec['Status'] = _OPB3_B3_STATUS_DONE
-    # A visão MGT não gera e-mail, mas a liquidação dela saiu na visão Banco —
-    # fica Generated para a tabela não sugerir que ficou algo pendente.
+    # A visão marcada como Disregard não gera e-mail, mas a liquidação dela saiu
+    # pela outra ponta — fica Generated para a tabela não sugerir que ficou algo
+    # pendente. Só a linha que o cadastro `opb3-events` aprova: a operação
+    # cancelada na B3 não saiu por ponta nenhuma, e carimbá-la de Generated
+    # esconderia justamente a linha que ninguém tratou.
     for rec in data:
-        if _bilateral(rec) and _mgt_view(rec):
+        if _bilateral(rec) and _view_off(rec) and _opb3_settle_ok(rec, ev_rules):
             rec['_ob_status'] = _OPB3_STATUS_GENERATED
     try:
         _otm_save(jp, data)
@@ -20611,6 +20692,11 @@ _B3_ACCOUNT_TYPE_ALIASES = {
     'CLIENTE 2': 'CLIENT 2', 'CLIENTE2': 'CLIENT 2', 'CLIENT2': 'CLIENT 2',
 }
 
+# A mensageria do Operations B3 sai na visão de UMA conta nossa (a coluna Conta
+# da linha), e a mesma liquidação chega pelas duas pontas quando o negócio é
+# intragrupo. Esta coluna é quem decide de que visão a mensagem sai.
+_B3_MSG_USES = ('Consider', 'Disregard')
+
 
 def _b3_account_type(value):
     """Tipo de conta na grafia canônica (`_B3_ACCOUNT_TYPES`) ou ''.
@@ -20633,7 +20719,21 @@ def _b3_accounts_upgrade(rows):
     só, a resposta. Aqui o que responde é a coluna TIPO, então uma linha sem
     tipo tem de virar CLIENT 1: lida como PRÓPRIA, ela deixaria de mandar o app
     procurar o cliente pelo CNPJ e o aviso de liquidação sairia endereçado ao
-    titular do omnibus."""
+    titular do omnibus.
+
+    A coluna MESSAGING nasce depois das outras, então o arquivo que já está em
+    disco vem sem ela. Preencher com o SEED (pelas duas chaves, conta e LE) é o
+    que mantém a regra que a mesa pediu — Banco assina, MGT/Lawton/Atacama não —
+    na instância que já abriu a tela uma vez. Um default cego 'Consider' faria a
+    mensagem intragrupo sair pelas duas pontas; um 'Disregard' cego a faria não
+    sair de nenhuma, e a segunda é pior: some sem erro nenhum."""
+    seed_by_acct, seed_by_le = {}, {}
+    for s in _MAPPING_DEFS['b3-accounts']['seed']:
+        d = _acc_digits(s['ACCOUNT'])
+        if d:
+            seed_by_acct[d] = s['MESSAGING']
+        seed_by_le.setdefault(_fcst_norm(s['LE']).strip(), s['MESSAGING'])
+
     out = []
     for r in rows:
         if not isinstance(r, dict):
@@ -20647,6 +20747,14 @@ def _b3_accounts_upgrade(rows):
         r['SIMPLIFIED NAME'] = str(r.get('SIMPLIFIED NAME', '') or '').strip()
         r['ACCOUNT'] = str(r.get('ACCOUNT', '') or '').strip()
         r['ACCOUNT TYPE'] = tipo
+        r['REFDATA NAME'] = str(r.get('REFDATA NAME', '') or '').strip()
+        if 'MESSAGING' not in r or not str(r.get('MESSAGING') or '').strip():
+            r['MESSAGING'] = (seed_by_acct.get(_acc_digits(r['ACCOUNT']))
+                              or seed_by_le.get(_fcst_norm(r['LE']).strip())
+                              # Conta nossa que o seed não conhece: a visão dela
+                              # gera, que é o que acontecia antes de a coluna
+                              # existir (só a visão MGT era descartada).
+                              or 'Consider')
         r['NOTES'] = str(r.get('NOTES', '') or '').strip()
         out.append(r)
     return out
@@ -21627,6 +21735,15 @@ _MAPPING_DEFS = {
             # pelo CNPJ onde não há cliente nenhum.
             {'key': 'ACCOUNT TYPE', 'label': 'Account Type', 'type': 'select',
              'options': list(_B3_ACCOUNT_TYPES)},
+            # Como a entidade está escrita no Reference Data. O Nome
+            # Simplificado ao lado é o da B3 (`INTRAGLAWTONFDO`, 20 caracteres),
+            # que não é razão social nenhuma: é ele que vem nas linhas do
+            # Operations B3, e sem esta coluna a mensageria de uma conta nossa
+            # sairia endereçada ao apelido do arquivo.
+            {'key': 'REFDATA NAME', 'label': 'Reference Data Name', 'refdata': 'name'},
+            # A mensageria sai na visão desta conta? Ver `_b3_msg_view_use`.
+            {'key': 'MESSAGING', 'label': 'Messaging', 'type': 'select',
+             'options': list(_B3_MSG_USES)},
             {'key': 'NOTES', 'label': 'Notes'},
         ],
         # As contas da B3 de cada entidade nossa: a PRÓPRIA (posição da casa) e
@@ -21639,21 +21756,25 @@ _MAPPING_DEFS = {
         #     numa linha do Operations B3 com essa Conta Contraparte o nome que
         #     vem da B3 é o do titular do guarda-chuva, e quem é o cliente sai
         #     do CNPJ. A conta PRÓPRIA identifica — é a nossa.
+        #  3. a mensageria sai na visão desta conta? A liquidação intragrupo
+        #     chega pelas DUAS pontas — o mesmo pagamento, espelhado —, e sair
+        #     das duas seria cobrar duas vezes. A visão que assina é a do Banco;
+        #     MGT, Lawton e Atacama entram como Disregard.
         'seed': [
-            {'LE': 'MGT', 'SIMPLIFIED NAME': 'MORGANBC',
-             'ACCOUNT': '04880.00-6', 'ACCOUNT TYPE': 'OWN', 'NOTES': ''},
-            {'LE': 'MGT', 'SIMPLIFIED NAME': 'MORGANBC',
-             'ACCOUNT': '04880.10-9', 'ACCOUNT TYPE': 'CLIENT 1', 'NOTES': ''},
-            {'LE': 'JPM', 'SIMPLIFIED NAME': 'JPMORGANBM',
-             'ACCOUNT': '73760.00-9', 'ACCOUNT TYPE': 'OWN', 'NOTES': ''},
-            {'LE': 'JPM', 'SIMPLIFIED NAME': 'JPMORGANBM',
-             'ACCOUNT': '73760.10-2', 'ACCOUNT TYPE': 'CLIENT 1', 'NOTES': ''},
-            {'LE': 'JPM', 'SIMPLIFIED NAME': 'JPMORGANBM',
-             'ACCOUNT': '73760.20-5', 'ACCOUNT TYPE': 'CLIENT 2', 'NOTES': ''},
-            {'LE': 'LAWTON', 'SIMPLIFIED NAME': 'INTRAGLAWTONFDO',
-             'ACCOUNT': '00041.00-7', 'ACCOUNT TYPE': 'OWN', 'NOTES': ''},
-            {'LE': 'ATACAMA', 'SIMPLIFIED NAME': 'INTRAGATACAMAFDO',
-             'ACCOUNT': '85398.00-5', 'ACCOUNT TYPE': 'OWN', 'NOTES': ''},
+            {'LE': 'MGT', 'SIMPLIFIED NAME': 'MORGANBC', 'ACCOUNT': '04880.00-6',
+             'ACCOUNT TYPE': 'OWN', 'REFDATA NAME': '', 'MESSAGING': 'Disregard', 'NOTES': ''},
+            {'LE': 'MGT', 'SIMPLIFIED NAME': 'MORGANBC', 'ACCOUNT': '04880.10-9',
+             'ACCOUNT TYPE': 'CLIENT 1', 'REFDATA NAME': '', 'MESSAGING': 'Disregard', 'NOTES': ''},
+            {'LE': 'JPM', 'SIMPLIFIED NAME': 'JPMORGANBM', 'ACCOUNT': '73760.00-9',
+             'ACCOUNT TYPE': 'OWN', 'REFDATA NAME': '', 'MESSAGING': 'Consider', 'NOTES': ''},
+            {'LE': 'JPM', 'SIMPLIFIED NAME': 'JPMORGANBM', 'ACCOUNT': '73760.10-2',
+             'ACCOUNT TYPE': 'CLIENT 1', 'REFDATA NAME': '', 'MESSAGING': 'Consider', 'NOTES': ''},
+            {'LE': 'JPM', 'SIMPLIFIED NAME': 'JPMORGANBM', 'ACCOUNT': '73760.20-5',
+             'ACCOUNT TYPE': 'CLIENT 2', 'REFDATA NAME': '', 'MESSAGING': 'Consider', 'NOTES': ''},
+            {'LE': 'LAWTON', 'SIMPLIFIED NAME': 'INTRAGLAWTONFDO', 'ACCOUNT': '00041.00-7',
+             'ACCOUNT TYPE': 'OWN', 'REFDATA NAME': '', 'MESSAGING': 'Disregard', 'NOTES': ''},
+            {'LE': 'ATACAMA', 'SIMPLIFIED NAME': 'INTRAGATACAMAFDO', 'ACCOUNT': '85398.00-5',
+             'ACCOUNT TYPE': 'OWN', 'REFDATA NAME': '', 'MESSAGING': 'Disregard', 'NOTES': ''},
         ],
         'upgrade': _b3_accounts_upgrade,
     },

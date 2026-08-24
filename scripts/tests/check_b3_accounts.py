@@ -53,9 +53,16 @@ print('\n== 1. o cadastro ==')
 check('registrado como b3-accounts', "'b3-accounts': {" in SRC, True)
 check('o nome antigo saiu do registro', "'b3-omnibus-account': {" in SRC, False)
 check('aba no /mapping', "key: 'b3-accounts'" in read('apps/templates/pages/mapping.html'), True)
-check('as colunas sao as quatro em ingles + notas',
+check('as colunas do cadastro',
       [c['key'] for c in R._MAPPING_DEFS['b3-accounts']['columns']],
-      ['LE', 'SIMPLIFIED NAME', 'ACCOUNT', 'ACCOUNT TYPE', 'NOTES'])
+      ['LE', 'SIMPLIFIED NAME', 'ACCOUNT', 'ACCOUNT TYPE',
+       'REFDATA NAME', 'MESSAGING', 'NOTES'])
+# O Nome Simplificado ao lado e o apelido de 20 caracteres da B3
+# (INTRAGLAWTONFDO), que nao e razao social nenhuma: quem endereca documento
+# precisa do nome do Reference Data, e ele se escolhe da lista de la.
+refd_col = [c for c in R._MAPPING_DEFS['b3-accounts']['columns']
+            if c['key'] == 'REFDATA NAME'][0]
+check('o nome do RefData e ligado ao Reference Data', refd_col.get('refdata'), 'name')
 # O TIPO e o que decide a regra: digitado a mao, um "Cliente1" viraria conta
 # PROPRIA sem erro nenhum.
 tipo_col = [c for c in R._MAPPING_DEFS['b3-accounts']['columns']
@@ -179,6 +186,58 @@ check('a grafia em portugues e normalizada',
       'CLIENT 1')
 check('e o upgrade esta ligado no registro',
       R._MAPPING_DEFS['b3-accounts'].get('upgrade') is R._b3_accounts_upgrade, True)
+
+print('\n== 8b. a coluna MESSAGING: de que VISAO a mensageria sai ==')
+# A liquidacao intragrupo chega pelos DOIS arquivos, espelhada. As duas pontas
+# virando e-mail, o time cobraria duas vezes o mesmo pagamento.
+msg_col = [c for c in R._MAPPING_DEFS['b3-accounts']['columns']
+           if c['key'] == 'MESSAGING'][0]
+check('e um select', msg_col.get('type'), 'select')
+check('com Consider e Disregard', msg_col.get('options'), list(R._B3_MSG_USES))
+check('o Banco assina', R._b3_msg_view_use('73760.00-9'), True)
+check('a MGT nao', R._b3_msg_view_use('04880.00-6'), False)
+# Estas duas passavam direto na regra antiga, que so conhecia o par MGT x Banco.
+check('o Lawton nao', R._b3_msg_view_use('00041.00-7'), False)
+check('a Atacama nao', R._b3_msg_view_use('85398.00-5'), False)
+# A conta e comparada por DIGITOS: o mesmo numero aparece com e sem pontuacao.
+check('a conta sem pontuacao casa', R._b3_msg_view_use('7376000 9'), True)
+check('  e a da MGT tambem', R._b3_msg_view_use('0488000 6'), False)
+# Conta de terceiro: e dela que a mensagem sai hoje. Travar por falta de linha
+# calaria a rotina inteira onde ninguem abriu o /mapping.
+check('conta fora do cadastro gera', R._b3_msg_view_use('11111.11-1'), True)
+check('conta em branco gera', R._b3_msg_view_use(''), True)
+
+# Quem e a contraparte sai da CONTA, nao da grafia do Nome Simplificado.
+check('a conta diz a LE', R._b3_account_le('85398.00-5'), 'ATACAMA')
+check('conta de fora nao diz LE', R._b3_account_le('11111.11-1'), '')
+
+# O arquivo que ja esta em disco vem sem a coluna: o upgrade a completa PELO
+# SEED. Um default cego 'Consider' faria a mensagem sair pelas duas pontas.
+up = R._b3_accounts_upgrade([
+    {'LE': 'JPM', 'ACCOUNT': '73760.00-9', 'ACCOUNT TYPE': 'OWN'},
+    {'LE': 'MGT', 'ACCOUNT': '04880.00-6', 'ACCOUNT TYPE': 'OWN'},
+    {'LE': 'ATACAMA', 'ACCOUNT': '85398.00-5', 'ACCOUNT TYPE': 'OWN'},
+    {'LE': 'CLIENTE', 'ACCOUNT': '99999.00-1', 'ACCOUNT TYPE': 'OWN'},
+])
+check('upgrade: Banco Consider', up[0]['MESSAGING'], 'Consider')
+check('upgrade: MGT Disregard', up[1]['MESSAGING'], 'Disregard')
+check('upgrade: Atacama Disregard', up[2]['MESSAGING'], 'Disregard')
+check('upgrade: conta desconhecida gera', up[3]['MESSAGING'], 'Consider')
+# Escolha feita na tela nao se reescreve pelo seed.
+mantido = R._b3_accounts_upgrade([{'LE': 'MGT', 'ACCOUNT': '04880.00-6',
+                                   'MESSAGING': 'Consider'}])
+check('upgrade nao pisa no que foi escolhido', mantido[0]['MESSAGING'], 'Consider')
+
+print('\n== 8c. a mensageria usa o cadastro, e nao mais o par fixo ==')
+# A regra antiga era `casa == MGT and contraparte == Banco`, escrita no
+# endpoint: ela conhecia esse par e so ele.
+check('o endpoint pergunta ao cadastro', '_b3_msg_view_use(rec.get(' in SRC, True)
+check('a regra fixa da visao MGT saiu', '_mgt_view' in SRC, False)
+# O inner join com o opb3-events continua: evento que nao e liquidacao nao vira
+# mensagem pedindo pagamento.
+mens = SRC[SRC.index('def api_opb3_mensageria('):]
+mens = mens[:mens.index('\n@blueprint.route', 1) if '\n@blueprint.route' in mens[1:] else len(mens)]
+check('e o join com opb3-events tambem', '_opb3_settle_ok(rec, ev_rules)' in mens, True)
 
 print('\n== 9. a traducao da aba ==')
 for lang, esperado_txt in (('en', 'B3 Accounts'), ('br', 'Contas B3'), ('es', 'Cuentas B3')):
