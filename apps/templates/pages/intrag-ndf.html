@@ -520,6 +520,18 @@ i.ti-spin, .ti-spin, i.ti-loader, i.ti-loader-2, i.ti-loader-3 { display: inline
 <script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
 <script>
 // col index 2 = status, 3 = Intrag ID, 4-33 = data, col 34 = hidden row ID
+// Campos de DATA do modal: dd/mm/aaaa na tela e ISO no value, que é como a linha
+// do Intrag guarda a data (`_save_intrag_*` grava %Y-%m-%d). O `<input
+// type="date">` de antes desenhava no locale do SISTEMA — mm/dd/yyyy no Windows
+// do JP, e 03/04 lido como 3 de abril onde o campo quis dizer 4 de março. O
+// helper é o do export-advanced.js, que esta página já carrega; sem ele o campo
+// continua um texto comum que aceita dd/mm/aaaa.
+var DATE_FIELDS = ['ndf-f-10', 'ndf-f-11', 'ndf-f-12'];
+jQuery(function () {
+    if (!window.otcDateField) return;
+    DATE_FIELDS.forEach(function (id) { window.otcDateField('#' + id); });
+});
+
 var NDF_COLS = [
     'Contract Type','CETIP Contract Code','Portfolio Code','Participant Position',
     'Client Tax ID (Party)','Counterparty','Client Tax ID (Cpty)',
@@ -917,6 +929,9 @@ $(document).ready(function() {
         var m=document.getElementById('ndfModal');
         m.querySelector('.modal-title').innerHTML='<i class="ti ti-edit me-1"></i>Edit Row — Intrag NDF';
         NDF_COLS.forEach(function(col,i){ var inp=document.getElementById('ndf-f-'+i); if(inp) inp.value=d[i+4]||''; });
+        // O campo que se VÊ é o do flatpickr: sem o sync, abrir uma linha e
+        // depois outra mostraria a data da primeira.
+        if (window.otcDateSync) window.otcDateSync('#ndfModal');
         $(m).data('editTr',tr);
         bootstrap.Modal.getOrCreateInstance(m).show();
     });
@@ -953,6 +968,7 @@ $(document).ready(function() {
     $(document.getElementById('ndfModal')).on('hidden.bs.modal',function() {
         $(this).removeData('editTr');
         NDF_COLS.forEach(function(col,i){ var inp=document.getElementById('ndf-f-'+i); if(inp) inp.value=''; });
+        if (window.otcDateSync) window.otcDateSync('#ndfModal');
     });
 
     // ── helpers ────────────────────────────────────────────────────────────────
@@ -1262,9 +1278,9 @@ $(document).ready(function() {
           <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-7">Cpty Collateral Basket</label><input type="text" class="form-control form-control-sm" id="ndf-f-7"></div>
           <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-8">Party Collateral Basket</label><input type="text" class="form-control form-control-sm" id="ndf-f-8"></div>
           <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-9">Notional Value</label><input type="text" class="form-control form-control-sm" id="ndf-f-9"></div>
-          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-10">Trade Date</label><input type="date" class="form-control form-control-sm" id="ndf-f-10"></div>
-          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-11">Registration Date</label><input type="date" class="form-control form-control-sm" id="ndf-f-11"></div>
-          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-12">Maturity Date</label><input type="date" class="form-control form-control-sm" id="ndf-f-12"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-10">Trade Date</label><input type="text" class="form-control form-control-sm" id="ndf-f-10" placeholder="dd/mm/aaaa" autocomplete="off"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-11">Registration Date</label><input type="text" class="form-control form-control-sm" id="ndf-f-11" placeholder="dd/mm/aaaa" autocomplete="off"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-12">Maturity Date</label><input type="text" class="form-control form-control-sm" id="ndf-f-12" placeholder="dd/mm/aaaa" autocomplete="off"></div>
           <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-13">Currency</label><input type="text" class="form-control form-control-sm" id="ndf-f-13"></div>
           <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-14">Reference Exchange</label><input type="text" class="form-control form-control-sm" id="ndf-f-14"></div>
           <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-ndf-col-15">Commodity</label><input type="text" class="form-control form-control-sm" id="ndf-f-15"></div>

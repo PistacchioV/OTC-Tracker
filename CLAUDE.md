@@ -255,6 +255,31 @@ Live Positions, o Track Confirmations e as três Recons).
   reemite `input`/`change` — é o que deixa o `wireRefdata` completar os campos
   irmãos —, e o esconder vem DEPOIS desses eventos, senão o próprio `input`
   reabre a lista. O domínio continua aberto: a lista é sugestão, não trava.
+- **Data é SEMPRE `dd/mm/aaaa` na tela, e `<input type="date">` visível é
+  proibido.** O campo nativo desenha no locale do SISTEMA: no Windows do JP isso
+  é `mm/dd/yyyy`, e a mesa lê `03/04` como 3 de abril onde o campo quis dizer 4
+  de março — um erro de data que não dá erro nenhum. Há dois jeitos aceitos, e os
+  dois mostram `dd/mm/aaaa`:
+  - **flatpickr com `altInput`** — o padrão geral, e o do
+    `otcDateField`/`otcDateSync` (expostos pelo `static/js/export-advanced.js`,
+    que é o único helper de data do app). Ele esconde o input original — que
+    segue com o `value` em **ISO**, e por isso o código em volta não muda — e
+    desenha ao lado o campo em dd/mm/aaaa. O flatpickr é global (vem no
+    `vendors.min.js`), mas a chamada leva guard: sem ele o campo tem de degradar
+    para texto comum, não quebrar. **Quem escreve no campo por código avisa o
+    picker** (`el._flatpickr.setDate(v, false)`, ou `otcDateSync('#modal')`): o
+    `value` do original muda, mas o campo que se VÊ é o outro, e ele ficaria com
+    a data anterior — abrir o modal numa linha e depois noutra mostraria a data
+    da primeira.
+  - **jQuery daterangepicker `singleDatePicker`** com
+    `locale: { format: 'DD/MM/YYYY' }`, nas páginas que já carregam os assets
+    dele (Other Products Summary, NDF Summary, MtM, Accrual, Control Panel,
+    dashboard). Fallback: campo de texto dd/mm/aaaa.
+
+  O `type="date"` só continua legítimo **invisível**, como picker atrás de um
+  campo de texto readonly em dd/mm/aaaa — é o `.date-wrap` das duas Recons
+  (`opacity:0` por cima do texto) e o botão de calendário do CGD no Reference
+  Data. Ali o que se lê é sempre o texto; o nativo é só o calendário.
 
 ---
 

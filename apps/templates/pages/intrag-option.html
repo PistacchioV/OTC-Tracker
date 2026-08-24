@@ -533,6 +533,18 @@
 
 <script>
 // col index 2 = status, 3 = Intrag ID, 4-41 = data, col 42 = hidden row ID
+// Campos de DATA do modal: dd/mm/aaaa na tela e ISO no value, que é como a linha
+// do Intrag guarda a data (`_save_intrag_*` grava %Y-%m-%d). O `<input
+// type="date">` de antes desenhava no locale do SISTEMA — mm/dd/yyyy no Windows
+// do JP, e 03/04 lido como 3 de abril onde o campo quis dizer 4 de março. O
+// helper é o do export-advanced.js, que esta página já carrega; sem ele o campo
+// continua um texto comum que aceita dd/mm/aaaa.
+var DATE_FIELDS = ['opt-f-3', 'opt-f-12', 'opt-f-13', 'opt-f-36'];
+jQuery(function () {
+    if (!window.otcDateField) return;
+    DATE_FIELDS.forEach(function (id) { window.otcDateField('#' + id); });
+});
+
 var OPT_COLS = [
     'Portfolio','System ID','Line Type ID','Registration Date','Buyer Account',
     'Buyer Name','Contract','B3 ID','My Number','Trade Type',
@@ -969,6 +981,9 @@ $(document).ready(function() {
         var m=document.getElementById('optModal');
         m.querySelector('.modal-title').innerHTML='<i class="ti ti-edit me-1"></i>Edit Row — Intrag Option';
         OPT_COLS.forEach(function(col,i){ var inp=document.getElementById('opt-f-'+i); if(inp) inp.value=d[i+4]||''; });
+        // O campo que se VÊ é o do flatpickr: sem o sync, abrir uma linha e
+        // depois outra mostraria a data da primeira.
+        if (window.otcDateSync) window.otcDateSync('#optModal');
         $(m).data('editTr',tr);
         bootstrap.Modal.getOrCreateInstance(m).show();
     });
@@ -1005,6 +1020,7 @@ $(document).ready(function() {
     $(document.getElementById('optModal')).on('hidden.bs.modal',function() {
         $(this).removeData('editTr');
         OPT_COLS.forEach(function(col,i){ var inp=document.getElementById('opt-f-'+i); if(inp) inp.value=''; });
+        if (window.otcDateSync) window.otcDateSync('#optModal');
     });
 
     // Smart Filter
@@ -1177,7 +1193,7 @@ $(document).ready(function() {
           <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-opt-col-0">Portfolio</label><input type="text" class="form-control form-control-sm" id="opt-f-0"></div>
           <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-opt-col-1">System ID</label><input type="text" class="form-control form-control-sm" id="opt-f-1"></div>
           <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-opt-col-2">Line Type ID</label><input type="text" class="form-control form-control-sm" id="opt-f-2"></div>
-          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-opt-col-3">Registration Date</label><input type="date" class="form-control form-control-sm" id="opt-f-3"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-opt-col-3">Registration Date</label><input type="text" class="form-control form-control-sm" id="opt-f-3" placeholder="dd/mm/aaaa" autocomplete="off"></div>
           <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-opt-col-4">Holder Account</label><input type="text" class="form-control form-control-sm" id="opt-f-4"></div>
           <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-opt-col-5">Holder Name</label><input type="text" class="form-control form-control-sm" id="opt-f-5"></div>
           <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-opt-col-6">Contract</label><input type="text" class="form-control form-control-sm" id="opt-f-6"></div>
@@ -1186,8 +1202,8 @@ $(document).ready(function() {
           <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-opt-col-9">Trade Type</label><input type="text" class="form-control form-control-sm" id="opt-f-9"></div>
           <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-opt-col-10">Writer Account</label><input type="text" class="form-control form-control-sm" id="opt-f-10"></div>
           <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-opt-col-11">Writer Name</label><input type="text" class="form-control form-control-sm" id="opt-f-11"></div>
-          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-opt-col-12">Start Date</label><input type="date" class="form-control form-control-sm" id="opt-f-12"></div>
-          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-opt-col-13">Maturity Date</label><input type="date" class="form-control form-control-sm" id="opt-f-13"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-opt-col-12">Start Date</label><input type="text" class="form-control form-control-sm" id="opt-f-12" placeholder="dd/mm/aaaa" autocomplete="off"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-opt-col-13">Maturity Date</label><input type="text" class="form-control form-control-sm" id="opt-f-13" placeholder="dd/mm/aaaa" autocomplete="off"></div>
           <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-opt-col-14">CETIP Number</label><input type="text" class="form-control form-control-sm" id="opt-f-14"></div>
           <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-opt-col-15">SISBACEN Currency Code</label><input type="text" class="form-control form-control-sm" id="opt-f-15"></div>
           <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-opt-col-16">Currency Symbol</label><input type="text" class="form-control form-control-sm" id="opt-f-16"></div>
@@ -1210,7 +1226,7 @@ $(document).ready(function() {
           <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-opt-col-33">Query Source</label><input type="text" class="form-control form-control-sm" id="opt-f-33"></div>
           <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-opt-col-34">Ticker</label><input type="text" class="form-control form-control-sm" id="opt-f-34"></div>
           <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-opt-col-35">Quantity</label><input type="text" class="form-control form-control-sm" id="opt-f-35"></div>
-          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-opt-col-36">Premium Payment Date</label><input type="date" class="form-control form-control-sm" id="opt-f-36"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-opt-col-36">Premium Payment Date</label><input type="text" class="form-control form-control-sm" id="opt-f-36" placeholder="dd/mm/aaaa" autocomplete="off"></div>
           <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-opt-col-37">Asian Option Average</label><input type="text" class="form-control form-control-sm" id="opt-f-37"></div>
         </div>
       </div>

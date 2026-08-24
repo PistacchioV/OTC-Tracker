@@ -268,11 +268,19 @@
                  defeito. */
               '<div class="xa-sec" id="xaDaySec">' +
                 '<div class="xa-sec-h">' + esc(t('daysTitle')) + '</div>' +
+                /* NUNCA `type="date"`: o campo nativo desenha no locale do
+                   SISTEMA, e no Windows do JP isso é mm/dd/yyyy. A data do app
+                   é dd/mm/yyyy em toda tela. O flatpickr vem do vendors.min.js
+                   (global) e o `altInput` é o que dá as duas coisas: o campo
+                   que se vê em dd/mm/yyyy e o `value` em ISO, que é o que o
+                   endpoint do dia espera. */
                 '<div class="row g-2">' +
                   '<div class="col-md-6"><label class="form-label">' + esc(t('from')) + '</label>' +
-                    '<input type="date" class="form-control form-control-sm" id="xaDayFrom"></div>' +
+                    '<input type="text" class="form-control form-control-sm" id="xaDayFrom" ' +
+                      'placeholder="dd/mm/aaaa" autocomplete="off"></div>' +
                   '<div class="col-md-6"><label class="form-label">' + esc(t('to')) + '</label>' +
-                    '<input type="date" class="form-control form-control-sm" id="xaDayTo"></div>' +
+                    '<input type="text" class="form-control form-control-sm" id="xaDayTo" ' +
+                      'placeholder="dd/mm/aaaa" autocomplete="off"></div>' +
                 '</div>' +
                 '<div class="xa-help" id="xaDayHelp">' + esc(t('daysHelp')) + '</div>' +
               '</div>' +
@@ -393,7 +401,16 @@
         // escrito. Escondê-la faria a mesma tela parecer duas conforme a
         // página, e um campo que some sem explicação lê-se como defeito.
         var daily = normDaily(opts.daily);
-        $el.find('#xaDayFrom,#xaDayTo').val('').prop('disabled', !daily);
+        $el.find('#xaDayFrom,#xaDayTo').each(function () {
+            // Limpar pelo flatpickr, e não pelo .val(''): o campo que se VÊ é o
+            // altInput, e zerar só o original deixaria a data anterior na tela.
+            if (this._flatpickr) this._flatpickr.clear(); else this.value = '';
+            dateField(this);
+            jQuery(this).prop('disabled', !daily);
+            if (this._flatpickr && this._flatpickr.altInput) {
+                this._flatpickr.altInput.disabled = !daily;
+            }
+        });
         $el.find('#xaDaySec').toggleClass('xa-off', !daily);
         $el.find('#xaDayHelp').text(daily ? t('daysHelp') : t('daysNone'));
         $el.find('#xaPosFrom,#xaPosTo').val('');
@@ -457,8 +474,8 @@
                 header: $el.find('#xaHeader').is(':checked'),
                 sep:    $el.find('#xaSep').val(),
                 orient: $el.find('#xaOrient').val(),
-                dayFrom: $el.find('#xaDayFrom').val() || '',
-                dayTo:   $el.find('#xaDayTo').val() || '',
+                dayFrom: isoDay($el.find('#xaDayFrom').val()),
+                dayTo:   isoDay($el.find('#xaDayTo').val()),
                 crits: crits,
                 cols: checked,
                 colLabels: checked.map(function (i) {
@@ -697,6 +714,65 @@
         if (!d.url) return null;
         return { url: d.url, param: d.param || 'date',
                  rows: d.rows || 'rows', columns: d.columns || 'columns' };
+    }
+
+    /* ══════ Campo de data — o PADRÃO do app ════════════════════════════════
+       dd/mm/aaaa na tela, ISO no `value`. E é padrão mesmo: **nunca**
+       `<input type="date">` visível, porque o campo nativo desenha no locale do
+       SISTEMA — no Windows do JP isso é mm/dd/yyyy, e a mesa lê 03/04 como 3 de
+       abril quando o campo quis dizer 4 de março. Um erro de data que não dá
+       erro nenhum.
+
+       O `altInput` do flatpickr é o que dá as duas coisas ao mesmo tempo: ele
+       esconde o input original (que segue com o valor ISO, e por isso NENHUM
+       código em volta muda) e desenha ao lado um campo em dd/mm/aaaa, que é o
+       que se vê e o que se digita.
+
+       Quem escreve no campo por código tem de avisar o picker
+       (`el._flatpickr.setDate(v, false)`): o `value` do original muda, mas o
+       campo VISÍVEL é o outro, e ele ficaria com a data anterior.
+
+       O flatpickr vem no vendors.min.js (global), mas o guard existe pelo mesmo
+       motivo do resto do app — uma página que carregue antes do vendor ficaria
+       com o campo quebrado em vez de um texto comum, e digitar dd/mm/aaaa
+       continua funcionando porque o `isoDay` normaliza as duas escritas.
+
+       Exposto como `window.otcDateField` para as páginas que já carregam este
+       arquivo (é o único helper de data do app; ver o comentário do padrão em
+       `pages/index.html`). */
+    function dateField(el, opts) {
+        if (typeof el === 'string') el = document.querySelector(el);
+        if (!el || el._flatpickr || typeof flatpickr === 'undefined') return null;
+        return flatpickr(el, jQuery.extend({
+            dateFormat: 'Y-m-d',       // o que fica no value — é o que a API espera
+            altInput: true, altFormat: 'd/m/Y',
+            altInputClass: el.className,
+            allowInput: true, disableMobile: true
+        }, opts || {}));
+    }
+    window.otcDateField = dateField;
+
+    /* Refaz o texto visível dos campos de data de um trecho depois de alguém
+       escrever no `value` por código. Sem isto, abrir o modal numa linha e
+       depois noutra mostra a data da PRIMEIRA. */
+    window.otcDateSync = function (root) {
+        var scope = (typeof root === 'string') ? document.querySelector(root) : root;
+        if (!scope) return;
+        Array.prototype.forEach.call(scope.querySelectorAll('input'), function (el) {
+            if (el._flatpickr) el._flatpickr.setDate(el.value || '', false);
+        });
+    };
+
+    /* O que a pessoa digitou/escolheu, em ISO. Aceita as duas escritas porque o
+       campo é editável: com o flatpickr o `value` já vem `Y-m-d`, e sem ele (ou
+       digitando à mão) chega `dd/mm/aaaa`. */
+    function isoDay(v) {
+        var s = String(v == null ? '' : v).trim();
+        if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+        var m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(s);
+        if (!m) return '';
+        return m[3] + '-' + (m[2].length === 1 ? '0' : '') + m[2] +
+                     '-' + (m[1].length === 1 ? '0' : '') + m[1];
     }
 
     function pad2(n) { return (n < 10 ? '0' : '') + n; }

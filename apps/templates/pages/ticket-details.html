@@ -93,7 +93,8 @@
                             <h6 class="tkd-label" data-lang="tkd-due">Due Date</h6>
                             <!-- Em branco até o master preencher (regra do usuário). -->
                             <input class="form-control form-control-sm d-none" id="tkd-due-inp"
-                                   type="date" style="max-width:200px;" />
+                                   type="text" placeholder="dd/mm/aaaa" autocomplete="off"
+                                   style="max-width:200px;" />
                             <p class="mb-0 d-none" id="tkd-due-txt"></p>
                         </div>
                     </div>
@@ -317,12 +318,39 @@ document.addEventListener('DOMContentLoaded', function () {
 
         if (tk.can_edit_due) {
             $('tkd-due-inp').value = tk.due_date || '';
+            // dd/mm/aaaa na tela, ISO no value (que é como o ticket guarda a
+            // data). O `type="date"` de antes desenhava no locale do SISTEMA —
+            // mm/dd/yyyy no Windows do JP. Esta página não carrega o
+            // export-advanced.js, então o flatpickr (global, do vendors.min.js)
+            // é chamado aqui mesmo; sem ele o campo vira um texto comum.
+            var _due = $('tkd-due-inp');
+            if (typeof flatpickr !== 'undefined') {
+                if (_due._flatpickr) _due._flatpickr.setDate(_due.value || '', false);
+                else flatpickr(_due, {
+                    dateFormat: 'Y-m-d', altInput: true, altFormat: 'd/m/Y',
+                    // A classe do campo visível vai SEM o `d-none`: o campo
+                    // nasce escondido (só o master edita o prazo), e copiar a
+                    // classe inteira deixaria o visível oculto para sempre —
+                    // o `show()` abaixo destrava o original, que o flatpickr
+                    // esconde de qualquer jeito.
+                    altInputClass: _due.className.replace(/\bd-none\b/g, '').trim(),
+                    allowInput: true, disableMobile: true
+                });
+            }
             show($('tkd-due-inp'), true); show($('tkd-due-txt'), false);
+            // Com o flatpickr, quem se vê é o campo alternativo.
+            if (_due._flatpickr && _due._flatpickr.altInput) {
+                show(_due._flatpickr.altInput, true);
+            }
         } else {
             $('tkd-due-txt').innerHTML = tk.due_date
                 ? esc(fmtDate(tk.due_date))
                 : '<span class="text-muted">&mdash;</span>';
             show($('tkd-due-inp'), false); show($('tkd-due-txt'), true);
+            var _dueOff = $('tkd-due-inp');
+            if (_dueOff._flatpickr && _dueOff._flatpickr.altInput) {
+                show(_dueOff._flatpickr.altInput, false);
+            }
         }
 
         show($('tkd-save-wrap'), tk.can_edit_status || tk.can_edit_due || tk.can_edit_fields);
