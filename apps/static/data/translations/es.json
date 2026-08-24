@@ -591,6 +591,7 @@
   "rd-col-casid": "CASID",
   "rd-col-ucn": "UCN",
   "rd-col-b3-account": "Cuenta B3",
+  "rd-col-bank-accounts": "Cuentas Bancarias",
   "rd-col-comm-acr": "Acrónimo Commodities",
   "rd-col-fx-acr": "Acrónimo FX Cash",
   "rd-swal-approve-title": "¿Aprobar este registro?",

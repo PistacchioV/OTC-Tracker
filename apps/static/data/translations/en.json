@@ -592,6 +592,7 @@
   "rd-col-casid": "CASID",
   "rd-col-ucn": "UCN",
   "rd-col-b3-account": "B3 Account",
+  "rd-col-bank-accounts": "Bank Accounts",
   "rd-col-comm-acr": "Commodities Acronym",
   "rd-col-fx-acr": "FX Cash Acronym",
   "rd-swal-approve-title": "Approve this record?",

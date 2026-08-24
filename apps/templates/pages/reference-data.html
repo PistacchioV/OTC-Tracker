@@ -474,6 +474,17 @@
                                     <th data-lang="rd-col-b3-account">B3 Account</th>
                                     <th data-lang="rd-col-comm-acr">Commodities Acronym</th>
                                     <th data-lang="rd-col-fx-acr">FX Cash Acronym</th>
+                                    <!-- Detalhes do CounterpartyDetails.json (o que o duplo clique
+                                         mostra). Nascem ESCONDIDAS — quem quiser vê-las na tela usa o
+                                         Columns —, mas vão SEMPRE no export: o DataTables exporta o
+                                         que está na tabela, e montar o arquivo por fora criaria uma
+                                         segunda leitura do mesmo JSON para discordar da tela. -->
+                                    <th data-lang="rd-cp-cgd">CGD</th>
+                                    <th data-lang="rd-cp-net">Settlement Net Type</th>
+                                    <th data-lang="rd-col-bank-accounts">Bank Accounts</th>
+                                    <th data-lang="rd-cp-default-pay">Default PAY</th>
+                                    <th data-lang="rd-cp-default-receive">Default RECEIVE</th>
+                                    <th data-lang="rd-cp-contacts">Contacts</th>
                                 </tr>
                                 <tr class="col-search-row" id="refdata-search-row">
                                     <th></th>
@@ -491,6 +502,12 @@
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="B3 Account" data-lang-placeholder="col-b3-account"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Comm. Acronym" data-lang-placeholder="col-comm-acronym"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="FX Acronym" data-lang-placeholder="col-fx-acronym"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="CGD" data-lang-placeholder="rd-cp-cgd"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Settlement Net Type" data-lang-placeholder="rd-cp-net"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Bank Accounts" data-lang-placeholder="rd-col-bank-accounts"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Default PAY" data-lang-placeholder="rd-cp-default-pay"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Default RECEIVE" data-lang-placeholder="rd-cp-default-receive"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Contacts" data-lang-placeholder="rd-cp-contacts"></th>
                                 </tr>
                             </thead>
                             <tbody></tbody>
@@ -754,12 +771,22 @@ $(document).ready(function () {
                 safe(r['B3 ACCOUNT']),
                 safe(r['COMMODITIES ACCRONYM']),
                 safe(r['FX CASH ACCRONYM'])
-            ];
+            // Os dois JSON são buscados em paralelo e qualquer um pode chegar
+            // primeiro: aqui se preenche o que já estiver carregado, e o
+            // decorateAllPending() do outro fetch completa o resto.
+            ].concat(cpdCells(r['SPN']));
         });
     }
 
     /* ── DataTable init ───────────────────────────────────────────────── */
-    var EXPORT_COLS = {columns: [2,3,4,5,6,7,8,9,10,11,12,13,14], modifier: {page:'all'}};
+    /* 15..20 são as colunas do CounterpartyDetails (CGD · Net · Contas ·
+       Default PAY/RECEIVE · Contatos). Elas nascem escondidas, mas entram no
+       export porque `columns` é uma lista de ÍNDICES: o DataTables não filtra
+       por visibilidade quando eles são declarados. */
+    var CPD_COL0 = 15;
+    var CPD_COLS = [15, 16, 17, 18, 19, 20];
+    var EXPORT_COLS = {columns: [2,3,4,5,6,7,8,9,10,11,12,13,14].concat(CPD_COLS),
+                       modifier: {page:'all'}};
 
     var dt = $('#ref-data-table').DataTable({
         data: [],
@@ -774,6 +801,9 @@ $(document).ready(function () {
         pageLength: 25,
         columnDefs: [
             {targets: [0,1], orderable: false, searchable: false},
+            // As colunas de detalhe ficam escondidas na tela e ainda assim vão no
+            // export: o EXPORT_COLS lista índices, e índice não olha visibilidade.
+            {targets: CPD_COLS, visible: false},
             {targets: '_all', defaultContent: ''}
         ],
         dom:
@@ -866,7 +896,17 @@ $(document).ready(function () {
                 {lbl:'UCN',            key:'rd-col-ucn'},
                 {lbl:'B3 Account',     key:'rd-col-b3-account'},
                 {lbl:'Comm. Acronym',  key:'rd-col-comm-acr'},
-                {lbl:'FX Acronym',     key:'rd-col-fx-acr'}
+                {lbl:'FX Acronym',     key:'rd-col-fx-acr'},
+                /* As seis do CounterpartyDetails: `off` marca a coluna que nasce
+                   escondida, e é por isso que a caixa dela vem desmarcada — uma
+                   caixa marcada sobre coluna invisível obrigaria a clicar duas
+                   vezes para mostrá-la. */
+                {lbl:'CGD',               key:'rd-cp-cgd',             off:true},
+                {lbl:'Settlement Net',    key:'rd-cp-net',             off:true},
+                {lbl:'Bank Accounts',     key:'rd-col-bank-accounts',  off:true},
+                {lbl:'Default PAY',       key:'rd-cp-default-pay',     off:true},
+                {lbl:'Default RECEIVE',   key:'rd-cp-default-receive', off:true},
+                {lbl:'Contacts',          key:'rd-cp-contacts',        off:true}
             ];
             var toggleWrap = container.querySelector('.columnToggleWrapper');
             if (toggleWrap) {
@@ -874,7 +914,7 @@ $(document).ready(function () {
                     var ci  = i + 2;
                     var uid = 'rd_col_' + i;
                     return '<li class="dropdown-item"><div class="form-check">' +
-                        '<input class="form-check-input rd-toggle-vis" type="checkbox" data-column="' + ci + '" id="' + uid + '" checked>' +
+                        '<input class="form-check-input rd-toggle-vis" type="checkbox" data-column="' + ci + '" id="' + uid + '"' + (c.off ? '' : ' checked') + '>' +
                         '<label class="form-check-label fw-medium" for="' + uid + '" data-lang="' + c.key + '">' + c.lbl + '</label>' +
                         '</div></li>';
                 }).join('');
@@ -1003,7 +1043,9 @@ $(document).ready(function () {
     }
 
     /* Recompute the status badge of every row from its real status + pending
-       details. Idempotent, safe to call after either data load or a detail edit. */
+       details, e reescreve as seis colunas de detalhe. Idempotent, safe to call
+       after either data load or a detail edit — e é ela que completa as colunas
+       quando o CounterpartyDetails.json chega DEPOIS do RefData.json. */
     function decorateAllPending() {
         if (!dt) return;
         dt.rows().every(function() {
@@ -1012,12 +1054,15 @@ $(document).ready(function () {
             var real = _REAL_STATUS[key] || 'PENDING';
             var want = String(real).toUpperCase() === 'ACTIVE' && cpHasPending(key);
             var badge = want ? detailsPendingBadge() : statusBadge(real);
-            if (d[2] !== badge) { d[2] = badge; this.data(d); }
+            var changed = applyCpdCells(d);
+            if (d[2] !== badge) { d[2] = badge; changed = true; }
+            if (changed) this.data(d);
         });
         dt.draw(false);
     }
 
-    /* Update just the one counterparty's badge (used after a detail popup action). */
+    /* Update just the one counterparty's badge + detail cells (used after a
+       detail popup action — o export leva a alteração sem recarregar a tela). */
     function decorateRowPending(spn) {
         if (!dt) return;
         var key = _spnKey(spn);
@@ -1027,7 +1072,9 @@ $(document).ready(function () {
             var real = _REAL_STATUS[key] || 'PENDING';
             var want = String(real).toUpperCase() === 'ACTIVE' && cpHasPending(key);
             var badge = want ? detailsPendingBadge() : statusBadge(real);
-            if (d[2] !== badge) { d[2] = badge; this.data(d); }
+            var changed = applyCpdCells(d);
+            if (d[2] !== badge) { d[2] = badge; changed = true; }
+            if (changed) this.data(d);
         });
         dt.draw(false);
     }
@@ -1284,6 +1331,89 @@ $(document).ready(function () {
         function slot(s){ s = s||{}; return { current:s.current||null, pending:s.pending||null, maker:s.maker||'', checker:s.checker||'' }; }
         return { ACCOUNTS:accounts, DEFAULT_PAY:slot(bk.DEFAULT_PAY), DEFAULT_RECEIVE:slot(bk.DEFAULT_RECEIVE) };
     }
+    /* ══════ As seis colunas de detalhe (CGD · Net · Contas · Contatos) ══════
+       O popup do duplo clique já mostrava tudo isto, mas o export não levava
+       nada: quem precisava dos contatos ou da data do CGD abria contraparte por
+       contraparte. Aqui o mesmo registro vira SEIS células de texto.
+
+       Num arquivo plano não cabe uma lista, então multivalor vai numa célula
+       só: itens separados por ' | ' e os campos de um item por ' · ', que é o
+       separador que o próprio popup usa entre telefone e e-mail — quem
+       comparar a tela com a planilha lê a mesma coisa.
+
+       O que não está aprovado sai marcado '(Pending)' em vez de ficar de fora.
+       Esconder o pendente faria a planilha dizer que a contraparte não tem
+       conta nenhuma justamente quando ela tem uma esperando checker, e é essa
+       a linha que alguém precisa olhar.
+
+       Sem registro no CounterpartyDetails as seis células ficam VAZIAS — não é
+       o mesmo que 'Total Net', que é o default do motor para quem não tem
+       cadastro: dizer 'Total Net' aqui seria afirmar uma escolha que ninguém
+       fez. */
+    function _cpdPend(status) {
+        return String(status || 'Active').trim().toLowerCase() === 'active' ? '' : ' (Pending)';
+    }
+    function _cpdAccText(a) {
+        var parts = [];
+        if (a.bank)    parts.push(a.bank);
+        if (a.agency)  parts.push(t('rd-cp-agency','Agency') + ' ' + a.agency);
+        if (a.account) parts.push(t('rd-cp-account','Account') + ' ' + a.account);
+        return parts.join(' · ');
+    }
+    /* O slot de default aponta para um id de conta; sem a conta o id não diz
+       nada a quem lê a planilha, então o que sai é o texto da conta. */
+    function _cpdDefaultText(slot, accounts) {
+        function byId(id) {
+            var a = accounts.filter(function(x){ return x.id === id; })[0];
+            return a ? _cpdAccText(a) : '';
+        }
+        var out = [];
+        var cur = slot.current ? byId(slot.current) : '';
+        var pen = slot.pending ? byId(slot.pending) : '';
+        if (cur) out.push(cur);
+        if (pen) out.push(pen + ' (Pending)');
+        return out.join(' | ');
+    }
+    function cpdCells(spn) {
+        var raw = _CPDETAILS[_spnKey(spn)];
+        if (!raw) return ['', '', '', '', '', ''];
+        var model = _normCp(raw);
+        var bank  = _normBank(raw);
+        var cgd = model.CGD.map(function(it){ return it.value + _cpdPend(it.status); }).join(' | ');
+        var net = model.NET && model.NET.value ? (model.NET.value + _cpdPend(model.NET.status)) : '';
+        var accs = bank.ACCOUNTS.map(function(a){ return _cpdAccText(a) + _cpdPend(a.status); }).join(' | ');
+        var contacts = model.CONTACTS.map(function(c){
+            var f = [];
+            if (c.name)  f.push(c.name);
+            if (c.email) f.push(c.email);
+            if (c.phone) f.push(c.phone);
+            // 'Active'/'Inactive' entre as regras é lixo de importação antiga —
+            // o popup já os descarta, e mantê-los aqui repetiria o status.
+            var rules = (c.rules || []).filter(function(r){
+                return !/^(active|inactive)$/i.test(String(r).trim());
+            });
+            if (rules.length) f.push(rules.join(', '));
+            f.push(c.status || 'Active');
+            return f.join(' · ') + _cpdPend(c.appr);
+        }).join(' | ');
+        return [cgd, net, accs,
+                _cpdDefaultText(bank.DEFAULT_PAY, bank.ACCOUNTS),
+                _cpdDefaultText(bank.DEFAULT_RECEIVE, bank.ACCOUNTS),
+                contacts].map(_esc);
+    }
+    /* Escreve as seis células no ARRAY DE DADOS da linha (nunca no <td>): é a
+       data que alimenta export, ordenação e filtro — o <td> é redesenhado a
+       cada draw e o arquivo sairia vazio. Devolve true quando algo mudou, para
+       o chamador não redesenhar à toa. */
+    function applyCpdCells(d) {
+        var cells = cpdCells(_txt(d[9]));
+        var changed = false;
+        for (var i = 0; i < cells.length; i++) {
+            if (d[CPD_COL0 + i] !== cells[i]) { d[CPD_COL0 + i] = cells[i]; changed = true; }
+        }
+        return changed;
+    }
+
     function _accBadge(status){
         var active = String(status).toLowerCase() === 'active';
         return '<span class="badge ' + (active ? 'bg-success-subtle text-success' : 'bg-warning-subtle text-warning') +
@@ -2014,13 +2144,16 @@ $(document).ready(function () {
             apiCall('/api/b3/update', {table:'refdata', idx: editIdx, fields: fields, action:'edit'}, function(res) {
                 if (res.ok) {
                     if (editRow) {
+                        // O .concat é o que impede a linha de encolher para 15
+                        // colunas e levar junto o detalhe do CounterpartyDetails
+                        // — que continua o mesmo, o modal não mexe nele.
                         editRow.data([
                             checkboxCell(), actionBtns(editIdx, CURRENT_USER), statusBadge('PENDING'),
                             fields['COUNTERPARTY'], fields['ECONOMIC GROUP'], fields['BANKER'],
                             fields['SIGNATURE TYPE'], fields['TAX ID'], fields['ECI'], fields['SPN'],
                             fields['CASID'], fields['UCN'], fields['B3 ACCOUNT'],
                             fields['COMMODITIES ACCRONYM'], fields['FX CASH ACCRONYM']
-                        ]).draw(false);
+                        ].concat(cpdCells(fields['SPN']))).draw(false);
                     }
                     _REAL_STATUS[_spnKey(fields['SPN'])] = 'PENDING';
                     bootstrap.Modal.getInstance(rdModalEl).hide();
@@ -2039,7 +2172,7 @@ $(document).ready(function () {
                         fields['SIGNATURE TYPE'], fields['TAX ID'], fields['ECI'], fields['SPN'],
                         fields['CASID'], fields['UCN'], fields['B3 ACCOUNT'],
                         fields['COMMODITIES ACCRONYM'], fields['FX CASH ACCRONYM']
-                    ]).draw(false);
+                    ].concat(cpdCells(fields['SPN']))).draw(false);
                     _REAL_STATUS[_spnKey(fields['SPN'])] = 'PENDING';
                     bootstrap.Modal.getInstance(rdModalEl).hide();
                     Swal.fire({title: t('rd-swal-saved','Added!'), icon:'success', timer:1200, showConfirmButton:false});
@@ -2066,5 +2199,15 @@ $(document).ready(function () {
     });
 
 }); // end ready
+</script>
+<!-- Item "Advanced" do menu Export (modal com formato, intervalo, filtros e
+     escolha de colunas). O helper é idempotente e se enxerta na collection do
+     DataTables Buttons que a página já montou, então nada aqui em cima muda.
+     Vai no FIM do bloco de propósito: precisa da DataTable já inicializada. -->
+<script src="{{ config.ASSETS_ROOT }}/js/export-advanced.js"></script>
+<script>
+    jQuery(function () {
+        if (window.otcExportAdvanced) otcExportAdvanced('#ref-data-table');
+    });
 </script>
 {% endblock extra_javascript %}
