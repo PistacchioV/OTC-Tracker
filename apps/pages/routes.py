@@ -10579,7 +10579,14 @@ def _optadv_email_rows(ref):
         # `commodity` é o que o gerador lê para quebrar o aviso por mercadoria e
         # para desambiguar o assunto. Na opção o equivalente é o ATIVO
         # SUBJACENTE, que é o mesmo texto que a coluna mostra.
-        out.append(dict(r, cells=cells, commodity=r.get('underlying', '')))
+        #
+        # `family` diz ao gerador de e-mail QUE aviso é este. Ele serve o termo e
+        # a opção com a mesma função, e o aviso de PRÊMIO de opção é o único que
+        # imprime a tabela sem as colunas de IR e Resultado Líquido — deduzir
+        # isso do rótulo do produto ('Opção de …') amarraria a regra a um texto
+        # que existe para ser lido por gente.
+        out.append(dict(r, cells=cells, commodity=r.get('underlying', ''),
+                        family='option'))
     return out
 
 

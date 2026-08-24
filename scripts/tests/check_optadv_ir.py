@@ -163,6 +163,97 @@ check('   e o IR soma a coluna IR',
 # É essa soma que torna o rateio de um lado só obrigatório: com o rateio dos dois
 # lados, este mesmo rodapé imprimia (28.884,13).
 
+# ── 6. o aviso de PRÊMIO de opção não imprime as duas colunas ───────────────
+#
+# O imposto é do net, então por linha ele não existe: a coluna IR mostrava um
+# rateio que não é fato do contrato e a coluna Resultado Líquido repetia o
+# Apurado com alguns centavos a menos, numa operação que não sofreu retenção
+# nenhuma. As duas saem da tabela do PRÊMIO — nas três classes de subjacente — e
+# o imposto aparece uma vez só, no quadro de baixo. Exercício/recompra e o termo
+# de mercadoria seguem com as colunas.
+
+import re                                                       # noqa: E402
+from apps.pages import otc_emails as E                          # noqa: E402
+
+print('\n== a tabela do aviso de prêmio ==')
+
+HEAD = ['B3 ID', 'Nº da Confirmação', 'Data de Início da Operação', 'Ativo Subjacente',
+        'Ptax', 'Cotação Ativo Subjacente', 'Quantidade da Operação',
+        'Resultado Apurado (R$)', 'IR 0,005% (R$)', 'Resultado Líquido (R$)',
+        'Settlement Net']
+IR_COLS = ('IR 0,005% (R$)', 'Resultado Líquido (R$)')
+
+
+def linha_aviso(ap, ir, liq, **kw):
+    r = {'counterparty': 'CLIENTE DO AVISO', 'legal': 'BANCO J.P. MORGAN', 'spn': '',
+         'taxid': '10144076000144', 'family': 'option',
+         'apurado': ap, 'ir': ir, 'liquido': liq,
+         'cells': ['CHASM25583X', 'DBH-1IV934', '01/08/2025', 'TRIGO(W U6)', '24/08/2026',
+                   '21/08/2026', '135,000.00', E._brl(ap), E._brl(ir), E._brl(liq),
+                   'Total Net']}
+    r.update(kw)
+    return r
+
+
+def aviso(rows):
+    d = E.build_ndfc_settlement_emails(rows, HEAD, '24/08/2026')[0]
+    ths = [re.sub(r'<[^>]+>', '', t).strip()
+           for t in re.findall(r'<th[^>]*>(.*?)</th>', d['html'], re.S)]
+    corpo = re.sub(r'<[^>]+>', '\x01', d['html'])
+    quadro = {}
+    for lbl in ('Resultado Apurado', 'IR (0,005%)', 'Resultado Final'):
+        m = re.search(re.escape(lbl) + r'\x01+\s*(?:R\$)?\s*\x01*\s*([\d.,()\-]+)', corpo)
+        if m:
+            quadro[lbl] = m.group(1)
+    # A tabela de dados: uma célula por coluna do cabeçalho, senão o valor de uma
+    # coluna cortada apareceria embaixo do rótulo da vizinha.
+    linha_dados = [tr for tr in re.findall(r'<tr[^>]*>(.*?)</tr>', d['html'], re.S)
+                   if 'CHASM25583X' in tr]
+    ncols = len(re.findall(r'<td[^>]*>', linha_dados[0])) if linha_dados else -1
+    return d, ths, quadro, ncols
+
+
+# prêmio com retenção — as três classes valem pela mesma regra
+for classe in ('Opção de Commodities', 'Opção de Taxas de Câmbio', 'Opção de EDG'):
+    rows = [linha_aviso(-100000.0, 5.0, -99995.0, premium=True, product_label=classe)]
+    d, ths, quadro, ncols = aviso(rows)
+    check('%-24s: a tabela não leva IR nem Líquido' % classe.replace('Opção de ', ''),
+          [c for c in IR_COLS if c in ths], [])
+    check('   e a linha tem uma célula por coluna', ncols, len(ths))
+    check('   o quadro traz o imposto', quadro.get('IR (0,005%)'), '5,00')
+    check('   e o Resultado Final encolhido', quadro.get('Resultado Final'), '(99.995,00)')
+    check('   o assunto continua marcando o prêmio',
+          d['subject'].startswith('(Pagamento de Prêmio) '), True)
+
+# prêmio SEM retenção: o quadro não inventa uma linha de IR zerado
+d, ths, quadro, _ = aviso([linha_aviso(21946.95, 0.0, 21946.95, premium=True,
+                                       product_label='Opção de Commodities')])
+check('sem retenção o quadro não traz linha de IR', 'IR (0,005%)' in quadro, False)
+check('   mas traz o Apurado e o Final', (quadro.get('Resultado Apurado'),
+                                          quadro.get('Resultado Final')),
+      ('21.946,95', '21.946,95'))
+
+# exercício/recompra de opção: NÃO é prêmio, mantém as colunas
+d, ths, quadro, _ = aviso([linha_aviso(-50000.0, 0.0, -50000.0, premium=False,
+                                       product_label='Opção de Commodities')])
+check('o aviso de EXERCÍCIO mantém as duas colunas',
+      [c for c in IR_COLS if c in ths], list(IR_COLS))
+check('   e o quadro segue com a linha de IR', 'IR (0,005%)' in quadro, True)
+
+# termo de mercadoria: intocado
+d, ths, quadro, _ = aviso([linha_aviso(-50000.0, 2.5, -49997.5, premium=False, family='')])
+check('o TERMO de mercadoria fica como estava',
+      ([c for c in IR_COLS if c in ths], quadro.get('IR (0,005%)')), (list(IR_COLS), '2,50'))
+
+# A ficha em PDF sai das MESMAS listas já cortadas — senão o anexo teria uma
+# coluna que o corpo do e-mail não tem.
+FONTE = open(os.path.join(ROOT, 'apps', 'pages', 'otc_emails.py'), encoding='utf-8').read()
+bloco = FONTE.split('def _ndfc_settlement_email', 1)[1].split('\ndef ', 1)[0]
+check('a ficha em PDF usa o mesmo cabeçalho e as mesmas linhas',
+      'ref_date=ref_date, headers=headers, data_rows=data_rows' in bloco, True)
+check('   e o corte acontece ANTES da tabela',
+      bloco.index('corta = {i') < bloco.index('table = _email_data_table'), True)
+
 print()
 if falhas:
     for f in falhas:
