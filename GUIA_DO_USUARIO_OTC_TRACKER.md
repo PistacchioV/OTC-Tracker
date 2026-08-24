@@ -2,694 +2,1643 @@
 
 **Brazil OTC Operations · JPMorgan Chase & Co.**
 
-**Versão:** 1.0 · **Data:** 30/07/2026
+**Versão:** 2.0 · **Data:** 24/08/2026
 
 ---
 
-> **Sobre as telas deste guia.** Todas as imagens foram capturadas do sistema real, porém com **dados fictícios**. Nenhum nome de cliente, CNPJ, conta ou valor real aparece nestas páginas.
+> **Sobre as telas deste guia.** Todas as imagens foram capturadas do sistema real, porém com **dados fictícios**. Nenhum nome de cliente, CNPJ, conta, valor ou caminho de servidor real aparece nestas páginas.
 
 ---
 
-## 1. Visão Geral
+## 1. Como usar este guia
 
-O **OTC Tracker** centraliza o ciclo de vida das operações de derivativos de balcão (OTC) da mesa Brasil — do momento em que o negócio é fechado até o arquivo de confirmação assinado e arquivado.
+O guia está organizado do jeito que o trabalho acontece, e não em ordem alfabética de tela.
 
-**Objetivo principal:** garantir que toda operação fechada no dia seja **registrada na B3**, **confirmada com a contraparte** e **instruída para liquidação**, sem que nenhuma se perca no caminho.
+- O **capítulo 3** cobre o que você faz uma vez: entrar, reconhecer a barra superior e achar as coisas no menu.
+- O **capítulo 4** é o mais importante e o mais curto: ele explica o que se repete em **toda** tela do sistema — a barra de ferramentas, o filtro por coluna, o Export, a cópia de células, os campos de data. Os capítulos seguintes **não repetem** essas instruções; eles dizem apenas o que é próprio de cada tela.
+- Os **capítulos 5 a 17** têm uma seção por tela, sempre no mesmo formato: a imagem da tela, *para que ela serve*, e o *passo a passo* de cada ação — que botão clicar, onde ele fica e o que acontece depois.
+- O **capítulo 18** reúne os anexos: significado de cada status, glossário, o que ainda não está disponível e os problemas mais comuns.
 
-O sistema cobre quatro grandes blocos de trabalho:
+**Convenções do texto**
 
-| Bloco | O que faz |
+| Como está escrito | O que significa |
 |---|---|
-| New Deals | Importa as operações do dia, valida os dados e registra na B3 |
-| Confirmations | Gera os documentos de confirmação (Word, PDF e XML) e envia à contraparte |
-| Daily Settlement | Calcula e instrui as liquidações do dia |
-| Reconciliations | Concilia posição, comitente e pagamentos/recebimentos |
+| **Import** | Um botão ou um item de menu, escrito exatamente como aparece na tela |
+| *Reference Date* | Um campo que você preenche |
+| `Success` | Um valor de dado — um status, um código |
+| Menu › Daily Settlement › NDF Summary | O caminho no menu lateral, da esquerda para a direita |
 
-### 1.1. Como o sistema se organiza
+> A interface do sistema é em **inglês** e pode ser trocada para português ou espanhol pelo seletor **EN** da barra superior. Os nomes de botões neste guia estão em inglês, como aparecem por padrão.
 
-Toda página segue o mesmo esqueleto: menu lateral à esquerda, barra superior com notificações e perfil, e a área de trabalho no centro.
+---
+
+## 2. Visão geral
+
+O **OTC Tracker** cobre o ciclo de vida das operações de derivativos de balcão (OTC) da mesa Brasil — do momento em que o negócio é fechado até o documento de confirmação assinado, arquivado, e a liquidação instruída.
+
+**A pergunta que o sistema existe para responder:** *toda operação fechada hoje foi registrada na B3, confirmada com a contraparte e instruída para liquidação?*
+
+O trabalho se divide em seis blocos, e o menu lateral segue essa divisão:
+
+| Bloco | O que faz | Capítulo |
+|---|---|---|
+| **New Deals** | Importa as operações do dia da Athena, valida, registra na B3 e gera a confirmação | 5 |
+| **Daily Settlement** | Apura as liquidações do dia, emite os avisos e instrui os pagamentos | 6 |
+| **Live Position** | Mostra a posição viva registrada na B3 (o que está em aberto) | 7 |
+| **Reconciliations** | Bate as nossas bases contra as da B3 e as do cliente | 8 |
+| **Documentation** | Acompanha a confirmação até o cliente devolver assinado, e o onboarding dos contratos | 9 e 10 |
+| **Cadastros e ferramentas** | Reference Data, de-para, calendário, cotações, leiaute de arquivo | 13 e 14 |
+
+### 2.1. Como o sistema se organiza na tela
+
+Toda página tem o mesmo esqueleto: **menu lateral** à esquerda (escondido até você chamá-lo), **barra superior** com tema, notificações, idioma e perfil, e a **área de trabalho** no centro.
 
 ![Painel inicial do OTC Tracker](docs/sop-screenshots/dashboard.png)
 
 ---
 
-## 2. Primeiros Passos
+## 3. Primeiros passos
 
-### 2.1. Requisitos de acesso
+### 3.1. Requisitos de acesso
 
 Antes do primeiro login, confirme os três pontos abaixo:
 
-1. Estar na **rede JPMorgan** (VPN ou escritório). Fora da rede o login não funciona, porque o sistema consulta o phonebook interno e envia e-mail pelo relay corporativo.
+1. Estar na **rede JPMorgan** (VPN ou escritório). Fora da rede o login não funciona, porque o sistema consulta o phonebook interno e envia o código por e-mail pelo relay corporativo.
 2. Ter um **SID** válido — uma letra seguida de seis dígitos, por exemplo `A123456`.
-3. Ter as páginas liberadas no seu perfil. O acesso é concedido **por página**: se um administrador não liberou uma tela, ela não aparece no seu menu.
+3. Ter as páginas liberadas no seu perfil. O acesso é concedido **por página**: se um administrador não liberou uma tela, ela não aparece no seu menu (ver 3.6).
 
-### 2.2. Entrar no sistema
+### 3.2. Entrar no sistema
+
+![Tela de login](docs/sop-screenshots/login.png)
 
 1. Abra o endereço do OTC Tracker no navegador.
-2. Digite o seu **SID** no campo **SID Number**.
-3. Clique em **Sign In**.
-4. Se este já for o seu computador de costume, você entra direto.
-5. Se for uma máquina nova, o sistema envia um **código de 6 dígitos** para o seu e-mail corporativo.
+2. Clique no campo **SID Number** — é o único campo da tela.
+3. Digite o seu SID (uma letra + seis dígitos).
+4. Clique no botão **Sign In**, logo abaixo do campo.
+5. Se este já for o seu computador de costume, o sistema abre direto no painel inicial.
+6. Se for uma máquina nova — ou se o seu IP mudou —, o sistema envia um **código de 6 dígitos** para o seu e-mail corporativo e leva você para a tela de verificação.
 
-### 2.3. Verificação em duas etapas
+> **Não há senha.** A autenticação é pelo SID + o computador de onde você acessa. É por isso que a primeira entrada de cada máquina nova pede o código por e-mail.
 
-Quando o código for solicitado:
+### 3.3. Verificação em duas etapas
 
-1. Abra o seu e-mail corporativo e copie o código de **6 dígitos**.
-2. Digite o código na tela de verificação e confirme.
+Quando a tela de verificação abrir:
 
-> **O código expira em 10 minutos.** Passado esse prazo, volte à tela de login e faça uma nova tentativa para receber outro código.
+1. Abra o seu e-mail corporativo e localize a mensagem do OTC Tracker.
+2. Copie o código de **6 dígitos**.
+3. Volte ao navegador, clique no campo do código e cole.
+4. Confirme.
 
-### 2.4. Ajustes da sua sessão
+> **O código expira em 10 minutos.** Passado o prazo, volte à tela de login e refaça o Sign In para receber um código novo — reenviar o antigo não adianta.
 
-Na barra superior, à direita, você encontra:
+### 3.4. A barra superior
 
-- **Sol / Lua** — alterna entre tema claro e escuro.
-- **Sino** — notificações do sistema (importações, mapeamentos, envios).
-- **EN** — idioma da interface.
-- **Seu nome** — perfil e sair.
+![Barra superior com o menu do usuário aberto](docs/sop-screenshots/topbar.png)
 
----
+Da esquerda para a direita:
 
-## 3. Passo a Passo Principal
+| Item | Onde fica | O que faz |
+|---|---|---|
+| **☰** | Extremo esquerdo | Abre o menu lateral (ver 3.5) |
+| **Logo OTC Tracker** | Ao lado do ☰ | Clique para voltar ao painel inicial |
+| **Atalhos** (KPI · Live Position NDF · Pending Confirmation · Pay/Rec · Reference Data) | Centro | Vão direto às telas mais usadas, sem passar pelo menu |
+| **Ícone de ajustes** | Depois dos atalhos | Personaliza quais atalhos aparecem ali |
+| **Sol / Lua** | À direita | Alterna entre tema claro e escuro |
+| **Sino** com o número vermelho | À direita | Notificações do sistema — importações, mapeamentos, validações, envios |
+| **Bandeira · EN** | À direita | Troca o idioma da interface entre **EN**, **BR** e **ES** |
+| **Suas iniciais + nome** | Extremo direito | Abre o menu do usuário |
 
-### 3.1. New Deals — a tela de trabalho do dia
+**Para abrir o menu do usuário:** clique nas suas iniciais (o círculo colorido) ou no seu nome, no canto superior direito. O menu traz:
 
-Todas as páginas de **New Deals** funcionam da mesma forma. Muda o produto, não o fluxo.
+- **Profile** — os seus dados e a sua função no sistema
+- **Notifications** — a lista completa de avisos
+- **Support Center** — abrir um chamado (capítulo 16)
+- **Lock Screen** — tranca a tela sem encerrar a sessão
+- **Log Out** — encerra a sessão
 
-![New Deals — NDF Vanilla](docs/sop-screenshots/new_deals-ndf-vanilla.png)
+**Para ler uma notificação:** clique no **sino**. A lista abre logo abaixo. Clique no aviso e o sistema leva você direto à tela onde aquilo aconteceu.
 
-A tela tem quatro áreas, de cima para baixo:
+### 3.5. O menu lateral
 
-| Área | Para que serve |
+![Menu lateral](docs/sop-screenshots/menu-lateral.png)
+
+O menu fica **escondido** e aparece de duas formas:
+
+- **Passe o mouse** pela borda esquerda da tela — ele desliza para dentro e some quando você sai.
+- **Clique no ☰** da barra superior para abri-lo.
+- Para deixá-lo **fixo**, clique no ícone de **alfinete** (*Pin / unpin menu*), no alto do próprio menu. Clique de novo para soltá-lo.
+
+O menu é em **níveis**: um item com **›** à direita tem submenu. Clicar nele **não abre uma página** — ele desliza para dentro do submenu, e o caminho percorrido aparece no alto, como um rastro. Para voltar um nível, clique no item de volta (**‹**) ou no nome do nível anterior no rastro.
+
+**O mapa completo do menu:**
+
+| Grupo | Itens |
 |---|---|
-| Área de upload | Arrastar uma planilha de operações (quando o produto aceita importação por arquivo) |
-| Barra de busca | Filtrar por qualquer coluna |
-| Show entries | Quantas linhas por página e, em alguns produtos, os botões de documento e e-mail |
-| Barra de ferramentas | Columns, Add Row, Export, Reference Date, Import, Mapping B3 e Clear Filters |
+| **NAVIGATION** | Dashboards › Dashboard 1 · Dashboard 2 — About |
+| **APPS** | Holidays Calendar · Electronic Inventory · Control Panel · File Interpreter · Quotes |
+| **APPS › Daily Settlement › NDF** | NDF Summary · NDF Cockpit · Other Publisher |
+| **APPS › Daily Settlement › Other Products** | Other Products Summary · OTM Settlements · Latam Desk Position · **Swap** (Settlement Advice · Athena · VCP · Events · Kapital Hybrids) · **NDF** (Settlement Advice) · **Option** (Settlement Advice · Cognos) |
+| **APPS › Daily Settlement** | Operations B3 |
+| **APPS › Live Position** | Live Position NDF · **Swap** (Characteristics · Cashflow · Premium) · Live Position Option |
+| **RECONCILIATIONS** | Comitente · Pay/Rec · FXO · CGD |
+| **DOCUMENTATION › Pending Confirmation** | Pending Confirmation · Metrics |
+| **DOCUMENTATION › Manual Confirmation** | Confirmations Monitor · Track Confirmations |
+| **DOCUMENTATION › Onboarding** | Overview · Tracking Docs |
+| **PRODUCTS** | Monitor (New Deals Monitor) |
+| **PRODUCTS › New Deals › NDF** | FWD Start · Other Publisher · Vanilla · Commodities |
+| **PRODUCTS › New Deals › Options** | FXO · Commodities |
+| **PRODUCTS › New Deals › DCE** | Deliverable Forward · NDF · Option · Swap *(em construção)* |
+| **PRODUCTS › Unwinds** | Swap · NDF · Options · COE · DCE *(em construção)* |
+| **PRODUCTS › Intrag** | NDF · Option · Swap |
+| **PRODUCTS › Regulatory** | e-Financeira · WHT *(em construção)* |
+| **PRODUCTS** | Accrual Swap · MtM Swap |
+| **SETTINGS** | Reference Data · Index B3 · Mapping · Manage Roles · Page Access |
+| **SUPPORT** | Tickets · Ticket Details |
 
-#### O que cada status significa
+> Os itens marcados **(em construção)** aparecem no menu mas ainda não têm tela: clicar neles devolve uma página de "não encontrado". A lista completa está no anexo 18.3.
 
-| Status | Significa |
+### 3.6. Por que uma tela não aparece no seu menu
+
+O acesso é **por página**. Um administrador monta a sua lista de páginas em *Page Access* (capítulo 15.2), e o menu mostra **só** o que está nessa lista.
+
+- Se a sua lista nunca foi configurada, você vê **tudo**.
+- Se ela foi configurada, você vê só o que está nela — e digitar o endereço direto no navegador também não passa: o sistema devolve você para uma página que você tem.
+- **Profile** e **Page Access** são sempre acessíveis.
+
+**Se falta uma tela que você precisa:** abra um chamado no Support Center (capítulo 16) dizendo qual é a tela e por quê.
+
+### 3.7. O seu perfil
+
+![Perfil do usuário](docs/sop-screenshots/users-profile.png)
+
+**Para abrir:** clique nas suas iniciais na barra superior › **Profile**.
+
+A tela mostra o que o phonebook devolveu sobre você (nome, e-mail, cargo) e o **papel** que você tem no sistema — `ADMIN`, `BO` (Back Office), `MO` (Middle Office), `FO` (Front Office), `INSTITUTIONAL` ou `HUB`. O papel não se edita aqui: ele define o que você pode **assinar** (por exemplo, validar uma etapa da esteira de confirmação — capítulo 9.4) e é alterado em *Manage Roles* por um administrador.
+
+---
+
+## 4. O que se repete em toda tela
+
+Este capítulo é a base. Quase toda tela do OTC Tracker é uma **tabela** com a mesma barra de ferramentas, os mesmos filtros e o mesmo Export. Aprenda aqui e os capítulos seguintes ficam curtos.
+
+### 4.1. A anatomia de uma tela de tabela
+
+De cima para baixo:
+
+| Faixa | O que tem |
 |---|---|
-| New | Acabou de chegar da API; ninguém revisou ainda |
-| Amend | Já existia, mas a API alterou um dado econômico — precisa de revisão |
-| Pending | Alguém editou e submeteu para aprovação |
-| Approved | Aprovado, pronto para seguir |
-| Sent | Arquivo gerado e enviado para registro |
-| Success | Registrado na B3, com o número do B3 ID preenchido |
-| Error | Voltou com erro da B3 |
+| **Título** | O nome da tela, e à direita a trilha de onde ela fica no menu |
+| **Área de upload** *(só em algumas)* | O retângulo pontilhado "Drop files here or click to upload" |
+| **Barra de busca** *(New Deals)* | O campo de fichas de filtro (ver 4.4) |
+| **Barra de ferramentas** | Columns · Add Row · Export · Reference Date · Import · Clear Filters, e o *Show N entries* à direita |
+| **Cabeçalho da tabela** | Os nomes das colunas — clique num nome para ordenar |
+| **Linha de filtro** | A 2ª linha do cabeçalho, uma caixinha por coluna (ver 4.3) |
+| **Linhas** | Os dados. A 1ª coluna costuma ser a caixa de seleção e a 2ª os botões de ação |
+| **Rodapé** | *Showing 1 to N of M entries* à esquerda e a paginação à direita |
 
----
+### 4.2. A barra de ferramentas
 
-### 3.2. Importar as operações do dia
-
-1. Confira o campo **Reference Date**. Ele comanda tudo — é a data usada para puxar e para gravar. Por padrão vem a data de hoje.
-2. Clique em **Import**.
-3. O sistema busca as operações na API Athena e carrega a tabela.
-4. O sino de notificações mostra quantas operações entraram.
-
-> **Você não precisa clicar em Import o tempo todo.** O sistema importa sozinho a cada **20 minutos** (NDF) e a cada **hora** (Opções). O botão serve para adiantar a importação ou para reimportar uma data passada.
-
----
-
-### 3.3. Encontrar uma operação
-
-1. Clique na barra de busca e escolha a **coluna** na lista que aparece.
-2. Digite o valor e pressione **Enter** para criar a ficha do filtro.
-3. Repita o processo para combinar filtros — por exemplo, data **e** status.
-4. Clique em **Search**.
-5. Para limpar tudo de uma vez, use **Clear Filters**.
-
-> **Atenção.** Depois de uma busca, a tabela mostra apenas o resultado. Os botões de documento e e-mail trabalham com o que está carregado na tela — se você filtrou, filtrou para eles também. A única exceção é o **Mapping B3**, que sempre lê o dia inteiro.
-
----
-
-### 3.4. Corrigir uma linha
-
-Cada linha tem quatro botões na coluna **Actions**, nesta ordem:
+Os botões são sempre os mesmos, com as mesmas cores, em todas as telas que os têm:
 
 | Botão | Cor | O que faz |
 |---|---|---|
-| Confirm | Verde | Aprova a operação |
-| Edit | Azul | Abre o formulário de edição |
-| Delete | Vermelho | Remove a linha |
-| Send | Azul-escuro | Envia para registro na B3 |
+| **Columns** | Azul claro | Escolhe quais colunas ficam visíveis (4.5) |
+| **Add Row** | Azul cheio | Abre o formulário para incluir uma linha à mão |
+| **Export** | Azul-esverdeado | Baixa o que está na tela (4.6) |
+| **Import** | Verde-azulado | Busca os dados na fonte (API, arquivo do share) |
+| **Mapping / atualizar** | Verde | Reprocessa o de-para daquela tela |
+| **Clear Filters** | Contorno cinza | Limpa **todos** os filtros de coluna de uma vez |
+| **Show [N] entries** | À direita | Quantas linhas por página |
 
-**Para corrigir um dado:**
+### 4.3. Filtrar por coluna
 
-1. Clique em **Edit** na linha desejada.
-2. Ajuste os campos no formulário.
-3. Salve. O status passa a **Pending** e a operação precisa da aprovação de **outro usuário**.
+A linha de caixinhas logo abaixo do cabeçalho é o filtro. Cada caixinha filtra **a sua** coluna, e o texto dentro dela (cinza claro) diz qual é.
 
-**Para editar várias linhas de uma vez:**
+1. Clique na caixinha da coluna que você quer filtrar.
+2. Digite o que procura — não precisa ser o valor inteiro, ele casa por **pedaço** do texto.
+3. A tabela filtra enquanto você digita.
+4. Para combinar critérios, preencha **mais de uma** caixinha: elas se somam (E, não OU).
+5. Para desfazer tudo, clique em **Clear Filters** na barra de ferramentas.
 
-1. Marque as caixas de seleção das linhas.
-2. Use a ação em massa que aparece na barra.
+> **Para achar o que está VAZIO, digite `blank`.** É o único jeito de procurar a ausência de um valor — a caixinha casa por conteúdo, e "nada" não se digita. A palavra só vale quando é a única coisa no campo; `blank trading` continua procurando o texto.
 
----
+**Para ordenar:** clique no **nome** da coluna, no cabeçalho. Clique de novo para inverter. Números ordenam como número (`9,00` antes de `1.000,00`), não como texto.
 
-### 3.5. Aprovar uma operação
+### 4.4. A busca por fichas (New Deals e Pending Confirmation)
 
-1. Clique em **Confirm** (botão verde) na linha.
-2. Operação com status **New** vai **direto para Approved** — como você não editou nada, não há o que submeter à revisão.
-3. Operação com status **Amend** vai para **Pending**, porque a API alterou um dado econômico e alguém precisa conferir.
-4. Operação com status **Pending** vai para **Approved**, mas **somente se for outro usuário**. Quem editou não aprova a própria alteração.
+Algumas telas trazem, acima da tabela, um campo largo com o texto *"Type a letter for text fields, or a number / date for value fields…"*. Ele busca **no servidor**, e não só no que está carregado.
 
-> **Duas travas antes de aprovar.** Se a contraparte não estiver cadastrada (badge vermelho **Missing Counterparty**) ou o ativo não estiver no **Index B3**, o sistema bloqueia a aprovação e avisa. Aprovar sem esses cadastros enviaria dado errado para a B3.
+1. Clique no campo.
+2. Comece a digitar. Uma lista aparece com as **colunas** que casam com o que você digitou.
+3. Escolha a coluna na lista.
+4. Digite o valor e pressione **Enter** — o filtro vira uma **ficha** cinza à esquerda do campo.
+5. Repita para combinar critérios (por exemplo, *Trade Date* **e** *Status*).
+6. Para tirar uma ficha, clique no **×** dela.
+7. Clique em **Search** (o botão roxo à direita) para reexecutar a busca.
 
----
+> Uma ficha pode ser de **igual** ou de **diferente**: a ficha `STATUS ≠ Success` que aparece por padrão nas telas de New Deals é o que esconde as operações já registradas e deixa na tela só o que ainda dá trabalho.
 
-### 3.6. Enviar para registro na B3
+### 4.5. Escolher quais colunas aparecem
 
-Vale para **NDF Vanilla**, **NDF FWD Start**, **NDF Other Publisher**, **NDF Commodities**, **Opção FXO** e **Opção Commodities**.
+![O menu Columns](docs/sop-screenshots/padrao-columns-menu.png)
 
-![New Deals — NDF FWD Start](docs/sop-screenshots/new_deals-ndf-fwdstart.png)
+1. Clique em **Columns**, o primeiro botão da barra de ferramentas.
+2. Um painel com uma caixa de seleção por coluna abre logo abaixo.
+3. **Desmarque** a coluna para escondê-la; **marque** para trazê-la de volta.
+4. Clique fora do painel para fechar.
 
-1. Com a linha em **Approved**, clique em **Send**.
-2. O sistema gera o arquivo **Conecta** e grava na pasta de envio.
-3. O status passa a **Sent** e você se torna o **Checker** da operação.
+> A escolha vale para a sessão daquela tela e **muda o que é exportado**: o Export leva só as colunas visíveis (4.6).
 
-> **A NDF Vanilla passou a enviar como as demais.** Antes o registro era feito por outra ferramenta e a operação seguia direto para o mapeamento do retorno; hoje o **Send** gera o arquivo Conecta também nela. Se a outra ferramenta continuar registrando em paralelo, o mesmo negócio vai à B3 duas vezes — combine com a mesa qual dos dois caminhos vale.
+### 4.6. Exportar
 
-> **Quer conferir o arquivo antes de enviar?** Dê **duplo clique na linha** para abrir o preview e use o botão de **download**: ele monta o arquivo exatamente como o Send montaria — mesmo layout do File Interpreter — e grava na sua pasta de Downloads, sem enviar nada e sem mexer no status da operação.
+![O menu Export](docs/sop-screenshots/padrao-export-menu.png)
 
----
+1. Clique em **Export**.
+2. Escolha o formato:
 
-### 3.7. Mapear o retorno da B3
-
-Depois de processar o arquivo, a B3 devolve um arquivo de retorno com o **B3 ID** de cada operação aceita.
-
-1. Confira o campo **Reference Date**.
-2. Clique no **botão verde de atualizar**, ao lado do **Import**.
-3. O sistema lê os arquivos da pasta de retorno e preenche a coluna **B3 ID**.
-4. Uma janela informa quantas operações foram mapeadas e quantas voltaram com erro.
-
-O que acontece com cada operação:
-
-| Situação | Resultado |
+| Item | O que faz |
 |---|---|
-| Encontrada no arquivo de retorno | Vira **Success** com o B3 ID preenchido |
-| Não encontrada, e esperava retorno (New, Sent ou Error) | Vira **Error** |
-| Não encontrada, mas ainda não foi registrada (Approved ou Pending) | Permanece como está |
-| Já era **Success** com B3 ID | Não é alterada |
+| **Copy** | Copia a tabela para a área de transferência — cole direto no Excel ou no e-mail |
+| **CSV** | Baixa um `.csv` com `;` de separador e acentuação preservada, que é o que o Excel em português abre certo |
+| **Excel** | Baixa um `.xlsx` |
+| **Print** | Abre a janela de impressão do navegador com a tabela formatada |
+| **PDF** | Baixa um `.pdf` em paisagem |
+| **Advanced Export** | Abre o exportador com filtros e intervalo de datas (4.7) |
 
-> **O mapeamento lê o dia inteiro**, inclusive o que não está visível na tela. Não é preciso limpar os filtros antes.
+> **O Export leva o que está NA TELA** — com os filtros aplicados, na ordenação escolhida e só com as colunas visíveis. Se o arquivo saiu com menos linhas do que você esperava, o motivo quase sempre é um filtro esquecido: clique em **Clear Filters** e exporte de novo.
+
+### 4.7. Advanced Export
+
+![A janela do Advanced Export](docs/sop-screenshots/padrao-advanced-export.png)
+
+É o último item do menu **Export**. Serve para o que o export simples não faz: escolher o formato, renomear o arquivo, filtrar por critério e — nas telas que guardam um arquivo por dia — exportar **um intervalo de datas de uma vez**.
+
+1. Clique em **Export** › **Advanced Export**.
+2. **Format** — escolha entre Excel, CSV, PDF ou Copy.
+3. **File name** — o nome sugerido é o título da tela; troque se quiser.
+4. **Rows** — *All rows* (a tabela toda) ou só a página que está à vista.
+5. **Start from the filters applied on screen** — deixe **marcado** para partir do que está filtrado na tela; desmarque para partir da tabela inteira e valer só os critérios que você montar abaixo.
+6. **RANGE — DAILY FILES** — preencha *From* e *To* para exportar vários dias de uma vez. **Se a tela não guardar arquivo por dia**, esta seção nasce apagada com o motivo escrito nela — não é defeito.
+7. **FILTERS** — clique em **+ Add filter**, escolha a coluna no primeiro campo, o critério (*contains*, *equals*…) no segundo e digite o valor no terceiro. Clique em **+ Add filter** de novo para somar critérios; no **×** vermelho para tirar um.
+8. **COLUMNS** — marque as colunas que vão no arquivo. Os três botões no alto são atalhos: **All** (todas), **On screen** (as que estão visíveis) e **None** (desmarca tudo, para você escolher poucas).
+9. **OPTIONS** — *Include the header row* deixa a linha de títulos no arquivo.
+10. Confira a contagem no rodapé à esquerda (*"12 of 12 rows"*) e clique em **Export**.
+
+> **No intervalo de datas, um dia sem arquivo é PULADO, não é erro.** No fim, o sistema diz quantos dias entraram e, para os que falharam, o motivo de cada um.
+
+### 4.8. Copiar células para o Excel
+
+Funciona em **toda** tabela do sistema, sem botão nenhum:
+
+1. Clique numa célula — ela fica azul.
+2. Para pegar um bloco, clique na primeira célula e **arraste** até a última; ou clique na primeira, segure **Shift** e clique na última.
+3. Pressione **Ctrl+C** (**Cmd+C** no Mac). As células piscam em verde.
+4. Cole no Excel: as colunas caem em colunas e as linhas em linhas.
+5. **Esc** limpa a seleção.
+
+> Cliques em caixas de seleção, botões e campos de edição **não** entram na seleção — dá para copiar dados de uma linha que está sendo editada sem atrapalhar a edição.
+
+### 4.9. Editar uma linha
+
+![Uma linha em modo de edição](docs/sop-screenshots/padrao-linha-edicao.png)
+
+Nas telas que permitem edição, ela acontece **na própria linha**, não numa janela separada:
+
+1. Clique no botão **Edit** (o quadrado azul-claro com o lápis) da linha.
+2. As células viram campos de digitação. Os campos derivados pelo sistema — o *Aging*, por exemplo — continuam bloqueados de propósito.
+3. Altere o que precisa. **Tab** anda para o campo seguinte.
+4. Clique em **Save** (o quadrado verde com o disquete) para gravar, ou em **Cancel** (o quadrado cinza com o ×) para desistir.
+
+### 4.10. Os botões de ação da linha
+
+São quadrados coloridos de canto arredondado, sempre na mesma ordem e sempre com a mesma cor. Passe o mouse por cima para ver o nome de cada um.
+
+| Botão | Cor | Ícone | O que faz |
+|---|---|---|---|
+| **Confirm** | Verde | ✓ | Aprova a linha e a manda para a etapa seguinte |
+| **Edit** | Azul claro | lápis | Abre a linha para edição (4.9) |
+| **Delete** | Vermelho | lixeira | Apaga a linha — pede confirmação antes |
+| **Send** | Azul | avião de papel | Envia (arquivo, e-mail, registro) |
+| **Save** | Verde | disquete | Grava a edição em curso |
+| **Cancel** | Cinza | × | Descarta a edição em curso |
+
+### 4.11. Datas
+
+**Toda data na tela é `dd/mm/aaaa`** — dia, mês e ano, nesta ordem, sempre.
+
+1. Clique no campo de data. Um calendário abre logo abaixo.
+2. Navegue pelos meses com as setas do calendário, ou digite a data direto no campo.
+3. Clique no dia. O calendário fecha e o campo fica preenchido.
+
+> Isso vale inclusive no Windows com o sistema em inglês: o sistema **não** usa o calendário nativo do navegador justamente para que `03/04` nunca seja lido como 3 de abril de um lado e 4 de março do outro.
+
+### 4.12. O campo *Reference Date*
+
+Nas telas que trabalham por dia (New Deals, Daily Settlement, as recons), o campo **Reference Date** — ou *Position date*, ou *Settlement date*, conforme a tela — **comanda tudo**: é a data que o sistema usa para buscar os dados e é a data com que ele grava o resultado.
+
+1. Confira a data **antes** de clicar em Import ou Run. Por padrão vem a data de hoje (ou o último dia útil, nas telas de posição).
+2. Para trabalhar um dia anterior, troque a data e a tela recarrega sozinha.
+3. Se você importar com a data errada, o dado entra no dia errado — corrija a data e importe de novo.
+
+### 4.13. As notificações
+
+O **sino** da barra superior mostra em vermelho quantos avisos você tem. O sistema avisa quando uma importação termina, quando falta um cadastro, quando uma confirmação cai na sua mesa, quando um envio saiu.
+
+1. Clique no sino.
+2. Clique no aviso: o sistema abre a tela onde aquilo aconteceu.
+3. Os avisos são endereçados por **papel** — o Back Office recebe os da esteira de confirmação, o Middle os dele, e assim por diante.
 
 ---
 
-### 3.8. Gerar confirmações e e-mails
+## 5. New Deals — o trabalho do dia
 
-Disponível em **Opção FXO**, **Opção Commodities** e **NDF Commodities**. Os botões ficam ao lado do **Show entries**.
+**Menu › PRODUCTS › New Deals**
 
-![New Deals — Opção FXO](docs/sop-screenshots/new_deals-opt-fxo.png)
+É aqui que a operação fechada pela mesa entra no sistema, é conferida e vai para registro na B3. São seis telas de produto, e **as seis funcionam do mesmo jeito** — muda o produto e as colunas, não o fluxo:
 
-> **A confirmação da contraparte não é mais gerada aqui.** O botão *Confirmation* saiu das telas de
-> New Deals: gerar e validar viraram o mesmo trabalho, no mesmo lugar — o **Confirmations Monitor**
-> (item 3.11). Na prática você não perde nada: a confirmação continua nascendo só depois do registro
-> na B3, e o documento é o mesmo. O que mudou é por onde se começa.
+| Tela | Produto |
+|---|---|
+| NDF › **Vanilla** | Termo de moeda comum |
+| NDF › **Other Publisher** | Termo de moeda com fonte de cotação que não a PTAX |
+| NDF › **FWD Start** | Termo com início futuro (a taxa só se conhece no fixing) |
+| NDF › **Commodities** | Termo de mercadoria |
+| Options › **FXO** | Opção de câmbio |
+| Options › **Commodities** | Opção de mercadoria |
 
-**Premium — aviso de pagamento de prêmio (D0)**
+### 5.1. New Deals Monitor — por onde começar o dia
 
-1. Clique em **Premium**.
-2. O sistema seleciona as operações cuja **Spot Date** (data de pagamento do prêmio) é o dia corrente.
-3. Gera um e-mail por contraparte, já com os contatos de liquidação preenchidos.
+**Menu › PRODUCTS › Monitor**
 
-**Econ. Affirmation — afirmação econômica**
+![New Deals Monitor](docs/sop-screenshots/new-deals-monitor.png)
 
-1. Clique em **Econ. Affirmation**.
-2. Aplica-se às operações do dia contra **instituições financeiras**.
+**Para que serve:** é o painel do dia. Ele responde, num relance, quanto já foi registrado na B3, quanto já virou confirmação e quanto falta — por produto.
 
-![New Deals — Opção Commodities](docs/sop-screenshots/new_deals-opt-commodities.png)
+A tela tem três seções, cada uma com um cartão por produto e um anel de progresso:
+
+| Seção | O que ela conta |
+|---|---|
+| **B3 Registration** | Quantas operações do dia já têm B3 ID |
+| **Confirmations** | Quantas já têm o documento de confirmação gerado e validado pelo OTC |
+| **Intrag** | Quantas já foram enviadas à Intrag |
+
+**Passo a passo:**
+
+1. Confira a **data** no alto da tela — por padrão é hoje. Troque para olhar um dia anterior.
+2. Percorra os cartões. O número grande é a contagem; o anel colorido é a proporção do que está pronto.
+3. **Clique no cartão do produto** para abrir a tela dele já filtrada por aquele dia.
+4. No cartão de **Confirmations**, o botão que aparece depende do estado: **Generate** enquanto não há PDF na pasta da confirmação, e **Validate** depois que há. Ver o capítulo 9.3.
+
+> **O cartão de Confirmations acompanha UM ciclo só, e ele termina no OTC.** Validada a etapa do OTC, a confirmação conta como 100% aqui. O que vem depois (Middle e Front Office) é acompanhado no **Confirmations Monitor** (capítulo 9.3).
+
+### 5.2. A tela de produto
+
+![New Deals — Vanilla NDF](docs/sop-screenshots/new_deals-ndf-vanilla.png)
+
+A tela tem quatro faixas, de cima para baixo:
+
+| Faixa | Para que serve |
+|---|---|
+| **Área de upload** | Arrastar uma planilha de operações, quando o produto aceita importação por arquivo |
+| **Barra de busca por fichas** | Filtrar por qualquer coluna, buscando no servidor (4.4) |
+| **Show entries** | Quantas linhas por página e, nas telas de opção e mercadoria, os botões **Premium** e **Econ. Affirmation** |
+| **Barra de ferramentas** | Columns · Add Row + · Export · *Reference Date* · Import · Mapping B3 ID · Clear Filters |
+
+**O que cada status significa:**
+
+| Status | Significa | O que fazer |
+|---|---|---|
+| `New` | Acabou de chegar da API; ninguém revisou | Conferir e aprovar |
+| `Amend` | Já existia e a API mudou um dado **econômico** | Revisar a célula destacada e aprovar |
+| `Pending` | Alguém editou e submeteu para aprovação | Outra pessoa precisa aprovar |
+| `Approved` | Aprovado, pronto para registro | Enviar (Send) |
+| `Sent` | Arquivo gerado e enviado para registro na B3 | Esperar o retorno |
+| `Success` | Registrado na B3, com o B3 ID preenchido | Nada — o ciclo daqui fechou |
+| `Error` | Voltou com erro da B3 | Corrigir e enviar de novo |
+
+#### As seis telas, lado a lado
+
+O fluxo é o mesmo nas seis; o que muda são as colunas e os botões próprios de cada produto.
+
+**NDF › FWD Start** — termo com início futuro. Traz *Strike Set Date* e *Strike Set Offset*, que é o que a B3 registra: a taxa em si só se conhece no fixing.
+
+![New Deals — FWD Start NDF](docs/sop-screenshots/new_deals-ndf-fwdstart.png)
+
+**NDF › Other Publisher** — termo de moeda com fonte de cotação que não a PTAX. A coluna *Publisher* diz qual é.
+
+![New Deals — Other Publisher NDF](docs/sop-screenshots/new_deals-ndf-otherpublisher.png)
+
+**NDF › Commodities** — termo de mercadoria. Traz *Market*, *Commodities*, *Contract*, *Strike Currency* e as datas de fixing. Tem o botão **Econ. Affirmation**.
+
+![New Deals — Commodities NDF](docs/sop-screenshots/new_deals-ndf-commodities.png)
+
+**Options › FXO** — opção de câmbio. Traz *Premium*, *PremiumPerUnit*, *PremiumCCY* e *SpotDate*. Tem os botões **Premium** e **Econ. Affirmation**.
+
+![New Deals — FXO Options](docs/sop-screenshots/new_deals-opt-fxo.png)
+
+**Options › Commodities** — opção de mercadoria. Junta as colunas das duas anteriores: mercado e contrato de um lado, prêmio do outro. Tem **Premium** e **Econ. Affirmation**.
+
+![New Deals — Commodities Options](docs/sop-screenshots/new_deals-opt-commodities.png)
+
+### 5.3. Importar as operações do dia
+
+1. Confira o campo **Reference Date**, na barra de ferramentas. Ele comanda tudo (4.12).
+2. Clique em **Import**.
+3. O sistema busca as operações na API da Athena e carrega a tabela.
+4. O **sino** de notificações informa quantas operações entraram e quantas foram atualizadas.
+
+> **Você não precisa clicar em Import o tempo todo.** O sistema importa sozinho: **NDF a cada 20 minutos**, **opções de hora em hora** e a varredura do box de mercadorias a cada 30 minutos — os três **só entre 08:00 e 20:00** (horário de Brasília). O botão serve para adiantar a importação ou para reimportar uma data passada.
+
+**Para importar por planilha** (nos produtos que aceitam):
+
+1. Arraste o arquivo para o retângulo pontilhado no alto da tela, ou clique em **Browse** e escolha o arquivo.
+2. O sistema lê a planilha e acrescenta as operações à tabela com status `New`.
+
+### 5.4. Conferir e corrigir uma operação
+
+1. Localize a linha — pela busca por fichas (4.4) ou pelos filtros de coluna (4.3).
+2. **Dê um duplo clique na linha** para ver todos os campos daquela operação numa janela, com os nomes que a B3 usa no arquivo de registro. É a forma mais rápida de conferir sem rolar a tabela para o lado.
+3. Para corrigir, clique no botão **Edit** (o lápis) da linha, altere o que precisa e clique em **Save** (4.9).
+4. Salvando uma edição, o status vai para `Pending` — a alteração precisa da aprovação de outra pessoa.
+
+**Células destacadas.** Numa linha `Amend`, as células que a API mudou ficam realçadas. Confira **essas** — é o que mudou desde a última vez.
+
+**O selo *Missing Counterparty*.** Se a contraparte da operação não foi encontrada no Reference Data, a linha vem com as colunas de cliente vazias e esse selo. Não invente o cliente: cadastre a contraparte no **Reference Data** (capítulo 13.1) e clique em **Mapping B3 ID** para o sistema resolver de novo.
+
+### 5.5. Aprovar
+
+**Uma linha por vez:**
+
+1. Clique no botão **Confirm** (o quadrado verde com o ✓) da linha.
+2. O que acontece depende do status:
+   - `New` → vai direto para **`Approved`**. Não houve edição nenhuma, então não há o que revisar.
+   - `Amend` → vai para **`Pending`**. A API mudou dado econômico e alguém precisa olhar; a aprovação acontece num segundo clique.
+3. Aprovando um `New`, o sistema faz **duas conferências** antes de deixar passar e recusa com um aviso se:
+   - a **contraparte** não estiver cadastrada no Reference Data;
+   - o **ativo subjacente** não estiver cadastrado no **Index B3**.
+
+   Nos dois casos, faça o cadastro na tela indicada e volte.
+
+**Várias linhas de uma vez (edição em massa):**
+
+1. Marque a **caixa de seleção** das linhas — ou a caixa do cabeçalho para marcar a página inteira.
+2. Uma barra extra aparece na barra de ferramentas, com um seletor de coluna, um campo de valor e três botões.
+3. Para **aplicar o mesmo valor** a todas as selecionadas: escolha a coluna em **Select Column to Apply**, digite o valor no campo ao lado e clique em **Confirm**.
+4. Para **enviar** todas: clique em **Send**.
+5. Para **apagar** todas: clique em **Delete** (pede confirmação).
+
+### 5.6. Enviar para registro na B3
+
+1. A linha precisa estar em **`Approved`** (ou em `Error`, para reenviar). Em qualquer outro status o sistema recusa e diz o que falta.
+2. Clique no botão **Send** (o quadrado azul com o avião de papel) da linha.
+3. Confirme na janela que abre.
+4. O status vira **`Sent`** e o arquivo segue para a B3 pelo Conecta.
+5. Quando o retorno chega, o status vira **`Success`** e o **B3 ID** aparece na coluna.
+
+> **Quem importou ou editou não pode enviar.** O sistema recusa o Send feito pela mesma pessoa que consta como *Maker* da linha — o envio precisa de um segundo par de olhos. Se aparecer *"You cannot send a deal you imported or last edited"*, peça a um colega para enviar.
+
+### 5.7. Trazer o B3 ID de volta
+
+Depois que a B3 devolve o arquivo de retorno:
+
+1. Confira a **Reference Date**.
+2. Clique no botão **verde de atualizar** (*Mapping B3 ID*), à direita do Import.
+3. O sistema lê o arquivo de retorno do dia e preenche o **B3 ID** das operações que casaram, mudando o status para `Success`.
+
+> Este botão trabalha a partir do **arquivo do dia inteiro**, e não do que está na tela: operações que você não filtrou também são atualizadas.
+
+### 5.8. Os botões próprios de cada produto
+
+**Premium** *(FXO e Options Commodities)* — gera o e-mail de cobrança do prêmio das opções cuja data de pagamento é hoje.
+
+1. Clique em **Premium**, ao lado do *Show entries*.
+2. O sistema monta os rascunhos e **baixa o arquivo** de e-mail.
+3. Abra o arquivo baixado: ele abre no seu Outlook, já preenchido, para você revisar e enviar.
+4. Se não houver prêmio a pagar hoje, o sistema avisa em vez de gerar arquivo vazio.
+
+**Econ. Affirmation** *(NDF Commodities, FXO e Options Commodities)* — gera o e-mail de afirmação econômica das operações com instituição financeira fechadas hoje. Mesmo passo a passo do Premium.
+
+### 5.9. Gerar a confirmação
+
+**A geração e a validação da confirmação acontecem no Confirmations Monitor**, e não aqui. As telas de New Deals não têm mais botão de confirmação: o ciclo inteiro do documento mora num lugar só. Ver o capítulo 9.3.
 
 ---
 
-### 3.9. Monitor — conferir se ficou algo pendente
+## 6. Daily Settlement — a liquidação do dia
 
-Caminho no menu: **Products → Monitor**.
+**Menu › APPS › Daily Settlement**
 
-![Monitor de New Deals](docs/sop-screenshots/new-deals-monitor.png)
+Este bloco apura o que liquida hoje, emite o aviso para o cliente e pede a transferência do dinheiro. Ele se divide por família de produto: **NDF** (termo de moeda), **Other Products** (swap, opção e termo de mercadoria) e **Operations B3** (a posição bruta que vem da B3).
 
-Como ler a tela:
+### 6.1. NDF Summary
 
-1. Cada **coluna** é uma etapa do processo: registro na B3, confirmação e Intrag.
-2. Cada **card** é um produto, com o total de operações da data de referência.
-3. A **cor do card** indica o progresso: vermelho quando nada foi resolvido, âmbar no meio do caminho e verde quando tudo está **Success**.
-4. As etiquetas mostram a quebra por status e por entidade legal.
-5. Clique em **Open page** para ir direto à tela do produto.
+**Menu › Daily Settlement › NDF › NDF Summary**
 
-> **Todo dia, às 19h00 e às 19h30**, o sistema envia um e-mail para a caixa de operações com a lista do que ainda está pendente. Quando não há nada pendente, o e-mail não é enviado.
+![NDF Summary](docs/sop-screenshots/ndf-summary.png)
+
+**Para que serve:** é a folha de liquidação dos termos de moeda do dia. Ela responde quanto se paga e quanto se recebe, por contraparte, e é dela que saem os avisos e os pedidos de TED.
+
+A tela tem, de cima para baixo: as **abas de produto** (Vanilla · Other Publisher · T+0 · Total) com a contagem de cada uma, e dois cartões — **Settlement Summary** (uma linha por contraparte) e **Trade Level** (uma linha por operação).
+
+**Passo a passo:**
+
+1. Confira a **data** no alto. Por padrão vem hoje.
+2. Clique na **aba** do produto que quer olhar, ou em **Total** para ver tudo junto.
+3. Confira o **Settlement Summary**: cada linha é uma contraparte, com *Receive*, *Pay*, *Settlement Net* e a *Direction*.
+4. Se um valor estiver errado, clique em **Edit** na linha, corrija e salve; ou use **Add row** para incluir uma liquidação que não veio automaticamente.
+5. Role até o **Trade Level** para ver de que operações aquele total é feito.
+
+**Para emitir os avisos de liquidação:**
+
+1. Marque as contrapartes que devem receber o aviso (a caixa de seleção de cada linha do Settlement Summary), ou não marque nenhuma para gerar todas.
+2. Clique em **Print Advice**, no alto do cartão.
+3. O sistema monta os avisos e **baixa o arquivo**: até dois avisos vêm como arquivos de e-mail soltos; três ou mais vêm num `.zip`.
+4. Abra o arquivo baixado — cada aviso abre no seu Outlook, já endereçado e formatado, para você revisar e enviar.
+5. As linhas passam para o status **`Generated`**.
+6. Depois de enviar, clique no botão **Confirm** (o ✓ verde) da linha para marcá-la como **`Sent`**. O status fica gravado e sobrevive a um recarregamento da tela.
+
+**Para pedir as TEDs:**
+
+1. Clique em **TEDs**, ao lado do Print Advice.
+2. O sistema monta o pedido de liberação com as instruções de pagamento (SSI) anexadas por contraparte e envia para OTC Ops e Settlements.
+3. Uma janela confirma quantas TEDs foram pedidas e quantos anexos foram. **Se faltar a SSI de alguma contraparte, o aviso diz de quem** — providencie e rode de novo.
+
+> **Operação intragrupo não gera aviso nem TED.** Não se manda documento nem se transfere dinheiro para a própria casa. A linha continua no Trade Level e no Settlement Summary — a liquidação existe e o total tem de fechar —, mas fica de fora do documento e do pedido de transferência.
+
+### 6.2. NDF Cockpit
+
+**Menu › Daily Settlement › NDF › NDF Cockpit**
+
+![NDF Cockpit](docs/sop-screenshots/ndf-cockpit.png)
+
+**Para que serve:** é a base bruta de liquidação de NDF, do jeito que ela chega — uma linha por operação, com notional, strike, taxa forward, publisher e a conta de liquidação. Os quatro números do alto (COUNTERPARTIES · NOTIONAL (LC) · SETTLEMENT · TOTAL) resumem o dia.
+
+**Passo a passo:**
+
+1. Confira a **data**.
+2. Clique em **Import settlement** para trazer o arquivo do dia.
+3. Use os filtros de coluna para achar a operação (4.3).
+4. Para corrigir uma linha, clique em **Edit**, altere e salve.
+
+### 6.3. Other Publisher
+
+**Menu › Daily Settlement › NDF › Other Publisher**
+
+![Other Publisher](docs/sop-screenshots/ndf-other-publisher.png)
+
+**Para que serve:** a mesma visão do Cockpit, restrita aos termos cuja fonte de cotação não é a PTAX. É uma tela de **consulta** — não há Import nem edição aqui.
+
+### 6.4. Other Products Summary
+
+**Menu › Daily Settlement › Other Products › Other Products Summary**
+
+![Other Products Summary](docs/sop-screenshots/other-products-summary.png)
+
+**Para que serve:** é o gêmeo do NDF Summary para swap, opção, termo de mercadoria e COE. As abas do alto são **Swap · Option · NDF Commodities · COE · Total**, e os dois cartões são os mesmos — **Settlement Summary** e **Trade Level**.
+
+**Passo a passo:** idêntico ao 6.1 — abas, conferência, **Print Advice**, **TEDs**, e o **Confirm** da linha para marcar como enviado.
+
+Duas coisas próprias desta tela:
+
+- **O Trade Level abre agrupado por Produto → LOB → Contraparte**, nessa ordem, que é a ordem da conferência. Sem isso, swap, termo e opção do mesmo cliente ficariam intercalados.
+- **Uma linha que neta zero mostra `0,00` no Receive**, e não duas células vazias: o zero é o resultado — a operação liquida por valores que se anulam —, enquanto vazio se leria como "não deu para calcular".
+
+### 6.5. OTM Settlements
+
+**Menu › Daily Settlement › Other Products › OTM Settlements**
+
+![OTM Settlements](docs/sop-screenshots/otm-settlements.png)
+
+**Para que serve:** os fluxos de caixa vindos do OTM, por trade — moeda, valor, data de valor, direção e a contraparte pelo SPN. Os quatro números do alto separam RATES, EQUITIES e COMMODITIES.
+
+**Passo a passo:**
+
+1. Confira a **data**.
+2. Clique em **Import cashflows** para carregar o arquivo do dia.
+3. Filtre e confira. Para corrigir, **Edit** na linha.
+
+> **O nome da contraparte aqui sai do SPN, nunca do texto do arquivo.** O arquivo traz o nome como a mesa digitou (`S T E S A L`); o sistema troca pelo nome do cadastro. Se um nome parecer estranho, o que falta é cadastro de SPN, não correção na linha.
+
+### 6.6. Latam Desk Position
+
+**Menu › Daily Settlement › Other Products › Latam Desk Position**
+
+![Latam Desk Position](docs/sop-screenshots/other-products-swap-latamdeskposition.png)
+
+**Para que serve:** a posição da mesa como o relatório Latam a entrega — é a fonte que liga o trade de equity ao registro da B3.
+
+**Passo a passo:**
+
+1. Confira a **data**.
+2. Clique em **Import position file**.
+3. Se a pasta tiver **mais de um relatório do mesmo dia** (acontece quando ele é reemitido), o sistema usa o **mais recente** e diz, na janela de resultado, quais foram ignorados. Os ignorados **não são apagados** do disco.
+
+### 6.7. Swap — Settlement Advice
+
+**Menu › Daily Settlement › Other Products › Swap › Settlement Advice**
+
+![Swap Settlement Advice](docs/sop-screenshots/other-products-swap-settlement-advice.png)
+
+**Para que serve:** é o aviso de liquidação do swap, linha a linha — cliente, contrato, prazo, curva do banco, curva do cliente, resultado bruto, alíquota e valor do IR e o valor líquido.
+
+**Passo a passo:**
+
+1. Confira a **data**.
+2. Confira as linhas. O campo **Filter by column…** filtra qualquer coluna.
+3. Clique em **Print Advice** para gerar o documento das linhas exibidas.
+
+### 6.8. Swap — Athena · VCP · Events · Kapital Hybrids
+
+São quatro telas de **consulta**, cada uma mostrando uma fonte do swap. Nenhuma tem Import nem edição: você escolhe a data, filtra e exporta.
+
+**Swap Athena** — a liquidação como a Athena calculou: CETIP ID, Kapital ID, as duas curvas e o valor líquido em reais.
+
+![Swap Athena](docs/sop-screenshots/other-products-swap-athena.png)
+
+**Swap VCP** — as pernas de VCP do contrato: conta, indexador e fator de cada lado.
+
+![Swap VCP](docs/sop-screenshots/other-products-swap-vcp.png)
+
+**Swap Events** — o arquivo de eventos da B3: registro, aditamentos, amortizações, valor base e as duas pernas.
+
+![Swap Events](docs/sop-screenshots/other-products-swap-events.png)
+
+**Swap Kapital Hybrids** — os híbridos vindos do Kapital: notional do stream, cupom, DCF e o líquido em reais.
+
+![Swap Kapital Hybrids](docs/sop-screenshots/other-products-swap-kapital-hybrids.png)
+
+### 6.9. NDF Commodities — Settlement Advice
+
+**Menu › Daily Settlement › Other Products › NDF › Settlement Advice**
+
+![NDF Settlement Advice](docs/sop-screenshots/other-products-ndf-settlement-advice.png)
+
+**Para que serve:** o aviso de liquidação do termo de mercadoria — contraparte, B3 ID, ativo subjacente, PTAX, cotação da mercadoria, quantidade, resultado apurado, o IR de 0,005% e o líquido.
+
+**Passo a passo:** confira a data, confira as linhas e clique em **Print Advice**.
+
+### 6.10. Option — Settlement Advice
+
+**Menu › Daily Settlement › Other Products › Option › Settlement Advice**
+
+![Option Settlement Advice](docs/sop-screenshots/other-products-option-settlement-advice.png)
+
+**Para que serve:** o mesmo aviso, para a opção — de câmbio, de mercadoria e de ação.
+
+> **No aviso de pagamento de prêmio, o IR não sai por linha.** O imposto de 0,005% incide sobre o **líquido** do dia por contraparte, e só quando o banco paga; quando o banco recebe, é zero. Por isso o documento traz o IR uma vez só, no resumo do rodapé, e não uma coluna por operação.
+
+### 6.11. Cognos
+
+**Menu › Daily Settlement › Other Products › Option › Cognos**
+
+![Cognos](docs/sop-screenshots/cognos.png)
+
+**Para que serve:** o detalhe das opções de câmbio como o Cognos entrega — call/put, moedas, montantes, strike, prêmio e as datas.
+
+**Passo a passo:** confira a data e clique em **Import FXO Detail** para carregar o arquivo do dia. Para corrigir uma linha, **Edit**.
+
+### 6.12. Operations B3
+
+**Menu › Daily Settlement › Operations B3**
+
+![Operations B3](docs/sop-screenshots/operations-b3.png)
+
+**Para que serve:** é a lista bruta de operações da B3 do dia — conta, tipo de operação, compra/venda, título, valor, modalidade e status na B3. É dela que sai o que entra na apuração de liquidação.
+
+**Passo a passo:**
+
+1. Confira a **data**.
+2. Clique em **Import operations** para carregar o arquivo da B3.
+3. Filtre e confira. Os números do alto resumem por *Tipo Operação*, *Tipo Título* e *Modalidade Liquidação*.
+
+**Para disparar a mensageria:**
+
+1. Clique em **Mensageria**, ao lado do Import.
+2. Um painel abre com um cartão por time destinatário, cada um com os campos de **TO** e **CC**. Preencha ou ajuste os endereços — eles ficam gravados para as próximas vezes.
+3. Confirme o envio.
+
+> **A liquidação intragrupo chega pelos dois arquivos, espelhada.** Para a mensagem não cobrar duas vezes o mesmo pagamento, o sistema envia por **uma** ponta só: quais contas geram mensagem é decidido no cadastro `b3-accounts` (capítulo 13.3), na coluna *Messaging*.
 
 ---
 
-### 3.10. Pending Confirmation — acompanhar as confirmações
+## 7. Live Position — o que está em aberto
 
-Caminho no menu: **Documentation → Pending Confirmation**.
+**Menu › APPS › Live Position**
+
+São cinco telas de **consulta** da posição viva registrada na B3. Nenhuma tem Import nem edição: você escolhe a data, filtra, confere e exporta. Todas trazem o campo **Filter by column…** acima da tabela, além da linha de filtro por coluna.
+
+| Tela | O que mostra |
+|---|---|
+| **Live Position NDF** | Todos os termos em aberto — partes, contrato, datas, valor base, taxa forward, taxa de câmbio e a situação do contrato |
+| **Swap › Characteristics** | As características de cada swap em aberto — tipo, contrato, partes, valor base, saldo, funcionalidade, indexadores e curvas |
+| **Swap › Cashflow** | As agendas de pagamento de juros e amortização de cada contrato |
+| **Swap › Premium** | Os eventos de prêmio dos swaps |
+| **Live Position Option** | As opções em aberto — tipo, combinação de operações, partes, strike, barreiras, quantidades e a situação |
+
+### 7.1. Live Position NDF
+
+![Live Position NDF](docs/sop-screenshots/live-position-ndf.png)
+
+1. Confira a **data** no alto — por padrão, o último dia útil com arquivo.
+2. Os números do alto (VANILLA · OTHER PUBLISHER · T+0 · COMMODITIES · TOTAL) contam a posição por tipo. **Clique num deles para filtrar a tabela** por aquele tipo.
+3. Filtre pelas caixinhas do cabeçalho ou pelo **Filter by column…**.
+4. Exporte com **Export** (4.6).
+
+> **A coluna de CPF/CNPJ da contraparte mostra o NOME do cliente**, não o documento — o sistema resolve o documento no Reference Data. Quando o documento **não** está cadastrado, a célula mostra o número mascarado em vez de ficar vazia: é assim que se vê quem falta cadastrar. A coluna da **Parte** não muda — aquela é a nossa perna.
+
+### 7.2. Live Position Option
+
+![Live Position Option](docs/sop-screenshots/live-position-option.png)
+
+Mesmo uso da anterior. A coluna **Combinação de operações** é a chave que liga a opção ao resultado apurado na liquidação e à reconciliação de FXO.
+
+### 7.3. Swap — Characteristics, Cashflow e Premium
+
+**Swap Characteristics**
+
+![Swap Characteristics](docs/sop-screenshots/live-position-swap-characteristics.png)
+
+**Swap Cashflow**
+
+![Swap Cashflow](docs/sop-screenshots/live-position-swap-cashflow.png)
+
+**Swap Premium**
+
+![Swap Premium](docs/sop-screenshots/live-position-swap-premium.png)
+
+Nas três: escolha a data, filtre, confira, exporte. Os números do alto da *Characteristics* resumem a posição por *Contract Type*, *LOB*, *Indexers* e *Features* — clique num deles para filtrar.
+
+---
+
+## 8. Reconciliations — bater as bases
+
+**Menu › RECONCILIATIONS**
+
+São quatro batimentos, cada um comparando duas fontes que deveriam dizer a mesma coisa.
+
+### 8.1. Comitente
+
+**Menu › Reconciliations › Comitente**
+
+![Comitente Reconciliation](docs/sop-screenshots/reconciliation-comitente.png)
+
+**Para que serve:** compara o cadastro de comitentes da B3 com o nosso — nome, endereço, telefone, e-mail, CNAE, natureza tributária. Cada campo recebe uma **nota de semelhança**, e a coluna *Avg Score* é a média.
+
+**Passo a passo:**
+
+1. Escolha a **data** no campo do alto.
+2. Clique em **Run Reconciliation** (botão azul) para rodar com os arquivos que o sistema encontra na pasta de sempre.
+3. Se os arquivos não estiverem lá, clique em **Manual Upload**. A janela pede **três** arquivos:
+   - **1. Base B3 & CGD Consolidada** (`.xlsx`)
+   - **2. DCADCOMITENTES B3** (`.txt`)
+   - **3. Party Central Report** (`.xlsx`)
+
+   Clique em cada retângulo (ou arraste o arquivo para dentro dele), confira que o nome apareceu, e clique em **Processar**.
+4. Clique em **Load DB** para carregar um batimento já rodado, sem refazê-lo.
+5. Ordene por **Avg Score** crescente para ver primeiro os cadastros mais divergentes.
+
+### 8.2. Pay/Rec
+
+**Menu › Reconciliations › Pay/Rec**
+
+![Pay/Rec Reconciliation](docs/sop-screenshots/reconciliation-payrec.png)
+
+**Para que serve:** confere, por contraparte, se a quantidade e o valor que **nós** vamos pagar/receber batem com os que o **cliente** informou. As colunas *Check Qty* e *Check Value* são o veredito de cada lado.
+
+**Passo a passo:**
+
+1. Escolha a **data**.
+2. Clique em **Run** (botão azul).
+3. Confira as linhas: o que não bate aparece com a diferença calculada.
+4. Escreva a explicação na coluna **Comment** da linha que divergiu.
+5. Quando tudo estiver resolvido ou justificado, clique em **End process** (botão verde) — ele só habilita depois de o Run rodar, e é ele que fecha e comunica o resultado.
+
+### 8.3. FXO
+
+**Menu › Reconciliations › FXO**
+
+![FXO Reconciliation](docs/sop-screenshots/reconciliation-fxo.png)
+
+**Para que serve:** bate a posição de opções de câmbio registrada na B3 contra o relatório de fim de dia da Athena, campo a campo — direção, put/call, contraparte, montante, prêmio, strike, datas e estilo. Cada par tem a sua coluna de *Status*.
+
+**Os quatro estados da primeira coluna**, na ordem da gravidade (que é a ordem em que a tabela abre):
+
+| Status | Significa | O que fazer |
+|---|---|---|
+| `Unmatched B3` | Está na B3 e não achou par na Athena | Falta bookar |
+| `Unmatched Athena` | Está na Athena e não achou par na B3 | Falta registrar |
+| `Partial - <campos>` | Casou, e os campos listados divergem | Conferir os campos citados |
+| `Matched` | Fechou | Nada |
+| `Justified` | Um `Unmatched` ou `Partial` com justificativa escrita | Nada |
+
+**Passo a passo:**
+
+1. Escolha a **data** no campo do alto.
+2. Clique em **Run Reconciliation**.
+3. Se a rede ou o relatório da Athena não responderem, clique em **Manual Upload** e suba os dois arquivos — a **posição B3** (`73760_AAMMDD_DPOSICAO.OPC`) e o **EOD da Athena** (`brazil_fxo_trades.csv`). A ordem não importa: o sistema reconhece cada um pelo conteúdo. Depois clique em **Run Reconciliation** dentro da janela.
+4. Percorra o que não fechou.
+5. Para justificar uma quebra, clique na célula **Comentário** da linha e escreva a explicação. A linha passa a `Justified`.
+
+> **A justificativa é do TRADE, não da execução.** Ela fica gravada pela *Combinação de operações* e vale para trás: um comentário escrito hoje aparece na recon de ontem que já estava fechada. Apagando o comentário, a linha volta a exibir o status original — `Partial - Cntpy`, por exemplo —, e não fica `Justified` para sempre.
+>
+> **Casar por MatchingDealID faz a operação aparecer duas vezes** — uma `Matched` naquela chave e uma `Unmatched Athena` na chave própria, que a B3 não tem. É esperado.
+
+### 8.4. CGD
+
+**Menu › Reconciliations › CGD**
+
+![CGD Reconciliation](docs/sop-screenshots/reconciliation-cgd.png)
+
+**Para que serve:** confere se todo cliente com Contrato Global de Derivativos (CGD) assinado está incluído na B3, e se todo cliente que aparece na posição da B3 tem CGD. Ela compara a **lista do FEP** com a **posição da B3 do último dia útil**.
+
+**Os cinco cartões do alto** são as cinco respostas possíveis. **Clique num cartão para filtrar a tabela** por aquele grupo:
+
+| Cartão | Significa |
+|---|---|
+| **PENDING B3** (vermelho) | O CGD está assinado e o cliente ainda não foi incluído na B3 |
+| **PENDING ACTION** (âmbar) | Está nos dois lados, mas o CGD ainda não fechou |
+| **ONLY IN B3** (roxo) | Aparece na posição da B3 e não está na lista do FEP |
+| **JUSTIFIED** (azul) | Garantidor de outro cliente, ou conta encerrada — está cadastrado como exceção |
+| **MATCHED** (verde) | Fechou |
+
+**Passo a passo:**
+
+1. Confira a **Position date** — por padrão, o **último dia útil**, porque é a posição da B3 desse dia que entra no batimento.
+2. Clique em **Run** (botão verde).
+3. Confira os cartões e clique naquele que quer detalhar.
+4. Use a coluna **Aging** para priorizar: ela conta em dias úteis desde a criação, e fica **âmbar a partir de 5** e **vermelha a partir de 15** dias.
+5. Para mandar o relatório por e-mail, clique em **Send report** (botão azul). O e-mail sai com uma seção por grupo, nas mesmas contagens da tela.
+6. **Export** baixa o que está na tela (4.6).
+
+> **Este batimento depende de quatro cadastros** editáveis na tela **Mapping** (capítulo 13.3): `cgd-stage`, `cgd-b3-participante`, `cgd-garantidor` e `cgd-conta-encerrada`. Se um deles estiver vazio, a tela **avisa** em vez de deixar linhas entrarem ou saírem em silêncio — por exemplo, a linha da B3 que vem sem CNPJ é resolvida pelo `cgd-b3-participante`, e a recon diz quantas saíram por falta de cadastro.
+
+---
+
+## 9. Confirmations — do documento até o cliente devolver assinado
+
+**Menu › DOCUMENTATION**
+
+Este bloco acompanha a confirmação depois que a operação já está registrada: gerar o documento, validá-lo mesa por mesa, mandar ao cliente e cobrar a devolução assinada.
+
+### 9.1. Pending Confirmation
+
+**Menu › Documentation › Pending Confirmation › Pending Confirmation**
 
 ![Pending Confirmation](docs/sop-screenshots/pending-confirmation.png)
 
-1. A tela lista as confirmações geradas e o estágio de cada uma.
-2. Use os filtros por coluna para localizar uma contraparte ou um período.
-3. As métricas de acompanhamento ficam em **Metrics**.
+**Para que serve:** é a lista de tudo que está pendente de confirmação com o cliente, com a idade de cada pendência. Os cartões do alto agrupam por faixa de atraso — *< 10 dias*, *10 a 20*, *20 a 30*, *30 a 60*, *60 a 90*, *> 90* e o *Total*.
 
-![Métricas de Pending Confirmation](docs/sop-screenshots/metrics-pending-confirmation.png)
+**Passo a passo:**
 
----
+1. **Clique num cartão** de faixa para filtrar a tabela por aquele grupo — comece pelos mais velhos.
+2. Localize a linha com a busca por fichas (4.4) ou com os filtros de coluna.
+3. Para escrever o que está travando, clique em **Edit** na linha e preencha **Break Reason** e **Comments**.
+4. Quando o cliente devolver assinado, marque a linha e clique em **Mark Concluded** — ela sai da fila de pendências.
+5. **Add Row +** inclui à mão uma pendência que não veio automaticamente.
 
-### 3.11. Manual Confirmation — validar antes de enviar ao cliente
+**A coluna *Pending Status*** diz o que está faltando, e ela é preenchida pelo sistema — não se digita à toa:
 
-Caminho no menu: **Documentation → Manual Confirmation → Confirmations Monitor** (e **Track Confirmations**).
+| Valor | Significa |
+|---|---|
+| `Pending Original` | Espera o documento original assinado |
+| `Pending Digital Signature` | Espera a assinatura digital |
+| `Exception FepWeb` / `Exception Digital Fep Web` | Trata-se pelo FepWeb |
+| `Pending OTC` · `Pending MO` · `Pending FO` · `Pending FepWeb` | A confirmação está na esteira de validação (9.3) |
+
+> **Operação vencida sai da fila sozinha.** Quando a data de vencimento chega, o sistema marca a linha como `Exception FepWeb` / `Ok` e ela deixa de envelhecer: não faz sentido cobrar a confirmação de uma operação que já liquidou.
+
+### 9.2. Metrics — Pending Confirmation
+
+**Menu › Documentation › Pending Confirmation › Metrics**
+
+![Metrics — Pending Confirmation](docs/sop-screenshots/metrics-pending-confirmation.png)
+
+**Para que serve:** é a visão gerencial da fila — a evolução das pendências no tempo e quem são os maiores ofensores.
+
+**Passo a passo:**
+
+1. Use o seletor **> 30 days / All** para escolher se o painel conta só o que está atrasado ou tudo.
+2. Use o segundo seletor (*Current Year* · *Last 24 Months* · *Daily (current month)*) para mudar o eixo do gráfico de história.
+3. Percorra os quadros **Top 5 Offenders**, **Top 5 Bankers**, **Top 5 Clients** e **Top 5 Economic Groups**.
+
+### 9.3. Confirmations Monitor
+
+**Menu › Documentation › Manual Confirmation › Confirmations Monitor**
 
 ![Confirmations Monitor](docs/sop-screenshots/manual-confirmation_monitor.png)
 
-A confirmação passa por uma esteira antes de sair: **(Pending Legal) → Pending OTC → Pending MO e/ou FO → Pending FepWeb → Ok**. Quem valida cada produto está cadastrado em **Mapping → Manual Confirmations — Validation Trail** (Produto × LOB); MO e FO validam em paralelo, não em fila.
+**Para que serve:** é a fila de trabalho da esteira de confirmação. Cada **cartão** é uma etapa, e dentro dele há um item por confirmação, ordenado do mais atrasado para o menos.
 
-1. O **Confirmations Monitor** tem **cinco cards**, um por etapa, com a fila de cada uma.
-2. Cada item da fila é **uma confirmação**, não uma operação: o documento cobre todas as operações da mesma contraparte, produto, LOB e data de negociação, e o item diz quantas são.
-3. **Abrir** mostra o PDF que está gravado no Electronic Inventory — o papel que vai ao cliente.
-4. **Validar** carimba a etapa com a data, a hora e o SPN de quem validou, e a confirmação passa para a etapa seguinte.
-5. **Rejeitar** (MO e FO) pede um comentário, avisa o Brazil OTC Ops por e-mail e devolve a confirmação para o OTC. As validações já dadas são apagadas: o documento vai ser refeito.
+**As cinco etapas, na ordem em que a confirmação anda:**
 
-**Gerar a confirmação — no card de Pending OTC**
+| Cartão | O que significa | Quem age |
+|---|---|---|
+| **Pending Legal** | Retenção manual — o Legal segurou a confirmação | OTC Ops solta |
+| **Pending OTC** | O documento precisa ser gerado e conferido | Back Office (OTC Ops) |
+| **Pending MO** | Conferência do Middle Office | Middle Office |
+| **Pending FO** | Conferência do Front Office | Front Office |
+| **Pending FepWeb** | Validado; falta enviar ao cliente | OTC Ops |
+| *(fim)* | `Ok` — a confirmação saiu da fila | — |
 
-Enquanto o documento ainda não foi gerado, o botão do item aparece como **Generate** em vez de
-*Validate* (o sistema sabe disso porque não há PDF na pasta da contraparte). O ciclo inteiro acontece
-a partir daí:
+> **MO e FO correm em paralelo**, não em fila: os dois contam o prazo a partir da mesma data da operação.
 
-1. Clique em **Generate**. Abre uma aba nova com a confirmação já preenchida.
-2. Revise o documento. O único botão é **💾 Salvar Word + PDF no Inventory** — ele grava o Word, o
-   PDF e o XML na pasta da contraparte.
-3. Gravado, a **tela de validação abre na sequência**, com o PDF de um lado e o checklist do outro.
-   Validando ali, a confirmação segue para MO e/ou FO normalmente.
-4. Se você fechar sem validar, nada se perde: a confirmação **continua em Pending OTC**, agora com o
-   documento na pasta, e o botão do card volta a ser **Validate**.
+**O que cada item mostra:** o cliente, o produto, quantas operações o documento cobre, os chips dos PDFs e do e-mail de recap encontrados na pasta, e as marcas de prazo:
 
-> **Só o OTC gera.** Nos cards de MO e FO, uma confirmação sem documento na pasta continua com o
-> botão riscado — essas mesas conferem o papel, não o produzem.
+| Marca | Significa |
+|---|---|
+| `faltam Nd` / `{n}d left` | Dentro do prazo |
+| `vence amanhã` / `vence hoje` | Véspera ou o próprio dia |
+| `Nd de atraso` | Prazo estourado — a marca fica vermelha |
+| `no callback` | Falta a conferência por telefone com o cliente (só no cartão *Pending FepWeb*) |
+
+**Os prazos**, contados em **dias úteis a partir da data da operação** (e não da data em que o documento foi gerado): **OTC D+3**, **MO D+4**, **FO D+6**. Eles são cadastráveis na tela Mapping (`manual-conf-sla`).
+
+**Passo a passo — gerar a confirmação:**
+
+1. No cartão **Pending OTC**, localize o item. Se ainda não existe PDF na pasta, o botão do item é **Generate**.
+2. Clique em **Generate**. O editor do documento abre numa aba nova, já com os dados da operação.
+3. Revise o texto do documento.
+4. Clique em **Salvar Word + PDF no Inventory** — é o único botão do editor. O documento é gravado no Electronic Inventory.
+5. Como você abriu pelo Monitor, o sistema leva você direto para a **tela de validação da esteira**: você está com o papel na frente e pode assinar pela mesa de OTC.
+6. Se preferir não validar agora, feche a aba. A confirmação continua em `Pending OTC`, agora com o PDF na pasta, e o botão do item passa a ser **Validate**.
+
+**Passo a passo — validar:**
+
+1. Clique em **Validate** (o botão verde do item). A tela de validação abre numa aba nova.
+2. Se aparecer **View** (contorno cinza) em vez de Validate, é porque aquela etapa é de **outra mesa**: você pode abrir e ler, mas não assinar.
+3. Ver 9.4.
+
+**Passo a passo — soltar do Legal:**
+
+1. No cartão **Pending Legal**, clique em **Release to OTC**.
+2. Confirme na janela: ela diz o cliente e quantas operações vão sair da retenção.
+3. A confirmação entra na fila do OTC, aqui e no Pending Confirmation.
+
+**Passo a passo — marcar como enviada ao cliente:**
+
+1. No cartão **Pending FepWeb**, clique em **Mark as sent**.
+2. Confirme na janela.
+3. O sistema carimba a data de *Enviado p/ cliente*, a confirmação vira **`Ok`** e a linha do Pending Confirmation passa a *Pending Digital Signature* ou *Pending Original*, conforme o tipo de assinatura do cliente no Reference Data.
+
+### 9.4. A tela de validação
+
+**Como se chega:** pelo botão **Validate** (ou **View**) de um item do Confirmations Monitor. Ela abre com o **PDF do documento de um lado** e o **checklist da etapa do outro**.
+
+**Passo a passo:**
+
+1. **Leia o PDF** no painel da esquerda. Se não houver PDF, a tela diz isso — gere o documento antes.
+2. No painel da direita, confira o cabeçalho: contraparte, produto, data da operação, quantas operações, a etapa e a marca de prazo.
+3. **Marque cada item do checklist.** O botão **Validate** só habilita quando todos estiverem marcados:
+
+| Etapa | Itens do checklist |
+|---|---|
+| **OTC** | Contraparte e Tax ID batem com o Reference Data · Data do CGD bate com o contrato registrado · Operações da Tabela de Referência batem (deal, valor, taxa, direção) · Datas batem (operação, fixings, PTAX e vencimento) |
+| **MO** e **FO** | Só os dois econômicos: operações da Tabela de Referência · datas |
+
+4. Clique em **Validate**. A confirmação segue para a etapa seguinte e o Monitor se atualiza.
+5. **Se o prazo já venceu**, o sistema pede a justificativa: um campo *"Reason for the delay"* aparece e a validação só passa com ele preenchido. A justificativa fica na coluna daquela mesa (`OTC Comments`, `MO Comments`, `FO Comments`).
+
+**Para devolver ao OTC (rejeitar):**
+
+1. Clique em **↩ Send back to OTC**, abaixo do botão verde.
+2. Escreva **o que está errado no documento** — o campo é obrigatório, e o texto que você escrever **é o corpo do aviso** que a mesa de OTC recebe.
+3. Clique em **Reject and notify**.
+
+> **Rejeitar é só das mesas seguintes.** O OTC monta o documento e não tem a quem devolvê-lo, então no OTC o botão não aparece.
 >
-> Se o Generate abrir uma tela de erro, ela diz **qual** é o problema: o produto não tem tela de
-> geração no sistema, a linha está sem *Trade Date*, ou a operação não está no arquivo do dia
-> daquela data. Os três pedem ações diferentes.
+> **Cada etapa é assinada pela sua mesa.** Quem não é da mesa vê a tela sem os botões de assinar — e, se tentar pelo endereço direto, o sistema recusa. Administrar acessos não dá esse direito: ser `ADMIN` não é passe livre para assinar por uma mesa.
 
-As duas pontas da esteira não são de validação:
+### 9.5. Track Confirmations
 
-- **Pending Legal** é um **hold manual**: enquanto a confirmação estiver nele, ela não anda, mesmo com as validações em dia. O card tem o botão de **soltar**, que devolve a confirmação para a fila do OTC.
-- **Pending FepWeb** é **derivado**, nunca digitado: as validações estão feitas e falta **enviar ao cliente**. A confirmação só chega a **Ok** com a coluna *Enviado p/ cliente* preenchida — é o que o botão desse card faz.
-- Escrever **Pending OTC** à mão no Track Confirmations **reabre a esteira**: é o que se faz quando a confirmação foi **regerada** depois de validada. O sistema apaga as três validações e o envio ao cliente (os comentários ficam), e as três mesas conferem o documento novo. Como isso desfaz validação alheia, a gravação exige a mesa de **OTC Ops**.
-
-> A esteira é espelhada na página **Pending Confirmation** a cada gravação, então as duas telas contam a mesma coisa.
-
-> **Cada etapa é assinada pela mesa dela.** Pending OTC é do **Back Office**, Pending MO do **MO** e Pending FO do **FO** — o papel vem do seu cadastro em *Users & Roles*. Quem não é da mesa continua abrindo a confirmação e lendo o documento, mas o botão do card aparece como **View** e a tela de validação não mostra o *Validar* nem o *Devolver ao OTC*.
-
-**O prazo de cada mesa** (dias úteis contados da data da operação) é cadastrável em **Mapping → Manual Confirmations — SLA**: OTC D+3, MO D+4 e FO D+6 de fábrica. Os prazos não se somam — MO e FO correm em paralelo, os dois contados da mesma data de operação. Validar depois do prazo exige uma justificativa, que fica gravada na coluna daquela mesa.
+**Menu › Documentation › Manual Confirmation › Track Confirmations**
 
 ![Track Confirmations](docs/sop-screenshots/manual-confirmation_track.png)
 
-A tela **Track Confirmations** é a base inteira: filtro por coluna, atualização em massa por coluna, exportação do que estiver na tela (com o filtro e a ordenação aplicados) e os cards do topo funcionando como filtro por etapa. Ela abre ordenada pelo **Aging**, do menor para o maior.
+**Para que serve:** é a esteira inteira em forma de tabela — uma linha por operação, com todas as datas e carimbos de cada mesa. É onde se corrige um dado da esteira e onde se enxerga o histórico completo.
 
-- **Os títulos das colunas estão em inglês** e acompanham o idioma escolhido no topo da página, como
-  o resto do sistema: *Settlement Date*, *Trade Date*, *Underlying Asset*, *Notional/Qty*,
-  *Counterparty*, *Aging*.
-- **`Notional Amount CCY`** (ao lado de *Notional/Qty*) mostra a **moeda** do notional junto com o
-  valor — `USD 1.500.000,00`. Ela é preenchida sozinha quando a operação é mapeada, e é diferente do
-  *Underlying Asset* ao lado: em mercadoria, aquele traz a commodity (OLEO, PLATTS), que não é moeda.
-  Operações mapeadas antes desta coluna existir aparecem em branco.
-- **Digite `blank` num campo de filtro** para listar as linhas em que aquela coluna está **vazia** —
-  é assim que se acha, por exemplo, tudo que ainda está sem *Callback Date*. A palavra só vale
-  sozinha no campo; escrevendo mais que isso, o filtro procura o texto normalmente.
+**As colunas que importam:**
 
-> As operações de **NDF Commodities, Opção de Commodities, FXO e NDF FWD Start** entram nesta esteira sozinhas, assim que são mapeadas no New Deals — antes mesmo de o documento existir. É por isso que elas aparecem no card de *Pending OTC* já com o botão **Generate**.
-
-> **A fila parada é cobrada por e-mail.** O card *Confirmations Escalation* do **Control Panel** manda o que está pendente de validação para o OTC, para o Sales Support e para o Front Office (um e-mail por produto), toda segunda e quinta, e diariamente quando alguma operação está no último dia do prazo ou já vencida. Ver o item 3.17.
-
----
-
-### 3.12. Exportar uma tabela — o Export e o Advanced Export
-
-Toda tela com tabela tem o botão **Export**, e ele oferece **Copy · CSV · Excel · Print · PDF**. O que sai é **o que está na tela**: os filtros que você aplicou, a ordenação que escolheu e as colunas visíveis. É o que se quer quase sempre.
-
-Quando não é, use o item **Advanced Export**, no fim do mesmo menu. Ele abre uma janela onde você monta a extração:
-
-| Campo | Para que serve |
+| Coluna | O que é |
 |---|---|
-| **Format** | Excel, CSV, PDF, Print ou Copy |
-| **File name** | o nome do arquivo (sem a extensão) |
-| **Rows** | tudo, só a página atual, ou uma faixa de posições (da linha N até a M) |
-| **Range — daily files** | **de que dia até que dia** — ver abaixo |
-| **Filters** | quantos critérios quiser: coluna + condição (*contém*, *é exatamente*, *começa com*, *está vazia*…) + valor |
-| **Columns** | quais colunas vão para o arquivo |
-| **Options** | levar o cabeçalho, separador do CSV, orientação do PDF |
+| **Pending** | Em que etapa a operação está |
+| **Aging** | Há quantos dias úteis ela espera |
+| **E-mail Subject** | O assunto do e-mail de recap interno — **preenchido pelo sistema** a partir do arquivo na pasta, não digitado |
+| **Callback Date** | A conferência por telefone com o cliente |
+| **Validated by OTC / MO / FO** + **Time Stamp** | Quem assinou cada etapa e quando |
+| **OTC / MO / FO Comments** | A justificativa de atraso daquela mesa |
+| **Sent to Client (FepWeb Released)** | A data do envio ao cliente |
 
-No rodapé, **antes de exportar**, aparece quantas linhas casaram com o que você montou. Se disser `0`, ajuste os critérios ali mesmo — não é preciso gerar o arquivo para descobrir.
+**Passo a passo:**
 
-**O Range é o que resolve "preciso do mês inteiro".** A tela mostra um dia; o sistema guarda um arquivo por dia. Preenchendo **De** e **Até**, ele lê um arquivo por dia e junta **tudo numa planilha só**, com a coluna **Reference Date** na frente de cada linha dizendo de que dia ela veio.
+1. Filtre pela coluna **Pending** para ver só uma etapa, ou por **Counterparty** / **Trade ID** para achar uma operação.
+2. Para corrigir, clique em **Edit** na linha, altere e salve.
+3. Para alterar a mesma coluna em várias linhas: marque as linhas, escolha a coluna em **Select Column to Apply**, digite o valor e confirme.
 
-- Ele lê **apenas dias úteis** (calendário ANBIMA), porque é nesses dias que os arquivos são gerados.
-- **Dia sem arquivo é pulado**, não é erro — feriado, ou dia anterior ao início da guarda.
-- Ao terminar, o rodapé resume: quantas linhas, de quantos dias, quantos dias sem arquivo e quantos deram erro.
-
-> **A tela que não tem arquivo diário mostra o Range apagado, com o motivo escrito.** O Reference Data, por exemplo, é um cadastro: existe o de hoje e mais nada, então o export dele cobre sempre o que está na tela.
-
-> **Se aparecer "não consegui ler N dias" com `HTTP 404`**, quase sempre é a aplicação que ficou sem reiniciar depois de uma atualização. Ver **4.3**.
+> **Preencher uma coluna de validação aqui É validar.** Escrever a data em *VALIDADO p/ MO* passa pelas mesmas três regras da tela de validação: carimba quem assinou, exige a mesa certa e pede justificativa se o prazo já venceu. Se você só quer ajustar um cadastro, não use as colunas de validação.
+>
+> **Apagar a data apaga o carimbo** — é assim que se desfaz uma validação feita por engano.
 
 ---
 
-### 3.13. Reference Data — cadastrar contrapartes
+## 10. Onboarding — os contratos globais (CGD)
 
-Caminho no menu: **Data Base → Reference Data**.
+**Menu › DOCUMENTATION › Onboarding**
+
+Acompanha a emissão dos **Contratos Globais de Derivativos**, desde a solicitação até o contrato ativo e registrado na B3. A fonte é a lista do SharePoint, importada para dentro do sistema.
+
+### 10.1. Overview
+
+**Menu › Documentation › Onboarding › Overview**
+
+![Onboarding Overview](docs/sop-screenshots/onboarding.png)
+
+**Para que serve:** responde *quantos contratos estão em aberto e em que mesa cada um está parado*. É o painel de trabalho do onboarding.
+
+A faixa do alto traz três números — **Documents** (o total), **Pending** (o que não está ativo) e **Active** (o que já está pronto) — e um link **Open Tracking Docs**.
+
+Abaixo, **três cartões verticais**, um por mesa da esteira:
+
+| Cartão | O que está esperando ali |
+|---|---|
+| **Legal** | Falta a emissão / a assinatura do contrato |
+| **Banking OTC** | Emitido; falta o carimbo do OTC |
+| **CEM MO** | Falta o carimbo do Middle Office |
+
+**Passo a passo:**
+
+1. Percorra os cartões. Dentro de cada um, os documentos aparecem **do mais antigo para o mais novo** — quem espera há mais tempo vem primeiro.
+2. Cada item mostra o cliente, o tipo de documento, a entidade, o CNPJ, o status, a data da solicitação e o **aging em dias úteis**, que fica âmbar a partir de 5 e vermelho a partir de 15.
+3. A etiqueta **derived** ao lado do status significa que a mesa foi **deduzida** pelo primeiro carimbo que falta, e não lida de um cadastro. Para fixar a mesa de um status, cadastre-o em **Mapping › `cgd-stage`** (13.3).
+4. Clique em **Open Tracking Docs** para ir à tabela completa.
+
+> **Só entra nos cartões o documento que NÃO está `Active`.** O que já está ativo saiu da esteira e conta em *Active*.
+>
+> **Documento com todos os carimbos e ainda não `Active` fica na ÚLTIMA mesa** — devolvê-lo sem etapa o faria sumir das três filas, e um pendente que some é pior do que um pendente na fila errada.
+
+### 10.2. Tracking Docs
+
+**Menu › Documentation › Onboarding › Tracking Docs**
+
+![Tracking Docs](docs/sop-screenshots/onboarding_tracking-docs.png)
+
+**Para que serve:** é a lista completa de CGDs, com as trinta colunas da planilha do SharePoint mais duas do sistema.
+
+**A faixa cinza acima da barra de ferramentas** mostra **de onde os dados vieram** — o caminho do banco e quantas linhas ele tem. Se o banco ainda não foi criado, essa faixa fica **vermelha** dizendo isso e o comando que resolve.
+
+**As duas colunas que o sistema calcula:**
+
+| Coluna | O que é |
+|---|---|
+| **Pending with** (a 1ª) | Em que mesa o documento está parado. O ícone de varinha ao lado significa *deduzido* |
+| **Aging** | Dias **úteis** desde a *Data Solicitação*, recalculados a cada abertura da tela |
+
+> **O Aging da planilha é ignorado de propósito.** Quem exportou ontem exportou o aging de ontem; aqui ele é refeito toda vez. E ele **para** quando o CGD conclui: o prazo de quem terminou deixou de correr. Sem *Data Solicitação*, a célula fica **vazia** — nunca zero, que se leria como "entrou hoje".
+
+**Passo a passo:**
+
+1. Filtre pelas caixinhas do cabeçalho — por **Status**, por **Razão Social**, por **Pending with**.
+2. Para corrigir um dado, clique em **Edit** na linha, altere e salve (4.9). O *Aging* não é editável: ele é calculado.
+3. **Add Row** inclui um documento que não veio na planilha.
+4. **Delete** apaga uma linha.
+5. **Overview**, no canto superior direito, volta ao painel.
+
+> **A importação REESCREVE a tabela inteira.** Quando a lista do SharePoint é reimportada, o que você editou aqui é substituído pelo que está lá — a lista é a fonte, e o app é a leitura dela. Correção que precisa durar tem de ser feita no SharePoint.
+
+---
+
+## 11. Intrag
+
+**Menu › PRODUCTS › Intrag**
+
+Três telas — **NDF**, **Option** e **Swap** — com as operações no leiaute que a Intrag recebe. Todas funcionam igual: busca por fichas, filtros por coluna, **Columns**, **Export**, **Add Row +** e **Clear Filters**.
+
+**Intrag — NDF**
+
+![Intrag NDF](docs/sop-screenshots/intrag-ndf.png)
+
+**Intrag — Option**
+
+![Intrag Option](docs/sop-screenshots/intrag-option.png)
+
+**Intrag — Swap**
+
+![Intrag Swap](docs/sop-screenshots/intrag-swap.png)
+
+**Passo a passo:**
+
+1. Localize a operação pela busca ou pelos filtros.
+2. Confira as colunas do leiaute — elas são o contrato com a Intrag e a ordem importa.
+3. **Add Row +** inclui uma operação à mão.
+4. **Export** baixa o conjunto para conferência.
+
+> Nestas três tabelas a seleção de célula usa a extensão nativa da tabela: clique numa célula, arraste para pegar um bloco e **Ctrl+C** para copiar (4.8).
+
+---
+
+## 12. Accrual e MtM de Swap
+
+**Menu › PRODUCTS › Accrual Swap** e **MtM Swap**
+
+![Accrual Swap](docs/sop-screenshots/accrual-swap.png)
+
+**Para que serve:** são as duas rotinas de fim de mês do swap — a apuração do **accrual** (juros acumulados) e a do **MtM** (marcação a mercado). As duas telas têm o mesmo desenho: um cartão de tabela por LOB (**CEM · EDG · Hybrids · Commodities**, e **COE** também no MtM).
+
+![MtM Swap](docs/sop-screenshots/mtm-swap.png)
+
+**Passo a passo:**
+
+1. Escolha a **data** no campo *Date*, no alto à esquerda.
+2. Clique em **Load** para carregar o que já foi processado naquela data.
+3. Clique em **Import from folder** para trazer os arquivos novos da pasta.
+4. Percorra os cartões. As linhas em **Check** são as que divergiram.
+5. **Escreva o comentário** na coluna *Comments* de cada linha em Check — explicando a divergência.
+6. Clique em **Validation** para gerar os arquivos de lote por LOB e disparar o e-mail de validação. O sistema pede confirmação antes.
+7. Clique em **Recon** para o batimento contra o registrado.
+8. Dentro de um cartão, **Send batch** envia o lote daquela LOB.
+9. Clique em **End Process** para fechar o mês. **Ele só passa se toda linha em Check tiver comentário** — se faltar alguma, o sistema lista LOB, Código IF e ID das que faltam. Fechando, sai o e-mail de status final para OTC Ops.
+
+No **MtM** há ainda o botão **New Mapping**, para cadastrar um de-para novo sem sair da tela.
+
+---
+
+## 13. Cadastros e ferramentas
+
+**Menu › SETTINGS** e **Menu › APPS**
+
+### 13.1. Reference Data
+
+**Menu › Settings › Reference Data**
 
 ![Reference Data](docs/sop-screenshots/reference-data.png)
 
-1. Localize a contraparte pelo **SPN** ou pelo nome.
-2. Dê **duplo clique na linha** para abrir o editor de detalhes: conta CETIP, dados bancários e contatos.
-3. Para uma contraparte nova, cadastre-a com o **accronym exatamente igual ao que a API envia** no campo *End Counterparty*.
+**Para que serve:** é o cadastro de contrapartes — a lista de clientes com quem a mesa opera. Quase toda outra tela consulta esta: é daqui que sai o nome do cliente a partir do CNPJ, o SPN, o tipo de assinatura e as contas.
 
-> **Este é o ponto mais importante do cadastro.** O sistema identifica a contraparte pelo **accronym**, e não pelo SPN que a API envia. Accronym errado ou ausente resulta em linha marcada como **Missing Counterparty**.
+**As colunas:** Counterparty · Economic Group · Banker · Signature Type · Tax ID · ECI · SPN · CASID · UCN · B3 Account · Commodities Acronym · FX Cash Acronym.
 
----
+**Passo a passo — cadastrar uma contraparte:**
 
-### 3.14. Mapping — cadastrar de-para
+1. Clique em **Add Row +**.
+2. Preencha os campos. Os que mais importam para o resto do sistema são o **Tax ID** (é a chave de resolução do cliente), o **SPN**, os dois **acronyms** e o **Signature Type**.
+3. Salve. A linha nasce com status pendente de aprovação.
+4. Marque as linhas a aprovar e clique em **Approve Selected**.
 
-Caminho no menu: **Data Base → Mapping**.
+**Passo a passo — corrigir um cadastro:** filtre pela coluna *Counterparty* ou *Tax ID*, clique em **Edit** na linha, altere e salve.
 
-![Mapping](docs/sop-screenshots/mapping.png)
+> **O `Signature Type` decide o rótulo da pendência de confirmação** — `Digital` leva a *Pending Digital Signature*, `Manual` e **não cadastrado** levam a *Pending Original*. Deixar em branco não é neutro: é o mesmo que dizer Manual.
 
-Esta é a tela onde se cadastra qualquer tradução entre o código de um sistema e o de outro. **Nada disso fica no código** — tudo é cadastrável aqui.
+### 13.2. Index B3
 
-1. Escolha o **tipo de mapeamento** nas abas do topo.
-2. Clique em **Add** para cadastrar um novo registro, ou no botão de edição para alterar um existente.
-3. Preencha os campos e salve.
-
-Tipos disponíveis:
-
-| Tipo | Para que serve |
-|---|---|
-| Currency Base | Códigos e características das moedas |
-| Interbook API (NDF) | Pares de books internos que não são negócio de cliente |
-| Commodities × B3 | Código da mercadoria no sistema e na B3 |
-| Publisher × B3 (NDF) | Fonte de informação e tela de consulta |
-| Legal Entity × Accronym | Entidade legal de cada accronym e settlement location |
-| Bank Name | Nome dos bancos |
-| FXO Conversion Rate | Taxa de conversão por moeda base |
-| Swap Curves (Athena × B3) | Curvas de swap |
-| B3 Accounts | As contas da B3 de cada entidade nossa — LE, Nome Simplificado, conta e tipo |
-| Quotes — Equities | Código do ativo subjacente → símbolo de mercado (item 3.20) |
-| Quotes — Commodities | Código da mercadoria → símbolo de mercado (item 3.20) |
-
-> **B3 Accounts** responde a duas perguntas de uma vez, e por isso o **Account Type** não é enfeite:
->
-> - **OWN** é a conta própria da entidade — a posição da casa.
-> - **CLIENT 1** e **CLIENT 2** são contas guarda-chuva: nelas o nome que vem da B3 é o do **titular do guarda-chuva**, não o do cliente, e o sistema descobre o cliente pelo **CNPJ**. Cadastrar uma conta de cliente como *OWN* faz o aviso de liquidação sair endereçado ao titular, com tudo preenchido e parecendo certo.
->
-> O **Simplified Name** é o nome que vai no campo *Participante* do cabeçalho dos arquivos de registro enviados à B3. Entidade sem esse nome cadastrado faz o envio parar com uma mensagem dizendo qual entidade falta — em vez de mandar um arquivo com o campo em branco.
-
-> **Mapping não exige reinício do sistema.** A alteração vale já na próxima tela que você abrir.
-
----
-
-### 3.15. Index B3 — cadastrar ativos
-
-Caminho no menu: **Data Base → Index B3**.
+**Menu › Settings › Index B3**
 
 ![Index B3](docs/sop-screenshots/index-b3.png)
 
-Aqui ficam os ativos subjacentes aceitos pela B3. Um ativo não cadastrado impede a aprovação da operação que o utiliza.
+**Para que serve:** consulta e cadastro dos ativos subjacentes registrados na B3. É aqui que se resolve o aviso *"Asset Not Registered"* que aparece ao aprovar uma operação em New Deals.
 
-> **Cadastrou o ativo com a operação já importada?** Volte à tela de New Deals e use o **Reload Data** (ele aparece no aviso *Asset Not Registered*). O selo *Missing Index B3* sai, e as colunas que dependem do cadastro — **Commodities** e **Quoted in Cents** — passam a mostrar o que você acabou de cadastrar, sem recarregar a página. Se a mercadoria continuar vazia depois do Reload, o que falta é a coluna **Commodity** na linha do Index B3: o sistema só preenche o que está lá.
+**Passo a passo — procurar um ativo:**
+
+1. No cartão **Search Filters**, escolha a **Class** (AÇÕES · AÇÕES INTERNACIONAIS · CESTA · COMMODITIES · INDICES · INDICES INTERNACIONAIS · JUROS).
+2. Refine com os demais seletores: *Underlying Asset Code*, *Exchange*, *Appreciation Index*, *Commodity*, *Instrument Type (IF)* (COE · OPC · SWAP · TER), *Currency*, *Quotation Type*, *Expiry Month* e *Calculated*.
+3. Os dois campos de texto aceitam o ano (*e.g. 2025*) e o nome do índice (*e.g. IBOV*).
+4. Clique em **Search**.
+5. **Clear Fields** limpa todos os filtros de uma vez.
+6. O resultado aparece na tabela abaixo, com a barra de ferramentas de sempre.
+
+### 13.3. Mapping — os de-para
+
+**Menu › Settings › Mapping**
+
+![Mapping](docs/sop-screenshots/mapping.png)
+
+**Para que serve:** é onde moram **todos os de-para do sistema** — as tabelas de tradução que dizem, por exemplo, que o código de curva `C00` é o índice `VCP`, ou qual conta B3 pertence a qual entidade nossa. São mais de quarenta cadastros.
+
+> **Nenhum de-para fica escrito no código.** Se um valor novo precisa ser traduzido, ele se cadastra aqui — e vale **no próximo request**, sem esperar reinício do sistema. É a diferença mais útil desta tela: mudança de cadastro é imediata.
+
+**Passo a passo:**
+
+1. Escolha o cadastro na **lista de tipos**, à esquerda (o primeiro é *Currency Base*).
+2. A tabela do cadastro escolhido aparece à direita, com as colunas próprias dele.
+3. Para **incluir**: clique em **Add**, preencha os campos da janela e salve.
+4. Para **corrigir**: clique em **Edit** na linha, altere e salve.
+5. Para **apagar**: clique em **Delete** na linha.
+6. **Export** e **Clear filters** funcionam como em qualquer tabela.
+7. Ordene clicando no nome da coluna.
+
+**Os cadastros que mais dão trabalho quando estão errados:**
+
+| Cadastro | O que ele decide |
+|---|---|
+| `commodities-b3` | O código B3 de cada mercadoria, por tipo de trade (Vanilla / Asian) |
+| `api-links` | O endereço da API da Athena, por uso e produto |
+| `opb3-events` | Quais linhas do Operations B3 entram numa apuração de liquidação |
+| `b3-accounts` | As contas B3 das nossas entidades — quem é o participante, e por qual conta sai a mensageria |
+| `manual-conf-validation` | Quem valida a confirmação de cada produto (OTC / MO / FO) |
+| `manual-conf-sla` | Os prazos de cada mesa da esteira |
+| `bankers-email` | O e-mail de cada banker, para o Cc da coleta de assinatura |
+| `cgd-stage`, `cgd-b3-participante`, `cgd-garantidor`, `cgd-conta-encerrada` | O batimento de CGD (8.4) e a esteira do Onboarding (10.1) |
+
+> **Alguns campos aceitam um PADRÃO, e não um valor literal.** Em `commodities-b3` e em `quotes-commodity`, `"MY"` entre aspas significa *letra do mês + ano do contrato* e `_` significa *espaço*: `CO"MY"` casa `COZ6`, `COK7` e todos os demais vencimentos daquela mercadoria com uma linha só.
+>
+> **Os valores não são aparados.** O espaço no fim de códigos B3 como `'C '` faz parte do código — não o apague achando que é sobra.
+
+### 13.4. Quotes
+
+**Menu › Apps › Quotes**
+
+![Quotes](docs/sop-screenshots/quotes.png)
+
+**Para que serve:** consulta a cotação histórica de uma moeda, ação ou mercadoria — PTAX pelo Banco Central, ações e commodities pelo mercado.
+
+**Passo a passo:**
+
+1. Escolha o **Quote Type**: *PTAX*, *Equities* ou *Commodities*.
+2. O campo **Instrument** só habilita depois disso. Comece a digitar e escolha o instrumento na lista que abre logo abaixo do campo — a lista acompanha a largura do campo e rola.
+3. Preencha **From** e **To** com o período.
+4. Clique em **Search**.
+5. A tabela abaixo traz a série. **Export** baixa (4.6).
+
+> **Se o sistema responder que o código não está cadastrado**, é porque falta a tradução do código B3 para o símbolo de mercado. Cadastre em **Mapping › `quotes-equity`** ou **`quotes-commodity`** — o sistema nunca tenta o código como ticker às cegas, justamente para não devolver um erro obscuro da fonte no lugar de "falta cadastrar".
+
+### 13.5. Holidays Calendar
+
+**Menu › Apps › Holidays Calendar**
+
+![Holidays Calendar](docs/sop-screenshots/holidays-calendar.png)
+
+**Para que serve:** os calendários de feriados que o sistema usa para contar dias úteis — o ANBIMA e os das praças de cada mercadoria.
+
+**Passo a passo — ver os feriados:**
+
+1. As **pastilhas** da barra lateral são os calendários. Clique numa para acender/apagar aquele calendário no quadro.
+2. Navegue com **‹** e **›**; **Today** volta ao mês corrente.
+3. Troque a visão em **Year · Month · Week · Day · List**.
+4. Clique num feriado para ver a que calendário ele pertence.
+
+**Passo a passo — incluir um feriado:**
+
+1. Clique em **Create New Holiday**.
+2. Escolha o **calendário** na lista, a **data** e a **descrição**.
+3. Salve.
+
+**Passo a passo — criar um calendário novo:**
+
+1. Clique em **Create New Calendar**.
+2. Envie uma **planilha** com uma aba: **coluna A** a data e **coluna B** a descrição. A terceira coluna, se houver, é ignorada.
+3. O cabeçalho é descartado por **não ser data** — não precisa tirá-lo.
+4. O calendário nasce com uma cor sorteada e já aparece nas pastilhas.
+
+### 13.6. File Interpreter
+
+**Menu › Apps › File Interpreter**
+
+![File Interpreter](docs/sop-screenshots/file-interpreter.png)
+
+**Para que serve:** é o cadastro dos **leiautes de arquivo** — campo a campo, com posição, formato e origem do valor. É por ele que se muda o que sai num arquivo de registro da B3 sem mexer no código.
+
+Cada leiaute é um **template**, e a tabela mostra uma linha por campo: **SEQ · FIELD · FORMAT · POSITION · REQUIRED · CONTENT · DESCRIPTION · SOURCE · SOURCE FIELD / VALUE**.
+
+**Passo a passo:**
+
+1. Escolha o template na biblioteca à esquerda.
+2. **Versions**, no cartão do template, escolhe a **variante** — a mesma família de arquivo pode ter versões por par de entidades ou por produto.
+3. Clique em **Edit Sources** para dizer de onde vem o valor de cada campo.
+4. Clique em **Edit Template** para alterar a estrutura, **Add Template** para criar uma variante e **Create New Template** para um leiaute novo.
+5. **Link Pages** amarra o template às páginas que o usam.
+6. Dê um **duplo clique** numa linha para ver a prévia do valor.
+
+**A coluna *Source*** diz quem manda o valor:
+
+| Source | Significa |
+|---|---|
+| **Page** | O gerador manda o valor; o detalhe ao lado é documentação |
+| **Fixed** | O valor está escrito ali — e **com o campo vazio é assim que se cadastra "campo em branco"** |
+| *fórmula* | Um cálculo: `FIELD`, `DATE`, `BIZDIFF`, `ADDBIZ`, `LOOKUP(...)`, `CASE(...)` |
+
+> **"Campo em branco" cadastra-se como Source `Fixed` com o valor VAZIO** — nunca como Page com o detalhe apagado. `Page` significa *"o gerador manda o valor"*, então limpar o detalhe não esvazia nada, em silêncio.
+>
+> O template é **relido a cada abertura da prévia**: editou, o próximo duplo clique já mostra o resultado novo, sem recarregar a página.
+
+### 13.7. Electronic Inventory
+
+**Menu › Apps › Electronic Inventory**
+
+![Electronic Inventory](docs/sop-screenshots/electronic-inventory.png)
+
+**Para que serve:** é o arquivo digital dos documentos por contraparte — confirmações, SSI e documentos transacionais. É onde o PDF gerado pela esteira fica guardado, e é de onde o Monitor o lê.
+
+**Passo a passo — achar um documento:**
+
+1. Digite o nome no campo **Search counterparty…**, à esquerda, e clique na contraparte.
+2. Os documentos dela aparecem à direita. Refine com **Search documents…**.
+3. Clique no documento para abri-lo.
+
+**Passo a passo — subir um documento:**
+
+1. Selecione a **contraparte** na lista da esquerda (o campo do formulário é preenchido a partir dela e não é editável).
+2. Clique em **Upload Document**.
+3. Escolha o **Document Type**: *Confirmations*, *SSI* ou *Transactional*.
+4. Conforme o tipo, um segundo seletor aparece — o **produto** da confirmação, ou o **tipo transacional**. Escolha.
+5. Preencha a **Date** (dd/mm/aaaa).
+6. Arraste o arquivo para o retângulo, ou clique nele para escolher.
+7. Confirme. As pastas são criadas automaticamente se não existirem.
+
+> **Suba a confirmação com o produto certo.** A pasta é o próprio código do produto, e é onde o Confirmations Monitor procura o PDF: um documento gravado na pasta errada fica invisível para a esteira, com o arquivo intacto no servidor.
 
 ---
 
-### 3.16. File Interpreter — os layouts dos arquivos
+## 14. Control Panel — as rotinas automáticas
 
-Caminho no menu: **Apps → File Interpreter**.
-
-É o catálogo dos arquivos que o sistema monta, campo a campo: os de registro na B3 (Termo, Opção, Swap, MID, DCE) e os de instrução da Intrag. Cada template mostra a ordem dos campos, a largura de cada um e **de onde sai o valor** — um valor fixo, uma coluna da tela, um cadastro do Mapping ou um cálculo.
-
-O que se faz aqui, sem precisar de release:
-
-- **Ver o layout** — clique no template na lista à esquerda. Os blocos (header, registro, verificação) aparecem na ordem em que saem no arquivo.
-- **Trocar a origem de um campo** — *Edit Sources*. Um campo fixo passa a valer no próximo arquivo gerado e no próximo preview.
-- **Cadastrar um cálculo** — no campo de origem há um construtor por listas: diferença em dias úteis entre duas datas, data + N dias úteis, busca num cadastro do Mapping e de-para em linha (*se for ASIAN escreva A; se for VANILLA, deixe em branco*).
-- **Versões** — um mesmo arquivo pode ter mais de um layout: por par de entidades (JPM × MGT, LAWTON × JPM…) ou por produto, como nos arquivos da Intrag. O seletor **Versions** no alto do cartão mostra quantas existem e troca entre elas; *Add Template* cria a próxima a partir de uma que já existe.
-
-> **O preview das telas de New Deals lê este cadastro.** Editou aqui, feche e abra o preview de novo (duplo clique na linha) — ele relê o template, sem refresh da página.
-
----
-
-### 3.17. Control Panel — rotinas e destinatários de e-mail
-
-Caminho no menu: **Apps → Control Panel**.
+**Menu › Apps › Control Panel**
 
 ![Control Panel](docs/sop-screenshots/control-panel.png)
 
-Cada card é uma rotina automática. Para configurar:
+**Para que serve:** é onde moram as rotinas que o sistema roda sozinho — salvar arquivos, mandar e-mails de cobrança, gerar planilhas de métrica. Cada rotina é um **cartão**, e cada cartão tem duas coisas: os **destinatários** e um botão para rodar **agora**, sem esperar o horário.
 
-1. Preencha os campos **To** e **Cc**. Separe vários endereços por ponto e vírgula.
-2. Saia do campo — o sistema salva automaticamente.
-3. Use o botão **Run** para disparar a rotina na hora, sem esperar o horário automático.
+Os cartões estão em **cinco seções**, e o que agrupa não é o que a rotina faz, e sim **quando** ela acontece:
 
-Os cards são agrupados em **cinco seções**, e o que agrupa não é o que a rotina *faz* e sim **quando** ela acontece e sobre o que ela responde:
-
-| Seção | Rotinas |
+| Seção | Cartões |
 |---|---|
-| **Intraday Routines** | Save CETIP Files · Deals Monitor — Pending Action · Confirmations Escalation |
+| **Intraday Routines** (ao longo do pregão) | Save CETIP Files · Deals Monitor — Pending Action · Confirmations Escalation |
 | **Settlement Reporting** | Save Daily Settlement Files · Settlement Forecast |
 | **Pending Confirmation Routines** | Daily Metric — Outstanding Confirmation Brazil OTC · Pending Confirmations Spreadsheet Metrics · Pending Confirmation — Weekly Escalation (CEM/EDG) · Pending Signature Confirmations — Collection |
 | **Economic Affirmation Routines** | Manual Deals EA · BACC EA Metrics · MT300 |
 | **Reference Data Routines** | Update Contacts |
 
-> **Você pode ver menos cards do que a lista acima.** O acesso ao Control Panel é concedido **por rotina**, não pela página inteira: o administrador libera cada card no *Page Access*, e o cabeçalho de uma seção só aparece se você tiver ao menos um card dela. Se falta uma rotina que você precisa operar, o pedido é de acesso àquele card.
+### 14.1. Como usar um cartão
 
-#### Save CETIP Files — quatro destinos, cada um com o seu recorte
+1. Localize o cartão pela seção.
+2. **Para mudar quem recebe:** clique no campo de destinatários e escreva os endereços **separados por `;`** — o campo mostra o formato esperado (`email1@jpmorgan.com; email2@jpmorgan.com`). Alguns cartões têm um segundo campo, opcional, para cópia.
+3. **Para rodar agora:** clique no botão do cartão. O nome muda conforme a rotina — **Run**, **Run all**, **Save files**, **Generate drafts**, **Save + OTC e-mail**, **Send to other areas**, **Run Other Publisher**, **Run FWD Start**.
+4. Uma janela informa o resultado: quantas linhas, quantos e-mails, o que faltou.
 
-Este card manda os arquivos da CETIP para **Sales Support**, **CEM Latam**, **BACC** e **BACC HUB EQT MO**. Cada um é um e-mail diferente, com a sua própria lista de **To** e com OTC Ops sempre em cópia.
+> **Você só vê os cartões que lhe foram liberados.** O acesso ao Control Panel é concedido **por cartão** (capítulo 15.2), então dois usuários podem ver esta tela com conteúdos diferentes — não é defeito.
 
-| Destino | O que recebe |
+### 14.2. Os cartões, um a um
+
+| Cartão | O que faz | Quando roda sozinho |
+|---|---|---|
+| **Save CETIP Files** | Salva os arquivos da CETIP na pasta do dia e manda o e-mail para o OTC | Ao longo do pregão |
+| **Deals Monitor — Pending Action** | Manda o e-mail do que está parado no New Deals Monitor | 19:00 e 19:30 (horário de Brasília) |
+| **Confirmations Escalation** | Cobra por e-mail o que está parado na esteira de confirmação — sete listas, uma por destinatário | Segundas e quintas; feriado **rola** para o próximo dia útil |
+| **Save Daily Settlement Files** | Salva os arquivos de liquidação do dia | Fim do dia |
+| **Settlement Forecast** | Monta e envia a projeção de liquidações | Diário |
+| **Daily Metric — Outstanding Confirmation Brazil OTC** | A métrica diária de confirmações em aberto | Diário |
+| **Pending Confirmations Spreadsheet Metrics** | Grava a planilha `PENDING - Outstanding Confirmation OTC.xlsx` que o time global lê | 10:45 |
+| **Pending Confirmation — Weekly Escalation (CEM/EDG)** | A escalação semanal das pendências | Semanal |
+| **Pending Signature Confirmations — Collection** | O e-mail de coleta de assinatura, com o banker em cópia | Diário |
+| **Manual Deals EA** | A afirmação econômica das operações manuais | Diário |
+| **BACC EA Metrics** | A planilha das operações manuais sem callback, para o time de métricas | Todo dia útil, **16:00** |
+| **MT300** | Gera as mensagens MT300 | Diário |
+| **Update Contacts** | Atualiza os contatos das contrapartes a partir de um arquivo | Sob demanda |
+
+### 14.3. O cartão *Pending Confirmations Spreadsheet Metrics*
+
+Este merece um passo a passo próprio, porque tem uma opção que os outros não têm:
+
+1. O campo **Reference date** vem com **hoje**, que é a rotina de sempre — a situação viva das pendências.
+2. Para gerar a planilha de um **dia anterior**, troque a data. O sistema monta a planilha a partir da **foto** daquele dia.
+3. Clique em **Run**.
+4. A planilha é gravada **sempre no mesmo caminho e com o mesmo nome**, porque o time global de métricas lê esse caminho e só ele.
+5. Uma **linha âmbar** no cartão passa a dizer *de que dia* é a foto que está lá agora. Assim que a rotina rodar de novo com a data de hoje, ela some.
+
+> Datas **futuras** são recusadas. E se não existir foto do dia pedido, o sistema devolve erro em vez de gerar a planilha com os dados de hoje — como o nome do arquivo é o mesmo, nada distinguiria a planilha certa da errada.
+
+---
+
+## 15. Administração
+
+### 15.1. Manage Roles
+
+**Menu › Settings › Manage Roles**
+
+![Manage Roles](docs/sop-screenshots/users-roles.png)
+
+**Para que serve:** é o cadastro de usuários e do papel de cada um. O papel decide o que a pessoa pode **assinar** — validar uma etapa da esteira, por exemplo — e quais avisos ela recebe.
+
+**Os papéis:** `ADMIN` · `BO` (Back Office) · `MO` (Middle Office) · `FO` (Front Office) · `INSTITUTIONAL` · `HUB`.
+
+**Passo a passo — incluir um usuário:**
+
+1. Clique em **Add New Role**.
+2. Informe o **SID**. O sistema busca nome, e-mail e cargo no phonebook.
+3. Escolha o **Role** na lista.
+4. Salve.
+
+**Passo a passo — alterar:** procure a pessoa em **Search users...**, ou filtre pelos seletores de **Role** e **Status** (Active · Inactive · Pending). Clique em **Edit** na linha, altere e salve. **Remove** apaga o cadastro; **View** só abre.
+
+> **`ADMIN` administra acesso; ele não substitui a mesa.** Ser administrador **não** dá o direito de validar uma etapa da esteira pela mesa de outra pessoa.
+
+### 15.2. Page Access
+
+**Menu › Settings › Page Access**
+
+![Page Access](docs/sop-screenshots/page-access.png)
+
+**Para que serve:** define, usuário por usuário, quais páginas aparecem no menu dele.
+
+**Passo a passo:**
+
+1. Procure a pessoa em **Search user…**, na coluna da esquerda, e clique nela.
+2. À direita abre a **lista de páginas**, agrupada igual ao menu lateral.
+3. **Marque** as páginas que a pessoa pode ver; **desmarque** as que não.
+4. O **Control Panel** aparece como uma seção à parte, **explodida em cartões**: dá para liberar só uma rotina, e não a tela inteira.
+5. Salve.
+
+> **Lista vazia = acesso total.** Enquanto ninguém configurar a lista de uma pessoa, ela vê tudo. A partir do primeiro salvamento, ela vê **só** o que está marcado.
+>
+> **Profile** e **Page Access** nunca são bloqueados — é o que impede alguém de ficar sem nenhuma tela.
+
+---
+
+## 16. Support Center — chamados
+
+**Menu › SUPPORT › Tickets**
+
+![Lista de chamados](docs/sop-screenshots/tickets-list.png)
+
+**Para que serve:** é onde se pede ajuda, se reporta um defeito ou se solicita um acesso.
+
+**Passo a passo — abrir um chamado:**
+
+1. Clique em **New Ticket**.
+2. Preencha o **assunto**, a **descrição** e a **prioridade** (*Low* · *Medium* · *High* · *Urgent*).
+3. Salve. O chamado nasce com status `New`.
+
+![Abrir um chamado](docs/sop-screenshots/ticket-create.png)
+
+**Passo a passo — acompanhar:**
+
+1. Filtre por **Status** (New · In Progress · Pending · Resolved · Closed) ou por **Priority**.
+2. Procure em **Search tickets...**.
+3. Clique no chamado para abrir os detalhes, onde ficam o histórico e os comentários.
+
+![Detalhes do chamado](docs/sop-screenshots/ticket-details.png)
+
+> **Você vê os chamados da sua MESA, não só os seus.** Quem é do Back Office vê os abertos pelo Back Office; quem é do Middle, os do Middle — a fila de uma mesa é assunto da mesa. Mas **ver não é poder**: editar, comentar e apagar continuam sendo de quem abriu o chamado, e o do colega abre em leitura.
+
+---
+
+## 17. Painéis
+
+### 17.1. Dashboard
+
+**Menu › Navigation › Dashboards**
+
+![Dashboard](docs/sop-screenshots/dashboard.png)
+
+**Para que serve:** é a visão do dia em números — quantos negócios entraram por produto, a distribuição, o ranking dos cinco maiores clientes, produtos e ativos subjacentes, a posição viva e a projeção de liquidações.
+
+**Passo a passo:**
+
+1. Use os seletores do alto (**Current Year** · **15 days** · **All**) e o campo de data para mudar o recorte.
+2. Clique num cartão de KPI para ir à tela que o alimenta.
+
+### 17.2. About
+
+**Menu › Navigation › About**
+
+![About](docs/sop-screenshots/about.png)
+
+Descreve o sistema, os módulos e a quem pertence cada um. É um bom ponto de partida para quem chega à mesa.
+
+---
+
+## 18. Anexos
+
+### 18.1. Os status, por tela
+
+**New Deals**
+
+| Status | Significa |
 |---|---|
-| **Sales Support** | Contrato/SIC, posição de Termo, de Opção e de SWAP — os arquivos como saem |
-| **CEM Latam BA** | só a posição de Opção (`DPOSICAO.OPC`) — o arquivo como sai |
-| **BACC** | DFLUXO swap, posição swap, posição OPC e posição TER — **recortados** para as operações entre contas de casa (Lawton `00041.00-7`, Banco `73760.00-9`, Atacama `85398.00-5`) |
-| **BACC HUB EQT MO** | *SWAP (Strategy)*, posição de NDF/Termo, de Opção, de SWAP e Agenda de Prêmios — **inteiros, sem filtro nenhum**, para reconciliação de posição |
+| `New` · `Amend` · `Pending` · `Approved` · `Sent` · `Success` · `Error` | Ver a tabela do capítulo 5.2 |
 
-> **A posição de NDF/Termo e a de Opção vão para os dois BACC, e o arquivo não é o mesmo.** No *Intragroup* ele vai recortado; no *HUB* vai inteiro. É por isso que são dois e-mails: num só, o recorte e o arquivo cheio chegariam com o mesmo nome na mesma mensagem.
+**Avisos de liquidação** (NDF Summary e Other Products Summary)
 
-1. Preencha as **To** que forem usar — cada uma é um e-mail diferente, e as duas de BACC começam vazias.
-2. O anexo dos dois BACC **mantém o nome original do arquivo e ganha `.txt` no fim** — `73760_260817_DPOSICAO-SWAP.CETIP21.txt`. O nome inteiro fica porque é por ele que o outro lado reconhece qual arquivo é aquele; o `.txt` é o que faz o anexo abrir com um duplo clique (as extensões da CETIP não são associadas a programa nenhum). O conteúdo é o mesmo texto de sempre.
-
-> **BACC e BACC HUB EQT MO são destinos diferentes, e o conteúdo é diferente.** O BACC recebe o **recorte** do intragrupo — quem diz isso é o corpo do e-mail, com a contagem em cada linha da tabela (*"— 12 of 480 line(s)"*). O BACC HUB recebe a **posição cheia**, sem contagem nenhuma na tabela, porque não houve corte: é com ela que a posição é reconciliada, e um arquivo filtrado bateria contra uma posição que não é a que a CETIP publicou.
->
-> **Sem endereço no To, o e-mail simplesmente não sai** — vale para os dois BACC, e o card mostra isso em vez de deixar você achando que foi enviado. Sales Support e CEM Latam têm endereço padrão.
->
-> **"Not found" quer dizer coisas diferentes nos dois.** No BACC, o sistema não conseguiu localizar no arquivo as colunas de parte e contraparte, e por isso **não anexou** aquele arquivo — mandar o arquivo cheio com o nome de um recorte seria pior; avise o time de tecnologia. No BACC HUB, quer dizer que o arquivo **não estava na pasta do dia**: rode antes o *Save CETIP Files* e confira se a CETIP publicou aquele arquivo.
->
-> **Um arquivo que some do e-mail sem dizer nada costuma ser o nome da linha em *Mapping → CETIP Files*.** O sistema liga cada linha do cadastro ao que ela faz (virar JSON, ir para o Sales Support, entrar no recorte do BACC) pelo **Type**, e o que identifica o arquivo ali é o trecho **entre parênteses** — `(DPOSICAO-TER)`, `(OPC DPOSICAO)`. O texto antes dos parênteses é só descrição e pode ser reescrito à vontade; **o que está entre parênteses, não**. Mudou, e o arquivo passa a ser só salvo: some dos e-mails e dos relatórios, calado.
-
-> **Nem todo card envia e-mail.** O *Daily Metric*, a *Weekly Escalation* e a *Collection* geram um **rascunho** — o navegador baixa um arquivo `.eml` que abre no Outlook já endereçado, para você revisar e enviar. O *Pending Confirmations Spreadsheet Metrics* não envia e-mail: ele **grava a planilha** "PENDING - Outstanding Confirmation OTC.xlsx" no share, todo dia útil às 10:45. Os demais mandam direto.
-
-#### Confirmations Escalation — cobrar as validações paradas
-
-Este card manda por e-mail as confirmações que estão **pendentes de validação** na esteira do *Confirmations Monitor* (item 3.11). São **sete listas de destinatários**, uma por e-mail, porque quem recebe a fila de um produto não é quem recebe a de outro:
-
-| Lista | O que vai no e-mail | Quando sai |
-|---|---|---|
-| **TO — OTC Ops** | tudo em *Pending OTC* | segunda e quinta, 17h00 |
-| **TO — Sales Support** | tudo em *Pending MO* | segunda e quinta, 17h00 |
-| **ESCALATION — Sales Support** | só o que está **no último dia do prazo ou vencido** | **todo dia útil**, 17h00 |
-| **TO — FO · CEM Swap** | Swap da LOB CEM | segunda e quinta, 17h00 |
-| **TO — FO · EDG Swap** | Swap da LOB EDG | segunda e quinta, 17h00 |
-| **TO — FO · EDG Corporate Swap** | Swap Corporate da LOB EDG | segunda e quinta, 17h00 |
-| **TO — FO · EDG Option** | Opção de câmbio (FXO) da LOB EDG | segunda e quinta, 17h00 |
-
-1. Preencha as listas e saia do campo — salva sozinho, como nos demais cards.
-2. Cada linha da lista do card tem o **seu próprio Run**: reenviar o e-mail do EDG Swap não dispara os outros. O **Run all** do rodapé manda o pacote da rotina.
-3. O e-mail traz uma tabela com **Trade Date, Cliente, Produto, LOB, Trade ID, Ativo e a data em que a confirmação entrou para validação**, com a linha vencida marcada em vermelho, e um botão que abre o *Confirmations Monitor*.
-
-> **Segunda ou quinta em feriado ANBIMA sai no próximo dia útil**, não é pulada.
->
-> **Sem nada pendente, o e-mail não é enviado** — e isso é diferente de *sem destinatário*, que o card mostra em amarelo: aí a cobrança deixou de sair porque a lista está vazia.
->
-> Se aparecer o aviso amarelo de **produto sem grupo**, há confirmação em *Pending FO* de um produto × LOB que não está na quebra acima — ela não está sendo cobrada por ninguém. Peça a inclusão ao time de tecnologia.
-
-**BACC EA Metrics — a planilha diária das operações manuais**
-
-Todo dia útil (calendário ANBIMA) às **16h00**, o sistema manda um e-mail com uma planilha `.xlsx`
-anexa para as listas de **TO** e **CC** do card. Assunto: *Support to OTC Derivatives - EA Metrics*.
-
-1. Preencha TO e CC e saia do campo — salva sozinho, como nos demais cards.
-2. **Run** manda agora, sem esperar as 16h00, e não consome o disparo do dia.
-3. A planilha traz as operações do **Track Confirmations** que ainda estão **sem Callback Date** e
-   que não estão em *Ok*, ordenadas da mais antiga para a mais nova (*Aging* do maior para o menor).
-4. As colunas *Born Age* saem em branco de propósito: elas são preenchidas por quem consolida do
-   outro lado. A coluna *Comments* traz o **assunto do e-mail de recap** da operação.
-
-> **Um dia sem operação manual manda a planilha vazia mesmo assim** — a ausência é a métrica. O
-> único caso em que nada é enviado é a lista de TO em branco, e o card avisa isso em âmbar.
-
----
-
-### 3.18. Live Position — conferir a posição em custódia
-
-Caminho no menu: **Live Position → NDF** (e demais produtos).
-
-![Live Position NDF](docs/sop-screenshots/live-position-ndf.png)
-
-1. Escolha a **Reference date**.
-2. Os cards no topo classificam a carteira por tipo de operação.
-3. A tabela mostra os contratos em custódia. É uma tela **somente leitura**.
-
-> **A coluna de CPF/CNPJ da contraparte mostra o NOME dela**, não o número — em NDF, Option e Swap (Características). O sistema procura o documento no **Reference Data** e escreve a razão social ali.
->
-> Quando a célula continua mostrando o **número**, é porque aquele CPF/CNPJ **não está cadastrado** no Reference Data. O número fica de propósito: apagá-lo esconderia justamente a contraparte que falta cadastrar. Cadastre em **Data Base → Reference Data** (item 3.13) e a coluna passa a mostrar o nome na consulta seguinte.
->
-> A coluna da **Parte** continua mostrando o documento — ela é a nossa perna, e o nome dela já está na coluna ao lado.
-
----
-
-### 3.19. Reconciliations — conciliar
-
-Caminho no menu: **Reconciliations**.
-
-![Conciliação por comitente](docs/sop-screenshots/reconciliation-comitente.png)
-
-![Conciliação Pay/Rec](docs/sop-screenshots/reconciliation-payrec.png)
-
-![Conciliação de FXO](docs/sop-screenshots/reconciliation-fxo.png)
-
-1. **Comitente** — confronta a posição por comitente.
-2. **Pay/Rec** — confronta pagamentos e recebimentos.
-3. **FXO** — confronta a posição da CETIP com a Athena, campo a campo. A **Reference date** abre em D-1 pelo calendário ANBIMA; os cards contam Total, OK, NOK e Sem match e filtram a tabela ao clique, e a faixa de chips diz **qual campo** está divergindo.
-4. As divergências aparecem destacadas na própria tabela.
-
----
-
-### 3.20. Quotes — consultar cotações
-
-Caminho no menu: **Apps → Quotes**.
-
-Consulta o histórico de cotações de três fontes, numa tela só:
-
-| Tipo | Fonte | O que a tabela traz |
-|---|---|---|
-| **PTAX** | Banco Central (boletim de fechamento) | Data, moeda, cotação contra o real e contra o dólar |
-| **Equities** | Yahoo Finance | Data, Adj Close, Close, High, Low, Open e Volume |
-| **Commodities** | Yahoo Finance | as mesmas colunas de Equities |
-
-1. Escolha o **Quote type**. O campo ao lado só é liberado depois disso.
-2. Escolha o **instrumento** — na PTAX é a moeda; nos outros dois é o **ativo subjacente cadastrado no Index B3** (item 3.15). Pode digitar para filtrar a lista.
-3. Ajuste **From** e **To** — a tela já abre com o último mês.
-4. Clique em **Search**. A tabela sai do mais recente para o mais antigo e aceita filtro por coluna, seleção de célula para copiar e o **Export** completo (Copy · CSV · Excel · Print · PDF).
-
-> **A lista de ativos é a do Index B3**, e só os que estão *Active*. Ativo cadastrado lá aparece aqui no mesmo dia.
->
-> **Se aparecer "has no market symbol registered in Mapping"**, o ativo existe no Index B3 mas ninguém disse ainda qual é o símbolo dele no mercado — o código da B3 (`AAPL34`) não é o mesmo que a fonte de cotação usa (`AAPL34.SA`). Cadastre em **Data Base → Mapping → Quotes — Equities** (ou *Quotes — Commodities*) e refaça a busca; vale na hora, sem reiniciar nada. Na lista de instrumentos, o que já está cadastrado aparece como `AAPL34 → AAPL34.SA`.
->
-> **Se a mensagem falar em proxy ou em "could not reach the source"**, a busca não conseguiu sair para a internet — ela tenta várias saídas e diz o que cada uma respondeu. Isso é rede, não cadastro: leve a mensagem inteira para o time de tecnologia.
-
----
-
-### 3.21. Holidays Calendar — os feriados que o sistema usa
-
-Caminho no menu: **Apps → Holidays Calendar**.
-
-![Calendário de Feriados](docs/sop-screenshots/holidays-calendar.png)
-
-Esta tela guarda os calendários de feriados que o sistema usa para contar dias úteis — a Data Base (dia útil anterior), a projeção de liquidações e os prazos das mesas. Cada calendário tem a sua **cor**, e é por ela que você o reconhece no mês.
-
-**Para incluir um feriado avulso:** clique na data (ou em **Create New Holiday**), preencha a data, o nome do feriado e escolha o calendário. Também dá para **arrastar** o calendário da barra lateral direto para o dia.
-
-**Para criar um calendário inteiro a partir de uma planilha:**
-
-1. Clique em **Create New Calendar**.
-2. Dê um **nome** ao calendário — é como ele vai aparecer na barra lateral e na lista de escolha.
-3. Arraste o **.xlsx** para a área tracejada, ou clique nela para procurar o arquivo.
-4. Clique em **Import**.
-
-A planilha tem **uma aba** com três colunas, nesta ordem:
-
-| Coluna | Conteúdo | Entra? |
-|---|---|---|
-| **A — Holiday** | a data, no formato `aaaa-mm-dd` | sim |
-| **B — Description** | o nome do feriado | sim |
-| **C — Holiday Type** | o tipo | não |
-
-> **A linha de cabeçalho não atrapalha** — o sistema descarta o que não é data, e isso vale também para a linha em branco do fim e para um eventual rodapé de total. Datas repetidas entram uma vez só, e linha sem descrição é ignorada.
->
-> **Se a resposta for "No holiday found"**, a coluna A não está sendo lida como data ou a coluna B está vazia. Confira se as datas estão em `aaaa-mm-dd` e se as duas colunas estão na ordem acima.
->
-> **A cor do calendário novo é escolhida pelo sistema**, entre as que ainda não estão em uso — para dois calendários nunca se confundirem no mês.
->
-> Depois de criado, ele é um calendário como qualquer outro: aparece na barra lateral, pode receber feriado avulso pelo modal e serve como agenda de feriados nas telas que pedem um *holiday schedule*.
-
----
-
-## 4. Perguntas Frequentes
-
-### 4.0. Um campo de data está mostrando mm/dd/aaaa
-
-**O que está acontecendo.** O sistema mostra data em **dd/mm/aaaa** em toda tela. Se algum campo aparecer no formato americano, é um campo de calendário do próprio Windows aparecendo onde deveria estar o do sistema — e o risco é real: `03/04` lido como 3 de abril quando o campo quis dizer 4 de março.
-
-**Como resolver:** avise o time de tecnologia informando **em que tela e em que campo**. É correção de uma linha, mas ela precisa ser feita campo a campo.
-
----
-
-### 4.1. A linha está marcada como "Missing Counterparty" e não consigo aprovar
-
-**O que está acontecendo.** O accronym enviado pela API não existe nem no **Reference Data**, nem no mapeamento **Legal Entity × Accronym**. O sistema prefere deixar os campos em branco a exibir uma contraparte errada.
-
-**Como resolver:**
-
-1. Abra a operação e verifique qual accronym a API enviou, no campo *End Counterparty*.
-2. Se for um **cliente**, cadastre-o em **Data Base → Reference Data**, com o accronym idêntico ao da API.
-3. Se for uma **perna interna JPM** (JPM, MGT ou Lawton), cadastre em **Data Base → Mapping → Legal Entity × Accronym**.
-4. Volte à linha, clique no badge vermelho e escolha **Reload Data**. A marcação desaparece sem precisar recarregar a página.
-
----
-
-### 4.2. Cliquei em Premium e apareceu "Nothing to Generate", mas há operação com Spot Date de hoje
-
-Há duas causas possíveis, nesta ordem de probabilidade:
-
-1. **A contraparte não está resolvida.** O aviso de prêmio é gerado apenas para contrapartes da conta CETIP de cliente. Se as colunas **Accronym** ou **Client** estiverem vazias, o sistema não consegue chegar até a conta. Cadastre a contraparte conforme o item 4.1.
-2. **A Spot Date não é hoje de fato.** O filtro compara com o **dia corrente**, e não com a Reference Date da tela. Se você está consultando uma data passada, o prêmio daquele dia já não é D0.
-
----
-
-### 4.3. Puxaram uma correção, mas a tela continua com o comportamento antigo
-
-**O que está acontecendo.** O servidor da equipe roda sem recarga automática. Depois de uma atualização que altere código ou telas, o sistema precisa ser **reiniciado** — caso contrário continua servindo a versão anterior.
-
-**Como resolver:**
-
-1. Solicite o **reinício do sistema** ao responsável pela instância.
-2. No seu navegador, force uma atualização sem cache (**Ctrl + Shift + R**).
-
-> **Exceção:** alterações feitas na tela **Mapping** valem imediatamente, sem reinício.
->
-> **Se o sintoma for "o e-mail das 19h não chegou"**, verifique antes se havia algo pendente no **Monitor** naquele horário. Quando está tudo resolvido, o e-mail não é enviado.
->
-> **Se o sintoma for o Advanced Export dizendo "não consegui ler N dias" com `HTTP 404`** em todos os dias do intervalo, é este mesmo caso: a extração está pedindo um endereço que só existe na versão nova, e o sistema ainda está servindo a anterior. Peça o reinício e tente de novo.
-
----
-
-## 5. Suporte
-
-| Situação | Para quem falar |
+| Status | Significa |
 |---|---|
-| Dúvida de processo operacional | Brazil OTC Operations |
-| Erro de sistema ou comportamento inesperado de tela | Time de tecnologia responsável pelo OTC Tracker |
-| Falta de acesso a uma página | Administrador do sistema (tela Page Access) |
+| `New` | O aviso ainda não foi gerado |
+| `Generated` | O aviso foi gerado e baixado |
+| `Sent` | Você marcou como enviado ao cliente |
+
+**Esteira de confirmação** (Confirmations Monitor e Track Confirmations)
+
+| Status | Significa |
+|---|---|
+| `Pending Legal` | Retenção manual do Legal |
+| `Pending OTC` | Falta gerar/conferir o documento |
+| `Pending MO` · `Pending FO` · `Pending MO/FO` | Falta a conferência daquela mesa (as duas correm em paralelo) |
+| `Pending FepWeb` | Validado; falta enviar ao cliente |
+| `Ok` | Enviado — saiu da fila |
+
+**Reconciliação de FXO**
+
+| Status | Significa |
+|---|---|
+| `Unmatched B3` · `Unmatched Athena` · `Partial - <campos>` · `Matched` · `Justified` | Ver a tabela do capítulo 8.3 |
+
+**Reconciliação de CGD**
+
+| Status | Significa |
+|---|---|
+| `Pending B3` · `Pending Action` · `Only in B3` · `Justified` · `Matched` | Ver a tabela do capítulo 8.4 |
+
+### 18.2. Glossário
+
+| Termo | O que é |
+|---|---|
+| **Accronym** | O apelido curto da contraparte no Reference Data. Há um para mercadoria e outro para câmbio |
+| **Aging** | Há quantos **dias úteis** algo espera. Sempre calculado, nunca digitado |
+| **B3 ID** | O número do registro da operação na B3. Sua presença é o que prova que a operação foi registrada |
+| **Callback** | A conferência da operação por telefone com o cliente |
+| **CGD** | Contrato Global de Derivativos — o contrato-quadro que precisa existir antes de operar |
+| **Deal / Athena ID** | O identificador da operação no sistema da mesa |
+| **EA** (Economic Affirmation) | A afirmação dos termos econômicos da operação com a contraparte |
+| **FEP / FepWeb** | A plataforma pela qual a confirmação chega ao cliente |
+| **LE** (Legal Entity) | A entidade nossa que bookou a operação — JPM, MGT, LAWTON |
+| **LOB** (Line of Business) | A mesa de negócio — CEM, EDG, Commodities |
+| **Maker / Checker** | Quem criou/editou a operação e quem a enviou. O sistema **exige que sejam pessoas diferentes** |
+| **Perna interna / intragrupo** | Operação entre entidades nossas. Liquida, mas não gera aviso nem TED |
+| **PTAX** | A taxa de câmbio oficial publicada pelo Banco Central |
+| **SID** | O seu identificador de funcionário — uma letra e seis dígitos |
+| **SPN** | O identificador do cliente nos sistemas do banco |
+| **SSI** | As instruções de liquidação (para onde o dinheiro vai) |
+| **SLA** | O prazo de cada mesa, em dias úteis, contado **da data da operação** |
+| **TED** | A transferência do valor liquidado |
+
+### 18.3. O que ainda não está disponível
+
+Estes itens aparecem no menu, mas a tela ainda não existe — clicar neles devolve "página não encontrada". Não é defeito do seu acesso:
+
+- **New Deals › DCE** — Deliverable Forward · NDF · Option · Swap
+- **Unwinds** — Swap (CEM · EDG) · NDF (FX · Commodities) · Options (FXO · Commodities · EDG) · COE · DCE (todos)
+- **Regulatory › e-Financeira** — Kapital · Athena NDF · Athena FXO · Pyramid
+- **Regulatory › WHT**
+
+### 18.4. Problemas comuns
+
+| O que acontece | Por quê | O que fazer |
+|---|---|---|
+| **A tela não aparece no meu menu** | A sua lista de páginas não a inclui | Peça o acesso pelo Support Center (capítulo 16) |
+| **A tabela está vazia e eu sei que há dados** | Quase sempre é um filtro esquecido, ou a *Reference Date* está no dia errado | Clique em **Clear Filters** e confira a data |
+| **O Export saiu com menos linhas** | Ele leva o que está na tela, com filtros aplicados | Limpe os filtros e exporte de novo (4.6) |
+| **Faltam colunas no arquivo exportado** | Ele leva só as colunas **visíveis** | Reative-as em **Columns** (4.5) |
+| **"You cannot send a deal you imported or last edited"** | A mesma pessoa não pode importar/editar e enviar | Peça a um colega para enviar (5.6) |
+| **"Asset Not Registered" ao aprovar** | O ativo subjacente não está no Index B3 | Cadastre em **Index B3** e volte (13.2) |
+| **Selo *Missing Counterparty* na linha** | A contraparte não foi achada no Reference Data | Cadastre e clique em **Mapping B3 ID** (5.4) |
+| **O aviso de liquidação não saiu para uma contraparte** | Pode ser perna intragrupo — ela liquida, mas não recebe documento | Confira se é entidade nossa (6.1) |
+| **O TED avisou "SSI not found"** | Falta a instrução de pagamento daquela contraparte | Suba a SSI no Electronic Inventory (13.7) |
+| **Um valor não é traduzido (código aparece cru)** | Falta uma linha no de-para | Cadastre em **Mapping** — vale no request seguinte (13.3) |
+| **A cotação responde "não cadastrado"** | Falta o de-para do código para o símbolo de mercado | Cadastre em **Mapping › `quotes-equity`** ou **`quotes-commodity`** (13.4) |
+| **O Tracking Docs abre sem linhas** | O banco da lista do SharePoint ainda não foi importado | A própria tela diz isso, em vermelho, com o caminho e o comando (10.2) |
+| **Mudei algo e não surtiu efeito** | Cadastro do **Mapping** vale no request seguinte; mudança no *código* exige reinício do sistema | Recarregue a página; se persistir, abra um chamado |
+
+### 18.5. Índice das telas
+
+| Tela | Menu | Capítulo |
+|---|---|---|
+| Dashboard | Navigation › Dashboards | 17.1 |
+| About | Navigation › About | 17.2 |
+| Holidays Calendar | Apps | 13.5 |
+| Electronic Inventory | Apps | 13.7 |
+| Control Panel | Apps | 14 |
+| File Interpreter | Apps | 13.6 |
+| Quotes | Apps | 13.4 |
+| NDF Summary | Daily Settlement › NDF | 6.1 |
+| NDF Cockpit | Daily Settlement › NDF | 6.2 |
+| Other Publisher | Daily Settlement › NDF | 6.3 |
+| Other Products Summary | Daily Settlement › Other Products | 6.4 |
+| OTM Settlements | Daily Settlement › Other Products | 6.5 |
+| Latam Desk Position | Daily Settlement › Other Products | 6.6 |
+| Swap Settlement Advice | Daily Settlement › Other Products › Swap | 6.7 |
+| Swap Athena · VCP · Events · Kapital Hybrids | Daily Settlement › Other Products › Swap | 6.8 |
+| NDF Settlement Advice | Daily Settlement › Other Products › NDF | 6.9 |
+| Option Settlement Advice | Daily Settlement › Other Products › Option | 6.10 |
+| Cognos | Daily Settlement › Other Products › Option | 6.11 |
+| Operations B3 | Daily Settlement | 6.12 |
+| Live Position NDF | Live Position | 7.1 |
+| Live Position Option | Live Position | 7.2 |
+| Swap Characteristics · Cashflow · Premium | Live Position › Swap | 7.3 |
+| Comitente | Reconciliations | 8.1 |
+| Pay/Rec | Reconciliations | 8.2 |
+| FXO | Reconciliations | 8.3 |
+| CGD | Reconciliations | 8.4 |
+| Pending Confirmation | Documentation › Pending Confirmation | 9.1 |
+| Metrics | Documentation › Pending Confirmation | 9.2 |
+| Confirmations Monitor | Documentation › Manual Confirmation | 9.3 |
+| Tela de validação | (aberta pelo Monitor) | 9.4 |
+| Track Confirmations | Documentation › Manual Confirmation | 9.5 |
+| Onboarding Overview | Documentation › Onboarding | 10.1 |
+| Tracking Docs | Documentation › Onboarding | 10.2 |
+| New Deals Monitor | Products › Monitor | 5.1 |
+| New Deals (6 telas de produto) | Products › New Deals | 5.2 |
+| Intrag NDF · Option · Swap | Products › Intrag | 11 |
+| Accrual Swap · MtM Swap | Products | 12 |
+| Reference Data | Settings | 13.1 |
+| Index B3 | Settings | 13.2 |
+| Mapping | Settings | 13.3 |
+| Manage Roles | Settings | 15.1 |
+| Page Access | Settings | 15.2 |
+| Tickets · Ticket Details | Support | 16 |
 
 ---
 
-## 6. Manutenção deste guia
-
-Este documento é gerado a partir do arquivo `GUIA_DO_USUARIO_OTC_TRACKER.md`, que é a **fonte única**. Para atualizar:
-
-1. Edite o Markdown.
-2. Recapture as telas, se o layout tiver mudado:
-   - Suba o app local com o launcher de desenvolvimento.
-   - Rode `python scripts/sop-capture/capture_screens.py`.
-3. Gere o Word novamente:
-   - `python scripts/build_sop_docx.py GUIA_DO_USUARIO_OTC_TRACKER.md`
-
-> **Ao trocar as telas, garanta que os dados exibidos sejam sempre fictícios.** Nenhum dado real de cliente, conta, servidor ou credencial pode aparecer nas imagens.
+*OTC Tracker · Brazil OTC Operations · JPMorgan Chase & Co. · Guia do Usuário v2.0 — 24/08/2026*
