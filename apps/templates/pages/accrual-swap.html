@@ -467,6 +467,7 @@ td .btn-sm.rounded-circle i { font-size: 1rem; }
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/vfs_fonts.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.html5.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.print.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/export-advanced.js"></script>
 <script>
 // Register JSZip with DataTables Buttons (needed for the Excel export).
 (function () {
@@ -765,6 +766,9 @@ td .btn-sm.rounded-circle i { font-size: 1rem; }
         // monta uma tabela por LOB, com id próprio, e um seletor fixo pegaria só
         // a primeira. O helper marca o nó, então rebuild não duplica handler.
         if (window.otcCellCopy) otcCellCopy('#' + tableId, { skip: [0, 1] });
+        // O Advanced é POR TABELA: a página monta uma por card, e um
+        // seletor fixo ligaria o item só no primeiro deles.
+        if (window.otcExportAdvanced) otcExportAdvanced('#' + tableId);
         buildExport(card, dt, lob, n);
         dt.on('draw.acc', function () {
             if (window.lucide) lucide.createIcons();

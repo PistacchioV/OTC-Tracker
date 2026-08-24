@@ -576,6 +576,7 @@
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/vfs_fonts.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.html5.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.print.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/export-advanced.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/select2/select2.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/table-std.js"></script>
@@ -1364,6 +1365,7 @@ $(document).ready(function () {
             wireAddRow(api, 'subj', function(dt){ subjAddRow(dt); });
             wireClearFilters(api, 'srSubj');
             if (window.otcCellCopy) otcCellCopy('#tblSubjacente', { skip: [0, 1] });
+            if (window.otcExportAdvanced) otcExportAdvanced('#tblSubjacente');
         }
     });
     $('#pageLenSubj').on('change', function(){ dtSubj.page.len(+this.value).draw(); });
@@ -1399,6 +1401,7 @@ $(document).ready(function () {
                 wireAddRow(api, 'vcp', function(dt){ vcpAddRow(dt); });
                 wireClearFilters(api, 'srVCP');
                 if (window.otcCellCopy) otcCellCopy('#tblVCP', { skip: [0, 1] });
+                if (window.otcExportAdvanced) otcExportAdvanced('#tblVCP');
             }
         });
         $('#pageLenVCP').on('change', function(){ dtVCP.page.len(+this.value).draw(); });
@@ -1426,6 +1429,7 @@ $(document).ready(function () {
                 wireAddRow(api, 'dominio', function(dt){ domAddRow(dt); });
                 wireClearFilters(api, 'srDom');
                 if (window.otcCellCopy) otcCellCopy('#tblDominio', { skip: [0, 1] });
+                if (window.otcExportAdvanced) otcExportAdvanced('#tblDominio');
             }
         });
         $('#pageLenDom').on('change', function(){ dtDom.page.len(+this.value).draw(); });
@@ -1453,6 +1457,7 @@ $(document).ready(function () {
                 wireAddRow(api, 'swapindex', function(dt){ swapAddRow(dt); });
                 wireClearFilters(api, 'srSwap');
                 if (window.otcCellCopy) otcCellCopy('#tblSwapIndex', { skip: [0, 1] });
+                if (window.otcExportAdvanced) otcExportAdvanced('#tblSwapIndex');
             }
         });
         $('#pageLenSwap').on('change', function(){ dtSwap.page.len(+this.value).draw(); });

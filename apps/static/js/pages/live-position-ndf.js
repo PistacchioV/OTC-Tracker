@@ -122,6 +122,9 @@
 
     // Selecao de celula + Ctrl+C — padrao New Deals; opt-in via table-std.js
     if (window.otcCellCopy) { window.otcCellCopy('#lnndf-table', { skip: [0] }); }
+    // Item Advanced do menu Export — opt-in como o otcCellCopy: onde o
+    // export-advanced.js não estiver carregado, é um no-op.
+    if (window.otcExportAdvanced) window.otcExportAdvanced('#lnndf-table');
 
     jQuery('#lnndf-table thead').off('keyup.lncol change.lncol')
       .on('keyup.lncol change.lncol', '.ln-col-filter', function () {

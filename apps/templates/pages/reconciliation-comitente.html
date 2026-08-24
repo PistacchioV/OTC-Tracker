@@ -393,6 +393,7 @@
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/vfs_fonts.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.html5.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.print.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/export-advanced.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/table-std.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
@@ -679,6 +680,7 @@ $(document).ready(function() {
 
                 // Seleção de célula + Ctrl+C — padrão New Deals
                 if (window.otcCellCopy) otcCellCopy('#recon-table');
+                if (window.otcExportAdvanced) otcExportAdvanced('#recon-table');
 
                 api.columns.adjust();
                 lucide.createIcons();

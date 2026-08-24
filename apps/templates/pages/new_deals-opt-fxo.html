@@ -5028,4 +5028,14 @@ $(document).ready(function() {
 
 }); // end $(document).ready
 </script>
+<!-- Item "Advanced" do menu Export (modal com formato, intervalo, filtros e
+     escolha de colunas). O helper é idempotente e se enxerta na collection do
+     DataTables Buttons que a página já montou, então nada aqui em cima muda.
+     Vai no FIM do bloco de propósito: precisa da DataTable já inicializada. -->
+<script src="{{ config.ASSETS_ROOT }}/js/export-advanced.js"></script>
+<script>
+    jQuery(function () {
+        if (window.otcExportAdvanced) otcExportAdvanced('#deals-processing-table');
+    });
+</script>
 {% endblock extra_javascript %}

@@ -149,6 +149,9 @@
     // idempotente e delega no nó da tabela, então sobrevive aos redraws e ao
     // rebuild que este `buildTable` faz a cada carga.
     if (window.otcCellCopy) otcCellCopy('#ndfc-table', { skip: [0, 1] });
+    // Item Advanced do menu Export — opt-in como o otcCellCopy: onde o
+    // export-advanced.js não estiver carregado, é um no-op.
+    if (window.otcExportAdvanced) window.otcExportAdvanced('#ndfc-table');
 
     var expWrap = document.querySelector('.ndfcExportWrapper');
     if (expWrap) { expWrap.innerHTML = ''; dt.buttons().container().appendTo(expWrap); }

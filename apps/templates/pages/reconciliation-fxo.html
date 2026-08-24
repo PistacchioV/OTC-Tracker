@@ -384,7 +384,7 @@
                 <button class="btn btn-sm btn-info bg-gradient btn-toolbar-all dropdown-toggle" data-bs-toggle="dropdown">
                     <i class="ti ti-download me-1"></i><span data-lang="map-export">Export</span>
                 </button>
-                <ul class="dropdown-menu">
+                <ul class="dropdown-menu" id="fxoExportMenu">
                     <li><a class="dropdown-item" href="#" id="fxoExportCopy"><i class="ti ti-copy me-1"></i> Copy</a></li>
                     <li><a class="dropdown-item" href="#" id="fxoExportCsv"><i class="ti ti-file-type-csv me-1"></i> CSV</a></li>
                     <li><a class="dropdown-item" href="#" id="fxoExportExcel"><i class="ti ti-file-spreadsheet me-1"></i> Excel</a></li>
@@ -476,6 +476,7 @@
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/vfs_fonts.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.html5.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.print.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/export-advanced.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/table-std.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
@@ -1032,6 +1033,11 @@
             });
             return out;
         }
+        // O item Advanced no MESMO <ul> do Export. A tabela é resolvida no
+        // clique, e não aqui: o buildTable recria a DataTable quando as
+        // colunas chegam do servidor.
+        if (window.otcExportAdvanced) otcExportAdvanced('#fxo-table', { menu: '#fxoExportMenu' });
+
         $('#fxoExportCsv').on('click', function (e) {
             e.preventDefault();
             if (!table) return;

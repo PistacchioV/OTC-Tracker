@@ -207,6 +207,9 @@
     if (window.otcCellCopy) {
       window.otcCellCopy('#swapchar-table', { skip: ACTIONS ? [0, 1] : [0] });
     }
+    // Item Advanced do menu Export — opt-in como o otcCellCopy: onde o
+    // export-advanced.js não estiver carregado, é um no-op.
+    if (window.otcExportAdvanced) window.otcExportAdvanced('#swapchar-table');
 
     // Per-column filter row → column search (debounced by keyup/change).
     jQuery('#swapchar-table thead').off('keyup.sccol change.sccol')
