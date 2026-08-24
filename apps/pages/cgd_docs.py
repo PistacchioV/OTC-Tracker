@@ -342,17 +342,63 @@ def counts(rows=None):
 #    faz a tela nascer respondendo antes de alguém cadastrar coisa nenhuma, e a
 #    resposta vem marcada como derivada para ninguém confundir com cadastro.
 
-STAGES = ('Legal', 'Banking OTC', 'CEM MO')
+# As mesas da esteira, NA ORDEM em que o documento passa por elas. `Banking` é a
+# primeira: é quem abre a solicitação do CGD. Era um cartão só, `Banking OTC`, e
+# ele juntava duas mesas que trabalham em momentos diferentes — a que pede o
+# contrato e a que o confere depois de assinado.
+STAGES = ('Banking', 'Legal', 'OTC', 'CEM MO')
+
+# Os campos OBRIGATÓRIOS do formulário de abertura da solicitação — os marcados
+# com `*`. Enquanto um deles estiver em branco o documento está no **Banking**: a
+# solicitação existe e ainda não está completa.
+#
+# Só os obrigatórios entram. `Grupo` e `CGD - Domínio cliente` são opcionais no
+# formulário (o domínio inclusive se preenche com `NA` quando o cliente não tem),
+# e cobrá-los aqui deixaria na fila do Banking uma solicitação que já pode seguir.
+#
+# A coluna do banco é o nome da LISTA do SharePoint, que nem sempre é o rótulo do
+# formulário: `CGD - Solicitação` é a `Data Solicitação` e `CGD - Tipo de
+# Assinatura` é o `Signature Type`.
+REQUEST_FIELDS = ('Data Solicitação', 'Razão Social', 'CNPJ', 'Signature Type')
+
+# O domínio do `CGD - Tipo de Assinatura` — como o cliente vai assinar o contrato.
+# São três, e o valor gravado é o código em inglês: `Manual` aparece como
+# *Física* na tela em português, mas é o MESMO valor (dois valores para a mesma
+# coisa fariam metade da lista deixar de casar com a outra metade).
+#
+# É o domínio de UM campo, não um de-para: não há nada a traduzir de um sistema
+# para outro, e por isso ele é constante de módulo — como o
+# `manual_conf.CONFIRMATION_TYPES` — e não um cadastro do /mapping.
+SIGNATURE_TYPES = ('FepWeb', 'DocuSign', 'Manual')
+
+# A coluna que guarda esse domínio. Constante porque a tela precisa saber QUAL
+# das trinta colunas vira um `select`, e casar pelo texto no navegador seria o
+# nome da coluna escrito em dois lugares.
+SIGNATURE_COLUMN = 'Signature Type'
 
 # O carimbo que cada etapa deixa quando termina. A ORDEM é a da esteira: quem
 # procura onde o documento parou pega a primeira que ainda não carimbou.
 STAGE_STAMP = (
-    ('Legal',       ('Emissão', 'Signature Date')),
-    ('Banking OTC', ('OTC - STAMP',)),
-    ('CEM MO',      ('MO - STAMP',)),
+    ('Banking', REQUEST_FIELDS),
+    ('Legal',   ('Emissão', 'Signature Date')),
+    ('OTC',     ('OTC - STAMP',)),
+    ('CEM MO',  ('MO - STAMP',)),
 )
 
 ACTIVE_STATUS = 'ACTIVE'
+
+# Status que tiram o documento das filas SEM ele ter concluído. `Inactive` é o
+# CGD que deixou de valer e `Cancelado` o que não vai adiante — nos dois casos
+# não há mesa trabalhando neles, e derivar uma etapa por carimbo faltante os
+# jogava na fila do Legal (que é a primeira que falta carimbo em quem nunca
+# começou). Um encerrado na fila é pior do que parece: ele envelhece para
+# sempre no topo da lista, empurrando para baixo o que alguém tem de fazer.
+#
+# A comparação é por PEDAÇO porque a grafia vem do SharePoint e é livre
+# (`Inactive`, `Inativo`, `CANCELADO`, `Cancelled`). E `INACTIVE` contém
+# `ACTIVE`: o teste do encerrado vem antes do de ativo em todo lugar que os
+# dois convivem.
+CLOSED_MARKS = ('INACTIV', 'INATIV', 'CANCEL')
 
 _STAGE_MAP = {'mtime': None, 'rows': None}
 
@@ -398,18 +444,36 @@ def _stage_map():
 
 
 def is_active(row):
-    """`Status` = Active — o documento está de pé e não é pendência de ninguém."""
+    """`Status` = Active — o documento está de pé e não é pendência de ninguém.
+
+    Comparação EXATA de propósito: `Inactive` normaliza para `INACTIVE`, que
+    contém `ACTIVE`, e um teste por pedaço contaria o encerrado como ativo.
+    """
     return _norm(row.get('Status')) == ACTIVE_STATUS
+
+
+def is_closed(row):
+    """O documento saiu das filas — concluído (`Active`) ou encerrado.
+
+    É o teste que o Overview usa para decidir se alguém ainda trabalha nele.
+    `is_active` continua respondendo só pelo concluído, que é o número que a
+    tela mostra.
+    """
+    v = _norm(row.get('Status'))
+    if v == ACTIVE_STATUS:
+        return True
+    return any(m in v for m in CLOSED_MARKS)
 
 
 def pending_stage(row):
     """`(etapa, derivada?)` de um documento pendente, ou `(None, False)`.
 
-    Documento ativo não tem etapa: ele terminou. Para os demais, o cadastro vence
-    a derivação — é ele que sabe que um status novo pertence à Legal, e a
-    derivação só olha carimbo.
+    Documento encerrado não tem etapa — concluído (`Active`) ou morto
+    (`Inactive`, `Cancelado`): ninguém está trabalhando nele. Para os demais, o
+    cadastro vence a derivação — é ele que sabe que um status novo pertence à
+    Legal, e a derivação só olha carimbo.
     """
-    if is_active(row):
+    if is_closed(row):
         return None, False
     cad = _stage_map().get(_norm(row.get('Status')))
     if cad:
@@ -435,9 +499,16 @@ def overview(rows=None):
     rows = load_all() if rows is None else rows
     filas = {e: [] for e in STAGES}
     ativos = 0
+    encerrados = 0
     for r in rows:
         if is_active(r):
             ativos += 1
+            continue
+        # Encerrado sem ter concluído (Inactive, Cancelado) sai das filas mas
+        # NÃO conta como ativo: são coisas diferentes, e somá-las esconderia
+        # quantos CGDs realmente estão de pé.
+        if is_closed(r):
+            encerrados += 1
             continue
         etapa, derivada = pending_stage(r)
         filas.setdefault(etapa, []).append({
@@ -457,4 +528,9 @@ def overview(rows=None):
     for e in STAGES:
         itens = sorted(filas.get(e, []), key=_idade, reverse=True)
         cards.append({'stage': e, 'count': len(itens), 'items': itens})
-    return {'cards': cards, 'active': ativos, 'total': len(rows)}
+    pendentes = sum(c['count'] for c in cards)
+    # Os quatro números fecham: total = pendentes + ativos + encerrados. Sem o
+    # `closed` explícito o Overview mostrava três que não somavam o total, e a
+    # diferença era justamente o que tinha sumido das filas.
+    return {'cards': cards, 'active': ativos, 'closed': encerrados,
+            'pending': pendentes, 'total': len(rows)}

@@ -38311,10 +38311,16 @@ def api_onboarding_docs():
         etapa, derivada = _cgd_mod.pending_stage(r)
         r['_stage'] = etapa or ''
         r['_stage_derived'] = bool(derivada)
+    # Os domínios vão no MESMO payload das colunas: a tela monta o campo de
+    # edição a partir deles, e uma lista escrita no template seria uma segunda
+    # cópia — que envelhece calada no dia em que a do servidor mudar.
     return jsonify({'success': True, 'db': path, 'db_ready': existe,
                     'columns': _cgd_mod.COLUMNS, 'id_column': _cgd_mod.ID_COLUMN,
                     'date_columns': list(_cgd_mod.DATE_COLUMNS),
-                    'stages': list(_cgd_mod.STAGES), 'rows': rows})
+                    'stages': list(_cgd_mod.STAGES),
+                    'signature_types': list(_cgd_mod.SIGNATURE_TYPES),
+                    'signature_column': _cgd_mod.SIGNATURE_COLUMN,
+                    'rows': rows})
 
 
 @blueprint.route('/api/onboarding/docs/save', methods=['POST'])

@@ -1916,5 +1916,8 @@
   "cgd-c-status": "Status FEP",
   "cgd-c-obs": "Justificación",
   "cgd-c-created": "Fecha de Creación",
-  "cgd-c-aging": "Aging"
+  "cgd-c-aging": "Aging",
+  "ob-sum-closed": "Cerrados",
+  "cgd-show": "Mostrar",
+  "cgd-entries": "registros"
 }

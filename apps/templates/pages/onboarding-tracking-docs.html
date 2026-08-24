@@ -92,16 +92,10 @@
 .tooltip-secondary .tooltip-arrow::before { border-top-color: #64748b; }
 
 /* ── Status: badge pill com gradiente, cor por status (padrão da casa). */
-.ob-badge {
-    display: inline-block; padding: .2rem .6rem; border-radius: 999px;
-    font-size: .68rem; font-weight: 700; color: #fff; white-space: nowrap; line-height: 1.35;
-}
-.ob-badge--active  { background-image: linear-gradient(100deg, #1a7f37, #34c759); }
-.ob-badge--legal   { background-image: linear-gradient(100deg, #6d4c41, #a1887f); }
-.ob-badge--otc     { background-image: linear-gradient(100deg, #0066cc, #5e5ce6); }
-.ob-badge--mo      { background-image: linear-gradient(100deg, #b07500, #f7b84b); }
-.ob-badge--wait    { background-image: linear-gradient(100deg, #4a5568, #94a3b8); }
-.ob-badge--danger  { background-image: linear-gradient(100deg, #b3261e, #ff453a); }
+/* Status é o badge pill do app (`badge rounded-pill text-bg-* bg-gradient`), sem
+   paleta própria — ver `statusClass()`. Aqui só o tamanho, para o pill não
+   engordar a linha numa tabela de fonte .8rem. */
+#ob-table td .badge { font-size: .68rem; font-weight: 700; padding: .28em .7em; }
 
 /* Aging: número tabular, e a cor só nos extremos. */
 #ob-table td.ob-age { font-variant-numeric: tabular-nums; font-weight: 700; }
@@ -110,7 +104,8 @@
 
 /* A linha em edição: fundo suave para não se perder de vista ao rolar. */
 #ob-table tr.ob-editing > td { background: rgba(0, 102, 204, .06) !important; }
-#ob-table tr.ob-editing input { width: 100%; font-size: .75rem; height: 26px; padding: 1px 4px; text-align: center; }
+#ob-table tr.ob-editing input,
+#ob-table tr.ob-editing select { width: 100%; font-size: .75rem; height: 26px; padding: 1px 4px; text-align: center; }
 
 /* A faixa que diz de onde a tela leu — o banco e a última importação. */
 #ob-docs .ob-src {
@@ -271,24 +266,36 @@
     var COLS = [];            // nomes das colunas do banco, na ordem
     var IDCOL = '_id';
     var DATECOLS = [];
+    var SIGTYPES = [];        // domínio do Tipo de Assinatura, vindo do servidor
+    var SIGCOL = '';          // e qual coluna o usa
     var table = null;
     var dados = [];
 
-    // Status → cor do badge. O texto vem do SharePoint e é livre, então o mapa
-    // casa por PALAVRA e o que não casar sai neutro — inventar cor por hash
-    // deixaria dois status parecidos com cores opostas.
+    // Status → cor do badge. As classes são as do app (`text-bg-*` do tema, com
+    // `bg-gradient`), e não um mapa de cores próprio desta página: status é badge
+    // pill gradiente em toda tela, e uma paleta paralela faria o mesmo verde ter
+    // dois tons dependendo de onde a pessoa está olhando.
+    //
+    // O texto vem do SharePoint e é livre, então o mapa casa por PALAVRA e o que
+    // não casar sai neutro — inventar cor por hash deixaria dois status parecidos
+    // com cores opostas.
     function statusClass(s) {
         var v = String(s || '').toUpperCase();
-        if (!v) { return 'ob-badge--wait'; }
-        if (v.indexOf('ACTIVE') !== -1) { return 'ob-badge--active'; }
-        if (v.indexOf('LEGAL') !== -1 || v.indexOf('SIGN') !== -1 || v.indexOf('ASSIN') !== -1) { return 'ob-badge--legal'; }
-        if (v.indexOf('OTC') !== -1) { return 'ob-badge--otc'; }
-        if (v.indexOf('MO') !== -1 || v.indexOf('CEM') !== -1) { return 'ob-badge--mo'; }
-        if (v.indexOf('CANCEL') !== -1 || v.indexOf('REJEIT') !== -1 || v.indexOf('REJECT') !== -1) { return 'ob-badge--danger'; }
-        return 'ob-badge--wait';
+        if (!v) { return 'text-bg-secondary'; }
+        // INACTIVE contém ACTIVE: o teste do encerrado vem PRIMEIRO, senão o
+        // documento morto sai com o mesmo verde do que está de pé (e a diferença
+        // entre os dois é justamente o que a coluna existe para dizer).
+        if (v.indexOf('INACTIV') !== -1 || v.indexOf('INATIV') !== -1) { return 'text-bg-dark'; }
+        if (v.indexOf('CANCEL') !== -1 || v.indexOf('REJEIT') !== -1 || v.indexOf('REJECT') !== -1) { return 'text-bg-danger'; }
+        if (v.indexOf('ACTIVE') !== -1 || v.indexOf('ATIVO') !== -1) { return 'text-bg-success'; }
+        if (v.indexOf('LEGAL') !== -1 || v.indexOf('SIGN') !== -1 || v.indexOf('ASSIN') !== -1) { return 'text-bg-info'; }
+        if (v.indexOf('OTC') !== -1) { return 'text-bg-primary'; }
+        if (v.indexOf('MO') !== -1 || v.indexOf('CEM') !== -1) { return 'text-bg-warning'; }
+        return 'text-bg-secondary';
     }
     function badge(s) {
-        return s ? '<span class="ob-badge ' + statusClass(s) + '">' + esc(s) + '</span>' : '';
+        return s ? '<span class="badge rounded-pill ' + statusClass(s) + ' bg-gradient">' +
+                   esc(s) + '</span>' : '';
     }
 
     function acoes() {
@@ -310,23 +317,33 @@
         return esc(v);
     }
 
+    // Checkbox · AÇÕES · Pendente em · as colunas do banco.
+    //
+    // Ações é a 2ª coluna, como em todo o app. Ela nasceu por ÚLTIMO aqui, e com
+    // trinta colunas do SharePoint no meio isso a jogava tão para a direita que
+    // ela sumia: quem abria a tela precisava rolar a tabela inteira para achar o
+    // botão de editar a linha que está vendo. Os índices abaixo (`i + 3`, o skip
+    // do otcCellCopy, o alvo do columnDefs e o recorte do export) contam a partir
+    // desta ordem — mudá-la é mudar os quatro.
+    var COL0 = 3;             // onde começam as colunas do banco
+
     function montaCabecalho() {
-        // Checkbox · Pendente em · as colunas do banco · Ações
         var th = ['<th style="width:34px"><input type="checkbox" id="ob-all"></th>',
+                  '<th style="width:96px">' + esc(t('actions')) + '</th>',
                   '<th>' + esc(t('stage')) + '</th>'];
-        var filtros = ['<th></th>', '<th><input type="text" data-col="1" placeholder="' + esc(t('stage')) + '"></th>'];
+        var filtros = ['<th></th>', '<th></th>',
+                       '<th><input type="text" data-col="2" placeholder="' + esc(t('stage')) + '"></th>'];
         COLS.forEach(function (c, i) {
             th.push('<th>' + esc(c) + '</th>');
-            filtros.push('<th><input type="text" data-col="' + (i + 2) + '" placeholder="' + esc(c) + '"></th>');
+            filtros.push('<th><input type="text" data-col="' + (i + COL0) + '" placeholder="' + esc(c) + '"></th>');
         });
-        th.push('<th style="width:96px">' + esc(t('actions')) + '</th>');
-        filtros.push('<th></th>');
         $('#ob-head').html(th.join(''));
         $('#ob-head-filters').html(filtros.join(''));
     }
 
     function linha(r) {
-        var td = ['<td><input type="checkbox" class="ob-chk"></td>'];
+        var td = ['<td><input type="checkbox" class="ob-chk"></td>',
+                  '<td>' + acoes() + '</td>'];
         var marca = r._stage_derived
             ? ' <i class="ti ti-wand" title="' + esc(t('derived')) + '" style="opacity:.55"></i>' : '';
         td.push('<td>' + (r._stage ? esc(r._stage) + marca : '') + '</td>');
@@ -343,7 +360,6 @@
                        || c === 'Nome Garantidor') ? ' class="ob-ell"' : '';
             td.push('<td' + ell + ' title="' + esc(v) + '">' + esc(v) + '</td>');
         });
-        td.push('<td>' + acoes() + '</td>');
         return '<tr data-id="' + esc(r[IDCOL]) + '">' + td.join('') + '</tr>';
     }
 
@@ -360,7 +376,7 @@
             orderCellsTop: true,          // a linha de filtro é a 2ª do thead
             scrollX: true, autoWidth: true,
             order: [],
-            columnDefs: [{ targets: 0, orderable: false }, { targets: -1, orderable: false }],
+            columnDefs: [{ targets: [0, 1], orderable: false }],
             language: { emptyTable: t('empty') }
         });
 
@@ -386,7 +402,7 @@
         // Seleção de célula para copiar — em TODA tabela do app. Pula o
         // checkbox e a coluna de Actions.
         if (window.otcCellCopy) {
-            otcCellCopy('#ob-table', { skip: [0, COLS.length + 2] });
+            otcCellCopy('#ob-table', { skip: [0, 1] });
         }
         montaBotoes();
         montaColunas();
@@ -397,7 +413,11 @@
         // aqui e disparada pelos itens do dropdown — o export é o do DataTables
         // Buttons, o mesmo do New Deals: sai o que está NA TELA, com filtros e
         // ordenação aplicados e só as colunas visíveis.
-        var comuns = { exportOptions: { columns: ':visible:not(:first-child):not(:last-child)' } };
+        // As duas primeiras colunas (checkbox e Ações) ficam de fora do arquivo.
+        // Era `:not(:first-child):not(:last-child)`, de quando Ações era a última:
+        // com ela na 2ª posição aquele recorte passaria a exportar os botões e a
+        // engolir a última coluna de dado, sem erro nenhum.
+        var comuns = { exportOptions: { columns: ':visible:not(:nth-child(1)):not(:nth-child(2))' } };
         var b = new $.fn.dataTable.Buttons(table, {
             buttons: [
                 $.extend({ extend: 'copyHtml5', name: 'copy' }, comuns),
@@ -423,7 +443,7 @@
 
     function montaColunas() {
         var html = COLS.map(function (c, i) {
-            return '<label><input type="checkbox" checked data-c="' + (i + 2) + '"> ' + esc(c) + '</label>';
+            return '<label><input type="checkbox" checked data-c="' + (i + COL0) + '"> ' + esc(c) + '</label>';
         }).join('');
         $('#ob-cols-menu').html(html).off('change').on('change', 'input', function () {
             table.column(parseInt($(this).data('c'), 10)).visible(this.checked);
@@ -439,6 +459,8 @@
                 COLS = j.columns || [];
                 IDCOL = j.id_column || '_id';
                 DATECOLS = j.date_columns || [];
+                SIGTYPES = j.signature_types || [];
+                SIGCOL = j.signature_column || '';
                 dados = j.rows || [];
                 $('#ob-src').html(
                     j.db_ready
@@ -467,9 +489,29 @@
         COLS.forEach(function (c, i) {
             var v = (c === 'Aging') ? '' : (r[c] == null ? '' : r[c]);
             if (c === 'Aging') { return; }        // derivado: não se digita
-            $(tds[i + 2]).html('<input type="text" data-col="' + esc(c) + '" value="' + esc(v) + '">');
+            // Tipo de Assinatura é DOMÍNIO FECHADO (FepWeb · DocuSign · Manual),
+            // então o campo é um `select`. Digitado à mão, um `Fepweb` ou um
+            // `Física` entrariam como valor novo e a linha deixaria de casar com
+            // as outras — o filtro por coluna passaria a ter dois nomes para a
+            // mesma coisa. O valor que já está gravado entra na lista mesmo se
+            // não for um dos três: escondê-lo faria o Save trocar o tipo da
+            // linha sem ninguém pedir.
+            if (SIGCOL && c === SIGCOL && SIGTYPES.length) {
+                var opts = SIGTYPES.slice();
+                if (v && opts.indexOf(v) === -1) { opts.unshift(v); }
+                $(tds[i + COL0]).html(
+                    '<select data-col="' + esc(c) + '">' +
+                    '<option value=""></option>' +
+                    opts.map(function (o) {
+                        return '<option value="' + esc(o) + '"' +
+                               (String(o) === String(v) ? ' selected' : '') + '>' +
+                               esc(o) + '</option>';
+                    }).join('') + '</select>');
+                return;
+            }
+            $(tds[i + COL0]).html('<input type="text" data-col="' + esc(c) + '" value="' + esc(v) + '">');
         });
-        $(tds[tds.length - 1]).html(
+        $(tds[1]).html(
             '<div class="d-flex justify-content-center gap-1">' +
               '<button class="btn btn-sm btn-success rounded-circle btn-act ob-save" ' +
                 'data-bs-toggle="tooltip" data-bs-custom-class="tooltip-success" title="' + esc(t('save')) + '">' +
@@ -498,7 +540,9 @@
     function salva() {
         if (!editando) { return; }
         var vals = {};
-        editando.$tr.find('input[data-col]').each(function () {
+        // `input` E `select`: sem o segundo, o Tipo de Assinatura não entrava no
+        // payload e o Save gravava a linha SEM ele — apagando o valor anterior.
+        editando.$tr.find('input[data-col], select[data-col]').each(function () {
             vals[$(this).data('col')] = this.value;
         });
         fetch('/api/onboarding/docs/save', {
