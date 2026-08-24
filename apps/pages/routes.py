@@ -5473,9 +5473,18 @@ _DS_IMPORTS = [
      'match': lambda n: n.startswith('cashflows'), 'otm': True, 'filters': []},
     {'key': 'ndfc', 'label': 'NDF Cockpit', 'json': 'ndf-cockpit', 'header': 4,
      'match': lambda n: n.startswith('settlement') and n.endswith('.xlsx'), 'ndfc': True, 'filters': []},
+    # As contas do Banco J.P. Morgan que entram (coluna Conta): a PRÓPRIA
+    # (73760.00-9) e a de CLIENTE 2 (73760.20-5) — as duas estão no cadastro
+    # `b3-accounts`, que é onde se lê o que cada uma é. A de CLIENTE 1
+    # (73760.10-2) fica de fora, como sempre esteve.
+    #
+    # O que entra aqui alcança mais do que o card: este é o JSON que a página
+    # Operations B3 lê (`opb3`), e é dele que saem a mensageria, os avisos de
+    # liquidação e os cards de reconciliação. Uma conta que não passa por este
+    # filtro não existe para nenhum deles — some sem erro nenhum.
     {'key': 'operacoes-jpm', 'label': 'Operações JPM', 'json': 'operacoes-jpm', 'header': 5,
      'match': lambda n: n.startswith('operacoes'),
-     'filters': [('digits', 2, {'73760009'}),
+     'filters': [('digits', 2, {'73760009', '73760205'}),
                  ('set', 10, {'OPC', 'OFVC', 'OFCC', 'SWAP', 'TER', 'COE'})],
      'opb3': True},                                 # also feeds the Operations B3 page json
     {'key': 'operacoes-mgt', 'label': 'Operações MGT', 'json': 'operacoes-mgt', 'header': 5,
@@ -18265,6 +18274,50 @@ def _pc_load_rows(category):
     except Exception:
         log.warning('[pending-confirmation] query failed for %s:\n%s', path, traceback.format_exc())
         return []
+
+
+@blueprint.route('/api/pending-confirmation/snapshot')
+def api_pending_confirmation_snapshot():
+    """A FOTO de um dia do Pending Confirmation, no formato {columns, rows} —
+    é o que o Advanced Export consulta para montar um arquivo de vários dias.
+
+    A tela mostra a situação de AGORA, que é viva: o Aging e o Status são
+    recalculados na leitura, e a linha muda de banco quando o prazo vira. A
+    série só existe porque a manutenção das 11:30 grava uma foto por dia
+    (`cache/pending-confirmation/AAAA/MM/DD`), e é ela que responde aqui.
+
+    Dia sem foto devolve `rows: []` e **200**, não 404: quem pede um intervalo
+    manda vinte datas de uma vez, e um dia sem movimento (feriado, ou anterior à
+    primeira foto gravada) não é erro — é dia sem linha. As COLUNAS vão em
+    qualquer caso, senão o consumidor não teria como montar o cabeçalho de um
+    intervalo que começa num feriado.
+
+    A foto é devolvida como está gravada, SEM refiltrar por categoria: ela já é
+    o balde `pending` daquele dia, e recomputar responderia pelo calendário de
+    hoje — a mesma regra da planilha de métricas com data anterior (§).
+    """
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    ds = (request.args.get('date') or '').strip()[:10]
+    try:
+        ref = datetime.strptime(ds, '%Y-%m-%d') if ds else datetime.now()
+    except ValueError:
+        return jsonify({'success': False, 'message': 'Invalid date'}), 400
+    path = os.path.join(_PC_SNAPSHOT_DIR, ref.strftime('%Y'), ref.strftime('%m'),
+                        ref.strftime('%d'),
+                        'pending-confirmation_{}.json'.format(ref.strftime('%Y%m%d')))
+    recs = []
+    if os.path.isfile(path):
+        try:
+            with open(path, encoding='utf-8') as fh:
+                data = json.load(fh)
+            recs = data if isinstance(data, list) else []
+        except (json.JSONDecodeError, IOError, OSError):
+            log.warning('[pc-snapshot] %s ilegível:\n%s', path, traceback.format_exc())
+    rows = [[('' if r.get(c) is None else str(r.get(c, ''))) for c in _PC_COLUMNS]
+            for r in recs if isinstance(r, dict)]
+    return jsonify({'success': True, 'columns': list(_PC_COLUMNS), 'rows': rows,
+                    'date': ref.strftime('%Y-%m-%d'), 'found': os.path.isfile(path)})
 
 
 @blueprint.route('/api/pending-confirmation/search', methods=['POST'])
