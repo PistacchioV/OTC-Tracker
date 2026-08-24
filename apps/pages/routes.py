@@ -10104,9 +10104,16 @@ def _optadv_apply_ir(items):
     mesmo imposto sobre o mesmo cliente, e uma segunda lista divergiria com uma
     tela retendo e a outra não.
 
-    O imposto é calculado sobre o net e depois RATEADO pelas linhas na proporção
-    do módulo de cada uma, com a sobra de arredondamento na última: a coluna é por
-    linha, e a soma que o aviso imprime tem de ser exatamente o imposto do net."""
+    O imposto é calculado sobre o net e depois RATEADO **só pelas linhas que
+    PAGAM**, na proporção do módulo de cada uma e com a sobra de arredondamento na
+    última. Nada é decidido por linha — quem decide se há imposto, e quanto, é o
+    net; a linha só carrega a parte da retenção que sai com ELA. Espalhar o
+    rateio também pelas linhas que recebem fazia a retenção andar para os DOIS
+    lados: o líquido de um recebimento encolhia por um imposto que não era dele,
+    as duas metades quase se anulavam, e o rodapé do aviso — que soma a coluna —
+    imprimia `(28.884,13)` onde o net com imposto é `(28.882,73)`. De um lado só,
+    a coluna fecha com o rodapé e o rodapé fecha com o net, que é a mesma conta
+    do Pay/Rec (HANDOFF §205: net Pay −219.047,36 → −219.036,41)."""
     grupos = {}
     for r in items:
         if not r.get('premium') or r.get('apurado') is None:
@@ -10120,17 +10127,21 @@ def _optadv_apply_ir(items):
         total = round(abs(net) * _NDFADV_IR_RATE, 2)
         if not total:
             continue
-        base = sum(abs(r['apurado']) for r in linhas)
+        # Só o lado que paga. `net < 0` garante que ele existe.
+        alvo = [r for r in linhas if r['apurado'] < 0]
+        base = sum(abs(r['apurado']) for r in alvo)
         acc = 0.0
-        for i, r in enumerate(linhas):
-            if i == len(linhas) - 1:
+        for i, r in enumerate(alvo):
+            if i == len(alvo) - 1:
                 r['ir'] = round(total - acc, 2)          # a sobra fecha o total
             else:
                 r['ir'] = round(total * abs(r['apurado']) / base, 2) if base else 0.0
                 acc += r['ir']
 
     # Resultado Líquido e as duas células — o IR retido sempre ENCOLHE o que se
-    # movimenta, qualquer que seja o sinal (mesma regra do aviso de FX).
+    # movimenta, qualquer que seja o sinal (mesma regra do aviso de FX). Como o
+    # rateio agora só toca o lado que paga, a linha que recebe sai com `0,00` de
+    # imposto e o líquido igual ao apurado: não houve retenção sobre ela.
     for r in items:
         ap, ir = r.get('apurado'), r.get('ir') or 0.0
         r['ir'] = ir
