@@ -176,7 +176,7 @@
     if (window.otcCellCopy) otcCellCopy('#otm-table', { skip: [0, 1] });
     // Item Advanced do menu Export — opt-in como o otcCellCopy: onde o
     // export-advanced.js não estiver carregado, é um no-op.
-    if (window.otcExportAdvanced) window.otcExportAdvanced('#otm-table');
+    if (window.otcExportAdvanced) window.otcExportAdvanced('#otm-table', { daily: '/api/otm-settlements/data' });
 
     var expWrap = document.querySelector('.otmExportWrapper');
     if (expWrap) { expWrap.innerHTML = ''; dt.buttons().container().appendTo(expWrap); }

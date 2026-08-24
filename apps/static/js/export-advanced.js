@@ -1,21 +1,40 @@
 /* ============================================================================
- * export-advanced.js — o item "Advanced" do menu Export, para qualquer tabela
- * do app.
+ * export-advanced.js — o item "Advanced Export" do menu Export, para qualquer
+ * tabela do app.
  * ----------------------------------------------------------------------------
  * O Export do padrão da casa (Copy · CSV · Excel · Print · PDF) exporta o que
  * está NA TELA: filtros aplicados, ordenação aplicada, colunas visíveis. É o
  * que se quer quase sempre, e por isso ele não muda. O que faltava era o
- * "quase": tirar um recorte que a tela não está mostrando — um intervalo de
- * datas, uma contraparte só, sem as colunas que não interessam — sem ter de
- * filtrar a tela inteira antes e desfazer depois.
+ * "quase", e são duas coisas:
+ *
+ *  1. um recorte que a tela não está mostrando — uma contraparte só, sem as
+ *     colunas que não interessam — sem filtrar a tela inteira antes e desfazer
+ *     depois;
+ *  2. VÁRIOS DIAS. A tela mostra um dia; os arquivos-dia do
+ *     `static/data/cache/` guardam a série, e até aqui a única forma de olhar o
+ *     mês era abrir a página vinte vezes, exportando uma planilha de cada vez.
  *
  * Uso, DEPOIS de a DataTable existir:
  *
  *     otcExportAdvanced('#minha-tabela', {
  *         name:  'reference-data',   // nome do arquivo (sem extensão)
  *         skip:  [0, 1],             // colunas que nunca se exportam
- *         menu:  '#meuDropdownUl'    // só quando o dropdown é markup da página
+ *         menu:  '#meuDropdownUl',   // só quando o dropdown é markup da página
+ *         daily: '/api/operations-b3/data'          // ou:
+ *         daily: { url: '/reconciliation-fxo/data', // endpoint do dia
+ *                  param: 'recon_date',             // padrão: 'date'
+ *                  rows: 'data' }                   // padrão: 'rows'
  *     });
+ *
+ * `daily` é o endpoint que a PRÓPRIA página consulta para desenhar um dia. O
+ * intervalo o chama uma vez por data e empilha o resultado — em vez de ler os
+ * JSON do cache por fora, que seria uma segunda regra sobre os mesmos arquivos,
+ * para discordar da tela no primeiro caso de borda. Cada linha sai com a
+ * Reference Date do arquivo de onde veio.
+ *
+ * Tela SEM arquivo-dia não declara `daily`: o Reference Data é cadastro — existe
+ * o de agora e nada mais —, e a seção do intervalo nasce desabilitada dizendo
+ * por quê, em vez de sumir (um campo que some lê-se como defeito).
  *
  * Sem `menu` o item entra na COLLECTION do DataTables Buttons (o dropdown que
  * o próprio Buttons desenha), no fim da lista. Com `menu`, num <ul> da página.
@@ -48,14 +67,23 @@
 
     var _TRANS = {
         en: {
-            advanced: 'Advanced', title: 'Advanced export',
+            advanced: 'Advanced Export', title: 'Advanced Export',
             format: 'Format', filename: 'File name',
             rows: 'Rows', rowsAll: 'All rows', rowsPage: 'Current page only',
             rowsRange: 'Positions from–to',
             useScreen: 'Start from the filters applied on screen',
             useScreenHelp: 'Unchecked, the export starts from the full table and only the criteria below apply.',
-            rangeTitle: 'Range', rangeCol: 'Column', from: 'From', to: 'To',
-            rangeHelp: 'Dates, numbers and text — both ends optional.',
+            daysTitle: 'Range — daily files', from: 'From', to: 'To',
+            daysHelp: 'Leave empty to export the day on screen. With a range, one file is read '
+                    + 'per day and every row carries its Reference Date.',
+            daysNone: 'This page has no daily files — there is only the current registry, so the '
+                    + 'export always covers what is on screen.',
+            daysReading: 'Reading {d}… ({i}/{n})',
+            daysFailed: 'Could not read {n} day(s)',
+            daysEmpty: 'No day in the range has data',
+            daysTooLong: 'Range too long — at most {n} days',
+            daysBackwards: 'The end date comes before the start date',
+            refDate: 'Reference Date',
             critTitle: 'Filters', critAdd: 'Add filter', critCol: 'Column',
             op: 'Condition', value: 'Value',
             opContains: 'contains', opNot: 'does not contain', opEquals: 'is exactly',
@@ -70,14 +98,23 @@
             colPick: '— pick a column —'
         },
         br: {
-            advanced: 'Advanced', title: 'Exportação avançada',
+            advanced: 'Advanced Export', title: 'Exportação avançada',
             format: 'Formato', filename: 'Nome do arquivo',
             rows: 'Linhas', rowsAll: 'Todas as linhas', rowsPage: 'Só a página atual',
             rowsRange: 'Posições de–até',
             useScreen: 'Partir dos filtros aplicados na tela',
             useScreenHelp: 'Desmarcado, a exportação parte da tabela inteira e valem só os critérios abaixo.',
-            rangeTitle: 'Intervalo', rangeCol: 'Coluna', from: 'De', to: 'Até',
-            rangeHelp: 'Datas, números e texto — as duas pontas são opcionais.',
+            daysTitle: 'Intervalo — arquivos diários', from: 'De', to: 'Até',
+            daysHelp: 'Em branco, exporta o dia que está na tela. Com intervalo, lê um arquivo '
+                    + 'por dia e cada linha leva a Reference Date dela.',
+            daysNone: 'Esta tela não tem arquivo diário — é o cadastro de agora, então o export '
+                    + 'cobre sempre o que está na tela.',
+            daysReading: 'Lendo {d}… ({i}/{n})',
+            daysFailed: 'Não consegui ler {n} dia(s)',
+            daysEmpty: 'Nenhum dia do intervalo tem dado',
+            daysTooLong: 'Intervalo longo demais — no máximo {n} dias',
+            daysBackwards: 'A data final é anterior à inicial',
+            refDate: 'Reference Date',
             critTitle: 'Filtros', critAdd: 'Adicionar filtro', critCol: 'Coluna',
             op: 'Condição', value: 'Valor',
             opContains: 'contém', opNot: 'não contém', opEquals: 'é exatamente',
@@ -92,14 +129,23 @@
             colPick: '— escolha uma coluna —'
         },
         es: {
-            advanced: 'Advanced', title: 'Exportación avanzada',
+            advanced: 'Advanced Export', title: 'Exportación avanzada',
             format: 'Formato', filename: 'Nombre del archivo',
             rows: 'Filas', rowsAll: 'Todas las filas', rowsPage: 'Solo la página actual',
             rowsRange: 'Posiciones de–hasta',
             useScreen: 'Partir de los filtros aplicados en la pantalla',
             useScreenHelp: 'Sin marcar, la exportación parte de la tabla entera y valen solo los criterios de abajo.',
-            rangeTitle: 'Intervalo', rangeCol: 'Columna', from: 'De', to: 'Hasta',
-            rangeHelp: 'Fechas, números y texto — los dos extremos son opcionales.',
+            daysTitle: 'Intervalo — archivos diarios', from: 'De', to: 'Hasta',
+            daysHelp: 'En blanco, exporta el día que está en la pantalla. Con intervalo, lee un '
+                    + 'archivo por día y cada fila lleva su Reference Date.',
+            daysNone: 'Esta pantalla no tiene archivo diario — es el registro de ahora, así que '
+                    + 'la exportación cubre siempre lo que está en la pantalla.',
+            daysReading: 'Leyendo {d}… ({i}/{n})',
+            daysFailed: 'No pude leer {n} día(s)',
+            daysEmpty: 'Ningún día del intervalo tiene datos',
+            daysTooLong: 'Intervalo demasiado largo — como máximo {n} días',
+            daysBackwards: 'La fecha final es anterior a la inicial',
+            refDate: 'Reference Date',
             critTitle: 'Filtros', critAdd: 'Añadir filtro', critCol: 'Columna',
             op: 'Condición', value: 'Valor',
             opContains: 'contiene', opNot: 'no contiene', opEquals: 'es exactamente',
@@ -142,48 +188,6 @@
         return s.replace(/\s+/g, ' ').trim();
     }
 
-    /* ── Comparação de intervalo ──────────────────────────────────────────
-       O tipo do intervalo é decidido pelas PONTAS que a pessoa digitou, não
-       pelo conteúdo da coluna: com 'De' e 'Até' em data, a célula que não for
-       data fica de fora (é o que ela quis dizer); com pontas numéricas, o
-       mesmo. Adivinhar pelo conteúdo faria a mesma coluna mudar de regra
-       conforme a linha. */
-    function parseDate(v) {
-        var s = String(v == null ? '' : v).trim();
-        var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
-        if (m) return Date.UTC(+m[1], +m[2] - 1, +m[3]);
-        m = /^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})$/.exec(s);
-        if (m) {
-            var y = +m[3];
-            if (y < 100) y += y < 70 ? 2000 : 1900;
-            return Date.UTC(y, +m[2] - 1, +m[1]);
-        }
-        return null;
-    }
-    function parseNum(v) {
-        var s = String(v == null ? '' : v).trim().replace(/\s/g, '');
-        if (!s || !/^-?[\d.,]+%?$/.test(s)) return null;
-        s = s.replace(/%$/, '');
-        var lastC = s.lastIndexOf(','), lastD = s.lastIndexOf('.');
-        if (lastC > lastD)      s = s.replace(/\./g, '').replace(',', '.');   // 1.234,56
-        else if (lastD > lastC) s = s.replace(/,/g, '');                      // 1,234.56
-        else                    s = s.replace(/[.,]/g, '');
-        var n = parseFloat(s);
-        return isNaN(n) ? null : n;
-    }
-    function coerce(v, kind) {
-        if (kind === 'date') return parseDate(v);
-        if (kind === 'num')  return parseNum(v);
-        return String(v == null ? '' : v).trim().toLowerCase();
-    }
-    function endKind(a, b) {
-        var vals = [a, b].filter(function (x) { return String(x || '').trim() !== ''; });
-        if (!vals.length) return null;
-        if (vals.every(function (x) { return parseDate(x) !== null; })) return 'date';
-        if (vals.every(function (x) { return parseNum(x) !== null; })) return 'num';
-        return 'text';
-    }
-
     /* ── Estilo (uma vez) ─────────────────────────────────────────────── */
     function ensureStyle() {
         if (document.getElementById(STYLE_ID)) return;
@@ -202,7 +206,11 @@
             + '#' + MODAL_ID + ' .xa-count{font-size:.75rem;font-variant-numeric:tabular-nums;opacity:.8}'
             + '#' + MODAL_ID + ' .xa-count.xa-zero{color:var(--ins-danger,#d93025);opacity:1;font-weight:600}'
             + '#' + MODAL_ID + ' .xa-rm{width:28px;height:28px;border-radius:8px;padding:0;display:inline-flex;'
-            +   'align-items:center;justify-content:center}';
+            +   'align-items:center;justify-content:center}'
+            // Seção desabilitada: fica à VISTA, apagada, com o motivo escrito.
+            // Escondê-la faria a mesma tela parecer duas conforme a página.
+            + '#' + MODAL_ID + ' .xa-off{opacity:.55}'
+            + '#' + MODAL_ID + ' .xa-off .xa-help{font-style:italic}';
         var el = document.createElement('style');
         el.id = STYLE_ID;
         el.textContent = css;
@@ -252,17 +260,21 @@
                 '<div class="xa-help">' + esc(t('useScreenHelp')) + '</div>' +
               '</div>' +
 
-              '<div class="xa-sec">' +
-                '<div class="xa-sec-h">' + esc(t('rangeTitle')) + '</div>' +
+              /* O Range é o intervalo de DIAS dos arquivos do cache, não uma
+                 faixa de valores de uma coluna: a tela mostra um dia, e o que
+                 se quer exportar é a série. A tela que não tem arquivo diário
+                 (Reference Data é cadastro, não é do dia) recebe a seção
+                 DESABILITADA com o motivo escrito — em branco, ela pareceria
+                 defeito. */
+              '<div class="xa-sec" id="xaDaySec">' +
+                '<div class="xa-sec-h">' + esc(t('daysTitle')) + '</div>' +
                 '<div class="row g-2">' +
-                  '<div class="col-md-6"><label class="form-label">' + esc(t('rangeCol')) + '</label>' +
-                    '<select class="form-select form-select-sm" id="xaRangeCol"></select></div>' +
-                  '<div class="col-md-3"><label class="form-label">' + esc(t('from')) + '</label>' +
-                    '<input type="text" class="form-control form-control-sm" id="xaRangeFrom"></div>' +
-                  '<div class="col-md-3"><label class="form-label">' + esc(t('to')) + '</label>' +
-                    '<input type="text" class="form-control form-control-sm" id="xaRangeTo"></div>' +
+                  '<div class="col-md-6"><label class="form-label">' + esc(t('from')) + '</label>' +
+                    '<input type="date" class="form-control form-control-sm" id="xaDayFrom"></div>' +
+                  '<div class="col-md-6"><label class="form-label">' + esc(t('to')) + '</label>' +
+                    '<input type="date" class="form-control form-control-sm" id="xaDayTo"></div>' +
                 '</div>' +
-                '<div class="xa-help">' + esc(t('rangeHelp')) + '</div>' +
+                '<div class="xa-help" id="xaDayHelp">' + esc(t('daysHelp')) + '</div>' +
               '</div>' +
 
               '<div class="xa-sec">' +
@@ -376,8 +388,14 @@
 
         var colOpts = '<option value="">' + esc(t('colPick')) + '</option>' +
             cols.map(function (c) { return '<option value="' + c.idx + '">' + esc(c.label) + '</option>'; }).join('');
-        $el.find('#xaRangeCol').html(colOpts).val('');
-        $el.find('#xaRangeFrom,#xaRangeTo').val('');
+
+        // Sem arquivo diário a seção fica visível e DESABILITADA, com o motivo
+        // escrito. Escondê-la faria a mesma tela parecer duas conforme a
+        // página, e um campo que some sem explicação lê-se como defeito.
+        var daily = normDaily(opts.daily);
+        $el.find('#xaDayFrom,#xaDayTo').val('').prop('disabled', !daily);
+        $el.find('#xaDaySec').toggleClass('xa-off', !daily);
+        $el.find('#xaDayHelp').text(daily ? t('daysHelp') : t('daysNone'));
         $el.find('#xaPosFrom,#xaPosTo').val('');
         $el.find('#xaScope').val('all');
         $el.find('#xaPosWrap').addClass('d-none');
@@ -422,8 +440,13 @@
                 // ninguém ter pedido. Blank/not blank são as exceções — são
                 // eles próprios a pergunta.
                 if (op !== 'blank' && op !== 'notblank' && !String(val).trim()) return;
-                crits.push({ col: +col, op: op, val: String(val) });
+                // O RÓTULO vai junto do índice: no export por intervalo de dias
+                // a tabela é outra (a que se monta com os arquivos), e o índice
+                // da tela não vale nela — o que casa as duas é o nome da coluna.
+                var lbl = (cols.filter(function (c) { return c.idx === +col; })[0] || {}).label || '';
+                crits.push({ col: +col, label: lbl, op: op, val: String(val) });
             });
+            var checked = $el.find('.xa-col:checked').map(function () { return +this.value; }).get();
             return {
                 format: $el.find('#xaFormat').val(),
                 name:   (($el.find('#xaName').val() || '').trim() || 'export'),
@@ -434,33 +457,36 @@
                 header: $el.find('#xaHeader').is(':checked'),
                 sep:    $el.find('#xaSep').val(),
                 orient: $el.find('#xaOrient').val(),
-                rangeCol: $el.find('#xaRangeCol').val(),
-                rangeFrom: $el.find('#xaRangeFrom').val() || '',
-                rangeTo:   $el.find('#xaRangeTo').val() || '',
+                dayFrom: $el.find('#xaDayFrom').val() || '',
+                dayTo:   $el.find('#xaDayTo').val() || '',
                 crits: crits,
-                cols: $el.find('.xa-col:checked').map(function () { return +this.value; }).get()
+                cols: checked,
+                colLabels: checked.map(function (i) {
+                    return (cols.filter(function (c) { return c.idx === i; })[0] || {}).label || '';
+                })
             };
         }
 
-        /* Os índices de linha que vão para o arquivo, já na ordem da tela. */
-        function pick(o) {
-            var base = dt.rows({
-                search: o.screen ? 'applied' : 'none',
+        /* Os índices de linha que vão para o arquivo, já na ordem da tabela.
+           `tbl` é a tabela da TELA no caminho normal e a montada com os arquivos
+           do dia no caminho do intervalo; `map` traduz o índice de coluna da
+           tela para o dela. */
+        function pick(o, tbl, map) {
+            tbl = tbl || dt;
+            var base = tbl.rows({
+                search: (tbl === dt && o.screen) ? 'applied' : 'none',
                 order:  'applied',
-                page:   o.scope === 'page' ? 'current' : 'all'
+                page:   (tbl === dt && o.scope === 'page') ? 'current' : 'all'
             }).indexes().toArray();
 
-            var rk = o.rangeCol === '' ? null : endKind(o.rangeFrom, o.rangeTo);
-            var lo = rk ? coerce(o.rangeFrom, rk) : null;
-            var hi = rk ? coerce(o.rangeTo, rk) : null;
-            if (String(o.rangeFrom).trim() === '') lo = null;
-            if (String(o.rangeTo).trim() === '')   hi = null;
+            var crits = o.crits.map(function (c) {
+                return { col: map ? map(c) : c.col, op: c.op, val: c.val };
+            }).filter(function (c) { return c.col !== null && c.col >= 0; });
 
             var keep = base.filter(function (idx) {
-                var i, c, cell;
-                for (i = 0; i < o.crits.length; i++) {
-                    c = o.crits[i];
-                    cell = plain(dt.cell(idx, c.col).render('display'));
+                for (var i = 0; i < crits.length; i++) {
+                    var c = crits[i];
+                    var cell = plain(tbl.cell(idx, c.col).render('display'));
                     var hay = cell.toLowerCase(), ndl = String(c.val).trim().toLowerCase();
                     if (c.op === 'blank'    && cell !== '') return false;
                     if (c.op === 'notblank' && cell === '') return false;
@@ -469,16 +495,6 @@
                     if (c.op === 'equals'   && hay !== ndl) return false;
                     if (c.op === 'begins'   && hay.indexOf(ndl) !== 0) return false;
                     if (c.op === 'ends'     && hay.lastIndexOf(ndl) !== hay.length - ndl.length) return false;
-                }
-                if (rk && (lo !== null || hi !== null)) {
-                    var v = coerce(plain(dt.cell(idx, +o.rangeCol).render('display')), rk);
-                    // Célula que não é do tipo do intervalo (data que não é
-                    // data, número que não é número) fica de fora: incluí-la
-                    // seria dizer que ela está dentro de um intervalo que não
-                    // sabe medir.
-                    if (v === null || v === '') return false;
-                    if (lo !== null && v < lo) return false;
-                    if (hi !== null && v > hi) return false;
                 }
                 return true;
             });
@@ -497,15 +513,87 @@
             $el.find('#xaPosWrap').toggleClass('d-none', o.scope !== 'range');
             $el.find('#xaSepWrap').toggleClass('d-none', o.format !== 'csvHtml5');
             $el.find('#xaOrientWrap').toggleClass('d-none', o.format !== 'pdfHtml5');
+            var $c = $el.find('#xaCount');
+            if (!o.cols.length) {
+                $c.text(t('noCols')).addClass('xa-zero');
+                $el.find('#xaRun').prop('disabled', true);
+                return;
+            }
+            // Com intervalo de dias a contagem não é a da tela: as linhas ainda
+            // estão em disco. Prometer um número aqui seria prometer o da tela,
+            // que é justamente o que essa exportação NÃO é.
+            var dayErr = dayRangeError(o);
+            if (dayErr) {
+                $c.text(dayErr).addClass('xa-zero');
+                $el.find('#xaRun').prop('disabled', true);
+                return;
+            }
+            if (o.dayFrom || o.dayTo) {
+                $c.text(t('daysHelp')).removeClass('xa-zero');
+                $el.find('#xaRun').prop('disabled', false);
+                return;
+            }
             lastKeep = pick(o);
             var total = dt.rows().count();
-            var $c = $el.find('#xaCount');
-            var bad = !lastKeep.length || !o.cols.length;
-            $c.text(!o.cols.length ? t('noCols')
-                   : !lastKeep.length ? t('noRows')
-                   : t('count', { n: lastKeep.length, total: total }))
+            var bad = !lastKeep.length;
+            $c.text(bad ? t('noRows') : t('count', { n: lastKeep.length, total: total }))
               .toggleClass('xa-zero', bad);
             $el.find('#xaRun').prop('disabled', bad);
+        }
+
+        /* O intervalo pedido, ou a mensagem do que está errado nele. */
+        function dayRangeError(o) {
+            if (!daily || (!o.dayFrom && !o.dayTo)) return '';
+            var a = o.dayFrom || o.dayTo, b = o.dayTo || o.dayFrom;
+            if (b < a) return t('daysBackwards');
+            if (dayList(a, b).length > MAX_DAYS) return t('daysTooLong', { n: MAX_DAYS });
+            return '';
+        }
+
+        /* Exporta o intervalo: lê um arquivo por dia, junta tudo numa tabela
+           oculta e devolve a exportação ao MESMO caminho de sempre. */
+        function runDaily(o) {
+            var dias = dayList(o.dayFrom || o.dayTo, o.dayTo || o.dayFrom);
+            var $c = $el.find('#xaCount');
+            $el.find('#xaRun').prop('disabled', true);
+            fetchDays(daily, dias, function (i, d) {
+                $c.text(t('daysReading', { d: d, i: i, n: dias.length })).removeClass('xa-zero');
+            }).then(function (res) {
+                $el.find('#xaRun').prop('disabled', false);
+                if (!res.rows.length) {
+                    $c.text(res.failed.length ? t('daysFailed', { n: res.failed.length })
+                                              : t('daysEmpty')).addClass('xa-zero');
+                    return;
+                }
+                var tbl = buildDailyTable(res);
+                // A tabela dos arquivos não tem checkbox nem Actions e ganha a
+                // Reference Date na frente: o casamento com o que a pessoa
+                // escolheu na tela é pelo RÓTULO, e a Reference Date entra
+                // sempre — sem ela, um arquivo de vinte dias não diz de que dia
+                // é cada linha.
+                function toDaily(c) {
+                    var i = res.columns.indexOf(c.label);
+                    return i === -1 ? null : i;
+                }
+                var keep = pick(o, tbl, toDaily);
+                if (!keep.length) {
+                    $c.text(t('noRows')).addClass('xa-zero');
+                    return;
+                }
+                var cols = [0].concat(o.colLabels.map(function (l) {
+                    return res.columns.indexOf(l);
+                }).filter(function (i) { return i > 0; }));
+                run(tbl, jQuery.extend({}, o, { cols: cols }), keep);
+                $c.text(t('count', { n: keep.length, total: res.rows.length }))
+                  .removeClass('xa-zero');
+                if (res.failed.length) {
+                    $c.text($c.text() + ' · ' + t('daysFailed', { n: res.failed.length }));
+                }
+                bootstrap.Modal.getInstance(el).hide();
+            }).catch(function () {
+                $el.find('#xaRun').prop('disabled', false);
+                $c.text(t('daysFailed', { n: dias.length })).addClass('xa-zero');
+            });
         }
 
         // Digitar recontava a cada tecla, e a contagem varre a tabela inteira:
@@ -542,7 +630,9 @@
            })
            .on('click.xa', '#xaRun', function () {
                var o = read();
-               if (!lastKeep.length || !o.cols.length) return;
+               if (!o.cols.length || dayRangeError(o)) return;
+               if (daily && (o.dayFrom || o.dayTo)) { runDaily(o); return; }
+               if (!lastKeep.length) return;
                run(dt, o, lastKeep);
                bootstrap.Modal.getInstance(el).hide();
            });
@@ -583,6 +673,117 @@
         try { dt.button(BTN_NAME + ':name').remove(); } catch (e) { /* ainda não existe */ }
         node._otcAdvButtons.add(conf, 0);
         dt.button(BTN_NAME + ':name').trigger();
+    }
+
+    /* ══════ O intervalo de dias: os arquivos do cache ══════════════════════
+       A tela mostra UM dia. Os arquivos-dia (`static/data/cache/…`) guardam a
+       série, e quem sabe transformar o arquivo de um dia nas colunas da tela é
+       o endpoint que a própria página consulta — por isso o intervalo o chama
+       uma vez por dia, com a data no lugar da de hoje, em vez de reler os JSON
+       por fora. Um leitor próprio seria uma segunda regra sobre os mesmos
+       arquivos, e as duas discordariam no primeiro caso de borda.
+
+       Página SEM arquivo-dia (Reference Data é cadastro: existe o de agora e
+       nada mais) não declara `daily`, e a seção nasce desabilitada dizendo por
+       quê. */
+    var MAX_DAYS = 120;              // ~seis meses úteis; acima disso o navegador é o gargalo
+
+    /* `daily` aceita a URL crua ou o objeto completo. `param` é o nome do
+       parâmetro de data (as recons usam `recon_date`, o resto usa `date`) e
+       `rows` a chave do payload (a Recon FXO devolve `data`). */
+    function normDaily(d) {
+        if (!d) return null;
+        if (typeof d === 'string') d = { url: d };
+        if (!d.url) return null;
+        return { url: d.url, param: d.param || 'date',
+                 rows: d.rows || 'rows', columns: d.columns || 'columns' };
+    }
+
+    function pad2(n) { return (n < 10 ? '0' : '') + n; }
+    function ymd(dt) {
+        return dt.getUTCFullYear() + '-' + pad2(dt.getUTCMonth() + 1) + '-' + pad2(dt.getUTCDate());
+    }
+    /* Os dias do intervalo, inclusive nas duas pontas. Vai dia a dia do
+       CALENDÁRIO, e não só nos úteis: um feriado sem arquivo simplesmente não
+       devolve linha, enquanto pular dia útil por engano esconderia o arquivo de
+       um dia em que houve movimento. */
+    function dayList(a, b) {
+        var out = [];
+        var cur = new Date(a + 'T00:00:00Z'), end = new Date(b + 'T00:00:00Z');
+        if (isNaN(cur.getTime()) || isNaN(end.getTime())) return out;
+        while (cur <= end && out.length <= MAX_DAYS) {
+            out.push(ymd(cur));
+            cur.setUTCDate(cur.getUTCDate() + 1);
+        }
+        return out;
+    }
+
+    /* Lê os dias EM SÉRIE, um pedido por vez. Em paralelo, um intervalo de três
+       meses abriria noventa requisições de uma vez sobre o mesmo processo — que
+       é único e serve a mesa inteira (o app roda com threads, não com workers).
+       Dia sem arquivo devolve zero linha e não é erro: é dia sem movimento. */
+    function fetchDays(daily, dias, onStep) {
+        var columns = [], rows = [], failed = [], empty = [];
+        var chain = Promise.resolve();
+        dias.forEach(function (d, i) {
+            chain = chain.then(function () {
+                if (onStep) onStep(i + 1, d);
+                var sep = daily.url.indexOf('?') === -1 ? '?' : '&';
+                return fetch(daily.url + sep + daily.param + '=' + encodeURIComponent(d),
+                             { credentials: 'same-origin' })
+                    .then(function (r) { return r.ok ? r.json() : null; })
+                    .then(function (j) {
+                        if (!j || j.error) { failed.push(d); return; }
+                        var cs = j[daily.columns] || [];
+                        var rs = j[daily.rows] || [];
+                        if (!columns.length && cs.length) {
+                            // A Reference Date é a primeira coluna e é a razão de
+                            // ser deste export: sem ela o arquivo de vinte dias
+                            // não diz de que dia é cada linha.
+                            columns = [t('refDate')].concat(cs.map(String));
+                        }
+                        if (!rs.length) { empty.push(d); return; }
+                        rs.forEach(function (r) {
+                            // A linha pode trazer uma cauda que a página usa
+                            // (status, maker, id): o que entra é o tamanho do
+                            // cabeçalho, senão as colunas saem deslocadas.
+                            var arr = Array.isArray(r) ? r : cs.map(function (c) { return r[c]; });
+                            var line = [d];
+                            for (var k = 0; k < cs.length; k++) {
+                                line.push(arr[k] == null ? '' : arr[k]);
+                            }
+                            rows.push(line);
+                        });
+                    })
+                    .catch(function () { failed.push(d); });
+            });
+        });
+        return chain.then(function () {
+            return { columns: columns, rows: rows, failed: failed, empty: empty };
+        });
+    }
+
+    /* Uma DataTable oculta com o resultado do intervalo. Ela existe para o
+       export continuar sendo o MESMO: filtro, seleção de colunas e Buttons
+       trabalham sobre uma DataTable, e montar um arquivo por fora daqui seria o
+       segundo gerador que este arquivo inteiro existe para não ter. */
+    function buildDailyTable(res) {
+        var host = document.getElementById('xaDailyHost');
+        if (!host) {
+            host = document.createElement('div');
+            host.id = 'xaDailyHost';
+            host.style.cssText = 'position:absolute;left:-9999px;top:0;width:1px;height:1px;overflow:hidden';
+            document.body.appendChild(host);
+        }
+        var old = jQuery('#xaDailyTable');
+        if (old.length && jQuery.fn.dataTable.isDataTable(old)) old.DataTable().destroy();
+        host.innerHTML = '<table id="xaDailyTable"><thead><tr>' +
+            res.columns.map(function (c) { return '<th>' + esc(c) + '</th>'; }).join('') +
+            '</tr></thead><tbody></tbody></table>';
+        return jQuery('#xaDailyTable').DataTable({
+            data: res.rows, paging: false, searching: false, info: false,
+            ordering: false, autoWidth: false, destroy: true
+        });
     }
 
     /* ── Ligação ao menu ──────────────────────────────────────────────── */

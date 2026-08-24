@@ -254,7 +254,7 @@
     if (window.otcCellCopy) otcCellCopy('#ldp-table', { skip: [0, 1] });
     // Item Advanced do menu Export — opt-in como o otcCellCopy: onde o
     // export-advanced.js não estiver carregado, é um no-op.
-    if (window.otcExportAdvanced) window.otcExportAdvanced('#ldp-table');
+    if (window.otcExportAdvanced) window.otcExportAdvanced('#ldp-table', { daily: BASE + '/data' });
 
     var expWrap = document.querySelector('.ldpExportWrapper');
     if (expWrap) { expWrap.innerHTML = ''; dt.buttons().container().appendTo(expWrap); }

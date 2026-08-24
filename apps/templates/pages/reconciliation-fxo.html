@@ -1036,7 +1036,13 @@
         // O item Advanced no MESMO <ul> do Export. A tabela é resolvida no
         // clique, e não aqui: o buildTable recria a DataTable quando as
         // colunas chegam do servidor.
-        if (window.otcExportAdvanced) otcExportAdvanced('#fxo-table', { menu: '#fxoExportMenu' });
+        // O intervalo de dias lê a recon gravada de cada data — a mesma que a
+        // tela abre. O endpoint da recon usa `recon_date` e devolve as linhas
+        // em `data`, não em `rows`.
+        if (window.otcExportAdvanced) otcExportAdvanced('#fxo-table', {
+            menu: '#fxoExportMenu',
+            daily: { url: '/reconciliation-fxo/data', param: 'recon_date', rows: 'data' }
+        });
 
         $('#fxoExportCsv').on('click', function (e) {
             e.preventDefault();

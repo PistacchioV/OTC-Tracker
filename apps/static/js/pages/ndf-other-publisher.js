@@ -182,7 +182,7 @@
     if (window.otcCellCopy) otcCellCopy('#nop-table', { skip: [0, 1] });
     // Item Advanced do menu Export — opt-in como o otcCellCopy: onde o
     // export-advanced.js não estiver carregado, é um no-op.
-    if (window.otcExportAdvanced) window.otcExportAdvanced('#nop-table');
+    if (window.otcExportAdvanced) window.otcExportAdvanced('#nop-table', { daily: API });
 
     var expWrap = document.querySelector('.nopExportWrapper');
     if (expWrap) { expWrap.innerHTML = ''; dt.buttons().container().appendTo(expWrap); }

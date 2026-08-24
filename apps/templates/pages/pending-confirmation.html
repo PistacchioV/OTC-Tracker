@@ -3173,7 +3173,12 @@ $(document).ready(function() {
 <script src="{{ config.ASSETS_ROOT }}/js/export-advanced.js"></script>
 <script>
     jQuery(function () {
-        if (window.otcExportAdvanced) otcExportAdvanced('#pending-confirmation-table');
+        // O intervalo de dias lê a FOTO de cada dia (a que a manutenção das
+        // 11:30 grava): a tela mostra a situação de agora, e a série só existe
+        // no snapshot.
+        if (window.otcExportAdvanced) otcExportAdvanced('#pending-confirmation-table', {
+            daily: '/api/pending-confirmation/snapshot'
+        });
     });
 </script>
 {% endblock extra_javascript %}

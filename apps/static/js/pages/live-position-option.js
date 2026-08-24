@@ -121,7 +121,7 @@
     if (window.otcCellCopy) { window.otcCellCopy('#lnopt-table', { skip: [0] }); }
     // Item Advanced do menu Export — opt-in como o otcCellCopy: onde o
     // export-advanced.js não estiver carregado, é um no-op.
-    if (window.otcExportAdvanced) window.otcExportAdvanced('#lnopt-table');
+    if (window.otcExportAdvanced) window.otcExportAdvanced('#lnopt-table', { daily: '/api/live-position-option/data' });
 
     jQuery('#lnopt-table thead').off('keyup.locol change.locol')
       .on('keyup.locol change.locol', '.ln-col-filter', function () {
