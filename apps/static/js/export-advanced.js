@@ -82,6 +82,8 @@
             daysLoading: 'Loading the calendar…',
             daysReading: 'Reading {d}… ({i}/{n})',
             daysBuilding: 'Building the file with {n} rows… (this may take a while)',
+            doneTitle: 'Export finished', doneTitleWarn: 'Export finished with gaps',
+            doneRows: '{n} row(s) exported', ok: 'OK',
             daysFailed: 'Could not read {n} day(s)',
             daysNoFile: '{n} day(s) with no file',
             daysDone: '{n} rows from {d} day(s)',
@@ -120,6 +122,8 @@
             daysLoading: 'Carregando o calendário…',
             daysReading: 'Lendo {d}… ({i}/{n})',
             daysBuilding: 'Montando o arquivo com {n} linhas… (pode demorar)',
+            doneTitle: 'Exportação concluída', doneTitleWarn: 'Exportação concluída com falhas',
+            doneRows: '{n} linha(s) exportada(s)', ok: 'OK',
             daysFailed: 'Não consegui ler {n} dia(s)',
             daysNoFile: '{n} dia(s) sem arquivo',
             daysDone: '{n} linhas de {d} dia(s)',
@@ -158,6 +162,8 @@
             daysLoading: 'Cargando el calendario…',
             daysReading: 'Leyendo {d}… ({i}/{n})',
             daysBuilding: 'Armando el archivo con {n} filas… (puede tardar)',
+            doneTitle: 'Exportación finalizada', doneTitleWarn: 'Exportación finalizada con fallas',
+            doneRows: '{n} fila(s) exportada(s)', ok: 'OK',
             daysFailed: 'No pude leer {n} día(s)',
             daysNoFile: '{n} día(s) sin archivo',
             daysDone: '{n} filas de {d} día(s)',
@@ -395,12 +401,59 @@
 
     /* Nome do arquivo: o título da página, que é como a pessoa chama a tela.
        O id da tabela é o último recurso — `ref-data-table` não é o nome de
-       nada que se mande por e-mail. */
+       nada que se mande por e-mail.
+
+       Ele sai LEGÍVEL ("Live Position NDF"), e não em slug: o padrão do app é
+       o do anexo do BACC (`EA Metrics - 20260824.xlsx`) — nome como se lê, um
+       hífen, a data compacta —, e é esse nome que a mesa procura na pasta de
+       downloads. O slug minúsculo com hífens era o nome do arquivo de código,
+       não o do documento. A limpeza é a MESMA classe de caracteres que o
+       DataTables aceita ao montar o nome, para o campo mostrar o nome que o
+       arquivo vai ter de verdade. */
     function defaultName(node) {
         var h = document.querySelector('.page-title-head h4, .page-title-head h5');
         var s = h ? h.textContent : '';
         s = String(s || node.id || 'export').replace(/\s+/g, ' ').trim();
-        return s.replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '').toLowerCase() || 'export';
+        // Colapsar de novo depois da limpeza: o que foi tirado do meio
+        // (a barra de "Confirmations / Track") deixa dois espaços.
+        return s.replace(/[^a-zA-Z0-9_\u00A1-\uFFFF., \-!()]/g, '')
+                .replace(/\s+/g, ' ').trim() || 'export';
+    }
+
+    /* A extensão por formato. `print` e `copyHtml5` não produzem arquivo — e é
+       por isso que eles não ganham nem nome nem aviso de fim: a janela de
+       impressão e o balão do próprio Buttons já são a resposta deles. */
+    var EXT = { excelHtml5: '.xlsx', csvHtml5: '.csv', pdfHtml5: '.pdf' };
+
+    function pad2(n) { return (n < 10 ? '0' : '') + n; }
+    /* Hoje pelo relógio LOCAL. O `ymd()` das datas do intervalo é UTC de
+       propósito (ele lê data ISO), e usá-lo aqui carimbaria o dia seguinte em
+       toda exportação feita depois das 21h no Brasil. */
+    function todayIso() {
+        var d = new Date();
+        return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+    }
+    function flatDay(iso) { return String(iso || '').replace(/-/g, ''); }
+
+    /* O aviso de fim. O arquivo baixa fora da tela e nada dizia que o processo
+       acabou — num intervalo grande a espera se lê como travamento. Guard no
+       `Swal` porque este helper é opt-in: onde o SweetAlert não estiver
+       carregado, o resumo do modal continua sendo a resposta, como antes. */
+    /* Fecha o modal e SÓ ENTÃO avisa. Aberto em cima dele, os dois backdrops se
+       somam, e o `hidden.bs.modal` do Bootstrap — que devolve o foco ao botão
+       que abriu — rouba o foco do SweetAlert no meio da transição. */
+    function hideThen(el, fn) {
+        var m = (window.bootstrap && bootstrap.Modal.getInstance(el)) || null;
+        if (!m || !el.classList.contains('show')) { fn(); return; }
+        jQuery(el).one('hidden.bs.modal', fn);
+        m.hide();
+    }
+
+    function doneAlert(icon, title, html) {
+        if (!window.Swal) return false;
+        Swal.fire({ title: title, html: html, icon: icon,
+                    confirmButtonText: t('ok'), confirmButtonColor: '#0066cc' });
+        return true;
     }
 
     /* ── O modal em si ────────────────────────────────────────────────── */
@@ -413,7 +466,8 @@
         $el.find('#xaFormat').html(fmts.map(function (f) {
             return '<option value="' + f.v + '">' + esc(f.l) + '</option>';
         }).join(''));
-        $el.find('#xaName').val(opts.name || 'export');
+        var baseName = opts.name || 'export';
+        $el.find('#xaName').val(baseName);
 
         var colOpts = '<option value="">' + esc(t('colPick')) + '</option>' +
             cols.map(function (c) { return '<option value="' + c.idx + '">' + esc(c.label) + '</option>'; }).join('');
@@ -545,6 +599,33 @@
             return keep;
         }
 
+        /* O nome final: o do campo mais a data, no padrão do app
+           (`EA Metrics - 20260824.xlsx`). Com intervalo vão as DUAS pontas —
+           é o que distingue uma extração de duas semanas da do dia. O carimbo
+           só entra enquanto o campo está como nasceu: quem renomeou à mão
+           quis aquele nome, e não aquele nome mais uma data.
+
+           Sem intervalo a data é a de HOJE, a da extração, e não a do dado na
+           tela: a data de referência da página não chega aqui (cada tela a
+           guarda do seu jeito), e inventar uma seria carimbar de errado. */
+        function finalName(o) {
+            if (o.name !== baseName) return o.name;
+            var a = o.dayFrom || o.dayTo, b = o.dayTo || o.dayFrom;
+            if (daily && a) {
+                return baseName + ' - ' + flatDay(a) +
+                       (b && b !== a ? ' a ' + flatDay(b) : '');
+            }
+            return baseName + ' - ' + flatDay(todayIso());
+        }
+
+        /* A primeira linha do aviso é o NOME do arquivo que acabou de baixar —
+           é o que a pessoa vai procurar na pasta de downloads. */
+        function fileLine(o) {
+            return EXT[o.format]
+                ? '<div class="fw-semibold mb-1">' + esc(o.name + EXT[o.format]) + '</div>'
+                : '';
+        }
+
         var lastKeep = [];
         function refresh() {
             var o = read();
@@ -669,7 +750,20 @@
                                   (res.why ? ' (' + res.why + ')' : '');
                     }
                     $c.text(resumo).toggleClass('xa-zero', !!res.failed.length);
-                    if (!res.failed.length) bootstrap.Modal.getInstance(el).hide();
+                    // Com o aviso na tela o modal já não precisa ficar aberto
+                    // para segurar o resumo: ele vai inteiro para o SweetAlert.
+                    // Sem SweetAlert vale a regra de antes — o modal fica de pé
+                    // quando algum dia ficou de fora, senão some com a única
+                    // tela que diz quantos dias entraram e o que faltou.
+                    var falhou = !!res.failed.length;
+                    var vaiAvisar = !!EXT[o.format] && !!window.Swal;
+                    var aviso = function () {
+                        if (!vaiAvisar) return;
+                        doneAlert(falhou ? 'warning' : 'success',
+                                  t(falhou ? 'doneTitleWarn' : 'doneTitle'),
+                                  fileLine(o) + '<div>' + esc(resumo) + '</div>');
+                    };
+                    if (vaiAvisar || !falhou) hideThen(el, aviso); else aviso();
                 }, 0);
             }).catch(function (e) {
                 $el.find('#xaRun').prop('disabled', false);
@@ -713,10 +807,26 @@
            .on('click.xa', '#xaRun', function () {
                var o = read();
                if (!o.cols.length || dayRangeError(o)) return;
+               o.name = finalName(o);
                if (daily && (o.dayFrom || o.dayTo)) { runDaily(o); return; }
                if (!lastKeep.length) return;
-               run(dt, o, lastKeep);
-               bootstrap.Modal.getInstance(el).hide();
+               // O mesmo try do caminho do intervalo: um erro na montagem
+               // deixaria o modal aberto sem dizer nada, que é a tela de
+               // travamento por outro motivo.
+               try {
+                   run(dt, o, lastKeep);
+               } catch (err) {
+                   $el.find('#xaCount')
+                      .text(t('daysFailed', { n: 0 }) +
+                            ((err && err.message) ? ' — ' + err.message : ''))
+                      .addClass('xa-zero');
+                   return;
+               }
+               hideThen(el, function () {
+                   if (!EXT[o.format]) return;
+                   doneAlert('success', t('doneTitle'),
+                             fileLine(o) + '<div>' + esc(t('doneRows', { n: lastKeep.length })) + '</div>');
+               });
            });
 
         refresh();
@@ -846,7 +956,6 @@
                      '-' + (m[1].length === 1 ? '0' : '') + m[1];
     }
 
-    function pad2(n) { return (n < 10 ? '0' : '') + n; }
     function ymd(dt) {
         return dt.getUTCFullYear() + '-' + pad2(dt.getUTCMonth() + 1) + '-' + pad2(dt.getUTCDate());
     }
