@@ -84,6 +84,7 @@
             daysBuilding: 'Building the file with {n} rows… (this may take a while)',
             doneTitle: 'Export finished', doneTitleWarn: 'Export finished with gaps',
             doneRows: '{n} row(s) exported', ok: 'OK',
+            exporting: 'Exporting…', failTitle: 'Nothing exported',
             daysFailed: 'Could not read {n} day(s)',
             daysNoFile: '{n} day(s) with no file',
             daysDone: '{n} rows from {d} day(s)',
@@ -124,6 +125,7 @@
             daysBuilding: 'Montando o arquivo com {n} linhas… (pode demorar)',
             doneTitle: 'Exportação concluída', doneTitleWarn: 'Exportação concluída com falhas',
             doneRows: '{n} linha(s) exportada(s)', ok: 'OK',
+            exporting: 'Exportando…', failTitle: 'Nada exportado',
             daysFailed: 'Não consegui ler {n} dia(s)',
             daysNoFile: '{n} dia(s) sem arquivo',
             daysDone: '{n} linhas de {d} dia(s)',
@@ -164,6 +166,7 @@
             daysBuilding: 'Armando el archivo con {n} filas… (puede tardar)',
             doneTitle: 'Exportación finalizada', doneTitleWarn: 'Exportación finalizada con fallas',
             doneRows: '{n} fila(s) exportada(s)', ok: 'OK',
+            exporting: 'Exportando…', failTitle: 'Nada exportado',
             daysFailed: 'No pude leer {n} día(s)',
             daysNoFile: '{n} día(s) sin archivo',
             daysDone: '{n} filas de {d} día(s)',
@@ -451,6 +454,10 @@
 
     function doneAlert(icon, title, html) {
         if (!window.Swal) return false;
+        // O popup do spinner é REAPROVEITADO: o `fire` em cima de um aberto
+        // troca o conteúdo no lugar, sem piscar. O loader não sai sozinho —
+        // sem isto a roda continuaria girando ao lado do ícone de sucesso.
+        if (Swal.isVisible && Swal.isVisible()) Swal.hideLoading();
         Swal.fire({ title: title, html: html, icon: icon,
                     confirmButtonText: t('ok'), confirmButtonColor: '#0066cc' });
         return true;
@@ -626,6 +633,78 @@
                 : '';
         }
 
+        /* Daqui para a frente é tudo SÍNCRONO — montar a tabela do intervalo,
+           filtrar e gerar o arquivo — e a aba fica congelada enquanto dura.
+           `busy` põe o spinner na frente ANTES de começar: fecha o modal, abre
+           o SweetAlert já em "Exportando…" e só dispara o trabalho um QUADRO
+           depois de o spinner ter PINTADO. Disparado antes, a tela congela com
+           o spinner ainda invisível e a espera volta a se ler como travamento —
+           que é o buraco entre o último "Reading" e o download.
+
+           O `didOpen` do SweetAlert já roda com o popup na tela; o par de
+           `requestAnimationFrame` em cima dele garante o quadro do próprio
+           spinner. Sem SweetAlert na página sobra a linha do rodapé do modal,
+           que é como era. */
+        function busy(n, fn) {
+            var go = function () {
+                // Uma rede só para as três etapas: fora da cadeia de promessas,
+                // um erro aqui não tem mais quem o pegue, e o spinner giraria
+                // para sempre — a mesma tela de travamento por outro motivo.
+                try { fn(); }
+                catch (err) {
+                    fail(t('daysFailed', { n: 0 }) +
+                         ((err && err.message) ? ' — ' + err.message : ''));
+                }
+            };
+            if (!window.Swal) {
+                $el.find('#xaCount').text(t('daysBuilding', { n: n })).removeClass('xa-zero');
+                setTimeout(go, 0);
+                return;
+            }
+            hideThen(el, function () {
+                Swal.fire({
+                    title: t('exporting'),
+                    html: esc(t('daysBuilding', { n: n })),
+                    allowOutsideClick: false, allowEscapeKey: false,
+                    showConfirmButton: false,
+                    didOpen: function () {
+                        Swal.showLoading();
+                        if (window.requestAnimationFrame) {
+                            requestAnimationFrame(function () { requestAnimationFrame(go); });
+                        } else { setTimeout(go, 30); }
+                    }
+                });
+            });
+        }
+
+        /* O desfecho ruim depois de o spinner estar de pé: o SweetAlert aberto
+           vira a mensagem, senão ele giraria para sempre. Sem SweetAlert
+           continua sendo a linha do rodapé, com o modal aberto — que é onde a
+           pessoa conserta o filtro. */
+        function fail(msg) {
+            $el.find('#xaCount').text(msg).addClass('xa-zero');
+            doneAlert('warning', t('failTitle'), esc(msg));
+        }
+
+        /* O desfecho bom: o spinner vira o aviso de fim, no MESMO popup. Print
+           e Copy não produzem arquivo e não têm o que anunciar — ali o spinner
+           só se fecha. */
+        function finish(falhou, o, resumo) {
+            $el.find('#xaCount').text(resumo).toggleClass('xa-zero', falhou);
+            var vaiAvisar = !!EXT[o.format] && !!window.Swal;
+            var aviso = function () {
+                if (!vaiAvisar) { if (window.Swal) Swal.close(); return; }
+                doneAlert(falhou ? 'warning' : 'success',
+                          t(falhou ? 'doneTitleWarn' : 'doneTitle'),
+                          fileLine(o) + '<div>' + esc(resumo) + '</div>');
+            };
+            // Com o spinner, o modal já fechou no `busy` e o `hideThen` cai
+            // direto no aviso. Sem SweetAlert vale a regra de antes: o modal
+            // fica de pé quando algum dia ficou de fora, senão some com a única
+            // tela que diz quantos dias entraram e o que faltou.
+            if (vaiAvisar || !falhou) hideThen(el, aviso); else aviso();
+        }
+
         var lastKeep = [];
         function refresh() {
             var o = read();
@@ -704,44 +783,24 @@
                             : t('daysEmpty')).addClass('xa-zero');
                     return;
                 }
-                var tbl = buildDailyTable(res);
-                // A tabela dos arquivos não tem checkbox nem Actions e ganha a
-                // Reference Date na frente: o casamento com o que a pessoa
-                // escolheu na tela é pelo RÓTULO, e a Reference Date entra
-                // sempre — sem ela, um arquivo de vinte dias não diz de que dia
-                // é cada linha.
-                function toDaily(c) {
-                    var i = res.columns.indexOf(c.label);
-                    return i === -1 ? null : i;
-                }
-                var keep = pick(o, tbl, toDaily);
-                if (!keep.length) {
-                    $c.text(t('noRows')).addClass('xa-zero');
-                    return;
-                }
-                var cols = [0].concat(o.colLabels.map(function (l) {
-                    return res.columns.indexOf(l);
-                }).filter(function (i) { return i > 0; }));
-                // Montar o arquivo (Excel/CSV/PDF) é SÍNCRONO e segura a aba
-                // por alguns segundos num intervalo grande. Sem este passe de
-                // tela o aviso só apareceria depois de o arquivo ter baixado, e
-                // a espera se lê como travamento.
-                $c.text(t('daysBuilding', { n: keep.length })).removeClass('xa-zero');
-                setTimeout(function () {
-                    // Fora da cadeia de promessas, o erro daqui não tem mais
-                    // quem o pegue: sem este try o modal ficaria em "montando"
-                    // para sempre, que é a mesma tela de travamento.
-                    try {
-                        run(tbl, jQuery.extend({}, o, { cols: cols }), keep);
-                    } catch (err) {
-                        $c.text(t('daysFailed', { n: 0 }) +
-                                ((err && err.message) ? ' — ' + err.message : ''))
-                          .addClass('xa-zero');
-                        return;
-                    }
-                    // O resumo fica NO MODAL, que não se fecha sozinho quando algum
-                    // dia ficou de fora: o arquivo já baixou, e some com a única
-                    // tela que diz quantos dias entraram e o que faltou.
+                // O "Reading" acabou e começa a parte que congela a aba: o
+                // spinner entra AQUI, no lugar dele.
+                busy(res.rows.length, function () {
+                    var tbl = buildDailyTable(res);
+                    // A tabela dos arquivos não tem checkbox nem Actions e ganha a
+                    // Reference Date na frente: o casamento com o que a pessoa
+                    // escolheu na tela é pelo RÓTULO, e a Reference Date entra
+                    // sempre — sem ela, um arquivo de vinte dias não diz de que dia
+                    // é cada linha.
+                    var keep = pick(o, tbl, function (c) {
+                        var i = res.columns.indexOf(c.label);
+                        return i === -1 ? null : i;
+                    });
+                    if (!keep.length) { fail(t('noRows')); return; }
+                    var cols = [0].concat(o.colLabels.map(function (l) {
+                        return res.columns.indexOf(l);
+                    }).filter(function (i) { return i > 0; }));
+                    run(tbl, jQuery.extend({}, o, { cols: cols }), keep);
                     var dias_ok = res.rows.length ? (new Set(res.rows.map(function (r) { return r[0]; }))).size : 0;
                     var resumo = t('daysDone', { n: keep.length, d: dias_ok });
                     if (res.empty.length) resumo += ' · ' + t('daysNoFile', { n: res.empty.length });
@@ -749,22 +808,8 @@
                         resumo += ' · ' + t('daysFailed', { n: res.failed.length }) +
                                   (res.why ? ' (' + res.why + ')' : '');
                     }
-                    $c.text(resumo).toggleClass('xa-zero', !!res.failed.length);
-                    // Com o aviso na tela o modal já não precisa ficar aberto
-                    // para segurar o resumo: ele vai inteiro para o SweetAlert.
-                    // Sem SweetAlert vale a regra de antes — o modal fica de pé
-                    // quando algum dia ficou de fora, senão some com a única
-                    // tela que diz quantos dias entraram e o que faltou.
-                    var falhou = !!res.failed.length;
-                    var vaiAvisar = !!EXT[o.format] && !!window.Swal;
-                    var aviso = function () {
-                        if (!vaiAvisar) return;
-                        doneAlert(falhou ? 'warning' : 'success',
-                                  t(falhou ? 'doneTitleWarn' : 'doneTitle'),
-                                  fileLine(o) + '<div>' + esc(resumo) + '</div>');
-                    };
-                    if (vaiAvisar || !falhou) hideThen(el, aviso); else aviso();
-                }, 0);
+                    finish(!!res.failed.length, o, resumo);
+                });
             }).catch(function (e) {
                 $el.find('#xaRun').prop('disabled', false);
                 $c.text(t('daysFailed', { n: 0 }) +
@@ -810,22 +855,11 @@
                o.name = finalName(o);
                if (daily && (o.dayFrom || o.dayTo)) { runDaily(o); return; }
                if (!lastKeep.length) return;
-               // O mesmo try do caminho do intervalo: um erro na montagem
-               // deixaria o modal aberto sem dizer nada, que é a tela de
-               // travamento por outro motivo.
-               try {
+               // O mesmo spinner do intervalo: a tela do dia também pode ter
+               // dezenas de milhares de linhas, e a montagem é a mesma.
+               busy(lastKeep.length, function () {
                    run(dt, o, lastKeep);
-               } catch (err) {
-                   $el.find('#xaCount')
-                      .text(t('daysFailed', { n: 0 }) +
-                            ((err && err.message) ? ' — ' + err.message : ''))
-                      .addClass('xa-zero');
-                   return;
-               }
-               hideThen(el, function () {
-                   if (!EXT[o.format]) return;
-                   doneAlert('success', t('doneTitle'),
-                             fileLine(o) + '<div>' + esc(t('doneRows', { n: lastKeep.length })) + '</div>');
+                   finish(false, o, t('doneRows', { n: lastKeep.length }));
                });
            });
 
