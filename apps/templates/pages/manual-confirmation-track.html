@@ -293,13 +293,14 @@
             </button>
             <span class="vr d-none d-lg-inline"></span>
             <!-- Modelo do New Deals / Pending Confirmation: escolhe-se a COLUNA e o
-                 campo de valor à esquerda se adapta ao tipo dela. Confirm e Delete
+                 campo de valor ao lado se adapta ao tipo dela — e é nessa ordem que
+                 os dois aparecem, a mesma em que se usam. Confirm e Delete
                  nascem escondidos e só aparecem com linha selecionada — na Pending
                  é o mesmo, e um Delete sempre visível numa tela sem desfazer é um
                  convite ao clique errado. -->
             <div class="mc-mass-wrap">
-                <div id="mcMassValueWrap" style="min-width:190px;"></div>
                 <select class="form-select form-select-sm" id="mcMassColumn" style="width:230px;"></select>
+                <div id="mcMassValueWrap" style="min-width:190px;"></div>
                 <button class="btn btn-sm btn-success bg-gradient btn-toolbar-all d-none" id="mcMassApply" disabled
                         data-bs-toggle="tooltip" data-bs-placement="top"
                         title="Apply the value to the selected rows">

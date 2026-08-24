@@ -1557,7 +1557,7 @@ $(document).ready(function() {
     // ========================================================================
     // ATUALIZAÇÃO EM MASSA — as colunas oferecidas e o tipo de campo de cada uma
     // ========================================================================
-    //  `kind` decide o campo que aparece à esquerda do dropdown de coluna:
+    //  `kind` decide o campo que aparece ao lado do dropdown de coluna:
     //    date     → máscara dd/mm/yyyy (flatpickr), sem digitar as barras
     //    select   → lista fechada
     //    refdata  → autocomplete do Reference Data, o MESMO do modal de edição
@@ -1874,9 +1874,10 @@ $(document).ready(function() {
 
                 // ---------------------------------------------------------
                 // Atualização em massa, no modelo das páginas de New Deals:
-                // primeiro se escolhe a COLUNA, depois o campo de valor à
-                // esquerda se adapta ao tipo dela (data com máscara, dropdown
-                // com autocomplete, texto livre).
+                // primeiro se escolhe a COLUNA, depois o campo de valor ao
+                // lado se adapta ao tipo dela (data com máscara, dropdown
+                // com autocomplete, texto livre) — e é nessa ordem que os dois
+                // aparecem na barra, a mesma em que se usam.
                 //
                 // Antes daqui só dava para aplicar o Pending Status — qualquer
                 // outra coluna exigia abrir o modal linha a linha.
@@ -1924,8 +1925,8 @@ $(document).ready(function() {
                 deleteBtn.setAttribute('title', 'Delete selected rows');
                 deleteBtn.innerHTML = '<i class="ti ti-trash me-1"></i> Delete';
 
-                conditionalActions.appendChild(valueWrapper);
                 conditionalActions.appendChild(columnSelect);
+                conditionalActions.appendChild(valueWrapper);
                 conditionalActions.appendChild(confirmBtn);
                 conditionalActions.appendChild(deleteBtn);
             }

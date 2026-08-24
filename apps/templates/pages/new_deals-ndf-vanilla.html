@@ -2076,7 +2076,7 @@ $(document).ready(function() {
                 // Value input wrapper — content replaced dynamically based on selected column
                 var valueWrapper = document.createElement('div');
                 valueWrapper.id = 'massColumnValueWrapper';
-                valueWrapper.className = 'd-none me-1';
+                valueWrapper.className = 'd-none me-2';
                 var defInput = document.createElement('input');
                 defInput.type = 'text';
                 defInput.className = 'form-control form-control-sm';
@@ -2088,7 +2088,7 @@ $(document).ready(function() {
 
                 // Column select
                 var columnSelect = document.createElement('select');
-                columnSelect.className = 'form-select form-select-sm d-none me-2 btn-toolbar-all';
+                columnSelect.className = 'form-select form-select-sm d-none me-1 btn-toolbar-all';
                 columnSelect.style.width = '180px';
                 columnSelect.id = 'massColumnSelect';
                 columnSelect.innerHTML =
@@ -2150,8 +2150,12 @@ $(document).ready(function() {
                 deleteBtn.setAttribute('data-bs-custom-class', 'tooltip-danger');
                 deleteBtn.innerHTML = '<i class="ti ti-trash me-1"></i> Delete';
 
-                conditionalActions.appendChild(valueWrapper);
+                // A COLUNA vem primeiro e o valor depois, que é a ordem em que se
+                // usam: sem coluna escolhida o campo de valor nasce desabilitado
+                // dizendo isso. As margens acompanham a troca (me-1 entre os dois
+                // campos, me-2 antes dos botões) para o espaçamento não mudar.
                 conditionalActions.appendChild(columnSelect);
+                conditionalActions.appendChild(valueWrapper);
                 conditionalActions.appendChild(confirmBtn);
                 conditionalActions.appendChild(applyBtn);
                 conditionalActions.appendChild(deleteBtn);
