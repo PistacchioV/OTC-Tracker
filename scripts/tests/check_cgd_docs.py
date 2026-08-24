@@ -65,6 +65,17 @@ def linha(**kw):
     return r
 
 
+def pedido(**kw):
+    """Uma linha com a SOLICITAÇÃO já completa — os campos obrigatórios do
+    formulário preenchidos. Sem eles o documento está no Banking (a solicitação
+    ainda está sendo aberta), e todo teste de etapa daí para a frente mediria
+    outra coisa."""
+    base = {'Data Solicitação': '01/08/2026', 'Razão Social': 'CLIENTE X',
+            'CNPJ': '10.144.076/0001-44', 'Signature Type': 'DocuSign'}
+    base.update(kw)
+    return linha(**base)
+
+
 # ── 1. Datas ────────────────────────────────────────────────────────────────
 
 print('== as datas da planilha ==')
@@ -104,24 +115,53 @@ check('documento Active não é pendência de ninguém',
 check('   e o teste é cego a caixa e acento',
       C.pending_stage(linha(Status=' active ')), (None, False))
 
-check('sem carimbo nenhum → Legal',
-      C.pending_stage(linha(Status='Em elaboração')), ('Legal', True))
-check('emitido e assinado, sem carimbo do OTC → Banking OTC',
-      C.pending_stage(linha(**{'Status': 'X', 'Emissão': '01/08/2026',
-                               'Signature Date': '02/08/2026'})),
-      ('Banking OTC', True))
+# Banking é a PRIMEIRA mesa: enquanto a solicitação não tem os campos
+# obrigatórios do formulário, ela está sendo aberta e não é pendência das mesas
+# seguintes.
+check('solicitação incompleta → Banking',
+      C.pending_stage(linha(Status='Em elaboração')), ('Banking', True))
+for falta in C.REQUEST_FIELDS:
+    r = pedido(Status='X')
+    r[falta] = ''
+    check('   falta "%s" → Banking' % falta, C.pending_stage(r)[0], 'Banking')
+check('solicitação completa, sem carimbo nenhum → Legal',
+      C.pending_stage(pedido(Status='Em elaboração')), ('Legal', True))
+check('emitido e assinado, sem carimbo do OTC → OTC',
+      C.pending_stage(pedido(**{'Status': 'X', 'Emissão': '01/08/2026',
+                                'Signature Date': '02/08/2026'})),
+      ('OTC', True))
 check('carimbado pelo OTC, sem o do MO → CEM MO',
-      C.pending_stage(linha(**{'Status': 'X', 'Emissão': '01/08/2026',
-                               'Signature Date': '02/08/2026',
-                               'OTC - STAMP': '03/08/2026'})),
+      C.pending_stage(pedido(**{'Status': 'X', 'Emissão': '01/08/2026',
+                                'Signature Date': '02/08/2026',
+                                'OTC - STAMP': '03/08/2026'})),
       ('CEM MO', True))
 # Tudo carimbado e ainda não Active: fica com a última mesa. Devolver "nenhuma"
-# faria o documento sumir das três filas.
+# faria o documento sumir das quatro filas.
 check('tudo carimbado e ainda não Active fica na última mesa',
-      C.pending_stage(linha(**{'Status': 'X', 'Emissão': '01/08/2026',
-                               'Signature Date': '02/08/2026',
-                               'OTC - STAMP': '03/08/2026', 'MO - STAMP': '04/08/2026'})),
+      C.pending_stage(pedido(**{'Status': 'X', 'Emissão': '01/08/2026',
+                                'Signature Date': '02/08/2026',
+                                'OTC - STAMP': '03/08/2026', 'MO - STAMP': '04/08/2026'})),
       ('CEM MO', True))
+# O domínio do Tipo de Assinatura é fechado e tem TRÊS opções: `Manual` é o
+# mesmo valor que a tela em português mostra como "Física".
+check('o tipo de assinatura tem três opções',
+      list(C.SIGNATURE_TYPES), ['FepWeb', 'DocuSign', 'Manual'])
+
+# O formulário de New Request grava NAS COLUNAS DO BANCO. Uma coluna com nome
+# errado aqui não dá erro: o `update_row` ignora a chave desconhecida e o campo
+# preenchido some no caminho — a solicitação nasceria sem o CNPJ que a pessoa
+# digitou. E os obrigatórios saem do próprio formulário, para as duas listas não
+# divergirem.
+check('todo campo do formulário aponta para uma coluna real',
+      [f['column'] for f in C.REQUEST_FORM if f['column'] not in C.COLUMNS], [])
+check('os obrigatórios saem do formulário',
+      list(C.REQUEST_FIELDS),
+      [f['column'] for f in C.REQUEST_FORM if f['required']])
+check('   e são os que seguram o documento no Banking',
+      list(C.STAGE_STAMP[0][1]), list(C.REQUEST_FIELDS))
+check('o Tipo de Assinatura é campo do formulário e coluna do banco',
+      C.SIGNATURE_COLUMN in C.COLUMNS
+      and C.SIGNATURE_COLUMN in [f['column'] for f in C.REQUEST_FORM], True)
 
 cadastro([{'STATUS': 'Pending Signature', 'STAGE': 'Legal'},
           {'STATUS': 'AGUARDANDO MO', 'STAGE': 'CEM MO'}])
@@ -131,23 +171,30 @@ check('o cadastro VENCE a derivação',
       ('CEM MO', False))
 check('   e a linha cadastrada não vem marcada como derivada',
       C.pending_stage(linha(Status='Pending Signature'))[1], False)
+check('   inclusive com a solicitação incompleta (o cadastro é explícito)',
+      C.pending_stage(linha(Status='Aguardando MO'))[0], 'CEM MO')
 check('status fora do cadastro continua derivando',
-      C.pending_stage(linha(Status='Outro qualquer'))[0], 'Legal')
+      C.pending_stage(pedido(Status='Outro qualquer'))[0], 'Legal')
 
 
 # ── 4. O banco ──────────────────────────────────────────────────────────────
 
 print('\n== o banco ==')
+# As três com a SOLICITAÇÃO completa (`Signature Type` incluído): sem ela as três
+# ficariam no Banking, e o que se quer medir aqui são as mesas seguintes.
 rows = [
     linha(**{'Status': 'Active', 'Doc Type': 'CGD', 'Razão Social': 'MONDELEZ',
              'CNPJ': '10.144.076/0001-44', 'Data Solicitação': '01/07/2026',
+             'Signature Type': 'FepWeb',
              'Emissão': '10/07/2026', 'Signature Date': '15/07/2026',
              'OTC - STAMP': '16/07/2026', 'MO - STAMP': '17/07/2026',
              'Conclusion - Stamp': '20/07/2026', 'Aging': '999'}),
     linha(**{'Status': 'Pending Signature', 'Doc Type': 'CGD', 'Razão Social': 'ATACAMA',
-             'CNPJ': '12.345.678/0001-99', 'Data Solicitação': '01/08/2026'}),
+             'CNPJ': '12.345.678/0001-99', 'Data Solicitação': '01/08/2026',
+             'Signature Type': 'DocuSign'}),
     linha(**{'Status': 'Pending OTC', 'Doc Type': 'CSA', 'Razão Social': 'LAWTON',
              'CNPJ': '98.765.432/0001-11', 'Data Solicitação': '05/08/2026',
+             'Signature Type': 'Manual',
              'Emissão': '06/08/2026', 'Signature Date': '07/08/2026'}),
 ]
 n = C.replace_all(rows)
@@ -190,18 +237,19 @@ C.replace_all(rows)
 ov = C.overview(C.load_all())
 check('só o que NÃO está Active entra nas filas', ov['active'], 1)
 filas = {c['stage']: c for c in ov['cards']}
-check('as três mesas na ordem da esteira',
+check('as quatro mesas na ordem da esteira',
       [c['stage'] for c in ov['cards']], list(C.STAGES))
 check('ATACAMA (sem emissão) cai na Legal',
       [i['client'] for i in filas['Legal']['items']], ['ATACAMA'])
-check('LAWTON (assinado, sem carimbo do OTC) cai no Banking OTC',
-      [i['client'] for i in filas['Banking OTC']['items']], ['LAWTON'])
+check('LAWTON (assinado, sem carimbo do OTC) cai no OTC',
+      [i['client'] for i in filas['OTC']['items']], ['LAWTON'])
 check('e o item leva o status COMO ESTÁ ESCRITO',
       filas['Legal']['items'][0]['status'], 'Pending Signature')
 
 # A fila vem do mais velho para o mais novo, como no Confirmations Monitor.
 C.replace_all(rows + [
     linha(**{'Status': 'Em elaboração', 'Razão Social': 'MAIS VELHO',
+             'CNPJ': '11.111.111/0001-11', 'Signature Type': 'FepWeb',
              'Data Solicitação': '01/01/2026'}),
 ])
 fila_legal = [c for c in C.overview()['cards'] if c['stage'] == 'Legal'][0]
@@ -265,6 +313,38 @@ res2 = subprocess.run([sys.executable, os.path.join(ROOT, 'scripts', 'import_cgd
 check('planilha que não é a lista é RECUSADA', res2.returncode != 0, True)
 check('   dizendo quais colunas esperava',
       'não achei o cabeçalho' in ((res2.stdout or '') + (res2.stderr or '')), True)
+
+# ── 5. O documento ENCERRADO sai das filas ──────────────────────────────────
+# `Inactive` contém `ACTIVE`: com um teste por pedaço o encerrado vira ativo, e
+# com um teste exato ele vira PENDENTE e cai na fila do Legal — que é a primeira
+# etapa sem carimbo em quem nunca começou. As duas leituras estão erradas, e a
+# segunda é pior: o documento morto envelhece para sempre no topo da fila,
+# empurrando para baixo o que alguém de fato tem de fazer.
+for st, ativo, fechado in (('Active', True, True), ('Inactive', False, True),
+                           ('INATIVO', False, True), ('Cancelado', False, True),
+                           ('Cancelled', False, True), ('Doc Transacional', False, False)):
+    r = {'Status': st}
+    check('%-16s is_active' % st, C.is_active(r), ativo)
+    check('%-16s is_closed' % st, C.is_closed(r), fechado)
+    check('%-16s sem etapa' % st, C.pending_stage(r)[0] is None, fechado)
+
+# E os quatro números do Overview FECHAM. Sem o `closed` explícito o painel
+# mostrava três que não somavam o total, e a diferença era justamente o que
+# tinha sumido das filas.
+ov = C.overview([
+    {'Status': 'Active'}, {'Status': 'Active'},
+    {'Status': 'Inactive'}, {'Status': 'Cancelado'},
+    {'Status': 'Em Analise Legal'}, {'Status': 'Doc Transacional'},
+])
+check('overview: total', ov['total'], 6)
+check('overview: ativos', ov['active'], 2)
+check('overview: encerrados', ov['closed'], 2)
+check('overview: pendentes', ov['pending'], 2)
+check('overview: os quatro fecham',
+      ov['pending'] + ov['active'] + ov['closed'] == ov['total'], True)
+check('nenhum encerrado nas filas',
+      [i['status'] for card in ov['cards'] for i in card['items']
+       if C.is_closed({'Status': i['status']})], [])
 
 shutil.rmtree(TMP, ignore_errors=True)
 

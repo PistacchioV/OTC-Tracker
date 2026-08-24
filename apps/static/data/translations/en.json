@@ -1916,5 +1916,14 @@
   "cgd-c-status": "Status FEP",
   "cgd-c-obs": "Substantiation",
   "cgd-c-created": "Creation Date",
-  "cgd-c-aging": "Aging"
+  "cgd-c-aging": "Aging",
+  "ob-sum-closed": "Closed",
+  "cgd-show": "Show",
+  "cgd-entries": "entries",
+  "ob-new-request": "New Request",
+  "ob-mass-apply": "Confirm",
+  "ob-mass-del": "Delete",
+  "ob-req-title": "New CGD Request",
+  "ob-req-cancel": "Cancel",
+  "ob-req-save": "Create request"
 }

@@ -3,6 +3,7 @@
 {% block title %}Onboarding Overview{% endblock title %}
 
 {% block extra_css %}
+<link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet" type="text/css" />
 <style>
 /* ============================================================================
    Onboarding · Overview — uma fila por mesa da esteira do CGD.
@@ -54,6 +55,7 @@
 }
 /* A mesa é a cor do CHIP, não a do cartão: cartão inteiro tingido briga com a
    lista dentro dele e some no tema escuro. */
+#ob-monitor .ob-c-bank   .ob-card__ico { background: linear-gradient(100deg, #0d7ea8, #4a849b); box-shadow: 0 4px 12px rgba(13,126,168,.28); }
 #ob-monitor .ob-c-legal  .ob-card__ico { background: linear-gradient(100deg, #6d4c41, #a1887f); box-shadow: 0 4px 12px rgba(109,76,65,.28); }
 #ob-monitor .ob-c-otc    .ob-card__ico { background: linear-gradient(100deg, #0066cc, #5e5ce6); box-shadow: 0 4px 12px rgba(0,102,204,.28); }
 #ob-monitor .ob-c-mo     .ob-card__ico { background: linear-gradient(100deg, #b07500, #f7b84b); box-shadow: 0 4px 12px rgba(176,117,0,.28); }
@@ -106,6 +108,7 @@
     white-space: nowrap; line-height: 1.35;
 }
 .ob-badge--active  { background-image: linear-gradient(100deg, #1a7f37, #34c759); }
+.ob-badge--bank    { background-image: linear-gradient(100deg, #0d7ea8, #4a849b); }
 .ob-badge--legal   { background-image: linear-gradient(100deg, #6d4c41, #a1887f); }
 .ob-badge--otc     { background-image: linear-gradient(100deg, #0066cc, #5e5ce6); }
 .ob-badge--mo      { background-image: linear-gradient(100deg, #b07500, #f7b84b); }
@@ -149,8 +152,13 @@
         <div><div class="ob-sum__n" id="ob-total">0</div><div class="ob-sum__l" data-lang="ob-sum-total">Documents</div></div>
         <div><div class="ob-sum__n" id="ob-pending">0</div><div class="ob-sum__l" data-lang="ob-sum-pending">Pending</div></div>
         <div><div class="ob-sum__n" id="ob-active">0</div><div class="ob-sum__l" data-lang="ob-sum-active">Active</div></div>
+        <div><div class="ob-sum__n" id="ob-closed">0</div><div class="ob-sum__l" data-lang="ob-sum-closed">Closed</div></div>
         <div class="ob-sum__db">
-            <a href="/onboarding/tracking-docs" class="text-decoration-none">
+            <button type="button" class="btn btn-sm btn-primary bg-gradient btn-toolbar-all mb-2"
+                    id="ob-new-request">
+                <i class="ti ti-file-plus me-1"></i><span data-lang="ob-new-request">New Request</span>
+            </button>
+            <a href="/onboarding/tracking-docs" class="text-decoration-none d-block">
                 <i class="ti ti-table"></i> <span data-lang="ob-open-tracking">Open Tracking Docs</span>
             </a>
             <div id="ob-dbline" class="mt-1"></div>
@@ -160,9 +168,17 @@
     <div class="row g-3" id="ob-cards"></div>
 
 </div>
+
+{% include 'partials/onboarding-new-request.html' %}
 {% endblock page_content %}
 
 {% block extra_javascript %}
+{# SweetAlert2 é LOCAL, não o CDN: a instância do JPM roda sem internet, e do
+   CDN a lib não chega — todo `Swal.fire` da página vira `Swal is not defined`
+   e MORRE dentro do handler. O efeito não é só ficar sem o balão: a ação que
+   vinha depois dele (o Delete da linha, o aviso do Run) não acontece, e a tela
+   não diz nada. As três páginas do CGD nasceram sem esta linha. #}
+<script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
 <script>
 (function () {
     'use strict';
@@ -170,19 +186,19 @@
     /* i18n do texto montado em JS. O I18nManager traduz os [data-lang] UMA vez,
        no load: o que o JS insere depois nunca passa por ele. */
     var _TRANS = {
-        en: { legal: 'Legal', otc: 'Banking OTC', mo: 'CEM MO',
+        en: { banking: 'Banking', legal: 'Legal', otc: 'OTC', mo: 'CEM MO',
               empty: 'Nothing pending with this desk',
               nodb: 'The CGD database has not been imported yet.',
               nodbhint: 'Run scripts/import_cgd_sharepoint.py with the SharePoint export.',
               docs: 'document(s)', days: 'business day(s)', noage: 'no request date',
               derived: 'derived', requested: 'Requested' },
-        br: { legal: 'Legal', otc: 'Banking OTC', mo: 'CEM MO',
+        br: { banking: 'Banking', legal: 'Legal', otc: 'OTC', mo: 'CEM MO',
               empty: 'Nada pendente nesta mesa',
               nodb: 'O banco de CGDs ainda não foi importado.',
               nodbhint: 'Rode scripts/import_cgd_sharepoint.py com a exportação do SharePoint.',
               docs: 'documento(s)', days: 'dia(s) útil(eis)', noage: 'sem data de solicitação',
               derived: 'derivado', requested: 'Solicitado' },
-        es: { legal: 'Legal', otc: 'Banking OTC', mo: 'CEM MO',
+        es: { banking: 'Banking', legal: 'Legal', otc: 'OTC', mo: 'CEM MO',
               empty: 'Nada pendiente en esta mesa',
               nodb: 'La base de CGD aún no fue importada.',
               nodbhint: 'Ejecute scripts/import_cgd_sharepoint.py con la exportación de SharePoint.',
@@ -203,9 +219,10 @@
     // Mesa → classe do chip e do badge. A ordem do array vem do servidor
     // (`cgd_docs.STAGES`), então o mapa aqui é só de aparência.
     var SKIN = {
-        'Legal':       { cls: 'ob-c-legal', badge: 'ob-badge--legal', icon: 'ti-gavel', key: 'legal' },
-        'Banking OTC': { cls: 'ob-c-otc',   badge: 'ob-badge--otc',   icon: 'ti-building-bank', key: 'otc' },
-        'CEM MO':      { cls: 'ob-c-mo',    badge: 'ob-badge--mo',    icon: 'ti-clipboard-check', key: 'mo' }
+        'Banking': { cls: 'ob-c-bank',  badge: 'ob-badge--bank',  icon: 'ti-file-plus', key: 'banking' },
+        'Legal':   { cls: 'ob-c-legal', badge: 'ob-badge--legal', icon: 'ti-gavel', key: 'legal' },
+        'OTC':     { cls: 'ob-c-otc',   badge: 'ob-badge--otc',   icon: 'ti-building-bank', key: 'otc' },
+        'CEM MO':  { cls: 'ob-c-mo',    badge: 'ob-badge--mo',    icon: 'ti-clipboard-check', key: 'mo' }
     };
 
     function ageClass(n) {
@@ -242,7 +259,10 @@
         var lista = c.items.length
             ? c.items.map(function (i) { return item(i, skin); }).join('')
             : '<div class="ob-empty">' + esc(t('empty')) + '</div>';
-        return '<div class="col-12 col-md-6 col-xl-4">' +
+        // Quatro mesas: `xl-3` para as quatro caberem numa linha só. Com `xl-4`
+        // a quarta descia sozinha e a esteira deixava de se ler da esquerda
+        // para a direita.
+        return '<div class="col-12 col-md-6 col-xl-3">' +
             '<div class="ob-card ' + skin.cls + '">' +
               '<div class="ob-card__head">' +
                 '<span class="ob-card__ico"><i class="ti ' + skin.icon + '"></i></span>' +
@@ -257,15 +277,23 @@
           '</div>';
     }
 
+    // O partial do modal chama isto depois de gravar — ele não sabe em que tela
+    // está, e cada uma se atualiza do seu jeito.
+    window.obRequestSaved = function () { load(); };
+
     function load() {
         fetch('/api/onboarding/overview', { credentials: 'same-origin' })
             .then(function (r) { return r.json(); })
             .then(function (j) {
                 if (!j || !j.success) { return; }
-                var pend = (j.total || 0) - (j.active || 0);
+                // Os quatro números vêm do servidor e FECHAM (total = pendentes +
+                // ativos + encerrados). O `pending` era calculado aqui como
+                // total − ativos, e por isso contava junto o Inactive e o
+                // Cancelado, que não são pendência de ninguém.
                 document.getElementById('ob-total').textContent = j.total || 0;
-                document.getElementById('ob-pending').textContent = pend;
+                document.getElementById('ob-pending').textContent = j.pending || 0;
                 document.getElementById('ob-active').textContent = j.active || 0;
+                document.getElementById('ob-closed').textContent = j.closed || 0;
                 // Banco ausente é um estado, não um erro: a tela diz o que
                 // fazer em vez de mostrar três filas vazias que parecem "não há
                 // nada pendente".

@@ -850,6 +850,15 @@ São quatro batimentos, cada um comparando duas fontes que deveriam dizer a mesm
 
 **Para que serve:** confere se todo cliente com Contrato Global de Derivativos (CGD) assinado está incluído na B3, e se todo cliente que aparece na posição da B3 tem CGD. Ela compara a **lista do FEP** com a **posição da B3 do último dia útil**.
 
+**De onde sai cada lado:**
+
+| Lado | Fonte |
+|---|---|
+| **Lista do FEP** | O `.xlsx` anexado ao e-mail mais recente da pasta **Inbox › Automatico › FEPWEB-CGD-ContratoGlobalDerivativos - SEM FILTRO DATAS**, na caixa compartilhada. Você não precisa salvar o arquivo em lugar nenhum: o sistema lê o anexo direto |
+| **Posição da B3** | O arquivo `CETIP21_AAMMDD_DPOSICAO-NET.txt` do último dia útil, na pasta em que a rotina **Save CETIP Files** o grava — e não na pasta de download bruto da B3 |
+
+> **Confira sempre de que dia é a lista.** Depois do Run, o painel diz o **assunto e a data** do e-mail que alimentou o batimento. Como a pasta acumula os relatórios, é isso que distingue "a recon está limpa" de "a recon rodou com a lista da semana passada".
+
 **Os cinco cartões do alto** são as cinco respostas possíveis. **Clique num cartão para filtrar a tabela** por aquele grupo:
 
 | Cartão | Significa |
@@ -1053,15 +1062,48 @@ Acompanha a emissão dos **Contratos Globais de Derivativos**, desde a solicita�
 
 **Para que serve:** responde *quantos contratos estão em aberto e em que mesa cada um está parado*. É o painel de trabalho do onboarding.
 
-A faixa do alto traz três números — **Documents** (o total), **Pending** (o que não está ativo) e **Active** (o que já está pronto) — e um link **Open Tracking Docs**.
+A faixa do alto traz quatro números e um link **Open Tracking Docs**:
 
-Abaixo, **três cartões verticais**, um por mesa da esteira:
+| Número | O que conta |
+|---|---|
+| **Documents** | O total do banco |
+| **Pending** | O que está em alguma das três filas |
+| **Active** | O que já está pronto (`Status` = Active) |
+| **Closed** | O que foi encerrado sem concluir — `Inactive` e `Cancelado` |
+
+Os quatro fecham: **Documents = Pending + Active + Closed**.
+
+Abaixo, **quatro cartões verticais**, um por mesa da esteira, na ordem em que o documento passa por elas:
 
 | Cartão | O que está esperando ali |
 |---|---|
+| **Banking** | A solicitação está sendo aberta — falta preencher um dos campos obrigatórios do formulário |
 | **Legal** | Falta a emissão / a assinatura do contrato |
-| **Banking OTC** | Emitido; falta o carimbo do OTC |
+| **OTC** | Assinado; falta o carimbo do OTC |
 | **CEM MO** | Falta o carimbo do Middle Office |
+
+**Para abrir uma solicitação:**
+
+1. Clique em **New Request**, no canto direito da faixa de números (o mesmo botão existe na barra do Tracking Docs).
+2. Preencha o formulário. Os campos com **\*** são obrigatórios; o sistema recusa o Save e marca em vermelho os que faltam.
+3. A **CGD - Solicitação** já vem com a data de hoje.
+4. **Razão Social** e **CNPJ** aceitam **todas as entidades do grupo** — são campos de várias linhas.
+5. **CGD - Tipo de Assinatura** é uma lista: *FepWeb*, *DocuSign* ou *Manual* (a assinatura física).
+6. Em **CGD - Domínio cliente**, se o cliente não tiver domínio, escreva `NA`.
+7. Clique em **Create request**. A solicitação entra na lista e aparece na fila da mesa correspondente.
+
+![Nova solicitação de CGD](docs/sop-screenshots/onboarding-new-request.png)
+
+**Os campos obrigatórios da solicitação** — enquanto um deles estiver em branco, o documento fica no Banking:
+
+| Campo do formulário | Coluna da lista |
+|---|---|
+| **CGD - Solicitação** | `Data Solicitação` |
+| **Razão Social** | `Razão Social` |
+| **CNPJ** | `CNPJ` |
+| **CGD - Tipo de Assinatura** | `Signature Type` |
+
+*Grupo* e *CGD - Domínio cliente* não entram: são opcionais no formulário (o domínio se preenche com `NA` quando o cliente não tem), e cobrá-los deixaria na fila uma solicitação que já pode seguir.
 
 **Passo a passo:**
 
@@ -1070,7 +1112,7 @@ Abaixo, **três cartões verticais**, um por mesa da esteira:
 3. A etiqueta **derived** ao lado do status significa que a mesa foi **deduzida** pelo primeiro carimbo que falta, e não lida de um cadastro. Para fixar a mesa de um status, cadastre-o em **Mapping › `cgd-stage`** (13.3).
 4. Clique em **Open Tracking Docs** para ir à tabela completa.
 
-> **Só entra nos cartões o documento que NÃO está `Active`.** O que já está ativo saiu da esteira e conta em *Active*.
+> **Só entra nos cartões o documento que ainda está em andamento.** O que está `Active` terminou e conta em *Active*; o que está `Inactive` ou `Cancelado` foi encerrado e conta em *Closed*. Nenhum dos dois é pendência de ninguém, e por isso nenhum aparece nas filas — antes, o encerrado caía na fila do **Legal** (a primeira etapa sem carimbo em quem nunca começou) e ficava lá envelhecendo no topo da lista.
 >
 > **Documento com todos os carimbos e ainda não `Active` fica na ÚLTIMA mesa** — devolvê-lo sem etapa o faria sumir das três filas, e um pendente que some é pior do que um pendente na fila errada.
 
@@ -1088,8 +1130,10 @@ Abaixo, **três cartões verticais**, um por mesa da esteira:
 
 | Coluna | O que é |
 |---|---|
-| **Pending with** (a 1ª) | Em que mesa o documento está parado. O ícone de varinha ao lado significa *deduzido* |
+| **Actions** (a 1ª depois da caixa de seleção) | Editar e excluir a linha |
+| **Pending with** | Em que mesa o documento está parado. O ícone de varinha ao lado significa *deduzido* |
 | **Aging** | Dias **úteis** desde a *Data Solicitação*, recalculados a cada abertura da tela |
+| **Signature Type** | Como o cliente vai assinar. Na edição é uma **lista fechada**: *FepWeb*, *DocuSign* ou *Manual* (a assinatura física) |
 
 > **O Aging da planilha é ignorado de propósito.** Quem exportou ontem exportou o aging de ontem; aqui ele é refeito toda vez. E ele **para** quando o CGD conclui: o prazo de quem terminou deixou de correr. Sem *Data Solicitação*, a célula fica **vazia** — nunca zero, que se leria como "entrou hoje".
 
@@ -1097,9 +1141,21 @@ Abaixo, **três cartões verticais**, um por mesa da esteira:
 
 1. Filtre pelas caixinhas do cabeçalho — por **Status**, por **Razão Social**, por **Pending with**.
 2. Para corrigir um dado, clique em **Edit** na linha, altere e salve (4.9). O *Aging* não é editável: ele é calculado.
-3. **Add Row** inclui um documento que não veio na planilha.
+3. **New Request** abre o formulário de abertura de solicitação (o mesmo do Overview — ver 10.1).
 4. **Delete** apaga uma linha.
 5. **Overview**, no canto superior direito, volta ao painel.
+
+**Para alterar várias linhas de uma vez:**
+
+![Edição em massa no Tracking Docs](docs/sop-screenshots/padrao-edicao-massa.png)
+
+1. Marque a **caixa de seleção** das linhas — ou a do cabeçalho para marcar a página inteira.
+2. Os botões **Confirm** e **Delete** aparecem na barra de ferramentas, com o número de linhas selecionadas.
+3. Escolha a coluna em **Select Column to Apply**. O campo de valor ao lado se adapta: lista fechada no *Signature Type*, calendário nas colunas de data, texto no resto.
+4. Digite o valor e clique em **Confirm**. O sistema pergunta antes — a ação alcança linhas que o filtro escondeu, sobrescreve o que já estava gravado e **não tem desfazer**.
+5. **Delete** apaga todas as selecionadas, também com confirmação.
+
+> O **Aging** não aparece na lista de colunas: ele é recalculado a cada leitura, e um valor digitado ali seria desfeito na abertura seguinte da tela.
 
 > **A importação REESCREVE a tabela inteira.** Quando a lista do SharePoint é reimportada, o que você editou aqui é substituído pelo que está lá — a lista é a fonte, e o app é a leitura dela. Correção que precisa durar tem de ser feita no SharePoint.
 

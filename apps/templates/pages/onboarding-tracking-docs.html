@@ -3,6 +3,7 @@
 {% block title %}Tracking Docs{% endblock title %}
 
 {% block extra_css %}
+<link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet" type="text/css" />
 <link href="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.css" rel="stylesheet" type="text/css" />
 <link href="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.css" rel="stylesheet" type="text/css" />
 <style>
@@ -92,25 +93,23 @@
 .tooltip-secondary .tooltip-arrow::before { border-top-color: #64748b; }
 
 /* ── Status: badge pill com gradiente, cor por status (padrão da casa). */
-.ob-badge {
-    display: inline-block; padding: .2rem .6rem; border-radius: 999px;
-    font-size: .68rem; font-weight: 700; color: #fff; white-space: nowrap; line-height: 1.35;
-}
-.ob-badge--active  { background-image: linear-gradient(100deg, #1a7f37, #34c759); }
-.ob-badge--legal   { background-image: linear-gradient(100deg, #6d4c41, #a1887f); }
-.ob-badge--otc     { background-image: linear-gradient(100deg, #0066cc, #5e5ce6); }
-.ob-badge--mo      { background-image: linear-gradient(100deg, #b07500, #f7b84b); }
-.ob-badge--wait    { background-image: linear-gradient(100deg, #4a5568, #94a3b8); }
-.ob-badge--danger  { background-image: linear-gradient(100deg, #b3261e, #ff453a); }
+/* Status é o badge pill do app (`badge rounded-pill text-bg-* bg-gradient`), sem
+   paleta própria — ver `statusClass()`. Aqui só o tamanho, para o pill não
+   engordar a linha numa tabela de fonte .8rem. */
+#ob-table td .badge { font-size: .68rem; font-weight: 700; padding: .28em .7em; }
 
 /* Aging: número tabular, e a cor só nos extremos. */
 #ob-table td.ob-age { font-variant-numeric: tabular-nums; font-weight: 700; }
 #ob-table td.ob-age.ob-late { color: var(--ins-danger, #d93025); }
 #ob-table td.ob-age.ob-warn { color: #b07500; }
 
+/* A barra de edição em massa acompanha a altura dos botões da toolbar. */
+#ob-docs .ob-mass .form-select, #ob-docs .ob-mass .form-control { height: 31px; font-size: .75rem; }
+
 /* A linha em edição: fundo suave para não se perder de vista ao rolar. */
 #ob-table tr.ob-editing > td { background: rgba(0, 102, 204, .06) !important; }
-#ob-table tr.ob-editing input { width: 100%; font-size: .75rem; height: 26px; padding: 1px 4px; text-align: center; }
+#ob-table tr.ob-editing input,
+#ob-table tr.ob-editing select { width: 100%; font-size: .75rem; height: 26px; padding: 1px 4px; text-align: center; }
 
 /* A faixa que diz de onde a tela leu — o banco e a última importação. */
 #ob-docs .ob-src {
@@ -152,8 +151,12 @@
                 <div class="dropdown-menu ob-cols-menu p-2" id="ob-cols-menu"></div>
             </div>
 
-            <button class="btn btn-sm btn-primary bg-gradient btn-toolbar-all" id="ob-add">
-                <i class="ti ti-plus me-1"></i><span data-lang="ob-btn-add">Add Row</span>
+            {# Era um `Add Row` que criava uma linha VAZIA de trinta colunas —
+               a pessoa tinha de descobrir sozinha o que preencher. Agora abre o
+               formulário de abertura da solicitação, que é o que a mesa
+               realmente faz aqui (o partial é o mesmo do Overview). #}
+            <button class="btn btn-sm btn-primary bg-gradient btn-toolbar-all" id="ob-new-request">
+                <i class="ti ti-file-plus me-1"></i><span data-lang="ob-new-request">New Request</span>
             </button>
 
             <div class="dropdown">
@@ -172,6 +175,23 @@
 
             <button class="btn btn-sm btn-outline-secondary btn-toolbar-all" id="ob-clear">
                 <i class="ti ti-filter-off me-1"></i><span data-lang="ob-btn-clear">Clear Filters</span>
+            </button>
+
+            {# Edição em massa, no modelo do Track Confirmations e do Pending
+               Confirmation: escolhe-se a COLUNA e o campo de valor ao lado se
+               adapta ao tipo dela — nessa ordem, que é a em que se usam. Confirm
+               e Delete nascem escondidos e só aparecem com linha selecionada: um
+               Delete sempre visível numa tela sem desfazer é convite ao clique
+               errado. #}
+            <select class="form-select form-select-sm ob-mass" id="ob-mass-col"
+                    style="width:210px;font-size:.75rem;height:31px;"></select>
+            <div id="ob-mass-val" class="ob-mass" style="min-width:180px;"></div>
+            <button class="btn btn-sm btn-success bg-gradient btn-toolbar-all d-none" id="ob-mass-apply">
+                <i class="ti ti-check me-1"></i><span data-lang="ob-mass-apply">Confirm</span>
+                <span class="badge bg-light text-dark ms-1" id="ob-sel-count">0</span>
+            </button>
+            <button class="btn btn-sm btn-danger bg-gradient btn-toolbar-all d-none" id="ob-mass-del">
+                <i class="ti ti-trash me-1"></i><span data-lang="ob-mass-del">Delete</span>
             </button>
 
             <div class="ms-auto d-flex align-items-center gap-2">
@@ -196,6 +216,8 @@
             </table>
         </div>
     </div>
+
+{% include 'partials/onboarding-new-request.html' %}
 </div>
 {% endblock page_content %}
 
@@ -226,6 +248,12 @@
     }
 })();
 </script>
+{# SweetAlert2 é LOCAL, não o CDN: a instância do JPM roda sem internet, e do
+   CDN a lib não chega — todo `Swal.fire` da página vira `Swal is not defined`
+   e MORRE dentro do handler. O efeito não é só ficar sem o balão: a ação que
+   vinha depois dele (o Delete da linha, o aviso do Run) não acontece, e a tela
+   não diz nada. As três páginas do CGD nasceram sem esta linha. #}
+<script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/export-advanced.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/table-std.js"></script>
 <script>
@@ -236,6 +264,8 @@
        uma vez, no load), então vive aqui. */
     var _TRANS = {
         en: { stage: 'Pending with', actions: 'Actions', edit: 'Edit', del: 'Delete',
+              massCol: 'Select Column to Apply', massTitle: 'Apply to {n} row(s)?', massEmpty: '(empty)',
+              yesApply: 'Yes, apply', massDone: '{n} row(s) updated', massDelTitle: 'Delete {n} row(s)?',
               save: 'Save', cancel: 'Cancel', confirmDel: 'Delete this document?',
               confirmDelTxt: 'The row is removed from the app database. The SharePoint list is not touched.',
               yes: 'Yes, delete', no: 'Cancel', saved: 'Saved', savedTxt: 'The row was updated.',
@@ -243,6 +273,8 @@
               nodb: 'The CGD database was not found', nodbHint: 'run scripts/import_cgd_sharepoint.py',
               src: 'Source', rows: 'row(s)', derived: 'derived from the stamps' },
         br: { stage: 'Pendente em', actions: 'Ações', edit: 'Editar', del: 'Excluir',
+              massCol: 'Select Column to Apply', massTitle: 'Aplicar em {n} linha(s)?', massEmpty: '(vazio)',
+              yesApply: 'Sim, aplicar', massDone: '{n} linha(s) atualizada(s)', massDelTitle: 'Excluir {n} linha(s)?',
               save: 'Salvar', cancel: 'Cancelar', confirmDel: 'Excluir este documento?',
               confirmDelTxt: 'A linha sai do banco do app. A lista do SharePoint não é tocada.',
               yes: 'Sim, excluir', no: 'Cancelar', saved: 'Salvo', savedTxt: 'A linha foi atualizada.',
@@ -250,6 +282,8 @@
               nodb: 'O banco de CGDs não foi encontrado', nodbHint: 'rode scripts/import_cgd_sharepoint.py',
               src: 'Fonte', rows: 'linha(s)', derived: 'derivado dos carimbos' },
         es: { stage: 'Pendiente en', actions: 'Acciones', edit: 'Editar', del: 'Eliminar',
+              massCol: 'Select Column to Apply', massTitle: '¿Aplicar en {n} fila(s)?', massEmpty: '(vacío)',
+              yesApply: 'Sí, aplicar', massDone: '{n} fila(s) actualizada(s)', massDelTitle: '¿Eliminar {n} fila(s)?',
               save: 'Guardar', cancel: 'Cancelar', confirmDel: '¿Eliminar este documento?',
               confirmDelTxt: 'La fila sale de la base del app. La lista de SharePoint no se toca.',
               yes: 'Sí, eliminar', no: 'Cancelar', saved: 'Guardado', savedTxt: 'La fila fue actualizada.',
@@ -271,24 +305,36 @@
     var COLS = [];            // nomes das colunas do banco, na ordem
     var IDCOL = '_id';
     var DATECOLS = [];
+    var SIGTYPES = [];        // domínio do Tipo de Assinatura, vindo do servidor
+    var SIGCOL = '';          // e qual coluna o usa
     var table = null;
     var dados = [];
 
-    // Status → cor do badge. O texto vem do SharePoint e é livre, então o mapa
-    // casa por PALAVRA e o que não casar sai neutro — inventar cor por hash
-    // deixaria dois status parecidos com cores opostas.
+    // Status → cor do badge. As classes são as do app (`text-bg-*` do tema, com
+    // `bg-gradient`), e não um mapa de cores próprio desta página: status é badge
+    // pill gradiente em toda tela, e uma paleta paralela faria o mesmo verde ter
+    // dois tons dependendo de onde a pessoa está olhando.
+    //
+    // O texto vem do SharePoint e é livre, então o mapa casa por PALAVRA e o que
+    // não casar sai neutro — inventar cor por hash deixaria dois status parecidos
+    // com cores opostas.
     function statusClass(s) {
         var v = String(s || '').toUpperCase();
-        if (!v) { return 'ob-badge--wait'; }
-        if (v.indexOf('ACTIVE') !== -1) { return 'ob-badge--active'; }
-        if (v.indexOf('LEGAL') !== -1 || v.indexOf('SIGN') !== -1 || v.indexOf('ASSIN') !== -1) { return 'ob-badge--legal'; }
-        if (v.indexOf('OTC') !== -1) { return 'ob-badge--otc'; }
-        if (v.indexOf('MO') !== -1 || v.indexOf('CEM') !== -1) { return 'ob-badge--mo'; }
-        if (v.indexOf('CANCEL') !== -1 || v.indexOf('REJEIT') !== -1 || v.indexOf('REJECT') !== -1) { return 'ob-badge--danger'; }
-        return 'ob-badge--wait';
+        if (!v) { return 'text-bg-secondary'; }
+        // INACTIVE contém ACTIVE: o teste do encerrado vem PRIMEIRO, senão o
+        // documento morto sai com o mesmo verde do que está de pé (e a diferença
+        // entre os dois é justamente o que a coluna existe para dizer).
+        if (v.indexOf('INACTIV') !== -1 || v.indexOf('INATIV') !== -1) { return 'text-bg-dark'; }
+        if (v.indexOf('CANCEL') !== -1 || v.indexOf('REJEIT') !== -1 || v.indexOf('REJECT') !== -1) { return 'text-bg-danger'; }
+        if (v.indexOf('ACTIVE') !== -1 || v.indexOf('ATIVO') !== -1) { return 'text-bg-success'; }
+        if (v.indexOf('LEGAL') !== -1 || v.indexOf('SIGN') !== -1 || v.indexOf('ASSIN') !== -1) { return 'text-bg-info'; }
+        if (v.indexOf('OTC') !== -1) { return 'text-bg-primary'; }
+        if (v.indexOf('MO') !== -1 || v.indexOf('CEM') !== -1) { return 'text-bg-warning'; }
+        return 'text-bg-secondary';
     }
     function badge(s) {
-        return s ? '<span class="ob-badge ' + statusClass(s) + '">' + esc(s) + '</span>' : '';
+        return s ? '<span class="badge rounded-pill ' + statusClass(s) + ' bg-gradient">' +
+                   esc(s) + '</span>' : '';
     }
 
     function acoes() {
@@ -310,23 +356,33 @@
         return esc(v);
     }
 
+    // Checkbox · AÇÕES · Pendente em · as colunas do banco.
+    //
+    // Ações é a 2ª coluna, como em todo o app. Ela nasceu por ÚLTIMO aqui, e com
+    // trinta colunas do SharePoint no meio isso a jogava tão para a direita que
+    // ela sumia: quem abria a tela precisava rolar a tabela inteira para achar o
+    // botão de editar a linha que está vendo. Os índices abaixo (`i + 3`, o skip
+    // do otcCellCopy, o alvo do columnDefs e o recorte do export) contam a partir
+    // desta ordem — mudá-la é mudar os quatro.
+    var COL0 = 3;             // onde começam as colunas do banco
+
     function montaCabecalho() {
-        // Checkbox · Pendente em · as colunas do banco · Ações
         var th = ['<th style="width:34px"><input type="checkbox" id="ob-all"></th>',
+                  '<th style="width:96px">' + esc(t('actions')) + '</th>',
                   '<th>' + esc(t('stage')) + '</th>'];
-        var filtros = ['<th></th>', '<th><input type="text" data-col="1" placeholder="' + esc(t('stage')) + '"></th>'];
+        var filtros = ['<th></th>', '<th></th>',
+                       '<th><input type="text" data-col="2" placeholder="' + esc(t('stage')) + '"></th>'];
         COLS.forEach(function (c, i) {
             th.push('<th>' + esc(c) + '</th>');
-            filtros.push('<th><input type="text" data-col="' + (i + 2) + '" placeholder="' + esc(c) + '"></th>');
+            filtros.push('<th><input type="text" data-col="' + (i + COL0) + '" placeholder="' + esc(c) + '"></th>');
         });
-        th.push('<th style="width:96px">' + esc(t('actions')) + '</th>');
-        filtros.push('<th></th>');
         $('#ob-head').html(th.join(''));
         $('#ob-head-filters').html(filtros.join(''));
     }
 
     function linha(r) {
-        var td = ['<td><input type="checkbox" class="ob-chk"></td>'];
+        var td = ['<td><input type="checkbox" class="ob-chk"></td>',
+                  '<td>' + acoes() + '</td>'];
         var marca = r._stage_derived
             ? ' <i class="ti ti-wand" title="' + esc(t('derived')) + '" style="opacity:.55"></i>' : '';
         td.push('<td>' + (r._stage ? esc(r._stage) + marca : '') + '</td>');
@@ -343,7 +399,6 @@
                        || c === 'Nome Garantidor') ? ' class="ob-ell"' : '';
             td.push('<td' + ell + ' title="' + esc(v) + '">' + esc(v) + '</td>');
         });
-        td.push('<td>' + acoes() + '</td>');
         return '<tr data-id="' + esc(r[IDCOL]) + '">' + td.join('') + '</tr>';
     }
 
@@ -360,7 +415,7 @@
             orderCellsTop: true,          // a linha de filtro é a 2ª do thead
             scrollX: true, autoWidth: true,
             order: [],
-            columnDefs: [{ targets: 0, orderable: false }, { targets: -1, orderable: false }],
+            columnDefs: [{ targets: [0, 1], orderable: false }],
             language: { emptyTable: t('empty') }
         });
 
@@ -386,7 +441,7 @@
         // Seleção de célula para copiar — em TODA tabela do app. Pula o
         // checkbox e a coluna de Actions.
         if (window.otcCellCopy) {
-            otcCellCopy('#ob-table', { skip: [0, COLS.length + 2] });
+            otcCellCopy('#ob-table', { skip: [0, 1] });
         }
         montaBotoes();
         montaColunas();
@@ -397,7 +452,11 @@
         // aqui e disparada pelos itens do dropdown — o export é o do DataTables
         // Buttons, o mesmo do New Deals: sai o que está NA TELA, com filtros e
         // ordenação aplicados e só as colunas visíveis.
-        var comuns = { exportOptions: { columns: ':visible:not(:first-child):not(:last-child)' } };
+        // As duas primeiras colunas (checkbox e Ações) ficam de fora do arquivo.
+        // Era `:not(:first-child):not(:last-child)`, de quando Ações era a última:
+        // com ela na 2ª posição aquele recorte passaria a exportar os botões e a
+        // engolir a última coluna de dado, sem erro nenhum.
+        var comuns = { exportOptions: { columns: ':visible:not(:nth-child(1)):not(:nth-child(2))' } };
         var b = new $.fn.dataTable.Buttons(table, {
             buttons: [
                 $.extend({ extend: 'copyHtml5', name: 'copy' }, comuns),
@@ -423,7 +482,7 @@
 
     function montaColunas() {
         var html = COLS.map(function (c, i) {
-            return '<label><input type="checkbox" checked data-c="' + (i + 2) + '"> ' + esc(c) + '</label>';
+            return '<label><input type="checkbox" checked data-c="' + (i + COL0) + '"> ' + esc(c) + '</label>';
         }).join('');
         $('#ob-cols-menu').html(html).off('change').on('change', 'input', function () {
             table.column(parseInt($(this).data('c'), 10)).visible(this.checked);
@@ -439,6 +498,8 @@
                 COLS = j.columns || [];
                 IDCOL = j.id_column || '_id';
                 DATECOLS = j.date_columns || [];
+                SIGTYPES = j.signature_types || [];
+                SIGCOL = j.signature_column || '';
                 dados = j.rows || [];
                 $('#ob-src').html(
                     j.db_ready
@@ -448,7 +509,9 @@
                           esc(t('nodb')) + '</span> <code>' + esc(j.db) + '</code>' +
                           '<span>— ' + esc(t('nodbHint')) + '</span>');
                 montaCabecalho();
+                montaMassa();
                 desenha();
+                atualizaSelecao();
             });
     }
 
@@ -467,9 +530,29 @@
         COLS.forEach(function (c, i) {
             var v = (c === 'Aging') ? '' : (r[c] == null ? '' : r[c]);
             if (c === 'Aging') { return; }        // derivado: não se digita
-            $(tds[i + 2]).html('<input type="text" data-col="' + esc(c) + '" value="' + esc(v) + '">');
+            // Tipo de Assinatura é DOMÍNIO FECHADO (FepWeb · DocuSign · Manual),
+            // então o campo é um `select`. Digitado à mão, um `Fepweb` ou um
+            // `Física` entrariam como valor novo e a linha deixaria de casar com
+            // as outras — o filtro por coluna passaria a ter dois nomes para a
+            // mesma coisa. O valor que já está gravado entra na lista mesmo se
+            // não for um dos três: escondê-lo faria o Save trocar o tipo da
+            // linha sem ninguém pedir.
+            if (SIGCOL && c === SIGCOL && SIGTYPES.length) {
+                var opts = SIGTYPES.slice();
+                if (v && opts.indexOf(v) === -1) { opts.unshift(v); }
+                $(tds[i + COL0]).html(
+                    '<select data-col="' + esc(c) + '">' +
+                    '<option value=""></option>' +
+                    opts.map(function (o) {
+                        return '<option value="' + esc(o) + '"' +
+                               (String(o) === String(v) ? ' selected' : '') + '>' +
+                               esc(o) + '</option>';
+                    }).join('') + '</select>');
+                return;
+            }
+            $(tds[i + COL0]).html('<input type="text" data-col="' + esc(c) + '" value="' + esc(v) + '">');
         });
-        $(tds[tds.length - 1]).html(
+        $(tds[1]).html(
             '<div class="d-flex justify-content-center gap-1">' +
               '<button class="btn btn-sm btn-success rounded-circle btn-act ob-save" ' +
                 'data-bs-toggle="tooltip" data-bs-custom-class="tooltip-success" title="' + esc(t('save')) + '">' +
@@ -498,7 +581,9 @@
     function salva() {
         if (!editando) { return; }
         var vals = {};
-        editando.$tr.find('input[data-col]').each(function () {
+        // `input` E `select`: sem o segundo, o Tipo de Assinatura não entrava no
+        // payload e o Save gravava a linha SEM ele — apagando o valor anterior.
+        editando.$tr.find('input[data-col], select[data-col]').each(function () {
             vals[$(this).data('col')] = this.value;
         });
         fetch('/api/onboarding/docs/save', {
@@ -548,11 +633,14 @@
         if (window.bootstrap && !this._tt) { this._tt = new bootstrap.Tooltip(this); this._tt.show(); }
     });
 
-    $('#ob-all').on('change', function () {
-        $('#ob-table tbody .ob-chk').prop('checked', this.checked);
-    });
+    // Marcar tudo. DELEGADO NO DOCUMENTO, e não em `#ob-table`: com `scrollX` o
+    // DataTables desenha o cabeçalho duas vezes, e a caixa que se VÊ está na
+    // tabela CLONE — que não tem o id. Um `.on()` pendurado em `#ob-table` nunca
+    // seria alcançado por ela: a página marcaria as linhas e o contador ficaria
+    // em zero, com os botões de lote escondidos.
     $(document).on('change', '#ob-all', function () {
         $('#ob-table tbody .ob-chk').prop('checked', this.checked);
+        atualizaSelecao();
     });
     $('#ob-len').on('change', function () {
         var n = parseInt(this.value, 10);
@@ -562,12 +650,121 @@
         $('#ob-head-filters input').val('');
         if (table) { table.search('').columns().search('').draw(); }
     });
-    $('#ob-add').on('click', function () {
-        fetch('/api/onboarding/docs/save', {
-            method: 'POST', credentials: 'same-origin',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ values: {} })
-        }).then(function () { carrega(); });
+    // O modal de New Request (partial) chama isto depois de gravar.
+    window.obRequestSaved = function () { carrega(); };
+
+
+    // ── Edição em massa ────────────────────────────────────────────────────
+    // Modelo do Track Confirmations: coluna → valor → Confirm, e o Delete ao
+    // lado. O `Aging` fica FORA da lista: ele é derivado a cada leitura, e
+    // digitá-lo cria um valor que a próxima abertura da tela desfaz — o usuário
+    // veria a alteração "não pegar", sem erro nenhum.
+    function colunasEditaveis() {
+        return COLS.filter(function (c) { return c !== 'Aging'; });
+    }
+
+    function montaMassa() {
+        var sel = $('#ob-mass-col').empty()
+            .append('<option value="">' + esc(t('massCol')) + '</option>');
+        colunasEditaveis().forEach(function (c) {
+            sel.append($('<option>').val(c).text(c));
+        });
+        campoMassa('');
+    }
+
+    // O campo de valor segue o TIPO da coluna: lista fechada no Tipo de
+    // Assinatura, campo de data com calendário nas colunas de data, texto no
+    // resto. Um lugar só para os três — o modal e a edição em massa oferecendo
+    // entradas diferentes da mesma coluna é como se cria um valor que só existe
+    // num dos caminhos.
+    function campoMassa(col) {
+        var $w = $('#ob-mass-val').empty();
+        if (SIGCOL && col === SIGCOL && SIGTYPES.length) {
+            var s = $('<select class="form-select form-select-sm" id="ob-mass-value">')
+                .append('<option value=""></option>');
+            SIGTYPES.forEach(function (o) { s.append($('<option>').val(o).text(o)); });
+            $w.append(s);
+            return;
+        }
+        var i = $('<input type="text" class="form-control form-control-sm" id="ob-mass-value">');
+        if (DATECOLS.indexOf(col) !== -1) {
+            i.attr('placeholder', 'dd/mm/aaaa').attr('autocomplete', 'off');
+            // Guard: sem o flatpickr o campo degrada para texto, não quebra.
+            setTimeout(function () {
+                if (typeof flatpickr !== 'undefined') {
+                    flatpickr(i[0], { dateFormat: 'd/m/Y', allowInput: true, disableMobile: true });
+                }
+            }, 0);
+        }
+        $w.append(i);
+    }
+
+    function selecionadas() {
+        return $('#ob-table tbody tr').filter(function () {
+            return $(this).find('.ob-chk').is(':checked');
+        }).map(function () { return String($(this).data('id')); }).get();
+    }
+
+    function atualizaSelecao() {
+        var n = selecionadas().length;
+        $('#ob-sel-count').text(n);
+        $('#ob-mass-apply, #ob-mass-del').toggleClass('d-none', n === 0);
+    }
+
+    $('#ob-mass-col').on('change', function () { campoMassa(this.value); });
+    $(document).on('change', '#ob-table .ob-chk', atualizaSelecao);
+
+    $('#ob-mass-apply').on('click', function () {
+        var col = $('#ob-mass-col').val();
+        var val = String($('#ob-mass-value').val() || '');
+        var ids = selecionadas();
+        if (!col || !ids.length) { return; }
+        // Aplicar em massa PERGUNTA antes: a ação alcança linhas que o filtro
+        // escondeu, sobrescreve o que já estava gravado, e a tela não tem
+        // desfazer.
+        Swal.fire({
+            icon: 'question', title: t('massTitle').replace('{n}', ids.length),
+            html: esc(col) + ' → ' + (val ? '<b>' + esc(val) + '</b>'
+                                          : '<i>' + esc(t('massEmpty')) + '</i>'),
+            showCancelButton: true, confirmButtonText: t('yesApply'), cancelButtonText: t('no'),
+            confirmButtonColor: '#1a8a4a', cancelButtonColor: '#6c757d'
+        }).then(function (r) {
+            if (!r.isConfirmed) { return; }
+            var vals = {}; vals[col] = val;
+            fetch('/api/onboarding/docs/save', {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ids: ids, values: vals })
+            }).then(function (r2) { return r2.json(); })
+              .then(function (j) {
+                  if (!j || !j.success) {
+                      Swal.fire({ icon: 'error', title: t('failed'),
+                                  text: (j && j.error) || '' });
+                      return;
+                  }
+                  carrega();
+                  Swal.fire({ icon: 'success', title: t('massDone').replace('{n}', ids.length),
+                              timer: 1600, showConfirmButton: false });
+              });
+        });
+    });
+
+    $('#ob-mass-del').on('click', function () {
+        var ids = selecionadas();
+        if (!ids.length) { return; }
+        Swal.fire({
+            icon: 'warning', title: t('massDelTitle').replace('{n}', ids.length),
+            text: t('confirmDelTxt'),
+            showCancelButton: true, confirmButtonText: t('yes'), cancelButtonText: t('no'),
+            confirmButtonColor: '#d33', cancelButtonColor: '#6c757d'
+        }).then(function (r) {
+            if (!r.isConfirmed) { return; }
+            fetch('/api/onboarding/docs/delete', {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ids: ids })
+            }).then(function () { carrega(); });
+        });
     });
 
     $(carrega);

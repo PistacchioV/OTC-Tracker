@@ -1916,5 +1916,14 @@
   "cgd-c-status": "Status FEP",
   "cgd-c-obs": "Justificación",
   "cgd-c-created": "Fecha de Creación",
-  "cgd-c-aging": "Aging"
+  "cgd-c-aging": "Aging",
+  "ob-sum-closed": "Cerrados",
+  "cgd-show": "Mostrar",
+  "cgd-entries": "registros",
+  "ob-new-request": "Nueva Solicitud",
+  "ob-mass-apply": "Confirmar",
+  "ob-mass-del": "Eliminar",
+  "ob-req-title": "Nueva Solicitud de CGD",
+  "ob-req-cancel": "Cancelar",
+  "ob-req-save": "Crear solicitud"
 }

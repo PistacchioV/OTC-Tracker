@@ -3,6 +3,7 @@
 {% block title %}CGD Reconciliation{% endblock title %}
 
 {% block extra_css %}
+<link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet" type="text/css" />
 <link href="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.css" rel="stylesheet" type="text/css" />
 <link href="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.css" rel="stylesheet" type="text/css" />
 <style>
@@ -74,8 +75,19 @@
 }
 #cgd-table tbody td { text-align: center; vertical-align: middle; font-size: .8rem; white-space: nowrap; }
 #cgd-table tbody td.cgd-ell { max-width: 320px; overflow: hidden; text-overflow: ellipsis; }
-#cgd-table thead .cgd-filters th { padding: 4px 5px; }
-#cgd-table thead .cgd-filters input {
+/* A linha de filtro. Os seletores do CLONE são obrigatórios: com `scrollX` o
+   DataTables desenha o cabeçalho duas vezes e REMOVE o id da tabela copiada, que
+   é justamente a que se vê — só `#cgd-table` estilizava o `<thead>` escondido no
+   corpo rolável, e os campos à vista caíam no input padrão do tema, destoando de
+   todas as outras telas. */
+#cgd-table thead .cgd-filters th,
+.dt-scroll-head thead .cgd-filters th,
+.dt-scroll-headInner thead .cgd-filters th,
+.dataTables_scrollHeadInner thead .cgd-filters th { padding: 4px 5px; }
+#cgd-table thead .cgd-filters input,
+.dt-scroll-head thead .cgd-filters input,
+.dt-scroll-headInner thead .cgd-filters input,
+.dataTables_scrollHeadInner thead .cgd-filters input {
     width: 100%; font-size: 12px; height: 28px; padding: 2px 6px;
     border: 1px solid var(--ins-border-color); border-radius: 6px;
     background: var(--ins-secondary-bg); color: var(--ins-body-color);
@@ -84,15 +96,10 @@
 #cgd-table td.cgd-age.cgd-late { color: var(--ins-danger, #d93025); }
 #cgd-table td.cgd-age.cgd-warn { color: #b07500; }
 
-/* Status do batimento: badge pill gradiente, cor por bucket. */
-.cgd-badge { display: inline-block; padding: .2rem .6rem; border-radius: 999px;
-             font-size: .68rem; font-weight: 700; color: #fff; white-space: nowrap; line-height: 1.35; }
-.cgd-badge--match  { background-image: linear-gradient(100deg, #1a7f37, #34c759); }
-.cgd-badge--fep    { background-image: linear-gradient(100deg, #b3261e, #ff453a); }
-.cgd-badge--b3     { background-image: linear-gradient(100deg, #7c3aed, #d946ef); }
-.cgd-badge--wait   { background-image: linear-gradient(100deg, #4a5568, #94a3b8); }
-.cgd-badge--just   { background-image: linear-gradient(100deg, #0d7ea8, #4a849b); }
-.cgd-badge--action { background-image: linear-gradient(100deg, #b07500, #f7b84b); }
+/* O Check é o badge pill do app (`badge rounded-pill text-bg-* bg-gradient`),
+   sem paleta própria — ver `badge()`. Aqui só o tamanho, para o pill não
+   engordar a linha numa tabela de fonte .8rem. */
+#cgd-table td .badge { font-size: .68rem; font-weight: 700; padding: .28em .7em; }
 
 #cgd-page .btn-toolbar-all {
     font-size: .75rem !important; padding: .25rem .6rem !important;
@@ -134,11 +141,22 @@
                 </div>
             </div>
 
-            <button class="btn btn-sm btn-success bg-gradient btn-toolbar-all" id="cgd-run">
-                <i class="ti ti-refresh me-1"></i><span data-lang="cgd-btn-run">Run</span>
+            {# Rodar o batimento é `btn-primary` com o ícone de PLAY, como nas outras
+               três recons (Comitente, FXO e Pay/Rec) — é a mesma ação, e a cor é o
+               que a pessoa procura antes de ler o rótulo. Estava `btn-success` com
+               um ícone de refresh: verde é a cor de concluir no app (o Confirm da
+               linha, o End process do Pay/Rec), e refresh se lê como "recarregar a
+               tela", não como "executar a apuração".
+
+               O e-mail é `btn-soft-primary`, que é a cor da ação de mandar
+               documento na barra de ferramentas (Print Advice e TEDs, nos dois
+               Summary). Ele também não podia continuar `btn-primary`: com o Run
+               na cor certa, os dois ficariam idênticos. #}
+            <button class="btn btn-sm btn-primary bg-gradient btn-toolbar-all" id="cgd-run">
+                <i class="ti ti-player-play me-1"></i><span data-lang="cgd-btn-run">Run</span>
             </button>
-            <button class="btn btn-sm btn-primary bg-gradient btn-toolbar-all" id="cgd-mail">
-                <i class="ti ti-mail me-1"></i><span data-lang="cgd-btn-mail">Send report</span>
+            <button class="btn btn-sm btn-soft-primary btn-toolbar-all" id="cgd-mail">
+                <i class="ti ti-mail-forward me-1"></i><span data-lang="cgd-btn-mail">Send report</span>
             </button>
 
             <div class="dropdown">
@@ -160,6 +178,24 @@
             </button>
 
             <div class="ms-auto cgd-src" id="cgd-src"></div>
+
+            {# `Show [N] entries` é parte da barra de ferramentas em toda tabela
+               do app. Aqui não havia nenhum: a tela nascia com 25 linhas fixas e
+               quem quisesse ver o resto paginava. O menor valor é 50, como na
+               Recon FXO — o batimento devolve a lista inteira do dia, e 25 é
+               pouco para conferir uma fila. #}
+            <div class="d-flex align-items-center gap-2">
+                <span style="font-size:.72rem;" data-lang="cgd-show">Show</span>
+                <select id="cgd-len" class="form-select form-select-sm"
+                        style="width:auto;font-size:.75rem;height:31px;">
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                    <option value="150">150</option>
+                    <option value="200">200</option>
+                    <option value="-1">All</option>
+                </select>
+                <span style="font-size:.72rem;" data-lang="cgd-entries">entries</span>
+            </div>
         </div>
     </div>
 
@@ -220,6 +256,12 @@
     }
 })();
 </script>
+{# SweetAlert2 é LOCAL, não o CDN: a instância do JPM roda sem internet, e do
+   CDN a lib não chega — todo `Swal.fire` da página vira `Swal is not defined`
+   e MORRE dentro do handler. O efeito não é só ficar sem o balão: a ação que
+   vinha depois dele (o Delete da linha, o aviso do Run) não acontece, e a tela
+   não diz nada. As três páginas do CGD nasceram sem esta linha. #}
+<script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/export-advanced.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/table-std.js"></script>
 <script>
@@ -273,13 +315,17 @@
     ];
 
     function badge(r) {
-        // A cor é do BUCKET, não do texto do Check: `Only FEP` é vermelho quando
-        // falta incluir na B3 e âmbar quando o que falta é a assinatura.
-        var m = { pending_b3: 'cgd-badge--fep', pending_action: 'cgd-badge--action',
-                  only_b3: 'cgd-badge--b3', justified: 'cgd-badge--just',
-                  matched: 'cgd-badge--match' };
-        return '<span class="cgd-badge ' + (m[r.bucket] || 'cgd-badge--wait') + '">' +
-               esc(r.check) + '</span>';
+        // O Check é a coluna de status desta tela, então ele é o badge pill do
+        // app (`badge rounded-pill text-bg-* bg-gradient`), como em toda tabela —
+        // e não uma paleta própria daqui.
+        //
+        // A cor é do BUCKET, não do texto: `Only FEP` é vermelho quando falta
+        // incluir na B3 e âmbar quando o que falta é a assinatura.
+        var m = { pending_b3: 'text-bg-danger', pending_action: 'text-bg-warning',
+                  only_b3: 'text-bg-primary', justified: 'text-bg-info',
+                  matched: 'text-bg-success' };
+        return '<span class="badge rounded-pill ' + (m[r.bucket] || 'text-bg-secondary') +
+               ' bg-gradient">' + esc(r.check) + '</span>';
     }
 
     function ageCell(a, b) {
@@ -306,7 +352,8 @@
             '</tr>';
         }).join(''));
         table = $('#cgd-table').DataTable({
-            paging: true, pageLength: 25, lengthChange: false, searching: true, info: true,
+            paging: true, pageLength: parseInt($('#cgd-len').val(), 10) || 50,
+            lengthChange: false, searching: true, info: true,
             // Só a tabela, o info e a paginação: o campo de busca e o `Show N`
             // nativos do DataTables duplicariam a barra de ferramentas da página
             // (que tem o seu próprio) e aparecem soltos por cima do cabeçalho.
@@ -452,6 +499,11 @@
         $('#cgd-kpis .cgd-kpi').removeClass('cgd-on');
         if (bucket) { $(this).addClass('cgd-on'); }
         desenha();
+    });
+
+    $('#cgd-len').on('change', function () {
+        var n = parseInt(this.value, 10);
+        if (table) { table.page.len(n).draw(); }
     });
 
     $('#cgd-clear').on('click', function () {
