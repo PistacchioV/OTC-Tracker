@@ -75,11 +75,17 @@
             useScreenHelp: 'Unchecked, the export starts from the full table and only the criteria below apply.',
             daysTitle: 'Range — daily files', from: 'From', to: 'To',
             daysHelp: 'Leave empty to export the day on screen. With a range, one file is read '
-                    + 'per day and every row carries its Reference Date.',
+                    + 'per BUSINESS day (ANBIMA) into a single file, and every row carries its '
+                    + 'Reference Date. A day with no file is skipped.',
             daysNone: 'This page has no daily files — there is only the current registry, so the '
                     + 'export always covers what is on screen.',
+            daysLoading: 'Loading the calendar…',
             daysReading: 'Reading {d}… ({i}/{n})',
             daysFailed: 'Could not read {n} day(s)',
+            daysNoFile: '{n} day(s) with no file',
+            daysDone: '{n} rows from {d} day(s)',
+            daysNoBiz: 'No business day in the range',
+            daysWillRead: '{n} business day(s) will be read',
             daysEmpty: 'No day in the range has data',
             daysTooLong: 'Range too long — at most {n} days',
             daysBackwards: 'The end date comes before the start date',
@@ -106,11 +112,17 @@
             useScreenHelp: 'Desmarcado, a exportação parte da tabela inteira e valem só os critérios abaixo.',
             daysTitle: 'Intervalo — arquivos diários', from: 'De', to: 'Até',
             daysHelp: 'Em branco, exporta o dia que está na tela. Com intervalo, lê um arquivo '
-                    + 'por dia e cada linha leva a Reference Date dela.',
+                    + 'por dia ÚTIL (ANBIMA) num arquivo só, e cada linha leva a Reference Date '
+                    + 'dela. Dia sem arquivo é pulado.',
             daysNone: 'Esta tela não tem arquivo diário — é o cadastro de agora, então o export '
                     + 'cobre sempre o que está na tela.',
+            daysLoading: 'Carregando o calendário…',
             daysReading: 'Lendo {d}… ({i}/{n})',
             daysFailed: 'Não consegui ler {n} dia(s)',
+            daysNoFile: '{n} dia(s) sem arquivo',
+            daysDone: '{n} linhas de {d} dia(s)',
+            daysNoBiz: 'Nenhum dia útil no intervalo',
+            daysWillRead: '{n} dia(s) útil(eis) a ler',
             daysEmpty: 'Nenhum dia do intervalo tem dado',
             daysTooLong: 'Intervalo longo demais — no máximo {n} dias',
             daysBackwards: 'A data final é anterior à inicial',
@@ -137,11 +149,17 @@
             useScreenHelp: 'Sin marcar, la exportación parte de la tabla entera y valen solo los criterios de abajo.',
             daysTitle: 'Intervalo — archivos diarios', from: 'De', to: 'Hasta',
             daysHelp: 'En blanco, exporta el día que está en la pantalla. Con intervalo, lee un '
-                    + 'archivo por día y cada fila lleva su Reference Date.',
+                    + 'archivo por día HÁBIL (ANBIMA) en un solo archivo, y cada fila lleva su '
+                    + 'Reference Date. El día sin archivo se salta.',
             daysNone: 'Esta pantalla no tiene archivo diario — es el registro de ahora, así que '
                     + 'la exportación cubre siempre lo que está en la pantalla.',
+            daysLoading: 'Cargando el calendario…',
             daysReading: 'Leyendo {d}… ({i}/{n})',
             daysFailed: 'No pude leer {n} día(s)',
+            daysNoFile: '{n} día(s) sin archivo',
+            daysDone: '{n} filas de {d} día(s)',
+            daysNoBiz: 'Ningún día hábil en el intervalo',
+            daysWillRead: '{n} día(s) hábil(es) a leer',
             daysEmpty: 'Ningún día del intervalo tiene datos',
             daysTooLong: 'Intervalo demasiado largo — como máximo {n} días',
             daysBackwards: 'La fecha final es anterior a la inicial',
@@ -546,8 +564,12 @@
                 return;
             }
             if (o.dayFrom || o.dayTo) {
-                $c.text(t('daysHelp')).removeClass('xa-zero');
-                $el.find('#xaRun').prop('disabled', false);
+                // Quantos dias ele VAI ler — a ajuda inteira não cabe no rodapé,
+                // e este número é o que diz se o intervalo é o que se quis: 14
+                // dias úteis onde o calendário tem 20.
+                var n = dayList(o.dayFrom || o.dayTo, o.dayTo || o.dayFrom, true).length;
+                $c.text(t('daysWillRead', { n: n })).toggleClass('xa-zero', !n);
+                $el.find('#xaRun').prop('disabled', !n);
                 return;
             }
             lastKeep = pick(o);
@@ -570,16 +592,32 @@
         /* Exporta o intervalo: lê um arquivo por dia, junta tudo numa tabela
            oculta e devolve a exportação ao MESMO caminho de sempre. */
         function runDaily(o) {
-            var dias = dayList(o.dayFrom || o.dayTo, o.dayTo || o.dayFrom);
             var $c = $el.find('#xaCount');
             $el.find('#xaRun').prop('disabled', true);
-            fetchDays(daily, dias, function (i, d) {
-                $c.text(t('daysReading', { d: d, i: i, n: dias.length })).removeClass('xa-zero');
+            $c.text(t('daysLoading')).removeClass('xa-zero');
+            // O calendário primeiro: sem ele o intervalo pediria sábado, domingo
+            // e feriado — dias em que a rotina não roda e não há nada a ler.
+            loadHolidays().then(function () {
+                var dias = dayList(o.dayFrom || o.dayTo, o.dayTo || o.dayFrom, true);
+                if (!dias.length) {
+                    $el.find('#xaRun').prop('disabled', false);
+                    $c.text(t('daysNoBiz')).addClass('xa-zero');
+                    return null;
+                }
+                return fetchDays(daily, dias, function (i, d) {
+                    $c.text(t('daysReading', { d: d, i: i, n: dias.length })).removeClass('xa-zero');
+                });
             }).then(function (res) {
+                if (!res) return;
                 $el.find('#xaRun').prop('disabled', false);
+                // O arquivo sai com o que VEIO. Antes, um dia que falhava
+                // derrubava a exportação inteira — e num intervalo de vinte dias
+                // basta um para perder os dezenove que estavam lá.
                 if (!res.rows.length) {
-                    $c.text(res.failed.length ? t('daysFailed', { n: res.failed.length })
-                                              : t('daysEmpty')).addClass('xa-zero');
+                    $c.text(res.failed.length
+                            ? t('daysFailed', { n: res.failed.length }) +
+                              (res.why ? ' — ' + res.why : '')
+                            : t('daysEmpty')).addClass('xa-zero');
                     return;
                 }
                 var tbl = buildDailyTable(res);
@@ -601,15 +639,22 @@
                     return res.columns.indexOf(l);
                 }).filter(function (i) { return i > 0; }));
                 run(tbl, jQuery.extend({}, o, { cols: cols }), keep);
-                $c.text(t('count', { n: keep.length, total: res.rows.length }))
-                  .removeClass('xa-zero');
+                // O resumo fica NO MODAL, que não se fecha sozinho quando algum
+                // dia ficou de fora: o arquivo já baixou, e some com a única
+                // tela que diz quantos dias entraram e o que faltou.
+                var dias_ok = res.rows.length ? (new Set(res.rows.map(function (r) { return r[0]; }))).size : 0;
+                var resumo = t('daysDone', { n: keep.length, d: dias_ok });
+                if (res.empty.length) resumo += ' · ' + t('daysNoFile', { n: res.empty.length });
                 if (res.failed.length) {
-                    $c.text($c.text() + ' · ' + t('daysFailed', { n: res.failed.length }));
+                    resumo += ' · ' + t('daysFailed', { n: res.failed.length }) +
+                              (res.why ? ' (' + res.why + ')' : '');
                 }
-                bootstrap.Modal.getInstance(el).hide();
-            }).catch(function () {
+                $c.text(resumo).toggleClass('xa-zero', !!res.failed.length);
+                if (!res.failed.length) bootstrap.Modal.getInstance(el).hide();
+            }).catch(function (e) {
                 $el.find('#xaRun').prop('disabled', false);
-                $c.text(t('daysFailed', { n: dias.length })).addClass('xa-zero');
+                $c.text(t('daysFailed', { n: 0 }) +
+                        ((e && e.message) ? ' — ' + e.message : '')).addClass('xa-zero');
             });
         }
 
@@ -655,6 +700,9 @@
            });
 
         refresh();
+        // O calendário chega depois do primeiro refresh: sem este segundo passe,
+        // a contagem de dias úteis nasceria contando os feriados.
+        if (daily) loadHolidays().then(refresh);
         bootstrap.Modal.getOrCreateInstance(el).show();
     }
 
@@ -779,16 +827,50 @@
     function ymd(dt) {
         return dt.getUTCFullYear() + '-' + pad2(dt.getUTCMonth() + 1) + '-' + pad2(dt.getUTCDate());
     }
-    /* Os dias do intervalo, inclusive nas duas pontas. Vai dia a dia do
-       CALENDÁRIO, e não só nos úteis: um feriado sem arquivo simplesmente não
-       devolve linha, enquanto pular dia útil por engano esconderia o arquivo de
-       um dia em que houve movimento. */
-    function dayList(a, b) {
+    /* ── Dias ÚTEIS ────────────────────────────────────────────────────────
+       Os arquivos-dia nascem de rotinas que rodam em dia útil, então pedir
+       sábado, domingo e feriado é pedir vinte vezes o que não existe — e era
+       isso que enchia a lista de "não consegui ler" com dias em que não havia
+       nada a ler. O calendário é o ANBIMA (`static/data/anbima.json`), o mesmo
+       que o resto do app usa; ele é carregado UMA vez e fica em memória.
+
+       Sem o arquivo (fetch que falha), sobra o fim de semana: é a parte da
+       regra que não depende de cadastro nenhum, e é melhor pedir um feriado a
+       mais do que pular um dia útil em que houve movimento. */
+    var _holidays = null, _holidayLoad = null;
+    function loadHolidays() {
+        if (_holidayLoad) return _holidayLoad;
+        _holidayLoad = fetch('/static/data/anbima.json', { credentials: 'same-origin' })
+            .then(function (r) { return r.ok ? r.json() : []; })
+            .then(function (list) {
+                _holidays = {};
+                (list || []).forEach(function (h) {
+                    var d = String((h && h.date) || h || '').slice(0, 10);
+                    if (d) _holidays[d] = 1;
+                });
+                return _holidays;
+            })
+            .catch(function () { _holidays = {}; return _holidays; });
+        return _holidayLoad;
+    }
+    function isBizDay(d) {
+        var dow = new Date(d + 'T00:00:00Z').getUTCDay();
+        if (dow === 0 || dow === 6) return false;
+        return !(_holidays && _holidays[d]);
+    }
+
+    /* Os dias do intervalo, inclusive nas duas pontas. `onlyBiz` filtra pelo
+       calendário; o teto conta os dias do CALENDÁRIO, para o limite não mudar
+       conforme o mês tem mais ou menos feriado. */
+    function dayList(a, b, onlyBiz) {
         var out = [];
         var cur = new Date(a + 'T00:00:00Z'), end = new Date(b + 'T00:00:00Z');
         if (isNaN(cur.getTime()) || isNaN(end.getTime())) return out;
-        while (cur <= end && out.length <= MAX_DAYS) {
-            out.push(ymd(cur));
+        var span = 0;
+        while (cur <= end && span <= MAX_DAYS) {
+            var d = ymd(cur);
+            if (!onlyBiz || isBizDay(d)) out.push(d);
+            span++;
             cur.setUTCDate(cur.getUTCDate() + 1);
         }
         return out;
@@ -799,7 +881,7 @@
        é único e serve a mesa inteira (o app roda com threads, não com workers).
        Dia sem arquivo devolve zero linha e não é erro: é dia sem movimento. */
     function fetchDays(daily, dias, onStep) {
-        var columns = [], rows = [], failed = [], empty = [];
+        var columns = [], rows = [], failed = [], empty = [], why = {};
         var chain = Promise.resolve();
         dias.forEach(function (d, i) {
             chain = chain.then(function () {
@@ -807,9 +889,32 @@
                 var sep = daily.url.indexOf('?') === -1 ? '?' : '&';
                 return fetch(daily.url + sep + daily.param + '=' + encodeURIComponent(d),
                              { credentials: 'same-origin' })
-                    .then(function (r) { return r.ok ? r.json() : null; })
+                    .then(function (r) {
+                        // O MOTIVO acompanha a falha. "Não consegui ler 20 dias"
+                        // não diz se foi rota errada, sessão vencida ou erro do
+                        // servidor — e sem isso não há o que investigar.
+                        if (!r.ok) {
+                            why['HTTP ' + r.status] = (why['HTTP ' + r.status] || 0) + 1;
+                            failed.push(d);
+                            return null;
+                        }
+                        return r.json().catch(function () {
+                            // 200 com corpo que não é JSON é a assinatura do
+                            // redirecionamento para o login: o pedido "deu
+                            // certo" e voltou uma página HTML.
+                            why['resposta não-JSON'] = (why['resposta não-JSON'] || 0) + 1;
+                            failed.push(d);
+                            return null;
+                        });
+                    })
                     .then(function (j) {
-                        if (!j || j.error) { failed.push(d); return; }
+                        if (!j) return;
+                        if (j.error) {
+                            why[String(j.error).slice(0, 60)] =
+                                (why[String(j.error).slice(0, 60)] || 0) + 1;
+                            failed.push(d);
+                            return;
+                        }
                         var cs = j[daily.columns] || [];
                         var rs = j[daily.rows] || [];
                         if (!columns.length && cs.length) {
@@ -818,6 +923,11 @@
                             // não diz de que dia é cada linha.
                             columns = [t('refDate')].concat(cs.map(String));
                         }
+                        // Dia que respondeu e não tem linha é dia SEM ARQUIVO, não
+                        // é falha: com o intervalo em dias úteis ele é o feriado
+                        // que a rotina não rodou, ou o dia anterior à primeira
+                        // gravação. Contar isso como erro fazia o export inteiro
+                        // morrer por causa do que não existe.
                         if (!rs.length) { empty.push(d); return; }
                         rs.forEach(function (r) {
                             // A linha pode trazer uma cauda que a página usa
@@ -831,11 +941,15 @@
                             rows.push(line);
                         });
                     })
-                    .catch(function () { failed.push(d); });
+                    .catch(function (e) {
+                        why[(e && e.message) ? String(e.message).slice(0, 60) : 'erro de rede'] = 1;
+                        failed.push(d);
+                    });
             });
         });
         return chain.then(function () {
-            return { columns: columns, rows: rows, failed: failed, empty: empty };
+            return { columns: columns, rows: rows, failed: failed, empty: empty,
+                     why: Object.keys(why).join(' · ') };
         });
     }
 

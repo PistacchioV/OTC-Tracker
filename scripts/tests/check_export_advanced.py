@@ -75,13 +75,15 @@ def main():
     # bastante para o rótulo da Reference Date.
     harness = ("var MAX_DAYS = %d;\n" % max_days
                + "var _decoder = null;\n"
+               # Um feriado no meio do intervalo do relato (05/08–24/08).
+               + "var _holidays = {'2026-08-06': 1};\n"
                + "function t(k) { return k; }\n"
                + "var document = { createElement: function () {\n"
                + "  return { set innerHTML(v) { this.value = String(v)\n"
                + "      .replace(/&amp;/g, '&').replace(/&lt;/g, '<')\n"
                + "      .replace(/&gt;/g, '>').replace(/&quot;/g, '\"'); }, value: '' };\n"
                + "} };\n")
-    for name in ('plain', 'normDaily', 'pad2', 'ymd', 'dayList', 'fetchDays'):
+    for name in ('plain', 'normDaily', 'pad2', 'ymd', 'isBizDay', 'dayList', 'fetchDays'):
         harness += extract(src, name) + '\n'
 
     harness += r"""
@@ -103,6 +105,16 @@ def main():
     out('daily-none',   normDaily('') === null);
     out('daily-nourl',  normDaily({ param: 'date' }) === null);
 
+    out('biz-sab',     isBizDay('2026-08-22'));
+    out('biz-dom',     isBizDay('2026-08-23'));
+    out('biz-seg',     isBizDay('2026-08-24'));
+    out('biz-feriado', isBizDay('2026-08-06'));
+    // O intervalo do relato: 05/08 a 24/08 tem 20 dias de calendário e 13 dias
+    // úteis — 6 de fim de semana e o feriado do stub ficam de fora. Eram 7 dias
+    // pedidos à toa, e cada um deles entrava na conta de "não consegui ler".
+    out('dias-cal',    dayList('2026-08-05', '2026-08-24').length);
+    out('dias-uteis',  dayList('2026-08-05', '2026-08-24', true).length);
+    out('dias-sem-fds', dayList('2026-08-22', '2026-08-23', true).length);
     out('dias-1',      dayList('2026-08-24', '2026-08-24').join(','));
     out('dias-3',      dayList('2026-08-24', '2026-08-26').join(','));
     // Vira o mês e o ano sem pular nem repetir dia.
@@ -119,7 +131,7 @@ def main():
     fetch = function (url) {
         CHAMADAS.push(url);
         var d = url.split('=')[1];
-        if (d === '2026-08-25') { return Promise.resolve({ ok: false }); }
+        if (d === '2026-08-25') { return Promise.resolve({ ok: false, status: 404 }); }
         if (d === '2026-08-26') {
             return Promise.resolve({ ok: true, json: function () {
                 return Promise.resolve({ columns: ['A', 'B'], rows: [] }); } });
@@ -137,6 +149,7 @@ def main():
             out('fd-failed',   res.failed.join(','));
             out('fd-empty',    res.empty.join(','));
             out('fd-passos',   passos.join(' '));
+            out('fd-why',      res.why);
             out('fd-serie',    CHAMADAS.join(' '));
         });
     """
@@ -180,6 +193,18 @@ def main():
     check('sem daily não há intervalo', got.get('daily-none'), 'true')
     check('daily sem url também não', got.get('daily-nourl'), 'true')
 
+    print('\n== só dias úteis: o arquivo nasce em dia útil ==')
+    # Pedir sábado, domingo e feriado é pedir o que não existe — e era isso que
+    # enchia a lista de "não consegui ler" com dias em que não havia nada a ler.
+    check('sábado não', got.get('biz-sab'), 'false')
+    check('domingo não', got.get('biz-dom'), 'false')
+    check('segunda sim', got.get('biz-seg'), 'true')
+    check('feriado ANBIMA não', got.get('biz-feriado'), 'false')
+    # O intervalo do relato: 05/08 a 24/08.
+    check('20 dias de calendário', got.get('dias-cal'), '20')
+    check('e 13 dias úteis', got.get('dias-uteis'), '13')
+    check('fim de semana inteiro não devolve dia', got.get('dias-sem-fds'), '0')
+
     print('\n== os dias do intervalo ==')
     check('um dia só', got.get('dias-1'), '2026-08-24')
     # As duas pontas são inclusivas: pedir 24 a 26 e receber 24 e 25 perderia o
@@ -212,6 +237,10 @@ def main():
     # abriria noventa requisições sobre o processo único que serve a mesa.
     check('os dias são pedidos em série', got.get('fd-serie'),
           '/api/x?date=2026-08-24 /api/x?date=2026-08-25 /api/x?date=2026-08-26')
+    # A falha vem com o MOTIVO: "não consegui ler 20 dias" não diz se foi rota
+    # errada, sessão vencida ou erro do servidor — e sem isso não há o que
+    # investigar. (Foi um 404 de endpoint novo sem restart do Flask.)
+    check('a falha diz o motivo', got.get('fd-why'), 'HTTP 404')
 
     print('\n== a trava do intervalo ==')
     check('o teto é o MAX_DAYS do arquivo', max_days >= 30, True)
