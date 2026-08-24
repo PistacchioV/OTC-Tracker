@@ -13504,3 +13504,26 @@ Por ser um rateio, o Settlement Summary e o Trade Level se corrigem junto, sem t
 os dois já netam somando linhas.
 
 `check_optadv_ir.py` prova o caso reportado número a número e as três condições do imposto.
+
+### A tabela do prêmio não leva mais as duas colunas
+
+Corrigido o rodapé, sobrou o que as colunas por linha diziam. `IR 0,005%` e `Resultado Líquido` são
+fatos do NET, não da operação: a primeira imprimia um rateio que não é do contrato, e a segunda
+repetia o Resultado Apurado com alguns centavos a menos numa operação que não sofreu retenção nenhuma
+— a retenção é uma só, sobre o que o banco paga no dia.
+
+No aviso de **Pagamento de Prêmio de Opção** as duas saem da tabela, nas TRÊS classes de subjacente
+(mercadoria, taxa de câmbio e EDG), e o imposto aparece uma vez, no quadro de baixo — e só quando há o
+que reter: sem retenção não existe linha de `IR (0,005%)` no quadro, porque `R$ 0,00` num aviso que já
+não tem a coluna levanta uma pergunta ("por que zero?") que o documento não responde. O Resultado
+Final fica sempre: é o valor que o parágrafo de instrução manda transferir.
+
+Quem decide é o par `premium` × `family`, e não o rótulo do produto: o rótulo ('Opção de Commodities')
+existe para ser lido por gente e muda com a classe do subjacente. Por isso `_optadv_email_rows` passou
+a marcar a linha com `family='option'` — o aviso de **exercício/recompra** de opção e o **termo de
+mercadoria** seguem com as duas colunas, byte a byte.
+
+O corte acontece ANTES de montar a tabela, então a **ficha em PDF** (`ndf-pdf-cpty`) sai com o mesmo
+cabeçalho e as mesmas linhas do corpo do e-mail — cortar depois deixaria o anexo com uma coluna que o
+e-mail não tem. E a TELA de Settlement Advice de Opção continua com as duas colunas: é lá que a mesa
+confere e corrige os valores.

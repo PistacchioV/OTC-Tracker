@@ -1323,13 +1323,37 @@ def _ndfc_settlement_email(items, contraparte, le_class, ref_date, cpd, headers,
     taxid = items[0].get('taxid', '')
     to_emails = '; '.join(_contacts_emails(cp, _SETTLEMENT_KEYWORDS))
 
-    data_rows = [t.get('cells') or [] for t in items]
+    # ── Aviso de PRÊMIO de opção: a tabela não leva IR nem Resultado Líquido ──
+    # O imposto da opção é do NET, não da operação (§310): por linha ele não
+    # existe, e as duas colunas mostravam um rateio que não é fato do contrato —
+    # o Resultado Líquido de cada linha repetia o Apurado com alguns centavos a
+    # menos, sem que aquela operação tivesse sofrido retenção nenhuma. Ele passa
+    # a aparecer uma vez só, no quadro de baixo, e só quando há o que reter.
+    #
+    # Vale para as TRÊS classes de subjacente (mercadoria, câmbio e equity): o
+    # que decide é o par `premium` × `family`, não o rótulo do produto. O aviso
+    # de EXERCÍCIO/RECOMPRA e o termo de mercadoria seguem com as colunas.
+    so_apurado = bool(premium) and str(items[0].get('family') or '') == 'option'
+    headers = list(headers)
+    data_rows = [list(t.get('cells') or []) for t in items]
+    if so_apurado:
+        corta = {i for i, h in enumerate(headers)
+                 if h in ('IR 0,005% (R$)', 'Resultado Líquido (R$)')}
+        if corta:
+            headers = [h for i, h in enumerate(headers) if i not in corta]
+            data_rows = [[cel for i, cel in enumerate(r) if i not in corta]
+                         for r in data_rows]
+
     table = _email_data_table(headers, data_rows)
-    summary_pairs = [
-        ('Resultado Apurado', 'R$ ' + _br_currency(apurado), False),
-        ('IR (0,005%)',       'R$ ' + _br(ir),               False),
-        ('Resultado Final',   'R$ ' + _br_currency(final),   True),
-    ]
+    summary_pairs = [('Resultado Apurado', 'R$ ' + _br_currency(apurado), False)]
+    # Sem retenção não há linha de IR no quadro do prêmio: `R$ 0,00` num aviso
+    # que já não tem a coluna diria que o imposto foi calculado e deu zero, e a
+    # pergunta que ele levanta ("por que zero?") não tem resposta no documento.
+    # O Resultado Final fica sempre — é o valor que o parágrafo de instrução
+    # manda transferir.
+    if ir or not so_apurado:
+        summary_pairs.append(('IR (0,005%)', 'R$ ' + _br(ir), False))
+    summary_pairs.append(('Resultado Final', 'R$ ' + _br_currency(final), True))
     summary = _email_summary(summary_pairs)
 
     _JPM_BANK_KV = [
