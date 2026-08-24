@@ -62,6 +62,7 @@ import json
 import logging
 import os
 import re
+import tempfile
 import unicodedata
 from datetime import date, datetime, timedelta
 
@@ -84,15 +85,45 @@ CGD_INPUT_ROOT = os.getenv(
                  'Alteryx', 'Batimento CGD', 'Input'))
 FEP_XLSX = os.getenv('CGD_FEP_XLSX', 'LISTA_CONTRATOS_CGD.xlsx')
 
-# A árvore das posições CETIP. É a MESMA raiz da rotina Save CETIP Files
-# (`CETIP_SOURCE_ROOT` no routes) e pelo mesmo env var: duas raízes seriam duas
-# verdades sobre onde está o arquivo do dia.
-CETIP_SOURCE_ROOT = os.getenv(
-    'CETIP_SOURCE_ROOT',
+# ── A lista do FEP vem por E-MAIL, não de uma pasta ─────────────────────────
+# O relatório do FepWeb chega como ANEXO `.xlsx` numa subpasta do box
+# compartilhado — a mesma caixa que a varredura de booking recap e a Recon de
+# Comitentes já leem. Ninguém salva esse arquivo em lugar nenhum, então apontar
+# o batimento para uma pasta era apontá-lo para um arquivo que alguém teria de
+# copiar à mão todo dia (e, no dia em que esquecesse, a recon rodaria com a
+# lista da semana passada sem dizer nada).
+#
+# Lê-se o e-mail MAIS RECENTE da pasta: o relatório é reemitido e a pasta
+# acumula. E o assunto e a data do e-mail escolhido voltam no resultado, porque
+# "de que dia é esta lista" é a primeira pergunta de quem olha uma quebra.
+#
+# Nada é apagado nem movido no box: a rotina só LÊ.
+FEP_MAILBOX = os.getenv('OTC_BOX_MAILBOX', 'brazil.otc.ops@jpmorgan.com')
+FEP_MAIL_FOLDER = tuple(
+    x for x in os.getenv(
+        'CGD_FEP_MAIL_FOLDER',
+        'Automatico|FEPWEB-CGD-ContratoGlobalDerivativos - SEM FILTRO DATAS'
+    ).split('|') if x.strip())
+_FEP_MAIL_EXT = ('.xlsx', '.xlsm')
+
+# A árvore das posições CETIP é a de DESTINO da rotina Save CETIP Files
+# (`CETIP_DEST_ROOT`), e não a de origem: o que a B3 despeja na pasta de download
+# é o arquivo cru, com o nome do dia em que foi baixado, e quem o filtra, renomeia
+# para a convenção da casa e o guarda no dia certo é a rotina. Ler a origem era
+# ler antes de a rotina passar — e num dia em que ela não rodasse, a recon acharia
+# um arquivo e diria que está tudo certo com a posição da véspera.
+#
+# É a MESMA raiz e o MESMO env var que o `recon_fxo` usa para a DPOSICAO de opção
+# — duas raízes seriam duas verdades sobre onde está o arquivo do dia.
+CETIP_DEST_ROOT = os.getenv(
+    'CETIP_DEST_ROOT',
     os.path.join(Config.SHARED_DRIVE_ROOT, 'Confirmation', 'Derivativos',
-                 'OTC Tracker', 'Alteryx', 'Posição B3', 'ARQUIVOS CETIP'))
-# `CETIP21_AAMMDD_DPOSICAO-NET` — CSV de 10 campos, sem cabeçalho.
-B3_FILE_TPL = 'CETIP21_{yymmdd}_DPOSICAO-NET'
+                 'OTC Tracker', 'CETIP Files', 'Position Files'))
+# O nome que a rotina GRAVA (regra `CGD (NET)`: o `.txt` entra no destino). O
+# nome sem extensão é o do arquivo cru e fica como segunda tentativa, para o dia
+# em que alguém puser o arquivo na pasta à mão. CSV de 10 campos, sem cabeçalho.
+B3_FILE_TPL = 'CETIP21_{yymmdd}_DPOSICAO-NET.txt'
+B3_FILE_ALT = 'CETIP21_{yymmdd}_DPOSICAO-NET'
 
 _EN_MONTHS = ('January', 'February', 'March', 'April', 'May', 'June',
               'July', 'August', 'September', 'October', 'November', 'December')
@@ -200,16 +231,22 @@ def dia_util_anterior(ref=None):
 
 
 def caminho_b3(dia):
-    """`{raiz}/{AAAA}/{MM}. {Month}/{DD}/CETIP21_{AAMMDD}_DPOSICAO-NET`.
+    """`{destino}/{AAAA}/{MM}. {Month}/{DD}/CETIP21_{AAMMDD}_DPOSICAO-NET.txt`.
 
-    A árvore é a mesma que o Save CETIP Files escreve, com o mês em inglês por
-    extenso — é a convenção do share, não uma escolha desta tela.
+    A árvore é a que o Save CETIP Files ESCREVE, com o mês em inglês por extenso
+    — é a convenção do share, não uma escolha desta tela. Existindo só o nome sem
+    extensão (arquivo posto à mão), é ele que volta: a alternativa é devolver um
+    caminho que não existe e dizer que a posição do dia não chegou.
     """
-    return os.path.join(
-        CETIP_SOURCE_ROOT, dia.strftime('%Y'),
+    pasta = os.path.join(
+        CETIP_DEST_ROOT, dia.strftime('%Y'),
         '{}. {}'.format(dia.strftime('%m'), _EN_MONTHS[dia.month - 1]),
-        dia.strftime('%d'),
-        B3_FILE_TPL.format(yymmdd=dia.strftime('%y%m%d')))
+        dia.strftime('%d'))
+    principal = os.path.join(pasta, B3_FILE_TPL.format(yymmdd=dia.strftime('%y%m%d')))
+    if os.path.isfile(principal):
+        return principal
+    alt = os.path.join(pasta, B3_FILE_ALT.format(yymmdd=dia.strftime('%y%m%d')))
+    return alt if os.path.isfile(alt) else principal
 
 
 # ── Cadastros (/mapping) ─────────────────────────────────────────────────────
@@ -370,22 +407,125 @@ def _col_idx(cabecalho):
     return out
 
 
+def _subpasta(folder, nome):
+    """A subpasta pelo nome, cega a caixa e a espaço nas pontas, ou `None`.
+
+    Pelo índice não dá: o nome da pasta é o que o time vê e digita, e a ordem
+    delas no Outlook muda quando alguém cria outra.
+    """
+    subs = folder.Folders
+    alvo = str(nome or '').strip().lower()
+    for i in range(1, subs.Count + 1):
+        f = subs.Item(i)
+        if str(f.Name).strip().lower() == alvo:
+            return f
+    return None
+
+
+def baixar_fep_do_box(avisos, destino=None):
+    """Salva o anexo `.xlsx` do e-mail MAIS RECENTE da pasta do FepWeb.
+
+    Devolve `(caminho, descricao)` — a descrição é o assunto e a data do e-mail
+    lido, para o painel dizer DE QUE dia é a lista. `(None, '')` quando não deu
+    para ler, sempre com o motivo em `avisos`: uma recon que rodou sem um dos
+    lados parece uma recon limpa.
+
+    Windows-only (COM/MAPI). Fora do Windows levanta `EnvironmentError`, e quem
+    chama cai para o arquivo em pasta.
+    """
+    try:
+        import win32com.client as _w
+        import pythoncom
+    except ImportError:
+        raise EnvironmentError(
+            'win32com não disponível: ler o anexo do FepWeb requer Windows com '
+            'Outlook instalado.')
+
+    caminho_txt = 'Inbox > ' + ' > '.join(FEP_MAIL_FOLDER)
+    pythoncom.CoInitialize()
+    try:
+        ns = _w.Dispatch('Outlook.Application').GetNamespace('MAPI')
+        pasta = ns.Folders[FEP_MAILBOX].Folders['Inbox']
+        for nome in FEP_MAIL_FOLDER:
+            sub = _subpasta(pasta, nome)
+            if sub is None:
+                avisos.append('Pasta do FepWeb não encontrada no box {}: {}'
+                              .format(FEP_MAILBOX, caminho_txt))
+                return None, ''
+            pasta = sub
+
+        itens = pasta.Items
+        # Mais recente primeiro. O relatório é reemitido e a pasta acumula:
+        # pegar o primeiro da ordem natural devolveria o mais ANTIGO, e o
+        # batimento rodaria com a lista de semanas atrás sem erro nenhum.
+        itens.Sort('[ReceivedTime]', True)
+        for i in range(1, itens.Count + 1):
+            try:
+                msg = itens.Item(i)
+                anexos = msg.Attachments
+                for a in range(1, anexos.Count + 1):
+                    at = anexos.Item(a)
+                    nome = str(at.FileName or '')
+                    if not nome.lower().endswith(_FEP_MAIL_EXT):
+                        continue          # assinatura, imagem embutida, .msg
+                    alvo = destino or os.path.join(
+                        tempfile.gettempdir(), 'fepweb-cgd-' + os.path.basename(nome))
+                    at.SaveAsFile(alvo)
+                    recebido = ''
+                    try:
+                        recebido = msg.ReceivedTime.strftime('%d/%m/%Y %H:%M')
+                    except Exception:
+                        pass
+                    desc = '{} — {} ({})'.format(nome, str(msg.Subject or '').strip(),
+                                                 recebido or 's/ data')
+                    _LOG.info('[recon-cgd] lista do FEP: %s', desc)
+                    return alvo, desc
+            except Exception:
+                _LOG.exception('[recon-cgd] falha lendo um item da pasta do FepWeb')
+        avisos.append('Nenhum e-mail com anexo .xlsx em {}.'.format(caminho_txt))
+        return None, ''
+    finally:
+        try:
+            pythoncom.CoUninitialize()
+        except Exception:
+            pass
+
+
 def ler_fep(avisos, path=None):
-    """As linhas do `LISTA_CONTRATOS_CGD.xlsx`, já filtradas pela regra do fluxo.
+    """As linhas da lista do FepWeb, já filtradas pela regra do fluxo.
+
+    A fonte é o ANEXO do e-mail (`baixar_fep_do_box`). `path` explícito vence —
+    é o upload manual e o caminho dos testes. Sem Outlook (o servidor que não é
+    Windows, a máquina de desenvolvimento), cai para o arquivo em
+    `CGD_INPUT_ROOT`, avisando qual das duas fontes acabou valendo: rodar com a
+    lista errada e não saber é a única falha aqui que não aparece.
 
     Devolve `{cnpj_digits: {...}}` com UMA entrada por CNPJ: o status é o do
     documento mais recente e a data de criação também. O workflow chegava no
     mesmo lugar por `Summarize` + `MultiRowFormula` ordenando por data.
     """
-    path = path or os.path.join(CGD_INPUT_ROOT, FEP_XLSX)
+    origem = ''
+    if not path:
+        try:
+            path, origem = baixar_fep_do_box(avisos)
+        except EnvironmentError as e:
+            avisos.append(str(e))
+        if not path:
+            path = os.path.join(CGD_INPUT_ROOT, FEP_XLSX)
+            avisos.append('Usei a lista em pasta ({}) em vez do anexo do e-mail.'
+                          .format(path))
     if not os.path.isfile(path):
         avisos.append('Lista do FEP não encontrada: {}'.format(path))
-        return {}, path
+        return {}, origem or path
+    # `path` é o ARQUIVO, que o openpyxl abre; `rotulo` é o que o painel e o
+    # e-mail MOSTRAM. Anexo salvo em temporário tem nome que não diz nada — o
+    # que a mesa precisa ler é o assunto e a data do e-mail de onde ele saiu.
+    rotulo = origem or path
     try:
         from openpyxl import load_workbook
     except Exception:
         avisos.append('openpyxl não está instalado: sem ele não dá para ler a lista do FEP.')
-        return {}, path
+        return {}, rotulo
 
     wb = load_workbook(path, data_only=True, read_only=True)
     ws = wb[wb.sheetnames[0]]
@@ -393,14 +533,14 @@ def ler_fep(avisos, path=None):
     wb.close()
     if not linhas:
         avisos.append('Lista do FEP está vazia.')
-        return {}, path
+        return {}, rotulo
 
     idx = _col_idx(linhas[0])
     faltando = [k for k in ('cnpj', 'status') if k not in idx]
     if faltando:
         avisos.append('A lista do FEP não tem as colunas {} — nada foi lido dela.'
                       .format(', '.join(faltando)))
-        return {}, path
+        return {}, rotulo
 
     por_cnpj = {}
     for l in linhas[1:]:
@@ -448,7 +588,7 @@ def ler_fep(avisos, path=None):
         rec['obs'] = (OBS_DOCUSIGN_FEP
                       if {'DOC TRANSACIONAL', 'ASSINATURA CONCLUIDA'} <= rec['statuses']
                       else '')
-    return por_cnpj, path
+    return por_cnpj, rotulo
 
 
 # ── O batimento ──────────────────────────────────────────────────────────────

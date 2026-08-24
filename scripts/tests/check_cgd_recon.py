@@ -39,7 +39,8 @@ os.chdir(ROOT)
 
 TMP = tempfile.mkdtemp(prefix='cgd-recon-')
 os.environ.setdefault('OTC_SHARED_DRIVE_ROOT', os.path.join(TMP, 'share'))
-os.environ['CETIP_SOURCE_ROOT'] = os.path.join(TMP, 'b3')
+# A posição vem da pasta de DESTINO do Save CETIP Files, não da de origem.
+os.environ['CETIP_DEST_ROOT'] = os.path.join(TMP, 'b3')
 os.environ['CGD_INPUT_ROOT'] = os.path.join(TMP, 'fep')
 
 from apps.pages import recon_cgd as R                            # noqa: E402
@@ -77,9 +78,23 @@ check('segunda volta para a sexta', R.dia_util_anterior(date(2026, 8, 24)), date
 antes = R.dia_util_anterior(date(2026, 9, 8))
 check('feriado ANBIMA é pulado', antes, date(2026, 9, 4))
 
+# O arquivo é o que a rotina Save CETIP Files GRAVA — pasta de destino, nome com
+# `.txt`. Lendo a pasta de ORIGEM, a recon veria o arquivo cru antes de a rotina
+# passar, e num dia em que ela não rodasse leria a posição da véspera achando que
+# era a do dia.
 p = R.caminho_b3(date(2026, 8, 21))
-check('o caminho tem ano/mês em inglês/dia',
-      p.replace(os.sep, '/').endswith('2026/08. August/21/CETIP21_260821_DPOSICAO-NET'), True)
+check('o caminho é o do DESTINO, com ano/mês em inglês/dia',
+      p.replace(os.sep, '/').endswith(
+          'b3/2026/08. August/21/CETIP21_260821_DPOSICAO-NET.txt'), True)
+# Sem o `.txt` (arquivo posto à mão) o caminho cai para o nome cru — devolver o
+# que não existe seria dizer que a posição do dia não chegou.
+_dia_dir = os.path.join(TMP, 'b3', '2026', '08. August', '21')
+os.makedirs(_dia_dir, exist_ok=True)
+_cru = os.path.join(_dia_dir, 'CETIP21_260821_DPOSICAO-NET')
+open(_cru, 'w').close()
+check('   e cai para o nome sem extensão quando só ele existe',
+      R.caminho_b3(date(2026, 8, 21)), _cru)
+os.remove(_cru)
 
 
 # ── 2. As contas próprias ───────────────────────────────────────────────────
@@ -173,6 +188,38 @@ check('o CNPJ com dois pedidos vale pelo mais recente',
       ('Assinatura Concluida', '15/08/2026'))
 check('   e a contagem lembra que eram dois', fep['88888888000188']['qtd'], 2)
 check('CNPJ entra por DÍGITO, com ou sem pontuação', '44444444000144' in fep, True)
+
+# ── A lista do FEP vem do ANEXO do e-mail ───────────────────────────────────
+# Fora do Windows não há Outlook, então a leitura cai para o arquivo em pasta —
+# e isso tem de ser DITO. A recon que rodou com a lista errada e não avisou é a
+# única falha daqui que ninguém percebe: ela devolve uma tela plausível.
+check('sem Outlook, o aviso diz que a fonte foi a pasta',
+      any('em vez do anexo do e-mail' in a for a in av), True)
+
+# Com o box respondendo, o rótulo que volta é o ASSUNTO E A DATA do e-mail, e
+# não o caminho do temporário em que o anexo foi salvo: "de que dia é esta
+# lista" é a primeira pergunta de quem olha uma quebra, e o nome do arquivo
+# temporário não responde nenhuma.
+_orig_box = R.baixar_fep_do_box
+R.baixar_fep_do_box = lambda avisos, destino=None: (
+    os.path.join(TMP, 'fep', 'LISTA_CONTRATOS_CGD.xlsx'),
+    'CGD.xlsx — FEPWEB-CGD SEM FILTRO DATAS (21/08/2026 07:10)')
+try:
+    av2 = []
+    fep2, rot2 = R.ler_fep(av2)
+    check('o anexo do e-mail vence a pasta', len(fep2), len(fep))
+    check('o rótulo é o assunto e a data do e-mail',
+          rot2, 'CGD.xlsx — FEPWEB-CGD SEM FILTRO DATAS (21/08/2026 07:10)')
+    check('   e nada é dito sobre cair para a pasta',
+          any('em vez do anexo' in a for a in av2), False)
+finally:
+    R.baixar_fep_do_box = _orig_box
+
+# `path` explícito continua vencendo os dois — é o upload manual.
+av3 = []
+_fep3, rot3 = R.ler_fep(av3, os.path.join(TMP, 'fep', 'LISTA_CONTRATOS_CGD.xlsx'))
+check('caminho explícito não vai ao box',
+      rot3.endswith('LISTA_CONTRATOS_CGD.xlsx') and not av3, True)
 
 
 # ── 5. Os buckets ───────────────────────────────────────────────────────────
