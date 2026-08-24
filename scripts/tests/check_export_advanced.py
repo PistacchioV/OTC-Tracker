@@ -85,8 +85,15 @@ def main():
                + "  return { set innerHTML(v) { this.value = String(v)\n"
                + "      .replace(/&amp;/g, '&').replace(/&lt;/g, '<')\n"
                + "      .replace(/&gt;/g, '>').replace(/&quot;/g, '\"'); }, value: '' };\n"
-               + "} };\n")
-    for name in ('plain', 'normDaily', 'pad2', 'ymd', 'isBizDay', 'dayList', 'fetchDays'):
+               + "},\n"
+               # O `defaultName` lê o <h4> do cabeçalho da página; aqui ele é
+               # trocado por caso de teste.
+               + "  querySelector: function () {\n"
+               + "    return _PAGE_H4 === null ? null : { textContent: _PAGE_H4 };\n"
+               + "  } };\n"
+               + "var _PAGE_H4 = null, baseName = '', daily = null;\n")
+    for name in ('plain', 'normDaily', 'pad2', 'ymd', 'isBizDay', 'dayList',
+                 'fetchDays', 'defaultName', 'flatDay', 'todayIso', 'finalName'):
         harness += extract(src, name) + '\n'
 
     harness += r"""
@@ -127,6 +134,38 @@ def main():
     out('dias-bissex', dayList('2028-02-27', '2028-03-01').join(','));
     out('dias-invert', dayList('2026-08-26', '2026-08-24').length);
     out('dias-lixo',   dayList('nao-e-data', '2026-08-24').length);
+
+    // ── o NOME do arquivo ──────────────────────────────────────────────
+    // O padrão do app é "Nome Legível - AAAAMMDD" (o mesmo do anexo do BACC),
+    // e não o slug do id da tabela.
+    _PAGE_H4 = 'Live Position NDF';
+    out('nome-titulo',  defaultName({ id: 'lnndf-table' }));
+    _PAGE_H4 = '  Manual Confirmations / Track  ';
+    out('nome-limpo',   defaultName({ id: 'x' }));
+    _PAGE_H4 = null;                       // página sem cabeçalho: sobra o id
+    out('nome-id',      defaultName({ id: 'lnndf-table' }));
+    out('nome-vazio',   defaultName({ id: '' }));
+
+    // O carimbo da data. `todayIso` é substituído para o teste não depender do
+    // dia em que ele roda.
+    todayIso = function () { return '2026-08-24'; };
+    baseName = 'Live Position NDF';
+    daily = normDaily('/api/x');
+    out('carimbo-dia',  finalName({ name: baseName, dayFrom: '', dayTo: '' }));
+    out('carimbo-int',  finalName({ name: baseName, dayFrom: '2026-08-11',
+                                    dayTo: '2026-08-24' }));
+    // Intervalo de um dia só não repete a data.
+    out('carimbo-1dia', finalName({ name: baseName, dayFrom: '2026-08-24',
+                                    dayTo: '2026-08-24' }));
+    // Uma ponta só vale pelas duas.
+    out('carimbo-meia', finalName({ name: baseName, dayFrom: '', dayTo: '2026-08-24' }));
+    // Renomeado à mão: vale o que foi digitado, sem data nenhuma.
+    out('carimbo-mao',  finalName({ name: 'Posicao para o Ze', dayFrom: '2026-08-11',
+                                    dayTo: '2026-08-24' }));
+    // Tela sem arquivo-dia: as datas nem chegam a existir, e sobra o dia.
+    daily = null;
+    out('carimbo-sem-daily', finalName({ name: baseName, dayFrom: '2026-08-11',
+                                         dayTo: '2026-08-24' }));
 
     // fetchDays com um fetch de mentira: um dia com linhas, um vazio, um que
     // falha. O dia sem arquivo NÃO é erro — é dia sem movimento.
@@ -215,6 +254,31 @@ def main():
     check('e 13 dias úteis', got.get('dias-uteis'), '13')
     check('fim de semana inteiro não devolve dia', got.get('dias-sem-fds'), '0')
 
+    print('\n== o nome do arquivo ==')
+    # Nome LEGÍVEL, como a mesa chama a tela — o slug minúsculo era o nome do
+    # arquivo de código, não o do documento que se manda por e-mail.
+    check('o título da página vira o nome', got.get('nome-titulo'), 'Live Position NDF')
+    # A limpeza é a MESMA que o DataTables aplica ao baixar; sem colapsar de
+    # novo, a barra removida deixaria dois espaços no meio.
+    check('a barra sai e o espaço não dobra', got.get('nome-limpo'),
+          'Manual Confirmations Track')
+    check('sem cabeçalho sobra o id', got.get('nome-id'), 'lnndf-table')
+    check('sem nada nenhum sobra export', got.get('nome-vazio'), 'export')
+    # A data é o que distingue a extração de hoje da de ontem na mesma pasta.
+    check('sem intervalo carimba o dia', got.get('carimbo-dia'),
+          'Live Position NDF - 20260824')
+    check('com intervalo vão as duas pontas', got.get('carimbo-int'),
+          'Live Position NDF - 20260811 a 20260824')
+    check('intervalo de um dia não repete', got.get('carimbo-1dia'),
+          'Live Position NDF - 20260824')
+    check('uma ponta só vale pelas duas', got.get('carimbo-meia'),
+          'Live Position NDF - 20260824')
+    # Quem renomeou quis AQUELE nome, e não aquele nome mais uma data.
+    check('renomeado à mão sai como foi digitado', got.get('carimbo-mao'),
+          'Posicao para o Ze')
+    check('tela sem arquivo-dia carimba o dia', got.get('carimbo-sem-daily'),
+          'Live Position NDF - 20260824')
+
     print('\n== os dias do intervalo ==')
     check('um dia só', got.get('dias-1'), '2026-08-24')
     # As duas pontas são inclusivas: pedir 24 a 26 e receber 24 e 25 perderia o
@@ -260,6 +324,15 @@ def main():
     # errada, sessão vencida ou erro do servidor — e sem isso não há o que
     # investigar. (Foi um 404 de endpoint novo sem restart do Flask.)
     check('a falha diz o motivo', got.get('fd-why'), 'HTTP 404')
+
+    print('\n== o relógio do carimbo ==')
+    # `todayIso` tem de ler o relógio LOCAL. Com `getUTC*` — que é o que o
+    # `ymd()` das datas do intervalo usa, e por bom motivo — toda exportação
+    # feita depois das 21h no Brasil sairia carimbada com o dia seguinte.
+    fonte_hoje = extract(src, 'todayIso')
+    check('todayIso lê o relógio local', 'getUTC' not in fonte_hoje, True)
+    check('e o ymd do intervalo continua em UTC',
+          'getUTC' in extract(src, 'ymd'), True)
 
     print('\n== a trava do intervalo ==')
     check('o teto é o MAX_DAYS do arquivo', max_days >= 30, True)
