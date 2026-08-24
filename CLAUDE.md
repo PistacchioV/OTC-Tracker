@@ -206,6 +206,25 @@ Live Positions, o Track Confirmations e as três Recons).
   com **`mb-3`, não `mb-2`**: o DataTables desenha a própria caixa encostada no
   elemento anterior e come a margem do irmão de cima, então o `mb-2` mede 0 px
   na tela e os botões ficam colados no cabeçalho (HANDOFF §233).
+- **O menu Export termina no `Advanced Export`**, e ele é uma linha por tela:
+  `otcExportAdvanced('#tabela', { daily: '<endpoint do dia>' })`, opt-in como o
+  `otcCellCopy` e no-op onde o `export-advanced.js` não estiver carregado. Ele se
+  enxerta na collection do Buttons (ou num `<ul>` da página, com `menu:`) e faz
+  o export pelo MESMO Buttons — um gerador próprio seria um segundo CSV, com
+  outro separador e outro BOM. Três coisas decidem se ele funciona (HANDOFF §304):
+  - **`daily` é o endpoint que a PRÓPRIA página consulta** para desenhar um dia
+    (`{columns, rows}`; as recons usam `recon_date`/`data`, o resto `date`/`rows`).
+    Ler os JSON do cache por fora seria uma segunda regra sobre os mesmos
+    arquivos. Tela sem arquivo-dia não declara `daily` e a seção nasce
+    desabilitada com o motivo escrito — some, e parece defeito.
+  - **O intervalo pede `exact=1` e confere o `source_date` da resposta.** As
+    telas de posição andam para trás até dez dias úteis quando falta arquivo — o
+    que as mantém populadas —, e numa SÉRIE isso é o arquivo de outro dia
+    carimbado com a data pedida. Endpoint com fallback tem de aceitar o `exact` e
+    devolver a data do arquivo que leu.
+  - **Dia sem arquivo é pulado, não é erro**; o que falha leva o motivo junto; e
+    há teto de 60 s por dia, porque a leitura é em série e um dia que não
+    responde segurava a fila inteira.
 - **Alinhamento valor × coluna é parte do padrão**, e são TRÊS coisas — a Recon
   FXO saiu desalinhada duas vezes por ter só a primeira. Com `scrollX` o
   cabeçalho vive numa tabela irmã do corpo:
@@ -716,9 +735,9 @@ continua no label inglês.
   (semeado com `MONDELEZ`). O split roda **depois** do split por tipo de net,
   então um Pay/Rec da Mondelez sai por direção *e* por mercadoria (§196).
 - **`b3-accounts`** — as contas B3 de cada entidade nossa (LE · Nome
-  Simplificado · Conta · Tipo), e ele responde DUAS perguntas. Era o
-  `b3-omnibus-account`, que listava só a conta guarda-chuva e onde **estar na
-  tabela era a resposta** (§287).
+  Simplificado · Conta · Tipo · Reference Data Name · Messaging), e ele responde
+  TRÊS perguntas. Era o `b3-omnibus-account`, que listava só a conta
+  guarda-chuva e onde **estar na tabela era a resposta** (§287).
   - **A conta identifica o cliente?** Só **CLIENT 1 / CLIENT 2** são
     guarda-chuva: nelas o nome que vem da B3 é o do titular do omnibus, e o
     cliente é resolvido por **CNPJ** contra o `RefData.json`. Com a conta
@@ -737,6 +756,25 @@ continua no label inglês.
     a tradução `_TER_BUCKET_LE` — o gerador fala em balde (`BANCO`) e o cadastro
     em LE (`JPM`). **LE sem Nome Simplificado levanta erro** dizendo qual falta,
     em vez de mandar para a B3 um header com o campo em branco.
+  - **A mensageria sai na visão desta conta?** Coluna **MESSAGING**
+    (Consider/Disregard). A liquidação intragrupo chega pelos DOIS arquivos,
+    espelhada, e as duas pontas virando e-mail cobrariam duas vezes o mesmo
+    pagamento: o Banco assina; MGT, Lawton e Atacama são `Disregard`. Era uma
+    regra escrita no endpoint (`casa == MGT e contraparte == Banco`) que conhecia
+    esse par e só ele — Lawton e Atacama passavam direto (§306). **Conta fora do
+    cadastro GERA**: é a conta de terceiro, e travá-la por falta de linha calaria
+    a rotina inteira onde ninguém abriu o /mapping. O `upgrade` completa a coluna
+    pelo seed (por conta e por LE) — um default cego `Consider` faria a mensagem
+    sair pelas duas pontas, e `Disregard` cego a faria não sair de nenhuma, que é
+    pior porque some sem erro.
+  - O **Reference Data Name** é como a entidade está escrita no Reference Data,
+    e existe porque o Nome Simplificado ao lado é o apelido de 20 caracteres da
+    B3 (`INTRAGLAWTONFDO`), que não endereça documento nenhum. A coluna é do tipo
+    `refdata`, então o nome se escolhe da lista.
+  - **Estar no cadastro é ser conta INTERNA** — a tabela lista as contas B3 das
+    nossas entidades e nada mais —, e é por aí que o BCC de compliance sabe que a
+    contraparte é o Lawton ou a Atacama, em vez de casar o prefixo do Nome
+    Simplificado.
 - **`fxo-conv-rate`** — alimenta as duas colunas de Taxa de Conversão da
   confirmação de FXO asiática (Moeda Base → nome da taxa + Venda/Compra) e vem
   semeado só com USD → USD PTAX / Venda; moeda não cadastrada gera aviso no
@@ -1757,6 +1795,17 @@ Intrag ficavam com o valor cru sempre que o notional estava na moeda fraca
   reiniciado** ou o código velho continua servindo. Vários "não está
   funcionando" vieram daí. Edição de mapping pela tela é a exceção — vale no
   request seguinte.
+- **O `config.py` é o arquivo que fica para trás.** Ele é o único que se ajusta
+  à mão na instância, e `git pull` **não sobrescreve arquivo modificado**: o
+  resto da árvore atualiza e ele não, deixando o checkout com dois commits
+  misturados. Foi assim que a instância subiu com o `manual_conf.py` novo e o
+  `config.py` velho (`AttributeError: … has no attribute 'DATABASE_DIR'`, vinte
+  frames dentro de um import). Hoje `create_app` confere
+  `_REQUIRED_CONFIG_NAMES` **antes** dos blueprints e recusa subir dizendo o
+  nome que falta e o comando (`git checkout -- apps/config.py`) — nunca caindo
+  para um default, que faria o app abrir o banco LOCAL com os bancos no share,
+  sem erro nenhum. **Chave nova do config que outro módulo leia direto do
+  `Config` entra nessa lista** (HANDOFF §308).
 - `flask_login`, `flask_wtf` e `flask_migrate` estão no `requirements.txt` mas
   **não são usados**; o app gerencia sessão e banco diretamente.
 

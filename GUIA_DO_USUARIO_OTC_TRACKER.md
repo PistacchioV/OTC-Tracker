@@ -320,11 +320,41 @@ A tela **Track Confirmations** é a base inteira: filtro por coluna, atualizaç�
 
 > As operações de **NDF Commodities, Opção de Commodities, FXO e NDF FWD Start** entram nesta esteira sozinhas, assim que são mapeadas no New Deals — antes mesmo de o documento existir. É por isso que elas aparecem no card de *Pending OTC* já com o botão **Generate**.
 
-> **A fila parada é cobrada por e-mail.** O card *Confirmations Escalation* do **Control Panel** manda o que está pendente de validação para o OTC, para o Sales Support e para o Front Office (um e-mail por produto), toda segunda e quinta, e diariamente quando alguma operação está no último dia do prazo ou já vencida. Ver o item 3.15.
+> **A fila parada é cobrada por e-mail.** O card *Confirmations Escalation* do **Control Panel** manda o que está pendente de validação para o OTC, para o Sales Support e para o Front Office (um e-mail por produto), toda segunda e quinta, e diariamente quando alguma operação está no último dia do prazo ou já vencida. Ver o item 3.17.
 
 ---
 
-### 3.12. Reference Data — cadastrar contrapartes
+### 3.12. Exportar uma tabela — o Export e o Advanced Export
+
+Toda tela com tabela tem o botão **Export**, e ele oferece **Copy · CSV · Excel · Print · PDF**. O que sai é **o que está na tela**: os filtros que você aplicou, a ordenação que escolheu e as colunas visíveis. É o que se quer quase sempre.
+
+Quando não é, use o item **Advanced Export**, no fim do mesmo menu. Ele abre uma janela onde você monta a extração:
+
+| Campo | Para que serve |
+|---|---|
+| **Format** | Excel, CSV, PDF, Print ou Copy |
+| **File name** | o nome do arquivo (sem a extensão) |
+| **Rows** | tudo, só a página atual, ou uma faixa de posições (da linha N até a M) |
+| **Range — daily files** | **de que dia até que dia** — ver abaixo |
+| **Filters** | quantos critérios quiser: coluna + condição (*contém*, *é exatamente*, *começa com*, *está vazia*…) + valor |
+| **Columns** | quais colunas vão para o arquivo |
+| **Options** | levar o cabeçalho, separador do CSV, orientação do PDF |
+
+No rodapé, **antes de exportar**, aparece quantas linhas casaram com o que você montou. Se disser `0`, ajuste os critérios ali mesmo — não é preciso gerar o arquivo para descobrir.
+
+**O Range é o que resolve "preciso do mês inteiro".** A tela mostra um dia; o sistema guarda um arquivo por dia. Preenchendo **De** e **Até**, ele lê um arquivo por dia e junta **tudo numa planilha só**, com a coluna **Reference Date** na frente de cada linha dizendo de que dia ela veio.
+
+- Ele lê **apenas dias úteis** (calendário ANBIMA), porque é nesses dias que os arquivos são gerados.
+- **Dia sem arquivo é pulado**, não é erro — feriado, ou dia anterior ao início da guarda.
+- Ao terminar, o rodapé resume: quantas linhas, de quantos dias, quantos dias sem arquivo e quantos deram erro.
+
+> **A tela que não tem arquivo diário mostra o Range apagado, com o motivo escrito.** O Reference Data, por exemplo, é um cadastro: existe o de hoje e mais nada, então o export dele cobre sempre o que está na tela.
+
+> **Se aparecer "não consegui ler N dias" com `HTTP 404`**, quase sempre é a aplicação que ficou sem reiniciar depois de uma atualização. Ver **4.3**.
+
+---
+
+### 3.13. Reference Data — cadastrar contrapartes
 
 Caminho no menu: **Data Base → Reference Data**.
 
@@ -338,7 +368,7 @@ Caminho no menu: **Data Base → Reference Data**.
 
 ---
 
-### 3.13. Mapping — cadastrar de-para
+### 3.14. Mapping — cadastrar de-para
 
 Caminho no menu: **Data Base → Mapping**.
 
@@ -363,8 +393,8 @@ Tipos disponíveis:
 | FXO Conversion Rate | Taxa de conversão por moeda base |
 | Swap Curves (Athena × B3) | Curvas de swap |
 | B3 Accounts | As contas da B3 de cada entidade nossa — LE, Nome Simplificado, conta e tipo |
-| Quotes — Equities | Código do ativo subjacente → símbolo de mercado (item 3.18) |
-| Quotes — Commodities | Código da mercadoria → símbolo de mercado (item 3.18) |
+| Quotes — Equities | Código do ativo subjacente → símbolo de mercado (item 3.20) |
+| Quotes — Commodities | Código da mercadoria → símbolo de mercado (item 3.20) |
 
 > **B3 Accounts** responde a duas perguntas de uma vez, e por isso o **Account Type** não é enfeite:
 >
@@ -377,7 +407,7 @@ Tipos disponíveis:
 
 ---
 
-### 3.14. Index B3 — cadastrar ativos
+### 3.15. Index B3 — cadastrar ativos
 
 Caminho no menu: **Data Base → Index B3**.
 
@@ -389,7 +419,7 @@ Aqui ficam os ativos subjacentes aceitos pela B3. Um ativo não cadastrado imped
 
 ---
 
-### 3.15. File Interpreter — os layouts dos arquivos
+### 3.16. File Interpreter — os layouts dos arquivos
 
 Caminho no menu: **Apps → File Interpreter**.
 
@@ -406,7 +436,7 @@ O que se faz aqui, sem precisar de release:
 
 ---
 
-### 3.16. Control Panel — rotinas e destinatários de e-mail
+### 3.17. Control Panel — rotinas e destinatários de e-mail
 
 Caminho no menu: **Apps → Control Panel**.
 
@@ -497,7 +527,7 @@ anexa para as listas de **TO** e **CC** do card. Assunto: *Support to OTC Deriva
 
 ---
 
-### 3.17. Live Position — conferir a posição em custódia
+### 3.18. Live Position — conferir a posição em custódia
 
 Caminho no menu: **Live Position → NDF** (e demais produtos).
 
@@ -509,13 +539,13 @@ Caminho no menu: **Live Position → NDF** (e demais produtos).
 
 > **A coluna de CPF/CNPJ da contraparte mostra o NOME dela**, não o número — em NDF, Option e Swap (Características). O sistema procura o documento no **Reference Data** e escreve a razão social ali.
 >
-> Quando a célula continua mostrando o **número**, é porque aquele CPF/CNPJ **não está cadastrado** no Reference Data. O número fica de propósito: apagá-lo esconderia justamente a contraparte que falta cadastrar. Cadastre em **Data Base → Reference Data** (item 3.12) e a coluna passa a mostrar o nome na consulta seguinte.
+> Quando a célula continua mostrando o **número**, é porque aquele CPF/CNPJ **não está cadastrado** no Reference Data. O número fica de propósito: apagá-lo esconderia justamente a contraparte que falta cadastrar. Cadastre em **Data Base → Reference Data** (item 3.13) e a coluna passa a mostrar o nome na consulta seguinte.
 >
 > A coluna da **Parte** continua mostrando o documento — ela é a nossa perna, e o nome dela já está na coluna ao lado.
 
 ---
 
-### 3.18. Reconciliations — conciliar
+### 3.19. Reconciliations — conciliar
 
 Caminho no menu: **Reconciliations**.
 
@@ -532,7 +562,7 @@ Caminho no menu: **Reconciliations**.
 
 ---
 
-### 3.19. Quotes — consultar cotações
+### 3.20. Quotes — consultar cotações
 
 Caminho no menu: **Apps → Quotes**.
 
@@ -545,7 +575,7 @@ Consulta o histórico de cotações de três fontes, numa tela só:
 | **Commodities** | Yahoo Finance | as mesmas colunas de Equities |
 
 1. Escolha o **Quote type**. O campo ao lado só é liberado depois disso.
-2. Escolha o **instrumento** — na PTAX é a moeda; nos outros dois é o **ativo subjacente cadastrado no Index B3** (item 3.14). Pode digitar para filtrar a lista.
+2. Escolha o **instrumento** — na PTAX é a moeda; nos outros dois é o **ativo subjacente cadastrado no Index B3** (item 3.15). Pode digitar para filtrar a lista.
 3. Ajuste **From** e **To** — a tela já abre com o último mês.
 4. Clique em **Search**. A tabela sai do mais recente para o mais antigo e aceita filtro por coluna, seleção de célula para copiar e o **Export** completo (Copy · CSV · Excel · Print · PDF).
 
@@ -557,7 +587,7 @@ Consulta o histórico de cotações de três fontes, numa tela só:
 
 ---
 
-### 3.20. Holidays Calendar — os feriados que o sistema usa
+### 3.21. Holidays Calendar — os feriados que o sistema usa
 
 Caminho no menu: **Apps → Holidays Calendar**.
 
@@ -594,6 +624,14 @@ A planilha tem **uma aba** com três colunas, nesta ordem:
 
 ## 4. Perguntas Frequentes
 
+### 4.0. Um campo de data está mostrando mm/dd/aaaa
+
+**O que está acontecendo.** O sistema mostra data em **dd/mm/aaaa** em toda tela. Se algum campo aparecer no formato americano, é um campo de calendário do próprio Windows aparecendo onde deveria estar o do sistema — e o risco é real: `03/04` lido como 3 de abril quando o campo quis dizer 4 de março.
+
+**Como resolver:** avise o time de tecnologia informando **em que tela e em que campo**. É correção de uma linha, mas ela precisa ser feita campo a campo.
+
+---
+
 ### 4.1. A linha está marcada como "Missing Counterparty" e não consigo aprovar
 
 **O que está acontecendo.** O accronym enviado pela API não existe nem no **Reference Data**, nem no mapeamento **Legal Entity × Accronym**. O sistema prefere deixar os campos em branco a exibir uma contraparte errada.
@@ -628,6 +666,8 @@ Há duas causas possíveis, nesta ordem de probabilidade:
 > **Exceção:** alterações feitas na tela **Mapping** valem imediatamente, sem reinício.
 >
 > **Se o sintoma for "o e-mail das 19h não chegou"**, verifique antes se havia algo pendente no **Monitor** naquele horário. Quando está tudo resolvido, o e-mail não é enviado.
+>
+> **Se o sintoma for o Advanced Export dizendo "não consegui ler N dias" com `HTTP 404`** em todos os dias do intervalo, é este mesmo caso: a extração está pedindo um endereço que só existe na versão nova, e o sistema ainda está servindo a anterior. Peça o reinício e tente de novo.
 
 ---
 

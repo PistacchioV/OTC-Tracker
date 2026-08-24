@@ -13118,3 +13118,323 @@ Conferido no arquivo gerado: `VANILLA_BANCO.txt` com header + tipo 1 + as três 
 
 ⚠️ **Ressalva assumida:** se a outra ferramenta continuar registrando em paralelo, o mesmo trade vai
 à B3 duas vezes. A decisão de operar só por aqui é da mesa.
+
+---
+
+## §301 — Edição em lote: a coluna vem antes do valor
+
+A barra oferecia o campo de VALOR à esquerda e o dropdown de COLUNA à direita, e a ordem de uso é a
+inversa: sem coluna escolhida o campo de valor nasce desabilitado dizendo *"Select a column
+first"* — ele pedia a escolha que estava do outro lado. Os dois trocaram de lugar nas **oito**
+telas que têm o par (as seis de New Deals, a Pending Confirmation e o Track Confirmations).
+
+O espaçamento não mudou junto, e isso não é detalhe: nas seis páginas de New Deals a barra é
+`d-flex` com margens `me-*` em cada elemento, não `gap`. O valor tinha `me-1` e o select `me-2`;
+inverter só a ordem apertaria o botão Send de 0.5rem para 0.25rem. As classes acompanharam a
+troca — `me-1` entre os dois campos, `me-2` antes dos botões.
+
+A inversão sobrevive ao primeiro clique porque as três implementações reconstroem o campo de valor
+com `innerHTML`/`.empty()` **dentro** do wrapper, que permanece onde está. Um reappend à barra
+desfaria a ordem em silêncio, no primeiro uso.
+
+---
+
+## §302 — O export do Reference Data leva o CounterpartyDetails junto
+
+O duplo clique na linha já mostrava CGD, contas, defaults e contatos; o export levava só as treze
+colunas da grade. Quem precisava dos contatos ou da data do CGD de meia dúzia de clientes abria
+contraparte por contraparte e copiava do popup.
+
+Entram **seis colunas** — CGD · Settlement Net Type · Bank Accounts · Default PAY · Default
+RECEIVE · Contacts — que nascem **escondidas** (quem quiser vê-las usa o Columns) e vão **sempre**
+no arquivo: o `EXPORT_COLS` é uma lista de ÍNDICES, e índice não olha visibilidade.
+
+Elas entram na TABELA, e não só no arquivo, porque é a tabela que o DataTables exporta; montar o
+arquivo por fora criaria uma segunda leitura do mesmo JSON, para discordar da tela no primeiro caso
+de borda. E são escritas no **array de dados** da linha, nunca no `<td>` — o `<td>` é redesenhado a
+cada draw e o arquivo sairia vazio (§298).
+
+O que decide o conteúdo da célula:
+
+- **multivalor numa célula só**: itens separados por `' | '` e os campos de um item por `' · '`, que
+  é o separador que o próprio popup usa entre telefone e e-mail — quem comparar a tela com a
+  planilha lê a mesma coisa;
+- **o que não está aprovado sai marcado `(Pending)`**, em vez de ficar de fora. Escondê-lo faria a
+  planilha dizer que a contraparte não tem conta nenhuma justamente quando ela tem uma esperando
+  checker, que é a linha que alguém precisa olhar;
+- `Active`/`Inactive` entre as REGRAS do contato é lixo de importação antiga (o popup já os
+  descarta) e sairia repetindo o status;
+- o slot de default aponta para um **id** de conta, e id não diz nada a quem lê a planilha: o que
+  sai é o texto da conta.
+
+Os dois JSON são buscados em paralelo e qualquer um chega primeiro, então o `buildRows` preenche o
+que já houver e o `decorateAllPending` — que os dois fetches já chamavam — completa o resto. Toda
+ação do popup passa pelo mesmo `bankFetch`, então editar um contato atualiza a célula sem recarregar
+a tela.
+
+---
+
+## §303 — Gravar no Track Confirmations não apaga mais o filtro
+
+Depois de uma ação em massa a tela voltava ao estado limpo: sem filtro de coluna, sem card ativo,
+nada marcado. Quem filtrou chegou até ali para trabalhar naquele recorte e ainda tem o resto da
+lista para tratar — limpar obrigava a refiltrar a cada gravação, e numa fila de esteira isso é o
+trabalho inteiro.
+
+Agora some a SELEÇÃO, não a VISTA: as marcas e a coluna de aplicação, que dizem respeito à próxima
+ação (marca sobrando faz a ação seguinte cair em linha que ninguém escolheu). O preço é conhecido e
+é o certo: a linha que deixou de casar com o filtro desaparece da tela — foi exatamente o que a
+alteração fez com ela.
+
+**Uma armadilha só apareceu com o filtro preservado:** a coluna de Pending divide o índice com o
+filtro dos cards, e o `applyPendingFilter` fazia `search('')` nela sempre que nenhum card estava
+ativo. O texto digitado no campo de Pending ficaria na tela sem efeito nenhum — filtro que se vê e a
+tabela ignora. Sem card, a coluna volta a ser do campo, pelo mesmo `colSearch` (que subiu para o
+escopo de fora por causa disso e continua entendendo `blank`).
+
+A gravação de UMA linha não dizia nada — o modal fechava e a tabela recarregava. Com filtro
+aplicado a linha alterada pode nem estar na vista, então não sobrava sinal de que deu certo. Passa a
+avisar como as ações em massa, e o mesmo para a exclusão de uma linha (que também engolia a falha do
+servidor).
+
+---
+
+## §304 — Advanced Export: o recorte que a tela não está mostrando, e a SÉRIE
+
+O Export da casa (Copy · CSV · Excel · Print · PDF) exporta o que está NA TELA, e é o que se quer
+quase sempre. Faltavam duas coisas, e o item **Advanced Export** cobre as duas: um recorte que a
+tela não mostra (uma contraparte só, sem as colunas que não interessam) e **vários DIAS** — a tela
+mostra um dia, e a única forma de olhar o mês era abrir a página vinte vezes.
+
+O modal tem formato, nome do arquivo, escopo (tudo · página atual · faixa de posições), o intervalo
+de dias, até N filtros coluna/condição/valor, a lista de colunas e as opções do formato. O rodapé
+conta quantas linhas casam **antes** de exportar.
+
+Decisões que não são óbvias:
+
+- **quem gera o arquivo continua sendo o DataTables Buttons**, por um botão temporário com o mesmo
+  `extend` de sempre. Um gerador próprio seria um segundo CSV, com outro separador e outro BOM, e os
+  dois divergiriam no primeiro acento;
+- o `rows` do export é uma **função** sobre o índice, com o modifier em `search:'none'`: a seleção já
+  foi decidida no modal (inclusive se os filtros da tela entram), e deixar o DataTables filtrar de
+  novo aplicaria a busca duas vezes — o "ignorar os filtros da tela" nunca chegaria a valer. A ORDEM
+  vem do `order:'applied'`;
+- **a tabela é resolvida no CLIQUE**, não na ligação: a Recon FXO destrói e recria a DataTable quando
+  as colunas chegam do servidor, e o item ficaria preso à instância morta — um menu que abre e não
+  exporta nada, sem erro no console;
+- **Excel só aparece com o JSZip carregado e PDF só com o pdfmake.** Oferecer o que não tem
+  biblioteca produz um clique que não faz nada e nenhuma mensagem.
+
+### O intervalo de dias
+
+Quem responde por um dia é o **endpoint que a própria página consulta** para desenhar aquele dia: o
+intervalo o chama uma vez por data, em vez de ler os JSON do cache por fora — um leitor próprio seria
+uma segunda regra sobre os mesmos arquivos, para discordar da tela no primeiro caso de borda. O
+resultado vai para uma DataTable oculta, e daí em diante o export é o mesmo de sempre. Cada linha
+sai com a **Reference Date** na frente; sem ela, um arquivo de vinte dias não diz de que dia é cada
+linha.
+
+- **Tela sem arquivo-dia não some com a seção: ela nasce DESABILITADA com o motivo escrito.**
+  Reference Data é cadastro — existe o de agora e nada mais —, e um campo que desaparece sem
+  explicação lê-se como defeito.
+- **Só dia ÚTIL** (calendário ANBIMA, o mesmo `anbima.json` do resto do app). Os arquivos nascem de
+  rotinas que rodam em dia útil, então pedir sábado, domingo e feriado é pedir o que não existe — e
+  era isso que enchia a lista de "não consegui ler" com dias em que não havia nada a ler. De 05/08 a
+  24/08 são 20 dias de calendário e 14 úteis.
+- **Os dias são pedidos EM SÉRIE**, com teto de 120 e **60 s por dia**. Em paralelo, um intervalo de
+  três meses abriria noventa requisições de uma vez sobre o processo único que serve a mesa (o app
+  escala com threads, não com workers); e a leitura em série significa que **um dia que não responde
+  segurava os outros dezenove** — daí o timeout, que é o que impedia a exportação de travar no
+  último dia.
+- **`exact=1` em todo pedido do intervalo.** As telas de Live Position andam para trás até dez dias
+  úteis quando não há arquivo do dia — é o que as mantém populadas —, mas para quem monta uma série
+  isso é o arquivo de OUTRO dia carimbado com a data pedida: pedir 05/08 devolvia 20 linhas do
+  arquivo de 24/07. Num intervalo de catorze dias seria o mesmo dia repetido catorze vezes, o que é
+  pior do que travar, porque não parece defeito. A TELA continua sem mandar o parâmetro.
+- **O dia substituído é pulado.** O payload passou a dizer `source_date` — a data do arquivo lido de
+  verdade —, e quando ela não é a pedida o dia entra como "sem arquivo". Vale mesmo onde o `exact`
+  for ignorado, porque a checagem é sobre o que voltou, não sobre o que foi pedido.
+- **O arquivo sai com o que veio.** Um dia que falha não derruba a exportação: num intervalo de vinte
+  dias basta um para perder os dezenove que estavam lá. O rodapé separa as três coisas — N linhas de
+  X dias · Y sem arquivo · Z com erro —, e **a falha leva o MOTIVO** (`HTTP 404`, `resposta não-JSON`,
+  o `error` do payload). "Não consegui ler 20 dias" não distingue rota errada, sessão vencida e erro
+  do servidor; sem o motivo não há o que investigar. `HTTP 404` em todos os dias, aliás, é o sintoma
+  de endpoint novo com o Flask sem reiniciar.
+- **A contagem some quando há intervalo** e dá lugar a "N dias úteis a ler": a contagem é a da tela,
+  e prometer um número antes de ler os arquivos seria prometer justamente o que essa exportação não é.
+
+O casamento das colunas é pelo **RÓTULO**, não pelo índice: a tabela dos arquivos não tem checkbox
+nem Actions e ganha a Reference Date na frente.
+
+Ligadas: Operations B3, OTM Settlements, as duas Live Positions, Cognos, NDF Cockpit, NDF Other
+Publisher, Latam Desk Position, as cinco telas do swap-characteristics, a Recon FXO e a Pending
+Confirmation — esta pelo **snapshot diário** (`/api/pending-confirmation/snapshot`), porque a tela
+mostra a situação de AGORA (Aging e Status são recalculados na leitura) e a série só existe na foto
+que a manutenção das 11:30 grava. Sem intervalo ficam as que não têm arquivo-dia (Reference Data,
+Mapping) e as que não expõem o dia num endpoint `{columns, rows}`: New Deals (busca por POST),
+Accrual/MtM (payload por card) e a Recon Comitente (lê do banco, sem data).
+
+---
+
+## §305 — Data é dd/mm/aaaa em toda tela
+
+O `<input type="date">` desenha no locale do **sistema**. No Windows do JP isso é `mm/dd/yyyy`, e a
+mesa lê `03/04` como 3 de abril onde o campo quis dizer 4 de março — um erro de data que não dá erro
+nenhum. O padrão já era dd/mm/aaaa (está escrito no `pages/index.html` e nos dois Summaries), mas
+quatro telas tinham campo nativo à vista.
+
+O caminho é o **`altInput` do flatpickr**, que dá as duas coisas ao mesmo tempo: ele esconde o input
+original — que segue com o `value` em ISO, e por isso NENHUM código em volta muda — e desenha ao lado
+o campo em dd/mm/aaaa. Nas duas telas de Intrag e no ticket isso importa porque o ISO é exatamente
+como a linha é gravada (`_save_intrag_*` grava `%Y-%m-%d`).
+
+Corrigidos: os dois campos do intervalo do **Advanced Export**, os três do modal do **Intrag NDF**,
+os quatro do **Intrag Option** e o Due Date do **ticket**.
+
+Duas coisas que não dão erro nenhum quando se esquece:
+
+- **quem escreve no campo por código tem de avisar o picker.** O `value` do original muda, mas o
+  campo que se VÊ é o outro: sem o `setDate`, abrir o modal numa linha e depois noutra mostra a data
+  da PRIMEIRA. Daí o `otcDateSync`, que o preenchimento e a limpeza dos modais de Intrag chamam;
+- no ticket, o campo **nasce escondido** (só o master edita o prazo), e a classe do campo visível vai
+  SEM o `d-none` — copiar a classe inteira o deixaria oculto para sempre, com o `show()` destravando
+  um input que o flatpickr esconde de qualquer jeito.
+
+O `type="date"` **invisível** continua legítimo: é o picker atrás de um texto readonly em dd/mm/aaaa
+— o `.date-wrap` das duas Recons (`opacity:0` por cima do texto) e o botão de calendário do CGD no
+Reference Data. Ali o que se lê é sempre o texto.
+
+`otcDateField`/`otcDateSync` saem do `export-advanced.js`, que 30 telas já carregam, para não haver
+um segundo helper de data.
+
+---
+
+## §306 — A mensageria do Operations B3 pergunta ao cadastro de contas
+
+A regra de qual ponta da liquidação intragrupo vira e-mail estava escrita no endpoint: `casa == MGT
+e contraparte == Banco`. Ela conhecia esse par e só ele — a visão do **Lawton** e a da **Atacama**
+passavam direto, e o mesmo pagamento saía pelas duas pontas, cobrado duas vezes de quem recebe.
+
+O `b3-accounts` ganhou duas colunas:
+
+- **Messaging** (Consider/Disregard): a mensageria sai na visão desta conta? É a pergunta que estava
+  no código. Seed: Banco assina; MGT, Lawton e Atacama não.
+- **Reference Data Name**: como a entidade está escrita no Reference Data. O Nome Simplificado ao
+  lado é o apelido de 20 caracteres da B3 (`INTRAGLAWTONFDO`), que não é razão social nenhuma — e era
+  ele que sobrava quando a contraparte era entidade nossa, porque essas não têm linha no RefData pela
+  conta B3. A coluna é do tipo `refdata`, então o nome se escolhe da lista.
+
+**Estar no cadastro é ser conta INTERNA** — a tabela lista as contas B3 das nossas entidades e nada
+mais —, e é por aí que o BCC de compliance passa a saber que a contraparte é o Lawton ou a Atacama,
+em vez de casar o prefixo do Nome Simplificado.
+
+Detalhes que não dão erro nenhum:
+
+- **conta FORA do cadastro gera** (é a conta de terceiro, de que a mensagem sai hoje): travá-la por
+  falta de linha calaria a rotina inteira em qualquer instância que não tivesse aberto o /mapping;
+- a comparação é por **dígitos** — a mesma conta aparece `73760.10-2` num arquivo e `7376010 2` no
+  outro;
+- o `upgrade` completa a coluna nova **pelo seed** (por conta e por LE): o arquivo que já está em
+  disco vem sem ela, e um default cego `Consider` faria a mensagem sair pelas duas pontas —
+  `Disregard` cego a faria não sair de nenhuma, que é pior, porque some sem erro;
+- a linha da visão descartada continua indo a `Generated` (a liquidação saiu pela outra ponta), mas
+  **só se o `opb3-events` a aprovar**: carimbar a operação cancelada esconderia justamente a linha
+  que ninguém tratou.
+
+O inner join com o `opb3-events` continua onde estava, agora dito por escrito: são **quatro**
+perguntas que precisam concordar — o evento é liquidação, a modalidade é Bilateral*/Bruta*, a visão
+assina, e a linha ainda não virou e-mail.
+
+**No mesmo assunto:** o filtro do arquivo de operações do Daily Settlement passou a considerar a
+conta **73760.20-5** (CLIENTE 2) além da própria (73760.00-9). O que não passa por esse filtro não
+existe para nada depois dele — a página Operations B3, a mensageria, os avisos e as recons saem
+todos desse JSON. A de CLIENTE 1 (73760.10-2) continua fora. E a coluna dos filtros do `_DS_IMPORTS`
+é **1-based**, enquanto a do `_CETIP_BEHAVIOUR`, logo acima no mesmo arquivo, é 0-based: trocar uma
+pela outra filtra pela coluna vizinha e devolve arquivo vazio, sem exceção nenhuma.
+
+---
+
+## §307 — Todo caminho de banco sai do `Config.DATABASE_DIR` (e a branch de produção)
+
+Mover os bancos para o share exigia achar QUATRO lugares, porque quatro montavam o caminho por conta
+própria a partir do diretório do pacote: o `_PC_DB_DIR` dos três DuckDB do Pending Confirmation, o
+`_DB_DIR` dos dois da esteira, o `DB_PATH` do de comitentes e os três scripts de migração. Mover só o
+`DATABASE_PATH` deixaria o app abrindo o banco de usuários no share e todo o resto local — sem erro
+nenhum, e com a migração "dando certo" no banco errado.
+
+Agora existe **`Config.DATABASE_DIR`**, a pasta de TODOS eles, e é dela que saem o `DATABASE_PATH`,
+os sete do `DATABASE_ACCESS_PATHS` e os quatro consumidores. Uma variável (`OTC_DATABASE_DIR`) move o
+conjunto; `DATABASE_PATH` continua movendo só o banco de usuários. Os scripts têm fallback para o
+caminho antigo, para continuarem rodando fora do venv da aplicação.
+
+Duas correções entraram junto: o **`db.sqlite3` estava escrito em dois lugares** com valores
+diferentes (o gerenciador de lock guardava um arquivo e o ORM abria outro), e o caminho de rede tinha
+**escapes inválidos** (`\l`, `\B`) que o Python ainda tolera — um `\b` num caminho futuro viraria
+backspace, sem erro nenhum. Agora é raw string.
+
+### As duas branches
+
+`visual-refresh-prod` é a branch que a **instância do JPM** roda, e ela é a `visual-refresh` MAIS um
+commit no `apps/config.py`: bancos e share em `\\Nawest.ad.jpmorganchase.com\lac\BRA\intra` em vez de
+dentro da aplicação e `I:\`. A diferença é **um bloco de cinco linhas**, entre os marcadores
+`── ENV:DEV ──` e `── /ENV ──`, e nada mais — o resto do código pergunta ao Config e não sabe onde os
+bancos estão.
+
+Código só nasce na dev e chega lá por merge: `/commit` publica na dev, `/commitjp` faz o merge, troca
+o bloco e volta o working tree para o de dev (com o de prod, o app local não sobe — caminho UNC não é
+absoluto fora do Windows, e o `_absolute_path_from_environment` recusa na subida). Corrigir direto na
+prod é criar uma divergência que ninguém vê até o merge seguinte conflitar.
+
+> Alternativa que segue aberta: o config já lê `OTC_DATABASE_DIR` e `OTC_SHARED_DRIVE_ROOT` do
+> ambiente. Com um `.env` na instância do JPM as duas branches ficam **idênticas** e o `/commitjp`
+> deixa de ser necessário.
+
+---
+
+## §308 — O `config.py` é o arquivo que fica para trás na instância, e a falha era ilegível
+
+A instância do time subiu com `AttributeError: type object 'Config' has no attribute 'DATABASE_DIR'`,
+vinte frames dentro de um import (`run.py` → `create_app` → `register_blueprints` → `routes` →
+`manual_conf`). Não era bug do código: eram **dois arquivos de commits diferentes** no mesmo
+checkout — `manual_conf.py` do §307 (que lê `Config.DATABASE_DIR`) ao lado de um `config.py`
+anterior a ele, que ainda montava cada caminho de banco na mão.
+
+**Por que justamente esse arquivo.** O `config.py` é o único que se ajusta à mão na instância
+(timeouts, caminhos, `SECRET_KEY`), então ele costuma estar **modificado localmente** — e um
+`git pull` não sobrescreve arquivo modificado. O resto da árvore atualiza, ele não, e o checkout
+passa a ser uma mistura. É a mesma classe de "não está funcionando" do reloader desligado (§CLAUDE §8):
+o código no disco não é o código que se pensa estar rodando.
+
+**O que mudou.** `create_app` confere `_REQUIRED_CONFIG_NAMES` **antes** de importar os blueprints e
+recusa subir dizendo o nome que falta, o arquivo, a causa provável e o comando:
+
+```
+apps/config.py esta desatualizado: faltam DATABASE_DIR. O arquivo costuma ficar
+modificado localmente na instancia, e nesse caso o `git pull` nao o sobrescreve.
+Confira com `git status apps/config.py` e traga a versao do repositorio
+(`git checkout -- apps/config.py`, ou guarde o seu ajuste com `git stash` antes).
+Reinicie o Flask depois: o reloader esta desligado na instancia do time.
+```
+
+Três decisões:
+
+- **A conferência vem antes do `register_blueprints`**, e não dentro de cada módulo. Cada consumidor
+  se defendendo daria quatro mensagens diferentes para a mesma causa — e a primeira a estourar
+  dependeria da ordem dos imports.
+- **A lista é só o que módulos de FORA leem direto do `Config`** (`DATABASE_DIR`, `DATABASE_PATH`,
+  `DATABASE_ACCESS_PATHS`, `SHARED_DRIVE_ROOT`). São justamente as chaves cuja ausência não aparece
+  na subida, e sim no import do módulo que a lê. **Nome novo no config que outro módulo leia entra
+  aqui junto.**
+- **Recusar, nunca cair para um default.** Um fallback `basedir/static/data/db` deixaria o app subir
+  lendo o banco LOCAL no dia em que os bancos estivessem no share — sem erro nenhum, que é o defeito
+  que o §307 existiu para eliminar.
+
+**Na instância, o conserto é um comando:**
+
+```bash
+git status apps/config.py          # confirma que ele está modificado localmente
+git stash push apps/config.py      # só se o ajuste local importar
+git checkout -- apps/config.py     # traz a versão do repositório
+```
+
+E **reiniciar o Flask** — o reloader está desligado.

@@ -97,6 +97,14 @@ Gere o arquivo de registro (Process / Send batch), importe o retorno da câmara 
 
 ## 5. Referência de Módulos (na ordem do sidebar)
 
+> **Exportar dados vale para todas as telas com tabela.** O botão **Export** entrega
+> **Copy · CSV · Excel · Print · PDF** do que está na tela — filtros e ordenação aplicados, colunas
+> visíveis. O item **Advanced Export**, no fim do mesmo menu, abre a extração customizável: formato,
+> nome do arquivo, escopo, filtros por coluna, escolha de colunas e o **intervalo de dias**, que lê
+> um arquivo por dia útil e junta tudo numa planilha só, com a **Reference Date** por linha. Dia sem
+> arquivo é pulado. A tela que não tem arquivo diário (cadastros como o Reference Data) mostra o
+> intervalo desabilitado, com o motivo escrito.
+
 ### Navegação (Main)
 
 #### Dashboard
@@ -307,7 +315,7 @@ Registro de novos negócios de Opção de Commodities, com cache, geração Cone
 
 #### Reference Data
 
-Dados de referência e tabelas de apoio usados pelas demais telas (contrapartes, contas, mapeamentos).
+Dados de referência e tabelas de apoio usados pelas demais telas (contrapartes, contas, mapeamentos). O **duplo clique na linha** abre o detalhe da contraparte — CGD, tipo de liquidação (net), contas bancárias com os defaults de pagamento/recebimento e contatos —, tudo sob maker/checker. Esse detalhe **vai no export** em seis colunas próprias, que nascem ocultas e podem ser exibidas pelo botão *Columns*.
 
 ![Reference Data](docs/sop-screenshots/reference-data.png)
 
@@ -412,6 +420,8 @@ Os módulos abaixo estão previstos no menu lateral mas **ainda não foram desen
 | HTTP 404 — No saved data for this date | Sem conjunto salvo para a data. | Rode a importação antes de validar/recon. |
 | HTTP 500 — Failed to read/save/write | Falha interna (log/traceback). | Tente de novo; se persistir, Suporte. |
 | Validação de formulário | Campo vazio/inválido (ex.: Strike). | Corrija (Editar) e reconfirme. |
+| Advanced Export — "não consegui ler N dias" (`HTTP 404`) | O intervalo pede um endereço que só existe na versão nova; o sistema ainda serve a anterior. | Peça o **reinício** da instância e repita. |
+| Advanced Export — "N dias sem arquivo" | Não é erro: dia sem arquivo gravado (feriado, ou anterior ao início da guarda). | Nenhuma — a planilha sai com os dias que existem. |
 
 > Erros 400/404 são corrigíveis pelo operador; erros 500 vão para o Suporte de TI.
 
