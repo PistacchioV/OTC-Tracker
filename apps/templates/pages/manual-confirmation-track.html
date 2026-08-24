@@ -280,7 +280,7 @@
                 <!-- O conjunto COMPLETO do padrão (Copy · CSV · Excel · Print ·
                      PDF, o mesmo do New Deals): só CSV e Copy aqui era bug de
                      consistência. Os itens disparam os DataTables Buttons. -->
-                <ul class="dropdown-menu">
+                <ul class="dropdown-menu" id="mcExportMenu">
                     <li><a class="dropdown-item" href="#" id="mcExportCopy"><i class="ti ti-copy me-1"></i> Copy</a></li>
                     <li><a class="dropdown-item" href="#" id="mcExportCsv"><i class="ti ti-file-type-csv me-1"></i> CSV</a></li>
                     <li><a class="dropdown-item" href="#" id="mcExportExcel"><i class="ti ti-file-spreadsheet me-1"></i> Excel</a></li>
@@ -376,6 +376,7 @@
     }
 })();
 </script>
+<script src="{{ config.ASSETS_ROOT }}/js/export-advanced.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/table-std.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
@@ -428,6 +429,7 @@
               delText: 'The rows leave the trail for good. There is no undo.',
               delOk: 'Delete', delDone: '{n} row(s) deleted', delFail: 'Could not delete',
               saveFail: 'Could not save',
+              saveDone: 'Confirmation saved', addDone: 'Confirmation added',
               delOneTitle: 'Delete this confirmation?',
               delOneText: 'Trade ID {k}. There is no undo.',
               actions: 'Actions', openDoc: 'Open confirmation', edit: 'Edit', del: 'Delete',
@@ -444,6 +446,7 @@
               delText: 'As linhas saem da esteira de vez. Não tem desfazer.',
               delOk: 'Excluir', delDone: '{n} linha(s) excluída(s)', delFail: 'Não consegui excluir',
               saveFail: 'Não foi possível gravar',
+              saveDone: 'Confirmação gravada', addDone: 'Confirmação criada',
               delOneTitle: 'Excluir esta confirmação?',
               delOneText: 'Trade ID {k}. Não tem desfazer.',
               actions: 'Ações', openDoc: 'Abrir confirmação', edit: 'Editar', del: 'Excluir',
@@ -460,6 +463,7 @@
               delText: 'Las filas salen de la cadena definitivamente. No hay deshacer.',
               delOk: 'Eliminar', delDone: '{n} fila(s) eliminada(s)', delFail: 'No se pudo eliminar',
               saveFail: 'No se pudo guardar',
+              saveDone: 'Confirmación guardada', addDone: 'Confirmación creada',
               delOneTitle: '¿Eliminar esta confirmación?',
               delOneText: 'Trade ID {k}. No hay deshacer.',
               actions: 'Acciones', openDoc: 'Abrir confirmación', edit: 'Editar', del: 'Eliminar',
@@ -858,20 +862,19 @@
         $('#mcMassApply').prop('disabled', !(n && $('#mcMassColumn').val()));
     }
 
-    // Depois de uma ação em massa a tela volta ao estado limpo: sem filtro de
-    // coluna, sem card ativo, nada marcado e a coluna de aplicação zerada.
-    // Manter o filtro depois de gravar mostrava um recorte que já não descreve o
-    // que está na tela — a linha alterada pode ter saído dele —, e as marcas
-    // sobrando faziam a ação seguinte cair em linhas que ninguém escolheu.
-    function resetAfterMass() {
-        $('.mc-col-filters input').val('');
+    // Depois de uma ação em massa some a SELEÇÃO, não a VISTA. O que se limpa é
+    // o que diz respeito à próxima ação — as marcas e a coluna de aplicação —,
+    // porque marca sobrando faz a ação seguinte cair em linha que ninguém
+    // escolheu. Os filtros (a linha de coluna e o card de Pending) FICAM: quem
+    // filtrou chegou até ali para trabalhar naquele recorte e ainda tem o resto
+    // da lista para tratar; limpar obrigava a refiltrar a cada gravação. O preço
+    // é conhecido e é o certo: a linha que deixou de casar com o filtro
+    // desaparece da tela — foi exatamente o que a alteração fez com ela.
+    function resetSelectionAfterMass() {
         $('#mcAll').prop('checked', false).prop('indeterminate', false);
         $('.mc-pick').prop('checked', false);
-        activePending = '';
         $('#mcMassColumn').val('');
         buildMassValueField('');
-        if (table) table.columns().search('');
-        applyPendingFilter();
         updateApply();
     }
 
@@ -892,6 +895,25 @@
         });
     }
 
+    // `blank` traz o que está VAZIO naquela coluna. É o único jeito de procurar
+    // a ausência: um campo de texto casa por conteúdo, e "nada" não se digita. O
+    // termo vira a regex `^\s*$` (regex ligado, smart DESLIGADO — o smart search
+    // do DataTables reescreveria a expressão e deixaria de casar a célula
+    // vazia).
+    //
+    // A palavra é reservada só quando é a ÚNICA coisa no campo: quem procura por
+    // uma contraparte chamada 'Blank Trading' digita mais que isso e cai na
+    // busca normal.
+    //
+    // Mora AQUI, e não dentro do ready, porque o applyPendingFilter também a
+    // chama para devolver a coluna de Pending ao campo de filtro quando nenhum
+    // card está ativo.
+    function colSearch(col, termo) {
+        var t = String(termo == null ? '' : termo).trim();
+        if (t.toLowerCase() === 'blank') return col.search('^\\s*$', true, false);
+        return col.search(t);
+    }
+
     // ── Filtro pelos cards ──────────────────────────────────────────────
     function applyPendingFilter() {
         // 'Pending MO/FO' está parada nas DUAS mesas: o card de MO e o de FO têm
@@ -900,7 +922,16 @@
         if (activePending === 'Pending MO') term = '^Pending (MO|MO/FO)$';
         else if (activePending === 'Pending FO') term = '^Pending (FO|MO/FO)$';
         else if (activePending) term = '^' + activePending.replace('/', '\\/') + '$';
-        table.column(OFFSET).search(term, true, false).draw();
+        if (term) {
+            table.column(OFFSET).search(term, true, false).draw();
+        } else {
+            // Sem card ativo esta coluna volta a ser do CAMPO de filtro, que
+            // divide o índice com ela: um `search('')` seco apagaria o que está
+            // digitado no Pending e deixaria o texto no campo sem efeito nenhum
+            // — filtro que a tela mostra e a tabela ignora.
+            var typed = $('.mc-col-filters th').eq(OFFSET).find('input').val() || '';
+            colSearch(table.column(OFFSET), typed).draw();
+        }
         $('.mc-w').removeClass('is-active')
             .filter('[data-pending="' + activePending + '"]').addClass(activePending ? 'is-active' : '');
     }
@@ -993,7 +1024,7 @@
                 save(keys.map(function (k) { var o = {}; o[KEY] = k; o[col] = val; return o; }))
                     .then(function (ok) {
                         if (!ok) return;
-                        resetAfterMass();
+                        resetSelectionAfterMass();
                         Swal.fire({ icon: 'success', title: t('massDone', { n: keys.length }),
                                     timer: 1600, showConfirmButton: false });
                     });
@@ -1021,7 +1052,7 @@
                         return;
                     }
                     load();
-                    resetAfterMass();
+                    resetSelectionAfterMass();
                     Swal.fire({ icon: 'success', title: t('delDone', { n: j.deleted || keys.length }),
                                 timer: 1600, showConfirmButton: false });
                 }).catch(function (e) {
@@ -1038,21 +1069,6 @@
         // A linha de filtro foi montada antes do init, então o DataTables a levou
         // junto para o cabeçalho visível. O evento é delegado no documento
         // porque o nó é remontado a cada rebuild da tabela.
-        // `blank` traz o que está VAZIO naquela coluna. É o único jeito de
-        // procurar a ausência: um campo de texto casa por conteúdo, e "nada" não
-        // se digita. O termo vira a regex `^\s*$` (regex ligado, smart
-        // DESLIGADO — o smart search do DataTables reescreveria a expressão e
-        // deixaria de casar a célula vazia).
-        //
-        // A palavra é reservada só quando é a ÚNICA coisa no campo: quem procura
-        // por uma contraparte chamada 'Blank Trading' digita mais que isso e cai
-        // na busca normal.
-        function colSearch(col, termo) {
-            var t = String(termo == null ? '' : termo).trim();
-            if (t.toLowerCase() === 'blank') return col.search('^\\s*$', true, false);
-            return col.search(t);
-        }
-
         $(document).on('input', '.mc-col-filters input', function () {
             if (!table) return;
             colSearch(table.column($(this).closest('th').index()), this.value).draw();
@@ -1078,6 +1094,9 @@
         });
 
         buildExportButtons();
+        // O item Advanced entra no MESMO <ul> do Export desta página (o menu é
+        // markup daqui, não a collection do Buttons).
+        if (window.otcExportAdvanced) otcExportAdvanced('#mc-table', { menu: '#mcExportMenu' });
         [['#mcExportCopy', 'copy'], ['#mcExportCsv', 'csv'], ['#mcExportExcel', 'excel'],
          ['#mcExportPrint', 'print'], ['#mcExportPdf', 'pdf']].forEach(function (par) {
             $(par[0]).on('click', function (e) {
@@ -1141,8 +1160,18 @@
                 return;
             }
             o[KEY] = key;
+            // `adding` é de fora e o openEditor pode reescrevê-lo antes de a
+            // gravação responder — o rótulo do aviso é decidido agora.
+            var wasAdding = adding;
             save([o]).then(function (ok) {
-                if (ok) bootstrap.Modal.getInstance(document.getElementById('mcEditModal')).hide();
+                if (!ok) return;
+                bootstrap.Modal.getInstance(document.getElementById('mcEditModal')).hide();
+                // A gravação de uma linha só não dizia nada: o modal fechava e a
+                // tabela recarregava — e com filtro aplicado a linha alterada
+                // pode nem estar na vista, então não sobrava sinal nenhum de que
+                // deu certo. Mesmo aviso das ações em massa.
+                Swal.fire({ icon: 'success', title: t(wasAdding ? 'addDone' : 'saveDone'),
+                            timer: 1600, showConfirmButton: false });
             });
         });
 
@@ -1161,7 +1190,17 @@
                 fetch('/api/manual-confirmation/delete', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ key: k })
-                }).then(function (x) { return x.json(); }).then(load);
+                }).then(function (x) { return x.json(); }).then(function (j) {
+                    if (j && j.success === false) {
+                        Swal.fire({ icon: 'error', title: t('delFail'), text: j.message || '' });
+                        return;
+                    }
+                    load();
+                    Swal.fire({ icon: 'success', title: t('delDone', { n: 1 }),
+                                timer: 1600, showConfirmButton: false });
+                }).catch(function (e) {
+                    Swal.fire({ icon: 'error', title: t('delFail'), text: e.message });
+                });
             });
         });
 
