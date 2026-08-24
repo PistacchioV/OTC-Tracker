@@ -81,6 +81,7 @@
                     + 'export always covers what is on screen.',
             daysLoading: 'Loading the calendar…',
             daysReading: 'Reading {d}… ({i}/{n})',
+            daysBuilding: 'Building the file with {n} rows… (this may take a while)',
             daysFailed: 'Could not read {n} day(s)',
             daysNoFile: '{n} day(s) with no file',
             daysDone: '{n} rows from {d} day(s)',
@@ -118,6 +119,7 @@
                     + 'cobre sempre o que está na tela.',
             daysLoading: 'Carregando o calendário…',
             daysReading: 'Lendo {d}… ({i}/{n})',
+            daysBuilding: 'Montando o arquivo com {n} linhas… (pode demorar)',
             daysFailed: 'Não consegui ler {n} dia(s)',
             daysNoFile: '{n} dia(s) sem arquivo',
             daysDone: '{n} linhas de {d} dia(s)',
@@ -155,6 +157,7 @@
                     + 'la exportación cubre siempre lo que está en la pantalla.',
             daysLoading: 'Cargando el calendario…',
             daysReading: 'Leyendo {d}… ({i}/{n})',
+            daysBuilding: 'Armando el archivo con {n} filas… (puede tardar)',
             daysFailed: 'No pude leer {n} día(s)',
             daysNoFile: '{n} día(s) sin archivo',
             daysDone: '{n} filas de {d} día(s)',
@@ -638,19 +641,36 @@
                 var cols = [0].concat(o.colLabels.map(function (l) {
                     return res.columns.indexOf(l);
                 }).filter(function (i) { return i > 0; }));
-                run(tbl, jQuery.extend({}, o, { cols: cols }), keep);
-                // O resumo fica NO MODAL, que não se fecha sozinho quando algum
-                // dia ficou de fora: o arquivo já baixou, e some com a única
-                // tela que diz quantos dias entraram e o que faltou.
-                var dias_ok = res.rows.length ? (new Set(res.rows.map(function (r) { return r[0]; }))).size : 0;
-                var resumo = t('daysDone', { n: keep.length, d: dias_ok });
-                if (res.empty.length) resumo += ' · ' + t('daysNoFile', { n: res.empty.length });
-                if (res.failed.length) {
-                    resumo += ' · ' + t('daysFailed', { n: res.failed.length }) +
-                              (res.why ? ' (' + res.why + ')' : '');
-                }
-                $c.text(resumo).toggleClass('xa-zero', !!res.failed.length);
-                if (!res.failed.length) bootstrap.Modal.getInstance(el).hide();
+                // Montar o arquivo (Excel/CSV/PDF) é SÍNCRONO e segura a aba
+                // por alguns segundos num intervalo grande. Sem este passe de
+                // tela o aviso só apareceria depois de o arquivo ter baixado, e
+                // a espera se lê como travamento.
+                $c.text(t('daysBuilding', { n: keep.length })).removeClass('xa-zero');
+                setTimeout(function () {
+                    // Fora da cadeia de promessas, o erro daqui não tem mais
+                    // quem o pegue: sem este try o modal ficaria em "montando"
+                    // para sempre, que é a mesma tela de travamento.
+                    try {
+                        run(tbl, jQuery.extend({}, o, { cols: cols }), keep);
+                    } catch (err) {
+                        $c.text(t('daysFailed', { n: 0 }) +
+                                ((err && err.message) ? ' — ' + err.message : ''))
+                          .addClass('xa-zero');
+                        return;
+                    }
+                    // O resumo fica NO MODAL, que não se fecha sozinho quando algum
+                    // dia ficou de fora: o arquivo já baixou, e some com a única
+                    // tela que diz quantos dias entraram e o que faltou.
+                    var dias_ok = res.rows.length ? (new Set(res.rows.map(function (r) { return r[0]; }))).size : 0;
+                    var resumo = t('daysDone', { n: keep.length, d: dias_ok });
+                    if (res.empty.length) resumo += ' · ' + t('daysNoFile', { n: res.empty.length });
+                    if (res.failed.length) {
+                        resumo += ' · ' + t('daysFailed', { n: res.failed.length }) +
+                                  (res.why ? ' (' + res.why + ')' : '');
+                    }
+                    $c.text(resumo).toggleClass('xa-zero', !!res.failed.length);
+                    if (!res.failed.length) bootstrap.Modal.getInstance(el).hide();
+                }, 0);
             }).catch(function (e) {
                 $el.find('#xaRun').prop('disabled', false);
                 $c.text(t('daysFailed', { n: 0 }) +
@@ -993,9 +1013,17 @@
         host.innerHTML = '<table id="xaDailyTable"><thead><tr>' +
             res.columns.map(function (c) { return '<th>' + esc(c) + '</th>'; }).join('') +
             '</tr></thead><tbody></tbody></table>';
+        // `paging: false` desenhava TODAS as linhas do intervalo no DOM — dez
+        // dias de Live Position são dezenas de milhares de linhas por cinquenta
+        // colunas, e a aba congelava antes de chegar ao arquivo (era o
+        // "Page Unresponsive" que nunca terminava). O export não lê o DOM:
+        // `pick()` e o Buttons trabalham pela API (`cell().render()`,
+        // `rows({page:'all'})`), que responde pelo dado em memória. Então a
+        // tabela pagina em UMA linha: o dado está todo aqui, o desenho não.
         return jQuery('#xaDailyTable').DataTable({
-            data: res.rows, paging: false, searching: false, info: false,
-            ordering: false, autoWidth: false, destroy: true
+            data: res.rows, searching: false, info: false, ordering: false,
+            autoWidth: false, destroy: true,
+            paging: true, pageLength: 1, lengthChange: false, deferRender: true
         });
     }
 
