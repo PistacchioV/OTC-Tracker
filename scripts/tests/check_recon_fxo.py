@@ -44,6 +44,10 @@ ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)),
 sys.path.insert(0, ROOT)
 os.chdir(ROOT)
 
+# Fora do Windows o share tem de ser absoluto para o `Config` importar (§8), e
+# desde que as recons perguntam a raiz ao Config isto vale para elas também.
+os.environ.setdefault('OTC_SHARED_DRIVE_ROOT', os.path.join(ROOT, '.check-share'))
+
 import pandas as pd                                              # noqa: E402
 from apps.pages import recon_fxo as R                            # noqa: E402
 

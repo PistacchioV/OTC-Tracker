@@ -47,9 +47,27 @@ ANBIMA_JSON = os.path.join(REPO_ROOT, 'apps', 'static', 'data', 'anbima.json')
 
 # Same default as apps/pages/routes.py (CETIP_SOURCE_ROOT). Overridable via the
 # CETIP_SOURCE_ROOT env var or the --root flag.
+# ── A raiz do share ───────────────────────────────────────────────────────────
+def _shared_root():
+    """A MESMA raiz que a aplicação usa (`Config.SHARED_DRIVE_ROOT`).
+
+    Escrita à mão aqui, ela ficaria em `I:\\` no dia em que a instância passasse
+    a apontar para o UNC — o script "daria certo" mexendo na árvore errada. O
+    fallback existe para o script continuar rodando fora do venv da aplicação."""
+    try:
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        if root not in sys.path:
+            sys.path.insert(0, root)
+        from apps.config import Config
+        return Config.SHARED_DRIVE_ROOT
+    except Exception:
+        return 'I:\\'
+
+
 DEFAULT_ROOT = os.getenv(
     'CETIP_SOURCE_ROOT',
-    r'I:\Confirmation\Derivativos\OTC Tracker\Alteryx\Posição B3\ARQUIVOS CETIP')
+    os.path.join(_shared_root(), 'Confirmation', 'Derivativos', 'OTC Tracker',
+                 'Alteryx', 'Posição B3', 'ARQUIVOS CETIP'))
 
 # Same month labels as routes.py (_EN_MONTH_NAMES).
 EN_MONTH_NAMES = (

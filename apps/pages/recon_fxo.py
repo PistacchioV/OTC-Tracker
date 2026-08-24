@@ -56,6 +56,11 @@ from datetime import datetime
 
 import pandas as pd
 
+# A raiz do share sai do Config, como todo destino de rede do app: na branch de
+# produção ela é o UNC, e um literal `I:\` aqui manteria ESTA recon presa à
+# letra mapeada enquanto o resto do app já fala com o servidor.
+from apps.config import Config
+
 _LOG = logging.getLogger(__name__)
 
 _MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -68,7 +73,8 @@ _CACHE_DIR = os.path.join(_DATA_DIR, 'cache', 'reconciliation', 'fxo')
 # arquivo do dia está.
 _CETIP_BASE = os.getenv(
     'CETIP_DEST_ROOT',
-    r"I:\Confirmation\Derivativos\OTC Tracker\CETIP Files\Position Files")
+    os.path.join(Config.SHARED_DRIVE_ROOT, 'Confirmation', 'Derivativos',
+                 'OTC Tracker', 'CETIP Files', 'Position Files'))
 
 # Nome do arquivo de posição de opções, com a data no padrão da B3 (AAMMDD).
 _DPOSICAO_NAME = '73760_{yymmdd}_DPOSICAO.OPC'

@@ -5,6 +5,10 @@ import sys
 import os
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))   # scripts/tests/ -> raiz do repo
 sys.path.insert(0, ROOT)
+
+# Fora do Windows o share tem de ser absoluto para o `Config` importar (§8), e o
+# `recon_payrec` pergunta a raiz a ele desde que deixou de escrever o `I:\` fixo.
+os.environ.setdefault('OTC_SHARED_DRIVE_ROOT', os.path.join(ROOT, '.check-share'))
 from apps.pages.recon_payrec import _cli_spb
 
 COLS = ['Status', 'Data', 'Hora', 'sNumConta', 'Valor (R$)', 'LTR',

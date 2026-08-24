@@ -36,8 +36,27 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill
 from openpyxl.utils import get_column_letter
 
-DEFAULT_ROOT = os.getenv('ELECTRONIC_INVENTORY_ROOT',
-                         r'I:\Confirmation\Derivativos\OTC Tracker\Electronic Inventory')
+# ── A raiz do share ───────────────────────────────────────────────────────────
+def _shared_root():
+    """A MESMA raiz que a aplicação usa (`Config.SHARED_DRIVE_ROOT`).
+
+    Escrita à mão aqui, ela ficaria em `I:\\` no dia em que a instância passasse
+    a apontar para o UNC — o script "daria certo" mexendo na árvore errada. O
+    fallback existe para o script continuar rodando fora do venv da aplicação."""
+    try:
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        if root not in sys.path:
+            sys.path.insert(0, root)
+        from apps.config import Config
+        return Config.SHARED_DRIVE_ROOT
+    except Exception:
+        return 'I:\\'
+
+
+DEFAULT_ROOT = os.getenv(
+    'ELECTRONIC_INVENTORY_ROOT',
+    os.path.join(_shared_root(), 'Confirmation', 'Derivativos', 'OTC Tracker',
+                 'Electronic Inventory'))
 
 # (sheet title, on-disk category folder). Matched case-insensitively.
 SHEETS = [

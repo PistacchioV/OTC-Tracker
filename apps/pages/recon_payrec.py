@@ -36,6 +36,9 @@ import logging
 import unicodedata
 from datetime import datetime
 
+# A raiz do share sai do Config (ver `_INPUT_BASE` abaixo).
+from apps.config import Config
+
 _LOG = logging.getLogger(__name__)
 _MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
 # Working cache (latest run per date + _last).
@@ -46,8 +49,11 @@ _CACHE_DIR = os.path.normpath(os.path.join(
 _HISTORY_BASE = os.path.normpath(os.path.join(
     _MODULE_DIR, '..', 'static', 'data', 'cache', 'payrec'))
 
-# Network folder holding the input files.
-_INPUT_BASE = r"I:\Confirmation\Derivativos\OTC Tracker\Reconciliations\payrec"
+# Network folder holding the input files. A raiz vem do `Config`, como todo
+# destino de rede do app: escrita aqui, ela ficaria em `I:\` na instância que
+# já aponta para o UNC.
+_INPUT_BASE = os.path.join(Config.SHARED_DRIVE_ROOT, 'Confirmation', 'Derivativos',
+                           'OTC Tracker', 'Reconciliations', 'payrec')
 
 # ── E-mail recipients ─────────────────────────────────────────────────────────
 _MAILBOX = 'brazil.otc.ops@jpmorgan.com'

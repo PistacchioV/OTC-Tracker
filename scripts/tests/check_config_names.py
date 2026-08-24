@@ -23,6 +23,7 @@ Não toca em dado real: nada é aberto, nada é gravado.
 """
 
 import ast
+import io
 import os
 import sys
 
@@ -164,6 +165,69 @@ sem_config = [n for n in _REQUIRED_CONFIG_NAMES if not hasattr(Config, n)]
 check(not sem_config,
       'todo nome de _REQUIRED_CONFIG_NAMES existe no config atual' +
       ('' if not sem_config else ' — ausentes: ' + ', '.join(sem_config)))
+
+# ── 5. nenhuma raiz de rede escrita à mão em apps/ ──────────────────────────
+#
+# O `Config.SHARED_DRIVE_ROOT` só vale para quem pergunta a ele. Um
+# `r"I:\Confirmation\..."` num módulo mantém AQUELE caminho na letra mapeada
+# depois de a instância do JPM passar a falar com o UNC — e a falha aparece como
+# "o arquivo do dia não chegou", não como erro de configuração. Foi o caso das
+# três recons (FXO, Comitente e Pay/Rec).
+#
+# A varredura é sobre os literais do AST, então comentário e docstring ficam de
+# fora por construção — o caminho citado em prosa continua permitido.
+
+import re                                                          # noqa: E402
+import subprocess                                                  # noqa: E402
+
+RAIZ_RE = re.compile(r'^(?:[A-Za-z]:[\\/]|\\\\[A-Za-z0-9._-]+[\\/])')
+
+
+def _docstrings(arvore):
+    """Os nós de docstring — módulo, classe e função."""
+    fora = set()
+    for no in ast.walk(arvore):
+        if isinstance(no, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            corpo = getattr(no, 'body', None)
+            if corpo and isinstance(corpo[0], ast.Expr) and isinstance(corpo[0].value, ast.Constant) \
+               and isinstance(corpo[0].value.value, str):
+                fora.add(id(corpo[0].value))
+    return fora
+
+
+def _versionados():
+    """Só o que está no git: a árvore de trabalho tem cópias soltas (`routes 2.py`,
+    `cotaçoes.py`) que não vão para instância nenhuma."""
+    saida = subprocess.check_output(['git', 'ls-files', 'apps'], cwd=REPO)
+    nomes = saida.decode('utf-8', 'replace').splitlines()
+    return [os.path.join(REPO, n) for n in nomes if n.endswith('.py')]
+
+
+try:
+    alvos = _versionados()
+except Exception as exc:                                            # pragma: no cover
+    check(False, 'git ls-files respondeu (a varredura de raiz precisa dele): %s' % exc)
+    alvos = []
+
+# O config é o dono do literal: é lá que o bloco de ambiente mora.
+alvos = [a for a in alvos if os.path.basename(a) != 'config.py']
+
+achados = []
+for caminho in alvos:
+    try:
+        arvore = ast.parse(io.open(caminho, encoding='utf-8').read())
+    except Exception:
+        continue
+    fora = _docstrings(arvore)
+    for no in ast.walk(arvore):
+        if isinstance(no, ast.Constant) and isinstance(no.value, str) and id(no) not in fora:
+            if RAIZ_RE.match(no.value):
+                achados.append('%s:%d  %r' % (os.path.relpath(caminho, REPO),
+                                              no.lineno, no.value[:60]))
+
+check(not achados,
+      'nenhum modulo de apps/ escreve raiz de rede a mao' +
+      ('' if not achados else ' — ' + '; '.join(achados[:6])))
 
 print()
 if falhas:
