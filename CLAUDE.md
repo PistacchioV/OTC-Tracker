@@ -154,6 +154,18 @@ nasce assim; página velha que divergir é bug de consistência (a varredura de
 2026-08-07 alinhou Reference Data, Index B3, Mapping, os dois Summaries, as
 Live Positions, o Track Confirmations e as três Recons).
 
+- **A página carrega o `plugins/jquery/jquery.min.js` ANTES do bloco de
+  DataTables.** O `vendors.min.js` do tema **não** expõe o jQuery, então sem essa
+  linha todo plugin dali para baixo morre com `jQuery is not defined` e a página
+  abre com a barra de ferramentas e **sem tabela nenhuma** — o erro fica só no
+  console do navegador, e na tela parece uma página que "não carregou os dados".
+  Foi o que aconteceu com o Tracking Docs e a Recon CGD, as duas únicas telas com
+  DataTables que nasceram sem ela.
+- **Declare o `dom`.** Sem ele o DataTables desenha o próprio campo de busca e o
+  próprio `Show N entries`, que duplicam os da barra de ferramentas da casa e
+  aparecem soltos por cima do cabeçalho. O padrão é
+  `dom: "rt<'d-md-flex justify-content-between align-items-center mt-2'ip>"` —
+  tabela, info e paginação, nada mais.
 - **Tabela centralizada.** `th`: `text-align:center !important;
   vertical-align:middle !important; font-size:.7rem` (quebra de linha
   permitida no header). `td`: `text-align:center; vertical-align:middle;
@@ -932,22 +944,85 @@ estão:
   ele existe: o CGD que concluiu parou de envelhecer. O da planilha é do dia da
   exportação e envelheceria parado no banco por semanas. Sem `Data Solicitação`
   o aging fica **vazio**, nunca zero: zero se lê como "entrou hoje".
-- **A etapa da esteira** (Legal · Banking OTC · CEM MO) de todo documento que não
-  está `Active` sai do cadastro **`cgd-stage`** (STATUS → mesa) e, sem linha
-  cadastrada, é derivada pelo primeiro carimbo que falta — `Emissão`/`Signature
-  Date` → Legal, `OTC - STAMP` → Banking OTC, `MO - STAMP` → CEM MO. O item vem
+- **A esteira tem QUATRO mesas, e o `Banking` é a PRIMEIRA**: Banking · Legal ·
+  OTC · CEM MO. Banking é quem abre a solicitação, e o documento sai de lá quando
+  os campos **obrigatórios do formulário** estão preenchidos (`REQUEST_FIELDS`:
+  `Data Solicitação`, `Razão Social`, `CNPJ`, `Signature Type` — os `*` do
+  formulário; `Grupo` e `Dominio` são opcionais e cobrá-los deixaria na fila uma
+  solicitação que já pode seguir). O nome da coluna do banco nem sempre é o do
+  formulário: `CGD - Solicitação` é a `Data Solicitação` e `CGD - Tipo de
+  Assinatura` é o `Signature Type`. Era um cartão só, `Banking OTC`, e ele juntava
+  duas mesas que trabalham em momentos diferentes — a que pede o contrato e a que
+  o confere depois de assinado.
+- **`Signature Type` é domínio fechado de TRÊS valores** (`SIGNATURE_TYPES`):
+  `FepWeb`, `DocuSign` e `Manual`. O valor gravado é o código em inglês —
+  *Física* é só como o `Manual` aparece na tela em português, e gravar os dois
+  faria metade da lista deixar de casar com a outra metade. Na grade, o campo é um
+  `select` alimentado pelo servidor (`signature_types` no payload de
+  `/api/onboarding/docs`), e o valor JÁ GRAVADO entra na lista mesmo fora dos três
+  — escondê-lo faria o primeiro Save trocar o tipo da linha sem ninguém pedir. Não
+  é cadastro do /mapping: é o domínio de UM campo, não um de-para.
+- **A etapa** de todo documento que não está encerrado sai do cadastro
+  **`cgd-stage`** (STATUS → mesa) e, sem linha cadastrada, é derivada pelo
+  primeiro carimbo que falta — solicitação incompleta → Banking,
+  `Emissão`/`Signature Date` → Legal, `OTC - STAMP` → OTC, `MO - STAMP` → CEM MO. O item vem
   MARCADO como derivado, para ninguém confundir dedução com cadastro. Documento
   com todos os carimbos e ainda não `Active` fica na ÚLTIMA mesa: devolvê-lo sem
-  etapa o faria sumir das três filas, e um pendente que some é pior que um
+  etapa o faria sumir das quatro filas, e um pendente que some é pior que um
   pendente na fila errada.
+
+- **Encerrado não é pendência de ninguém.** `is_active` responde só pelo
+  `Active` (comparação EXATA: `Inactive` normaliza para `INACTIVE`, que CONTÉM
+  `ACTIVE`, e um teste por pedaço contaria o morto como vivo), e quem tira o
+  documento das filas é o **`is_closed`** — `Active`, `Inactive` e `Cancelado`
+  (por pedaço, que a grafia vem do SharePoint e é livre). Sem ele o encerrado
+  caía na fila do **Legal**, que é a primeira etapa sem carimbo em quem nunca
+  começou, e ficava lá envelhecendo para sempre no topo — empurrando para baixo
+  o que alguém de fato tem de fazer. O Overview mostra **quatro** números que
+  FECHAM (`total = pending + active + closed`): com três, a diferença entre o
+  total e a soma era justamente o que tinha sumido das filas.
+- **O badge de status é o do app** (`badge rounded-pill text-bg-* bg-gradient`),
+  não uma paleta própria da página — e o teste do `INACTIV` vem ANTES do do
+  `ACTIVE` pela mesma razão de cima: com o `indexOf('ACTIVE')` sozinho, o
+  documento morto saía com o mesmo verde do que está de pé, que é exatamente a
+  diferença que a coluna existe para dizer. No **Overview** a cor é da MESA (a
+  do cartão), e não do status: lá o badge responde "de quem é a fila".
 
 O `_id` do banco é interno e **não é estável entre importações** — ele endereça a
 linha que a tela está editando, e a importação seguinte renumera tudo.
 
 ### A recon de CGD lê o D-1, e o cache tem de casar com ele
 
-`recon_cgd` bate a lista do FEP contra a posição da B3 do **último dia útil**
-(`CETIP21_AAMMDD_DPOSICAO-NET`). Três coisas:
+`recon_cgd` bate a lista do FEP contra a posição da B3 do **último dia útil**.
+Cinco coisas:
+
+- **o arquivo da B3 é o que a rotina Save CETIP Files GRAVA**, na pasta de
+  DESTINO (`CETIP_DEST_ROOT` — a mesma raiz e o mesmo env var do `recon_fxo`),
+  `{AAAA}/{MM}. {Month}/{DD}/CETIP21_{AAMMDD}_DPOSICAO-NET.txt`. Não é a pasta de
+  ORIGEM: ali está o arquivo cru que a B3 despeja, com o nome do dia do download,
+  e quem o filtra, renomeia para a convenção da casa e o guarda no dia certo é a
+  rotina. Lendo a origem, a recon leria antes de a rotina passar — e no dia em que
+  ela não rodasse acharia um arquivo e diria que está tudo certo com a posição da
+  véspera. O nome SEM o `.txt` fica como segunda tentativa, para o arquivo posto
+  na pasta à mão;
+
+- **a lista do FEP vem do ANEXO de um e-mail, não de uma pasta**
+  (`baixar_fep_do_box`): o `.xlsx` do relatório do FepWeb chega em
+  `Inbox > Automatico > FEPWEB-CGD-ContratoGlobalDerivativos - SEM FILTRO DATAS`
+  do box compartilhado — o MESMO que a varredura de booking recap e a Recon de
+  Comitentes já leem. Ninguém salva esse arquivo em disco, então apontar o
+  batimento para uma pasta era apontá-lo para um arquivo que alguém teria de
+  copiar à mão todo dia, e no dia em que esquecesse a recon rodaria com a lista
+  da semana passada sem dizer nada. Lê-se o e-mail **mais recente**
+  (`Sort('[ReceivedTime]', True)` — o relatório é reemitido e a pasta acumula, e
+  a ordem natural devolve o mais ANTIGO), e o **assunto e a data** do e-mail
+  escolhido voltam no resultado como `fep_file`: "de que dia é esta lista" é a
+  primeira pergunta de quem olha uma quebra, e o nome do temporário em que o
+  anexo foi salvo não responde nenhuma. `path` explícito vence (upload manual e
+  testes); sem Outlook — o Linux, a máquina de desenvolvimento — cai para
+  `CGD_INPUT_ROOT` **avisando qual das duas fontes valeu**, porque rodar com a
+  lista errada e não saber é a única falha daqui que não aparece: ela devolve
+  uma tela plausível. Nada é apagado nem movido no box: a rotina só LÊ;
 
 - as contas que definem "nosso" saem do cadastro `b3-accounts` (`ACCOUNT TYPE =
   OWN` + `LE` em `CGD_LES`), nunca de dois números escritos no filtro; cadastro
