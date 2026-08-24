@@ -1,0 +1,285 @@
+{% extends "layouts/vertical.html" %}
+
+{% block title %}Onboarding Overview{% endblock title %}
+
+{% block extra_css %}
+<style>
+/* ============================================================================
+   Onboarding · Overview — uma fila por mesa da esteira do CGD.
+   O desenho é o do Confirmations Monitor: cartão neutro com moldura e sombra
+   suave, chip de ícone no gradiente, total à direita em dígitos de largura fixa.
+   Camada visual: tokens --ins-* (tema) e --vr-* (visual-refresh). Nunca --bs-*.
+
+   O cartão NÃO é um `.card` do Bootstrap, é um <div> com classe própria — sobre
+   um `.card` o tema redeclara fundo, borda, raio e cor DEPOIS deste <style>
+   (extra_css vem antes do head-css) e cada propriedade precisaria de !important.
+   ============================================================================ */
+#ob-monitor { --ob-ease: var(--vr-ease, cubic-bezier(0.22, 1, 0.36, 1)); padding-bottom: .9rem; }
+
+/* As TRÊS mesas lado a lado. `min-width:0` mantém as colunas iguais: flex item
+   tem min-width:auto, e uma razão social comprida alargaria o card dela às
+   custas das vizinhas — dentro, quem resolve é o ellipsis dos itens. */
+#ob-cards > [class*="col"] { min-width: 0; }
+
+#ob-monitor .ob-card {
+    height: 100%;
+    background: var(--vr-card-bg, var(--ins-secondary-bg));
+    border: 1px solid var(--vr-card-border, var(--ins-border-color));
+    border-radius: var(--vr-card-radius, 18px);
+    box-shadow: var(--vr-card-shadow, 0 4px 14px rgba(15, 23, 42, .06));
+    display: flex; flex-direction: column; overflow: hidden;
+    transition: box-shadow 260ms var(--ob-ease), border-color 260ms var(--ob-ease);
+}
+@media (hover: hover) and (pointer: fine) {
+    #ob-monitor .ob-card:hover {
+        box-shadow: var(--vr-card-shadow-hover, 0 18px 40px rgba(94, 92, 230, .14));
+        border-color: rgba(0, 102, 204, .28);
+    }
+    #ob-monitor .ob-card:hover .ob-card__ico {
+        transform: scale(1.1) rotate(-4deg);
+        box-shadow: 0 8px 20px rgba(94, 92, 230, .38);
+    }
+}
+#ob-monitor .ob-card__head {
+    display: flex; align-items: center; gap: .75rem;
+    padding: 1.05rem 1.15rem .85rem;
+}
+#ob-monitor .ob-card__ico {
+    width: 42px; height: 42px; flex: 0 0 auto; border-radius: 12px;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 1.25rem;
+    background: var(--vr-grad, linear-gradient(100deg, #0066cc, #5e5ce6 50%, #8b5cf6 80%, #d946ef));
+    box-shadow: 0 4px 12px rgba(94, 92, 230, .28);
+    transition: transform 260ms var(--ob-ease), box-shadow 260ms var(--ob-ease);
+}
+/* A mesa é a cor do CHIP, não a do cartão: cartão inteiro tingido briga com a
+   lista dentro dele e some no tema escuro. */
+#ob-monitor .ob-c-legal  .ob-card__ico { background: linear-gradient(100deg, #6d4c41, #a1887f); box-shadow: 0 4px 12px rgba(109,76,65,.28); }
+#ob-monitor .ob-c-otc    .ob-card__ico { background: linear-gradient(100deg, #0066cc, #5e5ce6); box-shadow: 0 4px 12px rgba(0,102,204,.28); }
+#ob-monitor .ob-c-mo     .ob-card__ico { background: linear-gradient(100deg, #b07500, #f7b84b); box-shadow: 0 4px 12px rgba(176,117,0,.28); }
+
+#ob-monitor .ob-card__title { font-size: .95rem; font-weight: 700; letter-spacing: -.01em; margin: 0; color: var(--ins-body-color); }
+#ob-monitor .ob-card__sub { font-size: .68rem; color: var(--ins-secondary-color); margin: 0; }
+#ob-monitor .ob-card__val {
+    margin-left: auto; font-size: 1.45rem; font-weight: 800; letter-spacing: -.02em;
+    font-variant-numeric: tabular-nums; color: var(--ins-body-color);
+}
+
+/* ── A fila ──────────────────────────────────────────────────────────────
+   Rolagem interna: um card com 60 documentos não pode empurrar os outros dois
+   para fora da tela — as três mesas se leem lado a lado. O `flex:1 1 auto` faz
+   a fila ocupar o cartão inteiro, senão o card mais vazio mostra uma faixa do
+   fundo embaixo da lista. */
+#ob-monitor .ob-list {
+    background: var(--ins-tertiary-bg, #eef0f4);
+    flex: 1 1 auto; min-height: 22rem;
+    max-height: calc(100vh - 23rem); overflow-y: auto; padding: .5rem;
+    border-top: 1px solid var(--ins-border-color);
+}
+#ob-monitor .ob-item {
+    background: var(--vr-card-bg, var(--ins-secondary-bg));
+    border: 1px solid var(--ins-border-color);
+    border-radius: 12px; padding: .8rem .9rem; margin-bottom: .5rem;
+    transition: border-color 200ms var(--ob-ease), box-shadow 200ms var(--ob-ease);
+}
+#ob-monitor .ob-item:last-child { margin-bottom: 0; }
+@media (hover: hover) and (pointer: fine) {
+    #ob-monitor .ob-item:hover {
+        border-color: var(--vr-accent-1, #0066cc);
+        box-shadow: 0 4px 14px rgba(15, 23, 42, .07);
+    }
+}
+#ob-monitor .ob-item__top { display: flex; align-items: baseline; gap: .4rem; }
+#ob-monitor .ob-item__cli { font-size: .9rem; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ins-body-color); }
+#ob-monitor .ob-item__age { margin-left: auto; font-size: .74rem; font-weight: 800; flex-shrink: 0; font-variant-numeric: tabular-nums; color: var(--ins-secondary-color); }
+/* O aging alto é a única cor da fila: pintar o que está no prazo é pintar quase
+   tudo, e aí o vermelho some no meio. */
+#ob-monitor .ob-item__age.ob-late { color: var(--ins-danger, #d93025); }
+#ob-monitor .ob-item__age.ob-warn { color: #b07500; }
+#ob-monitor .ob-item__meta { font-size: .74rem; color: var(--ins-secondary-color); margin-top: .15rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ob-monitor .ob-item__foot { display: flex; align-items: center; gap: .35rem; margin-top: .45rem; flex-wrap: wrap; }
+
+/* O status é badge pill com gradiente — o padrão da casa em toda tabela. */
+.ob-badge {
+    display: inline-block; padding: .18rem .55rem; border-radius: 999px;
+    font-size: .66rem; font-weight: 700; letter-spacing: .01em; color: #fff;
+    white-space: nowrap; line-height: 1.35;
+}
+.ob-badge--active  { background-image: linear-gradient(100deg, #1a7f37, #34c759); }
+.ob-badge--legal   { background-image: linear-gradient(100deg, #6d4c41, #a1887f); }
+.ob-badge--otc     { background-image: linear-gradient(100deg, #0066cc, #5e5ce6); }
+.ob-badge--mo      { background-image: linear-gradient(100deg, #b07500, #f7b84b); }
+.ob-badge--wait    { background-image: linear-gradient(100deg, #4a5568, #94a3b8); }
+.ob-badge--danger  { background-image: linear-gradient(100deg, #b3261e, #ff453a); }
+/* A etapa DERIVADA (sem cadastro no /mapping) sai marcada: quem lê precisa
+   saber que o app deduziu pelos carimbos, e não que alguém cadastrou. */
+.ob-badge--derived { background-image: none; background: transparent; color: var(--ins-secondary-color); border: 1px dashed var(--ins-border-color); }
+
+#ob-monitor .ob-empty { padding: 2.2rem 1rem; text-align: center; color: var(--ins-secondary-color); font-size: .82rem; }
+
+/* A faixa de topo: o que a lista inteira diz em três números. */
+#ob-monitor .ob-sum {
+    display: flex; gap: 1.4rem; flex-wrap: wrap; align-items: baseline;
+    padding: .85rem 1.15rem; margin-bottom: 1rem;
+    background: var(--vr-card-bg, var(--ins-secondary-bg));
+    border: 1px solid var(--vr-card-border, var(--ins-border-color));
+    border-radius: var(--vr-card-radius, 18px);
+    box-shadow: var(--vr-card-shadow, 0 4px 14px rgba(15, 23, 42, .06));
+}
+#ob-monitor .ob-sum__n { font-size: 1.25rem; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--ins-body-color); }
+#ob-monitor .ob-sum__l { font-size: .7rem; text-transform: uppercase; letter-spacing: .04em; color: var(--ins-secondary-color); }
+#ob-monitor .ob-sum__db { margin-left: auto; font-size: .7rem; color: var(--ins-secondary-color); }
+</style>
+{% endblock extra_css %}
+
+{% block page_content %}
+<div class="container-fluid" id="ob-monitor">
+
+    <!-- O título é escrito aqui (e não pelo partial, que espera a variável
+         `title` da rota): é o `.page-title-head h4` que o Advanced Export lê
+         para batizar o arquivo exportado. -->
+    <div class="page-title-head d-flex align-items-center mb-3">
+        <div class="flex-grow-1 d-flex align-items-center gap-2">
+            <i data-lucide="building-2" style="width:20px;height:20px;flex-shrink:0;" class="text-primary me-1"></i>
+            <h4 class="mb-0 fw-semibold" data-lang="ob-title">Onboarding Overview</h4>
+        </div>
+    </div>
+
+    <div class="ob-sum">
+        <div><div class="ob-sum__n" id="ob-total">0</div><div class="ob-sum__l" data-lang="ob-sum-total">Documents</div></div>
+        <div><div class="ob-sum__n" id="ob-pending">0</div><div class="ob-sum__l" data-lang="ob-sum-pending">Pending</div></div>
+        <div><div class="ob-sum__n" id="ob-active">0</div><div class="ob-sum__l" data-lang="ob-sum-active">Active</div></div>
+        <div class="ob-sum__db">
+            <a href="/onboarding/tracking-docs" class="text-decoration-none">
+                <i class="ti ti-table"></i> <span data-lang="ob-open-tracking">Open Tracking Docs</span>
+            </a>
+            <div id="ob-dbline" class="mt-1"></div>
+        </div>
+    </div>
+
+    <div class="row g-3" id="ob-cards"></div>
+
+</div>
+{% endblock page_content %}
+
+{% block extra_javascript %}
+<script>
+(function () {
+    'use strict';
+
+    /* i18n do texto montado em JS. O I18nManager traduz os [data-lang] UMA vez,
+       no load: o que o JS insere depois nunca passa por ele. */
+    var _TRANS = {
+        en: { legal: 'Legal', otc: 'Banking OTC', mo: 'CEM MO',
+              empty: 'Nothing pending with this desk',
+              nodb: 'The CGD database has not been imported yet.',
+              nodbhint: 'Run scripts/import_cgd_sharepoint.py with the SharePoint export.',
+              docs: 'document(s)', days: 'business day(s)', noage: 'no request date',
+              derived: 'derived', requested: 'Requested' },
+        br: { legal: 'Legal', otc: 'Banking OTC', mo: 'CEM MO',
+              empty: 'Nada pendente nesta mesa',
+              nodb: 'O banco de CGDs ainda não foi importado.',
+              nodbhint: 'Rode scripts/import_cgd_sharepoint.py com a exportação do SharePoint.',
+              docs: 'documento(s)', days: 'dia(s) útil(eis)', noage: 'sem data de solicitação',
+              derived: 'derivado', requested: 'Solicitado' },
+        es: { legal: 'Legal', otc: 'Banking OTC', mo: 'CEM MO',
+              empty: 'Nada pendiente en esta mesa',
+              nodb: 'La base de CGD aún no fue importada.',
+              nodbhint: 'Ejecute scripts/import_cgd_sharepoint.py con la exportación de SharePoint.',
+              docs: 'documento(s)', days: 'día(s) hábil(es)', noage: 'sin fecha de solicitud',
+              derived: 'derivado', requested: 'Solicitado' }
+    };
+    function lang() {
+        try { return localStorage.getItem('__OTC_TRACKER_LANG__') || 'en'; }
+        catch (e) { return 'en'; }
+    }
+    function t(k) { return (_TRANS[lang()] || _TRANS.en)[k] || (_TRANS.en[k] || k); }
+    function esc(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+
+    // Mesa → classe do chip e do badge. A ordem do array vem do servidor
+    // (`cgd_docs.STAGES`), então o mapa aqui é só de aparência.
+    var SKIN = {
+        'Legal':       { cls: 'ob-c-legal', badge: 'ob-badge--legal', icon: 'ti-gavel', key: 'legal' },
+        'Banking OTC': { cls: 'ob-c-otc',   badge: 'ob-badge--otc',   icon: 'ti-building-bank', key: 'otc' },
+        'CEM MO':      { cls: 'ob-c-mo',    badge: 'ob-badge--mo',    icon: 'ti-clipboard-check', key: 'mo' }
+    };
+
+    function ageClass(n) {
+        if (typeof n !== 'number') { return ''; }
+        if (n >= 15) { return 'ob-late'; }
+        if (n >= 5) { return 'ob-warn'; }
+        return '';
+    }
+
+    function item(it, skin) {
+        var idade = (typeof it.aging === 'number')
+            ? esc(it.aging) + ' ' + esc(t('days'))
+            : esc(t('noage'));
+        var meta = [it.doc_type, it.legal_entity, it.cnpj]
+            .filter(function (x) { return x; }).map(esc).join(' · ');
+        var marca = it.derived
+            ? ' <span class="ob-badge ob-badge--derived">' + esc(t('derived')) + '</span>'
+            : '';
+        return '<div class="ob-item">' +
+            '<div class="ob-item__top">' +
+              '<span class="ob-item__cli" title="' + esc(it.client) + '">' + esc(it.client || '—') + '</span>' +
+              '<span class="ob-item__age ' + ageClass(it.aging) + '">' + idade + '</span>' +
+            '</div>' +
+            (meta ? '<div class="ob-item__meta">' + meta + '</div>' : '') +
+            '<div class="ob-item__foot">' +
+              '<span class="ob-badge ' + skin.badge + '">' + esc(it.status || '—') + '</span>' + marca +
+              (it.requested ? '<span class="ob-item__meta">' + esc(t('requested')) + ': ' + esc(it.requested) + '</span>' : '') +
+            '</div>' +
+          '</div>';
+    }
+
+    function card(c) {
+        var skin = SKIN[c.stage] || { cls: '', badge: 'ob-badge--wait', icon: 'ti-file-text', key: '' };
+        var lista = c.items.length
+            ? c.items.map(function (i) { return item(i, skin); }).join('')
+            : '<div class="ob-empty">' + esc(t('empty')) + '</div>';
+        return '<div class="col-12 col-md-6 col-xl-4">' +
+            '<div class="ob-card ' + skin.cls + '">' +
+              '<div class="ob-card__head">' +
+                '<span class="ob-card__ico"><i class="ti ' + skin.icon + '"></i></span>' +
+                '<div>' +
+                  '<p class="ob-card__title">' + esc(skin.key ? t(skin.key) : c.stage) + '</p>' +
+                  '<p class="ob-card__sub">' + esc(c.count) + ' ' + esc(t('docs')) + '</p>' +
+                '</div>' +
+                '<p class="ob-card__val">' + esc(c.count) + '</p>' +
+              '</div>' +
+              '<div class="ob-list">' + lista + '</div>' +
+            '</div>' +
+          '</div>';
+    }
+
+    function load() {
+        fetch('/api/onboarding/overview', { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (j) {
+                if (!j || !j.success) { return; }
+                var pend = (j.total || 0) - (j.active || 0);
+                document.getElementById('ob-total').textContent = j.total || 0;
+                document.getElementById('ob-pending').textContent = pend;
+                document.getElementById('ob-active').textContent = j.active || 0;
+                // Banco ausente é um estado, não um erro: a tela diz o que
+                // fazer em vez de mostrar três filas vazias que parecem "não há
+                // nada pendente".
+                document.getElementById('ob-dbline').innerHTML = j.db_ready
+                    ? ''
+                    : '<span class="text-danger">' + esc(t('nodb')) + '</span><br>' +
+                      '<code>' + esc(t('nodbhint')) + '</code>';
+                document.getElementById('ob-cards').innerHTML =
+                    (j.cards || []).map(card).join('');
+            })
+            .catch(function () { /* silencioso: a faixa de topo já fica em zero */ });
+    }
+
+    document.addEventListener('DOMContentLoaded', load);
+})();
+</script>
+{% endblock extra_javascript %}

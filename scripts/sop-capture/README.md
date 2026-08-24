@@ -37,6 +37,11 @@ python scripts/sop-capture/capture_screens.py
 
 # 4) regerar o Word a partir do Markdown
 python scripts/build_sop_docx.py
+#   Pillow é OPCIONAL e vale a pena: com ele a cópia embutida de cada captura
+#   é reduzida a 1400 px (a largura no Word é 6,6", então acima disso o arquivo
+#   cresce sem ninguém ver diferença) — o Guia cai de 44 MB para 20 MB. Sem
+#   Pillow o original é embutido e o .docx sai gordo, mas sai.
+#   Largura configurável por SOP_IMG_MAX_PX.
 ```
 
 ## Como funciona o mock
@@ -70,4 +75,7 @@ fictício; as demais chamadas seguem normalmente (retornando vazio/real).
   404 no catch-all de template).
 - Se precisar de mais/menos linhas fictícias ou de outra contraparte/valor,
   ajuste os pools no topo do `mockgen.py`.
-- Variáveis de ambiente opcionais: `SOP_BASE_URL`, `SOP_LOGIN_PATH`, `SOP_CHROME`.
+- Variáveis de ambiente opcionais: `SOP_BASE_URL`, `SOP_LOGIN_PATH`, `SOP_CHROME`,
+  `SOP_OUT_DIR` — este último grava os PNGs num diretório à parte, para conferir a
+  rodada antes de sobrescrever as telas do guia (uma captura ruim não pode apagar
+  a boa).

@@ -16,6 +16,8 @@ Caminhos de imagem são relativos à raiz do repositório.
 import os
 import re
 import sys
+import atexit
+import tempfile
 
 try:
     from docx import Document
@@ -39,6 +41,16 @@ OUT = (os.path.join(ROOT, _ARGS[1]) if len(_ARGS) > 1
 BLUE = RGBColor(0x00, 0x66, 0xCC)
 GREY = RGBColor(0x55, 0x55, 0x55)
 IMG_W = Inches(6.6)
+_TMP_IMGS = []
+
+
+@atexit.register
+def _limpa_tmp():
+    for f in _TMP_IMGS:
+        try:
+            os.unlink(f)
+        except OSError:
+            pass
 
 
 def shade(cell, hexc):
@@ -47,6 +59,38 @@ def shade(cell, hexc):
     shd.set(qn('w:val'), 'clear')
     shd.set(qn('w:fill'), hexc)
     tcPr.append(shd)
+
+
+# As capturas são feitas em 2x (device_scale_factor=2 do Playwright), porque no
+# Markdown elas são lidas na tela e o zoom precisa aguentar. No Word a imagem é
+# desenhada com 6,6 polegadas de largura, então acima de ~1400 px o arquivo
+# cresce sem ninguém enxergar diferença — o Guia saía com 44 MB, grande demais
+# para anexar num e-mail. Aqui a cópia embutida é reduzida a essa largura; o PNG
+# do repositório NÃO é tocado. Sem Pillow, embute o original (o documento sai
+# gordo, mas sai).
+IMG_MAX_PX = int(os.environ.get('SOP_IMG_MAX_PX') or 1400)
+_shrunk = {}
+
+
+def shrink(path):
+    """Devolve o caminho de uma cópia reduzida da imagem, ou o próprio caminho."""
+    if path in _shrunk:
+        return _shrunk[path]
+    out = path
+    try:
+        from PIL import Image
+        im = Image.open(path)
+        if im.width > IMG_MAX_PX:
+            alt = int(round(im.height * IMG_MAX_PX / float(im.width)))
+            im = im.convert('RGB').resize((IMG_MAX_PX, alt), Image.LANCZOS)
+            tmp = tempfile.NamedTemporaryFile(suffix='.png', delete=False)
+            im.save(tmp.name, 'PNG', optimize=True)
+            out = tmp.name
+            _TMP_IMGS.append(tmp.name)
+    except Exception:
+        pass
+    _shrunk[path] = out
+    return out
 
 
 def add_inline(par, text):
@@ -117,7 +161,7 @@ def build():
             fp = path if os.path.isabs(path) else os.path.join(ROOT, path)
             if os.path.exists(fp):
                 try:
-                    doc.add_picture(fp, width=IMG_W)
+                    doc.add_picture(shrink(fp), width=IMG_W)
                     doc.paragraphs[-1].alignment = WD_ALIGN_PARAGRAPH.CENTER
                 except Exception as e:
                     doc.add_paragraph('[imagem: %s — %s]' % (path, e))

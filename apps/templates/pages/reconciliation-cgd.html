@@ -1,0 +1,475 @@
+{% extends "layouts/vertical.html" %}
+
+{% block title %}CGD Reconciliation{% endblock title %}
+
+{% block extra_css %}
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<style>
+/* ============================================================================
+   Reconciliação de CGD — FEP × B3.
+   Cards de resumo no desenho do resto do app + tabela no padrão da casa.
+   Tokens --ins-*/--vr-*, nunca --bs-*.
+   ============================================================================ */
+#cgd-page { --cgd-ease: var(--vr-ease, cubic-bezier(0.22, 1, 0.36, 1)); }
+
+#cgd-page .cgd-panel {
+    background: var(--vr-card-bg, var(--ins-secondary-bg));
+    border: 1px solid var(--vr-card-border, var(--ins-border-color));
+    border-radius: var(--vr-card-radius, 18px);
+    box-shadow: var(--vr-card-shadow, 0 4px 14px rgba(15, 23, 42, .06));
+    padding: 1rem 1.1rem 1.15rem;
+}
+
+/* Os cards de contagem. Clicar num deles FILTRA a tabela pelo bucket — é o
+   caminho que a mesa faz de qualquer jeito, e sem isso ela digita o nome do
+   bucket no filtro da coluna. */
+#cgd-page .cgd-kpi {
+    background: var(--vr-card-bg, var(--ins-secondary-bg));
+    border: 1px solid var(--vr-card-border, var(--ins-border-color));
+    border-radius: var(--vr-card-radius, 18px);
+    box-shadow: var(--vr-card-shadow, 0 4px 14px rgba(15, 23, 42, .06));
+    padding: .9rem 1rem; height: 100%; cursor: pointer;
+    display: flex; align-items: center; gap: .75rem;
+    transition: box-shadow 240ms var(--cgd-ease), border-color 240ms var(--cgd-ease), transform 240ms var(--cgd-ease);
+}
+@media (hover: hover) and (pointer: fine) {
+    #cgd-page .cgd-kpi:hover { transform: translateY(-2px); border-color: rgba(0,102,204,.28);
+                               box-shadow: var(--vr-card-shadow-hover, 0 18px 40px rgba(94,92,230,.14)); }
+    #cgd-page .cgd-kpi:hover .cgd-kpi__ico { transform: scale(1.1) rotate(-4deg); }
+}
+#cgd-page .cgd-kpi.cgd-on { border-color: var(--vr-accent-1, #0066cc); box-shadow: 0 0 0 2px rgba(0,102,204,.16); }
+#cgd-page .cgd-kpi__ico {
+    width: 38px; height: 38px; flex: 0 0 auto; border-radius: 11px; color: #fff;
+    display: inline-flex; align-items: center; justify-content: center; font-size: 1.15rem;
+    background: var(--vr-grad, linear-gradient(100deg, #0066cc, #5e5ce6));
+    transition: transform 240ms var(--cgd-ease);
+}
+#cgd-page .cgd-k-b3      .cgd-kpi__ico { background: linear-gradient(100deg, #b3261e, #ff453a); }
+#cgd-page .cgd-k-action  .cgd-kpi__ico { background: linear-gradient(100deg, #b07500, #f7b84b); }
+#cgd-page .cgd-k-onlyb3  .cgd-kpi__ico { background: linear-gradient(100deg, #7c3aed, #d946ef); }
+#cgd-page .cgd-k-just    .cgd-kpi__ico { background: linear-gradient(100deg, #0d7ea8, #4a849b); }
+#cgd-page .cgd-k-match   .cgd-kpi__ico { background: linear-gradient(100deg, #1a7f37, #34c759); }
+#cgd-page .cgd-kpi__n { font-size: 1.4rem; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; color: var(--ins-body-color); }
+#cgd-page .cgd-kpi__l { font-size: .68rem; text-transform: uppercase; letter-spacing: .04em; color: var(--ins-secondary-color); }
+
+/* ── Data: `type="date"` INVISÍVEL por cima de um texto readonly em dd/mm/aaaa.
+   O campo nativo desenha no locale do SISTEMA — no Windows do JP isso é
+   mm/dd/yyyy, e a mesa leria 03/04 como 3 de abril onde o campo quis dizer 4 de
+   março. O que se lê é sempre o texto; o nativo é só o calendário. */
+#cgd-page .date-wrap { position: relative; width: 132px; }
+#cgd-page .date-wrap input[type=date] { position: absolute; inset: 0; opacity: 0; cursor: pointer; z-index: 2; }
+#cgd-page .date-wrap input[type=text] { pointer-events: none; padding-right: 28px; }
+#cgd-page .date-wrap-icon { position: absolute; right: 9px; top: 50%; transform: translateY(-50%);
+                            z-index: 1; font-size: 15px; pointer-events: none; color: var(--ins-secondary-color, #6c757d); }
+
+/* ── Tabela no padrão da casa. As regras do `th` valem para o CLONE que o
+   scrollX cria — o DataTables remove o id da tabela do cabeçalho. */
+#cgd-table thead th,
+.dt-scroll-head thead th,
+.dt-scroll-headInner thead th,
+.dataTables_scrollHeadInner thead th {
+    text-align: center !important; vertical-align: middle !important;
+    font-size: .7rem; white-space: normal;
+}
+#cgd-table tbody td { text-align: center; vertical-align: middle; font-size: .8rem; white-space: nowrap; }
+#cgd-table tbody td.cgd-ell { max-width: 320px; overflow: hidden; text-overflow: ellipsis; }
+#cgd-table thead .cgd-filters th { padding: 4px 5px; }
+#cgd-table thead .cgd-filters input {
+    width: 100%; font-size: 12px; height: 28px; padding: 2px 6px;
+    border: 1px solid var(--ins-border-color); border-radius: 6px;
+    background: var(--ins-secondary-bg); color: var(--ins-body-color);
+}
+#cgd-table td.cgd-age { font-variant-numeric: tabular-nums; font-weight: 700; }
+#cgd-table td.cgd-age.cgd-late { color: var(--ins-danger, #d93025); }
+#cgd-table td.cgd-age.cgd-warn { color: #b07500; }
+
+/* Status do batimento: badge pill gradiente, cor por bucket. */
+.cgd-badge { display: inline-block; padding: .2rem .6rem; border-radius: 999px;
+             font-size: .68rem; font-weight: 700; color: #fff; white-space: nowrap; line-height: 1.35; }
+.cgd-badge--match  { background-image: linear-gradient(100deg, #1a7f37, #34c759); }
+.cgd-badge--fep    { background-image: linear-gradient(100deg, #b3261e, #ff453a); }
+.cgd-badge--b3     { background-image: linear-gradient(100deg, #7c3aed, #d946ef); }
+.cgd-badge--wait   { background-image: linear-gradient(100deg, #4a5568, #94a3b8); }
+.cgd-badge--just   { background-image: linear-gradient(100deg, #0d7ea8, #4a849b); }
+.cgd-badge--action { background-image: linear-gradient(100deg, #b07500, #f7b84b); }
+
+#cgd-page .btn-toolbar-all {
+    font-size: .75rem !important; padding: .25rem .6rem !important;
+    height: auto !important; line-height: 1.4 !important; white-space: nowrap !important;
+    transition: transform 140ms var(--cgd-ease), box-shadow 140ms var(--cgd-ease);
+}
+@media (hover: hover) and (pointer: fine) {
+    #cgd-page .btn-toolbar-all:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,.10); }
+}
+#cgd-page .btn-toolbar-all:active { transform: scale(.96) !important; }
+#cgd-page .cgd-src { font-size: .7rem; color: var(--ins-secondary-color); }
+#cgd-page .cgd-src code { font-size: .68rem; }
+#cgd-page .cgd-warn {
+    background: #fff6e5; border: 1px solid #f2d9a8; color: #8a5b00;
+    border-radius: 10px; padding: .6rem .8rem; font-size: .74rem; margin-bottom: .8rem;
+}
+[data-bs-theme=dark] #cgd-page .cgd-warn { background: rgba(247,184,75,.12); color: #f7b84b; }
+</style>
+{% endblock extra_css %}
+
+{% block page_content %}
+<div class="container-fluid" id="cgd-page">
+
+    <div class="page-title-head d-flex align-items-center mb-3">
+        <div class="flex-grow-1 d-flex align-items-center gap-2">
+            <i data-lucide="file-check-2" style="width:20px;height:20px;flex-shrink:0;" class="text-primary me-1"></i>
+            <h4 class="mb-0 fw-semibold" data-lang="cgd-recon-title">CGD Reconciliation</h4>
+        </div>
+    </div>
+
+    <div class="cgd-panel mb-3">
+        <div class="d-flex flex-wrap gap-2 align-items-center">
+            <div class="d-flex align-items-center gap-2">
+                <label class="form-label mb-0 fw-semibold" style="font-size:.75rem;" data-lang="cgd-lbl-date">Position date:</label>
+                <div class="date-wrap">
+                    <input type="text" id="cgd-date-display" class="form-control form-control-sm" placeholder="DD/MM/YYYY" readonly>
+                    <i class="ti ti-calendar date-wrap-icon"></i>
+                    <input type="date" id="cgd-date">
+                </div>
+            </div>
+
+            <button class="btn btn-sm btn-success bg-gradient btn-toolbar-all" id="cgd-run">
+                <i class="ti ti-refresh me-1"></i><span data-lang="cgd-btn-run">Run</span>
+            </button>
+            <button class="btn btn-sm btn-primary bg-gradient btn-toolbar-all" id="cgd-mail">
+                <i class="ti ti-mail me-1"></i><span data-lang="cgd-btn-mail">Send report</span>
+            </button>
+
+            <div class="dropdown">
+                <button class="btn btn-sm btn-info bg-gradient btn-toolbar-all dropdown-toggle"
+                        type="button" data-bs-toggle="dropdown">
+                    <i class="ti ti-download me-1"></i><span data-lang="cgd-btn-export">Export</span>
+                </button>
+                <ul class="dropdown-menu" id="cgd-export-menu">
+                    <li><a class="dropdown-item" href="#" data-exp="copy">Copy</a></li>
+                    <li><a class="dropdown-item" href="#" data-exp="csv">CSV</a></li>
+                    <li><a class="dropdown-item" href="#" data-exp="excel">Excel</a></li>
+                    <li><a class="dropdown-item" href="#" data-exp="print">Print</a></li>
+                    <li><a class="dropdown-item" href="#" data-exp="pdf">PDF</a></li>
+                </ul>
+            </div>
+
+            <button class="btn btn-sm btn-outline-secondary btn-toolbar-all" id="cgd-clear">
+                <i class="ti ti-filter-off me-1"></i><span data-lang="cgd-btn-clear">Clear Filters</span>
+            </button>
+
+            <div class="ms-auto cgd-src" id="cgd-src"></div>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-3" id="cgd-kpis"></div>
+
+    <div class="cgd-panel">
+        <div id="cgd-warnings"></div>
+        <div class="table-responsive">
+            <table id="cgd-table" class="table table-hover table-sm w-100 mb-0">
+                <thead>
+                    <tr>
+                        <th data-lang="cgd-c-check">Check</th>
+                        <th data-lang="cgd-c-client">Client</th>
+                        <th data-lang="cgd-c-cnpj">CNPJ</th>
+                        <th data-lang="cgd-c-status">Status FEP</th>
+                        <th data-lang="cgd-c-obs">Substantiation</th>
+                        <th data-lang="cgd-c-created">Creation Date</th>
+                        <th data-lang="cgd-c-aging">Aging</th>
+                    </tr>
+                    <tr class="cgd-filters">
+                        <th><input type="text" data-col="0" placeholder="Check"></th>
+                        <th><input type="text" data-col="1" placeholder="Client"></th>
+                        <th><input type="text" data-col="2" placeholder="CNPJ"></th>
+                        <th><input type="text" data-col="3" placeholder="Status FEP"></th>
+                        <th><input type="text" data-col="4" placeholder="Substantiation"></th>
+                        <th><input type="text" data-col="5" placeholder="Creation Date"></th>
+                        <th><input type="text" data-col="6" placeholder="Aging"></th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock page_content %}
+
+{% block extra_javascript %}
+{# jQuery ANTES do DataTables: o `vendors.min.js` do tema não o expõe, e sem
+   ele todo plugin daqui para baixo morre com "jQuery is not defined" — a
+   página abre com a barra de ferramentas e SEM tabela nenhuma, sem erro
+   visível na tela. Toda página com DataTables no app carrega esta linha. #}
+<script src="{{ config.ASSETS_ROOT }}/plugins/jquery/jquery.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.buttons.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/jszip.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/pdfmake.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/vfs_fonts.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.html5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.print.min.js"></script>
+<script>
+(function () {   // registro síncrono do JSZip — sem ele o Excel não faz nada
+    var jz = window.JSZip || window.jszip;
+    if (jz && window.jQuery && jQuery.fn.dataTable && jQuery.fn.dataTable.Buttons &&
+        typeof jQuery.fn.dataTable.Buttons.jszip === 'function') {
+        jQuery.fn.dataTable.Buttons.jszip(jz);
+    }
+})();
+</script>
+<script src="{{ config.ASSETS_ROOT }}/js/export-advanced.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/table-std.js"></script>
+<script>
+(function ($) {
+    'use strict';
+
+    var _TRANS = {
+        en: { matched: 'Matched', pending_b3: 'Pending B3', pending_action: 'Pending action',
+              only_b3: 'Only in B3', justified: 'Justified', all: 'All',
+              run: 'Running the reconciliation…', runTxt: 'Reading the B3 position and the FEP list.',
+              done: 'Reconciliation finished', mailed: 'Report sent', mailFail: 'Report not sent',
+              norec: 'No recipient configured for this report.',
+              notrun: 'Nothing was reconciled for this date yet. Click Run first.',
+              empty: 'Nothing reconciled for this date yet — click Run.',
+              src: 'B3 file', fep: 'FEP list', at: 'run at' },
+        br: { matched: 'Batidos', pending_b3: 'Pendente na B3', pending_action: 'Pendente de ação',
+              only_b3: 'Só na B3', justified: 'Justificados', all: 'Todos',
+              run: 'Rodando o batimento…', runTxt: 'Lendo a posição da B3 e a lista do FEP.',
+              done: 'Batimento concluído', mailed: 'Relatório enviado', mailFail: 'Relatório não enviado',
+              norec: 'Nenhum destinatário cadastrado para este relatório.',
+              notrun: 'Nada foi batido nesta data ainda. Rode o batimento primeiro.',
+              empty: 'Nada batido nesta data ainda — clique em Run.',
+              src: 'Arquivo da B3', fep: 'Lista do FEP', at: 'rodado em' },
+        es: { matched: 'Conciliados', pending_b3: 'Pendiente en B3', pending_action: 'Pendiente de acción',
+              only_b3: 'Solo en B3', justified: 'Justificados', all: 'Todos',
+              run: 'Ejecutando la conciliación…', runTxt: 'Leyendo la posición de B3 y la lista del FEP.',
+              done: 'Conciliación finalizada', mailed: 'Informe enviado', mailFail: 'Informe no enviado',
+              norec: 'Ningún destinatario configurado para este informe.',
+              notrun: 'Nada conciliado en esta fecha. Ejecute primero.',
+              empty: 'Nada conciliado en esta fecha — haga clic en Run.',
+              src: 'Archivo de B3', fep: 'Lista del FEP', at: 'ejecutado' }
+    };
+    function lang() {
+        try { return localStorage.getItem('__OTC_TRACKER_LANG__') || 'en'; } catch (e) { return 'en'; }
+    }
+    function t(k) { return (_TRANS[lang()] || _TRANS.en)[k] || (_TRANS.en[k] || k); }
+    function esc(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+
+    var table = null, dados = [], bucket = '';
+
+    var KPIS = [
+        { key: 'pending_b3',     cls: 'cgd-k-b3',     icon: 'ti-alert-triangle' },
+        { key: 'pending_action', cls: 'cgd-k-action', icon: 'ti-clock-exclamation' },
+        { key: 'only_b3',        cls: 'cgd-k-onlyb3', icon: 'ti-building-bank' },
+        { key: 'justified',      cls: 'cgd-k-just',   icon: 'ti-shield-check' },
+        { key: 'matched',        cls: 'cgd-k-match',  icon: 'ti-circle-check' }
+    ];
+
+    function badge(r) {
+        // A cor é do BUCKET, não do texto do Check: `Only FEP` é vermelho quando
+        // falta incluir na B3 e âmbar quando o que falta é a assinatura.
+        var m = { pending_b3: 'cgd-badge--fep', pending_action: 'cgd-badge--action',
+                  only_b3: 'cgd-badge--b3', justified: 'cgd-badge--just',
+                  matched: 'cgd-badge--match' };
+        return '<span class="cgd-badge ' + (m[r.bucket] || 'cgd-badge--wait') + '">' +
+               esc(r.check) + '</span>';
+    }
+
+    function ageCell(a, b) {
+        if (typeof a !== 'number') { return '<td class="cgd-age"></td>'; }
+        // As faixas são as do e-mail: a fila de inclusão na B3 alarma em 15, a de
+        // cobrança de assinatura em 10.
+        var alarme = (b === 'pending_action') ? 10 : 15;
+        var cls = a >= alarme ? ' cgd-late' : (a >= 5 ? ' cgd-warn' : '');
+        return '<td class="cgd-age' + cls + '">' + esc(a) + '</td>';
+    }
+
+    function desenha() {
+        var rows = bucket ? dados.filter(function (r) { return r.bucket === bucket; }) : dados;
+        if (table) { table.destroy(); }
+        $('#cgd-table tbody').html(rows.map(function (r) {
+            return '<tr>' +
+                '<td>' + badge(r) + '</td>' +
+                '<td class="cgd-ell" title="' + esc(r.client) + '">' + esc(r.client) + '</td>' +
+                '<td>' + esc(r.cnpj) + '</td>' +
+                '<td>' + esc(r.status) + '</td>' +
+                '<td>' + esc(r.obs) + '</td>' +
+                '<td>' + esc(r.creation_date) + '</td>' +
+                ageCell(r.aging, r.bucket) +
+            '</tr>';
+        }).join(''));
+        table = $('#cgd-table').DataTable({
+            paging: true, pageLength: 25, lengthChange: false, searching: true, info: true,
+            // Só a tabela, o info e a paginação: o campo de busca e o `Show N`
+            // nativos do DataTables duplicariam a barra de ferramentas da página
+            // (que tem o seu próprio) e aparecem soltos por cima do cabeçalho.
+            dom: "rt<'d-md-flex justify-content-between align-items-center mt-2'ip>",
+            orderCellsTop: true, scrollX: true, autoWidth: true,
+            order: [],
+            language: { emptyTable: t('empty') }
+        });
+        $('#cgd-table thead .cgd-filters input').off('keyup change').on('keyup change', function () {
+            var i = parseInt($(this).data('col'), 10);
+            var v = String(this.value || '');
+            if (v.trim().toLowerCase() === 'blank') {
+                table.column(i).search('^\\s*$', true, false).draw();
+            } else {
+                table.column(i).search(v).draw();
+            }
+        });
+        table.columns.adjust();
+        setTimeout(function () { table.columns.adjust().draw(false); }, 150);
+        $(window).off('resize.cgd').on('resize.cgd', function () { table.columns.adjust(); });
+        if (window.otcCellCopy) { otcCellCopy('#cgd-table', {}); }
+        botoes();
+    }
+
+    function botoes() {
+        var comuns = { exportOptions: { columns: ':visible' } };
+        new $.fn.dataTable.Buttons(table, { buttons: [
+            $.extend({ extend: 'copyHtml5', name: 'copy' }, comuns),
+            $.extend({ extend: 'csvHtml5', name: 'csv', fieldSeparator: ';', bom: true }, comuns),
+            $.extend({ extend: 'excelHtml5', name: 'excel' }, comuns),
+            $.extend({ extend: 'print', name: 'print' }, comuns),
+            $.extend({ extend: 'pdfHtml5', name: 'pdf', orientation: 'landscape', pageSize: 'A4' }, comuns)
+        ] });
+        $('#cgd-export-menu').off('click').on('click', 'a[data-exp]', function (e) {
+            e.preventDefault();
+            table.button($(this).data('exp') + ':name').trigger();
+        });
+        if (window.otcExportAdvanced) {
+            // A recon tem arquivo-dia (o cache por data), então o intervalo é
+            // legítimo: o endpoint é o MESMO que a tela consulta para desenhar
+            // um dia — ler o cache por fora seria uma segunda regra sobre os
+            // mesmos arquivos.
+            otcExportAdvanced('#cgd-table', {
+                menu: '#cgd-export-menu',
+                daily: { url: '/api/reconciliation-cgd/data', param: 'recon_date' }
+            });
+        }
+    }
+
+    function kpis(counts) {
+        $('#cgd-kpis').html(KPIS.map(function (k) {
+            var n = (counts && counts[k.key]) || 0;
+            return '<div class="col-6 col-md-4 col-xl">' +
+                '<div class="cgd-kpi ' + k.cls + (bucket === k.key ? ' cgd-on' : '') + '" data-b="' + k.key + '">' +
+                  '<span class="cgd-kpi__ico"><i class="ti ' + k.icon + '"></i></span>' +
+                  '<div><div class="cgd-kpi__n">' + esc(n) + '</div>' +
+                       '<div class="cgd-kpi__l">' + esc(t(k.key)) + '</div></div>' +
+                '</div></div>';
+        }).join(''));
+    }
+
+    function pinta(j) {
+        dados = j.rows || [];
+        kpis(j.counts || {});
+        $('#cgd-src').html(j.b3_file
+            ? '<div><i class="ti ti-file-database"></i> ' + esc(t('src')) + ': <code>' + esc(j.b3_file) + '</code></div>' +
+              '<div><i class="ti ti-table"></i> ' + esc(t('fep')) + ': <code>' + esc(j.fep_file) + '</code></div>' +
+              (j.generated_at ? '<div>' + esc(t('at')) + ' ' + esc(j.generated_at) + '</div>' : '')
+            : '');
+        $('#cgd-warnings').html((j.warnings || []).length
+            ? '<div class="cgd-warn">' + (j.warnings || []).map(function (w) {
+                  return '<div>• ' + esc(w) + '</div>'; }).join('') + '</div>'
+            : '');
+        if (j.ref) {
+            $('#cgd-date').val(j.ref);
+            $('#cgd-date-display').val(j.ref_fmt || '');
+        }
+        desenha();
+    }
+
+    function carrega() {
+        var d = $('#cgd-date').val() || '';
+        fetch('/api/reconciliation-cgd/data' + (d ? '?recon_date=' + encodeURIComponent(d) : ''),
+              { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (j) { if (j && j.success) { pinta(j); } });
+    }
+
+    $('#cgd-run').on('click', function () {
+        var d = $('#cgd-date').val() || '';
+        if (window.Swal) {
+            Swal.fire({ title: t('run'), html: esc(t('runTxt')), allowOutsideClick: false,
+                        allowEscapeKey: false, showConfirmButton: false,
+                        didOpen: function () { Swal.showLoading(); } });
+        }
+        fetch('/reconciliation-cgd/run', {
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ recon_date: d })
+        }).then(function (r) { return r.json(); }).then(function (j) {
+            if (window.Swal) { Swal.close(); }
+            if (!j || !j.success) { throw new Error((j && j.error) || 'erro'); }
+            pinta(j);
+            if (window.Swal) {
+                Swal.fire({ icon: 'success', title: t('done'),
+                            html: esc((j.rows || []).length + ' · ' + (j.ref_fmt || '')),
+                            timer: 1600, showConfirmButton: false });
+            }
+        }).catch(function (e) {
+            if (window.Swal) {
+                Swal.fire({ icon: 'error', title: 'Erro', html: esc(String(e && e.message || e)),
+                            confirmButtonColor: '#0066cc' });
+            }
+        });
+    });
+
+    $('#cgd-mail').on('click', function () {
+        var d = $('#cgd-date').val() || '';
+        fetch('/reconciliation-cgd/email', {
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ recon_date: d })
+        }).then(function (r) { return r.json().then(function (j) { return { s: r.status, j: j }; }); })
+          .then(function (x) {
+            if (!window.Swal) { return; }
+            if (x.j && x.j.success) {
+                Swal.fire({ icon: 'success', title: t('mailed'),
+                            html: esc(x.j.to || ''), confirmButtonColor: '#0066cc' });
+            } else {
+                var motivo = (x.j && x.j.error) || '';
+                Swal.fire({ icon: 'warning', title: t('mailFail'),
+                            html: esc(motivo === 'no_recipient' ? t('norec')
+                                    : motivo === 'not_run' ? t('notrun') : motivo),
+                            confirmButtonColor: '#0066cc' });
+            }
+        });
+    });
+
+    // Clicar no card filtra a tabela; clicar de novo tira o filtro.
+    $(document).on('click', '#cgd-kpis .cgd-kpi', function () {
+        var b = $(this).data('b');
+        bucket = (bucket === b) ? '' : b;
+        $('#cgd-kpis .cgd-kpi').removeClass('cgd-on');
+        if (bucket) { $(this).addClass('cgd-on'); }
+        desenha();
+    });
+
+    $('#cgd-clear').on('click', function () {
+        $('#cgd-table thead .cgd-filters input').val('');
+        bucket = '';
+        $('#cgd-kpis .cgd-kpi').removeClass('cgd-on');
+        if (table) { table.search('').columns().search(''); }
+        desenha();
+    });
+
+    $('#cgd-date').on('change', function () {
+        // O texto é o que se lê; o nativo é só o calendário.
+        var v = this.value || '';
+        $('#cgd-date-display').val(v ? v.split('-').reverse().join('/') : '');
+        carrega();
+    });
+
+    $(carrega);
+})(jQuery);
+</script>
+{% endblock extra_javascript %}

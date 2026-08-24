@@ -62,6 +62,10 @@ from apps.pages.database_access import (
 # Confirmations. Import no topo (e não preguiçoso como os demais usos de
 # `manual_conf`) porque `_MAPPING_DEFS` precisa dela em tempo de importação.
 from apps.pages import manual_conf as _mc_mod
+# O banco da lista de CGDs do SharePoint (Onboarding).
+from apps.pages import cgd_docs as _cgd_mod
+# O batimento de CGD (FEP × B3) — tradução do workflow Alteryx.
+from apps.pages import recon_cgd as _recon_cgd
 _CONFIRMATION_TYPES = _mc_mod.CONFIRMATION_TYPES
 
 
@@ -434,8 +438,10 @@ def _get_page_access(sid):
             # A tela do File Interpreter mudou de URL (/file-interface →
             # /file-interpreter): o valor antigo gravado no cadastro segue
             # valendo — renomear página não pode revogar acesso em silêncio.
-            return (True, set('/file-interpreter' if str(u) == '/file-interface'
-                              else str(u) for u in arr))
+            # O item CGD virou a seção Onboarding, e o mesmo vale para ele.
+            _renomeadas = {'/file-interface': '/file-interpreter',
+                           '/cgd': '/onboarding'}
+            return (True, set(_renomeadas.get(str(u), str(u)) for u in arr))
     except Exception:
         pass
     return (False, set())
@@ -22203,6 +22209,54 @@ _MAPPING_DEFS = {
         ],
         'seed': [],
     },
+    # ── Onboarding e Reconciliação de CGD ───────────────────────────────────
+    #
+    # Os quatro cadastros que a esteira do CGD usa. Os três últimos eram abas do
+    # `Auxiliar.xlsx` numa pasta de rede, mantidas à mão: cadastro novo só valia
+    # para quem tivesse o arquivo aberto, e o batimento rodava com a lista de
+    # ontem sem dizer nada.
+    'cgd-stage': {
+        'label': 'Onboarding — Status → Mesa',
+        'columns': [
+            {'key': 'STATUS', 'label': 'Status (como está na lista do SharePoint)'},
+            {'key': 'STAGE', 'label': 'Mesa', 'type': 'select',
+             'options': list(_cgd_mod.STAGES)},
+            {'key': 'NOTES', 'label': 'Notes'},
+        ],
+        # Seed VAZIO de propósito: os status são texto livre de quem opera a
+        # lista, e semear com os de hoje seria fixar no código o de-para que esta
+        # tela existe para não fixar. Sem linha, o Overview DERIVA a mesa pelos
+        # carimbos que o documento tem — e marca o item como derivado.
+        'seed': [],
+    },
+    'cgd-b3-participante': {
+        'label': 'CGD — Participante B3 sem CNPJ',
+        'columns': [
+            {'key': 'NOME CONTRAPARTE', 'label': 'Nome Contraparte (como vem da B3)'},
+            {'key': 'CNPJ', 'label': 'CNPJ do participante'},
+            {'key': 'RAZAO SOCIAL', 'label': 'Razão Social'},
+            {'key': 'NOTES', 'label': 'Notes'},
+        ],
+        'seed': [],
+    },
+    'cgd-garantidor': {
+        'label': 'CGD — Garantidores',
+        'columns': [
+            {'key': 'CNPJ / CPF', 'label': 'CNPJ / CPF'},
+            {'key': 'NOME', 'label': 'Nome'},
+            {'key': 'NOTES', 'label': 'Notes'},
+        ],
+        'seed': [],
+    },
+    'cgd-conta-encerrada': {
+        'label': 'CGD — Contas encerradas',
+        'columns': [
+            {'key': 'CNPJ / CPF', 'label': 'CNPJ / CPF'},
+            {'key': 'NOME', 'label': 'Nome'},
+            {'key': 'NOTES', 'label': 'Notes'},
+        ],
+        'seed': [],
+    },
 }
 
 _mapping_cache = {}
@@ -38196,6 +38250,211 @@ def api_pc_metrics_history():
     if not session.get('authenticated'):
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
     return jsonify({'success': True, **_pc_metrics_history()})
+
+
+# ============================================================================
+# ONBOARDING — Overview e Tracking Docs (o CGD que vem da lista do SharePoint)
+#
+# O banco é o `cgd_docs` (DuckDB, `Config.DATABASE_DIR`), carregado pelo
+# `scripts/import_cgd_sharepoint.py`. A tela não importa nada: ela LÊ o que a
+# importação deixou, e é por isso que a página diz na cara quando o banco está
+# vazio — "sem dados" e "ninguém importou ainda" são coisas diferentes.
+# ============================================================================
+
+
+@blueprint.route('/cgd')
+def cgd_legacy():
+    """O endereço antigo do item de menu. A página virou a seção Onboarding, e
+    o link que alguém guardou continua chegando em algum lugar."""
+    return redirect(url_for('pages_blueprint.onboarding_overview'))
+
+
+@blueprint.route('/onboarding')
+def onboarding_overview():
+    return render_template('pages/onboarding-overview.html', segment='onboarding')
+
+
+@blueprint.route('/onboarding/tracking-docs')
+def onboarding_tracking_docs():
+    return render_template('pages/onboarding-tracking-docs.html',
+                           segment='onboarding-tracking-docs')
+
+
+def _cgd_db_ready():
+    """(existe?, caminho). A tela mostra o caminho quando não existe: sem isso,
+    "nenhum documento" é indistinguível de "o script nunca rodou nesta
+    instância", e as duas se resolvem de jeitos opostos."""
+    return os.path.isfile(_cgd_mod.DB_PATH), _cgd_mod.DB_PATH
+
+
+@blueprint.route('/api/onboarding/overview')
+def api_onboarding_overview():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    existe, path = _cgd_db_ready()
+    rows = _cgd_mod.load_all() if existe else []
+    data = _cgd_mod.overview(rows)
+    data.update({'success': True, 'db': path, 'db_ready': existe,
+                 'counts': _cgd_mod.counts(rows)})
+    return jsonify(data)
+
+
+@blueprint.route('/api/onboarding/docs')
+def api_onboarding_docs():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    existe, path = _cgd_db_ready()
+    rows = _cgd_mod.load_all() if existe else []
+    # A etapa vai JUNTO com a linha: a tabela mostra onde cada documento parou,
+    # e recalcular isso no navegador seria a mesma regra escrita duas vezes.
+    for r in rows:
+        etapa, derivada = _cgd_mod.pending_stage(r)
+        r['_stage'] = etapa or ''
+        r['_stage_derived'] = bool(derivada)
+    return jsonify({'success': True, 'db': path, 'db_ready': existe,
+                    'columns': _cgd_mod.COLUMNS, 'id_column': _cgd_mod.ID_COLUMN,
+                    'date_columns': list(_cgd_mod.DATE_COLUMNS),
+                    'stages': list(_cgd_mod.STAGES), 'rows': rows})
+
+
+@blueprint.route('/api/onboarding/docs/save', methods=['POST'])
+def api_onboarding_docs_save():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    payload = request.get_json(silent=True) or {}
+    rid = str(payload.get('id') or '').strip()
+    valores = payload.get('values') or {}
+    if not isinstance(valores, dict):
+        return jsonify({'success': False, 'error': 'invalid_values'}), 400
+    try:
+        if rid:
+            _cgd_mod.update_row(rid, valores)
+        else:
+            rid = _cgd_mod.add_row(valores)
+    except Exception as exc:                                  # pragma: no cover
+        log.exception('[onboarding] falha ao gravar a linha')
+        return jsonify({'success': False, 'error': str(exc)}), 500
+    return jsonify({'success': True, 'id': rid})
+
+
+@blueprint.route('/api/onboarding/docs/delete', methods=['POST'])
+def api_onboarding_docs_delete():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    rid = str((request.get_json(silent=True) or {}).get('id') or '').strip()
+    if not rid:
+        return jsonify({'success': False, 'error': 'missing_id'}), 400
+    try:
+        _cgd_mod.delete_row(rid)
+    except Exception as exc:                                  # pragma: no cover
+        log.exception('[onboarding] falha ao apagar a linha')
+        return jsonify({'success': False, 'error': str(exc)}), 500
+    return jsonify({'success': True})
+
+
+
+# ============================================================================
+# RECONCILIAÇÃO DE CGD — o batimento FEP × B3 (tradução do Alteryx `Batimento
+# CGD`; a regra e o porquê de cada mudança estão no `recon_cgd`).
+#
+# A tela ABRE com o resultado que já foi rodado naquele dia (cache), e rodar de
+# novo é decisão de quem opera: a leitura do arquivo da B3 e da lista do FEP é
+# lenta e vive num share, e fazê-la a cada abertura de página deixaria a tela
+# refém da rede.
+# ============================================================================
+
+_CGD_RECON_RECIPIENTS_FILE = os.path.join(_DAILY_METRIC_DIR, 'cgd_recon_recipients.json')
+
+
+def _cgd_recon_recipients():
+    try:
+        with open(_CGD_RECON_RECIPIENTS_FILE, encoding='utf-8') as fh:
+            d = json.load(fh)
+        if isinstance(d, dict):
+            return {'to': d.get('to', '') or '', 'cc': d.get('cc', '') or ''}
+    except Exception:
+        pass
+    return {'to': '', 'cc': ''}
+
+
+def _cgd_recon_save_recipients(to, cc):
+    os.makedirs(_DAILY_METRIC_DIR, exist_ok=True)
+    with open(_CGD_RECON_RECIPIENTS_FILE, 'w', encoding='utf-8') as fh:
+        json.dump({'to': to or '', 'cc': cc or ''}, fh, ensure_ascii=False, indent=2)
+
+
+def _cgd_emails(txt):
+    return [e.strip() for e in re.split(r'[;,]', str(txt or '')) if e.strip()]
+
+
+@blueprint.route('/reconciliation-cgd')
+def reconciliation_cgd():
+    return render_template('pages/reconciliation-cgd.html', segment='reconciliation-cgd')
+
+
+@blueprint.route('/api/reconciliation-cgd/data')
+def api_cgd_recon_data():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    ref = (request.args.get('recon_date') or request.args.get('date') or '').strip()
+    res = _recon_cgd.carregar(ref or None)
+    if not res:
+        # Sem cache a tela abre VAZIA dizendo que ninguém rodou aquele dia — e
+        # não rodando sozinha: um GET que varre o share é um GET que trava.
+        dia = _recon_cgd.dia_util_anterior()
+        return jsonify({'success': True, 'empty': True,
+                        'ref': (ref or dia.strftime('%Y-%m-%d')),
+                        'ref_fmt': _recon_cgd._fmt_date(_recon_cgd._parse_date(ref) or dia),
+                        'rows': [], 'counts': {}, 'warnings': []})
+    res['success'] = True
+    res['recipients'] = _cgd_recon_recipients()
+    return jsonify(res)
+
+
+@blueprint.route('/reconciliation-cgd/run', methods=['POST'])
+def api_cgd_recon_run():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    payload = request.get_json(silent=True) or {}
+    ref = _recon_cgd._parse_date(payload.get('recon_date') or payload.get('date'))
+    try:
+        res = _recon_cgd.executar(ref)
+    except Exception as exc:
+        log.exception('[recon-cgd] falha ao rodar o batimento')
+        return jsonify({'success': False, 'error': str(exc)}), 500
+    _recon_cgd.salvar(res)
+    res['success'] = True
+    res['recipients'] = _cgd_recon_recipients()
+    return jsonify(res)
+
+
+@blueprint.route('/api/reconciliation-cgd/recipients', methods=['GET', 'POST'])
+def api_cgd_recon_recipients():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    if request.method == 'GET':
+        return jsonify({'success': True, **_cgd_recon_recipients()})
+    d = request.get_json(silent=True) or {}
+    _cgd_recon_save_recipients(d.get('to', ''), d.get('cc', ''))
+    return jsonify({'success': True})
+
+
+@blueprint.route('/reconciliation-cgd/email', methods=['POST'])
+def api_cgd_recon_email():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    payload = request.get_json(silent=True) or {}
+    ref = (payload.get('recon_date') or payload.get('date') or '').strip()
+    res = _recon_cgd.carregar(ref or None)
+    if not res:
+        # Mandar um relatório que ninguém rodou seria mandar o de outro dia.
+        return jsonify({'success': False, 'error': 'not_run'}), 409
+    rec = _cgd_recon_recipients()
+    ok, motivo = _recon_cgd.enviar_email(res, _cgd_emails(rec['to']), _cgd_emails(rec['cc']))
+    if not ok:
+        return jsonify({'success': False, 'error': motivo}), 200
+    return jsonify({'success': True, 'to': rec['to'], 'cc': rec['cc']})
+
 
 
 def get_segment(request):

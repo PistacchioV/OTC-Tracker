@@ -43,7 +43,10 @@ import mockgen  # noqa: E402
 BASE = os.environ.get('SOP_BASE_URL', 'http://127.0.0.1:8050')
 LOGIN = os.environ.get('SOP_LOGIN_PATH', '/dev-login')
 SIDENAV = os.path.join(ROOT, 'apps/templates/partials/sidenav.html')
-OUT = os.path.join(ROOT, 'docs/sop-screenshots')
+# Destino das capturas. Sai por variável para a rodada de conferência poder
+# gravar num diretório à parte e só então sobrescrever as telas do guia — uma
+# captura ruim (página vazia, modal aberto) não pode apagar a boa.
+OUT = os.environ.get('SOP_OUT_DIR') or os.path.join(ROOT, 'docs/sop-screenshots')
 os.makedirs(OUT, exist_ok=True)
 
 # endpoints de dados a mockar (o mockgen decide o formato: tabela/cards/dashboard)
