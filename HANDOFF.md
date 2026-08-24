@@ -13527,3 +13527,64 @@ O corte acontece ANTES de montar a tabela, então a **ficha em PDF** (`ndf-pdf-c
 cabeçalho e as mesmas linhas do corpo do e-mail — cortar depois deixaria o anexo com uma coluna que o
 e-mail não tem. E a TELA de Settlement Advice de Opção continua com as duas colunas: é lá que a mesa
 confere e corrige os valores.
+
+
+---
+
+## §311 — Onboarding (Overview + Tracking Docs) e a recon de CGD saída do Alteryx
+
+O item `CGD` do menu apontava para `/cgd`, uma rota que **não existia** — clicar nele dava 404. Ele virou
+a seção **Onboarding**, com duas telas, e a reconciliação ganhou a quarta irmã.
+
+### O banco da lista
+
+A mesa acompanha os CGDs numa lista do SharePoint. `scripts/import_cgd_sharepoint.py` carrega a
+exportação (`Sharepoint-CGD.xlsx`, do Downloads) num DuckDB na pasta de sempre
+(`Config.DATABASE_DIR/cgd_sharepoint.db`, §307), com as 30 colunas da lista. Ele casa as colunas **por
+nome** — cego a caixa, acento e pontuação — e **procura** o cabeçalho em vez de presumir a linha 1: a
+exportação vem com título em cima, e uma linha acima importaria a planilha deslocada, com o CNPJ na
+coluna do SPN e sem erro nenhum. A importação REESCREVE a tabela: rodar duas vezes dá o mesmo
+resultado, e a linha apagada no SharePoint some daqui.
+
+**O `Aging` da planilha é ignorado.** Ele é do dia da exportação; aqui é refeito a cada leitura, em dias
+úteis ANBIMA, e PARA no `Conclusion - Stamp`.
+
+### As duas telas
+
+**Overview** é o desenho do Confirmations Monitor: três filas verticais — **Legal**, **Banking OTC** e
+**CEM MO** —, e nelas entra todo documento cujo Status não é `Active`. Cada item mostra o status como
+está escrito, o aging e onde parou. A etapa vem do cadastro `cgd-stage` e, sem cadastro, é derivada
+pelo primeiro carimbo que falta (marcada como derivada na tela).
+
+**Tracking Docs** é a tabela no padrão da casa — checkbox, as 30 colunas, coluna de ações, filtro por
+coluna, Columns/Add Row/Export/Clear Filters, `otcCellCopy`, squircles 32×32 — com o Status em badge
+pill gradiente e o aging colorido só nos extremos. A tela DIZ de onde leu (o caminho do banco) e, quando
+ele não existe, o comando que o cria: "sem documentos" e "ninguém importou ainda" são estados
+diferentes.
+
+### A recon (tradução do `Alteryx CGD.yxmd`, 150 nós)
+
+O batimento responde de quem temos CGD assinado × de quem a B3 reconhece. Buckets: `matched`,
+`pending_b3` (assinado e falta incluir na B3), `pending_action` (opera e o contrato não fechou),
+`justified` (garantidor ou conta encerrada) e `only_b3`.
+
+O que mudou do workflow, e por quê:
+
+- o **calendário** é o ANBIMA do app, não a aba `Feriados` do `Auxiliar.xlsx`;
+- as **contas** saem do cadastro `b3-accounts` (`OWN` + LE que assina CGD), não dos dois números
+  escritos no filtro;
+- as três abas do `Auxiliar.xlsx` viraram cadastro do /mapping (`cgd-b3-participante`,
+  `cgd-garantidor`, `cgd-conta-encerrada`): eram planilhas de rede mantidas à mão, e o batimento rodava
+  com a lista de ontem sem dizer nada;
+- **CNPJ compara por dígito** dos dois lados (§197);
+- o `Dummy.xlsx` e o `.xlsx` gravado no share sumiram: o resultado fica no cache do dia e a planilha é o
+  Export da própria tela.
+
+Os cortes do FEP continuam literais porque são a regra do processo: fora o aditamento, fora `Cancelado`,
+e "assinado" é um dos três status. O aging segue em dias CORRIDOS (é o relógio que a mesa já usa) e o
+`DOC TRANSACIONAL` continua se lendo `Docusign`.
+
+Um bug que a integração pegou: o cache gravava em D-1 e a leitura sem data caía em `hoje` — o
+batimento rodava e o GET seguinte dizia que ninguém tinha rodado.
+
+`check_cgd_docs.py` e `check_cgd_recon.py` cobrem os dois lados.

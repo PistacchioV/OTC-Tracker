@@ -104,6 +104,8 @@ importados pelas rotas — nenhum tem blueprint próprio:
 | `confirmation_pdfs.py` | réplicas em reportlab dos documentos Word |
 | `manual_conf.py` | a esteira de confirmação manual (os dois DuckDBs, as derivadas, o agrupamento) |
 | `recon_fxo.py` | motor da reconciliação de FXO (DPOSICAO × Athena EOD) |
+| `recon_cgd.py` | motor da reconciliação de CGD (lista do FEP × posição da B3) — tradução do workflow Alteryx `Batimento CGD` |
+| `cgd_docs.py` | o banco da lista de CGDs do SharePoint (Onboarding · Tracking Docs) |
 | `otc_boxparse.py` | parser do e-mail de booking recap |
 | `otc_tickets.py` | store JSON do Support Center |
 | `otc_emails.py`, `webpush.py`, `forecast_charts.py`, `otc_boxscan.py`, `recon_payrec.py`, `recon_comitente.py` | — |
@@ -315,7 +317,8 @@ São dois bancos:
 
 - **DuckDB** (`Users_OTCTracker.db`) — tabelas `users` e `verification_codes`.
   `DB_PATH` é o `Config.DATABASE_PATH`, e ele sai do **`Config.DATABASE_DIR`**,
-  que é a pasta de TODOS os bancos do app: os três do Pending Confirmation
+  que é a pasta de TODOS os bancos do app: o da lista de CGDs (`cgd_docs.DB_PATH`),
+  os três do Pending Confirmation
   (`_PC_DB_DIR`), os dois da esteira (`manual_conf._DB_DIR`), o de comitentes
   (`recon_comitente.DB_PATH`) e os três scripts de migração. **Nenhum deles monta
   o caminho por conta própria** — cada um que montasse ficaria lendo o banco
@@ -513,7 +516,7 @@ e um item no array `TYPES` de `apps/templates/pages/mapping.html`.
   colunas extras do arquivo** (`STATUS`/`MAKER`/`CHECKER`): o POST reescreve o
   arquivo inteiro e derrubaria o que não estivesse declarado (HANDOFF §188).
 
-São **39** mappings hoje: `currency-base`, `interbook-ndf`, `publisher-ndf`,
+São **43** mappings hoje: `currency-base`, `interbook-ndf`, `publisher-ndf`,
 `le-accronym`, `le-spn`, `commodities-b3`, `bank-name`, `fxo-conv-rate`,
 `ndf-pdf-cpty`, `swap-curves`, `cetip-files`, `api-links`, `opb3-events`,
 `swap-ir-client`, `swap-ir-term`, `swap-index`, `swap-funcionalidade`,
@@ -523,7 +526,9 @@ São **39** mappings hoje: `currency-base`, `interbook-ndf`, `publisher-ndf`,
 `quotes-commodity`, `gdt-codes`, `settlement-exception`, `mt300`, e os sete
 `dce-*` dos domínios DCE (`dce-country`, `dce-type-of-derivative`,
 `dce-type-of-swap`, `dce-type-of-verification`, `dce-functionality`,
-`dce-underlying-asset-category`, `dce-underlying-asset`) — seeds vazios com os
+`dce-underlying-asset-category`, `dce-underlying-asset`), mais os quatro do CGD
+(`cgd-stage`, `cgd-b3-participante`, `cgd-garantidor`, `cgd-conta-encerrada` —
+os três últimos eram abas do `Auxiliar.xlsx` do batimento) — seeds vazios com os
 JSONs versionados, como os dois Quotes (o `dce-underlying-asset` tem ~14 mil
 linhas). As colunas dos `dce-*` carregam `lang` (chave i18n): o `colLabel` do
 mapping.html traduz cabeçalho, filtro, export e modal — coluna sem `lang`
@@ -915,6 +920,44 @@ criado pela tela (HANDOFF §288).
   `check_holiday_calendars.py` compara seed × fallback campo a campo.
 - O registro está no `.gitignore` — o seed o recria, e versioná-lo daria
   conflito de merge a cada calendário criado pela tela.
+
+### O Onboarding conta o aging, e a esteira do CGD é DERIVADA
+
+A lista de CGDs vem do SharePoint (`Sharepoint-CGD.xlsx` → `cgd_sharepoint.db`,
+pelo `scripts/import_cgd_sharepoint.py`), e duas colunas dela não são lidas como
+estão:
+
+- **`Aging` é refeito a cada leitura** (`cgd_docs.aging_of`), em dias ÚTEIS
+  ANBIMA, da `Data Solicitação` até hoje — ou até o `Conclusion - Stamp`, quando
+  ele existe: o CGD que concluiu parou de envelhecer. O da planilha é do dia da
+  exportação e envelheceria parado no banco por semanas. Sem `Data Solicitação`
+  o aging fica **vazio**, nunca zero: zero se lê como "entrou hoje".
+- **A etapa da esteira** (Legal · Banking OTC · CEM MO) de todo documento que não
+  está `Active` sai do cadastro **`cgd-stage`** (STATUS → mesa) e, sem linha
+  cadastrada, é derivada pelo primeiro carimbo que falta — `Emissão`/`Signature
+  Date` → Legal, `OTC - STAMP` → Banking OTC, `MO - STAMP` → CEM MO. O item vem
+  MARCADO como derivado, para ninguém confundir dedução com cadastro. Documento
+  com todos os carimbos e ainda não `Active` fica na ÚLTIMA mesa: devolvê-lo sem
+  etapa o faria sumir das três filas, e um pendente que some é pior que um
+  pendente na fila errada.
+
+O `_id` do banco é interno e **não é estável entre importações** — ele endereça a
+linha que a tela está editando, e a importação seguinte renumera tudo.
+
+### A recon de CGD lê o D-1, e o cache tem de casar com ele
+
+`recon_cgd` bate a lista do FEP contra a posição da B3 do **último dia útil**
+(`CETIP21_AAMMDD_DPOSICAO-NET`). Três coisas:
+
+- as contas que definem "nosso" saem do cadastro `b3-accounts` (`ACCOUNT TYPE =
+  OWN` + `LE` em `CGD_LES`), nunca de dois números escritos no filtro; cadastro
+  vazio **avisa** em vez de deixar o arquivo inteiro entrar no batimento;
+- **CNPJ compara por dígito** dos dois lados (§197), e a linha da B3 que vem sem
+  CNPJ é resolvida pelo cadastro `cgd-b3-participante` — sem cadastro ela sai, e
+  a recon diz quantas saíram;
+- o cache do dia é gravado com a data da POSIÇÃO. A leitura sem data usa o mesmo
+  default (`dia_util_anterior`), e não `hoje`: com `today()` de um lado só, o
+  batimento rodava e o GET seguinte dizia que ninguém tinha rodado.
 
 ### Duas armadilhas de tela que não aparecem no console (HANDOFF §218)
 
@@ -1837,6 +1880,7 @@ Rodam **uma vez na instância do time depois do pull**. Todas idempotentes.
 | `update_pending_confirmation_bankers.py` | idem, coluna de banker |
 | `import_manual_confirmations.py` | **cria** os dois DuckDBs da esteira e semeia do `MANUAIS.xlsx` (`--xlsx`, `--schema-only`) |
 | `backfill_manual_confirmations.py` | traz para a esteira o que foi mapeado **antes** dela existir (`--dry-run`, `--source`) |
+| `import_cgd_sharepoint.py` | carrega a lista de CGDs do SharePoint (`Sharepoint-CGD.xlsx`) no DuckDB do Onboarding (`--xlsx`, `--sheet`, `--dry-run`, `--schema-only`). REESCREVE a tabela: rodar de novo dá o mesmo resultado |
 
 > `apps/static/data/db/` está no **`.gitignore`**, então os bancos **não vêm no
 > pull**. Sem rodar `import_manual_confirmations.py` as duas telas de Manual
