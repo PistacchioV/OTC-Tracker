@@ -197,6 +197,11 @@
 {% endblock page_content %}
 
 {% block extra_javascript %}
+{# jQuery ANTES do DataTables: o `vendors.min.js` do tema não o expõe, e sem
+   ele todo plugin daqui para baixo morre com "jQuery is not defined" — a
+   página abre com a barra de ferramentas e SEM tabela nenhuma, sem erro
+   visível na tela. Toda página com DataTables no app carrega esta linha. #}
+<script src="{{ config.ASSETS_ROOT }}/plugins/jquery/jquery.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.buttons.min.js"></script>
@@ -301,7 +306,11 @@
             '</tr>';
         }).join(''));
         table = $('#cgd-table').DataTable({
-            paging: true, pageLength: 25, lengthChange: true, searching: true, info: true,
+            paging: true, pageLength: 25, lengthChange: false, searching: true, info: true,
+            // Só a tabela, o info e a paginação: o campo de busca e o `Show N`
+            // nativos do DataTables duplicariam a barra de ferramentas da página
+            // (que tem o seu próprio) e aparecem soltos por cima do cabeçalho.
+            dom: "rt<'d-md-flex justify-content-between align-items-center mt-2'ip>",
             orderCellsTop: true, scrollX: true, autoWidth: true,
             order: [],
             language: { emptyTable: t('empty') }
