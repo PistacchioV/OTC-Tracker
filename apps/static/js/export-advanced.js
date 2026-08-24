@@ -752,6 +752,9 @@
        nada mais) não declara `daily`, e a seção nasce desabilitada dizendo por
        quê. */
     var MAX_DAYS = 120;              // ~seis meses úteis; acima disso o navegador é o gargalo
+    // Teto por DIA. O intervalo é lido em série, então um dia que não responde
+    // segurava a fila inteira — e a exportação ficava parada sem dizer nada.
+    var DAY_TIMEOUT_MS = 60000;
 
     /* `daily` aceita a URL crua ou o objeto completo. `param` é o nome do
        parâmetro de data (as recons usam `recon_date`, o resto usa `date`) e
@@ -887,9 +890,21 @@
             chain = chain.then(function () {
                 if (onStep) onStep(i + 1, d);
                 var sep = daily.url.indexOf('?') === -1 ? '?' : '&';
-                return fetch(daily.url + sep + daily.param + '=' + encodeURIComponent(d),
-                             { credentials: 'same-origin' })
+                // `exact=1`: o dia pedido ou nada. Sem ele, as telas de posição
+                // andam para trás até achar arquivo — e um intervalo sairia com
+                // o MESMO dia repetido sob datas diferentes. Endpoint que não
+                // conhece o parâmetro simplesmente o ignora.
+                var url = daily.url + sep + daily.param + '=' + encodeURIComponent(d) + '&exact=1';
+                // Um dia que não responde não pode segurar os outros dezenove: o
+                // pedido é abortado e o dia entra como falha. Era isso que
+                // travava a exportação inteira no último dia do intervalo.
+                var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+                var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, DAY_TIMEOUT_MS);
+                var opts = { credentials: 'same-origin' };
+                if (ctrl) opts.signal = ctrl.signal;
+                return fetch(url, opts)
                     .then(function (r) {
+                        clearTimeout(timer);
                         // O MOTIVO acompanha a falha. "Não consegui ler 20 dias"
                         // não diz se foi rota errada, sessão vencida ou erro do
                         // servidor — e sem isso não há o que investigar.
@@ -923,6 +938,14 @@
                             // não diz de que dia é cada linha.
                             columns = [t('refDate')].concat(cs.map(String));
                         }
+                        // O dia que a resposta diz ter lido. Quando ele não é o
+                        // pedido, a tela substituiu o arquivo pelo do dia
+                        // anterior (é o que ela faz para não abrir vazia) — e
+                        // aqui isso é o MESMO dia entrando duas vezes, com duas
+                        // datas. O dia é pulado como se não houvesse arquivo,
+                        // que é o que de fato não há.
+                        var src = String(j.source_date || '').slice(0, 10);
+                        if (src && src !== d) { empty.push(d); return; }
                         // Dia que respondeu e não tem linha é dia SEM ARQUIVO, não
                         // é falha: com o intervalo em dias úteis ele é o feriado
                         // que a rotina não rodou, ou o dia anterior à primeira

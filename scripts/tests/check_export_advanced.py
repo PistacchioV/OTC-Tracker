@@ -74,6 +74,9 @@ def main():
     # stub faz o mesmo com os casos que interessam. `t` devolve a chave, que é o
     # bastante para o rótulo da Reference Date.
     harness = ("var MAX_DAYS = %d;\n" % max_days
+               + "var DAY_TIMEOUT_MS = 60000;\n"
+               + "function setTimeout(f, ms) { return 0; }\n"
+               + "function clearTimeout(id) {}\n"
                + "var _decoder = null;\n"
                # Um feriado no meio do intervalo do relato (05/08–24/08).
                + "var _holidays = {'2026-08-06': 1};\n"
@@ -130,18 +133,25 @@ def main():
     var CHAMADAS = [];
     fetch = function (url) {
         CHAMADAS.push(url);
-        var d = url.split('=')[1];
+        var d = /date=([^&]+)/.exec(url)[1];
         if (d === '2026-08-25') { return Promise.resolve({ ok: false, status: 404 }); }
         if (d === '2026-08-26') {
             return Promise.resolve({ ok: true, json: function () {
                 return Promise.resolve({ columns: ['A', 'B'], rows: [] }); } });
+        }
+        // O dia SUBSTITUÍDO: a tela andou para trás e devolveu o arquivo de
+        // outro dia. Tem linhas, mas não são deste dia.
+        if (d === '2026-08-27') {
+            return Promise.resolve({ ok: true, json: function () {
+                return Promise.resolve({ columns: ['A', 'B'], source_date: '2026-08-24',
+                                         rows: [['x1', 'x2']] }); } });
         }
         return Promise.resolve({ ok: true, json: function () {
             return Promise.resolve({ columns: ['A', 'B'],
                                      rows: [['a1', 'b1', 'cauda'], ['a2', 'b2']] }); } });
     };
     var passos = [];
-    fetchDays(normDaily('/api/x'), ['2026-08-24', '2026-08-25', '2026-08-26'],
+    fetchDays(normDaily('/api/x'), ['2026-08-24', '2026-08-25', '2026-08-26', '2026-08-27'],
               function (i, d) { passos.push(i + ':' + d); })
         .then(function (res) {
             out('fd-cols',     res.columns.join(','));
@@ -230,13 +240,22 @@ def main():
           got.get('fd-rows'), '[["2026-08-24","a1","b1"],["2026-08-24","a2","b2"]]')
     check('o dia que falhou é reportado', got.get('fd-failed'), '2026-08-25')
     # Dia sem linha não é falha: é dia sem movimento.
-    check('o dia vazio não conta como falha', got.get('fd-empty'), '2026-08-26')
+    check('o dia vazio e o substituído entram como sem arquivo',
+          got.get('fd-empty'), '2026-08-26,2026-08-27')
     check('o progresso conta os dias', got.get('fd-passos'),
-          '1:2026-08-24 2:2026-08-25 3:2026-08-26')
+          '1:2026-08-24 2:2026-08-25 3:2026-08-26 4:2026-08-27')
+    # O dia que a tela SUBSTITUIU pelo arquivo de outro é pulado como se não
+    # houvesse arquivo — que é o que de fato não há. Aceitá-lo poria o mesmo dia
+    # duas vezes na planilha, com duas datas diferentes.
+    check('o dia substituído não entra',
+          got.get('fd-rows').find('x1'), -1)
     # EM SÉRIE, um pedido por vez: em paralelo, um intervalo de três meses
     # abriria noventa requisições sobre o processo único que serve a mesa.
-    check('os dias são pedidos em série', got.get('fd-serie'),
-          '/api/x?date=2026-08-24 /api/x?date=2026-08-25 /api/x?date=2026-08-26')
+    # `exact=1` desliga a busca para trás do servidor — sem ele, o dia sem arquivo
+    # volta com o do dia anterior.
+    check('os dias são pedidos em série, com exact', got.get('fd-serie'),
+          '/api/x?date=2026-08-24&exact=1 /api/x?date=2026-08-25&exact=1 '
+          '/api/x?date=2026-08-26&exact=1 /api/x?date=2026-08-27&exact=1')
     # A falha vem com o MOTIVO: "não consegui ler 20 dias" não diz se foi rota
     # errada, sessão vencida ou erro do servidor — e sem isso não há o que
     # investigar. (Foi um 404 de endpoint novo sem restart do Flask.)
