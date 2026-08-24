@@ -594,13 +594,21 @@ def _build_response_from_list(rows):
 
 
 # ─── Caminhos de rede (ambiente JP) ──────────────────────────────────────────
-_DCAD_BASE   = r"I:\Confirmation\Derivativos\Alteryx\Posição B3\ARQUIVOS CETIP"
-_OUTPUT_BASE = r"I:\Confirmation\Derivativos\OTC Tracker\Reconciliations\Comitente"
+# Todos pendem do `Config.SHARED_DRIVE_ROOT` — o mesmo que o routes usa. Com o
+# `I:\` escrito aqui, estas duas pastas continuariam na letra mapeada depois de
+# a instância do JPM apontar para o UNC, e a recon falharia dizendo que o
+# arquivo do dia não chegou.
+_DCAD_BASE   = os.path.join(Config.SHARED_DRIVE_ROOT, 'Confirmation', 'Derivativos',
+                            'Alteryx', 'Posição B3', 'ARQUIVOS CETIP')
+_OUTPUT_BASE = os.path.join(Config.SHARED_DRIVE_ROOT, 'Confirmation', 'Derivativos',
+                            'OTC Tracker', 'Reconciliations', 'Comitente')
 # O DCADCOMITENTES agora vem da pasta de DESTINO da rotina "Salvar Arquivos CETIP"
 # (CETIP_DEST_ROOT\YYYY\mm. Month\dd), e não mais do drop bruto da B3. Usa o MESMO
 # env var (CETIP_DEST_ROOT) da rotina CETIP para os dois ficarem sempre alinhados.
 _CETIP_DEST_BASE = os.getenv('CETIP_DEST_ROOT',
-                             r"I:\Confirmation\Derivativos\OTC Tracker\CETIP Files\Position Files")
+                             os.path.join(Config.SHARED_DRIVE_ROOT, 'Confirmation',
+                                          'Derivativos', 'OTC Tracker',
+                                          'CETIP Files', 'Position Files'))
 
 # Caixas Outlook e subjects dos emails
 _MAILBOX         = 'brazil.otc.ops@jpmorgan.com'

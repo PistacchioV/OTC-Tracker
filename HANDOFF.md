@@ -13438,3 +13438,69 @@ git checkout -- apps/config.py     # traz a versão do repositório
 ```
 
 E **reiniciar o Flask** — o reloader está desligado.
+
+---
+
+## §309 — A raiz do share também é do `Config`, e três recons não perguntavam
+
+O §307 tirou o caminho de BANCO de dentro dos módulos. Ficaram de fora as raízes de REDE, e três
+delas continuavam escritas à mão: `_CETIP_BASE` do `recon_fxo`, `_DCAD_BASE`/`_OUTPUT_BASE`/
+`_CETIP_DEST_BASE` do `recon_comitente` e `_INPUT_BASE` do `recon_payrec` — todas
+`r"I:\Confirmation\..."`.
+
+O `routes.py` já estava certo (treze destinos, todos `os.getenv(X, os.path.join(
+Config.SHARED_DRIVE_ROOT, …))`), e é isso que torna a falha invisível: na instância que aponta para o
+UNC, o app inteiro fala com o servidor e SÓ essas três recons continuam pedindo a letra mapeada. Se o
+processo subir como serviço, ou com outro usuário, o mapeamento de unidade não existe — e a recon
+falha dizendo que não achou o arquivo do dia, que se lê como *"a B3 não mandou"*.
+
+Na dev nada muda: o default do config **é** `I:\`, e `os.path.join('I:\\', 'Confirmation', …)`
+devolve o literal de antes byte a byte.
+
+Cinco scripts que espelham um destino do app foram junto (`create_cetip_folders`,
+`create_counterparty_folders`, `export_electronic_inventory_excel`,
+`backfill_cetip_position_files_vernacci` e o `export_users_excel`, que apontava para o banco de
+usuários **local**), com o mesmo `try: Config / except: literal` dos scripts de migração — eles
+precisam rodar fora do venv.
+
+O `check_config_names.py` passou a guardar a regra: varre por AST os literais dos módulos versionados
+de `apps/` e recusa qualquer coisa que comece por letra de unidade ou `\\servidor`. Comentário e
+docstring ficam de fora por construção, então o caminho citado em prosa continua permitido. Ao passar
+a importar o `Config`, o `recon_payrec` levou junto o `check_spb_status.py`, que deixou de rodar fora
+do Windows sem a variável — os cinco testes afetados ganharam o `os.environ.setdefault` que o
+`check_config_names` já usava.
+
+---
+
+## §310 — O IR da opção é do net, e o rodapé do aviso somava a coluna errada
+
+O aviso de pagamento de prêmio da Mondelez (24/08/2026, seis prêmios de TRIGO) saiu assim:
+
+    Resultado Apurado   (28.884,17)
+    IR (0,005%)               1,44
+    Resultado Final     (28.884,13)
+
+As duas primeiras linhas estão certas. A terceira não é nem o apurado nem o apurado menos o imposto —
+é o apurado mexido em **quatro centavos**.
+
+O §-anterior do IR de opção (`7da7fe4`) acertou as três condições — só PRÊMIO paga, a base é o NET por
+contraparte × data, e só quando o banco paga — e então **rateou o imposto por todas as linhas de
+prêmio**, para que a coluna somasse o imposto do net. O rateio é o certo: toda soma da aplicação (a
+coluna do aviso, o Trade Level, o Settlement Summary) é uma soma de LINHAS, e um valor que só existisse
+no rodapé sumiria das outras telas.
+
+O que estava errado era o LADO. A regra do líquido encolhe o caixa pelo sinal de cada linha
+(`ap - ir` se positivo, `ap + ir` se negativo), então a parte do imposto que caía numa linha de
+RECEBIMENTO era subtraída dali enquanto a que caía numa de PAGAMENTO era somada: 0,74 de um lado, 0,70
+do outro, e o rodapé — que soma a coluna — imprimia a diferença. Uma retenção não anda para os dois
+lados.
+
+Hoje o rateio vai **só para as linhas que pagam**. Nada é decidido por linha: quem diz se há imposto, e
+quanto, continua sendo o net; a linha carrega a parte da retenção que sai com ELA, a que recebe sai com
+`0,00` e o líquido igual ao apurado. A coluna volta a fechar com o rodapé, e o rodapé com o net —
+`28.884,17 − 1,44 = 28.882,73`, a mesma conta do Pay/Rec (§205: net Pay −219.047,36 → −219.036,41).
+
+Por ser um rateio, o Settlement Summary e o Trade Level se corrigem junto, sem tocar em nenhum dos dois:
+os dois já netam somando linhas.
+
+`check_optadv_ir.py` prova o caso reportado número a número e as três condições do imposto.

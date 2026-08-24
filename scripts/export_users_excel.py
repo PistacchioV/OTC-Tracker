@@ -20,6 +20,7 @@ Usage:
 
 import os
 import shutil
+import sys
 import tempfile
 from datetime import datetime
 
@@ -29,9 +30,26 @@ import pandas as pd
 # ── paths ─────────────────────────────────────────────────────────────────────
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.normpath(os.path.join(
-    SCRIPT_DIR, "..", "apps", "static", "data", "db", "Users_OTCTracker.db"
-))
+REPO_ROOT = os.path.dirname(SCRIPT_DIR)
+
+
+def _db_path():
+    """O MESMO banco que a aplicação abre (`Config.DATABASE_PATH`).
+
+    Montado a partir do diretório do script, ele lia o banco LOCAL enquanto o
+    app abria o do share: o export "dá certo" e sai vazio, ou com o cadastro de
+    outra instância. O fallback existe para o script rodar fora do venv."""
+    try:
+        if REPO_ROOT not in sys.path:
+            sys.path.insert(0, REPO_ROOT)
+        from apps.config import Config
+        return Config.DATABASE_PATH
+    except Exception:
+        return os.path.normpath(os.path.join(
+            REPO_ROOT, "apps", "static", "data", "db", "Users_OTCTracker.db"))
+
+
+DB_PATH = _db_path()
 DOWNLOADS = os.path.join(os.path.expanduser("~"), "Downloads")
 
 # Preferred column order; any other columns are appended in their natural order.

@@ -1764,6 +1764,20 @@ Intrag ficavam com o valor cru sempre que o notional estava na moeda fraca
   falha agora é na subida e não em silêncio. Na instância do time a variável
   não é necessária — `os.path.join('I:\\', 'Confirmation', …)` devolve o mesmo
   literal que estava fixo antes, byte a byte.
+
+  **E nenhum módulo escreve a raiz à mão.** O `Config.SHARED_DRIVE_ROOT` só vale
+  para quem pergunta a ele: um `r"I:\Confirmation\..."` no fonte mantém AQUELE
+  caminho na letra mapeada depois de a instância do JPM passar a falar com o
+  UNC — e a falha aparece como *"o arquivo do dia não chegou"*, não como erro de
+  configuração, porque quem lê o arquivo simplesmente não o encontra. Era o caso
+  das três recons (`recon_fxo`, `recon_comitente` e `recon_payrec`: a raiz das
+  posições CETIP, as duas pastas do Comitente e a de entrada do Pay/Rec) e dos
+  cinco scripts que espelham um destino do app. Na dev nada muda — o default
+  do config **é** o `I:\`, e o `os.path.join` devolve o literal de antes. O
+  `check_config_names.py` guarda a regra: varre por AST os literais dos módulos
+  versionados de `apps/` e recusa qualquer coisa que comece por letra de unidade
+  ou `\\servidor` (comentário e docstring ficam de fora por construção, então o
+  caminho citado em prosa continua permitido).
 - **SMTP** usa `mailhost.jpmchase.net` (relay interno, porta 25, sem auth) —
   fora da rede JPM o envio falha silenciosamente.
 - **API `getTrades` da Athena** (`apps/pages/athena_api.py`): importa New Deals
