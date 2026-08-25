@@ -5920,14 +5920,16 @@ def _swap_pos_lob_map(records):
 def accrual_swap():
     if not session.get('authenticated'):
         return redirect(url_for('pages_blueprint.sign_in_page'))
-    return render_template('pages/accrual-swap.html', segment='accrual-swap')
+    return render_template('pages/accrual-swap.html', segment='accrual-swap',
+                           today=_br_now().strftime('%Y-%m-%d'))
 
 
 @blueprint.route('/mtm-swap')
 def mtm_swap():
     if not session.get('authenticated'):
         return redirect(url_for('pages_blueprint.sign_in_page'))
-    return render_template('pages/mtm-swap.html', segment='mtm-swap')
+    return render_template('pages/mtm-swap.html', segment='mtm-swap',
+                           today=_br_now().strftime('%Y-%m-%d'))
 
 
 # ── Other Products Summary (Settlement Batch) ────────────────────────────────
@@ -7228,7 +7230,7 @@ def other_products_summary():
     if not session.get('authenticated'):
         return redirect(url_for('pages_blueprint.sign_in_page'))
     return render_template('pages/other-products-summary.html', segment='other-products-summary',
-                           today=datetime.now().strftime('%Y-%m-%d'))
+                           today=_br_now().strftime('%Y-%m-%d'))
 
 
 @blueprint.route('/api/other-products-summary/data')
@@ -11058,7 +11060,7 @@ def otm_settlements():
     if not session.get('authenticated'):
         return redirect(url_for('pages_blueprint.sign_in_page'))
     return render_template('pages/otm-settlements.html', segment='otm-settlements',
-                           today=datetime.now().strftime('%Y-%m-%d'))
+                           today=_br_now().strftime('%Y-%m-%d'))
 
 
 @blueprint.route('/api/otm-settlements/data')
@@ -11734,7 +11736,7 @@ def other_products_swap_latamdeskposition():
     latest = _latam_latest_ref()
     return render_template('pages/other-products-swap-latamdeskposition.html',
                            segment='other-products-swap-latamdeskposition',
-                           today=datetime.now().strftime('%Y-%m-%d'),
+                           today=_br_now().strftime('%Y-%m-%d'),
                            ref_date=(latest or datetime.now()).strftime('%Y-%m-%d'))
 
 
@@ -12391,7 +12393,7 @@ def ndf_cockpit():
     if not session.get('authenticated'):
         return redirect(url_for('pages_blueprint.sign_in_page'))
     return render_template('pages/ndf-cockpit.html', segment='ndf-cockpit',
-                           today=datetime.now().strftime('%Y-%m-%d'))
+                           today=_br_now().strftime('%Y-%m-%d'))
 
 
 @blueprint.route('/api/ndf-cockpit/data')
@@ -13237,7 +13239,7 @@ def cognos():
     if not session.get('authenticated'):
         return redirect(url_for('pages_blueprint.sign_in_page'))
     return render_template('pages/cognos.html', segment='cognos',
-                           today=datetime.now().strftime('%Y-%m-%d'))
+                           today=_br_now().strftime('%Y-%m-%d'))
 
 
 @blueprint.route('/api/cognos/data')
@@ -13706,7 +13708,7 @@ def operations_b3():
     if not session.get('authenticated'):
         return redirect(url_for('pages_blueprint.sign_in_page'))
     return render_template('pages/operations-b3.html', segment='operations-b3',
-                           today=datetime.now().strftime('%Y-%m-%d'))
+                           today=_br_now().strftime('%Y-%m-%d'))
 
 
 @blueprint.route('/api/operations-b3/data')
@@ -14684,7 +14686,7 @@ def ndf_summary():
     if not session.get('authenticated'):
         return redirect(url_for('pages_blueprint.sign_in_page'))
     return render_template('pages/ndf-summary.html', segment='ndf-summary',
-                           today=datetime.now().strftime('%Y-%m-%d'))
+                           today=_br_now().strftime('%Y-%m-%d'))
 
 
 @blueprint.route('/api/ndf-summary/cards')
@@ -31065,7 +31067,7 @@ def new_deals_monitor():
     if not session.get('authenticated'):
         return redirect(url_for('pages_blueprint.sign_in_page'))
     return render_template('pages/new-deals-monitor.html', segment='new-deals-monitor',
-                           today=datetime.now().strftime('%Y-%m-%d'))
+                           today=_br_now().strftime('%Y-%m-%d'))
 
 
 def _ndm_monitor_snapshot(ref):

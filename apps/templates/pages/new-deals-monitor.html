@@ -558,7 +558,9 @@
             $d.daterangepicker({
                 singleDatePicker: true, autoApply: true, showDropdowns: true,
                 locale: { format: 'DD/MM/YYYY' },
-                startDate: moment()
+                // A data que a página carregou (horário de Brasília), não a do
+                // navegador — dois relógios mostram dias diferentes na mesma tela.
+                startDate: moment('{{ today }}', 'YYYY-MM-DD')
             }, function (start) { load(start.format('YYYY-MM-DD')); });
             jQuery('#ndmDateWrap .ndm-cal-btn').on('click', function () { $d.trigger('click'); });
         }
