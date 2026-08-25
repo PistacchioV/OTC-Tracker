@@ -1521,9 +1521,11 @@ td .btn-sm.rounded-circle i { font-size: 1rem; }
     });
 
     // ── date picker + load-by-date ──────────────────────────────────────────
-    function todayISO() {
-        return (window.moment ? moment() : null) ? moment().format('YYYY-MM-DD') : new Date().toISOString().slice(0, 10);
-    }
+    // O "hoje" da tela é o do SERVIDOR, em horário de Brasília — o mesmo com que
+    // o arquivo-dia é nomeado. `moment()` e `new Date()` são o relógio do
+    // NAVEGADOR: numa máquina noutro fuso a tela pediria o dia que não existe, e
+    // o campo mostraria uma data e a tabela traria outra.
+    function todayISO() { return '{{ today }}'; }
     function pickedDateISO() {
         var inst = (window.jQuery && $('#accDate').data) ? $('#accDate').data('daterangepicker') : null;
         return (inst && inst.startDate) ? inst.startDate.format('YYYY-MM-DD') : todayISO();
@@ -1614,10 +1616,17 @@ td .btn-sm.rounded-circle i { font-size: 1rem; }
             $d.daterangepicker({
                 singleDatePicker: true, autoApply: true, showDropdowns: true,
                 locale: { format: 'DD/MM/YYYY', applyLabel: 'OK', cancelLabel: t('swal-cancel', 'Cancel') },
-                startDate: moment(), maxDate: moment()
+                // A data que a página carregou (horário de Brasília), não a do
+                // navegador: o arquivo-dia é nomeado pela data brasileira, e um
+                // navegador noutro fuso pediria o dia que não existe.
+                startDate: moment('{{ today }}', 'YYYY-MM-DD'),
+                maxDate: moment('{{ today }}', 'YYYY-MM-DD')
             });
         } else if ($d.length) {
-            $d.val(new Date().toLocaleDateString('pt-BR'));
+            // Mesmo no fallback (sem o plugin) a data é a da PÁGINA: o
+            // `new Date()` é o relógio do navegador, e é ele que fazia o campo
+            // discordar do dia que a tela carregou.
+            $d.val('{{ today[8:10] }}/{{ today[5:7] }}/{{ today[0:4] }}');
         }
     }
 

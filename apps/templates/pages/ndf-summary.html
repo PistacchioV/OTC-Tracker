@@ -1024,7 +1024,10 @@ function opsInitDatePicker() {
         $d.daterangepicker({
             singleDatePicker: true, autoApply: true, showDropdowns: true,
             locale: { format: 'DD/MM/YYYY' },
-            startDate: moment()   // default today; no maxDate → future reference dates allowed
+            // A data de partida é a que a PÁGINA carregou (horário de Brasília),
+            // não o relógio do navegador: com dois relógios, o campo mostra um
+            // dia e a tabela traz outro.
+            startDate: moment('{{ today }}', 'YYYY-MM-DD')
         }, function (start) { reload(start.format('YYYY-MM-DD')); });
         jQuery('#opsDateWrap .ops-cal-btn').on('click', function () { $d.trigger('click'); });
     } else if (inp) {
