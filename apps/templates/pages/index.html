@@ -332,6 +332,12 @@
     </div>
 
     <!-- ═══ STAT CARDS — bento colorido ══════════════════════════ -->
+    {# A falha do carregamento aparece AQUI, e não só no console: sem isto os
+       números ficam no traço do placeholder e os gráficos vazios, que se lê
+       como "não houve operação no dia". #}
+    <div id="dash-load-error" class="alert alert-danger py-2 px-3 mb-3 d-none"
+         style="font-size:.78rem;"></div>
+
     <div class="row row-cols-xxl-4 row-cols-md-2 row-cols-1 g-3">
         <div class="col">
             <div class="card dash-fade-in dash-stat dash-stat--ndf">

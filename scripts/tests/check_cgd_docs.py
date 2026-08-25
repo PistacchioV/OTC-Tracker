@@ -70,8 +70,12 @@ def pedido(**kw):
     formulário preenchidos. Sem eles o documento está no Banking (a solicitação
     ainda está sendo aberta), e todo teste de etapa daí para a frente mediria
     outra coisa."""
-    base = {'Data Solicitação': '01/08/2026', 'Razão Social': 'CLIENTE X',
-            'CNPJ': '10.144.076/0001-44', 'Signature Type': 'DocuSign'}
+    # Os valores saem do PRÓPRIO `REQUEST_FIELDS`, e não de uma lista escrita
+    # aqui: um campo obrigatório novo no formulário passaria a segurar tudo no
+    # Banking e o teste acusaria a etapa errada em toda asserção seguinte, sem
+    # dizer que a causa foi o campo novo.
+    _VALOR = {'Data Solicitação': '01/08/2026', 'CNPJ': '10.144.076/0001-44'}
+    base = {col: _VALOR.get(col, 'X') for col in C.REQUEST_FIELDS}
     base.update(kw)
     return linha(**base)
 
@@ -153,10 +157,16 @@ check('o tipo de assinatura tem três opções',
 # digitou. E os obrigatórios saem do próprio formulário, para as duas listas não
 # divergirem.
 check('todo campo do formulário aponta para uma coluna real',
-      [f['column'] for f in C.REQUEST_FORM if f['column'] not in C.COLUMNS], [])
+      [f['column'] for f in C.REQUEST_FORM
+       if f['column'] and f['column'] not in C.COLUMNS], [])
 check('os obrigatórios saem do formulário',
       list(C.REQUEST_FIELDS),
-      [f['column'] for f in C.REQUEST_FORM if f['required']])
+      [f['column'] for f in C.REQUEST_FORM if f['required'] and f['column']])
+# O Apêndice é obrigatório no formulário e não tem coluna — é arquivo, vai para o
+# Electronic Inventory. Se ele entrasse no `REQUEST_FIELDS`, a coluna `''` nunca
+# estaria preenchida e TODO documento ficaria preso no Banking para sempre.
+check('campo sem coluna não entra na regra do Banking',
+      '' in C.REQUEST_FIELDS, False)
 check('   e são os que seguram o documento no Banking',
       list(C.STAGE_STAMP[0][1]), list(C.REQUEST_FIELDS))
 check('o Tipo de Assinatura é campo do formulário e coluna do banco',
@@ -180,22 +190,23 @@ check('status fora do cadastro continua derivando',
 # ── 4. O banco ──────────────────────────────────────────────────────────────
 
 print('\n== o banco ==')
-# As três com a SOLICITAÇÃO completa (`Signature Type` incluído): sem ela as três
-# ficariam no Banking, e o que se quer medir aqui são as mesas seguintes.
+# As três com a SOLICITAÇÃO completa (o `pedido()` preenche todos os
+# obrigatórios): sem isso as três ficariam no Banking, e o que se quer medir
+# aqui são as mesas seguintes.
 rows = [
-    linha(**{'Status': 'Active', 'Doc Type': 'CGD', 'Razão Social': 'MONDELEZ',
-             'CNPJ': '10.144.076/0001-44', 'Data Solicitação': '01/07/2026',
-             'Signature Type': 'FepWeb',
-             'Emissão': '10/07/2026', 'Signature Date': '15/07/2026',
-             'OTC - STAMP': '16/07/2026', 'MO - STAMP': '17/07/2026',
-             'Conclusion - Stamp': '20/07/2026', 'Aging': '999'}),
-    linha(**{'Status': 'Pending Signature', 'Doc Type': 'CGD', 'Razão Social': 'ATACAMA',
-             'CNPJ': '12.345.678/0001-99', 'Data Solicitação': '01/08/2026',
-             'Signature Type': 'DocuSign'}),
-    linha(**{'Status': 'Pending OTC', 'Doc Type': 'CSA', 'Razão Social': 'LAWTON',
-             'CNPJ': '98.765.432/0001-11', 'Data Solicitação': '05/08/2026',
-             'Signature Type': 'Manual',
-             'Emissão': '06/08/2026', 'Signature Date': '07/08/2026'}),
+    pedido(**{'Status': 'Active', 'Doc Type': 'CGD', 'Razão Social': 'MONDELEZ',
+              'CNPJ': '10.144.076/0001-44', 'Data Solicitação': '01/07/2026',
+              'Signature Type': 'FepWeb',
+              'Emissão': '10/07/2026', 'Signature Date': '15/07/2026',
+              'OTC - STAMP': '16/07/2026', 'MO - STAMP': '17/07/2026',
+              'Conclusion - Stamp': '20/07/2026', 'Aging': '999'}),
+    pedido(**{'Status': 'Pending Signature', 'Doc Type': 'CGD', 'Razão Social': 'ATACAMA',
+              'CNPJ': '12.345.678/0001-99', 'Data Solicitação': '01/08/2026',
+              'Signature Type': 'DocuSign'}),
+    pedido(**{'Status': 'Pending OTC', 'Doc Type': 'CSA', 'Razão Social': 'LAWTON',
+              'CNPJ': '98.765.432/0001-11', 'Data Solicitação': '05/08/2026',
+              'Signature Type': 'Manual',
+              'Emissão': '06/08/2026', 'Signature Date': '07/08/2026'}),
 ]
 n = C.replace_all(rows)
 check('gravou as três linhas', n, 3)
@@ -248,9 +259,9 @@ check('e o item leva o status COMO ESTÁ ESCRITO',
 
 # A fila vem do mais velho para o mais novo, como no Confirmations Monitor.
 C.replace_all(rows + [
-    linha(**{'Status': 'Em elaboração', 'Razão Social': 'MAIS VELHO',
-             'CNPJ': '11.111.111/0001-11', 'Signature Type': 'FepWeb',
-             'Data Solicitação': '01/01/2026'}),
+    pedido(**{'Status': 'Em elaboração', 'Razão Social': 'MAIS VELHO',
+              'CNPJ': '11.111.111/0001-11', 'Signature Type': 'FepWeb',
+              'Data Solicitação': '01/01/2026'}),
 ])
 fila_legal = [c for c in C.overview()['cards'] if c['stage'] == 'Legal'][0]
 check('a fila abre pelo que espera há mais tempo',

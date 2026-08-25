@@ -6,19 +6,27 @@
    Onboarding abrem uma solicitação, e duplicar o markup seria manter dois
    formulários que divergem no dia em que um campo mudar.
 
-   Os campos vêm do SERVIDOR (`cgd_docs.REQUEST_FORM`, passado pelas rotas), e
-   não escritos aqui: é a MESMA lista de onde saem os obrigatórios que seguram o
-   documento na fila do Banking. Escritos no HTML, o dia em que um campo deixasse
-   de ser obrigatório o modal pararia de pedi-lo e a fila continuaria cobrando.
+   **Segue o modal padrão da casa** (o mesmo do /mapping e das 24 telas que o
+   usam): `modal-content liquid-glass`, cabeçalho `py-2` com `modal-title fs-6`,
+   corpo em `row g-3` com `col-md-*`, rótulo `form-label fs-xs text-muted mb-1`,
+   campos `form-control-sm` e rodapé `py-2` com os dois botões de ícone —
+   vermelho para descartar, verde para gravar. Ele tinha grid e classes próprias,
+   e destoava de todo modal do app.
+
+   Os campos vêm do SERVIDOR (`cgd_docs.REQUEST_FORM`, passado pelas rotas),
+   inclusive a LARGURA de cada um: é a MESMA lista de onde saem os obrigatórios
+   que seguram o documento na fila do Banking. Escritos no HTML, o dia em que um
+   campo deixasse de ser obrigatório o modal pararia de pedi-lo e a fila
+   continuaria cobrando.
 
    O JS é VANILLA de propósito: o Overview não carrega jQuery, e um partial que
    dependa dele funcionaria numa tela e morreria calado na outra.
    ========================================================================== #}
 <div class="modal fade" id="ob-req-modal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title" style="font-size:1rem;font-weight:700;">
+  <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content liquid-glass">
+      <div class="modal-header py-2">
+        <h5 class="modal-title fs-6">
           <i class="ti ti-file-plus me-1"></i>
           <span data-lang="ob-req-title">New CGD Request</span>
         </h5>
@@ -26,69 +34,86 @@
       </div>
 
       <div class="modal-body">
-        <div class="ob-req-grid">
+        <div class="row g-3">
           {% for f in cgd_form %}
-          <div class="ob-req-field" data-col="{{ f.column }}">
-            <label class="ob-req-label" for="ob-req-{{ loop.index }}">
-              {{ f.label }}{% if f.required %} <span class="ob-req-star">*</span>{% endif %}
+          {# `d-flex flex-column` + `mt-auto` no campo: a dica tem uma linha num
+             rótulo e nenhuma no outro, e sem isso os dois inputs da MESMA linha
+             ficam em alturas diferentes — era o desalinhado entre a data e o
+             Grupo. Com o campo empurrado para o fim da coluna, eles encostam na
+             mesma base independentemente do tamanho da dica. #}
+          <div class="{{ f.col or 'col-md-6' }} d-flex flex-column ob-req-field"
+               data-col="{{ f.column }}">
+            <label class="form-label fs-xs text-muted mb-1" for="ob-req-{{ loop.index }}">
+              {{ f.label }}{% if f.required %} <span class="text-danger">*</span>{% endif %}
             </label>
-            {% if f.hint %}<div class="ob-req-hint">{{ f.hint }}</div>{% endif %}
+            {% if f.hint %}<div class="ob-req-hint flex-grow-1">{{ f.hint }}</div>{% endif %}
+            <div class="mt-auto">
             {% if f.type == 'select' %}
+              {# O domínio vem do PRÓPRIO campo quando ele tem um (`Garantidor`);
+                 sem isso, o Tipo de Assinatura é o único que a lista alcança. #}
               <select class="form-select form-select-sm ob-req-input" id="ob-req-{{ loop.index }}"
+                      data-default="{{ f.default or '' }}"
                       {% if f.required %}required{% endif %}>
                 <option value=""></option>
-                {% for o in cgd_signature_types %}<option value="{{ o }}">{{ o }}</option>{% endfor %}
+                {% for o in (f.options or cgd_signature_types) %}<option value="{{ o }}">{{ o }}</option>{% endfor %}
               </select>
             {% elif f.type == 'textarea' %}
               {# Razão Social e CNPJ pedem TODAS as entidades do grupo — são
                  várias por linha, e um input de uma linha esconderia da pessoa
                  o que ela acabou de digitar. #}
               <textarea class="form-control form-control-sm ob-req-input" rows="3"
-                        id="ob-req-{{ loop.index }}"
+                        id="ob-req-{{ loop.index }}" data-default="{{ f.default or '' }}"
                         {% if f.required %}required{% endif %}></textarea>
             {% elif f.type == 'date' %}
-              {# Data é SEMPRE dd/mm/aaaa na tela. O `type=date` nativo desenha no
-                 locale do sistema — no Windows em inglês vira mm/dd/yyyy, e a
-                 mesa lê 03/04 como 3 de abril onde o campo quis dizer 4 de
-                 março. O flatpickr é global (vendors.min.js), e o guard no JS
-                 degrada para texto comum se ele faltar. #}
+              {# A data da solicitação é SEMPRE hoje e não se digita: ela é o dia
+                 em que o pedido está sendo aberto, e é dela que o aging conta.
+                 Editável, uma data para trás nasceria com atraso inventado e uma
+                 para a frente deixaria o aging vazio. Fica `disabled` e o valor
+                 é montado no JS — `disabled` não vai no submit de formulário,
+                 mas aqui quem monta o payload é o nosso código, que lê o campo. #}
               <input type="text" class="form-control form-control-sm ob-req-input ob-req-date"
-                     id="ob-req-{{ loop.index }}" placeholder="dd/mm/aaaa" autocomplete="off"
+                     id="ob-req-{{ loop.index }}" autocomplete="off" disabled readonly>
+            {% elif f.type == 'file' %}
+              {# O Apêndice não vai para o banco da lista: vai para o Electronic
+                 Inventory da contraparte, como documento `Transactional`. É onde
+                 os documentos por cliente já vivem e onde a mesa os procura —
+                 uma pasta nova, só do Onboarding, seria um segundo lugar para o
+                 mesmo tipo de papel. #}
+              <input type="file" class="form-control form-control-sm ob-req-input ob-req-file"
+                     id="ob-req-{{ loop.index }}"
+                     accept=".pdf,.doc,.docx,.xls,.xlsx,.msg,.eml,.png,.jpg,.jpeg,.gif,.txt,.zip"
                      {% if f.required %}required{% endif %}>
             {% else %}
               <input type="text" class="form-control form-control-sm ob-req-input"
                      id="ob-req-{{ loop.index }}" autocomplete="off"
+                     data-default="{{ f.default or '' }}"
                      {% if f.required %}required{% endif %}>
             {% endif %}
+            </div>
           </div>
           {% endfor %}
         </div>
         <div class="ob-req-err text-danger d-none" id="ob-req-err"></div>
       </div>
 
-      <div class="modal-footer">
-        <button type="button" class="btn btn-sm btn-light" data-bs-dismiss="modal"
-                data-lang="ob-req-cancel">Cancel</button>
-        <button type="button" class="btn btn-sm btn-primary bg-gradient" id="ob-req-save">
-          <i class="ti ti-device-floppy me-1"></i><span data-lang="ob-req-save">Create request</span>
-        </button>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-sm btn-danger" data-bs-dismiss="modal"
+                title="Cancel"><i class="ti ti-x"></i></button>
+        <button type="button" class="btn btn-sm btn-success" id="ob-req-save"
+                title="Create request"><i class="ti ti-device-floppy"></i></button>
       </div>
     </div>
   </div>
 </div>
 
 <style>
-#ob-req-modal .ob-req-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem 1.25rem; }
-@media (max-width: 640px) { #ob-req-modal .ob-req-grid { grid-template-columns: 1fr; } }
-/* Os campos de várias entidades ocupam a linha inteira: eles são listas. */
-#ob-req-modal .ob-req-field:has(textarea) { grid-column: 1 / -1; }
-#ob-req-modal .ob-req-label { font-size: .78rem; font-weight: 700; margin-bottom: .1rem; display: block; }
-#ob-req-modal .ob-req-star { color: var(--ins-danger, #d93025); }
 #ob-req-modal .ob-req-hint { font-size: .7rem; color: var(--ins-secondary-color); margin-bottom: .3rem; }
-#ob-req-modal .ob-req-input { font-size: .8rem; }
 /* Obrigatório em branco no Save: a borda diz QUAL, sem depender de ler o aviso. */
 #ob-req-modal .ob-req-input.is-invalid { border-color: var(--ins-danger, #d93025); }
 #ob-req-modal .ob-req-err { font-size: .75rem; margin-top: .8rem; }
+/* A data é preenchida pelo app e não se edita — o cinza de campo desabilitado
+   é o que diz isso antes de a pessoa tentar clicar. */
+#ob-req-modal .ob-req-date { font-variant-numeric: tabular-nums; text-align: center; }
 </style>
 
 <script>
@@ -98,12 +123,15 @@
     var TRANS = {
         en: { missing: 'Fill in the required fields ({n} missing).',
               failed: 'Could not create the request.',
+              upFailed: 'Could not save the appendix to the Electronic Inventory.',
               done: 'Request created' },
         br: { missing: 'Preencha os campos obrigatórios (faltam {n}).',
               failed: 'Não consegui criar a solicitação.',
+              upFailed: 'Não consegui gravar o apêndice no Electronic Inventory.',
               done: 'Solicitação criada' },
         es: { missing: 'Complete los campos obligatorios (faltan {n}).',
               failed: 'No se pudo crear la solicitud.',
+              upFailed: 'No se pudo guardar el apéndice en el Electronic Inventory.',
               done: 'Solicitud creada' }
     };
     function lang() {
@@ -121,22 +149,25 @@
     var erro = document.getElementById('ob-req-err');
     var bsModal = null;
 
-    // O flatpickr desenha o campo em dd/mm/aaaa. Sem ele o campo continua sendo
-    // um texto comum — a tela degrada, não quebra.
-    [].forEach.call(modalEl.querySelectorAll('.ob-req-date'), function (el) {
-        if (typeof flatpickr !== 'undefined') {
-            flatpickr(el, { dateFormat: 'd/m/Y', allowInput: true, disableMobile: true });
-        }
-    });
-
     function entrada(f) { return f.querySelector('.ob-req-input'); }
+
+    function hoje() {
+        var d = new Date();
+        return ('0' + d.getDate()).slice(-2) + '/' +
+               ('0' + (d.getMonth() + 1)).slice(-2) + '/' + d.getFullYear();
+    }
 
     function limpa() {
         campos.forEach(function (f) {
             var el = entrada(f);
             el.classList.remove('is-invalid');
-            if (el._flatpickr) { el._flatpickr.clear(); }
-            el.value = '';
+            // A data não se limpa: ela é sempre hoje, e é recarregada a cada
+            // abertura porque o modal sobrevive à virada do dia numa aba
+            // deixada aberta. Os demais voltam ao `default` do cadastro do
+            // formulário — o `No` do Garantidor e o `N/A` das informações dele
+            // são o caso comum, e obrigar a digitá-los é atrito por nada.
+            el.value = el.classList.contains('ob-req-date')
+                ? hoje() : (el.getAttribute('data-default') || '');
         });
         erro.classList.add('d-none');
         erro.textContent = '';
@@ -144,25 +175,57 @@
 
     function abre() {
         limpa();
-        // A data da solicitação nasce com HOJE — é o dia em que ela está sendo
-        // aberta, e é o que o formulário do SharePoint já traz preenchido.
-        var hoje = new Date();
-        var dd = ('0' + hoje.getDate()).slice(-2);
-        var mm = ('0' + (hoje.getMonth() + 1)).slice(-2);
-        [].forEach.call(modalEl.querySelectorAll('.ob-req-date'), function (el) {
-            var v = dd + '/' + mm + '/' + hoje.getFullYear();
-            if (el._flatpickr) { el._flatpickr.setDate(v, false); } else { el.value = v; }
-        });
         if (!bsModal && window.bootstrap) { bsModal = new bootstrap.Modal(modalEl); }
         if (bsModal) { bsModal.show(); }
+    }
+
+    // A contraparte do anexo é a PRIMEIRA entidade da Razão Social. O campo
+    // pede todas as entidades do grupo, uma por linha, e a pasta do Electronic
+    // Inventory é de UM cliente — o texto inteiro viraria um nome de pasta com
+    // várias razões sociais dentro, que ninguém encontra depois.
+    function contraparte(vals) {
+        return String(vals['Razão Social'] || '').split('\n')[0].trim();
+    }
+
+    // Sobe o Apêndice para o Electronic Inventory. Devolve uma promessa que
+    // resolve para `true` quando não havia arquivo (o campo é opt-in em quem não
+    // o declara) ou quando o upload deu certo.
+    function subeApendice(vals) {
+        var campo = modalEl.querySelector('.ob-req-file');
+        var arq = campo && campo.files && campo.files[0];
+        if (!arq) { return Promise.resolve(true); }
+        var fd = new FormData();
+        fd.append('client', contraparte(vals));
+        fd.append('type', 'Transactional');
+        fd.append('subtype', 'CGD TEMPLATE');
+        fd.append('date', String(vals['Data Solicitação'] || ''));
+        fd.append('file', arq);
+        return fetch('/api/electronic-inventory/upload', {
+            method: 'POST', credentials: 'same-origin', body: fd
+        }).then(function (r) { return r.json(); })
+          .then(function (j) {
+              if (j && j.success) { return true; }
+              throw new Error((j && j.message) || 'upload');
+          });
     }
 
     document.getElementById('ob-req-save').addEventListener('click', function () {
         var vals = {}, faltando = 0;
         campos.forEach(function (f) {
             var el = entrada(f);
-            var v = String(el.value || '').trim();
             var obrigatorio = el.hasAttribute('required');
+            if (el.type === 'file') {
+                // Arquivo não entra no payload da linha — ele tem destino
+                // próprio. Aqui só se confere que veio.
+                var temArq = !!(el.files && el.files.length);
+                el.classList.toggle('is-invalid', obrigatorio && !temArq);
+                if (obrigatorio && !temArq) { faltando++; }
+                return;
+            }
+            var v = String(el.value || '').trim();
+            // `disabled` não tem `required` (o campo é preenchido pelo app), mas
+            // o valor dele VAI no payload — quem monta é este código, não o
+            // submit do navegador.
             el.classList.toggle('is-invalid', obrigatorio && !v);
             if (obrigatorio && !v) { faltando++; }
             vals[f.getAttribute('data-col')] = v;
@@ -174,33 +237,40 @@
         }
         var btn = this;
         btn.disabled = true;
-        fetch('/api/onboarding/docs/save', {
-            method: 'POST', credentials: 'same-origin',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ values: vals })
-        }).then(function (r) { return r.json(); })
-          .then(function (j) {
-              btn.disabled = false;
-              if (!j || !j.success) {
-                  erro.textContent = (j && j.error) || t('failed');
-                  erro.classList.remove('d-none');
-                  return;
-              }
-              if (bsModal) { bsModal.hide(); }
-              // Quem incluiu o partial decide o que fazer depois: o Tracking Docs
-              // recarrega a tabela, o Overview recarrega as filas. O partial não
-              // sabe em qual tela está.
-              if (typeof window.obRequestSaved === 'function') { window.obRequestSaved(j); }
-              if (window.Swal) {
-                  Swal.fire({ icon: 'success', title: t('done'), timer: 1600,
-                              showConfirmButton: false });
-              }
-          })
-          .catch(function () {
-              btn.disabled = false;
-              erro.textContent = t('failed');
-              erro.classList.remove('d-none');
-          });
+        // O ANEXO PRIMEIRO, e a linha só depois: o upload é a parte que depende
+        // do share e é a que falha. Gravando a linha antes, um share fora do ar
+        // deixaria a solicitação criada SEM o template, e nada na tela diria que
+        // faltou — enquanto o contrário deixa um arquivo no inventário e a
+        // pessoa refaz o pedido.
+        subeApendice(vals).then(function () {
+            return fetch('/api/onboarding/docs/save', {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ values: vals })
+            }).then(function (r) { return r.json(); })
+              .then(function (j) {
+                  btn.disabled = false;
+                  if (!j || !j.success) {
+                      erro.textContent = (j && j.error) || t('failed');
+                      erro.classList.remove('d-none');
+                      return;
+                  }
+                  if (bsModal) { bsModal.hide(); }
+                  // Quem incluiu o partial decide o que fazer depois: o Tracking
+                  // Docs recarrega a tabela, o Overview recarrega as filas. O
+                  // partial não sabe em qual tela está.
+                  if (typeof window.obRequestSaved === 'function') { window.obRequestSaved(j); }
+                  if (window.Swal) {
+                      Swal.fire({ icon: 'success', title: t('done'), timer: 1600,
+                                  showConfirmButton: false });
+                  }
+              });
+        }).catch(function (e) {
+            btn.disabled = false;
+            erro.textContent = (e && e.message && e.message !== 'upload')
+                ? t('upFailed') + ' ' + e.message : t('upFailed');
+            erro.classList.remove('d-none');
+        });
     });
 
     // Único ponto de entrada: qualquer botão com este id abre o modal, nas duas

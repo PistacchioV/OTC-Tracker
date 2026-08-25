@@ -357,6 +357,12 @@ SIGNATURE_TYPES = ('FepWeb', 'DocuSign', 'Manual')
 # nome da coluna escrito em dois lugares.
 SIGNATURE_COLUMN = 'Signature Type'
 
+# O domínio do `Garantidor` — o formulário pergunta se o cliente TEM garantidor,
+# e as duas respostas são as do SharePoint. `Yes`/`No` em inglês porque é o que
+# a lista grava: traduzir aqui criaria um terceiro valor para a mesma resposta e
+# metade das linhas deixaria de casar com a outra metade no filtro.
+GUARANTOR_OPTIONS = ('Yes', 'No')
+
 # O formulário de abertura da solicitação, na ORDEM em que ele é preenchido.
 # Cada campo diz o rótulo (o do formulário do SharePoint, que nem sempre é o
 # nome da coluna), a COLUNA do banco em que ele grava, o tipo do campo, se é
@@ -366,25 +372,67 @@ SIGNATURE_COLUMN = 'Signature Type'
 # Request e a regra do Banking (`REQUEST_FIELDS` sai daqui) — e escrever os
 # campos no template deixaria a fila cobrando um campo que o formulário não pede
 # mais, sem erro nenhum.
+# `col` é a largura da coluna no grid do modal (as classes do Bootstrap que o
+# resto do app usa). A data é estreita de propósito — são dez caracteres, e um
+# campo de meia largura ao lado de um texto livre desequilibra a linha.
 REQUEST_FORM = (
     {'label': 'CGD - Solicitação', 'column': 'Data Solicitação', 'type': 'date',
-     'required': True, 'hint': ''},
+     'required': True, 'hint': 'Preenchida com a data de hoje', 'col': 'col-md-3'},
     {'label': 'Grupo', 'column': 'Grupo Economico', 'type': 'text',
-     'required': False, 'hint': 'Informar o nome de referência para a Razão Social'},
+     'required': False, 'hint': 'Informar o nome de referência para a Razão Social',
+     'col': 'col-md-9'},
     {'label': 'Razão Social', 'column': 'Razão Social', 'type': 'textarea',
-     'required': True, 'hint': 'Inserir todas as entidades do grupo'},
+     'required': True, 'hint': 'Inserir todas as entidades do grupo', 'col': 'col-12'},
     {'label': 'CNPJ', 'column': 'CNPJ', 'type': 'textarea',
-     'required': True, 'hint': 'Inserir todas as entidades do grupo'},
+     'required': True, 'hint': 'Inserir todas as entidades do grupo', 'col': 'col-12'},
     {'label': 'CGD - Tipo de Assinatura', 'column': SIGNATURE_COLUMN, 'type': 'select',
-     'required': True, 'hint': 'Selecionar a forma que o cliente assinará o CGD'},
-    {'label': 'CGD - Domínio cliente', 'column': 'Dominio', 'type': 'text',
-     'required': False, 'hint': 'Caso o cliente não tenha domínio preencher com NA'},
+     'required': True, 'hint': 'Selecionar a forma que o cliente assinará o CGD',
+     'col': 'col-md-6'},
+    {'label': 'CGD - Domínio cliente', 'column': 'Dominio', 'type': 'textarea',
+     'required': False, 'hint': 'Caso o cliente não tenha domínio preencher com NA',
+     'col': 'col-md-6'},
+    {'label': 'Contatos', 'column': 'Contacts', 'type': 'textarea',
+     'required': True, 'hint': 'Adicionar emails que devem ser considerados para solicitação de SSI',
+     'col': 'col-md-6'},
+    {'label': 'Garantidor', 'column': 'Garantidor', 'type': 'select',
+     'required': True, 'hint': 'Yes = cliente possui garantidor | No = cliente não possui garantidor',
+     'col': 'col-md-4', 'options': GUARANTOR_OPTIONS, 'default': 'No'},
+    # O formulário pede Razão Social E CNPJ do garantidor NUM campo só, e é
+    # assim que a lista guarda. O banco tem duas colunas (`Nome Garantidor` e
+    # `CNPJ Garantidor`) porque a exportação as separa; o texto digitado aqui vai
+    # para a primeira. Partir em dois campos seria inventar um formulário que
+    # ninguém preenche assim.
+    {'label': 'Informações do garantidor', 'column': 'Nome Garantidor', 'type': 'textarea',
+     'required': False, 'hint': 'Preencher com Razão Social e CNPJ do garantidor',
+     'col': 'col-md-8', 'default': 'N/A'},
+    # O Apêndice é ARQUIVO, e por isso não tem `column`: ele não vai para o
+    # banco da lista, vai para o Electronic Inventory da contraparte, como
+    # documento `Transactional` — que é onde os documentos por cliente já vivem
+    # e onde a mesa os procura. Guardá-lo numa pasta nova, só do Onboarding,
+    # criaria um segundo lugar para o mesmo tipo de papel.
+    {'label': 'Apêndice', 'column': '', 'type': 'file',
+     'required': True, 'hint': 'Adicionar o Template para emissão do CGD',
+     'col': 'col-12'},
 )
 
-# Os obrigatórios do formulário, na ordem dele. Derivado do `REQUEST_FORM` e não
-# escrito à mão: duas listas divergiriam no dia em que um campo deixasse de ser
-# obrigatório, e a fila do Banking continuaria cobrando o que ninguém mais pede.
-REQUEST_FIELDS = tuple(f['column'] for f in REQUEST_FORM if f['required'])
+# A pasta do Electronic Inventory em que o Apêndice é gravado, e o prefixo do
+# nome do arquivo. `Transactional` é uma das três pastas do inventário
+# (`routes.EI_SUBFOLDERS`); o prefixo é o que aparece no começo do nome e é por
+# ele que a mesa reconhece o documento na listagem.
+APPENDIX_EI_TYPE = 'Transactional'
+APPENDIX_EI_SUBTYPE = 'CGD TEMPLATE'
+
+# Os obrigatórios do formulário QUE VIRAM COLUNA, na ordem dele. Derivado do
+# `REQUEST_FORM` e não escrito à mão: duas listas divergiriam no dia em que um
+# campo deixasse de ser obrigatório, e a fila do Banking continuaria cobrando o
+# que ninguém mais pede.
+#
+# O `and f['column']` não é defensivo: o Apêndice é obrigatório no formulário e
+# NÃO tem coluna (é arquivo, vai para o Electronic Inventory). Sem o teste, a
+# coluna `''` entraria na lista, nunca estaria preenchida em linha nenhuma e
+# TODO documento ficaria preso no Banking para sempre — sem erro em lugar nenhum.
+REQUEST_FIELDS = tuple(f['column'] for f in REQUEST_FORM
+                       if f['required'] and f['column'])
 
 # As mesas da esteira, NA ORDEM em que o documento passa por elas. `Banking` é a
 # primeira: é quem abre a solicitação do CGD. Era um cartão só, `Banking OTC`, e

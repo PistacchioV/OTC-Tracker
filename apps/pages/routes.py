@@ -2055,12 +2055,50 @@ def dashboard():
     return render_template('pages/index.html', segment='index')
 
 
+# O painel percorre a árvore INTEIRA dos arquivos-dia do New Deals e ABRE cada
+# um deles. Em disco local isso custa milissegundos; no share da instância cada
+# `open()` é uma ida à rede, e um ano de pregão em dez pastas de produto são
+# milhares delas — o request leva minutos e o navegador fica com o traço do
+# placeholder o tempo todo. O sintoma é o pior possível: o servidor ESTÁ lendo, e
+# a tela parece um dia sem operação.
+#
+# O painel é só leitura e agregação, então a resposta serve para todo mundo por
+# alguns minutos. O TTL é curto de propósito: o dashboard é o que a mesa abre
+# depois de importar, e uma janela grande faria a importação "não aparecer".
+_DASH_TTL = float(os.getenv('OTC_DASHBOARD_TTL', '120'))
+_dash_cache = {}
+_dash_cache_lock = threading.Lock()
+
+
+def _dash_stats_cached(period):
+    """A resposta ainda fresca daquele período, ou `None`."""
+    if _DASH_TTL <= 0:
+        return None
+    with _dash_cache_lock:
+        item = _dash_cache.get(period)
+    if not item:
+        return None
+    quando, dados = item
+    return dados if (time.time() - quando) < _DASH_TTL else None
+
+
+def _dash_stats_store(period, dados):
+    """Guarda e DEVOLVE o payload — para o `return` do endpoint ser um só."""
+    if _DASH_TTL > 0:
+        with _dash_cache_lock:
+            _dash_cache[period] = (time.time(), dados)
+    return dados
+
+
 @blueprint.route('/api/dashboard-stats')
 def api_dashboard_stats():
     if not session.get('authenticated'):
         return jsonify({'error': 'unauthorized'}), 401
 
     period = request.args.get('period', 'all')  # month | year | all
+    cache = _dash_stats_cached(period)
+    if cache is not None:
+        return jsonify(cache)
     now = datetime.now()
     cur_month, cur_year = now.month, now.year
 
@@ -2285,7 +2323,7 @@ def api_dashboard_stats():
         for d in recent_sorted
     ]
 
-    return jsonify({
+    return jsonify(_dash_stats_store(period, {
         'ndf_total':     len(ndf_deals),
         'opt_total':     len(opt_deals),
         'pending_total': pending_total,
@@ -2309,7 +2347,7 @@ def api_dashboard_stats():
         'monthly_fxo':   monthly_fxo,
         'monthly_swap':  monthly_swap,
         'recent_deals':  recent_deals,
-    })
+    }))
 
 
 # Live Position entity breakdown. The Banco (holder 73760) is a party to EVERY
