@@ -880,8 +880,7 @@ function renderLiveEntityStats(entities) {
 async function loadLivePosition(dateStr) {
     try {
         const qs = dateStr ? `?date=${dateStr}` : '';
-        const res = await fetch(`/api/dashboard-live-position${qs}`);
-        const data = await res.json();
+        const data = await getJSON(`/api/dashboard-live-position${qs}`);
         _liveData = data;
 
         const total = document.getElementById('live-total');
@@ -948,12 +947,109 @@ function wireLivePosition(attempt) {
 
 // ─── main load ───────────────────────────────────────────────────────────────
 
+/**
+ * Lê a resposta como JSON e, quando ela NÃO é JSON, levanta um erro que diz o
+ * que veio.
+ *
+ * `res.json()` sozinho estoura com "Unexpected token <" quando o servidor
+ * devolve HTML — a página de erro 500, ou o redirecionamento para o login de
+ * uma sessão que expirou. A mensagem não diz nem o status nem o endereço, e o
+ * `catch` de quem chama deixava a tela exatamente como estava: os números no
+ * traço do placeholder e os gráficos vazios, como se não houvesse dado no dia.
+ * Era preciso abrir o console e adivinhar.
+ */
+async function getJSON(url) {
+    const res = await fetch(url, { credentials: 'same-origin' });
+    const texto = await res.text();
+    let dados = null;
+    try {
+        dados = JSON.parse(texto);
+    } catch {
+        const inicio = texto.trim().slice(0, 200).replace(/\s+/g, ' ');
+        throw new Error(`${url} devolveu ${res.status} ${res.statusText} ` +
+                        `(${res.headers.get('content-type') || 'sem content-type'}): ${inicio}`);
+    }
+    // JSON válido com status de erro (o 401 de sessão expirada, o 400 de
+    // parâmetro) também é falha: sem este teste, o corpo `{error: …}` seguia
+    // adiante e cada número virava `undefined` na tela — o que parece defeito
+    // de conta, não sessão vencida.
+    if (!res.ok) {
+        throw new Error(`${url} devolveu ${res.status}: ` +
+                        ((dados && (dados.error || dados.message)) || res.statusText));
+    }
+    return dados;
+}
+
+/**
+ * Põe o motivo NA TELA. O número que JÁ carregou fica: a falha pode ser de um
+ * gráfico só, e apagar o que deu certo esconderia metade da informação junto
+ * com o erro — só o traço do placeholder vira `!`.
+ */
+function mostraFalha(msg) {
+    ['dash-ndf-count', 'dash-opt-count', 'dash-swap-count', 'dash-total-count']
+        .forEach(id => {
+            const el = document.getElementById(id);
+            if (el && /^[–—-]?$/.test((el.textContent || '').trim())) {
+                el.textContent = '!';
+                el.title = msg;
+            }
+        });
+    const alvo = document.getElementById('dash-load-error');
+    if (alvo) {
+        alvo.className = 'alert alert-danger py-2 px-3 mb-3';
+        alvo.textContent = msg;
+    }
+}
+
+/**
+ * Roda um pedaço do desenho isolado dos outros.
+ *
+ * Os seis gráficos e a tabela viviam num `try` só: o primeiro que estourasse
+ * levava junto TODOS os seguintes — um `Chart is not defined` no gráfico de
+ * pizza deixava a página inteira vazia, e a tela não distinguia isso de um dia
+ * sem operação. Aqui cada um cai sozinho e diz o nome.
+ */
+function tenta(nome, fn) {
+    try {
+        fn();
+    } catch (err) {
+        console.error(`[Dashboard] ${nome} falhou:`, err);
+        mostraFalha(`${nome}: ${err && err.message ? err.message : err}`);
+    }
+}
+
+/**
+ * Diz que está BUSCANDO. O traço do placeholder é indistinguível de "não houve
+ * operação no dia", e a leitura pode demorar quando os arquivos-dia estão no
+ * share — foi assim que uma busca lenta passou por painel vazio.
+ */
+function mostraCarregando(ligado) {
+    const alvo = document.getElementById('dash-load-error');
+    if (!alvo) return;
+    if (ligado) {
+        alvo.className = 'alert alert-info py-2 px-3 mb-3';
+        alvo.textContent = t('dash-loading', 'Carregando os dados do painel…');
+    } else {
+        alvo.className = 'alert alert-danger py-2 px-3 mb-3 d-none';
+        alvo.textContent = '';
+    }
+}
+
 let _lastData = null;
 
 async function loadDashboard(period) {
+    mostraCarregando(true);
     try {
-        const res  = await fetch(`/api/dashboard-stats?period=${period}`);
-        const data = await res.json();
+        // O Chart.js vem de `plugins/chartjs/chart.umd.js`. Faltando o arquivo
+        // (404 no share do estático, cache antigo, pull incompleto) TODO gráfico
+        // sai vazio e o console mostra seis vezes o mesmo erro genérico — aqui a
+        // ausência é dita UMA vez, com o nome da biblioteca.
+        if (typeof Chart === 'undefined') {
+            mostraFalha('Chart.js não carregou (plugins/chartjs/chart.umd.js) — ' +
+                        'os gráficos ficam vazios até ele voltar.');
+        }
+
+        const data = await getJSON(`/api/dashboard-stats?period=${period}`);
         _lastData = data;
 
         // Null-safe: a missing/renamed count element must never halt chart rendering.
@@ -970,28 +1066,33 @@ async function loadDashboard(period) {
         setText('dash-swap-count', data.swap_total ?? 0);
         setText('dash-total-count', data.total_deals);
 
-        updatePeriodBadges(period);
-        buildPieChart(data.dist_ndf, data.dist_opt, data.dist_fxo, data.dist_swap,
-                      data.dist_ndf_vanilla, data.dist_ndf_otherpub, data.dist_ndf_fwdstart);
-        buildFlowChart(data.monthly_ndf, data.monthly_opt, data.monthly_fxo, data.monthly_swap,
-                       data.monthly_ndf_vanilla, data.monthly_ndf_otherpub, data.monthly_ndf_fwdstart);
-        buildClientsChart(data.top5_clients);
-        buildProductsChart(data.top5_products);
-        buildCommoditiesChart(data.top5_underlying);
+        mostraCarregando(false);
+        tenta('período', () => updatePeriodBadges(period));
+        tenta('Deal Distribution', () =>
+            buildPieChart(data.dist_ndf, data.dist_opt, data.dist_fxo, data.dist_swap,
+                          data.dist_ndf_vanilla, data.dist_ndf_otherpub, data.dist_ndf_fwdstart));
+        tenta('Deal Flow Analytics', () =>
+            buildFlowChart(data.monthly_ndf, data.monthly_opt, data.monthly_fxo, data.monthly_swap,
+                           data.monthly_ndf_vanilla, data.monthly_ndf_otherpub, data.monthly_ndf_fwdstart));
+        tenta('Top 5 Clients', () => buildClientsChart(data.top5_clients));
+        tenta('Top 5 Products', () => buildProductsChart(data.top5_products));
+        tenta('Top 5 Underlying', () => buildCommoditiesChart(data.top5_underlying));
 
-        _allRecentDeals = data.recent_deals || [];
-        _activeProduct  = 'all';
-        buildProductDropdown(_allRecentDeals);
-        renderRecentTable(_allRecentDeals);
-
-        // Sync filter label with current translation
-        const label = document.getElementById('dash-product-filter-label');
-        if (label) label.textContent = t('dash-filter-all', 'Todos');
+        tenta('Recent deals', () => {
+            _allRecentDeals = data.recent_deals || [];
+            _activeProduct  = 'all';
+            buildProductDropdown(_allRecentDeals);
+            renderRecentTable(_allRecentDeals);
+            const label = document.getElementById('dash-product-filter-label');
+            if (label) label.textContent = t('dash-filter-all', 'Todos');
+        });
 
     } catch (err) {
         console.error('[Dashboard] Failed to load stats:', err);
+        mostraFalha(err && err.message ? err.message : String(err));
         const tbody = document.getElementById('dash-recent-tbody');
-        if (tbody) tbody.innerHTML = '<tr><td colspan="5" class="text-center text-danger py-4">Erro ao carregar dados.</td></tr>';
+        if (tbody) tbody.innerHTML = '<tr><td colspan="5" class="text-center text-danger py-4">' +
+            (err && err.message ? err.message : 'Erro ao carregar dados.') + '</td></tr>';
     }
 }
 
