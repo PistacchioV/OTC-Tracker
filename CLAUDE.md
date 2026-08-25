@@ -995,6 +995,19 @@ estão:
   Assinatura` é o `Signature Type`. Era um cartão só, `Banking OTC`, e ele juntava
   duas mesas que trabalham em momentos diferentes — a que pede o contrato e a que
   o confere depois de assinado.
+- **O `Apêndice` do formulário é ARQUIVO e não tem coluna**: ele vai para o
+  Electronic Inventory da contraparte, pasta `Transactional`, com o prefixo
+  `CGD TEMPLATE` (`APPENDIX_EI_TYPE`/`APPENDIX_EI_SUBTYPE`) — é onde os
+  documentos por cliente já vivem, e uma pasta nova só do Onboarding seria um
+  segundo lugar para o mesmo papel. A contraparte é a **primeira linha** da Razão
+  Social: o campo pede todas as entidades do grupo e a pasta do inventário é de
+  UM cliente. O upload vem **antes** da gravação da linha — ele é a parte que
+  depende do share e é a que falha; na ordem inversa, um share fora do ar deixaria
+  a solicitação criada sem o template, sem nada na tela dizendo isso. E o
+  `REQUEST_FIELDS` filtra `f['column']`: sendo obrigatório e sem coluna, o
+  Apêndice entraria na regra do Banking como a coluna `''`, que nunca está
+  preenchida — TODO documento ficaria preso na primeira fila, para sempre e sem
+  erro nenhum.
 - **`Signature Type` é domínio fechado de TRÊS valores** (`SIGNATURE_TYPES`):
   `FepWeb`, `DocuSign` e `Manual`. O valor gravado é o código em inglês —
   *Física* é só como o `Manual` aparece na tela em português, e gravar os dois

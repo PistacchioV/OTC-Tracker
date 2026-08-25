@@ -1085,12 +1085,19 @@ Abaixo, **quatro cartões verticais**, um por mesa da esteira, na ordem em que o
 **Para abrir uma solicitação:**
 
 1. Clique em **New Request**, no canto direito da faixa de números (o mesmo botão existe na barra do Tracking Docs).
-2. Preencha o formulário. Os campos com **\*** são obrigatórios; o sistema recusa o Save e marca em vermelho os que faltam.
-3. A **CGD - Solicitação** já vem com a data de hoje.
+2. Preencha o formulário. Os campos com **\*** são obrigatórios; o sistema recusa a gravação e marca em vermelho os que faltam.
+3. A **CGD - Solicitação** vem com a data de hoje e **não se edita** — é o dia em que o pedido está sendo aberto, e é dela que o aging conta.
 4. **Razão Social** e **CNPJ** aceitam **todas as entidades do grupo** — são campos de várias linhas.
 5. **CGD - Tipo de Assinatura** é uma lista: *FepWeb*, *DocuSign* ou *Manual* (a assinatura física).
 6. Em **CGD - Domínio cliente**, se o cliente não tiver domínio, escreva `NA`.
-7. Clique em **Create request**. A solicitação entra na lista e aparece na fila da mesa correspondente.
+7. Em **Contatos**, os e-mails que devem entrar na solicitação de SSI.
+8. **Garantidor** já vem em *No*; troque para *Yes* se o cliente tiver um, e preencha **Informações do garantidor** com a razão social e o CNPJ dele (o campo vem com `N/A`).
+9. Em **Apêndice**, anexe o **template para emissão do CGD**.
+10. Clique no botão **verde** do rodapé para gravar. A solicitação entra na lista e aparece na fila da mesa correspondente.
+
+> **O apêndice vai para o Electronic Inventory**, na pasta **Transactional** da contraparte, com o nome `CGD TEMPLATE - <cliente> - <ddmmaaaa>` — é onde os documentos por cliente já vivem e onde a mesa os procura. A contraparte é a **primeira entidade** da *Razão Social*: o campo pede todas as do grupo, uma por linha, e a pasta do inventário é de um cliente só.
+>
+> **O arquivo é gravado ANTES da solicitação.** O anexo é a parte que depende do servidor de arquivos e é a que falha; gravando a linha primeiro, um servidor fora do ar deixaria a solicitação criada **sem** o template e nada na tela diria que faltou. Se o anexo falhar, a tela mostra o motivo e **nada é criado** — corrija e tente de novo.
 
 ![Nova solicitação de CGD](docs/sop-screenshots/onboarding-new-request.png)
 
@@ -1102,8 +1109,10 @@ Abaixo, **quatro cartões verticais**, um por mesa da esteira, na ordem em que o
 | **Razão Social** | `Razão Social` |
 | **CNPJ** | `CNPJ` |
 | **CGD - Tipo de Assinatura** | `Signature Type` |
+| **Contatos** | `Contacts` |
+| **Garantidor** | `Garantidor` |
 
-*Grupo* e *CGD - Domínio cliente* não entram: são opcionais no formulário (o domínio se preenche com `NA` quando o cliente não tem), e cobrá-los deixaria na fila uma solicitação que já pode seguir.
+*Grupo*, *CGD - Domínio cliente* e *Informações do garantidor* não entram: são opcionais no formulário (o domínio se preenche com `NA` quando o cliente não tem, e as informações do garantidor com `N/A` quando não há garantidor), e cobrá-los deixaria na fila uma solicitação que já pode seguir.
 
 **Passo a passo:**
 
