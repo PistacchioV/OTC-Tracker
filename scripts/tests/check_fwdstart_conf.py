@@ -234,5 +234,26 @@ check('e a confirmacao do FWD Start passa a de moeda',
 # A moeda do XML é a Moeda Base do grupo, não a Quantity Currency (que pode ser BRL).
 check('e manda a Moeda Base explicita', 'ccy=merc)' in src, True)
 
+# ── 8. O tipoOperacao do XML ────────────────────────────────────────────────
+# O FWD Start e um NDF: o que ele tem de proprio e a data de inicio la na frente,
+# nao o tipo de operacao. Ele saia com `Termo`, que nao pertence ao dominio que o
+# FepWeb espera nesse campo. E uma palavra so, num arquivo que ninguem abre — o
+# documento e gerado, gravado e enviado sem nada acusar.
+import ast                                                        # noqa: E402
+_arv = ast.parse(src)
+_tipos = {}
+for _no in ast.walk(_arv):
+    if not isinstance(_no, ast.Call):
+        continue
+    if getattr(_no.func, 'id', '') != '_conf_ndf_xml':
+        continue
+    _kw = {k.arg: getattr(k.value, 'value', None) for k in _no.keywords}
+    # A chamada sem `prefixo` e a do NDF Commodities, que usa o default.
+    _tipos[_kw.get('prefixo') or 'NDF_Comm'] = _kw.get('tipo') or 'NDF'
+check('o XML do FWD Start sai com tipoOperacao NDF', _tipos.get('NDF_FwdStart'), 'NDF')
+check('   e as outras tres seguem o produto delas',
+      (_tipos.get('NDF_Comm'), _tipos.get('Opt_Comm'), _tipos.get('Opt_FXO')),
+      ('NDF', 'Option', 'Option'))
+
 print('\n' + ('FALHOU: ' + ', '.join(fails) if fails else 'TUDO OK'))
 sys.exit(1 if fails else 0)
