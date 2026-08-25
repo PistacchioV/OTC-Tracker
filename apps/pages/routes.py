@@ -1005,7 +1005,13 @@ def _migrate_schema():
                 conn.execute("ALTER TABLE notifications ADD COLUMN target_sid VARCHAR DEFAULT ''")
                 conn.commit()
         except Exception:
-            log.debug("[migrate] notifications.target_sid check skipped: %s", traceback.format_exc())
+            # WARNING, e não debug: na instância do time o log de módulo só sai a
+            # partir de WARNING, então um `debug` aqui é o mesmo que silêncio. E
+            # esta migração falhando NÃO é inofensiva — a consulta do sino cita a
+            # coluna, e sem ela todo GET de /api/notifications estoura, a cada 8
+            # segundos, em cada aba aberta.
+            log.warning("[migrate] notifications.target_sid FALHOU — o sino "
+                        "quebra até isto rodar:\n%s", traceback.format_exc())
 
         # Ensure push_subscriptions table exists (Web Push)
         try:
@@ -30869,8 +30875,15 @@ def api_conf_fwdstart_save():
         if picked:
             # A moeda do XML é a Moeda Base (a estrangeira do par), a mesma que
             # dá nome ao grupo — não a Quantity Currency, que pode ser o BRL.
+            # `tipoOperacao` = **NDF**, e não `Termo`. O FWD Start é um NDF —
+            # o que ele tem de próprio é a data de início lá na frente, não o
+            # tipo de operação. `Termo` não pertence ao domínio que o FepWeb
+            # espera nesse campo, e o arquivo era recusado / classificado errado
+            # do outro lado. As outras três confirmações que geram XML já usam o
+            # nome do produto: NDF Commodities manda `NDF` e as duas de opção,
+            # `Option`.
             numero_contrato, xml_str, xml_warns = _conf_ndf_xml(
-                picked, merc, ref, tipo='Termo', prefixo='NDF_FwdStart',
+                picked, merc, ref, tipo='NDF', prefixo='NDF_FwdStart',
                 ccy_field='QuantityCurrency', warn_no_spot=False,
                 legs_fn=_conf_fx_legs, ccy=merc)
             xcand, xn = candidate, 0
@@ -35944,6 +35957,26 @@ def api_tickets_delete(ticket_id):
 # NOTIFICATIONS
 # ==============================================================================
 
+# O último motivo já registrado, para o aviso do sino não repetir a cada poll.
+_notif_fail_last = {'msg': ''}
+
+
+def _notif_query_failed(exc):
+    """Registra a falha da consulta do sino UMA vez por motivo.
+
+    Sem o de-duplicador, oito segundos vezes o número de abas abertas enchem o
+    log com o mesmo traceback e escondem tudo o que veio antes — inclusive a
+    linha da migração que explica a causa.
+    """
+    msg = '%s: %s' % (type(exc).__name__, exc)
+    if _notif_fail_last['msg'] == msg:
+        return
+    _notif_fail_last['msg'] = msg
+    log.error("[notifications] a consulta do sino falhou (%s) — o sino fica "
+              "vazio até isto ser resolvido:\n%s",
+              Config.DATABASE_PATH, traceback.format_exc())
+
+
 @blueprint.route('/api/notifications', methods=['GET'])
 def api_get_notifications():
     if not session.get('authenticated'):
@@ -35956,16 +35989,25 @@ def api_get_notifications():
         # está preenchido, só aquele SID vê a notificação — nem o master, nem
         # quem compartilha o papel. É o que mantém as atualizações de ticket
         # restritas ao requester.
-        rows = conn.execute("""
-            SELECT id, actor_sid, actor_name, action, page, detail, target_role, created_at
-            FROM notifications
-            WHERE DATE(created_at) = CURRENT_DATE
-              AND (COALESCE(target_sid, '') = '' OR COALESCE(target_sid, '') = ?)
-              AND (COALESCE(target_role, '') = ''
-                   OR list_contains(string_split(target_role, ','), ?))
-            ORDER BY created_at DESC
-            LIMIT 50
-        """, [user_sid, user_role]).fetchall()
+        # A consulta falhando NÃO pode derrubar o endpoint: a topbar o chama a
+        # cada 8 segundos POR ABA ABERTA, então um erro aqui vira um 500 a cada 8
+        # segundos por pessoa — o log enche e a causa some no meio das
+        # repetições. O sino fica vazio (o pior que pode acontecer) e o motivo
+        # sai UMA vez, em ERROR.
+        try:
+            rows = conn.execute("""
+                SELECT id, actor_sid, actor_name, action, page, detail, target_role, created_at
+                FROM notifications
+                WHERE DATE(created_at) = CURRENT_DATE
+                  AND (COALESCE(target_sid, '') = '' OR COALESCE(target_sid, '') = ?)
+                  AND (COALESCE(target_role, '') = ''
+                       OR list_contains(string_split(target_role, ','), ?))
+                ORDER BY created_at DESC
+                LIMIT 50
+            """, [user_sid, user_role]).fetchall()
+        except Exception as exc:
+            _notif_query_failed(exc)
+            rows = []
         notifs = []
         for r in rows:
             notifs.append({

@@ -68,8 +68,12 @@ self.addEventListener('push', function (event) {
                 }
                 return self.registration.showNotification(title, {
                     body: body,
-                    icon: '/static/images/favicon.ico',
-                    badge: '/static/images/favicon.ico',
+                    // O `favicon.ico` é a marca CLARA e tem 16×16: o balão do
+                    // sistema é desenhado em fundo claro e amplia o ícone para
+                    // ~48px, então ele saía lavado e borrado. O `-black.png` é a
+                    // versão escura, em 64×64.
+                    icon: '/static/images/favicon-black.png',
+                    badge: '/static/images/favicon-black.png',
                     tag: 'otc-activity',
                     renotify: true,
                     data: { url: url }
@@ -78,7 +82,7 @@ self.addEventListener('push', function (event) {
             .catch(function () {
                 return self.registration.showNotification('OTC Tracker', {
                     body: 'Nova atividade no OTC Tracker',
-                    icon: '/static/images/favicon.ico',
+                    icon: '/static/images/favicon-black.png',
                     tag: 'otc-activity'
                 });
             })
