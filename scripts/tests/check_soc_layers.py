@@ -180,7 +180,9 @@ check('/api/tickets/<ticket_id> registrada',
       '/api/tickets/<ticket_id>' in regras, True)
 check('/api/tickets/<ticket_id>/comment registrada',
       '/api/tickets/<ticket_id>/comment' in regras, True)
-for r in ('/quotes', '/api/quotes/ptax', '/api/quotes/<kind>',
+for r in ('/holidays-calendar', '/api/holidays/calendars', '/api/holidays/save',
+          '/api/fx-holiday-schedules',
+          '/quotes', '/api/quotes/ptax', '/api/quotes/<kind>',
           '/reconciliation-fxo', '/reconciliation-fxo/data',
           '/reconciliation-fxo/run', '/reconciliation-fxo/comment',
           '/onboarding', '/onboarding/tracking-docs', '/cgd',
@@ -195,7 +197,8 @@ for morto in ('_tk_roles_by_sid', '_tk_can_view', '_tk_public',
               '_tk_send_closed_email', 'def api_tickets_list',
               '_cgd_form_ctx', '_cgd_db_ready', 'def api_onboarding_docs',
               'def reconciliation_fxo_run', 'def reconciliation_fxo_comment',
-              '_quotes_underlyings', '_QUOTES_KINDS', 'def api_quotes_ptax'):
+              '_quotes_underlyings', '_QUOTES_KINDS', 'def api_quotes_ptax',
+              '_HOLIDAY_CAL_SEED', '_holiday_cal_slug', 'def api_holidays_save'):
     check('%s saiu do routes.py' % morto, morto in rotas_py, False)
 
 print(('FAIL: %d' % len(fails)) if fails else 'TUDO OK')

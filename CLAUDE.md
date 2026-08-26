@@ -2149,8 +2149,16 @@ features/<nome>/
 ```
 
 Extraídas até aqui: **`support`** (450 linhas / 6 rotas), **`onboarding`**
-(154 / 7), **`reconciliation_fxo`** (101 / 4) e **`quotes`** (129 / 3). O
-`routes.py` saiu de 39.696 para 38.912 linhas.
+(154 / 7), **`reconciliation_fxo`** (101 / 4), **`quotes`** (129 / 3) e
+**`holidays`** (331 / 5). O `routes.py` saiu de 39.696 para 38.587 linhas.
+
+**O `holidays` foi o primeiro com fronteira a decidir.** Ele tinha três
+referências de entrada, e as três eram para o `_anbima_holidays` — que não é o
+calendário DAQUELA tela e sim o de dias úteis do app inteiro (SLA da esteira,
+aging do CGD, schedulers, D-1 das recons). Ele é **horizontal** e ficou no
+`routes.py` esperando o `platform/`; vir junto obrigaria meia dúzia de features
+a importar a vertical de Feriados para saber se sexta é dia útil. Entrada não
+é sinal de que a feature não sai — é sinal de que há plataforma misturada nela.
 
 Nem toda vertical tem `domain.py`: o do Onboarding é o `apps/pages/cgd_docs.py`,
 e ele **fica onde está** porque a Recon de CGD e o /mapping também o consultam —
@@ -2202,8 +2210,8 @@ fora chamam o grupo; saída = de quantas ele depende:
 | `onboarding` (CGD) | 154 | **0** | 3 | ✅ feito |
 | `reconciliation-fxo` | 101 | **0** | 4 | ✅ feito |
 | `quotes` | 129 | **0** | 4 | ✅ feito |
-| `holidays` | 254 | 3 | 11 | próximo |
-| `bacc` · `mt300` · `appver` | ~170–310 | 7–9 | 13–21 | |
+| `holidays` | 331 | 3 | 11 | ✅ feito |
+| `bacc` · `mt300` · `appver` | ~170–310 | 7–9 | 13–21 | próximos |
 | `conf-escalation` · `mdea` | ~314–384 | 12–13 | 17–20 | |
 | `file-interpreter` | 307 | **43** | 4 | tarde |
 | `mapping` | 1263 | 39 | 35 | tarde |

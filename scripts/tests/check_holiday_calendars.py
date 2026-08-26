@@ -58,11 +58,32 @@ def read(rel):
 
 JS = read('apps/static/js/pages/apps-holidays-calendar.js')
 TPL = read('apps/templates/pages/holidays-calendar.html')
-SRC = read('apps/pages/routes.py')
+# O `routes.py` MAIS as verticais: este script casa por TEXTO e por nome de
+# funcao, e o Holidays Calendar virou `features/holidays/`. Sem a concatenacao,
+# a varredura nao fica vermelha — ela para de significar alguma coisa. Mesma
+# correcao do `check_notif_page_url` e do `check_quotes`.
+def _fontes_com_rotas():
+    partes = [read('apps/pages/routes.py')]
+    base = os.path.join(ROOT, 'apps', 'pages', 'features')
+    for raiz, dirs, arqs in os.walk(base):
+        dirs[:] = [d for d in dirs if d != '__pycache__']
+        for a in sorted(arqs):
+            if a.endswith('.py'):
+                partes.append(io.open(os.path.join(raiz, a), encoding='utf-8').read())
+    return '\n'.join(partes)
+
+
+SRC = _fontes_com_rotas()
+
+# As constantes e os helpers do calendario moram na vertical. O que ficou no
+# `routes` foi o `_anbima_holidays` — o calendario de dias UTEIS do app inteiro,
+# que e horizontal e nao pertence a esta tela.
+from apps.pages.features.holidays import domain as HD          # noqa: E402
+from apps.pages.features.holidays.infra import persistence as HP  # noqa: E402
 
 print('\n== 1. o seed do servidor x o fallback do navegador ==')
 check('o seed tem os onze de sempre',
-      [c['name'] for c in R._HOLIDAY_CAL_SEED],
+      [c['name'] for c in HD.CAL_SEED],
       ['ANBIMA', 'BURSA', 'CBY_AGS', 'EURIBOR', 'ICEAGS', 'IPE', 'LME',
        'NYMEX', 'PLATTS-ASIA', 'PLATTS-EUROPE', 'SOFR'])
 
@@ -76,7 +97,7 @@ for linha in re.findall(r'\{([^}]*)\}', bloco):
         row[k] = v
     fallback.append(row)
 check('o fallback tem onze linhas', len(fallback), 11)
-for i, seed in enumerate(R._HOLIDAY_CAL_SEED):
+for i, seed in enumerate(HD.CAL_SEED):
     fb = fallback[i] if i < len(fallback) else {}
     for campo in ('name', 'file', 'class', 'drag', 'color'):
         check('   %s.%s' % (seed['name'], campo), fb.get(campo), seed[campo])
@@ -120,7 +141,7 @@ linhas = [
     ['2026-07-04', '', 'Full'],                           # sem descricao
     ['Total', 4, ''],                                     # rodape
 ]
-got = R._holiday_rows_from_sheet(linhas, 'CME')
+got = HD.rows_from_sheet(linhas, 'CME')
 check('so as linhas que sao feriado', [r['date'] for r in got],
       ['2026-01-01', '2026-04-03', '2026-05-01', '2026-12-25'])
 check('e ordenadas por data', got == sorted(got, key=lambda r: r['date']), True)
@@ -128,43 +149,43 @@ check('a descricao e o titulo', got[0]['title'], 'New Year')
 check('o calendario vai na linha', {r['calendar'] for r in got}, {'CME'})
 # O cabecalho e descartado por nao ser data, e nao por ser a linha 1: uma
 # planilha exportada sem cabecalho perderia o primeiro feriado.
-sem_cab = R._holiday_rows_from_sheet([['2026-01-01', 'New Year', 'Full']], 'CME')
+sem_cab = HD.rows_from_sheet([['2026-01-01', 'New Year', 'Full']], 'CME')
 check('planilha SEM cabecalho nao perde o primeiro feriado', len(sem_cab), 1)
 # A terceira coluna existe na planilha e nao entra: o pedido e explicito.
 check('Holiday Type nao vira campo', sorted(got[0].keys()),
       ['calendar', 'date', 'title'])
 check('planilha sem data nenhuma devolve vazio',
-      R._holiday_rows_from_sheet([['a', 'b', 'c']], 'X'), [])
+      HD.rows_from_sheet([['a', 'b', 'c']], 'X'), [])
 
 print('\n== 5. o slug vira caminho em disco e classe de CSS ==')
-check('espaco vira _', R._holiday_cal_slug('Platts Asia'), 'platts_asia')
-check('hifen tambem', R._holiday_cal_slug('PLATTS-EUROPE'), 'platts_europe')
-check('acento e pontuacao caem', R._holiday_cal_slug('Ação B3!'), 'a_o_b3')
-check('nao sobra _ nas pontas', R._holiday_cal_slug('  CME  '), 'cme')
+check('espaco vira _', HD.slug('Platts Asia'), 'platts_asia')
+check('hifen tambem', HD.slug('PLATTS-EUROPE'), 'platts_europe')
+check('acento e pontuacao caem', HD.slug('Ação B3!'), 'a_o_b3')
+check('nao sobra _ nas pontas', HD.slug('  CME  '), 'cme')
 # Sem isso o nome do calendario escreveria fora da pasta de dados.
 check('travessia de caminho nao sobrevive',
-      R._holiday_cal_slug('../../etc/passwd'), 'etc_passwd')
-check('nome sem letra nem digito devolve vazio', R._holiday_cal_slug('///'), '')
+      HD.slug('../../etc/passwd'), 'etc_passwd')
+check('nome sem letra nem digito devolve vazio', HD.slug('///'), '')
 for nome in ('CME', 'Platts Asia', '../x'):
-    slug = R._holiday_cal_slug(nome)
+    slug = HD.slug(nome)
     check('   %r produz slug seguro' % nome,
           bool(re.fullmatch(r'[a-z0-9_-]*', slug)), True)
 
 print('\n== 6. a cor sai da paleta e foge das usadas ==')
 check('a paleta nao repete cor',
-      len(R._HOLIDAY_CAL_PALETTE), len(set(R._HOLIDAY_CAL_PALETTE)))
+      len(HD.CAL_PALETTE), len(set(HD.CAL_PALETTE)))
 check('nem colide com as dos onze',
-      sorted(set(R._HOLIDAY_CAL_PALETTE) &
-             {c['color'] for c in R._HOLIDAY_CAL_SEED}), [])
+      sorted(set(HD.CAL_PALETTE) &
+             {c['color'] for c in HD.CAL_SEED}), [])
 check('toda cor da paleta e hex de 6 digitos',
-      all(re.fullmatch(r'#[0-9a-f]{6}', c) for c in R._HOLIDAY_CAL_PALETTE), True)
+      all(re.fullmatch(r'#[0-9a-f]{6}', c) for c in HD.CAL_PALETTE), True)
 # Duas pills da mesma cor sao dois calendarios que se leem como um.
-quase_todas = [{'color': c} for c in R._HOLIDAY_CAL_PALETTE[:-1]]
+quase_todas = [{'color': c} for c in HD.CAL_PALETTE[:-1]]
 check('com uma cor livre, e ela que sai',
-      R._holiday_pick_color(quase_todas), R._HOLIDAY_CAL_PALETTE[-1])
+      HD.pick_color(quase_todas), HD.CAL_PALETTE[-1])
 check('esgotada a paleta, ainda devolve cor dela',
-      R._holiday_pick_color([{'color': c} for c in R._HOLIDAY_CAL_PALETTE])
-      in R._HOLIDAY_CAL_PALETTE, True)
+      HD.pick_color([{'color': c} for c in HD.CAL_PALETTE])
+      in HD.CAL_PALETTE, True)
 check('cor nova nunca fica sem CSS: o JS gera a regra',
       'function hcInjectCalendarCss' in JS, True)
 check('e so para as classes geradas',
@@ -174,16 +195,27 @@ print('\n== 7. o Save aceita calendario criado pela tela ==')
 # Era um mapa fixo: o calendario novo levava "Unknown calendar" do endpoint que
 # a propria pagina chama ao gravar um feriado avulso.
 check('o mapa fixo saiu do codigo', '_HOLIDAY_FILE_MAP' in SRC, False)
-check('o Save resolve pelo registro', '_holiday_file_for(calendar_name)' in SRC, True)
-check('ANBIMA resolve', R._holiday_file_for('ANBIMA'), 'anbima.json')
-check('cego a caixa e espaco', R._holiday_file_for(' sofr '), 'sofr.json')
-check('calendario que nao existe devolve None', R._holiday_file_for('XPTO'), None)
-check('nome vazio devolve None', R._holiday_file_for(''), None)
+# Assercao de COMPORTAMENTO e nao de texto: prender a grafia da chamada faz o
+# teste quebrar a cada refatoracao sem que nada tenha mudado para a tela. O que
+# importa e que uma linha que so existe no REGISTRO seja resolvida — e um mapa
+# fixo no codigo nao teria como conhece-la.
+_cal_orig = HP.calendars
+HP.calendars = lambda: list(HD.CAL_SEED) + [
+    {'name': 'CRIADO PELA TELA', 'file': 'criado_pela_tela.json'}]
+try:
+    check('o Save resolve pelo registro (inclusive o criado pela tela)',
+          HP.file_for('criado pela tela'), 'criado_pela_tela.json')
+finally:
+    HP.calendars = _cal_orig
+check('ANBIMA resolve', HP.file_for('ANBIMA'), 'anbima.json')
+check('cego a caixa e espaco', HP.file_for(' sofr '), 'sofr.json')
+check('calendario que nao existe devolve None', HP.file_for('XPTO'), None)
+check('nome vazio devolve None', HP.file_for(''), None)
 # O registro mora na pasta dos dados e NAO e uma agenda de feriados.
-bloco_sys = SRC.split('def api_fx_holiday_schedules', 1)[1] \
-               .split('_SYSTEM_FILES = {', 1)[1].split('}', 1)[0]
+bloco_sys = SRC.split('def fx_schedule_names', 1)[1] \
+               .split('sistema = {', 1)[1].split('}', 1)[0]
 check('o registro nao vira FX holiday schedule',
-      '_HOLIDAY_CAL_FILE' in bloco_sys, True)
+      'domain.CAL_FILE' in bloco_sys, True)
 
 print('\n== 8. o aviso do sino tem destino nos TRES mapas ==')
 check('routes', R._NOTIF_PAGE_URL.get('Holidays Calendar'), '/holidays-calendar')
