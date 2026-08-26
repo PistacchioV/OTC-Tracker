@@ -189,7 +189,14 @@ for r in ('/holidays-calendar', '/api/holidays/calendars', '/api/holidays/save',
           '/api/onboarding/overview', '/api/onboarding/docs',
           '/api/onboarding/docs/save', '/api/onboarding/docs/delete',
           '/api/control-panel/bacc-ea-metrics/recipients',
-          '/api/control-panel/bacc-ea-metrics/run'):
+          '/api/control-panel/bacc-ea-metrics/run',
+          '/api/control-panel/mt300/recipients', '/api/control-panel/mt300/run',
+          '/api/control-panel/app-version/recipients',
+          '/api/control-panel/app-version/run',
+          '/api/control-panel/manual-deals-ea/recipients',
+          '/api/control-panel/manual-deals-ea/run',
+          '/api/control-panel/confirmations-escalation/recipients',
+          '/api/control-panel/confirmations-escalation/run'):
     check('%s registrada' % r, r in regras, True)
 
 print('\n== 8. o que saiu do routes.py nao ficou nele ==')
@@ -202,7 +209,15 @@ for morto in ('_tk_roles_by_sid', '_tk_can_view', '_tk_public',
               '_quotes_underlyings', '_QUOTES_KINDS', 'def api_quotes_ptax',
               '_HOLIDAY_CAL_SEED', '_holiday_cal_slug', 'def api_holidays_save',
               '_BACC_COLUMNS', '_bacc_rows', '_bacc_build_xlsx', '_bacc_send_email',
-              '_bacc_disparar', 'def api_cp_bacc_run'):
+              '_bacc_disparar', 'def api_cp_bacc_run',
+              '_MT300_TIME', '_mt300_rows', '_mt300_is_target', '_mt300_send_email',
+              '_mt300_disparar', 'def api_cp_mt300_run',
+              '_APPVER_LINK_FILE', '_appver_read_link', '_appver_active_users',
+              '_appver_run', 'def api_cp_app_version_run',
+              '_MDEA_KINDS', '_mdea_rows', '_mdea_rebook_record', '_mdea_send_email',
+              '_mdea_disparar', 'def api_cp_mdea_run',
+              '_CE_FO_GROUPS', '_ce_snapshot', '_ce_run', '_ce_send_email',
+              '_ce_is_routine_day', 'def api_cp_conf_escalation_run'):
     check('%s saiu do routes.py' % morto, morto in rotas_py, False)
 
 print(('FAIL: %d' % len(fails)) if fails else 'TUDO OK')

@@ -37,6 +37,9 @@ os.chdir(ROOT)
 from apps import create_app                                  # noqa: E402
 from apps.config import DebugConfig                          # noqa: E402
 from apps.pages import routes as R                           # noqa: E402
+# O MT300 saiu do routes.py para features/mt300 — os nomes agora moram la.
+from apps.pages.features.mt300 import commands as MC, domain as MD, queries as MQ  # noqa: E402
+from apps.pages.features.mt300.infra import mail as MM, persistence as MP          # noqa: E402
 from flask import render_template                            # noqa: E402
 
 fails = []
@@ -57,8 +60,8 @@ def read(rel):
 app = create_app(DebugConfig)
 REF = datetime(2026, 8, 7)
 tmp = tempfile.mkdtemp(prefix='check-mt300-')
-_orig = {'dir': R._GENERIC_ND_PRODUCTS['vanilla']['dir'], 'rec': R._MT300_REC_FILE,
-         'claim': R._MT300_CLAIM_FILE, 'status': R._MT300_STATUS_FILE, 'd': R._MT300_DIR}
+_orig = {'dir': R._GENERIC_ND_PRODUCTS['vanilla']['dir'], 'd': R._DAILY_METRIC_DIR,
+         'send': MM.send}
 
 
 def deal(nome, cliente, cnpj, spn, notional, direction='SELL', rate='5.25470000'):
@@ -83,13 +86,10 @@ try:
         deal('D5VL-OUTRO', 'SUZANO SA', '16.404.287/0001-55', '999', '100.00', 'BUY'),
     ]))
     R._GENERIC_ND_PRODUCTS['vanilla']['dir'] = tmp
-    R._MT300_DIR = tmp
-    R._MT300_REC_FILE = os.path.join(tmp, 'rec.json')
-    R._MT300_CLAIM_FILE = os.path.join(tmp, 'sent.json')
-    R._MT300_STATUS_FILE = os.path.join(tmp, 'status.json')
+    R._DAILY_METRIC_DIR = tmp
 
     print('== 1. So as contrapartes do cadastro entram ==')
-    rows = R._mt300_rows(REF)
+    rows = MQ.rows(REF)
     check('as tres cadastradas, e so elas', [r['deal'] for r in rows],
           ['D5VL-2HTCA4', 'D5VL-2HTCIL', 'D5VL-SONOME'])
     check('   e quem esta fora do cadastro nao entra',
@@ -126,41 +126,41 @@ try:
     # A compra sai POSITIVA — o sinal e da direcao, nao do arquivo.
     io.open(os.path.join(d, '20260807_ndfvanilla.json'), 'w', encoding='utf-8').write(json.dumps([
         deal('D5VL-COMPRA', 'NESTLE BRASIL LTDA', '60.409.075/0001-52', '806544', '10.00', 'BUY')]))
-    r_compra = R._mt300_rows(REF)[0]
+    r_compra = MQ.rows(REF)[0]
     check('a compra sai POSITIVA', r_compra['qty'], '10.00')
     check('   e a position se inverte junto', r_compra['position'], 'JPM buys USD / sells BRL')
     # A entidade sai da LE do deal, nao de um literal: a mesma operacao e bookada
     # em entidades diferentes, e a mensagem e confirmada por quem a bookou.
     check('a entidade vem da LE do deal',
-          R._mt300_position({'LE': 'MGT', 'QuantityCurrency': 'USD',
+          MD.position({'LE': 'MGT', 'QuantityCurrency': 'USD',
                              'OtherQuantityCurrency': 'BRL', 'Direction': 'SELL'}),
           'MGT sells USD / buys BRL')
     # Sem uma das moedas nao da para dizer a operacao: melhor a celula vazia do
     # que uma frase pela metade.
     check('sem moeda, a celula fica vazia',
-          R._mt300_position({'LE': 'JPM', 'QuantityCurrency': 'USD',
+          MD.position({'LE': 'JPM', 'QuantityCurrency': 'USD',
                              'OtherQuantityCurrency': '', 'Direction': 'BUY'}), '')
 
     print('\n== 3. Sem operacao do grupo, o e-mail NAO sai ==')
     io.open(os.path.join(d, '20260807_ndfvanilla.json'), 'w', encoding='utf-8').write(json.dumps([
         deal('D5VL-OUTRO', 'SUZANO SA', '16.404.287/0001-55', '999', '100.00')]))
     enviados = []
-    R._mt300_send_email = lambda rows, to, cc, ref: (
+    MM.send = lambda rows, to, cc, ref: (
         enviados.append({'rows': len(rows), 'to': list(to), 'cc': list(cc)}) or True)
     with app.test_request_context():
-        R._save_mt300_recipients({'to': 'bacc@x.com'})
-        out = R._mt300_run(REF)
+        MP.save_recipients({'to': 'bacc@x.com'})
+        out = MC.run(REF)
         check('dia sem operacao do grupo', (out['sent'], out['reason']), (False, 'empty'))
         check('   e nem monta o e-mail', enviados, [])
         # Com operacao, mas sem TO: o pedido nao saiu de casa. Desfecho DISTINTO.
         io.open(os.path.join(d, '20260807_ndfvanilla.json'), 'w', encoding='utf-8').write(
             json.dumps([deal('D5VL-2HTCA4', 'NESTLE BRASIL LTDA', '60.409.075/0001-52',
                              '806544', '1,572,509.21')]))
-        R._save_mt300_recipients({'to': ''})
-        out = R._mt300_run(REF)
+        MP.save_recipients({'to': ''})
+        out = MC.run(REF)
         check('com operacao e sem TO', (out['sent'], out['reason']), (False, 'no_recipient'))
-        R._save_mt300_recipients({'to': 'bacc@x.com'})
-        out = R._mt300_run(REF)
+        MP.save_recipients({'to': 'bacc@x.com'})
+        out = MC.run(REF)
         check('com os dois, envia', (out['sent'], out['rows']), (True, 1))
         check('   e o Cc padrao e a caixa do OTC Ops', enviados[-1]['cc'],
               ['brazil.otc.ops@jpmorgan.com'])
@@ -170,7 +170,7 @@ try:
     check('as seis empresas do grupo estao no seed', len(seed), 6)
     check('   com CNPJ e SPN em todas',
           all(r['CNPJ'] and r['SPN'] for r in R._MAPPING_DEFS['mt300']['seed']), True)
-    check('o horario e 19:30', R._MT300_TIME, (19, 30))
+    check('o horario e 19:30', MD.TIME, (19, 30))
     check('o card esta no registro de acesso',
           any(c['id'] == 'mt300' for c in R._CONTROL_PANEL_CARDS), True)
     check('   e os dois endpoints apontam para ele',
@@ -202,8 +202,8 @@ try:
         check('%s.json tem as chaves' % lang, faltando, [])
 finally:
     R._GENERIC_ND_PRODUCTS['vanilla']['dir'] = _orig['dir']
-    R._MT300_REC_FILE, R._MT300_CLAIM_FILE = _orig['rec'], _orig['claim']
-    R._MT300_STATUS_FILE, R._MT300_DIR = _orig['status'], _orig['d']
+    R._DAILY_METRIC_DIR = _orig['d']
+    MM.send = _orig['send']
     shutil.rmtree(tmp, ignore_errors=True)
 
 print('\n' + ('FALHOU: ' + ', '.join(fails) if fails else 'TUDO OK'))

@@ -5,6 +5,9 @@ preservando o B3 ID, e-mail sem deal NAO arquivado, e o roteamento por produto.
 Nao toca em Outlook nem em rede.
 """
 import io, json, os, shutil, sys, tempfile, types
+# Este teste PROVA que o create_app sobe o scheduler (com o laco stubado),
+# entao o kill-switch dos outros testes nao pode valer aqui.
+os.environ.pop('OTC_DISABLE_SCHEDULERS', None)
 
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))   # scripts/tests/ -> raiz do repo
 sys.path.insert(0, ROOT)

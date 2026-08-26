@@ -58,10 +58,13 @@ for sid, nome, mail, status in [
 _c.close()
 
 from apps.pages import routes as R                         # noqa: E402
+# O card saiu do routes.py para features/appver — os nomes agora moram la, e os
+# arquivos pendem da pasta de plataforma (routes._DAILY_METRIC_DIR) por busca
+# atrasada: UM redirecionamento aponta todos para o tmp.
+from apps.pages.features.appver import commands as AC, domain as AD   # noqa: E402
+from apps.pages.features.appver.infra import persistence as AP        # noqa: E402
 R.DB_PATH = DB
-R._APPVER_DIR = TMP
-R._APPVER_REC_FILE = os.path.join(TMP, 'rec.json')
-R._APPVER_STATUS_FILE = os.path.join(TMP, 'status.json')
+R._DAILY_METRIC_DIR = TMP
 
 from apps import create_app                                # noqa: E402
 from apps.config import DebugConfig                        # noqa: E402
@@ -84,7 +87,7 @@ def link(conteudo, binario=False):
     p = os.path.join(TMP, 'link.txt')
     with open(p, 'wb' if binario else 'w', **({} if binario else {'encoding': 'utf-8'})) as fh:
         fh.write(conteudo)
-    R._APPVER_LINK_FILE = p
+    AP.LINK_FILE = p
     return p
 
 
@@ -103,7 +106,7 @@ CASOS = [
 ]
 for conteudo, esperado in CASOS:
     link(conteudo)
-    check('%-46r -> %s' % (conteudo[-46:], esperado), R._appver_read_link()[0], esperado)
+    check('%-46r -> %s' % (conteudo[-46:], esperado), AP.read_link()[0], esperado)
 
 print('\n== 2. e quando ela NAO sai, o erro e dito ==')
 for conteudo, rotulo in [('', 'arquivo vazio'),
@@ -111,11 +114,11 @@ for conteudo, rotulo in [('', 'arquivo vazio'),
                          ('um paragrafo inteiro que nao e versao nenhuma e passa dos quarenta',
                           'texto longo demais para ser versao')]:
     link(conteudo)
-    v, _bruto, err = R._appver_read_link()
+    v, _bruto, err = AP.read_link()
     check(rotulo + ': sem versao', v, '')
     check(rotulo + ': com motivo', bool(err), True)
-R._APPVER_LINK_FILE = os.path.join(TMP, 'nao-existe.txt')
-_v, _b, _e = R._appver_read_link()
+AP.LINK_FILE = os.path.join(TMP, 'nao-existe.txt')
+_v, _b, _e = AP.read_link()
 check('arquivo ausente: sem versao', _v, '')
 check('arquivo ausente: com motivo', 'FileNotFoundError' in _e, True)
 
@@ -123,10 +126,10 @@ print('\n== 3. cp1252 nao derruba a leitura ==')
 # O arquivo e escrito no Windows; um acento em cp1252 estouraria o utf-8, e
 # perder o acento e melhor do que nao ler a versao.
 link('Vers\xe3o v7\n'.encode('cp1252'), binario=True)
-check('acento em cp1252', R._appver_read_link()[0], 'v7')
+check('acento em cp1252', AP.read_link()[0], 'v7')
 
 print('\n== 4. o destinatario e quem esta ATIVO ==')
-ativos = R._appver_active_users()
+ativos = AP.active_users()
 check('so os Active', sorted(e for _, e in ativos),
       ['ana@jpmorgan.com', 'bruno@jpmorgan.com'])
 check('Pending e Inactive ficam de fora',
@@ -157,22 +160,22 @@ R.smtplib.SMTP = _SMTPFake
 R._create_notification = lambda *a, **k: None
 
 print('\n== 5. sem versao, o e-mail NAO sai ==')
-R._APPVER_LINK_FILE = os.path.join(TMP, 'nao-existe.txt')
-out = R._appver_run()
+AP.LINK_FILE = os.path.join(TMP, 'nao-existe.txt')
+out = AC.run()
 check('desfecho no_version', out.get('reason'), 'no_version')
 check('e nada foi enviado', len(enviados), 0)
 
 print('\n== 6. sem usuario ativo, tambem nao ==')
 link(r'\\srv\otc-source\v8')
-_real_ativos = R._appver_active_users
-R._appver_active_users = lambda: []
-out = R._appver_run()
+_real_ativos = AP.active_users
+AP.active_users = lambda: []
+out = AC.run()
 check('desfecho no_recipient', out.get('reason'), 'no_recipient')
 check('e nada foi enviado', len(enviados), 0)
-R._appver_active_users = _real_ativos
+AP.active_users = _real_ativos
 
 print('\n== 7. o caminho feliz ==')
-out = R._appver_run('bruno@jpmorgan.com; chefe@jpmorgan.com')
+out = AC.run('bruno@jpmorgan.com; chefe@jpmorgan.com')
 check('enviou', out.get('sent'), True)
 check('a versao anunciada', out.get('version'), 'v8')
 check('para os dois ativos', out.get('to'), 2)
@@ -202,13 +205,13 @@ check('a mensagem tem uma parte HTML', bool(_texto), True)
 _html = _texto            # o mesmo conteudo; nome proprio para as checagens de href
 for trecho, rotulo in [
         ('v8', 'a versao'),
-        (R._APPVER_STARTER, 'o nome do .bat a executar'),
+        (AD.STARTER, 'o nome do .bat a executar'),
         ('DevShell', 'a janela que tem de ser fechada'),
         ('Ctrl + C', 'como parar o processo'),
         ('Close the application that is running', 'o passo 1: derrubar o que esta no ar')]:
     check('o corpo cita ' + rotulo, trecho in _texto, True)
 check('o passo 1 vem ANTES do .bat no corpo',
-      _texto.index('Close the application') < _texto.index(R._APPVER_STARTER), True)
+      _texto.index('Close the application') < _texto.index(AD.STARTER), True)
 
 # O .bat NAO se abre com duplo clique: ele tem de rodar DENTRO do DevShell. O
 # texto dizia "(double-click)", que e o caminho que nao funciona — e e o que a
@@ -223,21 +226,21 @@ check('   sem sobrar o "(double-click)" antigo',
 # Os DOIS enderecos, e nenhum deles derivado do hostname: cada pessoa roda a
 # propria instancia, e o hostname de quem ENVIA nao abre nada para quem recebe
 # (o e-mail saia com `http://chcd293c37n1:8050`, a maquina de uma pessoa so).
-check('o passo 3 traz o atalho interno', R._APPVER_SHORTCUT in _texto, True)
-check('   e o localhost', R._APPVER_LOCAL_URL in _texto, True)
+check('o passo 3 traz o atalho interno', AP.SHORTCUT in _texto, True)
+check('   e o localhost', AP.local_url() in _texto, True)
 check('   e nao o hostname da maquina que enviou',
       R._otc_app_url() in _texto, False)
 # O atalho se ESCREVE `go/otctracker`, mas como `href` isso e caminho RELATIVO:
 # clicado no Outlook, o link morre. O texto fica; o destino ganha o esquema.
 check('o atalho tem esquema no href',
-      'href="{}"'.format(R._appver_href(R._APPVER_SHORTCUT)) in _texto
-      or R._appver_href(R._APPVER_SHORTCUT) in _texto, True)
+      'href="{}"'.format(AD.href(AP.SHORTCUT)) in _texto
+      or AD.href(AP.SHORTCUT) in _texto, True)
 check('   e o _appver_href nao mexe em quem ja tem esquema',
-      R._appver_href('http://localhost:8051'), 'http://localhost:8051')
+      AD.href('http://localhost:8051'), 'http://localhost:8051')
 
 print('\n== 9. o status gravado responde "o aviso saiu?" ==')
-R._appver_status_write('sent:v8:2', datetime(2026, 8, 26, 10, 30))
-st = R._appver_read_status()
+AP.write_status('sent:v8:2', datetime(2026, 8, 26, 10, 30))
+st = AP.read_status()
 check('guarda o resultado', st.get('result'), 'sent:v8:2')
 check('e o horario', st.get('at'), '26/08/2026 10:30:00')
 
@@ -274,7 +277,7 @@ check('sem sessao devolve 401',
 d = cl.get('/api/control-panel/app-version/recipients').get_json()
 check('o GET traz a versao', d.get('version'), 'v8')
 check('e quantos receberiam', d.get('active_users'), 2)
-check('e o caminho lido', d.get('path'), R._APPVER_LINK_FILE)
+check('e o caminho lido', d.get('path'), AP.LINK_FILE)
 check('e um trecho do arquivo, para conferir',
       d.get('link_preview', '').endswith('v8'), True)
 
@@ -291,7 +294,7 @@ check('responde 200', r.status_code, 200)
 check('com sucesso', b.get('success'), True)
 check('e mandou uma mensagem', len(enviados), 1)
 
-R._APPVER_LINK_FILE = os.path.join(TMP, 'nao-existe.txt')
+AP.LINK_FILE = os.path.join(TMP, 'nao-existe.txt')
 enviados[:] = []
 r = cl.post('/api/control-panel/app-version/run', json={'cc': ''})
 # 400 e nao 500: o pedido esta bem formado, falta o arquivo dizer a versao.

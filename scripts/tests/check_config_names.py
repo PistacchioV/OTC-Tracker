@@ -25,6 +25,10 @@ Não toca em dado real: nada é aberto, nada é gravado.
 import ast
 import io
 import os
+# Este teste sobe o app varias vezes reimportando apps.* — um scheduler vivo
+# importando o routes no meio disso e uma corrida de import, e o catch-up
+# tentaria o slot REAL do dia. O kill-switch desliga todos.
+os.environ['OTC_DISABLE_SCHEDULERS'] = '1'
 import sys
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))

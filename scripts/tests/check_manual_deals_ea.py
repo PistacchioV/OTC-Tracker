@@ -37,7 +37,10 @@ os.chdir(ROOT)
 
 from apps import create_app                                  # noqa: E402
 from apps.config import DebugConfig                          # noqa: E402
-from apps.pages import routes as R                           # noqa: E402
+from apps.pages import routes as R
+# O card saiu do routes.py para features/mdea — os nomes agora moram la.
+from apps.pages.features.mdea import commands as EC, domain as ED, queries as EQ  # noqa: E402
+from apps.pages.features.mdea.infra import mail as EM, persistence as EP          # noqa: E402                           # noqa: E402
 
 fails = []
 
@@ -59,9 +62,8 @@ REF = datetime(2026, 8, 11)
 tmp = tempfile.mkdtemp(prefix='check-mdea-')
 
 _orig = {'dir': R._GENERIC_ND_PRODUCTS['other-publishers']['dir'],
-         'rebook': R._MDEA_REBOOK_DIR, 'intern': R._pc_is_internal_counterparty,
-         'recfile': R._MDEA_REC_FILE, 'claim': R._MDEA_CLAIM_FILE,
-         'status': R._MDEA_STATUS_FILE, 'mdir': R._MDEA_DIR}
+         'rebook': EP.REBOOK_DIR, 'intern': R._pc_is_internal_counterparty,
+         'mdir': R._DAILY_METRIC_DIR, 'send': EM.send}
 try:
     op_dir = os.path.join(tmp, 'OtherPublisher', '2026', '08')
     os.makedirs(op_dir, exist_ok=True)
@@ -74,18 +76,15 @@ try:
             {'Deal': '', 'Client': 'SEM DEAL', 'LE': 'JPM', 'SPN': '111'},
         ]))
     R._GENERIC_ND_PRODUCTS['other-publishers']['dir'] = os.path.join(tmp, 'OtherPublisher')
-    R._MDEA_REBOOK_DIR = os.path.join(tmp, 'FwdStartRebooks')
-    R._MDEA_DIR = tmp
-    R._MDEA_REC_FILE = os.path.join(tmp, 'rec.json')
-    R._MDEA_CLAIM_FILE = os.path.join(tmp, 'sent.json')
-    R._MDEA_STATUS_FILE = os.path.join(tmp, 'status.json')
+    EP.REBOOK_DIR = os.path.join(tmp, 'FwdStartRebooks')
+    R._DAILY_METRIC_DIR = tmp
     # O ECONOMIC GROUP do RefData e quem responde; aqui so a Lawton e interna —
     # e o Banco Safra, que COMECA com "BANCO", e cliente.
     R._pc_is_internal_counterparty = lambda c, spn='': 'LAWTON' in str(c).upper()
 
     print('== 1. Other Publisher: so contraparte externa, do proprio dia ==')
     with app.test_request_context():
-        op = R._mdea_rows('otherpub', REF)
+        op = EQ.rows('otherpub', REF)
     check('so as externas entram', [r['deal'] for r in op], ['D5VL-AAA', 'D5VL-BBB'])
     check('a perna interna (Lawton) fica de fora',
           [r for r in op if 'LAWTON' in r['cpty'].upper()], [])
@@ -102,9 +101,9 @@ try:
 
     print('\n== 2. FWD Start: o Deal e o do VANILLA, e o par e GRAVADO ==')
     with app.test_request_context():
-        R._mdea_rebook_record([({'Deal': 'D5VL-VANILLA', 'Client': 'NATURA LTDA', 'LE': 'JPM',
+        EC.record_rebooks([({'Deal': 'D5VL-VANILLA', 'Client': 'NATURA LTDA', 'LE': 'JPM',
                                  'SPN': '111', 'TradeDate': '11/08/2026'}, 'D5VL-FWDORIG')], REF)
-        fs = R._mdea_rows('fwdstart', REF)
+        fs = EQ.rows('fwdstart', REF)
     check('uma linha, com o Deal do re-booking em vanilla',
           [r['deal'] for r in fs], ['D5VL-VANILLA'])
     # O Deal do FWD Start original NAO pode sair: ele foi cancelado, e pedir para
@@ -112,13 +111,13 @@ try:
     check('o Deal do FWD Start original NAO aparece',
           [r for r in fs if r['deal'] == 'D5VL-FWDORIG'], [])
     check('mas ele fica gravado no par, para a conferencia',
-          [r.get('FwdStartDeal') for r in R._mdea_rebook_rows(REF)], ['D5VL-FWDORIG'])
+          [r.get('FwdStartDeal') for r in EP.rebook_rows(REF)], ['D5VL-FWDORIG'])
     # A API e puxada a cada 20 min: o mesmo par volta em toda corrida do dia.
     with app.test_request_context():
-        R._mdea_rebook_record([({'Deal': 'D5VL-VANILLA', 'Client': 'NATURA LTDA'}, 'D5VL-FWDORIG')], REF)
-    check('a mesma operacao nao e gravada duas vezes', len(R._mdea_rebook_rows(REF)), 1)
+        EC.record_rebooks([({'Deal': 'D5VL-VANILLA', 'Client': 'NATURA LTDA'}, 'D5VL-FWDORIG')], REF)
+    check('a mesma operacao nao e gravada duas vezes', len(EP.rebook_rows(REF)), 1)
     check('dia sem fixacao devolve lista vazia, e nao erro',
-          R._mdea_rows('fwdstart', datetime(2026, 8, 12)), [])
+          EQ.rows('fwdstart', datetime(2026, 8, 12)), [])
 
     # FWD Start bookado e fixado no MESMO dia nao entra: ele nao ficou esperando
     # o fixing, e um trade normal do dia — o EA automatico o enxerga como
@@ -127,7 +126,7 @@ try:
     # vanilla E a Strike Set Date por construcao do pareamento, entao compara-la
     # excluiria TODAS as linhas.
     with app.test_request_context():
-        R._mdea_rebook_record([
+        EC.record_rebooks([
             ({'Deal': 'VAN-ANTIGO', 'Client': 'NATURA LTDA', 'LE': 'JPM'},
              {'deal': 'FWD-ANTIGO', 'trade': '20/07/2026'}),
             ({'Deal': 'VAN-MESMODIA', 'Client': 'BAYER S.A.', 'LE': 'JPM'},
@@ -135,7 +134,7 @@ try:
             ({'Deal': 'VAN-SEMDATA', 'Client': 'NUTRADE LTDA', 'LE': 'JPM'},
              {'deal': 'FWD-SEMDATA', 'trade': ''}),
         ], REF)
-        fs2 = [r['deal'] for r in R._mdea_rows('fwdstart', REF)]
+        fs2 = [r['deal'] for r in EQ.rows('fwdstart', REF)]
     check('o FWD Start bookado e fixado no mesmo dia fica FORA',
           'VAN-MESMODIA' in fs2, False)
     check('   e o bookado antes continua entrando', 'VAN-ANTIGO' in fs2, True)
@@ -146,8 +145,8 @@ try:
     # As datas vem de arquivos diferentes e ja apareceram com zero a esquerda de
     # um jeito e de outro: comparar o texto cru erraria em silencio.
     check('a comparacao de data e normalizada, nao textual',
-          [R._mdea_date_key('11/08/2026'), R._mdea_date_key('2026-08-11'),
-           R._mdea_date_key(''), R._mdea_date_key('lixo')],
+          [EQ.date_key('11/08/2026'), EQ.date_key('2026-08-11'),
+           EQ.date_key(''), EQ.date_key('lixo')],
           ['2026-08-11', '2026-08-11', '', ''])
     # O store NAO pode morar no cache do New Deals: o Monitor varre aquela arvore
     # e trata todo diretorio novo como um PRODUTO — foi assim que nasceu um card
@@ -157,43 +156,43 @@ try:
 
     print('\n== 3. Os desfechos do envio sao TRES, e nao dois ==')
     enviados = []
-    R._mdea_send_email = lambda kind, rows, to, cc, ref: (
+    EM.send = lambda kind, rows, to, cc, ref: (
         enviados.append({'kind': kind, 'rows': len(rows), 'to': list(to), 'cc': list(cc)}) or True)
     with app.test_request_context():
         # Sem destinatario, MAS com operacao: o pedido nao saiu de casa.
-        R._save_mdea_recipients({'to': '', 'cc': ''})
-        out = R._mdea_run('otherpub', REF)
+        EP.save_recipients({'to': '', 'cc': ''})
+        out = EC.run('otherpub', REF)
         check('sem TO nao envia, e diz por que', (out['sent'], out['reason']), (False, 'no_recipient'))
         check('   e nem monta o e-mail', enviados, [])
         # Lista vazia NAO envia — ao contrario do BACC EA Metrics.
-        R._save_mdea_recipients({'to': 'hub@x.com'})
-        out = R._mdea_run('fwdstart', datetime(2026, 8, 12))
+        EP.save_recipients({'to': 'hub@x.com'})
+        out = EC.run('fwdstart', datetime(2026, 8, 12))
         check('sem operacao nao envia', (out['sent'], out['reason']), (False, 'empty'))
         check('   e o desfecho vazio nao e erro', out.get('error'), None)
-        out = R._mdea_run('otherpub', REF)
+        out = EC.run('otherpub', REF)
         check('com TO e com operacao, envia', out['sent'], True)
         check('   com as linhas do dia', enviados[-1]['rows'], 2)
 
     print('\n== 4. O Cc nasce com a mesa, e o merge nao apaga a outra lista ==')
-    os.remove(R._MDEA_REC_FILE)
+    os.remove(EP.recipients_file())
     check('Cc padrao e a caixa do OTC Ops',
-          R._load_mdea_recipients()['cc'], 'brazil.otc.ops@jpmorgan.com')
-    R._save_mdea_recipients({'to': 'hub@x.com'})
-    check('gravar so o TO nao apaga o Cc', R._load_mdea_recipients()['cc'],
+          EP.load_recipients()['cc'], 'brazil.otc.ops@jpmorgan.com')
+    EP.save_recipients({'to': 'hub@x.com'})
+    check('gravar so o TO nao apaga o Cc', EP.load_recipients()['cc'],
           'brazil.otc.ops@jpmorgan.com')
-    R._save_mdea_recipients({'cc': ''})
-    check('mas limpar o Cc EXPLICITAMENTE vale', R._load_mdea_recipients()['cc'], '')
+    EP.save_recipients({'cc': ''})
+    check('mas limpar o Cc EXPLICITAMENTE vale', EP.load_recipients()['cc'], '')
 
     print('\n== 5. Horarios, claim e catch-up ==')
     check('Other Publisher as 20:00 e FWD Start as 16:30',
-          [R._MDEA_TIME['otherpub'], R._MDEA_TIME['fwdstart']], [(20, 0), (16, 30)])
+          [ED.TIME['otherpub'], ED.TIME['fwdstart']], [(20, 0), (16, 30)])
     check('o slot so e reservado uma vez',
-          [R._mdea_claim_slot('2026-08-11 otherpub 20:00'),
-           R._mdea_claim_slot('2026-08-11 otherpub 20:00')], [True, False])
+          [EP.claim_slot('2026-08-11 otherpub 20:00'),
+           EP.claim_slot('2026-08-11 otherpub 20:00')], [True, False])
     # Falha de envio DEVOLVE o slot: uma queda transitoria do SMTP nao pode
     # custar o e-mail do dia inteiro.
-    R._mdea_release_slot('2026-08-11 otherpub 20:00')
-    check('e devolvido quando o envio falha', R._mdea_claim_slot('2026-08-11 otherpub 20:00'), True)
+    EP.release_slot('2026-08-11 otherpub 20:00')
+    check('e devolvido quando o envio falha', EP.claim_slot('2026-08-11 otherpub 20:00'), True)
 
     print('\n== 6. O card, o template e os tres mapas de acesso ==')
     TPL = read('apps/templates/pages/control-panel.html')
@@ -253,21 +252,24 @@ try:
 
     print('\n== 7. O par e gravado no pull, e nao so registrado no log ==')
     SRC = read('apps/pages/routes.py')
-    check('o pull chama o _mdea_rebook_record', '_mdea_rebook_record(rebooks, now)' in SRC, True)
+    check('o pull chama o record_rebooks da feature',
+          '_mdea.record_rebooks(rebooks, now)' in SRC, True)
     # O scheduler roda fora de request: sem application context o
     # render_template e o _get_logo_path morrem, e so o automatico falha —
     # o botao Run funciona porque roda dentro de um request (CLAUDE.md §7).
-    bloco = SRC.split('def _mdea_send_email', 1)[1].split('\ndef ', 1)[0]
+    MAILSRC = read('apps/pages/features/mdea/infra/mail.py')
+    bloco = MAILSRC.split('def send', 1)[1]
     check('o envio monta a mensagem dentro do application context',
-          'with _app_context():' in bloco, True)
+          'with R._app_context():' in bloco, True)
+    CMDSRC = read('apps/pages/features/mdea/commands.py')
     check('e o horario e o do Brasil, nao o do servidor',
-          '_br_now()' in SRC.split('def _mdea_scheduler_loop', 1)[1].split('\ndef ', 1)[0], True)
+          'R._br_now()' in CMDSRC.split('def scheduler_loop', 1)[1].split('\ndef ', 1)[0], True)
 finally:
     R._GENERIC_ND_PRODUCTS['other-publishers']['dir'] = _orig['dir']
-    R._MDEA_REBOOK_DIR = _orig['rebook']
+    EP.REBOOK_DIR = _orig['rebook']
     R._pc_is_internal_counterparty = _orig['intern']
-    R._MDEA_REC_FILE, R._MDEA_CLAIM_FILE = _orig['recfile'], _orig['claim']
-    R._MDEA_STATUS_FILE, R._MDEA_DIR = _orig['status'], _orig['mdir']
+    R._DAILY_METRIC_DIR = _orig['mdir']
+    EM.send = _orig['send']
     shutil.rmtree(tmp, ignore_errors=True)
 
 print('\n' + ('FALHOU: ' + ', '.join(fails) if fails else 'TUDO OK'))

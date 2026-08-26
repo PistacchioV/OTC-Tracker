@@ -2150,15 +2150,27 @@ features/<nome>/
 
 Extraídas até aqui: **`support`** (450 linhas / 6 rotas), **`onboarding`**
 (154 / 7), **`reconciliation_fxo`** (101 / 4), **`quotes`** (129 / 3),
-**`holidays`** (331 / 5) e **`bacc`** (490 / 2). O `routes.py` saiu de 39.696
-para 38.102 linhas.
+**`holidays`** (331 / 5), **`bacc`** (490 / 2), **`mt300`** (384 / 2),
+**`appver`** (320 / 2), **`mdea`** (491 / 2) e **`conf_escalation`** (576 / 2).
+O `routes.py` saiu de 39.696 para 36.341 linhas.
 
 **O `bacc` foi o primeiro com SCHEDULER, e o registro dele NÃO veio junto.** O
 laço vive em `commands.scheduler_loop`, mas o `_schedule_on_start('bacc-ea', …)`
 fica no bloco de wiring do `routes.py`, ao lado do import do entrypoint:
 chamá-lo do corpo do módulo da feature exigiria importar o `routes` ali — o
 ciclo que a regra abaixo proíbe. O gancho é de plataforma; a feature só expõe o
-`start_scheduler`.
+`start_scheduler`. O mesmo desenho vale para `mt300`, `mdea` e
+`conf_escalation`; o `appver` não tem scheduler (só o botão do card). E os
+laços todos respeitam **`OTC_DISABLE_SCHEDULERS=1`** (`_start_schedulers`): é o
+kill-switch dos testes que sobem o app várias vezes — um catch-up de
+16h/17h/19h30 num processo de TESTE tentaria reivindicar o slot REAL do dia.
+
+**O `mdea` tem a única entrada de fora**: o pull do NDF grava os pares
+(vanilla ↔ FWD Start) via `_mdea.record_rebooks(...)` — import atrasado dentro
+da função, porque os entrypoints só são importados no fim do `routes.py`. E o
+`_otc_app_url` NÃO foi com o `conf_escalation`: endereço absoluto para botão de
+e-mail é plataforma (§7), e ficou no `routes.py` para o próximo e-mail com botão
+não importar a vertical da cobrança.
 
 **O `holidays` foi o primeiro com fronteira a decidir.** Ele tinha três
 referências de entrada, e as três eram para o `_anbima_holidays` — que não é o
@@ -2220,8 +2232,10 @@ fora chamam o grupo; saída = de quantas ele depende:
 | `quotes` | 129 | **0** | 4 | ✅ feito |
 | `holidays` | 331 | 3 | 11 | ✅ feito |
 | `bacc` | 490 | 2 rotas | 17 | ✅ feito |
-| `mt300` · `appver` | ~170–310 | 7–9 | 13–21 | próximos |
-| `conf-escalation` · `mdea` | ~314–384 | 12–13 | 17–20 | |
+| `mt300` | 384 | 2 rotas | 16 | ✅ feito |
+| `appver` | 320 | 2 rotas | 12 | ✅ feito |
+| `mdea` | 491 | 2 rotas + 1 gancho | 18 | ✅ feito |
+| `conf_escalation` | 576 | 2 rotas | 19 | ✅ feito |
 | `file-interpreter` | 307 | **43** | 4 | tarde |
 | `mapping` | 1263 | 39 | 35 | tarde |
 | `notificações` | 393 | **161** | 9 | é PLATAFORMA, não feature |
