@@ -43,6 +43,11 @@ from apps.pages.data_paths import (
     data_dir, data_path, data_write, mapping_file, mapping_write,
     PACKAGED_DIR as PACKAGED_DATA_DIR,
 )
+# Cache de leitura por request + TTL curto entre requests para os JSONs do
+# dia (Operations B3, OTM Settlements...) — ver apps/pages/request_cache.py.
+from apps.pages.request_cache import (
+    req_cached as _req_cached, bump_cache_gen as _bump_cache_gen,
+)
 from apps.pages import blueprint
 # Porte Python do parser de booking recap (o mesmo que otc-fileupload.js faz no
 # navegador) — usado pela varredura agendada do box. Sem dependência externa.
@@ -865,6 +870,20 @@ def _atomic_write_json(file_path, data):
     the file open without FILE_SHARE_DELETE (e.g. _find_deal_in_cache). In that
     case we fall back to a direct write — safe because _cache_lock already
     serialises all concurrent writes to the same file.
+
+    **O `bump_cache_gen` fica AQUI, e não em cada `*_save`.** O
+    `request_cache` pede que quem grava invalide o cache curto do dia, senão a
+    edição de quem salvou fica escondida atrás do TTL de 5 s — a pessoa salva,
+    a tela recarrega e mostra o valor anterior, sem erro nenhum. São 74
+    chamadores deste funil: pedir a chamada em cada um é criar 74 chances de
+    esquecer, e a que faltasse só apareceria como "salvei e não mudou" num
+    caso de borda. No funil, é impossível esquecer.
+
+    Invalidar demais não custa correção, só um relê a mais: o
+    `bump_cache_gen` ignora nome de arquivo sem `YYYYMMDD`, e um arquivo-dia
+    que nenhum loader decorado lê apenas incrementa uma geração que ninguém
+    consulta. O commit é DEPOIS da gravação bem-sucedida — antes, um erro no
+    `os.replace` invalidaria o cache de um dado que continua igual em disco.
     """
     import tempfile
     dir_name = os.path.dirname(file_path)
@@ -874,12 +893,14 @@ def _atomic_write_json(file_path, data):
             json.dump(data, fh, ensure_ascii=False, indent=2)
         try:
             os.replace(tmp_path, file_path)
+            _bump_cache_gen(file_path)
             return
         except PermissionError:
             pass  # Windows: target held open by a reader — fall through
         # Fallback: copy content then remove temp
         with open(file_path, 'w', encoding='utf-8') as fh:
             json.dump(data, fh, ensure_ascii=False, indent=2)
+        _bump_cache_gen(file_path)
         try:
             os.unlink(tmp_path)
         except OSError:
@@ -6486,6 +6507,12 @@ def _ds_write(jp, recs, name, spec, total, processed, delete_path):
     os.makedirs(os.path.dirname(jp), exist_ok=True)
     with open(jp, 'w', encoding='utf-8') as fh:
         json.dump(recs, fh, ensure_ascii=False, indent=2)
+    # Este write não passa pelo `_atomic_write_json`, que é onde os demais
+    # gravadores invalidam o cache de leitura. Sem o bump, a rotina importa o
+    # arquivo do dia e a tela segue mostrando o de antes por até
+    # `SHARED_CACHE_TTL_SECONDS` — o defeito que se lê como "importei e não
+    # apareceu", sem erro nenhum.
+    _bump_cache_gen(jp)
     processed.append({'file': name, 'type': spec['label'], 'kept': len(recs), 'total': total})
     if delete_path:                                    # mirror the VBA Kill (folder source only)
         try:
@@ -6970,6 +6997,7 @@ def _opb3_settle_ok(rec, rules=None):
     return True
 
 
+@_req_cached
 def _opb3_settle_rows(ref):
     """Linhas do Operations B3 de `ref` que valem para liquidação — o
     `_opb3_load` já peneirado pelo cadastro. A PÁGINA Operations B3 segue lendo
@@ -7000,6 +7028,7 @@ def _swadv_indexador(cod, nome):
     return nome_curva
 
 
+@_req_cached
 def _ops_swap_pos_terms(ref):
     """{Contrato → {'op', 'venc', 'idx_banco', 'idx_cliente'}} da posição
     DPOSICAO-SWAP mais recente até D-1 ANBIMA de `ref` (mesmo walk-back de 10
@@ -7575,6 +7604,7 @@ def _latam_equity_b3_index():
     return idx
 
 
+@_req_cached
 def _ops_equity_link(ref):
     """{Título da B3 → o que o Swap Athena teria dito, se tivesse equity}.
 
@@ -9145,8 +9175,9 @@ def _otm_ensure_meta(data, default_status='OK'):
     return changed
 
 
-def _otm_load(ref):
-    """(json_path, data|None) for `ref`; ensures meta on the loaded records."""
+@_req_cached
+def _otm_load_cached(ref):
+    """A leitura em si — é este resultado que o cache guarda. Ver `_otm_load`."""
     jp = _otm_json_path(ref)
     if not os.path.isfile(jp):
         return jp, None
@@ -9159,10 +9190,38 @@ def _otm_load(ref):
     return jp, data
 
 
+def _otm_load(ref):
+    """(json_path, data|None) for `ref`; ensures meta on the loaded records.
+
+    Devolve uma CÓPIA dos registros, nunca a lista que está no cache. Os
+    endpoints de add/edit/delete carregam o dia, mexem na lista e só então
+    gravam (`data.remove(rec)`, `rec[c] = ...`): com o objeto do cache na mão,
+    essa mutação passa a valer para todo mundo ANTES do save — e continua
+    valendo quando o save FALHA. A linha some da tela de quem não pediu nada, e
+    o request seguinte, que dentro do TTL recebe o mesmo objeto, grava por cima
+    o estado que nunca chegou ao disco. É perda de dado sem erro nenhum.
+
+    A cópia é rasa por registro porque toda escrita destes endpoints é escalar
+    (`rec[k] = v`), e ela custa uma fração da leitura do share que o cache
+    existe para poupar.
+    """
+    jp, data = _otm_load_cached(ref)
+    return jp, (None if data is None else [dict(r) for r in data])
+
+
 def _otm_save(jp, data):
+    """Grava o arquivo-dia do OTM Settlements.
+
+    O `_bump_cache_gen` está aqui porque este save NÃO passa pelo
+    `_atomic_write_json` — ele escreve direto. Sem a chamada, os loaders
+    decorados com `@_req_cached` que derivam deste arquivo continuariam
+    servindo o resultado anterior por até `SHARED_CACHE_TTL_SECONDS`: a pessoa
+    edita a linha, a tela recarrega e mostra o valor de antes, sem erro nenhum.
+    """
     os.makedirs(os.path.dirname(jp), exist_ok=True)
     with open(jp, 'w', encoding='utf-8') as fh:
         json.dump(data, fh, ensure_ascii=False, indent=2)
+    _bump_cache_gen(jp)
 
 
 def _otm_find(data, rid):
@@ -9286,6 +9345,7 @@ def _otm_import(ref=None):
     os.makedirs(os.path.dirname(jp), exist_ok=True)
     with open(jp, 'w', encoding='utf-8') as fh:
         json.dump(out, fh, ensure_ascii=False, indent=2)
+    _bump_cache_gen(jp)                                # ver o comentário em `_ds_write`
     _ds_write_updated(jp, ref.strftime('%H:%M:%S'))      # cashflows has no in-file time → import time
     try:
         os.remove(src_path)
@@ -10444,6 +10504,7 @@ def _ndfadv_media_label(date_str):
     return 'Média {}/{}'.format(_NDFADV_MESES[d.month - 1], d.year)
 
 
+@_req_cached
 def _ndfadv_otm_by_suffix(ref):
     """({sufixo do Trade Id → Σ Amount}, {sufixo → Cpty SPN}) do OTM do dia.
 
@@ -12171,8 +12232,9 @@ def _latam_json_path(ref):
                         '{}_{}.json'.format(_LATAM_JSON_BASE, ref.strftime('%Y%m%d')))
 
 
-def _latam_load(ref):
-    """(json_path, data|None) para `ref`, com a meta garantida nos registros."""
+@_req_cached
+def _latam_load_cached(ref):
+    """A leitura em si — é este resultado que o cache guarda. Ver `_latam_load`."""
     jp = _latam_json_path(ref)
     if not os.path.isfile(jp):
         return jp, None
@@ -12185,10 +12247,38 @@ def _latam_load(ref):
     return jp, data
 
 
+def _latam_load(ref):
+    """(json_path, data|None) para `ref`, com a meta garantida nos registros.
+
+    Devolve uma CÓPIA dos registros, nunca a lista que está no cache. Os
+    endpoints de add/edit/delete carregam o dia, mexem na lista e só então
+    gravam (`data.remove(rec)`, `rec[c] = ...`): com o objeto do cache na mão,
+    essa mutação passa a valer para todo mundo ANTES do save — e continua
+    valendo quando o save FALHA. A linha some da tela de quem não pediu nada, e
+    o request seguinte, que dentro do TTL recebe o mesmo objeto, grava por cima
+    o estado que nunca chegou ao disco. É perda de dado sem erro nenhum.
+
+    A cópia é rasa por registro porque toda escrita destes endpoints é escalar
+    (`rec[k] = v`), e ela custa uma fração da leitura do share que o cache
+    existe para poupar.
+    """
+    jp, data = _latam_load_cached(ref)
+    return jp, (None if data is None else [dict(r) for r in data])
+
+
 def _latam_save(jp, data):
+    """Grava o arquivo-dia do Latam Desk Position.
+
+    O `_bump_cache_gen` está aqui porque este save NÃO passa pelo
+    `_atomic_write_json` — ele escreve direto. Sem a chamada, os loaders
+    decorados com `@_req_cached` que derivam deste arquivo continuariam
+    servindo o resultado anterior por até `SHARED_CACHE_TTL_SECONDS`: a pessoa
+    edita a linha, a tela recarrega e mostra o valor de antes, sem erro nenhum.
+    """
     os.makedirs(os.path.dirname(jp), exist_ok=True)
     with open(jp, 'w', encoding='utf-8') as fh:
         json.dump(data, fh, ensure_ascii=False, indent=2)
+    _bump_cache_gen(jp)
 
 
 def _latam_find(data, rid):
@@ -14173,8 +14263,9 @@ def _opb3_ensure_meta(data, default_status='New'):
     return changed
 
 
-def _opb3_load(ref):
-    """(json_path, data|None) for `ref`; ensures meta on the loaded records."""
+@_req_cached
+def _opb3_load_cached(ref):
+    """A leitura em si — é este resultado que o cache guarda. Ver `_opb3_load`."""
     jp = _opb3_json_path(ref)
     if not os.path.isfile(jp):
         return jp, None
@@ -14185,6 +14276,25 @@ def _opb3_load(ref):
         return jp, None
     _opb3_ensure_meta(data)
     return jp, data
+
+
+def _opb3_load(ref):
+    """(json_path, data|None) for `ref`; ensures meta on the loaded records.
+
+    Devolve uma CÓPIA dos registros, nunca a lista que está no cache. Os
+    endpoints de add/edit/delete carregam o dia, mexem na lista e só então
+    gravam (`data.remove(rec)`, `rec[c] = ...`): com o objeto do cache na mão,
+    essa mutação passa a valer para todo mundo ANTES do save — e continua
+    valendo quando o save FALHA. A linha some da tela de quem não pediu nada, e
+    o request seguinte, que dentro do TTL recebe o mesmo objeto, grava por cima
+    o estado que nunca chegou ao disco. É perda de dado sem erro nenhum.
+
+    A cópia é rasa por registro porque toda escrita destes endpoints é escalar
+    (`rec[k] = v`), e ela custa uma fração da leitura do share que o cache
+    existe para poupar.
+    """
+    jp, data = _opb3_load_cached(ref)
+    return jp, (None if data is None else [dict(r) for r in data])
 
 
 def _opb3_find(data, rid):
@@ -14307,6 +14417,7 @@ def _opb3_side_write(recs, raw, ref, src_key):
     os.makedirs(os.path.dirname(b3_jp), exist_ok=True)
     with open(b3_jp, 'w', encoding='utf-8') as fh:
         json.dump(b3_rows, fh, ensure_ascii=False, indent=2)
+    _bump_cache_gen(b3_jp)                             # ver o comentário em `_ds_write`
     _ds_write_updated(b3_jp, _opb3_updated_from(_ds_read_rows(raw)) or ref.strftime('%H:%M:%S'))
 
 

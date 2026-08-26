@@ -67,9 +67,19 @@ def read(path):
 
 
 def write_json(path, data):
+    """Escreve uma fixture — e invalida o cache de leitura, como todo gravador.
+
+    Os loaders de arquivo-dia sao cacheados por um TTL curto
+    (`apps/pages/request_cache.py`), entao quem GRAVA um deles avisa. Em
+    producao isso e o `_atomic_write_json` e as tres rotinas de importacao; aqui
+    e este helper, que reescreve o mesmo dia varias vezes em milissegundos. Sem
+    o aviso, o segundo cenario do teste leria o arquivo do primeiro.
+    """
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with io.open(path, 'w', encoding='utf-8') as fh:
         json.dump(data, fh, ensure_ascii=False)
+    from apps.pages.request_cache import bump_cache_gen
+    bump_cache_gen(path)
 
 
 # ── Cadastro de mentira: RefData (nome -> SPN) e CounterpartyDetails (net type +
