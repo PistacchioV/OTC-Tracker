@@ -1,0 +1,14 @@
+# Os .bat são lidos pelo `cmd` do Windows, e ele PRECISA de CRLF: com quebra de
+# linha Unix o interpretador não fecha os blocos `if (...)`, a janela abre e
+# fecha na mesma fração de segundo, e nem o `pause` do fim chega a rodar. Foi o
+# que aconteceu com o `start-prod.bat` e o `start-debug.bat` — eles nasceram
+# aqui, num macOS, e foram para o share em LF.
+#
+# `eol=crlf` vale no CHECKOUT, então o arquivo chega certo em qualquer máquina
+# independentemente do `core.autocrlf` de quem clonou — que na instância do time
+# ninguém configurou.
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+
+# O resto fica como está: normalizar a árvore inteira agora produziria um diff
+# gigante e sem relação com o problema.

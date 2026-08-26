@@ -10,7 +10,19 @@ REM     start-prod.bat             -> tenta instalar requirements e sobe
 REM     start-prod.bat noinstall   -> pula a instalacao (util offline)
 REM ============================================================================
 
-cd /d "%~dp0"
+REM ---------------------------------------------------------------------------
+REM  UNC-safe: este .bat roda de \\NAWEST...\Application, e `cd /d` NAO aceita
+REM  caminho UNC -- o cmd responde "UNC paths are not supported", cai em
+REM  C:\Windows e segue. Dali, o `run:app` do waitress nao acha o run.py e o
+REM  servidor nem sobe. O `pushd` mapeia o share numa letra de unidade
+REM  temporaria, e o `popd` a devolve no fim.
+REM ---------------------------------------------------------------------------
+pushd "%~dp0" 2>nul
+if errorlevel 1 (
+    echo [ERRO] Nao consegui acessar a pasta: %~dp0
+    pause
+    exit /b 1
+)
 
 REM ---------------------------------------------------------------------------
 REM  Localiza o python do virtualenv (nao depende do PATH do sistema).
@@ -37,6 +49,7 @@ if not defined PY (
     echo [ERRO] Python nao encontrado. Crie o virtualenv OTCTracker ou instale o Python no PATH.
     echo        Ex.:  python -m venv OTCTracker
     echo.
+    popd
     pause
     exit /b 1
 )
@@ -83,3 +96,4 @@ if errorlevel 1 (
 )
 
 pause
+popd

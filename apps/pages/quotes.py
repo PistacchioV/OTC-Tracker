@@ -53,10 +53,12 @@ log = logging.getLogger('otc_tracker')
 # esta rota da fila; ele é a PRIMEIRA tentativa, não a única.
 QUOTES_PROXY = os.getenv('QUOTES_PROXY', 'http://proxy.jpmchase.net:9443')
 # A porta que o app de desktop usava. Ela é tentada DEPOIS, e existe porque as
-# duas convivem na rede: a 10443 respondeu *connection refused* na instância do
-# time (WinError 10061 — não há nada escutando ali), e a 9443 é a que atende.
-# Quem trocar o `QUOTES_PROXY` não perde o segundo endereço por isso.
-_FALLBACK_PROXIES = ('http://proxy.jpmchase.net:10443',)
+# O proxy é a 9443, SEMPRE — confirmado pela mesa. A 10443 é a porta do app de
+# desktop e não atende em máquina nenhuma; ela estava aqui como segunda tentativa
+# e o único efeito era pôr uma linha a mais em toda mensagem de erro, dizendo que
+# um endereço que nunca funcionou também falhou. Quem precisar de outro endereço
+# põe no `QUOTES_PROXY`.
+_FALLBACK_PROXIES = ()
 QUOTES_TIMEOUT = int(os.getenv('QUOTES_TIMEOUT', '30') or 30)
 # O timeout de CONEXÃO é curto de propósito: ele é pago uma vez por rota morta,
 # e com os 30 s da leitura a fila inteira faria a tela esperar um minuto e meio
@@ -269,27 +271,51 @@ def _row_date_key(row):
         return datetime.min
 
 
+def _causa_rede(baixo):
+    """O motivo de rede dentro de um texto de exceção, ou `''`."""
+    # A recusa vem antes do timeout: o texto do Windows para a recusa
+    # (WinError 10061) diz "actively refused", e o do timeout diz "timed out" —
+    # mas a mensagem do urllib3 costuma carregar as duas palavras quando houve
+    # retry, e o que aconteceu de fato foi a recusa.
+    if 'refused' in baixo or '10061' in baixo:
+        return 'connection refused'
+    if 'getaddrinfo' in baixo or 'name or service not known' in baixo \
+            or 'failed to resolve' in baixo or 'nodename nor servname' in baixo \
+            or '11001' in baixo:
+        return 'host not resolved'
+    if 'timed out' in baixo or 'timeout' in baixo:
+        return 'timed out'
+    if 'certificate' in baixo or 'sslerror' in baixo:
+        return 'SSL failure'
+    if 'forbidden' in baixo or '403' in baixo:
+        return 'denied by the proxy'
+    if 'authentication' in baixo or '407' in baixo:
+        return 'proxy authentication required'
+    return ''
+
+
 def _short_error(exc):
     """O motivo em UMA linha.
 
     A mensagem crua do urllib3 tem 400 caracteres — URL, pool, endereço do
-    objeto —, e é ela que aparecia na tela: quem lê precisa saber que o proxy
-    recusou, não em que posição de memória isso aconteceu.
+    objeto —, e é ela que aparecia na tela: quem lê precisa saber o que houve,
+    não em que posição de memória isso aconteceu.
+
+    O caso do PROXY tem uma armadilha. O `requests` embrulha tudo que impede de
+    falar com o proxy num `ProxyError` cujo texto começa com "Unable to connect
+    to proxy" — recusa de TCP, nome que não resolve, timeout e certificado, os
+    quatro. Reportar isso como "o proxy recusou a conexão" dava a MESMA frase
+    para quatro problemas diferentes, e cada um pede uma ação diferente: recusa
+    é porta/firewall, nome é DNS, timeout é rota, certificado é interceptação.
+    Aqui a frase diz que foi ao alcançar o PROXY e, junto, qual dos quatro.
     """
     txt = str(exc)
     baixo = txt.lower()
-    if 'unable to connect to proxy' in baixo:
-        return 'the proxy refused the connection'
-    if 'timed out' in baixo or 'timeout' in baixo:
-        return 'timed out'
-    if 'getaddrinfo' in baixo or 'name or service not known' in baixo \
-            or 'failed to resolve' in baixo or 'nodename nor servname' in baixo:
-        return 'host not resolved'
-    if 'certificate' in baixo or 'sslerror' in baixo:
-        return 'SSL failure'
-    if 'refused' in baixo:
-        return 'connection refused'
-    return type(exc).__name__
+    if 'unable to connect to proxy' in baixo or 'proxyerror' in type(exc).__name__.lower():
+        causa = _causa_rede(baixo)
+        return 'could not reach the proxy ({})'.format(causa) if causa \
+            else 'could not reach the proxy'
+    return _causa_rede(baixo) or type(exc).__name__
 
 
 def _fetch(url, params, proxies):
