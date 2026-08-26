@@ -380,6 +380,15 @@
         $('#ob-head-filters').html(filtros.join(''));
     }
 
+    // `dd/mm/aaaa` → `aaaa-mm-dd`, para o `data-order`. O que não for data
+    // devolve vazio, e a célula sai sem `data-order`: o DataTables volta a
+    // ordenar pelo texto, que é o comportamento certo para o que não é data
+    // (a coluna aceita texto livre quando a planilha traz um "a combinar").
+    function isoDe(v) {
+        var m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(String(v || '').trim());
+        return m ? m[3] + '-' + m[2] + '-' + m[1] : '';
+    }
+
     function linha(r) {
         var td = ['<td><input type="checkbox" class="ob-chk"></td>',
                   '<td>' + acoes() + '</td>'];
@@ -397,7 +406,15 @@
             }
             var ell = (c === 'Razão Social' || c === 'Contacts' || c === 'Grupo Economico'
                        || c === 'Nome Garantidor') ? ' class="ob-ell"' : '';
-            td.push('<td' + ell + ' title="' + esc(v) + '">' + esc(v) + '</td>');
+            // Coluna de data ordena pela data, não pelo texto. O servidor manda
+            // dd/mm/aaaa (é o formato da tela em todo o app) e por texto
+            // `01/12/2020` viria antes de `02/01/2026`. O `data-order` é lido
+            // pelo DataTables sozinho: mostra um valor, ordena por outro — e o
+            // filtro continua casando o que está NA TELA, que é o que quem
+            // digita copia.
+            var ordem = (DATECOLS.indexOf(c) !== -1) ? isoDe(v) : '';
+            td.push('<td' + ell + (ordem ? ' data-order="' + esc(ordem) + '"' : '') +
+                    ' title="' + esc(v) + '">' + esc(v) + '</td>');
         });
         return '<tr data-id="' + esc(r[IDCOL]) + '">' + td.join('') + '</tr>';
     }

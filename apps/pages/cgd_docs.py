@@ -101,8 +101,15 @@ AGING_STOP = 'Conclusion - Stamp'
 
 # As colunas que a tela desenha como DATA (dd/mm/aaaa) e o filtro entende como
 # tal. Ficam aqui e não no template porque o script também as normaliza.
+#
+# A lista tem de ser COMPLETA. O que não está nela sai como o SharePoint gravou,
+# e o SharePoint grava data com hora: `B3 Register` e `Captis` apareciam na
+# grade como `2022-08-02 00:00:00` na coluna ao lado de um `02/08/2022` — o
+# mesmo dado em duas grafias, na mesma linha, e a de fora ainda ordenava e
+# filtrava por outro texto. Data é SEMPRE dd/mm/aaaa na tela (CLAUDE.md §3), e
+# `check_cgd_docs.py` recusa coluna de data que fique de fora.
 DATE_COLUMNS = ('OTC - STAMP', 'MO - STAMP', 'Data Solicitação', 'Emissão',
-                'Signature Date', 'Conclusion - Stamp')
+                'Signature Date', 'B3 Register', 'Captis', 'Conclusion - Stamp')
 
 
 # ── Datas ────────────────────────────────────────────────────────────────────
