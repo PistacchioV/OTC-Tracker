@@ -7969,17 +7969,21 @@ _OPS_SOURCES = (
 
 
 def _ops_pos_swap_found(ref):
-    """A posição DPOSICAO-SWAP existe para `ref` (mesmo walk-back de 10 pregões
-    que `_ops_swap_pos_terms` usa)? Ela é quem dá prazo, LOB e, por tabela, o IR."""
-    probe = _prev_anbima_bizday(ref)
-    for _ in range(10):
-        dref = probe.strftime('%y%m%d')
-        p = os.path.join(B3_JSON_ROOT, 'Swap', _b3_date_subpath(dref),
-                         '73760_{}_DPOSICAO-SWAP.json'.format(dref))
-        if os.path.isfile(p):
-            return True
-        probe = _prev_anbima_bizday(probe)
-    return False
+    """A posição DPOSICAO-SWAP existe para `ref`? Mesmo walk-back de
+    `_ops_swap_pos_terms` — reusa a função (e o cache do request) em vez de
+    varrer os arquivos de novo só para checar existência.
+
+    Ela é quem dá prazo, LOB e, por tabela, o IR. A página que consome este
+    diagnóstico já chamou `_ops_swap_pos_terms`, então aqui a resposta sai do
+    cache e os até dez `isfile` no share não acontecem.
+
+    A pergunta mudou de "o arquivo está lá" para "o arquivo RENDE alguma
+    posição", e é de propósito: um arquivo presente que não devolve contrato
+    nenhum (ilegível, vazio, ou num layout que não é o de 146 campos) não dá
+    prazo, nem LOB, nem IR — dizer que a fonte está lá mandaria alguém procurar
+    o defeito em toda parte menos no arquivo.
+    """
+    return bool(_ops_swap_pos_terms(ref))
 
 
 def _ops_batch_status(ref):

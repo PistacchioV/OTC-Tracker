@@ -82,6 +82,20 @@ def write_json(path, data):
     bump_cache_gen(path)
 
 
+def invalida_dia(ref):
+    """Invalida o cache de leitura do dia `ref`.
+
+    Os loaders de arquivo-dia sao cacheados por data (`@_req_cached`), e a chave
+    e a DATA — nao a raiz de onde o arquivo foi lido. Este teste troca
+    `OTM_JSON_ROOT` / `B3_JSON_ROOT` por um temporario varias vezes na mesma
+    corrida, o que em producao nunca acontece: la a raiz e fixa. Sem invalidar,
+    o cenario da raiz vazia lia a posicao que um cenario ANTERIOR deixou no
+    cache e dizia que a fonte estava la.
+    """
+    from apps.pages.request_cache import bump_cache_gen
+    bump_cache_gen('x_{}.json'.format(ref.strftime('%Y%m%d')))
+
+
 # ── Cadastro de mentira: RefData (nome -> SPN) e CounterpartyDetails (net type +
 #    contas). Sao os DOIS arquivos que a tabela le do disco; stubados, o teste
 #    nao depende do cadastro real nem o suja.
@@ -231,9 +245,11 @@ write_json(os.path.join(b3, 'Swap', R._b3_date_subpath(DREF),
 _ds_root, _b3_root = R.OTM_JSON_ROOT, R.B3_JSON_ROOT
 try:
     R.OTM_JSON_ROOT, R.B3_JSON_ROOT = ds, b3
+    invalida_dia(REF)                  # trocar a RAIZ e trocar o dado
     trade = {r['id_b3']: r for r in R._ops_swap_trade_rows(REF_D)}
 finally:
     R.OTM_JSON_ROOT, R.B3_JSON_ROOT = _ds_root, _b3_root
+    invalida_dia(REF)                  # trocar a RAIZ e trocar o dado
     shutil.rmtree(tmp, ignore_errors=True)
 
 check('CEM-2026-3184 vira CEM', trade.get('A1', {}).get('lob'), 'CEM')
@@ -288,6 +304,7 @@ tmp = tempfile.mkdtemp(prefix='ops-src-')
 _ds_root, _b3_root = R.OTM_JSON_ROOT, R.B3_JSON_ROOT
 try:
     R.OTM_JSON_ROOT, R.B3_JSON_ROOT = tmp, os.path.join(tmp, 'b3')
+    invalida_dia(REF)                  # trocar a RAIZ e trocar o dado
     st = R._ops_batch_status(REF)
     check('sem nada, o Operations B3 aparece como faltando', 'Operations B3' in st['missing'], True)
     check('sem o Operations B3 o aviso e BLOQUEANTE', st['blocking'], True)
@@ -306,6 +323,7 @@ try:
     check('sugere o ultimo dia com batch', st['last_batch'], '2026-07-20')
 finally:
     R.OTM_JSON_ROOT, R.B3_JSON_ROOT = _ds_root, _b3_root
+    invalida_dia(REF)                  # trocar a RAIZ e trocar o dado
     shutil.rmtree(tmp, ignore_errors=True)
 
 print('\n== 11. arquivo presente e tabela vazia: o diagnostico responde ==')
@@ -326,6 +344,7 @@ def diag(opb3_rows):
     _r, _b = R.OTM_JSON_ROOT, R.B3_JSON_ROOT
     try:
         R.OTM_JSON_ROOT, R.B3_JSON_ROOT = tmp, os.path.join(tmp, 'b3')
+        invalida_dia(REF)                  # trocar a RAIZ e trocar o dado
         day = os.path.join(tmp, '2026', '08', '05')
         write_json(os.path.join(day, 'operations-b3_20260805.json'), opb3_rows)
         for k in ('br-onshore-settlements', 'eventos-swap-jpm', 'otm-settlement'):
@@ -333,6 +352,7 @@ def diag(opb3_rows):
         return R._ops_batch_status(REF8), R._ops_swap_trade_rows(REF8.date())
     finally:
         R.OTM_JSON_ROOT, R.B3_JSON_ROOT = _r, _b
+        invalida_dia(REF)                  # trocar a RAIZ e trocar o dado
         shutil.rmtree(tmp, ignore_errors=True)
 
 
@@ -554,6 +574,7 @@ def ted_run(cpty, bank, valor='-1000,00', legal='Bco J.P. Morgan S.A.'):
         write_json(os.path.join(b3d, 'Swap', R._b3_date_subpath(pos),
                                 '73760_%s_DPOSICAO-SWAP.json' % pos), [rec])
         R.OTM_JSON_ROOT, R.B3_JSON_ROOT = tmp, b3d
+        invalida_dia(REF)                  # trocar a RAIZ e trocar o dado
         app = create_app(DebugConfig)
         cl = app.test_client()
         with cl.session_transaction() as s:
