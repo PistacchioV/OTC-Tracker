@@ -8,8 +8,11 @@
                        de "nova versão" sem o número não diz nada a quem recebe
      • starter       — o nome do .bat (`_APPVER_STARTER`), que é o que a pessoa
                        vai procurar na pasta
-     • app_url       — endereço ABSOLUTO da instância (`_otc_app_url`); relativo
-                       não serve fora do navegador (CLAUDE.md §7)
+     • app_shortcut, app_local — os DOIS endereços da aplicação. Não sai do
+                       `_otc_app_url`: aquele monta `http://<hostname>:8050`, e
+                       aqui a instância que o leitor vai abrir é a DELE, na
+                       própria máquina — o hostname de quem enviou não abre nada
+                       para quem recebe. São o atalho interno e o localhost
      • current_year
 
    ⚠️ O CORPO É O PROCEDIMENTO. Quem recebe não vai abrir uma tela para descobrir
@@ -126,11 +129,14 @@
                                                  text-align:center;font-size:12px;font-weight:700;">2</span>
                                 </td>
                                 <td valign="top" style="padding:2px 0 14px;line-height:1.6;">
-                                    Open the <strong>Application</strong> folder and run
+                                    Open a <strong>DevShell</strong> window, then drag
                                     <strong style="font-family:Consolas,'Courier New',monospace;
                                                    background-color:#f1f3f6;padding:2px 6px;
                                                    border-radius:4px;">{{ starter }}</strong>
-                                    (double-click). A new DevShell window opens — leave it open, it
+                                    from the <strong>Application</strong> folder into it and press
+                                    <strong>Enter</strong>.
+                                    <span style="color:#8a6d1f;">Do not double-click the file — it
+                                    has to run inside DevShell.</span> Leave that window open: it
                                     is the application itself.
                                 </td>
                             </tr>
@@ -142,9 +148,12 @@
                                 </td>
                                 <td valign="top" style="padding:2px 0 6px;line-height:1.6;">
                                     Wait for the window to say the server is running, then open the
-                                    OTC Tracker in your browser
-                                    {% if app_url %}(<a href="{{ app_url }}" style="color:#3f63c9;">{{ app_url }}</a>){% endif %}
-                                    and refresh the page.
+                                    OTC Tracker in your browser —
+                                    {# O TEXTO é o atalho como a mesa o digita; o `href` leva o esquema, senão o
+                                       Outlook trata `go/otctracker` como caminho relativo e o link morre. #}
+                                    <strong><a href="{{ app_shortcut_href }}" style="color:#3f63c9;">{{ app_shortcut }}</a></strong>
+                                    or <a href="{{ app_local }}" style="color:#3f63c9;">{{ app_local }}</a>
+                                    — and refresh the page.
                                 </td>
                             </tr>
                         </table>

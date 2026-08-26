@@ -199,6 +199,7 @@ for _parte in _msg.walk():
         _texto = _parte.get_payload(decode=True).decode('utf-8', 'replace')
         break
 check('a mensagem tem uma parte HTML', bool(_texto), True)
+_html = _texto            # o mesmo conteudo; nome proprio para as checagens de href
 for trecho, rotulo in [
         ('v8', 'a versao'),
         (R._APPVER_STARTER, 'o nome do .bat a executar'),
@@ -208,6 +209,31 @@ for trecho, rotulo in [
     check('o corpo cita ' + rotulo, trecho in _texto, True)
 check('o passo 1 vem ANTES do .bat no corpo',
       _texto.index('Close the application') < _texto.index(R._APPVER_STARTER), True)
+
+# O .bat NAO se abre com duplo clique: ele tem de rodar DENTRO do DevShell. O
+# texto dizia "(double-click)", que e o caminho que nao funciona — e e o que a
+# pessoa tenta primeiro, porque e o obvio.
+check('o corpo diz para arrastar o .bat para o DevShell',
+      'drag' in _texto and 'into it' in _texto, True)
+check('   e desaconselha o duplo clique explicitamente',
+      'Do not double-click' in _texto, True)
+check('   sem sobrar o "(double-click)" antigo',
+      '(double-click)' in _texto, False)
+
+# Os DOIS enderecos, e nenhum deles derivado do hostname: cada pessoa roda a
+# propria instancia, e o hostname de quem ENVIA nao abre nada para quem recebe
+# (o e-mail saia com `http://chcd293c37n1:8050`, a maquina de uma pessoa so).
+check('o passo 3 traz o atalho interno', R._APPVER_SHORTCUT in _texto, True)
+check('   e o localhost', R._APPVER_LOCAL_URL in _texto, True)
+check('   e nao o hostname da maquina que enviou',
+      R._otc_app_url() in _texto, False)
+# O atalho se ESCREVE `go/otctracker`, mas como `href` isso e caminho RELATIVO:
+# clicado no Outlook, o link morre. O texto fica; o destino ganha o esquema.
+check('o atalho tem esquema no href',
+      'href="{}"'.format(R._appver_href(R._APPVER_SHORTCUT)) in _texto
+      or R._appver_href(R._APPVER_SHORTCUT) in _texto, True)
+check('   e o _appver_href nao mexe em quem ja tem esquema',
+      R._appver_href('http://localhost:8051'), 'http://localhost:8051')
 
 print('\n== 9. o status gravado responde "o aviso saiu?" ==')
 R._appver_status_write('sent:v8:2', datetime(2026, 8, 26, 10, 30))
