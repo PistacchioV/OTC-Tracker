@@ -169,16 +169,11 @@
 #mc-page .btn-toolbar-all:active { transform: scale(.97) !important; }
 #mc-page .mc-mass-wrap { display:flex; flex-wrap:wrap; gap:.5rem; align-items:center; }
 #mc-page .mc-mass-wrap .form-select, #mc-page .mc-mass-wrap .form-control { height:31px; font-size:.75rem; }
-/* O modal fica no MESMO raio e na mesma moldura dos cards. Sem a borda ele
-   flutua sem contorno no tema escuro, onde o fundo dele e o da página são
-   quase o mesmo preto. */
-#mcEditModal .modal-content {
-    border-radius: var(--vr-card-radius, 18px);
-    border: 1px solid var(--vr-card-border, var(--ins-border-color));
-    box-shadow: 0 24px 60px rgba(0, 0, 0, .18);
-}
-#mcEditGrid label { font-size:.68rem; font-weight:600; margin-bottom:.15rem; }
-#mcEditGrid input { font-size:.75rem; }
+/* A moldura do modal vem do `liquid-glass`, que é a classe da casa — antes ela
+   era redesenhada aqui, e uma paleta paralela faz o mesmo modal ter dois
+   contornos dependendo da tela em que a pessoa está. O campo travado já é
+   tratado pela regra `.mc-locked` lá em cima, que vale para a tabela E para o
+   modal: repeti-la aqui era uma segunda resposta para a mesma pergunta. */
 </style>
 {% endblock %}
 
@@ -327,24 +322,33 @@
 <!-- ── Edição de uma linha ────────────────────────────────────────── -->
 <div class="modal fade" id="mcEditModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
-        <div class="modal-content">
-            <div class="modal-header border-0 pb-0">
-                <h5 class="modal-title fw-semibold d-flex align-items-center gap-2">
-                    <i data-lucide="edit-3" style="width:18px;height:18px;" class="text-primary"></i>
+        {# Padrão de modal da casa, o mesmo do /mapping e das outras 24 telas:
+           `modal-content liquid-glass`, cabeçalho `py-2` com `modal-title fs-6`,
+           corpo em `row g-3`, rótulo `form-label fs-xs text-muted mb-1` e
+           rodapé `py-2` com os dois botões de ÍCONE — vermelho para descartar,
+           verde para gravar. Esta tela tinha cabeçalho sem altura, título de
+           outro tamanho, grade mais apertada e botões de TEXTO: era o único
+           editor do app com essa cara. #}
+        <div class="modal-content liquid-glass">
+            <div class="modal-header py-2">
+                <h5 class="modal-title fs-6 d-flex align-items-center gap-2">
+                    <i class="ti ti-edit"></i>
                     <!-- O título é trocado pelo JS (nova × edição), então ele não
                          leva data-lang: o I18nManager traduz uma vez no load e
                          sobrescreveria o texto certo pelo da chave. -->
                     <span id="mcEditTitle">Edit confirmation</span>
-                    <span class="badge bg-secondary-subtle text-secondary" id="mcEditKey"></span>
+                    <span class="badge rounded-pill text-bg-secondary bg-gradient" id="mcEditKey"></span>
                 </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <div class="modal-body pt-2">
-                <div class="row g-2" id="mcEditGrid"></div>
+            <div class="modal-body">
+                <div class="row g-3" id="mcEditGrid"></div>
             </div>
-            <div class="modal-footer border-0 pt-0">
-                <button class="btn btn-sm btn-light" data-bs-dismiss="modal" data-lang="btn-cancel">Cancel</button>
-                <button class="btn btn-sm btn-primary bg-gradient" id="mcEditSave" data-lang="btn-save">Save</button>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-sm btn-danger" data-bs-dismiss="modal"
+                        title="Cancel"><i class="ti ti-x"></i></button>
+                <button type="button" class="btn btn-sm btn-success" id="mcEditSave"
+                        title="Save"><i class="ti ti-device-floppy"></i></button>
             </div>
         </div>
     </div>
@@ -1117,8 +1121,11 @@
             $('#mcEditKey').text(adding ? '' : k);
             var grid = $('#mcEditGrid').empty();
             COLUMNS.forEach(function (c) {
-                var col = $('<div class="col-12 col-md-4 col-xl-3">');
-                $('<label>').text(labelFull(c)).appendTo(col);
+                // `col-md-6 col-xl-4`: são trinta campos, e a quatro por
+                // linha (`col-xl-3`) o rótulo longo quebrava em duas linhas e
+                // desalinhava a fileira inteira. Três cabem sem quebrar.
+                var col = $('<div class="col-12 col-md-6 col-xl-4">');
+                $('<label class="form-label fs-xs text-muted mb-1">').text(labelFull(c)).appendTo(col);
                 var inp = fieldFor(c, row[c] || '').attr('data-col', c);
                 // Derivadas (e a chave, na edição) ficam visíveis mas travadas:
                 // escondê-las faria perguntarem onde foram parar; deixá-las
