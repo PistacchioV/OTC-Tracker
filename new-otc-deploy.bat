@@ -37,17 +37,20 @@ set "EXCLUDE_DIR=%ORIGIN_PATH%\static\data"
 
 if not exist "%CURRENT_VERSION_FILE%" (
     echo Error: "%CURRENT_VERSION_FILE%" was not found.
+    pause
     exit /b 1
 )
 
 set /p "CURRENT_VERSION=" < "%CURRENT_VERSION_FILE%"
 if not defined CURRENT_VERSION (
     echo Error: link.txt does not contain a source version.
+    pause
     exit /b 1
 )
 
 if not exist "%ORIGIN_PATH%\" (
     echo Error: Origin path "%ORIGIN_PATH%" was not found.
+    pause
     exit /b 1
 )
 
@@ -65,6 +68,7 @@ set "TARGET_PATH=%SHARE_ROOT%\otc-source\%NEW_VERSION%"
 
 if exist "%TARGET_PATH%\" (
     echo Error: Target version "%NEW_VERSION%" already exists.
+    pause
     exit /b 1
 )
 
@@ -91,6 +95,7 @@ set "ROBOCOPY_RESULT=!ERRORLEVEL!"
 if !ROBOCOPY_RESULT! GEQ 8 (
     echo Error: Copy failed for the root files. Robocopy returned !ROBOCOPY_RESULT!.
     echo        Partial version left at "%TARGET_PATH%" - remove it before retrying.
+    pause
     exit /b !ROBOCOPY_RESULT!
 )
 
@@ -102,7 +107,8 @@ for %%D in (%DEPLOY_DIRS%) do (
         if !ROBOCOPY_RESULT! GEQ 8 (
             echo Error: Copy failed for "%%D". Robocopy returned !ROBOCOPY_RESULT!.
             echo        Partial version left at "%TARGET_PATH%" - remove it before retrying.
-            exit /b !ROBOCOPY_RESULT!
+            pause
+    exit /b !ROBOCOPY_RESULT!
         )
     )
 )
@@ -111,4 +117,5 @@ echo Skipped: "%EXCLUDE_DIR%"
 
 > "%CURRENT_VERSION_FILE%" echo %NEW_VERSION%
 echo Created %NEW_VERSION% and updated link.txt.
+pause
 exit /b 0
