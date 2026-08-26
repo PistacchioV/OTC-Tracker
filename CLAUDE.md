@@ -2149,8 +2149,16 @@ features/<nome>/
 ```
 
 Extraídas até aqui: **`support`** (450 linhas / 6 rotas), **`onboarding`**
-(154 / 7), **`reconciliation_fxo`** (101 / 4), **`quotes`** (129 / 3) e
-**`holidays`** (331 / 5). O `routes.py` saiu de 39.696 para 38.587 linhas.
+(154 / 7), **`reconciliation_fxo`** (101 / 4), **`quotes`** (129 / 3),
+**`holidays`** (331 / 5) e **`bacc`** (490 / 2). O `routes.py` saiu de 39.696
+para 38.102 linhas.
+
+**O `bacc` foi o primeiro com SCHEDULER, e o registro dele NÃO veio junto.** O
+laço vive em `commands.scheduler_loop`, mas o `_schedule_on_start('bacc-ea', …)`
+fica no bloco de wiring do `routes.py`, ao lado do import do entrypoint:
+chamá-lo do corpo do módulo da feature exigiria importar o `routes` ali — o
+ciclo que a regra abaixo proíbe. O gancho é de plataforma; a feature só expõe o
+`start_scheduler`.
 
 **O `holidays` foi o primeiro com fronteira a decidir.** Ele tinha três
 referências de entrada, e as três eram para o `_anbima_holidays` — que não é o
@@ -2211,7 +2219,8 @@ fora chamam o grupo; saída = de quantas ele depende:
 | `reconciliation-fxo` | 101 | **0** | 4 | ✅ feito |
 | `quotes` | 129 | **0** | 4 | ✅ feito |
 | `holidays` | 331 | 3 | 11 | ✅ feito |
-| `bacc` · `mt300` · `appver` | ~170–310 | 7–9 | 13–21 | próximos |
+| `bacc` | 490 | 2 rotas | 17 | ✅ feito |
+| `mt300` · `appver` | ~170–310 | 7–9 | 13–21 | próximos |
 | `conf-escalation` · `mdea` | ~314–384 | 12–13 | 17–20 | |
 | `file-interpreter` | 307 | **43** | 4 | tarde |
 | `mapping` | 1263 | 39 | 35 | tarde |

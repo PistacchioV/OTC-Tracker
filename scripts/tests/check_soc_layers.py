@@ -187,7 +187,9 @@ for r in ('/holidays-calendar', '/api/holidays/calendars', '/api/holidays/save',
           '/reconciliation-fxo/run', '/reconciliation-fxo/comment',
           '/onboarding', '/onboarding/tracking-docs', '/cgd',
           '/api/onboarding/overview', '/api/onboarding/docs',
-          '/api/onboarding/docs/save', '/api/onboarding/docs/delete'):
+          '/api/onboarding/docs/save', '/api/onboarding/docs/delete',
+          '/api/control-panel/bacc-ea-metrics/recipients',
+          '/api/control-panel/bacc-ea-metrics/run'):
     check('%s registrada' % r, r in regras, True)
 
 print('\n== 8. o que saiu do routes.py nao ficou nele ==')
@@ -198,7 +200,9 @@ for morto in ('_tk_roles_by_sid', '_tk_can_view', '_tk_public',
               '_cgd_form_ctx', '_cgd_db_ready', 'def api_onboarding_docs',
               'def reconciliation_fxo_run', 'def reconciliation_fxo_comment',
               '_quotes_underlyings', '_QUOTES_KINDS', 'def api_quotes_ptax',
-              '_HOLIDAY_CAL_SEED', '_holiday_cal_slug', 'def api_holidays_save'):
+              '_HOLIDAY_CAL_SEED', '_holiday_cal_slug', 'def api_holidays_save',
+              '_BACC_COLUMNS', '_bacc_rows', '_bacc_build_xlsx', '_bacc_send_email',
+              '_bacc_disparar', 'def api_cp_bacc_run'):
     check('%s saiu do routes.py' % morto, morto in rotas_py, False)
 
 print(('FAIL: %d' % len(fails)) if fails else 'TUDO OK')
