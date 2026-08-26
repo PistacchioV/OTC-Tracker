@@ -34581,6 +34581,30 @@ _APPVER_STATUS_FILE = os.path.join(_APPVER_DIR, 'app_version_status.json')
 # pessoa procurar um arquivo que não existe.
 _APPVER_STARTER = 'start-otc-tracker.bat'
 
+# Os dois endereços da aplicação, para o passo 3 do e-mail. NÃO saem do
+# `_otc_app_url`: aquele monta `http://<hostname>:8050`, e o hostname é o de
+# QUEM ENVIA — cada pessoa roda a própria instância na própria máquina, então o
+# endereço do remetente não abre nada para quem recebe. O e-mail saía com
+# `http://chcd293c37n1:8050`, que é a máquina de uma pessoa só.
+#
+# São dois porque servem a momentos diferentes: o atalho interno é o que se
+# digita de memória, e o localhost é o que funciona quando o atalho não resolve
+# (é a instância que a pessoa acabou de subir).
+_APPVER_SHORTCUT = os.environ.get('OTC_TRACKER_SHORTCUT', '').strip() or 'go/otctracker'
+_APPVER_LOCAL_URL = os.environ.get('OTC_TRACKER_LOCAL_URL', '').strip() or 'http://localhost:8051'
+
+
+def _appver_href(endereco):
+    """O endereço com esquema, para virar `href`.
+
+    O atalho se ESCREVE `go/otctracker` — é assim que a mesa o digita e é assim
+    que ele tem de aparecer no texto —, mas como `href` ele é um caminho
+    RELATIVO: clicado no Outlook, o cliente o resolve contra nada e o link morre.
+    O texto continua sendo o atalho; o destino ganha o `http://`.
+    """
+    e = str(endereco or '').strip()
+    return e if '://' in e else 'http://' + e.lstrip('/')
+
 # `link.txt` mora na pasta Application, e o caminho dela pende do
 # `SHARED_DRIVE_ROOT` — nunca de um literal `I:\...` ou `\\servidor\...`, que
 # ficaria preso na letra mapeada no dia em que a instância passasse a falar com o
@@ -34722,7 +34746,9 @@ def _appver_send_email(versao, usuarios, cc_list):
             html = render_template('pages/email-template-new-version.html',
                                    version=versao,
                                    starter=_APPVER_STARTER,
-                                   app_url=_otc_app_url(),
+                                   app_shortcut=_APPVER_SHORTCUT,
+                                   app_shortcut_href=_appver_href(_APPVER_SHORTCUT),
+                                   app_local=_APPVER_LOCAL_URL,
                                    current_year=datetime.now().year)
             msg = MIMEMultipart('related')
             msg['Subject'] = 'OTC Tracker - New version {} released, please restart'.format(versao)
