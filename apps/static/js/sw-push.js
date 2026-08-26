@@ -68,12 +68,19 @@ self.addEventListener('push', function (event) {
                 }
                 return self.registration.showNotification(title, {
                     body: body,
-                    // O `favicon.ico` é a marca CLARA e tem 16×16: o balão do
-                    // sistema é desenhado em fundo claro e amplia o ícone para
-                    // ~48px, então ele saía lavado e borrado. O `-black.png` é a
-                    // versão escura, em 64×64.
-                    icon: '/static/images/favicon-black.png',
-                    badge: '/static/images/favicon-black.png',
+                    // O `favicon-notif.png` é o chip AZUL do app com a marca em
+                    // BRANCO, em 256×256. O fundo sólido é o motivo de ele
+                    // existir: quem pinta o fundo do balão é o SISTEMA, claro ou
+                    // escuro conforme o tema do Windows, então marca de fundo
+                    // transparente só se lê num dos dois — as letras pretas somem
+                    // no balão escuro e as brancas, no claro. O tamanho também é
+                    // de propósito: o balão amplia o ícone para ~48px, e o
+                    // `favicon.ico` de 16×16 saía lavado e borrado. A mesma
+                    // imagem serve o caminho do `topbar.html` (aba aberta e sem
+                    // foco); marcas diferentes fariam o mesmo aviso parecer de
+                    // dois aplicativos.
+                    icon: '/static/images/favicon-notif.png',
+                    badge: '/static/images/favicon-notif.png',
                     tag: 'otc-activity',
                     renotify: true,
                     data: { url: url }
@@ -82,7 +89,7 @@ self.addEventListener('push', function (event) {
             .catch(function () {
                 return self.registration.showNotification('OTC Tracker', {
                     body: 'Nova atividade no OTC Tracker',
-                    icon: '/static/images/favicon-black.png',
+                    icon: '/static/images/favicon-notif.png',
                     tag: 'otc-activity'
                 });
             })
