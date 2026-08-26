@@ -24,6 +24,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
 import awmpy
+import portalocker
 from flask import (
     render_template, request, redirect, send_file,
     url_for, session, flash, jsonify, make_response, has_app_context
@@ -689,6 +690,66 @@ def _ensure_counterparty_folders(company):
 # RLock e não Lock: helper que tranca sozinho pode ser chamado de um bloco que já
 # tranca (é o caso do _conf_state_save), e com Lock isso seria deadlock.
 _cache_lock = threading.RLock()
+
+
+# _cache_lock only serializes threads INSIDE this process — quando duas
+# instâncias do app rodam (dois processos, dois hosts), cada uma tem seu
+# próprio RLock, e as duas podem ler o claim file antes de qualquer uma
+# escrever: ambas veem o slot livre e o e-mail agendado (BACC, MDEA, MT300)
+# sai em dobro. O portalocker.Lock abaixo é um lock de ARQUIVO — visto
+# por todo processo que abrir o mesmo caminho, inclusive noutro host no share —
+# e envolve o ciclo ler → checar → gravar inteiro, então só uma instância
+# consegue reservar o slot.
+def _claim_daily_slot(claim_file, claim_dir, slot, keep_last, log_prefix):
+    """Reserva `slot` em `claim_file`; False se outra instância (ou volta
+    anterior deste processo) já reservou. Cross-process via lock de arquivo."""
+    os.makedirs(claim_dir, exist_ok=True)
+    try:
+        with portalocker.Lock(claim_file + '.lock', mode='a+b', timeout=15,
+                              flags=portalocker.LockFlags.EXCLUSIVE):
+            with _cache_lock:
+                try:
+                    with open(claim_file, encoding='utf-8') as fh:
+                        sent = json.load(fh)
+                    if not isinstance(sent, list):
+                        sent = []
+                except (IOError, OSError, json.JSONDecodeError):
+                    sent = []
+                if slot in sent:
+                    return False
+                sent.append(slot)
+                _atomic_write_json(claim_file, sorted(sent)[-keep_last:])
+                return True
+    except portalocker.exceptions.LockException:
+        # Outra instância está com o lock — trata como "já reservado" para não
+        # arriscar dois envios; a próxima volta do catch-up tenta de novo.
+        log.warning('[%s] claim lock busy — assuming another instance is handling %s',
+                    log_prefix, slot)
+        return False
+    except Exception:                                       # noqa: BLE001
+        log.warning('[%s] não consegui gravar o claim:\n%s', log_prefix, traceback.format_exc())
+        return True
+
+
+def _release_daily_slot(claim_file, slot, log_prefix):
+    """Devolve `slot` (envio falhou) sob o mesmo lock cross-process do claim."""
+    try:
+        with portalocker.Lock(claim_file + '.lock', mode='a+b', timeout=15,
+                              flags=portalocker.LockFlags.EXCLUSIVE):
+            with _cache_lock:
+                try:
+                    with open(claim_file, encoding='utf-8') as fh:
+                        sent = json.load(fh)
+                    if not isinstance(sent, list):
+                        return
+                except (IOError, OSError, json.JSONDecodeError):
+                    return
+                if slot not in sent:
+                    return
+                _atomic_write_json(claim_file, [s for s in sent if s != slot])
+    except Exception:                                       # noqa: BLE001
+        log.warning('[%s] não consegui devolver o slot %s:\n%s',
+                    log_prefix, slot, traceback.format_exc())
 
 
 def _atomic_write_json(file_path, data):
@@ -31526,30 +31587,9 @@ _NDM_PENDING_STATUS_FILE = os.path.join(_DAILY_METRIC_DIR, 'deals_monitor_pendin
 
 def _ndm_pending_claim_slot(slot):
     """Reserva um disparo ('YYYY-MM-DD 19:00') EM DISCO. True = ninguém tinha
-    reservado e o e-mail pode sair; False = já foi.
-
-    A trava em memória não basta: com o reloader do Werkzeug ligado o módulo é
-    importado em DOIS processos, cada um com o seu scheduler, e a mesa receberia
-    o aviso duas vezes. Persistência de deal é idempotente e sobrevive a isso —
-    e-mail não. O arquivo guarda só os últimos disparos, para não crescer."""
-    with _cache_lock:
-        try:
-            with open(_NDM_PENDING_SENT_FILE, encoding='utf-8') as fh:
-                sent = json.load(fh)
-            if not isinstance(sent, list):
-                sent = []
-        except (IOError, OSError, json.JSONDecodeError):
-            sent = []
-        if slot in sent:
-            return False
-        sent.append(slot)
-        try:
-            os.makedirs(_DAILY_METRIC_DIR, exist_ok=True)
-            _atomic_write_json(_NDM_PENDING_SENT_FILE, sorted(sent)[-16:])
-        except Exception:                                   # noqa: BLE001
-            log.warning('[deals-monitor] não consegui gravar o controle de disparo:\n%s',
-                        traceback.format_exc())
-        return True
+    reservado e o e-mail pode sair; False = já foi. Cross-process: duas
+    instâncias do app não podem reservar o mesmo slot (ver `_claim_daily_slot`)."""
+    return _claim_daily_slot(_NDM_PENDING_SENT_FILE, _DAILY_METRIC_DIR, slot, 16, 'deals-monitor')
 
 
 def _ndm_pending_times():
@@ -31578,21 +31618,7 @@ def _ndm_pending_release_slot(slot):
     está perdido para sempre: nem o próximo restart o recupera, porque o
     catch-up também consulta esta lista. Uma falha transitória virava um dia sem
     aviso, sem nada na tela para explicar."""
-    with _cache_lock:
-        try:
-            with open(_NDM_PENDING_SENT_FILE, encoding='utf-8') as fh:
-                sent = json.load(fh)
-            if not isinstance(sent, list):
-                return
-        except (IOError, OSError, json.JSONDecodeError):
-            return
-        if slot not in sent:
-            return
-        try:
-            _atomic_write_json(_NDM_PENDING_SENT_FILE, [s for s in sent if s != slot])
-        except Exception:                                   # noqa: BLE001
-            log.warning('[deals-monitor] não consegui devolver o slot %s:\n%s',
-                        slot, traceback.format_exc())
+    _release_daily_slot(_NDM_PENDING_SENT_FILE, slot, 'deals-monitor')
 
 
 def _ndm_pending_status_write(slot, result, when):
@@ -31948,45 +31974,14 @@ def _pcx_claim_slot(slot):
     mais de um processo, a trava em memória não impede gravação dupla — aqui o
     arquivo é idempotente, mas o claim é o que faz o catch-up saber o que já
     rodou)."""
-    with _cache_lock:
-        try:
-            with open(_PCX_CLAIM_FILE, encoding='utf-8') as fh:
-                sent = json.load(fh)
-            if not isinstance(sent, list):
-                sent = []
-        except (IOError, OSError, json.JSONDecodeError):
-            sent = []
-        if slot in sent:
-            return False
-        sent.append(slot)
-        try:
-            os.makedirs(_DAILY_METRIC_DIR, exist_ok=True)
-            _atomic_write_json(_PCX_CLAIM_FILE, sorted(sent)[-16:])
-        except Exception:                                   # noqa: BLE001
-            log.warning('[pending-spreadsheet] não consegui gravar o claim:\n%s',
-                        traceback.format_exc())
-        return True
+    return _claim_daily_slot(_PCX_CLAIM_FILE, _DAILY_METRIC_DIR, slot, 16, 'pending-spreadsheet')
 
 
 def _pcx_release_slot(slot):
     """Devolve o slot quando a gravação falhou (share fora, arquivo aberto com
     lock no Excel): o catch-up da próxima volta tenta de novo. Sem isto uma
     falha transitória custava a planilha do dia inteiro."""
-    with _cache_lock:
-        try:
-            with open(_PCX_CLAIM_FILE, encoding='utf-8') as fh:
-                sent = json.load(fh)
-            if not isinstance(sent, list):
-                return
-        except (IOError, OSError, json.JSONDecodeError):
-            return
-        if slot not in sent:
-            return
-        try:
-            _atomic_write_json(_PCX_CLAIM_FILE, [s for s in sent if s != slot])
-        except Exception:                                   # noqa: BLE001
-            log.warning('[pending-spreadsheet] não consegui devolver o slot %s:\n%s',
-                        slot, traceback.format_exc())
+    _release_daily_slot(_PCX_CLAIM_FILE, slot, 'pending-spreadsheet')
 
 
 def _pcx_status_write(slot, result, when, ref=None):
@@ -32588,44 +32583,13 @@ def _ce_next_runs(now=None):
 def _ce_claim_slot(slot):
     """Reserva um disparo EM DISCO (mesma mecânica do Deals Monitor: a trava em
     memória não impede que dois processos mandem o mesmo e-mail)."""
-    with _cache_lock:
-        try:
-            with open(_CE_CLAIM_FILE, encoding='utf-8') as fh:
-                sent = json.load(fh)
-            if not isinstance(sent, list):
-                sent = []
-        except (IOError, OSError, json.JSONDecodeError):
-            sent = []
-        if slot in sent:
-            return False
-        sent.append(slot)
-        try:
-            os.makedirs(_DAILY_METRIC_DIR, exist_ok=True)
-            _atomic_write_json(_CE_CLAIM_FILE, sorted(sent)[-24:])
-        except Exception:                                   # noqa: BLE001
-            log.warning('[conf-escalation] não consegui gravar o claim:\n%s',
-                        traceback.format_exc())
-        return True
+    return _claim_daily_slot(_CE_CLAIM_FILE, _DAILY_METRIC_DIR, slot, 24, 'conf-escalation')
 
 
 def _ce_release_slot(slot):
     """Devolve o slot quando o envio falhou, para o catch-up da próxima volta
     tentar de novo — senão uma queda de SMTP às 17h custa a cobrança do dia."""
-    with _cache_lock:
-        try:
-            with open(_CE_CLAIM_FILE, encoding='utf-8') as fh:
-                sent = json.load(fh)
-            if not isinstance(sent, list):
-                return
-        except (IOError, OSError, json.JSONDecodeError):
-            return
-        if slot not in sent:
-            return
-        try:
-            _atomic_write_json(_CE_CLAIM_FILE, [s for s in sent if s != slot])
-        except Exception:                                   # noqa: BLE001
-            log.warning('[conf-escalation] não consegui devolver o slot %s:\n%s',
-                        slot, traceback.format_exc())
+    _release_daily_slot(_CE_CLAIM_FILE, slot, 'conf-escalation')
 
 
 def _ce_status_write(mode, slot, result, when):
@@ -33140,44 +33104,14 @@ def _bacc_claim_slot(slot):
     """Reserva o disparo do dia EM DISCO — a instância reinicia várias vezes ao
     dia e o catch-up precisa saber o que já saiu, senão o mesmo e-mail vai
     embora a cada subida."""
-    with _cache_lock:
-        try:
-            with open(_BACC_CLAIM_FILE, encoding='utf-8') as fh:
-                sent = json.load(fh)
-            if not isinstance(sent, list):
-                sent = []
-        except (IOError, OSError, json.JSONDecodeError):
-            sent = []
-        if slot in sent:
-            return False
-        sent.append(slot)
-        try:
-            os.makedirs(_DAILY_METRIC_DIR, exist_ok=True)
-            _atomic_write_json(_BACC_CLAIM_FILE, sorted(sent)[-16:])
-        except Exception:                                   # noqa: BLE001
-            log.warning('[bacc-ea] não consegui gravar o claim:\n%s', traceback.format_exc())
-        return True
+    return _claim_daily_slot(_BACC_CLAIM_FILE, _DAILY_METRIC_DIR, slot, 16, 'bacc-ea')
 
 
 def _bacc_release_slot(slot):
     """Devolve o slot quando o envio falhou (SMTP fora do ar): o catch-up da
     próxima volta tenta de novo. Sem isto uma falha transitória custava o
     relatório do dia inteiro."""
-    with _cache_lock:
-        try:
-            with open(_BACC_CLAIM_FILE, encoding='utf-8') as fh:
-                sent = json.load(fh)
-            if not isinstance(sent, list):
-                return
-        except (IOError, OSError, json.JSONDecodeError):
-            return
-        if slot not in sent:
-            return
-        try:
-            _atomic_write_json(_BACC_CLAIM_FILE, [s for s in sent if s != slot])
-        except Exception:                                   # noqa: BLE001
-            log.warning('[bacc-ea] não consegui devolver o slot %s:\n%s',
-                        slot, traceback.format_exc())
+    _release_daily_slot(_BACC_CLAIM_FILE, slot, 'bacc-ea')
 
 
 def _bacc_status_write(slot, result, when):
@@ -33642,45 +33576,14 @@ def _mdea_claim_slot(slot):
     """Reserva o disparo EM DISCO — a instância reinicia várias vezes ao dia e o
     catch-up precisa saber o que já saiu, senão o mesmo e-mail vai embora a cada
     subida."""
-    with _cache_lock:
-        try:
-            with open(_MDEA_CLAIM_FILE, encoding='utf-8') as fh:
-                sent = json.load(fh)
-            if not isinstance(sent, list):
-                sent = []
-        except (IOError, OSError, json.JSONDecodeError):
-            sent = []
-        if slot in sent:
-            return False
-        sent.append(slot)
-        try:
-            os.makedirs(_MDEA_DIR, exist_ok=True)
-            _atomic_write_json(_MDEA_CLAIM_FILE, sorted(sent)[-32:])
-        except Exception:                                   # noqa: BLE001
-            log.warning('[manual-deals-ea] não consegui gravar o claim:\n%s',
-                        traceback.format_exc())
-        return True
+    return _claim_daily_slot(_MDEA_CLAIM_FILE, _MDEA_DIR, slot, 32, 'manual-deals-ea')
 
 
 def _mdea_release_slot(slot):
     """Devolve o slot quando o envio falhou (SMTP fora do ar): o catch-up da
     próxima volta tenta de novo. Sem isto uma falha transitória custaria o
     e-mail do dia."""
-    with _cache_lock:
-        try:
-            with open(_MDEA_CLAIM_FILE, encoding='utf-8') as fh:
-                sent = json.load(fh)
-            if not isinstance(sent, list):
-                return
-        except (IOError, OSError, json.JSONDecodeError):
-            return
-        if slot not in sent:
-            return
-        try:
-            _atomic_write_json(_MDEA_CLAIM_FILE, [s for s in sent if s != slot])
-        except Exception:                                   # noqa: BLE001
-            log.warning('[manual-deals-ea] não consegui devolver o slot %s:\n%s',
-                        slot, traceback.format_exc())
+    _release_daily_slot(_MDEA_CLAIM_FILE, slot, 'manual-deals-ea')
 
 
 def _mdea_status_write(kind, result, when):
@@ -34081,41 +33984,13 @@ def _mt300_run(ref=None):
 def _mt300_claim_slot(slot):
     """Reserva o disparo EM DISCO: a instância reinicia várias vezes ao dia, e o
     catch-up precisa saber o que já saiu."""
-    with _cache_lock:
-        try:
-            with open(_MT300_CLAIM_FILE, encoding='utf-8') as fh:
-                sent = json.load(fh)
-            if not isinstance(sent, list):
-                sent = []
-        except (IOError, OSError, json.JSONDecodeError):
-            sent = []
-        if slot in sent:
-            return False
-        sent.append(slot)
-        try:
-            os.makedirs(_MT300_DIR, exist_ok=True)
-            _atomic_write_json(_MT300_CLAIM_FILE, sorted(sent)[-16:])
-        except Exception:                                   # noqa: BLE001
-            log.warning('[mt300] não consegui gravar o claim:\n%s', traceback.format_exc())
-        return True
+    return _claim_daily_slot(_MT300_CLAIM_FILE, _MT300_DIR, slot, 16, 'mt300')
 
 
 def _mt300_release_slot(slot):
     """Devolve o slot quando o envio falhou: uma queda transitória do SMTP não
     pode custar o e-mail do dia."""
-    with _cache_lock:
-        try:
-            with open(_MT300_CLAIM_FILE, encoding='utf-8') as fh:
-                sent = json.load(fh)
-            if not isinstance(sent, list):
-                return
-        except (IOError, OSError, json.JSONDecodeError):
-            return
-        if slot in sent:
-            try:
-                _atomic_write_json(_MT300_CLAIM_FILE, [x for x in sent if x != slot])
-            except Exception:                               # noqa: BLE001
-                log.warning('[mt300] não consegui devolver o slot:\n%s', traceback.format_exc())
+    _release_daily_slot(_MT300_CLAIM_FILE, slot, 'mt300')
 
 
 def _mt300_status_write(result, when):

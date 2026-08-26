@@ -125,6 +125,16 @@ _semaphores = _SemaphoreRegistry()
 _thread_state = threading.local()
 _settings = DatabaseAccessSettings()
 
+# A telemetria estruturada desta camada é INFO e sai UMA LINHA POR OPERAÇÃO — por
+# leitura e por escrita, em todo banco de arquivo do app. Com os bancos no share
+# e o sino consultando de tempos em tempos por aba aberta, isso vira a maior
+# parte do log e enterra o que se procura nele.
+#
+# Desligada por padrão. `OTC_DB_LOG=1` religa na instância sem tocar no arquivo —
+# é o que se faz quando o assunto É o lock.
+_DATABASE_LOGGING_ENABLED = os.getenv('OTC_DB_LOG', '').strip().lower() in (
+    '1', 'true', 'yes', 'on')
+
 
 def _database_id(database_path: str) -> str:
     """Return a stable identifier without exposing a potentially sensitive path."""
@@ -141,6 +151,16 @@ def _sanitize_error(error: BaseException, operation: DatabaseOperation) -> str:
 
 def _log_event(event: str, operation: DatabaseOperation, level: int = logging.INFO, **fields: object) -> None:
     """Emit one structured lifecycle event; observability cannot affect database safety."""
+    # O silêncio vale para o ROTINEIRO (INFO), nunca para WARNING e ERROR. Oito
+    # eventos desta camada saem nesses dois níveis — `file_lock_wait_timed_out`,
+    # `local_permit_wait_timed_out`, `file_lock_held_slow`,
+    # `transaction_outcome_unknown`, `file_lock_release_failed` e afins —, e são
+    # exatamente o que diz se o banco está em contenção e se um timeout novo
+    # começou a fazer request desistir. Calá-los junto com o ruído tiraria a
+    # visão no momento em que ela é necessária: o app seguiria falhando igual, só
+    # que sem deixar rastro.
+    if level < logging.WARNING and not _DATABASE_LOGGING_ENABLED:
+        return
     payload = {
         "event": event,
         "operation_id": operation.operation_id,
