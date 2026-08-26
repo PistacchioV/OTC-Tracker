@@ -2148,7 +2148,14 @@ features/<nome>/
 └── infra/          persistence.py · mail.py · mappers.py
 ```
 
-Extraída até aqui: **`support`** (Support Center) — 450 linhas, 6 rotas.
+Extraídas até aqui: **`support`** (Support Center, 450 linhas / 6 rotas) e
+**`onboarding`** (CGD, 154 linhas / 7 rotas). O `routes.py` saiu de 39.696
+para 39.125 linhas.
+
+Nem toda vertical tem `domain.py`: o do Onboarding é o `apps/pages/cgd_docs.py`,
+e ele **fica onde está** porque a Recon de CGD e o /mapping também o consultam —
+é horizontal, não vertical. Feature cujo domínio já mora num módulo próprio
+delega a ele em vez de criar um arquivo vazio.
 
 ### As regras que não dão erro nenhum quando se quebram
 
@@ -2187,8 +2194,8 @@ fora chamam o grupo; saída = de quantas ele depende:
 | Candidato | linhas | entrada | saída | |
 |---|---|---|---|---|
 | `support` | 450 | **0** | 15 | ✅ feito |
-| `onboarding` (CGD) | 103 | **0** | 3 | próximo |
-| `reconciliation-fxo` | 86 | **0** | 4 | |
+| `onboarding` (CGD) | 154 | **0** | 3 | ✅ feito |
+| `reconciliation-fxo` | 86 | **0** | 4 | próximo — sem teste ainda |
 | `quotes` | 88 | 1 | 4 | |
 | `holidays` | 254 | 3 | 11 | |
 | `bacc` · `mt300` · `appver` | ~170–310 | 7–9 | 13–21 | |

@@ -38971,158 +38971,11 @@ def api_pc_metrics_history():
 
 # ============================================================================
 # ONBOARDING — Overview e Tracking Docs (o CGD que vem da lista do SharePoint)
-#
-# O banco é o `cgd_docs` (DuckDB, `Config.DATABASE_DIR`), carregado pelo
-# `scripts/import_cgd_sharepoint.py`. A tela não importa nada: ela LÊ o que a
-# importação deixou, e é por isso que a página diz na cara quando o banco está
-# vazio — "sem dados" e "ninguém importou ainda" são coisas diferentes.
 # ============================================================================
-
-
-@blueprint.route('/cgd')
-def cgd_legacy():
-    """O endereço antigo do item de menu. A página virou a seção Onboarding, e
-    o link que alguém guardou continua chegando em algum lugar."""
-    return redirect(url_for('pages_blueprint.onboarding_overview'))
-
-
-def _cgd_form_ctx():
-    """O formulário de New Request para o template.
-
-    Vem do MÓDULO, não escrito no HTML: o mesmo `REQUEST_FORM` define os campos
-    do modal e os obrigatórios que seguram o documento no Banking. Escritos no
-    template, o dia em que um campo deixasse de ser obrigatório o modal pararia
-    de pedi-lo e a fila continuaria cobrando."""
-    return {'cgd_form': _cgd_mod.REQUEST_FORM,
-            'cgd_signature_types': _cgd_mod.SIGNATURE_TYPES}
-
-
-@blueprint.route('/onboarding')
-def onboarding_overview():
-    return render_template('pages/onboarding-overview.html', segment='onboarding',
-                           **_cgd_form_ctx())
-
-
-@blueprint.route('/onboarding/tracking-docs')
-def onboarding_tracking_docs():
-    return render_template('pages/onboarding-tracking-docs.html',
-                           segment='onboarding-tracking-docs', **_cgd_form_ctx())
-
-
-def _cgd_db_ready():
-    """(existe?, caminho). A tela mostra o caminho quando não existe: sem isso,
-    "nenhum documento" é indistinguível de "o script nunca rodou nesta
-    instância", e as duas se resolvem de jeitos opostos."""
-    return os.path.isfile(_cgd_mod.DB_PATH), _cgd_mod.DB_PATH
-
-
-@blueprint.route('/api/onboarding/overview')
-def api_onboarding_overview():
-    if not session.get('authenticated'):
-        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
-    existe, path = _cgd_db_ready()
-    rows = _cgd_mod.load_all() if existe else []
-    data = _cgd_mod.overview(rows)
-    data.update({'success': True, 'db': path, 'db_ready': existe,
-                 'counts': _cgd_mod.counts(rows)})
-    return jsonify(data)
-
-
-@blueprint.route('/api/onboarding/docs')
-def api_onboarding_docs():
-    if not session.get('authenticated'):
-        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
-    existe, path = _cgd_db_ready()
-    rows = _cgd_mod.load_all() if existe else []
-    # A etapa vai JUNTO com a linha: a tabela mostra onde cada documento parou,
-    # e recalcular isso no navegador seria a mesma regra escrita duas vezes.
-    for r in rows:
-        etapa, derivada = _cgd_mod.pending_stage(r)
-        r['_stage'] = etapa or ''
-        r['_stage_derived'] = bool(derivada)
-        # Encerrado NÃO tem etapa (ninguém trabalha nele), e a célula saía em
-        # branco — que se lê como "ainda não chegou em ninguém", justamente o
-        # contrário. A tela desenha `Finalized` a partir daqui em vez de repetir
-        # o `is_closed` no navegador: a regra de o que é encerrado é do módulo
-        # (`Active`, `Inactive`, `Cancelado`), e uma segunda cópia no JS
-        # discordaria dela no primeiro status novo que a lista trouxesse.
-        r['_closed'] = bool(_cgd_mod.is_closed(r))
-    # Os domínios vão no MESMO payload das colunas: a tela monta o campo de
-    # edição a partir deles, e uma lista escrita no template seria uma segunda
-    # cópia — que envelhece calada no dia em que a do servidor mudar.
-    return jsonify({'success': True, 'db': path, 'db_ready': existe,
-                    'columns': _cgd_mod.COLUMNS, 'id_column': _cgd_mod.ID_COLUMN,
-                    'date_columns': list(_cgd_mod.DATE_COLUMNS),
-                    'stages': list(_cgd_mod.STAGES),
-                    'signature_types': list(_cgd_mod.SIGNATURE_TYPES),
-                    'signature_column': _cgd_mod.SIGNATURE_COLUMN,
-                    'doc_types': list(_cgd_mod.DOC_TYPES),
-                    'doc_type_column': _cgd_mod.DOC_TYPE_COLUMN,
-                    'guarantor_options': list(_cgd_mod.GUARANTOR_OPTIONS),
-                    'rows': rows})
-
-
-@blueprint.route('/api/onboarding/docs/save', methods=['POST'])
-def api_onboarding_docs_save():
-    if not session.get('authenticated'):
-        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
-    payload = request.get_json(silent=True) or {}
-    rid = str(payload.get('id') or '').strip()
-    valores = payload.get('values') or {}
-    if not isinstance(valores, dict):
-        return jsonify({'success': False, 'error': 'invalid_values'}), 400
-    # `ids` é a edição em MASSA — o mesmo valor em várias linhas, numa chamada só.
-    # Uma requisição por linha faria a tela abrir o banco N vezes e deixaria o
-    # lote pela metade se a rede caísse no meio: aqui ou grava tudo ou o erro é
-    # um só.
-    ids = payload.get('ids')
-    if isinstance(ids, list) and ids:
-        try:
-            for uid in ids:
-                _cgd_mod.update_row(str(uid).strip(), valores)
-        except Exception as exc:                              # pragma: no cover
-            log.exception('[onboarding] falha na gravação em massa')
-            return jsonify({'success': False, 'error': str(exc)}), 500
-        return jsonify({'success': True, 'count': len(ids)})
-    try:
-        if rid:
-            _cgd_mod.update_row(rid, valores)
-        else:
-            rid = _cgd_mod.add_row(valores)
-    except Exception as exc:                                  # pragma: no cover
-        log.exception('[onboarding] falha ao gravar a linha')
-        return jsonify({'success': False, 'error': str(exc)}), 500
-    return jsonify({'success': True, 'id': rid})
-
-
-@blueprint.route('/api/onboarding/docs/delete', methods=['POST'])
-def api_onboarding_docs_delete():
-    if not session.get('authenticated'):
-        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
-    payload = request.get_json(silent=True) or {}
-    # `ids` (lote) ou `id` (a linha). O `set` é o que importa aqui: o `_id` é a
-    # CHAVE da linha no banco (o `DELETE` casa por valor, não por posição), então
-    # a ordem é indiferente — mas um id repetido na lista faria a contagem
-    # devolvida mentir sobre quantos documentos saíram.
-    ids = payload.get('ids')
-    if isinstance(ids, list) and ids:
-        ids = sorted({str(x).strip() for x in ids if str(x).strip()})
-        try:
-            for uid in ids:
-                _cgd_mod.delete_row(uid)
-        except Exception as exc:                              # pragma: no cover
-            log.exception('[onboarding] falha ao apagar o lote')
-            return jsonify({'success': False, 'error': str(exc)}), 500
-        return jsonify({'success': True, 'count': len(ids)})
-    rid = str(payload.get('id') or '').strip()
-    if not rid:
-        return jsonify({'success': False, 'error': 'missing_id'}), 400
-    try:
-        _cgd_mod.delete_row(rid)
-    except Exception as exc:                                  # pragma: no cover
-        log.exception('[onboarding] falha ao apagar a linha')
-        return jsonify({'success': False, 'error': str(exc)}), 500
-    return jsonify({'success': True})
+#
+# Saiu daqui: virou a vertical `apps/pages/features/onboarding/`. O domínio
+# continua no `apps/pages/cgd_docs.py` — a Recon de CGD e o /mapping também o
+# consultam, então ele é horizontal. Ver a §10 do CLAUDE.md.
 
 
 
@@ -39252,3 +39105,4 @@ def get_segment(request):
 # inteiro. A busca do lado delas é atrasada (dentro da função), o que mantém o
 # ciclo impossível e preserva os monkeypatches dos testes.
 from apps.pages.features.support import entrypoint as _f_support     # noqa: E402,F401
+from apps.pages.features.onboarding import entrypoint as _f_onboarding  # noqa: E402,F401
