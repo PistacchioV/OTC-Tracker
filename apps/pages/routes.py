@@ -100,6 +100,21 @@ _FLASK_APP = None
 def _capture_flask_app(state):
     global _FLASK_APP
     _FLASK_APP = state.app
+    # O banco de notificações é criado (e migrado do antigo) AQUI, uma vez,
+    # antes de existir tráfego. Antes ele nascia na primeira chamada de
+    # `get_notif_connection`, e num processo recém-subido essa chamada é quase
+    # sempre o poll do sino: a migração — 9,4 segundos de lock exclusivo no
+    # share — acontecia dentro do request mais frequente e mais barato do app.
+    #
+    # A falha aqui NÃO derruba a subida. Sem o banco de notificações o sino
+    # fica vazio e todo o resto funciona; recusar subir por causa do sino
+    # trocaria um aviso que não aparece por um app que não abre.
+    try:
+        _ensure_notif_db()
+    except Exception:                                       # noqa: BLE001
+        log.error('[notif-db] a subida não conseguiu preparar %s — o sino fica '
+                  'vazio até a próxima gravação conseguir:\n%s',
+                  NOTIF_DB_PATH, traceback.format_exc())
     _start_schedulers()
 
 
@@ -1067,7 +1082,27 @@ def get_notif_connection(readonly=False, unlocked=False):
     que filtra os tickets. Ali um dado parcial vira uma AUTORIZAÇÃO errada, e o
     `check_unlocked_reads.py` recusa a chamada fora do lugar permitido.
     """
-    _ensure_notif_db()
+    # **O ensure é do caminho de ESCRITA, e isto não é economia.** Ele abre o
+    # banco em modo READ-WRITE e, na primeira vez, migra o banco antigo: no
+    # share isso segurou o lock exclusivo por 9,4 SEGUNDOS. Chamado aqui em
+    # cima, quem pagava essa conta era o poll do sino — a consulta mais
+    # repetida do app, declarada MELHOR ESFORÇO, e a única que abre sem lock
+    # nenhum. Uma leitura best-effort virava a escrita mais cara do sistema.
+    #
+    # E o DuckDB não deixa isso passar em silêncio: um handle read-only aberto
+    # (outra aba, outra thread, a outra instância que enxerga o mesmo share)
+    # BLOQUEIA a abertura read-write, e o open estoura com *"the process cannot
+    # access the file because it is being used by another process"*. Como o
+    # `_notif_db_done` só é marcado no fim, a falha deixava o flag em False e
+    # TODO poll seguinte tentava de novo: um 500 por aba a cada 8 segundos,
+    # cada um custando uma tentativa de lock exclusivo no share.
+    #
+    # Quem cria o schema é a subida (`_capture_flask_app`) e, depois dela, só
+    # quem vai GRAVAR. O leitor não cria banco — no pior caso ele lê um banco
+    # que ainda não existe, e o sino fica vazio, que é o desfecho que este
+    # endpoint já tratava.
+    if not (readonly or unlocked):
+        _ensure_notif_db()
     if unlocked:
         if not readonly:
             # A gravação sem lock corrompe o arquivo em vez de só ler torto.
@@ -1080,6 +1115,13 @@ def get_notif_connection(readonly=False, unlocked=False):
 
 _notif_db_done = False
 _notif_db_lock = threading.Lock()
+# O ensure que FALHA não pode ser tentado de novo na chamada seguinte: a falha
+# típica é o arquivo em uso por outro processo, ela demora (é um lock no share
+# que expira) e ela se repete enquanto a outra ponta não soltar. Sem espera, o
+# app tenta a cada gravação de notificação — e as notificações acontecem a cada
+# ação de qualquer pessoa.
+_notif_db_retry_at = 0.0
+_NOTIF_DB_RETRY_SECONDS = 300
 
 
 def _notif_init_schema(conn, seq_start=1):
@@ -1229,46 +1271,98 @@ def _notif_avanca_sequencia(conn):
         log.warning('[notif-db] avanço da sequência falhou:\n%s', traceback.format_exc())
 
 
+def _notif_schema_pronto():
+    """As duas tabelas já existem? A pergunta é de LEITURA, e é ela que evita a
+    abertura read-write no caso normal — que é a esmagadora maioria das vezes.
+
+    Sem esta sonda, TODA subida da instância abria o banco de notificações em
+    modo de escrita só para descobrir que não havia nada a fazer. Isso é um lock
+    exclusivo no share, e é o que colide com a instância vizinha que já está de
+    pé: o DuckDB recusa a abertura read-write enquanto qualquer handle read-only
+    estiver aberto, e o erro que ele dá — *"used by another process"* — não diz
+    nada sobre schema nenhum.
+
+    O lock aqui é o COMPARTILHADO (`duckdb_read`, não o `unlocked`): a sonda roda
+    uma vez por processo, não por request, então esperar por uma gravação em
+    curso não custa nada — e é a resposta certa, porque uma leitura suja aqui
+    decidiria criar schema por cima de um banco que já o tem.
+
+    Qualquer falha responde **False** de propósito, inclusive o arquivo que não
+    existe: "não consegui ver" e "não está lá" levam ao mesmo lugar, que é o
+    caminho de criação — e ele é idempotente (`CREATE TABLE IF NOT EXISTS`).
+    """
+    try:
+        with duckdb_read(NOTIF_DB_PATH) as con:
+            achadas = {r[0] for r in con.execute(
+                "SELECT table_name FROM information_schema.tables").fetchall()}
+    except Exception:                                       # noqa: BLE001
+        return False
+    return {'notifications', 'push_subscriptions'} <= achadas
+
+
 def _ensure_notif_db():
-    """Cria o schema e migra do banco antigo — uma vez por processo."""
-    global _notif_db_done
+    """Cria o schema e migra do banco antigo — uma vez por processo.
+
+    Ele é chamado na SUBIDA (`_capture_flask_app`) e, depois dela, só por quem
+    vai gravar. Nunca pelo poll do sino — ver o comentário em
+    `get_notif_connection`.
+    """
+    global _notif_db_done, _notif_db_retry_at
     if _notif_db_done:
         return
     with _notif_db_lock:
         if _notif_db_done:
             return
-        # DUAS transações, e a ordem importa. O schema vai sozinho e comita
-        # primeiro; a migração vem depois, noutra. Juntos, um erro no meio da
-        # cópia — uma linha com nulo numa coluna NOT NULL foi o que apareceu no
-        # teste — desfazia TAMBÉM o `CREATE TABLE`, e o app subia com o banco de
-        # notificações sem tabela nenhuma: o sino passava a estourar a cada
-        # consulta, em cada aba. Separados, o pior caso é o sino sem histórico.
-        conn = _DuckDBHandle(duckdb_write(NOTIF_DB_PATH))
+        if time.monotonic() < _notif_db_retry_at:
+            return
+        # A sonda primeiro: com o schema no lugar não se abre nada para escrita.
+        if _notif_schema_pronto():
+            _notif_db_done = True
+            return
+        # O `try` começa ANTES do primeiro `duckdb_write`, e é onde estava o
+        # buraco: quem falhava era a ABERTURA (o arquivo em uso por outro
+        # processo), fora de qualquer `except`. O flag ficava em False, nada
+        # marcava a espera, e a tentativa seguinte vinha na próxima chamada.
         try:
-            # O início da sequência sai do banco ANTIGO e é decidido antes do
-            # schema: depois da tabela criada não há como corrigi-la.
-            _notif_init_schema(conn, _notif_maior_id_antigo() + 1)
-            conn.commit()
-        except Exception:
-            log.error('[notif-db] não consegui criar o schema:\n%s',
-                      traceback.format_exc())
-            conn.close()
-            raise
-        else:
-            conn.close()
+            # DUAS transações, e a ordem importa. O schema vai sozinho e comita
+            # primeiro; a migração vem depois, noutra. Juntos, um erro no meio da
+            # cópia — uma linha com nulo numa coluna NOT NULL foi o que apareceu no
+            # teste — desfazia TAMBÉM o `CREATE TABLE`, e o app subia com o banco de
+            # notificações sem tabela nenhuma: o sino passava a estourar a cada
+            # consulta, em cada aba. Separados, o pior caso é o sino sem histórico.
+            conn = _DuckDBHandle(duckdb_write(NOTIF_DB_PATH))
+            try:
+                # O início da sequência sai do banco ANTIGO e é decidido antes do
+                # schema: depois da tabela criada não há como corrigi-la.
+                _notif_init_schema(conn, _notif_maior_id_antigo() + 1)
+                conn.commit()
+            except Exception:
+                log.error('[notif-db] não consegui criar o schema:\n%s',
+                          traceback.format_exc())
+                conn.close()
+                raise
+            else:
+                conn.close()
 
-        conn = _DuckDBHandle(duckdb_write(NOTIF_DB_PATH))
-        try:
-            # O avanço só depois de uma migração que INSERIU: rodado sempre, ele
-            # queimaria um id a cada subida da instância — inofensivo, mas é
-            # efeito colateral por nada num caminho que roda todo dia.
-            if _notif_migrar_do_antigo(conn):
-                _notif_avanca_sequencia(conn)
-            conn.commit()
-        finally:
-            conn.close()
-        _notif_db_done = True
-        log.info('[notif-db] pronto em %s', os.path.abspath(NOTIF_DB_PATH))
+            conn = _DuckDBHandle(duckdb_write(NOTIF_DB_PATH))
+            try:
+                # O avanço só depois de uma migração que INSERIU: rodado sempre, ele
+                # queimaria um id a cada subida da instância — inofensivo, mas é
+                # efeito colateral por nada num caminho que roda todo dia.
+                if _notif_migrar_do_antigo(conn):
+                    _notif_avanca_sequencia(conn)
+                conn.commit()
+            finally:
+                conn.close()
+            _notif_db_done = True
+            log.info('[notif-db] pronto em %s', os.path.abspath(NOTIF_DB_PATH))
+        except Exception:                                       # noqa: BLE001
+            # Não relançar seria pior: quem grava notificação ficaria gravando
+            # numa tabela que talvez não exista. Quem chama já engole (o
+            # `_create_notification` inteiro é try/except) e a subida trata à
+            # parte — o que muda aqui é só a ESPERA antes da próxima tentativa.
+            _notif_db_retry_at = time.monotonic() + _NOTIF_DB_RETRY_SECONDS
+            raise
 
 def init_db():
     log.info("[init_db] Initializing database schema…")
@@ -36959,7 +37053,20 @@ def api_get_notifications():
     # vazio logo abaixo, e o poll seguinte corrige. Dispensando o lock, ela
     # não espera nem por uma gravação de notificação em curso. É o ÚNICO
     # lugar do app autorizado a isso (`check_unlocked_reads.py`).
-    conn = get_notif_connection(readonly=True, unlocked=True)
+    # A ABERTURA também é de melhor esforço, e ela ficava de fora: o `try` de
+    # baixo cobria a consulta, então um banco que não abre (não existe ainda,
+    # está em uso por outro processo) virava 500 — e o sino é chamado a cada 8
+    # segundos POR ABA. A tela ficava com o erro no console e o log com a mesma
+    # exceção centenas de vezes por minuto, escondendo a causa no meio das
+    # repetições. Sem conexão, o sino é o de sempre: vazio.
+    try:
+        conn = get_notif_connection(readonly=True, unlocked=True)
+    except Exception as exc:                                # noqa: BLE001
+        _notif_query_failed(exc)
+        # Mesma FORMA da resposta de sucesso, `total_today` incluído: a topbar lê
+        # o campo direto, e um payload pela metade trocaria o sino vazio por um
+        # erro no console do navegador.
+        return jsonify({"success": True, "notifications": [], "total_today": 0})
     try:
         # target_sid endereça UM usuário e é mais forte que target_role: quando
         # está preenchido, só aquele SID vê a notificação — nem o master, nem
