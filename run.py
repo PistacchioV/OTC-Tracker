@@ -48,4 +48,8 @@ if DEBUG:
     app.logger.info('Template Cache   = DISABLED')
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8050)
+    # A porta sai do `routes.APP_PORT` — a MESMA que os botões de e-mail usam.
+    # Escrita aqui, ela virava a terceira cópia do número, e as três discordavam:
+    # a instância subia na 8051 e o e-mail mandava a pessoa para a 8050.
+    from apps.pages.routes import APP_PORT
+    app.run(host="0.0.0.0", port=APP_PORT)

@@ -1859,8 +1859,12 @@ Intrag ficavam com o valor cru sempre que o notional estava na moeda fraca
   `url_for` é relativo (não serve fora do navegador) e `request.url_root` não
   existe na thread de um scheduler — num Run local ele devolveria
   `http://localhost:5005`, link morto para quem recebe. `_otc_app_url()` lê
-  **`OTC_TRACKER_URL`** do `.env` e, sem ela, monta `http://<hostname>:8050`
-  (a porta da waitress do `start-prod.bat`). Defina a variável na instância do
+  **`OTC_TRACKER_URL`** do `.env` e, sem ela, monta `http://<hostname>:8051`
+  — a porta é o **`routes.APP_PORT`**, UMA constante, porque o número aparece em
+  três lugares que se leem de fora do código (o botão de e-mail, o link do
+  e-mail de versão nova e o `run.py`) e os três diziam 8050 enquanto a instância
+  subia na 8051. Botão de e-mail com a porta errada não dá erro: leva a pessoa a
+  uma página que não abre. Defina a variável na instância do
   time — o padrão só acerta se o hostname resolver na rede de quem lê o e-mail
   (HANDOFF §257).
 - **`reportlab` é importado preguiçosamente** (PDFs de confirmação e folha de

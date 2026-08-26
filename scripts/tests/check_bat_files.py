@@ -25,6 +25,8 @@ import re
 import sys
 
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
+sys.path.insert(0, ROOT)
+os.environ.setdefault('OTC_SHARED_DRIVE_ROOT', ROOT)
 
 fails = []
 
@@ -81,6 +83,20 @@ for nome in BATS:
     if any(re.search(r'^\s*pushd\b', l, re.I) for l in codigo):
         check('  quem faz pushd faz popd',
               any(re.search(r'^\s*popd\b', l, re.I) for l in codigo), True)
+
+print('\n== a porta ==')
+# Os .bat nao conseguem ler a constante do Python (sao do cmd), entao a
+# igualdade e conferida aqui. Ela ja divergiu: a instancia subia na 8051 e o
+# `_otc_app_url` montava `:8050`, e todo botao de e-mail do app levava a uma
+# pagina que nao abre — sem erro nenhum, porque o link existe.
+from apps.pages.routes import APP_PORT                     # noqa: E402
+print('  APP_PORT = %d' % APP_PORT)
+for nome in BATS:
+    texto = io.open(os.path.join(ROOT, nome), 'rb').read().decode('utf-8', 'replace')
+    portas = sorted(set(int(x) for x in re.findall(r'\b(80\d\d)\b', texto)))
+    if not portas:
+        continue
+    check('  %s usa so a porta do app' % nome, portas, [APP_PORT])
 
 print('\n== o .gitattributes ==')
 # Sem ele, o proximo checkout numa maquina com `core.autocrlf` desligado (a

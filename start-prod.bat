@@ -2,8 +2,8 @@
 REM ============================================================================
 REM  OTC Tracker - PRODUCAO (Windows, maquina JP)
 REM
-REM  Waitress (servidor WSGI), porta 8050.
-REM  Acesso:  http://localhost:8050   (ou http://<IP-da-maquina>:8050)
+REM  Waitress (servidor WSGI), porta 8051.
+REM  Acesso:  http://localhost:8051   (ou http://<IP-da-maquina>:8051)
 REM
 REM  Uso:
 REM     start-prod.bat             -> tenta instalar requirements e sobe
@@ -78,7 +78,7 @@ if /I "%~1"=="noinstall" (
 set FLASK_APP=run.py
 set DEBUG=False
 echo.
-echo [PRODUCAO] OTC Tracker em http://0.0.0.0:8050  (waitress)
+echo [PRODUCAO] OTC Tracker em http://0.0.0.0:8051  (waitress)
 echo.
 REM gunicorn nao roda no Windows; usamos waitress como servidor WSGI de producao.
 REM
@@ -89,7 +89,7 @@ REM  a maior parte do tempo de um request e espera de REDE, e a thread fica
 REM  parada segurando a vaga.  Com quatro vagas, quatro esperas dessas param
 REM  o servidor inteiro -- inclusive o arquivo estatico e a pagina que o
 REM  usuario acabou de pedir, que nem banco usam.
-"%PY%" -m waitress --host=0.0.0.0 --port=8050 --threads=16 run:app
+"%PY%" -m waitress --host=0.0.0.0 --port=8051 --threads=16 run:app
 if errorlevel 1 (
     echo.
     echo [ERRO] waitress nao encontrado. Instale com:  "%PY%" -m pip install waitress

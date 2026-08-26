@@ -168,10 +168,10 @@ O projeto suporta tanto SQLite quanto bancos relacionais (PostgreSQL/MySQL):
 flask run
 
 # Especificar uma porta diferente
-flask run --port=8050
+flask run --port=8051
 
 # Permitir acesso externo (de outras máquinas) com porta específica
-flask run --host=0.0.0.0 --port=8050
+flask run --host=0.0.0.0 --port=8051
 ```
 
 ### 2. Produção
