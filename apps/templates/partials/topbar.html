@@ -833,6 +833,14 @@
                     }).catch(function () {});
                 }
                 navigator.serviceWorker.register('/sw.js').then(function (reg) {
+                    // Pede a checagem de versão a cada load. O `/sw.js` já vai
+                    // com `Cache-Control: no-cache` e o worker faz `skipWaiting`
+                    // + `clients.claim`, mas quem decide QUANDO reconferir o
+                    // script é o navegador, e ele pode segurar a versão
+                    // registrada por horas. Foi assim que o balão saiu no
+                    // formato NOVO por um caminho e no ANTIGO pelo outro, na
+                    // mesma tela: a página estava atualizada e o worker não.
+                    try { reg.update(); } catch (e) { /* navegador antigo */ }
                     fetch('/api/push/public-key').then(function (r) { return r.json(); })
                         .then(function (cfg) {
                             if (!cfg || !cfg.enabled || !cfg.key) { _pushInit = false; return; }
