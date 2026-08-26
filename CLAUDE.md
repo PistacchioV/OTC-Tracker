@@ -2129,3 +2129,76 @@ script ao módulo que ele protege — **rode o correspondente depois de mexer
 naquele módulo**. `check_boxparse.py` é o único que precisa de binário externo
 (o `jsc` do macOS, para rodar a cópia da regra que vive no navegador), então não
 roda na máquina Windows do time (§163).
+
+---
+
+## 10. As verticais (`apps/pages/features/`)
+
+O `routes.py` tem **39 mil linhas** porque toda funcionalidade nasceu nele: 1293
+funções de topo, 371 rotas, 514 constantes. A saída é levar **uma feature de
+cada vez** para `apps/pages/features/<nome>/`, seguindo a skill
+[`separation-of-concerns`](.claude/skills/separation-of-concerns/SKILL.md).
+
+```
+features/<nome>/
+├── entrypoint.py   as rotas: sessão → comando/consulta → JSON. Só código de status.
+├── commands.py     escrita (gravar + avisar + e-mail). Sem regra de negócio.
+├── queries.py      leitura, sem efeito nenhum.
+├── domain.py       as regras. PURAS: sem Flask, sem banco, sem SMTP.
+└── infra/          persistence.py · mail.py · mappers.py
+```
+
+Extraída até aqui: **`support`** (Support Center) — 450 linhas, 6 rotas.
+
+### As regras que não dão erro nenhum quando se quebram
+
+- **Módulo de feature nunca importa NOME do `routes` — só o MÓDULO, e dentro da
+  função.** Esta é a que causa perda silenciosa. Sessenta e um dos oitenta
+  scripts de `scripts/tests/` trocam atributos no `routes` para não encostar em
+  dado real (`R.DB_PATH = tmp`, `R._create_notification = espião`,
+  `R.OTM_JSON_ROOT = tmp`). Um `from apps.pages.routes import get_db_connection`
+  no topo do módulo **congela o valor no import**: o teste troca o atributo, o
+  módulo continua com o original, e o teste passa lendo o banco de VERDADE. O
+  jeito certo é `from apps.pages import routes` DENTRO da função e `routes.X` no
+  ponto de uso — busca atrasada, que de quebra torna o ciclo impossível.
+- **Entrypoint que o `routes.py` não importa é rota que não existe.** Em Flask o
+  `@blueprint.route` só roda quando o módulo é importado. Sem a linha no bloco
+  do fim do `routes.py`, a página responde **404** e a subida não diz nada. O
+  bloco fica no FIM de propósito: as features buscam no `routes` o que ainda é
+  de plataforma, e importá-las no topo fecharia o ciclo.
+- **Guarda que varre `routes.py` por AST para de cobrir o que saiu de lá.** São
+  32 scripts com o caminho escrito na mão, e o `check_unlocked_reads` casa por
+  **nome de função** — o `_tk_roles_by_sid` virou `roles_by_sid` e saiu da lista
+  proibida em silêncio. Ao mover código, atualize o guarda na MESMA mudança.
+- **O teste da feature é o que autoriza a extração.** O Support Center foi o
+  primeiro porque nada no resto do `routes.py` o chamava (zero referências de
+  entrada) **e** o `check_tickets.py` já o prendia ponta a ponta por HTTP.
+  Extrair sem uma rede dessas é mudar 39 mil linhas no escuro. Feature sem teste
+  de caracterização: escreva o teste primeiro, com o código ainda no lugar.
+
+`check_soc_layers.py` prende tudo isso, inclusive subindo o app para conferir as
+rotas no `url_map` — import escrito e import que executou são coisas diferentes.
+
+### A ordem das próximas fatias
+
+Ela sai do **acoplamento medido**, não do tamanho. Entrada = quantas funções de
+fora chamam o grupo; saída = de quantas ele depende:
+
+| Candidato | linhas | entrada | saída | |
+|---|---|---|---|---|
+| `support` | 450 | **0** | 15 | ✅ feito |
+| `onboarding` (CGD) | 103 | **0** | 3 | próximo |
+| `reconciliation-fxo` | 86 | **0** | 4 | |
+| `quotes` | 88 | 1 | 4 | |
+| `holidays` | 254 | 3 | 11 | |
+| `bacc` · `mt300` · `appver` | ~170–310 | 7–9 | 13–21 | |
+| `conf-escalation` · `mdea` | ~314–384 | 12–13 | 17–20 | |
+| `file-interpreter` | 307 | **43** | 4 | tarde |
+| `mapping` | 1263 | 39 | 35 | tarde |
+| `notificações` | 393 | **161** | 9 | é PLATAFORMA, não feature |
+
+As notificações, o e-mail, a sessão/autorização e o acesso a banco são
+**horizontais**: o lugar delas é `apps/pages/platform/infra/`, e é para lá que a
+ponte atrasada das features vai apontar quando forem extraídas. Enquanto isso
+não acontece, a busca em `routes` é andaime declarado — está escrita como tal
+nos docstrings de `infra/persistence.py` e `infra/mail.py`.
