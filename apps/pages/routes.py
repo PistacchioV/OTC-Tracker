@@ -26,10 +26,11 @@ from email.mime.multipart import MIMEMultipart
 import awmpy
 import portalocker
 from flask import (
-    render_template, request, redirect, send_file,
+    render_template, request, redirect, send_file, send_from_directory,
     url_for, session, flash, jsonify, make_response, has_app_context
 )
 from jinja2 import TemplateNotFound
+from werkzeug.exceptions import NotFound
 
 # Caminhos de infraestrutura (banco de usuários e raiz do share) saem do
 # `Config`, que os resolve para ABSOLUTOS e recusa um valor relativo. Era aqui
@@ -38,7 +39,10 @@ from jinja2 import TemplateNotFound
 # dentro do diretório de trabalho — foi assim que apareceram as pastas
 # `I:\Confirmation\...` na raiz do repositório.
 from apps.config import Config
-from apps.pages.data_paths import data_dir, data_path, data_write, mapping_file, mapping_write
+from apps.pages.data_paths import (
+    data_dir, data_path, data_write, mapping_file, mapping_write,
+    PACKAGED_DIR as PACKAGED_DATA_DIR,
+)
 from apps.pages import blueprint
 # Porte Python do parser de booking recap (o mesmo que otc-fileupload.js faz no
 # navegador) — usado pela varredura agendada do box. Sem dependência externa.
@@ -26637,6 +26641,44 @@ def api_ndf_mapping_b3():
 # ==============================================================================
 # API — B3 JSON CRUD (Subjacente / VCP / Domínio / RefData)
 # ==============================================================================
+
+# O `/static/data/...` do NAVEGADOR também sai do `DATA_DIR`
+# ─────────────────────────────────────────────────────────
+# Setenta e um `fetch` espalhados por quinze telas leem JSON por URL estática —
+# `RefData.json`, `Subjacente.json`, `anbima.json`, as agendas de feriado, os
+# cadastros do /mapping. Como URL estática, o Flask os serve da pasta do CÓDIGO,
+# e é aí que a regra do `data_paths` era furada pela ponta que ela não cobre: o
+# servidor lê e grava no `DATA_DIR` (o share, na instância do JPM) e a TELA lia
+# o checkout.
+#
+# Na dev as duas pastas são a mesma e nada aparece. Na instância do JPM não são,
+# e o efeito é o pior tipo de defeito: a mesa edita o Reference Data pela tela,
+# o app grava no share, a tela recarrega — e mostra a cópia versionada, de antes
+# do último `git pull`. Nenhum erro, dois arquivos, e a edição que "não salvou"
+# está salva no lugar certo.
+#
+# Esta rota é mais específica que o `/static/<path:filename>` embutido, então
+# ganha dele no roteamento, e resolve pelo MESMO `data_path()` do servidor —
+# `DATA_DIR` primeiro, cópia empacotada como queda. Quem não tem `DATA_DIR`
+# separado (a dev) não vê diferença nenhuma: o caminho resolvido é o mesmo.
+@blueprint.route('/static/data/<path:filename>')
+def static_data_file(filename):
+    """Serve `static/data/...` pelo `DATA_DIR`, com queda para o empacotado.
+
+    A RAIZ e o caminho RELATIVO vão separados para o `send_from_directory` de
+    propósito: quem recusa sair da pasta é o `safe_join` que ele faz por dentro,
+    e ele só tem como recusar se enxergar o `..` que veio na URL. Resolver o
+    caminho aqui e passar `dirname`/`basename` já resolvidos anula essa
+    checagem — a pasta traversada VIRA a raiz permitida, e
+    `/static/data/../../config.py` passa a servir o config.
+    """
+    for raiz in (data_dir(), PACKAGED_DATA_DIR):
+        try:
+            return send_from_directory(raiz, filename)
+        except NotFound:
+            continue                      # não está no DATA_DIR: tenta a cópia do repo
+    raise NotFound()
+
 
 _B3_DATA_DIR = data_dir()
 _B3_FILE_MAP = {
