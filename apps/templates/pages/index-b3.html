@@ -382,6 +382,33 @@
         });
     }
 
+    /* O aviso de dado que não carregou. Ele diz o ARQUIVO e o MOTIVO, e aponta
+       o diagnóstico do servidor — porque o próximo passo depende de qual é: um
+       404 é caminho, um arquivo vazio é conteúdo, e um erro de rede é o share.
+       Antes, os três davam a mesma tela em branco. */
+    function mostraFalha(lista) {
+        const filtros = document.querySelector('.card-body') || document.body;
+        let box = document.getElementById('b3-load-error');
+        if (!box) {
+            box = document.createElement('div');
+            box.id = 'b3-load-error';
+            box.className = 'alert alert-warning d-flex align-items-start gap-2 mb-3';
+            box.style.fontSize = '.8rem';
+            filtros.insertBefore(box, filtros.firstChild);
+        }
+        box.innerHTML =
+            '<i class="ti ti-alert-triangle mt-1"></i><div>' +
+            '<div class="fw-semibold" data-lang="b3-load-failed">' +
+            'Reference data did not load — the filters below are empty.</div>' +
+            '<ul class="mb-1 mt-1 ps-3">' +
+            lista.map(function (p) {
+                return '<li>' + String(p).replace(/[&<>]/g, function (ch) {
+                    return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[ch]; }) + '</li>';
+            }).join('') + '</ul>' +
+            '<a href="/api/data-files/status" target="_blank" class="small">' +
+            'Where the app is reading these files from →</a></div>';
+    }
+
     /* ------------------------------------------------------------------ */
     async function loadData() {
         const loadingEl = document.getElementById('statusLoading');
@@ -391,12 +418,51 @@
 
         try {
             const _lang = localStorage.getItem('__OTC_TRACKER_LANG__') || 'en';
+            /* Um `fetch` que devolve HTTP 200 com corpo vazio, ou um 404, ou um
+               JSON que não é lista: os três davam a MESMA tela — os selects com
+               só o placeholder, sem erro nenhum. O `Promise.all` cru ainda
+               piorava: bastava um dos três falhar para os outros dois se
+               perderem junto, e o `alert` genérico do catch não dizia qual.
+
+               `carrega()` transforma cada uma dessas falhas numa frase que
+               NOMEIA o arquivo e o motivo. É a mesma classe de defeito do
+               DATA_DIR (§4): a tela abre, a API responde 200 e não há dado —
+               o sintoma que menos parece falha. */
+            const problemas = [];
+            async function carrega(arquivo, opcional) {
+                const url = '{{ config.ASSETS_ROOT }}/data/' + arquivo;
+                let r;
+                try {
+                    r = await fetch(url, { credentials: 'same-origin' });
+                } catch (e) {
+                    problemas.push(arquivo + ' — ' + (e && e.message || 'network'));
+                    return [];
+                }
+                if (!r.ok) {
+                    problemas.push(arquivo + ' — HTTP ' + r.status);
+                    return [];
+                }
+                let d;
+                try {
+                    d = await r.json();
+                } catch (e) {
+                    problemas.push(arquivo + ' — conteúdo não é JSON');
+                    return [];
+                }
+                if (!Array.isArray(d)) {
+                    problemas.push(arquivo + ' — o conteúdo não é uma lista');
+                    return [];
+                }
+                if (!d.length && !opcional) { problemas.push(arquivo + ' — arquivo vazio'); }
+                return d;
+            }
             const [subj, vcp, dom, swap, trans] = await Promise.all([
-                fetch('{{ config.ASSETS_ROOT }}/data/Subjacente.json').then(r => r.json()),
-                fetch('{{ config.ASSETS_ROOT }}/data/VCP.json').then(r => r.json()),
-                fetch('{{ config.ASSETS_ROOT }}/data/Dominio.json').then(r => r.json()),
-                fetch('{{ config.ASSETS_ROOT }}/data/SwapIndex.json').then(r => r.json()).catch(() => ([])),
-                fetch('{{ config.ASSETS_ROOT }}/data/translations/' + _lang + '.json').then(r => r.json()).catch(() => ({}))
+                carrega('Subjacente.json'),
+                carrega('VCP.json'),
+                carrega('Dominio.json'),
+                carrega('SwapIndex.json', true),
+                fetch('{{ config.ASSETS_ROOT }}/data/translations/' + _lang + '.json')
+                    .then(r => r.json()).catch(() => ({}))
             ]);
             _TRANS = trans;
 
@@ -415,9 +481,15 @@
 
             // Currency Base saiu daqui — virou aba da página Mapping (Data Base).
             btnPes.disabled = false;
+
+            /* O aviso fica NA TELA, e não num `alert`: o alerta some com um
+               clique e leva a informação junto, e é justamente ela que a mesa
+               precisa repassar para quem vai olhar o servidor. Ele nomeia cada
+               arquivo e o motivo, e diz de onde o app está lendo. */
+            if (problemas.length) { mostraFalha(problemas); }
         } catch (err) {
             console.error('Error loading data:', err);
-            alert('Failed to load reference data. Check the console for details.');
+            mostraFalha([String(err && err.message || err)]);
         } finally {
             loadingEl.classList.add('d-none');
         }
