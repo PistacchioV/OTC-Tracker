@@ -423,6 +423,18 @@ que parece:
   `conn = get_db_connection()` seguido de `try: … finally: conn.close()` — os
   21 chamadores atuais são. Sem o `finally`, o lock nunca é liberado e **o app
   inteiro trava para todo mundo**, não só para o request que falhou.
+- **A leitura SEM lock (`unlocked=True`) é do poll do sino, e só dele.** Ela
+  dispensa até o lock compartilhado — o que coordena PROCESSOS —, então não
+  espera nem por uma gravação em curso; em troca, pode pegar o arquivo no meio
+  de um commit e falhar. Ali é aceitável porque o sino é consulta de MELHOR
+  ESFORÇO: o endpoint já devolve o sino vazio quando a consulta falha, e o poll
+  seguinte corrige. **Em qualquer outro lugar é um tiro no pé que não dá erro**
+  — a allowlist do `Page_Access`, o login e o papel que filtra os tickets
+  DECIDEM coisas, e um dado parcial ali vira autorização errada. O
+  `check_unlocked_reads.py` prende os pontos de chamada por AST e barra por nome
+  as funções de autorização. O aviso `file_lock_skipped` sai **uma vez por
+  banco**, não por leitura: ele é WARNING, WARNING passa pelo gate que silencia
+  o ruído de INFO, e uma linha por poll seria a maior parte do log.
 - **Quem só faz SELECT abre com `get_db_connection(readonly=True)`.** O caminho
   de escrita é EXCLUSIVO nos dois níveis — `BoundedSemaphore(1)` dentro do
   processo e lock de arquivo exclusivo entre eles —, então uma consulta aberta

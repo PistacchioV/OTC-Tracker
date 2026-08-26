@@ -122,6 +122,8 @@ class _SemaphoreRegistry:
 
 
 _semaphores = _SemaphoreRegistry()
+# Os bancos já avisados de que estão sendo lidos sem lock — ver `skip_file_lock`.
+_unlocked_warned: set = set()
 _thread_state = threading.local()
 _settings = DatabaseAccessSettings()
 
@@ -316,7 +318,13 @@ def _database_context(
     engine: str,
     write: bool,
     operation_id: Optional[str] = None,
+    skip_file_lock: bool = False,
 ) -> Iterator[object]:
+    if skip_file_lock and write:
+        # The exclusive file lock is what keeps two writers from touching the
+        # file at once; bypassing it for a write would corrupt data, not just
+        # risk a stale read.
+        raise ValueError("skip_file_lock is only permitted for read operations")
     normalized_path = normalize_database_path(database_path)
     operation = DatabaseOperation(
         operation_id=operation_id or uuid.uuid4().hex,
@@ -347,8 +355,23 @@ def _database_context(
     try:
         _acquire_permit(permit, operation)
         try:
-            file_lock = _acquire_file_lock(operation)
-            file_lock_acquired_at = time.monotonic()
+            if skip_file_lock:
+                # No cross-process coordination: this read may overlap an
+                # in-flight write on the share and see a torn/partial file.
+                #
+                # WARNING once PER PATH, not per operation. The one caller of
+                # this is the bell poll, which runs every few seconds per open
+                # tab: a warning per read would be most of the log, and burying
+                # the log is exactly what `_DATABASE_LOGGING_ENABLED` was added
+                # to stop — and WARNING bypasses that gate. The fact worth
+                # recording is that a given database is being read unlocked at
+                # all, and that is said once.
+                if normalized_path not in _unlocked_warned:
+                    _unlocked_warned.add(normalized_path)
+                    _log_event("file_lock_skipped", operation, logging.WARNING)
+            else:
+                file_lock = _acquire_file_lock(operation)
+                file_lock_acquired_at = time.monotonic()
             connection = _open_connection(engine, normalized_path, write)
             _log_event("connection_opened", operation)
             if write:
@@ -477,6 +500,19 @@ def duckdb_read(database_path: _PathLike) -> Iterator[duckdb.DuckDBPyConnection]
     return _database_context(database_path, engine="duckdb", write=False)  # type: ignore[return-value]
 
 
+def duckdb_read_unlocked(database_path: _PathLike) -> Iterator[duckdb.DuckDBPyConnection]:
+    """Open a DuckDB read-only connection WITHOUT the cross-process file lock.
+
+    DANGER: this file lives on a network share, and neither DuckDB nor the OS
+    guarantee a consistent view of a file being written concurrently — this
+    call can observe a torn/partial read while another process is mid-COMMIT.
+    Use only where a stale or occasionally-inconsistent read is acceptable
+    (e.g. a best-effort dashboard poll) and never for a read that feeds a
+    write-back decision.
+    """
+    return _database_context(database_path, engine="duckdb", write=False, skip_file_lock=True)  # type: ignore[return-value]
+
+
 def duckdb_write(
     database_path: _PathLike, *, operation_id: Optional[str] = None
 ) -> Iterator[duckdb.DuckDBPyConnection]:
@@ -489,6 +525,11 @@ def duckdb_write(
 def sqlite_read(database_path: _PathLike) -> Iterator[sqlite3.Connection]:
     """Open a fresh SQLite read-only connection under a shared file lock."""
     return _database_context(database_path, engine="sqlite", write=False)  # type: ignore[return-value]
+
+
+def sqlite_read_unlocked(database_path: _PathLike) -> Iterator[sqlite3.Connection]:
+    """SQLite equivalent of `duckdb_read_unlocked` — see its docstring for the risk."""
+    return _database_context(database_path, engine="sqlite", write=False, skip_file_lock=True)  # type: ignore[return-value]
 
 
 def sqlite_write(

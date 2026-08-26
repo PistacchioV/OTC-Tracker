@@ -58,15 +58,21 @@ _real_ctx = DA._database_context
 
 
 @contextlib.contextmanager
-def _spy(path, *, engine, write, operation_id=None):
-    with _real_ctx(path, engine=engine, write=write, operation_id=operation_id) as conn:
-        ops.append('write' if write else 'read')
+def _spy(path, *, engine, write, operation_id=None, skip_file_lock=False):
+    # `skip_file_lock` e o caminho do sino (leitura sem o lock entre processos).
+    # O espiao tem de aceita-lo e REPASSA-LO: engolindo o parametro, o teste
+    # exercitaria um caminho que a aplicacao nao usa.
+    with _real_ctx(path, engine=engine, write=write, operation_id=operation_id,
+                   skip_file_lock=skip_file_lock) as conn:
+        ops.append(('unlocked ' if skip_file_lock else '') + ('write' if write else 'read'))
         yield conn
 
 
 DA._database_context = _spy
 R.duckdb_write = lambda p, **k: _spy(p, engine='duckdb', write=True, **k)
 R.duckdb_read = lambda p, **k: _spy(p, engine='duckdb', write=False, **k)
+R.duckdb_read_unlocked = lambda p, **k: _spy(p, engine='duckdb', write=False,
+                                             skip_file_lock=True, **k)
 
 from apps import create_app                               # noqa: E402
 from apps.config import DebugConfig                       # noqa: E402
@@ -103,7 +109,12 @@ print('== 1. o sino nao toma mais a fila de escrita ==')
 ops[:] = []
 alice.get('/api/notifications')
 check('uma operacao por consulta', len(ops), 1)
-check('e ela e COMPARTILHADA', ops, ['read'])
+# Nem compartilhada: o sino le SEM LOCK. Ele e a consulta mais repetida do app
+# (uma por aba a cada poucos segundos) e e de MELHOR ESFORCO — a que falha ja
+# devolve o sino vazio, e o poll seguinte corrige. Assim ela nao espera nem por
+# uma gravacao de notificacao em curso. E o unico ponto do app autorizado a
+# isso; quem vigia e o `check_unlocked_reads.py`.
+check('e ela nem toma o lock compartilhado', ops, ['unlocked read'])
 
 print('\n== 2. a allowlist nao vai ao banco em toda navegacao ==')
 R._page_access_forget()

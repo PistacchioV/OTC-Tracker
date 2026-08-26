@@ -55,6 +55,7 @@ from apps.pages import otc_tickets
 # nome resolvido só na primeira chamada faria o `except` referenciar algo que
 # ainda não existe.
 from apps.pages.database_access import (
+    duckdb_read_unlocked,
     DatabaseCleanupError,
     DatabaseLockTimeout,
     TransactionOutcomeUnknown,
@@ -1025,15 +1026,32 @@ def get_db_connection(readonly=False):
 NOTIF_DB_PATH = Config.NOTIFICATIONS_DATABASE_PATH
 
 
-def get_notif_connection(readonly=False):
+def get_notif_connection(readonly=False, unlocked=False):
     """Abre o banco de NOTIFICAÇÕES. Mesmo contrato do `get_db_connection`:
     `conn = ...` seguido de `try: … finally: conn.close()`.
 
-    `readonly=True` para quem só faz SELECT — é o caminho do sino, e é o que
-    impede a consulta mais repetida do app de entrar na fila de escrita
-    (CLAUDE.md §4).
+    `readonly=True` para quem só faz SELECT — lock COMPARTILHADO, que não entra
+    na fila de escrita (CLAUDE.md §4).
+
+    **`unlocked=True` é o poll do sino, e SÓ ele.** Ele dispensa até o lock
+    compartilhado, então a leitura não espera nem por uma gravação de
+    notificação em curso. O preço é real: sem coordenação entre processos, a
+    leitura pode pegar o arquivo no meio de um commit e falhar — ou, no share,
+    ver um estado parcial. É aceitável ali porque o sino é uma consulta de
+    MELHOR ESFORÇO: ele repete a cada poucos segundos, o endpoint já trata a
+    consulta que falha devolvendo o sino vazio (e não um 500 a cada aba), e um
+    aviso que aparece um poll depois não muda decisão nenhuma.
+
+    NÃO use em nada que decida: a allowlist do `Page_Access`, o login, o papel
+    que filtra os tickets. Ali um dado parcial vira uma AUTORIZAÇÃO errada, e o
+    `check_unlocked_reads.py` recusa a chamada fora do lugar permitido.
     """
     _ensure_notif_db()
+    if unlocked:
+        if not readonly:
+            # A gravação sem lock corrompe o arquivo em vez de só ler torto.
+            raise ValueError('unlocked só vale para leitura')
+        return _DuckDBHandle(duckdb_read_unlocked(NOTIF_DB_PATH))
     if readonly:
         return _DuckDBHandle(duckdb_read(NOTIF_DB_PATH))
     return _DuckDBHandle(duckdb_write(NOTIF_DB_PATH))
@@ -36821,7 +36839,12 @@ def api_get_notifications():
         return jsonify({"success": False}), 401
     user_role = session.get('user_role', '')
     user_sid = (session.get('user_sid') or '').strip().upper()
-    conn = get_notif_connection(readonly=True)
+    # SEM LOCK: o sino é a consulta mais repetida do app (uma por aba a cada
+    # poucos segundos) e é de MELHOR ESFORÇO — a que falha já devolve o sino
+    # vazio logo abaixo, e o poll seguinte corrige. Dispensando o lock, ela
+    # não espera nem por uma gravação de notificação em curso. É o ÚNICO
+    # lugar do app autorizado a isso (`check_unlocked_reads.py`).
+    conn = get_notif_connection(readonly=True, unlocked=True)
     try:
         # target_sid endereça UM usuário e é mais forte que target_role: quando
         # está preenchido, só aquele SID vê a notificação — nem o master, nem
