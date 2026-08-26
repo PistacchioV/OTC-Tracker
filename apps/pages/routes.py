@@ -1010,6 +1010,227 @@ def get_db_connection(readonly=False):
     return _DuckDBHandle(duckdb_write(DB_PATH))
 
 
+# ── O banco das NOTIFICAÇÕES, separado do de usuários ───────────────────────
+# O lock da camada de acesso é por ARQUIVO. Com `notifications` e
+# `push_subscriptions` morando no mesmo DuckDB de `users`, cada gravação de
+# notificação — e elas acontecem a cada ação de qualquer pessoa da mesa —
+# segurava o arquivo inteiro em modo EXCLUSIVO, e com ele o login, a allowlist
+# do `Page_Access` e a gestão de usuários. Some a isso o sino, que consulta por
+# aba aberta: o banco vivia travado, e o que travava não era o dado que
+# importa, era o aviso.
+#
+# Separados, os dois tráfegos deixam de se ver. A gravação de notificação não
+# encosta em quem está entrando no app, e a consulta do sino (que é a mais
+# frequente do sistema) disputa apenas com outras notificações.
+NOTIF_DB_PATH = Config.NOTIFICATIONS_DATABASE_PATH
+
+
+def get_notif_connection(readonly=False):
+    """Abre o banco de NOTIFICAÇÕES. Mesmo contrato do `get_db_connection`:
+    `conn = ...` seguido de `try: … finally: conn.close()`.
+
+    `readonly=True` para quem só faz SELECT — é o caminho do sino, e é o que
+    impede a consulta mais repetida do app de entrar na fila de escrita
+    (CLAUDE.md §4).
+    """
+    _ensure_notif_db()
+    if readonly:
+        return _DuckDBHandle(duckdb_read(NOTIF_DB_PATH))
+    return _DuckDBHandle(duckdb_write(NOTIF_DB_PATH))
+
+
+_notif_db_done = False
+_notif_db_lock = threading.Lock()
+
+
+def _notif_init_schema(conn, seq_start=1):
+    """As duas tabelas do banco de notificações.
+
+    `seq_start` existe porque o DuckDB NÃO deixa mexer numa sequência de que uma
+    coluna depende: `ALTER SEQUENCE … RESTART` não é implementado, e o
+    `DROP`/`CREATE OR REPLACE` batem em *"Cannot drop entry because there are
+    entries that depend on it"*. Como o `id` das notificações migradas vem do
+    banco antigo, a sequência tem de NASCER depois do maior deles — depois da
+    tabela criada, não há mais como corrigi-la, e o próximo INSERT colidiria com
+    uma linha migrada.
+    """
+    conn.execute("CREATE SEQUENCE IF NOT EXISTS seq_notif_id START {}".format(
+        max(1, int(seq_start or 1))))
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS notifications (
+            id          INTEGER DEFAULT nextval('seq_notif_id') PRIMARY KEY,
+            actor_sid   VARCHAR NOT NULL DEFAULT '',
+            actor_name  VARCHAR NOT NULL DEFAULT '',
+            action      VARCHAR NOT NULL DEFAULT '',
+            page        VARCHAR NOT NULL DEFAULT '',
+            detail      VARCHAR DEFAULT '',
+            target_role VARCHAR DEFAULT '',
+            target_sid  VARCHAR DEFAULT '',
+            created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS push_subscriptions (
+            endpoint   VARCHAR PRIMARY KEY,
+            sid        VARCHAR NOT NULL DEFAULT '',
+            role       VARCHAR DEFAULT '',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+
+def _notif_migrar_do_antigo(conn):
+    """Traz `notifications` e `push_subscriptions` do banco de usuários.
+
+    Roda uma vez, na subida, e é IDEMPOTENTE: o banco da instância já tem as
+    duas tabelas cheias, e um script separado ("rode isto depois do pull") é a
+    forma mais confiável de a mesa ficar sem o sino — já aconteceu com as
+    migrações do Pending Confirmation.
+
+    O que veio NÃO é apagado do banco antigo. Renomear ou dropar deixaria a
+    volta atrás sem dado, e o custo de manter as linhas lá é algumas dezenas de
+    KB num arquivo que ninguém mais lê. O que impede a duplicação é o `id`:
+    a cópia pula o que já está aqui.
+    """
+    inseriu = False
+    if not os.path.isfile(DB_PATH):
+        return inseriu                                      # instalação nova
+    # Pela CAMADA (`duckdb_read`) e não pelo `duckdb.connect` cru: ela toma o
+    # lock compartilhado do arquivo, então a migração não atropela quem estiver
+    # lendo o banco de usuários nesse instante. E o módulo nem importa o
+    # `duckdb` — foi assim que a primeira versão disto falhou com `NameError`,
+    # engolido por um `except` mudo, deixando o banco novo vazio em silêncio.
+    try:
+        with duckdb_read(DB_PATH) as antigo:
+            for tabela, chave in (('notifications', 'id'),
+                                  ('push_subscriptions', 'endpoint')):
+                try:
+                    res = antigo.execute('SELECT * FROM {}'.format(tabela))
+                    # `description` ANTES do `fetchall`: depois de consumir o
+                    # resultado o DuckDB a zera, e `[d[0] for d in None]`
+                    # estoura um TypeError que cairia no mesmo `except` de "a
+                    # tabela não existe" — a migração pularia a tabela CHEIA
+                    # sem dizer nada.
+                    cols = [d[0] for d in res.description]
+                    linhas_antigas = res.fetchall()
+                except Exception:                           # noqa: BLE001
+                    log.info('[notif-db] nada a migrar de %s: %s', tabela,
+                             traceback.format_exc(limit=0).strip()[:140])
+                    continue
+                if not linhas_antigas:
+                    continue
+                existentes = {r[0] for r in conn.execute(
+                    'SELECT "{}" FROM {}'.format(chave, tabela)).fetchall()}
+                i = cols.index(chave)
+                novas = [l for l in linhas_antigas if l[i] not in existentes]
+                if not novas:
+                    continue
+                ph = ', '.join('?' for _ in cols)
+                nomes = ', '.join('"{}"'.format(x) for x in cols)
+                # NULL vira '' nas colunas que o schema novo declara NOT NULL.
+                # UMA linha antiga com nulo abortaria o lote inteiro — e o lote
+                # é a migração toda. O default do schema não salva: ele só vale
+                # quando a coluna é OMITIDA, e aqui ela vem com o valor nulo.
+                nn = {'actor_sid', 'actor_name', 'action', 'page', 'sid', 'endpoint'}
+                idx_nn = [k for k, nome in enumerate(cols) if nome in nn]
+                if idx_nn:
+                    novas = [tuple('' if (k in idx_nn and v is None) else v
+                                   for k, v in enumerate(l)) for l in novas]
+                conn.executemany('INSERT INTO {} ({}) VALUES ({})'.format(
+                    tabela, nomes, ph), novas)
+                inseriu = True
+                log.info('[notif-db] %d linha(s) de %s migradas do banco de usuários',
+                         len(novas), tabela)
+    except Exception:                                       # noqa: BLE001
+        # A migração falhando NÃO pode impedir o app de subir: sem ela o sino
+        # nasce sem histórico; com ela quebrada, ninguém entra. O motivo vai
+        # inteiro para o log.
+        log.error('[notif-db] a migração do banco antigo falhou:\n%s',
+                  traceback.format_exc())
+    return inseriu
+
+
+def _notif_maior_id_antigo():
+    """O maior `id` de `notifications` no banco de usuários, ou 0.
+
+    Lido ANTES de criar o schema — é ele que decide onde a sequência começa.
+    """
+    if not os.path.isfile(DB_PATH):
+        return 0
+    try:
+        with duckdb_read(DB_PATH) as antigo:
+            return int(antigo.execute(
+                'SELECT COALESCE(MAX(id), 0) FROM notifications').fetchone()[0] or 0)
+    except Exception:                                       # noqa: BLE001
+        return 0
+
+
+def _notif_avanca_sequencia(conn):
+    """Empurra a sequência para além do maior `id` da tabela, se ela ficou atrás.
+
+    O caminho normal já nasce certo (`seq_start`). Isto é o conserto do caso
+    torto: uma primeira subida em que o schema foi criado e a migração falhou no
+    meio deixaria a sequência em 1 com linhas de id alto na tabela, e o INSERT
+    seguinte colidiria — o sino pararia de gravar, e o erro apareceria uma vez
+    por ação de qualquer pessoa. Queimar `nextval` é O(n) e feio, mas é a única
+    coisa que o DuckDB permite fazer numa sequência com dependente, e o n aqui é
+    de algumas centenas.
+    """
+    try:
+        maior = int(conn.execute(
+            'SELECT COALESCE(MAX(id), 0) FROM notifications').fetchone()[0] or 0)
+        if maior <= 0:
+            return
+        for _ in range(maior + 2):
+            atual = int(conn.execute("SELECT nextval('seq_notif_id')").fetchone()[0])
+            if atual > maior:
+                return
+        log.warning('[notif-db] não consegui avançar a sequência além de %d', maior)
+    except Exception:                                       # noqa: BLE001
+        log.warning('[notif-db] avanço da sequência falhou:\n%s', traceback.format_exc())
+
+
+def _ensure_notif_db():
+    """Cria o schema e migra do banco antigo — uma vez por processo."""
+    global _notif_db_done
+    if _notif_db_done:
+        return
+    with _notif_db_lock:
+        if _notif_db_done:
+            return
+        # DUAS transações, e a ordem importa. O schema vai sozinho e comita
+        # primeiro; a migração vem depois, noutra. Juntos, um erro no meio da
+        # cópia — uma linha com nulo numa coluna NOT NULL foi o que apareceu no
+        # teste — desfazia TAMBÉM o `CREATE TABLE`, e o app subia com o banco de
+        # notificações sem tabela nenhuma: o sino passava a estourar a cada
+        # consulta, em cada aba. Separados, o pior caso é o sino sem histórico.
+        conn = _DuckDBHandle(duckdb_write(NOTIF_DB_PATH))
+        try:
+            # O início da sequência sai do banco ANTIGO e é decidido antes do
+            # schema: depois da tabela criada não há como corrigi-la.
+            _notif_init_schema(conn, _notif_maior_id_antigo() + 1)
+            conn.commit()
+        except Exception:
+            log.error('[notif-db] não consegui criar o schema:\n%s',
+                      traceback.format_exc())
+            conn.close()
+            raise
+        else:
+            conn.close()
+
+        conn = _DuckDBHandle(duckdb_write(NOTIF_DB_PATH))
+        try:
+            # O avanço só depois de uma migração que INSERIU: rodado sempre, ele
+            # queimaria um id a cada subida da instância — inofensivo, mas é
+            # efeito colateral por nada num caminho que roda todo dia.
+            if _notif_migrar_do_antigo(conn):
+                _notif_avanca_sequencia(conn)
+            conn.commit()
+        finally:
+            conn.close()
+        _notif_db_done = True
+        log.info('[notif-db] pronto em %s', os.path.abspath(NOTIF_DB_PATH))
+
 def init_db():
     log.info("[init_db] Initializing database schema…")
     conn = get_db_connection()
@@ -1046,28 +1267,12 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_vc_lookup
             ON verification_codes (SID, used, expires_at)
         """)
-        conn.execute("CREATE SEQUENCE IF NOT EXISTS seq_notif_id START 1")
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS notifications (
-                id          INTEGER DEFAULT nextval('seq_notif_id') PRIMARY KEY,
-                actor_sid   VARCHAR NOT NULL DEFAULT '',
-                actor_name  VARCHAR NOT NULL DEFAULT '',
-                action      VARCHAR NOT NULL DEFAULT '',
-                page        VARCHAR NOT NULL DEFAULT '',
-                detail      VARCHAR DEFAULT '',
-                target_role VARCHAR DEFAULT '',
-                target_sid  VARCHAR DEFAULT '',
-                created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS push_subscriptions (
-                endpoint   VARCHAR PRIMARY KEY,
-                sid        VARCHAR NOT NULL DEFAULT '',
-                role       VARCHAR DEFAULT '',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
+        # `notifications` e `push_subscriptions` NÃO nascem mais aqui: elas
+        # moram no banco de notificações (`_notif_init_schema`). Criá-las nos
+        # dois lugares seria manter dois schemas para a mesma tabela, e eles
+        # divergiriam na primeira coluna nova. Na instância elas continuam
+        # existindo neste arquivo — é de lá que a migração as lê —, mas ninguém
+        # mais escreve nelas.
         conn.commit()
         log.info("[init_db] Schema ready")
     except Exception:
@@ -1150,66 +1355,12 @@ def _migrate_schema():
         except Exception:
             log.error("[migrate] users schema migration FAILED:\n%s", traceback.format_exc())
 
-        # Ensure notifications table exists
-        try:
-            conn.execute("SELECT 1 FROM notifications LIMIT 1")
-        except Exception:
-            log.warning("[migrate] notifications table missing — creating")
-            try:
-                conn.execute("CREATE SEQUENCE IF NOT EXISTS seq_notif_id START 1")
-            except Exception:
-                pass
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS notifications (
-                    id          INTEGER DEFAULT nextval('seq_notif_id') PRIMARY KEY,
-                    actor_sid   VARCHAR NOT NULL DEFAULT '',
-                    actor_name  VARCHAR NOT NULL DEFAULT '',
-                    action      VARCHAR NOT NULL DEFAULT '',
-                    page        VARCHAR NOT NULL DEFAULT '',
-                    detail      VARCHAR DEFAULT '',
-                    target_role VARCHAR DEFAULT '',
-                    target_sid  VARCHAR DEFAULT '',
-                    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
-            conn.commit()
-            log.info("[migrate] notifications table created")
-
-        # notifications.target_sid — endereçamento a UM usuário, que target_role
-        # não cobre: as atualizações de ticket vão só para o requester, e o papel
-        # dele (BO/MO/FO/…) é compartilhado com o resto do time.
-        try:
-            ncols = [c[0] for c in conn.execute(
-                "SELECT column_name FROM information_schema.columns WHERE table_name='notifications'"
-            ).fetchall()]
-            if ncols and 'target_sid' not in ncols:
-                log.warning("[migrate] Adding missing column notifications.target_sid")
-                conn.execute("ALTER TABLE notifications ADD COLUMN target_sid VARCHAR DEFAULT ''")
-                conn.commit()
-        except Exception:
-            # WARNING, e não debug: na instância do time o log de módulo só sai a
-            # partir de WARNING, então um `debug` aqui é o mesmo que silêncio. E
-            # esta migração falhando NÃO é inofensiva — a consulta do sino cita a
-            # coluna, e sem ela todo GET de /api/notifications estoura, a cada 8
-            # segundos, em cada aba aberta.
-            log.warning("[migrate] notifications.target_sid FALHOU — o sino "
-                        "quebra até isto rodar:\n%s", traceback.format_exc())
-
-        # Ensure push_subscriptions table exists (Web Push)
-        try:
-            conn.execute("SELECT 1 FROM push_subscriptions LIMIT 1")
-        except Exception:
-            log.warning("[migrate] push_subscriptions table missing — creating")
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS push_subscriptions (
-                    endpoint   VARCHAR PRIMARY KEY,
-                    sid        VARCHAR NOT NULL DEFAULT '',
-                    role       VARCHAR DEFAULT '',
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
-            conn.commit()
-            log.info("[migrate] push_subscriptions table created")
+        # As duas tabelas de notificação NÃO são mais migradas aqui. Elas
+        # moram no banco de notificações, e é o `_ensure_notif_db` que cria o
+        # schema e traz o que está neste arquivo. O `target_sid` inclusive: a
+        # migração copia as colunas que EXISTEM no antigo, então uma base sem
+        # ele nasce com a coluna do schema novo e as linhas antigas entram com
+        # o default.
     finally:
         conn.close()
 
@@ -1248,7 +1399,7 @@ def _create_notification(actor_sid, actor_name, action, page, detail='', target_
     `api_get_notifications`."""
     target_role = _notif_roles(target_role)
     try:
-        conn = get_db_connection()
+        conn = get_notif_connection()
         try:
             conn.execute(
                 "INSERT INTO notifications (actor_sid, actor_name, action, page, detail, target_role, target_sid) "
@@ -1285,7 +1436,7 @@ def _push_notify(actor_sid, target_role, target_sid=''):
         from apps.pages import webpush
         if not webpush.is_enabled():
             return
-        conn = get_db_connection()
+        conn = get_notif_connection()
         try:
             if target_sid:
                 # O actor é excluído nos outros ramos porque não precisa ser
@@ -1315,7 +1466,7 @@ def _push_notify(actor_sid, target_role, target_sid=''):
             if code in (404, 410):   # subscription expired/unsubscribed
                 dead.append(endpoint)
         if dead:
-            conn = get_db_connection()
+            conn = get_notif_connection()
             try:
                 for ep in dead:
                     conn.execute("DELETE FROM push_subscriptions WHERE endpoint = ?", [ep])
@@ -36670,7 +36821,7 @@ def api_get_notifications():
         return jsonify({"success": False}), 401
     user_role = session.get('user_role', '')
     user_sid = (session.get('user_sid') or '').strip().upper()
-    conn = get_db_connection(readonly=True)
+    conn = get_notif_connection(readonly=True)
     try:
         # target_sid endereça UM usuário e é mais forte que target_role: quando
         # está preenchido, só aquele SID vê a notificação — nem o master, nem
@@ -36778,7 +36929,7 @@ def api_push_subscribe():
     endpoint = str((sub or {}).get('endpoint') or '').strip()
     if not endpoint:
         return jsonify({'success': False, 'message': 'no endpoint'}), 400
-    conn = get_db_connection()
+    conn = get_notif_connection()
     try:
         conn.execute("DELETE FROM push_subscriptions WHERE endpoint = ?", [endpoint])
         conn.execute(
@@ -36797,7 +36948,7 @@ def api_push_unsubscribe():
     data = request.get_json(silent=True) or {}
     endpoint = str(data.get('endpoint') or '').strip()
     if endpoint:
-        conn = get_db_connection()
+        conn = get_notif_connection()
         try:
             conn.execute("DELETE FROM push_subscriptions WHERE endpoint = ?", [endpoint])
             conn.commit()

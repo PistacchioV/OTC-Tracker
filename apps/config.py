@@ -114,8 +114,20 @@ class Config(object):
     # Todo banco que o app abre. É esta lista que o `validate_database_paths`
     # confere na subida (pasta gravável + arquivo de lock), então um banco que
     # não estiver aqui só acusa problema no primeiro request que o abrir.
+    # O banco das NOTIFICAÇÕES é separado do de usuários de propósito. O lock
+    # desta camada é por ARQUIVO: enquanto os quatro conviviam num só, cada
+    # gravação de notificação — e elas acontecem a cada ação de qualquer pessoa —
+    # segurava o arquivo inteiro, e com ele o login, a allowlist e a gestão de
+    # usuários. O sino ainda consulta por aba aberta. Separados, o tráfego de
+    # notificação não encosta em quem está entrando no app.
+    NOTIFICATIONS_DATABASE_PATH = _absolute_path_from_environment(
+        'OTC_NOTIFICATIONS_DATABASE_PATH',
+        os.path.join(DATABASE_DIR, 'Notifications_OTCTracker.db'),
+    )
+
     DATABASE_ACCESS_PATHS = (
         DATABASE_PATH,
+        NOTIFICATIONS_DATABASE_PATH,
         os.path.join(DATABASE_DIR, 'pending-confirmation-backlog.db'),
         os.path.join(DATABASE_DIR, 'pending-confirmation-pending.db'),
         os.path.join(DATABASE_DIR, 'pending-confirmation-ok.db'),

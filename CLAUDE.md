@@ -335,6 +335,26 @@ Live Positions, o Track Confirmations e as três Recons).
 São dois bancos:
 
 - **DuckDB** (`Users_OTCTracker.db`) — tabelas `users` e `verification_codes`.
+  As **notificações moram noutro arquivo** (`Notifications_OTCTracker.db`,
+  `Config.NOTIFICATIONS_DATABASE_PATH`), com `notifications` e
+  `push_subscriptions`. O lock desta camada é por ARQUIVO: com as quatro juntas,
+  cada gravação de notificação — e elas acontecem a cada ação de qualquer pessoa
+  — segurava o arquivo inteiro em modo exclusivo, e com ele o login, a allowlist
+  do `Page_Access` e a gestão de usuários; some a isso o sino, que consulta por
+  aba aberta, e o banco vivia travado. Quem abre o de notificação é o
+  `get_notif_connection()`, com o mesmo contrato do `get_db_connection()`.
+  A separação acontece **sozinha na subida** (`_ensure_notif_db`), copiando o
+  que está no arquivo antigo — um script "rode depois do pull" é a forma mais
+  confiável de a mesa ficar sem o sino. É idempotente e **não apaga** o que
+  copiou: o antigo fica como backup. `scripts/split_notifications_db.py
+  --dry-run` mostra o que vai ser copiado antes de reiniciar.
+  Três detalhes que não dão erro nenhum: o schema é comitado numa transação
+  SEPARADA da cópia (juntos, uma linha ruim desfazia o `CREATE TABLE` e o app
+  subia sem a tabela, com o sino estourando a cada consulta); a sequência
+  `seq_notif_id` nasce depois do maior `id` migrado, porque o DuckDB não deixa
+  alterar sequência de que uma coluna depende (`ALTER … RESTART` não existe e o
+  `DROP` bate em *dependency error*); e `NULL` vira `''` nas colunas `NOT NULL`,
+  senão UMA linha antiga aborta o lote inteiro.
   `DB_PATH` é o `Config.DATABASE_PATH`, e ele sai do **`Config.DATABASE_DIR`**,
   que é a pasta de TODOS os bancos do app: o da lista de CGDs (`cgd_docs.DB_PATH`),
   os três do Pending Confirmation
