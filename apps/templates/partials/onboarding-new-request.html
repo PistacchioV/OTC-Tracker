@@ -34,6 +34,15 @@
       </div>
 
       <div class="modal-body">
+        {# O aviso vem ANTES dos campos, e não no rodapé: ele muda a forma de
+           preencher (copiar do Party Central em vez de digitar de cabeça), e um
+           aviso lido depois de preencher não muda nada. #}
+        <div class="ob-req-note d-flex align-items-start gap-2 mb-3">
+          <i class="ti ti-info-circle mt-1"></i>
+          <span data-lang="ob-req-disclaimer">The information below must match exactly what is
+            registered in <strong>Party Central</strong>. A legal name or Tax ID that differs from
+            the source will not match the client and the request comes back.</span>
+        </div>
         <div class="row g-3">
           {% for f in cgd_form %}
           {# `d-flex flex-column` + `mt-auto` no campo: a dica tem uma linha num
@@ -41,12 +50,33 @@
              ficam em alturas diferentes — era o desalinhado entre a data e o
              Grupo. Com o campo empurrado para o fim da coluna, eles encostam na
              mesma base independentemente do tamanho da dica. #}
+          {# `data-on-col` / `data-on-value`: o campo que só vale quando OUTRO tem
+             certo valor (as informações do garantidor). Quem declara é o
+             `REQUEST_FORM` (`enabled_by`), não o JS — com a regra escrita no
+             navegador, o dia em que o domínio do Garantidor mudasse ela
+             continuaria olhando para o valor antigo e o campo ficaria travado
+             para sempre, sem erro nenhum. #}
           <div class="{{ f.col or 'col-md-6' }} d-flex flex-column ob-req-field"
-               data-col="{{ f.column }}">
+               data-col="{{ f.column }}"
+               {% if f.enabled_by %}data-on-col="{{ f.enabled_by.column }}"
+               data-on-value="{{ f.enabled_by.value }}"
+               {% if f.enabled_by.required_when_on %}data-on-required="1"{% endif %}
+               data-off-value="{{ f.enabled_by.value_when_off or '' }}"{% endif %}>
+            {# O texto nasce em INGLÊS e é traduzido por `data-lang`: o rótulo e
+               a dica vêm do servidor, e a chave i18n vem junto com eles (o mesmo
+               desenho dos cadastros `dce-*` do /mapping). Sem a chave, o campo
+               sai no rótulo inglês — que é o padrão, não um defeito. #}
             <label class="form-label fs-xs text-muted mb-1" for="ob-req-{{ loop.index }}">
-              {{ f.label }}{% if f.required %} <span class="text-danger">*</span>{% endif %}
+              {# O asterisco sai também para o campo que só é obrigatório QUANDO
+                 está ligado (`required_when_on`): o CSS o esconde enquanto ele
+                 está desligado, então ele aparece exatamente quando o campo
+                 passa a ser exigido. Preso ao `f.required`, o campo do
+                 garantidor viraria obrigatório sem nada na tela dizendo isso —
+                 a pessoa só descobriria no Save. #}
+              <span {% if f.lang %}data-lang="{{ f.lang }}"{% endif %}>{{ f.label }}</span>{% if f.required or (f.enabled_by and f.enabled_by.required_when_on) %} <span class="text-danger ob-req-star">*</span>{% endif %}
             </label>
-            {% if f.hint %}<div class="ob-req-hint flex-grow-1">{{ f.hint }}</div>{% endif %}
+            {% if f.hint %}<div class="ob-req-hint flex-grow-1"
+                 {% if f.hint_lang %}data-lang="{{ f.hint_lang }}"{% endif %}>{{ f.hint }}</div>{% endif %}
             <div class="mt-auto">
             {% if f.type == 'select' %}
               {# O domínio vem do PRÓPRIO campo quando ele tem um (`Garantidor`);
@@ -79,7 +109,17 @@
                  os documentos por cliente já vivem e onde a mesa os procura —
                  uma pasta nova, só do Onboarding, seria um segundo lugar para o
                  mesmo tipo de papel. #}
-              <input type="file" class="form-control form-control-sm ob-req-input ob-req-file"
+              {# Dropzone: o `<input type="file">` continua ali, escondido, e é ele
+                 que guarda o arquivo — a área é só a superfície de clique e de
+                 soltar. Substituí-lo por um controle próprio obrigaria a
+                 reimplementar o `files`, o `accept` e o `required` que o
+                 navegador já dá de graça. #}
+              <label class="ob-req-drop" for="ob-req-{{ loop.index }}">
+                <i class="ti ti-cloud-upload"></i>
+                <span class="ob-req-drop-txt" data-lang="ob-req-drop">Drop the file here or click to choose</span>
+                <span class="ob-req-drop-file"></span>
+              </label>
+              <input type="file" class="ob-req-input ob-req-file d-none"
                      id="ob-req-{{ loop.index }}"
                      accept=".pdf,.doc,.docx,.xls,.xlsx,.msg,.eml,.png,.jpg,.jpeg,.gif,.txt,.zip"
                      {% if f.required %}required{% endif %}>
@@ -114,6 +154,57 @@
 /* A data é preenchida pelo app e não se edita — o cinza de campo desabilitado
    é o que diz isso antes de a pessoa tentar clicar. */
 #ob-req-modal .ob-req-date { font-variant-numeric: tabular-nums; text-align: center; }
+
+/* O aviso do Party Central. Tom de informação, não de erro: ele não diz que
+   algo deu errado, diz de onde copiar. */
+#ob-req-modal .ob-req-note {
+    font-size: .74rem; line-height: 1.5;
+    color: var(--ins-secondary-color);
+    background: color-mix(in srgb, var(--vr-primary, #0066cc) 7%, transparent);
+    border: 1px solid color-mix(in srgb, var(--vr-primary, #0066cc) 20%, transparent);
+    border-radius: 8px; padding: .55rem .7rem;
+}
+#ob-req-modal .ob-req-note i { font-size: .95rem; color: var(--vr-primary, #0066cc); flex-shrink: 0; }
+
+/* Campo desligado pelo `enabled_by`: some o cursor de texto e o campo esmaece,
+   que é o que diz "não é aqui" antes de a pessoa tentar clicar. */
+#ob-req-modal .ob-req-field.is-off { opacity: .55; }
+#ob-req-modal .ob-req-field.is-off .ob-req-input { pointer-events: none; background: var(--ins-tertiary-bg, #f1f3f6); }
+/* O asterisco de obrigatório aparece e some com a regra — o campo passa a ser
+   exigido só quando está ligado. */
+#ob-req-modal .ob-req-field.is-off .ob-req-star { display: none; }
+
+/* Dropzone do Apêndice. O `<input type=file>` fica escondido atrás dela: a área
+   é só a superfície de clique e de soltar, e o input continua guardando o
+   arquivo, o `accept` e o `required`. */
+#ob-req-modal .ob-req-drop {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: .3rem; width: 100%; min-height: 92px; cursor: pointer; margin: 0;
+    padding: .8rem 1rem; text-align: center;
+    border: 1.5px dashed var(--ins-border-color, #ced4da);
+    border-radius: 10px; background: var(--ins-tertiary-bg, #f8f9fa);
+    transition: border-color .15s ease, background .15s ease, transform .15s ease;
+}
+#ob-req-modal .ob-req-drop i { font-size: 1.35rem; color: var(--vr-primary, #0066cc); }
+#ob-req-modal .ob-req-drop-txt { font-size: .75rem; color: var(--ins-secondary-color); }
+#ob-req-modal .ob-req-drop-file { font-size: .72rem; font-weight: 600; word-break: break-all; }
+#ob-req-modal .ob-req-drop:hover,
+#ob-req-modal .ob-req-drop.is-over {
+    border-color: var(--vr-primary, #0066cc);
+    background: color-mix(in srgb, var(--vr-primary, #0066cc) 8%, transparent);
+}
+#ob-req-modal .ob-req-drop.is-over { transform: scale(1.01); }
+/* Com arquivo escolhido a borda vira sólida e verde: o estado do campo se lê
+   sem abrir o seletor. */
+#ob-req-modal .ob-req-drop.has-file {
+    border-style: solid;
+    border-color: var(--ins-success, #198754);
+    background: color-mix(in srgb, var(--ins-success, #198754) 8%, transparent);
+}
+#ob-req-modal .ob-req-drop.has-file i { color: var(--ins-success, #198754); }
+/* Obrigatório em branco no Save: a MESMA borda vermelha dos outros campos. */
+#ob-req-modal .ob-req-file.is-invalid + .ob-req-drop,
+#ob-req-modal .ob-req-drop.is-invalid { border-color: var(--ins-danger, #d93025); }
 </style>
 
 <script>
@@ -121,15 +212,15 @@
     'use strict';
 
     var TRANS = {
-        en: { missing: 'Fill in the required fields ({n} missing).',
+        en: { chosen: 'Selected file:', missing: 'Fill in the required fields ({n} missing).',
               failed: 'Could not create the request.',
               upFailed: 'Could not save the appendix to the Electronic Inventory.',
               done: 'Request created' },
-        br: { missing: 'Preencha os campos obrigatórios (faltam {n}).',
+        br: { chosen: 'Arquivo escolhido:', missing: 'Preencha os campos obrigatórios (faltam {n}).',
               failed: 'Não consegui criar a solicitação.',
               upFailed: 'Não consegui gravar o apêndice no Electronic Inventory.',
               done: 'Solicitação criada' },
-        es: { missing: 'Complete los campos obligatorios (faltan {n}).',
+        es: { chosen: 'Archivo elegido:', missing: 'Complete los campos obligatorios (faltan {n}).',
               failed: 'No se pudo crear la solicitud.',
               upFailed: 'No se pudo guardar el apéndice en el Electronic Inventory.',
               done: 'Solicitud creada' }
@@ -171,6 +262,106 @@
         });
         erro.classList.add('d-none');
         erro.textContent = '';
+        if (arquivo) { arquivo.value = ''; }
+        pintaDrop();
+        // DEPOIS de repor os defaults: a dependência lê o valor do mestre, e
+        // aplicá-la antes deixaria o campo no estado da abertura anterior.
+        dependentes.forEach(aplicaDependencia);
+    }
+
+    // ── O campo que depende de outro (`enabled_by` do REQUEST_FORM) ────────
+    // A regra vem do SERVIDOR pelos `data-on-*`: qual campo manda, com que
+    // valor, se ele passa a ser obrigatório e com o que preencher quando está
+    // desligado. Escrita aqui, o dia em que o domínio do Garantidor mudasse ela
+    // continuaria olhando para o valor antigo e o campo ficaria travado para
+    // sempre, sem erro nenhum.
+    var dependentes = campos.filter(function (f) { return f.hasAttribute('data-on-col'); });
+
+    function campoPorColuna(col) {
+        for (var i = 0; i < campos.length; i++) {
+            if (campos[i].getAttribute('data-col') === col) { return campos[i]; }
+        }
+        return null;
+    }
+
+    function aplicaDependencia(f) {
+        var mestre = campoPorColuna(f.getAttribute('data-on-col'));
+        if (!mestre) { return; }
+        var ligado = String(entrada(mestre).value || '').trim() === f.getAttribute('data-on-value');
+        var el = entrada(f);
+        f.classList.toggle('is-off', !ligado);
+        el.disabled = !ligado;
+        if (f.getAttribute('data-on-required')) {
+            // Ligado, o campo passa a ser exigido: sem garantidor não há o que
+            // preencher, e COM garantidor a informação dele é o motivo de o
+            // campo existir.
+            if (ligado) { el.setAttribute('required', 'required'); }
+            else { el.removeAttribute('required'); }
+        }
+        if (!ligado) {
+            // Desligado, ele volta ao valor de "não se aplica" — e não fica com
+            // o que a pessoa tinha digitado antes de trocar para No, que iria
+            // para o banco dizendo que há garantidor.
+            el.value = f.getAttribute('data-off-value') || '';
+            el.classList.remove('is-invalid');
+        } else if (el.value === (f.getAttribute('data-off-value') || '')) {
+            // Ligando, o `N/A` sai da frente: ele é a resposta do estado
+            // anterior, e deixá-lo faria o campo parecer preenchido.
+            el.value = '';
+        }
+    }
+
+    function ligaDependencias() {
+        dependentes.forEach(function (f) {
+            var mestre = campoPorColuna(f.getAttribute('data-on-col'));
+            if (!mestre) { return; }
+            entrada(mestre).addEventListener('change', function () { aplicaDependencia(f); });
+            aplicaDependencia(f);
+        });
+    }
+    ligaDependencias();
+
+    // ── Dropzone do Apêndice ───────────────────────────────────────────────
+    // O `<input type=file>` continua sendo o dono do arquivo; a área só mostra
+    // o estado e recebe o arrastar. O `<label for>` já dá o clique de graça —
+    // não há handler de clique aqui de propósito, senão o clique na label
+    // abriria o seletor DUAS vezes.
+    var drop = modalEl.querySelector('.ob-req-drop');
+    var arquivo = modalEl.querySelector('.ob-req-file');
+
+    function pintaDrop() {
+        if (!drop || !arquivo) { return; }
+        var f = arquivo.files && arquivo.files[0];
+        drop.classList.toggle('has-file', !!f);
+        var alvo = drop.querySelector('.ob-req-drop-file');
+        if (alvo) { alvo.textContent = f ? (t('chosen') + ' ' + f.name) : ''; }
+        if (f) { drop.classList.remove('is-invalid'); }
+    }
+
+    if (drop && arquivo) {
+        arquivo.addEventListener('change', pintaDrop);
+        ['dragenter', 'dragover'].forEach(function (ev) {
+            drop.addEventListener(ev, function (e) {
+                e.preventDefault(); e.stopPropagation();
+                drop.classList.add('is-over');
+            });
+        });
+        ['dragleave', 'drop'].forEach(function (ev) {
+            drop.addEventListener(ev, function (e) {
+                e.preventDefault(); e.stopPropagation();
+                drop.classList.remove('is-over');
+            });
+        });
+        drop.addEventListener('drop', function (e) {
+            var dt = e.dataTransfer;
+            if (!dt || !dt.files || !dt.files.length) { return; }
+            // Um arquivo só: a solicitação tem UM apêndice, e aceitar vários
+            // deixaria a pessoa achando que os dois subiram.
+            var lista = new DataTransfer();
+            lista.items.add(dt.files[0]);
+            arquivo.files = lista.files;
+            pintaDrop();
+        });
     }
 
     function abre() {
@@ -180,11 +371,16 @@
     }
 
     // A contraparte do anexo é a PRIMEIRA entidade da Razão Social. O campo
-    // pede todas as entidades do grupo, uma por linha, e a pasta do Electronic
-    // Inventory é de UM cliente — o texto inteiro viraria um nome de pasta com
-    // várias razões sociais dentro, que ninguém encontra depois.
+    // pede todas as entidades do grupo separadas por `;`, e a pasta do
+    // Electronic Inventory é de UM cliente — o texto inteiro viraria um nome de
+    // pasta com várias razões sociais dentro, que ninguém encontra depois.
+    //
+    // Corta no `;` E na quebra de linha: o `;` é o separador que o formulário
+    // pede, mas a quebra continua aceita porque é como as solicitações antigas
+    // foram escritas, e quem colar do SharePoint traz uma por linha. Cortar só
+    // no `;` mandaria o grupo inteiro para o nome da pasta nesses casos.
     function contraparte(vals) {
-        return String(vals['Razão Social'] || '').split('\n')[0].trim();
+        return String(vals['Razão Social'] || '').split(/[;\n]/)[0].trim();
     }
 
     // Sobe o Apêndice para o Electronic Inventory. Devolve uma promessa que
@@ -217,8 +413,12 @@
             if (el.type === 'file') {
                 // Arquivo não entra no payload da linha — ele tem destino
                 // próprio. Aqui só se confere que veio.
+                //
+                // A marca vermelha vai na DROPZONE: o input está `d-none` atrás
+                // dela, e uma borda em elemento escondido não aparece — o campo
+                // ficaria sendo o único a não dizer que faltou.
                 var temArq = !!(el.files && el.files.length);
-                el.classList.toggle('is-invalid', obrigatorio && !temArq);
+                if (drop) { drop.classList.toggle('is-invalid', obrigatorio && !temArq); }
                 if (obrigatorio && !temArq) { faltando++; }
                 return;
             }
