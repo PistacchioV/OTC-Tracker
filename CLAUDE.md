@@ -343,9 +343,25 @@ São dois bancos:
   do `Page_Access` e a gestão de usuários; some a isso o sino, que consulta por
   aba aberta, e o banco vivia travado. Quem abre o de notificação é o
   `get_notif_connection()`, com o mesmo contrato do `get_db_connection()`.
-  A separação acontece **sozinha na subida** (`_ensure_notif_db`), copiando o
-  que está no arquivo antigo — um script "rode depois do pull" é a forma mais
-  confiável de a mesa ficar sem o sino. É idempotente e **não apaga** o que
+  A separação acontece **sozinha na subida** (`_ensure_notif_db`, chamado pelo
+  `record_once` do blueprint), copiando o que está no arquivo antigo — um script
+  "rode depois do pull" é a forma mais confiável de a mesa ficar sem o sino.
+  **Na subida, e nunca no poll do sino**: o `_ensure_notif_db` abre o banco em
+  modo READ-WRITE e, na primeira vez, migra — no share isso segurou o lock
+  exclusivo por 9,4 segundos —, e ele ficava no topo do `get_notif_connection`,
+  onde quem pagava a conta era a consulta mais repetida do app, a única que abre
+  sem lock nenhum e a declarada de melhor esforço. O DuckDB não perdoa: um
+  handle read-only aberto (outra aba, outra thread, a instância vizinha que
+  enxerga o mesmo share) **bloqueia** a abertura read-write, e o open estoura com
+  *"the process cannot access the file because it is being used by another
+  process"* — que não diz nada sobre schema. Como o flag só é marcado no fim, a
+  falha o deixava em `False` e todo poll seguinte tentava de novo: um 500 por aba
+  a cada 8 segundos, cada um custando uma tentativa de lock exclusivo no share.
+  Hoje o caminho de LEITURA não chama o ensure, uma **sonda** (`_notif_schema_pronto`,
+  leitura com lock compartilhado) evita a abertura read-write no caso normal, o
+  ensure que falha **espera** 5 min antes de tentar de novo, e a ABERTURA do sino
+  está dentro do `try` — sem conexão ele devolve a lista vazia, na mesma forma da
+  resposta de sucesso. `check_notif_db_boot.py` prende as quatro. É idempotente e **não apaga** o que
   copiou: o antigo fica como backup. `scripts/split_notifications_db.py
   --dry-run` mostra o que vai ser copiado antes de reiniciar.
   Três detalhes que não dão erro nenhum: o schema é comitado numa transação
