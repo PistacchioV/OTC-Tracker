@@ -2,8 +2,8 @@
 REM ============================================================================
 REM  OTC Tracker - DEBUG (Windows, maquina JP)
 REM
-REM  Werkzeug dev server, auto-reload, porta 8050.
-REM  Acesso:  http://localhost:8050   (ou http://<IP-da-maquina>:8050)
+REM  Werkzeug dev server, auto-reload, porta 8051.
+REM  Acesso:  http://localhost:8051   (ou http://<IP-da-maquina>:8051)
 REM
 REM  Uso:
 REM     start-debug.bat             -> tenta instalar requirements e sobe
@@ -78,7 +78,7 @@ if /I "%~1"=="noinstall" (
 set FLASK_APP=run.py
 set DEBUG=True
 echo.
-echo [DEBUG] OTC Tracker em http://0.0.0.0:8050  (Werkzeug dev server, auto-reload)
+echo [DEBUG] OTC Tracker em http://0.0.0.0:8051  (Werkzeug dev server, auto-reload)
 echo.
 "%PY%" "%BASE%run.py"
 

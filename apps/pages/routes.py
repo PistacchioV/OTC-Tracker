@@ -650,6 +650,16 @@ OPT_FXO_CACHE_DIR = os.path.normpath(os.path.join(
     data_dir(), "cache", "new deals", "Option", "FXO"
 ))
 SHARED_MAILBOX = "otc.tracker@jpmorgan.com"
+
+# A porta em que a instância roda. UMA constante porque ela aparece em três
+# lugares que se leem de fora do código — o endereço dos botões de e-mail
+# (`_otc_app_url`), o link do e-mail de versão nova e o `run.py` — e as três
+# diziam 8050 enquanto a instância subia na 8051. Um botão de e-mail com a porta
+# errada não dá erro: leva a pessoa a uma página que não abre.
+#
+# Os `.bat` não conseguem ler daqui (são do cmd), então a porta deles é conferida
+# pelo `check_bat_files.py` contra esta constante.
+APP_PORT = int(os.getenv('OTC_TRACKER_PORT', '8051'))
 RETURN_PATH = os.getenv('RETURN_PATH', os.path.join(
     Config.SHARED_DRIVE_ROOT, 'Confirmation', 'Derivativos', 'OTC Tracker', 'Batch Conecta', 'Return'))
 CONECTA_NEW_PATH = os.getenv('CONECTA_NEW_PATH', os.path.join(
@@ -32668,8 +32678,10 @@ def _otc_app_url(path='/'):
     devolveria `http://localhost:5005`, que é um link morto para quem recebe.
 
     Por isso o endereço é de CONFIGURAÇÃO (`OTC_TRACKER_URL` no .env). Sem ele
-    vale o hostname da máquina na porta de produção (`start-prod.bat` sobe a
-    waitress na 8050), que é como a mesa alcança a instância hoje.
+    vale o hostname da máquina na porta em que a instância roda — a **8051**,
+    e não a 8050 que estava aqui: o `start-otc-tracker.bat` da pasta Application
+    sobe nela, e todo botão de e-mail do app apontava para uma porta em que não
+    há nada escutando.
     """
     base = (os.getenv('OTC_TRACKER_URL', '') or '').strip().rstrip('/')
     if not base:
@@ -32678,7 +32690,7 @@ def _otc_app_url(path='/'):
             host = socket.gethostname() or 'localhost'
         except Exception:                                   # noqa: BLE001
             host = 'localhost'
-        base = 'http://{}:{}'.format(host, os.getenv('OTC_TRACKER_PORT', '8050'))
+        base = 'http://{}:{}'.format(host, os.getenv('OTC_TRACKER_PORT', str(APP_PORT)))
     return base + (path if str(path).startswith('/') else '/' + str(path))
 
 
@@ -34591,7 +34603,8 @@ _APPVER_STARTER = 'start-otc-tracker.bat'
 # digita de memória, e o localhost é o que funciona quando o atalho não resolve
 # (é a instância que a pessoa acabou de subir).
 _APPVER_SHORTCUT = os.environ.get('OTC_TRACKER_SHORTCUT', '').strip() or 'go/otctracker'
-_APPVER_LOCAL_URL = os.environ.get('OTC_TRACKER_LOCAL_URL', '').strip() or 'http://localhost:8051'
+_APPVER_LOCAL_URL = (os.environ.get('OTC_TRACKER_LOCAL_URL', '').strip()
+                     or 'http://localhost:{}'.format(APP_PORT))
 
 
 def _appver_href(endereco):
