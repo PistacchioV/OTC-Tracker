@@ -56,6 +56,7 @@ def configure_database(app):
 _REQUIRED_CONFIG_NAMES = (
     'DATABASE_DIR',            # a pasta de TODOS os bancos (manual_conf, routes, recon_comitente)
     'DATABASE_PATH',           # o DuckDB de usuários
+    'NOTIFICATIONS_DATABASE_PATH',   # o DuckDB das notificações (separado — §4)
     'DATABASE_ACCESS_PATHS',   # a lista que o validate_database_paths confere
     'SHARED_DRIVE_ROOT',       # a raiz do share
     'DATA_DIR',                # a pasta dos JSON (cache, cadastros, tickets)

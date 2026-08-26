@@ -40,6 +40,11 @@ c.close()
 
 from apps.pages import routes as R                        # noqa: E402
 R.DB_PATH = DB
+# As notificacoes mudaram de ARQUIVO: elas moram num banco proprio, separado do
+# de usuarios, porque o lock e por arquivo e a gravacao de notificacao — que
+# acontece a cada acao de qualquer pessoa — segurava o login junto. O banco
+# antigo acima continua com a tabela cheia, e e dele que a migracao le.
+R.NOTIF_DB_PATH = os.path.join(TMP, 'Notifications_OTCTracker.db')
 from apps import create_app                               # noqa: E402
 from apps.config import DebugConfig                       # noqa: E402
 
@@ -72,16 +77,30 @@ def feed(cl):
     d = cl.get('/api/notifications').get_json() or {}
     return [(n['action'], n['detail']) for n in d.get('notifications', [])]
 
-print('\n== 1. a migracao adiciona target_sid numa tabela existente ==')
+print('\n== 1. a divisao do banco, e o target_sid ==')
 with app.app_context():
-    conn = R.get_db_connection()
+    conn = R.get_notif_connection(readonly=True)
     try:
         cols = [x[0] for x in conn.execute(
             "SELECT column_name FROM information_schema.columns "
             "WHERE table_name='notifications'").fetchall()]
+        migradas = conn.execute('SELECT COUNT(*) FROM notifications').fetchone()[0]
     finally:
         conn.close()
-check('coluna criada', 'target_sid' in cols, True)
+check('a tabela vive no banco de NOTIFICACOES', bool(cols), True)
+check('   com a coluna target_sid do schema novo', 'target_sid' in cols, True)
+# A linha antiga (gravada antes de a coluna existir) foi COPIADA: sem isso, a
+# divisao apagaria o historico do sino da instancia sem ninguem notar.
+check('   e a notificacao legada veio junto', migradas >= 1, True)
+# E o banco de usuarios NAO perdeu nada — o que veio fica la como backup, e
+# renomear ou dropar deixaria a volta atras sem dado.
+with app.app_context():
+    conn = R.get_db_connection(readonly=True)
+    try:
+        ainda = conn.execute('SELECT COUNT(*) FROM notifications').fetchone()[0]
+    finally:
+        conn.close()
+check('   e o banco antigo continua intacto', ainda >= 1, True)
 
 print('\n== 2. notificacao legada (target_sid NULL) continua visivel ==')
 check('master ve a legada', ('Legacy', 'antes da migracao') in feed(master), True)
