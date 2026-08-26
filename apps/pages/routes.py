@@ -29559,8 +29559,10 @@ def _conf_ndf_xml(picked, merc, ref, tipo='NDF', prefixo='NDF_Comm',
     numeroContrato   = DealName quando a confirmação tem 1 operação
                        (Mondelez: DealName_Mercadoria); com várias,
                        <prefixo>_YYYYMMDD_Mercadoria.
-    Opções de Commodities usam o mesmo contrato com tipo='Option' e
-    prefixo='Opt_Comm' — o resto do padrão é idêntico ao NDF.
+    Opções de Commodities usam o mesmo contrato com tipo='OPTION' e
+    prefixo='Opt_Comm' — o resto do padrão é idêntico ao NDF. O tipo vai em
+    MAIÚSCULO como o `NDF`: é o que o FepWeb lê, e o `Option` com inicial
+    maiúscula era a única saída do app fora desse padrão.
     Opções de Câmbio (FXO) usam prefixo='Opt_FXO' e leem a moeda do
     ccy_field='UnderlyingAsset'; nelas o strike já é a cotação em BRL, então
     não há Spot FXRate para buscar e warn_no_spot=False cala o aviso que só
@@ -30315,7 +30317,11 @@ def api_conf_optcomm_save():
         picked = _conf_pick_optcomm(ref, acr, merc, family)
         if picked:
             numero_contrato, xml_str, xml_warns = _conf_ndf_xml(
-                picked, merc, ref, tipo='Option', prefixo='Opt_Comm')
+                # MAIÚSCULO: é como o FepWeb espera o tipo de operação, e é
+                # como o `NDF` (que sempre saiu em caixa alta) já ia. O
+                # `Option` com inicial maiúscula era a única saída fora do
+                # padrão, nas duas famílias de opção.
+                picked, merc, ref, tipo='OPTION', prefixo='Opt_Comm')
             # Mesmo nome-base do .doc/.pdf: os três arquivos da confirmação
             # ficam juntos na listagem da pasta. O numeroContrato continua
             # dentro do XML (é ele que o FepWeb lê), só não nomeia mais o
@@ -30739,7 +30745,8 @@ def api_conf_optfxo_save():
         picked = _conf_pick_optfxo(ref, acr, merc, family)
         if picked:
             numero_contrato, xml_str, xml_warns = _conf_ndf_xml(
-                picked, merc, ref, tipo='Option', prefixo='Opt_FXO',
+                # MAIÚSCULO, pela mesma razão do Opt Comm.
+                picked, merc, ref, tipo='OPTION', prefixo='Opt_FXO',
                 ccy_field='UnderlyingAsset', warn_no_spot=False)
             # Mesmo nome-base do .doc/.pdf: os três arquivos da confirmação
             # ficam juntos na listagem da pasta.
@@ -38825,6 +38832,13 @@ def api_onboarding_docs():
         etapa, derivada = _cgd_mod.pending_stage(r)
         r['_stage'] = etapa or ''
         r['_stage_derived'] = bool(derivada)
+        # Encerrado NÃO tem etapa (ninguém trabalha nele), e a célula saía em
+        # branco — que se lê como "ainda não chegou em ninguém", justamente o
+        # contrário. A tela desenha `Finalized` a partir daqui em vez de repetir
+        # o `is_closed` no navegador: a regra de o que é encerrado é do módulo
+        # (`Active`, `Inactive`, `Cancelado`), e uma segunda cópia no JS
+        # discordaria dela no primeiro status novo que a lista trouxesse.
+        r['_closed'] = bool(_cgd_mod.is_closed(r))
     # Os domínios vão no MESMO payload das colunas: a tela monta o campo de
     # edição a partir deles, e uma lista escrita no template seria uma segunda
     # cópia — que envelhece calada no dia em que a do servidor mudar.
@@ -38834,6 +38848,9 @@ def api_onboarding_docs():
                     'stages': list(_cgd_mod.STAGES),
                     'signature_types': list(_cgd_mod.SIGNATURE_TYPES),
                     'signature_column': _cgd_mod.SIGNATURE_COLUMN,
+                    'doc_types': list(_cgd_mod.DOC_TYPES),
+                    'doc_type_column': _cgd_mod.DOC_TYPE_COLUMN,
+                    'guarantor_options': list(_cgd_mod.GUARANTOR_OPTIONS),
                     'rows': rows})
 
 

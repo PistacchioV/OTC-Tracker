@@ -251,9 +251,13 @@ for _no in ast.walk(_arv):
     # A chamada sem `prefixo` e a do NDF Commodities, que usa o default.
     _tipos[_kw.get('prefixo') or 'NDF_Comm'] = _kw.get('tipo') or 'NDF'
 check('o XML do FWD Start sai com tipoOperacao NDF', _tipos.get('NDF_FwdStart'), 'NDF')
+# As duas familias de OPCAO saem em MAIUSCULO, como o NDF: e o que o FepWeb le,
+# e o `Option` com inicial maiuscula era a unica saida do app fora desse padrao.
 check('   e as outras tres seguem o produto delas',
       (_tipos.get('NDF_Comm'), _tipos.get('Opt_Comm'), _tipos.get('Opt_FXO')),
-      ('NDF', 'Option', 'Option'))
+      ('NDF', 'OPTION', 'OPTION'))
+check('   e o tipo vai sempre em CAIXA ALTA',
+      [t for t in _tipos.values() if t != t.upper()], [])
 
 print('\n' + ('FALHOU: ' + ', '.join(fails) if fails else 'TUDO OK'))
 sys.exit(1 if fails else 0)
