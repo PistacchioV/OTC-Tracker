@@ -438,7 +438,7 @@ except Q.QuotesError as e:
     msg = str(e)
     check('a mensagem nomeia a fonte', msg.startswith('PTAX (BCB):'), True)
     check('e diz o que CADA rota respondeu',
-          ['proxy refused' in msg, 'timed out' in msg, 'direct connection' in msg],
+          ['reach the proxy' in msg, 'timed out' in msg, 'direct connection' in msg],
           [True, True, True])
     check('sem o despejo do urllib3 (a mensagem crua tinha 400 caracteres)',
           [len(msg) < 220, 'urllib3' in msg, 'object at 0x' in msg], [True, False, False])
@@ -448,10 +448,29 @@ finally:
     Q.QUOTES_PROXY, Q._FALLBACK_PROXIES = _pref, _fb
     Q._route_ok.update(_ok)
 
-check('proxy recusando vira uma linha legivel',
+# O `requests` embrulha QUATRO problemas diferentes no mesmo "Unable to connect
+# to proxy" — recusa, DNS, timeout e certificado —, e cada um pede uma acao
+# diferente. A frase diz que foi ao alcancar o PROXY e, junto, qual deles: antes
+# os quatro davam a mesma linha, e a mensagem nao ajudava a agir.
+check('proxy recusando diz que foi recusa',
       Q._short_error(Exception('HTTPSConnectionPool(host=...): Max retries exceeded '
-                               "(Caused by ProxyError('Unable to connect to proxy', ...))")),
-      'the proxy refused the connection')
+                               "(Caused by ProxyError('Unable to connect to proxy', "
+                               "NewConnectionError('[WinError 10061] actively refused it')))")),
+      'could not reach the proxy (connection refused)')
+check('   e o DNS do proxy nao se confunde com recusa',
+      Q._short_error(Exception('Unable to connect to proxy: [Errno 11001] getaddrinfo failed')),
+      'could not reach the proxy (host not resolved)')
+check('   nem o timeout ate o proxy',
+      Q._short_error(Exception('Unable to connect to proxy: timed out')),
+      'could not reach the proxy (timed out)')
+check('   nem o 407, que e credencial e nao rede',
+      Q._short_error(Exception('Unable to connect to proxy: 407 Proxy Authentication Required')),
+      'could not reach the proxy (proxy authentication required)')
+# A mesa confirmou: o proxy e a 9443, sempre. A 10443 e a porta do app de
+# desktop, nunca atendeu, e como segunda tentativa so punha uma linha a mais em
+# toda mensagem de erro dizendo que um endereco morto tambem falhou.
+check('nao ha mais fallback de porta', list(Q._FALLBACK_PROXIES), [])
+check('e o proxy padrao e a 9443', Q.QUOTES_PROXY, 'http://proxy.jpmchase.net:9443')
 check('timeout vira uma linha legivel',
       Q._short_error(Exception('HTTPSConnectionPool: Read timed out. (read timeout=30)')),
       'timed out')
