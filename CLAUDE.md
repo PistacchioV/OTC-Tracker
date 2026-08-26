@@ -512,21 +512,12 @@ JS do menu, feed de notificações).
   `enforce_control_panel_cards` bloqueia o endpoint de cada rotina sem o card
   (`_CP_ENDPOINT_CARD`). Uma concessão legada da página inteira implica todos
   os cards.
-  - A página é dividida em **seis seções** — Intraday, Settlement Reporting,
-    Pending Confirmation, Economic Affirmation, Reference Data e Application —,
-    e o que
+  - A página é dividida em **cinco seções** — Intraday, Settlement Reporting,
+    Pending Confirmation, Economic Affirmation e Reference Data —, e o que
     agrupa não é o que a rotina FAZ e sim *quando* ela acontece e sobre o que
     responde: não há seção de "salvamento de arquivo", o Save CETIP Files está
     na Intraday (roda ao longo do pregão) e o Save Daily Settlement Files na
-    Settlement Reporting. A **Application** é a única que não fala de operação:
-    ela guarda as rotinas sobre a própria ferramenta, e hoje tem um card só, o
-    **New Version Released** — o aviso de que há versão nova e de que ela
-    precisa ser iniciada à mão. A versão dele NÃO se digita: sai do `link.txt`
-    que fica ao lado do `start-otc-tracker.bat`, na pasta Application (o caminho
-    pende do `SHARED_DRIVE_ROOT`, §8, e `OTC_VERSION_FILE` o move). Sem versão
-    reconhecida o envio é **recusado** — um aviso de "nova versão" sem o número
-    não diz nada a quem recebe —, e o destinatário é quem está `Active` no
-    cadastro de usuários, não quem está `Pending`. A seção de cada card **é o DOM**: o cabeçalho
+    Settlement Reporting. A seção de cada card **é o DOM**: o cabeçalho
     (`data-cp-hdr`), a
     `.row.cp-cards` logo abaixo, e os cards dentro dela. Havia um mapa
     card → grupo escrito à mão no JS, e ele envelhecia calado no dia em que um

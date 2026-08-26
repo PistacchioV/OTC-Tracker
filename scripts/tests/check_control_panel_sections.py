@@ -1,14 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""check_control_panel_sections.py — as SEIS secoes do Control Panel.
+"""check_control_panel_sections.py — as CINCO secoes do Control Panel.
 
 O painel cresceu ate virar uma parede de dez cards debaixo de um titulo so.
-Hoje sao seis secoes (Intraday, Settlement Reporting, Pending Confirmation,
-Economic Affirmation, Reference Data e Application), e a secao de cada card e
+Hoje sao cinco secoes (Intraday, Settlement Reporting, Pending
+Confirmation, Economic Affirmation e Reference Data), e a secao de cada card e
 o DOM: o cabecalho, a `.row.cp-cards` logo abaixo dele, e os cards dentro dela.
-
-A ultima, `Application`, e a unica que nao fala de operacao: ela guarda as
-rotinas sobre a propria ferramenta (hoje o aviso de versao nova para a mesa).
 
 O que este script prova:
 
@@ -77,7 +74,7 @@ for i, (pos, key) in enumerate(marcas):
 print('\n== 1. registro x template ==')
 reg = [c['id'] for c in R._CONTROL_PANEL_CARDS]
 no_tpl = re.findall(r'data-cp-card="([^"]+)"', CORPO)
-check('o registro tem 14 cards', len(reg), 14)
+check('o registro tem 13 cards', len(reg), 13)
 check('nenhum card repetido no template', sorted(no_tpl), sorted(set(no_tpl)))
 check('todo card do registro esta no template', sorted(set(reg) - set(no_tpl)), [])
 check('todo card do template esta no registro', sorted(set(no_tpl) - set(reg)), [])
@@ -86,8 +83,8 @@ check('e todo id tem um token de acesso',
       sorted('/control-panel#' + i for i in reg), True)
 
 print('\n== 2. toda secao tem card, todo card tem secao ==')
-check('o painel tem SEIS secoes', [s['key'] for s in secoes],
-      ['intraday', 'reporting', 'pendingconf', 'affirmation', 'refdata', 'application'])
+check('o painel tem CINCO secoes', [s['key'] for s in secoes],
+      ['intraday', 'reporting', 'pendingconf', 'affirmation', 'refdata'])
 for s in secoes:
     check('%s: tem a .row de cards' % s['key'], s['row'], True)
     check('%s: nao esta vazia' % s['key'], bool(s['cards']), True)
