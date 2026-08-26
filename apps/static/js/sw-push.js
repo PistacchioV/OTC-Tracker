@@ -45,13 +45,43 @@ var PAGE_URL = {
 };
 
 self.addEventListener('push', function (event) {
+    // `paginaCuida` fica FORA da cadeia porque o `.catch` do fim também precisa
+    // dele: sem isso, uma falha no fetch fazia o balão genérico sair mesmo com
+    // a janela aberta — a duplicata voltava justamente no caminho de erro, que
+    // é o que ninguém testa.
+    var paginaCuida = false;
     event.waitUntil(
-        fetch('/api/notifications', { credentials: 'include' })
-            .then(function (r) { return r.ok ? r.json() : null; })
+        // QUEM AVISA É UM SÓ. O mesmo evento chega por dois caminhos — este
+        // push e o `maybeNativeNotify` do topbar —, e com a aba ABERTA e sem
+        // foco os dois disparavam: duas notificações para a mesma coisa, e com
+        // `tag` diferente (`otc-activity` aqui, `otc-<id>` lá) o navegador nem
+        // as sobrepunha. Aparecia uma embaixo da outra.
+        //
+        // Com uma janela do app aberta, quem avisa é a PÁGINA: ela tem o
+        // `notification` inteiro na mão, sabe o id, marca como lida no clique e
+        // navega sem recarregar. O push existe para quando NÃO há janela — é
+        // por isso que ele existe. Basta UMA janela, focada ou não: o topbar já
+        // decide sozinho se mostra (ele se cala quando a aba está em foco,
+        // porque aí o toast da própria tela cobre).
+        self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+            .then(function (janelas) {
+                // Sentinela explícito: `null` também é o que o fetch devolve
+                // quando a resposta não vem, e os dois casos pedem coisas
+                // diferentes — sem janela e sem resposta, o balão genérico
+                // ainda tem de sair.
+                if (janelas && janelas.length) {
+                    paginaCuida = true;
+                    return 'PAGINA_CUIDA';
+                }
+                return fetch('/api/notifications', { credentials: 'include' })
+                    .then(function (r) { return r.ok ? r.json() : null; });
+            })
             .then(function (resp) {
+                if (resp === 'PAGINA_CUIDA') { return; }
                 var title = 'OTC Tracker';
                 var body = 'Nova atividade no OTC Tracker';
                 var url = '/dashboard';
+                var tag = 'otc-activity';
                 if (resp && resp.success && resp.notifications && resp.notifications.length) {
                     var n = resp.notifications[0];
                     var detail = (n.detail || '').replace(/\s*\[ND:\d{4}-\d{2}-\d{2}\]/, '');
@@ -74,6 +104,14 @@ self.addEventListener('push', function (event) {
                     var nPage = (n.page === 'Reconciliation' && n.action === 'Recon FXO')
                                 ? 'Recon FXO' : n.page;
                     url = PAGE_URL[nPage] || '/dashboard';
+                    // A MESMA `tag` do topbar (`otc-<id>`). Ela é o que faz o
+                    // navegador SOBREPOR em vez de empilhar: com tags
+                    // diferentes, uma corrida entre os dois caminhos deixava as
+                    // duas notificações na tela, uma embaixo da outra. O
+                    // `matchAll` acima já evita a corrida; a tag é o cinto de
+                    // segurança para o instante em que a janela fecha entre a
+                    // checagem e o `showNotification`.
+                    tag = 'otc-' + (Number(n.id) || 0);
                 }
                 return self.registration.showNotification(title, {
                     body: body,
@@ -90,12 +128,13 @@ self.addEventListener('push', function (event) {
                     // dois aplicativos.
                     icon: '/static/images/favicon-notif.png',
                     badge: '/static/images/favicon-notif.png',
-                    tag: 'otc-activity',
+                    tag: tag,
                     renotify: true,
                     data: { url: url }
                 });
             })
             .catch(function () {
+                if (paginaCuida) { return; }
                 return self.registration.showNotification('OTC Tracker', {
                     body: 'Nova atividade no OTC Tracker',
                     icon: '/static/images/favicon-notif.png',
