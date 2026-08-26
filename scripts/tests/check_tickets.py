@@ -28,13 +28,19 @@ R._create_notification = lambda actor_sid, actor_name, action, page, detail='', 
         {'actor': actor_sid, 'action': action, 'page': page, 'detail': detail,
          'role': target_role, 'sid': target_sid})
 
+# O envio mora na vertical (`features/support/infra/mail.py`) desde que o
+# Support Center saiu do routes.py. O stub troca o ATRIBUTO DO MODULO, e nao um
+# nome importado: `commands.py` chama `mail.send_closed(...)`, entao a troca
+# vale na hora da chamada. Importado por nome la, esta linha nao interceptaria
+# nada e o teste tentaria SMTP de verdade.
+from apps.pages.features.support.infra import mail as tk_mail   # noqa: E402
 MAILS = []
-_real_mail = R._tk_send_closed_email
+_real_mail = tk_mail.send_closed
 def fake_mail(ticket):
     MAILS.append({'to': ticket.get('requester_email'), 'id': ticket.get('id'),
                   'status': ticket.get('status')})
     return True
-R._tk_send_closed_email = fake_mail
+tk_mail.send_closed = fake_mail
 
 app = create_app(DebugConfig)
 app.config['TESTING'] = True
@@ -276,7 +282,10 @@ r = master.get('/ticket-create')
 check('/ticket-create removida -> 404', r.status_code, 404)
 
 print('\n== 17. o template do e-mail renderiza de verdade ==')
-R._tk_send_closed_email = _real_mail
+tk_mail.send_closed = _real_mail
+# `R.smtplib` e o MESMO objeto de modulo que o `mail.py` importou, entao
+# trocar `SMTP` aqui vale para os dois — e o envio de verdade roda contra
+# o fake, sem sair nada da maquina.
 sent = {}
 class FakeSMTP(object):
     def __init__(self, *a, **k): pass
@@ -354,10 +363,14 @@ for _t in _st['tickets']:
     if _t['id'] == _id_mo:
         _t.pop('requester_role', None)
 otc_tickets._write(_st)
-R._TK_ROLE_CACHE.clear()
+# O cache e o resolvedor moram na vertical. Trocar o ATRIBUTO DO MODULO
+# funciona nos dois caminhos: `roles_for_tickets` chama `roles_by_sid` como
+# global do proprio modulo, e `queries.roles_for` o chama qualificado.
+from apps.pages.features.support.infra import persistence as tk_db   # noqa: E402
+tk_db._CACHE.clear()
 _ROLES = {'C333333': 'MO'}
-_orig_roles = R._tk_roles_by_sid
-R._tk_roles_by_sid = lambda sids: {str(x or '').strip().upper():
+_orig_roles = tk_db.roles_by_sid
+tk_db.roles_by_sid = lambda sids: {str(x or '').strip().upper():
                                    _ROLES.get(str(x or '').strip().upper(), '')
                                    for x in sids if str(x or '').strip()}
 try:
@@ -368,7 +381,7 @@ try:
     check('   e continua fora da fila das outras',
           _id_mo in [t['id'] for t in d['tickets']], False)
 finally:
-    R._tk_roles_by_sid = _orig_roles
+    tk_db.roles_by_sid = _orig_roles
 
 print('\n== 20. arquivo corrompido nao derruba a pagina ==')
 io.open(otc_tickets._FILE, 'w', encoding='utf-8').write(u'{{{ nao e json')

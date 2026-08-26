@@ -107,7 +107,24 @@ check('   nao para a de New Deals',
 check('o New Deals segue apontando para a dele',
       PY.get('NDF Other Publisher'), '/new_deals-ndf-otherpublisher')
 # As quatro notificacoes da tela de liquidacao tem de usar a constante.
-SRC = read('apps/pages/routes.py')
+# O `routes.py` MAIS as verticais de `apps/pages/features/`. Este guarda casa por
+# TEXTO e por AST, entao codigo que sai do routes.py sai da varredura junto — e o
+# jeito de isso aparecer nao e uma assercao vermelha, e uma que deixa de existir.
+# Concatenar as duas fontes mantem a cobertura a cada extracao, sem editar este
+# arquivo de novo. (A Recon FXO foi a primeira a sair: sem isto, o `split` da
+# secao 5 estourava com IndexError.)
+def _fontes_com_rotas():
+    partes = [read('apps/pages/routes.py')]
+    base = os.path.join(ROOT, 'apps', 'pages', 'features')
+    for raiz, dirs, arqs in os.walk(base):
+        dirs[:] = [d for d in dirs if d != '__pycache__']
+        for a in sorted(arqs):
+            if a.endswith('.py'):
+                partes.append(io.open(os.path.join(raiz, a), encoding='utf-8').read())
+    return '\n'.join(partes)
+
+
+SRC = _fontes_com_rotas()
 blk = SRC.split("@blueprint.route('/api/ndf-other-publisher/data')", 1)[1] \
          .split('#  Cognos', 1)[0]
 check('as notificacoes da tela usam a constante', blk.count('_NOTIF_DS_OTHERPUB'), 4)
@@ -117,9 +134,13 @@ print('\n== 5. cada notificacao grava o par (acao, pagina) certo ==')
 # `page` e o DESTINO do clique, nao o assunto. A Recon FXO gravava
 # ('Recon FXO', 'Reconciliation') -- e 'Reconciliation' e a pagina do Pay/Rec,
 # entao o sino levava para a recon errada.
-blk = SRC.split("def reconciliation_fxo_run", 1)[1].split('\n@blueprint', 1)[0]
-check('a Recon FXO grava a pagina dela', "'Recon Generated', 'Recon FXO'" in blk, True)
-check('   e nao a do Pay/Rec', "'Reconciliation'," in blk, False)
+# O par da Recon FXO virou constante na vertical (`commands.NOTIF_ACTION` /
+# `NOTIF_PAGE`), entao a assercao pergunta pelas constantes e nao pela linha do
+# endpoint — o endpoint hoje passa `commands.NOTIF_PAGE`, nao um literal.
+from apps.pages.features.reconciliation_fxo import commands as _rfxo_cmd  # noqa: E402
+check('a Recon FXO grava a pagina dela',
+      (_rfxo_cmd.NOTIF_ACTION, _rfxo_cmd.NOTIF_PAGE), ('Recon Generated', 'Recon FXO'))
+check('   e nao a do Pay/Rec', _rfxo_cmd.NOTIF_PAGE == 'Reconciliation', False)
 blk = SRC.split("def reconciliation_payrec_run", 1)[1].split('\n@blueprint', 1)[0]
 check('o Pay/Rec continua com a dele', "'Reconciliation'," in blk, True)
 

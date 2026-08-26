@@ -42,9 +42,14 @@ PERMITIDO = {
 }
 
 # E as funcoes que NUNCA podem: elas decidem acesso.
+# A barreira e por NOME de funcao, entao funcao que muda de nome ao mudar de
+# arquivo sai da lista em silencio — foi o que quase aconteceu quando o Support
+# Center virou vertical e o `_tk_roles_by_sid` virou
+# `features/support/infra/persistence.roles_by_sid`. Ao mover codigo daqui, o
+# nome NOVO entra nesta tupla na mesma mudanca.
 PROIBIDO_SEMPRE = ('_read_page_access', '_get_page_access', '_set_page_access',
                    'get_user_by_sid', 'insert_new_user', 'verify_code',
-                   'save_verification_code', '_tk_roles_by_sid',
+                   'save_verification_code', 'roles_by_sid',
                    '_session_is_master', '_session_is_admin')
 
 ALVOS = ('duckdb_read_unlocked', 'sqlite_read_unlocked')
