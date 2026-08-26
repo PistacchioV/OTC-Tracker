@@ -268,3 +268,49 @@ if falhas:
     print('{} falha(s)'.format(len(falhas)))
     sys.exit(1)
 print('tudo ok')
+
+
+# ── 8. "É produção?" tem UMA resposta ────────────────────────────────────────
+# O guard do SECRET_KEY existe para a instância de produção não subir com uma
+# chave aleatória (que desloga todo mundo a cada restart). Mas ele olhava SÓ o
+# `app.config['DEBUG']`, que depende de qual objeto de config o chamador passou
+# — e a instância do JPM tem um `run.py` próprio que chama `create_app(Config)`,
+# com o Config BASE, que não define DEBUG. Resultado: o start de debug morria
+# pedindo uma chave que o modo debug não precisa, com `DEBUG=True` no ambiente.
+#
+# A `DEBUG` do ambiente é o jeito DOCUMENTADO de escolher o modo (`set
+# DEBUG=False`, topo do run.py). Se qualquer uma das duas diz debug, não é
+# produção.
+print('\n== o guard do SECRET_KEY ==')
+import importlib                                            # noqa: E402
+
+
+def _sobe(cfg_nome, **env):
+    for k in ('DEBUG', 'SECRET_KEY'):
+        os.environ.pop(k, None)
+    for k, v in env.items():
+        os.environ[k] = v
+    for m in [m for m in list(sys.modules) if m.startswith('apps')]:
+        del sys.modules[m]
+    import apps as _apps
+    from apps import config as _cfg
+    try:
+        _apps.create_app(getattr(_cfg, cfg_nome))
+        return True
+    except RuntimeError:
+        return False
+
+
+check(_sobe('Config', DEBUG='True') is True,
+      'Config base + DEBUG=True sobe (o start-debug da instância)')
+check(_sobe('Config') is False,
+      '   e sem DEBUG e sem SECRET_KEY continua RECUSANDO')
+check(_sobe('ProductionConfig', DEBUG='False') is False,
+      '   ProductionConfig sem SECRET_KEY também recusa')
+check(_sobe('Config', SECRET_KEY='x') is True, '   e com SECRET_KEY sobe')
+# A mensagem tem de dizer os DOIS caminhos: quem está em debug não precisa de
+# chave nenhuma, e quem está em produção precisa saber onde pô-la.
+_raiz = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
+_src_init = io.open(os.path.join(_raiz, 'apps', '__init__.py'), encoding='utf-8').read()
+check('DEBUG=True' in _src_init and '.env' in _src_init,
+      'a mensagem aponta o DEBUG e o SECRET_KEY')

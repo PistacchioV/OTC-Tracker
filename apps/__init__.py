@@ -128,11 +128,26 @@ def create_app(config):
     app = Flask(__name__)
     app.config.from_object(config)
 
-    # Refuse to boot a production instance without an explicit SECRET_KEY: the
-    # config falls back to an ephemeral random key otherwise, which silently
-    # invalidates every session cookie on each restart and hides a misconfig.
-    if not app.config.get('DEBUG', False) and not os.getenv('SECRET_KEY'):
-        raise RuntimeError('SECRET_KEY environment variable is required in production')
+    # Recusa subir uma instância de PRODUÇÃO sem `SECRET_KEY` explícita: sem ela
+    # a config cai numa chave aleatória, e aí todo cookie de sessão é invalidado
+    # a cada restart — a pessoa é deslogada sem motivo aparente, e o defeito não
+    # se parece com configuração faltando.
+    #
+    # "É produção?" tem DUAS respostas no app, e elas podiam discordar: o
+    # `app.config['DEBUG']`, que depende de qual objeto de config o chamador
+    # passou, e a variável de ambiente `DEBUG`, que é o jeito DOCUMENTADO de
+    # escolher o modo (`set DEBUG=False`, ver o topo do `run.py`). Um chamador
+    # que passe o `Config` base — sem `DEBUG` nenhum — cai aqui mesmo tendo
+    # `DEBUG=True` no ambiente, e o start de debug morre pedindo uma chave que
+    # o modo debug não precisa. A pergunta passa a ser uma só: se QUALQUER uma
+    # das duas diz debug, não é produção.
+    _debug_env = os.getenv('DEBUG', '').strip().lower() in ('1', 'true', 'yes', 'on')
+    if not app.config.get('DEBUG', False) and not _debug_env and not os.getenv('SECRET_KEY'):
+        raise RuntimeError(
+            'SECRET_KEY environment variable is required in production. '
+            'Para rodar em DEBUG, defina DEBUG=True no ambiente (ou passe o '
+            'DebugConfig para o create_app); para produção, defina SECRET_KEY '
+            'no .env.')
 
     # Single reverse proxy in front of the app (127.0.0.1:9443). Trust exactly
     # one X-Forwarded-For hop so get_client_ip() reads the real client IP from
