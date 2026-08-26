@@ -102,13 +102,13 @@ class Config(object):
     USE_SQLITE  = True
 
     DATABASE_LOCAL_SEMAPHORE_TIMEOUT_SECONDS = float(
-        os.getenv('DATABASE_LOCAL_SEMAPHORE_TIMEOUT_SECONDS', '45')
+        os.getenv('DATABASE_LOCAL_SEMAPHORE_TIMEOUT_SECONDS', '15')
     )
-    DATABASE_READ_LOCK_TIMEOUT_SECONDS = float(os.getenv('DATABASE_READ_LOCK_TIMEOUT_SECONDS', '45'))
+    DATABASE_READ_LOCK_TIMEOUT_SECONDS = float(os.getenv('DATABASE_READ_LOCK_TIMEOUT_SECONDS', '15'))
     DATABASE_WRITE_LOCK_TIMEOUT_SECONDS = float(os.getenv('DATABASE_WRITE_LOCK_TIMEOUT_SECONDS', '30'))
     DATABASE_SQLITE_BUSY_TIMEOUT_SECONDS = int(os.getenv('DATABASE_SQLITE_BUSY_TIMEOUT_SECONDS', '10000'))
     DATABASE_SLOW_LOCK_WARNING_SECONDS = float(os.getenv('DATABASE_SLOW_LOCK_WARNING_SECONDS', '5'))
-    DATABASE_LOCK_RETRY_LIMIT = int(os.getenv('DATABASE_LOCK_RETRY_LIMIT', '2'))
+    DATABASE_LOCK_RETRY_LIMIT = int(os.getenv('DATABASE_LOCK_RETRY_LIMIT', '4'))
     DATABASE_READ_CONCURRENCY = int(os.getenv('DATABASE_READ_CONCURRENCY', '4'))
     # Todo banco que o app abre. É esta lista que o `validate_database_paths`
     # confere na subida (pasta gravável + arquivo de lock), então um banco que

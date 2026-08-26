@@ -950,9 +950,9 @@
 
             window.fetchNotifications = fetchNotifications;
             fetchNotifications();
-            // 8s poll for near real-time cross-user propagation; pages also call
+            // 15s poll for near real-time cross-user propagation; pages also call
             // window.fetchNotifications() immediately after their own actions.
-            setInterval(fetchNotifications, 8000);
+            setInterval(fetchNotifications, 15000);
         });
         </script>
 
