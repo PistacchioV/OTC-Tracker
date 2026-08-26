@@ -2527,6 +2527,34 @@ def _dash_scan_files(raiz, period, now):
             yield (caminho, nome, mtime, size)
 
 
+def _product_from_path(file_path):
+    """Derive product label from directory path relative to new deals/ root.
+    e.g. .../Option/Commodities/2026/06/file.json  → 'Option Commodities'
+         .../NDF/FWD Start/2026/06/file.json       → 'NDF FWD Start'
+
+    De MÓDULO, e não aninhada no endpoint: quem grava o memo (`_dash_file_deals`)
+    guarda o `_product` e o `_type` junto de cada deal, então o aquecimento
+    precisa derivá-los do MESMO jeito que o endpoint — aninhada, ele não a
+    alcança, e a thread de aquecimento morria com `NameError` sem nada aparecer
+    na tela (o painel seguia certo, só voltava a pagar a leitura inteira). É
+    pura: só lê o `NEW_DEALS_CACHE_ROOT`, que é global.
+    """
+    rel = os.path.relpath(file_path, NEW_DEALS_CACHE_ROOT).replace('\\', '/')
+    parts = rel.split('/')
+    pretty = {'FwdStart': 'FWD Start', 'OtherPublisher': 'Other Publisher'}
+    label_parts = [pretty.get(p, p) for p in parts[:-1] if not p.isdigit()][:2]
+    return ' '.join(label_parts) if label_parts else 'Other'
+
+
+def _type_from_product(product):
+    p = product.lower()
+    if p.startswith('option'):
+        return 'OPT'
+    if p.startswith('swap'):
+        return 'SWAP'
+    return 'NDF'
+
+
 def _dash_file_deals(fp, fname, mtime, size, fdate, product, deal_type):
     """Os deals de UM arquivo-dia, já projetados, filtrados e anotados.
 
@@ -2565,6 +2593,61 @@ def _dash_file_deals(fp, fname, mtime, size, fdate, product, deal_type):
 
 
 
+
+# ── O memo do painel nasce QUENTE ───────────────────────────────────────────
+# A varredura ficou barata da SEGUNDA abertura em diante — o memo evita reabrir
+# o que não mudou. Só que a instância reinicia várias vezes ao dia (o reloader
+# está desligado, então todo deploy pede restart), e a cada restart o memo volta
+# a zero: quem abrir o painel primeiro paga a leitura inteira da árvore, e é
+# quase sempre alguém.
+#
+# Esta thread faz essa leitura FORA do request, no start. Ela não calcula nada e
+# não muda resposta nenhuma: só enche o `_dash_file_memo`, que é exatamente o
+# trabalho que o primeiro visitante fazia. Quem abrir o painel no meio da
+# varredura não espera por ela — cada arquivo que ela já leu é um a menos para o
+# request, e os que faltam ele lê como antes.
+#
+# `year` primeiro porque é o período com que o painel ABRE (`loadDashboard('year')`
+# no dashboard.js); `all` depois, para quem troca o filtro. A ordem importa: com
+# `all` primeiro, o período que a tela usa só ficaria pronto no fim.
+def _dash_warm_memo():
+    if not os.path.isdir(NEW_DEALS_CACHE_ROOT):
+        return
+    agora = datetime.now()
+    for periodo in ('year', 'all'):
+        t0 = time.time()
+        lidos = 0
+        try:
+            for fp, fname, mtime, size in _dash_scan_files(NEW_DEALS_CACHE_ROOT, periodo, agora):
+                if fname.endswith('.tmp') or fname.endswith('.bak'):
+                    continue
+                try:
+                    fdate = datetime.strptime(fname[:8], '%Y%m%d')
+                except ValueError:
+                    continue
+                produto = _product_from_path(fp)
+                _dash_file_deals(fp, fname, mtime, size, fdate,
+                                 produto, _type_from_product(produto))
+                lidos += 1
+        except Exception:                                   # noqa: BLE001
+            # Aquecer é otimização: falhar aqui não pode derrubar nada. O
+            # painel continua funcionando, só volta a pagar a leitura no
+            # primeiro acesso.
+            log.warning('[dashboard] aquecimento de %s parou:\n%s',
+                        periodo, traceback.format_exc())
+            return
+        log.info('[dashboard] memo aquecido: %s — %d arquivo(s) em %.1fs',
+                 periodo, lidos, time.time() - t0)
+
+
+def _dash_warm_start():
+    threading.Thread(target=_dash_warm_memo, name='dashboard-warm',
+                     daemon=True).start()
+
+
+# Sobe com o APP, como os laços agendados: no import ele rodaria em todo script
+# que importa o módulo, e a varredura do share não tem o que fazer ali.
+_schedule_on_start('dashboard-warm', _dash_warm_start)
 
 @blueprint.route('/api/data-files/status')
 def api_data_files_status():
@@ -2671,25 +2754,6 @@ def api_dashboard_stats():
             cl = (d.get('Client') or '')
             return 'LAWTON' not in cl.upper() and not _jpm_re.search(cl)
         return False
-
-    def _product_from_path(file_path):
-        """Derive product label from directory path relative to new deals/ root.
-        e.g. .../Option/Commodities/2026/06/file.json  → 'Option Commodities'
-             .../NDF/FWD Start/2026/06/file.json       → 'NDF FWD Start'
-        """
-        rel = os.path.relpath(file_path, NEW_DEALS_CACHE_ROOT).replace('\\', '/')
-        parts = rel.split('/')
-        pretty = {'FwdStart': 'FWD Start', 'OtherPublisher': 'Other Publisher'}
-        label_parts = [pretty.get(p, p) for p in parts[:-1] if not p.isdigit()][:2]
-        return ' '.join(label_parts) if label_parts else 'Other'
-
-    def _type_from_product(product):
-        p = product.lower()
-        if p.startswith('option'):
-            return 'OPT'
-        if p.startswith('swap'):
-            return 'SWAP'
-        return 'NDF'
 
     # Generic scan of all new deals cache directories
     all_deals = []

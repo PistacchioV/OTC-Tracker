@@ -172,7 +172,27 @@ check('e a tupla nao tem campo a mais',
 builtins.open = _open_real
 os.scandir = _scandir_real
 
-print('\n== 5. a ordem nao depende do sistema de arquivos ==')
+print('\n== 5. o aquecimento do memo ==')
+# A instancia reinicia varias vezes ao dia e o memo volta a zero: sem aquecer,
+# QUEM ABRIR O PAINEL PRIMEIRO paga a leitura inteira da arvore, e e quase
+# sempre alguem. A thread faz essa leitura fora do request.
+check('o aquecimento sobe com o APP',
+      any(l == 'dashboard-warm' for l, _ in R._SCHEDULERS), True)
+# `_product_from_path` e `_type_from_product` tem de ser de MODULO: o memo grava
+# o `_product`/`_type` junto de cada deal, e aninhadas no endpoint o
+# aquecimento nao as alcanca — ele morria com `NameError` e nada aparecia na
+# tela (o painel seguia certo, so voltava a pagar a leitura).
+check('_product_from_path e de modulo', callable(getattr(R, '_product_from_path', None)), True)
+check('_type_from_product e de modulo', callable(getattr(R, '_type_from_product', None)), True)
+R._dash_file_memo.clear()
+R._dash_warm_memo()
+check('e ele enche o memo', len(R._dash_file_memo) > 0, True)
+cont.update(listagens=0, aberturas=0)
+_antes = dict(R._dash_file_memo)
+R._dash_warm_memo()
+check('   rodar de novo nao reabre nada', cont['aberturas'], 0)
+
+print('\n== 6. a ordem nao depende do sistema de arquivos ==')
 R._DASH_TTL = 0
 from apps import create_app                                # noqa: E402
 from apps.config import DebugConfig                        # noqa: E402
