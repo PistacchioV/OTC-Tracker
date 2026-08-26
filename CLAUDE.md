@@ -2148,9 +2148,9 @@ features/<nome>/
 └── infra/          persistence.py · mail.py · mappers.py
 ```
 
-Extraídas até aqui: **`support`** (Support Center, 450 linhas / 6 rotas) e
-**`onboarding`** (CGD, 154 linhas / 7 rotas). O `routes.py` saiu de 39.696
-para 39.125 linhas.
+Extraídas até aqui: **`support`** (450 linhas / 6 rotas), **`onboarding`**
+(154 / 7) e **`reconciliation_fxo`** (101 / 4). O `routes.py` saiu de 39.696
+para 39.032 linhas.
 
 Nem toda vertical tem `domain.py`: o do Onboarding é o `apps/pages/cgd_docs.py`,
 e ele **fica onde está** porque a Recon de CGD e o /mapping também o consultam —
@@ -2177,6 +2177,11 @@ delega a ele em vez de criar um arquivo vazio.
   32 scripts com o caminho escrito na mão, e o `check_unlocked_reads` casa por
   **nome de função** — o `_tk_roles_by_sid` virou `roles_by_sid` e saiu da lista
   proibida em silêncio. Ao mover código, atualize o guarda na MESMA mudança.
+  Quando o guarda varre o arquivo INTEIRO, a correção é fazê-lo ler o
+  `routes.py` **mais** `features/**/*.py` de uma vez — é o que o
+  `check_notif_page_url` faz hoje (`_fontes_com_rotas`), e assim ele não precisa
+  ser editado a cada extração. O sintoma de não fazer isso nem sempre é
+  vermelho: às vezes é uma asserção que simplesmente deixa de existir.
 - **O teste da feature é o que autoriza a extração.** O Support Center foi o
   primeiro porque nada no resto do `routes.py` o chamava (zero referências de
   entrada) **e** o `check_tickets.py` já o prendia ponta a ponta por HTTP.
@@ -2195,8 +2200,8 @@ fora chamam o grupo; saída = de quantas ele depende:
 |---|---|---|---|---|
 | `support` | 450 | **0** | 15 | ✅ feito |
 | `onboarding` (CGD) | 154 | **0** | 3 | ✅ feito |
-| `reconciliation-fxo` | 86 | **0** | 4 | próximo — sem teste ainda |
-| `quotes` | 88 | 1 | 4 | |
+| `reconciliation-fxo` | 101 | **0** | 4 | ✅ feito |
+| `quotes` | 88 | 1 | 4 | próximo |
 | `holidays` | 254 | 3 | 11 | |
 | `bacc` · `mt300` · `appver` | ~170–310 | 7–9 | 13–21 | |
 | `conf-escalation` · `mdea` | ~314–384 | 12–13 | 17–20 | |

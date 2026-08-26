@@ -38079,105 +38079,11 @@ def api_mc_reject():
 
 # ==============================================================================
 #  FXO RECONCILIATION — posição B3/CETIP (DPOSICAO .OPC) × Athena (EOD FXO).
-#  O motor está em apps/pages/recon_fxo.py; aqui só entram sessão, data e o
-#  encaminhamento dos arquivos do upload manual.
 # ==============================================================================
-@blueprint.route('/reconciliation-fxo')
-def reconciliation_fxo():
-    if not session.get('authenticated'):
-        return redirect(url_for('pages_blueprint.sign_in_page'))
-    # D-1 no calendário ANBIMA: a posição da B3 e o EOD da Athena são do
-    # fechamento anterior. Abrir em "hoje" mandaria todo mundo procurar um
-    # arquivo que ainda não existe — e numa segunda-feira, ou no dia seguinte a
-    # um feriado, "ontem" no calendário civil não é dia útil nenhum.
-    return render_template('pages/reconciliation-fxo.html',
-                           segment='reconciliation-fxo',
-                           ref_date=_prev_anbima_bizday(datetime.now()).strftime('%Y-%m-%d'))
-
-
-@blueprint.route('/reconciliation-fxo/data')
-def reconciliation_fxo_data():
-    if not session.get('authenticated'):
-        return jsonify({'error': 'Unauthorized'}), 401
-    try:
-        from apps.pages.recon_fxo import load_last
-        return jsonify(load_last(request.args.get('recon_date', '')))
-    except Exception as e:
-        log.error('[recon_fxo_data] %s', e)
-        return jsonify({'error': str(e)}), 500
-
-
-@blueprint.route('/reconciliation-fxo/run', methods=['POST'])
-def reconciliation_fxo_run():
-    if not session.get('authenticated'):
-        return jsonify({'error': 'Unauthorized'}), 401
-    mode = request.form.get('mode', 'auto')
-    recon_date = request.form.get('recon_date', '')
-    try:
-        from apps.pages.recon_fxo import run_fxo
-        # Toca os dois cadastros da recon para o SEED ser materializado em disco.
-        # O motor lê o JSON direto (importar `routes` de lá seria circular) e não
-        # tem como semear: sem isto, na instância em que ninguém abriu a tela de
-        # /mapping o arquivo não existe, o cadastro volta vazio e as regras de
-        # exclusão simplesmente não valem — sem erro nenhum.
-        _mapping_rows('fxo-internal-cpty')
-        _mapping_rows('fxo-book-disregard')
-        files = request.files.getlist('files') if mode == 'manual' else None
-        result = run_fxo(recon_date, files=files, mode=mode)
-        if result.get('success'):
-            # `page` é o DESTINO do clique, não o assunto: 'Reconciliation' é a
-            # do Pay/Rec, e era para lá que o sino levava. O par certo é o mesmo
-            # da Recon Comitente — ação 'Recon Generated' (que tem ícone) e
-            # página 'Recon FXO'.
-            _create_notification(
-                session.get('user_sid', ''), session.get('user_name', ''),
-                'Recon Generated', 'Recon FXO',
-                result.get('meta', '') + (' (' + recon_date + ')' if recon_date else '')
-            )
-        return jsonify(result)
-    except FileNotFoundError as e:
-        # O arquivo de posição do dia ainda não chegou na rede. Não é erro de
-        # código: a tela oferece o upload manual em vez de mostrar um stack.
-        log.warning('[recon_fxo_run] arquivo não encontrado: %s', e)
-        return jsonify({'not_found': True, 'detail': str(e)})
-    except Exception as e:
-        log.error('[recon_fxo_run] %s', e)
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-
-@blueprint.route('/reconciliation-fxo/comment', methods=['POST'])
-def reconciliation_fxo_comment():
-    """Grava (ou apaga) a justificativa de uma operação.
-
-    O comentário pertence ao TRADE e não à execução do dia: ele volta em toda
-    recon daquela operação até alguém alterá-lo. Por isso o endpoint não recebe
-    data nenhuma — e por isso ele devolve o Status já recalculado, para a tela
-    trocar o badge sem precisar recarregar a tabela inteira.
-    """
-    if not session.get('authenticated'):
-        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
-    payload = request.get_json(silent=True) or {}
-    key = str(payload.get('key', '') or '').strip()
-    comment = str(payload.get('comment', '') or '').strip()
-    if not key:
-        return jsonify({'success': False,
-                        'error': 'Sem a chave da operação não há o que comentar.'}), 400
-    try:
-        from apps.pages import recon_fxo as _rf
-        _rf.save_comment(key, comment)
-        # O status novo sai do MESMO código que a tabela usa — reproduzir aqui a
-        # regra "com comentário vira Justified" criaria uma segunda resposta.
-        linha = {'Combinação de operações': key,
-                 'Status': str(payload.get('status', '') or ''),
-                 _rf.STATUS_RAW_KEY: str(payload.get('status_raw', '') or
-                                         payload.get('status', '') or '')}
-        _rf.aplicar_comentarios([linha])
-        return jsonify({'success': True, 'comment': comment,
-                        'status': linha['Status'],
-                        'status_raw': linha[_rf.STATUS_RAW_KEY]})
-    except Exception as e:
-        log.error('[recon_fxo_comment] %s', e)
-        return jsonify({'success': False, 'error': str(e)}), 500
+#
+# Saiu daqui: virou a vertical `apps/pages/features/reconciliation_fxo/`. O
+# MOTOR continua no `apps/pages/recon_fxo.py` — ele é o domínio desta recon e
+# tem o `check_recon_fxo.py` em cima. Ver a §10 do CLAUDE.md.
 
 
 @blueprint.route('/reconciliation-payrec/end-process', methods=['POST'])
@@ -39106,3 +39012,4 @@ def get_segment(request):
 # ciclo impossível e preserva os monkeypatches dos testes.
 from apps.pages.features.support import entrypoint as _f_support     # noqa: E402,F401
 from apps.pages.features.onboarding import entrypoint as _f_onboarding  # noqa: E402,F401
+from apps.pages.features.reconciliation_fxo import entrypoint as _f_recon_fxo  # noqa: E402,F401

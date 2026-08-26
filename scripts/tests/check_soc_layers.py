@@ -180,7 +180,9 @@ check('/api/tickets/<ticket_id> registrada',
       '/api/tickets/<ticket_id>' in regras, True)
 check('/api/tickets/<ticket_id>/comment registrada',
       '/api/tickets/<ticket_id>/comment' in regras, True)
-for r in ('/onboarding', '/onboarding/tracking-docs', '/cgd',
+for r in ('/reconciliation-fxo', '/reconciliation-fxo/data',
+          '/reconciliation-fxo/run', '/reconciliation-fxo/comment',
+          '/onboarding', '/onboarding/tracking-docs', '/cgd',
           '/api/onboarding/overview', '/api/onboarding/docs',
           '/api/onboarding/docs/save', '/api/onboarding/docs/delete'):
     check('%s registrada' % r, r in regras, True)
@@ -190,7 +192,8 @@ print('\n== 8. o que saiu do routes.py nao ficou nele ==')
 # metade: os dois divergem, e a que vale e a que o decorador registrou.
 for morto in ('_tk_roles_by_sid', '_tk_can_view', '_tk_public',
               '_tk_send_closed_email', 'def api_tickets_list',
-              '_cgd_form_ctx', '_cgd_db_ready', 'def api_onboarding_docs'):
+              '_cgd_form_ctx', '_cgd_db_ready', 'def api_onboarding_docs',
+              'def reconciliation_fxo_run', 'def reconciliation_fxo_comment'):
     check('%s saiu do routes.py' % morto, morto in rotas_py, False)
 
 print(('FAIL: %d' % len(fails)) if fails else 'TUDO OK')
