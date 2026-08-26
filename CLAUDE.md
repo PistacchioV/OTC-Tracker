@@ -370,6 +370,20 @@ São dois bancos:
   está lá, **sem nunca sobrescrever**: o arquivo que já está no share é o que a
   mesa editou pela tela, e ele vence. `db/` fica de fora — é do `DATABASE_DIR`,
   e copiar banco por cima de banco corrompe dado.
+
+  **O `/static/data/...` do NAVEGADOR também sai do `DATA_DIR`.** São 71 `fetch`
+  em 15 telas lendo JSON por URL estática (`RefData.json`, `Subjacente.json`,
+  `anbima.json`, os cadastros do /mapping), e como URL estática o Flask os
+  serviria da pasta do CÓDIGO — a ponta que a regra acima não alcançava. A rota
+  `static_data_file` resolve pelo mesmo `data_path()` e é mais específica que o
+  `/static/<path:filename>` embutido, então ganha dele no roteamento; a dev não
+  vê diferença, porque lá as duas pastas são a mesma. Sem ela a mesa editava o
+  Reference Data pela tela, o app gravava no share e a tela recarregava
+  mostrando a cópia versionada, de antes do último pull — nenhum erro, dois
+  arquivos, e a edição que "não salvou" salva no lugar certo. A rota entrega
+  **raiz e caminho relativo separados** ao `send_from_directory`: quem recusa o
+  `..` é o `safe_join` dele, e com o caminho já resolvido a pasta traversada
+  vira a raiz permitida (`/static/data/../../config.py` serviria o config).
 - **SQLite** (`apps/db.sqlite3`) — Flask-SQLAlchemy. Hoje **não é usado** pela
   lógica da aplicação; `configure_database()` chama `db.create_all()` **uma vez
   na subida**, não a cada request.
@@ -389,10 +403,26 @@ que parece:
   `conn = get_db_connection()` seguido de `try: … finally: conn.close()` — os
   21 chamadores atuais são. Sem o `finally`, o lock nunca é liberado e **o app
   inteiro trava para todo mundo**, não só para o request que falhou.
+- **Quem só faz SELECT abre com `get_db_connection(readonly=True)`.** O caminho
+  de escrita é EXCLUSIVO nos dois níveis — `BoundedSemaphore(1)` dentro do
+  processo e lock de arquivo exclusivo entre eles —, então uma consulta aberta
+  por ali põe toda leitura numa fila de UM. Com o banco no share, onde cada
+  operação custa ida e volta de rede, o sino da topbar (uma consulta por aba
+  aberta) consome a fila sozinho e a página que o usuário pediu espera atrás
+  dela: a tela levava MINUTOS, sem erro nenhum no log, porque ninguém falhou —
+  todo mundo esperou. A leitura toma lock COMPARTILHADO e um semáforo de
+  `DATABASE_READ_CONCURRENCY`, e segue excluída do escritor, que é a garantia
+  que importa. Os sete chamadores de leitura estão migrados; escrita continua
+  no modo padrão.
+- **A allowlist do `Page_Access` é cacheada por SID** (`_get_page_access`), com
+  invalidação na escrita e TTL de 30 s por cima. Os dois existem por razões
+  diferentes: a invalidação cobre a mudança feita NESTE processo, e o TTL cobre
+  a instância vizinha que editou o mesmo banco. Era a consulta mais repetida do
+  app — toda navegação e toda batida do sino — relendo o mesmo valor.
 - **Nunca faça trabalho lento segurando o lock** (rede, SMTP, varredura de
   arquivos, renderização de template). `_push_notify` é o modelo: lê a lista de
   inscritos, fecha, e só então dispara os HTTP pushes. A topbar consulta
-  notificações a cada 8 s por aba aberta — esse lock é tomado o tempo todo.
+  notificações a cada 15 s por aba aberta — esse lock é tomado o tempo todo.
 - Conexões por banco (os DuckDBs do Pending Confirmation) são abertas sob
   demanda com retry/backoff e **têm de fechar no `finally`**: uma conexão
   vazada segura o lock de escrita pela vida do processo e derruba a página.
@@ -403,10 +433,13 @@ que parece:
   (**não reentrante**): nunca chame um helper que trava de dentro de um bloco
   travado.
 - **Escale com threads, não com workers.** Produção é waitress
-  (`start-prod.bat`, 4 threads) e o `gunicorn-cfg.py` fixa `workers = 1`. Com
-  mais de um processo o singleton e o `_cache_lock` não protegem nada, o banco
-  de usuários não abre no segundo processo e cada processo sobe os próprios
-  schedulers (pulls duplicados).
+  (`start-prod.bat`, **`--threads=16`**) e o `gunicorn-cfg.py` fixa
+  `workers = 1`. Com mais de um processo o singleton e o `_cache_lock` não
+  protegem nada, o banco de usuários não abre no segundo processo e cada
+  processo sobe os próprios schedulers (pulls duplicados). O padrão do waitress
+  é **4**, e com os dados no share a maior parte de um request é espera de rede
+  com a thread parada segurando a vaga: quatro esperas dessas param o servidor
+  inteiro, inclusive o arquivo estático e a página que nem banco usa.
 
 ### SQL injection
 

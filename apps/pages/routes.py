@@ -26,10 +26,11 @@ from email.mime.multipart import MIMEMultipart
 import awmpy
 import portalocker
 from flask import (
-    render_template, request, redirect, send_file,
+    render_template, request, redirect, send_file, send_from_directory,
     url_for, session, flash, jsonify, make_response, has_app_context
 )
 from jinja2 import TemplateNotFound
+from werkzeug.exceptions import NotFound
 
 # Caminhos de infraestrutura (banco de usuários e raiz do share) saem do
 # `Config`, que os resolve para ABSOLUTOS e recusa um valor relativo. Era aqui
@@ -38,7 +39,10 @@ from jinja2 import TemplateNotFound
 # dentro do diretório de trabalho — foi assim que apareceram as pastas
 # `I:\Confirmation\...` na raiz do repositório.
 from apps.config import Config
-from apps.pages.data_paths import data_dir, data_path, data_write, mapping_file, mapping_write
+from apps.pages.data_paths import (
+    data_dir, data_path, data_write, mapping_file, mapping_write,
+    PACKAGED_DIR as PACKAGED_DATA_DIR,
+)
 from apps.pages import blueprint
 # Porte Python do parser de booking recap (o mesmo que otc-fileupload.js faz no
 # navegador) — usado pela varredura agendada do box. Sem dependência externa.
@@ -457,13 +461,58 @@ def _cp_card_allowed(allowed, card_id):
     return '/control-panel' in allowed or ('/control-panel#' + card_id) in allowed
 
 
+# A allowlist é a consulta mais repetida do app: o `enforce_page_access` a faz em
+# TODA navegação e o sino a faz a cada consulta, por aba aberta. Ela quase nunca
+# muda — só a tela `/page-access` a escreve —, então cada uma dessas idas ao
+# banco relia o mesmo valor. Com o banco no share isso é ida e vida de rede no
+# caminho crítico de cada request.
+#
+# Cache por SID, com invalidação na escrita e um TTL curto por cima. Os dois
+# existem por razões diferentes: a invalidação cobre a mudança feita NESTE
+# processo (o caso normal, e nele a revogação é imediata) e o TTL cobre a
+# instância vizinha que editou o mesmo banco — sem ele, um acesso revogado no
+# outro processo valeria pela vida deste. Trinta segundos é o atraso máximo de
+# uma revogação vinda de fora, e é o preço de não perguntar ao share a cada
+# clique.
+_PAGE_ACCESS_TTL = 30.0
+_page_access_cache = {}                      # sid → (expira_em, (configured, urls))
+_page_access_lock = threading.Lock()
+
+
+def _page_access_forget(sid=None):
+    """Esquece o cache — de um SID, ou inteiro quando `sid` é None."""
+    with _page_access_lock:
+        if sid is None:
+            _page_access_cache.clear()
+        else:
+            _page_access_cache.pop((sid or '').strip().upper(), None)
+
+
 def _get_page_access(sid):
     """(configured, urls_set). configured=False → not set yet (full access);
     configured=True → the stored allowlist (possibly empty)."""
     if not sid:
         return (False, set())
+    chave = sid.strip().upper()
+    agora = time.time()
+    with _page_access_lock:
+        em_cache = _page_access_cache.get(chave)
+    if em_cache and em_cache[0] > agora:
+        # Devolve uma CÓPIA do conjunto: o chamador não pode alterar o cache
+        # sem querer, e um `allowed.add(...)` numa rota viraria concessão
+        # permanente para o processo inteiro.
+        configurado, urls = em_cache[1]
+        return (configurado, set(urls))
+    resposta = _read_page_access(sid)
+    with _page_access_lock:
+        _page_access_cache[chave] = (agora + _PAGE_ACCESS_TTL, resposta)
+    return (resposta[0], set(resposta[1]))
+
+
+def _read_page_access(sid):
+    """A allowlist como está no banco, sem cache."""
     try:
-        conn = get_db_connection()
+        conn = get_db_connection(readonly=True)
         try:
             row = conn.execute("SELECT Page_Access FROM users WHERE SID = ?", [sid]).fetchone()
         finally:
@@ -496,6 +545,9 @@ def _set_page_access(sid, urls):
         conn.commit()
     finally:
         conn.close()
+    # DEPOIS do commit: esquecendo antes, uma leitura concorrente repovoaria o
+    # cache com o valor velho e a mudança só valeria daqui a um TTL.
+    _page_access_forget(sid)
 
 
 # Master users: top-of-hierarchy superusers pinned by SID (not by DB role, so the
@@ -914,8 +966,8 @@ class _DuckDBHandle:
         """O contexto de escrita comita quando o dono do handle o fecha."""
 
 
-def get_db_connection():
-    """Abre o banco de Usuários pelo contexto de transação exclusiva comum.
+def get_db_connection(readonly=False):
+    """Abre o banco de Usuários pelo contexto de transação comum.
 
     Era uma conexão SINGLETON atrás de um `threading.Lock` de módulo, com retry,
     backoff e reconexão quando ela adoecia. O lock de thread protegia UM
@@ -923,8 +975,24 @@ def get_db_connection():
     arquivo sem pedir licença a ninguém. O `duckdb_write` põe o lock no ARQUIVO,
     então a exclusão vale entre processos — e o retry, o backoff e a checagem de
     saúde passam a ser dele, num lugar só, para todos os bancos.
+
+    **`readonly=True` para quem só faz SELECT**, e não é otimização de detalhe.
+    O caminho de escrita é EXCLUSIVO nos dois níveis: um `BoundedSemaphore(1)`
+    dentro do processo e um lock de arquivo exclusivo entre eles. Abrir uma
+    consulta por ali põe toda leitura na mesma fila de UM: com o banco no share,
+    onde cada operação custa ida e volta de rede, a topbar consultando o sino
+    por aba aberta consome sozinha a fila inteira, e a página que o usuário
+    pediu espera atrás dela. Era o que fazia a tela levar minutos para aparecer
+    com o banco em `\\Nawest…` — sem erro nenhum no log, porque ninguém falhou:
+    todo mundo esperou.
+
+    A leitura toma lock COMPARTILHADO e um semáforo de `DATABASE_READ_CONCURRENCY`
+    permissões, então leitores não se bloqueiam entre si nem bloqueiam outra
+    instância — e continuam excluídos do escritor, que é a garantia que importa.
     """
     _ensure_db_initialized()        # lazy, one-time schema/migrations (no-op after first run)
+    if readonly:
+        return _DuckDBHandle(duckdb_read(DB_PATH))
     return _DuckDBHandle(duckdb_write(DB_PATH))
 
 
@@ -1268,7 +1336,7 @@ def _nd_token(value):
 
 def get_user_by_sid(sid):
     log.debug("[get_user_by_sid] Looking up SID=%s", sid)
-    conn = get_db_connection()
+    conn = get_db_connection(readonly=True)
     try:
         result = conn.execute(
             "SELECT SID, Name, Email, Role_Description, Position, Role, Status, IP_Address FROM users WHERE SID = ?",
@@ -1298,7 +1366,7 @@ def get_user_by_sid(sid):
 
 
 def get_all_users():
-    conn = get_db_connection()
+    conn = get_db_connection(readonly=True)
     try:
         rows = conn.execute("""
             SELECT SID, Name, Email, Role_Description, Position, Role, Status, IP_Address, created_at
@@ -1324,7 +1392,7 @@ def get_all_users():
 
 
 def get_role_groups():
-    conn = get_db_connection()
+    conn = get_db_connection(readonly=True)
     try:
         rows = conn.execute("""
             SELECT Role, COUNT(*) AS cnt,
@@ -1503,7 +1571,7 @@ def _code_send_allowed(sid):
     fresh codes for brute-forcing. Fails open on any DB error — 2FA email must
     never be bricked by the throttle itself."""
     try:
-        conn = get_db_connection()
+        conn = get_db_connection(readonly=True)
         try:
             row = conn.execute(
                 "SELECT "
@@ -18178,6 +18246,9 @@ def api_delete_user():
         conn.commit()
     finally:
         conn.close()
+    # O usuário sumiu do banco; a allowlist dele não pode ficar em memória para
+    # o caso de o mesmo SID ser recadastrado dentro do TTL.
+    _page_access_forget(sid)
 
     _create_notification(
         session.get('user_sid', ''), session.get('user_name', ''),
@@ -26570,6 +26641,44 @@ def api_ndf_mapping_b3():
 # ==============================================================================
 # API — B3 JSON CRUD (Subjacente / VCP / Domínio / RefData)
 # ==============================================================================
+
+# O `/static/data/...` do NAVEGADOR também sai do `DATA_DIR`
+# ─────────────────────────────────────────────────────────
+# Setenta e um `fetch` espalhados por quinze telas leem JSON por URL estática —
+# `RefData.json`, `Subjacente.json`, `anbima.json`, as agendas de feriado, os
+# cadastros do /mapping. Como URL estática, o Flask os serve da pasta do CÓDIGO,
+# e é aí que a regra do `data_paths` era furada pela ponta que ela não cobre: o
+# servidor lê e grava no `DATA_DIR` (o share, na instância do JPM) e a TELA lia
+# o checkout.
+#
+# Na dev as duas pastas são a mesma e nada aparece. Na instância do JPM não são,
+# e o efeito é o pior tipo de defeito: a mesa edita o Reference Data pela tela,
+# o app grava no share, a tela recarrega — e mostra a cópia versionada, de antes
+# do último `git pull`. Nenhum erro, dois arquivos, e a edição que "não salvou"
+# está salva no lugar certo.
+#
+# Esta rota é mais específica que o `/static/<path:filename>` embutido, então
+# ganha dele no roteamento, e resolve pelo MESMO `data_path()` do servidor —
+# `DATA_DIR` primeiro, cópia empacotada como queda. Quem não tem `DATA_DIR`
+# separado (a dev) não vê diferença nenhuma: o caminho resolvido é o mesmo.
+@blueprint.route('/static/data/<path:filename>')
+def static_data_file(filename):
+    """Serve `static/data/...` pelo `DATA_DIR`, com queda para o empacotado.
+
+    A RAIZ e o caminho RELATIVO vão separados para o `send_from_directory` de
+    propósito: quem recusa sair da pasta é o `safe_join` que ele faz por dentro,
+    e ele só tem como recusar se enxergar o `..` que veio na URL. Resolver o
+    caminho aqui e passar `dirname`/`basename` já resolvidos anula essa
+    checagem — a pasta traversada VIRA a raiz permitida, e
+    `/static/data/../../config.py` passa a servir o config.
+    """
+    for raiz in (data_dir(), PACKAGED_DATA_DIR):
+        try:
+            return send_from_directory(raiz, filename)
+        except NotFound:
+            continue                      # não está no DATA_DIR: tenta a cópia do repo
+    raise NotFound()
+
 
 _B3_DATA_DIR = data_dir()
 _B3_FILE_MAP = {
@@ -35466,7 +35575,7 @@ def _tk_roles_by_sid(sids):
     if not faltam:
         return out
     try:
-        conn = get_db_connection()
+        conn = get_db_connection(readonly=True)
         try:
             ph = ', '.join('?' for _ in faltam)
             linhas = conn.execute(
@@ -35867,7 +35976,7 @@ def api_get_notifications():
         return jsonify({"success": False}), 401
     user_role = session.get('user_role', '')
     user_sid = (session.get('user_sid') or '').strip().upper()
-    conn = get_db_connection()
+    conn = get_db_connection(readonly=True)
     try:
         # target_sid endereça UM usuário e é mais forte que target_role: quando
         # está preenchido, só aquele SID vê a notificação — nem o master, nem

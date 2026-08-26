@@ -167,5 +167,54 @@ for node in ast.walk(ast.parse(SRC)):
 check('nenhum rotulo gravado fora do mapa',
       sorted('%s (L%s)' % (p, ls[0]) for p, ls in _pages_sem_mapa.items()), [])
 
+# ─────────────────────────────────────────────────────────────────────────────
+print('\n== 8. os DOIS caminhos do balao mostram a MESMA marca ==')
+# O mesmo aviso sai por dois caminhos — `maybeNativeNotify` (aba aberta e sem
+# foco) e o `showNotification` do service worker (aba fechada) —, e cada um
+# escrevia o seu icone. O `badge` do topbar ficou apontando para o
+# `favicon.ico` do template comprado (so as barras azuis, sem as letras: a
+# marca CLARA) enquanto o sw-push ja usava outra, e o mesmo alerta parecia de
+# dois aplicativos.
+import re                                                    # noqa: E402
+
+_topbar = io.open(os.path.join(ROOT, 'apps', 'templates', 'partials', 'topbar.html'),
+                  encoding='utf-8').read()
+_swpush = io.open(os.path.join(ROOT, 'apps', 'static', 'js', 'sw-push.js'),
+                  encoding='utf-8').read()
+
+
+def _marcas(fonte):
+    """As imagens citadas em `icon:`/`badge:` — literais e por constante."""
+    achadas = set()
+    for m in re.finditer(r"""(?:icon|badge)\s*:\s*(?:'([^']+)'|([A-Za-z_$][\w$]*))""", fonte):
+        literal, nome = m.group(1), m.group(2)
+        if literal:
+            achadas.add(literal)
+        else:
+            for v in re.finditer(r"var\s+%s\s*=\s*'([^']+)'" % re.escape(nome), fonte):
+                achadas.add(v.group(1))
+    # a foto do autor nao e marca do app; ela e o caso COM avatar
+    return {a for a in achadas if '/images/' in a}
+
+
+_do_topbar, _do_sw = _marcas(_topbar), _marcas(_swpush)
+check('o topbar usa uma marca so', sorted(_do_topbar), sorted(_do_topbar)[:1])
+check('o sw-push tambem', sorted(_do_sw), sorted(_do_sw)[:1])
+check('e as duas sao a MESMA', _do_topbar, _do_sw)
+
+for _img in sorted(_do_topbar | _do_sw):
+    _abs = os.path.join(ROOT, 'apps', _img.lstrip('/'))
+    check('o arquivo existe: ' + _img, os.path.isfile(_abs), True)
+    # O balao amplia o icone para ~48px: uma imagem de 16x16 sai lavada.
+    try:
+        from PIL import Image
+        with Image.open(_abs) as _im:
+            check('   e nao e pequeno demais (>=64px)', min(_im.size) >= 64, True)
+    except ImportError:
+        print('  --  Pillow ausente: tamanho nao conferido')
+
+check('o topbar tem queda quando o autor nao tem foto',
+      'foto.onerror' in _topbar, True)
+
 print('\n' + ('FALHOU: ' + ', '.join(fails) if fails else 'TUDO OK'))
 sys.exit(1 if fails else 0)

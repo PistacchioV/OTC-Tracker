@@ -859,20 +859,48 @@
                 var title = n.actor_name || n.actor_sid || 'OTC Tracker';
                 var body  = (n.action || '') + ' in ' + (n.page || '') +
                             (rawDetail ? ' — ' + rawDetail : '');
-                try {
-                    var opts = { body: body, tag: 'otc-' + (Number(n.id) || 0),
-                                 icon: b.imgSrc, badge: '/static/images/favicon.ico' };
-                    var native = new Notification(title, opts);
-                    _nativeKeep.push(native);
-                    if (_nativeKeep.length > 20) _nativeKeep.shift();
-                    native.onclick = function () {
-                        window.focus();
-                        markRead(n.id);
-                        if (b.pageUrl) window.location.href = b.pageUrl;
-                        native.close();
-                    };
-                    setTimeout(function () { try { native.close(); } catch (e) {} }, 12000);
-                } catch (e) { /* some browsers throw when constructing while hidden — ignore */ }
+                // A marca do balão é o `favicon-notif.png`: o chip AZUL do app com
+                // a marca em BRANCO, e o fundo sólido é a razão de ele existir.
+                // Quem pinta o fundo do balão é o SISTEMA, não o site — claro ou
+                // escuro conforme o tema do Windows —, então marca de fundo
+                // transparente só se lê num dos dois. Com as letras pretas
+                // (`favicon-black.png`, o `logo-dark` do sidenav) ela some no
+                // balão escuro; com as brancas (`logo-sm.png`) some no claro. O
+                // chip não depende do tema.
+                //
+                // O `badge` apontava para o `favicon.ico` do template comprado —
+                // só as barras azuis, sem as letras: o logo CLARO. O
+                // `sw-push.js` usa a MESMA imagem; são dois caminhos para o mesmo
+                // aviso (aqui com a aba aberta e sem foco, lá com ela fechada) e
+                // mostrar marcas diferentes faria o mesmo alerta parecer de dois
+                // aplicativos.
+                var MARCA = '/static/images/favicon-notif.png';
+                function dispara(icone) {
+                    try {
+                        var opts = { body: body, tag: 'otc-' + (Number(n.id) || 0),
+                                     icon: icone, badge: MARCA };
+                        var native = new Notification(title, opts);
+                        _nativeKeep.push(native);
+                        if (_nativeKeep.length > 20) _nativeKeep.shift();
+                        native.onclick = function () {
+                            window.focus();
+                            markRead(n.id);
+                            if (b.pageUrl) window.location.href = b.pageUrl;
+                            native.close();
+                        };
+                        setTimeout(function () { try { native.close(); } catch (e) {} }, 12000);
+                    } catch (e) { /* some browsers throw when constructing while hidden — ignore */ }
+                }
+                // O ícone é a foto do autor (`users/<sid>.jpg`), e nem todo autor
+                // tem uma: as rotinas automáticas assinam como `api`, e o 404 do
+                // `api.jpg` aparecia no Network a cada aviso. A Notification não
+                // tem `onerror` — imagem que falha vira balão SEM ícone —, então
+                // a foto é testada ANTES e a marca entra no lugar dela. É o mesmo
+                // fallback que o item do sino já faz pelo `onerror` do <img>.
+                var foto = new Image();
+                foto.onload  = function () { dispara(b.imgSrc); };
+                foto.onerror = function () { dispara(MARCA); };
+                foto.src = b.imgSrc;
             }
 
             // Toast every notification that appeared since the last poll (each ID
