@@ -90,6 +90,7 @@ _FLASK_APP = None
 def _capture_flask_app(state):
     global _FLASK_APP
     _FLASK_APP = state.app
+    _start_schedulers()
 
 
 @contextmanager
@@ -102,6 +103,44 @@ def _app_context():
     else:
         with _FLASK_APP.app_context():
             yield
+
+
+# ── Os schedulers sobem com o APP, nunca com o import ────────────────────────
+# Os dez laços agendados (as duas APIs da Athena, a varredura do box e os sete
+# e-mails do Control Panel) eram disparados no corpo do módulo, então bastava
+# `from apps.pages import routes` para as threads começarem a rodar. Quem faz
+# isso não é só a fábrica: os 67 scripts de `scripts/tests/` importam este
+# módulo, e o `backfill`, e qualquer `python -c` de depuração.
+#
+# O efeito não é ruído. O laço do Deals Monitor faz um catch-up na primeira
+# volta — os slots de HOJE que já passaram e ninguém reivindicou —, então rodar
+# um teste depois das 19h fazia o processo do TESTE mandar o e-mail de
+# pendências de verdade. E, com o claim agora gravado em disco e enxergado por
+# todos os processos (`_claim_daily_slot`), ele ainda RESERVAVA o slot: o app
+# real chegava ao horário, via o dia já reivindicado e não mandava nada. Um
+# e-mail que some sem erro nenhum, por causa de um teste.
+#
+# Agora cada laço se REGISTRA aqui e quem os sobe é o `record_once` do
+# blueprint, que é o registro do app — o mesmo momento em que o `_FLASK_APP` é
+# capturado. Importar o módulo deixou de ter efeito; `create_app` continua
+# tendo o mesmo. As funções `_x_start_scheduler` seguem idempotentes (cada uma
+# tem o seu flag), então um segundo app no mesmo processo não duplica thread.
+_SCHEDULERS = []
+
+
+def _schedule_on_start(label, start):
+    """Registra um laço para subir junto com o app. NÃO o inicia."""
+    _SCHEDULERS.append((label, start))
+
+
+def _start_schedulers():
+    """Sobe os laços registrados. Um que falhe não pode levar os outros."""
+    for label, start in _SCHEDULERS:
+        try:
+            start()
+        except Exception:                                   # noqa: BLE001
+            log.warning('[%s] scheduler não iniciou:\n%s', label,
+                        traceback.format_exc())
 
 # ==============================================================================
 # LOGGING CONFIG
@@ -19199,13 +19238,10 @@ def _pc_start_scheduler():
     log.info('[pending-confirmation] daily scheduler started (runs at %s)', _PC_DAILY_TIME)
 
 
-# Start it on import. The Werkzeug reloader's supervisor sets WERKZEUG_RUN_MAIN
-# only in the child ('true'); starting an extra sleeping thread in the parent is
-# harmless (idempotent), so we don't gate on it here.
-try:
-    _pc_start_scheduler()
-except Exception:
-    log.warning('[pending-confirmation] could not start daily scheduler')
+# Sobe com o app (ver `_schedule_on_start`). Com o reloader do Werkzeug a
+# fábrica roda no supervisor e no filho, mas a partida é idempotente e a thread
+# extra do supervisor fica dormindo — não vale gatear por WERKZEUG_RUN_MAIN.
+_schedule_on_start('pending-confirmation', _pc_start_scheduler)
 
 
 def _pc_refdata_enrich(row):
@@ -20637,10 +20673,7 @@ def _fxo_api_start_scheduler():
              _FXO_API_POLL_MIN, _import_window_label())
 
 
-try:
-    _fxo_api_start_scheduler()
-except Exception:
-    log.warning('[opt-fxo] could not start the Athena API scheduler')
+_schedule_on_start('opt-fxo', _fxo_api_start_scheduler)
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -23891,10 +23924,7 @@ def _ndf_api_start_scheduler():
              _NDF_API_POLL_MIN, _import_window_label())
 
 
-try:
-    _ndf_api_start_scheduler()
-except Exception:
-    log.warning('[ndf] could not start the Athena API scheduler')
+_schedule_on_start('ndf', _ndf_api_start_scheduler)
 
 
 @blueprint.route('/api/new-deals/opt-fxo/cache/batch', methods=['POST'])
@@ -27390,10 +27420,7 @@ def _box_scan_start_scheduler():
              '· NDF Comm e Opt Comm)', _BOX_SCAN_POLL_MIN, _import_window_label())
 
 
-try:
-    _box_scan_start_scheduler()
-except Exception:                                           # noqa: BLE001
-    log.warning('[boxscan] scheduler não iniciou:\n%s', traceback.format_exc())
+_schedule_on_start('boxscan', _box_scan_start_scheduler)
 
 
 @blueprint.route('/api/new-deals/box-scan/run', methods=['POST'])
@@ -31735,10 +31762,7 @@ def _ndm_pending_start_scheduler():
              datetime.now().strftime('%H:%M'), _br_now().strftime('%H:%M'))
 
 
-try:
-    _ndm_pending_start_scheduler()
-except Exception:
-    log.warning('[deals-monitor] could not start the pending scheduler')
+_schedule_on_start('deals-monitor', _ndm_pending_start_scheduler)
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -32062,10 +32086,7 @@ def _pcx_start_scheduler():
              'dias úteis ANBIMA)', *_pcx_time())
 
 
-try:
-    _pcx_start_scheduler()
-except Exception:
-    log.warning('[pending-spreadsheet] could not start the scheduler')
+_schedule_on_start('pending-spreadsheet', _pcx_start_scheduler)
 
 
 @blueprint.route('/api/control-panel/pending-spreadsheet/run', methods=['POST'])
@@ -32688,10 +32709,7 @@ def _ce_start_scheduler():
              'escalação todo dia útil ANBIMA)', *_ce_time())
 
 
-try:
-    _ce_start_scheduler()
-except Exception:                                           # noqa: BLE001
-    log.warning('[conf-escalation] could not start the scheduler')
+_schedule_on_start('conf-escalation', _ce_start_scheduler)
 
 
 @blueprint.route('/api/control-panel/confirmations-escalation/recipients',
@@ -33193,10 +33211,7 @@ def _bacc_start_scheduler():
              *_bacc_time())
 
 
-try:
-    _bacc_start_scheduler()
-except Exception:                                           # noqa: BLE001
-    log.warning('[bacc-ea] could not start the scheduler')
+_schedule_on_start('bacc-ea', _bacc_start_scheduler)
 
 
 @blueprint.route('/api/control-panel/bacc-ea-metrics/recipients',
@@ -33669,10 +33684,7 @@ def _mdea_start_scheduler():
              *(_MDEA_TIME['otherpub'] + _MDEA_TIME['fwdstart']))
 
 
-try:
-    _mdea_start_scheduler()
-except Exception:                                           # noqa: BLE001
-    log.warning('[manual-deals-ea] could not start the scheduler')
+_schedule_on_start('manual-deals-ea', _mdea_start_scheduler)
 
 
 @blueprint.route('/api/control-panel/manual-deals-ea/recipients', methods=['GET', 'POST'])
@@ -34066,10 +34078,7 @@ def _mt300_start_scheduler():
     log.info('[mt300] scheduler iniciado (%02d:%02d BRT · dias úteis ANBIMA)', *_MT300_TIME)
 
 
-try:
-    _mt300_start_scheduler()
-except Exception:                                           # noqa: BLE001
-    log.warning('[mt300] could not start the scheduler')
+_schedule_on_start('mt300', _mt300_start_scheduler)
 
 
 @blueprint.route('/api/control-panel/mt300/recipients', methods=['GET', 'POST'])

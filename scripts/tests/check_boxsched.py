@@ -143,13 +143,25 @@ check('arquivo de 03/06 criado', os.path.isfile(p2), True)
 check('arquivo de 21/05 intocado', len(dayfile('ndf')), 1)
 
 print('\n== 7. scheduler e rota ==')
+threading = __import__('threading')
+
+
+def viva():
+    return any(t.name == 'box-scan-scheduler' and t.daemon
+               for t in threading.enumerate())
+
+
 check('intervalo padrao 30 min', R._BOX_SCAN_POLL_MIN, 30)
-check('thread do scheduler viva',
-      any(t.name == 'box-scan-scheduler' and t.daemon
-          for t in __import__('threading').enumerate()), True)
+# O laco sobe com o APP, nunca com o import: os 67 scripts daqui importam o
+# routes, e a thread que nascia no import fazia o processo do TESTE disparar
+# e-mail agendado de verdade (e reservar o slot, calando o app real).
+check('o import NAO sobe a thread', viva(), False)
+check('mas o laco esta registrado',
+      '_box_scan_start_scheduler' in [f.__name__ for _, f in R._SCHEDULERS], True)
 from apps import create_app                              # noqa: E402
 from apps.config import DebugConfig                      # noqa: E402
 rules = {str(x.rule) for x in create_app(DebugConfig).url_map.iter_rules()}
+check('e o create_app sobe', viva(), True)
 check('rota /api/new-deals/box-scan/run registrada',
       '/api/new-deals/box-scan/run' in rules, True)
 check('rota /api/new-deals/box-scan continua',
