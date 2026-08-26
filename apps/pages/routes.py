@@ -2555,6 +2555,71 @@ def _dash_file_deals(fp, fname, mtime, size, fdate, product, deal_type):
 
 
 
+
+@blueprint.route('/api/data-files/status')
+def api_data_files_status():
+    """De ONDE o app está lendo cada JSON, e o que ele achou lá.
+
+    Existe porque a falha desta família não parece falha: a tela abre, a API
+    responde 200 e não há dado (CLAUDE.md §4). Da máquina de quem desenvolve não
+    dá para ver o `DATA_DIR` da instância, e "não está carregando" sozinho não
+    distingue as quatro causas — arquivo ausente, arquivo vazio, arquivo no
+    lugar errado e share fora do ar.
+
+    Ele responde as quatro de uma vez, por arquivo: o caminho RESOLVIDO (que é o
+    que o `data_path` escolheu, e não onde ele deveria estar), se veio do
+    `DATA_DIR` ou da cópia empacotada, o tamanho, quantos registros e a data.
+    Sem esta rota, a única forma de saber isso é alguém abrir o share e olhar.
+    """
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+
+    # Os arquivos que as telas leem por URL estática e que, vazios, deixam a
+    # tela em branco sem erro. Não é a lista COMPLETA do `DATA_DIR` — é a dos
+    # que já causaram esse sintoma.
+    ARQUIVOS = ('Subjacente.json', 'VCP.json', 'Dominio.json', 'SwapIndex.json',
+                'RefData.json', 'CounterpartyDetails.json', 'anbima.json')
+
+    def _olha(nome):
+        alvo = data_path(nome)
+        item = {'file': nome, 'resolved': alvo,
+                'from': 'DATA_DIR' if os.path.dirname(alvo) == os.path.normpath(Config.DATA_DIR)
+                        else 'packaged'}
+        try:
+            st = os.stat(alvo)
+        except OSError as e:
+            item.update(exists=False, error='{}: {}'.format(type(e).__name__, e))
+            return item
+        item.update(exists=True, bytes=st.st_size,
+                    modified=datetime.fromtimestamp(st.st_mtime).strftime('%d/%m/%Y %H:%M:%S'))
+        # A contagem é o que separa "o arquivo está lá" de "o arquivo serve":
+        # um `[]` de 2 bytes existe, tem data e não enche select nenhum.
+        try:
+            with open(alvo, encoding='utf-8') as fh:
+                dados = json.load(fh)
+            item['records'] = len(dados) if isinstance(dados, (list, dict)) else None
+            item['is_list'] = isinstance(dados, list)
+        except Exception as e:                              # noqa: BLE001
+            item['error'] = 'não é JSON válido: {}'.format(e)
+        return item
+
+    arquivos = [_olha(n) for n in ARQUIVOS]
+    return jsonify({
+        'success': True,
+        # As três raízes, para a resposta dizer sozinha em que ambiente ela foi
+        # tirada — o mesmo JSON vindo da dev e da instância se parece.
+        'data_dir': Config.DATA_DIR,
+        'packaged_dir': PACKAGED_DATA_DIR,
+        'same_folder': os.path.normpath(Config.DATA_DIR) == os.path.normpath(PACKAGED_DATA_DIR),
+        'database_dir': Config.DATABASE_DIR,
+        'shared_drive_root': Config.SHARED_DRIVE_ROOT,
+        'files': arquivos,
+        # O mapa que o gerador de confirmação usa. Ele é lido do MESMO
+        # `Subjacente.json`, e ficar em zero é o que faz toda operação sair com
+        # "sem cadastro no Subjacente" mesmo estando cadastrada.
+        'subjacente_map_size': len(_conf_subjacente_map()),
+    })
+
 @blueprint.route('/api/dashboard-stats')
 def api_dashboard_stats():
     if not session.get('authenticated'):
@@ -28972,12 +29037,24 @@ _conf_subj_cache = {'mtime': None, 'map': {}}
 
 def _conf_subjacente_map():
     """Subjacente.json indexado pelo código do ativo → bolsa/fator/mercadoria.
-    Cache por mtime (o arquivo muda pouco e tem ~8k registros)."""
-    fp = os.path.normpath(os.path.join(os.path.dirname(__file__), '..',
-                                       'Subjacente.json'))
+    Cache por mtime (o arquivo muda pouco e tem ~8k registros).
+
+    O caminho sai do `data_path` — antes era montado do `__file__` e apontava
+    para `apps/Subjacente.json`, um arquivo que não existe em lugar nenhum (o
+    real está em `apps/static/data/`). O `getmtime` estourava, a função devolvia
+    `{}` e TODA operação saía com o aviso "Ativo X sem cadastro no Subjacente
+    (bolsa/fator ausentes)" — inclusive as que estão cadastradas. O mapa nunca
+    teve uma linha, e nada na tela dizia isso: o aviso parecia um cadastro
+    faltando, e a bolsa e o fator sumiam da confirmação em silêncio.
+
+    Sem o arquivo o mapa continua vazio e o aviso volta a ser verdadeiro — mas
+    agora ele também DIZ que o problema é o arquivo, e não o cadastro."""
+    fp = data_path('Subjacente.json')
     try:
         mt = os.path.getmtime(fp)
     except OSError:
+        log.warning('[conf] Subjacente.json não encontrado em %s — toda operação '
+                    'vai sair com "sem cadastro no Subjacente".', fp)
         return {}
     if _conf_subj_cache['mtime'] == mt:
         return _conf_subj_cache['map']
