@@ -22965,7 +22965,8 @@ _MAPPING_DEFS = {
     # que a fonte de mercado entende. É de-para, então é cadastro (§2).
     #
     # A LISTA de instrumentos da tela NÃO sai daqui: ela é o Subjacente ao vivo
-    # (`_quotes_underlyings`), para um ativo novo cadastrado no Index B3
+    # (`features/quotes/queries.underlyings`), para um ativo novo cadastrado
+    # no Index B3
     # aparecer em Cotações no mesmo dia. Este cadastro só TRADUZ, e por isso
     # guarda apenas os códigos que já têm símbolo — as ~1.700 linhas restantes
     # em branco seriam ruído para quem edita a tabela.
@@ -23563,132 +23564,10 @@ def _ndf_interbook_rules():
 # ══════════════════════════════════════════════════════════════════════════
 #  COTAÇÕES (Apps › Quotes) — PTAX, Equities e Commodities
 # ══════════════════════════════════════════════════════════════════════════
-#  Porte das três abas de busca do app de desktop. O trabalho de rede está no
-#  `apps/pages/quotes.py` (sessão Kerberos da Athena + proxy dos endpoints
-#  externos); aqui ficam sessão, cadastro e o formato que a tabela consome.
-#  As opções de Equities e Commodities são as MESMAS do Index B3 › Ativo
-#  Subjacente (`Subjacente.json`), separadas pelo campo `Classe`. Só a lista de
-#  moedas da PTAX é fixa — ela é o domínio do endpoint do BCB, não um cadastro.
-_QUOTES_KINDS = {
-    'equity':    ('quotes-equity',
-                  ('AÇÕES', 'AÇÕES INTERNACIONAIS', 'INDICES', 'INDICES INTERNACIONAIS')),
-    'commodity': ('quotes-commodity', ('COMMODITIES',)),
-}
-_quotes_underlying_cache = {'mtime': None, 'data': {}}
-
-
-def _quotes_underlyings(kind):
-    """[(código, símbolo cadastrado)] de uma classe, em ordem alfabética.
-
-    A lista vem do Subjacente **ao vivo** (cacheada por mtime, como o resto que
-    lê esse arquivo): ativo novo cadastrado no Index B3 aparece aqui no mesmo
-    dia, sem passar por release nem por um segundo cadastro.
-
-    Só os ACTIVE: um subjacente inativo não é escolha de tela — e ele continua
-    no arquivo justamente para o histórico não perder o código.
-
-    O símbolo vai JUNTO porque a tela mostra `AAPL34 → AAPL34.SA` na lista: sem
-    isso, quem escolhe não distingue o que está cadastrado do que ainda vai
-    falhar pedindo cadastro.
-    """
-    key, classes = _QUOTES_KINDS.get(kind) or ('', ())
-    if not key:
-        return []
-    fp = os.path.join(_B3_DATA_DIR, 'Subjacente.json')
-    try:
-        mt = os.path.getmtime(fp)
-    except OSError:
-        return []
-    if _quotes_underlying_cache['mtime'] != mt:
-        try:
-            with open(fp, encoding='utf-8') as fh:
-                data = json.load(fh) or []
-        except Exception:
-            log.warning('[quotes] Subjacente.json ilegível:\n%s', traceback.format_exc())
-            data = []
-        por_classe = {}
-        for rec in (data if isinstance(data, list) else []):
-            if str(rec.get('STATUS', '') or '').strip().upper() != 'ACTIVE':
-                continue
-            classe = str(rec.get('Classe', '') or '').strip()
-            code = str(rec.get('Codigo do Ativo Subjacente', '') or '').strip()
-            if classe and code:
-                por_classe.setdefault(classe, {}).setdefault(code.upper(), code)
-        _quotes_underlying_cache['mtime'] = mt
-        _quotes_underlying_cache['data'] = por_classe
-    from apps.pages import quotes as _q
-    # O cadastro é lido UMA vez e vira uma função: em commodities ele tem linhas
-    # de PADRÃO (`BO"MY"` → `ZL"MY".CBT`), que só se resolvem contra o código
-    # concreto — um dicionário não daria conta, e reler o cadastro por
-    # subjacente o percorreria novecentas vezes na mesma tela.
-    simbolo = _q.symbol_lookup(_mapping_rows(key))
-    vistos = {}
-    for classe in classes:
-        vistos.update(_quotes_underlying_cache['data'].get(classe) or {})
-    return [[code, simbolo(code)] for _k, code in sorted(vistos.items())]
-
-
-@blueprint.route('/quotes')
-def quotes_page():
-    if not session.get('authenticated'):
-        return redirect(url_for('pages_blueprint.sign_in_page'))
-    from apps.pages import quotes as _q
-    hoje = datetime.now()
-    return render_template(
-        'pages/quotes.html', segment='quotes',
-        # Padrão de um mês para trás, como no app de desktop: quem abre a tela
-        # quer o histórico recente, não um campo vazio pedindo duas datas.
-        date_from=(hoje - timedelta(days=30)).strftime('%Y-%m-%d'),
-        date_to=hoje.strftime('%Y-%m-%d'),
-        # A moeda é [código, símbolo] como as outras duas, para a tela tratar as
-        # três listas do mesmo jeito — na PTAX o código É o símbolo.
-        currencies=[[c, c] for c in _q.PTAX_CURRENCIES],
-        equities=_quotes_underlyings('equity'),
-        commodities=_quotes_underlyings('commodity'))
-
-
-@blueprint.route('/api/quotes/ptax')
-def api_quotes_ptax():
-    if not session.get('authenticated'):
-        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
-    from apps.pages import quotes as _q
-    try:
-        cols, rows = _q.fetch_ptax(request.args.get('currency', 'USD'),
-                                   request.args.get('from', ''),
-                                   request.args.get('to', ''))
-    except _q.QuotesError as e:
-        # 502 e não 500: o app está de pé, quem não respondeu foi a fonte — e a
-        # tela mostra o motivo por extenso em vez de "erro interno".
-        return jsonify({'success': False, 'error': str(e)}), 502
-    return jsonify({'success': True, 'columns': cols, 'rows': rows})
-
-
-@blueprint.route('/api/quotes/<kind>')
-def api_quotes_symbol(kind):
-    """Equities e Commodities: o mesmo endpoint, porque a diferença entre as
-    duas é só o CADASTRO de onde o símbolo sai — a fonte, as colunas e o
-    formato são idênticos. Duas funções seriam duas cópias da mesma coisa."""
-    if not session.get('authenticated'):
-        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
-    if kind not in _QUOTES_KINDS:
-        return jsonify({'success': False, 'error': 'Unknown quotes kind.'}), 404
-    from apps.pages import quotes as _q
-    cadastro = _QUOTES_KINDS[kind][0]
-    label = str(request.args.get('instrument', '') or '').strip()
-    symbol = _q.symbol_for(_mapping_rows(cadastro), label)
-    if not symbol:
-        # Pede cadastro em vez de tentar o código como símbolo: 'AAPL34' e
-        # 'AA UN' não são tickers de mercado, e a resposta seria um 404 obscuro
-        # da fonte em vez de "falta cadastrar".
-        return jsonify({'success': False, 'mapping': cadastro,
-                        'error': ('{} has no market symbol registered in '
-                                  'Mapping > {}.'.format(label or '(empty)', cadastro))}), 404
-    try:
-        cols, rows = _q.fetch_ohlc(symbol, request.args.get('from', ''),
-                                   request.args.get('to', ''))
-    except _q.QuotesError as e:
-        return jsonify({'success': False, 'error': str(e)}), 502
-    return jsonify({'success': True, 'columns': cols, 'rows': rows, 'symbol': symbol})
+#
+# Saiu daqui: virou a vertical `apps/pages/features/quotes/`. O MOTOR continua
+# no `apps/pages/quotes.py` — a sessão Kerberos, o proxy e o de-para com padrão
+# `"MY"`, com o `check_quotes.py` em cima. Ver a §10 do CLAUDE.md.
 
 
 @blueprint.route('/mapping')
@@ -39013,3 +38892,4 @@ def get_segment(request):
 from apps.pages.features.support import entrypoint as _f_support     # noqa: E402,F401
 from apps.pages.features.onboarding import entrypoint as _f_onboarding  # noqa: E402,F401
 from apps.pages.features.reconciliation_fxo import entrypoint as _f_recon_fxo  # noqa: E402,F401
+from apps.pages.features.quotes import entrypoint as _f_quotes         # noqa: E402,F401

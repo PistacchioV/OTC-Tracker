@@ -85,16 +85,22 @@ MAPS = {
     'quotes-commodity': [{'LABEL': 'BRT', 'SYMBOL': 'BZ=F', 'NOTES': ''}],
 }
 
+# A montagem das opcoes virou a vertical `features/quotes/`. O `_B3_DATA_DIR` e
+# o `_mapping_rows` continuam no `routes` — sao de plataforma — e a vertical os
+# busca ATRASADO, entao trocar o atributo aqui continua valendo.
+from apps.pages.features.quotes import queries as QQ          # noqa: E402
+from apps.pages.features.quotes.infra import persistence as QP  # noqa: E402
+
 _dir_orig, _rows_orig = R._B3_DATA_DIR, R._mapping_rows
 R._B3_DATA_DIR = tmp
 R._mapping_rows = lambda key: list(MAPS.get(key) or [])
-R._quotes_underlying_cache['mtime'] = None
+QP._cache['mtime'] = None
 try:
-    eq = R._quotes_underlyings('equity')
-    com = R._quotes_underlyings('commodity')
+    eq = QQ.underlyings('equity')
+    com = QQ.underlyings('commodity')
 finally:
     R._B3_DATA_DIR, R._mapping_rows = _dir_orig, _rows_orig
-    R._quotes_underlying_cache['mtime'] = None
+    QP._cache['mtime'] = None
 
 check('equity traz as quatro classes de papel/indice, em ordem, sem o INACTIVE',
       [p[0] for p in eq], ['AAPL34', 'IBOV', 'PETR4', 'SPX'])
@@ -107,7 +113,7 @@ check('o simbolo cadastrado vem junto (par [codigo, simbolo])',
 check('sem cadastro, o simbolo vem VAZIO — e o que a tela usa para avisar antes da busca',
       dict(eq)['IBOV'], '')
 check('cadastro com caixa/espaco diferente ainda casa', dict(eq)['AAPL34'], 'AAPL34.SA')
-check('tipo desconhecido devolve lista vazia, nao erro', R._quotes_underlyings('nope'), [])
+check('tipo desconhecido devolve lista vazia, nao erro', QQ.underlyings('nope'), [])
 
 
 # ── 2. symbol_for: cego a caixa e a espaco ────────────────────────────────────
@@ -483,14 +489,32 @@ check('o timeout de CONEXAO e curto (a fila inteira nao pode fazer a tela espera
 # ── 8. Rotas, pagina e menu ───────────────────────────────────────────────────
 print('\n8. Rotas, pagina e menu')
 
-rsrc = read('apps/pages/routes.py')
+# O `routes.py` MAIS as verticais: este bloco casa por TEXTO, entao codigo que
+# sai do routes.py sai da varredura junto — e sem isto a assercao nao fica
+# vermelha, ela deixa de significar alguma coisa. Mesma correcao do
+# `check_notif_page_url`.
+def _fontes_com_rotas():
+    partes = [read('apps/pages/routes.py')]
+    base = os.path.join(ROOT, 'apps', 'pages', 'features')
+    for raiz, dirs, arqs in os.walk(base):
+        dirs[:] = [d for d in dirs if d != '__pycache__']
+        for a in sorted(arqs):
+            if a.endswith('.py'):
+                partes.append(io.open(os.path.join(raiz, a), encoding='utf-8').read())
+    return '\n'.join(partes)
+
+
+rsrc = _fontes_com_rotas()
 check('a rota da pagina existe', "@blueprint.route('/quotes')" in rsrc, True)
 check('a API da PTAX existe', "@blueprint.route('/api/quotes/ptax')" in rsrc, True)
 check('a API por tipo existe', "@blueprint.route('/api/quotes/<kind>')" in rsrc, True)
 check('sem simbolo cadastrado a API responde 404 PEDINDO cadastro, e nao tenta o codigo',
       "'mapping': cadastro" in rsrc and 'has no market symbol registered' in rsrc, True)
+# Assercao de COMPORTAMENTO e nao de texto: a linha virou `queries.currencies()`,
+# e prender a grafia dela faria o teste quebrar a cada refatoracao sem que nada
+# tivesse mudado para a tela.
 check('a PTAX chega como [codigo, simbolo], como as outras duas',
-      'currencies=[[c, c] for c in _q.PTAX_CURRENCIES]' in rsrc, True)
+      QQ.currencies()[:2], [[c, c] for c in Q.PTAX_CURRENCIES[:2]])
 
 nav = read('apps/templates/partials/sidenav.html')
 check('o item Quotes esta no sidenav (e o que o Page_Access enxerga)',

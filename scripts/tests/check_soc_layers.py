@@ -180,7 +180,8 @@ check('/api/tickets/<ticket_id> registrada',
       '/api/tickets/<ticket_id>' in regras, True)
 check('/api/tickets/<ticket_id>/comment registrada',
       '/api/tickets/<ticket_id>/comment' in regras, True)
-for r in ('/reconciliation-fxo', '/reconciliation-fxo/data',
+for r in ('/quotes', '/api/quotes/ptax', '/api/quotes/<kind>',
+          '/reconciliation-fxo', '/reconciliation-fxo/data',
           '/reconciliation-fxo/run', '/reconciliation-fxo/comment',
           '/onboarding', '/onboarding/tracking-docs', '/cgd',
           '/api/onboarding/overview', '/api/onboarding/docs',
@@ -193,7 +194,8 @@ print('\n== 8. o que saiu do routes.py nao ficou nele ==')
 for morto in ('_tk_roles_by_sid', '_tk_can_view', '_tk_public',
               '_tk_send_closed_email', 'def api_tickets_list',
               '_cgd_form_ctx', '_cgd_db_ready', 'def api_onboarding_docs',
-              'def reconciliation_fxo_run', 'def reconciliation_fxo_comment'):
+              'def reconciliation_fxo_run', 'def reconciliation_fxo_comment',
+              '_quotes_underlyings', '_QUOTES_KINDS', 'def api_quotes_ptax'):
     check('%s saiu do routes.py' % morto, morto in rotas_py, False)
 
 print(('FAIL: %d' % len(fails)) if fails else 'TUDO OK')

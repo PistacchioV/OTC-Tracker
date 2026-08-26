@@ -2149,8 +2149,8 @@ features/<nome>/
 ```
 
 Extraídas até aqui: **`support`** (450 linhas / 6 rotas), **`onboarding`**
-(154 / 7) e **`reconciliation_fxo`** (101 / 4). O `routes.py` saiu de 39.696
-para 39.032 linhas.
+(154 / 7), **`reconciliation_fxo`** (101 / 4) e **`quotes`** (129 / 3). O
+`routes.py` saiu de 39.696 para 38.912 linhas.
 
 Nem toda vertical tem `domain.py`: o do Onboarding é o `apps/pages/cgd_docs.py`,
 e ele **fica onde está** porque a Recon de CGD e o /mapping também o consultam —
@@ -2201,8 +2201,8 @@ fora chamam o grupo; saída = de quantas ele depende:
 | `support` | 450 | **0** | 15 | ✅ feito |
 | `onboarding` (CGD) | 154 | **0** | 3 | ✅ feito |
 | `reconciliation-fxo` | 101 | **0** | 4 | ✅ feito |
-| `quotes` | 88 | 1 | 4 | próximo |
-| `holidays` | 254 | 3 | 11 | |
+| `quotes` | 129 | **0** | 4 | ✅ feito |
+| `holidays` | 254 | 3 | 11 | próximo |
 | `bacc` · `mt300` · `appver` | ~170–310 | 7–9 | 13–21 | |
 | `conf-escalation` · `mdea` | ~314–384 | 12–13 | 17–20 | |
 | `file-interpreter` | 307 | **43** | 4 | tarde |
