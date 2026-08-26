@@ -2268,6 +2268,146 @@ def _dash_stats_store(period, dados):
     return dados
 
 
+# ── A varredura do painel: podar, e ler a árvore UMA vez ─────────────────────
+# O painel varria a árvore INTEIRA do cache de New Deals e abria todo JSON do
+# período. Na dev é um SSD com dezenas de arquivos e ninguém nota; na instância
+# do JPM a árvore está num share, cada operação é ida e volta de rede, e dois
+# anos de histórico são milhares de arquivos — a tela fica em "Carregando os
+# dados do painel…" por minutos, sem erro nenhum, porque nada falhou: o servidor
+# está lendo.
+#
+# Duas correções, e a segunda quase se pagou sozinha na primeira tentativa:
+#
+#   • PODAR. A árvore termina em `{Produto}/{Sub}/{AAAA}/{MM}/arquivo.json`, e o
+#     período pedido descarta ano e mês INTEIROS antes de entrar neles.
+#   • LEMBRAR. Arquivo-dia já lido não precisa ser reaberto se não mudou.
+#
+# O memo só compensa se a verificação for de GRAÇA, e é aqui que o `os.scandir`
+# entra no lugar do `os.walk`. A listagem de um diretório no SMB já devolve nome,
+# tamanho e mtime de cada entrada, e o `DirEntry` os guarda: no Windows,
+# `entry.stat()` não custa chamada nenhuma. Com `os.walk` essa informação é
+# jogada fora e cada verificação vira um `os.stat` — uma ida a mais por arquivo,
+# que é justamente o que a medição mostrou: a primeira abertura do painel ficava
+# MAIS lenta do que antes, e só a segunda ganhava. Pelo scandir, a primeira
+# abertura custa o mesmo de antes e a segunda deixa de abrir o que não mudou.
+#
+# O memo guarda os deals PROJETADOS nos campos que o endpoint usa, e não o
+# registro inteiro: são 11 campos de umas 40, e guardar tudo seria trocar minutos
+# de rede por centenas de MB no processo único que serve a mesa. Campo novo lido
+# do deal no endpoint tem de entrar nesta tupla — `check_dashboard_walk.py` varre
+# a função por AST e recusa o que ficar de fora, porque a projeção silenciosa
+# devolveria `None` sem erro nenhum.
+_DASH_DEAL_FIELDS = ('Client', 'Commodities', 'Commodity', 'Deal', 'LE',
+                     'Status', 'TradeDate', 'UnderlyingAsset')
+
+_dash_file_memo = {}                    # caminho → (mtime, tamanho, [deals])
+_dash_memo_lock = threading.Lock()
+# Teto do memo. Estourado, ele é ESVAZIADO inteiro em vez de despejar por idade:
+# o custo é uma varredura completa a mais, uma vez, e a alternativa (LRU) é
+# estado a mais para manter no caminho mais quente da tela.
+_DASH_MEMO_MAX = 8000
+
+
+def _dash_dir_matters(nome, pai, period, now):
+    """Este diretório pode conter arquivo do período pedido?
+
+    Nome de 4 dígitos é ano; de 2 dígitos, mês — e o mês só é descartado dentro
+    do ano corrente, porque em outro ano ele já não é alcançado. Nome que não
+    seja número é pasta de produto e nunca é descartado: quem decide o que é ano
+    ou mês é o FORMATO do nome, não a profundidade — a árvore tem produto com um
+    nível de subpasta e produto com dois.
+    """
+    if period == 'all':
+        return True
+    if len(nome) == 4 and nome.isdigit():
+        return int(nome) == now.year
+    if period == 'month' and len(nome) == 2 and nome.isdigit():
+        if len(pai) == 4 and pai.isdigit():
+            return int(nome) == now.month
+    return True
+
+
+def _dash_scan_files(raiz, period, now):
+    """Gera (caminho, nome, mtime, tamanho) dos arquivos da árvore, podando.
+
+    `os.scandir` no lugar de `os.walk` de propósito — ver o comentário acima: é
+    o que faz a checagem do memo não custar uma ida a mais por arquivo.
+
+    Um diretório que não abre é PULADO com aviso, não derruba a varredura: o
+    share fica indisponível de vez em quando, e meia tela é melhor do que um 500
+    no painel inteiro.
+    """
+    pilha = [(raiz, '')]
+    while pilha:
+        atual, pai = pilha.pop()
+        subdirs, arquivos = [], []
+        try:
+            with os.scandir(atual) as entradas:
+                for e in entradas:
+                    try:
+                        if e.is_dir():
+                            if _dash_dir_matters(e.name, pai, period, now):
+                                subdirs.append((e.name, e.path))
+                            continue
+                        if not e.name.endswith('.json'):
+                            continue
+                        st = e.stat()
+                        arquivos.append((e.name, e.path, st.st_mtime, st.st_size))
+                    except OSError:
+                        continue
+        except OSError:
+            log.warning('[dashboard] não consegui listar %s', atual)
+            continue
+        # ORDENADO, e por nome — nos dois níveis. A ordem de leitura decide o
+        # desempate da lista de "Recent deals" (deals do MESMO dia saem na ordem
+        # em que entraram), e a ordem crua do `scandir` é a do sistema de
+        # arquivos: o mesmo dado renderia listas diferentes no share do JPM e no
+        # disco da dev. A pilha é LIFO, então os subdiretórios entram ao
+        # contrário para sair em ordem.
+        for nome, caminho in sorted(subdirs, reverse=True):
+            pilha.append((caminho, nome))
+        for nome, caminho, mtime, size in sorted(arquivos):
+            yield (caminho, nome, mtime, size)
+
+
+def _dash_file_deals(fp, fname, mtime, size, fdate, product, deal_type):
+    """Os deals de UM arquivo-dia, já projetados, filtrados e anotados.
+
+    A chave do memo é (mtime, tamanho) e não só o caminho: o arquivo-dia de HOJE
+    é reescrito a cada importação, e um amend entra no arquivo do dia da operação
+    — que pode ser antigo. Pelo caminho sozinho o painel mostraria o dia
+    congelado na primeira leitura do processo.
+    """
+    with _dash_memo_lock:
+        item = _dash_file_memo.get(fp)
+    if item and item[0] == mtime and item[1] == size:
+        return item[2]
+    try:
+        with open(fp, 'r', encoding='utf-8') as fh:
+            data = json.load(fh)
+    except Exception:                                       # noqa: BLE001
+        return []
+    saida = []
+    fdate_txt = fdate.strftime('%Y-%m-%d')
+    for d in (data if isinstance(data, list) else []):
+        if not isinstance(d, dict) or not (d.get('Deal') or '').strip():
+            continue
+        # Cancelado via API não conta em nenhuma métrica.
+        if str(d.get('Status') or '').strip() == 'Canceled':
+            continue
+        projetado = {k: d.get(k) for k in _DASH_DEAL_FIELDS}
+        projetado['_fdate'] = fdate_txt
+        projetado['_product'] = product
+        projetado['_type'] = deal_type
+        saida.append(projetado)
+    with _dash_memo_lock:
+        if len(_dash_file_memo) >= _DASH_MEMO_MAX:
+            _dash_file_memo.clear()
+        _dash_file_memo[fp] = (mtime, size, saida)
+    return saida
+
+
+
 @blueprint.route('/api/dashboard-stats')
 def api_dashboard_stats():
     if not session.get('authenticated'):
@@ -2332,34 +2472,20 @@ def api_dashboard_stats():
     # Generic scan of all new deals cache directories
     all_deals = []
     if os.path.isdir(NEW_DEALS_CACHE_ROOT):
-        for root, _dirs, files in os.walk(NEW_DEALS_CACHE_ROOT):
-            for fname in sorted(files):
-                if not fname.endswith('.json') or fname.endswith('.tmp') or fname.endswith('.bak'):
-                    continue
-                date_str = fname[:8]
-                try:
-                    fdate = datetime.strptime(date_str, '%Y%m%d')
-                except ValueError:
-                    continue
-                if not _file_in_period(fdate):
-                    continue
-                fp = os.path.join(root, fname)
-                product = _product_from_path(fp)
-                deal_type = _type_from_product(product)
-                try:
-                    with open(fp, 'r', encoding='utf-8') as fh:
-                        data = json.load(fh)
-                    for d in data:
-                        if isinstance(d, dict) and (d.get('Deal') or '').strip():
-                            # Cancelado via API não conta em nenhuma métrica
-                            if str(d.get('Status') or '').strip() == 'Canceled':
-                                continue
-                            d['_fdate']   = fdate.strftime('%Y-%m-%d')
-                            d['_product'] = product
-                            d['_type']    = deal_type
-                            all_deals.append(d)
-                except Exception:
-                    pass
+        for fp, fname, mtime, size in _dash_scan_files(NEW_DEALS_CACHE_ROOT, period, now):
+            if fname.endswith('.tmp') or fname.endswith('.bak'):
+                continue
+            try:
+                fdate = datetime.strptime(fname[:8], '%Y%m%d')
+            except ValueError:
+                continue
+            # A poda por diretório é grossa (ano e mês); quem decide de fato é a
+            # data no NOME do arquivo, como sempre foi.
+            if not _file_in_period(fdate):
+                continue
+            product = _product_from_path(fp)
+            all_deals.extend(_dash_file_deals(
+                fp, fname, mtime, size, fdate, product, _type_from_product(product)))
 
     def _is_fxo(d):
         return 'fxo' in (d.get('_product') or '').lower()
@@ -2412,15 +2538,23 @@ def api_dashboard_stats():
         for d in client_deals
         if (d.get('Client') or '').strip()
     )
+    # `most_common` desempata pela ordem de INSERÇÃO, que aqui é a ordem em que a
+    # árvore foi lida — a do sistema de arquivos. Dois clientes com a MESMA
+    # contagem trocavam de lugar entre o share do JPM e o disco da dev, e entre
+    # duas leituras no mesmo lugar. O desempate passa a ser o nome, que é
+    # arbitrário do mesmo jeito mas é sempre o mesmo. Vale para os três Top 5.
+    def _top5(contador):
+        return sorted(contador.items(), key=lambda kv: (-kv[1], kv[0]))[:5]
+
     top5_clients = []
-    for c, n in client_counts.most_common(5):
+    for c, n in _top5(client_counts):
         by_product = Counter(
             d['_product'] for d in client_deals if (d.get('Client') or '').strip() == c
         )
         top5_clients.append({'label': c, 'count': n, 'by_product': dict(by_product)})
 
     product_counts = Counter(d['_product'] for d in counted_deals)
-    top5_products  = [{'label': p, 'count': n} for p, n in product_counts.most_common(5)]
+    top5_products  = [{'label': p, 'count': n} for p, n in _top5(product_counts)]
 
     # Top 5 Underlying Assets — commodities show the Commodity name; FXO (no
     # Commodity) falls back to UnderlyingAsset (the currency).
@@ -2429,7 +2563,7 @@ def api_dashboard_stats():
     underlying_counts = Counter(
         _underlying_label(d) for d in counted_deals if _underlying_label(d)
     )
-    top5_underlying = [{'label': c, 'count': n} for c, n in underlying_counts.most_common(5)]
+    top5_underlying = [{'label': c, 'count': n} for c, n in _top5(underlying_counts)]
 
     # Monthly counts for current year (always full year, ignores period filter)
     monthly_opt = [0] * 12
@@ -2440,55 +2574,58 @@ def api_dashboard_stats():
     monthly_ndf_otherpub = [0] * 12
     monthly_ndf_fwdstart = [0] * 12
     if os.path.isdir(NEW_DEALS_CACHE_ROOT):
-        for root, _dirs, files in os.walk(NEW_DEALS_CACHE_ROOT):
-            for fname in files:
-                if not fname.endswith('.json') or fname.endswith('.tmp') or fname.endswith('.bak'):
-                    continue
-                try:
-                    fdate = datetime.strptime(fname[:8], '%Y%m%d')
-                except ValueError:
-                    continue
-                if fdate.year != cur_year:
-                    continue
-                fp = os.path.join(root, fname)
-                product = _product_from_path(fp)
-                is_fxo_file = 'fxo' in product.lower()
-                ptype = _type_from_product(product)
-                gen_bucket = ''
-                if is_fxo_file:
-                    target = monthly_fxo
-                elif ptype == 'OPT':
-                    target = monthly_opt
-                elif ptype == 'SWAP':
-                    target = monthly_swap
-                else:
-                    gen_bucket = _ndf_bucket(product)
-                    target = {'vanilla': monthly_ndf_vanilla,
-                              'otherpub': monthly_ndf_otherpub,
-                              'fwdstart': monthly_ndf_fwdstart}.get(
-                                  gen_bucket, monthly_ndf)
-                try:
-                    with open(fp, 'r', encoding='utf-8') as fh:
-                        data = json.load(fh)
-                    # Same rule as the totals above: count every leg that carries a
-                    # deal except the Banco J.P. Morgan leg — this keeps the client
-                    # leg and one intragroup leg while dropping the mirror view, so
-                    # a deal seen from two sides is counted only once. Os NDF
-                    # genéricos (vanilla/other pub/fwd start) usam a regra de
-                    # pares LE × contraparte (_gen_ndf_counted).
-                    cnt = sum(
-                        1 for d in data
-                        if isinstance(d, dict)
-                        and (d.get('Deal') or '').strip()
-                        and str(d.get('Status') or '').strip() != 'Canceled'
-                        and (_gen_ndf_counted(d) if gen_bucket else not _is_bank(d))
-                    )
-                    target[fdate.month - 1] += cnt
-                except Exception:
-                    pass
+        # Segunda passada pela MESMA árvore — os contadores por mês são sempre do
+        # ano inteiro e ignoram o período pedido. Ela usa o mesmo `_dash_scan_files`
+        # e o mesmo memo da primeira: com `period='year'` os arquivos já foram
+        # lidos e esta passada não abre nenhum, e com 'month' ou 'all' ela lê o
+        # ano uma vez e a primeira passada aproveita. Antes eram dois `os.walk`
+        # independentes, cada um abrindo os arquivos do próprio critério — o mesmo
+        # arquivo lido DUAS vezes do share na mesma tela.
+        for fp, fname, mtime, size in _dash_scan_files(NEW_DEALS_CACHE_ROOT, 'year', now):
+            if fname.endswith('.tmp') or fname.endswith('.bak'):
+                continue
+            try:
+                fdate = datetime.strptime(fname[:8], '%Y%m%d')
+            except ValueError:
+                continue
+            if fdate.year != cur_year:
+                continue
+            product = _product_from_path(fp)
+            is_fxo_file = 'fxo' in product.lower()
+            ptype = _type_from_product(product)
+            gen_bucket = ''
+            if is_fxo_file:
+                target = monthly_fxo
+            elif ptype == 'OPT':
+                target = monthly_opt
+            elif ptype == 'SWAP':
+                target = monthly_swap
+            else:
+                gen_bucket = _ndf_bucket(product)
+                target = {'vanilla': monthly_ndf_vanilla,
+                          'otherpub': monthly_ndf_otherpub,
+                          'fwdstart': monthly_ndf_fwdstart}.get(
+                              gen_bucket, monthly_ndf)
+            # Same rule as the totals above: count every leg that carries a
+            # deal except the Banco J.P. Morgan leg — this keeps the client
+            # leg and one intragroup leg while dropping the mirror view, so
+            # a deal seen from two sides is counted only once. Os NDF
+            # genéricos (vanilla/other pub/fwd start) usam a regra de
+            # pares LE × contraparte (_gen_ndf_counted).
+            # O `Deal` vazio e o `Canceled` já foram descartados na leitura.
+            target[fdate.month - 1] += sum(
+                1 for d in _dash_file_deals(fp, fname, mtime, size, fdate, product, ptype)
+                if (_gen_ndf_counted(d) if gen_bucket else not _is_bank(d))
+            )
 
     # Recent deals: last 50 client rows sorted desc — frontend filters by product
-    recent_sorted = sorted(client_deals, key=lambda d: d.get('_fdate', ''), reverse=True)[:50]
+    # A chave leva o Deal junto: `sorted` é estável, então sem ele o desempate
+    # entre deals do MESMO dia era a ordem de leitura da árvore — que é a do
+    # sistema de arquivos, e portanto diferente no share do JPM e no disco da
+    # dev. A mesma base rendia listas diferentes, e ninguém tinha como notar.
+    recent_sorted = sorted(client_deals,
+                           key=lambda d: (d.get('_fdate', ''), d.get('Deal', '')),
+                           reverse=True)[:50]
     recent_deals = [
         {
             'deal':    d.get('Deal', ''),
