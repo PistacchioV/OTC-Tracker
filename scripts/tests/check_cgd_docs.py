@@ -143,6 +143,66 @@ check('Doc Type e o Transactional Type do Electronic Inventory',
 check('e a coluna que o usa existe', C.DOC_TYPE_COLUMN in C.COLUMNS, True)
 check('Garantidor e Yes/No', list(C.GUARANTOR_OPTIONS), ['Yes', 'No'])
 
+# ── O formulario de abertura ────────────────────────────────────────────────
+print('\n== o formulario de New CGD Request ==')
+# Todo texto do app nasce em INGLES e e traduzido por `data-lang` (CLAUDE.md 2).
+# Os rotulos e as dicas vem do SERVIDOR, entao a chave i18n vem junto com eles —
+# o mesmo desenho dos cadastros `dce-*` do /mapping. Sem a chave, o campo sai no
+# rotulo ingles; sem a TRADUCAO, ele sai em ingles nas tres telas.
+_tr = {}
+for _lg in ('en', 'br', 'es'):
+    _tr[_lg] = json.load(io.open(os.path.join(ROOT, 'apps', 'static', 'data',
+                                              'translations', '%s.json' % _lg),
+                                 encoding='utf-8'))
+_sem_chave, _sem_trad = [], []
+for _f in C.REQUEST_FORM:
+    if not _f.get('lang'):
+        _sem_chave.append(_f['label'])
+    if _f.get('hint') and not _f.get('hint_lang'):
+        _sem_chave.append(_f['label'] + ' (hint)')
+    for _k in (_f.get('lang'), _f.get('hint_lang')):
+        if _k:
+            for _lg in ('en', 'br', 'es'):
+                if _k not in _tr[_lg]:
+                    _sem_trad.append('%s/%s' % (_lg, _k))
+check('todo campo tem chave i18n', _sem_chave, [])
+check('e toda chave existe nos tres idiomas', _sem_trad, [])
+# Rotulo em portugues escapa do i18n: ele apareceria igual nas tres telas.
+_acentos = [f['label'] for f in C.REQUEST_FORM
+            if any(ch in f['label'] for ch in 'áàâãéêíóôõúçÁÀÂÃÉÊÍÓÔÕÚÇ')]
+check('nenhum rotulo em portugues', _acentos, [])
+
+# O `enabled_by` diz que um campo so vale quando OUTRO tem certo valor, e quem
+# declara e o formulario — nao o JS. Com a regra no navegador, o dia em que o
+# dominio do Garantidor mudasse ela continuaria olhando para o valor antigo e o
+# campo ficaria travado para sempre, sem erro nenhum.
+_dep = [f for f in C.REQUEST_FORM if f.get('enabled_by')]
+check('ha um campo dependente', len(_dep), 1)
+_e = _dep[0]['enabled_by']
+check('   ele depende do Garantidor', _e['column'], 'Garantidor')
+check('   ligado no valor Yes', _e['value'], 'Yes')
+check('   e o valor dele existe no dominio', _e['value'] in C.GUARANTOR_OPTIONS, True)
+check('   ligado, vira obrigatorio', bool(_e.get('required_when_on')), True)
+check('   desligado, volta para N/A', _e.get('value_when_off'), 'N/A')
+# A coluna que MANDA tem de ser um campo do proprio formulario, senao o JS
+# procura um mestre que nao esta na tela e a dependencia nunca liga.
+check('   e a coluna que manda esta no formulario',
+      any(f['column'] == _e['column'] for f in C.REQUEST_FORM), True)
+
+# O separador das entidades e o `;`, e o modal CORTA nele para achar a
+# contraparte do anexo (a pasta do Electronic Inventory e de UM cliente).
+# Trocar a dica sem trocar o corte manda o grupo inteiro para o nome da pasta.
+_partial = io.open(os.path.join(ROOT, 'apps', 'templates', 'partials',
+                                'onboarding-new-request.html'), encoding='utf-8').read()
+check('a dica pede o ; como separador',
+      all(';' in f['hint'] for f in C.REQUEST_FORM
+          if f['column'] in ('Razão Social', 'CNPJ')), True)
+check('e o modal corta no ; para achar a contraparte',
+      "split(/[;\\n]/)" in _partial, True)
+check('o disclaimer do Party Central esta no modal',
+      'ob-req-disclaimer' in _partial and 'Party Central' in _partial, True)
+check('o Apendice e um dropzone', 'ob-req-drop' in _partial, True)
+
 
 # ── 2. O aging ──────────────────────────────────────────────────────────────
 

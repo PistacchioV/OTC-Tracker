@@ -397,43 +397,70 @@ DOC_TYPE_COLUMN = 'Doc Type'
 # resto do app usa). A data é estreita de propósito — são dez caracteres, e um
 # campo de meia largura ao lado de um texto livre desequilibra a linha.
 REQUEST_FORM = (
-    {'label': 'CGD - Solicitação', 'column': 'Data Solicitação', 'type': 'date',
-     'required': True, 'hint': 'Preenchida com a data de hoje', 'col': 'col-md-3'},
-    {'label': 'Grupo', 'column': 'Grupo Economico', 'type': 'text',
-     'required': False, 'hint': 'Informar o nome de referência para a Razão Social',
-     'col': 'col-md-9'},
-    {'label': 'Razão Social', 'column': 'Razão Social', 'type': 'textarea',
-     'required': True, 'hint': 'Inserir todas as entidades do grupo', 'col': 'col-12'},
-    {'label': 'CNPJ', 'column': 'CNPJ', 'type': 'textarea',
-     'required': True, 'hint': 'Inserir todas as entidades do grupo', 'col': 'col-12'},
-    {'label': 'CGD - Tipo de Assinatura', 'column': SIGNATURE_COLUMN, 'type': 'select',
-     'required': True, 'hint': 'Selecionar a forma que o cliente assinará o CGD',
-     'col': 'col-md-6'},
-    {'label': 'CGD - Domínio cliente', 'column': 'Dominio', 'type': 'textarea',
-     'required': False, 'hint': 'Caso o cliente não tenha domínio preencher com NA',
-     'col': 'col-md-6'},
-    {'label': 'Contatos', 'column': 'Contacts', 'type': 'textarea',
-     'required': True, 'hint': 'Adicionar emails que devem ser considerados para solicitação de SSI',
-     'col': 'col-md-6'},
-    {'label': 'Garantidor', 'column': 'Garantidor', 'type': 'select',
-     'required': True, 'hint': 'Yes = cliente possui garantidor | No = cliente não possui garantidor',
-     'col': 'col-md-4', 'options': GUARANTOR_OPTIONS, 'default': 'No'},
+    {'label': 'CGD - Request Date', 'lang': 'ob-req-f-date', 'column': 'Data Solicitação',
+     'type': 'date', 'required': True, 'col': 'col-md-3',
+     'hint': 'Filled in with today\'s date', 'hint_lang': 'ob-req-h-date'},
+    {'label': 'Group', 'lang': 'ob-req-f-group', 'column': 'Grupo Economico',
+     'type': 'text', 'required': False, 'col': 'col-md-9',
+     'hint': 'Reference name for the legal names below', 'hint_lang': 'ob-req-h-group'},
+    # Razão Social e CNPJ pedem TODAS as entidades do grupo, e o separador é o
+    # PONTO E VÍRGULA — não a quebra de linha. Ele é o que a mesa já usa na
+    # lista do SharePoint, e é o que o `contraparte()` do modal corta para achar
+    # a primeira entidade (a pasta do Electronic Inventory é de UM cliente).
+    # Trocar o separador aqui sem trocar lá faria o anexo ir para uma pasta com
+    # o grupo inteiro no nome.
+    {'label': 'Legal Name', 'lang': 'ob-req-f-name', 'column': 'Razão Social',
+     'type': 'textarea', 'required': True, 'col': 'col-12',
+     'hint': 'Enter every entity of the group, separated by ;',
+     'hint_lang': 'ob-req-h-name'},
+    {'label': 'Tax ID', 'lang': 'ob-req-f-cnpj', 'column': 'CNPJ',
+     'type': 'textarea', 'required': True, 'col': 'col-12',
+     'hint': 'Enter every entity of the group, separated by ;',
+     'hint_lang': 'ob-req-h-cnpj'},
+    {'label': 'CGD - Signature Type', 'lang': 'ob-req-f-sig', 'column': SIGNATURE_COLUMN,
+     'type': 'select', 'required': True, 'col': 'col-md-6',
+     'hint': 'How the client will sign the CGD', 'hint_lang': 'ob-req-h-sig'},
+    {'label': 'CGD - Client Domain', 'lang': 'ob-req-f-dom', 'column': 'Dominio',
+     'type': 'textarea', 'required': False, 'col': 'col-md-6',
+     'hint': 'Fill in with NA when the client has no domain',
+     'hint_lang': 'ob-req-h-dom'},
+    {'label': 'Contacts', 'lang': 'ob-req-f-contacts', 'column': 'Contacts',
+     'type': 'textarea', 'required': True, 'col': 'col-md-6',
+     'hint': 'E-mails to be considered for the SSI request',
+     'hint_lang': 'ob-req-h-contacts'},
+    {'label': 'Guarantor', 'lang': 'ob-req-f-guar', 'column': 'Garantidor',
+     'type': 'select', 'required': True, 'col': 'col-md-4',
+     'hint': 'Yes = the client has a guarantor | No = it does not',
+     'hint_lang': 'ob-req-h-guar',
+     'options': GUARANTOR_OPTIONS, 'default': 'No'},
     # O formulário pede Razão Social E CNPJ do garantidor NUM campo só, e é
     # assim que a lista guarda. O banco tem duas colunas (`Nome Garantidor` e
     # `CNPJ Garantidor`) porque a exportação as separa; o texto digitado aqui vai
     # para a primeira. Partir em dois campos seria inventar um formulário que
     # ninguém preenche assim.
-    {'label': 'Informações do garantidor', 'column': 'Nome Garantidor', 'type': 'textarea',
-     'required': False, 'hint': 'Preencher com Razão Social e CNPJ do garantidor',
-     'col': 'col-md-8', 'default': 'N/A'},
+    #
+    # `enabled_by` diz que este campo só vale quando OUTRO tem certo valor, e é
+    # o formulário que declara isso — não o JS. Com a regra escrita no
+    # navegador, o dia em que o domínio do Garantidor mudasse (ou o campo
+    # mudasse de nome) ela continuaria olhando para o valor antigo, e o campo
+    # ficaria travado para sempre sem erro nenhum. Ligado, ele passa a ser
+    # OBRIGATÓRIO: sem garantidor não há o que preencher, e com garantidor a
+    # informação dele é o motivo do campo existir.
+    {'label': 'Guarantor Details', 'lang': 'ob-req-f-guarinfo', 'column': 'Nome Garantidor',
+     'type': 'textarea', 'required': False, 'col': 'col-md-8', 'default': 'N/A',
+     'hint': 'Legal name and Tax ID of the guarantor',
+     'hint_lang': 'ob-req-h-guarinfo',
+     'enabled_by': {'column': 'Garantidor', 'value': 'Yes', 'required_when_on': True,
+                    'value_when_off': 'N/A'}},
     # O Apêndice é ARQUIVO, e por isso não tem `column`: ele não vai para o
     # banco da lista, vai para o Electronic Inventory da contraparte, como
     # documento `Transactional` — que é onde os documentos por cliente já vivem
     # e onde a mesa os procura. Guardá-lo numa pasta nova, só do Onboarding,
     # criaria um segundo lugar para o mesmo tipo de papel.
-    {'label': 'Apêndice', 'column': '', 'type': 'file',
-     'required': True, 'hint': 'Adicionar o Template para emissão do CGD',
-     'col': 'col-12'},
+    {'label': 'Appendix', 'lang': 'ob-req-f-appx', 'column': '', 'type': 'file',
+     'required': True, 'col': 'col-12',
+     'hint': 'Attach the template used to issue the CGD',
+     'hint_lang': 'ob-req-h-appx'},
 )
 
 # A pasta do Electronic Inventory em que o Apêndice é gravado, e o prefixo do
