@@ -68,7 +68,15 @@ echo.
 echo [PRODUCAO] OTC Tracker em http://0.0.0.0:8050  (waitress)
 echo.
 REM gunicorn nao roda no Windows; usamos waitress como servidor WSGI de producao.
-"%PY%" -m waitress --host=0.0.0.0 --port=8050 run:app
+REM
+REM  --threads=16 (o padrao do waitress e 4). ESCALE COM THREADS, NUNCA COM
+REM  PROCESSOS: o singleton do banco, o _cache_lock e os schedulers so valem
+REM  dentro de um processo (CLAUDE.md 4).  Com o banco e os dados no share,
+REM  a maior parte do tempo de um request e espera de REDE, e a thread fica
+REM  parada segurando a vaga.  Com quatro vagas, quatro esperas dessas param
+REM  o servidor inteiro -- inclusive o arquivo estatico e a pagina que o
+REM  usuario acabou de pedir, que nem banco usam.
+"%PY%" -m waitress --host=0.0.0.0 --port=8050 --threads=16 run:app
 if errorlevel 1 (
     echo.
     echo [ERRO] waitress nao encontrado. Instale com:  "%PY%" -m pip install waitress

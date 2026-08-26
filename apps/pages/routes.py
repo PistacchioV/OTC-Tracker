@@ -457,13 +457,58 @@ def _cp_card_allowed(allowed, card_id):
     return '/control-panel' in allowed or ('/control-panel#' + card_id) in allowed
 
 
+# A allowlist é a consulta mais repetida do app: o `enforce_page_access` a faz em
+# TODA navegação e o sino a faz a cada consulta, por aba aberta. Ela quase nunca
+# muda — só a tela `/page-access` a escreve —, então cada uma dessas idas ao
+# banco relia o mesmo valor. Com o banco no share isso é ida e vida de rede no
+# caminho crítico de cada request.
+#
+# Cache por SID, com invalidação na escrita e um TTL curto por cima. Os dois
+# existem por razões diferentes: a invalidação cobre a mudança feita NESTE
+# processo (o caso normal, e nele a revogação é imediata) e o TTL cobre a
+# instância vizinha que editou o mesmo banco — sem ele, um acesso revogado no
+# outro processo valeria pela vida deste. Trinta segundos é o atraso máximo de
+# uma revogação vinda de fora, e é o preço de não perguntar ao share a cada
+# clique.
+_PAGE_ACCESS_TTL = 30.0
+_page_access_cache = {}                      # sid → (expira_em, (configured, urls))
+_page_access_lock = threading.Lock()
+
+
+def _page_access_forget(sid=None):
+    """Esquece o cache — de um SID, ou inteiro quando `sid` é None."""
+    with _page_access_lock:
+        if sid is None:
+            _page_access_cache.clear()
+        else:
+            _page_access_cache.pop((sid or '').strip().upper(), None)
+
+
 def _get_page_access(sid):
     """(configured, urls_set). configured=False → not set yet (full access);
     configured=True → the stored allowlist (possibly empty)."""
     if not sid:
         return (False, set())
+    chave = sid.strip().upper()
+    agora = time.time()
+    with _page_access_lock:
+        em_cache = _page_access_cache.get(chave)
+    if em_cache and em_cache[0] > agora:
+        # Devolve uma CÓPIA do conjunto: o chamador não pode alterar o cache
+        # sem querer, e um `allowed.add(...)` numa rota viraria concessão
+        # permanente para o processo inteiro.
+        configurado, urls = em_cache[1]
+        return (configurado, set(urls))
+    resposta = _read_page_access(sid)
+    with _page_access_lock:
+        _page_access_cache[chave] = (agora + _PAGE_ACCESS_TTL, resposta)
+    return (resposta[0], set(resposta[1]))
+
+
+def _read_page_access(sid):
+    """A allowlist como está no banco, sem cache."""
     try:
-        conn = get_db_connection()
+        conn = get_db_connection(readonly=True)
         try:
             row = conn.execute("SELECT Page_Access FROM users WHERE SID = ?", [sid]).fetchone()
         finally:
@@ -496,6 +541,9 @@ def _set_page_access(sid, urls):
         conn.commit()
     finally:
         conn.close()
+    # DEPOIS do commit: esquecendo antes, uma leitura concorrente repovoaria o
+    # cache com o valor velho e a mudança só valeria daqui a um TTL.
+    _page_access_forget(sid)
 
 
 # Master users: top-of-hierarchy superusers pinned by SID (not by DB role, so the
@@ -914,8 +962,8 @@ class _DuckDBHandle:
         """O contexto de escrita comita quando o dono do handle o fecha."""
 
 
-def get_db_connection():
-    """Abre o banco de Usuários pelo contexto de transação exclusiva comum.
+def get_db_connection(readonly=False):
+    """Abre o banco de Usuários pelo contexto de transação comum.
 
     Era uma conexão SINGLETON atrás de um `threading.Lock` de módulo, com retry,
     backoff e reconexão quando ela adoecia. O lock de thread protegia UM
@@ -923,8 +971,24 @@ def get_db_connection():
     arquivo sem pedir licença a ninguém. O `duckdb_write` põe o lock no ARQUIVO,
     então a exclusão vale entre processos — e o retry, o backoff e a checagem de
     saúde passam a ser dele, num lugar só, para todos os bancos.
+
+    **`readonly=True` para quem só faz SELECT**, e não é otimização de detalhe.
+    O caminho de escrita é EXCLUSIVO nos dois níveis: um `BoundedSemaphore(1)`
+    dentro do processo e um lock de arquivo exclusivo entre eles. Abrir uma
+    consulta por ali põe toda leitura na mesma fila de UM: com o banco no share,
+    onde cada operação custa ida e volta de rede, a topbar consultando o sino
+    por aba aberta consome sozinha a fila inteira, e a página que o usuário
+    pediu espera atrás dela. Era o que fazia a tela levar minutos para aparecer
+    com o banco em `\\Nawest…` — sem erro nenhum no log, porque ninguém falhou:
+    todo mundo esperou.
+
+    A leitura toma lock COMPARTILHADO e um semáforo de `DATABASE_READ_CONCURRENCY`
+    permissões, então leitores não se bloqueiam entre si nem bloqueiam outra
+    instância — e continuam excluídos do escritor, que é a garantia que importa.
     """
     _ensure_db_initialized()        # lazy, one-time schema/migrations (no-op after first run)
+    if readonly:
+        return _DuckDBHandle(duckdb_read(DB_PATH))
     return _DuckDBHandle(duckdb_write(DB_PATH))
 
 
@@ -1268,7 +1332,7 @@ def _nd_token(value):
 
 def get_user_by_sid(sid):
     log.debug("[get_user_by_sid] Looking up SID=%s", sid)
-    conn = get_db_connection()
+    conn = get_db_connection(readonly=True)
     try:
         result = conn.execute(
             "SELECT SID, Name, Email, Role_Description, Position, Role, Status, IP_Address FROM users WHERE SID = ?",
@@ -1298,7 +1362,7 @@ def get_user_by_sid(sid):
 
 
 def get_all_users():
-    conn = get_db_connection()
+    conn = get_db_connection(readonly=True)
     try:
         rows = conn.execute("""
             SELECT SID, Name, Email, Role_Description, Position, Role, Status, IP_Address, created_at
@@ -1324,7 +1388,7 @@ def get_all_users():
 
 
 def get_role_groups():
-    conn = get_db_connection()
+    conn = get_db_connection(readonly=True)
     try:
         rows = conn.execute("""
             SELECT Role, COUNT(*) AS cnt,
@@ -1503,7 +1567,7 @@ def _code_send_allowed(sid):
     fresh codes for brute-forcing. Fails open on any DB error — 2FA email must
     never be bricked by the throttle itself."""
     try:
-        conn = get_db_connection()
+        conn = get_db_connection(readonly=True)
         try:
             row = conn.execute(
                 "SELECT "
@@ -18178,6 +18242,9 @@ def api_delete_user():
         conn.commit()
     finally:
         conn.close()
+    # O usuário sumiu do banco; a allowlist dele não pode ficar em memória para
+    # o caso de o mesmo SID ser recadastrado dentro do TTL.
+    _page_access_forget(sid)
 
     _create_notification(
         session.get('user_sid', ''), session.get('user_name', ''),
@@ -35466,7 +35533,7 @@ def _tk_roles_by_sid(sids):
     if not faltam:
         return out
     try:
-        conn = get_db_connection()
+        conn = get_db_connection(readonly=True)
         try:
             ph = ', '.join('?' for _ in faltam)
             linhas = conn.execute(
@@ -35867,7 +35934,7 @@ def api_get_notifications():
         return jsonify({"success": False}), 401
     user_role = session.get('user_role', '')
     user_sid = (session.get('user_sid') or '').strip().upper()
-    conn = get_db_connection()
+    conn = get_db_connection(readonly=True)
     try:
         # target_sid endereça UM usuário e é mais forte que target_role: quando
         # está preenchido, só aquele SID vê a notificação — nem o master, nem
