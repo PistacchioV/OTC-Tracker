@@ -370,6 +370,20 @@ SIGNATURE_COLUMN = 'Signature Type'
 # metade das linhas deixaria de casar com a outra metade no filtro.
 GUARANTOR_OPTIONS = ('Yes', 'No')
 
+# O domínio do `Doc Type` — o TIPO de documento transacional que a solicitação
+# gera. É o mesmo domínio do Transactional Type do Electronic Inventory, e por
+# isso os valores são os de lá, em inglês: o documento sai daqui e vai parar na
+# pasta do cliente com esse nome, e uma segunda grafia faria a mesma coisa
+# aparecer como dois tipos na listagem.
+#
+# Domínio de UM campo, como o `SIGNATURE_TYPES` — não é cadastro do /mapping,
+# porque não há nada a traduzir de um sistema para outro.
+DOC_TYPES = ('CGD', 'Appendix', 'CSA', 'CGD Amendment', 'Appendix Amendment')
+
+# A coluna que guarda esse domínio, pela mesma razão do `SIGNATURE_COLUMN`: a
+# tela precisa saber QUAL coluna vira um `select`.
+DOC_TYPE_COLUMN = 'Doc Type'
+
 # O formulário de abertura da solicitação, na ORDEM em que ele é preenchido.
 # Cada campo diz o rótulo (o do formulário do SharePoint, que nem sempre é o
 # nome da coluna), a COLUNA do banco em que ele grava, o tipo do campo, se é
