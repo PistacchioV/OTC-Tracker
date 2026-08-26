@@ -55,8 +55,17 @@ self.addEventListener('push', function (event) {
                 if (resp && resp.success && resp.notifications && resp.notifications.length) {
                     var n = resp.notifications[0];
                     var detail = (n.detail || '').replace(/\s*\[ND:\d{4}-\d{2}-\d{2}\]/, '');
-                    title = n.actor_name || n.actor_sid || 'OTC Tracker';
-                    body = (n.action || '') + ' in ' + (n.page || '') +
+                    // O TÍTULO começa pela marca. A linha de cima do balão é a
+                    // ORIGEM (`localhost:8051`) e quem a escreve é o navegador —
+                    // não há API que a troque —, então o nome do app tem de vir
+                    // no primeiro pedaço que é nosso. Antes o título era o nome
+                    // de quem agiu, e o balão não dizia de onde vinha.
+                    // A AÇÃO fica no título junto com a marca: com só
+                    // 'OTC Tracker', dois avisos empilhados ficariam idênticos e
+                    // não daria para separá-los sem abrir.
+                    title = 'OTC Tracker' + (n.action ? ' · ' + n.action : '');
+                    body = (n.actor_name || n.actor_sid || '') +
+                           (n.page ? ' · ' + n.page : '') +
                            (detail ? ' — ' + detail : '');
                     // A Recon FXO nasceu gravada com a página do Pay/Rec; as
                     // notificações antigas ainda carregam esse par. Mesma

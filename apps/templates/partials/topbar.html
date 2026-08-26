@@ -856,8 +856,16 @@
                 if (document.visibilityState === 'visible' && document.hasFocus()) return;
                 var b = buildNotif(n);
                 var rawDetail = (n.detail || '').replace(/\s*\[ND:\d{4}-\d{2}-\d{2}\]/, '');
-                var title = n.actor_name || n.actor_sid || 'OTC Tracker';
-                var body  = (n.action || '') + ' in ' + (n.page || '') +
+                // O TÍTULO começa pela marca — mesma montagem do `sw-push.js`,
+                // que é o mesmo aviso pelo outro caminho. A linha de cima do
+                // balão é a ORIGEM (`localhost:8051`) e quem a escreve é o
+                // navegador; não há API que a troque, então o nome do app tem de
+                // vir no primeiro pedaço que é nosso. A AÇÃO entra junto porque
+                // dois avisos com o título só da marca ficariam idênticos na
+                // pilha do sistema.
+                var title = 'OTC Tracker' + (n.action ? ' · ' + n.action : '');
+                var body  = (n.actor_name || n.actor_sid || '') +
+                            (n.page ? ' · ' + n.page : '') +
                             (rawDetail ? ' — ' + rawDetail : '');
                 // A marca do balão é o `favicon-notif.png`: o chip AZUL do app com
                 // a marca em BRANCO, e o fundo sólido é a razão de ele existir.
