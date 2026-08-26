@@ -107,9 +107,6 @@
 #ob-docs .ob-mass .form-select, #ob-docs .ob-mass .form-control { height: 31px; font-size: .75rem; }
 
 /* A linha em edição: fundo suave para não se perder de vista ao rolar. */
-#ob-table tr.ob-editing > td { background: rgba(0, 102, 204, .06) !important; }
-#ob-table tr.ob-editing input,
-#ob-table tr.ob-editing select { width: 100%; font-size: .75rem; height: 26px; padding: 1px 4px; text-align: center; }
 
 /* A faixa que diz de onde a tela leu — o banco e a última importação. */
 #ob-docs .ob-src {
@@ -157,6 +154,15 @@
                realmente faz aqui (o partial é o mesmo do Overview). #}
             <button class="btn btn-sm btn-primary bg-gradient btn-toolbar-all" id="ob-new-request">
                 <i class="ti ti-file-plus me-1"></i><span data-lang="ob-new-request">New Request</span>
+            </button>
+
+            {# Add Row é a linha CRUA — o documento que já existe e precisa entrar
+               na lista (o que veio de antes do SharePoint, o corrigido à mão).
+               O New Request ao lado é outra coisa: ele ABRE uma solicitação, com
+               o formulário obrigatório e o anexo indo para o Electronic
+               Inventory. Os dois botões existem porque são dois atos. #}
+            <button class="btn btn-sm btn-primary bg-gradient btn-toolbar-all" id="ob-add-row">
+                <i class="ti ti-plus me-1"></i><span data-lang="ob-add-row">Add Row</span>
             </button>
 
             <div class="dropdown">
@@ -217,6 +223,29 @@
         </div>
     </div>
 
+{# Modal de edição/criação da linha. Um só para os dois atos: os campos são os
+   mesmos, e o que decide é o `id` ir ou não no payload — o `/docs/save` sem
+   `id` chama o `add_row`. Padrão da casa: `liquid-glass`, header `py-2`, título
+   `fs-6`, grade `row g-3` e os dois botões de ícone no rodapé. #}
+<div class="modal fade" id="ob-modal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content liquid-glass">
+      <div class="modal-header py-2">
+        <h5 class="modal-title fs-6"><i class="ti ti-file-text me-1"></i>
+          <span id="ob-modal-title">Edit Document</span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body" id="ob-modal-body"></div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-sm btn-danger" data-bs-dismiss="modal"
+                title="Cancel"><i class="ti ti-x"></i></button>
+        <button type="button" class="btn btn-sm btn-success" id="ob-modal-save"
+                title="Save"><i class="ti ti-device-floppy"></i></button>
+      </div>
+    </div>
+  </div>
+</div>
+
 {% include 'partials/onboarding-new-request.html' %}
 </div>
 {% endblock page_content %}
@@ -264,6 +293,7 @@
        uma vez, no load), então vive aqui. */
     var _TRANS = {
         en: { stage: 'Pending with', actions: 'Actions', edit: 'Edit', del: 'Delete',
+              finalized: 'Finalized', editTitle: 'Edit Document', addTitle: 'New Document',
               massCol: 'Select Column to Apply', massTitle: 'Apply to {n} row(s)?', massEmpty: '(empty)',
               yesApply: 'Yes, apply', massDone: '{n} row(s) updated', massDelTitle: 'Delete {n} row(s)?',
               save: 'Save', cancel: 'Cancel', confirmDel: 'Delete this document?',
@@ -273,6 +303,7 @@
               nodb: 'The CGD database was not found', nodbHint: 'run scripts/import_cgd_sharepoint.py',
               src: 'Source', rows: 'row(s)', derived: 'derived from the stamps' },
         br: { stage: 'Pendente em', actions: 'Ações', edit: 'Editar', del: 'Excluir',
+              finalized: 'Finalizado', editTitle: 'Editar Documento', addTitle: 'Novo Documento',
               massCol: 'Select Column to Apply', massTitle: 'Aplicar em {n} linha(s)?', massEmpty: '(vazio)',
               yesApply: 'Sim, aplicar', massDone: '{n} linha(s) atualizada(s)', massDelTitle: 'Excluir {n} linha(s)?',
               save: 'Salvar', cancel: 'Cancelar', confirmDel: 'Excluir este documento?',
@@ -282,6 +313,7 @@
               nodb: 'O banco de CGDs não foi encontrado', nodbHint: 'rode scripts/import_cgd_sharepoint.py',
               src: 'Fonte', rows: 'linha(s)', derived: 'derivado dos carimbos' },
         es: { stage: 'Pendiente en', actions: 'Acciones', edit: 'Editar', del: 'Eliminar',
+              finalized: 'Finalizado', editTitle: 'Editar Documento', addTitle: 'Nuevo Documento',
               massCol: 'Select Column to Apply', massTitle: '¿Aplicar en {n} fila(s)?', massEmpty: '(vacío)',
               yesApply: 'Sí, aplicar', massDone: '{n} fila(s) actualizada(s)', massDelTitle: '¿Eliminar {n} fila(s)?',
               save: 'Guardar', cancel: 'Cancelar', confirmDel: '¿Eliminar este documento?',
@@ -302,11 +334,68 @@
         });
     }
 
+
+    /* ── Rótulo de cada coluna, nos três idiomas ────────────────────────────
+       Os NOMES são os do banco (e os do SharePoint antes dele) e não podem
+       mudar: renomear um quebraria a base de quem já a tem em disco, o
+       `update_row` e o filtro por coluna. Quem traduz é este mapa — o mesmo
+       desenho do `COLUMN_LABELS` da esteira de confirmação.
+
+       Ele vive aqui, e não em `data-lang`, porque o cabeçalho é montado em JS
+       DEPOIS do load: o I18nManager traduz os `[data-lang]` uma vez, no load, e
+       nunca vê o que o JS insere.
+
+       A lista tem de ser COMPLETA — coluna sem entrada aparece na tela com o
+       nome do banco, que é como `Razão Social`, `Emissão` e `Instituição
+       Financeira` apareciam em português na tela em inglês. `check_cgd_docs.py`
+       recusa coluna de `COLUMNS` que fique de fora. */
+    var COLTR = {
+        'Status':                 { en: 'Status',              br: 'Status',                es: 'Estado' },
+        'Doc Type':               { en: 'Doc Type',            br: 'Tipo de Documento',     es: 'Tipo de Documento' },
+        'Legal Entity':           { en: 'Legal Entity',        br: 'Entidade Legal',        es: 'Entidad Legal' },
+        'Razão Social':           { en: 'Legal Name',          br: 'Razão Social',          es: 'Razón Social' },
+        'Grupo Economico':        { en: 'Economic Group',      br: 'Grupo Econômico',       es: 'Grupo Económico' },
+        'CNPJ':                   { en: 'Tax ID',              br: 'CNPJ',                  es: 'CNPJ' },
+        'SPN':                    { en: 'SPN',                 br: 'SPN',                   es: 'SPN' },
+        'ECI':                    { en: 'ECI',                 br: 'ECI',                   es: 'ECI' },
+        'CASID':                  { en: 'CASID',               br: 'CASID',                 es: 'CASID' },
+        'UCN':                    { en: 'UCN',                 br: 'UCN',                   es: 'UCN' },
+        'Dominio':                { en: 'Client Domain',       br: 'Domínio',               es: 'Dominio' },
+        'OTC - STAMP':            { en: 'OTC — Stamp',         br: 'OTC — Carimbo',         es: 'OTC — Sello' },
+        'MO - STAMP':             { en: 'MO — Stamp',          br: 'MO — Carimbo',          es: 'MO — Sello' },
+        'Data Solicitação':       { en: 'Request Date',        br: 'Data Solicitação',      es: 'Fecha Solicitud' },
+        'Garantidor':             { en: 'Guarantor',           br: 'Garantidor',            es: 'Garante' },
+        'Nome Garantidor':        { en: 'Guarantor Name',      br: 'Nome do Garantidor',    es: 'Nombre del Garante' },
+        'CNPJ Garantidor':        { en: 'Guarantor Tax ID',    br: 'CNPJ do Garantidor',    es: 'CNPJ del Garante' },
+        'Emissão':                { en: 'Issue Date',          br: 'Emissão',               es: 'Emisión' },
+        'Signature Type':         { en: 'Signature Type',      br: 'Tipo de Assinatura',    es: 'Tipo de Firma' },
+        'Signature Date':         { en: 'Signature Date',      br: 'Data da Assinatura',    es: 'Fecha de Firma' },
+        'B3 ID - JPM':            { en: 'B3 ID — JPM',         br: 'B3 ID — JPM',           es: 'B3 ID — JPM' },
+        'B3 ID - MGT':            { en: 'B3 ID — MGT',         br: 'B3 ID — MGT',           es: 'B3 ID — MGT' },
+        'B3 Register':            { en: 'B3 Register',         br: 'Registro B3',           es: 'Registro B3' },
+        'Captis':                 { en: 'Captis',              br: 'Captis',                es: 'Captis' },
+        'Conclusion - Stamp':     { en: 'Conclusion — Stamp',  br: 'Conclusão — Carimbo',   es: 'Conclusión — Sello' },
+        'Aging':                  { en: 'Aging',               br: 'Aging',                 es: 'Aging' },
+        'Contacts':               { en: 'Contacts',            br: 'Contatos',              es: 'Contactos' },
+        'CSA?':                   { en: 'CSA?',                br: 'CSA?',                  es: '¿CSA?' },
+        'Instituição Financeira': { en: 'Financial Institution', br: 'Instituição Financeira', es: 'Institución Financiera' },
+        'B3 Account':             { en: 'B3 Account',          br: 'Conta B3',              es: 'Cuenta B3' }
+    };
+    /* O rótulo da coluna no idioma da tela. Sem entrada no mapa, o NOME do banco
+       — que é feio, mas é a única coisa que não mente sobre qual coluna é. */
+    function colLabel(c) {
+        var e = COLTR[c];
+        return (e && (e[lang()] || e.en)) || c;
+    }
+
     var COLS = [];            // nomes das colunas do banco, na ordem
     var IDCOL = '_id';
     var DATECOLS = [];
     var SIGTYPES = [];        // domínio do Tipo de Assinatura, vindo do servidor
     var SIGCOL = '';          // e qual coluna o usa
+    var DOCTYPES = [];        // domínio do Doc Type (Transactional Type do EI)
+    var DOCTYPECOL = '';
+    var GUAROPTS = [];        // Yes/No do Garantidor
     var table = null;
     var dados = [];
 
@@ -324,8 +413,14 @@
         // INACTIVE contém ACTIVE: o teste do encerrado vem PRIMEIRO, senão o
         // documento morto sai com o mesmo verde do que está de pé (e a diferença
         // entre os dois é justamente o que a coluna existe para dizer).
-        if (v.indexOf('INACTIV') !== -1 || v.indexOf('INATIV') !== -1) { return 'text-bg-dark'; }
-        if (v.indexOf('CANCEL') !== -1 || v.indexOf('REJEIT') !== -1 || v.indexOf('REJECT') !== -1) { return 'text-bg-danger'; }
+        // Vermelho, e não cinza-escuro: o `Inactive` é o contrato que deixou de
+        // valer, e no cinza ele se lia como "sem informação" — do lado de um
+        // `Active` verde, a diferença precisa saltar.
+        if (v.indexOf('INACTIV') !== -1 || v.indexOf('INATIV') !== -1) { return 'text-bg-danger'; }
+        // Cancelado fica CINZA-ESCURO para não virar o mesmo vermelho do
+        // inativo: são dois desfechos diferentes (um valeu e acabou, o outro
+        // nunca chegou a valer) e a coluna precisa distingui-los.
+        if (v.indexOf('CANCEL') !== -1 || v.indexOf('REJEIT') !== -1 || v.indexOf('REJECT') !== -1) { return 'text-bg-dark'; }
         if (v.indexOf('ACTIVE') !== -1 || v.indexOf('ATIVO') !== -1) { return 'text-bg-success'; }
         if (v.indexOf('LEGAL') !== -1 || v.indexOf('SIGN') !== -1 || v.indexOf('ASSIN') !== -1) { return 'text-bg-info'; }
         if (v.indexOf('OTC') !== -1) { return 'text-bg-primary'; }
@@ -373,11 +468,20 @@
         var filtros = ['<th></th>', '<th></th>',
                        '<th><input type="text" data-col="2" placeholder="' + esc(t('stage')) + '"></th>'];
         COLS.forEach(function (c, i) {
-            th.push('<th>' + esc(c) + '</th>');
-            filtros.push('<th><input type="text" data-col="' + (i + COL0) + '" placeholder="' + esc(c) + '"></th>');
+            th.push('<th>' + esc(colLabel(c)) + '</th>');
+            filtros.push('<th><input type="text" data-col="' + (i + COL0) + '" placeholder="' + esc(colLabel(c)) + '"></th>');
         });
         $('#ob-head').html(th.join(''));
         $('#ob-head-filters').html(filtros.join(''));
+    }
+
+    // `dd/mm/aaaa` → `aaaa-mm-dd`, para o `data-order`. O que não for data
+    // devolve vazio, e a célula sai sem `data-order`: o DataTables volta a
+    // ordenar pelo texto, que é o comportamento certo para o que não é data
+    // (a coluna aceita texto livre quando a planilha traz um "a combinar").
+    function isoDe(v) {
+        var m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(String(v || '').trim());
+        return m ? m[3] + '-' + m[2] + '-' + m[1] : '';
     }
 
     function linha(r) {
@@ -385,7 +489,14 @@
                   '<td>' + acoes() + '</td>'];
         var marca = r._stage_derived
             ? ' <i class="ti ti-wand" title="' + esc(t('derived')) + '" style="opacity:.55"></i>' : '';
-        td.push('<td>' + (r._stage ? esc(r._stage) + marca : '') + '</td>');
+        // Encerrado não tem etapa — ninguém trabalha nele —, e a célula saía em
+        // BRANCO, que se lê como "ainda não chegou em ninguém": o contrário do
+        // que aconteceu. O badge diz o desfecho, no mesmo padrão da coluna
+        // Status (pill + gradiente), e quem decide o que é encerrado é o
+        // servidor (`_closed`), não uma segunda cópia da regra aqui.
+        td.push('<td>' + (r._stage ? esc(r._stage) + marca
+                          : (r._closed ? '<span class="badge rounded-pill text-bg-secondary bg-gradient">' +
+                                         esc(t('finalized')) + '</span>' : '')) + '</td>');
         COLS.forEach(function (c) {
             var v = r[c];
             if (c === 'Status') { td.push('<td>' + badge(v) + '</td>'); return; }
@@ -397,7 +508,15 @@
             }
             var ell = (c === 'Razão Social' || c === 'Contacts' || c === 'Grupo Economico'
                        || c === 'Nome Garantidor') ? ' class="ob-ell"' : '';
-            td.push('<td' + ell + ' title="' + esc(v) + '">' + esc(v) + '</td>');
+            // Coluna de data ordena pela data, não pelo texto. O servidor manda
+            // dd/mm/aaaa (é o formato da tela em todo o app) e por texto
+            // `01/12/2020` viria antes de `02/01/2026`. O `data-order` é lido
+            // pelo DataTables sozinho: mostra um valor, ordena por outro — e o
+            // filtro continua casando o que está NA TELA, que é o que quem
+            // digita copia.
+            var ordem = (DATECOLS.indexOf(c) !== -1) ? isoDe(v) : '';
+            td.push('<td' + ell + (ordem ? ' data-order="' + esc(ordem) + '"' : '') +
+                    ' title="' + esc(v) + '">' + esc(v) + '</td>');
         });
         return '<tr data-id="' + esc(r[IDCOL]) + '">' + td.join('') + '</tr>';
     }
@@ -482,7 +601,7 @@
 
     function montaColunas() {
         var html = COLS.map(function (c, i) {
-            return '<label><input type="checkbox" checked data-c="' + (i + COL0) + '"> ' + esc(c) + '</label>';
+            return '<label><input type="checkbox" checked data-c="' + (i + COL0) + '"> ' + esc(colLabel(c)) + '</label>';
         }).join('');
         $('#ob-cols-menu').html(html).off('change').on('change', 'input', function () {
             table.column(parseInt($(this).data('c'), 10)).visible(this.checked);
@@ -500,6 +619,9 @@
                 DATECOLS = j.date_columns || [];
                 SIGTYPES = j.signature_types || [];
                 SIGCOL = j.signature_column || '';
+                DOCTYPES = j.doc_types || [];
+                DOCTYPECOL = j.doc_type_column || '';
+                GUAROPTS = j.guarantor_options || [];
                 dados = j.rows || [];
                 $('#ob-src').html(
                     j.db_ready
@@ -515,84 +637,107 @@
             });
     }
 
-    // ── Edição na linha ────────────────────────────────────────────────────
-    // A edição é NA GRADE (não em modal): são trinta colunas, e um modal com
-    // trinta campos esconde justamente a linha que se está corrigindo.
-    var editando = null;
+    // ── Edição em MODAL ────────────────────────────────────────────────────
+    // Era na grade, e a grade tem trinta colunas com `scrollX`: para chegar num
+    // campo do fim a pessoa rolava a tabela para o lado e perdia de vista a
+    // linha e o cabeçalho — editava sem saber em que coluna estava. O modal
+    // mostra os campos ROTULADOS, dois por vez, e é o padrão da casa (o mesmo
+    // do New Request ao lado).
+    //
+    // Ele serve os DOIS atos: editar a linha que existe e criar uma nova. É o
+    // mesmo formulário — o que muda é o `id` ir ou não no payload, e o endpoint
+    // já trata os dois (`/docs/save` sem `id` chama `add_row`).
+    var editandoId = null;
 
-    function entraEdicao($tr) {
-        if (editando) { sai(); }
-        var id = $tr.data('id');
-        var r = dados.filter(function (x) { return String(x[IDCOL]) === String(id); })[0];
-        if (!r) { return; }
-        editando = { id: id, $tr: $tr, orig: $tr.html() };
-        var tds = $tr.children('td');
-        COLS.forEach(function (c, i) {
-            var v = (c === 'Aging') ? '' : (r[c] == null ? '' : r[c]);
-            if (c === 'Aging') { return; }        // derivado: não se digita
-            // Tipo de Assinatura é DOMÍNIO FECHADO (FepWeb · DocuSign · Manual),
-            // então o campo é um `select`. Digitado à mão, um `Fepweb` ou um
-            // `Física` entrariam como valor novo e a linha deixaria de casar com
-            // as outras — o filtro por coluna passaria a ter dois nomes para a
-            // mesma coisa. O valor que já está gravado entra na lista mesmo se
-            // não for um dos três: escondê-lo faria o Save trocar o tipo da
-            // linha sem ninguém pedir.
-            if (SIGCOL && c === SIGCOL && SIGTYPES.length) {
-                var opts = SIGTYPES.slice();
-                if (v && opts.indexOf(v) === -1) { opts.unshift(v); }
-                $(tds[i + COL0]).html(
-                    '<select data-col="' + esc(c) + '">' +
-                    '<option value=""></option>' +
-                    opts.map(function (o) {
-                        return '<option value="' + esc(o) + '"' +
-                               (String(o) === String(v) ? ' selected' : '') + '>' +
-                               esc(o) + '</option>';
-                    }).join('') + '</select>');
-                return;
-            }
-            $(tds[i + COL0]).html('<input type="text" data-col="' + esc(c) + '" value="' + esc(v) + '">');
-        });
-        $(tds[1]).html(
-            '<div class="d-flex justify-content-center gap-1">' +
-              '<button class="btn btn-sm btn-success rounded-circle btn-act ob-save" ' +
-                'data-bs-toggle="tooltip" data-bs-custom-class="tooltip-success" title="' + esc(t('save')) + '">' +
-                '<i class="ti ti-device-floppy"></i></button>' +
-              '<button class="btn btn-sm btn-secondary rounded-circle btn-act ob-cancel" ' +
-                'data-bs-toggle="tooltip" data-bs-custom-class="tooltip-secondary" title="' + esc(t('cancel')) + '">' +
-                '<i class="ti ti-x"></i></button>' +
-            '</div>');
-        $tr.addClass('ob-editing');
-        // Datas em dd/mm/aaaa mesmo na edição: `<input type="date">` visível é
-        // proibido (o campo nativo desenha no locale do SISTEMA, e no Windows do
-        // JP isso é mm/dd/yyyy). O helper degrada para texto se faltar.
-        if (window.otcDateField) {
+    function campoDoModal(c, v) {
+        var id = 'obm-' + c.replace(/[^A-Za-z0-9]+/g, '-');
+        var campo;
+        // O tipo do campo segue o DOMÍNIO da coluna, e é o mesmo da edição em
+        // massa: um `select` aqui e um texto livre lá criariam um valor que só
+        // existe por um dos caminhos, e o filtro passaria a ter dois nomes para
+        // a mesma coisa.
+        if (SIGCOL && c === SIGCOL && SIGTYPES.length) {
+            campo = selectDe(SIGTYPES, v, id);
+        } else if (DOCTYPECOL && c === DOCTYPECOL && DOCTYPES.length) {
+            campo = selectDe(DOCTYPES, v, id);
+        } else if (c === 'Garantidor' && GUAROPTS.length) {
+            campo = selectDe(GUAROPTS, v, id);
+        } else if (DATECOLS.indexOf(c) !== -1) {
+            campo = '<input type="text" class="form-control form-control-sm ob-fld" ' +
+                    'data-col="' + esc(c) + '" id="' + id + '" autocomplete="off" ' +
+                    'placeholder="dd/mm/aaaa" value="' + esc(v) + '">';
+        } else {
+            campo = '<input type="text" class="form-control form-control-sm ob-fld" ' +
+                    'data-col="' + esc(c) + '" id="' + id + '" value="' + esc(v) + '">';
+        }
+        // Razão Social e Contacts recebem lista, não uma palavra: campo largo.
+        var largo = (c === 'Razão Social' || c === 'Contacts' || c === 'Grupo Economico');
+        return '<div class="' + (largo ? 'col-12' : 'col-md-6') + '">' +
+                 '<label class="form-label fs-xs text-muted mb-1" for="' + id + '">' +
+                   esc(colLabel(c)) + '</label>' + campo +
+               '</div>';
+    }
+
+    function selectDe(opcoes, v, id) {
+        // O valor JÁ GRAVADO entra na lista mesmo fora do domínio: escondê-lo
+        // faria o primeiro Save trocar o valor da linha sem ninguém pedir.
+        var lista = opcoes.slice();
+        if (v && lista.indexOf(v) === -1) { lista.unshift(v); }
+        return '<select class="form-select form-select-sm ob-fld" id="' + id + '">' +
+               '<option value=""></option>' +
+               lista.map(function (o) {
+                   return '<option value="' + esc(o) + '"' + (o === v ? ' selected' : '') + '>' +
+                          esc(o) + '</option>';
+               }).join('') + '</select>';
+    }
+
+    function abreModal(r) {
+        editandoId = r ? String(r[IDCOL]) : null;
+        $('#ob-modal-title').text(editandoId ? t('editTitle') : t('addTitle'));
+        var campos = colunasEditaveis().map(function (c) {
+            return campoDoModal(c, (r && r[c] != null) ? String(r[c]) : '');
+        }).join('');
+        $('#ob-modal-body').html('<div class="row g-3">' + campos + '</div>');
+        // O `data-col` precisa existir no <select> também: o `selectDe` monta a
+        // string antes de o nó existir, então ele é posto aqui, pela ordem dos
+        // campos — que é a de `colunasEditaveis`.
+        var cols = colunasEditaveis();
+        $('#ob-modal-body .ob-fld').each(function (i) { $(this).attr('data-col', cols[i]); });
+        // Datas em dd/mm/aaaa: `<input type="date">` visível é proibido (o campo
+        // nativo desenha no locale do SISTEMA, e no Windows do JP isso é
+        // mm/dd/yyyy). Guard: sem o flatpickr, degrada para texto.
+        if (typeof flatpickr !== 'undefined') {
             DATECOLS.forEach(function (c) {
-                $tr.find('input[data-col="' + c + '"]').each(function () { otcDateField(this); });
+                $('#ob-modal-body .ob-fld[data-col="' + c + '"]').each(function () {
+                    flatpickr(this, { dateFormat: 'd/m/Y', allowInput: true, disableMobile: true });
+                });
             });
         }
+        modal().show();
     }
 
-    function sai() {
-        if (!editando) { return; }
-        editando.$tr.removeClass('ob-editing').html(editando.orig);
-        editando = null;
+    var _modal = null;
+    function modal() {
+        if (!_modal) { _modal = new bootstrap.Modal(document.getElementById('ob-modal')); }
+        return _modal;
     }
 
-    function salva() {
-        if (!editando) { return; }
+    function salvaModal() {
         var vals = {};
-        // `input` E `select`: sem o segundo, o Tipo de Assinatura não entrava no
-        // payload e o Save gravava a linha SEM ele — apagando o valor anterior.
-        editando.$tr.find('input[data-col], select[data-col]').each(function () {
-            vals[$(this).data('col')] = this.value;
+        $('#ob-modal-body .ob-fld').each(function () {
+            var c = $(this).data('col');
+            if (c) { vals[c] = this.value; }
         });
+        var corpo = { values: vals };
+        if (editandoId) { corpo.id = editandoId; }
         fetch('/api/onboarding/docs/save', {
             method: 'POST', credentials: 'same-origin',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id: editando.id, values: vals })
+            body: JSON.stringify(corpo)
         }).then(function (r) { return r.json(); }).then(function (j) {
             if (!j || !j.success) { throw new Error((j && j.error) || 'erro'); }
-            editando = null;
+            modal().hide();
+            editandoId = null;
             carrega();
             if (window.Swal) {
                 Swal.fire({ icon: 'success', title: t('saved'), html: esc(t('savedTxt')),
@@ -606,11 +751,16 @@
         });
     }
 
+    $(document).on('click', '#ob-modal-save', salvaModal);
+    $('#ob-add-row').on('click', function () { abreModal(null); });
+
     // Delegado no nó da tabela: o DataTables reescreve os <td> a cada redraw,
     // então um laço no load pegaria só a primeira página.
-    $(document).on('click', '#ob-table .ob-edit', function () { entraEdicao($(this).closest('tr')); });
-    $(document).on('click', '#ob-table .ob-cancel', sai);
-    $(document).on('click', '#ob-table .ob-save', salva);
+    $(document).on('click', '#ob-table .ob-edit', function () {
+        var id = String($(this).closest('tr').data('id'));
+        var r = dados.filter(function (x) { return String(x[IDCOL]) === id; })[0];
+        if (r) { abreModal(r); }
+    });
     $(document).on('click', '#ob-table .ob-del', function () {
         var id = $(this).closest('tr').data('id');
         var go = function () {
@@ -667,7 +817,9 @@
         var sel = $('#ob-mass-col').empty()
             .append('<option value="">' + esc(t('massCol')) + '</option>');
         colunasEditaveis().forEach(function (c) {
-            sel.append($('<option>').val(c).text(c));
+            // O VALOR é o nome do banco (é ele que o servidor grava); o TEXTO é
+            // o rótulo traduzido, o mesmo do cabeçalho.
+            sel.append($('<option>').val(c).text(colLabel(c)));
         });
         campoMassa('');
     }
@@ -679,10 +831,13 @@
     // num dos caminhos.
     function campoMassa(col) {
         var $w = $('#ob-mass-val').empty();
-        if (SIGCOL && col === SIGCOL && SIGTYPES.length) {
+        var dominio = (SIGCOL && col === SIGCOL) ? SIGTYPES
+                    : (DOCTYPECOL && col === DOCTYPECOL) ? DOCTYPES
+                    : (col === 'Garantidor') ? GUAROPTS : null;
+        if (dominio && dominio.length) {
             var s = $('<select class="form-select form-select-sm" id="ob-mass-value">')
                 .append('<option value=""></option>');
-            SIGTYPES.forEach(function (o) { s.append($('<option>').val(o).text(o)); });
+            dominio.forEach(function (o) { s.append($('<option>').val(o).text(o)); });
             $w.append(s);
             return;
         }

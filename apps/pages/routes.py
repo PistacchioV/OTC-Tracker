@@ -419,6 +419,8 @@ _CONTROL_PANEL_CARDS = [
     {'id': 'mt300',       'label': 'MT300'},
     # Reference Data Routines
     {'id': 'contacts',    'label': 'Update Contacts'},
+    # Application
+    {'id': 'appversion',  'label': 'New Version Released'},
 ]
 _CP_CARD_TOKENS = {'/control-panel#' + c['id'] for c in _CONTROL_PANEL_CARDS}
 # API endpoint → the card it belongs to (for server-side enforcement).
@@ -448,6 +450,8 @@ _CP_ENDPOINT_CARD = {
     '/api/control-panel/manual-deals-ea/run': 'manualdealsea',
     '/api/control-panel/mt300/recipients': 'mt300',
     '/api/control-panel/mt300/run': 'mt300',
+    '/api/control-panel/app-version/recipients': 'appversion',
+    '/api/control-panel/app-version/run': 'appversion',
 }
 
 
@@ -2264,6 +2268,293 @@ def _dash_stats_store(period, dados):
     return dados
 
 
+# ── Os arquivos-dia do cache: um leitor só, com poda e memo ──────────────────
+# Sete endpoints varriam a árvore do cache com `os.walk` e abriam todo JSON que
+# casasse com o sufixo — as buscas das cinco telas de New Deals e as três de
+# Intrag. Na dev é um SSD com dezenas de arquivos e ninguém nota; na instância do
+# JPM a árvore está num share, cada listagem e cada abertura é ida e volta de
+# rede, e dois anos de histórico são milhares de arquivos.
+#
+# As três correções são as mesmas do painel (`_dash_scan_files`), e valem pelo
+# mesmo motivo:
+#
+#   • `os.scandir` no lugar de `os.walk`. A listagem de um diretório no SMB já
+#     devolve nome, tamanho e mtime de cada entrada, e o `DirEntry` os guarda —
+#     no Windows, `entry.stat()` não custa chamada nenhuma. Com `os.walk` essa
+#     informação é jogada fora e a checagem do memo custaria um `os.stat` por
+#     arquivo, que é MAIS caro do que não ter memo nenhum na primeira leitura.
+#   • PODAR por data. A árvore termina em `{...}/{AAAA}/{MM}/arquivo.json`, e um
+#     intervalo de datas descarta ano e mês inteiros antes de entrar neles. A
+#     poda é grossa de propósito: quem decide continua sendo a data no NOME do
+#     arquivo, como sempre foi.
+#   • LEMBRAR. Arquivo-dia já lido não é reaberto se não mudou. A chave é
+#     (mtime, tamanho) e não o caminho: o arquivo-dia de hoje é reescrito a cada
+#     importação, e um amend entra no arquivo do dia da OPERAÇÃO, que pode ser
+#     antigo — pelo caminho sozinho a tela congelaria o dia na primeira leitura
+#     do processo.
+#
+# A ORDEM é a de sempre (nome, dentro de cada pasta): a busca devolve os deals na
+# ordem em que a árvore é lida, e a ordem crua do `scandir` é a do sistema de
+# arquivos — a mesma base renderia listas diferentes no share e na dev.
+_daycache_memo = {}                     # caminho → (mtime, tamanho, dados)
+_daycache_lock = threading.Lock()
+# Teto do memo. Estourado, ele é ESVAZIADO inteiro em vez de despejar por idade:
+# o custo é uma varredura completa a mais, uma vez, e a alternativa (LRU) é
+# estado a mais para manter no caminho mais quente das telas.
+_DAYCACHE_MAX = 20000
+
+
+def _daycache_dir_ok(nome, pai, desde, ate):
+    """Este diretório pode conter arquivo-dia do intervalo?
+
+    Nome de 4 dígitos é ano; de 2 dígitos, mês — e o mês só é avaliado dentro de
+    um ano, porque fora dele não há como saber a que ano ele pertence. Nome que
+    não é número é pasta de produto e nunca é descartado: quem decide o que é
+    ano ou mês é o FORMATO do nome, não a profundidade — a árvore tem produto
+    com um nível de subpasta e produto com dois.
+    """
+    if desde is None and ate is None:
+        return True
+    if len(nome) == 4 and nome.isdigit():
+        ano = int(nome)
+        if desde is not None and ano < desde.year:
+            return False
+        if ate is not None and ano > ate.year:
+            return False
+        return True
+    if len(nome) == 2 and nome.isdigit() and len(pai) == 4 and pai.isdigit():
+        ano, mes = int(pai), int(nome)
+        if desde is not None and (ano, mes) < (desde.year, desde.month):
+            return False
+        if ate is not None and (ano, mes) > (ate.year, ate.month):
+            return False
+    return True
+
+
+def _day_files(raiz, sufixo='', desde=None, ate=None):
+    """Gera `(caminho, nome, mtime, tamanho)` dos arquivos-dia da árvore.
+
+    `desde`/`ate` são `date`/`datetime` e servem só para PODAR: o chamador
+    continua filtrando pela data do nome, que é a que vale.
+
+    Diretório que não abre é PULADO com aviso, não derruba a varredura: o share
+    fica indisponível de vez em quando, e meia lista é melhor do que um 500.
+    """
+    if not os.path.isdir(raiz):
+        return
+    pilha = [(raiz, '')]
+    while pilha:
+        atual, pai = pilha.pop()
+        subdirs, arquivos = [], []
+        try:
+            with os.scandir(atual) as entradas:
+                for e in entradas:
+                    try:
+                        if e.is_dir():
+                            if _daycache_dir_ok(e.name, pai, desde, ate):
+                                subdirs.append((e.name, e.path))
+                            continue
+                        if sufixo and not e.name.endswith(sufixo):
+                            continue
+                        st = e.stat()
+                        arquivos.append((e.name, e.path, st.st_mtime, st.st_size))
+                    except OSError:
+                        continue
+        except OSError:
+            log.warning('[daycache] não consegui listar %s', atual)
+            continue
+        # A pilha é LIFO, então os subdiretórios entram ao contrário para sair
+        # em ordem; os arquivos saem por nome, como o `sorted(files)` de antes.
+        for nome, caminho in sorted(subdirs, reverse=True):
+            pilha.append((caminho, nome))
+        for nome, caminho, mtime, size in sorted(arquivos):
+            yield (caminho, nome, mtime, size)
+
+
+def _day_json(fp, mtime, size, mutavel=False):
+    """O conteúdo de um arquivo-dia como LISTA, memoizado por (mtime, tamanho).
+
+    `mutavel=True` devolve uma cópia rasa dos registros. É para quem ALTERA os
+    dicionários depois de ler — sem ela, a alteração ficaria gravada no memo e
+    o próximo leitor veria o dado de outro request. A cópia custa microssegundos
+    contra a dezena de milissegundos de uma leitura no share, então ela é barata
+    exatamente onde importa.
+
+    Arquivo ilegível devolve lista vazia e NÃO entra no memo: um JSON quebrado
+    costuma ser um arquivo sendo escrito naquele instante, e memoizar o vazio
+    esconderia o dia até o processo reiniciar.
+    """
+    with _daycache_lock:
+        item = _daycache_memo.get(fp)
+    if item and item[0] == mtime and item[1] == size:
+        dados = item[2]
+    else:
+        try:
+            with open(fp, 'r', encoding='utf-8') as fh:
+                dados = json.load(fh)
+        except Exception:                                   # noqa: BLE001
+            return []
+        if not isinstance(dados, list):
+            dados = [dados] if isinstance(dados, dict) else []
+        with _daycache_lock:
+            if len(_daycache_memo) >= _DAYCACHE_MAX:
+                _daycache_memo.clear()
+            _daycache_memo[fp] = (mtime, size, dados)
+    if mutavel:
+        return [dict(d) if isinstance(d, dict) else d for d in dados]
+    return dados
+
+
+def _daycache_forget(fp=None):
+    """Esquece um arquivo (ou tudo). Quem REESCREVE um arquivo-dia chama isto —
+    o mtime novo já invalidaria a entrada, mas contar com isso é contar com a
+    resolução do relógio do sistema de arquivos, que num share não é garantida."""
+    with _daycache_lock:
+        if fp is None:
+            _daycache_memo.clear()
+        else:
+            _daycache_memo.pop(fp, None)
+
+# ── A varredura do painel: podar, e ler a árvore UMA vez ─────────────────────
+# O painel varria a árvore INTEIRA do cache de New Deals e abria todo JSON do
+# período. Na dev é um SSD com dezenas de arquivos e ninguém nota; na instância
+# do JPM a árvore está num share, cada operação é ida e volta de rede, e dois
+# anos de histórico são milhares de arquivos — a tela fica em "Carregando os
+# dados do painel…" por minutos, sem erro nenhum, porque nada falhou: o servidor
+# está lendo.
+#
+# Duas correções, e a segunda quase se pagou sozinha na primeira tentativa:
+#
+#   • PODAR. A árvore termina em `{Produto}/{Sub}/{AAAA}/{MM}/arquivo.json`, e o
+#     período pedido descarta ano e mês INTEIROS antes de entrar neles.
+#   • LEMBRAR. Arquivo-dia já lido não precisa ser reaberto se não mudou.
+#
+# O memo só compensa se a verificação for de GRAÇA, e é aqui que o `os.scandir`
+# entra no lugar do `os.walk`. A listagem de um diretório no SMB já devolve nome,
+# tamanho e mtime de cada entrada, e o `DirEntry` os guarda: no Windows,
+# `entry.stat()` não custa chamada nenhuma. Com `os.walk` essa informação é
+# jogada fora e cada verificação vira um `os.stat` — uma ida a mais por arquivo,
+# que é justamente o que a medição mostrou: a primeira abertura do painel ficava
+# MAIS lenta do que antes, e só a segunda ganhava. Pelo scandir, a primeira
+# abertura custa o mesmo de antes e a segunda deixa de abrir o que não mudou.
+#
+# O memo guarda os deals PROJETADOS nos campos que o endpoint usa, e não o
+# registro inteiro: são 11 campos de umas 40, e guardar tudo seria trocar minutos
+# de rede por centenas de MB no processo único que serve a mesa. Campo novo lido
+# do deal no endpoint tem de entrar nesta tupla — `check_dashboard_walk.py` varre
+# a função por AST e recusa o que ficar de fora, porque a projeção silenciosa
+# devolveria `None` sem erro nenhum.
+_DASH_DEAL_FIELDS = ('Client', 'Commodities', 'Commodity', 'Deal', 'LE',
+                     'Status', 'TradeDate', 'UnderlyingAsset')
+
+_dash_file_memo = {}                    # caminho → (mtime, tamanho, [deals])
+_dash_memo_lock = threading.Lock()
+# Teto do memo. Estourado, ele é ESVAZIADO inteiro em vez de despejar por idade:
+# o custo é uma varredura completa a mais, uma vez, e a alternativa (LRU) é
+# estado a mais para manter no caminho mais quente da tela.
+_DASH_MEMO_MAX = 8000
+
+
+def _dash_dir_matters(nome, pai, period, now):
+    """Este diretório pode conter arquivo do período pedido?
+
+    Nome de 4 dígitos é ano; de 2 dígitos, mês — e o mês só é descartado dentro
+    do ano corrente, porque em outro ano ele já não é alcançado. Nome que não
+    seja número é pasta de produto e nunca é descartado: quem decide o que é ano
+    ou mês é o FORMATO do nome, não a profundidade — a árvore tem produto com um
+    nível de subpasta e produto com dois.
+    """
+    if period == 'all':
+        return True
+    if len(nome) == 4 and nome.isdigit():
+        return int(nome) == now.year
+    if period == 'month' and len(nome) == 2 and nome.isdigit():
+        if len(pai) == 4 and pai.isdigit():
+            return int(nome) == now.month
+    return True
+
+
+def _dash_scan_files(raiz, period, now):
+    """Gera (caminho, nome, mtime, tamanho) dos arquivos da árvore, podando.
+
+    `os.scandir` no lugar de `os.walk` de propósito — ver o comentário acima: é
+    o que faz a checagem do memo não custar uma ida a mais por arquivo.
+
+    Um diretório que não abre é PULADO com aviso, não derruba a varredura: o
+    share fica indisponível de vez em quando, e meia tela é melhor do que um 500
+    no painel inteiro.
+    """
+    pilha = [(raiz, '')]
+    while pilha:
+        atual, pai = pilha.pop()
+        subdirs, arquivos = [], []
+        try:
+            with os.scandir(atual) as entradas:
+                for e in entradas:
+                    try:
+                        if e.is_dir():
+                            if _dash_dir_matters(e.name, pai, period, now):
+                                subdirs.append((e.name, e.path))
+                            continue
+                        if not e.name.endswith('.json'):
+                            continue
+                        st = e.stat()
+                        arquivos.append((e.name, e.path, st.st_mtime, st.st_size))
+                    except OSError:
+                        continue
+        except OSError:
+            log.warning('[dashboard] não consegui listar %s', atual)
+            continue
+        # ORDENADO, e por nome — nos dois níveis. A ordem de leitura decide o
+        # desempate da lista de "Recent deals" (deals do MESMO dia saem na ordem
+        # em que entraram), e a ordem crua do `scandir` é a do sistema de
+        # arquivos: o mesmo dado renderia listas diferentes no share do JPM e no
+        # disco da dev. A pilha é LIFO, então os subdiretórios entram ao
+        # contrário para sair em ordem.
+        for nome, caminho in sorted(subdirs, reverse=True):
+            pilha.append((caminho, nome))
+        for nome, caminho, mtime, size in sorted(arquivos):
+            yield (caminho, nome, mtime, size)
+
+
+def _dash_file_deals(fp, fname, mtime, size, fdate, product, deal_type):
+    """Os deals de UM arquivo-dia, já projetados, filtrados e anotados.
+
+    A chave do memo é (mtime, tamanho) e não só o caminho: o arquivo-dia de HOJE
+    é reescrito a cada importação, e um amend entra no arquivo do dia da operação
+    — que pode ser antigo. Pelo caminho sozinho o painel mostraria o dia
+    congelado na primeira leitura do processo.
+    """
+    with _dash_memo_lock:
+        item = _dash_file_memo.get(fp)
+    if item and item[0] == mtime and item[1] == size:
+        return item[2]
+    try:
+        with open(fp, 'r', encoding='utf-8') as fh:
+            data = json.load(fh)
+    except Exception:                                       # noqa: BLE001
+        return []
+    saida = []
+    fdate_txt = fdate.strftime('%Y-%m-%d')
+    for d in (data if isinstance(data, list) else []):
+        if not isinstance(d, dict) or not (d.get('Deal') or '').strip():
+            continue
+        # Cancelado via API não conta em nenhuma métrica.
+        if str(d.get('Status') or '').strip() == 'Canceled':
+            continue
+        projetado = {k: d.get(k) for k in _DASH_DEAL_FIELDS}
+        projetado['_fdate'] = fdate_txt
+        projetado['_product'] = product
+        projetado['_type'] = deal_type
+        saida.append(projetado)
+    with _dash_memo_lock:
+        if len(_dash_file_memo) >= _DASH_MEMO_MAX:
+            _dash_file_memo.clear()
+        _dash_file_memo[fp] = (mtime, size, saida)
+    return saida
+
+
+
 @blueprint.route('/api/dashboard-stats')
 def api_dashboard_stats():
     if not session.get('authenticated'):
@@ -2328,34 +2619,20 @@ def api_dashboard_stats():
     # Generic scan of all new deals cache directories
     all_deals = []
     if os.path.isdir(NEW_DEALS_CACHE_ROOT):
-        for root, _dirs, files in os.walk(NEW_DEALS_CACHE_ROOT):
-            for fname in sorted(files):
-                if not fname.endswith('.json') or fname.endswith('.tmp') or fname.endswith('.bak'):
-                    continue
-                date_str = fname[:8]
-                try:
-                    fdate = datetime.strptime(date_str, '%Y%m%d')
-                except ValueError:
-                    continue
-                if not _file_in_period(fdate):
-                    continue
-                fp = os.path.join(root, fname)
-                product = _product_from_path(fp)
-                deal_type = _type_from_product(product)
-                try:
-                    with open(fp, 'r', encoding='utf-8') as fh:
-                        data = json.load(fh)
-                    for d in data:
-                        if isinstance(d, dict) and (d.get('Deal') or '').strip():
-                            # Cancelado via API não conta em nenhuma métrica
-                            if str(d.get('Status') or '').strip() == 'Canceled':
-                                continue
-                            d['_fdate']   = fdate.strftime('%Y-%m-%d')
-                            d['_product'] = product
-                            d['_type']    = deal_type
-                            all_deals.append(d)
-                except Exception:
-                    pass
+        for fp, fname, mtime, size in _dash_scan_files(NEW_DEALS_CACHE_ROOT, period, now):
+            if fname.endswith('.tmp') or fname.endswith('.bak'):
+                continue
+            try:
+                fdate = datetime.strptime(fname[:8], '%Y%m%d')
+            except ValueError:
+                continue
+            # A poda por diretório é grossa (ano e mês); quem decide de fato é a
+            # data no NOME do arquivo, como sempre foi.
+            if not _file_in_period(fdate):
+                continue
+            product = _product_from_path(fp)
+            all_deals.extend(_dash_file_deals(
+                fp, fname, mtime, size, fdate, product, _type_from_product(product)))
 
     def _is_fxo(d):
         return 'fxo' in (d.get('_product') or '').lower()
@@ -2408,15 +2685,23 @@ def api_dashboard_stats():
         for d in client_deals
         if (d.get('Client') or '').strip()
     )
+    # `most_common` desempata pela ordem de INSERÇÃO, que aqui é a ordem em que a
+    # árvore foi lida — a do sistema de arquivos. Dois clientes com a MESMA
+    # contagem trocavam de lugar entre o share do JPM e o disco da dev, e entre
+    # duas leituras no mesmo lugar. O desempate passa a ser o nome, que é
+    # arbitrário do mesmo jeito mas é sempre o mesmo. Vale para os três Top 5.
+    def _top5(contador):
+        return sorted(contador.items(), key=lambda kv: (-kv[1], kv[0]))[:5]
+
     top5_clients = []
-    for c, n in client_counts.most_common(5):
+    for c, n in _top5(client_counts):
         by_product = Counter(
             d['_product'] for d in client_deals if (d.get('Client') or '').strip() == c
         )
         top5_clients.append({'label': c, 'count': n, 'by_product': dict(by_product)})
 
     product_counts = Counter(d['_product'] for d in counted_deals)
-    top5_products  = [{'label': p, 'count': n} for p, n in product_counts.most_common(5)]
+    top5_products  = [{'label': p, 'count': n} for p, n in _top5(product_counts)]
 
     # Top 5 Underlying Assets — commodities show the Commodity name; FXO (no
     # Commodity) falls back to UnderlyingAsset (the currency).
@@ -2425,7 +2710,7 @@ def api_dashboard_stats():
     underlying_counts = Counter(
         _underlying_label(d) for d in counted_deals if _underlying_label(d)
     )
-    top5_underlying = [{'label': c, 'count': n} for c, n in underlying_counts.most_common(5)]
+    top5_underlying = [{'label': c, 'count': n} for c, n in _top5(underlying_counts)]
 
     # Monthly counts for current year (always full year, ignores period filter)
     monthly_opt = [0] * 12
@@ -2436,55 +2721,58 @@ def api_dashboard_stats():
     monthly_ndf_otherpub = [0] * 12
     monthly_ndf_fwdstart = [0] * 12
     if os.path.isdir(NEW_DEALS_CACHE_ROOT):
-        for root, _dirs, files in os.walk(NEW_DEALS_CACHE_ROOT):
-            for fname in files:
-                if not fname.endswith('.json') or fname.endswith('.tmp') or fname.endswith('.bak'):
-                    continue
-                try:
-                    fdate = datetime.strptime(fname[:8], '%Y%m%d')
-                except ValueError:
-                    continue
-                if fdate.year != cur_year:
-                    continue
-                fp = os.path.join(root, fname)
-                product = _product_from_path(fp)
-                is_fxo_file = 'fxo' in product.lower()
-                ptype = _type_from_product(product)
-                gen_bucket = ''
-                if is_fxo_file:
-                    target = monthly_fxo
-                elif ptype == 'OPT':
-                    target = monthly_opt
-                elif ptype == 'SWAP':
-                    target = monthly_swap
-                else:
-                    gen_bucket = _ndf_bucket(product)
-                    target = {'vanilla': monthly_ndf_vanilla,
-                              'otherpub': monthly_ndf_otherpub,
-                              'fwdstart': monthly_ndf_fwdstart}.get(
-                                  gen_bucket, monthly_ndf)
-                try:
-                    with open(fp, 'r', encoding='utf-8') as fh:
-                        data = json.load(fh)
-                    # Same rule as the totals above: count every leg that carries a
-                    # deal except the Banco J.P. Morgan leg — this keeps the client
-                    # leg and one intragroup leg while dropping the mirror view, so
-                    # a deal seen from two sides is counted only once. Os NDF
-                    # genéricos (vanilla/other pub/fwd start) usam a regra de
-                    # pares LE × contraparte (_gen_ndf_counted).
-                    cnt = sum(
-                        1 for d in data
-                        if isinstance(d, dict)
-                        and (d.get('Deal') or '').strip()
-                        and str(d.get('Status') or '').strip() != 'Canceled'
-                        and (_gen_ndf_counted(d) if gen_bucket else not _is_bank(d))
-                    )
-                    target[fdate.month - 1] += cnt
-                except Exception:
-                    pass
+        # Segunda passada pela MESMA árvore — os contadores por mês são sempre do
+        # ano inteiro e ignoram o período pedido. Ela usa o mesmo `_dash_scan_files`
+        # e o mesmo memo da primeira: com `period='year'` os arquivos já foram
+        # lidos e esta passada não abre nenhum, e com 'month' ou 'all' ela lê o
+        # ano uma vez e a primeira passada aproveita. Antes eram dois `os.walk`
+        # independentes, cada um abrindo os arquivos do próprio critério — o mesmo
+        # arquivo lido DUAS vezes do share na mesma tela.
+        for fp, fname, mtime, size in _dash_scan_files(NEW_DEALS_CACHE_ROOT, 'year', now):
+            if fname.endswith('.tmp') or fname.endswith('.bak'):
+                continue
+            try:
+                fdate = datetime.strptime(fname[:8], '%Y%m%d')
+            except ValueError:
+                continue
+            if fdate.year != cur_year:
+                continue
+            product = _product_from_path(fp)
+            is_fxo_file = 'fxo' in product.lower()
+            ptype = _type_from_product(product)
+            gen_bucket = ''
+            if is_fxo_file:
+                target = monthly_fxo
+            elif ptype == 'OPT':
+                target = monthly_opt
+            elif ptype == 'SWAP':
+                target = monthly_swap
+            else:
+                gen_bucket = _ndf_bucket(product)
+                target = {'vanilla': monthly_ndf_vanilla,
+                          'otherpub': monthly_ndf_otherpub,
+                          'fwdstart': monthly_ndf_fwdstart}.get(
+                              gen_bucket, monthly_ndf)
+            # Same rule as the totals above: count every leg that carries a
+            # deal except the Banco J.P. Morgan leg — this keeps the client
+            # leg and one intragroup leg while dropping the mirror view, so
+            # a deal seen from two sides is counted only once. Os NDF
+            # genéricos (vanilla/other pub/fwd start) usam a regra de
+            # pares LE × contraparte (_gen_ndf_counted).
+            # O `Deal` vazio e o `Canceled` já foram descartados na leitura.
+            target[fdate.month - 1] += sum(
+                1 for d in _dash_file_deals(fp, fname, mtime, size, fdate, product, ptype)
+                if (_gen_ndf_counted(d) if gen_bucket else not _is_bank(d))
+            )
 
     # Recent deals: last 50 client rows sorted desc — frontend filters by product
-    recent_sorted = sorted(client_deals, key=lambda d: d.get('_fdate', ''), reverse=True)[:50]
+    # A chave leva o Deal junto: `sorted` é estável, então sem ele o desempate
+    # entre deals do MESMO dia era a ordem de leitura da árvore — que é a do
+    # sistema de arquivos, e portanto diferente no share do JPM e no disco da
+    # dev. A mesma base rendia listas diferentes, e ninguém tinha como notar.
+    recent_sorted = sorted(client_deals,
+                           key=lambda d: (d.get('_fdate', ''), d.get('Deal', '')),
+                           reverse=True)[:50]
     recent_deals = [
         {
             'deal':    d.get('Deal', ''),
@@ -19527,22 +19815,14 @@ def api_search_deal_cache():
     body = request.get_json(silent=True) or {}
     filters = body.get('filters', [])
 
+    # `_day_files` + `_day_json`: `os.scandir` (a listagem já traz mtime e
+    # tamanho) e memo por arquivo, então a segunda busca não reabre o que não
+    # mudou. A busca não tem intervalo de datas, então não há o que podar.
     matched = []
-    for root, _dirs, files in os.walk(CACHE_BASE_DIR):
-        for fname in sorted(files):
-            if not fname.endswith('_optcomm.json'):
-                continue
-            fpath = os.path.join(root, fname)
-            try:
-                with open(fpath, 'r', encoding='utf-8') as fh:
-                    deals = json.load(fh)
-                if not isinstance(deals, list):
-                    deals = [deals]
-                for deal in deals:
-                    if _deal_matches(deal, filters):
-                        matched.append(deal)
-            except Exception:
-                continue
+    for fpath, _fname, mtime, size in _day_files(CACHE_BASE_DIR, '_optcomm.json'):
+        for deal in _day_json(fpath, mtime, size):
+            if _deal_matches(deal, filters):
+                matched.append(deal)
 
     return jsonify({"success": True, "deals": matched})
 
@@ -19821,22 +20101,14 @@ def api_search_fxo_cache():
         return jsonify({"success": False, "message": "Not authenticated"}), 401
     body = request.get_json(silent=True) or {}
     filters = body.get('filters', [])
+    # `_day_files` + `_day_json`: `os.scandir` (a listagem já traz mtime e
+    # tamanho) e memo por arquivo, então a segunda busca não reabre o que não
+    # mudou. A busca não tem intervalo de datas, então não há o que podar.
     matched = []
-    for root, _dirs, files in os.walk(OPT_FXO_CACHE_DIR):
-        for fname in sorted(files):
-            if not fname.endswith('_optfxo.json'):
-                continue
-            fpath = os.path.join(root, fname)
-            try:
-                with open(fpath, 'r', encoding='utf-8') as fh:
-                    deals = json.load(fh)
-                if not isinstance(deals, list):
-                    deals = [deals]
-                for deal in deals:
-                    if _deal_matches(deal, filters):
-                        matched.append(deal)
-            except Exception:
-                continue
+    for fpath, _fname, mtime, size in _day_files(OPT_FXO_CACHE_DIR, '_optfxo.json'):
+        for deal in _day_json(fpath, mtime, size):
+            if _deal_matches(deal, filters):
+                matched.append(deal)
     return jsonify({"success": True, "deals": matched})
 
 
@@ -25072,25 +25344,18 @@ def api_intrag_ndf():
         # Trade Date range — load every day-file within [from, to] inclusive
         d_from = _parse_date_any(date_from)
         d_to   = _parse_date_any(date_to)
-        if os.path.isdir(INTRAG_NDF_CACHE_DIR):
-            for root, _, files in os.walk(INTRAG_NDF_CACHE_DIR):
-                for fname in sorted(files):
-                    if not fname.endswith('_intrag_ndf.json'):
-                        continue
-                    fdate = _parse_date_any(fname[:8])
-                    if fdate is None:
-                        continue
-                    if d_from and fdate < d_from:
-                        continue
-                    if d_to and fdate > d_to:
-                        continue
-                    try:
-                        with open(os.path.join(root, fname), 'r', encoding='utf-8') as fh:
-                            data = json.load(fh)
-                        if isinstance(data, list):
-                            entries.extend(data)
-                    except Exception as exc:
-                        log.warning('[INTRAG NDF] Skip %s: %s', fname, exc)
+        # Com intervalo há o que PODAR: ano e mês inteiros fora dele são
+        # descartados antes de o `scandir` entrar neles. Quem decide continua
+        # sendo a data no NOME do arquivo, logo abaixo.
+        for fp, fname, mtime, size in _day_files(INTRAG_NDF_CACHE_DIR, '_intrag_ndf.json', d_from, d_to):
+            fdate = _parse_date_any(fname[:8])
+            if fdate is None:
+                continue
+            if d_from and fdate < d_from:
+                continue
+            if d_to and fdate > d_to:
+                continue
+            entries.extend(_day_json(fp, mtime, size))
     elif date_str:
         try:
             ref = datetime.strptime(date_str, '%Y-%m-%d')
@@ -25104,19 +25369,9 @@ def api_intrag_ndf():
         except Exception as exc:
             log.warning('[INTRAG NDF] date load error date=%r: %s', date_str, exc)
     else:
-        if os.path.isdir(INTRAG_NDF_CACHE_DIR):
-            for root, _, files in os.walk(INTRAG_NDF_CACHE_DIR):
-                for fname in sorted(files):
-                    if not fname.endswith('_intrag_ndf.json'):
-                        continue
-                    fp = os.path.join(root, fname)
-                    try:
-                        with open(fp, 'r', encoding='utf-8') as fh:
-                            data = json.load(fh)
-                        if isinstance(data, list):
-                            entries.extend(data)
-                    except Exception as exc:
-                        log.warning('[INTRAG NDF] Skip %s: %s', fp, exc)
+        # Sem data nenhuma: a árvore inteira, e aí só o memo ajuda.
+        for fp, _fname, mtime, size in _day_files(INTRAG_NDF_CACHE_DIR, '_intrag_ndf.json'):
+            entries.extend(_day_json(fp, mtime, size))
     return jsonify({'success': True, 'entries': entries})
 
 
@@ -25132,25 +25387,18 @@ def api_intrag_option():
     if date_from or date_to:
         d_from = _parse_date_any(date_from)
         d_to   = _parse_date_any(date_to)
-        if os.path.isdir(INTRAG_OPT_CACHE_DIR):
-            for root, _, files in os.walk(INTRAG_OPT_CACHE_DIR):
-                for fname in sorted(files):
-                    if not fname.endswith(suffix):
-                        continue
-                    fdate = _parse_date_any(fname[:8])
-                    if fdate is None:
-                        continue
-                    if d_from and fdate < d_from:
-                        continue
-                    if d_to and fdate > d_to:
-                        continue
-                    try:
-                        with open(os.path.join(root, fname), 'r', encoding='utf-8') as fh:
-                            data = json.load(fh)
-                        if isinstance(data, list):
-                            entries.extend(data)
-                    except Exception as exc:
-                        log.warning('[INTRAG OPT] Skip %s: %s', fname, exc)
+        # Com intervalo há o que PODAR: ano e mês inteiros fora dele são
+        # descartados antes de o `scandir` entrar neles. Quem decide continua
+        # sendo a data no NOME do arquivo, logo abaixo.
+        for fp, fname, mtime, size in _day_files(INTRAG_OPT_CACHE_DIR, suffix, d_from, d_to):
+            fdate = _parse_date_any(fname[:8])
+            if fdate is None:
+                continue
+            if d_from and fdate < d_from:
+                continue
+            if d_to and fdate > d_to:
+                continue
+            entries.extend(_day_json(fp, mtime, size))
     elif date_str:
         try:
             ref = datetime.strptime(date_str, '%Y-%m-%d')
@@ -25164,18 +25412,9 @@ def api_intrag_option():
         except Exception as exc:
             log.warning('[INTRAG OPT] date load error date=%r: %s', date_str, exc)
     else:
-        if os.path.isdir(INTRAG_OPT_CACHE_DIR):
-            for root, _, files in os.walk(INTRAG_OPT_CACHE_DIR):
-                for fname in sorted(files):
-                    if not fname.endswith(suffix):
-                        continue
-                    try:
-                        with open(os.path.join(root, fname), 'r', encoding='utf-8') as fh:
-                            data = json.load(fh)
-                        if isinstance(data, list):
-                            entries.extend(data)
-                    except Exception as exc:
-                        log.warning('[INTRAG OPT] Skip %s: %s', fname, exc)
+        # Sem data nenhuma: a árvore inteira, e aí só o memo ajuda.
+        for fp, _fname, mtime, size in _day_files(INTRAG_OPT_CACHE_DIR, suffix):
+            entries.extend(_day_json(fp, mtime, size))
     return jsonify({'success': True, 'entries': entries})
 
 
@@ -25648,25 +25887,18 @@ def api_intrag_swap():
     if date_from or date_to:
         d_from = _parse_date_any(date_from)
         d_to   = _parse_date_any(date_to)
-        if os.path.isdir(INTRAG_SWAP_CACHE_DIR):
-            for root, _, files in os.walk(INTRAG_SWAP_CACHE_DIR):
-                for fname in sorted(files):
-                    if not fname.endswith(suffix):
-                        continue
-                    fdate = _parse_date_any(fname[:8])
-                    if fdate is None:
-                        continue
-                    if d_from and fdate < d_from:
-                        continue
-                    if d_to and fdate > d_to:
-                        continue
-                    try:
-                        with open(os.path.join(root, fname), 'r', encoding='utf-8') as fh:
-                            data = json.load(fh)
-                        if isinstance(data, list):
-                            entries.extend(data)
-                    except Exception as exc:
-                        log.warning('[INTRAG SWAP] Skip %s: %s', fname, exc)
+        # Com intervalo há o que PODAR: ano e mês inteiros fora dele são
+        # descartados antes de o `scandir` entrar neles. Quem decide continua
+        # sendo a data no NOME do arquivo, logo abaixo.
+        for fp, fname, mtime, size in _day_files(INTRAG_SWAP_CACHE_DIR, suffix, d_from, d_to):
+            fdate = _parse_date_any(fname[:8])
+            if fdate is None:
+                continue
+            if d_from and fdate < d_from:
+                continue
+            if d_to and fdate > d_to:
+                continue
+            entries.extend(_day_json(fp, mtime, size))
     elif date_str:
         try:
             ref = datetime.strptime(date_str, '%Y-%m-%d')
@@ -25680,18 +25912,9 @@ def api_intrag_swap():
         except Exception as exc:
             log.warning('[INTRAG SWAP] date load error date=%r: %s', date_str, exc)
     else:
-        if os.path.isdir(INTRAG_SWAP_CACHE_DIR):
-            for root, _, files in os.walk(INTRAG_SWAP_CACHE_DIR):
-                for fname in sorted(files):
-                    if not fname.endswith(suffix):
-                        continue
-                    try:
-                        with open(os.path.join(root, fname), 'r', encoding='utf-8') as fh:
-                            data = json.load(fh)
-                        if isinstance(data, list):
-                            entries.extend(data)
-                    except Exception as exc:
-                        log.warning('[INTRAG SWAP] Skip %s: %s', fname, exc)
+        # Sem data nenhuma: a árvore inteira, e aí só o memo ajuda.
+        for fp, _fname, mtime, size in _day_files(INTRAG_SWAP_CACHE_DIR, suffix):
+            entries.extend(_day_json(fp, mtime, size))
     return jsonify({'success': True, 'entries': entries})
 
 
@@ -25906,22 +26129,14 @@ def api_ndf_search_deal_cache():
     body = request.get_json(silent=True) or {}
     filters = body.get('filters', [])
 
+    # `_day_files` + `_day_json`: `os.scandir` (a listagem já traz mtime e
+    # tamanho) e memo por arquivo, então a segunda busca não reabre o que não
+    # mudou. A busca não tem intervalo de datas, então não há o que podar.
     matched = []
-    for root, _dirs, files in os.walk(NDF_COMM_CACHE_DIR):
-        for fname in sorted(files):
-            if not fname.endswith('_ndfcomm.json'):
-                continue
-            fpath = os.path.join(root, fname)
-            try:
-                with open(fpath, 'r', encoding='utf-8') as fh:
-                    deals = json.load(fh)
-                if not isinstance(deals, list):
-                    deals = [deals]
-                for deal in deals:
-                    if _deal_matches(deal, filters):
-                        matched.append(deal)
-            except Exception:
-                continue
+    for fpath, _fname, mtime, size in _day_files(NDF_COMM_CACHE_DIR, '_ndfcomm.json'):
+        for deal in _day_json(fpath, mtime, size):
+            if _deal_matches(deal, filters):
+                matched.append(deal)
 
     return jsonify({"success": True, "deals": matched})
 
@@ -29418,8 +29633,10 @@ def _conf_ndf_xml(picked, merc, ref, tipo='NDF', prefixo='NDF_Comm',
     numeroContrato   = DealName quando a confirmação tem 1 operação
                        (Mondelez: DealName_Mercadoria); com várias,
                        <prefixo>_YYYYMMDD_Mercadoria.
-    Opções de Commodities usam o mesmo contrato com tipo='Option' e
-    prefixo='Opt_Comm' — o resto do padrão é idêntico ao NDF.
+    Opções de Commodities usam o mesmo contrato com tipo='OPTION' e
+    prefixo='Opt_Comm' — o resto do padrão é idêntico ao NDF. O tipo vai em
+    MAIÚSCULO como o `NDF`: é o que o FepWeb lê, e o `Option` com inicial
+    maiúscula era a única saída do app fora desse padrão.
     Opções de Câmbio (FXO) usam prefixo='Opt_FXO' e leem a moeda do
     ccy_field='UnderlyingAsset'; nelas o strike já é a cotação em BRL, então
     não há Spot FXRate para buscar e warn_no_spot=False cala o aviso que só
@@ -30174,7 +30391,11 @@ def api_conf_optcomm_save():
         picked = _conf_pick_optcomm(ref, acr, merc, family)
         if picked:
             numero_contrato, xml_str, xml_warns = _conf_ndf_xml(
-                picked, merc, ref, tipo='Option', prefixo='Opt_Comm')
+                # MAIÚSCULO: é como o FepWeb espera o tipo de operação, e é
+                # como o `NDF` (que sempre saiu em caixa alta) já ia. O
+                # `Option` com inicial maiúscula era a única saída fora do
+                # padrão, nas duas famílias de opção.
+                picked, merc, ref, tipo='OPTION', prefixo='Opt_Comm')
             # Mesmo nome-base do .doc/.pdf: os três arquivos da confirmação
             # ficam juntos na listagem da pasta. O numeroContrato continua
             # dentro do XML (é ele que o FepWeb lê), só não nomeia mais o
@@ -30598,7 +30819,8 @@ def api_conf_optfxo_save():
         picked = _conf_pick_optfxo(ref, acr, merc, family)
         if picked:
             numero_contrato, xml_str, xml_warns = _conf_ndf_xml(
-                picked, merc, ref, tipo='Option', prefixo='Opt_FXO',
+                # MAIÚSCULO, pela mesma razão do Opt Comm.
+                picked, merc, ref, tipo='OPTION', prefixo='Opt_FXO',
                 ccy_field='UnderlyingAsset', warn_no_spot=False)
             # Mesmo nome-base do .doc/.pdf: os três arquivos da confirmação
             # ficam juntos na listagem da pasta.
@@ -34257,6 +34479,299 @@ def api_cp_mt300_run():
                         ' (+{} in copy)'.format(out['cc']) if out['cc'] else '')})
 
 
+
+# ==============================================================================
+# CONTROL PANEL — New Version Released (aviso de reinício para a mesa)
+# ==============================================================================
+# A instância do time roda com o reloader DESLIGADO: depois de um deploy, o
+# processo que está de pé continua servindo o código velho até alguém derrubá-lo
+# e subir de novo. Quem usa a ferramenta não tem como saber que isso aconteceu —
+# a tela abre, tudo responde, e o que ela mostra é a versão anterior. Este card é
+# o aviso: um e-mail para TODO usuário ativo dizendo qual versão foi liberada e
+# como reiniciar.
+#
+# A versão NÃO se digita. Ela sai do `link.txt` que fica ao lado do
+# `start-otc-tracker.bat`, na pasta Application — o mesmo arquivo que aponta para
+# o código em uso. Digitada, ela seria o número que alguém lembrou de trocar; lida
+# do arquivo, é a que a instância vai de fato subir.
+
+_APPVER_DIR = _DAILY_METRIC_DIR
+_APPVER_REC_FILE = os.path.join(_APPVER_DIR, 'app_version_recipients.json')
+_APPVER_STATUS_FILE = os.path.join(_APPVER_DIR, 'app_version_status.json')
+
+# O .bat que a mesa executa na pasta Application. Constante porque ele aparece em
+# dois lugares (o corpo do e-mail e o texto do card) e um nome errado manda a
+# pessoa procurar um arquivo que não existe.
+_APPVER_STARTER = 'start-otc-tracker.bat'
+
+# `link.txt` mora na pasta Application, e o caminho dela pende do
+# `SHARED_DRIVE_ROOT` — nunca de um literal `I:\...` ou `\\servidor\...`, que
+# ficaria preso na letra mapeada no dia em que a instância passasse a falar com o
+# UNC (CLAUDE.md §8, e o `check_config_names` recusa por AST).
+_APPVER_LINK_FILE = os.environ.get('OTC_VERSION_FILE', '').strip() or os.path.join(
+    Config.SHARED_DRIVE_ROOT, 'Confirmation', 'Derivativos', 'OTC Tracker',
+    'Application', 'link.txt')
+
+# `v8`, `v10`, `v8.2` — como TOKEN INTEIRO. Sem as âncoras, o `v` de qualquer
+# palavra seguida de dígito casaria, e o caminho de rede que costuma estar no
+# arquivo é cheio de candidatos.
+_APPVER_RE = re.compile(r'(?<![A-Za-z0-9])[vV](\d+(?:\.\d+)*)(?![A-Za-z0-9])')
+
+
+def _appver_read_link(path=None):
+    """(versao, texto_lido, erro) do `link.txt`.
+
+    Erro em vez de exceção porque o card precisa DIZER o que houve: um arquivo
+    que não abre e uma versão que não se reconhece são problemas diferentes, e
+    os dois têm de aparecer na tela antes de alguém clicar em enviar.
+
+    A leitura tenta utf-8 e cai para latin-1: o arquivo é escrito no Windows e
+    um acento em cp1252 estouraria a decodificação — perder o acento é melhor do
+    que não ler a versão.
+    """
+    alvo = path or _APPVER_LINK_FILE
+    try:
+        with open(alvo, 'rb') as fh:
+            bruto = fh.read()
+    except Exception as e:                                  # noqa: BLE001
+        return ('', '', '{}: {}'.format(type(e).__name__, e))
+    try:
+        texto = bruto.decode('utf-8')
+    except UnicodeDecodeError:
+        texto = bruto.decode('latin-1', 'replace')
+    texto = texto.strip()
+    if not texto:
+        return ('', '', 'link.txt está vazio')
+    # A ÚLTIMA ocorrência, não a primeira: o arquivo costuma guardar um caminho
+    # terminado na pasta da versão (`...\otc-source\v8`), e é o fim dele que
+    # responde "qual versão".
+    achados = _APPVER_RE.findall(texto)
+    if achados:
+        return ('v' + achados[-1], texto, '')
+    # Sem `vN`, vale o último pedaço do que estiver escrito — um nome de pasta,
+    # uma data, o que a pessoa que publicou tiver posto. Só se for curto: um
+    # parágrafo inteiro no lugar da versão é ilegível no e-mail.
+    ultima = [ln.strip() for ln in texto.splitlines() if ln.strip()][-1]
+    pedaco = re.split(r'[\\/]', ultima)[-1].strip()
+    if pedaco and len(pedaco) <= 40:
+        return (pedaco, texto, '')
+    return ('', texto, 'não reconheci a versão no conteúdo do link.txt')
+
+
+def _appver_active_users():
+    """[(nome, e-mail)] de quem está ATIVO no cadastro de usuários.
+
+    `Active` é o status da tela de Users & Roles, e a comparação é normalizada
+    porque o valor é gravado por um `select` mas pode ter vindo de importação
+    antiga. `Pending` (quem se cadastrou e ainda não foi aprovado) e `Inactive`
+    ficam de fora: o aviso é para quem usa a ferramenta.
+
+    Só leitura — `readonly=True`, senão a consulta entra na fila de escrita
+    (CLAUDE.md §4).
+    """
+    conn = get_db_connection(readonly=True)
+    try:
+        linhas = conn.execute(
+            "SELECT Name, Email FROM users "
+            "WHERE UPPER(TRIM(COALESCE(Status,''))) = 'ACTIVE' "
+            "  AND COALESCE(TRIM(Email),'') <> '' "
+            "ORDER BY Name"
+        ).fetchall()
+    finally:
+        conn.close()
+    saida, vistos = [], set()
+    for nome, email in linhas:
+        chave = str(email or '').strip().lower()
+        if chave and chave not in vistos:
+            vistos.add(chave)
+            saida.append((str(nome or '').strip(), str(email or '').strip()))
+    return saida
+
+
+def _load_appver_recipients():
+    try:
+        with open(_APPVER_REC_FILE, encoding='utf-8') as fh:
+            d = json.load(fh)
+        if isinstance(d, dict):
+            return {'cc': d.get('cc', '') or ''}
+    except Exception:                                       # noqa: BLE001
+        pass
+    return {'cc': ''}
+
+
+def _save_appver_recipients(d):
+    os.makedirs(_APPVER_DIR, exist_ok=True)
+    atual = _load_appver_recipients()
+    if 'cc' in (d or {}):
+        atual['cc'] = str((d or {}).get('cc') or '').strip()
+    _atomic_write_json(_APPVER_REC_FILE, atual)
+
+
+def _appver_status_write(result, when):
+    try:
+        os.makedirs(_APPVER_DIR, exist_ok=True)
+        _atomic_write_json(_APPVER_STATUS_FILE,
+                           {'result': result, 'at': when.strftime('%d/%m/%Y %H:%M:%S')})
+    except Exception:                                       # noqa: BLE001
+        log.warning('[app-version] não consegui gravar o status:\n%s', traceback.format_exc())
+
+
+def _appver_read_status():
+    try:
+        with open(_APPVER_STATUS_FILE, encoding='utf-8') as fh:
+            d = json.load(fh)
+        return d if isinstance(d, dict) else {}
+    except Exception:                                       # noqa: BLE001
+        return {}
+
+
+def _appver_send_email(versao, usuarios, cc_list):
+    """Monta e envia UMA mensagem. True, ou o texto do erro.
+
+    Uma mensagem só, com todo mundo no To, e não uma por pessoa: são dezenas de
+    destinatários, e N envios transformariam uma falha de SMTP no meio da lista
+    em "metade da mesa foi avisada" — desfecho que ninguém consegue reportar nem
+    repetir com segurança. Em troca, o corpo não é personalizado.
+
+    O `with _app_context()` envolve a montagem INTEIRA e não só o
+    `render_template`: o `_get_logo_path` lê `current_app.root_path` (CLAUDE.md
+    §7). Aqui o envio é sempre dentro de um request, então é no-op — fica pelo
+    mesmo motivo dos outros: o dia em que alguém agendar esta rotina.
+    """
+    from email.mime.image import MIMEImage
+    to_list = [e for _, e in usuarios]
+    try:
+        with _app_context():
+            html = render_template('pages/email-template-new-version.html',
+                                   version=versao,
+                                   starter=_APPVER_STARTER,
+                                   app_url=_otc_app_url(),
+                                   current_year=datetime.now().year)
+            msg = MIMEMultipart('related')
+            msg['Subject'] = 'OTC Tracker - New version {} released, please restart'.format(versao)
+            msg['From'] = SHARED_MAILBOX
+            msg['To'] = ', '.join(to_list)
+            if cc_list:
+                msg['Cc'] = ', '.join(cc_list)
+            alt = MIMEMultipart('alternative')
+            alt.attach(MIMEText('Please view this message in HTML.', 'plain', 'utf-8'))
+            alt.attach(MIMEText(html, 'html', 'utf-8'))
+            msg.attach(alt)
+            logo_path = _get_logo_path()
+            if logo_path:
+                with open(logo_path, 'rb') as f:
+                    limg = MIMEImage(f.read())
+                limg.add_header('Content-ID', '<otc_logo>')
+                limg.add_header('Content-Disposition', 'inline', filename='logo.png')
+                msg.attach(limg)
+            _attach_email_gradient(msg)
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30) as server:
+            server.sendmail(SHARED_MAILBOX, to_list + cc_list, msg.as_string())
+        return True
+    except Exception as e:                                  # noqa: BLE001
+        log.error('[app-version] envio falhou:\n%s', traceback.format_exc())
+        return '{}: {}'.format(type(e).__name__, e)
+
+
+def _appver_run(cc_raw=None):
+    """Uma corrida. Desfechos SEPARADOS, porque pedem ações diferentes:
+    `no_version` (o link.txt não respondeu qual é a versão — publicar de novo) e
+    `no_recipient` (ninguém ativo no cadastro — aprovar os usuários)."""
+    versao, _bruto, erro = _appver_read_link()
+    if not versao:
+        return {'sent': False, 'reason': 'no_version', 'error': erro,
+                'path': _APPVER_LINK_FILE, 'to': 0}
+    usuarios = _appver_active_users()
+    if not usuarios:
+        return {'sent': False, 'reason': 'no_recipient', 'version': versao, 'to': 0}
+    cc_list = [c for c in _parse_emails(cc_raw if cc_raw is not None
+                                        else _load_appver_recipients().get('cc'))
+               if c.lower() not in {e.lower() for _, e in usuarios}]
+    res = _appver_send_email(versao, usuarios, cc_list)
+    if res is True:
+        return {'sent': True, 'version': versao, 'to': len(usuarios), 'cc': len(cc_list)}
+    return {'sent': False, 'reason': 'error', 'error': res, 'version': versao,
+            'to': len(usuarios), 'cc': len(cc_list)}
+
+
+@blueprint.route('/api/control-panel/app-version/recipients', methods=['GET', 'POST'])
+def api_cp_app_version_recipients():
+    """GET → a versão lida agora, quantos usuários ativos receberiam, o Cc e o
+    desfecho do último envio; POST → grava o Cc.
+
+    A versão e a CONTAGEM voltam no GET de propósito: são as duas coisas que
+    alguém precisa conferir ANTES de mandar um e-mail para a mesa inteira."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    if request.method == 'POST':
+        try:
+            _save_appver_recipients(request.get_json(silent=True) or {})
+        except Exception as e:                              # noqa: BLE001
+            log.error('[app-version] save recipients failed:\n%s', traceback.format_exc())
+            return jsonify({'success': False,
+                            'error': '{}: {}'.format(type(e).__name__, e)}), 500
+        return jsonify({'success': True})
+    versao, bruto, erro = _appver_read_link()
+    try:
+        ativos = len(_appver_active_users())
+    except Exception:                                       # noqa: BLE001
+        # Banco indisponível não pode derrubar o card: o Cc ainda precisa ser
+        # editável, e a linha de status é quem diz que a contagem falhou.
+        log.warning('[app-version] não consegui contar os usuários:\n%s', traceback.format_exc())
+        ativos = None
+    return jsonify({'success': True, **_load_appver_recipients(),
+                    'version': versao, 'version_error': erro,
+                    # O conteúdo lido vai junto, cortado: é como se confere que
+                    # o `link.txt` aponta para a versão que se quer anunciar.
+                    'link_preview': bruto[:200],
+                    'path': _APPVER_LINK_FILE,
+                    'active_users': ativos,
+                    'last': _appver_read_status()})
+
+
+@blueprint.route('/api/control-panel/app-version/run', methods=['POST'])
+def api_cp_app_version_run():
+    """Manda o aviso AGORA para todo usuário ativo (botão do card)."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    payload = request.get_json(silent=True) or {}
+    if 'cc' in payload:
+        try:
+            _save_appver_recipients(payload)
+        except Exception:                                   # noqa: BLE001
+            log.error('[app-version] save recipients failed:\n%s', traceback.format_exc())
+    try:
+        out = _appver_run(payload.get('cc'))
+    except Exception as e:                                  # noqa: BLE001
+        log.error('[app-version] run manual falhou:\n%s', traceback.format_exc())
+        return jsonify({'success': False,
+                        'error': '{}: {}'.format(type(e).__name__, e)}), 500
+    if not out['sent'] and out.get('reason') == 'no_version':
+        # 400 e não 500: o pedido está bem formado, o que falta é o arquivo
+        # dizer qual versão foi publicada. E o e-mail NÃO sai sem ela — um aviso
+        # de "nova versão" sem o número não diz nada a quem recebe.
+        _appver_status_write('no_version', _br_now())
+        return jsonify({'success': False,
+                        'error': 'Could not read the version from {}{}.'.format(
+                            out.get('path') or 'link.txt',
+                            ' — ' + out['error'] if out.get('error') else '')}), 400
+    if not out['sent'] and out.get('reason') == 'no_recipient':
+        _appver_status_write('no_recipient', _br_now())
+        return jsonify({'success': False,
+                        'error': 'No user with status Active in Users & Roles — '
+                                 'there is nobody to notify.'}), 400
+    if not out['sent']:
+        _appver_status_write('error', _br_now())
+        return jsonify({'success': False, 'error': out.get('error') or 'unknown'}), 500
+    _appver_status_write('sent:{}:{}'.format(out['version'], out['to']), _br_now())
+    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                         'New Version Announced', 'Control Panel',
+                         '{} → {} active user(s)'.format(out['version'], out['to']))
+    return jsonify({'success': True, **out,
+                    'message': 'Version {} announced to {} active user(s){}.'.format(
+                        out['version'], out['to'],
+                        ' (+{} in copy)'.format(out['cc']) if out['cc'] else '')})
+
 def _find_generic_nd_deal(cfg, deal_name, client_name=None):
     """Locate a deal by Deal (+optional Client) across the product's cache files.
     Returns (file_path, list_index) or (None, None)."""
@@ -34392,27 +34907,26 @@ def api_generic_nd_search_cache(product):
 
     filters = (request.get_json(silent=True) or {}).get('filters', [])
     matched, refmap_cache = [], {}
-    if os.path.isdir(cfg['dir']):
-        for root, _dirs, files in os.walk(cfg['dir']):
-            for fname in sorted(files):
-                if not fname.endswith(cfg['suffix']):
-                    continue
-                fpath = os.path.join(root, fname)
-                try:
-                    with open(fpath, 'r', encoding='utf-8') as fh:
-                        deals = json.load(fh)
-                    if not isinstance(deals, list):
-                        deals = [deals]
-                    # Contraparte cadastrada depois do import → persiste o
-                    # enriquecimento, senão a linha volta vazia a cada visita.
-                    if _generic_nd_reenrich(deals, refmap_cache):
-                        with _cache_lock:
-                            _atomic_write_json(fpath, deals)
-                    for deal in deals:
-                        if _deal_matches(deal, filters):
-                            matched.append(deal)
-                except Exception:
-                    continue
+    # `mutavel=True`: o `_generic_nd_reenrich` ALTERA os dicionários, e sem a
+    # cópia a alteração ficaria gravada no memo — o próximo leitor veria o dado
+    # de outro request. Ela custa microssegundos contra a dezena de
+    # milissegundos de uma leitura no share.
+    for fpath, _fname, mtime, size in _day_files(cfg['dir'], cfg['suffix']):
+        deals = _day_json(fpath, mtime, size, mutavel=True)
+        try:
+            # Contraparte cadastrada depois do import → persiste o
+            # enriquecimento, senão a linha volta vazia a cada visita.
+            if _generic_nd_reenrich(deals, refmap_cache):
+                with _cache_lock:
+                    _atomic_write_json(fpath, deals)
+                # O mtime novo já invalidaria a entrada, mas contar com isso é
+                # contar com a resolução do relógio do share.
+                _daycache_forget(fpath)
+        except Exception:                                   # noqa: BLE001
+            continue
+        for deal in deals:
+            if _deal_matches(deal, filters):
+                matched.append(deal)
     return jsonify({"success": True, "deals": matched})
 
 
@@ -38391,6 +38905,13 @@ def api_onboarding_docs():
         etapa, derivada = _cgd_mod.pending_stage(r)
         r['_stage'] = etapa or ''
         r['_stage_derived'] = bool(derivada)
+        # Encerrado NÃO tem etapa (ninguém trabalha nele), e a célula saía em
+        # branco — que se lê como "ainda não chegou em ninguém", justamente o
+        # contrário. A tela desenha `Finalized` a partir daqui em vez de repetir
+        # o `is_closed` no navegador: a regra de o que é encerrado é do módulo
+        # (`Active`, `Inactive`, `Cancelado`), e uma segunda cópia no JS
+        # discordaria dela no primeiro status novo que a lista trouxesse.
+        r['_closed'] = bool(_cgd_mod.is_closed(r))
     # Os domínios vão no MESMO payload das colunas: a tela monta o campo de
     # edição a partir deles, e uma lista escrita no template seria uma segunda
     # cópia — que envelhece calada no dia em que a do servidor mudar.
@@ -38400,6 +38921,9 @@ def api_onboarding_docs():
                     'stages': list(_cgd_mod.STAGES),
                     'signature_types': list(_cgd_mod.SIGNATURE_TYPES),
                     'signature_column': _cgd_mod.SIGNATURE_COLUMN,
+                    'doc_types': list(_cgd_mod.DOC_TYPES),
+                    'doc_type_column': _cgd_mod.DOC_TYPE_COLUMN,
+                    'guarantor_options': list(_cgd_mod.GUARANTOR_OPTIONS),
                     'rows': rows})
 
 

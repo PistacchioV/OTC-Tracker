@@ -27,6 +27,8 @@ import os
 import shutil
 import subprocess
 import sys
+import io
+import re
 import tempfile
 from datetime import date
 
@@ -91,6 +93,55 @@ check('serial do Excel', C.fmt_date(46255), '21/08/2026')
 # Texto que não é data volta como veio: apagá-lo esconderia o erro da planilha.
 check('texto que não é data fica visível', C.fmt_date('a combinar'), 'a combinar')
 check('vazio continua vazio', C.fmt_date(''), '')
+# O SharePoint grava data COM HORA, e o que não está em DATE_COLUMNS sai como
+# veio: `B3 Register` e `Captis` apareciam na grade como `2022-08-02 00:00:00`
+# ao lado de um `02/08/2022` na coluna vizinha — o mesmo dado em duas grafias na
+# mesma linha, e a de fora ainda ordenava e filtrava por outro texto.
+check('data com hora perde a hora', C.fmt_date('2022-08-02 00:00:00'), '02/08/2022')
+check('   inclusive com hora de verdade', C.fmt_date('2026-06-24 15:30:00'), '24/06/2026')
+# A lista tem de ser COMPLETA. Estas são as colunas do SharePoint que guardam
+# data; uma que saia daqui volta a aparecer com `00:00:00` na tela.
+check('DATE_COLUMNS cobre toda coluna de data',
+      sorted(C.DATE_COLUMNS),
+      sorted(['B3 Register', 'Captis', 'Conclusion - Stamp', 'Data Solicitação',
+              'Emissão', 'MO - STAMP', 'OTC - STAMP', 'Signature Date']))
+check('   e toda uma delas existe em COLUMNS',
+      [c for c in C.DATE_COLUMNS if c not in C.COLUMNS], [])
+
+# ── O rotulo de cada coluna, nos tres idiomas ───────────────────────────────
+# Os NOMES sao os do banco (e os do SharePoint antes dele) e estao em portugues:
+# `Razao Social`, `Emissao`, `Instituicao Financeira`. Renomea-los quebraria a
+# base de quem ja a tem em disco, entao quem traduz e o mapa `COLTR` do
+# template. Coluna sem entrada aparece na tela com o nome do banco — que foi o
+# que fez a tela em ingles mostrar cabecalho em portugues.
+print('\n== os rotulos das colunas ==')
+_tpl = io.open(os.path.join(ROOT, 'apps', 'templates', 'pages',
+                            'onboarding-tracking-docs.html'), encoding='utf-8').read()
+_mapa = re.search(r'var COLTR = \{(.*?)\n    \};', _tpl, re.DOTALL)
+check('o mapa COLTR existe no template', bool(_mapa), True)
+_traduzidas = set(re.findall(r"^\s*'([^']+)':\s*\{", _mapa.group(1), re.M)) if _mapa else set()
+check('toda coluna de COLUMNS tem rotulo',
+      sorted(c for c in C.COLUMNS if c not in _traduzidas), [])
+check('e o mapa nao inventa coluna',
+      sorted(c for c in _traduzidas if c not in C.COLUMNS), [])
+# Os tres idiomas em cada entrada: faltando um, a tela cai no ingles sem avisar.
+_incompletas = []
+for _bloco in re.finditer(r"'([^']+)':\s*\{([^}]*)\}", _mapa.group(1) if _mapa else ''):
+    _idiomas = set(re.findall(r'\b(en|br|es)\s*:', _bloco.group(2)))
+    if _idiomas != {'en', 'br', 'es'}:
+        _incompletas.append(_bloco.group(1))
+check('todo rotulo tem en/br/es', _incompletas, [])
+
+# O cabecalho e o filtro usam o ROTULO; o resto do codigo, o nome do banco.
+check('o cabecalho usa colLabel', 'esc(colLabel(c))' in _tpl, True)
+
+# ── Os dominios fechados ────────────────────────────────────────────────────
+print('\n== os dominios de select ==')
+check('Doc Type e o Transactional Type do Electronic Inventory',
+      list(C.DOC_TYPES),
+      ['CGD', 'Appendix', 'CSA', 'CGD Amendment', 'Appendix Amendment'])
+check('e a coluna que o usa existe', C.DOC_TYPE_COLUMN in C.COLUMNS, True)
+check('Garantidor e Yes/No', list(C.GUARANTOR_OPTIONS), ['Yes', 'No'])
 
 
 # ── 2. O aging ──────────────────────────────────────────────────────────────

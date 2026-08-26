@@ -101,8 +101,15 @@ AGING_STOP = 'Conclusion - Stamp'
 
 # As colunas que a tela desenha como DATA (dd/mm/aaaa) e o filtro entende como
 # tal. Ficam aqui e não no template porque o script também as normaliza.
+#
+# A lista tem de ser COMPLETA. O que não está nela sai como o SharePoint gravou,
+# e o SharePoint grava data com hora: `B3 Register` e `Captis` apareciam na
+# grade como `2022-08-02 00:00:00` na coluna ao lado de um `02/08/2022` — o
+# mesmo dado em duas grafias, na mesma linha, e a de fora ainda ordenava e
+# filtrava por outro texto. Data é SEMPRE dd/mm/aaaa na tela (CLAUDE.md §3), e
+# `check_cgd_docs.py` recusa coluna de data que fique de fora.
 DATE_COLUMNS = ('OTC - STAMP', 'MO - STAMP', 'Data Solicitação', 'Emissão',
-                'Signature Date', 'Conclusion - Stamp')
+                'Signature Date', 'B3 Register', 'Captis', 'Conclusion - Stamp')
 
 
 # ── Datas ────────────────────────────────────────────────────────────────────
@@ -362,6 +369,20 @@ SIGNATURE_COLUMN = 'Signature Type'
 # a lista grava: traduzir aqui criaria um terceiro valor para a mesma resposta e
 # metade das linhas deixaria de casar com a outra metade no filtro.
 GUARANTOR_OPTIONS = ('Yes', 'No')
+
+# O domínio do `Doc Type` — o TIPO de documento transacional que a solicitação
+# gera. É o mesmo domínio do Transactional Type do Electronic Inventory, e por
+# isso os valores são os de lá, em inglês: o documento sai daqui e vai parar na
+# pasta do cliente com esse nome, e uma segunda grafia faria a mesma coisa
+# aparecer como dois tipos na listagem.
+#
+# Domínio de UM campo, como o `SIGNATURE_TYPES` — não é cadastro do /mapping,
+# porque não há nada a traduzir de um sistema para outro.
+DOC_TYPES = ('CGD', 'Appendix', 'CSA', 'CGD Amendment', 'Appendix Amendment')
+
+# A coluna que guarda esse domínio, pela mesma razão do `SIGNATURE_COLUMN`: a
+# tela precisa saber QUAL coluna vira um `select`.
+DOC_TYPE_COLUMN = 'Doc Type'
 
 # O formulário de abertura da solicitação, na ORDEM em que ele é preenchido.
 # Cada campo diz o rótulo (o do formulário do SharePoint, que nem sempre é o

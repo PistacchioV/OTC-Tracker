@@ -1,0 +1,193 @@
+{# ============================================================================
+   New Version Released — o aviso de reinício para a mesa.
+
+   Params:
+     • version       — a versão LIDA do `link.txt` da pasta Application
+                       (`_appver_read_link`). NUNCA vazia: sem ela o e-mail não
+                       sai (`_appver_run` devolve `no_version`), porque um aviso
+                       de "nova versão" sem o número não diz nada a quem recebe
+     • starter       — o nome do .bat (`_APPVER_STARTER`), que é o que a pessoa
+                       vai procurar na pasta
+     • app_url       — endereço ABSOLUTO da instância (`_otc_app_url`); relativo
+                       não serve fora do navegador (CLAUDE.md §7)
+     • current_year
+
+   ⚠️ O CORPO É O PROCEDIMENTO. Quem recebe não vai abrir uma tela para descobrir
+   o que fazer: os três passos vêm numerados, na ordem, com o nome exato do
+   arquivo a executar. Trocar isto por "reinicie a aplicação" devolve o problema
+   para quem está lendo.
+
+   O passo 1 é o que se esquece. Rodar o .bat sem derrubar o processo antigo
+   sobe um SEGUNDO servidor: a porta já está ocupada, o novo morre ou atende em
+   outra, e a pessoa continua no código velho achando que atualizou. É por isso
+   que ele vem primeiro e em negrito.
+
+   O cabeçalho é cor sólida + gradiente CSS, nunca imagem/VML — ver o comentário
+   do partials/email-gradient-header.html.
+   ========================================================================== #}
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>OTC Tracker – New Version</title>
+    <!--[if mso]>
+    <style type="text/css">body, table, td { font-family: Arial, sans-serif !important; }</style>
+    <![endif]-->
+</head>
+<body style="margin:0;padding:0;font-family:'Segoe UI',Arial,sans-serif;background-color:#f4f6f9;color:#333333;">
+
+<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%"
+       style="background-color:#f4f6f9;padding:40px 0;">
+    <tr>
+        <td align="center">
+            <!--[if mso]>
+            <table role="presentation" align="center" border="0" cellpadding="0" cellspacing="0" width="720"><tr><td width="720" style="width:720px;">
+            <![endif]-->
+            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="720"
+                   style="max-width:720px;background-color:#ffffff;border-radius:10px;
+                          box-shadow:0 4px 14px rgba(0,0,0,0.08);overflow:hidden;">
+
+                <!-- ── Header ─────────────────────────────────── -->
+                {% set header_title = 'Support to OTC Derivatives — New Version Released' %}
+                {% set header_subtitle = 'A restart is required &nbsp;·&nbsp; <strong style="color:#ffffff;">' ~ version ~ '</strong>' %}
+                {% set header_logo_height = 64 %}
+                {% set header_width = 720 %}
+                {% include 'partials/email-gradient-header.html' %}
+
+                <!-- ── Body ───────────────────────────────────── -->
+                <tr>
+                    <td style="padding:26px 30px 4px;">
+                        <p style="color:#444;font-size:14px;line-height:1.6;margin:0 0 12px;">Hi all,</p>
+                        <p style="color:#444;font-size:14px;line-height:1.6;margin:0 0 12px;">
+                            A new version of the <strong>OTC Tracker</strong> has been released.
+                            It does <strong>not</strong> come in on its own: the application that
+                            is running right now keeps serving the previous version until it is
+                            restarted by hand.
+                        </p>
+                    </td>
+                </tr>
+
+                <!-- ── A versão, em destaque ──────────────────────
+                     O número é a informação que a pessoa precisa levar consigo
+                     ("já estou nesta?"), então ele sai do corpo do texto e vira
+                     um bloco próprio, em monoespaçada — num identificador de
+                     versão a diferença entre l e 1 decide se ela reinicia. -->
+                <tr>
+                    <td style="padding:6px 30px 18px;">
+                        <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%"
+                               style="border-collapse:collapse;">
+                            <tr>
+                                <td bgcolor="#eef4fd" align="center"
+                                    style="background-color:#eef4fd;border:1px solid #d3e2f7;
+                                           border-radius:8px;padding:16px 20px;">
+                                    <p style="margin:0 0 4px;color:#3f63c9;font-size:11px;
+                                              letter-spacing:1px;text-transform:uppercase;font-weight:700;">
+                                        Version now available</p>
+                                    <p style="margin:0;color:#1f3a6e;font-size:26px;font-weight:700;
+                                              font-family:Consolas,'Courier New',monospace;">
+                                        {{ version }}</p>
+                                </td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+
+                <!-- ── O procedimento ─────────────────────────────
+                     Três passos numerados. O passo 1 (derrubar o que está no ar)
+                     vem antes de tudo e em negrito: rodar o .bat sem fechar o
+                     DevShell sobe um segundo servidor, e a pessoa continua no
+                     código velho sem nenhum sinal de que algo deu errado. -->
+                <tr>
+                    <td style="padding:4px 30px 8px;">
+                        <p style="color:#333;font-size:14px;font-weight:700;margin:0 0 10px;">
+                            How to update — three steps:</p>
+                        <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%"
+                               style="border-collapse:collapse;font-size:14px;color:#444;">
+                            <tr>
+                                <td width="34" valign="top" style="padding:0 0 14px;">
+                                    <span style="display:inline-block;width:24px;height:24px;line-height:24px;
+                                                 background-color:#4f8ae2;color:#ffffff;border-radius:12px;
+                                                 text-align:center;font-size:12px;font-weight:700;">1</span>
+                                </td>
+                                <td valign="top" style="padding:2px 0 14px;line-height:1.6;">
+                                    <strong>Close the application that is running.</strong>
+                                    Go to the black DevShell / command window that opened when you
+                                    started the OTC Tracker and stop it — press
+                                    <strong>Ctrl + C</strong>, or simply close the window.
+                                    <span style="color:#8a6d1f;">Skipping this step is the usual
+                                    mistake: starting a second one leaves you on the old version.</span>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td width="34" valign="top" style="padding:0 0 14px;">
+                                    <span style="display:inline-block;width:24px;height:24px;line-height:24px;
+                                                 background-color:#4f8ae2;color:#ffffff;border-radius:12px;
+                                                 text-align:center;font-size:12px;font-weight:700;">2</span>
+                                </td>
+                                <td valign="top" style="padding:2px 0 14px;line-height:1.6;">
+                                    Open the <strong>Application</strong> folder and run
+                                    <strong style="font-family:Consolas,'Courier New',monospace;
+                                                   background-color:#f1f3f6;padding:2px 6px;
+                                                   border-radius:4px;">{{ starter }}</strong>
+                                    (double-click). A new DevShell window opens — leave it open, it
+                                    is the application itself.
+                                </td>
+                            </tr>
+                            <tr>
+                                <td width="34" valign="top" style="padding:0 0 6px;">
+                                    <span style="display:inline-block;width:24px;height:24px;line-height:24px;
+                                                 background-color:#4f8ae2;color:#ffffff;border-radius:12px;
+                                                 text-align:center;font-size:12px;font-weight:700;">3</span>
+                                </td>
+                                <td valign="top" style="padding:2px 0 6px;line-height:1.6;">
+                                    Wait for the window to say the server is running, then open the
+                                    OTC Tracker in your browser
+                                    {% if app_url %}(<a href="{{ app_url }}" style="color:#3f63c9;">{{ app_url }}</a>){% endif %}
+                                    and refresh the page.
+                                </td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+
+                <tr>
+                    <td style="padding:8px 30px 4px;">
+                        <p style="color:#666;font-size:12.5px;line-height:1.6;margin:0;
+                                  border-top:1px solid #eceff3;padding-top:14px;">
+                            If anything looks wrong after the restart, open a ticket in the
+                            <strong>Support Center</strong> and tell us which version the e-mail
+                            announced — it is the fastest way for us to reproduce what you are seeing.
+                        </p>
+                    </td>
+                </tr>
+
+                <!-- ── Signature ──────────────────────────────── -->
+                <tr>
+                    <td style="padding:18px 30px 26px;">
+                        <p style="font-size:14px;line-height:1.6;color:#333333;margin:0;">
+                            Regards,<br/>
+                            <strong>OTC Tracker — Brazil OTC Operations</strong>
+                        </p>
+                    </td>
+                </tr>
+
+                <!-- ── Footer ─────────────────────────────────── -->
+                <tr>
+                    <td style="background-color:#f8f9fa;padding:18px 32px;text-align:center;border-top:1px solid #e9ecef;">
+                        <p style="color:#999999;font-size:11px;margin:0;">
+                            &copy; {{ current_year }} OTC Tracker by JPMorganChase &amp; Co.</p>
+                        <p style="color:#bbbbbb;font-size:10px;margin:5px 0 0;">
+                            This is an automated notification. Do not reply to this email.</p>
+                    </td>
+                </tr>
+
+            </table>
+            <!--[if mso]>
+            </td></tr></table>
+            <![endif]-->
+        </td>
+    </tr>
+</table>
+</body>
+</html>
