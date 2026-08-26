@@ -2268,6 +2268,153 @@ def _dash_stats_store(period, dados):
     return dados
 
 
+# ── Os arquivos-dia do cache: um leitor só, com poda e memo ──────────────────
+# Sete endpoints varriam a árvore do cache com `os.walk` e abriam todo JSON que
+# casasse com o sufixo — as buscas das cinco telas de New Deals e as três de
+# Intrag. Na dev é um SSD com dezenas de arquivos e ninguém nota; na instância do
+# JPM a árvore está num share, cada listagem e cada abertura é ida e volta de
+# rede, e dois anos de histórico são milhares de arquivos.
+#
+# As três correções são as mesmas do painel (`_dash_scan_files`), e valem pelo
+# mesmo motivo:
+#
+#   • `os.scandir` no lugar de `os.walk`. A listagem de um diretório no SMB já
+#     devolve nome, tamanho e mtime de cada entrada, e o `DirEntry` os guarda —
+#     no Windows, `entry.stat()` não custa chamada nenhuma. Com `os.walk` essa
+#     informação é jogada fora e a checagem do memo custaria um `os.stat` por
+#     arquivo, que é MAIS caro do que não ter memo nenhum na primeira leitura.
+#   • PODAR por data. A árvore termina em `{...}/{AAAA}/{MM}/arquivo.json`, e um
+#     intervalo de datas descarta ano e mês inteiros antes de entrar neles. A
+#     poda é grossa de propósito: quem decide continua sendo a data no NOME do
+#     arquivo, como sempre foi.
+#   • LEMBRAR. Arquivo-dia já lido não é reaberto se não mudou. A chave é
+#     (mtime, tamanho) e não o caminho: o arquivo-dia de hoje é reescrito a cada
+#     importação, e um amend entra no arquivo do dia da OPERAÇÃO, que pode ser
+#     antigo — pelo caminho sozinho a tela congelaria o dia na primeira leitura
+#     do processo.
+#
+# A ORDEM é a de sempre (nome, dentro de cada pasta): a busca devolve os deals na
+# ordem em que a árvore é lida, e a ordem crua do `scandir` é a do sistema de
+# arquivos — a mesma base renderia listas diferentes no share e na dev.
+_daycache_memo = {}                     # caminho → (mtime, tamanho, dados)
+_daycache_lock = threading.Lock()
+# Teto do memo. Estourado, ele é ESVAZIADO inteiro em vez de despejar por idade:
+# o custo é uma varredura completa a mais, uma vez, e a alternativa (LRU) é
+# estado a mais para manter no caminho mais quente das telas.
+_DAYCACHE_MAX = 20000
+
+
+def _daycache_dir_ok(nome, pai, desde, ate):
+    """Este diretório pode conter arquivo-dia do intervalo?
+
+    Nome de 4 dígitos é ano; de 2 dígitos, mês — e o mês só é avaliado dentro de
+    um ano, porque fora dele não há como saber a que ano ele pertence. Nome que
+    não é número é pasta de produto e nunca é descartado: quem decide o que é
+    ano ou mês é o FORMATO do nome, não a profundidade — a árvore tem produto
+    com um nível de subpasta e produto com dois.
+    """
+    if desde is None and ate is None:
+        return True
+    if len(nome) == 4 and nome.isdigit():
+        ano = int(nome)
+        if desde is not None and ano < desde.year:
+            return False
+        if ate is not None and ano > ate.year:
+            return False
+        return True
+    if len(nome) == 2 and nome.isdigit() and len(pai) == 4 and pai.isdigit():
+        ano, mes = int(pai), int(nome)
+        if desde is not None and (ano, mes) < (desde.year, desde.month):
+            return False
+        if ate is not None and (ano, mes) > (ate.year, ate.month):
+            return False
+    return True
+
+
+def _day_files(raiz, sufixo='', desde=None, ate=None):
+    """Gera `(caminho, nome, mtime, tamanho)` dos arquivos-dia da árvore.
+
+    `desde`/`ate` são `date`/`datetime` e servem só para PODAR: o chamador
+    continua filtrando pela data do nome, que é a que vale.
+
+    Diretório que não abre é PULADO com aviso, não derruba a varredura: o share
+    fica indisponível de vez em quando, e meia lista é melhor do que um 500.
+    """
+    if not os.path.isdir(raiz):
+        return
+    pilha = [(raiz, '')]
+    while pilha:
+        atual, pai = pilha.pop()
+        subdirs, arquivos = [], []
+        try:
+            with os.scandir(atual) as entradas:
+                for e in entradas:
+                    try:
+                        if e.is_dir():
+                            if _daycache_dir_ok(e.name, pai, desde, ate):
+                                subdirs.append((e.name, e.path))
+                            continue
+                        if sufixo and not e.name.endswith(sufixo):
+                            continue
+                        st = e.stat()
+                        arquivos.append((e.name, e.path, st.st_mtime, st.st_size))
+                    except OSError:
+                        continue
+        except OSError:
+            log.warning('[daycache] não consegui listar %s', atual)
+            continue
+        # A pilha é LIFO, então os subdiretórios entram ao contrário para sair
+        # em ordem; os arquivos saem por nome, como o `sorted(files)` de antes.
+        for nome, caminho in sorted(subdirs, reverse=True):
+            pilha.append((caminho, nome))
+        for nome, caminho, mtime, size in sorted(arquivos):
+            yield (caminho, nome, mtime, size)
+
+
+def _day_json(fp, mtime, size, mutavel=False):
+    """O conteúdo de um arquivo-dia como LISTA, memoizado por (mtime, tamanho).
+
+    `mutavel=True` devolve uma cópia rasa dos registros. É para quem ALTERA os
+    dicionários depois de ler — sem ela, a alteração ficaria gravada no memo e
+    o próximo leitor veria o dado de outro request. A cópia custa microssegundos
+    contra a dezena de milissegundos de uma leitura no share, então ela é barata
+    exatamente onde importa.
+
+    Arquivo ilegível devolve lista vazia e NÃO entra no memo: um JSON quebrado
+    costuma ser um arquivo sendo escrito naquele instante, e memoizar o vazio
+    esconderia o dia até o processo reiniciar.
+    """
+    with _daycache_lock:
+        item = _daycache_memo.get(fp)
+    if item and item[0] == mtime and item[1] == size:
+        dados = item[2]
+    else:
+        try:
+            with open(fp, 'r', encoding='utf-8') as fh:
+                dados = json.load(fh)
+        except Exception:                                   # noqa: BLE001
+            return []
+        if not isinstance(dados, list):
+            dados = [dados] if isinstance(dados, dict) else []
+        with _daycache_lock:
+            if len(_daycache_memo) >= _DAYCACHE_MAX:
+                _daycache_memo.clear()
+            _daycache_memo[fp] = (mtime, size, dados)
+    if mutavel:
+        return [dict(d) if isinstance(d, dict) else d for d in dados]
+    return dados
+
+
+def _daycache_forget(fp=None):
+    """Esquece um arquivo (ou tudo). Quem REESCREVE um arquivo-dia chama isto —
+    o mtime novo já invalidaria a entrada, mas contar com isso é contar com a
+    resolução do relógio do sistema de arquivos, que num share não é garantida."""
+    with _daycache_lock:
+        if fp is None:
+            _daycache_memo.clear()
+        else:
+            _daycache_memo.pop(fp, None)
+
 # ── A varredura do painel: podar, e ler a árvore UMA vez ─────────────────────
 # O painel varria a árvore INTEIRA do cache de New Deals e abria todo JSON do
 # período. Na dev é um SSD com dezenas de arquivos e ninguém nota; na instância
@@ -19668,22 +19815,14 @@ def api_search_deal_cache():
     body = request.get_json(silent=True) or {}
     filters = body.get('filters', [])
 
+    # `_day_files` + `_day_json`: `os.scandir` (a listagem já traz mtime e
+    # tamanho) e memo por arquivo, então a segunda busca não reabre o que não
+    # mudou. A busca não tem intervalo de datas, então não há o que podar.
     matched = []
-    for root, _dirs, files in os.walk(CACHE_BASE_DIR):
-        for fname in sorted(files):
-            if not fname.endswith('_optcomm.json'):
-                continue
-            fpath = os.path.join(root, fname)
-            try:
-                with open(fpath, 'r', encoding='utf-8') as fh:
-                    deals = json.load(fh)
-                if not isinstance(deals, list):
-                    deals = [deals]
-                for deal in deals:
-                    if _deal_matches(deal, filters):
-                        matched.append(deal)
-            except Exception:
-                continue
+    for fpath, _fname, mtime, size in _day_files(CACHE_BASE_DIR, '_optcomm.json'):
+        for deal in _day_json(fpath, mtime, size):
+            if _deal_matches(deal, filters):
+                matched.append(deal)
 
     return jsonify({"success": True, "deals": matched})
 
@@ -19962,22 +20101,14 @@ def api_search_fxo_cache():
         return jsonify({"success": False, "message": "Not authenticated"}), 401
     body = request.get_json(silent=True) or {}
     filters = body.get('filters', [])
+    # `_day_files` + `_day_json`: `os.scandir` (a listagem já traz mtime e
+    # tamanho) e memo por arquivo, então a segunda busca não reabre o que não
+    # mudou. A busca não tem intervalo de datas, então não há o que podar.
     matched = []
-    for root, _dirs, files in os.walk(OPT_FXO_CACHE_DIR):
-        for fname in sorted(files):
-            if not fname.endswith('_optfxo.json'):
-                continue
-            fpath = os.path.join(root, fname)
-            try:
-                with open(fpath, 'r', encoding='utf-8') as fh:
-                    deals = json.load(fh)
-                if not isinstance(deals, list):
-                    deals = [deals]
-                for deal in deals:
-                    if _deal_matches(deal, filters):
-                        matched.append(deal)
-            except Exception:
-                continue
+    for fpath, _fname, mtime, size in _day_files(OPT_FXO_CACHE_DIR, '_optfxo.json'):
+        for deal in _day_json(fpath, mtime, size):
+            if _deal_matches(deal, filters):
+                matched.append(deal)
     return jsonify({"success": True, "deals": matched})
 
 
@@ -25213,25 +25344,18 @@ def api_intrag_ndf():
         # Trade Date range — load every day-file within [from, to] inclusive
         d_from = _parse_date_any(date_from)
         d_to   = _parse_date_any(date_to)
-        if os.path.isdir(INTRAG_NDF_CACHE_DIR):
-            for root, _, files in os.walk(INTRAG_NDF_CACHE_DIR):
-                for fname in sorted(files):
-                    if not fname.endswith('_intrag_ndf.json'):
-                        continue
-                    fdate = _parse_date_any(fname[:8])
-                    if fdate is None:
-                        continue
-                    if d_from and fdate < d_from:
-                        continue
-                    if d_to and fdate > d_to:
-                        continue
-                    try:
-                        with open(os.path.join(root, fname), 'r', encoding='utf-8') as fh:
-                            data = json.load(fh)
-                        if isinstance(data, list):
-                            entries.extend(data)
-                    except Exception as exc:
-                        log.warning('[INTRAG NDF] Skip %s: %s', fname, exc)
+        # Com intervalo há o que PODAR: ano e mês inteiros fora dele são
+        # descartados antes de o `scandir` entrar neles. Quem decide continua
+        # sendo a data no NOME do arquivo, logo abaixo.
+        for fp, fname, mtime, size in _day_files(INTRAG_NDF_CACHE_DIR, '_intrag_ndf.json', d_from, d_to):
+            fdate = _parse_date_any(fname[:8])
+            if fdate is None:
+                continue
+            if d_from and fdate < d_from:
+                continue
+            if d_to and fdate > d_to:
+                continue
+            entries.extend(_day_json(fp, mtime, size))
     elif date_str:
         try:
             ref = datetime.strptime(date_str, '%Y-%m-%d')
@@ -25245,19 +25369,9 @@ def api_intrag_ndf():
         except Exception as exc:
             log.warning('[INTRAG NDF] date load error date=%r: %s', date_str, exc)
     else:
-        if os.path.isdir(INTRAG_NDF_CACHE_DIR):
-            for root, _, files in os.walk(INTRAG_NDF_CACHE_DIR):
-                for fname in sorted(files):
-                    if not fname.endswith('_intrag_ndf.json'):
-                        continue
-                    fp = os.path.join(root, fname)
-                    try:
-                        with open(fp, 'r', encoding='utf-8') as fh:
-                            data = json.load(fh)
-                        if isinstance(data, list):
-                            entries.extend(data)
-                    except Exception as exc:
-                        log.warning('[INTRAG NDF] Skip %s: %s', fp, exc)
+        # Sem data nenhuma: a árvore inteira, e aí só o memo ajuda.
+        for fp, _fname, mtime, size in _day_files(INTRAG_NDF_CACHE_DIR, '_intrag_ndf.json'):
+            entries.extend(_day_json(fp, mtime, size))
     return jsonify({'success': True, 'entries': entries})
 
 
@@ -25273,25 +25387,18 @@ def api_intrag_option():
     if date_from or date_to:
         d_from = _parse_date_any(date_from)
         d_to   = _parse_date_any(date_to)
-        if os.path.isdir(INTRAG_OPT_CACHE_DIR):
-            for root, _, files in os.walk(INTRAG_OPT_CACHE_DIR):
-                for fname in sorted(files):
-                    if not fname.endswith(suffix):
-                        continue
-                    fdate = _parse_date_any(fname[:8])
-                    if fdate is None:
-                        continue
-                    if d_from and fdate < d_from:
-                        continue
-                    if d_to and fdate > d_to:
-                        continue
-                    try:
-                        with open(os.path.join(root, fname), 'r', encoding='utf-8') as fh:
-                            data = json.load(fh)
-                        if isinstance(data, list):
-                            entries.extend(data)
-                    except Exception as exc:
-                        log.warning('[INTRAG OPT] Skip %s: %s', fname, exc)
+        # Com intervalo há o que PODAR: ano e mês inteiros fora dele são
+        # descartados antes de o `scandir` entrar neles. Quem decide continua
+        # sendo a data no NOME do arquivo, logo abaixo.
+        for fp, fname, mtime, size in _day_files(INTRAG_OPT_CACHE_DIR, suffix, d_from, d_to):
+            fdate = _parse_date_any(fname[:8])
+            if fdate is None:
+                continue
+            if d_from and fdate < d_from:
+                continue
+            if d_to and fdate > d_to:
+                continue
+            entries.extend(_day_json(fp, mtime, size))
     elif date_str:
         try:
             ref = datetime.strptime(date_str, '%Y-%m-%d')
@@ -25305,18 +25412,9 @@ def api_intrag_option():
         except Exception as exc:
             log.warning('[INTRAG OPT] date load error date=%r: %s', date_str, exc)
     else:
-        if os.path.isdir(INTRAG_OPT_CACHE_DIR):
-            for root, _, files in os.walk(INTRAG_OPT_CACHE_DIR):
-                for fname in sorted(files):
-                    if not fname.endswith(suffix):
-                        continue
-                    try:
-                        with open(os.path.join(root, fname), 'r', encoding='utf-8') as fh:
-                            data = json.load(fh)
-                        if isinstance(data, list):
-                            entries.extend(data)
-                    except Exception as exc:
-                        log.warning('[INTRAG OPT] Skip %s: %s', fname, exc)
+        # Sem data nenhuma: a árvore inteira, e aí só o memo ajuda.
+        for fp, _fname, mtime, size in _day_files(INTRAG_OPT_CACHE_DIR, suffix):
+            entries.extend(_day_json(fp, mtime, size))
     return jsonify({'success': True, 'entries': entries})
 
 
@@ -25789,25 +25887,18 @@ def api_intrag_swap():
     if date_from or date_to:
         d_from = _parse_date_any(date_from)
         d_to   = _parse_date_any(date_to)
-        if os.path.isdir(INTRAG_SWAP_CACHE_DIR):
-            for root, _, files in os.walk(INTRAG_SWAP_CACHE_DIR):
-                for fname in sorted(files):
-                    if not fname.endswith(suffix):
-                        continue
-                    fdate = _parse_date_any(fname[:8])
-                    if fdate is None:
-                        continue
-                    if d_from and fdate < d_from:
-                        continue
-                    if d_to and fdate > d_to:
-                        continue
-                    try:
-                        with open(os.path.join(root, fname), 'r', encoding='utf-8') as fh:
-                            data = json.load(fh)
-                        if isinstance(data, list):
-                            entries.extend(data)
-                    except Exception as exc:
-                        log.warning('[INTRAG SWAP] Skip %s: %s', fname, exc)
+        # Com intervalo há o que PODAR: ano e mês inteiros fora dele são
+        # descartados antes de o `scandir` entrar neles. Quem decide continua
+        # sendo a data no NOME do arquivo, logo abaixo.
+        for fp, fname, mtime, size in _day_files(INTRAG_SWAP_CACHE_DIR, suffix, d_from, d_to):
+            fdate = _parse_date_any(fname[:8])
+            if fdate is None:
+                continue
+            if d_from and fdate < d_from:
+                continue
+            if d_to and fdate > d_to:
+                continue
+            entries.extend(_day_json(fp, mtime, size))
     elif date_str:
         try:
             ref = datetime.strptime(date_str, '%Y-%m-%d')
@@ -25821,18 +25912,9 @@ def api_intrag_swap():
         except Exception as exc:
             log.warning('[INTRAG SWAP] date load error date=%r: %s', date_str, exc)
     else:
-        if os.path.isdir(INTRAG_SWAP_CACHE_DIR):
-            for root, _, files in os.walk(INTRAG_SWAP_CACHE_DIR):
-                for fname in sorted(files):
-                    if not fname.endswith(suffix):
-                        continue
-                    try:
-                        with open(os.path.join(root, fname), 'r', encoding='utf-8') as fh:
-                            data = json.load(fh)
-                        if isinstance(data, list):
-                            entries.extend(data)
-                    except Exception as exc:
-                        log.warning('[INTRAG SWAP] Skip %s: %s', fname, exc)
+        # Sem data nenhuma: a árvore inteira, e aí só o memo ajuda.
+        for fp, _fname, mtime, size in _day_files(INTRAG_SWAP_CACHE_DIR, suffix):
+            entries.extend(_day_json(fp, mtime, size))
     return jsonify({'success': True, 'entries': entries})
 
 
@@ -26047,22 +26129,14 @@ def api_ndf_search_deal_cache():
     body = request.get_json(silent=True) or {}
     filters = body.get('filters', [])
 
+    # `_day_files` + `_day_json`: `os.scandir` (a listagem já traz mtime e
+    # tamanho) e memo por arquivo, então a segunda busca não reabre o que não
+    # mudou. A busca não tem intervalo de datas, então não há o que podar.
     matched = []
-    for root, _dirs, files in os.walk(NDF_COMM_CACHE_DIR):
-        for fname in sorted(files):
-            if not fname.endswith('_ndfcomm.json'):
-                continue
-            fpath = os.path.join(root, fname)
-            try:
-                with open(fpath, 'r', encoding='utf-8') as fh:
-                    deals = json.load(fh)
-                if not isinstance(deals, list):
-                    deals = [deals]
-                for deal in deals:
-                    if _deal_matches(deal, filters):
-                        matched.append(deal)
-            except Exception:
-                continue
+    for fpath, _fname, mtime, size in _day_files(NDF_COMM_CACHE_DIR, '_ndfcomm.json'):
+        for deal in _day_json(fpath, mtime, size):
+            if _deal_matches(deal, filters):
+                matched.append(deal)
 
     return jsonify({"success": True, "deals": matched})
 
@@ -34833,27 +34907,26 @@ def api_generic_nd_search_cache(product):
 
     filters = (request.get_json(silent=True) or {}).get('filters', [])
     matched, refmap_cache = [], {}
-    if os.path.isdir(cfg['dir']):
-        for root, _dirs, files in os.walk(cfg['dir']):
-            for fname in sorted(files):
-                if not fname.endswith(cfg['suffix']):
-                    continue
-                fpath = os.path.join(root, fname)
-                try:
-                    with open(fpath, 'r', encoding='utf-8') as fh:
-                        deals = json.load(fh)
-                    if not isinstance(deals, list):
-                        deals = [deals]
-                    # Contraparte cadastrada depois do import → persiste o
-                    # enriquecimento, senão a linha volta vazia a cada visita.
-                    if _generic_nd_reenrich(deals, refmap_cache):
-                        with _cache_lock:
-                            _atomic_write_json(fpath, deals)
-                    for deal in deals:
-                        if _deal_matches(deal, filters):
-                            matched.append(deal)
-                except Exception:
-                    continue
+    # `mutavel=True`: o `_generic_nd_reenrich` ALTERA os dicionários, e sem a
+    # cópia a alteração ficaria gravada no memo — o próximo leitor veria o dado
+    # de outro request. Ela custa microssegundos contra a dezena de
+    # milissegundos de uma leitura no share.
+    for fpath, _fname, mtime, size in _day_files(cfg['dir'], cfg['suffix']):
+        deals = _day_json(fpath, mtime, size, mutavel=True)
+        try:
+            # Contraparte cadastrada depois do import → persiste o
+            # enriquecimento, senão a linha volta vazia a cada visita.
+            if _generic_nd_reenrich(deals, refmap_cache):
+                with _cache_lock:
+                    _atomic_write_json(fpath, deals)
+                # O mtime novo já invalidaria a entrada, mas contar com isso é
+                # contar com a resolução do relógio do share.
+                _daycache_forget(fpath)
+        except Exception:                                   # noqa: BLE001
+            continue
+        for deal in deals:
+            if _deal_matches(deal, filters):
+                matched.append(deal)
     return jsonify({"success": True, "deals": matched})
 
 
