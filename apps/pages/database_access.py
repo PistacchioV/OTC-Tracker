@@ -121,7 +121,99 @@ class _SemaphoreRegistry:
             return entry
 
 
+class _UnlockedReadGate:
+    """Coordena, DENTRO do processo, as leituras sem lock com as escritas.
+
+    O DuckDB guarda UMA instância por arquivo dentro do processo, e recusa a
+    segunda conexão que chegue com outra configuração: um poll do sino aberto
+    `read_only` no instante em que o `duckdb_write` conecta derruba a ESCRITA
+    com *"Can't open a connection to same database file with a different
+    configuration than existing connections"* — a notificação se perde, e o
+    poll seguinte nem fica sabendo. O conflito é exclusivamente
+    intra-processo (entre processos o sintoma é outro: lock de arquivo), então
+    a coordenação pode ser toda em memória — nenhuma ida ao share.
+
+    As leituras COM lock não precisam disto: o lock de arquivo compartilhado ×
+    exclusivo já as exclui do escritor, inclusive entre handles do mesmo
+    processo. Só a leitura `unlocked` convive no tempo com uma escrita — e é
+    ela que se registra aqui.
+
+    O portão é de MELHOR ESFORÇO nos dois lados, de propósito:
+
+    - o leitor espera um pouco (`_GATE_READ_WAIT_SECONDS`) por um escritor em
+      curso — na maioria das vezes a escrita fecha em milissegundos e a leitura
+      que hoje falharia passa a responder com dado — e, esgotada a espera,
+      SEGUE para o connect e falha como sempre falhou (o poll já devolve o sino
+      vazio). Esperar sem teto seria devolver ao sino a fila que o `unlocked`
+      existe para evitar;
+    - o escritor declara a intenção (leitor novo recua), espera os leitores em
+      voo fecharem (`_GATE_WRITE_WAIT_SECONDS` — eles são SELECTs curtos) e,
+      esgotada a espera, segue e deixa o connect decidir. O teto é o que impede
+      um leitor doente de calar as notificações do app inteiro.
+    """
+
+    def __init__(self) -> None:
+        self._cond = threading.Condition()
+        self._readers = 0
+        self._writers = 0
+
+    def enter_read(self, timeout_seconds: float) -> None:
+        """Registra uma leitura sem lock, esperando (com teto) escritor em curso."""
+        deadline = time.monotonic() + timeout_seconds
+        with self._cond:
+            while self._writers:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    break
+                self._cond.wait(remaining)
+            self._readers += 1
+
+    def exit_read(self) -> None:
+        with self._cond:
+            self._readers -= 1
+            if self._readers <= 0:
+                self._cond.notify_all()
+
+    def enter_write(self, timeout_seconds: float) -> bool:
+        """Declara a escrita e espera (com teto) os leitores sem lock fecharem.
+
+        Devolve False quando o teto venceu com leitores ainda abertos — a
+        escrita segue assim mesmo, e o `duckdb.connect` dirá se deu."""
+        deadline = time.monotonic() + timeout_seconds
+        with self._cond:
+            self._writers += 1
+            while self._readers:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    return False
+                self._cond.wait(remaining)
+            return True
+
+    def exit_write(self) -> None:
+        with self._cond:
+            self._writers -= 1
+            self._cond.notify_all()
+
+
+class _UnlockedGateRegistry:
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._entries: dict[str, _UnlockedReadGate] = {}
+
+    def get(self, database_path: str) -> _UnlockedReadGate:
+        with self._lock:
+            entry = self._entries.get(database_path)
+            if entry is None:
+                entry = _UnlockedReadGate()
+                self._entries[database_path] = entry
+            return entry
+
+
+_GATE_READ_WAIT_SECONDS = 1.0
+_GATE_WRITE_WAIT_SECONDS = 10.0
+
 _semaphores = _SemaphoreRegistry()
+_unlocked_gates = _UnlockedGateRegistry()
 # Os bancos já avisados de que estão sendo lidos sem lock — ver `skip_file_lock`.
 _unlocked_warned: set = set()
 _thread_state = threading.local()
@@ -342,6 +434,11 @@ def _database_context(
 
     permits = _semaphores.get(normalized_path, _settings.read_concurrency)
     permit = permits.write if write else permits.read
+    # O portão intra-processo leitor-sem-lock × escritor é do DuckDB, e só dele:
+    # é a instância única por arquivo dele que recusa configurações mistas.
+    gate = _unlocked_gates.get(normalized_path) if engine == "duckdb" else None
+    gate_read = False
+    gate_write = False
     file_lock = None
     file_lock_acquired_at: Optional[float] = None
     connection = None
@@ -369,9 +466,17 @@ def _database_context(
                 if normalized_path not in _unlocked_warned:
                     _unlocked_warned.add(normalized_path)
                     _log_event("file_lock_skipped", operation, logging.WARNING)
+                if gate is not None:
+                    gate.enter_read(_GATE_READ_WAIT_SECONDS)
+                    gate_read = True
             else:
                 file_lock = _acquire_file_lock(operation)
                 file_lock_acquired_at = time.monotonic()
+                if write and gate is not None:
+                    gate_write = True
+                    if not gate.enter_write(_GATE_WRITE_WAIT_SECONDS):
+                        _log_event("unlocked_gate_wait_timed_out", operation,
+                                   logging.WARNING)
             connection = _open_connection(engine, normalized_path, write)
             _log_event("connection_opened", operation)
             if write:
@@ -421,6 +526,10 @@ def _database_context(
                         "file_lock_release_failed", operation, logging.ERROR,
                         error_type=type(exc).__name__, error_message=_sanitize_error(exc, operation),
                     )
+            if gate_read:
+                gate.exit_read()
+            if gate_write:
+                gate.exit_write()
             permit.release()
     except BaseException as exc:
         primary_error = exc
