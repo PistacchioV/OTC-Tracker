@@ -103,12 +103,23 @@ def load_holidays(filename):
 
 
 def write_holidays(filename, holidays):
-    """Grava os feriados. Devolve `None` ou a mensagem de erro."""
+    """Grava os feriados. Devolve `None` ou a mensagem de erro.
+
+    A escrita é ATÔMICA — o navegador lê este arquivo por URL estática
+    (`/static/data/<file>`), e um fetch no meio de um write não pode ver JSON
+    pela metade — e avisa o espelho vivo: a tabela do calendário no
+    `holiday_calendars.db` acompanha na hora. O aviso é explícito porque o
+    nome do arquivo de calendário só o registro conhece — o gancho genérico
+    do funil não teria como classificá-lo."""
     try:
-        with open(calendar_path(filename), 'w', encoding='utf-8') as f:
-            json.dump(holidays, f, ensure_ascii=False, indent=4)
-    except IOError as e:
+        _routes()._atomic_write_json(calendar_path(filename), holidays)
+    except Exception as e:                                  # noqa: BLE001
         return str(e)
+    try:
+        from apps.pages import duck_mirror
+        duck_mirror.notify_holidays()
+    except Exception:                                       # noqa: BLE001
+        pass
     return None
 
 

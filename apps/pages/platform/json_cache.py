@@ -123,6 +123,7 @@ def _atomic_write_json(file_path, data):
         try:
             os.replace(tmp_path, file_path)
             _bump_cache_gen(file_path)
+            _duck_mirror_notify(file_path)
             return
         except PermissionError:
             pass  # Windows: target held open by a reader — fall through
@@ -130,6 +131,7 @@ def _atomic_write_json(file_path, data):
         with open(file_path, 'w', encoding='utf-8') as fh:
             json.dump(data, fh, ensure_ascii=False, indent=2)
         _bump_cache_gen(file_path)
+        _duck_mirror_notify(file_path)
         try:
             os.unlink(tmp_path)
         except OSError:
@@ -140,6 +142,20 @@ def _atomic_write_json(file_path, data):
         except OSError:
             pass
         raise
+
+
+def _duck_mirror_notify(file_path):
+    """O espelho vivo JSON → DuckDB (fase 2 — `apps/pages/duck_mirror.py`).
+
+    Fica no FUNIL pela mesma razão do `bump_cache_gen`: são 74 chamadores, e o
+    que ficasse de fora envelheceria o banco em silêncio. O aviso só enfileira
+    (nada de trabalho no share aqui — este funil roda sob o `_cache_lock`) e é
+    à prova de exceção: gravar o JSON nunca falha por causa do espelho."""
+    try:
+        from apps.pages import duck_mirror
+        duck_mirror.notify_write(file_path)
+    except Exception:                                       # noqa: BLE001
+        pass
 
 
 def _unique_filepath(output_dir, filename):

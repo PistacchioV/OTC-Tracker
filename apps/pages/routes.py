@@ -10976,6 +10976,14 @@ def _b3_load(table):
 def _b3_save(path, records):
     with open(path, 'w', encoding='utf-8') as fh:
         json.dump(records, fh, ensure_ascii=False, indent=2)
+    # Espelho vivo (fase 2): o RefData gravado aqui atualiza o
+    # reference_data.db na hora; os demais arquivos do mapa são ignorados
+    # pela triagem. Melhor esforço — o save nunca falha pelo espelho.
+    try:
+        from apps.pages import duck_mirror
+        duck_mirror.notify_write(path)
+    except Exception:                                       # noqa: BLE001
+        pass
 
 
 # ── Holidays Calendar ────────────────────────────────────────────────────────
