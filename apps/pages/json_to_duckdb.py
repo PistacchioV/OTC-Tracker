@@ -318,7 +318,19 @@ def convert_holidays(data_dir, out_dir, force=False, dry_run=False):
     con = duckdb.connect(stats['db'])
     try:
         ensure_manifest(con)
-        write_rows_table(con, q('_registry'), registry, force_varchar=True)
+        # O `_registry` também entra no manifest: é o que permite ao leitor
+        # DB-first (`duck_read`, fase 3) provar que a tabela reflete o
+        # `holiday-calendars.json` COMO ELE ESTÁ — registro vindo do seed (sem
+        # arquivo em disco) fica fora do manifest de propósito, e o leitor cai
+        # no caminho JSON, que é quem semeia.
+        reg_path = os.path.join(data_dir, REGISTRY_FILE)
+        reg_st = os.stat(reg_path) if os.path.isfile(reg_path) else None
+        if force or reg_st is None or not manifest_unchanged(con, REGISTRY_FILE, reg_st):
+            write_rows_table(con, q('_registry'), registry, force_varchar=True)
+            if reg_st is not None:
+                manifest_record(con, REGISTRY_FILE, reg_st, ['_registry'])
+        else:
+            stats['skipped'].append(REGISTRY_FILE)
         for cal in registry:
             nome = str(cal['name']).strip()
             arquivo = str(cal.get('file', '')).strip()
