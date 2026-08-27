@@ -110,5 +110,43 @@ check('   e o arquivo baixa pela rota file',
       c.get('/api/electronic-inventory/file?client=ACME%20SA&rel=' +
             'Transactional/' + arquivos[0]).status_code, 200)
 
+print('\n== 5. a listagem e o MAX_PATH ==')
+# A varredura de documents parte da forma \\?\ no Windows: no UNC do JP a SSI
+# da SAINT-GOBAIN FILIAL 0177 tinha 288 chars (o nome entra duas vezes, na
+# pasta e no arquivo), o os.stat falhava com "not found" e o arquivo era
+# pulado em silêncio — na tela, "No documents" com o PDF na pasta.
+from apps.pages.platform import electronic_inventory as EI      # noqa: E402
+check('UNC ganha o prefixo \\\\?\\UNC\\',
+      EI._ei_extended('\\\\srv\\share\\x'), '\\\\?\\UNC\\srv\\share\\x')
+check('   letra de unidade ganha \\\\?\\',
+      EI._ei_extended('I:\\Confirmation\\x'), '\\\\?\\I:\\Confirmation\\x')
+check('   ja prefixado e idempotente',
+      EI._ei_extended('\\\\?\\I:\\x'), '\\\\?\\I:\\x')
+# E o `rel` deixou de sair de relpath(full, base) — full pode estar na forma
+# \\?\ e base na comum, sem raiz em comum. Montado das partes tem de ser byte
+# a byte o de sempre, no arquivo raso (SSI) e no fundo (Confirmations).
+ssi_dir = os.path.join(R.ELECTRONIC_INVENTORY_ROOT, 'ACME SA', 'SSI')
+os.makedirs(ssi_dir, exist_ok=True)
+with open(os.path.join(ssi_dir, 'SSI - ACME SA - 27082026.pdf'), 'wb') as fh:
+    fh.write(b'%PDF')
+conf_dir = os.path.join(R.ELECTRONIC_INVENTORY_ROOT, 'ACME SA',
+                        'Confirmations', '2026', '08. August', '27', 'FXO')
+os.makedirs(conf_dir, exist_ok=True)
+with open(os.path.join(conf_dir, 'FXO - ACME SA - 27082026.pdf'), 'wb') as fh:
+    fh.write(b'%PDF')
+d = c.get('/api/electronic-inventory/documents?client=ACME%20SA').get_json()
+rels = sorted(x['rel'] for x in d['documents'])
+check('documents lista os tres com o rel de sempre',
+      (d['folder_exists'], rels),
+      (True, sorted(['SSI/SSI - ACME SA - 27082026.pdf',
+                     'Confirmations/2026/08. August/27/FXO/FXO - ACME SA - 27082026.pdf',
+                     'Transactional/' + arquivos[0]])))
+doc_conf = [x for x in d['documents'] if x['doctype'] == 'Confirmations'][0]
+check('   e a data do caminho de Confirmations continua saindo',
+      doc_conf['doc_date'], '27/08/2026')
+check('   e o SSI baixa pela rota file',
+      c.get('/api/electronic-inventory/file?client=ACME%20SA&rel=' +
+            'SSI/SSI%20-%20ACME%20SA%20-%2027082026.pdf').status_code, 200)
+
 print(('FAIL: %d' % len(fails)) if fails else 'TUDO OK')
 sys.exit(1 if fails else 0)

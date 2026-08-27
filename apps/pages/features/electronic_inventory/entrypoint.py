@@ -61,7 +61,7 @@ def api_ei_documents():
     if not client:
         return jsonify({'success': False, 'message': 'client required'}), 400
     base = _R()._ei_resolve_client_dir(client)
-    folder_exists = bool(base) and os.path.isdir(base)
+    folder_exists = bool(base) and os.path.isdir(_R()._ei_long_path(base))
     docs = []
     if folder_exists:
         types = _R().EI_SUBFOLDERS if doctype in ('all', '', 'All') else (doctype,)

@@ -258,6 +258,16 @@ def _ei_iter_files(base, doctype):
     reads a dd/mm/yyyy date from the YYYY/MM/DD path; Transactional derives a
     sub-type from the '<TYPE> - ...' filename prefix. rel is POSIX, base-relative."""
     sub = os.path.join(base, doctype)
+    # A varredura parte da forma ESTENDIDA (\\?\): na instância do JP a raiz é
+    # o UNC (\\Nawest...\intra, +41 chars sobre o I:\) e o nome da contraparte
+    # entra DUAS vezes no caminho (pasta e arquivo) — a SSI de uma filial de
+    # nome longo passa dos 260 do MAX_PATH e o os.stat falhava com "not found",
+    # com o `continue` pulando em silêncio um arquivo que está na pasta (foi a
+    # SAINT-GOBAIN FILIAL 0177, 288 chars). O gate de 250 do _ei_long_path não
+    # serve aqui: `sub` é curto, quem estoura são os caminhos que o walk monta
+    # descendo dele (Confirmations desce ano/mês/dia/produto).
+    if os.name == 'nt':
+        sub = _ei_extended(os.path.normpath(os.path.abspath(sub)))
     if not os.path.isdir(sub):
         return
     for dirpath, _dirs, files in os.walk(sub):
@@ -294,7 +304,10 @@ def _ei_iter_files(base, doctype):
                 'name': fn,
                 'doctype': doctype,
                 'subtype': subtype,
-                'rel': os.path.relpath(full, base).replace('\\', '/'),
+                # Montado das partes, não de relpath(full, base): `full` pode
+                # estar na forma \\?\ e `base` na comum — relpath entre as duas
+                # não tem raiz em comum. O resultado é byte a byte o de antes.
+                'rel': '/'.join([doctype] + parts + [fn]),
                 'ext': ext.lstrip('.').upper(),
                 'previewable': ext in _EI_PREVIEWABLE,
                 'size': st.st_size,
@@ -380,6 +393,20 @@ def _ei_scan_root(grace=6.0):
         return (_EI_ROOT_CACHE['exists'], dict(_EI_ROOT_CACHE['dirs']), False)
 
 
+def _ei_extended(path):
+    r"""Forma estendida (\\?\...) INCONDICIONAL — só a montagem da string, sem
+    os gates de `_ei_long_path`. É a raiz de um os.walk que precisa disto: a
+    raiz em si é curta e passaria pelo gate de 250, mas quem estoura o MAX_PATH
+    são os caminhos que a varredura monta DESCENDO dela — e o prefixo só
+    protege os filhos se já estiver no pai. O caminho tem de vir absoluto e
+    normalizado: \\?\ desliga a normalização dali em diante."""
+    if path.startswith('\\\\?\\'):
+        return path
+    if path.startswith('\\\\'):                 # UNC: \\server\share -> \\?\UNC\server\share
+        return '\\\\?\\UNC\\' + path[2:]
+    return '\\\\?\\' + path
+
+
 def _ei_long_path(path):
     r"""Windows extended-length form (\\?\...) for paths near MAX_PATH (260).
 
@@ -390,11 +417,9 @@ def _ei_long_path(path):
     found", which is indistinguishable from a missing file. No-op off Windows,
     on short paths, and on already-prefixed ones. The path must already be
     absolute and normalised — \\?\ disables all further normalisation."""
-    if os.name != 'nt' or len(path) < 250 or path.startswith('\\\\?\\'):
+    if os.name != 'nt' or len(path) < 250:
         return path
-    if path.startswith('\\\\'):                 # UNC: \\server\share -> \\?\UNC\server\share
-        return '\\\\?\\UNC\\' + path[2:]
-    return '\\\\?\\' + path
+    return _ei_extended(path)
 
 
 def _ei_locate_file(client, rel):
