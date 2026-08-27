@@ -34,7 +34,7 @@ try:
 except Exception:                                          # pragma: no cover
     duckdb = None
 
-from apps.pages.data_paths import data_dir, data_path, data_write, mapping_file, mapping_write
+from apps.pages.data_paths import data_write, mapping_file
 from apps.pages.database_access import duckdb_read, duckdb_write
 # Só o Config: importar o `routes` daqui seria circular (é ele quem importa este
 # módulo). O que se repete é a LEITURA da configuração, não o dado.
@@ -252,10 +252,17 @@ def load_all(path=None):
 
     O aging gravado nunca chega à tela: ele é do dia da exportação, e a lista
     fica semanas no banco entre uma importação e outra.
+
+    Chama `ensure_db` como toda escrita do módulo — é o que dispensa script de
+    migração (CLAUDE.md §7): sem isso, um banco em disco anterior a uma coluna
+    nova (`Taxonomy` foi o primeiro caso) derruba a leitura com *column not
+    found* em vez de se autocompletar. As outras funções já chamam; só a
+    leitura tinha ficado de fora.
     """
     path = path or DB_PATH
     if duckdb is None or not os.path.isfile(path):
         return []
+    path = ensure_db(path)
     cols = ', '.join('"{}"'.format(c) for c in DB_COLUMNS)
     # `duckdb_read`: lock COMPARTILHADO — duas telas abertas não se excluem.
     with duckdb_read(path) as con:

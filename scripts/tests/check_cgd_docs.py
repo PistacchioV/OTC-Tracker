@@ -399,6 +399,28 @@ check('a linha nova entra no fim', len(C.load_all()), 4)
 C.delete_row(novo_id)
 check('   e sai inteira', len(C.load_all()), 3)
 
+# `load_all` tem de se autocurar: um banco em disco anterior a uma coluna nova
+# (o caso real na instância do time foi o `Taxonomy`) não pode derrubar a
+# LEITURA com "column not found" — as outras funções já chamam `ensure_db`,
+# só a leitura tinha ficado de fora (o bug que produziu a BinderException).
+import duckdb as _duckdb                                          # noqa: E402
+_old_db = os.path.join(TMP, 'old_schema.db')
+_old_cols = ['_id', 'Status', 'Razão Social', 'Data Solicitação']
+_con = _duckdb.connect(_old_db)
+_con.execute('CREATE TABLE {} ({})'.format(
+    C.TABLE, ', '.join('"{}" VARCHAR'.format(c) for c in _old_cols)))
+_con.execute('INSERT INTO {} VALUES (?, ?, ?, ?)'.format(C.TABLE),
+             ['1', 'Em elaboração', 'Cliente Velho', '01/08/2026'])
+_con.close()
+try:
+    _lidas_velho = C.load_all(_old_db)
+    check('banco com schema velho não derruba a leitura', len(_lidas_velho), 1)
+    check('   e a coluna nova vem vazia, não ausente',
+          _lidas_velho[0].get('Taxonomy'), '')
+except Exception as _e:
+    falhas.append('load_all não se autocurou: %r' % (_e,))
+    print('FAIL load_all não se autocurou  ->  %r' % (_e,))
+
 
 # ── 5. O Overview ───────────────────────────────────────────────────────────
 
