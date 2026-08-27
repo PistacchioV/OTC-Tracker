@@ -13663,3 +13663,24 @@ ferramenta que copia os corpos por AST e reescreve todo `Name(Load)` sem dono pa
 
 A separação interna desses quatro é trabalho futuro; a fronteira com o `routes.py` — e os guardas —
 já valem.
+
+## §313 — Os lotes finais: 39 verticais, e o `routes.py` em 24 mil linhas
+
+A campanha fechou com **39 features** em `apps/pages/features/` e o `routes.py` em **24.125 linhas**
+(de 39.696). Os últimos lotes foram MtM e Accrual verbatim (com redes novas escritas antes:
+`check_mtm_api`, `check_cognos_api`, `check_intrag_api`, `check_cpd_api`, `check_ei_api`), a família
+de liquidação INTEIRA numa vertical só (`other_products`, 29 rotas — o `_ops_trade_rows` é o único
+lugar que sabe as famílias, então parti-la seria cruzar features), e as cascas de confirmation,
+pending_confirmation, live_positions, file_interpreter, ndf_cockpit e ndf_other_publisher.
+
+O que FICOU no `routes.py` é plataforma de verdade: sessão/authz, notificações, os DuckDB, ANBIMA,
+os coletores da liquidação (`_ops_*`, `_otm_*`, `_latam_*`, `_opb3_*`, `_ndfsum_*`), os stores por
+dia, o motor `_fi_*` do File Interpreter, os leitores `_cpd_*`/`_ei_*`/`_pc_*` — e o **New Deals**
+(44 rotas + geradores), a última grande vertical, deixada de propósito para quando a plataforma
+tiver casa própria (`apps/pages/platform/`): extraí-la antes obrigaria a vertical a importar meia
+plataforma pelo `_R()`.
+
+Oito guardas que varriam o TEXTO do `routes.py` ganharam a leitura concatenada (routes + árvore de
+features), e os que desmontam AST aceitam a chamada por busca atrasada (`func.attr` além de
+`func.id`). A suíte fechou em **96 scripts** verdes, todos com `OTC_DISABLE_SCHEDULERS=1` no arnês
+coletivo e as páginas principais respondendo 200 no smoke.

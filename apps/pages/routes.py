@@ -26,7 +26,7 @@ from email.mime.multipart import MIMEMultipart
 import awmpy
 import portalocker
 from flask import (
-    render_template, request, redirect, send_file, send_from_directory,
+    render_template, request, redirect, send_from_directory,
     url_for, session, flash, jsonify, make_response, has_app_context
 )
 from jinja2 import TemplateNotFound

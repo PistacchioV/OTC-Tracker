@@ -6,7 +6,7 @@ Só a casca: os coletores por produto ficam — os Settlement Advices leem os me
 from datetime import datetime
 
 from flask import (jsonify, redirect, render_template, request,
-                   send_file, session, url_for)
+                   session, url_for)
 
 from apps.pages import blueprint
 
