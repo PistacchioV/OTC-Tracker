@@ -93,7 +93,10 @@ check('a varredura achou as aplicacoes', aplicacoes >= 6, True)
 print('\n== 4. os quatro caminhos dividem igual ==')
 # Comparacao literal das expressoes, uma por caminho, para o teste dizer QUAL
 # caminho divergiu em vez de so "achei moeda numa linha".
-src = io.open('apps/pages/routes.py', encoding='utf-8').read()
+# Os gravadores da Intrag moram em features/intrag desde a extracao — os dois
+# arquivos entram na mesma varredura.
+src = (io.open('apps/pages/routes.py', encoding='utf-8').read()
+       + io.open('apps/pages/features/intrag/engine.py', encoding='utf-8').read())
 check('NDF Comm -> Intrag',
       'strike_effective = strike_val / 100.0 if qic else strike_val' in src, True)
 check('Opt Comm -> Intrag',

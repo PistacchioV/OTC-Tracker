@@ -3471,7 +3471,6 @@ CETIP_CEM_LATAM_EMAILS    = [e.strip() for e in os.getenv(
     'martina.rambert@jpmchase.com,mercedes.e.mino@jpmchase.com').split(',') if e.strip()]
 
 
-
 # Network shares for the secondary (flat) copies of two types, mirroring the
 # Alteryx second outputs (commented date subfolder → flat folder).
 CETIP_OPTIONS_SHARE = os.getenv('CETIP_OPTIONS_SHARE',
@@ -4531,95 +4530,6 @@ def _cc_read_rows(filename, raw_bytes):
     raise ValueError('Unsupported file type. Please upload .xlsx, .xlsm, .csv or .tsv.')
 
 
-def _import_client_contacts(filename, raw_bytes):
-    """Parse the spreadsheet bytes and merge contacts into CounterpartyDetails.json.
-    Returns a summary dict; raises ValueError on a recoverable input problem."""
-    rows = _cc_read_rows(filename, raw_bytes)
-
-    groups = {}                    # nspn -> {'spn', 'name', 'contacts'[]}
-    rows_seen = 0
-    skipped_email = []             # placeholder addresses left out of the import
-    for i in range(_CONTACTS_DATA_START_ROW - 1, len(rows)):
-        row = rows[i]
-        spn_raw = _cc_cell(row, _CC_SPN)
-        nspn = _norm_spn(spn_raw)
-        if not nspn:
-            continue
-        # Only import contacts flagged Active ("A") in column D — inactive rows
-        # are ignored entirely (an SPN with no active rows is left untouched).
-        if _cc_cell(row, _CC_ACTIVE).upper() != 'A':
-            continue
-        cname = _cc_cell(row, _CC_CONTACT)
-        phone = _cc_cell(row, _CC_PHONE)
-        email = _cc_cell(row, _CC_EMAIL)
-        rule  = _cc_cell(row, _CC_RULE)
-        if not (cname or phone or email or rule):
-            continue               # blank contact line
-        rows_seen += 1
-        # A filled-in but unusable address ('xxx', 'xx@xx.com') means the row
-        # carries no way to reach anyone — skip it instead of importing a
-        # contact that will bounce.
-        if email and not _cc_email_is_usable(email):
-            skipped_email.append('%s · %s · %s' % (spn_raw.strip(), cname or '(no name)', email))
-            continue
-        g = groups.setdefault(nspn, {'spn': spn_raw.strip(), 'name': '', 'contacts': []})
-        cp_name = _cc_cell(row, _CC_NAME)
-        if cp_name and not g['name']:
-            g['name'] = cp_name
-        g['contacts'].append({
-            'name': cname, 'phone': phone, 'email': email,
-            'rules': _cc_parse_rules(rule), 'status': 'Active',
-        })
-
-    if not groups:
-        raise ValueError('No active contact rows found (data is expected to start at row 5, '
-                         'with the SPN in column B and the Active flag "A" in column D).')
-
-    data = _cpd_load()
-    by_nspn = {}
-    for rec in data:
-        by_nspn.setdefault(_norm_spn(rec.get('SPN', '')), rec)
-
-    matched = created = 0
-    for nspn, g in groups.items():
-        rec = by_nspn.get(nspn)
-        if rec is None:
-            rec = {'SPN': g['spn'], 'COUNTERPARTY': g['name'], 'CGD': [],
-                   'BANKING': {'PAY': [], 'RECEIVE': []}, 'CONTACTS': []}
-            data.append(rec)
-            by_nspn[nspn] = rec
-            created += 1
-        else:
-            matched += 1
-            if g['name'] and not str(rec.get('COUNTERPARTY', '') or '').strip():
-                rec['COUNTERPARTY'] = g['name']
-        rec['CONTACTS'] = g['contacts']     # replace contacts for this SPN
-
-    # Sweep the WHOLE base, not just the SPNs in this spreadsheet: placeholders
-    # imported before this filter existed live under counterparties the current
-    # file may not even mention.
-    swept = 0
-    for rec in data:
-        kept, dropped = _cc_drop_placeholder_contacts(rec.get('CONTACTS') or [])
-        if dropped:
-            rec['CONTACTS'] = kept
-            swept += len(dropped)
-            for c in dropped:
-                log.info('[contacts] swept placeholder %s · %s · %s',
-                         rec.get('SPN', ''), c.get('name', ''), c.get('email', ''))
-
-    _cpd_save_list(data)
-    if skipped_email:
-        log.info('[contacts] %d placeholder e-mail rows skipped on import:\n  %s',
-                 len(skipped_email), '\n  '.join(skipped_email))
-    return {
-        'rows': rows_seen, 'spns': len(groups),
-        'contacts': sum(len(g['contacts']) for g in groups.values()),
-        'matched': matched, 'created': created, 'total': len(data),
-        'skipped_email': len(skipped_email), 'swept': swept,
-    }
-
-
 # Network folder scanned for Daily Settlement source files when the dropzone is
 # left empty (see api_cp_daily_settlement_save).
 SETTLEMENTS_ROOT = os.getenv('SETTLEMENTS_ROOT', os.path.join(
@@ -4922,34 +4832,6 @@ def api_cp_daily_settlement_save():
                 len(skipped), ', '.join(skipped[:8]) + ('…' if len(skipped) > 8 else ''))
     return jsonify({'success': True, 'source': source, 'processed': processed,
                     'skipped': skipped, 'message': msg or 'Nothing to process.'})
-
-
-@blueprint.route('/api/control-panel/import-contacts', methods=['POST'])
-def api_cp_import_contacts():
-    """Update client contacts from the uploaded 'CONTATO DE CLIENTES' spreadsheet."""
-    if not session.get('authenticated'):
-        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
-    f = request.files.get('file')
-    if not f or not f.filename:
-        return jsonify({'success': False, 'error': 'No file uploaded.'}), 400
-    try:
-        summary = _import_client_contacts(f.filename, f.read())
-    except ValueError as e:
-        return jsonify({'success': False, 'error': str(e)}), 400
-    except Exception:
-        log.error('[contacts] import failed:\n%s', traceback.format_exc())
-        return jsonify({'success': False, 'error': 'Failed to process the spreadsheet.'}), 500
-
-    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
-                         'Contacts Updated', 'Control Panel',
-                         '{} contacts across {} counterparties'.format(summary['contacts'], summary['spns']))
-    msg = ('<b>{contacts}</b> contacts imported across <b>{spns}</b> counterparties.'
-           '<br>Matched existing: {matched} &middot; New records appended: {created}'
-           '<br>Total counterparties: {total}').format(**summary)
-    if summary.get('skipped_email') or summary.get('swept'):
-        msg += ('<br>Placeholder e-mails ignored: {skipped_email} '
-                '&middot; removed from the stored base: {swept}').format(**summary)
-    return jsonify({'success': True, 'message': msg})
 
 
 # ============================================================================
@@ -17962,6 +17844,15 @@ def api_pending_confirmation_import_update():
 # mapped, it is a fresh outstanding confirmation → insert it into the pending DB.
 # (Intragroup deals go to Intrag instead, so they are skipped here — this trigger
 # complements the existing Intrag ones.)
+
+def _intrag_engine():
+    """Gancho para os gravadores da vertical Intrag (features/intrag): os saves
+    do New Deals espelham a operação intragrupo para os day-files dela. Import
+    atrasado — os entrypoints só são importados no fim deste arquivo."""
+    from apps.pages.features.intrag import engine
+    return engine
+
+
 def _pc_is_intragroup(client):
     cl = str(client or '').lower()
     return 'banco' in cl and 'morgan' in cl
@@ -18610,7 +18501,7 @@ def api_update_deal_cache(deal_id):
     # outstanding confirmation → Pending Confirmation (the manual-mapping twin of
     # the return-file scan trigger; _pc_save_from_deal skips internal legs itself).
     if str(updates.get('Status', '')) == 'Success':
-        _maybe_save_intrag_opt(updated_deal)
+        _intrag_engine()._maybe_save_intrag_opt(updated_deal)
         _pc_save_from_deal(updated_deal, 'OPTION COMM')     # → pending confirmation
 
     _fields = {k: v for k, v in updates.items() if k not in ('Maker', 'Checker', '_client')}
@@ -18893,7 +18784,7 @@ def api_update_fxo_cache(deal_id):
     # instead flow to Pending Confirmation (manual-mapping twin of the return-file
     # scan trigger; _pc_save_from_deal skips internal legs itself).
     if str(updates.get('Status', '')) == 'Success':
-        _maybe_save_intrag_fxo(updated_deal)
+        _intrag_engine()._maybe_save_intrag_fxo(updated_deal)
         _pc_save_from_deal(updated_deal, 'OPTION')          # → pending confirmation
 
     _fields = {k: v for k, v in updates.items() if k not in ('Maker', 'Checker', '_client')}
@@ -23286,7 +23177,7 @@ def api_fxo_mapping_b3():
                 except Exception:
                     pass
             if intrag_candidate is not None:
-                _maybe_save_intrag_fxo(intrag_candidate)
+                _intrag_engine()._maybe_save_intrag_fxo(intrag_candidate)
                 _pc_save_from_deal(intrag_candidate, 'OPTION')      # → pending confirmation
 
         results.append({
@@ -23321,20 +23212,9 @@ NEW_DEALS_CACHE_ROOT = os.path.normpath(os.path.join(
     data_dir(), "cache", "new deals"
 ))
 
-INTRAG_NDF_CACHE_DIR = os.path.normpath(os.path.join(
-    data_dir(), "cache", "new deals", "Intrag", "NDF"
-))
-INTRAG_OPT_CACHE_DIR = os.path.normpath(os.path.join(
-    data_dir(), "cache", "new deals", "Intrag", "Option"
-))
-INTRAG_SWAP_CACHE_DIR = os.path.normpath(os.path.join(
-    data_dir(), "cache", "new deals", "Intrag", "Swap"
-))
 
 # Network share where generated Intrag NDF .txt files are written; pende da
 # raiz do share (Config.SHARED_DRIVE_ROOT), como os demais destinos.
-INTRAG_NDF_SEND_DIR = os.path.join(
-    Config.SHARED_DRIVE_ROOT, 'Confirmation', 'Derivativos', 'OTC Tracker', 'Intrag')
 
 # English month names for the "mm. Mmmm" folder (e.g. "06. June") — fixed list
 # so the folder name never depends on the server locale.
@@ -23454,915 +23334,8 @@ def _parse_deal_date(s):
             pass
     return None
 
-def _save_intrag_ndf_entry(deal):
-    """Compute all Intrag NDF fields and append/update in the daily JSON file."""
-    td = _parse_deal_date(deal.get('TradeDate', '') or '')
-    sd = _parse_deal_date(deal.get('SettlementDate', '') or '')
-    fx = _parse_deal_date(deal.get('FXConvDate', '') or '')
-    fe = _parse_deal_date(deal.get('FixingEndDate', '') or '')
-
-    fmt_d = lambda d: d.strftime('%Y-%m-%d') if d else ''
-
-    direction = (deal.get('Direction', '') or '').upper()
-    position = 'VENDEDOR' if direction == 'SELL' else ('COMPRADOR' if direction == 'BUY' else '')
-
-    try:
-        total_notional = float(str(deal.get('TotalNotional', 0) or 0).replace(',', ''))
-    except (ValueError, TypeError):
-        total_notional = 0.0
-    try:
-        strike_val = float(str(deal.get('Strike', 0) or 0).replace(',', ''))
-    except (ValueError, TypeError):
-        strike_val = 0.0
-
-    qic = (deal.get('QuotedInCents', 'NO') or 'NO').upper() == 'YES'
-    strike_effective = strike_val / 100.0 if qic else strike_val
-    notional_value_str = f'{total_notional * strike_effective:.2f}' if (total_notional and strike_val) else ''
-    qty_str = str(int(round(total_notional))) if total_notional else ''
-    strike_str = f'{strike_effective:.4f}' if strike_val else ''
-
-    underlying_asset = (deal.get('UnderlyingAsset', '') or '').strip()
-    subj = _subjacente_by_code().get(underlying_asset.upper(), {})
-    reference_exchange = (subj.get('Bolsa de Negociacao') or '').strip()
-    commodity = (deal.get('Commodities', '') or '').strip()
-    unit = (subj.get('Unidade de Negociacao') or '').strip()
-    strike_ccy = (deal.get('StrikeCurrency', '') or '').strip()
-
-    # Maturity Month/Year: o vencimento do CONTRATO do subjacente, pelo cadastro
-    # da Index B3 (Mes/Ano Vencimento do Código do Ativo Subjacente). O `Month`
-    # do deal é o mês de pricing e nem sempre coincide com o mês embutido no
-    # código (AULF27 = jan/2027) — era dele que o campo saía, e saía errado
-    # quando os dois divergiam. Código sem cadastro cai no comportamento
-    # antigo (Month, depois Settlement), que é também o caminho dos deals
-    # antigos re-salvos.
-    expiry_str = ''
-    try:
-        mes_v = int(float(subj.get('Mes Vencimento') or 0))
-        ano_v = int(float(subj.get('Ano Vencimento') or 0))
-        # Faixa sã: o cadastro tem linhas com ano digitado errado (AGD1 →
-        # 2202), e '12-2202' num arquivo de registro é pior que o fallback.
-        if 1 <= mes_v <= 12 and 2000 <= ano_v <= 2099:
-            expiry_str = '{:02d}-{:04d}'.format(mes_v, ano_v)
-    except (ValueError, TypeError):
-        expiry_str = ''
-    if not expiry_str:
-        month_raw = (deal.get('Month', '') or '').strip().upper()
-        m = re.match(r'^([A-Z]{3})(\d{2,4})$', month_raw)
-        if m:
-            mon_num = _MONTH_ABBR.get(m.group(1), '')
-            yr = m.group(2) if len(m.group(2)) == 4 else '20' + m.group(2)
-            if mon_num:
-                expiry_str = f'{mon_num}-{yr}'
-        elif re.match(r'^\d{4}-\d{2}$', month_raw):
-            parts = month_raw.split('-')
-            expiry_str = f'{parts[1]}-{parts[0]}'
-        elif sd:
-            expiry_str = sd.strftime('%m-%Y')
-
-    # ANBIMA biz days between FXConvDate and SettlementDate
-    anbima_days = ''
-    if fx and sd:
-        lo, hi = (fx, sd) if fx < sd else (sd, fx)
-        anbima_days = f'D-{_anbima_bizdays_between(lo, hi)}'
-
-    # Weekday biz days between SettlementDate and FixingEndDate
-    weekday_days = ''
-    if sd and fe:
-        lo, hi = (sd, fe) if sd < fe else (fe, sd)
-        weekday_days = f'D-{_weekday_bizdays_between(lo, hi)}'
-
-    trade_type = (deal.get('TradeType', '') or '').upper()
-    trade_type_label = 'ASIATICO' if 'ASIAN' in trade_type else ('FINAL' if 'VANILLA' in trade_type else '')
-
-    strike_ccy_label = 'Strike em BRL' if strike_ccy.upper() == 'BRL' else ''
-
-    entry = {
-        'contract_type':          'NDF - TERMO MERCADORIA',
-        'b3_id':                  deal.get('B3_ID', '') or '',
-        'portfolio_code':         'INTRAGJP552',
-        'participant_position':   position,
-        'party_tax_id':           '',
-        'counterparty':           'JPM',
-        'cpty_tax_id':            '',
-        'cpty_collateral_basket': 'NÃO',
-        'party_collateral_basket':'NÃO',
-        'notional_value':         notional_value_str,
-        'trade_date':             fmt_d(td),
-        'registration_date':      fmt_d(td),
-        'maturity_date':          fmt_d(sd),
-        'currency':               'N/A',
-        'reference_exchange':     reference_exchange,
-        'commodity':              commodity,
-        'underlying_asset':       underlying_asset,
-        'quantity':               qty_str,
-        'unit_of_negotiation':    unit,
-        'strike':                 strike_str,
-        'strike_currency':        strike_ccy,
-        'expiry_month_year':      expiry_str,
-        'anbima_bizdays':         anbima_days,
-        'fixed_0':                '0',
-        'na_1':                   'N/A',
-        'na_2':                   'N/A',
-        'weekday_bizdays':        weekday_days,
-        'trade_type_label':       trade_type_label,
-        'strike_ccy_label':       strike_ccy_label,
-        'na_3':                   'N/A',
-        '_deal':                  deal.get('Deal', '') or '',
-        '_client':                deal.get('Client', '') or '',
-        'status':                 'New',
-        'maker':                  '',
-        'checker':                '',
-    }
-
-    _intrag_ndf_persist(entry, td)
-
-
-def _intrag_ndf_persist(entry, td):
-    """Append/update uma entrada no day-file da Intrag NDF (chave = _deal)."""
-    ref = td or datetime.now()
-    dir_path = os.path.join(INTRAG_NDF_CACHE_DIR, ref.strftime('%Y'), ref.strftime('%m'))
-    os.makedirs(dir_path, exist_ok=True)
-    fname = ref.strftime('%Y%m%d') + '_intrag_ndf.json'
-    file_path = os.path.join(dir_path, fname)
-
-    with _cache_lock:
-        if os.path.exists(file_path):
-            try:
-                with open(file_path, 'r', encoding='utf-8') as fh:
-                    entries = json.load(fh)
-                if not isinstance(entries, list):
-                    entries = []
-            except (json.JSONDecodeError, ValueError):
-                entries = []
-        else:
-            entries = []
-        deal_id = entry['_deal']
-        idx = next((i for i, e in enumerate(entries) if e.get('_deal') == deal_id), None)
-        if idx is not None:
-            # Preserve the existing lifecycle state on re-save — only the very
-            # first time an entry lands in the JSON does it start as 'New'.
-            entry['status']  = entries[idx].get('status') or 'New'
-            entry['maker']   = entries[idx].get('maker', '')
-            entry['checker'] = entries[idx].get('checker', '')
-            entries[idx] = entry
-        else:
-            entries.append(entry)
-        _atomic_write_json(file_path, entries)
-    log.info('[INTRAG NDF] Saved entry deal=%r → %s', deal_id, file_path)
-
-
-def _save_intrag_ndf_moeda_entry(deal):
-    """NDF de moeda (Vanilla / Other Publisher contra o Lawton) → entrada na
-    Intrag NDF no layout do arquivo "Instrucao NDF Moeda" (NDF - TERMO DE
-    MOEDAS): campos de mercadoria em N/A, moeda = perna estrangeira do par,
-    valor nocional na moeda estrangeira, taxa forward em R$/moeda na coluna
-    Forward Rate (R$/CCY) e o publisher na coluna Information Source — da
-    coluna Trade Price em diante o layout de moeda anda uma casa à esquerda
-    em relação ao de mercadoria."""
-    td = _parse_deal_date(deal.get('TradeDate', '') or '')
-    sd = _parse_deal_date(deal.get('SettlementDate', '') or '')
-    lf = _parse_deal_date(deal.get('LastFixingDate', '') or '')
-    fmt_d = lambda d: d.strftime('%Y-%m-%d') if d else ''
-
-    # A linha das páginas genéricas é a ponta do banco CONTRA o Lawton; a
-    # carteira registrada (INTRAGJP552) é a do fundo, então a posição do
-    # participante é a inversa da Direction da linha (banco SELL → fundo compra).
-    direction = (deal.get('Direction', '') or '').upper()
-    position = 'COMPRADOR' if direction == 'SELL' else ('VENDEDOR' if direction == 'BUY' else '')
-
-    # _conf_to_float detecta BR ("1.234,56") e US ("1,234.56") — o Notional das
-    # páginas genéricas é gravado no formato US ('{:,.2f}').
-    rate_val = _conf_to_float(deal.get('Rate', ''))
-    notional_val = _conf_to_float(deal.get('Notional', ''))
-    qty_ccy = (deal.get('QuantityCurrency', '') or '').strip().upper()
-    oth_ccy = (deal.get('OtherQuantityCurrency', '') or '').strip().upper()
-    foreign_ccy = oth_ccy if qty_ccy == 'BRL' else qty_ccy
-
-    # Valor nocional na moeda estrangeira: nocional em BRL ÷ taxa (R$/moeda);
-    # quando a quantidade do deal já está na moeda estrangeira, é o próprio.
-    if notional_val is not None and qty_ccy == 'BRL' and rate_val:
-        foreign_notional = notional_val / rate_val
-    else:
-        foreign_notional = notional_val
-    notional_str = '{:.2f}'.format(foreign_notional) if foreign_notional is not None else ''
-
-    rate_str = '{:.8f}'.format(rate_val).rstrip('0').rstrip('.') if rate_val is not None else ''
-    # No template o publisher sai com espaços ("PTAX USB WMR 4"), não pipes.
-    publisher = (deal.get('Publisher', '') or 'PTAX').replace('|', ' ').strip() or 'PTAX'
-
-    # Offset do fixing (dias úteis ANBIMA entre o último fixing e o vencimento);
-    # o padrão de NDF de moeda é D-2.
-    fixing_off = 'D-2'
-    if lf and sd:
-        lo, hi = (lf, sd) if lf < sd else (sd, lf)
-        fixing_off = 'D-{}'.format(_anbima_bizdays_between(lo, hi))
-
-    entry = {
-        'contract_type':          'NDF - TERMO DE MOEDAS',
-        'b3_id':                  deal.get('B3_ID', '') or '',
-        'portfolio_code':         'INTRAGJP552',
-        'participant_position':   position,
-        'party_tax_id':           '',
-        'counterparty':           'JPM',
-        'cpty_tax_id':            '',
-        'cpty_collateral_basket': 'NÃO',
-        'party_collateral_basket':'NÃO',
-        'notional_value':         notional_str,
-        'trade_date':             fmt_d(td),
-        'registration_date':      fmt_d(td),
-        'maturity_date':          fmt_d(sd),
-        'currency':               foreign_ccy,
-        'reference_exchange':     'N/A',
-        'commodity':              'N/A',
-        'underlying_asset':       'N/A',
-        'quantity':               'N/A',
-        'unit_of_negotiation':    '0',
-        # Da coluna Trade Price em diante o termo de MOEDA anda uma casa à
-        # esquerda em relação ao termo de mercadoria (as chaves são nomes
-        # legados; o comentário ao lado é a coluna que cada uma alimenta).
-        'strike':                 '0',         # Trade Price
-        'strike_currency':        'BRL',       # Settlement Parity
-        'expiry_month_year':      'N/A',       # Maturity Month/Year
-        'anbima_bizdays':         'N/A',       # Spot Fixing
-        'fixed_0':                rate_str,    # Forward Rate (R$/CCY)
-        'na_1':                   'N/A',       # Asian Fwd Avg Rate
-        'na_2':                   publisher,   # Information Source
-        'weekday_bizdays':        fixing_off,  # Comm Fixing
-        'trade_type_label':       'N/A',       # Adjustment Type
-        'strike_ccy_label':       'N/A',       # Observation
-        'na_3':                   'N/A',       # Discount Factor
-        '_deal':                  deal.get('Deal', '') or '',
-        '_client':                deal.get('Client', '') or '',
-        'status':                 'New',
-        'maker':                  '',
-        'checker':                '',
-    }
-    _intrag_ndf_persist(entry, td)
-
 
 # Intra-group accounts: 73760.00-9 = Banco J.P. Morgan, 00041.00-7 = Lawton.
-_INTRAG_OPT_JPM_ACC    = '73760.00-9'
-_INTRAG_OPT_LAWTON_ACC = '00041.00-7'
-_INTRAG_OPT_JPM_NAME    = 'BANCO J.P MORGAN S.A'
-_INTRAG_OPT_LAWTON_NAME = 'LAWTON MULTIMERCADO-FI'
-
-
-def _intrag_opt_name_for(acc):
-    if acc == _INTRAG_OPT_JPM_ACC:
-        return _INTRAG_OPT_JPM_NAME
-    if acc == _INTRAG_OPT_LAWTON_ACC:
-        return _INTRAG_OPT_LAWTON_NAME
-    return ''
-
-
-def _save_intrag_opt_entry(deal, is_fxo=False):
-    """Compute the Intrag Option fields from a New Deals Opt-Comm (or Opt-FXO)
-    deal and append/update the daily JSON. Only the columns specified so far are
-    filled; the rest are placeholders to be wired later. Random my_number /
-    cetip_number are generated once and preserved on re-save (like the lifecycle
-    state).
-
-    FXO deals share the same intrag_opt.json file and the same filling logic,
-    but override seven fields (information source, exchange, ticker, currency
-    symbol, bulletin, bulletin time and SISBACEN currency code)."""
-    td = _parse_deal_date(deal.get('TradeDate', '') or '')
-    sd = _parse_deal_date(deal.get('SettlementDate', '') or '')
-    fmt_br = lambda d: d.strftime('%d/%m/%Y') if d else ''
-
-    direction = (deal.get('Direction', '') or '').upper()
-    if direction == 'BUY':
-        buyer_account = _INTRAG_OPT_LAWTON_ACC
-    elif direction == 'SELL':
-        buyer_account = _INTRAG_OPT_JPM_ACC
-    else:
-        buyer_account = ''
-    buyer_name = _intrag_opt_name_for(buyer_account)
-    # Seller is the inverse account/name of the buyer.
-    if buyer_account == _INTRAG_OPT_JPM_ACC:
-        seller_account = _INTRAG_OPT_LAWTON_ACC
-    elif buyer_account == _INTRAG_OPT_LAWTON_ACC:
-        seller_account = _INTRAG_OPT_JPM_ACC
-    else:
-        seller_account = ''
-    seller_name = _intrag_opt_name_for(seller_account)
-
-    instrument = (deal.get('Instrument', '') or '').upper()
-    if 'PUT' in instrument:
-        contract = 'OFVC'
-    elif 'CALL' in instrument:
-        contract = 'OFCC'
-    else:
-        contract = ''
-
-    currency_symbol = (deal.get('Commodities', '') or '').strip()[:3].upper()
-
-    # ── numeric columns ──────────────────────────────────────────────────
-    def _f(v):
-        try:
-            return float(str(v if v is not None else '').replace(',', '').strip() or 0)
-        except (ValueError, TypeError):
-            return 0.0
-
-    def _has(key):
-        return str(deal.get(key, '') or '').strip() != ''
-
-    qic = (deal.get('QuotedInCents', 'NO') or 'NO').upper() == 'YES'
-    # Cotado em cents divide por 100 SEMPRE, seja o strike em USD ou em BRL: a
-    # regra é do ativo (Fator Conversão 0,01 no Subjacente) e não da moeda do
-    # deal. Antes o BRL era exceção aqui e não era no Conecta desta mesma
-    # página — o mesmo deal saía com strike diferente nos dois arquivos. §172
-    _cents = lambda v: (v / 100.0) if qic else v
-
-    is_call = 'CALL' in instrument
-    is_put  = 'PUT' in instrument
-
-    premium_val  = _f(deal.get('Premium'))
-    notional_val = _f(deal.get('TotalNotional'))
-    strike_adj   = _cents(_f(deal.get('Strike')))
-    ppu_adj      = _cents(_f(deal.get('PremiumPerUnit')))
-
-    premium_str    = '{:.2f}'.format(premium_val)  if _has('Premium')       else ''
-    fxbase_str     = '{:.2f}'.format(notional_val) if _has('TotalNotional') else ''
-    quantity_str   = '{:.2f}'.format(notional_val) if _has('TotalNotional') else ''
-    call_strike    = '{:.8f}'.format(strike_adj)   if (is_call and _has('Strike')) else ''
-    put_strike     = '{:.8f}'.format(strike_adj)   if (is_put  and _has('Strike')) else ''
-    call_premium   = '{:.8f}'.format(ppu_adj)      if (is_call and _has('PremiumPerUnit')) else ''
-    put_premium    = '{:.8f}'.format(ppu_adj)      if (is_put  and _has('PremiumPerUnit')) else ''
-
-    # Fixing = weekday biz-days (no calendar) between FixingEndDate and SettlementDate.
-    fe = _parse_deal_date(deal.get('FixingEndDate', '') or '')
-    fixing_days = ''
-    if fe and sd:
-        lo, hi = (fe, sd) if fe < sd else (sd, fe)
-        fixing_days = str(_weekday_bizdays_between(lo, hi))
-    fixing_desc = ('D-' + fixing_days) if fixing_days != '' else ''
-
-    underlying_asset = (deal.get('UnderlyingAsset', '') or '').strip()
-    subj = _subjacente_by_code().get(underlying_asset.upper(), {})
-    exchange = (subj.get('Bolsa de Negociacao') or '').strip()
-
-    spot = _parse_deal_date(deal.get('SpotDate', '') or '')
-    trade_type = (deal.get('TradeType', '') or '').upper()
-    if 'ASIAN' in trade_type:
-        asian_label = 'APLICÁVEL'
-    elif 'VANILLA' in trade_type:
-        asian_label = 'NÃO APLICÁVEL'
-    else:
-        asian_label = ''
-
-    # FXO overrides these seven columns; everything else uses the shared logic.
-    if is_fxo:
-        info_source   = 'SISBACEN'
-        exchange_val  = 'BACEN'
-        ticker_val    = 'USD'
-        currency_sym  = 'USD'
-        bulletin_val  = '3'
-        bulletin_time = '18:00'
-        sisbacen_ccy  = '220'
-    else:
-        info_source   = 'COMMODITIES'
-        exchange_val  = exchange
-        ticker_val    = underlying_asset
-        currency_sym  = currency_symbol
-        bulletin_val  = '9'
-        bulletin_time = ''
-        sisbacen_ccy  = 'COM'
-
-    entry = {
-        'portfolio':              'INTRAGJP552',
-        'system_id':              'OPCAO',
-        'line_type_id':           '1',
-        'registration_date':      fmt_br(td),
-        'buyer_account':          buyer_account,
-        'buyer_name':             buyer_name,
-        'contract':               contract,
-        'b3_id':                  deal.get('B3_ID', '') or '',
-        'my_number':              ''.join(random.choice(string.digits) for _ in range(10)),
-        'trade_type':             '002',
-        'seller_account':         seller_account,
-        'seller_name':            seller_name,
-        'start_date':             fmt_br(td),
-        'maturity_date':          fmt_br(sd),
-        'cetip_number':           ''.join(random.choice(string.digits) for _ in range(16)),
-        'sisbacen_currency_code': sisbacen_ccy,
-        'currency_symbol':        currency_sym,
-        'investment_amount':      premium_str,        # Premium
-        'fx_base_value':          fxbase_str,         # Total Notional
-        'prepaid_value':          '',                 # Unwind Amount
-        'prepayment_unit_price':  '',                 # Unwind Unit Price
-        'redemption_value':       '0.00',
-        'call_strike_price':      call_strike,
-        'put_strike_price':       put_strike,
-        'call_unit_premium':      call_premium,
-        'put_unit_premium':       put_premium,
-        'barrier_rate':           '',
-        'exercise_type':          'EUROPEIA',
-        'information_source':     info_source,
-        'bulletin':               bulletin_val,
-        'bulletin_time':          bulletin_time,
-        'maturity_rate':          fixing_days,        # Fixing (biz-day count)
-        'maturity_rate_desc':     fixing_desc,        # Fixing Description (D-n)
-        'query_source':           exchange_val,       # Exchange (Bolsa de Negociacao)
-        'ticker':                 ticker_val,
-        'quantity':               quantity_str,
-        'premium_payment_date':   spot.strftime('%d/%m/%Y') if spot else '',
-        'asian_option_average':   asian_label,
-        '_deal':   deal.get('Deal', '') or '',
-        '_client': deal.get('Client', '') or '',
-        'status':  'New',
-        'maker':   '',
-        'checker': '',
-    }
-
-    ref = td or datetime.now()
-    dir_path = os.path.join(INTRAG_OPT_CACHE_DIR, ref.strftime('%Y'), ref.strftime('%m'))
-    os.makedirs(dir_path, exist_ok=True)
-    fname = ref.strftime('%Y%m%d') + '_intrag_opt.json'
-    file_path = os.path.join(dir_path, fname)
-
-    with _cache_lock:
-        if os.path.exists(file_path):
-            try:
-                with open(file_path, 'r', encoding='utf-8') as fh:
-                    entries = json.load(fh)
-                if not isinstance(entries, list):
-                    entries = []
-            except (json.JSONDecodeError, ValueError):
-                entries = []
-        else:
-            entries = []
-        deal_id = entry['_deal']
-        idx = next((i for i, e in enumerate(entries) if e.get('_deal') == deal_id), None)
-        if idx is not None:
-            # Preserve lifecycle + the once-generated random numbers on re-save.
-            for k in ('status', 'maker', 'checker', 'my_number', 'cetip_number'):
-                if entries[idx].get(k):
-                    entry[k] = entries[idx][k]
-            entries[idx] = entry
-        else:
-            entries.append(entry)
-        _atomic_write_json(file_path, entries)
-    log.info('[INTRAG %s] Saved entry deal=%r → %s', 'FXO' if is_fxo else 'OPT', deal_id, file_path)
-
-
-def _maybe_save_intrag_opt(deal):
-    """Save to Intrag Option when the counterparty is Banco J.P. Morgan (intragroup)."""
-    cl = (deal.get('Client', '') or '').lower()
-    if 'banco' in cl and 'morgan' in cl:
-        try:
-            _save_intrag_opt_entry(deal)
-        except Exception as exc:
-            log.error('[INTRAG OPT] save failed for deal=%r: %s', deal.get('Deal', ''), exc)
-
-
-def _maybe_save_intrag_fxo(deal):
-    """Save an Opt-FXO deal to Intrag Option (shared file) when the counterparty
-    is Banco J.P. Morgan (intragroup). Same logic as opt-comm with FXO overrides."""
-    cl = (deal.get('Client', '') or '').lower()
-    if 'banco' in cl and 'morgan' in cl:
-        try:
-            _save_intrag_opt_entry(deal, is_fxo=True)
-        except Exception as exc:
-            log.error('[INTRAG FXO] save failed for deal=%r: %s', deal.get('Deal', ''), exc)
-
-
-def _find_intrag_ndf_entry(deal_id, trade_date):
-    """Locate an Intrag NDF entry by deal id (+ optional trade date to narrow the
-    daily file). Returns (file_path, entries_list, idx) or (None, None, None)."""
-    if not deal_id:
-        return None, None, None
-    ref = _parse_date_any(trade_date) if trade_date else None
-    candidate_files = []
-    if ref is not None:
-        fp = os.path.join(
-            INTRAG_NDF_CACHE_DIR, ref.strftime('%Y'), ref.strftime('%m'),
-            ref.strftime('%Y%m%d') + '_intrag_ndf.json'
-        )
-        if os.path.isfile(fp):
-            candidate_files.append(fp)
-    if not candidate_files and os.path.isdir(INTRAG_NDF_CACHE_DIR):
-        for root, _, files in os.walk(INTRAG_NDF_CACHE_DIR):
-            for fname in files:
-                if fname.endswith('_intrag_ndf.json'):
-                    candidate_files.append(os.path.join(root, fname))
-    for fp in candidate_files:
-        try:
-            with open(fp, 'r', encoding='utf-8') as fh:
-                entries = json.load(fh)
-            if not isinstance(entries, list):
-                continue
-        except (json.JSONDecodeError, ValueError, OSError):
-            continue
-        idx = next((i for i, e in enumerate(entries) if e.get('_deal') == deal_id), None)
-        if idx is not None:
-            return fp, entries, idx
-    return None, None, None
-
-
-@blueprint.route('/api/intrag/ndf')
-def api_intrag_ndf():
-    if not session.get('authenticated'):
-        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
-    date_str  = request.args.get('date', '').strip()       # YYYY-MM-DD (single day)
-    date_from = request.args.get('date_from', '').strip()  # YYYY-MM-DD (range start)
-    date_to   = request.args.get('date_to', '').strip()    # YYYY-MM-DD (range end)
-    entries = []
-    if date_from or date_to:
-        # Trade Date range — load every day-file within [from, to] inclusive
-        d_from = _parse_date_any(date_from)
-        d_to   = _parse_date_any(date_to)
-        # Com intervalo há o que PODAR: ano e mês inteiros fora dele são
-        # descartados antes de o `scandir` entrar neles. Quem decide continua
-        # sendo a data no NOME do arquivo, logo abaixo.
-        for fp, fname, mtime, size in _day_files(INTRAG_NDF_CACHE_DIR, '_intrag_ndf.json', d_from, d_to):
-            fdate = _parse_date_any(fname[:8])
-            if fdate is None:
-                continue
-            if d_from and fdate < d_from:
-                continue
-            if d_to and fdate > d_to:
-                continue
-            entries.extend(_day_json(fp, mtime, size))
-    elif date_str:
-        try:
-            ref = datetime.strptime(date_str, '%Y-%m-%d')
-            fname = ref.strftime('%Y%m%d') + '_intrag_ndf.json'
-            fp = os.path.join(INTRAG_NDF_CACHE_DIR, ref.strftime('%Y'), ref.strftime('%m'), fname)
-            if os.path.isfile(fp):
-                with open(fp, 'r', encoding='utf-8') as fh:
-                    entries = json.load(fh)
-                if not isinstance(entries, list):
-                    entries = []
-        except Exception as exc:
-            log.warning('[INTRAG NDF] date load error date=%r: %s', date_str, exc)
-    else:
-        # Sem data nenhuma: a árvore inteira, e aí só o memo ajuda.
-        for fp, _fname, mtime, size in _day_files(INTRAG_NDF_CACHE_DIR, '_intrag_ndf.json'):
-            entries.extend(_day_json(fp, mtime, size))
-    return jsonify({'success': True, 'entries': entries})
-
-
-@blueprint.route('/api/intrag/option')
-def api_intrag_option():
-    if not session.get('authenticated'):
-        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
-    date_str  = request.args.get('date', '').strip()
-    date_from = request.args.get('date_from', '').strip()
-    date_to   = request.args.get('date_to', '').strip()
-    suffix = '_intrag_opt.json'
-    entries = []
-    if date_from or date_to:
-        d_from = _parse_date_any(date_from)
-        d_to   = _parse_date_any(date_to)
-        # Com intervalo há o que PODAR: ano e mês inteiros fora dele são
-        # descartados antes de o `scandir` entrar neles. Quem decide continua
-        # sendo a data no NOME do arquivo, logo abaixo.
-        for fp, fname, mtime, size in _day_files(INTRAG_OPT_CACHE_DIR, suffix, d_from, d_to):
-            fdate = _parse_date_any(fname[:8])
-            if fdate is None:
-                continue
-            if d_from and fdate < d_from:
-                continue
-            if d_to and fdate > d_to:
-                continue
-            entries.extend(_day_json(fp, mtime, size))
-    elif date_str:
-        try:
-            ref = datetime.strptime(date_str, '%Y-%m-%d')
-            fp = os.path.join(INTRAG_OPT_CACHE_DIR, ref.strftime('%Y'), ref.strftime('%m'),
-                              ref.strftime('%Y%m%d') + suffix)
-            if os.path.isfile(fp):
-                with open(fp, 'r', encoding='utf-8') as fh:
-                    entries = json.load(fh)
-                if not isinstance(entries, list):
-                    entries = []
-        except Exception as exc:
-            log.warning('[INTRAG OPT] date load error date=%r: %s', date_str, exc)
-    else:
-        # Sem data nenhuma: a árvore inteira, e aí só o memo ajuda.
-        for fp, _fname, mtime, size in _day_files(INTRAG_OPT_CACHE_DIR, suffix):
-            entries.extend(_day_json(fp, mtime, size))
-    return jsonify({'success': True, 'entries': entries})
-
-
-def _find_intrag_opt_entry(deal_id, trade_date):
-    """Locate an Intrag Option entry by deal id (+ optional trade date)."""
-    if not deal_id:
-        return None, None, None
-    ref = _parse_date_any(trade_date) if trade_date else None
-    candidate_files = []
-    if ref is not None:
-        fp = os.path.join(INTRAG_OPT_CACHE_DIR, ref.strftime('%Y'), ref.strftime('%m'),
-                          ref.strftime('%Y%m%d') + '_intrag_opt.json')
-        if os.path.isfile(fp):
-            candidate_files.append(fp)
-    if not candidate_files and os.path.isdir(INTRAG_OPT_CACHE_DIR):
-        for root, _, files in os.walk(INTRAG_OPT_CACHE_DIR):
-            for fname in files:
-                if fname.endswith('_intrag_opt.json'):
-                    candidate_files.append(os.path.join(root, fname))
-    for fp in candidate_files:
-        try:
-            with open(fp, 'r', encoding='utf-8') as fh:
-                entries = json.load(fh)
-            if not isinstance(entries, list):
-                continue
-        except (json.JSONDecodeError, ValueError, OSError):
-            continue
-        idx = next((i for i, e in enumerate(entries) if e.get('_deal') == deal_id), None)
-        if idx is not None:
-            return fp, entries, idx
-    return None, None, None
-
-
-@blueprint.route('/api/intrag/option/send-file', methods=['POST'])
-def api_intrag_option_send_file():
-    """Generate the Intrag Option .txt file(s) from the selected rows and flip
-    New/Approved → Sent. Same standard folder as NDF; file Intrag-Option-YYYYMMDD.txt.
-
-    Body: { "items": [ { "deal_id": str, "cells": [...38...] } ] }. Rows are
-    grouped by Registration Date (data col index 3) — one file per date."""
-    if not session.get('authenticated'):
-        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
-
-    payload = request.get_json(silent=True) or {}
-    items = payload.get('items')
-    if not isinstance(items, list) or not items:
-        rows = payload.get('rows')
-        if not isinstance(rows, list) or not rows:
-            return jsonify({'success': False, 'message': 'No rows provided'}), 400
-        items = [{'deal_id': '', 'cells': r} for r in rows if isinstance(r, list)]
-
-    REG_DATE_IDX = 3   # Registration Date within the 38 data columns
-    SENDABLE = {'New', 'Approved'}
-
-    groups = {}
-    sent_ids = []
-    for it in items:
-        if not isinstance(it, dict):
-            continue
-        cells = ['' if c is None else str(c) for c in (it.get('cells') or [])]
-        if not cells:
-            continue
-        td_raw = cells[REG_DATE_IDX] if len(cells) > REG_DATE_IDX else ''
-        ref = _parse_date_any(td_raw) or datetime.now()
-        groups.setdefault(ref.strftime('%Y%m%d'), {'ref': ref, 'rows': []})['rows'].append(cells)
-        if it.get('deal_id'):
-            sent_ids.append((it['deal_id'], td_raw))
-
-    if not groups:
-        return jsonify({'success': False, 'message': 'No valid rows provided'}), 400
-
-    written = []
-    try:
-        with _cache_lock:
-            for key, grp in groups.items():
-                ref = grp['ref']
-                month_folder = ref.strftime('%m') + '. ' + _EN_MONTH_NAMES[ref.month - 1]
-                dir_path = os.path.join(INTRAG_NDF_SEND_DIR, ref.strftime('%Y'), month_folder, ref.strftime('%d'))
-                os.makedirs(dir_path, exist_ok=True)
-                base = 'Intrag-Option-' + key
-                candidate = base + '.txt'
-                n = 0
-                while os.path.exists(os.path.join(dir_path, candidate)):
-                    n += 1
-                    candidate = base + ' (' + str(n) + ').txt'
-                file_path = os.path.join(dir_path, candidate)
-                with open(file_path, 'w', encoding='utf-8') as fh:
-                    fh.write('\n'.join(';'.join(r) for r in grp['rows']))
-                written.append(file_path)
-                log.info('[INTRAG OPT] Wrote send file %s (%d row(s))', file_path, len(grp['rows']))
-
-            for deal_id, td_raw in sent_ids:
-                fp, entries, idx = _find_intrag_opt_entry(deal_id, td_raw)
-                if idx is None:
-                    continue
-                if (entries[idx].get('status') or 'New') in SENDABLE:
-                    entries[idx]['status'] = 'Sent'
-                    _atomic_write_json(fp, entries)
-    except Exception as exc:
-        log.error('[INTRAG OPT] send-file failed: %s', exc)
-        return jsonify({'success': False, 'message': 'File generation failed: ' + str(exc)}), 500
-
-    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
-                         'Intrag Sent', 'Intrag Option',
-                         str(len(items)) + ' row' + ('' if len(items) == 1 else 's') + ' sent')
-    return jsonify({'success': True, 'files': written, 'count': len(items)})
-
-
-@blueprint.route('/api/intrag/option/edit', methods=['POST'])
-def api_intrag_option_edit():
-    """Row-level edit on an Intrag Option entry → status 'Pending', records maker."""
-    if not session.get('authenticated'):
-        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
-    payload    = request.get_json(silent=True) or {}
-    deal_id    = (payload.get('deal_id') or '').strip()
-    trade_date = (payload.get('trade_date') or '').strip()
-    fields     = payload.get('fields') or {}
-    if not deal_id:
-        return jsonify({'success': False, 'message': 'Missing deal_id'}), 400
-    with _cache_lock:
-        fp, entries, idx = _find_intrag_opt_entry(deal_id, trade_date)
-        if idx is None:
-            return jsonify({'success': False, 'message': 'Entry not found'}), 404
-        if isinstance(fields, dict):
-            for k, v in fields.items():
-                if k in entries[idx] and k not in ('_deal', '_client', 'status', 'maker', 'checker'):
-                    entries[idx][k] = v
-        entries[idx]['status']  = 'Pending'
-        entries[idx]['maker']   = session.get('user_sid', '')
-        entries[idx]['checker'] = ''
-        _atomic_write_json(fp, entries)
-    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
-                         'Deal Updated', 'Intrag Option', deal_id)
-    return jsonify({'success': True, 'status': 'Pending'})
-
-
-@blueprint.route('/api/intrag/option/approve', methods=['POST'])
-def api_intrag_option_approve():
-    """Move an Intrag Option entry Pending → Approved (maker ≠ checker)."""
-    if not session.get('authenticated'):
-        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
-    payload    = request.get_json(silent=True) or {}
-    deal_id    = (payload.get('deal_id') or '').strip()
-    trade_date = (payload.get('trade_date') or '').strip()
-    if not deal_id:
-        return jsonify({'success': False, 'message': 'Missing deal_id'}), 400
-    user_sid = session.get('user_sid', '')
-    with _cache_lock:
-        fp, entries, idx = _find_intrag_opt_entry(deal_id, trade_date)
-        if idx is None:
-            return jsonify({'success': False, 'message': 'Entry not found'}), 404
-        if (entries[idx].get('status') or '') != 'Pending':
-            return jsonify({'success': False, 'message': 'Only Pending entries can be approved.'}), 400
-        if entries[idx].get('maker') and entries[idx]['maker'] == user_sid:
-            return jsonify({'success': False,
-                            'message': 'Maker cannot approve their own change — a different user must check it.'}), 403
-        entries[idx]['status']  = 'Approved'
-        entries[idx]['checker'] = user_sid
-        _atomic_write_json(fp, entries)
-    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
-                         'Status Updated', 'Intrag Option', deal_id + ' → Approved')
-    return jsonify({'success': True, 'status': 'Approved'})
-
-
-@blueprint.route('/api/intrag/ndf/send-file', methods=['POST'])
-def api_intrag_ndf_send_file():
-    """Generate the Intrag NDF .txt file(s) from the selected table rows.
-
-    Body: { "rows": [ [col0, col1, ... col29], ... ] } — the 30 data columns,
-    in NDF_COLS order. Rows are grouped by their Trade Date (data col index 10)
-    so each file lands in its own date folder:
-
-        I:\\Confirmation\\Derivativos\\OTC Tracker\\Intrag\\YYYY\\mm. Mmmm\\dd
-        (e.g. 2026\\06. June\\22)
-
-    Each file is named Intrag-NDF-YYYYMMDD.txt; if a file already exists it is
-    NOT overwritten — a copy with " (1)", " (2)", ... is created instead. Each
-    selected row becomes one line; columns are separated by ';'. A single-row
-    (row-level) send therefore produces a file with one line.
-    """
-    if not session.get('authenticated'):
-        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
-
-    payload = request.get_json(silent=True) or {}
-    # New format: items = [{ "deal_id": str, "cells": [...30...] }, ...]
-    # Legacy format: rows = [[...30...], ...] (no status tracking).
-    items = payload.get('items')
-    if not isinstance(items, list) or not items:
-        rows = payload.get('rows')
-        if not isinstance(rows, list) or not rows:
-            return jsonify({'success': False, 'message': 'No rows provided'}), 400
-        items = [{'deal_id': '', 'cells': r} for r in rows if isinstance(r, list)]
-
-    TRADE_DATE_IDX = 10  # index of Trade Date within the 30 data columns
-    SENDABLE = {'New', 'Approved'}
-
-    # Group rows by Trade Date → one file per distinct trade date. For the common
-    # case (all rows share a trade date) this yields a single file.
-    groups = {}
-    sent_ids = []   # (deal_id, trade_date) pairs eligible to flip to 'Sent'
-    for it in items:
-        if not isinstance(it, dict):
-            continue
-        cells = ['' if c is None else str(c) for c in (it.get('cells') or [])]
-        if not cells:
-            continue
-        td_raw = cells[TRADE_DATE_IDX] if len(cells) > TRADE_DATE_IDX else ''
-        ref = _parse_date_any(td_raw) or datetime.now()
-        key = ref.strftime('%Y%m%d')
-        groups.setdefault(key, {'ref': ref, 'rows': []})['rows'].append(cells)
-        if it.get('deal_id'):
-            sent_ids.append((it['deal_id'], td_raw))
-
-    if not groups:
-        return jsonify({'success': False, 'message': 'No valid rows provided'}), 400
-
-    written = []
-    try:
-        with _cache_lock:
-            for key, grp in groups.items():
-                ref = grp['ref']
-                month_folder = ref.strftime('%m') + '. ' + _EN_MONTH_NAMES[ref.month - 1]
-                dir_path = os.path.join(
-                    INTRAG_NDF_SEND_DIR, ref.strftime('%Y'), month_folder, ref.strftime('%d')
-                )
-                os.makedirs(dir_path, exist_ok=True)
-
-                base = 'Intrag-NDF-' + key
-                candidate = base + '.txt'
-                n = 0
-                while os.path.exists(os.path.join(dir_path, candidate)):
-                    n += 1
-                    candidate = base + ' (' + str(n) + ').txt'
-                file_path = os.path.join(dir_path, candidate)
-
-                content = '\n'.join(';'.join(r) for r in grp['rows'])
-                with open(file_path, 'w', encoding='utf-8') as fh:
-                    fh.write(content)
-                written.append(file_path)
-                log.info('[INTRAG NDF] Wrote send file %s (%d row(s))', file_path, len(grp['rows']))
-
-            # Flip status New/Approved → Sent for every persisted entry sent.
-            for deal_id, td_raw in sent_ids:
-                fp, entries, idx = _find_intrag_ndf_entry(deal_id, td_raw)
-                if idx is None:
-                    continue
-                if (entries[idx].get('status') or 'New') in SENDABLE:
-                    entries[idx]['status'] = 'Sent'
-                    _atomic_write_json(fp, entries)
-    except Exception as exc:
-        log.error('[INTRAG NDF] send-file failed: %s', exc)
-        return jsonify({'success': False, 'message': 'File generation failed: ' + str(exc)}), 500
-
-    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
-                         'Intrag Sent', 'Intrag NDF',
-                         str(len(items)) + ' row' + ('' if len(items) == 1 else 's') + ' sent')
-    return jsonify({'success': True, 'files': written, 'count': len(items)})
-
-
-@blueprint.route('/api/intrag/ndf/edit', methods=['POST'])
-def api_intrag_ndf_edit():
-    """Persist a row-level edit on an Intrag NDF entry → status becomes 'Pending'
-    and the editing user is recorded as the maker (4-eyes control)."""
-    if not session.get('authenticated'):
-        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
-
-    payload    = request.get_json(silent=True) or {}
-    deal_id    = (payload.get('deal_id') or '').strip()
-    trade_date = (payload.get('trade_date') or '').strip()
-    fields     = payload.get('fields') or {}
-    if not deal_id:
-        return jsonify({'success': False, 'message': 'Missing deal_id'}), 400
-
-    with _cache_lock:
-        fp, entries, idx = _find_intrag_ndf_entry(deal_id, trade_date)
-        if idx is None:
-            return jsonify({'success': False, 'message': 'Entry not found'}), 404
-        if isinstance(fields, dict):
-            for k, v in fields.items():
-                if k in entries[idx] and k not in ('_deal', '_client', 'status', 'maker', 'checker'):
-                    entries[idx][k] = v
-        entries[idx]['status']  = 'Pending'
-        entries[idx]['maker']   = session.get('user_sid', '')
-        entries[idx]['checker'] = ''
-        _atomic_write_json(fp, entries)
-
-    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
-                         'Deal Updated', 'Intrag NDF', deal_id)
-    return jsonify({'success': True, 'status': 'Pending'})
-
-
-@blueprint.route('/api/intrag/ndf/approve', methods=['POST'])
-def api_intrag_ndf_approve():
-    """Move an Intrag NDF entry Pending → Approved. Enforces maker ≠ checker:
-    the user who made the edit cannot approve their own change."""
-    if not session.get('authenticated'):
-        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
-
-    payload    = request.get_json(silent=True) or {}
-    deal_id    = (payload.get('deal_id') or '').strip()
-    trade_date = (payload.get('trade_date') or '').strip()
-    if not deal_id:
-        return jsonify({'success': False, 'message': 'Missing deal_id'}), 400
-
-    user_sid = session.get('user_sid', '')
-    with _cache_lock:
-        fp, entries, idx = _find_intrag_ndf_entry(deal_id, trade_date)
-        if idx is None:
-            return jsonify({'success': False, 'message': 'Entry not found'}), 404
-        if (entries[idx].get('status') or '') != 'Pending':
-            return jsonify({'success': False, 'message': 'Only Pending entries can be approved.'}), 400
-        if entries[idx].get('maker') and entries[idx]['maker'] == user_sid:
-            return jsonify({'success': False,
-                            'message': 'Maker cannot approve their own change — a different user must check it.'}), 403
-        entries[idx]['status']  = 'Approved'
-        entries[idx]['checker'] = user_sid
-        _atomic_write_json(fp, entries)
-
-    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
-                         'Status Updated', 'Intrag NDF', deal_id + ' → Approved')
-    return jsonify({'success': True, 'status': 'Approved'})
 
 
 # ── Intrag ID mapping (Return-folder export CSV → fill each entry's intrag_id) ──
@@ -24370,97 +23343,6 @@ def api_intrag_ndf_approve():
 # ALL operations and NO header — match by row content, not column names:
 #   • Option: col C (idx 2) == 'OPCAO'                → col I (idx 8) = B3 ID, col A (idx 0) = Intrag ID
 #   • NDF:    col B (idx 1) == 'NDF - TERMO MERCADORIA'→ col C (idx 2) = B3 ID, col A (idx 0) = Intrag ID
-def _intrag_b3_key(v):
-    """B3 ID match key — stripped, leading zeros dropped (both sides)."""
-    s = str(v or '').strip()
-    return s.lstrip('0') or s
-
-
-def _intrag_find_export_csv():
-    """Most recent Boletas*.csv in the Return folder, or None."""
-    try:
-        cands = [os.path.join(RETURN_PATH, fn) for fn in os.listdir(RETURN_PATH)
-                 if fn.lower().startswith('boletas') and fn.lower().endswith('.csv')]
-    except OSError:
-        return None
-    cands = [p for p in cands if os.path.isfile(p)]
-    return max(cands, key=lambda p: os.path.getmtime(p)) if cands else None
-
-
-def _intrag_build_b3_map(csv_path, match_col, match_val, b3_col):
-    """Parse the Boletas CSV (no header) → {b3_key → Intrag ID (col A)} for rows whose
-    `match_col` equals `match_val`."""
-    import csv as _csv
-    out = {}
-    with open(csv_path, 'r', encoding='latin-1', newline='') as fh:
-        sample = fh.read(4096); fh.seek(0)
-        delim = ';' if sample.count(';') > sample.count(',') else ','
-        for row in _csv.reader(fh, delimiter=delim):
-            if len(row) <= max(match_col, b3_col):
-                continue
-            if str(row[match_col]).strip().upper() != match_val:
-                continue
-            b3, intrag_id = _intrag_b3_key(row[b3_col]), str(row[0]).strip()
-            if b3 and intrag_id:
-                out.setdefault(b3, intrag_id)
-    return out
-
-
-def _intrag_run_mapping(deals, match_col, match_val, b3_col, finder):
-    """Map each requested deal's B3 ID → Intrag ID via the export CSV, persist the
-    intrag_id onto the matching JSON entry (loaded rows only). Returns (results, err)."""
-    csv_path = _intrag_find_export_csv()
-    if not csv_path:
-        return None, 'No Boletas CSV found in the Return folder.'
-    try:
-        b3map = _intrag_build_b3_map(csv_path, match_col, match_val, b3_col)
-    except Exception:
-        log.error('[intrag-map] CSV parse failed:\n%s', traceback.format_exc())
-        return None, 'Failed to read the Boletas CSV.'
-    results = []
-    with _cache_lock:
-        for d in (deals or []):
-            did = str(d.get('id') or '').strip()
-            b3  = _intrag_b3_key(d.get('b3_id'))
-            if not did or not b3 or b3 not in b3map:
-                continue
-            intrag_id = b3map[b3]
-            fp, entries, idx = finder(did, None)
-            if idx is None:
-                results.append({'id': did, 'intrag_id': intrag_id, 'status': 'Error'})
-                continue
-            entries[idx]['intrag_id'] = intrag_id
-            entries[idx]['status']    = 'Success'          # mapped → Success
-            try:
-                _atomic_write_json(fp, entries)
-            except Exception:
-                log.error('[intrag-map] save failed %s:\n%s', fp, traceback.format_exc())
-                results.append({'id': did, 'intrag_id': intrag_id, 'status': 'Error'})
-                continue
-            results.append({'id': did, 'intrag_id': intrag_id, 'status': 'Success'})
-    return results, None
-
-
-@blueprint.route('/api/intrag/ndf/mapping-intrag-id', methods=['POST'])
-def api_intrag_ndf_mapping_intrag_id():
-    if not session.get('authenticated'):
-        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
-    deals = (request.get_json(silent=True) or {}).get('deals', [])
-    results, err = _intrag_run_mapping(deals, 1, 'NDF - TERMO MERCADORIA', 2, _find_intrag_ndf_entry)
-    if results is None:
-        return jsonify({'ok': False, 'error': err}), 400
-    return jsonify({'ok': True, 'results': results})
-
-
-@blueprint.route('/api/intrag/option/mapping-intrag-id', methods=['POST'])
-def api_intrag_option_mapping_intrag_id():
-    if not session.get('authenticated'):
-        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
-    deals = (request.get_json(silent=True) or {}).get('deals', [])
-    results, err = _intrag_run_mapping(deals, 2, 'OPCAO', 8, _find_intrag_opt_entry)
-    if results is None:
-        return jsonify({'ok': False, 'error': err}), 400
-    return jsonify({'ok': True, 'results': results})
 
 
 # ── Intrag Swap ───────────────────────────────────────────────────────────────
@@ -24468,226 +23350,6 @@ def api_intrag_option_mapping_intrag_id():
 # YYYYMMDD_intrag_swap.json, ciclo New → Pending → Approved → Sent (4-eyes) e
 # geração de .txt (36 colunas do layout B3 de swap, separadas por ';') na mesma
 # pasta de rede da NDF. Não há feed automático — as linhas são criadas na página.
-
-def _find_intrag_swap_entry(deal_id, trade_date):
-    """Locate an Intrag Swap entry by deal id (+ optional start date to narrow
-    the daily file). Returns (file_path, entries_list, idx) or (None, None, None)."""
-    if not deal_id:
-        return None, None, None
-    ref = _parse_date_any(trade_date) if trade_date else None
-    candidate_files = []
-    if ref is not None:
-        fp = os.path.join(
-            INTRAG_SWAP_CACHE_DIR, ref.strftime('%Y'), ref.strftime('%m'),
-            ref.strftime('%Y%m%d') + '_intrag_swap.json'
-        )
-        if os.path.isfile(fp):
-            candidate_files.append(fp)
-    if not candidate_files and os.path.isdir(INTRAG_SWAP_CACHE_DIR):
-        for root, _, files in os.walk(INTRAG_SWAP_CACHE_DIR):
-            for fname in files:
-                if fname.endswith('_intrag_swap.json'):
-                    candidate_files.append(os.path.join(root, fname))
-    for fp in candidate_files:
-        try:
-            with open(fp, 'r', encoding='utf-8') as fh:
-                entries = json.load(fh)
-            if not isinstance(entries, list):
-                continue
-        except (json.JSONDecodeError, ValueError, OSError):
-            continue
-        idx = next((i for i, e in enumerate(entries) if e.get('_deal') == deal_id), None)
-        if idx is not None:
-            return fp, entries, idx
-    return None, None, None
-
-
-@blueprint.route('/api/intrag/swap')
-def api_intrag_swap():
-    if not session.get('authenticated'):
-        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
-    date_str  = request.args.get('date', '').strip()       # YYYY-MM-DD (single day)
-    date_from = request.args.get('date_from', '').strip()  # YYYY-MM-DD (range start)
-    date_to   = request.args.get('date_to', '').strip()    # YYYY-MM-DD (range end)
-    suffix = '_intrag_swap.json'
-    entries = []
-    if date_from or date_to:
-        d_from = _parse_date_any(date_from)
-        d_to   = _parse_date_any(date_to)
-        # Com intervalo há o que PODAR: ano e mês inteiros fora dele são
-        # descartados antes de o `scandir` entrar neles. Quem decide continua
-        # sendo a data no NOME do arquivo, logo abaixo.
-        for fp, fname, mtime, size in _day_files(INTRAG_SWAP_CACHE_DIR, suffix, d_from, d_to):
-            fdate = _parse_date_any(fname[:8])
-            if fdate is None:
-                continue
-            if d_from and fdate < d_from:
-                continue
-            if d_to and fdate > d_to:
-                continue
-            entries.extend(_day_json(fp, mtime, size))
-    elif date_str:
-        try:
-            ref = datetime.strptime(date_str, '%Y-%m-%d')
-            fp = os.path.join(INTRAG_SWAP_CACHE_DIR, ref.strftime('%Y'), ref.strftime('%m'),
-                              ref.strftime('%Y%m%d') + suffix)
-            if os.path.isfile(fp):
-                with open(fp, 'r', encoding='utf-8') as fh:
-                    entries = json.load(fh)
-                if not isinstance(entries, list):
-                    entries = []
-        except Exception as exc:
-            log.warning('[INTRAG SWAP] date load error date=%r: %s', date_str, exc)
-    else:
-        # Sem data nenhuma: a árvore inteira, e aí só o memo ajuda.
-        for fp, _fname, mtime, size in _day_files(INTRAG_SWAP_CACHE_DIR, suffix):
-            entries.extend(_day_json(fp, mtime, size))
-    return jsonify({'success': True, 'entries': entries})
-
-
-@blueprint.route('/api/intrag/swap/send-file', methods=['POST'])
-def api_intrag_swap_send_file():
-    """Generate the Intrag Swap .txt file(s) from the selected rows and flip
-    New/Approved → Sent. Same standard folder as NDF; file Intrag-Swap-YYYYMMDD.txt.
-
-    Body: { "items": [ { "deal_id": str, "cells": [...36...] } ] }. Rows are
-    grouped by Data Início (data col index 2) — one file per date."""
-    if not session.get('authenticated'):
-        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
-
-    payload = request.get_json(silent=True) or {}
-    items = payload.get('items')
-    if not isinstance(items, list) or not items:
-        rows = payload.get('rows')
-        if not isinstance(rows, list) or not rows:
-            return jsonify({'success': False, 'message': 'No rows provided'}), 400
-        items = [{'deal_id': '', 'cells': r} for r in rows if isinstance(r, list)]
-
-    START_DATE_IDX = 2   # Data Início within the 36 data columns
-    SENDABLE = {'New', 'Approved'}
-
-    groups = {}
-    sent_ids = []
-    for it in items:
-        if not isinstance(it, dict):
-            continue
-        cells = ['' if c is None else str(c) for c in (it.get('cells') or [])]
-        if not cells:
-            continue
-        td_raw = cells[START_DATE_IDX] if len(cells) > START_DATE_IDX else ''
-        ref = _parse_date_any(td_raw) or datetime.now()
-        groups.setdefault(ref.strftime('%Y%m%d'), {'ref': ref, 'rows': []})['rows'].append(cells)
-        if it.get('deal_id'):
-            sent_ids.append((it['deal_id'], td_raw))
-
-    if not groups:
-        return jsonify({'success': False, 'message': 'No valid rows provided'}), 400
-
-    written = []
-    try:
-        with _cache_lock:
-            for key, grp in groups.items():
-                ref = grp['ref']
-                month_folder = ref.strftime('%m') + '. ' + _EN_MONTH_NAMES[ref.month - 1]
-                dir_path = os.path.join(INTRAG_NDF_SEND_DIR, ref.strftime('%Y'), month_folder, ref.strftime('%d'))
-                os.makedirs(dir_path, exist_ok=True)
-                base = 'Intrag-Swap-' + key
-                candidate = base + '.txt'
-                n = 0
-                while os.path.exists(os.path.join(dir_path, candidate)):
-                    n += 1
-                    candidate = base + ' (' + str(n) + ').txt'
-                file_path = os.path.join(dir_path, candidate)
-                with open(file_path, 'w', encoding='utf-8') as fh:
-                    fh.write('\n'.join(';'.join(r) for r in grp['rows']))
-                written.append(file_path)
-                log.info('[INTRAG SWAP] Wrote send file %s (%d row(s))', file_path, len(grp['rows']))
-
-            for deal_id, td_raw in sent_ids:
-                fp, entries, idx = _find_intrag_swap_entry(deal_id, td_raw)
-                if idx is None:
-                    continue
-                if (entries[idx].get('status') or 'New') in SENDABLE:
-                    entries[idx]['status'] = 'Sent'
-                    _atomic_write_json(fp, entries)
-    except Exception as exc:
-        log.error('[INTRAG SWAP] send-file failed: %s', exc)
-        return jsonify({'success': False, 'message': 'File generation failed: ' + str(exc)}), 500
-
-    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
-                         'Intrag Sent', 'Intrag Swap',
-                         str(len(items)) + ' row' + ('' if len(items) == 1 else 's') + ' sent')
-    return jsonify({'success': True, 'files': written, 'count': len(items)})
-
-
-@blueprint.route('/api/intrag/swap/edit', methods=['POST'])
-def api_intrag_swap_edit():
-    """Row-level edit on an Intrag Swap entry → status 'Pending', records maker."""
-    if not session.get('authenticated'):
-        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
-    payload    = request.get_json(silent=True) or {}
-    deal_id    = (payload.get('deal_id') or '').strip()
-    trade_date = (payload.get('trade_date') or '').strip()
-    fields     = payload.get('fields') or {}
-    if not deal_id:
-        return jsonify({'success': False, 'message': 'Missing deal_id'}), 400
-    with _cache_lock:
-        fp, entries, idx = _find_intrag_swap_entry(deal_id, trade_date)
-        if idx is None:
-            return jsonify({'success': False, 'message': 'Entry not found'}), 404
-        if isinstance(fields, dict):
-            for k, v in fields.items():
-                if k in entries[idx] and k not in ('_deal', '_client', 'status', 'maker', 'checker'):
-                    entries[idx][k] = v
-        entries[idx]['status']  = 'Pending'
-        entries[idx]['maker']   = session.get('user_sid', '')
-        entries[idx]['checker'] = ''
-        _atomic_write_json(fp, entries)
-    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
-                         'Deal Updated', 'Intrag Swap', deal_id)
-    return jsonify({'success': True, 'status': 'Pending'})
-
-
-@blueprint.route('/api/intrag/swap/approve', methods=['POST'])
-def api_intrag_swap_approve():
-    """Move an Intrag Swap entry Pending → Approved (maker ≠ checker)."""
-    if not session.get('authenticated'):
-        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
-    payload    = request.get_json(silent=True) or {}
-    deal_id    = (payload.get('deal_id') or '').strip()
-    trade_date = (payload.get('trade_date') or '').strip()
-    if not deal_id:
-        return jsonify({'success': False, 'message': 'Missing deal_id'}), 400
-    user_sid = session.get('user_sid', '')
-    with _cache_lock:
-        fp, entries, idx = _find_intrag_swap_entry(deal_id, trade_date)
-        if idx is None:
-            return jsonify({'success': False, 'message': 'Entry not found'}), 404
-        if (entries[idx].get('status') or '') != 'Pending':
-            return jsonify({'success': False, 'message': 'Only Pending entries can be approved.'}), 400
-        if entries[idx].get('maker') and entries[idx]['maker'] == user_sid:
-            return jsonify({'success': False,
-                            'message': 'Maker cannot approve their own change — a different user must check it.'}), 403
-        entries[idx]['status']  = 'Approved'
-        entries[idx]['checker'] = user_sid
-        _atomic_write_json(fp, entries)
-    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
-                         'Status Updated', 'Intrag Swap', deal_id + ' → Approved')
-    return jsonify({'success': True, 'status': 'Approved'})
-
-
-@blueprint.route('/api/intrag/swap/mapping-intrag-id', methods=['POST'])
-def api_intrag_swap_mapping_intrag_id():
-    # Boletas CSV: linhas de swap identificadas pela col B == 'SWAP' com o B3 ID
-    # na col C (mesmo formato das linhas de NDF). Ajustar match_col/match_val/b3_col
-    # aqui se o layout real do CSV de retorno para swap for diferente.
-    if not session.get('authenticated'):
-        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
-    deals = (request.get_json(silent=True) or {}).get('deals', [])
-    results, err = _intrag_run_mapping(deals, 1, 'SWAP', 2, _find_intrag_swap_entry)
-    if results is None:
-        return jsonify({'ok': False, 'error': err}), 400
-    return jsonify({'ok': True, 'results': results})
 
 
 @blueprint.route('/api/new-deals/ndf-commodities/cache', methods=['POST'])
@@ -24902,7 +23564,7 @@ def api_ndf_update_deal_cache(deal_id):
     cl_lower = (updated_deal.get('Client', '') or '').lower()
     if new_status == 'Success' and 'banco' in cl_lower and 'morgan' in cl_lower:
         try:
-            _save_intrag_ndf_entry(updated_deal)
+            _intrag_engine()._save_intrag_ndf_entry(updated_deal)
         except Exception as exc:
             log.error('[NDF PATCH] Failed to save Intrag entry for deal=%r: %s', deal_id, exc)
     # External clients (non-intragroup) instead become a fresh outstanding
@@ -25457,7 +24119,7 @@ def api_ndf_mapping_b3():
             cl_low = (intrag_candidate.get('Client', '') or '').lower()
             if 'banco' in cl_low and 'morgan' in cl_low:
                 try:
-                    _save_intrag_ndf_entry(intrag_candidate)
+                    _intrag_engine()._save_intrag_ndf_entry(intrag_candidate)
                 except Exception as exc:
                     log.error('[MAPPING-B3] Intrag save failed for deal=%r: %s', deal_text, exc)
             _pc_save_from_deal(intrag_candidate, 'NDF COMM')       # → pending confirmation
@@ -26079,7 +24741,7 @@ def api_mapping_b3():
                     except Exception:
                         pass
                 if intrag_candidate is not None:
-                    _maybe_save_intrag_opt(intrag_candidate)
+                    _intrag_engine()._maybe_save_intrag_opt(intrag_candidate)
                     _pc_save_from_deal(intrag_candidate, 'OPTION COMM')   # → pending confirmation
 
         results.append({
@@ -26179,30 +24841,6 @@ def api_ndf_economic_affirmation_email():
 # keyed by SPN. Replaces (or appends) the record for the edited counterparty.
 # ==============================================================================
 
-@blueprint.route('/api/counterparty-details/save', methods=['POST'])
-def api_counterparty_details_save():
-    if not session.get('authenticated'):
-        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
-
-    payload = request.get_json(silent=True) or {}
-    spn = str(payload.get('SPN', '') or '').strip()
-    if not spn:
-        return jsonify({'ok': False, 'error': 'missing_spn'}), 400
-
-    created = _cpd_find(_cpd_load(), spn) is None
-    data, rec = _cpd_get_record(spn)
-
-    # COUNTERPARTY name can still be set here; CGD / CONTACTS / BANKING are each
-    # managed by their dedicated maker/checker endpoints below and are left untouched.
-    if payload.get('COUNTERPARTY'):
-        rec['COUNTERPARTY'] = payload.get('COUNTERPARTY')
-
-    try:
-        _cpd_save_list(data)
-    except IOError as e:
-        return jsonify({'ok': False, 'error': str(e)}), 500
-    return jsonify({'ok': True, 'created': created})
-
 
 # ──────────────────────────────────────────────────────────────────────────
 # Banking accounts — maker/checker (Pending → Active) + Default PAY/RECEIVE
@@ -26252,16 +24890,6 @@ def _cpd_load():
     return data
 
 
-def _cpd_save_list(data):
-    path = _cpd_path()
-    try:
-        shutil.copy2(path, path + '.bak')
-    except (IOError, OSError):
-        pass
-    with open(path, 'w', encoding='utf-8') as fh:
-        json.dump(data, fh, ensure_ascii=False, indent=2)
-
-
 def _norm_spn(value):
     s = str(value or '').strip()
     if s.endswith('.0'):
@@ -26277,6 +24905,52 @@ def _cpd_find(data, spn):
             return rec
     return None
 
+
+def _cpd_save_list(data):
+    path = _cpd_path()
+    try:
+        shutil.copy2(path, path + '.bak')
+    except (IOError, OSError):
+        pass
+    with open(path, 'w', encoding='utf-8') as fh:
+        json.dump(data, fh, ensure_ascii=False, indent=2)
+
+def _contacts_norm(contacts):
+    """Coerce stored CONTACTS into maker/checker items. `status` keeps the business
+    Active/Inactive value; approval state lives in `appr` (Pending/Active) + maker/checker.
+    Legacy contacts (no appr/maker keys) are imported as already approved."""
+    out = []
+    for c in (contacts or []):
+        c = c or {}
+        legacy = ('appr' not in c) and ('maker' not in c)
+        rules = c.get('rules')
+        if not isinstance(rules, list):
+            rules = c.get('RULES') if isinstance(c.get('RULES'), list) else []
+        out.append({
+            'id':      c.get('id') or uuid.uuid4().hex[:8],
+            'name':    c.get('name')  or c.get('NAME')  or '',
+            'phone':   c.get('phone') or c.get('PHONE') or '',
+            'email':   c.get('email') or c.get('EMAIL') or '',
+            'rules':   rules,
+            'status':  c.get('status') or c.get('STATUS') or 'Active',
+            'appr':    c.get('appr') or ('Active' if legacy else 'Pending'),
+            'maker':   c.get('maker', '') or ('IMPORT' if legacy else ''),
+            'checker': c.get('checker', '') or ('IMPORT' if legacy else ''),
+        })
+    return out
+
+def _net_norm(net):
+    """Coerce a stored Settlement Net Type into {value,status,maker,checker}.
+    Missing/legacy records default to Total Net, already Active (imported)."""
+    if not isinstance(net, dict):
+        net = {}
+    val = str(net.get('value', '') or '').strip()
+    return {
+        'value':   val if val in _CP_NET_TYPES else 'Total Net',
+        'status':  net.get('status', 'Active') or 'Active',
+        'maker':   net.get('maker', '') or '',
+        'checker': net.get('checker', '') or '',
+    }
 
 def _default_slot(existing=None):
     existing = existing or {}
@@ -26323,18 +24997,6 @@ def _bank_norm(bank):
             'DEFAULT_RECEIVE': _default_slot(bank.get('DEFAULT_RECEIVE'))}
 
 
-def _bank_get_record(spn):
-    """Return (data, rec, banking) for an SPN, creating the record if needed."""
-    data = _cpd_load()
-    rec = _cpd_find(data, spn)
-    if rec is None:
-        rec = {'SPN': str(spn or '').strip(), 'COUNTERPARTY': '', 'CGD': [],
-               'BANKING': _bank_norm({}), 'CONTACTS': []}
-        data.append(rec)
-    rec['BANKING'] = _bank_norm(rec.get('BANKING'))
-    return data, rec, rec['BANKING']
-
-
 def _cgd_norm(cgd):
     """Coerce stored CGD into a list of maker/checker items.
     Legacy shapes (string / list-of-strings) become Active items imported."""
@@ -26360,48 +25022,9 @@ def _cgd_norm(cgd):
     return items
 
 
-def _contacts_norm(contacts):
-    """Coerce stored CONTACTS into maker/checker items. `status` keeps the business
-    Active/Inactive value; approval state lives in `appr` (Pending/Active) + maker/checker.
-    Legacy contacts (no appr/maker keys) are imported as already approved."""
-    out = []
-    for c in (contacts or []):
-        c = c or {}
-        legacy = ('appr' not in c) and ('maker' not in c)
-        rules = c.get('rules')
-        if not isinstance(rules, list):
-            rules = c.get('RULES') if isinstance(c.get('RULES'), list) else []
-        out.append({
-            'id':      c.get('id') or uuid.uuid4().hex[:8],
-            'name':    c.get('name')  or c.get('NAME')  or '',
-            'phone':   c.get('phone') or c.get('PHONE') or '',
-            'email':   c.get('email') or c.get('EMAIL') or '',
-            'rules':   rules,
-            'status':  c.get('status') or c.get('STATUS') or 'Active',
-            'appr':    c.get('appr') or ('Active' if legacy else 'Pending'),
-            'maker':   c.get('maker', '') or ('IMPORT' if legacy else ''),
-            'checker': c.get('checker', '') or ('IMPORT' if legacy else ''),
-        })
-    return out
-
-
 # Settlement Net Type — single value per counterparty with maker/checker.
 # Item: {value ∈ _CP_NET_TYPES, status ∈ Active|Pending, maker, checker}
 _CP_NET_TYPES = ['Total Net', 'Pay/Rec', 'No Net']
-
-
-def _net_norm(net):
-    """Coerce a stored Settlement Net Type into {value,status,maker,checker}.
-    Missing/legacy records default to Total Net, already Active (imported)."""
-    if not isinstance(net, dict):
-        net = {}
-    val = str(net.get('value', '') or '').strip()
-    return {
-        'value':   val if val in _CP_NET_TYPES else 'Total Net',
-        'status':  net.get('status', 'Active') or 'Active',
-        'maker':   net.get('maker', '') or '',
-        'checker': net.get('checker', '') or '',
-    }
 
 
 # Migra o CounterpartyDetails.json já na subida do app (e não só no primeiro
@@ -26414,318 +25037,15 @@ except Exception:
                 traceback.format_exc())
 
 
-def _cpd_get_record(spn):
-    """Return (data, rec) for an SPN with CGD/CONTACTS/BANKING/NET normalized; create if missing."""
-    data = _cpd_load()
-    rec = _cpd_find(data, spn)
-    if rec is None:
-        rec = {'SPN': str(spn or '').strip(), 'COUNTERPARTY': '', 'CGD': [],
-               'BANKING': _bank_norm({}), 'CONTACTS': [], 'NET': _net_norm({})}
-        data.append(rec)
-    rec['CGD'] = _cgd_norm(rec.get('CGD'))
-    rec['CONTACTS'] = _contacts_norm(rec.get('CONTACTS'))
-    rec['BANKING'] = _bank_norm(rec.get('BANKING'))
-    rec['NET'] = _net_norm(rec.get('NET'))
-    return data, rec
-
-
-def _contact_disp(c):
-    if not c:
-        return ''
-    return (c.get('name') or c.get('email') or c.get('id') or '').strip()
-
-
-def _acc_disp(acc):
-    if not acc:
-        return ''
-    return (acc.get('bank') or acc.get('account') or acc.get('id') or '').strip()
-
-
-def _bank_detail(spn, rec, extra=''):
-    """Notification detail: 'SPN <spn> · <counterparty> · <extra>'. The leading
-    'SPN <spn>' lets the bell deep-link to Reference Data filtered by that SPN."""
-    name = str((rec or {}).get('COUNTERPARTY', '') or '').strip()
-    head = 'SPN {} · {}'.format(spn, name) if name else 'SPN {}'.format(spn)
-    return head + ' · ' + extra if extra else head
-
-
-def _notify_bank(action, detail):
-    """Emit a notification-bell entry for a banking maker/checker action."""
-    _create_notification(session.get('user_sid', ''), session.get('user_name', ''),
-                         action, 'Reference Data', detail)
-
-
-@blueprint.route('/api/counterparty-details/banking/account/add', methods=['POST'])
-def api_cp_banking_account_add():
-    if not session.get('authenticated'):
-        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
-    p = request.get_json(silent=True) or {}
-    spn = str(p.get('SPN', '') or '').strip()
-    if not spn:
-        return jsonify({'ok': False, 'error': 'missing_spn'}), 400
-    bank = str(p.get('bank', '') or '').strip()
-    agency = str(p.get('agency', '') or '').strip()
-    account = str(p.get('account', '') or '').strip()
-    if not (bank or agency or account):
-        return jsonify({'ok': False, 'error': 'empty_account'}), 400
-
-    sid = session.get('user_sid', '') or ''
-    data, rec, banking = _bank_get_record(spn)
-    acc = {'id': uuid.uuid4().hex[:8], 'bank': bank, 'agency': agency,
-           'account': account, 'status': 'Pending', 'maker': sid, 'checker': ''}
-    banking['ACCOUNTS'].append(acc)
-    _cpd_save_list(data)
-    _notify_bank('Bank Account Added', _bank_detail(spn, rec, _acc_disp(acc) + ' (Pending approval)'))
-    return jsonify({'ok': True, 'account': acc})
-
-
-@blueprint.route('/api/counterparty-details/banking/account/edit', methods=['POST'])
-def api_cp_banking_account_edit():
-    if not session.get('authenticated'):
-        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
-    p = request.get_json(silent=True) or {}
-    spn = str(p.get('SPN', '') or '').strip()
-    acc_id = str(p.get('id', '') or '').strip()
-    if not spn:
-        return jsonify({'ok': False, 'error': 'missing_spn'}), 400
-    bank = str(p.get('bank', '') or '').strip()
-    agency = str(p.get('agency', '') or '').strip()
-    account = str(p.get('account', '') or '').strip()
-    if not (bank or agency or account):
-        return jsonify({'ok': False, 'error': 'empty_account'}), 400
-    sid = session.get('user_sid', '') or ''
-    data, rec, banking = _bank_get_record(spn)
-    acc = next((a for a in banking['ACCOUNTS'] if a['id'] == acc_id), None)
-    if acc is None:
-        return jsonify({'ok': False, 'error': 'not_found'}), 404
-    # Editing bank details requires re-approval → back to Pending (maker/checker).
-    acc['bank'] = bank
-    acc['agency'] = agency
-    acc['account'] = account
-    acc['status'] = 'Pending'
-    acc['maker'] = sid
-    acc['checker'] = ''
-    _cpd_save_list(data)
-    _notify_bank('Bank Account Edited', _bank_detail(spn, rec, _acc_disp(acc) + ' (Pending approval)'))
-    return jsonify({'ok': True, 'account': acc})
-
-
-@blueprint.route('/api/counterparty-details/banking/account/approve', methods=['POST'])
-def api_cp_banking_account_approve():
-    if not session.get('authenticated'):
-        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
-    p = request.get_json(silent=True) or {}
-    spn = str(p.get('SPN', '') or '').strip()
-    acc_id = str(p.get('id', '') or '').strip()
-    sid = session.get('user_sid', '') or ''
-    data, rec, banking = _bank_get_record(spn)
-    acc = next((a for a in banking['ACCOUNTS'] if a['id'] == acc_id), None)
-    if acc is None:
-        return jsonify({'ok': False, 'error': 'not_found'}), 404
-    if acc.get('maker') and acc['maker'] == sid:
-        return jsonify({'ok': False, 'error': 'same_user'}), 403
-    acc['status'] = 'Active'
-    acc['checker'] = sid
-    _cpd_save_list(data)
-    _notify_bank('Bank Account Approved', _bank_detail(spn, rec, _acc_disp(acc)))
-    return jsonify({'ok': True, 'account': acc})
-
-
-@blueprint.route('/api/counterparty-details/banking/account/delete', methods=['POST'])
-def api_cp_banking_account_delete():
-    if not session.get('authenticated'):
-        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
-    p = request.get_json(silent=True) or {}
-    spn = str(p.get('SPN', '') or '').strip()
-    acc_id = str(p.get('id', '') or '').strip()
-    data, rec, banking = _bank_get_record(spn)
-    removed = next((a for a in banking['ACCOUNTS'] if a['id'] == acc_id), None)
-    banking['ACCOUNTS'] = [a for a in banking['ACCOUNTS'] if a['id'] != acc_id]
-    for slot in ('DEFAULT_PAY', 'DEFAULT_RECEIVE'):
-        d = banking[slot]
-        if d.get('current') == acc_id:
-            d['current'] = None
-        if d.get('pending') == acc_id:
-            d['pending'] = None
-    _cpd_save_list(data)
-    _notify_bank('Bank Account Deleted', _bank_detail(spn, rec, _acc_disp(removed)))
-    return jsonify({'ok': True})
-
-
-@blueprint.route('/api/counterparty-details/banking/default/set', methods=['POST'])
-def api_cp_banking_default_set():
-    if not session.get('authenticated'):
-        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
-    p = request.get_json(silent=True) or {}
-    spn = str(p.get('SPN', '') or '').strip()
-    kind = str(p.get('kind', '') or '').upper()
-    acc_id = str(p.get('id', '') or '').strip()
-    if kind not in ('PAY', 'RECEIVE'):
-        return jsonify({'ok': False, 'error': 'bad_kind'}), 400
-    sid = session.get('user_sid', '') or ''
-    data, rec, banking = _bank_get_record(spn)
-    acc = next((a for a in banking['ACCOUNTS'] if a['id'] == acc_id), None)
-    if acc is None:
-        return jsonify({'ok': False, 'error': 'not_found'}), 404
-    if str(acc.get('status', '')).lower() != 'active':
-        return jsonify({'ok': False, 'error': 'not_active'}), 400
-    slot = banking['DEFAULT_' + kind]
-    slot['pending'] = acc_id
-    slot['maker'] = sid
-    slot['checker'] = ''
-    _cpd_save_list(data)
-    _notify_bank('Bank Default Set', _bank_detail(spn, rec, '{} → {} (Pending approval)'.format(kind, _acc_disp(acc))))
-    return jsonify({'ok': True, 'slot': slot})
-
-
-@blueprint.route('/api/counterparty-details/banking/default/approve', methods=['POST'])
-def api_cp_banking_default_approve():
-    if not session.get('authenticated'):
-        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
-    p = request.get_json(silent=True) or {}
-    spn = str(p.get('SPN', '') or '').strip()
-    kind = str(p.get('kind', '') or '').upper()
-    if kind not in ('PAY', 'RECEIVE'):
-        return jsonify({'ok': False, 'error': 'bad_kind'}), 400
-    sid = session.get('user_sid', '') or ''
-    data, rec, banking = _bank_get_record(spn)
-    slot = banking['DEFAULT_' + kind]
-    if not slot.get('pending'):
-        return jsonify({'ok': False, 'error': 'no_pending'}), 400
-    if slot.get('maker') and slot['maker'] == sid:
-        return jsonify({'ok': False, 'error': 'same_user'}), 403
-    slot['current'] = slot['pending']
-    slot['pending'] = None
-    slot['checker'] = sid
-    _cpd_save_list(data)
-    _acc = next((a for a in banking['ACCOUNTS'] if a['id'] == slot['current']), None)
-    _notify_bank('Bank Default Approved', _bank_detail(spn, rec, '{} → {}'.format(kind, _acc_disp(_acc))))
-    return jsonify({'ok': True, 'slot': slot})
-
-
 # ──────────────────────────────────────────────────────────────────────────
 # CGD — maker/checker (Pending → Active). Item: {id,value,status,maker,checker}
 # ──────────────────────────────────────────────────────────────────────────
-@blueprint.route('/api/counterparty-details/cgd/add', methods=['POST'])
-def api_cp_cgd_add():
-    if not session.get('authenticated'):
-        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
-    p = request.get_json(silent=True) or {}
-    spn = str(p.get('SPN', '') or '').strip()
-    if not spn:
-        return jsonify({'ok': False, 'error': 'missing_spn'}), 400
-    value = str(p.get('value', '') or '').strip()
-    if not value:
-        return jsonify({'ok': False, 'error': 'empty_value'}), 400
-    sid = session.get('user_sid', '') or ''
-    data, rec = _cpd_get_record(spn)
-    item = {'id': uuid.uuid4().hex[:8], 'value': value,
-            'status': 'Pending', 'maker': sid, 'checker': ''}
-    rec['CGD'].append(item)
-    _cpd_save_list(data)
-    _notify_bank('CGD Added', _bank_detail(spn, rec, value + ' (Pending approval)'))
-    return jsonify({'ok': True, 'item': item})
-
-
-@blueprint.route('/api/counterparty-details/cgd/edit', methods=['POST'])
-def api_cp_cgd_edit():
-    if not session.get('authenticated'):
-        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
-    p = request.get_json(silent=True) or {}
-    spn = str(p.get('SPN', '') or '').strip()
-    iid = str(p.get('id', '') or '').strip()
-    value = str(p.get('value', '') or '').strip()
-    if not value:
-        return jsonify({'ok': False, 'error': 'empty_value'}), 400
-    sid = session.get('user_sid', '') or ''
-    data, rec = _cpd_get_record(spn)
-    item = next((x for x in rec['CGD'] if x['id'] == iid), None)
-    if item is None:
-        return jsonify({'ok': False, 'error': 'not_found'}), 404
-    item['value'] = value
-    item['status'] = 'Pending'
-    item['maker'] = sid
-    item['checker'] = ''
-    _cpd_save_list(data)
-    _notify_bank('CGD Edited', _bank_detail(spn, rec, value + ' (Pending approval)'))
-    return jsonify({'ok': True, 'item': item})
-
-
-@blueprint.route('/api/counterparty-details/cgd/approve', methods=['POST'])
-def api_cp_cgd_approve():
-    if not session.get('authenticated'):
-        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
-    p = request.get_json(silent=True) or {}
-    spn = str(p.get('SPN', '') or '').strip()
-    iid = str(p.get('id', '') or '').strip()
-    sid = session.get('user_sid', '') or ''
-    data, rec = _cpd_get_record(spn)
-    item = next((x for x in rec['CGD'] if x['id'] == iid), None)
-    if item is None:
-        return jsonify({'ok': False, 'error': 'not_found'}), 404
-    if item.get('maker') and item['maker'] == sid:
-        return jsonify({'ok': False, 'error': 'same_user'}), 403
-    item['status'] = 'Active'
-    item['checker'] = sid
-    _cpd_save_list(data)
-    _notify_bank('CGD Approved', _bank_detail(spn, rec, item['value']))
-    return jsonify({'ok': True, 'item': item})
-
-
-@blueprint.route('/api/counterparty-details/cgd/delete', methods=['POST'])
-def api_cp_cgd_delete():
-    if not session.get('authenticated'):
-        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
-    p = request.get_json(silent=True) or {}
-    spn = str(p.get('SPN', '') or '').strip()
-    iid = str(p.get('id', '') or '').strip()
-    data, rec = _cpd_get_record(spn)
-    removed = next((x for x in rec['CGD'] if x['id'] == iid), None)
-    rec['CGD'] = [x for x in rec['CGD'] if x['id'] != iid]
-    _cpd_save_list(data)
-    _notify_bank('CGD Deleted', _bank_detail(spn, rec, (removed or {}).get('value', '')))
-    return jsonify({'ok': True})
 
 
 # ──────────────────────────────────────────────────────────────────────────
 # SETTLEMENT NET TYPE — single value per counterparty, maker/checker.
 # Editing proposes a change (→ Pending); a different SID approves (→ Active).
 # ──────────────────────────────────────────────────────────────────────────
-@blueprint.route('/api/counterparty-details/net/edit', methods=['POST'])
-def api_cp_net_edit():
-    if not session.get('authenticated'):
-        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
-    p = request.get_json(silent=True) or {}
-    spn = str(p.get('SPN', '') or '').strip()
-    if not spn:
-        return jsonify({'ok': False, 'error': 'missing_spn'}), 400
-    value = str(p.get('value', '') or '').strip()
-    if value not in _CP_NET_TYPES:
-        return jsonify({'ok': False, 'error': 'invalid_value'}), 400
-    sid = session.get('user_sid', '') or ''
-    data, rec = _cpd_get_record(spn)
-    rec['NET'] = {'value': value, 'status': 'Pending', 'maker': sid, 'checker': ''}
-    _cpd_save_list(data)
-    _notify_bank('Net Type Edited', _bank_detail(spn, rec, value + ' (Pending approval)'))
-    return jsonify({'ok': True, 'item': rec['NET']})
-
-
-@blueprint.route('/api/counterparty-details/net/approve', methods=['POST'])
-def api_cp_net_approve():
-    if not session.get('authenticated'):
-        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
-    p = request.get_json(silent=True) or {}
-    spn = str(p.get('SPN', '') or '').strip()
-    sid = session.get('user_sid', '') or ''
-    data, rec = _cpd_get_record(spn)
-    net = rec['NET']
-    if net.get('maker') and net['maker'] == sid:
-        return jsonify({'ok': False, 'error': 'same_user'}), 403
-    net['status'] = 'Active'
-    net['checker'] = sid
-    _cpd_save_list(data)
-    _notify_bank('Net Type Approved', _bank_detail(spn, rec, net['value']))
-    return jsonify({'ok': True, 'item': net})
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -26733,97 +25053,6 @@ def api_cp_net_approve():
 # `status` stays the business Active/Inactive value.
 # Item: {id,name,phone,email,rules,status,appr,maker,checker}
 # ──────────────────────────────────────────────────────────────────────────
-def _contact_payload(p):
-    rules = p.get('rules')
-    if not isinstance(rules, list):
-        rules = []
-    return {
-        'name':   str(p.get('name', '') or '').strip(),
-        'phone':  str(p.get('phone', '') or '').strip(),
-        'email':  str(p.get('email', '') or '').strip(),
-        'rules':  [str(r).strip() for r in rules if str(r).strip()],
-        'status': str(p.get('status', 'Active') or 'Active').strip() or 'Active',
-    }
-
-
-@blueprint.route('/api/counterparty-details/contact/add', methods=['POST'])
-def api_cp_contact_add():
-    if not session.get('authenticated'):
-        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
-    p = request.get_json(silent=True) or {}
-    spn = str(p.get('SPN', '') or '').strip()
-    if not spn:
-        return jsonify({'ok': False, 'error': 'missing_spn'}), 400
-    fields = _contact_payload(p)
-    if not (fields['name'] or fields['phone'] or fields['email'] or fields['rules']):
-        return jsonify({'ok': False, 'error': 'empty_contact'}), 400
-    sid = session.get('user_sid', '') or ''
-    data, rec = _cpd_get_record(spn)
-    item = dict(fields, id=uuid.uuid4().hex[:8], appr='Pending', maker=sid, checker='')
-    rec['CONTACTS'].append(item)
-    _cpd_save_list(data)
-    _notify_bank('Contact Added', _bank_detail(spn, rec, _contact_disp(item) + ' (Pending approval)'))
-    return jsonify({'ok': True, 'item': item})
-
-
-@blueprint.route('/api/counterparty-details/contact/edit', methods=['POST'])
-def api_cp_contact_edit():
-    if not session.get('authenticated'):
-        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
-    p = request.get_json(silent=True) or {}
-    spn = str(p.get('SPN', '') or '').strip()
-    iid = str(p.get('id', '') or '').strip()
-    fields = _contact_payload(p)
-    if not (fields['name'] or fields['phone'] or fields['email'] or fields['rules']):
-        return jsonify({'ok': False, 'error': 'empty_contact'}), 400
-    sid = session.get('user_sid', '') or ''
-    data, rec = _cpd_get_record(spn)
-    item = next((x for x in rec['CONTACTS'] if x['id'] == iid), None)
-    if item is None:
-        return jsonify({'ok': False, 'error': 'not_found'}), 404
-    item.update(fields)
-    item['appr'] = 'Pending'
-    item['maker'] = sid
-    item['checker'] = ''
-    _cpd_save_list(data)
-    _notify_bank('Contact Edited', _bank_detail(spn, rec, _contact_disp(item) + ' (Pending approval)'))
-    return jsonify({'ok': True, 'item': item})
-
-
-@blueprint.route('/api/counterparty-details/contact/approve', methods=['POST'])
-def api_cp_contact_approve():
-    if not session.get('authenticated'):
-        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
-    p = request.get_json(silent=True) or {}
-    spn = str(p.get('SPN', '') or '').strip()
-    iid = str(p.get('id', '') or '').strip()
-    sid = session.get('user_sid', '') or ''
-    data, rec = _cpd_get_record(spn)
-    item = next((x for x in rec['CONTACTS'] if x['id'] == iid), None)
-    if item is None:
-        return jsonify({'ok': False, 'error': 'not_found'}), 404
-    if item.get('maker') and item['maker'] == sid:
-        return jsonify({'ok': False, 'error': 'same_user'}), 403
-    item['appr'] = 'Active'
-    item['checker'] = sid
-    _cpd_save_list(data)
-    _notify_bank('Contact Approved', _bank_detail(spn, rec, _contact_disp(item)))
-    return jsonify({'ok': True, 'item': item})
-
-
-@blueprint.route('/api/counterparty-details/contact/delete', methods=['POST'])
-def api_cp_contact_delete():
-    if not session.get('authenticated'):
-        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
-    p = request.get_json(silent=True) or {}
-    spn = str(p.get('SPN', '') or '').strip()
-    iid = str(p.get('id', '') or '').strip()
-    data, rec = _cpd_get_record(spn)
-    removed = next((x for x in rec['CONTACTS'] if x['id'] == iid), None)
-    rec['CONTACTS'] = [x for x in rec['CONTACTS'] if x['id'] != iid]
-    _cpd_save_list(data)
-    _notify_bank('Contact Deleted', _bank_detail(spn, rec, _contact_disp(removed)))
-    return jsonify({'ok': True})
 
 
 # ==============================================================================
@@ -29711,7 +27940,7 @@ def api_generic_nd_update_cache(product, deal_id):
         if product in ('vanilla', 'other-publishers') and \
                 'LAWTON' in (updated_deal.get('Client', '') or '').upper():
             try:
-                _save_intrag_ndf_moeda_entry(updated_deal)
+                _intrag_engine()._save_intrag_ndf_moeda_entry(updated_deal)
             except Exception as exc:
                 log.error('[ND %s] Intrag moeda save failed for deal=%r: %s',
                           product, deal_id, exc)
@@ -30721,7 +28950,7 @@ def api_generic_nd_mapping_b3(product):
             if product in ('vanilla', 'other-publishers') and \
                     'LAWTON' in (success_deal.get('Client', '') or '').upper():
                 try:
-                    _save_intrag_ndf_moeda_entry(success_deal)
+                    _intrag_engine()._save_intrag_ndf_moeda_entry(success_deal)
                 except Exception as exc:
                     log.error('[MAPPING-%s] Intrag moeda save failed for deal=%r: %s',
                               product, deal_text, exc)
@@ -32318,63 +30547,6 @@ def _ei_scan_root(grace=6.0):
         return (_EI_ROOT_CACHE['exists'], dict(_EI_ROOT_CACHE['dirs']), False)
 
 
-@blueprint.route('/api/electronic-inventory/clients')
-def api_ei_clients():
-    if not session.get('authenticated'):
-        return jsonify({'success': False, 'message': 'unauthorized'}), 401
-    root = ELECTRONIC_INVENTORY_ROOT
-    spn_by_key = {}
-    all_ref = _ei_refdata_clients()
-    for name, spn in all_ref:
-        spn_by_key[_ei_match_key(name)] = (name, spn)
-    # Cached, background-warmed share scan — never blocks on a slow network drive.
-    root_exists, disk_dirs, complete = _ei_scan_root()
-    clients = {}
-    for key, folder in disk_dirs.items():
-        ref = spn_by_key.get(key)
-        clients[key] = {'name': folder, 'spn': ref[1] if ref else '', 'on_disk': True}
-    # Fold in RefData names not (yet) matched to a folder. When the scan is still
-    # running we don't know if the folder exists, so on_disk = None (unknown) and
-    # the UI shows no badge; only a COMPLETE scan justifies a "no folder" badge.
-    for name, spn in all_ref:
-        key = _ei_match_key(name)
-        if key not in clients:
-            clients[key] = {'name': name, 'spn': spn,
-                            'on_disk': (False if complete else None)}
-    out = sorted(clients.values(), key=lambda c: c['name'].upper())
-    return jsonify({'success': True, 'clients': out, 'root': root,
-                    'root_exists': bool(root_exists),
-                    'scan_complete': complete,
-                    'share_slow': not complete,
-                    'transactional_types': list(_EI_TRANSACTIONAL_TYPES),
-                    'confirmation_types': list(_EI_CONFIRMATION_TYPES)})
-
-
-@blueprint.route('/api/electronic-inventory/documents')
-def api_ei_documents():
-    if not session.get('authenticated'):
-        return jsonify({'success': False, 'message': 'unauthorized'}), 401
-    client = (request.args.get('client') or '').strip()
-    doctype = (request.args.get('type') or 'all').strip()
-    if not client:
-        return jsonify({'success': False, 'message': 'client required'}), 400
-    base = _ei_resolve_client_dir(client)
-    folder_exists = bool(base) and os.path.isdir(base)
-    docs = []
-    if folder_exists:
-        types = EI_SUBFOLDERS if doctype in ('all', '', 'All') else (doctype,)
-        for dt in types:
-            if dt not in EI_SUBFOLDERS:
-                continue
-            try:
-                docs.extend(_ei_iter_files(base, dt))
-            except Exception:
-                log.warning('[ei] iter %s/%s failed:\n%s', client, dt, traceback.format_exc())
-    docs.sort(key=lambda d: d['modified'], reverse=True)
-    return jsonify({'success': True, 'documents': docs, 'client': client,
-                    'folder': base or '', 'folder_exists': folder_exists})
-
-
 def _ei_long_path(path):
     r"""Windows extended-length form (\\?\...) for paths near MAX_PATH (260).
 
@@ -32416,29 +30588,6 @@ def _ei_locate_file(client, rel):
         if os.path.isfile(cand):
             return cand
     return None
-
-
-@blueprint.route('/api/electronic-inventory/file')
-def api_ei_file():
-    if not session.get('authenticated'):
-        return jsonify({'success': False, 'message': 'unauthorized'}), 401
-    from flask import send_file, abort
-    client = (request.args.get('client') or '').strip()
-    rel = (request.args.get('rel') or '').strip()
-    download = request.args.get('download') in ('1', 'true', 'yes')
-    if not client or not rel:
-        return abort(404)
-    try:
-        full = _ei_locate_file(client, rel)
-    except ValueError:
-        return abort(400)
-    if not full:
-        return abort(404)
-    name = os.path.basename(full)
-    try:
-        return send_file(full, as_attachment=download, download_name=name)
-    except TypeError:   # Flask < 2.0
-        return send_file(full, as_attachment=download, attachment_filename=name)
 
 
 @blueprint.route('/api/manual-confirmation/email-preview')
@@ -32521,73 +30670,6 @@ def api_mc_email_preview():
     resp.headers['Content-Security-Policy'] = 'sandbox'
     resp.headers['X-Content-Type-Options'] = 'nosniff'
     return resp
-
-
-@blueprint.route('/api/electronic-inventory/upload', methods=['POST'])
-def api_ei_upload():
-    if not session.get('authenticated'):
-        return jsonify({'success': False, 'message': 'unauthorized'}), 401
-    client  = (request.form.get('client') or '').strip()
-    doctype = (request.form.get('type') or '').strip()
-    subtype = (request.form.get('subtype') or '').strip()
-    date_s  = (request.form.get('date') or '').strip()
-    f = request.files.get('file')
-    if not client or doctype not in EI_SUBFOLDERS or not f or not f.filename:
-        return jsonify({'success': False, 'message': 'client, a valid type and a file are required'}), 400
-    ext = os.path.splitext(f.filename)[1].lower()
-    if ext not in _EI_ALLOWED_UPLOAD:
-        return jsonify({'success': False, 'message': 'File type %s is not allowed.' % (ext or '?')}), 400
-    if not os.path.isdir(ELECTRONIC_INVENTORY_ROOT):
-        return jsonify({'success': False, 'message': 'Electronic Inventory share is not reachable.'}), 503
-    digits = re.sub(r'\D', '', date_s)
-    ddmmyyyy = digits if len(digits) == 8 else datetime.now().strftime('%d%m%Y')
-    dd, mm, yyyy = ddmmyyyy[0:2], ddmmyyyy[2:4], ddmmyyyy[4:8]
-    base = _ei_resolve_client_dir(client, create=True)
-    cname = _ei_sanitize(client)
-    if doctype == 'Confirmations':
-        # Confirmations: Confirmations/<yyyy>/<mm>. <Month>/<dd>/<Product>. The
-        # product folder keeps a busy trading day readable instead of dumping
-        # every product's PDFs side by side.
-        #
-        # A pasta sai do `TYPE_FOLDER`, que é o MESMO nome que o app usa ao gravar
-        # a confirmação que ele gera. Antes daqui saía o nome do tipo cru, e o
-        # upload de um FXO ia para `.../FXO/` enquanto o app gravava em
-        # `.../FX Options/` — dois lugares para o mesmo produto, e o Monitor
-        # procurando PDF só no segundo: a confirmação subida à mão ficava
-        # invisível para ele, com o arquivo lá no share.
-        prefix = (_ei_sanitize(subtype).upper() or 'CONFIRMATION')
-        pasta = _mc_mod.TYPE_FOLDER.get(_mc_mod.upper_norm(subtype))
-        product_dir = _ei_sanitize(pasta or subtype) or 'Other'
-        target_dir = os.path.join(base, 'Confirmations', yyyy, _ei_month_folder(mm), dd, product_dir)
-    elif doctype == 'SSI':
-        target_dir = os.path.join(base, 'SSI')
-        prefix = 'SSI'
-    else:  # Transactional
-        target_dir = os.path.join(base, 'Transactional')
-        prefix = (_ei_sanitize(subtype).upper() or 'DOC')
-    try:
-        os.makedirs(_ei_long_path(target_dir), exist_ok=True)
-        # A counterparty can legitimately have several documents of the same kind
-        # (a 2nd CGD Amendment, a 3rd, …). Number the new one instead of either
-        # clobbering the previous or hiding it behind a meaningless " (2)".
-        nth = _ei_next_ordinal(target_dir, prefix, cname)
-        style = 'hash' if doctype == 'Confirmations' else 'ordinal'
-        fname = '%s%s - %s - %s%s' % (
-            _ei_version_prefix(nth, style), prefix, cname, ddmmyyyy, ext)
-        dest = os.path.join(target_dir, fname)
-        stem, e = os.path.splitext(dest)
-        i = 2
-        while os.path.exists(_ei_long_path(dest)):   # same kind AND same date — still never clobber
-            dest = '%s (%d)%s' % (stem, i, e)
-            i += 1
-        f.save(_ei_long_path(dest))     # `dest` itself stays clean for relpath/basename below
-    except Exception:
-        log.error('[ei] upload failed:\n%s', traceback.format_exc())
-        return jsonify({'success': False, 'message': 'Could not save the file to the share.'}), 500
-    return jsonify({'success': True, 'saved': {
-        'name': os.path.basename(dest),
-        'rel': os.path.relpath(dest, base).replace('\\', '/'),
-        'doctype': doctype}})
 
 
 @blueprint.route('/<template>')
@@ -32906,5 +30988,8 @@ from apps.pages.features.forecast import entrypoint as _f_forecast              
 from apps.pages.features.deals_monitor import entrypoint as _f_deals_monitor     # noqa: E402,F401
 _schedule_on_start('deals-monitor', _f_deals_monitor.start_scheduler)
 from apps.pages.features.cetip import entrypoint as _f_cetip                     # noqa: E402,F401
+from apps.pages.features.intrag import entrypoint as _f_intrag                   # noqa: E402,F401
+from apps.pages.features.counterparty_details import entrypoint as _f_cpd        # noqa: E402,F401
+from apps.pages.features.electronic_inventory import entrypoint as _f_ei         # noqa: E402,F401
 _schedule_on_start('boxscan', _f_boxscan.start_scheduler)
 from apps.pages.features.appver import entrypoint as _f_appver         # noqa: E402,F401

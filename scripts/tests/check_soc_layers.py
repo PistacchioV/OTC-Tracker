@@ -215,7 +215,15 @@ for r in ('/holidays-calendar', '/api/holidays/calendars', '/api/holidays/save',
           '/api/control-panel/settlement-forecast/email',
           '/api/new-deals/monitor', '/api/control-panel/deals-monitor/run',
           '/api/control-panel/cetip-settlement',
-          '/api/control-panel/cetip-settlement/recipients'):
+          '/api/control-panel/cetip-settlement/recipients',
+          '/api/intrag/ndf', '/api/intrag/option', '/api/intrag/swap',
+          '/api/intrag/ndf/approve', '/api/intrag/swap/approve',
+          '/api/counterparty-details/save',
+          '/api/counterparty-details/contact/add',
+          '/api/counterparty-details/contact/approve',
+          '/api/electronic-inventory/clients',
+          '/api/electronic-inventory/documents',
+          '/api/electronic-inventory/upload'):
     check('%s registrada' % r, r in regras, True)
 
 print('\n== 8. o que saiu do routes.py nao ficou nele ==')
@@ -245,8 +253,43 @@ for morto in ('_tk_roles_by_sid', '_tk_can_view', '_tk_public',
               '_sigcoll_groups', '_sigcoll_build_drafts', '_pcx_build_xlsx',
               '_pcx_save_spreadsheet', '_send_forecast_email', '_ndm_monitor_snapshot',
               '_send_ndm_pending_email', '_cetip_distribute_emails', '_cetip_bacc_copy',
-              'def api_cp_cetip_settlement'):
+              'def api_cp_cetip_settlement',
+              '_intrag_ndf_persist', '_save_intrag_opt_entry', 'def api_intrag_swap_approve',
+              '_cpd_get_record', '_bank_get_record', 'def api_cp_contact_approve',
+              'def api_ei_clients', 'def api_ei_upload'):
     check('%s saiu do routes.py' % morto, morto in rotas_py, False)
+
+print('\n== 9. nenhum global orfao nos modulos de feature ==')
+# As extracoes VERBATIM religam nome a nome; um nome que escapou vira NameError
+# so quando aquele caminho roda — este passo desmonta o bytecode de TODAS as
+# funcoes das features e cobra que cada LOAD_GLOBAL exista no modulo.
+import builtins as _bt
+import dis as _dis
+import importlib as _il
+import inspect as _isp
+import types as _tp
+_orfaos = []
+for p in ARQS:
+    mod_nome = rel(p)[:-3].replace('/', '.')
+    if mod_nome.endswith('__init__'):
+        mod_nome = mod_nome[:-9].rstrip('.')
+    try:
+        _m = _il.import_module(mod_nome)
+    except Exception as e:                                  # noqa: BLE001
+        _orfaos.append('%s: import falhou (%s)' % (mod_nome, e))
+        continue
+    _g = set(vars(_m))
+    for _nome, _fn in list(vars(_m).items()):
+        if not _isp.isfunction(_fn) or _fn.__module__ != _m.__name__:
+            continue
+        _cods = [_fn.__code__] + [c2 for c2 in _fn.__code__.co_consts
+                                  if isinstance(c2, _tp.CodeType)]
+        for _cod in _cods:
+            for _ins in _dis.get_instructions(_cod):
+                if _ins.opname == 'LOAD_GLOBAL' and _ins.argval not in _g \
+                        and _ins.argval not in dir(_bt):
+                    _orfaos.append('%s.%s -> %s' % (mod_nome, _nome, _ins.argval))
+check('todo LOAD_GLOBAL das features resolve', sorted(set(_orfaos)), [])
 
 print(('FAIL: %d' % len(fails)) if fails else 'TUDO OK')
 sys.exit(1 if fails else 0)

@@ -2156,8 +2156,19 @@ Extraídas até aqui: **`support`** (450 linhas / 6 rotas), **`onboarding`**
 **`recon_comitente`** (125 / 3), **`recon_payrec`** (160 / 5),
 **`recon_cgd`** (75 / 5), **`boxscan`** (350 / 3), **`sigcoll`** (200 / 2),
 **`pcx`** (420 / 2), **`forecast`** (180 / 3, só o card — o coletor é
-plataforma), **`deals_monitor`** (650 / 3) e **`cetip`** (830 / 2).
-O `routes.py` saiu de 39.696 para 32.926 linhas.
+plataforma), **`deals_monitor`** (650 / 3), **`cetip`** (830 / 2), **`intrag`** (1250 / 15,
+verbatim + o gancho `_intrag_engine()` para os gravadores chamados pelos saves
+do New Deals), **`counterparty_details`** (720 / 18, verbatim — os LEITORES
+`_cpd_path/_cpd_load/_cpd_find` e os normalizadores compartilhados ficaram no
+routes) e **`electronic_inventory`** (90 / 4, só a casca — os helpers `_ei_*`
+são plataforma: Track, TED e os saves de confirmação usam os mesmos).
+O `routes.py` saiu de 39.696 para 31.012 linhas.
+
+**O guarda ganhou a seção 9** (`check_soc_layers`): desmonta o bytecode de toda
+função das features e cobra que cada `LOAD_GLOBAL` exista no módulo — é o que
+pega o nome que a religação por AST deixou escapar, que só viraria `NameError`
+quando aquele caminho rodasse (pegou um `traceback` sem import no pcx no
+primeiro giro).
 
 **`deals_monitor` e `cetip` foram movidos VERBATIM** (`engine.py` +
 `entrypoint.py`): os nomes internos foram preservados — inclusive para os
@@ -2254,6 +2265,7 @@ fora chamam o grupo; saída = de quantas ele depende:
 | `boxscan` | ~350 | 3 rotas + scheduler | — | ✅ feito |
 | `sigcoll` · `pcx` · `forecast` | ~800 | 2+2+3 rotas | — | ✅ feito |
 | `deals_monitor` · `cetip` (verbatim) | ~1480 | 3+2 rotas | — | ✅ feito |
+| `intrag` · `counterparty_details` · `electronic_inventory` | ~2060 | 15+18+4 rotas | — | ✅ feito |
 | `file-interpreter` | 307 | **43** | 4 | tarde |
 | `mapping` | 1263 | 39 | 35 | tarde |
 | `notificações` | 393 | **161** | 9 | é PLATAFORMA, não feature |
