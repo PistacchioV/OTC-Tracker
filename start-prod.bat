@@ -77,6 +77,25 @@ if /I "%~1"=="noinstall" (
 
 set FLASK_APP=run.py
 set DEBUG=False
+
+REM ---------------------------------------------------------------------------
+REM  BYTECODE EM DISCO LOCAL. Sem isto o Python grava os .pyc dentro do
+REM  __pycache__ de CADA pasta do codigo -- que aqui e o SHARE. Na primeira
+REM  subida depois de um pull (quando todo .pyc esta obsoleto) sao centenas de
+REM  gravacoes atomicas via rede, uma por modulo: o processo fica minutos
+REM  parado em `_write_atomic` do importlib, SEM imprimir nada, e parece
+REM  travado. Quem cancela nesse ponto ve um KeyboardInterrupt no meio do
+REM  import de uma feature qualquer -- um traceback que aponta para o modulo
+REM  que por acaso estava sendo compilado, nao para o problema.
+REM
+REM  Com o cache numa pasta local o custo cai para leitura do .py pelo share e
+REM  gravacao local; a segunda subida em diante nem recompila. Nao use
+REM  PYTHONDONTWRITEBYTECODE: ele evita a escrita mas obriga a recompilar
+REM  TUDO a cada subida, e a instancia reinicia varias vezes por dia.
+REM ---------------------------------------------------------------------------
+if not defined PYTHONPYCACHEPREFIX set "PYTHONPYCACHEPREFIX=%TEMP%\otc-tracker-pycache"
+echo [INFO] Bytecode (.pyc) em: %PYTHONPYCACHEPREFIX%
+
 echo.
 echo [PRODUCAO] OTC Tracker em http://0.0.0.0:8051  (waitress)
 echo.
