@@ -397,6 +397,19 @@ São dois bancos:
   **200** e o gráfico vem vazio, como se não houvesse operação no dia. É a falha
   que menos parece falha.
 
+  **Todo JSON coberto pelos bancos DuckDB tem um espelho vivo** (fase 2 da
+  migração — HANDOFF §326): a escrita avisa o `apps/pages/duck_mirror.py`
+  (gancho no funil `_atomic_write_json`, mais `_b3_save`, `_cpd_save_list` e o
+  `write_holidays` da vertical), e uma thread daemon reconverte na hora com o
+  motor `apps/pages/json_to_duckdb.py` — os `daily_<rotina>.db`,
+  `reference_data.db` e `holiday_calendars.db` da pasta `db/` ficam sempre
+  atualizados sem rodar script. O aviso só ENFILEIRA (nada de DuckDB no share
+  sob o `_cache_lock`) e é melhor esforço: falha vai para o log e o manifest
+  reconverte na rodada seguinte. Os JSONs seguem sendo a fonte de LEITURA até
+  a fase 3 religar os consumidores. `OTC_DISABLE_DUCK_MIRROR=1` desliga (o
+  `OTC_DISABLE_SCHEDULERS=1` dos testes também), e `check_duck_mirror.py`
+  prende o ciclo.
+
   Duas garantias sustentam a troca: a **leitura cai para a cópia empacotada**
   quando o arquivo não existe no `DATA_DIR` (`anbima.json`, `Subjacente.json`, as
   seeds — sem isso, subir apontando para um share vazio apagaria os 42 cadastros
@@ -2150,7 +2163,7 @@ Rodam **uma vez na instância do time depois do pull**. Todas idempotentes.
 | `import_manual_confirmations.py` | **cria** os dois DuckDBs da esteira e semeia do `MANUAIS.xlsx` (`--xlsx`, `--schema-only`) |
 | `backfill_manual_confirmations.py` | traz para a esteira o que foi mapeado **antes** dela existir (`--dry-run`, `--source`) |
 | `import_cgd_sharepoint.py` | carrega a lista de CGDs do SharePoint (`Sharepoint-CGD.xlsx`) no DuckDB do Onboarding (`--xlsx`, `--sheet`, `--dry-run`, `--schema-only`). REESCREVE a tabela: rodar de novo dá o mesmo resultado |
-| `convert_json_to_duckdb.py` | a migração JSON → DuckDB (HANDOFF §324–§325): materializa os JSONs do `Config.DATA_DIR` no **`Config.DATABASE_DIR`** (a `db/` de todos os bancos) — `holiday_calendars.db` (uma tabela por calendário do registro), `reference_data.db` (`refdata` + `counterparty_details`, tudo VARCHAR — zero à esquerda) e **um `daily_<rotina>.db` por rotina de arquivo-dia**, seguindo a ramificação de `cache/` (`daily_new_deals.db`, `daily_pending_confirmation.db`, …; a subárvore vira schema, cada dia uma tabela tipada). Ao contrário das demais, é feito para RODAR DE NOVO: incremental por `_manifest` (mtime/tamanho), só reconverte o que mudou; calendário/dia/rotina novos viram tabela/banco novos (`--only`, `--force`, `--dry-run`) |
+| `convert_json_to_duckdb.py` | a CARGA COMPLETA da migração JSON → DuckDB (HANDOFF §324–§326; o dia a dia é do espelho vivo `duck_mirror`, e o MOTOR dos dois é o `apps/pages/json_to_duckdb.py`): materializa os JSONs do `Config.DATA_DIR` no **`Config.DATABASE_DIR`** (a `db/` de todos os bancos) — `holiday_calendars.db` (uma tabela por calendário do registro), `reference_data.db` (`refdata` + `counterparty_details`, tudo VARCHAR — zero à esquerda) e **um `daily_<rotina>.db` por rotina de arquivo-dia**, seguindo a ramificação de `cache/` (`daily_new_deals.db`, `daily_pending_confirmation.db`, …; a subárvore vira schema, cada dia uma tabela tipada). Ao contrário das demais, é feito para RODAR DE NOVO: incremental por `_manifest` (mtime/tamanho), só reconverte o que mudou; calendário/dia/rotina novos viram tabela/banco novos (`--only`, `--force`, `--dry-run`) |
 
 > `apps/static/data/db/` está no **`.gitignore`**, então os bancos **não vêm no
 > pull**. Sem rodar `import_manual_confirmations.py` as duas telas de Manual

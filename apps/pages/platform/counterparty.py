@@ -273,6 +273,13 @@ def _cpd_save_list(data):
         pass
     with open(path, 'w', encoding='utf-8') as fh:
         json.dump(data, fh, ensure_ascii=False, indent=2)
+    # Espelho vivo (fase 2): a tabela counterparty_details do
+    # reference_data.db acompanha na hora. Melhor esforço.
+    try:
+        from apps.pages import duck_mirror
+        duck_mirror.notify_write(path)
+    except Exception:                                       # noqa: BLE001
+        pass
 
 def _contacts_norm(contacts):
     """Coerce stored CONTACTS into maker/checker items. `status` keeps the business

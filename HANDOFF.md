@@ -14143,3 +14143,60 @@ Dois ajustes do §324, pedidos na revisão:
 `check_json_to_duckdb.py` acompanhou: um banco por rotina com os nomes da ramificação, rotina
 sem subárvore no `main`, o legado removido, o incremental atravessando bancos e o default do
 destino na `db/`. Smoke na dev: cinco bancos, 114 conversões, segunda rodada em zero.
+
+## §326 — fase 2 da migração DuckDB: o espelho vivo (2026-08-27)
+
+A fase 2 começou — e o desenho dela mudou no mapeamento. O plano era religar as LEITURAS para
+os bancos, mas os leitores de JSON estão espalhados demais para um flip seguro de uma vez: 71
+`fetch` de navegador leem `/static/data/*.json` por URL estática (a tela de calendário lê o
+arquivo do calendário DIRETO), e cada leitor de servidor tem o próprio cache por mtime. Trocar
+a leitura antes de os bancos estarem SEMPRE atualizados criaria janelas de divergência que não
+dão erro nenhum. A fase 2 virou o pré-requisito do flip: o **espelho vivo** — toda escrita de
+JSON coberto atualiza o DuckDB na hora; a fase 3 religa os consumidores um a um.
+
+O motor de conversão saiu do script e virou módulo do app (`apps/pages/json_to_duckdb.py`) —
+ele agora tem dois chamadores, e a regra "como este JSON vira tabela" não pode existir em dois
+lugares. O `scripts/convert_json_to_duckdb.py` ficou como CLI fina (a carga completa/
+reconciliação); ganhou `convert_daily_files(rels)` para converter SÓ o arquivo gravado, sem
+varrer a árvore de `cache/` — que no share é uma caminhada cara.
+
+O `apps/pages/duck_mirror.py` é o espelho: fila em memória + thread daemon. Quatro ganchos —
+o funil `_atomic_write_json` (74 chamadores; o aviso fica no funil pela MESMA razão do
+`bump_cache_gen`: o que ficasse de fora envelheceria o banco em silêncio), o `_b3_save`
+(RefData), o `_cpd_save_list` (CounterpartyDetails) e o `write_holidays` da vertical (aviso
+explícito: o nome do arquivo de calendário só o registro conhece). Três decisões que não são
+detalhe:
+
+- **assíncrono e fora do `_cache_lock`**: o funil roda com o lock global tomado, e DuckDB no
+  share ali dentro é o "trabalho lento segurando o lock" que o §4 proíbe. O aviso só
+  enfileira; quem converte é a thread;
+- **melhor esforço de ponta a ponta**: o aviso nunca levanta para o chamador, e a conversão
+  que falha fica no log — o manifest faz a próxima rodada reconverter o que ficou para trás
+  (o mtime do JSON não casa mais). Arquivo AUSENTE virou `skipped`, não erro: o par RefData ×
+  CounterpartyDetails nem sempre nasce junto;
+- **os bancos moram ao lado do dado espelhado**: `Config.DATABASE_DIR` quando a raiz é a do
+  app; `<raiz>/db` quando a raiz foi trocada — é o que faz os testes (que apontam
+  `_B3_DATA_DIR` para tmp) espelharem no próprio tmp em vez de escrever num banco REAL.
+
+Kill-switches: `OTC_DISABLE_DUCK_MIRROR=1` (só o espelho) e `OTC_DISABLE_SCHEDULERS=1` (o dos
+testes que sobem o app — espelho é trabalho de fundo da instância, como os schedulers). O
+`write_holidays` também ficou ATÔMICO no caminho: o navegador lê o arquivo por URL estática, e
+um fetch no meio de um write não pode ver JSON pela metade.
+
+`check_duck_mirror.py` prende o ciclo (funil → banco, regravação, os dois fora-do-funil,
+calendário, o que NÃO dispara, a raiz do espelho, kill-switch e a prova de exceção);
+`check_json_to_duckdb`, `check_holidays_api`, `check_holiday_calendars`, `check_cpd_api`,
+`check_config_names` e `check_soc_layers` seguem verdes.
+
+## §327 — o Print Advice do NDF Summary gerava só a página visível (2026-08-27)
+
+Select-all + Print Advice no NDF Summary (Daily Settlement › NDF) gerava os avisos SÓ das
+linhas da página visível — era preciso paginar e gerar de novo. Duas causas da mesma família
+(§7, a armadilha do `rows({page:'all'})`): o select-all marcava os checkboxes NO DOM
+(`$('tbody .ops-cb')` — só a página renderizada; o DataTables recria as células ao paginar), e
+o coletor descartava linha sem nó (`node ? … : false`).
+
+A regra agora: **select-all marcado = o conjunto FILTRADO inteiro** (`rows({search:'applied'})`,
+lido pelos DADOS, não pelo DOM) — no Print Advice e no Delete, que compartilhavam o coletor.
+Sem o select-all, valem os checkboxes marcados um a um. E desmarcar UMA linha desfaz o "todos",
+senão o select-all seguiria valendo por cima da exclusão manual.
