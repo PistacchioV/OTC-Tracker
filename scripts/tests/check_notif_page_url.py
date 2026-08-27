@@ -125,8 +125,9 @@ def _fontes_com_rotas():
 
 
 SRC = _fontes_com_rotas()
-blk = SRC.split("@blueprint.route('/api/ndf-other-publisher/data')", 1)[1] \
-         .split('#  Cognos', 1)[0]
+# A tela mora em features/ndf_other_publisher — o bloco é o entrypoint inteiro.
+blk = io.open(os.path.join(ROOT, 'apps', 'pages', 'features', 'ndf_other_publisher',
+                           'entrypoint.py'), encoding='utf-8').read()
 check('as notificacoes da tela usam a constante', blk.count('_NOTIF_DS_OTHERPUB'), 4)
 check('   e nenhuma usa o rotulo do New Deals', "'NDF Other Publisher'," in blk, False)
 

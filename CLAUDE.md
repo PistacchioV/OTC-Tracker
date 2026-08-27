@@ -2175,7 +2175,14 @@ forecast e MtM usam) e as cascas de **`ndf_summary`** (7), **`operations_b3`**
 só: `_ops_trade_rows` e os coletores continuam no routes) e
 **`file_interpreter`** (6, com os alias `/file-interface` — o MOTOR `_fi_*`
 fica: ele gera o layout de todo arquivo do app).
-O `routes.py` saiu de 39.696 para **25.799** linhas.
+E por fim as cascas de **`confirmation`** (26 rotas — os nove
+editores/validates dos documentos), **`ndf_cockpit`** (7),
+**`ndf_other_publisher`** (7), **`pending_confirmation`** (9 — os três DuckDB
+e as regras `_pc_*` são plataforma) e **`live_positions`** (10).
+O `routes.py` saiu de 39.696 para **24.125** linhas. O que fica nele é o
+coração de plataforma (sessão/authz, notificações, banco, ANBIMA, os motores
+compartilhados) e o **New Deals** (44 rotas + geradores) — a última grande
+vertical, deixada para quando a plataforma tiver casa própria.
 
 **O guarda ganhou a seção 9** (`check_soc_layers`): desmonta o bytecode de toda
 função das features e cobra que cada `LOAD_GLOBAL` exista no módulo — é o que
@@ -2281,6 +2288,7 @@ fora chamam o grupo; saída = de quantas ele depende:
 | `intrag` · `counterparty_details` · `electronic_inventory` | ~2060 | 15+18+4 rotas | — | ✅ feito |
 | `manual_confirmation` · `mtm` · `cognos` · `otm` · `latam` | ~2400 | 17+16+7+7+7 rotas | — | ✅ feito |
 | `accrual` · `ndf_summary` · `operations_b3` · `other_products` · `file_interpreter` | ~2750 | 15+7+9+29+6 rotas | — | ✅ feito |
+| `confirmation` · `ndf_cockpit` · `ndf_other_publisher` · `pending_confirmation` · `live_positions` | ~1700 | 26+7+7+9+10 rotas | — | ✅ feito |
 | `file-interpreter` | 307 | **43** | 4 | tarde |
 | `mapping` | 1263 | 39 | 35 | tarde |
 | `notificações` | 393 | **161** | 9 | é PLATAFORMA, não feature |

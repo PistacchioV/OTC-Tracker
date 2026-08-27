@@ -163,7 +163,11 @@ check('moedas diferentes = grupos diferentes',
 check('o link do grupo abre o documento (nao 404)', bool(html) and 'ANEXO' in html, True)
 
 print('\n== 7. o PDF sai do MESMO HTML do .doc ==')
-src = io.open(os.path.join(ROOT, 'apps', 'pages', 'routes.py'), encoding='utf-8').read()
+# As rotas de confirmação moram em features/confirmation desde a extração; o
+# routes segue com os geradores — os dois entram no mesmo texto.
+src = (io.open(os.path.join(ROOT, 'apps', 'pages', 'routes.py'), encoding='utf-8').read()
+       + io.open(os.path.join(ROOT, 'apps', 'pages', 'features', 'confirmation',
+                              'entrypoint.py'), encoding='utf-8').read())
 blk = src.split('def api_conf_fwdstart_save')[1].split('def api_conf_fwdstart_pdf')[0]
 check('o save renderiza o doc com doc_only', 'doc_only=True' in blk, True)
 check('e passa ESSE html para o PDF', 'word_html_pdf(doc_html)' in blk, True)
@@ -230,7 +234,7 @@ src_xml = src.split('def _conf_ndf_xml')[1].split('\ndef ', 1)[0]
 check('a fórmula da mercadoria sobrevive sem legs_fn',
       'strike_adj = _conf_strike_adj(deal, subj)' in src_xml, True)
 check('e a confirmacao do FWD Start passa a de moeda',
-      'legs_fn=_conf_fx_legs' in src, True)
+      'legs_fn=_conf_fx_legs' in src or 'legs_fn=_R()._conf_fx_legs' in src, True)
 # A moeda do XML é a Moeda Base do grupo, não a Quantity Currency (que pode ser BRL).
 check('e manda a Moeda Base explicita', 'ccy=merc)' in src, True)
 
@@ -245,7 +249,8 @@ _tipos = {}
 for _no in ast.walk(_arv):
     if not isinstance(_no, ast.Call):
         continue
-    if getattr(_no.func, 'id', '') != '_conf_ndf_xml':
+    _nome_fn = getattr(_no.func, 'id', '') or getattr(_no.func, 'attr', '')
+    if _nome_fn != '_conf_ndf_xml':
         continue
     _kw = {k.arg: getattr(k.value, 'value', None) for k in _no.keywords}
     # A chamada sem `prefixo` e a do NDF Commodities, que usa o default.
