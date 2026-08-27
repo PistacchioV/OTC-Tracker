@@ -13685,3 +13685,77 @@ Oito guardas que varriam o TEXTO do `routes.py` ganharam a leitura concatenada (
 features), e os que desmontam AST aceitam a chamada por busca atrasada (`func.attr` além de
 `func.id`). A suíte fechou em **96 scripts** verdes, todos com `OTC_DISABLE_SCHEDULERS=1` no arnês
 coletivo e as páginas principais respondendo 200 no smoke.
+
+## §314 — A fase platform/ começa: calendário ANBIMA e notificações
+
+As duas primeiras horizontais ganharam casa própria em `apps/pages/platform/`, na ordem do
+acoplamento medido: **`anbima.py`** (o calendário de dias úteis — `_br_now`, `_prev_anbima_bizday`,
+`_pcx_is_bizday` e as duas cargas históricas do `anbima.json`, movidas as duas de propósito:
+unificá-las muda comportamento de borda e é outra decisão) e **`notifications.py`** (o motor do sino
+e do Web Push — o mapa `_NOTIF_PAGE_URL`, `get_notif_connection`, o ensure/migração da subida,
+`_create_notification` → `_push_notify`; era o nome mais alcançado pelas features, 118 pontos de
+chamada). Os ENDPOINTS do sino continuam no `routes.py`: rota é casca.
+
+O padrão da fase, que as próximas fatias repetem:
+
+- **O `routes.py` mantém os nomes como ALIAS** (`_x = _pf_anbima._x`): as features seguem
+  alcançando por `routes.<nome>` sem mudar, e os 22 testes que trocam `R._create_notification`
+  por espião continuam interceptando todo mundo — o alias é um atributo do `routes`, e todo
+  chamador o resolve em tempo de chamada.
+- **O ESTADO mora na platform** (`_ANBIMA_HOLIDAYS`, `_notif_db_done`, `_notif_db_retry_at`):
+  alias de objeto mutável apontaria para o set velho quando a carga rebinda o global. Teste que
+  troca estado troca LÁ — `check_conf_escalation` e `check_notif_db_boot` foram apontados na
+  mesma mudança.
+- **Platform não importa NOME do routes, e o import do MÓDULO é atrasado** — o que ainda é do
+  `routes` (`DB_PATH`, `NOTIF_DB_PATH`, `_B3_DATA_DIR`, `_DuckDBHandle`, `duckdb_*`) é alcançado
+  por `routes.<nome>` dentro da função, andaime declarado até a camada de banco ter fatia. É o que
+  mantém válidos `R.NOTIF_DB_PATH = tmp` e os contadores de `check_notif_db_boot` sobre
+  `R.duckdb_write` — e `R.duckdb_read_unlocked` segue importado no `routes` DE PROPÓSITO (o
+  pyflakes o marca como não usado; `check_db_read_path` o troca por espião e a platform o alcança
+  por atributo).
+- **Guardas na mesma mudança**: `check_soc_layers` ganhou a seção 10 (platform nunca importa
+  feature nem nome do routes, LOAD_GLOBAL resolve, e o alias do routes É o objeto da platform —
+  extração pela metade é cópia que diverge); a seção 8 cobra os `def` movidos fora do routes;
+  `check_notif_page_url` varre `platform/` junto com as features; `check_mc_notify` lê o
+  `_push_notify` no arquivo novo (o split por texto estourou na hora — foi assim que a mudança de
+  casa apareceu). `check_unlocked_reads` não precisou de nada: ele varre `apps/**` por nome de
+  função, e `get_notif_connection` levou o nome junto.
+
+Dois leitores inline do estado no `routes.py` foram reescritos para a função (`_forecast_spine`
+usa `_pcx_is_bizday`), porque ler `_ANBIMA_HOLIDAYS` por alias é ler o objeto de antes da carga.
+O `routes.py` fechou em **20.752 linhas** (−570). Suíte: 96/96 verdes.
+
+## §315 — Cinco fatias de uma vez: a infraestrutura horizontal inteira na platform/
+
+O lote fechou a camada de INFRA da fase platform/ (§314 tem o padrão; este lote o repete cinco
+vezes): **`json_cache.py`** (o armazém JSON — `_cache_lock`, `_atomic_write_json` com o
+`bump_cache_gen` no funil, os claims diários cross-process do BACC/MDEA/MT300, o daycache memoizado
+`_day_files`/`_day_json` e o `_unique_filepath`), **`mail.py`** (relay, `SHARED_MAILBOX`, logo,
+gradiente no-op, `_parse_emails`, `_email_drafts_response`, `_otc_app_url` — os SENDERS ficam com os
+donos; quem stuba SMTP troca `R.smtplib.SMTP`, e módulo é um objeto só para todo importador),
+**`dates.py`** (`_parse_date_any`, `_parse_deal_date`, `_EN_MONTH_NAMES` — parse é aqui, calendário
+é no `anbima.py`), **`db.py`** (`_DuckDBHandle` + `get_db_connection`; primitivas seguem no
+`database_access.py`, caminho e `_ensure_db_initialized` seguem no `routes` como superfície de patch)
+e **`authz.py`** (master/admin, allowlist do `Page_Access` com o cache por SID, o registro
+`_CONTROL_PANEL_CARDS`/`_CP_ENDPOINT_CARD`, `_safe_landing`, `_user_can_access_page` — os dois
+`before_request` que APLICAM ficam no `routes`: registro em blueprint é casca).
+
+O que este lote ensinou, além do §314:
+
+- **Objeto de estado mutado IN PLACE aceita alias** (`_cache_lock`, `_daycache_memo`,
+  `_page_access_cache`): ninguém os rebinda, então o alias do `routes` continua vivo e os testes
+  que os leem por lá não mudam. O critério é o rebind, não o tipo — o set da ANBIMA não aceitava.
+- **Caminho relativo a `__file__` muda de valor quando o código muda de casa**: o `_load_nav_urls`
+  precisou de `../../templates` no lugar de `../templates` — o único ajuste não-verbatim do lote,
+  conferido pelo tamanho do `_NAV_URLS` (77 páginas).
+- Dois guardas de TEXTO acompanharam o código na mesma mudança: `check_req_cache` lê o funil do
+  `_atomic_write_json` no arquivo novo, e a âncora nova da seção 8 do `check_soc_layers` aprendeu
+  que `'_cache_lock = threading'` casa com o `_dash_cache_lock` — âncora de substring pede o
+  sufixo (`threading.RLock`).
+- `import portalocker` e `import tempfile` saíram do topo do `routes` (só o armazém os usava);
+  o `duckdb_read_unlocked` FICA (§314 — superfície de patch e atributo que a platform alcança).
+
+Sete módulos na `platform/` (calendário, notificações, armazém JSON, e-mail, datas, banco,
+autorização), `routes.py` em **20.139 linhas** (21.322 no fechamento da campanha, −1.183 na fase).
+Suíte: 96/96 verdes. Próximas fatias: os motores compartilhados (liquidação, `_conf_*`, CC/CPD,
+quotes/forecast, EI, `_mc_*`, FI/PC/OpB3, New Deals) e as seis separações internas dos verbatim.

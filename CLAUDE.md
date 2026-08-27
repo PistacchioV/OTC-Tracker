@@ -2253,16 +2253,52 @@ delega a ele em vez de criar um arquivo vazio.
 `check_soc_layers.py` prende tudo isso, inclusive subindo o app para conferir as
 rotas no `url_map` — import escrito e import que executou são coisas diferentes.
 
-### O que vem agora: a fase `platform/`
+### A fase `platform/` (começou em 27/08/2026 — HANDOFF §314–§315)
 
-A fila de features acabou — as 43 fatias saíram na ordem do acoplamento medido
-(entrada = chamadas de fora do grupo), e o histórico está no HANDOFF §310–§313.
-O próximo passo é dar casa própria ao que hoje as features alcançam por
-`_R()`/busca atrasada: notificações (161 entradas), e-mail/SMTP,
-sessão/autorização, acesso a banco, calendário ANBIMA, e os motores
-compartilhados (New Deals, liquidação, `_fi_*`, `_pc_*`, `_cpd_*`, `_ei_*`) —
-tudo para `apps/pages/platform/`, com as pontes atrasadas das features passando
-a apontar para lá. Enquanto isso não acontece, a busca em `routes` é andaime
-declarado — está escrita como tal nos docstrings das features. Em paralelo, os
-seis verbatim aceitam a separação interna em domain/queries/commands, uma por
-vez, com as redes que já os prendem.
+A fila de features acabou — as 43 fatias saíram na ordem do acoplamento medido,
+histórico no HANDOFF §310–§313 — e a camada de INFRA horizontal já mora em
+`apps/pages/platform/`, sete módulos: **`anbima.py`** (o calendário de dias
+úteis — `_br_now`, `_prev_anbima_bizday`, `_pcx_is_bizday`, as DUAS cargas
+históricas do `anbima.json` preservadas de propósito), **`notifications.py`**
+(o motor do sino e do Web Push — `_NOTIF_PAGE_URL`, `get_notif_connection`, o
+ensure/migração da subida, `_create_notification` → `_push_notify`),
+**`json_cache.py`** (o armazém JSON — `_cache_lock`, `_atomic_write_json`, os
+claims diários cross-process, o daycache `_day_files`/`_day_json`),
+**`mail.py`** (relay/caixa da mesa, logo, `_parse_emails`,
+`_email_drafts_response`, `_otc_app_url` — os senders ficam com os donos),
+**`dates.py`** (`_parse_date_any`/`_parse_deal_date` — parse aqui, calendário
+no anbima), **`db.py`** (`_DuckDBHandle` + `get_db_connection`; as primitivas
+seguem no `database_access.py`) e **`authz.py`** (master/admin, allowlist do
+`Page_Access` com cache por SID, o registro de cards do Control Panel). Os
+endpoints do sino e os dois `before_request` continuam no `routes.py`: rota e
+registro em blueprint são casca.
+
+O padrão da fase, que as próximas fatias repetem (motores compartilhados —
+liquidação, `_conf_*`, CC/CPD, quotes/forecast, EI, `_mc_*`, FI/PC/OpB3,
+New Deals — nessa fila):
+
+- **o `routes.py` mantém os nomes como ALIAS** (`_x = _pf_anbima._x`): features
+  seguem alcançando por `routes.<nome>` e os testes que trocam a FUNÇÃO no
+  `routes` (`R._create_notification = espião`) continuam interceptando todos;
+- **o ESTADO mora na platform** (`_ANBIMA_HOLIDAYS`, `_notif_db_done`): alias de
+  objeto mutável apontaria para o set velho quando a carga rebinda o global.
+  Teste que troca estado troca LÁ, e leitor inline do estado no `routes` é
+  reescrito para a função (foi o `_forecast_spine` → `_pcx_is_bizday`). O
+  critério é o REBIND, não o tipo: `_cache_lock`, `_daycache_memo` e
+  `_page_access_cache` são mutados in place e nunca rebindados, então o alias
+  deles continua vivo e os testes não mudam;
+- **caminho relativo a `__file__` muda de valor com a mudança de casa** — o
+  `_load_nav_urls` precisou de `../../templates` (era `../` no routes);
+- **platform nunca importa feature nem NOME do routes**; o que ainda é do
+  `routes` (`DB_PATH`, `NOTIF_DB_PATH`, `_DuckDBHandle`, `duckdb_*`) é busca
+  atrasada dentro da função — andaime declarado até a camada de banco ter
+  fatia. O `duckdb_read_unlocked` segue importado no `routes` DE PROPÓSITO,
+  mesmo com o pyflakes o marcando: é superfície de patch dos testes e atributo
+  que a platform alcança;
+- **guardas na mesma mudança** — `check_soc_layers` seção 10 (fronteiras da
+  platform + o alias do routes É o objeto da platform), seção 8 com os `def`
+  movidos, `check_notif_page_url` varrendo `platform/` junto das features, e
+  `check_mc_notify` lendo `_push_notify` no arquivo novo.
+
+Em paralelo, os seis verbatim aceitam a separação interna em
+domain/queries/commands, uma por vez, com as redes que já os prendem.
