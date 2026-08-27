@@ -63,7 +63,13 @@ import ast                                             # noqa: E402
 import io                                              # noqa: E402
 import re                                              # noqa: E402
 
+# As telas de OTM e Latam moram em features/ desde a extracao — os entrypoints
+# entram na mesma arvore (os endpoints mutantes estao la, chamando o store do
+# routes por _R()).
 fonte = io.open(os.path.join(RAIZ, 'apps', 'pages', 'routes.py'), encoding='utf-8').read()
+for _rel in ('features/otm/entrypoint.py', 'features/latam/entrypoint.py',
+             'features/cognos/entrypoint.py'):
+    fonte += io.open(os.path.join(RAIZ, 'apps', 'pages', _rel), encoding='utf-8').read()
 arvore = ast.parse(fonte)
 linhas = fonte.split('\n')
 

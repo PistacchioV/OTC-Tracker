@@ -223,7 +223,14 @@ for r in ('/holidays-calendar', '/api/holidays/calendars', '/api/holidays/save',
           '/api/counterparty-details/contact/approve',
           '/api/electronic-inventory/clients',
           '/api/electronic-inventory/documents',
-          '/api/electronic-inventory/upload'):
+          '/api/electronic-inventory/upload',
+          '/manual-confirmation/monitor', '/manual-confirmation/track',
+          '/api/manual-confirmation/data', '/api/manual-confirmation/validate',
+          '/mtm-swap', '/api/mtm-swap/data', '/api/mtm-swap/row/edit',
+          '/cognos', '/api/cognos/data', '/api/cognos/row/confirm',
+          '/otm-settlements', '/api/otm-settlements/data',
+          '/other-products-swap-latamdeskposition',
+          '/api/other-products-swap-latamdeskposition/data'):
     check('%s registrada' % r, r in regras, True)
 
 print('\n== 8. o que saiu do routes.py nao ficou nele ==')
@@ -256,7 +263,11 @@ for morto in ('_tk_roles_by_sid', '_tk_can_view', '_tk_public',
               'def api_cp_cetip_settlement',
               '_intrag_ndf_persist', '_save_intrag_opt_entry', 'def api_intrag_swap_approve',
               '_cpd_get_record', '_bank_get_record', 'def api_cp_contact_approve',
-              'def api_ei_clients', 'def api_ei_upload'):
+              'def api_ei_clients', 'def api_ei_upload',
+              'def api_mc_validate', 'def manual_confirmation_generate',
+              '_mtm_build_from_folder', '_mtm_generate_book', 'def api_mtm_process',
+              '_cog_import', '_cog_collect', 'def api_cog_row_confirm',
+              'def api_otm_row_confirm', 'def api_latam_row_confirm'):
     check('%s saiu do routes.py' % morto, morto in rotas_py, False)
 
 print('\n== 9. nenhum global orfao nos modulos de feature ==')

@@ -27,7 +27,8 @@ ROOT = normpath(join(dirname(abspath(__file__)), '..', '..'))
 sys.path.insert(0, ROOT)
 os.chdir(ROOT)
 
-from apps.pages import routes as R  # noqa: E402
+from apps.pages import routes as R
+from apps.pages.features.mtm import engine as ME  # noqa: E402  # noqa: E402
 
 FAILED = [False]
 
@@ -159,11 +160,11 @@ for label, book, rows in [('book CEM (BANCO + espelho LAWTON)', 'CEM', CEM_ROWS)
                           ('book Hybrids (espelho LAWTON, sufixo HYB)', 'Hybrids',
                            [make_row('20251111111', '00041.00-7', '10.00')])]:
     gold = _legacy_generate_book(book, rows, YMD)
-    got = R._mtm_generate_book(book, rows, YMD)
+    got = ME._mtm_generate_book(book, rows, YMD)
     check(label + ' — mesmos arquivos', sorted(got) == sorted(gold))
-    same = all(R._mtm_file_lines(got[fn]) == _legacy_file_lines(gold[fn]) for fn in gold)
+    same = all(ME._mtm_file_lines(got[fn]) == _legacy_file_lines(gold[fn]) for fn in gold)
     check(label + ' — linhas idênticas', same)
-    lens = [len(ln) for fn in got for ln in R._mtm_file_lines(got[fn])[1:]]
+    lens = [len(ln) for fn in got for ln in ME._mtm_file_lines(got[fn])[1:]]
     check(label + ' — 93 chars', lens and all(n == 93 for n in lens))
 
 gold = _legacy_generate_book('CEM', CEM_ROWS, YMD)
@@ -179,11 +180,11 @@ check('MtM zero → 0.01', _legacy_file_lines(
     _legacy_generate_book('EDG', EDG_ROWS, YMD)['MtM_BANCO-EDG'])[1][61:73] == '000000000001')
 check('Notionals em branco = 12 espaços (posições 74-85)',
       lines[1][73:85] == ' ' * 12)
-got = R._mtm_generate_book('CEM', CEM_ROWS, YMD)
-check('book desconhecido → nada', R._mtm_generate_book('COE', CEM_ROWS, YMD) == {})
+got = ME._mtm_generate_book('CEM', CEM_ROWS, YMD)
+check('book desconhecido → nada', ME._mtm_generate_book('COE', CEM_ROWS, YMD) == {})
 
 print('· preview: rótulos vêm do template, células fecham com a linha')
-prev = R._mtm_gen_preview(got)
+prev = ME._mtm_gen_preview(got)
 with open(join(R._FILE_INTERPRETER_DIR, 'mid-informacoes-derivativos.json'), encoding='utf-8') as fh:
     tpl = json.load(fh)
 reg = next(b for b in tpl['blocks'] if b['id'] == 'registro-emissao')
@@ -192,14 +193,14 @@ banco_prev = next(p for p in prev if p['filename'] == 'MtM_BANCO-CEM.txt')
 check('labels do preview == field do template', banco_prev['cols'] == tpl_labels)
 check('células remontam a linha byte a byte',
       [''.join(cells) for cells in banco_prev['rows']] ==
-      R._mtm_file_lines(got['MtM_BANCO-CEM'])[1:])
+      ME._mtm_file_lines(got['MtM_BANCO-CEM'])[1:])
 check('header do preview == header do arquivo',
       banco_prev['header'] == _legacy_swap_header('BANCO', datetime.now().strftime('%Y%m%d')))
 
 print('· headers de arquivo passam pelo motor')
 today = datetime.now().strftime('%Y%m%d')
 for pk in ('BANCO', 'LAWTON', 'ATACAMA'):
-    check('header ' + pk, R._mtm_swap_header(pk, today) == _legacy_swap_header(pk, today))
+    check('header ' + pk, ME._mtm_swap_header(pk, today) == _legacy_swap_header(pk, today))
 
 print('· o cadastro comanda: template editado muda a linha')
 _ORIG_DIR = R._FILE_INTERPRETER_DIR
@@ -213,7 +214,7 @@ try:
         json.dump(tpl, fh, ensure_ascii=False, indent=2)
     R._FILE_INTERPRETER_DIR = tmp
     R._fi_tpl_cache.clear()
-    edited = R._mtm_file_lines(R._mtm_generate_book('CEM', CEM_ROWS[:1], YMD)['MtM_BANCO-CEM'])[1]
+    edited = ME._mtm_file_lines(ME._mtm_generate_book('CEM', CEM_ROWS[:1], YMD)['MtM_BANCO-CEM'])[1]
     gold1 = _legacy_file_lines(_legacy_generate_book('CEM', CEM_ROWS[:1], YMD)['MtM_BANCO-CEM'])[1]
     check('Fixed editado (0848 → 0849) aparece na linha',
           edited[6:10] == '0849' and edited[:6] == gold1[:6] and edited[10:] == gold1[10:])
@@ -222,7 +223,7 @@ try:
     R._FILE_INTERPRETER_DIR = tmp
     R._fi_tpl_cache.clear()
     try:
-        R._mtm_generate_book('CEM', CEM_ROWS[:1], YMD)
+        ME._mtm_generate_book('CEM', CEM_ROWS[:1], YMD)
         check('template ausente → ValueError (nada de arquivo meio montado)', False)
     except ValueError:
         check('template ausente → ValueError (nada de arquivo meio montado)', True)

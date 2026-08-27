@@ -2162,7 +2162,13 @@ do New Deals), **`counterparty_details`** (720 / 18, verbatim — os LEITORES
 `_cpd_path/_cpd_load/_cpd_find` e os normalizadores compartilhados ficaram no
 routes) e **`electronic_inventory`** (90 / 4, só a casca — os helpers `_ei_*`
 são plataforma: Track, TED e os saves de confirmação usam os mesmos).
-O `routes.py` saiu de 39.696 para 31.012 linhas.
+Depois vieram **`manual_confirmation`** (620 / 17, casca — o motor é o
+`manual_conf.py` e os `_mc_*` compartilhados ficaram), **`mtm`** (1240 / 16,
+verbatim — `_mtm_parse_num`/`_mtm_norm_party` ficaram: summaries e accrual os
+usam), **`cognos`** (330 / 7 — o store por dia ficou: o Save Daily Settlement
+grava o mesmo arquivo), e as cascas de **`otm`** e **`latam`** (7 rotas cada —
+stores e coletores são da família de liquidação).
+O `routes.py` saiu de 39.696 para 28.550 linhas.
 
 **O guarda ganhou a seção 9** (`check_soc_layers`): desmonta o bytecode de toda
 função das features e cobra que cada `LOAD_GLOBAL` exista no módulo — é o que
@@ -2266,6 +2272,7 @@ fora chamam o grupo; saída = de quantas ele depende:
 | `sigcoll` · `pcx` · `forecast` | ~800 | 2+2+3 rotas | — | ✅ feito |
 | `deals_monitor` · `cetip` (verbatim) | ~1480 | 3+2 rotas | — | ✅ feito |
 | `intrag` · `counterparty_details` · `electronic_inventory` | ~2060 | 15+18+4 rotas | — | ✅ feito |
+| `manual_confirmation` · `mtm` · `cognos` · `otm` · `latam` | ~2400 | 17+16+7+7+7 rotas | — | ✅ feito |
 | `file-interpreter` | 307 | **43** | 4 | tarde |
 | `mapping` | 1263 | 39 | 35 | tarde |
 | `notificações` | 393 | **161** | 9 | é PLATAFORMA, não feature |
