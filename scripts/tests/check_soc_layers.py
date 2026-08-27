@@ -206,7 +206,16 @@ for r in ('/holidays-calendar', '/api/holidays/calendars', '/api/holidays/save',
           '/reconciliation-cgd', '/api/reconciliation-cgd/data',
           '/reconciliation-cgd/run', '/reconciliation-cgd/email',
           '/api/new-deals/box-scan', '/api/new-deals/box-scan/run',
-          '/api/new-deals/box-archive'):
+          '/api/new-deals/box-archive',
+          '/api/control-panel/signature-collection/preview',
+          '/api/control-panel/signature-collection/generate',
+          '/api/control-panel/pending-spreadsheet/run',
+          '/api/control-panel/pending-spreadsheet/status',
+          '/api/control-panel/settlement-forecast/data',
+          '/api/control-panel/settlement-forecast/email',
+          '/api/new-deals/monitor', '/api/control-panel/deals-monitor/run',
+          '/api/control-panel/cetip-settlement',
+          '/api/control-panel/cetip-settlement/recipients'):
     check('%s registrada' % r, r in regras, True)
 
 print('\n== 8. o que saiu do routes.py nao ficou nele ==')
@@ -232,7 +241,11 @@ for morto in ('_tk_roles_by_sid', '_tk_can_view', '_tk_public',
               '_build_weekly_escalation_eml', 'def reconciliation_comitente_run',
               'def reconciliation_payrec_run', 'def api_cgd_recon_run',
               '_cgd_recon_recipients', '_BOX_PRODUCTS', '_box_scan_pull',
-              '_box_persist_deals', 'def api_new_deals_box_scan_run'):
+              '_box_persist_deals', 'def api_new_deals_box_scan_run',
+              '_sigcoll_groups', '_sigcoll_build_drafts', '_pcx_build_xlsx',
+              '_pcx_save_spreadsheet', '_send_forecast_email', '_ndm_monitor_snapshot',
+              '_send_ndm_pending_email', '_cetip_distribute_emails', '_cetip_bacc_copy',
+              'def api_cp_cetip_settlement'):
     check('%s saiu do routes.py' % morto, morto in rotas_py, False)
 
 print(('FAIL: %d' % len(fails)) if fails else 'TUDO OK')

@@ -2154,8 +2154,18 @@ Extraídas até aqui: **`support`** (450 linhas / 6 rotas), **`onboarding`**
 **`appver`** (320 / 2), **`mdea`** (491 / 2), **`conf_escalation`** (576 / 2),
 **`daily_metric`** (300 / 2), **`weekly_escalation`** (140 / 2),
 **`recon_comitente`** (125 / 3), **`recon_payrec`** (160 / 5),
-**`recon_cgd`** (75 / 5), e **`boxscan`** (350 / 3).
-O `routes.py` saiu de 39.696 para 35.274 linhas.
+**`recon_cgd`** (75 / 5), **`boxscan`** (350 / 3), **`sigcoll`** (200 / 2),
+**`pcx`** (420 / 2), **`forecast`** (180 / 3, só o card — o coletor é
+plataforma), **`deals_monitor`** (650 / 3) e **`cetip`** (830 / 2).
+O `routes.py` saiu de 39.696 para 32.926 linhas.
+
+**`deals_monitor` e `cetip` foram movidos VERBATIM** (`engine.py` +
+`entrypoint.py`): os nomes internos foram preservados — inclusive para os
+testes que os trocam — e o que é de plataforma é alcançado por `_R().<nome>`
+(busca atrasada gerada por AST). A separação interna em domain/queries/commands
+é trabalho futuro; a fronteira com o `routes.py`, e o guarda que a prende, já
+valem. A ferramenta que faz isso é o `extract_verbatim.py` (scratchpad da
+sessão): copia os corpos por AST e religa todo `Name(Load)` sem dono.
 
 **O `bacc` foi o primeiro com SCHEDULER, e o registro dele NÃO veio junto.** O
 laço vive em `commands.scheduler_loop`, mas o `_schedule_on_start('bacc-ea', …)`
@@ -2242,6 +2252,8 @@ fora chamam o grupo; saída = de quantas ele depende:
 | `daily_metric` · `weekly_escalation` | ~300+140 | 2+2 rotas | — | ✅ feito |
 | `recon_comitente` · `recon_payrec` · `recon_cgd` | ~360 | 3+5+5 rotas | — | ✅ feito |
 | `boxscan` | ~350 | 3 rotas + scheduler | — | ✅ feito |
+| `sigcoll` · `pcx` · `forecast` | ~800 | 2+2+3 rotas | — | ✅ feito |
+| `deals_monitor` · `cetip` (verbatim) | ~1480 | 3+2 rotas | — | ✅ feito |
 | `file-interpreter` | 307 | **43** | 4 | tarde |
 | `mapping` | 1263 | 39 | 35 | tarde |
 | `notificações` | 393 | **161** | 9 | é PLATAFORMA, não feature |
