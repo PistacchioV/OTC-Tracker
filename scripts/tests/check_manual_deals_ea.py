@@ -251,7 +251,7 @@ try:
         check('%s.json tem as chaves do card' % lang, faltando, [])
 
     print('\n== 7. O par e gravado no pull, e nao so registrado no log ==')
-    SRC = read('apps/pages/routes.py')
+    SRC = read('apps/pages/routes.py') + read('apps/pages/platform/new_deals.py')
     check('o pull chama o record_rebooks da feature',
           '_mdea.record_rebooks(rebooks, now)' in SRC, True)
     # O scheduler roda fora de request: sem application context o

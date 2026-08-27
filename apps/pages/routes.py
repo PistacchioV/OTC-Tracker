@@ -2778,13 +2778,61 @@ _DAILY_METRIC_DIR = os.path.normpath(os.path.join(
 _parse_emails = _pf_mail._parse_emails
 
 
-def _pc_refdata_lookup(r, by_spn, by_name):
-    """RefData.json record for a pending row (by SPN first, then counterparty name)."""
-    spn = r.get('SPN', '')
-    rec = by_spn.get(_norm_spn(spn)) if spn else None
-    if rec is None:
-        rec = by_name.get(_pc_norm(r.get('Client', '')))
-    return rec or {}
+# ── Pending Confirmation: motor movido para platform/pending_confirmation.py (§318)
+# Os nomes ficam como ALIAS; _PC_DB_DIR e _B3_DATA_DIR ficam AQUI (superficie
+# de patch dos testes — a platform le por routes.<nome>).
+from apps.pages.platform import pending_confirmation as _pf_pc  # noqa: E402
+_pc_refdata_lookup = _pf_pc._pc_refdata_lookup
+_PC_DBS = _pf_pc._PC_DBS
+_PC_TABLE = _pf_pc._PC_TABLE
+_PC_COLUMNS = _pf_pc._PC_COLUMNS
+_PC_SNAPSHOT_DIR = _pf_pc._PC_SNAPSHOT_DIR
+_pc_norm = _pf_pc._pc_norm
+_pc_category_from_filters = _pf_pc._pc_category_from_filters
+_pc_ensure_db = _pf_pc._pc_ensure_db
+_pc_load_rows = _pf_pc._pc_load_rows
+_PC_DERIVED_COLUMNS = _pf_pc._PC_DERIVED_COLUMNS
+_pc_derive_row = _pf_pc._pc_derive_row
+_PC_UPDATE_HEADERS = _pf_pc._PC_UPDATE_HEADERS
+_pc_signature_pending_status = _pf_pc._pc_signature_pending_status
+_pc_signature_status = _pf_pc._pc_signature_status
+_pc_import_update = _pf_pc._pc_import_update
+_pc_is_intragroup = _pf_pc._pc_is_intragroup
+_pc_refdata_by_name = _pf_pc._pc_refdata_by_name
+_pc_is_internal_counterparty = _pf_pc._pc_is_internal_counterparty
+_pc_aging_band_label = _pf_pc._pc_aging_band_label
+_pc_banker_for_spn = _pf_pc._pc_banker_for_spn
+_PC_OK_STATUSES = _pf_pc._PC_OK_STATUSES
+_PC_PASTDUE_STATUS = _pf_pc._PC_PASTDUE_STATUS
+_PC_TENOR_EXCEPTION = _pf_pc._PC_TENOR_EXCEPTION
+_PC_INTERNAL_EXCEPTION = _pf_pc._PC_INTERNAL_EXCEPTION
+_PC_ESTEIRA_STATUSES = _pf_pc._PC_ESTEIRA_STATUSES
+_pc_is_esteira_status = _pf_pc._pc_is_esteira_status
+_pc_is_ok_status = _pf_pc._pc_is_ok_status
+_pc_cutoff_date = _pf_pc._pc_cutoff_date
+_pc_apply_auto_rules = _pf_pc._pc_apply_auto_rules
+_pc_refresh_aging_status = _pf_pc._pc_refresh_aging_status
+_pc_target_category = _pf_pc._pc_target_category
+_pc_write_exec = _pf_pc._pc_write_exec
+_pc_delete_tn = _pf_pc._pc_delete_tn
+_pc_insert_into = _pf_pc._pc_insert_into
+_pc_upsert_row = _pf_pc._pc_upsert_row
+_pc_rewrite_db = _pf_pc._pc_rewrite_db
+_pc_snapshot_pending = _pf_pc._pc_snapshot_pending
+_pc_run_daily_maintenance = _pf_pc._pc_run_daily_maintenance
+_PC_DAILY_TIME = _pf_pc._PC_DAILY_TIME
+_pc_scheduler_started = _pf_pc._pc_scheduler_started
+_pc_scheduler_lock = _pf_pc._pc_scheduler_lock
+_pc_scheduler_loop = _pf_pc._pc_scheduler_loop
+_pc_start_scheduler = _pf_pc._pc_start_scheduler
+_pc_refdata_enrich = _pf_pc._pc_refdata_enrich
+_pc_save_from_deal = _pf_pc._pc_save_from_deal
+_PC_METRICS_AGING_THRESHOLD = _pf_pc._PC_METRICS_AGING_THRESHOLD
+_PC_METRICS_HISTORY_FILE = _pf_pc._PC_METRICS_HISTORY_FILE
+_pc_metrics_int = _pf_pc._pc_metrics_int
+_pc_latest_snapshot_rows = _pf_pc._pc_latest_snapshot_rows
+_pc_metrics_offenders = _pf_pc._pc_metrics_offenders
+_pc_metrics_history = _pf_pc._pc_metrics_history
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -3192,96 +3240,55 @@ _opsadv_blocked_header = _pf_settle._opsadv_blocked_header
 _opsadv_family_drafts = _pf_settle._opsadv_family_drafts
 
 
-def _ops_norm_event(v):
-    """Tipo Operação normalizado para comparação: `_fcst_norm` cuida de caixa e
-    acento, e o `\\s+` colapsa o espaço. Os arquivos da B3 vêm com padding e
-    espaço duplo entre palavras; sem o colapso, `PAGAMENTO DE  DIF. DE JUROS`
-    simplesmente não casa com a linha cadastrada — e o swap some da tela sem
-    nenhum sinal de que houve comparação."""
-    return re.sub(r'\s+', ' ', _fcst_norm(v)).strip()
-
-
-def _opb3_ev_key(v):
-    """Chave de comparação de Tipo Título / Tipo Operação / Status B3.
-
-    Além de caixa e acento (`_fcst_norm`), colapsa PONTUAÇÃO em espaço: a B3
-    escreve o mesmo status como `CANCELADA: COMANDADA` num arquivo e
-    `CANCELADA:COMANDADA` noutro, e quem cadastra digita de um jeito ou de
-    outro. Comparar o texto cru fazia a regra simplesmente não valer — sem erro
-    nenhum, que é o pior desfecho possível para um filtro."""
-    return re.sub(r'[^a-z0-9]+', ' ', _fcst_norm(v)).strip()
-
-
-def _opb3_event_rules():
-    """(consider, disregard) do cadastro `opb3-events`, cada regra já como a
-    tripla normalizada (tipo título, tipo operação, status B3). `''` é coringa.
-
-    USE em branco vale como **Consider**: é o que as linhas do antigo
-    `swap-b3-events` queriam dizer, e é a leitura inofensiva das duas."""
-    cons, dis = [], []
-    for r in _mapping_rows('opb3-events'):
-        rule = (_opb3_ev_key(r.get('TIPO TITULO', '')),
-                _opb3_ev_key(r.get('TIPO OPERACAO', '')),
-                _opb3_ev_key(r.get('STATUS B3', '')))
-        if not any(rule):
-            continue                       # linha totalmente vazia não é regra
-        (dis if _fcst_norm(r.get('USE', '')).strip().startswith('disreg')
-         else cons).append(rule)
-    return cons, dis
-
-
-def _opb3_rule_hit(rule, tit, op, st):
-    rt, ro, rs = rule
-    return ((not rt or rt == tit) and (not ro or ro == op) and (not rs or rs == st))
-
-
-def _opb3_settle_ok(rec, rules=None):
-    """A linha do Operations B3 entra numa apuração de liquidação? Cadastro
-    `opb3-events`, e é a MESMA resposta para o NDF Summary, o Other Products, os
-    avisos e a mensageria — o mesmo negócio não pode contar numa tela e sumir na
-    outra.
-
-    Precedência:
-      1. **Disregard** vence sempre. É o que tira a operação `CANCELADA:
-         COMANDADA`, que continua no arquivo com o valor cheio e somava um caixa
-         que não vai acontecer.
-      2. Um Tipo Título com ao menos um **Consider** próprio vira LISTA BRANCA —
-         é o caso do SWAP, onde só amortização, juros e prêmio são liquidação
-         (resgate é vencimento). Regra de título em branco também conta como
-         casamento aqui: ela vale para qualquer título.
-      3. Tipo Título sem nenhum Consider não é filtrado — é como TER e OPC se
-         comportam hoje, e é o que mantém a tela igual para quem não cadastrar
-         nada.
-
-    "Nenhum swap entra" continua sendo possível, mas agora se DIZ: uma linha
-    Tipo Título = SWAP, resto em branco, Disregard. Antes isso se fazia
-    esvaziando a tabela, o que não distinguia "não quero nenhum" de "ainda não
-    cadastrei".
-
-    `rules` é o par já lido por quem varre muitas linhas: sem ele cada registro
-    reabre o cadastro (um `stat` por linha, por tela)."""
-    cons, dis = rules if rules is not None else _opb3_event_rules()
-    tit = _opb3_ev_key(rec.get('Tipo Título', ''))
-    op = _opb3_ev_key(rec.get('Tipo Operação', ''))
-    st = _opb3_ev_key(rec.get('Status', ''))
-    if any(_opb3_rule_hit(r, tit, op, st) for r in dis):
-        return False
-    if any(r[0] == tit for r in cons if r[0]):
-        return any(_opb3_rule_hit(r, tit, op, st) for r in cons)
-    return True
-
-
-@_req_cached
-def _opb3_settle_rows(ref):
-    """Linhas do Operations B3 de `ref` que valem para liquidação — o
-    `_opb3_load` já peneirado pelo cadastro. A PÁGINA Operations B3 segue lendo
-    o arquivo inteiro: ela é a fonte, e esconder linha lá deixaria o time sem
-    onde ver a operação cancelada que a regra descartou."""
-    _jp, data = _opb3_load(ref)
-    if not data:
-        return []
-    rules = _opb3_event_rules()
-    return [r for r in data if _opb3_settle_ok(r, rules)]
+# ── Operations B3: leitores movidos para platform/operations_b3.py (§318) ────
+# Os nomes ficam como ALIAS; o _OPB3_MSG_RECIPIENTS_FILE fica AQUI (caminho
+# sobre _DAILY_METRIC_DIR, superficie de patch — a platform le por routes.<nome>).
+from apps.pages.platform import operations_b3 as _pf_opb3  # noqa: E402
+_opb3_ev_key = _pf_opb3._opb3_ev_key
+_opb3_event_rules = _pf_opb3._opb3_event_rules
+_opb3_rule_hit = _pf_opb3._opb3_rule_hit
+_opb3_settle_ok = _pf_opb3._opb3_settle_ok
+_opb3_settle_rows = _pf_opb3._opb3_settle_rows
+_OPB3_COLUMNS = _pf_opb3._OPB3_COLUMNS
+_OPB3_DATE_COLS = _pf_opb3._OPB3_DATE_COLS
+_OPB3_HEADER_ROW = _pf_opb3._OPB3_HEADER_ROW
+_OPB3_META_KEYS = _pf_opb3._OPB3_META_KEYS
+_opb3_ensure_meta = _pf_opb3._opb3_ensure_meta
+_opb3_load_cached = _pf_opb3._opb3_load_cached
+_opb3_load = _pf_opb3._opb3_load
+_opb3_find = _pf_opb3._opb3_find
+_opb3_ref_from = _pf_opb3._opb3_ref_from
+_opb3_json_path = _pf_opb3._opb3_json_path
+_opb3_extract = _pf_opb3._opb3_extract
+_opb3_spec = _pf_opb3._opb3_spec
+_opb3_map_recs = _pf_opb3._opb3_map_recs
+_opb3_merge = _pf_opb3._opb3_merge
+_opb3_side_write = _pf_opb3._opb3_side_write
+_opb3_updated_from = _pf_opb3._opb3_updated_from
+_opb3_import = _pf_opb3._opb3_import
+_opb3_breakdown = _pf_opb3._opb3_breakdown
+_opb3_tipo_maps = _pf_opb3._opb3_tipo_maps
+_opb3_tipo_for = _pf_opb3._opb3_tipo_for
+_opb3_collect = _pf_opb3._opb3_collect
+_OPB3_MSG_GDT_BCC = _pf_opb3._OPB3_MSG_GDT_BCC
+_OPB3_ACCT_BANCO = _pf_opb3._OPB3_ACCT_BANCO
+_OPB3_ACCT_MGT = _pf_opb3._OPB3_ACCT_MGT
+_OPB3_STATUS_GENERATED = _pf_opb3._OPB3_STATUS_GENERATED
+_OPB3_B3_STATUS_DONE = _pf_opb3._OPB3_B3_STATUS_DONE
+_opb3_msg_load_recipients = _pf_opb3._opb3_msg_load_recipients
+_opb3_msg_save_recipients = _pf_opb3._opb3_msg_save_recipients
+_opb3_msg_route_key = _pf_opb3._opb3_msg_route_key
+_opb3_refdata_by_account = _pf_opb3._opb3_refdata_by_account
+_OPB3_LEGAL_SIDES = _pf_opb3._OPB3_LEGAL_SIDES
+_opb3_legal_side = _pf_opb3._opb3_legal_side
+_opb3_internal_ter_map = _pf_opb3._opb3_internal_ter_map
+_opb3_internal_leg = _pf_opb3._opb3_internal_leg
+_opb3_internal_swapprem_map = _pf_opb3._opb3_internal_swapprem_map
+_opb3_internal_trade_map = _pf_opb3._opb3_internal_trade_map
+_opb3_internal_swap_map = _pf_opb3._opb3_internal_swap_map
+_opb3_internal_ndfc_map = _pf_opb3._opb3_internal_ndfc_map
+_opb3_events_upgrade = _pf_opb3._opb3_events_upgrade
+_ops_norm_event = _pf_opb3._ops_norm_event
 
 
 
@@ -7471,352 +7478,6 @@ def _cog_extract(rows):
 #  "last updated" timestamp. Import mirrors the Save Daily Settlement Files read
 #  logic. JSON: static/data/cache/daily settlement/YYYY/MM/DD/operations-b3_YYYYMMDD.json
 OPB3_SOURCE_ROOT = os.getenv('OPB3_SOURCE_ROOT', SETTLEMENTS_ROOT)
-_OPB3_COLUMNS = [
-    'Conta', 'Tipo Operação', 'C/V', 'Título', 'Tipo Título', 'Tipo de Regime', 'Data Vencimento',
-    'Valor', 'Modalidade Liquidação', 'Status', 'Data Liquidação', 'Contraparte (Nome Simpl.)',
-    'Conta Contraparte', 'Num Ctrl Operação',
-]
-_OPB3_DATE_COLS = {'Data Vencimento', 'Data Liquidação'}
-_OPB3_HEADER_ROW = 5                                   # 1-based
-_OPB3_META_KEYS = ('_ob_status', '_ob_maker', '_ob_checker', '_ob_id')
-
-
-# ── Operations B3 maker/checker meta (standard: same pattern as OTM) ──────────
-def _opb3_ensure_meta(data, default_status='New'):
-    """Ensure every record has status/maker/checker/id meta. Returns True if any
-    record changed (caller may persist — one-time migration for legacy JSONs).
-    Imported rows default to 'New' (matches the page's historical badge)."""
-    changed = False
-    for rec in data:
-        if not rec.get('_ob_id'):
-            rec['_ob_id'] = _otm_new_id(); changed = True
-        if '_ob_status' not in rec:
-            rec['_ob_status'] = default_status; changed = True
-        for k in ('_ob_maker', '_ob_checker'):
-            if k not in rec:
-                rec[k] = ''; changed = True
-    return changed
-
-
-@_req_cached
-def _opb3_load_cached(ref):
-    """A leitura em si — é este resultado que o cache guarda. Ver `_opb3_load`."""
-    jp = _opb3_json_path(ref)
-    if not os.path.isfile(jp):
-        return jp, None
-    try:
-        with open(jp, encoding='utf-8') as fh:
-            data = json.load(fh) or []
-    except Exception:
-        return jp, None
-    _opb3_ensure_meta(data)
-    return jp, data
-
-
-def _opb3_load(ref):
-    """(json_path, data|None) for `ref`; ensures meta on the loaded records.
-
-    Devolve uma CÓPIA dos registros, nunca a lista que está no cache. Os
-    endpoints de add/edit/delete carregam o dia, mexem na lista e só então
-    gravam (`data.remove(rec)`, `rec[c] = ...`): com o objeto do cache na mão,
-    essa mutação passa a valer para todo mundo ANTES do save — e continua
-    valendo quando o save FALHA. A linha some da tela de quem não pediu nada, e
-    o request seguinte, que dentro do TTL recebe o mesmo objeto, grava por cima
-    o estado que nunca chegou ao disco. É perda de dado sem erro nenhum.
-
-    A cópia é rasa por registro porque toda escrita destes endpoints é escalar
-    (`rec[k] = v`), e ela custa uma fração da leitura do share que o cache
-    existe para poupar.
-    """
-    jp, data = _opb3_load_cached(ref)
-    return jp, (None if data is None else [dict(r) for r in data])
-
-
-def _opb3_find(data, rid):
-    for rec in data:
-        if str(rec.get('_ob_id', '')) == str(rid):
-            return rec
-    return None
-
-
-def _opb3_ref_from(payload):
-    ds = str((payload or {}).get('date', '') or '').strip()
-    try:
-        return datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
-    except ValueError:
-        return datetime.now()
-
-
-def _opb3_json_path(ref):
-    return os.path.join(OTM_JSON_ROOT, ref.strftime('%Y'), ref.strftime('%m'), ref.strftime('%d'),
-                        'operations-b3_{}.json'.format(ref.strftime('%Y%m%d')))
-
-
-def _opb3_extract(rows):
-    """Rows → (records, updated_time). Header on row 5; keep the reporting columns
-    by header name. Time = row 2 col A (HH:MM:SS)."""
-    updated = _ds_cell(rows[1], 0) if len(rows) >= 2 else ''
-    hidx = _OPB3_HEADER_ROW - 1
-    if len(rows) <= hidx:
-        return [], updated
-    header = [_ds_cell(rows[hidx], i) for i in range(len(rows[hidx]))]
-    hnorm = [_fcst_norm(h) for h in header]
-
-    def col_idx(name):
-        n = _fcst_norm(name)
-        if n in hnorm:
-            return hnorm.index(n)
-        for i, h in enumerate(hnorm):
-            if h and (n in h or h in n):
-                return i
-        return None
-    idx_map = {c: col_idx(c) for c in _OPB3_COLUMNS}
-
-    out = []
-    for r in rows[hidx + 1:]:
-        if not any(_ds_cell(r, i) for i in range(len(r))):
-            continue
-        out.append({c: _ds_cell(r, idx_map.get(c)) for c in _OPB3_COLUMNS})
-    return out, updated
-
-
-def _opb3_spec():
-    return next((s for s in _DS_IMPORTS if s.get('key') == 'operacoes-jpm'), None)
-
-
-def _opb3_map_recs(recs):
-    """Map the FILTERED _ds_process recs (dicts keyed by the full header) to the 14
-    Operations B3 reporting columns by header name — so the page shows exactly the
-    rows that were processed (house account + operation-type filter), not the raw file."""
-    if not recs:
-        return []
-    keys = list(recs[0].keys())
-    knorm = [(k, _fcst_norm(k)) for k in keys]
-
-    def resolve(name):
-        n = _fcst_norm(name)
-        for k, kn in knorm:
-            if kn == n:
-                return k
-        for k, kn in knorm:
-            if kn and (n in kn or kn in n):
-                return k
-        return None
-    idx = {c: resolve(c) for c in _OPB3_COLUMNS}
-    return [{c: (rec.get(idx[c], '') if idx[c] else '') for c in _OPB3_COLUMNS} for rec in recs]
-
-
-def _opb3_merge(existing, new_recs, src_key):
-    """Merge freshly-mapped rows from ONE source (e.g. operacoes-jpm / operacoes-mgt)
-    into the day's Operations B3 records WITHOUT clobbering rows from the other
-    sources. Rows carry a hidden `_ob_src` tag: re-processing a source replaces only
-    its own rows (idempotent) and preserves maker/checker meta per Num Ctrl Operação.
-    Legacy untagged rows are treated as operacoes-jpm (the only source that fed this
-    page before MGT was added). Manually-added rows (_ob_src='manual') are kept."""
-    existing = existing or []
-    _opb3_ensure_meta(existing)
-    for rec in existing:                                # migrate legacy rows (no source tag)
-        if not rec.get('_ob_src'):
-            rec['_ob_src'] = 'operacoes-jpm'
-    old_by_ctrl = {}
-    for rec in existing:
-        if rec.get('_ob_src') == src_key:
-            k = str(rec.get('Num Ctrl Operação', '') or '').strip()
-            if k:
-                old_by_ctrl[k] = rec
-    result = [r for r in existing if r.get('_ob_src') != src_key]
-    for rec in new_recs:
-        rec['_ob_src'] = src_key
-        prev = old_by_ctrl.get(str(rec.get('Num Ctrl Operação', '') or '').strip())
-        if prev:                                        # carry status/maker/checker/id forward
-            for m in _OPB3_META_KEYS:
-                rec[m] = prev.get(m, '')
-        else:
-            _opb3_ensure_meta([rec])
-        result.append(rec)
-    return result
-
-
-def _opb3_side_write(recs, raw, ref, src_key):
-    """Write/merge the FILTERED operacoes recs into the day's Operations B3 json."""
-    b3_new = _opb3_map_recs(recs)
-    b3_jp = _opb3_json_path(ref)
-    existing = []
-    if os.path.isfile(b3_jp):
-        try:
-            with open(b3_jp, encoding='utf-8') as fh:
-                existing = json.load(fh) or []
-        except Exception:
-            existing = []
-    b3_rows = _opb3_merge(existing, b3_new, src_key)
-    os.makedirs(os.path.dirname(b3_jp), exist_ok=True)
-    with open(b3_jp, 'w', encoding='utf-8') as fh:
-        json.dump(b3_rows, fh, ensure_ascii=False, indent=2)
-    _bump_cache_gen(b3_jp)                             # ver o comentário em `_ds_write`
-    _ds_write_updated(b3_jp, _opb3_updated_from(_ds_read_rows(raw)) or ref.strftime('%H:%M:%S'))
-
-
-def _opb3_updated_from(rows):
-    return _ds_cell(rows[1], 0) if len(rows) >= 2 else ''
-
-
-def _opb3_import(ref=None):
-    ref = ref or datetime.now()
-    if not os.path.isdir(OPB3_SOURCE_ROOT):
-        return {'success': False, 'error': 'Source folder not found: {}'.format(OPB3_SOURCE_ROOT)}
-    # Pick up every source that feeds this page (operacoes* → JPM, mgt.* → MGT). Each
-    # is filtered by its own spec (house account + operation-type) and MERGED into the
-    # day's json so the two counterparties coexist instead of overwriting each other.
-    files = sorted(f for f in os.listdir(OPB3_SOURCE_ROOT)
-                   if os.path.isfile(os.path.join(OPB3_SOURCE_ROOT, f)))
-    handled, total_rows, last_updated = [], 0, ''
-    for name in files:
-        spec = _ds_match_spec(name)
-        if not spec or not spec.get('opb3'):
-            continue
-        src_path = os.path.join(OPB3_SOURCE_ROOT, name)
-        try:
-            with open(src_path, 'rb') as fh:
-                raw = fh.read()
-        except Exception:
-            log.warning("[opb3] read failed for %s:\n%s", src_path, traceback.format_exc())
-            continue
-        filtered, _tot = _ds_process(raw, spec)
-        _opb3_side_write(filtered, raw, ref, spec['key'])
-        handled.append(name)
-        total_rows += len(filtered)
-        last_updated = _opb3_updated_from(_ds_read_rows(raw)) or last_updated
-        try:
-            os.remove(src_path)
-        except OSError:
-            log.warning("[opb3] could not delete source %s", src_path)
-    if not handled:
-        return {'success': False, 'error': 'No Operacoes*/MGT* file found in {}'.format(OPB3_SOURCE_ROOT)}
-    return {'success': True, 'file': ', '.join(handled), 'rows': total_rows,
-            'updated': last_updated, 'date': ref.strftime('%Y-%m-%d')}
-
-
-def _opb3_breakdown(data, col):
-    """Dynamic count per distinct value of `col` (skip blanks). Returns
-    {total, items:[{label,count}]} sorted by count desc then label."""
-    counts = {}
-    for rec in data:
-        v = str(rec.get(col, '') or '').strip()
-        if not v:
-            continue
-        counts[v] = counts.get(v, 0) + 1
-    items = [{'label': k, 'count': counts[k]}
-             for k in sorted(counts, key=lambda k: (-counts[k], k))]
-    return {'total': sum(counts.values()), 'items': items}
-
-
-def _opb3_tipo_maps(ref):
-    """{'TER'|'OPC'|'SWAP': {contrato_upper: tipo}} a partir dos snapshots de
-    posição (DPOSICAO*) mais recentes até D-1 ANBIMA de `ref` (walk-back de até
-    10 dias úteis por categoria — mesmo fallback do Live Position):
-      TER  → chave "Contrato";   valor da "Classe do Ativo Subjacente" (como está)
-      OPC  → chave "Código IF";  valor da "Classe do ativo subjacente" (como está)
-      SWAP → chave "Contrato";   valor do "Código Identificador"
-    """
-    specs = {
-        'TER':  ('NDF',    lambda r: '73760_{}_DPOSICAO-TER.json'.format(r)),
-        'OPC':  ('Option', lambda r: '73760_{}_DPOSICAO.json'.format(r)),
-        'SWAP': ('Swap',   lambda r: '73760_{}_DPOSICAO-SWAP.json'.format(r)),
-    }
-    out = {k: {} for k in specs}
-    for key, (cat, fname) in specs.items():
-        probe = _prev_anbima_bizday(ref)
-        path = None
-        for _ in range(10):
-            p = os.path.join(B3_JSON_ROOT, cat, _b3_date_subpath(probe.strftime('%y%m%d')),
-                             fname(probe.strftime('%y%m%d')))
-            if os.path.isfile(p):
-                path = p
-                break
-            probe = _prev_anbima_bizday(probe)
-        if not path:
-            continue
-        try:
-            with open(path, encoding='utf-8') as fh:
-                data = json.load(fh) or []
-        except Exception:
-            continue
-        if not data:
-            continue
-        keys = list(data[0].keys())
-        # A posição de opções não tem coluna "Contrato" — o contrato dela é o
-        # "Código IF". Procurar por 'Contrato' ali caía no fallback por substring
-        # e resolvia para "Situação do contrato", então o Título do Operations B3
-        # nunca casava e a coluna Type saía vazia para todo OPC.
-        if key == 'OPC':
-            k_contr = _fcst_resolve_key(keys, ('Código IF', 'Codigo IF', 'Contrato'))
-        else:
-            k_contr = _fcst_resolve_key(keys, ('Contrato', 'Título', 'Titulo', 'Codigo do Contrato'))
-        k_classe = _fcst_resolve_key(keys, ('Classe do Ativo Subjacente', 'Classe do Ativo', 'Classe'))
-        k_ident = _fcst_resolve_key(keys, ('Código Identificador', 'Codigo Identificador'))
-        for rec in data:
-            contrato = str(rec.get(k_contr, '') or '').strip().upper() if k_contr else ''
-            if not contrato:
-                continue
-            if key == 'SWAP':
-                tipo = str(rec.get(k_ident, '') or '').strip().upper() if k_ident else ''
-            else:                                       # TER e OPC: classe como está
-                tipo = str(rec.get(k_classe, '') or '').strip().upper() if k_classe else ''
-            if tipo:
-                out[key].setdefault(contrato, tipo)
-    return out
-
-
-def _opb3_tipo_for(rec, maps):
-    """Tipo derivado de uma linha do Operations B3 (match Título × posição)."""
-    titn = _fcst_norm(str(rec.get('Tipo Título', '') or ''))
-    key = 'SWAP' if 'swap' in titn else ('OPC' if 'opc' in titn else ('TER' if 'ter' in titn else None))
-    if not key:
-        return ''
-    titulo = str(rec.get('Título', '') or '').strip().upper()
-    return maps.get(key, {}).get(titulo, '')
-
-
-def _opb3_collect(ref):
-    jp = _opb3_json_path(ref)
-    rows_out, data = [], []
-    tipo_maps = _opb3_tipo_maps(ref)
-    if os.path.isfile(jp):
-        try:
-            with open(jp, encoding='utf-8') as fh:
-                data = json.load(fh) or []
-        except Exception:
-            data = []
-        if _opb3_ensure_meta(data) and data:             # legacy JSON w/o meta → migrate once
-            try:
-                _otm_save(jp, data)
-            except Exception:
-                pass
-        for rec in data:
-            row = []
-            for c in _OPB3_COLUMNS:
-                v = rec.get(c, '')
-                if c in _OPB3_DATE_COLS:
-                    d = _fcst_parse_date(v)
-                    v = d.strftime('%d/%m/%Y') if d else (v or '')
-                elif c == 'Valor':
-                    v = _swapchar_fmt_value(v)
-                row.append('' if v is None else v)
-            # Coluna derivada Type (não persistida): match do Título na posição.
-            row.append(_opb3_tipo_for(rec, tipo_maps))
-            # Append maker/checker meta as the row tail: [...data..., status, maker, checker, id]
-            row += [rec.get('_ob_status', 'New'), rec.get('_ob_maker', ''),
-                    rec.get('_ob_checker', ''), rec.get('_ob_id', '')]
-            rows_out.append(row)
-    # Dynamic breakdown widgets: Tipo Operação, Tipo Título, Modalidade Liquidação.
-    widgets = {
-        'total': len(data),
-        'tipo_operacao': _opb3_breakdown(data, 'Tipo Operação'),
-        'tipo_titulo':   _opb3_breakdown(data, 'Tipo Título'),
-        'modalidade':    _opb3_breakdown(data, 'Modalidade Liquidação'),
-    }
-    return {'widgets': widgets, 'columns': _OPB3_COLUMNS + ['Type'], 'rows': rows_out,
-            'updated': _ds_read_updated(jp)}
 
 
 # ── Operations B3 maker/checker CRUD — every change/insert persisted to the JSON ──
@@ -7827,209 +7488,6 @@ def _opb3_collect(ref):
 #  Modalidade de Liquidação Bilateral*/Bruta*. Drafts .eml (X-Unsent) com o
 #  shell padrão dos avisos; destinatários vêm dos cards CEM / Equities.
 _OPB3_MSG_RECIPIENTS_FILE = os.path.join(_DAILY_METRIC_DIR, 'operations_b3_mensageria_recipients.json')
-# BCC de compliance (GDT) dos intragrupo — ver regra no loop da geração.
-_OPB3_MSG_GDT_BCC = 'gdt.br.derivatives@restricted.chase.com'
-# Contas de casa dos dois arquivos que alimentam a página (ver _DS_IMPORTS):
-# operacoes-jpm = Banco J.P. Morgan, mgt.* = MGT. Elas sobrevivem aqui porque o
-# `_OPB3_LEGAL_SIDES` traduz o LEGAL do Cockpit ("BANCOJP…") em conta, e essa é
-# uma pergunta sobre o texto do Cockpit, não sobre o cadastro de contas. QUE
-# VISÃO gera mensagem deixou de ser decidido aqui: é a coluna Messaging do
-# `b3-accounts` (ver `_b3_msg_view_use`).
-_OPB3_ACCT_BANCO = '73760009'
-_OPB3_ACCT_MGT = '04880006'
-# Status local de uma linha já transformada em e-mail de mensageria.
-_OPB3_STATUS_GENERATED = 'Generated'
-# Status B3 gravado na linha quando o e-mail sai (a B3 fecha a operação depois
-# da mensagem; a página passa a refletir isso sem esperar o próximo arquivo).
-_OPB3_B3_STATUS_DONE = 'FINALIZADA'
-
-
-def _opb3_msg_load_recipients():
-    try:
-        with open(_OPB3_MSG_RECIPIENTS_FILE, encoding='utf-8') as fh:
-            d = json.load(fh) or {}
-    except Exception:
-        d = {}
-    out = {}
-    for k in ('cem', 'equities'):
-        v = d.get(k) or {}
-        out[k] = {'to': str(v.get('to', '') or ''), 'cc': str(v.get('cc', '') or '')}
-    return out
-
-
-def _opb3_msg_save_recipients(payload):
-    # Ler → mesclar → gravar sob o lock: o payload traz só os cards alterados, e
-    # sem isso dois usuários salvando cards diferentes perderiam um dos dois.
-    with _cache_lock:
-        cur = _opb3_msg_load_recipients()
-        for k in ('cem', 'equities'):
-            v = (payload or {}).get(k)
-            if isinstance(v, dict):
-                cur[k] = {'to': str(v.get('to', '') or '').strip(),
-                          'cc': str(v.get('cc', '') or '').strip()}
-        os.makedirs(_DAILY_METRIC_DIR, exist_ok=True)
-        _atomic_write_json(_OPB3_MSG_RECIPIENTS_FILE, cur)
-    return cur
-
-
-def _opb3_msg_route_key(tipo):
-    """Card de destinatários por tipo: EQUITIES/EDG/AÇÕES → equities; resto → cem."""
-    tn = _fcst_norm(str(tipo or ''))
-    return 'equities' if ('equit' in tn or 'edg' in tn or 'acao' in tn or 'acoes' in tn) else 'cem'
-
-
-def _opb3_refdata_by_account():
-    """Conta CETIP ('B3 ACCOUNT', ex. 74220.00-5) → nome da contraparte (RefData)."""
-    out = {}
-    try:
-        with open(data_path('RefData.json'),
-                  encoding='utf-8') as fh:
-            for r in json.load(fh) or []:
-                acc = str(r.get('B3 ACCOUNT', '') or '').strip()
-                name = str(r.get('COUNTERPARTY', '') or '').strip()
-                if acc and name and acc not in out:
-                    out[acc] = name
-    except Exception:
-        pass
-    return out
-
-
-# LEGAL do Cockpit ↔ conta de casa da B3. O Cockpit exibe as duas entidades
-# (`_ndfc_collect` filtra por BANCOJP*/JPMORGANCHASE*), então um negócio
-# intragrupo aparece DUAS vezes sob o mesmo contrato, uma perna por entidade e
-# com sinais opostos.
-_OPB3_LEGAL_SIDES = ((_OPB3_ACCT_BANCO, 'BANCOJP'), (_OPB3_ACCT_MGT, 'JPMORGANCHASE'))
-
-
-def _opb3_legal_side(legal):
-    """LEGAL do Cockpit → conta de casa correspondente ('' quando não classifica).
-    Ignora pontuação/espaço ("J.P." ≡ "JP"), como o filtro do próprio Cockpit."""
-    s = re.sub(r'[^A-Z0-9]', '', str(legal or '').upper())
-    for acct, prefix in _OPB3_LEGAL_SIDES:
-        if s.startswith(prefix):
-            return acct
-    return ''
-
-
-def _opb3_internal_ter_map(ref):
-    """B3 ID (upper) → {conta de casa: Σ SETTLEMENT interno} — lado JP do
-    batimento para Tipo Título = TER (NDF de moeda).
-
-    É o par (B3 ID, SETTLEMENT) do card Trade Level do NDF Summary: as mesmas
-    linhas de exibição do Cockpit (CD_CETIP_RETURN já com os resgates de contrato
-    aplicados) e a coluna SETTLEMENT pura — não a SETTLEMENT B3, que é o lado da
-    B3 e é justamente o outro lado da comparação.
-
-    A quebra por conta de casa existe por causa do intragrupo: somar as duas
-    pernas do mesmo contrato dava exatamente zero, e o "Favor considerar" saía
-    R$ 0,00 em vez do valor da perna que assina a mensagem."""
-    out = {}
-    try:
-        ci = {c: i for i, c in enumerate(_NDFC_COLUMNS)}
-        for row in _ndfc_collect(ref)['rows']:
-            b3 = str(row[ci['CD_CETIP_RETURN']] or '').strip().upper()
-            if not b3 or b3 == _NDFC_MISSING_B3.upper():
-                continue
-            v = _mtm_parse_num(row[ci['[PROD] Cockpit.SETTLEMENT']])
-            if v is None:
-                continue
-            legs = out.setdefault(b3, {})
-            side = _opb3_legal_side(row[ci['LEGAL']])
-            legs[side] = legs.get(side, 0.0) + v
-    except Exception:
-        return {}
-    return out
-
-
-def _opb3_internal_leg(ter_map, contrato, casa):
-    """SETTLEMENT interno do contrato pela ótica de `casa` (conta do participante
-    do e-mail). Sem perna daquele lado — negócio de uma entidade só, ou LEGAL que
-    não classifica — soma o que houver, que é o valor único do contrato."""
-    legs = ter_map.get(contrato)
-    if not legs:
-        return None
-    if casa and casa in legs:
-        return legs[casa]
-    return sum(legs.values())
-
-
-def _opb3_internal_swapprem_map(ref):
-    """Contrato (upper) → Σ valor da agenda de prêmios (DAGENDAPREMIOS) — lado JP
-    do batimento para PAGAMENTO DE PREMIO × SWAP. {} quando não há arquivo."""
-    out = {}
-    probe = _prev_anbima_bizday(ref)
-    path = None
-    for _ in range(10):
-        p = os.path.join(B3_JSON_ROOT, 'Swap', _b3_date_subpath(probe.strftime('%y%m%d')),
-                         '73760_{}_DAGENDAPREMIOS.json'.format(probe.strftime('%y%m%d')))
-        if os.path.isfile(p):
-            path = p
-            break
-        probe = _prev_anbima_bizday(probe)
-    if not path:
-        return out
-    try:
-        with open(path, encoding='utf-8') as fh:
-            data = json.load(fh) or []
-        if not data:
-            return out
-        keys = list(data[0].keys())
-        k_contr = _fcst_resolve_key(keys, ('Contrato', 'Codigo do Contrato', 'Título', 'Titulo'))
-        k_val = _fcst_resolve_key(keys, ('Valor do Evento', 'Valor'))
-        for rec in data:
-            contrato = str(rec.get(k_contr, '') or '').strip().upper() if k_contr else ''
-            v = _ndfc_valnum(rec.get(k_val)) if k_val else None
-            if contrato and v is not None:
-                out[contrato] = out.get(contrato, 0.0) + v
-    except Exception:
-        return {}
-    return out
-
-
-def _opb3_internal_trade_map(rows):
-    """B3 ID (upper) → Σ SETTLEMENT interno, a partir de linhas do Trade Level do
-    Other Products Summary.
-
-    Mesma ideia do `_opb3_internal_ter_map` para o NDF de moeda: o lado JP do
-    batimento é a coluna SETTLEMENT que a tela já mostra, não uma segunda leitura
-    dos arquivos. Se o "Favor considerar" do e-mail e o Settlement do Trade Level
-    discordarem, não há como saber qual dos dois o time deve seguir."""
-    out = {}
-    for r in rows or []:
-        b3 = str(r.get('id_b3', '') or '').strip().upper()
-        v = r.get('_settle_n')
-        if b3 and v is not None:
-            out[b3] = out.get(b3, 0.0) + v
-    return out
-
-
-def _opb3_internal_swap_map(ref):
-    """B3 ID → SETTLEMENT interno do SWAP (linhas de swap do Trade Level).
-
-    Cobre os vencimentos (diferencial de amortização e de juros); o prêmio segue
-    com a agenda de prêmios, que é a fonte dele. O valor é o do CONTRATO, não o
-    do evento — por isso a mensageria junta amortização e juros da mesma
-    contraparte antes de comparar: separados, cada e-mail acusaria uma
-    divergência que é só a outra metade do mesmo pagamento."""
-    try:
-        return _opb3_internal_trade_map(_ops_swap_trade_rows(ref.date()))
-    except Exception:
-        log.error('[opb3-msg] mapa interno de swap falhou:\n%s', traceback.format_exc())
-        return {}
-
-
-def _opb3_internal_ndfc_map(ref):
-    """B3 ID → SETTLEMENT interno do TERMO DE COMMODITIES.
-
-    O `_opb3_internal_ter_map` cobre o NDF de MOEDA (vem do Cockpit); a
-    commodity não passa por lá e ficava sem lado interno — o e-mail saía sempre
-    sem o "Favor considerar", que é indistinguível de "bateu"."""
-    try:
-        return _opb3_internal_trade_map(_ops_ndfc_trade_rows(ref.date()))
-    except Exception:
-        log.error('[opb3-msg] mapa interno de termo de commodities falhou:\n%s',
-                  traceback.format_exc())
-        return {}
 
 
 # ── Live Position › NDF ──────────────────────────────────────────────────────
@@ -8096,22 +7554,103 @@ def _lpndf_fmt_rate(v):
     return out if out else '0'
 
 
-def _ndf_ter_path(ref, max_back=10, exact=False):
-    """Newest existing DPOSICAO-TER (path, dref) walking back from `ref` (D-1 ANBIMA).
+# ── New Deals: motor movido para platform/new_deals.py (§319) ────────────────
+# Os nomes ficam como ALIAS; os caminhos de cache, o _fxo_refdata_by_spn e o
+# _generic_nd_cfg ficam AQUI (superficie de patch e chamada interna — §316).
+from apps.pages.platform import new_deals as _pf_nd  # noqa: E402
 
-    `exact=True` NÃO anda para trás: devolve o arquivo daquele dia ou nada. É o
-    que o Advanced Export pede — num intervalo, a busca para trás faria todo dia
-    sem arquivo devolver o do dia anterior, e a planilha sairia com o mesmo dia
-    repetido carimbado com datas diferentes."""
-    cur = ref
-    for _ in range(1 if exact else max_back):
-        dref = cur.strftime('%y%m%d')
-        p = os.path.join(B3_JSON_ROOT, 'NDF', _b3_date_subpath(dref),
-                         '73760_{}_DPOSICAO-TER.json'.format(dref))
-        if os.path.isfile(p):
-            return p, dref
-        cur = _prev_anbima_bizday(cur)
-    return None, None
+
+def _mdea_record_rebooks(rebooks, now):
+    """Gancho platform → vertical: o pull do NDF (platform/new_deals) grava os
+    pares vanilla ↔ FWD Start na vertical mdea — a "única entrada de fora" do
+    §10. A platform não importa feature (fronteira da seção 10 do
+    check_soc_layers); quem conhece as verticais é a casca, então a travessia
+    mora aqui, com o import atrasado porque os entrypoints só são importados no
+    fim deste arquivo."""
+    from apps.pages.features.mdea import entrypoint as _mdea
+    _mdea.record_rebooks(rebooks, now)
+_ndf_ter_path = _pf_nd._ndf_ter_path
+_find_deal_in_cache = _pf_nd._find_deal_in_cache
+_nd_fix_underlying_marker = _pf_nd._nd_fix_underlying_marker
+_deal_matches = _pf_nd._deal_matches
+_find_fxo = _pf_nd._find_fxo
+_FXO_MONTHS_EN = _pf_nd._FXO_MONTHS_EN
+_fxo_ccy = _pf_nd._fxo_ccy
+_fxo_num = _pf_nd._fxo_num
+_fxo_date_dmy = _pf_nd._fxo_date_dmy
+_fxo_refdata_by_accronym = _pf_nd._fxo_refdata_by_accronym
+_FXO_FIELD_ORDER = _pf_nd._FXO_FIELD_ORDER
+_fxo_order_deal = _pf_nd._fxo_order_deal
+_fxo_deal_from_row = _pf_nd._fxo_deal_from_row
+_fxo_persist_deals = _pf_nd._fxo_persist_deals
+_ND_AMEND_SKIP = _pf_nd._ND_AMEND_SKIP
+_ND_AMEND_COSMETIC = _pf_nd._ND_AMEND_COSMETIC
+_ND_AMEND_COSMETIC_BY_PRODUCT = _pf_nd._ND_AMEND_COSMETIC_BY_PRODUCT
+_ND_AMEND_KEEP_STATUS = _pf_nd._ND_AMEND_KEEP_STATUS
+_nd_amend_entity = _pf_nd._nd_amend_entity
+_nd_amend_same_entity = _pf_nd._nd_amend_same_entity
+_nd_amend_flat = _pf_nd._nd_amend_flat
+_nd_amend_is_economic = _pf_nd._nd_amend_is_economic
+_nd_api_amend = _pf_nd._nd_api_amend
+_nd_amend_index = _pf_nd._nd_amend_index
+_nd_amend_find = _pf_nd._nd_amend_find
+_nd_amend_register = _pf_nd._nd_amend_register
+_nd_cancel_in_file = _pf_nd._nd_cancel_in_file
+_fxo_persist_new_deals = _pf_nd._fxo_persist_new_deals
+_fxo_deals_from_api_records = _pf_nd._fxo_deals_from_api_records
+_fxo_api_pull = _pf_nd._fxo_api_pull
+_FXO_API_POLL_MIN = _pf_nd._FXO_API_POLL_MIN
+_fxo_api_scheduler_started = _pf_nd._fxo_api_scheduler_started
+_fxo_api_scheduler_lock = _pf_nd._fxo_api_scheduler_lock
+_fxo_api_scheduler_loop = _pf_nd._fxo_api_scheduler_loop
+_fxo_api_start_scheduler = _pf_nd._fxo_api_start_scheduler
+_ndf_api_norm = _pf_nd._ndf_api_norm
+_ndf_api_get = _pf_nd._ndf_api_get
+_api_rec_is_cancelled = _pf_nd._api_rec_is_cancelled
+_ndf_flat = _pf_nd._ndf_flat
+_fxo_internal_cpty_upgrade = _pf_nd._fxo_internal_cpty_upgrade
+_fxo_book_disregard_upgrade = _pf_nd._fxo_book_disregard_upgrade
+_ndf_weak_leg = _pf_nd._ndf_weak_leg
+_ndf_le_from_location = _pf_nd._ndf_le_from_location
+_ndf_le_from_accronym = _pf_nd._ndf_le_from_accronym
+_ndf_le_accronyms = _pf_nd._ndf_le_accronyms
+_ndf_accronym_variants = _pf_nd._ndf_accronym_variants
+_ndf_le_row = _pf_nd._ndf_le_row
+_ndf_le_refdata = _pf_nd._ndf_le_refdata
+_ndf_ref_by_accronym = _pf_nd._ndf_ref_by_accronym
+_ndf_api_key = _pf_nd._ndf_api_key
+_ndf_interbook_rules = _pf_nd._ndf_interbook_rules
+_ndf_is_interbook = _pf_nd._ndf_is_interbook
+_ndf_deal_from_api = _pf_nd._ndf_deal_from_api
+_generic_nd_persist_new_deals = _pf_nd._generic_nd_persist_new_deals
+_NDF_REBOOK_LOOKBACK_MONTHS = _pf_nd._NDF_REBOOK_LOOKBACK_MONTHS
+_ndf_rebook_key = _pf_nd._ndf_rebook_key
+_ndf_fwdstart_cached_keys = _pf_nd._ndf_fwdstart_cached_keys
+_ndf_drop_fwdstart_rebooks = _pf_nd._ndf_drop_fwdstart_rebooks
+_ndf_api_pull = _pf_nd._ndf_api_pull
+_NDF_API_POLL_MIN = _pf_nd._NDF_API_POLL_MIN
+_ndf_api_scheduler_started = _pf_nd._ndf_api_scheduler_started
+_ndf_api_scheduler_lock = _pf_nd._ndf_api_scheduler_lock
+_ndf_api_scheduler_loop = _pf_nd._ndf_api_scheduler_loop
+_ndf_api_start_scheduler = _pf_nd._ndf_api_start_scheduler
+_find_ndf_deal_in_cache = _pf_nd._find_ndf_deal_in_cache
+_ndf_comm_ter_lines = _pf_nd._ndf_comm_ter_lines
+_GENERIC_ND_PC_TYPE = _pf_nd._GENERIC_ND_PC_TYPE
+_GENERIC_ND_MC_SOURCE = _pf_nd._GENERIC_ND_MC_SOURCE
+_generic_nd_pending_status = _pf_nd._generic_nd_pending_status
+_generic_nd_pc_trigger = _pf_nd._generic_nd_pc_trigger
+_find_generic_nd_deal = _pf_nd._find_generic_nd_deal
+_generic_nd_reenrich = _pf_nd._generic_nd_reenrich
+_ndf_publisher_row = _pf_nd._ndf_publisher_row
+_NDF_NOTES_BACEN = _pf_nd._NDF_NOTES_BACEN
+_ndf_publisher_is_bacen = _pf_nd._ndf_publisher_is_bacen
+_ndf_publisher_codes = _pf_nd._ndf_publisher_codes
+_ndf_publisher_fonte_info = _pf_nd._ndf_publisher_fonte_info
+_generic_ndf_ter_line = _pf_nd._generic_ndf_ter_line
+_nd_lawton_mirror = _pf_nd._nd_lawton_mirror
+_nd_lawton_sig = _pf_nd._nd_lawton_sig
+_ND_MAPPING_ERRORABLE = _pf_nd._ND_MAPPING_ERRORABLE
+_generic_nd_mapping_candidates = _pf_nd._generic_nd_mapping_candidates
 
 
 def _lpndf_collect(ref, exact=False):
@@ -9209,80 +8748,6 @@ def user_info():
 # ROTAS — CACHE DE DEALS (New Deals › Options › Commodities)
 # ==============================================================================
 
-def _find_deal_in_cache(deal_name, client_name=None):
-    """Search all YYYYMMDD_optcomm.json files for a deal by Deal + Client.
-    Returns (file_path, list_index) or (None, None)."""
-    files_scanned     = 0
-    deal_name_matches = []   # Deal matched but Client didn't
-
-    for root, _dirs, files in os.walk(CACHE_BASE_DIR):
-        for fname in sorted(files, reverse=True):   # newest files first
-            if not fname.endswith('_optcomm.json'):
-                continue
-            fpath = os.path.join(root, fname)
-            files_scanned += 1
-            try:
-                with open(fpath, 'r', encoding='utf-8') as fh:
-                    deals = json.load(fh)
-                if not isinstance(deals, list):
-                    deals = [deals]
-                for i, deal in enumerate(deals):
-                    d_name   = (deal.get('Deal')   or '').strip()
-                    d_client = (deal.get('Client') or '').strip()
-                    if d_name == deal_name.strip():
-                        want = (client_name or '').strip()
-                        if not want or d_client == want:
-                            log.debug("[_find_opt] FOUND %r client=%r → %s[%d]",
-                                      deal_name, client_name, fname, i)
-                            return fpath, i
-                        else:
-                            deal_name_matches.append({
-                                'file': fname, 'idx': i,
-                                'stored_client': repr(d_client),
-                                'wanted_client': repr(want)
-                            })
-            except Exception:
-                log.warning("[_find_opt] Error reading %s: %s", fpath, traceback.format_exc())
-                continue
-
-    if deal_name_matches:
-        log.warning(
-            "[_find_opt] CLIENT MISMATCH for deal=%r  wanted_client=%r\n"
-            "  Matches by name (stored vs wanted): %s",
-            deal_name, repr(client_name), deal_name_matches
-        )
-    elif files_scanned == 0:
-        log.error("[_find_opt] No _optcomm.json files found in %s", CACHE_BASE_DIR)
-    else:
-        log.warning("[_find_opt] deal=%r client=%r NOT FOUND in %d file(s)",
-                    deal_name, client_name, files_scanned)
-    return None, None
-
-
-def _nd_fix_underlying_marker(deal):
-    """Tira do UnderlyingAsset um `"MY"` que tenha sobrado do padrão do cadastro.
-
-    O código chega pronto do navegador. Um cliente com o `otc-fileupload.js`
-    ANTERIOR ao §164 em cache trata o padrão como prefixo literal e concatena o
-    mês/ano no fim — `HO"MY"` vira `HO"MY"U6` em vez de `HOU6`, e o deal entra
-    com um Underlying Asset que não existe no Subjacente ("Missing Index B3").
-    Foi o que aconteceu em 03/08/2026 (§170).
-
-    A guarda fica na GRAVAÇÃO, não na leitura: corrigir só na tela deixaria o
-    arquivo — que é o que alimenta o Conecta e o registro na B3 — com o código
-    torto. O aviso no log é o que identifica a máquina com o JS velho.
-    """
-    if not isinstance(deal, dict):
-        return
-    ua = deal.get('UnderlyingAsset')
-    if not isinstance(ua, str) or '"' not in ua:
-        return
-    fixed = otc_boxparse.strip_b3_marker(ua)
-    if fixed != ua:
-        deal['UnderlyingAsset'] = fixed
-        log.warning('[new-deals] UnderlyingAsset com marcador de padrão: %r → %r '
-                    '(deal=%r · cliente com JS antigo em cache?)',
-                    ua, fixed, deal.get('Deal', ''))
 
 
 # O parse de datas mora em `platform/dates.py` — aliases.
@@ -9292,52 +8757,6 @@ _parse_date_any = _pf_dates._parse_date_any
 _parse_deal_date = _pf_dates._parse_deal_date
 
 
-def _deal_matches(deal, filters):
-    """Return True when a deal dict satisfies every filter.
-
-    Date filters support a `mode` of 'from' (cell >= value), 'to'
-    (cell <= value) or 'exact'/absent (equality, both bounds inclusive when a
-    'from'+'to' pair is supplied for the same field).
-    """
-    for f in filters:
-        field = f.get('field', '')
-        ftype = f.get('type', 'text')
-        value = str(f.get('value', '')).strip()
-        if not field or not value:
-            continue
-        cell_val = str(deal.get(field, '')).strip()
-        if ftype == 'text':
-            # mode 'not' = "different from" (case-insensitive equality, negated) —
-            # used by the New Deals default chip Status <> Success.
-            if (f.get('mode') or '').lower() == 'not':
-                if value.lower() == cell_val.lower():
-                    return False
-            elif value.lower() not in cell_val.lower():
-                return False
-        elif ftype == 'date':
-            mode = (f.get('mode') or 'exact').lower()
-            fval = _parse_date_any(value)
-            cval = _parse_date_any(cell_val)
-            if mode in ('from', 'to'):
-                # Range bound — both the filter value and the cell must parse
-                if fval is None or cval is None:
-                    return False
-                if mode == 'from' and cval < fval:
-                    return False
-                if mode == 'to' and cval > fval:
-                    return False
-            else:
-                # Exact: compare as dates when both parse, else fall back to
-                # substring so partial inputs (e.g. "06/2026") still work
-                if fval is not None and cval is not None:
-                    if cval != fval:
-                        return False
-                elif value not in cell_val:
-                    return False
-        elif ftype == 'number':
-            if value.replace(',', '') not in cell_val.replace(',', ''):
-                return False
-    return True
 
 
 # ── Pending Confirmation (DuckDB-backed) ──────────────────────────────────────
@@ -9349,141 +8768,6 @@ def _deal_matches(deal, filters):
 # que muda quando os bancos vão para o share, e montar o caminho aqui deixaria
 # esta tela lendo o banco local enquanto o resto do app lê o do share.
 _PC_DB_DIR = Config.DATABASE_DIR
-_PC_DBS = {
-    'backlog': 'pending-confirmation-backlog.db',
-    'pending': 'pending-confirmation-pending.db',
-    'ok':      'pending-confirmation-ok.db',
-}
-_PC_TABLE = 'pending_confirmation'
-_PC_COLUMNS = [
-    'Status', 'LOB', 'SPN', 'Client', 'Aging', 'Product Type', 'Trade Date',
-    'Maturity Date', 'Trade Number', 'Pending Status', 'Owner', 'EA', 'Send Date',
-    'Return Date', 'Break Reason', 'Comments', 'Economic Group', 'Signature Type',
-    'FepWeb ID', 'Pendência',
-]
-# Daily JSON snapshots of the pending DB (YYYY/MM/DD), for a future metrics page.
-_PC_SNAPSHOT_DIR = os.path.join(data_dir(),
-                                'cache', 'pending-confirmation')
-
-
-def _pc_norm(s):
-    import unicodedata
-    s = unicodedata.normalize('NFKD', str(s or '')).encode('ascii', 'ignore').decode('ascii')
-    return re.sub(r'[^a-z0-9]', '', s.lower())
-
-
-def _pc_category_from_filters(filters):
-    """The Status chip selects which DB. Default 'pending'."""
-    for f in (filters or []):
-        if _pc_norm(f.get('field', '')) == 'status':
-            v = _pc_norm(f.get('value', ''))
-            if 'backlog' in v:
-                return 'backlog'
-            if v == 'ok':
-                return 'ok'
-            return 'pending'
-    return 'pending'
-
-
-def _pc_ensure_db(path):
-    """Create an empty pending_confirmation DB (schema only) if the file is
-    missing, so the page works before the first spreadsheet import runs."""
-    if os.path.isfile(path):
-        return
-    try:
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        # O `with` fecha a conexão e solta o lock em QUALQUER saída, inclusive na
-        # exceção. Era `connect` + `finally: close()` escrito à mão: uma conexão
-        # vazada segura o lock de escrita do DuckDB pela vida do processo, e aí a
-        # página some para TODOS, não só para quem tropeçou no erro.
-        with duckdb_write(path) as con:
-            cols = ', '.join('"{}" VARCHAR'.format(c) for c in _PC_COLUMNS)
-            con.execute('CREATE TABLE IF NOT EXISTS {} ({})'.format(_PC_TABLE, cols))
-        log.info('[pending-confirmation] created empty DB %s', path)
-    except Exception:
-        log.warning('[pending-confirmation] could not create %s', path)
-
-
-def _pc_load_rows(category):
-    path = os.path.join(_PC_DB_DIR, _PC_DBS.get(category, _PC_DBS['pending']))
-    _pc_ensure_db(path)
-    if not os.path.isfile(path):
-        return []
-    try:
-        # `duckdb_read`: lock de arquivo COMPARTILHADO (as leituras não se
-        # excluem entre si) e fechamento garantido na saída do bloco.
-        with duckdb_read(path) as con:
-            cols = ', '.join('"{}"'.format(c) for c in _PC_COLUMNS)
-            rows = con.execute('SELECT {} FROM {}'.format(cols, _PC_TABLE)).fetchall()
-        out = [dict(zip(_PC_COLUMNS, r)) for r in rows]
-        for r in out:                       # keep Aging/Status current at read time
-            _pc_refresh_aging_status(r)
-        return out
-    except Exception:
-        log.warning('[pending-confirmation] query failed for %s:\n%s', path, traceback.format_exc())
-        return []
-
-
-#  Colunas DERIVADAS do Pending Confirmation: as que a tela não deixa editar
-#  porque saem de outra coisa. Owner / Economic Group / Signature Type vêm do
-#  Reference Data pelo SPN (ou pelo nome); Aging e Status saem do Trade Date; e o
-#  Pending Status sai do PRAZO (Maturity − Trade) pela regra do Pending Update.
-_PC_DERIVED_COLUMNS = ('Owner', 'Economic Group', 'Signature Type', 'Aging',
-                       'Status', 'Pending Status')
-
-
-def _pc_derive_row(src):
-    """Campos derivados de UMA linha do Pending Confirmation.
-
-    Existe para que a atualização em massa da tela não tenha uma segunda cópia
-    das regras. Elas já vivem aqui — `_pc_refdata_lookup`, `_pc_aging_band_label`
-    e `_pc_signature_status` são as MESMAS que a importação do Pending Update
-    usa. Uma cópia em JavaScript faria a mesma operação sair com um Pending
-    Status pelo arquivo e outro por uma edição na tela, sem nada acusando.
-
-    `src` traz o que o usuário tem em mãos (SPN, Client, Trade Date, Maturity
-    Date) **e o Pending Status atual da linha** — sem ele, mexer na data de uma
-    confirmação que está em `Pending MO` a devolveria para `Pending Original` e
-    ela sumiria da fila da mesa. A resposta traz as seis colunas derivadas — quem
-    chama decide quais aplicar, porque isso depende de QUAL coluna foi alterada."""
-    rec = _pc_refdata_lookup({'SPN': str(src.get('SPN', '') or ''),
-                              'Client': str(src.get('Client', '') or '')},
-                             _fxo_refdata_by_spn(), _pc_refdata_by_name())
-    trade_dt = _parse_date_any(str(src.get('Trade Date', '') or ''))
-    mat_dt = _parse_date_any(str(src.get('Maturity Date', '') or ''))
-    pending_status, status = _pc_signature_status(
-        rec, trade_dt, mat_dt, str(src.get('Pending Status', '') or ''))
-    aging = (datetime.now().date() - trade_dt).days if trade_dt else None
-    return {
-        # SPN e Client saem juntos: escolher um preenche o outro, como no modal.
-        'SPN': str(rec.get('SPN', '') or '') or str(src.get('SPN', '') or ''),
-        'Client': str(rec.get('COUNTERPARTY', '') or '') or str(src.get('Client', '') or ''),
-        'Owner': str(rec.get('BANKER', '') or ''),
-        'Economic Group': str(rec.get('ECONOMIC GROUP', '') or ''),
-        'Signature Type': str(rec.get('SIGNATURE TYPE', '') or ''),
-        'Aging': '' if aging is None else str(aging),
-        'Status': status,
-        'Pending Status': pending_status,
-    }
-
-
-# ── Pending Update — bulk upsert from the "Pending Update" xlsx ────────────────
-# Sheet columns:
-#   LOB; End Counterparty Desc; Aging; Status; Product Type; Booking Date;
-#   Settlement Date; Deal Name; Pending Status
-# Mapping to page columns: End Counterparty Desc → Client (+ SPN via RefData name),
-# Booking Date → Trade Date, Settlement Date → Maturity Date, Deal Name → Trade
-# Number, Product Type as-is. Status/Pending Status são DERIVADOS por
-# `_pc_signature_status` — a linha já em etapa da esteira mantém a etapa; o resto
-# cai na regra de prazo (≤ 60 dias → Exception FepWeb) e tipo de assinatura.
-_PC_UPDATE_HEADERS = {
-    'lob': 'LOB',
-    'endcounterpartydesc': 'Client',
-    'producttype': 'Product Type',
-    'bookingdate': 'Trade Date',
-    'settlementdate': 'Maturity Date',
-    'dealname': 'Trade Number',
-}
 
 
 # Erros de fórmula do Excel, como o openpyxl os entrega (texto) quando lê o valor
@@ -9492,150 +8776,6 @@ _XL_ERROR_TEXT = {'#NULL!', '#N/A', '#REF!', '#VALUE!', '#DIV/0!', '#NAME?', '#N
                   '#SPILL!', '#CALC!', '#GETTING_DATA'}
 
 
-def _pc_signature_pending_status(rec, trade_dt, maturity_dt):
-    """Pending Status pelo PRAZO e pelo TIPO DE ASSINATURA.
-
-    Esta é a regra de **NDF Vanilla e NDF Other Publisher** — os únicos produtos
-    que não passam pela esteira de validação. Todo o resto entra na esteira e o
-    Pending Status dele é a ETAPA (ver `_pc_is_esteira_status`), que prazo e
-    assinatura não têm o que opinar.
-
-      * prazo (Settlement − Trade) ≤ 60 dias corridos → `Exception FepWeb`;
-      * senão, pelo SIGNATURE TYPE da contraparte no Reference Data:
-        Internal → `Exception Digital Fep Web`, Digital → `Pending Digital
-        Signature`, Manual **e não cadastrado** → `Pending Original`.
-
-    É a MESMA função que o New Deals chama (`_generic_nd_pending_status`). Eram
-    duas cópias, e elas divergiam em duas coisas em silêncio: o prazo curto saía
-    `Exception Digital Fep Web` por um caminho e `Exception FepWeb` pelo outro, e
-    o ramo `internal` só existia no lado do New Deals — a mesma contraparte
-    recebia respostas diferentes conforme a linha ter vindo do arquivo ou da tela.
-    """
-    if trade_dt and maturity_dt and (maturity_dt - trade_dt).days <= 60:
-        return _PC_TENOR_EXCEPTION
-    sig = _pc_norm((rec or {}).get('SIGNATURE TYPE', ''))
-    if sig == 'internal':
-        return _PC_INTERNAL_EXCEPTION
-    if sig == 'digital':
-        return 'Pending Digital Signature'
-    return 'Pending Original'
-
-
-def _pc_signature_status(rec, trade_dt, maturity_dt, current=''):
-    """(Pending Status, Status) de uma linha do Pending Confirmation.
-
-    `current` é o Pending Status que a linha JÁ TEM. Quando ele é uma etapa da
-    esteira, ele fica: quem decide o estágio de uma confirmação em validação é o
-    Confirmations Monitor, e recalcular por prazo/assinatura aqui trocaria um
-    `Pending MO` por `Pending Original` — a linha sumiria da fila da mesa sem
-    ninguém ter validado nada. Sem etapa (NDF Vanilla / Other Publisher, ou linha
-    nova), vale a regra de prazo e assinatura.
-
-    O Status acompanha o Pending Status: `Ok` quando ele é resolvido, senão a
-    faixa de aging.
-    """
-    if _pc_is_esteira_status(current):
-        pending_status = str(current).strip()
-    else:
-        pending_status = _pc_signature_pending_status(rec, trade_dt, maturity_dt)
-    if _pc_is_ok_status(pending_status):
-        return pending_status, 'Ok'
-    aging = (datetime.now().date() - trade_dt).days if trade_dt else None
-    return pending_status, _pc_aging_band_label(aging)
-
-
-def _pc_import_update(raw_bytes):
-    """Parse the Pending Update xlsx and upsert each operation. Returns
-    {updated, skipped}."""
-    import openpyxl
-    wb = openpyxl.load_workbook(io.BytesIO(raw_bytes), read_only=True, data_only=True)
-    ws = wb.active
-    rows_iter = ws.iter_rows(values_only=True)
-    try:
-        header = next(rows_iter)
-    except StopIteration:
-        return {'updated': 0, 'skipped': 0}
-    # normalized header name → column index
-    col_idx = {}
-    for i, h in enumerate(header):
-        n = _pc_norm(h)
-        if n and n not in col_idx:
-            col_idx[n] = i
-    # page-column → sheet column index (resolved once)
-    pc_to_i = {}
-    for norm, pc in _PC_UPDATE_HEADERS.items():
-        if norm in col_idx:
-            pc_to_i[pc] = col_idx[norm]
-
-    def cell(row, page_col):
-        i = pc_to_i.get(page_col)
-        if i is None or i >= len(row):
-            return ''
-        v = row[i]
-        if v is None:
-            return ''
-        # openpyxl com data_only=True devolve o valor EM CACHE da fórmula; quando a
-        # fórmula está com erro, o que chega é o TEXTO '#NULL!' / '#N/A' / '#REF!'.
-        # Isso não é dado: entrava no banco, aparecia na tela e saía na planilha
-        # como #NULL!. Vira vazio — e no Trade Number, que é a chave da linha, a
-        # linha passa a ser pulada pela regra que já existe para número vazio (uma
-        # chave '#NULL!' ainda colidia com todas as outras linhas quebradas).
-        if isinstance(v, str) and v.strip().upper() in _XL_ERROR_TEXT:
-            return ''
-        return v
-
-    # RefData maps built once: SPN + signature type by counterparty name.
-    by_name = _pc_refdata_by_name()
-    # Pending Status que cada Trade Number JÁ TEM. A importação é um upsert: a
-    # linha que está numa etapa da esteira tem de sair dela com a etapa intacta,
-    # senão o arquivo do dia devolve para `Pending Original` toda confirmação que
-    # as mesas estão conferindo. Lido UMA vez — por linha seriam N leituras dos
-    # três DuckDBs.
-    atual = {}
-    for _cat in ('backlog', 'pending', 'ok'):
-        for _r in _pc_load_rows(_cat):
-            _tn = str(_r.get('Trade Number', '') or '').strip()
-            if _tn and _tn not in atual:
-                atual[_tn] = str(_r.get('Pending Status', '') or '')
-
-    updated, skipped = 0, 0
-    for row in rows_iter:
-        if row is None or not any(v not in (None, '') for v in row):
-            continue
-        client = str(cell(row, 'Client') or '').strip()
-        tn = str(cell(row, 'Trade Number') or '').strip()
-        if tn.endswith('.0'):
-            tn = tn[:-2]
-        if not tn:
-            skipped += 1
-            continue
-        rec = by_name.get(_pc_norm(client))
-        spn = str((rec or {}).get('SPN', '') or '').strip()
-        trade_dt = _parse_date_any(cell(row, 'Trade Date'))
-        maturity_dt = _parse_date_any(cell(row, 'Maturity Date'))
-        pending_status, status = _pc_signature_status(rec, trade_dt, maturity_dt,
-                                                      atual.get(tn, ''))
-        aging = (datetime.now().date() - trade_dt).days if trade_dt else None
-        r = {c: '' for c in _PC_COLUMNS}
-        r['LOB'] = str(cell(row, 'LOB') or '').strip()
-        r['SPN'] = spn
-        r['Client'] = client
-        r['Aging'] = str(aging) if aging is not None else ''
-        r['Product Type'] = str(cell(row, 'Product Type') or '').strip()
-        r['Trade Date'] = trade_dt.strftime('%d/%m/%Y') if trade_dt else ''
-        r['Maturity Date'] = maturity_dt.strftime('%d/%m/%Y') if maturity_dt else ''
-        r['Trade Number'] = tn
-        r['Status'] = status
-        r['Pending Status'] = pending_status
-        r['Owner'] = _pc_banker_for_spn(spn)
-        _pc_refdata_enrich(r)        # Economic Group / Signature Type do RefData
-        _pc_upsert_row(r)
-        updated += 1
-    try:
-        wb.close()
-    except Exception:
-        pass
-    return {'updated': updated, 'skipped': skipped}
 
 
 # ── Pending Confirmation — populate on New Deals Success+mapped ────────────────
@@ -9652,261 +8792,6 @@ def _intrag_engine():
     return engine
 
 
-def _pc_is_intragroup(client):
-    cl = str(client or '').lower()
-    return 'banco' in cl and 'morgan' in cl
-
-
-def _pc_refdata_by_name():
-    """{normalized COUNTERPARTY name -> RefData record}, for economic-group /
-    signature-type lookups by counterparty name."""
-    out = {}
-    try:
-        with open(os.path.join(_B3_DATA_DIR, 'RefData.json'), encoding='utf-8') as fh:
-            data = json.load(fh)
-        for rec in (data if isinstance(data, list) else []):
-            nm = _pc_norm(rec.get('COUNTERPARTY', ''))
-            if nm and nm not in out:
-                out[nm] = rec
-    except (IOError, json.JSONDecodeError):
-        pass
-    return out
-
-
-def _pc_is_internal_counterparty(client, spn=''):
-    """True when the deal's counterparty is an INTERNAL leg (Banco J.P. Morgan or
-    Lawton) — identified by ECONOMIC GROUP == 'INTERNAL' in RefData (by SPN first,
-    then by name). Only external clients should flow to Pending Confirmation, so
-    these bank/Lawton legs are skipped."""
-    rec = None
-    key = _norm_spn(spn)
-    if key:
-        rec = _fxo_refdata_by_spn().get(key)
-    if rec is None:
-        rec = _pc_refdata_by_name().get(_pc_norm(client))
-    if rec is not None:
-        return _pc_norm(rec.get('ECONOMIC GROUP', '')) == 'internal'
-    # No RefData hit → fall back to the intragroup name check (Banco JP Morgan).
-    return _pc_is_intragroup(client)
-
-
-def _pc_aging_band_label(days):
-    """Same aging-band label the page computes on Add Row (arAgingStatus)."""
-    if days is None:
-        return ''
-    if days < 10:
-        return '< 10 dias de pendência'
-    if days < 20:
-        return '>= 10 e < 20 dias de pendência'
-    if days < 30:
-        return '>= 20 e < 30 dias de pendência'
-    if days < 60:
-        return '>= 30 e < 60 dias de pendência'
-    if days < 90:
-        return '>= 60 e < 90 dias de pendência'
-    return '>= 90 dias de pendência'
-
-
-def _pc_banker_for_spn(spn):
-    """Owner = the RefData BANKER for this deal's SPN ('' when unknown)."""
-    try:
-        rec = _fxo_refdata_by_spn().get(_norm_spn(spn))
-        return str((rec or {}).get('BANKER', '') or '').strip()
-    except Exception:
-        return ''
-
-
-# Pending Status values that mean the confirmation is RESOLVED → the row moves to
-# the 'ok' DB. (Concluded = Mark Concluded; plus the digitally-resolved states.)
-_PC_OK_STATUSES = {'concluded', 'signeddigitally', 'exceptiondigitalfepweb'}
-# Pending Status do vencido (a regra universal) e do prazo curto (≤ 60 dias):
-# são a MESMA situação — a confirmação se resolve pelo FepWeb — e o mesmo rótulo.
-_PC_PASTDUE_STATUS = 'Exception FepWeb'
-_PC_TENOR_EXCEPTION = _PC_PASTDUE_STATUS
-# O `Internal` do SIGNATURE TYPE tem rótulo próprio: não é a mesma situação, é
-# contraparte que assina por dentro.
-_PC_INTERNAL_EXCEPTION = 'Exception Digital Fep Web'
-
-# As etapas da esteira de validação (§254). Uma linha em qualquer uma delas está
-# sendo conferida pelas mesas, e é a esteira quem manda no Pending Status dela —
-# prazo e tipo de assinatura não entram. Só NDF Vanilla e NDF Other Publisher não
-# passam pela esteira; todo o resto passa.
-_PC_ESTEIRA_STATUSES = {'pendinglegal', 'pendingotc', 'pendingmo', 'pendingfo',
-                        'pendingmofo', 'pendingfepweb'}
-
-
-def _pc_is_esteira_status(v):
-    return _pc_norm(v) in _PC_ESTEIRA_STATUSES
-
-
-def _pc_is_ok_status(v):
-    # ANY "Exception *" status (Exception, Exception FepWeb, Exception Digital Fep
-    # Web, …) counts as resolved/OK — it is NOT an outstanding confirmation, so it
-    # must not feed the pending metrics. Kept alongside the explicit resolved set.
-    n = _pc_norm(v)
-    return n.startswith('exception') or n in _PC_OK_STATUSES
-
-
-def _pc_cutoff_date():
-    """Trade dates strictly before this go to the 12-month backlog."""
-    from dateutil.relativedelta import relativedelta
-    return datetime.now().date() - relativedelta(months=12)
-
-
-def _pc_apply_auto_rules(row):
-    """Mantém a linha em dia: (1) recalcula o Aging (hoje − Trade Date) e a faixa
-    do Status; (2) aplica a regra do VENCIDO.
-
-    A regra do vencido é a **única que vale para todo produto e todo estágio** —
-    esteira inclusive. Chegada a data de vencimento com a confirmação em qualquer
-    status que não seja resolvido, ela vira `Exception FepWeb` e o Status vira
-    `Ok`: não há mais o que confirmar de uma operação que já liquidou. As DUAS
-    colunas mudam juntas, e é isso que tira a linha da fila e a move para o DB ok.
-
-    O teste é `not _pc_is_ok_status(...)`, e não "começa com Pending": status como
-    *Abonado via PDF* ou *Client Treasury Allowance* também são pendências — não
-    começam com "Pending" e ficavam de fora da regra, envelhecendo para sempre
-    numa operação já vencida.
-    """
-    td = _parse_date_any(row.get('Trade Date', ''))
-    if td:
-        row['Aging'] = str((datetime.now().date() - td).days)
-    md = _parse_date_any(row.get('Maturity Date', ''))
-    if md and md <= datetime.now().date() and not _pc_is_ok_status(row.get('Pending Status', '')):
-        row['Pending Status'] = _PC_PASTDUE_STATUS
-    # Status column: 'Ok' once the confirmation is resolved (an ok Pending Status),
-    # otherwise the aging-band label.
-    if _pc_is_ok_status(row.get('Pending Status', '')):
-        row['Status'] = 'Ok'
-    elif td:
-        row['Status'] = _pc_aging_band_label((datetime.now().date() - td).days)
-    return row
-
-
-# Back-compat alias (older call sites).
-_pc_refresh_aging_status = _pc_apply_auto_rules
-
-
-def _pc_target_category(row):
-    """The DB a row belongs to NOW: backlog if Trade Date > 12 months; ok if its
-    Pending Status is resolved; otherwise pending."""
-    td = _parse_date_any(row.get('Trade Date', ''))
-    if td and td < _pc_cutoff_date():
-        return 'backlog'
-    if _pc_is_ok_status(row.get('Pending Status', '')):
-        return 'ok'
-    return 'pending'
-
-
-def _pc_write_exec(category, ops):
-    """Run (sql, params) operations in one shared exclusive transaction."""
-    path = os.path.join(_PC_DB_DIR, _PC_DBS[category])
-    _pc_ensure_db(path)
-    try:
-        # O retry/backoff que estava escrito aqui à mão passou a ser do
-        # `duckdb_write`, num lugar só e para todos os bancos.
-        with duckdb_write(path) as con:
-            for sql, params in ops:
-                con.execute(sql, params)
-        return True
-    except Exception:
-        log.warning('[pending-confirmation] write failed on %s:\n%s', category, traceback.format_exc())
-        return False
-
-
-def _pc_delete_tn(category, tn):
-    if not tn:
-        return
-    _pc_write_exec(category, [('DELETE FROM {} WHERE "Trade Number" = ?'.format(_PC_TABLE), [tn])])
-
-
-def _pc_insert_into(category, row):
-    # INSERT com colunas explícitas: funciona também num DB ainda não migrado
-    # (colunas legadas extras ficam NULL) — o VALUES posicional quebraria.
-    cols = ', '.join('"{}"'.format(c) for c in _PC_COLUMNS)
-    placeholders = ', '.join('?' for _ in _PC_COLUMNS)
-    _pc_write_exec(category, [('INSERT INTO {} ({}) VALUES ({})'.format(_PC_TABLE, cols, placeholders),
-                              [row.get(c, '') for c in _PC_COLUMNS])])
-
-
-def _pc_upsert_row(row):
-    """Persist one row: refresh aging/status, remove its Trade Number from ALL
-    three DBs, then insert it into the DB it now belongs to (this is what moves a
-    row pending→ok when confirmed, or →backlog past 12 months). Returns the
-    target category."""
-    _pc_refresh_aging_status(row)
-    tn = str(row.get('Trade Number', '') or '')
-    target = _pc_target_category(row)
-    for cat in ('backlog', 'pending', 'ok'):
-        _pc_delete_tn(cat, tn)
-    _pc_insert_into(target, row)
-    return target
-
-
-def _pc_rewrite_db(category, rows):
-    """Replace a DB's contents with `rows` (used by the daily re-route)."""
-    path = os.path.join(_PC_DB_DIR, _PC_DBS[category])
-    _pc_ensure_db(path)
-    cols_ddl = ', '.join('"{}" VARCHAR'.format(c) for c in _PC_COLUMNS)
-    try:
-        # DROP + CREATE + INSERT numa transação só: aqui o `with` importa mais do
-        # que nos outros, porque uma falha no meio deixaria o banco SEM a tabela
-        # que acabou de ser derrubada — a página abriria vazia.
-        with duckdb_write(path) as con:
-            con.execute('DROP TABLE IF EXISTS {}'.format(_PC_TABLE))
-            con.execute('CREATE TABLE {} ({})'.format(_PC_TABLE, cols_ddl))
-            if rows:
-                ph = ', '.join('?' for _ in _PC_COLUMNS)
-                con.executemany('INSERT INTO {} VALUES ({})'.format(_PC_TABLE, ph),
-                                [[r.get(c, '') for c in _PC_COLUMNS] for r in rows])
-        return True
-    except Exception:
-        log.warning('[pending-confirmation] rewrite failed on %s:\n%s', category, traceback.format_exc())
-        return False
-
-
-def _pc_snapshot_pending(rows_pending):
-    """Write a JSON photo of the pending DB under cache/pending-confirmation/
-    YYYY/MM/DD (year/month/day like the other caches) for a metrics page."""
-    today = datetime.now()
-    out_dir = os.path.join(_PC_SNAPSHOT_DIR, today.strftime('%Y'), today.strftime('%m'), today.strftime('%d'))
-    os.makedirs(out_dir, exist_ok=True)
-    path = os.path.join(out_dir, 'pending-confirmation_{}.json'.format(today.strftime('%Y%m%d')))
-    with open(path, 'w', encoding='utf-8') as fh:
-        json.dump(rows_pending, fh, ensure_ascii=False, indent=2)
-    return path
-
-
-def _pc_run_daily_maintenance(snapshot=True):
-    """Re-route every row across the three DBs (refresh aging/status; backlog past
-    12 months; ok when resolved; else pending), rewrite the DBs, and save the
-    pending snapshot. Shared by the in-app 11:30 scheduler and the standalone
-    script. Idempotent."""
-    seen, all_rows = set(), []
-    for cat in ('backlog', 'pending', 'ok'):
-        for r in _pc_load_rows(cat):
-            tn = str(r.get('Trade Number', '') or '')
-            key = tn or ('#' + str(len(all_rows)))
-            if key in seen:
-                continue
-            seen.add(key)
-            all_rows.append(r)
-    buckets = {'backlog': [], 'pending': [], 'ok': []}
-    for r in all_rows:
-        buckets[_pc_target_category(r)].append(r)
-    for cat in ('backlog', 'pending', 'ok'):
-        _pc_rewrite_db(cat, buckets[cat])
-    snap = _pc_snapshot_pending(buckets['pending']) if snapshot else None
-    log.info('[pending-confirmation] daily maintenance: %d backlog / %d pending / %d ok%s',
-             len(buckets['backlog']), len(buckets['pending']), len(buckets['ok']),
-             (' + snapshot ' + os.path.basename(snap)) if snap else '')
-    return buckets
-
-
-# In-app daily scheduler — runs _pc_run_daily_maintenance at a fixed local time
-# (default 11:30). Self-contained (no OS Task Scheduler needed); the maintenance
-# is idempotent so an occasional double-run is harmless.
-_PC_DAILY_TIME = os.getenv('PC_DAILY_TIME', '11:30')
 # ──────────────────────────────────────────────────────────────────────────
 # Horário de Brasília — mora em `platform/anbima.py` (fatia platform/); alias.
 # ──────────────────────────────────────────────────────────────────────────
@@ -9980,40 +8865,6 @@ def _import_window_label():
         _IMPORT_WINDOW[1] // 60, _IMPORT_WINDOW[1] % 60)
 
 
-_pc_scheduler_started = False
-_pc_scheduler_lock = threading.Lock()
-
-
-def _pc_scheduler_loop():
-    try:
-        hh, mm = (int(x) for x in _PC_DAILY_TIME.split(':')[:2])
-    except Exception:
-        hh, mm = 11, 30
-    last_run = None
-    while True:
-        try:
-            now = _br_now()
-            target = now.replace(hour=hh, minute=mm, second=0, microsecond=0)
-            if target <= now:
-                target += timedelta(days=1)
-            time.sleep(max(1.0, (target - now).total_seconds()))
-            today = _br_now().date()
-            if today != last_run:          # once per calendar day
-                last_run = today
-                _pc_run_daily_maintenance(snapshot=True)
-        except Exception:
-            log.error('[pending-confirmation] scheduler error:\n%s', traceback.format_exc())
-            time.sleep(60)
-
-
-def _pc_start_scheduler():
-    global _pc_scheduler_started
-    with _pc_scheduler_lock:
-        if _pc_scheduler_started:
-            return
-        _pc_scheduler_started = True
-    threading.Thread(target=_pc_scheduler_loop, name='pc-daily-scheduler', daemon=True).start()
-    log.info('[pending-confirmation] daily scheduler started (runs at %s)', _PC_DAILY_TIME)
 
 
 # Sobe com o app (ver `_schedule_on_start`). Com o reloader do Werkzeug a
@@ -10022,19 +8873,6 @@ def _pc_start_scheduler():
 _schedule_on_start('pending-confirmation', _pc_start_scheduler)
 
 
-def _pc_refdata_enrich(row):
-    """Preenche Economic Group / Signature Type da linha a partir do RefData
-    (chave: SPN; fallback: nome do Client) quando ainda estão vazios — todo
-    feed que insere linha no Pending Confirmation passa por aqui."""
-    rec = _fxo_refdata_by_spn().get(_norm_spn(row.get('SPN', '')))
-    if rec is None:
-        rec = _pc_refdata_by_name().get(_pc_norm(row.get('Client', '')))
-    if not rec:
-        return
-    if not str(row.get('Economic Group', '') or '').strip():
-        row['Economic Group'] = str(rec.get('ECONOMIC GROUP', '') or '').strip()
-    if not str(row.get('Signature Type', '') or '').strip():
-        row['Signature Type'] = str(rec.get('SIGNATURE TYPE', '') or '').strip()
 
 
 # ── cola da esteira (_mc_*): movida para platform/manual_confirmation.py (§317)
@@ -10076,127 +8914,8 @@ _mc_generate_url = _pf_mc._mc_generate_url
 _mc_pc_sync = _pf_mc._mc_pc_sync
 
 
-def _pc_save_from_deal(deal, product_type, pending_status=None, trade_number=None,
-                       source=None):
-    """Build and insert a pending row from a Success+mapped New Deals deal.
-    product_type: 'NDF COMM' (NDF Comm), 'OPTION COMM' (Opt Comm), 'OPTION' (FXO),
-    'NDF FWD START' / 'NDF OTHER PUB' / 'NDF VANILLA' (generic NDF pages).
-    pending_status overrides the default 'Pending OTC' (signature-type rules);
-    trade_number overrides the Deal id (FWD Start rows are keyed by B3 ID).
-    `source` distingue as três páginas genéricas de NDF, que gravam o MESMO
-    Product Type — sem ele o FWD Start não se separa de Vanilla/Other Publisher."""
-    try:
-        client = str(deal.get('Client', '') or '')
-        if _pc_is_internal_counterparty(client, deal.get('SPN', '')):
-            return          # bank / Lawton / intragroup leg → not a client confirmation
-        td = _parse_date_any(deal.get('TradeDate', ''))
-        md = _parse_date_any(deal.get('SettlementDate', ''))
-        aging = (datetime.now().date() - td).days if td else None
-        row = {c: '' for c in _PC_COLUMNS}
-        row['Status'] = _pc_aging_band_label(aging)
-        # A LOB acompanha o produto: mercadoria é COMMODITY, o resto é CEM.
-        row['LOB'] = _lob_for_source(source or product_type)
-        row['SPN'] = str(deal.get('SPN', '') or '')
-        row['Client'] = client
-        row['Aging'] = str(aging) if aging is not None else ''
-        row['Product Type'] = product_type
-        row['Trade Date'] = td.strftime('%d/%m/%Y') if td else str(deal.get('TradeDate', '') or '')
-        row['Maturity Date'] = md.strftime('%d/%m/%Y') if md else str(deal.get('SettlementDate', '') or '')
-        row['Trade Number'] = str(trade_number or deal.get('Deal', '') or '')
-        row['Pending Status'] = pending_status or 'Pending OTC'
-        row['Owner'] = _pc_banker_for_spn(deal.get('SPN', ''))
-        _pc_refdata_enrich(row)      # Economic Group / Signature Type do RefData
-        _pc_upsert_row(row)          # routes to pending (or backlog if >12 months)
-        # A MESMA operação entra na esteira de validação da confirmação — só os
-        # produtos que geram documento (ver _MC_CONFIRMATION_SOURCES).
-        _mc_save_from_deal(deal, source or product_type, trade_number=row['Trade Number'])
-    except Exception:
-        log.warning('[pending-confirmation] save-from-deal failed:\n%s', traceback.format_exc())
 
 
-# ==============================================================================
-# API — OPT FXO CACHE (mesma lógica que opt-commodities, arquivo _optfxo.json)
-# CRUD + bulk only. mapping-b3 / send-conecta / premium / econ-affirmation e o
-# import do blotter XLSX (Brazil_FXO_Blotter_Extended_*_YYYYMMDD.xlsx) são
-# product-specific e serão implementados quando o mapeamento de colunas chegar.
-# ==============================================================================
-def _find_fxo(deal_name, client_name=None):
-    """Search all YYYYMMDD_optfxo.json files for a deal by Deal + Client.
-    Returns (file_path, list_index) or (None, None)."""
-    for root, _dirs, files in os.walk(OPT_FXO_CACHE_DIR):
-        for fname in sorted(files, reverse=True):
-            if not fname.endswith('_optfxo.json'):
-                continue
-            fpath = os.path.join(root, fname)
-            try:
-                with open(fpath, 'r', encoding='utf-8') as fh:
-                    deals = json.load(fh)
-                if not isinstance(deals, list):
-                    deals = [deals]
-                for i, deal in enumerate(deals):
-                    d_name   = (deal.get('Deal')   or '').strip()
-                    d_client = (deal.get('Client') or '').strip()
-                    if deal_name and d_name == deal_name.strip():
-                        want = (client_name or '').strip()
-                        if not want or d_client == want:
-                            return fpath, i
-            except Exception:
-                continue
-    return None, None
-
-
-# ──────────────────────────────────────────────────────────────────────────
-# OPT FXO — XLSX blotter import (Brazil_FXO_Blotter_Extended_*_YYYYMMDD.xlsx)
-# ──────────────────────────────────────────────────────────────────────────
-# Internal 3-letter currency codes (feed) → ISO. Extend as new codes appear.
-_FXO_MONTHS_EN = ['January', 'February', 'March', 'April', 'May', 'June', 'July',
-                  'August', 'September', 'October', 'November', 'December']
-
-
-def _fxo_ccy(code):
-    """Código de moeda da Athena → ISO. O de-para vem da tela Mapping (aba
-    Currency Codes); código não cadastrado passa como veio."""
-    c = str(code or '').strip().upper()
-    return _mapping_ccy_maps()[0].get(c, c)
-
-
-def _fxo_num(v):
-    """Parse a blotter number (native float, or BR '1.234,56' / US '1234.56') → float|None."""
-    if v is None or v == '':
-        return None
-    if isinstance(v, (int, float)):
-        return float(v)
-    s = str(v).strip()
-    if not s:
-        return None
-    neg = s.startswith('-')
-    s = s.lstrip('+-').replace(' ', '')
-    if ',' in s and '.' in s:
-        s = s.replace('.', '').replace(',', '.')   # BR: dot=thousands, comma=decimal
-    elif ',' in s:
-        s = s.replace(',', '.')                     # comma decimal
-    try:
-        val = float(s)
-        return -val if neg else val
-    except ValueError:
-        return None
-
-
-def _fxo_date_dmy(v):
-    """yyyy-mm-dd / datetime / date → dd/mm/yyyy; blank/other → ''."""
-    if v is None or v == '':
-        return ''
-    if hasattr(v, 'strftime'):
-        return v.strftime('%d/%m/%Y')
-    s = str(v).strip().split('T')[0].split(' ')[0]
-    if not s:
-        return ''
-    for fmt in ('%Y-%m-%d', '%d/%m/%Y', '%Y/%m/%d', '%m/%d/%Y'):
-        try:
-            return datetime.strptime(s, fmt).strftime('%d/%m/%Y')
-        except ValueError:
-            continue
-    return s
 
 
 def _fxo_refdata_by_spn():
@@ -10214,522 +8933,6 @@ def _fxo_refdata_by_spn():
     return out
 
 
-def _fxo_refdata_by_accronym(refmap_spn=None):
-    """FX CASH ACCRONYM (upper) → registro do Reference Data. Deriva do índice
-    por SPN já carregado (sem reler o arquivo) quando ele é passado. É o índice
-    que resolve a contraparte pelo código, e não pelo SPN — necessário para as
-    pernas internas, cujo SPN é de book e não está no Reference Data."""
-    out = {}
-    for rec in (refmap_spn if refmap_spn is not None else _fxo_refdata_by_spn()).values():
-        a = str(rec.get('FX CASH ACCRONYM', '') or '').strip().upper()
-        if a and a not in out:
-            out[a] = rec
-    return out
-
-
-# Canonical field order = the New Deals Opt-FXO table column order (same order the
-# XLSX import builds each dict). Persisted _optfxo.json must follow this, not the
-# alphabetical order some legacy writes produced. Maker/Checker are kept last.
-_FXO_FIELD_ORDER = (
-    'Status', 'Deal', 'B3_ID', 'TradeDate', 'Month', 'SettlementDate',
-    'SPN', 'Acronym', 'Client', 'TaxID', 'TradeType', 'UnderlyingAsset',
-    'FXHolidaySchedule', 'TotalNotional', 'Instrument', 'Strike',
-    'StrikeCurrency', 'Direction', 'Premium', 'PremiumPerUnit', 'PremiumCCY',
-    'SpotDate', 'FixingStartDate', 'FixingEndDate', 'TradingBook', 'OtherBook',
-)
-
-
-def _fxo_order_deal(d):
-    """Return a new dict with keys in table-column order so the persisted
-    _optfxo.json is column-ordered (not alphabetical). Known columns come first
-    in canonical order, then any extra keys (e.g. _fdate) in their existing
-    order, and Maker/Checker always last (matching the previous convention)."""
-    if not isinstance(d, dict):
-        return d
-    tail = ('Maker', 'Checker')
-    ordered = {}
-    for k in _FXO_FIELD_ORDER:
-        if k in d:
-            ordered[k] = d[k]
-    for k, v in d.items():
-        if k not in ordered and k not in tail:
-            ordered[k] = v
-    for k in tail:
-        if k in d:
-            ordered[k] = d[k]
-    return ordered
-
-
-def _fxo_deal_from_row(get, sid, refmap, refmap_acr=None):
-    """Build one Opt-FXO deal dict from a source row. `get(NAME)` returns the
-    value of the normalized-uppercase column NAME — the XLSX blotter headers
-    and the Athena API field names normalize to the same keys, so both sources
-    share this builder (same drop filters, same derivations).
-    Returns None when the row must be skipped."""
-    PUT_CALL = {'PUT': 'Option (Put)', 'CALL': 'Option (Call)'}
-
-    # Drop rows with empty End Counterparty / Description / SPN
-    end_cp = str(get('END COUNTERPARTY') or '').strip()
-    if end_cp == '':
-        return None
-    if str(get('END COUNTERPARTY DESCRIPTION') or '').strip() == '':
-        return None
-    if str(get('SPN') or '').strip() == '':
-        return None
-
-    # B3 does not accept underscores in the deal id on file registration —
-    # replace '_' with '-' at the source (applies to Deal, dedup, Conecta).
-    deal_name = str(get('DEAL NAME') or '').strip().replace('_', '-')
-    if not deal_name:
-        return None
-
-    spn = str(get('SPN') or '').strip()
-    if spn.endswith('.0'):
-        spn = spn[:-2]
-    # A contraparte é procurada pelo ACCRONYM DA CONTRAPARTE — o End Counterparty
-    # —, depois pela identidade da entidade quando ele é perna interna, e só então
-    # pelo SPN da API (que passou a trazer o SPN da contraparte, §174).
-    #
-    # O Settlement Location NÃO entra aqui: ele diz respeito à nossa perna, não à
-    # contraparte, então usá-lo para achar a contraparte casaria a linha errada.
-    # É por isso que só `_ndf_le_from_accronym(end_cp)` alimenta o passo da LE —
-    # ele existe para perna interna, cujo End Counterparty é nome de book JPM.
-    if refmap_acr is None:
-        refmap_acr = _fxo_refdata_by_accronym(refmap)
-    le_cp = _ndf_le_from_accronym(end_cp)
-    ref = _ndf_ref_by_accronym(refmap_acr, end_cp, le_cp, refmap, spn)
-    # SPN da tela: o do Reference Data quando a contraparte foi resolvida; o da
-    # API só enquanto não há cadastro nenhum a que recorrer.
-    spn = str(ref.get('SPN', '') or '').strip() or spn
-
-    strike_v = _fxo_num(get('STRIKE'))
-    premq_v  = _fxo_num(get('PREMIUM QUANTITY'))
-    qty_v    = _fxo_num(get('QUANTITY'))
-    ppu_v    = (premq_v / qty_v) if (premq_v is not None and qty_v not in (None, 0)) else None
-
-    first_fix = get('FIRST FIXING DATE')
-    last_fix  = get('LAST FIXING DATE')
-    if str(first_fix or '').strip() and str(last_fix or '').strip():
-        trade_type, fix_start, fix_end = 'ASIAN', _fxo_date_dmy(first_fix), _fxo_date_dmy(last_fix)
-    else:
-        exp = _fxo_date_dmy(get('EXPIRATION DATE'))
-        trade_type, fix_start, fix_end = 'VANILLA', exp, exp
-
-    trade_date = _fxo_date_dmy(get('TRADE DATE'))
-    try:
-        month = _FXO_MONTHS_EN[datetime.strptime(trade_date, '%d/%m/%Y').month - 1] if trade_date else ''
-    except ValueError:
-        month = ''
-
-    direction = str(get('TYPE') or '').strip().upper()
-    strike_ccy = _fxo_ccy(get('QUANTITY CURRENCY'))  # FXO: Underlying Asset == Strike Currency
-
-    return {
-        'Status':            'New',
-        'Deal':              deal_name,
-        'B3_ID':             '',
-        'TradeDate':         trade_date,
-        'Month':             month,
-        'SettlementDate':    _fxo_date_dmy(get('SETTLEMENT DATE')),
-        'SPN':               spn,
-        # Sem cadastro no Reference Data a coluna fica com o código cru da API
-        # (mesma regra do NDF). Além de não esconder a informação, é o que dá ao
-        # badge "Missing Counterparty" da tela o que consultar: ele só limpa a
-        # marcação de perna interna quando há um accronym na célula para procurar
-        # no mapping Legal Entity × Accronym.
-        #
-        # PERNA INTERNA mantém o accronym que veio da API: a contraparte foi
-        # resolvida pela razão social da entidade, e trocar 'LM-FWDECOMBRR FXC'
-        # por 'JPMORGANBM' apagaria da tela o book que a operação realmente tem
-        # (§174).
-        'Acronym':           end_cp if le_cp else ((ref.get('FX CASH ACCRONYM', '') or '') or end_cp),
-        'Client':            ref.get('COUNTERPARTY', '') or '',
-        'TaxID':             ref.get('TAX ID', '') or '',
-        'TradeType':         trade_type,
-        'UnderlyingAsset':   strike_ccy,
-        'FXHolidaySchedule': 'ANBIMA',
-        'TotalNotional':     ('{:,.2f}'.format(qty_v) if qty_v is not None else ''),
-        'Instrument':        PUT_CALL.get(str(get('OPTION TYPE') or '').strip().upper(), ''),
-        'Strike':            ('{:.6f}'.format(strike_v) if strike_v is not None else ''),
-        'StrikeCurrency':    strike_ccy,
-        'Direction':         direction,
-        'Premium':           ('{:,.2f}'.format(premq_v) if premq_v is not None else ''),
-        'PremiumPerUnit':    ('{:,.8f}'.format(ppu_v) if ppu_v is not None else ''),
-        'PremiumCCY':        _fxo_ccy(get('PREMIUM CCY')),
-        'SpotDate':          _fxo_date_dmy(get('PREMIUM DATE')),
-        'FixingStartDate':   fix_start,
-        'FixingEndDate':     fix_end,
-        'TradingBook':       str(get('TRADING BOOK') or '').strip(),
-        'OtherBook':         str(get('OTHER BOOK') or '').strip(),
-        'Maker':             sid,
-    }
-
-
-def _fxo_persist_deals(deals):
-    """Upsert FXO deals into per-TradeDate _optfxo.json by Deal+Client. Returns count."""
-    by_file = {}
-    for d in deals:
-        try:
-            ref_date = datetime.strptime(d.get('TradeDate', ''), '%d/%m/%Y')
-        except (ValueError, TypeError):
-            ref_date = datetime.now()
-        dir_path = os.path.join(OPT_FXO_CACHE_DIR, ref_date.strftime('%Y'), ref_date.strftime('%m'))
-        fpath = os.path.join(dir_path, ref_date.strftime('%Y%m%d') + '_optfxo.json')
-        by_file.setdefault(fpath, (dir_path, []))[1].append(d)
-
-    saved = 0
-    with _cache_lock:
-        for fpath, (dir_path, ds) in by_file.items():
-            os.makedirs(dir_path, exist_ok=True)
-            try:
-                with open(fpath, encoding='utf-8') as fh:
-                    existing = json.load(fh)
-                if not isinstance(existing, list):
-                    existing = [existing]
-            except (IOError, json.JSONDecodeError):
-                existing = []
-            for d in ds:
-                idx = next((i for i, e in enumerate(existing)
-                            if (e.get('Deal') or '').strip() == (d.get('Deal') or '').strip()
-                            and (e.get('Client') or '').strip() == (d.get('Client') or '').strip()), None)
-                if idx is not None:
-                    existing[idx] = _fxo_order_deal(d)
-                else:
-                    existing.append(_fxo_order_deal(d))
-                saved += 1
-            _atomic_write_json(fpath, existing)
-    return saved
-
-
-# ──────────────────────────────────────────────────────────────────────────
-# OPT FXO — Athena getTrades API import (manual button + 10-min scheduler)
-# ──────────────────────────────────────────────────────────────────────────
-# The API returns the same columns as the XLSX blotter, so the rows go through
-# the same _fxo_deal_from_row filters/derivations. Unlike the XLSX flow, the
-# API pull NEVER overwrites an existing Deal+Client — a deal already in the day
-# file may have been worked (Approved/Sent) and a 10-min poll must not reset it.
-
-# Campos que NUNCA entram na comparação de amend: Status/B3_ID/Maker/Checker
-# são do fluxo da página; SPN/Client/TaxID vêm do RefData (o re-enriquecimento
-# os altera sem a operação ter mudado); AmendChanged é o próprio marcador.
-# Campos que o amend da API NÃO toca: são nossos, não da API. Status e B3 ID são
-# do fluxo de registro, Maker/Checker de quem operou, AmendChanged é o próprio
-# registro do amend.
-#
-# SPN, Client e Tax ID **saíram desta lista** (§176). Eles ficavam de fora porque
-# são enriquecimento nosso (Reference Data) e não campo da API — só que isso
-# congelava a contraparte na primeira importação: operação rebookada para outro
-# cliente ficava para sempre com o nome antigo na tela, e a linha que veio sem
-# contraparte nunca ganhava a que passou a resolver. Agora são comparados como
-# qualquer outro campo; o que os protege de derrubar um Success para Amend é
-# `_nd_amend_is_economic`, que olha o ACCRONYM.
-_ND_AMEND_SKIP = {'Status', 'B3_ID', 'Maker', 'Checker', 'AmendChanged'}
-
-# Campos que mudam o DADO mas não o NEGÓCIO: a célula é destacada como qualquer
-# outra, mas quem já está Success não volta para a fila por causa deles. Os dois
-# books são onde a operação está pendurada dentro do banco — a contraparte, o
-# valor e o prazo do negócio não mudam quando ela troca de book. É uma lista
-# curta de propósito: o default é econômico, porque um campo em que ninguém
-# pensou aparecendo como Amend custa uma revisão, e o contrário custa uma
-# operação registrada errada.
-_ND_AMEND_COSMETIC = {'OtherBook', 'TradingBook'}
-
-# A mesma ideia, mas quando o campo só é cosmético em UM produto. A chave é a do
-# `_GENERIC_ND_PRODUCTS`.
-#
-# **NDF FWD Start × Strike**: o que a B3 registra é o **Strike Set Offset** — o
-# spread sobre a taxa que só será conhecida no dia do fixing. O Strike da linha é
-# a projeção daquela taxa no momento do booking, e a Athena a recalcula a cada
-# pull: a operação não mudou, mudou o mercado. Sem esta exceção, todo FWD Start
-# já registrado voltava sozinho para a fila de Amend, e a mesa reconferia um
-# registro que continuava certo. A célula segue destacada (o campo entra em
-# `AmendChanged` como qualquer outro); o que não regride é o status.
-_ND_AMEND_COSMETIC_BY_PRODUCT = {'fwd-start': {'Strike'}}
-
-# Os status em que a operação JÁ SAIU DA MESA, e por isso só um dado ECONÔMICO
-# a devolve para a fila de Amend. `Sent` é o arquivo de registro enviado à B3 e
-# `Success` é o retorno com o B3 ID — nos dois casos a operação está registrada
-# (ou a caminho), e o trabalho de conferir já foi feito por alguém.
-#
-# O `Sent` estava de fora, e era um buraco por onde passava exatamente o que a
-# regra do `Success` existe para evitar: a Athena troca o Other Book, ou o
-# Reference Data passa a resolver o accronym de uma perna interna, e a operação
-# que a mesa acabou de mandar para a B3 voltava sozinha para `Amend` — sem
-# Checker, fora da lista de enviadas, e reconferida à toa. E o `Sent` vem ANTES
-# do `Success`, então a janela em que isso acontecia era justamente a de espera
-# do retorno da B3.
-#
-# O que NÃO muda: mudança econômica derruba os dois do mesmo jeito, e a célula
-# segue destacada (`AmendChanged`) em qualquer um dos casos — o que não regride
-# é o status.
-_ND_AMEND_KEEP_STATUS = {'Success', 'Sent'}
-
-
-def _nd_amend_entity(acr):
-    """Entidade de um accronym FX Cash. Duas fontes, nessa ordem: a LE cadastrada
-    no mapping le-accronym e, quando o código não está cadastrado, o sufixo
-    depois do último hífen — é assim que a API sufixa o End Counterparty
-    ('CMBB-LAW' → 'LAW'), o mesmo corte que _ndf_accronym_variants usa. Sem
-    nenhum dos dois devolve '' (entidade desconhecida)."""
-    le = _ndf_le_from_accronym(acr)
-    if le:
-        return le
-    a = str(acr or '').strip().upper()
-    return a.rsplit('-', 1)[-1].strip() if '-' in a else ''
-
-
-def _nd_amend_same_entity(old, new, stored, incoming):
-    """Dois accronyms são da MESMA entidade (JPM→JPM, MGT→MGT, LAW→LAW)?
-    Trocar o código dentro da entidade é registro; trocar de entidade muda a
-    ponta do negócio.
-
-    Quando o produto carrega a coluna LE (os três NDFs), ela é a resposta: é
-    derivada do accronym e da settlement location, e é justamente a entidade.
-    O FXO não tem essa coluna, e aí a entidade sai do próprio accronym.
-    Entidade desconhecida nunca empata — dois códigos que ninguém sabe de onde
-    vêm podem ser de entidades diferentes, e o seguro é tratar como econômico."""
-    le_old = str(stored.get('LE', '') or '').strip().upper()
-    le_new = str(incoming.get('LE', '') or '').strip().upper()
-    if le_old or le_new:
-        return bool(le_old) and le_old == le_new
-    ent_old, ent_new = _nd_amend_entity(old), _nd_amend_entity(new)
-    return bool(ent_old) and ent_old == ent_new
-
-
-def _nd_amend_flat(v):
-    return str(v or '').strip()
-
-
-def _nd_amend_is_economic(field, old, new, stored, incoming, product=''):
-    """A mudança desse campo justifica derrubar um deal já Success para Amend?
-
-    `product` é a chave do `_GENERIC_ND_PRODUCTS` quando quem chama sabe de que
-    página o deal veio — é o que permite um campo ser cosmético em UM produto
-    (ver `_ND_AMEND_COSMETIC_BY_PRODUCT`). Vazio significa "não sei", e aí só a
-    lista geral vale: o default é econômico, porque um campo esquecido virando
-    Amend custa uma revisão e o contrário custa uma operação registrada errada.
-    """
-    if field in _ND_AMEND_COSMETIC:
-        return False
-    if field in _ND_AMEND_COSMETIC_BY_PRODUCT.get(product, ()):
-        return False
-    if field in ('SPN', 'Client', 'TaxID'):
-        # Os três são DERIVADOS da contraparte, e a contraparte é o accronym
-        # (nunca o SPN nem a settlement location — §147/§148). Com o accronym
-        # igual, mudou a nossa resolução e não o negócio: é o caso de §174, em
-        # que a perna interna passou a achar SPN/Client/Tax ID que antes vinham
-        # vazios. Destaca a célula, mantém o Success. Mudando o accronym, vale a
-        # mesma régua dele: só é econômico se trocou de entidade.
-        acr_old = _nd_amend_flat(stored.get('Acronym')).upper()
-        acr_new = _nd_amend_flat(incoming.get('Acronym')).upper()
-        if acr_old == acr_new:
-            return False
-        return not _nd_amend_same_entity(acr_old, acr_new, stored, incoming)
-    if field == 'Acronym':
-        # Accronym aparecendo onde a célula estava VAZIA, com o SPN da operação
-        # intacto, é enriquecimento nosso que melhorou — a contraparte sempre foi
-        # a mesma, ninguém rebookou nada. Sem esta exceção, passar a preencher o
-        # accronym das pernas internas no FXO devolveria para a fila, de uma vez,
-        # todo deal interno que já estava Success. A célula ainda é destacada;
-        # só o status é que não regride.
-        if not old and _nd_amend_flat(stored.get('SPN')) == _nd_amend_flat(incoming.get('SPN')):
-            return False
-        return not _nd_amend_same_entity(old, new, stored, incoming)
-    return True
-
-
-def _nd_api_amend(stored, incoming, product=''):
-    """Bate um deal já importado com a versão atual da API. Campo de dado
-    diferente → aplica o valor novo e registra o nome do campo em AmendChanged
-    (o front destaca as células). Deal já Canceled não é reaberto. Retorna a
-    lista de campos alterados.
-
-    Status: a mudança normalmente joga o deal para 'Amend'. A exceção é quem já
-    saiu da mesa — **Sent** e **Success** (`_ND_AMEND_KEEP_STATUS`) —, que só cai
-    para Amend quando alguma informação **econômica** mudou (contraparte/
-    entidade, vencimento, notional, strike, compra × venda, put × call, prêmio,
-    data de pagamento do prêmio…). Mexer só no Other Book, ou trocar o accronym
-    dentro da mesma entidade, destaca a célula e mantém o status: são detalhes de
-    booking, e devolver para a fila uma operação já enviada à B3 gera retrabalho
-    à toa."""
-    if str(stored.get('Status', '') or '').strip() == 'Canceled':
-        return []
-    registrado = str(stored.get('Status', '') or '').strip() in _ND_AMEND_KEEP_STATUS
-    # Foto do deal ANTES de qualquer escrita: o loop já gravou os campos
-    # anteriores em `stored`, então perguntar a ele "a LE mudou?" no meio do
-    # caminho responderia sempre que não.
-    before = dict(stored)
-    changed, economic = [], False
-    for k, v in incoming.items():
-        if k in _ND_AMEND_SKIP:
-            continue
-        old = str(stored.get(k, '') or '').strip()
-        new = str(v or '').strip()
-        if old != new:
-            stored[k] = v
-            changed.append(k)
-            if _nd_amend_is_economic(k, old, new, before, incoming, product):
-                economic = True
-    if changed:
-        if economic or not registrado:
-            stored['Status'] = 'Amend'
-        prev = stored.get('AmendChanged') or []
-        stored['AmendChanged'] = sorted(set(prev) | set(changed))
-    return changed
-
-
-def _nd_amend_index(existing):
-    """Índices de um arquivo do dia para o amend da API: por (Deal, Client) e por
-    Deal. O segundo existe porque o Client PODE mudar — ver `_nd_amend_find`."""
-    idx, by_deal = {}, {}
-    for e in existing:
-        if not isinstance(e, dict):
-            continue
-        deal = (e.get('Deal') or '').strip()
-        idx[(deal, (e.get('Client') or '').strip())] = e
-        by_deal.setdefault(deal, []).append(e)
-    return idx, by_deal
-
-
-def _nd_amend_find(st, deal):
-    """Linha já gravada correspondente a este deal da API, ou None.
-
-    A chave normal é **Deal + Client**. Quando o Client muda — a operação foi
-    rebookada para outra contraparte, ou a nossa resolução passou a achar o nome
-    que antes vinha vazio (§174) — essa chave não casa, e o deal entrava como
-    LINHA NOVA: a operação aparecia duas vezes, a antiga com a contraparte velha,
-    e nenhuma das duas marcada como Amend.
-
-    Por isso, sem match pela chave, procura-se **pelo Deal ID**. Só quando ele é
-    único no arquivo: o mesmo Deal pode ter duas pernas gravadas (é o que o
-    cancelamento por Deal já trata), e aí não há como saber qual delas a API está
-    amendando — nesse caso o deal entra como novo, que é o comportamento antigo e
-    deixa a decisão para o operador."""
-    key = ((deal.get('Deal') or '').strip(), (deal.get('Client') or '').strip())
-    row = st['idx'].get(key)
-    if row is not None:
-        return row
-    same = st['by_deal'].get((deal.get('Deal') or '').strip()) or []
-    return same[0] if len(same) == 1 else None
-
-
-def _nd_amend_register(st, deal):
-    """Grava o deal recém-inserido nos dois índices, para o mesmo pull não o
-    inserir de novo (nem pela chave, nem pelo Deal)."""
-    d = (deal.get('Deal') or '').strip()
-    st['idx'][(d, (deal.get('Client') or '').strip())] = deal
-    st['by_deal'].setdefault(d, []).append(deal)
-
-
-def _nd_cancel_in_file(fpath, deal_name):
-    """Cancelamento vindo da API: **apaga** as linhas desse Deal no arquivo do
-    dia. A operação deixou de existir na origem, então mantê-la na tela é
-    convidar alguém a registrar na B3 um negócio que não existe mais.
-
-    A ÚNICA exceção é o deal que **já foi registrado na B3** (Status Success
-    **com** B3 ID): esse existe lá fora e o cancelamento exige ação humana na
-    B3. Apagar a linha esconderia essa pendência, então ele só vira
-    Status='Canceled' e continua visível (badge escuro). Success sem B3 ID não
-    chegou a ser registrado — é apagado como os demais.
-
-    Retorna (removidas, marcadas_canceled)."""
-    if not deal_name or not os.path.isfile(fpath):
-        return 0, 0
-    with _cache_lock:
-        try:
-            with open(fpath, encoding='utf-8') as fh:
-                deals = json.load(fh)
-            if not isinstance(deals, list):
-                deals = [deals]
-        except (IOError, json.JSONDecodeError):
-            return 0, 0
-        kept, removed, marked = [], 0, 0
-        for dd in deals:
-            if not isinstance(dd, dict) or (dd.get('Deal') or '').strip() != deal_name:
-                kept.append(dd)
-                continue
-            status = (dd.get('Status') or '').strip()
-            if status == 'Canceled':                       # já tratado num pull anterior
-                kept.append(dd)
-                continue
-            if status == 'Success' and str(dd.get('B3_ID') or '').strip():
-                dd['Status'] = 'Canceled'                  # registrado na B3 → fica à vista
-                kept.append(dd)
-                marked += 1
-                continue
-            removed += 1                                   # nunca registrado → sai da tabela
-        if removed or marked:
-            _atomic_write_json(fpath, kept)
-        return removed, marked
-
-
-def _fxo_persist_new_deals(deals):
-    """Insert deals whose Deal+Client is new; existing ones are compared with
-    the incoming API data — any difference applies the new values, flips the
-    Status to Amend and records AmendChanged. Returns (inserted, amended_names)."""
-    fresh, amended, seen_files = [], [], {}
-    with _cache_lock:
-        for d in deals:
-            try:
-                ref_date = datetime.strptime(d.get('TradeDate', ''), '%d/%m/%Y')
-            except (ValueError, TypeError):
-                ref_date = datetime.now()
-            fpath = os.path.join(OPT_FXO_CACHE_DIR, ref_date.strftime('%Y'), ref_date.strftime('%m'),
-                                 ref_date.strftime('%Y%m%d') + '_optfxo.json')
-            if fpath not in seen_files:
-                existing = []
-                try:
-                    with open(fpath, encoding='utf-8') as fh:
-                        existing = json.load(fh)
-                    if not isinstance(existing, list):
-                        existing = [existing]
-                except (IOError, json.JSONDecodeError):
-                    existing = []
-                idx, by_deal = _nd_amend_index(existing)
-                seen_files[fpath] = {'existing': existing, 'idx': idx,
-                                     'by_deal': by_deal, 'dirty': False}
-            st = seen_files[fpath]
-            row = _nd_amend_find(st, d)
-            if row is not None:
-                if _nd_api_amend(row, d):
-                    amended.append(d.get('Deal') or '')
-                    st['dirty'] = True
-                continue
-            _nd_amend_register(st, d)           # dedup within the same pull too
-            fresh.append(d)
-        for fpath, st in seen_files.items():
-            if st['dirty']:
-                _atomic_write_json(fpath, st['existing'])
-    if fresh:
-        _fxo_persist_deals(fresh)
-    return fresh, amended
-
-
-def _fxo_deals_from_api_records(records, sid):
-    """Athena getTrades records → (deal dicts, cancelados). Cancelados são os
-    registros com isCancelled = true: (Deal, TradeDate dd/mm/yyyy) para marcar
-    Status='Canceled' no cache quando o deal já tiver sido importado. isDead não
-    conta como cancelamento — ver `_api_rec_is_cancelled` (§173)."""
-    refmap = _fxo_refdata_by_spn()
-    refmap_acr = _fxo_refdata_by_accronym(refmap)
-    deals, cancelled = [], []
-    for rec in records or []:
-        if not isinstance(rec, dict):
-            continue
-        norm = {}
-        for k, v in rec.items():
-            n = re.sub(r'[\s_]+', ' ', str(k or '').strip().upper())
-            if n and n not in norm:
-                norm[n] = v
-        if _api_rec_is_cancelled(norm):
-            nm = str(norm.get('DEAL NAME') or '').strip().replace('_', '-')
-            if nm:
-                cancelled.append((nm, _fxo_date_dmy(norm.get('TRADE DATE'))))
-            continue
-        deal = _fxo_deal_from_row(norm.get, sid, refmap, refmap_acr)
-        if deal:
-            deals.append(deal)
-    return deals, cancelled
 
 
 def _api_ref_date(value=None):
@@ -10755,106 +8958,6 @@ def _api_ref_suffix(ref_dt):
     return ' (ref {})'.format(ref_dt.strftime('%d/%m/%Y'))
 
 
-def _fxo_api_pull(sid='API', actor_name='Athena API', ref_date=None):
-    """Fetch the reference date's FXO trades from the Athena API and insert the
-    new ones. Shared by the manual Import button (which sends the Reference Date
-    field, default today) and the hourly scheduler (always today). Raises on
-    network/SSO errors — callers decide how loud to be about it."""
-    from apps.pages import athena_api
-    if not athena_api.is_available():
-        raise RuntimeError("The 'requests' package is not installed; "
-                           "the Athena API client is unavailable.")
-    ref_dt = _api_ref_date(ref_date)
-    date = ref_dt.strftime('%Y%m%d')
-    payload = athena_api.fetch_fxo_trades(date)
-    records = athena_api.extract_records(payload)
-    deals, cancelled = _fxo_deals_from_api_records(records, sid)
-    inserted, amended = _fxo_persist_new_deals(deals)
-    # isCancelled na API → a linha SAI do arquivo do dia (a operação não existe
-    # mais). Só quem já foi registrado na B3 fica, como 'Canceled'.
-    removed = canceled = 0
-    for nm, td in cancelled:
-        try:
-            rd = datetime.strptime(td, '%d/%m/%Y') if td else ref_dt
-        except ValueError:
-            rd = ref_dt
-        r, c = _nd_cancel_in_file(
-            os.path.join(OPT_FXO_CACHE_DIR, rd.strftime('%Y'), rd.strftime('%m'),
-                         rd.strftime('%Y%m%d') + '_optfxo.json'), nm)
-        removed += r
-        canceled += c
-    if inserted or amended or removed or canceled:
-        bits = []
-        if inserted:
-            bits.append('{} imported'.format(len(inserted)))
-        if amended:
-            bits.append('{} amended'.format(len(amended)))
-        if removed:
-            bits.append('{} removed (cancelled)'.format(removed))
-        if canceled:
-            bits.append('{} canceled'.format(canceled))
-        _create_notification(sid, actor_name, 'New Deals', 'Opt FXO',
-                             'Athena API{}: {} deal(s)'.format(_api_ref_suffix(ref_dt),
-                                                              ', '.join(bits)))
-    # Mesma prestação de contas do pull de NDF: "veio 0" tem de dizer se a API
-    # devolveu nada ou se os registros foram descartados, e por quê.
-    log.info('[opt-fxo] pull ref=%s: %d fetched · %d parseados · importados=%d '
-             'amendados=%d · cancelados na API=%d (linhas removidas=%d, '
-             'marcadas Canceled por já terem B3 ID=%d)',
-             date, len(records), len(deals), len(inserted), len(amended),
-             len(cancelled), removed, canceled)
-    return {'success': True, 'date': date, 'fetched': len(records),
-            'parsed': len(deals), 'imported': len(inserted),
-            'amended': len(amended), 'canceled': canceled, 'removed': removed,
-            # chave 'dead' mantida: é o que as 4 telas leem para o resumo do
-            # import. O conteúdo é só isCancelled desde §173.
-            'dead': len(cancelled), 'deals': inserted}
-
-
-# In-app scheduler — polls the Athena FXO API every FXO_API_POLL_MIN minutes
-# (default 60) with trade date = today. Same self-contained pattern as the
-# pending-confirmation daily scheduler. Off the JPM network every poll fails;
-# repeats of the same error are demoted to debug so the log stays readable.
-_FXO_API_POLL_MIN = int(os.getenv('FXO_API_POLL_MIN', '60') or 60)
-_fxo_api_scheduler_started = False
-_fxo_api_scheduler_lock = threading.Lock()
-
-
-def _fxo_api_scheduler_loop():
-    last_err = None
-    while True:
-        time.sleep(max(60, _FXO_API_POLL_MIN * 60))
-        if not _import_window_open():
-            continue                    # fora do horário da mesa — `_import_window_open`
-        try:
-            res = _fxo_api_pull()
-            if res.get('imported'):
-                log.info('[opt-fxo] Athena API poll: %d new deal(s) imported '
-                         '(%d fetched)', res['imported'], res['fetched'])
-            last_err = None
-        except Exception as e:                          # noqa: BLE001
-            msg = str(e)
-            if msg != last_err:
-                log.warning('[opt-fxo] Athena API poll failed: %s', msg)
-            else:
-                log.debug('[opt-fxo] Athena API poll failed again: %s', msg)
-            last_err = msg
-
-
-def _fxo_api_start_scheduler():
-    global _fxo_api_scheduler_started
-    from apps.pages import athena_api
-    if not athena_api.is_available():
-        log.info('[opt-fxo] Athena API scheduler NOT started (requests missing)')
-        return
-    with _fxo_api_scheduler_lock:
-        if _fxo_api_scheduler_started:
-            return
-        _fxo_api_scheduler_started = True
-    threading.Thread(target=_fxo_api_scheduler_loop,
-                     name='fxo-athena-api-scheduler', daemon=True).start()
-    log.info('[opt-fxo] Athena API scheduler started (every %d min · janela %s BRT)',
-             _FXO_API_POLL_MIN, _import_window_label())
 
 
 _schedule_on_start('opt-fxo', _fxo_api_start_scheduler)
@@ -10874,46 +8977,6 @@ _schedule_on_start('opt-fxo', _fxo_api_start_scheduler)
 # Same new-only persistence rule as the FXO API pull: a poll or re-import
 # never overwrites a deal already in the day file (key Deal+Client).
 
-def _ndf_api_norm(rec):
-    """Normalize an API record's keys the same way the XLSX headers are
-    normalized (underscores/spaces → single space, uppercase)."""
-    norm = {}
-    for k, v in rec.items():
-        n = re.sub(r'[\s_]+', ' ', str(k or '').strip().upper())
-        if n and n not in norm:
-            norm[n] = v
-    return norm
-
-
-def _ndf_api_get(norm, *names):
-    """First non-empty value among alternative normalized field names."""
-    for n in names:
-        v = norm.get(n)
-        if v not in (None, ''):
-            return v
-    return None
-
-
-def _api_rec_is_cancelled(norm):
-    """True só para os registros com **isCancelled = true** na API.
-
-    `isDead` NÃO entra: até 04/08/2026 os dois flags eram tratados igual e um
-    trade marcado isDead simplesmente não era importado — mas isDead é estado
-    interno da Athena (o registro deixou de ser a versão viva do trade), e não
-    "a operação não existe". Quem cancela uma operação é o isCancelled; o resto
-    tem que ser puxado. §173
-    """
-    for k in ('ISCANCELLED', 'IS CANCELLED'):
-        v = norm.get(k)
-        if v is True or str(v).strip().lower() == 'true':
-            return True
-    return False
-
-
-def _ndf_flat(s):
-    """Só letras e números, em maiúsculas — o nome do book casa independente de
-    espaço e hífen ("BR ON - LN LAWTON NDF" ≡ "BR ON-LN LAWTON NDF")."""
-    return re.sub(r'[^A-Z0-9]', '', str(s or '').upper())
 
 
 # ── Mappings (página Mapping, seção Data Base) ────────────────────────────────
@@ -11021,29 +9084,6 @@ _MAP_OPB3_SEED = (
 )
 
 
-def _opb3_events_upgrade(rows):
-    """Completa o arquivo já em disco com as linhas de Consider de TER e OPC.
-
-    Sem isto, a instância que já tem o `opb3-events.json` (o arquivo é
-    versionado, mas o da mesa pode ter sido editado) ficaria SEM regra para esses
-    dois títulos — e "Tipo Título sem nenhum Consider não é filtrado" faria TODO
-    evento de termo entrar no aviso no dia em que o `_ndfadv_collect` deixou de
-    testar 'resgate' por conta própria. Um aviso que ganha linhas sozinho é pior
-    do que um que falta.
-
-    Só completa o que FALTA: um Tipo Título que já tem Consider próprio foi
-    configurado por alguém, e sobrescrevê-lo apagaria a decisão da mesa."""
-    out = list(rows)
-    # Quais títulos JÁ têm Consider é medido ANTES de acrescentar qualquer coisa:
-    # medindo dentro do laço, a primeira linha de OPC que entra faz a segunda
-    # (o prêmio) parecer configurada e ela nunca é acrescentada.
-    tem_consider = {_opb3_ev_key(r.get('TIPO TITULO', '')) for r in out
-                    if not _fcst_norm(r.get('USE', '')).strip().startswith('disreg')}
-    for seed in _MAP_OPB3_SEED:
-        tit = _opb3_ev_key(seed['TIPO TITULO'])
-        if tit in ('ter', 'opc') and tit not in tem_consider:
-            out.append(dict(seed))
-    return out
 
 
 # Quem valida a confirmação: REQUESTED = precisa passar por essa mesa; EXEMPT =
@@ -11075,21 +9115,6 @@ _API_LINKS_SEED = (
 )
 
 
-# O `upgrade` do cadastro da recon de FXO mora no `recon_fxo`, e não aqui, pelo
-# mesmo motivo do cadastro da esteira: quem lê aquele arquivo a cada run é o
-# motor da recon, e enquanto o upgrade vivesse só nesta tela ele veria o JSON
-# cru — a coluna nova não existiria para quem nunca abriu o /mapping.
-def _fxo_internal_cpty_upgrade(rows):
-    # Import preguiçoso, como os demais usos do `recon_fxo` aqui: aquele módulo
-    # carrega o pandas, e a tela de /mapping não é motivo para arrastá-lo para a
-    # subida do app.
-    from apps.pages import recon_fxo as _rf
-    return _rf.internal_cpty_upgrade(rows)
-
-
-def _fxo_book_disregard_upgrade(rows):
-    from apps.pages import recon_fxo as _rf
-    return _rf.book_disregard_upgrade(rows)
 
 
 # O cabeçalho do relatório EOD de FXO da Athena, na ordem em que ele vem. Serve
@@ -12707,104 +10732,6 @@ def _mapping_ccy_maps():
     return ath, weak, inv
 
 
-def _ndf_weak_leg(qty_ccy, other_ccy):
-    """A moeda FRACA do par, quando existe uma — é ela que manda inverter o
-    strike, e é ela que diz com quantas casas o 1/taxa vai para o arquivo.
-
-    A convenção é do PAR, não da COLUNA. A API manda o strike da moeda fraca
-    como moeda/BRL (3,33 MXN por real) e a aplicação inteira trabalha com
-    R$/moeda — e qual das duas pernas carrega o notional depende de como a mesa
-    bookou, não da moeda. Testar só a `Other Quantity Units` deixava passar sem
-    inverter justamente a operação cotada NA moeda fraca: o BRL/CNH de
-    19/08/2026 saiu com 1,29567245 no lugar de 0,77179965, e com ele o
-    contravalor do MT300 e a taxa do arquivo Intrag, que leem o Rate como
-    R$/moeda.
-
-    Par com as DUAS pernas fracas não tem BRL para a convenção apontar — a
-    inversão seria um chute, e a linha fica como a API mandou."""
-    weak = _mapping_ccy_maps()[1]
-    pernas = [c for c in (str(qty_ccy or '').strip().upper(),
-                          str(other_ccy or '').strip().upper()) if c in weak]
-    return pernas[0] if len(pernas) == 1 else None
-
-
-def _ndf_le_from_location(loc):
-    """Settlement Location da API → Legal Entity da página (mapping le-accronym).
-    None quando não há linha cadastrada para aquela location."""
-    l = str(loc or '').strip().upper()
-    if not l:
-        return None
-    for r in _mapping_rows('le-accronym'):
-        if str(r.get('SETTLEMENT LOCATION', '') or '').strip().upper() == l:
-            return str(r.get('LE', '') or '').strip().upper() or None
-    return None
-
-
-def _ndf_le_from_accronym(acr):
-    """LE cadastrada para esse End Counterparty na coluna ACCRONYM do mapping
-    le-accronym. Casa o código exato e também o accronym base (o mesmo corte de
-    _ndf_accronym_variants); a comparação é achatada por _ndf_flat, então espaço
-    e hífen a mais no cadastro não impedem o match ('LM-FXECOMBRR JPMCBB FXC' ≡
-    'LM FXECOMBRR JPMCBB FXC'). None quando não há linha."""
-    cands = {_ndf_flat(c) for c in _ndf_accronym_variants(acr)}
-    cands.discard('')
-    if not cands:
-        return None
-    for r in _mapping_rows('le-accronym'):
-        a = _ndf_flat(r.get('ACCRONYM'))
-        if a and a in cands:
-            return str(r.get('LE', '') or '').strip().upper() or None
-    return None
-
-
-def _ndf_le_accronyms(le):
-    """Códigos cadastrados para essa LE no mapping le-accronym (na ordem da
-    tabela), mais o nome da própria LE no fim. É por aqui que a contraparte de
-    uma perna interna é resolvida: cadastre para a LE tanto os códigos que a API
-    manda (nomes de book, ex. 'LM-FXECOMBRR JPMCBB FXC') quanto o accronym da
-    entidade no Reference Data (ex. 'JPMORGANBM', 'LAWTON') — o que existir no
-    cadastro traz SPN/Client/Tax ID, e uma linha por entidade resolve todos os
-    books dela."""
-    l = str(le or '').strip().upper()
-    if not l:
-        return []
-    out = []
-    for r in _mapping_rows('le-accronym'):
-        if str(r.get('LE', '') or '').strip().upper() != l:
-            continue
-        a = str(r.get('ACCRONYM', '') or '').strip().upper()
-        if a and a not in out:
-            out.append(a)
-    if l not in out:
-        out.append(l)
-    return out
-
-
-def _ndf_accronym_variants(acr):
-    """Códigos a tentar no Reference Data para um End Counterparty da API: o
-    próprio e, quando ele vem sufixado por entidade, o accronym sem o último
-    trecho depois do hífen ('CMBB-LAW' → 'CMBB'). É o que dispensa cadastrar a
-    mesma contraparte uma vez por LE, sem precisar configurar sufixo nenhum."""
-    a = str(acr or '').strip().upper()
-    if not a:
-        return []
-    out = [a]
-    base = a.rsplit('-', 1)[0].strip() if '-' in a else ''
-    # Base curta demais provavelmente não é acronym de contraparte — não tenta.
-    if len(base) >= 3 and base not in out:
-        out.append(base)
-    return out
-
-
-def _ndf_le_row(le):
-    """Linha do mapping le-spn dessa Legal Entity ({} quando não há)."""
-    l = str(le or '').strip().upper()
-    if not l:
-        return {}
-    for r in _mapping_rows('le-spn'):
-        if str(r.get('LE', '') or '').strip().upper() == l:
-            return r
-    return {}
 
 
 def _refdata_by_name(refmap_spn=None):
@@ -12818,89 +10745,6 @@ def _refdata_by_name(refmap_spn=None):
     return out
 
 
-def _ndf_le_refdata(le, refmap_acr, refmap_spn=None):
-    """Contraparte de uma PERNA INTERNA (o End Counterparty é a própria entidade
-    JPM), nesta ordem:
-
-      1. **razão social** cadastrada para a LE em le-spn, procurada no Reference
-         Data pelo nome normalizado — é o passo que faltava: book interno não tem
-         accronym no Reference Data, então antes disto a linha ficava com SPN,
-         Client e Tax ID vazios (§174);
-      2. accronyms cadastrados para a LE em le-accronym (o que já funcionava);
-      3. **SPN** cadastrado para a LE em le-spn: se ele existir no Reference Data
-         devolve a linha inteira; se não, devolve só o SPN, para a coluna não
-         ficar vazia quando é a única informação registrada.
-
-    {} quando nada casa — e aí a tela marca Missing Counterparty, que é o pedido
-    de cadastro, não uma contraparte inventada."""
-    row = _ndf_le_row(le)
-    name = str(row.get('NAME', '') or '').strip()
-    if name:
-        rec = _refdata_by_name(refmap_spn).get(_pc_norm(name))
-        if rec:
-            return rec
-    for cand in _ndf_le_accronyms(le):
-        rec = refmap_acr.get(cand)
-        if rec:
-            return rec
-    spn = str(row.get('SPN', '') or '').strip()
-    if spn:
-        if refmap_spn is None:
-            refmap_spn = _fxo_refdata_by_spn()
-        return refmap_spn.get(_norm_spn(spn)) or {'SPN': spn}
-    return {}
-
-
-def _ndf_ref_by_accronym(refmap_acr, acr, le=None, refmap_spn=None, api_spn=''):
-    """Linha do Reference Data do End Counterparty, nesta ordem:
-
-      1. código exato e accronym sem o sufixo da entidade;
-      2. sendo perna interna (`le`), a identidade da entidade — razão social,
-         accronyms cadastrados e SPN (ver `_ndf_le_refdata`);
-      3. não sendo, o **SPN que veio da API**.
-
-    {} quando nada casa.
-
-    `le` tem de ser a entidade DA CONTRAPARTE (a que sai do accronym dela), nunca
-    a que sai da Settlement Location, que é a nossa perna: com a location, um
-    cliente sem accronym cadastrado era resolvido como a própria JPMorgan.
-
-    O passo 3 é novo (§174): o campo SPN da API passou a trazer o SPN da
-    contraparte — antes vinha o da Legal Entity, e usá-lo como chave era o mesmo
-    erro do parágrafo acima por outro caminho. Ele fica por último de propósito,
-    depois do accronym, que é a chave que a mesa cadastra."""
-    for cand in _ndf_accronym_variants(acr):
-        rec = refmap_acr.get(cand)
-        if rec:
-            return rec
-    if le:
-        return _ndf_le_refdata(le, refmap_acr, refmap_spn)
-    if api_spn:
-        if refmap_spn is None:
-            refmap_spn = _fxo_refdata_by_spn()
-        return refmap_spn.get(_norm_spn(api_spn)) or {}
-    return {}
-
-
-def _ndf_api_key(name):
-    """Nome de campo da tela → chave do registro normalizado (_ndf_api_norm)."""
-    return re.sub(r'[\s_]+', ' ', str(name or '').strip().upper())
-
-
-def _ndf_interbook_rules():
-    """Regras do filtro interbook como (campo A, valor A, campo B, valor B), com
-    valores já achatados por _ndf_flat. BOTH WAYS = YES gera também a linha com
-    os valores trocados entre os dois campos."""
-    out = []
-    for r in _mapping_rows('interbook-ndf'):
-        fa, fb = _ndf_api_key(r.get('FIELD A')), _ndf_api_key(r.get('FIELD B'))
-        va, vb = _ndf_flat(r.get('VALUE A')), _ndf_flat(r.get('VALUE B'))
-        if not (fa and fb and va and vb):
-            continue
-        out.append((fa, va, fb, vb))
-        if str(r.get('BOTH WAYS', '') or '').strip().upper() == 'YES':
-            out.append((fa, vb, fb, va))
-    return out
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -12922,12 +10766,32 @@ def _ndf_interbook_rules():
 _FILE_INTERPRETER_DIR = os.path.normpath(os.path.join(
     data_dir(), 'file-interpreter'))
 
-# A pasta chamava-se `file-interface` (o endereço antigo da página). Template
-# criado PELA TELA na instância do time não está no git: na subida, o que
-# ficou na pasta antiga é movido para a nova (sem sobrescrever o que já
-# existe) — renomear diretório não pode sumir com cadastro de runtime.
-_FI_LEGACY_DIR = os.path.normpath(os.path.join(
-    data_dir(), 'file-interface'))
+# ── File Interpreter: motor movido para platform/file_interpreter.py (§318) ──
+# Os nomes ficam como ALIAS; o _FILE_INTERPRETER_DIR fica AQUI porque e a
+# superficie de patch dos check_fi_* (a platform o le por routes.<nome>).
+from apps.pages.platform import file_interpreter as _pf_fi  # noqa: E402
+_FI_LEGACY_DIR = _pf_fi._FI_LEGACY_DIR
+_FI_KEY_RE = _pf_fi._FI_KEY_RE
+_FI_FIELD_KEYS = _pf_fi._FI_FIELD_KEYS
+_FI_META_KEYS = _pf_fi._FI_META_KEYS
+_fi_path = _pf_fi._fi_path
+_fi_load = _pf_fi._fi_load
+_fi_clean_template = _pf_fi._fi_clean_template
+_fi_tpl_cache = _pf_fi._fi_tpl_cache
+_fi_tpl_cached = _pf_fi._fi_tpl_cached
+_FI_LE_PAIRS = _pf_fi._FI_LE_PAIRS
+_fi_le_pair_norm = _pf_fi._fi_le_pair_norm
+_fi_variant_key = _pf_fi._fi_variant_key
+_fi_variant_file_name = _pf_fi._fi_variant_file_name
+_fi_width = _pf_fi._fi_width
+_fi_field_src = _pf_fi._fi_field_src
+_fi_seq_key = _pf_fi._fi_seq_key
+_FI_CALC_RE = _pf_fi._FI_CALC_RE
+_fi_deal_get = _pf_fi._fi_deal_get
+_fi_calc_value = _pf_fi._fi_calc_value
+_fi_effective_seq_value = _pf_fi._fi_effective_seq_value
+_fi_block_of = _pf_fi._fi_block_of
+_fi_build_line = _pf_fi._fi_build_line
 try:
     if os.path.isdir(_FI_LEGACY_DIR):
         os.makedirs(_FILE_INTERPRETER_DIR, exist_ok=True)
@@ -12938,876 +10802,8 @@ try:
 except OSError:
     pass
 
-# A chave é também o nome do arquivo em disco: o regex é o que impede um
-# path traversal via URL (`../../`) além de padronizar o kebab-case.
-_FI_KEY_RE = re.compile(r'^[a-z0-9][a-z0-9-]{1,63}$')
 
-_FI_FIELD_KEYS = ('seq', 'field', 'format', 'position', 'required',
-                  'content', 'description', 'source', 'source_detail',
-                  'source_note')
-# `variant_label` é o rótulo da variante quando ela NÃO é por par de pernas —
-# as da Intrag são por PRODUTO (NDF Commodities, Opt FXO). Só rótulo: quem o
-# motor consulta para escolher a variante continua sendo o `le_pair`.
-_FI_META_KEYS = ('name', 'system_id', 'category', 'manual_section',
-                 'manual_pages', 'manual_version', 'description',
-                 'file_name_rule', 'notes', 'base_key', 'le_pair',
-                 'variant_label', 'file_name')
 
-
-def _fi_path(key):
-    return os.path.join(_FILE_INTERPRETER_DIR, key + '.json')
-
-
-def _fi_load(key):
-    """Template completo (dict) ou None. Sem cache: a página é de consulta
-    eventual e os arquivos são pequenos — mtime-cache aqui seria zelo à toa."""
-    try:
-        with open(_fi_path(key), encoding='utf-8') as fh:
-            data = json.load(fh)
-        return data if isinstance(data, dict) else None
-    except Exception:
-        return None
-
-
-def _fi_clean_template(key, payload):
-    """Normaliza o template recebido do POST → (dict, None) ou (None, erro).
-
-    Igual aos mappings, valores NÃO são trimados: conteúdo de campo B3 pode
-    carregar espaço significativo. A validação é de FORMA (tipos e chaves
-    conhecidas), não de conteúdo — o dono do layout é o manual da B3, não o app."""
-    if not isinstance(payload, dict):
-        return None, 'payload must be an object'
-    out = {'key': key}
-    for k in _FI_META_KEYS:
-        out[k] = str(payload.get(k, '') or '')
-    if not out['name'].strip():
-        return None, 'name is required'
-    # `file_name` vira nome de arquivo em disco na geração: só o basename e
-    # só caracteres inofensivos — um '../' cadastrado não pode virar caminho.
-    out['file_name'] = re.sub(r'[^A-Za-z0-9._ -]', '',
-                              os.path.basename(out['file_name'])).strip()
-    ft = str(payload.get('file_type', '') or '').strip().lower()
-    out['file_type'] = ft if ft in ('positional', 'delimited') else 'positional'
-    sep = payload.get('separator')
-    out['separator'] = (str(sep) if sep not in (None, '') else None) \
-        if out['file_type'] == 'delimited' else None
-    rl = payload.get('record_length')
-    try:
-        out['record_length'] = int(rl) if rl not in (None, '') else None
-    except (TypeError, ValueError):
-        out['record_length'] = None
-    st = str(payload.get('status', '') or '').strip().lower()
-    out['status'] = st if st in ('active', 'library') else 'library'
-    pages = []
-    for p in (payload.get('linked_pages') or []):
-        if isinstance(p, dict) and str(p.get('url', '') or '').startswith('/'):
-            entry = {'label': str(p.get('label', '') or '').strip(),
-                     'url': str(p['url']).strip()}
-            # As COLUNAS da página vivem aqui (cadastráveis, nada fixo no
-            # código): são as opções do dropdown de Origem quando Source=Page.
-            cols = [str(c) for c in (p.get('columns') or []) if str(c).strip()]
-            if cols:
-                entry['columns'] = cols
-            pages.append(entry)
-    out['linked_pages'] = pages
-    blocks = []
-    for b in (payload.get('blocks') or []):
-        if not isinstance(b, dict):
-            continue
-        fields = []
-        for f in (b.get('fields') or []):
-            if not isinstance(f, dict):
-                continue
-            fld = {k: str(f.get(k, '') or '') for k in _FI_FIELD_KEYS}
-            # Origem POR PÁGINA: quando o mesmo template serve páginas que
-            # preenchem o campo de jeitos diferentes, o texto de cada página
-            # vive aqui e o source/source_detail plano fica como o comum.
-            sbp = f.get('source_by_page')
-            if isinstance(sbp, dict):
-                clean_sbp = {}
-                for url, ov in sbp.items():
-                    if isinstance(ov, dict) and str(url).startswith('/'):
-                        clean_sbp[str(url)] = {
-                            'source': str(ov.get('source', '') or ''),
-                            'source_detail': str(ov.get('source_detail', '') or ''),
-                            'source_note': str(ov.get('source_note', '') or '')}
-                if clean_sbp:
-                    fld['source_by_page'] = clean_sbp
-            fields.append(fld)
-        blocks.append({'id': str(b.get('id', '') or '').strip() or 'block-%d' % (len(blocks) + 1),
-                       'title': str(b.get('title', '') or '').strip() or 'Block',
-                       'note': str(b.get('note', '') or ''),
-                       'fields': fields})
-    out['blocks'] = blocks
-    return out, None
-
-
-# ── O cadastro COMANDA previews e geração ────────────────────────────────────
-#  O template do File Interface é a autoridade da ESTRUTURA da linha: ordem dos
-#  campos, largura (format) e os literais dos campos Fixed. O código continua
-#  dono dos VALORES calculados — o gerador entrega strings já formatadas por
-#  seq, usadas VERBATIM, para a troca ser byte a byte idêntica ao que sempre
-#  foi enviado à B3 (as excentricidades históricas ficam no gerador, não no
-#  motor). Editar um Fixed, reordenar ou acrescentar campo pela tela muda o
-#  arquivo e o preview sem tocar em código.
-
-_fi_tpl_cache = {}   # key -> (mtime, dict) — edição na tela vale no request seguinte
-
-
-def _fi_tpl_cached(key):
-    """Template com cache por mtime, como os mappings — geradores e previews
-    leem a cada request e o arquivo só é reparseado quando muda."""
-    path = _fi_path(key)
-    try:
-        mt = os.path.getmtime(path)
-    except OSError:
-        return None
-    hit = _fi_tpl_cache.get(key)
-    if hit and hit[0] == mt:
-        return hit[1]
-    data = _fi_load(key)
-    if data is not None:
-        _fi_tpl_cache[key] = (mt, data)
-    return data
-
-
-# ── Variantes por par de pernas (LE pair) ───────────────────────────────────
-#  Um template pode ser VARIANTE de outro: `base_key` aponta o template-mãe e
-#  `le_pair` diz para qual par de pernas ele vale ('MGT x JPM'). O gerador
-#  continua chamando o motor pela chave BASE — quem escolhe a variante é o
-#  motor, pelo par do deal. Sem par, ou sem variante cadastrada para o par,
-#  vale o base: o comportamento de sempre, byte a byte. A variante é uma
-#  cópia completa do layout, então nela mais campos podem virar Fixed (conta
-#  da parte/contraparte, Nome Simplificado do header) sem tocar em código.
-
-_FI_LE_PAIRS = ('JPM x MGT', 'JPM x CLI', 'MGT x CLI', 'JPM x ATACAMA',
-                'MGT x JPM', 'ATACAMA x JPM', 'LAWTON x JPM', 'JPM x LAWTON')
-
-
-def _fi_le_pair_norm(pair):
-    """'mgt × Jpm ' ≡ 'MGT x JPM' — comparação cega a caixa, espaço extra e ao
-    sinal de vezes. O que se grava é o texto do cadastro."""
-    s = str(pair or '').upper().replace('×', 'X')
-    return ' '.join(s.split())
-
-
-def _fi_variant_key(base_key, page_url=None, le_pair=None):
-    """Chave EFETIVA do template para (página, par de pernas). A variante
-    ligada à página vence a variante sem página nenhuma (coringa); variante
-    ligada só a OUTRAS páginas não vale aqui. Sem par ou sem variante → o
-    próprio base."""
-    want = _fi_le_pair_norm(le_pair)
-    if not want:
-        return base_key
-    wildcard = None
-    try:
-        names = sorted(os.listdir(_FILE_INTERPRETER_DIR))
-    except OSError:
-        return base_key
-    for fn in names:
-        if not fn.endswith('.json'):
-            continue
-        t = _fi_tpl_cached(fn[:-5])
-        if not t or str(t.get('base_key', '') or '') != base_key:
-            continue
-        if _fi_le_pair_norm(t.get('le_pair')) != want:
-            continue
-        pages = [p.get('url') for p in (t.get('linked_pages') or [])]
-        if not pages:
-            wildcard = wildcard or t.get('key')
-        elif not page_url or page_url in pages:
-            return t.get('key')
-    return wildcard or base_key
-
-
-def _fi_variant_file_name(base_key, page_url=None, le_pair=None):
-    """`file_name` da variante efetiva — o nome do arquivo gerado quando o
-    cadastro define um. '' = usa o nome padrão do gerador."""
-    key = _fi_variant_key(base_key, page_url, le_pair)
-    tpl = _fi_tpl_cached(key)
-    return str((tpl or {}).get('file_name', '') or '').strip()
-
-
-def _fi_width(fmt):
-    """Largura em caracteres de um formato do manual: X(n)/9(n) → n,
-    9(a)V9(b) → a+b (o V é decimal implícito, não ocupa posição).
-    None = formato que o motor não sabe medir."""
-    m = re.fullmatch(r'9\((\d+)\)V9\((\d+)\)', str(fmt or ''))
-    if m:
-        return int(m.group(1)) + int(m.group(2))
-    m = re.fullmatch(r'[X9]\((\d+)\)', str(fmt or ''))
-    return int(m.group(1)) if m else None
-
-
-def _fi_field_src(field, page_url=None):
-    """source/source_detail/source_note efetivos: o override da página
-    (source_by_page) vence o texto comum do campo."""
-    ov = (field.get('source_by_page') or {}).get(page_url or '')
-    return ov if ov else field
-
-
-def _fi_seq_key(seq):
-    s = str(seq or '').strip()
-    return s.lstrip('0') or '0' if s.isdigit() else s
-
-
-# ── Cálculo CADASTRÁVEL de campo (Source Calculated) ────────────────────────
-#  O Source Field/Value pode carregar uma FÓRMULA em vez de texto livre, e aí o
-#  motor calcula o valor — nada de código novo para um campo derivado. O
-#  catálogo é pequeno e nomeado (argumentos separados por ';', campo = nome da
-#  COLUNA da página, casado com o campo do deal cego a caixa/espaço):
-#    FIELD(Campo)                       → o valor do campo, como está
-#    DATE(Campo)                        → o campo como data AAAAMMDD
-#    BIZDIFF(Campo A; Campo B)          → dias úteis ANBIMA entre A e B,
-#                                         zero-padded pela largura do format
-#                                         (9(01) → '3', 9(02) → '03')
-#    ADDBIZ(Campo; N)                   → data do campo + N dias úteis (AAAAMMDD)
-#    LOOKUP(mapping; COL IN; COL OUT; Campo) → linha do mapping cuja COL IN
-#                                         casa com o campo (normalizado exato),
-#                                         devolvendo COL OUT
-#    CASE(Campo; DE=PARA; DE=PARA; …)   → de-para em linha sobre o valor do
-#                                         campo (comparação normalizada). Valor
-#                                         não listado devolve VAZIO, que o motor
-#                                         completa com espaços na largura do
-#                                         format — é assim que se cadastra
-#                                         "e no resto, branco"
-#  Texto que NÃO parseia como fórmula continua documentação: o valor do
-#  gerador vale, como sempre — é o que mantém todo cadastro existente
-#  byte a byte. A cópia do navegador é o FiTer.calc (fi-ter-pair.js).
-_FI_CALC_RE = re.compile(r'^\s*(BIZDIFF|ADDBIZ|DATE|FIELD|LOOKUP|CASE)\s*\((.*)\)\s*$',
-                         re.I | re.S)
-
-
-def _fi_deal_get(deal, name):
-    """Campo do deal pelo NOME DA COLUNA da página: 'Last Fixing Date' ≡
-    'LastFixingDate' — a comparação ignora caixa e tudo que não é letra ou
-    dígito. Sem campo, ''."""
-    want = re.sub(r'[^A-Z0-9]', '', str(name or '').upper())
-    if not want:
-        return ''
-    for k, v in (deal or {}).items():
-        if re.sub(r'[^A-Z0-9]', '', str(k).upper()) == want:
-            return re.sub(r'<[^>]+>', '', str(v or '')).strip()
-    return ''
-
-
-def _fi_calc_value(spec, deal, fmt=''):
-    """Executa uma fórmula cadastrada sobre o deal. None = não é fórmula (ou
-    argumento inválido): o chamador mantém o valor do gerador — a fórmula mal
-    cadastrada degrada para o comportamento de sempre, nunca derruba o
-    arquivo."""
-    m = _FI_CALC_RE.match(str(spec or ''))
-    if not m or deal is None:
-        return None
-    fn = m.group(1).upper()
-    args = [a.strip() for a in m.group(2).split(';')]
-    try:
-        if fn == 'FIELD':
-            return _fi_deal_get(deal, args[0])
-        if fn == 'DATE':
-            dt = _parse_date_any(_fi_deal_get(deal, args[0]))
-            return dt.strftime('%Y%m%d') if dt else ''
-        if fn == 'BIZDIFF':
-            a = _parse_date_any(_fi_deal_get(deal, args[0]))
-            b = _parse_date_any(_fi_deal_get(deal, args[1]))
-            s = str(_anbima_biz_diff(a, b))
-            w = _fi_width(fmt)
-            return s.zfill(w)[:w] if w else s
-        if fn == 'ADDBIZ':
-            dt = _parse_date_any(_fi_deal_get(deal, args[0]))
-            d2 = _anbima_add_biz(dt, int(args[1])) if dt else None
-            return d2.strftime('%Y%m%d') if d2 else ''
-        if fn == 'CASE':
-            alvo = re.sub(r'[^A-Z0-9]', '', _fi_deal_get(deal, args[0]).upper())
-            for par in args[1:]:
-                if '=' not in par:
-                    continue
-                de, para = par.split('=', 1)
-                if re.sub(r'[^A-Z0-9]', '', de.upper()) == alvo:
-                    return para
-            return ''
-        if fn == 'LOOKUP':
-            key, col_in, col_out, fld = (args + ['', '', '', ''])[:4]
-            alvo = re.sub(r'[^A-Z0-9]', '', _fi_deal_get(deal, fld).upper())
-            if not alvo:
-                return ''
-            for row in _mapping_rows(key):
-                v = re.sub(r'[^A-Z0-9]', '', str(row.get(col_in, '') or '').upper())
-                if v and v == alvo:
-                    return str(row.get(col_out, '') or '')
-            return ''
-    except Exception:
-        return None
-    return None
-
-
-def _fi_effective_seq_value(key, block_id, seq, values, page_url=None,
-                            le_pair=None, deal=None):
-    """Valor EFETIVO de um campo (por seq) como o motor o montaria: Fixed do
-    cadastro (variante/override da página) > fórmula cadastrada > valor do
-    gerador. É o que deixa OUTRA regra depender de um campo cadastrável — o
-    deslocamento das linhas de verificação lê aqui a Cotação para o
-    Vencimento."""
-    tpl = _fi_tpl_cached(_fi_variant_key(key, page_url, le_pair))
-    blk = _fi_block_of(tpl, block_id) or _fi_block_of(_fi_tpl_cached(key), block_id)
-    for f in (blk or {}).get('fields', []):
-        if _fi_seq_key(f.get('seq')) != _fi_seq_key(seq):
-            continue
-        src = _fi_field_src(f, page_url)
-        if str(src.get('source', '')) == 'Fixed':
-            return str(src.get('source_detail', ''))
-        calc = _fi_calc_value(src.get('source_detail'), deal, f.get('format'))
-        if calc is not None:
-            return calc
-        break
-    vals = {_fi_seq_key(k): ('' if v is None else str(v))
-            for k, v in (values or {}).items()}
-    return vals.get(_fi_seq_key(seq), '')
-
-
-def _fi_block_of(tpl, block_id):
-    for b in (tpl or {}).get('blocks', []):
-        if b.get('id') == block_id:
-            return b
-    return None
-
-
-def _fi_build_line(key, block_id, values, page_url=None, le_pair=None, deal=None):
-    """Monta UMA linha do arquivo a partir do cadastro do File Interface.
-
-    `values` = {seq: string JÁ formatada} dos campos não-Fixed ('4' e '04'
-    valem o mesmo). Fixed sai do cadastro (override por página vence) padded
-    pela largura do format (X → espaços à direita, 9 → zeros à esquerda;
-    Fixed vazio = campo em branco na largura). Valor de gerador é usado
-    verbatim, apenas completado com espaços se vier mais curto que o format —
-    nunca truncado nem reformatado. Posicional concatena; delimitado junta
-    com o separator do template e fecha com token vazio (padrão OPC).
-    Template/bloco ausente levanta ValueError: arquivo para a B3 não pode
-    sair meio montado em silêncio.
-
-    `le_pair` escolhe a VARIANTE do template ('MGT x JPM'): a cadastrada para
-    o par vence; variante sem o bloco cai de volta no bloco do base — uma
-    variante criada antes de o base ganhar um bloco não pode derrubar a
-    geração inteira."""
-    eff_key = _fi_variant_key(key, page_url, le_pair)
-    tpl = _fi_tpl_cached(eff_key)
-    block = _fi_block_of(tpl, block_id)
-    if eff_key != key and (tpl is None or block is None):
-        eff_key = key
-        tpl = _fi_tpl_cached(key)
-        block = _fi_block_of(tpl, block_id)
-    if tpl is None or block is None:
-        raise ValueError('file-interpreter template missing: {}/{}'.format(eff_key, block_id))
-    positional = tpl.get('file_type') != 'delimited'
-    vals = {_fi_seq_key(k): ('' if v is None else str(v)) for k, v in (values or {}).items()}
-    parts = []
-    for f in block.get('fields', []):
-        src = _fi_field_src(f, page_url)
-        fixed = str(src.get('source', '')) == 'Fixed'
-        val = str(src.get('source_detail', '')) if fixed \
-            else vals.get(_fi_seq_key(f.get('seq')), '')
-        if not fixed and deal is not None:
-            # Fórmula cadastrada no Source Field/Value vence o valor do
-            # gerador; texto que não parseia continua documentação (None).
-            calc = _fi_calc_value(src.get('source_detail'), deal, f.get('format'))
-            if calc is not None:
-                val = calc
-        if positional:
-            w = _fi_width(f.get('format'))
-            if w is not None and len(val) < w:
-                if fixed and val and str(f.get('format', '')).startswith('9'):
-                    val = val.rjust(w, '0')
-                else:
-                    val = val.ljust(w)
-        parts.append(val)
-    if positional:
-        return ''.join(parts)
-    sep = tpl.get('separator') or ';'
-    return sep.join(parts) + sep
-
-
-def _ndf_is_interbook(norm):
-    """True quando o registro da API é uma perna interbook — pares cadastrados na
-    tela Mapping (aba Interbook API). Predicado compartilhado: o mapeamento usa
-    para descartar e o pull para contar, sem duplicar a regra."""
-    for fa, va, fb, vb in _ndf_interbook_rules():
-        if _ndf_flat(norm.get(fa)) == va and _ndf_flat(norm.get(fb)) == vb:
-            return True
-    return False
-
-
-def _ndf_deal_from_api(rec, sid, refmap_acr, today_dmy, refmap_spn=None):
-    """One Athena NDF getTrades record → (target_product, deal_dict).
-    target_product is a _GENERIC_ND_PRODUCTS key; (None, None) = skip."""
-    norm = _ndf_api_norm(rec)
-    get = norm.get
-
-    if _api_rec_is_cancelled(norm):
-        return None, None
-    deal_name = str(get('DEAL NAME') or '').strip().replace('_', '-')
-    if not deal_name:
-        return None, None
-    end_cp = str(get('END COUNTERPARTY') or '').strip()
-    if not end_cp:
-        return None, None
-    # Internal holding book — not a client trade, never imported
-    if 'GLOBAL_HOLDING_BOOK' in end_cp.upper().replace(' ', '_').replace('-', '_'):
-        return None, None
-    # Interbook (Other Book × Settlement Location) — mesma natureza do holding
-    # book acima: perna interna, não é negócio de cliente.
-    if _ndf_is_interbook(norm):
-        return None, None
-
-    # LE da CONTRAPARTE: só quando o próprio End Counterparty está cadastrado no
-    # mapping Legal Entity × Accronym, ou seja, quando a contraparte é uma perna
-    # interna (outra entidade JPM). Fora esse caso ela é None — e tem de ser.
-    loc = str(get('SETTLEMENT LOCATION') or '').strip().upper()
-    le_cp = _ndf_le_from_accronym(end_cp)
-    # LE da coluna da tela: a NOSSA perna. Cai para a Settlement Location, e sem
-    # cadastro a location crua fica visível.
-    le = le_cp or _ndf_le_from_location(loc) or loc
-
-    # Contraparte, nesta ordem:
-    #   1. accronym exato do End Counterparty no Reference Data (e o accronym
-    #      sem o sufixo de entidade — evita cadastrar a mesma contraparte uma
-    #      vez por LE);
-    #   2. só então, e SOMENTE se a contraparte for perna interna (le_cp), os
-    #      demais accronyms daquela entidade.
-    #
-    # O passo 2 recebe `le_cp`, NUNCA a LE da Settlement Location: a location é
-    # a nossa perna, e usá-la aqui fazia um cliente virar a própria JPMorgan.
-    # Foi o que aconteceu com SOMICHEL (Michelin): accronym não cadastrado +
-    # Settlement Location BRAZIL → LE JPM → a linha veio com SPN, nome e CNPJ do
-    # Banco J.P. Morgan, em silêncio, numa operação que vai para registro.
-    #
-    # Sendo perna interna, o passo 2 é a IDENTIDADE DA ENTIDADE (razão social
-    # cadastrada em le-spn → Reference Data; depois accronyms; depois o SPN da
-    # LE). Não sendo, entra o SPN que veio da API — que passou a trazer o SPN da
-    # contraparte, e não mais o da Legal Entity (§174). Ele fica por último, e
-    # nunca é consultado para perna interna, para não reintroduzir por outro
-    # caminho o erro do parágrafo acima.
-    #
-    # Nada casando, SPN/Client/TaxID ficam vazios e a página marca "Missing
-    # Counterparty" — que é o erro certo: pede cadastro em vez de inventar.
-    ref = _ndf_ref_by_accronym(refmap_acr, end_cp, le_cp, refmap_spn,
-                               str(get('SPN') or '').strip())
-    spn = str(ref.get('SPN', '') or '').strip()
-
-    first_fix = _fxo_date_dmy(get('FIRST FIXING DATE'))
-    last_fix  = _fxo_date_dmy(_ndf_api_get(norm, 'LAST FIXING DATE') or get('EXPIRATION DATE'))
-    # ASIAN only when there is an actual fixing window (first ≠ last). An empty
-    # FIRST_FIXING_DATE (last falls back to Expiration Date) is a single fixing
-    # → VANILLA.
-    trade_type = 'ASIAN' if (first_fix and last_fix and first_fix != last_fix) else 'VANILLA'
-
-    trade_date = _fxo_date_dmy(get('TRADE DATE'))
-    try:
-        month = _FXO_MONTHS_EN[datetime.strptime(trade_date, '%d/%m/%Y').month - 1] if trade_date else ''
-    except ValueError:
-        month = ''
-
-    qty_ccy   = _fxo_ccy(get('QUANTITY CURRENCY'))
-    other_ccy = _fxo_ccy(get('OTHER QUANTITY UNITS'))
-    qty_v     = _fxo_num(get('QUANTITY'))
-    strike_v  = _fxo_num(get('STRIKE'))
-    # Moedas fracas cotam invertido vs BRL: a API manda o strike como
-    # Moeda/BRL (ex.: 3,33 MXN por BRL) — a página e os arquivos (Conecta,
-    # Intrag) trabalham com BRL por unidade da moeda (0,30...), então o Rate
-    # é gravado já invertido quando o PAR tem uma moeda fraca (flag Weak Ccy
-    # do cadastro Currency Base), em qualquer das duas pernas — ver
-    # `_ndf_weak_leg`.
-    if strike_v and _ndf_weak_leg(qty_ccy, other_ccy):
-        strike_v = 1.0 / strike_v
-    instr     = str(get('INSTRUMENT TYPE') or '').strip()
-    publisher = str(get('PUBLISHER') or '').strip()
-    # FX Pair comes with internal ccy codes ("USB/BRR") → ISO ("USD/BRL")
-    fx_pair = re.sub(r'[A-Z]{3}', lambda m: _fxo_ccy(m.group(0)),
-                     str(get('INSTRUMENT') or '').strip().upper())
-
-    # Routing (order matters: FWD Start wins over the publisher test).
-    # Vanilla × Other Publisher sai do CADASTRO, não de literal: a linha do
-    # publisher em /mapping › Publisher × B3 (NDF) com NOTES = BACEN vai para
-    # Vanilla; o resto (e publisher sem linha) vai para Other Publisher. Uma
-    # linha sem Match Tokens casa só pelo texto completo, então 'PTAX' e
-    # 'PTAX|BRR|PTAX' são cadastros distintos e independentes (§166).
-    if 'FXFORWARDSTART' in instr.upper().replace(' ', ''):
-        strike_set = _fxo_date_dmy(_ndf_api_get(norm, 'STRIKE SET DATE', 'STRIKESETDATE'))
-        # Fixa hoje: será cancelada e re-bookada como vanilla, então não entra em
-        # página nenhuma. Ainda assim o deal é MONTADO e devolvido no alvo
-        # `_fwd-start-fixing` — é dele que sai a chave que reconhece o
-        # re-booking do outro lado (ver _ndf_rebook_key).
-        target = '_fwd-start-fixing' if (strike_set and strike_set == today_dmy) \
-            else 'fwd-start'
-    elif not _ndf_publisher_is_bacen(publisher):
-        target = 'other-publishers'
-    else:
-        target = 'vanilla'
-
-    deal = {
-        'Status':            'New',
-        'LE':                le,
-        'Deal':              deal_name,
-        'B3_ID':             '',
-        'TradeDate':         trade_date,
-        'Month':             month,
-        'SettlementDate':    _fxo_date_dmy(get('SETTLEMENT DATE')),
-        'SPN':               spn,
-        # Perna interna mantém o accronym da API (o nome do book), §174.
-        'Acronym':           end_cp if le_cp else ((ref.get('FX CASH ACCRONYM', '') or '') or end_cp),
-        'Client':            ref.get('COUNTERPARTY', '') or '',
-        'TaxID':             ref.get('TAX ID', '') or '',
-        'FirstFixingDate':   first_fix,
-        'LastFixingDate':    last_fix,
-        'Instrument':        instr,
-        'TradeType':         trade_type,
-        'Direction':         str(get('TYPE') or '').strip().upper(),
-        'FXPair':            fx_pair,
-        'QuantityCurrency':  qty_ccy,
-        'OtherQuantityCurrency': other_ccy,
-        'Publisher':         publisher,
-        'Notional':          ('{:,.2f}'.format(qty_v) if qty_v is not None else ''),
-        'Rate':              ('{:,.8f}'.format(strike_v) if strike_v is not None else ''),
-        'IsBRRFixed':        ('YES' if qty_ccy == 'BRL' else 'NO'),
-        'TradingBook':       str(get('TRADING BOOK') or '').strip(),
-        'OtherBook':         str(get('OTHER BOOK') or '').strip(),
-        # `loc` é o SETTLEMENT LOCATION cru (upper) já lido para derivar a LE.
-        'SettlementLocation': loc,
-        'Maker':             sid,
-    }
-    if target in ('fwd-start', '_fwd-start-fixing'):
-        deal['StrikeSetDate']   = _fxo_date_dmy(_ndf_api_get(norm, 'STRIKE SET DATE', 'STRIKESETDATE'))
-        deal['StrikeSetOffset'] = str(_ndf_api_get(norm, 'STRIKE OFFSET', 'STRIKEOFFSET',
-                                                   'STRIKE SET OFFSET') or '').strip()
-        # Strike da API, na MESMA convenção do Rate (já invertido para moeda
-        # fraca, acima): BRL por unidade da moeda base. É ele que converte o
-        # notional no XML da confirmação, então divergir do Rate faria a coluna
-        # da tela e o valor do arquivo contarem histórias diferentes.
-        deal['Strike'] = ('{:,.8f}'.format(strike_v) if strike_v is not None else '')
-        deal['Rate'] = ''       # FWD Start: strike is only set on the strike set date
-    return target, deal
-
-
-def _generic_nd_persist_new_deals(product, deals):
-    """Insert deals whose Deal+Client is new in the product's day file; existing
-    ones are compared with the incoming API data — any difference applies the
-    new values, flips the Status to Amend and records AmendChanged (front
-    highlight). Returns (inserted, amended_names)."""
-    cfg = _generic_nd_cfg(product)
-    if not cfg:
-        return [], []
-    fresh, amended, seen_files = [], [], {}
-    with _cache_lock:
-        for d in deals:
-            try:
-                ref_date = datetime.strptime(d.get('TradeDate', ''), '%d/%m/%Y')
-            except (ValueError, TypeError):
-                ref_date = datetime.now()
-            dir_path = os.path.join(cfg['dir'], ref_date.strftime('%Y'), ref_date.strftime('%m'))
-            fpath = os.path.join(dir_path, ref_date.strftime('%Y%m%d') + cfg['suffix'])
-            if fpath not in seen_files:
-                existing = []
-                try:
-                    with open(fpath, encoding='utf-8') as fh:
-                        existing = json.load(fh)
-                    if not isinstance(existing, list):
-                        existing = [existing]
-                except (IOError, json.JSONDecodeError):
-                    existing = []
-                idx, by_deal = _nd_amend_index(existing)
-                seen_files[fpath] = {'dir': dir_path, 'existing': existing,
-                                     'idx': idx, 'by_deal': by_deal}
-            st = seen_files[fpath]
-            row = _nd_amend_find(st, d)
-            if row is not None:
-                if _nd_api_amend(row, d, product):
-                    amended.append(d.get('Deal') or '')
-                continue
-            _nd_amend_register(st, d)
-            st['existing'].append(d)
-            fresh.append(d)
-        for fpath, st in seen_files.items():
-            os.makedirs(st['dir'], exist_ok=True)
-            _atomic_write_json(fpath, st['existing'])
-    return fresh, amended
-
-
-# ──────────────────────────────────────────────────────────────────────────
-# FWD Start → Vanilla: o re-booking do dia da fixação não entra no Vanilla
-# ──────────────────────────────────────────────────────────────────────────
-# No dia em que um FWD Start fixa (Strike Set Date), a mesa CANCELA a operação e
-# faz um booking novo, com outro Deal ID, já como NDF vanilla. As duas pontas são
-# a MESMA operação — importar o re-booking encheria a página de Vanilla de
-# duplicatas que ninguém pediu, e o Deal ID novo faz com que nenhuma regra de
-# chave (Deal+Client) as reconheça como par.
-#
-# O par é reconhecido por **contraparte + notional + data de vencimento**, com a
-# **Trade Date do vanilla igual à Strike Set Date do FWD Start**. Strike e trade
-# date NÃO entram na comparação: o strike é justamente o que a fixação define
-# (o FWD Start nem tem strike gravado, ver `deal['Rate'] = ''` acima), e a data
-# de negociação do re-booking é outra por construção.
-#
-# Os FWD Start comparados vêm de duas fontes, unidas:
-#   1. o próprio pull — os registros roteados para `_fwd-start-fixing`, que a
-#      regra de roteamento já tira de circulação;
-#   2. o cache das páginas de FWD Start dos últimos meses, porque a operação foi
-#      bookada semanas antes e mora no arquivo do dia DELA, não no de hoje.
-# A (2) é o que salva quando a API não devolve mais o FWD Start original no dia
-# da fixação; a (1) é o que salva quando ele nunca chegou a ser importado.
-
-_NDF_REBOOK_LOOKBACK_MONTHS = 24
-
-
-def _ndf_rebook_key(deal, when_field):
-    """(contraparte, notional, vencimento, data) de uma operação — a chave que
-    emparelha um FWD Start (`when_field='StrikeSetDate'`) com o vanilla que o
-    substituiu (`when_field='TradeDate'`).
-
-    Devolve None quando falta qualquer uma das quatro partes. Chave incompleta
-    não casa com nada, e é o lado seguro: na dúvida o deal É importado e o
-    operador decide — o contrário some com a operação sem ninguém ver."""
-    cp = str(deal.get('SPN') or '').strip() or str(deal.get('Acronym') or '').strip().upper()
-    notional = _conf_to_float(deal.get('Notional'))
-    settle = _parse_date_any(deal.get('SettlementDate'))
-    when = _parse_date_any(deal.get(when_field))
-    if not cp or notional is None or not settle or not when:
-        return None
-    # abs: a direção da operação viaja no campo Direction, não no sinal do
-    # notional — e o re-booking pode gravar o sinal do outro jeito.
-    return (cp, round(abs(notional), 2), settle, when)
-
-
-def _ndf_fwdstart_cached_keys(ref):
-    """Chaves dos FWD Start já importados que podem ter virado vanilla: varre o
-    cache das duas grafias de pasta em produção (FwdStart / FWD Start) nos
-    últimos _NDF_REBOOK_LOOKBACK_MONTHS meses. Cancelado entra também — pelo
-    contrário, está cancelado justamente porque o re-booking aconteceu."""
-    months, first = [], datetime(ref.year, ref.month, 1)
-    for _ in range(_NDF_REBOOK_LOOKBACK_MONTHS):
-        months.append(first)
-        first = datetime(first.year, first.month, 1) - timedelta(days=1)
-        first = datetime(first.year, first.month, 1)
-    keys = {}
-    for base in (os.path.join(NEW_DEALS_CACHE_ROOT, 'NDF', 'FwdStart'),
-                 os.path.join(NEW_DEALS_CACHE_ROOT, 'NDF', 'FWD Start')):
-        for m in months:
-            dpath = os.path.join(base, m.strftime('%Y'), m.strftime('%m'))
-            if not os.path.isdir(dpath):
-                continue
-            try:
-                fnames = os.listdir(dpath)
-            except OSError:
-                continue
-            for fname in fnames:
-                if not fname.endswith('_ndffwdstart.json'):
-                    continue
-                try:
-                    with open(os.path.join(dpath, fname), encoding='utf-8') as fh:
-                        data = json.load(fh)
-                except (IOError, OSError, json.JSONDecodeError):
-                    continue
-                for e in (data if isinstance(data, list) else []):
-                    if not isinstance(e, dict):
-                        continue
-                    k = _ndf_rebook_key(e, 'StrikeSetDate')
-                    if k:
-                        # A TRADE DATE do FWD Start vai junto: o Manual Deals EA
-                        # precisa dela para tirar do e-mail o FWD Start que foi
-                        # bookado e fixou no MESMO dia (ver `features/mdea/queries.rows`). Só o
-                        # Deal ID não responde essa pergunta.
-                        keys.setdefault(k, {'deal': str(e.get('Deal') or '').strip(),
-                                            'trade': str(e.get('TradeDate') or '').strip()})
-    return keys
-
-
-def _ndf_drop_fwdstart_rebooks(vanilla_deals, fixing_deals, ref):
-    """Tira da lista de vanilla os re-bookings de FWD Start que fixaram.
-
-    Retorna (deals_que_ficam, [(deal_vanilla, info_do_fwdstart)]), com
-    `info_do_fwdstart` = `{'deal', 'trade'}` — o Deal ID e a Trade Date do FWD
-    Start original."""
-    if not vanilla_deals:
-        return vanilla_deals, []
-    keys = _ndf_fwdstart_cached_keys(ref)
-    for d in fixing_deals:
-        k = _ndf_rebook_key(d, 'StrikeSetDate')
-        if k:
-            keys.setdefault(k, {'deal': str(d.get('Deal') or '').strip(),
-                                'trade': str(d.get('TradeDate') or '').strip()})
-    if not keys:
-        return vanilla_deals, []
-    kept, dropped = [], []
-    for d in vanilla_deals:
-        k = _ndf_rebook_key(d, 'TradeDate')
-        if k is not None and k in keys:
-            dropped.append((d, keys[k]))
-        else:
-            kept.append(d)
-    return kept, dropped
-
-
-def _ndf_api_pull(sid='API', actor_name='Athena API', ref_date=None):
-    """Fetch the reference date's NDF trades from the Athena API and route/insert
-    the new ones into FWD Start / Other Publisher / Vanilla. `ref_date` vem do
-    campo Reference Date das páginas (default hoje); o scheduler nunca manda, ou
-    seja, sempre puxa o dia. Raises on network/SSO errors — the caller decides
-    how loud to be about it.
-    ⚠️ `now` daqui para baixo é a DATA DE REFERÊNCIA, não o relógio: é ela que
-    decide o arquivo do dia, a regra do Strike Set Date de hoje no FWD Start e o
-    dia procurado nos cancelamentos."""
-    from apps.pages import athena_api
-    if not athena_api.is_available():
-        raise RuntimeError("The 'requests' package is not installed; "
-                           "the Athena API client is unavailable.")
-    now = _api_ref_date(ref_date)
-    payload = athena_api.fetch_ndf_trades(now.strftime('%Y%m%d'))
-    records = athena_api.extract_records(payload)
-
-    refmap_spn = _fxo_refdata_by_spn()
-    refmap_acr = _fxo_refdata_by_accronym(refmap_spn)
-    today_dmy = now.strftime('%d/%m/%Y')
-    routed = {'fwd-start': [], 'other-publishers': [], 'vanilla': []}
-    fixing_today = []           # FWD Start que fixam hoje: índice do re-booking
-    skipped_interbook, cancelled = 0, []
-    for rec in records:
-        if not isinstance(rec, dict):
-            continue
-        target, deal = _ndf_deal_from_api(rec, sid, refmap_acr, today_dmy, refmap_spn)
-        if target == '_fwd-start-fixing':
-            fixing_today.append(deal)
-            continue
-        if target is None:
-            norm = _ndf_api_norm(rec)
-            if _api_rec_is_cancelled(norm):
-                # isCancelled: se o deal já foi importado, vira Canceled
-                nm = str(norm.get('DEAL NAME') or '').strip().replace('_', '-')
-                if nm:
-                    cancelled.append((nm, _fxo_date_dmy(norm.get('TRADE DATE'))))
-                continue
-            if _ndf_is_interbook(norm):
-                skipped_interbook += 1
-            continue
-        routed[target].append(deal)
-    skipped_fwd_today = len(fixing_today)
-
-    # O re-booking do FWD Start que fixou hoje chega como vanilla, com Deal ID
-    # novo — sai antes de qualquer gravação.
-    routed['vanilla'], rebooks = _ndf_drop_fwdstart_rebooks(
-        routed['vanilla'], fixing_today, now)
-    for d, fwd in rebooks:
-        log.info('[ndf-api] vanilla %s não importado: re-booking do FWD Start %s '
-                 '(contraparte %s · notional %s · vencimento %s)',
-                 d.get('Deal') or '?', (fwd or {}).get('deal') or '?', d.get('Acronym') or '?',
-                 d.get('Notional') or '?', d.get('SettlementDate') or '?')
-    # O par (vanilla ↔ FWD Start) é GRAVADO, e não só registrado no log. Ele é
-    # calculado aqui — o único lugar que vê os dois lados — e some em seguida: o
-    # vanilla não entra em arquivo-dia nenhum (é justamente o que esta função
-    # evita) e o FWD Start original está no arquivo do dia em que foi bookado,
-    # semanas atrás, sem o Deal ID novo. Quem precisa do par depois é o e-mail
-    # Manual Deals EA — a vertical features/mdea —, que sai na Strike Set Date
-    # pedindo o Deal do VANILLA. O import é atrasado porque os entrypoints das
-    # features só são importados no fim deste arquivo.
-    from apps.pages.features.mdea import entrypoint as _mdea
-    _mdea.record_rebooks(rebooks, now)
-
-    targets = {}
-    for product, deals in routed.items():
-        inserted, amended = _generic_nd_persist_new_deals(product, deals)
-        cfg = _generic_nd_cfg(product)
-        if (inserted or amended) and cfg:
-            bits = []
-            if inserted:
-                bits.append('{} imported'.format(len(inserted)))
-            if amended:
-                bits.append('{} amended'.format(len(amended)))
-            _create_notification(sid, actor_name, 'New Deals', cfg['label'],
-                                 'Athena API{}: {} deal(s)'.format(_api_ref_suffix(now),
-                                                                   ', '.join(bits)))
-        targets[product] = {'parsed': len(deals), 'imported': len(inserted),
-                            'amended': len(amended), 'deals': inserted}
-
-    # Cancelamentos: procura o Deal no arquivo do dia (trade date do registro)
-    # dos três produtos. A linha é APAGADA — a operação não existe mais na
-    # origem. Exceção: já registrado na B3 (Success com B3 ID) vira 'Canceled'
-    # e continua visível, porque o cancelamento na B3 é ação humana.
-    removed = canceled = 0
-    for nm, td in cancelled:
-        try:
-            rd = datetime.strptime(td, '%d/%m/%Y') if td else now
-        except ValueError:
-            rd = now
-        for product in routed:
-            cfg = _generic_nd_cfg(product)
-            r, c = _nd_cancel_in_file(
-                os.path.join(cfg['dir'], rd.strftime('%Y'), rd.strftime('%m'),
-                             rd.strftime('%Y%m%d') + cfg['suffix']), nm)
-            removed += r
-            canceled += c
-    # Prestação de contas do pull: sem isso, "veio 0" não diz se a API devolveu
-    # nada, se tudo estava cancelado ou se o filtro de interbook comeu os
-    # registros — os três somem no mesmo zero da tela.
-    log.info('[ndf-api] pull ref=%s: %d fetched · roteados fwd=%d op=%d vanilla=%d · '
-             'importados=%d amendados=%d · cancelados na API=%d (linhas removidas=%d, '
-             'marcadas Canceled por já terem B3 ID=%d) · '
-             'interbook=%d · strike set na data=%d · re-booking de FWD Start=%d',
-             now.strftime('%Y%m%d'), len(records),
-             len(routed['fwd-start']), len(routed['other-publishers']), len(routed['vanilla']),
-             sum(t['imported'] for t in targets.values()),
-             sum(t['amended'] for t in targets.values()),
-             len(cancelled), removed, canceled, skipped_interbook, skipped_fwd_today, len(rebooks))
-    return {'success': True, 'date': now.strftime('%Y%m%d'), 'fetched': len(records),
-            'skipped_fwd_strike_today': skipped_fwd_today,
-            'skipped_fwd_rebook': len(rebooks),
-            'skipped_fwd_rebook_deals': [d.get('Deal') or '' for d, _f in rebooks],
-            'skipped_interbook': skipped_interbook, 'canceled': canceled,
-            # chave 'dead' mantida pelo contrato com as telas — só isCancelled
-            # desde §173.
-            'removed': removed, 'dead': len(cancelled), 'targets': targets}
-
-
-# In-app scheduler — polls the Athena NDF API every NDF_API_POLL_MIN minutes
-# (default 20) with trade date = today, routing into FWD Start / Other
-# Publisher / Vanilla. Same pattern as the FXO scheduler above.
-_NDF_API_POLL_MIN = int(os.getenv('NDF_API_POLL_MIN', '20') or 20)
-_ndf_api_scheduler_started = False
-_ndf_api_scheduler_lock = threading.Lock()
-
-
-def _ndf_api_scheduler_loop():
-    last_err = None
-    while True:
-        time.sleep(max(60, _NDF_API_POLL_MIN * 60))
-        if not _import_window_open():
-            continue                    # fora do horário da mesa — `_import_window_open`
-        try:
-            res = _ndf_api_pull()
-            imported = sum(t.get('imported', 0) for t in (res.get('targets') or {}).values())
-            if imported:
-                log.info('[ndf] Athena API poll: %d new deal(s) imported '
-                         '(%d fetched)', imported, res['fetched'])
-            last_err = None
-        except Exception as e:                          # noqa: BLE001
-            msg = str(e)
-            if msg != last_err:
-                log.warning('[ndf] Athena API poll failed: %s', msg)
-            else:
-                log.debug('[ndf] Athena API poll failed again: %s', msg)
-            last_err = msg
-
-
-def _ndf_api_start_scheduler():
-    global _ndf_api_scheduler_started
-    from apps.pages import athena_api
-    if not athena_api.is_available():
-        log.info('[ndf] Athena API scheduler NOT started (requests missing)')
-        return
-    with _ndf_api_scheduler_lock:
-        if _ndf_api_scheduler_started:
-            return
-        _ndf_api_scheduler_started = True
-    threading.Thread(target=_ndf_api_scheduler_loop,
-                     name='ndf-athena-api-scheduler', daemon=True).start()
-    log.info('[ndf] Athena API scheduler started (every %d min · janela %s BRT)',
-             _NDF_API_POLL_MIN, _import_window_label())
 
 
 _schedule_on_start('ndf', _ndf_api_start_scheduler)
@@ -13911,313 +10907,6 @@ _MONTH_ABBR = {
 # pasta de rede da NDF. Não há feed automático — as linhas são criadas na página.
 
 
-def _find_ndf_deal_in_cache(deal_name, client_name=None):
-    """Search all YYYYMMDD_ndfcomm.json files for a deal by Deal + Client.
-    Returns (file_path, list_index) or (None, None)."""
-    files_scanned     = 0
-    deals_scanned     = 0
-    deal_name_matches = []   # where Deal matched but Client didn't
-    all_names_seen    = []   # sample of (fname, deal_name, client) for every deal scanned
-
-    if not os.path.isdir(NDF_COMM_CACHE_DIR):
-        log.error("[_find_ndf] CACHE DIR MISSING: %s", NDF_COMM_CACHE_DIR)
-        return None, None
-
-    for root, _dirs, files in os.walk(NDF_COMM_CACHE_DIR):
-        for fname in sorted(files):
-            if not fname.endswith('_ndfcomm.json'):
-                continue
-            fpath = os.path.join(root, fname)
-            files_scanned += 1
-            try:
-                with open(fpath, 'r', encoding='utf-8') as fh:
-                    deals = json.load(fh)
-                if not isinstance(deals, list):
-                    deals = [deals]
-                for i, deal in enumerate(deals):
-                    deals_scanned += 1
-                    d_name   = deal.get('Deal', '')
-                    d_client = deal.get('Client', '')
-                    all_names_seen.append((fname, d_name, d_client))
-                    # Trim-tolerant match: a stray leading/trailing space in the
-                    # cache or in the request must not cause a phantom 404.
-                    if (d_name or '').strip() == (deal_name or '').strip():
-                        if client_name is None or (d_client or '').strip() == (client_name or '').strip():
-                            log.debug("[_find_ndf] FOUND %r client=%r → %s[%d]",
-                                      deal_name, client_name, fname, i)
-                            return fpath, i
-                        else:
-                            deal_name_matches.append({
-                                'file': fname, 'idx': i,
-                                'stored_client': repr(d_client),
-                                'wanted_client': repr(client_name)
-                            })
-            except Exception:
-                log.warning("[_find_ndf] Error reading %s: %s", fpath, traceback.format_exc())
-                continue
-
-    # ── Not found — emit targeted diagnosis ──────────────────────────────
-    if deal_name_matches:
-        # Deal name exists in cache but client field doesn't match
-        log.warning(
-            "[_find_ndf] CLIENT MISMATCH for deal=%r  wanted_client=%r\n"
-            "  Matches by name (stored_client vs wanted_client): %s",
-            deal_name, repr(client_name), deal_name_matches
-        )
-    elif files_scanned == 0:
-        # Directory exists but contains no _ndfcomm.json files
-        try:
-            tree = []
-            for root2, _dirs2, files2 in os.walk(NDF_COMM_CACHE_DIR):
-                level = root2.replace(NDF_COMM_CACHE_DIR, '').count(os.sep)
-                indent = '  ' * level
-                tree.append(f"{indent}{os.path.basename(root2)}/")
-                for f2 in files2[:5]:
-                    tree.append(f"{'  ' * (level+1)}{f2}")
-            log.warning(
-                "[_find_ndf] NO _ndfcomm.json FILES FOUND in %s\n  Directory tree:\n%s",
-                NDF_COMM_CACHE_DIR, '\n'.join(tree) or '  (empty)'
-            )
-        except Exception:
-            log.warning("[_find_ndf] NO _ndfcomm.json FILES FOUND in %s", NDF_COMM_CACHE_DIR)
-    else:
-        # Deal name itself was never found in any file
-        # Show every (file, stored_Deal, stored_Client) so the mismatch is obvious
-        log.warning(
-            "[_find_ndf] DEAL NAME NOT MATCHED: wanted=%r (repr=%r)\n"
-            "  Scanned %d file(s), %d deal(s). All stored (Deal, Client) pairs:\n%s",
-            deal_name, repr(deal_name),
-            files_scanned, deals_scanned,
-            '\n'.join(
-                f"    [{fn}] Deal={repr(dn)}  Client={repr(dc)}"
-                for fn, dn, dc in all_names_seen
-            ) or '    (none)'
-        )
-
-    return None, None
-
-
-# A montagem final das linhas TER passou a sair do cadastro do File Interface
-# (template termo-multiclasses): a ordem dos campos e os literais Fixed vêm do
-# JSON, com os overrides da página /new_deals-ndf-commodities resolvidos pelo
-# motor (_fi_build_line). Os valores continuam calculados aqui, já na largura
-# exata de sempre — o motor não reformata nada. Template/bloco ausente vira
-# erro claro no endpoint, nunca arquivo montado do jeito velho em silêncio.
-def _ndf_comm_ter_lines(deal):
-    """Linhas TER de UM deal de NDF Commodities: a tipo 1 (Dados Fixos) e,
-    para asiático, as tipo 2 (datas de verificação da janela de fixing).
-    Devolve (is_jpmorgan, [linhas]) — is_jpmorgan decide o arquivo
-    (TCO_LAWTON × TCO_BANCO). Template/bloco ausente levanta ValueError."""
-    from decimal import Decimal
-    import datetime as _dt
-    import json as _json
-
-    def _sh(v):
-        return re.sub(r'<[^>]+>', '', str(v or '')).strip()
-
-    def _date(val):
-        val = _sh(val)
-        if not val:
-            return ''
-        for fmt in ('%Y-%m-%d %H:%M:%S', '%Y-%m-%d', '%d/%m/%Y'):
-            try:
-                return _dt.datetime.strptime(val, fmt).strftime('%Y%m%d')
-            except ValueError:
-                continue
-        return ''
-
-    def _cpty(client):
-        c = client.upper()
-        if 'LAWTON' in c:
-            return '00041007'
-        if 'BANCO J.P MORGAN' in c or 'JP MORGAN' in c:
-            return '73760009'
-        return '73760102'
-
-    def _taxid(client, taxid):
-        c = client.upper()
-        if 'LAWTON' in c or 'BANCO J.P MORGAN' in c or 'JP MORGAN' in c:
-            return ''
-        return re.sub(r'[.\-/]', '', _sh(taxid))
-
-    def _pos(s, width, align='left', fill=' '):
-        s = str(s or '')
-        if len(s) > width:
-            s = s[:width]
-        return s.rjust(width, fill) if align == 'right' else s.ljust(width, fill)
-
-    def _pos_num(val, int_digits, dec_digits, div100=False):
-        """Fixed-width positional numeric: int_digits integer + dec_digits decimal, no separator."""
-        v = _sh(str(val or ''))
-        if not v:
-            return '0' * (int_digits + dec_digits)
-        try:
-            d = Decimal(v.replace(',', ''))
-            if div100:
-                d = d / Decimal('100')
-            d = abs(d)
-            int_part = int(d)
-            frac_int = int(((d - int_part) * Decimal(10 ** dec_digits)).to_integral_value())
-            return str(int_part).zfill(int_digits) + str(frac_int).zfill(dec_digits)
-        except Exception:
-            return '0' * (int_digits + dec_digits)
-
-    client           = _sh(deal.get('Client', ''))
-    taxid            = _sh(deal.get('TaxID', ''))
-    direction        = _sh(deal.get('Direction', ''))
-    trade_type       = _sh(deal.get('TradeType', '')).upper()
-    strike_ccy       = _sh(deal.get('StrikeCurrency', '')).upper()
-    underlying       = _sh(deal.get('UnderlyingAsset', '')).upper()
-    instrument       = _sh(deal.get('Instrument', '')).upper()
-    _cu              = client.upper()
-    is_jpmorgan      = bool(re.search(r'J\.?P\.?\s*MORGAN', _cu))
-    part_account     = '00041007' if is_jpmorgan else '73760009'
-    fx_holiday_sched = _sh(deal.get('FXHolidaySchedule', ''))
-    qic              = _sh(deal.get('QuotedInCents', 'NO')).upper() == 'YES'
-    asian            = trade_type == 'ASIAN'
-    vanilla          = trade_type == 'VANILLA'
-    brl              = strike_ccy == 'BRL'
-    is_tas           = instrument.startswith('TAS')
-
-    dir_code   = '0' if direction.upper() == 'BUY' else '1'
-    fix_start  = _date(deal.get('FixingStartDate', ''))
-    fix_end    = _date(deal.get('FixingEndDate', ''))
-    fxconv     = _date(deal.get('FXConvDate', ''))
-    trade_date = _date(deal.get('TradeDate', ''))
-    settl_date = _date(deal.get('SettlementDate', ''))
-    deal_id    = _sh(deal.get('Deal', ''))
-    notional   = _sh(deal.get('TotalNotional', ''))
-    # Quoted in Cents divide por 100 SEMPRE que o ativo é cotado em cents —
-    # a moeda do strike não entra na conta. A regra é do ativo (Fator
-    # Conversão 0,01 no Subjacente), não do par de moedas, então excetuar o
-    # BRL fazia o mesmo ativo sair com strike 100× diferente conforme a
-    # moeda do deal. §172
-    strike_str = _pos_num(deal.get('Strike', ''), 12, 8, div100=qic)
-
-    # Notional: integer right-justified to 14 chars + '00' = 16 chars total
-    try:
-        qty_int = int(round(float(notional.replace(',', ''))))
-        qty_str = str(qty_int).rjust(14, '0') + '00'
-    except Exception:
-        qty_str = '0' * 16
-
-    # Cadastro (Commodities × B3): coluna vazia devolve o 'F'/'A' e o
-    # 340/358 de sempre — ver `_b3_quote_cfg`. §177
-    _q           = _b3_quote_cfg(underlying)
-    tipo_cotacao = _q['ndf']
-    fonte_info   = _q['source']
-
-    fix_single = fix_start if (fix_start and fix_start == fix_end) else ''
-    tipo_media = 'N' if fix_single else 'A'
-
-    _deal_holidays = set()
-    if not vanilla and fx_holiday_sched:
-        # Strip anything but word chars so a crafted FXHolidaySchedule
-        # (e.g. '../../secret') can't escape the data dir (path traversal).
-        _sched_file = re.sub(r'[^A-Za-z0-9_]', '', fx_holiday_sched.replace('-', '_'))
-        holiday_path = data_path(f'{_sched_file}.json') if _sched_file else None
-        try:
-            with open(holiday_path, encoding='utf-8') as _hf:
-                _raw = _json.load(_hf)
-            _deal_holidays = set(
-                item['date'] if isinstance(item, dict) else item
-                for item in _raw
-            )
-        except Exception:
-            pass
-
-    biz_count = 0
-    if not vanilla and fix_start and fix_end:
-        try:
-            _s = _dt.datetime.strptime(fix_start, '%Y%m%d').date()
-            _e = _dt.datetime.strptime(fix_end,   '%Y%m%d').date()
-            _cur = _s
-            while _cur <= _e:
-                if _cur.weekday() < 5 and _cur.strftime('%Y-%m-%d') not in _deal_holidays:
-                    biz_count += 1
-                _cur += _dt.timedelta(days=1)
-        except Exception:
-            pass
-
-    if vanilla:
-        biz_str = '000'
-    else:
-        biz_str = str(biz_count).zfill(3)
-    my_number = str(random.randint(1000000000, 9999999999))
-
-    # Par de pernas → variante do template. A perna nossa é a MESMA regra do
-    # arquivo destino: cliente JPM = visão Lawton (TCO_LAWTON), senão Banco.
-    le_pair = _ter_le_pair('LAWTON' if is_jpmorgan else 'JPM', client)
-
-    # Posicional (largura fixa, sem delimitador) — layout TER do cadastro.
-    # Só os campos não-Fixed entram em `values` (seq do template); os
-    # literais e os brancos saem do JSON.
-    values = {
-        '4': _pos(my_number, 10),                     # Nº Controle Interno
-        '5': _pos(part_account, 8),                   # Lançamento do Participante
-        '6': _pos(dir_code, 1),                       # Papel
-        '8': _pos(_cpty(client), 8),                  # Contraparte
-        '9': _pos(_taxid(client, taxid), 14),         # CPF/CNPJ Contraparte
-        '12': _pos(' ' + fonte_info, 4),              # Fonte de Informação
-        '16': _pos(qty_str, 16),                      # Valor Base / Quantidade
-        '17': _pos(underlying, 10, 'right'),          # Código do Ativo Subjacente
-        '18': _pos(strike_str, 20),                   # Taxa a Termo (R$/Moeda)
-        '19': _pos(fix_single, 8),                    # Data de Fixing do Ativo Subjacente
-        '20': _pos(trade_date, 8),                    # Data de Operação
-        '21': _pos(settl_date, 8),                    # Data de Vencimento
-        '23': _pos(tipo_cotacao, 1),                  # Tipo de Cotação
-        '24': _pos('' if brl else fxconv, 8),         # Data de Fixing da Moeda
-        '35': _pos('S' if is_tas else 'N', 1),        # Termo a Termo
-        '36': _pos(trade_date if is_tas else '', 8),  # Data de Fixação
-        '37': _pos('V' if is_tas else '', 1),         # Forma de Atualização
-        '55': _pos('S' if brl else '', 1),            # Taxa a Termo em Reais
-        '57': _pos(deal_id, 14, 'right'),             # Código Identificador
-        '58': _pos(tipo_media, 1),                    # Tipo Média Asiático
-        '59': _pos(biz_str, 3),                       # Quantidade de Datas de Verificação
-    }
-    lines = [_fi_build_line(_TER_FI_KEY, 'registro-dados-fixos', values,
-                            page_url='/new_deals-ndf-commodities',
-                            le_pair=le_pair, deal=deal)]
-
-    # Asian fixing date rows (line type 2) — também pelo motor. O parse das
-    # datas fica num try próprio: um ValueError do template tem de SUBIR até
-    # o endpoint, não ser engolido junto com uma data malformada.
-    #
-    # Cotação para o Vencimento (campo 15) EFETIVA preenchida (> 0) desloca as
-    # DATAS das linhas de verificação N dias úteis PARA FRENTE, no MESMO
-    # calendário do deal — o campo é cadastrável (Fixed da variante ou
-    # fórmula), e hoje nasce em branco: sem cadastro, nada muda.
-    _cotv = _fi_effective_seq_value(_TER_FI_KEY, 'registro-dados-fixos', '15',
-                                    values, '/new_deals-ndf-commodities',
-                                    le_pair, deal).strip()
-    _shift_n = int(_cotv) if _cotv.isdigit() and int(_cotv) > 0 else 0
-
-    def _shift_biz(d0):
-        cur, left = d0, _shift_n
-        while left > 0:
-            cur += _dt.timedelta(days=1)
-            if cur.weekday() < 5 and cur.strftime('%Y-%m-%d') not in _deal_holidays:
-                left -= 1
-        return cur
-
-    if asian and fix_start and fix_end:
-        try:
-            _s2 = _dt.datetime.strptime(fix_start, '%Y%m%d').date()
-            _e2 = _dt.datetime.strptime(fix_end,   '%Y%m%d').date()
-        except ValueError:
-            _s2 = _e2 = None
-        _cur2 = _s2
-        while _cur2 is not None and _cur2 <= _e2:
-            if _cur2.weekday() < 5 and _cur2.strftime('%Y-%m-%d') not in _deal_holidays:
-                _d  = _shift_biz(_cur2).strftime('%Y%m%d')
-                _fx = _d if brl else ''
-                lines.append(_fi_build_line(
-                    _TER_FI_KEY, 'registro-dados-variaveis',
-                    {'4': _pos(_d, 8),                    # Data Verificação
-                     '6': _pos(_fx, 8) + _pos('', 10)},   # Data de Verificação da Moeda + filler
-                    page_url='/new_deals-ndf-commodities', le_pair=le_pair, deal=deal))
-            _cur2 += _dt.timedelta(days=1)
-    return is_jpmorgan, lines
 
 
 # ==============================================================================
@@ -14400,52 +11089,6 @@ def _generic_nd_cfg(product):
     return _GENERIC_ND_PRODUCTS.get(product)
 
 
-# Product Type shown on the Pending Confirmation row — the three generic NDF
-# pages (Vanilla / Other Publisher / FWD Start) all report plain 'NDF'.
-_GENERIC_ND_PC_TYPE = {'fwd-start': 'NDF',
-                       'other-publishers': 'NDF',
-                       'vanilla': 'NDF'}
-
-# Qual das três páginas genéricas de NDF gera confirmação. Só o FWD Start —
-# Vanilla e Other Publisher alimentam o Pending Confirmation e param por aí.
-_GENERIC_ND_MC_SOURCE = {'fwd-start': 'NDF FWD START'}
-
-
-def _generic_nd_pending_status(product, deal):
-    """Pending Status de um deal genérico de NDF que virou Success.
-
-    **O FWD Start vem primeiro, e antes do prazo.** Ele passa pela esteira de
-    validação como todo produto que não seja Vanilla / Other Publisher, e a etapa
-    de quem entra na esteira é `Pending OTC` — o prazo curto não a substitui. Com
-    o teste de prazo na frente, um FWD Start de 30 dias nascia `Exception FepWeb`
-    (resolvido) no Pending Confirmation enquanto a esteira o mantinha na fila do
-    OTC: as duas telas contando coisas diferentes sobre a mesma confirmação.
-
-    Vanilla e Other Publisher não têm esteira, e por isso são os únicos que caem
-    na regra de prazo/assinatura — a MESMA função que a importação do Pending
-    Update e a edição em massa da tela usam.
-    """
-    if product == 'fwd-start':
-        return 'Pending OTC'
-    return _pc_signature_pending_status(
-        _fxo_refdata_by_spn().get(_norm_spn(deal.get('SPN', '')), {}),
-        _parse_date_any(deal.get('TradeDate', '')),
-        _parse_date_any(deal.get('SettlementDate', '')))
-
-
-def _generic_nd_pc_trigger(product, deal):
-    """→ Pending Confirmation on Status Success (same trigger as the other New
-    Deals products; _pc_save_from_deal skips internal/intragroup legs itself).
-    FWD Start rows are keyed by the mapped B3 ID, not the Deal name."""
-    tn = None
-    if product == 'fwd-start':
-        tn = str(deal.get('B3_ID', '') or '').strip() or None
-    # `source` separa as três páginas, que gravam o mesmo Product Type 'NDF':
-    # só o FWD Start gera confirmação e entra em Manual Confirmations.
-    _pc_save_from_deal(deal, _GENERIC_ND_PC_TYPE.get(product, 'NDF'),
-                       pending_status=_generic_nd_pending_status(product, deal),
-                       trade_number=tn,
-                       source=_GENERIC_ND_MC_SOURCE.get(product))
 
 
 # ==============================================================================
@@ -14622,171 +11265,6 @@ _conf_fwdstart_rows = _pf_conf._conf_fwdstart_rows
 _otc_app_url = _pf_mail._otc_app_url
 
 
-def _find_generic_nd_deal(cfg, deal_name, client_name=None):
-    """Locate a deal by Deal (+optional Client) across the product's cache files.
-    Returns (file_path, list_index) or (None, None)."""
-    base = cfg['dir']
-    if not os.path.isdir(base):
-        return None, None
-    for root, _dirs, files in os.walk(base):
-        for fname in sorted(files):
-            if not fname.endswith(cfg['suffix']):
-                continue
-            fpath = os.path.join(root, fname)
-            try:
-                with open(fpath, 'r', encoding='utf-8') as fh:
-                    deals = json.load(fh)
-                if not isinstance(deals, list):
-                    deals = [deals]
-                for i, deal in enumerate(deals):
-                    if deal.get('Deal', '') == deal_name and (client_name is None or deal.get('Client', '') == client_name):
-                        return fpath, i
-            except Exception:
-                continue
-    return None, None
-
-
-def _generic_nd_reenrich(deals, refmap_cache):
-    """Preenche SPN/Client/TaxID de deals importados com contraparte faltante
-    cujo Acronym (End Counterparty) passou a existir no RefData — o cadastro
-    feito depois do import só corrigia o DOM da página; ao sair e voltar, o
-    cache em disco ainda tinha os campos vazios (linha sem badge e sem
-    cliente). Retorna True se algo mudou (o caller persiste o arquivo).
-    refmap_cache: dict de 1 posição para construir o mapa por acronym só uma
-    vez por request."""
-    changed = False
-    for deal in deals:
-        if not isinstance(deal, dict):
-            continue
-        if str(deal.get('SPN', '') or '').strip():
-            continue
-        acr = str(deal.get('Acronym', '') or '').strip().upper()
-        if not acr:
-            continue
-        if 'map' not in refmap_cache:
-            refmap_cache['spn'] = _fxo_refdata_by_spn()
-            refmap_cache['map'] = _fxo_refdata_by_accronym(refmap_cache['spn'])
-        # Mapping Legal Entity × Accronym: o accronym gravado pode identificar a
-        # LE (é o caso do End Counterparty que é nome de book interno, importado
-        # antes de a linha existir). Quando ele identifica, a LE gravada estava
-        # errada — veio da Settlement Location — e é corrigida aqui, junto com a
-        # contraparte da entidade, sem precisar de novo pull da API.
-        #
-        # Só `le_map` entra na busca da contraparte. Caindo para a LE gravada no
-        # deal (que veio da Settlement Location, a NOSSA perna) um cliente sem
-        # accronym cadastrado era re-enriquecido como a própria JPMorgan — o
-        # mesmo erro de _ndf_deal_from_api, aqui aplicado a quem já está no
-        # arquivo.
-        le_map = _ndf_le_from_accronym(acr)
-        # Sem SPN gravado não há o que passar como último recurso — a linha está
-        # aqui justamente porque o campo veio vazio.
-        rec = _ndf_ref_by_accronym(refmap_cache['map'], acr, le_map, refmap_cache['spn'])
-        if not rec:
-            if le_map and le_map != str(deal.get('LE', '') or '').strip().upper():
-                deal['LE'] = le_map
-                changed = True
-            continue
-        if le_map and le_map != str(deal.get('LE', '') or '').strip().upper():
-            deal['LE'] = le_map
-        deal['SPN'] = str(rec.get('SPN', '') or '')
-        deal['Client'] = rec.get('COUNTERPARTY', '') or ''
-        deal['TaxID'] = rec.get('TAX ID', '') or ''
-        # Perna interna mantém o accronym da API (o nome do book) — §174.
-        ref_acr = '' if le_map else str(rec.get('FX CASH ACCRONYM', '') or '').strip()
-        if ref_acr:
-            deal['Acronym'] = ref_acr
-        changed = True
-    return changed
-
-
-# ──────────────────────────────────────────────────────────────────────────
-# GENERIC NDF (FWD Start / Other Publisher) — send-conecta (TER files)
-# ──────────────────────────────────────────────────────────────────────────
-# Same positional TER layout as ndf-commodities, with the FX-NDF field rules.
-# Lines are split into THREE files by participant entity:
-#   • LE = LAWTON, or client is the Banco J.P. Morgan → the LAWTON-side leg →
-#     *_LAWTON file (participant 00041007) — mirrors the ndf-commodities
-#     convention;
-#   • else LE = MGT → *_MGT file (participant 04880006);
-#   • else → *_BANCO file (participant 73760009).
-# Counterparty account follows the LE matrix used on the page previews.
-#
-# A perna Lawton × Banco NÃO depende de vir da API: quando a linha do banco
-# tem o Lawton como contraparte e o lote não traz a perna espelhada explícita
-# (LE = LAWTON) do mesmo trade, o envio SINTETIZA a visão Lawton a partir da
-# própria linha — mesmo trade, Participante ↔ Contraparte trocados e Papel
-# invertido — e ela cai no *_LAWTON. É a convenção que o TAXA da página
-# /ndf-other-publisher sempre teve (uma linha, duas visões); aqui o desenho
-# original apostava que a perna do book do Lawton chegaria como deal próprio,
-# e ela não chega — o arquivo visão Lawton simplesmente nunca nascia.
-
-# Athena publisher (feeder) → códigos B3: mapping publisher-ndf, tela Mapping.
-def _ndf_publisher_row(publisher):
-    """Linha do mapping publisher-ndf que casa o publisher.
-
-    Duas passadas, nesta ordem:
-
-    1. **Nome exato** — o PUBLISHER da linha igual ao publisher inteiro. Uma
-       linha **sem** Match Tokens só casa aqui: é o texto completo, sem
-       variação. É o que separa a linha 'PTAX' da 'PTAX|BRR|PTAX' — as duas
-       existem e cada uma vale para o seu publisher exato.
-    2. **Token** — só para linhas COM a coluna TOKENS preenchida, porque a
-       Athena manda o publisher composto ('PTAX|USB|WMR|4' → REUTERS - WMR).
-
-    Nada casando → {}.
-    """
-    p = (publisher or '').strip().upper()
-    if not p:
-        return {}
-    rows = _mapping_rows('publisher-ndf')
-    for r in rows:
-        if str(r.get('PUBLISHER', '') or '').strip().upper() == p:
-            return r
-    for r in rows:
-        for tok in re.split(r'[,;]', str(r.get('TOKENS', '') or '')):
-            tok = tok.strip().upper()
-            if tok and tok in p:
-                return r
-    return {}
-
-
-# Valor da coluna NOTES que marca o feeder como BACEN — e, com isso, manda a
-# operação para a página Vanilla em vez de Other Publisher.
-_NDF_NOTES_BACEN = 'BACEN'
-
-
-def _ndf_publisher_is_bacen(publisher):
-    """True quando a linha do publisher no mapping tem NOTES = BACEN.
-
-    É o que decide Vanilla × Other Publisher. Antes o teste era o literal
-    `publisher.upper() != 'PTAX'` no roteamento da API, então qualquer variante
-    ('PTAX|BRR|PTAX') caía em Other Publisher mesmo sendo PTAX do BACEN, e não
-    havia como corrigir sem mexer no código. Agora quem decide é o cadastro.
-
-    Publisher vazio conta como BACEN: é o default histórico do import, que
-    tratava ausência de feeder como PTAX puro.
-    """
-    if not (publisher or '').strip():
-        return True
-    notes = str(_ndf_publisher_row(publisher).get('NOTES', '') or '').strip().upper()
-    return notes == _NDF_NOTES_BACEN
-
-
-def _ndf_publisher_codes(publisher):
-    """Publisher → {'consulta': Fonte de Consulta, 'info': Tela ou Função de
-    Consulta}. Publisher sem linha no mapping devolve {} (campos em branco)."""
-    r = _ndf_publisher_row(publisher)
-    if not r:
-        return {}
-    return {'consulta': str(r.get('FONTE CONSULTA', '') or '').strip(),
-            'info': str(r.get('TELA CONSULTA', '') or '').strip()}
-
-
-def _ndf_publisher_fonte_info(publisher):
-    """Fonte de Informação do TER, 4 chars alinhados à direita. Sem linha no
-    mapping = 1, que era o comportamento de quando isso era hardcoded."""
-    fi = str(_ndf_publisher_row(publisher).get('FONTE INFO', '') or '').strip() or '1'
-    return fi.rjust(4)
 
 def _moeda_num_code(iso):
     """ISO 3-letter → B3 3-digit currency code (mapping Currency Base, SIMBOLO →
@@ -14932,245 +11410,6 @@ def _ter_file_header(le, today, page_url, le_pair=None):
                           le_pair=le_pair)
 
 
-def _generic_ndf_ter_line(deal, is_fwd, page_url=None):
-    """Linha tipo 1 (Dados Fixos) do TER de um deal FWD Start / Other
-    Publisher. Devolve (bucket, linha) — bucket BANCO / LAWTON / MGT — ou
-    None para deal cancelado. Os valores continuam calculados aqui, na
-    largura exata de sempre; a ordem dos campos e os literais Fixed saem do
-    cadastro (page_url decide os overrides de cada página). Template/bloco
-    ausente levanta ValueError."""
-    def _s(v):
-        return re.sub(r'<[^>]+>', '', str(v or '')).strip()
-
-    def _pos(s, width, align='left', fill=' '):
-        s = str(s or '')[:width]
-        return s.rjust(width, fill) if align == 'right' else s.ljust(width, fill)
-
-    def _znum(val, int_digits, dec_digits):
-        """Zero-padded positional number: int_digits + dec_digits chars."""
-        try:
-            from decimal import Decimal
-            d = abs(Decimal(str(val).replace(',', '')))
-            ip = int(d)
-            fp = int(((d - ip) * (10 ** dec_digits)).to_integral_value())
-            return str(ip).zfill(int_digits) + str(fp).zfill(dec_digits)
-        except Exception:
-            return '0' * (int_digits + dec_digits)
-
-    def _d8(v):
-        dt = _parse_date_any(_s(v))
-        return dt.strftime('%Y%m%d') if dt else ''
-
-    def _is_jpm(c):
-        return bool(re.search(r'J\.?P\.?\s*MORGAN', c.upper()))
-
-    def _is_mgt(c):
-        return 'MGT' in c.upper()
-
-    def _is_lawton(c):
-        return 'LAWTON' in c.upper()
-
-    if str(deal.get('Status', '') or '').strip() == 'Canceled':
-        return None                     # cancelado via API: fora dos arquivos
-    client   = _s(deal.get('Client', ''))
-    le       = _s(deal.get('LE', '')).upper()
-    deal_id  = _s(deal.get('Deal', ''))
-    publisher = _s(deal.get('Publisher', ''))
-    qty_ccy  = _s(deal.get('QuantityCurrency', '')).upper()
-    oth_ccy  = _s(deal.get('OtherQuantityCurrency', '')).upper()
-    # O flag de asiático NÃO vem do TradeType: ele é derivado das datas de
-    # fixing logo abaixo (asian_fix), para o arquivo não depender de um
-    # rótulo que pode ter vindo do XLSX ou de uma edição manual.
-
-    # Entity bucket + participant / counterparty accounts
-    if 'LAWTON' in le:                        # LE Lawton: parte Lawton × banco JPM
-        bucket, participant, cpty = 'LAWTON', '00041007', '73760009'
-    elif _is_jpm(client):                     # Lawton-side mirror leg
-        bucket, participant = 'LAWTON', '00041007'
-        cpty = '04880006' if le == 'MGT' else '73760009'
-    else:
-        bucket = 'MGT' if le == 'MGT' else 'BANCO'
-        participant = '04880006' if le == 'MGT' else '73760009'
-        if _is_lawton(client):
-            cpty = '00041007'
-        elif le == 'MGT':
-            cpty = '73760009' if _is_jpm(client) else '04880109'
-        else:
-            cpty = '04880006' if _is_mgt(client) else '73760102'
-    taxid = '' if ('LAWTON' in le or _is_jpm(client) or _is_lawton(client) or _is_mgt(client)) \
-        else re.sub(r'[.\-\/]', '', _s(deal.get('TaxID', '')))
-
-    last_fix_dt = _parse_date_any(_s(deal.get('LastFixingDate', '')))
-    settl_dt    = _parse_date_any(_s(deal.get('SettlementDate', '')))
-    biz_diff    = _anbima_biz_diff(last_fix_dt, settl_dt)
-
-    strike_set_dt = _parse_date_any(_s(deal.get('StrikeSetDate', '')))
-    fixacao_dt    = _anbima_add_biz(strike_set_dt, biz_diff) if strike_set_dt else None
-
-    # Fonte de Informação: coluna do mapping publisher-ndf (PTAX puro = 0,
-    # demais feeders = 1). Boletim: no OP sai em branco; no FWD Start segue
-    # a fonte (0 → 3, senão 1).
-    fonte_info = _ndf_publisher_fonte_info(publisher)
-    boletim    = ('3' if fonte_info.strip() == '0' else '1') if is_fwd else ' '
-
-    # Valor Base / Quantidade: inteiro alinhado à direita em 14 + '00'. Estas
-    # páginas mandam a coluna como Notional (só o NDF Comm usa TotalNotional)
-    # — aceita os dois. O valor gravado é US ('{:,.2f}'), mas uma edição
-    # manual pode chegar em BR; quando os dois separadores aparecem, quem
-    # define o decimal é o que vem por último. Sem isso, '5.158.000,00' não
-    # parseia e o campo sai com 16 zeros em silêncio.
-    notional_s = (_s(deal.get('TotalNotional', '')) or _s(deal.get('Notional', ''))).replace(' ', '')
-    if ',' in notional_s and '.' in notional_s:
-        notional_s = (notional_s.replace('.', '').replace(',', '.')
-                      if notional_s.rfind(',') > notional_s.rfind('.')
-                      else notional_s.replace(',', ''))
-    elif notional_s.count('.') > 1:
-        notional_s = notional_s.replace('.', '')     # 5.158.000 — dois pontos só podem ser milhar
-    else:
-        notional_s = notional_s.replace(',', '')     # US, o formato que a aplicação grava
-    try:
-        qty_int = int(round(float(notional_s)))
-        qty_str = str(qty_int).rjust(14, '0') + '00'
-    except Exception:
-        qty_str = '0' * 16
-
-    fix_start = _d8(deal.get('FirstFixingDate', ''))
-    fix_end   = _d8(deal.get('LastFixingDate', ''))
-    # Asiático exige JANELA de fixing: primeira E última preenchidas e
-    # DIFERENTES. First fixing vazio (fixing único) ou datas iguais = vanilla.
-    # A regra antiga só testava a igualdade das duas, então o first vazio
-    # caía em 'A' — um fixing único ia para a B3 como média asiática.
-    asian_fix  = bool(fix_start and fix_end and fix_start != fix_end)
-    # Vanilla: Data de Fixing do Ativo Subjacente = a data do fixing único
-    # (a última preenchida). Asiático deixa em branco — as datas da janela
-    # vão nas linhas de verificação.
-    fix_single = '' if asian_fix else (fix_end or fix_start)
-    # Data de Fixing do Ativo Subjacente (campo 19): HOJE o cadastro manda
-    # branco para as DUAS páginas (Fixed vazio no termo-multiclasses — o FWD
-    # Start passou a Blank em 2026-08-12, a pedido da mesa; o OP sempre foi).
-    # O valor continua calculado e entregue ao motor: com o override Fixed ele
-    # é ignorado, e re-apontar o cadastro para Page volta a mandar a data sem
-    # tocar em código. `tipo_media` não depende deste campo — sai de
-    # `asian_fix` —, então o branco não muda a classificação.
-    if not is_fwd:
-        fix_single = ''
-    tipo_media = 'A' if asian_fix else 'N'
-
-    if is_fwd:
-        taxa_termo   = _pos('', 20)
-        cot_venc     = str(biz_diff)[:1] or '0'
-        fonte_cons   = ''
-        tela_cons    = ''
-        data_aval    = ''
-        valor_perc   = _znum(_s(deal.get('StrikeSetOffset', '')) or '0', 4, 8)
-    else:
-        # O campo é a "Taxa a Termo (R$/Moeda)" e o Rate do deal JÁ está nessa
-        # convenção — a inversão da moeda fraca é feita UMA vez, na importação
-        # (`_ndf_weak_leg`). Aqui só entram as casas do cadastro (Inverse
-        # Decimals), que é a precisão com que o 1/taxa vai para a B3.
-        #
-        # Este bloco invertia de novo, e por QUANTITY CURRENCY: como a
-        # importação olhava a outra perna, as duas condições eram
-        # complementares e o arquivo saía certo por compensação — mas a coluna
-        # Rate da tela, o contravalor do MT300 e a taxa do Intrag ficavam com o
-        # valor cru sempre que a moeda fraca era a do notional.
-        rate_raw = _fxo_num(_s(deal.get('Rate', '')))
-        _inv = _mapping_ccy_maps()[2]
-        _leg = _ndf_weak_leg(qty_ccy, oth_ccy)
-        if rate_raw and _leg in _inv:
-            rate_val = round(rate_raw, _inv[_leg])
-        else:
-            rate_val = rate_raw
-        taxa_termo   = _znum(rate_val if rate_val is not None else '0', 12, 8)
-        cot_venc     = ' '
-        pub = _ndf_publisher_codes(publisher)
-        fonte_cons   = pub.get('consulta', '')
-        tela_cons    = pub.get('info', '')
-        data_aval    = _d8(deal.get('LastFixingDate', ''))
-        valor_perc   = (_znum(_s(deal.get('StrikeSetOffset', '')), 4, 8)
-                        if _s(deal.get('StrikeSetOffset', '')) else _pos('', 12))
-
-    dir_code = '0' if _s(deal.get('Direction', '')).upper() == 'BUY' else '1'
-    my_number = str(random.randint(1000000000, 9999999999))
-
-    # OP com BRL fixed: inverte as moedas — a estrangeira vira a Moeda de
-    # Referência e o BRL a Moeda Cotada.
-    brl_fixed = (not is_fwd) and _s(deal.get('IsBRRFixed', '')).upper() == 'YES'
-    moeda_ref, moeda_cot = (oth_ccy, qty_ccy) if brl_fixed else (qty_ccy, oth_ccy)
-
-    # Só os campos não-Fixed entram em `values` (seq do template). O que
-    # antes era literal na concatenação — Contrato Global 'S', Classe do
-    # Ativo '2', Cotação R$/USD '1' e Paridade '3' do OP, Termo a Termo
-    # S/N, Forma de Atualização 'V', 'N' de Atualizar/Ajustar, os brancos —
-    # agora sai do cadastro, por página.
-    values = {
-        '4': _pos(my_number, 10),                    # Nº Controle Interno
-        '5': _pos(participant, 8),                   # Lançamento do Participante
-        '6': _pos(dir_code, 1),                      # Papel
-        '8': _pos(cpty, 8),                          # Contraparte
-        '9': _pos(taxid, 14),                        # CPF/CNPJ Contraparte
-        '12': _pos(fonte_info, 4),                   # Fonte de Informação
-        '13': _pos(_moeda_num_code(moeda_ref), 3),   # Moeda de Referência
-        '14': _pos(_moeda_num_code(moeda_cot), 3),   # Moeda Cotada
-        '15': _pos(cot_venc, 1),                     # Cotação para o Vencimento (FWD)
-        '16': _pos(qty_str, 16),                     # Valor Base / Quantidade
-        '18': _pos(taxa_termo, 20),                  # Taxa a Termo (OP)
-        '19': _pos(fix_single, 8),                   # Data de Fixing do Ativo (FWD)
-        '20': _pos(_d8(deal.get('TradeDate', '')), 8),       # Data de Operação
-        '21': _pos(_d8(deal.get('SettlementDate', '')), 8),  # Data de Vencimento
-        '22': _pos(boletim, 1),                      # Boletim (FWD)
-        '26': _pos(fonte_cons, 1),                   # Fonte de Consulta (OP)
-        '27': _pos(tela_cons, 8, 'right'),           # Tela ou Função de Consulta (OP)
-        '32': _pos(data_aval, 8),                    # Data de Avaliação (OP)
-        '36': _pos(fixacao_dt.strftime('%Y%m%d') if fixacao_dt else '', 8),  # Data de Fixação
-        '38': _pos(valor_perc, 12),                  # Valor / Percentual Negociado
-        '39': _pos((str(biz_diff)[:1] or '0') if is_fwd else ' ', 1),  # Cotação para Fixing (FWD)
-        '55': _pos('S' if _s(deal.get('IsBRRFixed', '')).upper() == 'YES' else '', 1),  # Taxa a Termo em Reais
-        '57': _pos(deal_id[-14:], 14, 'right'),      # Código Identificador (right 14 of Deal)
-        '58': _pos(tipo_media, 1),                   # Tipo Média Asiático
-        '59': _pos(str(_anbima_biz_diff(
-            _parse_date_any(_s(deal.get('FirstFixingDate', ''))),
-            _parse_date_any(_s(deal.get('LastFixingDate', ''))))
-            + 1).zfill(3) if asian_fix else '000', 3),   # Qtde Datas Verificação
-    }
-    # O default é a página do produto; o download do Vanilla passa a DELE,
-    # para os overrides e variantes do cadastro daquela página valerem.
-    page_url = page_url or ('/new_deals-ndf-fwdstart' if is_fwd
-                            else '/new_deals-ndf-otherpublisher')
-    le_pair = _ter_le_pair(_TER_BUCKET_LE[bucket], client)
-    return bucket, _fi_build_line(_TER_FI_KEY, 'registro-dados-fixos', values,
-                                  page_url=page_url, le_pair=le_pair, deal=deal)
-
-
-def _nd_lawton_mirror(deal):
-    """A perna Lawton × Banco do MESMO trade, vista a partir da linha do banco
-    contra o Lawton. LE = LAWTON leva a `_generic_ndf_ter_line` ao ramo que já
-    monta a visão Lawton (participante 00041007 × contraparte 73760009, CNPJ em
-    branco); o Papel inverte porque quem compra de um lado vende do outro. Todo
-    o resto — datas, taxa, notional, publisher, Código Identificador — é do
-    trade, então fica igual."""
-    m = dict(deal)
-    m['LE'] = 'LAWTON'
-    m['Client'] = 'BANCO J.P. MORGAN S.A.'
-    d = str(deal.get('Direction', '') or '').strip().upper()
-    m['Direction'] = 'SELL' if d == 'BUY' else 'BUY'
-    return m
-
-
-def _nd_lawton_sig(deal):
-    """Assinatura de trade para casar a perna do banco com a perna Lawton
-    explícita do lote: (Data de Operação, Data de Vencimento, notional). Os
-    Deal IDs das duas pernas são diferentes — cada book registra o seu —, então
-    a correlação é pelos termos econômicos."""
-    def _dt8(v):
-        dt = _parse_date_any(re.sub(r'<[^>]+>', '', str(v or '')).strip())
-        return dt.strftime('%Y%m%d') if dt else ''
-    raw = str(deal.get('TotalNotional') or deal.get('Notional') or '').replace(',', '').strip()
-    try:
-        val = round(float(raw), 2)
-    except ValueError:
-        val = None
-    return (_dt8(deal.get('TradeDate')), _dt8(deal.get('SettlementDate')), val)
 
 
 def _vanilla_verification_lines(deal, page_url, le_pair):
@@ -15225,62 +11464,6 @@ def _vanilla_verification_lines(deal, page_url, le_pair):
     return lines
 
 
-# Status que ESPERAM retorno da B3: só esses viram 'Error' quando o deal não
-# aparece no arquivo. Um deal em Approved/Pending ainda nem foi registrado, e um
-# já Success não pode regredir por causa de um arquivo que já foi consumido.
-_ND_MAPPING_ERRORABLE = {'New', 'Sent', 'Error'}
-
-
-def _generic_nd_mapping_candidates(cfg, product, ref_date):
-    """Deals da Reference Date que entram no mapping do arquivo de retorno.
-
-    Sai do ARQUIVO DO DIA, não da tabela. A tabela mostra o resultado da última
-    busca — mapear o que estava renderizado deixava para trás operações do mesmo
-    dia que ninguém tinha filtrado.
-
-    Entram todos os status, exceto:
-      • 'Canceled' — cancelado na API, fora do fluxo;
-      • já 'Success' COM B3 ID — não há o que mapear e uma segunda passada só
-        poderia perder informação.
-    Nas outras páginas o filtro antigo (New/Sent/Error) é mantido: o Vanilla é
-    que é registrado por outra ferramenta, e por isso precisa olhar qualquer
-    status."""
-    ref = _parse_date_any(ref_date)
-    if not ref:
-        return []
-    fpath = os.path.join(cfg['dir'], ref.strftime('%Y'), ref.strftime('%m'),
-                         ref.strftime('%Y%m%d') + cfg['suffix'])
-    if not os.path.isfile(fpath):
-        return []
-    try:
-        with open(fpath, encoding='utf-8') as fh:
-            deals = json.load(fh)
-        if not isinstance(deals, list):
-            deals = [deals]
-    except (IOError, json.JSONDecodeError):
-        return []
-
-    out, seen = [], set()
-    for d in deals:
-        if not isinstance(d, dict):
-            continue
-        deal = str(d.get('Deal', '') or '').strip()
-        if not deal:
-            continue
-        status = str(d.get('Status', '') or '').strip()
-        if status == 'Canceled':
-            continue
-        if status == 'Success' and str(d.get('B3_ID', '') or '').strip():
-            continue
-        if product != 'vanilla' and status not in _ND_MAPPING_ERRORABLE:
-            continue
-        client = str(d.get('Client', '') or '').strip()
-        key = (deal, client)
-        if key in seen:
-            continue
-        seen.add(key)
-        out.append({'Deal': deal, 'Client': client, 'Status': status})
-    return out
 
 
 # ==============================================================================
@@ -15313,9 +11496,12 @@ def _notif_query_failed(exc):
     if _notif_fail_last['msg'] == msg:
         return
     _notif_fail_last['msg'] = msg
+    # O caminho é o do banco de NOTIFICAÇÕES: a mensagem imprimia o
+    # Config.DATABASE_PATH (o banco de usuários) e mandava quem depura caçar
+    # lock no arquivo errado.
     log.error("[notifications] a consulta do sino falhou (%s) — o sino fica "
               "vazio até isto ser resolvido:\n%s",
-              Config.DATABASE_PATH, traceback.format_exc())
+              NOTIF_DB_PATH, traceback.format_exc())
 
 
 @blueprint.route('/api/notifications', methods=['GET'])
@@ -15335,14 +11521,29 @@ def api_get_notifications():
     # segundos POR ABA. A tela ficava com o erro no console e o log com a mesma
     # exceção centenas de vezes por minuto, escondendo a causa no meio das
     # repetições. Sem conexão, o sino é o de sempre: vazio.
-    try:
-        conn = get_notif_connection(readonly=True, unlocked=True)
-    except Exception as exc:                                # noqa: BLE001
-        _notif_query_failed(exc)
-        # Mesma FORMA da resposta de sucesso, `total_today` incluído: a topbar lê
-        # o campo direto, e um payload pela metade trocaria o sino vazio por um
-        # erro no console do navegador.
-        return jsonify({"success": True, "notifications": [], "total_today": 0})
+    # UMA retentativa curta antes de desistir: a falha mais comum aqui é a
+    # colisão de milissegundos com uma gravação de notificação em curso — o
+    # DuckDB recusa abrir read-only o arquivo que o MESMO processo tem aberto
+    # em escrita ("different configuration than existing connections"). A
+    # gravação é curta, então 250 ms depois a abertura quase sempre passa, e o
+    # sino deixa de piscar vazio por um ciclo de poll. O ERROR do log fica
+    # reservado para a falha que persiste (conexão vazada, ensure em loop),
+    # que é a que pede alguém. O laço mantém UM ponto de chamada
+    # `unlocked=True` — é o que o check_unlocked_reads prende por AST.
+    conn = None
+    for tentativa in (1, 2):
+        try:
+            conn = get_notif_connection(readonly=True, unlocked=True)
+            break
+        except Exception as exc:                            # noqa: BLE001
+            if tentativa == 1:
+                time.sleep(0.25)
+                continue
+            _notif_query_failed(exc)
+            # Mesma FORMA da resposta de sucesso, `total_today` incluído: a
+            # topbar lê o campo direto, e um payload pela metade trocaria o
+            # sino vazio por um erro no console do navegador.
+            return jsonify({"success": True, "notifications": [], "total_today": 0})
     try:
         # target_sid endereça UM usuário e é mais forte que target_role: quando
         # está preenchido, só aquele SID vê a notificação — nem o master, nem
@@ -15567,170 +11768,6 @@ def _initiate_2fa(sid, email, name):
     return redirect(url_for('pages_blueprint.two_factor_page'))
 
 
-# ============================================================================
-#  METRICS — Pending Confirmation
-#  Dashboard for confirmations pending > 30 days. Offenders (bankers / clients /
-#  economic groups) come from the daily pending-confirmation snapshot JSON ("photo
-#  of the day"); the >30d volume history is seeded from the external report
-#  (static/data/pending-confirmation-metrics-history.json) until enough internal
-#  snapshots accumulate. Owner holds one or more banker names separated by ';'.
-# ============================================================================
-_PC_METRICS_AGING_THRESHOLD = 30
-_PC_METRICS_HISTORY_FILE = os.path.join(
-    data_dir(), 'pending-confirmation-metrics-history.json')
-
-
-def _pc_metrics_int(v):
-    try:
-        return int(float(str(v).strip()))
-    except Exception:
-        return None
-
-
-def _pc_latest_snapshot_rows():
-    """Pending-confirmation rows for the metric e-mails (daily metric / weekly
-    escalation). Lê DIRETO do DB pending (Aging e Status são recalculados na
-    leitura por _pc_load_rows → informação 100% atual no momento do envio); o
-    snapshot diário mais recente fica só como fallback se o DB não abrir.
-    Returns (rows, source_label)."""
-    def _pending_only(rows):
-        # Defensive: rows whose Pending Status is now considered OK (any
-        # Exception*) may still sit in the pending DB/snapshot until the daily
-        # re-route. Drop them so the metrics never count a resolved confirmation.
-        return [r for r in rows if not _pc_is_ok_status(r.get('Pending Status', ''))]
-    try:
-        rows = _pc_load_rows('pending')
-        if rows:
-            return _pending_only(rows), 'live'
-    except Exception:
-        log.warning('[pc-metrics] live DB read failed:\n%s', traceback.format_exc())
-    try:
-        for back in range(0, 40):
-            d = datetime.now() - timedelta(days=back)
-            p = os.path.join(_PC_SNAPSHOT_DIR, d.strftime('%Y'), d.strftime('%m'), d.strftime('%d'),
-                             'pending-confirmation_{}.json'.format(d.strftime('%Y%m%d')))
-            if os.path.isfile(p):
-                with open(p, encoding='utf-8') as fh:
-                    rows = json.load(fh)
-                if isinstance(rows, list):
-                    return _pending_only(rows), d.strftime('%Y-%m-%d')
-    except Exception:
-        log.warning('[pc-metrics] snapshot scan failed:\n%s', traceback.format_exc())
-    return [], 'none'
-
-
-def _pc_metrics_offenders(rows):
-    """Top-5 offenders among rows aging > 30 days (each row = one contract):
-      • bankers       → # of pending contracts (confirmations)
-      • clients       → # of pending contracts (confirmations)
-      • economic grp  → # of pending contracts (confirmations)
-    Owner is a fixed banker GROUP (e.g. "A; B; C") — treated as a single name, not
-    split per person, since the group is the same team across a client's deals.
-    """
-    gt30 = [r for r in rows
-            if (_pc_metrics_int(r.get('Aging')) or 0) > _PC_METRICS_AGING_THRESHOLD]
-
-    banker_count, client_count, egroup_count = {}, {}, {}
-    for r in gt30:
-        client = str(r.get('Client', '') or '').strip()
-        egroup = str(r.get('Economic Group', '') or '').strip()
-        banker = str(r.get('Owner', '') or '').strip()     # whole Owner group = one name
-        if banker:
-            banker_count[banker] = banker_count.get(banker, 0) + 1
-        if client:
-            client_count[client] = client_count.get(client, 0) + 1
-        if egroup:
-            egroup_count[egroup] = egroup_count.get(egroup, 0) + 1
-
-    def top5(d):
-        return [{'label': k, 'value': v}
-                for k, v in sorted(d.items(), key=lambda kv: (-kv[1], kv[0].lower()))[:5]]
-
-    return {
-        'bankers':    top5(banker_count),
-        'clients':    top5(client_count),
-        'egroups':    top5(egroup_count),
-        'gt30_total': len(gt30),
-        'all_total':  len(rows),
-    }
-
-
-def _pc_metrics_history():
-    """>30d volume history: seed (external report) merged with any internal daily
-    snapshots. Returns {gt30:{monthly,daily}, all:{monthly,daily}} where each point
-    is {period|date, volume, pct} (pct = MoM/DoD change vs the previous point)."""
-    seed = {}
-    try:
-        with open(_PC_METRICS_HISTORY_FILE, encoding='utf-8') as fh:
-            seed = json.load(fh)
-    except Exception:
-        log.warning('[pc-metrics] could not read history seed')
-    seed_gt30 = (seed.get('gt30') or {})
-    seed_monthly = list(seed_gt30.get('monthly') or [])
-    seed_daily   = list(seed_gt30.get('daily') or [])
-
-    internal_gt30, internal_all = {}, {}     # day 'YYYY-MM-DD' -> volume
-    try:
-        if os.path.isdir(_PC_SNAPSHOT_DIR):
-            for root, _dirs, files in os.walk(_PC_SNAPSHOT_DIR):
-                for fn in files:
-                    if not fn.endswith('.json'):
-                        continue
-                    m = re.search(r'(\d{4})(\d{2})(\d{2})', fn)
-                    if not m:
-                        continue
-                    day = '{}-{}-{}'.format(*m.groups())
-                    try:
-                        with open(os.path.join(root, fn), encoding='utf-8') as fh:
-                            rows = json.load(fh)
-                    except Exception:
-                        continue
-                    if not isinstance(rows, list):
-                        continue
-                    # Snapshots taken under older rules may still carry rows whose
-                    # Pending Status is now considered OK (any Exception*). Exclude
-                    # them so the >30d history never counts a resolved confirmation.
-                    rows = [r for r in rows if not _pc_is_ok_status(r.get('Pending Status', ''))]
-                    internal_gt30[day] = sum(
-                        1 for r in rows
-                        if (_pc_metrics_int(r.get('Aging')) or 0) > _PC_METRICS_AGING_THRESHOLD)
-                    internal_all[day] = len(rows)
-    except Exception:
-        log.warning('[pc-metrics] internal snapshot scan failed:\n%s', traceback.format_exc())
-
-    def merge_daily(seed_list, internal):
-        by = {d['date']: d['volume'] for d in seed_list}
-        by.update(internal)                     # internal overrides seed for same day
-        return [{'date': k, 'volume': by[k]} for k in sorted(by)]
-
-    def monthly_last(internal):                 # last snapshot value of each month
-        by_month = {}
-        for day in sorted(internal):
-            by_month[day[:7]] = internal[day]
-        return by_month
-
-    gt30_daily   = merge_daily(seed_daily, internal_gt30)
-    gt30_month   = {m['period']: m['volume'] for m in seed_monthly}
-    gt30_month.update(monthly_last(internal_gt30))
-    gt30_monthly = [{'period': k, 'volume': gt30_month[k]} for k in sorted(gt30_month)]
-
-    all_daily    = [{'date': k, 'volume': internal_all[k]} for k in sorted(internal_all)]
-    all_month    = monthly_last(internal_all)
-    all_monthly  = [{'period': k, 'volume': all_month[k]} for k in sorted(all_month)]
-
-    def with_pct(series, key):
-        out, prev = [], None
-        for pt in series:
-            vol = pt['volume']
-            pct = None if prev in (None, 0) else round((vol - prev) * 100.0 / prev)
-            out.append({key: pt[key], 'volume': vol, 'pct': pct})
-            prev = vol
-        return out
-
-    return {
-        'gt30': {'monthly': with_pct(gt30_monthly, 'period'), 'daily': with_pct(gt30_daily, 'date')},
-        'all':  {'monthly': with_pct(all_monthly, 'period'),  'daily': with_pct(all_daily, 'date')},
-    }
 
 
 # ============================================================================

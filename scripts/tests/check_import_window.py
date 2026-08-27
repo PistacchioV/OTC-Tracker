@@ -101,6 +101,7 @@ LOOPS = {'_fxo_api_scheduler_loop': 'API de FXO',
          'scheduler_loop': 'box de commodities'}
 achados = {}
 for arq in (os.path.join(ROOT, 'apps', 'pages', 'routes.py'),
+            os.path.join(ROOT, 'apps', 'pages', 'platform', 'new_deals.py'),
             os.path.join(ROOT, 'apps', 'pages', 'features', 'boxscan', 'commands.py')):
     tree = ast.parse(open(arq, encoding='utf-8').read())
     for node in ast.walk(tree):

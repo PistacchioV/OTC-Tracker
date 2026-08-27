@@ -71,6 +71,8 @@ print('\n== 3. nenhum ponto da divisao olha a moeda ==')
 ALVOS = [
     ('apps/pages/routes.py',
      r'^\s*(?!def ).*(div100\s*=|_cents\s*=\s*lambda|strike_effective\s*=)'),
+    ('apps/pages/platform/new_deals.py',
+     r'^\s*(?!def ).*(div100\s*=|_cents\s*=\s*lambda|strike_effective\s*=)'),
     ('apps/pages/features/new_deals/entrypoint.py',
      r'^\s*(?!def ).*(div100\s*=|_cents\s*=\s*lambda|strike_effective\s*=)'),
     ('apps/templates/pages/new_deals-ndf-commodities.html',
@@ -98,6 +100,7 @@ print('\n== 4. os quatro caminhos dividem igual ==')
 # Os gravadores da Intrag moram em features/intrag desde a extracao — os dois
 # arquivos entram na mesma varredura.
 src = (io.open('apps/pages/routes.py', encoding='utf-8').read()
+       + io.open('apps/pages/platform/new_deals.py', encoding='utf-8').read()
        + io.open('apps/pages/features/intrag/engine.py', encoding='utf-8').read()
        + io.open('apps/pages/features/new_deals/entrypoint.py', encoding='utf-8').read())
 check('NDF Comm -> Intrag',

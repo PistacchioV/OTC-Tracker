@@ -68,8 +68,10 @@ import re                                              # noqa: E402
 # routes por _R()).
 fonte = io.open(os.path.join(RAIZ, 'apps', 'pages', 'routes.py'), encoding='utf-8').read()
 # A família de liquidação mora em platform/settlement.py (§316) — dois dos
-# sete decorados (`_ops_swap_pos_terms`, `_ops_equity_link`) vivem lá.
-for _rel in ('platform/settlement.py',
+# sete decorados (`_ops_swap_pos_terms`, `_ops_equity_link`) vivem lá; os dois
+# do Operations B3 (`_opb3_load_cached`, `_opb3_settle_rows`) moram em
+# platform/operations_b3.py desde o §318.
+for _rel in ('platform/settlement.py', 'platform/operations_b3.py',
              'features/otm/entrypoint.py', 'features/latam/entrypoint.py',
              'features/cognos/entrypoint.py', 'features/operations_b3/entrypoint.py',
              'features/ndf_summary/entrypoint.py', 'features/other_products/entrypoint.py'):

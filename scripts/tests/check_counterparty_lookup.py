@@ -137,7 +137,8 @@ finally:
     R._mapping_rows = _orig_rows
 
 print('\n== 6. o accronym da API sobrevive na perna interna ==')
-src = io.open('apps/pages/routes.py', encoding='utf-8').read()
+src = (io.open('apps/pages/routes.py', encoding='utf-8').read()
+       + io.open('apps/pages/platform/new_deals.py', encoding='utf-8').read())
 check('builder do NDF',
       "'Acronym':           end_cp if le_cp else ((ref.get('FX CASH ACCRONYM', '') or '') or end_cp)," in src,
       True)

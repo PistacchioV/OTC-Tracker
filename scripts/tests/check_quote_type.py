@@ -124,6 +124,7 @@ check('os PTS* saem do arquivo antigo na migracao',
 
 print('\n== 4. nenhum consumidor guarda mais o literal ==')
 src = (io.open('apps/pages/routes.py', encoding='utf-8').read()
+       + io.open('apps/pages/platform/new_deals.py', encoding='utf-8').read()
        + io.open('apps/pages/features/new_deals/entrypoint.py', encoding='utf-8').read())
 check('Termo: sem o F/A no codigo', "'F' if is_fixed else 'A'" in src, False)
 check('Termo: sem o 340/358 no codigo', "'340' if is_fixed else '358'" in src, False)
