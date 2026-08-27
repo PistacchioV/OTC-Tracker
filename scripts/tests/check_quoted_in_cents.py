@@ -101,7 +101,7 @@ print('\n== 4. os quatro caminhos dividem igual ==')
 # arquivos entram na mesma varredura.
 src = (io.open('apps/pages/routes.py', encoding='utf-8').read()
        + io.open('apps/pages/platform/new_deals.py', encoding='utf-8').read()
-       + io.open('apps/pages/features/intrag/engine.py', encoding='utf-8').read()
+       + io.open('apps/pages/features/intrag/commands.py', encoding='utf-8').read()
        + io.open('apps/pages/features/new_deals/entrypoint.py', encoding='utf-8').read())
 check('NDF Comm -> Intrag',
       'strike_effective = strike_val / 100.0 if qic else strike_val' in src, True)

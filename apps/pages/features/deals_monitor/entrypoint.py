@@ -6,11 +6,11 @@ from datetime import datetime
 from flask import jsonify, redirect, render_template, request, session, url_for
 
 from apps.pages import blueprint
-from apps.pages.features.deals_monitor import engine
+from apps.pages.features.deals_monitor import commands, queries
+from apps.pages.features.deals_monitor.infra import persistence
 
 # O wiring do routes registra o scheduler com este nome.
-start_scheduler = None  # preenchido abaixo do import do engine
-start_scheduler = engine._ndm_pending_start_scheduler
+start_scheduler = commands._ndm_pending_start_scheduler
 
 
 def _R():
@@ -28,7 +28,7 @@ def api_new_deals_monitor():
         ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
     except ValueError:
         ref = datetime.now()
-    cards, conf_cards = engine._ndm_monitor_snapshot(ref)
+    cards, conf_cards = queries._ndm_monitor_snapshot(ref)
     return jsonify({'success': True, 'date': ref.strftime('%Y-%m-%d'),
                     'cards': cards, 'conf_cards': conf_cards})
 
@@ -39,11 +39,11 @@ def api_cp_deals_monitor_recipients():
     if not session.get('authenticated'):
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
     if request.method == 'GET':
-        return jsonify({'success': True, **engine._load_ndm_pending_recipients(),
-                        **engine._ndm_pending_status()})
+        return jsonify({'success': True, **persistence._load_ndm_pending_recipients(),
+                        **queries._ndm_pending_status()})
     payload = request.get_json(silent=True) or {}
     try:
-        engine._save_ndm_pending_recipients((payload.get('to') or '').strip(),
+        persistence._save_ndm_pending_recipients((payload.get('to') or '').strip(),
                                      (payload.get('cc') or '').strip())
     except Exception as e:                                  # noqa: BLE001
         _R().log.error('[deals-monitor] save recipients failed:\n%s', traceback.format_exc())
@@ -61,12 +61,12 @@ def api_cp_deals_monitor_run():
         ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
     except ValueError:
         ref = datetime.now()
-    rec = engine._load_ndm_pending_recipients()
+    rec = persistence._load_ndm_pending_recipients()
     to_list, cc_list = _R()._parse_emails(rec['to']), _R()._parse_emails(rec['cc'])
     if not (to_list or cc_list):
         return jsonify({'success': False,
                         'error': 'Nenhum destinatário salvo. Preencha o TO antes de rodar.'}), 400
-    result = engine._send_ndm_pending_email(ref, to_list, cc_list)
+    result = commands._send_ndm_pending_email(ref, to_list, cc_list)
     if result == 'empty':
         return jsonify({'success': True,
                         'message': 'Nothing pending on the Deals Monitor — no e-mail sent.'})

@@ -1,12 +1,6 @@
 # -*- coding: utf-8 -*-
-"""Intrag (NDF / Option / Swap) — os day-files, o ciclo maker/checker e o
-mapeamento do Intrag ID a partir do CSV de export da B3.
-
-Movido VERBATIM do routes.py (nomes preservados). Os GRAVADORES
-(`_save_intrag_ndf_entry`, `_save_intrag_ndf_moeda_entry`,
-`_maybe_save_intrag_opt`, `_maybe_save_intrag_fxo`) são chamados pelos saves
-do New Deals — o routes os alcança pelo gancho `_intrag_engine()` (import
-atrasado), como o `record_rebooks` do mdea.
+"""As escritas do Intrag — a linha espelhada de cada produto (termo de
+mercadoria, termo de moeda e opção) e o mapeamento do B3 ID vindo do retorno.
 """
 import json
 import os
@@ -14,27 +8,14 @@ import re
 import traceback
 from datetime import datetime
 
+from apps.pages.features.intrag import domain, queries
+from apps.pages.features.intrag.infra import mappers, persistence
 
 def _R():
     """Busca ATRASADA no routes — plataforma (ver features/support/infra)."""
     from apps.pages import routes
     return routes
 
-
-INTRAG_NDF_CACHE_DIR = os.path.normpath(os.path.join(
-    _R().data_dir(), "cache", "new deals", "Intrag", "NDF"
-))
-
-INTRAG_OPT_CACHE_DIR = os.path.normpath(os.path.join(
-    _R().data_dir(), "cache", "new deals", "Intrag", "Option"
-))
-
-INTRAG_SWAP_CACHE_DIR = os.path.normpath(os.path.join(
-    _R().data_dir(), "cache", "new deals", "Intrag", "Swap"
-))
-
-INTRAG_NDF_SEND_DIR = os.path.join(
-    _R().Config.SHARED_DRIVE_ROOT, 'Confirmation', 'Derivativos', 'OTC Tracker', 'Intrag')
 
 def _save_intrag_ndf_entry(deal):
     """Compute all Intrag NDF fields and append/update in the daily JSON file."""
@@ -156,40 +137,8 @@ def _save_intrag_ndf_entry(deal):
         'checker':                '',
     }
 
-    _intrag_ndf_persist(entry, td)
+    persistence._intrag_ndf_persist(entry, td)
 
-def _intrag_ndf_persist(entry, td):
-    """Append/update uma entrada no day-file da Intrag NDF (chave = _deal)."""
-    ref = td or datetime.now()
-    dir_path = os.path.join(INTRAG_NDF_CACHE_DIR, ref.strftime('%Y'), ref.strftime('%m'))
-    os.makedirs(dir_path, exist_ok=True)
-    fname = ref.strftime('%Y%m%d') + '_intrag_ndf.json'
-    file_path = os.path.join(dir_path, fname)
-
-    with _R()._cache_lock:
-        if os.path.exists(file_path):
-            try:
-                with open(file_path, 'r', encoding='utf-8') as fh:
-                    entries = json.load(fh)
-                if not isinstance(entries, list):
-                    entries = []
-            except (json.JSONDecodeError, ValueError):
-                entries = []
-        else:
-            entries = []
-        deal_id = entry['_deal']
-        idx = next((i for i, e in enumerate(entries) if e.get('_deal') == deal_id), None)
-        if idx is not None:
-            # Preserve the existing lifecycle state on re-save — only the very
-            # first time an entry lands in the JSON does it start as 'New'.
-            entry['status']  = entries[idx].get('status') or 'New'
-            entry['maker']   = entries[idx].get('maker', '')
-            entry['checker'] = entries[idx].get('checker', '')
-            entries[idx] = entry
-        else:
-            entries.append(entry)
-        _R()._atomic_write_json(file_path, entries)
-    _R().log.info('[INTRAG NDF] Saved entry deal=%r → %s', deal_id, file_path)
 
 def _save_intrag_ndf_moeda_entry(deal):
     """NDF de moeda (Vanilla / Other Publisher contra o Lawton) → entrada na
@@ -277,22 +226,8 @@ def _save_intrag_ndf_moeda_entry(deal):
         'maker':                  '',
         'checker':                '',
     }
-    _intrag_ndf_persist(entry, td)
+    persistence._intrag_ndf_persist(entry, td)
 
-_INTRAG_OPT_JPM_ACC    = '73760.00-9'
-
-_INTRAG_OPT_LAWTON_ACC = '00041.00-7'
-
-_INTRAG_OPT_JPM_NAME    = 'BANCO J.P MORGAN S.A'
-
-_INTRAG_OPT_LAWTON_NAME = 'LAWTON MULTIMERCADO-FI'
-
-def _intrag_opt_name_for(acc):
-    if acc == _INTRAG_OPT_JPM_ACC:
-        return _INTRAG_OPT_JPM_NAME
-    if acc == _INTRAG_OPT_LAWTON_ACC:
-        return _INTRAG_OPT_LAWTON_NAME
-    return ''
 
 def _save_intrag_opt_entry(deal, is_fxo=False):
     """Compute the Intrag Option fields from a New Deals Opt-Comm (or Opt-FXO)
@@ -310,20 +245,20 @@ def _save_intrag_opt_entry(deal, is_fxo=False):
 
     direction = (deal.get('Direction', '') or '').upper()
     if direction == 'BUY':
-        buyer_account = _INTRAG_OPT_LAWTON_ACC
+        buyer_account = domain._INTRAG_OPT_LAWTON_ACC
     elif direction == 'SELL':
-        buyer_account = _INTRAG_OPT_JPM_ACC
+        buyer_account = domain._INTRAG_OPT_JPM_ACC
     else:
         buyer_account = ''
-    buyer_name = _intrag_opt_name_for(buyer_account)
+    buyer_name = domain._intrag_opt_name_for(buyer_account)
     # Seller is the inverse account/name of the buyer.
-    if buyer_account == _INTRAG_OPT_JPM_ACC:
-        seller_account = _INTRAG_OPT_LAWTON_ACC
-    elif buyer_account == _INTRAG_OPT_LAWTON_ACC:
-        seller_account = _INTRAG_OPT_JPM_ACC
+    if buyer_account == domain._INTRAG_OPT_JPM_ACC:
+        seller_account = domain._INTRAG_OPT_LAWTON_ACC
+    elif buyer_account == domain._INTRAG_OPT_LAWTON_ACC:
+        seller_account = domain._INTRAG_OPT_JPM_ACC
     else:
         seller_account = ''
-    seller_name = _intrag_opt_name_for(seller_account)
+    seller_name = domain._intrag_opt_name_for(seller_account)
 
     instrument = (deal.get('Instrument', '') or '').upper()
     if 'PUT' in instrument:
@@ -454,7 +389,7 @@ def _save_intrag_opt_entry(deal, is_fxo=False):
     }
 
     ref = td or datetime.now()
-    dir_path = os.path.join(INTRAG_OPT_CACHE_DIR, ref.strftime('%Y'), ref.strftime('%m'))
+    dir_path = os.path.join(persistence.INTRAG_OPT_CACHE_DIR, ref.strftime('%Y'), ref.strftime('%m'))
     os.makedirs(dir_path, exist_ok=True)
     fname = ref.strftime('%Y%m%d') + '_intrag_opt.json'
     file_path = os.path.join(dir_path, fname)
@@ -483,6 +418,7 @@ def _save_intrag_opt_entry(deal, is_fxo=False):
         _R()._atomic_write_json(file_path, entries)
     _R().log.info('[INTRAG %s] Saved entry deal=%r → %s', 'FXO' if is_fxo else 'OPT', deal_id, file_path)
 
+
 def _maybe_save_intrag_opt(deal):
     """Save to Intrag Option when the counterparty is Banco J.P. Morgan (intragroup)."""
     cl = (deal.get('Client', '') or '').lower()
@@ -491,6 +427,7 @@ def _maybe_save_intrag_opt(deal):
             _save_intrag_opt_entry(deal)
         except Exception as exc:
             _R().log.error('[INTRAG OPT] save failed for deal=%r: %s', deal.get('Deal', ''), exc)
+
 
 def _maybe_save_intrag_fxo(deal):
     """Save an Opt-FXO deal to Intrag Option (shared file) when the counterparty
@@ -502,108 +439,15 @@ def _maybe_save_intrag_fxo(deal):
         except Exception as exc:
             _R().log.error('[INTRAG FXO] save failed for deal=%r: %s', deal.get('Deal', ''), exc)
 
-def _find_intrag_ndf_entry(deal_id, trade_date):
-    """Locate an Intrag NDF entry by deal id (+ optional trade date to narrow the
-    daily file). Returns (file_path, entries_list, idx) or (None, None, None)."""
-    if not deal_id:
-        return None, None, None
-    ref = _R()._parse_date_any(trade_date) if trade_date else None
-    candidate_files = []
-    if ref is not None:
-        fp = os.path.join(
-            INTRAG_NDF_CACHE_DIR, ref.strftime('%Y'), ref.strftime('%m'),
-            ref.strftime('%Y%m%d') + '_intrag_ndf.json'
-        )
-        if os.path.isfile(fp):
-            candidate_files.append(fp)
-    if not candidate_files and os.path.isdir(INTRAG_NDF_CACHE_DIR):
-        for root, _, files in os.walk(INTRAG_NDF_CACHE_DIR):
-            for fname in files:
-                if fname.endswith('_intrag_ndf.json'):
-                    candidate_files.append(os.path.join(root, fname))
-    for fp in candidate_files:
-        try:
-            with open(fp, 'r', encoding='utf-8') as fh:
-                entries = json.load(fh)
-            if not isinstance(entries, list):
-                continue
-        except (json.JSONDecodeError, ValueError, OSError):
-            continue
-        idx = next((i for i, e in enumerate(entries) if e.get('_deal') == deal_id), None)
-        if idx is not None:
-            return fp, entries, idx
-    return None, None, None
-
-def _find_intrag_opt_entry(deal_id, trade_date):
-    """Locate an Intrag Option entry by deal id (+ optional trade date)."""
-    if not deal_id:
-        return None, None, None
-    ref = _R()._parse_date_any(trade_date) if trade_date else None
-    candidate_files = []
-    if ref is not None:
-        fp = os.path.join(INTRAG_OPT_CACHE_DIR, ref.strftime('%Y'), ref.strftime('%m'),
-                          ref.strftime('%Y%m%d') + '_intrag_opt.json')
-        if os.path.isfile(fp):
-            candidate_files.append(fp)
-    if not candidate_files and os.path.isdir(INTRAG_OPT_CACHE_DIR):
-        for root, _, files in os.walk(INTRAG_OPT_CACHE_DIR):
-            for fname in files:
-                if fname.endswith('_intrag_opt.json'):
-                    candidate_files.append(os.path.join(root, fname))
-    for fp in candidate_files:
-        try:
-            with open(fp, 'r', encoding='utf-8') as fh:
-                entries = json.load(fh)
-            if not isinstance(entries, list):
-                continue
-        except (json.JSONDecodeError, ValueError, OSError):
-            continue
-        idx = next((i for i, e in enumerate(entries) if e.get('_deal') == deal_id), None)
-        if idx is not None:
-            return fp, entries, idx
-    return None, None, None
-
-def _intrag_b3_key(v):
-    """B3 ID match key — stripped, leading zeros dropped (both sides)."""
-    s = str(v or '').strip()
-    return s.lstrip('0') or s
-
-def _intrag_find_export_csv():
-    """Most recent Boletas*.csv in the Return folder, or None."""
-    try:
-        cands = [os.path.join(_R().RETURN_PATH, fn) for fn in os.listdir(_R().RETURN_PATH)
-                 if fn.lower().startswith('boletas') and fn.lower().endswith('.csv')]
-    except OSError:
-        return None
-    cands = [p for p in cands if os.path.isfile(p)]
-    return max(cands, key=lambda p: os.path.getmtime(p)) if cands else None
-
-def _intrag_build_b3_map(csv_path, match_col, match_val, b3_col):
-    """Parse the Boletas CSV (no header) → {b3_key → Intrag ID (col A)} for rows whose
-    `match_col` equals `match_val`."""
-    import csv as _csv
-    out = {}
-    with open(csv_path, 'r', encoding='latin-1', newline='') as fh:
-        sample = fh.read(4096); fh.seek(0)
-        delim = ';' if sample.count(';') > sample.count(',') else ','
-        for row in _csv.reader(fh, delimiter=delim):
-            if len(row) <= max(match_col, b3_col):
-                continue
-            if str(row[match_col]).strip().upper() != match_val:
-                continue
-            b3, intrag_id = _intrag_b3_key(row[b3_col]), str(row[0]).strip()
-            if b3 and intrag_id:
-                out.setdefault(b3, intrag_id)
-    return out
 
 def _intrag_run_mapping(deals, match_col, match_val, b3_col, finder):
     """Map each requested deal's B3 ID → Intrag ID via the export CSV, persist the
     intrag_id onto the matching JSON entry (loaded rows only). Returns (results, err)."""
-    csv_path = _intrag_find_export_csv()
+    csv_path = queries._intrag_find_export_csv()
     if not csv_path:
         return None, 'No Boletas CSV found in the Return folder.'
     try:
-        b3map = _intrag_build_b3_map(csv_path, match_col, match_val, b3_col)
+        b3map = mappers._intrag_build_b3_map(csv_path, match_col, match_val, b3_col)
     except Exception:
         _R().log.error('[intrag-map] CSV parse failed:\n%s', traceback.format_exc())
         return None, 'Failed to read the Boletas CSV.'
@@ -611,7 +455,7 @@ def _intrag_run_mapping(deals, match_col, match_val, b3_col, finder):
     with _R()._cache_lock:
         for d in (deals or []):
             did = str(d.get('id') or '').strip()
-            b3  = _intrag_b3_key(d.get('b3_id'))
+            b3  = domain._intrag_b3_key(d.get('b3_id'))
             if not did or not b3 or b3 not in b3map:
                 continue
             intrag_id = b3map[b3]
@@ -629,35 +473,3 @@ def _intrag_run_mapping(deals, match_col, match_val, b3_col, finder):
                 continue
             results.append({'id': did, 'intrag_id': intrag_id, 'status': 'Success'})
     return results, None
-
-def _find_intrag_swap_entry(deal_id, trade_date):
-    """Locate an Intrag Swap entry by deal id (+ optional start date to narrow
-    the daily file). Returns (file_path, entries_list, idx) or (None, None, None)."""
-    if not deal_id:
-        return None, None, None
-    ref = _R()._parse_date_any(trade_date) if trade_date else None
-    candidate_files = []
-    if ref is not None:
-        fp = os.path.join(
-            INTRAG_SWAP_CACHE_DIR, ref.strftime('%Y'), ref.strftime('%m'),
-            ref.strftime('%Y%m%d') + '_intrag_swap.json'
-        )
-        if os.path.isfile(fp):
-            candidate_files.append(fp)
-    if not candidate_files and os.path.isdir(INTRAG_SWAP_CACHE_DIR):
-        for root, _, files in os.walk(INTRAG_SWAP_CACHE_DIR):
-            for fname in files:
-                if fname.endswith('_intrag_swap.json'):
-                    candidate_files.append(os.path.join(root, fname))
-    for fp in candidate_files:
-        try:
-            with open(fp, 'r', encoding='utf-8') as fh:
-                entries = json.load(fh)
-            if not isinstance(entries, list):
-                continue
-        except (json.JSONDecodeError, ValueError, OSError):
-            continue
-        idx = next((i for i, e in enumerate(entries) if e.get('_deal') == deal_id), None)
-        if idx is not None:
-            return fp, entries, idx
-    return None, None, None

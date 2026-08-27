@@ -31,7 +31,9 @@ app = create_app(DebugConfig)
 app.config['TESTING'] = True
 
 # A Intrag mora em features/intrag (nomes preservados no engine).
-from apps.pages.features.intrag import engine as B          # noqa: E402
+# O Intrag mora em features/intrag, separado em camadas (§321): os
+# arquivos-dia e a gravação são de `infra/persistence`.
+from apps.pages.features.intrag.infra import persistence as B   # noqa: E402
 B.INTRAG_NDF_CACHE_DIR = os.path.join(TMP, 'ndf')
 B.INTRAG_OPT_CACHE_DIR = os.path.join(TMP, 'opt')
 B.INTRAG_SWAP_CACHE_DIR = os.path.join(TMP, 'swap')

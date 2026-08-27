@@ -30,8 +30,9 @@ sys.path.insert(0, ROOT)
 os.chdir(ROOT)
 
 from apps.pages import routes as R
-# O Accrual mora em features/accrual (nomes preservados no engine).
-from apps.pages.features.accrual import engine as AE  # noqa: E402  # noqa: E402
+# O Accrual mora em features/accrual, separado em camadas (§321): o gerador
+# de linha é de `commands` (ele chama o _fi_build_line do File Interpreter).
+from apps.pages.features.accrual import commands as AE  # noqa: E402
 
 FAILED = [False]
 

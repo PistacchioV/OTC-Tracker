@@ -8787,9 +8787,15 @@ _XL_ERROR_TEXT = {'#NULL!', '#N/A', '#REF!', '#VALUE!', '#DIV/0!', '#NAME?', '#N
 def _intrag_engine():
     """Gancho para os gravadores da vertical Intrag (features/intrag): os saves
     do New Deals espelham a operação intragrupo para os day-files dela. Import
-    atrasado — os entrypoints só são importados no fim deste arquivo."""
-    from apps.pages.features.intrag import engine
-    return engine
+    atrasado — os entrypoints só são importados no fim deste arquivo.
+
+    Aponta para o `commands` desde a separação interna (§321): os quatro nomes
+    que o New Deals chama (`_save_intrag_ndf_entry`,
+    `_save_intrag_ndf_moeda_entry`, `_maybe_save_intrag_opt` e
+    `_maybe_save_intrag_fxo`) são todos de ESCRITA. O nome da função fica como
+    está: ele é a fronteira que o New Deals conhece."""
+    from apps.pages.features.intrag import commands
+    return commands
 
 
 # ──────────────────────────────────────────────────────────────────────────

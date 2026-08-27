@@ -1,10 +1,8 @@
 # -*- coding: utf-8 -*-
-"""Counterparty Details — o registro por SPN (CGD, contatos, banking, NET) com
-maker/checker por item, e o import da planilha CONTATO DE CLIENTES.
-
-Movido VERBATIM do routes.py. Os LEITORES ficaram lá: `_cpd_path/_cpd_load/
-_cpd_find` (summaries, advices, TED e o e-mail de cobrança leem o registro) e
-os normalizadores compartilhados `_norm_spn/_bank_norm/_cgd_norm`.
+"""As escritas do Counterparty Details — o import da planilha CONTATO DE
+CLIENTES (parse → merge → varredura de placeholders → grava) e o aviso do sino
+das ações de maker/checker. O parse campo a campo (`_cc_*`) e a gravação
+(`_cpd_save_list`) são da `platform/counterparty.py`, por busca atrasada.
 """
 
 
@@ -103,62 +101,7 @@ def _import_client_contacts(filename, raw_bytes):
     }
 
 
-def _bank_get_record(spn):
-    """Return (data, rec, banking) for an SPN, creating the record if needed."""
-    data = _R()._cpd_load()
-    rec = _R()._cpd_find(data, spn)
-    if rec is None:
-        rec = {'SPN': str(spn or '').strip(), 'COUNTERPARTY': '', 'CGD': [],
-               'BANKING': _R()._bank_norm({}), 'CONTACTS': []}
-        data.append(rec)
-    rec['BANKING'] = _R()._bank_norm(rec.get('BANKING'))
-    return data, rec, rec['BANKING']
-
-
-def _cpd_get_record(spn):
-    """Return (data, rec) for an SPN with CGD/CONTACTS/BANKING/NET normalized; create if missing."""
-    data = _R()._cpd_load()
-    rec = _R()._cpd_find(data, spn)
-    if rec is None:
-        rec = {'SPN': str(spn or '').strip(), 'COUNTERPARTY': '', 'CGD': [],
-               'BANKING': _R()._bank_norm({}), 'CONTACTS': [], 'NET': _R()._net_norm({})}
-        data.append(rec)
-    rec['CGD'] = _R()._cgd_norm(rec.get('CGD'))
-    rec['CONTACTS'] = _R()._contacts_norm(rec.get('CONTACTS'))
-    rec['BANKING'] = _R()._bank_norm(rec.get('BANKING'))
-    rec['NET'] = _R()._net_norm(rec.get('NET'))
-    return data, rec
-
-def _contact_disp(c):
-    if not c:
-        return ''
-    return (c.get('name') or c.get('email') or c.get('id') or '').strip()
-
-def _acc_disp(acc):
-    if not acc:
-        return ''
-    return (acc.get('bank') or acc.get('account') or acc.get('id') or '').strip()
-
-def _bank_detail(spn, rec, extra=''):
-    """Notification detail: 'SPN <spn> · <counterparty> · <extra>'. The leading
-    'SPN <spn>' lets the bell deep-link to Reference Data filtered by that SPN."""
-    name = str((rec or {}).get('COUNTERPARTY', '') or '').strip()
-    head = 'SPN {} · {}'.format(spn, name) if name else 'SPN {}'.format(spn)
-    return head + ' · ' + extra if extra else head
-
 def _notify_bank(action, detail):
     """Emit a notification-bell entry for a banking maker/checker action."""
     _R()._create_notification(_R().session.get('user_sid', ''), _R().session.get('user_name', ''),
                          action, 'Reference Data', detail)
-
-def _contact_payload(p):
-    rules = p.get('rules')
-    if not isinstance(rules, list):
-        rules = []
-    return {
-        'name':   str(p.get('name', '') or '').strip(),
-        'phone':  str(p.get('phone', '') or '').strip(),
-        'email':  str(p.get('email', '') or '').strip(),
-        'rules':  [str(r).strip() for r in rules if str(r).strip()],
-        'status': str(p.get('status', 'Active') or 'Active').strip() or 'Active',
-    }

@@ -7,7 +7,8 @@ from datetime import datetime
 from flask import jsonify, request, session
 
 from apps.pages import blueprint
-from apps.pages.features.intrag import engine
+from apps.pages.features.intrag import commands, queries
+from apps.pages.features.intrag.infra import persistence
 
 
 def _R():
@@ -31,7 +32,7 @@ def api_intrag_ndf():
         # Com intervalo há o que PODAR: ano e mês inteiros fora dele são
         # descartados antes de o `scandir` entrar neles. Quem decide continua
         # sendo a data no NOME do arquivo, logo abaixo.
-        for fp, fname, mtime, size in _R()._day_files(engine.INTRAG_NDF_CACHE_DIR, '_intrag_ndf.json', d_from, d_to):
+        for fp, fname, mtime, size in _R()._day_files(persistence.INTRAG_NDF_CACHE_DIR, '_intrag_ndf.json', d_from, d_to):
             fdate = _R()._parse_date_any(fname[:8])
             if fdate is None:
                 continue
@@ -44,7 +45,7 @@ def api_intrag_ndf():
         try:
             ref = datetime.strptime(date_str, '%Y-%m-%d')
             fname = ref.strftime('%Y%m%d') + '_intrag_ndf.json'
-            fp = os.path.join(engine.INTRAG_NDF_CACHE_DIR, ref.strftime('%Y'), ref.strftime('%m'), fname)
+            fp = os.path.join(persistence.INTRAG_NDF_CACHE_DIR, ref.strftime('%Y'), ref.strftime('%m'), fname)
             if os.path.isfile(fp):
                 with open(fp, 'r', encoding='utf-8') as fh:
                     entries = json.load(fh)
@@ -54,7 +55,7 @@ def api_intrag_ndf():
             _R().log.warning('[INTRAG NDF] date load error date=%r: %s', date_str, exc)
     else:
         # Sem data nenhuma: a árvore inteira, e aí só o memo ajuda.
-        for fp, _fname, mtime, size in _R()._day_files(engine.INTRAG_NDF_CACHE_DIR, '_intrag_ndf.json'):
+        for fp, _fname, mtime, size in _R()._day_files(persistence.INTRAG_NDF_CACHE_DIR, '_intrag_ndf.json'):
             entries.extend(_R()._day_json(fp, mtime, size))
     return jsonify({'success': True, 'entries': entries})
 
@@ -73,7 +74,7 @@ def api_intrag_option():
         # Com intervalo há o que PODAR: ano e mês inteiros fora dele são
         # descartados antes de o `scandir` entrar neles. Quem decide continua
         # sendo a data no NOME do arquivo, logo abaixo.
-        for fp, fname, mtime, size in _R()._day_files(engine.INTRAG_OPT_CACHE_DIR, suffix, d_from, d_to):
+        for fp, fname, mtime, size in _R()._day_files(persistence.INTRAG_OPT_CACHE_DIR, suffix, d_from, d_to):
             fdate = _R()._parse_date_any(fname[:8])
             if fdate is None:
                 continue
@@ -85,7 +86,7 @@ def api_intrag_option():
     elif date_str:
         try:
             ref = datetime.strptime(date_str, '%Y-%m-%d')
-            fp = os.path.join(engine.INTRAG_OPT_CACHE_DIR, ref.strftime('%Y'), ref.strftime('%m'),
+            fp = os.path.join(persistence.INTRAG_OPT_CACHE_DIR, ref.strftime('%Y'), ref.strftime('%m'),
                               ref.strftime('%Y%m%d') + suffix)
             if os.path.isfile(fp):
                 with open(fp, 'r', encoding='utf-8') as fh:
@@ -96,7 +97,7 @@ def api_intrag_option():
             _R().log.warning('[INTRAG OPT] date load error date=%r: %s', date_str, exc)
     else:
         # Sem data nenhuma: a árvore inteira, e aí só o memo ajuda.
-        for fp, _fname, mtime, size in _R()._day_files(engine.INTRAG_OPT_CACHE_DIR, suffix):
+        for fp, _fname, mtime, size in _R()._day_files(persistence.INTRAG_OPT_CACHE_DIR, suffix):
             entries.extend(_R()._day_json(fp, mtime, size))
     return jsonify({'success': True, 'entries': entries})
 
@@ -144,7 +145,7 @@ def api_intrag_option_send_file():
             for key, grp in groups.items():
                 ref = grp['ref']
                 month_folder = ref.strftime('%m') + '. ' + _R()._EN_MONTH_NAMES[ref.month - 1]
-                dir_path = os.path.join(engine.INTRAG_NDF_SEND_DIR, ref.strftime('%Y'), month_folder, ref.strftime('%d'))
+                dir_path = os.path.join(persistence.INTRAG_NDF_SEND_DIR, ref.strftime('%Y'), month_folder, ref.strftime('%d'))
                 os.makedirs(dir_path, exist_ok=True)
                 base = 'Intrag-Option-' + key
                 candidate = base + '.txt'
@@ -159,7 +160,7 @@ def api_intrag_option_send_file():
                 _R().log.info('[INTRAG OPT] Wrote send file %s (%d row(s))', file_path, len(grp['rows']))
 
             for deal_id, td_raw in sent_ids:
-                fp, entries, idx = engine._find_intrag_opt_entry(deal_id, td_raw)
+                fp, entries, idx = queries._find_intrag_opt_entry(deal_id, td_raw)
                 if idx is None:
                     continue
                 if (entries[idx].get('status') or 'New') in SENDABLE:
@@ -186,7 +187,7 @@ def api_intrag_option_edit():
     if not deal_id:
         return jsonify({'success': False, 'message': 'Missing deal_id'}), 400
     with _R()._cache_lock:
-        fp, entries, idx = engine._find_intrag_opt_entry(deal_id, trade_date)
+        fp, entries, idx = queries._find_intrag_opt_entry(deal_id, trade_date)
         if idx is None:
             return jsonify({'success': False, 'message': 'Entry not found'}), 404
         if isinstance(fields, dict):
@@ -213,7 +214,7 @@ def api_intrag_option_approve():
         return jsonify({'success': False, 'message': 'Missing deal_id'}), 400
     user_sid = session.get('user_sid', '')
     with _R()._cache_lock:
-        fp, entries, idx = engine._find_intrag_opt_entry(deal_id, trade_date)
+        fp, entries, idx = queries._find_intrag_opt_entry(deal_id, trade_date)
         if idx is None:
             return jsonify({'success': False, 'message': 'Entry not found'}), 404
         if (entries[idx].get('status') or '') != 'Pending':
@@ -287,7 +288,7 @@ def api_intrag_ndf_send_file():
                 ref = grp['ref']
                 month_folder = ref.strftime('%m') + '. ' + _R()._EN_MONTH_NAMES[ref.month - 1]
                 dir_path = os.path.join(
-                    engine.INTRAG_NDF_SEND_DIR, ref.strftime('%Y'), month_folder, ref.strftime('%d')
+                    persistence.INTRAG_NDF_SEND_DIR, ref.strftime('%Y'), month_folder, ref.strftime('%d')
                 )
                 os.makedirs(dir_path, exist_ok=True)
 
@@ -307,7 +308,7 @@ def api_intrag_ndf_send_file():
 
             # Flip status New/Approved → Sent for every persisted entry sent.
             for deal_id, td_raw in sent_ids:
-                fp, entries, idx = engine._find_intrag_ndf_entry(deal_id, td_raw)
+                fp, entries, idx = queries._find_intrag_ndf_entry(deal_id, td_raw)
                 if idx is None:
                     continue
                 if (entries[idx].get('status') or 'New') in SENDABLE:
@@ -337,7 +338,7 @@ def api_intrag_ndf_edit():
         return jsonify({'success': False, 'message': 'Missing deal_id'}), 400
 
     with _R()._cache_lock:
-        fp, entries, idx = engine._find_intrag_ndf_entry(deal_id, trade_date)
+        fp, entries, idx = queries._find_intrag_ndf_entry(deal_id, trade_date)
         if idx is None:
             return jsonify({'success': False, 'message': 'Entry not found'}), 404
         if isinstance(fields, dict):
@@ -368,7 +369,7 @@ def api_intrag_ndf_approve():
 
     user_sid = session.get('user_sid', '')
     with _R()._cache_lock:
-        fp, entries, idx = engine._find_intrag_ndf_entry(deal_id, trade_date)
+        fp, entries, idx = queries._find_intrag_ndf_entry(deal_id, trade_date)
         if idx is None:
             return jsonify({'success': False, 'message': 'Entry not found'}), 404
         if (entries[idx].get('status') or '') != 'Pending':
@@ -389,7 +390,7 @@ def api_intrag_ndf_mapping_intrag_id():
     if not session.get('authenticated'):
         return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
     deals = (request.get_json(silent=True) or {}).get('deals', [])
-    results, err = engine._intrag_run_mapping(deals, 1, 'NDF - TERMO MERCADORIA', 2, engine._find_intrag_ndf_entry)
+    results, err = commands._intrag_run_mapping(deals, 1, 'NDF - TERMO MERCADORIA', 2, queries._find_intrag_ndf_entry)
     if results is None:
         return jsonify({'ok': False, 'error': err}), 400
     return jsonify({'ok': True, 'results': results})
@@ -399,7 +400,7 @@ def api_intrag_option_mapping_intrag_id():
     if not session.get('authenticated'):
         return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
     deals = (request.get_json(silent=True) or {}).get('deals', [])
-    results, err = engine._intrag_run_mapping(deals, 2, 'OPCAO', 8, engine._find_intrag_opt_entry)
+    results, err = commands._intrag_run_mapping(deals, 2, 'OPCAO', 8, queries._find_intrag_opt_entry)
     if results is None:
         return jsonify({'ok': False, 'error': err}), 400
     return jsonify({'ok': True, 'results': results})
@@ -419,7 +420,7 @@ def api_intrag_swap():
         # Com intervalo há o que PODAR: ano e mês inteiros fora dele são
         # descartados antes de o `scandir` entrar neles. Quem decide continua
         # sendo a data no NOME do arquivo, logo abaixo.
-        for fp, fname, mtime, size in _R()._day_files(engine.INTRAG_SWAP_CACHE_DIR, suffix, d_from, d_to):
+        for fp, fname, mtime, size in _R()._day_files(persistence.INTRAG_SWAP_CACHE_DIR, suffix, d_from, d_to):
             fdate = _R()._parse_date_any(fname[:8])
             if fdate is None:
                 continue
@@ -431,7 +432,7 @@ def api_intrag_swap():
     elif date_str:
         try:
             ref = datetime.strptime(date_str, '%Y-%m-%d')
-            fp = os.path.join(engine.INTRAG_SWAP_CACHE_DIR, ref.strftime('%Y'), ref.strftime('%m'),
+            fp = os.path.join(persistence.INTRAG_SWAP_CACHE_DIR, ref.strftime('%Y'), ref.strftime('%m'),
                               ref.strftime('%Y%m%d') + suffix)
             if os.path.isfile(fp):
                 with open(fp, 'r', encoding='utf-8') as fh:
@@ -442,7 +443,7 @@ def api_intrag_swap():
             _R().log.warning('[INTRAG SWAP] date load error date=%r: %s', date_str, exc)
     else:
         # Sem data nenhuma: a árvore inteira, e aí só o memo ajuda.
-        for fp, _fname, mtime, size in _R()._day_files(engine.INTRAG_SWAP_CACHE_DIR, suffix):
+        for fp, _fname, mtime, size in _R()._day_files(persistence.INTRAG_SWAP_CACHE_DIR, suffix):
             entries.extend(_R()._day_json(fp, mtime, size))
     return jsonify({'success': True, 'entries': entries})
 
@@ -490,7 +491,7 @@ def api_intrag_swap_send_file():
             for key, grp in groups.items():
                 ref = grp['ref']
                 month_folder = ref.strftime('%m') + '. ' + _R()._EN_MONTH_NAMES[ref.month - 1]
-                dir_path = os.path.join(engine.INTRAG_NDF_SEND_DIR, ref.strftime('%Y'), month_folder, ref.strftime('%d'))
+                dir_path = os.path.join(persistence.INTRAG_NDF_SEND_DIR, ref.strftime('%Y'), month_folder, ref.strftime('%d'))
                 os.makedirs(dir_path, exist_ok=True)
                 base = 'Intrag-Swap-' + key
                 candidate = base + '.txt'
@@ -505,7 +506,7 @@ def api_intrag_swap_send_file():
                 _R().log.info('[INTRAG SWAP] Wrote send file %s (%d row(s))', file_path, len(grp['rows']))
 
             for deal_id, td_raw in sent_ids:
-                fp, entries, idx = engine._find_intrag_swap_entry(deal_id, td_raw)
+                fp, entries, idx = queries._find_intrag_swap_entry(deal_id, td_raw)
                 if idx is None:
                     continue
                 if (entries[idx].get('status') or 'New') in SENDABLE:
@@ -532,7 +533,7 @@ def api_intrag_swap_edit():
     if not deal_id:
         return jsonify({'success': False, 'message': 'Missing deal_id'}), 400
     with _R()._cache_lock:
-        fp, entries, idx = engine._find_intrag_swap_entry(deal_id, trade_date)
+        fp, entries, idx = queries._find_intrag_swap_entry(deal_id, trade_date)
         if idx is None:
             return jsonify({'success': False, 'message': 'Entry not found'}), 404
         if isinstance(fields, dict):
@@ -559,7 +560,7 @@ def api_intrag_swap_approve():
         return jsonify({'success': False, 'message': 'Missing deal_id'}), 400
     user_sid = session.get('user_sid', '')
     with _R()._cache_lock:
-        fp, entries, idx = engine._find_intrag_swap_entry(deal_id, trade_date)
+        fp, entries, idx = queries._find_intrag_swap_entry(deal_id, trade_date)
         if idx is None:
             return jsonify({'success': False, 'message': 'Entry not found'}), 404
         if (entries[idx].get('status') or '') != 'Pending':
@@ -582,7 +583,7 @@ def api_intrag_swap_mapping_intrag_id():
     if not session.get('authenticated'):
         return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
     deals = (request.get_json(silent=True) or {}).get('deals', [])
-    results, err = engine._intrag_run_mapping(deals, 1, 'SWAP', 2, engine._find_intrag_swap_entry)
+    results, err = commands._intrag_run_mapping(deals, 1, 'SWAP', 2, queries._find_intrag_swap_entry)
     if results is None:
         return jsonify({'ok': False, 'error': err}), 400
     return jsonify({'ok': True, 'results': results})

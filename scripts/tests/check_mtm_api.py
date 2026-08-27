@@ -31,7 +31,10 @@ app = create_app(DebugConfig)
 app.config['TESTING'] = True
 
 # O MtM mora em features/mtm (nomes preservados no engine).
-from apps.pages.features.mtm import engine as B             # noqa: E402
+# O MtM mora em features/mtm, separado em camadas (§321): a raiz do
+# arquivo-dia e de `infra/persistence`, os indices de coluna sao do domain.
+from apps.pages.features.mtm import domain as BD               # noqa: E402
+from apps.pages.features.mtm.infra import persistence as B     # noqa: E402
 B.MTM_JSON_ROOT = TMP
 
 NOTIFS = []
@@ -72,7 +75,7 @@ check('empty, nao 404', (d['success'], d.get('empty')), (True, True))
 
 # ── monta o dataset do dia com a forma real: [..., Valor, ..., Comment,
 #    status, maker, checker, id] — os indices vem das constantes do modulo.
-VIDX, CIDX = B._MTM_VALOR_IDX, B._MTM_COMMENT_IDX
+VIDX, CIDX = BD._MTM_VALOR_IDX, BD._MTM_COMMENT_IDX
 ncells = max(VIDX, CIDX) + 2                 # celulas de dado (Comment = ultima)
 def linha(rid, valor):
     r = ['c%d' % i for i in range(ncells)]
