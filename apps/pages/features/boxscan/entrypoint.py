@@ -82,3 +82,35 @@ def api_new_deals_box_archive():
         _routes().log.error('[api_new_deals_box_archive] %s', e)
         return jsonify({'error': str(e)}), 500
 
+
+
+@blueprint.route('/api/parse-msg-html', methods=['POST'])
+def api_parse_msg_html():
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
+    f = request.files.get('file')
+    if not f:
+        return jsonify({'ok': False, 'error': 'no file'}), 400
+    # Cap the .msg size before handing the bytes to the OLE/CFB parser to avoid
+    # memory-exhaustion DoS from an oversized upload.
+    _MAX_MSG_BYTES = 25 * 1024 * 1024
+    try:
+        import extract_msg
+        import io
+        data = f.read(_MAX_MSG_BYTES + 1)
+        if len(data) > _MAX_MSG_BYTES:
+            return jsonify({'ok': False, 'error': 'file too large'}), 413
+        msg = extract_msg.openMsg(io.BytesIO(data))
+        html_body = getattr(msg, 'htmlBody', None)
+        if html_body:
+            if isinstance(html_body, bytes):
+                html_body = html_body.decode('utf-8', errors='replace')
+            return jsonify({'ok': True, 'html': html_body})
+        # Fallback to plain text body wrapped in <pre>
+        body = getattr(msg, 'body', None) or ''
+        if isinstance(body, bytes):
+            body = body.decode('utf-8', errors='replace')
+        return jsonify({'ok': True, 'html': '<pre>' + body + '</pre>'})
+    except Exception as e:
+        _routes().log.error('parse_msg_html error: %s', e)
+        return jsonify({'ok': False, 'error': str(e)}), 500

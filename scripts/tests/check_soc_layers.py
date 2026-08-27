@@ -241,7 +241,13 @@ for r in ('/holidays-calendar', '/api/holidays/calendars', '/api/holidays/save',
           '/ndf-cockpit', '/api/ndf-cockpit/data',
           '/ndf-other-publisher', '/api/ndf-other-publisher/data',
           '/api/pending-confirmation/derive', '/metrics-pending-confirmation',
-          '/live-position-swap-characteristics', '/live-position-ndf'):
+          '/live-position-swap-characteristics', '/live-position-ndf',
+          '/mapping', '/api/mappings/<key>', '/api/reference-data/counterparties',
+          '/api/b3/add', '/api/b3/update', '/api/b3/delete',
+          '/api/control-panel/daily-settlement-save', '/new-deals-monitor',
+          '/api/parse-msg-html',
+          '/api/new-deals/<product>/cache', '/api/new-deals/<product>/cache/search',
+          '/api/new-deals/<product>/mapping-b3', '/api/new-deals/<product>/send-conecta'):
     check('%s registrada' % r, r in regras, True)
 
 print('\n== 8. o que saiu do routes.py nao ficou nele ==')

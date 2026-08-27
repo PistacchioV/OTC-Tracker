@@ -2179,10 +2179,17 @@ E por fim as cascas de **`confirmation`** (26 rotas — os nove
 editores/validates dos documentos), **`ndf_cockpit`** (7),
 **`ndf_other_publisher`** (7), **`pending_confirmation`** (9 — os três DuckDB
 e as regras `_pc_*` são plataforma) e **`live_positions`** (10).
-O `routes.py` saiu de 39.696 para **24.125** linhas. O que fica nele é o
-coração de plataforma (sessão/authz, notificações, banco, ANBIMA, os motores
-compartilhados) e o **New Deals** (44 rotas + geradores) — a última grande
-vertical, deixada para quando a plataforma tiver casa própria.
+E o fechamento: as cascas de **`mapping`** (3 rotas — o registro
+`_MAPPING_DEFS`/`_mapping_rows` é plataforma), **`index_b3`** (3),
+**`daily_settlement`** (1 — o card; o `_ds_handle` e os stores são plataforma)
+e **`new_deals`** (44 rotas, a maior — os motores, caches, lookups e geradores
+ficam no routes); a página do Monitor foi para o `deals_monitor` e o parser de
+`.msg` para o `boxscan`.
+O `routes.py` saiu de 39.696 para **21.322 linhas** (−46%). O que fica nele é
+SÓ plataforma: sessão/authz, notificações/push, banco, ANBIMA, dashboard, o
+`/mapping` de registro, e os motores compartilhados (New Deals, liquidação,
+File Interpreter, Pending Confirmation, EI, CPD) — o material da futura fase
+`apps/pages/platform/`.
 
 **O guarda ganhou a seção 9** (`check_soc_layers`): desmonta o bytecode de toda
 função das features e cobra que cada `LOAD_GLOBAL` exista no módulo — é o que
@@ -2289,6 +2296,7 @@ fora chamam o grupo; saída = de quantas ele depende:
 | `manual_confirmation` · `mtm` · `cognos` · `otm` · `latam` | ~2400 | 17+16+7+7+7 rotas | — | ✅ feito |
 | `accrual` · `ndf_summary` · `operations_b3` · `other_products` · `file_interpreter` | ~2750 | 15+7+9+29+6 rotas | — | ✅ feito |
 | `confirmation` · `ndf_cockpit` · `ndf_other_publisher` · `pending_confirmation` · `live_positions` | ~1700 | 26+7+7+9+10 rotas | — | ✅ feito |
+| `mapping` · `index_b3` · `daily_settlement` · `new_deals` | ~2600 | 3+3+1+44 rotas | — | ✅ feito |
 | `file-interpreter` | 307 | **43** | 4 | tarde |
 | `mapping` | 1263 | 39 | 35 | tarde |
 | `notificações` | 393 | **161** | 9 | é PLATAFORMA, não feature |

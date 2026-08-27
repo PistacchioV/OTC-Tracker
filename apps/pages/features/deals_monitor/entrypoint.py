@@ -3,7 +3,7 @@
 import traceback
 from datetime import datetime
 
-from flask import jsonify, request, session
+from flask import jsonify, redirect, render_template, request, session, url_for
 
 from apps.pages import blueprint
 from apps.pages.features.deals_monitor import engine
@@ -78,3 +78,11 @@ def api_cp_deals_monitor_run():
     return jsonify({'success': True,
                     'message': 'Pending Action enviado para {} destinatário(s).'.format(
                         len(to_list) + len(cc_list))})
+
+
+@blueprint.route('/new-deals-monitor')
+def new_deals_monitor():
+    if not session.get('authenticated'):
+        return redirect(url_for('pages_blueprint.sign_in_page'))
+    return render_template('pages/new-deals-monitor.html', segment='new-deals-monitor',
+                           today=_R()._br_now().strftime('%Y-%m-%d'))

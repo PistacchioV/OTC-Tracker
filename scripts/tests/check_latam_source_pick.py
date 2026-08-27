@@ -64,10 +64,12 @@ with tempfile.TemporaryDirectory() as tmp:
 
 # o Save Daily Settlement chama o mesmo seletor — os dois caminhos têm de
 # concordar sobre qual é o relatório do dia
-src = io.open(os.path.join(ROOT, 'apps', 'pages', 'routes.py'), encoding='utf-8').read()
+src = (io.open(os.path.join(ROOT, 'apps', 'pages', 'routes.py'), encoding='utf-8').read()
+       + io.open(os.path.join(ROOT, 'apps/pages/features/daily_settlement/entrypoint.py'), encoding='utf-8').read())
 ini = src.index('def api_cp_daily_settlement_save')
 corpo = src[ini:ini + 4000]
-ok('_latam_pick_source(folder_files, SETTLEMENTS_ROOT)' in corpo,
+ok('_latam_pick_source(folder_files, SETTLEMENTS_ROOT)' in corpo
+   or '_latam_pick_source(folder_files, _R().SETTLEMENTS_ROOT)' in corpo,
    'Save Daily Settlement usa o mesmo _latam_pick_source')
 ok('folder_files.sort()' in corpo,
    'a varredura da pasta é ordenada (os.listdir não tem ordem garantida)')
