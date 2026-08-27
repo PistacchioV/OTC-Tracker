@@ -13844,3 +13844,77 @@ Nenhum teste precisou de repoint neste lote (os quatro do §316 já tinham sido;
 Treze módulos na `platform/`, `routes.py` em **15.828 linhas** (−1.588 no lote; −4.311 na fase
 de motores; 21.322 no fechamento da campanha). Suíte: 96/96 verdes. Próximas fatias: FI/PC/OpB3,
 New Deals — e as seis separações internas dos verbatim.
+
+## §318 — platform/: FI, Pending Confirmation e Operations B3 (2026-08-27)
+
+Sétimo, oitavo e nono motores da fase (a fatia "FI/PC/OpB3" da fila do §317), no mesmo padrão
+§314/§315 — verbatim por bytecode, alias no routes, guardas na mesma mudança:
+
+- **`file_interpreter.py`** (~420 linhas) — templates, variantes por par de pernas
+  (`_fi_variant_key`), fórmulas (`_fi_calc_value`) e a montagem de linha (`_fi_build_line`). O
+  **`_FILE_INTERPRETER_DIR` FICOU no routes** (os sete check_fi_* fazem `R._FILE_INTERPRETER_DIR
+  = tmp`); calendário e mappings do LOOKUP por busca atrasada. O cache `_fi_tpl_cache` (in
+  place) mora na platform com alias vivo.
+- **`pending_confirmation.py`** (~840 linhas) — os três DuckDBs, `_pc_derive_row`, as TRÊS
+  regras de Pending Status (§7), a manutenção das 11:30, o snapshot, as métricas e o
+  `_pc_save_from_deal` (que dispara a esteira via `routes._mc_save_from_deal` — atrasado, então
+  os espiões seguem valendo). `_PC_DB_DIR` e `_B3_DATA_DIR` ficaram no routes (superfície de
+  patch); o estado `_pc_scheduler_started` (REBINDADO) mora na platform; o REGISTRO do
+  scheduler segue no wiring do routes.
+- **`operations_b3.py`** (~720 linhas) — o arquivo-dia (`_opb3_load`/`_opb3_import`), as regras
+  do cadastro `opb3-events`, o breakdown, os mapas de perna interna (TER/swap/NDFC/swap-prem) e
+  a mensageria. Os dois loaders `@_req_cached` vieram junto (o decorador por import direto do
+  `request_cache`, como no §316) e o `check_req_cache` passou a ler o arquivo novo. O
+  `_OPB3_MSG_RECIPIENTS_FILE` FICOU no routes: é caminho sobre `_DAILY_METRIC_DIR`, que os
+  testes patcham.
+
+Um tropeço instrutivo: a whitelist do extrator dizia `json` e o módulo do FI nasceu SEM o
+`import json` — e o `except Exception` do `_fi_load` engoliu o NameError, devolvendo None como
+se o template não existisse. É a mesma classe de silêncio que a seção 9 do guarda caça; a
+whitelist de um slice tem de casar com os imports do header, e o pyflakes nos módulos novos
+agora faz parte do fecho de cada fatia.
+
+Repoints: `check_pc_mass_update` (fonte + platform/pending_confirmation.py) e `check_req_cache`
+(platform/operations_b3.py na lista). Os `_fontes_com_rotas_` não mudaram.
+
+## §319 — platform/new_deals.py: o motor do New Deals (2026-08-27)
+
+O décimo motor, o maior da fase (~2.450 linhas, 82 nomes): os caches de deal das quatro páginas
+(`_find_*`, `_deal_matches`, `_fxo_deal_from_row`, `_ndf_deal_from_api`), os dois pulls da
+Athena com schedulers (estado `*_scheduler_started` rebindado mora lá), a regra de Amend
+(`_ND_AMEND_*`, `_nd_api_amend`, `_nd_cancel_in_file`), a resolução de contraparte por accronym
+(§7), a perna fraca (`_ndf_weak_leg`), o espelho Lawton e a geração TER
+(`_generic_ndf_ter_line`, `_ndf_comm_ter_lines`).
+
+Duas decisões de fronteira que valem regra:
+
+- **Função patchada E chamada por dentro da fatia pode simplesmente FICAR no routes.** O
+  `_fxo_refdata_by_spn` (3 testes patcham) e o par `_GENERIC_ND_PRODUCTS`/`_generic_nd_cfg`
+  (2 testes) são chamados por sete funções movidas — movê-los exigiria dual-patch em cinco
+  testes; morando no routes, TODO caminho passa por `routes.<nome>` e os espiões interceptam de
+  graça. É o complemento da lição do §316: dual-patch é o remédio, ficar no routes é a vacina.
+- **A "única entrada de fora" do mdea virou gancho da casca.** O pull importava
+  `features.mdea.entrypoint` de dentro da função; na platform isso feria "platform nunca importa
+  feature". O `routes._mdea_record_rebooks` faz a travessia (platform → routes → feature, tudo
+  atrasado) — quem conhece as verticais é a casca.
+
+O `_nd_token` NÃO veio: é helper de notificação (Accrual e afins o usam) — nome parecido não é
+pertencimento. `_ndfadv_*`/`_ndfc_*`/`_ndfsum_*` também não: são a liquidação de NDF, fatia que
+não existe mais como fila (ficam como plataforma miúda no routes).
+
+Repoints (todos ancorados em texto): check_cancel_remove (recorta o corpo do arquivo novo e dá
+ao `from apps.pages import routes` um routes FALSO em sys.modules — mantém o "sem subir o app"
+com os mesmos stubs), check_counterparty_lookup, check_import_window, check_quote_type,
+check_quoted_in_cents, check_manual_deals_ea.
+
+No mesmo dia, fora da fase: o log do sino passou a imprimir o `NOTIF_DB_PATH` (imprimia o banco
+de USUÁRIOS — mandava caçar lock no arquivo errado) e a abertura do poll ganhou UMA retentativa
+de 250 ms num laço (um ponto de chamada `unlocked=True`, que é o que o check_unlocked_reads
+prende): a colisão com uma gravação em curso — o "different configuration than existing
+connections" do DuckDB — é de milissegundos, e o ERROR fica reservado à falha que persiste.
+
+**Dezessete módulos na `platform/`, `routes.py` em ~11.870 linhas** (−3.960 nos dois lotes;
+−9,4 mil na fase de motores; era 21.322 no fechamento da campanha e 39 mil no início de tudo).
+Suíte: 96/96 verdes, app com 377 rotas. A fila de motores ACABOU — o que resta são as seis
+separações internas dos verbatim (deals_monitor, cetip, intrag, counterparty_details, mtm,
+accrual).

@@ -2295,10 +2295,9 @@ seguem no `database_access.py`) e **`authz.py`** (master/admin, allowlist do
 endpoints do sino e os dois `before_request` continuam no `routes.py`: rota e
 registro em blueprint são casca.
 
-**Seis MOTORES já saíram (§316–§317):** **`settlement.py`** (a família
+**DEZ MOTORES já saíram (§316–§319):** **`settlement.py`** (a família
 de liquidação — `_ops_trade_rows` e todo o `_ops_*`/`_opssum_*`/`_opsadv_*`,
-mais o elo de equity `_ops_equity_link`/`_latam_equity_b3_index`; os leitores
-`_opb3_*` FICARAM no `routes` de propósito, são da fatia FI/PC/OpB3),
+mais o elo de equity `_ops_equity_link`/`_latam_equity_b3_index`),
 **`confirmations.py`** (o motor `_conf_*` das quatro famílias — segregação,
 estado New→Generated→Success, `_conf_esteira_stages`, as páginas de geração e
 o XML da B3), **`counterparty.py`** (o CounterpartyDetails.json — `_cpd_*`,
@@ -2308,11 +2307,27 @@ o XML da B3), **`counterparty.py`** (o CounterpartyDetails.json — `_cpd_*`,
 de liquidação também lê), **`electronic_inventory.py`** (resolução de pasta no
 share, o scanner com cache, versões ordinais e listagem — o
 **`ELECTRONIC_INVENTORY_ROOT` FICA no routes** de propósito: é superfície de
-patch do check_ei_api, como `_B3_DATA_DIR`) e **`manual_confirmation.py`** (a
+patch do check_ei_api, como `_B3_DATA_DIR`), **`manual_confirmation.py`** (a
 cola `_mc_*` da esteira — `_mc_save_from_deal`, `_mc_confirmation_docs`,
 `_MC_STAGE_ROLE`/`_MC_STAGE_NOTIFY_ROLES`, `_mc_generate_url`, `_mc_pc_sync`;
 o dono do banco segue sendo o `manual_conf.py`, importado direto como
-`_mc_mod`).
+`_mc_mod`), **`file_interpreter.py`** (§318 — templates, variantes,
+`_fi_calc_value`/`_fi_build_line`; o `_FILE_INTERPRETER_DIR` fica no routes,
+superfície de patch dos check_fi_*), **`pending_confirmation.py`** (§318 — os
+três DuckDBs, `_pc_derive_row`, as regras de Pending Status, a manutenção das
+11:30, o snapshot e o `_pc_save_from_deal`; `_PC_DB_DIR` fica no routes),
+**`operations_b3.py`** (§318 — o arquivo-dia, as regras do `opb3-events`, o
+breakdown, os mapas de perna interna e a mensageria; os dois loaders
+`@_req_cached` foram junto) e **`new_deals.py`** (§319, a maior — os caches de
+deal das quatro páginas, os dois pulls da Athena com schedulers, a regra de
+Amend, a resolução de contraparte por accronym, a perna fraca, o espelho
+Lawton e a geração TER; os caminhos de cache, o `_fxo_refdata_by_spn` e o par
+`_GENERIC_ND_PRODUCTS`/`_generic_nd_cfg` FICAM no routes — patchados pelos
+testes E chamados por dentro da fatia, só interceptam todos os caminhos
+morando lá; o `_nd_token` também ficou: é helper de NOTIFICAÇÃO, o Accrual o
+usa. A "única entrada de fora" do mdea virou o gancho
+`routes._mdea_record_rebooks` — platform não importa feature, quem conhece as
+verticais é a casca).
 
 Lições do lote §316/§317: **chamada interna do módulo não passa pelo alias** —
 teste que troca uma função chamada por DENTRO da própria fatia (`_cpd_path`,
@@ -2330,8 +2345,14 @@ ponto do import — são os mesmos objetos). O `@_req_cached` vem do
 `_fontes_com_rotas_` dos oito testes ancorados em texto varre `platform/`
 junto de `features/`, então as próximas fatias não o editam.
 
-O padrão da fase, que as próximas fatias repetem (motores compartilhados —
-FI/PC/OpB3, New Deals — nessa fila):
+**A fila de MOTORES acabou no §319.** O que resta no `routes.py` (~11,9 mil
+linhas) é casca e plataforma miúda: sessão/authz-endpoints, o registro
+`_MAPPING_DEFS`, os leitores `_ndfc_*`/`_ndfsum_*`/`_ndfadv_*` da liquidação
+de NDF, o Daily Settlement (`_ds_*`), o wiring das features e os aliases. O
+trabalho que segue são as **seis separações internas dos verbatim**
+(deals_monitor, cetip, intrag, counterparty_details, mtm, accrual).
+
+O padrão da fase, que qualquer fatia futura repete:
 
 - **o `routes.py` mantém os nomes como ALIAS** (`_x = _pf_anbima._x`): features
   seguem alcançando por `routes.<nome>` e os testes que trocam a FUNÇÃO no
