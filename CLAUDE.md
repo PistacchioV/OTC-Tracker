@@ -448,7 +448,16 @@ que parece:
   — a allowlist do `Page_Access`, o login e o papel que filtra os tickets
   DECIDEM coisas, e um dado parcial ali vira autorização errada. O
   `check_unlocked_reads.py` prende os pontos de chamada por AST e barra por nome
-  as funções de autorização. O aviso `file_lock_skipped` sai **uma vez por
+  as funções de autorização. E a leitura sem lock tem um efeito colateral que
+  não é dela: o DuckDB guarda UMA instância por arquivo dentro do processo e
+  recusa a segunda conexão com outra configuração — com um poll aberto
+  `read_only`, era o **`duckdb_write` do `_create_notification` que estourava**
+  ("different configuration than existing connections") e a notificação se
+  perdia. O `_UnlockedReadGate` do `database_access` coordena os dois EM
+  MEMÓRIA (o conflito é só intra-processo; nenhuma ida ao share): a escrita
+  espera os polls em voo fecharem, o poll espera um pouco por uma escrita em
+  curso e, no teto, degrada para o sino vazio de sempre — nunca para uma fila.
+  `check_unlocked_gate.py` prende os dois sentidos e os dois tetos. O aviso `file_lock_skipped` sai **uma vez por
   banco**, não por leitura: ele é WARNING, WARNING passa pelo gate que silencia
   o ruído de INFO, e uma linha por poll seria a maior parte do log.
 - **Quem só faz SELECT abre com `get_db_connection(readonly=True)`.** O caminho
@@ -2097,6 +2106,21 @@ Intrag ficavam com o valor cru sempre que o notional estava na moeda fraca
   reiniciado** ou o código velho continua servindo. Vários "não está
   funcionando" vieram daí. Edição de mapping pela tela é a exceção — vale no
   request seguinte.
+- **O bytecode não pode ser gravado no share** (`PYTHONPYCACHEPREFIX` no `.bat`
+  de subida). Sem isso o Python cria um `__pycache__` ao lado de CADA `.py` —
+  que ali é remoto — e um pull grande vira centenas de gravações atômicas via
+  rede: a subida fica minutos parada no `importlib` **sem imprimir nada** e
+  parece travada. Quem cancela vê um `KeyboardInterrupt` no import de um módulo
+  qualquer, e o módulo **muda a cada tentativa** — essa é a assinatura, porque
+  o culpado não é ele, é o que estava na vez. O caminho vai para
+  `%LOCALAPPDATA%`, nunca `%TEMP%` (Limpeza de Disco apaga e a subida seguinte
+  recompila tudo), e **nunca** use `PYTHONDONTWRITEBYTECODE`: evita a escrita
+  ao custo de recompilar a cada subida, e a instância reinicia várias vezes ao
+  dia. O `start-prod.bat` já tem a linha; o `start-otc-tracker.bat` da
+  instância mora no share, não está no repo, e é colado à mão — HANDOFF §322
+  tem o bloco e as três armadilhas do espelhamento (a letra da unidade é
+  descartada, o `pushd` do `.bat` mapeia o share numa letra qualquer, e versões
+  diferentes precisam de prefixos diferentes).
 - **O `config.py` é o arquivo que fica para trás.** Ele é o único que se ajusta
   à mão na instância, e `git pull` **não sobrescreve arquivo modificado**: o
   resto da árvore atualiza e ele não, deixando o checkout com dois commits
@@ -2126,6 +2150,7 @@ Rodam **uma vez na instância do time depois do pull**. Todas idempotentes.
 | `import_manual_confirmations.py` | **cria** os dois DuckDBs da esteira e semeia do `MANUAIS.xlsx` (`--xlsx`, `--schema-only`) |
 | `backfill_manual_confirmations.py` | traz para a esteira o que foi mapeado **antes** dela existir (`--dry-run`, `--source`) |
 | `import_cgd_sharepoint.py` | carrega a lista de CGDs do SharePoint (`Sharepoint-CGD.xlsx`) no DuckDB do Onboarding (`--xlsx`, `--sheet`, `--dry-run`, `--schema-only`). REESCREVE a tabela: rodar de novo dá o mesmo resultado |
+| `convert_json_to_duckdb.py` | a migração JSON → DuckDB (HANDOFF §324): materializa os JSONs do `Config.DATA_DIR` em `<DATA_DIR>/duckdb/` — `holiday_calendars.db` (uma tabela por calendário do registro), `reference_data.db` (`refdata` + `counterparty_details`, tudo VARCHAR — zero à esquerda) e `daily_caches.db` (um schema por rotina, uma tabela por dia, tipada). Ao contrário das demais, é feito para RODAR DE NOVO: incremental por `_manifest` (mtime/tamanho), só reconverte o que mudou; calendário/dia novo vira tabela nova (`--only`, `--force`, `--dry-run`) |
 
 > `apps/static/data/db/` está no **`.gitignore`**, então os bancos **não vêm no
 > pull**. Sem rodar `import_manual_confirmations.py` as duas telas de Manual
