@@ -4,7 +4,7 @@
 Só a casca: o `_ds_handle` e os stores por dia são plataforma — cinco telas leem o que ele grava.
 """
 
-from flask import (                   session, url_for)
+from flask import jsonify, request, session
 
 
 
@@ -23,11 +23,11 @@ def api_cp_daily_settlement_save():
     the daily-settlement cache (today's date). Folder sources are deleted after
     processing (mirrors the VBA Kill). OTM cashflows are handled on their own
     page and are ignored here. No file anywhere → error (UI warns the user)."""
-    if not _R().session.get('authenticated'):
-        return _R().jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
 
     ref = _R().datetime.now()
-    uploaded = [f for f in _R().request.files.getlist('files') if f and f.filename]
+    uploaded = [f for f in request.files.getlist('files') if f and f.filename]
     processed, skipped = [], []
     source = 'dropzone'
 
@@ -44,7 +44,7 @@ def api_cp_daily_settlement_save():
             except OSError:
                 folder_files = []
         if not folder_files:
-            return _R().jsonify({'success': False,
+            return jsonify({'success': False,
                             'error': ('Nenhum arquivo encontrado para processamento — o dropzone está '
                                       'vazio e não há arquivos em {}.'.format(_R().SETTLEMENTS_ROOT))}), 400
         # Latam Desk Position: a pasta pode ter mais de um relatório (ele é
@@ -69,7 +69,7 @@ def api_cp_daily_settlement_save():
 
     if processed:
         types = ', '.join(p['type'] for p in processed)
-        _R()._create_notification(_R().session.get('user_sid', ''), _R().session.get('user_name', ''),
+        _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                              'Daily Settlement Saved', 'Control Panel',
                              '{} file(s) processed: {} ({})'.format(len(processed), types, ref.strftime('%Y-%m-%d')))
 
@@ -84,5 +84,5 @@ def api_cp_daily_settlement_save():
         msg += ('<br><br>' if msg else '') + \
             '<span class="text-muted">{} ignored (unrecognized): {}</span>'.format(
                 len(skipped), ', '.join(skipped[:8]) + ('…' if len(skipped) > 8 else ''))
-    return _R().jsonify({'success': True, 'source': source, 'processed': processed,
+    return jsonify({'success': True, 'source': source, 'processed': processed,
                     'skipped': skipped, 'message': msg or 'Nothing to process.'})

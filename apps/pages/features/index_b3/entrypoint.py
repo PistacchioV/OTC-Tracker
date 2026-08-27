@@ -4,7 +4,7 @@
 Só a casca: o arquivo é o MESMO que o cadastro swap-index do /mapping edita.
 """
 
-from flask import (                   session, url_for)
+from flask import jsonify, request, session
 
 
 
@@ -16,30 +16,30 @@ def _R():
 
 @_R().blueprint.route('/api/b3/update', methods=['POST'])
 def api_b3_update():
-    if not _R().session.get('authenticated'):
-        return _R().jsonify({'ok': False, 'error': 'Unauthorized'}), 401
-    payload = _R().request.get_json(silent=True) or {}
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Unauthorized'}), 401
+    payload = request.get_json(silent=True) or {}
     table   = payload.get('table', '')
     idx     = payload.get('idx')
     fields  = payload.get('fields', {})
     action  = payload.get('action', 'edit')   # 'edit' | 'approve'
-    user    = _R().session.get('user_sid', 'UNKNOWN')
+    user    = session.get('user_sid', 'UNKNOWN')
 
     if table not in _R()._B3_FILE_MAP or idx is None:
-        return _R().jsonify({'ok': False, 'error': 'bad_request'}), 400
+        return jsonify({'ok': False, 'error': 'bad_request'}), 400
 
     if not _R()._user_can_access_page('/reference-data' if table == 'refdata' else '/index-b3'):
-        return _R().jsonify({'ok': False, 'error': 'forbidden'}), 403
+        return jsonify({'ok': False, 'error': 'forbidden'}), 403
 
     records, path = _R()._b3_load(table)
     if not (0 <= int(idx) < len(records)):
-        return _R().jsonify({'ok': False, 'error': 'bad_index'}), 400
+        return jsonify({'ok': False, 'error': 'bad_index'}), 400
 
     rec = records[int(idx)]
 
     if action == 'approve':
         if rec.get('MAKER') == user:
-            return _R().jsonify({'ok': False, 'error': 'same_user'}), 403
+            return jsonify({'ok': False, 'error': 'same_user'}), 403
         rec['CHECKER'] = user
         new_status = 'INACTIVE' if rec.get('STATUS') == 'PENDING INACTIVE' else 'ACTIVE'
         rec['STATUS']  = new_status
@@ -80,26 +80,26 @@ def api_b3_update():
     else:
         page = 'Index B3'
         detail = table + ' — ' + action + ' → ' + new_status
-    _R()._create_notification(user, _R().session.get('user_name', ''), 'Item Updated', page, detail)
-    return _R().jsonify({'ok': True, 'new_status': new_status})
+    _R()._create_notification(user, session.get('user_name', ''), 'Item Updated', page, detail)
+    return jsonify({'ok': True, 'new_status': new_status})
 
 @_R().blueprint.route('/api/b3/delete', methods=['POST'])
 def api_b3_delete():
-    if not _R().session.get('authenticated'):
-        return _R().jsonify({'ok': False, 'error': 'Unauthorized'}), 401
-    payload = _R().request.get_json(silent=True) or {}
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Unauthorized'}), 401
+    payload = request.get_json(silent=True) or {}
     table   = payload.get('table', '')
     idx     = payload.get('idx')
 
     if table not in _R()._B3_FILE_MAP or idx is None:
-        return _R().jsonify({'ok': False, 'error': 'bad_request'}), 400
+        return jsonify({'ok': False, 'error': 'bad_request'}), 400
 
     if not _R()._user_can_access_page('/reference-data' if table == 'refdata' else '/index-b3'):
-        return _R().jsonify({'ok': False, 'error': 'forbidden'}), 403
+        return jsonify({'ok': False, 'error': 'forbidden'}), 403
 
     records, path = _R()._b3_load(table)
     if not (0 <= int(idx) < len(records)):
-        return _R().jsonify({'ok': False, 'error': 'bad_index'}), 400
+        return jsonify({'ok': False, 'error': 'bad_index'}), 400
 
     removed = records.pop(int(idx))
     _R()._b3_save(path, records)
@@ -113,24 +113,24 @@ def api_b3_delete():
     else:
         page = 'Index B3'
         detail = table
-    _R()._create_notification(_R().session.get('user_sid', ''), _R().session.get('user_name', ''),
+    _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                          'Item Deleted', page, detail)
-    return _R().jsonify({'ok': True})
+    return jsonify({'ok': True})
 
 @_R().blueprint.route('/api/b3/add', methods=['POST'])
 def api_b3_add():
-    if not _R().session.get('authenticated'):
-        return _R().jsonify({'ok': False, 'error': 'Unauthorized'}), 401
-    payload = _R().request.get_json(silent=True) or {}
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Unauthorized'}), 401
+    payload = request.get_json(silent=True) or {}
     table   = payload.get('table', '')
     fields  = payload.get('fields', {})
-    user    = _R().session.get('user_sid', 'UNKNOWN')
+    user    = session.get('user_sid', 'UNKNOWN')
 
     if table not in _R()._B3_FILE_MAP:
-        return _R().jsonify({'ok': False, 'error': 'bad_request'}), 400
+        return jsonify({'ok': False, 'error': 'bad_request'}), 400
 
     if not _R()._user_can_access_page('/reference-data' if table == 'refdata' else '/index-b3'):
-        return _R().jsonify({'ok': False, 'error': 'forbidden'}), 403
+        return jsonify({'ok': False, 'error': 'forbidden'}), 403
 
     records, path = _R()._b3_load(table)
     fields['STATUS']  = 'PENDING'
@@ -152,5 +152,5 @@ def api_b3_add():
     else:
         page = 'Index B3'
         detail = table + ': ' + str(fields.get('TICKER', fields.get('CODE', fields.get('NAME', ''))))
-    _R()._create_notification(user, _R().session.get('user_name', ''), 'New Item', page, detail)
-    return _R().jsonify({'ok': True, 'idx': len(records) - 1})
+    _R()._create_notification(user, session.get('user_name', ''), 'New Item', page, detail)
+    return jsonify({'ok': True, 'idx': len(records) - 1})
