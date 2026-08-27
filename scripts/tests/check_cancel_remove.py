@@ -6,16 +6,28 @@ que vira Canceled e continua visivel.
 import io, json, os, re, sys, tempfile, threading
 
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))   # scripts/tests/ -> raiz do repo
-SRC = os.path.join(ROOT, 'apps', 'pages', 'routes.py')
+# O motor mora em platform/new_deals.py desde o §319. O corpo recortado faz
+# `from apps.pages import routes` (busca atrasada do lock/writer), e para o
+# teste continuar SEM subir o app o `routes` que ele encontra e um FALSO em
+# sys.modules — os mesmos stubs que antes entravam pelo namespace do exec.
+SRC = os.path.join(ROOT, 'apps', 'pages', 'platform', 'new_deals.py')
 src = io.open(SRC, encoding='utf-8').read()
 
 m = re.search(r'^def _nd_cancel_in_file\(.*?(?=\n\ndef )', src, re.S | re.M)
 assert m, 'nao achei _nd_cancel_in_file'
-ns = {'os': os, 'json': json, '_cache_lock': threading.RLock()}
 def _atomic_write_json(p, data):
     with io.open(p, 'w', encoding='utf-8') as fh:
         json.dump(data, fh, ensure_ascii=False, indent=2)
-ns['_atomic_write_json'] = _atomic_write_json
+import types
+_fake_routes = types.SimpleNamespace(_cache_lock=threading.RLock(),
+                                     _atomic_write_json=_atomic_write_json)
+_fake_pages = types.ModuleType('apps.pages')
+_fake_pages.routes = _fake_routes
+_fake_apps = types.ModuleType('apps')
+_fake_apps.pages = _fake_pages
+sys.modules['apps'] = _fake_apps
+sys.modules['apps.pages'] = _fake_pages
+ns = {'os': os, 'json': json}
 exec(compile(m.group(0), 'cut', 'exec'), ns)
 fn = ns['_nd_cancel_in_file']
 

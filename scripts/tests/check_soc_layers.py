@@ -357,7 +357,40 @@ for morto in ('_tk_roles_by_sid', '_tk_can_view', '_tk_public',
               'def _mc_save_from_deal', 'def _mc_legal_entity',
               'def _mc_confirmation_docs', 'def _mc_pc_sync',
               'def _mc_notify_roles', 'def _mc_can_validate',
-              'def _mc_generate_url', '_MC_STAGE_NOTIFY_ROLES = {'):
+              'def _mc_generate_url', '_MC_STAGE_NOTIFY_ROLES = {',
+              # ... §318: o File Interpreter para platform/file_interpreter.py
+              # (o _FILE_INTERPRETER_DIR fica no routes: superficie de patch) ...
+              'def _fi_load', 'def _fi_clean_template', 'def _fi_variant_key',
+              'def _fi_calc_value', 'def _fi_build_line',
+              'def _fi_effective_seq_value', '_FI_CALC_RE = re.compile',
+              # ... o Pending Confirmation para platform/pending_confirmation.py
+              # (_PC_DB_DIR e _B3_DATA_DIR ficam no routes: superficie de patch) ...
+              'def _pc_load_rows', 'def _pc_derive_row',
+              'def _pc_signature_pending_status', 'def _pc_import_update',
+              'def _pc_is_internal_counterparty', 'def _pc_apply_auto_rules',
+              'def _pc_save_from_deal', 'def _pc_run_daily_maintenance',
+              'def _pc_snapshot_pending', '_PC_ESTEIRA_STATUSES = {',
+              # ... e o Operations B3 para platform/operations_b3.py
+              # (o _OPB3_MSG_RECIPIENTS_FILE fica no routes: caminho sobre
+              # _DAILY_METRIC_DIR, que os testes patcham).
+              'def _opb3_load', 'def _opb3_import', 'def _opb3_event_rules',
+              'def _opb3_settle_rows', 'def _opb3_collect',
+              'def _opb3_breakdown', 'def _opb3_tipo_maps',
+              'def _opb3_msg_load_recipients', 'def _ops_norm_event',
+              '_OPB3_COLUMNS = [',
+              # ... §319: o motor do New Deals para platform/new_deals.py
+              # (os caminhos de cache, o _fxo_refdata_by_spn e o
+              # _generic_nd_cfg ficam no routes: superficie de patch e
+              # chamada interna).
+              'def _find_deal_in_cache', 'def _find_ndf_deal_in_cache',
+              'def _find_fxo', 'def _deal_matches', 'def _fxo_deal_from_row',
+              'def _ndf_deal_from_api', 'def _nd_api_amend',
+              'def _nd_amend_is_economic', 'def _nd_cancel_in_file',
+              'def _fxo_api_pull', 'def _ndf_api_pull',
+              'def _ndf_ref_by_accronym', 'def _ndf_weak_leg',
+              'def _generic_ndf_ter_line', 'def _ndf_comm_ter_lines',
+              'def _nd_lawton_mirror', 'def _generic_nd_mapping_candidates',
+              '_ND_AMEND_COSMETIC_BY_PRODUCT = {'):
     check('%s saiu do routes.py' % morto, morto in rotas_py, False)
 
 print('\n== 9. nenhum global orfao nos modulos de feature ==')
@@ -467,6 +500,10 @@ from apps.pages.platform import counterparty as _cpd   # noqa: E402
 from apps.pages.platform import forecast as _fct       # noqa: E402
 from apps.pages.platform import electronic_inventory as _eli  # noqa: E402
 from apps.pages.platform import manual_confirmation as _mcf   # noqa: E402
+from apps.pages.platform import file_interpreter as _pfi      # noqa: E402
+from apps.pages.platform import pending_confirmation as _ppc  # noqa: E402
+from apps.pages.platform import operations_b3 as _ob3         # noqa: E402
+from apps.pages.platform import new_deals as _pnd             # noqa: E402
 from apps.pages import routes as R                      # noqa: E402
 for _mod, _nomes in (
         (_anb, ('_br_now', '_load_anbima', '_prev_anbima_bizday',
@@ -515,7 +552,31 @@ for _mod, _nomes in (
                 '_mc_pc_sync', '_mc_notify_roles', '_mc_can_validate',
                 '_mc_generate_url', '_mc_ei_link', '_mc_stamp_generated',
                 '_MC_STAGE_ROLE', '_MC_STAGE_NOTIFY_ROLES',
-                '_MC_GENERATE_PRODUCTS', '_COMMODITY_SOURCES'))):
+                '_MC_GENERATE_PRODUCTS', '_COMMODITY_SOURCES')),
+        (_pfi, ('_fi_path', '_fi_load', '_fi_clean_template', '_fi_tpl_cache',
+                '_fi_tpl_cached', '_fi_variant_key', '_fi_calc_value',
+                '_fi_build_line', '_fi_effective_seq_value', '_FI_LE_PAIRS',
+                '_FI_CALC_RE')),
+        (_ppc, ('_pc_load_rows', '_pc_derive_row', '_pc_signature_pending_status',
+                '_pc_signature_status', '_pc_import_update',
+                '_pc_is_internal_counterparty', '_pc_apply_auto_rules',
+                '_pc_save_from_deal', '_pc_run_daily_maintenance',
+                '_pc_snapshot_pending', '_pc_refdata_by_name',
+                '_pc_latest_snapshot_rows', '_pc_metrics_history',
+                '_PC_ESTEIRA_STATUSES', '_PC_COLUMNS', '_PC_DBS')),
+        (_ob3, ('_opb3_load', '_opb3_load_cached', '_opb3_import',
+                '_opb3_event_rules', '_opb3_settle_rows', '_opb3_collect',
+                '_opb3_breakdown', '_opb3_tipo_maps', '_opb3_msg_load_recipients',
+                '_opb3_refdata_by_account', '_opb3_internal_ter_map',
+                '_ops_norm_event', '_OPB3_COLUMNS')),
+        (_pnd, ('_find_deal_in_cache', '_find_ndf_deal_in_cache', '_find_fxo',
+                '_deal_matches', '_fxo_deal_from_row', '_ndf_deal_from_api',
+                '_nd_api_amend', '_nd_amend_is_economic', '_nd_cancel_in_file',
+                '_fxo_api_pull', '_ndf_api_pull', '_ndf_ref_by_accronym',
+                '_ndf_weak_leg', '_generic_ndf_ter_line', '_ndf_comm_ter_lines',
+                '_nd_lawton_mirror', '_generic_nd_mapping_candidates',
+                '_generic_nd_persist_new_deals', '_fxo_persist_new_deals',
+                '_ND_AMEND_COSMETIC_BY_PRODUCT', '_ND_AMEND_KEEP_STATUS'))):
     for _nm in _nomes:
         check('routes.%s e o da platform' % _nm,
               getattr(R, _nm) is getattr(_mod, _nm), True)
