@@ -1,46 +1,16 @@
 # -*- coding: utf-8 -*-
-"""Cognos (FXO Detail) — o import e a coleta da tela.
-
-O STORE por dia (`_cog_json_path/_cog_load/_cog_save/_cog_find/_cog_read_rows/
-_cog_extract` e as colunas `_COG_*`) ficou no routes: o Save Daily Settlement
-grava o mesmo arquivo e o Settlement Advice de Opção lê o PRM de lá.
+"""A leitura do arquivo-dia do Cognos (FXO Detail) — as linhas formatadas para
+a tela. O STORE por dia é do `routes` (o Save Daily Settlement grava o mesmo
+arquivo e o Settlement Advice de Opção lê o PRM de lá).
 """
 import os
-import traceback
 from datetime import datetime
-
 
 def _R():
     """Busca ATRASADA no routes — plataforma (ver features/support/infra)."""
     from apps.pages import routes
     return routes
 
-
-def _cog_import(ref=None):
-    """Find "FXO Detail*.xlsx" in COG_SOURCE_ROOT, extract, write today's JSON."""
-    ref = ref or datetime.now()
-    if not os.path.isdir(_R().COG_SOURCE_ROOT):
-        return {'success': False, 'error': 'Source folder not found: {}'.format(_R().COG_SOURCE_ROOT)}
-    matches = sorted(f for f in os.listdir(_R().COG_SOURCE_ROOT)
-                     if f.lower().startswith('fxo detail') and f.lower().endswith(('.xlsx', '.xls', '.txt')))
-    if not matches:
-        return {'success': False, 'error': 'No "FXO Detail*" file found in {}'.format(_R().COG_SOURCE_ROOT)}
-    src_path = os.path.join(_R().COG_SOURCE_ROOT, matches[0])
-    try:
-        rows = _R()._cog_read_rows(src_path)
-    except Exception:
-        _R().log.warning("[cognos] read failed for %s:\n%s", src_path, traceback.format_exc())
-        return {'success': False, 'error': 'Could not read {}'.format(matches[0])}
-    out, kept = _R()._cog_extract(rows)
-    jp = _R()._cog_json_path(ref)
-    _R()._cog_save(jp, out)
-    _R()._ds_write_updated(jp, ref.strftime('%H:%M:%S'))
-    try:
-        os.remove(src_path)
-    except OSError:
-        _R().log.warning("[cognos] could not delete source %s", src_path)
-    _R().log.info("[cognos] imported %s: kept %d → %s", matches[0], kept, jp)
-    return {'success': True, 'file': matches[0], 'rows': kept, 'date': ref.strftime('%Y-%m-%d')}
 
 def _cog_fmt_date(v):
     """FXO Detail dates → dd/mm/yyyy. Most are yyyy-mm-dd; Event Trade Date comes
@@ -60,6 +30,7 @@ def _cog_fmt_date(v):
             continue
     d = _R()._fcst_parse_date(s)
     return d.strftime('%d/%m/%Y') if d else s
+
 
 def _cog_collect(ref):
     """Read the Cognos JSON for `ref` → display rows + widgets (Call/Put/Total).
@@ -124,10 +95,3 @@ def _cog_collect(ref):
     return {'widgets': widgets, 'columns': _R()._COG_COLUMNS, 'rows': rows_out,
             'value_columns': sorted(_R()._COG_VALUE_COLS),
             'updated': _R()._ds_read_updated(jp)}
-
-def _cog_ref_from(payload):
-    ds = str((payload or {}).get('date', '') or '').strip()
-    try:
-        return datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
-    except ValueError:
-        return datetime.now()

@@ -6,7 +6,7 @@ from datetime import datetime
 from flask import jsonify, redirect, render_template, request, session, url_for
 
 from apps.pages import blueprint
-from apps.pages.features.cognos import engine
+from apps.pages.features.cognos import commands, domain, queries
 
 
 def _R():
@@ -31,7 +31,7 @@ def api_cog_data():
         ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
     except ValueError:
         ref = datetime.now()
-    payload = engine._cog_collect(ref)
+    payload = queries._cog_collect(ref)
     payload.update({'success': True, 'date': ref.strftime('%Y-%m-%d'),
                     'date_fmt': ref.strftime('%d/%m/%Y')})
     return jsonify(payload)
@@ -40,7 +40,7 @@ def api_cog_data():
 def api_cog_import():
     if not session.get('authenticated'):
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
-    res = engine._cog_import(datetime.now())
+    res = commands._cog_import(datetime.now())
     if res.get('success'):
         _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                              'Cognos Imported', 'Cognos',
@@ -54,7 +54,7 @@ def api_cog_row_add():
     p = request.get_json(silent=True) or {}
     cells = p.get('cells') or []
     sid = session.get('user_sid', '')
-    ref = engine._cog_ref_from(p)
+    ref = domain._cog_ref_from(p)
     jp, data = _R()._cog_load(ref)
     if data is None:
         data = []
@@ -78,7 +78,7 @@ def api_cog_row_edit():
     p = request.get_json(silent=True) or {}
     rid, cells = str(p.get('id', '')), (p.get('cells') or [])
     sid = session.get('user_sid', '')
-    jp, data = _R()._cog_load(engine._cog_ref_from(p))
+    jp, data = _R()._cog_load(domain._cog_ref_from(p))
     rec = _R()._cog_find(data or [], rid)
     if rec is None:
         return jsonify({'success': False, 'error': 'Row not found.'}), 404
@@ -92,7 +92,7 @@ def api_cog_row_edit():
         _R().log.error('[cognos] edit save failed:\n%s', traceback.format_exc())
         return jsonify({'success': False, 'error': 'Save failed.'}), 500
     _R()._create_notification(sid, session.get('user_name', ''), 'Cognos Row Updated', 'Cognos',
-                         '{} ({})'.format(rec.get('Athena ID', ''), engine._cog_ref_from(p).strftime('%Y-%m-%d')))
+                         '{} ({})'.format(rec.get('Athena ID', ''), domain._cog_ref_from(p).strftime('%Y-%m-%d')))
     return jsonify({'success': True})
 
 @blueprint.route('/api/cognos/row/delete', methods=['POST'])
@@ -102,7 +102,7 @@ def api_cog_row_delete():
     p = request.get_json(silent=True) or {}
     rid = str(p.get('id', ''))
     sid = session.get('user_sid', '')
-    jp, data = _R()._cog_load(engine._cog_ref_from(p))
+    jp, data = _R()._cog_load(domain._cog_ref_from(p))
     if data is None:
         return jsonify({'success': False, 'error': 'No data for this date.'}), 404
     rec = _R()._cog_find(data, rid)
@@ -115,7 +115,7 @@ def api_cog_row_delete():
         _R().log.error('[cognos] delete save failed:\n%s', traceback.format_exc())
         return jsonify({'success': False, 'error': 'Save failed.'}), 500
     _R()._create_notification(sid, session.get('user_name', ''), 'Cognos Row Deleted', 'Cognos',
-                         '{} ({})'.format(rec.get('Athena ID', ''), engine._cog_ref_from(p).strftime('%Y-%m-%d')))
+                         '{} ({})'.format(rec.get('Athena ID', ''), domain._cog_ref_from(p).strftime('%Y-%m-%d')))
     return jsonify({'success': True})
 
 @blueprint.route('/api/cognos/row/confirm', methods=['POST'])
@@ -125,7 +125,7 @@ def api_cog_row_confirm():
     p = request.get_json(silent=True) or {}
     rid = str(p.get('id', ''))
     sid = session.get('user_sid', '')
-    jp, data = _R()._cog_load(engine._cog_ref_from(p))
+    jp, data = _R()._cog_load(domain._cog_ref_from(p))
     rec = _R()._cog_find(data or [], rid)
     if rec is None:
         return jsonify({'success': False, 'error': 'Row not found.'}), 404
@@ -140,5 +140,5 @@ def api_cog_row_confirm():
         _R().log.error('[cognos] confirm save failed:\n%s', traceback.format_exc())
         return jsonify({'success': False, 'error': 'Save failed.'}), 500
     _R()._create_notification(sid, session.get('user_name', ''), 'Cognos Row Confirmed', 'Cognos',
-                         '{} ({})'.format(rec.get('Athena ID', ''), engine._cog_ref_from(p).strftime('%Y-%m-%d')))
+                         '{} ({})'.format(rec.get('Athena ID', ''), domain._cog_ref_from(p).strftime('%Y-%m-%d')))
     return jsonify({'success': True})

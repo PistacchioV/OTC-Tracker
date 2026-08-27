@@ -28,7 +28,9 @@ JSC = '/System/Library/Frameworks/JavaScriptCore.framework/Versions/A/Helpers/js
 
 from apps.pages import otc_boxparse as B                 # noqa: E402
 from apps.pages import routes as R
-from apps.pages.features.cetip import engine as CE  # noqa: E402                       # noqa: E402
+# O Save CETIP Files mora em features/cetip, separado em camadas (§321).
+from apps.pages.features.cetip import domain as CE   # noqa: E402
+from apps.pages.features.cetip import queries as CQ  # noqa: E402
 
 fails = []
 
@@ -360,7 +362,7 @@ print('\n== 7. o seed e o comportamento cobrem os MESMOS tipos ==')
 tmp = tempfile.mkdtemp()
 R._MAPPINGS_DIR = tmp                    # nao encosta no arquivo real
 R._mapping_cache.pop('cetip-files', None)
-rules = CE._cetip_rules()
+rules = CQ._cetip_rules()
 # O numero cresce quando a CETIP publica um arquivo novo; o que nao pode
 # variar e a PARIDADE com o comportamento, conferida logo abaixo — um tipo
 # so no seed nunca vira anexo, e um so no codigo nunca roda.
@@ -431,7 +433,7 @@ R._atomic_write_json(os.path.join(tmp, 'cetip-files.json'), [
     {'TYPE': '', 'SOURCE': 'CETIP21_YYMMDD_X', 'DEST': 'Y', 'EXTRA DEST': ''},
 ])
 R._mapping_cache.pop('cetip-files', None)
-rules2 = CE._cetip_rules()
+rules2 = CQ._cetip_rules()
 check('so a linha valida entra', [r['label'] for r in rules2],
       ['SWAP Position (DPOSICAO-SWAP)'])
 

@@ -7,7 +7,8 @@ from datetime import datetime
 from flask import jsonify, request, session
 
 from apps.pages import blueprint
-from apps.pages.features.cetip import engine
+from apps.pages.features.cetip import commands, queries
+from apps.pages.features.cetip.infra import mail, persistence
 
 
 def _R():
@@ -24,7 +25,7 @@ def api_cp_cetip_recipients():
     if not session.get('authenticated'):
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
     if request.method == 'GET':
-        rec = engine._load_cetip_recipients()
+        rec = persistence._load_cetip_recipients()
         return jsonify({'success': True,
                         'ss_to': rec['ss_to'] or _R().CETIP_SALES_SUPPORT_EMAIL,
                         'cem_to': rec['cem_to'] or '; '.join(_R().CETIP_CEM_LATAM_EMAILS),
@@ -32,8 +33,8 @@ def api_cp_cetip_recipients():
                         'hub_to': rec['hub_to']})
     payload = request.get_json(silent=True) or {}
     try:
-        rec, _mudou = engine._cetip_merge_recipients(payload)
-        engine._save_cetip_recipients(rec)
+        rec, _mudou = persistence._cetip_merge_recipients(payload)
+        persistence._save_cetip_recipients(rec)
     except Exception as e:
         _R().log.error('[cetip] save recipients failed:\n%s', traceback.format_exc())
         return jsonify({'success': False, 'error': '{}: {}'.format(type(e).__name__, e)}), 500
@@ -71,13 +72,13 @@ def api_cp_cetip_settlement():
     if stage == 'distribute':
         # Merge, não substituição: o payload traz o que está na tela, e uma tela que
         # não conhecesse uma das quatro chaves apagaria aquela lista ao rodar.
-        rec, mudou = engine._cetip_merge_recipients(payload)
+        rec, mudou = persistence._cetip_merge_recipients(payload)
         if mudou:
             try:
-                engine._save_cetip_recipients(rec)
+                persistence._save_cetip_recipients(rec)
             except Exception:
                 _R().log.error('[cetip] save recipients failed:\n%s', traceback.format_exc())
-        return engine._cetip_distribute_emails(ref, dest_dir, send_mail,
+        return commands._cetip_distribute_emails(ref, dest_dir, send_mail,
                                         _R()._parse_emails(rec['ss_to']),
                                         _R()._parse_emails(rec['cem_to']),
                                         _R()._parse_emails(rec['bacc_to']),
@@ -113,7 +114,7 @@ def api_cp_cetip_settlement():
     # expected-but-absent files (expected name derived from the reference date).
     ref_yymmdd = ref.strftime('%y%m%d')
     missing = []
-    for rule in engine._cetip_rules():
+    for rule in queries._cetip_rules():
         rule_matched = False
         for name in files:
             if not rule['match'](name.lower()):
@@ -128,7 +129,7 @@ def api_cp_cetip_settlement():
             dest_path = os.path.join(dest_dir, dest_name)
             src_path  = os.path.join(src_dir, name)
             try:
-                engine._cetip_save_file(src_path, dest_path)
+                persistence._cetip_save_file(src_path, dest_path)
                 entry = {'src': name, 'dest': dest_name, 'type': rule['label']}
                 saved.append(entry)
                 # Also emit a tidy JSON (NDF / Option / Swap / Operations), split
@@ -137,7 +138,7 @@ def api_cp_cetip_settlement():
                     _R()._b3_export_json(dest_path, rule['json'], dest_name, dref)
                 # INDEXADORESSWAP_VCP → refresh the VCP indexer reference JSON.
                 if rule.get('vcp_update'):
-                    engine._cetip_update_vcp_json(dest_path)
+                    persistence._cetip_update_vcp_json(dest_path)
             except Exception as e:
                 errors.append({'file': name, 'type': rule['label'], 'error': str(e)})
                 continue
@@ -146,7 +147,7 @@ def api_cp_cetip_settlement():
             if extra:
                 try:
                     os.makedirs(extra, exist_ok=True)
-                    engine._cetip_save_file(src_path, os.path.join(extra, dest_name))
+                    persistence._cetip_save_file(src_path, os.path.join(extra, dest_name))
                 except Exception:
                     _R().log.warning("[cetip] secondary copy failed %s → %s:\n%s",
                                 name, extra, traceback.format_exc())
@@ -172,7 +173,7 @@ def api_cp_cetip_settlement():
         if missing:
             ops_msg += (' <b>{}</b> expected file(s) were <b>not found</b> in the source folder '
                         'and are flagged as <i>Not found</i> in the table.'.format(len(missing)))
-        mail_ops = engine._send_cetip_email(
+        mail_ops = mail._send_cetip_email(
             [_R().CETIP_OTC_OPS_EMAIL], [], 'CETIP Files Saved',
             'Hello,', ops_msg,
             ref_fmt, saved, dest_folder=dest_dir, missing=missing)

@@ -1,7 +1,13 @@
 # -*- coding: utf-8 -*-
-"""New Deals Monitor — os cards da tela e o e-mail de pendências das 19h.
+"""New Deals Monitor — o snapshot dos cards e o e-mail de pendências (19h/19h30).
 
-Extraído VERBATIM do routes.py (nomes internos preservados) com a plataforma
-alcançada por busca atrasada. A separação interna em domain/queries/commands é
-trabalho futuro; a fronteira com o routes — e o guarda que a prende — já vale.
+Fronteira decidida: `domain.py` (catálogo de cards, LE da linha, taxonomia do
+e-mail, parse dos horários — puro), `queries.py` (o snapshot que a página E o
+e-mail leem — uma contagem só —, os blocos de pendência e o status do aviso),
+`infra/persistence.py` (destinatários, claim de slot cross-process e o desfecho
+do último disparo) e `commands.py` (o envio, o disparo com claim, o catch-up de
+restart e o scheduler — o REGISTRO continua no wiring do routes, via
+`start_scheduler` do entrypoint). Toda travessia entre camadas é pelo ATRIBUTO
+do módulo, que é o que deixa os espiões do check_ndm_pending_sched
+interceptarem; o que é de plataforma chega por busca atrasada (`_R()`).
 """

@@ -7,7 +7,8 @@ from datetime import datetime
 from flask import jsonify, render_template, request, session
 
 from apps.pages import blueprint
-from apps.pages.features.accrual import engine
+from apps.pages.features.accrual import commands, domain, queries
+from apps.pages.features.accrual.infra import mappers, persistence
 
 
 def _R():
@@ -39,14 +40,14 @@ def api_accrual_swap_process():
         _R().log.error('[accrual] read failed:\n%s', traceback.format_exc())
         return jsonify({'success': False, 'error': 'Failed to read the spreadsheet.'}), 500
 
-    if len(rows) < engine._ACC_HEADER_ROW:
+    if len(rows) < domain._ACC_HEADER_ROW:
         return jsonify({'success': False,
                         'error': 'File has fewer than {} rows — headers expected on row {}.'
-                        .format(engine._ACC_HEADER_ROW, engine._ACC_HEADER_ROW)}), 400
+                        .format(domain._ACC_HEADER_ROW, domain._ACC_HEADER_ROW)}), 400
 
-    result = engine._accrual_build_result(rows)
+    result = queries._accrual_build_result(rows)
     try:
-        _, saved = engine._accrual_persist(result, f.filename)
+        _, saved = persistence._accrual_persist(result, f.filename)
         result['date'] = saved['date']
     except Exception:
         _R().log.error('[accrual] save failed:\n%s', traceback.format_exc())
@@ -67,20 +68,20 @@ def api_accrual_swap_factors():
         return jsonify({'success': False, 'error': 'No file uploaded.'}), 400
 
     kind = (request.form.get('kind') or '').strip().lower()
-    if kind not in engine._ACC_FACTOR_KINDS:
+    if kind not in mappers._ACC_FACTOR_KINDS:
         base = os.path.splitext(os.path.basename(f.filename))[0].lower()
         kind = ('cem' if base.startswith('cem') else 'edg' if base.startswith('edg')
                 else 'hyb' if base.startswith('hyb') else '')
-    if kind not in engine._ACC_FACTOR_KINDS:
+    if kind not in mappers._ACC_FACTOR_KINDS:
         return jsonify({'success': False,
                         'error': 'Unrecognised factor file (expected a CEM, EDG or HYB file).'}), 400
 
-    path, data = engine._accrual_load(request.form.get('date'))
+    path, data = persistence._accrual_load(request.form.get('date'))
     if not data or not data.get('tables'):
         return jsonify({'success': False,
                         'error': 'No accrual data for this date — process the VCP file first.'}), 400
 
-    spec = engine._ACC_FACTOR_KINDS[kind]
+    spec = mappers._ACC_FACTOR_KINDS[kind]
     lob  = spec['lob']
     try:
         raw  = f.read()
@@ -91,9 +92,9 @@ def api_accrual_swap_factors():
         _R().log.error('[accrual] factor read failed:\n%s', traceback.format_exc())
         return jsonify({'success': False, 'error': 'Failed to read the factor file.'}), 500
 
-    matched, missing = engine._acc_apply_factors(data, lob, fmap)
+    matched, missing = domain._acc_apply_factors(data, lob, fmap)
     try:
-        engine._accrual_save(path, data)
+        persistence._accrual_save(path, data)
     except Exception:
         _R().log.error('[accrual] factor save failed:\n%s', traceback.format_exc())
         return jsonify({'success': False, 'error': 'Failed to save the enriched data.'}), 500
@@ -104,7 +105,7 @@ def api_accrual_swap_factors():
                          '{} · {} matched, {} missing'.format(lob, matched, missing) + _R()._nd_token(data.get('date')))
     return jsonify({
         'success': True,
-        'headers': data.get('headers') or list(engine._ACC_FIXED_HEADERS),
+        'headers': data.get('headers') or list(domain._ACC_FIXED_HEADERS),
         'tables':  data.get('tables') or {},
         'counts':  data.get('counts') or {},
         'ref_date': data.get('ref_date'),
@@ -121,12 +122,12 @@ def api_accrual_import_folder():
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
     p   = request.get_json(silent=True) or {}
     ymd = _R()._accrual_parse_date(p.get('date')) or datetime.now().strftime('%Y%m%d')
-    folder = engine._accrual_source_dir(ymd)
+    folder = persistence._accrual_source_dir(ymd)
     if not os.path.isdir(folder):
         return jsonify({'success': False, 'error': 'Folder not found: {}'.format(folder)}), 400
 
     files = [fn for fn in os.listdir(folder) if os.path.isfile(os.path.join(folder, fn))]
-    vcp = next((fn for fn in files if engine._accrual_is_vcp_name(fn)), None)
+    vcp = next((fn for fn in files if domain._accrual_is_vcp_name(fn)), None)
     if not vcp:
         return jsonify({'success': False,
                         'error': 'No VCP file found in {}'.format(folder)}), 400
@@ -139,16 +140,16 @@ def api_accrual_import_folder():
     except Exception:
         _R().log.error('[accrual] folder VCP read failed:\n%s', traceback.format_exc())
         return jsonify({'success': False, 'error': 'Failed to read the VCP file.'}), 500
-    if len(rows) < engine._ACC_HEADER_ROW:
+    if len(rows) < domain._ACC_HEADER_ROW:
         return jsonify({'success': False,
-                        'error': 'VCP file has fewer than {} rows.'.format(engine._ACC_HEADER_ROW)}), 400
+                        'error': 'VCP file has fewer than {} rows.'.format(domain._ACC_HEADER_ROW)}), 400
 
-    result = engine._accrual_build_result(rows)
-    path, data = engine._accrual_persist(result, vcp, ymd=ymd)
+    result = queries._accrual_build_result(rows)
+    path, data = persistence._accrual_persist(result, vcp, ymd=ymd)
 
     # Apply each factor file present in the folder (CEM / EDG / HYB), in turn.
     applied = []
-    for kind, spec in engine._ACC_FACTOR_KINDS.items():
+    for kind, spec in mappers._ACC_FACTOR_KINDS.items():
         fn = next((x for x in files
                    if os.path.splitext(x)[0].lower().startswith(kind)), None)
         if not fn:
@@ -156,7 +157,7 @@ def api_accrual_import_folder():
         try:
             with open(os.path.join(folder, fn), 'rb') as fh:
                 fmap = spec['parser'](fn, fh.read())
-            m, miss = engine._acc_apply_factors(data, spec['lob'], fmap)
+            m, miss = domain._acc_apply_factors(data, spec['lob'], fmap)
             applied.append({'kind': kind, 'lob': spec['lob'], 'file': fn,
                             'matched': m, 'missing': miss, 'mapped': len(fmap)})
         except Exception:
@@ -164,7 +165,7 @@ def api_accrual_import_folder():
             applied.append({'kind': kind, 'lob': spec['lob'], 'file': fn, 'error': True})
 
     try:
-        engine._accrual_save(path, data)
+        persistence._accrual_save(path, data)
     except Exception:
         _R().log.error('[accrual] folder save failed:\n%s', traceback.format_exc())
         return jsonify({'success': False, 'error': 'Failed to save the imported data.'}), 500
@@ -177,7 +178,7 @@ def api_accrual_import_folder():
                              result.get('diagnostics', {}).get('matched', 0), len(applied)) + _R()._nd_token(ymd))
     return jsonify({
         'success': True,
-        'headers': data.get('headers') or list(engine._ACC_FIXED_HEADERS),
+        'headers': data.get('headers') or list(domain._ACC_FIXED_HEADERS),
         'tables':  data.get('tables') or {},
         'counts':  data.get('counts') or {},
         'ref_date': data.get('ref_date'),
@@ -191,7 +192,7 @@ def api_accrual_data():
     """Return the saved accrual JSON for a given date (?date=YYYY-MM-DD, default today)."""
     if not session.get('authenticated'):
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
-    _, data = engine._accrual_load(request.args.get('date'))
+    _, data = persistence._accrual_load(request.args.get('date'))
     if not data:
         return jsonify({'success': True, 'empty': True})
     data['success'] = True
@@ -203,7 +204,7 @@ def api_accrual_latest():
     data by default — e.g. when opened from a bell notification."""
     if not session.get('authenticated'):
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
-    return jsonify({'success': True, 'date': engine._accrual_latest_ymd()})
+    return jsonify({'success': True, 'date': persistence._accrual_latest_ymd()})
 
 @blueprint.route('/api/accrual-swap/row/delete', methods=['POST'])
 def api_accrual_row_delete():
@@ -211,12 +212,12 @@ def api_accrual_row_delete():
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
     p = request.get_json(silent=True) or {}
     lob, rid = p.get('lob'), str(p.get('id', ''))
-    path, data = engine._accrual_load(p.get('date'))
+    path, data = persistence._accrual_load(p.get('date'))
     if not data or lob not in (data.get('tables') or {}):
         return jsonify({'success': False, 'error': 'No saved data for this date.'}), 404
     data['tables'][lob] = [r for r in data['tables'][lob] if not (r and str(r[-1]) == rid)]
     try:
-        engine._accrual_save(path, data)
+        persistence._accrual_save(path, data)
     except Exception:
         _R().log.error('[accrual] save failed:\n%s', traceback.format_exc())
         return jsonify({'success': False, 'error': 'Save failed.'}), 500
@@ -231,12 +232,12 @@ def api_accrual_rows_delete():
     p = request.get_json(silent=True) or {}
     lob = p.get('lob')
     ids = set(str(x) for x in (p.get('ids') or []))
-    path, data = engine._accrual_load(p.get('date'))
+    path, data = persistence._accrual_load(p.get('date'))
     if not data or lob not in (data.get('tables') or {}):
         return jsonify({'success': False, 'error': 'No saved data for this date.'}), 404
     data['tables'][lob] = [r for r in data['tables'][lob] if not (r and str(r[-1]) in ids)]
     try:
-        engine._accrual_save(path, data)
+        persistence._accrual_save(path, data)
     except Exception:
         _R().log.error('[accrual] save failed:\n%s', traceback.format_exc())
         return jsonify({'success': False, 'error': 'Save failed.'}), 500
@@ -253,10 +254,10 @@ def api_accrual_row_edit():
     lob, rid = p.get('lob'), str(p.get('id', ''))
     cells = p.get('cells') or []
     sid = session.get('user_sid', '')
-    path, data = engine._accrual_load(p.get('date'))
+    path, data = persistence._accrual_load(p.get('date'))
     if not data or lob not in (data.get('tables') or {}):
         return jsonify({'success': False, 'error': 'No saved data for this date.'}), 404
-    target = engine._accrual_find(data, lob, rid)
+    target = domain._accrual_find(data, lob, rid)
     if target is None:
         return jsonify({'success': False, 'error': 'Row not found.'}), 404
     ndata = len(target) - 4                         # cells before status/maker/checker/id
@@ -264,7 +265,7 @@ def api_accrual_row_edit():
         target[i] = cells[i]
     target[-4], target[-3], target[-2] = 'Pending', sid, ''   # status, maker, checker
     try:
-        engine._accrual_save(path, data)
+        persistence._accrual_save(path, data)
     except Exception:
         _R().log.error('[accrual] save failed:\n%s', traceback.format_exc())
         return jsonify({'success': False, 'error': 'Save failed.'}), 500
@@ -280,10 +281,10 @@ def api_accrual_row_send():
     p = request.get_json(silent=True) or {}
     lob, rid = p.get('lob'), str(p.get('id', ''))
     sid = session.get('user_sid', '')
-    path, data = engine._accrual_load(p.get('date'))
+    path, data = persistence._accrual_load(p.get('date'))
     if not data or lob not in (data.get('tables') or {}):
         return jsonify({'success': False, 'error': 'No saved data for this date.'}), 404
-    target = engine._accrual_find(data, lob, rid)
+    target = domain._accrual_find(data, lob, rid)
     if target is None:
         return jsonify({'success': False, 'error': 'Row not found.'}), 404
     maker = str(target[-3] or '')
@@ -292,7 +293,7 @@ def api_accrual_row_send():
                         'message': 'A different user must send a row you changed.'}), 403
     target[-4], target[-2] = 'Sent', sid            # status, checker
     try:
-        engine._accrual_save(path, data)
+        persistence._accrual_save(path, data)
     except Exception:
         _R().log.error('[accrual] save failed:\n%s', traceback.format_exc())
         return jsonify({'success': False, 'error': 'Save failed.'}), 500
@@ -308,16 +309,16 @@ def api_accrual_send_batch():
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
     p = request.get_json(silent=True) or {}
     lob = p.get('lob')
-    path, data = engine._accrual_load(p.get('date'))
+    path, data = persistence._accrual_load(p.get('date'))
     if not data or lob not in (data.get('tables') or {}):
         return jsonify({'success': False, 'error': 'No saved data for this date.'}), 404
-    missing = engine._acc_missing_accrual_rows(data, [lob])          # block when any factor is missing
+    missing = domain._acc_missing_accrual_rows(data, [lob])          # block when any factor is missing
     if missing:
         return jsonify({'success': False, 'error': 'missing_accrual', 'missing': missing}), 400
     ymd = _R()._accrual_parse_date(p.get('date')) or datetime.now().strftime('%Y%m%d')
     try:
-        generated = engine._acc_write_batch_files(data, lob, datetime.now().strftime('%Y%m%d'),
-                                           evidence_dir=engine._accrual_source_dir(ymd))
+        generated = commands._acc_write_batch_files(data, lob, datetime.now().strftime('%Y%m%d'),
+                                           evidence_dir=persistence._accrual_source_dir(ymd))
     except ValueError:
         _R().log.error('[accrual] send-batch failed:\n%s', traceback.format_exc())
         return jsonify({'success': False,
@@ -341,24 +342,24 @@ def api_accrual_validation():
     if not session.get('authenticated'):
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
     p = request.get_json(silent=True) or {}
-    path, data = engine._accrual_load(p.get('date'))
+    path, data = persistence._accrual_load(p.get('date'))
     if not data or not (data.get('tables')):
         return jsonify({'success': False, 'error': 'No saved data for this date.'}), 404
 
-    missing = engine._acc_missing_accrual_rows(data, ['CEM', 'EDG', 'Hybrids', 'Commodities'])   # block across all books
+    missing = domain._acc_missing_accrual_rows(data, ['CEM', 'EDG', 'Hybrids', 'Commodities'])   # block across all books
     if missing:
         return jsonify({'success': False, 'error': 'missing_accrual', 'missing': missing}), 400
 
     ymd = _R()._accrual_parse_date(p.get('date')) or datetime.now().strftime('%Y%m%d')
     ref = datetime.strptime(ymd, '%Y%m%d')
     today = datetime.now().strftime('%Y%m%d')
-    evidence_dir = engine._accrual_source_dir(ymd)
+    evidence_dir = persistence._accrual_source_dir(ymd)
 
     generated = []
     try:
         for lob in ('CEM', 'EDG', 'Hybrids', 'Commodities'):
             if lob in (data.get('tables') or {}):
-                generated.extend(engine._acc_write_batch_files(data, lob, today, evidence_dir=evidence_dir))
+                generated.extend(commands._acc_write_batch_files(data, lob, today, evidence_dir=evidence_dir))
     except ValueError:
         _R().log.error('[accrual] validation generate failed:\n%s', traceback.format_exc())
         return jsonify({'success': False,
@@ -409,7 +410,7 @@ def api_accrual_recon():
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
     f = request.files.get('file')
     date_arg = request.form.get('date')
-    path, data = engine._accrual_load(date_arg)
+    path, data = persistence._accrual_load(date_arg)
     if not data or not data.get('tables'):
         return jsonify({'success': False, 'error': 'No saved data for this date.'}), 404
 
@@ -418,8 +419,8 @@ def api_accrual_recon():
             rows = _R()._cc_read_rows(f.filename, f.read())
         else:
             ymd = _R()._accrual_parse_date(date_arg) or datetime.now().strftime('%Y%m%d')
-            folder = engine._accrual_source_dir(ymd)
-            op = engine._acc_find_operacoes(folder)
+            folder = persistence._accrual_source_dir(ymd)
+            op = persistence._acc_find_operacoes(folder)
             if not op:
                 return jsonify({'success': False,
                                 'error': 'operacoes file not found in {}'.format(folder)}), 400
@@ -431,9 +432,9 @@ def api_accrual_recon():
         _R().log.error('[accrual] recon read failed:\n%s', traceback.format_exc())
         return jsonify({'success': False, 'error': 'Failed to read the operacoes file.'}), 500
 
-    summary = engine._acc_run_recon(data, rows)
+    summary = commands._acc_run_recon(data, rows)
     try:
-        engine._accrual_save(path, data)
+        persistence._accrual_save(path, data)
     except Exception:
         _R().log.error('[accrual] recon save failed:\n%s', traceback.format_exc())
         return jsonify({'success': False, 'error': 'Failed to save the recon result.'}), 500
@@ -443,7 +444,7 @@ def api_accrual_recon():
                          'Recon · {} ok, {} check'.format(summary['success_rows'], summary['check_rows']) + _R()._nd_token(ymd))
     return jsonify({
         'success': True,
-        'headers': data.get('headers') or list(engine._ACC_FIXED_HEADERS),
+        'headers': data.get('headers') or list(domain._ACC_FIXED_HEADERS),
         'tables': data.get('tables') or {},
         'counts': data.get('counts') or {},
         'recon': data.get('recon') or {},
@@ -459,15 +460,15 @@ def api_accrual_row_comment():
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
     p = request.get_json(silent=True) or {}
     lob, rid = p.get('lob'), str(p.get('id', ''))
-    path, data = engine._accrual_load(p.get('date'))
+    path, data = persistence._accrual_load(p.get('date'))
     if not data or lob not in (data.get('tables') or {}):
         return jsonify({'success': False, 'error': 'No saved data for this date.'}), 404
-    target = engine._accrual_find(data, lob, rid)
+    target = domain._accrual_find(data, lob, rid)
     if target is None:
         return jsonify({'success': False, 'error': 'Row not found.'}), 404
     target[-5] = str(p.get('comment', ''))                # Comments = last data cell
     try:
-        engine._accrual_save(path, data)
+        persistence._accrual_save(path, data)
     except Exception:
         _R().log.error('[accrual] comment save failed:\n%s', traceback.format_exc())
         return jsonify({'success': False, 'error': 'Save failed.'}), 500
@@ -480,11 +481,11 @@ def api_accrual_end_process():
     if not session.get('authenticated'):
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
     p = request.get_json(silent=True) or {}
-    path, data = engine._accrual_load(p.get('date'))
+    path, data = persistence._accrual_load(p.get('date'))
     if not data or not data.get('tables'):
         return jsonify({'success': False, 'error': 'No saved data for this date.'}), 404
 
-    checks, pending = engine._acc_check_status_rows(data)
+    checks, pending = domain._acc_check_status_rows(data)
     if pending:
         return jsonify({'success': False, 'error': 'uncommented', 'pending': pending}), 400
 
@@ -495,7 +496,7 @@ def api_accrual_end_process():
         html = render_template(
             'pages/email-template-accrual-endprocess.html',
             ref_date_fmt=ref.strftime('%d/%m/%Y'), has_check=bool(checks), checks=checks,
-            folder=engine._accrual_source_dir(ymd), current_year=datetime.now().year)
+            folder=persistence._accrual_source_dir(ymd), current_year=datetime.now().year)
         logo_path = _R()._get_logo_path()
         _R().threading.Thread(target=_R()._send_accrual_endprocess_email,
                          args=(subject, html, logo_path), daemon=True).start()

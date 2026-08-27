@@ -28,7 +28,10 @@ sys.path.insert(0, ROOT)
 os.chdir(ROOT)
 
 from apps.pages import routes as R
-from apps.pages.features.mtm import engine as ME  # noqa: E402  # noqa: E402
+# O MtM mora em features/mtm, separado em camadas (§321): a geração é de
+# `commands` e o recorte de linhas é do `domain`.
+from apps.pages.features.mtm import commands as ME  # noqa: E402
+from apps.pages.features.mtm import domain as MD    # noqa: E402
 
 FAILED = [False]
 
@@ -162,9 +165,9 @@ for label, book, rows in [('book CEM (BANCO + espelho LAWTON)', 'CEM', CEM_ROWS)
     gold = _legacy_generate_book(book, rows, YMD)
     got = ME._mtm_generate_book(book, rows, YMD)
     check(label + ' — mesmos arquivos', sorted(got) == sorted(gold))
-    same = all(ME._mtm_file_lines(got[fn]) == _legacy_file_lines(gold[fn]) for fn in gold)
+    same = all(MD._mtm_file_lines(got[fn]) == _legacy_file_lines(gold[fn]) for fn in gold)
     check(label + ' — linhas idênticas', same)
-    lens = [len(ln) for fn in got for ln in ME._mtm_file_lines(got[fn])[1:]]
+    lens = [len(ln) for fn in got for ln in MD._mtm_file_lines(got[fn])[1:]]
     check(label + ' — 93 chars', lens and all(n == 93 for n in lens))
 
 gold = _legacy_generate_book('CEM', CEM_ROWS, YMD)
@@ -193,7 +196,7 @@ banco_prev = next(p for p in prev if p['filename'] == 'MtM_BANCO-CEM.txt')
 check('labels do preview == field do template', banco_prev['cols'] == tpl_labels)
 check('células remontam a linha byte a byte',
       [''.join(cells) for cells in banco_prev['rows']] ==
-      ME._mtm_file_lines(got['MtM_BANCO-CEM'])[1:])
+      MD._mtm_file_lines(got['MtM_BANCO-CEM'])[1:])
 check('header do preview == header do arquivo',
       banco_prev['header'] == _legacy_swap_header('BANCO', datetime.now().strftime('%Y%m%d')))
 
@@ -214,7 +217,7 @@ try:
         json.dump(tpl, fh, ensure_ascii=False, indent=2)
     R._FILE_INTERPRETER_DIR = tmp
     R._fi_tpl_cache.clear()
-    edited = ME._mtm_file_lines(ME._mtm_generate_book('CEM', CEM_ROWS[:1], YMD)['MtM_BANCO-CEM'])[1]
+    edited = MD._mtm_file_lines(ME._mtm_generate_book('CEM', CEM_ROWS[:1], YMD)['MtM_BANCO-CEM'])[1]
     gold1 = _legacy_file_lines(_legacy_generate_book('CEM', CEM_ROWS[:1], YMD)['MtM_BANCO-CEM'])[1]
     check('Fixed editado (0848 → 0849) aparece na linha',
           edited[6:10] == '0849' and edited[:6] == gold1[:6] and edited[10:] == gold1[10:])

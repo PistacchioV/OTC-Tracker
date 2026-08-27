@@ -16,8 +16,10 @@ os.chdir(ROOT)
 
 import openpyxl                                          # noqa: E402
 from apps.pages import routes as R
-# O Accrual mora em features/accrual (nomes preservados no engine).
-from apps.pages.features.accrual import engine as AE  # noqa: E402                       # noqa: E402
+# O Accrual mora em features/accrual, separado em camadas (§321): o parser da
+# planilha e o de-para de chave são de `infra/mappers` e `domain`.
+from apps.pages.features.accrual.infra import mappers as AE  # noqa: E402
+from apps.pages.features.accrual import domain as AD         # noqa: E402
 
 fails = []
 
@@ -81,26 +83,26 @@ raw = wb_bytes([('Resumo Gerencial', summary_rows()),
                 ('Base CETIP x Kapital', kapital_rows())])
 fmap = AE._acc_parse_cem_factors('cem.xlsx', raw)
 for cetip, exp in EXPECTED.items():
-    check('%s' % cetip, AE._acc_fmap_get(fmap, cetip), exp)
-check('LE 123 nao entra', AE._acc_fmap_get(fmap, 'CET-300'), None)
-check('linha sem digito ignorada', AE._acc_fmap_get(fmap, 'sem digito'), None)
+    check('%s' % cetip, AD._acc_fmap_get(fmap, cetip), exp)
+check('LE 123 nao entra', AD._acc_fmap_get(fmap, 'CET-300'), None)
+check('linha sem digito ignorada', AD._acc_fmap_get(fmap, 'sem digito'), None)
 
 print('\n== 2. nomes antigos continuam funcionando (a posicao e a mesma) ==')
 raw = wb_bytes([('Summary', summary_rows()), ('Kapital CETIP', kapital_rows())])
 fmap = AE._acc_parse_cem_factors('cem.xlsx', raw)
 for cetip, exp in EXPECTED.items():
-    check('%s' % cetip, AE._acc_fmap_get(fmap, cetip), exp)
+    check('%s' % cetip, AD._acc_fmap_get(fmap, cetip), exp)
 
 print('\n== 3. nomes sem qualquer relacao ==')
 raw = wb_bytes([('Plan1', summary_rows()), ('Plan2', kapital_rows())])
 fmap = AE._acc_parse_cem_factors('cem.xlsx', raw)
-check('Plan1/Plan2 tambem', AE._acc_fmap_get(fmap, 'CET-100'), EXPECTED['CET-100'])
+check('Plan1/Plan2 tambem', AD._acc_fmap_get(fmap, 'CET-100'), EXPECTED['CET-100'])
 
 print('\n== 4. abas alem da 2a nao atrapalham ==')
 raw = wb_bytes([('summary', summary_rows()), ('kapital', kapital_rows()),
                 ('Notas', [['lixo']]), ('Parametros', [['mais lixo']])])
 fmap = AE._acc_parse_cem_factors('cem.xlsx', raw)
-check('4 abas, usa as 2 primeiras', AE._acc_fmap_get(fmap, 'CET-200'), EXPECTED['CET-200'])
+check('4 abas, usa as 2 primeiras', AD._acc_fmap_get(fmap, 'CET-200'), EXPECTED['CET-200'])
 
 print('\n== 5. arquivo com uma aba so -> erro explicito ==')
 raw = wb_bytes([('summary', summary_rows())])
@@ -126,19 +128,19 @@ print('\n== 7. abas invertidas produzem resultado VAZIO, nao errado ==')
 # de inventar fator — que e a falha desejada (aparece como Missing Accrual).
 raw = wb_bytes([('kapital', kapital_rows()), ('summary', summary_rows())])
 fmap = AE._acc_parse_cem_factors('cem.xlsx', raw)
-check('ordem trocada -> nada casa', AE._acc_fmap_get(fmap, 'CET-100'), None)
+check('ordem trocada -> nada casa', AD._acc_fmap_get(fmap, 'CET-100'), None)
 
 print('\n== 8. lookup por digitos (CETIP com formatacao diferente) ==')
 raw = wb_bytes([('a', summary_rows()), ('b', kapital_rows())])
 fmap = AE._acc_parse_cem_factors('cem.xlsx', raw)
-check('acha por digitos', AE._acc_fmap_get(fmap, 'cet100'), EXPECTED['CET-100'])
+check('acha por digitos', AD._acc_fmap_get(fmap, 'cet100'), EXPECTED['CET-100'])
 
 print('\n== 9. fator negativo vira absoluto (regra do _acc_fmt_factor) ==')
 rows = summary_rows()
 rows[1][8] = '-1,23456789'
 raw = wb_bytes([('a', rows), ('b', kapital_rows())])
 fmap = AE._acc_parse_cem_factors('cem.xlsx', raw)
-check('sinal descartado', AE._acc_fmap_get(fmap, 'CET-100')[0], '1.23456789')
+check('sinal descartado', AD._acc_fmap_get(fmap, 'CET-100')[0], '1.23456789')
 
 print('\n%s' % ('TUDO OK' if not fails else 'FALHAS (%d): %r' % (len(fails), fails)))
 sys.exit(1 if fails else 0)
