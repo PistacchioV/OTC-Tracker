@@ -12,7 +12,6 @@ import traceback
 import unicodedata
 import uuid
 import shutil
-import tempfile
 import base64
 import logging
 import time
@@ -24,7 +23,6 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
 import awmpy
-import portalocker
 from flask import (
     render_template, request, redirect, send_from_directory,
     url_for, session, flash, jsonify, make_response, has_app_context
@@ -322,276 +320,43 @@ def csp_report():
 # Pages everyone can always reach regardless of configuration. The dashboards are
 # NOT here — they are grantable like any other page (Main › Dashboards). '/users-profile'
 # stays open so a fully-restricted user always has a safe landing (no redirect loop).
-_ALWAYS_ALLOWED_PATHS = {'/users-profile', '/page-access'}
+# `_ALWAYS_ALLOWED_PATHS` mora em `platform/authz.py`; alias logo abaixo,
+# junto dos demais (depois do import da platform).
 
-# Rótulo do Daily Settlement › NDF › Other Publisher. Ele NÃO pode ser o mesmo
-# do New Deals ('NDF Other Publisher', que vem do `_GENERIC_ND_PRODUCTS`): o
-# rótulo é a chave que decide DUAS coisas — para onde o sino leva ao clicar e
-# QUEM enxerga a notificação (o filtro por acesso de página). Compartilhado, a
-# notificação da tela de liquidação abria a de New Deals e sumia para quem só
-# tem a de liquidação liberada.
-_NOTIF_DS_OTHERPUB = 'NDF Other Publisher (Settlement)'
+# As notificações moram em `apps/pages/platform/notifications.py` (segunda
+# fatia da fase platform/ — CLAUDE.md §10). Os nomes ficam aqui como ALIAS:
+# as features alcançam por `routes.<nome>` e os 22 testes que trocam
+# `R._create_notification` por espião seguem interceptando todo mundo. O
+# ESTADO da subida (`_notif_db_done`, `_notif_db_retry_at`) mora LÁ.
+from apps.pages.platform import notifications as _pf_notif  # noqa: E402
 
-# Notification "page" label → the sidebar URL it belongs to (for feed filtering).
-# ⚠️ Este mapa tem MAIS DUAS cópias, no navegador: `PAGE_URL` em
-# partials/topbar.html (clique no sino) e em static/js/sw-push.js (clique no push
-# do sistema). Os três têm de concordar, senão o mesmo aviso leva a lugares
-# diferentes conforme onde foi clicado — `check_notif_page_url.py` prova isso.
-_NOTIF_PAGE_URL = {
-    'NDF Comm': '/new_deals-ndf-commodities', 'Opt Comm': '/new_deals-opt-commodities',
-    'Opt FXO': '/new_deals-opt-fxo', 'NDF FWD Start': '/new_deals-ndf-fwdstart',
-    'NDF Other Publisher': '/new_deals-ndf-otherpublisher', 'NDF Vanilla': '/new_deals-ndf-vanilla',
-    _NOTIF_DS_OTHERPUB: '/ndf-other-publisher',
-    'Index B3': '/index-b3',
-    'Users': '/users-roles', 'Recon Comitente': '/reconciliation-comitente',
-    'Recon FXO': '/reconciliation-fxo',
-    'Reference Data': '/reference-data', 'Control Panel': '/control-panel',
-    'Accrual': '/accrual-swap', 'MtM': '/mtm-swap', 'Intrag Option': '/intrag-option',
-    'Intrag NDF': '/intrag-ndf', 'Intrag Swap': '/intrag-swap',
-    'Reconciliation': '/reconciliation-payrec',
-    'Pending Confirmation': '/pending-confirmation',
-    # A esteira de confirmação manual. O rótulo é 'Confirmation' (e não
-    # 'Manual Confirmation') porque é o que as notificações já gravadas
-    # carregam: renomear deixaria o histórico do sino sem destino.
-    'Confirmation': '/manual-confirmation/monitor',
-    'Support': '/tickets-list',
-    # Nove páginas gravavam notificação SEM entrada aqui — o aviso aparecia no
-    # sino e o clique não ia a lugar nenhum (o TED Release do Other Products
-    # Summary foi como isso apareceu). Todo rótulo `page` passado a
-    # `_create_notification` TEM de existir neste mapa (e nas duas cópias do
-    # navegador) — `check_notif_page_url.py` agora prende isso.
-    'Other Products Summary': '/other-products-summary',
-    'NDF Summary':            '/ndf-summary',
-    'Operations B3':          '/operations-b3',
-    'OTM Settlements':        '/otm-settlements',
-    'Latam Desk Position':    '/other-products-swap-latamdeskposition',
-    'NDF Cockpit':            '/ndf-cockpit',
-    'Cognos':                 '/cognos',
-    # A tela chama-se **File Interpreter** desde a renomeação; o rótulo aqui
-    # continua 'File Interface' porque é o que as notificações JÁ GRAVADAS
-    # carregam, e é por ele que o clique acha o destino — mesma razão do
-    # 'Confirmation' lá em cima. Um segundo rótulo apontando para a mesma URL
-    # também não serve: `check_notif_page_url.py` recusa destino repetido, e com
-    # razão, porque aí o mesmo aviso teria duas chaves.
-    'File Interface':         '/file-interpreter',
-    'File Interpreter':       '/file-interpreter',
-    'Mapping':                '/mapping',
-    'Holidays Calendar':      '/holidays-calendar',
-}
+_NOTIF_DS_OTHERPUB = _pf_notif._NOTIF_DS_OTHERPUB
 
+_NOTIF_PAGE_URL = _pf_notif._NOTIF_PAGE_URL
+_notif_page_url = _pf_notif._notif_page_url
 
-def _notif_page_url(page, action=''):
-    """Destino do clique de uma notificação.
+# A autorização por página/card mora em `platform/authz.py` — aliases; os
+# dois `before_request` que a APLICAM ficam aqui (registro em blueprint é
+# casca). O estado (`_page_access_cache`) mora lá e é mutado in place.
+from apps.pages.platform import authz as _pf_authz  # noqa: E402
 
-    O par (ação, página) da Recon FXO nasceu trocado — a ação era 'Recon FXO' e a
-    página 'Reconciliation', que é a do Pay/Rec —, então o sino levava para a
-    recon errada. O cadastro foi corrigido na origem, mas as notificações **já
-    gravadas** carregam o par antigo: sem esta tradução, o histórico do sino
-    continuaria abrindo o Pay/Rec para sempre. Mesma razão do rótulo
-    'Confirmation' logo acima — o que está no banco não se reescreve.
-
-    A cópia desta regra vive no `partials/topbar.html` (é lá que o clique
-    acontece); as duas têm de dizer a mesma coisa.
-    """
-    if page == 'Reconciliation' and action == 'Recon FXO':
-        return _NOTIF_PAGE_URL['Recon FXO']
-    return _NOTIF_PAGE_URL.get(page)
-
-
-def _load_nav_urls():
-    """Parse the sidebar template once for every side-nav-link href — the set of
-    controllable pages. Robust to markup changes (matches the href only)."""
-    try:
-        fp = os.path.join(os.path.dirname(__file__), '..', 'templates', 'partials', 'sidenav.html')
-        with open(fp, encoding='utf-8') as fh:
-            html = fh.read()
-        urls = set(re.findall(r'<a[^>]*\bhref="(/[^"]+)"[^>]*\bclass="side-nav-link"', html))
-        urls |= set(re.findall(r'<a[^>]*\bclass="side-nav-link"[^>]*\bhref="(/[^"]+)"', html))
-        return urls - _ALWAYS_ALLOWED_PATHS
-    except Exception:
-        log.warning('[page-access] could not parse sidenav urls:\n%s', traceback.format_exc())
-        return set()
-
-
-_NAV_URLS = _load_nav_urls()
-
-# Control Panel is access-controlled at the card level: instead of the single
-# "/control-panel" page grant, each routine card can be granted on its own. Tokens
-# are stored in the same allowlist as page URLs ("/control-panel#<id>").
-#
-# A ORDEM aqui é a da tela, seção por seção — é ela que monta a checklist do
-# /page-access, e uma ordem diferente da do painel faz quem concede o acesso
-# procurar o card numa lista que não se parece com a página que ele vai liberar.
-# O que NÃO pode mudar é o `id`: ele é o token gravado no `Page_Access` de cada
-# usuário (`/control-panel#<id>`), então renomeá-lo revoga o acesso em silêncio.
-_CONTROL_PANEL_CARDS = [
-    # Intraday Routines
-    {'id': 'cetip',       'label': 'Save CETIP Files'},
-    {'id': 'dealsmonitor', 'label': 'Deals Monitor — Pending Action'},
-    {'id': 'confescalation', 'label': 'Confirmations Escalation'},
-    # Settlement Reporting
-    {'id': 'daily',       'label': 'Save Daily Settlement Files'},
-    {'id': 'forecast',    'label': 'Settlement Forecast'},
-    # Pending Confirmation Routines
-    {'id': 'dailymetric', 'label': 'Daily Metric — Outstanding Confirmation Brazil OTC'},
-    {'id': 'pendingspreadsheet', 'label': 'Pending Confirmations Spreadsheet Metrics'},
-    {'id': 'weeklyescalation', 'label': 'Pending Confirmation — Weekly Escalation (CEM/EDG)'},
-    {'id': 'signaturecollection', 'label': 'Pending Signature Confirmations — Collection'},
-    # Economic Affirmation Routines
-    {'id': 'manualdealsea', 'label': 'Manual Deals EA'},
-    {'id': 'baccea',      'label': 'BACC EA Metrics'},
-    {'id': 'mt300',       'label': 'MT300'},
-    # Reference Data Routines
-    {'id': 'contacts',    'label': 'Update Contacts'},
-    # Application
-    {'id': 'appversion',  'label': 'New Version Released'},
-]
-_CP_CARD_TOKENS = {'/control-panel#' + c['id'] for c in _CONTROL_PANEL_CARDS}
-# API endpoint → the card it belongs to (for server-side enforcement).
-_CP_ENDPOINT_CARD = {
-    '/api/control-panel/cetip-settlement': 'cetip',
-    '/api/control-panel/cetip-settlement/recipients': 'cetip',
-    '/api/control-panel/daily-settlement-save': 'daily',
-    '/api/control-panel/settlement-forecast/data': 'forecast',
-    '/api/control-panel/settlement-forecast/email': 'forecast',
-    '/api/control-panel/settlement-forecast/recipients': 'forecast',
-    '/api/control-panel/import-contacts': 'contacts',
-    '/api/control-panel/daily-metric/recipients': 'dailymetric',
-    '/api/control-panel/daily-metric/run': 'dailymetric',
-    '/api/control-panel/weekly-escalation/recipients': 'weeklyescalation',
-    '/api/control-panel/weekly-escalation/run': 'weeklyescalation',
-    '/api/control-panel/signature-collection/preview': 'signaturecollection',
-    '/api/control-panel/signature-collection/generate': 'signaturecollection',
-    '/api/control-panel/deals-monitor/recipients': 'dealsmonitor',
-    '/api/control-panel/deals-monitor/run': 'dealsmonitor',
-    '/api/control-panel/pending-spreadsheet/run': 'pendingspreadsheet',
-    '/api/control-panel/pending-spreadsheet/status': 'pendingspreadsheet',
-    '/api/control-panel/confirmations-escalation/recipients': 'confescalation',
-    '/api/control-panel/confirmations-escalation/run': 'confescalation',
-    '/api/control-panel/bacc-ea-metrics/recipients': 'baccea',
-    '/api/control-panel/bacc-ea-metrics/run': 'baccea',
-    '/api/control-panel/manual-deals-ea/recipients': 'manualdealsea',
-    '/api/control-panel/manual-deals-ea/run': 'manualdealsea',
-    '/api/control-panel/mt300/recipients': 'mt300',
-    '/api/control-panel/mt300/run': 'mt300',
-    '/api/control-panel/app-version/recipients': 'appversion',
-    '/api/control-panel/app-version/run': 'appversion',
-}
-
-
-def _cp_page_allowed(allowed):
-    """True if the user may open the Control Panel page at all (any card granted;
-    a legacy whole-page '/control-panel' grant counts as all cards)."""
-    return '/control-panel' in allowed or any(t in allowed for t in _CP_CARD_TOKENS)
-
-
-def _cp_card_allowed(allowed, card_id):
-    return '/control-panel' in allowed or ('/control-panel#' + card_id) in allowed
-
-
-# A allowlist é a consulta mais repetida do app: o `enforce_page_access` a faz em
-# TODA navegação e o sino a faz a cada consulta, por aba aberta. Ela quase nunca
-# muda — só a tela `/page-access` a escreve —, então cada uma dessas idas ao
-# banco relia o mesmo valor. Com o banco no share isso é ida e vida de rede no
-# caminho crítico de cada request.
-#
-# Cache por SID, com invalidação na escrita e um TTL curto por cima. Os dois
-# existem por razões diferentes: a invalidação cobre a mudança feita NESTE
-# processo (o caso normal, e nele a revogação é imediata) e o TTL cobre a
-# instância vizinha que editou o mesmo banco — sem ele, um acesso revogado no
-# outro processo valeria pela vida deste. Trinta segundos é o atraso máximo de
-# uma revogação vinda de fora, e é o preço de não perguntar ao share a cada
-# clique.
-_PAGE_ACCESS_TTL = 30.0
-_page_access_cache = {}                      # sid → (expira_em, (configured, urls))
-_page_access_lock = threading.Lock()
-
-
-def _page_access_forget(sid=None):
-    """Esquece o cache — de um SID, ou inteiro quando `sid` é None."""
-    with _page_access_lock:
-        if sid is None:
-            _page_access_cache.clear()
-        else:
-            _page_access_cache.pop((sid or '').strip().upper(), None)
-
-
-def _get_page_access(sid):
-    """(configured, urls_set). configured=False → not set yet (full access);
-    configured=True → the stored allowlist (possibly empty)."""
-    if not sid:
-        return (False, set())
-    chave = sid.strip().upper()
-    agora = time.time()
-    with _page_access_lock:
-        em_cache = _page_access_cache.get(chave)
-    if em_cache and em_cache[0] > agora:
-        # Devolve uma CÓPIA do conjunto: o chamador não pode alterar o cache
-        # sem querer, e um `allowed.add(...)` numa rota viraria concessão
-        # permanente para o processo inteiro.
-        configurado, urls = em_cache[1]
-        return (configurado, set(urls))
-    resposta = _read_page_access(sid)
-    with _page_access_lock:
-        _page_access_cache[chave] = (agora + _PAGE_ACCESS_TTL, resposta)
-    return (resposta[0], set(resposta[1]))
-
-
-def _read_page_access(sid):
-    """A allowlist como está no banco, sem cache."""
-    try:
-        conn = get_db_connection(readonly=True)
-        try:
-            row = conn.execute("SELECT Page_Access FROM users WHERE SID = ?", [sid]).fetchone()
-        finally:
-            conn.close()
-    except Exception:
-        return (False, set())
-    raw = ((row[0] if row else '') or '').strip()
-    if not raw:
-        return (False, set())
-    try:
-        arr = json.loads(raw)
-        if isinstance(arr, list):
-            # A tela do File Interpreter mudou de URL (/file-interface →
-            # /file-interpreter): o valor antigo gravado no cadastro segue
-            # valendo — renomear página não pode revogar acesso em silêncio.
-            # O item CGD virou a seção Onboarding, e o mesmo vale para ele.
-            _renomeadas = {'/file-interface': '/file-interpreter',
-                           '/cgd': '/onboarding'}
-            return (True, set(_renomeadas.get(str(u), str(u)) for u in arr))
-    except Exception:
-        pass
-    return (False, set())
-
-
-def _set_page_access(sid, urls):
-    conn = get_db_connection()
-    try:
-        payload = json.dumps(sorted(set(str(u) for u in (urls or []))))
-        conn.execute("UPDATE users SET Page_Access = ? WHERE SID = ?", [payload, sid])
-        conn.commit()
-    finally:
-        conn.close()
-    # DEPOIS do commit: esquecendo antes, uma leitura concorrente repovoaria o
-    # cache com o valor velho e a mudança só valeria daqui a um TTL.
-    _page_access_forget(sid)
-
-
-# Master users: top-of-hierarchy superusers pinned by SID (not by DB role, so the
-# capability can't be granted to anyone else through user management). A master is
-# always exempt from page-access restrictions and is the only one who can change an
-# admin's (or another master's) access.
-_MASTER_SIDS = {'E930179'}
-
-
-def _session_is_master():
-    return (session.get('user_sid') or '').strip().upper() in _MASTER_SIDS
-
-
-def _session_is_admin():
-    """Admin-console privileges. Master is a superset of admin."""
-    return (session.get('user_role') or '').upper() == 'ADMIN' or _session_is_master()
+_ALWAYS_ALLOWED_PATHS = _pf_authz._ALWAYS_ALLOWED_PATHS
+_load_nav_urls = _pf_authz._load_nav_urls
+_NAV_URLS = _pf_authz._NAV_URLS
+_CONTROL_PANEL_CARDS = _pf_authz._CONTROL_PANEL_CARDS
+_CP_CARD_TOKENS = _pf_authz._CP_CARD_TOKENS
+_CP_ENDPOINT_CARD = _pf_authz._CP_ENDPOINT_CARD
+_cp_page_allowed = _pf_authz._cp_page_allowed
+_cp_card_allowed = _pf_authz._cp_card_allowed
+_page_access_forget = _pf_authz._page_access_forget
+_get_page_access = _pf_authz._get_page_access
+_read_page_access = _pf_authz._read_page_access
+_set_page_access = _pf_authz._set_page_access
+_MASTER_SIDS = _pf_authz._MASTER_SIDS
+_session_is_master = _pf_authz._session_is_master
+_session_is_admin = _pf_authz._session_is_admin
+_safe_landing = _pf_authz._safe_landing
+_user_can_access_page = _pf_authz._user_can_access_page
 
 
 @blueprint.before_request
@@ -615,36 +380,6 @@ def enforce_page_access():
         return
     if path not in allowed:
         return redirect(_safe_landing(allowed))
-
-
-def _safe_landing(allowed):
-    """A page the user is actually allowed to reach — used when a blocked navigation
-    is redirected, so it never bounces to a page they also can't see (the dashboards
-    are now grantable, so '/dashboard' is not guaranteed). '/users-profile' is the
-    always-open last resort."""
-    for u in ('/dashboard', '/dashboard-2'):
-        if u in allowed:
-            return u
-    if _cp_page_allowed(allowed):
-        return '/control-panel'
-    for u in sorted(allowed):
-        if u in _NAV_URLS:
-            return u
-    return '/users-profile'
-
-
-def _user_can_access_page(url):
-    """True if the current session may reach a given sidebar page URL — same rule
-    as enforce_page_access, for API endpoints that back a page. enforce_page_access
-    skips '/api/' paths, so a mutating API behind a page must re-check here or a
-    user without that page granted could call it directly. Master and unconfigured
-    users always pass."""
-    if _session_is_master():
-        return True
-    configured, allowed = _get_page_access(session.get('user_sid', ''))
-    if not configured:
-        return True
-    return url in allowed
 
 
 @blueprint.before_request
@@ -673,7 +408,10 @@ CACHE_BASE_DIR = os.path.normpath(os.path.join(
 OPT_FXO_CACHE_DIR = os.path.normpath(os.path.join(
     data_dir(), "cache", "new deals", "Option", "FXO"
 ))
-SHARED_MAILBOX = "otc.tracker@jpmorgan.com"
+# A infraestrutura de e-mail mora em `platform/mail.py` — aliases.
+from apps.pages.platform import mail as _pf_mail  # noqa: E402
+
+SHARED_MAILBOX = _pf_mail.SHARED_MAILBOX
 
 # A porta em que a instância roda. UMA constante porque ela aparece em três
 # lugares que se leem de fora do código — o endereço dos botões de e-mail
@@ -812,141 +550,21 @@ def _ensure_counterparty_folders(company):
             os.makedirs(os.path.join(parent, sub), exist_ok=True)
     except Exception as exc:
         log.warning('Electronic Inventory folder creation failed for %r: %s', company, exc)
-# Serializa o ciclo ler → alterar → gravar dos caches JSON (New Deals, MtM,
-# mappings, estado de confirmação). O _atomic_write_json garante que o arquivo
-# nunca fica pela metade; só ele NÃO evita lost update: dois requests que leem a
-# mesma versão e gravam em seguida fazem o segundo apagar a alteração do primeiro.
-# RLock e não Lock: helper que tranca sozinho pode ser chamado de um bloco que já
-# tranca (é o caso do _conf_state_save), e com Lock isso seria deadlock.
-_cache_lock = threading.RLock()
+# O armazém JSON (escrita atômica, _cache_lock, claims diários, arquivos-dia)
+# mora em `platform/json_cache.py` — aliases. Os objetos de estado (o RLock, o
+# memo do daycache) são mutados in place e nunca rebindados, então o alias
+# continua vivo.
+from apps.pages.platform import json_cache as _pf_jcache  # noqa: E402
+
+_cache_lock = _pf_jcache._cache_lock
+_claim_daily_slot = _pf_jcache._claim_daily_slot
+_release_daily_slot = _pf_jcache._release_daily_slot
+_atomic_write_json = _pf_jcache._atomic_write_json
+_unique_filepath = _pf_jcache._unique_filepath
 
 
-# _cache_lock only serializes threads INSIDE this process — quando duas
-# instâncias do app rodam (dois processos, dois hosts), cada uma tem seu
-# próprio RLock, e as duas podem ler o claim file antes de qualquer uma
-# escrever: ambas veem o slot livre e o e-mail agendado (BACC, MDEA, MT300)
-# sai em dobro. O portalocker.Lock abaixo é um lock de ARQUIVO — visto
-# por todo processo que abrir o mesmo caminho, inclusive noutro host no share —
-# e envolve o ciclo ler → checar → gravar inteiro, então só uma instância
-# consegue reservar o slot.
-def _claim_daily_slot(claim_file, claim_dir, slot, keep_last, log_prefix):
-    """Reserva `slot` em `claim_file`; False se outra instância (ou volta
-    anterior deste processo) já reservou. Cross-process via lock de arquivo."""
-    os.makedirs(claim_dir, exist_ok=True)
-    try:
-        with portalocker.Lock(claim_file + '.lock', mode='a+b', timeout=15,
-                              flags=portalocker.LockFlags.EXCLUSIVE):
-            with _cache_lock:
-                try:
-                    with open(claim_file, encoding='utf-8') as fh:
-                        sent = json.load(fh)
-                    if not isinstance(sent, list):
-                        sent = []
-                except (IOError, OSError, json.JSONDecodeError):
-                    sent = []
-                if slot in sent:
-                    return False
-                sent.append(slot)
-                _atomic_write_json(claim_file, sorted(sent)[-keep_last:])
-                return True
-    except portalocker.exceptions.LockException:
-        # Outra instância está com o lock — trata como "já reservado" para não
-        # arriscar dois envios; a próxima volta do catch-up tenta de novo.
-        log.warning('[%s] claim lock busy — assuming another instance is handling %s',
-                    log_prefix, slot)
-        return False
-    except Exception:                                       # noqa: BLE001
-        log.warning('[%s] não consegui gravar o claim:\n%s', log_prefix, traceback.format_exc())
-        return True
-
-
-def _release_daily_slot(claim_file, slot, log_prefix):
-    """Devolve `slot` (envio falhou) sob o mesmo lock cross-process do claim."""
-    try:
-        with portalocker.Lock(claim_file + '.lock', mode='a+b', timeout=15,
-                              flags=portalocker.LockFlags.EXCLUSIVE):
-            with _cache_lock:
-                try:
-                    with open(claim_file, encoding='utf-8') as fh:
-                        sent = json.load(fh)
-                    if not isinstance(sent, list):
-                        return
-                except (IOError, OSError, json.JSONDecodeError):
-                    return
-                if slot not in sent:
-                    return
-                _atomic_write_json(claim_file, [s for s in sent if s != slot])
-    except Exception:                                       # noqa: BLE001
-        log.warning('[%s] não consegui devolver o slot %s:\n%s',
-                    log_prefix, slot, traceback.format_exc())
-
-
-def _atomic_write_json(file_path, data):
-    """Write JSON safely: atomic rename on POSIX; direct write fallback on Windows.
-
-    On Windows, os.replace() raises PermissionError if a concurrent reader holds
-    the file open without FILE_SHARE_DELETE (e.g. _find_deal_in_cache). In that
-    case we fall back to a direct write — safe because _cache_lock already
-    serialises all concurrent writes to the same file.
-
-    **O `bump_cache_gen` fica AQUI, e não em cada `*_save`.** O
-    `request_cache` pede que quem grava invalide o cache curto do dia, senão a
-    edição de quem salvou fica escondida atrás do TTL de 5 s — a pessoa salva,
-    a tela recarrega e mostra o valor anterior, sem erro nenhum. São 74
-    chamadores deste funil: pedir a chamada em cada um é criar 74 chances de
-    esquecer, e a que faltasse só apareceria como "salvei e não mudou" num
-    caso de borda. No funil, é impossível esquecer.
-
-    Invalidar demais não custa correção, só um relê a mais: o
-    `bump_cache_gen` ignora nome de arquivo sem `YYYYMMDD`, e um arquivo-dia
-    que nenhum loader decorado lê apenas incrementa uma geração que ninguém
-    consulta. O commit é DEPOIS da gravação bem-sucedida — antes, um erro no
-    `os.replace` invalidaria o cache de um dado que continua igual em disco.
-    """
-    dir_name = os.path.dirname(file_path)
-    fd, tmp_path = tempfile.mkstemp(dir=dir_name, suffix='.tmp')
-    try:
-        with os.fdopen(fd, 'w', encoding='utf-8') as fh:
-            json.dump(data, fh, ensure_ascii=False, indent=2)
-        try:
-            os.replace(tmp_path, file_path)
-            _bump_cache_gen(file_path)
-            return
-        except PermissionError:
-            pass  # Windows: target held open by a reader — fall through
-        # Fallback: copy content then remove temp
-        with open(file_path, 'w', encoding='utf-8') as fh:
-            json.dump(data, fh, ensure_ascii=False, indent=2)
-        _bump_cache_gen(file_path)
-        try:
-            os.unlink(tmp_path)
-        except OSError:
-            pass
-    except Exception:
-        try:
-            os.unlink(tmp_path)
-        except OSError:
-            pass
-        raise
-
-
-def _unique_filepath(output_dir, filename):
-    """Return a path inside output_dir that does not collide with an existing
-    file. If 'filename' is free it is used as-is; otherwise a copy suffix is
-    inserted before the extension based on how many same-named files exist:
-    'TCO_BANCO.txt' -> 'TCO_BANCO (1).txt' -> 'TCO_BANCO (2).txt' ...
-    """
-    base, ext = os.path.splitext(filename)
-    candidate = filename
-    n = 0
-    while os.path.exists(os.path.join(output_dir, candidate)):
-        n += 1
-        candidate = base + ' (' + str(n) + ')' + ext
-    return os.path.join(output_dir, candidate)
-
-
-SMTP_HOST = "mailhost.jpmchase.net"
-SMTP_PORT = 25
+SMTP_HOST = _pf_mail.SMTP_HOST
+SMTP_PORT = _pf_mail.SMTP_PORT
 CODE_EXPIRY_MINUTES = 10
 
 # 2FA hardening. A 6-digit code has a 10^6 space; without a cap on wrong tries it
@@ -986,67 +604,14 @@ _db_init_lock = threading.RLock()     # re-entrant: init_db() re-enters via get_
 _db_init_tls  = threading.local()     # per-thread "currently initializing" flag
 
 
-class _DuckDBHandle:
-    """Adaptador de compatibilidade para os chamadores antigos, que usam `close()`.
+# O handle e a abertura do banco de usuários moram em `platform/db.py` —
+# aliases. O caminho (`DB_PATH`), as primitivas e o `_ensure_db_initialized`
+# ficam AQUI e a platform os alcança por busca atrasada: são a superfície
+# que os testes trocam.
+from apps.pages.platform import db as _pf_db  # noqa: E402
 
-    O banco de usuários passou a ser aberto pelo `duckdb_write` do
-    `database_access` — um contexto (`with`) cujo lock é de ARQUIVO, e por isso
-    vale também ENTRE PROCESSOS. Os ~21 chamadores das rotas seguem o contrato
-    antigo (`conn = get_db_connection()` … `finally: conn.close()`), e reescrever
-    os 21 no mesmo commit seria trocar a disciplina de fechamento de todos de uma
-    vez; este adaptador é o que permite migrá-los aos poucos.
-
-    O `close()` é o `__exit__` do contexto: é ele que comita, fecha a conexão e
-    solta o lock. A regra do `finally` continua valendo palavra por palavra
-    (CLAUDE.md §4) — sem ela o lock não é liberado e o app trava para todos.
-    """
-    __slots__ = ('_context', '_conn', '_closed')
-
-    def __init__(self, context):
-        self._context = context
-        self._conn = context.__enter__()
-        self._closed = False
-
-    def __getattr__(self, name):
-        return getattr(self._conn, name)
-
-    def close(self):
-        if not self._closed:
-            self._closed = True
-            self._context.__exit__(None, None, None)
-
-    def commit(self):
-        """O contexto de escrita comita quando o dono do handle o fecha."""
-
-
-def get_db_connection(readonly=False):
-    """Abre o banco de Usuários pelo contexto de transação comum.
-
-    Era uma conexão SINGLETON atrás de um `threading.Lock` de módulo, com retry,
-    backoff e reconexão quando ela adoecia. O lock de thread protegia UM
-    processo: um script de manutenção rodando ao lado do servidor abria o mesmo
-    arquivo sem pedir licença a ninguém. O `duckdb_write` põe o lock no ARQUIVO,
-    então a exclusão vale entre processos — e o retry, o backoff e a checagem de
-    saúde passam a ser dele, num lugar só, para todos os bancos.
-
-    **`readonly=True` para quem só faz SELECT**, e não é otimização de detalhe.
-    O caminho de escrita é EXCLUSIVO nos dois níveis: um `BoundedSemaphore(1)`
-    dentro do processo e um lock de arquivo exclusivo entre eles. Abrir uma
-    consulta por ali põe toda leitura na mesma fila de UM: com o banco no share,
-    onde cada operação custa ida e volta de rede, a topbar consultando o sino
-    por aba aberta consome sozinha a fila inteira, e a página que o usuário
-    pediu espera atrás dela. Era o que fazia a tela levar minutos para aparecer
-    com o banco em `\\Nawest…` — sem erro nenhum no log, porque ninguém falhou:
-    todo mundo esperou.
-
-    A leitura toma lock COMPARTILHADO e um semáforo de `DATABASE_READ_CONCURRENCY`
-    permissões, então leitores não se bloqueiam entre si nem bloqueiam outra
-    instância — e continuam excluídos do escritor, que é a garantia que importa.
-    """
-    _ensure_db_initialized()        # lazy, one-time schema/migrations (no-op after first run)
-    if readonly:
-        return _DuckDBHandle(duckdb_read(DB_PATH))
-    return _DuckDBHandle(duckdb_write(DB_PATH))
+_DuckDBHandle = _pf_db._DuckDBHandle
+get_db_connection = _pf_db.get_db_connection
 
 
 # ── O banco das NOTIFICAÇÕES, separado do de usuários ───────────────────────
@@ -1064,307 +629,16 @@ def get_db_connection(readonly=False):
 NOTIF_DB_PATH = Config.NOTIFICATIONS_DATABASE_PATH
 
 
-def get_notif_connection(readonly=False, unlocked=False):
-    """Abre o banco de NOTIFICAÇÕES. Mesmo contrato do `get_db_connection`:
-    `conn = ...` seguido de `try: … finally: conn.close()`.
+# O banco de notificações mora em `platform/notifications.py` — aliases; o
+# ESTADO da subida (`_notif_db_done`, `_notif_db_retry_at`, o lock) mora lá.
+get_notif_connection = _pf_notif.get_notif_connection
+_notif_init_schema = _pf_notif._notif_init_schema
+_notif_migrar_do_antigo = _pf_notif._notif_migrar_do_antigo
+_notif_maior_id_antigo = _pf_notif._notif_maior_id_antigo
+_notif_avanca_sequencia = _pf_notif._notif_avanca_sequencia
+_notif_schema_pronto = _pf_notif._notif_schema_pronto
+_ensure_notif_db = _pf_notif._ensure_notif_db
 
-    `readonly=True` para quem só faz SELECT — lock COMPARTILHADO, que não entra
-    na fila de escrita (CLAUDE.md §4).
-
-    **`unlocked=True` é o poll do sino, e SÓ ele.** Ele dispensa até o lock
-    compartilhado, então a leitura não espera nem por uma gravação de
-    notificação em curso. O preço é real: sem coordenação entre processos, a
-    leitura pode pegar o arquivo no meio de um commit e falhar — ou, no share,
-    ver um estado parcial. É aceitável ali porque o sino é uma consulta de
-    MELHOR ESFORÇO: ele repete a cada poucos segundos, o endpoint já trata a
-    consulta que falha devolvendo o sino vazio (e não um 500 a cada aba), e um
-    aviso que aparece um poll depois não muda decisão nenhuma.
-
-    NÃO use em nada que decida: a allowlist do `Page_Access`, o login, o papel
-    que filtra os tickets. Ali um dado parcial vira uma AUTORIZAÇÃO errada, e o
-    `check_unlocked_reads.py` recusa a chamada fora do lugar permitido.
-    """
-    # **O ensure é do caminho de ESCRITA, e isto não é economia.** Ele abre o
-    # banco em modo READ-WRITE e, na primeira vez, migra o banco antigo: no
-    # share isso segurou o lock exclusivo por 9,4 SEGUNDOS. Chamado aqui em
-    # cima, quem pagava essa conta era o poll do sino — a consulta mais
-    # repetida do app, declarada MELHOR ESFORÇO, e a única que abre sem lock
-    # nenhum. Uma leitura best-effort virava a escrita mais cara do sistema.
-    #
-    # E o DuckDB não deixa isso passar em silêncio: um handle read-only aberto
-    # (outra aba, outra thread, a outra instância que enxerga o mesmo share)
-    # BLOQUEIA a abertura read-write, e o open estoura com *"the process cannot
-    # access the file because it is being used by another process"*. Como o
-    # `_notif_db_done` só é marcado no fim, a falha deixava o flag em False e
-    # TODO poll seguinte tentava de novo: um 500 por aba a cada 8 segundos,
-    # cada um custando uma tentativa de lock exclusivo no share.
-    #
-    # Quem cria o schema é a subida (`_capture_flask_app`) e, depois dela, só
-    # quem vai GRAVAR. O leitor não cria banco — no pior caso ele lê um banco
-    # que ainda não existe, e o sino fica vazio, que é o desfecho que este
-    # endpoint já tratava.
-    if not (readonly or unlocked):
-        _ensure_notif_db()
-    if unlocked:
-        if not readonly:
-            # A gravação sem lock corrompe o arquivo em vez de só ler torto.
-            raise ValueError('unlocked só vale para leitura')
-        return _DuckDBHandle(duckdb_read_unlocked(NOTIF_DB_PATH))
-    if readonly:
-        return _DuckDBHandle(duckdb_read(NOTIF_DB_PATH))
-    return _DuckDBHandle(duckdb_write(NOTIF_DB_PATH))
-
-
-_notif_db_done = False
-_notif_db_lock = threading.Lock()
-# O ensure que FALHA não pode ser tentado de novo na chamada seguinte: a falha
-# típica é o arquivo em uso por outro processo, ela demora (é um lock no share
-# que expira) e ela se repete enquanto a outra ponta não soltar. Sem espera, o
-# app tenta a cada gravação de notificação — e as notificações acontecem a cada
-# ação de qualquer pessoa.
-_notif_db_retry_at = 0.0
-_NOTIF_DB_RETRY_SECONDS = 300
-
-
-def _notif_init_schema(conn, seq_start=1):
-    """As duas tabelas do banco de notificações.
-
-    `seq_start` existe porque o DuckDB NÃO deixa mexer numa sequência de que uma
-    coluna depende: `ALTER SEQUENCE … RESTART` não é implementado, e o
-    `DROP`/`CREATE OR REPLACE` batem em *"Cannot drop entry because there are
-    entries that depend on it"*. Como o `id` das notificações migradas vem do
-    banco antigo, a sequência tem de NASCER depois do maior deles — depois da
-    tabela criada, não há mais como corrigi-la, e o próximo INSERT colidiria com
-    uma linha migrada.
-    """
-    conn.execute("CREATE SEQUENCE IF NOT EXISTS seq_notif_id START {}".format(
-        max(1, int(seq_start or 1))))
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS notifications (
-            id          INTEGER DEFAULT nextval('seq_notif_id') PRIMARY KEY,
-            actor_sid   VARCHAR NOT NULL DEFAULT '',
-            actor_name  VARCHAR NOT NULL DEFAULT '',
-            action      VARCHAR NOT NULL DEFAULT '',
-            page        VARCHAR NOT NULL DEFAULT '',
-            detail      VARCHAR DEFAULT '',
-            target_role VARCHAR DEFAULT '',
-            target_sid  VARCHAR DEFAULT '',
-            created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS push_subscriptions (
-            endpoint   VARCHAR PRIMARY KEY,
-            sid        VARCHAR NOT NULL DEFAULT '',
-            role       VARCHAR DEFAULT '',
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-
-
-def _notif_migrar_do_antigo(conn):
-    """Traz `notifications` e `push_subscriptions` do banco de usuários.
-
-    Roda uma vez, na subida, e é IDEMPOTENTE: o banco da instância já tem as
-    duas tabelas cheias, e um script separado ("rode isto depois do pull") é a
-    forma mais confiável de a mesa ficar sem o sino — já aconteceu com as
-    migrações do Pending Confirmation.
-
-    O que veio NÃO é apagado do banco antigo. Renomear ou dropar deixaria a
-    volta atrás sem dado, e o custo de manter as linhas lá é algumas dezenas de
-    KB num arquivo que ninguém mais lê. O que impede a duplicação é o `id`:
-    a cópia pula o que já está aqui.
-    """
-    inseriu = False
-    if not os.path.isfile(DB_PATH):
-        return inseriu                                      # instalação nova
-    # Pela CAMADA (`duckdb_read`) e não pelo `duckdb.connect` cru: ela toma o
-    # lock compartilhado do arquivo, então a migração não atropela quem estiver
-    # lendo o banco de usuários nesse instante. E o módulo nem importa o
-    # `duckdb` — foi assim que a primeira versão disto falhou com `NameError`,
-    # engolido por um `except` mudo, deixando o banco novo vazio em silêncio.
-    try:
-        with duckdb_read(DB_PATH) as antigo:
-            for tabela, chave in (('notifications', 'id'),
-                                  ('push_subscriptions', 'endpoint')):
-                try:
-                    res = antigo.execute('SELECT * FROM {}'.format(tabela))
-                    # `description` ANTES do `fetchall`: depois de consumir o
-                    # resultado o DuckDB a zera, e `[d[0] for d in None]`
-                    # estoura um TypeError que cairia no mesmo `except` de "a
-                    # tabela não existe" — a migração pularia a tabela CHEIA
-                    # sem dizer nada.
-                    cols = [d[0] for d in res.description]
-                    linhas_antigas = res.fetchall()
-                except Exception:                           # noqa: BLE001
-                    log.info('[notif-db] nada a migrar de %s: %s', tabela,
-                             traceback.format_exc(limit=0).strip()[:140])
-                    continue
-                if not linhas_antigas:
-                    continue
-                existentes = {r[0] for r in conn.execute(
-                    'SELECT "{}" FROM {}'.format(chave, tabela)).fetchall()}
-                i = cols.index(chave)
-                novas = [l for l in linhas_antigas if l[i] not in existentes]
-                if not novas:
-                    continue
-                ph = ', '.join('?' for _ in cols)
-                nomes = ', '.join('"{}"'.format(x) for x in cols)
-                # NULL vira '' nas colunas que o schema novo declara NOT NULL.
-                # UMA linha antiga com nulo abortaria o lote inteiro — e o lote
-                # é a migração toda. O default do schema não salva: ele só vale
-                # quando a coluna é OMITIDA, e aqui ela vem com o valor nulo.
-                nn = {'actor_sid', 'actor_name', 'action', 'page', 'sid', 'endpoint'}
-                idx_nn = [k for k, nome in enumerate(cols) if nome in nn]
-                if idx_nn:
-                    novas = [tuple('' if (k in idx_nn and v is None) else v
-                                   for k, v in enumerate(l)) for l in novas]
-                conn.executemany('INSERT INTO {} ({}) VALUES ({})'.format(
-                    tabela, nomes, ph), novas)
-                inseriu = True
-                log.info('[notif-db] %d linha(s) de %s migradas do banco de usuários',
-                         len(novas), tabela)
-    except Exception:                                       # noqa: BLE001
-        # A migração falhando NÃO pode impedir o app de subir: sem ela o sino
-        # nasce sem histórico; com ela quebrada, ninguém entra. O motivo vai
-        # inteiro para o log.
-        log.error('[notif-db] a migração do banco antigo falhou:\n%s',
-                  traceback.format_exc())
-    return inseriu
-
-
-def _notif_maior_id_antigo():
-    """O maior `id` de `notifications` no banco de usuários, ou 0.
-
-    Lido ANTES de criar o schema — é ele que decide onde a sequência começa.
-    """
-    if not os.path.isfile(DB_PATH):
-        return 0
-    try:
-        with duckdb_read(DB_PATH) as antigo:
-            return int(antigo.execute(
-                'SELECT COALESCE(MAX(id), 0) FROM notifications').fetchone()[0] or 0)
-    except Exception:                                       # noqa: BLE001
-        return 0
-
-
-def _notif_avanca_sequencia(conn):
-    """Empurra a sequência para além do maior `id` da tabela, se ela ficou atrás.
-
-    O caminho normal já nasce certo (`seq_start`). Isto é o conserto do caso
-    torto: uma primeira subida em que o schema foi criado e a migração falhou no
-    meio deixaria a sequência em 1 com linhas de id alto na tabela, e o INSERT
-    seguinte colidiria — o sino pararia de gravar, e o erro apareceria uma vez
-    por ação de qualquer pessoa. Queimar `nextval` é O(n) e feio, mas é a única
-    coisa que o DuckDB permite fazer numa sequência com dependente, e o n aqui é
-    de algumas centenas.
-    """
-    try:
-        maior = int(conn.execute(
-            'SELECT COALESCE(MAX(id), 0) FROM notifications').fetchone()[0] or 0)
-        if maior <= 0:
-            return
-        for _ in range(maior + 2):
-            atual = int(conn.execute("SELECT nextval('seq_notif_id')").fetchone()[0])
-            if atual > maior:
-                return
-        log.warning('[notif-db] não consegui avançar a sequência além de %d', maior)
-    except Exception:                                       # noqa: BLE001
-        log.warning('[notif-db] avanço da sequência falhou:\n%s', traceback.format_exc())
-
-
-def _notif_schema_pronto():
-    """As duas tabelas já existem? A pergunta é de LEITURA, e é ela que evita a
-    abertura read-write no caso normal — que é a esmagadora maioria das vezes.
-
-    Sem esta sonda, TODA subida da instância abria o banco de notificações em
-    modo de escrita só para descobrir que não havia nada a fazer. Isso é um lock
-    exclusivo no share, e é o que colide com a instância vizinha que já está de
-    pé: o DuckDB recusa a abertura read-write enquanto qualquer handle read-only
-    estiver aberto, e o erro que ele dá — *"used by another process"* — não diz
-    nada sobre schema nenhum.
-
-    O lock aqui é o COMPARTILHADO (`duckdb_read`, não o `unlocked`): a sonda roda
-    uma vez por processo, não por request, então esperar por uma gravação em
-    curso não custa nada — e é a resposta certa, porque uma leitura suja aqui
-    decidiria criar schema por cima de um banco que já o tem.
-
-    Qualquer falha responde **False** de propósito, inclusive o arquivo que não
-    existe: "não consegui ver" e "não está lá" levam ao mesmo lugar, que é o
-    caminho de criação — e ele é idempotente (`CREATE TABLE IF NOT EXISTS`).
-    """
-    try:
-        with duckdb_read(NOTIF_DB_PATH) as con:
-            achadas = {r[0] for r in con.execute(
-                "SELECT table_name FROM information_schema.tables").fetchall()}
-    except Exception:                                       # noqa: BLE001
-        return False
-    return {'notifications', 'push_subscriptions'} <= achadas
-
-
-def _ensure_notif_db():
-    """Cria o schema e migra do banco antigo — uma vez por processo.
-
-    Ele é chamado na SUBIDA (`_capture_flask_app`) e, depois dela, só por quem
-    vai gravar. Nunca pelo poll do sino — ver o comentário em
-    `get_notif_connection`.
-    """
-    global _notif_db_done, _notif_db_retry_at
-    if _notif_db_done:
-        return
-    with _notif_db_lock:
-        if _notif_db_done:
-            return
-        if time.monotonic() < _notif_db_retry_at:
-            return
-        # A sonda primeiro: com o schema no lugar não se abre nada para escrita.
-        if _notif_schema_pronto():
-            _notif_db_done = True
-            return
-        # O `try` começa ANTES do primeiro `duckdb_write`, e é onde estava o
-        # buraco: quem falhava era a ABERTURA (o arquivo em uso por outro
-        # processo), fora de qualquer `except`. O flag ficava em False, nada
-        # marcava a espera, e a tentativa seguinte vinha na próxima chamada.
-        try:
-            # DUAS transações, e a ordem importa. O schema vai sozinho e comita
-            # primeiro; a migração vem depois, noutra. Juntos, um erro no meio da
-            # cópia — uma linha com nulo numa coluna NOT NULL foi o que apareceu no
-            # teste — desfazia TAMBÉM o `CREATE TABLE`, e o app subia com o banco de
-            # notificações sem tabela nenhuma: o sino passava a estourar a cada
-            # consulta, em cada aba. Separados, o pior caso é o sino sem histórico.
-            conn = _DuckDBHandle(duckdb_write(NOTIF_DB_PATH))
-            try:
-                # O início da sequência sai do banco ANTIGO e é decidido antes do
-                # schema: depois da tabela criada não há como corrigi-la.
-                _notif_init_schema(conn, _notif_maior_id_antigo() + 1)
-                conn.commit()
-            except Exception:
-                log.error('[notif-db] não consegui criar o schema:\n%s',
-                          traceback.format_exc())
-                conn.close()
-                raise
-            else:
-                conn.close()
-
-            conn = _DuckDBHandle(duckdb_write(NOTIF_DB_PATH))
-            try:
-                # O avanço só depois de uma migração que INSERIU: rodado sempre, ele
-                # queimaria um id a cada subida da instância — inofensivo, mas é
-                # efeito colateral por nada num caminho que roda todo dia.
-                if _notif_migrar_do_antigo(conn):
-                    _notif_avanca_sequencia(conn)
-                conn.commit()
-            finally:
-                conn.close()
-            _notif_db_done = True
-            log.info('[notif-db] pronto em %s', os.path.abspath(NOTIF_DB_PATH))
-        except Exception:                                       # noqa: BLE001
-            # Não relançar seria pior: quem grava notificação ficaria gravando
-            # numa tabela que talvez não exista. Quem chama já engole (o
-            # `_create_notification` inteiro é try/except) e a subida trata à
-            # parte — o que muda aqui é só a ESPERA antes da próxima tentativa.
-            _notif_db_retry_at = time.monotonic() + _NOTIF_DB_RETRY_SECONDS
-            raise
 
 def init_db():
     log.info("[init_db] Initializing database schema…")
@@ -1500,116 +774,10 @@ def _migrate_schema():
         conn.close()
 
 
-def _notif_roles(target_role):
-    """`target_role` normalizado: aceita '' , 'ADMIN' ou vários papéis.
-
-    Uma etapa da esteira precisa avisar DUAS mesas (Pending MO é do MO e do BO),
-    e a coluna sempre guardou um papel só. Vários papéis viram uma lista separada
-    por vírgula na MESMA coluna — 'MO,BO' —, e quem lê parte a string. O valor
-    antigo continua válido de graça: 'ADMIN' parte numa lista de um elemento.
-
-    Criar uma tabela de destinatários para isto seria um join novo em cada
-    consulta do sino, que a topbar faz a cada 8 s por aba aberta.
-    """
-    if not target_role:
-        return ''
-    if isinstance(target_role, str):
-        partes = target_role.split(',')
-    else:
-        partes = list(target_role)
-    vistos, out = set(), []
-    for p in partes:
-        p = str(p or '').strip().upper()
-        if p and p not in vistos:
-            vistos.add(p)
-            out.append(p)
-    return ','.join(out)
-
-
-def _create_notification(actor_sid, actor_name, action, page, detail='', target_role='',
-                         target_sid=''):
-    """Publica uma notificação no sino. `target_role` restringe aos papéis
-    listados (um só, ou vários separados por vírgula — ver `_notif_roles`),
-    `target_sid` a UM usuário (os dois vazios = todo mundo). Ver o filtro em
-    `api_get_notifications`."""
-    target_role = _notif_roles(target_role)
-    try:
-        conn = get_notif_connection()
-        try:
-            conn.execute(
-                "INSERT INTO notifications (actor_sid, actor_name, action, page, detail, target_role, target_sid) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                [actor_sid or '', actor_name or '', action, page, detail or '',
-                 target_role or '', (target_sid or '').strip().upper()]
-            )
-            conn.commit()
-        finally:
-            conn.close()
-        # Wake subscribers' devices via Web Push (best-effort, off the request path).
-        try:
-            import threading
-            threading.Thread(target=_push_notify,
-                             args=(actor_sid or '', target_role or ''),
-                             kwargs={'target_sid': (target_sid or '').strip().upper()},
-                             daemon=True).start()
-        except Exception:
-            pass
-    except Exception:
-        log.error("[_create_notification] FAILED:\n%s", traceback.format_exc())
-
-
-def _push_notify(actor_sid, target_role, target_sid=''):
-    """Send a payloadless Web Push to every subscriber matching the
-    notification's target_role (empty = everyone), except the actor. The
-    Service Worker then fetches /api/notifications and shows it. Runs in a
-    background thread; HTTP sends happen with no DB lock held.
-
-    `target_sid` mirrors the feed filter: when set, only that user's devices
-    are woken. Sem isso o celular do time inteiro apitaria por uma notificação
-    que só o requester consegue abrir."""
-    try:
-        from apps.pages import webpush
-        if not webpush.is_enabled():
-            return
-        conn = get_notif_connection()
-        try:
-            if target_sid:
-                # O actor é excluído nos outros ramos porque não precisa ser
-                # avisado do que ele mesmo fez; aqui não: o destinatário é
-                # explícito e pode até ser o próprio actor.
-                rows = conn.execute(
-                    "SELECT endpoint FROM push_subscriptions WHERE sid = ?",
-                    [target_sid]).fetchall()
-            elif target_role:
-                # Vários papéis na mesma notificação (Pending MO avisa MO e BO).
-                # Os `?` são montados pela CONTAGEM e os papéis vão bindados —
-                # o único jeito de escrever um IN, e o que o cheat sheet permite.
-                papeis = [p for p in _notif_roles(target_role).split(',') if p]
-                rows = conn.execute(
-                    "SELECT endpoint FROM push_subscriptions WHERE role IN ({}) AND sid <> ?"
-                    .format(','.join('?' * len(papeis))),
-                    papeis + [actor_sid]).fetchall() if papeis else []
-            else:
-                rows = conn.execute(
-                    "SELECT endpoint FROM push_subscriptions WHERE sid <> ?",
-                    [actor_sid]).fetchall()
-        finally:
-            conn.close()
-        dead = []
-        for (endpoint,) in rows:
-            code = webpush.send_push(endpoint)
-            if code in (404, 410):   # subscription expired/unsubscribed
-                dead.append(endpoint)
-        if dead:
-            conn = get_notif_connection()
-            try:
-                for ep in dead:
-                    conn.execute("DELETE FROM push_subscriptions WHERE endpoint = ?", [ep])
-                conn.commit()
-            finally:
-                conn.close()
-    except Exception:
-        log.error("[_push_notify] FAILED:\n%s", traceback.format_exc())
+# O disparo do sino/push mora em `platform/notifications.py` — aliases.
+_notif_roles = _pf_notif._notif_roles
+_create_notification = _pf_notif._create_notification
+_push_notify = _pf_notif._push_notify
 
 
 def _nd_token(value):
@@ -2054,44 +1222,9 @@ def send_account_activated_email(to_email, first_name):
         return False
 
 
-def _get_logo_path():
-    from flask import current_app
-    candidates = [
-        os.path.join(current_app.root_path, 'static', 'images', 'logo.png'),
-        os.path.join(os.path.dirname(current_app.root_path), 'static', 'images', 'logo.png'),
-        os.path.join(current_app.root_path, '..', 'static', 'images', 'logo.png'),
-    ]
-    for path in candidates:
-        path = os.path.normpath(path)
-        if os.path.exists(path):
-            return path
-    return None
-
-
-def _get_email_asset(filename):
-    """Resolve an image under static/images (same lookup as the logo) for inline
-    e-mail embedding. Returns the path or None."""
-    from flask import current_app
-    candidates = [
-        os.path.join(current_app.root_path, 'static', 'images', filename),
-        os.path.join(os.path.dirname(current_app.root_path), 'static', 'images', filename),
-        os.path.join(current_app.root_path, '..', 'static', 'images', filename),
-    ]
-    for path in candidates:
-        path = os.path.normpath(path)
-        if os.path.exists(path):
-            return path
-    return None
-
-
-def _attach_email_gradient(container):
-    """No-op mantido pelos ~10 call sites. O cabeçalho dos e-mails NÃO usa mais
-    a imagem de gradiente: o <v:rect> do Outlook a pintava ora mais estreito que
-    a célula (faixa sólida à direita), ora na largura da janela inteira — o
-    partial agora é bgcolor sólido + gradiente CSS (ver
-    partials/email-gradient-header.html). Anexar o PNG sem nada referenciando o
-    cid faria o Outlook listá-lo como anexo solto em todo e-mail do sistema."""
-    return
+_get_logo_path = _pf_mail._get_logo_path
+_get_email_asset = _pf_mail._get_email_asset
+_attach_email_gradient = _pf_mail._attach_email_gradient
 
 
 @blueprint.app_context_processor
@@ -2564,152 +1697,14 @@ def _dash_stats_store(period, dados):
     return dados
 
 
-# ── Os arquivos-dia do cache: um leitor só, com poda e memo ──────────────────
-# Sete endpoints varriam a árvore do cache com `os.walk` e abriam todo JSON que
-# casasse com o sufixo — as buscas das cinco telas de New Deals e as três de
-# Intrag. Na dev é um SSD com dezenas de arquivos e ninguém nota; na instância do
-# JPM a árvore está num share, cada listagem e cada abertura é ida e volta de
-# rede, e dois anos de histórico são milhares de arquivos.
-#
-# As três correções são as mesmas do painel (`_dash_scan_files`), e valem pelo
-# mesmo motivo:
-#
-#   • `os.scandir` no lugar de `os.walk`. A listagem de um diretório no SMB já
-#     devolve nome, tamanho e mtime de cada entrada, e o `DirEntry` os guarda —
-#     no Windows, `entry.stat()` não custa chamada nenhuma. Com `os.walk` essa
-#     informação é jogada fora e a checagem do memo custaria um `os.stat` por
-#     arquivo, que é MAIS caro do que não ter memo nenhum na primeira leitura.
-#   • PODAR por data. A árvore termina em `{...}/{AAAA}/{MM}/arquivo.json`, e um
-#     intervalo de datas descarta ano e mês inteiros antes de entrar neles. A
-#     poda é grossa de propósito: quem decide continua sendo a data no NOME do
-#     arquivo, como sempre foi.
-#   • LEMBRAR. Arquivo-dia já lido não é reaberto se não mudou. A chave é
-#     (mtime, tamanho) e não o caminho: o arquivo-dia de hoje é reescrito a cada
-#     importação, e um amend entra no arquivo do dia da OPERAÇÃO, que pode ser
-#     antigo — pelo caminho sozinho a tela congelaria o dia na primeira leitura
-#     do processo.
-#
-# A ORDEM é a de sempre (nome, dentro de cada pasta): a busca devolve os deals na
-# ordem em que a árvore é lida, e a ordem crua do `scandir` é a do sistema de
-# arquivos — a mesma base renderia listas diferentes no share e na dev.
-_daycache_memo = {}                     # caminho → (mtime, tamanho, dados)
-_daycache_lock = threading.Lock()
-# Teto do memo. Estourado, ele é ESVAZIADO inteiro em vez de despejar por idade:
-# o custo é uma varredura completa a mais, uma vez, e a alternativa (LRU) é
-# estado a mais para manter no caminho mais quente das telas.
-_DAYCACHE_MAX = 20000
-
-
-def _daycache_dir_ok(nome, pai, desde, ate):
-    """Este diretório pode conter arquivo-dia do intervalo?
-
-    Nome de 4 dígitos é ano; de 2 dígitos, mês — e o mês só é avaliado dentro de
-    um ano, porque fora dele não há como saber a que ano ele pertence. Nome que
-    não é número é pasta de produto e nunca é descartado: quem decide o que é
-    ano ou mês é o FORMATO do nome, não a profundidade — a árvore tem produto
-    com um nível de subpasta e produto com dois.
-    """
-    if desde is None and ate is None:
-        return True
-    if len(nome) == 4 and nome.isdigit():
-        ano = int(nome)
-        if desde is not None and ano < desde.year:
-            return False
-        if ate is not None and ano > ate.year:
-            return False
-        return True
-    if len(nome) == 2 and nome.isdigit() and len(pai) == 4 and pai.isdigit():
-        ano, mes = int(pai), int(nome)
-        if desde is not None and (ano, mes) < (desde.year, desde.month):
-            return False
-        if ate is not None and (ano, mes) > (ate.year, ate.month):
-            return False
-    return True
-
-
-def _day_files(raiz, sufixo='', desde=None, ate=None):
-    """Gera `(caminho, nome, mtime, tamanho)` dos arquivos-dia da árvore.
-
-    `desde`/`ate` são `date`/`datetime` e servem só para PODAR: o chamador
-    continua filtrando pela data do nome, que é a que vale.
-
-    Diretório que não abre é PULADO com aviso, não derruba a varredura: o share
-    fica indisponível de vez em quando, e meia lista é melhor do que um 500.
-    """
-    if not os.path.isdir(raiz):
-        return
-    pilha = [(raiz, '')]
-    while pilha:
-        atual, pai = pilha.pop()
-        subdirs, arquivos = [], []
-        try:
-            with os.scandir(atual) as entradas:
-                for e in entradas:
-                    try:
-                        if e.is_dir():
-                            if _daycache_dir_ok(e.name, pai, desde, ate):
-                                subdirs.append((e.name, e.path))
-                            continue
-                        if sufixo and not e.name.endswith(sufixo):
-                            continue
-                        st = e.stat()
-                        arquivos.append((e.name, e.path, st.st_mtime, st.st_size))
-                    except OSError:
-                        continue
-        except OSError:
-            log.warning('[daycache] não consegui listar %s', atual)
-            continue
-        # A pilha é LIFO, então os subdiretórios entram ao contrário para sair
-        # em ordem; os arquivos saem por nome, como o `sorted(files)` de antes.
-        for nome, caminho in sorted(subdirs, reverse=True):
-            pilha.append((caminho, nome))
-        for nome, caminho, mtime, size in sorted(arquivos):
-            yield (caminho, nome, mtime, size)
-
-
-def _day_json(fp, mtime, size, mutavel=False):
-    """O conteúdo de um arquivo-dia como LISTA, memoizado por (mtime, tamanho).
-
-    `mutavel=True` devolve uma cópia rasa dos registros. É para quem ALTERA os
-    dicionários depois de ler — sem ela, a alteração ficaria gravada no memo e
-    o próximo leitor veria o dado de outro request. A cópia custa microssegundos
-    contra a dezena de milissegundos de uma leitura no share, então ela é barata
-    exatamente onde importa.
-
-    Arquivo ilegível devolve lista vazia e NÃO entra no memo: um JSON quebrado
-    costuma ser um arquivo sendo escrito naquele instante, e memoizar o vazio
-    esconderia o dia até o processo reiniciar.
-    """
-    with _daycache_lock:
-        item = _daycache_memo.get(fp)
-    if item and item[0] == mtime and item[1] == size:
-        dados = item[2]
-    else:
-        try:
-            with open(fp, 'r', encoding='utf-8') as fh:
-                dados = json.load(fh)
-        except Exception:                                   # noqa: BLE001
-            return []
-        if not isinstance(dados, list):
-            dados = [dados] if isinstance(dados, dict) else []
-        with _daycache_lock:
-            if len(_daycache_memo) >= _DAYCACHE_MAX:
-                _daycache_memo.clear()
-            _daycache_memo[fp] = (mtime, size, dados)
-    if mutavel:
-        return [dict(d) if isinstance(d, dict) else d for d in dados]
-    return dados
-
-
-def _daycache_forget(fp=None):
-    """Esquece um arquivo (ou tudo). Quem REESCREVE um arquivo-dia chama isto —
-    o mtime novo já invalidaria a entrada, mas contar com isso é contar com a
-    resolução do relógio do sistema de arquivos, que num share não é garantida."""
-    with _daycache_lock:
-        if fp is None:
-            _daycache_memo.clear()
-        else:
-            _daycache_memo.pop(fp, None)
+# O leitor memoizado dos arquivos-dia mora em `platform/json_cache.py`.
+_daycache_memo = _pf_jcache._daycache_memo
+_daycache_lock = _pf_jcache._daycache_lock
+_DAYCACHE_MAX = _pf_jcache._DAYCACHE_MAX
+_daycache_dir_ok = _pf_jcache._daycache_dir_ok
+_day_files = _pf_jcache._day_files
+_day_json = _pf_jcache._day_json
+_daycache_forget = _pf_jcache._daycache_forget
 
 # ── A varredura do painel: podar, e ler a árvore UMA vez ─────────────────────
 # O painel varria a árvore INTEIRA do cache de New Deals e abria todo JSON do
@@ -3987,12 +2982,11 @@ def _fcst_lob(identifier):
 def _forecast_spine(anchor=None, count=None):
     """The forecast column spine: the next `count` (default FORECAST_BIZDAYS)
     ANBIMA business days starting TODAY (inclusive), skipping weekends/holidays."""
-    _load_anbima()
     count = count or FORECAST_BIZDAYS
     start = datetime.now().date()
     days, d = [], start
     while len(days) < count:
-        if d.weekday() < 5 and d.strftime('%Y-%m-%d') not in _ANBIMA_HOLIDAYS:
+        if _pcx_is_bizday(d):
             days.append(d)
         d += timedelta(days=1)
     return days
@@ -4319,16 +3313,7 @@ _DAILY_METRIC_DIR = os.path.normpath(os.path.join(
 # recipients replace the previously hardcoded OTC Ops / accrual-cc addresses.
 
 
-def _parse_emails(raw):
-    """Split a free-text address list (comma / semicolon / whitespace / newline)
-    into a clean, de-duplicated list of addresses."""
-    out, seen = [], set()
-    for p in re.split(r'[,;\s]+', str(raw or '').strip()):
-        p = p.strip()
-        if p and p.lower() not in seen:
-            seen.add(p.lower())
-            out.append(p)
-    return out
+_parse_emails = _pf_mail._parse_emails
 
 
 def _pc_refdata_lookup(r, by_spn, by_name):
@@ -11826,16 +10811,6 @@ def _mtm_parse_num(s):
 # mapping_swap-hyb.json B3 ID and set the Hybrids row (Código IF = B3 ID).
 
 
-def _last_anbima_bizday_of_month(year, month):
-    """Last ANBIMA business day of the given year/month (datetime)."""
-    _load_anbima()
-    nm = datetime(year + 1, 1, 1) if month == 12 else datetime(year, month + 1, 1)
-    cur = nm - timedelta(days=1)
-    while cur.weekday() >= 5 or cur.strftime('%Y-%m-%d') in _ANBIMA_HOLIDAYS:
-        cur -= timedelta(days=1)
-    return cur
-
-
 # ---------------------------------------------------------------------------
 #  MtM — fixed-width Conecta file generation (Send batch / Validation)
 #  Header (control) line: tipo-linha '0'; data lines: tipo-linha '1'.
@@ -12283,22 +11258,11 @@ def _nd_fix_underlying_marker(deal):
                     ua, fixed, deal.get('Deal', ''))
 
 
-def _parse_date_any(val):
-    """Parse a date string in any supported format → datetime.date, or None.
+# O parse de datas mora em `platform/dates.py` — aliases.
+from apps.pages.platform import dates as _pf_dates  # noqa: E402
 
-    Handles the smart-filter input (dd/mm/yyyy) and the formats stored in the
-    JSON cache (yyyy-mm-dd, yyyy-mm-dd HH:MM:SS, yyyymmdd, dd-mm-yyyy).
-    """
-    val = str(val or '').strip()
-    if not val:
-        return None
-    val = val.split('T')[0].split(' ')[0]  # drop any time component
-    for fmt in ('%d/%m/%Y', '%Y-%m-%d', '%Y%m%d', '%d-%m-%Y'):
-        try:
-            return datetime.strptime(val, fmt).date()
-        except ValueError:
-            continue
-    return None
+_parse_date_any = _pf_dates._parse_date_any
+_parse_deal_date = _pf_dates._parse_deal_date
 
 
 def _deal_matches(deal, filters):
@@ -12917,28 +11881,12 @@ def _pc_run_daily_maintenance(snapshot=True):
 # is idempotent so an occasional double-run is harmless.
 _PC_DAILY_TIME = os.getenv('PC_DAILY_TIME', '11:30')
 # ──────────────────────────────────────────────────────────────────────────
-# Horário de Brasília
+# Horário de Brasília — mora em `platform/anbima.py` (fatia platform/); alias.
 # ──────────────────────────────────────────────────────────────────────────
-# Os agendamentos da aplicação (aviso de pendências às 19h, manutenção diária
-# às 11h30) são horários do BRASIL. `datetime.now()` devolve o horário LOCAL do
-# servidor, e a instância do time não roda necessariamente em BRT — foi por isso
-# que o aviso das 19h não saiu na hora esperada.
-#
-# No Windows o `zoneinfo` depende do pacote `tzdata`, que pode não estar
-# instalado; sem ele cai no offset fixo de -03:00, que vale o ano todo desde que
-# o Brasil acabou com o horário de verão (2019). Não é uma aproximação
-# arriscada: é o mesmo offset que o banco de fusos daria hoje.
-try:
-    from zoneinfo import ZoneInfo
-    _BR_TZ = ZoneInfo('America/Sao_Paulo')
-except Exception:                                   # noqa: BLE001
-    _BR_TZ = timezone(timedelta(hours=-3))
+from apps.pages.platform import anbima as _pf_anbima  # noqa: E402
 
-
-def _br_now():
-    """Agora em horário de Brasília, como datetime ingênuo (sem tzinfo) — é
-    assim que o resto do código compara, formata e nomeia arquivos por data."""
-    return datetime.now(_BR_TZ).replace(tzinfo=None)
+_BR_TZ = _pf_anbima._BR_TZ
+_br_now = _pf_anbima._br_now
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -16950,69 +15898,26 @@ NEW_DEALS_CACHE_ROOT = os.path.normpath(os.path.join(
 
 # English month names for the "mm. Mmmm" folder (e.g. "06. June") — fixed list
 # so the folder name never depends on the server locale.
-_EN_MONTH_NAMES = (
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December'
-)
+_EN_MONTH_NAMES = _pf_dates._EN_MONTH_NAMES
 
 # ── ANBIMA calendar ───────────────────────────────────────────────────────────
+# O calendário mora em `apps/pages/platform/anbima.py` (a primeira fatia da
+# fase platform/ — CLAUDE.md §10). Os nomes ficam aqui como ALIAS: as features
+# alcançam por `routes.<nome>` (andaime declarado) e os testes que trocam a
+# FUNÇÃO no `routes` seguem valendo. O ESTADO (`_ANBIMA_HOLIDAYS`,
+# `_anbima_loaded`, `_anbima_hols_cache`) mora LÁ — um alias de set apontaria
+# para o objeto velho quando `_load_anbima` rebinda o global.
+from apps.pages.platform import anbima as _pf_anbima  # noqa: E402
 
-_ANBIMA_HOLIDAYS: set = set()
-_anbima_loaded = False
-
-def _load_anbima():
-    global _ANBIMA_HOLIDAYS, _anbima_loaded
-    if _anbima_loaded:
-        return
-    try:
-        path = data_path('anbima.json')
-        with open(path, 'r', encoding='utf-8') as fh:
-            data = json.load(fh)
-        _ANBIMA_HOLIDAYS = {d['date'] for d in data}
-    except Exception as exc:
-        log.warning('[ANBIMA] Failed to load anbima.json: %s', exc)
-        _ANBIMA_HOLIDAYS = set()
-    _anbima_loaded = True
-
-def _prev_anbima_bizday(ref):
-    """Return the previous ANBIMA business day (D-1) before `ref` (date/datetime).
-    Skips weekends and ANBIMA holidays."""
-    _load_anbima()
-    cur = ref - timedelta(days=1)
-    while cur.weekday() >= 5 or cur.strftime('%Y-%m-%d') in _ANBIMA_HOLIDAYS:
-        cur -= timedelta(days=1)
-    return cur
-
-def _anbima_bizdays_between(d1, d2):
-    """Count ANBIMA business days from d1 (inclusive) up to d2 - 1 (d2 exclusive).
-
-    Counts the first date and stops at the second date minus one day, using the
-    ANBIMA holiday calendar (weekdays minus ANBIMA holidays).
-    """
-    _load_anbima()
-    if d1 >= d2:
-        return 0
-    count, cur = 0, d1
-    while cur < d2:
-        if cur.weekday() < 5 and cur.strftime('%Y-%m-%d') not in _ANBIMA_HOLIDAYS:
-            count += 1
-        cur += timedelta(days=1)
-    return count
-
-def _weekday_bizdays_between(d1, d2):
-    """Count weekday-only days from d1 (inclusive) up to d2 - 1 (d2 exclusive).
-
-    Counts the first date and stops at the second date minus one day, using only
-    weekdays (Mon-Fri), with no holiday calendar.
-    """
-    if d1 >= d2:
-        return 0
-    count, cur = 0, d1
-    while cur < d2:
-        if cur.weekday() < 5:
-            count += 1
-        cur += timedelta(days=1)
-    return count
+_load_anbima = _pf_anbima._load_anbima
+_prev_anbima_bizday = _pf_anbima._prev_anbima_bizday
+_anbima_bizdays_between = _pf_anbima._anbima_bizdays_between
+_weekday_bizdays_between = _pf_anbima._weekday_bizdays_between
+_last_anbima_bizday_of_month = _pf_anbima._last_anbima_bizday_of_month
+_pcx_is_bizday = _pf_anbima._pcx_is_bizday
+_anbima_holidays = _pf_anbima._anbima_holidays
+_anbima_biz_diff = _pf_anbima._anbima_biz_diff
+_anbima_add_biz = _pf_anbima._anbima_add_biz
 
 # ── Subjacente.json lookup (keyed by Codigo do Ativo Subjacente, first match) ──
 
@@ -17055,17 +15960,6 @@ _MONTH_ABBR = {
     'MAY': '05', 'JUN': '06', 'JUL': '07', 'AUG': '08',
     'SEP': '09', 'OCT': '10', 'NOV': '11', 'DEC': '12',
 }
-
-def _parse_deal_date(s):
-    if not s:
-        return None
-    for fmt in ('%Y-%m-%d', '%d/%m/%Y', '%Y%m%d'):
-        try:
-            return datetime.strptime(s.strip(), fmt)
-        except (ValueError, AttributeError):
-            pass
-    return None
-
 
 # Intra-group accounts: 73760.00-9 = Banco J.P. Morgan, 00041.00-7 = Lawton.
 
@@ -17503,17 +16397,7 @@ def _b3_save(path, records):
 # Builds the HTML drafts in apps/pages/otc_emails.py and opens them in Outlook
 # for manual review (win32com — Windows/JPM only; degrades gracefully elsewhere).
 # ==============================================================================
-def _email_drafts_response(drafts, zip_name=None):
-    """Return the drafts as a downloadable .eml / .zip so the file opens in the
-    ACTING user's Outlook (server-side Outlook automation would only ever open on
-    the server). From = the logged-in user's e-mail (resolved from their SID)."""
-    from apps.pages import otc_emails
-    fname, mime, data = otc_emails.build_drafts_download(drafts, session.get('user_email'), zip_name=zip_name)
-    resp = make_response(data)
-    resp.headers['Content-Type'] = mime
-    resp.headers['Content-Disposition'] = 'attachment; filename="{}"'.format(fname)
-    resp.headers['X-Draft-Count'] = str(len(drafts))
-    return resp
+_email_drafts_response = _pf_mail._email_drafts_response
 
 
 # ==============================================================================
@@ -19236,35 +18120,7 @@ def _conf_fwdstart_rows(picked, warnings):
 # ele tem a própria coluna, "Signature Type").
 
 
-def _pcx_is_bizday(d):
-    _load_anbima()
-    return d.weekday() < 5 and d.strftime('%Y-%m-%d') not in _ANBIMA_HOLIDAYS
-
-
-def _otc_app_url(path='/'):
-    """Endereço ABSOLUTO de uma página do app, para o botão de um e-mail.
-
-    O app nunca precisou disto: todo link até hoje era interno. Um e-mail,
-    porém, é lido fora do navegador que abriu o app, então `url_for` (relativo)
-    não serve, e `request.url_root` também não — o disparo automático roda numa
-    thread sem request, e num Run feito na máquina de desenvolvimento ele
-    devolveria `http://localhost:5005`, que é um link morto para quem recebe.
-
-    Por isso o endereço é de CONFIGURAÇÃO (`OTC_TRACKER_URL` no .env). Sem ele
-    vale o hostname da máquina na porta em que a instância roda — a **8051**,
-    e não a 8050 que estava aqui: o `start-otc-tracker.bat` da pasta Application
-    sobe nela, e todo botão de e-mail do app apontava para uma porta em que não
-    há nada escutando.
-    """
-    base = (os.getenv('OTC_TRACKER_URL', '') or '').strip().rstrip('/')
-    if not base:
-        import socket
-        try:
-            host = socket.gethostname() or 'localhost'
-        except Exception:                                   # noqa: BLE001
-            host = 'localhost'
-        base = 'http://{}:{}'.format(host, os.getenv('OTC_TRACKER_PORT', str(APP_PORT)))
-    return base + (path if str(path).startswith('/') else '/' + str(path))
+_otc_app_url = _pf_mail._otc_app_url
 
 
 def _find_generic_nd_deal(cfg, deal_name, client_name=None):
@@ -19444,45 +18300,6 @@ def _moeda_num_code(iso):
         if sym and code and sym not in m:
             m[sym] = code
     return m.get(str(iso or '').strip().upper(), '')
-
-
-_anbima_hols_cache = None
-
-
-def _anbima_holidays():
-    global _anbima_hols_cache
-    if _anbima_hols_cache is None:
-        try:
-            with open(os.path.join(_B3_DATA_DIR, 'anbima.json'), encoding='utf-8') as fh:
-                _anbima_hols_cache = {(x.get('date') if isinstance(x, dict) else x)
-                                      for x in json.load(fh)}
-        except (IOError, json.JSONDecodeError):
-            _anbima_hols_cache = set()
-    return _anbima_hols_cache
-
-
-def _anbima_biz_diff(start_dt, end_dt):
-    """ANBIMA business days in (start, end] — the 'diferença de dias úteis'."""
-    if not start_dt or not end_dt or end_dt <= start_dt:
-        return 0
-    hols, n, cur = _anbima_holidays(), 0, start_dt
-    while cur < end_dt:
-        cur += timedelta(days=1)
-        if cur.weekday() < 5 and cur.strftime('%Y-%m-%d') not in hols:
-            n += 1
-    return n
-
-
-def _anbima_add_biz(start_dt, n):
-    """start advanced by n ANBIMA business days."""
-    if not start_dt:
-        return None
-    hols, cur, left = _anbima_holidays(), start_dt, n
-    while left > 0:
-        cur += timedelta(days=1)
-        if cur.weekday() < 5 and cur.strftime('%Y-%m-%d') not in hols:
-            left -= 1
-    return cur
 
 
 # A montagem final das linhas passou a sair do cadastro do File Interface

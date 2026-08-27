@@ -136,7 +136,10 @@ for papel, esperado in (('MO', [1, 3]), ('FO', [1, 4]), ('BO', [1, 3, 4]),
 con.close()
 
 print('\n== 5. e o push acorda os mesmos papeis ==')
-SRC = io.open('apps/pages/routes.py', encoding='utf-8').read()
+# O `_push_notify` mora na platform/ desde a fatia `platform/notifications.py`
+# — a varredura por texto acompanha o codigo, senao este split estoura (foi
+# exatamente assim que a mudanca de casa apareceu aqui).
+SRC = io.open('apps/pages/platform/notifications.py', encoding='utf-8').read()
 blk = SRC.split('def _push_notify', 1)[1].split('\ndef ', 1)[0]
 check('o push monta um IN, nao uma igualdade', 'role IN (' in blk, True)
 check('   com os papeis BINDADOS, nao interpolados',

@@ -98,7 +98,12 @@ for saver in ('_otm_save', '_latam_save'):
     ok('_bump_cache_gen(' in corpo.get(saver, ''),
        '%s invalida o cache (não passa pelo _atomic_write_json)' % saver)
 
-ok('_bump_cache_gen(file_path)' in corpo.get('_atomic_write_json', ''),
+# O funil mora na platform/ desde a fatia `platform/json_cache.py` — a
+# asserção acompanha o código (era em `corpo`, do routes.py).
+_jcache_src = io.open(os.path.join(RAIZ, 'apps', 'pages', 'platform', 'json_cache.py'),
+                      encoding='utf-8').read()
+_jcache_fn = _jcache_src.split('def _atomic_write_json', 1)[1].split('\ndef ', 1)[0]
+ok('_bump_cache_gen(file_path)' in _jcache_fn,
    '_atomic_write_json invalida o cache — o funil dos demais gravadores')
 
 # E NENHUM outro gravador direto pode aparecer sem invalidar. A varredura é

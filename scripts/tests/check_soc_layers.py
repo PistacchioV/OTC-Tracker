@@ -288,7 +288,44 @@ for morto in ('_tk_roles_by_sid', '_tk_can_view', '_tk_public',
               '_acc_apply_factors', '_acc_write_batch_files', 'def api_accrual_recon',
               'def api_ndf_summary_ted_email', 'def api_opb3_mensageria',
               'def api_ops_data', 'def api_optadv_row_confirm',
-              'def api_file_interpreter_template'):
+              'def api_file_interpreter_template',
+              # fase platform/ — o calendário foi para platform/anbima.py; os
+              # nomes seguem no routes como ALIAS (`_x = _pf_anbima._x`), e é
+              # por isso que a busca aqui é por `def X`: o alias não tem `def`.
+              'def _br_now', 'def _load_anbima', 'def _prev_anbima_bizday',
+              'def _anbima_bizdays_between', 'def _weekday_bizdays_between',
+              'def _last_anbima_bizday_of_month', 'def _pcx_is_bizday',
+              'def _anbima_holidays', 'def _anbima_biz_diff',
+              'def _anbima_add_biz',
+              # ... e as notificacoes para platform/notifications.py.
+              'def get_notif_connection', 'def _ensure_notif_db',
+              'def _notif_init_schema', 'def _notif_schema_pronto',
+              'def _notif_migrar_do_antigo', 'def _notif_maior_id_antigo',
+              'def _notif_avanca_sequencia', 'def _notif_roles',
+              'def _create_notification', 'def _push_notify',
+              'def _notif_page_url', '_NOTIF_PAGE_URL = {',
+              # ... o armazém JSON para platform/json_cache.py ...
+              'def _claim_daily_slot', 'def _release_daily_slot',
+              'def _atomic_write_json', 'def _unique_filepath',
+              'def _day_files', 'def _day_json', 'def _daycache_forget',
+              'def _daycache_dir_ok', '_cache_lock = threading.RLock',
+              '_daycache_memo = {}',
+              # ... o e-mail para platform/mail.py ...
+              'def _get_logo_path', 'def _get_email_asset',
+              'def _attach_email_gradient', 'def _parse_emails',
+              'def _email_drafts_response', 'def _otc_app_url',
+              # ... as datas para platform/dates.py ...
+              'def _parse_date_any', 'def _parse_deal_date',
+              # ... o banco de usuários para platform/db.py ...
+              'class _DuckDBHandle', 'def get_db_connection',
+              # ... e a autorização para platform/authz.py (os dois
+              # before_request FICAM no routes: registro em blueprint é casca).
+              'def _load_nav_urls', 'def _get_page_access',
+              'def _read_page_access', 'def _set_page_access',
+              'def _session_is_master', 'def _session_is_admin',
+              'def _safe_landing', 'def _user_can_access_page',
+              'def _cp_page_allowed', 'def _cp_card_allowed',
+              'def _page_access_forget', '_CONTROL_PANEL_CARDS = ['):
     check('%s saiu do routes.py' % morto, morto in rotas_py, False)
 
 print('\n== 9. nenhum global orfao nos modulos de feature ==')
@@ -322,6 +359,90 @@ for p in ARQS:
                         and _ins.argval not in dir(_bt):
                     _orfaos.append('%s.%s -> %s' % (mod_nome, _nome, _ins.argval))
 check('todo LOAD_GLOBAL das features resolve', sorted(set(_orfaos)), [])
+
+print('\n== 10. as HORIZONTAIS (apps/pages/platform/) ==')
+# As mesmas regras das features, com os sentidos invertidos: platform nunca
+# importa feature (a seta aponta para dentro), nunca importa NOME do routes
+# (congela o valor que os testes trocam), e o import do routes que ainda
+# restar — andaime declarado, enquanto banco/paths não têm fatia própria —
+# e ATRASADO, dentro da funcao.
+PLAT = os.path.join(ROOT, 'apps', 'pages', 'platform')
+plat_arqs = []
+for raiz, dirs, arqs in os.walk(PLAT):
+    dirs[:] = [d for d in dirs if d != '__pycache__']
+    plat_arqs += [os.path.join(raiz, a) for a in arqs if a.endswith('.py')]
+plat_arqs = sorted(plat_arqs)
+check('a pasta das horizontais existe e tem modulo', bool(plat_arqs), True)
+plat_arvores = {p: ast.parse(io.open(p, encoding='utf-8').read()) for p in plat_arqs}
+_p_maus, _p_topo, _p_feat = [], [], []
+for p in plat_arqs:
+    for mod, nomes, no in imports_de(plat_arvores[p]):
+        if mod == 'apps.pages.routes' and nomes:
+            _p_maus.append('%s:%d importa %s' % (rel(p), no.lineno, ', '.join(nomes)))
+        if mod.startswith('apps.pages.features'):
+            _p_feat.append('%s:%d' % (rel(p), no.lineno))
+    for n in plat_arvores[p].body:                  # so o corpo do modulo
+        for mod, _nomes, no in imports_de(ast.Module(body=[n], type_ignores=[])):
+            if mod in ('apps.pages.routes',) or mod.endswith('.routes'):
+                _p_topo.append('%s:%d' % (rel(p), no.lineno))
+check('platform nunca importa NOME do routes', _p_maus, [])
+check('e o import do routes e atrasado (andaime declarado)', _p_topo, [])
+check('platform nunca importa feature', _p_feat, [])
+_p_orfaos = []
+for p in plat_arqs:
+    mod_nome = rel(p)[:-3].replace('/', '.')
+    if mod_nome.endswith('__init__'):
+        mod_nome = mod_nome[:-9].rstrip('.')
+    try:
+        _m = _il.import_module(mod_nome)
+    except Exception as e:                                  # noqa: BLE001
+        _p_orfaos.append('%s: import falhou (%s)' % (mod_nome, e))
+        continue
+    _g = set(vars(_m))
+    for _nome, _fn in list(vars(_m).items()):
+        if not _isp.isfunction(_fn) or _fn.__module__ != _m.__name__:
+            continue
+        _cods = [_fn.__code__] + [c2 for c2 in _fn.__code__.co_consts
+                                  if isinstance(c2, _tp.CodeType)]
+        for _cod in _cods:
+            for _ins in _dis.get_instructions(_cod):
+                if _ins.opname == 'LOAD_GLOBAL' and _ins.argval not in _g \
+                        and _ins.argval not in dir(_bt):
+                    _p_orfaos.append('%s.%s -> %s' % (mod_nome, _nome, _ins.argval))
+check('todo LOAD_GLOBAL da platform resolve', sorted(set(_p_orfaos)), [])
+# E o alias do routes aponta mesmo para ca — extracao pela metade e a falha
+# classica: as duas copias divergem e a que vale e a que ninguem olha.
+from apps.pages.platform import anbima as _anb          # noqa: E402
+from apps.pages.platform import notifications as _ntf   # noqa: E402
+from apps.pages.platform import json_cache as _jch      # noqa: E402
+from apps.pages.platform import mail as _pml            # noqa: E402
+from apps.pages.platform import dates as _dts           # noqa: E402
+from apps.pages.platform import db as _pdb              # noqa: E402
+from apps.pages.platform import authz as _atz           # noqa: E402
+from apps.pages import routes as R                      # noqa: E402
+for _mod, _nomes in (
+        (_anb, ('_br_now', '_load_anbima', '_prev_anbima_bizday',
+                '_anbima_bizdays_between', '_weekday_bizdays_between',
+                '_last_anbima_bizday_of_month', '_pcx_is_bizday',
+                '_anbima_holidays', '_anbima_biz_diff', '_anbima_add_biz')),
+        (_ntf, ('get_notif_connection', '_ensure_notif_db', '_notif_schema_pronto',
+                '_notif_roles', '_create_notification', '_push_notify',
+                '_notif_page_url', '_NOTIF_PAGE_URL')),
+        (_jch, ('_cache_lock', '_claim_daily_slot', '_release_daily_slot',
+                '_atomic_write_json', '_unique_filepath', '_daycache_memo',
+                '_day_files', '_day_json', '_daycache_forget')),
+        (_pml, ('_get_logo_path', '_get_email_asset', '_attach_email_gradient',
+                '_parse_emails', '_email_drafts_response', '_otc_app_url')),
+        (_dts, ('_parse_date_any', '_parse_deal_date', '_EN_MONTH_NAMES')),
+        (_pdb, ('_DuckDBHandle', 'get_db_connection')),
+        (_atz, ('_ALWAYS_ALLOWED_PATHS', '_NAV_URLS', '_CONTROL_PANEL_CARDS',
+                '_CP_ENDPOINT_CARD', '_get_page_access', '_read_page_access',
+                '_set_page_access', '_page_access_forget', '_session_is_master',
+                '_session_is_admin', '_safe_landing', '_user_can_access_page',
+                '_MASTER_SIDS'))):
+    for _nm in _nomes:
+        check('routes.%s e o da platform' % _nm,
+              getattr(R, _nm) is getattr(_mod, _nm), True)
 
 print(('FAIL: %d' % len(fails)) if fails else 'TUDO OK')
 sys.exit(1 if fails else 0)

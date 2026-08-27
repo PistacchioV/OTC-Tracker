@@ -293,11 +293,14 @@ finally:
 
 
 # ── 8. segunda e quinta, rolando o feriado ──────────────────────────────────
+# O ESTADO do calendário mora na platform/ (fatia `platform/anbima.py`): quem
+# troca o set de feriados troca LÁ — o alias do `routes` é da função, não do set.
+from apps.pages.platform import anbima as CAL  # noqa: E402
 print('\n== 8. o dia do relatório agendado ==')
-_hols, _loaded = R._ANBIMA_HOLIDAYS, R._anbima_loaded
+_hols, _loaded = CAL._ANBIMA_HOLIDAYS, CAL._anbima_loaded
 try:
-    R._anbima_loaded = True
-    R._ANBIMA_HOLIDAYS = set()
+    CAL._anbima_loaded = True
+    CAL._ANBIMA_HOLIDAYS = set()
     check('segunda-feira é dia', CQ.is_routine_day(date(2026, 8, 10)), True)
     check('quinta-feira é dia', CQ.is_routine_day(date(2026, 8, 13)), True)
     check('terça não é', CQ.is_routine_day(date(2026, 8, 11)), False)
@@ -305,25 +308,25 @@ try:
     check('sábado nunca é', CQ.is_routine_day(date(2026, 8, 15)), False)
 
     # Segunda feriado → o relatório sai na terça, e a segunda não emite.
-    R._ANBIMA_HOLIDAYS = {'2026-08-10'}
+    CAL._ANBIMA_HOLIDAYS = {'2026-08-10'}
     check('segunda feriado não emite', CQ.is_routine_day(date(2026, 8, 10)), False)
     check('   e a terça passa a ser o dia', CQ.is_routine_day(date(2026, 8, 11)), True)
     check('   sem virar dia também na quarta', CQ.is_routine_day(date(2026, 8, 12)), False)
 
     # Quinta feriado → sexta. É este caso que a pergunta ao contrário resolve:
     # olhar só o dia da semana de hoje (sexta) perderia o relatório da semana.
-    R._ANBIMA_HOLIDAYS = {'2026-08-13'}
+    CAL._ANBIMA_HOLIDAYS = {'2026-08-13'}
     check('quinta feriado não emite', CQ.is_routine_day(date(2026, 8, 13)), False)
     check('   e a sexta paga a quinta', CQ.is_routine_day(date(2026, 8, 14)), True)
 
     # Dois feriados seguidos rolam de novo.
-    R._ANBIMA_HOLIDAYS = {'2026-08-13', '2026-08-14'}
+    CAL._ANBIMA_HOLIDAYS = {'2026-08-13', '2026-08-14'}
     check('quinta e sexta feriado caem na segunda',
           CQ.is_routine_day(date(2026, 8, 17)), True)
     check('   e a segunda é UM disparo, não dois',
           sum(1 for d in (date(2026, 8, 17),) if CQ.is_routine_day(d)), 1)
 finally:
-    R._ANBIMA_HOLIDAYS, R._anbima_loaded = _hols, _loaded
+    CAL._ANBIMA_HOLIDAYS, CAL._anbima_loaded = _hols, _loaded
 
 
 # ── 9. o template do e-mail ─────────────────────────────────────────────────
