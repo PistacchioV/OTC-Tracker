@@ -681,11 +681,20 @@ document.addEventListener('DOMContentLoaded', function () {
         $menu.on('click', function (e) { e.stopPropagation(); });   // keep open while toggling
 
         // Selection via checkboxes (no Select extension) → enable/disable Delete.
+        // Select-all marcado = o conjunto FILTRADO inteiro (todas as páginas):
+        // o DataTables só tem nó das linhas renderizadas, e marcar/varrer o DOM
+        // cobre só a página visível.
         function selectedRows() {
-            return dt.rows(function (idx, data, node) { return $(node).find('.ops-cb').prop('checked'); });
+            if ($card.find('.ops-cb-all').is(':checked')) return dt.rows({ search: 'applied' });
+            return dt.rows(function (idx, data, node) { return node ? $(node).find('.ops-cb').prop('checked') : false; });
         }
         function syncDel() { $delBtn.prop('disabled', selectedRows().count() === 0); }
-        $('#' + id + ' tbody').on('change', '.ops-cb', syncDel);
+        $('#' + id + ' tbody').on('change', '.ops-cb', function () {
+            // Desmarcar UMA linha desfaz o "todos": senão o select-all seguiria
+            // valendo por cima da exclusão manual.
+            if (!this.checked) $card.find('.ops-cb-all').prop('checked', false);
+            syncDel();
+        });
         $card.find('.ops-cb-all').on('change', function () {
             var on = this.checked;
             $('#' + id + ' tbody .ops-cb').prop('checked', on);
@@ -823,10 +832,16 @@ document.addEventListener('DOMContentLoaded', function () {
     var genBtn = document.getElementById('opsGenerate');
     if (genBtn) genBtn.addEventListener('click', function () {
         var btn = this;
-        // Only the rows whose checkbox is ticked (same selector the Delete uses).
-        var sel = dtSummary.rows(function (idx, data, node) {
-            return node ? $(node).find('.ops-cb').prop('checked') : false;
-        });
+        // Com o select-all MARCADO, a seleção é o conjunto FILTRADO inteiro —
+        // lida pelos dados, não pelo DOM: o DataTables só mantém nó das linhas
+        // já renderizadas, então varrer checkbox cobre apenas a página visível
+        // (era o Print Advice gerando um pedaço por página). Sem o select-all,
+        // valem os checkboxes marcados um a um (páginas já visitadas incluídas).
+        var allOn = $(dtSummary.table().container()).find('.ops-cb-all').is(':checked');
+        var sel = allOn ? dtSummary.rows({ search: 'applied' })
+                        : dtSummary.rows(function (idx, data, node) {
+                              return node ? $(node).find('.ops-cb').prop('checked') : false;
+                          });
         var names = [];
         sel.data().each(function (d) {
             var name = decodeHtml(d[3]).trim();
