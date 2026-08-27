@@ -36,6 +36,11 @@ def ok(cond, msg):
 
 
 from apps.pages import routes as R                     # noqa: E402
+# A família de liquidação mora em platform/settlement.py (§316): quem chama
+# `_opssum_meta_load` e `_latam_equity_b3_index` por dentro é o próprio
+# módulo (chamada direta, não pelo alias do routes), então o espião entra
+# nos DOIS lugares — o alias do routes cobre os chamadores de fora.
+from apps.pages.platform import settlement as PS       # noqa: E402
 
 REF = datetime(2026, 8, 18)
 TITULO = 'OPEQ0001'                                    # Título/Código IF da B3
@@ -82,11 +87,11 @@ def _stub(conf='', otm_suffix=None):
     R._otm_load = lambda ref: ('', list(OTM))
     R._optadv_cognos_prm = lambda ref: ({}, {})
     R._optadv_edits_load = lambda ref: ('', {})
-    R._opssum_meta_load = lambda ref: ('', {})
+    R._opssum_meta_load = PS._opssum_meta_load = lambda ref: ('', {})
     # o índice do Latam roda de verdade sobre a fixture: é ele que decide a
     # forma da chave (Título em maiúscula), e um teste que o pulasse não veria
     # um de-para que casa com a grafia errada.
-    R._latam_equity_b3_index = lambda: {
+    R._latam_equity_b3_index = PS._latam_equity_b3_index = lambda: {
         str(r['CLEARING_TRD_ID_CLNT']).upper(): (R._ops_eq_ref_key(r['Deal_Ref']), '270WC', r)
         for r in LATAM}
 

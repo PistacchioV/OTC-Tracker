@@ -325,7 +325,39 @@ for morto in ('_tk_roles_by_sid', '_tk_can_view', '_tk_public',
               'def _session_is_master', 'def _session_is_admin',
               'def _safe_landing', 'def _user_can_access_page',
               'def _cp_page_allowed', 'def _cp_card_allowed',
-              'def _page_access_forget', '_CONTROL_PANEL_CARDS = ['):
+              'def _page_access_forget', '_CONTROL_PANEL_CARDS = [',
+              # ... e a familia de liquidacao para platform/settlement.py (§316).
+              'def _ops_trade_rows', 'def _ops_swap_trade_rows',
+              'def _ops_ndfc_trade_rows', 'def _ops_opt_trade_rows',
+              'def _ops_equity_link', 'def _ops_is_internal_cpty',
+              'def _opssum_rows', 'def _opssum_set_status',
+              'def _ops_recon', 'def _ops_batch_status',
+              'def _opsadv_family_drafts', '_OPS_SRC_MAP = {',
+              # ... o motor de confirmacoes para platform/confirmations.py ...
+              'def _conf_segregate', 'def _conf_esteira_stages',
+              'def _conf_stage_counts', 'def _conf_generation_page',
+              'def _conf_opt_generation_page', 'def _conf_fxo_generation_page',
+              'def _conf_fwdstart_rows', 'def _conf_ndf_xml',
+              'def _conf_state_load', 'def _conf_state_save',
+              'def _conf_cgd_lookup', '_CONF_STAGE_ORDER = (',
+              # ... e o Counterparty Details para platform/counterparty.py.
+              'def _cpd_path', 'def _cpd_load', 'def _cpd_find',
+              'def _cpd_save_list', 'def _norm_spn', 'def _cc_read_rows',
+              'def _contacts_norm', '_CONTACT_RULE_MAP = {',
+              # ... §317: o Forecast para platform/forecast.py ...
+              'def _forecast_collect', 'def _forecast_payload',
+              'def _forecast_spine', 'def _fcst_lob', 'def _fcst_norm',
+              '_FORECAST_SOURCES = [',
+              # ... o Electronic Inventory para platform/electronic_inventory.py
+              # (o ELECTRONIC_INVENTORY_ROOT fica no routes: superficie de patch) ...
+              'def _ei_scan_root', 'def _ei_actual_dir_name',
+              'def _ei_client_dir_names', 'def _ei_iter_files',
+              'def _ei_locate_file', 'def _ei_resolve_client_dir',
+              # ... e a cola da esteira para platform/manual_confirmation.py.
+              'def _mc_save_from_deal', 'def _mc_legal_entity',
+              'def _mc_confirmation_docs', 'def _mc_pc_sync',
+              'def _mc_notify_roles', 'def _mc_can_validate',
+              'def _mc_generate_url', '_MC_STAGE_NOTIFY_ROLES = {'):
     check('%s saiu do routes.py' % morto, morto in rotas_py, False)
 
 print('\n== 9. nenhum global orfao nos modulos de feature ==')
@@ -402,6 +434,16 @@ for p in plat_arqs:
     for _nome, _fn in list(vars(_m).items()):
         if not _isp.isfunction(_fn) or _fn.__module__ != _m.__name__:
             continue
+        # `__module__` mente sob functools.wraps: o wrapper do `@_req_cached`
+        # (settlement) carrega o nome do modulo decorado, mas o CODIGO — e os
+        # globals que ele resolve — sao do request_cache.py. Quem diz onde o
+        # codigo mora e o co_filename; o CORPO decorado (que e o que a extracao
+        # religou e precisa provar) segue conferido via __wrapped__.
+        if os.path.abspath(_fn.__code__.co_filename) != os.path.abspath(_m.__file__):
+            _fn = getattr(_fn, '__wrapped__', None)
+            if _fn is None or os.path.abspath(_fn.__code__.co_filename) \
+                    != os.path.abspath(_m.__file__):
+                continue
         _cods = [_fn.__code__] + [c2 for c2 in _fn.__code__.co_consts
                                   if isinstance(c2, _tp.CodeType)]
         for _cod in _cods:
@@ -419,6 +461,12 @@ from apps.pages.platform import mail as _pml            # noqa: E402
 from apps.pages.platform import dates as _dts           # noqa: E402
 from apps.pages.platform import db as _pdb              # noqa: E402
 from apps.pages.platform import authz as _atz           # noqa: E402
+from apps.pages.platform import settlement as _stl     # noqa: E402
+from apps.pages.platform import confirmations as _cnf  # noqa: E402
+from apps.pages.platform import counterparty as _cpd   # noqa: E402
+from apps.pages.platform import forecast as _fct       # noqa: E402
+from apps.pages.platform import electronic_inventory as _eli  # noqa: E402
+from apps.pages.platform import manual_confirmation as _mcf   # noqa: E402
 from apps.pages import routes as R                      # noqa: E402
 for _mod, _nomes in (
         (_anb, ('_br_now', '_load_anbima', '_prev_anbima_bizday',
@@ -439,7 +487,35 @@ for _mod, _nomes in (
                 '_CP_ENDPOINT_CARD', '_get_page_access', '_read_page_access',
                 '_set_page_access', '_page_access_forget', '_session_is_master',
                 '_session_is_admin', '_safe_landing', '_user_can_access_page',
-                '_MASTER_SIDS'))):
+                '_MASTER_SIDS')),
+        (_stl, ('_ops_trade_rows', '_ops_swap_trade_rows', '_ops_ndfc_trade_rows',
+                '_ops_opt_trade_rows', '_ops_equity_link', '_ops_is_internal_cpty',
+                '_opssum_rows', '_opssum_set_status', '_ops_recon',
+                '_ops_batch_status', '_opsadv_family_drafts', '_OPS_RECON_TOL',
+                '_OPS_SRC_MAP', '_OPSADV_FAMILIES')),
+        (_cnf, ('_conf_segregate', '_conf_esteira_stages', '_conf_stage_counts',
+                '_conf_generation_page', '_conf_opt_generation_page',
+                '_conf_fxo_generation_page', '_conf_fwdstart_rows',
+                '_conf_ndf_xml', '_conf_state_load', '_conf_state_save',
+                '_conf_cgd_lookup', '_conf_subj_cache', '_CONF_STAGE_ORDER',
+                'CONF_STATE_DIR')),
+        (_cpd, ('_cpd_path', '_cpd_load', '_cpd_find', '_cpd_save_list',
+                '_norm_spn', '_cc_read_rows', '_contacts_norm', '_net_norm',
+                '_bank_norm', '_cgd_norm', '_CONTACT_RULE_MAP',
+                '_CP_NET_TYPES')),
+        (_fct, ('_forecast_collect', '_forecast_payload', '_forecast_spine',
+                '_forecast_matrix', '_forecast_latest_ref', '_fcst_lob',
+                '_fcst_norm', '_fcst_parse_date', '_fcst_resolve_key',
+                '_FORECAST_SOURCES', '_FCST_ENTITY_MAP')),
+        (_eli, ('_ei_scan_root', '_ei_actual_dir_name', '_ei_client_dir_names',
+                '_ei_iter_files', '_ei_locate_file', '_ei_resolve_client_dir',
+                '_ei_sanitize', '_ei_match_key', '_ei_refdata_clients',
+                '_EI_ROOT_CACHE', 'EI_SUBFOLDERS', '_EI_TRANSACTIONAL_TYPES')),
+        (_mcf, ('_mc_save_from_deal', '_mc_legal_entity', '_mc_confirmation_docs',
+                '_mc_pc_sync', '_mc_notify_roles', '_mc_can_validate',
+                '_mc_generate_url', '_mc_ei_link', '_mc_stamp_generated',
+                '_MC_STAGE_ROLE', '_MC_STAGE_NOTIFY_ROLES',
+                '_MC_GENERATE_PRODUCTS', '_COMMODITY_SOURCES'))):
     for _nm in _nomes:
         check('routes.%s e o da platform' % _nm,
               getattr(R, _nm) is getattr(_mod, _nm), True)

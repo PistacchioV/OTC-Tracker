@@ -29,7 +29,11 @@ app.config['TESTING'] = True
 # summaries/advices) e continua no routes, entao o patch sobrevive a extracao.
 CPD_FILE = os.path.join(TMP, 'CounterpartyDetails.json')
 io.open(CPD_FILE, 'w', encoding='utf-8').write('[]')
-R._cpd_path = lambda: CPD_FILE
+# O armazém mora em platform/counterparty.py (§316): o `_cpd_load` chama o
+# `_cpd_path` por DENTRO do módulo, então o stub entra nos dois lugares —
+# o alias do routes cobre quem chega de fora.
+from apps.pages.platform import counterparty as PCD
+R._cpd_path = PCD._cpd_path = lambda: CPD_FILE
 NOTIFS = []
 R._create_notification = lambda sid, nome, acao, pagina, msg='': NOTIFS.append((acao, pagina))
 
