@@ -196,7 +196,17 @@ for r in ('/holidays-calendar', '/api/holidays/calendars', '/api/holidays/save',
           '/api/control-panel/manual-deals-ea/recipients',
           '/api/control-panel/manual-deals-ea/run',
           '/api/control-panel/confirmations-escalation/recipients',
-          '/api/control-panel/confirmations-escalation/run'):
+          '/api/control-panel/confirmations-escalation/run',
+          '/api/control-panel/daily-metric/recipients', '/api/control-panel/daily-metric/run',
+          '/api/control-panel/weekly-escalation/recipients',
+          '/api/control-panel/weekly-escalation/run',
+          '/reconciliation-comitente', '/reconciliation-comitente/run',
+          '/reconciliation-payrec', '/reconciliation-payrec/run',
+          '/reconciliation-payrec/justify', '/reconciliation-payrec/end-process',
+          '/reconciliation-cgd', '/api/reconciliation-cgd/data',
+          '/reconciliation-cgd/run', '/reconciliation-cgd/email',
+          '/api/new-deals/box-scan', '/api/new-deals/box-scan/run',
+          '/api/new-deals/box-archive'):
     check('%s registrada' % r, r in regras, True)
 
 print('\n== 8. o que saiu do routes.py nao ficou nele ==')
@@ -217,7 +227,12 @@ for morto in ('_tk_roles_by_sid', '_tk_can_view', '_tk_public',
               '_MDEA_KINDS', '_mdea_rows', '_mdea_rebook_record', '_mdea_send_email',
               '_mdea_disparar', 'def api_cp_mdea_run',
               '_CE_FO_GROUPS', '_ce_snapshot', '_ce_run', '_ce_send_email',
-              '_ce_is_routine_day', 'def api_cp_conf_escalation_run'):
+              '_ce_is_routine_day', 'def api_cp_conf_escalation_run',
+              '_pc_metrics_pivot', '_build_daily_metric_eml', '_pc_weekly_escalation',
+              '_build_weekly_escalation_eml', 'def reconciliation_comitente_run',
+              'def reconciliation_payrec_run', 'def api_cgd_recon_run',
+              '_cgd_recon_recipients', '_BOX_PRODUCTS', '_box_scan_pull',
+              '_box_persist_deals', 'def api_new_deals_box_scan_run'):
     check('%s saiu do routes.py' % morto, morto in rotas_py, False)
 
 print(('FAIL: %d' % len(fails)) if fails else 'TUDO OK')

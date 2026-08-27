@@ -2151,8 +2151,11 @@ features/<nome>/
 Extraídas até aqui: **`support`** (450 linhas / 6 rotas), **`onboarding`**
 (154 / 7), **`reconciliation_fxo`** (101 / 4), **`quotes`** (129 / 3),
 **`holidays`** (331 / 5), **`bacc`** (490 / 2), **`mt300`** (384 / 2),
-**`appver`** (320 / 2), **`mdea`** (491 / 2) e **`conf_escalation`** (576 / 2).
-O `routes.py` saiu de 39.696 para 36.341 linhas.
+**`appver`** (320 / 2), **`mdea`** (491 / 2), **`conf_escalation`** (576 / 2),
+**`daily_metric`** (300 / 2), **`weekly_escalation`** (140 / 2),
+**`recon_comitente`** (125 / 3), **`recon_payrec`** (160 / 5),
+**`recon_cgd`** (75 / 5), e **`boxscan`** (350 / 3).
+O `routes.py` saiu de 39.696 para 35.274 linhas.
 
 **O `bacc` foi o primeiro com SCHEDULER, e o registro dele NÃO veio junto.** O
 laço vive em `commands.scheduler_loop`, mas o `_schedule_on_start('bacc-ea', …)`
@@ -2236,6 +2239,9 @@ fora chamam o grupo; saída = de quantas ele depende:
 | `appver` | 320 | 2 rotas | 12 | ✅ feito |
 | `mdea` | 491 | 2 rotas + 1 gancho | 18 | ✅ feito |
 | `conf_escalation` | 576 | 2 rotas | 19 | ✅ feito |
+| `daily_metric` · `weekly_escalation` | ~300+140 | 2+2 rotas | — | ✅ feito |
+| `recon_comitente` · `recon_payrec` · `recon_cgd` | ~360 | 3+5+5 rotas | — | ✅ feito |
+| `boxscan` | ~350 | 3 rotas + scheduler | — | ✅ feito |
 | `file-interpreter` | 307 | **43** | 4 | tarde |
 | `mapping` | 1263 | 39 | 35 | tarde |
 | `notificações` | 393 | **161** | 9 | é PLATAFORMA, não feature |

@@ -38,7 +38,9 @@ os.environ.setdefault('OTC_SHARED_DRIVE_ROOT', os.path.join(ROOT, '.check-share'
 
 from apps import create_app                                  # noqa: E402
 from apps.config import DebugConfig                          # noqa: E402
-from apps.pages import routes as R                           # noqa: E402
+from apps.pages import routes as R
+# As rotas moram em features/recon_comitente desde a extracao.
+from apps.pages.features.recon_comitente import entrypoint as CE  # noqa: E402                           # noqa: E402
 from apps.pages import recon_comitente as RC                 # noqa: E402
 
 fails = []
@@ -72,7 +74,7 @@ def chamar(endpoint, exc, stub):
     with app.test_request_context(url, **kw):
         from flask import session
         session['authenticated'] = True
-        fn = R.reconciliation_comitente_data if endpoint == 'data' else R.reconciliation_comitente_run
+        fn = CE.reconciliation_comitente_data if endpoint == 'data' else CE.reconciliation_comitente_run
         r = fn()
     body, status = (r if isinstance(r, tuple) else (r, 200))
     return status, body.get_json()

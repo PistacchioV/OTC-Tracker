@@ -94,15 +94,18 @@ print('\n== 5. os tres loops consultam a janela ==')
 # Por AST, e nao por grep: o que importa e o `continue` guardado pela janela
 # estar no CORPO do while, antes do trabalho — dentro do try ele ja teria
 # custado o poll.
+# O laco do box mora em features/boxscan/commands.py desde a extracao — os dois
+# arquivos entram na mesma varredura.
 LOOPS = {'_fxo_api_scheduler_loop': 'API de FXO',
          '_ndf_api_scheduler_loop': 'API de NDF',
-         '_box_scan_scheduler_loop': 'box de commodities'}
-tree = ast.parse(open(os.path.join(ROOT, 'apps', 'pages', 'routes.py'),
-                      encoding='utf-8').read())
+         'scheduler_loop': 'box de commodities'}
 achados = {}
-for node in ast.walk(tree):
-    if isinstance(node, ast.FunctionDef) and node.name in LOOPS:
-        achados[node.name] = node
+for arq in (os.path.join(ROOT, 'apps', 'pages', 'routes.py'),
+            os.path.join(ROOT, 'apps', 'pages', 'features', 'boxscan', 'commands.py')):
+    tree = ast.parse(open(arq, encoding='utf-8').read())
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name in LOOPS:
+            achados.setdefault(node.name, node)
 
 for nome, rotulo in LOOPS.items():
     fn = achados.get(nome)
@@ -118,8 +121,15 @@ for nome, rotulo in LOOPS.items():
     for i, stmt in enumerate(corpo):
         if not isinstance(stmt, ast.If):
             continue
-        chamadas = [n.func.id for n in ast.walk(stmt.test)
-                    if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)]
+        # O nome pode ser chamada direta (`_import_window_open()`, no routes) ou
+        # busca atrasada (`_routes()._import_window_open()`, nas features).
+        chamadas = []
+        for n in ast.walk(stmt.test):
+            if isinstance(n, ast.Call):
+                if isinstance(n.func, ast.Name):
+                    chamadas.append(n.func.id)
+                elif isinstance(n.func, ast.Attribute):
+                    chamadas.append(n.func.attr)
         if '_import_window_open' in chamadas:
             guarda = (i, stmt)
             break
