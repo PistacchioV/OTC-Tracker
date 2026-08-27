@@ -2168,7 +2168,14 @@ verbatim — `_mtm_parse_num`/`_mtm_norm_party` ficaram: summaries e accrual os
 usam), **`cognos`** (330 / 7 — o store por dia ficou: o Save Daily Settlement
 grava o mesmo arquivo), e as cascas de **`otm`** e **`latam`** (7 rotas cada —
 stores e coletores são da família de liquidação).
-O `routes.py` saiu de 39.696 para 28.550 linhas.
+Depois: **`accrual`** (1120 / 15, verbatim — ficaram `_acc_digits`,
+`_accrual_lob`, `_accrual_parse_date` e `_ACC_ENDPROC_CC`, que b3-accounts,
+forecast e MtM usam) e as cascas de **`ndf_summary`** (7), **`operations_b3`**
+(9), **`other_products`** (29 — a família de liquidação INTEIRA numa vertical
+só: `_ops_trade_rows` e os coletores continuam no routes) e
+**`file_interpreter`** (6, com os alias `/file-interface` — o MOTOR `_fi_*`
+fica: ele gera o layout de todo arquivo do app).
+O `routes.py` saiu de 39.696 para **25.799** linhas.
 
 **O guarda ganhou a seção 9** (`check_soc_layers`): desmonta o bytecode de toda
 função das features e cobra que cada `LOAD_GLOBAL` exista no módulo — é o que
@@ -2273,6 +2280,7 @@ fora chamam o grupo; saída = de quantas ele depende:
 | `deals_monitor` · `cetip` (verbatim) | ~1480 | 3+2 rotas | — | ✅ feito |
 | `intrag` · `counterparty_details` · `electronic_inventory` | ~2060 | 15+18+4 rotas | — | ✅ feito |
 | `manual_confirmation` · `mtm` · `cognos` · `otm` · `latam` | ~2400 | 17+16+7+7+7 rotas | — | ✅ feito |
+| `accrual` · `ndf_summary` · `operations_b3` · `other_products` · `file_interpreter` | ~2750 | 15+7+9+29+6 rotas | — | ✅ feito |
 | `file-interpreter` | 307 | **43** | 4 | tarde |
 | `mapping` | 1263 | 39 | 35 | tarde |
 | `notificações` | 393 | **161** | 9 | é PLATAFORMA, não feature |

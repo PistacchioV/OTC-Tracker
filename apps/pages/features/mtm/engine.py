@@ -10,9 +10,8 @@ import os
 import random
 import re
 import traceback
-from datetime import datetime, timedelta
+from datetime import datetime
 
-from flask import render_template
 
 
 def _R():
@@ -21,7 +20,7 @@ def _R():
     return routes
 
 
-MTM_SOURCE_ROOT = _R().os.getenv('MTM_SOURCE_ROOT', _R().os.path.join(
+MTM_SOURCE_ROOT = os.getenv('MTM_SOURCE_ROOT', os.path.join(
     _R().Config.SHARED_DRIVE_ROOT, 'Confirmation', 'Derivativos', 'OTC Tracker', 'Regulatory', 'MTM'))
 
 MTM_JSON_ROOT = _R().data_write('cache', 'mtm')
@@ -114,7 +113,7 @@ def _mtm_apply_cem_values(cem_rows, file_rows):
 
 def _mtm_is_edg_value_name(n):
     """EDG/COE MtM values file — named 'EDG.<ext>' (any extension)."""
-    return _R().os.path.splitext(n or '')[0].strip().lower() == 'edg'
+    return os.path.splitext(n or '')[0].strip().lower() == 'edg'
 
 def _mtm_apply_edg_values(data, file_rows):
     """EDG file: col A = contract ID, col B = MtM value (IDs 'JP*' are COE, the rest
@@ -204,12 +203,12 @@ def _mtm_apply_hyb_values(hyb_rows, file_rows, mapping):
     return matched, zeros, missing
 
 def _mtm_path_for(ymd):
-    return _R().os.path.join(MTM_JSON_ROOT, ymd[:4], ymd[4:6], ymd[6:8], 'mtm_swap_{}.json'.format(ymd))
+    return os.path.join(MTM_JSON_ROOT, ymd[:4], ymd[4:6], ymd[6:8], 'mtm_swap_{}.json'.format(ymd))
 
 def _mtm_source_dir(ymd):
-    ref = _R().datetime.strptime(ymd, '%Y%m%d')
+    ref = datetime.strptime(ymd, '%Y%m%d')
     month_folder = ref.strftime('%m') + '. ' + _R()._EN_MONTH_NAMES[ref.month - 1]
-    return _R().os.path.join(MTM_SOURCE_ROOT, ref.strftime('%Y'), month_folder, ref.strftime('%d'))
+    return os.path.join(MTM_SOURCE_ROOT, ref.strftime('%Y'), month_folder, ref.strftime('%d'))
 
 def _mtm_is_swap_name(n):
     return 'sematualmid' in (n or '').lower()
@@ -220,7 +219,7 @@ def _mtm_is_coe_name(n):
 
 def _mtm_coe_refdate():
     """Last ANBIMA business day of the PENULTIMATE month vs. today (e.g. Jul → May)."""
-    now = _R().datetime.now()
+    now = datetime.now()
     y, m = now.year, now.month - 2
     while m <= 0:
         m += 12
@@ -307,7 +306,7 @@ def _mtm_normalize_zeros(data):
     return n
 
 def _mtm_build_from_folder(folder):
-    files = [fn for fn in _R().os.listdir(folder) if _R().os.path.isfile(_R().os.path.join(folder, fn))]
+    files = [fn for fn in os.listdir(folder) if os.path.isfile(os.path.join(folder, fn))]
     swap_fn = next((fn for fn in files if _mtm_is_swap_name(fn)), None)
     coe_fn  = next((fn for fn in files if _mtm_is_coe_name(fn)), None)
     buckets = {k: [] for k in _MTM_SWAP_BOOKS}
@@ -315,12 +314,12 @@ def _mtm_build_from_folder(folder):
     ref_date = coe_ref = None
     kept = matched = 0
     if swap_fn:
-        with open(_R().os.path.join(folder, swap_fn), 'rb') as fh:
+        with open(os.path.join(folder, swap_fn), 'rb') as fh:
             rows = _R()._cc_read_rows(swap_fn, fh.read())
         sb, ref_date, kept, matched = _mtm_build_swap(rows)
         buckets.update(sb)
     if coe_fn:
-        with open(_R().os.path.join(folder, coe_fn), 'rb') as fh:
+        with open(os.path.join(folder, coe_fn), 'rb') as fh:
             rows = _R()._cc_read_rows(coe_fn, fh.read())
         buckets['COE'], coe_ref = _mtm_build_coe(rows)
     # CEM MtM values (VCP_CETIP_MTM) — applied to the CEM book before finalize.
@@ -329,20 +328,20 @@ def _mtm_build_from_folder(folder):
     cem_val_fn = next((fn for fn in files if _mtm_is_cem_value_name(fn)), None)
     cem_matched = cem_zeros = cem_missing = 0
     if cem_val_fn and buckets.get('CEM'):
-        with open(_R().os.path.join(folder, cem_val_fn), 'rb') as fh:
+        with open(os.path.join(folder, cem_val_fn), 'rb') as fh:
             vrows = _R()._cc_read_rows(cem_val_fn, fh.read())
         cem_matched, cem_zeros, cem_missing = _mtm_apply_cem_values(buckets['CEM'], vrows)
     edg_val_fn = next((fn for fn in files if _mtm_is_edg_value_name(fn)), None)
     edg_matched = edg_coe_matched = edg_missing = 0
     if edg_val_fn:
-        with open(_R().os.path.join(folder, edg_val_fn), 'rb') as fh:
+        with open(os.path.join(folder, edg_val_fn), 'rb') as fh:
             erows = _R()._cc_read_rows(edg_val_fn, fh.read())
         edg_matched, edg_coe_matched, _ez, edg_missing = _mtm_apply_edg_values({'tables': buckets}, erows)
     # Hybrids MtM values (Stream_level_MTM) — SUMIF by Trade Name via mapping_swap-hyb.json.
     hyb_val_fn = next((fn for fn in files if _mtm_is_hyb_value_name(fn)), None)
     hyb_matched = hyb_zeros = hyb_missing = 0
     if hyb_val_fn and buckets.get('Hybrids'):
-        with open(_R().os.path.join(folder, hyb_val_fn), 'rb') as fh:
+        with open(os.path.join(folder, hyb_val_fn), 'rb') as fh:
             hrows = _R()._cc_read_rows(hyb_val_fn, fh.read())
         hyb_matched, hyb_zeros, hyb_missing = _mtm_apply_hyb_values(
             buckets['Hybrids'], hrows, _mtm_load_hyb_mapping())
@@ -370,28 +369,28 @@ def _mtm_save(path, data):
     caller que já tranca o ciclo ler → alterar → gravar (o correto, e o que todos
     fazem hoje). Aqui é só a garantia de que uma gravação nunca sai sem lock."""
     with _R()._cache_lock:
-        _R().os.makedirs(_R().os.path.dirname(path), exist_ok=True)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
         _R()._atomic_write_json(path, data)
 
 def _mtm_load(date_str):
-    ymd = _R()._accrual_parse_date(date_str) or _R().datetime.now().strftime('%Y%m%d')
+    ymd = _R()._accrual_parse_date(date_str) or datetime.now().strftime('%Y%m%d')
     path = _mtm_path_for(ymd)
-    if not _R().os.path.isfile(path):
+    if not os.path.isfile(path):
         return None, None
     try:
         with open(path, encoding='utf-8') as fh:
             return path, _R().json.load(fh)
     except Exception:
-        _R().log.error('[mtm] read failed %s:\n%s', path, _R().traceback.format_exc())
+        _R().log.error('[mtm] read failed %s:\n%s', path, traceback.format_exc())
         return None, None
 
 def _mtm_latest_ymd():
     latest = None
-    if not _R().os.path.isdir(MTM_JSON_ROOT):
+    if not os.path.isdir(MTM_JSON_ROOT):
         return None
-    for _root, _dirs, files in _R().os.walk(MTM_JSON_ROOT):
+    for _root, _dirs, files in os.walk(MTM_JSON_ROOT):
         for fn in files:
-            m = _R().re.match(r'mtm_swap_(\d{8})\.json$', fn)
+            m = re.match(r'mtm_swap_(\d{8})\.json$', fn)
             if m and (latest is None or m.group(1) > latest):
                 latest = m.group(1)
     return '{}-{}-{}'.format(latest[:4], latest[4:6], latest[6:8]) if latest else None
@@ -448,7 +447,7 @@ def _mtm_valor_fixed(v, int_digits):
     return str(int(round(abs(v or 0.0) * 100))).zfill(int_digits + 2)
 
 def _mtm_rand_meunum():
-    return ''.join(_R().random.choice('0123456789') for _ in range(10))
+    return ''.join(random.choice('0123456789') for _ in range(10))
 
 def _mtm_cpty_of(row):
     """Lawton / Atacama / None from the book row's CONTRAPARTE / Conta (idx 4)."""
@@ -488,7 +487,7 @@ def _mtm_generate_book(book_key, rows, ymd):
     if not suffix:
         return {}
     book_cpty = _MTM_GEN_BOOK_CPTY.get(book_key)     # ATACAMA (EDG) / LAWTON (CEM,HYB)
-    today = _R().datetime.now().strftime('%Y%m%d')
+    today = datetime.now().strftime('%Y%m%d')
     banco = 'MtM_BANCO-' + suffix
     files = {banco: {'view': 'BANCO',
                      'header': _mtm_swap_header('BANCO', today), 'lines': []}}
@@ -506,7 +505,7 @@ def _mtm_generate_book(book_key, rows, ymd):
     return files
 
 def _mtm_generate_coe(rows, ymd):
-    today = _R().datetime.now().strftime('%Y%m%d')
+    today = datetime.now().strftime('%Y%m%d')
     f = {'view': 'BANCO', 'cols': _MTM_GEN_COE_COLS, 'header': _mtm_coe_header(today), 'rows': []}
     for row in rows:
         v = _R()._mtm_parse_num(row[_MTM_COE_VALOR_IDX]) or 0.0
@@ -532,13 +531,13 @@ def _mtm_write_gen_files(files, ymd):
         content = '\r\n'.join(_mtm_file_lines(fdata)) + '\r\n'
         for d in dests:
             try:
-                _R().os.makedirs(d, exist_ok=True)
-                path = _R().os.path.join(d, fname + '.txt')
+                os.makedirs(d, exist_ok=True)
+                path = os.path.join(d, fname + '.txt')
                 with open(path, 'w', encoding='latin-1', newline='') as fh:
                     fh.write(content)
                 written.append(path)
             except Exception:
-                _R().log.error('[mtm] write %s → %s failed:\n%s', fname, d, _R().traceback.format_exc())
+                _R().log.error('[mtm] write %s → %s failed:\n%s', fname, d, traceback.format_exc())
     return written
 
 def _mtm_gen_preview(files):
@@ -620,16 +619,16 @@ def _send_mtm_validation_email(subject, html, logo_path, attach_paths):
                     part = MIMEBase('application', 'octet-stream')
                     part.set_payload(f.read())
                 encoders.encode_base64(part)
-                part.add_header('Content-Disposition', 'attachment', filename=_R().os.path.basename(path))
+                part.add_header('Content-Disposition', 'attachment', filename=os.path.basename(path))
                 msg.attach(part)
             except Exception:
-                _R().log.warning('[mtm] could not attach %s:\n%s', path, _R().traceback.format_exc())
+                _R().log.warning('[mtm] could not attach %s:\n%s', path, traceback.format_exc())
         with _R().smtplib.SMTP(_R().SMTP_HOST, _R().SMTP_PORT, timeout=20) as server:
             server.sendmail(_R().SHARED_MAILBOX, [_R().CETIP_OTC_OPS_EMAIL], msg.as_string())
         _R().log.info('[mtm] validation e-mail sent to %s', _R().CETIP_OTC_OPS_EMAIL)
         return True
     except Exception:
-        _R().log.error('[mtm] validation e-mail FAILED:\n%s', _R().traceback.format_exc())
+        _R().log.error('[mtm] validation e-mail FAILED:\n%s', traceback.format_exc())
         return False
 
 def _send_mtm_endprocess_email(subject, html, logo_path):
@@ -660,7 +659,7 @@ def _send_mtm_endprocess_email(subject, html, logo_path):
         _R().log.info('[mtm] end-process e-mail sent to %s (cc %s)', _R().CETIP_OTC_OPS_EMAIL, _R()._ACC_ENDPROC_CC)
         return True
     except Exception:
-        _R().log.error('[mtm] end-process e-mail FAILED:\n%s', _R().traceback.format_exc())
+        _R().log.error('[mtm] end-process e-mail FAILED:\n%s', traceback.format_exc())
         return False
 
 def _mtm_is_recon_name(n):
@@ -708,9 +707,9 @@ def _mtm_run_recon(data, rows):
     return {'success_rows': ok_rows, 'check_rows': check_rows, 'map_entries': len(fmap)}
 
 def _mtm_find_recon_file(folder):
-    if not _R().os.path.isdir(folder):
+    if not os.path.isdir(folder):
         return None
-    for fn in _R().os.listdir(folder):
-        if _R().os.path.isfile(_R().os.path.join(folder, fn)) and _mtm_is_recon_name(fn):
-            return _R().os.path.join(folder, fn)
+    for fn in os.listdir(folder):
+        if os.path.isfile(os.path.join(folder, fn)) and _mtm_is_recon_name(fn):
+            return os.path.join(folder, fn)
     return None

@@ -230,7 +230,13 @@ for r in ('/holidays-calendar', '/api/holidays/calendars', '/api/holidays/save',
           '/cognos', '/api/cognos/data', '/api/cognos/row/confirm',
           '/otm-settlements', '/api/otm-settlements/data',
           '/other-products-swap-latamdeskposition',
-          '/api/other-products-swap-latamdeskposition/data'):
+          '/api/other-products-swap-latamdeskposition/data',
+          '/accrual-swap', '/api/accrual-swap/data',
+          '/ndf-summary', '/api/ndf-summary/data', '/api/ndf-summary/ted-email',
+          '/operations-b3', '/api/operations-b3/data', '/api/operations-b3/mensageria',
+          '/other-products-summary', '/api/other-products-summary/data',
+          '/other-products-ndf-settlement-advice', '/other-products-swap-vcp',
+          '/file-interpreter', '/api/file-interpreter/templates'):
     check('%s registrada' % r, r in regras, True)
 
 print('\n== 8. o que saiu do routes.py nao ficou nele ==')
@@ -267,7 +273,11 @@ for morto in ('_tk_roles_by_sid', '_tk_can_view', '_tk_public',
               'def api_mc_validate', 'def manual_confirmation_generate',
               '_mtm_build_from_folder', '_mtm_generate_book', 'def api_mtm_process',
               '_cog_import', '_cog_collect', 'def api_cog_row_confirm',
-              'def api_otm_row_confirm', 'def api_latam_row_confirm'):
+              'def api_otm_row_confirm', 'def api_latam_row_confirm',
+              '_acc_apply_factors', '_acc_write_batch_files', 'def api_accrual_recon',
+              'def api_ndf_summary_ted_email', 'def api_opb3_mensageria',
+              'def api_ops_data', 'def api_optadv_row_confirm',
+              'def api_file_interpreter_template'):
     check('%s saiu do routes.py' % morto, morto in rotas_py, False)
 
 print('\n== 9. nenhum global orfao nos modulos de feature ==')

@@ -41,6 +41,20 @@ import tempfile
 from datetime import date, datetime
 
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
+
+
+def _fontes_com_rotas_(base):
+    """routes.py + a arvore de features — as rotas moram nos entrypoints desde
+    a verticalizacao, e um scan so do routes viraria assercao vazia."""
+    import io as _io, os as _os
+    partes = [_io.open(_os.path.join(base, 'apps', 'pages', 'routes.py'), encoding='utf-8').read()]
+    raiz = _os.path.join(base, 'apps', 'pages', 'features')
+    for r, dirs, arqs in _os.walk(raiz):
+        dirs[:] = [d for d in dirs if d != '__pycache__']
+        for a in sorted(arqs):
+            if a.endswith('.py'):
+                partes.append(_io.open(_os.path.join(r, a), encoding='utf-8').read())
+    return '\n'.join(partes)
 sys.path.insert(0, ROOT)
 os.chdir(ROOT)
 
@@ -226,7 +240,7 @@ js = HTML.split('(j.trade || []).forEach', 1)[1].split('});', 1)[0]
 # numero com o icone ✓/✗ (§188). Ela conta como coluna do mesmo jeito.
 from_js = re.findall(r'esc\(r\.(\w+)\)|(diffCell)\(r\)', js)
 from_js = ['difference' if b else a for a, b in from_js]
-SRC = read('apps/pages/routes.py')
+SRC = _fontes_com_rotas_(ROOT)
 m = re.search(r'_OPS_TRADE_COLS = \((.*?)\)\n', SRC, re.S)
 from_py = re.findall(r"'(\w+)'", m.group(1)) if m else []
 EXPECTED = ['lob', 'counterparty', 'internal_id', 'id_b3', 'product', 'type',

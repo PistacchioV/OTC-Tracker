@@ -18,25 +18,25 @@ def _R():
 
 def _cog_import(ref=None):
     """Find "FXO Detail*.xlsx" in COG_SOURCE_ROOT, extract, write today's JSON."""
-    ref = ref or _R().datetime.now()
-    if not _R().os.path.isdir(_R().COG_SOURCE_ROOT):
+    ref = ref or datetime.now()
+    if not os.path.isdir(_R().COG_SOURCE_ROOT):
         return {'success': False, 'error': 'Source folder not found: {}'.format(_R().COG_SOURCE_ROOT)}
-    matches = sorted(f for f in _R().os.listdir(_R().COG_SOURCE_ROOT)
+    matches = sorted(f for f in os.listdir(_R().COG_SOURCE_ROOT)
                      if f.lower().startswith('fxo detail') and f.lower().endswith(('.xlsx', '.xls', '.txt')))
     if not matches:
         return {'success': False, 'error': 'No "FXO Detail*" file found in {}'.format(_R().COG_SOURCE_ROOT)}
-    src_path = _R().os.path.join(_R().COG_SOURCE_ROOT, matches[0])
+    src_path = os.path.join(_R().COG_SOURCE_ROOT, matches[0])
     try:
         rows = _R()._cog_read_rows(src_path)
     except Exception:
-        _R().log.warning("[cognos] read failed for %s:\n%s", src_path, _R().traceback.format_exc())
+        _R().log.warning("[cognos] read failed for %s:\n%s", src_path, traceback.format_exc())
         return {'success': False, 'error': 'Could not read {}'.format(matches[0])}
     out, kept = _R()._cog_extract(rows)
     jp = _R()._cog_json_path(ref)
     _R()._cog_save(jp, out)
     _R()._ds_write_updated(jp, ref.strftime('%H:%M:%S'))
     try:
-        _R().os.remove(src_path)
+        os.remove(src_path)
     except OSError:
         _R().log.warning("[cognos] could not delete source %s", src_path)
     _R().log.info("[cognos] imported %s: kept %d → %s", matches[0], kept, jp)
@@ -50,12 +50,12 @@ def _cog_fmt_date(v):
         return ''
     for fmt in ('%Y-%m-%d', '%Y/%m/%d'):                 # yyyy-mm-dd (date part)
         try:
-            return _R().datetime.strptime(s.split(' ')[0], fmt).strftime('%d/%m/%Y')
+            return datetime.strptime(s.split(' ')[0], fmt).strftime('%d/%m/%Y')
         except ValueError:
             continue
     for fmt in ('%b %d, %Y %I:%M:%S %p', '%b %d, %Y'):   # 'jul 2, 2026 12:00:00 AM'
         try:
-            return _R().datetime.strptime(s, fmt).strftime('%d/%m/%Y')
+            return datetime.strptime(s, fmt).strftime('%d/%m/%Y')
         except ValueError:
             continue
     d = _R()._fcst_parse_date(s)
@@ -67,7 +67,7 @@ def _cog_collect(ref):
     widgets = {'total': 0, 'call': 0, 'put': 0}
     jp = _R()._cog_json_path(ref)
     rows_out = []
-    if _R().os.path.isfile(jp):
+    if os.path.isfile(jp):
         try:
             with open(jp, encoding='utf-8') as fh:
                 data = _R().json.load(fh) or []
@@ -128,6 +128,6 @@ def _cog_collect(ref):
 def _cog_ref_from(payload):
     ds = str((payload or {}).get('date', '') or '').strip()
     try:
-        return _R().datetime.strptime(ds[:10], '%Y-%m-%d') if ds else _R().datetime.now()
+        return datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
     except ValueError:
-        return _R().datetime.now()
+        return datetime.now()

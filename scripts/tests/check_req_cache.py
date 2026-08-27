@@ -68,7 +68,8 @@ import re                                              # noqa: E402
 # routes por _R()).
 fonte = io.open(os.path.join(RAIZ, 'apps', 'pages', 'routes.py'), encoding='utf-8').read()
 for _rel in ('features/otm/entrypoint.py', 'features/latam/entrypoint.py',
-             'features/cognos/entrypoint.py'):
+             'features/cognos/entrypoint.py', 'features/operations_b3/entrypoint.py',
+             'features/ndf_summary/entrypoint.py', 'features/other_products/entrypoint.py'):
     fonte += io.open(os.path.join(RAIZ, 'apps', 'pages', _rel), encoding='utf-8').read()
 arvore = ast.parse(fonte)
 linhas = fonte.split('\n')

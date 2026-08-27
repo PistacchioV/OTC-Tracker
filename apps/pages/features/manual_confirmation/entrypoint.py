@@ -7,14 +7,11 @@ routes são compartilhados com os saves do New Deals e com o espelho do Pending
 Confirmation (`_mc_save_from_deal`, `_mc_pc_sync`, os carimbos) — ficam lá até
 a fase `platform/`, alcançados por `_R()`.
 """
-import io
-import json
 import os
-import re
 import traceback
 from datetime import datetime
 
-from flask import (jsonify, redirect, render_template, request, send_file,
+from flask import (jsonify, redirect, render_template, request,
                    session, url_for)
 
 from apps.pages import blueprint
@@ -26,28 +23,28 @@ def _R():
     return routes
 
 
-@_R().blueprint.route('/manual-confirmation')
+@blueprint.route('/manual-confirmation')
 def manual_confirmation():
     """O item do menu apontava para cá antes das duas telas existirem. Mantido
     como porta de entrada, levando ao Monitor — que é o primeiro item da lista e
     a tela por onde o trabalho começa."""
-    if not _R().session.get('authenticated'):
-        return _R().redirect(_R().url_for('pages_blueprint.sign_in_page'))
-    return _R().redirect(_R().url_for('pages_blueprint.manual_confirmation_monitor'))
+    if not session.get('authenticated'):
+        return redirect(url_for('pages_blueprint.sign_in_page'))
+    return redirect(url_for('pages_blueprint.manual_confirmation_monitor'))
 
-@_R().blueprint.route('/manual-confirmation/monitor')
+@blueprint.route('/manual-confirmation/monitor')
 def manual_confirmation_monitor():
-    if not _R().session.get('authenticated'):
-        return _R().redirect(_R().url_for('pages_blueprint.sign_in_page'))
-    return _R().render_template('pages/manual-confirmation-monitor.html',
+    if not session.get('authenticated'):
+        return redirect(url_for('pages_blueprint.sign_in_page'))
+    return render_template('pages/manual-confirmation-monitor.html',
                            segment='manual-confirmation-monitor')
 
-@_R().blueprint.route('/manual-confirmation/track')
+@blueprint.route('/manual-confirmation/track')
 def manual_confirmation_track():
-    if not _R().session.get('authenticated'):
-        return _R().redirect(_R().url_for('pages_blueprint.sign_in_page'))
+    if not session.get('authenticated'):
+        return redirect(url_for('pages_blueprint.sign_in_page'))
     from apps.pages import manual_conf as _mc
-    return _R().render_template('pages/manual-confirmation-track.html',
+    return render_template('pages/manual-confirmation-track.html',
                            segment='manual-confirmation-track',
                            mc_columns=_mc.COLUMNS,
                            mc_labels=_mc.COLUMN_LABELS,
@@ -61,20 +58,20 @@ def manual_confirmation_track():
                            # Inventory reconheciam.
                            mc_options={'Produto': list(_mc.CONFIRMATION_TYPES)})
 
-@_R().blueprint.route('/api/manual-confirmation/data')
+@blueprint.route('/api/manual-confirmation/data')
 def api_mc_data():
-    if not _R().session.get('authenticated'):
-        return _R().jsonify({'error': 'Unauthorized'}), 401
+    if not session.get('authenticated'):
+        return jsonify({'error': 'Unauthorized'}), 401
     try:
         from apps.pages import manual_conf as _mc
         rows = _mc.load_all()
-        return _R().jsonify({'columns': _mc.COLUMNS, 'labels': _mc.COLUMN_LABELS,
+        return jsonify({'columns': _mc.COLUMNS, 'labels': _mc.COLUMN_LABELS,
                         'data': rows, 'counts': _R()._mc_counts(rows)})
     except Exception as e:
         _R().log.error('[manual-conf] data: %s', e)
-        return _R().jsonify({'error': str(e)}), 500
+        return jsonify({'error': str(e)}), 500
 
-@_R().blueprint.route('/api/manual-confirmation/monitor')
+@blueprint.route('/api/manual-confirmation/monitor')
 def api_mc_monitor():
     """Os cards do Monitor — SEM os documentos.
 
@@ -83,8 +80,8 @@ def api_mc_monitor():
     a soma de todas elas para abrir. O payload sai na hora e a página busca os
     PDFs de cada item em paralelo no endpoint /docs abaixo.
     """
-    if not _R().session.get('authenticated'):
-        return _R().jsonify({'error': 'Unauthorized'}), 401
+    if not session.get('authenticated'):
+        return jsonify({'error': 'Unauthorized'}), 401
     try:
         from apps.pages import manual_conf as _mc
         payload = _mc.monitor_payload()
@@ -97,31 +94,31 @@ def api_mc_monitor():
         payload['can_validate']['LEGAL'] = payload['can_validate'][_mc.STAGE_OTC]
         payload['can_validate']['FEPWEB'] = payload['can_validate'][_mc.STAGE_OTC]
         payload['stage_role'] = dict(_R()._MC_STAGE_ROLE)
-        return _R().jsonify(payload)
+        return jsonify(payload)
     except Exception as e:
         _R().log.error('[manual-conf] monitor: %s', e)
-        return _R().jsonify({'error': str(e)}), 500
+        return jsonify({'error': str(e)}), 500
 
-@_R().blueprint.route('/api/manual-confirmation/docs')
+@blueprint.route('/api/manual-confirmation/docs')
 def api_mc_docs():
     """Os PDFs de UMA confirmação (cliente × produto × data da operação).
 
     Chamado pelo Monitor item a item, depois de os cards já estarem na tela —
     é o que deixa a lista abrir na hora mesmo com o share de rede lento.
     """
-    if not _R().session.get('authenticated'):
-        return _R().jsonify({'error': 'Unauthorized'}), 401
-    row = {'Cliente': _R().request.args.get('cliente', ''),
-           'Produto': _R().request.args.get('produto', ''),
-           'LOB': _R().request.args.get('lob', ''),
-           'Moeda': _R().request.args.get('ativo', ''),
-           'Data Operação': _R().request.args.get('data', '')}
-    trades = [t.strip() for t in (_R().request.args.get('trades') or '').split(',') if t.strip()]
+    if not session.get('authenticated'):
+        return jsonify({'error': 'Unauthorized'}), 401
+    row = {'Cliente': request.args.get('cliente', ''),
+           'Produto': request.args.get('produto', ''),
+           'LOB': request.args.get('lob', ''),
+           'Moeda': request.args.get('ativo', ''),
+           'Data Operação': request.args.get('data', '')}
+    trades = [t.strip() for t in (request.args.get('trades') or '').split(',') if t.strip()]
     docs = _R()._mc_confirmation_docs(row, trades)
     _R()._mc_flush_email_subjects(_R()._mc_sync_email_subjects(docs, trades))
-    return _R().jsonify({'docs': docs})
+    return jsonify({'docs': docs})
 
-@_R().blueprint.route('/api/manual-confirmation/docs', methods=['POST'])
+@blueprint.route('/api/manual-confirmation/docs', methods=['POST'])
 def api_mc_docs_batch():
     """Os PDFs de VÁRIAS confirmações de uma vez.
 
@@ -135,15 +132,15 @@ def api_mc_docs_batch():
     A resposta vem na ORDEM em que os itens chegaram — é assim que a tela casa
     cada lista com o seu item, sem precisar de identificador.
     """
-    if not _R().session.get('authenticated'):
-        return _R().jsonify({'error': 'Unauthorized'}), 401
-    itens = (_R().request.get_json(silent=True) or {}).get('items') or []
+    if not session.get('authenticated'):
+        return jsonify({'error': 'Unauthorized'}), 401
+    itens = (request.get_json(silent=True) or {}).get('items') or []
     if not isinstance(itens, list):
-        return _R().jsonify({'error': 'items must be a list'}), 400
+        return jsonify({'error': 'items must be a list'}), 400
     # Raiz inacessível é o diagnóstico que NENHUM item consegue dar sozinho:
     # cada um só vê a própria pasta "inexistente". Um drive mapeado que o
     # processo não enxerga produz exatamente um Monitor 100% 'no PDF'.
-    if not _R().os.path.isdir(_R().ELECTRONIC_INVENTORY_ROOT):
+    if not os.path.isdir(_R().ELECTRONIC_INVENTORY_ROOT):
         _R().log.warning('[manual-conf] docs: raiz do Electronic Inventory inacessível '
                     'deste processo: %s', _R().ELECTRONIC_INVENTORY_ROOT)
     else:
@@ -169,9 +166,9 @@ def api_mc_docs_batch():
     # UMA gravação para o lote inteiro: por item, cada uma releria os dois bancos
     # para escrever uma célula, e o Monitor manda até 200 itens de uma vez.
     _R()._mc_flush_email_subjects(assuntos)
-    return _R().jsonify({'docs': out})
+    return jsonify({'docs': out})
 
-@_R().blueprint.route('/manual-confirmation/generate')
+@blueprint.route('/manual-confirmation/generate')
 def manual_confirmation_generate():
     """Abre o editor da confirmação de um item do Monitor (botão Generate).
 
@@ -180,13 +177,13 @@ def manual_confirmation_generate():
     junto é o `mc_keys` — é por ele que o editor sabe que, depois de gravar,
     quem abre é a validação da ESTEIRA e não o checklist do documento.
     """
-    if not _R().session.get('authenticated'):
-        return _R().redirect(_R().url_for('pages_blueprint.sign_in_page'))
+    if not session.get('authenticated'):
+        return redirect(url_for('pages_blueprint.sign_in_page'))
     from apps.pages import manual_conf as _mc
-    keys = [k.strip() for k in (_R().request.args.get('keys') or '').split(',') if k.strip()]
+    keys = [k.strip() for k in (request.args.get('keys') or '').split(',') if k.strip()]
     rows = [r for r in (_mc.find_row(k) for k in keys) if r is not None]
     if not rows:
-        return _R().render_template('confirmations/manual-validate.html',
+        return render_template('confirmations/manual-validate.html',
                                found=False, stage=_mc.STAGE_OTC, keys=keys), 404
     url, motivo = '', ''
     for row in rows:
@@ -195,14 +192,14 @@ def manual_confirmation_generate():
             break
     if not url:
         _R().log.warning('[manual-conf] Generate sem destino para %s: %s', keys, motivo)
-        return _R().render_template('confirmations/manual-generate-error.html',
+        return render_template('confirmations/manual-generate-error.html',
                                keys=keys, motivo=motivo,
                                cliente=rows[0].get('Cliente', ''),
                                produto=rows[0].get('Produto', ''),
                                data=rows[0].get('Data Operação', '')), 404
-    return _R().redirect(url + '&mc_keys=' + _R().quote(','.join(keys)))
+    return redirect(url + '&mc_keys=' + _R().quote(','.join(keys)))
 
-@_R().blueprint.route('/manual-confirmation/validate')
+@blueprint.route('/manual-confirmation/validate')
 def manual_confirmation_validate():
     """A tela de validação de UMA confirmação: PDF ao lado, checklist da etapa e
     o histórico das três mesas.
@@ -216,16 +213,16 @@ def manual_confirmation_validate():
     várias operações: validar trade a trade faria a mesma folha ser conferida dez
     vezes.
     """
-    if not _R().session.get('authenticated'):
-        return _R().redirect(_R().url_for('pages_blueprint.sign_in_page'))
+    if not session.get('authenticated'):
+        return redirect(url_for('pages_blueprint.sign_in_page'))
     from apps.pages import manual_conf as _mc
-    keys = [k.strip() for k in (_R().request.args.get('keys') or '').split(',') if k.strip()]
-    stage = (_R().request.args.get('stage') or '').strip().upper()
+    keys = [k.strip() for k in (request.args.get('keys') or '').split(',') if k.strip()]
+    stage = (request.args.get('stage') or '').strip().upper()
     if stage not in (_mc.STAGE_OTC, _mc.STAGE_MO, _mc.STAGE_FO):
         stage = _mc.STAGE_OTC
     rows = [r for r in (_mc.find_row(k) for k in keys) if r is not None]
     if not rows:
-        return _R().render_template('confirmations/manual-validate.html',
+        return render_template('confirmations/manual-validate.html',
                                found=False, stage=stage, keys=keys), 404
     row = rows[0]
     sla = _mc.sla_state(row, stage)
@@ -242,7 +239,7 @@ def manual_confirmation_validate():
     _keys = [str(r.get(_mc.KEY_COLUMN, '') or '') for r in rows]
     docs = _R()._mc_confirmation_docs(row, _keys)
     _R()._mc_flush_email_subjects(_R()._mc_sync_email_subjects(docs, _keys))
-    return _R().render_template(
+    return render_template(
         'confirmations/manual-validate.html',
         found=True,
         keys=keys, stage=stage,
@@ -270,19 +267,19 @@ def manual_confirmation_validate():
         comment=row.get(_mc.STAGE_COMMENT_COLUMN.get(stage, ''), ''),
         docs=docs)
 
-@_R().blueprint.route('/api/manual-confirmation/upsert', methods=['POST'])
+@blueprint.route('/api/manual-confirmation/upsert', methods=['POST'])
 def api_mc_upsert():
     """Grava uma linha (edição no modal, linha nova ou edição em massa)."""
-    if not _R().session.get('authenticated'):
-        return _R().jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
     from apps.pages import manual_conf as _mc
-    payload = _R().request.get_json(silent=True) or {}
+    payload = request.get_json(silent=True) or {}
     rows = payload.get('rows')
     if rows is None:
         rows = [payload.get('row') or {}]
     if not isinstance(rows, list):
-        return _R().jsonify({'success': False, 'message': 'rows must be a list'}), 400
-    sid = _R().session.get('user_sid', '')
+        return jsonify({'success': False, 'message': 'rows must be a list'}), 400
+    sid = session.get('user_sid', '')
     etapas = (_mc.STAGE_OTC, _mc.STAGE_MO, _mc.STAGE_FO)
     # Monta TUDO antes de gravar: uma edição em massa que falha na quinta linha
     # não pode deixar as quatro primeiras salvas e o usuário sem saber quais.
@@ -294,7 +291,7 @@ def api_mc_upsert():
         if not key:
             # Sem Trade ID a linha não tem chave: o próximo upsert apagaria a
             # anterior sem chave e ficaria uma só. Recusa em vez de perder linha.
-            return _R().jsonify({'success': False,
+            return jsonify({'success': False,
                             'message': 'Trade ID é obrigatório — é a chave da linha.'}), 400
         row = _mc.find_row(key) or _mc.blank_row()
         # Estado ANTES da edição: é ele que diz se esta gravação é uma validação
@@ -332,7 +329,7 @@ def api_mc_upsert():
                 # como os dois botões do Monitor. Soltar um hold sem nada
                 # validado não apaga trabalho de ninguém e segue livre.
                 if limpar and not _R()._mc_can_validate(_mc.STAGE_OTC):
-                    return _R().jsonify({'success': False, 'stage_forbidden': True,
+                    return jsonify({'success': False, 'stage_forbidden': True,
                                     'stage': _mc.STAGE_OTC, 'key': key,
                                     'message': _R()._mc_stage_denied(_mc.STAGE_OTC)}), 403
                 row['Pending'] = ''          # a derivação decide (→ Pending OTC)
@@ -350,7 +347,7 @@ def api_mc_upsert():
             depois = str(row.get(col_data, '') or '').strip()
             if depois and not antes[stage]:
                 if not _R()._mc_can_validate(stage):
-                    return _R().jsonify({'success': False, 'stage_forbidden': True,
+                    return jsonify({'success': False, 'stage_forbidden': True,
                                     'stage': stage, 'key': key,
                                     'message': _R()._mc_stage_denied(stage)}), 403
                 comentario = str(row.get(_mc.STAGE_COMMENT_COLUMN.get(stage, ''), '') or '').strip()
@@ -358,7 +355,7 @@ def api_mc_upsert():
                     # 409, não 400: o pedido está bem formado — o ESTADO é que
                     # exige mais um campo. A tela usa isso para abrir a coluna de
                     # comentário em vez de mostrar um erro genérico.
-                    return _R().jsonify({'success': False, 'sla_comment_required': True,
+                    return jsonify({'success': False, 'sla_comment_required': True,
                                     'stage': stage, 'key': key,
                                     'column': _mc.STAGE_COMMENT_COLUMN.get(stage, ''),
                                     # Em INGLÊS, como todo texto de servidor que
@@ -385,20 +382,20 @@ def api_mc_upsert():
         _mc.upsert_row(row)
         saved.append(row)
     _R()._mc_pc_sync(saved)
-    return _R().jsonify({'success': True, 'rows': saved})
+    return jsonify({'success': True, 'rows': saved})
 
-@_R().blueprint.route('/api/manual-confirmation/legal-release', methods=['POST'])
+@blueprint.route('/api/manual-confirmation/legal-release', methods=['POST'])
 def api_mc_legal_release():
     """O botão do card Pending Legal do Monitor: solta o hold do jurídico e a
     confirmação entra na fila do OTC — aqui e no Pending Confirmation (espelho).
     A ação é da mesa de OTC Ops, a mesma trava da etapa OTC."""
-    if not _R().session.get('authenticated'):
-        return _R().jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
     from apps.pages import manual_conf as _mc
     if not _R()._mc_can_validate(_mc.STAGE_OTC):
-        return _R().jsonify({'success': False, 'stage_forbidden': True,
+        return jsonify({'success': False, 'stage_forbidden': True,
                         'message': _R()._mc_stage_denied(_mc.STAGE_OTC)}), 403
-    payload = _R().request.get_json(silent=True) or {}
+    payload = request.get_json(silent=True) or {}
     keys = [str(k).strip() for k in (payload.get('keys') or []) if str(k or '').strip()]
     saved = []
     for k in keys:
@@ -410,32 +407,32 @@ def api_mc_legal_release():
         _mc.upsert_row(row)
         saved.append(row)
     if not saved:
-        return _R().jsonify({'success': False,
+        return jsonify({'success': False,
                         'message': 'No confirmation in Pending Legal for these trades.'}), 404
     _R()._mc_pc_sync(saved)
-    _R()._create_notification(_R().session.get('user_sid', ''), _R().session.get('user_name', ''),
+    _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                          'Manual Confirmation', 'Confirmation',
                          'Legal hold released · {}{}'.format(
                              saved[0].get('Cliente', '') or keys[0],
                              ' (%d ops)' % len(saved) if len(saved) > 1 else ''),
                          target_role=_R()._mc_notify_roles(saved))
-    return _R().jsonify({'success': True, 'rows': saved})
+    return jsonify({'success': True, 'rows': saved})
 
-@_R().blueprint.route('/api/manual-confirmation/fepweb-sent', methods=['POST'])
+@blueprint.route('/api/manual-confirmation/fepweb-sent', methods=['POST'])
 def api_mc_fepweb_sent():
     """O botão do card Pending FepWeb do Monitor: carimba o Enviado p/ cliente
     com a data de hoje — a confirmação vira Ok na esteira e, no Pending
     Confirmation, passa a aguardar a assinatura (Digital/Original pelo
     Signature Type do Reference Data, via `_mc_pc_sync`)."""
-    if not _R().session.get('authenticated'):
-        return _R().jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
     from apps.pages import manual_conf as _mc
     if not _R()._mc_can_validate(_mc.STAGE_OTC):
-        return _R().jsonify({'success': False, 'stage_forbidden': True,
+        return jsonify({'success': False, 'stage_forbidden': True,
                         'message': _R()._mc_stage_denied(_mc.STAGE_OTC)}), 403
-    payload = _R().request.get_json(silent=True) or {}
+    payload = request.get_json(silent=True) or {}
     keys = [str(k).strip() for k in (payload.get('keys') or []) if str(k or '').strip()]
-    hoje = _R().datetime.now().strftime('%d/%m/%Y')
+    hoje = datetime.now().strftime('%d/%m/%Y')
     saved = []
     for k in keys:
         row = _mc.find_row(k)
@@ -447,59 +444,59 @@ def api_mc_fepweb_sent():
         _mc.upsert_row(row)
         saved.append(row)
     if not saved:
-        return _R().jsonify({'success': False,
+        return jsonify({'success': False,
                         'message': 'No confirmation in Pending FepWeb for these trades.'}), 404
     _R()._mc_pc_sync(saved)
-    _R()._create_notification(_R().session.get('user_sid', ''), _R().session.get('user_name', ''),
+    _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                          'Manual Confirmation', 'Confirmation',
                          'Sent to client (FepWeb) · {}{}'.format(
                              saved[0].get('Cliente', '') or keys[0],
                              ' (%d ops)' % len(saved) if len(saved) > 1 else ''),
                          target_role=_R()._mc_notify_roles(saved))
-    return _R().jsonify({'success': True, 'rows': saved})
+    return jsonify({'success': True, 'rows': saved})
 
-@_R().blueprint.route('/api/manual-confirmation/derive', methods=['POST'])
+@blueprint.route('/api/manual-confirmation/derive', methods=['POST'])
 def api_mc_derive():
     """Recalcula as derivadas de um lote de linhas SEM gravar — é o que a edição
     em massa usa para mostrar Pending e Aging já corretos antes de salvar."""
-    if not _R().session.get('authenticated'):
-        return _R().jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
     from apps.pages import manual_conf as _mc
-    payload = _R().request.get_json(silent=True) or {}
+    payload = request.get_json(silent=True) or {}
     rows = payload.get('rows')
     if not isinstance(rows, list):
-        return _R().jsonify({'success': False, 'message': 'rows must be a list'}), 400
+        return jsonify({'success': False, 'message': 'rows must be a list'}), 400
     rules = _mc.validation_rules()
     out = []
     for src in rows:
         row = dict(src) if isinstance(src, dict) else {}
         _mc.refresh_derived(row, rules)
         out.append({c: row.get(c, '') for c in _mc.DERIVED_COLUMNS})
-    return _R().jsonify({'success': True, 'rows': out})
+    return jsonify({'success': True, 'rows': out})
 
-@_R().blueprint.route('/api/manual-confirmation/delete', methods=['POST'])
+@blueprint.route('/api/manual-confirmation/delete', methods=['POST'])
 def api_mc_delete():
-    if not _R().session.get('authenticated'):
-        return _R().jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
     from apps.pages import manual_conf as _mc
-    payload = _R().request.get_json(silent=True) or {}
+    payload = request.get_json(silent=True) or {}
     keys = payload.get('keys') or ([payload.get('key')] if payload.get('key') else [])
     n = 0
     for k in keys:
         if str(k or '').strip():
             _mc.delete_row(k)
             n += 1
-    return _R().jsonify({'success': True, 'deleted': n})
+    return jsonify({'success': True, 'deleted': n})
 
-@_R().blueprint.route('/api/manual-confirmation/validate', methods=['POST'])
+@blueprint.route('/api/manual-confirmation/validate', methods=['POST'])
 def api_mc_validate():
     """Valida uma etapa. O SPN vem da SESSÃO, não do corpo do POST — quem
     carimba é quem está logado, e aceitar o SPN do cliente deixaria qualquer
     sessão assinar por outra pessoa."""
-    if not _R().session.get('authenticated'):
-        return _R().jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
     from apps.pages import manual_conf as _mc
-    payload = _R().request.get_json(silent=True) or {}
+    payload = request.get_json(silent=True) or {}
     # A validação é da CONFIRMAÇÃO, e um documento cobre várias operações — por
     # isso o corpo traz `keys`. Validar trade a trade faria a mesma folha ser
     # conferida dez vezes, e bastaria esquecer uma para o grupo travar.
@@ -507,27 +504,27 @@ def api_mc_validate():
     keys = [str(k).strip() for k in keys if str(k or '').strip()]
     stage = str(payload.get('stage') or '').strip().upper()
     if stage not in (_mc.STAGE_OTC, _mc.STAGE_MO, _mc.STAGE_FO):
-        return _R().jsonify({'success': False, 'message': 'Etapa inválida.'}), 400
+        return jsonify({'success': False, 'message': 'Etapa inválida.'}), 400
     # A trava de verdade é aqui, e não no botão: a tela esconde, o endpoint
     # garante. Sem isto, um POST direto assinaria pela mesa de qualquer um.
     if not _R()._mc_can_validate(stage):
-        return _R().jsonify({'success': False, 'stage_forbidden': True,
+        return jsonify({'success': False, 'stage_forbidden': True,
                         'message': _R()._mc_stage_denied(stage)}), 403
     comment = str(payload.get('comment') or '').strip()
     try:
-        rows = [r for r in (_mc.mark_validated(k, stage, _R().session.get('user_sid', ''), comment)
+        rows = [r for r in (_mc.mark_validated(k, stage, session.get('user_sid', ''), comment)
                             for k in keys) if r is not None]
     except _mc.SlaCommentRequired:
         # 409 e não 400: o pedido está bem formado, o ESTADO é que exige mais um
         # campo. A tela usa `sla_comment_required` para abrir o campo em vez de
         # mostrar um erro genérico.
-        return _R().jsonify({'success': False, 'sla_comment_required': True,
+        return jsonify({'success': False, 'sla_comment_required': True,
                         'stage': stage,
                         'message': 'Validação fora do prazo: informe o motivo do atraso.'}), 409
     if not rows:
-        return _R().jsonify({'success': False, 'message': 'Confirmação não encontrada.'}), 404
+        return jsonify({'success': False, 'message': 'Confirmação não encontrada.'}), 404
     _R()._mc_pc_sync(rows)
-    _R()._create_notification(_R().session.get('user_sid', ''), _R().session.get('user_name', ''),
+    _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                          'Manual Confirmation', 'Confirmation',
                          # Em INGLÊS como todo o resto do sino: o detalhe é
                          # gravado no banco e o feed o mostra cru, então texto de
@@ -541,39 +538,39 @@ def api_mc_validate():
                          # vem depois. O Back Office vai junto porque acompanha a
                          # esteira inteira — é dele o documento.
                          target_role=_R()._mc_notify_roles(rows))
-    return _R().jsonify({'success': True, 'row': rows[0], 'rows': rows})
+    return jsonify({'success': True, 'row': rows[0], 'rows': rows})
 
-@_R().blueprint.route('/api/manual-confirmation/reject', methods=['POST'])
+@blueprint.route('/api/manual-confirmation/reject', methods=['POST'])
 def api_mc_reject():
     """Reject de MO/FO: devolve a confirmação para Pending OTC e avisa a mesa.
 
     A gravação vem ANTES do e-mail de propósito: a confirmação precisa voltar
     para o OTC mesmo que o relay não responda. O retorno diz se o e-mail saiu.
     """
-    if not _R().session.get('authenticated'):
-        return _R().jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
     from apps.pages import manual_conf as _mc
-    payload = _R().request.get_json(silent=True) or {}
+    payload = request.get_json(silent=True) or {}
     keys = payload.get('keys') or ([payload.get('key')] if payload.get('key') else [])
     keys = [str(k).strip() for k in keys if str(k or '').strip()]
     stage = str(payload.get('stage') or '').strip().upper()
     comment = str(payload.get('comment') or '').strip()
     if stage not in (_mc.STAGE_MO, _mc.STAGE_FO):
-        return _R().jsonify({'success': False, 'message': 'Só MO e FO rejeitam.'}), 400
+        return jsonify({'success': False, 'message': 'Só MO e FO rejeitam.'}), 400
     # Rejeitar é a outra resposta à MESMA pergunta que o validar responde — o
     # documento está certo? —, então quem não assina a etapa também não a devolve.
     if not _R()._mc_can_validate(stage):
-        return _R().jsonify({'success': False, 'stage_forbidden': True,
+        return jsonify({'success': False, 'stage_forbidden': True,
                         'message': _R()._mc_stage_denied(stage)}), 403
     if not comment:
         # Sem comentário o aviso chega dizendo "refaça" e nada mais — e o OTC
         # tem de perguntar de volta o que estava errado.
-        return _R().jsonify({'success': False,
+        return jsonify({'success': False,
                         'message': 'O comentário é obrigatório: é ele que diz o que refazer.'}), 400
     before = next((r for r in (_mc.find_row(k) for k in keys) if r is not None), None)
     if before is None:
-        return _R().jsonify({'success': False, 'message': 'Confirmação não encontrada.'}), 404
-    sid = _R().session.get('user_sid', '')
+        return jsonify({'success': False, 'message': 'Confirmação não encontrada.'}), 404
+    sid = session.get('user_sid', '')
     # O documento inteiro volta para o OTC: rejeitar só uma operação deixaria as
     # outras esperando um papel que já foi devolvido.
     for k in keys:
@@ -584,8 +581,8 @@ def api_mc_reject():
         from apps.pages.otc_emails import send_mc_reject_email
         emailed = send_mc_reject_email(before, stage, sid, comment)
     except Exception:
-        _R().log.warning('[manual-conf] aviso de reject falhou:\n%s', _R().traceback.format_exc())
-    _R()._create_notification(sid, _R().session.get('user_name', ''),
+        _R().log.warning('[manual-conf] aviso de reject falhou:\n%s', traceback.format_exc())
+    _R()._create_notification(sid, session.get('user_name', ''),
                          'Manual Confirmation', 'Confirmation',
                          # `keys[0]`, não `key`: essa variável nunca existiu nesta
                          # função — a linha só não estourava porque o `or` à
@@ -597,9 +594,9 @@ def api_mc_reject():
                          # refazer. Mesma regra da validação, lida do estado.
                          target_role=_R()._mc_notify_roles(
                              [r for r in (_mc.find_row(k) for k in keys) if r is not None]))
-    return _R().jsonify({'success': True, 'emailed': bool(emailed)})
+    return jsonify({'success': True, 'emailed': bool(emailed)})
 
-@_R().blueprint.route('/api/manual-confirmation/email-preview')
+@blueprint.route('/api/manual-confirmation/email-preview')
 def api_mc_email_preview():
     """O e-mail de recap (.msg/.eml) da pasta da confirmação, como HTML — o
     Monitor o abre numa aba nova. Abrir o arquivo cru baixaria o .msg e
@@ -608,12 +605,12 @@ def api_mc_email_preview():
     O HTML do corpo é o que veio no e-mail, então a resposta leva
     `Content-Security-Policy: sandbox` — script de e-mail não roda na aba.
     """
-    if not _R().session.get('authenticated'):
-        return _R().jsonify({'success': False, 'message': 'unauthorized'}), 401
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'unauthorized'}), 401
     from flask import Response, abort
     from html import escape
-    client = (_R().request.args.get('client') or '').strip()
-    rel = (_R().request.args.get('rel') or '').strip()
+    client = (request.args.get('client') or '').strip()
+    rel = (request.args.get('rel') or '').strip()
     if not client or not rel or not rel.lower().endswith(('.msg', '.eml')):
         return abort(404)
     try:
@@ -625,7 +622,7 @@ def api_mc_email_preview():
     # Mesmo teto do /api/parse-msg-html: o parser OLE/CFB não pode receber um
     # arquivo sem limite de tamanho.
     _MAX = 25 * 1024 * 1024
-    if _R().os.path.getsize(full) > _MAX:
+    if os.path.getsize(full) > _MAX:
         return abort(413)
     subject = sender = to = when = ''
     body_html = ''
@@ -663,8 +660,8 @@ def api_mc_email_preview():
                     body_html = '<pre style="white-space:pre-wrap">{}</pre>'.format(escape(content))
     except Exception:
         _R().log.warning('[manual-conf] email-preview falhou para %s:\n%s', full,
-                    _R().traceback.format_exc())
-        return _R().jsonify({'success': False,
+                    traceback.format_exc())
+        return jsonify({'success': False,
                         'message': 'Could not read the e-mail file.'}), 500
     cab = ''.join(
         '<div><span style="display:inline-block;min-width:64px;color:#7b8299">{}</span>{}</div>'

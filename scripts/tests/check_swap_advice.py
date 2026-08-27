@@ -37,6 +37,20 @@ import tempfile
 from datetime import datetime
 
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
+
+
+def _fontes_com_rotas_(base):
+    """routes.py + a arvore de features — as rotas moram nos entrypoints desde
+    a verticalizacao, e um scan so do routes viraria assercao vazia."""
+    import io as _io, os as _os
+    partes = [_io.open(_os.path.join(base, 'apps', 'pages', 'routes.py'), encoding='utf-8').read()]
+    raiz = _os.path.join(base, 'apps', 'pages', 'features')
+    for r, dirs, arqs in _os.walk(raiz):
+        dirs[:] = [d for d in dirs if d != '__pycache__']
+        for a in sorted(arqs):
+            if a.endswith('.py'):
+                partes.append(_io.open(_os.path.join(r, a), encoding='utf-8').read())
+    return '\n'.join(partes)
 sys.path.insert(0, ROOT)
 os.chdir(ROOT)
 
@@ -171,7 +185,7 @@ check('so os swaps de diferencial/premio entram', sorted(by_contract), ['A1', 'N
 check('o swap repetido vira UMA linha', len(rows), 4)
 check('as duas telas veem os mesmos contratos',
       sorted(by_contract), sorted(r['id_b3'] for r in trade))
-SRC = read('apps/pages/routes.py')
+SRC = _fontes_com_rotas_(ROOT)
 check('a regra do universo tem UMA implementacao', SRC.count('def _ops_swap_settling'), 1)
 for fn in ('_ops_swap_trade_rows', '_swadv_collect'):
     body = SRC.split('def %s(' % fn, 1)[1].split('\ndef ', 1)[0]
@@ -474,9 +488,11 @@ check('mesmo raio do Other Products Summary',
 print('\n== 14. a edicao vale na TELA e no AVISO IMPRESSO ==')
 # E o ponto do modulo inteiro: se a celula corrigida so valesse na tela, o
 # cliente receberia o valor antigo e ninguem notaria.
-SRC = read('apps/pages/routes.py')
-check('a tela le as linhas com overlay', 'items = _swadv_items(ref)' in SRC, True)
-check('o aviso impresso tambem', 'for r in _swadv_items(ref):' in SRC, True)
+SRC = _fontes_com_rotas_(ROOT)
+check('a tela le as linhas com overlay',
+      'items = _swadv_items(ref)' in SRC or 'items = _R()._swadv_items(ref)' in SRC, True)
+check('o aviso impresso tambem',
+      'for r in _swadv_items(ref):' in SRC or 'for r in _R()._swadv_items(ref):' in SRC, True)
 check('e o overlay sincroniza os numeros CRUS', '_SWADV_NUM_FIELDS' in SRC, True)
 # `_mtm_parse_num` le so o formato US; a tabela mostra US e o aviso imprime BR,
 # entao o operador digita ora um ora outro.

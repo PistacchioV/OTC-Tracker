@@ -37,6 +37,20 @@ import tempfile
 from datetime import datetime, timedelta, timezone
 
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
+
+
+def _fontes_com_rotas_(base):
+    """routes.py + a arvore de features — as rotas moram nos entrypoints desde
+    a verticalizacao, e um scan so do routes viraria assercao vazia."""
+    import io as _io, os as _os
+    partes = [_io.open(_os.path.join(base, 'apps', 'pages', 'routes.py'), encoding='utf-8').read()]
+    raiz = _os.path.join(base, 'apps', 'pages', 'features')
+    for r, dirs, arqs in _os.walk(raiz):
+        dirs[:] = [d for d in dirs if d != '__pycache__']
+        for a in sorted(arqs):
+            if a.endswith('.py'):
+                partes.append(_io.open(_os.path.join(r, a), encoding='utf-8').read())
+    return '\n'.join(partes)
 sys.path.insert(0, ROOT)
 os.chdir(ROOT)
 
@@ -224,7 +238,7 @@ check('e o internal fica None, nao zero', drafts[0].get('internal'), None)
 
 # ─────────────────────────────────────────────────────────────────────────────
 print('\n== 6. uma definicao so para as duas decisoes ==')
-src = io.open(os.path.join(ROOT, 'apps', 'pages', 'routes.py'), encoding='utf-8').read()
+src = _fontes_com_rotas_(ROOT)
 check('o agrupamento chama a funcao do otc_emails',
       'otc_emails.opb3_msg_is_swap_venc' in src, True)
 check('e nao reimplementa o teste de premio no agrupamento',

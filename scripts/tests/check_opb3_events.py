@@ -23,6 +23,20 @@ import os
 import sys
 
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
+
+
+def _fontes_com_rotas_(base):
+    """routes.py + a arvore de features — as rotas moram nos entrypoints desde
+    a verticalizacao, e um scan so do routes viraria assercao vazia."""
+    import io as _io, os as _os
+    partes = [_io.open(_os.path.join(base, 'apps', 'pages', 'routes.py'), encoding='utf-8').read()]
+    raiz = _os.path.join(base, 'apps', 'pages', 'features')
+    for r, dirs, arqs in _os.walk(raiz):
+        dirs[:] = [d for d in dirs if d != '__pycache__']
+        for a in sorted(arqs):
+            if a.endswith('.py'):
+                partes.append(_io.open(_os.path.join(r, a), encoding='utf-8').read())
+    return '\n'.join(partes)
 sys.path.insert(0, ROOT)
 os.chdir(ROOT)
 
@@ -57,7 +71,7 @@ def rec(tit, op, status='PENDENTE DE LIQUIDACAO FINANCEIRA', **extra):
 
 
 print('== 1. o cadastro existe e reproduz o comportamento antigo ==')
-SRC = read('apps/pages/routes.py')
+SRC = _fontes_com_rotas_(ROOT)
 check("'opb3-events' registrado", "'opb3-events': {" in SRC, True)
 check('e na aba do /mapping', "key: 'opb3-events'" in read('apps/templates/pages/mapping.html'), True)
 check('o antigo swap-b3-events saiu', "'swap-b3-events': {" in SRC, False)
