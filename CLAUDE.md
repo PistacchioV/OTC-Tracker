@@ -2275,7 +2275,7 @@ delega a ele em vez de criar um arquivo vazio.
 `check_soc_layers.py` prende tudo isso, inclusive subindo o app para conferir as
 rotas no `url_map` — import escrito e import que executou são coisas diferentes.
 
-### A fase `platform/` (começou em 27/08/2026 — HANDOFF §314–§315)
+### A fase `platform/` (começou em 27/08/2026 — HANDOFF §314–§317)
 
 A fila de features acabou — as 43 fatias saíram na ordem do acoplamento medido,
 histórico no HANDOFF §310–§313 — e a camada de INFRA horizontal já mora em
@@ -2295,9 +2295,43 @@ seguem no `database_access.py`) e **`authz.py`** (master/admin, allowlist do
 endpoints do sino e os dois `before_request` continuam no `routes.py`: rota e
 registro em blueprint são casca.
 
+**Seis MOTORES já saíram (§316–§317):** **`settlement.py`** (a família
+de liquidação — `_ops_trade_rows` e todo o `_ops_*`/`_opssum_*`/`_opsadv_*`,
+mais o elo de equity `_ops_equity_link`/`_latam_equity_b3_index`; os leitores
+`_opb3_*` FICARAM no `routes` de propósito, são da fatia FI/PC/OpB3),
+**`confirmations.py`** (o motor `_conf_*` das quatro famílias — segregação,
+estado New→Generated→Success, `_conf_esteira_stages`, as páginas de geração e
+o XML da B3), **`counterparty.py`** (o CounterpartyDetails.json — `_cpd_*`,
+`_norm_spn`, os normalizadores e o parser `_cc_*` do Update Contacts),
+**`forecast.py`** (a matriz do Settlement Forecast — `_forecast_collect`/
+`_forecast_payload`, `_fcst_*` e os mapas de contrato de swap, que a família
+de liquidação também lê), **`electronic_inventory.py`** (resolução de pasta no
+share, o scanner com cache, versões ordinais e listagem — o
+**`ELECTRONIC_INVENTORY_ROOT` FICA no routes** de propósito: é superfície de
+patch do check_ei_api, como `_B3_DATA_DIR`) e **`manual_confirmation.py`** (a
+cola `_mc_*` da esteira — `_mc_save_from_deal`, `_mc_confirmation_docs`,
+`_MC_STAGE_ROLE`/`_MC_STAGE_NOTIFY_ROLES`, `_mc_generate_url`, `_mc_pc_sync`;
+o dono do banco segue sendo o `manual_conf.py`, importado direto como
+`_mc_mod`).
+
+Lições do lote §316/§317: **chamada interna do módulo não passa pelo alias** —
+teste que troca uma função chamada por DENTRO da própria fatia (`_cpd_path`,
+`_conf_cgd_lookup`, `_opssum_meta_load`, `_latam_equity_b3_index`) troca nos
+DOIS lugares (`R.` cobre quem chega de fora, o módulo cobre a chamada
+interna); **`session` do Flask é superfície de patch** (`R.session = {...}` no
+check_swap_advice), então na platform ele é alcançado por `routes.session`,
+nunca por import direto; **constante de módulo que referencia outro módulo da
+platform importa DIRETO** (o `_MC_GENERATE_PRODUCTS` referencia os grupos das
+confirmações no nível do módulo, e o alias do routes ainda não existe naquele
+ponto do import — são os mesmos objetos). O `@_req_cached` vem do
+`request_cache.py` por import direto — e o guarda da seção 10 aprendeu que
+`__module__` mente sob `functools.wraps`: quem diz onde o código mora é o
+`co_filename`, e o corpo decorado é conferido via `__wrapped__`. O helper
+`_fontes_com_rotas_` dos oito testes ancorados em texto varre `platform/`
+junto de `features/`, então as próximas fatias não o editam.
+
 O padrão da fase, que as próximas fatias repetem (motores compartilhados —
-liquidação, `_conf_*`, CC/CPD, quotes/forecast, EI, `_mc_*`, FI/PC/OpB3,
-New Deals — nessa fila):
+FI/PC/OpB3, New Deals — nessa fila):
 
 - **o `routes.py` mantém os nomes como ALIAS** (`_x = _pf_anbima._x`): features
   seguem alcançando por `routes.<nome>` e os testes que trocam a FUNÇÃO no

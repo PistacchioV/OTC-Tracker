@@ -13759,3 +13759,88 @@ Sete módulos na `platform/` (calendário, notificações, armazém JSON, e-mail
 autorização), `routes.py` em **20.139 linhas** (21.322 no fechamento da campanha, −1.183 na fase).
 Suíte: 96/96 verdes. Próximas fatias: os motores compartilhados (liquidação, `_conf_*`, CC/CPD,
 quotes/forecast, EI, `_mc_*`, FI/PC/OpB3, New Deals) e as seis separações internas dos verbatim.
+
+## §316 — Os três primeiros MOTORES na platform/: liquidação, `_conf_*` e o Counterparty Details
+
+A fase entrou nos motores compartilhados, na ordem da fila do §315. Três fatias, todas VERBATIM
+com religação por bytecode (compila cada def isolado e lê os LOAD_GLOBAL com `co_positions` — a
+mesma técnica da seção 9/10 do `check_soc_layers`, que é o que prova depois que nenhum nome ficou
+órfão):
+
+- **`settlement.py`** (~1.400 linhas) — a família de liquidação inteira: `_ops_trade_rows` (o único
+  lugar que sabe as famílias, §199) e todo o `_ops_*`/`_opssum_*`/`_opsadv_*`, o elo de equity
+  (`_ops_equity_link`, `_latam_equity_b3_index`, `_latam_trade_dt`) e o `_swadv_indexador`. Os
+  leitores `_opb3_*` + `_ops_norm_event` FICARAM no `routes` de propósito: são da fatia FI/PC/OpB3,
+  e a fatia os alcança por `routes.<nome>` como qualquer andaime.
+- **`confirmations.py`** (~1.330 linhas) — o motor `_conf_*` das quatro famílias: segregação por
+  contraparte × mercadoria, estado New→Generated→Success, `_conf_esteira_stages` (§254), as três
+  páginas de geração, o XML da B3 e o `_conf_pc_set_fepweb`. Os três `_mc_*` vizinhos
+  (`_mc_conf_trade_keys`, `_mc_ei_link`, `_mc_stamp_generated`) ficaram para a fatia `_mc_*`. O
+  estado `_conf_subj_cache` é mutado in place — alias vale (critério do §315).
+- **`counterparty.py`** (~390 linhas) — o CounterpartyDetails.json: `_cpd_*`, `_norm_spn`, os
+  normalizadores (`_contacts_norm`/`_net_norm`/`_bank_norm`/`_cgd_norm`, `_default_slot`,
+  `_CP_NET_TYPES`) e o parser `_cc_*` do Update Contacts — CC e CPD juntos porque operam o mesmo
+  arquivo.
+
+O que este lote ensinou, além do §314/§315:
+
+- **Chamada interna do módulo não passa pelo alias.** O §314 prometia que trocar a função no
+  `routes` intercepta todo mundo — vale para quem chega DE FORA (o alias resolve em tempo de
+  chamada), e deixa de valer quando o chamador mudou de casa JUNTO: `_cpd_load` chama `_cpd_path`
+  por global do próprio módulo. Os quatro testes atingidos (`check_cpd_api`, `check_fwdstart_conf`,
+  `check_ops_equity_option` ×2) trocam agora nos DOIS lugares — `R.` para quem chega de fora, o
+  módulo da platform para a chamada interna.
+- **`session` do Flask é superfície de patch.** O `check_swap_advice` faz `R.session = {...}` para
+  carimbar o maker fora de request context; um `from flask import session` na platform passaria por
+  cima do espião. Na platform ele é `routes.session`, sempre.
+- **`__module__` mente sob `functools.wraps`.** O wrapper do `@_req_cached` carrega o nome do módulo
+  decorado, mas o CÓDIGO — e os globals que ele resolve — são do `request_cache.py`; a seção 10 do
+  guarda estourava com os globals do wrapper. Quem diz onde o código mora é o `co_filename`, e o
+  corpo decorado (que é o que a religação precisa provar) segue conferido via `__wrapped__`.
+- **O `_fontes_com_rotas_` dos oito testes ancorados em texto varre `platform/` junto** — a mesma
+  correção do §314 (`check_notif_page_url`), aplicada de uma vez às oito cópias; as próximas fatias
+  não tocam nesses testes. Quatro guardas com leitura direta do `routes.py` foram apontados para o
+  arquivo novo (`check_req_cache` ganhou `platform/settlement.py` na lista; `check_co12_roll`,
+  `check_conf_optcomm_palmoil` e `check_ops_summary` leem o módulo da fatia).
+
+Dez módulos na `platform/`, `routes.py` em **17.320 linhas** (−2.819 no lote; 21.322 no fechamento
+da campanha). Suíte: 96/96 verdes. Próximas fatias: quotes/forecast, EI, `_mc_*`, FI/PC/OpB3,
+New Deals — e as seis separações internas dos verbatim.
+
+## §317 — Mais três motores: Forecast, Electronic Inventory e a cola da esteira (`_mc_*`)
+
+O lote repete o §316 (mesma ferramenta de religação por bytecode, mesmo padrão de alias) três
+vezes:
+
+- **`forecast.py`** (~530 linhas) — a matriz do Settlement Forecast: `_forecast_collect`/
+  `_forecast_payload`/`_forecast_spine`, os `_fcst_*` (parse de data, entidade, produto, LOB,
+  normalização) e os mapas de contrato de swap (`_swap_contract_ident_map`/`_swap_contract_cpty_map`).
+  É horizontal porque a família de liquidação lê daqui (`_ops_settlement_counts`,
+  `_ops_swap_trade_rows`) — pelo alias do routes, então a ordem das fatias não importou.
+- **`electronic_inventory.py`** (~420 linhas) — resolução de pasta de cliente no share, o scanner
+  do root com cache/TTL (`_EI_ROOT_CACHE`, estado in place — alias vale), versões ordinais e
+  listagem. O **`ELECTRONIC_INVENTORY_ROOT` FICOU no routes de propósito**: o `check_ei_api` faz
+  `R.ELECTRONIC_INVENTORY_ROOT = tmp`, e o motor o lê por `routes.<nome>` — o teste passou sem
+  UMA linha de edição, que era o objetivo. O `_CONFIRMATION_TYPES` vem direto do `manual_conf`
+  (mesma tupla que o routes apelida), preservando `_EI_CONFIRMATION_TYPES = _CONFIRMATION_TYPES`
+  byte a byte.
+- **`manual_confirmation.py`** (~770 linhas) — a cola `_mc_*`: o gancho `_mc_save_from_deal`
+  (chamado de DENTRO do `_pc_save_from_deal`, que fica no routes), `_mc_legal_entity`, os
+  documentos da pasta (`_mc_confirmation_docs` + E-mail Subject), papéis e avisos
+  (`_MC_STAGE_ROLE`, `_MC_STAGE_NOTIFY_ROLES`), o Generate do Monitor e o `_mc_pc_sync`. Os
+  seeds de mapping (`_MC_VALIDATION_SEED`…) ficaram no routes: são material do `_MAPPING_DEFS`,
+  não da cola.
+
+A lição nova: **constante de módulo que referencia outra fatia da platform importa DIRETO.** O
+`_MC_GENERATE_PRODUCTS` referencia os grupos das confirmações (`_conf_ndfcomm_groups`…) no NÍVEL
+DO MÓDULO, e o bloco de alias das confirmações vive num ponto do `routes.py` POSTERIOR ao import
+deste módulo — `routes.<nome>` não existiria ainda. O import direto de `platform.confirmations`
+entrega os mesmos objetos que o alias aponta, e platform→platform não fere fronteira nenhuma.
+
+Nenhum teste precisou de repoint neste lote (os quatro do §316 já tinham sido; o
+`_fontes_com_rotas_` corrigido lá cobriu os ancorados em texto daqui de graça). Guardas: seções
+8 e 10 do `check_soc_layers` com os três módulos novos.
+
+Treze módulos na `platform/`, `routes.py` em **15.828 linhas** (−1.588 no lote; −4.311 na fase
+de motores; 21.322 no fechamento da campanha). Suíte: 96/96 verdes. Próximas fatias: FI/PC/OpB3,
+New Deals — e as seis separações internas dos verbatim.
