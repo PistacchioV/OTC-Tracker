@@ -14050,3 +14050,75 @@ set "PYCACHE_DIR=%APP_STATE_DIR%\pycache\%VERSION_PATH%"
 if not defined PYTHONPYCACHEPREFIX set "PYTHONPYCACHEPREFIX=%PYCACHE_DIR%"
 echo [INFO] Bytecode (.pyc) em: %PYTHONPYCACHEPREFIX%
 ```
+
+## §323 — o "different configuration" que derrubava a ESCRITA de notificação (2026-08-27)
+
+O ERROR da instância voltou: `_create_notification` FAILED com
+`duckdb.ConnectionException: Can't open a connection to same database file with a different
+configuration than existing connections`. O §319 tinha dado retentativa ao LEITOR (o poll do
+sino, `unlocked=True`), mas o lado que aparecia no log era o outro: com um poll aberto
+`read_only` no instante do `duckdb.connect(read_only=False)`, quem estourava era o
+**`duckdb_write`** — a notificação se perdia, e o sino de quem devia recebê-la nunca ficava
+sabendo.
+
+Três fatos que definem a correção:
+
+1. **O conflito é exclusivamente INTRA-processo.** O DuckDB guarda uma instância por arquivo
+   dentro do processo e recusa configurações mistas; entre processos o sintoma é outro (lock de
+   arquivo, "being used by another process"). Logo a coordenação pode ser toda em memória —
+   nenhuma ida ao share, que é o custo que o `unlocked` existe para evitar.
+2. **As leituras COM lock não têm o problema.** O lock de arquivo compartilhado × exclusivo
+   (portalocker, no sidecar `.lock`) já exclui leitor de escritor, inclusive entre handles do
+   mesmo processo. Só a leitura `unlocked` convive no tempo com uma escrita.
+3. **Retentativa é loteria dos dois lados**; com abas suficientes polling a cada 8 s, a janela
+   de colisão volta. O determinístico é cada lado saber do outro.
+
+O `_UnlockedReadGate` (`database_access.py`, registrado por caminho normalizado, só para
+`engine == 'duckdb'`): o poll se registra ao abrir sem lock; a escrita, depois do lock de
+arquivo, espera os polls em voo fecharem (são SELECTs curtos; teto de 10 s com WARNING
+`unlocked_gate_wait_timed_out`) e conecta limpa. No sentido inverso o poll espera até 1 s por
+uma escrita em curso — na maioria das vezes ela fecha em milissegundos e a leitura que hoje
+falharia passa a responder com DADO — e, no teto, SEGUE para o connect e falha como sempre
+falhou (o endpoint devolve o sino vazio; nenhum log novo nesse caminho). Melhor esforço nos
+dois lados de propósito: esperar sem teto seria devolver ao sino a fila que o `unlocked`
+existe para evitar, e um leitor doente não pode calar as notificações do app inteiro.
+
+`check_unlocked_gate.py` prende: a colisão da imagem (escrita durante leitura unlocked
+COMPLETA — antes, ConnectionException), o inverso (leitura durante escrita curta espera e traz
+dado), os dois tetos, o pareamento enter/exit mesmo com falha, e que sqlite não passa pelo
+portão. `check_notif_db_boot`, `check_db_read_path` e `check_unlocked_reads` seguem verdes.
+
+## §324 — JSON → DuckDB: o conversor da migração de fluxos (2026-08-27)
+
+Começou a migração dos fluxos de JSON para DuckDB. O primeiro passo é o
+`scripts/convert_json_to_duckdb.py`: materializa os JSONs do `Config.DATA_DIR` (na instância do
+JPM, o `...\Application\static\data` do share — o caminho NÃO é fixado no script, CLAUDE.md §8)
+como bancos DuckDB em `<DATA_DIR>/duckdb/`, deixando os JSONs como fonte até o app ser religado.
+Três bancos, no desenho combinado:
+
+- **`holiday_calendars.db`** — uma tabela POR CALENDÁRIO do registro `holiday-calendars.json`
+  (`date DATE`, `title`, `calendar`; `_registry` guarda cores/CSS). Calendário criado pela tela
+  ganha a tabela na rodada seguinte; calendário sem arquivo vira tabela VAZIA uma vez (não erro,
+  e não "convertido" a cada rodada).
+- **`reference_data.db`** — `refdata` e `counterparty_details`, TUDO VARCHAR de propósito: é
+  cadastro de IDENTIFICADOR, e 158 dos 553 documentos começam com zero — um BIGINT perderia o
+  zero à esquerda e a chave pararia de casar em silêncio (§197). Aninhado (CGD/CONTACTS/BANKING/
+  NET) vira texto JSON na coluna, consultável por `json_extract`.
+- **`daily_caches.db`** — um banco único para as rotinas de arquivo-dia (`cache/**`): um SCHEMA
+  por rotina (o caminho sem os segmentos de data — `new_deals_ndf_commodities`, `b3_files_swap`,
+  `pending_confirmation`…) e uma TABELA POR DIA (`d_AAAAMMDD[_tag]`; a tag distingue DFLUXO de
+  DPOSICAO no mesmo dia e cai quando só repete a rotina). Lista-de-objetos vira tabela TIPADA
+  por inferência; payload-objeto (as recons) vira uma tabela por lista interna + `_meta`.
+
+A inferência otimiza sem trair o dado: número só vira BIGINT/DOUBLE quando TODOS os valores da
+coluna parseiam, **número com zero à esquerda é texto** (Trade ID não perde o zero), data
+reconhece ISO e o `dd/mm/aaaa` da casa (§3 — nunca mm/dd), texto sai byte a byte (o `'C '` dos
+códigos B3), `''` vira NULL só em coluna tipada. E a rodada é INCREMENTAL: cada banco guarda um
+`_manifest` (caminho, mtime, tamanho) e só reconverte o que mudou — as tabelas da conversão
+anterior de um arquivo são derrubadas antes da nova, para lista interna que saiu do payload não
+ficar de fantasma. `_last.json` e arquivos sem data não entram e são AVISADOS (`fora do
+padrão-dia`), porque um arquivo que some da conversão sem dizer nada pareceria perda.
+
+`check_json_to_duckdb.py` prende tudo isso em tempfile; o smoke contra a dev converteu os 115
+arquivos-dia, os 553 do RefData, os 439 do CounterpartyDetails e os 11 calendários, com a
+segunda rodada em zero reconversões.
