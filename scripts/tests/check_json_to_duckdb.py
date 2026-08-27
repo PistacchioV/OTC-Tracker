@@ -13,12 +13,17 @@ O que este script prova, com um DATA_DIR inteiro em tempfile:
      VERBATIM (com espaço); TUDO VARCHAR — o zero à esquerda de SPN/TAX ID é o
      que morreria num BIGINT, em silêncio (CLAUDE.md §7); aninhado vira texto
      JSON com roundtrip fiel;
-  3. **Arquivo-dia**: um banco, um SCHEMA por rotina, uma TABELA POR DIA;
-     tipos inferidos (dd/mm/aaaa → DATE, número → BIGINT/DOUBLE), com o zero à
+  3. **Arquivo-dia**: UM BANCO POR ROTINA, seguindo a ramificação que a pasta
+     `cache/` já tem (`daily_new_deals.db`, `daily_pending_confirmation.db`,
+     …) — a subárvore da rotina vira schema e cada dia é uma tabela; tipos
+     inferidos (dd/mm/aaaa → DATE, número → BIGINT/DOUBLE), com o zero à
      esquerda continuando texto e `''` virando NULL só em coluna tipada;
-     payload-objeto vira as tabelas das listas internas + `_meta`;
+     payload-objeto vira as tabelas das listas internas + `_meta`; o
+     `daily_caches.db` do desenho anterior é removido;
   4. **Incremental**: segunda rodada não reconverte nada; arquivo alterado
-     reconverte SÓ ele; `_last.json` e afins ficam de fora, avisados.
+     reconverte SÓ ele; `_last.json` e afins ficam de fora, avisados. E o
+     destino padrão é a pasta `db/` de todos os bancos (`DATABASE_DIR`),
+     nunca uma pasta nova.
 
 Tudo em tempfile; não toca em dado real.
 """
@@ -177,18 +182,25 @@ check('2. e consultavel por json_extract',
       'A123456')
 con.close()
 
-# ═══ 3. arquivo-dia ═════════════════════════════════════════════════════════
+# ═══ 3. arquivo-dia: um banco POR ROTINA ════════════════════════════════════
+# O desenho anterior era um daily_caches.db único: se existir, sai de cena.
+open(os.path.join(OUT, 'daily_caches.db'), 'wb').close()
 st = conv.convert_daily(DATA, OUT)
 check('3. daily sem erros', st['errors'], [])
 check('3. _last.json ficou de fora, avisado',
       st['ignored'], ['cache/reconciliation/payrec/_last.json'])
-con = duckdb.connect(os.path.join(OUT, 'daily_caches.db'), read_only=True)
-check('3. um schema por rotina',
+check('3. um banco por rotina, com o nome da ramificacao de cache/',
+      sorted(os.path.basename(p) for p in st['dbs']),
+      ['daily_new_deals.db', 'daily_pending_confirmation.db', 'daily_reconciliation.db'])
+check('3. o daily_caches.db legado foi removido',
+      os.path.isfile(os.path.join(OUT, 'daily_caches.db')), False)
+con = duckdb.connect(os.path.join(OUT, 'daily_new_deals.db'), read_only=True)
+check('3. a subarvore da rotina vira schema dentro do banco dela',
       {r[0] for r in con.execute(
           "SELECT DISTINCT table_schema FROM information_schema.tables "
           "WHERE table_schema NOT IN ('main')").fetchall()},
-      {'new_deals_ndf_commodities', 'pending_confirmation', 'reconciliation_payrec'})
-nd = 'new_deals_ndf_commodities.d_20260612_ndfcomm'
+      {'ndf_commodities'})
+nd = 'ndf_commodities.d_20260612_ndfcomm'
 tipos = {d[0]: d[1] for d in con.execute("DESCRIBE %s" % nd).fetchall()}
 check('3. dd/mm/aaaa e ISO viram DATE',
       (tipos['TradeDate'], tipos['SettlementDate']), ('DATE', 'DATE'))
@@ -200,14 +212,15 @@ check('3. valores: data real, strike de 8 casas, vazio->NULL so no tipado',
                   "FROM %s ORDER BY \"Deal\"" % nd).fetchall(),
       [(datetime.date(2026, 6, 12), 5.12345678, 1500000, ''),
        (datetime.date(2026, 6, 12), 4.9, None, 'A123456')])
-check('3. tabela do dia sem tag redundante',
-      con.execute("SELECT \"Trade Number\" FROM "
-                  "pending_confirmation.d_20260827").fetchone()[0], '0012345')
+con.close()
+con = duckdb.connect(os.path.join(OUT, 'daily_pending_confirmation.db'), read_only=True)
+check('3. rotina sem subarvore fica no main, tabela so com o dia',
+      con.execute("SELECT \"Trade Number\" FROM main.d_20260827").fetchone()[0], '0012345')
+con.close()
+con = duckdb.connect(os.path.join(OUT, 'daily_reconciliation.db'), read_only=True)
 check('3. payload-objeto: lista interna vira tabela',
-      con.execute("SELECT count(*) FROM "
-                  "reconciliation_payrec.d_20260706_summary").fetchone()[0], 2)
-meta = dict(con.execute(
-    "SELECT key, value FROM reconciliation_payrec.d_20260706__meta").fetchall())
+      con.execute("SELECT count(*) FROM payrec.d_20260706_summary").fetchone()[0], 2)
+meta = dict(con.execute("SELECT key, value FROM payrec.d_20260706__meta").fetchall())
 check('3. e o resto vira _meta chave->valor',
       (json.loads(meta['success']), json.loads(meta['recon_date'])),
       (True, '2026-07-06'))
@@ -223,8 +236,8 @@ alterado = w('cache/new deals/NDF/Commodities/2026/06/20260612_ndfcomm.json',
 os.utime(alterado, (os.path.getmtime(alterado) + 5,) * 2)
 st = conv.convert_daily(DATA, OUT)
 check('4. arquivo alterado reconverte SO ele',
-      (st['converted'], len(st['skipped'])), ([nd], 2))
-con = duckdb.connect(os.path.join(OUT, 'daily_caches.db'), read_only=True)
+      (st['converted'], len(st['skipped'])), (['daily_new_deals.db:' + nd], 2))
+con = duckdb.connect(os.path.join(OUT, 'daily_new_deals.db'), read_only=True)
 check('4. com o conteudo novo',
       con.execute("SELECT count(*) FROM %s" % nd).fetchone()[0], 3)
 con.close()
@@ -233,7 +246,9 @@ novo = w('cache/new deals/NDF/Commodities/2026/06/20260613_ndfcomm.json', DEALS[
 st = conv.convert_daily(DATA, OUT)
 check('4. dia novo vira tabela nova, sem tocar nas outras',
       (st['converted'], len(st['skipped'])),
-      (['new_deals_ndf_commodities.d_20260613_ndfcomm'], 3))
+      (['daily_new_deals.db:ndf_commodities.d_20260613_ndfcomm'], 3))
+check('4. destino padrao e a pasta db/ de todos os bancos',
+      conv._default_out_dir('/x'), os.path.join('/x', 'db'))
 
 print()
 if fails:
