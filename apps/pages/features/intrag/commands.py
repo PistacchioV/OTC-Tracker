@@ -176,8 +176,9 @@ def _save_intrag_ndf_moeda_entry(deal):
     notional_str = '{:.2f}'.format(foreign_notional) if foreign_notional is not None else ''
 
     rate_str = '{:.8f}'.format(rate_val).rstrip('0').rstrip('.') if rate_val is not None else ''
-    # No template o publisher sai com espaços ("PTAX USB WMR 4"), não pipes.
-    publisher = (deal.get('Publisher', '') or 'PTAX').replace('|', ' ').strip() or 'PTAX'
+    # No template o publisher sai com espaços ("PTAX USB WMR 4") — nunca o
+    # pipe/colchete/chave do texto cru (`PTAX|BRR[PTAX` → `PTAX BRR PTAX`).
+    publisher = domain._intrag_info_source(deal.get('Publisher', '') or 'PTAX') or 'PTAX'
 
     # Offset do fixing (dias úteis ANBIMA entre o último fixing e o vencimento);
     # o padrão de NDF de moeda é D-2.

@@ -981,6 +981,7 @@ $(document).ready(function() {
         var m=document.getElementById('optModal');
         m.querySelector('.modal-title').innerHTML='<i class="ti ti-edit me-1"></i>Edit Row — Intrag Option';
         OPT_COLS.forEach(function(col,i){ var inp=document.getElementById('opt-f-'+i); if(inp) inp.value=d[i+4]||''; });
+        var inpIntrag=document.getElementById('opt-f-intrag'); if(inpIntrag) inpIntrag.value=d[3]||'';
         // O campo que se VÊ é o do flatpickr: sem o sync, abrir uma linha e
         // depois outra mostraria a data da primeira.
         if (window.otcDateSync) window.otcDateSync('#optModal');
@@ -993,7 +994,11 @@ $(document).ready(function() {
         var prevData = editTr ? table.row(editTr).data() : null;
         var vals=[]; OPT_COLS.forEach(function(col,i){ var inp=document.getElementById('opt-f-'+i); vals.push(inp?inp.value.trim():''); });
         var id = editTr ? (prevData[42]||_optId()) : _optId();
-        var intragId = (editTr && prevData) ? (prevData[3]||'') : '';   // Intrag ID preserved on edit
+        // O campo do modal já abre com o Intrag ID atual: inalterado, preserva;
+        // digitado, a linha casou com o registro e o servidor devolve Success.
+        var inpIntrag=document.getElementById('opt-f-intrag');
+        var intragId = inpIntrag ? inpIntrag.value.trim()
+                                 : ((editTr && prevData) ? (prevData[3]||'') : '');
 
         function _applyRow(newStatus) {
             var row=['<input class="form-check-input form-check-input-light fs-14 mt-0" type="checkbox" value="">', _optActionsCell(), newStatus, intragId];
@@ -1008,9 +1013,9 @@ $(document).ready(function() {
             var fields={}; OPT_ENTRY_FIELDS.forEach(function(f,i){ fields[f]=vals[i]; });
             fetch('/api/intrag/option/edit', {
                 method:'POST', headers:{'Content-Type':'application/json'},
-                body: JSON.stringify({ deal_id: id, trade_date: vals[3], fields: fields })
+                body: JSON.stringify({ deal_id: id, trade_date: vals[3], fields: fields, intrag_id: intragId })
             }).then(function(resp){ return resp.json(); })
-              .then(function(){ _applyRow('Pending'); if (window.fetchNotifications) window.fetchNotifications(); })
+              .then(function(j){ _applyRow((j && j.status) || 'Pending'); if (window.fetchNotifications) window.fetchNotifications(); })
               .catch(function(){ _applyRow('Pending'); });
         } else {
             _applyRow('New');
@@ -1020,6 +1025,7 @@ $(document).ready(function() {
     $(document.getElementById('optModal')).on('hidden.bs.modal',function() {
         $(this).removeData('editTr');
         OPT_COLS.forEach(function(col,i){ var inp=document.getElementById('opt-f-'+i); if(inp) inp.value=''; });
+        var inpIntrag=document.getElementById('opt-f-intrag'); if(inpIntrag) inpIntrag.value='';
         if (window.otcDateSync) window.otcDateSync('#optModal');
     });
 
@@ -1190,6 +1196,7 @@ $(document).ready(function() {
       </div>
       <div class="modal-body">
         <div class="row g-2">
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-col-intrag-id">Intrag ID</label><input type="text" class="form-control form-control-sm" id="opt-f-intrag"></div>
           <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-opt-col-0">Portfolio</label><input type="text" class="form-control form-control-sm" id="opt-f-0"></div>
           <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-opt-col-1">System ID</label><input type="text" class="form-control form-control-sm" id="opt-f-1"></div>
           <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-opt-col-2">Line Type ID</label><input type="text" class="form-control form-control-sm" id="opt-f-2"></div>

@@ -121,5 +121,53 @@ check('so o dia pedido', [e['_deal'] for e in d['entries']], ['D-3'])
 d = maker.get('/api/intrag/ndf?date_from=2026-08-19&date_to=2026-08-22').get_json()
 check('o intervalo traz os dois dias', len(d['entries']), 3)
 
+print('\n== 6. Intrag ID digitado na edicao = Success (o desfecho do Mapping) ==')
+from apps.pages.features.intrag import domain as D           # noqa: E402
+r = maker.post('/api/intrag/ndf/edit', json={'deal_id': 'D-2', 'trade_date': '2026-08-20',
+                                             'fields': {'campo': 'z'}, 'intrag_id': ' 12345 '})
+check('edit com intrag_id novo devolve Success', (r.status_code, r.get_json()['status']),
+      (200, 'Success'))
+e = next(x for x in maker.get('/api/intrag/ndf?date=2026-08-20').get_json()['entries']
+         if x['_deal'] == 'D-2')
+check('   persistido TRIMADO, com status e maker',
+      (e['intrag_id'], e['status'], e['maker']), ('12345', 'Success', 'A111111'))
+# Intrag ID INALTERADO: a edicao e de DADO e segue o 4-eyes (Pending) — sem
+# isso, qualquer edicao numa linha ja casada escaparia da aprovacao.
+r = maker.post('/api/intrag/ndf/edit', json={'deal_id': 'D-2', 'trade_date': '2026-08-20',
+                                             'fields': {'campo': 'w'}, 'intrag_id': '12345'})
+check('inalterado, edicao de dado segue o 4-eyes', r.get_json()['status'], 'Pending')
+# Intrag ID LIMPO: a linha descasou — Pending, e o campo esvazia de verdade.
+r = maker.post('/api/intrag/ndf/edit', json={'deal_id': 'D-2', 'trade_date': '2026-08-20',
+                                             'fields': {}, 'intrag_id': ''})
+e = next(x for x in maker.get('/api/intrag/ndf?date=2026-08-20').get_json()['entries']
+         if x['_deal'] == 'D-2')
+check('limpo: Pending e campo vazio', (r.get_json()['status'], e['intrag_id']), ('Pending', ''))
+# Payload SEM a chave (tela antiga aberta): comportamento de antes, intocado.
+r = maker.post('/api/intrag/ndf/edit', json={'deal_id': 'D-3', 'trade_date': '2026-08-21',
+                                             'fields': {'campo': 'y2'}})
+e = next(x for x in maker.get('/api/intrag/ndf?date=2026-08-21').get_json()['entries']
+         if x['_deal'] == 'D-3')
+check('payload sem a chave nao toca no campo', (r.get_json()['status'], 'intrag_id' in e),
+      ('Pending', False))
+r = maker.post('/api/intrag/option/edit', json={'deal_id': 'NAO-EXISTE', 'intrag_id': '1'})
+check('option: mesma rota, entrada inexistente e 404', r.status_code, 404)
+
+print('\n== 7. Information Source legivel (separador -> espaco) ==')
+check('a regra pura', D._intrag_info_source('PTAX|BRR[PTAX'), 'PTAX BRR PTAX')
+check('   chave/parentese tambem', D._intrag_info_source('{PTAX}(BRR);<X>'), 'PTAX BRR X')
+check('   texto limpo passa intocado', D._intrag_info_source('PTAX USB WMR 4'), 'PTAX USB WMR 4')
+check('   nao-texto volta como veio', D._intrag_info_source(None), None)
+# Linha GRAVADA antes da limpeza: a leitura ja devolve legivel, sem reescrever
+# o arquivo-dia — e sem vazar a limpeza para o cache compartilhado.
+IN_persist({'_deal': 'D-4', '_client': 'DELTA', 'na_2': 'PTAX|BRR[PTAX'}, datetime(2026, 8, 22))
+e = next(x for x in maker.get('/api/intrag/ndf?date=2026-08-22').get_json()['entries']
+         if x['_deal'] == 'D-4')
+check('linha antiga sai limpa na listagem', e['na_2'], 'PTAX BRR PTAX')
+with open(os.path.join(B.INTRAG_NDF_CACHE_DIR, '2026', '08', '20260822_intrag_ndf.json'),
+          encoding='utf-8') as fh:
+    cru = next(x for x in json.load(fh) if x['_deal'] == 'D-4')
+check('   e o arquivo-dia fica como esta (limpeza e de leitura)',
+      cru['na_2'], 'PTAX|BRR[PTAX')
+
 print(('FAIL: %d' % len(fails)) if fails else 'TUDO OK')
 sys.exit(1 if fails else 0)
