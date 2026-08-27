@@ -3,17 +3,9 @@
 
 Só a casca: o `_ds_handle` e os stores por dia são plataforma — cinco telas leem o que ele grava.
 """
-import io
-import json
-import os
-import re
-import traceback
-from datetime import datetime
 
-from flask import (jsonify, redirect, render_template, request,
-                   session, url_for)
+from flask import (                   session, url_for)
 
-from apps.pages import blueprint
 
 
 def _R():

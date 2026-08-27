@@ -3,17 +3,9 @@
 
 Só a casca: o arquivo é o MESMO que o cadastro swap-index do /mapping edita.
 """
-import io
-import json
-import os
-import re
-import traceback
-from datetime import datetime
 
-from flask import (jsonify, redirect, render_template, request,
-                   session, url_for)
+from flask import (                   session, url_for)
 
-from apps.pages import blueprint
 
 
 def _R():

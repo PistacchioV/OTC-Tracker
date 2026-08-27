@@ -11,10 +11,9 @@ import io
 import json
 import os
 import re
-import traceback
 from datetime import datetime
 
-from flask import jsonify, render_template, request, send_file, session
+from flask import jsonify, request, session
 
 from apps.pages import blueprint
 

@@ -3,17 +3,9 @@
 
 Só a casca: o REGISTRO `_MAPPING_DEFS`, o `_mapping_rows` e os upgrades são plataforma — meia aplicação os lê.
 """
-import io
-import json
-import os
-import re
-import traceback
-from datetime import datetime
 
-from flask import (jsonify, redirect, render_template, request,
-                   session, url_for)
+from flask import (                   session, url_for)
 
-from apps.pages import blueprint
 
 
 def _R():
