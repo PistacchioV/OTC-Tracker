@@ -2134,10 +2134,12 @@ roda na máquina Windows do time (§163).
 
 ## 10. As verticais (`apps/pages/features/`)
 
-O `routes.py` tem **39 mil linhas** porque toda funcionalidade nasceu nele: 1293
-funções de topo, 371 rotas, 514 constantes. A saída é levar **uma feature de
-cada vez** para `apps/pages/features/<nome>/`, seguindo a skill
-[`separation-of-concerns`](.claude/skills/separation-of-concerns/SKILL.md).
+O `routes.py` TINHA **39 mil linhas** porque toda funcionalidade nasceu nele.
+A saída foi levar **uma feature de cada vez** para
+`apps/pages/features/<nome>/`, seguindo a skill
+[`separation-of-concerns`](.claude/skills/separation-of-concerns/SKILL.md) —
+sempre com rede de caracterização ANTES, a mesma rede verde DEPOIS, e os
+guardas atualizados na mesma mudança.
 
 ```
 features/<nome>/
@@ -2148,48 +2150,29 @@ features/<nome>/
 └── infra/          persistence.py · mail.py · mappers.py
 ```
 
-Extraídas até aqui: **`support`** (450 linhas / 6 rotas), **`onboarding`**
-(154 / 7), **`reconciliation_fxo`** (101 / 4), **`quotes`** (129 / 3),
-**`holidays`** (331 / 5), **`bacc`** (490 / 2), **`mt300`** (384 / 2),
-**`appver`** (320 / 2), **`mdea`** (491 / 2), **`conf_escalation`** (576 / 2),
-**`daily_metric`** (300 / 2), **`weekly_escalation`** (140 / 2),
-**`recon_comitente`** (125 / 3), **`recon_payrec`** (160 / 5),
-**`recon_cgd`** (75 / 5), **`boxscan`** (350 / 3), **`sigcoll`** (200 / 2),
-**`pcx`** (420 / 2), **`forecast`** (180 / 3, só o card — o coletor é
-plataforma), **`deals_monitor`** (650 / 3), **`cetip`** (830 / 2), **`intrag`** (1250 / 15,
-verbatim + o gancho `_intrag_engine()` para os gravadores chamados pelos saves
-do New Deals), **`counterparty_details`** (720 / 18, verbatim — os LEITORES
-`_cpd_path/_cpd_load/_cpd_find` e os normalizadores compartilhados ficaram no
-routes) e **`electronic_inventory`** (90 / 4, só a casca — os helpers `_ei_*`
-são plataforma: Track, TED e os saves de confirmação usam os mesmos).
-Depois vieram **`manual_confirmation`** (620 / 17, casca — o motor é o
-`manual_conf.py` e os `_mc_*` compartilhados ficaram), **`mtm`** (1240 / 16,
-verbatim — `_mtm_parse_num`/`_mtm_norm_party` ficaram: summaries e accrual os
-usam), **`cognos`** (330 / 7 — o store por dia ficou: o Save Daily Settlement
-grava o mesmo arquivo), e as cascas de **`otm`** e **`latam`** (7 rotas cada —
-stores e coletores são da família de liquidação).
-Depois: **`accrual`** (1120 / 15, verbatim — ficaram `_acc_digits`,
-`_accrual_lob`, `_accrual_parse_date` e `_ACC_ENDPROC_CC`, que b3-accounts,
-forecast e MtM usam) e as cascas de **`ndf_summary`** (7), **`operations_b3`**
-(9), **`other_products`** (29 — a família de liquidação INTEIRA numa vertical
-só: `_ops_trade_rows` e os coletores continuam no routes) e
-**`file_interpreter`** (6, com os alias `/file-interface` — o MOTOR `_fi_*`
-fica: ele gera o layout de todo arquivo do app).
-E por fim as cascas de **`confirmation`** (26 rotas — os nove
-editores/validates dos documentos), **`ndf_cockpit`** (7),
-**`ndf_other_publisher`** (7), **`pending_confirmation`** (9 — os três DuckDB
-e as regras `_pc_*` são plataforma) e **`live_positions`** (10).
-E o fechamento: as cascas de **`mapping`** (3 rotas — o registro
-`_MAPPING_DEFS`/`_mapping_rows` é plataforma), **`index_b3`** (3),
-**`daily_settlement`** (1 — o card; o `_ds_handle` e os stores são plataforma)
-e **`new_deals`** (44 rotas, a maior — os motores, caches, lookups e geradores
-ficam no routes); a página do Monitor foi para o `deals_monitor` e o parser de
-`.msg` para o `boxscan`.
-O `routes.py` saiu de 39.696 para **21.322 linhas** (−46%). O que fica nele é
-SÓ plataforma: sessão/authz, notificações/push, banco, ANBIMA, dashboard, o
-`/mapping` de registro, e os motores compartilhados (New Deals, liquidação,
-File Interpreter, Pending Confirmation, EI, CPD) — o material da futura fase
-`apps/pages/platform/`.
+**A campanha fechou em 27/08/2026: 43 verticais, e o `routes.py` em 21.322
+linhas (−46%).** O catálogo, com a fronteira decidida de cada uma no docstring
+do próprio `__init__.py`:
+
+- **Desenho fino** (domain/queries/commands/infra): `support`, `onboarding`,
+  `reconciliation_fxo`, `quotes`, `holidays`, `bacc`, `mt300`, `appver`,
+  `mdea`, `conf_escalation`, `daily_metric`, `weekly_escalation`, `recon_cgd`,
+  `boxscan`, `sigcoll`, `pcx`, `forecast`, `recon_comitente`, `recon_payrec`,
+  `cognos`.
+- **Verbatim** (`engine.py` + `entrypoint.py`, nomes internos preservados):
+  `deals_monitor`, `cetip`, `intrag`, `counterparty_details`, `mtm`,
+  `accrual`.
+- **Casca** (só as rotas; motores/stores continuam no `routes` como
+  plataforma): `electronic_inventory`, `manual_confirmation`, `otm`, `latam`,
+  `ndf_summary`, `operations_b3`, `other_products`, `file_interpreter`,
+  `confirmation`, `ndf_cockpit`, `ndf_other_publisher`, `pending_confirmation`,
+  `live_positions`, `mapping`, `index_b3`, `daily_settlement` e **`new_deals`**
+  (44 rotas, a maior).
+
+O que FICA no `routes.py` é só plataforma: sessão/authz, notificações/push,
+banco, ANBIMA, dashboard, o registro `_MAPPING_DEFS`, e os motores
+compartilhados (New Deals, família de liquidação, File Interpreter, Pending
+Confirmation, EI, CPD) — o material da futura fase `apps/pages/platform/`.
 
 **O guarda ganhou a seção 9** (`check_soc_layers`): desmonta o bytecode de toda
 função das features e cobra que cada `LOAD_GLOBAL` exista no módulo — é o que
@@ -2270,39 +2253,16 @@ delega a ele em vez de criar um arquivo vazio.
 `check_soc_layers.py` prende tudo isso, inclusive subindo o app para conferir as
 rotas no `url_map` — import escrito e import que executou são coisas diferentes.
 
-### A ordem das próximas fatias
+### O que vem agora: a fase `platform/`
 
-Ela sai do **acoplamento medido**, não do tamanho. Entrada = quantas funções de
-fora chamam o grupo; saída = de quantas ele depende:
-
-| Candidato | linhas | entrada | saída | |
-|---|---|---|---|---|
-| `support` | 450 | **0** | 15 | ✅ feito |
-| `onboarding` (CGD) | 154 | **0** | 3 | ✅ feito |
-| `reconciliation-fxo` | 101 | **0** | 4 | ✅ feito |
-| `quotes` | 129 | **0** | 4 | ✅ feito |
-| `holidays` | 331 | 3 | 11 | ✅ feito |
-| `bacc` | 490 | 2 rotas | 17 | ✅ feito |
-| `mt300` | 384 | 2 rotas | 16 | ✅ feito |
-| `appver` | 320 | 2 rotas | 12 | ✅ feito |
-| `mdea` | 491 | 2 rotas + 1 gancho | 18 | ✅ feito |
-| `conf_escalation` | 576 | 2 rotas | 19 | ✅ feito |
-| `daily_metric` · `weekly_escalation` | ~300+140 | 2+2 rotas | — | ✅ feito |
-| `recon_comitente` · `recon_payrec` · `recon_cgd` | ~360 | 3+5+5 rotas | — | ✅ feito |
-| `boxscan` | ~350 | 3 rotas + scheduler | — | ✅ feito |
-| `sigcoll` · `pcx` · `forecast` | ~800 | 2+2+3 rotas | — | ✅ feito |
-| `deals_monitor` · `cetip` (verbatim) | ~1480 | 3+2 rotas | — | ✅ feito |
-| `intrag` · `counterparty_details` · `electronic_inventory` | ~2060 | 15+18+4 rotas | — | ✅ feito |
-| `manual_confirmation` · `mtm` · `cognos` · `otm` · `latam` | ~2400 | 17+16+7+7+7 rotas | — | ✅ feito |
-| `accrual` · `ndf_summary` · `operations_b3` · `other_products` · `file_interpreter` | ~2750 | 15+7+9+29+6 rotas | — | ✅ feito |
-| `confirmation` · `ndf_cockpit` · `ndf_other_publisher` · `pending_confirmation` · `live_positions` | ~1700 | 26+7+7+9+10 rotas | — | ✅ feito |
-| `mapping` · `index_b3` · `daily_settlement` · `new_deals` | ~2600 | 3+3+1+44 rotas | — | ✅ feito |
-| `file-interpreter` | 307 | **43** | 4 | tarde |
-| `mapping` | 1263 | 39 | 35 | tarde |
-| `notificações` | 393 | **161** | 9 | é PLATAFORMA, não feature |
-
-As notificações, o e-mail, a sessão/autorização e o acesso a banco são
-**horizontais**: o lugar delas é `apps/pages/platform/infra/`, e é para lá que a
-ponte atrasada das features vai apontar quando forem extraídas. Enquanto isso
-não acontece, a busca em `routes` é andaime declarado — está escrita como tal
-nos docstrings de `infra/persistence.py` e `infra/mail.py`.
+A fila de features acabou — as 43 fatias saíram na ordem do acoplamento medido
+(entrada = chamadas de fora do grupo), e o histórico está no HANDOFF §310–§313.
+O próximo passo é dar casa própria ao que hoje as features alcançam por
+`_R()`/busca atrasada: notificações (161 entradas), e-mail/SMTP,
+sessão/autorização, acesso a banco, calendário ANBIMA, e os motores
+compartilhados (New Deals, liquidação, `_fi_*`, `_pc_*`, `_cpd_*`, `_ei_*`) —
+tudo para `apps/pages/platform/`, com as pontes atrasadas das features passando
+a apontar para lá. Enquanto isso não acontece, a busca em `routes` é andaime
+declarado — está escrita como tal nos docstrings das features. Em paralelo, os
+seis verbatim aceitam a separação interna em domain/queries/commands, uma por
+vez, com as redes que já os prendem.
