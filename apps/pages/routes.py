@@ -4750,6 +4750,30 @@ def _spn_key(v):
 _REFDATA_TRIPLE_CACHE = {'mtime': None, 'rows': []}
 
 
+def _refdata_records():
+    """As linhas CRUAS do Reference Data — DB-first (fase 3, HANDOFF §328).
+
+    O `reference_data.db` responde quando o manifest prova que ele reflete o
+    `RefData.json` atual; senão vale o JSON de sempre (e o espelho é avisado
+    para se curar). Os três índices derivados abaixo continuam cacheados pelo
+    MTIME DO JSON — que é exatamente a chave do contrato de frescor, então as
+    duas fontes respondem a mesma pergunta."""
+    try:
+        from apps.pages import duck_read
+        rows = duck_read.refdata_rows()
+    except Exception:                                       # noqa: BLE001
+        rows = None
+    if rows is not None:
+        return rows
+    path = os.path.join(_B3_DATA_DIR, 'RefData.json')
+    try:
+        with open(path, encoding='utf-8') as fh:
+            data = json.load(fh) or []
+    except Exception:                                       # noqa: BLE001
+        data = []
+    return data if isinstance(data, list) else []
+
+
 def _refdata_triples():
     """[{name, spn, taxid}] do RefData.json, cacheado por mtime.
 
@@ -4766,13 +4790,9 @@ def _refdata_triples():
     except OSError:
         return []
     if _REFDATA_TRIPLE_CACHE['mtime'] != mt:
-        try:
-            with open(path, encoding='utf-8') as fh:
-                data = json.load(fh) or []
-        except Exception:                                   # noqa: BLE001
-            data = []
+        data = _refdata_records()
         vistos, out = set(), []
-        for rec in (data if isinstance(data, list) else []):
+        for rec in data:
             nome = str(rec.get('COUNTERPARTY', '') or '').strip()
             spn = str(rec.get('SPN', '') or '').strip()
             taxid = str(rec.get('TAX ID', '') or '').strip()
@@ -4797,13 +4817,9 @@ def _refdata_by_spn():
     except OSError:
         return {}
     if _REFDATA_SPN_CACHE['mtime'] != mt:
-        try:
-            with open(path, encoding='utf-8') as fh:
-                data = json.load(fh) or []
-        except Exception:
-            data = []
+        data = _refdata_records()
         m = {}
-        for rec in (data if isinstance(data, list) else []):
+        for rec in data:
             spn = _spn_key(rec.get('SPN', ''))
             name = str(rec.get('COUNTERPARTY', '') or '').strip()
             if spn and name and spn not in m:
@@ -4852,13 +4868,9 @@ def _refdata_by_taxid():
     except OSError:
         return {}
     if _REFDATA_TAXID_CACHE['mtime'] != mt:
-        try:
-            with open(path, encoding='utf-8') as fh:
-                data = json.load(fh) or []
-        except Exception:
-            data = []
+        data = _refdata_records()
         m = {}
-        for rec in (data if isinstance(data, list) else []):
+        for rec in data:
             digits = ''.join(ch for ch in str(rec.get('TAX ID', '') or '') if ch.isdigit())
             name = str(rec.get('COUNTERPARTY', '') or '').strip()
             if digits and name and digits not in m:

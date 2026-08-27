@@ -14200,3 +14200,44 @@ A regra agora: **select-all marcado = o conjunto FILTRADO inteiro** (`rows({sear
 lido pelos DADOS, não pelo DOM) — no Print Advice e no Delete, que compartilhavam o coletor.
 Sem o select-all, valem os checkboxes marcados um a um. E desmarcar UMA linha desfaz o "todos",
 senão o select-all seguiria valendo por cima da exclusão manual.
+
+## §328 — fase 3 começou: leitura DB-first com contrato de FRESCOR (2026-08-27)
+
+O flip de leitura, consumidor a consumidor. A peça central é o
+`apps/pages/duck_read.py`: o leitor religado só usa o banco quando o `_manifest` dele
+(caminho, mtime, tamanho — gravado pelo motor a cada conversão) prova que a tabela reflete o
+JSON **como ele está agora** em disco. Qualquer outra situação — banco ausente, manifest
+defasado (JSON editado por fora do app), arquivo em uso pelo espelho naquele instante —
+devolve `None`: o chamador cai no JSON de sempre e o espelho é avisado para se curar. O flip
+nunca pode ser a fonte de um dado velho; no pior caso ele é um caminho a mais que não
+funcionou, e o comportamento é o de ontem. (As conexões são as cruas do DuckDB, como as do
+espelho — a colisão intra-processo com o espelho escrevendo vira exceção capturada e
+fallback, nunca fila.)
+
+Dois pilotos religados:
+
+- **RefData**: os três índices derivados do `routes.py` (`_refdata_triples`,
+  `_refdata_by_spn`, `_refdata_by_taxid` — e com eles o `/api/reference-data/counterparties`)
+  passaram a ler pelo `_refdata_records()`, que é DB-first. O cache por MTIME DO JSON deles
+  ficou como estava de propósito: o mtime é exatamente a chave do contrato de frescor, então
+  as duas fontes respondem à mesma pergunta.
+- **Feriados**: `calendars()` (a tabela `_registry` — o motor passou a registrá-la no
+  manifest, e a pular a reescrita quando o registro não mudou) e `load_holidays` (a tabela do
+  calendário, com a data voltando como STRING ISO — a forma que o JSON sempre teve). O
+  caminho JSON continua sendo quem SEMEIA: registro vindo do seed nem tem arquivo para o
+  manifest provar.
+
+Os leitores que FICARAM no JSON (recon_fxo, recon_payrec, otc_emails, electronic_inventory,
+`_cpd_load` e todos os `fetch` de navegador) seguem corretos porque a escrita espelha o JSON
+— e o `_cpd_load` tem um motivo para não ser religado tão cedo: o `_contacts_norm` decide
+"contato legado" pela AUSÊNCIA de chave (`'appr' not in c`), e a tabela achata as chaves na
+união das colunas — um record reconstruído do banco teria a chave com NULL onde o JSON não a
+tinha, e todo contato viraria legado em silêncio. Flip ali exige antes tirar a semântica de
+chave-ausente do domínio.
+
+`check_duck_read.py` prende: a resposta vindo DO banco (provado adulterando a tabela), o
+manifest defasado caindo no JSON com o espelho se curando sozinho, os dois pilotos de
+feriados e o banco ausente/ilegível como fallback silencioso. As seis suítes que exercitam os
+leitores religados (`check_sigcoll_api`, `check_ndf_advice`, `check_daily_metric_api`,
+`check_weekly_escalation_api`, `check_ops_trade_swap`, `check_lp_counterparty_name`) seguem
+verdes — nelas o tmp não tem banco, que é o fallback funcionando.

@@ -31,6 +31,25 @@ def calendar_path(filename):
     return os.path.join(data_dir(), filename)
 
 
+def _calendars_db():
+    """O registro pela tabela `_registry` — DB-first (fase 3, HANDOFF §328).
+
+    Só responde quando o manifest prova que o banco reflete o
+    `holiday-calendars.json` atual; senão `None` e vale o caminho JSON de
+    sempre (que é quem SEMEIA — registro vindo do seed nem tem arquivo para o
+    manifest provar)."""
+    try:
+        from apps.pages import duck_read
+        rows = duck_read.table_rows('holiday_calendars.db', '_registry', domain.CAL_FILE)
+    except Exception:                                       # noqa: BLE001
+        return None
+    if not rows:
+        return None
+    rows = [r for r in rows
+            if isinstance(r, dict) and str(r.get('name', '') or '').strip()]
+    return rows or None
+
+
 def calendars():
     """O registro de calendários.
 
@@ -42,6 +61,9 @@ def calendars():
     O registro está no `.gitignore` — o seed o recria, e versioná-lo daria
     conflito de merge a cada calendário criado pela tela.
     """
+    linhas = _calendars_db()
+    if linhas is not None:
+        return linhas
     R = _routes()
     path = registry_path()
     if not os.path.isfile(path):
@@ -91,7 +113,14 @@ def file_for(name):
 
 
 def load_holidays(filename):
-    """Os feriados de um calendário. Arquivo ausente ou ilegível → lista vazia."""
+    """Os feriados de um calendário. Arquivo ausente ou ilegível → lista vazia.
+
+    DB-first (fase 3): a tabela do calendário responde quando o manifest prova
+    que ela reflete o arquivo atual — senão vale o JSON de sempre, e o espelho
+    é avisado. A data volta como STRING ISO, a forma que o JSON sempre teve."""
+    linhas = _load_holidays_db(filename)
+    if linhas is not None:
+        return linhas
     try:
         fp = calendar_path(filename)
         if not os.path.exists(fp):
@@ -100,6 +129,31 @@ def load_holidays(filename):
             return json.load(f)
     except (json.JSONDecodeError, IOError):
         return []
+
+
+def _load_holidays_db(filename):
+    alvo = str(filename or '').strip().lower()
+    nome = next((str(r.get('name', '') or '') for r in calendars()
+                 if str(r.get('file', '') or '').strip().lower() == alvo), None)
+    if not nome:
+        return None
+    try:
+        from apps.pages import duck_mirror, duck_read
+        from apps.pages.json_to_duckdb import norm_ident
+        rows = duck_read.table_rows(
+            'holiday_calendars.db', norm_ident(nome, 'cal'), str(filename).strip(),
+            order_by='"date"', heal=duck_mirror.notify_holidays)
+    except Exception:                                       # noqa: BLE001
+        return None
+    if rows is None:
+        return None
+    out = []
+    for r in rows:
+        d = r.get('date')
+        out.append({'date': d.isoformat() if hasattr(d, 'isoformat') else (d or ''),
+                    'title': r.get('title') or '',
+                    'calendar': r.get('calendar') or ''})
+    return out
 
 
 def write_holidays(filename, holidays):

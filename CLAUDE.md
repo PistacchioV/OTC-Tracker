@@ -405,10 +405,18 @@ São dois bancos:
   `reference_data.db` e `holiday_calendars.db` da pasta `db/` ficam sempre
   atualizados sem rodar script. O aviso só ENFILEIRA (nada de DuckDB no share
   sob o `_cache_lock`) e é melhor esforço: falha vai para o log e o manifest
-  reconverte na rodada seguinte. Os JSONs seguem sendo a fonte de LEITURA até
-  a fase 3 religar os consumidores. `OTC_DISABLE_DUCK_MIRROR=1` desliga (o
+  reconverte na rodada seguinte. `OTC_DISABLE_DUCK_MIRROR=1` desliga (o
   `OTC_DISABLE_SCHEDULERS=1` dos testes também), e `check_duck_mirror.py`
-  prende o ciclo.
+  prende o ciclo. A **fase 3** (leitura DB-first) religa os consumidores um a
+  um pelo `apps/pages/duck_read.py`, com contrato de FRESCOR: o banco só
+  responde quando o `_manifest` prova que ele reflete o JSON atual — senão
+  vale o JSON de sempre e o espelho se cura. Religados: os três índices de
+  RefData do `routes.py` (`_refdata_records`) e o registro/arquivos de
+  calendário da vertical de feriados (HANDOFF §328; `check_duck_read.py`
+  prende). O `_cpd_load` NÃO pode ser religado enquanto o `_contacts_norm`
+  decidir "legado" pela AUSÊNCIA de chave — a tabela achata as chaves na
+  união das colunas, e o record reconstruído teria a chave com NULL onde o
+  JSON não a tinha.
 
   Duas garantias sustentam a troca: a **leitura cai para a cópia empacotada**
   quando o arquivo não existe no `DATA_DIR` (`anbima.json`, `Subjacente.json`, as
