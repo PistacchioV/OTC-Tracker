@@ -40,7 +40,7 @@ from werkzeug.exceptions import NotFound
 # `I:\Confirmation\...` na raiz do repositório.
 from apps.config import Config
 from apps.pages.data_paths import (
-    data_dir, data_path, data_write, mapping_file, mapping_write,
+    data_dir, data_path, data_write,
     PACKAGED_DIR as PACKAGED_DATA_DIR,
 )
 # Cache de leitura por request + TTL curto entre requests para os JSONs do
@@ -52,21 +52,16 @@ from apps.pages import blueprint
 # Porte Python do parser de booking recap (o mesmo que otc-fileupload.js faz no
 # navegador) — usado pela varredura agendada do box. Sem dependência externa.
 from apps.pages import otc_boxparse
-# Armazenamento dos tickets do Support Center (camada de dados pura — sessão,
-# notificação e e-mail ficam aqui, nas rotas).
-from apps.pages import otc_tickets
 # Locks e transações dos bancos de arquivo (DuckDB/SQLite avulsos). Import no
 # TOPO, e não preguiçoso: as exceções são capturadas em `except` de rotas, e um
 # nome resolvido só na primeira chamada faria o `except` referenciar algo que
 # ainda não existe.
+# As exceções de transação (DatabaseLockTimeout etc.) foram com a vertical da
+# Recon de Comitentes — o entrypoint dela as importa da mesma fonte.
 from apps.pages.database_access import (
     duckdb_read_unlocked,
-    DatabaseCleanupError,
-    DatabaseLockTimeout,
-    TransactionOutcomeUnknown,
     duckdb_read,
     duckdb_write,
-    verify_sqlite_integrity,
 )
 # Os tipos de confirmação são UMA lista só, definida no módulo da esteira: ela
 # alimenta o Confirmation Type do upload do Electronic Inventory, o cadastro
@@ -35255,3 +35250,20 @@ from apps.pages.features.recon_cgd import entrypoint as _f_recon_cgd            
 from apps.pages.features.boxscan import entrypoint as _f_boxscan                  # noqa: E402,F401
 _schedule_on_start('boxscan', _f_boxscan.start_scheduler)
 from apps.pages.features.appver import entrypoint as _f_appver         # noqa: E402,F401
+
+# ============================================================================
+# DEV BYPASS — login local sem 2FA para desenvolvimento.
+# NUNCA commitar: scripts/commit-push.sh remove este bloco antes do push.
+# ============================================================================
+@blueprint.route('/dev-login')
+def dev_login():
+    dev_user = {
+        'SID':   'A000000',
+        'Name':  'Dev User',
+        'Email': 'dev.user@jpmorgan.com',
+        'Role':  'ADMIN',
+    }
+    session.clear()                       # drop any stale 'locked'/expiry from a prior session
+    _set_session(dev_user, remember_me=True)
+    log.info("[dev_login] DEV BYPASS session set for %s", dev_user['SID'])
+    return redirect(url_for('pages_blueprint.dashboard'))

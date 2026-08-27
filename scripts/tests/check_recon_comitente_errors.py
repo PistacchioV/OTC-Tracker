@@ -40,7 +40,8 @@ from apps import create_app                                  # noqa: E402
 from apps.config import DebugConfig                          # noqa: E402
 from apps.pages import routes as R
 # As rotas moram em features/recon_comitente desde a extracao.
-from apps.pages.features.recon_comitente import entrypoint as CE  # noqa: E402                           # noqa: E402
+from apps.pages.features.recon_comitente import entrypoint as CE  # noqa: E402
+from apps.pages import database_access as DA  # noqa: E402                           # noqa: E402
 from apps.pages import recon_comitente as RC                 # noqa: E402
 
 fails = []
@@ -57,9 +58,9 @@ def check(label, got, exp):
 app = create_app(DebugConfig)
 
 CASOS = [
-    ('DatabaseLockTimeout',       R.DatabaseLockTimeout(RC.DB_PATH, 'write', 30.0)),
-    ('TransactionOutcomeUnknown', R.TransactionOutcomeUnknown(RC.DB_PATH, 'op-abc123')),
-    ('DatabaseCleanupError',      R.DatabaseCleanupError('cleanup')),
+    ('DatabaseLockTimeout',       DA.DatabaseLockTimeout(RC.DB_PATH, 'write', 30.0)),
+    ('TransactionOutcomeUnknown', DA.TransactionOutcomeUnknown(RC.DB_PATH, 'op-abc123')),
+    ('DatabaseCleanupError',      DA.DatabaseCleanupError('cleanup')),
     ('Exception',                 RuntimeError('qualquer outra')),
 ]
 
@@ -103,7 +104,7 @@ try:
         st, j = chamar('run', exc, 'run_auto')
         esperado = 503 if nome == 'DatabaseLockTimeout' else 500
         check('%-28s responde %s' % (nome, esperado), st, esperado)
-    st, j = chamar('run', R.TransactionOutcomeUnknown(RC.DB_PATH, 'op-abc123'), 'run_auto')
+    st, j = chamar('run', DA.TransactionOutcomeUnknown(RC.DB_PATH, 'op-abc123'), 'run_auto')
     # Sem o `operation_id` a conferencia operacional nao tem por onde comecar.
     check('o outcome desconhecido se declara', j.get('outcome_unknown'), True)
     check('   e devolve o operation_id', j.get('operation_id'), 'op-abc123')
@@ -114,7 +115,7 @@ try:
     check('   a frase manda NAO reexecutar antes de conferir',
           'Não execute novamente' in j.get('error', ''), True)
     # Cleanup e o unico 500 que diz que o trabalho FOI feito.
-    _st, j = chamar('run', R.DatabaseCleanupError('cleanup'), 'run_auto')
+    _st, j = chamar('run', DA.DatabaseCleanupError('cleanup'), 'run_auto')
     check('o cleanup diz que a reconciliacao CONCLUIU',
           'foi concluída' in j.get('error', ''), True)
 
