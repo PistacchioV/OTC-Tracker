@@ -4,6 +4,23 @@ o nome do participante de cada lado e a chave de casamento do retorno da B3.
 
 Puro: nada aqui importa `routes`, Flask ou disco.
 """
+import re
+
+
+# Os delimitadores que chegam no Publisher do deal (`PTAX|BRR|PTAX`,
+# `PTAX BRR[PTAX`): o cadastro publisher-ndf separa os match tokens por `|`,
+# e o texto cru ainda pode trazer colchete/chave/parêntese. No arquivo e na
+# tela o publisher sai com ESPAÇO ("PTAX BRR PTAX") — nunca com o separador
+# do cadastro.
+_INFO_SOURCE_SEPARADORES = re.compile(r'[|\[\]{}()<>;\\]+')
+
+
+def _intrag_info_source(text):
+    """Information Source legível: todo separador vira espaço, espaços
+    repetidos colapsam. Valor que não é texto volta como veio."""
+    if not isinstance(text, str):
+        return text
+    return re.sub(r'\s+', ' ', _INFO_SOURCE_SEPARADORES.sub(' ', text)).strip()
 
 
 _INTRAG_OPT_JPM_ACC    = '73760.00-9'

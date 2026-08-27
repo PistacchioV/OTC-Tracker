@@ -5,12 +5,33 @@ Swap) e o CSV de retorno da B3 na pasta de export. Sem efeito nenhum.
 import json
 import os
 
+from apps.pages.features.intrag import domain
 from apps.pages.features.intrag.infra import persistence
 
 def _R():
     """Busca ATRASADA no routes — plataforma (ver features/support/infra)."""
     from apps.pages import routes
     return routes
+
+
+def _limpar_info_source(entries, key):
+    """As entradas com o Information Source LEGÍVEL (separadores → espaço).
+
+    As linhas gravadas antes da limpeza ainda carregam `[`/`|` no arquivo-dia,
+    e é aqui — na leitura — que elas saem certas para a tela sem reescrever
+    cache nenhum. A cópia é rasa e só da linha que precisa: as listas vêm do
+    memo do daycache, e mutar o dict de lá seria editar o cache compartilhado
+    por fora do lock."""
+    out = []
+    for e in entries:
+        if isinstance(e, dict):
+            v = e.get(key)
+            limpo = domain._intrag_info_source(v)
+            if limpo != v:
+                e = dict(e)
+                e[key] = limpo
+        out.append(e)
+    return out
 
 
 def _find_intrag_ndf_entry(deal_id, trade_date):

@@ -57,7 +57,9 @@ def api_intrag_ndf():
         # Sem data nenhuma: a árvore inteira, e aí só o memo ajuda.
         for fp, _fname, mtime, size in _R()._day_files(persistence.INTRAG_NDF_CACHE_DIR, '_intrag_ndf.json'):
             entries.extend(_R()._day_json(fp, mtime, size))
-    return jsonify({'success': True, 'entries': entries})
+    # `na_2` é a coluna Information Source dos dois layouts; linha gravada
+    # antes da limpeza ainda traz `[`/`|` no arquivo — sai legível daqui.
+    return jsonify({'success': True, 'entries': queries._limpar_info_source(entries, 'na_2')})
 
 @blueprint.route('/api/intrag/option')
 def api_intrag_option():
@@ -99,7 +101,8 @@ def api_intrag_option():
         # Sem data nenhuma: a árvore inteira, e aí só o memo ajuda.
         for fp, _fname, mtime, size in _R()._day_files(persistence.INTRAG_OPT_CACHE_DIR, suffix):
             entries.extend(_R()._day_json(fp, mtime, size))
-    return jsonify({'success': True, 'entries': entries})
+    return jsonify({'success': True,
+                    'entries': queries._limpar_info_source(entries, 'information_source')})
 
 @blueprint.route('/api/intrag/option/send-file', methods=['POST'])
 def api_intrag_option_send_file():
@@ -194,13 +197,22 @@ def api_intrag_option_edit():
             for k, v in fields.items():
                 if k in entries[idx] and k not in ('_deal', '_client', 'status', 'maker', 'checker'):
                     entries[idx][k] = v
-        entries[idx]['status']  = 'Pending'
+        # Mesma regra do NDF: Intrag ID digitado = Success (o desfecho do
+        # Mapping); sem mudança nele, a edição de dado segue o 4-eyes.
+        status = 'Pending'
+        if 'intrag_id' in payload:
+            novo   = str(payload.get('intrag_id') or '').strip()
+            antigo = str(entries[idx].get('intrag_id') or '').strip()
+            entries[idx]['intrag_id'] = novo
+            if novo and novo != antigo:
+                status = 'Success'
+        entries[idx]['status']  = status
         entries[idx]['maker']   = session.get('user_sid', '')
         entries[idx]['checker'] = ''
         _R()._atomic_write_json(fp, entries)
     _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                          'Deal Updated', 'Intrag Option', deal_id)
-    return jsonify({'success': True, 'status': 'Pending'})
+    return jsonify({'success': True, 'status': status})
 
 @blueprint.route('/api/intrag/option/approve', methods=['POST'])
 def api_intrag_option_approve():
@@ -345,14 +357,24 @@ def api_intrag_ndf_edit():
             for k, v in fields.items():
                 if k in entries[idx] and k not in ('_deal', '_client', 'status', 'maker', 'checker'):
                     entries[idx][k] = v
-        entries[idx]['status']  = 'Pending'
+        # Intrag ID digitado na edição = o mesmo desfecho do Mapping: a linha
+        # está casada com o registro e vai a Success. Inalterado (ou limpo), a
+        # edição é de DADO e segue o 4-eyes de sempre (Pending).
+        status = 'Pending'
+        if 'intrag_id' in payload:
+            novo   = str(payload.get('intrag_id') or '').strip()
+            antigo = str(entries[idx].get('intrag_id') or '').strip()
+            entries[idx]['intrag_id'] = novo
+            if novo and novo != antigo:
+                status = 'Success'
+        entries[idx]['status']  = status
         entries[idx]['maker']   = session.get('user_sid', '')
         entries[idx]['checker'] = ''
         _R()._atomic_write_json(fp, entries)
 
     _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                          'Deal Updated', 'Intrag NDF', deal_id)
-    return jsonify({'success': True, 'status': 'Pending'})
+    return jsonify({'success': True, 'status': status})
 
 @blueprint.route('/api/intrag/ndf/approve', methods=['POST'])
 def api_intrag_ndf_approve():
