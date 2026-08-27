@@ -14122,3 +14122,24 @@ padrão-dia`), porque um arquivo que some da conversão sem dizer nada pareceria
 `check_json_to_duckdb.py` prende tudo isso em tempfile; o smoke contra a dev converteu os 115
 arquivos-dia, os 553 do RefData, os 439 do CounterpartyDetails e os 11 calendários, com a
 segunda rodada em zero reconversões.
+
+## §325 — o conversor DuckDB no desenho final: um banco POR ROTINA, na db/ (2026-08-27)
+
+Dois ajustes do §324, pedidos na revisão:
+
+- **Um `daily_<rotina>.db` por rotina de arquivo-dia**, não um `daily_caches.db` único com a
+  rotina como schema. A ramificação é a que a pasta `cache/` já tem: `daily_new_deals.db`,
+  `daily_pending_confirmation.db`, `daily_b3_files.db`, `daily_payrec.db`,
+  `daily_reconciliation.db` — a subárvore da rotina (produto, família B3) vira SCHEMA dentro do
+  banco dela, e cada dia segue sendo uma tabela (`d_AAAAMMDD[_tag]`; a tag cai quando só repete
+  a rotina). Rotina nova em `cache/` ganha o próprio banco sozinha, sem tocar no script. O
+  `daily_caches.db` do desenho anterior é REMOVIDO pelo próprio conversor quando encontrado:
+  dois formatos em disco seriam duas respostas para a mesma pergunta, e o arquivo é 100%
+  derivado dos JSONs.
+- **O destino padrão é o `Config.DATABASE_DIR`** — a `db/` que já guarda todos os bancos do app
+  (§4) —, não uma pasta `duckdb/` nova ao lado. O manifest é por banco, então o incremental
+  continua igual; quem rodou a versão anterior recebe um aviso apontando a pasta antiga.
+
+`check_json_to_duckdb.py` acompanhou: um banco por rotina com os nomes da ramificação, rotina
+sem subárvore no `main`, o legado removido, o incremental atravessando bancos e o default do
+destino na `db/`. Smoke na dev: cinco bancos, 114 conversões, segunda rodada em zero.

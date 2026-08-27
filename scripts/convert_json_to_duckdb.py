@@ -22,11 +22,14 @@ Três bancos, no desenho pedido:
   esquerda e a chave deixaria de casar em silêncio (CLAUDE.md §7). O que é
   aninhado (CGD, CONTACTS, BANKING, NET) vira texto JSON na coluna, legível
   por `json_extract` de quem consultar.
-- **`daily_caches.db`** — um banco único para as rotinas de arquivo-dia
-  (`<DATA_DIR>/cache/**`), com um SCHEMA por rotina (o caminho da pasta, sem
-  os segmentos de data) e UMA TABELA POR DIA (`d_AAAAMMDD[_tag]`). Payload
-  lista-de-objetos vira tabela TIPADA por inferência; payload objeto vira uma
-  tabela por lista interna (`d_..._summary`) mais uma `_meta` chave→valor.
+- **`daily_<rotina>.db`** — UM BANCO POR ROTINA de arquivo-dia, seguindo a
+  ramificação que `<DATA_DIR>/cache/` já tem (`daily_new_deals.db`,
+  `daily_pending_confirmation.db`, `daily_b3_files.db`, …). A subárvore da
+  rotina (produto, família B3) vira SCHEMA dentro do banco, e cada dia é UMA
+  TABELA (`d_AAAAMMDD[_tag]`). Payload lista-de-objetos vira tabela TIPADA
+  por inferência; payload objeto vira uma tabela por lista interna
+  (`d_..._summary`) mais uma `_meta` chave→valor. Rotina nova em `cache/`
+  ganha o próprio banco sozinha.
 
 A inferência de tipos otimiza a leitura sem trair o dado:
 
@@ -42,7 +45,8 @@ A inferência de tipos otimiza a leitura sem trair o dado:
 Caminhos: a origem é o `Config.DATA_DIR` (na instância do JPM, o
 `...\\Application\\static\\data` do share — nada de letra de unidade fixa no
 código, CLAUDE.md §8); fora do app o fallback é o `apps/static/data` do repo.
-Os `.db` saem em `<DATA_DIR>/duckdb/` por padrão (`--out-dir` muda).
+Os `.db` saem no **`Config.DATABASE_DIR`** — a pasta `db/` que já guarda todos
+os bancos do app (CLAUDE.md §4) — por padrão (`--out-dir` muda).
 
 Uso:
     python scripts/convert_json_to_duckdb.py [--only holidays|refdata|daily]
@@ -432,14 +436,16 @@ def _dia_de(rel_parts, stem):
     return None
 
 
-def _tabela_dia(schema, stem, dia):
+def _tabela_dia(redundantes, stem, dia):
     """`d_AAAAMMDD[_tag]` — o que sobra do nome depois de tirar a data é a tag
-    (distingue DFLUXO de DPOSICAO no mesmo dia); tag que repete o schema cai."""
+    (distingue DFLUXO de DPOSICAO no mesmo dia); tag que só repete a rotina ou
+    o schema (`pending-confirmation_20260827.json` dentro do
+    `daily_pending_confirmation.db`) cai."""
     tag = stem
     for tok in (dia.strftime('%Y%m%d'), dia.strftime('%y%m%d'), dia.strftime('%Y-%m-%d')):
         tag = tag.replace(tok, '')
     tag = norm_ident(tag, '')
-    if tag == schema:
+    if tag in redundantes:
         tag = ''
     return 'd_' + dia.strftime('%Y%m%d') + (('_' + tag) if tag else '')
 
@@ -481,18 +487,43 @@ def _convert_daily_payload(con, schema, tabela, payload):
     return criadas
 
 
+def _daily_db_name(familia):
+    return 'daily_' + (norm_ident(familia, 'r') or 'cache') + '.db'
+
+
 def convert_daily(data_dir, out_dir, force=False, dry_run=False):
-    stats = {'db': os.path.join(out_dir, 'daily_caches.db'),
+    """UM BANCO POR ROTINA — a ramificação é a que a pasta `cache/` já tem.
+
+    Cada família de primeiro nível (`new deals`, `pending-confirmation`,
+    `b3 files`, …) vira o seu `daily_<rotina>.db`; a subárvore dela (produto,
+    família B3) vira SCHEMA dentro do banco, e cada dia é uma tabela. Rotina
+    nova em `cache/` ganha o próprio banco sozinha, sem tocar aqui."""
+    stats = {'db': 'daily_<rotina>.db (um por rotina)', 'dbs': [],
              'converted': [], 'skipped': [], 'errors': [], 'ignored': []}
     raiz = os.path.join(data_dir, 'cache')
     if not os.path.isdir(raiz):
         stats['errors'].append(('cache', 'pasta cache/ ausente em %s' % data_dir))
         return stats
-    con = None
-    if not dry_run:
-        os.makedirs(out_dir, exist_ok=True)
-        con = duckdb.connect(stats['db'])
-        ensure_manifest(con)
+
+    # O desenho anterior (um `daily_caches.db` único, com a rotina como
+    # schema) sai de cena: dois formatos em disco seriam duas respostas para
+    # a mesma pergunta. O arquivo é 100% derivado dos JSONs — recriável.
+    legado = os.path.join(out_dir, 'daily_caches.db')
+    if not dry_run and os.path.isfile(legado):
+        os.remove(legado)
+        stats['converted'].append('daily_caches.db legado removido (agora é um DB por rotina)')
+
+    cons = {}
+
+    def _con_da_familia(familia):
+        db = os.path.join(out_dir, _daily_db_name(familia))
+        if db not in cons:
+            os.makedirs(out_dir, exist_ok=True)
+            cons[db] = duckdb.connect(db)
+            ensure_manifest(cons[db])
+            stats['dbs'].append(db)
+        return cons[db]
+
     try:
         for dirpath, _dirs, files in sorted(os.walk(raiz)):
             for fname in sorted(files):
@@ -508,29 +539,34 @@ def convert_daily(data_dir, out_dir, force=False, dry_run=False):
                     # avulsas): fica no JSON — some daqui e parece perda.
                     stats['ignored'].append(rel)
                     continue
-                # O schema é a ROTINA: o caminho sem `cache/` e sem os
-                # segmentos de data.
+                # A família (1º nível sob `cache/`) nomeia o BANCO; o resto do
+                # caminho — sem os segmentos de data — é o schema dentro dele.
+                familia = parts[1] if len(parts) >= 3 else 'cache'
                 schema = norm_ident(
-                    '_'.join(p for p in parts[1:-1] if not p.isdigit()), 's') or 'cache'
-                tabela = _tabela_dia(schema, stem, dia)
+                    '_'.join(p for p in parts[2:-1] if not p.isdigit()), 's') or 'main'
+                tabela = _tabela_dia({schema, norm_ident(familia, 'r')}, stem, dia)
+                rotulo = '%s:%s.%s' % (_daily_db_name(familia), schema, tabela)
                 if dry_run:
-                    stats['converted'].append('%s.%s <- %s' % (schema, tabela, rel))
+                    stats['converted'].append('%s <- %s' % (rotulo, rel))
                     continue
                 try:
+                    con = _con_da_familia(familia)
                     st = os.stat(full)
                     if not force and manifest_unchanged(con, rel, st):
                         stats['skipped'].append(rel)
                         continue
                     _drop_targets(con, manifest_targets(con, rel))
-                    con.execute('CREATE SCHEMA IF NOT EXISTS %s' % q(schema))
+                    if schema != 'main':
+                        con.execute('CREATE SCHEMA IF NOT EXISTS %s' % q(schema))
                     payload = _load_json(full)
                     criadas = _convert_daily_payload(con, schema, tabela, payload)
                     manifest_record(con, rel, st, criadas)
-                    stats['converted'].extend(criadas)
+                    stats['converted'].extend(
+                        '%s:%s' % (_daily_db_name(familia), c) for c in criadas)
                 except Exception:                              # noqa: BLE001
                     stats['errors'].append((rel, traceback.format_exc()))
     finally:
-        if con is not None:
+        for con in cons.values():
             con.close()
     return stats
 
@@ -547,19 +583,35 @@ def _default_data_dir():
         return os.path.join(ROOT, 'apps', 'static', 'data')
 
 
+def _default_out_dir(data_dir):
+    """O destino é a pasta de TODOS os bancos do app (`Config.DATABASE_DIR`,
+    a `db/` que já existe — CLAUDE.md §4), nunca uma pasta nova ao lado."""
+    try:
+        sys.path.insert(0, ROOT)
+        from apps.config import Config
+        return Config.DATABASE_DIR
+    except Exception:                                          # noqa: BLE001
+        return os.path.join(data_dir, 'db')
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument('--data-dir', default=None, help='origem dos JSONs (padrão: Config.DATA_DIR)')
-    ap.add_argument('--out-dir', default=None, help='destino dos .db (padrão: <data-dir>/duckdb)')
+    ap.add_argument('--out-dir', default=None,
+                    help='destino dos .db (padrão: Config.DATABASE_DIR — a pasta db/ existente)')
     ap.add_argument('--only', choices=('holidays', 'refdata', 'daily'), default=None)
     ap.add_argument('--force', action='store_true', help='reconverte mesmo sem mudança')
     ap.add_argument('--dry-run', action='store_true', help='só lista o que converteria')
     args = ap.parse_args(argv)
 
     data_dir = os.path.abspath(args.data_dir or _default_data_dir())
-    out_dir = os.path.abspath(args.out_dir or os.path.join(data_dir, 'duckdb'))
+    out_dir = os.path.abspath(args.out_dir or _default_out_dir(data_dir))
     print('origem : %s' % data_dir)
     print('destino: %s' % out_dir)
+    antigo = os.path.join(data_dir, 'duckdb')
+    if os.path.isdir(antigo) and os.path.abspath(antigo) != out_dir:
+        print('aviso  : %s era o destino da versão anterior — os bancos agora '
+              'saem na pasta db/; a pasta antiga pode ser removida.' % antigo)
 
     conversores = {'holidays': convert_holidays, 'refdata': convert_refdata,
                    'daily': convert_daily}
