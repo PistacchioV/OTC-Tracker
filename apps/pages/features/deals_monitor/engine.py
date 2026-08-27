@@ -6,7 +6,6 @@ preservados — inclusive para os testes que os trocam — e o que é de platafo
 é alcançado por busca atrasada (`_R().<nome>`). A separação interna em
 domain/queries/commands é trabalho futuro; a fronteira com o routes já vale.
 """
-import io
 import json
 import os
 import re
@@ -40,7 +39,7 @@ _NDM_CARDS = [
     {'key': 'intrag-option',      'label': 'Intrag Option',       'url': '/intrag-option',                'dirs': ('Intrag/Option',),                            'les': ('LAW', 'ATA')},
 ]
 
-_NDM_JPM_RE = _R().re.compile(r'J\.?P\.?\s*MORGAN', _R().re.IGNORECASE)
+_NDM_JPM_RE = re.compile(r'J\.?P\.?\s*MORGAN', re.IGNORECASE)
 
 _NDM_ATA_DIRS = {'Option/Equity', 'Option/Equities', 'Swap/Equities'}
 
@@ -81,16 +80,16 @@ def _ndm_monitor_snapshot(ref):
     # Um único walk: agrupa os arquivos DA DATA por produto (caminho sem os
     # níveis de ano/mês), contando linhas por Status e por LE (_ndm_deal_le).
     found, found_les = {}, {}
-    if _R().os.path.isdir(_R().NEW_DEALS_CACHE_ROOT):
-        for root, _dirs, files in _R().os.walk(_R().NEW_DEALS_CACHE_ROOT):
+    if os.path.isdir(_R().NEW_DEALS_CACHE_ROOT):
+        for root, _dirs, files in os.walk(_R().NEW_DEALS_CACHE_ROOT):
             for fname in files:
                 if not fname.endswith('.json') or fname[:8] != want:
                     continue
-                rel = _R().os.path.relpath(root, _R().NEW_DEALS_CACHE_ROOT).replace('\\', '/')
+                rel = os.path.relpath(root, _R().NEW_DEALS_CACHE_ROOT).replace('\\', '/')
                 pkey = '/'.join([p for p in rel.split('/') if not p.isdigit()][:2])
                 try:
-                    with open(_R().os.path.join(root, fname), encoding='utf-8') as fh:
-                        data = _R().json.load(fh)
+                    with open(os.path.join(root, fname), encoding='utf-8') as fh:
+                        data = json.load(fh)
                 except Exception:
                     continue
                 bucket = found.setdefault(pkey, _R().Counter())
@@ -157,13 +156,13 @@ def _ndm_monitor_snapshot(ref):
             cache_dirs = (cache_dirs,)
         groups = {}
         for cache_dir in cache_dirs:
-            fp = _R().os.path.join(cache_dir, ref.strftime('%Y'), ref.strftime('%m'),
+            fp = os.path.join(cache_dir, ref.strftime('%Y'), ref.strftime('%m'),
                               ref.strftime('%Y%m%d') + suffix)
-            if not _R().os.path.isfile(fp):
+            if not os.path.isfile(fp):
                 continue
             try:
                 with open(fp, encoding='utf-8') as fh:
-                    data = _R().json.load(fh)
+                    data = json.load(fh)
             except Exception:
                 data = []
             for d in (data if isinstance(data, list) else []):
@@ -198,8 +197,8 @@ def _ndm_monitor_snapshot(ref):
     # (NDF de moeda não tem mercadoria).
     conf_cards.append(_conf_option_card(
         'conf-ndf-fwdstart', 'NDF FWD Start', '/new_deals-ndf-fwdstart',
-        (_R().os.path.join(_R().NEW_DEALS_CACHE_ROOT, 'NDF', 'FwdStart'),
-         _R().os.path.join(_R().NEW_DEALS_CACHE_ROOT, 'NDF', 'FWD Start')),
+        (os.path.join(_R().NEW_DEALS_CACHE_ROOT, 'NDF', 'FwdStart'),
+         os.path.join(_R().NEW_DEALS_CACHE_ROOT, 'NDF', 'FWD Start')),
         '_ndffwdstart.json', False))
     # Commodities Options: ciclo próprio da confirmação, igual ao NDF Comm.
     opt_groups, _opt_deal_statuses, _opt_total = _R()._conf_optcomm_groups(ref)
@@ -312,10 +311,10 @@ def _ndm_pending_blocks(ref):
 
 _NDM_PENDING_DEFAULT_TO = 'brazil.otc.ops@jpmorgan.com'
 
-_NDM_PENDING_RECIPIENTS_FILE = _R().os.path.join(_R()._DAILY_METRIC_DIR,
+_NDM_PENDING_RECIPIENTS_FILE = os.path.join(_R()._DAILY_METRIC_DIR,
                                             'deals_monitor_pending_recipients.json')
 
-_NDM_PENDING_TIMES = _R().os.getenv('DEALS_MONITOR_PENDING_TIMES', '19:00,19:30')
+_NDM_PENDING_TIMES = os.getenv('DEALS_MONITOR_PENDING_TIMES', '19:00,19:30')
 
 def _ndm_pending_status():
     """{last, next} do aviso automático, para a tela do Control Panel.
@@ -328,7 +327,7 @@ def _ndm_pending_status():
     last = {}
     try:
         with open(_NDM_PENDING_STATUS_FILE, encoding='utf-8') as fh:
-            d = _R().json.load(fh)
+            d = json.load(fh)
         if isinstance(d, dict):
             last = d
     except Exception:                                       # noqa: BLE001
@@ -343,7 +342,7 @@ def _ndm_pending_status():
             break
     if nxt is None:
         hh, mm = times[0]
-        nxt = (now + _R().timedelta(days=1)).replace(hour=hh, minute=mm, second=0, microsecond=0)
+        nxt = (now + timedelta(days=1)).replace(hour=hh, minute=mm, second=0, microsecond=0)
     return {
         'times': ['{:02d}:{:02d}'.format(h, m) for h, m in times],
         'next': nxt.strftime('%d/%m/%Y %H:%M'),
@@ -357,7 +356,7 @@ def _load_ndm_pending_recipients():
     alguém abrir o Control Panel."""
     try:
         with open(_NDM_PENDING_RECIPIENTS_FILE, encoding='utf-8') as fh:
-            d = _R().json.load(fh)
+            d = json.load(fh)
         if isinstance(d, dict) and (d.get('to') or d.get('cc')):
             return {'to': d.get('to', '') or '', 'cc': d.get('cc', '') or ''}
     except Exception:
@@ -365,9 +364,9 @@ def _load_ndm_pending_recipients():
     return {'to': _NDM_PENDING_DEFAULT_TO, 'cc': ''}
 
 def _save_ndm_pending_recipients(to, cc):
-    _R().os.makedirs(_R()._DAILY_METRIC_DIR, exist_ok=True)
+    os.makedirs(_R()._DAILY_METRIC_DIR, exist_ok=True)
     with open(_NDM_PENDING_RECIPIENTS_FILE, 'w', encoding='utf-8') as fh:
-        _R().json.dump({'to': to or '', 'cc': cc or ''}, fh, ensure_ascii=False, indent=2)
+        json.dump({'to': to or '', 'cc': cc or ''}, fh, ensure_ascii=False, indent=2)
 
 def _send_ndm_pending_email(ref, to_list, cc_list):
     """Envia o aviso de pendências do Monitor. Retorna True, 'empty' (nada
@@ -386,19 +385,19 @@ def _send_ndm_pending_email(ref, to_list, cc_list):
                          ref.strftime('%Y-%m-%d'))
                 return 'empty'
             ref_fmt = ref.strftime('%d/%m/%Y')
-            html = _R().render_template('pages/email-template-deals-monitor.html',
+            html = render_template('pages/email-template-deals-monitor.html',
                                    ref_date_fmt=ref_fmt, blocks=blocks,
-                                   grand_total=grand_total, current_year=_R().datetime.now().year)
-            msg = _R().MIMEMultipart('related')
+                                   grand_total=grand_total, current_year=datetime.now().year)
+            msg = MIMEMultipart('related')
             msg['Subject'] = 'Pending Action - Deals Monitor'
             msg['From'] = _R().SHARED_MAILBOX
             if to_list:
                 msg['To'] = ', '.join(to_list)
             if cc_list:
                 msg['Cc'] = ', '.join(cc_list)
-            alt = _R().MIMEMultipart('alternative')
-            alt.attach(_R().MIMEText('Please view this report in HTML.', 'plain', 'utf-8'))
-            alt.attach(_R().MIMEText(html, 'html', 'utf-8'))
+            alt = MIMEMultipart('alternative')
+            alt.attach(MIMEText('Please view this report in HTML.', 'plain', 'utf-8'))
+            alt.attach(MIMEText(html, 'html', 'utf-8'))
             msg.attach(alt)
             logo_path = _R()._get_logo_path()
             if logo_path:
@@ -415,16 +414,16 @@ def _send_ndm_pending_email(ref, to_list, cc_list):
                  len(blocks), to_list, cc_list)
         return True
     except Exception as e:                                  # noqa: BLE001
-        _R().log.error('[deals-monitor] aviso de pendências FALHOU:\n%s', _R().traceback.format_exc())
+        _R().log.error('[deals-monitor] aviso de pendências FALHOU:\n%s', traceback.format_exc())
         return '{}: {}'.format(type(e).__name__, e)
 
 _ndm_pending_scheduler_started = False
 
-_ndm_pending_scheduler_lock = _R().threading.Lock()
+_ndm_pending_scheduler_lock = threading.Lock()
 
-_NDM_PENDING_SENT_FILE = _R().os.path.join(_R()._DAILY_METRIC_DIR, 'deals_monitor_pending_sent.json')
+_NDM_PENDING_SENT_FILE = os.path.join(_R()._DAILY_METRIC_DIR, 'deals_monitor_pending_sent.json')
 
-_NDM_PENDING_STATUS_FILE = _R().os.path.join(_R()._DAILY_METRIC_DIR, 'deals_monitor_pending_status.json')
+_NDM_PENDING_STATUS_FILE = os.path.join(_R()._DAILY_METRIC_DIR, 'deals_monitor_pending_status.json')
 
 def _ndm_pending_claim_slot(slot):
     """Reserva um disparo ('YYYY-MM-DD 19:00') EM DISCO. True = ninguém tinha
@@ -463,14 +462,14 @@ def _ndm_pending_status_write(slot, result, when):
     """Grava o desfecho do último disparo, para a tela poder responder "o aviso
     das 19h saiu?". O log do servidor tinha a resposta e ninguém o lê."""
     try:
-        _R().os.makedirs(_R()._DAILY_METRIC_DIR, exist_ok=True)
+        os.makedirs(_R()._DAILY_METRIC_DIR, exist_ok=True)
         _R()._atomic_write_json(_NDM_PENDING_STATUS_FILE, {
             'slot': slot, 'result': result,
             'at': when.strftime('%d/%m/%Y %H:%M:%S'),
         })
     except Exception:                                       # noqa: BLE001
         _R().log.warning('[deals-monitor] não consegui gravar o status do disparo:\n%s',
-                    _R().traceback.format_exc())
+                    traceback.format_exc())
 
 def _ndm_pending_disparar(slot, fired):
     """Manda o aviso de um slot, se ninguém já mandou. True quando o slot era
@@ -520,7 +519,7 @@ def _ndm_pending_catch_up(times):
                          '(processo subiu depois do horário)', slot)
         except Exception:                              # noqa: BLE001
             _R().log.error('[deals-monitor] catch-up de %s falhou:\n%s',
-                      slot, _R().traceback.format_exc())
+                      slot, traceback.format_exc())
 
 def _ndm_pending_scheduler_loop():
     times = _ndm_pending_times()
@@ -543,17 +542,17 @@ def _ndm_pending_scheduler_loop():
                     break
             if nxt is None:
                 hh, mm = times[0]
-                nxt = (now + _R().timedelta(days=1)).replace(hour=hh, minute=mm,
+                nxt = (now + timedelta(days=1)).replace(hour=hh, minute=mm,
                                                         second=0, microsecond=0)
-            _R().time.sleep(max(1.0, (nxt - now).total_seconds()))
+            time.sleep(max(1.0, (nxt - now).total_seconds()))
             fired = _R()._br_now()
             slot = '{} {:02d}:{:02d}'.format(fired.strftime('%Y-%m-%d'),
                                              nxt.hour, nxt.minute)
             if not _ndm_pending_disparar(slot, fired):
-                _R().time.sleep(60)
+                time.sleep(60)
         except Exception:
-            _R().log.error('[deals-monitor] scheduler error:\n%s', _R().traceback.format_exc())
-            _R().time.sleep(60)
+            _R().log.error('[deals-monitor] scheduler error:\n%s', traceback.format_exc())
+            time.sleep(60)
 
 def _ndm_pending_start_scheduler():
     global _ndm_pending_scheduler_started
@@ -561,9 +560,9 @@ def _ndm_pending_start_scheduler():
         if _ndm_pending_scheduler_started:
             return
         _ndm_pending_scheduler_started = True
-    _R().threading.Thread(target=_ndm_pending_scheduler_loop,
+    threading.Thread(target=_ndm_pending_scheduler_loop,
                      name='deals-monitor-pending-scheduler', daemon=True).start()
     _R().log.info('[deals-monitor] scheduler de pendências iniciado (%s BRT · '
              'agora são %s no servidor / %s em Brasília)',
              ', '.join('{:02d}:{:02d}'.format(h, m) for h, m in _ndm_pending_times()),
-             _R().datetime.now().strftime('%H:%M'), _R()._br_now().strftime('%H:%M'))
+             datetime.now().strftime('%H:%M'), _R()._br_now().strftime('%H:%M'))

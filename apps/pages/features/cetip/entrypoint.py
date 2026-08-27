@@ -16,35 +16,35 @@ def _R():
     return routes
 
 
-@_R().blueprint.route('/api/control-panel/cetip-settlement/recipients', methods=['GET', 'POST'])
+@blueprint.route('/api/control-panel/cetip-settlement/recipients', methods=['GET', 'POST'])
 def api_cp_cetip_recipients():
     """GET → the TO lists for the four distribution e-mails (defaults shown when
     nothing is saved yet; BACC e BACC HUB não têm default e voltam vazios);
     POST → persist them. CC (OTC Ops) is fixed in code."""
-    if not _R().session.get('authenticated'):
-        return _R().jsonify({'success': False, 'error': 'Not authenticated'}), 401
-    if _R().request.method == 'GET':
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    if request.method == 'GET':
         rec = engine._load_cetip_recipients()
-        return _R().jsonify({'success': True,
+        return jsonify({'success': True,
                         'ss_to': rec['ss_to'] or _R().CETIP_SALES_SUPPORT_EMAIL,
                         'cem_to': rec['cem_to'] or '; '.join(_R().CETIP_CEM_LATAM_EMAILS),
                         'bacc_to': rec['bacc_to'],
                         'hub_to': rec['hub_to']})
-    payload = _R().request.get_json(silent=True) or {}
+    payload = request.get_json(silent=True) or {}
     try:
         rec, _mudou = engine._cetip_merge_recipients(payload)
         engine._save_cetip_recipients(rec)
     except Exception as e:
-        _R().log.error('[cetip] save recipients failed:\n%s', _R().traceback.format_exc())
-        return _R().jsonify({'success': False, 'error': '{}: {}'.format(type(e).__name__, e)}), 500
-    return _R().jsonify({'success': True})
+        _R().log.error('[cetip] save recipients failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': '{}: {}'.format(type(e).__name__, e)}), 500
+    return jsonify({'success': True})
 
-@_R().blueprint.route('/api/control-panel/cetip-settlement', methods=['POST'])
+@blueprint.route('/api/control-panel/cetip-settlement', methods=['POST'])
 def api_cp_cetip_settlement():
-    if not _R().session.get('authenticated'):
-        return _R().jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
 
-    payload   = _R().request.get_json(silent=True) or {}
+    payload   = request.get_json(silent=True) or {}
     date_str  = (payload.get('date') or '').strip()
     send_mail = payload.get('send_email', True)
     # Two-stage split: 'save' (default) saves the files/JSONs + e-mails OTC Ops only;
@@ -53,16 +53,16 @@ def api_cp_cetip_settlement():
     stage     = (payload.get('stage') or 'save').strip().lower()
 
     try:
-        ref = (_R().datetime.strptime(date_str, '%Y-%m-%d') if date_str
-               else _R()._prev_anbima_bizday(_R().datetime.now()))
+        ref = (datetime.strptime(date_str, '%Y-%m-%d') if date_str
+               else _R()._prev_anbima_bizday(datetime.now()))
     except ValueError:
-        return _R().jsonify({'success': False, 'error': 'Invalid date (expected YYYY-MM-DD).'}), 400
+        return jsonify({'success': False, 'error': 'Invalid date (expected YYYY-MM-DD).'}), 400
 
     # Folder pattern: YYYY\mm. Month\dd (e.g. 2026\06. June\24) — same for source
     # and destination, both keyed on the reference date.
     month_folder = ref.strftime('%m') + '. ' + _R()._EN_MONTH_NAMES[ref.month - 1]
-    src_dir  = _R().os.path.join(_R().CETIP_SOURCE_ROOT, ref.strftime('%Y'), month_folder, ref.strftime('%d'))
-    dest_dir = _R().os.path.join(_R().CETIP_DEST_ROOT,   ref.strftime('%Y'), month_folder, ref.strftime('%d'))
+    src_dir  = os.path.join(_R().CETIP_SOURCE_ROOT, ref.strftime('%Y'), month_folder, ref.strftime('%d'))
+    dest_dir = os.path.join(_R().CETIP_DEST_ROOT,   ref.strftime('%Y'), month_folder, ref.strftime('%d'))
 
     # Stage 2 ("Send to other areas") — no re-save; e-mail Sales Support + CEM Latam
     # from the already-saved files. Requires stage 1 ("Save CETIP Files") to have run.
@@ -76,7 +76,7 @@ def api_cp_cetip_settlement():
             try:
                 engine._save_cetip_recipients(rec)
             except Exception:
-                _R().log.error('[cetip] save recipients failed:\n%s', _R().traceback.format_exc())
+                _R().log.error('[cetip] save recipients failed:\n%s', traceback.format_exc())
         return engine._cetip_distribute_emails(ref, dest_dir, send_mail,
                                         _R()._parse_emails(rec['ss_to']),
                                         _R()._parse_emails(rec['cem_to']),
@@ -85,24 +85,24 @@ def api_cp_cetip_settlement():
 
     # Ensure the dated source folder exists (B3 daily drop). On Windows create it
     # in the standard layout if missing; on dev (POSIX) just error out cleanly.
-    if not _R().os.path.isdir(src_dir):
-        if _R().os.name == 'nt':
+    if not os.path.isdir(src_dir):
+        if os.name == 'nt':
             try:
-                _R().os.makedirs(src_dir, exist_ok=True)
+                os.makedirs(src_dir, exist_ok=True)
                 _R().log.info("[cetip] created source folder: %s", src_dir)
             except Exception:
-                _R().log.warning("[cetip] could not create source %s:\n%s", src_dir, _R().traceback.format_exc())
-        if not _R().os.path.isdir(src_dir):
-            return _R().jsonify({'success': False,
+                _R().log.warning("[cetip] could not create source %s:\n%s", src_dir, traceback.format_exc())
+        if not os.path.isdir(src_dir):
+            return jsonify({'success': False,
                             'error': 'Source folder not found: {}'.format(src_dir)}), 400
 
-    files = [f for f in _R().os.listdir(src_dir) if _R().os.path.isfile(_R().os.path.join(src_dir, f))]
+    files = [f for f in os.listdir(src_dir) if os.path.isfile(os.path.join(src_dir, f))]
     if not files:
-        return _R().jsonify({'success': False,
+        return jsonify({'success': False,
                         'error': 'No files found in the source folder: {}'.format(src_dir)}), 400
 
     # Make sure the destination day folder exists before saving anything.
-    _R().os.makedirs(dest_dir, exist_ok=True)
+    os.makedirs(dest_dir, exist_ok=True)
     saved, errors = [], []
     # (Sales Support / CEM Latam attachments are gathered in stage 2 from dest_dir,
     # so stage 1 only saves + e-mails OTC Ops — see _cetip_distribute_emails.)
@@ -125,8 +125,8 @@ def api_cp_cetip_settlement():
                                'error': 'Could not parse date from filename.'})
                 continue
             dest_name = rule['dest_name'](dref)
-            dest_path = _R().os.path.join(dest_dir, dest_name)
-            src_path  = _R().os.path.join(src_dir, name)
+            dest_path = os.path.join(dest_dir, dest_name)
+            src_path  = os.path.join(src_dir, name)
             try:
                 engine._cetip_save_file(src_path, dest_path)
                 entry = {'src': name, 'dest': dest_name, 'type': rule['label']}
@@ -145,11 +145,11 @@ def api_cp_cetip_settlement():
             extra = rule.get('extra_dest')
             if extra:
                 try:
-                    _R().os.makedirs(extra, exist_ok=True)
-                    engine._cetip_save_file(src_path, _R().os.path.join(extra, dest_name))
+                    os.makedirs(extra, exist_ok=True)
+                    engine._cetip_save_file(src_path, os.path.join(extra, dest_name))
                 except Exception:
                     _R().log.warning("[cetip] secondary copy failed %s → %s:\n%s",
-                                name, extra, _R().traceback.format_exc())
+                                name, extra, traceback.format_exc())
         if not rule_matched:
             try:
                 exp = rule['dest_name'](ref_yymmdd)
@@ -157,7 +157,7 @@ def api_cp_cetip_settlement():
                 exp = ''
             missing.append({'dest': exp, 'type': rule['label']})
 
-    _R()._create_notification(_R().session.get('user_sid', ''), _R().session.get('user_name', ''),
+    _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                          'CETIP Files Saved', 'Control Panel',
                          '{} file(s) saved ({})'.format(len(saved), ref.strftime('%Y-%m-%d')))
 
@@ -188,6 +188,6 @@ def api_cp_cetip_settlement():
             msg += ('<br><span class="text-warning">Files saved, but the OTC Ops e-mail failed: {}</span>'
                     .format(mail_ops))
 
-    return _R().jsonify({'success': True, 'message': msg, 'saved': saved, 'errors': errors,
+    return jsonify({'success': True, 'message': msg, 'saved': saved, 'errors': errors,
                     'source': src_dir, 'destination': dest_dir,
                     'email_sent': {'otc_ops': mail_ops}})

@@ -19,62 +19,62 @@ def _R():
     return routes
 
 
-@_R().blueprint.route('/api/new-deals/monitor')
+@blueprint.route('/api/new-deals/monitor')
 def api_new_deals_monitor():
-    if not _R().session.get('authenticated'):
-        return _R().jsonify({'success': False, 'message': 'Not authenticated'}), 401
-    ds = (_R().request.args.get('date') or '').strip()
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    ds = (request.args.get('date') or '').strip()
     try:
-        ref = _R().datetime.strptime(ds[:10], '%Y-%m-%d') if ds else _R().datetime.now()
+        ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
     except ValueError:
-        ref = _R().datetime.now()
+        ref = datetime.now()
     cards, conf_cards = engine._ndm_monitor_snapshot(ref)
-    return _R().jsonify({'success': True, 'date': ref.strftime('%Y-%m-%d'),
+    return jsonify({'success': True, 'date': ref.strftime('%Y-%m-%d'),
                     'cards': cards, 'conf_cards': conf_cards})
 
-@_R().blueprint.route('/api/control-panel/deals-monitor/recipients', methods=['GET', 'POST'])
+@blueprint.route('/api/control-panel/deals-monitor/recipients', methods=['GET', 'POST'])
 def api_cp_deals_monitor_recipients():
     """TO/CC do aviso diário, do card Deals Monitor. Salvar vazio nos dois
     campos volta ao default da mesa em vez de desligar a rotina em silêncio."""
-    if not _R().session.get('authenticated'):
-        return _R().jsonify({'success': False, 'error': 'Not authenticated'}), 401
-    if _R().request.method == 'GET':
-        return _R().jsonify({'success': True, **engine._load_ndm_pending_recipients(),
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    if request.method == 'GET':
+        return jsonify({'success': True, **engine._load_ndm_pending_recipients(),
                         **engine._ndm_pending_status()})
-    payload = _R().request.get_json(silent=True) or {}
+    payload = request.get_json(silent=True) or {}
     try:
         engine._save_ndm_pending_recipients((payload.get('to') or '').strip(),
                                      (payload.get('cc') or '').strip())
     except Exception as e:                                  # noqa: BLE001
-        _R().log.error('[deals-monitor] save recipients failed:\n%s', _R().traceback.format_exc())
-        return _R().jsonify({'success': False, 'error': '{}: {}'.format(type(e).__name__, e)}), 500
-    return _R().jsonify({'success': True})
+        _R().log.error('[deals-monitor] save recipients failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': '{}: {}'.format(type(e).__name__, e)}), 500
+    return jsonify({'success': True})
 
-@_R().blueprint.route('/api/control-panel/deals-monitor/run', methods=['POST'])
+@blueprint.route('/api/control-panel/deals-monitor/run', methods=['POST'])
 def api_cp_deals_monitor_run():
     """Dispara o aviso na hora, sem esperar os horários agendados."""
-    if not _R().session.get('authenticated'):
-        return _R().jsonify({'success': False, 'error': 'Not authenticated'}), 401
-    payload = _R().request.get_json(silent=True) or {}
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    payload = request.get_json(silent=True) or {}
     ds = (payload.get('date') or '').strip()
     try:
-        ref = _R().datetime.strptime(ds[:10], '%Y-%m-%d') if ds else _R().datetime.now()
+        ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
     except ValueError:
-        ref = _R().datetime.now()
+        ref = datetime.now()
     rec = engine._load_ndm_pending_recipients()
     to_list, cc_list = _R()._parse_emails(rec['to']), _R()._parse_emails(rec['cc'])
     if not (to_list or cc_list):
-        return _R().jsonify({'success': False,
+        return jsonify({'success': False,
                         'error': 'Nenhum destinatário salvo. Preencha o TO antes de rodar.'}), 400
     result = engine._send_ndm_pending_email(ref, to_list, cc_list)
     if result == 'empty':
-        return _R().jsonify({'success': True,
+        return jsonify({'success': True,
                         'message': 'Nothing pending on the Deals Monitor — no e-mail sent.'})
     if result is not True:
-        return _R().jsonify({'success': False, 'error': 'E-mail failed: {}'.format(result)}), 500
-    _R()._create_notification(_R().session.get('user_sid', ''), _R().session.get('user_name', ''),
+        return jsonify({'success': False, 'error': 'E-mail failed: {}'.format(result)}), 500
+    _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                          'Deals Monitor Sent', 'Control Panel',
                          'Pending Action e-mailed ({})'.format(ref.strftime('%Y-%m-%d')))
-    return _R().jsonify({'success': True,
+    return jsonify({'success': True,
                     'message': 'Pending Action enviado para {} destinatário(s).'.format(
                         len(to_list) + len(cc_list))})

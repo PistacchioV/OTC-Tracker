@@ -8,8 +8,6 @@ Movido VERBATIM do routes.py (nomes preservados). Os GRAVADORES
 do New Deals — o routes os alcança pelo gancho `_intrag_engine()` (import
 atrasado), como o `record_rebooks` do mdea.
 """
-import csv
-import io
 import json
 import os
 import re
@@ -23,19 +21,19 @@ def _R():
     return routes
 
 
-INTRAG_NDF_CACHE_DIR = _R().os.path.normpath(_R().os.path.join(
+INTRAG_NDF_CACHE_DIR = os.path.normpath(os.path.join(
     _R().data_dir(), "cache", "new deals", "Intrag", "NDF"
 ))
 
-INTRAG_OPT_CACHE_DIR = _R().os.path.normpath(_R().os.path.join(
+INTRAG_OPT_CACHE_DIR = os.path.normpath(os.path.join(
     _R().data_dir(), "cache", "new deals", "Intrag", "Option"
 ))
 
-INTRAG_SWAP_CACHE_DIR = _R().os.path.normpath(_R().os.path.join(
+INTRAG_SWAP_CACHE_DIR = os.path.normpath(os.path.join(
     _R().data_dir(), "cache", "new deals", "Intrag", "Swap"
 ))
 
-INTRAG_NDF_SEND_DIR = _R().os.path.join(
+INTRAG_NDF_SEND_DIR = os.path.join(
     _R().Config.SHARED_DRIVE_ROOT, 'Confirmation', 'Derivativos', 'OTC Tracker', 'Intrag')
 
 def _save_intrag_ndf_entry(deal):
@@ -91,13 +89,13 @@ def _save_intrag_ndf_entry(deal):
         expiry_str = ''
     if not expiry_str:
         month_raw = (deal.get('Month', '') or '').strip().upper()
-        m = _R().re.match(r'^([A-Z]{3})(\d{2,4})$', month_raw)
+        m = re.match(r'^([A-Z]{3})(\d{2,4})$', month_raw)
         if m:
             mon_num = _R()._MONTH_ABBR.get(m.group(1), '')
             yr = m.group(2) if len(m.group(2)) == 4 else '20' + m.group(2)
             if mon_num:
                 expiry_str = f'{mon_num}-{yr}'
-        elif _R().re.match(r'^\d{4}-\d{2}$', month_raw):
+        elif re.match(r'^\d{4}-\d{2}$', month_raw):
             parts = month_raw.split('-')
             expiry_str = f'{parts[1]}-{parts[0]}'
         elif sd:
@@ -162,20 +160,20 @@ def _save_intrag_ndf_entry(deal):
 
 def _intrag_ndf_persist(entry, td):
     """Append/update uma entrada no day-file da Intrag NDF (chave = _deal)."""
-    ref = td or _R().datetime.now()
-    dir_path = _R().os.path.join(INTRAG_NDF_CACHE_DIR, ref.strftime('%Y'), ref.strftime('%m'))
-    _R().os.makedirs(dir_path, exist_ok=True)
+    ref = td or datetime.now()
+    dir_path = os.path.join(INTRAG_NDF_CACHE_DIR, ref.strftime('%Y'), ref.strftime('%m'))
+    os.makedirs(dir_path, exist_ok=True)
     fname = ref.strftime('%Y%m%d') + '_intrag_ndf.json'
-    file_path = _R().os.path.join(dir_path, fname)
+    file_path = os.path.join(dir_path, fname)
 
     with _R()._cache_lock:
-        if _R().os.path.exists(file_path):
+        if os.path.exists(file_path):
             try:
                 with open(file_path, 'r', encoding='utf-8') as fh:
-                    entries = _R().json.load(fh)
+                    entries = json.load(fh)
                 if not isinstance(entries, list):
                     entries = []
-            except (_R().json.JSONDecodeError, ValueError):
+            except (json.JSONDecodeError, ValueError):
                 entries = []
         else:
             entries = []
@@ -455,20 +453,20 @@ def _save_intrag_opt_entry(deal, is_fxo=False):
         'checker': '',
     }
 
-    ref = td or _R().datetime.now()
-    dir_path = _R().os.path.join(INTRAG_OPT_CACHE_DIR, ref.strftime('%Y'), ref.strftime('%m'))
-    _R().os.makedirs(dir_path, exist_ok=True)
+    ref = td or datetime.now()
+    dir_path = os.path.join(INTRAG_OPT_CACHE_DIR, ref.strftime('%Y'), ref.strftime('%m'))
+    os.makedirs(dir_path, exist_ok=True)
     fname = ref.strftime('%Y%m%d') + '_intrag_opt.json'
-    file_path = _R().os.path.join(dir_path, fname)
+    file_path = os.path.join(dir_path, fname)
 
     with _R()._cache_lock:
-        if _R().os.path.exists(file_path):
+        if os.path.exists(file_path):
             try:
                 with open(file_path, 'r', encoding='utf-8') as fh:
-                    entries = _R().json.load(fh)
+                    entries = json.load(fh)
                 if not isinstance(entries, list):
                     entries = []
-            except (_R().json.JSONDecodeError, ValueError):
+            except (json.JSONDecodeError, ValueError):
                 entries = []
         else:
             entries = []
@@ -512,24 +510,24 @@ def _find_intrag_ndf_entry(deal_id, trade_date):
     ref = _R()._parse_date_any(trade_date) if trade_date else None
     candidate_files = []
     if ref is not None:
-        fp = _R().os.path.join(
+        fp = os.path.join(
             INTRAG_NDF_CACHE_DIR, ref.strftime('%Y'), ref.strftime('%m'),
             ref.strftime('%Y%m%d') + '_intrag_ndf.json'
         )
-        if _R().os.path.isfile(fp):
+        if os.path.isfile(fp):
             candidate_files.append(fp)
-    if not candidate_files and _R().os.path.isdir(INTRAG_NDF_CACHE_DIR):
-        for root, _, files in _R().os.walk(INTRAG_NDF_CACHE_DIR):
+    if not candidate_files and os.path.isdir(INTRAG_NDF_CACHE_DIR):
+        for root, _, files in os.walk(INTRAG_NDF_CACHE_DIR):
             for fname in files:
                 if fname.endswith('_intrag_ndf.json'):
-                    candidate_files.append(_R().os.path.join(root, fname))
+                    candidate_files.append(os.path.join(root, fname))
     for fp in candidate_files:
         try:
             with open(fp, 'r', encoding='utf-8') as fh:
-                entries = _R().json.load(fh)
+                entries = json.load(fh)
             if not isinstance(entries, list):
                 continue
-        except (_R().json.JSONDecodeError, ValueError, OSError):
+        except (json.JSONDecodeError, ValueError, OSError):
             continue
         idx = next((i for i, e in enumerate(entries) if e.get('_deal') == deal_id), None)
         if idx is not None:
@@ -543,22 +541,22 @@ def _find_intrag_opt_entry(deal_id, trade_date):
     ref = _R()._parse_date_any(trade_date) if trade_date else None
     candidate_files = []
     if ref is not None:
-        fp = _R().os.path.join(INTRAG_OPT_CACHE_DIR, ref.strftime('%Y'), ref.strftime('%m'),
+        fp = os.path.join(INTRAG_OPT_CACHE_DIR, ref.strftime('%Y'), ref.strftime('%m'),
                           ref.strftime('%Y%m%d') + '_intrag_opt.json')
-        if _R().os.path.isfile(fp):
+        if os.path.isfile(fp):
             candidate_files.append(fp)
-    if not candidate_files and _R().os.path.isdir(INTRAG_OPT_CACHE_DIR):
-        for root, _, files in _R().os.walk(INTRAG_OPT_CACHE_DIR):
+    if not candidate_files and os.path.isdir(INTRAG_OPT_CACHE_DIR):
+        for root, _, files in os.walk(INTRAG_OPT_CACHE_DIR):
             for fname in files:
                 if fname.endswith('_intrag_opt.json'):
-                    candidate_files.append(_R().os.path.join(root, fname))
+                    candidate_files.append(os.path.join(root, fname))
     for fp in candidate_files:
         try:
             with open(fp, 'r', encoding='utf-8') as fh:
-                entries = _R().json.load(fh)
+                entries = json.load(fh)
             if not isinstance(entries, list):
                 continue
-        except (_R().json.JSONDecodeError, ValueError, OSError):
+        except (json.JSONDecodeError, ValueError, OSError):
             continue
         idx = next((i for i, e in enumerate(entries) if e.get('_deal') == deal_id), None)
         if idx is not None:
@@ -573,12 +571,12 @@ def _intrag_b3_key(v):
 def _intrag_find_export_csv():
     """Most recent Boletas*.csv in the Return folder, or None."""
     try:
-        cands = [_R().os.path.join(_R().RETURN_PATH, fn) for fn in _R().os.listdir(_R().RETURN_PATH)
+        cands = [os.path.join(_R().RETURN_PATH, fn) for fn in os.listdir(_R().RETURN_PATH)
                  if fn.lower().startswith('boletas') and fn.lower().endswith('.csv')]
     except OSError:
         return None
-    cands = [p for p in cands if _R().os.path.isfile(p)]
-    return max(cands, key=lambda p: _R().os.path.getmtime(p)) if cands else None
+    cands = [p for p in cands if os.path.isfile(p)]
+    return max(cands, key=lambda p: os.path.getmtime(p)) if cands else None
 
 def _intrag_build_b3_map(csv_path, match_col, match_val, b3_col):
     """Parse the Boletas CSV (no header) → {b3_key → Intrag ID (col A)} for rows whose
@@ -607,7 +605,7 @@ def _intrag_run_mapping(deals, match_col, match_val, b3_col, finder):
     try:
         b3map = _intrag_build_b3_map(csv_path, match_col, match_val, b3_col)
     except Exception:
-        _R().log.error('[intrag-map] CSV parse failed:\n%s', _R().traceback.format_exc())
+        _R().log.error('[intrag-map] CSV parse failed:\n%s', traceback.format_exc())
         return None, 'Failed to read the Boletas CSV.'
     results = []
     with _R()._cache_lock:
@@ -626,7 +624,7 @@ def _intrag_run_mapping(deals, match_col, match_val, b3_col, finder):
             try:
                 _R()._atomic_write_json(fp, entries)
             except Exception:
-                _R().log.error('[intrag-map] save failed %s:\n%s', fp, _R().traceback.format_exc())
+                _R().log.error('[intrag-map] save failed %s:\n%s', fp, traceback.format_exc())
                 results.append({'id': did, 'intrag_id': intrag_id, 'status': 'Error'})
                 continue
             results.append({'id': did, 'intrag_id': intrag_id, 'status': 'Success'})
@@ -640,24 +638,24 @@ def _find_intrag_swap_entry(deal_id, trade_date):
     ref = _R()._parse_date_any(trade_date) if trade_date else None
     candidate_files = []
     if ref is not None:
-        fp = _R().os.path.join(
+        fp = os.path.join(
             INTRAG_SWAP_CACHE_DIR, ref.strftime('%Y'), ref.strftime('%m'),
             ref.strftime('%Y%m%d') + '_intrag_swap.json'
         )
-        if _R().os.path.isfile(fp):
+        if os.path.isfile(fp):
             candidate_files.append(fp)
-    if not candidate_files and _R().os.path.isdir(INTRAG_SWAP_CACHE_DIR):
-        for root, _, files in _R().os.walk(INTRAG_SWAP_CACHE_DIR):
+    if not candidate_files and os.path.isdir(INTRAG_SWAP_CACHE_DIR):
+        for root, _, files in os.walk(INTRAG_SWAP_CACHE_DIR):
             for fname in files:
                 if fname.endswith('_intrag_swap.json'):
-                    candidate_files.append(_R().os.path.join(root, fname))
+                    candidate_files.append(os.path.join(root, fname))
     for fp in candidate_files:
         try:
             with open(fp, 'r', encoding='utf-8') as fh:
-                entries = _R().json.load(fh)
+                entries = json.load(fh)
             if not isinstance(entries, list):
                 continue
-        except (_R().json.JSONDecodeError, ValueError, OSError):
+        except (json.JSONDecodeError, ValueError, OSError):
             continue
         idx = next((i for i, e in enumerate(entries) if e.get('_deal') == deal_id), None)
         if idx is not None:

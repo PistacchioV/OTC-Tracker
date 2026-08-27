@@ -903,7 +903,6 @@ def _atomic_write_json(file_path, data):
     consulta. O commit é DEPOIS da gravação bem-sucedida — antes, um erro no
     `os.replace` invalidaria o cache de um dado que continua igual em disco.
     """
-    import tempfile
     dir_name = os.path.dirname(file_path)
     fd, tmp_path = tempfile.mkstemp(dir=dir_name, suffix='.tmp')
     try:

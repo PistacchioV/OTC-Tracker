@@ -9,13 +9,14 @@ e o Settlement Forecast e o MtM usam a caixa do OTC Ops — são plataforma. O
 `_MAPPING_DEFS`, que é o registro (plataforma) — a regra viva continua sendo o
 cadastro, lido aqui por `_R()._mapping_rows`.
 """
-import io
 import os
 import re
 import shutil
 import tempfile
 import traceback
 from datetime import datetime
+
+from flask import render_template
 
 
 def _R():
@@ -24,7 +25,7 @@ def _R():
     return routes
 
 
-_CETIP_RECIPIENTS_FILE = _R().os.path.normpath(_R().os.path.join(
+_CETIP_RECIPIENTS_FILE = os.path.normpath(os.path.join(
     _R().data_dir(), 'control-panel',
     'cetip_distribution_recipients.json'))
 
@@ -45,7 +46,7 @@ def _save_cetip_recipients(rec):
     lista: com três chaves, uma assinatura posicional deixaria uma chamada de dois
     argumentos apagar a terceira em silêncio — que é justamente o que o POST
     fazia quando o payload vinha sem uma delas (ver `_cetip_merge_recipients`)."""
-    _R().os.makedirs(_R().os.path.dirname(_CETIP_RECIPIENTS_FILE), exist_ok=True)
+    os.makedirs(os.path.dirname(_CETIP_RECIPIENTS_FILE), exist_ok=True)
     with open(_CETIP_RECIPIENTS_FILE, 'w', encoding='utf-8') as fh:
         _R().json.dump({k: str((rec or {}).get(k, '') or '') for k in _CETIP_RECIPIENT_KEYS},
                   fh, ensure_ascii=False, indent=2)
@@ -68,15 +69,15 @@ def _ensure_cetip_roots():
     """At server start, make sure the CETIP source/destination ROOT folders exist;
     create them if missing. Windows-only (the I:\\ paths are JPM network paths) —
     skipped elsewhere so dev machines don't create junk dirs from backslash paths."""
-    if _R().os.name != 'nt':
+    if os.name != 'nt':
         return
     for root in (_R().CETIP_SOURCE_ROOT, _R().CETIP_DEST_ROOT):
         try:
-            if not _R().os.path.isdir(root):
-                _R().os.makedirs(root, exist_ok=True)
+            if not os.path.isdir(root):
+                os.makedirs(root, exist_ok=True)
                 _R().log.info("[cetip] created root folder: %s", root)
         except Exception:
-            _R().log.warning("[cetip] could not create root %s:\n%s", root, _R().traceback.format_exc())
+            _R().log.warning("[cetip] could not create root %s:\n%s", root, traceback.format_exc())
 
 _CETIP_BEHAVIOUR = {
     'NDF Position (DPOSICAO C21)': {},
@@ -203,7 +204,7 @@ def _cetip_split_pattern(pattern):
     `.TXT` (é o formato que o usuário digita) e a comparação é feita contra o
     nome do arquivo sem extensão, o que faz `.TXT` e `.txt` casarem sozinhos.
     """
-    s = _R().os.path.splitext(str(pattern or '').strip())[0]
+    s = os.path.splitext(str(pattern or '').strip())[0]
     i = s.upper().find(_CETIP_DATE_TOKEN)
     if i < 0:
         return None
@@ -211,7 +212,7 @@ def _cetip_split_pattern(pattern):
 
 def _cetip_apply_date(pattern, yymmdd):
     """Troca o `YYMMDD` do padrão pela data (case-insensitive, todas as ocorrências)."""
-    return _R().re.sub(_CETIP_DATE_TOKEN, yymmdd, str(pattern or ''), flags=_R().re.I)
+    return re.sub(_CETIP_DATE_TOKEN, yymmdd, str(pattern or ''), flags=re.I)
 
 def _cetip_make_matcher(pattern, label):
     """Predicado de match do padrão, ou None se o padrão for inválido.
@@ -227,10 +228,10 @@ def _cetip_make_matcher(pattern, label):
     if not parts:
         return None
     idx, tail = parts
-    head = _R().os.path.splitext(str(pattern or '').strip())[0][:idx].lower()
+    head = os.path.splitext(str(pattern or '').strip())[0][:idx].lower()
 
     def _match(name_lower):
-        stem = _R().os.path.splitext(name_lower)[0]
+        stem = os.path.splitext(name_lower)[0]
         if tail and not stem.endswith(tail):
             return False
         date = stem[idx:idx + 6]
@@ -248,7 +249,7 @@ def _cetip_paren_key(label):
     rótulo inteiro. É o NOME DO ARQUIVO da CETIP dentro do rótulo — a parte que
     identifica de que arquivo a linha fala, ao contrário do prefixo descritivo,
     que é como o time escolheu chamá-lo."""
-    m = _R().re.search(r'\(([^)]*)\)\s*$', str(label or ''))
+    m = re.search(r'\(([^)]*)\)\s*$', str(label or ''))
     return (m.group(1) if m else str(label or '')).strip().upper()
 
 _CETIP_BEHAVIOUR_BY_PAREN = {_cetip_paren_key(k): v for k, v in _CETIP_BEHAVIOUR.items()}
@@ -368,7 +369,7 @@ def _cetip_update_vcp_json(src_path):
 
         # Load the existing table + index by Qualification ID (as string).
         current = []
-        if _R().os.path.isfile(_R().VCP_JSON):
+        if os.path.isfile(_R().VCP_JSON):
             try:
                 with open(_R().VCP_JSON, encoding='utf-8') as fh:
                     current = _R().json.load(fh) or []
@@ -417,7 +418,7 @@ def _cetip_update_vcp_json(src_path):
                  updated, added, len(current))
         return _R().VCP_JSON
     except Exception:
-        _R().log.warning("[cetip] VCP.json update failed:\n%s", _R().traceback.format_exc())
+        _R().log.warning("[cetip] VCP.json update failed:\n%s", traceback.format_exc())
         return None
 
 def _send_cetip_email(to_list, cc_list, subject, greeting, message_html,
@@ -431,14 +432,14 @@ def _send_cetip_email(to_list, cc_list, subject, greeting, message_html,
     attachments = attachments or []
     missing = missing or []
     try:
-        attach_names = [_R().os.path.basename(p) for p in attachments]
-        html = _R().render_template(
+        attach_names = [os.path.basename(p) for p in attachments]
+        html = render_template(
             'pages/email-template-cetip-saved.html',
             subject=subject, greeting=greeting, message_html=message_html,
             ref_date_fmt=ref_date_fmt, file_count=len(saved), saved_files=saved,
             missing_files=missing, missing_count=len(missing),
             attachment_names=attach_names, dest_folder=dest_folder,
-            current_year=_R().datetime.now().year)
+            current_year=datetime.now().year)
 
         # mixed > [ related > [ alternative > [plain, html], logo ], attachment... ]
         msg = _R().MIMEMultipart('mixed')
@@ -471,10 +472,10 @@ def _send_cetip_email(to_list, cc_list, subject, greeting, message_html,
                     part.set_payload(f.read())
                 encoders.encode_base64(part)
                 part.add_header('Content-Disposition', 'attachment',
-                                filename=_R().os.path.basename(path))
+                                filename=os.path.basename(path))
                 msg.attach(part)
             except Exception:
-                _R().log.warning("[cetip] could not attach %s:\n%s", path, _R().traceback.format_exc())
+                _R().log.warning("[cetip] could not attach %s:\n%s", path, traceback.format_exc())
 
         recipients = list(to_list) + list(cc_list or [])
         with _R().smtplib.SMTP(_R().SMTP_HOST, _R().SMTP_PORT, timeout=20) as server:
@@ -482,7 +483,7 @@ def _send_cetip_email(to_list, cc_list, subject, greeting, message_html,
         _R().log.info("[cetip] e-mail '%s' sent to %s", subject, recipients)
         return True
     except Exception as e:
-        _R().log.error("[cetip] e-mail '%s' FAILED:\n%s", subject, _R().traceback.format_exc())
+        _R().log.error("[cetip] e-mail '%s' FAILED:\n%s", subject, traceback.format_exc())
         return '{}: {}'.format(type(e).__name__, e)   # error string surfaced to the UI
 
 _CETIP_BACC_ACCOUNTS = frozenset(('00041007',      # Lawton   00041.00-7
@@ -495,7 +496,7 @@ def _cetip_acct_key(v):
     O Lawton é `00041.00-7`; um exportador que trate a conta como NÚMERO devolve
     `41007`, que sem o zfill não casaria com nada — e o recorte sairia vazio sem
     erro nenhum."""
-    d = _R().re.sub(r'\D', '', str(v or ''))
+    d = re.sub(r'\D', '', str(v or ''))
     return d.zfill(8) if 0 < len(d) <= 8 else d
 
 def _cetip_bacc_col(header, spec):
@@ -538,7 +539,7 @@ def _cetip_txt_name(src_path):
     Quando o DEST cadastrado já termina em `.txt` (o `SWAP (Strategy)` é assim),
     não ganha um segundo: `…_MID.txt.txt` é um nome que ninguém escreveu de
     propósito, e o casamento do outro lado é pelo nome."""
-    nome = _R().os.path.basename(src_path)
+    nome = os.path.basename(src_path)
     return nome if nome.lower().endswith('.txt') else nome + '.txt'
 
 def _cetip_bacc_copy(src_path, cfg, out_dir):
@@ -564,7 +565,7 @@ def _cetip_bacc_copy(src_path, cfg, out_dir):
         with open(src_path, 'r', encoding='latin-1', newline='') as fh:
             linhas = [ln for ln in fh.read().splitlines() if ln.strip()]
     except Exception:
-        _R().log.warning('[cetip] BACC: não consegui ler %s:\n%s', src_path, _R().traceback.format_exc())
+        _R().log.warning('[cetip] BACC: não consegui ler %s:\n%s', src_path, traceback.format_exc())
         return None
     if not linhas:
         return None
@@ -575,7 +576,7 @@ def _cetip_bacc_copy(src_path, cfg, out_dir):
     i_cpty = _cetip_bacc_col(header, cfg.get('contraparte') or {})
     if i_parte is None or i_cpty is None:
         _R().log.warning('[cetip] BACC: colunas não resolvidas em %s (parte=%s contraparte=%s) '
-                    '— arquivo NÃO anexado', _R().os.path.basename(src_path), i_parte, i_cpty)
+                    '— arquivo NÃO anexado', os.path.basename(src_path), i_parte, i_cpty)
         return None
 
     def _conta(campos, i):
@@ -584,7 +585,7 @@ def _cetip_bacc_copy(src_path, cfg, out_dir):
     mantidas = [ln for ln in dados
                 if _conta(ln.split(';'), i_parte) in _CETIP_BACC_ACCOUNTS
                 and _conta(ln.split(';'), i_cpty) in _CETIP_BACC_ACCOUNTS]
-    out_path = _R().os.path.join(out_dir, _cetip_txt_name(src_path))
+    out_path = os.path.join(out_dir, _cetip_txt_name(src_path))
     saida = ([linhas[0]] if tem_header else []) + mantidas
     try:
         # Latin-1 + CRLF: o mesmo formato do `_cetip_save_file`, para o recorte ser
@@ -593,10 +594,10 @@ def _cetip_bacc_copy(src_path, cfg, out_dir):
             fh.write('\r\n'.join(saida) + ('\r\n' if saida else ''))
     except Exception:
         _R().log.warning('[cetip] BACC: não consegui gravar o recorte de %s:\n%s',
-                    _R().os.path.basename(src_path), _R().traceback.format_exc())
+                    os.path.basename(src_path), traceback.format_exc())
         return None
     _R().log.info('[cetip] BACC: %s → %d de %d linha(s) intragrupo',
-             _R().os.path.basename(src_path), len(mantidas), len(dados))
+             os.path.basename(src_path), len(mantidas), len(dados))
     return out_path, len(mantidas), len(dados)
 
 def _cetip_txt_copy(src_path, out_dir):
@@ -615,12 +616,12 @@ def _cetip_txt_copy(src_path, out_dir):
     liquidação — é ela que o KPI lê.
     """
     try:
-        out_path = _R().os.path.join(out_dir, _cetip_txt_name(src_path))
-        _R().shutil.copy2(src_path, out_path)
+        out_path = os.path.join(out_dir, _cetip_txt_name(src_path))
+        shutil.copy2(src_path, out_path)
         return out_path
     except Exception:
         _R().log.warning('[cetip] HUB: não consegui copiar %s:\n%s',
-                    _R().os.path.basename(src_path), _R().traceback.format_exc())
+                    os.path.basename(src_path), traceback.format_exc())
         return None
 
 def _cetip_distribute_emails(ref, dest_dir, send_mail, ss_to_list=None, cem_to_list=None,
@@ -637,7 +638,7 @@ def _cetip_distribute_emails(ref, dest_dir, send_mail, ss_to_list=None, cem_to_l
     cem_to_list = cem_to_list or _R().CETIP_CEM_LATAM_EMAILS
     bacc_to_list = bacc_to_list or []
     hub_to_list  = hub_to_list  or []
-    if not _R().os.path.isdir(dest_dir):
+    if not os.path.isdir(dest_dir):
         return _R().jsonify({'success': False,
                         'error': 'No saved files found for this date. Run "Save CETIP Files" first.'}), 400
     ref_yymmdd = ref.strftime('%y%m%d')
@@ -660,8 +661,8 @@ def _cetip_distribute_emails(ref, dest_dir, send_mail, ss_to_list=None, cem_to_l
             dest_name = rule['dest_name'](ref_yymmdd)
         except Exception:
             continue
-        dest_path = _R().os.path.join(dest_dir, dest_name)
-        if not _R().os.path.isfile(dest_path):
+        dest_path = os.path.join(dest_dir, dest_name)
+        if not os.path.isfile(dest_path):
             # Só o HUB reclama do arquivo que faltou. É reconciliação de POSIÇÃO:
             # um e-mail com três dos quatro arquivos se parece com um e-mail
             # completo, e a posição que falta é a que ninguém vai conferir.
@@ -675,7 +676,7 @@ def _cetip_distribute_emails(ref, dest_dir, send_mail, ss_to_list=None, cem_to_l
             opc_paths.append(dest_path); opc_saved.append(entry)
         if rule.get('attach_bacc') and bacc_to_list:
             if bacc_tmp is None:
-                bacc_tmp = _R().tempfile.mkdtemp(prefix='cetip-bacc-')
+                bacc_tmp = tempfile.mkdtemp(prefix='cetip-bacc-')
             cut = _cetip_bacc_copy(dest_path, rule.get('bacc') or {}, bacc_tmp)
             if cut is None:
                 bacc_skipped.append({'dest': dest_name, 'type': rule['label']})
@@ -687,11 +688,11 @@ def _cetip_distribute_emails(ref, dest_dir, send_mail, ss_to_list=None, cem_to_l
             # é o do ANEXO (com o `.txt`), não o do arquivo salvo no share: a tabela
             # e a lista de anexos ficam lado a lado no mesmo e-mail, e dois nomes
             # para o mesmo arquivo fariam procurar um anexo que não existe.
-            bacc_saved.append({'src': dest_name, 'dest': _R().os.path.basename(cut_path),
+            bacc_saved.append({'src': dest_name, 'dest': os.path.basename(cut_path),
                                'type': '{} — {} of {} line(s)'.format(rule['label'], kept, total)})
         if quer_hub:
             if hub_tmp is None:
-                hub_tmp = _R().tempfile.mkdtemp(prefix='cetip-hub-')
+                hub_tmp = tempfile.mkdtemp(prefix='cetip-hub-')
             hub_path = _cetip_txt_copy(dest_path, hub_tmp)
             if hub_path is None:
                 hub_skipped.append({'dest': dest_name, 'type': rule['label']})
@@ -699,13 +700,13 @@ def _cetip_distribute_emails(ref, dest_dir, send_mail, ss_to_list=None, cem_to_l
                 hub_paths.append(hub_path)
                 # Sem contagem de linhas na coluna Type: aqui o arquivo é INTEIRO,
                 # e escrever "480 of 480" sugeriria que houve um corte.
-                hub_saved.append({'src': dest_name, 'dest': _R().os.path.basename(hub_path),
+                hub_saved.append({'src': dest_name, 'dest': os.path.basename(hub_path),
                                   'type': rule['label']})
 
     def _limpa_temp():
         for d in (bacc_tmp, hub_tmp):
             if d:
-                _R().shutil.rmtree(d, ignore_errors=True)
+                shutil.rmtree(d, ignore_errors=True)
 
     if not attach_paths and not opc_paths and not bacc_paths and not hub_paths:
         _limpa_temp()

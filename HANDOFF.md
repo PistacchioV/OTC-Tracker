@@ -13588,3 +13588,78 @@ Um bug que a integração pegou: o cache gravava em D-1 e a leitura sem data ca�
 batimento rodava e o GET seguinte dizia que ninguém tinha rodado.
 
 `check_cgd_docs.py` e `check_cgd_recon.py` cobrem os dois lados.
+
+---
+
+## §309 — Os SweetAlerts do Holidays Calendar falam o idioma do app (e o mês sai maiúsculo)
+
+A data do popup do feriado estava fixa em `pt-BR` e os títulos/badges dos alertas eram texto inserido
+por JS — que o I18nManager nunca alcança, porque ele traduz os `[data-lang]` uma vez, no load. A
+página ganhou o padrão da casa: mapa `_TRANS` local (en/br/es) com `t()` lendo
+`__OTC_TRACKER_LANG__` — a MESMA chave do I18nManager (o swapchar lê `language`, que é a chave
+antiga; não copie dele). A data por extenso sai do `Intl.DateTimeFormat` no locale do idioma
+escolhido, com o **mês sempre de inicial maiúscula** via `formatToParts` — em inglês o locale já
+capitaliza, em pt/es ele escreve minúsculo, e capitalizar por regex sobre a frase montada quebraria
+no primeiro locale com ordem diferente. `segunda-feira, 10 de Agosto de 2026` ·
+`Monday, August 10, 2026` · `lunes, 10 de Agosto de 2026`.
+
+## §310 — A campanha de verticalização: 24 features fora do `routes.py`
+
+Entre 26/08 e 27/08 o `routes.py` saiu de **39.696 para 31.012 linhas** (−8.700), com **24 verticais**
+em `apps/pages/features/`. O processo de cada fatia foi sempre o mesmo — rede de caracterização ANTES
+(quando não havia), extração, a MESMA rede verde depois, guardas atualizados na mesma mudança, suíte
+inteira, commit — e a suíte cresceu de 84 para **94 scripts**.
+
+A ordem saiu do acoplamento medido (entradas de fora do grupo), e as fronteiras decididas em cada uma
+estão nos docstrings dos `__init__.py`. As que valem regra geral:
+
+- **entrada não é sinal de que a feature não sai — é sinal de plataforma misturada.** O
+  `_anbima_holidays` (holidays), o `_otc_app_url` (conf_escalation), o coletor do forecast
+  (`_forecast_payload`, que o Other Products Summary lê), o `_pcx_is_bizday`, os leitores
+  `_cpd_path/_cpd_load/_cpd_find`, os helpers `_ei_*` e o motor do File Interpreter (`_fi_*`, 36
+  entradas: ele é o gerador de layout de TODO arquivo) ficaram no `routes.py` esperando o `platform/`;
+- **gancho de volta é import atrasado dentro da função**: o pull do NDF grava os pares de re-booking
+  via `_mdea.record_rebooks`, e os saves do New Deals espelham a Intrag via `_intrag_engine()` — os
+  entrypoints só são importados no fim do `routes.py`, então import no topo não existe;
+- **verrugas são REGISTRADAS, nunca consertadas na extração**: o envelope do e-mail do forecast vai
+  fixo para OTC Ops + accrual-cc enquanto os headers levam as listas do card
+  (`check_forecast_api.py`); a primeira gravação da Intrag entra sem coluna de ciclo e é o re-save
+  que materializa o `New` (`check_intrag_api.py`); o calendário do holidays duplica por caixa
+  (`check_holidays_api.py`). Consertar qualquer uma é decisão, com teste mudando junto.
+
+O que resta no `routes.py` é o coração de plataforma (notificações, sessão/authz, banco, ANBIMA, os
+helpers compartilhados acima) e as famílias grandes de página (New Deals com 44 rotas, os summaries,
+live positions, MtM/Accrual, mapping com 1263 linhas) — candidatas das próximas fatias, na mesma
+mecânica.
+
+## §311 — Scheduler mora na feature; o REGISTRO fica no wiring (e o kill-switch dos testes)
+
+Sete features têm laço agendado (bacc, mt300, mdea, conf_escalation, boxscan, pcx, deals_monitor). O
+laço vive em `commands.scheduler_loop`/`engine`, mas o `_schedule_on_start('<label>', …)` fica no
+bloco de wiring do `routes.py`, ao lado do import do entrypoint: o gancho é de plataforma, e chamá-lo
+do corpo do módulo da feature exigiria importar o `routes` ali — o ciclo que a regra das features
+proíbe.
+
+Junto veio **`OTC_DISABLE_SCHEDULERS=1`**, honrado pelo `_start_schedulers`: os testes que sobem o
+app várias vezes (o guard do config purga e reimporta `apps.*`) corriam com os laços VIVOS ao lado —
+uma corrida de import intermitente, e um catch-up de 16h/17h/19h30 num processo de TESTE tentando
+reivindicar o slot REAL do dia e mandar o e-mail de verdade. O `check_boxsched`, que prova justamente
+a subida, LIMPA a variável no próprio arnês — é o único que precisa dos laços de pé.
+
+## §312 — Extração VERBATIM com religação por AST, e o guarda de bytecode que a prende
+
+Para os emaranhados grandes (deals_monitor, cetip, intrag, counterparty_details) o desenho fino
+domain/queries/commands sairia caro demais de uma vez. Eles foram movidos **verbatim** — nomes
+internos preservados, inclusive para os testes que os trocam (`N._NDM_…`, `CE._CETIP_…`) — com uma
+ferramenta que copia os corpos por AST e reescreve todo `Name(Load)` sem dono para `_R().<nome>`
+(busca atrasada no routes). Três armadilhas dela, já pagas:
+
+- o `col_offset` do AST é offset em **BYTES** (utf-8): linha com acento desloca a reescrita em chars;
+- num target de assign, só o `ctx=Store` define nome — `spn_by_key[_ei_match_key(name)] = …` tem um
+  Load DENTRO do target, e tratá-lo como definido deixou um nome sem religar;
+- nome religado só explode quando o CAMINHO roda. Por isso o `check_soc_layers` ganhou a **seção 9**:
+  desmonta o bytecode de toda função das features e cobra que cada `LOAD_GLOBAL` exista no módulo —
+  no primeiro giro pegou um `traceback` sem import no caminho de ERRO do pcx.
+
+A separação interna desses quatro é trabalho futuro; a fronteira com o `routes.py` — e os guardas —
+já valem.

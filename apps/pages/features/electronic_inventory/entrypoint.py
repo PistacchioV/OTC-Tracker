@@ -5,7 +5,6 @@ Os helpers `_ei_*` (sanitize, long path, scan do share, localizar arquivo) NÃO
 vieram: o Track Confirmations, o TED e os quatro saves de confirmação usam os
 mesmos — são plataforma, alcançados por `_R()`.
 """
-import io
 import os
 import re
 import traceback
@@ -22,10 +21,10 @@ def _R():
     return routes
 
 
-@_R().blueprint.route('/api/electronic-inventory/clients')
+@blueprint.route('/api/electronic-inventory/clients')
 def api_ei_clients():
-    if not _R().session.get('authenticated'):
-        return _R().jsonify({'success': False, 'message': 'unauthorized'}), 401
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'unauthorized'}), 401
     root = _R().ELECTRONIC_INVENTORY_ROOT
     spn_by_key = {}
     all_ref = _R()._ei_refdata_clients()
@@ -46,23 +45,23 @@ def api_ei_clients():
             clients[key] = {'name': name, 'spn': spn,
                             'on_disk': (False if complete else None)}
     out = sorted(clients.values(), key=lambda c: c['name'].upper())
-    return _R().jsonify({'success': True, 'clients': out, 'root': root,
+    return jsonify({'success': True, 'clients': out, 'root': root,
                     'root_exists': bool(root_exists),
                     'scan_complete': complete,
                     'share_slow': not complete,
                     'transactional_types': list(_R()._EI_TRANSACTIONAL_TYPES),
                     'confirmation_types': list(_R()._EI_CONFIRMATION_TYPES)})
 
-@_R().blueprint.route('/api/electronic-inventory/documents')
+@blueprint.route('/api/electronic-inventory/documents')
 def api_ei_documents():
-    if not _R().session.get('authenticated'):
-        return _R().jsonify({'success': False, 'message': 'unauthorized'}), 401
-    client = (_R().request.args.get('client') or '').strip()
-    doctype = (_R().request.args.get('type') or 'all').strip()
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'unauthorized'}), 401
+    client = (request.args.get('client') or '').strip()
+    doctype = (request.args.get('type') or 'all').strip()
     if not client:
-        return _R().jsonify({'success': False, 'message': 'client required'}), 400
+        return jsonify({'success': False, 'message': 'client required'}), 400
     base = _R()._ei_resolve_client_dir(client)
-    folder_exists = bool(base) and _R().os.path.isdir(base)
+    folder_exists = bool(base) and os.path.isdir(base)
     docs = []
     if folder_exists:
         types = _R().EI_SUBFOLDERS if doctype in ('all', '', 'All') else (doctype,)
@@ -72,19 +71,19 @@ def api_ei_documents():
             try:
                 docs.extend(_R()._ei_iter_files(base, dt))
             except Exception:
-                _R().log.warning('[ei] iter %s/%s failed:\n%s', client, dt, _R().traceback.format_exc())
+                _R().log.warning('[ei] iter %s/%s failed:\n%s', client, dt, traceback.format_exc())
     docs.sort(key=lambda d: d['modified'], reverse=True)
-    return _R().jsonify({'success': True, 'documents': docs, 'client': client,
+    return jsonify({'success': True, 'documents': docs, 'client': client,
                     'folder': base or '', 'folder_exists': folder_exists})
 
-@_R().blueprint.route('/api/electronic-inventory/file')
+@blueprint.route('/api/electronic-inventory/file')
 def api_ei_file():
-    if not _R().session.get('authenticated'):
-        return _R().jsonify({'success': False, 'message': 'unauthorized'}), 401
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'unauthorized'}), 401
     from flask import send_file, abort
-    client = (_R().request.args.get('client') or '').strip()
-    rel = (_R().request.args.get('rel') or '').strip()
-    download = _R().request.args.get('download') in ('1', 'true', 'yes')
+    client = (request.args.get('client') or '').strip()
+    rel = (request.args.get('rel') or '').strip()
+    download = request.args.get('download') in ('1', 'true', 'yes')
     if not client or not rel:
         return abort(404)
     try:
@@ -93,30 +92,30 @@ def api_ei_file():
         return abort(400)
     if not full:
         return abort(404)
-    name = _R().os.path.basename(full)
+    name = os.path.basename(full)
     try:
         return send_file(full, as_attachment=download, download_name=name)
     except TypeError:   # Flask < 2.0
         return send_file(full, as_attachment=download, attachment_filename=name)
 
-@_R().blueprint.route('/api/electronic-inventory/upload', methods=['POST'])
+@blueprint.route('/api/electronic-inventory/upload', methods=['POST'])
 def api_ei_upload():
-    if not _R().session.get('authenticated'):
-        return _R().jsonify({'success': False, 'message': 'unauthorized'}), 401
-    client  = (_R().request.form.get('client') or '').strip()
-    doctype = (_R().request.form.get('type') or '').strip()
-    subtype = (_R().request.form.get('subtype') or '').strip()
-    date_s  = (_R().request.form.get('date') or '').strip()
-    f = _R().request.files.get('file')
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'unauthorized'}), 401
+    client  = (request.form.get('client') or '').strip()
+    doctype = (request.form.get('type') or '').strip()
+    subtype = (request.form.get('subtype') or '').strip()
+    date_s  = (request.form.get('date') or '').strip()
+    f = request.files.get('file')
     if not client or doctype not in _R().EI_SUBFOLDERS or not f or not f.filename:
-        return _R().jsonify({'success': False, 'message': 'client, a valid type and a file are required'}), 400
-    ext = _R().os.path.splitext(f.filename)[1].lower()
+        return jsonify({'success': False, 'message': 'client, a valid type and a file are required'}), 400
+    ext = os.path.splitext(f.filename)[1].lower()
     if ext not in _R()._EI_ALLOWED_UPLOAD:
-        return _R().jsonify({'success': False, 'message': 'File type %s is not allowed.' % (ext or '?')}), 400
-    if not _R().os.path.isdir(_R().ELECTRONIC_INVENTORY_ROOT):
-        return _R().jsonify({'success': False, 'message': 'Electronic Inventory share is not reachable.'}), 503
-    digits = _R().re.sub(r'\D', '', date_s)
-    ddmmyyyy = digits if len(digits) == 8 else _R().datetime.now().strftime('%d%m%Y')
+        return jsonify({'success': False, 'message': 'File type %s is not allowed.' % (ext or '?')}), 400
+    if not os.path.isdir(_R().ELECTRONIC_INVENTORY_ROOT):
+        return jsonify({'success': False, 'message': 'Electronic Inventory share is not reachable.'}), 503
+    digits = re.sub(r'\D', '', date_s)
+    ddmmyyyy = digits if len(digits) == 8 else datetime.now().strftime('%d%m%Y')
     dd, mm, yyyy = ddmmyyyy[0:2], ddmmyyyy[2:4], ddmmyyyy[4:8]
     base = _R()._ei_resolve_client_dir(client, create=True)
     cname = _R()._ei_sanitize(client)
@@ -134,15 +133,15 @@ def api_ei_upload():
         prefix = (_R()._ei_sanitize(subtype).upper() or 'CONFIRMATION')
         pasta = _R()._mc_mod.TYPE_FOLDER.get(_R()._mc_mod.upper_norm(subtype))
         product_dir = _R()._ei_sanitize(pasta or subtype) or 'Other'
-        target_dir = _R().os.path.join(base, 'Confirmations', yyyy, _R()._ei_month_folder(mm), dd, product_dir)
+        target_dir = os.path.join(base, 'Confirmations', yyyy, _R()._ei_month_folder(mm), dd, product_dir)
     elif doctype == 'SSI':
-        target_dir = _R().os.path.join(base, 'SSI')
+        target_dir = os.path.join(base, 'SSI')
         prefix = 'SSI'
     else:  # Transactional
-        target_dir = _R().os.path.join(base, 'Transactional')
+        target_dir = os.path.join(base, 'Transactional')
         prefix = (_R()._ei_sanitize(subtype).upper() or 'DOC')
     try:
-        _R().os.makedirs(_R()._ei_long_path(target_dir), exist_ok=True)
+        os.makedirs(_R()._ei_long_path(target_dir), exist_ok=True)
         # A counterparty can legitimately have several documents of the same kind
         # (a 2nd CGD Amendment, a 3rd, …). Number the new one instead of either
         # clobbering the previous or hiding it behind a meaningless " (2)".
@@ -150,17 +149,17 @@ def api_ei_upload():
         style = 'hash' if doctype == 'Confirmations' else 'ordinal'
         fname = '%s%s - %s - %s%s' % (
             _R()._ei_version_prefix(nth, style), prefix, cname, ddmmyyyy, ext)
-        dest = _R().os.path.join(target_dir, fname)
-        stem, e = _R().os.path.splitext(dest)
+        dest = os.path.join(target_dir, fname)
+        stem, e = os.path.splitext(dest)
         i = 2
-        while _R().os.path.exists(_R()._ei_long_path(dest)):   # same kind AND same date — still never clobber
+        while os.path.exists(_R()._ei_long_path(dest)):   # same kind AND same date — still never clobber
             dest = '%s (%d)%s' % (stem, i, e)
             i += 1
         f.save(_R()._ei_long_path(dest))     # `dest` itself stays clean for relpath/basename below
     except Exception:
-        _R().log.error('[ei] upload failed:\n%s', _R().traceback.format_exc())
-        return _R().jsonify({'success': False, 'message': 'Could not save the file to the share.'}), 500
-    return _R().jsonify({'success': True, 'saved': {
-        'name': _R().os.path.basename(dest),
-        'rel': _R().os.path.relpath(dest, base).replace('\\', '/'),
+        _R().log.error('[ei] upload failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'message': 'Could not save the file to the share.'}), 500
+    return jsonify({'success': True, 'saved': {
+        'name': os.path.basename(dest),
+        'rel': os.path.relpath(dest, base).replace('\\', '/'),
         'doctype': doctype}})

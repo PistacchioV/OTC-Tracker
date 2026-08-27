@@ -2,6 +2,7 @@
 """Os arquivos do card: a planilha no share, o claim, o status e a foto."""
 import json
 import os
+import traceback
 from datetime import datetime
 
 from apps.config import Config

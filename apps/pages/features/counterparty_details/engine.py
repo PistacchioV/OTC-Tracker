@@ -6,9 +6,6 @@ Movido VERBATIM do routes.py. Os LEITORES ficaram lá: `_cpd_path/_cpd_load/
 _cpd_find` (summaries, advices, TED e o e-mail de cobrança leem o registro) e
 os normalizadores compartilhados `_norm_spn/_bank_norm/_cgd_norm`.
 """
-import os
-import uuid
-from datetime import datetime
 
 
 def _R():

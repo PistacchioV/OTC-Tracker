@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 """As regras do e-mail de cobrança — puras (o cadastro chega por parâmetro)."""
-import re
 
 FROM = 'is.trade.doc@jpmchase.com'
 CC_FIXED = ['brazil.otc.ops@jpmorgan.com', 'is.trade.doc@jpmchase.com']
