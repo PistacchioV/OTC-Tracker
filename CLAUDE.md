@@ -2097,6 +2097,21 @@ Intrag ficavam com o valor cru sempre que o notional estava na moeda fraca
   reiniciado** ou o código velho continua servindo. Vários "não está
   funcionando" vieram daí. Edição de mapping pela tela é a exceção — vale no
   request seguinte.
+- **O bytecode não pode ser gravado no share** (`PYTHONPYCACHEPREFIX` no `.bat`
+  de subida). Sem isso o Python cria um `__pycache__` ao lado de CADA `.py` —
+  que ali é remoto — e um pull grande vira centenas de gravações atômicas via
+  rede: a subida fica minutos parada no `importlib` **sem imprimir nada** e
+  parece travada. Quem cancela vê um `KeyboardInterrupt` no import de um módulo
+  qualquer, e o módulo **muda a cada tentativa** — essa é a assinatura, porque
+  o culpado não é ele, é o que estava na vez. O caminho vai para
+  `%LOCALAPPDATA%`, nunca `%TEMP%` (Limpeza de Disco apaga e a subida seguinte
+  recompila tudo), e **nunca** use `PYTHONDONTWRITEBYTECODE`: evita a escrita
+  ao custo de recompilar a cada subida, e a instância reinicia várias vezes ao
+  dia. O `start-prod.bat` já tem a linha; o `start-otc-tracker.bat` da
+  instância mora no share, não está no repo, e é colado à mão — HANDOFF §322
+  tem o bloco e as três armadilhas do espelhamento (a letra da unidade é
+  descartada, o `pushd` do `.bat` mapeia o share numa letra qualquer, e versões
+  diferentes precisam de prefixos diferentes).
 - **O `config.py` é o arquivo que fica para trás.** Ele é o único que se ajusta
   à mão na instância, e `git pull` **não sobrescreve arquivo modificado**: o
   resto da árvore atualiza e ele não, deixando o checkout com dois commits

@@ -14022,3 +14022,31 @@ foi para o `start-prod.bat` (o versionado); o `start-otc-tracker.bat`, que é o 
 roda, mora no share e não está no repo — a linha tem de ser colada nele à mão. NÃO use
 `PYTHONDONTWRITEBYTECODE`: evita a escrita mas recompila tudo a cada subida, e a instância
 reinicia várias vezes por dia.
+
+**Onde os `.pyc` caem, e as três coisas que o `.bat` real ensinou.** O `PYTHONPYCACHEPREFIX` faz o
+Python **espelhar a árvore do fonte** dentro do prefixo, em vez de criar um `__pycache__` por pasta;
+nenhum `__pycache__` novo nasce ao lado do código, e os que já estão no share viram órfãos
+ignorados (`for /d /r %d in (__pycache__) do @if exist "%d" rd /s /q "%d"` limpa, se quiser).
+
+1. **A letra da unidade é DESCARTADA** no espelhamento
+   (`importlib/_bootstrap_external.py`: `if head[1] == ':' … head = head[2:]`). Isso importa porque
+   o `start-otc-tracker.bat` faz `pushd` sobre o caminho UNC, e `pushd` mapeia o share na primeira
+   letra livre — era essa a razão de o traceback aparecer ora com `Y:` ora com `L:`: mesma máquina,
+   letra diferente. Com a letra fora, as duas produzem o MESMO cache e não recompilam à toa.
+2. **O prefixo leva a VERSÃO no caminho.** Como a raiz que o `pushd` mapeia já é a pasta da versão,
+   o caminho espelhado começa em `pages\...` — `v12` e `v13` cairiam no mesmo lugar. O Python
+   detectaria pelo mtime/tamanho do fonte e recompilaria (não corrompe), mas cada troca de versão
+   invalidaria o cache da outra. Daí `…\pycache\%VERSION_PATH%`.
+3. **`%LOCALAPPDATA%`, não `%TEMP%`.** O `.bat` da instância já guarda ali o que precisa sobreviver
+   (`APP_STATE_DIR` = `%LOCALAPPDATA%\OTC-Tracker`, com o `secret_key.txt` e o `.snapshot` do
+   requirements). `%TEMP%` é alvo de Limpeza de Disco e de GPO: limpo, a subida seguinte recompila
+   tudo — não quebra, só volta a demorar. O `start-prod.bat` foi alinhado a essa escolha.
+
+O bloco a colar no `start-otc-tracker.bat`, logo antes do `echo Starting OTC Tracker with
+Waitress`:
+
+```bat
+set "PYCACHE_DIR=%APP_STATE_DIR%\pycache\%VERSION_PATH%"
+if not defined PYTHONPYCACHEPREFIX set "PYTHONPYCACHEPREFIX=%PYCACHE_DIR%"
+echo [INFO] Bytecode (.pyc) em: %PYTHONPYCACHEPREFIX%
+```

@@ -92,8 +92,16 @@ REM  Com o cache numa pasta local o custo cai para leitura do .py pelo share e
 REM  gravacao local; a segunda subida em diante nem recompila. Nao use
 REM  PYTHONDONTWRITEBYTECODE: ele evita a escrita mas obriga a recompilar
 REM  TUDO a cada subida, e a instancia reinicia varias vezes por dia.
+REM
+REM  %LOCALAPPDATA% e nao %TEMP%: o cache precisa SOBREVIVER aos restarts, e
+REM  %TEMP% e alvo de Limpeza de Disco e de GPO -- limpo, a subida seguinte
+REM  recompila tudo (nao quebra, so volta a demorar).  O Python espelha a
+REM  arvore do fonte dentro do prefixo DESCARTANDO a letra da unidade, entao o
+REM  pushd acima pode mapear o share em qualquer letra livre que o cache e o
+REM  mesmo -- e por isso tambem que versoes diferentes do codigo precisariam de
+REM  prefixos diferentes se rodassem da mesma raiz mapeada.
 REM ---------------------------------------------------------------------------
-if not defined PYTHONPYCACHEPREFIX set "PYTHONPYCACHEPREFIX=%TEMP%\otc-tracker-pycache"
+if not defined PYTHONPYCACHEPREFIX set "PYTHONPYCACHEPREFIX=%LOCALAPPDATA%\OTC-Tracker\pycache"
 echo [INFO] Bytecode (.pyc) em: %PYTHONPYCACHEPREFIX%
 
 echo.
