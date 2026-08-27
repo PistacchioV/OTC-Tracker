@@ -13918,3 +13918,107 @@ connections" do DuckDB — é de milissegundos, e o ERROR fica reservado à falh
 Suíte: 96/96 verdes, app com 377 rotas. A fila de motores ACABOU — o que resta são as seis
 separações internas dos verbatim (deals_monitor, cetip, intrag, counterparty_details, mtm,
 accrual).
+
+## §320 — a separação interna estreia: deals_monitor e counterparty_details (2026-08-27)
+
+Com a fila de motores da platform/ fechada (§319), começou a última frente do §10: a separação
+interna dos seis verbatim. As duas primeiras — a menor (`counterparty_details`, engine de 164
+linhas) e a primeira do catálogo (`deals_monitor`, 568) — saíram no mesmo dia, e o `engine.py`
+das duas foi APAGADO.
+
+**counterparty_details**: `domain.py` (exibição e payload — `_contact_disp`, `_acc_disp`,
+`_bank_detail`, `_contact_payload`), `infra/persistence.py` (`_cpd_get_record`/`_bank_get_record`
+— achar/criar o record normalizado de um SPN) e `commands.py` (o import da planilha CONTATO DE
+CLIENTES e o `_notify_bank` do maker/checker). O domínio grosso continua na
+`platform/counterparty.py` — é horizontal, e a fatia não o duplicou.
+
+**deals_monitor**: `domain.py` (catálogo de cards, `_ndm_deal_le`, taxonomia, parse dos
+horários), `queries.py` (o snapshot que a página E o e-mail leem — uma contagem só —, os blocos
+de pendência, o status do aviso), `infra/persistence.py` (destinatários, claim de slot
+cross-process, desfecho do disparo) e `commands.py` (envio, disparo, catch-up, scheduler — o
+registro segue no wiring do routes via `start_scheduler`).
+
+A regra que a estreia fixou, e que os próximos quatro repetem: **toda travessia entre camadas é
+pelo ATRIBUTO do módulo** (`queries._ndm_pending_blocks(...)`, `persistence._load_...()`), nunca
+`from .queries import nome`. O check_ndm_pending_sched patcha seis nomes e o bench dele exercita
+o ciclo inteiro: com o import por nome, o espião patchado no módulo dono não interceptaria a
+cópia congelada no importador — o mesmo silêncio da regra nº 1 da seção do §10, agora entre
+camadas da MESMA feature. Nome patchado e chamado na mesma camada fica de graça (a chamada
+interna resolve pelos globals do módulo).
+
+Repoints: o check_ndm_pending_sched importa as quatro camadas e patcha cada nome no dono
+(arquivos em P, envio em C, blocks em Q, horários em D); o texto-âncora do retry lê o
+commands.py. O check_cpd_api não precisou de UMA linha: ele fala com as rotas por HTTP e patcha
+plataforma no routes.
+
+Suíte: 96/96. Restam quatro verbatim: cetip, intrag, mtm, accrual.
+
+## §321 — o fim dos engines: accrual, cetip, intrag, mtm e cognos (2026-08-27)
+
+As últimas separações internas. Com elas **não existe mais `engine.py` no repositório**: as 43
+verticais estão todas em domain/queries/commands/infra.
+
+- **accrual** (548 linhas) → `domain` (layout das colunas, parse/formatação de fator, de-para do
+  Código IF, aplicação dos fatores, consultas sobre a tabela), `queries` (o build do dia a partir
+  da posição de swap), `infra/persistence` (arquivo-dia + pasta de origem), `infra/mappers`
+  (planilha de fatores → mapa, um formato por LOB) e `commands` (Batch Conecta + batimento).
+- **cetip** (813) → `domain` (o catálogo de comportamento por arquivo, o reconhecimento nome ×
+  data, os nomes de saída), `queries` (o cadastro `cetip-files`, a regra viva), `infra/
+  persistence` (destinatários, cópia do dia, JSON de posição), `infra/mappers` (cabeçalho →
+  índice de coluna), `infra/mail` e `commands` (recorte do BACC, cópias, distribuição).
+- **intrag** (663) → `domain` (o par JPM × Lawton e a chave do retorno), `queries` (achar a linha
+  nos arquivos-dia), `infra/persistence` (os arquivos-dia sob o `_cache_lock`), `infra/mappers`
+  (CSV do Conecta → `{chave: B3 ID}`) e `commands` (as linhas espelhadas dos três produtos).
+- **mtm** (715) → as seis camadas, com `infra/mappers` levando os três `_mtm_apply_*` (um por LOB)
+  e o de-para do Hybrids.
+- **cognos** (133) → `domain`/`queries`/`commands`. Ele estava no catálogo do §10 como "desenho
+  fino" **sem ser** — quem o pegou foi a varredura por `engine.py` no fecho do lote, não a lista.
+  Lista escrita à mão envelhece; a varredura não.
+
+Três lições:
+
+1. **`domain` é puro de verdade** — nenhum dos 43 importa `routes`, e o guarda recusa. Função que
+   precisa de helper de plataforma (`_cc_cell`, `_acc_digits`, `_fi_build_line`, `_mtm_parse_num`)
+   NÃO é domain, por mais que pareça regra: ela desce para queries/commands/infra. Quando a única
+   dependência é o LOG, o domain usa `logging.getLogger('otc_tracker')` direto — mesmo objeto que
+   o `routes.log`, sem a dependência (cetip).
+2. **Montar caminho é infra.** O `_mtm_path_for` foi para o domain no primeiro corte e o pyflakes
+   o denunciou: ele monta sobre o `MTM_JSON_ROOT`, que é disco.
+3. **`col_offset` do AST é em BYTES UTF-8.** O `split_engine.py` (scratchpad) edita fonte por
+   posição, e uma linha com acento ANTES da referência desloca a coluna: o
+   `'Data Referência': … _mtm_gen_min_value` do MtM saiu recortado 1 caractere à esquerda. A
+   edição passou a ser feita sobre os bytes da linha; quem transformou isso em erro visível (em vez
+   de corrupção silenciosa) foi o `assert` de que o recorte é exatamente o nome esperado — o mesmo
+   cinto do `extract_platform.py` do §316.
+
+Repoints: check_fi_accrual, check_cem_sheets, check_cetip_bacc, check_b3_pattern, check_intrag_api,
+check_quoted_in_cents, check_mtm_api, check_fi_mid — todos pelo mesmo critério do §320 (o patch vai
+no módulo DONO; texto-âncora aponta para o arquivo que ficou com o corpo). O
+`routes._intrag_engine()` manteve o nome e passou a devolver `commands`.
+
+Suíte: 96/96, app com 377 rotas, zero `engine.py`.
+
+## §322 — a prod "travando para iniciar" não era erro de código (2026-08-27)
+
+Depois do merge do §318–§319 a instância do JPM parecia travar na subida; o Ctrl+C mostrava um
+traceback que morria dentro do import de uma feature — `weekly_escalation` numa tentativa,
+`forecast` na outra. **Módulo diferente a cada vez é a assinatura do problema**: não é aquele
+módulo, é o que estava na vez. O fim do traceback dizia tudo:
+
+```
+File "<frozen importlib._bootstrap_external>", line 1214, in _cache_bytecode
+File "<frozen importlib._bootstrap_external>", line 1239, in set_data
+File "<frozen importlib._bootstrap_external>", line 212, in _write_atomic
+KeyboardInterrupt
+```
+
+Ele estava GRAVANDO os `.pyc`. O código roda de um share, então o `__pycache__` de cada pasta é
+remoto, e o merge trouxe **181 arquivos `.py` novos ou alterados** — 181 compilações com gravação
+atômica via rede, uma por módulo, sem nada impresso no console. Um pull normal mexe em 2–5
+arquivos e ninguém percebe; este mexeu em 181.
+
+A correção é uma linha no `.bat` de subida: `PYTHONPYCACHEPREFIX` apontando para disco LOCAL. Ela
+foi para o `start-prod.bat` (o versionado); o `start-otc-tracker.bat`, que é o que a instância
+roda, mora no share e não está no repo — a linha tem de ser colada nele à mão. NÃO use
+`PYTHONDONTWRITEBYTECODE`: evita a escrita mas recompila tudo a cada subida, e a instância
+reinicia várias vezes por dia.

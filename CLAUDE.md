@@ -2176,14 +2176,12 @@ features/<nome>/
 linhas (−46%).** O catálogo, com a fronteira decidida de cada uma no docstring
 do próprio `__init__.py`:
 
-- **Desenho fino** (domain/queries/commands/infra): `support`, `onboarding`,
-  `reconciliation_fxo`, `quotes`, `holidays`, `bacc`, `mt300`, `appver`,
-  `mdea`, `conf_escalation`, `daily_metric`, `weekly_escalation`, `recon_cgd`,
-  `boxscan`, `sigcoll`, `pcx`, `forecast`, `recon_comitente`, `recon_payrec`,
-  `cognos`.
-- **Verbatim** (`engine.py` + `entrypoint.py`, nomes internos preservados):
-  `deals_monitor`, `cetip`, `intrag`, `counterparty_details`, `mtm`,
-  `accrual`.
+- **Desenho fino** (domain/queries/commands/infra) — **TODAS as 43**, desde o
+  §321: não existe mais `engine.py` em feature nenhuma. As últimas sete a
+  serem separadas por dentro foram `deals_monitor` e `counterparty_details`
+  (§320) e `accrual`, `cetip`, `intrag`, `mtm` e `cognos` (§321) — este
+  último estava listado como desenho fino sem ser, e a varredura por
+  `engine.py` o pegou.
 - **Casca** (só as rotas; motores/stores continuam no `routes` como
   plataforma): `electronic_inventory`, `manual_confirmation`, `otm`, `latam`,
   `ndf_summary`, `operations_b3`, `other_products`, `file_interpreter`,
@@ -2349,8 +2347,32 @@ junto de `features/`, então as próximas fatias não o editam.
 linhas) é casca e plataforma miúda: sessão/authz-endpoints, o registro
 `_MAPPING_DEFS`, os leitores `_ndfc_*`/`_ndfsum_*`/`_ndfadv_*` da liquidação
 de NDF, o Daily Settlement (`_ds_*`), o wiring das features e os aliases. O
-trabalho que segue são as **seis separações internas dos verbatim**
-(deals_monitor, cetip, intrag, counterparty_details, mtm, accrual).
+trabalho que segue é o desenho fino das camadas onde ele ainda for raso — a
+fila de EXTRAÇÕES acabou. As sete separações internas saíram no §320
+(`deals_monitor`, `counterparty_details`) e no §321 (`accrual`, `cetip`,
+`intrag`, `mtm`, `cognos`), e com elas **não há mais `engine.py` no
+repositório**.
+
+O padrão que elas fixaram, e que vale para qualquer camada nova:
+
+- **toda travessia entre camadas é pelo ATRIBUTO do módulo**
+  (`queries._ndm_pending_blocks(...)`, `persistence._mtm_path_for(...)`),
+  nunca `from .queries import nome` — é o que deixa o espião do teste,
+  patchado no módulo DONO, interceptar também as chamadas que vêm de outra
+  camada. Chamada dentro da MESMA camada fica de graça (resolve pelos globals
+  do módulo);
+- **`domain` é puro de verdade**: nenhum dos 43 importa `routes` (o guarda
+  recusa), então função que precisa de helper de plataforma — `_cc_cell` para
+  ler célula, `_acc_digits`, `_fi_build_line`, `_mtm_parse_num` — mora em
+  `queries`/`commands`/`infra`, não no domain. Quando a única dependência é o
+  LOG, o domain usa `logging.getLogger('otc_tracker')` direto: é o mesmo
+  objeto que o `routes.log`, sem a dependência (foi o `cetip/domain.py`);
+- **montar caminho é infra, não regra**: `_mtm_path_for` parecia domínio e é
+  `infra/persistence` — ele monta sobre o `MTM_JSON_ROOT`;
+- **o gancho que o resto do app conhece não muda de nome**: o
+  `routes._intrag_engine()` continua se chamando assim e passou a devolver o
+  `commands` — os quatro nomes que o New Deals chama nele são todos de
+  escrita.
 
 O padrão da fase, que qualquer fatia futura repete:
 
@@ -2377,5 +2399,12 @@ O padrão da fase, que qualquer fatia futura repete:
   movidos, `check_notif_page_url` varrendo `platform/` junto das features, e
   `check_mc_notify` lendo `_push_notify` no arquivo novo.
 
-Em paralelo, os seis verbatim aceitam a separação interna em
-domain/queries/commands, uma por vez, com as redes que já os prendem.
+A ferramenta que fez as cinco separações do §321 é o `split_engine.py`
+(scratchpad da sessão): reparte um `engine.py` por AST, copia os corpos
+verbatim e reescreve só as referências CRUZADAS para `<camada>.<nome>`. Uma
+armadilha dele vale para qualquer ferramenta que edite fonte por posição: o
+`col_offset` do AST é em **bytes UTF-8**, não em caracteres — uma linha com
+acento antes da referência desloca a coluna, e a edição sai no lugar errado
+(foi o `'Data Referência': … _mtm_gen_min_value` do MtM). A edição é feita
+sobre os bytes da linha, e o `assert` de que o recorte é o nome esperado é o
+que transformou isso em erro em vez de corrupção silenciosa.
