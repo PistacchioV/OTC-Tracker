@@ -120,18 +120,95 @@
 
 #ob-monitor .ob-empty { padding: 2.2rem 1rem; text-align: center; color: var(--ins-secondary-color); font-size: .82rem; }
 
-/* A faixa de topo: o que a lista inteira diz em três números. */
-#ob-monitor .ob-sum {
-    display: flex; gap: 1.4rem; flex-wrap: wrap; align-items: baseline;
-    padding: .85rem 1.15rem; margin-bottom: 1rem;
+/* ── Os cards de contagem por status ─────────────────────────────────────
+   Um card por número, com o chip de ícone no padrão do app (o mesmo desenho
+   dos cards das mesas). Era uma faixa única de números soltos, e o Inactive
+   nem aparecia. */
+#ob-monitor .ob-stat {
+    display: flex; align-items: center; gap: .75rem;
+    padding: .85rem 1rem;
     background: var(--vr-card-bg, var(--ins-secondary-bg));
     border: 1px solid var(--vr-card-border, var(--ins-border-color));
     border-radius: var(--vr-card-radius, 18px);
     box-shadow: var(--vr-card-shadow, 0 4px 14px rgba(15, 23, 42, .06));
+    height: 100%;
+    transition: box-shadow 260ms var(--ob-ease), border-color 260ms var(--ob-ease);
 }
-#ob-monitor .ob-sum__n { font-size: 1.25rem; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--ins-body-color); }
-#ob-monitor .ob-sum__l { font-size: .7rem; text-transform: uppercase; letter-spacing: .04em; color: var(--ins-secondary-color); }
-#ob-monitor .ob-sum__db { margin-left: auto; font-size: .7rem; color: var(--ins-secondary-color); }
+@media (hover: hover) and (pointer: fine) {
+    #ob-monitor .ob-stat:hover {
+        box-shadow: var(--vr-card-shadow-hover, 0 18px 40px rgba(94, 92, 230, .14));
+    }
+    #ob-monitor .ob-stat:hover .ob-stat__ico { transform: scale(1.1) rotate(-4deg); }
+}
+#ob-monitor .ob-stat__ico {
+    width: 38px; height: 38px; flex: 0 0 auto; border-radius: 11px;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 1.1rem;
+    background: var(--vr-grad, linear-gradient(100deg, #0066cc, #5e5ce6 50%, #8b5cf6 80%, #d946ef));
+    box-shadow: 0 4px 12px rgba(94, 92, 230, .28);
+    transition: transform 260ms var(--ob-ease);
+}
+#ob-monitor .ob-stat--total   .ob-stat__ico { background: linear-gradient(100deg, #0066cc, #5e5ce6); box-shadow: 0 4px 12px rgba(0,102,204,.28); }
+#ob-monitor .ob-stat--pending .ob-stat__ico { background: linear-gradient(100deg, #b07500, #f7b84b); box-shadow: 0 4px 12px rgba(176,117,0,.28); }
+#ob-monitor .ob-stat--active  .ob-stat__ico { background: linear-gradient(100deg, #1a7f37, #34c759); box-shadow: 0 4px 12px rgba(26,127,55,.28); }
+#ob-monitor .ob-stat--inactive .ob-stat__ico { background: linear-gradient(100deg, #b3261e, #ff453a); box-shadow: 0 4px 12px rgba(179,38,30,.28); }
+#ob-monitor .ob-stat--cancel  .ob-stat__ico { background: linear-gradient(100deg, #374151, #6b7280); box-shadow: 0 4px 12px rgba(55,65,81,.28); }
+#ob-monitor .ob-stat__n { font-size: 1.35rem; font-weight: 800; letter-spacing: -.02em; font-variant-numeric: tabular-nums; color: var(--ins-body-color); line-height: 1.1; }
+#ob-monitor .ob-stat__l { font-size: .68rem; text-transform: uppercase; letter-spacing: .04em; color: var(--ins-secondary-color); }
+#ob-monitor #ob-dbline { font-size: .7rem; color: var(--ins-secondary-color); }
+
+/* ── As ações da fila ────────────────────────────────────────────────────
+   Legal anexa o Taxonomy num dropzone compacto; OTC abre o modal no clique;
+   CEM MO tem os dois botões (download e conclusão). */
+#ob-monitor .ob-item-drop {
+    display: flex; align-items: center; justify-content: center; gap: .4rem;
+    width: 100%; margin: .5rem 0 0; padding: .45rem .6rem; cursor: pointer;
+    font-size: .72rem; color: var(--ins-secondary-color);
+    border: 1.5px dashed var(--ins-border-color, #ced4da); border-radius: 8px;
+    background: var(--ins-tertiary-bg, #f8f9fa);
+    transition: border-color .15s ease, background .15s ease;
+}
+#ob-monitor .ob-item-drop i { font-size: .95rem; color: var(--vr-primary, #0066cc); }
+#ob-monitor .ob-item-drop:hover,
+#ob-monitor .ob-item-drop.is-over {
+    border-color: var(--vr-primary, #0066cc);
+    background: color-mix(in srgb, var(--vr-primary, #0066cc) 8%, transparent);
+}
+#ob-monitor .ob-item-drop.is-busy { opacity: .55; pointer-events: none; }
+#ob-monitor .ob-c-otc .ob-item { cursor: pointer; }
+#ob-monitor .ob-item__act { display: flex; gap: .4rem; margin-top: .5rem; }
+#ob-monitor .ob-item__act .btn {
+    font-size: .7rem; padding: .22rem .55rem; line-height: 1.35;
+    border-radius: 8px; flex: 1 1 auto;
+}
+
+#ob-monitor .ob-empty { padding: 2.2rem 1rem; text-align: center; color: var(--ins-secondary-color); font-size: .82rem; }
+
+/* O modal do OTC segue o padrão da casa (liquid-glass, header py-2, fs-6);
+   o dropzone é o MESMO desenho do New Request. */
+#ob-otc-modal .ob-otc-hint { font-size: .7rem; color: var(--ins-secondary-color); margin-bottom: .3rem; }
+#ob-otc-modal .ob-req-drop {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: .3rem; width: 100%; min-height: 84px; cursor: pointer; margin: 0;
+    padding: .8rem 1rem; text-align: center;
+    border: 1.5px dashed var(--ins-border-color, #ced4da);
+    border-radius: 10px; background: var(--ins-tertiary-bg, #f8f9fa);
+    transition: border-color .15s ease, background .15s ease;
+}
+#ob-otc-modal .ob-req-drop i { font-size: 1.35rem; color: var(--vr-primary, #0066cc); }
+#ob-otc-modal .ob-req-drop:hover,
+#ob-otc-modal .ob-req-drop.is-over {
+    border-color: var(--vr-primary, #0066cc);
+    background: color-mix(in srgb, var(--vr-primary, #0066cc) 8%, transparent);
+}
+#ob-otc-modal .ob-req-drop.has-file {
+    border-style: solid; border-color: var(--ins-success, #198754);
+    background: color-mix(in srgb, var(--ins-success, #198754) 8%, transparent);
+}
+#ob-otc-modal .ob-req-drop.has-file i { color: var(--ins-success, #198754); }
+#ob-otc-modal .ob-req-drop.is-invalid,
+#ob-otc-modal .form-control.is-invalid { border-color: var(--ins-danger, #d93025); }
+#ob-otc-modal .ob-otc-file-name { font-size: .72rem; font-weight: 600; word-break: break-all; }
 </style>
 {% endblock extra_css %}
 
@@ -146,27 +223,113 @@
             <i data-lucide="building-2" style="width:20px;height:20px;flex-shrink:0;" class="text-primary me-1"></i>
             <h4 class="mb-0 fw-semibold" data-lang="ob-title">Onboarding Overview</h4>
         </div>
-    </div>
-
-    <div class="ob-sum">
-        <div><div class="ob-sum__n" id="ob-total">0</div><div class="ob-sum__l" data-lang="ob-sum-total">Documents</div></div>
-        <div><div class="ob-sum__n" id="ob-pending">0</div><div class="ob-sum__l" data-lang="ob-sum-pending">Pending</div></div>
-        <div><div class="ob-sum__n" id="ob-active">0</div><div class="ob-sum__l" data-lang="ob-sum-active">Active</div></div>
-        <div><div class="ob-sum__n" id="ob-closed">0</div><div class="ob-sum__l" data-lang="ob-sum-closed">Closed</div></div>
-        <div class="ob-sum__db">
-            <button type="button" class="btn btn-sm btn-primary bg-gradient btn-toolbar-all mb-2"
+        <div class="text-end d-flex align-items-center gap-2">
+            <a href="/onboarding/tracking-docs" class="btn btn-sm btn-soft-primary btn-toolbar-all">
+                <i class="ti ti-table me-1"></i><span data-lang="ob-open-tracking">Open Tracking Docs</span>
+            </a>
+            <button type="button" class="btn btn-sm btn-primary bg-gradient btn-toolbar-all"
                     id="ob-new-request">
                 <i class="ti ti-file-plus me-1"></i><span data-lang="ob-new-request">New Request</span>
             </button>
-            <a href="/onboarding/tracking-docs" class="text-decoration-none d-block">
-                <i class="ti ti-table"></i> <span data-lang="ob-open-tracking">Open Tracking Docs</span>
-            </a>
-            <div id="ob-dbline" class="mt-1"></div>
         </div>
     </div>
 
+    {# A contagem por status: um card por número, com ícone — o padrão dos
+       stat-cards do app. O Inactive tem card próprio: contrato que deixou de
+       valer não é a mesma coisa que o cancelado, e somados num "Closed" a
+       diferença sumia. #}
+    <div class="row g-3 mb-3">
+        <div class="col-6 col-md-4 col-xl">
+            <div class="ob-stat ob-stat--total">
+                <span class="ob-stat__ico"><i class="ti ti-files"></i></span>
+                <div><div class="ob-stat__n" id="ob-total">0</div>
+                     <div class="ob-stat__l" data-lang="ob-sum-total">Documents</div></div>
+            </div>
+        </div>
+        <div class="col-6 col-md-4 col-xl">
+            <div class="ob-stat ob-stat--pending">
+                <span class="ob-stat__ico"><i class="ti ti-hourglass-high"></i></span>
+                <div><div class="ob-stat__n" id="ob-pending">0</div>
+                     <div class="ob-stat__l" data-lang="ob-sum-pending">Pending</div></div>
+            </div>
+        </div>
+        <div class="col-6 col-md-4 col-xl">
+            <div class="ob-stat ob-stat--active">
+                <span class="ob-stat__ico"><i class="ti ti-circle-check"></i></span>
+                <div><div class="ob-stat__n" id="ob-active">0</div>
+                     <div class="ob-stat__l" data-lang="ob-sum-active">Active</div></div>
+            </div>
+        </div>
+        <div class="col-6 col-md-4 col-xl">
+            <div class="ob-stat ob-stat--inactive">
+                <span class="ob-stat__ico"><i class="ti ti-circle-off"></i></span>
+                <div><div class="ob-stat__n" id="ob-inactive">0</div>
+                     <div class="ob-stat__l" data-lang="ob-sum-inactive">Inactive</div></div>
+            </div>
+        </div>
+        <div class="col-6 col-md-4 col-xl">
+            <div class="ob-stat ob-stat--cancel">
+                <span class="ob-stat__ico"><i class="ti ti-ban"></i></span>
+                <div><div class="ob-stat__n" id="ob-cancelled">0</div>
+                     <div class="ob-stat__l" data-lang="ob-sum-cancelled">Cancelled</div></div>
+            </div>
+        </div>
+    </div>
+    <div id="ob-dbline" class="mb-2"></div>
+
     <div class="row g-3" id="ob-cards"></div>
 
+</div>
+
+{# O modal da mesa de OTC: o CGD abonado + Issue Date + Signature Date + o B3
+   ID da LE da solicitação. Padrão da casa (liquid-glass, header py-2, fs-6,
+   botões de ícone no rodapé). #}
+<div class="modal fade" id="ob-otc-modal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content liquid-glass">
+      <div class="modal-header py-2">
+        <h5 class="modal-title fs-6"><i class="ti ti-building-bank me-1"></i>
+          <span data-lang="ob-otc-title">OTC — Signed CGD</span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="fw-semibold mb-2" id="ob-otc-client" style="font-size:.85rem;"></div>
+        <div class="row g-3">
+          <div class="col-12">
+            <label class="form-label fs-xs text-muted mb-1" data-lang="ob-otc-file">Signed CGD (abonado)</label>
+            <label class="ob-req-drop" for="ob-otc-fileinput" id="ob-otc-drop">
+              <i class="ti ti-cloud-upload"></i>
+              <span class="ob-otc-hint" data-lang="ob-req-drop">Drop the file here or click to choose</span>
+              <span class="ob-otc-file-name" id="ob-otc-filename"></span>
+            </label>
+            <input type="file" class="d-none" id="ob-otc-fileinput"
+                   accept=".pdf,.doc,.docx,.msg,.eml,.png,.jpg,.jpeg,.zip">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label fs-xs text-muted mb-1" data-lang="ob-otc-issue">Issue Date</label>
+            <input type="text" class="form-control form-control-sm" id="ob-otc-issue"
+                   placeholder="dd/mm/aaaa" autocomplete="off">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label fs-xs text-muted mb-1" data-lang="ob-otc-sig">Signature Date</label>
+            <input type="text" class="form-control form-control-sm" id="ob-otc-sig"
+                   placeholder="dd/mm/aaaa" autocomplete="off">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label fs-xs text-muted mb-1" id="ob-otc-b3-label">B3 ID - JPM</label>
+            <input type="text" class="form-control form-control-sm" id="ob-otc-b3" autocomplete="off">
+          </div>
+        </div>
+        <div class="text-danger d-none mt-2" id="ob-otc-err" style="font-size:.75rem;"></div>
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-sm btn-danger" data-bs-dismiss="modal"
+                title="Cancel"><i class="ti ti-x"></i></button>
+        <button type="button" class="btn btn-sm btn-success" id="ob-otc-save"
+                title="Save"><i class="ti ti-device-floppy"></i></button>
+      </div>
+    </div>
+  </div>
 </div>
 
 {% include 'partials/onboarding-new-request.html' %}
@@ -186,24 +349,54 @@
     /* i18n do texto montado em JS. O I18nManager traduz os [data-lang] UMA vez,
        no load: o que o JS insere depois nunca passa por ele. */
     var _TRANS = {
-        en: { banking: 'Banking', legal: 'Legal', otc: 'OTC', mo: 'CEM MO',
+        en: { legal: 'Legal', otc: 'OTC', mo: 'CEM MO',
               empty: 'Nothing pending with this desk',
               nodb: 'The CGD database has not been imported yet.',
               nodbhint: 'Run scripts/import_cgd_sharepoint.py with the SharePoint export.',
               docs: 'document(s)', days: 'business day(s)', noage: 'no request date',
-              derived: 'derived', requested: 'Requested' },
-        br: { banking: 'Banking', legal: 'Legal', otc: 'OTC', mo: 'CEM MO',
+              derived: 'derived', requested: 'Requested',
+              attach: 'Attach Taxonomy (Excel or PDF)', uploading: 'Uploading…',
+              taxDone: 'Taxonomy attached', otcDone: 'Signed CGD registered',
+              download: 'Download', complete: 'Complete',
+              missing: 'Fill in the file, the two dates and the B3 ID.',
+              moTitle: 'Conclude this document?',
+              moTxt: 'The MO stamp and the conclusion date are written and the document leaves the queues.',
+              moDone: 'Document concluded', yes: 'Yes, conclude', no: 'Cancel',
+              noFiles: 'No Taxonomy or signed CGD found in the Electronic Inventory for this client.',
+              upFailed: 'Could not save the file to the Electronic Inventory.',
+              failed: 'Could not update the document.' },
+        br: { legal: 'Legal', otc: 'OTC', mo: 'CEM MO',
               empty: 'Nada pendente nesta mesa',
               nodb: 'O banco de CGDs ainda não foi importado.',
               nodbhint: 'Rode scripts/import_cgd_sharepoint.py com a exportação do SharePoint.',
               docs: 'documento(s)', days: 'dia(s) útil(eis)', noage: 'sem data de solicitação',
-              derived: 'derivado', requested: 'Solicitado' },
-        es: { banking: 'Banking', legal: 'Legal', otc: 'OTC', mo: 'CEM MO',
+              derived: 'derivado', requested: 'Solicitado',
+              attach: 'Anexar Taxonomy (Excel ou PDF)', uploading: 'Enviando…',
+              taxDone: 'Taxonomy anexado', otcDone: 'CGD abonado registrado',
+              download: 'Download', complete: 'Concluir',
+              missing: 'Preencha o arquivo, as duas datas e o B3 ID.',
+              moTitle: 'Concluir este documento?',
+              moTxt: 'O carimbo do MO e a data de conclusão são gravados e o documento sai das filas.',
+              moDone: 'Documento concluído', yes: 'Sim, concluir', no: 'Cancelar',
+              noFiles: 'Nenhum Taxonomy ou CGD abonado encontrado no Electronic Inventory deste cliente.',
+              upFailed: 'Não consegui gravar o arquivo no Electronic Inventory.',
+              failed: 'Não consegui atualizar o documento.' },
+        es: { legal: 'Legal', otc: 'OTC', mo: 'CEM MO',
               empty: 'Nada pendiente en esta mesa',
               nodb: 'La base de CGD aún no fue importada.',
               nodbhint: 'Ejecute scripts/import_cgd_sharepoint.py con la exportación de SharePoint.',
               docs: 'documento(s)', days: 'día(s) hábil(es)', noage: 'sin fecha de solicitud',
-              derived: 'derivado', requested: 'Solicitado' }
+              derived: 'derivado', requested: 'Solicitado',
+              attach: 'Adjuntar Taxonomy (Excel o PDF)', uploading: 'Enviando…',
+              taxDone: 'Taxonomy adjuntado', otcDone: 'CGD firmado registrado',
+              download: 'Download', complete: 'Concluir',
+              missing: 'Complete el archivo, las dos fechas y el B3 ID.',
+              moTitle: '¿Concluir este documento?',
+              moTxt: 'El sello del MO y la fecha de conclusión se graban y el documento sale de las filas.',
+              moDone: 'Documento concluido', yes: 'Sí, concluir', no: 'Cancelar',
+              noFiles: 'Ningún Taxonomy o CGD firmado encontrado en el Electronic Inventory de este cliente.',
+              upFailed: 'No se pudo guardar el archivo en el Electronic Inventory.',
+              failed: 'No se pudo actualizar el documento.' }
     };
     function lang() {
         try { return localStorage.getItem('__OTC_TRACKER_LANG__') || 'en'; }
@@ -217,9 +410,9 @@
     }
 
     // Mesa → classe do chip e do badge. A ordem do array vem do servidor
-    // (`cgd_docs.STAGES`), então o mapa aqui é só de aparência.
+    // (`cgd_docs.STAGES`), então o mapa aqui é só de aparência. O Banking
+    // SAIU: a ação dele é o próprio New Request.
     var SKIN = {
-        'Banking': { cls: 'ob-c-bank',  badge: 'ob-badge--bank',  icon: 'ti-file-plus', key: 'banking' },
         'Legal':   { cls: 'ob-c-legal', badge: 'ob-badge--legal', icon: 'ti-gavel', key: 'legal' },
         'OTC':     { cls: 'ob-c-otc',   badge: 'ob-badge--otc',   icon: 'ti-building-bank', key: 'otc' },
         'CEM MO':  { cls: 'ob-c-mo',    badge: 'ob-badge--mo',    icon: 'ti-clipboard-check', key: 'mo' }
@@ -232,7 +425,40 @@
         return '';
     }
 
-    function item(it, skin) {
+    // A contraparte do Electronic Inventory é a PRIMEIRA entidade da Razão
+    // Social — a mesma regra do modal de New Request (a pasta é de UM cliente).
+    function contraparte(nome) {
+        return String(nome || '').split(/[;\n]/)[0].trim();
+    }
+
+    // As ações de cada mesa, dentro do item. `data-*` carrega o que o handler
+    // delegado precisa: id da linha, cliente da pasta e a LE (o rótulo do B3 ID
+    // do modal do OTC sai dela).
+    function acoes(it, stage) {
+        var attrs = ' data-id="' + esc(it.id) + '" data-client="' + esc(contraparte(it.client)) +
+                    '" data-le="' + esc(it.legal_entity) + '"';
+        if (stage === 'Legal') {
+            // Dropzone do Taxonomy: o input escondido guarda o arquivo, a label
+            // é a superfície de clique e de soltar — o mesmo desenho do
+            // New Request.
+            return '<label class="ob-item-drop ob-tax-drop"' + attrs + '>' +
+                     '<i class="ti ti-cloud-upload"></i>' +
+                     '<span>' + esc(t('attach')) + '</span>' +
+                     '<input type="file" class="d-none ob-tax-file" accept=".pdf,.xls,.xlsx">' +
+                   '</label>';
+        }
+        if (stage === 'CEM MO') {
+            return '<div class="ob-item__act">' +
+                '<button type="button" class="btn btn-info bg-gradient ob-mo-down"' + attrs + '>' +
+                  '<i class="ti ti-download me-1"></i>' + esc(t('download')) + '</button>' +
+                '<button type="button" class="btn btn-success bg-gradient ob-mo-done"' + attrs + '>' +
+                  '<i class="ti ti-check me-1"></i>' + esc(t('complete')) + '</button>' +
+              '</div>';
+        }
+        return '';
+    }
+
+    function item(it, skin, stage) {
         var idade = (typeof it.aging === 'number')
             ? esc(it.aging) + ' ' + esc(t('days'))
             : esc(t('noage'));
@@ -241,7 +467,13 @@
         var marca = it.derived
             ? ' <span class="ob-badge ob-badge--derived">' + esc(t('derived')) + '</span>'
             : '';
-        return '<div class="ob-item">' +
+        // No card do OTC o ITEM inteiro abre o modal — os data-* vão no próprio
+        // item para o handler delegado não depender de um botão interno.
+        var attrs = (stage === 'OTC')
+            ? ' data-id="' + esc(it.id) + '" data-client="' + esc(contraparte(it.client)) +
+              '" data-le="' + esc(it.legal_entity) + '" data-cli-full="' + esc(it.client) + '"'
+            : '';
+        return '<div class="ob-item' + (stage === 'OTC' ? ' ob-otc-item' : '') + '"' + attrs + '>' +
             '<div class="ob-item__top">' +
               '<span class="ob-item__cli" title="' + esc(it.client) + '">' + esc(it.client || '—') + '</span>' +
               '<span class="ob-item__age ' + ageClass(it.aging) + '">' + idade + '</span>' +
@@ -251,18 +483,17 @@
               '<span class="ob-badge ' + skin.badge + '">' + esc(it.status || '—') + '</span>' + marca +
               (it.requested ? '<span class="ob-item__meta">' + esc(t('requested')) + ': ' + esc(it.requested) + '</span>' : '') +
             '</div>' +
+            acoes(it, stage) +
           '</div>';
     }
 
     function card(c) {
         var skin = SKIN[c.stage] || { cls: '', badge: 'ob-badge--wait', icon: 'ti-file-text', key: '' };
         var lista = c.items.length
-            ? c.items.map(function (i) { return item(i, skin); }).join('')
+            ? c.items.map(function (i) { return item(i, skin, c.stage); }).join('')
             : '<div class="ob-empty">' + esc(t('empty')) + '</div>';
-        // Quatro mesas: `xl-3` para as quatro caberem numa linha só. Com `xl-4`
-        // a quarta descia sozinha e a esteira deixava de se ler da esquerda
-        // para a direita.
-        return '<div class="col-12 col-md-6 col-xl-3">' +
+        // Três mesas: `xl-4` para as três caberem numa linha só.
+        return '<div class="col-12 col-md-6 col-xl-4">' +
             '<div class="ob-card ' + skin.cls + '">' +
               '<div class="ob-card__head">' +
                 '<span class="ob-card__ico"><i class="ti ' + skin.icon + '"></i></span>' +
@@ -286,14 +517,14 @@
             .then(function (r) { return r.json(); })
             .then(function (j) {
                 if (!j || !j.success) { return; }
-                // Os quatro números vêm do servidor e FECHAM (total = pendentes +
-                // ativos + encerrados). O `pending` era calculado aqui como
-                // total − ativos, e por isso contava junto o Inactive e o
-                // Cancelado, que não são pendência de ninguém.
+                // Os números vêm do servidor e FECHAM (total = pendentes +
+                // ativos + inativos + cancelados). O `pending` conta DOCUMENTOS
+                // distintos — o mesmo documento pode estar em duas filas.
                 document.getElementById('ob-total').textContent = j.total || 0;
                 document.getElementById('ob-pending').textContent = j.pending || 0;
                 document.getElementById('ob-active').textContent = j.active || 0;
-                document.getElementById('ob-closed').textContent = j.closed || 0;
+                document.getElementById('ob-inactive').textContent = j.inactive || 0;
+                document.getElementById('ob-cancelled').textContent = j.cancelled || 0;
                 // Banco ausente é um estado, não um erro: a tela diz o que
                 // fazer em vez de mostrar três filas vazias que parecem "não há
                 // nada pendente".
@@ -306,6 +537,273 @@
             })
             .catch(function () { /* silencioso: a faixa de topo já fica em zero */ });
     }
+
+    // ── Anexos: sobem pelo Electronic Inventory, carimbam depois ───────────
+    // A MESMA ordem do New Request: o upload é a parte que depende do share e
+    // é a que falha; carimbar antes deixaria a etapa fechada sem o papel.
+    function hoje() {
+        var d = new Date();
+        return ('0' + d.getDate()).slice(-2) + '/' +
+               ('0' + (d.getMonth() + 1)).slice(-2) + '/' + d.getFullYear();
+    }
+
+    function subeArquivo(cliente, subtipo, arq) {
+        var fd = new FormData();
+        fd.append('client', cliente);
+        fd.append('type', 'Transactional');
+        fd.append('subtype', subtipo);
+        fd.append('date', hoje());
+        fd.append('file', arq);
+        return fetch('/api/electronic-inventory/upload', {
+            method: 'POST', credentials: 'same-origin', body: fd
+        }).then(function (r) { return r.json(); })
+          .then(function (j) {
+              if (j && j.success) { return j; }
+              throw new Error((j && j.message) || 'upload');
+          });
+    }
+
+    function carimba(payload) {
+        return fetch('/api/onboarding/docs/stamp', {
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        }).then(function (r) { return r.json(); })
+          .then(function (j) {
+              if (j && j.success) { return j; }
+              throw new Error((j && j.error) || 'stamp');
+          });
+    }
+
+    function falha(msg, e) {
+        var extra = (e && e.message && ['upload', 'stamp'].indexOf(e.message) === -1)
+            ? ' ' + e.message : '';
+        if (window.Swal) {
+            Swal.fire({ icon: 'error', title: msg + extra, confirmButtonColor: '#0066cc' });
+        }
+    }
+
+    // ── Legal: o dropzone do Taxonomy ──────────────────────────────────────
+    // Delegado no documento: os itens são reescritos a cada load().
+    function taxUpload(label, arq) {
+        if (!arq) { return; }
+        label.classList.add('is-busy');
+        var span = label.querySelector('span');
+        if (span) { span.textContent = t('uploading'); }
+        subeArquivo(label.getAttribute('data-client'), 'CGD TAXONOMY', arq)
+            .then(function () { return carimba({ id: label.getAttribute('data-id'), action: 'taxonomy' }); })
+            .then(function () {
+                if (window.Swal) {
+                    Swal.fire({ icon: 'success', title: t('taxDone'), timer: 1500,
+                                showConfirmButton: false });
+                }
+                load();
+            })
+            .catch(function (e) { falha(t('upFailed'), e); load(); });
+    }
+
+    document.addEventListener('change', function (e) {
+        if (!e.target.classList || !e.target.classList.contains('ob-tax-file')) { return; }
+        taxUpload(e.target.closest('.ob-tax-drop'), e.target.files && e.target.files[0]);
+    });
+    ['dragenter', 'dragover'].forEach(function (ev) {
+        document.addEventListener(ev, function (e) {
+            var d = e.target.closest && e.target.closest('.ob-tax-drop');
+            if (!d) { return; }
+            e.preventDefault(); e.stopPropagation();
+            d.classList.add('is-over');
+        });
+    });
+    document.addEventListener('dragleave', function (e) {
+        var d = e.target.closest && e.target.closest('.ob-tax-drop');
+        if (d) { d.classList.remove('is-over'); }
+    });
+    document.addEventListener('drop', function (e) {
+        var d = e.target.closest && e.target.closest('.ob-tax-drop');
+        if (!d) { return; }
+        e.preventDefault(); e.stopPropagation();
+        d.classList.remove('is-over');
+        var dt = e.dataTransfer;
+        if (dt && dt.files && dt.files.length) { taxUpload(d, dt.files[0]); }
+    });
+
+    // ── OTC: o modal do CGD abonado ────────────────────────────────────────
+    var otcModal = null;
+    var otcAtual = null;      // {id, client, le}
+    var otcEl = document.getElementById('ob-otc-modal');
+
+    function abreOtc(el) {
+        otcAtual = { id: el.getAttribute('data-id'),
+                     client: el.getAttribute('data-client'),
+                     le: el.getAttribute('data-le') || '' };
+        document.getElementById('ob-otc-client').textContent =
+            el.getAttribute('data-cli-full') || otcAtual.client;
+        // O rótulo do B3 ID acompanha a LE da solicitação: CHASE = MGT, o
+        // Banco (default do formulário) = JPM — a mesma regra do servidor.
+        var mgt = (otcAtual.le || '').toUpperCase().indexOf('CHASE') !== -1;
+        document.getElementById('ob-otc-b3-label').textContent = mgt ? 'B3 ID - MGT' : 'B3 ID - JPM';
+        ['ob-otc-issue', 'ob-otc-sig', 'ob-otc-b3'].forEach(function (id) {
+            var i = document.getElementById(id);
+            i.value = ''; i.classList.remove('is-invalid');
+        });
+        var fi = document.getElementById('ob-otc-fileinput');
+        fi.value = '';
+        pintaOtcDrop();
+        // dd/mm/aaaa com flatpickr (global no vendors.min.js); sem ele o campo
+        // degrada para texto — nunca `<input type=date>` visível (locale do
+        // sistema, mm/dd no Windows do JP).
+        if (typeof flatpickr !== 'undefined') {
+            ['ob-otc-issue', 'ob-otc-sig'].forEach(function (id) {
+                var el2 = document.getElementById(id);
+                if (!el2._flatpickr) {
+                    flatpickr(el2, { dateFormat: 'd/m/Y', allowInput: true, disableMobile: true });
+                } else { el2._flatpickr.clear(); }
+            });
+        }
+        var err = document.getElementById('ob-otc-err');
+        err.classList.add('d-none'); err.textContent = '';
+        if (!otcModal && window.bootstrap) { otcModal = new bootstrap.Modal(otcEl); }
+        if (otcModal) { otcModal.show(); }
+    }
+
+    function pintaOtcDrop() {
+        var fi = document.getElementById('ob-otc-fileinput');
+        var drop = document.getElementById('ob-otc-drop');
+        var f = fi.files && fi.files[0];
+        drop.classList.toggle('has-file', !!f);
+        document.getElementById('ob-otc-filename').textContent = f ? f.name : '';
+        if (f) { drop.classList.remove('is-invalid'); }
+    }
+
+    document.addEventListener('click', function (e) {
+        var it = e.target.closest && e.target.closest('.ob-otc-item');
+        if (it) { abreOtc(it); }
+    });
+    (function () {
+        var fi = document.getElementById('ob-otc-fileinput');
+        var drop = document.getElementById('ob-otc-drop');
+        fi.addEventListener('change', pintaOtcDrop);
+        ['dragenter', 'dragover'].forEach(function (ev) {
+            drop.addEventListener(ev, function (e) {
+                e.preventDefault(); e.stopPropagation();
+                drop.classList.add('is-over');
+            });
+        });
+        ['dragleave', 'drop'].forEach(function (ev) {
+            drop.addEventListener(ev, function (e) {
+                e.preventDefault(); e.stopPropagation();
+                drop.classList.remove('is-over');
+            });
+        });
+        drop.addEventListener('drop', function (e) {
+            var dt = e.dataTransfer;
+            if (!dt || !dt.files || !dt.files.length) { return; }
+            var lista = new DataTransfer();
+            lista.items.add(dt.files[0]);
+            fi.files = lista.files;
+            pintaOtcDrop();
+        });
+    })();
+
+    document.getElementById('ob-otc-save').addEventListener('click', function () {
+        if (!otcAtual) { return; }
+        var fi = document.getElementById('ob-otc-fileinput');
+        var arq = fi.files && fi.files[0];
+        var issue = document.getElementById('ob-otc-issue');
+        var sig = document.getElementById('ob-otc-sig');
+        var b3 = document.getElementById('ob-otc-b3');
+        var falta = 0;
+        document.getElementById('ob-otc-drop').classList.toggle('is-invalid', !arq);
+        [issue, sig, b3].forEach(function (i) {
+            var vazio = !String(i.value || '').trim();
+            i.classList.toggle('is-invalid', vazio);
+            if (vazio) { falta++; }
+        });
+        var err = document.getElementById('ob-otc-err');
+        if (!arq || falta) {
+            err.textContent = t('missing');
+            err.classList.remove('d-none');
+            return;
+        }
+        err.classList.add('d-none');
+        var btn = this;
+        btn.disabled = true;
+        subeArquivo(otcAtual.client, 'CGD ABONADO', arq)
+            .then(function () {
+                return carimba({ id: otcAtual.id, action: 'otc',
+                                 issue_date: issue.value.trim(),
+                                 signature_date: sig.value.trim(),
+                                 b3_id: b3.value.trim() });
+            })
+            .then(function () {
+                btn.disabled = false;
+                if (otcModal) { otcModal.hide(); }
+                if (window.Swal) {
+                    Swal.fire({ icon: 'success', title: t('otcDone'), timer: 1500,
+                                showConfirmButton: false });
+                }
+                load();
+            })
+            .catch(function (e) {
+                btn.disabled = false;
+                falha(t('failed'), e);
+            });
+    });
+
+    // ── CEM MO: baixar os dois papéis e concluir ───────────────────────────
+    // O Download procura no Electronic Inventory da contraparte o Taxonomy e o
+    // CGD ABONADO mais recentes — os nomes que os dois uploads acima gravaram.
+    document.addEventListener('click', function (e) {
+        var b = e.target.closest && e.target.closest('.ob-mo-down');
+        if (!b) { return; }
+        var cliente = b.getAttribute('data-client');
+        fetch('/api/electronic-inventory/documents?client=' + encodeURIComponent(cliente) +
+              '&type=Transactional', { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (j) {
+                var docs = (j && j.documents) || [];
+                function ultimo(marca) {
+                    var achados = docs.filter(function (d) {
+                        return String(d.name || '').toUpperCase().indexOf(marca) !== -1;
+                    });
+                    return achados.length ? achados[0] : null;   // já vêm por mtime desc
+                }
+                var alvos = [ultimo('CGD TAXONOMY'), ultimo('CGD ABONADO')]
+                    .filter(function (x) { return x; });
+                if (!alvos.length) {
+                    if (window.Swal) { Swal.fire({ icon: 'warning', title: t('noFiles'),
+                                                   confirmButtonColor: '#0066cc' }); }
+                    return;
+                }
+                alvos.forEach(function (d) {
+                    window.open('/api/electronic-inventory/file?client=' +
+                                encodeURIComponent(cliente) + '&rel=' +
+                                encodeURIComponent(d.rel) + '&download=1', '_blank');
+                });
+            });
+    });
+
+    document.addEventListener('click', function (e) {
+        var b = e.target.closest && e.target.closest('.ob-mo-done');
+        if (!b) { return; }
+        var id = b.getAttribute('data-id');
+        var vai = function () {
+            carimba({ id: id, action: 'mo' })
+                .then(function () {
+                    if (window.Swal) {
+                        Swal.fire({ icon: 'success', title: t('moDone'), timer: 1500,
+                                    showConfirmButton: false });
+                    }
+                    load();
+                })
+                .catch(function (e2) { falha(t('failed'), e2); });
+        };
+        if (!window.Swal) { if (window.confirm(t('moTitle'))) { vai(); } return; }
+        Swal.fire({ icon: 'question', title: t('moTitle'), text: t('moTxt'),
+                    showCancelButton: true, confirmButtonText: t('yes'),
+                    cancelButtonText: t('no'), confirmButtonColor: '#1a8a4a' })
+            .then(function (r) { if (r.isConfirmed) { vai(); } });
+    });
 
     document.addEventListener('DOMContentLoaded', load);
 })();

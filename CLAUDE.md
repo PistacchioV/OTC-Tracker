@@ -660,7 +660,13 @@ São **43** mappings hoje: `currency-base`, `interbook-ndf`, `publisher-ndf`,
 `dce-type-of-swap`, `dce-type-of-verification`, `dce-functionality`,
 `dce-underlying-asset-category`, `dce-underlying-asset`), mais os quatro do CGD
 (`cgd-stage`, `cgd-b3-participante`, `cgd-garantidor`, `cgd-conta-encerrada` —
-os três últimos eram abas do `Auxiliar.xlsx` do batimento) — seeds vazios com os
+os três últimos eram abas do `Auxiliar.xlsx` do batimento, e as COLUNAS deles
+seguem a ordem e os nomes das abas: no `cgd-b3-participante` — rótulo
+**CGD — B3 Participants** — Razão Social · Nome Simplificado · CNPJ · **Conta**,
+com as CHAVES antigas preservadas porque o motor da recon lê por elas; no
+`cgd-garantidor` a coluna `NOME` virou `EMPRESA` com `upgrade` na leitura.
+`scripts/import_cgd_auxiliar.py` carrega as três abas nos JSONs — idempotente,
+reescreve cada cadastro) — seeds vazios com os
 JSONs versionados, como os dois Quotes (o `dce-underlying-asset` tem ~14 mil
 linhas). As colunas dos `dce-*` carregam `lang` (chave i18n): o `colLabel` do
 mapping.html traduz cabeçalho, filtro, export e modal — coluna sem `lang`
@@ -1067,24 +1073,36 @@ estão:
 - **O formulário de abertura vive no SERVIDOR** (`REQUEST_FORM`): rótulo, coluna
   do banco, tipo, obrigatoriedade e dica de cada campo. Dele saem DUAS coisas — o
   modal de *New Request* (partial `partials/onboarding-new-request.html`, incluído
-  pelo Overview e pelo Tracking Docs) e o `REQUEST_FIELDS` que segura o documento
-  no Banking. Escrito no template, o dia em que um campo deixasse de ser
-  obrigatório o modal pararia de pedi-lo e a fila continuaria cobrando. O
-  `REQUEST_FIELDS` fica ANTES do `STAGE_STAMP` no módulo, que o consome na
-  leitura: definido depois, o Banking nasceria com a lista vazia e a fila ficaria
-  permanentemente zerada, sem erro nenhum. E o `check_cgd_docs` confere que toda
-  coluna citada no formulário EXISTE — nome errado ali não dá erro, o
-  `update_row` ignora a chave e o campo preenchido some no caminho.
-- **A esteira tem QUATRO mesas, e o `Banking` é a PRIMEIRA**: Banking · Legal ·
-  OTC · CEM MO. Banking é quem abre a solicitação, e o documento sai de lá quando
-  os campos **obrigatórios do formulário** estão preenchidos (`REQUEST_FIELDS`:
-  `Data Solicitação`, `Razão Social`, `CNPJ`, `Signature Type` — os `*` do
-  formulário; `Grupo` e `Dominio` são opcionais e cobrá-los deixaria na fila uma
-  solicitação que já pode seguir). O nome da coluna do banco nem sempre é o do
-  formulário: `CGD - Solicitação` é a `Data Solicitação` e `CGD - Tipo de
-  Assinatura` é o `Signature Type`. Era um cartão só, `Banking OTC`, e ele juntava
-  duas mesas que trabalham em momentos diferentes — a que pede o contrato e a que
-  o confere depois de assinado.
+  pelo Overview e pelo Tracking Docs) e o `REQUEST_FIELDS` que a validação do
+  Save exige. Escrito no template, o dia em que um campo deixasse de ser
+  obrigatório o modal pararia de pedi-lo. O formulário pede também Document Type
+  (o domínio é o `DOC_TYPES` = Transactional Type do EI), a Legal Entity
+  (`LEGAL_ENTITIES`, Banco por default), ECI/SPN/CASID/UCN, e dois CHECKBOXES
+  (gravam Yes/No): Financial Institution e o *Client Domain in the Appendix* —
+  este com coluna PSEUDO `_domain_in_appendix` (começa com `_`, não persiste;
+  só liga o `enabled_by` do Dominio: marcado, o campo trava e grava `Included
+  in the Appendix`; desmarcado, digitar o domínio vira obrigatório). E o
+  `check_cgd_docs` confere que toda coluna real citada no formulário EXISTE —
+  nome errado ali não dá erro, o `update_row` ignora a chave e o campo
+  preenchido some no caminho.
+- **A esteira tem TRÊS mesas, e Legal e OTC correm em PARALELO**: Legal · OTC ·
+  CEM MO. O `Banking` saiu — a ação dele é o próprio **New Request** (que valida
+  os `REQUEST_FIELDS` antes de gravar), então a solicitação criada já nasce
+  pendente **nas duas filas ao mesmo tempo** (`pending_stages` devolve LISTA; o
+  `pending_stage` singular é a primeira). O que fecha cada mesa é o carimbo
+  dela: **Legal** termina anexando o **Taxonomy** no card do Overview (Excel ou
+  PDF; sobe pelo Electronic Inventory como `CGD TAXONOMY` e a coluna `Taxonomy`
+  — à esquerda do Captis, FORA de `DATE_COLUMNS` porque guarda `data · SID` e o
+  fmt_date jogaria o SID fora — recebe o carimbo, passando a pendência ao CEM
+  MO); **OTC** termina no modal do item (dropzone do CGD abonado → EI como
+  `CGD ABONADO`, Issue Date, Signature Date e o B3 ID — que cai em `B3 ID - JPM`
+  ou `B3 ID - MGT` conforme a **Legal Entity** da solicitação, `b3_id_column`);
+  **CEM MO** tem dois botões — Download (o taxonomy e o abonado mais recentes do
+  EI da contraparte) e Complete (`MO - STAMP` + `Conclusion - Stamp` + Status
+  `Active`). Quem escreve data e SID é o SERVIDOR
+  (`/api/onboarding/docs/stamp`), e o upload vem ANTES do carimbo — a mesma
+  ordem do New Request. Um STAGE `Banking` ainda cadastrado no `cgd-stage` cai
+  na derivação, senão o item sumiria das filas.
 - **O `Apêndice` do formulário é ARQUIVO e não tem coluna**: ele vai para o
   Electronic Inventory da contraparte, pasta `Transactional`, com o prefixo
   `CGD TEMPLATE` (`APPENDIX_EI_TYPE`/`APPENDIX_EI_SUBTYPE`) — é onde os
@@ -1106,14 +1124,18 @@ estão:
   `/api/onboarding/docs`), e o valor JÁ GRAVADO entra na lista mesmo fora dos três
   — escondê-lo faria o primeiro Save trocar o tipo da linha sem ninguém pedir. Não
   é cadastro do /mapping: é o domínio de UM campo, não um de-para.
-- **A etapa** de todo documento que não está encerrado sai do cadastro
-  **`cgd-stage`** (STATUS → mesa) e, sem linha cadastrada, é derivada pelo
-  primeiro carimbo que falta — solicitação incompleta → Banking,
-  `Emissão`/`Signature Date` → Legal, `OTC - STAMP` → OTC, `MO - STAMP` → CEM MO. O item vem
-  MARCADO como derivado, para ninguém confundir dedução com cadastro. Documento
-  com todos os carimbos e ainda não `Active` fica na ÚLTIMA mesa: devolvê-lo sem
-  etapa o faria sumir das quatro filas, e um pendente que some é pior que um
-  pendente na fila errada.
+- **As etapas** de todo documento que não está encerrado saem do cadastro
+  **`cgd-stage`** (STATUS → mesa, uma só — quem cadastrou foi explícito) e, sem
+  linha cadastrada, são DERIVADAS pelos carimbos: sem `Taxonomy` → Legal; com
+  `Taxonomy` e sem `MO - STAMP` → CEM MO; sem `OTC - STAMP` → OTC — Legal e OTC
+  ao mesmo tempo é o estado normal da solicitação recém-criada. As datas de
+  `Emissão`/`Signature Date` NÃO derivam mais nada: quem as grava é o modal do
+  OTC. O item vem MARCADO como derivado, para ninguém confundir dedução com
+  cadastro. Documento com todos os carimbos e ainda não `Active` fica na ÚLTIMA
+  mesa: devolvê-lo sem etapa o faria sumir das filas, e um pendente que some é
+  pior que um pendente na fila errada. Na grade do Tracking Docs a coluna
+  *Pending with* é SEMPRE badge pill — uma por mesa pendente, ou o `Finalized`
+  do encerrado.
 
 - **Encerrado não é pendência de ninguém.** `is_active` responde só pelo
   `Active` (comparação EXATA: `Inactive` normaliza para `INACTIVE`, que CONTÉM

@@ -13,9 +13,11 @@ Quatro coisas que erram em SILÊNCIO:
    e PROCURA o cabeçalho em vez de presumir a linha 1: a exportação do SharePoint
    vem com linhas de título, e uma linha acima importa a planilha inteira
    deslocada — o CNPJ na coluna do SPN, sem erro nenhum.
-3. **A etapa da esteira** de um documento que não está `Active`: o cadastro
-   `cgd-stage` vence, e sem ele a etapa é derivada pelo primeiro carimbo que
-   falta. Documento pendente que não cai em fila nenhuma some da tela.
+3. **As etapas da esteira** de um documento que não está `Active`: o cadastro
+   `cgd-stage` vence, e sem ele as etapas são DERIVADAS pelos carimbos — Legal
+   e OTC correm em PARALELO (a solicitação nasce nas duas filas), o Taxonomy
+   fecha a Legal e passa a pendência ao CEM MO, o `OTC - STAMP` fecha o OTC.
+   Documento pendente que não cai em fila nenhuma some da tela.
 4. **A importação REESCREVE a tabela.** Rodar duas vezes tem de dar o mesmo
    resultado, e a linha apagada no SharePoint tem de sumir daqui.
 
@@ -69,13 +71,10 @@ def linha(**kw):
 
 def pedido(**kw):
     """Uma linha com a SOLICITAÇÃO já completa — os campos obrigatórios do
-    formulário preenchidos. Sem eles o documento está no Banking (a solicitação
-    ainda está sendo aberta), e todo teste de etapa daí para a frente mediria
-    outra coisa."""
+    formulário preenchidos, como o New Request grava."""
     # Os valores saem do PRÓPRIO `REQUEST_FIELDS`, e não de uma lista escrita
-    # aqui: um campo obrigatório novo no formulário passaria a segurar tudo no
-    # Banking e o teste acusaria a etapa errada em toda asserção seguinte, sem
-    # dizer que a causa foi o campo novo.
+    # aqui: um campo obrigatório novo no formulário mudaria o que a linha de
+    # teste representa sem dizer que a causa foi o campo novo.
     _VALOR = {'Data Solicitação': '01/08/2026', 'CNPJ': '10.144.076/0001-44'}
     base = {col: _VALOR.get(col, 'X') for col in C.REQUEST_FIELDS}
     base.update(kw)
@@ -174,20 +173,34 @@ check('nenhum rotulo em portugues', _acentos, [])
 
 # O `enabled_by` diz que um campo so vale quando OUTRO tem certo valor, e quem
 # declara e o formulario — nao o JS. Com a regra no navegador, o dia em que o
-# dominio do Garantidor mudasse ela continuaria olhando para o valor antigo e o
-# campo ficaria travado para sempre, sem erro nenhum.
-_dep = [f for f in C.REQUEST_FORM if f.get('enabled_by')]
-check('ha um campo dependente', len(_dep), 1)
-_e = _dep[0]['enabled_by']
-check('   ele depende do Garantidor', _e['column'], 'Garantidor')
+# dominio do mestre mudasse ela continuaria olhando para o valor antigo e o
+# campo ficaria travado para sempre, sem erro nenhum. Sao DOIS dependentes: as
+# informacoes do Garantidor (ligadas pelo Yes) e o Dominio (ligado quando o
+# checkbox do Apendice esta DESMARCADO = No).
+_dep = {f['column']: f['enabled_by'] for f in C.REQUEST_FORM if f.get('enabled_by')}
+check('ha dois campos dependentes', sorted(_dep), ['Dominio', 'Nome Garantidor'])
+_e = _dep['Nome Garantidor']
+check('   o garantidor depende do Garantidor', _e['column'], 'Garantidor')
 check('   ligado no valor Yes', _e['value'], 'Yes')
 check('   e o valor dele existe no dominio', _e['value'] in C.GUARANTOR_OPTIONS, True)
 check('   ligado, vira obrigatorio', bool(_e.get('required_when_on')), True)
 check('   desligado, volta para N/A', _e.get('value_when_off'), 'N/A')
+_d = _dep['Dominio']
+check('   o Dominio depende do checkbox do Apendice', _d['column'], '_domain_in_appendix')
+check('   e liga quando ele esta DESMARCADO', _d['value'], 'No')
+check('   desmarcado, o dominio e obrigatorio', bool(_d.get('required_when_on')), True)
+check('   marcado, a coluna grava que esta no Apendice',
+      _d.get('value_when_off'), 'Included in the Appendix')
 # A coluna que MANDA tem de ser um campo do proprio formulario, senao o JS
 # procura um mestre que nao esta na tela e a dependencia nunca liga.
-check('   e a coluna que manda esta no formulario',
-      any(f['column'] == _e['column'] for f in C.REQUEST_FORM), True)
+for _col, _eb in _dep.items():
+    check('   e a coluna que manda em %s esta no formulario' % _col,
+          any(f['column'] == _eb['column'] for f in C.REQUEST_FORM), True)
+# O checkbox mestre nasce MARCADO (o dominio no Apendice e o caso comum) e a
+# coluna dele e PSEUDO — nao persiste, so liga a dependencia.
+_chk = [f for f in C.REQUEST_FORM if f['column'] == '_domain_in_appendix'][0]
+check('   o checkbox nasce marcado', _chk.get('default'), 'Yes')
+check('   e nao entra nos obrigatorios', '_domain_in_appendix' in C.REQUEST_FIELDS, False)
 
 # O separador das entidades e o `;`, e o modal CORTA nele para achar a
 # contraparte do anexo (a pasta do Electronic Inventory e de UM cliente).
@@ -230,33 +243,43 @@ check('documento Active não é pendência de ninguém',
 check('   e o teste é cego a caixa e acento',
       C.pending_stage(linha(Status=' active ')), (None, False))
 
-# Banking é a PRIMEIRA mesa: enquanto a solicitação não tem os campos
-# obrigatórios do formulário, ela está sendo aberta e não é pendência das mesas
-# seguintes.
-check('solicitação incompleta → Banking',
-      C.pending_stage(linha(Status='Em elaboração')), ('Banking', True))
-for falta in C.REQUEST_FIELDS:
-    r = pedido(Status='X')
-    r[falta] = ''
-    check('   falta "%s" → Banking' % falta, C.pending_stage(r)[0], 'Banking')
-check('solicitação completa, sem carimbo nenhum → Legal',
-      C.pending_stage(pedido(Status='Em elaboração')), ('Legal', True))
-check('emitido e assinado, sem carimbo do OTC → OTC',
-      C.pending_stage(pedido(**{'Status': 'X', 'Emissão': '01/08/2026',
-                                'Signature Date': '02/08/2026'})),
-      ('OTC', True))
-check('carimbado pelo OTC, sem o do MO → CEM MO',
-      C.pending_stage(pedido(**{'Status': 'X', 'Emissão': '01/08/2026',
-                                'Signature Date': '02/08/2026',
-                                'OTC - STAMP': '03/08/2026'})),
-      ('CEM MO', True))
+# Banking NÃO é mais mesa: a ação dele é o próprio New Request. A solicitação
+# criada nasce pendente em Legal E OTC ao mesmo tempo — as duas trabalham em
+# paralelo, e dizer uma só esconderia a outra do próprio trabalho.
+check('as mesas são três', list(C.STAGES), ['Legal', 'OTC', 'CEM MO'])
+check('solicitação criada → Legal e OTC juntas',
+      C.pending_stages(pedido(Status='Em elaboração')), (['Legal', 'OTC'], True))
+# O Taxonomy fecha a Legal e PASSA a pendência ao CEM MO; o OTC continua.
+check('taxonomy anexado, sem OTC → OTC e CEM MO',
+      C.pending_stages(pedido(**{'Status': 'X',
+                                 'Taxonomy': '20/08/2026 10:00 · E930179'})),
+      (['OTC', 'CEM MO'], True))
+# O carimbo do OTC fecha o OTC; sem taxonomy a Legal continua.
+check('OTC carimbado, sem taxonomy → só Legal',
+      C.pending_stages(pedido(**{'Status': 'X', 'OTC - STAMP': '03/08/2026'})),
+      (['Legal'], True))
+check('taxonomy + OTC, sem MO → CEM MO',
+      C.pending_stages(pedido(**{'Status': 'X',
+                                 'Taxonomy': '20/08/2026 10:00 · E930179',
+                                 'OTC - STAMP': '03/08/2026'})),
+      (['CEM MO'], True))
+# As datas de Emissão/Assinatura NÃO derivam mais a Legal: quem as grava é o
+# modal do OTC, e o que fecha a Legal é o Taxonomy.
+check('emissão e assinatura sozinhas não fecham nada',
+      C.pending_stages(pedido(**{'Status': 'X', 'Emissão': '01/08/2026',
+                                 'Signature Date': '02/08/2026'})),
+      (['Legal', 'OTC'], True))
 # Tudo carimbado e ainda não Active: fica com a última mesa. Devolver "nenhuma"
-# faria o documento sumir das quatro filas.
+# faria o documento sumir das filas.
 check('tudo carimbado e ainda não Active fica na última mesa',
-      C.pending_stage(pedido(**{'Status': 'X', 'Emissão': '01/08/2026',
-                                'Signature Date': '02/08/2026',
-                                'OTC - STAMP': '03/08/2026', 'MO - STAMP': '04/08/2026'})),
-      ('CEM MO', True))
+      C.pending_stages(pedido(**{'Status': 'X',
+                                 'Taxonomy': '20/08/2026 10:00 · E930179',
+                                 'OTC - STAMP': '03/08/2026',
+                                 'MO - STAMP': '04/08/2026'})),
+      (['CEM MO'], True))
+# O singular continua respondendo — é a primeira das pendentes.
+check('pending_stage é a primeira da lista',
+      C.pending_stage(pedido(Status='X')), ('Legal', True))
 # O domínio do Tipo de Assinatura é fechado e tem TRÊS opções: `Manual` é o
 # mesmo valor que a tela em português mostra como "Física".
 check('o tipo de assinatura tem três opções',
@@ -267,22 +290,43 @@ check('o tipo de assinatura tem três opções',
 # preenchido some no caminho — a solicitação nasceria sem o CNPJ que a pessoa
 # digitou. E os obrigatórios saem do próprio formulário, para as duas listas não
 # divergirem.
+# Coluna pseudo (começa com `_`) é do formulário, não do banco: o servidor a
+# descarta e ela só existe para o `enabled_by` do checkbox.
 check('todo campo do formulário aponta para uma coluna real',
       [f['column'] for f in C.REQUEST_FORM
-       if f['column'] and f['column'] not in C.COLUMNS], [])
+       if f['column'] and not f['column'].startswith('_')
+       and f['column'] not in C.COLUMNS], [])
 check('os obrigatórios saem do formulário',
       list(C.REQUEST_FIELDS),
-      [f['column'] for f in C.REQUEST_FORM if f['required'] and f['column']])
-# O Apêndice é obrigatório no formulário e não tem coluna — é arquivo, vai para o
-# Electronic Inventory. Se ele entrasse no `REQUEST_FIELDS`, a coluna `''` nunca
-# estaria preenchida e TODO documento ficaria preso no Banking para sempre.
-check('campo sem coluna não entra na regra do Banking',
+      [f['column'] for f in C.REQUEST_FORM if f['required'] and f['column']
+       and not f['column'].startswith('_')])
+# O Apêndice é obrigatório no formulário e não tem coluna — é arquivo, vai para
+# o Electronic Inventory. Se ele entrasse no `REQUEST_FIELDS`, a coluna `''`
+# nunca estaria preenchida e a validação cobraria o impossível.
+check('campo sem coluna não entra nos obrigatórios',
       '' in C.REQUEST_FIELDS, False)
-check('   e são os que seguram o documento no Banking',
-      list(C.STAGE_STAMP[0][1]), list(C.REQUEST_FIELDS))
 check('o Tipo de Assinatura é campo do formulário e coluna do banco',
       C.SIGNATURE_COLUMN in C.COLUMNS
       and C.SIGNATURE_COLUMN in [f['column'] for f in C.REQUEST_FORM], True)
+# Os quatro identificadores, a LE, o Doc Type e a Instituição Financeira
+# entraram no formulário — cada um gravando na coluna que a lista já tinha.
+_form_cols = [f['column'] for f in C.REQUEST_FORM]
+for _c in ('ECI', 'SPN', 'CASID', 'UCN', 'Instituição Financeira',
+           C.LEGAL_ENTITY_COLUMN, C.DOC_TYPE_COLUMN):
+    check('o formulário pede %s' % _c, _c in _form_cols, True)
+# A LE tem DUAS opções, o Banco por default — e é POR ELA que o modal do OTC
+# decide a coluna do B3 ID.
+_le = [f for f in C.REQUEST_FORM if f['column'] == C.LEGAL_ENTITY_COLUMN][0]
+check('a LE tem as duas entidades', list(_le['options']), list(C.LEGAL_ENTITIES))
+check('   com o Banco por default', _le['default'], 'BANCO J.P MORGAN S.A')
+check('   Banco → B3 ID - JPM', C.b3_id_column('BANCO J.P MORGAN S.A'), 'B3 ID - JPM')
+check('   Chase → B3 ID - MGT',
+      C.b3_id_column('JPMORGAN CHASE BANK, N.A. - SAO PAULO BRANCH'), 'B3 ID - MGT')
+check('   vazio cai no JPM (o default do formulário)',
+      C.b3_id_column(''), 'B3 ID - JPM')
+# O Doc Type do formulário é o MESMO domínio do Electronic Inventory.
+_dt = [f for f in C.REQUEST_FORM if f['column'] == C.DOC_TYPE_COLUMN][0]
+check('o Doc Type oferece os tipos do EI', list(_dt['options']), list(C.DOC_TYPES))
 
 cadastro([{'STATUS': 'Pending Signature', 'STAGE': 'Legal'},
           {'STATUS': 'AGUARDANDO MO', 'STAGE': 'CEM MO'}])
@@ -296,6 +340,12 @@ check('   inclusive com a solicitação incompleta (o cadastro é explícito)',
       C.pending_stage(linha(Status='Aguardando MO'))[0], 'CEM MO')
 check('status fora do cadastro continua derivando',
       C.pending_stage(pedido(Status='Outro qualquer'))[0], 'Legal')
+# Um STAGE cadastrado que não existe mais (o antigo Banking) cai na derivação:
+# devolvê-lo jogaria o item numa fila que a tela não desenha, e ele sumiria.
+cadastro([{'STATUS': 'Em abertura', 'STAGE': 'Banking'}])
+check('STAGE que não existe mais cai na derivação',
+      C.pending_stages(pedido(Status='Em abertura')), (['Legal', 'OTC'], True))
+cadastro([])
 
 
 # ── 4. O banco ──────────────────────────────────────────────────────────────
@@ -359,14 +409,20 @@ C.replace_all(rows)
 ov = C.overview(C.load_all())
 check('só o que NÃO está Active entra nas filas', ov['active'], 1)
 filas = {c['stage']: c for c in ov['cards']}
-check('as quatro mesas na ordem da esteira',
+check('as três mesas na ordem da esteira',
       [c['stage'] for c in ov['cards']], list(C.STAGES))
-check('ATACAMA (sem emissão) cai na Legal',
-      [i['client'] for i in filas['Legal']['items']], ['ATACAMA'])
-check('LAWTON (assinado, sem carimbo do OTC) cai no OTC',
-      [i['client'] for i in filas['OTC']['items']], ['LAWTON'])
+# Sem taxonomy e sem carimbo do OTC, o documento está nas DUAS filas — Legal e
+# OTC correm em paralelo, e o mesmo item aparece nas duas.
+check('os dois pendentes estão na Legal (sem taxonomy)',
+      sorted(i['client'] for i in filas['Legal']['items']), ['ATACAMA', 'LAWTON'])
+check('e também no OTC (as mesas correm em paralelo)',
+      sorted(i['client'] for i in filas['OTC']['items']), ['ATACAMA', 'LAWTON'])
+check('pending conta DOCUMENTOS distintos, não itens de card', ov['pending'], 2)
 check('e o item leva o status COMO ESTÁ ESCRITO',
-      filas['Legal']['items'][0]['status'], 'Pending Signature')
+      sorted(i['status'] for i in filas['Legal']['items']),
+      ['Pending OTC', 'Pending Signature'])
+check('o item leva a LE (é ela que escolhe o B3 ID do modal do OTC)',
+      'legal_entity' in filas['OTC']['items'][0], True)
 
 # A fila vem do mais velho para o mais novo, como no Confirmations Monitor.
 C.replace_all(rows + [
@@ -461,9 +517,13 @@ ov = C.overview([
 check('overview: total', ov['total'], 6)
 check('overview: ativos', ov['active'], 2)
 check('overview: encerrados', ov['closed'], 2)
+# Inactive e Cancelado saem SEPARADOS — o card de cada um existe para a
+# diferença aparecer (um valeu e acabou, o outro nunca chegou a valer).
+check('overview: inativos', ov['inactive'], 1)
+check('overview: cancelados', ov['cancelled'], 1)
 check('overview: pendentes', ov['pending'], 2)
-check('overview: os quatro fecham',
-      ov['pending'] + ov['active'] + ov['closed'] == ov['total'], True)
+check('overview: os números fecham',
+      ov['pending'] + ov['active'] + ov['inactive'] + ov['cancelled'] == ov['total'], True)
 check('nenhum encerrado nas filas',
       [i['status'] for card in ov['cards'] for i in card['items']
        if C.is_closed({'Status': i['status']})], [])

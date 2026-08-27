@@ -373,6 +373,7 @@
         'B3 ID - JPM':            { en: 'B3 ID — JPM',         br: 'B3 ID — JPM',           es: 'B3 ID — JPM' },
         'B3 ID - MGT':            { en: 'B3 ID — MGT',         br: 'B3 ID — MGT',           es: 'B3 ID — MGT' },
         'B3 Register':            { en: 'B3 Register',         br: 'Registro B3',           es: 'Registro B3' },
+        'Taxonomy':               { en: 'Taxonomy',            br: 'Taxonomy',              es: 'Taxonomy' },
         'Captis':                 { en: 'Captis',              br: 'Captis',                es: 'Captis' },
         'Conclusion - Stamp':     { en: 'Conclusion — Stamp',  br: 'Conclusão — Carimbo',   es: 'Conclusión — Sello' },
         'Aging':                  { en: 'Aging',               br: 'Aging',                 es: 'Aging' },
@@ -489,12 +490,20 @@
                   '<td>' + acoes() + '</td>'];
         var marca = r._stage_derived
             ? ' <i class="ti ti-wand" title="' + esc(t('derived')) + '" style="opacity:.55"></i>' : '';
-        // Encerrado não tem etapa — ninguém trabalha nele —, e a célula saía em
-        // BRANCO, que se lê como "ainda não chegou em ninguém": o contrário do
-        // que aconteceu. O badge diz o desfecho, no mesmo padrão da coluna
-        // Status (pill + gradiente), e quem decide o que é encerrado é o
-        // servidor (`_closed`), não uma segunda cópia da regra aqui.
-        td.push('<td>' + (r._stage ? esc(r._stage) + marca
+        // A célula é SEMPRE badge pill: uma por mesa pendente (Legal e OTC
+        // correm em paralelo, então pode haver duas) e o `Finalized` para o
+        // encerrado. Texto solto se lia como dado da planilha; o pill diz que é
+        // estado. Quem decide as mesas é o servidor (`_stages`), não uma
+        // segunda cópia da regra aqui.
+        var STAGE_BADGE = { 'Legal': 'text-bg-info', 'OTC': 'text-bg-primary',
+                            'CEM MO': 'text-bg-warning' };
+        var etapas = (r._stages && r._stages.length ? r._stages
+                      : (r._stage ? [r._stage] : []));
+        var pills = etapas.map(function (s) {
+            return '<span class="badge rounded-pill ' + (STAGE_BADGE[s] || 'text-bg-secondary') +
+                   ' bg-gradient me-1">' + esc(s) + '</span>';
+        }).join('');
+        td.push('<td>' + (pills ? pills + marca
                           : (r._closed ? '<span class="badge rounded-pill text-bg-secondary bg-gradient">' +
                                          esc(t('finalized')) + '</span>' : '')) + '</td>');
         COLS.forEach(function (c) {

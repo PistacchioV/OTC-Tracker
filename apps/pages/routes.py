@@ -14638,31 +14638,49 @@ _MAPPING_DEFS = {
         # carimbos que o documento tem — e marca o item como derivado.
         'seed': [],
     },
+    # As colunas seguem a ORDEM e os nomes da aba `Mapping` do Auxiliar.xlsx
+    # (A = Razão Social, B = Nome Simplificado, C = CNPJ, D = Conta): é a
+    # planilha de onde a lista vem, e a tela na mesma ordem é o que deixa o
+    # copiar-e-colar conferível coluna a coluna. As CHAVES são as antigas — o
+    # motor da recon (`recon_cgd._participantes`) e os JSONs já gravados leem
+    # por elas, e renomeá-las apagaria o cadastro existente em silêncio.
     'cgd-b3-participante': {
-        'label': 'CGD — Participante B3 sem CNPJ',
+        'label': 'CGD — B3 Participants',
         'columns': [
-            {'key': 'NOME CONTRAPARTE', 'label': 'Nome Contraparte (como vem da B3)'},
-            {'key': 'CNPJ', 'label': 'CNPJ do participante'},
-            {'key': 'RAZAO SOCIAL', 'label': 'Razão Social'},
-            {'key': 'NOTES', 'label': 'Notes'},
+            {'key': 'RAZAO SOCIAL', 'label': 'Participant (Legal Name)',
+             'lang': 'map-col-cgd-part-name'},
+            {'key': 'NOME CONTRAPARTE', 'label': 'Participant (Short Name)',
+             'lang': 'map-col-cgd-part-short'},
+            {'key': 'CNPJ', 'label': 'Participant (Tax ID)',
+             'lang': 'map-col-cgd-part-cnpj'},
+            {'key': 'CONTA', 'label': 'Participant (Account)',
+             'lang': 'map-col-cgd-part-account'},
         ],
         'seed': [],
     },
     'cgd-garantidor': {
-        'label': 'CGD — Garantidores',
+        'label': 'CGD — Guarantors',
         'columns': [
-            {'key': 'CNPJ / CPF', 'label': 'CNPJ / CPF'},
-            {'key': 'NOME', 'label': 'Nome'},
-            {'key': 'NOTES', 'label': 'Notes'},
+            {'key': 'CNPJ / CPF', 'label': 'Tax ID (CNPJ / CPF)',
+             'lang': 'map-col-cgd-guar-cnpj'},
+            {'key': 'EMPRESA', 'label': 'Company', 'lang': 'map-col-cgd-guar-company'},
+            {'key': 'CLIENTE', 'label': 'Client', 'lang': 'map-col-cgd-guar-client'},
         ],
+        # O formato antigo tinha a coluna NOME: vira EMPRESA na leitura, senão o
+        # cadastro existente abriria com a coluna vazia e o primeiro Save (que
+        # reescreve o arquivo inteiro) apagaria o nome de todas as linhas.
+        'upgrade': lambda rows: [
+            dict(r, **{'EMPRESA': r.get('EMPRESA') or r.get('NOME') or ''})
+            for r in rows],
         'seed': [],
     },
     'cgd-conta-encerrada': {
-        'label': 'CGD — Contas encerradas',
+        'label': 'CGD — Closed Accounts',
         'columns': [
-            {'key': 'CNPJ / CPF', 'label': 'CNPJ / CPF'},
-            {'key': 'NOME', 'label': 'Nome'},
-            {'key': 'NOTES', 'label': 'Notes'},
+            {'key': 'CNPJ / CPF', 'label': 'Tax ID (CNPJ / CPF)',
+             'lang': 'map-col-cgd-closed-cnpj'},
+            {'key': 'NOME', 'label': 'Name', 'lang': 'map-col-cgd-closed-name'},
+            {'key': 'NOTES', 'label': 'Notes', 'lang': 'map-col-notes'},
         ],
         'seed': [],
     },

@@ -84,6 +84,43 @@ def api_onboarding_docs_save():
     return jsonify({'success': True, 'id': rid})
 
 
+@blueprint.route('/api/onboarding/docs/stamp', methods=['POST'])
+def api_onboarding_docs_stamp():
+    """Os três carimbos da esteira. O upload do ARQUIVO (taxonomy, abonado) é o
+    do Electronic Inventory — o navegador sobe o anexo por lá primeiro e só
+    então carimba aqui, na mesma ordem do New Request: o upload é a parte que
+    depende do share e é a que falha, e carimbar antes deixaria a etapa fechada
+    sem o papel que a fecha."""
+    if not session.get('authenticated'):
+        return _nao_autenticado()
+    payload = request.get_json(silent=True) or {}
+    rid = str(payload.get('id') or '').strip()
+    acao = str(payload.get('action') or '').strip()
+    if not rid:
+        return jsonify({'success': False, 'error': 'missing_id'}), 400
+    sid = session.get('user_sid') or ''
+    try:
+        if acao == 'taxonomy':
+            return jsonify({'success': True,
+                            'stamp': commands.stamp_taxonomy(rid, sid)})
+        if acao == 'otc':
+            issue = str(payload.get('issue_date') or '').strip()
+            assinatura = str(payload.get('signature_date') or '').strip()
+            b3 = str(payload.get('b3_id') or '').strip()
+            if not issue or not assinatura or not b3:
+                return jsonify({'success': False,
+                                'error': 'missing_fields'}), 400
+            return jsonify({'success': True,
+                            'values': commands.stamp_otc(rid, sid, issue,
+                                                         assinatura, b3)})
+        if acao == 'mo':
+            return jsonify({'success': True,
+                            'values': commands.stamp_mo(rid, sid)})
+    except Exception as exc:                                  # pragma: no cover
+        return _falhou(exc, 'falha ao carimbar a etapa (%s)' % acao)
+    return jsonify({'success': False, 'error': 'unknown_action'}), 400
+
+
 @blueprint.route('/api/onboarding/docs/delete', methods=['POST'])
 def api_onboarding_docs_delete():
     if not session.get('authenticated'):

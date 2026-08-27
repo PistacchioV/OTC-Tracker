@@ -129,6 +129,10 @@ check('a linha aberta tem _stage', bool(linha_a['_stage']), True)
 check('   e diz se a etapa foi DERIVADA', isinstance(linha_a['_stage_derived'], bool), True)
 check('   _stage bate com o modulo', linha_a['_stage'],
       (cgd_docs.pending_stage(linha_a)[0] or ''))
+# `_stages` e a LISTA: Legal e OTC correm em paralelo e a coluna mostra as duas.
+check('   _stages e a lista do modulo', linha_a['_stages'],
+      cgd_docs.pending_stages(linha_a)[0])
+check('   e a linha nova esta nas DUAS mesas', linha_a['_stages'], ['Legal', 'OTC'])
 check('a linha Active NAO esta encerrada por engano', linha_b['_closed'],
       bool(cgd_docs.is_closed(linha_b)))
 check('   e Active e encerrada de verdade', linha_b['_closed'], True)
@@ -173,6 +177,48 @@ restantes = {r[cgd_docs.ID_COLUMN] for r in cgd_docs.load_all()}
 check('   e os dois sairam', {str(id_c), str(id_d)} & restantes, set())
 st, d = jpost(c, '/api/onboarding/docs/delete', {})
 check('sem id -> 400 missing_id', (st, d['error']), (400, 'missing_id'))
+
+print('\n== 7b. os carimbos da esteira ==')
+# Quem escreve data e SID e o SERVIDOR: um relogio errado ou um SID digitado
+# assinariam a etapa por outra pessoa. O upload do arquivo e o do Electronic
+# Inventory, testado la — aqui se prende so o carimbo.
+id_e = cgd_docs.add_row({'Razão Social': 'ESTEIRA LTDA', 'Status': 'Em andamento',
+                         'Legal Entity': 'JPMORGAN CHASE BANK, N.A. - SAO PAULO BRANCH'})
+st, d = jpost(c, '/api/onboarding/docs/stamp', {'id': str(id_e), 'action': 'taxonomy'})
+check('taxonomy -> 200', (st, d['success']), (200, True))
+lin = {r[cgd_docs.ID_COLUMN]: r for r in cgd_docs.load_all()}[str(id_e)]
+check('   a coluna Taxonomy leva data e SID', 'A111111' in lin['Taxonomy'], True)
+check('   e a pendencia da Legal passou ao CEM MO',
+      cgd_docs.pending_stages(lin)[0], ['OTC', 'CEM MO'])
+st, d = jpost(c, '/api/onboarding/docs/stamp',
+              {'id': str(id_e), 'action': 'otc', 'issue_date': '20/08/2026',
+               'signature_date': '21/08/2026', 'b3_id': 'B3X-123'})
+check('otc -> 200', (st, d['success']), (200, True))
+lin = {r[cgd_docs.ID_COLUMN]: r for r in cgd_docs.load_all()}[str(id_e)]
+check('   Emissao e assinatura gravadas',
+      (lin['Emissão'], lin['Signature Date']), ('20/08/2026', '21/08/2026'))
+# A LE da linha e a Chase: o B3 ID cai na coluna MGT, nunca na JPM.
+check('   o B3 ID caiu na coluna da LE (MGT)', lin['B3 ID - MGT'], 'B3X-123')
+check('   e a JPM ficou em branco', lin['B3 ID - JPM'], '')
+check('   OTC - STAMP fechou a mesa', bool(lin['OTC - STAMP']), True)
+check('   sobrou so o CEM MO', cgd_docs.pending_stages(lin)[0], ['CEM MO'])
+st, d = jpost(c, '/api/onboarding/docs/stamp', {'id': str(id_e), 'action': 'mo'})
+check('mo -> 200', (st, d['success']), (200, True))
+lin = {r[cgd_docs.ID_COLUMN]: r for r in cgd_docs.load_all()}[str(id_e)]
+check('   MO - STAMP e Conclusion gravados',
+      bool(lin['MO - STAMP']) and bool(lin['Conclusion - Stamp']), True)
+check('   o Status virou Active e o documento saiu das filas',
+      (lin['Status'], cgd_docs.pending_stages(lin)[0]), ('Active', []))
+st, d = jpost(c, '/api/onboarding/docs/stamp',
+              {'id': str(id_e), 'action': 'otc', 'issue_date': '20/08/2026'})
+check('otc sem os tres campos -> 400', (st, d['error']), (400, 'missing_fields'))
+st, d = jpost(c, '/api/onboarding/docs/stamp', {'id': str(id_e), 'action': 'x'})
+check('acao desconhecida -> 400', (st, d['error']), (400, 'unknown_action'))
+st, d = jpost(c, '/api/onboarding/docs/stamp', {'action': 'mo'})
+check('sem id -> 400', (st, d['error']), (400, 'missing_id'))
+check('sem sessao -> 401',
+      jpost(anon, '/api/onboarding/docs/stamp', {'id': '1', 'action': 'mo'})[0], 401)
+cgd_docs.delete_row(id_e)
 
 print('\n== 8. as paginas sobem, com o formulario do MODULO ==')
 # O `REQUEST_FORM` define o modal de New Request E os campos obrigatorios que

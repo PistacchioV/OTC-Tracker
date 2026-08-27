@@ -79,6 +79,11 @@ COLUMNS = [
     'B3 ID - JPM',
     'B3 ID - MGT',
     'B3 Register',
+    # O carimbo do Taxonomy anexado pela Legal (data · SID de quem anexou). Fica
+    # à ESQUERDA do Captis de propósito — é a ordem em que a tela mostra — e NÃO
+    # entra em DATE_COLUMNS: o valor carrega o SID junto da data, e o fmt_date
+    # jogaria o SID fora ao reformatar.
+    'Taxonomy',
     'Captis',
     # Derivada na leitura — ver o cabeçalho do módulo. A coluna fica no banco
     # porque a planilha tem a dela, e guardá-la permite ver o que veio do
@@ -333,9 +338,10 @@ def counts(rows=None):
 
 # ── A esteira ────────────────────────────────────────────────────────────────
 #
-# O Overview mostra TRÊS filas — Legal, Banking OTC e CEM MO —, e nelas entra
-# todo documento cujo Status não é `Active`. "Não está ativo" é o que define
-# pendência; o que a fila responde é ONDE ele parou.
+# O Overview mostra TRÊS filas — Legal, OTC e CEM MO —, e nelas entra todo
+# documento cujo Status não é `Active` nem encerrado. Legal e OTC trabalham em
+# PARALELO desde a criação da solicitação; o que a fila responde é o que ainda
+# falta, e um documento pode dever a duas mesas ao mesmo tempo.
 #
 # A resposta vem de duas fontes, nesta ordem:
 #
@@ -384,6 +390,32 @@ DOC_TYPES = ('CGD', 'Appendix', 'CSA', 'CGD Amendment', 'Appendix Amendment')
 # tela precisa saber QUAL coluna vira um `select`.
 DOC_TYPE_COLUMN = 'Doc Type'
 
+# O domínio da Legal Entity que assina o CGD — as DUAS entidades que têm conta
+# de registro na B3 (`CGD_LES` da recon: JPM e MGT). O Banco é o default porque
+# é onde a mesa booka a quase totalidade dos contratos. A grafia é a do
+# documento, e é POR ELA que se decide qual coluna de B3 ID a solicitação usa.
+LEGAL_ENTITIES = ('BANCO J.P MORGAN S.A',
+                  'JPMORGAN CHASE BANK, N.A. - SAO PAULO BRANCH')
+LEGAL_ENTITY_COLUMN = 'Legal Entity'
+
+# LE → a coluna de B3 ID daquela entidade. O modal do OTC pede UM B3 ID, e qual
+# das duas colunas o recebe depende da LE em que a solicitação foi aberta.
+_B3_ID_BY_LE = {
+    'BANCO J.P MORGAN S.A': 'B3 ID - JPM',
+    'JPMORGAN CHASE BANK, N.A. - SAO PAULO BRANCH': 'B3 ID - MGT',
+}
+
+
+def b3_id_column(legal_entity):
+    """A coluna de B3 ID da LE da linha. Cega a caixa/acento; `CHASE` no nome é
+    o que separa a branch do Banco — LE vazia ou desconhecida cai no JPM, que é
+    o default do formulário."""
+    v = _norm(legal_entity)
+    for le, col in _B3_ID_BY_LE.items():
+        if v == _norm(le):
+            return col
+    return 'B3 ID - MGT' if 'CHASE' in v else 'B3 ID - JPM'
+
 # O formulário de abertura da solicitação, na ORDEM em que ele é preenchido.
 # Cada campo diz o rótulo (o do formulário do SharePoint, que nem sempre é o
 # nome da coluna), a COLUNA do banco em que ele grava, o tipo do campo, se é
@@ -400,9 +432,31 @@ REQUEST_FORM = (
     {'label': 'CGD - Request Date', 'lang': 'ob-req-f-date', 'column': 'Data Solicitação',
      'type': 'date', 'required': True, 'col': 'col-md-3',
      'hint': 'Filled in with today\'s date', 'hint_lang': 'ob-req-h-date'},
-    {'label': 'Group', 'lang': 'ob-req-f-group', 'column': 'Grupo Economico',
-     'type': 'text', 'required': False, 'col': 'col-md-9',
+    # O Doc Type é o Transactional Type do Electronic Inventory (DOC_TYPES): o
+    # documento que a solicitação gera vai parar na pasta do cliente com esse
+    # nome, e uma grafia própria do formulário criaria um segundo tipo na
+    # listagem.
+    {'label': 'Document Type', 'lang': 'ob-req-f-doctype', 'column': DOC_TYPE_COLUMN,
+     'type': 'select', 'required': True, 'col': 'col-md-4',
+     'hint': 'Transactional document type of the Electronic Inventory',
+     'hint_lang': 'ob-req-h-doctype',
+     'options': DOC_TYPES, 'default': 'CGD'},
+    # Qual das nossas entidades assina — e é POR ELA que o modal do OTC decide
+    # se o B3 ID digitado vai para `B3 ID - JPM` ou `B3 ID - MGT`.
+    {'label': 'Legal Entity', 'lang': 'ob-req-f-le', 'column': LEGAL_ENTITY_COLUMN,
+     'type': 'select', 'required': True, 'col': 'col-md-5',
+     'hint': 'Entity issuing the CGD', 'hint_lang': 'ob-req-h-le',
+     'options': LEGAL_ENTITIES, 'default': LEGAL_ENTITIES[0]},
+    {'label': 'Economic Group', 'lang': 'ob-req-f-group', 'column': 'Grupo Economico',
+     'type': 'text', 'required': False, 'col': 'col-md-8',
      'hint': 'Reference name for the legal names below', 'hint_lang': 'ob-req-h-group'},
+    # Checkbox: o valor gravado é Yes/No, como o Garantidor — dois valores para
+    # a mesma resposta fariam metade da lista não casar com a outra no filtro.
+    {'label': 'Financial Institution', 'lang': 'ob-req-f-fininst',
+     'column': 'Instituição Financeira', 'type': 'checkbox', 'required': False,
+     'col': 'col-md-4', 'default': '',
+     'hint': 'Tick when the client is a financial institution',
+     'hint_lang': 'ob-req-h-fininst'},
     # Razão Social e CNPJ pedem TODAS as entidades do grupo, e o separador é o
     # PONTO E VÍRGULA — não a quebra de linha. Ele é o que a mesa já usa na
     # lista do SharePoint, e é o que o `contraparte()` do modal corta para achar
@@ -417,13 +471,37 @@ REQUEST_FORM = (
      'type': 'textarea', 'required': True, 'col': 'col-12',
      'hint': 'Enter every entity of the group, separated by ;',
      'hint_lang': 'ob-req-h-cnpj'},
+    # Os quatro identificadores do cliente nos sistemas internos. Opcionais: a
+    # solicitação não pode ficar presa esperando um código que outra área emite.
+    {'label': 'ECI', 'lang': 'ob-req-f-eci', 'column': 'ECI',
+     'type': 'text', 'required': False, 'col': 'col-md-3'},
+    {'label': 'SPN', 'lang': 'ob-req-f-spn', 'column': 'SPN',
+     'type': 'text', 'required': False, 'col': 'col-md-3'},
+    {'label': 'CASID', 'lang': 'ob-req-f-casid', 'column': 'CASID',
+     'type': 'text', 'required': False, 'col': 'col-md-3'},
+    {'label': 'UCN', 'lang': 'ob-req-f-ucn', 'column': 'UCN',
+     'type': 'text', 'required': False, 'col': 'col-md-3'},
     {'label': 'CGD - Signature Type', 'lang': 'ob-req-f-sig', 'column': SIGNATURE_COLUMN,
      'type': 'select', 'required': True, 'col': 'col-md-6',
      'hint': 'How the client will sign the CGD', 'hint_lang': 'ob-req-h-sig'},
+    # O domínio do cliente costuma já estar escrito no Apêndice anexado, e é o
+    # caso comum — por isso o checkbox nasce MARCADO. A coluna começa com `_` e
+    # NÃO é persistida (o update_row descarta chave desconhecida): o que fica
+    # gravado é o efeito dela no campo Dominio abaixo, via `enabled_by`.
+    {'label': 'Client Domain in the Appendix', 'lang': 'ob-req-f-domappx',
+     'column': '_domain_in_appendix', 'type': 'checkbox', 'required': False,
+     'col': 'col-md-6', 'default': 'Yes',
+     'hint': 'Untick when the domain is NOT in the attached Appendix',
+     'hint_lang': 'ob-req-h-domappx'},
+    # Desmarcado o checkbox acima, o domínio passa a ser DIGITADO e obrigatório;
+    # marcado, o campo trava e a coluna grava que ele está no Apêndice.
     {'label': 'CGD - Client Domain', 'lang': 'ob-req-f-dom', 'column': 'Dominio',
      'type': 'textarea', 'required': False, 'col': 'col-md-6',
      'hint': 'Fill in with NA when the client has no domain',
-     'hint_lang': 'ob-req-h-dom'},
+     'hint_lang': 'ob-req-h-dom',
+     'enabled_by': {'column': '_domain_in_appendix', 'value': 'No',
+                    'required_when_on': True,
+                    'value_when_off': 'Included in the Appendix'}},
     {'label': 'Contacts', 'lang': 'ob-req-f-contacts', 'column': 'Contacts',
      'type': 'textarea', 'required': True, 'col': 'col-md-6',
      'hint': 'E-mails to be considered for the SSI request',
@@ -472,34 +550,33 @@ APPENDIX_EI_SUBTYPE = 'CGD TEMPLATE'
 
 # Os obrigatórios do formulário QUE VIRAM COLUNA, na ordem dele. Derivado do
 # `REQUEST_FORM` e não escrito à mão: duas listas divergiriam no dia em que um
-# campo deixasse de ser obrigatório, e a fila do Banking continuaria cobrando o
-# que ninguém mais pede.
+# campo deixasse de ser obrigatório, e a validação do Save continuaria cobrando
+# o que ninguém mais pede.
 #
 # O `and f['column']` não é defensivo: o Apêndice é obrigatório no formulário e
-# NÃO tem coluna (é arquivo, vai para o Electronic Inventory). Sem o teste, a
-# coluna `''` entraria na lista, nunca estaria preenchida em linha nenhuma e
-# TODO documento ficaria preso no Banking para sempre — sem erro em lugar nenhum.
+# NÃO tem coluna (é arquivo, vai para o Electronic Inventory), e o checkbox do
+# domínio tem uma coluna PSEUDO (`_domain_in_appendix`) que não é persistida.
+# Sem os testes, uma coluna que nunca se preenche entraria na lista e a
+# validação do formulário cobraria o impossível — sem erro em lugar nenhum.
 REQUEST_FIELDS = tuple(f['column'] for f in REQUEST_FORM
-                       if f['required'] and f['column'])
+                       if f['required'] and f['column']
+                       and not f['column'].startswith('_'))
 
-# As mesas da esteira, NA ORDEM em que o documento passa por elas. `Banking` é a
-# primeira: é quem abre a solicitação do CGD. Era um cartão só, `Banking OTC`, e
-# ele juntava duas mesas que trabalham em momentos diferentes — a que pede o
-# contrato e a que o confere depois de assinado.
-STAGES = ('Banking', 'Legal', 'OTC', 'CEM MO')
+# As mesas da esteira. `Banking` SAIU: a ação dele é abrir a solicitação, e ela
+# acontece inteira no New Request — solicitação criada já nasce pendente em
+# **Legal e OTC ao mesmo tempo** (as duas trabalham em paralelo), e o CEM MO
+# recebe quando o Taxonomy é anexado pela Legal.
+STAGES = ('Legal', 'OTC', 'CEM MO')
 
-# O carimbo que cada etapa deixa quando termina. A ORDEM é a da esteira: quem
-# procura onde o documento parou pega a primeira que ainda não carimbou.
-#
-# Vem DEPOIS do `REQUEST_FIELDS`, que ele consome na leitura do módulo: definido
-# antes, o Banking nasceria com a lista vazia e nunca casaria com nada — a fila
-# ficaria permanentemente zerada, sem erro nenhum.
-STAGE_STAMP = (
-    ('Banking', REQUEST_FIELDS),
-    ('Legal',   ('Emissão', 'Signature Date')),
-    ('OTC',     ('OTC - STAMP',)),
-    ('CEM MO',  ('MO - STAMP',)),
-)
+# O carimbo que ENCERRA cada mesa. Legal termina anexando o Taxonomy (a coluna
+# guarda data · SID de quem anexou); OTC termina no modal do abonado (Emissão,
+# Signature Date, B3 ID → `OTC - STAMP`); CEM MO termina no Complete
+# (`MO - STAMP` + Conclusion). Não é mais uma FILA: Legal e OTC correm juntas,
+# e por isso quem responde é `pending_stages` (plural), não a primeira que
+# falta.
+LEGAL_STAMP = 'Taxonomy'
+OTC_STAMP = 'OTC - STAMP'
+MO_STAMP = 'MO - STAMP'
 
 ACTIVE_STATUS = 'ACTIVE'
 
@@ -580,73 +657,103 @@ def is_closed(row):
     return any(m in v for m in CLOSED_MARKS)
 
 
-def pending_stage(row):
-    """`(etapa, derivada?)` de um documento pendente, ou `(None, False)`.
+def pending_stages(row):
+    """`(etapas, derivadas?)` de um documento pendente — LISTA, porque Legal e
+    OTC correm em paralelo: a solicitação recém-criada está nas duas filas ao
+    mesmo tempo, e dizer uma só esconderia a outra mesa do próprio trabalho.
 
-    Documento encerrado não tem etapa — concluído (`Active`) ou morto
-    (`Inactive`, `Cancelado`): ninguém está trabalhando nele. Para os demais, o
-    cadastro vence a derivação — é ele que sabe que um status novo pertence à
-    Legal, e a derivação só olha carimbo.
+    Documento encerrado não tem etapa. O cadastro `cgd-stage` vence a derivação
+    (uma etapa só — quem cadastrou foi explícito); um STAGE cadastrado que não
+    existe mais (o antigo `Banking`) cai na derivação, senão o item sumiria das
+    filas sem erro nenhum.
     """
     if is_closed(row):
-        return None, False
+        return [], False
     cad = _stage_map().get(_norm(row.get('Status')))
-    if cad:
-        return cad, False
-    for etapa, campos in STAGE_STAMP:
-        if any(not str(row.get(c) or '').strip() for c in campos):
-            return etapa, True
-    # Todos os carimbos dados e o status ainda não é Active: o documento está com
-    # a ÚLTIMA mesa que o tocou, esperando o registro fechar. Devolvê-lo sem
-    # etapa o faria sumir das três filas — e um pendente que some é pior do que
-    # um pendente na fila errada, que alguém corrige cadastrando o status.
-    return STAGES[-1], True
+    if cad and cad in STAGES:
+        return [cad], False
+    etapas = []
+    tax = str(row.get(LEGAL_STAMP) or '').strip()
+    if not tax:
+        etapas.append('Legal')
+    elif not str(row.get(MO_STAMP) or '').strip():
+        # Taxonomy anexado → a pendência da Legal PASSA para o CEM MO.
+        etapas.append('CEM MO')
+    if not str(row.get(OTC_STAMP) or '').strip():
+        etapas.append('OTC')
+    if etapas:
+        # Na ordem da esteira, que é a ordem dos cards na tela.
+        return [e for e in STAGES if e in etapas], True
+    # Todos os carimbos dados e o status ainda não é Active: o documento está
+    # com a ÚLTIMA mesa, esperando o registro fechar. Devolvê-lo sem etapa o
+    # faria sumir das filas — e um pendente que some é pior do que um pendente
+    # na fila errada, que alguém corrige cadastrando o status.
+    return [STAGES[-1]], True
+
+
+def pending_stage(row):
+    """`(etapa, derivada?)` — a PRIMEIRA das etapas pendentes, ou `(None,
+    False)`. Mantida para quem precisa de uma resposta singular (a coluna da
+    grade mostra todas via `pending_stages`)."""
+    etapas, derivada = pending_stages(row)
+    return (etapas[0] if etapas else None), (derivada if etapas else False)
 
 
 def overview(rows=None):
     """As três filas do Overview, na ordem da esteira.
 
+    O MESMO documento pode estar em mais de uma fila (Legal e OTC correm em
+    paralelo), então `pending` conta DOCUMENTOS distintos, não itens de card.
     Cada item leva o que a fila precisa mostrar: cliente, status COMO ESTÁ
-    ESCRITO (é ele que a mesa reconhece), aging e se a etapa foi derivada.
-    A fila vem ordenada pelo aging decrescente — quem espera há mais tempo
-    encabeça, como no Confirmations Monitor.
+    ESCRITO, aging, a LE (é ela que diz qual B3 ID o modal do OTC pede) e se a
+    etapa foi derivada. A fila vem ordenada pelo aging decrescente.
     """
     rows = load_all() if rows is None else rows
     filas = {e: [] for e in STAGES}
     ativos = 0
-    encerrados = 0
+    inativos = 0
+    cancelados = 0
+    pendentes = 0
     for r in rows:
         if is_active(r):
             ativos += 1
             continue
-        # Encerrado sem ter concluído (Inactive, Cancelado) sai das filas mas
-        # NÃO conta como ativo: são coisas diferentes, e somá-las esconderia
-        # quantos CGDs realmente estão de pé.
+        # Encerrado sem ter concluído sai das filas e NÃO conta como ativo. O
+        # Inactive (valeu e deixou de valer) e o Cancelado (nunca chegou a
+        # valer) saem SEPARADOS: são desfechos diferentes, e o card de cada um
+        # existe para a diferença aparecer.
         if is_closed(r):
-            encerrados += 1
+            if 'INACTIV' in _norm(r.get('Status')) or 'INATIV' in _norm(r.get('Status')):
+                inativos += 1
+            else:
+                cancelados += 1
             continue
-        etapa, derivada = pending_stage(r)
-        filas.setdefault(etapa, []).append({
+        etapas, derivada = pending_stages(r)
+        pendentes += 1
+        item = {
             'id': r.get(ID_COLUMN, ''),
             'client': (r.get('Razão Social') or r.get('Grupo Economico') or '').strip(),
             'cnpj': (r.get('CNPJ') or '').strip(),
             'doc_type': (r.get('Doc Type') or '').strip(),
-            'legal_entity': (r.get('Legal Entity') or '').strip(),
+            'legal_entity': (r.get(LEGAL_ENTITY_COLUMN) or '').strip(),
             'status': (r.get('Status') or '').strip(),
             'aging': r.get('Aging', ''),
             'derived': derivada,
             'requested': (r.get(AGING_FROM) or '').strip(),
-        })
+            'taxonomy': (r.get(LEGAL_STAMP) or '').strip(),
+        }
+        for etapa in etapas:
+            filas.setdefault(etapa, []).append(dict(item))
     def _idade(it):
         return it['aging'] if isinstance(it['aging'], int) else -1
     cards = []
     for e in STAGES:
         itens = sorted(filas.get(e, []), key=_idade, reverse=True)
         cards.append({'stage': e, 'count': len(itens), 'items': itens})
-    pendentes = sum(c['count'] for c in cards)
-    # Os quatro números fecham: total = pendentes + ativos + encerrados. Sem o
-    # `closed` explícito o Overview mostrava três que não somavam o total, e a
-    # diferença era justamente o que tinha sumido das filas.
-    return {'cards': cards, 'active': ativos, 'closed': encerrados,
+    # Os números FECHAM: total = pendentes + ativos + inativos + cancelados.
+    # `closed` continua no payload (inativos + cancelados) para quem soma os
+    # quatro de antes.
+    return {'cards': cards, 'active': ativos, 'inactive': inativos,
+            'cancelled': cancelados, 'closed': inativos + cancelados,
             'pending': pendentes, 'total': len(rows)}
 
