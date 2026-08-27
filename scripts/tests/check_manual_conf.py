@@ -555,6 +555,11 @@ check('   e sem notional não sobra nada',
       R._mc_notional_ccy(_D, 'OPTION', ''), '')
 
 
+# O BACC saiu do routes.py para features/bacc — os nomes agora moram la.
+from apps.pages.features.bacc import domain as BD, queries as BQ
+from apps.pages.features.bacc.infra import mail as BM
+
+
 def _bacc_linha(tid, aging, pend, ccy, notional, cb=''):
     r = M.blank_row(**{'Trade ID': tid, 'Cliente': 'ACME', 'Produto': 'FXO',
                        'LOB': 'CEM', 'Notional': notional, 'Data Callback': cb,
@@ -572,7 +577,7 @@ _FAKE = [_bacc_linha('T-A', '3', 'Pending OTC', 'USD', '1500000'),
 _orig_load = M.load_all
 M.load_all = lambda: _FAKE
 try:
-    _saida = R._bacc_rows()
+    _saida = BQ.rows()
 finally:
     M.load_all = _orig_load
 # Dois cortes que respondem perguntas diferentes: o callback fecha a operação do
@@ -582,7 +587,7 @@ check('o anexo tira o Ok e o que já tem callback, e ordena pelo aging',
       [r['Trade ID'] for r in _saida], ['T-B', 'T-A', 'T-C'])
 
 check('as doze colunas da planilha, na ordem pedida',
-      [h for h, _s, _k in R._BACC_COLUMNS],
+      [h for h, _s, _k in BD.COLUMNS],
       ['Trade ID', 'Product', 'Trade Date', 'Legal Entity', 'Conterparty Name',
        'Aging', 'Born Age', 'Notional/Qty', 'National Currency',
        'Notional Amount', 'Comments', 'LOB'])
@@ -590,16 +595,16 @@ check('as doze colunas da planilha, na ordem pedida',
 # nova. A moeda não sai da coluna `Moeda`: aquela é o ATIVO, e em mercadoria
 # guarda a commodity (OLEO), que não é moeda nenhuma.
 check('   a moeda e o valor saem da coluna nova',
-      (R._bacc_ccy(_FAKE[0]), R._bacc_amount(_FAKE[0])), ('USD', '1500000'))
+      (BD.ccy(_FAKE[0]), BD.amount(_FAKE[0])), ('USD', '1500000'))
 check('   e a linha sem moeda sai com a célula da moeda vazia',
-      (R._bacc_ccy(_FAKE[2]), R._bacc_amount(_FAKE[2])), ('', '999'))
+      (BD.ccy(_FAKE[2]), BD.amount(_FAKE[2])), ('', '999'))
 # Número que não parseia sairia como TEXTO no Excel — sem somar e sem ordenar.
 # A versão anterior escrevia como inteiro só o que "parecia dígito", e um
 # notional com centavos não passava no teste.
 check('o valor vira número de verdade nas duas escritas',
-      [R._bacc_num(v) for v in ('1500000', '250000.50', '1.500.000,00', '', 'n/a')],
+      [BD.num(v) for v in ('1500000', '250000.50', '1.500.000,00', '', 'n/a')],
       [1500000, 250000.5, 1500000, None, None])
-_ws = R._bacc_build_xlsx(_saida).active
+_ws = BM.build_xlsx(_saida).active
 _hdr = [c.value for c in _ws[1]]
 _linha = {_hdr[i]: c.value for i, c in enumerate(_ws[2])}
 check('   e chega ao xlsx como número',
@@ -620,7 +625,7 @@ check('as duas colunas de valor levam a máscara de milhar',
 check('   e o Aging não leva',
       _ws.cell(row=2, column=_hdr.index('Aging') + 1).number_format, 'General')
 # Máscara sobre texto não faz nada, mas prometeria um número.
-_ws2 = R._bacc_build_xlsx([_bacc_linha('T-X', '1', 'Pending OTC', 'EUR', 'n/a')]).active
+_ws2 = BM.build_xlsx([_bacc_linha('T-X', '1', 'Pending OTC', 'EUR', 'n/a')]).active
 check('   valor que não parseia fica texto, e sem máscara',
       (_ws2.cell(row=2, column=8).value, _ws2.cell(row=2, column=8).number_format),
       ('n/a', 'General'))

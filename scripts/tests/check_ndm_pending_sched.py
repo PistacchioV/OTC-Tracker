@@ -36,7 +36,9 @@ ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)),
 sys.path.insert(0, ROOT)
 os.chdir(ROOT)
 
-from apps.pages import routes as R                            # noqa: E402
+from apps.pages import routes as R
+# O Deals Monitor mora em features/deals_monitor (nomes preservados no engine).
+from apps.pages.features.deals_monitor import engine as N  # noqa: E402                            # noqa: E402
 
 fails = []
 
@@ -56,15 +58,15 @@ class Bench(object):
         self.sent = []
         self.result = True
         self.recips = {'to': 'ops@x', 'cc': ''}
-        self._real = (R._NDM_PENDING_SENT_FILE, R._NDM_PENDING_STATUS_FILE, R._DAILY_METRIC_DIR,
-                      R._br_now, R._send_ndm_pending_email, R._load_ndm_pending_recipients)
-        R._NDM_PENDING_SENT_FILE = os.path.join(self.tmp, 'sent.json')
-        R._NDM_PENDING_STATUS_FILE = os.path.join(self.tmp, 'status.json')
+        self._real = (N._NDM_PENDING_SENT_FILE, N._NDM_PENDING_STATUS_FILE, R._DAILY_METRIC_DIR,
+                      R._br_now, N._send_ndm_pending_email, N._load_ndm_pending_recipients)
+        N._NDM_PENDING_SENT_FILE = os.path.join(self.tmp, 'sent.json')
+        N._NDM_PENDING_STATUS_FILE = os.path.join(self.tmp, 'status.json')
         R._DAILY_METRIC_DIR = self.tmp
         R._br_now = lambda: self.now
-        R._load_ndm_pending_recipients = lambda: dict(self.recips)
-        R._send_ndm_pending_email = self._send
-        self.times = R._ndm_pending_times()
+        N._load_ndm_pending_recipients = lambda: dict(self.recips)
+        N._send_ndm_pending_email = self._send
+        self.times = N._ndm_pending_times()
         self.now = datetime(2026, 8, 5, 8, 0)
 
     def _send(self, ref, to, cc):
@@ -76,23 +78,23 @@ class Bench(object):
     def tick(self, when):
         """Uma volta do laco naquele instante (e o que o scheduler faz)."""
         self.now = datetime.strptime(when, '%Y-%m-%d %H:%M')
-        R._ndm_pending_catch_up(self.times)
+        N._ndm_pending_catch_up(self.times)
 
     def claimed(self):
         try:
-            return json.load(io.open(R._NDM_PENDING_SENT_FILE, encoding='utf-8'))
+            return json.load(io.open(N._NDM_PENDING_SENT_FILE, encoding='utf-8'))
         except Exception:
             return []
 
     def status(self):
         try:
-            return json.load(io.open(R._NDM_PENDING_STATUS_FILE, encoding='utf-8'))
+            return json.load(io.open(N._NDM_PENDING_STATUS_FILE, encoding='utf-8'))
         except Exception:
             return {}
 
     def close(self):
-        (R._NDM_PENDING_SENT_FILE, R._NDM_PENDING_STATUS_FILE, R._DAILY_METRIC_DIR,
-         R._br_now, R._send_ndm_pending_email, R._load_ndm_pending_recipients) = self._real
+        (N._NDM_PENDING_SENT_FILE, N._NDM_PENDING_STATUS_FILE, R._DAILY_METRIC_DIR,
+         R._br_now, N._send_ndm_pending_email, N._load_ndm_pending_recipients) = self._real
         shutil.rmtree(self.tmp, ignore_errors=True)
 
 
@@ -169,14 +171,14 @@ try:
     b6 = Bench()
     try:
         b6.tick('2026-08-10 19:00')
-        st = R._ndm_pending_status()
+        st = N._ndm_pending_status()
         check('traz o desfecho do ultimo disparo', st['last'].get('result'), 'enviado')
         check('   com o horario', st['last'].get('slot'), '2026-08-10 19:00')
         check('traz os horarios configurados', st['times'], ['19:00', '19:30'])
         check('e o proximo horario', st['next'], '10/08/2026 19:30')
         # Depois do ultimo do dia, o proximo e o primeiro de amanha.
         b6.now = datetime(2026, 8, 10, 21, 0)
-        check('vira o dia depois do ultimo', R._ndm_pending_status()['next'], '11/08/2026 19:00')
+        check('vira o dia depois do ultimo', N._ndm_pending_status()['next'], '11/08/2026 19:00')
     finally:
         b6.close()
 finally:
@@ -212,9 +214,9 @@ class _SMTPStub(object):
         _SMTPStub.raw = raw
 
 
-_smtp_real, _blocks_real = R.smtplib.SMTP, R._ndm_pending_blocks
+_smtp_real, _blocks_real = R.smtplib.SMTP, N._ndm_pending_blocks
 R.smtplib.SMTP = _SMTPStub
-R._ndm_pending_blocks = lambda ref: ([{'tipo': 'Registration', 'label': 'NDF',
+N._ndm_pending_blocks = lambda ref: ([{'tipo': 'Registration', 'label': 'NDF',
                                        'itens': [{'produto': 'NDF Commodities',
                                                   'total': 3, 'detalhe': 'New 3'}],
                                        'total': 3}], 3)
@@ -223,7 +225,7 @@ try:
     _res = {}
 
     def _numa_thread():
-        _res['r'] = R._send_ndm_pending_email(datetime(2026, 8, 7), ['a@b.com'], [])
+        _res['r'] = N._send_ndm_pending_email(datetime(2026, 8, 7), ['a@b.com'], [])
 
     _t = threading.Thread(target=_numa_thread)
     _t.start()
@@ -234,9 +236,9 @@ try:
     check('   com o logo inline', 'otc_logo' in (_SMTPStub.raw or ''), True)
     with app.test_request_context('/'):
         check('e continua funcionando DENTRO de um request',
-              R._send_ndm_pending_email(datetime(2026, 8, 7), ['a@b.com'], []), True)
+              N._send_ndm_pending_email(datetime(2026, 8, 7), ['a@b.com'], []), True)
 finally:
-    R.smtplib.SMTP, R._ndm_pending_blocks = _smtp_real, _blocks_real
+    R.smtplib.SMTP, N._ndm_pending_blocks = _smtp_real, _blocks_real
 
 cl = app.test_client()
 with cl.session_transaction() as s:
@@ -257,7 +259,7 @@ check('o card tem onde mostrar', 'id="cp-dm2-status"' in CP, True)
 check('e le o desfecho', 'renderStatus(d)' in CP, True)
 check('o retry roda a cada volta do laco',
       '_ndm_pending_catch_up(times)' in
-      io.open(os.path.join(ROOT, 'apps', 'pages', 'routes.py'),
+      io.open(os.path.join(ROOT, 'apps', 'pages', 'features', 'deals_monitor', 'engine.py'),
               encoding='utf-8').read().split('def _ndm_pending_scheduler_loop')[1].split('def ')[0], True)
 
 print('\n' + ('FALHOU: ' + ', '.join(fails) if fails else 'TUDO OK'))

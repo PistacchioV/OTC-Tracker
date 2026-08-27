@@ -43,8 +43,11 @@ def with_stage(row):
     em ninguém"*, justamente o contrário. Uma cópia do `is_closed` no JS
     discordaria da do módulo no primeiro status novo que a lista trouxesse.
     """
-    etapa, derivada = cgd_docs.pending_stage(row)
-    row['_stage'] = etapa or ''
+    etapas, derivada = cgd_docs.pending_stages(row)
+    # `_stages` é a LISTA (Legal e OTC correm em paralelo e a coluna mostra as
+    # duas); `_stage` continua sendo a primeira, para quem precisa de uma só.
+    row['_stages'] = etapas
+    row['_stage'] = etapas[0] if etapas else ''
     row['_stage_derived'] = bool(derivada)
     row['_closed'] = bool(cgd_docs.is_closed(row))
     return row

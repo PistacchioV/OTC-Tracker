@@ -29,6 +29,24 @@ import re
 import sys
 
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
+
+
+def _fontes_com_rotas_(base):
+    """routes.py + a arvore de features — as rotas moram nos entrypoints desde
+    a verticalizacao, e um scan so do routes viraria assercao vazia."""
+    import io as _io, os as _os
+    partes = [_io.open(_os.path.join(base, 'apps', 'pages', 'routes.py'), encoding='utf-8').read()]
+    # ... e a arvore da platform/ — a fase §316 move os motores compartilhados
+    # para la, e um scan que parasse nas features perderia o que acabou de sair
+    # do routes (foi a familia de liquidacao a primeira).
+    for raiz in (_os.path.join(base, 'apps', 'pages', 'features'),
+                 _os.path.join(base, 'apps', 'pages', 'platform')):
+        for r, dirs, arqs in _os.walk(raiz):
+            dirs[:] = [d for d in dirs if d != '__pycache__']
+            for a in sorted(arqs):
+                if a.endswith('.py'):
+                    partes.append(_io.open(_os.path.join(r, a), encoding='utf-8').read())
+    return '\n'.join(partes)
 sys.path.insert(0, ROOT)
 os.chdir(ROOT)
 
@@ -125,7 +143,7 @@ check('base64 de UTF-8: o acento do nome volta inteiro',
       volta[0]['counterparty'], 'MONDELEZ BRASIL LTDA')
 check('e as colunas tambem', volta[0]['columns'][1], 'Resultado Líquido (R$)')
 
-SRC = read('apps/pages/routes.py')
+SRC = _fontes_com_rotas_(ROOT)
 print('\n== 5. As QUATRO entradas passam pelo blocker ==')
 for fn, fam in (('api_swap_settlement_advice_emails', 'swap'),
                 ('api_ndf_settlement_advice_emails', 'ndf'),

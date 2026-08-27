@@ -13588,3 +13588,259 @@ Um bug que a integração pegou: o cache gravava em D-1 e a leitura sem data ca�
 batimento rodava e o GET seguinte dizia que ninguém tinha rodado.
 
 `check_cgd_docs.py` e `check_cgd_recon.py` cobrem os dois lados.
+
+---
+
+## §309 — Os SweetAlerts do Holidays Calendar falam o idioma do app (e o mês sai maiúsculo)
+
+A data do popup do feriado estava fixa em `pt-BR` e os títulos/badges dos alertas eram texto inserido
+por JS — que o I18nManager nunca alcança, porque ele traduz os `[data-lang]` uma vez, no load. A
+página ganhou o padrão da casa: mapa `_TRANS` local (en/br/es) com `t()` lendo
+`__OTC_TRACKER_LANG__` — a MESMA chave do I18nManager (o swapchar lê `language`, que é a chave
+antiga; não copie dele). A data por extenso sai do `Intl.DateTimeFormat` no locale do idioma
+escolhido, com o **mês sempre de inicial maiúscula** via `formatToParts` — em inglês o locale já
+capitaliza, em pt/es ele escreve minúsculo, e capitalizar por regex sobre a frase montada quebraria
+no primeiro locale com ordem diferente. `segunda-feira, 10 de Agosto de 2026` ·
+`Monday, August 10, 2026` · `lunes, 10 de Agosto de 2026`.
+
+## §310 — A campanha de verticalização: 24 features fora do `routes.py`
+
+Entre 26/08 e 27/08 o `routes.py` saiu de **39.696 para 31.012 linhas** (−8.700), com **24 verticais**
+em `apps/pages/features/`. O processo de cada fatia foi sempre o mesmo — rede de caracterização ANTES
+(quando não havia), extração, a MESMA rede verde depois, guardas atualizados na mesma mudança, suíte
+inteira, commit — e a suíte cresceu de 84 para **94 scripts**.
+
+A ordem saiu do acoplamento medido (entradas de fora do grupo), e as fronteiras decididas em cada uma
+estão nos docstrings dos `__init__.py`. As que valem regra geral:
+
+- **entrada não é sinal de que a feature não sai — é sinal de plataforma misturada.** O
+  `_anbima_holidays` (holidays), o `_otc_app_url` (conf_escalation), o coletor do forecast
+  (`_forecast_payload`, que o Other Products Summary lê), o `_pcx_is_bizday`, os leitores
+  `_cpd_path/_cpd_load/_cpd_find`, os helpers `_ei_*` e o motor do File Interpreter (`_fi_*`, 36
+  entradas: ele é o gerador de layout de TODO arquivo) ficaram no `routes.py` esperando o `platform/`;
+- **gancho de volta é import atrasado dentro da função**: o pull do NDF grava os pares de re-booking
+  via `_mdea.record_rebooks`, e os saves do New Deals espelham a Intrag via `_intrag_engine()` — os
+  entrypoints só são importados no fim do `routes.py`, então import no topo não existe;
+- **verrugas são REGISTRADAS, nunca consertadas na extração**: o envelope do e-mail do forecast vai
+  fixo para OTC Ops + accrual-cc enquanto os headers levam as listas do card
+  (`check_forecast_api.py`); a primeira gravação da Intrag entra sem coluna de ciclo e é o re-save
+  que materializa o `New` (`check_intrag_api.py`); o calendário do holidays duplica por caixa
+  (`check_holidays_api.py`). Consertar qualquer uma é decisão, com teste mudando junto.
+
+O que resta no `routes.py` é o coração de plataforma (notificações, sessão/authz, banco, ANBIMA, os
+helpers compartilhados acima) e as famílias grandes de página (New Deals com 44 rotas, os summaries,
+live positions, MtM/Accrual, mapping com 1263 linhas) — candidatas das próximas fatias, na mesma
+mecânica.
+
+## §311 — Scheduler mora na feature; o REGISTRO fica no wiring (e o kill-switch dos testes)
+
+Sete features têm laço agendado (bacc, mt300, mdea, conf_escalation, boxscan, pcx, deals_monitor). O
+laço vive em `commands.scheduler_loop`/`engine`, mas o `_schedule_on_start('<label>', …)` fica no
+bloco de wiring do `routes.py`, ao lado do import do entrypoint: o gancho é de plataforma, e chamá-lo
+do corpo do módulo da feature exigiria importar o `routes` ali — o ciclo que a regra das features
+proíbe.
+
+Junto veio **`OTC_DISABLE_SCHEDULERS=1`**, honrado pelo `_start_schedulers`: os testes que sobem o
+app várias vezes (o guard do config purga e reimporta `apps.*`) corriam com os laços VIVOS ao lado —
+uma corrida de import intermitente, e um catch-up de 16h/17h/19h30 num processo de TESTE tentando
+reivindicar o slot REAL do dia e mandar o e-mail de verdade. O `check_boxsched`, que prova justamente
+a subida, LIMPA a variável no próprio arnês — é o único que precisa dos laços de pé.
+
+## §312 — Extração VERBATIM com religação por AST, e o guarda de bytecode que a prende
+
+Para os emaranhados grandes (deals_monitor, cetip, intrag, counterparty_details) o desenho fino
+domain/queries/commands sairia caro demais de uma vez. Eles foram movidos **verbatim** — nomes
+internos preservados, inclusive para os testes que os trocam (`N._NDM_…`, `CE._CETIP_…`) — com uma
+ferramenta que copia os corpos por AST e reescreve todo `Name(Load)` sem dono para `_R().<nome>`
+(busca atrasada no routes). Três armadilhas dela, já pagas:
+
+- o `col_offset` do AST é offset em **BYTES** (utf-8): linha com acento desloca a reescrita em chars;
+- num target de assign, só o `ctx=Store` define nome — `spn_by_key[_ei_match_key(name)] = …` tem um
+  Load DENTRO do target, e tratá-lo como definido deixou um nome sem religar;
+- nome religado só explode quando o CAMINHO roda. Por isso o `check_soc_layers` ganhou a **seção 9**:
+  desmonta o bytecode de toda função das features e cobra que cada `LOAD_GLOBAL` exista no módulo —
+  no primeiro giro pegou um `traceback` sem import no caminho de ERRO do pcx.
+
+A separação interna desses quatro é trabalho futuro; a fronteira com o `routes.py` — e os guardas —
+já valem.
+
+## §313 — Os lotes finais: 43 verticais, e o `routes.py` em 21 mil linhas
+
+A campanha fechou com **43 features** em `apps/pages/features/` e o `routes.py` em **21.322 linhas**
+(de 39.696, −46%). O próprio New Deals saiu no último lote — como a maior casca (44 rotas), com os
+motores ficando no routes. Os últimos lotes foram MtM e Accrual verbatim (com redes novas escritas antes:
+`check_mtm_api`, `check_cognos_api`, `check_intrag_api`, `check_cpd_api`, `check_ei_api`), a família
+de liquidação INTEIRA numa vertical só (`other_products`, 29 rotas — o `_ops_trade_rows` é o único
+lugar que sabe as famílias, então parti-la seria cruzar features), e as cascas de confirmation,
+pending_confirmation, live_positions, file_interpreter, ndf_cockpit e ndf_other_publisher.
+
+O que FICOU no `routes.py` é plataforma de verdade: sessão/authz, notificações, os DuckDB, ANBIMA,
+os coletores da liquidação (`_ops_*`, `_otm_*`, `_latam_*`, `_opb3_*`, `_ndfsum_*`), os stores por
+dia, o motor `_fi_*` do File Interpreter, os leitores `_cpd_*`/`_ei_*`/`_pc_*` e os motores do New
+Deals (caches, lookup de contraparte, roteamento por publisher, espelho Lawton, geradores
+TER/Conecta) — o material da fase `apps/pages/platform/`, que é o próximo passo natural: dar casa
+própria ao que hoje as features alcançam por `_R()`.
+
+Oito guardas que varriam o TEXTO do `routes.py` ganharam a leitura concatenada (routes + árvore de
+features), e os que desmontam AST aceitam a chamada por busca atrasada (`func.attr` além de
+`func.id`). A suíte fechou em **96 scripts** verdes, todos com `OTC_DISABLE_SCHEDULERS=1` no arnês
+coletivo e as páginas principais respondendo 200 no smoke.
+
+## §314 — A fase platform/ começa: calendário ANBIMA e notificações
+
+As duas primeiras horizontais ganharam casa própria em `apps/pages/platform/`, na ordem do
+acoplamento medido: **`anbima.py`** (o calendário de dias úteis — `_br_now`, `_prev_anbima_bizday`,
+`_pcx_is_bizday` e as duas cargas históricas do `anbima.json`, movidas as duas de propósito:
+unificá-las muda comportamento de borda e é outra decisão) e **`notifications.py`** (o motor do sino
+e do Web Push — o mapa `_NOTIF_PAGE_URL`, `get_notif_connection`, o ensure/migração da subida,
+`_create_notification` → `_push_notify`; era o nome mais alcançado pelas features, 118 pontos de
+chamada). Os ENDPOINTS do sino continuam no `routes.py`: rota é casca.
+
+O padrão da fase, que as próximas fatias repetem:
+
+- **O `routes.py` mantém os nomes como ALIAS** (`_x = _pf_anbima._x`): as features seguem
+  alcançando por `routes.<nome>` sem mudar, e os 22 testes que trocam `R._create_notification`
+  por espião continuam interceptando todo mundo — o alias é um atributo do `routes`, e todo
+  chamador o resolve em tempo de chamada.
+- **O ESTADO mora na platform** (`_ANBIMA_HOLIDAYS`, `_notif_db_done`, `_notif_db_retry_at`):
+  alias de objeto mutável apontaria para o set velho quando a carga rebinda o global. Teste que
+  troca estado troca LÁ — `check_conf_escalation` e `check_notif_db_boot` foram apontados na
+  mesma mudança.
+- **Platform não importa NOME do routes, e o import do MÓDULO é atrasado** — o que ainda é do
+  `routes` (`DB_PATH`, `NOTIF_DB_PATH`, `_B3_DATA_DIR`, `_DuckDBHandle`, `duckdb_*`) é alcançado
+  por `routes.<nome>` dentro da função, andaime declarado até a camada de banco ter fatia. É o que
+  mantém válidos `R.NOTIF_DB_PATH = tmp` e os contadores de `check_notif_db_boot` sobre
+  `R.duckdb_write` — e `R.duckdb_read_unlocked` segue importado no `routes` DE PROPÓSITO (o
+  pyflakes o marca como não usado; `check_db_read_path` o troca por espião e a platform o alcança
+  por atributo).
+- **Guardas na mesma mudança**: `check_soc_layers` ganhou a seção 10 (platform nunca importa
+  feature nem nome do routes, LOAD_GLOBAL resolve, e o alias do routes É o objeto da platform —
+  extração pela metade é cópia que diverge); a seção 8 cobra os `def` movidos fora do routes;
+  `check_notif_page_url` varre `platform/` junto com as features; `check_mc_notify` lê o
+  `_push_notify` no arquivo novo (o split por texto estourou na hora — foi assim que a mudança de
+  casa apareceu). `check_unlocked_reads` não precisou de nada: ele varre `apps/**` por nome de
+  função, e `get_notif_connection` levou o nome junto.
+
+Dois leitores inline do estado no `routes.py` foram reescritos para a função (`_forecast_spine`
+usa `_pcx_is_bizday`), porque ler `_ANBIMA_HOLIDAYS` por alias é ler o objeto de antes da carga.
+O `routes.py` fechou em **20.752 linhas** (−570). Suíte: 96/96 verdes.
+
+## §315 — Cinco fatias de uma vez: a infraestrutura horizontal inteira na platform/
+
+O lote fechou a camada de INFRA da fase platform/ (§314 tem o padrão; este lote o repete cinco
+vezes): **`json_cache.py`** (o armazém JSON — `_cache_lock`, `_atomic_write_json` com o
+`bump_cache_gen` no funil, os claims diários cross-process do BACC/MDEA/MT300, o daycache memoizado
+`_day_files`/`_day_json` e o `_unique_filepath`), **`mail.py`** (relay, `SHARED_MAILBOX`, logo,
+gradiente no-op, `_parse_emails`, `_email_drafts_response`, `_otc_app_url` — os SENDERS ficam com os
+donos; quem stuba SMTP troca `R.smtplib.SMTP`, e módulo é um objeto só para todo importador),
+**`dates.py`** (`_parse_date_any`, `_parse_deal_date`, `_EN_MONTH_NAMES` — parse é aqui, calendário
+é no `anbima.py`), **`db.py`** (`_DuckDBHandle` + `get_db_connection`; primitivas seguem no
+`database_access.py`, caminho e `_ensure_db_initialized` seguem no `routes` como superfície de patch)
+e **`authz.py`** (master/admin, allowlist do `Page_Access` com o cache por SID, o registro
+`_CONTROL_PANEL_CARDS`/`_CP_ENDPOINT_CARD`, `_safe_landing`, `_user_can_access_page` — os dois
+`before_request` que APLICAM ficam no `routes`: registro em blueprint é casca).
+
+O que este lote ensinou, além do §314:
+
+- **Objeto de estado mutado IN PLACE aceita alias** (`_cache_lock`, `_daycache_memo`,
+  `_page_access_cache`): ninguém os rebinda, então o alias do `routes` continua vivo e os testes
+  que os leem por lá não mudam. O critério é o rebind, não o tipo — o set da ANBIMA não aceitava.
+- **Caminho relativo a `__file__` muda de valor quando o código muda de casa**: o `_load_nav_urls`
+  precisou de `../../templates` no lugar de `../templates` — o único ajuste não-verbatim do lote,
+  conferido pelo tamanho do `_NAV_URLS` (77 páginas).
+- Dois guardas de TEXTO acompanharam o código na mesma mudança: `check_req_cache` lê o funil do
+  `_atomic_write_json` no arquivo novo, e a âncora nova da seção 8 do `check_soc_layers` aprendeu
+  que `'_cache_lock = threading'` casa com o `_dash_cache_lock` — âncora de substring pede o
+  sufixo (`threading.RLock`).
+- `import portalocker` e `import tempfile` saíram do topo do `routes` (só o armazém os usava);
+  o `duckdb_read_unlocked` FICA (§314 — superfície de patch e atributo que a platform alcança).
+
+Sete módulos na `platform/` (calendário, notificações, armazém JSON, e-mail, datas, banco,
+autorização), `routes.py` em **20.139 linhas** (21.322 no fechamento da campanha, −1.183 na fase).
+Suíte: 96/96 verdes. Próximas fatias: os motores compartilhados (liquidação, `_conf_*`, CC/CPD,
+quotes/forecast, EI, `_mc_*`, FI/PC/OpB3, New Deals) e as seis separações internas dos verbatim.
+
+## §316 — Os três primeiros MOTORES na platform/: liquidação, `_conf_*` e o Counterparty Details
+
+A fase entrou nos motores compartilhados, na ordem da fila do §315. Três fatias, todas VERBATIM
+com religação por bytecode (compila cada def isolado e lê os LOAD_GLOBAL com `co_positions` — a
+mesma técnica da seção 9/10 do `check_soc_layers`, que é o que prova depois que nenhum nome ficou
+órfão):
+
+- **`settlement.py`** (~1.400 linhas) — a família de liquidação inteira: `_ops_trade_rows` (o único
+  lugar que sabe as famílias, §199) e todo o `_ops_*`/`_opssum_*`/`_opsadv_*`, o elo de equity
+  (`_ops_equity_link`, `_latam_equity_b3_index`, `_latam_trade_dt`) e o `_swadv_indexador`. Os
+  leitores `_opb3_*` + `_ops_norm_event` FICARAM no `routes` de propósito: são da fatia FI/PC/OpB3,
+  e a fatia os alcança por `routes.<nome>` como qualquer andaime.
+- **`confirmations.py`** (~1.330 linhas) — o motor `_conf_*` das quatro famílias: segregação por
+  contraparte × mercadoria, estado New→Generated→Success, `_conf_esteira_stages` (§254), as três
+  páginas de geração, o XML da B3 e o `_conf_pc_set_fepweb`. Os três `_mc_*` vizinhos
+  (`_mc_conf_trade_keys`, `_mc_ei_link`, `_mc_stamp_generated`) ficaram para a fatia `_mc_*`. O
+  estado `_conf_subj_cache` é mutado in place — alias vale (critério do §315).
+- **`counterparty.py`** (~390 linhas) — o CounterpartyDetails.json: `_cpd_*`, `_norm_spn`, os
+  normalizadores (`_contacts_norm`/`_net_norm`/`_bank_norm`/`_cgd_norm`, `_default_slot`,
+  `_CP_NET_TYPES`) e o parser `_cc_*` do Update Contacts — CC e CPD juntos porque operam o mesmo
+  arquivo.
+
+O que este lote ensinou, além do §314/§315:
+
+- **Chamada interna do módulo não passa pelo alias.** O §314 prometia que trocar a função no
+  `routes` intercepta todo mundo — vale para quem chega DE FORA (o alias resolve em tempo de
+  chamada), e deixa de valer quando o chamador mudou de casa JUNTO: `_cpd_load` chama `_cpd_path`
+  por global do próprio módulo. Os quatro testes atingidos (`check_cpd_api`, `check_fwdstart_conf`,
+  `check_ops_equity_option` ×2) trocam agora nos DOIS lugares — `R.` para quem chega de fora, o
+  módulo da platform para a chamada interna.
+- **`session` do Flask é superfície de patch.** O `check_swap_advice` faz `R.session = {...}` para
+  carimbar o maker fora de request context; um `from flask import session` na platform passaria por
+  cima do espião. Na platform ele é `routes.session`, sempre.
+- **`__module__` mente sob `functools.wraps`.** O wrapper do `@_req_cached` carrega o nome do módulo
+  decorado, mas o CÓDIGO — e os globals que ele resolve — são do `request_cache.py`; a seção 10 do
+  guarda estourava com os globals do wrapper. Quem diz onde o código mora é o `co_filename`, e o
+  corpo decorado (que é o que a religação precisa provar) segue conferido via `__wrapped__`.
+- **O `_fontes_com_rotas_` dos oito testes ancorados em texto varre `platform/` junto** — a mesma
+  correção do §314 (`check_notif_page_url`), aplicada de uma vez às oito cópias; as próximas fatias
+  não tocam nesses testes. Quatro guardas com leitura direta do `routes.py` foram apontados para o
+  arquivo novo (`check_req_cache` ganhou `platform/settlement.py` na lista; `check_co12_roll`,
+  `check_conf_optcomm_palmoil` e `check_ops_summary` leem o módulo da fatia).
+
+Dez módulos na `platform/`, `routes.py` em **17.320 linhas** (−2.819 no lote; 21.322 no fechamento
+da campanha). Suíte: 96/96 verdes. Próximas fatias: quotes/forecast, EI, `_mc_*`, FI/PC/OpB3,
+New Deals — e as seis separações internas dos verbatim.
+
+## §317 — Mais três motores: Forecast, Electronic Inventory e a cola da esteira (`_mc_*`)
+
+O lote repete o §316 (mesma ferramenta de religação por bytecode, mesmo padrão de alias) três
+vezes:
+
+- **`forecast.py`** (~530 linhas) — a matriz do Settlement Forecast: `_forecast_collect`/
+  `_forecast_payload`/`_forecast_spine`, os `_fcst_*` (parse de data, entidade, produto, LOB,
+  normalização) e os mapas de contrato de swap (`_swap_contract_ident_map`/`_swap_contract_cpty_map`).
+  É horizontal porque a família de liquidação lê daqui (`_ops_settlement_counts`,
+  `_ops_swap_trade_rows`) — pelo alias do routes, então a ordem das fatias não importou.
+- **`electronic_inventory.py`** (~420 linhas) — resolução de pasta de cliente no share, o scanner
+  do root com cache/TTL (`_EI_ROOT_CACHE`, estado in place — alias vale), versões ordinais e
+  listagem. O **`ELECTRONIC_INVENTORY_ROOT` FICOU no routes de propósito**: o `check_ei_api` faz
+  `R.ELECTRONIC_INVENTORY_ROOT = tmp`, e o motor o lê por `routes.<nome>` — o teste passou sem
+  UMA linha de edição, que era o objetivo. O `_CONFIRMATION_TYPES` vem direto do `manual_conf`
+  (mesma tupla que o routes apelida), preservando `_EI_CONFIRMATION_TYPES = _CONFIRMATION_TYPES`
+  byte a byte.
+- **`manual_confirmation.py`** (~770 linhas) — a cola `_mc_*`: o gancho `_mc_save_from_deal`
+  (chamado de DENTRO do `_pc_save_from_deal`, que fica no routes), `_mc_legal_entity`, os
+  documentos da pasta (`_mc_confirmation_docs` + E-mail Subject), papéis e avisos
+  (`_MC_STAGE_ROLE`, `_MC_STAGE_NOTIFY_ROLES`), o Generate do Monitor e o `_mc_pc_sync`. Os
+  seeds de mapping (`_MC_VALIDATION_SEED`…) ficaram no routes: são material do `_MAPPING_DEFS`,
+  não da cola.
+
+A lição nova: **constante de módulo que referencia outra fatia da platform importa DIRETO.** O
+`_MC_GENERATE_PRODUCTS` referencia os grupos das confirmações (`_conf_ndfcomm_groups`…) no NÍVEL
+DO MÓDULO, e o bloco de alias das confirmações vive num ponto do `routes.py` POSTERIOR ao import
+deste módulo — `routes.<nome>` não existiria ainda. O import direto de `platform.confirmations`
+entrega os mesmos objetos que o alias aponta, e platform→platform não fere fronteira nenhuma.
+
+Nenhum teste precisou de repoint neste lote (os quatro do §316 já tinham sido; o
+`_fontes_com_rotas_` corrigido lá cobriu os ancorados em texto daqui de graça). Guardas: seções
+8 e 10 do `check_soc_layers` com os três módulos novos.
+
+Treze módulos na `platform/`, `routes.py` em **15.828 linhas** (−1.588 no lote; −4.311 na fase
+de motores; 21.322 no fechamento da campanha). Suíte: 96/96 verdes. Próximas fatias: FI/PC/OpB3,
+New Deals — e as seis separações internas dos verbatim.

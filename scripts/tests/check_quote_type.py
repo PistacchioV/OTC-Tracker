@@ -123,7 +123,8 @@ check('os PTS* saem do arquivo antigo na migracao',
       [r.get('B3 CODE') for r in R._commodities_b3_upgrade(pts_antigo)], ['NG1'])
 
 print('\n== 4. nenhum consumidor guarda mais o literal ==')
-src = io.open('apps/pages/routes.py', encoding='utf-8').read()
+src = (io.open('apps/pages/routes.py', encoding='utf-8').read()
+       + io.open('apps/pages/features/new_deals/entrypoint.py', encoding='utf-8').read())
 check('Termo: sem o F/A no codigo', "'F' if is_fixed else 'A'" in src, False)
 check('Termo: sem o 340/358 no codigo', "'340' if is_fixed else '358'" in src, False)
 check('Termo: le do cadastro', "tipo_cotacao = _q['ndf']" in src, True)
@@ -131,7 +132,8 @@ check('Termo: fonte le do cadastro', "fonte_info   = _q['source']" in src, True)
 # Desde o File Interface v3 a montagem e por seq do template (values dict).
 check('Opcao: sem o 5 literal', "f[17] = '5'" in src and "'18': '5'" in src, False)
 check('Opcao: le do cadastro',
-      "'18': _b3_quote_cfg(_sh(deal.get('UnderlyingAsset', '')))['opt']" in src, True)
+      "'18': _b3_quote_cfg(_sh(deal.get('UnderlyingAsset', '')))['opt']" in src
+      or "'18': _R()._b3_quote_cfg(_sh(deal.get('UnderlyingAsset', '')))['opt']" in src, True)
 
 NDF_PAGES = ['new_deals-ndf-commodities', 'new_deals-ndf-vanilla',
              'new_deals-ndf-otherpublisher', 'new_deals-ndf-fwdstart']

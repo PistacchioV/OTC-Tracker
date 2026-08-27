@@ -115,18 +115,24 @@ check('o New Deals segue apontando para a dele',
 # secao 5 estourava com IndexError.)
 def _fontes_com_rotas():
     partes = [read('apps/pages/routes.py')]
-    base = os.path.join(ROOT, 'apps', 'pages', 'features')
-    for raiz, dirs, arqs in os.walk(base):
-        dirs[:] = [d for d in dirs if d != '__pycache__']
-        for a in sorted(arqs):
-            if a.endswith('.py'):
-                partes.append(io.open(os.path.join(raiz, a), encoding='utf-8').read())
+    # A arvore de platform/ entra pela mesma razao das features: o motor do
+    # sino mora la desde a fatia `platform/notifications.py`, e um
+    # `_create_notification` chamado de la com rotulo literal tem de passar
+    # pela mesma varredura.
+    for sub in ('features', 'platform'):
+        base = os.path.join(ROOT, 'apps', 'pages', sub)
+        for raiz, dirs, arqs in os.walk(base):
+            dirs[:] = [d for d in dirs if d != '__pycache__']
+            for a in sorted(arqs):
+                if a.endswith('.py'):
+                    partes.append(io.open(os.path.join(raiz, a), encoding='utf-8').read())
     return '\n'.join(partes)
 
 
 SRC = _fontes_com_rotas()
-blk = SRC.split("@blueprint.route('/api/ndf-other-publisher/data')", 1)[1] \
-         .split('#  Cognos', 1)[0]
+# A tela mora em features/ndf_other_publisher — o bloco é o entrypoint inteiro.
+blk = io.open(os.path.join(ROOT, 'apps', 'pages', 'features', 'ndf_other_publisher',
+                           'entrypoint.py'), encoding='utf-8').read()
 check('as notificacoes da tela usam a constante', blk.count('_NOTIF_DS_OTHERPUB'), 4)
 check('   e nenhuma usa o rotulo do New Deals', "'NDF Other Publisher'," in blk, False)
 

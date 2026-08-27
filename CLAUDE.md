@@ -660,7 +660,13 @@ São **43** mappings hoje: `currency-base`, `interbook-ndf`, `publisher-ndf`,
 `dce-type-of-swap`, `dce-type-of-verification`, `dce-functionality`,
 `dce-underlying-asset-category`, `dce-underlying-asset`), mais os quatro do CGD
 (`cgd-stage`, `cgd-b3-participante`, `cgd-garantidor`, `cgd-conta-encerrada` —
-os três últimos eram abas do `Auxiliar.xlsx` do batimento) — seeds vazios com os
+os três últimos eram abas do `Auxiliar.xlsx` do batimento, e as COLUNAS deles
+seguem a ordem e os nomes das abas: no `cgd-b3-participante` — rótulo
+**CGD — B3 Participants** — Razão Social · Nome Simplificado · CNPJ · **Conta**,
+com as CHAVES antigas preservadas porque o motor da recon lê por elas; no
+`cgd-garantidor` a coluna `NOME` virou `EMPRESA` com `upgrade` na leitura.
+`scripts/import_cgd_auxiliar.py` carrega as três abas nos JSONs — idempotente,
+reescreve cada cadastro) — seeds vazios com os
 JSONs versionados, como os dois Quotes (o `dce-underlying-asset` tem ~14 mil
 linhas). As colunas dos `dce-*` carregam `lang` (chave i18n): o `colLabel` do
 mapping.html traduz cabeçalho, filtro, export e modal — coluna sem `lang`
@@ -1067,24 +1073,36 @@ estão:
 - **O formulário de abertura vive no SERVIDOR** (`REQUEST_FORM`): rótulo, coluna
   do banco, tipo, obrigatoriedade e dica de cada campo. Dele saem DUAS coisas — o
   modal de *New Request* (partial `partials/onboarding-new-request.html`, incluído
-  pelo Overview e pelo Tracking Docs) e o `REQUEST_FIELDS` que segura o documento
-  no Banking. Escrito no template, o dia em que um campo deixasse de ser
-  obrigatório o modal pararia de pedi-lo e a fila continuaria cobrando. O
-  `REQUEST_FIELDS` fica ANTES do `STAGE_STAMP` no módulo, que o consome na
-  leitura: definido depois, o Banking nasceria com a lista vazia e a fila ficaria
-  permanentemente zerada, sem erro nenhum. E o `check_cgd_docs` confere que toda
-  coluna citada no formulário EXISTE — nome errado ali não dá erro, o
-  `update_row` ignora a chave e o campo preenchido some no caminho.
-- **A esteira tem QUATRO mesas, e o `Banking` é a PRIMEIRA**: Banking · Legal ·
-  OTC · CEM MO. Banking é quem abre a solicitação, e o documento sai de lá quando
-  os campos **obrigatórios do formulário** estão preenchidos (`REQUEST_FIELDS`:
-  `Data Solicitação`, `Razão Social`, `CNPJ`, `Signature Type` — os `*` do
-  formulário; `Grupo` e `Dominio` são opcionais e cobrá-los deixaria na fila uma
-  solicitação que já pode seguir). O nome da coluna do banco nem sempre é o do
-  formulário: `CGD - Solicitação` é a `Data Solicitação` e `CGD - Tipo de
-  Assinatura` é o `Signature Type`. Era um cartão só, `Banking OTC`, e ele juntava
-  duas mesas que trabalham em momentos diferentes — a que pede o contrato e a que
-  o confere depois de assinado.
+  pelo Overview e pelo Tracking Docs) e o `REQUEST_FIELDS` que a validação do
+  Save exige. Escrito no template, o dia em que um campo deixasse de ser
+  obrigatório o modal pararia de pedi-lo. O formulário pede também Document Type
+  (o domínio é o `DOC_TYPES` = Transactional Type do EI), a Legal Entity
+  (`LEGAL_ENTITIES`, Banco por default), ECI/SPN/CASID/UCN, e dois CHECKBOXES
+  (gravam Yes/No): Financial Institution e o *Client Domain in the Appendix* —
+  este com coluna PSEUDO `_domain_in_appendix` (começa com `_`, não persiste;
+  só liga o `enabled_by` do Dominio: marcado, o campo trava e grava `Included
+  in the Appendix`; desmarcado, digitar o domínio vira obrigatório). E o
+  `check_cgd_docs` confere que toda coluna real citada no formulário EXISTE —
+  nome errado ali não dá erro, o `update_row` ignora a chave e o campo
+  preenchido some no caminho.
+- **A esteira tem TRÊS mesas, e Legal e OTC correm em PARALELO**: Legal · OTC ·
+  CEM MO. O `Banking` saiu — a ação dele é o próprio **New Request** (que valida
+  os `REQUEST_FIELDS` antes de gravar), então a solicitação criada já nasce
+  pendente **nas duas filas ao mesmo tempo** (`pending_stages` devolve LISTA; o
+  `pending_stage` singular é a primeira). O que fecha cada mesa é o carimbo
+  dela: **Legal** termina anexando o **Taxonomy** no card do Overview (Excel ou
+  PDF; sobe pelo Electronic Inventory como `CGD TAXONOMY` e a coluna `Taxonomy`
+  — à esquerda do Captis, FORA de `DATE_COLUMNS` porque guarda `data · SID` e o
+  fmt_date jogaria o SID fora — recebe o carimbo, passando a pendência ao CEM
+  MO); **OTC** termina no modal do item (dropzone do CGD abonado → EI como
+  `CGD ABONADO`, Issue Date, Signature Date e o B3 ID — que cai em `B3 ID - JPM`
+  ou `B3 ID - MGT` conforme a **Legal Entity** da solicitação, `b3_id_column`);
+  **CEM MO** tem dois botões — Download (o taxonomy e o abonado mais recentes do
+  EI da contraparte) e Complete (`MO - STAMP` + `Conclusion - Stamp` + Status
+  `Active`). Quem escreve data e SID é o SERVIDOR
+  (`/api/onboarding/docs/stamp`), e o upload vem ANTES do carimbo — a mesma
+  ordem do New Request. Um STAGE `Banking` ainda cadastrado no `cgd-stage` cai
+  na derivação, senão o item sumiria das filas.
 - **O `Apêndice` do formulário é ARQUIVO e não tem coluna**: ele vai para o
   Electronic Inventory da contraparte, pasta `Transactional`, com o prefixo
   `CGD TEMPLATE` (`APPENDIX_EI_TYPE`/`APPENDIX_EI_SUBTYPE`) — é onde os
@@ -1106,14 +1124,18 @@ estão:
   `/api/onboarding/docs`), e o valor JÁ GRAVADO entra na lista mesmo fora dos três
   — escondê-lo faria o primeiro Save trocar o tipo da linha sem ninguém pedir. Não
   é cadastro do /mapping: é o domínio de UM campo, não um de-para.
-- **A etapa** de todo documento que não está encerrado sai do cadastro
-  **`cgd-stage`** (STATUS → mesa) e, sem linha cadastrada, é derivada pelo
-  primeiro carimbo que falta — solicitação incompleta → Banking,
-  `Emissão`/`Signature Date` → Legal, `OTC - STAMP` → OTC, `MO - STAMP` → CEM MO. O item vem
-  MARCADO como derivado, para ninguém confundir dedução com cadastro. Documento
-  com todos os carimbos e ainda não `Active` fica na ÚLTIMA mesa: devolvê-lo sem
-  etapa o faria sumir das quatro filas, e um pendente que some é pior que um
-  pendente na fila errada.
+- **As etapas** de todo documento que não está encerrado saem do cadastro
+  **`cgd-stage`** (STATUS → mesa, uma só — quem cadastrou foi explícito) e, sem
+  linha cadastrada, são DERIVADAS pelos carimbos: sem `Taxonomy` → Legal; com
+  `Taxonomy` e sem `MO - STAMP` → CEM MO; sem `OTC - STAMP` → OTC — Legal e OTC
+  ao mesmo tempo é o estado normal da solicitação recém-criada. As datas de
+  `Emissão`/`Signature Date` NÃO derivam mais nada: quem as grava é o modal do
+  OTC. O item vem MARCADO como derivado, para ninguém confundir dedução com
+  cadastro. Documento com todos os carimbos e ainda não `Active` fica na ÚLTIMA
+  mesa: devolvê-lo sem etapa o faria sumir das filas, e um pendente que some é
+  pior que um pendente na fila errada. Na grade do Tracking Docs a coluna
+  *Pending with* é SEMPRE badge pill — uma por mesa pendente, ou o `Finalized`
+  do encerrado.
 
 - **Encerrado não é pendência de ninguém.** `is_active` responde só pelo
   `Active` (comparação EXATA: `Inactive` normaliza para `INACTIVE`, que CONTÉM
@@ -2134,10 +2156,12 @@ roda na máquina Windows do time (§163).
 
 ## 10. As verticais (`apps/pages/features/`)
 
-O `routes.py` tem **39 mil linhas** porque toda funcionalidade nasceu nele: 1293
-funções de topo, 371 rotas, 514 constantes. A saída é levar **uma feature de
-cada vez** para `apps/pages/features/<nome>/`, seguindo a skill
-[`separation-of-concerns`](.claude/skills/separation-of-concerns/SKILL.md).
+O `routes.py` TINHA **39 mil linhas** porque toda funcionalidade nasceu nele.
+A saída foi levar **uma feature de cada vez** para
+`apps/pages/features/<nome>/`, seguindo a skill
+[`separation-of-concerns`](.claude/skills/separation-of-concerns/SKILL.md) —
+sempre com rede de caracterização ANTES, a mesma rede verde DEPOIS, e os
+guardas atualizados na mesma mudança.
 
 ```
 features/<nome>/
@@ -2148,9 +2172,69 @@ features/<nome>/
 └── infra/          persistence.py · mail.py · mappers.py
 ```
 
-Extraídas até aqui: **`support`** (450 linhas / 6 rotas), **`onboarding`**
-(154 / 7), **`reconciliation_fxo`** (101 / 4) e **`quotes`** (129 / 3). O
-`routes.py` saiu de 39.696 para 38.912 linhas.
+**A campanha fechou em 27/08/2026: 43 verticais, e o `routes.py` em 21.322
+linhas (−46%).** O catálogo, com a fronteira decidida de cada uma no docstring
+do próprio `__init__.py`:
+
+- **Desenho fino** (domain/queries/commands/infra): `support`, `onboarding`,
+  `reconciliation_fxo`, `quotes`, `holidays`, `bacc`, `mt300`, `appver`,
+  `mdea`, `conf_escalation`, `daily_metric`, `weekly_escalation`, `recon_cgd`,
+  `boxscan`, `sigcoll`, `pcx`, `forecast`, `recon_comitente`, `recon_payrec`,
+  `cognos`.
+- **Verbatim** (`engine.py` + `entrypoint.py`, nomes internos preservados):
+  `deals_monitor`, `cetip`, `intrag`, `counterparty_details`, `mtm`,
+  `accrual`.
+- **Casca** (só as rotas; motores/stores continuam no `routes` como
+  plataforma): `electronic_inventory`, `manual_confirmation`, `otm`, `latam`,
+  `ndf_summary`, `operations_b3`, `other_products`, `file_interpreter`,
+  `confirmation`, `ndf_cockpit`, `ndf_other_publisher`, `pending_confirmation`,
+  `live_positions`, `mapping`, `index_b3`, `daily_settlement` e **`new_deals`**
+  (44 rotas, a maior).
+
+O que FICA no `routes.py` é só plataforma: sessão/authz, notificações/push,
+banco, ANBIMA, dashboard, o registro `_MAPPING_DEFS`, e os motores
+compartilhados (New Deals, família de liquidação, File Interpreter, Pending
+Confirmation, EI, CPD) — o material da futura fase `apps/pages/platform/`.
+
+**O guarda ganhou a seção 9** (`check_soc_layers`): desmonta o bytecode de toda
+função das features e cobra que cada `LOAD_GLOBAL` exista no módulo — é o que
+pega o nome que a religação por AST deixou escapar, que só viraria `NameError`
+quando aquele caminho rodasse (pegou um `traceback` sem import no pcx no
+primeiro giro).
+
+**`deals_monitor` e `cetip` foram movidos VERBATIM** (`engine.py` +
+`entrypoint.py`): os nomes internos foram preservados — inclusive para os
+testes que os trocam — e o que é de plataforma é alcançado por `_R().<nome>`
+(busca atrasada gerada por AST). A separação interna em domain/queries/commands
+é trabalho futuro; a fronteira com o `routes.py`, e o guarda que a prende, já
+valem. A ferramenta que faz isso é o `extract_verbatim.py` (scratchpad da
+sessão): copia os corpos por AST e religa todo `Name(Load)` sem dono.
+
+**O `bacc` foi o primeiro com SCHEDULER, e o registro dele NÃO veio junto.** O
+laço vive em `commands.scheduler_loop`, mas o `_schedule_on_start('bacc-ea', …)`
+fica no bloco de wiring do `routes.py`, ao lado do import do entrypoint:
+chamá-lo do corpo do módulo da feature exigiria importar o `routes` ali — o
+ciclo que a regra abaixo proíbe. O gancho é de plataforma; a feature só expõe o
+`start_scheduler`. O mesmo desenho vale para `mt300`, `mdea` e
+`conf_escalation`; o `appver` não tem scheduler (só o botão do card). E os
+laços todos respeitam **`OTC_DISABLE_SCHEDULERS=1`** (`_start_schedulers`): é o
+kill-switch dos testes que sobem o app várias vezes — um catch-up de
+16h/17h/19h30 num processo de TESTE tentaria reivindicar o slot REAL do dia.
+
+**O `mdea` tem a única entrada de fora**: o pull do NDF grava os pares
+(vanilla ↔ FWD Start) via `_mdea.record_rebooks(...)` — import atrasado dentro
+da função, porque os entrypoints só são importados no fim do `routes.py`. E o
+`_otc_app_url` NÃO foi com o `conf_escalation`: endereço absoluto para botão de
+e-mail é plataforma (§7), e ficou no `routes.py` para o próximo e-mail com botão
+não importar a vertical da cobrança.
+
+**O `holidays` foi o primeiro com fronteira a decidir.** Ele tinha três
+referências de entrada, e as três eram para o `_anbima_holidays` — que não é o
+calendário DAQUELA tela e sim o de dias úteis do app inteiro (SLA da esteira,
+aging do CGD, schedulers, D-1 das recons). Ele é **horizontal** e ficou no
+`routes.py` esperando o `platform/`; vir junto obrigaria meia dúzia de features
+a importar a vertical de Feriados para saber se sexta é dia útil. Entrada não
+é sinal de que a feature não sai — é sinal de que há plataforma misturada nela.
 
 Nem toda vertical tem `domain.py`: o do Onboarding é o `apps/pages/cgd_docs.py`,
 e ele **fica onde está** porque a Recon de CGD e o /mapping também o consultam —
@@ -2191,26 +2275,86 @@ delega a ele em vez de criar um arquivo vazio.
 `check_soc_layers.py` prende tudo isso, inclusive subindo o app para conferir as
 rotas no `url_map` — import escrito e import que executou são coisas diferentes.
 
-### A ordem das próximas fatias
+### A fase `platform/` (começou em 27/08/2026 — HANDOFF §314–§317)
 
-Ela sai do **acoplamento medido**, não do tamanho. Entrada = quantas funções de
-fora chamam o grupo; saída = de quantas ele depende:
+A fila de features acabou — as 43 fatias saíram na ordem do acoplamento medido,
+histórico no HANDOFF §310–§313 — e a camada de INFRA horizontal já mora em
+`apps/pages/platform/`, sete módulos: **`anbima.py`** (o calendário de dias
+úteis — `_br_now`, `_prev_anbima_bizday`, `_pcx_is_bizday`, as DUAS cargas
+históricas do `anbima.json` preservadas de propósito), **`notifications.py`**
+(o motor do sino e do Web Push — `_NOTIF_PAGE_URL`, `get_notif_connection`, o
+ensure/migração da subida, `_create_notification` → `_push_notify`),
+**`json_cache.py`** (o armazém JSON — `_cache_lock`, `_atomic_write_json`, os
+claims diários cross-process, o daycache `_day_files`/`_day_json`),
+**`mail.py`** (relay/caixa da mesa, logo, `_parse_emails`,
+`_email_drafts_response`, `_otc_app_url` — os senders ficam com os donos),
+**`dates.py`** (`_parse_date_any`/`_parse_deal_date` — parse aqui, calendário
+no anbima), **`db.py`** (`_DuckDBHandle` + `get_db_connection`; as primitivas
+seguem no `database_access.py`) e **`authz.py`** (master/admin, allowlist do
+`Page_Access` com cache por SID, o registro de cards do Control Panel). Os
+endpoints do sino e os dois `before_request` continuam no `routes.py`: rota e
+registro em blueprint são casca.
 
-| Candidato | linhas | entrada | saída | |
-|---|---|---|---|---|
-| `support` | 450 | **0** | 15 | ✅ feito |
-| `onboarding` (CGD) | 154 | **0** | 3 | ✅ feito |
-| `reconciliation-fxo` | 101 | **0** | 4 | ✅ feito |
-| `quotes` | 129 | **0** | 4 | ✅ feito |
-| `holidays` | 254 | 3 | 11 | próximo |
-| `bacc` · `mt300` · `appver` | ~170–310 | 7–9 | 13–21 | |
-| `conf-escalation` · `mdea` | ~314–384 | 12–13 | 17–20 | |
-| `file-interpreter` | 307 | **43** | 4 | tarde |
-| `mapping` | 1263 | 39 | 35 | tarde |
-| `notificações` | 393 | **161** | 9 | é PLATAFORMA, não feature |
+**Seis MOTORES já saíram (§316–§317):** **`settlement.py`** (a família
+de liquidação — `_ops_trade_rows` e todo o `_ops_*`/`_opssum_*`/`_opsadv_*`,
+mais o elo de equity `_ops_equity_link`/`_latam_equity_b3_index`; os leitores
+`_opb3_*` FICARAM no `routes` de propósito, são da fatia FI/PC/OpB3),
+**`confirmations.py`** (o motor `_conf_*` das quatro famílias — segregação,
+estado New→Generated→Success, `_conf_esteira_stages`, as páginas de geração e
+o XML da B3), **`counterparty.py`** (o CounterpartyDetails.json — `_cpd_*`,
+`_norm_spn`, os normalizadores e o parser `_cc_*` do Update Contacts),
+**`forecast.py`** (a matriz do Settlement Forecast — `_forecast_collect`/
+`_forecast_payload`, `_fcst_*` e os mapas de contrato de swap, que a família
+de liquidação também lê), **`electronic_inventory.py`** (resolução de pasta no
+share, o scanner com cache, versões ordinais e listagem — o
+**`ELECTRONIC_INVENTORY_ROOT` FICA no routes** de propósito: é superfície de
+patch do check_ei_api, como `_B3_DATA_DIR`) e **`manual_confirmation.py`** (a
+cola `_mc_*` da esteira — `_mc_save_from_deal`, `_mc_confirmation_docs`,
+`_MC_STAGE_ROLE`/`_MC_STAGE_NOTIFY_ROLES`, `_mc_generate_url`, `_mc_pc_sync`;
+o dono do banco segue sendo o `manual_conf.py`, importado direto como
+`_mc_mod`).
 
-As notificações, o e-mail, a sessão/autorização e o acesso a banco são
-**horizontais**: o lugar delas é `apps/pages/platform/infra/`, e é para lá que a
-ponte atrasada das features vai apontar quando forem extraídas. Enquanto isso
-não acontece, a busca em `routes` é andaime declarado — está escrita como tal
-nos docstrings de `infra/persistence.py` e `infra/mail.py`.
+Lições do lote §316/§317: **chamada interna do módulo não passa pelo alias** —
+teste que troca uma função chamada por DENTRO da própria fatia (`_cpd_path`,
+`_conf_cgd_lookup`, `_opssum_meta_load`, `_latam_equity_b3_index`) troca nos
+DOIS lugares (`R.` cobre quem chega de fora, o módulo cobre a chamada
+interna); **`session` do Flask é superfície de patch** (`R.session = {...}` no
+check_swap_advice), então na platform ele é alcançado por `routes.session`,
+nunca por import direto; **constante de módulo que referencia outro módulo da
+platform importa DIRETO** (o `_MC_GENERATE_PRODUCTS` referencia os grupos das
+confirmações no nível do módulo, e o alias do routes ainda não existe naquele
+ponto do import — são os mesmos objetos). O `@_req_cached` vem do
+`request_cache.py` por import direto — e o guarda da seção 10 aprendeu que
+`__module__` mente sob `functools.wraps`: quem diz onde o código mora é o
+`co_filename`, e o corpo decorado é conferido via `__wrapped__`. O helper
+`_fontes_com_rotas_` dos oito testes ancorados em texto varre `platform/`
+junto de `features/`, então as próximas fatias não o editam.
+
+O padrão da fase, que as próximas fatias repetem (motores compartilhados —
+FI/PC/OpB3, New Deals — nessa fila):
+
+- **o `routes.py` mantém os nomes como ALIAS** (`_x = _pf_anbima._x`): features
+  seguem alcançando por `routes.<nome>` e os testes que trocam a FUNÇÃO no
+  `routes` (`R._create_notification = espião`) continuam interceptando todos;
+- **o ESTADO mora na platform** (`_ANBIMA_HOLIDAYS`, `_notif_db_done`): alias de
+  objeto mutável apontaria para o set velho quando a carga rebinda o global.
+  Teste que troca estado troca LÁ, e leitor inline do estado no `routes` é
+  reescrito para a função (foi o `_forecast_spine` → `_pcx_is_bizday`). O
+  critério é o REBIND, não o tipo: `_cache_lock`, `_daycache_memo` e
+  `_page_access_cache` são mutados in place e nunca rebindados, então o alias
+  deles continua vivo e os testes não mudam;
+- **caminho relativo a `__file__` muda de valor com a mudança de casa** — o
+  `_load_nav_urls` precisou de `../../templates` (era `../` no routes);
+- **platform nunca importa feature nem NOME do routes**; o que ainda é do
+  `routes` (`DB_PATH`, `NOTIF_DB_PATH`, `_DuckDBHandle`, `duckdb_*`) é busca
+  atrasada dentro da função — andaime declarado até a camada de banco ter
+  fatia. O `duckdb_read_unlocked` segue importado no `routes` DE PROPÓSITO,
+  mesmo com o pyflakes o marcando: é superfície de patch dos testes e atributo
+  que a platform alcança;
+- **guardas na mesma mudança** — `check_soc_layers` seção 10 (fronteiras da
+  platform + o alias do routes É o objeto da platform), seção 8 com os `def`
+  movidos, `check_notif_page_url` varrendo `platform/` junto das features, e
+  `check_mc_notify` lendo `_push_notify` no arquivo novo.
+
+Em paralelo, os seis verbatim aceitam a separação interna em
+domain/queries/commands, uma por vez, com as redes que já os prendem.

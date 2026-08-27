@@ -108,7 +108,10 @@ finally:
     R._anbima_holidays = _orig
 
 print('\n== 6. os dois produtos usam a MESMA funcao ==')
-src = io.open('apps/pages/routes.py', encoding='utf-8').read()
+# A regra e os dois chamadores moram em platform/confirmations.py (§316); o
+# routes entra junto para provar que não ficou cópia para trás.
+src = (io.open('apps/pages/routes.py', encoding='utf-8').read()
+       + io.open('apps/pages/platform/confirmations.py', encoding='utf-8').read())
 check('a regra existe uma vez so',
       src.count("if refd.month == 12:"), 1)
 check('Termo chama', src.count("ticker = _conf_co12_text(deal, i)"), 2)

@@ -34,6 +34,46 @@ function hcEsc(s) {
     });
 }
 
+/**
+ * O idioma do app — a mesma chave que o I18nManager lê. O I18nManager traduz os
+ * [data-lang] UMA vez, no load: o que este arquivo insere depois (os SweetAlerts)
+ * nunca passa por ele, então o texto dinâmico sai deste mapa local.
+ */
+const HC_LANG = (localStorage.getItem('__OTC_TRACKER_LANG__') || 'en').toLowerCase();
+const HC_TRANS = {
+    en: { holiday: 'Holiday', date: 'Date',
+          saveErr: 'Save error', saveErrText: 'Could not save holiday',
+          saved: 'Holiday saved', savedHtml: '{t} added to {c}',
+          netErr: 'Network error', netErrText: 'Could not save the holiday.',
+          calCreated: 'Calendar created', calCreatedHtml: '{c} · {n} holiday(s) imported' },
+    br: { holiday: 'Feriado', date: 'Data',
+          saveErr: 'Erro ao salvar', saveErrText: 'Não foi possível salvar o feriado',
+          saved: 'Feriado salvo', savedHtml: '{t} adicionado ao {c}',
+          netErr: 'Erro de rede', netErrText: 'Não foi possível salvar o feriado.',
+          calCreated: 'Calendário criado', calCreatedHtml: '{c} · {n} feriado(s) importado(s)' },
+    es: { holiday: 'Feriado', date: 'Fecha',
+          saveErr: 'Error al guardar', saveErrText: 'No se pudo guardar el feriado',
+          saved: 'Feriado guardado', savedHtml: '{t} agregado a {c}',
+          netErr: 'Error de red', netErrText: 'No se pudo guardar el feriado.',
+          calCreated: 'Calendario creado', calCreatedHtml: '{c} · {n} feriado(s) importado(s)' },
+};
+function hcT(k) { return (HC_TRANS[HC_LANG] || HC_TRANS.en)[k] || HC_TRANS.en[k]; }
+
+/**
+ * A data por extenso no idioma do app, com o MÊS sempre de inicial maiúscula:
+ * 'Monday, August 10, 2026' · 'segunda-feira, 10 de Agosto de 2026'. Em inglês o
+ * locale já capitaliza; em pt/es ele escreve o mês minúsculo, e o formatToParts
+ * acha a parte do mês sem regex sobre a frase montada.
+ */
+const HC_LOCALE = {en: 'en-US', br: 'pt-BR', es: 'es-ES'};
+function hcDataExtenso(d) {
+    return new Intl.DateTimeFormat(HC_LOCALE[HC_LANG] || 'en-US',
+        {weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'})
+        .formatToParts(d)
+        .map(p => p.type === 'month' ? p.value.charAt(0).toUpperCase() + p.value.slice(1) : p.value)
+        .join('');
+}
+
 /** '#8b5cf6' → '139,92,246'. Devolve null no que não for hex de 6 dígitos. */
 function hcHexToRgb(hex) {
     const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || '').trim());
@@ -141,12 +181,7 @@ class CalendarSchedule {
         if (info.event.extendedProps && info.event.extendedProps.calendar) {
             const calendar = info.event.extendedProps.calendar;
             const holidayName = info.event.extendedProps.holidayName || info.event.extendedProps.description;
-            const date = info.event.start.toLocaleDateString('pt-BR', {
-                weekday: 'long',
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric'
-            });
+            const date = hcDataExtenso(info.event.start);
             
             // Detectar tema para adaptar logo
             const isDark = document.documentElement.getAttribute('data-bs-theme') === 'dark'
@@ -168,11 +203,11 @@ class CalendarSchedule {
     <span style="font-size:1rem;font-weight:700;letter-spacing:-0.015em;line-height:1">${calendar}</span>
   </div>
   <div class="hc-swal-row" style="display:flex;align-items:flex-start;gap:10px;margin-bottom:9px;opacity:0;transform:translateY(7px)">
-    <span style="font-size:0.63rem;font-weight:700;color:#0066cc;background:rgba(0,102,204,0.08);border:1px solid rgba(0,102,204,0.16);padding:1px 7px;border-radius:999px;white-space:nowrap;margin-top:2px;flex-shrink:0">Holiday</span>
+    <span style="font-size:0.63rem;font-weight:700;color:#0066cc;background:rgba(0,102,204,0.08);border:1px solid rgba(0,102,204,0.16);padding:1px 7px;border-radius:999px;white-space:nowrap;margin-top:2px;flex-shrink:0">${hcT('holiday')}</span>
     <span style="font-size:0.87rem;line-height:1.45">${holidayName}</span>
   </div>
   <div class="hc-swal-row" style="display:flex;align-items:center;gap:10px;opacity:0;transform:translateY(7px)">
-    <span style="font-size:0.63rem;font-weight:700;color:#0066cc;background:rgba(0,102,204,0.08);border:1px solid rgba(0,102,204,0.16);padding:1px 7px;border-radius:999px;white-space:nowrap;flex-shrink:0">Date</span>
+    <span style="font-size:0.63rem;font-weight:700;color:#0066cc;background:rgba(0,102,204,0.08);border:1px solid rgba(0,102,204,0.16);padding:1px 7px;border-radius:999px;white-space:nowrap;flex-shrink:0">${hcT('date')}</span>
     <span style="font-size:0.87rem">${date}</span>
   </div>
 </div>`;
@@ -480,8 +515,8 @@ class CalendarSchedule {
                         .then(data => {
                             if (!data.ok) {
                                 Swal.fire({
-                                    title: 'Save error',
-                                    text: data.error || 'Could not save holiday',
+                                    title: hcT('saveErr'),
+                                    text: data.error || hcT('saveErrText'),
                                     icon: 'error',
                                     confirmButtonText: 'OK',
                                     buttonsStyling: false,
@@ -489,8 +524,10 @@ class CalendarSchedule {
                                 });
                             } else {
                                 Swal.fire({
-                                    title: 'Holiday saved',
-                                    html: `<span style="font-size:.88rem"><strong>${titleVal}</strong> added to <strong>${calendarName}</strong></span>`,
+                                    title: hcT('saved'),
+                                    html: `<span style="font-size:.88rem">${hcT('savedHtml')
+                                        .replace('{t}', `<strong>${hcEsc(titleVal)}</strong>`)
+                                        .replace('{c}', `<strong>${hcEsc(calendarName)}</strong>`)}</span>`,
                                     icon: 'success',
                                     timer: 2000,
                                     timerProgressBar: true,
@@ -500,8 +537,8 @@ class CalendarSchedule {
                         })
                         .catch(() => {
                             Swal.fire({
-                                title: 'Network error',
-                                text: 'Could not save the holiday.',
+                                title: hcT('netErr'),
+                                text: hcT('netErrText'),
                                 icon: 'error',
                                 confirmButtonText: 'OK',
                                 buttonsStyling: false,
@@ -622,8 +659,10 @@ class CalendarSchedule {
 
                 modal.hide();
                 Swal.fire({
-                    title: 'Calendar created',
-                    html: `<span style="font-size:.88rem"><strong>${hcEsc(cal.name)}</strong> · ${d.total} holiday(s) imported</span>`,
+                    title: hcT('calCreated'),
+                    html: `<span style="font-size:.88rem">${hcT('calCreatedHtml')
+                        .replace('{c}', `<strong>${hcEsc(cal.name)}</strong>`)
+                        .replace('{n}', String(d.total))}</span>`,
                     icon: 'success',
                     timer: 2400,
                     timerProgressBar: true,

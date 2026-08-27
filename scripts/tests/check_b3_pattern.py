@@ -27,7 +27,8 @@ os.chdir(ROOT)
 JSC = '/System/Library/Frameworks/JavaScriptCore.framework/Versions/A/Helpers/jsc'
 
 from apps.pages import otc_boxparse as B                 # noqa: E402
-from apps.pages import routes as R                       # noqa: E402
+from apps.pages import routes as R
+from apps.pages.features.cetip import engine as CE  # noqa: E402                       # noqa: E402
 
 fails = []
 
@@ -312,14 +313,14 @@ if os.path.exists(JSC):
                                         sd or '(sem data)', van), js, exp)
 
 print('\n== 6. padrao dos arquivos CETIP ==')
-check('offset e final', R._cetip_split_pattern('CETIP21_YYMMDD_DPOSICAO-SWAP'),
+check('offset e final', CE._cetip_split_pattern('CETIP21_YYMMDD_DPOSICAO-SWAP'),
       (8, '_dposicao-swap'))
-check('extensao descartada', R._cetip_split_pattern('SIC_YYMMDD_DCADCOMITENTES.TXT'),
+check('extensao descartada', CE._cetip_split_pattern('SIC_YYMMDD_DCADCOMITENTES.TXT'),
       (4, '_dcadcomitentes'))
-check('sem YYMMDD', R._cetip_split_pattern('SEM_DATA'), None)
-check('aplica a data', R._cetip_apply_date('73760_YYMMDD_DPOSICAO.CETIP21', '260731'),
+check('sem YYMMDD', CE._cetip_split_pattern('SEM_DATA'), None)
+check('aplica a data', CE._cetip_apply_date('73760_YYMMDD_DPOSICAO.CETIP21', '260731'),
       '73760_260731_DPOSICAO.CETIP21')
-check('aplica em minusculo tambem', R._cetip_apply_date('x_yymmdd_y', '260731'), 'x_260731_y')
+check('aplica em minusculo tambem', CE._cetip_apply_date('x_yymmdd_y', '260731'), 'x_260731_y')
 
 # O match novo tem de aceitar o que o antigo aceitava e recusar o que recusava.
 LEGACY = [
@@ -343,7 +344,7 @@ LEGACY = [
      ['SIC_260731_DCADCOMITENTES.TXT'], ['SIC_260731_DPOSCONTRATOSIC.TXT']),
 ]
 for pattern, legacy, should, shouldnt in LEGACY:
-    m = R._cetip_make_matcher(pattern, 'test')
+    m = CE._cetip_make_matcher(pattern, 'test')
     for name in should:
         check('%s casa %s' % (pattern.split('_')[-1], name), m(name.lower()), True)
         check('  (o antigo tambem casava)', legacy(name.lower()), True)
@@ -351,7 +352,7 @@ for pattern, legacy, should, shouldnt in LEGACY:
         check('%s NAO casa %s' % (pattern.split('_')[-1], name), m(name.lower()), False)
 
 # data invalida na posicao do YYMMDD -> nao casa
-mm = R._cetip_make_matcher('CETIP21_YYMMDD_DPOSICAO-SWAP', 'test')
+mm = CE._cetip_make_matcher('CETIP21_YYMMDD_DPOSICAO-SWAP', 'test')
 check('data nao numerica nao casa', mm('cetip21_abcdef_dposicao-swap.txt'), False)
 check('nome curto demais nao casa', mm('dposicao-swap.txt'), False)
 
@@ -359,7 +360,7 @@ print('\n== 7. o seed e o comportamento cobrem os MESMOS tipos ==')
 tmp = tempfile.mkdtemp()
 R._MAPPINGS_DIR = tmp                    # nao encosta no arquivo real
 R._mapping_cache.pop('cetip-files', None)
-rules = R._cetip_rules()
+rules = CE._cetip_rules()
 # O numero cresce quando a CETIP publica um arquivo novo; o que nao pode
 # variar e a PARIDADE com o comportamento, conferida logo abaixo — um tipo
 # so no seed nunca vira anexo, e um so no codigo nunca roda.
@@ -368,7 +369,7 @@ check('todas com match', all(callable(r['match']) for r in rules), True)
 check('todas com dest_name', all(callable(r['dest_name']) for r in rules), True)
 labels = [r['label'] for r in rules]
 check('labels batem com o comportamento',
-      sorted(labels), sorted(R._CETIP_BEHAVIOUR.keys()))
+      sorted(labels), sorted(CE._CETIP_BEHAVIOUR.keys()))
 
 by_label = {r['label']: r for r in rules}
 # os offsets tem de ser os mesmos que estavam fixos no codigo
@@ -430,7 +431,7 @@ R._atomic_write_json(os.path.join(tmp, 'cetip-files.json'), [
     {'TYPE': '', 'SOURCE': 'CETIP21_YYMMDD_X', 'DEST': 'Y', 'EXTRA DEST': ''},
 ])
 R._mapping_cache.pop('cetip-files', None)
-rules2 = R._cetip_rules()
+rules2 = CE._cetip_rules()
 check('so a linha valida entra', [r['label'] for r in rules2],
       ['SWAP Position (DPOSICAO-SWAP)'])
 

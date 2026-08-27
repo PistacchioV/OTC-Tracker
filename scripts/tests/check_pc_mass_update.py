@@ -208,8 +208,9 @@ check('payload torto nao derruba',
       cl.post('/api/pending-confirmation/derive', json={'rows': 'x'}).status_code, 400)
 
 print('\n== 5. a mesma regra que a importacao do Pending Update usa ==')
-SRC = read('apps/pages/routes.py')
-blkp = SRC.split('def _pc_derive_row', 1)[1].split('\n@blueprint', 1)[0]
+SRC = (read('apps/pages/routes.py')
+       + read('apps/pages/features/pending_confirmation/entrypoint.py'))
+blkp = SRC.split('def _pc_derive_row', 1)[1].split('\ndef ', 1)[0]
 check('reusa o _pc_signature_status', '_pc_signature_status(' in blkp, True)
 check('   passando o Pending Status atual', "src.get('Pending Status'" in blkp, True)
 check('reusa o _pc_refdata_lookup', '_pc_refdata_lookup(' in blkp, True)

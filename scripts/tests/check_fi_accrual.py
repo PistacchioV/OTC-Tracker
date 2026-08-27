@@ -29,7 +29,9 @@ ROOT = normpath(join(dirname(abspath(__file__)), '..', '..'))
 sys.path.insert(0, ROOT)
 os.chdir(ROOT)
 
-from apps.pages import routes as R  # noqa: E402
+from apps.pages import routes as R
+# O Accrual mora em features/accrual (nomes preservados no engine).
+from apps.pages.features.accrual import engine as AE  # noqa: E402  # noqa: E402
 
 FAILED = [False]
 
@@ -130,29 +132,29 @@ for label, row in [('contraparte externa → 1 linha BANCO', BANCO_ONLY),
                    ('Lawton, duas pernas VCP → 4 linhas (curvas 01 e 00)', LAWTON_BOTH),
                    ('Atacama, perna da contraparte → BANCO + ATACAMA', ATACAMA_CONTRA)]:
     gold = _legacy_records(row, TODAY)
-    got = R._acc_swap_records(row, TODAY)
+    got = AE._acc_swap_records(row, TODAY)
     check(label, [(g['view'], g['line']) for g in got] ==
           [(g['view'], g['line']) for g in gold])
     check(label + ' — 77 chars', all(len(g['line']) == 77 for g in got) and
           all(len(g['line']) == 77 for g in gold))
 
-check('sem perna VCP → nenhuma linha', R._acc_swap_records(SEM_VCP, TODAY) == [])
+check('sem perna VCP → nenhuma linha', AE._acc_swap_records(SEM_VCP, TODAY) == [])
 
 golds = _legacy_records(LAWTON_BOTH, TODAY)
 check('4 linhas: BANCO×2 + LAWTON×2', [g['view'] for g in golds] ==
       ['BANCO', 'BANCO', 'LAWTON', 'LAWTON'])
 check('curvas 01 (parte) e 00 (contraparte) nas duas views',
       [g['line'][25:27] for g in golds] == ['01', '00', '01', '00'])
-line = R._acc_swap_records(LAWTON_BOTH, TODAY)[0]['line']
+line = AE._acc_swap_records(LAWTON_BOTH, TODAY)[0]['line']
 check('PU em branco = 22 espaços (posições 46-67)', line[45:67] == ' ' * 22)
 check('fator |0,99987654| → 0099987654',
       _legacy_fator('0,99987654') == '0099987654' and
-      R._acc_swap_records(LAWTON_BOTH, TODAY)[1]['line'][67:77] == '0099987654')
+      AE._acc_swap_records(LAWTON_BOTH, TODAY)[1]['line'][67:77] == '0099987654')
 check('fator vazio → 0000000000', _legacy_fator('') == '0000000000')
 
 print('· headers de arquivo passam pelo motor')
 for view in ('BANCO', 'LAWTON', 'ATACAMA'):
-    check('header ' + view, R._acc_swap_header(view, TODAY) == _legacy_header(view, TODAY))
+    check('header ' + view, AE._acc_swap_header(view, TODAY) == _legacy_header(view, TODAY))
 
 print('· o cadastro comanda: template editado muda a linha')
 _ORIG_DIR = R._FILE_INTERPRETER_DIR
@@ -168,7 +170,7 @@ try:
         json.dump(tpl, fh, ensure_ascii=False, indent=2)
     R._FILE_INTERPRETER_DIR = tmp
     R._fi_tpl_cache.clear()
-    edited = R._acc_swap_records(BANCO_ONLY, TODAY)[0]['line']
+    edited = AE._acc_swap_records(BANCO_ONLY, TODAY)[0]['line']
     gold = _legacy_records(BANCO_ONLY, TODAY)[0]['line']
     check('Fixed editado (Tipo 00 → 27) aparece na linha',
           edited[23:25] == '27' and edited[:23] == gold[:23] and edited[25:] == gold[25:])
@@ -177,7 +179,7 @@ try:
     R._FILE_INTERPRETER_DIR = tmp
     R._fi_tpl_cache.clear()
     try:
-        R._acc_swap_records(BANCO_ONLY, TODAY)
+        AE._acc_swap_records(BANCO_ONLY, TODAY)
         check('template ausente → ValueError (nada de arquivo meio montado)', False)
     except ValueError:
         check('template ausente → ValueError (nada de arquivo meio montado)', True)

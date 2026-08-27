@@ -178,7 +178,8 @@ builtins.open = _open_real
 os.scandir = _scandir_real
 
 print('\n== 7. nenhum endpoint voltou ao os.walk ==')
-_src = io.open(os.path.join(ROOT, 'apps', 'pages', 'routes.py'), encoding='utf-8').read()
+_src = (io.open(os.path.join(ROOT, 'apps', 'pages', 'routes.py'), encoding='utf-8').read()
+        + io.open(os.path.join(ROOT, 'apps/pages/features/new_deals/entrypoint.py'), encoding='utf-8').read())
 _tree = ast.parse(_src)
 _sobrou = []
 for _n in ast.walk(_tree):

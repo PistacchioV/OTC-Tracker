@@ -37,6 +37,9 @@ sys.path.insert(0, ROOT)
 os.chdir(ROOT)
 
 from apps.pages import routes as R                          # noqa: E402
+# O card saiu do routes.py para features/conf_escalation — os nomes moram la.
+from apps.pages.features.conf_escalation import commands as CC, domain as CD, queries as CQ  # noqa: E402
+from apps.pages.features.conf_escalation.infra import mail as CMAIL, persistence as CP2      # noqa: E402
 from apps.pages import manual_conf as M                     # noqa: E402
 
 fails = []
@@ -52,9 +55,9 @@ def check(label, got, exp):
 
 # ── 1. os assuntos, por extenso ─────────────────────────────────────────────
 print('== 1. os assuntos que a mesa pediu ==')
-check('OTC', R._CE_SUBJECT_OTC, 'Confirmations Pending Validation - OTC')
-check('MO', R._CE_SUBJECT_MO, 'Confirmations Pending Validation - MO')
-subj = {g['id']: g['subject'] for g in R._CE_FO_GROUPS}
+check('OTC', CD.SUBJECT_OTC, 'Confirmations Pending Validation - OTC')
+check('MO', CD.SUBJECT_MO, 'Confirmations Pending Validation - MO')
+subj = {g['id']: g['subject'] for g in CD.FO_GROUPS}
 check('FO · CEM Swap', subj.get('cem-swap'),
       'Confirmations Pending Validation - FO - CEM Swap')
 check('FO · EDG Swap', subj.get('edg-swap'),
@@ -67,14 +70,14 @@ check('FO · EDG Option', subj.get('edg-option'),
 # inglês era a única coisa bilíngue do e-mail.
 check('   os cinco em inglês, sem acento no cabeçalho',
       all(s.isascii()
-          for s in [R._CE_SUBJECT_OTC, R._CE_SUBJECT_MO] + list(subj.values())), True)
+          for s in [CD.SUBJECT_OTC, CD.SUBJECT_MO] + list(subj.values())), True)
 # SWAP e SWAP CORPORATE da EDG chegaram a ser um grupo só (mesmo assunto); são
 # separados porque quem RECEBE cada um é diferente. Uma lista por e-mail.
 check('cada grupo do FO tem lista própria',
-      sorted(g['rec'] for g in R._CE_FO_GROUPS),
+      sorted(g['rec'] for g in CD.FO_GROUPS),
       ['fo_cem_swap', 'fo_edg_corp_swap', 'fo_edg_option', 'fo_edg_swap'])
 check('   e todas as listas do card são conhecidas do servidor',
-      sorted(R._CE_REC_KEYS),
+      sorted(CD.REC_KEYS),
       sorted(['otc_to', 'sales_to', 'sales_escalation',
               'fo_cem_swap', 'fo_edg_swap', 'fo_edg_corp_swap', 'fo_edg_option']))
 
@@ -84,7 +87,7 @@ print('\n== 2. o grupo de Front Office da linha ==')
 
 
 def grupo(produto, lob):
-    return R._ce_fo_group_id({'Produto': produto, 'LOB': lob})
+    return CQ.fo_group_id({'Produto': produto, 'LOB': lob})
 
 
 check('SWAP × CEM', grupo('SWAP', 'CEM'), 'cem-swap')
@@ -106,17 +109,17 @@ check('NDF COMM × CEM não tem grupo', grupo('NDF COMM', 'CEM'), '')
 # ── 3. a data de envio para validação ───────────────────────────────────────
 print('\n== 3. quando a confirmação chegou na mesa ==')
 check('a coluna do MO/FO manda',
-      R._ce_sent_date({'Data envio validação MO/FO': '10/08/2026',
+      CQ.sent_date({'Data envio validação MO/FO': '10/08/2026',
                        'Conferido OTC': '09/08/2026',
                        'Data envio validação OTC': '05/08/2026'}), '10/08/2026')
 # A linha antiga entrou na esteira antes desse carimbo: sem a cadeia, a coluna
 # sairia vazia justamente nas confirmações mais velhas — as que o e-mail cobra.
 check('   sem ela, o Conferido OTC',
-      R._ce_sent_date({'Conferido OTC': '09/08/2026',
+      CQ.sent_date({'Conferido OTC': '09/08/2026',
                        'Data envio validação OTC': '05/08/2026'}), '09/08/2026')
 check('   sem os dois, o envio para o OTC',
-      R._ce_sent_date({'Data envio validação OTC': '05/08/2026'}), '05/08/2026')
-check('   sem nenhum, vazio (e não uma data inventada)', R._ce_sent_date({}), '')
+      CQ.sent_date({'Data envio validação OTC': '05/08/2026'}), '05/08/2026')
+check('   sem nenhum, vazio (e não uma data inventada)', CQ.sent_date({}), '')
 
 
 # ── 4. o retrato da fila ────────────────────────────────────────────────────
@@ -176,7 +179,7 @@ _load_all, _sla_days = M.load_all, M.sla_days
 try:
     M.load_all = lambda: [dict(r) for r in ROWS]
     M.sla_days = lambda: dict(M.SLA_BIZDAYS)                # sem depender do cadastro
-    otc, mo, grupos, esc, sem_grupo = R._ce_snapshot(HOJE)
+    otc, mo, grupos, esc, sem_grupo = CQ.snapshot(HOJE)
     por_id = {g['id']: g for g in grupos}
 
     check('o e-mail do MO leva as paradas em MO e em MO/FO',
@@ -220,13 +223,13 @@ try:
     # ── 7. o disparo, com o envio stubado ───────────────────────────────────
     print('\n== 7. o que cada modo manda ==')
     enviados = []
-    _send, _rec = R._ce_send_email, R._load_ce_recipients
+    _send, _rec = CMAIL.send, CP2.load_recipients
     try:
-        R._ce_send_email = (lambda subject, scope, rows, to_list, ref, escalation=False:
+        CMAIL.send = (lambda subject, scope, rows, to_list, ref, escalation=False:
                             enviados.append({'subject': subject, 'scope': scope,
                                              'rows': len(rows), 'to': list(to_list),
                                              'esc': escalation}) or True)
-        R._load_ce_recipients = lambda: {'otc_to': 'otc@x.com', 'sales_to': 'sales@x.com',
+        CP2.load_recipients = lambda: {'otc_to': 'otc@x.com', 'sales_to': 'sales@x.com',
                                          'sales_escalation': 'boss@x.com',
                                          'fo_cem_swap': 'cem@x.com',
                                          'fo_edg_swap': 'edg@x.com',
@@ -234,10 +237,10 @@ try:
                                          'fo_edg_option': 'opt@x.com'}
 
         del enviados[:]
-        out = R._ce_run('routine', datetime(2026, 8, 12, 17, 0))
+        out = CC.run('routine', datetime(2026, 8, 12, 17, 0))
         check('a rotina manda OTC + MO + os quatro grupos de FO',
               [e['subject'] for e in enviados],
-              [R._CE_SUBJECT_OTC, R._CE_SUBJECT_MO, subj['cem-swap'], subj['edg-swap'],
+              [CD.SUBJECT_OTC, CD.SUBJECT_MO, subj['cem-swap'], subj['edg-swap'],
                subj['edg-corp-swap'], subj['edg-option']])
         # Uma lista por e-mail: quem cuida do EDG Corporate Swap não recebe a
         # fila do EDG Swap, e o OTC não recebe a do Sales Support.
@@ -249,78 +252,81 @@ try:
               [e for e in enviados if e['esc']], [])
 
         del enviados[:]
-        out = R._ce_run('escalation', datetime(2026, 8, 12, 17, 0))
+        out = CC.run('escalation', datetime(2026, 8, 12, 17, 0))
         check('a escalação é UM e-mail, para a lista dela',
               [(e['subject'], e['to'], e['rows']) for e in enviados],
-              [(R._CE_SUBJECT_MO, ['boss@x.com'], 3)])
+              [(CD.SUBJECT_MO, ['boss@x.com'], 3)])
 
         del enviados[:]
-        R._ce_run('fo-edg-corp-swap', datetime(2026, 8, 12, 17, 0))
+        CC.run('fo-edg-corp-swap', datetime(2026, 8, 12, 17, 0))
         check('o Run individual manda SÓ o e-mail daquele item',
               [(e['subject'], e['to']) for e in enviados],
               [(subj['edg-corp-swap'], ['corp@x.com'])])
         del enviados[:]
-        R._ce_run('mo', datetime(2026, 8, 12, 17, 0))
-        check('   idem para o MO', [e['subject'] for e in enviados], [R._CE_SUBJECT_MO])
+        CC.run('mo', datetime(2026, 8, 12, 17, 0))
+        check('   idem para o MO', [e['subject'] for e in enviados], [CD.SUBJECT_MO])
         del enviados[:]
-        R._ce_run('otc', datetime(2026, 8, 12, 17, 0))
+        CC.run('otc', datetime(2026, 8, 12, 17, 0))
         check('   e para o OTC', [(e['subject'], e['to']) for e in enviados],
-              [(R._CE_SUBJECT_OTC, ['otc@x.com'])])
+              [(CD.SUBJECT_OTC, ['otc@x.com'])])
 
         # Nada parado e lista em branco são desfechos DIFERENTES: o primeiro é a
         # rotina rodando bem, o segundo é cobrança que não saiu de casa.
         del enviados[:]
         M.load_all = lambda: []
-        out = R._ce_run('routine', datetime(2026, 8, 12, 17, 0))
+        out = CC.run('routine', datetime(2026, 8, 12, 17, 0))
         check('fila vazia não manda e-mail', enviados, [])
         check('   e o motivo é "empty"',
               sorted({s['reason'] for s in out['skipped']}), ['empty'])
 
         M.load_all = lambda: [dict(r) for r in ROWS]
-        R._load_ce_recipients = lambda: {k: '' for k in R._CE_REC_KEYS}
+        CP2.load_recipients = lambda: {k: '' for k in CD.REC_KEYS}
         del enviados[:]
-        out = R._ce_run('routine', datetime(2026, 8, 12, 17, 0))
+        out = CC.run('routine', datetime(2026, 8, 12, 17, 0))
         check('sem destinatário salvo, nada é enviado', enviados, [])
         check('   e o card recebe "no_recipient", não "empty"',
               'no_recipient' in {s['reason'] for s in out['skipped']}, True)
     finally:
-        R._ce_send_email, R._load_ce_recipients = _send, _rec
+        CMAIL.send, CP2.load_recipients = _send, _rec
 finally:
     M.load_all, M.sla_days = _load_all, _sla_days
 
 
 # ── 8. segunda e quinta, rolando o feriado ──────────────────────────────────
+# O ESTADO do calendário mora na platform/ (fatia `platform/anbima.py`): quem
+# troca o set de feriados troca LÁ — o alias do `routes` é da função, não do set.
+from apps.pages.platform import anbima as CAL  # noqa: E402
 print('\n== 8. o dia do relatório agendado ==')
-_hols, _loaded = R._ANBIMA_HOLIDAYS, R._anbima_loaded
+_hols, _loaded = CAL._ANBIMA_HOLIDAYS, CAL._anbima_loaded
 try:
-    R._anbima_loaded = True
-    R._ANBIMA_HOLIDAYS = set()
-    check('segunda-feira é dia', R._ce_is_routine_day(date(2026, 8, 10)), True)
-    check('quinta-feira é dia', R._ce_is_routine_day(date(2026, 8, 13)), True)
-    check('terça não é', R._ce_is_routine_day(date(2026, 8, 11)), False)
-    check('sexta não é (sem feriado na semana)', R._ce_is_routine_day(date(2026, 8, 14)), False)
-    check('sábado nunca é', R._ce_is_routine_day(date(2026, 8, 15)), False)
+    CAL._anbima_loaded = True
+    CAL._ANBIMA_HOLIDAYS = set()
+    check('segunda-feira é dia', CQ.is_routine_day(date(2026, 8, 10)), True)
+    check('quinta-feira é dia', CQ.is_routine_day(date(2026, 8, 13)), True)
+    check('terça não é', CQ.is_routine_day(date(2026, 8, 11)), False)
+    check('sexta não é (sem feriado na semana)', CQ.is_routine_day(date(2026, 8, 14)), False)
+    check('sábado nunca é', CQ.is_routine_day(date(2026, 8, 15)), False)
 
     # Segunda feriado → o relatório sai na terça, e a segunda não emite.
-    R._ANBIMA_HOLIDAYS = {'2026-08-10'}
-    check('segunda feriado não emite', R._ce_is_routine_day(date(2026, 8, 10)), False)
-    check('   e a terça passa a ser o dia', R._ce_is_routine_day(date(2026, 8, 11)), True)
-    check('   sem virar dia também na quarta', R._ce_is_routine_day(date(2026, 8, 12)), False)
+    CAL._ANBIMA_HOLIDAYS = {'2026-08-10'}
+    check('segunda feriado não emite', CQ.is_routine_day(date(2026, 8, 10)), False)
+    check('   e a terça passa a ser o dia', CQ.is_routine_day(date(2026, 8, 11)), True)
+    check('   sem virar dia também na quarta', CQ.is_routine_day(date(2026, 8, 12)), False)
 
     # Quinta feriado → sexta. É este caso que a pergunta ao contrário resolve:
     # olhar só o dia da semana de hoje (sexta) perderia o relatório da semana.
-    R._ANBIMA_HOLIDAYS = {'2026-08-13'}
-    check('quinta feriado não emite', R._ce_is_routine_day(date(2026, 8, 13)), False)
-    check('   e a sexta paga a quinta', R._ce_is_routine_day(date(2026, 8, 14)), True)
+    CAL._ANBIMA_HOLIDAYS = {'2026-08-13'}
+    check('quinta feriado não emite', CQ.is_routine_day(date(2026, 8, 13)), False)
+    check('   e a sexta paga a quinta', CQ.is_routine_day(date(2026, 8, 14)), True)
 
     # Dois feriados seguidos rolam de novo.
-    R._ANBIMA_HOLIDAYS = {'2026-08-13', '2026-08-14'}
+    CAL._ANBIMA_HOLIDAYS = {'2026-08-13', '2026-08-14'}
     check('quinta e sexta feriado caem na segunda',
-          R._ce_is_routine_day(date(2026, 8, 17)), True)
+          CQ.is_routine_day(date(2026, 8, 17)), True)
     check('   e a segunda é UM disparo, não dois',
-          sum(1 for d in (date(2026, 8, 17),) if R._ce_is_routine_day(d)), 1)
+          sum(1 for d in (date(2026, 8, 17),) if CQ.is_routine_day(d)), 1)
 finally:
-    R._ANBIMA_HOLIDAYS, R._anbima_loaded = _hols, _loaded
+    CAL._ANBIMA_HOLIDAYS, CAL._anbima_loaded = _hols, _loaded
 
 
 # ── 9. o template do e-mail ─────────────────────────────────────────────────
@@ -384,7 +390,7 @@ for parte in CP.split('data-ce-run="')[1:]:
     modos.add(parte.split('"', 1)[0])
 check('a tela tem um Run para cada e-mail', sorted(modos),
       sorted(['routine', 'otc', 'mo', 'escalation'] +
-             ['fo-' + g['id'] for g in R._CE_FO_GROUPS]))
+             ['fo-' + g['id'] for g in CD.FO_GROUPS]))
 # Um campo de destinatário por lista, e o campo tem de EXISTIR: o mapa do JS
 # liga a chave do servidor ao id do input, e uma ponta sem a outra deixa a lista
 # sem onde ser preenchida — o e-mail simplesmente nunca sai.
@@ -392,11 +398,11 @@ mapa = CP.split('var FIELDS = {', 1)[1].split('};', 1)[0]
 pares = dict(p.strip().split(': ') for p in mapa.replace('\n', ' ').split(',') if ': ' in p)
 pares = {k.strip(): v.strip().strip("'") for k, v in pares.items()}
 check('   e um campo de destinatário para cada lista',
-      sorted(k for k in R._CE_REC_KEYS if k not in pares), [])
+      sorted(k for k in CD.REC_KEYS if k not in pares), [])
 check('   com o input correspondente no DOM',
       sorted(i for i in pares.values() if ('id="%s"' % i) not in CP), [])
 check('   e todos são modos que o servidor aceita',
-      sorted(m for m in modos if m not in R._CE_MODES), [])
+      sorted(m for m in modos if m not in CD.MODES), [])
 # A seção de cada card é o DOM, não um mapa card → grupo escrito à mão (que
 # envelhecia calado quando um card mudava de seção). O que prende isso para
 # TODOS os cards é o check_control_panel_sections; aqui basta o deste card.

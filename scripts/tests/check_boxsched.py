@@ -5,6 +5,9 @@ preservando o B3 ID, e-mail sem deal NAO arquivado, e o roteamento por produto.
 Nao toca em Outlook nem em rede.
 """
 import io, json, os, shutil, sys, tempfile, types
+# Este teste PROVA que o create_app sobe o scheduler (com o laco stubado),
+# entao o kill-switch dos outros testes nao pode valer aqui.
+os.environ.pop('OTC_DISABLE_SCHEDULERS', None)
 
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))   # scripts/tests/ -> raiz do repo
 sys.path.insert(0, ROOT)
@@ -24,6 +27,9 @@ stub.archive_email = archive_email
 sys.modules['apps.pages.otc_boxscan'] = stub
 
 from apps.pages import routes as R                      # noqa: E402
+# O boxscan saiu do routes.py para features/boxscan — os nomes moram la.
+from apps.pages.features.boxscan import commands as BC       # noqa: E402
+from apps.pages.features.boxscan.infra import persistence as BP  # noqa: E402
 
 fails = []
 def check(label, got, exp):
@@ -36,8 +42,8 @@ def check(label, got, exp):
 TMP = tempfile.mkdtemp()
 R.CACHE_BASE_DIR = os.path.join(TMP, 'opt')
 R.NDF_COMM_CACHE_DIR = os.path.join(TMP, 'ndf')
-R._BOX_PRODUCTS['opt']['dir'] = lambda: R.CACHE_BASE_DIR
-R._BOX_PRODUCTS['ndf']['dir'] = lambda: R.NDF_COMM_CACHE_DIR
+BP.PRODUCTS['opt']['dir'] = lambda: R.CACHE_BASE_DIR
+BP.PRODUCTS['ndf']['dir'] = lambda: R.NDF_COMM_CACHE_DIR
 R._create_notification = lambda *a, **k: None            # sem DuckDB no teste
 
 HEADERS = ['DealName', 'TradeDate', 'Market', 'Contract', 'Instrument', 'Type',
@@ -61,7 +67,7 @@ def email(eid, rows, subject='Brazil Booking Recap - BO_CBOT Option'):
     return {'entry_id': eid, 'subject': subject, 'html': html(rows)}
 
 def dayfile(product):
-    d = R._BOX_PRODUCTS[product]
+    d = BP.PRODUCTS[product]
     p = os.path.join(d['dir'](), '2026', '05', '20260521' + d['suffix'])
     if not os.path.isfile(p):
         return []
@@ -69,7 +75,7 @@ def dayfile(product):
 
 print('\n== 1. import inicial (opt): 1 e-mail, 2 linhas -> 3 deals ==')
 BOX['opt'] = [email('E1', [row(), row(direction='Buy')])]
-r = R._box_scan_pull('opt')
+r = BC.pull('opt')
 check('e-mails lidos', r['emails'], 1)
 check('deals gerados', r['deals'], 3)
 check('novos', r['new'], 3)
@@ -85,7 +91,7 @@ check('notional formatado', rows_[0]['TotalNotional'], '1,500,000.00')
 
 print('\n== 2. mesmo e-mail de novo: idempotente (nada muda) ==')
 ARCHIVED[:] = []
-r = R._box_scan_pull('opt')
+r = BC.pull('opt')
 check('nenhum novo', r['new'], 0)
 check('nenhum amend', r['amended'], 0)
 check('continua com 3 linhas', len(dayfile('opt')), 3)
@@ -102,7 +108,7 @@ for d in rows_:
 json.dump(rows_, io.open(p, 'w', encoding='utf-8'))
 
 BOX['opt'] = [email('E2', [row(strike='3.100'), row(direction='Buy', strike='3.100')])]
-r = R._box_scan_pull('opt')
+r = BC.pull('opt')
 check('3 amendados', r['amended'], 3)
 check('nenhum novo', r['new'], 0)
 rows_ = dayfile('opt')
@@ -118,7 +124,7 @@ print('\n== 4. e-mail sem linha de deal NAO e arquivado ==')
 ARCHIVED[:] = []
 BOX['opt'] = [{'entry_id': 'E3', 'subject': 'Brazil Booking Recap - vazio',
                'html': '<html><body><p>sem tabela</p></body></html>'}]
-r = R._box_scan_pull('opt')
+r = BC.pull('opt')
 check('nenhum deal', r['deals'], 0)
 check('nao arquivou', r['archived'], 0)
 check('box intocado', ARCHIVED, [])
@@ -126,7 +132,7 @@ check('box intocado', ARCHIVED, [])
 print('\n== 5. produto ndf grava no diretorio proprio e sem Premium ==')
 BOX['ndf'] = [email('N1', [row(deal='N-1')], subject='Brazil Booking Recap - MAL_LME Swap')]
 BOX['opt'] = []
-r = R._box_scan_pull('ndf')
+r = BC.pull('ndf')
 check('1 deal (so 1 linha no e-mail)', r['deals'], 1)
 nrows = dayfile('ndf')
 check('gravou no dir do ndf', len(nrows), 1)
@@ -137,7 +143,7 @@ print('\n== 6. deal em outra trade date vai para outro arquivo ==')
 other = row(deal='D-OUT')
 other[1] = '03-Jun-2026'
 BOX['ndf'] = [email('N2', [other], subject='Brazil Booking Recap - Swap')]
-R._box_scan_pull('ndf')
+BC.pull('ndf')
 p2 = os.path.join(R.NDF_COMM_CACHE_DIR, '2026', '06', '20260603_ndfcomm.json')
 check('arquivo de 03/06 criado', os.path.isfile(p2), True)
 check('arquivo de 21/05 intocado', len(dayfile('ndf')), 1)
@@ -151,13 +157,13 @@ def viva():
                for t in threading.enumerate())
 
 
-check('intervalo padrao 30 min', R._BOX_SCAN_POLL_MIN, 30)
+check('intervalo padrao 30 min', BC.POLL_MIN, 30)
 # O laco sobe com o APP, nunca com o import: os 67 scripts daqui importam o
 # routes, e a thread que nascia no import fazia o processo do TESTE disparar
 # e-mail agendado de verdade (e reservar o slot, calando o app real).
 check('o import NAO sobe a thread', viva(), False)
 check('mas o laco esta registrado',
-      '_box_scan_start_scheduler' in [f.__name__ for _, f in R._SCHEDULERS], True)
+      any(l == 'boxscan' for l, _ in R._SCHEDULERS), True)
 from apps import create_app                              # noqa: E402
 from apps.config import DebugConfig                      # noqa: E402
 rules = {str(x.rule) for x in create_app(DebugConfig).url_map.iter_rules()}

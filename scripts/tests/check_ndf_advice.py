@@ -38,6 +38,24 @@ import tempfile
 from datetime import datetime
 
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
+
+
+def _fontes_com_rotas_(base):
+    """routes.py + a arvore de features — as rotas moram nos entrypoints desde
+    a verticalizacao, e um scan so do routes viraria assercao vazia."""
+    import io as _io, os as _os
+    partes = [_io.open(_os.path.join(base, 'apps', 'pages', 'routes.py'), encoding='utf-8').read()]
+    # ... e a arvore da platform/ — a fase §316 move os motores compartilhados
+    # para la, e um scan que parasse nas features perderia o que acabou de sair
+    # do routes (foi a familia de liquidacao a primeira).
+    for raiz in (_os.path.join(base, 'apps', 'pages', 'features'),
+                 _os.path.join(base, 'apps', 'pages', 'platform')):
+        for r, dirs, arqs in _os.walk(raiz):
+            dirs[:] = [d for d in dirs if d != '__pycache__']
+            for a in sorted(arqs):
+                if a.endswith('.py'):
+                    partes.append(_io.open(_os.path.join(r, a), encoding='utf-8').read())
+    return '\n'.join(partes)
 sys.path.insert(0, ROOT)
 os.chdir(ROOT)
 
@@ -206,7 +224,7 @@ check('e por isso o liquido dela e o cheio',
       cell('C2', 'Resultado Líquido (R$)'), '-500,000.00')
 
 print('\n== 6. a pagina esta LIGADA ==')
-SRC = read('apps/pages/routes.py')
+SRC = _fontes_com_rotas_(ROOT)
 check('rota da pagina',
       "@blueprint.route('/other-products-ndf-settlement-advice')" in SRC, True)
 check('endpoint de dados',
@@ -259,7 +277,7 @@ check('o card de NDF deixa de ser n/a', rec['na'], False)
 check('e conta as tres linhas', rec['b3_count'], 3)
 
 print('\n== 8. a isencao de IR e UM cadastro para as duas telas ==')
-SRC0 = read('apps/pages/routes.py')
+SRC0 = _fontes_com_rotas_(ROOT)
 check('cadastro registrado', "'ndfc-ir-exempt': {" in SRC0, True)
 check('aba no /mapping', "key: 'ndfc-ir-exempt'" in read('apps/templates/pages/mapping.html'), True)
 check('LAWTON isenta', R._ndfc_ir_exempt('LAWTON MULTIMERCADO EXCLUSIVO'), True)
@@ -340,7 +358,7 @@ check('o assunto diz Termo de Commodities',
       d[0]['subject'].startswith('Liquidação de Operação de Derivativo (Termo de Commodities)'), True)
 
 print('\n== 11. cadastros da quebra e do PDF ==')
-SRC1 = read('apps/pages/routes.py')
+SRC1 = _fontes_com_rotas_(ROOT)
 check('cadastro da quebra registrado', "'ndfc-advice-split': {" in SRC1, True)
 check('aba no /mapping',
       "key: 'ndfc-advice-split'" in read('apps/templates/pages/mapping.html'), True)
@@ -370,7 +388,7 @@ check('C2 nao e omnibus -> nome da posicao',
 check('o Trade Level herda o cliente resolvido',
       by_t['C1']['counterparty'], 'AMG BRASIL S.A.')
 
-SRC2 = read('apps/pages/routes.py')
+SRC2 = _fontes_com_rotas_(ROOT)
 check('cadastro de contas B3 registrado', "'b3-accounts': {" in SRC2, True)
 check('aba no /mapping',
       "key: 'b3-accounts'" in read('apps/templates/pages/mapping.html'), True)

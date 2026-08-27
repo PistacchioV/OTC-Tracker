@@ -15,9 +15,8 @@
 
    Os campos vêm do SERVIDOR (`cgd_docs.REQUEST_FORM`, passado pelas rotas),
    inclusive a LARGURA de cada um: é a MESMA lista de onde saem os obrigatórios
-   que seguram o documento na fila do Banking. Escritos no HTML, o dia em que um
-   campo deixasse de ser obrigatório o modal pararia de pedi-lo e a fila
-   continuaria cobrando.
+   que a validação do Save exige. Escritos no HTML, o dia em que um campo
+   deixasse de ser obrigatório o modal pararia de pedi-lo.
 
    O JS é VANILLA de propósito: o Overview não carrega jQuery, e um partial que
    dependa dele funcionaria numa tela e morreria calado na outra.
@@ -94,6 +93,14 @@
               <textarea class="form-control form-control-sm ob-req-input" rows="3"
                         id="ob-req-{{ loop.index }}" data-default="{{ f.default or '' }}"
                         {% if f.required %}required{% endif %}></textarea>
+            {% elif f.type == 'checkbox' %}
+              {# Checkbox grava Yes/No — o mesmo par do Garantidor, e é o que o
+                 filtro da grade casa. O `data-default` diz como ele NASCE:
+                 'Yes' = marcado (o domínio no Apêndice é o caso comum). #}
+              <div class="form-check form-switch ob-req-check">
+                <input type="checkbox" role="switch" class="form-check-input ob-req-input"
+                       id="ob-req-{{ loop.index }}" data-default="{{ f.default or '' }}">
+              </div>
             {% elif f.type == 'date' %}
               {# A data da solicitação é SEMPRE hoje e não se digita: ela é o dia
                  em que o pedido está sendo aberto, e é dela que o aging conta.
@@ -242,6 +249,15 @@
 
     function entrada(f) { return f.querySelector('.ob-req-input'); }
 
+    // O VALOR de um campo, qualquer que seja o tipo. Checkbox fala Yes/No — o
+    // mesmo par do Garantidor: é o que vai para o banco e o que o `enabled_by`
+    // compara, então ler `.value` de um checkbox (que é sempre "on") quebraria
+    // a dependência em silêncio.
+    function valorDe(el) {
+        if (el.type === 'checkbox') { return el.checked ? 'Yes' : 'No'; }
+        return String(el.value || '').trim();
+    }
+
     function hoje() {
         var d = new Date();
         return ('0' + d.getDate()).slice(-2) + '/' +
@@ -257,8 +273,12 @@
             // deixada aberta. Os demais voltam ao `default` do cadastro do
             // formulário — o `No` do Garantidor e o `N/A` das informações dele
             // são o caso comum, e obrigar a digitá-los é atrito por nada.
-            el.value = el.classList.contains('ob-req-date')
-                ? hoje() : (el.getAttribute('data-default') || '');
+            if (el.type === 'checkbox') {
+                el.checked = (el.getAttribute('data-default') === 'Yes');
+            } else {
+                el.value = el.classList.contains('ob-req-date')
+                    ? hoje() : (el.getAttribute('data-default') || '');
+            }
         });
         erro.classList.add('d-none');
         erro.textContent = '';
@@ -287,7 +307,7 @@
     function aplicaDependencia(f) {
         var mestre = campoPorColuna(f.getAttribute('data-on-col'));
         if (!mestre) { return; }
-        var ligado = String(entrada(mestre).value || '').trim() === f.getAttribute('data-on-value');
+        var ligado = valorDe(entrada(mestre)) === f.getAttribute('data-on-value');
         var el = entrada(f);
         f.classList.toggle('is-off', !ligado);
         el.disabled = !ligado;
@@ -422,10 +442,12 @@
                 if (obrigatorio && !temArq) { faltando++; }
                 return;
             }
-            var v = String(el.value || '').trim();
+            var v = valorDe(el);
             // `disabled` não tem `required` (o campo é preenchido pelo app), mas
             // o valor dele VAI no payload — quem monta é este código, não o
-            // submit do navegador.
+            // submit do navegador. Coluna pseudo (começa com `_`, o checkbox do
+            // domínio) vai junto e o servidor a descarta: ela só existe para o
+            // `enabled_by`.
             el.classList.toggle('is-invalid', obrigatorio && !v);
             if (obrigatorio && !v) { faltando++; }
             vals[f.getAttribute('data-col')] = v;

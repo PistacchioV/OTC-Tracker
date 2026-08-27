@@ -35,6 +35,11 @@ os.chdir(ROOT)
 TMP = tempfile.mkdtemp()
 
 from apps.pages import routes as R                        # noqa: E402
+# O ESTADO da subida do banco de notificacoes mora na platform/ (fatia
+# `platform/notifications.py`): flag, espera e sonda trocam-se LA. Os
+# caminhos e as primitivas (NOTIF_DB_PATH, duckdb_read/write) continuam
+# trocados no routes — e a platform os alcanca por busca atrasada.
+from apps.pages.platform import notifications as NP       # noqa: E402
 
 R.DB_PATH = os.path.join(TMP, 'Users_OTCTracker.db')
 R.NOTIF_DB_PATH = os.path.join(TMP, 'Notifications_OTCTracker.db')
@@ -56,7 +61,7 @@ def check(label, got, exp):
 app = create_app(DebugConfig)
 app.config['TESTING'] = True
 
-check('a subida deixa o banco de notificacoes pronto', R._notif_db_done, True)
+check('a subida deixa o banco de notificacoes pronto', NP._notif_db_done, True)
 check('e o arquivo existe', os.path.isfile(R.NOTIF_DB_PATH), True)
 
 import duckdb                                             # noqa: E402
@@ -106,31 +111,31 @@ for rotulo, kw in (('o poll do sino (unlocked)', {'readonly': True, 'unlocked': 
 # E o que importa de verdade: mesmo com o flag em False — o estado de um
 # processo cuja subida falhou — a leitura continua sem escrever. Era aqui que
 # cada poll de cada aba tentava a migracao de novo.
-R._notif_db_done = False
+NP._notif_db_done = False
 zera()
 conn = R.get_notif_connection(readonly=True, unlocked=True)
 conn.close()
 check('nem com o ensure pendente (o caso da tempestade)', contas['write'], 0)
 check('e o flag continua como estava (o leitor nao decide isso)',
-      R._notif_db_done, False)
+      NP._notif_db_done, False)
 
 
 # ── 3. a sonda evita a abertura read-write ──────────────────────────────────
-R._notif_db_done = False
-R._notif_db_retry_at = 0.0
+NP._notif_db_done = False
+NP._notif_db_retry_at = 0.0
 zera()
 R._ensure_notif_db()
 check('o ensure com o schema pronto nao abre para escrita', contas['write'], 0)
 check('so le', contas['read'] >= 1, True)
-check('e marca o banco como pronto', R._notif_db_done, True)
+check('e marca o banco como pronto', NP._notif_db_done, True)
 
 
 # ── 4. o ensure que falha ESPERA antes de tentar de novo ────────────────────
 _write_falha[0] = True
-R._notif_db_done = False
-R._notif_db_retry_at = 0.0
-_sonda = R._notif_schema_pronto
-R._notif_schema_pronto = lambda: False          # como se o schema faltasse
+NP._notif_db_done = False
+NP._notif_db_retry_at = 0.0
+_sonda = NP._notif_schema_pronto
+NP._notif_schema_pronto = lambda: False          # como se o schema faltasse
 zera()
 try:
     R._ensure_notif_db()
@@ -139,7 +144,7 @@ except Exception:
     subiu = True
 check('o ensure que falha relanca (quem grava tem de saber)', subiu, True)
 check('tentou abrir uma vez', contas['write'], 1)
-check('e armou a espera', R._notif_db_retry_at > R.time.monotonic(), True)
+check('e armou a espera', NP._notif_db_retry_at > R.time.monotonic(), True)
 
 zera()
 try:
@@ -151,7 +156,7 @@ check('a chamada seguinte, dentro da espera, nao tenta de novo', contas['write']
 check('e nao estoura', subiu, False)
 
 # Passada a espera, ele volta a tentar — a outra ponta pode ter soltado.
-R._notif_db_retry_at = 0.0
+NP._notif_db_retry_at = 0.0
 zera()
 try:
     R._ensure_notif_db()
@@ -159,9 +164,9 @@ except Exception:
     pass
 check('passada a espera, tenta de novo', contas['write'], 1)
 
-R._notif_schema_pronto = _sonda
+NP._notif_schema_pronto = _sonda
 _write_falha[0] = False
-R._notif_db_done = True
+NP._notif_db_done = True
 
 
 # ── 5. o sino que nao abre devolve vazio, nunca 500 ─────────────────────────

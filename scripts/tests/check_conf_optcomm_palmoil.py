@@ -192,9 +192,10 @@ check('e nao da replica em reportlab',
       R._CONF_OPT_PDF_VARIANT.get('palm-oil'), None)
 
 print('\n== 6. o gerador escreve as tres colunas novas ==')
-src = io.open('apps/pages/routes.py', encoding='utf-8').read()
-i = src.index('def _conf_opt_generation_page(')
-corpo = src[i:src.index('\n@blueprint.route', i)]
+# O gerador mora em platform/confirmations.py (§316); o corpo vai até o
+# próximo statement de topo (não há mais rota ao lado dele).
+src = io.open('apps/pages/platform/confirmations.py', encoding='utf-8').read()
+corpo = src.split('def _conf_opt_generation_page(', 1)[1].split('\ndef ', 1)[0]
 for campo in ('bbg', 'taxaConv', 'dtTaxaConv'):
     check("_conf_opt_generation_page preenche %s" % campo,
           ("row['%s']" % campo) in corpo, True)
