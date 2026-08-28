@@ -14691,3 +14691,53 @@ Hoje há uma LISTA de candidatos, tentada na ordem (UNC, depois a letra), valend
 o primeiro que existir; `--data-dir` continua mandando em qualquer caso, e a
 primeira linha da saída diz qual caminho valeu, que é o que permite conferir
 antes de deixar rodando.
+
+## §342 — a pasta db/ espelha a árvore de origem (2026-08-28)
+
+Reportado da instância: *"está sendo salvo tudo dentro da mesma pasta e ficando
+mil dbs no mesmo lugar, ficando uma confusão"*. E estava mesmo: os 133 bancos
+caíam soltos na raiz do `db/`, com o caminho ACHATADO no nome
+(`daily_new_deals_ndf_vanilla.db`, `mappings_mt300.db`). Achar o banco de uma
+tela virava caça ao nome, no meio dos bancos do próprio app.
+
+Agora a pasta `db/` **espelha a árvore do `DATA_DIR`**: o caminho vira PASTA e o
+último segmento vira o ARQUIVO.
+
+    db/cache/new deals/NDF/Vanilla.db          db/mappings/mt300.db
+    db/cache/new deals/Option/FXO.db           db/control-panel/mt300_status.db
+    db/cache/b3 files/Swap.db                  db/file-interpreter/termo.db
+    db/cache/daily settlement/otm-settlement.db
+    db/cache/pending-confirmation.db           db/Subjacente.db  (raiz fica na raiz)
+
+**Ano, mês e dia NÃO viram pasta** — eles já são a tabela `d_AAAAMMDD` dentro do
+banco, que era o pedido explícito. E onde a rotina não se ramifica em pastas, a
+TAG do arquivo vira o banco dentro da pasta da rotina (o Daily Settlement, dez
+arquivos por dia na mesma pasta).
+
+Cinco coisas que não dão erro nenhum e apareceram no caminho:
+
+- **a tag perdia o separador da data.** `otm-settlement_20260728` sem a data
+  deixa um `_` no fim, e o arquivo saía `otm-settlement_.db`. O `_sem_data`
+  passou a aparar ` _-` das pontas;
+- **a remoção de legados NÃO pode ser por varredura de `*.db`.** O
+  `DATABASE_DIR` é a casa de TODOS os bancos do app — usuários, notificações,
+  os três do Pending Confirmation, os dois da esteira, o do Onboarding —, e
+  varrer ali apagaria dado que nada recria. Ela é por LISTA DE NOMES DERIVADOS,
+  e o `_legacy_flat_name` reconstrói o nome achatado a partir do caminho novo
+  (quem é tag e quem é rotina sai da PROFUNDIDADE, pela mesma regra que gerou o
+  caminho);
+- **o que decide a remoção é o ARQUIVO, não o nome.** O JSON de raiz passou a
+  manter a caixa do original (`Subjacente.db`) e o legado dele era normalizado
+  (`subjacente.db`): em macOS e Windows os dois nomes são o MESMO arquivo, e
+  remover o "legado" apagaria o banco recém-criado — a leitura seguinte cairia
+  no JSON sem ninguém entender por quê. No Linux são dois de verdade, e aí o
+  antigo TEM de sair. `os.path.samefile` responde certo nos dois;
+- **as conexões criam a subpasta** (`os.makedirs(os.path.dirname(db))`), nos
+  dois conversores — antes só a raiz existia;
+- **o `duck_read` monta o caminho com `*db_name.split('/')`** nos dois pontos:
+  o alvo deixou de ser um nome e passou a ser um caminho relativo.
+
+Migração de quem já tem o formato anterior: a carga completa move tudo sozinha —
+125 legados removidos e 133 bancos na árvore nova, com a segunda rodada em zero.
+Os nove standalone foram regerados e as fatias seguem somando exatamente a carga
+completa, inclusive rodando SETE em paralelo. Suíte completa verde.
