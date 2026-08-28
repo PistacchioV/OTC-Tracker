@@ -16,6 +16,7 @@ espelho, ou o script de carga) e leitores de melhor esforço — a colisão
 intra-processo com o espelho escrevendo vira exceção, capturada, `None`,
 fallback. Nenhuma fila, nenhum lock no share.
 """
+import json
 import os
 
 import duckdb
@@ -37,16 +38,28 @@ def _limpo(rows):
     return out
 
 
-def table_rows(db_name, table, rel, schema='main', order_by=None, heal=None):
+def table_rows(db_name, table, rel, schema='main', order_by=None, heal=None,
+               manifest_key=None, expected_path=None):
     """As linhas de `table` SE o manifest prova que o banco reflete o JSON
     `rel` atual — senão `None` (e o espelho é avisado para se curar).
 
-    `rel` é o caminho relativo à raiz de dados, exatamente como o motor o
-    grava no `_manifest`. `heal` troca o aviso padrão (`notify_write` do
-    caminho) — os arquivos de calendário precisam do aviso explícito."""
+    `rel` é o caminho relativo à raiz de dados; `manifest_key` é a CHAVE no
+    `_manifest` quando ela difere do caminho (as tabelas de cadastro levam a
+    versão do formato no sufixo — um banco no formato antigo simplesmente não
+    casa, cai no JSON e o espelho reconverte no novo). `heal` troca o aviso
+    padrão (`notify_write` do caminho) — os arquivos de calendário precisam do
+    aviso explícito."""
     try:
         raiz = _data_root()
         jpath = os.path.join(raiz, rel.replace('/', os.sep))
+        # `expected_path` é o guarda da SUPERFÍCIE DE PATCH: o chamador diz de
+        # que arquivo ELE leria, e se não for o canônico que o espelho cobre
+        # (um `_cpd_path`/`data_path` trocado por teste ou config), o banco não
+        # responde — refletir OUTRO arquivo com carimbo de fresco seria a
+        # fonte errada.
+        if expected_path is not None and \
+                os.path.normpath(str(expected_path)) != os.path.normpath(jpath):
+            return None
         st = os.stat(jpath)
     except Exception:                                       # noqa: BLE001
         return None
@@ -70,7 +83,7 @@ def table_rows(db_name, table, rel, schema='main', order_by=None, heal=None):
         con = duckdb.connect(db, read_only=True)
         try:
             row = con.execute('SELECT mtime, fsize FROM _manifest WHERE path = ?',
-                              [rel]).fetchone()
+                              [manifest_key or rel]).fetchone()
             if not row or abs(row[0] - st.st_mtime) >= 1e-6 or row[1] != st.st_size:
                 _cura()
                 return None
@@ -88,6 +101,41 @@ def table_rows(db_name, table, rel, schema='main', order_by=None, heal=None):
         return None
 
 
-def refdata_rows():
-    """As linhas cruas do RefData — do `reference_data.db` quando fresco."""
-    return table_rows('reference_data.db', 'refdata', 'RefData.json')
+def raw_records(db_name, table, rel, expected_path=None):
+    """Os REGISTROS ORIGINAIS de uma tabela de cadastro — a coluna `_raw`,
+    que guarda cada registro exatamente como está no JSON.
+
+    É o canal de fidelidade do flip: reconstruir pelo conjunto de colunas
+    poria chave com NULL onde o JSON não tinha chave nenhuma, e há consumidor
+    que decide pela AUSÊNCIA (o `_contacts_norm` do CounterpartyDetails).
+    Linha sem `_raw` (banco em formato antigo) devolve `None` — o manifest
+    versionado já impede o caso, isto é o cinto de segurança."""
+    from apps.pages.json_to_duckdb import _refdata_manifest_key
+    rows = table_rows(db_name, table, rel,
+                      manifest_key=_refdata_manifest_key(rel),
+                      expected_path=expected_path)
+    if rows is None:
+        return None
+    out = []
+    for r in rows:
+        cru = r.get('_raw')
+        if not cru:
+            return None
+        try:
+            out.append(json.loads(cru))
+        except ValueError:
+            return None
+    return out
+
+
+def refdata_rows(expected_path=None):
+    """Os registros originais do RefData — do `reference_data.db` quando fresco."""
+    return raw_records('reference_data.db', 'refdata', 'RefData.json',
+                       expected_path=expected_path)
+
+
+def cpd_records(expected_path=None):
+    """Os registros originais do CounterpartyDetails — fidelidade total,
+    chave-ausente incluída."""
+    return raw_records('reference_data.db', 'counterparty_details',
+                       'CounterpartyDetails.json', expected_path=expected_path)

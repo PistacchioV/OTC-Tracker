@@ -35,7 +35,7 @@ sys.path.insert(0, ROOT)
 os.environ.setdefault('OTC_SHARED_DRIVE_ROOT', ROOT)
 
 from apps.pages.json_to_duckdb import (            # noqa: E402
-    convert_daily, convert_holidays, convert_refdata)
+    convert_daily, convert_datasets, convert_holidays, convert_refdata)
 
 
 def _default_data_dir():
@@ -58,7 +58,8 @@ def main(argv=None):
     ap.add_argument('--data-dir', default=None, help='origem dos JSONs (padrão: Config.DATA_DIR)')
     ap.add_argument('--out-dir', default=None,
                     help='destino dos .db (padrão: Config.DATABASE_DIR — a pasta db/ existente)')
-    ap.add_argument('--only', choices=('holidays', 'refdata', 'daily'), default=None)
+    ap.add_argument('--only', choices=('holidays', 'refdata', 'datasets', 'daily'),
+                    default=None)
     ap.add_argument('--force', action='store_true', help='reconverte mesmo sem mudança')
     ap.add_argument('--dry-run', action='store_true', help='só lista o que converteria')
     args = ap.parse_args(argv)
@@ -73,7 +74,7 @@ def main(argv=None):
               'saem na pasta db/; a pasta antiga pode ser removida.' % antigo)
 
     conversores = {'holidays': convert_holidays, 'refdata': convert_refdata,
-                   'daily': convert_daily}
+                   'datasets': convert_datasets, 'daily': convert_daily}
     escolhidos = [args.only] if args.only else list(conversores)
     houve_erro = False
     for nome in escolhidos:
@@ -81,7 +82,7 @@ def main(argv=None):
         print('\n== %s -> %s' % (nome, os.path.basename(stats['db'])))
         print('   convertidos: %d | inalterados: %d%s' % (
             len(stats['converted']), len(stats['skipped']),
-            ' | fora do padrão-dia: %d' % len(stats['ignored'])
+            ' | fora deste conversor: %d' % len(stats['ignored'])
             if stats.get('ignored') else ''))
         for item in stats['converted']:
             print('   + %s' % item)

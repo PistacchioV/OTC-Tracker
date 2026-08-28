@@ -68,8 +68,11 @@ R._b3_save(os.path.join(TMP, 'RefData.json'),
 check('1. espelho alcancou o banco', M.flush(20))
 check('1. sem banco adulterado, DB e JSON dizem o mesmo',
       DR.refdata_rows()[0]['SPN'], '007135')
-# A prova de que a fonte é o BANCO: adultera a tabela (o JSON continua 007135).
-_tamper('reference_data.db', "UPDATE refdata SET \"SPN\" = '999999'")
+# A prova de que a fonte é o BANCO: adultera a coluna `_raw` — o canal que o
+# flip consome (as tipadas ficam para o SQL) — enquanto o JSON continua 007135.
+_tamper('reference_data.db',
+        'UPDATE refdata SET "_raw" = '
+        '\'{"COUNTERPARTY": "ACME LTDA", "SPN": "999999"}\'')
 check('1. a leitura veio do banco (a adulteracao aparece)',
       R._refdata_records()[0]['SPN'], '999999')
 R._REFDATA_TRIPLE_CACHE['mtime'] = None
@@ -100,6 +103,45 @@ _tamper('holiday_calendars.db', "UPDATE anbima SET \"title\" = 'DO BANCO'")
 lidas = HP.load_holidays('anbima.json')
 check('3. load_holidays veio do banco, data como STRING ISO',
       lidas, [{'date': '2026-01-01', 'title': 'DO BANCO', 'calendar': 'ANBIMA'}])
+
+# ── 3b. CounterpartyDetails: fidelidade total via _raw ──────────────────────
+from apps.pages.platform import counterparty as CP          # noqa: E402
+CP._cpd_save_list([{'SPN': '007135', 'COUNTERPARTY': 'ACME LTDA', 'CGD': [],
+                    'CONTACTS': [{'name': 'Bob', 'email': 'b@x'}],
+                    'BANKING': {'ACCOUNTS': []},
+                    'NET': {'value': 'Total Net', 'status': 'Active'}}])
+M.flush(20)
+# O contato veio SEM 'appr'/'maker' — a semântica de chave-AUSENTE que o
+# _contacts_norm lê. O flip só é correto se as duas fontes respondem IGUAL.
+via_db = CP._cpd_load()
+_orig_cpd = None
+try:
+    import apps.pages.duck_read as _dr
+    _orig_cpd = _dr.cpd_records
+    _dr.cpd_records = lambda: None
+    M.flush(20)                       # a migração one-shot pode ter regravado
+    via_json = CP._cpd_load()
+finally:
+    _dr.cpd_records = _orig_cpd
+check('3b. DB-first e JSON respondem IGUAL (chave-ausente preservada)',
+      via_db, via_json)
+check('3b. contato legado importado como ja aprovado (a chave AUSENTE foi vista)',
+      bool(via_db and via_db[0]['CONTACTS']
+           and via_db[0]['CONTACTS'][0].get('appr')))
+
+# ── 3c. o navegador: /static/data servido do banco quando fresco ────────────
+M.flush(20)
+resp = R._duck_static_json('RefData.json')
+check('3c. RefData.json servido do banco',
+      resp is not None and json.loads(resp.get_data(as_text=True))[0]['SPN'],
+      '135742')
+resp = R._duck_static_json('anbima.json')
+check('3c. arquivo de calendario servido do banco (via registro)',
+      resp is not None and json.loads(resp.get_data(as_text=True))[0]['calendar'],
+      'ANBIMA')
+check('3c. subpasta e nao-coberto caem no arquivo (None)',
+      (R._duck_static_json('mappings/bank-name.json'),
+       R._duck_static_json('datatables.json')), (None, None))
 
 # ── 4. banco ausente/ilegível nunca é erro ──────────────────────────────────
 os.rename(os.path.join(DBDIR, 'reference_data.db'),

@@ -5970,12 +5970,8 @@ def _vcp_refdata_maps():
     and TAX ID. by_account skips the shared 73760.10-2 omnibus (ambiguous — many
     clients share it; those resolve by Tax ID instead)."""
     by_acct, by_taxid = {}, {}
-    try:
-        with open(os.path.join(_B3_DATA_DIR, 'RefData.json'), encoding='utf-8') as fh:
-            data = json.load(fh) or []
-    except (IOError, json.JSONDecodeError):
-        data = []
-    for rec in (data if isinstance(data, list) else []):
+    data = _refdata_records()                     # DB-first (fase 3)
+    for rec in data:
         name = str(rec.get('COUNTERPARTY', '') or '').strip()
         if not name:
             continue
@@ -10960,13 +10956,63 @@ def static_data_file(filename):
     caminho aqui e passar `dirname`/`basename` já resolvidos anula essa
     checagem — a pasta traversada VIRA a raiz permitida, e
     `/static/data/../../config.py` passa a servir o config.
+
+    **Os JSONs cobertos pelos bancos saem SERVIDOS DO BANCO quando ele está
+    fresco** (fase 3, HANDOFF §330): é o flip de leitura do NAVEGADOR — os
+    `fetch` de RefData, CounterpartyDetails e dos arquivos de calendário
+    respondem pelo DuckDB sem mudar uma linha de JS. Qualquer dúvida (banco
+    frio, arquivo não coberto, subpasta) cai no arquivo, como sempre foi.
     """
+    resp = _duck_static_json(filename)
+    if resp is not None:
+        return resp
     for raiz in (data_dir(), PACKAGED_DATA_DIR):
         try:
             return send_from_directory(raiz, filename)
         except NotFound:
             continue                      # não está no DATA_DIR: tenta a cópia do repo
     raise NotFound()
+
+
+# Os arquivos de primeiro nível que NÃO são calendário de feriado — poupa a
+# consulta ao registro no fetch dos pesados (o Subjacente tem 4 MB). A lista
+# pode envelhecer sem quebrar nada: um nome fora dela só paga uma consulta ao
+# registro que devolve "não é calendário".
+_DUCK_STATIC_NAO_CALENDARIO = frozenset({
+    'Subjacente.json', 'VCP.json', 'Dominio.json', 'SwapIndex.json',
+    'datatables-rendering.json', 'datatables.json', 'treeview-data.json',
+    'typeahead-data-2.json', 'typeahead.json', 'holiday-calendars.json',
+})
+
+
+def _duck_static_json(filename):
+    """A resposta do banco para um `/static/data/<arquivo>` coberto — ou `None`.
+
+    Melhor esforço de ponta a ponta: este caminho nunca pode ser a razão de um
+    fetch falhar, então toda exceção vira `None` e o arquivo é servido do
+    disco."""
+    try:
+        nome = str(filename or '').replace('\\', '/').strip('/')
+        if '/' in nome or not nome.endswith('.json'):
+            return None
+        from apps.pages import duck_read
+        rows = None
+        if nome == 'RefData.json':
+            rows = duck_read.refdata_rows()
+        elif nome == 'CounterpartyDetails.json':
+            rows = duck_read.cpd_records()
+        elif nome not in _DUCK_STATIC_NAO_CALENDARIO:
+            from apps.pages.features.holidays.infra import persistence as _hp
+            if any(str(r.get('file', '') or '').strip().lower() == nome.lower()
+                   for r in _hp.calendars()):
+                rows = _hp._load_holidays_db(nome)
+        if rows is None:
+            return None
+        from flask import Response
+        return Response(json.dumps(rows, ensure_ascii=False),
+                        mimetype='application/json')
+    except Exception:                                       # noqa: BLE001
+        return None
 
 
 _B3_DATA_DIR = data_dir()
@@ -10981,6 +11027,17 @@ _B3_FILE_MAP = {
 
 def _b3_load(table):
     path = os.path.join(_B3_DATA_DIR, _B3_FILE_MAP[table])
+    if table == 'refdata':
+        # DB-first (fase 3): a tela do Reference Data lê do banco quando ele
+        # está fresco; o caminho devolvido segue sendo o do JSON — é nele que
+        # o _b3_save grava, e o espelho realinha o banco em seguida.
+        try:
+            from apps.pages import duck_read
+            rows = duck_read.refdata_rows()
+        except Exception:                                   # noqa: BLE001
+            rows = None
+        if rows is not None:
+            return rows, path
     with open(path, encoding='utf-8') as fh:
         return json.load(fh), path
 

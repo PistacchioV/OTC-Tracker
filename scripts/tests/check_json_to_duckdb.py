@@ -171,6 +171,10 @@ check('2. null continua NULL e vazio continua vazio',
       con.execute("SELECT \"COMMODITIES ACCRONYM\" IS NULL, \"BANKER\" = '' "
                   "FROM refdata ORDER BY \"SPN\"").fetchall(),
       [(True, False), (False, True)])
+cru = con.execute("SELECT \"_raw\" FROM refdata "
+                  "WHERE \"COUNTERPARTY\" LIKE '3M%'").fetchone()[0]
+check('2. _raw guarda o registro EXATO (o canal do flip de leitura)',
+      json.loads(cru)['COMMODITIES ACCRONYM'] is None and '_raw' not in json.loads(cru))
 bank = con.execute("SELECT \"BANKING\" FROM counterparty_details "
                    "WHERE \"SPN\" = '007135'").fetchone()[0]
 check('2. aninhado roundtrip fiel via JSON',
@@ -249,6 +253,43 @@ check('4. dia novo vira tabela nova, sem tocar nas outras',
       (['daily_new_deals.db:ndf_commodities.d_20260613_ndfcomm'], 3))
 check('4. destino padrao e a pasta db/ de todos os bancos',
       conv._default_out_dir('/x'), os.path.join('/x', 'db'))
+
+# ═══ 5. datasets: TODOS os demais JSONs, um banco por pasta ═════════════════
+w('mappings/bank-name.json', [{'BANK': 'ITAU', 'CODE': '341', 'B3': 'C '}])
+w('file-interpreter/termo.json', {'name': 'Termo', 'version': 2,
+                                  'fields': [{'seq': 1, 'source': 'Fixed'}]})
+w('translations/en.json', {'hello': 'Hello', 'bye': 'Bye'})
+w('Subjacente.json', [{'Codigo': 'AAPL34', 'Classe': 'EQUITY'}])
+# O banco de translations da primeira versão da cobertura tem de SAIR de cena.
+open(os.path.join(OUT, 'translations.db'), 'wb').close()
+st = conv.convert_datasets(DATA, OUT)
+check('5. datasets sem erros', st['errors'], [])
+check('5. um banco por pasta, raiz em static_data.db — e translations FORA',
+      sorted(os.path.basename(p) for p in st['dbs']),
+      ['file_interpreter.db', 'mappings.db', 'static_data.db'])
+check('5. i18n fica em JSON: nada de translations.db (o legado foi removido)',
+      os.path.isfile(os.path.join(OUT, 'translations.db')), False)
+check('5. RefData/CPD/registro/calendarios ficam com os conversores proprios',
+      sorted(x for x in st['ignored'] if not x.startswith('cache/')),
+      ['CounterpartyDetails.json', 'RefData.json', 'anbima.json', 'bursa.json',
+       'holiday-calendars.json'])
+con = duckdb.connect(os.path.join(OUT, 'mappings.db'), read_only=True)
+check('5. mapping: tipado, byte a byte, com o registro exato em _raw',
+      con.execute('SELECT "CODE", "B3", json_extract_string("_raw", \'$.BANK\') '
+                  'FROM bank_name').fetchone(), (341, 'C ', 'ITAU'))
+con.close()
+con = duckdb.connect(os.path.join(OUT, 'file_interpreter.db'), read_only=True)
+check('5. payload-objeto: lista interna com _raw + _meta',
+      (con.execute('SELECT "seq" FROM termo_fields').fetchone()[0],
+       json.loads(dict(con.execute(
+           'SELECT key, value FROM termo__meta').fetchall())['version'])), (1, 2))
+con.close()
+st = conv.convert_datasets(DATA, OUT)
+check('5. segunda rodada nao reconverte nada', len(st['converted']), 0)
+from apps.pages import json_to_duckdb as core                # noqa: E402
+st = core.convert_dataset_files(DATA, OUT, ['mappings/bank-name.json', 'anbima.json'])
+check('5. a porta do espelho: so o dado converte, calendario e ignorado',
+      (len(st['skipped']), st['ignored']), (1, ['anbima.json']))
 
 print()
 if fails:
