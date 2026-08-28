@@ -435,8 +435,11 @@ São dois bancos:
   SwapIndex pelo `static_data.db`) e o estático dos `mappings/` e dos JSONs
   de raiz. A reconstrução sai NA ORDEM do arquivo pela coluna `_seq`
   (`CAST` na ordenação — como texto, '10' < '2'), formato `#raw2` no
-  manifest. Os ARQUIVO-DIA seguem lidos do JSON — as tabelas são tipadas e
-  não reproduzem o payload cru; o flip deles é por consumidor virar SQL.
+  manifest. E os ARQUIVO-DIA fecham o mapa
+  (§334): o funil `_day_json` tenta o `day_payload` no MISS do memo — as
+  tabelas diárias também levam `_seq`/`_raw`, e o payload-LISTA volta byte a
+  byte na ordem do arquivo; payload-objeto (as recons) e os leitores de data
+  exata seguem no JSON de propósito.
 
   Duas garantias sustentam a troca: a **leitura cai para a cópia empacotada**
   quando o arquivo não existe no `DATA_DIR` (`anbima.json`, `Subjacente.json`, as
