@@ -152,9 +152,9 @@ def day_payload(path):
         alvo = core._daily_rel_target(rel)
         if alvo is None:
             return None
-        familia, schema, tabela = alvo
+        db_name, schema, tabela = alvo
         st = os.stat(jpath)
-        db = os.path.join(duck_mirror._out_dir(raiz), core._daily_db_name(familia))
+        db = os.path.join(duck_mirror._out_dir(raiz), db_name)
         if not os.path.isfile(db):
             duck_mirror.notify_write(jpath)
             return None

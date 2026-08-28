@@ -13,17 +13,23 @@ O que este script prova, com um DATA_DIR inteiro em tempfile:
      VERBATIM (com espaço); TUDO VARCHAR — o zero à esquerda de SPN/TAX ID é o
      que morreria num BIGINT, em silêncio (CLAUDE.md §7); aninhado vira texto
      JSON com roundtrip fiel;
-  3. **Arquivo-dia**: UM BANCO POR ROTINA, seguindo a ramificação que a pasta
-     `cache/` já tem (`daily_new_deals.db`, `daily_pending_confirmation.db`,
-     …) — a subárvore da rotina vira schema e cada dia é uma tabela; tipos
+  3. **Arquivo-dia**: UM BANCO POR PRODUTO, com o caminho INTEIRO de `cache/`
+     no nome (`daily_new_deals_ndf_commodities.db`,
+     `daily_new_deals_option_fxo.db`) e cada dia como uma tabela; onde a
+     rotina não se ramifica em pastas, o produto sai do NOME do arquivo (o
+     Daily Settlement, dez arquivos na mesma pasta → dez bancos); tipos
      inferidos (dd/mm/aaaa → DATE, número → BIGINT/DOUBLE), com o zero à
      esquerda continuando texto e `''` virando NULL só em coluna tipada;
-     payload-objeto vira as tabelas das listas internas + `_meta`; o
-     `daily_caches.db` do desenho anterior é removido;
+     payload-objeto vira as tabelas das listas internas + `_meta`; os bancos
+     dos desenhos anteriores (`daily_caches.db` e o `daily_<rotina>.db` por
+     primeiro nível) são removidos, e o que ainda é alvo NÃO é tocado;
   4. **Incremental**: segunda rodada não reconverte nada; arquivo alterado
      reconverte SÓ ele; `_last.json` e afins ficam de fora, avisados. E o
      destino padrão é a pasta `db/` de todos os bancos (`DATABASE_DIR`),
      nunca uma pasta nova.
+  5. **Datasets**: UM BANCO POR JSON (`mappings_bank_name.db`,
+     `file_interpreter_termo.db`, `subjacente.db` na raiz); `translations/`
+     fica em JSON; e os bancos por PASTA do desenho anterior são removidos.
 
 Tudo em tempfile; não toca em dado real.
 """
@@ -106,8 +112,15 @@ DEALS = [
      'Client': 'Negrão S.A.', 'Maker': 'A123456', 'Qty': 3},
 ]
 w('cache/new deals/NDF/Commodities/2026/06/20260612_ndfcomm.json', DEALS)
+w('cache/new deals/Option/FXO/2026/06/20260612_optfxo.json', DEALS[:1])
 w('cache/pending-confirmation/2026/08/27/pending-confirmation_20260827.json',
   [{'Trade Number': '0012345', 'Aging': '31', 'Client': 'ACME LTDA'}])
+# Daily Settlement: a rotina que NÃO se ramifica em pastas — os arquivos do dia
+# convivem na mesma pasta, e é o NOME de cada um que diz o produto.
+w('cache/daily settlement/2026/07/28/otm-settlement_20260728.json',
+  [{'Trade Id': '0099', 'Curve': 'PRE'}])
+w('cache/daily settlement/2026/07/28/ndf-cockpit_20260728.json',
+  [{'Trade Id': '0100', 'Curve': 'DOL'}])
 w('cache/reconciliation/payrec/2026-07-06.json',
   {'success': True, 'recon_date': '2026-07-06',
    'summary': [{'pay_receive': 'Pay', 'jpm_qty': 3, 'jpm_value': -226846.2276319994},
@@ -188,25 +201,52 @@ check('2. e consultavel por json_extract',
       'A123456')
 con.close()
 
-# ═══ 3. arquivo-dia: um banco POR ROTINA ════════════════════════════════════
-# O desenho anterior era um daily_caches.db único: se existir, sai de cena.
-open(os.path.join(OUT, 'daily_caches.db'), 'wb').close()
+# ═══ 3. arquivo-dia: um banco POR PRODUTO ═══════════════════════════════════
+# Os dois desenhos anteriores — o daily_caches.db único e o daily_<rotina>.db
+# por primeiro nível de cache/ — saem de cena se existirem.
+for _legado in ('daily_caches.db', 'daily_new_deals.db', 'daily_reconciliation.db'):
+    open(os.path.join(OUT, _legado), 'wb').close()
 st = conv.convert_daily(DATA, OUT)
 check('3. daily sem erros', st['errors'], [])
 check('3. _last.json ficou de fora, avisado',
       st['ignored'], ['cache/reconciliation/payrec/_last.json'])
-check('3. um banco por rotina, com o nome da ramificacao de cache/',
+check('3. um banco por PRODUTO, com o caminho inteiro de cache/ no nome',
       sorted(os.path.basename(p) for p in st['dbs']),
-      ['daily_new_deals.db', 'daily_pending_confirmation.db', 'daily_reconciliation.db'])
-check('3. o daily_caches.db legado foi removido',
-      os.path.isfile(os.path.join(OUT, 'daily_caches.db')), False)
-con = duckdb.connect(os.path.join(OUT, 'daily_new_deals.db'), read_only=True)
-check('3. a subarvore da rotina vira schema dentro do banco dela',
+      ['daily_new_deals_ndf_commodities.db', 'daily_new_deals_option_fxo.db',
+       'daily_pending_confirmation.db', 'daily_reconciliation_payrec.db',
+       'daily_settlement_ndf_cockpit.db', 'daily_settlement_otm.db'])
+check('3. os bancos dos desenhos anteriores foram removidos',
+      [os.path.isfile(os.path.join(OUT, f))
+       for f in ('daily_caches.db', 'daily_new_deals.db', 'daily_reconciliation.db')],
+      [False, False, False])
+# `daily_pending_confirmation.db` é o mesmo nome nos dois desenhos (a rotina
+# nunca se ramificou): apagá-lo como legado custaria uma reconversão inteira à
+# toa. A marca provaria isso — se o banco tivesse sido apagado e recriado, ela
+# não estaria lá.
+_marca = duckdb.connect(os.path.join(OUT, 'daily_pending_confirmation.db'))
+_marca.execute('CREATE TABLE _marca AS SELECT 1 AS x')
+_marca.close()
+conv.convert_daily(DATA, OUT)
+_marca = duckdb.connect(os.path.join(OUT, 'daily_pending_confirmation.db'),
+                        read_only=True)
+check('3. o nome que ainda e alvo NAO e apagado (rotina sem ramificacao)',
+      _marca.execute('SELECT x FROM _marca').fetchone()[0], 1)
+_marca.close()
+# O Daily Settlement é o caso do pedido: mesma pasta, um banco por arquivo.
+check('3. rotina sem pastas: o produto sai do NOME, um banco por arquivo',
+      [os.path.isfile(os.path.join(OUT, f)) for f in
+       ('daily_settlement_otm.db', 'daily_settlement_ndf_cockpit.db')], [True, True])
+con = duckdb.connect(os.path.join(OUT, 'daily_settlement_otm.db'), read_only=True)
+check('3. e a tabela e so o dia: a tag ja esta no nome do banco',
+      con.execute('SELECT "Curve" FROM main.d_20260728').fetchone()[0], 'PRE')
+con.close()
+con = duckdb.connect(os.path.join(OUT, 'daily_new_deals_ndf_commodities.db'), read_only=True)
+check('3. o caminho vai para o NOME do banco: nada de schema extra',
       {r[0] for r in con.execute(
           "SELECT DISTINCT table_schema FROM information_schema.tables "
           "WHERE table_schema NOT IN ('main')").fetchall()},
-      {'ndf_commodities'})
-nd = 'ndf_commodities.d_20260612_ndfcomm'
+      set())
+nd = 'main.d_20260612_ndfcomm'
 tipos = {d[0]: d[1] for d in con.execute("DESCRIBE %s" % nd).fetchall()}
 check('3. dd/mm/aaaa e ISO viram DATE',
       (tipos['TradeDate'], tipos['SettlementDate']), ('DATE', 'DATE'))
@@ -222,13 +262,13 @@ check('3. arquivo-dia tambem leva _seq/_raw (o canal do _day_json)',
       ('_raw' in tipos and tipos['_seq']), 'BIGINT')
 con.close()
 con = duckdb.connect(os.path.join(OUT, 'daily_pending_confirmation.db'), read_only=True)
-check('3. rotina sem subarvore fica no main, tabela so com o dia',
+check('3. tag que so repete o nome do banco cai: a tabela e so o dia',
       con.execute("SELECT \"Trade Number\" FROM main.d_20260827").fetchone()[0], '0012345')
 con.close()
-con = duckdb.connect(os.path.join(OUT, 'daily_reconciliation.db'), read_only=True)
+con = duckdb.connect(os.path.join(OUT, 'daily_reconciliation_payrec.db'), read_only=True)
 check('3. payload-objeto: lista interna vira tabela',
-      con.execute("SELECT count(*) FROM payrec.d_20260706_summary").fetchone()[0], 2)
-meta = dict(con.execute("SELECT key, value FROM payrec.d_20260706__meta").fetchall())
+      con.execute("SELECT count(*) FROM main.d_20260706_summary").fetchone()[0], 2)
+meta = dict(con.execute("SELECT key, value FROM main.d_20260706__meta").fetchall())
 check('3. e o resto vira _meta chave->valor',
       (json.loads(meta['success']), json.loads(meta['recon_date'])),
       (True, '2026-07-06'))
@@ -237,15 +277,17 @@ con.close()
 # ═══ 4. incremental ═════════════════════════════════════════════════════════
 st = conv.convert_daily(DATA, OUT)
 check('4. segunda rodada nao reconverte nada',
-      (len(st['converted']), len(st['skipped'])), (0, 3))
+      (len(st['converted']), len(st['skipped'])), (0, 6))
 
 alterado = w('cache/new deals/NDF/Commodities/2026/06/20260612_ndfcomm.json',
              DEALS + [dict(DEALS[0], Deal='DBH-1CCC')])
 os.utime(alterado, (os.path.getmtime(alterado) + 5,) * 2)
 st = conv.convert_daily(DATA, OUT)
 check('4. arquivo alterado reconverte SO ele',
-      (st['converted'], len(st['skipped'])), (['daily_new_deals.db:' + nd], 2))
-con = duckdb.connect(os.path.join(OUT, 'daily_new_deals.db'), read_only=True)
+      (st['converted'], len(st['skipped'])),
+      (['daily_new_deals_ndf_commodities.db:' + nd], 5))
+con = duckdb.connect(os.path.join(OUT, 'daily_new_deals_ndf_commodities.db'),
+                     read_only=True)
 check('4. com o conteudo novo',
       con.execute("SELECT count(*) FROM %s" % nd).fetchone()[0], 3)
 con.close()
@@ -254,35 +296,43 @@ novo = w('cache/new deals/NDF/Commodities/2026/06/20260613_ndfcomm.json', DEALS[
 st = conv.convert_daily(DATA, OUT)
 check('4. dia novo vira tabela nova, sem tocar nas outras',
       (st['converted'], len(st['skipped'])),
-      (['daily_new_deals.db:ndf_commodities.d_20260613_ndfcomm'], 3))
+      (['daily_new_deals_ndf_commodities.db:main.d_20260613_ndfcomm'], 6))
 check('4. destino padrao e a pasta db/ de todos os bancos',
       conv._default_out_dir('/x'), os.path.join('/x', 'db'))
 
-# ═══ 5. datasets: TODOS os demais JSONs, um banco por pasta ═════════════════
+# ═══ 5. datasets: TODOS os demais JSONs, UM BANCO POR JSON ══════════════════
 w('mappings/bank-name.json', [{'BANK': 'ITAU', 'CODE': '341', 'B3': 'C '}])
+w('mappings/mt300.json', [{'COUNTERPARTY': 'ACME LTDA', 'SPN': '135742'}])
+w('control-panel/mt300_status.json', {'last': '2026-08-27', 'sent': 12})
 w('file-interpreter/termo.json', {'name': 'Termo', 'version': 2,
                                   'fields': [{'seq': 1, 'source': 'Fixed'}]})
 w('translations/en.json', {'hello': 'Hello', 'bye': 'Bye'})
 w('Subjacente.json', [{'Codigo': 'AAPL34', 'Classe': 'EQUITY'}])
-# O banco de translations da primeira versão da cobertura tem de SAIR de cena.
-open(os.path.join(OUT, 'translations.db'), 'wb').close()
+# Os bancos por PASTA do desenho anterior (e o translations.db da primeira
+# versão da cobertura) têm de SAIR de cena.
+for _legado in ('translations.db', 'mappings.db', 'file_interpreter.db',
+                'static_data.db'):
+    open(os.path.join(OUT, _legado), 'wb').close()
 st = conv.convert_datasets(DATA, OUT)
 check('5. datasets sem erros', st['errors'], [])
-check('5. um banco por pasta, raiz em static_data.db — e translations FORA',
+check('5. UM BANCO POR JSON, com a pasta no nome — e translations FORA',
       sorted(os.path.basename(p) for p in st['dbs']),
-      ['file_interpreter.db', 'mappings.db', 'static_data.db'])
-check('5. i18n fica em JSON: nada de translations.db (o legado foi removido)',
-      os.path.isfile(os.path.join(OUT, 'translations.db')), False)
+      ['control_panel_mt300_status.db', 'file_interpreter_termo.db',
+       'mappings_bank_name.db', 'mappings_mt300.db', 'subjacente.db'])
+check('5. os bancos por PASTA do desenho anterior foram removidos',
+      [os.path.isfile(os.path.join(OUT, f)) for f in
+       ('translations.db', 'mappings.db', 'file_interpreter.db', 'static_data.db')],
+      [False, False, False, False])
 check('5. RefData/CPD/registro/calendarios ficam com os conversores proprios',
       sorted(x for x in st['ignored'] if not x.startswith('cache/')),
       ['CounterpartyDetails.json', 'RefData.json', 'anbima.json', 'bursa.json',
        'holiday-calendars.json'])
-con = duckdb.connect(os.path.join(OUT, 'mappings.db'), read_only=True)
+con = duckdb.connect(os.path.join(OUT, 'mappings_bank_name.db'), read_only=True)
 check('5. mapping: tipado, byte a byte, com o registro exato em _raw',
       con.execute('SELECT "CODE", "B3", json_extract_string("_raw", \'$.BANK\') '
                   'FROM bank_name').fetchone(), (341, 'C ', 'ITAU'))
 con.close()
-con = duckdb.connect(os.path.join(OUT, 'file_interpreter.db'), read_only=True)
+con = duckdb.connect(os.path.join(OUT, 'file_interpreter_termo.db'), read_only=True)
 check('5. payload-objeto: lista interna com _raw + _meta',
       (con.execute('SELECT "seq" FROM termo_fields').fetchone()[0],
        json.loads(dict(con.execute(
@@ -294,6 +344,9 @@ from apps.pages import json_to_duckdb as core                # noqa: E402
 st = core.convert_dataset_files(DATA, OUT, ['mappings/bank-name.json', 'anbima.json'])
 check('5. a porta do espelho: so o dado converte, calendario e ignorado',
       (len(st['skipped']), st['ignored']), (1, ['anbima.json']))
+check('5. cada JSON tem o SEU banco: um mapping nao fecha a leitura do outro',
+      core._dataset_rel_target('mappings/mt300.json', set()),
+      ('mappings_mt300.db', 'mt300'))
 
 print()
 if fails:

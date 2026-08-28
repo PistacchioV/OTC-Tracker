@@ -10656,10 +10656,11 @@ def _mapping_rows(key):
         cached = _mapping_cache.get(key)
         if cached and cached[0] == mtime:
             return cached[1]
-        # DB-first (fase 3): o mappings.db (ou o static_data.db, para os
-        # registros com `file` na raiz) quando o manifest prova o frescor —
-        # via `_raw`, então o conteúdo é o do arquivo byte a byte e o
-        # `upgrade` abaixo roda igual nas duas fontes. Senão, o JSON.
+        # DB-first (fase 3): o banco DESTE cadastro (`mappings_<key>.db`, ou o
+        # `<arquivo>.db` da raiz para os registros com `file`) quando o
+        # manifest prova o frescor — via `_raw`, então o conteúdo é o do
+        # arquivo byte a byte e o `upgrade` abaixo roda igual nas duas fontes.
+        # Senão, o JSON.
         rows = None
         try:
             from apps.pages import duck_read
@@ -11037,8 +11038,9 @@ _B3_FILE_MAP = {
 def _b3_load(table):
     path = os.path.join(_B3_DATA_DIR, _B3_FILE_MAP[table])
     # DB-first (fase 3): o refdata pelo reference_data.db, os demais quatro
-    # (Subjacente, VCP, Dominio, SwapIndex) pelo static_data.db — quando o
-    # manifest prova o frescor. O caminho devolvido segue sendo o do JSON: é
+    # (Subjacente, VCP, Dominio, SwapIndex) pelo banco de CADA UM
+    # (`subjacente.db`, `vcp.db`, …) — quando o manifest prova o frescor. O
+    # caminho devolvido segue sendo o do JSON: é
     # nele que o _b3_save grava, e o espelho realinha o banco em seguida.
     try:
         from apps.pages import duck_read

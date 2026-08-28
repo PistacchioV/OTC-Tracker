@@ -155,7 +155,7 @@ lidas = DR.dataset_records(os.path.join(R._MAPPINGS_DIR, 'bank-name.json'))
 check('3d. dataset_records devolve a LISTA NA ORDEM do arquivo (12 linhas)',
       lidas, linhas_map)
 import duckdb as _dd
-_con = _dd.connect(os.path.join(DBDIR, 'mappings.db'))
+_con = _dd.connect(os.path.join(DBDIR, 'mappings_bank_name.db'))
 _con.execute('UPDATE bank_name SET "_raw" = \'{"BANK": "DO BANCO"}\' '
              'WHERE "BANK" = \'B00\'')
 _con.close()
@@ -182,8 +182,8 @@ dia = os.path.join(TMP, 'cache', 'new deals', 'NDF', 'Commodities', '2026', '06'
 os.makedirs(os.path.dirname(dia), exist_ok=True)
 R._atomic_write_json(dia, [{'Deal': 'DBH-9AAA'}, {'Deal': 'DBH-9BBB'}])
 M.flush(20)
-_tamper('daily_new_deals.db',
-        'UPDATE ndf_commodities.d_20260618_ndfcomm SET "_raw" = '
+_tamper('daily_new_deals_ndf_commodities.db',
+        'UPDATE main.d_20260618_ndfcomm SET "_raw" = '
         '\'{"Deal": "DO BANCO"}\' WHERE "Deal" = \'DBH-9AAA\'')
 lidas = R._day_json(dia, os.path.getmtime(dia), os.path.getsize(dia))
 check('3e. _day_json veio do banco, NA ORDEM do arquivo',

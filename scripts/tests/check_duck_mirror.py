@@ -68,15 +68,15 @@ dia = os.path.join(TMP, 'cache', 'new deals', 'NDF', 'Commodities', '2026', '06'
 os.makedirs(os.path.dirname(dia), exist_ok=True)
 R._atomic_write_json(dia, [{'Deal': 'DBH-1AAA', 'TradeDate': '15/06/2026'}])
 check('1. flush esvazia a fila', M.flush(20))
-check('1. arquivo-dia espelhado no banco da familia',
-      consulta('daily_new_deals.db',
-               'SELECT "Deal", "TradeDate" FROM ndf_commodities.d_20260615_ndfcomm'),
+check('1. arquivo-dia espelhado no banco do PRODUTO',
+      consulta('daily_new_deals_ndf_commodities.db',
+               'SELECT "Deal", "TradeDate" FROM main.d_20260615_ndfcomm'),
       [('DBH-1AAA', __import__('datetime').date(2026, 6, 15))])
 R._atomic_write_json(dia, [{'Deal': 'DBH-1AAA'}, {'Deal': 'DBH-1BBB'}])
 M.flush(20)
 check('1. regravacao atualiza a tabela',
-      consulta('daily_new_deals.db',
-               'SELECT count(*) FROM ndf_commodities.d_20260615_ndfcomm'), [(2,)])
+      consulta('daily_new_deals_ndf_commodities.db',
+               'SELECT count(*) FROM main.d_20260615_ndfcomm'), [(2,)])
 
 # ── 2. RefData e CounterpartyDetails (escritas fora do funil) ───────────────
 R._b3_save(os.path.join(TMP, 'RefData.json'),
@@ -105,7 +105,7 @@ check('3. e o registro virou tabela tambem',
       consulta('holiday_calendars.db',
                'SELECT count(*) FROM _registry')[0][0] >= 11)
 
-# ── 4. a cobertura total: mapping vira mappings.db; ponteiro não dispara ────
+# ── 4. a cobertura total: cada mapping tem o SEU banco; ponteiro não dispara ─
 os.makedirs(os.path.join(TMP, 'mappings'), exist_ok=True)
 R._atomic_write_json(os.path.join(TMP, 'mappings', 'bank-name.json'),
                      [{'BANK': 'ITAU', 'CODE': '341'}])
@@ -114,15 +114,17 @@ os.makedirs(os.path.dirname(ponteiro), exist_ok=True)
 R._atomic_write_json(ponteiro, {'recon_date': '2026-07-06'})
 M.flush(20)
 bancos = sorted(f for f in os.listdir(DBDIR) if f.endswith('.db'))
-check('4. mapping espelha em mappings.db; _last.json em nada',
-      bancos, ['daily_new_deals.db', 'holiday_calendars.db', 'mappings.db',
-               'reference_data.db'])
+check('4. mapping espelha no banco DELE; _last.json em nada',
+      bancos, ['daily_new_deals_ndf_commodities.db', 'holiday_calendars.db',
+               'mappings_bank_name.db', 'reference_data.db'])
 check('4. a tabela do mapping leva o registro exato (_raw)',
-      json.loads(consulta('mappings.db',
+      json.loads(consulta('mappings_bank_name.db',
                           'SELECT "_raw" FROM bank_name')[0][0]),
       {'BANK': 'ITAU', 'CODE': '341'})
+# Com um banco por JSON, o `anbima.json` viraria `anbima.db` se o conversor de
+# datasets o aceitasse — e aí o calendário teria DUAS tabelas, em dois bancos.
 check('4. arquivo de CALENDARIO nao vira dataset (e do holidays)',
-      os.path.isfile(os.path.join(DBDIR, 'static_data.db')), False)
+      os.path.isfile(os.path.join(DBDIR, 'anbima.db')), False)
 
 # ── 5. os bancos moram ao lado do dado espelhado ────────────────────────────
 check('5. raiz trocada espelha em <raiz>/db, nunca no DATABASE_DIR real',
