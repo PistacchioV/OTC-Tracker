@@ -14428,3 +14428,75 @@ leitores; `.bak`/`.lock`/`_last`/`__pycache__` ficam fora; o estático cai para 
 quando o arquivo não existe; e o seed da subida (`_seed_data_dir`, cópia sem aviso) converge
 pelo heal-de-leitura ou pela carga. Suíte completa verde antes e depois; o standalone foi
 regerado com o formato dos feriados.
+
+## §336 — um banco por PRODUTO, um banco por JSON (2026-08-28)
+
+A quebra dos bancos era GROSSA demais: um `daily_<rotina>.db` por primeiro nível de `cache/`
+(com o produto virando schema lá dentro) e um `<pasta>.db` por pasta de dataset. Na prática o
+`daily_new_deals.db` guardava termo, opção, swap e Intrag no mesmo arquivo, e o `mappings.db`
+guardava os 42 cadastros. A pedido, a quebra desceu um nível — e nos dois casos ela agora
+segue exatamente a ramificação que já existe no disco:
+
+**Arquivo-dia: o caminho INTEIRO de `cache/` nomeia o banco.** `daily_new_deals_ndf_vanilla.db`,
+`daily_new_deals_ndf_fwdstart.db`, `daily_new_deals_ndf_otherpublisher.db`,
+`daily_new_deals_ndf_commodities.db`, `daily_new_deals_option_commodities.db`,
+`daily_new_deals_option_fxo.db`, `daily_new_deals_intrag_ndf.db`,
+`daily_new_deals_intrag_option.db`, `daily_b3_files_swap.db`, … Cada dia é uma tabela dentro
+dele e o SCHEMA sumiu — o que era subárvore está no nome do banco, e um schema além disso
+repetiria a mesma informação.
+
+**Onde a rotina NÃO se ramifica em pastas, o produto sai do NOME do arquivo.** É o Daily
+Settlement, que grava os dez arquivos do dia (`otm-settlement`, `ndf-cockpit`, `cognos`,
+`br-onshore-settlements`, `latam-desk-position`, os dois `eventos-swap`, …) na MESMA pasta
+`AAAA/MM/DD`: sem isso os dez cairiam num banco só, justamente a rotina em que a quebra é mais
+útil. Vira `daily_settlement_otm.db`, `daily_settlement_ndf_cockpit.db`, … O corte é pela
+CONTAGEM de pastas e nunca por olhar os vizinhos em disco — `_daily_rel_target` tem de ser
+PURO sobre o caminho, porque o espelho vivo converte um arquivo por vez e não pode depender de
+varrer o diretório.
+
+**Datasets: um banco por ARQUIVO.** `mappings_mt300.db`, `control_panel_mt300_status.db`,
+`file_interpreter_termo.db`, e o JSON de raiz com o próprio nome (`subjacente.db`, `vcp.db`).
+São 133 bancos onde havia ~10, e isso de quebra tira uma contenção que não precisava existir:
+o espelho reconvertendo UM mapping fechava a leitura dos outros 41.
+
+Quatro detalhes que não dão erro nenhum:
+
+- **A tag da TABELA é tudo-ou-nada.** Ela cai quando é pura repetição do nome do banco
+  (`pending-confirmation_20260827` no `daily_pending_confirmation.db`; `otm-settlement_20260728`
+  no `daily_settlement_otm.db`) e fica INTEIRA caso contrário. A primeira versão podava token a
+  token, e aí o `DPOSICAO-SWAP` do `daily_b3_files_swap.db` perdia justamente o `swap` e ficava
+  indistinguível de um `DPOSICAO` da mesma pasta — perda de dado sem erro nenhum.
+- **A tag entra no nome do banco PODADA** dos tokens que a rotina já diz (`payrec` +
+  `payrec_status` → `daily_payrec_status.db`), e o prefixo `daily_` não é acrescentado à rotina
+  que já se chama `daily …` — senão o Daily Settlement sairia `daily_daily_settlement_otm.db`.
+- **Os bancos dos desenhos anteriores são apagados na carga completa** (`_drop_legacy_dbs`),
+  **menos o nome que ainda é alvo**: `daily_pending_confirmation.db` é o mesmo banco antes e
+  depois (a rotina nunca se ramificou), com o mesmo manifest, e apagá-lo custaria uma
+  reconversão inteira à toa. Quem faz a limpeza é a carga completa e não o espelho: o espelho
+  enxerga um arquivo por vez e não tem como saber que um banco ficou órfão.
+- **Colisão vira ERRO, não sobrescrita.** `_colisoes` denuncia dois arquivos que reivindiquem a
+  mesma tabela — o caso teórico que a poda de nome deixa em aberto. Sem isso a segunda conversão
+  sobrescreveria a primeira e o `_drop_targets` da rodada seguinte apagaria o que sobrou.
+
+O `duck_read.day_payload` passou a receber o nome do banco pronto do `_daily_rel_target` (era
+ele que recompunha por família), e a leitura DB-first continua intacta — o contrato de frescor
+não mudou. Carga completa limpa: 133 bancos, 190 datasets + 114 arquivo-dia convertidos, zero
+erro; segunda rodada não reconverte nada. Suíte completa verde.
+
+## §337 — dois ajustes pedidos na mesma sessão (2026-08-28)
+
+**`SWAP CORPORATE` × CEM entra no grupo do CEM Swap** (`conf_escalation/domain.FO_GROUPS`). Na
+EDG os dois produtos são grupos SEPARADOS porque quem recebe cada um é diferente; na CEM é a
+mesma mesa, então o grupo passou a listar os dois produtos. Antes o `SWAP CORPORATE · CEM` não
+casava com grupo nenhum e caía no `unmatched` do card — cobrança que ninguém recebe, com a
+linha âmbar na tela como único aviso. O teste que prendia o comportamento antigo foi invertido,
+com a EDG continuando separada na mesma asserção.
+
+**O card Update Contacts ganhou DROPZONE** no lugar do `<input type=file>` cru, reusando o
+`.cp-dropzone` que o Daily Settlement já tinha na página. O helper novo (`cpWireDropzone`) é de
+arquivo ÚNICO e mantém o **input como fonte da verdade** — o drop só o preenche, via
+`DataTransfer` —, então o `cpRunUpload` segue lendo `input.files[0]` e nada mais mudou. Duas
+coisas que não dão erro nenhum: `input.value = ''` NÃO dispara `change`, então o runner passou a
+emitir o evento depois de um upload com sucesso (sem isso o dropzone continuaria mostrando o
+arquivo já enviado), e o `DataTransfer` está num `try` — num browser sem ele o clique continua
+funcionando. Chave `cp-contacts-dz` nos três idiomas.
