@@ -218,6 +218,8 @@ check('3. valores: data real, strike de 8 casas, vazio->NULL so no tipado',
                   "FROM %s ORDER BY \"Deal\"" % nd).fetchall(),
       [(datetime.date(2026, 6, 12), 5.12345678, 1500000, ''),
        (datetime.date(2026, 6, 12), 4.9, None, 'A123456')])
+check('3. arquivo-dia tambem leva _seq/_raw (o canal do _day_json)',
+      ('_raw' in tipos and tipos['_seq']), 'BIGINT')
 con.close()
 con = duckdb.connect(os.path.join(OUT, 'daily_pending_confirmation.db'), read_only=True)
 check('3. rotina sem subarvore fica no main, tabela so com o dia',

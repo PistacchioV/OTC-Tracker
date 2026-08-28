@@ -130,6 +130,65 @@ def raw_records(db_name, table, rel, expected_path=None, manifest_key=None):
     return out
 
 
+def day_payload(path):
+    """O conteúdo de UM arquivo-dia pelo banco da rotina — a LISTA original,
+    na ordem do arquivo — ou `None` e vale o JSON.
+
+    Só o payload-LISTA reconstrói (é a forma dos New Deals, Pending
+    Confirmation, arquivos B3…): o manifest diz que a conversão gerou UMA
+    tabela, e ela carrega `_raw`/`_seq`. Payload-objeto (as recons, que viram
+    sub-tabelas + `_meta`) fica com o JSON — remontar o objeto pelas tabelas
+    normalizadas seria adivinhar chave e ordem. Banco frio/formato antigo →
+    `None` com o espelho avisado, como em tudo."""
+    try:
+        from apps.pages import duck_mirror
+        from apps.pages import json_to_duckdb as core
+        raiz = _data_root()
+        jpath = os.path.normpath(str(path))
+        rel = os.path.relpath(jpath, raiz)
+        if rel.startswith('..'):
+            return None
+        rel = rel.replace(os.sep, '/')
+        alvo = core._daily_rel_target(rel)
+        if alvo is None:
+            return None
+        familia, schema, tabela = alvo
+        st = os.stat(jpath)
+        db = os.path.join(duck_mirror._out_dir(raiz), core._daily_db_name(familia))
+        if not os.path.isfile(db):
+            duck_mirror.notify_write(jpath)
+            return None
+        con = duckdb.connect(db, read_only=True)
+        try:
+            row = con.execute(
+                'SELECT mtime, fsize, targets FROM _manifest WHERE path = ?',
+                [core._dataset_manifest_key(rel)]).fetchone()
+            if not row or abs(row[0] - st.st_mtime) >= 1e-6 or row[1] != st.st_size:
+                duck_mirror.notify_write(jpath)
+                return None
+            if json.loads(row[2] or '[]') != ['%s.%s' % (schema, tabela)]:
+                return None                    # payload-objeto: fica no JSON
+            alvo_sql = '%s.%s' % (q(schema), q(tabela))
+            cols = [d[0] for d in
+                    con.execute('SELECT * FROM %s LIMIT 0' % alvo_sql).description]
+            if cols == ['_empty']:
+                return []                      # o dia existe e está vazio
+            if '_raw' not in cols or '_seq' not in cols:
+                return None
+            out = []
+            for (cru,) in con.execute(
+                    'SELECT "_raw" FROM %s ORDER BY CAST("_seq" AS BIGINT)'
+                    % alvo_sql).fetchall():
+                if not cru:
+                    return None
+                out.append(json.loads(cru))
+            return out
+        finally:
+            con.close()
+    except Exception:                                       # noqa: BLE001
+        return None
+
+
 def dataset_records(path):
     """Os registros originais de um JSON coberto pelos DATASETS (mappings,
     cadastros B3, …), pelo caminho ABSOLUTO de quem lê — que também é o
