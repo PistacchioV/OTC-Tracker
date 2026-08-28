@@ -21,8 +21,9 @@ O ESCOPO é UMA rotina de cache\: **payrec**.
 
 O histórico diário da reconciliação de Pay/Rec.
 
-Cada produto vira um banco (o caminho inteiro de cache\ no nome —
-daily_new_deals_ndf_vanilla.db, daily_b3_files_swap.db) e cada dia é uma tabela
+Cada produto vira um banco e a pasta db\ ESPELHA a árvore de cache\
+(db\cache\new deals\NDF\Vanilla.db, db\cache\b3 files\Swap.db); só
+ano/mês/dia não viram pasta — cada dia é uma tabela
 (d_AAAAMMDD[_tag]), tipada por inferência: dd/mm/aaaa e ISO viram DATE, número
 vira BIGINT/DOUBLE, zero à esquerda continua texto, '' vira NULL só em coluna
 tipada, e texto sai byte a byte.
@@ -639,8 +640,12 @@ def _daily_rel_target(rel):
 
 
 def _novo_daily_stats():
+    # `avisos` é o que o resumo IMPRIME sem ser erro — hoje, a rotina pedida que
+    # não existe em disco. `ignored` continua sendo contagem (os `_last` e as
+    # configs avulsas são muitos e não interessam um a um).
     return {'db': 'daily_<produto>.db (um por produto)', 'dbs': [],
-            'converted': [], 'skipped': [], 'errors': [], 'ignored': []}
+            'converted': [], 'skipped': [], 'errors': [], 'ignored': [],
+            'avisos': []}
 
 
 def _convert_daily_rels(data_dir, out_dir, rels, force, stats):
@@ -774,6 +779,21 @@ def _legacy_flat_name(rel_db):
     return '_'.join(toks) + '.db'
 
 
+def chave_familia(nome):
+    """A rotina de `cache/` reduzida à sua identidade, para casar o escopo
+    pedido com a pasta que está em disco.
+
+    O nome da pasta é escrito por quem criou a árvore, e as instâncias não
+    concordam na grafia: a dev tem `b3 files` e o share do JPM tem `B3 Files`.
+    Casando por string exata, o `02_2_b3_files.py` não achava a pasta e saía
+    dizendo `convertidos: 0` — a fatia inteira ficava de fora sem erro nenhum.
+    Pior, o `99_outros` exclui pela MESMA lista: com a comparação exata ele não
+    reconhecia a rotina como coberta e a convertia junto, e os dois escreviam no
+    mesmo banco se rodassem em paralelo, que é justamente o que a divisão
+    promete que não acontece."""
+    return '_'.join(_tokens(nome))
+
+
 def cache_families(data_dir):
     """As rotinas de primeiro nível de `cache/` — `new deals`, `b3 files`,
     `daily settlement`, … É o eixo pelo qual a conversão se REPARTE entre
@@ -820,15 +840,24 @@ def convert_daily(data_dir, out_dir, force=False, dry_run=False,
 
     todas = cache_families(data_dir)
     if familias is not None:
-        alvo_fams = [f for f in todas if f in set(familias)]
-        faltando = sorted(set(familias) - set(todas))
+        quero = {chave_familia(f) for f in familias}
+        alvo_fams = [f for f in todas if chave_familia(f) in quero]
+        achadas = {chave_familia(f) for f in alvo_fams}
+        faltando = [f for f in familias if chave_familia(f) not in achadas]
         if faltando:
             # Rotina pedida que não existe em disco não é erro (a instância pode
-            # não ter aquele cache ainda), mas some sem dizer nada se ficar calada.
-            stats['ignored'].extend('cache/%s (rotina ausente em disco)' % f
-                                    for f in faltando)
+            # não ter aquele cache ainda) — mas o aviso vai em `avisos`, que o
+            # resumo IMPRIME. Contado só como número, ele saía como um `fora
+            # deste conversor: 1` indistinguível de um ponteiro `_last` e a
+            # pessoa lia "não havia nada a fazer" onde a fatia inteira ficou
+            # de fora. Por isso ele diz também o que ACHOU: a diferença entre
+            # a grafia pedida e a que está em disco é a resposta.
+            stats['avisos'].extend(
+                'cache/%s: rotina ausente em disco. Rotinas encontradas: %s'
+                % (f, ', '.join(todas) or '(nenhuma)') for f in faltando)
     elif excluir is not None:
-        alvo_fams = [f for f in todas if f not in set(excluir)]
+        fora = {chave_familia(f) for f in excluir}
+        alvo_fams = [f for f in todas if chave_familia(f) not in fora]
     else:
         alvo_fams = todas
 
@@ -1109,6 +1138,8 @@ def _resumo(nome, stats, houve_erro):
         len(stats['converted']), len(stats['skipped']),
         ' | fora deste conversor: %d' % len(stats['ignored'])
         if stats.get('ignored') else ''))
+    for aviso in stats.get('avisos') or ():
+        print('   ! %s' % aviso)
     for item in stats['converted']:
         print('   + %s' % item)
     for rel, erro in stats['errors']:

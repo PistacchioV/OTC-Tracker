@@ -198,6 +198,44 @@ with contextlib.redirect_stdout(_buf):
 check('segunda rodada de uma fatia não reconverte nada',
       'convertidos: 0' in _buf.getvalue())
 
+
+# --- A GRAFIA da pasta não pode decidir se a fatia roda -----------------------
+# A dev tem `b3 files` e o share do JPM tem `B3 Files`. Casando por string
+# exata, o 02_2 saía com `convertidos: 0` e a fatia inteira ficava de fora sem
+# erro nenhum — e o 99_outros, que exclui pela MESMA lista, a convertia junto:
+# duas fatias no mesmo banco, que é o que a divisão promete não acontecer.
+CASE = tempfile.mkdtemp(prefix='sa-case-')
+_p = os.path.join(CASE, 'cache', 'B3 Files', 'Swap', '2026', '08', '27')
+os.makedirs(_p)
+io.open(os.path.join(_p, 'DPOSICAO-SWAP_20260827.json'), 'w',
+        encoding='utf-8').write('[{"Cod": "X"}]')
+_OUT_CASE = os.path.join(CASE, 'db')
+
+mod = _carregar('sa_case_b3', os.path.join(PASTA, '02_2_b3_files.py'))
+_buf = io.StringIO()
+with contextlib.redirect_stdout(_buf):
+    mod.main(['--data-dir', CASE, '--out-dir', _OUT_CASE])
+check('a fatia acha a rotina com outra grafia (B3 Files x b3 files)',
+      _arvore(_OUT_CASE), ['cache/B3 Files/Swap.db'])
+
+mod = _carregar('sa_case_outros', os.path.join(PASTA, '99_outros.py'))
+_buf = io.StringIO()
+with contextlib.redirect_stdout(_buf):
+    mod.main(['--data-dir', CASE, '--out-dir', os.path.join(CASE, 'db-outros')])
+check('e o 99_outros a reconhece como coberta, sem duplicar o banco',
+      _arvore(os.path.join(CASE, 'db-outros')), [])
+
+# Rotina que de fato não existe: o aviso é IMPRESSO e diz o que há em disco.
+mod = _carregar('sa_case_ds', os.path.join(PASTA, '02_3_daily_settlement.py'))
+_buf = io.StringIO()
+with contextlib.redirect_stdout(_buf):
+    mod.main(['--data-dir', CASE, '--out-dir', _OUT_CASE])
+_saida = _buf.getvalue()
+check('rotina ausente AVISA na tela, em vez de virar um número mudo',
+      'rotina ausente em disco' in _saida)
+check('e o aviso diz quais rotinas ele achou', 'B3 Files' in _saida)
+
+shutil.rmtree(CASE, ignore_errors=True)
 shutil.rmtree(DATA, ignore_errors=True)
 shutil.rmtree(TMP, ignore_errors=True)
 
