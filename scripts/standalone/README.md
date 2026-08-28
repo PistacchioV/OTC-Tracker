@@ -116,6 +116,20 @@ start python 02_3_daily_settlement.py
   dez arquivos do dia na mesma pasta — quem dá o banco é o **nome do arquivo**,
   dentro da pasta da rotina.
 - **Bancos de formatos antigos são removidos** quando a fatia que os cobre roda.
+- **`convertidos: 0 | inalterados: 0` numa primeira rodada quer dizer que a
+  rotina não está naquela máquina**, e o script diz isso com todas as letras:
+
+  ```
+  == daily -> daily_<produto>.db (um por produto)
+     convertidos: 0 | inalterados: 0
+     ! cache/daily settlement: rotina ausente em disco.
+       Rotinas encontradas: b3 files, new deals, payrec
+  ```
+
+  A lista de rotinas encontradas é o que resolve o caso: se a pasta está lá com
+  **outro nome**, é ela que aparece ali. A grafia em si não atrapalha — o
+  script casa `b3 files`, `B3 Files` e `B3-Files` como a mesma rotina —, mas um
+  nome de fato diferente precisa de `--data-dir` ou de um ajuste na pasta.
 
 ---
 
