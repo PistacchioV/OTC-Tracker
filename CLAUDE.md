@@ -427,9 +427,16 @@ São dois bancos:
     se não for o canônico coberto pelo espelho o banco não responde — é como o
     `R._cpd_path = tmp` dos testes continua mandando;
   - **a ESCRITA continua nos JSONs** de propósito (rollback = reverter o
-    commit; nenhuma migração de volta). Os ARQUIVO-DIA seguem lidos do JSON —
-    as tabelas são tipadas e não reproduzem o payload cru; o flip deles é por
-    consumidor virar SQL. `check_duck_read.py` prende tudo.
+    commit; nenhuma migração de volta). `check_duck_read.py` prende tudo.
+
+  O flip alcança também os DATASETS (§333): o `_mapping_rows` (os 43
+  cadastros — o `upgrade` roda igual nas duas fontes, porque o `_raw` é o
+  arquivo byte a byte), o `_b3_load` inteiro (Subjacente/VCP/Dominio/
+  SwapIndex pelo `static_data.db`) e o estático dos `mappings/` e dos JSONs
+  de raiz. A reconstrução sai NA ORDEM do arquivo pela coluna `_seq`
+  (`CAST` na ordenação — como texto, '10' < '2'), formato `#raw2` no
+  manifest. Os ARQUIVO-DIA seguem lidos do JSON — as tabelas são tipadas e
+  não reproduzem o payload cru; o flip deles é por consumidor virar SQL.
 
   Duas garantias sustentam a troca: a **leitura cai para a cópia empacotada**
   quando o arquivo não existe no `DATA_DIR` (`anbima.json`, `Subjacente.json`, as

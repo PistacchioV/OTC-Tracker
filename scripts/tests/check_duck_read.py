@@ -139,9 +139,42 @@ resp = R._duck_static_json('anbima.json')
 check('3c. arquivo de calendario servido do banco (via registro)',
       resp is not None and json.loads(resp.get_data(as_text=True))[0]['calendar'],
       'ANBIMA')
-check('3c. subpasta e nao-coberto caem no arquivo (None)',
-      (R._duck_static_json('mappings/bank-name.json'),
+check('3c. subpasta fora dos mappings e nao-coberto caem no arquivo (None)',
+      (R._duck_static_json('translations/en.json'),
        R._duck_static_json('datatables.json')), (None, None))
+
+# ── 3d. datasets: _mapping_rows, _b3_load e o estático dos mappings ─────────
+R._MAPPINGS_DIR = os.path.join(TMP, 'mappings')
+os.makedirs(R._MAPPINGS_DIR, exist_ok=True)
+# 12 linhas: com o _seq gravado como TEXTO, '10' < '2' — a ordem so sai certa
+# porque a leitura ordena por CAST.
+linhas_map = [{'BANK': 'B%02d' % i, 'CODE': str(300 + i)} for i in range(12)]
+R._atomic_write_json(os.path.join(R._MAPPINGS_DIR, 'bank-name.json'), linhas_map)
+M.flush(20)
+lidas = DR.dataset_records(os.path.join(R._MAPPINGS_DIR, 'bank-name.json'))
+check('3d. dataset_records devolve a LISTA NA ORDEM do arquivo (12 linhas)',
+      lidas, linhas_map)
+import duckdb as _dd
+_con = _dd.connect(os.path.join(DBDIR, 'mappings.db'))
+_con.execute('UPDATE bank_name SET "_raw" = \'{"BANK": "DO BANCO"}\' '
+             'WHERE "BANK" = \'B00\'')
+_con.close()
+check('3d. _mapping_rows veio do banco (a adulteracao aparece)',
+      R._mapping_rows('bank-name')[0], {'BANK': 'DO BANCO'})
+R._b3_save(os.path.join(TMP, 'Subjacente.json'),
+           [{'Codigo': 'AAPL34', 'Classe': 'EQUITY'}])
+M.flush(20)
+resp = R._duck_static_json('Subjacente.json')
+check('3d. cadastro B3 de raiz servido do banco',
+      resp is not None and json.loads(resp.get_data(as_text=True))[0]['Codigo'],
+      'AAPL34')
+check('3d. _b3_load DB-first devolve as linhas e o caminho do JSON',
+      (R._b3_load('subj')[0][0]['Classe'],
+       R._b3_load('subj')[1].endswith('Subjacente.json')), ('EQUITY', True))
+resp = R._duck_static_json('mappings/bank-name.json')
+check('3d. mapping servido do banco pelo /static/data',
+      resp is not None and json.loads(resp.get_data(as_text=True))[0],
+      {'BANK': 'DO BANCO'})
 
 # ── 4. banco ausente/ilegível nunca é erro ──────────────────────────────────
 os.rename(os.path.join(DBDIR, 'reference_data.db'),

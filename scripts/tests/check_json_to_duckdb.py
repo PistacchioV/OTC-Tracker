@@ -158,8 +158,10 @@ con = duckdb.connect(os.path.join(OUT, 'reference_data.db'), read_only=True)
 desc = con.execute("DESCRIBE refdata").fetchall()
 check('2. colunas VERBATIM, na ordem do JSON',
       [d[0] for d in desc][:4], ['STATUS', 'COUNTERPARTY', 'TAX ID', 'SPN'])
-check('2. cadastro de identificador e TODO VARCHAR',
-      {d[1] for d in desc}, {'VARCHAR'})
+check('2. cadastro de identificador e TODO VARCHAR (so o _seq e numero: a ordem)',
+      {d[1] for d in desc if d[0] != '_seq'}, {'VARCHAR'})
+check('2. _seq presente (a ordem da reconstrucao)',
+      any(d[0] == '_seq' for d in desc))
 check('2. zero a esquerda sobrevive (SPN e ECI)',
       con.execute("SELECT \"SPN\", \"ECI\" FROM refdata "
                   "WHERE \"COUNTERPARTY\" LIKE '3M%'").fetchone(),
