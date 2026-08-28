@@ -307,9 +307,9 @@ def _opb3_side_write(recs, raw, ref, src_key):
             existing = []
     b3_rows = _opb3_merge(existing, b3_new, src_key)
     os.makedirs(os.path.dirname(b3_jp), exist_ok=True)
-    with open(b3_jp, 'w', encoding='utf-8') as fh:
-        json.dump(b3_rows, fh, ensure_ascii=False, indent=2)
-    routes._bump_cache_gen(b3_jp)                             # ver o comentário em `_ds_write`
+    # Pelo FUNIL (auditoria §335): o bump que era manual vem junto, e o
+    # espelho DuckDB fica sabendo da gravação.
+    routes._atomic_write_json(b3_jp, b3_rows)
     routes._ds_write_updated(b3_jp, _opb3_updated_from(routes._ds_read_rows(raw)) or ref.strftime('%H:%M:%S'))
 
 

@@ -2685,8 +2685,7 @@ def _b3_export_json(src_path, json_cfg, dest_name, dref, skip_existing=False):
             rows = _b3_filter_rows(rows, filt)
 
         os.makedirs(out_dir, exist_ok=True)
-        with open(json_path, 'w', encoding='utf-8') as fh:
-            json.dump(rows, fh, ensure_ascii=False, indent=2)
+        _atomic_write_json(json_path, rows)     # funil: atômico + espelho (§335)
         return json_path
     except Exception:
         log.warning("[b3-json] export failed for %s:\n%s", src_path, traceback.format_exc())
@@ -3096,14 +3095,9 @@ def _ds_handle(name, raw, delete_path, ref, processed, skipped):
 
 def _ds_write(jp, recs, name, spec, total, processed, delete_path):
     os.makedirs(os.path.dirname(jp), exist_ok=True)
-    with open(jp, 'w', encoding='utf-8') as fh:
-        json.dump(recs, fh, ensure_ascii=False, indent=2)
-    # Este write não passa pelo `_atomic_write_json`, que é onde os demais
-    # gravadores invalidam o cache de leitura. Sem o bump, a rotina importa o
-    # arquivo do dia e a tela segue mostrando o de antes por até
-    # `SHARED_CACHE_TTL_SECONDS` — o defeito que se lê como "importei e não
-    # apareceu", sem erro nenhum.
-    _bump_cache_gen(jp)
+    # Pelo FUNIL (auditoria §335): o bump vem junto, e o espelho DuckDB fica
+    # sabendo da gravação.
+    _atomic_write_json(jp, recs)
     processed.append({'file': name, 'type': spec['label'], 'kept': len(recs), 'total': total})
     if delete_path:                                    # mirror the VBA Kill (folder source only)
         try:
@@ -3981,9 +3975,7 @@ def _otm_save(jp, data):
     edita a linha, a tela recarrega e mostra o valor de antes, sem erro nenhum.
     """
     os.makedirs(os.path.dirname(jp), exist_ok=True)
-    with open(jp, 'w', encoding='utf-8') as fh:
-        json.dump(data, fh, ensure_ascii=False, indent=2)
-    _bump_cache_gen(jp)
+    _atomic_write_json(jp, data)                # funil: bump + espelho (§335)
 
 
 def _otm_find(data, rid):
@@ -4007,8 +3999,7 @@ def _ds_meta_path(json_path):
 
 def _ds_write_updated(json_path, hhmmss):
     try:
-        with open(_ds_meta_path(json_path), 'w', encoding='utf-8') as fh:
-            json.dump({'updated': hhmmss or ''}, fh)
+        _atomic_write_json(_ds_meta_path(json_path), {'updated': hhmmss or ''})
     except OSError:
         pass
 
@@ -4105,9 +4096,7 @@ def _otm_import(ref=None):
     out, kept, deleted, filtered = _otm_extract(rows)
     jp = _otm_json_path(ref)
     os.makedirs(os.path.dirname(jp), exist_ok=True)
-    with open(jp, 'w', encoding='utf-8') as fh:
-        json.dump(out, fh, ensure_ascii=False, indent=2)
-    _bump_cache_gen(jp)                                # ver o comentário em `_ds_write`
+    _atomic_write_json(jp, out)                 # funil: bump + espelho (§335)
     _ds_write_updated(jp, ref.strftime('%H:%M:%S'))      # cashflows has no in-file time → import time
     try:
         os.remove(src_path)
@@ -6305,9 +6294,7 @@ def _latam_save(jp, data):
     edita a linha, a tela recarrega e mostra o valor de antes, sem erro nenhum.
     """
     os.makedirs(os.path.dirname(jp), exist_ok=True)
-    with open(jp, 'w', encoding='utf-8') as fh:
-        json.dump(data, fh, ensure_ascii=False, indent=2)
-    _bump_cache_gen(jp)
+    _atomic_write_json(jp, data)                # funil: bump + espelho (§335)
 
 
 def _latam_find(data, rid):
@@ -6347,8 +6334,8 @@ def _latam_write_meta(jp, hhmmss, fname=''):
     """Sidecar <json>.meta.json com a hora do import e o arquivo de origem — a
     página mostra os dois porque o relatório pode ser de qualquer dia."""
     try:
-        with open(_ds_meta_path(jp), 'w', encoding='utf-8') as fh:
-            json.dump({'updated': hhmmss or '', 'file': fname or ''}, fh)
+        _atomic_write_json(_ds_meta_path(jp),
+                           {'updated': hhmmss or '', 'file': fname or ''})
     except OSError:
         pass
 
@@ -6730,8 +6717,7 @@ def _ndfc_load(ref):
 
 def _ndfc_save(jp, data):
     os.makedirs(os.path.dirname(jp), exist_ok=True)
-    with open(jp, 'w', encoding='utf-8') as fh:
-        json.dump(data, fh, ensure_ascii=False, indent=2)
+    _atomic_write_json(jp, data)                # funil: bump + espelho (§335)
 
 
 def _ndfc_find(data, rid):
@@ -7180,8 +7166,7 @@ def _ndfop_meta_load(ref):
 
 def _ndfop_meta_save(path, meta):
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, 'w', encoding='utf-8') as fh:
-        json.dump(meta, fh, ensure_ascii=False, indent=2)
+    _atomic_write_json(path, meta)              # funil: bump + espelho (§335)
 
 
 def _ndfop_cockpit_index(ref):
@@ -7419,8 +7404,7 @@ def _cog_load(ref):
 
 def _cog_save(jp, data):
     os.makedirs(os.path.dirname(jp), exist_ok=True)
-    with open(jp, 'w', encoding='utf-8') as fh:
-        json.dump(data, fh, ensure_ascii=False, indent=2)
+    _atomic_write_json(jp, data)                # funil: bump + espelho (§335)
 
 
 def _cog_find(data, rid):
@@ -7998,8 +7982,7 @@ def _ndfsum_meta_load(ref):
 
 def _ndfsum_meta_save(path, meta):
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, 'w', encoding='utf-8') as fh:
-        json.dump(meta, fh, ensure_ascii=False, indent=2)
+    _atomic_write_json(path, meta)              # funil: bump + espelho (§335)
 
 
 def _ndfsum_default_account(banking, slot_key):
@@ -11070,16 +11053,9 @@ def _b3_load(table):
 
 
 def _b3_save(path, records):
-    with open(path, 'w', encoding='utf-8') as fh:
-        json.dump(records, fh, ensure_ascii=False, indent=2)
-    # Espelho vivo (fase 2): o RefData gravado aqui atualiza o
-    # reference_data.db na hora; os demais arquivos do mapa são ignorados
-    # pela triagem. Melhor esforço — o save nunca falha pelo espelho.
-    try:
-        from apps.pages import duck_mirror
-        duck_mirror.notify_write(path)
-    except Exception:                                       # noqa: BLE001
-        pass
+    # Pelo FUNIL (auditoria §335): atômico e com o espelho avisado de graça —
+    # o notify manual da fase 2 saiu junto com o write cru.
+    _atomic_write_json(path, records)
 
 
 # ── Holidays Calendar ────────────────────────────────────────────────────────

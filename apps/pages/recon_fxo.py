@@ -1312,10 +1312,10 @@ def save_comment(key, comment):
             data.pop(k, None)
         try:
             os.makedirs(os.path.dirname(_COMMENTS_PATH), exist_ok=True)
-            tmp = _COMMENTS_PATH + '.tmp'
-            with open(tmp, 'w', encoding='utf-8') as fh:
-                json.dump(data, fh, ensure_ascii=False, indent=1)
-            os.replace(tmp, _COMMENTS_PATH)
+            # Pelo FUNIL (auditoria §335): atômico E avisando o espelho — o
+            # tmp+replace local fazia o mesmo sem o banco ficar sabendo.
+            from apps.pages import routes
+            routes._atomic_write_json(_COMMENTS_PATH, data)
         except Exception as exc:
             _LOG.warning('[recon_fxo] não consegui gravar o comentário: %s', exc)
             raise
@@ -1361,10 +1361,9 @@ def _cache_path(recon_date):
 def _persist(recon_date, payload):
     try:
         os.makedirs(_CACHE_DIR, exist_ok=True)
-        tmp = _cache_path(recon_date) + '.tmp'
-        with open(tmp, 'w', encoding='utf-8') as fh:
-            json.dump(payload, fh, ensure_ascii=False)
-        os.replace(tmp, _cache_path(recon_date))
+        # Pelo FUNIL (auditoria §335): atômico e com o espelho avisado.
+        from apps.pages import routes
+        routes._atomic_write_json(_cache_path(recon_date), payload)
     except Exception as exc:                       # pragma: no cover - defensivo
         _LOG.warning('[recon_fxo] não consegui gravar o cache: %s', exc)
 

@@ -40,7 +40,13 @@ def _calendars_db():
     manifest provar)."""
     try:
         from apps.pages import duck_read
-        rows = duck_read.table_rows('holiday_calendars.db', '_registry', domain.CAL_FILE)
+        from apps.pages import json_to_duckdb as core
+        # Pelo `_raw`/`_seq` (raw_records): a ORDEM do registro é a ordem das
+        # pills e do sorteio de cores da tela, e o SELECT sem ordenação não a
+        # promete.
+        rows = duck_read.raw_records(
+            'holiday_calendars.db', '_registry', domain.CAL_FILE,
+            manifest_key=core._dataset_manifest_key(domain.CAL_FILE))
     except Exception:                                       # noqa: BLE001
         return None
     if not rows:
@@ -139,10 +145,15 @@ def _load_holidays_db(filename):
         return None
     try:
         from apps.pages import duck_mirror, duck_read
-        from apps.pages.json_to_duckdb import norm_ident
+        from apps.pages import json_to_duckdb as core
+        # ORDEM pelo `_seq` (a posição no arquivo): dois feriados no mesmo dia
+        # têm de voltar como o JSON os guarda.
         rows = duck_read.table_rows(
-            'holiday_calendars.db', norm_ident(nome, 'cal'), str(filename).strip(),
-            order_by='"date"', heal=duck_mirror.notify_holidays)
+            'holiday_calendars.db', core.norm_ident(nome, 'cal'),
+            str(filename).strip(),
+            order_by='CAST("_seq" AS BIGINT)',
+            manifest_key=core._dataset_manifest_key(str(filename).strip()),
+            heal=duck_mirror.notify_holidays)
     except Exception:                                       # noqa: BLE001
         return None
     if rows is None:

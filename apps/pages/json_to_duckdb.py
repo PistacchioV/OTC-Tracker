@@ -324,11 +324,15 @@ def convert_holidays(data_dir, out_dir, force=False, dry_run=False):
         # arquivo em disco) fica fora do manifest de propósito, e o leitor cai
         # no caminho JSON, que é quem semeia.
         reg_path = os.path.join(data_dir, REGISTRY_FILE)
+        reg_chave = _dataset_manifest_key(REGISTRY_FILE)
         reg_st = os.stat(reg_path) if os.path.isfile(reg_path) else None
-        if force or reg_st is None or not manifest_unchanged(con, REGISTRY_FILE, reg_st):
-            write_rows_table(con, q('_registry'), registry, force_varchar=True)
+        if force or reg_st is None or not manifest_unchanged(con, reg_chave, reg_st):
+            # `_com_raw`: a ORDEM do registro é a ordem das pills e do sorteio
+            # de cores da tela — o leitor remonta pelo `_seq`/`_raw`.
+            write_rows_table(con, q('_registry'), _com_raw(registry),
+                             force_varchar=True)
             if reg_st is not None:
-                manifest_record(con, REGISTRY_FILE, reg_st, ['_registry'])
+                manifest_record(con, reg_chave, reg_st, ['_registry'])
         else:
             stats['skipped'].append(REGISTRY_FILE)
         for cal in registry:
@@ -337,10 +341,11 @@ def convert_holidays(data_dir, out_dir, force=False, dry_run=False):
             tabela = norm_ident(nome, 'cal')
             try:
                 fp = os.path.join(data_dir, arquivo) if arquivo else ''
+                chave = _dataset_manifest_key(arquivo) if arquivo else ''
                 existe = arquivo and os.path.isfile(fp)
                 if existe:
                     st = os.stat(fp)
-                    if not force and manifest_unchanged(con, arquivo, st):
+                    if not force and manifest_unchanged(con, chave, st):
                         stats['skipped'].append(arquivo)
                         continue
                 elif con.execute(
@@ -352,8 +357,12 @@ def convert_holidays(data_dir, out_dir, force=False, dry_run=False):
                     # só faria o resumo dizer "convertido" sem nada ter mudado.
                     stats['skipped'].append(arquivo or nome)
                     continue
+                # O `_seq` é a ordem do ARQUIVO: dois feriados no mesmo dia têm
+                # de voltar como o JSON os guarda — ORDER BY "date" sozinho não
+                # promete isso.
                 con.execute('CREATE OR REPLACE TABLE %s '
-                            '("date" DATE, "title" VARCHAR, "calendar" VARCHAR)' % q(tabela))
+                            '("date" DATE, "title" VARCHAR, "calendar" VARCHAR, '
+                            '"_seq" BIGINT)' % q(tabela))
                 n = 0
                 if existe:
                     feriados = _load_json(fp) or []
@@ -365,12 +374,13 @@ def convert_holidays(data_dir, out_dir, force=False, dry_run=False):
                             _parse_date(str(h.get('date', '')).strip()),
                             str(h.get('title', h.get('name', '')) or ''),
                             str(h.get('calendar', '') or nome),
+                            len(data),
                         ])
                     if data:
                         con.executemany(
-                            'INSERT INTO %s VALUES (?, ?, ?)' % q(tabela), data)
+                            'INSERT INTO %s VALUES (?, ?, ?, ?)' % q(tabela), data)
                     n = len(data)
-                    manifest_record(con, arquivo, st, [tabela])
+                    manifest_record(con, chave, st, [tabela])
                 stats['converted'].append('%s (%d feriados)' % (tabela, n))
             except Exception:                                  # noqa: BLE001
                 stats['errors'].append((arquivo or nome, traceback.format_exc()))

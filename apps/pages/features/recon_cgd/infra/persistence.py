@@ -28,6 +28,5 @@ def load_recipients():
 def save_recipients(to, cc):
     R = _routes()
     os.makedirs(R._DAILY_METRIC_DIR, exist_ok=True)
-    with open(recipients_file(), 'w', encoding='utf-8') as fh:
-        json.dump({'to': str(to or '').strip(), 'cc': str(cc or '').strip()},
-                  fh, ensure_ascii=False, indent=2)
+    R._atomic_write_json(recipients_file(),
+                         {'to': str(to or '').strip(), 'cc': str(cc or '').strip()})

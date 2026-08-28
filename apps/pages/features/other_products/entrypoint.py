@@ -3,7 +3,6 @@
 
 Só a casca: _ops_trade_rows é o ÚNICO lugar que sabe as famílias; coletores/advices compartilham tudo — os helpers ficam no routes até a fase platform/, alcançados por _R().
 """
-import json
 import os
 import re
 import traceback
@@ -306,8 +305,7 @@ def api_ops_summary_observation():
         else:
             meta.pop(key, None)        # entrada vazia não fica ocupando o overlay
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, 'w', encoding='utf-8') as fh:
-            json.dump(meta, fh, ensure_ascii=False, indent=2)
+        _R()._atomic_write_json(path, meta)     # funil: atômico + espelho (§335)
         return jsonify({'ok': True})
     except Exception as e:
         _R().log.error('[ops-summary] observation save failed:\n%s', traceback.format_exc())

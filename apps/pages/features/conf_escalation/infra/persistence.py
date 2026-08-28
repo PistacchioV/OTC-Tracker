@@ -58,8 +58,7 @@ def load_recipients():
 def save_recipients(d):
     os.makedirs(metric_dir(), exist_ok=True)
     payload = {k: str((d or {}).get(k, '') or '').strip() for k in domain.REC_KEYS}
-    with open(recipients_file(), 'w', encoding='utf-8') as fh:
-        json.dump(payload, fh, ensure_ascii=False, indent=2)
+    _routes()._atomic_write_json(recipients_file(), payload)
 
 
 def claim_slot(slot):

@@ -64,8 +64,7 @@ def _accrual_load(date_str):
 
 def _accrual_save(path, data):
     data['counts'] = {k: len(v) for k, v in (data.get('tables') or {}).items()}
-    with open(path, 'w', encoding='utf-8') as fh:
-        _R().json.dump(data, fh, ensure_ascii=False, indent=2)
+    _R()._atomic_write_json(path, data)         # funil: atômico + espelho (§335)
 
 
 def _accrual_persist(result, source_file, ymd=None):
@@ -81,8 +80,7 @@ def _accrual_persist(result, source_file, ymd=None):
     saved['saved_at']    = now.strftime('%Y-%m-%d %H:%M:%S')
     saved['source_file'] = source_file
     path = os.path.join(out_dir, 'accrual_swap_{}.json'.format(ymd))
-    with open(path, 'w', encoding='utf-8') as fh:
-        _R().json.dump(saved, fh, ensure_ascii=False, indent=2)
+    _R()._atomic_write_json(path, saved)        # funil: atômico + espelho (§335)
     _R().log.info('[accrual] saved %s', path)
     return path, saved
 

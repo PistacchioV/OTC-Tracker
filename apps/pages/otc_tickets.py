@@ -67,11 +67,13 @@ def _atomic_write(path, data):
             json.dump(data, fh, ensure_ascii=False, indent=2)
         try:
             os.replace(tmp, path)
+            _duck_notify(path)
             return
         except PermissionError:
             pass
         with io.open(path, 'w', encoding='utf-8') as fh:
             json.dump(data, fh, ensure_ascii=False, indent=2)
+        _duck_notify(path)
         try:
             os.unlink(tmp)
         except OSError:
@@ -82,6 +84,16 @@ def _atomic_write(path, data):
         except OSError:
             pass
         raise
+
+
+def _duck_notify(path):
+    """Espelho vivo (auditoria §335): o tickets.db acompanha cada gravação.
+    Melhor esforço — o store nunca falha por causa do espelho."""
+    try:
+        from apps.pages import duck_mirror
+        duck_mirror.notify_write(path)
+    except Exception:                                       # noqa: BLE001
+        pass
 
 
 def _read():

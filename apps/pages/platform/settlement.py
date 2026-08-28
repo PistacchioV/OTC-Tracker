@@ -1098,8 +1098,7 @@ def _opssum_set_status(ref, triples, status):
         n += 1
     if n:
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, 'w', encoding='utf-8') as fh:
-            json.dump(meta, fh, ensure_ascii=False, indent=2)
+        routes._atomic_write_json(path, meta)   # funil: atômico + espelho (§335)
     return n
 
 

@@ -1449,10 +1449,11 @@ def _persist(recon_date, payload):
     try:
         os.makedirs(_CACHE_DIR, exist_ok=True)
         key = (recon_date or 'last').replace('/', '-')
-        with open(os.path.join(_CACHE_DIR, key + '.json'), 'w', encoding='utf-8') as fh:
-            json.dump(payload, fh, ensure_ascii=False)
-        with open(os.path.join(_CACHE_DIR, '_last.json'), 'w', encoding='utf-8') as fh:
-            json.dump(payload, fh, ensure_ascii=False)
+        # Pelo FUNIL (auditoria §335): atômico e com o espelho avisado — o
+        # `_last.json` o espelho ignora sozinho (ponteiro, começa com `_`).
+        from apps.pages import routes
+        routes._atomic_write_json(os.path.join(_CACHE_DIR, key + '.json'), payload)
+        routes._atomic_write_json(os.path.join(_CACHE_DIR, '_last.json'), payload)
     except Exception:
         pass
 
@@ -1495,8 +1496,8 @@ def finalize_history(recon_date):
         return None
     try:
         os.makedirs(os.path.dirname(p), exist_ok=True)
-        with open(p, 'w', encoding='utf-8') as fh:
-            json.dump(data, fh, ensure_ascii=False)
+        from apps.pages import routes
+        routes._atomic_write_json(p, data)      # funil: atômico + espelho
         return p
     except Exception:
         return None
