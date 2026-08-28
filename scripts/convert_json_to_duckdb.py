@@ -16,6 +16,15 @@ share). Destino: `Config.DATABASE_DIR` — a pasta `db/` de todos os bancos
 para fora do `Config.DATA_DIR`, os bancos saem em `<data-dir>/db`, a mesma
 regra do espelho vivo.
 
+A quebra é POR PRODUTO (§336): o caminho inteiro de `cache/` nomeia cada
+`daily_*.db` (`daily_new_deals_ndf_vanilla.db`, `daily_new_deals_option_fxo.db`)
+e cada dia é uma tabela; o Daily Settlement, que não se ramifica em pastas,
+quebra pelo NOME do arquivo (`daily_settlement_otm.db`, …). Os demais JSONs
+viram um banco cada (`mappings_mt300.db`, `file_interpreter_termo.db`). Esta
+carga completa é também quem REMOVE os bancos dos desenhos anteriores — o
+espelho vivo, que enxerga um arquivo por vez, não tem como saber que um banco
+ficou órfão.
+
 Uso:
     python scripts/convert_json_to_duckdb.py [--only holidays|refdata|daily]
         [--data-dir X] [--out-dir Y] [--force] [--dry-run]

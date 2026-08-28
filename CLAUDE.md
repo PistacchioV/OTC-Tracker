@@ -401,9 +401,9 @@ São dois bancos:
   migração — HANDOFF §326): a escrita avisa o `apps/pages/duck_mirror.py`
   (gancho no funil `_atomic_write_json`, mais `_b3_save`, `_cpd_save_list` e o
   `write_holidays` da vertical), e uma thread daemon reconverte na hora com o
-  motor `apps/pages/json_to_duckdb.py` — os `daily_<rotina>.db`,
-  `reference_data.db` e `holiday_calendars.db` da pasta `db/` ficam sempre
-  atualizados sem rodar script. O aviso só ENFILEIRA (nada de DuckDB no share
+  motor `apps/pages/json_to_duckdb.py` — os `daily_<produto>.db`, o banco de
+  cada JSON avulso, `reference_data.db` e `holiday_calendars.db` da pasta
+  `db/` ficam sempre atualizados sem rodar script. O aviso só ENFILEIRA (nada de DuckDB no share
   sob o `_cache_lock`) e é melhor esforço: falha vai para o log e o manifest
   reconverte na rodada seguinte. `OTC_DISABLE_DUCK_MIRROR=1` desliga (o
   `OTC_DISABLE_SCHEDULERS=1` dos testes também), e `check_duck_mirror.py`
@@ -438,14 +438,41 @@ São dois bancos:
   O flip alcança também os DATASETS (§333): o `_mapping_rows` (os 43
   cadastros — o `upgrade` roda igual nas duas fontes, porque o `_raw` é o
   arquivo byte a byte), o `_b3_load` inteiro (Subjacente/VCP/Dominio/
-  SwapIndex pelo `static_data.db`) e o estático dos `mappings/` e dos JSONs
-  de raiz. A reconstrução sai NA ORDEM do arquivo pela coluna `_seq`
+  SwapIndex) e o estático dos `mappings/` e dos JSONs de raiz. A
+  reconstrução sai NA ORDEM do arquivo pela coluna `_seq`
   (`CAST` na ordenação — como texto, '10' < '2'), formato `#raw2` no
   manifest. E os ARQUIVO-DIA fecham o mapa
   (§334): o funil `_day_json` tenta o `day_payload` no MISS do memo — as
   tabelas diárias também levam `_seq`/`_raw`, e o payload-LISTA volta byte a
   byte na ordem do arquivo; payload-objeto (as recons) e os leitores de data
   exata seguem no JSON de propósito.
+
+  **A quebra dos bancos é por PRODUTO, um DB por arquivo-dia e um DB por JSON
+  avulso** (§336). O caminho inteiro de `cache/` nomeia o banco
+  (`daily_new_deals_ndf_vanilla.db`, `daily_new_deals_option_fxo.db`,
+  `daily_new_deals_intrag_ndf.db`, `daily_b3_files_swap.db`) e cada dia é uma
+  tabela dentro dele; onde a rotina **não se ramifica em pastas**, quem separa
+  os produtos é o NOME do arquivo, e a tag dele entra no banco — é o Daily
+  Settlement, dez arquivos por dia na mesma pasta virando
+  `daily_settlement_otm.db`, `daily_settlement_ndf_cockpit.db`, … Os demais
+  JSONs seguem a mesma ideia: um banco por ARQUIVO (`mappings_mt300.db`,
+  `control_panel_mt300_status.db`, `file_interpreter_termo.db`,
+  `subjacente.db` na raiz), o que de quebra tira a contenção que o banco
+  compartilhado criava — o espelho reconvertendo UM mapping fechava a leitura
+  dos outros 42. Três detalhes que não dão erro nenhum:
+  - o corte "tag no banco ou não" é pela CONTAGEM de pastas, nunca por olhar
+    os vizinhos em disco: o `_daily_rel_target` tem de ser puro sobre o
+    caminho, porque o espelho vivo converte UM arquivo por vez e não pode
+    depender de varrer o diretório;
+  - a tag da TABELA é tudo-ou-nada. Podando token a token, o `DPOSICAO-SWAP`
+    do `daily_b3_files_swap.db` perderia justamente o `swap` e ficaria
+    indistinguível de um `DPOSICAO` da mesma pasta;
+  - os bancos dos desenhos ANTERIORES são apagados na carga completa
+    (`_drop_legacy_dbs`), **menos o nome que ainda é alvo** —
+    `daily_pending_confirmation.db` é o mesmo banco antes e depois, e
+    apagá-lo custaria uma reconversão inteira à toa. Dois arquivos que
+    reivindiquem a mesma tabela viram ERRO na carga completa (`_colisoes`),
+    nunca sobrescrita silenciosa.
 
   Duas garantias sustentam a troca: a **leitura cai para a cópia empacotada**
   quando o arquivo não existe no `DATA_DIR` (`anbima.json`, `Subjacente.json`, as
@@ -2200,7 +2227,7 @@ Rodam **uma vez na instância do time depois do pull**. Todas idempotentes.
 | `import_manual_confirmations.py` | **cria** os dois DuckDBs da esteira e semeia do `MANUAIS.xlsx` (`--xlsx`, `--schema-only`) |
 | `backfill_manual_confirmations.py` | traz para a esteira o que foi mapeado **antes** dela existir (`--dry-run`, `--source`) |
 | `import_cgd_sharepoint.py` | carrega a lista de CGDs do SharePoint (`Sharepoint-CGD.xlsx`) no DuckDB do Onboarding (`--xlsx`, `--sheet`, `--dry-run`, `--schema-only`). REESCREVE a tabela: rodar de novo dá o mesmo resultado |
-| `convert_json_to_duckdb.py` | a CARGA COMPLETA da migração JSON → DuckDB (HANDOFF §324–§331; o dia a dia é do espelho vivo `duck_mirror`, e o MOTOR dos dois é o `apps/pages/json_to_duckdb.py`): materializa TODOS os JSONs do `Config.DATA_DIR` no **`Config.DATABASE_DIR`** (a `db/` de todos os bancos) — além dos três abaixo, o `convert_datasets` cobre o RESTO na ramificação por pasta (raiz → `static_data.db`; `mappings/` → `mappings.db`; `file-interpreter/`, `control-panel/`, `tickets/` idem), com a coluna `_raw` nas listas de registros; SÓ `translations/` fica em JSON (i18n do navegador, versionado como código — §332) — `holiday_calendars.db` (uma tabela por calendário do registro), `reference_data.db` (`refdata` + `counterparty_details`, tudo VARCHAR — zero à esquerda) e **um `daily_<rotina>.db` por rotina de arquivo-dia**, seguindo a ramificação de `cache/` (`daily_new_deals.db`, `daily_pending_confirmation.db`, …; a subárvore vira schema, cada dia uma tabela tipada). Ao contrário das demais, é feito para RODAR DE NOVO: incremental por `_manifest` (mtime/tamanho), só reconverte o que mudou; calendário/dia/rotina novos viram tabela/banco novos (`--only`, `--force`, `--dry-run`) |
+| `convert_json_to_duckdb.py` | a CARGA COMPLETA da migração JSON → DuckDB (HANDOFF §324–§331; o dia a dia é do espelho vivo `duck_mirror`, e o MOTOR dos dois é o `apps/pages/json_to_duckdb.py`): materializa TODOS os JSONs do `Config.DATA_DIR` no **`Config.DATABASE_DIR`** (a `db/` de todos os bancos) — além dos três abaixo, o `convert_datasets` cobre o RESTO com **um banco por ARQUIVO** (`mappings_mt300.db`, `control_panel_mt300_status.db`, `file_interpreter_termo.db`, `subjacente.db` na raiz), com a coluna `_raw` nas listas de registros; SÓ `translations/` fica em JSON (i18n do navegador, versionado como código — §332) — `holiday_calendars.db` (uma tabela por calendário do registro), `reference_data.db` (`refdata` + `counterparty_details`, tudo VARCHAR — zero à esquerda) e **um `daily_<produto>.db` por produto de arquivo-dia**, com o caminho inteiro de `cache/` no nome (`daily_new_deals_ndf_vanilla.db`, `daily_new_deals_option_fxo.db`, `daily_settlement_otm.db`, …; cada dia uma tabela tipada). Ao contrário das demais, é feito para RODAR DE NOVO: incremental por `_manifest` (mtime/tamanho), só reconverte o que mudou; calendário/dia/produto novos viram tabela/banco novos (`--only`, `--force`, `--dry-run`) |
 
 > `apps/static/data/db/` está no **`.gitignore`**, então os bancos **não vêm no
 > pull**. Sem rodar `import_manual_confirmations.py` as duas telas de Manual

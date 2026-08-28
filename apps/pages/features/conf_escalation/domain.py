@@ -20,13 +20,19 @@ SUBJECT_OTC = 'Confirmations Pending Validation - OTC'
 # separados porque quem recebe cada um é diferente, e uma lista compartilhada
 # mandaria a fila do corporate para quem só cuida do swap comum.
 #
+# Na CEM é o contrário, e por isso o grupo lista os DOIS produtos: lá quem
+# cuida do swap corporate é a mesma mesa do swap comum, então a fila é uma só.
+# Sem isso o `SWAP CORPORATE · CEM` não casava com grupo nenhum e caía no
+# `unmatched` do card — cobrança que ninguém recebe, com a linha visível na
+# tela em âmbar como único aviso.
+#
 # ⚠️ 'OPTION EDG' não é um produto: é a opção de CÂMBIO na LOB EDG, e o tipo de
 # confirmação dela é `FXO` (o `upgrade` do cadastro `manual-conf-validation`
 # converte a linha antiga exatamente assim). Cadastrar 'OPTION EDG' aqui como
 # produto faria o grupo nunca casar com linha nenhuma, em silêncio.
 FO_GROUPS = (
     {'id': 'cem-swap', 'label': 'CEM Swap', 'lob': 'CEM',
-     'products': ('SWAP',), 'rec': 'fo_cem_swap',
+     'products': ('SWAP', 'SWAP CORPORATE'), 'rec': 'fo_cem_swap',
      'subject': 'Confirmations Pending Validation - FO - CEM Swap'},
     {'id': 'edg-swap', 'label': 'EDG Swap', 'lob': 'EDG',
      'products': ('SWAP',), 'rec': 'fo_edg_swap',
