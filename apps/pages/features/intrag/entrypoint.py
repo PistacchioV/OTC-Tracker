@@ -412,7 +412,10 @@ def api_intrag_ndf_mapping_intrag_id():
     if not session.get('authenticated'):
         return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
     deals = (request.get_json(silent=True) or {}).get('deals', [])
-    results, err = commands._intrag_run_mapping(deals, 1, 'NDF - TERMO MERCADORIA', 2, queries._find_intrag_ndf_entry)
+    # PREFIXO de família (ver `mappers._intrag_build_b3_map`): a tela manda os
+    # DOIS contract types — 'NDF - TERMO MERCADORIA' e 'NDF - TERMO DE
+    # MOEDAS' — e o retorno ecoa o texto de cada um.
+    results, err = commands._intrag_run_mapping(deals, 1, 'NDF - TERMO', 2, queries._find_intrag_ndf_entry)
     if results is None:
         return jsonify({'ok': False, 'error': err}), 400
     return jsonify({'ok': True, 'results': results})
