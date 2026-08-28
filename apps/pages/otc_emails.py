@@ -259,11 +259,21 @@ def _load_json(name):
         return []
 
 
+def _refdata():
+    """As linhas do Reference Data — DB-first (fase 3), JSON de fallback."""
+    try:
+        from apps.pages import duck_read
+        rows = duck_read.refdata_rows(expected_path=data_path('RefData.json'))
+    except Exception:                                       # noqa: BLE001
+        rows = None
+    return rows if rows is not None else _load_json('RefData.json')
+
+
 def _build_refdata_index(key='COMMODITIES ACCRONYM'):
     """acronym → ref record. `key` selects which RefData accronym column to index
     by: 'COMMODITIES ACCRONYM' (commodities) or 'FX CASH ACCRONYM' (FXO)."""
     idx = {}
-    for r in _load_json('RefData.json'):
+    for r in _refdata():
         acc = str(r.get(key, '') or '').strip().upper()
         if acc and acc not in idx:
             idx[acc] = r
@@ -275,7 +285,7 @@ def _build_refdata_spn_index():
     contraparte cadastrada com a coluna em branco), o SPN não é — por isso ele é
     a chave confiável para achar a conta B3 e o nome da contraparte."""
     idx = {}
-    for r in _load_json('RefData.json'):
+    for r in _refdata():
         k = _norm_spn(r.get('SPN'))
         if k and k not in idx:
             idx[k] = r

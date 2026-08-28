@@ -706,8 +706,9 @@ $(document).ready(function() {
 
     // ── Mapping Intrag ID (return-folder CSV → fill the Intrag ID column) ─────────
     // Table cols: [2]=status, [3]=Intrag ID, [5]=B3 ID (CETIP Contract Code), [34]=row id.
-    // Backend reads the single return CSV (no header; NDF rows: col B == "NDF - TERMO
-    // MERCADORIA", col C = B3 ID, col A = Intrag ID), matches on B3 ID, persists the JSON.
+    // Backend reads the single return CSV (no header; NDF rows: col B começa com
+    // "NDF - TERMO" — mercadoria E moedas —, col C = B3 ID, col A = Intrag ID),
+    // matches on B3 ID, persists the JSON.
     var _mappingNdfRunning = false;
     document.getElementById('btnMappingNdf').addEventListener('click', function() {
         if (_mappingNdfRunning) return;

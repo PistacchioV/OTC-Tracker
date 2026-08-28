@@ -325,9 +325,22 @@ def _load_net_type_map():
     """{normalized counterparty name → net type}. Joins RefData (name→SPN) with
     CounterpartyDetails (SPN→NET.value). Only an Active (approved) net type
     overrides the default; everything else stays 'Total Net' (safe)."""
+    # DB-first (fase 3): as duas pernas do join saem do reference_data.db
+    # quando ele está fresco; senão, os JSONs de sempre. O `expected_path` é o
+    # guarda da superfície de patch: caminho trocado → o banco não responde.
+    def _db(fn, path):
+        try:
+            from apps.pages import duck_read
+            return getattr(duck_read, fn)(expected_path=path)
+        except Exception:                                   # noqa: BLE001
+            return None
+
     name_to_spn = {}
     try:
-        for r in json.load(open(_REFDATA_PATH, encoding='utf-8')):
+        refs = _db('refdata_rows', _REFDATA_PATH)
+        if refs is None:
+            refs = json.load(open(_REFDATA_PATH, encoding='utf-8'))
+        for r in refs:
             nm = _norm(r.get('COUNTERPARTY', ''))
             spn = str(r.get('SPN', '') or '').strip()
             if nm and spn and nm not in name_to_spn:
@@ -336,7 +349,10 @@ def _load_net_type_map():
         return {}
     spn_to_net = {}
     try:
-        for r in json.load(open(_CPD_PATH, encoding='utf-8')):
+        cpds = _db('cpd_records', _CPD_PATH)
+        if cpds is None:
+            cpds = json.load(open(_CPD_PATH, encoding='utf-8'))
+        for r in cpds:
             spn = str(r.get('SPN', '') or '').strip()
             net = r.get('NET') or {}
             val = str(net.get('value', '') or '').strip()

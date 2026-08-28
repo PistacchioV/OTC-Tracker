@@ -214,12 +214,28 @@ def _cpd_path():
 
 
 def _cpd_load():
+    # DB-first (fase 3): os registros ORIGINAIS pela coluna `_raw` do
+    # reference_data.db, quando o manifest prova o frescor — a fidelidade é
+    # total (chave-ausente incluída, que é o que o `_contacts_norm` lê), então
+    # a migração one-shot abaixo roda igual nas duas fontes. Sem banco fresco,
+    # o JSON de sempre. E SÓ quando `_cpd_path()` é o arquivo CANÔNICO que o
+    # espelho cobre: um `_cpd_path` trocado (o check_cpd_api aponta para um
+    # arquivo próprio) tem de continuar mandando — o banco reflete OUTRO
+    # arquivo, e responder por ele seria ler a fonte errada com carimbo de
+    # fresca.
+    data = None
     try:
-        with open(_cpd_path(), encoding='utf-8') as fh:
-            data = json.load(fh)
-        data = data if isinstance(data, list) else []
-    except (json.JSONDecodeError, IOError, FileNotFoundError):
-        return []
+        from apps.pages import duck_read
+        data = duck_read.cpd_records(expected_path=_cpd_path())
+    except Exception:                                       # noqa: BLE001
+        data = None
+    if data is None:
+        try:
+            with open(_cpd_path(), encoding='utf-8') as fh:
+                data = json.load(fh)
+            data = data if isinstance(data, list) else []
+        except (json.JSONDecodeError, IOError, FileNotFoundError):
+            return []
     # Migração one-shot do formato legado (BANKING.PAY/RECEIVE, contatos sem
     # id/appr, CGD string, NET ausente): normaliza TODOS os registros e
     # persiste na primeira leitura em que algo mudou. Sem isso os ids de

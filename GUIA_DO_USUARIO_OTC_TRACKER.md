@@ -549,7 +549,7 @@ A tela tem, de cima para baixo: as **abas de produto** (Vanilla · Other Publish
 
 **Para emitir os avisos de liquidação:**
 
-1. Marque as contrapartes que devem receber o aviso (a caixa de seleção de cada linha do Settlement Summary), ou não marque nenhuma para gerar todas.
+1. Marque as contrapartes que devem receber o aviso (a caixa de seleção de cada linha do Settlement Summary). A **caixa do cabeçalho marca todas** — todas as linhas do filtro atual, em **todas as páginas da tabela**, não só a que está na tela; desmarcar uma linha depois desfaz o "todas". É preciso ao menos uma marcada.
 2. Clique em **Print Advice**, no alto do cartão.
 3. O sistema monta os avisos e **baixa o arquivo**: até dois avisos vêm como arquivos de e-mail soltos; três ou mais vêm num `.zip`.
 4. Abra o arquivo baixado — cada aviso abre no seu Outlook, já endereçado e formatado, para você revisar e enviar.
@@ -1194,6 +1194,15 @@ Três telas — **NDF**, **Option** e **Swap** — com as operações no leiaute
 2. Confira as colunas do leiaute — elas são o contrato com a Intrag e a ordem importa.
 3. **Add Row +** inclui uma operação à mão.
 4. **Export** baixa o conjunto para conferência.
+
+**O ciclo da linha (NDF e Option):** a operação chega como **`New`**, o **Send** gera o arquivo e a marca **`Sent`**, e o que fecha o ciclo é o **Intrag ID** — com ele preenchido, a linha fica **`Success`**. Há dois jeitos de preenchê-lo:
+
+- **Mapping Intrag ID** (o botão verde da barra): lê o CSV de retorno na pasta de export, casa pelo **B3 ID** e preenche a coluna das linhas casadas — cada uma vai a `Success`.
+- **Na edição da linha**: o modal do **Edit** traz o campo **Intrag ID** como primeiro campo. Digitado um Intrag ID novo, a linha vai a **`Success`** ao salvar — é o mesmo desfecho do Mapping, para o retorno que chegou por outra via.
+
+**Editar sem mexer no Intrag ID é outra coisa:** a edição de dado leva a linha a **`Pending`**, e um **segundo usuário** precisa aprovar (o ✓ da linha) — quem editou não aprova a própria edição. Apagar o Intrag ID no modal também devolve a linha a `Pending`.
+
+> A coluna **Information Source** sai sempre legível — `PTAX BRR PTAX`, com espaços. Os separadores do texto de origem (`|`, colchete, chave) são trocados por espaço na chegada, e as linhas antigas já aparecem corrigidas na tela.
 
 > Nestas três tabelas a seleção de célula usa a extensão nativa da tabela: clique numa célula, arraste para pegar um bloco e **Ctrl+C** para copiar (4.8).
 

@@ -14241,3 +14241,98 @@ feriados e o banco ausente/ilegível como fallback silencioso. As seis suítes q
 leitores religados (`check_sigcoll_api`, `check_ndf_advice`, `check_daily_metric_api`,
 `check_weekly_escalation_api`, `check_ops_trade_swap`, `check_lp_counterparty_name`) seguem
 verdes — nelas o tmp não tem banco, que é o fallback funcionando.
+
+## §329 — o Mapping Intrag ID não alcançava o termo de MOEDAS (2026-08-27)
+
+Na tela de Intrag NDF, o Mapping Intrag ID dizia "N operation(s) mapped" e o termo de moedas
+continuava sem Intrag ID — sem erro nenhum. O filtro do CSV de retorno era IGUALDADE EXATA com
+`'NDF - TERMO MERCADORIA'`, e a mesma tela envia DOIS contract types (`NDF - TERMO MERCADORIA`
+e `NDF - TERMO DE MOEDAS`); o retorno ecoa o texto do instrumento enviado, então a linha de
+moedas era descartada ANTES do casamento — o alerta contava só as de mercadoria.
+
+O filtro virou PREFIXO de família (`startswith`, com o NDF passando `'NDF - TERMO'`): ele só
+diz de que família a linha é; quem pareia de verdade é o **B3 ID**, exato e único — alargar o
+filtro não tem como casar cruzado. OPCAO e SWAP ganham a mesma tolerância de graça (prefixo de
+valor exato é o comportamento de antes). `check_intrag_api` §7 prende com um CSV de fixture:
+mercadoria E moedas mapeadas e PERSISTIDAS com `Success`.
+
+No mesmo dia: o `convert_json_to_duckdb_standalone.py` (fora do repo, entregue à mão) — a
+versão AUTOCONTIDA do conversor para rodar numa máquina sem o código do app: caminhos
+absolutos do share fixados, sem Config, sem import de `apps`; requisito único `pip install
+duckdb`. O oficial continua sendo o `scripts/convert_json_to_duckdb.py` sobre o motor
+`apps/pages/json_to_duckdb.py` — o standalone é uma cópia congelada para uso avulso, e quem
+mudar o motor não o atualiza sozinho.
+
+## §330 — a fonte de leitura virou o banco: o flip completo dos cadastros (2026-08-27)
+
+O pedido: mudar a fonte de leitura para os DBs — mantendo as escritas nos JSONs para rollback
+fácil. É exatamente o que o contrato de frescor permite: a escrita segue no JSON (com o
+espelho realinhando o banco em seguida), a leitura é DB-first, e o rollback é reverter o
+commit — nenhuma migração de volta, porque o JSON nunca deixou de ser escrito.
+
+**A coluna `_raw`** (`convert_refdata`): cada registro de RefData/CounterpartyDetails vai
+para a tabela também COMO ELE É — o texto JSON original — ao lado das colunas tipadas. É o
+canal de fidelidade do flip: reconstruir pelo conjunto de colunas poria chave com NULL onde o
+JSON não tinha chave nenhuma, e o `_contacts_norm` decide "contato legado" pela AUSÊNCIA
+(§328). Com o `_raw`, o `_cpd_load` pôde ser religado — a migração one-shot dele roda igual
+nas duas fontes. O manifest ganhou VERSÃO DE FORMATO na chave (`RefData.json#raw1`): banco no
+formato antigo simplesmente não casa, cai no JSON e o espelho reconverte no novo — upgrade
+automático, sem script.
+
+**Leitores religados** (todos DB-first com fallback JSON): os que faltavam do RefData —
+`_vcp_refdata_maps`, `_b3_load('refdata')` (a tela do Reference Data), `recon_fxo`,
+`recon_payrec` (as duas pernas do net type), `otc_emails` (os dois índices),
+`_ei_refdata_clients` — e o `_cpd_load` inteiro. E **o NAVEGADOR**: a rota
+`static_data_file` serve `RefData.json`, `CounterpartyDetails.json` e os arquivos de
+calendário DIRETO DO BANCO quando fresco — os fetch das telas mudaram de fonte sem uma linha
+de JS; qualquer dúvida cai no arquivo.
+
+**`expected_path` — o guarda da superfície de patch.** O check_cpd_api pegou na primeira
+rodada: ele troca o `_cpd_path()` para um arquivo próprio, e o flip respondia pelo banco do
+arquivo CANÔNICO — fonte errada com carimbo de fresca. Todo leitor com caminho próprio passa
+ao `duck_read` o caminho DE QUE ELE LERIA (`expected_path`); se não for o canônico coberto
+pelo espelho, o banco não responde e vale o arquivo — que é como o patch dos testes (e
+qualquer config exótica) continua mandando.
+
+O que segue no JSON: os ARQUIVO-DIA (as tabelas são tipadas e não reproduzem o payload cru;
+o flip ali é por consumidor virar SQL — próxima frente) e os JSONs sem banco (mappings,
+Subjacente, Dominio…). `check_duck_read` cobre o ciclo (18 asserções, com o CPD provando a
+chave-ausente e o estático servindo do banco); a bateria — cpd, payrec, recon_fxo, ei,
+ndf_advice, holidays, intrag, soc_layers, config_names — verde.
+
+## §331 — cobertura TOTAL: todos os JSONs viram DuckDB (2026-08-27)
+
+A fase seguinte da migração: o motor ganhou o `convert_datasets` — TODOS os JSONs do DATA_DIR
+que ainda não tinham banco, na mesma ramificação por pasta que os arquivo-dia fixaram: a raiz
+vira `static_data.db` (Subjacente, Dominio, VCP, SwapIndex, métricas…), `mappings/` →
+`mappings.db` (os 43 cadastros, uma tabela cada), `file-interpreter/` → `file_interpreter.db`,
+`translations/`, `control-panel/` e `tickets/` idem — pasta nova ganha o próprio banco
+sozinha. Fica de fora o que TEM conversor próprio (RefData/CPD, o registro e os arquivos de
+calendário — identificados pelo registro, senão seriam duas tabelas para o mesmo arquivo,
+`cache/`) e a pasta `db/`.
+
+Toda tabela lista-de-registros dos datasets leva a coluna **`_raw`** (o registro exato, como
+no RefData §330) — é o que deixa o flip de leitura desses consumidores pronto para quando
+chegar a vez deles; payload-objeto vira as tabelas das listas internas (também com `_raw`)
+mais a `_meta`. O **espelho vivo** cobre tudo: o gancho genérico do funil passou a classificar
+qualquer outro JSON do DATA_DIR como dataset — arquivo de calendário também cai ali pelo
+funil, e é o motor (na thread) que o reconhece pelo registro e devolve como `ignored`.
+
+Uma armadilha de eficiência pega no smoke: `sorted(os.walk(...))` consome o generator INTEIRO
+antes de a poda de `dirs[:]` fazer efeito — a árvore de `cache/` era varrida à toa (no share,
+uma caminhada cara) e o `ignored` saía com 116 itens em vez de 5. A ordem determinística vem
+de ordenar in place, com a poda valendo.
+
+Smoke na dev: 12 bancos, 193 conversões de datasets, segunda rodada em zero. O standalone do
+§329 foi REGERADO do motor novo e reentregue (a cópia congelada agora cobre tudo). O que
+resta da migração: o flip de leitura dos datasets (consumidor a consumidor, com o `_raw`
+pronto) e dos arquivo-dia (por consumidor virar SQL).
+
+## §332 — translations fica em JSON: os únicos fora da migração (2026-08-27)
+
+Decisão da revisão do §331: os TRÊS JSONs de `translations/` ({en,br,es}.json) são os únicos
+que permanecem como JSON — são os dicionários de i18n que o navegador consome no load
+(`I18nManager`) e vivem versionados como código, não como dado da mesa. A pasta entrou no
+`_DATASET_SKIP_DIRS` do motor, o `translations.db` que a primeira rodada da cobertura criou é
+REMOVIDO pelo próprio conversor quando encontrado (mesma regra do `daily_caches.db` legado), e
+o standalone foi regerado e reentregue. Todo o RESTO do DATA_DIR tem banco.

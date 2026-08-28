@@ -158,13 +158,21 @@ _EI_ALLOWED_UPLOAD = {'.pdf', '.msg', '.eml', '.doc', '.docx', '.xls', '.xlsx',
 
 
 def _ei_refdata_clients():
-    """[(name, spn)] from RefData.json. Best-effort: [] if missing/unreadable."""
+    """[(name, spn)] from RefData.json — DB-first (fase 3), JSON de fallback.
+    Best-effort: [] if missing/unreadable."""
     from apps.pages import routes
+    rows = None
     try:
-        with open(os.path.join(routes._B3_DATA_DIR, 'RefData.json'), encoding='utf-8') as fh:
-            rows = json.load(fh)
-    except Exception:
-        return []
+        from apps.pages import duck_read
+        rows = duck_read.refdata_rows()
+    except Exception:                                       # noqa: BLE001
+        rows = None
+    if rows is None:
+        try:
+            with open(os.path.join(routes._B3_DATA_DIR, 'RefData.json'), encoding='utf-8') as fh:
+                rows = json.load(fh)
+        except Exception:
+            return []
     out = []
     for r in (rows if isinstance(rows, list) else []):
         name = (r.get('COUNTERPARTY') or '').strip()

@@ -384,6 +384,19 @@ def convert_holidays(data_dir, out_dir, force=False, dry_run=False):
 _REFDATA_TABLES = (('RefData.json', 'refdata'),
                    ('CounterpartyDetails.json', 'counterparty_details'))
 
+# Versão do FORMATO das tabelas de cadastro no manifest. O `_raw` (o registro
+# original como texto JSON, coluna a mais ao lado das tipadas) é o canal de
+# FIDELIDADE do flip de leitura: reconstruir o registro pelas colunas
+# adicionaria chave com NULL onde o JSON não tinha chave nenhuma — e o
+# `_contacts_norm` do CounterpartyDetails decide "contato legado" justamente
+# pela AUSÊNCIA da chave. Mudou o formato? Muda o sufixo: o manifest antigo
+# deixa de casar, o leitor cai no JSON e o espelho reconverte no formato novo.
+_REFDATA_FMT = '#raw1'
+
+
+def _refdata_manifest_key(arquivo):
+    return arquivo + _REFDATA_FMT
+
 
 def convert_refdata(data_dir, out_dir, force=False, dry_run=False):
     stats = {'db': os.path.join(out_dir, 'reference_data.db'),
@@ -397,6 +410,7 @@ def convert_refdata(data_dir, out_dir, force=False, dry_run=False):
         ensure_manifest(con)
         for arquivo, tabela in _REFDATA_TABLES:
             fp = os.path.join(data_dir, arquivo)
+            chave = _refdata_manifest_key(arquivo)
             try:
                 if not os.path.isfile(fp):
                     # Ausente não é falha: o par (RefData × CounterpartyDetails)
@@ -405,13 +419,18 @@ def convert_refdata(data_dir, out_dir, force=False, dry_run=False):
                     stats['skipped'].append(arquivo + ' (ausente)')
                     continue
                 st = os.stat(fp)
-                if not force and manifest_unchanged(con, arquivo, st):
+                if not force and manifest_unchanged(con, chave, st):
                     stats['skipped'].append(arquivo)
                     continue
                 rows = _load_json(fp) or []
                 rows = [r for r in rows if isinstance(r, dict)]
-                n = write_rows_table(con, q(tabela), rows, force_varchar=True)
-                manifest_record(con, arquivo, st, [tabela])
+                # `_raw` = o registro EXATAMENTE como está no JSON — a coluna
+                # que o flip de leitura consome; as tipadas ficam para o SQL.
+                linhas = [r if '_raw' in r
+                          else {**r, '_raw': json.dumps(r, ensure_ascii=False)}
+                          for r in rows]
+                n = write_rows_table(con, q(tabela), linhas, force_varchar=True)
+                manifest_record(con, chave, st, [tabela])
                 stats['converted'].append('%s (%d linhas)' % (tabela, n))
             except Exception:                                  # noqa: BLE001
                 stats['errors'].append((arquivo, traceback.format_exc()))
@@ -464,12 +483,23 @@ def _lista_de_objetos(v):
     return isinstance(v, list) and all(isinstance(x, dict) for x in v)
 
 
-def _convert_daily_payload(con, schema, tabela, payload):
-    """Grava o payload de UM arquivo-dia; devolve os nomes das tabelas criadas."""
+def _com_raw(rows):
+    """As linhas com a coluna `_raw` (o registro EXATO como texto JSON) — o
+    canal de fidelidade do flip de leitura, como no RefData."""
+    return [r if '_raw' in r else {**r, '_raw': json.dumps(r, ensure_ascii=False)}
+            for r in rows]
+
+
+def _convert_daily_payload(con, schema, tabela, payload, raw=False):
+    """Grava o payload de UM arquivo-dia; devolve os nomes das tabelas criadas.
+
+    `raw=True` (os DATASETS — cadastros e configs) acrescenta a coluna `_raw`
+    em toda tabela lista-de-objetos, para o flip de leitura ter o registro
+    exato; os arquivo-dia ficam sem ela de propósito (volume)."""
     alvo = lambda t: '%s.%s' % (q(schema), q(t))               # noqa: E731
     criadas = []
     if _lista_de_objetos(payload):
-        write_rows_table(con, alvo(tabela), payload)
+        write_rows_table(con, alvo(tabela), _com_raw(payload) if raw else payload)
         criadas.append('%s.%s' % (schema, tabela))
     elif isinstance(payload, list):
         write_rows_table(con, alvo(tabela),
@@ -480,7 +510,7 @@ def _convert_daily_payload(con, schema, tabela, payload):
         for k, v in payload.items():
             if _lista_de_objetos(v) and v:
                 sub = '%s_%s' % (tabela, norm_ident(k, 'k'))
-                write_rows_table(con, alvo(sub), v)
+                write_rows_table(con, alvo(sub), _com_raw(v) if raw else v)
                 criadas.append('%s.%s' % (schema, sub))
             else:
                 meta[k] = v
@@ -626,3 +656,145 @@ def convert_daily(data_dir, out_dir, force=False, dry_run=False):
     return _convert_daily_rels(data_dir, out_dir, rels, force, stats)
 
 
+
+# ── 4. os DEMAIS JSONs (mappings, cadastros B3, templates, configs) ─────────
+
+_DATASET_COVERED_TOP = frozenset({'RefData.json', 'CounterpartyDetails.json',
+                                  REGISTRY_FILE})
+# `db`/`duckdb` são os próprios bancos; `cache` é dos conversores de
+# arquivo-dia; `translations` FICA EM JSON de propósito — são os dicionários
+# de i18n que o navegador consome e que vivem versionados como código, os
+# únicos JSONs que permanecem fora da migração (decisão de 2026-08-27).
+_DATASET_SKIP_DIRS = frozenset({'db', 'duckdb', 'cache', 'translations'})
+
+
+def _holiday_files(data_dir):
+    """Os arquivos de calendário do registro — cobertos pelo `convert_holidays`,
+    nunca pelos datasets (seriam duas tabelas para o mesmo arquivo)."""
+    try:
+        rows = _load_json(os.path.join(data_dir, REGISTRY_FILE)) or []
+        return {str(r.get('file', '') or '').strip().lower()
+                for r in rows if isinstance(r, dict)} - {''}
+    except Exception:                                          # noqa: BLE001
+        return set()
+
+
+def _dataset_rel_target(rel, cal_files):
+    """(banco, tabela) de um JSON avulso — ou `None` quando ele é de OUTRO
+    conversor (RefData/CPD, registro e arquivos de calendário, `cache/`) ou de
+    pasta que não é dado (`db/`). A ramificação é a da pasta: raiz →
+    `static_data.db`; `mappings/` → `mappings.db`; `file-interpreter/` →
+    `file_interpreter.db`; `tickets/`, `translations/`, `control-panel/` idem —
+    pasta nova ganha o próprio banco sozinha."""
+    parts = rel.split('/')
+    fname = parts[-1]
+    if not fname.endswith('.json') or fname.startswith('_'):
+        return None
+    if parts[0] in _DATASET_SKIP_DIRS:
+        return None
+    if len(parts) == 1:
+        if fname in _DATASET_COVERED_TOP or fname.lower() in cal_files:
+            return None
+        return 'static_data.db', norm_ident(fname[:-5], 't') or 't'
+    db = (norm_ident(parts[0], 'd') or 'static_data') + '.db'
+    tabela = norm_ident('_'.join(parts[1:])[:-5], 't') or 't'
+    return db, tabela
+
+
+def _novo_dataset_stats():
+    return {'db': '<pasta>.db (um por pasta; raiz = static_data.db)', 'dbs': [],
+            'converted': [], 'skipped': [], 'errors': [], 'ignored': []}
+
+
+def _convert_dataset_rels(data_dir, out_dir, rels, force, stats, cal_files):
+    cons = {}
+
+    def _con(db):
+        path = os.path.join(out_dir, db)
+        if path not in cons:
+            os.makedirs(out_dir, exist_ok=True)
+            cons[path] = duckdb.connect(path)
+            ensure_manifest(cons[path])
+            stats['dbs'].append(path)
+        return cons[path]
+
+    try:
+        for rel in rels:
+            alvo = _dataset_rel_target(rel, cal_files)
+            if alvo is None:
+                stats['ignored'].append(rel)
+                continue
+            db, tabela = alvo
+            try:
+                con = _con(db)
+                st = os.stat(os.path.join(data_dir, rel.replace('/', os.sep)))
+                if not force and manifest_unchanged(con, rel, st):
+                    stats['skipped'].append(rel)
+                    continue
+                _drop_targets(con, manifest_targets(con, rel))
+                payload = _load_json(os.path.join(data_dir, rel.replace('/', os.sep)))
+                criadas = _convert_daily_payload(con, 'main', tabela, payload, raw=True)
+                manifest_record(con, rel, st, criadas)
+                stats['converted'].extend('%s:%s' % (db, c) for c in criadas)
+            except Exception:                                  # noqa: BLE001
+                stats['errors'].append((rel, traceback.format_exc()))
+    finally:
+        for con in cons.values():
+            con.close()
+    return stats
+
+
+def convert_dataset_files(data_dir, out_dir, rels, force=False):
+    """Converte SÓ os JSONs dados — a porta do espelho vivo, como a dos
+    arquivo-dia. Caminho que é de outro conversor volta em `ignored`."""
+    stats = _novo_dataset_stats()
+    limpos = [str(r).replace(os.sep, '/').strip('/') for r in (rels or [])]
+    return _convert_dataset_rels(data_dir, out_dir, limpos, force, stats,
+                                 _holiday_files(data_dir))
+
+
+def convert_datasets(data_dir, out_dir, force=False, dry_run=False):
+    """TODOS os demais JSONs do DATA_DIR — a cobertura total da migração.
+
+    Um banco por PASTA de primeiro nível (a raiz vira `static_data.db`), uma
+    tabela por arquivo. Payload lista-de-objetos vira tabela TIPADA com a
+    coluna `_raw` (o registro exato — o canal do flip de leitura); payload
+    objeto vira as tabelas das listas internas (também com `_raw`) mais a
+    `_meta` chave→valor. Fica de fora o que tem conversor próprio (RefData/
+    CPD, calendários, `cache/`) e a pasta `db/`."""
+    stats = _novo_dataset_stats()
+    if not os.path.isdir(data_dir):
+        stats['errors'].append(('.', 'pasta de dados ausente: %s' % data_dir))
+        return stats
+    # A primeira versão desta cobertura convertia `translations/` também; a
+    # pasta ficou FORA da migração e o banco derivado sai de cena.
+    legado = os.path.join(out_dir, 'translations.db')
+    if not dry_run and os.path.isfile(legado):
+        os.remove(legado)
+        stats['converted'].append('translations.db legado removido (i18n fica em JSON)')
+    cal_files = _holiday_files(data_dir)
+    rels = []
+    # `os.walk` SEM `sorted(...)` por fora: o sorted consumiria o generator
+    # inteiro antes da poda de `dirs[:]` fazer efeito, e a árvore de `cache/`
+    # — que é dos conversores de arquivo-dia — seria varrida à toa (no share,
+    # uma caminhada cara). A ordem determinística vem de ordenar in place.
+    for dirpath, dirs, files in os.walk(data_dir):
+        rel_dir = os.path.relpath(dirpath, data_dir).replace(os.sep, '/')
+        if rel_dir == '.':
+            dirs[:] = sorted(d for d in dirs if d not in _DATASET_SKIP_DIRS)
+        else:
+            dirs.sort()
+        for fname in sorted(files):
+            if not fname.endswith('.json'):
+                continue
+            rel = fname if rel_dir == '.' else rel_dir + '/' + fname
+            if _dataset_rel_target(rel, cal_files) is None:
+                stats['ignored'].append(rel)
+            else:
+                rels.append(rel)
+    if dry_run:
+        for rel in rels:
+            db, tabela = _dataset_rel_target(rel, cal_files)
+            stats['converted'].append('%s:%s <- %s' % (db, tabela, rel))
+        return stats
+    return _convert_dataset_rels(data_dir, out_dir, rels, force, stats, cal_files)

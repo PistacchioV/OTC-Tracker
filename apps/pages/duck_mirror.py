@@ -90,9 +90,17 @@ def notify_write(file_path):
         tarefa = _TOP_LEVEL_TASKS.get(rel)
         if tarefa:
             _put((tarefa, raiz, None))
-        elif rel.startswith('cache/') and rel.endswith('.json') \
-                and not os.path.basename(rel).startswith('_'):
+        elif not rel.endswith('.json') or os.path.basename(rel).startswith('_'):
+            return
+        elif rel.startswith('cache/'):
             _put(('daily', raiz, rel))
+        elif rel.split('/', 1)[0] not in ('db', 'duckdb'):
+            # Qualquer OUTRO JSON do DATA_DIR é um dataset (mappings, cadastros
+            # B3, templates, configs) — a cobertura total. Arquivo de
+            # CALENDÁRIO também cai aqui pelo gancho genérico, e é o motor
+            # (`_dataset_rel_target`, na thread) que o reconhece pelo registro
+            # e o devolve como `ignored`: o dele é o `notify_holidays`.
+            _put(('datasets', raiz, rel))
     except Exception:                                       # noqa: BLE001
         # O espelho nunca derruba a gravação que o avisou.
         pass
@@ -143,6 +151,8 @@ def _loop():
             out = _out_dir(data_dir)
             if kind == 'daily':
                 stats = core.convert_daily_files(data_dir, out, [rel])
+            elif kind == 'datasets':
+                stats = core.convert_dataset_files(data_dir, out, [rel])
             elif kind == 'holidays':
                 stats = core.convert_holidays(data_dir, out)
             else:

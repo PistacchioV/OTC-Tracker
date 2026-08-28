@@ -105,16 +105,24 @@ check('3. e o registro virou tabela tambem',
       consulta('holiday_calendars.db',
                'SELECT count(*) FROM _registry')[0][0] >= 11)
 
-# ── 4. o que NÃO dispara ────────────────────────────────────────────────────
+# ── 4. a cobertura total: mapping vira mappings.db; ponteiro não dispara ────
 os.makedirs(os.path.join(TMP, 'mappings'), exist_ok=True)
-R._atomic_write_json(os.path.join(TMP, 'mappings', 'bank-name.json'), [{'A': 1}])
+R._atomic_write_json(os.path.join(TMP, 'mappings', 'bank-name.json'),
+                     [{'BANK': 'ITAU', 'CODE': '341'}])
 ponteiro = os.path.join(TMP, 'cache', 'reconciliation', 'payrec', '_last.json')
 os.makedirs(os.path.dirname(ponteiro), exist_ok=True)
 R._atomic_write_json(ponteiro, {'recon_date': '2026-07-06'})
 M.flush(20)
 bancos = sorted(f for f in os.listdir(DBDIR) if f.endswith('.db'))
-check('4. mapping e _last.json nao criam banco nenhum',
-      bancos, ['daily_new_deals.db', 'holiday_calendars.db', 'reference_data.db'])
+check('4. mapping espelha em mappings.db; _last.json em nada',
+      bancos, ['daily_new_deals.db', 'holiday_calendars.db', 'mappings.db',
+               'reference_data.db'])
+check('4. a tabela do mapping leva o registro exato (_raw)',
+      json.loads(consulta('mappings.db',
+                          'SELECT "_raw" FROM bank_name')[0][0]),
+      {'BANK': 'ITAU', 'CODE': '341'})
+check('4. arquivo de CALENDARIO nao vira dataset (e do holidays)',
+      os.path.isfile(os.path.join(DBDIR, 'static_data.db')), False)
 
 # ── 5. os bancos moram ao lado do dado espelhado ────────────────────────────
 check('5. raiz trocada espelha em <raiz>/db, nunca no DATABASE_DIR real',

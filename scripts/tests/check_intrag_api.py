@@ -152,7 +152,41 @@ check('payload sem a chave nao toca no campo', (r.get_json()['status'], 'intrag_
 r = maker.post('/api/intrag/option/edit', json={'deal_id': 'NAO-EXISTE', 'intrag_id': '1'})
 check('option: mesma rota, entrada inexistente e 404', r.status_code, 404)
 
-print('\n== 7. Information Source legivel (separador -> espaco) ==')
+print('\n== 7. Mapping Intrag ID: o CSV de retorno cobre MERCADORIA e MOEDAS ==')
+# O filtro da familia e por PREFIXO ('NDF - TERMO'): o retorno ecoa o texto do
+# instrumento enviado, e a mesma tela manda dois contract types. Com igualdade
+# exata a linha de moedas era descartada ANTES do casamento — o Mapping dizia
+# "N mapped" (as de mercadoria) e o termo de moedas ficava sem Intrag ID.
+from apps.pages.features.intrag import queries as Q          # noqa: E402
+IN_persist({'_deal': 'MAP-MERC', '_client': 'ACME', 'b3_id': '26C0001'},
+           datetime(2026, 8, 23))
+IN_persist({'_deal': 'MAP-MOEDA', '_client': 'BETA', 'b3_id': '26C0002',
+            'contract_type': 'NDF - TERMO DE MOEDAS'}, datetime(2026, 8, 23))
+csv_path = os.path.join(TMP, 'boletas.csv')
+with open(csv_path, 'w', encoding='latin-1') as fh:
+    fh.write('INT-111;NDF - TERMO MERCADORIA;26C0001;x\n'
+             'INT-222;NDF - TERMO DE MOEDAS;26C0002;x\n'
+             'INT-333;OPCAO;26C0003;x\n')
+_finder_orig = Q._intrag_find_export_csv
+Q._intrag_find_export_csv = lambda: csv_path
+try:
+    r = maker.post('/api/intrag/ndf/mapping-intrag-id',
+                   json={'deals': [{'id': 'MAP-MERC', 'b3_id': '26C0001'},
+                                   {'id': 'MAP-MOEDA', 'b3_id': '26C0002'}]})
+finally:
+    Q._intrag_find_export_csv = _finder_orig
+res = {x['id']: x for x in r.get_json()['results']}
+check('mercadoria mapeada', (res['MAP-MERC']['status'], res['MAP-MERC']['intrag_id']),
+      ('Success', 'INT-111'))
+check('MOEDAS mapeada tambem (era descartada pelo filtro exato)',
+      (res['MAP-MOEDA']['status'], res['MAP-MOEDA']['intrag_id']),
+      ('Success', 'INT-222'))
+d = maker.get('/api/intrag/ndf?date=2026-08-23').get_json()['entries']
+check('e PERSISTIDA no arquivo-dia com status Success',
+      sorted((e['_deal'], e.get('intrag_id'), e['status']) for e in d),
+      [('MAP-MERC', 'INT-111', 'Success'), ('MAP-MOEDA', 'INT-222', 'Success')])
+
+print('\n== 8. Information Source legivel (separador -> espaco) ==')
 check('a regra pura', D._intrag_info_source('PTAX|BRR[PTAX'), 'PTAX BRR PTAX')
 check('   chave/parentese tambem', D._intrag_info_source('{PTAX}(BRR);<X>'), 'PTAX BRR X')
 check('   texto limpo passa intocado', D._intrag_info_source('PTAX USB WMR 4'), 'PTAX USB WMR 4')

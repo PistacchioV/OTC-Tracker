@@ -358,6 +358,17 @@ def _refdata_rows():
         return []
     if _REFDATA_CACHE['mtime'] == mtime:
         return _REFDATA_CACHE['rows']
+    # DB-first (fase 3): o reference_data.db quando fresco; senão o JSON. O
+    # cache por mtime fica — o mtime é a própria chave do contrato de frescor.
+    try:
+        from apps.pages import duck_read
+        db_rows = duck_read.refdata_rows(expected_path=path)
+    except Exception:                                       # noqa: BLE001
+        db_rows = None
+    if db_rows is not None:
+        _REFDATA_CACHE['mtime'] = mtime
+        _REFDATA_CACHE['rows'] = db_rows
+        return db_rows
     try:
         with open(path, encoding='utf-8') as fh:
             data = json.load(fh)
