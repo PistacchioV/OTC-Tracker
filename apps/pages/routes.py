@@ -10673,8 +10673,19 @@ def _mapping_rows(key):
         cached = _mapping_cache.get(key)
         if cached and cached[0] == mtime:
             return cached[1]
-        with open(path, encoding='utf-8') as fh:
-            rows = json.load(fh) or []
+        # DB-first (fase 3): o mappings.db (ou o static_data.db, para os
+        # registros com `file` na raiz) quando o manifest prova o frescor —
+        # via `_raw`, então o conteúdo é o do arquivo byte a byte e o
+        # `upgrade` abaixo roda igual nas duas fontes. Senão, o JSON.
+        rows = None
+        try:
+            from apps.pages import duck_read
+            rows = duck_read.dataset_records(path)
+        except Exception:                                   # noqa: BLE001
+            rows = None
+        if rows is None:
+            with open(path, encoding='utf-8') as fh:
+                rows = json.load(fh) or []
         if not isinstance(rows, list):
             rows = []
         rows = [r for r in rows if isinstance(r, dict)]
@@ -10993,19 +11004,34 @@ def _duck_static_json(filename):
     disco."""
     try:
         nome = str(filename or '').replace('\\', '/').strip('/')
-        if '/' in nome or not nome.endswith('.json'):
+        if not nome.endswith('.json'):
             return None
         from apps.pages import duck_read
         rows = None
-        if nome == 'RefData.json':
+        if '/' in nome:
+            # Subpasta: só os cadastros do /mapping — o resto (translations,
+            # file-interpreter) fica com o arquivo.
+            if nome.startswith('mappings/') and nome.count('/') == 1:
+                rows = duck_read.dataset_records(
+                    os.path.join(_B3_DATA_DIR, *nome.split('/')))
+            else:
+                return None
+        elif nome == 'RefData.json':
             rows = duck_read.refdata_rows()
         elif nome == 'CounterpartyDetails.json':
             rows = duck_read.cpd_records()
-        elif nome not in _DUCK_STATIC_NAO_CALENDARIO:
-            from apps.pages.features.holidays.infra import persistence as _hp
-            if any(str(r.get('file', '') or '').strip().lower() == nome.lower()
-                   for r in _hp.calendars()):
-                rows = _hp._load_holidays_db(nome)
+        else:
+            if nome not in _DUCK_STATIC_NAO_CALENDARIO:
+                from apps.pages.features.holidays.infra import persistence as _hp
+                if any(str(r.get('file', '') or '').strip().lower() == nome.lower()
+                       for r in _hp.calendars()):
+                    rows = _hp._load_holidays_db(nome)
+            if rows is None:
+                # Qualquer outro JSON de raiz coberto pelos DATASETS
+                # (Subjacente, Dominio, VCP, SwapIndex, …) — lista de
+                # registros sai do banco; payload que não é lista fica com o
+                # arquivo (dataset_records devolve None).
+                rows = duck_read.dataset_records(os.path.join(_B3_DATA_DIR, nome))
         if rows is None:
             return None
         from flask import Response
@@ -11027,17 +11053,18 @@ _B3_FILE_MAP = {
 
 def _b3_load(table):
     path = os.path.join(_B3_DATA_DIR, _B3_FILE_MAP[table])
-    if table == 'refdata':
-        # DB-first (fase 3): a tela do Reference Data lê do banco quando ele
-        # está fresco; o caminho devolvido segue sendo o do JSON — é nele que
-        # o _b3_save grava, e o espelho realinha o banco em seguida.
-        try:
-            from apps.pages import duck_read
-            rows = duck_read.refdata_rows()
-        except Exception:                                   # noqa: BLE001
-            rows = None
-        if rows is not None:
-            return rows, path
+    # DB-first (fase 3): o refdata pelo reference_data.db, os demais quatro
+    # (Subjacente, VCP, Dominio, SwapIndex) pelo static_data.db — quando o
+    # manifest prova o frescor. O caminho devolvido segue sendo o do JSON: é
+    # nele que o _b3_save grava, e o espelho realinha o banco em seguida.
+    try:
+        from apps.pages import duck_read
+        rows = (duck_read.refdata_rows() if table == 'refdata'
+                else duck_read.dataset_records(path))
+    except Exception:                                       # noqa: BLE001
+        rows = None
+    if rows is not None:
+        return rows, path
     with open(path, encoding='utf-8') as fh:
         return json.load(fh), path
 

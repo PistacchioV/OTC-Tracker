@@ -384,14 +384,17 @@ def convert_holidays(data_dir, out_dir, force=False, dry_run=False):
 _REFDATA_TABLES = (('RefData.json', 'refdata'),
                    ('CounterpartyDetails.json', 'counterparty_details'))
 
-# Versão do FORMATO das tabelas de cadastro no manifest. O `_raw` (o registro
+# Versão do FORMATO das tabelas de registro no manifest. O `_raw` (o registro
 # original como texto JSON, coluna a mais ao lado das tipadas) é o canal de
 # FIDELIDADE do flip de leitura: reconstruir o registro pelas colunas
 # adicionaria chave com NULL onde o JSON não tinha chave nenhuma — e o
 # `_contacts_norm` do CounterpartyDetails decide "contato legado" justamente
-# pela AUSÊNCIA da chave. Mudou o formato? Muda o sufixo: o manifest antigo
-# deixa de casar, o leitor cai no JSON e o espelho reconverte no formato novo.
-_REFDATA_FMT = '#raw1'
+# pela AUSÊNCIA da chave. O `_seq` (posição no arquivo) é a ORDEM: o DuckDB
+# não promete ordem de inserção no SELECT, e a lista reconstruída tem de sair
+# na ordem do JSON — as telas exibem na ordem do arquivo. Mudou o formato?
+# Muda o sufixo: o manifest antigo deixa de casar, o leitor cai no JSON e o
+# espelho reconverte no formato novo — upgrade sem script.
+_REFDATA_FMT = '#raw2'
 
 
 def _refdata_manifest_key(arquivo):
@@ -424,12 +427,9 @@ def convert_refdata(data_dir, out_dir, force=False, dry_run=False):
                     continue
                 rows = _load_json(fp) or []
                 rows = [r for r in rows if isinstance(r, dict)]
-                # `_raw` = o registro EXATAMENTE como está no JSON — a coluna
+                # `_seq`/`_raw` = ordem e registro EXATOS do JSON — as colunas
                 # que o flip de leitura consome; as tipadas ficam para o SQL.
-                linhas = [r if '_raw' in r
-                          else {**r, '_raw': json.dumps(r, ensure_ascii=False)}
-                          for r in rows]
-                n = write_rows_table(con, q(tabela), linhas, force_varchar=True)
+                n = write_rows_table(con, q(tabela), _com_raw(rows), force_varchar=True)
                 manifest_record(con, chave, st, [tabela])
                 stats['converted'].append('%s (%d linhas)' % (tabela, n))
             except Exception:                                  # noqa: BLE001
@@ -484,10 +484,15 @@ def _lista_de_objetos(v):
 
 
 def _com_raw(rows):
-    """As linhas com a coluna `_raw` (o registro EXATO como texto JSON) — o
-    canal de fidelidade do flip de leitura, como no RefData."""
-    return [r if '_raw' in r else {**r, '_raw': json.dumps(r, ensure_ascii=False)}
-            for r in rows]
+    """As linhas com `_seq` (a posição no arquivo — a ordem da reconstrução) e
+    `_raw` (o registro EXATO como texto JSON) — os canais do flip de leitura."""
+    out = []
+    for i, r in enumerate(rows):
+        if '_raw' in r:
+            out.append(r)
+        else:
+            out.append({**r, '_seq': i, '_raw': json.dumps(r, ensure_ascii=False)})
+    return out
 
 
 def _convert_daily_payload(con, schema, tabela, payload, raw=False):
@@ -659,6 +664,15 @@ def convert_daily(data_dir, out_dir, force=False, dry_run=False):
 
 # ── 4. os DEMAIS JSONs (mappings, cadastros B3, templates, configs) ─────────
 
+# A mesma versão de formato dos cadastros: os datasets carregam `_seq`/`_raw`
+# nas listas de registros, e o leitor DB-first depende dos dois.
+_DATASET_FMT = _REFDATA_FMT
+
+
+def _dataset_manifest_key(rel):
+    return rel + _DATASET_FMT
+
+
 _DATASET_COVERED_TOP = frozenset({'RefData.json', 'CounterpartyDetails.json',
                                   REGISTRY_FILE})
 # `db`/`duckdb` são os próprios bancos; `cache` é dos conversores de
@@ -725,16 +739,17 @@ def _convert_dataset_rels(data_dir, out_dir, rels, force, stats, cal_files):
                 stats['ignored'].append(rel)
                 continue
             db, tabela = alvo
+            chave = _dataset_manifest_key(rel)
             try:
                 con = _con(db)
                 st = os.stat(os.path.join(data_dir, rel.replace('/', os.sep)))
-                if not force and manifest_unchanged(con, rel, st):
+                if not force and manifest_unchanged(con, chave, st):
                     stats['skipped'].append(rel)
                     continue
-                _drop_targets(con, manifest_targets(con, rel))
+                _drop_targets(con, manifest_targets(con, chave))
                 payload = _load_json(os.path.join(data_dir, rel.replace('/', os.sep)))
                 criadas = _convert_daily_payload(con, 'main', tabela, payload, raw=True)
-                manifest_record(con, rel, st, criadas)
+                manifest_record(con, chave, st, criadas)
                 stats['converted'].extend('%s:%s' % (db, c) for c in criadas)
             except Exception:                                  # noqa: BLE001
                 stats['errors'].append((rel, traceback.format_exc()))

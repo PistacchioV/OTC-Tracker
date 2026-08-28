@@ -101,18 +101,20 @@ def table_rows(db_name, table, rel, schema='main', order_by=None, heal=None,
         return None
 
 
-def raw_records(db_name, table, rel, expected_path=None):
-    """Os REGISTROS ORIGINAIS de uma tabela de cadastro — a coluna `_raw`,
-    que guarda cada registro exatamente como está no JSON.
+def raw_records(db_name, table, rel, expected_path=None, manifest_key=None):
+    """Os REGISTROS ORIGINAIS de uma tabela de registros — a coluna `_raw`
+    (cada registro exatamente como está no JSON), na ordem do arquivo
+    (`_seq`; o CAST cobre a tabela que o gravou como texto).
 
     É o canal de fidelidade do flip: reconstruir pelo conjunto de colunas
     poria chave com NULL onde o JSON não tinha chave nenhuma, e há consumidor
     que decide pela AUSÊNCIA (o `_contacts_norm` do CounterpartyDetails).
-    Linha sem `_raw` (banco em formato antigo) devolve `None` — o manifest
-    versionado já impede o caso, isto é o cinto de segurança."""
+    Linha sem `_raw`/`_seq` (banco em formato antigo) devolve `None` — o
+    manifest versionado já impede o caso, isto é o cinto de segurança."""
     from apps.pages.json_to_duckdb import _refdata_manifest_key
     rows = table_rows(db_name, table, rel,
-                      manifest_key=_refdata_manifest_key(rel),
+                      manifest_key=manifest_key or _refdata_manifest_key(rel),
+                      order_by='CAST("_seq" AS BIGINT)',
                       expected_path=expected_path)
     if rows is None:
         return None
@@ -126,6 +128,30 @@ def raw_records(db_name, table, rel, expected_path=None):
         except ValueError:
             return None
     return out
+
+
+def dataset_records(path):
+    """Os registros originais de um JSON coberto pelos DATASETS (mappings,
+    cadastros B3, …), pelo caminho ABSOLUTO de quem lê — que também é o
+    guarda: fora da raiz espelhada, ou arquivo de outro conversor, → `None`
+    e vale o JSON. Payload que não é lista de registros (os dicts viram
+    `_meta`/sub-tabelas) também devolve `None` — a reconstrução fiel é só da
+    lista."""
+    try:
+        from apps.pages import json_to_duckdb as core
+        raiz = _data_root()
+        rel = os.path.relpath(os.path.normpath(str(path)), raiz)
+        if rel.startswith('..'):
+            return None
+        rel = rel.replace(os.sep, '/')
+        alvo = core._dataset_rel_target(rel, core._holiday_files(raiz))
+        if alvo is None:
+            return None
+        db, tabela = alvo
+        return raw_records(db, tabela, rel,
+                           manifest_key=core._dataset_manifest_key(rel))
+    except Exception:                                       # noqa: BLE001
+        return None
 
 
 def refdata_rows(expected_path=None):
