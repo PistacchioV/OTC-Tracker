@@ -428,6 +428,12 @@ São dois bancos:
     `R._cpd_path = tmp` dos testes continua mandando;
   - **a ESCRITA continua nos JSONs** de propósito (rollback = reverter o
     commit; nenhuma migração de volta). `check_duck_read.py` prende tudo.
+  - **`json.dump` é PROIBIDO fora do funil** (`_atomic_write_json`) em
+    `apps/pages` — a auditoria §335 achou ~30 escritores gravando DATA_DIR
+    por fora, com os bancos envelhecendo em silêncio para quem os consulta
+    por fora do app. `check_duck_writers.py` reprova o próximo, com arquivo
+    e linha; as exceções (o funil e os dois stores com aviso próprio) são a
+    allowlist dele.
 
   O flip alcança também os DATASETS (§333): o `_mapping_rows` (os 43
   cadastros — o `upgrade` roda igual nas duas fontes, porque o `_raw` é o
