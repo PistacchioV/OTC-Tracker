@@ -327,13 +327,13 @@ Consulta de índices e resultados da B3 usados nas apurações.
 
 #### Intragrupo — NDF
 
-Operações intragrupo de NDF. Permite enviar o arquivo, editar e aprovar as operações entre entidades do grupo.
+Operações intragrupo de NDF. Permite enviar o arquivo, editar e aprovar as operações entre entidades do grupo. O ciclo fecha com o **Intrag ID**: preenchido pelo **Mapping Intrag ID** (CSV de retorno, casado pelo B3 ID) ou digitado no **Edit** da linha, a operação vai a `Success`; edição de dado sem Intrag ID novo vai a `Pending` e exige aprovação de um segundo usuário.
 
 ![Intragrupo — NDF](docs/sop-screenshots/intrag-ndf.png)
 
 #### Intragrupo — Opção
 
-Operações intragrupo de Opção. Permite enviar o arquivo, editar e aprovar as operações entre entidades do grupo.
+Operações intragrupo de Opção. Permite enviar o arquivo, editar e aprovar as operações entre entidades do grupo. O ciclo do **Intrag ID** é o mesmo da tela de NDF: Mapping pelo retorno ou digitado no Edit → `Success`; edição de dado → `Pending` com aprovação de um segundo usuário.
 
 ![Intragrupo — Opção](docs/sop-screenshots/intrag-option.png)
 
