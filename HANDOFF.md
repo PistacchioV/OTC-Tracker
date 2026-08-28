@@ -14800,3 +14800,34 @@ aviso de rotina ausente é impresso, e ele nomeia as rotinas encontradas. Os
 nove standalone foram regerados (o `_DOC_ROTINA` ainda descrevia os nomes
 achatados do desenho anterior — corrigido para a árvore espelhada). Suíte
 completa verde.
+
+---
+
+## §344 — "outro conversor já leva" contado como "ficou de fora" (2026-08-28)
+
+Na máquina de dev do time, o `convert_json_to_duckdb.py` terminava os datasets
+com `convertidos: 0 | inalterados: 134 | fora deste conversor: 15`. O número
+está certo e a rodada estava saudável — mas *fora deste conversor* se lê como
+perda, e a pergunta veio: que 15 são esses?
+
+São os JSONs que OUTRO conversor da mesma rodada leva: `RefData.json`,
+`CounterpartyDetails.json` (do `convert_refdata`), o `holiday-calendars.json` e
+os arquivos de calendário que ele aponta (do `convert_holidays`). A aritmética
+fecha com a linha de cima do mesmo relatório: `holidays … inalterados: 13` = 12
+calendários + o registro, e 12 + 3 = 15.
+
+Estavam no mesmo balde `ignored` dos que ninguém converte, e o resumo só
+contava. Agora o corte tem dois lados (`_dataset_fora`): `cobertos` para o que
+outro conversor leva, `ignored` para o que fica fora de tudo, e o resumo mostra
+os dois separados — `| já cobertos por outro conversor: 5`. Na dev o `ignored`
+de datasets é hoje ZERO, e é essa a informação que a linha anterior escondia.
+
+A condição é a MESMA do `_dataset_rel_target` (é ele quem decide o corte); o
+`_dataset_fora` só diz de que lado o arquivo caiu, e está nos dois pontos que
+classificam — a varredura do `convert_datasets` e a porta do espelho vivo
+(`convert_dataset_rels`), que recebe caminhos arbitrários.
+
+Guardas: duas asserções novas no `check_duckdb_standalone` e as duas do
+`check_json_to_duckdb` que fixavam o balde único, atualizadas — mais uma que
+prende o `ignored` em zero, que é o que uma regressão do corte quebraria
+primeiro. Os nove standalone regerados. Suíte completa verde.

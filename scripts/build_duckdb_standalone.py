@@ -133,8 +133,10 @@ def _data_dir_padrao():
 
 def _resumo(nome, stats, houve_erro):
     print('\n== %%s -> %%s' %% (nome, os.path.basename(stats['db'])))
-    print('   convertidos: %%d | inalterados: %%d%%s' %% (
+    print('   convertidos: %%d | inalterados: %%d%%s%%s' %% (
         len(stats['converted']), len(stats['skipped']),
+        ' | ja cobertos por outro conversor: %%d' %% len(stats['cobertos'])
+        if stats.get('cobertos') else '',
         ' | fora deste conversor: %%d' %% len(stats['ignored'])
         if stats.get('ignored') else ''))
     for aviso in stats.get('avisos') or ():
