@@ -238,5 +238,80 @@ finally:
     RP._MAPPINGS_DIR = _dir_orig
     shutil.rmtree(tmpmap, ignore_errors=True)
 
+print('\n== SPB - outros bancos: so casa com BANCO ==')
+# A liquidacao interbancaria nao traz nome nenhum (so o LTR e o valor), entao e
+# casada so por VALOR e com a tolerancia larga da tarifa (+-R$20). Sem a guarda,
+# essa janela fechava contra a perna de um CLIENTE qualquer: um recebimento de
+# R$7,02 da Saint Gobain saiu Settled contra um SPB de R$6,68, e como a linha SPB
+# e drop_if_unmatched (ruido por construcao), o ruido roubava o par de uma
+# liquidacao de verdade e ainda a carimbava como paga.
+_dir_orig = RP._MAPPINGS_DIR
+tmpmap = tempfile.mkdtemp(prefix='banknames-')
+io.open(os.path.join(tmpmap, 'bank-name.json'), 'w', encoding='utf-8').write(_json.dumps([
+    {'ID': '033', 'NAME': 'BANCO SANTANDER S/A'},
+    {'ID': '217', 'NAME': 'BANCO JOHN DEERE S/A'},
+    {'ID': '001', 'NAME': 'BANCO DO BRASIL S/A'},
+    {'ID': '755', 'NAME': 'BOFA MERRILL LYNCH BM S/A'},
+]))
+RP._MAPPINGS_DIR = tmpmap
+try:
+    _SG = 'SAINT GOBAIN DO BRASIL PRODUTOS INDUSTRIAIS E PARA CONSTRUCAO LTDA'
+
+    def _spb(v, pr='Receive'):
+        return {'value': v, 'client': '', 'sistema': 'SPB - outros bancos',
+                'snumconta': '', 'product': 'NDF', 'pay_receive': pr, 'le': 'JPM',
+                'bank': True, 'tol': RP._TOL_BANK, 'drop_if_unmatched': True}
+
+    def _par(valor_jpm, cpty, spb_val, pr='Receive', spb_pr=None):
+        """(status, casou?) da perna do JPM contra um unico SPB interbancario."""
+        jpm = [{'value': valor_jpm, 'cpty': cpty, 'pay_receive': pr,
+                'product': 'NDF', 'le': 'JPM'}]
+        det, _ = RP._reconcile(jpm, [_spb(spb_val, spb_pr or pr)])
+        linha = [d for d in det if d['jpm_value'] != ''][0]
+        return linha['status'], linha['client_value'] != ''
+
+    check('o caso reportado: cliente x SPB nao casa (7,02 x 6,68)',
+          _par(7.02, _SG, 6.68), ('Pending', False))
+    # O bucket exato roda ANTES de qualquer tolerancia: a guarda vale nele tambem.
+    check('   nem com o valor IGUAL (o bucket exato)',
+          _par(7.02, _SG, 7.02), ('Pending', False))
+    check('   nem em valor alto', _par(48410.20, _SG, 48410.20), ('Pending', False))
+    # Banco cadastrado continua casando dentro da tolerancia da tarifa (R$20) —
+    # apertar a guarda nao pode matar o match que ela existe para permitir.
+    check('banco cadastrado casa, com a tarifa dentro dos R$20',
+          _par(48410.20, 'BANCO SANTANDER (BRASIL) S.A.', 48400.20), ('Settled', True))
+    check('   e a variante de grafia tambem (Bofa)',
+          _par(48410.20, 'BOFA MERRILL LYNCH BM S/A', 48400.20), ('Settled', True))
+    # `banco` e token SIGNIFICATIVO: e ele que separa o Banco John Deere da John
+    # Deere montadora, que e cliente.
+    check('BANCO JOHN DEERE casa', _par(500.0, 'BANCO JOHN DEERE S/A', 500.0),
+          ('Settled', True))
+    check('   mas JOHN DEERE BRASIL (o cliente) nao',
+          _par(500.0, 'JOHN DEERE BRASIL LTDA', 500.0), ('Pending', False))
+    # A palavra `brasil` do Banco do Brasil nao pode casar DENTRO de outro nome:
+    # a comparacao e por palavra, nunca por substring do nome colado.
+    check('o `brasil` do Banco do Brasil nao faz a Saint Gobain virar banco',
+          RP._is_bank_cpty(_SG), False)
+    # Com +-R$20 dois valores pequenos de sinais opostos ficam dentro da janela.
+    check('direcao oposta nao casa (Pay -3,00 x Receive +9,00)',
+          _par(-3.00, 'BANCO SANTANDER S/A', 9.00, pr='Pay', spb_pr='Receive'),
+          ('Pending', False))
+    # Banco fora do cadastro responde NAO — o lado seguro do erro: Pending (que
+    # se ve) em vez de um Settled contra o SPB errado (que nao se ve).
+    check('banco NAO cadastrado nao casa — pede cadastro em vez de inventar par',
+          _par(48410.20, 'BANCO SAFRA S.A.', 48410.20), ('Pending', False))
+    # A liquidacao normal do cliente (SDConta) nao passa pela guarda: ela tem
+    # nome e nao e interbancaria.
+    _cli_norm = [{'value': 2092.48, 'client': _SG, 'sistema': 'SDConta - conta externa',
+                  'snumconta': '341-912-95023', 'product': 'NDF',
+                  'pay_receive': 'Receive', 'le': 'JPM'}]
+    _det, _ = RP._reconcile([{'value': 2092.48, 'cpty': _SG, 'pay_receive': 'Receive',
+                              'product': 'NDF', 'le': 'JPM'}], _cli_norm)
+    check('a liquidacao do proprio cliente continua casando',
+          (_det[0]['status'], _det[0]['client_value']), ('Settled', 2092.48))
+finally:
+    RP._MAPPINGS_DIR = _dir_orig
+    shutil.rmtree(tmpmap, ignore_errors=True)
+
 print('\n%s' % ('TUDO OK' if not fails else 'FALHAS (%d): %r' % (len(fails), fails)))
 sys.exit(1 if fails else 0)
