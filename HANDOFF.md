@@ -14365,3 +14365,33 @@ espelho reconverte sozinho. O standalone foi regerado no formato novo e reentreg
 `_mapping_rows` provado no banco por adulteração, o `_b3_load` DB-first com o caminho do JSON,
 e o estático servindo mapping e cadastro de raiz. O que resta da migração: os ARQUIVO-DIA —
 cada consumidor virar consulta SQL, começando pelo intervalo do Advanced Export.
+
+## §334 — a última parte: os arquivo-dia lidos pelo banco (2026-08-27)
+
+O fecho da migração de leitura. O flip é pelo FUNIL: o `_day_json` do
+`platform/json_cache` — o daycache por (mtime, tamanho) que serve os leitores de arquivo-dia
+do app — passou a tentar o `duck_read.day_payload(path)` no MISS do memo, antes do
+`open()`. O memo continua sendo o cache; o banco só é consultado quando o arquivo mudou, e o
+contrato de frescor é o mesmo de tudo (manifest × stat, com o espelho avisado no descompasso).
+
+Para isso os arquivo-dia ganharam o que os cadastros já tinham: `raw=True` na conversão —
+`_seq` (ordem) e `_raw` (o registro exato) em toda tabela de lista — e o manifest deles passou
+para a chave versionada (`#raw2`): os `daily_*.db` de ontem não casam, caem no JSON e o
+espelho os reconverte sozinho. O custo é o dobro de armazenamento nos bancos diários — que são
+100% derivados e recriáveis; a fidelidade byte a byte do funil vale mais.
+
+O que reconstrói é o payload-LISTA (a forma dos New Deals, Pending Confirmation, arquivos
+B3…): o manifest diz que a conversão gerou UMA tabela e ela carrega `_raw`/`_seq`; dia vazio
+volta `[]` (a tabela `_empty`). **Payload-objeto (as recons) fica com o JSON de propósito** —
+ele vira sub-tabelas + `_meta` normalizadas, e remontar o objeto por elas seria adivinhar
+chave e ordem. Os leitores que abrem o arquivo-dia DIRETO (o ramo de data exata de alguns
+endpoints) seguem no JSON — mesma resposta, migração gradual.
+
+`check_duck_read` §3e prende: a lista voltando DO BANCO na ordem (por adulteração do `_raw`),
+o payload-objeto continuando no JSON (embrulhado em lista, como sempre) e o dia vazio; o
+`check_daycache` — que prende o memo — segue verde, e a suíte completa também. O standalone
+foi regerado no formato novo e reentregue.
+
+Com isto o mapa fecha: escrita nos JSONs (rollback fácil) → espelho vivo → leitura DB-first
+em cadastros, datasets, calendários, navegador E arquivo-dia. O que sobra em JSON por
+decisão: `translations/` (§332), os payload-objeto das recons e os leitores de data exata.

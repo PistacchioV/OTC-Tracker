@@ -294,13 +294,24 @@ def _day_json(fp, mtime, size, mutavel=False):
     if item and item[0] == mtime and item[1] == size:
         dados = item[2]
     else:
+        # DB-first (fase 3, §334): o banco da rotina responde pelo payload-
+        # LISTA quando o manifest prova o frescor — o memo por (mtime, tamanho)
+        # continua sendo o cache, então o banco só é consultado quando o
+        # arquivo mudou. Payload-objeto e banco frio caem no JSON de sempre.
+        dados = None
         try:
-            with open(fp, 'r', encoding='utf-8') as fh:
-                dados = json.load(fh)
+            from apps.pages import duck_read
+            dados = duck_read.day_payload(fp)
         except Exception:                                   # noqa: BLE001
-            return []
-        if not isinstance(dados, list):
-            dados = [dados] if isinstance(dados, dict) else []
+            dados = None
+        if dados is None:
+            try:
+                with open(fp, 'r', encoding='utf-8') as fh:
+                    dados = json.load(fh)
+            except Exception:                               # noqa: BLE001
+                return []
+            if not isinstance(dados, list):
+                dados = [dados] if isinstance(dados, dict) else []
         with _daycache_lock:
             if len(_daycache_memo) >= _DAYCACHE_MAX:
                 _daycache_memo.clear()

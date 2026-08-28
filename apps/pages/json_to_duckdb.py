@@ -581,18 +581,21 @@ def _convert_daily_rels(data_dir, out_dir, rels, force, stats):
     try:
         for rel in rels:
             familia, schema, tabela = _daily_rel_target(rel)
+            chave = _dataset_manifest_key(rel)
             try:
                 con = _con_da_familia(familia)
                 st = os.stat(os.path.join(data_dir, rel.replace('/', os.sep)))
-                if not force and manifest_unchanged(con, rel, st):
+                if not force and manifest_unchanged(con, chave, st):
                     stats['skipped'].append(rel)
                     continue
-                _drop_targets(con, manifest_targets(con, rel))
+                _drop_targets(con, manifest_targets(con, chave))
                 if schema != 'main':
                     con.execute('CREATE SCHEMA IF NOT EXISTS %s' % q(schema))
                 payload = _load_json(os.path.join(data_dir, rel.replace('/', os.sep)))
-                criadas = _convert_daily_payload(con, schema, tabela, payload)
-                manifest_record(con, rel, st, criadas)
+                # `raw=True` desde o flip dos arquivo-dia (§334): o `_day_json`
+                # reconstrói a lista pelo `_raw`, na ordem do `_seq`.
+                criadas = _convert_daily_payload(con, schema, tabela, payload, raw=True)
+                manifest_record(con, chave, st, criadas)
                 stats['converted'].extend(
                     '%s:%s' % (_daily_db_name(familia), c) for c in criadas)
             except Exception:                                  # noqa: BLE001

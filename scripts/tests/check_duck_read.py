@@ -176,6 +176,32 @@ check('3d. mapping servido do banco pelo /static/data',
       resp is not None and json.loads(resp.get_data(as_text=True))[0],
       {'BANK': 'DO BANCO'})
 
+# ── 3e. arquivo-dia: o funil _day_json DB-first ─────────────────────────────
+dia = os.path.join(TMP, 'cache', 'new deals', 'NDF', 'Commodities', '2026', '06',
+                   '20260618_ndfcomm.json')
+os.makedirs(os.path.dirname(dia), exist_ok=True)
+R._atomic_write_json(dia, [{'Deal': 'DBH-9AAA'}, {'Deal': 'DBH-9BBB'}])
+M.flush(20)
+_tamper('daily_new_deals.db',
+        'UPDATE ndf_commodities.d_20260618_ndfcomm SET "_raw" = '
+        '\'{"Deal": "DO BANCO"}\' WHERE "Deal" = \'DBH-9AAA\'')
+lidas = R._day_json(dia, os.path.getmtime(dia), os.path.getsize(dia))
+check('3e. _day_json veio do banco, NA ORDEM do arquivo',
+      lidas, [{'Deal': 'DO BANCO'}, {'Deal': 'DBH-9BBB'}])
+obj = os.path.join(TMP, 'cache', 'reconciliation', 'payrec', '2026-07-08.json')
+os.makedirs(os.path.dirname(obj), exist_ok=True)
+R._atomic_write_json(obj, {'success': True, 'summary': [{'a': 1}]})
+M.flush(20)
+lidas = R._day_json(obj, os.path.getmtime(obj), os.path.getsize(obj))
+check('3e. payload-objeto continua vindo do JSON (embrulhado em lista)',
+      lidas, [{'success': True, 'summary': [{'a': 1}]}])
+vazio = os.path.join(TMP, 'cache', 'new deals', 'NDF', 'Commodities', '2026', '06',
+                     '20260619_ndfcomm.json')
+R._atomic_write_json(vazio, [])
+M.flush(20)
+check('3e. dia vazio reconstrói como lista vazia',
+      R._day_json(vazio, os.path.getmtime(vazio), os.path.getsize(vazio)), [])
+
 # ── 4. banco ausente/ilegível nunca é erro ──────────────────────────────────
 os.rename(os.path.join(DBDIR, 'reference_data.db'),
           os.path.join(DBDIR, 'reference_data.db.fora'))
