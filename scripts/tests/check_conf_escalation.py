@@ -101,7 +101,15 @@ check("   'OPTION' × EDG é a MESMA coisa que FXO × EDG",
       grupo('OPTION', 'EDG'), 'edg-option')
 check('   e a caixa/acento não decidem nada', grupo(' swap corporate ', 'edg'),
       'edg-corp-swap')
-check('SWAP CORPORATE × CEM não entra no CEM Swap', grupo('SWAP CORPORATE', 'CEM'), '')
+# Na CEM as duas filas são da MESMA mesa, então o grupo aceita os dois produtos
+# — ao contrário da EDG, onde o corporate tem destinatários próprios. Antes o
+# `SWAP CORPORATE × CEM` não casava com grupo nenhum e caía no `unmatched`:
+# cobrança que ninguém recebe, com uma linha âmbar no card como único aviso.
+check('SWAP CORPORATE × CEM entra no MESMO grupo que SWAP × CEM',
+      grupo('SWAP CORPORATE', 'CEM'), 'cem-swap')
+check('   e a EDG continua separando as duas filas',
+      (grupo('SWAP', 'EDG'), grupo('SWAP CORPORATE', 'EDG')),
+      ('edg-swap', 'edg-corp-swap'))
 check('FXO × CEM não tem grupo', grupo('FXO', 'CEM'), '')
 check('NDF COMM × CEM não tem grupo', grupo('NDF COMM', 'CEM'), '')
 
