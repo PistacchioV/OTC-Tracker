@@ -343,10 +343,13 @@ check('5. os bancos dos desenhos anteriores foram removidos',
        ('translations.db', 'mappings.db', 'file_interpreter.db', 'static_data.db',
         'mappings_mt300.db', 'control_panel_mt300_status.db')],
       [False] * 6)
+# Eles saem em `cobertos`, não em `ignored`: outro conversor da MESMA rodada os
+# leva, e contá-los como "fora" fazia o resumo parecer perda.
 check('5. RefData/CPD/registro/calendarios ficam com os conversores proprios',
-      sorted(x for x in st['ignored'] if not x.startswith('cache/')),
+      sorted(x for x in st['cobertos'] if not x.startswith('cache/')),
       ['CounterpartyDetails.json', 'RefData.json', 'anbima.json', 'bursa.json',
        'holiday-calendars.json'])
+check('5. e nada sobra como fora de todo conversor', st['ignored'], [])
 con = duckdb.connect(os.path.join(OUT, 'mappings', 'bank-name.db'), read_only=True)
 check('5. mapping: tipado, byte a byte, com o registro exato em _raw',
       con.execute('SELECT "CODE", "B3", json_extract_string("_raw", \'$.BANK\') '
@@ -363,7 +366,8 @@ check('5. segunda rodada nao reconverte nada', len(st['converted']), 0)
 from apps.pages import json_to_duckdb as core                # noqa: E402
 st = core.convert_dataset_files(DATA, OUT, ['mappings/bank-name.json', 'anbima.json'])
 check('5. a porta do espelho: so o dado converte, calendario e ignorado',
-      (len(st['skipped']), st['ignored']), (1, ['anbima.json']))
+      (len(st['skipped']), st['cobertos'], st['ignored']),
+      (1, ['anbima.json'], []))
 check('5. cada JSON tem o SEU banco, na pasta do JSON',
       core._dataset_rel_target('mappings/mt300.json', set()),
       ('mappings/mt300.db', 'mt300'))

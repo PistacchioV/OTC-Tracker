@@ -990,9 +990,31 @@ def _dataset_legacy_dbs(data_dir):
     return legados
 
 
+def _dataset_fora(rel, cal_files, stats):
+    """Onde entra o JSON que este conversor NÃO leva: `cobertos` quando outro
+    conversor da mesma rodada o converte (o RefData/CPD e o registro, pelo
+    `convert_refdata`/`convert_holidays`; os arquivos de calendário, pelo
+    `convert_holidays`), `ignored` quando ninguém o leva.
+
+    A condição é a MESMA do `_dataset_rel_target` — ela decide o mesmo corte,
+    aqui só para dizer de que lado dele o arquivo caiu."""
+    partes = rel.split('/')
+    if len(partes) == 1 and (partes[0] in _DATASET_COVERED_TOP
+                             or partes[0].lower() in cal_files):
+        stats['cobertos'].append(rel)
+    else:
+        stats['ignored'].append(rel)
+
+
 def _novo_dataset_stats():
+    # `cobertos` são os JSONs que OUTRO conversor da mesma rodada converte — o
+    # RefData/CPD (refdata) e os arquivos de calendário (holidays). Eles saíam
+    # no mesmo balde `ignored` dos que ficam de fora de verdade, e o resumo
+    # dizia só `fora deste conversor: 15`: um número que se lê como perda
+    # quando é exatamente o contrário.
     return {'db': '<pasta>_<arquivo>.db (um por JSON)', 'dbs': [],
-            'converted': [], 'skipped': [], 'errors': [], 'ignored': []}
+            'converted': [], 'skipped': [], 'errors': [], 'ignored': [],
+            'cobertos': []}
 
 
 def _convert_dataset_rels(data_dir, out_dir, rels, force, stats, cal_files):
@@ -1013,7 +1035,7 @@ def _convert_dataset_rels(data_dir, out_dir, rels, force, stats, cal_files):
         for rel in rels:
             alvo = _dataset_rel_target(rel, cal_files)
             if alvo is None:
-                stats['ignored'].append(rel)
+                _dataset_fora(rel, cal_files, stats)
                 continue
             db, tabela = alvo
             chave = _dataset_manifest_key(rel)
@@ -1076,7 +1098,7 @@ def convert_datasets(data_dir, out_dir, force=False, dry_run=False):
                 continue
             rel = fname if rel_dir == '.' else rel_dir + '/' + fname
             if _dataset_rel_target(rel, cal_files) is None:
-                stats['ignored'].append(rel)
+                _dataset_fora(rel, cal_files, stats)
             else:
                 rels.append(rel)
     if dry_run:
@@ -1127,8 +1149,10 @@ def _data_dir_padrao():
 
 def _resumo(nome, stats, houve_erro):
     print('\n== %s -> %s' % (nome, os.path.basename(stats['db'])))
-    print('   convertidos: %d | inalterados: %d%s' % (
+    print('   convertidos: %d | inalterados: %d%s%s' % (
         len(stats['converted']), len(stats['skipped']),
+        ' | ja cobertos por outro conversor: %d' % len(stats['cobertos'])
+        if stats.get('cobertos') else '',
         ' | fora deste conversor: %d' % len(stats['ignored'])
         if stats.get('ignored') else ''))
     for aviso in stats.get('avisos') or ():

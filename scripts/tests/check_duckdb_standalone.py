@@ -199,6 +199,22 @@ check('segunda rodada de uma fatia não reconverte nada',
       'convertidos: 0' in _buf.getvalue())
 
 
+# --- "outro conversor já leva" não é "ficou de fora" --------------------------
+# Os arquivos de calendário e o RefData/CPD saíam no mesmo balde dos JSONs que
+# ninguém converte, e o resumo dizia `fora deste conversor: 15` — um número que
+# se lê como perda quando é o contrário: são os que o holidays/refdata levam na
+# MESMA rodada.
+mod = _carregar('sa_cob', os.path.join(PASTA, '01_cadastros.py'))
+_buf = io.StringIO()
+with contextlib.redirect_stdout(_buf):
+    mod.main(['--data-dir', DATA, '--out-dir', os.path.join(DATA, 'db-cob'),
+              '--only', 'datasets', '--dry-run'])
+_cob = _buf.getvalue()
+# O DATA de teste tem holiday-calendars.json e o anbima.json que ele aponta.
+check('calendario e registro contam como COBERTOS, nao como fora',
+      'ja cobertos por outro conversor: 2' in _cob, True)
+check('e nada sobra como fora deste conversor', 'fora deste conversor' in _cob, False)
+
 # --- A GRAFIA da pasta não pode decidir se a fatia roda -----------------------
 # A dev tem `b3 files` e o share do JPM tem `B3 Files`. Casando por string
 # exata, o 02_2 saía com `convertidos: 0` e a fatia inteira ficava de fora sem

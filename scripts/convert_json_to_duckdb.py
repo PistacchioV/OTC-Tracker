@@ -89,8 +89,10 @@ def main(argv=None):
     for nome in escolhidos:
         stats = conversores[nome](data_dir, out_dir, force=args.force, dry_run=args.dry_run)
         print('\n== %s -> %s' % (nome, os.path.basename(stats['db'])))
-        print('   convertidos: %d | inalterados: %d%s' % (
+        print('   convertidos: %d | inalterados: %d%s%s' % (
             len(stats['converted']), len(stats['skipped']),
+            ' | já cobertos por outro conversor: %d' % len(stats['cobertos'])
+            if stats.get('cobertos') else '',
             ' | fora deste conversor: %d' % len(stats['ignored'])
             if stats.get('ignored') else ''))
         for aviso in stats.get('avisos') or ():
