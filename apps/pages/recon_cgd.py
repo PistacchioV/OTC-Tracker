@@ -716,10 +716,10 @@ def salvar(res):
     path = _cache_path(res.get('ref'))
     try:
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        tmp = path + '.tmp'
-        with open(tmp, 'w', encoding='utf-8') as fh:
-            json.dump(res, fh, ensure_ascii=False)
-        os.replace(tmp, path)                    # escrita atômica: nunca meio JSON
+        # Pelo FUNIL (auditoria §335): a mesma escrita atômica, com o espelho
+        # DuckDB avisado de graça.
+        from apps.pages import routes
+        routes._atomic_write_json(path, res)
     except Exception:
         _LOG.exception('[recon-cgd] não consegui gravar o cache do dia')
     return path

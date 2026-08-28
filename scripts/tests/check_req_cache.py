@@ -96,12 +96,16 @@ ok(decorados == ESPERADOS,
    'os sete loaders decorados com @_req_cached (falta=%s sobra=%s)'
    % (sorted(ESPERADOS - decorados) or '-', sorted(decorados - ESPERADOS) or '-'))
 
-# ── 3. todo save que escapa do funil invalida por conta própria ─────────────
-# `_atomic_write_json` cobre os 74 pontos que passam por ele. Estes dois não
-# passam: escrevem com `json.dump` direto.
+# ── 3. os saves passam TODOS pelo funil ─────────────────────────────────────
+# `_otm_save` e `_latam_save` escreviam com `json.dump` direto e invalidavam
+# o cache à mão; a auditoria da migração DuckDB (§335) os levou para o
+# `_atomic_write_json`, que bumpa E avisa o espelho — o bump manual saiu
+# junto com o write cru, e o `check_duck_writers.py` impede a volta.
 for saver in ('_otm_save', '_latam_save'):
-    ok('_bump_cache_gen(' in corpo.get(saver, ''),
-       '%s invalida o cache (não passa pelo _atomic_write_json)' % saver)
+    ok('_atomic_write_json(' in corpo.get(saver, ''),
+       '%s grava pelo FUNIL (bump + espelho vêm de lá)' % saver)
+    ok('json.dump(' not in corpo.get(saver, ''),
+       '%s sem write cru' % saver)
 
 # O funil mora na platform/ desde a fatia `platform/json_cache.py` — a
 # asserção acompanha o código (era em `corpo`, do routes.py).

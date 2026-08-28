@@ -41,8 +41,8 @@ def _load_ndm_pending_recipients():
 
 def _save_ndm_pending_recipients(to, cc):
     os.makedirs(_R()._DAILY_METRIC_DIR, exist_ok=True)
-    with open(_NDM_PENDING_RECIPIENTS_FILE, 'w', encoding='utf-8') as fh:
-        json.dump({'to': to or '', 'cc': cc or ''}, fh, ensure_ascii=False, indent=2)
+    _R()._atomic_write_json(_NDM_PENDING_RECIPIENTS_FILE,
+                            {'to': to or '', 'cc': cc or ''})
 
 
 def _ndm_pending_claim_slot(slot):

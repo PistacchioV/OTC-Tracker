@@ -14395,3 +14395,36 @@ foi regerado no formato novo e reentregue.
 Com isto o mapa fecha: escrita nos JSONs (rollback fácil) → espelho vivo → leitura DB-first
 em cadastros, datasets, calendários, navegador E arquivo-dia. O que sobra em JSON por
 decisão: `translations/` (§332), os payload-objeto das recons e os leitores de data exata.
+
+## §335 — a varredura da migração: dois achados reais, os dois fechados (2026-08-27)
+
+Auditoria completa da migração JSON → DuckDB (escritas × espelho × leituras × manifest), a
+pedido. Dois achados de verdade:
+
+**1. ~30 escritores de DATA_DIR fora do funil.** O censo de `json.dump` em `apps/pages` achou
+a classe inteira: os caches das três recons, o histórico do Pay/Rec, os comentários da Recon
+FXO, os tickets, o arquivo-dia do Operations B3, o overlay de status do settlement, o snapshot
+do Pending Confirmation, o `VCP.json` do CETIP, os recipients do Control Panel (sete features)
+e as edições in-place do New Deals — todos gravavam com `open`+`json.dump` direto, sem passar
+pelo `_atomic_write_json`. A LEITURA nunca quebrou (o contrato de frescor derruba o banco
+defasado para o JSON), mas os bancos ficavam VELHOS em silêncio para quem os consulta por fora
+— até a próxima carga completa. Todos migraram para o funil, que é atômico e avisa o espelho
+(vários ganharam atomicidade que não tinham; os que já faziam tmp+replace perderam a cópia
+local da mesma lógica; o `otc_tickets` mantém o gravador próprio documentado e ganhou o
+aviso). O `check_duck_writers.py` PRENDE a regra por varredura: `json.dump` em `apps/pages` só
+na allowlist (o funil + os dois stores com aviso próprio) — o próximo write cru nasce
+reprovado, com arquivo e linha.
+
+**2. Feriados sem ordem garantida.** As tabelas de calendário e a `_registry` não tinham
+`_seq`: a ordem do REGISTRO é a ordem das pills e do sorteio de cores da tela, e dois feriados
+no MESMO dia têm de voltar como o JSON os guarda — o SELECT sem ordenação não promete nenhum
+dos dois. O registro passou pelo `_com_raw` (o leitor remonta por `_seq`/`_raw`), as tabelas
+de calendário ganharam a coluna `_seq` (com `ORDER BY CAST`), e os manifests de feriados
+entraram na chave versionada (`#raw2`) — os bancos de ontem reconvertem sozinhos.
+
+O que a varredura CONFIRMOU são (por construção e por teste): todos os leitores religados têm
+frescor + fallback + guarda de patch; as chaves de manifest casam entre motor, espelho e
+leitores; `.bak`/`.lock`/`_last`/`__pycache__` ficam fora; o estático cai para o empacotado
+quando o arquivo não existe; e o seed da subida (`_seed_data_dir`, cópia sem aviso) converge
+pelo heal-de-leitura ou pela carga. Suíte completa verde antes e depois; o standalone foi
+regerado com o formato dos feriados.

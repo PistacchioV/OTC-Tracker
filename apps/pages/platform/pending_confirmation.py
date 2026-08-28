@@ -552,8 +552,8 @@ def _pc_snapshot_pending(rows_pending):
     out_dir = os.path.join(_PC_SNAPSHOT_DIR, today.strftime('%Y'), today.strftime('%m'), today.strftime('%d'))
     os.makedirs(out_dir, exist_ok=True)
     path = os.path.join(out_dir, 'pending-confirmation_{}.json'.format(today.strftime('%Y%m%d')))
-    with open(path, 'w', encoding='utf-8') as fh:
-        json.dump(rows_pending, fh, ensure_ascii=False, indent=2)
+    from apps.pages import routes
+    routes._atomic_write_json(path, rows_pending)   # funil: atômico + espelho (§335)
     return path
 
 

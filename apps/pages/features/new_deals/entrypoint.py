@@ -1400,8 +1400,7 @@ def api_ndf_mapping_b3():
                         with open(file_path, 'r', encoding='utf-8') as fh:
                             deals_list = json.load(fh)
                         deals_list[idx].update(updates)
-                        with open(file_path, 'w', encoding='utf-8') as fh:
-                            json.dump(deals_list, fh, ensure_ascii=False, indent=2)
+                        _R()._atomic_write_json(file_path, deals_list)   # funil (§335)
                         if new_status == 'Success':
                             intrag_candidate = deals_list[idx].copy()
                     except Exception:
@@ -1746,8 +1745,7 @@ def api_mapping_b3():
                         with open(file_path, 'r', encoding='utf-8') as fh:
                             deals_list = json.load(fh)
                         deals_list[idx].update(updates)
-                        with open(file_path, 'w', encoding='utf-8') as fh:
-                            json.dump(deals_list, fh, ensure_ascii=False, indent=2)
+                        _R()._atomic_write_json(file_path, deals_list)   # funil (§335)
                         if new_status == 'Success':
                             intrag_candidate = deals_list[idx].copy()
                     except Exception:

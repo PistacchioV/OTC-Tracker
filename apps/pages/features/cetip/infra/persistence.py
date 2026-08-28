@@ -40,9 +40,9 @@ def _save_cetip_recipients(rec):
     argumentos apagar a terceira em silêncio — que é justamente o que o POST
     fazia quando o payload vinha sem uma delas (ver `_cetip_merge_recipients`)."""
     os.makedirs(os.path.dirname(_CETIP_RECIPIENTS_FILE), exist_ok=True)
-    with open(_CETIP_RECIPIENTS_FILE, 'w', encoding='utf-8') as fh:
-        _R().json.dump({k: str((rec or {}).get(k, '') or '') for k in domain._CETIP_RECIPIENT_KEYS},
-                  fh, ensure_ascii=False, indent=2)
+    _R()._atomic_write_json(
+        _CETIP_RECIPIENTS_FILE,
+        {k: str((rec or {}).get(k, '') or '') for k in domain._CETIP_RECIPIENT_KEYS})
 
 
 def _cetip_merge_recipients(payload):
@@ -154,8 +154,7 @@ def _cetip_update_vcp_json(src_path):
                 row['Classificação Nível 1'] = g(3)
                 updated += 1
 
-        with open(_R().VCP_JSON, 'w', encoding='utf-8') as fh:
-            _R().json.dump(current, fh, ensure_ascii=False, indent=2)
+        _R()._atomic_write_json(_R().VCP_JSON, current)
         _R().log.info("[cetip] VCP.json refreshed: %d updated, %d added (%d total)",
                  updated, added, len(current))
         return _R().VCP_JSON
