@@ -373,6 +373,7 @@
   "cp-r-contacts-title": "Actualizar Contactos",
   "cp-r-contacts-desc": "Importa la planilla \"CONTATO DE CLIENTES\" y reemplaza los contactos de cada contraparte solo con los que están Activos (coincidencia por SPN, ceros a la izquierda ignorados). Los datos de CGD y bancarios se conservan.",
   "cp-contacts-file": "Planilla (.xlsx, .xlsm, .csv)",
+  "cp-contacts-dz": "Arrastre la planilla aquí o haga clic para seleccionar",
   "cp-contacts-meta": "Planilla → Contrapartes",
   "cp-ref-date": "Fecha de referencia",
   "cp-pending": "Pendiente de configuración",

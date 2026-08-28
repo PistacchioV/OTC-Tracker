@@ -374,6 +374,7 @@
   "cp-r-contacts-title": "Update Contacts",
   "cp-r-contacts-desc": "Imports the \"CONTATO DE CLIENTES\" spreadsheet and replaces each counterparty's contacts with the Active ones only (matched by SPN, leading zeros ignored). CGD and banking data are preserved.",
   "cp-contacts-file": "Spreadsheet (.xlsx, .xlsm, .csv)",
+  "cp-contacts-dz": "Drop the spreadsheet here or click to browse",
   "cp-contacts-meta": "Spreadsheet → Counterparties",
   "cp-ref-date": "Reference date",
   "cp-pending": "Pending configuration",

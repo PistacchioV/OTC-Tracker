@@ -992,8 +992,14 @@
                     </p>
                     <div class="cp-field">
                         <label data-lang="cp-contacts-file">Spreadsheet (.xlsx, .xlsm, .csv)</label>
-                        <input type="file" id="cp-contacts-file" accept=".xlsx,.xlsm,.csv"
-                               class="form-control form-control-sm">
+                        <div class="cp-dropzone" id="cpContactsDrop" tabindex="0">
+                            <input type="file" id="cp-contacts-file" accept=".xlsx,.xlsm,.csv" hidden>
+                            <div class="cp-dz-hint">
+                                <i class="ti ti-cloud-upload"></i>
+                                <span data-lang="cp-contacts-dz">Drop the spreadsheet here or click to browse</span>
+                            </div>
+                            <ul class="cp-dz-list" id="cp-contacts-list"></ul>
+                        </div>
                     </div>
                     <div class="cp-card__foot">
                         <span class="cp-card__meta">
@@ -1183,6 +1189,51 @@ function cpRunRoutine(btn) {
         });
 }
 
+// ── Single-file dropzone ─────────────────────────────────────────────────────
+// Turns a `.cp-dropzone` into the visible face of a hidden <input type=file>.
+// The input stays the SOURCE OF TRUTH — the drop only fills it, via DataTransfer
+// — so `cpRunUpload` keeps reading `input.files[0]` and nothing else changes.
+// One file: a card that takes a single spreadsheet must not let two pile up and
+// silently upload whichever came first.
+function cpWireDropzone(dropId, inputId, listId) {
+    var drop = document.getElementById(dropId);
+    var input = document.getElementById(inputId);
+    var listEl = document.getElementById(listId);
+    if (!drop || !input || !listEl) return;
+    function esch(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+    function render() {
+        var f = input.files && input.files[0];
+        listEl.innerHTML = f
+            ? '<li><i class="ti ti-file"></i>' + esch(f.name) + '<span class="cp-dz-x">&times;</span></li>'
+            : '';
+        var x = listEl.querySelector('.cp-dz-x');
+        if (x) x.addEventListener('click', function (e) { e.stopPropagation(); input.value = ''; render(); });
+    }
+    function take(fileList) {
+        if (!fileList || !fileList.length) return;
+        try {
+            var dt = new DataTransfer();
+            dt.items.add(fileList[0]);
+            input.files = dt.files;
+        } catch (err) { return; }   // browser sem DataTransfer: o clique ainda funciona
+        render();
+    }
+    drop.addEventListener('click', function (e) { if (e.target.closest('.cp-dz-x')) return; input.click(); });
+    drop.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); input.click(); } });
+    // `change` cobre os DOIS lados: o arquivo escolhido pelo browse e a limpeza
+    // que o runner faz depois de um upload com sucesso (ele dispara o evento).
+    input.addEventListener('change', render);
+    ['dragenter', 'dragover'].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add('cp-dz-over'); }); });
+    ['dragleave', 'dragend'].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove('cp-dz-over'); }); });
+    drop.addEventListener('drop', function (e) {
+        e.preventDefault(); drop.classList.remove('cp-dz-over');
+        take(e.dataTransfer && e.dataTransfer.files);
+    });
+    render();
+}
+
+cpWireDropzone('cpContactsDrop', 'cp-contacts-file', 'cp-contacts-list');
+
 // ── Upload routine runner ────────────────────────────────────────────────────
 // Cards with data-upload-endpoint POST a file (multipart) from data-file-input.
 function cpRunUpload(btn) {
@@ -1212,6 +1263,9 @@ function cpRunUpload(btn) {
                             html: res.body.message || t('cp-done-msg', 'Done.'),
                             confirmButtonColor: '#0066cc' });
                 fi.value = '';
+                // `value = ''` NÃO dispara `change`: sem este aviso, o dropzone
+                // continuaria mostrando o arquivo que já foi enviado.
+                fi.dispatchEvent(new Event('change'));
             } else {
                 Swal.fire({ icon: 'error', title: t('cp-err-title', 'Routine failed'),
                             html: (res.body && res.body.error) || t('cp-err-msg', 'An error occurred while running the routine.'),
