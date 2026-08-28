@@ -8,7 +8,9 @@ NDF, Option, Swap e Operations (DPOSICAO, DFLUXO).
 Versão AUTOCONTIDA: roda em QUALQUER máquina, sem o código do OTC Tracker por
 perto. Requisito único:  pip install duckdb
 
-    Origem : I:\Confirmation\Derivativos\OTC Tracker\Application\static\data
+    Origem : o static\data do share — o UNC
+             (\\Nawest.ad.jpmorganchase.com\lac\BRA\intra\...) ou a letra I:,
+             o que existir na máquina. `--data-dir` manda em qualquer caso.
     Destino: ...\static\data\db   (a pasta db dentro da origem)
 
 Uso:
@@ -987,7 +989,23 @@ def convert_datasets(data_dir, out_dir, force=False, dry_run=False):
 import argparse
 import sys
 
-DATA_DIR_PADRAO = r'I:\Confirmation\Derivativos\OTC Tracker\Application\static\data'
+# O share tem DOIS endereços que apontam para o mesmo lugar: o UNC, que é o que a
+# instância do JPM usa (o bloco ENV:PROD do config), e a letra `I:` mapeada, que
+# é como a mesa o enxerga. Qual deles existe depende da máquina de quem roda,
+# então tenta-se na ordem e vale o primeiro que responder — fixar um só faria o
+# script não achar nada na metade das máquinas, e o sintoma seria "não converteu
+# nada", não "caminho errado".
+DATA_DIR_CANDIDATOS = (
+    r'\\Nawest.ad.jpmorganchase.com\lac\BRA\intra\Confirmation\Derivativos\OTC Tracker\Application\static\data',
+    r'I:\Confirmation\Derivativos\OTC Tracker\Application\static\data',
+)
+
+
+def _data_dir_padrao():
+    for cand in DATA_DIR_CANDIDATOS:
+        if os.path.isdir(cand):
+            return cand
+    return DATA_DIR_CANDIDATOS[0]
 
 
 def _resumo(nome, stats, houve_erro):
@@ -1005,15 +1023,16 @@ def _resumo(nome, stats, houve_erro):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument('--data-dir', default=DATA_DIR_PADRAO,
-                    help='origem dos JSONs (padrão: o static\\data do share)')
+    ap.add_argument('--data-dir', default=None,
+                    help='origem dos JSONs (padrão: o static\\data do share — o UNC '
+                         'ou a letra I:, o que existir na máquina)')
     ap.add_argument('--out-dir', default=None,
                     help='destino dos .db (padrão: a pasta db dentro da origem)')
     ap.add_argument('--force', action='store_true', help='reconverte mesmo sem mudança')
     ap.add_argument('--dry-run', action='store_true', help='só lista o que converteria')
     args = ap.parse_args(argv)
 
-    data_dir = os.path.abspath(args.data_dir)
+    data_dir = os.path.abspath(args.data_dir or _data_dir_padrao())
     out_dir = os.path.abspath(args.out_dir or os.path.join(data_dir, 'db'))
     print('origem : %s' % data_dir)
     print('destino: %s' % out_dir)
