@@ -458,10 +458,14 @@ def _tokens(texto):
 
 def _sem_data(stem, dia):
     """O nome do arquivo sem a data — o que sobra é a TAG, que é quem diz de
-    que arquivo do dia se trata (DFLUXO × DPOSICAO, otm-settlement × cognos)."""
+    que arquivo do dia se trata (DFLUXO × DPOSICAO, otm-settlement × cognos).
+
+    Os separadores que sobram nas pontas caem junto: tirar a data de
+    `otm-settlement_20260728` deixa um `_` no fim, e ele viraria o nome de
+    arquivo `otm-settlement_.db`."""
     for tok in (dia.strftime('%Y%m%d'), dia.strftime('%y%m%d'), dia.strftime('%Y-%m-%d')):
         stem = stem.replace(tok, '')
-    return stem
+    return stem.strip(' _-')
 
 
 def _tabela_dia(banco_toks, stem, dia):
@@ -550,49 +554,67 @@ def _convert_daily_payload(con, schema, tabela, payload, raw=False):
     return criadas
 
 
-def _daily_db_name(rotina_parts, tag=''):
-    """O nome do banco de um produto de arquivo-dia: o caminho de pastas sob
-    `cache/` (sem os segmentos de data), mais a tag do nome do arquivo quando
-    ela for pedida.
+# Caracteres que o Windows não aceita em nome de arquivo/pasta. O resto do nome
+# de origem é PRESERVADO (espaço e hífen inclusive): a pasta `db/` espelha a
+# árvore do `DATA_DIR`, e é isso que faz achar o banco de uma tela ser o mesmo
+# gesto de achar o JSON dela.
+_INVALIDO_NO_NOME = re.compile(r'[<>:"/\\|?*\x00-\x1f]+')
 
-    Dois cuidados que só aparecem no nome: a tag entra PODADA dos tokens que a
-    rotina já diz (`payrec` + `payrec_status` → `daily_payrec_status.db`, não
-    `daily_payrec_payrec_status.db`), e o prefixo `daily_` não é acrescentado
-    à rotina que já se chama `daily …` — senão o Daily Settlement sairia
-    `daily_daily_settlement_otm.db`."""
-    toks = []
-    for parte in rotina_parts:
-        toks.extend(_tokens(parte))
-    for t in _tokens(tag):
-        if t not in toks:
-            toks.append(t)
-    if not toks:
-        toks = ['cache']
-    if toks[0] != 'daily':
-        toks.insert(0, 'daily')
-    return '_'.join(toks) + '.db'
+
+def _nome_seguro(texto, padrao='sem_nome'):
+    """Um segmento de caminho válido, preservando o nome de origem."""
+    s = _INVALIDO_NO_NOME.sub('_', str(texto or '')).strip().rstrip('.')
+    return s or padrao
+
+
+def _daily_db_name(rotina_parts, tag=''):
+    """O CAMINHO do banco de um produto de arquivo-dia, relativo ao `db/`.
+
+    A pasta espelha a árvore de `cache/` e o último segmento vira o ARQUIVO:
+    `cache/new deals/NDF/Vanilla` → `cache/new deals/NDF/Vanilla.db`. Antes
+    tudo isso era achatado num nome só (`daily_new_deals_ndf_vanilla.db`) e os
+    133 bancos caíam soltos na mesma pasta — achar o banco de uma tela virava
+    caça ao nome. Com a árvore espelhada, quem sabe onde está o JSON sabe onde
+    está o banco.
+
+    Quando a rotina NÃO se ramifica em pastas, quem separa os produtos é a TAG
+    do nome do arquivo, e é ela que vira o arquivo dentro da pasta da rotina
+    (`cache/daily settlement/otm-settlement.db`). Tag ausente — ou que só
+    repete o nome da rotina, como o `pending-confirmation_AAAAMMDD` — não
+    ganha pasta própria: seria `cache/pending-confirmation/pending-confirmation.db`,
+    uma pasta para um arquivo só."""
+    partes = [_nome_seguro(p) for p in rotina_parts if str(p or '').strip()]
+    if not partes:
+        partes = ['cache']
+    tag = str(tag or '').strip()
+    if tag and _tokens(tag) != _tokens(partes[-1]):
+        # A rotina de um nível só: a tag é quem distingue os produtos, então ela
+        # é o arquivo e a rotina é a pasta.
+        return '/'.join(partes + [_nome_seguro(tag)]) + '.db'
+    return '/'.join(partes) + '.db'
 
 
 def _daily_rel_target(rel):
-    """(banco, schema, tabela) de UM caminho relativo de arquivo-dia — ou
-    `None` quando o arquivo não é um dia (ponteiros `_last`, configs avulsas).
+    """(caminho do banco, schema, tabela) de UM caminho relativo de arquivo-dia
+    — ou `None` quando o arquivo não é um dia (ponteiros `_last`, configs
+    avulsas).
 
-    **A quebra é por PRODUTO**: o caminho INTEIRO de pastas sob `cache/`, sem
-    os segmentos de data, nomeia o banco — cada produto tem o seu
-    (`daily_new_deals_ndf_vanilla.db`, `daily_new_deals_option_fxo.db`,
-    `daily_new_deals_intrag_ndf.db`) e cada dia é uma tabela dentro dele.
+    **A quebra é por PRODUTO, e a pasta `db/` espelha a árvore de `cache/`**:
+    `cache/new deals/NDF/Vanilla/2026/07/…` vira
+    `db/cache/new deals/NDF/Vanilla.db`, com cada dia como uma tabela dentro
+    dele. Os segmentos de ANO/MÊS/DIA não viram pasta — eles já são a tabela.
 
     Onde a rotina **não se ramifica em pastas**, quem separa os produtos é o
-    NOME do arquivo, e então é a TAG dele que nomeia o banco: o Daily
-    Settlement grava os dez arquivos do dia (`otm-settlement`, `ndf-cockpit`,
-    `cognos`, …) na MESMA pasta, e sem isso os dez cairiam num banco só —
-    justamente a rotina em que a quebra por produto é mais útil. O corte é
-    pela CONTAGEM de pastas, e não por olhar os vizinhos em disco, porque
-    esta função tem de ser pura sobre o caminho: o espelho vivo converte UM
-    arquivo por vez e não pode depender de varrer o diretório.
+    NOME do arquivo, e então é a TAG dele que vira o banco dentro da pasta da
+    rotina: o Daily Settlement grava os dez arquivos do dia (`otm-settlement`,
+    `ndf-cockpit`, `cognos`, …) na MESMA pasta `AAAA/MM/DD`, e sem isso os dez
+    cairiam num banco só — justamente a rotina em que a quebra é mais útil. O
+    corte é pela CONTAGEM de pastas, e não por olhar os vizinhos em disco,
+    porque esta função tem de ser pura sobre o caminho: o espelho vivo converte
+    UM arquivo por vez e não pode depender de varrer o diretório.
 
-    O schema é sempre `main` — o que era subárvore agora está no nome do
-    banco, e um schema além disso repetiria a mesma informação."""
+    O schema é sempre `main` — o que era subárvore agora está no CAMINHO, e um
+    schema além disso repetiria a mesma informação."""
     parts = rel.split('/')
     if len(parts) < 2 or parts[0] != 'cache':
         return None
@@ -603,9 +625,11 @@ def _daily_rel_target(rel):
     dia = _dia_de(parts[1:-1], stem)
     if dia is None:
         return None
-    rotina = [p for p in parts[1:-1] if not p.isdigit()] or ['cache']
-    banco = _daily_db_name(rotina, _sem_data(stem, dia) if len(rotina) < 2 else '')
-    return banco, 'main', _tabela_dia(set(_tokens(banco[:-3])), stem, dia)
+    rotina = ['cache'] + [p for p in parts[1:-1] if not p.isdigit()]
+    banco = _daily_db_name(rotina, _sem_data(stem, dia) if len(rotina) < 3 else '')
+    # A tabela deixa de repetir o que o CAMINHO já diz.
+    return banco, 'main', _tabela_dia(set(_tokens(banco[:-3].replace('/', '_'))),
+                                      stem, dia)
 
 
 def _novo_daily_stats():
@@ -619,9 +643,11 @@ def _convert_daily_rels(data_dir, out_dir, rels, force, stats):
     cons = {}
 
     def _con_do_banco(nome):
-        db = os.path.join(out_dir, nome)
+        # `nome` é um CAMINHO relativo (`cache/new deals/NDF/Vanilla.db`): a
+        # pasta espelha a árvore de origem, então é ela que precisa existir.
+        db = os.path.join(out_dir, *nome.split('/'))
         if db not in cons:
-            os.makedirs(out_dir, exist_ok=True)
+            os.makedirs(os.path.dirname(db), exist_ok=True)
             cons[db] = duckdb.connect(db)
             ensure_manifest(cons[db])
             stats['dbs'].append(db)
@@ -670,19 +696,76 @@ def convert_daily_files(data_dir, out_dir, rels, force=False):
 
 
 def _drop_legacy_dbs(out_dir, legados, alvos, stats, motivo):
-    """Apaga os bancos do desenho ANTERIOR que a quebra nova não usa mais.
+    """Apaga os bancos dos desenhos ANTERIORES que a quebra nova não usa mais.
 
-    O nome que continua sendo alvo NÃO é tocado — `daily_pending_confirmation.db`
-    é o mesmo banco antes e depois (a rotina nunca se ramificou), com o mesmo
-    manifest, e apagá-lo custaria uma reconversão inteira sem motivo. O que
-    sobra é 100% derivado dos JSONs e recriável; deixá-lo em disco é que seria
-    o problema, porque quem consulta os bancos por fora do app encontraria dois
-    formatos e nada dizendo qual deles é o de hoje."""
-    for nome in sorted(set(legados) - set(alvos)):
-        caminho = os.path.join(out_dir, nome)
-        if os.path.isfile(caminho):
-            os.remove(caminho)
-            stats['converted'].append('%s legado removido (%s)' % (nome, motivo))
+    A remoção é por LISTA DE NOMES DERIVADOS, nunca por varredura de `*.db` na
+    pasta: o `DATABASE_DIR` é a casa de TODOS os bancos do app — o de usuários,
+    o de notificações, os três do Pending Confirmation, os dois da esteira, o
+    do Onboarding —, e uma varredura ali apagaria dado que nada recria.
+
+    O nome que continua sendo alvo NÃO é tocado: seria o mesmo banco, com o
+    mesmo manifest, e apagá-lo custaria uma reconversão inteira sem motivo. O
+    que sobra é 100% derivado dos JSONs e recriável; deixá-lo em disco é que
+    seria o problema, porque quem consulta os bancos por fora do app
+    encontraria dois formatos e nada dizendo qual deles é o de hoje."""
+    # O que decide não é o NOME, é o ARQUIVO. O JSON de raiz passou a manter a
+    # caixa do original (`Subjacente.db`) e o nome legado dele era normalizado
+    # (`subjacente.db`): em macOS e Windows os dois nomes são o MESMO arquivo, e
+    # remover o "legado" apagaria o banco recém-criado — a leitura seguinte
+    # cairia no JSON sem ninguém entender por quê. No Linux são dois arquivos de
+    # verdade, e aí o antigo TEM de sair, senão fica um banco órfão que nada
+    # atualiza. `samefile` responde certo nos dois.
+    por_nome = {}
+    for a in alvos:
+        por_nome.setdefault(str(a).lower(),
+                            os.path.join(out_dir, *str(a).split('/')))
+    for nome in sorted(set(legados)):
+        caminho = os.path.join(out_dir, *nome.split('/'))
+        if not os.path.isfile(caminho):
+            continue
+        gemeo = por_nome.get(str(nome).lower())
+        try:
+            if gemeo and os.path.isfile(gemeo) and os.path.samefile(gemeo, caminho):
+                continue
+        except OSError:                                        # noqa: BLE001
+            pass
+        if str(nome) in {str(a) for a in alvos}:
+            continue
+        os.remove(caminho)
+        stats['converted'].append('%s legado removido (%s)' % (nome, motivo))
+
+
+def _legacy_flat_name(rel_db):
+    """O nome ACHATADO que este banco tinha no desenho anterior — o de quando
+    os 133 bancos moravam soltos na raiz do `db/`.
+
+    `cache/new deals/NDF/Vanilla.db` → `daily_new_deals_ndf_vanilla.db`;
+    `cache/daily settlement/otm-settlement.db` → `daily_settlement_otm.db`;
+    `mappings/mt300.db` → `mappings_mt300.db`. É assim que a carga completa
+    sabe o que remover **sem varrer a pasta** — e não varrer é o que protege os
+    outros bancos do app, que moram no mesmo `DATABASE_DIR` e que nada recria.
+    """
+    partes = rel_db[:-3].split('/')
+    if partes[0] != 'cache':
+        return (norm_ident('_'.join(partes), 'd') or 'd') + '.db'
+    # No arquivo-dia, o desenho anterior era `daily_` + os tokens da rotina,
+    # mais os da TAG que a rotina ainda não dizia. Quem é tag e quem é rotina
+    # sai da PROFUNDIDADE, pela mesma regra que gerou o caminho: com um nível
+    # de rotina o último segmento é a tag; com dois ou mais, é rotina.
+    corpo, tag = partes[1:], ''
+    if len(partes) == 3:
+        corpo, tag = partes[1:2], partes[2]
+    toks = []
+    for p in corpo:
+        toks.extend(_tokens(p))
+    for t in _tokens(tag):
+        if t not in toks:
+            toks.append(t)
+    if not toks:
+        toks = ['cache']
+    if toks[0] != 'daily':
+        toks.insert(0, 'daily')
+    return '_'.join(toks) + '.db'
 
 
 def cache_families(data_dir):
@@ -788,11 +871,16 @@ def convert_daily(data_dir, out_dir, force=False, dry_run=False,
     # carga alheia no meio dela.
     if familias is None and excluir is None:
         legados = {'daily_caches.db', 'daily_cache.db'}
-        legados.update(_daily_db_name([f]) for f in todas)
+        legados.update('daily_' + (norm_ident(f, 'r') or 'cache') + '.db'
+                       for f in todas)
     else:
-        legados = {_daily_db_name([f]) for f in alvo_fams}
+        legados = {'daily_' + (norm_ident(f, 'r') or 'cache') + '.db'
+                   for f in alvo_fams}
+    # E os nomes ACHATADOS do desenho seguinte, o de quando cada produto já
+    # tinha o seu banco mas todos moravam soltos na raiz do `db/`.
+    legados.update(_legacy_flat_name(a[0]) for a, _ in alvos)
     _drop_legacy_dbs(out_dir, legados, {a[0] for a, _ in alvos},
-                     stats, 'agora e um DB por produto')
+                     stats, 'agora a pasta db/ espelha a arvore de origem')
     return _convert_daily_rels(data_dir, out_dir, rels, force, stats)
 
 
@@ -833,16 +921,19 @@ def _dataset_rel_target(rel, cal_files):
     conversor (RefData/CPD, registro e arquivos de calendário, `cache/`) ou de
     pasta que não é dado (`db/`).
 
-    **UM BANCO POR ARQUIVO**, com o caminho inteiro no nome: `mappings/mt300.json`
-    → `mappings_mt300.db`, `control-panel/mt300_status.json` →
-    `control_panel_mt300_status.db`, `file-interpreter/termo.json` →
-    `file_interpreter_termo.db`, e o JSON de raiz com o próprio nome
-    (`subjacente.db`). A tabela leva o nome do arquivo, então continua legível
-    de dentro do banco.
+    **UM BANCO POR ARQUIVO, na MESMA árvore do JSON**: `mappings/mt300.json` →
+    `db/mappings/mt300.db`, `control-panel/mt300_status.json` →
+    `db/control-panel/mt300_status.db`, `file-interpreter/termo.json` →
+    `db/file-interpreter/termo.db`, `tickets/…` idem, e o JSON de raiz na raiz
+    do `db/` (`subjacente.db`). A tabela leva o nome do arquivo, então continua
+    legível de dentro do banco.
 
-    O desenho anterior juntava a pasta inteira num banco só (`mappings.db`
-    com 42 tabelas), e isso custava contenção onde ela não precisa existir: o
-    espelho reconvertendo UM mapping fechava a leitura dos outros 41."""
+    Dois desenhos ficaram para trás, e cada um custou uma coisa: juntar a pasta
+    inteira num banco só (`mappings.db` com 42 tabelas) criava contenção onde
+    ela não precisa existir — o espelho reconvertendo UM mapping fechava a
+    leitura dos outros 41 —, e achatar o caminho no nome
+    (`mappings_mt300.db`) deixava os 133 bancos soltos na mesma pasta, onde
+    achar o de uma tela virava caça ao nome."""
     parts = rel.split('/')
     fname = parts[-1]
     if not fname.endswith('.json') or fname.startswith('_'):
@@ -852,7 +943,7 @@ def _dataset_rel_target(rel, cal_files):
     if len(parts) == 1 and (fname in _DATASET_COVERED_TOP or fname.lower() in cal_files):
         return None
     stem = fname[:-5]
-    db = (norm_ident('_'.join(parts[:-1] + [stem]), 'd') or 'd') + '.db'
+    db = '/'.join([_nome_seguro(p) for p in parts[:-1]] + [_nome_seguro(stem)]) + '.db'
     return db, norm_ident(stem, 't') or 't'
 
 
@@ -880,9 +971,11 @@ def _convert_dataset_rels(data_dir, out_dir, rels, force, stats, cal_files):
     cons = {}
 
     def _con(db):
-        path = os.path.join(out_dir, db)
+        # `db` é um CAMINHO relativo (`mappings/mt300.db`) — a pasta espelha a
+        # árvore do JSON de origem.
+        path = os.path.join(out_dir, *db.split('/'))
         if path not in cons:
-            os.makedirs(out_dir, exist_ok=True)
+            os.makedirs(os.path.dirname(path), exist_ok=True)
             cons[path] = duckdb.connect(path)
             ensure_manifest(cons[path])
             stats['dbs'].append(path)
@@ -970,11 +1063,15 @@ def convert_datasets(data_dir, out_dir, force=False, dry_run=False):
                                 'mais de um JSON reivindica esta tabela: %s'
                                 % ', '.join(colidem)))
 
-    # O desenho anterior (um banco por PASTA, e a `translations.db` da primeira
-    # versão da cobertura) sai de cena pela mesma razão dos arquivo-dia: o banco
-    # que nenhum espelho atualiza mais é o que engana quem o consulta.
-    _drop_legacy_dbs(out_dir, _dataset_legacy_dbs(data_dir), {a[0] for a, _ in alvos},
-                     stats, 'agora e um DB por JSON')
+    # Os desenhos anteriores saem de cena pela mesma razão dos arquivo-dia: o
+    # banco que nenhum espelho atualiza mais é o que engana quem o consulta.
+    # São dois — um banco por PASTA (`mappings.db` com 42 tabelas) e o nome
+    # ACHATADO na raiz (`mappings_mt300.db`) — mais a `translations.db` da
+    # primeira versão da cobertura.
+    legados = set(_dataset_legacy_dbs(data_dir))
+    legados.update(_legacy_flat_name(a[0]) for a, _ in alvos)
+    _drop_legacy_dbs(out_dir, legados, {a[0] for a, _ in alvos},
+                     stats, 'agora a pasta db/ espelha a arvore de origem')
     return _convert_dataset_rels(data_dir, out_dir, rels, force, stats, cal_files)
 
 # ── CLI (caminhos fixos do share — versão standalone) ───────────────────────

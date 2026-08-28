@@ -468,11 +468,19 @@ São dois bancos:
     do `daily_b3_files_swap.db` perderia justamente o `swap` e ficaria
     indistinguível de um `DPOSICAO` da mesma pasta;
   - os bancos dos desenhos ANTERIORES são apagados na carga completa
-    (`_drop_legacy_dbs`), **menos o nome que ainda é alvo** —
-    `daily_pending_confirmation.db` é o mesmo banco antes e depois, e
-    apagá-lo custaria uma reconversão inteira à toa. Dois arquivos que
-    reivindiquem a mesma tabela viram ERRO na carga completa (`_colisoes`),
-    nunca sobrescrita silenciosa.
+    (`_drop_legacy_dbs`), **menos o que ainda é alvo** — apagá-lo custaria uma
+    reconversão inteira à toa. A remoção é por LISTA DE NOMES DERIVADOS
+    (`_legacy_flat_name`), **nunca por varredura de `*.db`**: o
+    `DATABASE_DIR` é a casa de TODOS os bancos do app — usuários,
+    notificações, os três do Pending Confirmation, os dois da esteira, o do
+    Onboarding —, e varrer ali apagaria dado que nada recria;
+  - **o que decide a remoção é o ARQUIVO, não o nome** (`os.path.samefile`). O
+    JSON de raiz passou a manter a caixa do original (`Subjacente.db`) e o
+    nome legado era normalizado (`subjacente.db`): em macOS e Windows os dois
+    são o MESMO arquivo, e remover o "legado" apagaria o banco recém-criado —
+    no Linux são dois de verdade, e aí o antigo tem de sair;
+  - dois arquivos que reivindiquem a mesma tabela viram ERRO na carga completa
+    (`_colisoes`), nunca sobrescrita silenciosa.
 
   Duas garantias sustentam a troca: a **leitura cai para a cópia empacotada**
   quando o arquivo não existe no `DATA_DIR` (`anbima.json`, `Subjacente.json`, as
@@ -2267,7 +2275,7 @@ Rodam **uma vez na instância do time depois do pull**. Todas idempotentes.
 | `backfill_manual_confirmations.py` | traz para a esteira o que foi mapeado **antes** dela existir (`--dry-run`, `--source`) |
 | `import_cgd_sharepoint.py` | carrega a lista de CGDs do SharePoint (`Sharepoint-CGD.xlsx`) no DuckDB do Onboarding (`--xlsx`, `--sheet`, `--dry-run`, `--schema-only`). REESCREVE a tabela: rodar de novo dá o mesmo resultado |
 | `build_duckdb_standalone.py` | gera os **`scripts/standalone/*.py`** — os conversores para rodar numa máquina SEM o código do app (sem Config, sem import de `apps`, caminhos do share fixos, `pip install duckdb` como requisito único). São **nove**, e a divisão é operacional: a carga no share é longa, e repartida ela pode ser rodada **em paralelo por várias pessoas** — `01_cadastros` (os JSONs ÚNICOS, sem quebra por dia), um `02_*` por rotina de `cache/` (as que quebram por DIA), o `99_outros` (a rede de segurança: rotina nova em `cache/` nunca fica sem conversor) e o `00_completo` para quem prefere um comando só. É seguro porque os bancos são um por produto: duas fatias nunca escrevem no mesmo `.db`. Eles são VERSIONADOS para serem entregues junto com o código, e **gerados — nunca editados à mão**: são cópias de um motor que vive noutro lugar, e por três vezes o motor mudou e elas tiveram de ser regeradas (HANDOFF §331/§333/§334) até que na quarta passou batido (§336/§339). O gerador copia o corpo do `json_to_duckdb.py` por programa (a única adaptação é o seed do registro de calendários, que no app vem da vertical de feriados) e **recusa gerar** se sobrar qualquer outra referência a `apps` — que é como uma dependência nova viraria `ImportError` na máquina de quem só tem o duckdb. **Mexeu no motor, rode isto e commite**; o `check_duckdb_standalone.py` reprova quem esquecer, com o comando na mensagem |
-| `convert_json_to_duckdb.py` | a CARGA COMPLETA da migração JSON → DuckDB (HANDOFF §324–§331; o dia a dia é do espelho vivo `duck_mirror`, e o MOTOR dos dois é o `apps/pages/json_to_duckdb.py`): materializa TODOS os JSONs do `Config.DATA_DIR` no **`Config.DATABASE_DIR`** (a `db/` de todos os bancos) — além dos três abaixo, o `convert_datasets` cobre o RESTO com **um banco por ARQUIVO** (`mappings_mt300.db`, `control_panel_mt300_status.db`, `file_interpreter_termo.db`, `subjacente.db` na raiz), com a coluna `_raw` nas listas de registros; SÓ `translations/` fica em JSON (i18n do navegador, versionado como código — §332) — `holiday_calendars.db` (uma tabela por calendário do registro), `reference_data.db` (`refdata` + `counterparty_details`, tudo VARCHAR — zero à esquerda) e **um `daily_<produto>.db` por produto de arquivo-dia**, com o caminho inteiro de `cache/` no nome (`daily_new_deals_ndf_vanilla.db`, `daily_new_deals_option_fxo.db`, `daily_settlement_otm.db`, …; cada dia uma tabela tipada). Ao contrário das demais, é feito para RODAR DE NOVO: incremental por `_manifest` (mtime/tamanho), só reconverte o que mudou; calendário/dia/produto novos viram tabela/banco novos (`--only`, `--force`, `--dry-run`) |
+| `convert_json_to_duckdb.py` | a CARGA COMPLETA da migração JSON → DuckDB (HANDOFF §324–§331; o dia a dia é do espelho vivo `duck_mirror`, e o MOTOR dos dois é o `apps/pages/json_to_duckdb.py`): materializa TODOS os JSONs do `Config.DATA_DIR` no **`Config.DATABASE_DIR`** (a `db/` de todos os bancos), numa árvore que **espelha a de origem**: `convert_datasets` cobre os JSONs avulsos com **um banco por ARQUIVO na pasta do arquivo** (`db/mappings/mt300.db`, `db/control-panel/mt300_status.db`, `db/file-interpreter/termo.db`, `db/tickets/…`, e o JSON de raiz na raiz), com a coluna `_raw` nas listas de registros; SÓ `translations/` fica em JSON (i18n do navegador, versionado como código — §332) — `holiday_calendars.db` (uma tabela por calendário do registro), `reference_data.db` (`refdata` + `counterparty_details`, tudo VARCHAR — zero à esquerda) e **um banco por PRODUTO de arquivo-dia** sob `db/cache/`, com a árvore de `cache/` virando pasta (`db/cache/new deals/NDF/Vanilla.db`, `db/cache/b3 files/Swap.db`, `db/cache/daily settlement/otm-settlement.db`) e **ano/mês/dia virando TABELA, nunca pasta**. Ao contrário das demais, é feito para RODAR DE NOVO: incremental por `_manifest` (mtime/tamanho), só reconverte o que mudou; calendário/dia/produto novos viram tabela/banco novos (`--only`, `--force`, `--dry-run`) |
 
 > `apps/static/data/db/` está no **`.gitignore`**, então os bancos **não vêm no
 > pull**. Sem rodar `import_manual_confirmations.py` as duas telas de Manual

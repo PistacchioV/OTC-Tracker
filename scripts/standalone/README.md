@@ -92,14 +92,29 @@ start python 02_3_daily_settlement.py
   rodada terminar com `convertidos: 0`.
 - **Erro num arquivo não para o resto.** Ele sai no resumo do fim, com o motivo,
   e os demais continuam.
-- **Um banco por produto, uma tabela por dia.** O caminho de `cache/` vira o
-  nome do banco (`daily_new_deals_ndf_vanilla.db`, `daily_b3_files_swap.db`) e
-  cada dia é uma tabela `d_AAAAMMDD`. Onde a rotina não se ramifica em pastas —
-  o Daily Settlement, que grava os dez arquivos do dia na mesma pasta — quem dá
-  o banco é o **nome do arquivo** (`daily_settlement_otm.db`,
-  `daily_settlement_ndf_cockpit.db`).
-- **Um banco por JSON** para os cadastros (`mappings_mt300.db`,
-  `file_interpreter_termo.db`, `subjacente.db`).
+- **A pasta `db` espelha a árvore de origem.** O caminho de `cache/` vira
+  PASTA e o produto vira o arquivo; **ano, mês e dia não viram pasta** — eles
+  já são a tabela `d_AAAAMMDD` dentro do banco:
+
+  ```
+  db/
+  ├── cache/
+  │   ├── new deals/NDF/Vanilla.db          (uma tabela por dia)
+  │   ├── new deals/Option/FXO.db
+  │   ├── b3 files/Swap.db
+  │   ├── daily settlement/otm-settlement.db
+  │   ├── daily settlement/cognos.db
+  │   └── pending-confirmation.db
+  ├── mappings/mt300.db
+  ├── control-panel/mt300_status.db
+  ├── file-interpreter/termo.db
+  ├── reference_data.db
+  └── Subjacente.db                          (os JSONs de raiz ficam na raiz)
+  ```
+
+  Onde a rotina não se ramifica em pastas — o Daily Settlement, que grava os
+  dez arquivos do dia na mesma pasta — quem dá o banco é o **nome do arquivo**,
+  dentro da pasta da rotina.
 - **Bancos de formatos antigos são removidos** quando a fatia que os cobre roda.
 
 ---
