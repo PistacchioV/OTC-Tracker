@@ -137,6 +137,8 @@ def _resumo(nome, stats, houve_erro):
         len(stats['converted']), len(stats['skipped']),
         ' | fora deste conversor: %%d' %% len(stats['ignored'])
         if stats.get('ignored') else ''))
+    for aviso in stats.get('avisos') or ():
+        print('   ! %%s' %% aviso)
     for item in stats['converted']:
         print('   + %%s' %% item)
     for rel, erro in stats['errors']:
@@ -233,8 +235,9 @@ _DOC_ROTINA = """O ESCOPO é UMA rotina de cache\\: **%(fam)s**.
 
 %(desc)s
 
-Cada produto vira um banco (o caminho inteiro de cache\\ no nome —
-daily_new_deals_ndf_vanilla.db, daily_b3_files_swap.db) e cada dia é uma tabela
+Cada produto vira um banco e a pasta db\\ ESPELHA a árvore de cache\\
+(db\\cache\\new deals\\NDF\\Vanilla.db, db\\cache\\b3 files\\Swap.db); só
+ano/mês/dia não viram pasta — cada dia é uma tabela
 (d_AAAAMMDD[_tag]), tipada por inferência: dd/mm/aaaa e ISO viram DATE, número
 vira BIGINT/DOUBLE, zero à esquerda continua texto, '' vira NULL só em coluna
 tipada, e texto sai byte a byte.

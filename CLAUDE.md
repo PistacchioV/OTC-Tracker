@@ -480,7 +480,20 @@ São dois bancos:
     são o MESMO arquivo, e remover o "legado" apagaria o banco recém-criado —
     no Linux são dois de verdade, e aí o antigo tem de sair;
   - dois arquivos que reivindiquem a mesma tabela viram ERRO na carga completa
-    (`_colisoes`), nunca sobrescrita silenciosa.
+    (`_colisoes`), nunca sobrescrita silenciosa;
+  - **a rotina de `cache/` é casada pelo nome NORMALIZADO** (`chave_familia`),
+    nunca por string exata. O nome da pasta é escrito por quem criou a árvore e
+    as instâncias não concordam: a dev tem `b3 files` e o share do JPM tem
+    `B3 Files`. Casando por igualdade, o `02_2_b3_files.py` não achava a pasta e
+    saía com `convertidos: 0` — a fatia inteira de fora, sem erro nenhum — e o
+    `99_outros`, que exclui pela MESMA lista, não a reconhecia como coberta e a
+    convertia junto: dois scripts no mesmo banco, que é exatamente o que a
+    divisão em fatias promete não acontecer. O banco herda a grafia que está em
+    DISCO (`db/cache/B3 Files/Swap.db`), porque a pasta espelha a origem.
+    **Rotina pedida que não existe vai para `avisos`, que o resumo IMPRIME** —
+    e o aviso lista as rotinas que ele achou, que é o que distingue "não há esse
+    cache aqui" de "a pasta se chama outra coisa". Contado só em `ignored`, ele
+    saía como um `fora deste conversor: 1` indistinguível de um ponteiro `_last`.
 
   Duas garantias sustentam a troca: a **leitura cai para a cópia empacotada**
   quando o arquivo não existe no `DATA_DIR` (`anbima.json`, `Subjacente.json`, as

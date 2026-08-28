@@ -93,6 +93,8 @@ def main(argv=None):
             len(stats['converted']), len(stats['skipped']),
             ' | fora deste conversor: %d' % len(stats['ignored'])
             if stats.get('ignored') else ''))
+        for aviso in stats.get('avisos') or ():
+            print('   ! %s' % aviso)
         for item in stats['converted']:
             print('   + %s' % item)
         for rel, erro in stats['errors']:

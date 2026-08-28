@@ -14741,3 +14741,62 @@ Migração de quem já tem o formato anterior: a carga completa move tudo sozinh
 125 legados removidos e 133 bancos na árvore nova, com a segunda rodada em zero.
 Os nove standalone foram regerados e as fatias seguem somando exatamente a carga
 completa, inclusive rodando SETE em paralelo. Suíte completa verde.
+
+---
+
+## §343 — a fatia do standalone não achava a rotina pela GRAFIA da pasta (2026-08-28)
+
+`python 02_2_b3_files.py` na máquina de outra pessoa, apontado para o share do
+JPM, terminou assim:
+
+```
+escopo : cache/b3 files (arquivo-dia)
+== daily -> daily_<produto>.db (um por produto)
+   convertidos: 0 | inalterados: 0 | fora deste conversor: 1
+```
+
+Nenhum erro, nenhum banco, e uma linha que se lê como "não havia nada a fazer".
+Eram **duas** falhas, uma escondendo a outra.
+
+**A causa.** `convert_daily` casava o escopo pedido com a pasta em disco por
+string EXATA (`f in set(familias)`). O nome da pasta é escrito por quem criou a
+árvore e as instâncias não concordam na grafia: a dev tem `b3 files` e o share
+tem `B3 Files`. O `os.listdir` devolve o nome REAL — o Windows ser
+case-insensitive para abrir o caminho não ajuda em nada aqui, porque a
+comparação é entre strings, não entre arquivos. A rotina caía em "ausente em
+disco" e a fatia inteira ficava de fora.
+
+O estrago passava do script que a pessoa rodou. O `99_outros` exclui pela MESMA
+lista, com a mesma comparação: sem reconhecer `B3 Files` como coberta, ele a
+convertia junto — **dois scripts escrevendo no mesmo banco**, que é exatamente
+o que a divisão em fatias promete não acontecer, e que só apareceria como
+corrupção se as duas pessoas rodassem ao mesmo tempo.
+
+Hoje o casamento é pelo nome NORMALIZADO (`chave_familia`, sobre o `_tokens`
+que já normaliza caixa, acento e separador), nos dois sentidos — o `familias` e
+o `excluir`. O banco herda a grafia que está em DISCO
+(`db/cache/B3 Files/Swap.db`): a pasta espelha a origem, e é assim que quem sabe
+onde está o JSON sabe onde está o banco.
+
+**A segunda falha era o aviso.** A rotina ausente ia para `ignored`, que o
+resumo só CONTA — e `ignored` é também onde caem os ponteiros `_last` e as
+configs avulsas, coisas normais e numerosas. O `fora deste conversor: 1` era
+indistinguível de rotina.
+
+Agora existe `stats['avisos']`, que os dois impressores (o CLI do repo e o molde
+do gerador) imprimem sempre, e ele diz o que ACHOU:
+
+```
+   ! cache/daily settlement: rotina ausente em disco.
+     Rotinas encontradas: b3 files, new deals, payrec
+```
+
+Essa lista é o que resolve o caso na hora: se a pasta existe com outro nome, ela
+está ali. `ignored` continua sendo contagem, que é o papel dele.
+
+Guardas no `check_duckdb_standalone.py`: a fatia acha `B3 Files` pedindo
+`b3 files`, o `99_outros` a reconhece como coberta e não duplica o banco, o
+aviso de rotina ausente é impresso, e ele nomeia as rotinas encontradas. Os
+nove standalone foram regerados (o `_DOC_ROTINA` ainda descrevia os nomes
+achatados do desenho anterior — corrigido para a árvore espelhada). Suíte
+completa verde.
