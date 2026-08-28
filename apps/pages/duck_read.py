@@ -76,7 +76,9 @@ def table_rows(db_name, table, rel, schema='main', order_by=None, heal=None,
 
     try:
         from apps.pages import duck_mirror
-        db = os.path.join(duck_mirror._out_dir(raiz), db_name)
+        # `db_name` pode ser um CAMINHO relativo (`cache/new deals/NDF/Vanilla.db`):
+        # a pasta `db/` espelha a árvore de origem desde a quebra em subpastas.
+        db = os.path.join(duck_mirror._out_dir(raiz), *db_name.split('/'))
         if not os.path.isfile(db):
             _cura()
             return None
@@ -154,7 +156,9 @@ def day_payload(path):
             return None
         db_name, schema, tabela = alvo
         st = os.stat(jpath)
-        db = os.path.join(duck_mirror._out_dir(raiz), db_name)
+        # `db_name` pode ser um CAMINHO relativo (`cache/new deals/NDF/Vanilla.db`):
+        # a pasta `db/` espelha a árvore de origem desde a quebra em subpastas.
+        db = os.path.join(duck_mirror._out_dir(raiz), *db_name.split('/'))
         if not os.path.isfile(db):
             duck_mirror.notify_write(jpath)
             return None

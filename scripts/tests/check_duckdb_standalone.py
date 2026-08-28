@@ -160,21 +160,34 @@ mod = _carregar('sa_completo', os.path.join(PASTA, '00_completo.py'))
 check('00_completo roda sem erro',
       mod.main(['--data-dir', DATA, '--out-dir', OUT_FULL]), 0)
 
+def _arvore(raiz):
+    """Os bancos com o CAMINHO relativo — a pasta db/ espelha a árvore de
+    origem, então comparar só o nome do arquivo esconderia a subpasta errada."""
+    return sorted(os.path.relpath(os.path.join(dp, f), raiz).replace(os.sep, '/')
+                  for dp, _d, fs in os.walk(raiz) for f in fs if f.endswith('.db'))
+
+
 check('a soma das fatias é EXATAMENTE a carga completa',
-      sorted(os.listdir(OUT_FATIAS)), sorted(os.listdir(OUT_FULL)))
-# `rotina-nova` tem UM nível de pasta, então a tag do nome do arquivo entra no
-# banco — a mesma regra do Daily Settlement.
+      _arvore(OUT_FATIAS), _arvore(OUT_FULL))
+_fatias_arvore = _arvore(OUT_FATIAS)
+# `rotina-nova` tem UM nível de pasta, então a tag do nome do arquivo vira o
+# banco dentro da pasta da rotina — a mesma regra do Daily Settlement.
 check('a rotina que nenhum script nomeia foi coberta pelo 99_outros',
-      'daily_rotina_nova_coisa.db' in os.listdir(OUT_FATIAS))
-check('o Daily Settlement quebrou pelo NOME do arquivo',
-      [d for d in sorted(os.listdir(OUT_FATIAS)) if d.startswith('daily_settlement')],
-      ['daily_settlement_cognos.db', 'daily_settlement_otm.db'])
-check('os cadastros viraram um banco por JSON',
-      [d for d in sorted(os.listdir(OUT_FATIAS))
-       if d in ('mappings_bank_name.db', 'subjacente.db', 'reference_data.db',
+      'cache/rotina-nova/coisa.db' in _fatias_arvore)
+check('o Daily Settlement quebrou pelo NOME do arquivo, dentro da pasta dele',
+      [d for d in _fatias_arvore if d.startswith('cache/daily settlement/')],
+      ['cache/daily settlement/cognos.db', 'cache/daily settlement/otm-settlement.db'])
+check('a pasta db/ espelha a arvore de cache/',
+      [d for d in _fatias_arvore if d.startswith('cache/new deals/')],
+      ['cache/new deals/NDF/Vanilla.db', 'cache/new deals/Option/FXO.db'])
+check('e ano/mes/dia NAO viram pasta',
+      any('/2026/' in d for d in _fatias_arvore), False)
+check('os cadastros viraram um banco por JSON, na pasta do JSON',
+      [d for d in _fatias_arvore
+       if d in ('mappings/bank-name.db', 'Subjacente.db', 'reference_data.db',
                 'holiday_calendars.db')],
-      ['holiday_calendars.db', 'mappings_bank_name.db', 'reference_data.db',
-       'subjacente.db'])
+      ['Subjacente.db', 'holiday_calendars.db', 'mappings/bank-name.db',
+       'reference_data.db'])
 
 # Rodar de novo não reconverte nada — a fatia é incremental como a carga toda.
 mod = _carregar('sa_nd2', os.path.join(PASTA, '02_1_new_deals.py'))

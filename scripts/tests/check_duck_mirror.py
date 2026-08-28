@@ -55,7 +55,8 @@ def check(label, got, exp=True):
 
 
 def consulta(db, sql):
-    con = duckdb.connect(os.path.join(DBDIR, db), read_only=True)
+    # `db` pode ser um CAMINHO relativo: a pasta db/ espelha a árvore de origem.
+    con = duckdb.connect(os.path.join(DBDIR, *db.split('/')), read_only=True)
     try:
         return con.execute(sql).fetchall()
     finally:
@@ -69,13 +70,13 @@ os.makedirs(os.path.dirname(dia), exist_ok=True)
 R._atomic_write_json(dia, [{'Deal': 'DBH-1AAA', 'TradeDate': '15/06/2026'}])
 check('1. flush esvazia a fila', M.flush(20))
 check('1. arquivo-dia espelhado no banco do PRODUTO',
-      consulta('daily_new_deals_ndf_commodities.db',
+      consulta('cache/new deals/NDF/Commodities.db',
                'SELECT "Deal", "TradeDate" FROM main.d_20260615_ndfcomm'),
       [('DBH-1AAA', __import__('datetime').date(2026, 6, 15))])
 R._atomic_write_json(dia, [{'Deal': 'DBH-1AAA'}, {'Deal': 'DBH-1BBB'}])
 M.flush(20)
 check('1. regravacao atualiza a tabela',
-      consulta('daily_new_deals_ndf_commodities.db',
+      consulta('cache/new deals/NDF/Commodities.db',
                'SELECT count(*) FROM main.d_20260615_ndfcomm'), [(2,)])
 
 # ── 2. RefData e CounterpartyDetails (escritas fora do funil) ───────────────
@@ -113,12 +114,13 @@ ponteiro = os.path.join(TMP, 'cache', 'reconciliation', 'payrec', '_last.json')
 os.makedirs(os.path.dirname(ponteiro), exist_ok=True)
 R._atomic_write_json(ponteiro, {'recon_date': '2026-07-06'})
 M.flush(20)
-bancos = sorted(f for f in os.listdir(DBDIR) if f.endswith('.db'))
+bancos = sorted(os.path.relpath(os.path.join(dp, f), DBDIR).replace(os.sep, '/')
+                for dp, _d, fs in os.walk(DBDIR) for f in fs if f.endswith('.db'))
 check('4. mapping espelha no banco DELE; _last.json em nada',
-      bancos, ['daily_new_deals_ndf_commodities.db', 'holiday_calendars.db',
-               'mappings_bank_name.db', 'reference_data.db'])
+      bancos, ['cache/new deals/NDF/Commodities.db', 'holiday_calendars.db',
+               'mappings/bank-name.db', 'reference_data.db'])
 check('4. a tabela do mapping leva o registro exato (_raw)',
-      json.loads(consulta('mappings_bank_name.db',
+      json.loads(consulta('mappings/bank-name.db',
                           'SELECT "_raw" FROM bank_name')[0][0]),
       {'BANK': 'ITAU', 'CODE': '341'})
 # Com um banco por JSON, o `anbima.json` viraria `anbima.db` se o conversor de
