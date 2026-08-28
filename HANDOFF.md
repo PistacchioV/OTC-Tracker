@@ -14336,3 +14336,32 @@ que permanecem como JSON — são os dicionários de i18n que o navegador consom
 `_DATASET_SKIP_DIRS` do motor, o `translations.db` que a primeira rodada da cobertura criou é
 REMOVIDO pelo próprio conversor quando encontrado (mesma regra do `daily_caches.db` legado), e
 o standalone foi regerado e reentregue. Todo o RESTO do DATA_DIR tem banco.
+
+## §333 — o flip dos DATASETS: /mapping, cadastros B3 e o estático deles (2026-08-27)
+
+A fase seguinte ao §331: a leitura dos datasets também virou DB-first. Três consumidores:
+
+- **`_mapping_rows`** — o caminho de leitura de configuração mais quente do app (os 43
+  cadastros, lidos pelos motores o tempo todo). O flip fica DENTRO do cache por mtime (o mtime
+  é a chave do contrato de frescor), via `duck_read.dataset_records(path)` — o caminho ABSOLUTO
+  de quem lê é o próprio guarda (`_MAPPINGS_DIR` trocado por teste → fora da raiz → JSON), e o
+  `_raw` garante que o `upgrade` roda igual nas duas fontes. Os registros com `file` na raiz
+  (SwapIndex) resolvem sozinhos para o `static_data.db`.
+- **`_b3_load`** — os quatro que faltavam (Subjacente, VCP, Dominio, SwapIndex) pelo
+  `static_data.db`; o caminho devolvido segue sendo o do JSON, que é onde o `_b3_save` grava.
+- **o NAVEGADOR** — o `_duck_static_json` passou a servir também os JSONs de raiz cobertos
+  pelos datasets e os `mappings/<arquivo>.json`; payload que não é lista fica com o arquivo
+  (`dataset_records` devolve None), e subpasta fora dos mappings idem.
+
+E a correção que tornou isso possível: **a reconstrução precisava de ORDEM garantida**. O
+DuckDB não promete ordem de inserção no SELECT, e as telas exibem na ordem do arquivo — as
+tabelas `_raw` ganharam a coluna **`_seq`** (posição no arquivo) e a leitura ordena por
+`CAST("_seq" AS BIGINT)` (o CAST cobre o force_varchar dos cadastros, onde '10' < '2' por
+texto). A versão de formato no manifest subiu para **`#raw2`** — e passou a valer para os
+datasets também (`_dataset_manifest_key`): banco no formato de ontem não casa, cai no JSON e o
+espelho reconverte sozinho. O standalone foi regerado no formato novo e reentregue.
+
+`check_duck_read` §3d prende: a lista de 12 linhas voltando NA ORDEM (pega o '10'<'2'), o
+`_mapping_rows` provado no banco por adulteração, o `_b3_load` DB-first com o caminho do JSON,
+e o estático servindo mapping e cadastro de raiz. O que resta da migração: os ARQUIVO-DIA —
+cada consumidor virar consulta SQL, começando pelo intervalo do Advanced Export.
