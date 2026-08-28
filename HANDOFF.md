@@ -14681,3 +14681,13 @@ esperada dos cadastros.
 `scripts/standalone/README.md` é o que a pessoa que recebe lê: a tabela dos
 nove, o `pip install duckdb`, as flags, um exemplo de rodada em paralelo no
 Windows, e o aviso de que os arquivos são gerados e não se editam à mão.
+
+**Adendo do mesmo dia — o caminho padrão.** Os nove nasceram com o
+`I:\Confirmation\...` fixo, que é como a MESA enxerga o share; a instância do
+JPM fala com ele pelo UNC (`\\Nawest.ad.jpmorganchase.com\lac\BRA\intra`, o
+bloco ENV:PROD do config). Fixar um só faria o script não achar nada em metade
+das máquinas — e o sintoma seria "não converteu nada", não "caminho errado".
+Hoje há uma LISTA de candidatos, tentada na ordem (UNC, depois a letra), valendo
+o primeiro que existir; `--data-dir` continua mandando em qualquer caso, e a
+primeira linha da saída diz qual caminho valeu, que é o que permite conferir
+antes de deixar rodando.

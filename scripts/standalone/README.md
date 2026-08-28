@@ -46,9 +46,22 @@ Sem argumento nenhum, a origem e o destino já são os do share:
 python 01_cadastros.py
 ```
 
+O share tem **dois endereços para o mesmo lugar** — o UNC e a letra `I:`
+mapeada —, e qual deles existe depende da máquina. Os scripts tentam nessa
+ordem e usam o primeiro que responder:
+
 ```
-Origem : I:\Confirmation\Derivativos\OTC Tracker\Application\static\data
-Destino: ...\static\data\db
+\\Nawest.ad.jpmorganchase.com\lac\BRA\intra\...\static\data
+I:\Confirmation\Derivativos\OTC Tracker\Application\static\data
+```
+
+O destino é a pasta `db` dentro da origem. A primeira linha da saída diz qual
+caminho valeu — confira antes de deixar rodando:
+
+```
+origem : \\Nawest.ad.jpmorganchase.com\...\static\data
+destino: \\Nawest.ad.jpmorganchase.com\...\static\data\db
+escopo : cadastros (sem quebra por dia)
 ```
 
 Opções:
