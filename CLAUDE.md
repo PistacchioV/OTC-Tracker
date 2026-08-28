@@ -1243,6 +1243,45 @@ estão:
 O `_id` do banco é interno e **não é estável entre importações** — ele endereça a
 linha que a tela está editando, e a importação seguinte renumera tudo.
 
+### O `SPB - outros bancos` da Recon Pay/Rec só casa com BANCO
+
+A liquidação interbancária capturada do `HistoricoMensagens` **não traz nome de
+contraparte nenhum** — só o código LTR (0004 paga / 0005 recebe), o status
+`Sucesso` e o VALOR. Por isso ela é casada só por valor e com a tolerância larga
+que a tarifa interbancária exige (**±R$20**, `_TOL_BANK`).
+
+Essa janela precisa de um guarda de ELEGIBILIDADE, e ele vem ANTES de qualquer
+tolerância (`_match_allowed`): o outro lado de um interbancário é um **BANCO**.
+Sem ele, ±R$20 casa com qualquer perna pequena do dia — um recebimento de
+**R$7,02 da Saint Gobain fechou contra um SPB de R$6,68 e saiu `Settled`**, com
+o cliente sem ter liquidado nada. E o estrago é maior do que uma linha errada: a
+linha SPB nasce `drop_if_unmatched` (é RUÍDO por construção e seria descartada
+em silêncio), então o ruído **rouba o par de uma liquidação de verdade e ainda a
+carimba como paga** — some justamente o alerta que a mesa precisava ver.
+
+- **Quem responde "é banco?" é o cadastro `bank-name`** (/mapping), nunca a
+  palavra `banco` no nome: esse teste erra dos dois lados — Banco Safra,
+  Bradesco e Santander aparecem como CLIENTES, e o `BOFA MERRILL LYNCH BM S/A`
+  é banco sem a palavra. Casa quando TODAS as palavras do nome cadastrado estão
+  no nome da contraparte, o que absorve as variantes de grafia (`BANCO ITAU S/A`
+  × `Banco Itau Unibanco S.A.`).
+- **A comparação é por PALAVRA, nunca por substring.** O `_norm` cola o nome
+  inteiro (`saintgobaindobrasil`), e aí o `brasil` do *Banco do Brasil* casa
+  DENTRO de `SAINT GOBAIN DO BRASIL` — a primeira versão da guarda respondeu que
+  TODA contraparte era banco. Daí o `_name_tokens`, que compara conjuntos.
+- **`banco` é token SIGNIFICATIVO** e não entra nos stopwords: é ele que separa
+  o `BANCO JOHN DEERE S/A` da John Deere montadora, que é cliente. O que se
+  descarta são só sufixos societários e conectivos (`sa`, `ltda`, `bm`, `do`…).
+- **A guarda vale nos TRÊS estágios do match**, o bucket exato incluído: valores
+  que caem na mesma unidade inteira casam ali sem passar por tolerância nenhuma.
+- **A direção entra pela mesma porta.** Com ±R$20 dois valores pequenos de
+  sinais OPOSTOS ficam dentro da janela (um Pay de −3,00 fechava com um Receive
+  de +9,00), e um pagamento nunca é o par de um recebimento.
+- **Banco fora do cadastro responde NÃO**, e isso é o lado seguro do erro: a
+  perna vira `Pending` (falso alarme, que se vê) em vez de casar com um SPB que
+  não é dela (falso `Settled`, que não se vê). Cadastrar é uma linha na tela,
+  válida no run seguinte sem restart.
+
 ### A recon de CGD lê o D-1, e o cache tem de casar com ele
 
 `recon_cgd` bate a lista do FEP contra a posição da B3 do **último dia útil**.
@@ -2227,6 +2266,7 @@ Rodam **uma vez na instância do time depois do pull**. Todas idempotentes.
 | `import_manual_confirmations.py` | **cria** os dois DuckDBs da esteira e semeia do `MANUAIS.xlsx` (`--xlsx`, `--schema-only`) |
 | `backfill_manual_confirmations.py` | traz para a esteira o que foi mapeado **antes** dela existir (`--dry-run`, `--source`) |
 | `import_cgd_sharepoint.py` | carrega a lista de CGDs do SharePoint (`Sharepoint-CGD.xlsx`) no DuckDB do Onboarding (`--xlsx`, `--sheet`, `--dry-run`, `--schema-only`). REESCREVE a tabela: rodar de novo dá o mesmo resultado |
+| `build_duckdb_standalone.py` | gera os **`scripts/standalone/*.py`** — os conversores para rodar numa máquina SEM o código do app (sem Config, sem import de `apps`, caminhos do share fixos, `pip install duckdb` como requisito único). São **nove**, e a divisão é operacional: a carga no share é longa, e repartida ela pode ser rodada **em paralelo por várias pessoas** — `01_cadastros` (os JSONs ÚNICOS, sem quebra por dia), um `02_*` por rotina de `cache/` (as que quebram por DIA), o `99_outros` (a rede de segurança: rotina nova em `cache/` nunca fica sem conversor) e o `00_completo` para quem prefere um comando só. É seguro porque os bancos são um por produto: duas fatias nunca escrevem no mesmo `.db`. Eles são VERSIONADOS para serem entregues junto com o código, e **gerados — nunca editados à mão**: são cópias de um motor que vive noutro lugar, e por três vezes o motor mudou e elas tiveram de ser regeradas (HANDOFF §331/§333/§334) até que na quarta passou batido (§336/§339). O gerador copia o corpo do `json_to_duckdb.py` por programa (a única adaptação é o seed do registro de calendários, que no app vem da vertical de feriados) e **recusa gerar** se sobrar qualquer outra referência a `apps` — que é como uma dependência nova viraria `ImportError` na máquina de quem só tem o duckdb. **Mexeu no motor, rode isto e commite**; o `check_duckdb_standalone.py` reprova quem esquecer, com o comando na mensagem |
 | `convert_json_to_duckdb.py` | a CARGA COMPLETA da migração JSON → DuckDB (HANDOFF §324–§331; o dia a dia é do espelho vivo `duck_mirror`, e o MOTOR dos dois é o `apps/pages/json_to_duckdb.py`): materializa TODOS os JSONs do `Config.DATA_DIR` no **`Config.DATABASE_DIR`** (a `db/` de todos os bancos) — além dos três abaixo, o `convert_datasets` cobre o RESTO com **um banco por ARQUIVO** (`mappings_mt300.db`, `control_panel_mt300_status.db`, `file_interpreter_termo.db`, `subjacente.db` na raiz), com a coluna `_raw` nas listas de registros; SÓ `translations/` fica em JSON (i18n do navegador, versionado como código — §332) — `holiday_calendars.db` (uma tabela por calendário do registro), `reference_data.db` (`refdata` + `counterparty_details`, tudo VARCHAR — zero à esquerda) e **um `daily_<produto>.db` por produto de arquivo-dia**, com o caminho inteiro de `cache/` no nome (`daily_new_deals_ndf_vanilla.db`, `daily_new_deals_option_fxo.db`, `daily_settlement_otm.db`, …; cada dia uma tabela tipada). Ao contrário das demais, é feito para RODAR DE NOVO: incremental por `_manifest` (mtime/tamanho), só reconverte o que mudou; calendário/dia/produto novos viram tabela/banco novos (`--only`, `--force`, `--dry-run`) |
 
 > `apps/static/data/db/` está no **`.gitignore`**, então os bancos **não vêm no

@@ -14500,3 +14500,184 @@ coisas que não dão erro nenhum: `input.value = ''` NÃO dispara `change`, ent�
 emitir o evento depois de um upload com sucesso (sem isso o dropzone continuaria mostrando o
 arquivo já enviado), e o `DataTransfer` está num `try` — num browser sem ele o clique continua
 funcionando. Chave `cp-contacts-dz` nos três idiomas.
+
+## §338 — o SPB interbancário casava com cliente: a guarda de elegibilidade (2026-08-28)
+
+Reportado da tela: um recebimento de **R$7,02 da Saint Gobain** apareceu
+`Settled` contra uma linha **`SPB - outros bancos` de R$6,68**. O cliente não
+tinha liquidado nada.
+
+**A causa.** A liquidação interbancária capturada do `HistoricoMensagens` não
+traz nome de contraparte nenhum — só o LTR, o status `Sucesso` e o valor —,
+então ela é casada só por VALOR e com a tolerância larga que a tarifa
+interbancária exige (±R$20, `_TOL_BANK`). Para R$7,02 essa janela é 285% do
+próprio valor: ela casa com literalmente qualquer perna pequena do dia. O match
+aconteceu no terceiro estágio do `_reconcile` e o status virou `Settled` na
+linha que aceita a tolerância do próprio registro.
+
+**Por que é pior do que uma linha errada.** A linha SPB nasce
+`drop_if_unmatched` — é RUÍDO por construção e seria descartada em silêncio se
+não casasse. Então o ruído roubou o par de uma liquidação de verdade e ainda a
+carimbou como paga: sumiu justamente o alerta que a mesa precisava ver. Defeito
+que se reporta como êxito.
+
+**A correção não é tolerância, é ELEGIBILIDADE.** O outro lado de um
+interbancário é um BANCO, e essa pergunta vem ANTES de qualquer tolerância
+(`_match_allowed`, aplicado nos TRÊS estágios do match — o bucket exato
+incluído, porque ali valores da mesma unidade inteira casam sem passar por
+tolerância nenhuma). Quem responde "é banco?" é o cadastro **`bank-name`** do
+/mapping, não um `if` no código.
+
+Três coisas que não dão erro nenhum:
+
+- **a comparação é por PALAVRA, nunca por substring.** O `_norm` cola o nome
+  inteiro, e a primeira versão da guarda usava o núcleo do cadastro dentro do
+  nome colado: o `brasil` do *Banco do Brasil* casou dentro de `SAINT GOBAIN DO
+  BRASIL` e a função respondeu que TODA contraparte era banco — o teste pegou na
+  hora. Daí o `_name_tokens`, que compara conjuntos de palavras;
+- **`banco` é token significativo**, e não stopword: é ele que separa o `BANCO
+  JOHN DEERE S/A` da John Deere montadora, que é cliente. O que se descarta são
+  sufixos societários e conectivos (`sa`, `ltda`, `bm`, `do`…). Pela mesma razão
+  a regra NÃO pode ser "tem a palavra banco no nome": Safra, Bradesco e
+  Santander aparecem como clientes, e o `BOFA MERRILL LYNCH BM S/A` é banco sem
+  a palavra;
+- **a direção entra pela mesma porta.** Com ±R$20, dois valores pequenos de
+  sinais OPOSTOS ficam dentro da janela — um Pay de −3,00 fechava com um Receive
+  de +9,00. Um pagamento nunca é o par de um recebimento.
+
+Banco fora do cadastro responde NÃO, e é o lado seguro do erro: a perna vira
+`Pending` (falso alarme, que se vê) em vez de casar com o SPB errado (falso
+`Settled`, que não se vê). **Hoje o `bank-name` tem 8 bancos e o Safra não está
+lá**, embora o próprio comentário do `_cli_spb` o cite como contraparte
+interbancária típica — cadastrar os que faltam em /mapping › Bank Name é ação de
+mesa, vale no run seguinte sem restart.
+
+`check_payrec_run.py` ganhou a seção da guarda (11 asserções): o caso reportado,
+o mesmo com valor idêntico (o bucket exato), banco cadastrado continuando a
+casar dentro da tarifa, a variante de grafia, o par John Deere banco × cliente,
+a direção oposta, o banco não cadastrado e a liquidação normal do cliente, que
+não passa pela guarda.
+
+## §339 — o standalone deixa de ser cópia manual: um gerador (2026-08-28)
+
+Perguntado na sessão: *"o standalone que será rodado por alguém que não tem
+acesso ao config foi ajustado também com a segregação de bancos?"* — **não
+tinha**. Ele estava no formato anterior (`_daily_db_name(familia)`,
+`_tabela_dia(redundantes, …)`, um banco por pasta), e rodá-lo depois do §336
+teria produzido o desenho VELHO ao lado do novo: dois formatos em disco, sem
+erro nenhum, e nada dizendo qual é o de hoje.
+
+O problema não é esta vez, é o padrão: o próprio §329 registrou que "quem mudar
+o motor não o atualiza sozinho", e §331, §333 e §334 tiveram, cada um, a linha
+"o standalone foi regerado e reentregue" — à mão, três vezes, e na quarta
+passou. Uma cópia congelada de 855 linhas mantida por disciplina é uma cópia que
+um dia diverge.
+
+**Agora ele é GERADO**: `scripts/build_duckdb_standalone.py` monta o arquivo a
+partir do cabeçalho/CLI próprios mais o corpo do `apps/pages/json_to_duckdb.py`
+copiado por programa. Três guardas dentro do gerador:
+
+- a **única** adaptação do corpo é o seed do registro de calendários (no app ele
+  vem da vertical de feriados; sem `apps` não há de onde tirá-lo), e o gerador
+  **falha** se esse trecho não for encontrado — mudou o ramo, alguém revê a
+  adaptação em vez de gerar um arquivo silenciosamente errado;
+- ele **recusa gerar** se sobrar qualquer outra referência a `apps` no corpo,
+  imprimindo arquivo e linha: é assim que uma dependência nova do motor viraria
+  `ImportError` na máquina de quem só tem `pip install duckdb`;
+- o cabeçalho gerado diz, no próprio arquivo, que ele é gerado e não se edita à
+  mão.
+
+Regerado e validado rodando **de fora do repo**, contra o `static/data` da dev:
+133 bancos, os MESMOS que o script oficial produz (`diff` das listagens vazio),
+190 datasets + 114 arquivo-dia, zero erro, segunda rodada em zero, e a remoção
+dos bancos legados funcionando — inclusive preservando o
+`daily_pending_confirmation.db`, que continua sendo alvo. O corpo difere do
+motor em exatamente 12 linhas, todas do seed adaptado.
+
+O aviso ficou nos dois lugares onde a próxima pessoa olha: no docstring do
+`json_to_duckdb.py` (⚠️ mexeu aqui, rode o gerador) e na tabela de scripts do
+CLAUDE.md §9. O arquivo entregue continua fora do repo, de propósito —
+versioná-lo seria criar a segunda cópia do motor que o gerador existe para
+evitar.
+
+## §340 — o standalone entra no repo, com o guarda que o mantém em dia (2026-08-28)
+
+Pedido: versionar o standalone em `scripts/`, para entregá-lo junto com o código
+a quem vai rodá-lo, em vez de mandar o arquivo à parte.
+
+Feito — mas **versionar sozinho seria só mudar o lugar do problema do §339**: a
+cópia continuaria envelhecendo em silêncio, agora com o agravante de parecer
+oficial. Então ela entrou com três coisas:
+
+1. **Gerada, nunca editada.** O `build_duckdb_standalone.py` passou a escrever
+   direto em `scripts/convert_json_to_duckdb_standalone.py`, e o cabeçalho do
+   arquivo gerado diz isso.
+2. **`check_duckdb_standalone.py`**, o guarda. Ele regera em memória e cobra que
+   o arquivo do repo seja BYTE A BYTE o que o gerador produz hoje — com o
+   comando a rodar na própria mensagem de falha. Provado nos dois sentidos:
+   mexendo no motor sem regerar, o teste sai 1 e imprime o diff; restaurado,
+   volta a 0.
+3. **O guarda prova mais do que a sincronia.** Que ele é mesmo autocontido
+   (nenhum `apps`, nenhum `Config`, e a lista de imports é exatamente
+   `argparse/datetime/duckdb/json/os/re/sys/traceback`); que o corpo é o do
+   motor com a ÚNICA adaptação declarada aplicada — e essa comparação é EXATA
+   contra a constante `SEED_APP`/`SEED_STANDALONE` do gerador, não uma
+   heurística de palavras-chave, que aceitaria qualquer outra edição que
+   "parecesse" do seed; e que ele CONVERTE de verdade, produzindo o mesmo
+   desenho do script oficial (um banco por produto com o caminho de `cache/` no
+   nome, o Daily Settlement quebrando pelo nome do arquivo, um banco por JSON,
+   segunda rodada em zero).
+
+A primeira versão do check 3 foi por palavras-chave e reprovou — o que foi bom:
+mostrou que a asserção frágil era a própria asserção. Trocada pela igualdade
+exata, ela passou a provar o que promete.
+
+Suíte completa verde, agora com 102 scripts.
+
+## §341 — o standalone repartido: nove scripts para rodar em paralelo (2026-08-28)
+
+Pedido: além de versionar (§340), **repartir** o standalone — um script para os
+JSONs únicos e um por bloco com quebra por dia — "para mais pessoas conseguirem
+rodar, ou rodar mais de um ao mesmo tempo sem precisar esperar um terminar".
+
+O motor ganhou ESCOPO, e é o motor que ganhou — não os scripts. `convert_daily`
+passou a aceitar `familias` (restringe a rotinas de primeiro nível de `cache/`)
+e `excluir` (o complemento). Repetir esse filtro em cada script gerado seria a
+mesma regra em nove lugares. Junto veio o `cache_families()`, que é o eixo da
+repartição e existe para o gerador e os scripts não terem cada um a sua lista.
+
+Três decisões dentro do escopo:
+
+- **a varredura desce só na fatia** (`os.walk` por família, não em `cache/`
+  inteiro): no share, onde a caminhada é cara, é a diferença entre ler uma
+  rotina e ler tudo;
+- **a limpeza de bancos legados se restringe às famílias da fatia.** Sem isso,
+  quem rodasse a fatia do New Deals apagaria o `daily_b3_files.db` que a pessoa
+  ao lado estava convertendo naquele instante — desfazer a carga alheia no meio
+  dela;
+- **rotina pedida que não existe em disco vai para `ignored` com o motivo**, não
+  é erro nem silêncio: a instância pode não ter aquele cache ainda.
+
+`scripts/standalone/` tem **nove** arquivos: `00_completo` (tudo num comando),
+`01_cadastros` (os JSONs únicos — feriados, RefData/CPD e um banco por JSON de
+cadastro), seis `02_*` (uma rotina de `cache/` cada) e `99_outros` — a rede de
+segurança que pega toda rotina sem arquivo próprio, para uma rotina NOVA nunca
+ficar sem conversor enquanto ninguém regera nada.
+
+A repartição é segura porque **os bancos são um por produto**: duas fatias nunca
+escrevem no mesmo `.db`. Provado rodando SETE processos ao mesmo tempo contra o
+`static/data` da dev — zero erro, 133 bancos, resultado idêntico ao da carga
+sequencial e ao do script oficial do repo.
+
+O guarda do §340 cresceu junto: além da sincronia byte a byte de cada um dos
+nove com o gerador, ele cobra que a pasta tenha exatamente os arquivos gerados,
+que todos sejam autocontidos (imports só da stdlib + duckdb) e — o que motiva a
+repartição — que **a soma das fatias seja EXATAMENTE a carga completa**, com uma
+rotina inventada caindo no `99_outros`. Duas asserções minhas nasceram erradas e
+o teste as pegou: a rotina de UM nível de pasta leva a tag do arquivo no nome do
+banco (`daily_rotina_nova_coisa.db`), e o `reference_data.db` faltava na lista
+esperada dos cadastros.
+
+`scripts/standalone/README.md` é o que a pessoa que recebe lê: a tabela dos
+nove, o `pip install duckdb`, as flags, um exemplo de rodada em paralelo no
+Windows, e o aviso de que os arquivos são gerados e não se editam à mão.
