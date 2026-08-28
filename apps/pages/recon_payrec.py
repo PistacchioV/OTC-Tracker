@@ -968,6 +968,79 @@ def _cli_spb(rows, cols, mgt=False):
     return out
 
 
+# ── Quem pode ser par de quem ─────────────────────────────────────────────────
+_BANK_NAME_KEY = 'bank-name'
+# Sufixos societários e conectivos — não identificam ninguém, e exigi-los faria
+# `BANCO SANTANDER S/A` deixar de casar com `BANCO SANTANDER (BRASIL) S.A.`.
+# A palavra `banco` NÃO está aqui de propósito: é justamente ela que separa o
+# `BANCO JOHN DEERE S/A` da John Deere montadora, que é cliente.
+_BANK_STOP_TOKENS = frozenset({'sa', 'ltda', 'bm', 'do', 'da', 'de', 'dos', 'das',
+                               'e', 's', 'me', 'epp', 'cia'})
+
+
+def _name_tokens(name):
+    """As PALAVRAS do nome, normalizadas e sem os sufixos societários.
+
+    A comparação é por palavra e nunca por substring: o `_norm` cola o nome
+    inteiro (`saintgobaindobrasil`), e aí o núcleo `brasil` do Banco do Brasil
+    casa DENTRO de `SAINT GOBAIN DO BRASIL` — foi assim que a primeira versão
+    desta guarda respondeu que toda contraparte era banco.
+    """
+    partes = re.split(r'[^0-9A-Za-zÀ-ÿ]+', str(name or ''))
+    return {t for t in (_norm(p) for p in partes) if t and t not in _BANK_STOP_TOKENS}
+
+
+def _is_bank_cpty(name):
+    """A contraparte desta perna do JPM é um BANCO?
+
+    Responde pelo cadastro `bank-name` (/mapping), nunca pela palavra `banco` no
+    nome sozinha: o projeto já aprendeu que esse teste erra dos dois lados —
+    Banco Safra, Bradesco e Santander aparecem como CLIENTES (CLAUDE.md §7), e
+    o `BOFA MERRILL LYNCH BM S/A` é banco sem a palavra. Casa quando TODAS as
+    palavras do nome cadastrado estão no nome da contraparte, o que absorve as
+    variantes de grafia (`BANCO ITAU S/A` × `Banco Itau Unibanco S.A.`) sem
+    abrir a mão para um nome qualquer.
+
+    Banco fora do cadastro responde NÃO, e isso é o lado seguro do erro: a perna
+    vira `Pending` (falso alarme, que se vê) em vez de casar com um SPB que não
+    é dela (falso `Settled`, que não se vê). Cadastrar é uma linha na tela de
+    /mapping, e vale no run seguinte sem restart.
+    """
+    alvo = _name_tokens(name)
+    if not alvo:
+        return False
+    for r in _mapping_rows(_BANK_NAME_KEY):
+        cadastrado = _name_tokens(r.get('NAME', ''))
+        if cadastrado and cadastrado <= alvo:
+            return True
+    return False
+
+
+def _match_allowed(j, c):
+    """A pergunta que vem ANTES de qualquer tolerância: este par é POSSÍVEL?
+
+    O `SPB - outros bancos` é uma liquidação INTERBANCÁRIA — o outro lado dela é
+    um BANCO. Ela não traz nome de cliente nenhum (só o LTR, o status e o
+    valor), então é casada só por VALOR, e com a tolerância larga que a tarifa
+    interbancária exige (±R$20). Sem esta guarda essa janela casa com qualquer
+    perna pequena do dia: um recebimento de R$7,02 da Saint Gobain fechou contra
+    um SPB de R$6,68 e saiu `Settled`, quando o cliente não tinha liquidado nada.
+
+    E o estrago é maior do que uma linha errada. A linha SPB nasce
+    `drop_if_unmatched` — ela é RUÍDO por construção e seria descartada em
+    silêncio se não casasse —, então o ruído rouba o par de uma liquidação de
+    verdade e ainda a carimba como paga: some justamente o alerta que a mesa
+    precisava ver.
+
+    A direção entra pela mesma porta: com ±R$20, dois valores pequenos de
+    SINAIS OPOSTOS ficam dentro da janela (um Pay de −3,00 fechava com um
+    Receive de +9,00), e um pagamento nunca é o par de um recebimento.
+    """
+    if not c.get('bank'):
+        return True
+    return _is_bank_cpty(j.get('cpty')) and j.get('pay_receive') == c.get('pay_receive')
+
+
 # ── Reconciliation ────────────────────────────────────────────────────────────
 def _reconcile(jpm, client):
     buckets = {}
@@ -979,7 +1052,11 @@ def _reconcile(jpm, client):
         pool = buckets.get(_int_key(j['value']), [])
         mate = None
         for c in pool:
-            if id(c) not in matched:
+            # `_match_allowed` vale nos TRÊS estágios, e neste também: valores
+            # que caem na mesma unidade inteira casam aqui sem passar por
+            # tolerância nenhuma — um SPB interbancário de R$7,02 fecharia com
+            # a perna de R$7,02 de um cliente qualquer.
+            if id(c) not in matched and _match_allowed(j, c):
                 mate = c; matched.add(id(c)); break
         # COMM OPT premiums are settled net of ~0.005% IR, so the exact whole-unit
         # key can miss. Fall back to the nearest unmatched client value within
@@ -988,7 +1065,7 @@ def _reconcile(jpm, client):
             tol = abs(j['value']) * _TOL_COMM_OPT_PCT + _TOL_COMM_OPT_ABS
             best, best_d = None, None
             for c in client:
-                if id(c) in matched:
+                if id(c) in matched or not _match_allowed(j, c):
                     continue
                 d = abs(c['value'] - j['value'])
                 if d <= tol and (best_d is None or d < best_d):
@@ -1004,7 +1081,7 @@ def _reconcile(jpm, client):
         if mate is None:
             best, best_d = None, None
             for c in client:
-                if id(c) in matched:
+                if id(c) in matched or not _match_allowed(j, c):
                     continue
                 d = abs(c['value'] - j['value'])
                 tol = c.get('tol', 0.0)

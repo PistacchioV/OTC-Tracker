@@ -1,75 +1,42 @@
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""O motor da conversão JSON → DuckDB (fase 2 da migração: HANDOFF §324–§326).
+r"""convert 99_outros — as rotinas de cache/ que não têm arquivo próprio.
 
-Era o corpo do `scripts/convert_json_to_duckdb.py` e virou módulo do app
-porque agora ele tem DOIS chamadores: o script (a carga completa, rodada à
-mão) e o **espelho vivo** (`apps/pages/duck_mirror.py`), que reconverte na
-hora o JSON que acabou de ser gravado. Duplicar a regra nos dois seria criar
-duas respostas para "como este JSON vira tabela".
+A rede de segurança: rotina nova em cache/ é convertida por aqui.
 
-Materializa os dados que hoje vivem em JSON como bancos DuckDB tipados, ao
-lado dos próprios JSONs (que continuam sendo a fonte de LEITURA enquanto os
-consumidores não forem religados — fase 3). Idempotente e INCREMENTAL: cada
-banco guarda um `_manifest` (caminho, mtime, tamanho) e só reconverte o
-arquivo que mudou — rodar de novo com nada mudado não reescreve nada, e um
-calendário/dia novo vira tabela nova sem tocar nas existentes.
+Versão AUTOCONTIDA: roda em QUALQUER máquina, sem o código do OTC Tracker por
+perto. Requisito único:  pip install duckdb
 
-Três bancos, no desenho pedido:
+    Origem : I:\Confirmation\Derivativos\OTC Tracker\Application\static\data
+    Destino: ...\static\data\db   (a pasta db dentro da origem)
 
-- **`holiday_calendars.db`** — UMA TABELA POR CALENDÁRIO (nome vindo do
-  registro `holiday-calendars.json`; calendário criado pela tela ganha a
-  tabela na rodada seguinte). Colunas tipadas: `date DATE`, `title`,
-  `calendar`. A tabela `_registry` guarda o próprio registro (cores/CSS).
-- **`reference_data.db`** — duas tabelas: `refdata` (RefData.json) e
-  `counterparty_details` (CounterpartyDetails.json). TUDO VARCHAR de
-  propósito: é cadastro de IDENTIFICADOR (SPN, ECI, TAX ID, conta B3), e 158
-  dos 553 documentos começam com zero — um BIGINT aqui perderia o zero à
-  esquerda e a chave deixaria de casar em silêncio (CLAUDE.md §7). O que é
-  aninhado (CGD, CONTACTS, BANKING, NET) vira texto JSON na coluna, legível
-  por `json_extract` de quem consultar.
-- **`daily_<produto>.db`** — UM BANCO POR PRODUTO de arquivo-dia, com o
-  caminho INTEIRO de `<DATA_DIR>/cache/` no nome (`daily_new_deals_ndf_vanilla.db`,
-  `daily_new_deals_option_fxo.db`, `daily_b3_files_swap.db`, …) e cada dia
-  como UMA TABELA (`d_AAAAMMDD[_tag]`). Onde a rotina NÃO se ramifica em
-  pastas — o Daily Settlement grava os dez arquivos do dia na mesma pasta —,
-  quem separa os produtos é o NOME do arquivo, e a tag dele entra no banco
-  (`daily_settlement_otm.db`, `daily_settlement_ndf_cockpit.db`): assim toda
-  rotina tem a mesma quebra, venha o produto da pasta ou do nome. Payload
-  lista-de-objetos vira tabela TIPADA por inferência; payload objeto vira uma
-  tabela por lista interna (`d_..._summary`) mais uma `_meta` chave→valor.
-  Produto novo em `cache/` ganha o próprio banco sozinho.
-- **`<pasta>_<arquivo>.db`** — UM BANCO POR JSON avulso para todo o resto
-  (`mappings_mt300.db`, `control_panel_mt300_status.db`,
-  `file_interpreter_termo.db`, `subjacente.db` na raiz), com uma tabela por
-  arquivo. Um banco por arquivo também tira a contenção que um banco
-  compartilhado criava: o espelho reconvertendo UM mapping não fecha a
-  leitura dos outros 42.
+Uso:
+    python 99_outros.py
+    python 99_outros.py --dry-run
+    python 99_outros.py --data-dir "D:\outra\pasta" --out-dir "D:\saida"
 
-A inferência de tipos otimiza a leitura sem trair o dado:
+O ESCOPO é o RESTO de cache\: toda rotina que não tem arquivo próprio ao lado
+deste. Ele existe para uma rotina NOVA nunca ficar sem conversor — hoje as
+cobertas são:
 
-- número só vira BIGINT/DOUBLE quando TODOS os valores da coluna parseiam —
-  e **número com zero à esquerda é texto** (Trade ID todo numérico não perde o
-  zero); inteiro fora de 64 bits é texto;
-- data reconhece ISO (`AAAA-MM-DD`) e o padrão da casa (`dd/mm/aaaa` — a
-  convenção do app inteiro, CLAUDE.md §3; nunca mm/dd);
-- coluna de texto preserva o valor BYTE A BYTE, espaço no fim incluído (o
-  `'C '` dos códigos B3); `''` em coluna tipada vira NULL, em coluna de texto
-  fica `''`.
+  - new deals
+  - b3 files
+  - daily settlement
+  - pending-confirmation
+  - payrec
+  - reconciliation
 
-Os caminhos chegam EXPLÍCITOS (`data_dir`, `out_dir`) — quem resolve os
-padrões (`Config.DATA_DIR` → `Config.DATABASE_DIR`) é cada chamador; este
-módulo não monta caminho de dado por conta própria.
+Se não houver nenhuma rotina fora dessa lista, este script não faz nada, e isso
+é o resultado esperado.
 
-⚠️ **Este motor tem NOVE cópias**: os `scripts/standalone/*.py`, entregues a
-quem precisa rodar a conversão numa máquina sem o código do app (e sem acesso ao
-`config.py`), repartidos por escopo para várias pessoas rodarem em paralelo.
-Elas são GERADAS a partir daqui e não se atualizam sozinhas — por três vezes
-tiveram de ser regeradas depois de uma mudança neste arquivo, e na quarta passou
-batido, com os dois lados produzindo bancos DIFERENTES do mesmo dado e nenhum
-erro. Depois de mexer aqui, rode `python scripts/build_duckdb_standalone.py` e
-commite o resultado; o `check_duckdb_standalone.py` reprova quem esquecer.
+É IDEMPOTENTE e INCREMENTAL: cada banco guarda um `_manifest` com
+caminho/mtime/tamanho e só reconverte o arquivo que mudou — rodar de novo com
+nada alterado não reescreve nada. `--force` reconverte tudo; `--dry-run` só
+lista. Erro num arquivo não para o resto: sai no resumo do fim.
 
-Teste de regressão: `scripts/tests/check_json_to_duckdb.py`.
+GERADO por scripts/build_duckdb_standalone.py a partir de
+apps/pages/json_to_duckdb.py — não edite à mão: mexer no motor e não regerar
+estes arquivos é como eles passam a discordar.
 """
 import datetime
 import json
@@ -310,14 +277,10 @@ def _holiday_registry(data_dir):
     if os.path.isfile(path):
         rows = _load_json(path) or []
         return [r for r in rows if isinstance(r, dict) and str(r.get('name', '')).strip()]
-    # Instância que nunca abriu a tela: o registro ainda não foi semeado.
-    # O seed do app é a mesma lista que a tela usaria — importado só aqui,
-    # e só neste caso.
-    try:
-        from apps.pages.features.holidays import domain
-        return [dict(r) for r in domain.CAL_SEED]
-    except Exception:                                          # noqa: BLE001
-        return []
+    # Sem registro não há o que converter — o arquivo nasce quando alguém
+    # abre a tela de calendários no app. (No app este ramo cai no seed da
+    # vertical de feriados; aqui não há `apps` para importar.)
+    return []
 
 
 def convert_holidays(data_dir, out_dir, force=False, dry_run=False):
@@ -1018,3 +981,51 @@ def convert_datasets(data_dir, out_dir, force=False, dry_run=False):
     _drop_legacy_dbs(out_dir, _dataset_legacy_dbs(data_dir), {a[0] for a, _ in alvos},
                      stats, 'agora e um DB por JSON')
     return _convert_dataset_rels(data_dir, out_dir, rels, force, stats, cal_files)
+
+# ── CLI (caminhos fixos do share — versão standalone) ───────────────────────
+import argparse
+import sys
+
+DATA_DIR_PADRAO = r'I:\Confirmation\Derivativos\OTC Tracker\Application\static\data'
+
+
+def _resumo(nome, stats, houve_erro):
+    print('\n== %s -> %s' % (nome, os.path.basename(stats['db'])))
+    print('   convertidos: %d | inalterados: %d%s' % (
+        len(stats['converted']), len(stats['skipped']),
+        ' | fora deste conversor: %d' % len(stats['ignored'])
+        if stats.get('ignored') else ''))
+    for item in stats['converted']:
+        print('   + %s' % item)
+    for rel, erro in stats['errors']:
+        houve_erro[0] = True
+        print('   ERRO %s: %s' % (rel, str(erro).strip().splitlines()[-1]))
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument('--data-dir', default=DATA_DIR_PADRAO,
+                    help='origem dos JSONs (padrão: o static\\data do share)')
+    ap.add_argument('--out-dir', default=None,
+                    help='destino dos .db (padrão: a pasta db dentro da origem)')
+    ap.add_argument('--force', action='store_true', help='reconverte mesmo sem mudança')
+    ap.add_argument('--dry-run', action='store_true', help='só lista o que converteria')
+    args = ap.parse_args(argv)
+
+    data_dir = os.path.abspath(args.data_dir)
+    out_dir = os.path.abspath(args.out_dir or os.path.join(data_dir, 'db'))
+    print('origem : %s' % data_dir)
+    print('destino: %s' % out_dir)
+    print('escopo : cache/ menos as rotinas com arquivo próprio')
+
+    houve_erro = [False]
+    # Tudo que os demais scripts NAO cobrem: e o que garante que uma rotina nova
+    # em cache/ tenha conversor sem ninguem regerar nada.
+    _resumo('daily', convert_daily(data_dir, out_dir, force=args.force,
+                                   dry_run=args.dry_run, excluir=['new deals', 'b3 files', 'daily settlement', 'pending-confirmation', 'payrec', 'reconciliation']),
+            houve_erro)
+    return 1 if houve_erro[0] else 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())
