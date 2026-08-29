@@ -154,11 +154,34 @@ check('o Aging também', r['Aging Confirmação'], '')
 check('   e as duas estão marcadas como derivadas', sorted(M.DERIVED_COLUMNS),
       ['Aging Confirmação', 'Pending'])
 # O aging conta da data de ENVIO para o OTC, não da data da operação: uma
-# operação de três meses atrás cuja confirmação saiu ontem não está atrasada.
-ontem = (datetime.now().date() - timedelta(days=1)).strftime('%d/%m/%Y')
+# operação de três meses atrás cuja confirmação saiu no dia útil anterior não
+# está atrasada.
+#
+# A data de envio é montada em dias ÚTEIS ANBIMA, nunca com `hoje - 1 dia`: o
+# aging conta dias úteis, então num SÁBADO o "ontem" é sexta e a resposta certa
+# passa a ser 0 — o teste falhava todo fim de semana com o código correto.
+# Recuar dois dias úteis a partir do último dia útil <= hoje deixa exatamente UM
+# no intervalo, em qualquer dia em que a suíte rode.
+def _dia_util_anterior(d):
+    feriados = M._anbima_holidays()
+    while True:
+        d -= timedelta(days=1)
+        if d.weekday() < 5 and d.strftime('%Y-%m-%d') not in feriados:
+            return d
+
+
+def _ultimo_dia_util(d):
+    feriados = M._anbima_holidays()
+    while d.weekday() >= 5 or d.strftime('%Y-%m-%d') in feriados:
+        d -= timedelta(days=1)
+    return d
+
+
+envio = _dia_util_anterior(_ultimo_dia_util(datetime.now().date()))
 antigo = (datetime.now().date() - timedelta(days=90)).strftime('%d/%m/%Y')
 M.upsert_row(M.blank_row(**{'Trade ID': 'T5', 'Produto': 'NDF COMM',
-                            'Data Operação': antigo, 'Data envio validação OTC': ontem}))
+                            'Data Operação': antigo,
+                            'Data envio validação OTC': envio.strftime('%d/%m/%Y')}))
 check('o aging é da pendência, não da operação', M.find_row('T5')['Aging Confirmação'], '1')
 
 print('\n== 5. o reject devolve para o OTC e limpa o que já valeu ==')

@@ -14874,7 +14874,12 @@ teste que quebraria no futuro sem ninguém ter mexido em nada. Os nove standalon
 regerados. Suíte completa verde (o `check_manual_conf` falha aos sábados por uma
 fragilidade própria e anterior — ver abaixo).
 
-**Achado de lado, não corrigido:** `check_manual_conf.py` monta o caso do aging
-com `ontem = hoje - 1 dia` e espera 1 dia ÚTIL. Rodando num sábado, o ontem é
-sexta e a resposta correta é 0 — o teste falha todo fim de semana, sem nada de
-errado no código. Vale trocar o `ontem` por uma data com N dias úteis garantidos.
+**Achado de lado, CORRIGIDO na mesma sessão:** `check_manual_conf.py` montava o
+caso do aging com `ontem = hoje - 1 dia` e esperava 1 dia ÚTIL. Rodando num
+sábado, o ontem é sexta e a resposta certa passa a ser 0 — o teste falhava todo
+fim de semana com o código correto. Agora a data de envio é montada pelo
+calendário ANBIMA: **o dia útil anterior ao último dia útil <= hoje**, que deixa
+exatamente UM dia útil no intervalo em qualquer dia em que a suíte rode. Simulando
+os 365 dias de 2026, a regra antiga falharia em 116 (todo sábado, domingo e
+feriado) e a nova em nenhum. Data montada com aritmética de dias corridos num
+teste que mede dias ÚTEIS é a mesma armadilha em qualquer outro lugar.
