@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""convert 02_new_deals_option — o bloco `new deals/Option` de cache/.
+"""convert 02_new_deals_swap_commodities — o bloco `new deals/Swap/Commodities` de cache/.
 
-O ESCOPO é UM bloco de cache/: **new deals/Option**.
+O ESCOPO é UM bloco de cache/: **new deals/Swap/Commodities**.
 
-As opções do New Deals — Commodities e FXO.
+Os swaps de mercadoria.
 
 Cada produto vira um banco e a pasta db/ espelha a árvore de cache/; só
 ano/mês/dia não viram pasta — cada dia é uma tabela dentro do banco.
@@ -34,6 +34,6 @@ from convert_json_to_duckdb import run    # noqa: E402
 
 
 if __name__ == '__main__':
-    sys.exit(run(escopo='cache/new deals/Option (arquivo-dia)',
-                 conversores=('daily',), familias=['new deals/Option'],
+    sys.exit(run(escopo='cache/new deals/Swap/Commodities (arquivo-dia)',
+                 conversores=('daily',), familias=['new deals/Swap/Commodities'],
                  doc=__doc__))

@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-r"""convert 99_outros — as rotinas de cache/ que não têm arquivo próprio.
+r"""convert 02_new_deals_ndf_vanilla — a rotina `new deals/NDF/Vanilla` de cache/.
 
-A rede de segurança: rotina nova em cache/ é convertida por aqui.
+O termo de moeda vanilla — costuma ser o maior
+arquivo-dia do app inteiro.
 
 Versão AUTOCONTIDA: roda em QUALQUER máquina, sem o código do OTC Tracker por
 perto. Requisito único:  pip install duckdb
@@ -13,37 +14,28 @@ perto. Requisito único:  pip install duckdb
     Destino: ...\static\data\db   (a pasta db dentro da origem)
 
 Uso:
-    python 99_outros.py
-    python 99_outros.py --dry-run
-    python 99_outros.py --data-dir "D:\outra\pasta" --out-dir "D:\saida"
+    python 02_1_new_deals_ndf_vanilla.py
+    python 02_1_new_deals_ndf_vanilla.py --dry-run
+    python 02_1_new_deals_ndf_vanilla.py --data-dir "D:\outra\pasta" --out-dir "D:\saida"
 
-O ESCOPO é o RESTO de cache\: toda rotina que não tem arquivo próprio ao lado
-deste. Ele existe para uma rotina NOVA nunca ficar sem conversor — hoje as
-cobertas são:
+O ESCOPO é UM bloco de cache\: **new deals/NDF/Vanilla**.
 
-  - new deals/NDF/Vanilla
-  - new deals/NDF/FwdStart
-  - new deals/NDF/FWD Start
-  - new deals/NDF/OtherPublisher
-  - new deals/NDF/Commodities
-  - new deals/Option/FXO
-  - new deals/Option/Commodities
-  - new deals/Swap/Rates
-  - new deals/Swap/Commodities
-  - new deals/Intrag/NDF
-  - new deals/Intrag/Option
-  - new deals/Intrag/Swap
-  - b3 files/NDF
-  - b3 files/Option
-  - b3 files/Swap
-  - b3 files/Operations
-  - daily settlement
-  - pending-confirmation
-  - payrec
-  - reconciliation
+O termo de moeda vanilla — costuma ser o maior
+arquivo-dia do app inteiro.
 
-Se não houver nenhuma rotina fora dessa lista, este script não faz nada, e isso
-é o resultado esperado.
+Cada produto vira um banco e a pasta db\ ESPELHA a árvore de cache\
+(db\cache\new deals\NDF\Vanilla.db, db\cache\b3 files\Swap.db); só
+ano/mês/dia não viram pasta — cada dia é uma tabela
+(d_AAAAMMDD[_tag]), tipada por inferência: dd/mm/aaaa e ISO viram DATE, número
+vira BIGINT/DOUBLE, zero à esquerda continua texto, '' vira NULL só em coluna
+tipada, e texto sai byte a byte.
+
+Como os bancos são um por produto, este script NÃO escreve em nada que os outros
+escrevem: pode rodar ao mesmo tempo que eles.
+
+Se nesta instância o bloco ainda for grande demais, `--bloco NOME` desce mais um
+nível (ex.: `--bloco Vanilla`). Ele SUBSTITUI o escopo desta fatia — não rode a
+fatia inteira em paralelo com um bloco dela.
 
 É IDEMPOTENTE e INCREMENTAL: cada banco guarda um `_manifest` com
 caminho/mtime/tamanho e só reconverte o arquivo que mudou — rodar de novo com
@@ -1388,6 +1380,10 @@ def main(argv=None):
                          'ou a letra I:, o que existir na máquina)')
     ap.add_argument('--out-dir', default=None,
                     help='destino dos .db (padrão: a pasta db dentro da origem)')
+    ap.add_argument('--bloco', default=None,
+                    help='restringe a UMA subpasta desta fatia (ex.: --bloco '
+                         'Vanilla). SUBSTITUI o escopo da fatia — nao rode a '
+                         'fatia inteira em paralelo com um bloco dela.')
     ap.add_argument('--force', action='store_true', help='reconverte mesmo sem mudança')
     ap.add_argument('--dry-run', action='store_true', help='só lista o que converteria')
     ap.add_argument('--meses', type=int, default=12,
@@ -1407,13 +1403,17 @@ def main(argv=None):
     print('janela : %s' % ('arquivo-dia a partir de %s (%d meses)'
                            % (desde.strftime('%d/%m/%Y'), args.meses)
                            if desde else 'historico INTEIRO (--meses 0)'))
-    print('escopo : cache/ menos as rotinas com arquivo próprio')
+    print('escopo : cache/new deals/NDF/Vanilla (arquivo-dia)')
 
     houve_erro = [False]
-    # Tudo que os demais scripts NAO cobrem: e o que garante que uma rotina nova
-    # em cache/ tenha conversor sem ninguem regerar nada.
+    # `--bloco` SUBSTITUI o escopo desta fatia; nao soma. Rodar a fatia inteira
+    # em paralelo com um bloco dela poria dois processos no mesmo banco.
+    fatia = 'new deals/NDF/Vanilla'
+    if args.bloco:
+        fatia = fatia.rstrip('/') + '/' + args.bloco.strip().strip('/')
+        print('escopo : cache/%s (arquivo-dia) [--bloco]' % fatia)
     _resumo('daily', convert_daily(data_dir, out_dir, force=args.force,
-                                   dry_run=args.dry_run, excluir=['new deals/NDF/Vanilla', 'new deals/NDF/FwdStart', 'new deals/NDF/FWD Start', 'new deals/NDF/OtherPublisher', 'new deals/NDF/Commodities', 'new deals/Option/FXO', 'new deals/Option/Commodities', 'new deals/Swap/Rates', 'new deals/Swap/Commodities', 'new deals/Intrag/NDF', 'new deals/Intrag/Option', 'new deals/Intrag/Swap', 'b3 files/NDF', 'b3 files/Option', 'b3 files/Swap', 'b3 files/Operations', 'daily settlement', 'pending-confirmation', 'payrec', 'reconciliation'],
+                                   dry_run=args.dry_run, familias=[fatia],
                                    desde=desde),
             houve_erro)
     return 1 if houve_erro[0] else 0

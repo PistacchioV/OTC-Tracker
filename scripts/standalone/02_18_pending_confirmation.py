@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-r"""convert 02_b3_files_option — a rotina `b3 files/Option` de cache/.
+r"""convert 02_pending_confirmation — a rotina `pending-confirmation` de cache/.
 
-Idem, para as opções.
+Os snapshots diários do Pending Confirmation.
 
 Versão AUTOCONTIDA: roda em QUALQUER máquina, sem o código do OTC Tracker por
 perto. Requisito único:  pip install duckdb
@@ -13,13 +13,13 @@ perto. Requisito único:  pip install duckdb
     Destino: ...\static\data\db   (a pasta db dentro da origem)
 
 Uso:
-    python 02_6_b3_files_option.py
-    python 02_6_b3_files_option.py --dry-run
-    python 02_6_b3_files_option.py --data-dir "D:\outra\pasta" --out-dir "D:\saida"
+    python 02_18_pending_confirmation.py
+    python 02_18_pending_confirmation.py --dry-run
+    python 02_18_pending_confirmation.py --data-dir "D:\outra\pasta" --out-dir "D:\saida"
 
-O ESCOPO é UM bloco de cache\: **b3 files/Option**.
+O ESCOPO é UM bloco de cache\: **pending-confirmation**.
 
-Idem, para as opções.
+Os snapshots diários do Pending Confirmation.
 
 Cada produto vira um banco e a pasta db\ ESPELHA a árvore de cache\
 (db\cache\new deals\NDF\Vanilla.db, db\cache\b3 files\Swap.db); só
@@ -847,20 +847,38 @@ def chave_familia(nome):
 # O que NÃO está aqui não fica de fora: o `99_outros` de cada split cobre o
 # resto, e é essa a rede que faz esta lista poder envelhecer sem perda.
 #
-# As duas rotinas grandes — New Deals e B3 Files — entram REPARTIDAS POR BLOCO,
-# uma fatia por pasta de produto. Como bloco único elas eram o gargalo: as
-# outras quatro terminam em minutos e três pessoas ficavam esperando a maior.
-# O corte é no PRIMEIRO nível dentro da rotina, que é onde a árvore de fato se
-# divide; para descer mais numa instância específica há o `--bloco`, que não
-# precisa de arquivo novo.
+# As duas rotinas grandes — New Deals e B3 Files — entram REPARTIDAS ATÉ O
+# PRODUTO, que é a folha da árvore (abaixo dele já vem AAAA/MM/DD) e a unidade
+# em que cada banco é escrito. Como bloco único elas eram o gargalo: as outras
+# quatro rotinas terminam em minutos e o resto da equipe ficava esperando a
+# maior. Repartir só até `new deals/NDF` ainda deixava o Vanilla — o maior
+# arquivo-dia do app — junto com os outros três.
+#
+# Uma pasta de produto que a instância não tenha vira um aviso e sai limpa; e o
+# que NÃO estiver nesta lista não fica de fora: o `99_outros` poda por CAMINHO,
+# então um produto novo (`new deals/NDF/Asian`) cai nele. Para descer ainda
+# mais numa instância específica há o `--bloco`, que não precisa de arquivo
+# novo.
 ROTINAS_CACHE = (
-    ('new deals/NDF', 'Os termos de moeda e mercadoria do New Deals — Vanilla, FWD\n'
-                      'Start, Other Publisher e Commodities, um banco por produto.'),
-    ('new deals/Option', 'As opções do New Deals — Commodities e FXO.'),
-    ('new deals/Swap', 'Os swaps do New Deals — Rates e Commodities.'),
-    ('new deals/Intrag', 'Os arquivo-dia da Intrag — NDF e Opção.'),
+    ('new deals/NDF/Vanilla', 'O termo de moeda vanilla — costuma ser o maior\n'
+                              'arquivo-dia do app inteiro.'),
+    ('new deals/NDF/FwdStart', 'O NDF FWD Start, na pasta que o app grava hoje.'),
+    ('new deals/NDF/FWD Start', 'O MESMO produto na pasta LEGADA (com espaço), que\n'
+                                'continua cheia no share e que o app ainda lê. Ela é\n'
+                                'uma fatia própria porque tem dado de verdade; onde\n'
+                                'não existir, esta fatia avisa e sai limpa.'),
+    ('new deals/NDF/OtherPublisher', 'O NDF Other Publisher.'),
+    ('new deals/NDF/Commodities', 'O termo de mercadoria.'),
+    ('new deals/Option/FXO', 'A opção de câmbio.'),
+    ('new deals/Option/Commodities', 'A opção de mercadoria.'),
+    ('new deals/Swap/Rates', 'Os swaps de taxa.'),
+    ('new deals/Swap/Commodities', 'Os swaps de mercadoria.'),
+    ('new deals/Intrag/NDF', 'O termo da Intrag.'),
+    ('new deals/Intrag/Option', 'A opção da Intrag.'),
+    ('new deals/Intrag/Swap', 'O swap da Intrag.'),
     ('b3 files/NDF', 'As posições e fluxos de NDF que a rotina Save CETIP Files\n'
-                     'grava (DPOSICAO, DFLUXO).'),
+                     'grava (DPOSICAO, DFLUXO). Aqui o produto já é o primeiro\n'
+                     'nível: o ano vem logo abaixo, não há o que repartir mais.'),
     ('b3 files/Option', 'Idem, para as opções.'),
     ('b3 files/Swap', 'Idem, para os swaps — costuma ser o maior dos quatro.'),
     ('b3 files/Operations', 'O Operations B3 — a lista de operações registradas.'),
@@ -1383,12 +1401,12 @@ def main(argv=None):
     print('janela : %s' % ('arquivo-dia a partir de %s (%d meses)'
                            % (desde.strftime('%d/%m/%Y'), args.meses)
                            if desde else 'historico INTEIRO (--meses 0)'))
-    print('escopo : cache/b3 files/Option (arquivo-dia)')
+    print('escopo : cache/pending-confirmation (arquivo-dia)')
 
     houve_erro = [False]
     # `--bloco` SUBSTITUI o escopo desta fatia; nao soma. Rodar a fatia inteira
     # em paralelo com um bloco dela poria dois processos no mesmo banco.
-    fatia = 'b3 files/Option'
+    fatia = 'pending-confirmation'
     if args.bloco:
         fatia = fatia.rstrip('/') + '/' + args.bloco.strip().strip('/')
         print('escopo : cache/%s (arquivo-dia) [--bloco]' % fatia)

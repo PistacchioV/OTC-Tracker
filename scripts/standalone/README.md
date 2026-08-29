@@ -25,44 +25,53 @@ por várias pessoas** — cada uma com o seu arquivo, ninguém esperando o outro
 terminar.
 
 Isso é seguro porque **os bancos são um por produto**: duas fatias nunca
-escrevem no mesmo `.db`. Rodar catorze ao mesmo tempo dá exatamente o mesmo
+escrevem no mesmo `.db`. Rodar vinte e dois ao mesmo tempo dá exatamente o mesmo
 resultado de rodar tudo em sequência.
 
-**As duas rotinas grandes entram repartidas por dentro.** New Deals e B3 Files
-eram um bloco cada e viravam o gargalo: as outras quatro terminam em minutos e
-três pessoas ficavam esperando a maior. Agora cada uma vira quatro fatias, uma
-por pasta de produto.
+**As duas rotinas grandes são repartidas até o PRODUTO** — que é a folha da
+árvore (abaixo dele já vem `AAAA\MM\DD`) e a unidade em que cada banco é
+escrito. Repartir só até `new deals/NDF` ainda deixaria o **Vanilla**, o maior
+arquivo-dia do app, junto com os outros três.
+
+Uma pasta que a sua instância não tenha vira um aviso e a fatia sai limpa.
 
 | Arquivo | O que converte |
 |---|---|
-| `00_completo.py` | Tudo de uma vez — para quem prefere um comando só |
-| `01_cadastros.py` | Os JSONs **únicos**, sem quebra por dia: feriados, RefData/CounterpartyDetails, mappings, control-panel, file-interpreter, cadastros B3 |
-| `02_1_new_deals_ndf.py` | `cache/new deals/NDF` — Vanilla, FWD Start, Other Publisher e Commodities |
-| `02_2_new_deals_option.py` | `cache/new deals/Option` — Commodities e FXO |
-| `02_3_new_deals_swap.py` | `cache/new deals/Swap` — Rates e Commodities |
-| `02_4_new_deals_intrag.py` | `cache/new deals/Intrag` — NDF e Opção |
-| `02_5_b3_files_ndf.py` | `cache/b3 files/NDF` — DPOSICAO e DFLUXO |
-| `02_6_b3_files_option.py` | `cache/b3 files/Option` |
-| `02_7_b3_files_swap.py` | `cache/b3 files/Swap` — costuma ser o maior dos quatro |
-| `02_8_b3_files_operations.py` | `cache/b3 files/Operations` |
-| `02_9_daily_settlement.py` | `cache/daily settlement` — OTM, NDF Cockpit, Operações JPM/MGT, Eventos Swap, Cognos, BR Onshore, Latam Desk |
-| `02_10_pending_confirmation.py` | `cache/pending-confirmation` — os snapshots diários |
-| `02_11_payrec.py` | `cache/payrec` — o histórico da recon de Pay/Rec |
-| `02_12_reconciliation.py` | `cache/reconciliation` — os caches por data das reconciliações |
-| `99_outros.py` | Todo bloco de `cache/` que **não** tem arquivo próprio acima. A poda é por CAMINHO, então tanto uma rotina nova (`cache/equity`) quanto uma pasta nova dentro de uma já coberta (`cache/new deals/Equity`) caem aqui. Se não houver nada fora da lista, ele não faz nada, e isso é o resultado esperado |
+| `00_completo.py` | tudo — cadastros + todos os blocos de `cache/` |
+| `01_cadastros.py` | os JSONs ÚNICOS (feriados, RefData/CPD, mappings, control-panel, file-interpreter) |
+| `02_1_new_deals_ndf_vanilla.py` | `new deals/NDF/Vanilla` — costuma ser o maior arquivo-dia do app |
+| `02_2_new_deals_ndf_fwdstart.py` | `new deals/NDF/FwdStart` — o FWD Start, na pasta que o app grava hoje |
+| `02_3_new_deals_ndf_fwd_start.py` | `new deals/NDF/FWD Start` — o MESMO produto na pasta legada (com espaço), que segue cheia no share |
+| `02_4_new_deals_ndf_otherpublisher.py` | `new deals/NDF/OtherPublisher` |
+| `02_5_new_deals_ndf_commodities.py` | `new deals/NDF/Commodities` — o termo de mercadoria |
+| `02_6_new_deals_option_fxo.py` | `new deals/Option/FXO` — a opção de câmbio |
+| `02_7_new_deals_option_commodities.py` | `new deals/Option/Commodities` |
+| `02_8_new_deals_swap_rates.py` | `new deals/Swap/Rates` |
+| `02_9_new_deals_swap_commodities.py` | `new deals/Swap/Commodities` |
+| `02_10_new_deals_intrag_ndf.py` | `new deals/Intrag/NDF` |
+| `02_11_new_deals_intrag_option.py` | `new deals/Intrag/Option` |
+| `02_12_new_deals_intrag_swap.py` | `new deals/Intrag/Swap` |
+| `02_13_b3_files_ndf.py` | `b3 files/NDF` — DPOSICAO e DFLUXO da rotina Save CETIP Files |
+| `02_14_b3_files_option.py` | `b3 files/Option` |
+| `02_15_b3_files_swap.py` | `b3 files/Swap` — costuma ser o maior dos quatro |
+| `02_16_b3_files_operations.py` | `b3 files/Operations` |
+| `02_17_daily_settlement.py` | `daily settlement` — OTM, NDF Cockpit, Operações JPM/MGT, Eventos Swap, Cognos, BR Onshore, Latam Desk |
+| `02_18_pending_confirmation.py` | `pending-confirmation` — os snapshots diários |
+| `02_19_payrec.py` | `payrec` — o histórico da recon de Pay/Rec |
+| `02_20_reconciliation.py` | `reconciliation` — os caches por data das reconciliações |
+| `99_outros.py` | o RESTO de `cache/` — a rede de segurança |
 
-**Para cobrir tudo**, rode `01` + os doze `02_*` + `99` (ou apenas `00_completo`).
+**Para cobrir tudo**, rode `01` + os vinte `02_*` + `99` (ou apenas `00_completo`).
 
 ### Se um bloco ainda for grande
 
 `--bloco NOME` desce mais um nível, sem precisar de arquivo novo:
 
 ```
-python 02_1_new_deals_ndf.py --bloco Vanilla
-python 02_1_new_deals_ndf.py --bloco Commodities
+python 02_13_b3_files_ndf.py --bloco Extra
 ```
 
-Ele **substitui** o escopo da fatia, não soma — não rode `02_1_new_deals_ndf.py`
+Ele **substitui** o escopo da fatia, não soma — não rode `02_13_b3_files_ndf.py`
 em paralelo com um `--bloco` dele. Para saber que blocos existem, peça um que
 não existe: o aviso lista o que há naquele nível.
 
@@ -74,6 +83,33 @@ Sem argumento nenhum, a origem e o destino já são os do share:
 
 ```
 python 01_cadastros.py
+```
+
+Os vinte e dois, para copiar:
+
+```
+python 01_cadastros.py
+python 02_1_new_deals_ndf_vanilla.py
+python 02_2_new_deals_ndf_fwdstart.py
+python 02_3_new_deals_ndf_fwd_start.py
+python 02_4_new_deals_ndf_otherpublisher.py
+python 02_5_new_deals_ndf_commodities.py
+python 02_6_new_deals_option_fxo.py
+python 02_7_new_deals_option_commodities.py
+python 02_8_new_deals_swap_rates.py
+python 02_9_new_deals_swap_commodities.py
+python 02_10_new_deals_intrag_ndf.py
+python 02_11_new_deals_intrag_option.py
+python 02_12_new_deals_intrag_swap.py
+python 02_13_b3_files_ndf.py
+python 02_14_b3_files_option.py
+python 02_15_b3_files_swap.py
+python 02_16_b3_files_operations.py
+python 02_17_daily_settlement.py
+python 02_18_pending_confirmation.py
+python 02_19_payrec.py
+python 02_20_reconciliation.py
+python 99_outros.py
 ```
 
 O share tem **dois endereços para o mesmo lugar** — o UNC e a letra `I:`
@@ -107,10 +143,10 @@ Exemplo de uma rodada em paralelo, no Windows:
 
 ```
 start python 01_cadastros.py
-start python 02_1_new_deals_ndf.py
-start python 02_2_new_deals_option.py
-start python 02_5_b3_files_ndf.py
-start python 02_7_b3_files_swap.py
+start python 02_1_new_deals_ndf_vanilla.py
+start python 02_5_new_deals_ndf_commodities.py
+start python 02_6_new_deals_option_fxo.py
+start python 02_15_b3_files_swap.py
 ```
 
 ---
@@ -152,8 +188,8 @@ start python 02_7_b3_files_swap.py
   histórico entra numa SEGUNDA passada:
 
   ```
-  python 02_7_b3_files_swap.py             # os últimos 12 meses (padrão)
-  python 02_7_b3_files_swap.py --meses 0   # depois, o histórico INTEIRO
+  python 02_15_b3_files_swap.py            # os últimos 12 meses (padrão)
+  python 02_15_b3_files_swap.py --meses 0  # depois, o histórico INTEIRO
   ```
 
   A janela sai declarada na primeira linha da saída, junto da origem e do

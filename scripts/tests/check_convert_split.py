@@ -120,15 +120,22 @@ def w(rel, payload):
 
 # Datas dentro da janela padrão não importam aqui: as fatias rodam com
 # `--meses 0` porque o que se compara é a ÁRVORE de bancos, não o recorte.
+# O New Deals é repartido até o PRODUTO, que é a folha da árvore.
 w('cache/new deals/NDF/Vanilla/2026/07/20260727_ndfvan.json', [{'Deal': 'D0'}])
-w('cache/new deals/Option/FXO/2026/07/20260727_optfxo.json', [{'Deal': 'D1'}])
-w('cache/new deals/Swap/Rates/2026/07/20260727_swr.json', [{'Deal': 'D2'}])
-w('cache/new deals/Intrag/NDF/2026/07/20260727_ind.json', [{'Deal': 'D3'}])
-# Um bloco NOVO dentro de uma rotina que TEM fatias: a poda do 99_outros é por
-# CAMINHO, então ele cai lá — e `new deals/NDF`, que tem fatia, não.
-w('cache/new deals/Equity/2026/07/20260727_eq.json', [{'Deal': 'D4'}])
+w('cache/new deals/NDF/Commodities/2026/07/20260727_ndfc.json', [{'Deal': 'D1'}])
+w('cache/new deals/Option/FXO/2026/07/20260727_optfxo.json', [{'Deal': 'D2'}])
+w('cache/new deals/Swap/Rates/2026/07/20260727_swr.json', [{'Deal': 'D3'}])
+w('cache/new deals/Intrag/NDF/2026/07/20260727_ind.json', [{'Deal': 'D4'}])
+# Um PRODUTO novo dentro de uma rotina que tem fatias, e um bloco novo um nível
+# acima: a poda do 99_outros é por CAMINHO, então os dois caem lá — enquanto
+# `new deals/NDF/Vanilla`, que tem fatia, não.
+w('cache/new deals/NDF/Asian/2026/07/20260727_as.json', [{'Deal': 'D5'}])
+w('cache/new deals/Equity/2026/07/20260727_eq.json', [{'Deal': 'D6'}])
 w('cache/b3 files/Swap/2026/07/03/73760_260703_DFLUXO.json', [{'Cod': 'X'}])
 w('cache/b3 files/NDF/2026/07/03/73760_260703_DPOSICAO.json', [{'Cod': 'Y'}])
+# Uma subpasta que a dev não tem, para provar o `--bloco`: é o caso que ele
+# existe para resolver — a instância com mais pasta do que este repositório.
+w('cache/b3 files/NDF/Extra/2026/07/03/73760_260703_EXTRA.json', [{'Cod': 'E'}])
 w('cache/b3 files/Option/2026/07/03/73760_260703_DPOSICAO.json', [{'Cod': 'Z'}])
 w('cache/b3 files/Operations/2026/07/03/ops_20260703.json', [{'Cod': 'W'}])
 w('cache/daily settlement/2026/07/28/otm-settlement_20260728.json', [{'Trade Id': '9'}])
@@ -190,10 +197,19 @@ check('a rotina que nenhum script nomeia foi coberta pelo 99_outros',
 # e o bloco novo ficaria sem conversor nenhum — sem erro, sem banco.
 check('e o bloco novo dentro de uma rotina com fatias, também',
       'cache/new deals/Equity.db' in _arvore(OUT_FATIAS))
-check('as duas rotinas grandes vieram repartidas por bloco',
+check('   e o PRODUTO novo dentro de um bloco com fatia, idem',
+      'cache/new deals/NDF/Asian.db' in _arvore(OUT_FATIAS))
+check('o New Deals veio repartido até o PRODUTO',
+      sorted(d for d in _arvore(OUT_FATIAS) if d.startswith('cache/new deals/')),
+      ['cache/new deals/Equity.db', 'cache/new deals/Intrag/NDF.db',
+       'cache/new deals/NDF/Asian.db', 'cache/new deals/NDF/Commodities.db',
+       'cache/new deals/NDF/Vanilla.db', 'cache/new deals/Option/FXO.db',
+       'cache/new deals/Swap/Rates.db'])
+check('e o B3 Files por produto (ali o produto já é o primeiro nível)',
       sorted(d for d in _arvore(OUT_FATIAS) if d.startswith('cache/b3 files/')),
-      ['cache/b3 files/NDF.db', 'cache/b3 files/Operations.db',
-       'cache/b3 files/Option.db', 'cache/b3 files/Swap.db'])
+      ['cache/b3 files/NDF.db', 'cache/b3 files/NDF/Extra.db',
+       'cache/b3 files/Operations.db', 'cache/b3 files/Option.db',
+       'cache/b3 files/Swap.db'])
 
 print('\n== 3. as fatias não escrevem no mesmo banco ==')
 # Cada fatia sozinha, num destino próprio: o conjunto de bancos de uma não pode
@@ -214,7 +230,7 @@ print('\n== 4. os argumentos de cada fatia ==')
 rc, saida = _rodar('01_cadastros.py', os.path.join(DATA, 'x'), ['--meses', '0'])
 check('o 01_cadastros RECUSA --meses (nao ha data para cortar)', rc != 0)
 check('   e diz por quê', 'unrecognized arguments: --meses' in saida)
-_UMA = '02_1_new_deals_ndf.py'
+_UMA = '02_13_b3_files_ndf.py'
 rc, saida = _rodar(_UMA, os.path.join(DATA, 'y'), ['--only', 'daily'])
 check('a fatia de bloco RECUSA --only (tem uma etapa so)', rc != 0)
 
@@ -226,12 +242,12 @@ check('a fatia de bloco anuncia a janela padrão de 12 meses',
 # `--bloco` desce mais um nível e SUBSTITUI o escopo — é o que reparte onde a
 # instância tem mais pasta do que a dev, sem um arquivo novo.
 _OUT_BL = os.path.join(DATA, 'bloco')
-rc, saida = _rodar(_UMA, _OUT_BL, ['--meses', '0', '--bloco', 'Vanilla'])
+rc, saida = _rodar(_UMA, _OUT_BL, ['--meses', '0', '--bloco', 'Extra'])
 check('--bloco desce mais um nivel', rc, 0)
 check('   e converte SO aquele bloco', _arvore(_OUT_BL),
-      ['cache/new deals/NDF/Vanilla.db'])
+      ['cache/b3 files/NDF/Extra.db'])
 check('   e o escopo impresso é o efetivo, não o da fatia',
-      'cache/new deals/NDF/Vanilla' in saida)
+      'cache/b3 files/NDF/Extra' in saida)
 rc, saida = _rodar('01_cadastros.py', os.path.join(DATA, 'bl2'), ['--bloco', 'X'])
 check('a fatia de cadastros nao aceita --bloco', rc != 0)
 rc, saida = _rodar('01_cadastros.py', os.path.join(DATA, 'z2'), ['--dry-run'])

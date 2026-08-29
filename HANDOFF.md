@@ -14984,3 +14984,41 @@ como as do standalone: escritas à mão elas envelheceriam no dia em que um bloc
 entrasse no `ROTINAS_CACHE`, que é justamente a mudança que ninguém lembra de
 propagar. O guarda cobra byte a byte, e agora também que o bloco novo dentro de
 uma rotina coberta caia no `99_outros`. Suíte completa verde.
+
+---
+
+## §348 — a quebra desce até o PRODUTO (2026-08-29)
+
+A repartição do §347 parou no primeiro nível dentro da rotina
+(`new deals/NDF`), e isso ainda deixava o **Vanilla** — o maior arquivo-dia do
+app — no mesmo bloco que FWD Start, Other Publisher e Commodities. O escopo
+passou a ir até a folha: `new deals/NDF/Vanilla`, `new deals/Option/FXO`,
+`new deals/Swap/Rates`, e assim por diante.
+
+São **20 blocos** (12 do New Deals, 4 do B3 Files, 4 das demais rotinas) e 23
+arquivos por split. O produto é o nível certo para parar: abaixo dele já vem
+`AAAA/MM/DD`, e é ele que nomeia cada banco — uma fatia por banco é o máximo de
+paralelismo que a quebra por produto permite.
+
+No **B3 Files** o produto já era o primeiro nível (`b3 files/Swap/AAAA/...`), então
+lá as quatro fatias do §347 continuam valendo como estão.
+
+Duas coisas que a lista mostra e que valem registro:
+
+- **`NDF/FwdStart` e `NDF/FWD Start` são pastas DIFERENTES e as duas existem.**
+  O `_GENERIC_ND_PRODUCTS` grava em `FwdStart` (sem espaço); o
+  `platform/new_deals.py` e o `deals_monitor` LEEM as duas, porque a legada
+  (com espaço) continua cheia no share — e é ela, não a outra, que a dev tem em
+  disco. Normalizadas elas não casam (`fwdstart` × `fwd_start`), então cada uma
+  é uma fatia. A que não existir na instância avisa e sai limpa, o que custa
+  nada;
+- **`Swap/Rates` e `Swap/Commodities` não aparecem no código** — são criadas a
+  partir do rótulo do produto. Entraram na lista pelo que está em disco, e é o
+  `99_outros` que garante o resto: um produto fora da lista
+  (`new deals/NDF/Asian`) cai nele porque a poda é por CAMINHO.
+
+O guarda ganhou o caso do produto novo dentro de um bloco com fatia, e o teste
+do `--bloco` mudou de alvo: com o Vanilla já sendo uma fatia, ele passou a ser
+exercido onde de fato serve — uma subpasta que a dev não tem
+(`b3 files/NDF/Extra`), que é o caso para o qual ele existe. Suíte completa
+verde; o `check_convert_split` leva ~13 s com as 22 fatias em subprocesso.
