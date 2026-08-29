@@ -43,6 +43,7 @@ ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)),
 sys.path.insert(0, ROOT)
 os.environ.setdefault('OTC_SHARED_DRIVE_ROOT', ROOT)
 
+GERADOR = os.path.join(ROOT, 'scripts', 'build_convert_split.py')
 CONVERT = os.path.join(ROOT, 'scripts', 'convert')
 STANDALONE = os.path.join(ROOT, 'scripts', 'standalone')
 MOTOR = os.path.join(ROOT, 'apps', 'pages', 'json_to_duckdb.py')
@@ -82,7 +83,22 @@ esperado.append('99_outros.py')
 
 for pasta, nome in ((CONVERT, 'scripts/convert'), (STANDALONE, 'scripts/standalone')):
     achados = sorted(f for f in os.listdir(pasta) if f.endswith('.py'))
-    check('%s tem uma fatia por rotina do motor' % nome, achados, sorted(esperado))
+    check('%s tem uma fatia por bloco do motor' % nome, achados, sorted(esperado))
+
+# E as do `convert/` são BYTE A BYTE o que o gerador produz — elas são geradas
+# justamente porque escritas à mão envelheceriam no dia em que um bloco entrasse
+# no ROTINAS_CACHE, que é a mudança que ninguém lembra de propagar.
+_gen = _carregar('build_convert_split', GERADOR)
+TMP = tempfile.mkdtemp(prefix='cv-gen-')
+check('o gerador do convert/ roda sem erro', _gen.main([TMP]), 0)
+for arq in sorted(os.listdir(TMP)):
+    atual = io.open(os.path.join(CONVERT, arq), encoding='utf-8').read() \
+        if os.path.isfile(os.path.join(CONVERT, arq)) else ''
+    novo = io.open(os.path.join(TMP, arq), encoding='utf-8').read()
+    if atual != novo:
+        print('        → rode: python scripts/build_convert_split.py')
+    check('%s é byte a byte o que o gerador produz' % arq, atual == novo)
+shutil.rmtree(TMP, ignore_errors=True)
 
 # A rotina citada no 99_outros de cada split é a mesma lista, e ela vem do motor.
 _cobertas = [f for f, _ in motor.ROTINAS_CACHE]
@@ -104,8 +120,17 @@ def w(rel, payload):
 
 # Datas dentro da janela padrão não importam aqui: as fatias rodam com
 # `--meses 0` porque o que se compara é a ÁRVORE de bancos, não o recorte.
+w('cache/new deals/NDF/Vanilla/2026/07/20260727_ndfvan.json', [{'Deal': 'D0'}])
 w('cache/new deals/Option/FXO/2026/07/20260727_optfxo.json', [{'Deal': 'D1'}])
+w('cache/new deals/Swap/Rates/2026/07/20260727_swr.json', [{'Deal': 'D2'}])
+w('cache/new deals/Intrag/NDF/2026/07/20260727_ind.json', [{'Deal': 'D3'}])
+# Um bloco NOVO dentro de uma rotina que TEM fatias: a poda do 99_outros é por
+# CAMINHO, então ele cai lá — e `new deals/NDF`, que tem fatia, não.
+w('cache/new deals/Equity/2026/07/20260727_eq.json', [{'Deal': 'D4'}])
 w('cache/b3 files/Swap/2026/07/03/73760_260703_DFLUXO.json', [{'Cod': 'X'}])
+w('cache/b3 files/NDF/2026/07/03/73760_260703_DPOSICAO.json', [{'Cod': 'Y'}])
+w('cache/b3 files/Option/2026/07/03/73760_260703_DPOSICAO.json', [{'Cod': 'Z'}])
+w('cache/b3 files/Operations/2026/07/03/ops_20260703.json', [{'Cod': 'W'}])
 w('cache/daily settlement/2026/07/28/otm-settlement_20260728.json', [{'Trade Id': '9'}])
 w('cache/pending-confirmation/2026/08/27/pending-confirmation_20260827.json', [{'T': '1'}])
 w('cache/payrec/2026/08/27/payrec_20260827.json', [{'V': '1'}])
@@ -160,6 +185,15 @@ check('a soma das fatias é EXATAMENTE a carga completa',
       _arvore(OUT_FATIAS), _arvore(OUT_FULL))
 check('a rotina que nenhum script nomeia foi coberta pelo 99_outros',
       'cache/rotina-nova/coisa.db' in _arvore(OUT_FATIAS))
+# A poda do 99_outros é por CAMINHO: um bloco novo DENTRO de uma rotina que já
+# tem fatias cai nele. Por primeiro nível, `new deals` estaria excluída inteira
+# e o bloco novo ficaria sem conversor nenhum — sem erro, sem banco.
+check('e o bloco novo dentro de uma rotina com fatias, também',
+      'cache/new deals/Equity.db' in _arvore(OUT_FATIAS))
+check('as duas rotinas grandes vieram repartidas por bloco',
+      sorted(d for d in _arvore(OUT_FATIAS) if d.startswith('cache/b3 files/')),
+      ['cache/b3 files/NDF.db', 'cache/b3 files/Operations.db',
+       'cache/b3 files/Option.db', 'cache/b3 files/Swap.db'])
 
 print('\n== 3. as fatias não escrevem no mesmo banco ==')
 # Cada fatia sozinha, num destino próprio: o conjunto de bancos de uma não pode
@@ -180,13 +214,26 @@ print('\n== 4. os argumentos de cada fatia ==')
 rc, saida = _rodar('01_cadastros.py', os.path.join(DATA, 'x'), ['--meses', '0'])
 check('o 01_cadastros RECUSA --meses (nao ha data para cortar)', rc != 0)
 check('   e diz por quê', 'unrecognized arguments: --meses' in saida)
-rc, saida = _rodar('02_2_b3_files.py', os.path.join(DATA, 'y'), ['--only', 'daily'])
-check('a fatia de rotina RECUSA --only (tem uma etapa so)', rc != 0)
+_UMA = '02_1_new_deals_ndf.py'
+rc, saida = _rodar(_UMA, os.path.join(DATA, 'y'), ['--only', 'daily'])
+check('a fatia de bloco RECUSA --only (tem uma etapa so)', rc != 0)
 
 # A janela: o padrão vale, e sai declarado.
-rc, saida = _rodar('02_2_b3_files.py', os.path.join(DATA, 'z'), ['--dry-run'])
-check('a fatia de rotina anuncia a janela padrão de 12 meses',
+rc, saida = _rodar(_UMA, os.path.join(DATA, 'z'), ['--dry-run'])
+check('a fatia de bloco anuncia a janela padrão de 12 meses',
       'janela : arquivo-dia a partir de' in saida and '(12 meses)' in saida)
+
+# `--bloco` desce mais um nível e SUBSTITUI o escopo — é o que reparte onde a
+# instância tem mais pasta do que a dev, sem um arquivo novo.
+_OUT_BL = os.path.join(DATA, 'bloco')
+rc, saida = _rodar(_UMA, _OUT_BL, ['--meses', '0', '--bloco', 'Vanilla'])
+check('--bloco desce mais um nivel', rc, 0)
+check('   e converte SO aquele bloco', _arvore(_OUT_BL),
+      ['cache/new deals/NDF/Vanilla.db'])
+check('   e o escopo impresso é o efetivo, não o da fatia',
+      'cache/new deals/NDF/Vanilla' in saida)
+rc, saida = _rodar('01_cadastros.py', os.path.join(DATA, 'bl2'), ['--bloco', 'X'])
+check('a fatia de cadastros nao aceita --bloco', rc != 0)
 rc, saida = _rodar('01_cadastros.py', os.path.join(DATA, 'z2'), ['--dry-run'])
 check('e a de cadastros NAO anuncia janela nenhuma', 'janela :' in saida, False)
 

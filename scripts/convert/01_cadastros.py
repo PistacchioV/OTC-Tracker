@@ -11,17 +11,17 @@ O ESCOPO são os JSONs ÚNICOS — os que NÃO têm quebra por dia:
                           db/file-interpreter/termo.db, e o JSON da raiz na raiz.
 
 A pasta translations/ fica FORA de propósito: os 3 JSONs de i18n são os únicos
-que permanecem como JSON. Os arquivo-dia de cache/ são dos outros scripts, e
-por isso esta fatia não recebe `--meses`: nenhum destes JSONs tem data para
-cortar.
+que permanecem como JSON. Os arquivo-dia de cache/ são dos outros scripts, e por
+isso esta fatia não recebe `--meses`: nenhum destes JSONs tem data para cortar.
 
-Usa o `Config` do app para achar a origem e o destino — é a versão para rodar
+GERADO por scripts/build_convert_split.py — não edite à mão.
+
+Usa o `Config` do app para achar a origem e o destino: é a versão para rodar
 DENTRO do checkout. Para uma máquina sem o código do OTC Tracker existe o
 `scripts/standalone/`, com o mesmo corte em fatias.
 
 As fatias são independentes: os bancos são um por produto, então duas nunca
-escrevem no mesmo arquivo e podem rodar AO MESMO TEMPO, em máquinas
-diferentes.
+escrevem no mesmo arquivo e podem rodar AO MESMO TEMPO, em máquinas diferentes.
 """
 import os
 import sys

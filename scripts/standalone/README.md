@@ -25,22 +25,46 @@ por várias pessoas** — cada uma com o seu arquivo, ninguém esperando o outro
 terminar.
 
 Isso é seguro porque **os bancos são um por produto**: duas fatias nunca
-escrevem no mesmo `.db`. Rodar sete ao mesmo tempo dá exatamente o mesmo
+escrevem no mesmo `.db`. Rodar catorze ao mesmo tempo dá exatamente o mesmo
 resultado de rodar tudo em sequência.
+
+**As duas rotinas grandes entram repartidas por dentro.** New Deals e B3 Files
+eram um bloco cada e viravam o gargalo: as outras quatro terminam em minutos e
+três pessoas ficavam esperando a maior. Agora cada uma vira quatro fatias, uma
+por pasta de produto.
 
 | Arquivo | O que converte |
 |---|---|
 | `00_completo.py` | Tudo de uma vez — para quem prefere um comando só |
 | `01_cadastros.py` | Os JSONs **únicos**, sem quebra por dia: feriados, RefData/CounterpartyDetails, mappings, control-panel, file-interpreter, cadastros B3 |
-| `02_1_new_deals.py` | `cache/new deals` — NDF (Vanilla, FWD Start, Other Publisher, Commodities), Opção (Commodities, FXO), Swap e Intrag. **É a maior fatia** |
-| `02_2_b3_files.py` | `cache/b3 files` — as posições e fluxos da rotina Save CETIP Files |
-| `02_3_daily_settlement.py` | `cache/daily settlement` — OTM, NDF Cockpit, Operações JPM/MGT, Eventos Swap, Cognos, BR Onshore, Latam Desk |
-| `02_4_pending_confirmation.py` | `cache/pending-confirmation` — os snapshots diários |
-| `02_5_payrec.py` | `cache/payrec` — o histórico da recon de Pay/Rec |
-| `02_6_reconciliation.py` | `cache/reconciliation` — os caches por data das reconciliações |
-| `99_outros.py` | Toda rotina de `cache/` que **não** tem arquivo próprio acima. Existe para uma rotina nova nunca ficar sem conversor — se não houver nenhuma, ele não faz nada, e isso é o resultado esperado |
+| `02_1_new_deals_ndf.py` | `cache/new deals/NDF` — Vanilla, FWD Start, Other Publisher e Commodities |
+| `02_2_new_deals_option.py` | `cache/new deals/Option` — Commodities e FXO |
+| `02_3_new_deals_swap.py` | `cache/new deals/Swap` — Rates e Commodities |
+| `02_4_new_deals_intrag.py` | `cache/new deals/Intrag` — NDF e Opção |
+| `02_5_b3_files_ndf.py` | `cache/b3 files/NDF` — DPOSICAO e DFLUXO |
+| `02_6_b3_files_option.py` | `cache/b3 files/Option` |
+| `02_7_b3_files_swap.py` | `cache/b3 files/Swap` — costuma ser o maior dos quatro |
+| `02_8_b3_files_operations.py` | `cache/b3 files/Operations` |
+| `02_9_daily_settlement.py` | `cache/daily settlement` — OTM, NDF Cockpit, Operações JPM/MGT, Eventos Swap, Cognos, BR Onshore, Latam Desk |
+| `02_10_pending_confirmation.py` | `cache/pending-confirmation` — os snapshots diários |
+| `02_11_payrec.py` | `cache/payrec` — o histórico da recon de Pay/Rec |
+| `02_12_reconciliation.py` | `cache/reconciliation` — os caches por data das reconciliações |
+| `99_outros.py` | Todo bloco de `cache/` que **não** tem arquivo próprio acima. A poda é por CAMINHO, então tanto uma rotina nova (`cache/equity`) quanto uma pasta nova dentro de uma já coberta (`cache/new deals/Equity`) caem aqui. Se não houver nada fora da lista, ele não faz nada, e isso é o resultado esperado |
 
-**Para cobrir tudo**, rode `01` + os seis `02_*` + `99` (ou apenas `00_completo`).
+**Para cobrir tudo**, rode `01` + os doze `02_*` + `99` (ou apenas `00_completo`).
+
+### Se um bloco ainda for grande
+
+`--bloco NOME` desce mais um nível, sem precisar de arquivo novo:
+
+```
+python 02_1_new_deals_ndf.py --bloco Vanilla
+python 02_1_new_deals_ndf.py --bloco Commodities
+```
+
+Ele **substitui** o escopo da fatia, não soma — não rode `02_1_new_deals_ndf.py`
+em paralelo com um `--bloco` dele. Para saber que blocos existem, peça um que
+não existe: o aviso lista o que há naquele nível.
 
 ---
 
@@ -83,9 +107,10 @@ Exemplo de uma rodada em paralelo, no Windows:
 
 ```
 start python 01_cadastros.py
-start python 02_1_new_deals.py
-start python 02_2_b3_files.py
-start python 02_3_daily_settlement.py
+start python 02_1_new_deals_ndf.py
+start python 02_2_new_deals_option.py
+start python 02_5_b3_files_ndf.py
+start python 02_7_b3_files_swap.py
 ```
 
 ---
@@ -127,8 +152,8 @@ start python 02_3_daily_settlement.py
   histórico entra numa SEGUNDA passada:
 
   ```
-  python 02_2_b3_files.py                # os últimos 12 meses (padrão)
-  python 02_2_b3_files.py --meses 0      # depois, o histórico INTEIRO
+  python 02_7_b3_files_swap.py             # os últimos 12 meses (padrão)
+  python 02_7_b3_files_swap.py --meses 0   # depois, o histórico INTEIRO
   ```
 
   A janela sai declarada na primeira linha da saída, junto da origem e do
@@ -151,8 +176,8 @@ start python 02_3_daily_settlement.py
   ```
   == daily -> daily_<produto>.db (um por produto)
      convertidos: 0 | inalterados: 0
-     ! cache/daily settlement: rotina ausente em disco.
-       Rotinas encontradas: b3 files, new deals, payrec
+     ! cache/daily settlement: bloco ausente em disco.
+       Dentro de cache há: b3 files, new deals, payrec
   ```
 
   A lista de rotinas encontradas é o que resolve o caso: se a pasta está lá com

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""convert 02_daily_settlement — a rotina `daily settlement` de cache/.
+"""convert 02_daily_settlement — o bloco `daily settlement` de cache/.
 
-O ESCOPO é UMA rotina de cache/: **daily settlement**.
+O ESCOPO é UM bloco de cache/: **daily settlement**.
 
 Os arquivos do Daily Settlement — OTM Settlements, NDF Cockpit,
 Operações JPM/MGT, Eventos Swap, Cognos, BR Onshore, Latam Desk.
@@ -12,16 +12,21 @@ convivem em AAAA/MM/DD, e é o NOME de cada um que dá o banco.
 Cada produto vira um banco e a pasta db/ espelha a árvore de cache/; só
 ano/mês/dia não viram pasta — cada dia é uma tabela dentro do banco.
 
-A janela padrão é de 12 meses (`--meses`); `--meses 0` traz o histórico
-inteiro, e é essa passada que remove os bancos de formato antigo.
+A janela padrão é de 12 meses (`--meses`); `--meses 0` traz o histórico inteiro,
+e é essa passada que remove os bancos de formato antigo.
 
-Usa o `Config` do app para achar a origem e o destino — é a versão para rodar
+Se nesta instância o bloco ainda for grande demais, `--bloco NOME` desce mais um
+nível (ex.: `--bloco Vanilla`). Ele SUBSTITUI o escopo desta fatia — não rode a
+fatia inteira em paralelo com um bloco dela.
+
+GERADO por scripts/build_convert_split.py — não edite à mão.
+
+Usa o `Config` do app para achar a origem e o destino: é a versão para rodar
 DENTRO do checkout. Para uma máquina sem o código do OTC Tracker existe o
 `scripts/standalone/`, com o mesmo corte em fatias.
 
 As fatias são independentes: os bancos são um por produto, então duas nunca
-escrevem no mesmo arquivo e podem rodar AO MESMO TEMPO, em máquinas
-diferentes.
+escrevem no mesmo arquivo e podem rodar AO MESMO TEMPO, em máquinas diferentes.
 """
 import os
 import sys

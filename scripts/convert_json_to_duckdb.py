@@ -109,7 +109,21 @@ def run(argv=None, escopo=None, conversores=None, familias=None, excluir=None,
                              'meses (padrão 12). Use 0 para o histórico INTEIRO — é '
                              'a segunda passada, e é ela que remove os bancos de '
                              'formato antigo.')
+    # `--bloco` desce mais um nível DENTRO da fatia — é para repartir onde a
+    # instância tem mais pasta do que a dev, sem precisar de um arquivo novo.
+    # Ele SUBSTITUI o escopo da fatia, não soma: rodar a fatia inteira e um
+    # bloco dela ao mesmo tempo poria dois processos no mesmo banco.
+    if familias and len(familias) == 1:
+        ap.add_argument('--bloco', default=None,
+                        help='restringe a UMA subpasta desta fatia (ex.: --bloco '
+                             'Vanilla). Substitui o escopo da fatia — não rode a '
+                             'fatia inteira em paralelo com um bloco dela.')
     args = ap.parse_args(argv)
+    if getattr(args, 'bloco', None):
+        familias = [familias[0].rstrip('/') + '/' + args.bloco.strip().strip('/')]
+        # O escopo IMPRESSO passa a ser o efetivo — deixá-lo no da fatia faria a
+        # tela dizer que converteu mais do que converteu.
+        escopo = 'cache/%s (arquivo-dia)' % familias[0]
 
     data_dir = os.path.abspath(args.data_dir or _default_data_dir())
     out_dir = os.path.abspath(args.out_dir or _default_out_dir(data_dir))

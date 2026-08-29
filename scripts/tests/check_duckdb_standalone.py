@@ -203,7 +203,7 @@ check('os cadastros viraram um banco por JSON, na pasta do JSON',
        'reference_data.db'])
 
 # Rodar de novo não reconverte nada — a fatia é incremental como a carga toda.
-mod = _carregar('sa_nd2', os.path.join(PASTA, '02_1_new_deals.py'))
+mod = _carregar('sa_nd2', os.path.join(PASTA, '02_1_new_deals_ndf.py'))
 import contextlib                                              # noqa: E402
 _buf = io.StringIO()
 with contextlib.redirect_stdout(_buf):
@@ -240,7 +240,7 @@ io.open(os.path.join(_p, 'DPOSICAO-SWAP_20260827.json'), 'w',
         encoding='utf-8').write('[{"Cod": "X"}]')
 _OUT_CASE = os.path.join(CASE, 'db')
 
-mod = _carregar('sa_case_b3', os.path.join(PASTA, '02_2_b3_files.py'))
+mod = _carregar('sa_case_b3', os.path.join(PASTA, '02_7_b3_files_swap.py'))
 _buf = io.StringIO()
 with contextlib.redirect_stdout(_buf):
     mod.main(['--data-dir', CASE, '--out-dir', _OUT_CASE, '--meses', '0'])
@@ -256,14 +256,17 @@ check('e o 99_outros a reconhece como coberta, sem duplicar o banco',
       _arvore(os.path.join(CASE, 'db-outros')), [])
 
 # Rotina que de fato não existe: o aviso é IMPRESSO e diz o que há em disco.
-mod = _carregar('sa_case_ds', os.path.join(PASTA, '02_3_daily_settlement.py'))
+mod = _carregar('sa_case_ds', os.path.join(PASTA, '02_9_daily_settlement.py'))
 _buf = io.StringIO()
 with contextlib.redirect_stdout(_buf):
     mod.main(['--data-dir', CASE, '--out-dir', _OUT_CASE, '--meses', '0'])
 _saida = _buf.getvalue()
-check('rotina ausente AVISA na tela, em vez de virar um número mudo',
-      'rotina ausente em disco' in _saida)
-check('e o aviso diz quais rotinas ele achou', 'B3 Files' in _saida)
+check('bloco ausente AVISA na tela, em vez de virar um número mudo',
+      'bloco ausente em disco' in _saida)
+# O aviso lista o que há NO NÍVEL EM QUE PAROU — um escopo de dois segmentos
+# falha quase sempre no segundo, e mostrar as rotinas da raiz ali responderia a
+# pergunta errada.
+check('e o aviso diz o que ele achou naquele nível', 'B3 Files' in _saida)
 
 shutil.rmtree(CASE, ignore_errors=True)
 
@@ -283,7 +286,7 @@ _OUT_JAN = os.path.join(JAN, 'db')
 os.makedirs(_OUT_JAN)
 io.open(os.path.join(_OUT_JAN, 'daily_b3_files_swap.db'), 'w').close()
 
-mod = _carregar('sa_jan', os.path.join(PASTA, '02_2_b3_files.py'))
+mod = _carregar('sa_jan', os.path.join(PASTA, '02_7_b3_files_swap.py'))
 _buf = io.StringIO()
 with contextlib.redirect_stdout(_buf):
     mod.main(['--data-dir', JAN, '--out-dir', _OUT_JAN])   # padrão: 12 meses
