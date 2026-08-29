@@ -16,20 +16,32 @@ share). Destino: `Config.DATABASE_DIR` — a pasta `db/` de todos os bancos
 para fora do `Config.DATA_DIR`, os bancos saem em `<data-dir>/db`, a mesma
 regra do espelho vivo.
 
-A quebra é POR PRODUTO (§336): o caminho inteiro de `cache/` nomeia cada
-`daily_*.db` (`daily_new_deals_ndf_vanilla.db`, `daily_new_deals_option_fxo.db`)
-e cada dia é uma tabela; o Daily Settlement, que não se ramifica em pastas,
-quebra pelo NOME do arquivo (`daily_settlement_otm.db`, …). Os demais JSONs
-viram um banco cada (`mappings_mt300.db`, `file_interpreter_termo.db`). Esta
-carga completa é também quem REMOVE os bancos dos desenhos anteriores — o
-espelho vivo, que enxerga um arquivo por vez, não tem como saber que um banco
-ficou órfão.
+A quebra é POR PRODUTO e a pasta `db/` ESPELHA a árvore de origem (§336/§342):
+`cache/new deals/NDF/Vanilla/AAAA/MM/DD` vira `db/cache/new deals/NDF/Vanilla.db`
+com cada dia como uma TABELA — só ano/mês/dia não viram pasta. Onde a rotina não
+se ramifica em pastas, quem dá o banco é o NOME do arquivo
+(`db/cache/daily settlement/otm-settlement.db`). Os demais JSONs viram um banco
+cada, na pasta do JSON (`db/mappings/mt300.db`). Esta carga completa é também
+quem REMOVE os bancos dos desenhos anteriores — o espelho vivo, que enxerga um
+arquivo por vez, não tem como saber que um banco ficou órfão.
+
+**A janela padrão é de 12 meses** (`--meses`), porque a carga no share leva
+horas de rede e o dado recente é o que a mesa consulta; o histórico entra numa
+SEGUNDA passada (`--meses 0`), que é também a única que limpa os bancos de
+formato antigo. Ver §345.
 
 Uso:
-    python scripts/convert_json_to_duckdb.py [--only holidays|refdata|daily]
-        [--data-dir X] [--out-dir Y] [--force] [--dry-run]
+    python scripts/convert_json_to_duckdb.py [--only holidays|refdata|datasets|daily]
+        [--data-dir X] [--out-dir Y] [--force] [--dry-run] [--meses N]
 
-Teste de regressão: `scripts/tests/check_json_to_duckdb.py`.
+**Para repartir entre várias pessoas** — a carga inteira leva horas e ninguém
+precisa esperar a fila — use `scripts/convert/`: nove fatias (`01_cadastros`,
+um `02_*` por rotina de `cache/`, o `99_outros`) que rodam ao mesmo tempo, sobre
+o `run()` deste arquivo. O `00_completo.py` de lá é este script. Para uma
+máquina SEM o código do app existe o `scripts/standalone/`, com o mesmo corte.
+
+Testes de regressão: `scripts/tests/check_json_to_duckdb.py` (o motor) e
+`scripts/tests/check_convert_split.py` (as fatias).
 """
 import argparse
 import os

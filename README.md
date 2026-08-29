@@ -154,10 +154,39 @@ ASSETS_ROOT=/static
 > BCB e o Yahoo) e as chaves VAPID do Web Push.
 
 ### 2. Configuração do Banco de Dados
-O projeto suporta tanto SQLite quanto bancos relacionais (PostgreSQL/MySQL):
 
-- SQLite (padrão): Não requer configuração adicional
-- PostgreSQL/MySQL: Configure as variáveis DB_* no arquivo .env
+O SQLAlchemy vem configurado do template (SQLite por padrão, PostgreSQL/MySQL
+pelas variáveis `DB_*` do `.env`), mas **a lógica da aplicação não o usa**. Os
+dados de verdade estão em três lugares:
+
+- **DuckDB** — usuários/2FA (`Users_OTCTracker.db`), notificações
+  (`Notifications_OTCTracker.db`) e os bancos de Pending Confirmation, esteira
+  de confirmação e Onboarding. Todos sob `Config.DATABASE_DIR`.
+- **JSON** — os arquivo-dia (cache), os 43 cadastros do `/mapping`, RefData,
+  calendários e templates, sob `Config.DATA_DIR`. **É aqui que a aplicação
+  escreve**, e é o que se reverte num rollback.
+- **DuckDB espelhado** — cada JSON gravado é reconvertido na hora
+  (`apps/pages/duck_mirror.py`) para um banco em `db/`, e a leitura usa o banco
+  quando ele comprovadamente reflete o JSON atual.
+
+Mover tudo de lugar é uma variável só: `OTC_DATABASE_DIR` (bancos) e
+`OTC_DATA_DIR` (JSONs). Ver **CLAUDE.md §4**.
+
+#### Materializar os bancos DuckDB numa instância nova
+
+O espelho cuida do dia a dia; a carga inicial (ou a reconciliação depois de um
+período com o app parado) é feita por script. Ela é **idempotente e
+incremental**, e converte só os arquivo-dia dos **últimos 12 meses** por padrão:
+
+```bash
+python scripts/convert/00_completo.py            # tudo num comando
+python scripts/convert/00_completo.py --meses 0  # depois, o histórico inteiro
+```
+
+A carga no share leva horas, então ela também vem **repartida em nove fatias**
+que várias pessoas rodam ao mesmo tempo — `scripts/convert/README.md` explica.
+Para uma máquina **sem o código do app**, o `scripts/standalone/` tem o mesmo
+corte com os caminhos do share fixos e só o `duckdb` como dependência.
 
 ## Executando o Projeto
 
