@@ -44,7 +44,8 @@ sys.path.insert(0, ROOT)
 os.environ.setdefault('OTC_SHARED_DRIVE_ROOT', ROOT)
 
 from apps.pages.json_to_duckdb import (            # noqa: E402
-    convert_daily, convert_datasets, convert_holidays, convert_refdata)
+    convert_daily, convert_datasets, convert_holidays, convert_refdata,
+    data_de_corte)
 
 
 def _default_data_dir():
@@ -71,12 +72,23 @@ def main(argv=None):
                     default=None)
     ap.add_argument('--force', action='store_true', help='reconverte mesmo sem mudança')
     ap.add_argument('--dry-run', action='store_true', help='só lista o que converteria')
+    ap.add_argument('--meses', type=int, default=12,
+                    help='janela dos ARQUIVO-DIA: converte só os dos últimos N '
+                         'meses (padrão 12). Use 0 para o histórico INTEIRO — é '
+                         'a segunda passada, e é ela que remove os bancos de '
+                         'formato antigo.')
     args = ap.parse_args(argv)
 
     data_dir = os.path.abspath(args.data_dir or _default_data_dir())
     out_dir = os.path.abspath(args.out_dir or _default_out_dir(data_dir))
+    desde = data_de_corte(args.meses)
     print('origem : %s' % data_dir)
     print('destino: %s' % out_dir)
+    # A janela é DECLARADA na tela: o recorte silencioso faria a segunda
+    # passada (a do histórico) parecer desnecessária.
+    print('janela : %s' % ('arquivo-dia a partir de %s (%d meses)'
+                           % (desde.strftime('%d/%m/%Y'), args.meses) if desde
+                           else 'histórico INTEIRO (--meses 0)'))
     antigo = os.path.join(data_dir, 'duckdb')
     if os.path.isdir(antigo) and os.path.abspath(antigo) != out_dir:
         print('aviso  : %s era o destino da versão anterior — os bancos agora '
@@ -87,10 +99,14 @@ def main(argv=None):
     escolhidos = [args.only] if args.only else list(conversores)
     houve_erro = False
     for nome in escolhidos:
-        stats = conversores[nome](data_dir, out_dir, force=args.force, dry_run=args.dry_run)
+        extra = {'desde': desde} if nome == 'daily' else {}
+        stats = conversores[nome](data_dir, out_dir, force=args.force,
+                                  dry_run=args.dry_run, **extra)
         print('\n== %s -> %s' % (nome, os.path.basename(stats['db'])))
-        print('   convertidos: %d | inalterados: %d%s%s' % (
+        print('   convertidos: %d | inalterados: %d%s%s%s' % (
             len(stats['converted']), len(stats['skipped']),
+            ' | fora da janela: %d' % len(stats['antigos'])
+            if stats.get('antigos') else '',
             ' | já cobertos por outro conversor: %d' % len(stats['cobertos'])
             if stats.get('cobertos') else '',
             ' | fora deste conversor: %d' % len(stats['ignored'])

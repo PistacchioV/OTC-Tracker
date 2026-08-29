@@ -133,8 +133,10 @@ def _data_dir_padrao():
 
 def _resumo(nome, stats, houve_erro):
     print('\n== %%s -> %%s' %% (nome, os.path.basename(stats['db'])))
-    print('   convertidos: %%d | inalterados: %%d%%s%%s' %% (
+    print('   convertidos: %%d | inalterados: %%d%%s%%s%%s' %% (
         len(stats['converted']), len(stats['skipped']),
+        ' | fora da janela: %%d' %% len(stats['antigos'])
+        if stats.get('antigos') else '',
         ' | ja cobertos por outro conversor: %%d' %% len(stats['cobertos'])
         if stats.get('cobertos') else '',
         ' | fora deste conversor: %%d' %% len(stats['ignored'])
@@ -157,13 +159,13 @@ def main(argv=None):
                     help='destino dos .db (padrão: a pasta db dentro da origem)')
 %(arg_only)s    ap.add_argument('--force', action='store_true', help='reconverte mesmo sem mudança')
     ap.add_argument('--dry-run', action='store_true', help='só lista o que converteria')
-    args = ap.parse_args(argv)
+%(arg_meses)s    args = ap.parse_args(argv)
 
     data_dir = os.path.abspath(args.data_dir or _data_dir_padrao())
     out_dir = os.path.abspath(args.out_dir or os.path.join(data_dir, 'db'))
     print('origem : %%s' %% data_dir)
     print('destino: %%s' %% out_dir)
-    print('escopo : %(escopo_label)s')
+%(linha_janela)s    print('escopo : %(escopo_label)s')
 
     houve_erro = [False]
 %(corpo_main)s
@@ -179,8 +181,11 @@ _MAIN_COMPLETO = """    conversores = {'holidays': convert_holidays, 'refdata': 
                    'datasets': convert_datasets, 'daily': convert_daily}
     escolhidos = [args.only] if args.only else list(conversores)
     for nome in escolhidos:
+        # A janela so vale para o conversor de arquivo-dia; os cadastros nao
+        # tem data nenhuma para recortar.
+        extra = {'desde': desde} if nome == 'daily' else {}
         _resumo(nome, conversores[nome](data_dir, out_dir, force=args.force,
-                                        dry_run=args.dry_run), houve_erro)
+                                        dry_run=args.dry_run, **extra), houve_erro)
 """
 
 _MAIN_CADASTROS = """    # Os JSONs UNICOS — nenhum deles tem quebra por dia, entao esta fatia nao
@@ -194,14 +199,16 @@ _MAIN_CADASTROS = """    # Os JSONs UNICOS — nenhum deles tem quebra por dia, 
 """
 
 _MAIN_ROTINA = """    _resumo('daily', convert_daily(data_dir, out_dir, force=args.force,
-                                   dry_run=args.dry_run, familias=[%(fam)r]),
+                                   dry_run=args.dry_run, familias=[%(fam)r],
+                                   desde=desde),
             houve_erro)
 """
 
 _MAIN_OUTROS = """    # Tudo que os demais scripts NAO cobrem: e o que garante que uma rotina nova
     # em cache/ tenha conversor sem ninguem regerar nada.
     _resumo('daily', convert_daily(data_dir, out_dir, force=args.force,
-                                   dry_run=args.dry_run, excluir=%(cobertas)r),
+                                   dry_run=args.dry_run, excluir=%(cobertas)r,
+                                   desde=desde),
             houve_erro)
 """
 
@@ -211,6 +218,22 @@ _ARG_ONLY_COMPLETO = ("    ap.add_argument('--only', "
 _ARG_ONLY_CADASTROS = ("    ap.add_argument('--only', "
                        "choices=('holidays', 'refdata', 'datasets'),\n"
                        "                    default=None)\n")
+
+# A janela só existe onde há ARQUIVO-DIA: o 01_cadastros não a recebe, porque
+# um `--meses` que não muda nada é pior do que não existir.
+_ARG_MESES = (
+    "    ap.add_argument('--meses', type=int, default=12,\n"
+    "                    help='janela dos arquivo-dia: converte so os dos ultimos '\n"
+    "                         'N meses (padrao 12). Use 0 para o historico INTEIRO '\n"
+    "                         '— e a segunda passada, e e ela que remove os bancos '\n"
+    "                         'de formato antigo.')\n")
+_LINHA_JANELA = (
+    "    desde = data_de_corte(args.meses)\n"
+    "    # A janela e DECLARADA na tela: o recorte silencioso faria a segunda\n"
+    "    # passada (a do historico) parecer desnecessaria.\n"
+    "    print('janela : %s' % ('arquivo-dia a partir de %s (%d meses)'\n"
+    "                           % (desde.strftime('%d/%m/%Y'), args.meses)\n"
+    "                           if desde else 'historico INTEIRO (--meses 0)'))\n")
 
 _DOC_COMPLETO = """O ESCOPO é TUDO: os cadastros (feriados, RefData/CounterpartyDetails, mappings,
 control-panel, file-interpreter) e TODAS as rotinas de arquivo-dia de cache\\.
@@ -296,18 +319,19 @@ SEED_STANDALONE = """    # Sem registro não há o que converter — o arquivo n
 
 
 def _variantes():
-    """(arquivo, titulo, resumo, escopo_doc, escopo_label, arg_only, corpo_main)."""
+    """(arquivo, titulo, resumo, escopo_doc, escopo_label, arg_only, corpo_main,
+    tem_janela)."""
     out = [
         ('00_completo.py',
          'convert 00_completo — TUDO de uma vez.',
          'Converte os cadastros E todas as rotinas de arquivo-dia num comando só.',
          _DOC_COMPLETO, 'tudo (cadastros + todas as rotinas de cache/)',
-         _ARG_ONLY_COMPLETO, _MAIN_COMPLETO),
+         _ARG_ONLY_COMPLETO, _MAIN_COMPLETO, True),
         ('01_cadastros.py',
          'convert 01_cadastros — os JSONs ÚNICOS (sem quebra por dia).',
          'Feriados, RefData/CounterpartyDetails e um banco por JSON de cadastro.',
          _DOC_CADASTROS, 'cadastros (sem quebra por dia)',
-         _ARG_ONLY_CADASTROS, _MAIN_CADASTROS),
+         _ARG_ONLY_CADASTROS, _MAIN_CADASTROS, False),
     ]
     for i, (fam, desc) in enumerate(ROTINAS, start=1):
         out.append((
@@ -316,7 +340,7 @@ def _variantes():
             desc.replace('\n', '\n'),
             _DOC_ROTINA % {'fam': fam, 'desc': desc},
             'cache/%s (arquivo-dia)' % fam,
-            '', _MAIN_ROTINA % {'fam': fam}))
+            '', _MAIN_ROTINA % {'fam': fam}, True))
     cobertas = [f for f, _ in ROTINAS]
     out.append((
         '99_outros.py',
@@ -324,7 +348,7 @@ def _variantes():
         'A rede de segurança: rotina nova em cache/ é convertida por aqui.',
         _DOC_OUTROS % {'lista': '\n'.join('  - %s' % f for f in cobertas)},
         'cache/ menos as rotinas com arquivo próprio',
-        '', _MAIN_OUTROS % {'cobertas': cobertas}))
+        '', _MAIN_OUTROS % {'cobertas': cobertas}, True))
     return out
 
 
@@ -337,10 +361,13 @@ def main(argv=None):
         os.makedirs(destino)
 
     gerados = []
-    for (arq, titulo, resumo, doc, label, arg_only, main_corpo) in _variantes():
+    for (arq, titulo, resumo, doc, label, arg_only, main_corpo,
+         tem_janela) in _variantes():
         cab = _CAB % {'titulo': titulo, 'resumo': resumo, 'arquivo': arq,
                       'escopo_doc': doc}
         rod = _RODAPE % {'arg_only': arg_only, 'escopo_label': label,
+                         'arg_meses': _ARG_MESES if tem_janela else '',
+                         'linha_janela': _LINHA_JANELA if tem_janela else '',
                          'corpo_main': main_corpo.rstrip('\n')}
         conteudo = cab + corpo + rod
         io.open(os.path.join(destino, arq), 'w', encoding='utf-8').write(conteudo)
