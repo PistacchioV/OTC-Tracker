@@ -14883,3 +14883,52 @@ exatamente UM dia útil no intervalo em qualquer dia em que a suíte rode. Simul
 os 365 dias de 2026, a regra antiga falharia em 116 (todo sábado, domingo e
 feriado) e a nova em nenhum. Data montada com aritmética de dias corridos num
 teste que mede dias ÚTEIS é a mesma armadilha em qualquer outro lugar.
+
+---
+
+## §346 — a carga com Config também repartida em fatias (2026-08-29)
+
+O `scripts/standalone/` já era repartido em nove — é o que deixa várias pessoas
+converterem ao mesmo tempo, sem uma esperar a outra. O
+`scripts/convert_json_to_duckdb.py`, que é a mesma carga rodando DENTRO do
+checkout, continuava tudo-ou-nada: quem o rodava ficava horas sem resposta e
+sem como dividir o trabalho.
+
+Agora ele tem o mesmo corte, em `scripts/convert/`: `00_completo`,
+`01_cadastros`, um `02_*` por rotina de `cache/` e o `99_outros`. A diferença
+entre os dois splits é só de DEPENDÊNCIA — aqui os caminhos saem do `Config`,
+lá são fixos porque a máquina não tem o código do app.
+
+**A implementação é UMA.** O `convert_json_to_duckdb.py` passou a expor
+`run(escopo, conversores, familias, excluir, doc)`, e cada arquivo de
+`scripts/convert/` é uma chamada de três linhas. Ao contrário do standalone —
+que precisa carregar o motor inteiro porque não pode importar nada —, aqui
+copiar a CLI nove vezes seria criar a mesma divergência que o
+`check_duckdb_standalone` existe para prender.
+
+**A lista de rotinas saiu do gerador e foi para o MOTOR** (`ROTINAS_CACHE`, ao
+lado do `cache_families`, cujo docstring já dizia que ela mora ali "para o
+gerador e os scripts não terem cada um a sua lista"). Os dois splits a
+consomem: escrita em cada um, uma rotina acrescentada num lado ficaria coberta
+só pelo `99_outros` do outro — e a diferença apareceria como uma fatia que
+demora muito mais do que a irmã, **nunca como erro**. O gerador a carrega do
+ARQUIVO por importlib, e não por `from apps.pages...`: importar o pacote traria
+o blueprint do Flask junto, e ele roda com stdlib + duckdb.
+
+Três detalhes que caem do escopo, e são o que torna cada fatia honesta:
+
+- **etapa única não ganha `--only`** (uma fatia de rotina só roda `daily`), e
+  **fatia sem arquivo-dia não ganha `--meses`** — o `01_cadastros` RECUSA o
+  argumento, porque nenhum daqueles JSONs tem data para cortar;
+- o `00_completo` é a única SEM escopo, e por isso continua sendo a única que
+  remove os bancos dos desenhos anteriores e a única que enxerga colisão de
+  tabela entre rotinas diferentes;
+- o escopo sai impresso (`escopo : cache/b3 files (arquivo-dia)`), como no
+  standalone.
+
+`check_convert_split.py` (novo) prende os quatro pontos: os dois splits têm as
+mesmas fatias; as oito do `convert/` — rodadas EM SUBPROCESSO, que é como a
+pessoa as roda — somam exatamente a carga completa; **nenhum banco é
+reivindicado por duas fatias**, que é o que as deixa rodar em paralelo e o
+defeito que ninguém reproduz depois; e os argumentos de cada uma. Os nove
+standalone regerados (o motor mudou). Suíte completa verde.
