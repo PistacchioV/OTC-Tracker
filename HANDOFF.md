@@ -14932,3 +14932,55 @@ pessoa as roda — somam exatamente a carga completa; **nenhum banco é
 reivindicado por duas fatias**, que é o que as deixa rodar em paralelo e o
 defeito que ninguém reproduz depois; e os argumentos de cada uma. Os nove
 standalone regerados (o motor mudou). Suíte completa verde.
+
+---
+
+## §347 — New Deals e B3 Files repartidos POR BLOCO (2026-08-29)
+
+Com a carga em fatias (§346), as quatro rotinas pequenas terminavam em minutos
+e três pessoas ficavam esperando as duas grandes. New Deals e B3 Files eram um
+bloco cada — o gargalo estava dentro delas.
+
+O escopo passou a ser um **CAMINHO** sob `cache/` (`new deals/NDF`), e não só a
+rotina de primeiro nível. As duas grandes viraram quatro fatias cada, uma por
+pasta de produto, e os dois splits foram de 9 para 15 arquivos:
+
+```
+02_1..02_4   new deals/{NDF, Option, Swap, Intrag}
+02_5..02_8   b3 files/{NDF, Option, Swap, Operations}
+02_9..02_12  daily settlement, pending-confirmation, payrec, reconciliation
+```
+
+Quatro coisas que não dão erro nenhum quando se quebram:
+
+- **o `99_outros` poda por CAMINHO.** É isso que faz a rede de segurança valer
+  nos DOIS níveis: uma rotina nova (`cache/equity`) e uma pasta nova dentro de
+  uma já coberta (`cache/new deals/Equity`) caem as duas nele. Podando por
+  primeiro nível, `new deals` sairia inteira do escopo e o bloco novo ficaria
+  sem conversor nenhum — sem erro e sem banco, que é a falha que menos parece
+  falha;
+- **a fatia de sub-bloco NÃO apaga o banco legado da rotina.** O
+  `daily_new_deals.db` guarda também o Option, o Swap e o Intrag, que quem está
+  rodando ao lado ainda vai converter: apagá-lo daqui é apagar o trabalho deles
+  antes de ele existir no formato novo. Só a passada que cobre a família inteira
+  (ou a carga sem escopo) mexe nele — a mesma regra da janela do §345;
+- **o aviso de bloco ausente lista o que há NO NÍVEL EM QUE PAROU.** Um escopo
+  de dois segmentos falha quase sempre no segundo, e mostrar as rotinas de
+  primeiro nível ali responderia a pergunta errada;
+- **o gerador REMOVE a fatia que saiu do `ROTINAS_CACHE`** — nos dois splits. Um
+  arquivo órfão continua rodando, com um escopo que ninguém mais declara e que o
+  `99_outros` agora também cobre: dois processos no mesmo banco, sem nada na
+  pasta dizendo isso. Foi o que aconteceu ao gerar esta mudança — o standalone
+  ficou com os seis nomes antigos ao lado dos doze novos.
+
+**`--bloco NOME`** desce mais um nível sem precisar de arquivo novo
+(`02_1_new_deals_ndf.py --bloco Vanilla`), porque a árvore da instância do JPM
+não é a da dev. Ele SUBSTITUI o escopo da fatia e o escopo IMPRESSO passa a ser
+o efetivo — deixá-lo no da fatia faria a tela dizer que converteu mais do que
+converteu. Só as fatias de bloco o recebem; o `01_cadastros` o recusa.
+
+As fatias do `convert/` passaram a ser **geradas** (`build_convert_split.py`),
+como as do standalone: escritas à mão elas envelheceriam no dia em que um bloco
+entrasse no `ROTINAS_CACHE`, que é justamente a mudança que ninguém lembra de
+propagar. O guarda cobra byte a byte, e agora também que o bloco novo dentro de
+uma rotina coberta caia no `99_outros`. Suíte completa verde.
