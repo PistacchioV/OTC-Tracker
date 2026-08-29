@@ -7,10 +7,18 @@ deste. Ele existe para um bloco NOVO nunca ficar sem conversor, e a poda é por
 CAMINHO — tanto uma rotina nova (`cache/equity`) quanto uma pasta nova dentro de
 uma já coberta (`cache/new deals/Equity`) caem aqui. Hoje os cobertos são:
 
-  - new deals/NDF
-  - new deals/Option
-  - new deals/Swap
-  - new deals/Intrag
+  - new deals/NDF/Vanilla
+  - new deals/NDF/FwdStart
+  - new deals/NDF/FWD Start
+  - new deals/NDF/OtherPublisher
+  - new deals/NDF/Commodities
+  - new deals/Option/FXO
+  - new deals/Option/Commodities
+  - new deals/Swap/Rates
+  - new deals/Swap/Commodities
+  - new deals/Intrag/NDF
+  - new deals/Intrag/Option
+  - new deals/Intrag/Swap
   - b3 files/NDF
   - b3 files/Option
   - b3 files/Swap
@@ -42,5 +50,5 @@ from convert_json_to_duckdb import run    # noqa: E402
 
 if __name__ == '__main__':
     sys.exit(run(escopo='cache/ menos os blocos com arquivo próprio',
-                 conversores=('daily',), excluir=['new deals/NDF', 'new deals/Option', 'new deals/Swap', 'new deals/Intrag', 'b3 files/NDF', 'b3 files/Option', 'b3 files/Swap', 'b3 files/Operations', 'daily settlement', 'pending-confirmation', 'payrec', 'reconciliation'],
+                 conversores=('daily',), excluir=['new deals/NDF/Vanilla', 'new deals/NDF/FwdStart', 'new deals/NDF/FWD Start', 'new deals/NDF/OtherPublisher', 'new deals/NDF/Commodities', 'new deals/Option/FXO', 'new deals/Option/Commodities', 'new deals/Swap/Rates', 'new deals/Swap/Commodities', 'new deals/Intrag/NDF', 'new deals/Intrag/Option', 'new deals/Intrag/Swap', 'b3 files/NDF', 'b3 files/Option', 'b3 files/Swap', 'b3 files/Operations', 'daily settlement', 'pending-confirmation', 'payrec', 'reconciliation'],
                  doc=__doc__))

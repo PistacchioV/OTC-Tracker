@@ -24,18 +24,26 @@ nunca escrevem no mesmo arquivo. Isso é prendido por teste
 |---|---|
 | `00_completo.py` | tudo — cadastros + todos os blocos de `cache/` |
 | `01_cadastros.py` | os JSONs ÚNICOS (feriados, RefData/CPD, mappings, control-panel, file-interpreter) |
-| `02_1_new_deals_ndf.py` | `cache/new deals/NDF` |
-| `02_2_new_deals_option.py` | `cache/new deals/Option` |
-| `02_3_new_deals_swap.py` | `cache/new deals/Swap` |
-| `02_4_new_deals_intrag.py` | `cache/new deals/Intrag` |
-| `02_5_b3_files_ndf.py` | `cache/b3 files/NDF` |
-| `02_6_b3_files_option.py` | `cache/b3 files/Option` |
-| `02_7_b3_files_swap.py` | `cache/b3 files/Swap` |
-| `02_8_b3_files_operations.py` | `cache/b3 files/Operations` |
-| `02_9_daily_settlement.py` | `cache/daily settlement` |
-| `02_10_pending_confirmation.py` | `cache/pending-confirmation` |
-| `02_11_payrec.py` | `cache/payrec` |
-| `02_12_reconciliation.py` | `cache/reconciliation` |
+| `02_1_new_deals_ndf_vanilla.py` | `new deals/NDF/Vanilla` — costuma ser o maior arquivo-dia do app |
+| `02_2_new_deals_ndf_fwdstart.py` | `new deals/NDF/FwdStart` — o FWD Start, na pasta que o app grava hoje |
+| `02_3_new_deals_ndf_fwd_start.py` | `new deals/NDF/FWD Start` — o MESMO produto na pasta legada (com espaço), que segue cheia no share |
+| `02_4_new_deals_ndf_otherpublisher.py` | `new deals/NDF/OtherPublisher` |
+| `02_5_new_deals_ndf_commodities.py` | `new deals/NDF/Commodities` — o termo de mercadoria |
+| `02_6_new_deals_option_fxo.py` | `new deals/Option/FXO` — a opção de câmbio |
+| `02_7_new_deals_option_commodities.py` | `new deals/Option/Commodities` |
+| `02_8_new_deals_swap_rates.py` | `new deals/Swap/Rates` |
+| `02_9_new_deals_swap_commodities.py` | `new deals/Swap/Commodities` |
+| `02_10_new_deals_intrag_ndf.py` | `new deals/Intrag/NDF` |
+| `02_11_new_deals_intrag_option.py` | `new deals/Intrag/Option` |
+| `02_12_new_deals_intrag_swap.py` | `new deals/Intrag/Swap` |
+| `02_13_b3_files_ndf.py` | `b3 files/NDF` — DPOSICAO e DFLUXO da rotina Save CETIP Files |
+| `02_14_b3_files_option.py` | `b3 files/Option` |
+| `02_15_b3_files_swap.py` | `b3 files/Swap` — costuma ser o maior dos quatro |
+| `02_16_b3_files_operations.py` | `b3 files/Operations` |
+| `02_17_daily_settlement.py` | `daily settlement` — OTM, NDF Cockpit, Operações JPM/MGT, Eventos Swap, Cognos, BR Onshore, Latam Desk |
+| `02_18_pending_confirmation.py` | `pending-confirmation` — os snapshots diários |
+| `02_19_payrec.py` | `payrec` — o histórico da recon de Pay/Rec |
+| `02_20_reconciliation.py` | `reconciliation` — os caches por data das reconciliações |
 | `99_outros.py` | o RESTO de `cache/` — a rede de segurança |
 
 ---
@@ -48,45 +56,58 @@ Um comando só:
 python scripts/convert/00_completo.py
 ```
 
-Ou repartido — **catorze** arquivos, em qualquer ordem, ao mesmo tempo:
+Ou repartido — **vinte e dois** arquivos, em qualquer ordem, ao mesmo tempo:
 
 ```bash
 python scripts/convert/01_cadastros.py
-python scripts/convert/02_1_new_deals_ndf.py
-python scripts/convert/02_2_new_deals_option.py
-python scripts/convert/02_3_new_deals_swap.py
-python scripts/convert/02_4_new_deals_intrag.py
-python scripts/convert/02_5_b3_files_ndf.py
-python scripts/convert/02_6_b3_files_option.py
-python scripts/convert/02_7_b3_files_swap.py
-python scripts/convert/02_8_b3_files_operations.py
-python scripts/convert/02_9_daily_settlement.py
-python scripts/convert/02_10_pending_confirmation.py
-python scripts/convert/02_11_payrec.py
-python scripts/convert/02_12_reconciliation.py
+python scripts/convert/02_1_new_deals_ndf_vanilla.py
+python scripts/convert/02_2_new_deals_ndf_fwdstart.py
+python scripts/convert/02_3_new_deals_ndf_fwd_start.py
+python scripts/convert/02_4_new_deals_ndf_otherpublisher.py
+python scripts/convert/02_5_new_deals_ndf_commodities.py
+python scripts/convert/02_6_new_deals_option_fxo.py
+python scripts/convert/02_7_new_deals_option_commodities.py
+python scripts/convert/02_8_new_deals_swap_rates.py
+python scripts/convert/02_9_new_deals_swap_commodities.py
+python scripts/convert/02_10_new_deals_intrag_ndf.py
+python scripts/convert/02_11_new_deals_intrag_option.py
+python scripts/convert/02_12_new_deals_intrag_swap.py
+python scripts/convert/02_13_b3_files_ndf.py
+python scripts/convert/02_14_b3_files_option.py
+python scripts/convert/02_15_b3_files_swap.py
+python scripts/convert/02_16_b3_files_operations.py
+python scripts/convert/02_17_daily_settlement.py
+python scripts/convert/02_18_pending_confirmation.py
+python scripts/convert/02_19_payrec.py
+python scripts/convert/02_20_reconciliation.py
 python scripts/convert/99_outros.py
 ```
 
-**As duas rotinas grandes entram repartidas por dentro.** New Deals e B3 Files
-eram um bloco cada e viravam o gargalo: as outras quatro terminam em minutos e
-três pessoas ficavam esperando a maior. Agora cada uma vira quatro fatias, uma
-por pasta de produto.
+**As duas rotinas grandes são repartidas até o PRODUTO** — que é a folha da
+árvore (abaixo dele já vem `AAAA/MM/DD`) e a unidade em que cada banco é
+escrito. Elas eram um bloco cada e viravam o gargalo: as outras quatro rotinas
+terminam em minutos e o resto da equipe ficava esperando a maior. Repartir só
+até `new deals/NDF` ainda deixaria o **Vanilla** — o maior arquivo-dia do app —
+junto com os outros três.
+
+Uma pasta que a sua instância não tenha vira um aviso e a fatia sai limpa; e um
+produto que não esteja na lista (`new deals/NDF/Asian`) cai no `99_outros`, que
+poda por caminho.
 
 ### Se um bloco ainda for grande
 
 `--bloco NOME` desce mais um nível, sem precisar de arquivo novo:
 
 ```bash
-python scripts/convert/02_1_new_deals_ndf.py --bloco Vanilla
-python scripts/convert/02_1_new_deals_ndf.py --bloco Commodities
+python scripts/convert/02_13_b3_files_ndf.py --bloco Extra
 ```
 
 Ele **substitui** o escopo da fatia, não soma — não rode
-`02_1_new_deals_ndf.py` em paralelo com um `--bloco` dele. Para saber que
+`02_13_b3_files_ndf.py` em paralelo com um `--bloco` dele. Para saber que
 blocos existem, peça um que não existe: o aviso lista o que há naquele nível.
 
 O que **não** vale é rodar o `00_completo` junto com os outros: aí sim dois
-processos escreveriam no mesmo banco. Ou o `00`, ou os catorze.
+processos escreveriam no mesmo banco. Ou o `00`, ou os vinte e dois.
 
 O `99_outros` parece dispensável e não é: ele pega qualquer bloco de `cache/`
 que não tenha script próprio, e a poda dele é por **caminho** — tanto uma rotina

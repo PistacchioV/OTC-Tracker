@@ -5,7 +5,8 @@
 O ESCOPO é UM bloco de cache/: **b3 files/NDF**.
 
 As posições e fluxos de NDF que a rotina Save CETIP Files
-grava (DPOSICAO, DFLUXO).
+grava (DPOSICAO, DFLUXO). Aqui o produto já é o primeiro
+nível: o ano vem logo abaixo, não há o que repartir mais.
 
 Cada produto vira um banco e a pasta db/ espelha a árvore de cache/; só
 ano/mês/dia não viram pasta — cada dia é uma tabela dentro do banco.

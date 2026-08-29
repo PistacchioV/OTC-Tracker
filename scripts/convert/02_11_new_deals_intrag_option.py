@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""convert 02_new_deals_ndf — o bloco `new deals/NDF` de cache/.
+"""convert 02_new_deals_intrag_option — o bloco `new deals/Intrag/Option` de cache/.
 
-O ESCOPO é UM bloco de cache/: **new deals/NDF**.
+O ESCOPO é UM bloco de cache/: **new deals/Intrag/Option**.
 
-Os termos de moeda e mercadoria do New Deals — Vanilla, FWD
-Start, Other Publisher e Commodities, um banco por produto.
+A opção da Intrag.
 
 Cada produto vira um banco e a pasta db/ espelha a árvore de cache/; só
 ano/mês/dia não viram pasta — cada dia é uma tabela dentro do banco.
@@ -35,6 +34,6 @@ from convert_json_to_duckdb import run    # noqa: E402
 
 
 if __name__ == '__main__':
-    sys.exit(run(escopo='cache/new deals/NDF (arquivo-dia)',
-                 conversores=('daily',), familias=['new deals/NDF'],
+    sys.exit(run(escopo='cache/new deals/Intrag/Option (arquivo-dia)',
+                 conversores=('daily',), familias=['new deals/Intrag/Option'],
                  doc=__doc__))
