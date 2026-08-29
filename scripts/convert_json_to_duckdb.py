@@ -63,45 +63,67 @@ def _default_out_dir(data_dir):
     return os.path.join(data_dir, 'db')
 
 
-def main(argv=None):
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+def run(argv=None, escopo=None, conversores=None, familias=None, excluir=None,
+        doc=None):
+    """A implementação ÚNICA da CLI, parametrizada pelo ESCOPO.
+
+    `scripts/convert_json_to_duckdb.py` a chama sem escopo (a carga completa) e
+    cada arquivo de `scripts/convert/` a chama com o seu — é o que dá o mesmo
+    corte em blocos do `scripts/standalone/` sem uma segunda cópia da CLI.
+    A diferença entre os dois splits é só de DEPENDÊNCIA: aqui os caminhos saem
+    do `Config`, lá são fixos porque a máquina não tem o código do app.
+
+    `conversores` restringe as ETAPAS (o `01_cadastros` não roda `daily`);
+    `familias`/`excluir` restringem as rotinas de `cache/` dentro do `daily`.
+    """
+    ap = argparse.ArgumentParser(
+        description=(doc or __doc__).splitlines()[0])
     ap.add_argument('--data-dir', default=None, help='origem dos JSONs (padrão: Config.DATA_DIR)')
     ap.add_argument('--out-dir', default=None,
                     help='destino dos .db (padrão: Config.DATABASE_DIR — a pasta db/ existente)')
-    ap.add_argument('--only', choices=('holidays', 'refdata', 'datasets', 'daily'),
-                    default=None)
+    todos = {'holidays': convert_holidays, 'refdata': convert_refdata,
+             'datasets': convert_datasets, 'daily': convert_daily}
+    etapas = [n for n in todos if n in (conversores or todos)]
+    if len(etapas) > 1:
+        ap.add_argument('--only', choices=tuple(etapas), default=None)
     ap.add_argument('--force', action='store_true', help='reconverte mesmo sem mudança')
     ap.add_argument('--dry-run', action='store_true', help='só lista o que converteria')
-    ap.add_argument('--meses', type=int, default=12,
-                    help='janela dos ARQUIVO-DIA: converte só os dos últimos N '
-                         'meses (padrão 12). Use 0 para o histórico INTEIRO — é '
-                         'a segunda passada, e é ela que remove os bancos de '
-                         'formato antigo.')
+    # A janela só existe onde há ARQUIVO-DIA: uma fatia só de cadastros não a
+    # recebe, porque um argumento que não muda nada é pior do que não existir.
+    tem_janela = 'daily' in etapas
+    if tem_janela:
+        ap.add_argument('--meses', type=int, default=12,
+                        help='janela dos ARQUIVO-DIA: converte só os dos últimos N '
+                             'meses (padrão 12). Use 0 para o histórico INTEIRO — é '
+                             'a segunda passada, e é ela que remove os bancos de '
+                             'formato antigo.')
     args = ap.parse_args(argv)
 
     data_dir = os.path.abspath(args.data_dir or _default_data_dir())
     out_dir = os.path.abspath(args.out_dir or _default_out_dir(data_dir))
-    desde = data_de_corte(args.meses)
+    desde = data_de_corte(getattr(args, 'meses', 0)) if tem_janela else None
     print('origem : %s' % data_dir)
     print('destino: %s' % out_dir)
-    # A janela é DECLARADA na tela: o recorte silencioso faria a segunda
-    # passada (a do histórico) parecer desnecessária.
-    print('janela : %s' % ('arquivo-dia a partir de %s (%d meses)'
-                           % (desde.strftime('%d/%m/%Y'), args.meses) if desde
-                           else 'histórico INTEIRO (--meses 0)'))
+    if tem_janela:
+        # A janela é DECLARADA na tela: o recorte silencioso faria a segunda
+        # passada (a do histórico) parecer desnecessária.
+        print('janela : %s' % ('arquivo-dia a partir de %s (%d meses)'
+                               % (desde.strftime('%d/%m/%Y'), args.meses) if desde
+                               else 'histórico INTEIRO (--meses 0)'))
+    if escopo:
+        print('escopo : %s' % escopo)
     antigo = os.path.join(data_dir, 'duckdb')
     if os.path.isdir(antigo) and os.path.abspath(antigo) != out_dir:
         print('aviso  : %s era o destino da versão anterior — os bancos agora '
               'saem na pasta db/; a pasta antiga pode ser removida.' % antigo)
 
-    conversores = {'holidays': convert_holidays, 'refdata': convert_refdata,
-                   'datasets': convert_datasets, 'daily': convert_daily}
-    escolhidos = [args.only] if args.only else list(conversores)
+    escolhidos = [getattr(args, 'only', None)] if getattr(args, 'only', None) else etapas
     houve_erro = False
     for nome in escolhidos:
-        extra = {'desde': desde} if nome == 'daily' else {}
-        stats = conversores[nome](data_dir, out_dir, force=args.force,
-                                  dry_run=args.dry_run, **extra)
+        extra = {'desde': desde, 'familias': familias, 'excluir': excluir} \
+            if nome == 'daily' else {}
+        stats = todos[nome](data_dir, out_dir, force=args.force,
+                            dry_run=args.dry_run, **extra)
         print('\n== %s -> %s' % (nome, os.path.basename(stats['db'])))
         print('   convertidos: %d | inalterados: %d%s%s%s' % (
             len(stats['converted']), len(stats['skipped']),
@@ -119,6 +141,13 @@ def main(argv=None):
             houve_erro = True
             print('   ERRO %s: %s' % (rel, erro.strip().splitlines()[-1]))
     return 1 if houve_erro else 0
+
+
+def main(argv=None):
+    """A carga COMPLETA — sem escopo, que é o que faz dela a única que remove os
+    bancos dos desenhos anteriores e a única que enxerga colisão de tabela entre
+    rotinas diferentes."""
+    return run(argv, escopo='tudo (cadastros + todas as rotinas de cache/)')
 
 
 if __name__ == '__main__':

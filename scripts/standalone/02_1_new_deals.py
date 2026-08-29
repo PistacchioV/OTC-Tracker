@@ -839,10 +839,33 @@ def chave_familia(nome):
     return '_'.join(_tokens(nome))
 
 
+# As rotinas que ganham um script PRÓPRIO nos dois splits — o `scripts/convert/`
+# (que usa o Config) e o `scripts/standalone/` (que não usa). A lista mora aqui
+# porque os dois a consomem: escrita em cada um, uma rotina acrescentada num
+# lado ficaria coberta só pelo `99_outros` do outro, e a diferença apareceria
+# como uma fatia que demora muito mais do que a irmã — nunca como erro.
+# O que NÃO está aqui não fica de fora: o `99_outros` de cada split cobre o
+# resto, e é essa a rede que faz esta lista poder envelhecer sem perda.
+ROTINAS_CACHE = (
+    ('new deals', 'Os arquivo-dia do New Deals — NDF (Vanilla, FWD Start, Other\n'
+                  'Publisher, Commodities), Opção (Commodities, FXO), Swap e Intrag.\n'
+                  'É a maior fatia: um banco por produto, uma tabela por dia.'),
+    ('b3 files', 'As posições e fluxos que a rotina Save CETIP Files grava —\n'
+                 'NDF, Option, Swap e Operations (DPOSICAO, DFLUXO).'),
+    ('daily settlement', 'Os arquivos do Daily Settlement — OTM Settlements, NDF Cockpit,\n'
+                         'Operações JPM/MGT, Eventos Swap, Cognos, BR Onshore, Latam Desk.\n'
+                         'Esta rotina NÃO se ramifica em pastas: os dez arquivos do dia\n'
+                         'convivem em AAAA/MM/DD, e é o NOME de cada um que dá o banco.'),
+    ('pending-confirmation', 'Os snapshots diários do Pending Confirmation.'),
+    ('payrec', 'O histórico diário da reconciliação de Pay/Rec.'),
+    ('reconciliation', 'Os caches por data das reconciliações (Pay/Rec e afins).'),
+)
+
+
 def cache_families(data_dir):
     """As rotinas de primeiro nível de `cache/` — `new deals`, `b3 files`,
     `daily settlement`, … É o eixo pelo qual a conversão se REPARTE entre
-    pessoas (o standalone dividido), e ele existe aqui para o gerador e os
+    pessoas (os dois splits), e ele existe aqui para o gerador e os
     scripts não terem cada um a sua lista."""
     raiz = os.path.join(data_dir, 'cache')
     try:

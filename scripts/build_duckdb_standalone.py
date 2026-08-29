@@ -51,20 +51,22 @@ SAIDA_PADRAO = os.path.join(ROOT, 'scripts', 'standalone')
 # As rotinas de `cache/` que ganham arquivo PRÓPRIO. É uma lista de conveniência
 # — quem não estiver aqui cai no `99_outros`, que existe justamente para rotina
 # nova não ficar sem conversor enquanto ninguém regera nada.
-ROTINAS = (
-    ('new deals', 'Os arquivo-dia do New Deals — NDF (Vanilla, FWD Start, Other\n'
-                  'Publisher, Commodities), Opção (Commodities, FXO), Swap e Intrag.\n'
-                  'É a maior fatia: um banco por produto, uma tabela por dia.'),
-    ('b3 files', 'As posições e fluxos que a rotina Save CETIP Files grava —\n'
-                 'NDF, Option, Swap e Operations (DPOSICAO, DFLUXO).'),
-    ('daily settlement', 'Os arquivos do Daily Settlement — OTM Settlements, NDF Cockpit,\n'
-                         'Operações JPM/MGT, Eventos Swap, Cognos, BR Onshore, Latam Desk.\n'
-                         'Esta rotina NÃO se ramifica em pastas: os dez arquivos do dia\n'
-                         'convivem em AAAA/MM/DD, e é o NOME de cada um que dá o banco.'),
-    ('pending-confirmation', 'Os snapshots diários do Pending Confirmation.'),
-    ('payrec', 'O histórico diário da reconciliação de Pay/Rec.'),
-    ('reconciliation', 'Os caches por data das reconciliações (Pay/Rec e afins).'),
-)
+def _rotinas_do_motor():
+    """A lista de rotinas sai do MOTOR, não daqui.
+
+    Ela é o eixo dos DOIS splits (`scripts/convert/` e `scripts/standalone/`), e
+    escrita em cada um envelheceria de um lado só. É carregada do ARQUIVO por
+    importlib, e não por `from apps.pages...`, porque importar o pacote traria o
+    blueprint do Flask junto — este gerador roda com stdlib e duckdb, e é assim
+    que ele continua rodando em qualquer checkout."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location('_motor_json_to_duckdb', MOTOR)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return tuple(mod.ROTINAS_CACHE)
+
+
+ROTINAS = _rotinas_do_motor()
 
 _CAB = r'''#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
