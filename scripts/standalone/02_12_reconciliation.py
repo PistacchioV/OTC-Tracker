@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-r"""convert 02_payrec — a rotina `payrec` de cache/.
+r"""convert 02_reconciliation — a rotina `reconciliation` de cache/.
 
-O histórico diário da reconciliação de Pay/Rec.
+Os caches por data das reconciliações (Pay/Rec e afins).
 
 Versão AUTOCONTIDA: roda em QUALQUER máquina, sem o código do OTC Tracker por
 perto. Requisito único:  pip install duckdb
@@ -13,13 +13,13 @@ perto. Requisito único:  pip install duckdb
     Destino: ...\static\data\db   (a pasta db dentro da origem)
 
 Uso:
-    python 02_5_payrec.py
-    python 02_5_payrec.py --dry-run
-    python 02_5_payrec.py --data-dir "D:\outra\pasta" --out-dir "D:\saida"
+    python 02_12_reconciliation.py
+    python 02_12_reconciliation.py --dry-run
+    python 02_12_reconciliation.py --data-dir "D:\outra\pasta" --out-dir "D:\saida"
 
-O ESCOPO é UMA rotina de cache\: **payrec**.
+O ESCOPO é UM bloco de cache\: **reconciliation**.
 
-O histórico diário da reconciliação de Pay/Rec.
+Os caches por data das reconciliações (Pay/Rec e afins).
 
 Cada produto vira um banco e a pasta db\ ESPELHA a árvore de cache\
 (db\cache\new deals\NDF\Vanilla.db, db\cache\b3 files\Swap.db); só
@@ -30,6 +30,10 @@ tipada, e texto sai byte a byte.
 
 Como os bancos são um por produto, este script NÃO escreve em nada que os outros
 escrevem: pode rodar ao mesmo tempo que eles.
+
+Se nesta instância o bloco ainda for grande demais, `--bloco NOME` desce mais um
+nível (ex.: `--bloco Vanilla`). Ele SUBSTITUI o escopo desta fatia — não rode a
+fatia inteira em paralelo com um bloco dela.
 
 É IDEMPOTENTE e INCREMENTAL: cada banco guarda um `_manifest` com
 caminho/mtime/tamanho e só reconverte o arquivo que mudou — rodar de novo com
@@ -842,12 +846,24 @@ def chave_familia(nome):
 # como uma fatia que demora muito mais do que a irmã — nunca como erro.
 # O que NÃO está aqui não fica de fora: o `99_outros` de cada split cobre o
 # resto, e é essa a rede que faz esta lista poder envelhecer sem perda.
+#
+# As duas rotinas grandes — New Deals e B3 Files — entram REPARTIDAS POR BLOCO,
+# uma fatia por pasta de produto. Como bloco único elas eram o gargalo: as
+# outras quatro terminam em minutos e três pessoas ficavam esperando a maior.
+# O corte é no PRIMEIRO nível dentro da rotina, que é onde a árvore de fato se
+# divide; para descer mais numa instância específica há o `--bloco`, que não
+# precisa de arquivo novo.
 ROTINAS_CACHE = (
-    ('new deals', 'Os arquivo-dia do New Deals — NDF (Vanilla, FWD Start, Other\n'
-                  'Publisher, Commodities), Opção (Commodities, FXO), Swap e Intrag.\n'
-                  'É a maior fatia: um banco por produto, uma tabela por dia.'),
-    ('b3 files', 'As posições e fluxos que a rotina Save CETIP Files grava —\n'
-                 'NDF, Option, Swap e Operations (DPOSICAO, DFLUXO).'),
+    ('new deals/NDF', 'Os termos de moeda e mercadoria do New Deals — Vanilla, FWD\n'
+                      'Start, Other Publisher e Commodities, um banco por produto.'),
+    ('new deals/Option', 'As opções do New Deals — Commodities e FXO.'),
+    ('new deals/Swap', 'Os swaps do New Deals — Rates e Commodities.'),
+    ('new deals/Intrag', 'Os arquivo-dia da Intrag — NDF e Opção.'),
+    ('b3 files/NDF', 'As posições e fluxos de NDF que a rotina Save CETIP Files\n'
+                     'grava (DPOSICAO, DFLUXO).'),
+    ('b3 files/Option', 'Idem, para as opções.'),
+    ('b3 files/Swap', 'Idem, para os swaps — costuma ser o maior dos quatro.'),
+    ('b3 files/Operations', 'O Operations B3 — a lista de operações registradas.'),
     ('daily settlement', 'Os arquivos do Daily Settlement — OTM Settlements, NDF Cockpit,\n'
                          'Operações JPM/MGT, Eventos Swap, Cognos, BR Onshore, Latam Desk.\n'
                          'Esta rotina NÃO se ramifica em pastas: os dez arquivos do dia\n'
@@ -856,6 +872,51 @@ ROTINAS_CACHE = (
     ('payrec', 'O histórico diário da reconciliação de Pay/Rec.'),
     ('reconciliation', 'Os caches por data das reconciliações (Pay/Rec e afins).'),
 )
+
+
+def chave_escopo(caminho):
+    """Um escopo de `cache/` como TUPLA de segmentos normalizados.
+
+    O escopo é um CAMINHO (`new deals/NDF`), e não só a rotina de primeiro
+    nível: as duas rotinas grandes se repartem por dentro, e sem isso a fatia do
+    New Deals seguiria sendo um bloco só enquanto quatro pessoas esperam por
+    ela. Comparar por tupla — e não pela string colada — é o que impede
+    `new deals/NDF` de casar com uma rotina chamada `new dealsndf`."""
+    partes = str(caminho or '').replace('\\', '/').split('/')
+    return tuple(chave_familia(p) for p in partes if str(p).strip())
+
+
+def _subpastas(caminho):
+    try:
+        return sorted(n for n in os.listdir(caminho)
+                      if os.path.isdir(os.path.join(caminho, n)))
+    except OSError:
+        return []
+
+
+def resolver_escopo(raiz_cache, escopo):
+    """(caminho REAL do escopo sob `cache/`, None) — ou (None, aviso).
+
+    Desce segmento a segmento casando pelo nome NORMALIZADO, porque a grafia da
+    pasta é de quem criou a árvore e as instâncias não concordam (a dev tem
+    `b3 files`, o share tem `B3 Files`). O caminho devolvido é o que está em
+    DISCO, que é o que a pasta `db/` espelha.
+
+    O aviso diz o que ele ACHOU **no nível em que parou** — não a listagem da
+    raiz. Um escopo de dois segmentos falha quase sempre no segundo, e mostrar
+    as rotinas de primeiro nível ali responderia a pergunta errada."""
+    partes = [p for p in str(escopo or '').replace('\\', '/').split('/') if p.strip()]
+    atual, reais = raiz_cache, []
+    for p in partes:
+        alvo = chave_familia(p)
+        achou = next((n for n in _subpastas(atual) if chave_familia(n) == alvo), None)
+        if achou is None:
+            onde = '/'.join(reais) or 'cache'
+            return None, ('cache/%s: bloco ausente em disco. Dentro de %s há: %s'
+                          % (escopo, onde, ', '.join(_subpastas(atual)) or '(nenhuma pasta)'))
+        reais.append(achou)
+        atual = os.path.join(atual, achou)
+    return '/'.join(reais), None
 
 
 def cache_families(data_dir):
@@ -914,44 +975,65 @@ def convert_daily(data_dir, out_dir, force=False, dry_run=False,
         return stats
 
     todas = cache_families(data_dir)
+    # Os escopos RESOLVIDOS em disco (a grafia real), e as famílias que este run
+    # cobre por INTEIRO — que é o que autoriza mexer no banco legado da rotina.
+    escopos, fams_inteiras = [], set()
     if familias is not None:
-        quero = {chave_familia(f) for f in familias}
-        alvo_fams = [f for f in todas if chave_familia(f) in quero]
-        achadas = {chave_familia(f) for f in alvo_fams}
-        faltando = [f for f in familias if chave_familia(f) not in achadas]
-        if faltando:
-            # Rotina pedida que não existe em disco não é erro (a instância pode
-            # não ter aquele cache ainda) — mas o aviso vai em `avisos`, que o
-            # resumo IMPRIME. Contado só como número, ele saía como um `fora
-            # deste conversor: 1` indistinguível de um ponteiro `_last` e a
-            # pessoa lia "não havia nada a fazer" onde a fatia inteira ficou
-            # de fora. Por isso ele diz também o que ACHOU: a diferença entre
-            # a grafia pedida e a que está em disco é a resposta.
-            stats['avisos'].extend(
-                'cache/%s: rotina ausente em disco. Rotinas encontradas: %s'
-                % (f, ', '.join(todas) or '(nenhuma)') for f in faltando)
+        for pedido in familias:
+            real, aviso = resolver_escopo(raiz, pedido)
+            if real is None:
+                # Bloco pedido que não existe em disco não é erro (a instância
+                # pode não ter aquele cache) — mas o aviso vai em `avisos`, que
+                # o resumo IMPRIME. Contado só como número, ele saía como um
+                # `fora deste conversor: 1` indistinguível de um ponteiro
+                # `_last`, e a pessoa lia "não havia nada a fazer" onde a fatia
+                # inteira ficou de fora.
+                stats['avisos'].append(aviso)
+                continue
+            escopos.append(real)
+            if len(chave_escopo(real)) == 1:
+                fams_inteiras.add(real)
     elif excluir is not None:
-        fora = {chave_familia(f) for f in excluir}
-        alvo_fams = [f for f in todas if chave_familia(f) not in fora]
+        escopos = None                      # varre o cache/ inteiro, podando
     else:
-        alvo_fams = todas
+        escopos = list(todas)
+        fams_inteiras = set(todas)
 
     rels = []
-    for fam in alvo_fams:
-        for dirpath, _dirs, files in sorted(os.walk(os.path.join(raiz, fam))):
-            for fname in sorted(files):
-                if not fname.endswith('.json'):
-                    continue
-                rel = os.path.relpath(os.path.join(dirpath, fname),
-                                      data_dir).replace(os.sep, '/')
-                if _daily_rel_target(rel) is None:
-                    # Não é arquivo-dia (ponteiros como `_last`, configs
-                    # avulsas): fica no JSON — some daqui e parece perda.
-                    stats['ignored'].append(rel)
-                elif desde and (dia_do_rel(rel) or datetime.date.min) < desde:
-                    stats['antigos'].append(rel)
-                else:
-                    rels.append(rel)
+    if escopos is None:
+        # O `99_outros`: desce o `cache/` inteiro PODANDO os escopos cobertos.
+        # A poda é por caminho, e é o que faz a rede de segurança funcionar nos
+        # dois níveis — uma rotina NOVA (`cache/equity`) e um bloco novo dentro
+        # de uma coberta (`cache/new deals/Equity`) caem os dois aqui, enquanto
+        # `cache/new deals/NDF`, que tem script próprio, é podado.
+        fora = {chave_escopo(e) for e in excluir}
+        caminhados = []
+        for dirpath, dirs, files in os.walk(raiz):
+            rel_dir = os.path.relpath(dirpath, raiz).replace(os.sep, '/')
+            base = () if rel_dir == '.' else chave_escopo(rel_dir)
+            dirs[:] = [d for d in sorted(dirs)
+                       if (base + (chave_familia(d),)) not in fora]
+            if rel_dir != '.':
+                caminhados.append((dirpath, files))
+        andar = caminhados
+    else:
+        andar = [(dp, fs) for e in escopos
+                 for dp, _d, fs in sorted(os.walk(os.path.join(raiz, *e.split('/'))))]
+
+    for dirpath, files in andar:
+        for fname in sorted(files):
+            if not fname.endswith('.json'):
+                continue
+            rel = os.path.relpath(os.path.join(dirpath, fname),
+                                  data_dir).replace(os.sep, '/')
+            if _daily_rel_target(rel) is None:
+                # Não é arquivo-dia (ponteiros como `_last`, configs
+                # avulsas): fica no JSON — some daqui e parece perda.
+                stats['ignored'].append(rel)
+            elif desde and (dia_do_rel(rel) or datetime.date.min) < desde:
+                stats['antigos'].append(rel)
+            else:
+                rels.append(rel)
     # Os JSONs soltos na RAIZ de `cache/` (sem pasta de rotina) só entram na
     # carga sem escopo: eles não pertencem a fatia nenhuma.
     if familias is None and excluir is None:
@@ -996,13 +1078,19 @@ def convert_daily(data_dir, out_dir, force=False, dry_run=False,
         # famílias da fatia: o `daily_caches.db` e o banco de OUTRA rotina são
         # trabalho de quem está rodando ao lado, e apagá-los daqui seria
         # desfazer a carga alheia no meio dela.
+        #
+        # O legado da ROTINA (`daily_b3_files.db`) só sai quando esta passada
+        # cobre a família INTEIRA. Numa fatia de sub-bloco (`b3 files/NDF`) ele
+        # guarda também o Option, o Swap e o Operations, que quem está rodando
+        # ao lado ainda vai converter — apagá-lo daqui é apagar o trabalho
+        # deles antes de ele existir no formato novo.
         if familias is None and excluir is None:
             legados = {'daily_caches.db', 'daily_cache.db'}
             legados.update('daily_' + (norm_ident(f, 'r') or 'cache') + '.db'
                            for f in todas)
         else:
             legados = {'daily_' + (norm_ident(f, 'r') or 'cache') + '.db'
-                       for f in alvo_fams}
+                       for f in fams_inteiras}
         # E os nomes ACHATADOS do desenho seguinte, o de quando cada produto já
         # tinha o seu banco mas todos moravam soltos na raiz do `db/`.
         legados.update(_legacy_flat_name(a[0]) for a, _ in alvos)
@@ -1272,6 +1360,10 @@ def main(argv=None):
                          'ou a letra I:, o que existir na máquina)')
     ap.add_argument('--out-dir', default=None,
                     help='destino dos .db (padrão: a pasta db dentro da origem)')
+    ap.add_argument('--bloco', default=None,
+                    help='restringe a UMA subpasta desta fatia (ex.: --bloco '
+                         'Vanilla). SUBSTITUI o escopo da fatia — nao rode a '
+                         'fatia inteira em paralelo com um bloco dela.')
     ap.add_argument('--force', action='store_true', help='reconverte mesmo sem mudança')
     ap.add_argument('--dry-run', action='store_true', help='só lista o que converteria')
     ap.add_argument('--meses', type=int, default=12,
@@ -1291,11 +1383,17 @@ def main(argv=None):
     print('janela : %s' % ('arquivo-dia a partir de %s (%d meses)'
                            % (desde.strftime('%d/%m/%Y'), args.meses)
                            if desde else 'historico INTEIRO (--meses 0)'))
-    print('escopo : cache/payrec (arquivo-dia)')
+    print('escopo : cache/reconciliation (arquivo-dia)')
 
     houve_erro = [False]
+    # `--bloco` SUBSTITUI o escopo desta fatia; nao soma. Rodar a fatia inteira
+    # em paralelo com um bloco dela poria dois processos no mesmo banco.
+    fatia = 'reconciliation'
+    if args.bloco:
+        fatia = fatia.rstrip('/') + '/' + args.bloco.strip().strip('/')
+        print('escopo : cache/%s (arquivo-dia) [--bloco]' % fatia)
     _resumo('daily', convert_daily(data_dir, out_dir, force=args.force,
-                                   dry_run=args.dry_run, familias=['payrec'],
+                                   dry_run=args.dry_run, familias=[fatia],
                                    desde=desde),
             houve_erro)
     return 1 if houve_erro[0] else 0

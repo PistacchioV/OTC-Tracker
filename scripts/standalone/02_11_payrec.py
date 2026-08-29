@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-r"""convert 01_cadastros — os JSONs ÚNICOS (sem quebra por dia).
+r"""convert 02_payrec — a rotina `payrec` de cache/.
 
-Feriados, RefData/CounterpartyDetails e um banco por JSON de cadastro.
+O histórico diário da reconciliação de Pay/Rec.
 
 Versão AUTOCONTIDA: roda em QUALQUER máquina, sem o código do OTC Tracker por
 perto. Requisito único:  pip install duckdb
@@ -13,23 +13,27 @@ perto. Requisito único:  pip install duckdb
     Destino: ...\static\data\db   (a pasta db dentro da origem)
 
 Uso:
-    python 01_cadastros.py
-    python 01_cadastros.py --dry-run
-    python 01_cadastros.py --data-dir "D:\outra\pasta" --out-dir "D:\saida"
+    python 02_11_payrec.py
+    python 02_11_payrec.py --dry-run
+    python 02_11_payrec.py --data-dir "D:\outra\pasta" --out-dir "D:\saida"
 
-O ESCOPO são os JSONs ÚNICOS — os que NÃO têm quebra por dia:
+O ESCOPO é UM bloco de cache\: **payrec**.
 
-  - holiday_calendars.db  uma tabela por calendário do registro (+ _registry);
-  - reference_data.db     refdata e counterparty_details, TUDO VARCHAR (o zero à
-                          esquerda de SPN/ECI/TAX ID é o que um BIGINT perderia
-                          em silêncio) + a coluna _raw com o registro exato;
-  - <pasta>_<arquivo>.db  UM BANCO POR JSON para o resto — mappings_mt300.db,
-                          control_panel_mt300_status.db,
-                          file_interpreter_termo.db, e o JSON da raiz com o
-                          próprio nome (subjacente.db).
+O histórico diário da reconciliação de Pay/Rec.
 
-A pasta translations\ fica FORA de propósito: os 3 JSONs de i18n são os únicos
-que permanecem como JSON. Os arquivo-dia de cache\ são dos outros scripts.
+Cada produto vira um banco e a pasta db\ ESPELHA a árvore de cache\
+(db\cache\new deals\NDF\Vanilla.db, db\cache\b3 files\Swap.db); só
+ano/mês/dia não viram pasta — cada dia é uma tabela
+(d_AAAAMMDD[_tag]), tipada por inferência: dd/mm/aaaa e ISO viram DATE, número
+vira BIGINT/DOUBLE, zero à esquerda continua texto, '' vira NULL só em coluna
+tipada, e texto sai byte a byte.
+
+Como os bancos são um por produto, este script NÃO escreve em nada que os outros
+escrevem: pode rodar ao mesmo tempo que eles.
+
+Se nesta instância o bloco ainda for grande demais, `--bloco NOME` desce mais um
+nível (ex.: `--bloco Vanilla`). Ele SUBSTITUI o escopo desta fatia — não rode a
+fatia inteira em paralelo com um bloco dela.
 
 É IDEMPOTENTE e INCREMENTAL: cada banco guarda um `_manifest` com
 caminho/mtime/tamanho e só reconverte o arquivo que mudou — rodar de novo com
@@ -1356,27 +1360,42 @@ def main(argv=None):
                          'ou a letra I:, o que existir na máquina)')
     ap.add_argument('--out-dir', default=None,
                     help='destino dos .db (padrão: a pasta db dentro da origem)')
-    ap.add_argument('--only', choices=('holidays', 'refdata', 'datasets'),
-                    default=None)
+    ap.add_argument('--bloco', default=None,
+                    help='restringe a UMA subpasta desta fatia (ex.: --bloco '
+                         'Vanilla). SUBSTITUI o escopo da fatia — nao rode a '
+                         'fatia inteira em paralelo com um bloco dela.')
     ap.add_argument('--force', action='store_true', help='reconverte mesmo sem mudança')
     ap.add_argument('--dry-run', action='store_true', help='só lista o que converteria')
+    ap.add_argument('--meses', type=int, default=12,
+                    help='janela dos arquivo-dia: converte so os dos ultimos '
+                         'N meses (padrao 12). Use 0 para o historico INTEIRO '
+                         '— e a segunda passada, e e ela que remove os bancos '
+                         'de formato antigo.')
     args = ap.parse_args(argv)
 
     data_dir = os.path.abspath(args.data_dir or _data_dir_padrao())
     out_dir = os.path.abspath(args.out_dir or os.path.join(data_dir, 'db'))
     print('origem : %s' % data_dir)
     print('destino: %s' % out_dir)
-    print('escopo : cadastros (sem quebra por dia)')
+    desde = data_de_corte(args.meses)
+    # A janela e DECLARADA na tela: o recorte silencioso faria a segunda
+    # passada (a do historico) parecer desnecessaria.
+    print('janela : %s' % ('arquivo-dia a partir de %s (%d meses)'
+                           % (desde.strftime('%d/%m/%Y'), args.meses)
+                           if desde else 'historico INTEIRO (--meses 0)'))
+    print('escopo : cache/payrec (arquivo-dia)')
 
     houve_erro = [False]
-    # Os JSONs UNICOS — nenhum deles tem quebra por dia, entao esta fatia nao
-    # toca em nada que os scripts de rotina convertem.
-    conversores = {'holidays': convert_holidays, 'refdata': convert_refdata,
-                   'datasets': convert_datasets}
-    escolhidos = [args.only] if args.only else list(conversores)
-    for nome in escolhidos:
-        _resumo(nome, conversores[nome](data_dir, out_dir, force=args.force,
-                                        dry_run=args.dry_run), houve_erro)
+    # `--bloco` SUBSTITUI o escopo desta fatia; nao soma. Rodar a fatia inteira
+    # em paralelo com um bloco dela poria dois processos no mesmo banco.
+    fatia = 'payrec'
+    if args.bloco:
+        fatia = fatia.rstrip('/') + '/' + args.bloco.strip().strip('/')
+        print('escopo : cache/%s (arquivo-dia) [--bloco]' % fatia)
+    _resumo('daily', convert_daily(data_dir, out_dir, force=args.force,
+                                   dry_run=args.dry_run, familias=[fatia],
+                                   desde=desde),
+            houve_erro)
     return 1 if houve_erro[0] else 0
 
 

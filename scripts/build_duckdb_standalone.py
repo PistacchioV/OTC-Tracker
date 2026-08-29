@@ -17,9 +17,14 @@ fatias nunca escrevem no mesmo `.db`:
     00_completo     tudo de uma vez (para quem prefere um comando só)
     01_cadastros    os JSONs ÚNICOS, sem quebra por dia (feriados, RefData/CPD,
                     mappings, control-panel, file-interpreter, cadastros B3)
-    02_<rotina>     uma fatia por rotina de `cache/` — as que têm quebra por DIA
-    99_outros       toda rotina de `cache/` que não tem arquivo próprio, para
-                    uma rotina NOVA nunca ficar sem conversor
+    02_<bloco>      uma fatia por BLOCO de `cache/` — as que têm quebra por DIA.
+                    As duas rotinas grandes (New Deals e B3 Files) entram
+                    repartidas por dentro, uma fatia por pasta de produto: como
+                    bloco único elas eram o gargalo da carga
+    99_outros       todo bloco de `cache/` que não tem arquivo próprio, para um
+                    bloco NOVO nunca ficar sem conversor — a poda é por CAMINHO,
+                    então tanto uma rotina nova quanto uma pasta nova dentro de
+                    uma já coberta caem ali
 
 Eles são VERSIONADOS em `scripts/standalone/` para serem entregues junto com o
 código, e são gerados — nunca editados à mão — porque são cópias de um motor
@@ -48,9 +53,6 @@ ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)),
 MOTOR = os.path.join(ROOT, 'apps', 'pages', 'json_to_duckdb.py')
 SAIDA_PADRAO = os.path.join(ROOT, 'scripts', 'standalone')
 
-# As rotinas de `cache/` que ganham arquivo PRÓPRIO. É uma lista de conveniência
-# — quem não estiver aqui cai no `99_outros`, que existe justamente para rotina
-# nova não ficar sem conversor enquanto ninguém regera nada.
 def _rotinas_do_motor():
     """A lista de rotinas sai do MOTOR, não daqui.
 
@@ -200,8 +202,14 @@ _MAIN_CADASTROS = """    # Os JSONs UNICOS — nenhum deles tem quebra por dia, 
                                         dry_run=args.dry_run), houve_erro)
 """
 
-_MAIN_ROTINA = """    _resumo('daily', convert_daily(data_dir, out_dir, force=args.force,
-                                   dry_run=args.dry_run, familias=[%(fam)r],
+_MAIN_ROTINA = """    # `--bloco` SUBSTITUI o escopo desta fatia; nao soma. Rodar a fatia inteira
+    # em paralelo com um bloco dela poria dois processos no mesmo banco.
+    fatia = %(fam)r
+    if args.bloco:
+        fatia = fatia.rstrip('/') + '/' + args.bloco.strip().strip('/')
+        print('escopo : cache/%%s (arquivo-dia) [--bloco]' %% fatia)
+    _resumo('daily', convert_daily(data_dir, out_dir, force=args.force,
+                                   dry_run=args.dry_run, familias=[fatia],
                                    desde=desde),
             houve_erro)
 """
@@ -229,6 +237,13 @@ _ARG_MESES = (
     "                         'N meses (padrao 12). Use 0 para o historico INTEIRO '\n"
     "                         '— e a segunda passada, e e ela que remove os bancos '\n"
     "                         'de formato antigo.')\n")
+# Só as fatias de BLOCO recebem: é o que desce mais um nível numa instância que
+# tem mais pasta do que a dev, sem precisar de um arquivo novo.
+_ARG_BLOCO = (
+    "    ap.add_argument('--bloco', default=None,\n"
+    "                    help='restringe a UMA subpasta desta fatia (ex.: --bloco '\n"
+    "                         'Vanilla). SUBSTITUI o escopo da fatia — nao rode a '\n"
+    "                         'fatia inteira em paralelo com um bloco dela.')\n")
 _LINHA_JANELA = (
     "    desde = data_de_corte(args.meses)\n"
     "    # A janela e DECLARADA na tela: o recorte silencioso faria a segunda\n"
@@ -258,7 +273,7 @@ _DOC_CADASTROS = """O ESCOPO são os JSONs ÚNICOS — os que NÃO têm quebra p
 A pasta translations\\ fica FORA de propósito: os 3 JSONs de i18n são os únicos
 que permanecem como JSON. Os arquivo-dia de cache\\ são dos outros scripts."""
 
-_DOC_ROTINA = """O ESCOPO é UMA rotina de cache\\: **%(fam)s**.
+_DOC_ROTINA = """O ESCOPO é UM bloco de cache\\: **%(fam)s**.
 
 %(desc)s
 
@@ -270,7 +285,11 @@ vira BIGINT/DOUBLE, zero à esquerda continua texto, '' vira NULL só em coluna
 tipada, e texto sai byte a byte.
 
 Como os bancos são um por produto, este script NÃO escreve em nada que os outros
-escrevem: pode rodar ao mesmo tempo que eles."""
+escrevem: pode rodar ao mesmo tempo que eles.
+
+Se nesta instância o bloco ainda for grande demais, `--bloco NOME` desce mais um
+nível (ex.: `--bloco Vanilla`). Ele SUBSTITUI o escopo desta fatia — não rode a
+fatia inteira em paralelo com um bloco dela."""
 
 _DOC_OUTROS = """O ESCOPO é o RESTO de cache\\: toda rotina que não tem arquivo próprio ao lado
 deste. Ele existe para uma rotina NOVA nunca ficar sem conversor — hoje as
@@ -342,7 +361,7 @@ def _variantes():
             desc.replace('\n', '\n'),
             _DOC_ROTINA % {'fam': fam, 'desc': desc},
             'cache/%s (arquivo-dia)' % fam,
-            '', _MAIN_ROTINA % {'fam': fam}, True))
+            _ARG_BLOCO, _MAIN_ROTINA % {'fam': fam}, True))
     cobertas = [f for f, _ in ROTINAS]
     out.append((
         '99_outros.py',
@@ -374,6 +393,16 @@ def main(argv=None):
         conteudo = cab + corpo + rod
         io.open(os.path.join(destino, arq), 'w', encoding='utf-8').write(conteudo)
         gerados.append((arq, conteudo.count('\n')))
+
+    # Fatia que saiu do `ROTINAS_CACHE` deixa um arquivo ÓRFÃO, e ele continua
+    # rodando — com um escopo que ninguém mais declara e que o `99_outros`
+    # agora cobre. Duas pessoas escreveriam no mesmo banco sem que nada na
+    # pasta dissesse isso.
+    nomes = {a for a, _ in gerados}
+    for antigo in sorted(os.listdir(destino)):
+        if antigo.endswith('.py') and antigo not in nomes:
+            os.remove(os.path.join(destino, antigo))
+            print('   - %s (removido: nao esta mais no ROTINAS_CACHE)' % antigo)
 
     print('gerados em %s:' % destino)
     for arq, n in gerados:
