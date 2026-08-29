@@ -230,7 +230,7 @@ print('\n== 4. os argumentos de cada fatia ==')
 rc, saida = _rodar('01_cadastros.py', os.path.join(DATA, 'x'), ['--meses', '0'])
 check('o 01_cadastros RECUSA --meses (nao ha data para cortar)', rc != 0)
 check('   e diz por quê', 'unrecognized arguments: --meses' in saida)
-_UMA = '02_13_b3_files_ndf.py'
+_UMA = '02_12_b3_files_ndf.py'
 rc, saida = _rodar(_UMA, os.path.join(DATA, 'y'), ['--only', 'daily'])
 check('a fatia de bloco RECUSA --only (tem uma etapa so)', rc != 0)
 

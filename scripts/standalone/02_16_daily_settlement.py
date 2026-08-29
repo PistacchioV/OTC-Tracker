@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-r"""convert 02_new_deals_ndf_otherpublisher — a rotina `new deals/NDF/OtherPublisher` de cache/.
+r"""convert 02_daily_settlement — a rotina `daily settlement` de cache/.
 
-O NDF Other Publisher.
+Os arquivos do Daily Settlement — OTM Settlements, NDF Cockpit,
+Operações JPM/MGT, Eventos Swap, Cognos, BR Onshore, Latam Desk.
+Esta rotina NÃO se ramifica em pastas: os dez arquivos do dia
+convivem em AAAA/MM/DD, e é o NOME de cada um que dá o banco.
 
 Versão AUTOCONTIDA: roda em QUALQUER máquina, sem o código do OTC Tracker por
 perto. Requisito único:  pip install duckdb
@@ -13,13 +16,16 @@ perto. Requisito único:  pip install duckdb
     Destino: ...\static\data\db   (a pasta db dentro da origem)
 
 Uso:
-    python 02_4_new_deals_ndf_otherpublisher.py
-    python 02_4_new_deals_ndf_otherpublisher.py --dry-run
-    python 02_4_new_deals_ndf_otherpublisher.py --data-dir "D:\outra\pasta" --out-dir "D:\saida"
+    python 02_16_daily_settlement.py
+    python 02_16_daily_settlement.py --dry-run
+    python 02_16_daily_settlement.py --data-dir "D:\outra\pasta" --out-dir "D:\saida"
 
-O ESCOPO é UM bloco de cache\: **new deals/NDF/OtherPublisher**.
+O ESCOPO é UM bloco de cache\: **daily settlement**.
 
-O NDF Other Publisher.
+Os arquivos do Daily Settlement — OTM Settlements, NDF Cockpit,
+Operações JPM/MGT, Eventos Swap, Cognos, BR Onshore, Latam Desk.
+Esta rotina NÃO se ramifica em pastas: os dez arquivos do dia
+convivem em AAAA/MM/DD, e é o NOME de cada um que dá o banco.
 
 Cada produto vira um banco e a pasta db\ ESPELHA a árvore de cache\
 (db\cache\new deals\NDF\Vanilla.db, db\cache\b3 files\Swap.db); só
@@ -862,11 +868,10 @@ def chave_familia(nome):
 ROTINAS_CACHE = (
     ('new deals/NDF/Vanilla', 'O termo de moeda vanilla — costuma ser o maior\n'
                               'arquivo-dia do app inteiro.'),
-    ('new deals/NDF/FwdStart', 'O NDF FWD Start, na pasta que o app grava hoje.'),
-    ('new deals/NDF/FWD Start', 'O MESMO produto na pasta LEGADA (com espaço), que\n'
-                                'continua cheia no share e que o app ainda lê. Ela é\n'
-                                'uma fatia própria porque tem dado de verdade; onde\n'
-                                'não existir, esta fatia avisa e sai limpa.'),
+    ('new deals/NDF/FwdStart', 'O NDF FWD Start. A pasta é SEM espaço — `FWD Start`\n'
+                              'é o rótulo da tela, e a pasta com espaço nunca\n'
+                              'existiu (se alguma instância a tiver, o 99_outros a\n'
+                              'converte, porque a poda é por caminho).'),
     ('new deals/NDF/OtherPublisher', 'O NDF Other Publisher.'),
     ('new deals/NDF/Commodities', 'O termo de mercadoria.'),
     ('new deals/Option/FXO', 'A opção de câmbio.'),
@@ -1401,12 +1406,12 @@ def main(argv=None):
     print('janela : %s' % ('arquivo-dia a partir de %s (%d meses)'
                            % (desde.strftime('%d/%m/%Y'), args.meses)
                            if desde else 'historico INTEIRO (--meses 0)'))
-    print('escopo : cache/new deals/NDF/OtherPublisher (arquivo-dia)')
+    print('escopo : cache/daily settlement (arquivo-dia)')
 
     houve_erro = [False]
     # `--bloco` SUBSTITUI o escopo desta fatia; nao soma. Rodar a fatia inteira
     # em paralelo com um bloco dela poria dois processos no mesmo banco.
-    fatia = 'new deals/NDF/OtherPublisher'
+    fatia = 'daily settlement'
     if args.bloco:
         fatia = fatia.rstrip('/') + '/' + args.bloco.strip().strip('/')
         print('escopo : cache/%s (arquivo-dia) [--bloco]' % fatia)

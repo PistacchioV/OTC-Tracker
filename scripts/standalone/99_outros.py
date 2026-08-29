@@ -25,7 +25,6 @@ são:
 
   - new deals/NDF/Vanilla
   - new deals/NDF/FwdStart
-  - new deals/NDF/FWD Start
   - new deals/NDF/OtherPublisher
   - new deals/NDF/Commodities
   - new deals/Option/FXO
@@ -874,11 +873,10 @@ def chave_familia(nome):
 ROTINAS_CACHE = (
     ('new deals/NDF/Vanilla', 'O termo de moeda vanilla — costuma ser o maior\n'
                               'arquivo-dia do app inteiro.'),
-    ('new deals/NDF/FwdStart', 'O NDF FWD Start, na pasta que o app grava hoje.'),
-    ('new deals/NDF/FWD Start', 'O MESMO produto na pasta LEGADA (com espaço), que\n'
-                                'continua cheia no share e que o app ainda lê. Ela é\n'
-                                'uma fatia própria porque tem dado de verdade; onde\n'
-                                'não existir, esta fatia avisa e sai limpa.'),
+    ('new deals/NDF/FwdStart', 'O NDF FWD Start. A pasta é SEM espaço — `FWD Start`\n'
+                              'é o rótulo da tela, e a pasta com espaço nunca\n'
+                              'existiu (se alguma instância a tiver, o 99_outros a\n'
+                              'converte, porque a poda é por caminho).'),
     ('new deals/NDF/OtherPublisher', 'O NDF Other Publisher.'),
     ('new deals/NDF/Commodities', 'O termo de mercadoria.'),
     ('new deals/Option/FXO', 'A opção de câmbio.'),
@@ -1415,7 +1413,7 @@ def main(argv=None):
     # Tudo que os demais scripts NAO cobrem: e o que garante que uma rotina nova
     # em cache/ tenha conversor sem ninguem regerar nada.
     _resumo('daily', convert_daily(data_dir, out_dir, force=args.force,
-                                   dry_run=args.dry_run, excluir=['new deals/NDF/Vanilla', 'new deals/NDF/FwdStart', 'new deals/NDF/FWD Start', 'new deals/NDF/OtherPublisher', 'new deals/NDF/Commodities', 'new deals/Option/FXO', 'new deals/Option/Commodities', 'new deals/Swap/Rates', 'new deals/Swap/Commodities', 'new deals/Intrag/NDF', 'new deals/Intrag/Option', 'new deals/Intrag/Swap', 'b3 files/NDF', 'b3 files/Option', 'b3 files/Swap', 'b3 files/Operations', 'daily settlement', 'pending-confirmation', 'payrec', 'reconciliation'],
+                                   dry_run=args.dry_run, excluir=['new deals/NDF/Vanilla', 'new deals/NDF/FwdStart', 'new deals/NDF/OtherPublisher', 'new deals/NDF/Commodities', 'new deals/Option/FXO', 'new deals/Option/Commodities', 'new deals/Swap/Rates', 'new deals/Swap/Commodities', 'new deals/Intrag/NDF', 'new deals/Intrag/Option', 'new deals/Intrag/Swap', 'b3 files/NDF', 'b3 files/Option', 'b3 files/Swap', 'b3 files/Operations', 'daily settlement', 'pending-confirmation', 'payrec', 'reconciliation'],
                                    desde=desde),
             houve_erro)
     return 1 if houve_erro[0] else 0

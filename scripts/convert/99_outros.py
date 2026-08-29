@@ -9,7 +9,6 @@ uma já coberta (`cache/new deals/Equity`) caem aqui. Hoje os cobertos são:
 
   - new deals/NDF/Vanilla
   - new deals/NDF/FwdStart
-  - new deals/NDF/FWD Start
   - new deals/NDF/OtherPublisher
   - new deals/NDF/Commodities
   - new deals/Option/FXO
@@ -50,5 +49,5 @@ from convert_json_to_duckdb import run    # noqa: E402
 
 if __name__ == '__main__':
     sys.exit(run(escopo='cache/ menos os blocos com arquivo próprio',
-                 conversores=('daily',), excluir=['new deals/NDF/Vanilla', 'new deals/NDF/FwdStart', 'new deals/NDF/FWD Start', 'new deals/NDF/OtherPublisher', 'new deals/NDF/Commodities', 'new deals/Option/FXO', 'new deals/Option/Commodities', 'new deals/Swap/Rates', 'new deals/Swap/Commodities', 'new deals/Intrag/NDF', 'new deals/Intrag/Option', 'new deals/Intrag/Swap', 'b3 files/NDF', 'b3 files/Option', 'b3 files/Swap', 'b3 files/Operations', 'daily settlement', 'pending-confirmation', 'payrec', 'reconciliation'],
+                 conversores=('daily',), excluir=['new deals/NDF/Vanilla', 'new deals/NDF/FwdStart', 'new deals/NDF/OtherPublisher', 'new deals/NDF/Commodities', 'new deals/Option/FXO', 'new deals/Option/Commodities', 'new deals/Swap/Rates', 'new deals/Swap/Commodities', 'new deals/Intrag/NDF', 'new deals/Intrag/Option', 'new deals/Intrag/Swap', 'b3 files/NDF', 'b3 files/Option', 'b3 files/Swap', 'b3 files/Operations', 'daily settlement', 'pending-confirmation', 'payrec', 'reconciliation'],
                  doc=__doc__))
