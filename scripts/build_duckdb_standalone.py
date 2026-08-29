@@ -291,14 +291,16 @@ Se nesta instância o bloco ainda for grande demais, `--bloco NOME` desce mais u
 nível (ex.: `--bloco Vanilla`). Ele SUBSTITUI o escopo desta fatia — não rode a
 fatia inteira em paralelo com um bloco dela."""
 
-_DOC_OUTROS = """O ESCOPO é o RESTO de cache\\: toda rotina que não tem arquivo próprio ao lado
-deste. Ele existe para uma rotina NOVA nunca ficar sem conversor — hoje as
-cobertas são:
+_DOC_OUTROS = """O ESCOPO é o RESTO de cache\\: todo bloco que não tem arquivo próprio ao lado
+deste. Ele existe para um bloco NOVO nunca ficar sem conversor, e a poda é por
+CAMINHO — tanto uma rotina nova (cache\\equity) quanto um produto novo dentro de
+um bloco já coberto (cache\\new deals\\NDF\\Asian) caem aqui. Hoje os cobertos
+são:
 
 %(lista)s
 
-Se não houver nenhuma rotina fora dessa lista, este script não faz nada, e isso
-é o resultado esperado."""
+Se não houver nada fora dessa lista, este script não faz nada, e isso é o
+resultado esperado."""
 
 
 def _slug(nome):

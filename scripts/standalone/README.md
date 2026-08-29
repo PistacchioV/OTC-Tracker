@@ -11,7 +11,7 @@ pip install duckdb
 Só isso. Nenhuma outra dependência.
 
 > **Rodando DENTRO do checkout, use o `scripts/convert/`.** Ele tem o mesmo
-> corte em nove fatias, mas pergunta ao `Config` onde estão a origem e o destino
+> corte em fatias, mas pergunta ao `Config` onde estão a origem e o destino
 > em vez de carregar os caminhos do share fixos — e não é uma cópia do motor,
 > então nunca fica para trás. Esta pasta existe para a máquina que **não tem** o
 > código do app.
