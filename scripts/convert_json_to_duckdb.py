@@ -35,9 +35,10 @@ Uso:
         [--data-dir X] [--out-dir Y] [--force] [--dry-run] [--meses N]
 
 **Para repartir entre várias pessoas** — a carga inteira leva horas e ninguém
-precisa esperar a fila — use `scripts/convert/`: nove fatias (`01_cadastros`,
-um `02_*` por rotina de `cache/`, o `99_outros`) que rodam ao mesmo tempo, sobre
-o `run()` deste arquivo. O `00_completo.py` de lá é este script. Para uma
+precisa esperar a fila — use `scripts/convert/`: uma fatia por BLOCO de `cache/`
+(`01_cadastros`, um `02_*` por bloco, o `99_outros`) que rodam ao mesmo tempo,
+sobre o `run()` deste arquivo. As duas rotinas grandes vão repartidas até o
+PRODUTO, então o Vanilla, o FXO e o Swap/Rates são fatias independentes. O `00_completo.py` de lá é este script. Para uma
 máquina SEM o código do app existe o `scripts/standalone/`, com o mesmo corte.
 
 Testes de regressão: `scripts/tests/check_json_to_duckdb.py` (o motor) e

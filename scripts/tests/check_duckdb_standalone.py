@@ -5,7 +5,8 @@
 Os `scripts/standalone/*.py` são a versão do conversor para rodar numa máquina
 SEM o código do OTC Tracker (sem Config, sem import de `apps`, `pip install
 duckdb` como requisito único). São VERSIONADOS para ser entregues junto com o
-código, e são NOVE cópias de um motor que vive em `apps/pages/json_to_duckdb.py`.
+código, e são UMA CÓPIA POR FATIA (hoje 23) de um motor que vive em
+`apps/pages/json_to_duckdb.py`.
 
 Cópia da mesma regra diverge, e esta já divergiu: por três vezes o motor mudou e
 o standalone teve de ser regerado à mão (HANDOFF §331/§333/§334), e na quarta (a

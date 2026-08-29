@@ -17,9 +17,11 @@ Uso:
     python 99_outros.py --dry-run
     python 99_outros.py --data-dir "D:\outra\pasta" --out-dir "D:\saida"
 
-O ESCOPO é o RESTO de cache\: toda rotina que não tem arquivo próprio ao lado
-deste. Ele existe para uma rotina NOVA nunca ficar sem conversor — hoje as
-cobertas são:
+O ESCOPO é o RESTO de cache\: todo bloco que não tem arquivo próprio ao lado
+deste. Ele existe para um bloco NOVO nunca ficar sem conversor, e a poda é por
+CAMINHO — tanto uma rotina nova (cache\equity) quanto um produto novo dentro de
+um bloco já coberto (cache\new deals\NDF\Asian) caem aqui. Hoje os cobertos
+são:
 
   - new deals/NDF/Vanilla
   - new deals/NDF/FwdStart
@@ -42,8 +44,8 @@ cobertas são:
   - payrec
   - reconciliation
 
-Se não houver nenhuma rotina fora dessa lista, este script não faz nada, e isso
-é o resultado esperado.
+Se não houver nada fora dessa lista, este script não faz nada, e isso é o
+resultado esperado.
 
 É IDEMPOTENTE e INCREMENTAL: cada banco guarda um `_manifest` com
 caminho/mtime/tamanho e só reconverte o arquivo que mudou — rodar de novo com

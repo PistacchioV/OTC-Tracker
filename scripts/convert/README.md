@@ -1,6 +1,6 @@
 # `scripts/convert/` — a carga JSON → DuckDB, repartida
 
-A conversão dos JSONs para os bancos DuckDB, em **nove fatias** que podem ser
+A conversão dos JSONs para os bancos DuckDB, em **23 fatias** que podem ser
 rodadas por pessoas diferentes ao mesmo tempo.
 
 Esta é a versão que roda **dentro do checkout**: ela pergunta ao `Config` do app

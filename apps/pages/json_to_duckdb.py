@@ -60,15 +60,17 @@ Os caminhos chegam EXPLÍCITOS (`data_dir`, `out_dir`) — quem resolve os
 padrões (`Config.DATA_DIR` → `Config.DATABASE_DIR`) é cada chamador; este
 módulo não monta caminho de dado por conta própria.
 
-A carga completa tem DOIS splits, e os dois são repartidos em nove fatias para
-várias pessoas rodarem em paralelo — a diferença é só de DEPENDÊNCIA:
+A carga completa tem DOIS splits, e os dois são repartidos numa fatia por BLOCO
+de `cache/` (hoje 23 arquivos) para várias pessoas rodarem em paralelo — a
+diferença entre eles é só de DEPENDÊNCIA:
 
   - `scripts/convert/`     usa o `Config` do app (roda DENTRO do checkout). São
                            CHAMADAS de três linhas para `convert_json_to_duckdb.run`,
                            não cópias: aqui não há motivo para duplicar a CLI.
   - `scripts/standalone/`  não usa nada do app (roda numa máquina sem o código).
 
-⚠️ **Por isso este motor tem NOVE cópias**: os `scripts/standalone/*.py` são
+⚠️ **Por isso este motor tem uma CÓPIA POR FATIA do standalone**: os
+`scripts/standalone/*.py` são
 GERADOS a partir daqui e não se atualizam sozinhos — por três vezes tiveram de
 ser regerados depois de uma mudança neste arquivo, e na quarta passou batido,
 com os dois lados produzindo bancos DIFERENTES do mesmo dado e nenhum erro.
