@@ -632,13 +632,54 @@ def _daily_rel_target(rel):
                                       stem, dia)
 
 
+def dia_do_rel(rel):
+    """A DATA de um caminho relativo de arquivo-dia, ou `None`.
+
+    É a mesma leitura que o `_daily_rel_target` faz para montar a tabela, aqui
+    exposta sozinha porque a JANELA de conversão precisa dela antes de abrir
+    banco nenhum — filtrar por `os.stat` seria filtrar pelo dia em que o
+    arquivo foi ESCRITO, e um arquivo-dia antigo reescrito hoje (um backfill,
+    uma cópia do share) entraria na janela dizendo respeito a outro ano."""
+    parts = rel.split('/')
+    if len(parts) < 2 or parts[0] != 'cache':
+        return None
+    fname = parts[-1]
+    if not fname.endswith('.json') or fname.startswith('_'):
+        return None
+    return _dia_de(parts[1:-1], fname[:-5])
+
+
+def data_de_corte(meses, hoje=None):
+    """O primeiro dia da janela: `meses` meses para trás a partir de hoje.
+    `meses` 0 ou negativo = SEM janela (`None`), que é a carga completa.
+
+    O recuo é por MÊS de calendário, não por 30×N dias: pedir 12 meses em
+    29/08 tem de dar 29/08 do ano anterior, e não uma data cinco dias adiante
+    que deixaria de fora justamente o começo do mês mais antigo."""
+    if not meses or int(meses) <= 0:
+        return None
+    hoje = hoje or datetime.date.today()
+    meses = int(meses)
+    ano = hoje.year - (meses // 12)
+    mes = hoje.month - (meses % 12)
+    if mes <= 0:
+        ano, mes = ano - 1, mes + 12
+    dia = hoje.day
+    while dia > 28:                     # 31/03 menos 1 mês não existe em fev.
+        try:
+            return datetime.date(ano, mes, dia)
+        except ValueError:
+            dia -= 1
+    return datetime.date(ano, mes, dia)
+
+
 def _novo_daily_stats():
     # `avisos` é o que o resumo IMPRIME sem ser erro — hoje, a rotina pedida que
     # não existe em disco. `ignored` continua sendo contagem (os `_last` e as
     # configs avulsas são muitos e não interessam um a um).
     return {'db': 'daily_<produto>.db (um por produto)', 'dbs': [],
             'converted': [], 'skipped': [], 'errors': [], 'ignored': [],
-            'avisos': []}
+            'avisos': [], 'antigos': []}
 
 
 def _convert_daily_rels(data_dir, out_dir, rels, force, stats):
@@ -801,7 +842,7 @@ def cache_families(data_dir):
 
 
 def convert_daily(data_dir, out_dir, force=False, dry_run=False,
-                  familias=None, excluir=None):
+                  familias=None, excluir=None, desde=None):
     """UM BANCO POR PRODUTO — a ramificação é a que a pasta `cache/` já tem.
 
     Cada caminho de produto (`new deals/NDF/Vanilla`, `new deals/Option/FXO`,
@@ -824,6 +865,17 @@ def convert_daily(data_dir, out_dir, force=False, dry_run=False,
     famílias da fatia (apagar os de outra seria apagar o trabalho de quem está
     rodando ao lado), e a detecção de colisão só enxerga a fatia — a visão
     completa é a da carga sem escopo.
+
+    **`desde` é a JANELA**: arquivo-dia anterior a essa data não é convertido e
+    volta em `stats['antigos']`, que o resumo IMPRIME como contagem. Ela existe
+    porque a carga completa no share leva horas de rede, e o dado recente é o
+    que a mesa consulta — o histórico antigo entra numa segunda passada, feita
+    com `desde=None`. Ela é DECLARADA, nunca implícita: um recorte silencioso
+    faria a segunda passada parecer desnecessária.
+
+    A data sai do CAMINHO do arquivo (`dia_do_rel`), não do `mtime`: o mtime é
+    quando o arquivo foi escrito, e o dia de 2024 recopiado para o share este
+    mês entraria na janela como se fosse recente.
     """
     stats = _novo_daily_stats()
     raiz = os.path.join(data_dir, 'cache')
@@ -866,6 +918,8 @@ def convert_daily(data_dir, out_dir, force=False, dry_run=False,
                     # Não é arquivo-dia (ponteiros como `_last`, configs
                     # avulsas): fica no JSON — some daqui e parece perda.
                     stats['ignored'].append(rel)
+                elif desde and (dia_do_rel(rel) or datetime.date.min) < desde:
+                    stats['antigos'].append(rel)
                 else:
                     rels.append(rel)
     # Os JSONs soltos na RAIZ de `cache/` (sem pasta de rotina) só entram na
@@ -874,7 +928,12 @@ def convert_daily(data_dir, out_dir, force=False, dry_run=False,
         for fname in sorted(os.listdir(raiz)):
             if fname.endswith('.json'):
                 rel = 'cache/' + fname
-                (rels if _daily_rel_target(rel) else stats['ignored']).append(rel)
+                if _daily_rel_target(rel) is None:
+                    stats['ignored'].append(rel)
+                elif desde and (dia_do_rel(rel) or datetime.date.min) < desde:
+                    stats['antigos'].append(rel)
+                else:
+                    rels.append(rel)
 
     if dry_run:
         for rel in rels:
@@ -893,20 +952,30 @@ def convert_daily(data_dir, out_dir, force=False, dry_run=False,
                                 'mais de um arquivo-dia reivindica esta tabela: %s'
                                 % ', '.join(colidem)))
 
-    # Sem escopo, a limpeza é a completa. COM escopo ela se restringe às
-    # famílias da fatia: o `daily_caches.db` e o banco de OUTRA rotina são
-    # trabalho de quem está rodando ao lado, e apagá-los daqui seria desfazer a
-    # carga alheia no meio dela.
-    if familias is None and excluir is None:
-        legados = {'daily_caches.db', 'daily_cache.db'}
-        legados.update('daily_' + (norm_ident(f, 'r') or 'cache') + '.db'
-                       for f in todas)
+    # COM JANELA não se apaga banco nenhum. Todo legado — o `daily_caches.db`,
+    # o `daily_<rotina>.db` e o nome ACHATADO por produto — guarda o histórico
+    # INTEIRO daquele recorte, e esta passada escreve só doze meses. Apagá-lo
+    # aqui trocaria um banco de formato velho e completo por um de formato novo
+    # e parcial: uma perda que a segunda passada desfaz, mas só depois das
+    # horas em que o histórico não existiria em lugar nenhum. Quem limpa é a
+    # passada sem janela, que é a que de fato substitui o que estava lá.
+    if desde:
+        legados = set()
     else:
-        legados = {'daily_' + (norm_ident(f, 'r') or 'cache') + '.db'
-                   for f in alvo_fams}
-    # E os nomes ACHATADOS do desenho seguinte, o de quando cada produto já
-    # tinha o seu banco mas todos moravam soltos na raiz do `db/`.
-    legados.update(_legacy_flat_name(a[0]) for a, _ in alvos)
+        # Sem escopo, a limpeza é a completa. COM escopo ela se restringe às
+        # famílias da fatia: o `daily_caches.db` e o banco de OUTRA rotina são
+        # trabalho de quem está rodando ao lado, e apagá-los daqui seria
+        # desfazer a carga alheia no meio dela.
+        if familias is None and excluir is None:
+            legados = {'daily_caches.db', 'daily_cache.db'}
+            legados.update('daily_' + (norm_ident(f, 'r') or 'cache') + '.db'
+                           for f in todas)
+        else:
+            legados = {'daily_' + (norm_ident(f, 'r') or 'cache') + '.db'
+                       for f in alvo_fams}
+        # E os nomes ACHATADOS do desenho seguinte, o de quando cada produto já
+        # tinha o seu banco mas todos moravam soltos na raiz do `db/`.
+        legados.update(_legacy_flat_name(a[0]) for a, _ in alvos)
     _drop_legacy_dbs(out_dir, legados, {a[0] for a, _ in alvos},
                      stats, 'agora a pasta db/ espelha a arvore de origem')
     return _convert_daily_rels(data_dir, out_dir, rels, force, stats)
@@ -1149,8 +1218,10 @@ def _data_dir_padrao():
 
 def _resumo(nome, stats, houve_erro):
     print('\n== %s -> %s' % (nome, os.path.basename(stats['db'])))
-    print('   convertidos: %d | inalterados: %d%s%s' % (
+    print('   convertidos: %d | inalterados: %d%s%s%s' % (
         len(stats['converted']), len(stats['skipped']),
+        ' | fora da janela: %d' % len(stats['antigos'])
+        if stats.get('antigos') else '',
         ' | ja cobertos por outro conversor: %d' % len(stats['cobertos'])
         if stats.get('cobertos') else '',
         ' | fora deste conversor: %d' % len(stats['ignored'])
@@ -1175,12 +1246,23 @@ def main(argv=None):
                     default=None)
     ap.add_argument('--force', action='store_true', help='reconverte mesmo sem mudança')
     ap.add_argument('--dry-run', action='store_true', help='só lista o que converteria')
+    ap.add_argument('--meses', type=int, default=12,
+                    help='janela dos arquivo-dia: converte so os dos ultimos '
+                         'N meses (padrao 12). Use 0 para o historico INTEIRO '
+                         '— e a segunda passada, e e ela que remove os bancos '
+                         'de formato antigo.')
     args = ap.parse_args(argv)
 
     data_dir = os.path.abspath(args.data_dir or _data_dir_padrao())
     out_dir = os.path.abspath(args.out_dir or os.path.join(data_dir, 'db'))
     print('origem : %s' % data_dir)
     print('destino: %s' % out_dir)
+    desde = data_de_corte(args.meses)
+    # A janela e DECLARADA na tela: o recorte silencioso faria a segunda
+    # passada (a do historico) parecer desnecessaria.
+    print('janela : %s' % ('arquivo-dia a partir de %s (%d meses)'
+                           % (desde.strftime('%d/%m/%Y'), args.meses)
+                           if desde else 'historico INTEIRO (--meses 0)'))
     print('escopo : tudo (cadastros + todas as rotinas de cache/)')
 
     houve_erro = [False]
@@ -1188,8 +1270,11 @@ def main(argv=None):
                    'datasets': convert_datasets, 'daily': convert_daily}
     escolhidos = [args.only] if args.only else list(conversores)
     for nome in escolhidos:
+        # A janela so vale para o conversor de arquivo-dia; os cadastros nao
+        # tem data nenhuma para recortar.
+        extra = {'desde': desde} if nome == 'daily' else {}
         _resumo(nome, conversores[nome](data_dir, out_dir, force=args.force,
-                                        dry_run=args.dry_run), houve_erro)
+                                        dry_run=args.dry_run, **extra), houve_erro)
     return 1 if houve_erro[0] else 0
 
 

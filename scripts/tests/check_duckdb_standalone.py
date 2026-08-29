@@ -150,15 +150,28 @@ w('anbima.json', [{'date': '2026-01-01', 'title': 'Ano Novo', 'calendar': 'ANBIM
 OUT_FATIAS = os.path.join(DATA, 'db-fatias')
 OUT_FULL = os.path.join(DATA, 'db-full')
 
+
+def _SEM_JANELA(mod):
+    """`--meses 0` para quem tem a janela; nada para o 01_cadastros, que não a
+    recebe (`--meses` ali seria um argumento desconhecido).
+
+    Estas asserções comparam a ÁRVORE de bancos, não o recorte. Rodando na
+    janela padrão, as datas fixas dos arquivos de teste sairiam dela sozinhas
+    quando o relógio passasse de doze meses — um teste que quebra no futuro
+    sem ninguém ter mexido em nada."""
+    return ['--meses', '0'] if '--meses' in io.open(
+        mod.__file__, encoding='utf-8').read() else []
+
+
 fatias = [a for a in existentes if a != '00_completo.py']
 for arq in fatias:
     mod = _carregar('sa_' + arq[:-3], os.path.join(PASTA, arq))
-    rc = mod.main(['--data-dir', DATA, '--out-dir', OUT_FATIAS])
+    rc = mod.main(['--data-dir', DATA, '--out-dir', OUT_FATIAS] + _SEM_JANELA(mod))
     check('%s roda sem erro' % arq, rc, 0)
 
 mod = _carregar('sa_completo', os.path.join(PASTA, '00_completo.py'))
 check('00_completo roda sem erro',
-      mod.main(['--data-dir', DATA, '--out-dir', OUT_FULL]), 0)
+      mod.main(['--data-dir', DATA, '--out-dir', OUT_FULL, '--meses', '0']), 0)
 
 def _arvore(raiz):
     """Os bancos com o CAMINHO relativo — a pasta db/ espelha a árvore de
@@ -194,7 +207,7 @@ mod = _carregar('sa_nd2', os.path.join(PASTA, '02_1_new_deals.py'))
 import contextlib                                              # noqa: E402
 _buf = io.StringIO()
 with contextlib.redirect_stdout(_buf):
-    mod.main(['--data-dir', DATA, '--out-dir', OUT_FATIAS])
+    mod.main(['--data-dir', DATA, '--out-dir', OUT_FATIAS, '--meses', '0'])
 check('segunda rodada de uma fatia não reconverte nada',
       'convertidos: 0' in _buf.getvalue())
 
@@ -230,14 +243,15 @@ _OUT_CASE = os.path.join(CASE, 'db')
 mod = _carregar('sa_case_b3', os.path.join(PASTA, '02_2_b3_files.py'))
 _buf = io.StringIO()
 with contextlib.redirect_stdout(_buf):
-    mod.main(['--data-dir', CASE, '--out-dir', _OUT_CASE])
+    mod.main(['--data-dir', CASE, '--out-dir', _OUT_CASE, '--meses', '0'])
 check('a fatia acha a rotina com outra grafia (B3 Files x b3 files)',
       _arvore(_OUT_CASE), ['cache/B3 Files/Swap.db'])
 
 mod = _carregar('sa_case_outros', os.path.join(PASTA, '99_outros.py'))
 _buf = io.StringIO()
 with contextlib.redirect_stdout(_buf):
-    mod.main(['--data-dir', CASE, '--out-dir', os.path.join(CASE, 'db-outros')])
+    mod.main(['--data-dir', CASE, '--out-dir', os.path.join(CASE, 'db-outros'),
+              '--meses', '0'])
 check('e o 99_outros a reconhece como coberta, sem duplicar o banco',
       _arvore(os.path.join(CASE, 'db-outros')), [])
 
@@ -245,13 +259,68 @@ check('e o 99_outros a reconhece como coberta, sem duplicar o banco',
 mod = _carregar('sa_case_ds', os.path.join(PASTA, '02_3_daily_settlement.py'))
 _buf = io.StringIO()
 with contextlib.redirect_stdout(_buf):
-    mod.main(['--data-dir', CASE, '--out-dir', _OUT_CASE])
+    mod.main(['--data-dir', CASE, '--out-dir', _OUT_CASE, '--meses', '0'])
 _saida = _buf.getvalue()
 check('rotina ausente AVISA na tela, em vez de virar um número mudo',
       'rotina ausente em disco' in _saida)
 check('e o aviso diz quais rotinas ele achou', 'B3 Files' in _saida)
 
 shutil.rmtree(CASE, ignore_errors=True)
+
+# --- A JANELA: doze meses primeiro, o histórico depois -----------------------
+import datetime                                                  # noqa: E402
+JAN = tempfile.mkdtemp(prefix='sa-janela-')
+_hoje = datetime.date.today()
+for _d in (_hoje - datetime.timedelta(days=20), _hoje - datetime.timedelta(days=600)):
+    _dir = os.path.join(JAN, 'cache', 'b3 files', 'Swap',
+                        '%04d' % _d.year, '%02d' % _d.month, '%02d' % _d.day)
+    os.makedirs(_dir)
+    io.open(os.path.join(_dir, 'DPOSICAO-SWAP_%s.json' % _d.strftime('%Y%m%d')),
+            'w', encoding='utf-8').write('[{"Cod": "X"}]')
+_OUT_JAN = os.path.join(JAN, 'db')
+# Um banco do desenho ACHATADO, para provar que a passada com janela não o apaga:
+# ele guarda o histórico inteiro e ela escreve só doze meses.
+os.makedirs(_OUT_JAN)
+io.open(os.path.join(_OUT_JAN, 'daily_b3_files_swap.db'), 'w').close()
+
+mod = _carregar('sa_jan', os.path.join(PASTA, '02_2_b3_files.py'))
+_buf = io.StringIO()
+with contextlib.redirect_stdout(_buf):
+    mod.main(['--data-dir', JAN, '--out-dir', _OUT_JAN])   # padrão: 12 meses
+_jan = _buf.getvalue()
+check('a janela padrão é de 12 meses e sai declarada na tela',
+      'janela : arquivo-dia a partir de' in _jan and '(12 meses)' in _jan)
+check('o dia fora dela é CONTADO, não sumido', 'fora da janela: 1' in _jan)
+check('e o dia dentro dela converteu', 'convertidos: 1' in _jan)
+check('com janela, o banco de formato antigo NAO e apagado',
+      os.path.isfile(os.path.join(_OUT_JAN, 'daily_b3_files_swap.db')))
+
+_buf = io.StringIO()
+with contextlib.redirect_stdout(_buf):
+    mod.main(['--data-dir', JAN, '--out-dir', _OUT_JAN, '--meses', '0'])
+_full = _buf.getvalue()
+check('a segunda passada anuncia o histórico INTEIRO',
+      'historico INTEIRO' in _full)
+_velho = (_hoje - datetime.timedelta(days=600)).strftime('%Y%m%d')
+check('ela traz o dia que a janela tinha deixado de fora',
+      ('d_%s_dposicao_swap' % _velho) in _full)
+# O dia recente já estava no banco: a segunda passada não o reescreve.
+# (`convertidos` conta também a remoção do legado, por isso a asserção é no
+# `inalterados`, que é onde a promessa incremental se lê.)
+check('e não reconverte o que a primeira já tinha feito',
+      'inalterados: 1' in _full)
+check('e é ELA que remove o banco de formato antigo',
+      os.path.isfile(os.path.join(_OUT_JAN, 'daily_b3_files_swap.db')), False)
+
+# A data sai do CAMINHO, não do mtime: o arquivo antigo foi escrito agora.
+check('o corte é pelo dia do arquivo, nao pelo mtime',
+      mod.dia_do_rel('cache/b3 files/Swap/2024/03/05/DPOSICAO_20240305.json'),
+      datetime.date(2024, 3, 5))
+check('12 meses de 31/03 cai em 28/02, nao num dia que nao existe',
+      mod.data_de_corte(1, datetime.date(2026, 3, 31)),
+      datetime.date(2026, 2, 28))
+
+shutil.rmtree(JAN, ignore_errors=True)
 shutil.rmtree(DATA, ignore_errors=True)
 shutil.rmtree(TMP, ignore_errors=True)
 

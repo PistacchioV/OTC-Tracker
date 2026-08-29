@@ -115,7 +115,30 @@ start python 02_3_daily_settlement.py
   Onde a rotina não se ramifica em pastas — o Daily Settlement, que grava os
   dez arquivos do dia na mesma pasta — quem dá o banco é o **nome do arquivo**,
   dentro da pasta da rotina.
-- **Bancos de formatos antigos são removidos** quando a fatia que os cobre roda.
+- **A janela é de 12 meses por padrão.** Os arquivo-dia mais antigos que isso
+  não são convertidos e saem contados como `fora da janela`. A carga completa no
+  share leva horas de rede, e o dado recente é o que a mesa consulta — o
+  histórico entra numa SEGUNDA passada:
+
+  ```
+  python 02_2_b3_files.py                # os últimos 12 meses (padrão)
+  python 02_2_b3_files.py --meses 0      # depois, o histórico INTEIRO
+  ```
+
+  A janela sai declarada na primeira linha da saída, junto da origem e do
+  destino, e `--meses N` a muda. Duas coisas que ela NÃO faz:
+  - **não recorta os cadastros** — o `01_cadastros.py` nem recebe o argumento,
+    porque nenhum daqueles JSONs tem data para cortar;
+  - **não apaga banco de formato antigo.** Aqueles guardam o histórico inteiro,
+    e a passada com janela escreve só doze meses: trocar um pelo outro seria uma
+    perda até a segunda passada terminar. Quem limpa é o `--meses 0`, que é o
+    que de fato substitui o que estava lá.
+
+  A data vem do **caminho** do arquivo (`AAAA/MM/DD`), nunca da data em que ele
+  foi gravado: um dia de 2024 recopiado para o share este mês continua sendo de
+  2024.
+- **Bancos de formatos antigos são removidos** quando a fatia que os cobre roda
+  **sem janela** (`--meses 0`).
 - **`convertidos: 0 | inalterados: 0` numa primeira rodada quer dizer que a
   rotina não está naquela máquina**, e o script diz isso com todas as letras:
 
