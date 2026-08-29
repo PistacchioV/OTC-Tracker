@@ -14831,3 +14831,50 @@ Guardas: duas asserções novas no `check_duckdb_standalone` e as duas do
 `check_json_to_duckdb` que fixavam o balde único, atualizadas — mais uma que
 prende o `ignored` em zero, que é o que uma regressão do corte quebraria
 primeiro. Os nove standalone regerados. Suíte completa verde.
+
+---
+
+## §345 — a carga por JANELA: doze meses primeiro, o histórico depois (2026-08-29)
+
+A carga completa no share leva horas de rede, e ela era tudo-ou-nada: quem a
+rodava ficava sem resposta até o fim. Na máquina de dev do time ela foi
+interrompida com Ctrl+C no meio do `convert_daily` — que é o sinal de que o
+tempo, e não o resultado, era o problema.
+
+Agora `convert_daily` aceita `desde`, e as CLIs expõem `--meses` com **padrão
+12**: converte os arquivo-dia dos últimos doze meses e conta o resto como
+`fora da janela: N`. O histórico entra numa SEGUNDA passada, `--meses 0`, feita
+depois — incremental pelo `_manifest`, então ela só traz o que faltou.
+
+Quatro decisões que não dão erro nenhum quando se quebram:
+
+- **a data sai do CAMINHO** (`dia_do_rel`), nunca do `mtime`. Filtrar pelo mtime
+  filtraria pelo dia em que o arquivo foi ESCRITO, e um dia de 2024 recopiado
+  para o share este mês entraria na janela como se fosse recente;
+- **com janela não se apaga banco legado.** Todo legado — o `daily_caches.db`, o
+  `daily_<rotina>.db` e o nome achatado por produto — guarda o histórico
+  INTEIRO daquele recorte, e a passada com janela escreve só doze meses. Apagar
+  ali trocaria um banco velho e completo por um novo e parcial: uma perda que a
+  segunda passada desfaz, mas só depois das horas em que o histórico não
+  existiria em lugar nenhum. Quem limpa é o `--meses 0`;
+- **a janela é DECLARADA** na primeira parte da saída (`janela : arquivo-dia a
+  partir de 29/08/2025 (12 meses)`) e o que fica de fora sai CONTADO. Um recorte
+  silencioso faria a segunda passada parecer desnecessária — a mesma classe de
+  falha do §343 e do §344;
+- **o `01_cadastros.py` não recebe `--meses`.** Nenhum daqueles JSONs tem data
+  para cortar, e um argumento que não muda nada é pior do que não existir.
+
+`data_de_corte` recua por MÊS de calendário, não por 30×N dias, e desce o dia
+quando ele não existe no mês de destino (um mês antes de 31/03 é 28/02).
+
+O guarda ganhou nove asserções, e as antigas passaram a rodar com `--meses 0`:
+elas comparam a ÁRVORE de bancos, e na janela padrão as datas fixas dos arquivos
+de teste sairiam dela sozinhas quando o relógio passasse de doze meses — um
+teste que quebraria no futuro sem ninguém ter mexido em nada. Os nove standalone
+regerados. Suíte completa verde (o `check_manual_conf` falha aos sábados por uma
+fragilidade própria e anterior — ver abaixo).
+
+**Achado de lado, não corrigido:** `check_manual_conf.py` monta o caso do aging
+com `ontem = hoje - 1 dia` e espera 1 dia ÚTIL. Rodando num sábado, o ontem é
+sexta e a resposta correta é 0 — o teste falha todo fim de semana, sem nada de
+errado no código. Vale trocar o `ontem` por uma data com N dias úteis garantidos.
