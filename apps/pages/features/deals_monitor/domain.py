@@ -8,8 +8,8 @@ import re
 
 _NDM_CARDS = [
     {'key': 'ndf-commodities',    'label': 'NDF Commodities',     'url': '/new_deals-ndf-commodities',    'dirs': ('NDF/Commodities',),                          'les': ('JPM', 'LAW')},
-    {'key': 'ndf-fwdstart',       'label': 'NDF FWD Start',       'url': '/new_deals-ndf-fwdstart',       'dirs': ('NDF/FWD Start', 'NDF/FwdStart'),             'les': ('JPM', 'MGT', 'LAW')},
-    {'key': 'ndf-otherpublisher', 'label': 'NDF Other Publisher', 'url': '/new_deals-ndf-otherpublisher', 'dirs': ('NDF/OtherPublisher', 'NDF/Other Publisher'), 'les': ('JPM', 'MGT', 'LAW')},
+    {'key': 'ndf-fwdstart',       'label': 'NDF FWD Start',       'url': '/new_deals-ndf-fwdstart',       'dirs': ('NDF/FwdStart',),                             'les': ('JPM', 'MGT', 'LAW')},
+    {'key': 'ndf-otherpublisher', 'label': 'NDF Other Publisher', 'url': '/new_deals-ndf-otherpublisher', 'dirs': ('NDF/OtherPublisher',),                        'les': ('JPM', 'MGT', 'LAW')},
     {'key': 'ndf-vanilla',        'label': 'NDF Vanilla',         'url': '/new_deals-ndf-vanilla',        'dirs': ('NDF/Vanilla',),                              'les': ('JPM', 'MGT', 'LAW')},
     {'key': 'opt-commodities',    'label': 'Commodities Options', 'url': '/new_deals-opt-commodities',    'dirs': ('Option/Commodities',),                       'les': ('JPM', 'LAW')},
     {'key': 'opt-fxo',            'label': 'FX Options',          'url': '/new_deals-opt-fxo',            'dirs': ('Option/FXO',),                               'les': ('JPM', 'LAW')},
@@ -24,9 +24,11 @@ _NDM_JPM_RE = re.compile(r'J\.?P\.?\s*MORGAN', re.IGNORECASE)
 
 _NDM_ATA_DIRS = {'Option/Equity', 'Option/Equities', 'Swap/Equities'}
 
-_NDM_GENERIC_NDF_DIRS = {'NDF/FWD Start', 'NDF/FwdStart',
-                         'NDF/OtherPublisher', 'NDF/Other Publisher',
-                         'NDF/Vanilla'}
+# As PASTAS das três páginas genéricas de NDF — sem espaço, que é como o
+# `_GENERIC_ND_PRODUCTS` as grava. `FWD Start` e `Other Publisher` (com espaço)
+# são os RÓTULOS, e conviviam aqui como se fossem "a outra grafia em produção":
+# nunca foram, e um diretório que não existe casa com nada.
+_NDM_GENERIC_NDF_DIRS = {'NDF/FwdStart', 'NDF/OtherPublisher', 'NDF/Vanilla'}
 
 def _ndm_deal_le(pkey, d):
     """Entidade (LE) de uma linha do monitor, para os subitens dos cards.

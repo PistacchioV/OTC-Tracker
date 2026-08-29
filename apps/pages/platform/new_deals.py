@@ -1391,9 +1391,16 @@ def _ndf_rebook_key(deal, when_field):
 
 def _ndf_fwdstart_cached_keys(ref):
     """Chaves dos FWD Start já importados que podem ter virado vanilla: varre o
-    cache das duas grafias de pasta em produção (FwdStart / FWD Start) nos
-    últimos _NDF_REBOOK_LOOKBACK_MONTHS meses. Cancelado entra também — pelo
-    contrário, está cancelado justamente porque o re-booking aconteceu."""
+    cache dos últimos _NDF_REBOOK_LOOKBACK_MONTHS meses. Cancelado entra também
+    — pelo contrário, está cancelado justamente porque o re-booking aconteceu.
+
+    A pasta é `NDF/FwdStart`, UMA grafia — a mesma do
+    `_GENERIC_ND_PRODUCTS['fwd-start']['dir']`, que é quem grava. Havia aqui uma
+    segunda leitura em `NDF/FWD Start` chamada de "a outra grafia em produção",
+    e ela nunca existiu: o app grava em `FwdStart` desde o commit que criou a
+    página. O que tem espaço é o RÓTULO (`_dash_product_label` traduz um no
+    outro), e o caminho com espaço saiu de um exemplo errado num docstring —
+    daí para três leitores e, na dev, para uma pasta de mock criada à mão."""
     from apps.pages import routes
     months, first = [], datetime(ref.year, ref.month, 1)
     for _ in range(_NDF_REBOOK_LOOKBACK_MONTHS):
@@ -1401,8 +1408,7 @@ def _ndf_fwdstart_cached_keys(ref):
         first = datetime(first.year, first.month, 1) - timedelta(days=1)
         first = datetime(first.year, first.month, 1)
     keys = {}
-    for base in (os.path.join(routes.NEW_DEALS_CACHE_ROOT, 'NDF', 'FwdStart'),
-                 os.path.join(routes.NEW_DEALS_CACHE_ROOT, 'NDF', 'FWD Start')):
+    for base in (os.path.join(routes.NEW_DEALS_CACHE_ROOT, 'NDF', 'FwdStart'),):
         for m in months:
             dpath = os.path.join(base, m.strftime('%Y'), m.strftime('%m'))
             if not os.path.isdir(dpath):

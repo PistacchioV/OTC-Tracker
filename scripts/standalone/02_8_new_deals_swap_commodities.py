@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-r"""convert 02_new_deals_option_fxo — a rotina `new deals/Option/FXO` de cache/.
+r"""convert 02_new_deals_swap_commodities — a rotina `new deals/Swap/Commodities` de cache/.
 
-A opção de câmbio.
+Os swaps de mercadoria.
 
 Versão AUTOCONTIDA: roda em QUALQUER máquina, sem o código do OTC Tracker por
 perto. Requisito único:  pip install duckdb
@@ -13,13 +13,13 @@ perto. Requisito único:  pip install duckdb
     Destino: ...\static\data\db   (a pasta db dentro da origem)
 
 Uso:
-    python 02_6_new_deals_option_fxo.py
-    python 02_6_new_deals_option_fxo.py --dry-run
-    python 02_6_new_deals_option_fxo.py --data-dir "D:\outra\pasta" --out-dir "D:\saida"
+    python 02_8_new_deals_swap_commodities.py
+    python 02_8_new_deals_swap_commodities.py --dry-run
+    python 02_8_new_deals_swap_commodities.py --data-dir "D:\outra\pasta" --out-dir "D:\saida"
 
-O ESCOPO é UM bloco de cache\: **new deals/Option/FXO**.
+O ESCOPO é UM bloco de cache\: **new deals/Swap/Commodities**.
 
-A opção de câmbio.
+Os swaps de mercadoria.
 
 Cada produto vira um banco e a pasta db\ ESPELHA a árvore de cache\
 (db\cache\new deals\NDF\Vanilla.db, db\cache\b3 files\Swap.db); só
@@ -862,11 +862,10 @@ def chave_familia(nome):
 ROTINAS_CACHE = (
     ('new deals/NDF/Vanilla', 'O termo de moeda vanilla — costuma ser o maior\n'
                               'arquivo-dia do app inteiro.'),
-    ('new deals/NDF/FwdStart', 'O NDF FWD Start, na pasta que o app grava hoje.'),
-    ('new deals/NDF/FWD Start', 'O MESMO produto na pasta LEGADA (com espaço), que\n'
-                                'continua cheia no share e que o app ainda lê. Ela é\n'
-                                'uma fatia própria porque tem dado de verdade; onde\n'
-                                'não existir, esta fatia avisa e sai limpa.'),
+    ('new deals/NDF/FwdStart', 'O NDF FWD Start. A pasta é SEM espaço — `FWD Start`\n'
+                              'é o rótulo da tela, e a pasta com espaço nunca\n'
+                              'existiu (se alguma instância a tiver, o 99_outros a\n'
+                              'converte, porque a poda é por caminho).'),
     ('new deals/NDF/OtherPublisher', 'O NDF Other Publisher.'),
     ('new deals/NDF/Commodities', 'O termo de mercadoria.'),
     ('new deals/Option/FXO', 'A opção de câmbio.'),
@@ -1401,12 +1400,12 @@ def main(argv=None):
     print('janela : %s' % ('arquivo-dia a partir de %s (%d meses)'
                            % (desde.strftime('%d/%m/%Y'), args.meses)
                            if desde else 'historico INTEIRO (--meses 0)'))
-    print('escopo : cache/new deals/Option/FXO (arquivo-dia)')
+    print('escopo : cache/new deals/Swap/Commodities (arquivo-dia)')
 
     houve_erro = [False]
     # `--bloco` SUBSTITUI o escopo desta fatia; nao soma. Rodar a fatia inteira
     # em paralelo com um bloco dela poria dois processos no mesmo banco.
-    fatia = 'new deals/Option/FXO'
+    fatia = 'new deals/Swap/Commodities'
     if args.bloco:
         fatia = fatia.rstrip('/') + '/' + args.bloco.strip().strip('/')
         print('escopo : cache/%s (arquivo-dia) [--bloco]' % fatia)

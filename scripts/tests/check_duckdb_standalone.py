@@ -5,7 +5,7 @@
 Os `scripts/standalone/*.py` são a versão do conversor para rodar numa máquina
 SEM o código do OTC Tracker (sem Config, sem import de `apps`, `pip install
 duckdb` como requisito único). São VERSIONADOS para ser entregues junto com o
-código, e são UMA CÓPIA POR FATIA (hoje 23) de um motor que vive em
+código, e são UMA CÓPIA POR FATIA (hoje 22) de um motor que vive em
 `apps/pages/json_to_duckdb.py`.
 
 Cópia da mesma regra diverge, e esta já divergiu: por três vezes o motor mudou e
@@ -241,7 +241,7 @@ io.open(os.path.join(_p, 'DPOSICAO-SWAP_20260827.json'), 'w',
         encoding='utf-8').write('[{"Cod": "X"}]')
 _OUT_CASE = os.path.join(CASE, 'db')
 
-mod = _carregar('sa_case_b3', os.path.join(PASTA, '02_15_b3_files_swap.py'))
+mod = _carregar('sa_case_b3', os.path.join(PASTA, '02_14_b3_files_swap.py'))
 _buf = io.StringIO()
 with contextlib.redirect_stdout(_buf):
     mod.main(['--data-dir', CASE, '--out-dir', _OUT_CASE, '--meses', '0'])
@@ -257,7 +257,7 @@ check('e o 99_outros a reconhece como coberta, sem duplicar o banco',
       _arvore(os.path.join(CASE, 'db-outros')), [])
 
 # Rotina que de fato não existe: o aviso é IMPRESSO e diz o que há em disco.
-mod = _carregar('sa_case_ds', os.path.join(PASTA, '02_17_daily_settlement.py'))
+mod = _carregar('sa_case_ds', os.path.join(PASTA, '02_16_daily_settlement.py'))
 _buf = io.StringIO()
 with contextlib.redirect_stdout(_buf):
     mod.main(['--data-dir', CASE, '--out-dir', _OUT_CASE, '--meses', '0'])
@@ -287,7 +287,7 @@ _OUT_JAN = os.path.join(JAN, 'db')
 os.makedirs(_OUT_JAN)
 io.open(os.path.join(_OUT_JAN, 'daily_b3_files_swap.db'), 'w').close()
 
-mod = _carregar('sa_jan', os.path.join(PASTA, '02_15_b3_files_swap.py'))
+mod = _carregar('sa_jan', os.path.join(PASTA, '02_14_b3_files_swap.py'))
 _buf = io.StringIO()
 with contextlib.redirect_stdout(_buf):
     mod.main(['--data-dir', JAN, '--out-dir', _OUT_JAN])   # padrão: 12 meses

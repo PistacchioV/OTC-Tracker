@@ -15022,3 +15022,44 @@ do `--bloco` mudou de alvo: com o Vanilla já sendo uma fatia, ele passou a ser
 exercido onde de fato serve — uma subpasta que a dev não tem
 (`b3 files/NDF/Extra`), que é o caso para o qual ele existe. Suíte completa
 verde; o `check_convert_split` leva ~13 s com as 22 fatias em subprocesso.
+
+---
+
+## §349 — `NDF/FWD Start`: uma pasta que nunca existiu (2026-08-29)
+
+As três páginas genéricas de NDF gravam em `_GENERIC_ND_PRODUCTS[k]['dir']`:
+`NDF/Vanilla`, `NDF/FwdStart` e `NDF/OtherPublisher` — **sem espaço**. `FWD
+Start` e `Other Publisher`, com espaço, são os RÓTULOS de tela; o
+`_dash_product_label` é justamente quem traduz um no outro
+(`{'FwdStart': 'FWD Start', ...}`).
+
+Os dois viviam misturados. O commit que criou as páginas (`d5ea5ef`) já gravava
+em `FwdStart`, mas trouxe um docstring com o exemplo
+`.../NDF/FWD Start/2026/06/file.json` — e daí a grafia com espaço virou "a outra
+grafia de pasta em produção" em três leitores:
+
+- `platform/new_deals._ndf_fwdstart_cached_keys`, que varria as duas;
+- o card de Confirmations do Monitor (`deals_monitor/queries`), que somava as duas;
+- o catálogo `_NDM_CARDS` e o `_NDM_GENERIC_NDF_DIRS`, com as duas — e o mesmo
+  para `Other Publisher`.
+
+**Nenhuma versão do app escreveu ali** (`git log -S` confirma: `'NDF',
+'FwdStart'` é o dir de escrita desde o commit que criou a página). O que existe
+na dev é uma pasta com nove arquivos `*_ndffwd_mock.json`, postos à mão seguindo
+o exemplo errado.
+
+Diretório que não existe **não dá erro** — ele casa com nada. O custo real é
+outro: a lista sugere que os dois caminhos são suportados, e quem a lesse
+escreveria dado no lugar errado achando que funciona. Foi o que aconteceu
+comigo, na quebra por produto do §348: criei uma fatia de conversão só para essa
+pasta, descrita como "a legada, que continua cheia no share".
+
+Hoje há uma grafia só em todo caminho, e o `_NDM_TAXONOMY` — que guarda o mesmo
+par como RÓTULO — fica como está. A fatia fantasma saiu (19 blocos, 22
+arquivos por split); se alguma instância tiver a pasta, o `99_outros` a converte,
+porque a poda é por CAMINHO.
+
+`check_nd_cache_dirs.py` (novo) prende a direção — quem lê usa o que o gerador
+escreve —, e a varredura por texto olha só linhas de CAMINHO (`os.path.join` e
+as tuplas `dirs`): varrendo o arquivo inteiro ela acusaria o `_NDM_TAXONOMY`, e
+a "correção" seria trocar o rótulo que a mesa lê. Suíte completa verde (105).

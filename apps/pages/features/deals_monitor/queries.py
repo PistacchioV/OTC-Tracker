@@ -139,13 +139,11 @@ def _ndm_monitor_snapshot(ref):
                         'count': g['count']} for g in ordered],
         }
 
-    # FWD Start tem duas grafias de pasta em produção (FwdStart / FWD Start),
-    # como nos cards de B3 — o card soma as duas. Segregação só por contraparte
-    # (NDF de moeda não tem mercadoria).
+    # A pasta é `NDF/FwdStart`, UMA grafia — a que o app grava. Segregação só
+    # por contraparte (NDF de moeda não tem mercadoria).
     conf_cards.append(_conf_option_card(
         'conf-ndf-fwdstart', 'NDF FWD Start', '/new_deals-ndf-fwdstart',
-        (os.path.join(_R().NEW_DEALS_CACHE_ROOT, 'NDF', 'FwdStart'),
-         os.path.join(_R().NEW_DEALS_CACHE_ROOT, 'NDF', 'FWD Start')),
+        (os.path.join(_R().NEW_DEALS_CACHE_ROOT, 'NDF', 'FwdStart'),),
         '_ndffwdstart.json', False))
     # Commodities Options: ciclo próprio da confirmação, igual ao NDF Comm.
     opt_groups, _opt_deal_statuses, _opt_total = _R()._conf_optcomm_groups(ref)

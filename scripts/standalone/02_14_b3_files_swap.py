@@ -13,9 +13,9 @@ perto. Requisito único:  pip install duckdb
     Destino: ...\static\data\db   (a pasta db dentro da origem)
 
 Uso:
-    python 02_15_b3_files_swap.py
-    python 02_15_b3_files_swap.py --dry-run
-    python 02_15_b3_files_swap.py --data-dir "D:\outra\pasta" --out-dir "D:\saida"
+    python 02_14_b3_files_swap.py
+    python 02_14_b3_files_swap.py --dry-run
+    python 02_14_b3_files_swap.py --data-dir "D:\outra\pasta" --out-dir "D:\saida"
 
 O ESCOPO é UM bloco de cache\: **b3 files/Swap**.
 
@@ -862,11 +862,10 @@ def chave_familia(nome):
 ROTINAS_CACHE = (
     ('new deals/NDF/Vanilla', 'O termo de moeda vanilla — costuma ser o maior\n'
                               'arquivo-dia do app inteiro.'),
-    ('new deals/NDF/FwdStart', 'O NDF FWD Start, na pasta que o app grava hoje.'),
-    ('new deals/NDF/FWD Start', 'O MESMO produto na pasta LEGADA (com espaço), que\n'
-                                'continua cheia no share e que o app ainda lê. Ela é\n'
-                                'uma fatia própria porque tem dado de verdade; onde\n'
-                                'não existir, esta fatia avisa e sai limpa.'),
+    ('new deals/NDF/FwdStart', 'O NDF FWD Start. A pasta é SEM espaço — `FWD Start`\n'
+                              'é o rótulo da tela, e a pasta com espaço nunca\n'
+                              'existiu (se alguma instância a tiver, o 99_outros a\n'
+                              'converte, porque a poda é por caminho).'),
     ('new deals/NDF/OtherPublisher', 'O NDF Other Publisher.'),
     ('new deals/NDF/Commodities', 'O termo de mercadoria.'),
     ('new deals/Option/FXO', 'A opção de câmbio.'),

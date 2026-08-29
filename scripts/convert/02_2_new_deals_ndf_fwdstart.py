@@ -4,7 +4,10 @@
 
 O ESCOPO é UM bloco de cache/: **new deals/NDF/FwdStart**.
 
-O NDF FWD Start, na pasta que o app grava hoje.
+O NDF FWD Start. A pasta é SEM espaço — `FWD Start`
+é o rótulo da tela, e a pasta com espaço nunca
+existiu (se alguma instância a tiver, o 99_outros a
+converte, porque a poda é por caminho).
 
 Cada produto vira um banco e a pasta db/ espelha a árvore de cache/; só
 ano/mês/dia não viram pasta — cada dia é uma tabela dentro do banco.
