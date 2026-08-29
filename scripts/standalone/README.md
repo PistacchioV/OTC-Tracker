@@ -10,6 +10,12 @@ pip install duckdb
 
 Só isso. Nenhuma outra dependência.
 
+> **Rodando DENTRO do checkout, use o `scripts/convert/`.** Ele tem o mesmo
+> corte em nove fatias, mas pergunta ao `Config` onde estão a origem e o destino
+> em vez de carregar os caminhos do share fixos — e não é uma cópia do motor,
+> então nunca fica para trás. Esta pasta existe para a máquina que **não tem** o
+> código do app.
+
 ---
 
 ## Por que são vários
@@ -168,3 +174,10 @@ python scripts/build_duckdb_standalone.py
 
 O teste `scripts/tests/check_duckdb_standalone.py` reprova qualquer divergência
 entre estes arquivos e o motor.
+
+A **lista de rotinas** (quais ganham um `02_*` próprio) também não se edita aqui
+nem no gerador: ela mora no motor (`ROTINAS_CACHE`), porque o `scripts/convert/`
+a consome também. Escrita nos dois lugares, uma rotina acrescentada num lado
+ficaria coberta só pelo `99_outros` do outro — e a diferença apareceria como uma
+fatia que demora muito mais do que a irmã, nunca como erro.
+`scripts/tests/check_convert_split.py` prende isso.

@@ -60,14 +60,24 @@ Os caminhos chegam EXPLÍCITOS (`data_dir`, `out_dir`) — quem resolve os
 padrões (`Config.DATA_DIR` → `Config.DATABASE_DIR`) é cada chamador; este
 módulo não monta caminho de dado por conta própria.
 
-⚠️ **Este motor tem NOVE cópias**: os `scripts/standalone/*.py`, entregues a
-quem precisa rodar a conversão numa máquina sem o código do app (e sem acesso ao
-`config.py`), repartidos por escopo para várias pessoas rodarem em paralelo.
-Elas são GERADAS a partir daqui e não se atualizam sozinhas — por três vezes
-tiveram de ser regeradas depois de uma mudança neste arquivo, e na quarta passou
-batido, com os dois lados produzindo bancos DIFERENTES do mesmo dado e nenhum
-erro. Depois de mexer aqui, rode `python scripts/build_duckdb_standalone.py` e
-commite o resultado; o `check_duckdb_standalone.py` reprova quem esquecer.
+A carga completa tem DOIS splits, e os dois são repartidos em nove fatias para
+várias pessoas rodarem em paralelo — a diferença é só de DEPENDÊNCIA:
+
+  - `scripts/convert/`     usa o `Config` do app (roda DENTRO do checkout). São
+                           CHAMADAS de três linhas para `convert_json_to_duckdb.run`,
+                           não cópias: aqui não há motivo para duplicar a CLI.
+  - `scripts/standalone/`  não usa nada do app (roda numa máquina sem o código).
+
+⚠️ **Por isso este motor tem NOVE cópias**: os `scripts/standalone/*.py` são
+GERADOS a partir daqui e não se atualizam sozinhos — por três vezes tiveram de
+ser regerados depois de uma mudança neste arquivo, e na quarta passou batido,
+com os dois lados produzindo bancos DIFERENTES do mesmo dado e nenhum erro.
+Depois de mexer aqui, rode `python scripts/build_duckdb_standalone.py` e commite
+o resultado; o `check_duckdb_standalone.py` reprova quem esquecer.
+
+O `ROTINAS_CACHE` mora aqui pela mesma razão: é o eixo dos DOIS splits, e
+escrito em cada um envelheceria de um lado só. `check_convert_split.py` prende
+que eles tenham as mesmas fatias e que nenhum banco seja reivindicado por duas.
 
 Teste de regressão: `scripts/tests/check_json_to_duckdb.py`.
 """
