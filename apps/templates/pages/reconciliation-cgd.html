@@ -51,6 +51,13 @@
 #cgd-page .cgd-k-onlyb3  .cgd-kpi__ico { background: linear-gradient(100deg, #7c3aed, #d946ef); }
 #cgd-page .cgd-k-just    .cgd-kpi__ico { background: linear-gradient(100deg, #0d7ea8, #4a849b); }
 #cgd-page .cgd-k-match   .cgd-kpi__ico { background: linear-gradient(100deg, #1a7f37, #34c759); }
+/* o Total usa o gradiente da MARCA, que é o que o separa dos buckets: os outros
+   cinco são cores de estado, ele é o fechamento da conta */
+#cgd-page .cgd-k-total   .cgd-kpi__ico { background: var(--vr-grad); }
+#cgd-page .cgd-k-total {
+    border-color: color-mix(in oklab, var(--sf-blue) 42%, var(--vr-card-border));
+    box-shadow: var(--vr-card-shadow), 0 0 26px -8px color-mix(in oklab, var(--sf-blue) 70%, transparent);
+}
 #cgd-page .cgd-kpi__n { font-size: 1.4rem; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; color: var(--ins-body-color); }
 #cgd-page .cgd-kpi__l { font-size: .68rem; text-transform: uppercase; letter-spacing: .04em; color: var(--ins-secondary-color); }
 
@@ -269,7 +276,7 @@
     'use strict';
 
     var _TRANS = {
-        en: { matched: 'Matched', pending_b3: 'Pending B3', pending_action: 'Pending action',
+        en: { total: 'Total', matched: 'Matched', pending_b3: 'Pending B3', pending_action: 'Pending action',
               only_b3: 'Only in B3', justified: 'Justified', all: 'All',
               run: 'Running the reconciliation…', runTxt: 'Reading the B3 position and the FEP list.',
               done: 'Reconciliation finished', mailed: 'Report sent', mailFail: 'Report not sent',
@@ -277,7 +284,7 @@
               notrun: 'Nothing was reconciled for this date yet. Click Run first.',
               empty: 'Nothing reconciled for this date yet — click Run.',
               src: 'B3 file', fep: 'FEP list', at: 'run at' },
-        br: { matched: 'Batidos', pending_b3: 'Pendente na B3', pending_action: 'Pendente de ação',
+        br: { total: 'Total', matched: 'Batidos', pending_b3: 'Pendente na B3', pending_action: 'Pendente de ação',
               only_b3: 'Só na B3', justified: 'Justificados', all: 'Todos',
               run: 'Rodando o batimento…', runTxt: 'Lendo a posição da B3 e a lista do FEP.',
               done: 'Batimento concluído', mailed: 'Relatório enviado', mailFail: 'Relatório não enviado',
@@ -285,7 +292,7 @@
               notrun: 'Nada foi batido nesta data ainda. Rode o batimento primeiro.',
               empty: 'Nada batido nesta data ainda — clique em Run.',
               src: 'Arquivo da B3', fep: 'Lista do FEP', at: 'rodado em' },
-        es: { matched: 'Conciliados', pending_b3: 'Pendiente en B3', pending_action: 'Pendiente de acción',
+        es: { total: 'Total', matched: 'Conciliados', pending_b3: 'Pendiente en B3', pending_action: 'Pendiente de acción',
               only_b3: 'Solo en B3', justified: 'Justificados', all: 'Todos',
               run: 'Ejecutando la conciliación…', runTxt: 'Leyendo la posición de B3 y la lista del FEP.',
               done: 'Conciliación finalizada', mailed: 'Informe enviado', mailFail: 'Informe no enviado',
@@ -311,7 +318,13 @@
         { key: 'pending_action', cls: 'cgd-k-action', icon: 'ti-clock-exclamation' },
         { key: 'only_b3',        cls: 'cgd-k-onlyb3', icon: 'ti-building-bank' },
         { key: 'justified',      cls: 'cgd-k-just',   icon: 'ti-shield-check' },
-        { key: 'matched',        cls: 'cgd-k-match',  icon: 'ti-circle-check' }
+        { key: 'matched',        cls: 'cgd-k-match',  icon: 'ti-circle-check' },
+        // O Total vem por ÚLTIMO e com a cor da marca — é o padrão dos cards de
+        // contagem do app (Pending Confirmation, Comitente, FXO). E ele é a SOMA
+        // dos buckets acima, não um número vindo do servidor: uma segunda
+        // contagem sobre o mesmo conjunto divergiria da soma no primeiro caso de
+        // borda, e o card que deveria fechar a conta seria o que não fecha.
+        { key: 'total',          cls: 'cgd-k-total',  icon: 'ti-sum', soma: true }
     ];
 
     function badge(r) {
@@ -405,9 +418,14 @@
 
     function kpis(counts) {
         $('#cgd-kpis').html(KPIS.map(function (k) {
-            var n = (counts && counts[k.key]) || 0;
+            var n = k.soma
+                ? KPIS.reduce(function (acc, o) {
+                      return o.soma ? acc : acc + ((counts && counts[o.key]) || 0);
+                  }, 0)
+                : ((counts && counts[k.key]) || 0);
             return '<div class="col-6 col-md-4 col-xl">' +
-                '<div class="cgd-kpi ' + k.cls + (bucket === k.key ? ' cgd-on' : '') + '" data-b="' + k.key + '">' +
+                '<div class="cgd-kpi ' + k.cls + (!k.soma && bucket === k.key ? ' cgd-on' : '') +
+                  '" data-b="' + (k.soma ? '' : k.key) + '">' +
                   '<span class="cgd-kpi__ico"><i class="ti ' + k.icon + '"></i></span>' +
                   '<div><div class="cgd-kpi__n">' + esc(n) + '</div>' +
                        '<div class="cgd-kpi__l">' + esc(t(k.key)) + '</div></div>' +

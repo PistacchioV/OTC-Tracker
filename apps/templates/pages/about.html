@@ -4,692 +4,664 @@
 
 {% block extra_css %}
 <style>
-/* ================================================================
- *  ABOUT — Apple Design Language + Emil Kowalski Motion
- * ================================================================ */
+/* ============================================================================
+   About OTC Tracker — folha StreamFlow
+   ----------------------------------------------------------------------------
+   Esta página é a VITRINE do design: quem quiser ver o StreamFlow inteiro num
+   lugar só olha aqui. Por isso ela é a única que usa os gestos completos das
+   três referências — o índice mono entre colchetes do glass-effect2, o
+   "eyebrow" (traço + rótulo espaçado) do cogni e as pílulas de vidro do
+   pulsedesk — em vez de só herdar o `streamflow.css`.
 
-:root {
-    --ab-ease-out:  cubic-bezier(0.23, 1, 0.32, 1);
-    --ab-ease-io:   cubic-bezier(0.77, 0, 0.175, 1);
-    --ab-blue:      #0066cc;
-    --ab-blue-dk:   #2997ff;
-    --ab-muted:     #6e6e73;
-    --ab-dark1:     #1d1d1f;
-    --ab-dark2:     #272729;
-    --ab-parchment: #f5f5f7;
-    --ab-white:     #ffffff;
-    --ab-hairline:  #e0e0e0;
-    --ab-violet:    #8b5cf6;
-    --ab-fuchsia:   #d946ef;
-    --ab-grad:      linear-gradient(100deg, #0066cc, #5e5ce6 52%, #8b5cf6 80%, #d946ef);
-    --ab-grad-soft: linear-gradient(135deg, rgba(0,102,204,.16), rgba(139,92,246,.14));
-}
+   Tudo sai dos tokens `--sf-*` / `--vr-*` da camada global: nenhuma cor é
+   escrita duas vezes, e o dia em que a marca mudar esta página muda junto.
 
-/* ── Scroll reveal ──────────────────────────────────────────── */
-.ab-rv {
-    opacity: 0;
-    transform: translateY(30px) scale(0.965);
-    filter: blur(8px);
-    transition: opacity 760ms var(--ab-ease-out),
-                transform 760ms var(--ab-ease-out),
-                filter 760ms var(--ab-ease-out);
-}
-.ab-rv.in { opacity: 1; transform: none; filter: blur(0); }
+   DARK e LIGHT: a folha global já entrega `--vr-card-bg`, `--vr-card-border`,
+   `--sf-hair` e `--sf-micro` nos dois temas. O que se declara aqui por tema é
+   só o que NÃO deriva deles (o painel de contraste e o texto sobre ele).
+   ========================================================================== */
 
-@media (prefers-reduced-motion: reduce) {
-    .ab-rv { opacity: 1 !important; transform: none !important; filter: none !important; transition: none !important; }
-    /* Drop hover/press movement too — keep only color/shadow feedback. */
-    .ab-feat:hover, .ab-feat:active, .ab-tech:hover,
-    .ab-feat__link:hover i { transform: none !important; }
+/* ── Painéis: um só desenho, cinco acentos ──────────────────────────────────
+   Antes eram cinco tiles com paletas próprias (dark, dark2, white, parchment,
+   blue) — cinco fundos escritos à mão que não acompanhavam o tema. Agora é UM
+   painel de vidro e um acento por seção, o que também é o que faz a página
+   ler como uma sequência e não como cinco blocos avulsos. */
+.ab-tile-dark, .ab-tile-dark2, .ab-tile-white,
+.ab-tile-parchment, .ab-tile-blue {
+  position: relative;
+  overflow: hidden;
+  border-radius: 24px;
+  border: 1px solid var(--vr-card-border);
+  background-color: var(--vr-card-bg);
+  backdrop-filter: blur(var(--sf-glass-blur)) saturate(160%);
+  -webkit-backdrop-filter: blur(var(--sf-glass-blur)) saturate(160%);
+  box-shadow: var(--vr-card-shadow);
+  padding: 2.6rem 2.2rem;
+  margin-bottom: 1.6rem;
 }
+/* a aurora de cada seção — o acento entra por aqui, não por um fundo sólido */
+.ab-tile-dark::before, .ab-tile-dark2::before, .ab-tile-white::before,
+.ab-tile-parchment::before, .ab-tile-blue::before {
+  content: "";
+  position: absolute;
+  inset: -30% -10% auto -10%;
+  height: 70%;
+  pointer-events: none;
+  filter: blur(40px);
+  opacity: 0.5;
+}
+[data-bs-theme=dark] .ab-tile-dark::before,
+[data-bs-theme=dark] .ab-tile-dark2::before,
+[data-bs-theme=dark] .ab-tile-white::before,
+[data-bs-theme=dark] .ab-tile-parchment::before,
+[data-bs-theme=dark] .ab-tile-blue::before { opacity: 0.72; }
 
-/* Stagger delays — children of .ab-sg */
-.ab-sg > .ab-rv:nth-child(1) { transition-delay:   0ms; }
-.ab-sg > .ab-rv:nth-child(2) { transition-delay:  65ms; }
-.ab-sg > .ab-rv:nth-child(3) { transition-delay: 130ms; }
-.ab-sg > .ab-rv:nth-child(4) { transition-delay: 195ms; }
-.ab-sg > .ab-rv:nth-child(5) { transition-delay: 260ms; }
-.ab-sg > .ab-rv:nth-child(6) { transition-delay: 325ms; }
-.ab-sg > .ab-rv:nth-child(7) { transition-delay: 390ms; }
-.ab-sg > .ab-rv:nth-child(8) { transition-delay: 455ms; }
-
-/* ── HERO ───────────────────────────────────────────────────── */
-.ab-hero {
-    background:
-        radial-gradient(72% 90% at 14% -12%, rgba(0,102,204,.38) 0%, transparent 58%),
-        radial-gradient(60% 80% at 92% -6%, rgba(217,70,239,.24) 0%, transparent 58%),
-        linear-gradient(165deg, #0d1226 0%, #0a0a12 62%) !important;
-    border: 1px solid rgba(255,255,255,.09);
-    border-radius: 26px;
-    padding: 6rem 2rem 5.25rem;
-    text-align: center;
-    position: relative;
-    overflow: hidden;
-    box-shadow: 0 30px 80px rgba(8,10,25,.35);
+.ab-tile-dark::before {
+  background: radial-gradient(46% 100% at 20% 0%, color-mix(in oklab, var(--sf-cyan) 62%, transparent), transparent 68%),
+              radial-gradient(42% 100% at 78% 6%, color-mix(in oklab, var(--sf-blue) 52%, transparent), transparent 68%);
 }
-.ab-hero::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: radial-gradient(ellipse 80% 60% at 50% 15%, rgba(255,255,255,.06) 0%, transparent 62%);
-    pointer-events: none;
+.ab-tile-parchment::before {
+  background: radial-gradient(48% 100% at 16% 0%, color-mix(in oklab, var(--sf-blue) 52%, transparent), transparent 68%),
+              radial-gradient(44% 100% at 84% 4%, color-mix(in oklab, var(--sf-violet) 50%, transparent), transparent 68%);
 }
-.ab-hero__badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    background: rgba(255,255,255,.13);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    border: 1px solid rgba(255,255,255,.18);
-    color: rgba(255,255,255,.88);
-    font-size: .67rem;
-    font-weight: 600;
-    letter-spacing: .1em;
-    text-transform: uppercase;
-    border-radius: 9999px;
-    padding: .35rem 1rem;
-    margin-bottom: 1.75rem;
+.ab-tile-white::before {
+  background: radial-gradient(50% 100% at 50% 0%, color-mix(in oklab, var(--sf-cyan) 46%, transparent), transparent 70%);
 }
-.ab-hero__logo {
-    height: 78px;
-    width: auto;
-    object-fit: contain;
-    display: block;
-    margin: 0 auto 1.5rem;
-    filter: drop-shadow(0 4px 20px rgba(0,0,0,.28));
-}
-.ab-hero h1 {
-    font-size: clamp(2.6rem, 5.6vw, 4rem) !important;
-    font-weight: 800 !important;
-    letter-spacing: -0.045em !important;
-    line-height: 1.03 !important;
-    margin-bottom: 1.25rem !important;
-    background: linear-gradient(100deg, #ffffff 28%, #8ab4ff 62%, #d3aaff 100%);
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
-    color: transparent !important;
-}
-.ab-hero .ab-lead {
-    font-size: 1rem;
-    color: rgba(255,255,255,.76) !important;
-    line-height: 1.62;
-    max-width: 540px;
-    margin: 0 auto 2.25rem;
-}
-.ab-hero__btns { display: flex; gap: .75rem; justify-content: center; flex-wrap: wrap; }
-
-/* Hero/CTA buttons */
-.ab-btn-w {
-    background: var(--ab-grad);
-    color: #fff;
-    border: none;
-    border-radius: 9999px;
-    padding: .58rem 1.5rem;
-    font-size: .875rem;
-    font-weight: 600;
-    text-decoration: none;
-    display: inline-flex;
-    align-items: center;
-    gap: .375rem;
-    box-shadow: 0 8px 22px rgba(94,92,230,.38);
-    transition: filter 150ms ease, transform 150ms ease, box-shadow 150ms ease;
-}
-.ab-btn-w:active { transform: scale(0.97); color: #fff; }
-@media (hover:hover) and (pointer:fine) {
-    .ab-btn-w:hover { filter: brightness(1.08) saturate(1.05); transform: translateY(-1px); color: #fff; box-shadow: 0 10px 28px rgba(94,92,230,.46); }
-}
-.ab-btn-o {
-    background: rgba(255,255,255,.10);
-    color: #fff;
-    border: 1px solid rgba(255,255,255,.36);
-    border-radius: 9999px;
-    padding: .55rem 1.5rem;
-    font-size: .875rem;
-    font-weight: 400;
-    text-decoration: none;
-    display: inline-flex;
-    align-items: center;
-    gap: .375rem;
-    transition: background 150ms ease, transform 150ms ease;
-}
-.ab-btn-o:active { transform: scale(0.97); color: #fff; }
-@media (hover:hover) and (pointer:fine) {
-    .ab-btn-o:hover { background: rgba(255,255,255,.20); color: #fff; }
-}
-
-/* ── Section labels ─────────────────────────────────────────── */
-.ab-sl {
-    font-size: .67rem;
-    font-weight: 600;
-    letter-spacing: .12em;
-    text-transform: uppercase;
-    color: var(--ab-blue);
-    display: block;
-    margin-bottom: .4rem;
-}
-.ab-st {
-    font-size: clamp(1.35rem, 2.4vw, 1.75rem);
-    font-weight: 700;
-    letter-spacing: -0.3px;
-    color: var(--ins-heading-color, #1d1d1f);
-    line-height: 1.15;
-    margin: 0;
-}
-
-/* ── Tiles ──────────────────────────────────────────────────── */
-/* Light-mode defaults; dark-mode overrides below */
-.ab-tile-dark  { background: #eef1f6; border-radius: 18px; padding: 2.75rem 2rem; }
-.ab-tile-dark .ab-sl { color: var(--ab-blue); }
-.ab-tile-dark .ab-st { color: #1d1d1f !important; }
-[data-bs-theme=dark] .ab-tile-dark  { background: var(--ab-dark1); }
-[data-bs-theme=dark] .ab-tile-dark .ab-sl { color: var(--ab-blue-dk); }
-[data-bs-theme=dark] .ab-tile-dark .ab-st { color: #fff !important; }
-
-.ab-tile-parchment { background: var(--ab-parchment); border-radius: 18px; padding: 2.75rem 2rem; }
-[data-bs-theme=dark] .ab-tile-parchment { background: var(--ins-tertiary-bg, #2a2a2c); }
-
-.ab-tile-white {
-    background: var(--ab-white);
-    border: 1px solid var(--ab-hairline);
-    border-radius: 18px;
-    padding: 2.75rem 2rem;
-}
-[data-bs-theme=dark] .ab-tile-white {
-    background: var(--ins-secondary-bg, #1c1c1e);
-    border-color: rgba(255,255,255,.07);
-}
-
-.ab-tile-dark2 { background: #f0f2f7; border-radius: 18px; padding: 2.75rem 2rem; }
-.ab-tile-dark2 .ab-sl { color: var(--ab-blue); }
-.ab-tile-dark2 .ab-st { color: #1d1d1f !important; }
-[data-bs-theme=dark] .ab-tile-dark2 { background: var(--ab-dark2); }
-[data-bs-theme=dark] .ab-tile-dark2 .ab-sl { color: var(--ab-blue-dk); }
-[data-bs-theme=dark] .ab-tile-dark2 .ab-st { color: #fff !important; }
-
-.ab-tile-blue {
-    background: var(--ab-blue);
-    border-radius: 18px;
-    padding: 3.5rem 2rem;
-    text-align: center;
-    position: relative;
-    overflow: hidden;
+.ab-tile-dark2::before {
+  background: radial-gradient(46% 100% at 26% 0%, color-mix(in oklab, var(--sf-violet) 56%, transparent), transparent 68%),
+              radial-gradient(42% 100% at 74% 6%, color-mix(in oklab, var(--sf-fuchsia) 44%, transparent), transparent 68%);
 }
 .ab-tile-blue::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: radial-gradient(ellipse 60% 80% at 50% -15%, rgba(255,255,255,.10) 0%, transparent 70%);
-    pointer-events: none;
+  background: radial-gradient(60% 130% at 50% 0%, color-mix(in oklab, var(--sf-blue) 70%, transparent), transparent 72%);
+  inset: -40% -10% auto -10%;
+  height: 130%;
+  opacity: 0.6;
 }
-.ab-tile-blue .ab-sl { color: rgba(255,255,255,.55); }
-.ab-tile-blue .ab-st { color: #fff !important; }
+/* cantos em esquadro (cogni) em todo painel */
+.ab-tile-dark::after, .ab-tile-dark2::after, .ab-tile-white::after,
+.ab-tile-parchment::after, .ab-tile-blue::after {
+  content: "";
+  position: absolute;
+  top: 14px; left: 14px;
+  width: 16px; height: 16px;
+  border-top: 1px solid color-mix(in oklab, var(--sf-cyan) 55%, transparent);
+  border-left: 1px solid color-mix(in oklab, var(--sf-cyan) 55%, transparent);
+  pointer-events: none;
+}
+.ab-tile-dark > *, .ab-tile-dark2 > *, .ab-tile-white > *,
+.ab-tile-parchment > *, .ab-tile-blue > * { position: relative; z-index: 1; }
 
-/* ── Stats (dark tile) ──────────────────────────────────────── */
-.ab-stat {
-    text-align: center;
-    padding: 1.25rem .75rem;
-    border-right: 1px solid rgba(0,0,0,.08);
+/* ── Índice da seção: [ 01. Capacidades ] — o marcador do glass-effect2 ───── */
+.ab-idx {
+  display: inline-block;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  font-size: 0.62rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--sf-micro);
+  border: 1px solid var(--sf-hair);
+  border-radius: 6px;
+  padding: 0.22rem 0.6rem;
+  background: color-mix(in oklab, var(--vr-card-bg) 60%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  margin-bottom: 0.9rem;
 }
-.ab-stat:last-child { border-right: none; }
-@media (max-width: 767.98px) {
-    .ab-stat { border-right: none; border-bottom: 1px solid rgba(0,0,0,.08); }
-    .ab-stat:last-child { border-bottom: none; }
+
+/* ── "Eyebrow" do cogni: traço curto + rótulo bem espaçado ────────────────── */
+.ab-sl {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--sf-cyan);
+  margin-bottom: 0.7rem;
 }
-[data-bs-theme=dark] .ab-stat { border-right-color: rgba(255,255,255,.07); }
-@media (max-width: 767.98px) {
-    [data-bs-theme=dark] .ab-stat { border-bottom-color: rgba(255,255,255,.07); }
+.ab-sl::before {
+  content: "";
+  width: 26px; height: 1px;
+  background: var(--vr-grad);
 }
+.ab-st {
+  font-size: clamp(1.7rem, 3vw, 2.5rem);
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  line-height: 1.1;
+  margin: 0 0 1.8rem;
+  background: linear-gradient(180deg, var(--ins-body-color),
+              color-mix(in oklab, var(--ins-body-color) 55%, transparent));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* ── HERO ─────────────────────────────────────────────────────────────────── */
+.ab-hero {
+  position: relative;
+  overflow: hidden;
+  text-align: center;
+  padding: 4.2rem 2rem 3.6rem;
+  border-radius: 28px;
+  border: 1px solid var(--vr-card-border);
+  background-color: var(--vr-card-bg);
+  backdrop-filter: blur(var(--sf-glass-blur)) saturate(165%);
+  -webkit-backdrop-filter: blur(var(--sf-glass-blur)) saturate(165%);
+  box-shadow: var(--vr-card-shadow),
+              0 0 90px -18px color-mix(in oklab, var(--sf-blue) 60%, transparent);
+  margin-bottom: 1.6rem;
+}
+/* os feixes de luz do pulsedesk, presos ao hero */
+.ab-hero::before {
+  content: "";
+  position: absolute;
+  inset: -60%;
+  pointer-events: none;
+  opacity: 0.55;
+  background:
+    radial-gradient(38% 42% at 24% 12%, color-mix(in oklab, var(--sf-cyan) 62%, transparent), transparent 66%),
+    radial-gradient(34% 40% at 78% 18%, color-mix(in oklab, var(--sf-violet) 58%, transparent), transparent 66%),
+    radial-gradient(40% 36% at 50% 96%, color-mix(in oklab, var(--sf-blue) 52%, transparent), transparent 68%);
+  filter: blur(36px);
+  animation: ab-drift 26s ease-in-out infinite alternate;
+}
+[data-bs-theme=dark] .ab-hero::before { opacity: 0.8; }
+.ab-hero > * { position: relative; z-index: 1; }
+
+@keyframes ab-drift {
+  0%   { transform: translate3d(0,0,0) scale(1); }
+  100% { transform: translate3d(2.5%, -2%, 0) scale(1.08); }
+}
+
+.ab-hero__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--sf-micro);
+  border: 1px solid var(--sf-hair);
+  border-radius: 999px;
+  padding: 0.4rem 0.95rem;
+  background: color-mix(in oklab, var(--vr-card-bg) 62%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  margin-bottom: 1.9rem;
+}
+/* o ponto "ao vivo" do pulsedesk */
+.ab-hero__badge::before {
+  content: "";
+  width: 6px; height: 6px;
+  border-radius: 999px;
+  background: var(--sf-cyan);
+  box-shadow: 0 0 10px var(--sf-cyan);
+  animation: ab-pulse 2.4s ease-out infinite;
+}
+@keyframes ab-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(41,197,246,.6); }
+  70%  { box-shadow: 0 0 0 9px rgba(41,197,246,0); }
+  100% { box-shadow: 0 0 0 0 rgba(41,197,246,0); }
+}
+
+.ab-hero__logo {
+  /* BLOCO, e não a imagem inline que era antes: inline ele dividia a linha com
+     o `.ab-hero__badge` (que é `inline-flex`) e aparecia colado nele, à direita,
+     em vez de centrado abaixo. */
+  display: block;
+  width: 132px;
+  margin: 0 auto 1.4rem;
+  filter: drop-shadow(0 8px 26px rgba(41, 197, 246, 0.35));
+}
+/* a versão certa por tema — ver o comentário no markup */
+.ab-logo--dark  { display: none; }
+[data-bs-theme=dark] .ab-logo--light { display: none; }
+[data-bs-theme=dark] .ab-logo--dark  { display: block; }
+.ab-hero h1 {
+  font-size: clamp(2.6rem, 6vw, 4.6rem);
+  font-weight: 800;
+  letter-spacing: -0.045em;
+  line-height: 0.98;
+  margin: 0 0 1.1rem;
+  background: linear-gradient(100deg,
+              var(--ins-body-color) 0%, var(--sf-cyan) 30%,
+              var(--sf-blue) 50%, var(--sf-violet) 70%,
+              var(--ins-body-color) 100%);
+  background-size: 260% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: ab-shimmer 9s ease-in-out infinite;
+}
+@keyframes ab-shimmer {
+  0%, 100% { background-position: 0% 0; }
+  50%      { background-position: 100% 0; }
+}
+.ab-lead {
+  max-width: 620px;
+  margin: 0 auto 2.4rem;
+  font-size: 1.05rem;
+  line-height: 1.7;
+  color: var(--ins-secondary-color);
+}
+
+.ab-hero__btns {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.7rem;
+}
+/* Botão de vidro com o BRILHO QUE VARRE (cogni). O brilho é uma camada a mais
+   no background animada por `background-position`, e não um ::after com
+   overflow hidden — o mesmo motivo do `.btn-primary` global: pseudo recortado
+   decapitaria qualquer coisa posicionada para fora do botão. */
+.ab-btn-w, .ab-btn-o {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  padding: 0.66rem 1.25rem;
+  border-radius: 999px;
+  text-decoration: none;
+  background-repeat: no-repeat;
+  background-size: 230% 100%, 100% 100%;
+  background-position: 135% 0, 0 0;
+  transition: background-position 0.7s var(--vr-ease),
+              transform 0.25s var(--vr-ease),
+              box-shadow 0.25s var(--vr-ease),
+              border-color 0.25s var(--vr-ease);
+}
+.ab-btn-w {
+  color: #fff;
+  border: none;
+  background-image:
+    linear-gradient(100deg, transparent 32%, rgba(255,255,255,.34) 50%, transparent 68%),
+    var(--vr-grad);
+  box-shadow: 0 8px 24px rgba(0, 123, 255, 0.34);
+}
+.ab-btn-o {
+  color: var(--ins-body-color);
+  border: 1px solid var(--sf-hair);
+  background-image:
+    linear-gradient(100deg, transparent 32%, var(--sf-shine) 50%, transparent 68%),
+    linear-gradient(color-mix(in oklab, var(--vr-card-bg) 66%, transparent),
+                    color-mix(in oklab, var(--vr-card-bg) 66%, transparent));
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+.ab-btn-w:hover, .ab-btn-o:hover {
+  background-position: -35% 0, 0 0;
+  transform: translateY(-2px);
+  color: var(--ins-body-color);
+}
+.ab-btn-w:hover { color: #fff; box-shadow: 0 12px 32px rgba(0, 123, 255, 0.46); }
+.ab-btn-o:hover { border-color: color-mix(in oklab, var(--sf-cyan) 55%, var(--sf-hair)); }
+
+/* ── STATS ────────────────────────────────────────────────────────────────── */
+.ab-stat { text-align: center; padding: 0.5rem 0.25rem; }
 .ab-stat__label {
-    font-size: .64rem;
-    font-weight: 600;
-    color: #6e6e73;
-    text-transform: uppercase;
-    letter-spacing: .1em;
-    display: block;
-    margin-bottom: .5rem;
+  display: block;
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--sf-micro);
+  margin-bottom: 0.55rem;
 }
-[data-bs-theme=dark] .ab-stat__label { color: rgba(255,255,255,.42); }
 .ab-stat__val {
-    font-size: 2.5rem;
-    font-weight: 700;
-    color: var(--ab-blue);
-    letter-spacing: -1px;
-    line-height: 1;
-    display: block;
-    margin-bottom: .4rem;
+  display: block;
+  font-size: clamp(2.3rem, 5vw, 3.4rem);
+  font-weight: 800;
+  letter-spacing: -0.05em;
+  line-height: 1;
+  background: var(--vr-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
-[data-bs-theme=dark] .ab-stat__val { color: var(--ab-blue-dk); }
 .ab-stat__sub {
-    font-size: .78rem;
-    color: #6e6e73;
-    display: block;
+  display: block;
+  margin-top: 0.5rem;
+  font-size: 0.78rem;
+  color: var(--ins-secondary-color);
 }
-[data-bs-theme=dark] .ab-stat__sub { color: rgba(255,255,255,.52); }
 
-/* ── Capability group headings (sidenav-style sections) ────── */
+/* ── CAPACIDADES ──────────────────────────────────────────────────────────── */
+.ab-cap-groups { margin-top: 0.4rem; }
 .ab-cap-group {
-    font-size: .74rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: .09em;
-    color: var(--ab-blue);
-    margin: 1.75rem 0 .9rem;
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--sf-micro);
+  margin: 2.2rem 0 0.9rem;
 }
 .ab-cap-groups > .ab-cap-group:first-child { margin-top: 0; }
-[data-bs-theme=dark] .ab-cap-group { color: var(--ab-blue-dk); }
+.ab-cap-group::before {
+  content: "";
+  width: 18px; height: 1px;
+  flex: 0 0 auto;
+  background: var(--vr-grad);
+}
+.ab-cap-group::after {
+  content: "";
+  flex: 1 1 auto;
+  height: 1px;
+  background: linear-gradient(90deg, var(--sf-hair), transparent);
+}
+.ab-sg { margin-bottom: 0.4rem !important; }
 
-/* ── Feature cards (parchment tile) ────────────────────────── */
+/* cartão de funcionalidade — o spotlight vem da camada global (`streamflow.js`
+   escreve --sf-mx/--sf-my e o `.ab-feat::after` desenha) */
 .ab-feat {
-    background: var(--ab-white);
-    border: 1px solid var(--ab-hairline);
-    border-radius: 18px;
-    padding: 1.5rem;
-    height: 100%;
-    transition: transform 220ms var(--ab-ease-out),
-                box-shadow 220ms var(--ab-ease-out);
+  position: relative;
+  overflow: hidden;
+  height: 100%;
+  padding: 1.45rem 1.35rem;
+  border-radius: 18px;
+  border: 1px solid var(--vr-card-border);
+  background-color: color-mix(in oklab, var(--vr-card-bg) 72%, transparent);
+  backdrop-filter: blur(14px) saturate(150%);
+  -webkit-backdrop-filter: blur(14px) saturate(150%);
+  transition: transform 0.3s var(--vr-ease), border-color 0.3s var(--vr-ease),
+              box-shadow 0.3s var(--vr-ease);
 }
-[data-bs-theme=dark] .ab-feat {
-    background: var(--ins-secondary-bg, #1c1c1e);
-    border-color: rgba(255,255,255,.07);
+.ab-feat::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.35s var(--vr-ease);
+  background: radial-gradient(circle 240px at var(--sf-mx, 50%) var(--sf-my, -10%),
+              color-mix(in oklab, var(--sf-cyan) 34%, transparent) 0%,
+              color-mix(in oklab, var(--sf-blue) 20%, transparent) 34%,
+              transparent 74%);
 }
-@media (hover:hover) and (pointer:fine) {
-    .ab-feat:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 12px 32px rgba(0,0,0,.08);
-    }
+.ab-feat:hover::after { opacity: 1; }
+.ab-feat:hover {
+  transform: translateY(-3px);
+  border-color: color-mix(in oklab, var(--sf-cyan) 52%, var(--vr-card-border));
+  box-shadow: var(--vr-card-shadow-hover);
 }
-.ab-feat:active { transform: scale(0.98); }
+.ab-feat > * { position: relative; z-index: 1; }
+
 .ab-feat__icon {
-    width: 44px;
-    height: 44px;
-    border-radius: 11px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1.2rem;
-    margin-bottom: .875rem;
-    flex-shrink: 0;
+  width: 44px; height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 13px;
+  font-size: 1.2rem;
+  margin-bottom: 1rem;
+  /* o tile é sempre o gradiente da marca com o glifo branco: as classes
+     `bg-*-subtle text-*` do markup ficam por história e são sobrescritas aqui,
+     senão cada cartão teria uma cor de tema diferente e a grade viraria um
+     mostruário de paleta em vez de uma família. */
+  background: var(--vr-grad) !important;
+  color: #fff !important;
+  box-shadow: 0 6px 18px rgba(0, 123, 255, 0.30),
+              inset 0 1px 0 rgba(255, 255, 255, 0.28);
+  transition: transform 0.3s var(--vr-ease), box-shadow 0.3s var(--vr-ease);
+}
+.ab-feat__icon i { color: #fff !important; }
+.ab-feat:hover .ab-feat__icon {
+  transform: scale(1.1) rotate(-4deg);
+  box-shadow: 0 8px 22px rgba(41, 197, 246, 0.46),
+              inset 0 1px 0 rgba(255, 255, 255, 0.36);
 }
 .ab-feat__title {
-    font-size: .9375rem;
-    font-weight: 600;
-    letter-spacing: -0.2px;
-    color: var(--ins-heading-color, #1d1d1f);
-    margin-bottom: .45rem;
+  font-size: 1.02rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin-bottom: 0.45rem;
 }
 .ab-feat__desc {
-    font-size: .8125rem;
-    color: var(--ab-muted);
-    line-height: 1.55;
-    margin-bottom: .875rem;
+  font-size: 0.86rem;
+  line-height: 1.6;
+  color: var(--ins-secondary-color);
+  margin-bottom: 0.9rem;
 }
 .ab-feat__link {
-    font-size: .8125rem;
-    font-weight: 600;
-    color: var(--ab-blue);
-    text-decoration: none;
-    display: inline-flex;
-    align-items: center;
-    gap: .3rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-decoration: none;
+  color: var(--sf-cyan);
+  transition: gap 0.25s var(--vr-ease), color 0.25s var(--vr-ease);
 }
-/* Nudge the arrow with transform (GPU), not gap (layout). */
-.ab-feat__link i { transition: transform 160ms var(--ab-ease-out); }
-@media (hover:hover) and (pointer:fine) {
-    .ab-feat__link:hover i { transform: translateX(3px); }
-}
+.ab-feat__link:hover { gap: 0.7rem; color: var(--sf-blue); }
 
-/* ── Flow steps (white tile) ────────────────────────────────── */
+/* ── FLUXO OPERACIONAL — trilho de gradiente ligando os passos ────────────── */
 .ab-step {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    text-align: center;
-    padding: .5rem 1rem;
+  position: relative;
+  height: 100%;
+  padding: 1.5rem 1.3rem;
+  border-radius: 18px;
+  border: 1px solid var(--vr-card-border);
+  background-color: color-mix(in oklab, var(--vr-card-bg) 72%, transparent);
+  backdrop-filter: blur(14px) saturate(150%);
+  -webkit-backdrop-filter: blur(14px) saturate(150%);
+  transition: transform 0.3s var(--vr-ease), border-color 0.3s var(--vr-ease),
+              box-shadow 0.3s var(--vr-ease);
+}
+.ab-step:hover {
+  transform: translateY(-3px);
+  border-color: color-mix(in oklab, var(--sf-cyan) 52%, var(--vr-card-border));
+  box-shadow: var(--vr-card-shadow-hover);
 }
 .ab-step__num {
-    width: 44px;
-    height: 44px;
-    border-radius: 50%;
-    background: var(--ab-blue);
-    color: #fff;
-    font-weight: 700;
-    font-size: 1.0625rem;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    margin-bottom: .875rem;
-    flex-shrink: 0;
+  width: 34px; height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #fff;
+  background: var(--vr-grad);
+  box-shadow: 0 6px 18px rgba(0, 123, 255, 0.32);
+  margin-bottom: 0.85rem;
 }
-.ab-step__icon { font-size: 1.4rem; color: var(--ab-blue); display: block; margin-bottom: .5rem; }
+.ab-step__icon { display: none; }   /* o número já marca o passo */
 .ab-step__title {
-    font-size: .9375rem;
-    font-weight: 700;
-    letter-spacing: -0.2px;
-    color: var(--ins-heading-color, #1d1d1f);
-    margin-bottom: .35rem;
+  font-size: 0.98rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin-bottom: 0.4rem;
 }
 .ab-step__desc {
-    font-size: .78rem;
-    color: var(--ab-muted);
-    line-height: 1.55;
-    max-width: 155px;
-    margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.6;
+  color: var(--ins-secondary-color);
+  margin: 0;
 }
+/* ── A grade dos passos ────────────────────────────────────────────────────
+   O container é um flex que QUEBRA LINHA, e os `.ab-step` não têm largura
+   fixa: cada linha fica com uma soma de larguras diferente e o
+   `justify-content: center` centraliza cada uma no seu próprio comprimento —
+   o que se vê como um escalonamento diagonal, e não como uma grade.
+
+   Grade de colunas iguais resolve os dois de uma vez: as linhas passam a ter a
+   mesma largura e os cartões, a mesma medida. As setas somem porque numa grade
+   que quebra em linhas elas apontariam para o fim da linha, não para o passo
+   seguinte — quem dá a ordem é o número no canto de cada cartão. */
+.ab-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+  align-items: stretch;
+}
+@media (max-width: 991.98px) { .ab-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 575.98px) { .ab-steps { grid-template-columns: 1fr; } }
+.ab-steps .ab-step-arrow { display: none !important; }
+
+/* a seta entre passos vira um trilho em gradiente */
 .ab-step-arrow {
-    color: rgba(0, 102, 204, .28);
-    font-size: 1.125rem;
-    flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: transparent;
+  position: relative;
+}
+.ab-step-arrow::before {
+  content: "";
+  width: 100%; height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, transparent, var(--sf-cyan), var(--sf-violet), transparent);
+  opacity: 0.6;
 }
 
-/* ── Info cards (dark-2 tile) ───────────────────────────────── */
+/* ── NOTIFICAÇÕES / AUTENTICAÇÃO ──────────────────────────────────────────── */
 .ab-info {
-    background: #fff;
-    border: 1px solid #e0e0e0;
-    border-radius: 18px;
-    padding: 1.5rem;
-    height: 100%;
+  position: relative;
+  height: 100%;
+  padding: 1.8rem 1.6rem;
+  border-radius: 20px;
+  border: 1px solid var(--vr-card-border);
+  background-color: color-mix(in oklab, var(--vr-card-bg) 74%, transparent);
+  backdrop-filter: blur(16px) saturate(155%);
+  -webkit-backdrop-filter: blur(16px) saturate(155%);
+  transition: transform 0.3s var(--vr-ease), border-color 0.3s var(--vr-ease),
+              box-shadow 0.3s var(--vr-ease);
 }
-[data-bs-theme=dark] .ab-info {
-    background: rgba(255,255,255,.05);
-    border-color: rgba(255,255,255,.07);
+.ab-info:hover {
+  transform: translateY(-3px);
+  border-color: color-mix(in oklab, var(--sf-violet) 52%, var(--vr-card-border));
+  box-shadow: var(--vr-card-shadow-hover);
 }
 .ab-info__icon {
-    width: 44px;
-    height: 44px;
-    border-radius: 11px;
-    background: rgba(0,102,204,.08);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1.2rem;
-    margin-bottom: .875rem;
+  width: 50px; height: 50px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 15px;
+  font-size: 1.4rem;
+  margin-bottom: 1rem;
+  background: linear-gradient(105deg, var(--sf-violet), var(--sf-fuchsia)) !important;
+  color: #fff !important;
+  box-shadow: 0 8px 22px rgba(139, 92, 246, 0.36),
+              inset 0 1px 0 rgba(255, 255, 255, 0.28);
 }
-[data-bs-theme=dark] .ab-info__icon { background: rgba(255,255,255,.07); }
-.ab-info__title { font-size: .9375rem; font-weight: 600; color: #1d1d1f; margin-bottom: .5rem; }
-[data-bs-theme=dark] .ab-info__title { color: #fff; }
-.ab-info__desc  { font-size: .8125rem; color: #6e6e73; line-height: 1.55; margin: 0; }
-[data-bs-theme=dark] .ab-info__desc  { color: rgba(255,255,255,.52); }
+.ab-info__icon i { color: #fff !important; }
+.ab-info__title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin-bottom: 0.5rem;
+}
+.ab-info__desc {
+  font-size: 0.88rem;
+  line-height: 1.65;
+  color: var(--ins-secondary-color);
+  margin: 0;
+}
 
-/* ── Tech items (parchment tile) ────────────────────────────── */
+/* ── TECNOLOGIA — esteira contínua (a marquee do glass-effect2) ────────────
+   A lista de tecnologias é curta e fixa; em grade ela ocupava meia tela sem
+   dizer mais. Em esteira ela vira movimento, que é o que a seção precisa ser.
+   O conteúdo é DUPLICADO no markup para o laço fechar sem salto. */
+.ab-marquee {
+  position: relative;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+}
+.ab-marquee__track {
+  display: flex;
+  width: max-content;
+  gap: 0.9rem;
+  animation: ab-marquee 32s linear infinite;
+}
+.ab-marquee__dup { display: flex; gap: 0.9rem; }
+.ab-marquee:hover .ab-marquee__track { animation-play-state: paused; }
+@keyframes ab-marquee {
+  from { transform: translate3d(0, 0, 0); }
+  to   { transform: translate3d(-50%, 0, 0); }
+}
 .ab-tech {
-    background: var(--ab-white);
-    border: 1px solid var(--ab-hairline);
-    border-radius: 18px;
-    padding: 1.375rem 1rem;
-    text-align: center;
-    height: 100%;
-    transition: transform 220ms var(--ab-ease-out),
-                box-shadow 220ms var(--ab-ease-out);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex: 0 0 auto;
+  padding: 0.8rem 1.3rem;
+  border-radius: 999px;
+  border: 1px solid var(--sf-hair);
+  background: color-mix(in oklab, var(--vr-card-bg) 70%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transition: border-color 0.25s var(--vr-ease), transform 0.25s var(--vr-ease);
 }
-[data-bs-theme=dark] .ab-tech {
-    background: var(--ins-secondary-bg, #1c1c1e);
-    border-color: rgba(255,255,255,.07);
+.ab-tech:hover {
+  border-color: color-mix(in oklab, var(--sf-cyan) 55%, var(--sf-hair));
+  transform: translateY(-2px);
 }
-@media (hover:hover) and (pointer:fine) {
-    .ab-tech:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 18px rgba(0,0,0,.07);
-    }
+.ab-tech i { font-size: 1.15rem; color: var(--sf-cyan); }
+.ab-tech__label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
 }
-.ab-tech i { font-size: 1.75rem; display: block; margin-bottom: .5rem; }
-.ab-tech__label { font-size: .72rem; font-weight: 600; color: var(--ab-muted); }
 
-/* CTA text */
+/* ── CTA ──────────────────────────────────────────────────────────────────── */
+.ab-tile-blue { text-align: center; padding: 3.4rem 2rem; }
 .ab-cta-title {
-    font-size: clamp(1.4rem, 2.5vw, 2rem);
-    font-weight: 700;
-    color: #fff !important;
-    letter-spacing: -0.3px;
-    margin-bottom: .5rem;
+  font-size: clamp(1.8rem, 4vw, 2.9rem);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1.05;
+  margin: 0 0 0.9rem;
+  background: linear-gradient(100deg, var(--sf-cyan), var(--sf-blue) 46%, var(--sf-violet));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 .ab-cta-desc {
-    font-size: .9375rem;
-    color: rgba(255,255,255,.70);
-    margin-bottom: 1.875rem;
-    line-height: 1.55;
+  max-width: 560px;
+  margin: 0 auto 2rem;
+  font-size: 0.98rem;
+  line-height: 1.7;
+  color: var(--ins-secondary-color);
 }
-/* ================================================================
- *  ABOUT — MOTION BOOST (entrada sequencial, glow, sheen, hover+)
- * ================================================================ */
 
-/* ── Entrada sequencial do HERO no load ─────────────────────────── */
-.ab-hero__badge,
-.ab-hero__logo,
-.ab-hero h1,
-.ab-hero .ab-lead,
-.ab-hero__btns {
+/* ── Animação de entrada por bloco ────────────────────────────────────────── */
+@media (prefers-reduced-motion: no-preference) {
+  .ab-rv {
     opacity: 0;
-    animation: abHeroIn 900ms var(--ab-ease-out) both;
-}
-.ab-hero__badge { animation-delay: 120ms; }
-.ab-hero__logo  { animation: abLogoIn 950ms var(--ab-ease-out) 240ms both,
-                             abLogoGlow 4.2s ease-in-out 1500ms infinite; }
-.ab-hero h1       { animation-delay: 380ms; }
-.ab-hero .ab-lead { animation-delay: 520ms; }
-.ab-hero__btns    { animation-delay: 660ms; }
-
-@keyframes abHeroIn {
-    from { opacity: 0; transform: translateY(26px); filter: blur(9px); }
-    to   { opacity: 1; transform: none;              filter: blur(0); }
-}
-@keyframes abLogoIn {
-    0%   { opacity: 0; transform: translateY(14px) scale(0.72); }
-    60%  { opacity: 1; transform: translateY(0)    scale(1.06); }
-    100% { opacity: 1; transform: none; }
-}
-@keyframes abLogoGlow {
-    0%, 100% { filter: drop-shadow(0 4px 20px rgba(0,0,0,.28)); }
-    50%      { filter: drop-shadow(0 8px 34px rgba(41,151,255,.55)); }
-}
-
-/* Sheen diagonal cruzando o hero periodicamente */
-.ab-hero::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(115deg, transparent 32%, rgba(255,255,255,.12) 50%, transparent 68%);
-    background-size: 250% 100%;
-    animation: abSheen 7.5s ease-in-out 1.6s infinite;
-    pointer-events: none;
-}
-@keyframes abSheen {
-    0%        { background-position: 210% 0; }
-    55%, 100% { background-position: -70% 0; }
-}
-
-/* Título do hero com leve brilho de texto */
-.ab-hero h1 { text-shadow: 0 2px 30px rgba(0,0,0,.18); }
-
-/* ── Stats: contador ganha "pop" ao revelar ─────────────────────── */
-.ab-stat__val { display: inline-block; will-change: transform; }
-.ab-rv.in .ab-stat__val { animation: abPop 620ms var(--ab-ease-out) 120ms both; }
-@keyframes abPop {
-    0%   { transform: scale(0.6); opacity: 0; }
-    55%  { transform: scale(1.12); opacity: 1; }
-    100% { transform: none; }
-}
-
-/* ── Feature cards: hover mais marcante + ícone reativo ─────────── */
-.ab-feat { position: relative; overflow: hidden; }
-.ab-feat::after {
-    content: '';
-    position: absolute; inset: 0;
-    border-radius: 18px;
-    box-shadow: inset 0 0 0 1px rgba(41,151,255,.45);
-    opacity: 0;
-    transition: opacity 260ms var(--ab-ease-out);
-    pointer-events: none;
-}
-.ab-feat__icon { transition: transform 260ms var(--ab-ease-out); }
-@media (hover:hover) and (pointer:fine) {
-    .ab-feat:hover {
-        transform: translateY(-6px);
-        box-shadow: 0 20px 46px rgba(0,102,204,.16);
-    }
-    .ab-feat:hover::after { opacity: 1; }
-    .ab-feat:hover .ab-feat__icon { transform: scale(1.1) rotate(-4deg); }
-}
-
-/* ── Flow steps: número com anel pulsante ao revelar ────────────── */
-.ab-step__num { position: relative; }
-.ab-rv.in .ab-step__num::after {
-    content: '';
-    position: absolute; inset: -6px;
-    border-radius: 50%;
-    border: 2px solid var(--ab-blue);
-    opacity: 0;
-    animation: abRing 900ms var(--ab-ease-out) 200ms 1;
-}
-@keyframes abRing {
-    0%   { opacity: .6; transform: scale(0.7); }
-    100% { opacity: 0;  transform: scale(1.35); }
-}
-
-/* ── CTA azul: glow pulsante ────────────────────────────────────── */
-.ab-tile-blue::after {
-    content: '';
-    position: absolute; inset: 0;
-    background: radial-gradient(ellipse 55% 70% at 50% -10%, rgba(41,151,255,.38) 0%, transparent 62%);
-    animation: abPulse 4.5s ease-in-out infinite;
-    pointer-events: none;
-}
-@keyframes abPulse {
-    0%, 100% { opacity: .35; }
-    50%      { opacity: .85; }
+    transform: translateY(18px);
+    transition: opacity 0.7s var(--vr-ease), transform 0.7s var(--vr-ease);
+  }
+  /* a classe é `in`, e não `ab-in`: quem a adiciona é o IntersectionObserver
+     no <script> do fim DESTA página. Trocar o nome aqui deixaria todo bloco
+     com `opacity: 0` para sempre — a página abriria em branco, sem erro. */
+  .ab-rv.in { opacity: 1; transform: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .ab-hero__badge, .ab-hero__logo, .ab-hero h1, .ab-hero .ab-lead, .ab-hero__btns,
-    .ab-hero::after, .ab-tile-blue::after, .ab-rv.in .ab-stat__val,
-    .ab-rv.in .ab-step__num::after {
-        animation: none !important;
-        opacity: 1 !important;
-    }
+  .ab-hero::before, .ab-hero h1, .ab-hero__badge::before,
+  .ab-marquee__track { animation: none; }
 }
 
-/* ================================================================
- *  ABOUT — NOVA REDESIGN (overrides visuais, além das animações)
- * ================================================================ */
-
-/* Eyebrow (rótulo de seção) em gradiente */
-.ab-sl {
-    font-size: .7rem;
-    font-weight: 700;
-    letter-spacing: .14em;
-    text-transform: uppercase;
-    background: var(--ab-grad);
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
-    color: transparent;
-    display: block;
-    margin-bottom: .55rem;
+@media (max-width: 767.98px) {
+  .ab-tile-dark, .ab-tile-dark2, .ab-tile-white,
+  .ab-tile-parchment, .ab-tile-blue { padding: 1.9rem 1.15rem; border-radius: 20px; }
+  .ab-hero { padding: 3rem 1.15rem 2.6rem; }
 }
-
-/* Título de seção grande e apertado */
-.ab-st {
-    font-size: clamp(1.6rem, 3vw, 2.35rem) !important;
-    font-weight: 800 !important;
-    letter-spacing: -0.03em !important;
-    line-height: 1.1 !important;
-}
-
-/* Seção de features: sem "caixa" — cards flutuam sobre o glow da página */
-.ab-tile-parchment,
-[data-bs-theme=dark] .ab-tile-parchment {
-    background: transparent;
-    padding: .5rem 0;
-}
-
-/* Demais painéis: superfície glass coerente com o visual-refresh */
-.ab-tile-dark, .ab-tile-white, .ab-tile-dark2,
-[data-bs-theme=dark] .ab-tile-dark,
-[data-bs-theme=dark] .ab-tile-white,
-[data-bs-theme=dark] .ab-tile-dark2 {
-    background: var(--vr-card-bg, rgba(9,9,30,.02));
-    border: 1px solid var(--vr-card-border, rgba(9,9,30,.08));
-    border-radius: 20px;
-    padding: 2.4rem 2rem;
-    -webkit-backdrop-filter: blur(6px);
-    backdrop-filter: blur(6px);
-}
-.ab-tile-dark .ab-st, .ab-tile-dark2 .ab-st,
-[data-bs-theme=dark] .ab-tile-dark .ab-st,
-[data-bs-theme=dark] .ab-tile-dark2 .ab-st { color: var(--ins-heading-color) !important; }
-
-/* Stats: número enorme em gradiente */
-.ab-stat { border: 0 !important; padding: 1.25rem 1rem; }
-.ab-stat .ab-stat__val {
-    font-size: clamp(2rem, 3.6vw, 2.9rem);
-    font-weight: 800;
-    letter-spacing: -0.03em;
-    line-height: 1;
-    background: var(--ab-grad);
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
-    color: transparent;
-}
-
-/* Rótulo de categoria (New Deals, Daily Settlement…) em gradiente */
-.ab-cap-group,
-[data-bs-theme=dark] .ab-cap-group {
-    background: var(--ab-grad);
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
-    color: transparent;
-    font-size: .72rem;
-    letter-spacing: .12em;
-    margin: 2rem 0 1rem;
-}
-
-/* Feature cards: glass + ícone em tile de gradiente */
-.ab-feat,
-[data-bs-theme=dark] .ab-feat {
-    background: var(--vr-card-bg, #fff);
-    border: 1px solid var(--vr-card-border, var(--ab-hairline));
-    border-radius: 16px;
-    padding: 1.6rem;
-}
-.ab-feat .ab-feat__icon {
-    background: var(--ab-grad) !important;
-    color: #fff !important;
-    box-shadow: 0 6px 16px rgba(94,92,230,.3);
-}
-.ab-feat .ab-feat__title { font-size: 1rem; letter-spacing: -0.01em; }
-.ab-feat .ab-feat__link { color: var(--ab-blue-dk); }
-
-/* Passos do fluxo: número em círculo de gradiente */
-.ab-step .ab-step__num {
-    background: var(--ab-grad) !important;
-    color: #fff !important;
-    box-shadow: 0 6px 16px rgba(94,92,230,.3);
-    border: 0 !important;
-}
-
-/* Tech chips (Platform stack): pill glass */
-.ab-tech,
-[data-bs-theme=dark] .ab-tech {
-    background: var(--vr-card-bg, #fff);
-    border: 1px solid var(--vr-card-border, var(--ab-hairline));
-    border-radius: 14px;
-}
-
-/* CTA: painel em gradiente multicolor */
-.ab-tile-blue {
-    background: linear-gradient(120deg, #0066cc 0%, #5e5ce6 48%, #8b5cf6 78%, #d946ef 100%) !important;
-    border-radius: 24px;
-    box-shadow: 0 24px 60px rgba(94,92,230,.32);
-}
-.ab-tile-blue .ab-sl {
-    background: none;
-    -webkit-text-fill-color: rgba(255,255,255,.78);
-    color: rgba(255,255,255,.78);
-}
-.ab-tile-blue .ab-st { color: #fff !important; }
 </style>
 {% endblock extra_css %}
 
@@ -707,7 +679,16 @@
                     <i class="ti ti-building-bank" style="font-size:.75rem;"></i>
                     JPMorganChase &amp; Co. — OTC Derivatives Operations
                 </div>
-                <img src="{{ config.ASSETS_ROOT }}/images/logo.png" alt="OTC Tracker" class="ab-hero__logo">
+                <!-- O logo tem DUAS versões no repo e elas não são
+                     intercambiáveis: `logo.png` é branco (some no tema claro) e
+                     `logo-black.png` é preto (some no escuro). É o mesmo par que
+                     a topbar usa. Ficam as duas no markup e o CSS mostra a certa
+                     — trocar por JS deixaria o logo errado visível no primeiro
+                     quadro, antes do script rodar. -->
+                <img src="{{ config.ASSETS_ROOT }}/images/logo-black.png" alt="OTC Tracker"
+                     class="ab-hero__logo ab-logo--light">
+                <img src="{{ config.ASSETS_ROOT }}/images/logo.png" alt="OTC Tracker"
+                     class="ab-hero__logo ab-logo--dark">
                 <h1>OTC Tracker</h1>
                 <p class="ab-lead" data-lang="about-hero-desc">
                     Plataforma interna para gestão, validação e envio de operações de Derivativos OTC à B3 —
@@ -794,6 +775,7 @@
         <div class="col-12">
             <div class="ab-tile-parchment">
                 <div class="mb-4 ab-rv">
+                    <span class="ab-idx">[ 02. Capabilities ]</span>
                     <span class="ab-sl" data-lang="about-features-label">Funcionalidades</span>
                     <h2 class="ab-st" data-lang="about-features-title">O que o OTC Tracker oferece</h2>
                 </div>
@@ -1407,10 +1389,11 @@
         <div class="col-12">
             <div class="ab-tile-white">
                 <div class="mb-4 ab-rv">
+                    <span class="ab-idx">[ 03. Operational Flow ]</span>
                     <span class="ab-sl" data-lang="about-flow-label">Fluxo Operacional</span>
                     <h2 class="ab-st" data-lang="about-flow-title">Como funciona</h2>
                 </div>
-                <div class="d-flex flex-column flex-md-row flex-wrap align-items-center justify-content-center">
+                <div class="ab-steps">
                     <!-- Step 1 -->
                     <div class="ab-step ab-rv" style="transition-delay:0ms">
                         <div class="ab-step__num">1</div>
@@ -1526,46 +1509,67 @@
         <div class="col-12">
             <div class="ab-tile-parchment">
                 <div class="mb-4 ab-rv">
+                    <span class="ab-idx">[ 05. Technology ]</span>
                     <span class="ab-sl" data-lang="about-tech-label">Tecnologia</span>
                     <h2 class="ab-st" data-lang="about-tech-title">Stack da plataforma</h2>
                 </div>
-                <div class="row g-3 ab-sg">
-                    <div class="col-6 col-md-2 ab-rv">
+                <div class="ab-marquee ab-rv">
+                    <div class="ab-marquee__track" aria-label="Platform stack">
                         <div class="ab-tech">
-                            <i class="ti ti-brand-python" style="color:#0066cc;"></i>
+                            <i class="ti ti-brand-python" style="color:#29c5f6;"></i>
                             <div class="ab-tech__label">Python / Flask</div>
                         </div>
-                    </div>
-                    <div class="col-6 col-md-2 ab-rv">
                         <div class="ab-tech">
-                            <i class="ti ti-database" style="color:#2997ff;"></i>
+                            <i class="ti ti-database" style="color:#007bff;"></i>
                             <div class="ab-tech__label">DuckDB</div>
                         </div>
-                    </div>
-                    <div class="col-6 col-md-2 ab-rv">
                         <div class="ab-tech">
-                            <i class="ti ti-brand-bootstrap" style="color:#7952b3;"></i>
+                            <i class="ti ti-brand-bootstrap" style="color:#8b5cf6;"></i>
                             <div class="ab-tech__label">Bootstrap 5</div>
                         </div>
-                    </div>
-                    <div class="col-6 col-md-2 ab-rv">
                         <div class="ab-tech">
-                            <i class="ti ti-table" style="color:#198754;"></i>
+                            <i class="ti ti-table" style="color:#34d399;"></i>
                             <div class="ab-tech__label">DataTables</div>
                         </div>
-                    </div>
-                    <div class="col-6 col-md-2 ab-rv">
                         <div class="ab-tech">
-                            <i class="ti ti-cloud-upload" style="color:#c08000;"></i>
+                            <i class="ti ti-cloud-upload" style="color:#fbbf24;"></i>
                             <div class="ab-tech__label">Dropzone.js</div>
                         </div>
-                    </div>
-                    <div class="col-6 col-md-2 ab-rv">
                         <div class="ab-tech">
-                            <i class="ti ti-server" style="color:#dc3545;"></i>
+                            <i class="ti ti-server" style="color:#f43f5e;"></i>
                             <div class="ab-tech__label">Gunicorn</div>
                         </div>
-                    </div>
+                        <!-- A cópia é obrigatória, não decorativa: a animação desliza o track
+                             em -50%, então o laço só volta ao início sem salto visível se o
+                             conteúdo estiver DUAS vezes. `aria-hidden` na cópia para o leitor
+                             de tela não anunciar a lista repetida. -->
+                        <div class="ab-marquee__dup" aria-hidden="true">
+                            <div class="ab-tech">
+                                <i class="ti ti-brand-python" style="color:#29c5f6;"></i>
+                                <div class="ab-tech__label">Python / Flask</div>
+                            </div>
+                            <div class="ab-tech">
+                                <i class="ti ti-database" style="color:#007bff;"></i>
+                                <div class="ab-tech__label">DuckDB</div>
+                            </div>
+                            <div class="ab-tech">
+                                <i class="ti ti-brand-bootstrap" style="color:#8b5cf6;"></i>
+                                <div class="ab-tech__label">Bootstrap 5</div>
+                            </div>
+                            <div class="ab-tech">
+                                <i class="ti ti-table" style="color:#34d399;"></i>
+                                <div class="ab-tech__label">DataTables</div>
+                            </div>
+                            <div class="ab-tech">
+                                <i class="ti ti-cloud-upload" style="color:#fbbf24;"></i>
+                                <div class="ab-tech__label">Dropzone.js</div>
+                            </div>
+                            <div class="ab-tech">
+                                <i class="ti ti-server" style="color:#f43f5e;"></i>
+                                <div class="ab-tech__label">Gunicorn</div>
+                            </div>
+                        </div>
+                </div>
                 </div>
             </div>
         </div>

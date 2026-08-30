@@ -1,0 +1,2905 @@
+/* ============================================================================
+   streamflow.css  —  Camada visual StreamFlow (liquid glass)
+   ----------------------------------------------------------------------------
+   Terceira camada de override, carregada DEPOIS do visual-refresh.css. Não
+   altera markup nem JS.
+
+   MESCLA de três referências:
+     · glass-effect2 (Positiv+) — a BASE: fundo líquido com blobs à deriva,
+       painéis de vidro, micro-rótulos mono em caixa alta e o par azul/ciano
+       (#007bff · #29C5F6).
+     · cogni            — a malha técnica de fundo, os cantos em esquadro do
+       painel de título, o "eyebrow" (traço + rótulo espaçado) e o brilho que
+       varre o botão no hover.
+     · pulsedesk        — o azul-marinho profundo (#080c14), as pílulas de
+       vidro, o realce por escala no hover e os pontos de status com halo.
+
+   POR QUE REDEFINIR TOKEN, e não reescrever regra: o visual-refresh tem ~1100
+   linhas presas a --vr-accent-*, --vr-card-* e --vr-grad. Trocando a ORIGEM, a
+   folha inteira vira StreamFlow de uma vez — e a regra que o refresh mudar
+   amanhã já nasce na paleta nova. O que este arquivo acrescenta por regra é só
+   o que não existe lá: o fundo líquido, o vidro e os micro-rótulos.
+
+   DARK e LIGHT são os dois de primeira classe: toda cor nasce em :root (light)
+   e é REDEFINIDA em [data-bs-theme=dark] — nunca uma cor com definição única
+   dentro do bloco escuro, senão ela some no claro (regra da casa, CLAUDE §7).
+
+   SEM fonte de internet e SEM CDN: a instância do JPM roda sem rede, e o link
+   do Google Fonts que as três referências usam simplesmente não chega. A pilha
+   tipográfica pede Inter/Geist se estiverem instaladas e cai no sistema.
+
+   Para reverter: remover o <link> em partials/head-css.html.
+   ========================================================================== */
+
+/* ══════════════════════════════════════════════════════════════════════════
+   1. TOKENS — LIGHT (padrão do app: config.js sobe com theme "light")
+   ══════════════════════════════════════════════════════════════════════════ */
+:root {
+  /* paleta StreamFlow */
+  --sf-cyan:    #29c5f6;
+  --sf-blue:    #007bff;
+  --sf-indigo:  #4f46e5;
+  --sf-violet:  #8b5cf6;
+  --sf-fuchsia: #d946ef;
+  --sf-mint:    #34d399;   /* pulsedesk: o ponto "ao vivo" */
+
+  /* ── tokens do visual-refresh, reapontados para a paleta nova ───────────
+     É esta troca que repagina card, topbar, sidenav, botões e badges sem
+     tocar numa linha daquele arquivo. */
+  --vr-accent-1: var(--sf-cyan);
+  --vr-accent-2: var(--sf-blue);
+  --vr-accent-3: var(--sf-violet);
+  --vr-accent-4: var(--sf-fuchsia);
+  --vr-grad: linear-gradient(105deg, #29c5f6, #007bff 42%, #6d5ce7 74%, #a855f7 100%);
+  --vr-card-radius: 16px;
+  --vr-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* fundo e vidro — LIGHT */
+  --vr-page-bg: #dfe8f7;
+  --vr-card-bg: rgba(255, 255, 255, 0.56);
+  --vr-card-border: rgba(10, 22, 44, 0.10);
+  --vr-card-shadow: 0 1px 2px rgba(10, 22, 44, 0.04), 0 12px 32px rgba(10, 22, 44, 0.07);
+  --vr-card-shadow-hover: 0 2px 6px rgba(10, 22, 44, 0.05), 0 24px 52px rgba(0, 123, 255, 0.16);
+
+  --sf-glass-blur: 26px;
+  --sf-hair: rgba(10, 22, 44, 0.10);
+  --sf-micro: rgba(10, 22, 44, 0.52);   /* cor dos micro-rótulos */
+  --sf-shine: rgba(255, 255, 255, 0.55);
+
+  /* blobs líquidos — LIGHT (pastel, para não brigar com texto escuro) */
+  --sf-blob-a: rgba(0, 123, 255, 0.85);
+  --sf-blob-b: rgba(139, 92, 246, 0.72);
+  --sf-blob-c: rgba(41, 197, 246, 0.80);
+  --sf-grid-line: rgba(10, 22, 44, 0.055);
+  --sf-noise-opacity: 0.045;
+
+  /* cabeçalho sticky das tabelas (visual-refresh §fim): precisa ser SÓLIDO,
+     no tom que a tabela já tem por baixo = page-bg + card-bg composto. */
+  --vr-thead-bg: #eef3fc;
+  --vr-thead-line: rgba(10, 22, 44, 0.13);
+
+  /* tokens do tema alinhados ao azul StreamFlow */
+  --ins-primary: #007bff;
+  --ins-primary-rgb: 0, 123, 255;
+  --ins-link-color: #0069d9;
+  --ins-link-color-rgb: 0, 105, 217;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   2. TOKENS — DARK (o modo nativo das três referências)
+   ══════════════════════════════════════════════════════════════════════════ */
+[data-bs-theme=dark] {
+  /* azul-marinho profundo: #050a14 do glass-effect2 encontrando o #080c14 do
+     pulsedesk. Não é preto — é marinho, e é o que faz o ciano acender. */
+  --ins-body-bg: #060b16;
+  --ins-body-bg-rgb: 6, 11, 22;
+  --ins-secondary-bg: #0b1220;
+  --ins-secondary-bg-rgb: 11, 18, 32;
+  --ins-border-color: rgba(255, 255, 255, 0.09);
+  --ins-border-color-translucent: rgba(255, 255, 255, 0.09);
+  --ins-primary: #29c5f6;
+  --ins-primary-rgb: 41, 197, 246;
+  --ins-link-color: #67e8f9;
+  --ins-link-color-rgb: 103, 232, 249;
+
+  --vr-page-bg: #060b16;
+  --vr-card-bg: rgba(255, 255, 255, 0.06);
+  --vr-card-border: rgba(255, 255, 255, 0.10);
+  --vr-card-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 14px 38px rgba(0, 0, 0, 0.52);
+  --vr-card-shadow-hover: inset 0 1px 0 rgba(255, 255, 255, 0.09), 0 26px 58px rgba(0, 123, 255, 0.22);
+
+  --sf-glass-blur: 30px;
+  --sf-hair: rgba(255, 255, 255, 0.10);
+  --sf-micro: rgba(255, 255, 255, 0.55);
+  --sf-shine: rgba(255, 255, 255, 0.28);
+
+  --sf-blob-a: rgba(0, 123, 255, 0.95);
+  --sf-blob-b: rgba(124, 58, 237, 0.85);
+  --sf-blob-c: rgba(41, 197, 246, 0.80);
+  --sf-grid-line: rgba(255, 255, 255, 0.055);
+  --sf-noise-opacity: 0.075;
+
+  /* #060b16 (page) + branco 4.5% (card) — o tom composto sob a tabela */
+  --vr-thead-bg: #111725;
+  --vr-thead-line: rgba(255, 255, 255, 0.14);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   3. TIPOGRAFIA
+   ══════════════════════════════════════════════════════════════════════════ */
+body {
+  font-family: "Inter", "Geist", "Plus Jakarta Sans", -apple-system,
+               BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI",
+               system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+}
+
+/* As três referências usam tracking negativo nos títulos e positivo, largo, nos
+   micro-rótulos. É esse contraste que dá o ar do design. */
+h1, h2, h3, h4, h5, .h1, .h2, .h3, .h4, .h5, .card-title {
+  letter-spacing: -0.028em;
+}
+
+/* seleção de texto — glass-effect2 (azul) no claro, pulsedesk (ciano) no escuro */
+::selection { background: rgba(0, 123, 255, 0.28); color: inherit; }
+[data-bs-theme=dark] ::selection { background: rgba(41, 197, 246, 0.30); color: #eaf9ff; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   4. FUNDO LÍQUIDO — blobs à deriva (glass-effect2) + malha e grão (cogni)
+   --------------------------------------------------------------------------
+   Vive em DOIS pseudo-elementos do <body>, e não em markup: a regra da casa é
+   que a camada de refino não toca template. `body::before` são os blobs (a
+   única coisa animada); `body::after` é a malha + o grão, estáticos.
+
+   As duas camadas ficam em z-index NEGATIVO — pintam acima do fundo do canvas e
+   abaixo de todo o conteúdo — em vez de elevar o `.wrapper`, que quebraria o
+   empilhamento de modal e offcanvas (a nota longa está no `.wrapper`, abaixo).
+   E o `.content-page` fica TRANSPARENTE: o visual-refresh o
+   pinta com --vr-page-bg opaco, e um fundo opaco em cima esconderia os blobs
+   inteiros (a falha apareceria como "o fundo novo não funcionou", sem erro).
+   ══════════════════════════════════════════════════════════════════════════ */
+body {
+  background-color: var(--vr-page-bg);
+  overflow-x: hidden;              /* o blob é maior que a viewport de propósito */
+}
+
+body::before,
+body::after {
+  content: "";
+  position: fixed;
+  pointer-events: none;
+  /* -1, e NUNCA 0 com o .wrapper elevado: ver a nota do `.wrapper` abaixo. */
+  z-index: -1;
+}
+
+/* — os três blobs — */
+body::before {
+  inset: -25vmax;
+  background:
+    radial-gradient(44vmax 40vmax at 10% 6%, var(--sf-blob-a), transparent 62%),
+    radial-gradient(40vmax 36vmax at 90% 20%, var(--sf-blob-b), transparent 62%),
+    radial-gradient(48vmax 42vmax at 46% 96%, var(--sf-blob-c), transparent 64%);
+  filter: blur(38px);
+  animation: sf-drift 32s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+/* — a malha técnica (cogni) —
+   Malha e grão vivem em CAMADAS SEPARADAS de propósito: as duas têm força
+   própria (--sf-grid-line e --sf-noise-opacity), e `opacity` age no elemento
+   inteiro — juntas num pseudo só, apagar o grão apagaria a malha junto. */
+body::after {
+  inset: 0;
+  background-image:
+    repeating-linear-gradient(0deg,  var(--sf-grid-line) 0 1px, transparent 1px 44px),
+    repeating-linear-gradient(90deg, var(--sf-grid-line) 0 1px, transparent 1px 44px);
+}
+@supports (mask-image: linear-gradient(#000, #000)) {
+  body::after {
+    /* desvanece a malha nas bordas, como o overlay radial do cogni */
+    -webkit-mask-image: radial-gradient(120% 100% at 50% 0%, #000 35%, rgba(0,0,0,0.35) 100%);
+    mask-image: radial-gradient(120% 100% at 50% 0%, #000 35%, rgba(0,0,0,0.35) 100%);
+  }
+}
+
+/* O `.wrapper` fica SEM z-index de propósito, e isso não é detalhe de estilo.
+   Com `z-index: 1` ele vira um CONTEXTO DE EMPILHAMENTO, e todo o app passa a
+   viver dentro dele — modal em 1055 e offcanvas em 1045 incluídos. O
+   `.modal-backdrop` (e o `.offcanvas-backdrop`) o Bootstrap pendura direto no
+   <body>, em 1050: fora do contexto, portanto, e ACIMA dele inteiro. O efeito é
+   o backdrop desfocado pintando por cima do próprio diálogo — a tela fica
+   embaçada e o clique vai todo para o backdrop, com o modal intacto por baixo.
+   Nada disso aparece como erro no console.
+
+   Sem z-index aqui, as camadas líquidas descem para -1: elas pintam acima do
+   fundo do canvas e abaixo de todo conteúdo, que é exatamente o que se quer, e
+   o empilhamento de modal/offcanvas volta a ser o do Bootstrap. */
+.wrapper { position: relative; }
+
+/* fundo do conteúdo: transparente, para a camada líquida aparecer */
+.content-page {
+  background-color: transparent !important;
+  background-image: none !important;
+}
+
+@keyframes sf-drift {
+  0%   { transform: translate3d(0, 0, 0) scale(1); }
+  50%  { transform: translate3d(2.5vw, -2vh, 0) scale(1.07); }
+  100% { transform: translate3d(-2.5vw, 2vh, 0) scale(1.03); }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   5. PAINÉIS DE VIDRO
+   ══════════════════════════════════════════════════════════════════════════ */
+.card,
+.dropdown-menu,
+.modal-content,
+.offcanvas,
+.toast,
+.swal2-popup {
+  background-color: var(--vr-card-bg) !important;
+  border: 1px solid var(--vr-card-border) !important;
+  border-radius: var(--vr-card-radius) !important;
+  backdrop-filter: blur(var(--sf-glass-blur)) saturate(160%);
+  -webkit-backdrop-filter: blur(var(--sf-glass-blur)) saturate(160%);
+}
+.card, .modal-content, .swal2-popup { box-shadow: var(--vr-card-shadow); }
+
+/* SPOTLIGHT (cogni) — o halo que SEGUE o cursor dentro do cartão.
+   Quem escreve a posição é o `streamflow.js`, em `--sf-mx`/`--sf-my`; aqui só
+   se desenha. Os fallbacks do `var()` são o desenho anterior (halo fixo no
+   topo), então sem o JS o cartão continua correto — nunca quebrado.
+   `pointer-events: none` e `border-radius: inherit` mantêm o halo dentro do
+   cartão e fora do caminho do clique. */
+.card, .ndm-card, .fxo-widget, .mc-card, .otm-widget, .ob-widget,
+.ndfc-widget, .ln-widget, .ops-widget { position: relative; }
+
+.card::after, .ndm-card::after, .fxo-widget::after, .mc-card::after,
+.otm-widget::after, .ob-widget::after, .ndfc-widget::after,
+.ln-widget::after, .ops-widget::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  background:
+    radial-gradient(circle 320px at var(--sf-mx, 50%) var(--sf-my, -8%),
+      color-mix(in oklab, var(--sf-cyan) 55%, transparent) 0%,
+      color-mix(in oklab, var(--sf-blue) 34%, transparent) 30%,
+      color-mix(in oklab, var(--sf-violet) 16%, transparent) 55%,
+      transparent 76%);
+  transition: opacity 0.35s var(--vr-ease);
+}
+/* no tema CLARO o halo pousa sobre fundo claro e a mesma força vira uma mancha
+   azul chapada — a intensidade é por tema, como todo o resto do arquivo */
+:root:not([data-bs-theme=dark]) .card::after, :root:not([data-bs-theme=dark]) .ndm-card::after, :root:not([data-bs-theme=dark]) .fxo-widget::after,
+:root:not([data-bs-theme=dark]) .mc-card::after, :root:not([data-bs-theme=dark]) .otm-widget::after, :root:not([data-bs-theme=dark]) .ob-widget::after,
+:root:not([data-bs-theme=dark]) .ndfc-widget::after, :root:not([data-bs-theme=dark]) .ln-widget::after, :root:not([data-bs-theme=dark]) .ops-widget::after {
+  background:
+    radial-gradient(circle 320px at var(--sf-mx, 50%) var(--sf-my, -8%),
+      color-mix(in oklab, var(--sf-cyan) 30%, transparent) 0%,
+      color-mix(in oklab, var(--sf-blue) 18%, transparent) 32%,
+      transparent 74%);
+}
+[data-bs-theme=dark] .card::after, [data-bs-theme=dark] .ndm-card::after,
+[data-bs-theme=dark] .fxo-widget::after, [data-bs-theme=dark] .mc-card::after,
+[data-bs-theme=dark] .otm-widget::after, [data-bs-theme=dark] .ob-widget::after,
+[data-bs-theme=dark] .ndfc-widget::after, [data-bs-theme=dark] .ln-widget::after,
+[data-bs-theme=dark] .ops-widget::after {
+  background:
+    radial-gradient(circle 320px at var(--sf-mx, 50%) var(--sf-my, -8%),
+      color-mix(in oklab, var(--sf-cyan) 55%, transparent) 0%,
+      color-mix(in oklab, var(--sf-blue) 34%, transparent) 30%,
+      color-mix(in oklab, var(--sf-violet) 16%, transparent) 55%,
+      transparent 76%);
+}
+.card:hover::after, .ndm-card:hover::after, .fxo-widget:hover::after,
+.mc-card:hover::after, .otm-widget:hover::after, .ob-widget:hover::after,
+.ndfc-widget:hover::after, .ln-widget:hover::after, .ops-widget:hover::after {
+  opacity: 1;
+}
+.card:hover { box-shadow: var(--vr-card-shadow-hover); }
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   6. PAINEL DE TÍTULO — o "hero" de cada página
+   --------------------------------------------------------------------------
+   Cantos em esquadro (cogni), ponto pulsante de acento (glass-effect2) e o
+   breadcrumb virando micro-rótulo em pílula de vidro (pulsedesk).
+   ══════════════════════════════════════════════════════════════════════════ */
+.page-title-head {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--vr-card-radius);
+  border: 1px solid var(--vr-card-border);
+  background:
+    radial-gradient(62% 190% at 0% -10%, color-mix(in oklab, var(--sf-blue) 16%, transparent), transparent 62%),
+    radial-gradient(52% 190% at 100% -10%, color-mix(in oklab, var(--sf-violet) 12%, transparent), transparent 60%),
+    var(--vr-card-bg);
+  backdrop-filter: blur(var(--sf-glass-blur)) saturate(160%);
+  -webkit-backdrop-filter: blur(var(--sf-glass-blur)) saturate(160%);
+}
+/* cantos em esquadro — dois traços no canto superior esquerdo */
+.page-title-head::before {
+  content: "";
+  position: absolute;
+  top: 10px; left: 10px;
+  width: 14px; height: 14px;
+  border-top: 1px solid color-mix(in oklab, var(--sf-cyan) 60%, transparent);
+  border-left: 1px solid color-mix(in oklab, var(--sf-cyan) 60%, transparent);
+  pointer-events: none;
+}
+.page-title-head::after {
+  content: "";
+  position: absolute;
+  bottom: 10px; right: 10px;
+  width: 14px; height: 14px;
+  border-bottom: 1px solid color-mix(in oklab, var(--sf-violet) 55%, transparent);
+  border-right: 1px solid color-mix(in oklab, var(--sf-violet) 55%, transparent);
+  pointer-events: none;
+}
+/* título em gradiente vertical (as três referências fazem o mesmo) */
+.page-title-head h4 {
+  letter-spacing: -0.042em;
+  background: linear-gradient(180deg, var(--ins-body-color),
+              color-mix(in oklab, var(--ins-body-color) 58%, transparent));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+/* a barra de acento que o visual-refresh já desenha sob o título vira o traço
+   do "eyebrow" do cogni: mais longa, em gradiente, com o ponto pulsante ao lado */
+.page-title-head .flex-grow-1::after {
+  width: 72px; height: 2px;
+  background: var(--vr-grad);
+}
+/* breadcrumb = micro-rótulo em pílula de vidro */
+.page-title-head .breadcrumb {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.28rem 0.7rem !important;
+  border-radius: 999px;
+  border: 1px solid var(--sf-hair);
+  background: color-mix(in oklab, var(--vr-card-bg) 70%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  font-size: 0.63rem;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--sf-micro);
+}
+.page-title-head .breadcrumb .breadcrumb-item,
+.page-title-head .breadcrumb .breadcrumb-item a { color: inherit; }
+.page-title-head .breadcrumb .breadcrumb-item.active {
+  color: var(--ins-body-color);
+  font-weight: 600;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   7. TOPBAR — vidro fundo (pulsedesk: backdrop-blur-2xl) + fio de acento
+   ══════════════════════════════════════════════════════════════════════════ */
+.app-topbar {
+  background: color-mix(in oklab, var(--vr-page-bg) 62%, transparent) !important;
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border-bottom: 1px solid var(--sf-hair);
+  position: sticky;
+}
+/* fio de gradiente sob a topbar — a assinatura da marca no alto da tela */
+.app-topbar::after {
+  content: "";
+  position: absolute;
+  left: 0; right: 0; bottom: -1px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--sf-cyan) 18%,
+              var(--sf-blue) 46%, var(--sf-violet) 74%, transparent);
+  opacity: 0.55;
+  pointer-events: none;
+}
+/* pílulas de vidro nos itens da topbar (pulsedesk) */
+.app-topbar .nav-user .topbar-link,
+.app-topbar #megamenu-pages .topbar-link {
+  border-radius: 999px;
+  border: 1px solid var(--sf-hair);
+  background: color-mix(in oklab, var(--vr-card-bg) 60%, transparent);
+  transition: border-color 0.25s var(--vr-ease), background-color 0.25s var(--vr-ease),
+              transform 0.25s var(--vr-ease);
+}
+.app-topbar .nav-user .topbar-link:hover,
+.app-topbar #megamenu-pages .topbar-link:hover {
+  border-color: color-mix(in oklab, var(--sf-cyan) 46%, var(--sf-hair));
+  transform: translateY(-1px);
+}
+/* busca em pílula de vidro */
+.app-search .topbar-search {
+  border-radius: 999px !important;
+  background: color-mix(in oklab, var(--vr-card-bg) 70%, transparent) !important;
+  border: 1px solid var(--sf-hair) !important;
+}
+.app-search .topbar-search:focus {
+  border-color: color-mix(in oklab, var(--sf-cyan) 55%, var(--sf-hair)) !important;
+  box-shadow: 0 0 0 3px rgba(41, 197, 246, 0.16) !important;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   8. SIDENAV — vidro sobre o fundo líquido, nos DOIS temas
+   ══════════════════════════════════════════════════════════════════════════ */
+.sidenav-menu {
+  background: color-mix(in oklab, var(--vr-page-bg) 58%, transparent) !important;
+  backdrop-filter: blur(26px) saturate(170%);
+  -webkit-backdrop-filter: blur(26px) saturate(170%);
+  border-right: 1px solid var(--sf-hair);
+}
+[data-bs-theme=dark] .sidenav-menu {
+  background: color-mix(in oklab, var(--vr-page-bg) 55%, transparent) !important;
+}
+[data-bs-theme=dark] .sidenav-menu::before {
+  background: radial-gradient(80% 58% at 18% 0%,
+              color-mix(in oklab, var(--sf-blue) 20%, transparent), transparent 72%);
+}
+
+/* título de seção = "eyebrow" do cogni: traço curto + rótulo bem espaçado */
+.side-nav-title {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  font-size: 0.6rem !important;
+  font-weight: 600;
+  color: var(--sf-micro);
+  opacity: 1;
+}
+.side-nav-title::before {
+  content: "";
+  width: 14px; height: 1px;
+  flex: 0 0 auto;
+  background: var(--vr-grad);
+}
+
+/* item ativo: pílula de vidro com o fio de acento à esquerda */
+.side-nav .side-nav-item .side-nav-link {
+  border-radius: 12px;
+}
+.side-nav .side-nav-item .side-nav-link.active,
+.side-nav .side-nav-item.menuitem-active > .side-nav-link {
+  background: linear-gradient(100deg,
+              color-mix(in oklab, var(--sf-blue) 24%, transparent),
+              color-mix(in oklab, var(--sf-violet) 14%, transparent)) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.10);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   9. BOTÕES
+   --------------------------------------------------------------------------
+   O primário ganha o BRILHO QUE VARRE do cogni. Ele é feito com uma camada a
+   mais no background e `background-position`, e NÃO com um ::after + overflow
+   hidden: `.btn` hospeda badges posicionados para fora (o contador do sino é
+   um `.topbar-badge` com `top:-10px` dentro de um `.btn`), e recortar o botão
+   os decapitaria — some o número, sem erro nenhum.
+   ══════════════════════════════════════════════════════════════════════════ */
+.btn {
+  --vr-btn-radius: 12px;
+  border-radius: var(--vr-btn-radius);
+  letter-spacing: -0.005em;
+}
+
+.btn-primary {
+  background-image:
+    linear-gradient(100deg, transparent 32%, var(--sf-shine) 50%, transparent 68%),
+    var(--vr-grad);
+  background-size: 230% 100%, 100% 100%;
+  background-position: 135% 0, 0 0;
+  background-repeat: no-repeat;
+  border: none;
+  box-shadow: 0 6px 20px rgba(0, 123, 255, 0.30);
+  transition: background-position 0.75s var(--vr-ease),
+              box-shadow 0.25s var(--vr-ease),
+              transform 0.25s var(--vr-ease);
+}
+.btn-primary:hover,
+.btn-primary:focus {
+  background-position: -35% 0, 0 0;
+  box-shadow: 0 10px 30px rgba(0, 123, 255, 0.42);
+  transform: translateY(-1px);
+}
+
+/* toolbar em pílula (glass-effect2: o grupo de filtros; pulsedesk: os chips) */
+.btn-toolbar-all {
+  border-radius: 999px !important;
+  transition: transform 0.22s var(--vr-ease), filter 0.22s var(--vr-ease),
+              box-shadow 0.22s var(--vr-ease), background-color 0.22s var(--vr-ease);
+}
+.btn-toolbar-all:hover { transform: translateY(-1px) scale(1.03); }
+.btn-toolbar-all:active { transform: scale(0.97); }
+
+/* outline vira vidro (glass-effect2: `bg-white/5 border-white/10`) */
+.btn-outline-secondary,
+.btn-outline-primary,
+.btn-outline-dark,
+.btn-outline-light {
+  background-color: color-mix(in oklab, var(--vr-card-bg) 62%, transparent);
+  border-color: var(--sf-hair);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+/* anel de foco no ciano da marca — acessibilidade não é opcional */
+.btn:focus-visible,
+.form-control:focus,
+.form-select:focus {
+  box-shadow: 0 0 0 3px rgba(41, 197, 246, 0.22) !important;
+  border-color: color-mix(in oklab, var(--sf-cyan) 55%, var(--sf-hair)) !important;
+  outline: none;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   10. FORMULÁRIOS
+   ══════════════════════════════════════════════════════════════════════════ */
+.form-control, .form-select, .input-group-text {
+  border-radius: 10px;
+  border-color: var(--sf-hair);
+  background-color: color-mix(in oklab, var(--vr-card-bg) 55%, transparent);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   11. TABELAS — cabeçalho em micro-rótulo (as três referências concordam)
+   ══════════════════════════════════════════════════════════════════════════ */
+.table > thead th,
+.dt-scroll-head thead th,
+.dt-scroll-headInner thead th,
+.dataTables_scrollHeadInner thead th {
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: 600;
+  color: var(--sf-micro);
+}
+/* o campo de filtro NÃO herda o micro-rótulo do header (o texto digitado
+   sairia em caixa alta e espaçado) */
+.table thead th input,
+.dt-scroll-head thead th input {
+  text-transform: none;
+  letter-spacing: normal;
+  border-radius: 8px;
+}
+.table > tbody > tr { transition: background-color 0.18s var(--vr-ease); }
+.table > tbody > tr:hover > * {
+  background-color: color-mix(in oklab, var(--sf-cyan) 7%, transparent);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   12. BADGES E PONTOS DE STATUS — halo do pulsedesk
+   ══════════════════════════════════════════════════════════════════════════ */
+.badge {
+  letter-spacing: 0.03em;
+  font-weight: 600;
+}
+.badge.rounded-pill { padding-inline: 0.62rem; }
+.badge.bg-success, .badge.text-bg-success { box-shadow: 0 0 12px rgba(52, 211, 153, 0.30); }
+.badge.bg-danger,  .badge.text-bg-danger  { box-shadow: 0 0 12px rgba(239, 68, 68, 0.30); }
+.badge.bg-primary, .badge.text-bg-primary { box-shadow: 0 0 12px rgba(0, 123, 255, 0.32); }
+.badge.bg-info,    .badge.text-bg-info    { box-shadow: 0 0 12px rgba(41, 197, 246, 0.30); }
+
+/* barra de progresso na marca */
+.progress-bar { background-image: var(--vr-grad); background-color: transparent; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   13. BARRA DE ROLAGEM
+   ══════════════════════════════════════════════════════════════════════════ */
+* { scrollbar-color: color-mix(in oklab, var(--sf-blue) 45%, transparent) transparent; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+  background-color: color-mix(in oklab, var(--sf-blue) 42%, transparent);
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(in oklab, var(--sf-cyan) 62%, transparent);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   14. MOVIMENTO REDUZIDO — o fundo para de derivar, o resto continua legível
+   ══════════════════════════════════════════════════════════════════════════ */
+@media (prefers-reduced-motion: reduce) {
+  body::before { animation: none; }
+  .card::after { transition: none; }
+  .btn-primary { transition: box-shadow 0.2s ease; }
+  .btn-toolbar-all:hover { transform: none; }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   15. AMPLITUDE — a mão pesada
+   --------------------------------------------------------------------------
+   O que está acima repagina; o que está aqui é o que se VÊ da porta. São os
+   quatro gestos que as referências têm e um app de tabela normalmente não:
+   feixes de luz atravessando o fundo, título que cintila, tiles de ícone
+   acesos e a entrada dos cartões.
+
+   Uma restrição sustenta o bloco inteiro: NADA que anime `transform` num
+   elemento que hospede tabela. O DataTables mede coluna por coluna no init e
+   num segundo passe atrasado (CLAUDE §3, "alinhamento valor × coluna"), e um
+   cartão em movimento nessa janela é cabeçalho desalinhado do corpo — que não
+   dá erro nenhum e parece bug de tabela, nunca de animação. Por isso o cartão
+   entra só em OPACIDADE, e o translate fica no painel de título, que não tem
+   tabela dentro.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── 15.1 Feixes de luz (cogni: fumaça volumétrica · pulsedesk: light trails)
+   Segunda camada de fundo, à frente dos blobs e atrás do conteúdo. É uma
+   faixa de listas diagonais desfocadas, à deriva em contratempo com os blobs —
+   é o cruzamento das duas velocidades que dá a sensação de volume. */
+.wrapper::before {
+  content: "";
+  position: fixed;
+  inset: -30vmax;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.75;
+  background:
+    repeating-linear-gradient(
+      114deg,
+      transparent 0 6vmax,
+      color-mix(in oklab, var(--sf-cyan) 22%, transparent) 6vmax 6.7vmax,
+      transparent 6.7vmax 13vmax,
+      color-mix(in oklab, var(--sf-violet) 18%, transparent) 13vmax 13.5vmax,
+      transparent 13.5vmax 24vmax);
+  filter: blur(46px);
+  animation: sf-beams 44s linear infinite;
+  will-change: transform;
+}
+[data-bs-theme=dark] .wrapper::before { opacity: 1; }
+
+@keyframes sf-beams {
+  0%   { transform: translate3d(-6vw, -3vh, 0) rotate(0deg); }
+  50%  { transform: translate3d(6vw, 3vh, 0) rotate(1.5deg); }
+  100% { transform: translate3d(-6vw, -3vh, 0) rotate(0deg); }
+}
+
+/* ── 15.2 Painel de título: maior, com o texto cintilando no gradiente ────── */
+.page-title-head {
+  padding: 1.7rem 1.8rem !important;
+  margin-bottom: 1.5rem;
+  animation: sf-rise 0.7s var(--vr-ease) both;
+}
+.page-title-head h4 {
+  font-size: 2.35rem !important;
+  font-weight: 800 !important;
+  line-height: 1.05;
+  /* o gradiente da MARCA percorre o texto — o glass-effect2 faz o mesmo no
+     hero, e é o único lugar do app onde o título carrega a paleta inteira */
+  background: linear-gradient(100deg,
+              var(--ins-body-color) 0%,
+              var(--sf-cyan) 32%,
+              var(--sf-blue) 50%,
+              var(--sf-violet) 68%,
+              var(--ins-body-color) 100%);
+  background-size: 260% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: sf-shimmer 9s ease-in-out infinite;
+}
+/* ponto pulsante antes do bloco de título (glass-effect2: o status "ao vivo") */
+.page-title-head .flex-grow-1 {
+  padding-left: 1.15rem;
+}
+.page-title-head .flex-grow-1::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 0.6rem;
+  width: 8px; height: 8px;
+  border-radius: 999px;
+  background: var(--sf-cyan);
+  box-shadow: 0 0 0 0 rgba(41, 197, 246, 0.55);
+  animation: sf-pulse 2.4s ease-out infinite;
+}
+
+@keyframes sf-shimmer {
+  0%, 100% { background-position: 0% 0; }
+  50%      { background-position: 100% 0; }
+}
+@keyframes sf-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(41, 197, 246, 0.55); }
+  70%  { box-shadow: 0 0 0 10px rgba(41, 197, 246, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(41, 197, 246, 0); }
+}
+@keyframes sf-rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* ── 15.3 Entrada dos cartões — OPACIDADE apenas (ver a nota do bloco) ────── */
+@media (prefers-reduced-motion: no-preference) {
+  .content-page .card { animation: sf-fade 0.75s var(--vr-ease) both; }
+  .content-page .card:nth-of-type(1) { animation-delay: 0.04s; }
+  .content-page .card:nth-of-type(2) { animation-delay: 0.10s; }
+  .content-page .card:nth-of-type(3) { animation-delay: 0.16s; }
+  .content-page .card:nth-of-type(4) { animation-delay: 0.22s; }
+  .content-page .card:nth-of-type(n+5) { animation-delay: 0.28s; }
+}
+@keyframes sf-fade { from { opacity: 0; } to { opacity: 1; } }
+
+/* ── 15.4 Cartões: mais vidro, mais relevo, borda que acende ─────────────── */
+.card {
+  border-radius: 18px !important;
+  transition: box-shadow 0.35s var(--vr-ease), border-color 0.35s var(--vr-ease);
+}
+.card:hover {
+  border-color: color-mix(in oklab, var(--sf-cyan) 52%, var(--vr-card-border)) !important;
+}
+/* fio de gradiente no topo do cabeçalho do cartão */
+.card-header {
+  position: relative;
+  border-bottom: 1px solid var(--sf-hair) !important;
+}
+.card-header::after {
+  content: "";
+  position: absolute;
+  left: 1.4rem; right: 1.4rem; bottom: -1px;
+  height: 1px;
+  background: linear-gradient(90deg, var(--sf-cyan), var(--sf-blue) 40%,
+              var(--sf-violet) 72%, transparent);
+  opacity: 0;
+  transition: opacity 0.35s var(--vr-ease);
+}
+.card:hover .card-header::after { opacity: 0.9; }
+
+/* ── 15.5 Sidenav: tiles de ícone acesos ─────────────────────────────────── */
+.side-nav .side-nav-item .side-nav-link .menu-icon {
+  width: 32px; height: 32px;
+  border-radius: 10px;
+  background: var(--vr-grad);
+  box-shadow: 0 6px 18px rgba(0, 123, 255, 0.34),
+              inset 0 1px 0 rgba(255, 255, 255, 0.30);
+}
+.side-nav .side-nav-item .side-nav-link.active .menu-icon,
+.side-nav .side-nav-item.menuitem-active > .side-nav-link .menu-icon {
+  box-shadow: 0 8px 24px rgba(41, 197, 246, 0.55),
+              inset 0 1px 0 rgba(255, 255, 255, 0.40);
+}
+/* o item ativo ganha um halo, além do fio à esquerda que o refresh já desenha */
+.side-nav .side-nav-item .side-nav-link.active,
+.side-nav .side-nav-item.menuitem-active > .side-nav-link {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12),
+              0 6px 22px rgba(0, 123, 255, 0.20);
+}
+.side-nav .side-nav-item .side-nav-link.active::before,
+.side-nav .side-nav-item.menuitem-active > .side-nav-link::before {
+  width: 3px;
+  box-shadow: 0 0 12px var(--sf-cyan);
+}
+
+/* ── 15.6 Marca da topbar com brilho pulsante (cogni: animate-pulse-glow) ── */
+.app-topbar .logo-topbar img,
+.app-topbar .logo-topbar svg {
+  filter: drop-shadow(0 0 10px rgba(41, 197, 246, 0.35));
+}
+
+/* ── 15.7 Movimento reduzido: tudo o que se move aqui, para ───────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .wrapper::before { animation: none; }
+  .page-title-head { animation: none; }
+  .page-title-head h4 { animation: none; background-position: 0 0; }
+  .page-title-head .flex-grow-1::before { animation: none; }
+  .content-page .card { animation: none; }
+}
+
+/* ── 15.8 O grão (glass-effect2: .noise-overlay) ──────────────────────────
+   feTurbulence embutido como data-URI: nada de arquivo externo, nada de rede —
+   a instância do JPM não tem internet. Fica ATRÁS do conteúdo de propósito: na
+   referência ele cobre a página inteira, e sobre uma tabela densa isso custa
+   legibilidade antes de dar estilo. */
+.wrapper::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: var(--sf-noise-opacity);
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='sfn'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23sfn)'/%3E%3C/svg%3E");
+  background-size: 180px 180px;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   16. RESPIRO — o fundo líquido só existe se houver por onde vê-lo
+   --------------------------------------------------------------------------
+   O tema entrega `.content-page` com 0.75rem de padding lateral: o cartão
+   encosta na borda da tela e cobre a viewport inteira, então blob, feixe e
+   malha ficam atrás de uma placa opaca e o fundo não aparece em lugar nenhum.
+   As três referências fazem o oposto — conteúdo num contêiner com ar em volta,
+   flutuando sobre a luz. É isso que esta seção devolve.
+   ══════════════════════════════════════════════════════════════════════════ */
+.content-page {
+  padding-left: 1.5rem !important;
+  padding-right: 1.5rem !important;
+  padding-top: 1.5rem !important;
+}
+@media (max-width: 767.98px) {
+  .content-page { padding-left: 0.85rem !important; padding-right: 0.85rem !important; }
+}
+
+/* vidro mais fino: é a transparência que deixa a luz do fundo atravessar o
+   cartão. O borrão sobe junto — sem ele o texto da tabela disputaria com o
+   desenho de trás. */
+:root:not([data-bs-theme=dark])            { --vr-card-bg: rgba(255, 255, 255, 0.50); }
+[data-bs-theme=dark] { --vr-card-bg: rgba(255, 255, 255, 0.042); }
+
+/* ── 16.1 Aurora sob o painel de título ──────────────────────────────────
+   Uma faixa de cor larga atrás do topo do conteúdo — o gesto de abertura das
+   três referências. Fica no `.content-page::before` (o `::after` não é usado
+   por ninguém aqui, mas o `::before` é mais previsível para z-index). */
+.content-page::before {
+  content: "";
+  position: absolute;
+  top: -40px; left: -10%; right: -10%;
+  height: 460px;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(46% 100% at 22% 0%, color-mix(in oklab, var(--sf-cyan) 55%, transparent), transparent 68%),
+    radial-gradient(42% 100% at 62% 6%, color-mix(in oklab, var(--sf-blue) 48%, transparent), transparent 66%),
+    radial-gradient(40% 100% at 92% 0%, color-mix(in oklab, var(--sf-violet) 52%, transparent), transparent 66%);
+  filter: blur(26px);
+  opacity: 0.55;
+}
+[data-bs-theme=dark] .content-page::before { opacity: 0.75; }
+
+/* ── 16.2 Painel de título: fundo mais quente e halo externo ─────────────── */
+.page-title-head {
+  box-shadow: var(--vr-card-shadow),
+              0 0 60px -12px color-mix(in oklab, var(--sf-blue) 55%, transparent);
+}
+
+/* ── 16.3 Cabeçalho da tabela ─────────────────────────────────────────────
+   O --vr-thead-bg continua SÓLIDO, e não é descuido: ele é o fundo do header
+   sticky, e translúcido deixaria as linhas do corpo passando por baixo durante
+   a rolagem — o texto do header misturado com os valores (a nota está no fim
+   do visual-refresh.css). O tom é o composto de page-bg + card-bg do tema.
+   Aqui só se ajusta o TOM, para acompanhar a paleta nova. */
+:root:not([data-bs-theme=dark])                { --vr-thead-bg: #eef3fc; }
+[data-bs-theme=dark] { --vr-thead-bg: #0f1626; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   17. TELAS DE AUTENTICAÇÃO
+   --------------------------------------------------------------------------
+   Sign-in, sign-up, 2FA e lock screen estendem o base.html DIRETO — não têm
+   `.wrapper` nem `.content-page`, então nada das seções 4 e 16 as alcança:
+   os blobs do <body> ficam atrás de um painel branco opaco e a tela de entrada
+   do app é a única que não parece com o resto dele. É a primeira que a mesa vê.
+   ══════════════════════════════════════════════════════════════════════════ */
+/* mesma regra do `.wrapper`: sem z-index, senão o diálogo de qualquer tela de
+   auth (2FA, reset) nasceria embaixo do próprio backdrop */
+.auth-box {
+  position: relative;
+}
+/* feixes de luz, como no `.wrapper` */
+.auth-box::before {
+  content: "";
+  position: fixed;
+  inset: -30vmax;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.7;
+  background:
+    repeating-linear-gradient(
+      114deg,
+      transparent 0 6vmax,
+      color-mix(in oklab, var(--sf-cyan) 22%, transparent) 6vmax 6.7vmax,
+      transparent 6.7vmax 13vmax,
+      color-mix(in oklab, var(--sf-violet) 18%, transparent) 13vmax 13.5vmax,
+      transparent 13.5vmax 24vmax);
+  filter: blur(46px);
+  animation: sf-beams 44s linear infinite;
+}
+[data-bs-theme=dark] .auth-box::before { opacity: 1; }
+
+/* o painel do formulário vira vidro — é o que deixa a luz do fundo atravessar */
+.auth-box .auth-box-form {
+  background: color-mix(in oklab, var(--vr-card-bg) 88%, transparent) !important;
+  backdrop-filter: blur(28px) saturate(165%);
+  -webkit-backdrop-filter: blur(28px) saturate(165%);
+  box-shadow: 0 30px 70px -20px rgba(0, 60, 140, 0.35);
+}
+/* aurora atrás do painel, o mesmo gesto de abertura das outras telas */
+.auth-box .auth-box-form::before {
+  content: "";
+  position: absolute;
+  top: -12%; left: -30%; right: -30%;
+  height: 55%;
+  z-index: 0;
+  pointer-events: none;
+  filter: blur(30px);
+  opacity: 0.5;
+  background:
+    radial-gradient(50% 100% at 26% 0%, color-mix(in oklab, var(--sf-cyan) 62%, transparent), transparent 68%),
+    radial-gradient(46% 100% at 74% 8%, color-mix(in oklab, var(--sf-violet) 58%, transparent), transparent 68%);
+}
+[data-bs-theme=dark] .auth-box .auth-box-form::before { opacity: 0.7; }
+.auth-box .auth-box-form > * { position: relative; z-index: 1; }
+
+/* campo e botão da entrada no idioma StreamFlow */
+.auth-box .form-control {
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--vr-card-bg) 70%, transparent);
+  border: 1px solid var(--sf-hair);
+}
+.auth-box .btn-primary { border-radius: 999px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-box::before { animation: none; }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   18. GRÁFICOS
+   --------------------------------------------------------------------------
+   As cores de série NÃO se escrevem aqui em regra nenhuma: o `app.js` tem o
+   helper `ins(v)`, que lê `--ins-<v>` do :root:not([data-bs-theme=dark]) em tempo de execução, e as
+   páginas pedem `ins('chart-primary')`, `ins('chart-secondary')`,
+   `ins('chart-dark')` e `ins('chart-border-color')`. Reapontando os TOKENS, o
+   gráfico inteiro do app troca de paleta sem uma linha de JS — e continua
+   trocando sozinho quando o usuário vira o tema, que é o que o helper faz.
+
+   Escrever a cor em cada gráfico seria a segunda lista das mesmas cores, e ela
+   envelheceria calada no dia em que a marca mudasse.
+   ══════════════════════════════════════════════════════════════════════════ */
+:root:not([data-bs-theme=dark]) {
+  --ins-chart-primary: #007bff;
+  --ins-chart-primary-rgb: 0, 123, 255;
+  --ins-chart-secondary: #29c5f6;
+  --ins-chart-secondary-rgb: 41, 197, 246;
+  --ins-chart-dark: #8b5cf6;
+  --ins-chart-dark-rgb: 139, 92, 246;
+  --ins-chart-border-color: rgba(10, 22, 44, 0.10);
+}
+[data-bs-theme=dark] {
+  --ins-chart-primary: #29c5f6;
+  --ins-chart-primary-rgb: 41, 197, 246;
+  --ins-chart-secondary: #007bff;
+  --ins-chart-secondary-rgb: 0, 123, 255;
+  --ins-chart-dark: #a855f7;
+  --ins-chart-dark-rgb: 168, 85, 247;
+  --ins-chart-border-color: rgba(255, 255, 255, 0.09);
+}
+
+/* o cromo do gráfico — grade, eixos, legenda e tooltip — é CSS, e sem isto ele
+   fica no cinza do tema enquanto as séries já mudaram de paleta */
+.apexcharts-gridline,
+.apexcharts-xaxis-tick { stroke: var(--ins-chart-border-color) !important; }
+.apexcharts-text,
+.apexcharts-legend-text,
+.apexcharts-xaxis-label,
+.apexcharts-yaxis-label {
+  fill: var(--sf-micro) !important;
+  color: var(--sf-micro) !important;
+  letter-spacing: 0.02em;
+}
+.apexcharts-legend-marker { border-radius: 3px !important; }
+.apexcharts-tooltip,
+.apexcharts-tooltip.apexcharts-theme-light,
+.apexcharts-tooltip.apexcharts-theme-dark {
+  border-radius: 12px !important;
+  border: 1px solid var(--vr-card-border) !important;
+  background: color-mix(in oklab, var(--vr-page-bg) 88%, transparent) !important;
+  backdrop-filter: blur(18px) saturate(160%);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.28) !important;
+  color: var(--ins-body-color) !important;
+}
+.apexcharts-tooltip-title {
+  background: transparent !important;
+  border-bottom: 1px solid var(--vr-card-border) !important;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+/* barra e área ganham o brilho da marca */
+.apexcharts-bar-series .apexcharts-bar-area,
+.apexcharts-radialbar .apexcharts-datalabel-value { filter: none; }
+.apexcharts-canvas { border-radius: 12px; }
+
+/* Chart.js e ECharts, quando a página usa um deles: só o contêiner */
+canvas.chartjs-render-monitor,
+.echarts-container { border-radius: 12px; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   19. BOTÕES — a família inteira, não só o primário
+   --------------------------------------------------------------------------
+   O visual-refresh já dava sombra e lift; aqui cada variante ganha o GRADIENTE
+   e o halo da própria cor, que é o que as três referências fazem (o CTA nunca
+   é chapado). O brilho que varre é o mesmo mecanismo do primário — camada a
+   mais no background + `background-position` —, e pela mesma razão: `.btn`
+   hospeda badge posicionado para fora, então nada de `overflow: hidden`.
+   ══════════════════════════════════════════════════════════════════════════ */
+.btn-success, .btn-info, .btn-warning, .btn-danger,
+.btn-secondary, .btn-dark {
+  border: none;
+  background-repeat: no-repeat;
+  background-size: 230% 100%, 100% 100%;
+  background-position: 135% 0, 0 0;
+  transition: background-position 0.7s var(--vr-ease),
+              box-shadow 0.25s var(--vr-ease),
+              transform 0.25s var(--vr-ease),
+              filter 0.25s var(--vr-ease);
+}
+.btn-success:hover, .btn-info:hover, .btn-warning:hover, .btn-danger:hover,
+.btn-secondary:hover, .btn-dark:hover { background-position: -35% 0, 0 0; }
+
+.btn-success {
+  background-image: linear-gradient(100deg, transparent 32%, var(--sf-shine) 50%, transparent 68%),
+                    linear-gradient(105deg, #10b981, #34d399 55%, #06b6d4 100%);
+  box-shadow: 0 6px 20px rgba(16, 185, 129, 0.32);
+}
+.btn-info {
+  background-image: linear-gradient(100deg, transparent 32%, var(--sf-shine) 50%, transparent 68%),
+                    linear-gradient(105deg, #06b6d4, #29c5f6 55%, #3b82f6 100%);
+  box-shadow: 0 6px 20px rgba(41, 197, 246, 0.32);
+}
+.btn-warning {
+  background-image: linear-gradient(100deg, transparent 32%, var(--sf-shine) 50%, transparent 68%),
+                    linear-gradient(105deg, #f59e0b, #fbbf24 55%, #f97316 100%);
+  box-shadow: 0 6px 20px rgba(245, 158, 11, 0.32);
+}
+.btn-danger {
+  background-image: linear-gradient(100deg, transparent 32%, var(--sf-shine) 50%, transparent 68%),
+                    linear-gradient(105deg, #e11d48, #f43f5e 55%, #fb7185 100%);
+  box-shadow: 0 6px 20px rgba(225, 29, 72, 0.32);
+}
+.btn-secondary {
+  background-image: linear-gradient(100deg, transparent 32%, var(--sf-shine) 50%, transparent 68%),
+                    linear-gradient(105deg, #6366f1, #8b5cf6 55%, #a855f7 100%);
+  box-shadow: 0 6px 20px rgba(139, 92, 246, 0.30);
+}
+.btn-dark {
+  background-image: linear-gradient(100deg, transparent 32%, var(--sf-shine) 50%, transparent 68%),
+                    linear-gradient(105deg, #1e293b, #334155 55%, #0f172a 100%);
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.32);
+}
+
+/* variantes "soft" viram vidro tingido */
+.btn-soft-primary, .btn-soft-info, .btn-soft-success,
+.btn-soft-danger, .btn-soft-warning, .btn-soft-secondary {
+  border: 1px solid var(--sf-hair);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+/* BOTÕES DE AÇÃO DA LINHA — a geometria é intocável.
+   O CLAUDE §3 trava o squircle em 32×32 com min/max nos DOIS eixos, padding 0
+   e raio 10px: mexer no tamanho aqui desalinharia a coluna Actions do app
+   inteiro. O que se acrescenta é só o HALO da cor, que não mede nada. */
+.ops-row-act, .btn-row-edit, .btn-row-delete, .btn-row-confirm, .btn-row-send,
+.btn-row-approve, .acc-act-edit, .acc-act-send, .acc-act-del, .ops-row-del,
+.ar-confirm, .ar-edit, .ar-delete, .btn-rd-edit, .btn-rd-confirm, .btn-rd-delete {
+  transition: box-shadow 0.22s var(--vr-ease), filter 0.22s var(--vr-ease);
+}
+.ops-row-act:hover, .btn-row-edit:hover, .btn-row-delete:hover,
+.btn-row-confirm:hover, .btn-row-send:hover, .btn-row-approve:hover,
+.acc-act-edit:hover, .acc-act-send:hover, .acc-act-del:hover, .ops-row-del:hover,
+.ar-confirm:hover, .ar-edit:hover, .ar-delete:hover,
+.btn-rd-edit:hover, .btn-rd-confirm:hover, .btn-rd-delete:hover {
+  filter: brightness(1.12) saturate(1.12);
+  box-shadow: 0 0 0 3px color-mix(in oklab, currentColor 22%, transparent);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   20. O RESTO DOS COMPONENTES
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* — abas — */
+.nav-tabs { border-bottom: 1px solid var(--sf-hair); gap: 0.25rem; }
+.nav-tabs .nav-link {
+  border: none !important;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  letter-spacing: 0.02em;
+  color: var(--sf-micro);
+  transition: background-color 0.22s var(--vr-ease), color 0.22s var(--vr-ease);
+}
+.nav-tabs .nav-link:hover { background: color-mix(in oklab, var(--vr-card-bg) 70%, transparent); }
+.nav-tabs .nav-link.active {
+  color: #fff !important;
+  background: var(--vr-grad) !important;
+  box-shadow: 0 6px 18px rgba(0, 123, 255, 0.30);
+}
+.nav-pills .nav-link.active { background: var(--vr-grad) !important; border-radius: 999px; }
+
+/* — paginação (inclusive a do DataTables) — */
+.pagination .page-link,
+.dt-paging .dt-paging-button {
+  border: 1px solid transparent !important;
+  border-radius: 10px !important;
+  color: var(--sf-micro) !important;
+  background: transparent !important;
+  transition: background-color 0.2s var(--vr-ease), color 0.2s var(--vr-ease);
+}
+.pagination .page-link:hover,
+.dt-paging .dt-paging-button:hover {
+  background: color-mix(in oklab, var(--vr-card-bg) 80%, transparent) !important;
+  color: var(--ins-body-color) !important;
+}
+.pagination .page-item.active .page-link,
+.dt-paging .dt-paging-button.current {
+  background: var(--vr-grad) !important;
+  color: #fff !important;
+  border-color: transparent !important;
+  box-shadow: 0 4px 14px rgba(0, 123, 255, 0.32);
+}
+
+/* — dropdowns — */
+.dropdown-menu { padding: 0.4rem; }
+.dropdown-item {
+  border-radius: 9px;
+  transition: background-color 0.18s var(--vr-ease), transform 0.18s var(--vr-ease);
+}
+.dropdown-item:hover, .dropdown-item:focus {
+  background: color-mix(in oklab, var(--sf-blue) 14%, transparent);
+  transform: translateX(2px);
+}
+.dropdown-divider { border-color: var(--sf-hair); }
+
+/* — modais e offcanvas — */
+.modal-content { border-radius: 20px !important; }
+.modal-header, .offcanvas-header { border-bottom: 1px solid var(--sf-hair); }
+.modal-footer { border-top: 1px solid var(--sf-hair); }
+.modal-backdrop.show {
+  background: radial-gradient(60% 60% at 50% 40%,
+              color-mix(in oklab, var(--sf-blue) 26%, #04070f), #04070f);
+  opacity: 0.72;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+/* — alertas — */
+.alert {
+  border-radius: 14px;
+  border: 1px solid var(--sf-hair);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+/* — SweetAlert2 (o diálogo padrão do app) — */
+.swal2-popup { border-radius: 20px !important; }
+.swal2-container.swal2-backdrop-show {
+  background: radial-gradient(60% 60% at 50% 40%,
+              color-mix(in oklab, var(--sf-blue) 22%, rgba(4, 7, 15, 0.86)),
+              rgba(4, 7, 15, 0.86)) !important;
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+}
+.swal2-styled.swal2-confirm {
+  border-radius: 999px !important;
+  background-image: var(--vr-grad) !important;
+  box-shadow: 0 6px 20px rgba(0, 123, 255, 0.32) !important;
+}
+.swal2-styled.swal2-cancel { border-radius: 999px !important; }
+
+/* — switches e checkboxes na cor da marca — */
+.form-check-input:checked {
+  background-color: var(--sf-blue);
+  border-color: var(--sf-blue);
+  box-shadow: 0 0 10px rgba(0, 123, 255, 0.35);
+}
+
+/* — tooltips — */
+.tooltip-inner {
+  border-radius: 10px;
+  padding: 0.35rem 0.6rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.02em;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+/* — os widgets de resumo das telas de liquidação —
+   `background-color`, e NUNCA o atalho `background`. O atalho zera o
+   `background-image` junto, e o cartão de TOTAL destas telas tem exatamente aí
+   a sua identidade: `.ops-recon--total` declara
+   `linear-gradient(135deg,#0066cc,#34369b)` e pinta o texto de branco em cima.
+   Como esta regra tem a mesma especificidade da da página (uma classe) e vem
+   num arquivo posterior, o atalho vencia e apagava o gradiente — o texto
+   branco ficava sobre o fundo de cartão comum, ilegível. O mesmo erro que o
+   §31 já tinha documentado no `.card` do Comitente, cometido de novo aqui. */
+.otm-widget, .ob-widget, .ndfc-widget, .ln-widget, .ops-widget,
+.ndm-card, .fxo-widget, .mc-card {
+  border-radius: 16px;
+  border: 1px solid var(--vr-card-border);
+  background-color: var(--vr-card-bg);
+  backdrop-filter: blur(var(--sf-glass-blur)) saturate(160%);
+  -webkit-backdrop-filter: blur(var(--sf-glass-blur)) saturate(160%);
+  transition: box-shadow 0.3s var(--vr-ease), border-color 0.3s var(--vr-ease);
+}
+.otm-widget:hover, .ob-widget:hover, .ndfc-widget:hover, .ln-widget:hover,
+.ops-widget:hover, .ndm-card:hover, .fxo-widget:hover, .mc-card:hover {
+  border-color: color-mix(in oklab, var(--sf-cyan) 48%, var(--vr-card-border));
+  box-shadow: var(--vr-card-shadow-hover);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   21. BADGES PILL DE STATUS
+   --------------------------------------------------------------------------
+   O status é a coluna que a mesa lê primeiro, e no app ele é sempre um
+   `badge rounded-pill ... bg-gradient` (regra do padrão de tabela, CLAUDE §3).
+   O `.bg-gradient` do Bootstrap é um véu branco chapado; aqui cada variante
+   ganha o gradiente da PRÓPRIA cor mais o halo — o mesmo tratamento dos
+   chips de status do pulsedesk.
+
+   As duas famílias de classe são cobertas de propósito: o app usa `text-bg-*`
+   nas telas novas e `bg-*` nas antigas, e pegar só uma deixaria metade dos
+   status com o desenho anterior — divergência que não dá erro nenhum e
+   aparece como "essa tela é de outro app".
+   ══════════════════════════════════════════════════════════════════════════ */
+.badge {
+  border-radius: 999px;
+  padding: 0.34em 0.72em;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.035em;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.18);
+  transition: box-shadow 0.22s var(--vr-ease), filter 0.22s var(--vr-ease);
+}
+.badge:hover { filter: brightness(1.08) saturate(1.08); }
+
+.badge.bg-success, .badge.text-bg-success {
+  background-image: linear-gradient(105deg, #059669, #10b981 52%, #34d399 100%) !important;
+  color: #fff !important;
+  box-shadow: 0 2px 10px rgba(16, 185, 129, 0.38), inset 0 1px 0 rgba(255,255,255,0.22);
+}
+.badge.bg-danger, .badge.text-bg-danger {
+  background-image: linear-gradient(105deg, #be123c, #e11d48 52%, #fb7185 100%) !important;
+  color: #fff !important;
+  box-shadow: 0 2px 10px rgba(225, 29, 72, 0.38), inset 0 1px 0 rgba(255,255,255,0.22);
+}
+.badge.bg-warning, .badge.text-bg-warning {
+  background-image: linear-gradient(105deg, #d97706, #f59e0b 52%, #fbbf24 100%) !important;
+  color: #241503 !important;
+  text-shadow: none;
+  box-shadow: 0 2px 10px rgba(245, 158, 11, 0.38), inset 0 1px 0 rgba(255,255,255,0.30);
+}
+.badge.bg-info, .badge.text-bg-info {
+  background-image: linear-gradient(105deg, #0891b2, #29c5f6 52%, #67e8f9 100%) !important;
+  color: #04222b !important;
+  text-shadow: none;
+  box-shadow: 0 2px 10px rgba(41, 197, 246, 0.38), inset 0 1px 0 rgba(255,255,255,0.30);
+}
+.badge.bg-primary, .badge.text-bg-primary {
+  background-image: linear-gradient(105deg, #0062cc, #007bff 52%, #4da3ff 100%) !important;
+  color: #fff !important;
+  box-shadow: 0 2px 10px rgba(0, 123, 255, 0.40), inset 0 1px 0 rgba(255,255,255,0.22);
+}
+.badge.bg-secondary, .badge.text-bg-secondary {
+  background-image: linear-gradient(105deg, #4f46e5, #8b5cf6 52%, #a855f7 100%) !important;
+  color: #fff !important;
+  box-shadow: 0 2px 10px rgba(139, 92, 246, 0.38), inset 0 1px 0 rgba(255,255,255,0.22);
+}
+.badge.bg-dark, .badge.text-bg-dark {
+  background-image: linear-gradient(105deg, #0f172a, #1e293b 52%, #334155 100%) !important;
+  color: #e2e8f0 !important;
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.42), inset 0 1px 0 rgba(255,255,255,0.14);
+}
+.badge.bg-light, .badge.text-bg-light {
+  background-image: linear-gradient(105deg, #e2e8f0, #f1f5f9 52%, #ffffff 100%) !important;
+  color: #0f172a !important;
+  text-shadow: none;
+  border-color: rgba(10, 22, 44, 0.12);
+}
+/* o "Sent" do New Deals/Intrag/Accrual/MtM é definido no <style> do head-css,
+   com !important; aqui ele só recebe o gradiente e o halo da própria cor. */
+.badge.badge-sent {
+  background-image: linear-gradient(105deg, #0e7490, #17a2b8 52%, #22d3ee 100%) !important;
+  box-shadow: 0 2px 10px rgba(23, 162, 184, 0.38), inset 0 1px 0 rgba(255,255,255,0.22);
+}
+/* badge "soft" (fundo tingido, texto na cor) vira vidro tingido */
+.badge[class*="bg-"][class*="-subtle"] {
+  border-color: var(--sf-hair);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  text-shadow: none;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   22. PAINEL DE TÍTULO — as duas correções que só o print mostrou
+   --------------------------------------------------------------------------
+   O `.flex-grow-1` do painel NÃO tem a mesma forma em toda página: no Reference
+   Data ele guarda só o <h4>, e no New Deals guarda um ÍCONE ao lado do título,
+   em linha. Nas páginas de ícone o bloco é um container flex — e aí a barra de
+   acento, que o visual-refresh desenha como `display:block` no `::after`, deixa
+   de ficar SOB o título e vira mais um item de flex, aparecendo como um traço
+   solto à direita do nome.
+
+   As duas marcas passam a ser ABSOLUTAS: fora do fluxo, elas não são item de
+   flex em lugar nenhum e caem no mesmo lugar nas duas formas de painel.
+   ══════════════════════════════════════════════════════════════════════════ */
+.page-title-head .flex-grow-1 {
+  padding-bottom: 0.95rem;
+}
+.page-title-head .flex-grow-1::after {
+  position: absolute;
+  left: 1.15rem;
+  bottom: 0.1rem;
+  margin-top: 0;
+}
+/* o ponto no eixo do título (2.35rem de altura), não no topo do bloco */
+.page-title-head .flex-grow-1::before {
+  top: 1.15rem;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   23. AS PÁGINAS COM SUPERFÍCIE PRÓPRIA
+   --------------------------------------------------------------------------
+   Boa parte do app NÃO usa `.card` para o painel principal: cada tela batizou
+   a própria classe (`sc-widget`, `ln-widget`, `ops-widget`, `cp-card`,
+   `mc-item`, `ob-panel`, `acc-stat`, `smart-filter-wrapper`…) e estilizou fundo,
+   borda e raio no `<style>` da página. Nessas telas o StreamFlow chegava só
+   pelo que é global — fundo líquido, painel de título, breadcrumb, botões e
+   badges do Bootstrap — e a SUPERFÍCIE continuava com o desenho antigo. Era a
+   tela pela metade.
+
+   O levantamento que gerou esta seção: varrer os `<style>` de
+   `apps/templates/pages/` atrás de regra com raio ≥ 10px + `background` +
+   `padding` (a assinatura de um contêiner, não de um chip ou de um ícone).
+   Refazer quando surgir tela nova com superfície própria.
+
+   Duas decisões que evitam estrago:
+
+   · onde a família é previsível, o alvo é ESTRUTURAL (`div[class*="-widget"]`),
+     e não uma lista de nomes: assim a próxima tela com um `xyz-widget` já nasce
+     coberta. O prefixo `div` não é enfeite — sem ele, `[class*="-card"]`
+     casaria com o ícone `<i class="ti ti-credit-card">` do Tabler e o
+     transformaria num painel de vidro. E o `:not([class*="__"])` tira os
+     sub-elementos BEM (`cp-card__icon`, `mc-item__ops`), que são ícone e chip
+     dentro do painel, não o painel.
+
+   · `-item` e `-menu` NÃO entram na regra estrutural: casariam com
+     `.dropdown-item`, `.breadcrumb-item`, `.list-group-item`, `.topbar-menu` e
+     `.sidenav-menu`. Esses vão por nome, um a um.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── 23.1 Painéis: vidro, com a mesma física do `.card` ─────────────────── */
+div[class*="-widget"]:not([class*="__"]):not(.row),
+div[class*="-card"]:not([class*="__"]):not(.row),
+div[class*="-panel"]:not([class*="__"]):not(.row),
+div[class*="-tile"]:not([class*="__"]):not(.row),
+.mc-item, .ob-item, .cp-ce-item, .ei-type-item, .map-type-item, .fi-tpl-item,
+.ei-doc-row, .ei-up-block, .fi-block, .fi-tpl-pair, .nop-preview,
+.pa-user, .pa-role, .pa-summary, .cp-acc-row, .cp-glass,
+.acc-stat, .acc-tcard, .acc-datecard, .qt-card, .pcm-mini, .ab-feat, .ab-info {
+  border-radius: 16px;
+  border: 1px solid var(--vr-card-border);
+  background-color: var(--vr-card-bg);
+  backdrop-filter: blur(var(--sf-glass-blur)) saturate(160%);
+  -webkit-backdrop-filter: blur(var(--sf-glass-blur)) saturate(160%);
+  box-shadow: var(--vr-card-shadow);
+  transition: box-shadow 0.3s var(--vr-ease), border-color 0.3s var(--vr-ease);
+}
+div[class*="-widget"]:not([class*="__"]):not(.row):hover,
+div[class*="-card"]:not([class*="__"]):not(.row):hover,
+div[class*="-panel"]:not([class*="__"]):not(.row):hover,
+.mc-item:hover, .ob-item:hover, .cp-ce-item:hover, .ei-type-item:hover,
+.map-type-item:hover, .fi-tpl-item:hover, .ei-doc-row:hover, .fi-block:hover,
+.pa-user:hover, .pa-role:hover, .cp-acc-row:hover, .acc-stat:hover,
+.acc-tcard:hover, .qt-card:hover, .pcm-mini:hover {
+  border-color: color-mix(in oklab, var(--sf-cyan) 48%, var(--vr-card-border));
+  box-shadow: var(--vr-card-shadow-hover);
+}
+
+/* ── 23.2 Spotlight nesses painéis também ────────────────────────────────
+   As TILES do about ficam de fora: o `.ab-tile-blue` tem `::before` e `::after`
+   PRÓPRIOS na página (o desenho do bloco azul), e sobrescrevê-los apagaria a
+   arte da tela — o único caso do app em que a classe de painel já usa os dois
+   pseudos. */
+div[class*="-widget"]:not([class*="__"]):not(.row),
+div[class*="-card"]:not([class*="__"]):not(.row),
+div[class*="-panel"]:not([class*="__"]):not(.row),
+.mc-item, .ob-item, .cp-ce-item, .ei-type-item, .map-type-item, .fi-tpl-item,
+.ei-doc-row, .fi-block, .pa-user, .pa-role, .cp-acc-row,
+.acc-stat, .acc-tcard, .qt-card, .pcm-mini { position: relative; }
+
+div[class*="-widget"]:not([class*="__"]):not(.row)::after,
+div[class*="-card"]:not([class*="__"]):not(.row)::after,
+div[class*="-panel"]:not([class*="__"]):not(.row)::after,
+.mc-item::after, .ob-item::after, .cp-ce-item::after, .ei-type-item::after,
+.map-type-item::after, .fi-tpl-item::after, .ei-doc-row::after,
+.fi-block::after, .pa-user::after, .pa-role::after, .cp-acc-row::after,
+.acc-stat::after, .acc-tcard::after, .qt-card::after, .pcm-mini::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.35s var(--vr-ease);
+  background:
+    radial-gradient(circle 320px at var(--sf-mx, 50%) var(--sf-my, -8%),
+      color-mix(in oklab, var(--sf-cyan) 30%, transparent) 0%,
+      color-mix(in oklab, var(--sf-blue) 18%, transparent) 32%,
+      transparent 74%);
+}
+[data-bs-theme=dark] div[class*="-widget"]:not([class*="__"]):not(.row)::after,
+[data-bs-theme=dark] div[class*="-card"]:not([class*="__"]):not(.row)::after,
+[data-bs-theme=dark] div[class*="-panel"]:not([class*="__"]):not(.row)::after,
+[data-bs-theme=dark] .mc-item::after, [data-bs-theme=dark] .ob-item::after,
+[data-bs-theme=dark] .cp-ce-item::after, [data-bs-theme=dark] .ei-type-item::after,
+[data-bs-theme=dark] .map-type-item::after, [data-bs-theme=dark] .fi-tpl-item::after,
+[data-bs-theme=dark] .ei-doc-row::after, [data-bs-theme=dark] .fi-block::after,
+[data-bs-theme=dark] .pa-user::after, [data-bs-theme=dark] .pa-role::after,
+[data-bs-theme=dark] .cp-acc-row::after, [data-bs-theme=dark] .acc-stat::after,
+[data-bs-theme=dark] .acc-tcard::after, [data-bs-theme=dark] .qt-card::after,
+[data-bs-theme=dark] .pcm-mini::after {
+  background:
+    radial-gradient(circle 320px at var(--sf-mx, 50%) var(--sf-my, -8%),
+      color-mix(in oklab, var(--sf-cyan) 55%, transparent) 0%,
+      color-mix(in oklab, var(--sf-blue) 34%, transparent) 30%,
+      color-mix(in oklab, var(--sf-violet) 16%, transparent) 55%,
+      transparent 76%);
+}
+div[class*="-widget"]:not([class*="__"]):not(.row):hover::after,
+div[class*="-card"]:not([class*="__"]):not(.row):hover::after,
+div[class*="-panel"]:not([class*="__"]):not(.row):hover::after,
+.mc-item:hover::after, .ob-item:hover::after, .cp-ce-item:hover::after,
+.ei-type-item:hover::after, .map-type-item:hover::after, .fi-tpl-item:hover::after,
+.ei-doc-row:hover::after, .fi-block:hover::after, .pa-user:hover::after,
+.pa-role:hover::after, .cp-acc-row:hover::after, .acc-stat:hover::after,
+.acc-tcard:hover::after, .qt-card:hover::after, .pcm-mini:hover::after {
+  opacity: 1;
+}
+
+/* ── 23.3 Heros das telas que têm um ─────────────────────────────────────── */
+.dash-hero, .pcm-hero, .ab-hero {
+  border-radius: 20px;
+  box-shadow: var(--vr-card-shadow),
+              0 0 70px -14px color-mix(in oklab, var(--sf-blue) 55%, transparent);
+}
+
+/* ── 23.4 Zonas de upload ────────────────────────────────────────────────── */
+div[class*="-dropzone"], .upload-zone, .ob-req-drop, .cp-dz-list, .pr-dz-list,
+.hc-dz-file, .mc-docs {
+  border-radius: 16px;
+  border: 1px dashed color-mix(in oklab, var(--sf-cyan) 42%, var(--vr-card-border));
+  background-color: color-mix(in oklab, var(--vr-card-bg) 70%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transition: border-color 0.25s var(--vr-ease), background-color 0.25s var(--vr-ease);
+}
+div[class*="-dropzone"]:hover, .upload-zone:hover, .ob-req-drop:hover {
+  border-color: var(--sf-cyan);
+  background-color: color-mix(in oklab, var(--sf-cyan) 10%, transparent);
+}
+
+/* ── 23.5 Campos de data e chips das barras de ferramentas ───────────────── */
+div[class*="-datewrap"], .date-wrap, .live-datewrap {
+  border-radius: 999px;
+  border: 1px solid var(--sf-hair);
+  background-color: color-mix(in oklab, var(--vr-card-bg) 72%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+div[class*="-chip"]:not([class*="-chips"]), span[class*="-chip"]:not([class*="-chips"]), .ndm-soon-pill, .ops-recon-badge,
+.smart-filter-chip {
+  border-radius: 999px !important;
+  border: 1px solid var(--sf-hair);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  letter-spacing: 0.02em;
+}
+
+/* ── 23.6 Smart filter — a barra de busca de 22 telas ────────────────────── */
+.smart-filter-wrapper {
+  border-radius: 999px;
+  border: 1px solid var(--sf-hair);
+  background-color: color-mix(in oklab, var(--vr-card-bg) 76%, transparent);
+  backdrop-filter: blur(14px) saturate(160%);
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+  transition: border-color 0.25s var(--vr-ease), box-shadow 0.25s var(--vr-ease);
+}
+.smart-filter-wrapper:focus-within {
+  border-color: color-mix(in oklab, var(--sf-cyan) 55%, var(--sf-hair));
+  box-shadow: 0 0 0 3px rgba(41, 197, 246, 0.16);
+}
+.smart-filter-dropdown {
+  border-radius: 14px;
+  border: 1px solid var(--vr-card-border);
+  background-color: var(--vr-card-bg);
+  backdrop-filter: blur(var(--sf-glass-blur)) saturate(160%);
+  -webkit-backdrop-filter: blur(var(--sf-glass-blur)) saturate(160%);
+  box-shadow: var(--vr-card-shadow);
+}
+
+/* ── 23.7 Menus e botões que as páginas escreveram por conta ─────────────── */
+.acc-drop, .acc-cols-menu, .ei-combo-menu, .qt-combo__menu, .ob-cols-menu,
+.mc-cols-menu, .cp-dz-list {
+  border-radius: 14px;
+  border: 1px solid var(--vr-card-border);
+  background-color: var(--vr-card-bg);
+  backdrop-filter: blur(var(--sf-glass-blur)) saturate(160%);
+  -webkit-backdrop-filter: blur(var(--sf-glass-blur)) saturate(160%);
+  box-shadow: var(--vr-card-shadow);
+}
+.acc-btn, .acc-load-btn, .cp-run-btn, .ab-btn-w, .ab-btn-o, .ob-mass {
+  border-radius: 999px;
+  transition: transform 0.22s var(--vr-ease), filter 0.22s var(--vr-ease),
+              box-shadow 0.22s var(--vr-ease);
+}
+.acc-btn:hover, .acc-load-btn:hover, .cp-run-btn:hover,
+.ab-btn-w:hover, .ab-btn-o:hover, .ob-mass:hover {
+  transform: translateY(-1px) scale(1.02);
+  filter: brightness(1.06) saturate(1.05);
+}
+.cp-run-btn {
+  background-image: var(--vr-grad) !important;
+  border: none !important;
+  color: #fff !important;
+  box-shadow: 0 6px 20px rgba(0, 123, 255, 0.32);
+}
+
+/* ── 23.8 Inputs próprios das páginas ────────────────────────────────────── */
+.acc-date-input, .acc-comment-inp, .acc-edit-inp, .ops-cell-inp, .ops-status-sel,
+.acc-tool-select, .ob-fld, .fi-src-value {
+  border-radius: 10px;
+  border: 1px solid var(--sf-hair);
+  background-color: color-mix(in oklab, var(--vr-card-bg) 60%, transparent);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   24. BOTÕES "SOFT" — o hover que apagava o texto
+   --------------------------------------------------------------------------
+   O `visual-refresh.css` (§"Botões soft/light") troca o FUNDO do hover por um
+   mix claro — `color-mix(… var(--vr-accent-2) 8%, var(--vr-card-bg))` — e não
+   declara `color`. O Bootstrap continua mandando o seu
+   `--ins-btn-hover-color: #fff`, e o resultado é texto BRANCO sobre fundo
+   quase branco: o rótulo some por completo no hover (o "Columns" da barra de
+   ferramentas, em toda tela que tem a barra).
+
+   O defeito é ANTERIOR ao StreamFlow — medi com esta folha desativada e ele
+   está lá igual. A paleta nova só o tornou visível: o `--vr-card-bg` claro
+   passou de 0.74 para 0.50 de alfa e o acento ficou mais claro, então o fundo
+   do hover subiu de "cinza claro" para "quase branco".
+
+   A correção mora aqui, e não lá, porque é esta a camada de desenho da branch —
+   e ela declara os DOIS lados do par (fundo e cor), que é justamente o que
+   faltava. Sempre que uma regra troca o fundo de um estado, ela responde
+   também pela cor do texto daquele estado.
+   ══════════════════════════════════════════════════════════════════════════ */
+.btn-light, .btn-soft-primary, .btn-soft-secondary, .btn-soft-info,
+.btn-soft-success, .btn-soft-danger, .btn-soft-warning, .btn-soft-dark {
+  color: var(--ins-body-color);
+}
+.btn-light:hover, .btn-light:focus, .btn-light:active,
+.btn-soft-primary:hover, .btn-soft-primary:focus, .btn-soft-primary:active,
+.btn-soft-secondary:hover, .btn-soft-secondary:focus, .btn-soft-secondary:active,
+.btn-soft-info:hover, .btn-soft-info:focus, .btn-soft-info:active,
+.btn-soft-success:hover, .btn-soft-success:focus, .btn-soft-success:active,
+.btn-soft-danger:hover, .btn-soft-danger:focus, .btn-soft-danger:active,
+.btn-soft-warning:hover, .btn-soft-warning:focus, .btn-soft-warning:active,
+.btn-soft-dark:hover, .btn-soft-dark:focus, .btn-soft-dark:active {
+  /* o par completo: fundo de vidro tingido + texto do corpo, nos dois temas */
+  color: var(--ins-body-color) !important;
+  background-color: color-mix(in oklab, var(--sf-cyan) 16%, var(--vr-card-bg)) !important;
+  border-color: color-mix(in oklab, var(--sf-cyan) 50%, var(--vr-card-border)) !important;
+}
+/* o mesmo par no estado ABERTO do dropdown — o Columns fica aberto enquanto o
+   menu está na tela, e sem isto o rótulo sumiria justamente aí */
+.btn-light.show, .btn-soft-primary.show, .btn-soft-secondary.show,
+.btn-soft-info.show, .btn-soft-success.show, .btn-soft-danger.show,
+.btn-soft-warning.show, .btn-soft-dark.show {
+  color: var(--ins-body-color) !important;
+  background-color: color-mix(in oklab, var(--sf-cyan) 20%, var(--vr-card-bg)) !important;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   25. O VIDRO NO TEMA CLARO
+   --------------------------------------------------------------------------
+   No escuro o vidro é bonito por CONTRASTE: o painel é quase preto, a luz
+   atrás é saturada, e a borda clara de 1px desenha a aresta. No claro nada
+   disso acontecia — o fundo (#dfe8f7) estava quase da cor do painel branco, a
+   borda sumia contra os dois e o `backdrop-filter` não tinha o que refratar.
+   O resultado é o que se vê: uma tela lavada, sem profundidade.
+
+   Vidro não é transparência, é ARESTA + REFRAÇÃO + SOMBRA. As quatro medidas
+   abaixo devolvem as três no claro:
+
+     1. o fundo desce e satura, para o painel claro ter de que se destacar;
+     2. os blobs sobem de intensidade, para haver COR atravessando o painel;
+     3. a aresta passa a ser dupla — um filete branco POR DENTRO da borda
+        (`inset 0 1px 0`) é o que faz uma superfície parecer vidro e não papel;
+     4. a sombra fica mais funda e ganha um tom azul, em vez do cinza neutro
+        que se confunde com o fundo.
+   ══════════════════════════════════════════════════════════════════════════ */
+:root:not([data-bs-theme=dark]) {
+  /* 1 — fundo mais fundo e mais azul: o painel claro precisa de contraste */
+  --vr-page-bg: #ccd9ee;
+
+  /* 2 — cor de verdade atravessando o vidro */
+  --sf-blob-a: rgba(0, 110, 255, 0.72);
+  --sf-blob-b: rgba(139, 92, 246, 0.62);
+  --sf-blob-c: rgba(41, 197, 246, 0.70);
+  --sf-grid-line: rgba(10, 22, 44, 0.070);
+
+  /* 3 + 4 — aresta dupla e sombra azulada com profundidade */
+  --vr-card-bg: rgba(255, 255, 255, 0.62);
+  --vr-card-border: rgba(255, 255, 255, 0.85);
+  --vr-card-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    inset 0 0 0 1px rgba(10, 40, 90, 0.055),
+    0 1px 2px rgba(16, 40, 90, 0.06),
+    0 14px 34px -8px rgba(16, 40, 90, 0.18);
+  --vr-card-shadow-hover:
+    inset 0 1px 0 rgba(255, 255, 255, 1),
+    inset 0 0 0 1px rgba(0, 123, 255, 0.16),
+    0 2px 6px rgba(16, 40, 90, 0.07),
+    0 26px 56px -10px rgba(0, 110, 255, 0.30);
+
+  --sf-hair: rgba(10, 40, 90, 0.12);
+  --sf-glass-blur: 30px;
+
+  /* o cabeçalho sticky continua SÓLIDO (nota do §16.3), só acompanha o tom */
+  --vr-thead-bg: #e6edf9;
+  --vr-thead-line: rgba(10, 40, 90, 0.16);
+}
+
+/* a saturação é o que traz a cor de trás para dentro do vidro — no claro ela
+   precisa ser maior que no escuro, porque há menos contraste para carregá-la */
+:root:not([data-bs-theme=dark]) .card,
+:root:not([data-bs-theme=dark]) .page-title-head,
+:root:not([data-bs-theme=dark]) .dropdown-menu,
+:root:not([data-bs-theme=dark]) .modal-content,
+:root:not([data-bs-theme=dark]) .offcanvas,
+:root:not([data-bs-theme=dark]) div[class*="-widget"]:not([class*="__"]):not(.row),
+:root:not([data-bs-theme=dark]) div[class*="-card"]:not([class*="__"]):not(.row),
+:root:not([data-bs-theme=dark]) div[class*="-panel"]:not([class*="__"]):not(.row) {
+  backdrop-filter: blur(var(--sf-glass-blur)) saturate(215%) brightness(1.04);
+  -webkit-backdrop-filter: blur(var(--sf-glass-blur)) saturate(215%) brightness(1.04);
+}
+
+/* a topbar e o menu ficam mais translúcidos no claro — são as duas superfícies
+   que cobrem a maior área do fundo, e opacas elas escondiam a luz inteira */
+:root:not([data-bs-theme=dark]) .app-topbar {
+  background: color-mix(in oklab, var(--vr-page-bg) 42%, transparent) !important;
+  backdrop-filter: blur(26px) saturate(200%) brightness(1.05);
+  -webkit-backdrop-filter: blur(26px) saturate(200%) brightness(1.05);
+}
+:root:not([data-bs-theme=dark]) .sidenav-menu {
+  background: color-mix(in oklab, var(--vr-page-bg) 40%, transparent) !important;
+  backdrop-filter: blur(28px) saturate(200%) brightness(1.05);
+  -webkit-backdrop-filter: blur(28px) saturate(200%) brightness(1.05);
+}
+
+/* a aurora do topo do conteúdo carrega mais no claro, pela mesma razão */
+:root:not([data-bs-theme=dark]) .content-page::before { opacity: 0.85; }
+:root:not([data-bs-theme=dark]) .wrapper::before { opacity: 0.9; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   26. RODAPÉ
+   --------------------------------------------------------------------------
+   O tema entrega o rodapé com `background-color: var(--ins-secondary-bg)`,
+   `border-top` e `margin: auto -12px 0` — uma faixa sólida calculada para o
+   padding de 0.75rem que o `.content-page` tinha. Com o respiro do §16 (1.5rem)
+   a margem negativa não alcança mais as bordas, e a faixa aparece como uma
+   CAIXA escura solta, deslocada, dentro da página de vidro.
+
+   Aqui ele volta a ser o que é: uma linha de assinatura, sem fundo, centrada,
+   separada só por um filete.
+   ══════════════════════════════════════════════════════════════════════════ */
+.footer {
+  /* FIXO no rodapé da tela: `sticky` e não `fixed`, porque o `.content-page`
+     carrega `margin-left: var(--ins-sidenav-width)` e um `fixed` precisaria
+     repetir esse deslocamento à mão — e errá-lo no dia em que o menu recolhe.
+     O sticky herda a caixa do pai e acerta os dois estados de graça. */
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  background-color: transparent !important;
+  background-image: none !important;
+  /* sem cor de fundo, como pedido — o desfoque é só o que impede o conteúdo
+     de passar LEGÍVEL por baixo do texto enquanto se rola */
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-top: 1px solid var(--sf-hair);
+  margin-inline: 0 !important;
+  justify-content: center;
+  padding-block: 1.1rem;
+  color: var(--sf-micro);
+  font-size: 0.76rem;
+  letter-spacing: 0.03em;
+}
+.footer .container-fluid { width: 100%; }
+.footer .fw-semibold { color: var(--ins-body-color); }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   27. SPOTLIGHT — a BORDA acesa, como no cogni
+   --------------------------------------------------------------------------
+   A referência faz o efeito com DUAS camadas, e a que dá o caráter é a que
+   faltava aqui. No `interactions.js` do cogni:
+
+     · o "sheen" — `radial-gradient(400px circle at X Y, rgba(255,255,255,.4),
+       transparent 40%)` com `mix-blend-mode: overlay`, sobre `-inset-px`, ou
+       seja COBRINDO a borda. Como o cartão dele é um `p-[1px]` com fundo em
+       gradiente (a borda é o fundo aparecendo por 1px), esse branco acende a
+       ARESTA sob o cursor — é o traço fino que se vê no canto;
+     · o "glow" — um círculo de 256px da cor de acento, `blur(80px)`, atrás do
+       conteúdo: o bloom colorido.
+
+   Eu só tinha o segundo, e mais difuso — daí a mancha de cor no miolo em vez
+   da borda desenhada.
+
+   O sheen aqui NÃO vai por cima do conteúdo, e essa é a única diferença
+   deliberada em relação à referência: no cogni o cartão é uma peça de vitrine,
+   aqui ele guarda tabela densa, e uma camada branca em `overlay` sobre texto
+   de 12px custa legibilidade. Em vez disso o `::before` desenha SÓ o anel de
+   1px, pela máscara de composição — mesmo resultado visual na aresta, zero
+   risco no texto.
+   ══════════════════════════════════════════════════════════════════════════ */
+.card::before,
+div[class*="-widget"]:not([class*="__"]):not(.row)::before,
+div[class*="-card"]:not([class*="__"]):not(.row)::before,
+div[class*="-panel"]:not([class*="__"]):not(.row)::before,
+.mc-item::before, .ob-item::before, .cp-ce-item::before, .ei-type-item::before,
+.map-type-item::before, .fi-tpl-item::before, .ei-doc-row::before,
+.fi-block::before, .pa-user::before, .pa-role::before, .cp-acc-row::before,
+.acc-stat::before, .acc-tcard::before, .qt-card::before, .pcm-mini::before,
+.ab-feat::before, .ab-step::before, .ab-info::before {
+  content: "";
+  position: absolute;
+  /* `inset: 0`, e NÃO -1px: metade dos cartões do app tem `overflow: hidden`
+     (os KPI do dashboard, por exemplo), e um pixel para fora é recortado
+     inteiro — o anel simplesmente não aparecia nesses. Em cima da própria
+     aresta ele sobrevive aos dois casos. */
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s var(--vr-ease);
+  /* 2px, não 1: a 1px o anel existe mas é uma linha de meio pixel depois do
+     arredondamento e some na tela — foi o que me fez procurar defeito onde não
+     havia. 2px é o mínimo que se LÊ como aresta acesa.
+
+     A INTENSIDADE é outra história, e foi calibrada para baixo duas vezes: o
+     efeito tem de ser percebido de canto de olho, nunca olhado. Fechou em
+     branco a 20% no anel e ciano a 9% no bloom — perto de um quinto do que
+     começou. Sobre tabela densa, luz que se nota é luz que atrapalha. */
+  padding: 2px;
+  background:
+    radial-gradient(240px circle at var(--sf-mx, 50%) var(--sf-my, 0%),
+      rgba(255, 255, 255, 0.20) 0%,
+      color-mix(in oklab, var(--sf-cyan) 16%, transparent) 26%,
+      transparent 54%);
+  /* Mostra só o ANEL: a máscara pinta a caixa inteira e subtrai o miolo, e o
+     que sobra é a moldura. `overflow: hidden` no cartão está fora de
+     cogitação — decapitaria o dropdown de Columns/Export.
+
+     Em LONGHAND (`mask-image` + `mask-clip`) de propósito. Com a forma
+     abreviada (`mask: … content-box, …`) o Chromium não produz o anel: o
+     pseudo renderiza — sem máscara ele pinta o degradê inteiro —, mas com ela
+     some por completo, em qualquer espessura. Duas camadas da MESMA imagem,
+     recortadas em caixas diferentes, é a forma que funciona. */
+  -webkit-mask-image: linear-gradient(#000 0 0), linear-gradient(#000 0 0);
+          mask-image: linear-gradient(#000 0 0), linear-gradient(#000 0 0);
+  -webkit-mask-clip: content-box, border-box;
+          mask-clip: content-box, border-box;
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+}
+.card:hover::before,
+div[class*="-widget"]:not([class*="__"]):not(.row):hover::before,
+div[class*="-card"]:not([class*="__"]):not(.row):hover::before,
+div[class*="-panel"]:not([class*="__"]):not(.row):hover::before,
+.mc-item:hover::before, .ob-item:hover::before, .cp-ce-item:hover::before,
+.ei-type-item:hover::before, .map-type-item:hover::before,
+.fi-tpl-item:hover::before, .ei-doc-row:hover::before, .fi-block:hover::before,
+.pa-user:hover::before, .pa-role:hover::before, .cp-acc-row:hover::before,
+.acc-stat:hover::before, .acc-tcard:hover::before, .qt-card:hover::before,
+.pcm-mini:hover::before, .ab-feat:hover::before, .ab-step:hover::before,
+.ab-info:hover::before { opacity: 1; }
+
+/* o bloom colorido fica mais CONCENTRADO — o cogni usa um círculo de 256px
+   com blur de 80px, e não um degradê largo: é isso que o faz parecer uma luz
+   sob o cursor em vez de um fundo tingido */
+[data-bs-theme=dark] .card::after,
+[data-bs-theme=dark] div[class*="-widget"]:not([class*="__"]):not(.row)::after,
+[data-bs-theme=dark] div[class*="-card"]:not([class*="__"]):not(.row)::after,
+[data-bs-theme=dark] .ab-feat::after, [data-bs-theme=dark] .ab-step::after {
+  background:
+    radial-gradient(300px circle at var(--sf-mx, 50%) var(--sf-my, -8%),
+      color-mix(in oklab, var(--sf-cyan) 9%, transparent) 0%,
+      color-mix(in oklab, var(--sf-blue) 5%, transparent) 40%,
+      transparent 66%);
+}
+:root:not([data-bs-theme=dark]) .card::after,
+:root:not([data-bs-theme=dark]) div[class*="-widget"]:not([class*="__"]):not(.row)::after,
+:root:not([data-bs-theme=dark]) div[class*="-card"]:not([class*="__"]):not(.row)::after,
+:root:not([data-bs-theme=dark]) .ab-feat::after,
+:root:not([data-bs-theme=dark]) .ab-step::after {
+  background:
+    radial-gradient(300px circle at var(--sf-mx, 50%) var(--sf-my, -8%),
+      color-mix(in oklab, var(--sf-cyan) 6%, transparent) 0%,
+      color-mix(in oklab, var(--sf-blue) 3%, transparent) 40%,
+      transparent 66%);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   28. A MALHA DE FUNDO — linhas bem espaçadas
+   --------------------------------------------------------------------------
+   Começou em 44px, densidade de papel milimetrado, competindo com a grade das
+   tabelas. Passou por 96px, 150px e fechou em 220px: nesse passo a malha vira
+   referência de profundidade — dá o que os blobs precisam para parecer que
+   estão ATRÁS de alguma coisa — sem nunca virar assunto. Numa tela de 1600px
+   sobram sete linhas verticais: a grade se lê como enquadramento, não como
+   textura.
+   ══════════════════════════════════════════════════════════════════════════ */
+body::after {
+  background-image:
+    repeating-linear-gradient(0deg,  var(--sf-grid-line) 0 1px, transparent 1px 220px),
+    repeating-linear-gradient(90deg, var(--sf-grid-line) 0 1px, transparent 1px 220px);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   29. O TOPBAR QUE SUMIA AO ROLAR
+   --------------------------------------------------------------------------
+   O `.app-topbar` é `position: sticky; top: 0` do tema, e ainda assim ele
+   desaparecia depois de uma tela de rolagem. O motivo não está nele: um
+   elemento sticky só gruda DENTRO da caixa do pai, e o `.wrapper` vem do tema
+   com `height: 100%` — 900px numa janela de 900px, enquanto o documento tem
+   2381px. Passado o primeiro scroll de altura de tela, o topbar chega ao fim
+   do próprio container e vai embora com ele.
+
+   `min-height` em vez de `height` deixa a caixa acompanhar o conteúdo, e o
+   sticky passa a valer a página inteira — em TODAS as telas, porque a regra é
+   do layout e não de uma delas.
+   ══════════════════════════════════════════════════════════════════════════ */
+.wrapper {
+  height: auto;
+  min-height: 100vh;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   30. BREADCRUMB NO TEMA CLARO
+   --------------------------------------------------------------------------
+   A primeira tentativa deu vidro à pílula e ela continuou invisível, porque o
+   problema não era falta de vidro: era a DIREÇÃO do contraste. A pílula estava
+   em branco a 55% sobre um painel que já é branco a 50% — mais branco sobre
+   branco não desenha aresta nenhuma. No escuro ela aparece porque ali o passo
+   é para CIMA (clarear sobre um fundo escuro é um passo visível); no claro o
+   passo tem de ser para BAIXO, e isso quer dizer tingir, não clarear.
+
+   Daí o gelo azulado: a mesma família de cor do fundo líquido, um degrau
+   abaixo do painel em luminosidade, com o filete branco só na aresta de cima.
+   O texto acompanha — superfície e tinta se declaram juntas, como no §24, no
+   §32 e no §33.
+   ══════════════════════════════════════════════════════════════════════════ */
+:root:not([data-bs-theme=dark]) .page-title-head .breadcrumb {
+  background: color-mix(in oklab, var(--sf-blue) 11%, rgba(255, 255, 255, 0.62));
+  border: 1px solid color-mix(in oklab, var(--sf-blue) 16%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.85),
+    0 1px 6px -2px rgba(16, 40, 90, 0.14);
+  backdrop-filter: blur(14px) saturate(190%);
+  -webkit-backdrop-filter: blur(14px) saturate(190%);
+}
+:root:not([data-bs-theme=dark]) .page-title-head .breadcrumb,
+:root:not([data-bs-theme=dark]) .page-title-head .breadcrumb .breadcrumb-item,
+:root:not([data-bs-theme=dark]) .page-title-head .breadcrumb .breadcrumb-item a {
+  color: #3c4a60;
+}
+:root:not([data-bs-theme=dark]) .page-title-head .breadcrumb .breadcrumb-item.active {
+  color: #16233a;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   31. CARD DE TOTAL DA RECON DE COMITENTES
+   --------------------------------------------------------------------------
+   Mora aqui, e não no <style> da página, por uma razão de ORDEM: o
+   `visual-refresh.css` pinta `.card` com o ATALHO `background: … !important`,
+   e atalho zera o `background-image`. Como ele é carregado depois do
+   `extra_css` da página (base.html), a regra do Total escrita lá perdia por
+   origem — mesma especificidade, arquivo posterior. Daqui ela vence, e o
+   seletor duplo (`.card.widget-total`) ainda garante margem sobre o `.card`.
+
+   O par cor-de-fundo + cor-de-texto é declarado JUNTO de propósito: era
+   exatamente a metade que aplicava (o branco no texto) sem a outra (o
+   gradiente atrás) que deixava o card ilegível.
+   ══════════════════════════════════════════════════════════════════════════ */
+.card.widget-total {
+  background: var(--vr-grad) !important;
+  border-color: transparent !important;
+  box-shadow: 0 10px 30px -8px color-mix(in oklab, var(--sf-blue) 70%, transparent) !important;
+}
+.card.widget-total .widget-lbl,
+.card.widget-total .widget-val,
+.card.widget-total .widget-icon { color: #fff !important; }
+.card.widget-total .widget-icon { opacity: 0.32; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   32. TEXTO DAS ZONAS DE UPLOAD
+   --------------------------------------------------------------------------
+   O §23.4 trocou o fundo das dropzones por vidro e não disse nada sobre o
+   TEXTO — o mesmo erro dos botões soft do §24. A dica ("Drop the spreadsheet
+   here…") vem das páginas em `rgb(84,84,90)`, um cinza escolhido para o cinza
+   médio do tema anterior; sobre o marinho profundo do StreamFlow ela fica em
+   ~2:1 de contraste e some. O ícone tinha o mesmo problema por outro caminho:
+   estava no `#0066cc` antigo, azul escuro sobre fundo escuro.
+
+   A lição, de novo: regra que muda o fundo de uma superfície responde também
+   pela cor do que está escrito nela.
+   ══════════════════════════════════════════════════════════════════════════ */
+div[class*="-dropzone"], .upload-zone, .ob-req-drop {
+  color: var(--ins-body-color);
+}
+[class*="-dz-hint"],
+div[class*="-dropzone"] small,
+.upload-zone small,
+div[class*="-dropzone"] .text-muted,
+.upload-zone .text-muted {
+  color: color-mix(in oklab, var(--ins-body-color) 72%, transparent) !important;
+}
+div[class*="-dropzone"] > i,
+div[class*="-dropzone"] i[class*="ti-"],
+.upload-zone i[class*="ti-"],
+.ob-req-drop i[class*="ti-"] {
+  color: var(--sf-cyan) !important;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   33. CONTRASTE DO TEXTO SECUNDÁRIO NO CLARO
+   --------------------------------------------------------------------------
+   O `--ins-secondary-color` do tema (#7a7a7a) foi escolhido para um fundo
+   quase branco. Sobre o #ccd9ee do StreamFlow ele mede ~2.9:1 — abaixo do
+   mínimo — e todo texto secundário que fica DIRETO no fundo (subtítulos de
+   página, legendas soltas) desaparece. Sobre cartão ele ainda passava, e é por
+   isso que o defeito aparece só em alguns lugares: some onde não há cartão.
+
+   #515b69 mede 4.83:1 sobre o fundo e 6.88:1 sobre o cartão branco — cobre os
+   dois casos sem escurecer o texto a ponto de competir com os títulos.
+   ══════════════════════════════════════════════════════════════════════════ */
+:root:not([data-bs-theme=dark]) {
+  --ins-secondary-color: #515b69;
+  --sf-micro: #515b69;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   34. SOBREPOSIÇÕES — dropdown, modal, offcanvas, toast, SweetAlert
+   --------------------------------------------------------------------------
+   Cartão e sobreposição têm exigências OPOSTAS de transparência, e o §5 tratou
+   os dois com o mesmo `--vr-card-bg`. O cartão quer deixar a luz do fundo
+   passar — é dele que vem o vidro. A sobreposição flutua sobre conteúdo
+   ARBITRÁRIO e precisa esconder o que está atrás: no sino de notificações o
+   breadcrumb da página aparecia POR DENTRO do painel, atravessando o texto.
+
+   A primeira resposta foi alfa 0,975 — e aí a sobreposição deixou de ser
+   vidro: virou papel. Errei o instrumento. Quem esconde o que está atrás é o
+   DESFOQUE (a 34px o breadcrumb vira mancha, e mancha não se lê); o alfa só
+   decide quanta luz do fundo ainda chega. Com o desfoque fazendo o trabalho, o
+   alfa pode voltar para a faixa em que a superfície ainda parece vidro.
+   ══════════════════════════════════════════════════════════════════════════ */
+:root:not([data-bs-theme=dark]) { --sf-overlay-bg: rgba(255, 255, 255, 0.82); }
+[data-bs-theme=dark]            { --sf-overlay-bg: rgba(13, 19, 32, 0.80); }
+
+.dropdown-menu,
+.modal-content,
+.offcanvas,
+.toast,
+.swal2-popup,
+.smart-filter-dropdown,
+.acc-drop, .acc-cols-menu, .ei-combo-menu, .qt-combo__menu,
+.ob-cols-menu, .mc-cols-menu, .cp-dz-list,
+.map-ac-drop, .ar-ac-drop {
+  background-color: var(--sf-overlay-bg) !important;
+  backdrop-filter: blur(34px) saturate(200%) !important;
+  -webkit-backdrop-filter: blur(34px) saturate(200%) !important;
+  box-shadow: 0 20px 50px -12px rgba(6, 14, 30, 0.32),
+              inset 0 1px 0 rgba(255, 255, 255, 0.10);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   35. CONTROL PANEL — o painel de seção e os cartões de rotina
+   --------------------------------------------------------------------------
+   A `.row.cp-cards` virou superfície de vidro pelo seletor estrutural do §23
+   (o nome contém "-card"), e é ela o painel azul-claro que envolve cada seção.
+   Ficou bom como agrupador, então em vez de excluí-la o desenho a assume: ela
+   é o CONTINENTE e o `.cp-card` é o CONTEÚDO.
+
+   Para os dois se lerem como camadas diferentes, o de dentro precisa CONTRASTAR
+   com o de fora — e a primeira tentativa errou o sinal disso no tema claro.
+   Ali eu deixei o continente em branco a 62% e o conteúdo em branco a 38%: os
+   dois pousam em quase o mesmo branco, e o que sobra é uma aresta chapada em
+   vez de duas camadas. É a mesma armadilha do breadcrumb do §30 — no escuro
+   qualquer passo de branco aparece, no claro branco sobre branco não desenha
+   nada.
+
+   A correção é por tema, porque a direção do passo é por tema:
+   · no CLARO o continente vira uma lâmina fina e tingida (deixa o líquido do
+     fundo atravessar, que é de onde vem o vidro) e a rotina sobe para um
+     branco quase cheio, com sombra própria. O passo é de baixo para cima.
+   · no ESCURO a relação que já agradava fica como estava — o continente um
+     pouco mais claro que o fundo, a rotina um pouco mais escura que ele.
+
+   E o `.cp-card` PERDEU o `backdrop-filter`. Desfoque aninhado não acrescenta
+   nada: o backdrop dele é o resultado já composto do continente, que por sua
+   vez já foi desfocado — desfocar de novo uma superfície lisa devolve a mesma
+   superfície lisa, ao preço de uma camada de composição por cartão. O que dá
+   profundidade ali é o passo de cor e a sombra, não um segundo blur.
+
+   O respiro embaixo é maior que o de cima de propósito: o cartão tem botão no
+   rodapé, e botão encostado na borda do continente parece corte, não margem.
+   ══════════════════════════════════════════════════════════════════════════ */
+.row.cp-cards {
+  padding: 1.15rem 1.05rem 1.9rem;
+  margin-inline: 0;
+}
+.cp-card {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+.cp-card:hover {
+  border-color: color-mix(in oklab, var(--sf-cyan) 48%, var(--vr-card-border)) !important;
+}
+
+/* claro — lâmina tingida por fora, branco quase cheio por dentro */
+:root:not([data-bs-theme=dark]) .row.cp-cards {
+  background-color: color-mix(in oklab, var(--sf-blue) 5%, rgba(255, 255, 255, 0.30)) !important;
+  border: 1px solid rgba(255, 255, 255, 0.62) !important;
+  /* `!important` porque o §25 alcança esta mesma caixa por
+     `div[class*="-card"]` — um seletor de TIPO a mais, e portanto mais
+     específico que `.row.cp-cards`. E o que ele traz junto é justamente o
+     `brightness(1.04)`, que empurra o backdrop para o branco: era metade do
+     motivo de o continente parecer opaco no claro. */
+  backdrop-filter: blur(34px) saturate(230%) !important;
+  -webkit-backdrop-filter: blur(34px) saturate(230%) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.75),
+    0 10px 34px -20px rgba(16, 40, 90, 0.30);
+}
+:root:not([data-bs-theme=dark]) .cp-card {
+  background-color: rgba(255, 255, 255, 0.82) !important;
+  border: 1px solid rgba(255, 255, 255, 0.95) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    0 8px 26px -14px rgba(16, 40, 90, 0.26);
+}
+:root:not([data-bs-theme=dark]) .cp-card:hover {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    0 14px 34px -14px rgba(16, 40, 90, 0.34);
+}
+
+/* escuro — a relação que já funcionava, com mais saturação no continente */
+[data-bs-theme=dark] .row.cp-cards {
+  background-color: rgba(255, 255, 255, 0.038) !important;
+  backdrop-filter: blur(34px) saturate(180%);
+  -webkit-backdrop-filter: blur(34px) saturate(180%);
+}
+[data-bs-theme=dark] .cp-card {
+  background-color: rgba(255, 255, 255, 0.026) !important;
+  box-shadow: var(--vr-card-shadow);
+}
+[data-bs-theme=dark] .cp-card:hover { box-shadow: var(--vr-card-shadow-hover); }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   36. AS QUEBRAS DE COR DO TEMA CLARO
+   --------------------------------------------------------------------------
+   A cor entrava e saía de repente nas telas claras, e a causa é uma só: a
+   aurora do §16.1 é uma CAIXA de 460px de altura. Ela tem gradiente nos dois
+   eixos horizontais e ARESTA CRUA embaixo — passados os 460px a cor
+   simplesmente termina, no meio do primeiro cartão da página. No escuro isso
+   não aparece porque cor saturada sobre fundo escuro se lê como brilho e o
+   corte cai dentro do próprio escurecimento; no claro ela pousa sobre
+   quase-branco, onde qualquer degrau vira uma linha.
+
+   São três correções, e as três são sobre o mesmo defeito:
+
+   · a aurora ganha MÁSCARA vertical, que é o que troca a aresta por
+     desvanecimento. A altura sobe junto — mascarar sem alongar só empurraria o
+     corte para cima e ainda o encurtaria;
+   · no claro ela perde força e ganha desfoque. Não é a mesma cena com menos
+     opacidade: sobre branco a cor rende muito mais, então a dose que dá glow
+     no escuro dá mancha no claro;
+   · o painel de título e o halo azul dele seguem o mesmo caminho, porque as
+     três camadas se somam na mesma faixa da tela — foi a soma, e não uma
+     delas, que produziu a faixa ciano→lilás com fim abrupto.
+
+   O `filter: blur()` roda ANTES da máscara (é a ordem do modelo de pintura),
+   então os dois compõem: desfoca a cor, depois dissolve a borda.
+   ══════════════════════════════════════════════════════════════════════════ */
+.content-page::before {
+  height: 620px;
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 38%, transparent 100%);
+          mask-image: linear-gradient(180deg, #000 0%, #000 38%, transparent 100%);
+}
+:root:not([data-bs-theme=dark]) .content-page::before {
+  opacity: 0.30;
+  filter: blur(52px);
+}
+
+/* painel de título: mesma ideia de gesto, um terço da dose */
+:root:not([data-bs-theme=dark]) .page-title-head {
+  background:
+    radial-gradient(84% 220% at 0% -10%,
+      color-mix(in oklab, var(--sf-blue) 8%, transparent), transparent 80%),
+    radial-gradient(72% 220% at 100% -10%,
+      color-mix(in oklab, var(--sf-violet) 6%, transparent), transparent 78%),
+    var(--vr-card-bg);
+  box-shadow: var(--vr-card-shadow),
+              0 0 60px -18px color-mix(in oklab, var(--sf-blue) 26%, transparent);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   37. AS LINHAS QUE SAÍAM NA COR DO TEXTO
+   --------------------------------------------------------------------------
+   O Pending Confirmation e o New Deals têm a MESMA estrutura de cartão — faixa
+   do dropzone, faixa da barra de ferramentas, tabela — e mesmo assim um se lia
+   uniforme e o outro saía em blocos. A diferença não está no fundo das faixas:
+   está no filete entre elas.
+
+   O Pending separa as faixas com as utilidades do Bootstrap (`.border-top`,
+   `.border-bottom`), e elas pintam `border-color: var(--bs-border-color)`. O
+   tema NÃO define os `--bs-*` (é a regra do §2 do CLAUDE.md), então a variável
+   não resolve, a declaração fica inválida no tempo de valor computado e o
+   `border-color` cai no que a cascata manda quando não há valor: `currentColor`.
+   O filete passa a sair na cor do TEXTO — medido, `rgb(170,184,197)` no escuro
+   e `rgb(29,29,31)` no claro. Um traço de texto atravessando o cartão inteiro,
+   que é exatamente o corte que se vê. O mesmo vale para a borda de baixo das
+   células da tabela e para o `.card-header`.
+
+   O New Deals escapava por acidente: as faixas dele são CSS da própria página,
+   com a cor escrita.
+
+   A correção é dar cor às utilidades e às células — nunca definir os `--bs-*`,
+   que continuariam invisíveis para quem lê o código procurando de onde vem a
+   cor. É global de propósito: quem herdou o defeito foi o Bootstrap, não uma
+   tela, e havia página escondendo o problema atrás de um cartão sem faixas.
+   ══════════════════════════════════════════════════════════════════════════ */
+:root:not([data-bs-theme=dark]) { --sf-rule: rgba(10, 40, 90, 0.11); }
+[data-bs-theme=dark]            { --sf-rule: rgba(255, 255, 255, 0.075); }
+
+.border, .border-top, .border-bottom, .border-start, .border-end,
+.border-2, .border-1 {
+  border-color: var(--sf-rule) !important;
+}
+.card-header, .card-footer {
+  border-top-color: var(--sf-rule);
+  border-bottom-color: var(--sf-rule);
+}
+.table > :not(caption) > * > *,
+.table > thead > tr > th,
+.table > tbody > tr > td,
+.table > tbody > tr > th {
+  border-color: var(--sf-rule);
+}
+.dropdown-divider, hr { border-top-color: var(--sf-rule); }
+
+/* ── 36.1 Segunda calibragem do claro ─────────────────────────────────────
+   Máscara e desfoque tiraram a ARESTA da aurora, e sobrou a DOSE. O tema
+   claro pinta cor sobre quase-branco, onde cada ponto de saturação rende
+   muito mais do que sobre o marinho — a mesma paleta que no escuro se lê como
+   brilho, no claro se lê como mancha, e mancha grande sempre tem uma beirada
+   em algum lugar. Aqui a cor recua até virar ambiente: o vidro dos painéis
+   continua puxando o azul para dentro pela saturação alta do §25, que é de
+   onde o efeito deve vir — do material, não de uma pintura por baixo dele. */
+:root:not([data-bs-theme=dark]) .content-page::before {
+  opacity: 0.20;
+  filter: blur(64px);
+}
+:root:not([data-bs-theme=dark]) {
+  --sf-blob-a: rgba(0, 123, 255, 0.55);
+  --sf-blob-b: rgba(139, 92, 246, 0.44);
+  --sf-blob-c: rgba(41, 197, 246, 0.52);
+}
+.content-page::before {
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, rgba(0,0,0,0.75) 18%, transparent 100%);
+          mask-image: linear-gradient(180deg, #000 0%, rgba(0,0,0,0.75) 18%, transparent 100%);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   38. OS BLOCOS BRANCOS DENTRO DO CARTÃO (tema claro)
+   --------------------------------------------------------------------------
+   As faixas internas das páginas de New Deals — o dropzone e a barra do filtro
+   inteligente — são pintadas em BRANCO CHAPADO pelo CSS da própria página.
+   No escuro isso passa despercebido (lá o valor equivalente é um marinho quase
+   igual ao cartão), e foi por isso que essas telas pareciam as mais uniformes
+   de todas. No claro é o contrário: um retângulo de branco puro dentro de um
+   cartão de vidro azulado é o corte mais duro da tela inteira — a superfície
+   deixa de ser translúcida no meio dela mesma.
+
+   A regra é a mesma do resto: quem está DENTRO de vidro é vidro. Alfa mais
+   alto que o do cartão (a faixa precisa se distinguir dele), sem desfoque
+   próprio — o cartão já desfocou o fundo, e desfocar de novo não acrescenta
+   nada (a nota do §35).
+   ══════════════════════════════════════════════════════════════════════════ */
+:root:not([data-bs-theme=dark]) .card .dropzone,
+:root:not([data-bs-theme=dark]) .card form.dropzone,
+:root:not([data-bs-theme=dark]) .nd-filter-bar {
+  background-color: rgba(255, 255, 255, 0.42) !important;
+  background-image: none !important;
+}
+:root:not([data-bs-theme=dark]) .nd-filter-bar {
+  border-top-color: var(--sf-rule) !important;
+  border-bottom-color: var(--sf-rule) !important;
+}
+:root:not([data-bs-theme=dark]) .card .dropzone:hover,
+:root:not([data-bs-theme=dark]) .card form.dropzone:hover {
+  background-color: rgba(255, 255, 255, 0.58) !important;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   39. O HOVER DO MENU — a terceira vez do mesmo erro
+   --------------------------------------------------------------------------
+   O `visual-refresh.css` pinta o hover do item com `background: var(--vr-card-bg)`,
+   que no claro é branco a 50%. O menu JÁ é uma superfície clara de vidro, então
+   o resultado é branco sobre branco: a pílula sai CHAPADA, sem material nenhum.
+
+   É o mesmo diagnóstico do breadcrumb (§30) e dos blocos brancos (§38), e a
+   mesma resposta: no claro o passo tem de ser para BAIXO — tingir. Aqui o
+   tingimento é o próprio gradiente do estado ativo, numa fração da dose, o que
+   dá de graça a leitura de "quase lá" quando o ponteiro passa: a mesma cor do
+   selecionado, mais fraca. E o filete de acento à esquerda aparece já no
+   hover, também mais fraco, porque é ele que diz qual item o ponteiro está
+   apontando quando dois vizinhos têm tinta parecida.
+   ══════════════════════════════════════════════════════════════════════════ */
+.side-nav .side-nav-item .side-nav-link {
+  position: relative;
+  transition: background-color .18s var(--vr-ease, ease), box-shadow .18s ease;
+}
+.side-nav .side-nav-item .side-nav-link:hover {
+  background: linear-gradient(100deg,
+              color-mix(in oklab, var(--sf-blue) 13%, transparent),
+              color-mix(in oklab, var(--sf-violet) 8%, transparent)) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(10px) saturate(190%);
+  -webkit-backdrop-filter: blur(10px) saturate(190%);
+}
+.side-nav .side-nav-item .side-nav-link:hover::after {
+  content: "";
+  position: absolute;
+  left: 0; top: 22%; bottom: 22%;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--vr-grad);
+  opacity: 0.55;
+}
+/* o item ativo já desenha o próprio filete (`::before`): não some sob o hover */
+.side-nav .side-nav-item .side-nav-link.active:hover::after,
+.side-nav .side-nav-item.menuitem-active > .side-nav-link:hover::after {
+  display: none;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   40. O SELETOR POR PEDAÇO DO NOME PEGA O CONTÊINER JUNTO
+   --------------------------------------------------------------------------
+   O §23 escolhe as superfícies por PEDAÇO do nome da classe, e isso tem um
+   custo que só aparece na tela: o nome do contêiner costuma conter o nome do
+   que ele contém. `div[class*="-chip"]` casou com `.ndm-chips` e
+   `.smart-filter-chips`, que são as CAIXAS de chips — as duas ganharam contorno
+   de pílula e `border-radius: 999px` com padding zero, e o texto encostou na
+   borda esquerda como se estivesse vazando do campo. Pelo mesmo caminho,
+   `div[class*="-widget"]` casou com a `.row.pending-widgets-row`, uma GRADE do
+   Bootstrap, e inventou um painel de vidro em volta de três cartões que já
+   eram de vidro — a moldura dupla que o Pending Confirmation tinha e o New
+   Deals não.
+
+   Duas exclusões resolvem a família inteira, e as duas são sobre o que a coisa
+   É, não sobre onde ela está:
+   · o PLURAL nunca é o item (`-chips` é a caixa de `-chip`);
+   · uma `.row` é grade de layout, não superfície.
+
+   A `.row.cp-cards` é a exceção DECLARADA — ali o desenho adotou o contêiner
+   como painel de seção de propósito (§35) —, e por isso ela recupera aqui, por
+   escrito, o que a exclusão tirou. Exceção que se lê é exceção; exceção que
+   cai de um seletor por substring é acidente.
+   ══════════════════════════════════════════════════════════════════════════ */
+.row.cp-cards {
+  border-radius: 16px;
+  position: relative;
+  transition: box-shadow 0.3s var(--vr-ease), border-color 0.3s var(--vr-ease);
+}
+[data-bs-theme=dark] .row.cp-cards {
+  border: 1px solid var(--vr-card-border) !important;
+  box-shadow: var(--vr-card-shadow);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   41. O SWEETALERT NÃO ESTAVA PEGANDO O VIDRO
+   --------------------------------------------------------------------------
+   O §34 dá o fundo das sobreposições por `background-color`, e o SweetAlert2
+   pinta o popup com o ATALHO `background` — que resolve depois e leva junto o
+   `background-image`. Resultado no escuro: um painel cinza-claro chapado, o
+   único elemento do app inteiro que ainda estava no visual da biblioteca.
+
+   Aqui vai o conjunto completo — atalho contra atalho —, mais o `backdrop` do
+   próprio SweetAlert, que é o véu por trás do diálogo: sem desfoque nele o
+   calendário continuava legível atrás do aviso e o diálogo parecia flutuar
+   sobre uma foto, não sobre a página.
+   ══════════════════════════════════════════════════════════════════════════ */
+.swal2-popup {
+  background: var(--sf-overlay-bg) !important;
+  background-image:
+    linear-gradient(150deg,
+      color-mix(in oklab, var(--sf-cyan) 9%, transparent),
+      transparent 46%),
+    linear-gradient(320deg,
+      color-mix(in oklab, var(--sf-violet) 9%, transparent),
+      transparent 44%) !important;
+  border: 1px solid var(--vr-card-border) !important;
+  border-radius: 20px !important;
+  backdrop-filter: blur(34px) saturate(200%) !important;
+  -webkit-backdrop-filter: blur(34px) saturate(200%) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 30px 80px -20px rgba(4, 10, 24, 0.55) !important;
+  color: var(--ins-body-color) !important;
+}
+.swal2-title, .swal2-html-container { color: inherit !important; }
+.swal2-container.swal2-backdrop-show,
+.swal2-container {
+  backdrop-filter: blur(6px) saturate(120%);
+  -webkit-backdrop-filter: blur(6px) saturate(120%);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   42. TAGS & BADGES — o padrão do design system novo
+   --------------------------------------------------------------------------
+   O design system define a tag como CHIP TINGIDO, não como pílula sólida:
+   fundo da cor a 20%, texto na variação clara da MESMA cor e borda da cor a
+   30%, em pílula. É o oposto do que o app fazia (`bg-gradient` chapado com
+   texto branco), e a diferença não é só de gosto — o chip tingido pertence à
+   superfície de vidro em que ele pousa, enquanto o sólido flutua por cima dela
+   como um adesivo.
+
+   A adaptação necessária é a COR DO TEXTO, e ela é por tema. O design system
+   é escuro: `text-{cor}-300` é uma variação clara, que sobre o chip a 20% num
+   fundo escuro dá contraste de sobra e sobre um fundo CLARO desaparece. No
+   tema claro o texto vai para a variação 700 — mesmo matiz, outra direção. É a
+   regra que já valeu no §24, no §30, no §32 e no §39: superfície e tinta se
+   declaram JUNTAS.
+
+   O `background-image: none` não é enfeite: é o que apaga o `.bg-gradient` que
+   o markup das telas carrega — sem ele o gradiente do tema continuaria pintado
+   por cima do tingimento e o chip sairia sólido do mesmo jeito.
+
+   O tamanho da fonte fica com quem chama. O design system pede 10px, e as
+   telas de tabela já usam essa faixa; forçar aqui alcançaria também o contador
+   do sino e os chips das barras de ferramentas, que são outro assunto e têm
+   dimensão própria.
+   ══════════════════════════════════════════════════════════════════════════ */
+.badge {
+  border-radius: 999px;
+  border: 1px solid transparent;
+  letter-spacing: 0.03em;
+  font-weight: 600;
+  background-image: none !important;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+/* — as cinco tags do design system, por família de cor — */
+.badge.text-bg-success, .badge.bg-success,
+.badge.text-bg-danger,  .badge.bg-danger,
+.badge.text-bg-warning, .badge.bg-warning,
+.badge.text-bg-info,    .badge.bg-info,
+.badge.text-bg-primary, .badge.bg-primary,
+.badge.text-bg-secondary, .badge.bg-secondary,
+.badge.text-bg-light,   .badge.bg-light,
+.badge.text-bg-dark,    .badge.bg-dark {
+  background-color: color-mix(in oklab, var(--sf-tag) 20%, transparent) !important;
+  /* repetido aqui, e não só no `.badge` acima, porque o gradiente de status do
+     §21 tem `!important` na MESMA especificidade (0,2,0): `!important` não se
+     resolve por especificidade, e quem desempata é a ordem no arquivo. */
+  background-image: none !important;
+  border-color: color-mix(in oklab, var(--sf-tag) 30%, transparent) !important;
+  color: var(--sf-tag-ink) !important;
+}
+
+.badge.text-bg-success, .badge.bg-success { --sf-tag: #10b981; }
+.badge.text-bg-danger,  .badge.bg-danger  { --sf-tag: #ef4444; }
+.badge.text-bg-warning, .badge.bg-warning { --sf-tag: #eab308; }
+.badge.text-bg-info,    .badge.bg-info    { --sf-tag: #06b6d4; }
+.badge.text-bg-primary, .badge.bg-primary { --sf-tag: #3b82f6; }
+.badge.text-bg-secondary, .badge.bg-secondary { --sf-tag: #8b5cf6; }
+.badge.text-bg-light,   .badge.bg-light   { --sf-tag: #94a3b8; }
+.badge.text-bg-dark,    .badge.bg-dark    { --sf-tag: #64748b; }
+
+/* escuro = a variação 300 do design system */
+[data-bs-theme=dark] .badge.text-bg-success, [data-bs-theme=dark] .badge.bg-success { --sf-tag-ink: #6ee7b7; }
+[data-bs-theme=dark] .badge.text-bg-danger,  [data-bs-theme=dark] .badge.bg-danger  { --sf-tag-ink: #fca5a5; }
+[data-bs-theme=dark] .badge.text-bg-warning, [data-bs-theme=dark] .badge.bg-warning { --sf-tag-ink: #fde047; }
+[data-bs-theme=dark] .badge.text-bg-info,    [data-bs-theme=dark] .badge.bg-info    { --sf-tag-ink: #67e8f9; }
+[data-bs-theme=dark] .badge.text-bg-primary, [data-bs-theme=dark] .badge.bg-primary { --sf-tag-ink: #93c5fd; }
+[data-bs-theme=dark] .badge.text-bg-secondary, [data-bs-theme=dark] .badge.bg-secondary { --sf-tag-ink: #c4b5fd; }
+[data-bs-theme=dark] .badge.text-bg-light, [data-bs-theme=dark] .badge.bg-light,
+[data-bs-theme=dark] .badge.text-bg-dark,  [data-bs-theme=dark] .badge.bg-dark  { --sf-tag-ink: #cbd5e1; }
+
+/* claro = a variação 700, mesmo matiz e o contraste virado para baixo */
+:root:not([data-bs-theme=dark]) .badge.text-bg-success, :root:not([data-bs-theme=dark]) .badge.bg-success { --sf-tag-ink: #047857; }
+:root:not([data-bs-theme=dark]) .badge.text-bg-danger,  :root:not([data-bs-theme=dark]) .badge.bg-danger  { --sf-tag-ink: #b91c1c; }
+:root:not([data-bs-theme=dark]) .badge.text-bg-warning, :root:not([data-bs-theme=dark]) .badge.bg-warning { --sf-tag-ink: #92600a; }
+:root:not([data-bs-theme=dark]) .badge.text-bg-info,    :root:not([data-bs-theme=dark]) .badge.bg-info    { --sf-tag-ink: #0e7490; }
+:root:not([data-bs-theme=dark]) .badge.text-bg-primary, :root:not([data-bs-theme=dark]) .badge.bg-primary { --sf-tag-ink: #1d4ed8; }
+:root:not([data-bs-theme=dark]) .badge.text-bg-secondary, :root:not([data-bs-theme=dark]) .badge.bg-secondary { --sf-tag-ink: #6d28d9; }
+:root:not([data-bs-theme=dark]) .badge.text-bg-light, :root:not([data-bs-theme=dark]) .badge.bg-light,
+:root:not([data-bs-theme=dark]) .badge.text-bg-dark,  :root:not([data-bs-theme=dark]) .badge.bg-dark  { --sf-tag-ink: #475569; }
+
+/* a DEFAULT TAG do design system: branco a 10% com borda a 20% */
+.badge:not([class*="bg-"]) {
+  background-color: color-mix(in oklab, var(--vr-card-bg) 90%, transparent);
+  border-color: var(--sf-hair);
+  color: var(--ins-body-color);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   43. COLORS & SURFACES — os valores do design system novo
+   --------------------------------------------------------------------------
+   O design system publica a paleta e, ao lado dela, quatro TRATAMENTOS DE
+   SUPERFÍCIE nomeados. Os tratamentos são a parte que muda a tela, porque são
+   eles que dizem o que separa uma camada da outra:
+
+     Glass Effect     blur + `from-white/20 to-white/5`
+     Card Surface     rgba(255,255,255,0.05)
+     Elevated Surface rgba(255,255,255,0.08)   ← hover / interativo
+     Selected State   rgba(139,92,246,0.15)    ← ativo / escolhido
+
+   Card e Elevated são o passo que faltava no §35: em vez de cada tela inventar
+   quanto clarear no hover, há um valor para "parado" e outro para "sob o
+   ponteiro". Selected é violeta de propósito — estado escolhido não é a mesma
+   coisa que estado apontado, e usar o mesmo branco para os dois faz o item
+   selecionado sumir assim que o mouse passa no vizinho.
+
+   O Glass Gradient (`from-white/20 to-white/5`) é o que dá o brilho diagonal
+   de material. Ele vale como está no ESCURO; no claro o mesmo branco sobre
+   branco é justamente o efeito chapado de sempre (§30/§38/§39), então ali a
+   ponta fria do gradiente é tingida em vez de esbranquiçada.
+
+   A SELEÇÃO DE CÉLULA das tabelas fica de fora: o azul `#b3d7ff`/`#0066cc` do
+   `otcCellCopy` é convenção de app inteiro (CLAUDE.md §3), lida por quem copia
+   para o Excel em vinte e sete telas, e trocá-la por violeta aqui a faria
+   discordar da documentação sem ninguém pedir.
+   ══════════════════════════════════════════════════════════════════════════ */
+:root:not([data-bs-theme=dark]) {
+  --sf-primary-500: hsl(260, 95%, 63%);
+  --sf-primary-600: hsl(250, 95%, 58%);
+  --sf-primary-700: hsl(270, 95%, 68%);
+  --sf-secondary-800: hsl(280, 90%, 80%);
+  --sf-surface-elevated: rgba(255, 255, 255, 0.92);
+  --sf-surface-selected: rgba(139, 92, 246, 0.14);
+  --sf-glass-sheen: linear-gradient(135deg,
+                      rgba(255, 255, 255, 0.40),
+                      rgba(41, 197, 246, 0.05) 62%,
+                      transparent);
+}
+[data-bs-theme=dark] {
+  --sf-primary-500: hsl(260, 95%, 63%);
+  --sf-primary-600: hsl(250, 95%, 58%);
+  --sf-primary-700: hsl(270, 95%, 68%);
+  --sf-secondary-800: hsl(280, 90%, 80%);
+
+  /* Elevated e Selected entram como o design system pede — eles descrevem um
+     PASSO (parado → sob o ponteiro → escolhido), e um passo é relativo à
+     superfície de baixo, seja ela qual for.
+
+     O `--vr-card-bg` e o fundo da página NÃO entram, e isso foi testado na
+     tela antes de ficar assim. O design system é cinza NEUTRO
+     (`hsl(225,15..20%,10..15%)`, com o fundo indo para o slate-900); o escuro
+     desta aplicação é um marinho FRIO e mais fundo (`#060b16`), e é dele que
+     vem quase todo o efeito de vidro daqui — os blobs, o brilho diagonal e a
+     saturação alta dos painéis só rendem porque há um azul profundo por baixo
+     para eles puxarem. Trocado pelo cinza, o mesmo material saiu lavado. Vale
+     a superfície do design system onde ela descreve RELAÇÃO, não onde ela
+     escolhe a cor da casa. */
+  --sf-surface-elevated: rgba(255, 255, 255, 0.08);
+  --sf-surface-selected: rgba(139, 92, 246, 0.15);
+
+  /* O Glass Gradient do design system é `from-white/20 to-white/5` — branco
+     PURO. Lá ele pousa sobre cinza neutro e o resultado continua cinza; aqui
+     ele pousa sobre marinho, e branco sobre uma cor SATURADA a puxa para o
+     acromático: o cartão a 4,3% de branco sobre `#060b16` compõe um azul
+     escuro, e mais 20% de branco por cima o achata em cinza. Era o brilho, não
+     o fundo — reverter os tokens de superfície não resolveu porque o
+     desbotamento vinha desta camada.
+
+     Mesmo gesto, com HUE: o brilho é o ciano da casa em vez de branco, então
+     ele CLAREIA sem dessaturar. */
+  --sf-glass-sheen: linear-gradient(135deg,
+                      color-mix(in oklab, var(--sf-cyan) 15%, transparent),
+                      color-mix(in oklab, var(--sf-blue) 5%, transparent) 58%,
+                      transparent);
+}
+
+/* Glass Effect — o brilho diagonal nas superfícies de vidro */
+.card:not([class*="total"]):not([class*="Total"]),
+div[class*="-widget"]:not([class*="__"]):not(.row):not([class*="total"]):not([class*="--"]),
+div[class*="-card"]:not([class*="__"]):not(.row):not([class*="total"]):not([class*="--"]),
+div[class*="-panel"]:not([class*="__"]):not(.row):not([class*="total"]):not([class*="--"]),
+.row.cp-cards,
+/* As superfícies de nome PRÓPRIO. O §23.1 já as trata como vidro por uma lista
+   explícita — elas não casam com `-widget`/`-card`/`-panel` —, e o brilho
+   ficou para trás porque foi escrito só com os seletores estruturais. O
+   sintoma é uma tela inteira parecendo cinza ao lado das outras: o brilho é
+   ciano (§ "o brilho não pode ser branco"), então quem não o recebe fica com o
+   azul do fundo e mais nada. Era o About inteiro, e com ele o Accrual, o
+   Quotes, o Page Access, o File Interpreter e o Electronic Inventory. */
+.mc-item, .ob-item, .cp-ce-item, .ei-type-item, .map-type-item, .fi-tpl-item,
+.ei-doc-row, .ei-up-block, .fi-block, .fi-tpl-pair, .nop-preview,
+.pa-user, .pa-role, .pa-summary, .cp-acc-row, .cp-glass,
+.acc-stat, .acc-tcard, .acc-datecard, .qt-card, .pcm-mini,
+.ab-feat, .ab-info, .ab-hero, .ab-step,
+.ab-tile-dark, .ab-tile-dark2, .ab-tile-white, .ab-tile-parchment {
+  background-image: var(--sf-glass-sheen) !important;
+}
+
+/* O painel de título fica FORA da regra acima e recebe o brilho COMPOSTO com o
+   tingimento dele. `background-image` aceita várias camadas mas não as SOMA
+   entre regras: a última declaração substitui a lista inteira, e a versão
+   anterior desta seção apagou os dois radiais do §6/§36 sem deixar rastro —
+   o painel perdeu a abertura ciano→violeta nos dois temas. Camadas na ordem
+   de pintura: o brilho na frente, o tingimento atrás. */
+.page-title-head {
+  background-image:
+    var(--sf-glass-sheen),
+    radial-gradient(62% 190% at 0% -10%,
+      color-mix(in oklab, var(--sf-blue) 16%, transparent), transparent 62%),
+    radial-gradient(52% 190% at 100% -10%,
+      color-mix(in oklab, var(--sf-violet) 12%, transparent), transparent 60%) !important;
+}
+:root:not([data-bs-theme=dark]) .page-title-head {
+  background-image:
+    var(--sf-glass-sheen),
+    radial-gradient(84% 220% at 0% -10%,
+      color-mix(in oklab, var(--sf-blue) 8%, transparent), transparent 80%),
+    radial-gradient(72% 220% at 100% -10%,
+      color-mix(in oklab, var(--sf-violet) 6%, transparent), transparent 78%) !important;
+}
+
+/* Elevated Surface — o passo de hover, um valor só para o app inteiro */
+.mc-item:hover, .ob-item:hover, .cp-ce-item:hover, .ei-type-item:hover,
+.map-type-item:hover, .fi-tpl-item:hover, .ei-doc-row:hover, .fi-block:hover,
+.pa-user:hover, .pa-role:hover, .cp-acc-row:hover, .acc-stat:hover,
+.acc-tcard:hover, .qt-card:hover, .pcm-mini:hover, .cp-card:hover {
+  background-color: var(--sf-surface-elevated) !important;
+}
+
+/* Selected State */
+.dropdown-item.active, .dropdown-item:active,
+.list-group-item.active,
+.smart-filter-dropdown li.sf-kbd-active {
+  background-color: var(--sf-surface-selected) !important;
+  color: var(--ins-body-color) !important;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   44. OS CHIPS DO FILTRO INTELIGENTE — campo e valor são coisas diferentes
+   --------------------------------------------------------------------------
+   O chip diz duas coisas de uma vez: QUAL campo está filtrado e POR QUE valor.
+   Escritos na mesma cor, o olho tem de ler a pontuação para separar um do
+   outro — e num chip de 10px o `:` é o caractere menos visível que existe.
+
+   A separação é feita só aqui porque o markup já tem o gancho: as 22 telas
+   montam o chip como `<strong>CAMPO:</strong>&nbsp;valor`, então o `<strong>`
+   É o campo e o resto é o valor. Uma regra de CSS alcança as vinte e duas; um
+   ajuste no JS teria de ser repetido vinte e duas vezes e envelheceria em
+   tela nova.
+
+   O campo fica em tom SECUNDÁRIO e o valor em destaque — é o valor que se
+   procura quando se olha a barra para conferir o que está filtrando. E o
+   `uppercase` vai no CHIP, não no `<strong>`: a origem dos valores é variada
+   (`Success` vem do status, `30/08/2026` da data) e só o contêiner iguala
+   todos sem depender de quem escreveu cada um.
+   ══════════════════════════════════════════════════════════════════════════ */
+.smart-filter-chip {
+  background-color: color-mix(in oklab, var(--sf-blue) 16%, var(--vr-card-bg)) !important;
+  background-image: var(--sf-glass-sheen) !important;
+  border: 1px solid color-mix(in oklab, var(--sf-blue) 26%, transparent) !important;
+  backdrop-filter: blur(12px) saturate(200%);
+  -webkit-backdrop-filter: blur(12px) saturate(200%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  text-transform: uppercase;
+  letter-spacing: 0.045em;
+  font-weight: 600;
+  padding: 3px 9px;
+  gap: 6px;
+}
+.smart-filter-chip strong {
+  font-weight: 600;
+  opacity: 0.72;
+  color: var(--sf-chip-key);
+}
+.smart-filter-chip { color: var(--sf-chip-val) !important; }
+
+:root:not([data-bs-theme=dark]) {
+  --sf-chip-key: #3f5878;
+  --sf-chip-val: #10233d;
+}
+[data-bs-theme=dark] {
+  --sf-chip-key: #8fb6e8;
+  --sf-chip-val: #eaf2ff;
+}
+
+.smart-filter-chip .sf-chip-remove {
+  opacity: 0.55;
+  font-size: 14px;
+  margin-left: 0;
+}
+.smart-filter-chip .sf-chip-remove:hover { opacity: 1; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   45. AS GRADES VERTICAIS DAS TABELAS
+   --------------------------------------------------------------------------
+   Medindo as duas telas lado a lado, o que separa a tabela "fluida" do New
+   Deals da tabela "quebrada" do Reference Data é UMA classe: o
+   `table-bordered` do Bootstrap, que desenha borda nos QUATRO lados de cada
+   célula. As linhas verticais recortam a tabela em caixas e é isso que se lê
+   como grade de planilha em vez de lista.
+
+   Até o §37 elas eram piores do que pareciam: sem `--bs-border-color`
+   definido, saíam em `currentColor` — a cor do TEXTO. O §37 as rebaixou a um
+   fio; aqui elas somem, que é o padrão do resto do app (das oito telas
+   medidas, só o Reference Data carregava a classe).
+
+   O que FICA é a linha horizontal entre as linhas de dado: ela é o que separa
+   um registro do outro numa tabela densa, e some o registro junto se for
+   tirada. Corte na vertical é enfeite; corte na horizontal é informação.
+
+   O `border-collapse: collapse` da tabela funde bordas adjacentes, então a
+   borda ESQUERDA de uma célula e a DIREITA da vizinha são o mesmo traço — por
+   isso as duas são zeradas juntas, e não só uma.
+
+   O fundo SÓLIDO do cabeçalho continua, e não é inconsistência: das oito telas
+   medidas, sete têm `th` com `position: sticky` — as linhas passam por baixo
+   dele na rolagem, e translúcido é o texto do cabeçalho misturado com os
+   valores (a nota do §16.3). O New Deals é o único com `th` estático, e por
+   isso é o único que pode viver sem o fundo. Igualar por ali quebraria a
+   rolagem de sete telas para uniformizar uma.
+   ══════════════════════════════════════════════════════════════════════════ */
+.table-bordered > :not(caption) > * > *,
+.table-bordered > thead > tr > th,
+.table-bordered > tbody > tr > td,
+.table-bordered > tbody > tr > th,
+table.dataTable.table-bordered th,
+table.dataTable.table-bordered td {
+  border-left-width: 0 !important;
+  border-right-width: 0 !important;
+}
+/* os clones do cabeçalho com scrollX perdem o id da tabela (nota do §padrão de
+   tabela): o seletor tem de alcançá-los pelo contêiner do DataTables */
+.dt-scroll-head .table-bordered th,
+.dt-scroll-headInner .table-bordered th,
+.dataTables_scrollHeadInner .table-bordered th {
+  border-left-width: 0 !important;
+  border-right-width: 0 !important;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   46. O TAMANHO DO PASSO ENTRE CAMADAS NO TEMA CLARO
+   --------------------------------------------------------------------------
+   O escuro é mais agradável que o claro por uma razão que se mede: o TAMANHO
+   do degrau entre uma camada e a seguinte. No Control Panel escuro, o fundo é
+   ~rgb(6,11,22), o painel de seção ~rgb(15,20,31) e o cartão de rotina
+   ~rgb(21,26,37) — degraus de +9 e +6 por canal. No claro os mesmos três eram
+   rgb(204,217,238) → rgb(226,235,247) → rgb(250,251,253): +22 e +24, quase
+   quatro vezes maior. Cada degrau desses é uma aresta que o olho encontra.
+
+   E a causa raiz não está nos painéis: está na AMPLITUDE do tema. O fundo
+   claro era um azul-acinzentado bem carregado (`#ccd9ee`) enquanto as
+   superfícies são quase brancas, então qualquer sobreposição tinha de cruzar
+   meio caminho até o branco. Aproximar o fundo do branco encolhe todos os
+   degraus de uma vez — inclusive os que eu não ajustei aqui — porque cada
+   superfície é uma fração do que falta para o branco, e o que falta ficou
+   menor.
+
+   Isto MELHORA o contraste de texto: o corpo é escuro, e clarear o fundo
+   afasta os dois. Os tons calibrados contra o fundo antigo (§33) continuam
+   válidos pelo lado seguro.
+   ══════════════════════════════════════════════════════════════════════════ */
+:root:not([data-bs-theme=dark]) {
+  --vr-page-bg: #e3ebf7;
+  --vr-card-bg: rgba(255, 255, 255, 0.44);
+}
+
+/* Control Panel: os dois degraus recalibrados na mesma proporção do escuro */
+:root:not([data-bs-theme=dark]) .row.cp-cards {
+  background-color: color-mix(in oklab, var(--sf-blue) 3%, rgba(255, 255, 255, 0.24)) !important;
+}
+:root:not([data-bs-theme=dark]) .cp-card {
+  background-color: rgba(255, 255, 255, 0.40) !important;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   47. O DASHBOARD — a última tela fora da linguagem
+   --------------------------------------------------------------------------
+   O `index.html` (a rota `/dashboard`) desenha as próprias superfícies com
+   nomes que o §23 não alcança — `.dash-hero`, `.dash-stat` —, então o refino
+   passou ao largo dela. E o `.dash-hero` não é só "não refinado": ele tem cor
+   FIXA (`linear-gradient(160deg, #0d1226, #0a0a12)`), o que no tema claro
+   produz o único bloco PRETO do app inteiro, com o resto da página em vidro
+   azul-claro em volta. Cor fixa não tem tema; o que se vê no claro é o desenho
+   do escuro colado ali.
+
+   Aqui ele vira painel de vidro com a mesma física do `.page-title-head` — os
+   dois são o mesmo objeto (o cabeçalho da tela), e é estranho que só um deles
+   deixe a luz do fundo passar.
+
+   Junto vem a consequência: os textos do hero são gradientes que partem do
+   BRANCO (`#fff 28%` no título, `rgba(255,255,255,.66)` na linha de apoio) e
+   só se liam porque o bloco era preto. Superfície e tinta se declaram juntas —
+   é a mesma regra do §24, §30, §32, §39 e §42, e aqui ela aparece na direção
+   inversa: mudei o fundo, então devo a cor do texto.
+
+   O seletor repete o `#dash-page` porque a página usa ID (1,1,0). Sem ele, uma
+   regra de classe não alcança nada aqui, por mais específica que pareça.
+   ══════════════════════════════════════════════════════════════════════════ */
+#dash-page .dash-hero {
+  background-color: var(--vr-card-bg);
+  background-image:
+    var(--sf-glass-sheen),
+    radial-gradient(72% 150% at 6% -25%,
+      color-mix(in oklab, var(--sf-blue) 22%, transparent), transparent 64%),
+    radial-gradient(64% 150% at 96% -12%,
+      color-mix(in oklab, var(--sf-violet) 16%, transparent), transparent 62%);
+  border: 1px solid var(--vr-card-border);
+  backdrop-filter: blur(var(--sf-glass-blur)) saturate(180%);
+  -webkit-backdrop-filter: blur(var(--sf-glass-blur)) saturate(180%);
+  box-shadow: var(--vr-card-shadow),
+              0 0 70px -18px color-mix(in oklab, var(--sf-blue) 30%, transparent);
+  /* NÃO ponha `overflow: hidden` aqui. A página declara `overflow: visible` de
+     propósito: o dropdown do período ("Current Year") abre para BAIXO a partir
+     do canto do hero e precisa sair da caixa. Com o recorte ligado ele fica
+     preso na borda inferior, aparecendo cortado pela metade. Os cantos em
+     esquadro não precisam do recorte — estão posicionados para dentro —, e o
+     fundo respeita o `border-radius` sem ele. */
+}
+/* cantos em esquadro, como no painel de título das demais telas */
+#dash-page .dash-hero::before,
+#dash-page .dash-hero::after {
+  content: "";
+  position: absolute;
+  width: 14px; height: 14px;
+  pointer-events: none;
+  z-index: 2;
+}
+#dash-page .dash-hero::before {
+  top: 12px; left: 12px;
+  border-top: 1px solid color-mix(in oklab, var(--sf-cyan) 60%, transparent);
+  border-left: 1px solid color-mix(in oklab, var(--sf-cyan) 60%, transparent);
+}
+#dash-page .dash-hero::after {
+  bottom: 12px; right: 12px;
+  border-bottom: 1px solid color-mix(in oklab, var(--sf-violet) 55%, transparent);
+  border-right: 1px solid color-mix(in oklab, var(--sf-violet) 55%, transparent);
+}
+
+/* — a tinta que o fundo novo pede, por tema — */
+:root:not([data-bs-theme=dark]) #dash-page .dash-hero__title {
+  background: linear-gradient(100deg, #101b31 24%, #1559c9 64%, #7c3aed 100%);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+:root:not([data-bs-theme=dark]) #dash-page .dash-hero__eyebrow {
+  background: linear-gradient(100deg, #1559c9, #7c3aed);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+:root:not([data-bs-theme=dark]) #dash-page .dash-hero__sub { color: #46536b; }
+:root:not([data-bs-theme=dark]) #dash-page .dash-hero .btn-outline-primary {
+  background: rgba(255, 255, 255, 0.55);
+  border-color: var(--sf-hair);
+  color: #1c2a44;
+}
+:root:not([data-bs-theme=dark]) #dash-page .dash-hero .btn-outline-primary:hover,
+:root:not([data-bs-theme=dark]) #dash-page .dash-hero .btn-outline-primary.show {
+  background: rgba(255, 255, 255, 0.78);
+  border-color: color-mix(in oklab, var(--sf-blue) 30%, transparent);
+  color: #10233d;
+}
+
+/* — os cartões de número: vidro com o brilho diagonal, e o filete de acento
+     que o resto do app usa para dizer "este bloco tem uma cor própria" — */
+#dash-page .dash-stat {
+  background-image: var(--sf-glass-sheen) !important;
+  border-radius: 20px !important;
+}
+#dash-page .dash-stat::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 18%; bottom: 18%;
+  width: 2px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, var(--c1), var(--c2));
+  z-index: 2;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   48. O BRILHO NÃO PODE APAGAR A COR DE QUEM TEM COR PRÓPRIA
+   --------------------------------------------------------------------------
+   O §43 dá o brilho diagonal por `background-image`, e `background-image` não
+   SOMA entre regras: a última declaração substitui a lista inteira. Já
+   consertei isso uma vez no painel de título; o mesmo tiro pegou os cartões de
+   TOTAL, e neles o estrago é maior porque ali o gradiente não é enfeite — é a
+   identidade do bloco. O `.ops-recon--total` do NDF Summary declara
+   `linear-gradient(135deg, #0066cc, #34369b)` e pinta o texto de BRANCO em
+   cima; sem o gradiente sobra a cor de cartão comum, e o texto branco
+   praticamente desaparece. Um card ilegível é pior do que um card sem brilho.
+
+   Duas exclusões, e as duas dizem a mesma coisa — "este bloco declarou uma
+   identidade própria, não passe por cima":
+   · `total` no nome: em toda a base é o cartão de soma, e ele é colorido
+     justamente para não se confundir com os irmãos;
+   · `--` no nome: o modificador BEM. É o mesmo espírito da exclusão de `__`
+     que o §23 já tinha (sub-elemento), aplicado à variante.
+
+   O que se perde é o brilho nesses blocos, e ele não faz falta: quem tem
+   gradiente próprio já tem o seu.
+   ══════════════════════════════════════════════════════════════════════════ */
+/* A exclusão vive no seletor do §43, e NÃO numa regra de reposição aqui. A
+   primeira tentativa foi `background-image: none !important` nestes blocos, e
+   ela não resolve nada: `!important` também vence o gradiente da PÁGINA, então
+   o cartão saía sem imagem nenhuma — o mesmo texto branco sobre o mesmo fundo
+   claro, agora por outro caminho. Quando o defeito é "minha regra passou por
+   cima de outra", a correção é a minha regra não alcançar, não uma terceira
+   regra por cima das duas.
+
+   Medido antes: DEZENOVE cartões de total com contraste de 1,25:1 entre o
+   texto e o fundo — branco sobre quase-branco em Live Positions, Other
+   Products, Cognos, OTM, Operations B3, NDF Cockpit, Other Publisher, Comitente
+   e no Total do dashboard. */
+
+/* ══════════════════════════════════════════════════════════════════════════
+   49. RESPIRO ACIMA DO CABEÇALHO DA TABELA
+   --------------------------------------------------------------------------
+   O Other Publisher já declarava `#nop-page .table-responsive { padding-top:
+   1rem }` e por isso era a única com a barra de ferramentas descolada do
+   cabeçalho. Nas demais, o `<thead>` encosta na linha de baixo da barra e as
+   duas se leem como uma faixa só.
+
+   A regra sobe para cá porque é do PADRÃO de tabela, não de uma tela: escrita
+   página a página, ela nasce faltando na próxima — foi o que aconteceu no NDF
+   Cockpit. As páginas que já a têm continuam idênticas (mesmo valor).
+
+   E é `margin-top`, NÃO `padding-top`. O `.table-responsive` que hospeda uma
+   tabela simples é o SCROLLPORT (o `visual-refresh.css` lhe dá `max-height` +
+   `overflow: auto` para o cabeçalho ter contra o que grudar). Padding fica
+   DENTRO da área que rola: o cabeçalho sticky parava 16px abaixo do topo e as
+   linhas do corpo desfilavam por essa fresta, aparecendo cortadas acima dele —
+   medido no /mapping, folga de 16px com o corpo rolado. Margem fica FORA da
+   área que rola, dá o mesmo respiro e não tem por onde vazar.
+   ══════════════════════════════════════════════════════════════════════════ */
+.card .table-responsive,
+.card-body > .table-responsive,
+.card .dt-container {
+  margin-top: 1rem;
+  padding-top: 0;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   50. A BANDA DO CABEÇALHO — opaca, e invisível
+   --------------------------------------------------------------------------
+   A varredura das 79 páginas deu uma correlação exata, sem uma exceção:
+   as 38 tabelas com banda sólida no `th` são as 38 com `position: sticky`, e
+   as 15 sem banda são as 15 com `th` estático (New Deals, Accrual e MtM). A
+   banda não é capricho de tela — é a proteção da rolagem, e removê-la para
+   igualar ao New Deals trocaria uma queixa visual por texto de cabeçalho
+   misturado com valores em 35 páginas.
+
+   Mas ela também não precisava aparecer. Medindo o pixel do cartão logo acima
+   do cabeçalho e o pixel da banda, em quatro telas e nos dois temas, o
+   `--vr-thead-bg` estava LONGE do que tem por trás:
+
+     claro   cartão rgb(241,250,254)   banda rgb(230,237,249)   Δ até −14
+     escuro  cartão rgb( 22, 49, 70)   banda rgb( 15, 22, 38)   Δ até −34
+
+   No escuro o desencontro é de saturação, não só de brilho: a banda era quase
+   cinza-azulado sob um cartão claramente azul. Daí o retângulo.
+
+   Os valores abaixo SÃO a média medida do cartão. A banda continua opaca (a
+   rolagem segue protegida) e some da vista, que é o que se pedia. Fica um
+   resíduo de poucas unidades porque o brilho do §43 é diagonal e o cartão
+   muda de tom da esquerda para a direita — uma cor fixa não acompanha um
+   gradiente, e nessa escala isso não se enxerga.
+
+   Este é o par de valores a REVISAR sempre que `--vr-card-bg`, o fundo da
+   página ou o brilho mudarem: eles não são uma cor escolhida, são uma cor
+   COPIADA de outra, e cópia envelhece quando o original muda.
+   ══════════════════════════════════════════════════════════════════════════ */
+:root:not([data-bs-theme=dark]) { --vr-thead-bg: #f1fafe; }
+[data-bs-theme=dark]            { --vr-thead-bg: #163146; }

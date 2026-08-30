@@ -72,6 +72,19 @@
 #fxo-page .fxo-w-none .fxo-widget__ico,
 #fxo-page .fxo-w-none-ath .fxo-widget__ico { background: linear-gradient(100deg, #c0392b, #ff5a5a); box-shadow: 0 4px 12px rgba(192,57,43,.28); }
 #fxo-page .fxo-w-just .fxo-widget__ico { background: linear-gradient(100deg, #0066cc, #5e5ce6); box-shadow: 0 4px 12px rgba(0,102,204,.28); }
+/* O Total é o card de FECHAMENTO da fileira: vem por ÚLTIMO e leva o gradiente
+   da MARCA, o que o separa dos cinco cards de ESTADO ao lado (Matched ·
+   Partial · os dois Unmatched · Justified), que carregam cor semântica. Ele
+   estava em primeiro e sem acento nenhum — lido como só mais um estado. */
+#fxo-page .fxo-w-total .fxo-widget__ico {
+    background: var(--vr-grad);
+    box-shadow: 0 6px 18px color-mix(in oklab, var(--sf-blue) 55%, transparent);
+}
+#fxo-page .fxo-w-total {
+    border-color: color-mix(in oklab, var(--sf-blue) 45%, var(--vr-card-border)) !important;
+    box-shadow: var(--vr-card-shadow),
+                0 0 30px -8px color-mix(in oklab, var(--sf-blue) 70%, transparent) !important;
+}
 
 #fxo-page .widget-lbl {
     font-size: .78rem; font-weight: 700; letter-spacing: -.01em;
@@ -289,13 +302,6 @@
          quem endereçar. -->
     <div class="row g-2 mb-3">
         <div class="col-6 col-lg col-fxo-w">
-            <div class="fxo-widget fxo-w-total" data-status="">
-                <span class="fxo-widget__ico"><i class="ti ti-sum"></i></span>
-                <p class="widget-lbl" data-lang="fxo-w-total">Total</p>
-                <p class="widget-val" id="w-total">—</p>
-            </div>
-        </div>
-        <div class="col-6 col-lg col-fxo-w">
             <div class="fxo-widget fxo-w-ok" data-status="Matched">
                 <span class="fxo-widget__ico"><i class="ti ti-circle-check"></i></span>
                 <p class="widget-lbl" data-lang="fxo-w-ok">Matched</p>
@@ -328,6 +334,13 @@
                 <span class="fxo-widget__ico"><i class="ti ti-message-check"></i></span>
                 <p class="widget-lbl" data-lang="fxo-w-justified">Justified</p>
                 <p class="widget-val" id="w-justified">—</p>
+            </div>
+        </div>
+        <div class="col-6 col-lg col-fxo-w">
+            <div class="fxo-widget fxo-w-total" data-status="">
+                <span class="fxo-widget__ico"><i class="ti ti-sum"></i></span>
+                <p class="widget-lbl" data-lang="fxo-w-total">Total</p>
+                <p class="widget-val" id="w-total">—</p>
             </div>
         </div>
     </div>
