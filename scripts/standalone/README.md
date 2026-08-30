@@ -249,7 +249,7 @@ start python 02_14_b3_files_swap.py
   rotina não está naquela máquina**, e o script diz isso com todas as letras:
 
   ```
-  == daily -> daily_<produto>.db (um por produto)
+  == daily -> db/cache/<caminho>/<produto>.db (um por produto)
      convertidos: 0 | inalterados: 0
      ! cache/daily settlement: bloco ausente em disco.
        Dentro de cache há: b3 files, new deals, payrec
