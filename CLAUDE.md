@@ -401,8 +401,8 @@ São dois bancos:
   migração — HANDOFF §326): a escrita avisa o `apps/pages/duck_mirror.py`
   (gancho no funil `_atomic_write_json`, mais `_b3_save`, `_cpd_save_list` e o
   `write_holidays` da vertical), e uma thread daemon reconverte na hora com o
-  motor `apps/pages/json_to_duckdb.py` — os `daily_<produto>.db`, o banco de
-  cada JSON avulso, `reference_data.db` e `holiday_calendars.db` da pasta
+  motor `apps/pages/json_to_duckdb.py` — o banco de cada produto de arquivo-dia,
+  o de cada JSON avulso, `reference_data.db` e `holiday_calendars.db` da pasta
   `db/` ficam sempre atualizados sem rodar script. O aviso só ENFILEIRA (nada de DuckDB no share
   sob o `_cache_lock`) e é melhor esforço: falha vai para o log e o manifest
   reconverte na rodada seguinte. `OTC_DISABLE_DUCK_MIRROR=1` desliga (o
@@ -448,18 +448,21 @@ São dois bancos:
   exata seguem no JSON de propósito.
 
   **A quebra dos bancos é por PRODUTO, um DB por arquivo-dia e um DB por JSON
-  avulso** (§336). O caminho inteiro de `cache/` nomeia o banco
-  (`daily_new_deals_ndf_vanilla.db`, `daily_new_deals_option_fxo.db`,
-  `daily_new_deals_intrag_ndf.db`, `daily_b3_files_swap.db`) e cada dia é uma
-  tabela dentro dele; onde a rotina **não se ramifica em pastas**, quem separa
-  os produtos é o NOME do arquivo, e a tag dele entra no banco — é o Daily
-  Settlement, dez arquivos por dia na mesma pasta virando
-  `daily_settlement_otm.db`, `daily_settlement_ndf_cockpit.db`, … Os demais
-  JSONs seguem a mesma ideia: um banco por ARQUIVO (`mappings_mt300.db`,
-  `control_panel_mt300_status.db`, `file_interpreter_termo.db`,
-  `subjacente.db` na raiz), o que de quebra tira a contenção que o banco
-  compartilhado criava — o espelho reconvertendo UM mapping fechava a leitura
-  dos outros 42. Três detalhes que não dão erro nenhum:
+  avulso** (§336), e a pasta `db/` ESPELHA a árvore de origem (§342): o caminho
+  de `cache/` vira PASTA e o produto vira o arquivo
+  (`db/cache/new deals/NDF/Vanilla.db`, `db/cache/new deals/Option/FXO.db`),
+  com só ano/mês/dia virando TABELA. Onde a pasta do DIA guarda mais de um
+  arquivo, quem separa os produtos é o NOME, e a tag dele vira o banco — é o
+  Daily Settlement, dez arquivos por dia na mesma pasta virando
+  `db/cache/daily settlement/otm-settlement.db` e irmãos, e é cada produto do
+  B3 Files, cujo Swap tem posição, fluxo e agenda de prêmios lado a lado
+  (`db/cache/b3 files/Swap/73760_DPOSICAO-SWAP.db`). Os demais
+  JSONs seguem a mesma ideia: um banco por ARQUIVO, na pasta do arquivo
+  (`db/mappings/mt300.db`, `db/control-panel/mt300_status.db`,
+  `db/file-interpreter/termo.db`, `Subjacente.db` na raiz), o que de quebra
+  tira a contenção que o banco compartilhado criava — o espelho reconvertendo
+  UM mapping fechava a leitura dos outros 42. Três detalhes que não dão erro
+  nenhum:
   - o corte "tag no banco ou não" é **declarado** (`_por_arquivo`), nunca por
     olhar os vizinhos em disco: o `_daily_rel_target` tem de ser puro sobre o
     caminho, porque o espelho vivo converte UM arquivo por vez e não pode
@@ -477,7 +480,7 @@ São dois bancos:
     FIM: em `73760_260610_DPOSICAO-SWAP` ela está no MEIO, e tirá-la deixaria
     um `_` duplo que o strip das pontas não alcança (`73760__DPOSICAO-SWAP.db`);
   - a tag da TABELA é tudo-ou-nada. Podando token a token, o `DPOSICAO-SWAP`
-    do `daily_b3_files_swap.db` perderia justamente o `swap` e ficaria
+    do `db/cache/b3 files/Swap.db` perderia justamente o `swap` e ficaria
     indistinguível de um `DPOSICAO` da mesma pasta;
   - os bancos dos desenhos ANTERIORES são apagados na carga completa
     (`_drop_legacy_dbs`), **menos o que ainda é alvo** — apagá-lo custaria uma

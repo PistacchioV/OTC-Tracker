@@ -809,7 +809,7 @@ def _novo_daily_stats():
     # `avisos` é o que o resumo IMPRIME sem ser erro — hoje, a rotina pedida que
     # não existe em disco. `ignored` continua sendo contagem (os `_last` e as
     # configs avulsas são muitos e não interessam um a um).
-    return {'db': 'daily_<produto>.db (um por produto)', 'dbs': [],
+    return {'db': 'db/cache/<caminho>/<produto>.db (um por produto)', 'dbs': [],
             'converted': [], 'skipped': [], 'errors': [], 'ignored': [],
             'avisos': [], 'antigos': []}
 
@@ -1491,7 +1491,7 @@ def _novo_dataset_stats():
     # no mesmo balde `ignored` dos que ficam de fora de verdade, e o resumo
     # dizia só `fora deste conversor: 15`: um número que se lê como perda
     # quando é exatamente o contrário.
-    return {'db': '<pasta>_<arquivo>.db (um por JSON)', 'dbs': [],
+    return {'db': 'db/<pasta>/<arquivo>.db (um por JSON)', 'dbs': [],
             'converted': [], 'skipped': [], 'errors': [], 'ignored': [],
             'cobertos': []}
 
