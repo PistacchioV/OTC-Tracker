@@ -1,14 +1,22 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""convert 01_cadastros — os JSONs ÚNICOS (sem quebra por dia).
+"""convert 01_cadastros — os cadastros sem pasta própria (calendários, RefData/CPD, raiz).
 
-O ESCOPO são os JSONs ÚNICOS — os que NÃO têm quebra por dia:
+O ESCOPO são os cadastros que NÃO têm pasta própria ao lado deste script:
 
   - holiday_calendars.db  uma tabela por calendário do registro (+ _registry);
   - reference_data.db     refdata e counterparty_details, TUDO VARCHAR;
-  - <pasta>/<arquivo>.db  UM BANCO POR JSON para o resto — db/mappings/mt300.db,
-                          db/control-panel/mt300_status.db,
-                          db/file-interpreter/termo.db, e o JSON da raiz na raiz.
+  - <arquivo>.db          os JSONs da RAIZ do DATA_DIR (Subjacente, Dominio, …).
+
+As pastas com muitos arquivos saíram para fatias próprias — 01_1 em diante:
+
+  - mappings
+  - file-interpreter
+  - control-panel
+  - tickets
+
+Este é o COMPLEMENTO delas, como o 99_outros é o dos blocos de cache/: pasta de
+cadastro NOVA cai aqui sozinha, sem ninguém tocar em nada.
 
 A pasta translations/ fica FORA de propósito: os 3 JSONs de i18n são os únicos
 que permanecem como JSON. Os arquivo-dia de cache/ são dos outros scripts, e por
@@ -32,6 +40,7 @@ from convert_json_to_duckdb import run    # noqa: E402
 
 
 if __name__ == '__main__':
-    sys.exit(run(escopo='cadastros (sem quebra por dia)',
+    sys.exit(run(escopo='cadastros: calendarios, RefData/CPD e os JSONs de raiz',
                  conversores=('holidays', 'refdata', 'datasets'),
+                 excluir_pastas=['mappings', 'file-interpreter', 'control-panel', 'tickets'],
                  doc=__doc__))

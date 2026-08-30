@@ -76,7 +76,12 @@ def _slug(nome):
     return ''.join(c if c.isalnum() else '_' for c in nome.lower()).strip('_')
 
 
+# Os dois eixos moram no motor: as PASTAS de cadastro (`01_*`) e os BLOCOS de
+# `cache/` (`02_*`). O `01_cadastros` e o `99_outros` são os complementos —
+# pasta nova e rotina nova caem neles sem ninguém tocar em nada.
 esperado = ['00_completo.py', '01_cadastros.py']
+esperado += ['01_%d_%s.py' % (i, _slug(p))
+             for i, (p, _) in enumerate(motor.PASTAS_DATASET, start=1)]
 esperado += ['02_%d_%s.py' % (i, _slug(f))
              for i, (f, _) in enumerate(motor.ROTINAS_CACHE, start=1)]
 esperado.append('99_outros.py')
@@ -177,7 +182,14 @@ w('cache/reconciliation/payrec/2026-08-27.json', [{'V': '4'}])
 w('cache/reconciliation/nova/2026-08-27.json', [{'V': '5'}])
 # Uma rotina que NENHUM script nomeia: tem de cair no 99_outros.
 w('cache/rotina-nova/2026/07/28/coisa_20260728.json', [{'A': '1'}])
+# As quatro pastas de cadastro com fatia própria, mais uma que ninguém nomeia e
+# um JSON de RAIZ: os dois últimos são do `01_cadastros`, que é o complemento.
 w('mappings/bank-name.json', [{'ID': '341', 'NAME': 'BANCO ITAU S/A'}])
+w('file-interpreter/termo.json', {'name': 'Termo', 'version': 2})
+w('control-panel/mt300_status.json', {'last': '2026-08-27'})
+w('tickets/t-001.json', {'id': 'T-001', 'status': 'Open'})
+w('cadastro-novo/coisa.json', [{'A': '1'}])
+w('Subjacente.json', [{'Codigo': 'PETR4', 'Classe': 'ACAO'}])
 w('holiday-calendars.json', [{'name': 'ANBIMA', 'file': 'anbima.json'}])
 w('anbima.json', [{'date': '2026-01-01', 'title': 'Ano Novo', 'calendar': 'ANBIMA'}])
 
@@ -281,6 +293,15 @@ check('   e a recon que nenhuma fatia nomeia caiu no 99_outros',
       'cache/reconciliation/nova.db' in _arvore(OUT_FATIAS))
 check('   e o histórico de Pay/Rec continua num banco à parte do cache da recon',
       'cache/payrec.db' in _arvore(OUT_FATIAS))
+# Os CADASTROS também vão repartidos: uma fatia por pasta, e o `01_cadastros` é
+# o complemento — a pasta que ninguém nomeia e o JSON de RAIZ caem nele, do
+# mesmo jeito que a rotina nova cai no `99_outros`.
+check('cada pasta de cadastro tem a sua fatia, e a nova cai no complemento',
+      sorted(d for d in _arvore(OUT_FATIAS) if '/' in d and not d.startswith('cache/')),
+      ['cadastro-novo/coisa.db', 'control-panel/mt300_status.db',
+       'file-interpreter/termo.db', 'mappings/bank-name.db', 'tickets/t-001.db'])
+check('   e o JSON de raiz também é do complemento',
+      'Subjacente.db' in _arvore(OUT_FATIAS))
 
 print('\n== 3. as fatias não escrevem no mesmo banco ==')
 # Cada fatia sozinha, num destino próprio: o conjunto de bancos de uma não pode

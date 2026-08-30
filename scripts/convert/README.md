@@ -1,6 +1,6 @@
 # `scripts/convert/` — a carga JSON → DuckDB, repartida
 
-A conversão dos JSONs para os bancos DuckDB, em **35 fatias** que podem ser
+A conversão dos JSONs para os bancos DuckDB, em **39 fatias** que podem ser
 rodadas por pessoas diferentes ao mesmo tempo.
 
 Esta é a versão que roda **dentro do checkout**: ela pergunta ao `Config` do app
@@ -23,7 +23,11 @@ nunca escrevem no mesmo arquivo. Isso é prendido por teste
 | arquivo | escopo |
 |---|---|
 | `00_completo.py` | tudo — cadastros + todos os blocos de `cache/` |
-| `01_cadastros.py` | os JSONs ÚNICOS (feriados, RefData/CPD, mappings, control-panel, file-interpreter) |
+| `01_cadastros.py` | o RESTO dos cadastros — calendários, RefData/CPD e os JSONs da raiz. É o complemento das quatro fatias abaixo: pasta de cadastro NOVA cai aqui |
+| `01_1_mappings.py` | `mappings/` — os 43 cadastros do /mapping, um banco cada |
+| `01_2_file_interpreter.py` | `file-interpreter/` — templates e variantes |
+| `01_3_control_panel.py` | `control-panel/` — o estado das rotinas |
+| `01_4_tickets.py` | `tickets/` — o store do Support Center |
 | `02_1_new_deals_ndf_vanilla.py` | `new deals/NDF/Vanilla` — costuma ser o maior arquivo-dia do app |
 | `02_2_new_deals_ndf_fwdstart.py` | `new deals/NDF/FwdStart` — o FWD Start (a pasta é SEM espaço) |
 | `02_3_new_deals_ndf_otherpublisher.py` | `new deals/NDF/OtherPublisher` |
@@ -68,10 +72,14 @@ Um comando só:
 python scripts/convert/00_completo.py
 ```
 
-Ou repartido — **trinta e quatro** arquivos, em qualquer ordem, ao mesmo tempo:
+Ou repartido — **trinta e oito** arquivos, em qualquer ordem, ao mesmo tempo:
 
 ```bash
 python scripts/convert/01_cadastros.py
+python scripts/convert/01_1_mappings.py
+python scripts/convert/01_2_file_interpreter.py
+python scripts/convert/01_3_control_panel.py
+python scripts/convert/01_4_tickets.py
 python scripts/convert/02_1_new_deals_ndf_vanilla.py
 python scripts/convert/02_2_new_deals_ndf_fwdstart.py
 python scripts/convert/02_3_new_deals_ndf_otherpublisher.py
@@ -142,7 +150,7 @@ Ele **substitui** o escopo da fatia, não soma — não rode
 blocos existem, peça um que não existe: o aviso lista o que há naquele nível.
 
 O que **não** vale é rodar o `00_completo` junto com os outros: aí sim dois
-processos escreveriam no mesmo banco. Ou o `00`, ou os trinta e quatro.
+processos escreveriam no mesmo banco. Ou o `00`, ou os trinta e oito.
 
 O `99_outros` parece dispensável e não é: ele pega qualquer bloco de `cache/`
 que não tenha script próprio, e a poda dele é por **caminho** — tanto uma rotina

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-r"""convert 01_cadastros — os JSONs ÚNICOS (sem quebra por dia).
+r"""convert 01_cadastros — os cadastros sem pasta própria.
 
-Feriados, RefData/CounterpartyDetails e um banco por JSON de cadastro.
+Feriados, RefData/CounterpartyDetails e os JSONs da raiz.
 
 Versão AUTOCONTIDA: roda em QUALQUER máquina, sem o código do OTC Tracker por
 perto. Requisito único:  pip install duckdb
@@ -17,16 +17,23 @@ Uso:
     python 01_cadastros.py --dry-run
     python 01_cadastros.py --data-dir "D:\outra\pasta" --out-dir "D:\saida"
 
-O ESCOPO são os JSONs ÚNICOS — os que NÃO têm quebra por dia:
+O ESCOPO são os cadastros SEM pasta própria ao lado deste script:
 
   - holiday_calendars.db  uma tabela por calendário do registro (+ _registry);
   - reference_data.db     refdata e counterparty_details, TUDO VARCHAR (o zero à
                           esquerda de SPN/ECI/TAX ID é o que um BIGINT perderia
                           em silêncio) + a coluna _raw com o registro exato;
-  - <pasta>_<arquivo>.db  UM BANCO POR JSON para o resto — mappings_mt300.db,
-                          control_panel_mt300_status.db,
-                          file_interpreter_termo.db, e o JSON da raiz com o
-                          próprio nome (subjacente.db).
+  - <arquivo>.db          os JSONs da RAIZ do DATA_DIR (Subjacente, Dominio, …).
+
+As pastas com muitos arquivos saíram para fatias próprias — 01_1 em diante:
+
+  - mappings
+  - file-interpreter
+  - control-panel
+  - tickets
+
+Este é o COMPLEMENTO delas, como o 99_outros é o dos blocos de cache\: pasta de
+cadastro NOVA cai aqui sozinha, sem ninguém tocar em nada.
 
 A pasta translations\ fica FORA de propósito: os 3 JSONs de i18n são os únicos
 que permanecem como JSON. Os arquivo-dia de cache\ são dos outros scripts.
@@ -1432,6 +1439,35 @@ def _dataset_rel_target(rel, cal_files):
     return db, norm_ident(stem, 't') or 't'
 
 
+# As pastas de cadastro que ganham fatia PRÓPRIA na carga repartida — o eixo do
+# split dos datasets, como o `ROTINAS_CACHE` é o dos arquivo-dia. Mora aqui pela
+# mesma razão: os dois geradores a consomem, e escrita em cada um ela
+# envelheceria de um lado só.
+#
+# São as quatro pastas com muitos arquivos; o resto (os calendários, o
+# RefData/CPD e os JSONs de raiz) fica no `01_cadastros`, que é o COMPLEMENTO —
+# pasta nova de cadastro cai nele sem ninguém tocar em nada, do mesmo jeito que
+# rotina nova de `cache/` cai no `99_outros`.
+PASTAS_DATASET = (
+    ('mappings', 'Os 43 cadastros do /mapping — um banco por cadastro.'),
+    ('file-interpreter', 'Os templates e variantes do File Interpreter.'),
+    ('control-panel', 'O estado das rotinas do Control Panel.'),
+    ('tickets', 'O store do Support Center.'),
+)
+
+
+def _dataset_pasta(rel):
+    """A PASTA de primeiro nível de um JSON avulso, normalizada — `''` para o
+    JSON que mora na raiz do `DATA_DIR`.
+
+    É por ela que a carga dos cadastros se reparte, e é normalizada pela mesma
+    razão que a rotina de `cache/`: a grafia da pasta é de quem criou a árvore,
+    e casar por string exata é como o `02_2_b3_files` saía com zero convertidos
+    no share do JPM."""
+    partes = str(rel).split('/')
+    return chave_familia(partes[0]) if len(partes) > 1 else ''
+
+
 def _dataset_legacy_dbs(data_dir):
     """Os nomes do desenho ANTERIOR dos datasets: um banco por PASTA de
     primeiro nível, mais o `static_data.db` da raiz e o `translations.db` da
@@ -1524,7 +1560,8 @@ def convert_dataset_files(data_dir, out_dir, rels, force=False):
                                  _holiday_files(data_dir))
 
 
-def convert_datasets(data_dir, out_dir, force=False, dry_run=False):
+def convert_datasets(data_dir, out_dir, force=False, dry_run=False,
+                     pastas=None, excluir=None):
     """TODOS os demais JSONs do DATA_DIR — a cobertura total da migração.
 
     UM BANCO POR ARQUIVO (`mappings_mt300.db`, `control_panel_mt300_status.db`,
@@ -1532,12 +1569,25 @@ def convert_datasets(data_dir, out_dir, force=False, dry_run=False):
     lista-de-objetos vira tabela TIPADA com a coluna `_raw` (o registro exato —
     o canal do flip de leitura); payload objeto vira as tabelas das listas
     internas (também com `_raw`) mais a `_meta` chave→valor. Fica de fora o que
-    tem conversor próprio (RefData/CPD, calendários, `cache/`) e a pasta
-    `db/`."""
+    tem conversor próprio (RefData/CPD, calendários, `cache/`) e a pasta `db/`.
+
+    `pastas` restringe a conversão a pastas de primeiro nível do `DATA_DIR`
+    (`mappings`, `tickets`, …) e `excluir` é o complemento — os mesmos dois
+    parâmetros do `convert_daily`, pela mesma razão: repartir a carga entre
+    pessoas rodando ao mesmo tempo. Como os bancos são um por ARQUIVO, duas
+    fatias nunca escrevem no mesmo `.db`. O JSON da RAIZ tem pasta `''`: ele
+    pertence ao complemento, que é quem também leva a pasta de cadastro NOVA —
+    é o `99_outros` dos datasets.
+
+    Com escopo, a limpeza de bancos legados se restringe às pastas da fatia:
+    apagar o legado de outra seria desfazer a carga de quem está rodando ao
+    lado, e o `static_data.db` da raiz é do complemento."""
     stats = _novo_dataset_stats()
     if not os.path.isdir(data_dir):
         stats['errors'].append(('.', 'pasta de dados ausente: %s' % data_dir))
         return stats
+    so_pastas = None if pastas is None else {chave_familia(p) for p in pastas}
+    fora_pastas = set() if excluir is None else {chave_familia(p) for p in excluir}
     cal_files = _holiday_files(data_dir)
     rels = []
     # `os.walk` SEM `sorted(...)` por fora: o sorted consumiria o generator
@@ -1547,13 +1597,24 @@ def convert_datasets(data_dir, out_dir, force=False, dry_run=False):
     for dirpath, dirs, files in os.walk(data_dir):
         rel_dir = os.path.relpath(dirpath, data_dir).replace(os.sep, '/')
         if rel_dir == '.':
-            dirs[:] = sorted(d for d in dirs if d not in _DATASET_SKIP_DIRS)
+            # Com escopo, a varredura nem DESCE na pasta que não é da fatia —
+            # no share, onde a caminhada é cara, é a diferença entre ler uma
+            # pasta e ler o `DATA_DIR` inteiro.
+            dirs[:] = sorted(
+                d for d in dirs
+                if d not in _DATASET_SKIP_DIRS
+                and (so_pastas is None or chave_familia(d) in so_pastas)
+                and chave_familia(d) not in fora_pastas)
         else:
             dirs.sort()
         for fname in sorted(files):
             if not fname.endswith('.json'):
                 continue
             rel = fname if rel_dir == '.' else rel_dir + '/' + fname
+            # O JSON da RAIZ pertence ao complemento: uma fatia de pasta não o
+            # leva, e a de `excluir` leva.
+            if so_pastas is not None and _dataset_pasta(rel) not in so_pastas:
+                continue
             if _dataset_rel_target(rel, cal_files) is None:
                 _dataset_fora(rel, cal_files, stats)
             else:
@@ -1575,7 +1636,15 @@ def convert_datasets(data_dir, out_dir, force=False, dry_run=False):
     # São dois — um banco por PASTA (`mappings.db` com 42 tabelas) e o nome
     # ACHATADO na raiz (`mappings_mt300.db`) — mais a `translations.db` da
     # primeira versão da cobertura.
-    legados = set(_dataset_legacy_dbs(data_dir))
+    if so_pastas is None:
+        # Sem escopo de pasta, a limpeza é a completa: o `static_data.db` da
+        # raiz e o `translations.db` são desta fatia (a do complemento).
+        legados = {n for n in _dataset_legacy_dbs(data_dir)
+                   if chave_familia(n[:-3]) not in fora_pastas}
+    else:
+        # Numa fatia de pasta, só o banco-por-pasta DELA. O da raiz e o das
+        # outras são de quem está rodando ao lado.
+        legados = {(norm_ident(p, 'd') or 'static_data') + '.db' for p in pastas}
     legados.update(_legacy_flat_name(a[0]) for a, _ in alvos)
     _drop_legacy_dbs(out_dir, legados, {a[0] for a, _ in alvos},
                      stats, 'agora a pasta db/ espelha a arvore de origem')
@@ -1640,17 +1709,19 @@ def main(argv=None):
     out_dir = os.path.abspath(args.out_dir or os.path.join(data_dir, 'db'))
     print('origem : %s' % data_dir)
     print('destino: %s' % out_dir)
-    print('escopo : cadastros (sem quebra por dia)')
+    print('escopo : cadastros: calendarios, RefData/CPD e os JSONs de raiz')
 
     houve_erro = [False]
-    # Os JSONs UNICOS — nenhum deles tem quebra por dia, entao esta fatia nao
-    # toca em nada que os scripts de rotina convertem.
+    # Os cadastros SEM pasta propria: calendarios, RefData/CPD e os JSONs da
+    # raiz. As pastas com fatia propria sao excluidas — este script e o
+    # COMPLEMENTO delas, entao pasta de cadastro NOVA cai aqui sozinha.
     conversores = {'holidays': convert_holidays, 'refdata': convert_refdata,
                    'datasets': convert_datasets}
     escolhidos = [args.only] if args.only else list(conversores)
     for nome in escolhidos:
+        extra = {'excluir': ['mappings', 'file-interpreter', 'control-panel', 'tickets']} if nome == 'datasets' else {}
         _resumo(nome, conversores[nome](data_dir, out_dir, force=args.force,
-                                        dry_run=args.dry_run), houve_erro)
+                                        dry_run=args.dry_run, **extra), houve_erro)
     return 1 if houve_erro[0] else 0
 
 

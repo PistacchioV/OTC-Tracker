@@ -29,14 +29,24 @@ MOTOR = os.path.join(ROOT, 'apps', 'pages', 'json_to_duckdb.py')
 SAIDA_PADRAO = os.path.join(ROOT, 'scripts', 'convert')
 
 
-def _rotinas():
-    """A lista sai do MOTOR, carregada do ARQUIVO por importlib: um
-    `from apps.pages...` traria o blueprint do Flask junto, e este gerador roda
-    com stdlib + duckdb."""
+def _motor():
+    """O motor, carregado do ARQUIVO por importlib: um `from apps.pages...`
+    traria o blueprint do Flask junto, e este gerador roda com stdlib +
+    duckdb."""
     spec = importlib.util.spec_from_file_location('_motor_json_to_duckdb', MOTOR)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
-    return tuple(mod.ROTINAS_CACHE)
+    return mod
+
+
+def _pastas():
+    """As pastas de cadastro com fatia própria — do MOTOR, como as rotinas."""
+    return tuple(_motor().PASTAS_DATASET)
+
+
+def _rotinas():
+    """Os blocos de `cache/` — a mesma lista que o `scripts/standalone/` usa."""
+    return tuple(_motor().ROTINAS_CACHE)
 
 
 _MODELO = '''#!/usr/bin/env python3
@@ -78,17 +88,33 @@ Esta é a única fatia SEM escopo, e por isso a única que remove os bancos dos
 desenhos anteriores e a única que enxerga colisão de tabela entre blocos
 diferentes."""
 
-_DOC_CADASTROS = """O ESCOPO são os JSONs ÚNICOS — os que NÃO têm quebra por dia:
+_DOC_CADASTROS = """O ESCOPO são os cadastros que NÃO têm pasta própria ao lado deste script:
 
   - holiday_calendars.db  uma tabela por calendário do registro (+ _registry);
   - reference_data.db     refdata e counterparty_details, TUDO VARCHAR;
-  - <pasta>/<arquivo>.db  UM BANCO POR JSON para o resto — db/mappings/mt300.db,
-                          db/control-panel/mt300_status.db,
-                          db/file-interpreter/termo.db, e o JSON da raiz na raiz.
+  - <arquivo>.db          os JSONs da RAIZ do DATA_DIR (Subjacente, Dominio, …).
+
+As pastas com muitos arquivos saíram para fatias próprias — 01_1 em diante:
+
+%(lista)s
+
+Este é o COMPLEMENTO delas, como o 99_outros é o dos blocos de cache/: pasta de
+cadastro NOVA cai aqui sozinha, sem ninguém tocar em nada.
 
 A pasta translations/ fica FORA de propósito: os 3 JSONs de i18n são os únicos
 que permanecem como JSON. Os arquivo-dia de cache/ são dos outros scripts, e por
 isso esta fatia não recebe `--meses`: nenhum destes JSONs tem data para cortar."""
+
+_DOC_PASTA = """O ESCOPO é UMA pasta de cadastro do DATA_DIR: **%(pasta)s/**.
+
+%(desc)s
+
+É UM BANCO POR ARQUIVO, na mesma árvore do JSON: db/%(pasta)s/<arquivo>.db, com
+uma tabela por arquivo. Juntar a pasta inteira num banco só criava contenção
+onde ela não precisa existir — o espelho reconvertendo UM cadastro fechava a
+leitura dos outros.
+
+Não recebe `--meses`: nenhum destes JSONs tem data para cortar."""
 
 _DOC_BLOCO = """O ESCOPO é UM bloco de cache/: **%(fam)s**.
 
@@ -121,14 +147,26 @@ def _slug(nome):
 
 def _variantes():
     rotinas = _rotinas()
+    pastas = _pastas()
+    _lista_pastas = '\n'.join('  - %s' % p for p, _ in pastas)
     out = [
         ('00_completo.py', 'convert 00_completo — TUDO de uma vez.', _DOC_COMPLETO,
          "escopo='tudo (cadastros + todos os blocos de cache/)',"),
-        ('01_cadastros.py', 'convert 01_cadastros — os JSONs ÚNICOS (sem quebra por dia).',
-         _DOC_CADASTROS,
-         "escopo='cadastros (sem quebra por dia)',\n"
-         "                 conversores=('holidays', 'refdata', 'datasets'),"),
+        ('01_cadastros.py',
+         'convert 01_cadastros — os cadastros sem pasta própria (calendários, '
+         'RefData/CPD, raiz).',
+         _DOC_CADASTROS % {'lista': _lista_pastas},
+         "escopo='cadastros: calendarios, RefData/CPD e os JSONs de raiz',\n"
+         "                 conversores=('holidays', 'refdata', 'datasets'),\n"
+         "                 excluir_pastas=%r," % ([p for p, _ in pastas],)),
     ]
+    for i, (pasta, desc) in enumerate(pastas, start=1):
+        out.append((
+            '01_%d_%s.py' % (i, _slug(pasta)),
+            'convert 01_%s — a pasta de cadastro `%s/`.' % (_slug(pasta), pasta),
+            _DOC_PASTA % {'pasta': pasta, 'desc': desc},
+            "escopo='%s/ (um banco por arquivo)',\n"
+            "                 conversores=('datasets',), pastas=[%r]," % (pasta, pasta)))
     for i, (fam, desc) in enumerate(rotinas, start=1):
         out.append((
             '02_%d_%s.py' % (i, _slug(fam)),

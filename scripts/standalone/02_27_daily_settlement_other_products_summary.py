@@ -1440,6 +1440,35 @@ def _dataset_rel_target(rel, cal_files):
     return db, norm_ident(stem, 't') or 't'
 
 
+# As pastas de cadastro que ganham fatia PRÓPRIA na carga repartida — o eixo do
+# split dos datasets, como o `ROTINAS_CACHE` é o dos arquivo-dia. Mora aqui pela
+# mesma razão: os dois geradores a consomem, e escrita em cada um ela
+# envelheceria de um lado só.
+#
+# São as quatro pastas com muitos arquivos; o resto (os calendários, o
+# RefData/CPD e os JSONs de raiz) fica no `01_cadastros`, que é o COMPLEMENTO —
+# pasta nova de cadastro cai nele sem ninguém tocar em nada, do mesmo jeito que
+# rotina nova de `cache/` cai no `99_outros`.
+PASTAS_DATASET = (
+    ('mappings', 'Os 43 cadastros do /mapping — um banco por cadastro.'),
+    ('file-interpreter', 'Os templates e variantes do File Interpreter.'),
+    ('control-panel', 'O estado das rotinas do Control Panel.'),
+    ('tickets', 'O store do Support Center.'),
+)
+
+
+def _dataset_pasta(rel):
+    """A PASTA de primeiro nível de um JSON avulso, normalizada — `''` para o
+    JSON que mora na raiz do `DATA_DIR`.
+
+    É por ela que a carga dos cadastros se reparte, e é normalizada pela mesma
+    razão que a rotina de `cache/`: a grafia da pasta é de quem criou a árvore,
+    e casar por string exata é como o `02_2_b3_files` saía com zero convertidos
+    no share do JPM."""
+    partes = str(rel).split('/')
+    return chave_familia(partes[0]) if len(partes) > 1 else ''
+
+
 def _dataset_legacy_dbs(data_dir):
     """Os nomes do desenho ANTERIOR dos datasets: um banco por PASTA de
     primeiro nível, mais o `static_data.db` da raiz e o `translations.db` da
@@ -1532,7 +1561,8 @@ def convert_dataset_files(data_dir, out_dir, rels, force=False):
                                  _holiday_files(data_dir))
 
 
-def convert_datasets(data_dir, out_dir, force=False, dry_run=False):
+def convert_datasets(data_dir, out_dir, force=False, dry_run=False,
+                     pastas=None, excluir=None):
     """TODOS os demais JSONs do DATA_DIR — a cobertura total da migração.
 
     UM BANCO POR ARQUIVO (`mappings_mt300.db`, `control_panel_mt300_status.db`,
@@ -1540,12 +1570,25 @@ def convert_datasets(data_dir, out_dir, force=False, dry_run=False):
     lista-de-objetos vira tabela TIPADA com a coluna `_raw` (o registro exato —
     o canal do flip de leitura); payload objeto vira as tabelas das listas
     internas (também com `_raw`) mais a `_meta` chave→valor. Fica de fora o que
-    tem conversor próprio (RefData/CPD, calendários, `cache/`) e a pasta
-    `db/`."""
+    tem conversor próprio (RefData/CPD, calendários, `cache/`) e a pasta `db/`.
+
+    `pastas` restringe a conversão a pastas de primeiro nível do `DATA_DIR`
+    (`mappings`, `tickets`, …) e `excluir` é o complemento — os mesmos dois
+    parâmetros do `convert_daily`, pela mesma razão: repartir a carga entre
+    pessoas rodando ao mesmo tempo. Como os bancos são um por ARQUIVO, duas
+    fatias nunca escrevem no mesmo `.db`. O JSON da RAIZ tem pasta `''`: ele
+    pertence ao complemento, que é quem também leva a pasta de cadastro NOVA —
+    é o `99_outros` dos datasets.
+
+    Com escopo, a limpeza de bancos legados se restringe às pastas da fatia:
+    apagar o legado de outra seria desfazer a carga de quem está rodando ao
+    lado, e o `static_data.db` da raiz é do complemento."""
     stats = _novo_dataset_stats()
     if not os.path.isdir(data_dir):
         stats['errors'].append(('.', 'pasta de dados ausente: %s' % data_dir))
         return stats
+    so_pastas = None if pastas is None else {chave_familia(p) for p in pastas}
+    fora_pastas = set() if excluir is None else {chave_familia(p) for p in excluir}
     cal_files = _holiday_files(data_dir)
     rels = []
     # `os.walk` SEM `sorted(...)` por fora: o sorted consumiria o generator
@@ -1555,13 +1598,24 @@ def convert_datasets(data_dir, out_dir, force=False, dry_run=False):
     for dirpath, dirs, files in os.walk(data_dir):
         rel_dir = os.path.relpath(dirpath, data_dir).replace(os.sep, '/')
         if rel_dir == '.':
-            dirs[:] = sorted(d for d in dirs if d not in _DATASET_SKIP_DIRS)
+            # Com escopo, a varredura nem DESCE na pasta que não é da fatia —
+            # no share, onde a caminhada é cara, é a diferença entre ler uma
+            # pasta e ler o `DATA_DIR` inteiro.
+            dirs[:] = sorted(
+                d for d in dirs
+                if d not in _DATASET_SKIP_DIRS
+                and (so_pastas is None or chave_familia(d) in so_pastas)
+                and chave_familia(d) not in fora_pastas)
         else:
             dirs.sort()
         for fname in sorted(files):
             if not fname.endswith('.json'):
                 continue
             rel = fname if rel_dir == '.' else rel_dir + '/' + fname
+            # O JSON da RAIZ pertence ao complemento: uma fatia de pasta não o
+            # leva, e a de `excluir` leva.
+            if so_pastas is not None and _dataset_pasta(rel) not in so_pastas:
+                continue
             if _dataset_rel_target(rel, cal_files) is None:
                 _dataset_fora(rel, cal_files, stats)
             else:
@@ -1583,7 +1637,15 @@ def convert_datasets(data_dir, out_dir, force=False, dry_run=False):
     # São dois — um banco por PASTA (`mappings.db` com 42 tabelas) e o nome
     # ACHATADO na raiz (`mappings_mt300.db`) — mais a `translations.db` da
     # primeira versão da cobertura.
-    legados = set(_dataset_legacy_dbs(data_dir))
+    if so_pastas is None:
+        # Sem escopo de pasta, a limpeza é a completa: o `static_data.db` da
+        # raiz e o `translations.db` são desta fatia (a do complemento).
+        legados = {n for n in _dataset_legacy_dbs(data_dir)
+                   if chave_familia(n[:-3]) not in fora_pastas}
+    else:
+        # Numa fatia de pasta, só o banco-por-pasta DELA. O da raiz e o das
+        # outras são de quem está rodando ao lado.
+        legados = {(norm_ident(p, 'd') or 'static_data') + '.db' for p in pastas}
     legados.update(_legacy_flat_name(a[0]) for a, _ in alvos)
     _drop_legacy_dbs(out_dir, legados, {a[0] for a, _ in alvos},
                      stats, 'agora a pasta db/ espelha a arvore de origem')

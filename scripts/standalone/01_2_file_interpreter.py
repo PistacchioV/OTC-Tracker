@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-r"""convert 02_reconciliation_fxo — a rotina `reconciliation/fxo` de cache/.
+r"""convert 01_file_interpreter — a pasta de cadastro `file-interpreter`.
 
-A reconciliação de FXO (DPOSICAO × Athena EOD).
+Os templates e variantes do File Interpreter.
 
 Versão AUTOCONTIDA: roda em QUALQUER máquina, sem o código do OTC Tracker por
 perto. Requisito único:  pip install duckdb
@@ -13,27 +13,21 @@ perto. Requisito único:  pip install duckdb
     Destino: ...\static\data\db   (a pasta db dentro da origem)
 
 Uso:
-    python 02_30_reconciliation_fxo.py
-    python 02_30_reconciliation_fxo.py --dry-run
-    python 02_30_reconciliation_fxo.py --data-dir "D:\outra\pasta" --out-dir "D:\saida"
+    python 01_2_file_interpreter.py
+    python 01_2_file_interpreter.py --dry-run
+    python 01_2_file_interpreter.py --data-dir "D:\outra\pasta" --out-dir "D:\saida"
 
-O ESCOPO é UM bloco de cache\: **reconciliation/fxo**.
+O ESCOPO é UMA pasta de cadastro do DATA_DIR: **file-interpreter\**.
 
-A reconciliação de FXO (DPOSICAO × Athena EOD).
+Os templates e variantes do File Interpreter.
 
-Cada produto vira um banco e a pasta db\ ESPELHA a árvore de cache\
-(db\cache\new deals\NDF\Vanilla.db, db\cache\b3 files\Swap.db); só
-ano/mês/dia não viram pasta — cada dia é uma tabela
-(d_AAAAMMDD[_tag]), tipada por inferência: dd/mm/aaaa e ISO viram DATE, número
-vira BIGINT/DOUBLE, zero à esquerda continua texto, '' vira NULL só em coluna
-tipada, e texto sai byte a byte.
+É UM BANCO POR ARQUIVO, na mesma árvore do JSON (db\file-interpreter\<arquivo>.db),
+com uma tabela por arquivo e a coluna _raw guardando o registro exato. Juntar a
+pasta inteira num banco só criava contenção onde ela não precisa existir — o
+espelho reconvertendo UM cadastro fechava a leitura dos outros.
 
-Como os bancos são um por produto, este script NÃO escreve em nada que os outros
+Como os bancos são um por arquivo, este script NÃO escreve em nada que os outros
 escrevem: pode rodar ao mesmo tempo que eles.
-
-Se nesta instância o bloco ainda for grande demais, `--bloco NOME` desce mais um
-nível (ex.: `--bloco Vanilla`). Ele SUBSTITUI o escopo desta fatia — não rode a
-fatia inteira em paralelo com um bloco dela.
 
 É IDEMPOTENTE e INCREMENTAL: cada banco guarda um `_manifest` com
 caminho/mtime/tamanho e só reconverte o arquivo que mudou — rodar de novo com
@@ -1696,42 +1690,22 @@ def main(argv=None):
                          'ou a letra I:, o que existir na máquina)')
     ap.add_argument('--out-dir', default=None,
                     help='destino dos .db (padrão: a pasta db dentro da origem)')
-    ap.add_argument('--bloco', default=None,
-                    help='restringe a UMA subpasta desta fatia (ex.: --bloco '
-                         'Vanilla). SUBSTITUI o escopo da fatia — nao rode a '
-                         'fatia inteira em paralelo com um bloco dela.')
     ap.add_argument('--force', action='store_true', help='reconverte mesmo sem mudança')
     ap.add_argument('--dry-run', action='store_true', help='só lista o que converteria')
-    ap.add_argument('--meses', type=int, default=12,
-                    help='janela dos arquivo-dia: converte so os dos ultimos '
-                         'N meses (padrao 12). Use 0 para o historico INTEIRO '
-                         '— e a segunda passada, e e ela que remove os bancos '
-                         'de formato antigo.')
     args = ap.parse_args(argv)
 
     data_dir = os.path.abspath(args.data_dir or _data_dir_padrao())
     out_dir = os.path.abspath(args.out_dir or os.path.join(data_dir, 'db'))
     print('origem : %s' % data_dir)
     print('destino: %s' % out_dir)
-    desde = data_de_corte(args.meses)
-    # A janela e DECLARADA na tela: o recorte silencioso faria a segunda
-    # passada (a do historico) parecer desnecessaria.
-    print('janela : %s' % ('arquivo-dia a partir de %s (%d meses)'
-                           % (desde.strftime('%d/%m/%Y'), args.meses)
-                           if desde else 'historico INTEIRO (--meses 0)'))
-    print('escopo : cache/reconciliation/fxo (arquivo-dia)')
+    print('escopo : file-interpreter/ (um banco por arquivo)')
 
     houve_erro = [False]
-    # `--bloco` SUBSTITUI o escopo desta fatia; nao soma. Rodar a fatia inteira
-    # em paralelo com um bloco dela poria dois processos no mesmo banco.
-    fatia = 'reconciliation/fxo'
-    if args.bloco:
-        fatia = fatia.rstrip('/') + '/' + args.bloco.strip().strip('/')
-        print('escopo : cache/%s (arquivo-dia) [--bloco]' % fatia)
-    _resumo('daily', convert_daily(data_dir, out_dir, force=args.force,
-                                   dry_run=args.dry_run, familias=[fatia],
-                                   desde=desde),
-            houve_erro)
+    # UMA pasta de cadastro. Os bancos sao um por ARQUIVO, entao esta fatia nao
+    # escreve em nada que as outras escrevem.
+    _resumo('datasets', convert_datasets(data_dir, out_dir, force=args.force,
+                                         dry_run=args.dry_run,
+                                         pastas=['file-interpreter']), houve_erro)
     return 1 if houve_erro[0] else 0
 
 
