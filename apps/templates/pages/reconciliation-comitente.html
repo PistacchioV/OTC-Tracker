@@ -42,7 +42,12 @@
     opacity: .65;
     margin-bottom: .4rem;
 }
-.widget-total { background: linear-gradient(135deg,#667eea 0%,#764ba2 100%); color:#fff; }
+/* O Total é o card de FECHAMENTO: vem por último e leva o gradiente da MARCA.
+   O ESTILO dele mora no `streamflow.css`, e não aqui: o `visual-refresh.css`
+   aplica `background: … !important` (ATALHO, que zera o background-image) no
+   `.card`, e é carregado DEPOIS do <style> da página — daqui a regra perderia
+   por ordem de origem, com a mesma especificidade. O sintoma era o texto
+   branco sobre o vidro claro, sem o gradiente por baixo. */
 .widget-new   { background:#f1f3f5; color:#495057; border:1px solid #dee2e6 !important; }
 .widget-check { background:#fff8e1; color:#7b5e00; border:1px solid #ffe082 !important; }
 .widget-ok    { background:#e8f5e9; color:#1b5e20; border:1px solid #a5d6a7 !important; }
@@ -179,13 +184,6 @@
     <!-- ── Widgets ───────────────────────────────────────────────── -->
     <div class="row g-3 mb-4">
         <div class="col-6 col-md-4 col-lg">
-            <div class="card recon-widget widget-total h-100">
-                <div class="widget-lbl" data-lang="recon-w-total">Total</div>
-                <div class="widget-val" id="w-total">—</div>
-                <i data-lucide="bar-chart-2" class="widget-icon" style="width:48px;height:48px;"></i>
-            </div>
-        </div>
-        <div class="col-6 col-md-4 col-lg">
             <div class="card recon-widget widget-new h-100">
                 <div class="widget-lbl" data-lang="recon-w-new">New</div>
                 <div class="widget-val" id="w-new">—</div>
@@ -211,6 +209,13 @@
                 <div class="widget-lbl" data-lang="recon-w-amend">Amend</div>
                 <div class="widget-val" id="w-amend">—</div>
                 <i data-lucide="alert-circle" class="widget-icon" style="width:48px;height:48px;"></i>
+            </div>
+        </div>
+        <div class="col-6 col-md-4 col-lg">
+            <div class="card recon-widget widget-total h-100">
+                <div class="widget-lbl" data-lang="recon-w-total">Total</div>
+                <div class="widget-val" id="w-total">—</div>
+                <i data-lucide="bar-chart-2" class="widget-icon" style="width:48px;height:48px;"></i>
             </div>
         </div>
     </div>
