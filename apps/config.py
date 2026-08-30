@@ -47,8 +47,8 @@ class Config(object):
 
     # ══ AMBIENTE — o único bloco que difere entre as branches ═════════════════
     #
-    # `visual-refresh` (desenvolvimento) aponta para dentro da aplicação;
-    # `visual-refresh-prod` (instância do JPM) aponta para o share. É a ÚNICA
+    # `StreamFlow` (desenvolvimento) aponta para dentro da aplicação;
+    # `StreamFlow-prod` (instância do JPM) aponta para o share. É a ÚNICA
     # diferença entre as duas, e ela mora aqui de propósito: o resto do código
     # pergunta ao Config e não sabe onde os bancos estão.
     #
