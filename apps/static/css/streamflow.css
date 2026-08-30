@@ -2954,3 +2954,72 @@ table.dataTable.table-bordered td {
    ══════════════════════════════════════════════════════════════════════════ */
 :root:not([data-bs-theme=dark]) { --vr-thead-bg: #f1fafe; }
 [data-bs-theme=dark]            { --vr-thead-bg: #163146; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   51. MENU DENTRO DE VIDRO NÃO PODE CONTAR COM O PRÓPRIO DESFOQUE
+   --------------------------------------------------------------------------
+   O sintoma era o dropdown do filtro "totalmente transparente", e o diagnóstico
+   por dedução estava errado: o fundo dele já era opaco. O que se via por cima
+   dos itens era a barra de ferramentas — medido com `elementFromPoint` dentro
+   da caixa do menu, quem responde é o `.btn-toolbar`, não o `<li>`. É
+   EMPILHAMENTO, e a correção está logo abaixo (§51.1).
+
+   O segundo defeito é real e independente, e vale a regra:
+
+     `backdrop-filter` num ANCESTRAL cria uma "raiz de backdrop". O filho passa
+     a enxergar só o que foi composto DENTRO dessa raiz — fora da caixa do
+     ancestral não há backdrop para amostrar, e o desfoque do filho não faz
+     nada ali.
+
+   O `.smart-filter-dropdown` é filho do `.smart-filter-wrapper`, que tem
+   `blur(14px)`, e abre para BAIXO, muito além da caixa do wrapper. Resultado
+   medido: `backdrop-filter: blur(34px)` computado e aplicado a NADA. Com o
+   fundo em `rgba(13,19,32,0.8)`, que sobre uma página escura é quase o mesmo
+   tom, o menu não esconderia o que ficasse atrás nem depois de resolvido o
+   empilhamento — por isso o alfa vai a 1 aqui embaixo.
+
+   O mesmo vale para todo `.dropdown-menu` dentro de um `.card`: o cartão tem
+   `blur(30px)`, então é ele a raiz de backdrop.
+
+   Onde o desfoque não pode trabalhar, quem esconde é o ALFA — e aqui ele vai a
+   1. O desfoque fica declarado assim mesmo: onde a raiz permite, ele ainda
+   soma saturação; onde não permite, não custa nada.
+
+   As sobreposições de nível de PÁGINA (modal, offcanvas, toast, SweetAlert)
+   continuam no §34: elas são penduradas no `<body>`, fora de qualquer raiz de
+   backdrop, e ali o desfoque de fato funciona.
+   ══════════════════════════════════════════════════════════════════════════ */
+:root:not([data-bs-theme=dark]) { --sf-menu-solid: #f4f8fe; }
+[data-bs-theme=dark]            { --sf-menu-solid: #111b2c; }
+
+.dropdown-menu,
+.smart-filter-dropdown,
+.acc-drop, .acc-cols-menu, .ei-combo-menu, .qt-combo__menu,
+.ob-cols-menu, .mc-cols-menu, .cp-dz-list,
+.map-ac-drop, .ar-ac-drop {
+  background-color: var(--sf-menu-solid) !important;
+  border: 1px solid var(--vr-card-border) !important;
+}
+
+/* ── 51.1 O empilhamento, que era a causa de verdade ──────────────────────
+   `backdrop-filter` cria CONTEXTO DE EMPILHAMENTO. Ao dar vidro ao
+   `.smart-filter-wrapper` (§23.6) eu prendi dentro dele o dropdown que ele
+   hospeda: o `z-index: 1055` do menu passou a valer só entre os irmãos DELE, e
+   o wrapper, com `z-index: auto`, ficou na ordem do documento — abaixo da barra
+   de ferramentas, que vem depois. O menu abria e a barra era pintada por cima
+   dele.
+
+   É o mesmo defeito que o `.wrapper` com `z-index: 1` causou nos modais no
+   começo deste refino, e a lição é a mesma: dar vidro a um contêiner que
+   hospeda um popup custa um contexto de empilhamento, e o contexto tem de ser
+   elevado junto.
+
+   `z-index` no WRAPPER, não no menu: quem precisa subir é o contexto inteiro —
+   mexer no menu não adianta, porque ele já é o mais alto de um contexto que
+   está embaixo. O valor é baixo de propósito: só precisa passar dos irmãos do
+   cartão, e a topbar e os modais vivem em faixas muito acima.
+   ──────────────────────────────────────────────────────────────────────── */
+.smart-filter-wrapper {
+  position: relative;
+  z-index: 20;
+}
