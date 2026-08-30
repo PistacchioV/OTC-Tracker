@@ -15063,3 +15063,47 @@ porque a poda é por CAMINHO.
 escreve —, e a varredura por texto olha só linhas de CAMINHO (`os.path.join` e
 as tuplas `dirs`): varrendo o arquivo inteiro ela acusaria o `_NDM_TAXONOMY`, e
 a "correção" seria trocar o rótulo que a mesa lê. Suíte completa verde (105).
+
+---
+
+## §350 — o Daily Settlement repartido por ARQUIVO (2026-08-29)
+
+A quebra dos BANCOS do Daily Settlement já era por arquivo desde o §336 — a
+rotina não se ramifica em pastas, e é o NOME que dá o banco. O que faltava era a
+quebra dos SCRIPTS: `daily settlement` era uma fatia só, e ali convivem oito
+arquivos por dia, cada um de uma fonte diferente.
+
+O escopo passou a aceitar **TAG de arquivo** no último segmento, além de pasta:
+`daily settlement/otm-settlement`. Com isso um escopo é sempre o CAMINHO do
+banco que ele produz (`db/cache/daily settlement/otm-settlement.db`), o que
+dispensa uma segunda sintaxe para dizer a mesma coisa. São 26 blocos e 29
+arquivos por split.
+
+Três coisas que não dão erro nenhum:
+
+- **o `.meta.json` acompanha o arquivo que ele anota**, no MESMO banco, como
+  `d_AAAAMMDD_meta`. Ele não é um produto — é o anexo do arquivo-dia daquele
+  produto —, e num banco separado quem consultasse o Cognos teria de juntar
+  dois. Antes ele saía sozinho e com o nome torto: `cognos_.meta.db`, porque a
+  data está no MEIO do nome (`cognos_20260826.meta`) e tirá-la deixa um `_` que
+  o `strip` das pontas não alcança. E como o payload é um OBJETO, a tabela
+  chave→valor sairia `d_20260826_meta__meta`: daí o `meta_tabela` do
+  `_convert_daily_payload`, que é PASSADO e não deduzido do sufixo — deduzir
+  faria uma tabela legítima terminada em `_meta` cair na mesma regra;
+- **a exclusão por tag do `99_outros` compara o diretório por PREFIXO.** O do
+  arquivo é o do DIA (`daily settlement/2026/08/26`) e o do escopo é o da rotina:
+  comparando os dois inteiros, nenhuma exclusão casava e o `99_outros`
+  reconvertia tudo o que as oito fatias já tinham feito — dois processos no
+  mesmo banco, que é exatamente o que a divisão promete não acontecer. Só
+  apareceu porque o teste roda as fatias e o `99_outros` contra a mesma árvore;
+- **a lista de arquivos não é fechada.** Arquivo com tag fora dela
+  (`relatorio-novo_20260826.json`) cai no `99_outros`, que exclui por tag do
+  mesmo jeito — e uma tag pedida que não existe vira aviso com a lista das que
+  há, como o bloco ausente do §343.
+
+Os guardas passaram a achar a fatia pelo SUFIXO do nome, nunca pelo número: a
+numeração desloca a cada bloco que entra ou sai do `ROTINAS_CACHE`, e por três
+vezes seguidas eles quebraram com `FileNotFoundError` sobre um teste que não é
+sobre numeração. O `check_convert_split` ganhou a pasta do print inteira — os
+oito arquivos, os quatro `.meta` e uma tag que ninguém nomeia. Suíte completa
+verde (105).

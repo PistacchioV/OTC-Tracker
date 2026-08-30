@@ -183,7 +183,7 @@ python scripts/convert/00_completo.py            # tudo num comando
 python scripts/convert/00_completo.py --meses 0  # depois, o histórico inteiro
 ```
 
-A carga no share leva horas, então ela também vem **repartida em 22 fatias**
+A carga no share leva horas, então ela também vem **repartida em 29 fatias**
 (uma por bloco de `cache/`, com New Deals e B3 Files quebrados até o produto)
 que várias pessoas rodam ao mesmo tempo — `scripts/convert/README.md` explica.
 Para uma máquina **sem o código do app**, o `scripts/standalone/` tem o mesmo
