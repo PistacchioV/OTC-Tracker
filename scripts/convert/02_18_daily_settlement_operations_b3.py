@@ -4,7 +4,11 @@
 
 O ESCOPO é UM bloco de cache/: **daily settlement/operations-b3**.
 
-O Operations B3.
+O arquivo DERIVADO que a página
+Operations B3 lê: o merge das operações
+JPM e MGT (`_ob_src`) mais o que a tela
+edita. Não confundir com os dois
+arquivos de ORIGEM ao lado.
 
 Cada produto vira um banco e a pasta db/ espelha a árvore de cache/; só
 ano/mês/dia não viram pasta — cada dia é uma tabela dentro do banco.

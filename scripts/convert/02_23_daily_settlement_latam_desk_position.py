@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""convert 02_daily_settlement_eventos_swap_jpm — o bloco `daily settlement/eventos-swap-jpm` de cache/.
+"""convert 02_daily_settlement_latam_desk_position — o bloco `daily settlement/latam-desk-position` de cache/.
 
-O ESCOPO é UM bloco de cache/: **daily settlement/eventos-swap-jpm**.
+O ESCOPO é UM bloco de cache/: **daily settlement/latam-desk-position**.
 
-Os eventos de swap.
+O Latam Desk Position.
 
 Cada produto vira um banco e a pasta db/ espelha a árvore de cache/; só
 ano/mês/dia não viram pasta — cada dia é uma tabela dentro do banco.
@@ -34,6 +34,6 @@ from convert_json_to_duckdb import run    # noqa: E402
 
 
 if __name__ == '__main__':
-    sys.exit(run(escopo='cache/daily settlement/eventos-swap-jpm (arquivo-dia)',
-                 conversores=('daily',), familias=['daily settlement/eventos-swap-jpm'],
+    sys.exit(run(escopo='cache/daily settlement/latam-desk-position (arquivo-dia)',
+                 conversores=('daily',), familias=['daily settlement/latam-desk-position'],
                  doc=__doc__))

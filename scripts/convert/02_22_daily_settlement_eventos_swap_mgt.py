@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""convert 02_reconciliation — o bloco `reconciliation` de cache/.
+"""convert 02_daily_settlement_eventos_swap_mgt — o bloco `daily settlement/eventos-swap-mgt` de cache/.
 
-O ESCOPO é UM bloco de cache/: **reconciliation**.
+O ESCOPO é UM bloco de cache/: **daily settlement/eventos-swap-mgt**.
 
-Os caches por data das reconciliações (Pay/Rec e afins).
+Idem, os da MGT.
 
 Cada produto vira um banco e a pasta db/ espelha a árvore de cache/; só
 ano/mês/dia não viram pasta — cada dia é uma tabela dentro do banco.
@@ -34,6 +34,6 @@ from convert_json_to_duckdb import run    # noqa: E402
 
 
 if __name__ == '__main__':
-    sys.exit(run(escopo='cache/reconciliation (arquivo-dia)',
-                 conversores=('daily',), familias=['reconciliation'],
+    sys.exit(run(escopo='cache/daily settlement/eventos-swap-mgt (arquivo-dia)',
+                 conversores=('daily',), familias=['daily settlement/eventos-swap-mgt'],
                  doc=__doc__))

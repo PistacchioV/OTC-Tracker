@@ -42,13 +42,19 @@ são:
   - daily settlement/ndf-cockpit
   - daily settlement/operations-b3
   - daily settlement/operacoes-jpm
+  - daily settlement/operacoes-mgt
   - daily settlement/eventos-swap-jpm
+  - daily settlement/eventos-swap-mgt
+  - daily settlement/latam-desk-position
+  - daily settlement/swap-kapital-hybrids
   - daily settlement/cognos
   - daily settlement/br-onshore-settlements
   - daily settlement/other-products-summary
   - pending-confirmation
   - payrec
-  - reconciliation
+  - reconciliation/fxo
+  - reconciliation/cgd
+  - reconciliation/payrec
 
 Se não houver nada fora dessa lista, este script não faz nada, e isso é o
 resultado esperado.
@@ -935,9 +941,19 @@ ROTINAS_CACHE = (
     # `99_outros`, que exclui por tag do mesmo jeito.
     ('daily settlement/otm-settlement', 'O OTM Settlements.'),
     ('daily settlement/ndf-cockpit', 'O NDF Cockpit.'),
-    ('daily settlement/operations-b3', 'O Operations B3.'),
-    ('daily settlement/operacoes-jpm', 'As operações JPM/MGT.'),
-    ('daily settlement/eventos-swap-jpm', 'Os eventos de swap.'),
+    ('daily settlement/operations-b3', 'O arquivo DERIVADO que a página\n'
+                                       'Operations B3 lê: o merge das operações\n'
+                                       'JPM e MGT (`_ob_src`) mais o que a tela\n'
+                                       'edita. Não confundir com os dois\n'
+                                       'arquivos de ORIGEM ao lado.'),
+    ('daily settlement/operacoes-jpm', 'As operações do Banco J.P. Morgan, como\n'
+                                       'importadas — uma das duas origens do\n'
+                                       'operations-b3.'),
+    ('daily settlement/operacoes-mgt', 'Idem, as da MGT.'),
+    ('daily settlement/eventos-swap-jpm', 'Os eventos de swap do Banco.'),
+    ('daily settlement/eventos-swap-mgt', 'Idem, os da MGT.'),
+    ('daily settlement/latam-desk-position', 'O Latam Desk Position.'),
+    ('daily settlement/swap-kapital-hybrids', 'O Swap Kapital Hybrids.'),
     ('daily settlement/cognos', 'O Cognos.'),
     ('daily settlement/br-onshore-settlements', 'O BR Onshore Settlements.'),
     ('daily settlement/other-products-summary', 'O Other Products Summary — e o\n'
@@ -945,7 +961,16 @@ ROTINAS_CACHE = (
                                                 'mora no `.meta` ao lado.'),
     ('pending-confirmation', 'Os snapshots diários do Pending Confirmation.'),
     ('payrec', 'O histórico diário da reconciliação de Pay/Rec.'),
-    ('reconciliation', 'Os caches por data das reconciliações (Pay/Rec e afins).'),
+    # Cada reconciliação tem a SUA pasta em `cache/reconciliation/` e o seu
+    # banco, então cada uma é uma fatia — `reconciliation` inteira seria o único
+    # escopo da lista a produzir mais de um banco, e a fatia que roda três
+    # recons em série é a que não termina enquanto duas pessoas esperam. A
+    # recon de COMITENTES não está aqui de propósito: ela não tem cache JSON,
+    # grava direto no `matching_comitentes.db`.
+    ('reconciliation/fxo', 'A reconciliação de FXO (DPOSICAO × Athena EOD).'),
+    ('reconciliation/cgd', 'A reconciliação de CGD (lista do FEP × posição da B3).'),
+    ('reconciliation/payrec', 'Os caches por data da reconciliação de Pay/Rec —\n'
+                              'irmãos do histórico que mora em `cache/payrec`.'),
 )
 
 
@@ -1543,7 +1568,7 @@ def main(argv=None):
     # Tudo que os demais scripts NAO cobrem: e o que garante que uma rotina nova
     # em cache/ tenha conversor sem ninguem regerar nada.
     _resumo('daily', convert_daily(data_dir, out_dir, force=args.force,
-                                   dry_run=args.dry_run, excluir=['new deals/NDF/Vanilla', 'new deals/NDF/FwdStart', 'new deals/NDF/OtherPublisher', 'new deals/NDF/Commodities', 'new deals/Option/FXO', 'new deals/Option/Commodities', 'new deals/Swap/Rates', 'new deals/Swap/Commodities', 'new deals/Intrag/NDF', 'new deals/Intrag/Option', 'new deals/Intrag/Swap', 'b3 files/NDF', 'b3 files/Option', 'b3 files/Swap', 'b3 files/Operations', 'daily settlement/otm-settlement', 'daily settlement/ndf-cockpit', 'daily settlement/operations-b3', 'daily settlement/operacoes-jpm', 'daily settlement/eventos-swap-jpm', 'daily settlement/cognos', 'daily settlement/br-onshore-settlements', 'daily settlement/other-products-summary', 'pending-confirmation', 'payrec', 'reconciliation'],
+                                   dry_run=args.dry_run, excluir=['new deals/NDF/Vanilla', 'new deals/NDF/FwdStart', 'new deals/NDF/OtherPublisher', 'new deals/NDF/Commodities', 'new deals/Option/FXO', 'new deals/Option/Commodities', 'new deals/Swap/Rates', 'new deals/Swap/Commodities', 'new deals/Intrag/NDF', 'new deals/Intrag/Option', 'new deals/Intrag/Swap', 'b3 files/NDF', 'b3 files/Option', 'b3 files/Swap', 'b3 files/Operations', 'daily settlement/otm-settlement', 'daily settlement/ndf-cockpit', 'daily settlement/operations-b3', 'daily settlement/operacoes-jpm', 'daily settlement/operacoes-mgt', 'daily settlement/eventos-swap-jpm', 'daily settlement/eventos-swap-mgt', 'daily settlement/latam-desk-position', 'daily settlement/swap-kapital-hybrids', 'daily settlement/cognos', 'daily settlement/br-onshore-settlements', 'daily settlement/other-products-summary', 'pending-confirmation', 'payrec', 'reconciliation/fxo', 'reconciliation/cgd', 'reconciliation/payrec'],
                                    desde=desde),
             houve_erro)
     return 1 if houve_erro[0] else 0

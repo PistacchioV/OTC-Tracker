@@ -2,7 +2,11 @@
 # -*- coding: utf-8 -*-
 r"""convert 02_daily_settlement_operations_b3 — a rotina `daily settlement/operations-b3` de cache/.
 
-O Operations B3.
+O arquivo DERIVADO que a página
+Operations B3 lê: o merge das operações
+JPM e MGT (`_ob_src`) mais o que a tela
+edita. Não confundir com os dois
+arquivos de ORIGEM ao lado.
 
 Versão AUTOCONTIDA: roda em QUALQUER máquina, sem o código do OTC Tracker por
 perto. Requisito único:  pip install duckdb
@@ -19,7 +23,11 @@ Uso:
 
 O ESCOPO é UM bloco de cache\: **daily settlement/operations-b3**.
 
-O Operations B3.
+O arquivo DERIVADO que a página
+Operations B3 lê: o merge das operações
+JPM e MGT (`_ob_src`) mais o que a tela
+edita. Não confundir com os dois
+arquivos de ORIGEM ao lado.
 
 Cada produto vira um banco e a pasta db\ ESPELHA a árvore de cache\
 (db\cache\new deals\NDF\Vanilla.db, db\cache\b3 files\Swap.db); só
@@ -917,9 +925,19 @@ ROTINAS_CACHE = (
     # `99_outros`, que exclui por tag do mesmo jeito.
     ('daily settlement/otm-settlement', 'O OTM Settlements.'),
     ('daily settlement/ndf-cockpit', 'O NDF Cockpit.'),
-    ('daily settlement/operations-b3', 'O Operations B3.'),
-    ('daily settlement/operacoes-jpm', 'As operações JPM/MGT.'),
-    ('daily settlement/eventos-swap-jpm', 'Os eventos de swap.'),
+    ('daily settlement/operations-b3', 'O arquivo DERIVADO que a página\n'
+                                       'Operations B3 lê: o merge das operações\n'
+                                       'JPM e MGT (`_ob_src`) mais o que a tela\n'
+                                       'edita. Não confundir com os dois\n'
+                                       'arquivos de ORIGEM ao lado.'),
+    ('daily settlement/operacoes-jpm', 'As operações do Banco J.P. Morgan, como\n'
+                                       'importadas — uma das duas origens do\n'
+                                       'operations-b3.'),
+    ('daily settlement/operacoes-mgt', 'Idem, as da MGT.'),
+    ('daily settlement/eventos-swap-jpm', 'Os eventos de swap do Banco.'),
+    ('daily settlement/eventos-swap-mgt', 'Idem, os da MGT.'),
+    ('daily settlement/latam-desk-position', 'O Latam Desk Position.'),
+    ('daily settlement/swap-kapital-hybrids', 'O Swap Kapital Hybrids.'),
     ('daily settlement/cognos', 'O Cognos.'),
     ('daily settlement/br-onshore-settlements', 'O BR Onshore Settlements.'),
     ('daily settlement/other-products-summary', 'O Other Products Summary — e o\n'
@@ -927,7 +945,16 @@ ROTINAS_CACHE = (
                                                 'mora no `.meta` ao lado.'),
     ('pending-confirmation', 'Os snapshots diários do Pending Confirmation.'),
     ('payrec', 'O histórico diário da reconciliação de Pay/Rec.'),
-    ('reconciliation', 'Os caches por data das reconciliações (Pay/Rec e afins).'),
+    # Cada reconciliação tem a SUA pasta em `cache/reconciliation/` e o seu
+    # banco, então cada uma é uma fatia — `reconciliation` inteira seria o único
+    # escopo da lista a produzir mais de um banco, e a fatia que roda três
+    # recons em série é a que não termina enquanto duas pessoas esperam. A
+    # recon de COMITENTES não está aqui de propósito: ela não tem cache JSON,
+    # grava direto no `matching_comitentes.db`.
+    ('reconciliation/fxo', 'A reconciliação de FXO (DPOSICAO × Athena EOD).'),
+    ('reconciliation/cgd', 'A reconciliação de CGD (lista do FEP × posição da B3).'),
+    ('reconciliation/payrec', 'Os caches por data da reconciliação de Pay/Rec —\n'
+                              'irmãos do histórico que mora em `cache/payrec`.'),
 )
 
 
