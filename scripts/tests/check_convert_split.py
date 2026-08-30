@@ -132,6 +132,9 @@ w('cache/new deals/Intrag/NDF/2026/07/20260727_ind.json', [{'Deal': 'D4'}])
 w('cache/new deals/NDF/Asian/2026/07/20260727_as.json', [{'Deal': 'D5'}])
 w('cache/new deals/Equity/2026/07/20260727_eq.json', [{'Deal': 'D6'}])
 w('cache/b3 files/Swap/2026/07/03/73760_260703_DFLUXO.json', [{'Cod': 'X'}])
+# O irmão dele na MESMA pasta do dia: é por isso que o B3 Files nomeia os
+# bancos pelo ARQUIVO, e é o caso que o `--bloco` por tag reparte.
+w('cache/b3 files/Swap/2026/07/03/73760_260703_DPOSICAO-SWAP.json', [{'Cod': 'P'}])
 w('cache/b3 files/NDF/2026/07/03/73760_260703_DPOSICAO.json', [{'Cod': 'Y'}])
 # Uma subpasta que a dev não tem, para provar o `--bloco`: é o caso que ele
 # existe para resolver — a instância com mais pasta do que este repositório.
@@ -257,11 +260,17 @@ check('   e o operations-b3 (derivado) não se confunde com as origens',
           for t in ('operations-b3', 'operacoes-jpm', 'operacoes-mgt')))
 check('e a tag que nenhuma fatia nomeia caiu no 99_outros',
       'cache/daily settlement/relatorio-novo.db' in _arvore(OUT_FATIAS))
-check('e o B3 Files por produto (ali o produto já é o primeiro nível)',
+# O B3 Files vai por PRODUTO **e** por ARQUIVO: a pasta do dia de cada produto
+# guarda mais de um arquivo (o Swap tem posição, fluxo e agenda de prêmios), e
+# num banco só eles seriam o mesmo dia repetido com tags diferentes.
+check('e o B3 Files por produto E por arquivo dentro dele',
       sorted(d for d in _arvore(OUT_FATIAS) if d.startswith('cache/b3 files/')),
-      ['cache/b3 files/NDF.db', 'cache/b3 files/NDF/Extra.db',
-       'cache/b3 files/Operations.db', 'cache/b3 files/Option.db',
-       'cache/b3 files/Swap.db'])
+      ['cache/b3 files/NDF/73760_DPOSICAO.db',
+       'cache/b3 files/NDF/Extra/73760_EXTRA.db',
+       'cache/b3 files/Operations/ops.db',
+       'cache/b3 files/Option/73760_DPOSICAO.db',
+       'cache/b3 files/Swap/73760_DFLUXO.db',
+       'cache/b3 files/Swap/73760_DPOSICAO-SWAP.db'])
 # Cada reconciliação tem o SEU banco — e, por isso, a sua fatia: um escopo é
 # sempre o caminho do banco que ele produz.
 check('cada reconciliação tem o seu banco',
@@ -309,9 +318,18 @@ _OUT_BL = os.path.join(DATA, 'bloco')
 rc, saida = _rodar(_UMA, _OUT_BL, ['--meses', '0', '--bloco', 'Extra'])
 check('--bloco desce mais um nivel', rc, 0)
 check('   e converte SO aquele bloco', _arvore(_OUT_BL),
-      ['cache/b3 files/NDF/Extra.db'])
+      ['cache/b3 files/NDF/Extra/73760_EXTRA.db'])
 check('   e o escopo impresso é o efetivo, não o da fatia',
       'cache/b3 files/NDF/Extra' in saida)
+# E o `--bloco` desce até um ARQUIVO, não só até uma subpasta: é assim que a
+# fatia do Swap — a única cuja pasta de dia guarda três arquivos — se reparte
+# entre três pessoas sem um script novo para cada.
+_OUT_TAG = os.path.join(DATA, 'tag')
+_SWAP = next(f for f in sorted(os.listdir(CONVERT)) if f.endswith('_b3_files_swap.py'))
+rc, saida = _rodar(_SWAP, _OUT_TAG, ['--meses', '0', '--bloco', '73760_DPOSICAO-SWAP'])
+check('--bloco desce ate UM ARQUIVO dentro do produto', rc, 0)
+check('   e converte so o banco daquele arquivo', _arvore(_OUT_TAG),
+      ['cache/b3 files/Swap/73760_DPOSICAO-SWAP.db'])
 rc, saida = _rodar('01_cadastros.py', os.path.join(DATA, 'bl2'), ['--bloco', 'X'])
 check('a fatia de cadastros nao aceita --bloco', rc != 0)
 rc, saida = _rodar('01_cadastros.py', os.path.join(DATA, 'z2'), ['--dry-run'])

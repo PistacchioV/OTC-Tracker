@@ -203,6 +203,37 @@ def coerce(v, kind):
 
 # ── escrita de tabela ───────────────────────────────────────────────────────
 
+def nomes_unicos(chaves, chave=None):
+    """Os nomes das `chaves` na ordem, desempatados por sufixo `_2`, `_3`…
+
+    `chave` é a IGUALDADE que decide o que colide, e é o parâmetro inteiro:
+
+      - `str.lower` (o default, e o que o `nomes_sql` usa) para o nome de
+        COLUNA, porque o identificador do DuckDB é insensível a caixa;
+      - a identidade, para a CHAVE do JSON, onde `PU Inicial` e `Pu inicial`
+        são dois campos diferentes e têm de continuar sendo.
+
+    A regra que os dois usos compartilham — e que é a razão de a função existir
+    uma vez só — é que **o candidato é conferido contra TODAS as chaves da
+    lista**, não só contra as já emitidas. Um layout com `X` duas vezes E uma
+    coluna literalmente chamada `X_2` produziria dois `X_2`, e num dicionário o
+    segundo apaga o primeiro: uma coluna perdida sem erro nenhum."""
+    chave = chave or (lambda s: str(s).lower())
+    reservados = {chave(k) for k in chaves}
+    usados, nomes = set(), []
+    for k in chaves:
+        nome = str(k)
+        if chave(nome) in usados:
+            n = 2
+            while chave('%s_%d' % (nome, n)) in usados or \
+                  chave('%s_%d' % (nome, n)) in reservados:
+                n += 1
+            nome = '%s_%d' % (nome, n)
+        usados.add(chave(nome))
+        nomes.append(nome)
+    return nomes
+
+
 def nomes_sql(chaves):
     """Os NOMES de coluna para as chaves do JSON, na ordem, sem colisão.
 
@@ -226,20 +257,7 @@ def nomes_sql(chaves):
         da tabela não daria erro nenhum — é a falha que menos parece falha, e o
         `_raw` ao lado ainda a teria, o que faria o banco discordar de si
         mesmo."""
-    reservados = {str(k).lower() for k in chaves}
-    usados = set()
-    nomes = []
-    for k in chaves:
-        nome = str(k)
-        if nome.lower() in usados:
-            n = 2
-            while ('%s_%d' % (nome, n)).lower() in usados or \
-                  ('%s_%d' % (nome, n)).lower() in reservados:
-                n += 1
-            nome = '%s_%d' % (nome, n)
-        usados.add(nome.lower())
-        nomes.append(nome)
-    return nomes
+    return nomes_unicos(chaves)
 
 
 def write_rows_table(con, qualified, rows, force_varchar=False):
@@ -510,12 +528,14 @@ def _sem_data(stem, dia):
     """O nome do arquivo sem a data — o que sobra é a TAG, que é quem diz de
     que arquivo do dia se trata (DFLUXO × DPOSICAO, otm-settlement × cognos).
 
-    Os separadores que sobram nas pontas caem junto: tirar a data de
-    `otm-settlement_20260728` deixa um `_` no fim, e ele viraria o nome de
-    arquivo `otm-settlement_.db`."""
+    Os separadores que sobram caem junto — nas PONTAS e no MEIO: tirar a data
+    de `otm-settlement_20260728` deixa um `_` no fim, que viraria o nome de
+    arquivo `otm-settlement_.db`; e tirá-la de `73760_260610_DPOSICAO-SWAP`,
+    onde ela está no meio, deixa `73760__DPOSICAO-SWAP`, com o `_` duplo que o
+    strip das pontas não alcança."""
     for tok in (dia.strftime('%Y%m%d'), dia.strftime('%y%m%d'), dia.strftime('%Y-%m-%d')):
         stem = stem.replace(tok, '')
-    return stem.strip(' _-')
+    return re.sub(r'[ _-]{2,}', '_', stem).strip(' _-')
 
 
 def _tabela_dia(banco_toks, stem, dia):
@@ -630,6 +650,53 @@ def _nome_seguro(texto, padrao='sem_nome'):
 _META_SUFIXO = '.meta'
 
 
+# As rotinas de `cache/` que se ramificam em pastas E ainda assim guardam mais
+# de um arquivo na pasta do DIA. O casamento é por PREFIXO e sobre a chave
+# normalizada, então `b3 files` cobre `B3 Files/Swap` e todos os irmãos — a
+# grafia da pasta é de quem criou a árvore e as instâncias não concordam (a dev
+# tem `b3 files`, o share do JPM tem `B3 Files`).
+_ROTINAS_POR_ARQUIVO = (('b3_files',),)
+
+
+def _por_arquivo(rotina_parts):
+    """A rotina deste caminho nomeia os bancos pelo ARQUIVO?
+
+    Duas respostas somadas, e as duas são necessárias:
+
+      - **a rotina não se ramifica em pastas** (um nível só). É o Daily
+        Settlement, e é o default certo para uma rotina NOVA: sem subpasta, o
+        que separa os produtos só pode ser o nome do arquivo. Cair no contrário
+        poria os dez arquivos do dia num banco só;
+      - **ou ela está declarada** em `_ROTINAS_POR_ARQUIVO`. O B3 Files se
+        ramifica (NDF · Option · Swap · Operations) E mistura: o Swap grava
+        posição, fluxo e agenda de prêmios lado a lado. Contar pastas responde
+        "não" aqui, e foi assim que o Swap inteiro caiu num banco só.
+
+    A declaração é o preço de a função ser PURA sobre o caminho: o espelho vivo
+    converte UM arquivo por vez e não pode varrer o diretório para descobrir se
+    ele tem vizinhos."""
+    if len(rotina_parts) < 3:
+        return True
+    chave = chave_escopo('/'.join(str(p) for p in rotina_parts[1:]))
+    return any(chave[:len(pref)] == pref for pref in _ROTINAS_POR_ARQUIVO)
+
+
+def _daily_pai_legado(rel_db):
+    """O nome que este banco tinha quando a rotina inteira era UM banco, ou
+    `None` — `cache/b3 files/Swap/73760_DPOSICAO-SWAP.db` →
+    `cache/b3 files/Swap.db`.
+
+    Sem ele o banco do desenho anterior fica ÓRFÃO em disco: nada mais o
+    escreve, nada mais o lê, e quem consulta os bancos por fora do app encontra
+    dois e nada dizendo qual é o de hoje. É o mesmo motivo do
+    `_legacy_flat_name` — só que um desenho depois."""
+    partes = rel_db[:-3].split('/')
+    if len(partes) < 3 or partes[0] != 'cache':
+        return None
+    pai = partes[:-1]
+    return '/'.join(pai) + '.db' if _por_arquivo(pai) else None
+
+
 def _daily_db_name(rotina_parts, tag=''):
     """O CAMINHO do banco de um produto de arquivo-dia, relativo ao `db/`.
 
@@ -667,14 +734,12 @@ def _daily_rel_target(rel):
     `db/cache/new deals/NDF/Vanilla.db`, com cada dia como uma tabela dentro
     dele. Os segmentos de ANO/MÊS/DIA não viram pasta — eles já são a tabela.
 
-    Onde a rotina **não se ramifica em pastas**, quem separa os produtos é o
-    NOME do arquivo, e então é a TAG dele que vira o banco dentro da pasta da
-    rotina: o Daily Settlement grava os dez arquivos do dia (`otm-settlement`,
-    `ndf-cockpit`, `cognos`, …) na MESMA pasta `AAAA/MM/DD`, e sem isso os dez
-    cairiam num banco só — justamente a rotina em que a quebra é mais útil. O
-    corte é pela CONTAGEM de pastas, e não por olhar os vizinhos em disco,
-    porque esta função tem de ser pura sobre o caminho: o espelho vivo converte
-    UM arquivo por vez e não pode depender de varrer o diretório.
+    Onde a pasta do DIA guarda mais de um arquivo, quem separa os produtos é o
+    NOME, e então é a TAG dele que vira o banco dentro da pasta da rotina — ver
+    `_por_arquivo`. São o Daily Settlement (dez arquivos de fontes diferentes
+    na MESMA pasta `AAAA/MM/DD`) e o B3 Files (o Swap grava posição, fluxo e
+    agenda de prêmios lado a lado). Sem isso os dez, e os três, cairiam num
+    banco só — justamente onde a quebra é mais útil.
 
     O **`.meta.json` acompanha o arquivo dele**: `cognos_20260826.meta.json` vai
     para o banco do `cognos`, na tabela `d_20260826_meta`. Ele não é um produto
@@ -700,7 +765,7 @@ def _daily_rel_target(rel):
     if dia is None:
         return None
     rotina = ['cache'] + [p for p in parts[1:-1] if not p.isdigit()]
-    banco = _daily_db_name(rotina, _sem_data(stem, dia) if len(rotina) < 3 else '')
+    banco = _daily_db_name(rotina, _sem_data(stem, dia) if _por_arquivo(rotina) else '')
     # A tabela deixa de repetir o que o CAMINHO já diz.
     tabela = _tabela_dia(set(_tokens(banco[:-3].replace('/', '_'))), stem, dia)
     return banco, 'main', (tabela + '_meta') if meta else tabela
@@ -874,11 +939,11 @@ def _legacy_flat_name(rel_db):
         return (norm_ident('_'.join(partes), 'd') or 'd') + '.db'
     # No arquivo-dia, o desenho anterior era `daily_` + os tokens da rotina,
     # mais os da TAG que a rotina ainda não dizia. Quem é tag e quem é rotina
-    # sai da PROFUNDIDADE, pela mesma regra que gerou o caminho: com um nível
-    # de rotina o último segmento é a tag; com dois ou mais, é rotina.
+    # sai da MESMA regra que gerou o caminho (`_por_arquivo`), nunca de contar
+    # segmentos: o `b3 files/Swap` tem dois níveis de rotina E tag.
     corpo, tag = partes[1:], ''
-    if len(partes) == 3:
-        corpo, tag = partes[1:2], partes[2]
+    if len(partes) >= 3 and _por_arquivo(partes[:-1]):
+        corpo, tag = partes[1:-1], partes[-1]
     toks = []
     for p in corpo:
         toks.extend(_tokens(p))
@@ -1292,6 +1357,13 @@ def convert_daily(data_dir, out_dir, force=False, dry_run=False,
         # E os nomes ACHATADOS do desenho seguinte, o de quando cada produto já
         # tinha o seu banco mas todos moravam soltos na raiz do `db/`.
         legados.update(_legacy_flat_name(a[0]) for a, _ in alvos)
+        # E o banco da ROTINA INTEIRA, de quando ela ainda não se quebrava por
+        # arquivo (`cache/b3 files/Swap.db`) — mais o achatado DELE, que a linha
+        # acima deixou de produzir no instante em que o alvo ganhou um nível.
+        for a, _ in alvos:
+            pai = _daily_pai_legado(a[0])
+            if pai:
+                legados.update((pai, _legacy_flat_name(pai)))
     _drop_legacy_dbs(out_dir, legados, {a[0] for a, _ in alvos},
                      stats, 'agora a pasta db/ espelha a arvore de origem')
     return _convert_daily_rels(data_dir, out_dir, rels, force, stats)
