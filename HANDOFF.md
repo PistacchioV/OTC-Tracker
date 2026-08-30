@@ -15277,3 +15277,50 @@ que nunca aconteceu. A varredura virou a seção 6 do
 nenhuma das duas pontas, em vez de assertar o `Pu inicial`.
 
 Suíte completa verde.
+
+## §354 — os cadastros repartidos por PASTA (2026-08-29)
+
+Pedido: *"quebre em um codigo para mappings, outro para file interpreter, outro
+para control panel e outro para tickets"*. O `01_cadastros` era uma fatia só
+para as três etapas de cadastro, e a de `datasets` sozinha convertia 116 bancos
+em série — a única fatia que ainda não tinha por onde ser repartida.
+
+O `convert_datasets` ganhou **`pastas`/`excluir`**, exatamente os dois
+parâmetros que o `convert_daily` já tinha, e pela mesma razão. O eixo do corte
+mora no motor, ao lado do `ROTINAS_CACHE`:
+
+```
+PASTAS_DATASET = (mappings, file-interpreter, control-panel, tickets)
+```
+
+São **39 fatias** por split: `00_completo`, `01_cadastros`, quatro `01_*`,
+trinta e dois `02_*` e `99_outros`. Na dev, os 116 bancos de datasets se
+repartem em 42 (mappings) + 43 (file-interpreter) + 20 (control-panel) + 0
+(tickets, vazia aqui) + 11 (a raiz, no complemento).
+
+Quatro decisões:
+
+- **o `01_cadastros` virou o COMPLEMENTO**, e não a fatia inteira: ele leva os
+  calendários, o RefData/CPD e os JSONs da RAIZ, e exclui as quatro pastas. É o
+  `99_outros` dos cadastros — pasta de cadastro NOVA cai nele sozinha, sem
+  ninguém tocar em nada. Deixá-lo como estava poria dois processos nos mesmos
+  bancos no instante em que alguém rodasse as duas coisas;
+- **o JSON da RAIZ tem pasta `''`**, então pertence ao complemento por
+  construção — uma fatia de pasta nunca o pega;
+- **a limpeza de legados se restringe à fatia.** Numa fatia de pasta sai só o
+  banco-por-pasta dela (`mappings.db` do desenho anterior); o `static_data.db`
+  da raiz é do complemento. Apagar o legado de outra é desfazer a carga de quem
+  está rodando ao lado — a mesma regra dos arquivo-dia;
+- **com escopo, a varredura nem DESCE** na pasta que não é da fatia. No share,
+  onde a caminhada é cara, é a diferença entre ler uma pasta e ler o `DATA_DIR`
+  inteiro.
+
+O guarda monta a lista esperada a partir dos DOIS eixos do motor
+(`PASTAS_DATASET` e `ROTINAS_CACHE`), e a rede de teste ganhou as quatro pastas,
+uma quinta que ninguém nomeia e um JSON de raiz — as duas últimas provando o
+complemento. A asserção que já existia, "a soma das fatias é EXATAMENTE a carga
+completa", é a que garante que nada se perdeu no corte: ela pegou o primeiro
+erro desta mudança, quando o guarda ainda montava a lista pelo eixo velho e
+simplesmente não rodava as fatias novas.
+
+Suíte completa verde.

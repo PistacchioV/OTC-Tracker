@@ -25,7 +25,7 @@ por várias pessoas** — cada uma com o seu arquivo, ninguém esperando o outro
 terminar.
 
 Isso é seguro porque **os bancos são um por produto**: duas fatias nunca
-escrevem no mesmo `.db`. Rodar trinta e quatro ao mesmo tempo dá exatamente o mesmo
+escrevem no mesmo `.db`. Rodar trinta e oito ao mesmo tempo dá exatamente o mesmo
 resultado de rodar tudo em sequência.
 
 **As duas rotinas grandes são repartidas até o PRODUTO** — que é a folha da
@@ -47,7 +47,11 @@ Uma pasta que a sua instância não tenha vira um aviso e a fatia sai limpa.
 | Arquivo | O que converte |
 |---|---|
 | `00_completo.py` | tudo — cadastros + todos os blocos de `cache/` |
-| `01_cadastros.py` | os JSONs ÚNICOS (feriados, RefData/CPD, mappings, control-panel, file-interpreter) |
+| `01_cadastros.py` | o RESTO dos cadastros — calendários, RefData/CPD e os JSONs da raiz. É o complemento das quatro fatias abaixo: pasta de cadastro NOVA cai aqui |
+| `01_1_mappings.py` | `mappings/` — os 43 cadastros do /mapping, um banco cada |
+| `01_2_file_interpreter.py` | `file-interpreter/` — templates e variantes |
+| `01_3_control_panel.py` | `control-panel/` — o estado das rotinas |
+| `01_4_tickets.py` | `tickets/` — o store do Support Center |
 | `02_1_new_deals_ndf_vanilla.py` | `new deals/NDF/Vanilla` — costuma ser o maior arquivo-dia do app |
 | `02_2_new_deals_ndf_fwdstart.py` | `new deals/NDF/FwdStart` — o FWD Start (a pasta é SEM espaço) |
 | `02_3_new_deals_ndf_otherpublisher.py` | `new deals/NDF/OtherPublisher` |
@@ -82,7 +86,8 @@ Uma pasta que a sua instância não tenha vira um aviso e a fatia sai limpa.
 | `02_32_reconciliation_payrec.py` | `reconciliation/payrec` — idem, a de Pay/Rec |
 | `99_outros.py` | o RESTO de `cache/` — a rede de segurança |
 
-**Para cobrir tudo**, rode `01` + os trinta e dois `02_*` + `99` (ou apenas `00_completo`).
+**Para cobrir tudo**, rode `01_cadastros` + os quatro `01_*` + os trinta e dois
+`02_*` + `99_outros` (ou apenas `00_completo`).
 
 ### Se um bloco ainda for grande
 
@@ -104,6 +109,10 @@ Sem argumento nenhum, a origem e o destino já são os do share:
 
 ```
 python 01_cadastros.py
+python 01_1_mappings.py
+python 01_2_file_interpreter.py
+python 01_3_control_panel.py
+python 01_4_tickets.py
 python 02_1_new_deals_ndf_vanilla.py
 python 02_2_new_deals_ndf_fwdstart.py
 python 02_3_new_deals_ndf_otherpublisher.py
@@ -201,9 +210,9 @@ start python 02_14_b3_files_swap.py
   │   ├── daily settlement/otm-settlement.db
   │   ├── daily settlement/cognos.db
   │   └── pending-confirmation.db
-  ├── mappings/mt300.db
-  ├── control-panel/mt300_status.db
-  ├── file-interpreter/termo.db
+  ├── mappings/mt300.db                      (fatia 01_1)
+  ├── control-panel/mt300_status.db          (fatia 01_3)
+  ├── file-interpreter/termo.db              (fatia 01_2)
   ├── reference_data.db
   └── Subjacente.db                          (os JSONs de raiz ficam na raiz)
   ```

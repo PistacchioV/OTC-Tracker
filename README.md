@@ -183,10 +183,11 @@ python scripts/convert/00_completo.py            # tudo num comando
 python scripts/convert/00_completo.py --meses 0  # depois, o histórico inteiro
 ```
 
-A carga no share leva horas, então ela também vem **repartida em 35 fatias**
-(uma por bloco de `cache/`, com New Deals e B3 Files quebrados até o produto, o
-Daily Settlement por arquivo e uma fatia por reconciliação) que várias pessoas
-rodam ao mesmo tempo — `scripts/convert/README.md` explica.
+A carga no share leva horas, então ela também vem **repartida em 39 fatias**
+(uma por pasta de cadastro e uma por bloco de `cache/`, com New Deals e B3 Files
+quebrados até o produto, o Daily Settlement e o B3 Files por arquivo e uma fatia
+por reconciliação) que várias pessoas rodam ao mesmo tempo —
+`scripts/convert/README.md` explica.
 Para uma máquina **sem o código do app**, o `scripts/standalone/` tem o mesmo
 corte com os caminhos do share fixos e só o `duckdb` como dependência.
 
