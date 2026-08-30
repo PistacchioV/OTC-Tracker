@@ -77,7 +77,7 @@ def _default_out_dir(data_dir):
 
 
 def run(argv=None, escopo=None, conversores=None, familias=None, excluir=None,
-        doc=None):
+        doc=None, pastas=None, excluir_pastas=None):
     """A implementação ÚNICA da CLI, parametrizada pelo ESCOPO.
 
     `scripts/convert_json_to_duckdb.py` a chama sem escopo (a carga completa) e
@@ -87,7 +87,11 @@ def run(argv=None, escopo=None, conversores=None, familias=None, excluir=None,
     do `Config`, lá são fixos porque a máquina não tem o código do app.
 
     `conversores` restringe as ETAPAS (o `01_cadastros` não roda `daily`);
-    `familias`/`excluir` restringem as rotinas de `cache/` dentro do `daily`.
+    `familias`/`excluir` restringem as rotinas de `cache/` dentro do `daily`, e
+    `pastas`/`excluir_pastas` fazem o mesmo com as pastas de cadastro dentro do
+    `datasets` (`mappings`, `tickets`, …). Os dois pares são o mesmo desenho: a
+    fatia leva um escopo, o complemento leva o resto, e como os bancos são um
+    por arquivo duas fatias nunca escrevem no mesmo `.db`.
     """
     ap = argparse.ArgumentParser(
         description=(doc or __doc__).splitlines()[0])
@@ -147,8 +151,11 @@ def run(argv=None, escopo=None, conversores=None, familias=None, excluir=None,
     escolhidos = [getattr(args, 'only', None)] if getattr(args, 'only', None) else etapas
     houve_erro = False
     for nome in escolhidos:
-        extra = {'desde': desde, 'familias': familias, 'excluir': excluir} \
-            if nome == 'daily' else {}
+        extra = {}
+        if nome == 'daily':
+            extra = {'desde': desde, 'familias': familias, 'excluir': excluir}
+        elif nome == 'datasets' and (pastas is not None or excluir_pastas is not None):
+            extra = {'pastas': pastas, 'excluir': excluir_pastas}
         stats = todos[nome](data_dir, out_dir, force=args.force,
                             dry_run=args.dry_run, **extra)
         print('\n== %s -> %s' % (nome, os.path.basename(stats['db'])))

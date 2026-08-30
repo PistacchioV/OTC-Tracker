@@ -65,10 +65,10 @@ def _rotinas_do_motor():
     spec = importlib.util.spec_from_file_location('_motor_json_to_duckdb', MOTOR)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
-    return tuple(mod.ROTINAS_CACHE)
+    return tuple(mod.ROTINAS_CACHE), tuple(mod.PASTAS_DATASET)
 
 
-ROTINAS = _rotinas_do_motor()
+ROTINAS, PASTAS = _rotinas_do_motor()
 
 _CAB = r'''#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
@@ -192,14 +192,23 @@ _MAIN_COMPLETO = """    conversores = {'holidays': convert_holidays, 'refdata': 
                                         dry_run=args.dry_run, **extra), houve_erro)
 """
 
-_MAIN_CADASTROS = """    # Os JSONs UNICOS — nenhum deles tem quebra por dia, entao esta fatia nao
-    # toca em nada que os scripts de rotina convertem.
+_MAIN_CADASTROS = """    # Os cadastros SEM pasta propria: calendarios, RefData/CPD e os JSONs da
+    # raiz. As pastas com fatia propria sao excluidas — este script e o
+    # COMPLEMENTO delas, entao pasta de cadastro NOVA cai aqui sozinha.
     conversores = {'holidays': convert_holidays, 'refdata': convert_refdata,
                    'datasets': convert_datasets}
     escolhidos = [args.only] if args.only else list(conversores)
     for nome in escolhidos:
+        extra = {'excluir': %(pastas)r} if nome == 'datasets' else {}
         _resumo(nome, conversores[nome](data_dir, out_dir, force=args.force,
-                                        dry_run=args.dry_run), houve_erro)
+                                        dry_run=args.dry_run, **extra), houve_erro)
+"""
+
+_MAIN_PASTA = """    # UMA pasta de cadastro. Os bancos sao um por ARQUIVO, entao esta fatia nao
+    # escreve em nada que as outras escrevem.
+    _resumo('datasets', convert_datasets(data_dir, out_dir, force=args.force,
+                                         dry_run=args.dry_run,
+                                         pastas=[%(pasta)r]), houve_erro)
 """
 
 _MAIN_ROTINA = """    # `--bloco` SUBSTITUI o escopo desta fatia; nao soma. Rodar a fatia inteira
@@ -259,19 +268,35 @@ esperar a outra —, use os arquivos numerados ao lado deste: 01_cadastros e um
 02_* por rotina. Os bancos são um por produto, então as fatias nunca escrevem no
 mesmo arquivo."""
 
-_DOC_CADASTROS = """O ESCOPO são os JSONs ÚNICOS — os que NÃO têm quebra por dia:
+_DOC_CADASTROS = """O ESCOPO são os cadastros SEM pasta própria ao lado deste script:
 
   - holiday_calendars.db  uma tabela por calendário do registro (+ _registry);
   - reference_data.db     refdata e counterparty_details, TUDO VARCHAR (o zero à
                           esquerda de SPN/ECI/TAX ID é o que um BIGINT perderia
                           em silêncio) + a coluna _raw com o registro exato;
-  - <pasta>_<arquivo>.db  UM BANCO POR JSON para o resto — mappings_mt300.db,
-                          control_panel_mt300_status.db,
-                          file_interpreter_termo.db, e o JSON da raiz com o
-                          próprio nome (subjacente.db).
+  - <arquivo>.db          os JSONs da RAIZ do DATA_DIR (Subjacente, Dominio, …).
+
+As pastas com muitos arquivos saíram para fatias próprias — 01_1 em diante:
+
+%(lista)s
+
+Este é o COMPLEMENTO delas, como o 99_outros é o dos blocos de cache\\: pasta de
+cadastro NOVA cai aqui sozinha, sem ninguém tocar em nada.
 
 A pasta translations\\ fica FORA de propósito: os 3 JSONs de i18n são os únicos
 que permanecem como JSON. Os arquivo-dia de cache\\ são dos outros scripts."""
+
+_DOC_PASTA = """O ESCOPO é UMA pasta de cadastro do DATA_DIR: **%(pasta)s\\**.
+
+%(desc)s
+
+É UM BANCO POR ARQUIVO, na mesma árvore do JSON (db\\%(pasta)s\\<arquivo>.db),
+com uma tabela por arquivo e a coluna _raw guardando o registro exato. Juntar a
+pasta inteira num banco só criava contenção onde ela não precisa existir — o
+espelho reconvertendo UM cadastro fechava a leitura dos outros.
+
+Como os bancos são um por arquivo, este script NÃO escreve em nada que os outros
+escrevem: pode rodar ao mesmo tempo que eles."""
 
 _DOC_ROTINA = """O ESCOPO é UM bloco de cache\\: **%(fam)s**.
 
@@ -344,6 +369,8 @@ SEED_STANDALONE = """    # Sem registro não há o que converter — o arquivo n
 def _variantes():
     """(arquivo, titulo, resumo, escopo_doc, escopo_label, arg_only, corpo_main,
     tem_janela)."""
+    _nomes_pastas = [p for p, _ in PASTAS]
+    _lista_pastas = '\n'.join('  - %s' % p for p in _nomes_pastas)
     out = [
         ('00_completo.py',
          'convert 00_completo — TUDO de uma vez.',
@@ -351,11 +378,20 @@ def _variantes():
          _DOC_COMPLETO, 'tudo (cadastros + todas as rotinas de cache/)',
          _ARG_ONLY_COMPLETO, _MAIN_COMPLETO, True),
         ('01_cadastros.py',
-         'convert 01_cadastros — os JSONs ÚNICOS (sem quebra por dia).',
-         'Feriados, RefData/CounterpartyDetails e um banco por JSON de cadastro.',
-         _DOC_CADASTROS, 'cadastros (sem quebra por dia)',
-         _ARG_ONLY_CADASTROS, _MAIN_CADASTROS, False),
+         'convert 01_cadastros — os cadastros sem pasta própria.',
+         'Feriados, RefData/CounterpartyDetails e os JSONs da raiz.',
+         _DOC_CADASTROS % {'lista': _lista_pastas}, 'cadastros: calendarios, '
+         'RefData/CPD e os JSONs de raiz',
+         _ARG_ONLY_CADASTROS, _MAIN_CADASTROS % {'pastas': _nomes_pastas}, False),
     ]
+    for i, (pasta, desc) in enumerate(PASTAS, start=1):
+        out.append((
+            '01_%d_%s.py' % (i, _slug(pasta)),
+            'convert 01_%s — a pasta de cadastro `%s`.' % (_slug(pasta), pasta),
+            desc,
+            _DOC_PASTA % {'pasta': pasta, 'desc': desc},
+            '%s/ (um banco por arquivo)' % pasta,
+            '', _MAIN_PASTA % {'pasta': pasta}, False))
     for i, (fam, desc) in enumerate(ROTINAS, start=1):
         out.append((
             '02_%d_%s.py' % (i, _slug(fam)),
