@@ -213,12 +213,52 @@ def coerce(v, kind):
 
 # ── escrita de tabela ───────────────────────────────────────────────────────
 
+def nomes_sql(chaves):
+    """Os NOMES de coluna para as chaves do JSON, na ordem, sem colisão.
+
+    **O identificador do DuckDB é insensível a CAIXA, mesmo citado.** A chave do
+    JSON é preservada tal e qual — é o contrato com o arquivo de origem —, mas
+    duas chaves que só diferem no caso são a MESMA coluna para o banco, e a
+    segunda estoura com *"Column with name X already exists"*. Foi o
+    `DPOSICAO-SWAP`: o layout da B3 repete nomes por perna e a grafia não é
+    estável, então o arquivo tem `PU Inicial` e `Pu inicial`. O `_b3_export_json`
+    já desempata o repetido EXATO (`Pu inicial` → `Pu inicial_2`), mas ele
+    compara com caixa e por isso deixa passar o par acima.
+
+    A saída é o mesmo `_N` que o app usa para o repetido, com duas regras que
+    fazem a diferença:
+
+      - o candidato é conferido contra TODAS as chaves do arquivo, não só
+        contra as já emitidas — senão o desempate de `Pu inicial` produziria
+        `Pu inicial_2`, que é uma coluna de VERDADE do mesmo arquivo, e a
+        colisão voltaria pela outra ponta;
+      - **a coluna é RENOMEADA, nunca descartada.** Uma perna do swap sumindo
+        da tabela não daria erro nenhum — é a falha que menos parece falha, e o
+        `_raw` ao lado ainda a teria, o que faria o banco discordar de si
+        mesmo."""
+    reservados = {str(k).lower() for k in chaves}
+    usados = set()
+    nomes = []
+    for k in chaves:
+        nome = str(k)
+        if nome.lower() in usados:
+            n = 2
+            while ('%s_%d' % (nome, n)).lower() in usados or \
+                  ('%s_%d' % (nome, n)).lower() in reservados:
+                n += 1
+            nome = '%s_%d' % (nome, n)
+        usados.add(nome.lower())
+        nomes.append(nome)
+    return nomes
+
+
 def write_rows_table(con, qualified, rows, force_varchar=False):
     """`CREATE OR REPLACE` de uma tabela a partir de uma lista de objetos.
 
     As colunas são a UNIÃO das chaves, na ordem de primeira aparição, com os
-    NOMES DO JSON preservados (citados). `force_varchar=True` é o modo dos
-    cadastros de identificador (RefData/CounterpartyDetails)."""
+    NOMES DO JSON preservados (citados) — só o que colidiria por CAIXA ganha
+    sufixo, ver `nomes_sql`. `force_varchar=True` é o modo dos cadastros de
+    identificador (RefData/CounterpartyDetails)."""
     cols = []
     vistos = set()
     for r in rows:
@@ -235,7 +275,10 @@ def write_rows_table(con, qualified, rows, force_varchar=False):
             kinds[c] = 'json' if any(isinstance(r.get(c), (dict, list)) for r in rows) else 'str'
         else:
             kinds[c] = resolve_kind(kind_of(r.get(c)) for r in rows)
-    ddl = ', '.join('%s %s' % (q(c), _SQL_TYPE[kinds[c]]) for c in cols)
+    # A CHAVE continua sendo a do JSON (é por ela que o valor é lido); o que o
+    # desempate muda é só o NOME da coluna no banco.
+    ddl = ', '.join('%s %s' % (q(n), _SQL_TYPE[kinds[c]])
+                    for c, n in zip(cols, nomes_sql(cols)))
     con.execute('CREATE OR REPLACE TABLE %s (%s)' % (qualified, ddl))
     data = [[coerce(r.get(c), kinds[c]) for c in cols] for r in rows]
     if data:
