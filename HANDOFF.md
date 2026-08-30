@@ -15107,3 +15107,51 @@ vezes seguidas eles quebraram com `FileNotFoundError` sobre um teste que não é
 sobre numeração. O `check_convert_split` ganhou a pasta do print inteira — os
 oito arquivos, os quatro `.meta` e uma tag que ninguém nomeia. Suíte completa
 verde (105).
+
+## §351 — uma fatia por reconciliação, e os quatro arquivos que faltavam (2026-08-29)
+
+Pergunta do usuário: *"reconciliation tem que quebrar um db para cada
+reconciliação, está assim?"* Os **bancos** já estavam — `cache/reconciliation/`
+tem uma pasta por recon (`fxo`, `cgd`, `payrec`) e o `_daily_rel_target` a
+espelha em `db/cache/reconciliation/fxo.db` e irmãos. O que não estava era a
+quebra dos SCRIPTS: `reconciliation` era **uma fatia só para as três**, e a
+única da lista a escrever em mais de um `.db`.
+
+Hoje um escopo é sempre o caminho do banco que ele produz — e essa é a regra
+que decide tudo aqui:
+
+- **três fatias de recon**, uma por pasta. A de **COMITENTES não entra**: ela
+  não tem cache JSON, grava direto no `matching_comitentes.db`;
+- e o `cache/payrec` de primeiro nível continua **um banco à parte** do
+  `cache/reconciliation/payrec` — são o histórico e o cache por data, dois
+  arquivos diferentes da mesma recon.
+
+### O que a pergunta seguinte revelou
+
+*"qual a diferença entre os dois?"*, sobre `operacoes-jpm.db` e
+`operations-b3.db` lado a lado na pasta. São coisas distintas e o nome parecido
+esconde isso:
+
+| banco | o que é |
+|---|---|
+| `operacoes-jpm.db` | o arquivo **de origem** — as operações do Banco J.P. Morgan como importadas (contas 73760009/73760205) |
+| `operacoes-mgt.db` | a outra origem — as da MGT (04880006) |
+| `operations-b3.db` | o **DERIVADO** que a página Operations B3 lê: o merge das duas (`_ob_src`) mais o que a tela edita, e é dele que saem a mensageria, os avisos de liquidação e os cards de reconciliação |
+
+Conferindo o `_DS_IMPORTS` contra o `ROTINAS_CACHE`, **quatro tags do Daily
+Settlement não tinham fatia** e caíam no `99_outros`: `operacoes-mgt`,
+`eventos-swap-mgt`, `latam-desk-position` e `swap-kapital-hybrids`. A rede de
+segurança fazia o trabalho dela — o dado convertia —, e é justamente por isso
+que a falta não aparecia: o arquivo ia parar na fatia de todo mundo, que é a
+que ninguém quer esperar. As quatro entraram; são **32 blocos e 35 arquivos**
+por split.
+
+O guarda ganhou a seção 5, que compara o registro dos cards de importação
+(`routes._DS_IMPORTS`) com as fatias e cobra que nenhum arquivo do Daily
+Settlement dependa do `99_outros` — a asserção é de mão única de propósito, já
+que `operations-b3` e `other-products-summary` são derivados e não têm card. E
+a rede de teste do `check_convert_split` passou a escrever as recons como elas
+são em disco (pasta por recon, data no NOME do arquivo, mais o ponteiro
+`_last`), com uma quarta recon que ninguém nomeia para provar o `99_outros`.
+
+Suíte completa verde.
