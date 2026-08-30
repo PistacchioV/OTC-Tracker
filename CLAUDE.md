@@ -481,6 +481,20 @@ São dois bancos:
     no Linux são dois de verdade, e aí o antigo tem de sair;
   - dois arquivos que reivindiquem a mesma tabela viram ERRO na carga completa
     (`_colisoes`), nunca sobrescrita silenciosa;
+  - **o identificador do DuckDB é insensível a CAIXA, mesmo citado**, e por isso
+    duas chaves do JSON que só diferem no caso são a MESMA coluna para o banco:
+    o arquivo converte com *"Column with name X already exists"* e o dia inteiro
+    fica de fora. É o `DPOSICAO-SWAP`, cujo layout repete nomes por perna com
+    grafia instável (`PU Inicial` e `Pu inicial`) — o `_b3_export_json` já
+    desempata o repetido EXATO com `_2`, mas compara COM caixa e deixa passar
+    esse par. Quem desempata para o banco é o `nomes_sql`, com duas regras: o
+    candidato é conferido contra TODAS as chaves do arquivo (senão o desempate
+    de `Pu inicial` produziria `Pu inicial_2`, que é uma coluna de verdade do
+    mesmo arquivo, e a colisão voltaria pela outra ponta), e a coluna é
+    **RENOMEADA, nunca descartada** — uma perna do swap sumindo da tabela não
+    daria erro nenhum, e o `_raw` ao lado ainda a teria, o que faria o banco
+    discordar de si mesmo. O sufixo é só do BANCO: o `_raw` guarda a chave
+    original, e é dele que a leitura reconstrói;
   - **o escopo de `cache/` é um CAMINHO** (`new deals/NDF`), não só a rotina de
     primeiro nível: as rotinas grandes se repartem até o PRODUTO
     (`new deals/NDF/Vanilla`), que é a folha da árvore e a unidade em que cada
