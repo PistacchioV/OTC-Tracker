@@ -138,7 +138,21 @@ w('cache/b3 files/NDF/2026/07/03/73760_260703_DPOSICAO.json', [{'Cod': 'Y'}])
 w('cache/b3 files/NDF/Extra/2026/07/03/73760_260703_EXTRA.json', [{'Cod': 'E'}])
 w('cache/b3 files/Option/2026/07/03/73760_260703_DPOSICAO.json', [{'Cod': 'Z'}])
 w('cache/b3 files/Operations/2026/07/03/ops_20260703.json', [{'Cod': 'W'}])
+# O Daily Settlement, como ele é em produção: os arquivos do dia na MESMA pasta,
+# cada um de uma fonte, mais os `.meta` que anotam alguns deles.
 w('cache/daily settlement/2026/07/28/otm-settlement_20260728.json', [{'Trade Id': '9'}])
+w('cache/daily settlement/2026/07/28/otm-settlement_20260728.meta.json', [{'src': 'x'}])
+w('cache/daily settlement/2026/07/28/cognos_20260728.json', [{'Trade Id': '8'}])
+w('cache/daily settlement/2026/07/28/cognos_20260728.meta.json', [{'src': 'y'}])
+w('cache/daily settlement/2026/07/28/ndf-cockpit_20260728.json', [{'Trade Id': '7'}])
+w('cache/daily settlement/2026/07/28/operacoes-jpm_20260728.json', [{'Trade Id': '6'}])
+w('cache/daily settlement/2026/07/28/br-onshore-settlements_20260728.json', [{'T': '5'}])
+w('cache/daily settlement/2026/07/28/eventos-swap-jpm_20260728.json', [{'T': '4'}])
+w('cache/daily settlement/2026/07/28/operations-b3_20260728.json', [{'T': '3'}])
+w('cache/daily settlement/2026/07/28/other-products-summary_20260728.json', [{'T': '2'}])
+# Uma tag que NENHUMA fatia nomeia: tem de cair no 99_outros, como a rotina e o
+# produto novos. A lista de arquivos do Daily Settlement não é fechada.
+w('cache/daily settlement/2026/07/28/relatorio-novo_20260728.json', [{'T': '1'}])
 w('cache/pending-confirmation/2026/08/27/pending-confirmation_20260827.json', [{'T': '1'}])
 w('cache/payrec/2026/08/27/payrec_20260827.json', [{'V': '1'}])
 w('cache/reconciliation/2026/08/27/recon_20260827.json', [{'V': '2'}])
@@ -205,6 +219,19 @@ check('o New Deals veio repartido até o PRODUTO',
        'cache/new deals/NDF/Asian.db', 'cache/new deals/NDF/Commodities.db',
        'cache/new deals/NDF/Vanilla.db', 'cache/new deals/Option/FXO.db',
        'cache/new deals/Swap/Rates.db'])
+check('o Daily Settlement veio repartido por ARQUIVO',
+      sorted(d for d in _arvore(OUT_FATIAS) if d.startswith('cache/daily settlement/')),
+      ['cache/daily settlement/br-onshore-settlements.db',
+       'cache/daily settlement/cognos.db',
+       'cache/daily settlement/eventos-swap-jpm.db',
+       'cache/daily settlement/ndf-cockpit.db',
+       'cache/daily settlement/operacoes-jpm.db',
+       'cache/daily settlement/operations-b3.db',
+       'cache/daily settlement/other-products-summary.db',
+       'cache/daily settlement/otm-settlement.db',
+       'cache/daily settlement/relatorio-novo.db'])
+check('e a tag que nenhuma fatia nomeia caiu no 99_outros',
+      'cache/daily settlement/relatorio-novo.db' in _arvore(OUT_FATIAS))
 check('e o B3 Files por produto (ali o produto já é o primeiro nível)',
       sorted(d for d in _arvore(OUT_FATIAS) if d.startswith('cache/b3 files/')),
       ['cache/b3 files/NDF.db', 'cache/b3 files/NDF/Extra.db',
@@ -230,7 +257,9 @@ print('\n== 4. os argumentos de cada fatia ==')
 rc, saida = _rodar('01_cadastros.py', os.path.join(DATA, 'x'), ['--meses', '0'])
 check('o 01_cadastros RECUSA --meses (nao ha data para cortar)', rc != 0)
 check('   e diz por quê', 'unrecognized arguments: --meses' in saida)
-_UMA = '02_12_b3_files_ndf.py'
+# Pelo SUFIXO, nunca pelo número: a numeração desloca a cada bloco que entra ou
+# sai do ROTINAS_CACHE, e este teste não é sobre ela.
+_UMA = next(f for f in sorted(os.listdir(CONVERT)) if f.endswith('_b3_files_ndf.py'))
 rc, saida = _rodar(_UMA, os.path.join(DATA, 'y'), ['--only', 'daily'])
 check('a fatia de bloco RECUSA --only (tem uma etapa so)', rc != 0)
 

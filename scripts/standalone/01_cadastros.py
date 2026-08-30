@@ -524,12 +524,20 @@ def _com_raw(rows):
     return out
 
 
-def _convert_daily_payload(con, schema, tabela, payload, raw=False):
+def _convert_daily_payload(con, schema, tabela, payload, raw=False,
+                           meta_tabela=None):
     """Grava o payload de UM arquivo-dia; devolve os nomes das tabelas criadas.
 
     `raw=True` (os DATASETS — cadastros e configs) acrescenta a coluna `_raw`
     em toda tabela lista-de-objetos, para o flip de leitura ter o registro
-    exato; os arquivo-dia ficam sem ela de propósito (volume)."""
+    exato; os arquivo-dia ficam sem ela de propósito (volume).
+
+    `meta_tabela` nomeia a tabela chave→valor de um payload-OBJETO em vez do
+    `<tabela>__meta` de sempre. Serve ao arquivo `.meta.json`, que já É
+    metadado: sem isso a tabela dele sairia `d_20260826_meta__meta`, gaguejando
+    o mesmo nome duas vezes. O nome é PASSADO, e não deduzido do sufixo de
+    `tabela` — deduzir faria uma tabela legítima terminada em `_meta` cair na
+    mesma regra."""
     alvo = lambda t: '%s.%s' % (q(schema), q(t))               # noqa: E731
     criadas = []
     if _lista_de_objetos(payload):
@@ -549,7 +557,7 @@ def _convert_daily_payload(con, schema, tabela, payload, raw=False):
             else:
                 meta[k] = v
         if meta:
-            sub = tabela + '__meta'
+            sub = meta_tabela or (tabela + '__meta')
             write_rows_table(
                 con, alvo(sub),
                 [{'key': k, 'value': json.dumps(v, ensure_ascii=False)}
@@ -572,6 +580,11 @@ def _nome_seguro(texto, padrao='sem_nome'):
     """Um segmento de caminho válido, preservando o nome de origem."""
     s = _INVALIDO_NO_NOME.sub('_', str(texto or '')).strip().rstrip('.')
     return s or padrao
+
+
+# O sufixo do anexo de um arquivo-dia. Ele não é um produto: vai para o banco do
+# arquivo que anota, com `_meta` no nome da tabela.
+_META_SUFIXO = '.meta'
 
 
 def _daily_db_name(rotina_parts, tag=''):
@@ -620,6 +633,14 @@ def _daily_rel_target(rel):
     porque esta função tem de ser pura sobre o caminho: o espelho vivo converte
     UM arquivo por vez e não pode depender de varrer o diretório.
 
+    O **`.meta.json` acompanha o arquivo dele**: `cognos_20260826.meta.json` vai
+    para o banco do `cognos`, na tabela `d_20260826_meta`. Ele não é um produto
+    — é o anexo do arquivo-dia daquele produto —, e num banco separado quem
+    consultasse o Cognos teria de juntar dois. Antes ele saía num banco próprio
+    e com o nome torto (`cognos_.meta.db`): a data está no MEIO do nome
+    (`cognos_20260826.meta`), então tirá-la deixa um `_` que não está na ponta
+    e o `strip` das pontas não alcança.
+
     O schema é sempre `main` — o que era subárvore agora está no CAMINHO, e um
     schema além disso repetiria a mesma informação."""
     parts = rel.split('/')
@@ -629,14 +650,17 @@ def _daily_rel_target(rel):
     if not fname.endswith('.json') or fname.startswith('_'):
         return None
     stem = fname[:-5]
+    meta = stem.endswith(_META_SUFIXO)
+    if meta:
+        stem = stem[:-len(_META_SUFIXO)]
     dia = _dia_de(parts[1:-1], stem)
     if dia is None:
         return None
     rotina = ['cache'] + [p for p in parts[1:-1] if not p.isdigit()]
     banco = _daily_db_name(rotina, _sem_data(stem, dia) if len(rotina) < 3 else '')
     # A tabela deixa de repetir o que o CAMINHO já diz.
-    return banco, 'main', _tabela_dia(set(_tokens(banco[:-3].replace('/', '_'))),
-                                      stem, dia)
+    tabela = _tabela_dia(set(_tokens(banco[:-3].replace('/', '_'))), stem, dia)
+    return banco, 'main', (tabela + '_meta') if meta else tabela
 
 
 def dia_do_rel(rel):
@@ -721,7 +745,12 @@ def _convert_daily_rels(data_dir, out_dir, rels, force, stats):
                 payload = _load_json(os.path.join(data_dir, rel.replace('/', os.sep)))
                 # `raw=True` desde o flip dos arquivo-dia (§334): o `_day_json`
                 # reconstrói a lista pelo `_raw`, na ordem do `_seq`.
-                criadas = _convert_daily_payload(con, schema, tabela, payload, raw=True)
+                # Num arquivo `.meta.json` a tabela chave→valor é a do próprio
+                # arquivo: ele já é o metadado, e o `__meta` de sempre repetiria
+                # a palavra.
+                criadas = _convert_daily_payload(
+                    con, schema, tabela, payload, raw=True,
+                    meta_tabela=tabela if rel.endswith(_META_SUFIXO + '.json') else None)
                 manifest_record(con, chave, st, criadas)
                 stats['converted'].extend('%s:%s' % (banco, c) for c in criadas)
             except Exception:                                  # noqa: BLE001
@@ -877,10 +906,21 @@ ROTINAS_CACHE = (
     ('b3 files/Option', 'Idem, para as opções.'),
     ('b3 files/Swap', 'Idem, para os swaps — costuma ser o maior dos quatro.'),
     ('b3 files/Operations', 'O Operations B3 — a lista de operações registradas.'),
-    ('daily settlement', 'Os arquivos do Daily Settlement — OTM Settlements, NDF Cockpit,\n'
-                         'Operações JPM/MGT, Eventos Swap, Cognos, BR Onshore, Latam Desk.\n'
-                         'Esta rotina NÃO se ramifica em pastas: os dez arquivos do dia\n'
-                         'convivem em AAAA/MM/DD, e é o NOME de cada um que dá o banco.'),
+    # O Daily Settlement NÃO se ramifica em pastas: os arquivos do dia convivem
+    # em AAAA/MM/DD e quem separa os produtos é o NOME. Por isso o escopo aqui
+    # é a TAG do arquivo — cada um vem de uma fonte diferente e é uma fatia.
+    # A lista não precisa ser exaustiva: arquivo com tag fora dela cai no
+    # `99_outros`, que exclui por tag do mesmo jeito.
+    ('daily settlement/otm-settlement', 'O OTM Settlements.'),
+    ('daily settlement/ndf-cockpit', 'O NDF Cockpit.'),
+    ('daily settlement/operations-b3', 'O Operations B3.'),
+    ('daily settlement/operacoes-jpm', 'As operações JPM/MGT.'),
+    ('daily settlement/eventos-swap-jpm', 'Os eventos de swap.'),
+    ('daily settlement/cognos', 'O Cognos.'),
+    ('daily settlement/br-onshore-settlements', 'O BR Onshore Settlements.'),
+    ('daily settlement/other-products-summary', 'O Other Products Summary — e o\n'
+                                                'overlay de status do aviso, que\n'
+                                                'mora no `.meta` ao lado.'),
     ('pending-confirmation', 'Os snapshots diários do Pending Confirmation.'),
     ('payrec', 'O histórico diário da reconciliação de Pay/Rec.'),
     ('reconciliation', 'Os caches por data das reconciliações (Pay/Rec e afins).'),
@@ -907,29 +947,64 @@ def _subpastas(caminho):
         return []
 
 
+def tag_do_rel(rel):
+    """A TAG de um arquivo-dia, normalizada — o que sobra do NOME depois de
+    tirar a data (`otm-settlement_20260826.json` → `otm_settlement`).
+
+    É ela que separa os produtos onde a rotina **não se ramifica em pastas**: o
+    Daily Settlement grava os dez arquivos do dia na MESMA `AAAA/MM/DD`, e sem
+    a tag os dez seriam um bloco só — justamente a rotina em que repartir mais
+    ajuda, porque cada arquivo vem de uma fonte diferente. O `.meta` é podado
+    junto: ele acompanha o arquivo que anota, não é um produto."""
+    parts = rel.split('/')
+    fname = parts[-1]
+    if not fname.endswith('.json'):
+        return ''
+    stem = fname[:-5]
+    if stem.endswith(_META_SUFIXO):
+        stem = stem[:-len(_META_SUFIXO)]
+    dia = _dia_de(parts[1:-1], stem)
+    if dia is None:
+        return ''
+    return '_'.join(_tokens(_sem_data(stem, dia)))
+
+
 def resolver_escopo(raiz_cache, escopo):
-    """(caminho REAL do escopo sob `cache/`, None) — ou (None, aviso).
+    """(caminho REAL sob `cache/`, tag ou None, None) — ou (None, None, aviso).
 
     Desce segmento a segmento casando pelo nome NORMALIZADO, porque a grafia da
     pasta é de quem criou a árvore e as instâncias não concordam (a dev tem
     `b3 files`, o share tem `B3 Files`). O caminho devolvido é o que está em
     DISCO, que é o que a pasta `db/` espelha.
 
+    **O último segmento pode ser uma TAG de arquivo em vez de uma pasta**
+    (`daily settlement/otm-settlement`), e é assim que a rotina que não se
+    ramifica em pastas também se reparte. Um escopo é, então, sempre o CAMINHO
+    do banco que ele produz — `db/cache/daily settlement/otm-settlement.db` —,
+    o que dispensa uma segunda sintaxe para dizer a mesma coisa.
+
     O aviso diz o que ele ACHOU **no nível em que parou** — não a listagem da
     raiz. Um escopo de dois segmentos falha quase sempre no segundo, e mostrar
     as rotinas de primeiro nível ali responderia a pergunta errada."""
     partes = [p for p in str(escopo or '').replace('\\', '/').split('/') if p.strip()]
     atual, reais = raiz_cache, []
-    for p in partes:
+    for i, p in enumerate(partes):
         alvo = chave_familia(p)
         achou = next((n for n in _subpastas(atual) if chave_familia(n) == alvo), None)
         if achou is None:
+            # Último segmento sem pasta correspondente: é TAG de arquivo. Não se
+            # valida aqui — só a varredura sabe que tags existem, e validar
+            # custaria descer a árvore duas vezes. Tag que não casa com nada vira
+            # aviso DEPOIS, com a lista das tags encontradas.
+            if i == len(partes) - 1 and reais:
+                return '/'.join(reais), alvo, None
             onde = '/'.join(reais) or 'cache'
-            return None, ('cache/%s: bloco ausente em disco. Dentro de %s há: %s'
-                          % (escopo, onde, ', '.join(_subpastas(atual)) or '(nenhuma pasta)'))
+            return None, None, ('cache/%s: bloco ausente em disco. Dentro de %s há: %s'
+                                % (escopo, onde,
+                                   ', '.join(_subpastas(atual)) or '(nenhuma pasta)'))
         reais.append(achou)
         atual = os.path.join(atual, achou)
-    return '/'.join(reais), None
+    return '/'.join(reais), None, None
 
 
 def cache_families(data_dir):
@@ -993,7 +1068,7 @@ def convert_daily(data_dir, out_dir, force=False, dry_run=False,
     escopos, fams_inteiras = [], set()
     if familias is not None:
         for pedido in familias:
-            real, aviso = resolver_escopo(raiz, pedido)
+            real, tag, aviso = resolver_escopo(raiz, pedido)
             if real is None:
                 # Bloco pedido que não existe em disco não é erro (a instância
                 # pode não ter aquele cache) — mas o aviso vai em `avisos`, que
@@ -1003,37 +1078,58 @@ def convert_daily(data_dir, out_dir, force=False, dry_run=False,
                 # inteira ficou de fora.
                 stats['avisos'].append(aviso)
                 continue
-            escopos.append(real)
-            if len(chave_escopo(real)) == 1:
+            escopos.append((real, tag, pedido))
+            # A família só é "inteira" quando o escopo é ela e mais nada: com
+            # sub-bloco ou com tag, esta passada cobre um pedaço, e o banco
+            # legado da rotina guarda também o pedaço dos outros.
+            if tag is None and len(chave_escopo(real)) == 1:
                 fams_inteiras.add(real)
     elif excluir is not None:
         escopos = None                      # varre o cache/ inteiro, podando
     else:
-        escopos = list(todas)
+        # (caminho real, tag, pedido) — a mesma forma do ramo com escopo, para
+        # a varredura não ter dois formatos.
+        escopos = [(f, None, f) for f in todas]
         fams_inteiras = set(todas)
 
     rels = []
+    fora_tag = set()             # só o `99_outros` a preenche (exclusão por tag)
     if escopos is None:
         # O `99_outros`: desce o `cache/` inteiro PODANDO os escopos cobertos.
         # A poda é por caminho, e é o que faz a rede de segurança funcionar nos
         # dois níveis — uma rotina NOVA (`cache/equity`) e um bloco novo dentro
         # de uma coberta (`cache/new deals/Equity`) caem os dois aqui, enquanto
         # `cache/new deals/NDF`, que tem script próprio, é podado.
-        fora = {chave_escopo(e) for e in excluir}
+        # Os cobertos por PASTA podam a descida; os cobertos por TAG não podem
+        # (a pasta é a mesma de todos), então viram um filtro por arquivo.
+        fora_dir = set()
+        for pedido in excluir:
+            real, tag, _av = resolver_escopo(raiz, pedido)
+            if real is None:
+                # O que não existe nesta instância não precisa ser excluído — e
+                # não podar por ele é o que mantém a rede de segurança honesta.
+                continue
+            if tag is None:
+                fora_dir.add(chave_escopo(real))
+            else:
+                fora_tag.add((chave_escopo(real), tag))
         caminhados = []
         for dirpath, dirs, files in os.walk(raiz):
             rel_dir = os.path.relpath(dirpath, raiz).replace(os.sep, '/')
             base = () if rel_dir == '.' else chave_escopo(rel_dir)
             dirs[:] = [d for d in sorted(dirs)
-                       if (base + (chave_familia(d),)) not in fora]
+                       if (base + (chave_familia(d),)) not in fora_dir]
             if rel_dir != '.':
                 caminhados.append((dirpath, files))
         andar = caminhados
     else:
-        andar = [(dp, fs) for e in escopos
-                 for dp, _d, fs in sorted(os.walk(os.path.join(raiz, *e.split('/'))))]
+        andar = [(dp, fs, e) for e in escopos
+                 for dp, _d, fs in sorted(os.walk(os.path.join(raiz, *e[0].split('/'))))]
 
-    for dirpath, files in andar:
+    vistos_por_tag = {}          # escopo com tag → tags que ele encontrou
+    for entrada in andar:
+        dirpath, files = entrada[0], entrada[1]
+        esc = entrada[2] if len(entrada) > 2 else None
         for fname in sorted(files):
             if not fname.endswith('.json'):
                 continue
@@ -1043,10 +1139,37 @@ def convert_daily(data_dir, out_dir, force=False, dry_run=False,
                 # Não é arquivo-dia (ponteiros como `_last`, configs
                 # avulsas): fica no JSON — some daqui e parece perda.
                 stats['ignored'].append(rel)
-            elif desde and (dia_do_rel(rel) or datetime.date.min) < desde:
+                continue
+            if esc is not None and esc[1] is not None:
+                # Escopo por TAG: a pasta é a mesma de todos os produtos, então
+                # o corte é por arquivo. As tags vistas ficam guardadas para o
+                # aviso — tag que não casa com nada precisa dizer quais existem.
+                achada = tag_do_rel(rel)
+                vistos_por_tag.setdefault(esc[2], set()).add(achada)
+                if achada != esc[1]:
+                    continue
+            if fora_tag:
+                # O diretório do arquivo é o do DIA (`daily settlement/2026/08/26`)
+                # e o do escopo é o da rotina (`daily settlement`): a comparação é
+                # por PREFIXO. Comparando os dois inteiros, nenhuma exclusão por
+                # tag casava — e o `99_outros` reconvertia tudo o que as fatias
+                # já tinham feito, dois processos no mesmo banco.
+                _d = chave_escopo(os.path.relpath(dirpath, raiz).replace(os.sep, '/'))
+                _t = tag_do_rel(rel)
+                if any(_t == t and _d[:len(base_esc)] == base_esc
+                       for base_esc, t in fora_tag):
+                    continue
+            if desde and (dia_do_rel(rel) or datetime.date.min) < desde:
                 stats['antigos'].append(rel)
             else:
                 rels.append(rel)
+
+    for pedido, achadas in sorted(vistos_por_tag.items()):
+        alvo = next((e[1] for e in escopos if e[2] == pedido), None)
+        if alvo is not None and alvo not in achadas:
+            stats['avisos'].append(
+                'cache/%s: nenhum arquivo com essa tag. Tags encontradas: %s'
+                % (pedido, ', '.join(sorted(t for t in achadas if t)) or '(nenhuma)'))
     # Os JSONs soltos na RAIZ de `cache/` (sem pasta de rotina) só entram na
     # carga sem escopo: eles não pertencem a fatia nenhuma.
     if familias is None and excluir is None:

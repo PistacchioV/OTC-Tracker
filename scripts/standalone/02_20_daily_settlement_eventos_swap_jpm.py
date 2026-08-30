@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-r"""convert 02_new_deals_ndf_otherpublisher — a rotina `new deals/NDF/OtherPublisher` de cache/.
+r"""convert 02_daily_settlement_eventos_swap_jpm — a rotina `daily settlement/eventos-swap-jpm` de cache/.
 
-O NDF Other Publisher.
+Os eventos de swap.
 
 Versão AUTOCONTIDA: roda em QUALQUER máquina, sem o código do OTC Tracker por
 perto. Requisito único:  pip install duckdb
@@ -13,13 +13,13 @@ perto. Requisito único:  pip install duckdb
     Destino: ...\static\data\db   (a pasta db dentro da origem)
 
 Uso:
-    python 02_3_new_deals_ndf_otherpublisher.py
-    python 02_3_new_deals_ndf_otherpublisher.py --dry-run
-    python 02_3_new_deals_ndf_otherpublisher.py --data-dir "D:\outra\pasta" --out-dir "D:\saida"
+    python 02_20_daily_settlement_eventos_swap_jpm.py
+    python 02_20_daily_settlement_eventos_swap_jpm.py --dry-run
+    python 02_20_daily_settlement_eventos_swap_jpm.py --data-dir "D:\outra\pasta" --out-dir "D:\saida"
 
-O ESCOPO é UM bloco de cache\: **new deals/NDF/OtherPublisher**.
+O ESCOPO é UM bloco de cache\: **daily settlement/eventos-swap-jpm**.
 
-O NDF Other Publisher.
+Os eventos de swap.
 
 Cada produto vira um banco e a pasta db\ ESPELHA a árvore de cache\
 (db\cache\new deals\NDF\Vanilla.db, db\cache\b3 files\Swap.db); só
@@ -1523,12 +1523,12 @@ def main(argv=None):
     print('janela : %s' % ('arquivo-dia a partir de %s (%d meses)'
                            % (desde.strftime('%d/%m/%Y'), args.meses)
                            if desde else 'historico INTEIRO (--meses 0)'))
-    print('escopo : cache/new deals/NDF/OtherPublisher (arquivo-dia)')
+    print('escopo : cache/daily settlement/eventos-swap-jpm (arquivo-dia)')
 
     houve_erro = [False]
     # `--bloco` SUBSTITUI o escopo desta fatia; nao soma. Rodar a fatia inteira
     # em paralelo com um bloco dela poria dois processos no mesmo banco.
-    fatia = 'new deals/NDF/OtherPublisher'
+    fatia = 'daily settlement/eventos-swap-jpm'
     if args.bloco:
         fatia = fatia.rstrip('/') + '/' + args.bloco.strip().strip('/')
         print('escopo : cache/%s (arquivo-dia) [--bloco]' % fatia)
