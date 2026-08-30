@@ -121,6 +121,9 @@ w('cache/daily settlement/2026/07/28/otm-settlement_20260728.json',
   [{'Trade Id': '0099', 'Curve': 'PRE'}])
 w('cache/daily settlement/2026/07/28/ndf-cockpit_20260728.json',
   [{'Trade Id': '0100', 'Curve': 'DOL'}])
+# O `.meta` de um arquivo-dia: ele ANOTA o arquivo, não é um produto.
+w('cache/daily settlement/2026/07/28/otm-settlement_20260728.meta.json',
+  {'source_date': '2026-07-28', 'rows': 1})
 w('cache/reconciliation/payrec/2026-07-06.json',
   {'success': True, 'recon_date': '2026-07-06',
    'summary': [{'pay_receive': 'Pay', 'jpm_qty': 3, 'jpm_value': -226846.2276319994},
@@ -255,7 +258,19 @@ con = duckdb.connect(os.path.join(OUT, 'cache', 'daily settlement', 'otm-settlem
                      read_only=True)
 check('3. e a tabela e so o dia: a tag ja esta no nome do banco',
       con.execute('SELECT "Curve" FROM main.d_20260728').fetchone()[0], 'PRE')
+# O `.meta` vai para o banco do arquivo que ele anota, com `_meta` na tabela.
+# Num banco próprio ele sairia como `otm-settlement_.meta.db` — a data está no
+# MEIO do nome, então tirá-la deixa um `_` que o strip das pontas não alcança —
+# e quem consultasse o produto teria de juntar dois bancos.
+check('3. o .meta acompanha o arquivo dele, no MESMO banco',
+      sorted(r[0] for r in con.execute(
+          "SELECT table_name FROM information_schema.tables "
+          "WHERE table_schema='main' AND table_name LIKE 'd_%'").fetchall()),
+      ['d_20260728', 'd_20260728_meta'])
 con.close()
+check('3. e nao sobra um banco com o nome torto',
+      os.path.isfile(os.path.join(OUT, 'cache', 'daily settlement',
+                                  'otm-settlement_.meta.db')), False)
 _NDFC = os.path.join(OUT, 'cache', 'new deals', 'NDF', 'Commodities.db')
 con = duckdb.connect(_NDFC, read_only=True)
 check('3. o caminho vai para o NOME do banco: nada de schema extra',
@@ -295,7 +310,7 @@ con.close()
 # ═══ 4. incremental ═════════════════════════════════════════════════════════
 st = conv.convert_daily(DATA, OUT)
 check('4. segunda rodada nao reconverte nada',
-      (len(st['converted']), len(st['skipped'])), (0, 6))
+      (len(st['converted']), len(st['skipped'])), (0, 7))
 
 alterado = w('cache/new deals/NDF/Commodities/2026/06/20260612_ndfcomm.json',
              DEALS + [dict(DEALS[0], Deal='DBH-1CCC')])
@@ -303,7 +318,7 @@ os.utime(alterado, (os.path.getmtime(alterado) + 5,) * 2)
 st = conv.convert_daily(DATA, OUT)
 check('4. arquivo alterado reconverte SO ele',
       (st['converted'], len(st['skipped'])),
-      (['cache/new deals/NDF/Commodities.db:' + nd], 5))
+      (['cache/new deals/NDF/Commodities.db:' + nd], 6))
 con = duckdb.connect(_NDFC, read_only=True)
 check('4. com o conteudo novo',
       con.execute("SELECT count(*) FROM %s" % nd).fetchone()[0], 3)
@@ -313,7 +328,7 @@ novo = w('cache/new deals/NDF/Commodities/2026/06/20260613_ndfcomm.json', DEALS[
 st = conv.convert_daily(DATA, OUT)
 check('4. dia novo vira tabela nova, sem tocar nas outras',
       (st['converted'], len(st['skipped'])),
-      (['cache/new deals/NDF/Commodities.db:main.d_20260613_ndfcomm'], 6))
+      (['cache/new deals/NDF/Commodities.db:main.d_20260613_ndfcomm'], 7))
 check('4. destino padrao e a pasta db/ de todos os bancos',
       conv._default_out_dir('/x'), os.path.join('/x', 'db'))
 

@@ -1,6 +1,6 @@
 # `scripts/convert/` — a carga JSON → DuckDB, repartida
 
-A conversão dos JSONs para os bancos DuckDB, em **22 fatias** que podem ser
+A conversão dos JSONs para os bancos DuckDB, em **29 fatias** que podem ser
 rodadas por pessoas diferentes ao mesmo tempo.
 
 Esta é a versão que roda **dentro do checkout**: ela pergunta ao `Config` do app
@@ -39,10 +39,17 @@ nunca escrevem no mesmo arquivo. Isso é prendido por teste
 | `02_13_b3_files_option.py` | `b3 files/Option` |
 | `02_14_b3_files_swap.py` | `b3 files/Swap` — costuma ser o maior dos quatro |
 | `02_15_b3_files_operations.py` | `b3 files/Operations` |
-| `02_16_daily_settlement.py` | `daily settlement` — OTM, NDF Cockpit, Operações JPM/MGT, Eventos Swap, Cognos, BR Onshore, Latam Desk |
-| `02_17_pending_confirmation.py` | `pending-confirmation` — os snapshots diários |
-| `02_18_payrec.py` | `payrec` — o histórico da recon de Pay/Rec |
-| `02_19_reconciliation.py` | `reconciliation` — os caches por data das reconciliações |
+| `02_16_daily_settlement_otm_settlement.py` | `daily settlement/otm-settlement` — o `.meta` ao lado vem no MESMO banco |
+| `02_17_daily_settlement_ndf_cockpit.py` | `daily settlement/ndf-cockpit` |
+| `02_18_daily_settlement_operations_b3.py` | `daily settlement/operations-b3` |
+| `02_19_daily_settlement_operacoes_jpm.py` | `daily settlement/operacoes-jpm` |
+| `02_20_daily_settlement_eventos_swap_jpm.py` | `daily settlement/eventos-swap-jpm` |
+| `02_21_daily_settlement_cognos.py` | `daily settlement/cognos` |
+| `02_22_daily_settlement_br_onshore_settlements.py` | `daily settlement/br-onshore-settlements` |
+| `02_23_daily_settlement_other_products_summary.py` | `daily settlement/other-products-summary` |
+| `02_24_pending_confirmation.py` | `pending-confirmation` — os snapshots diários |
+| `02_25_payrec.py` | `payrec` — o histórico da recon de Pay/Rec |
+| `02_26_reconciliation.py` | `reconciliation` — os caches por data das reconciliações |
 | `99_outros.py` | o RESTO de `cache/` — a rede de segurança |
 
 ---
@@ -74,10 +81,17 @@ python scripts/convert/02_12_b3_files_ndf.py
 python scripts/convert/02_13_b3_files_option.py
 python scripts/convert/02_14_b3_files_swap.py
 python scripts/convert/02_15_b3_files_operations.py
-python scripts/convert/02_16_daily_settlement.py
-python scripts/convert/02_17_pending_confirmation.py
-python scripts/convert/02_18_payrec.py
-python scripts/convert/02_19_reconciliation.py
+python scripts/convert/02_16_daily_settlement_otm_settlement.py
+python scripts/convert/02_17_daily_settlement_ndf_cockpit.py
+python scripts/convert/02_18_daily_settlement_operations_b3.py
+python scripts/convert/02_19_daily_settlement_operacoes_jpm.py
+python scripts/convert/02_20_daily_settlement_eventos_swap_jpm.py
+python scripts/convert/02_21_daily_settlement_cognos.py
+python scripts/convert/02_22_daily_settlement_br_onshore_settlements.py
+python scripts/convert/02_23_daily_settlement_other_products_summary.py
+python scripts/convert/02_24_pending_confirmation.py
+python scripts/convert/02_25_payrec.py
+python scripts/convert/02_26_reconciliation.py
 python scripts/convert/99_outros.py
 ```
 
@@ -105,7 +119,7 @@ Ele **substitui** o escopo da fatia, não soma — não rode
 blocos existem, peça um que não existe: o aviso lista o que há naquele nível.
 
 O que **não** vale é rodar o `00_completo` junto com os outros: aí sim dois
-processos escreveriam no mesmo banco. Ou o `00`, ou os vinte e um.
+processos escreveriam no mesmo banco. Ou o `00`, ou os vinte e oito.
 
 O `99_outros` parece dispensável e não é: ele pega qualquer bloco de `cache/`
 que não tenha script próprio, e a poda dele é por **caminho** — tanto uma rotina

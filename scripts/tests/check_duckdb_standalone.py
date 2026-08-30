@@ -5,7 +5,7 @@
 Os `scripts/standalone/*.py` são a versão do conversor para rodar numa máquina
 SEM o código do OTC Tracker (sem Config, sem import de `apps`, `pip install
 duckdb` como requisito único). São VERSIONADOS para ser entregues junto com o
-código, e são UMA CÓPIA POR FATIA (hoje 22) de um motor que vive em
+código, e são UMA CÓPIA POR FATIA (hoje 29) de um motor que vive em
 `apps/pages/json_to_duckdb.py`.
 
 Cópia da mesma regra diverge, e esta já divergiu: por três vezes o motor mudou e
@@ -52,6 +52,18 @@ def check(label, got, exp=True):
 
 def _ler(path):
     return io.open(path, encoding='utf-8').read()
+
+
+def _fatia(sufixo):
+    """O arquivo da fatia que termina em `sufixo` — nunca o nome inteiro.
+
+    O número no começo (`02_14_`) é POSIÇÃO no `ROTINAS_CACHE`, e ele desloca a
+    cada bloco que entra ou sai. Três vezes seguidas este guarda quebrou por
+    isso, dizendo `FileNotFoundError` sobre um teste que não é sobre numeração."""
+    achados = [f for f in os.listdir(PASTA) if f.endswith(sufixo)]
+    if len(achados) != 1:
+        raise SystemExit('fatia %r: esperava 1 arquivo, achei %r' % (sufixo, achados))
+    return os.path.join(PASTA, achados[0])
 
 
 def _carregar(nome, path):
@@ -204,7 +216,7 @@ check('os cadastros viraram um banco por JSON, na pasta do JSON',
        'reference_data.db'])
 
 # Rodar de novo não reconverte nada — a fatia é incremental como a carga toda.
-mod = _carregar('sa_nd2', os.path.join(PASTA, '02_1_new_deals_ndf_vanilla.py'))
+mod = _carregar('sa_nd2', _fatia('_new_deals_ndf_vanilla.py'))
 import contextlib                                              # noqa: E402
 _buf = io.StringIO()
 with contextlib.redirect_stdout(_buf):
@@ -241,7 +253,7 @@ io.open(os.path.join(_p, 'DPOSICAO-SWAP_20260827.json'), 'w',
         encoding='utf-8').write('[{"Cod": "X"}]')
 _OUT_CASE = os.path.join(CASE, 'db')
 
-mod = _carregar('sa_case_b3', os.path.join(PASTA, '02_14_b3_files_swap.py'))
+mod = _carregar('sa_case_b3', _fatia('_b3_files_swap.py'))
 _buf = io.StringIO()
 with contextlib.redirect_stdout(_buf):
     mod.main(['--data-dir', CASE, '--out-dir', _OUT_CASE, '--meses', '0'])
@@ -257,7 +269,7 @@ check('e o 99_outros a reconhece como coberta, sem duplicar o banco',
       _arvore(os.path.join(CASE, 'db-outros')), [])
 
 # Rotina que de fato não existe: o aviso é IMPRESSO e diz o que há em disco.
-mod = _carregar('sa_case_ds', os.path.join(PASTA, '02_16_daily_settlement.py'))
+mod = _carregar('sa_case_ds', _fatia('_daily_settlement_otm_settlement.py'))
 _buf = io.StringIO()
 with contextlib.redirect_stdout(_buf):
     mod.main(['--data-dir', CASE, '--out-dir', _OUT_CASE, '--meses', '0'])
@@ -287,7 +299,7 @@ _OUT_JAN = os.path.join(JAN, 'db')
 os.makedirs(_OUT_JAN)
 io.open(os.path.join(_OUT_JAN, 'daily_b3_files_swap.db'), 'w').close()
 
-mod = _carregar('sa_jan', os.path.join(PASTA, '02_14_b3_files_swap.py'))
+mod = _carregar('sa_jan', _fatia('_b3_files_swap.py'))
 _buf = io.StringIO()
 with contextlib.redirect_stdout(_buf):
     mod.main(['--data-dir', JAN, '--out-dir', _OUT_JAN])   # padrão: 12 meses

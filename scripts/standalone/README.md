@@ -25,7 +25,7 @@ por várias pessoas** — cada uma com o seu arquivo, ninguém esperando o outro
 terminar.
 
 Isso é seguro porque **os bancos são um por produto**: duas fatias nunca
-escrevem no mesmo `.db`. Rodar vinte e um ao mesmo tempo dá exatamente o mesmo
+escrevem no mesmo `.db`. Rodar vinte e oito ao mesmo tempo dá exatamente o mesmo
 resultado de rodar tudo em sequência.
 
 **As duas rotinas grandes são repartidas até o PRODUTO** — que é a folha da
@@ -54,13 +54,20 @@ Uma pasta que a sua instância não tenha vira um aviso e a fatia sai limpa.
 | `02_13_b3_files_option.py` | `b3 files/Option` |
 | `02_14_b3_files_swap.py` | `b3 files/Swap` — costuma ser o maior dos quatro |
 | `02_15_b3_files_operations.py` | `b3 files/Operations` |
-| `02_16_daily_settlement.py` | `daily settlement` — OTM, NDF Cockpit, Operações JPM/MGT, Eventos Swap, Cognos, BR Onshore, Latam Desk |
-| `02_17_pending_confirmation.py` | `pending-confirmation` — os snapshots diários |
-| `02_18_payrec.py` | `payrec` — o histórico da recon de Pay/Rec |
-| `02_19_reconciliation.py` | `reconciliation` — os caches por data das reconciliações |
+| `02_16_daily_settlement_otm_settlement.py` | `daily settlement/otm-settlement` — o `.meta` ao lado vem no MESMO banco |
+| `02_17_daily_settlement_ndf_cockpit.py` | `daily settlement/ndf-cockpit` |
+| `02_18_daily_settlement_operations_b3.py` | `daily settlement/operations-b3` |
+| `02_19_daily_settlement_operacoes_jpm.py` | `daily settlement/operacoes-jpm` |
+| `02_20_daily_settlement_eventos_swap_jpm.py` | `daily settlement/eventos-swap-jpm` |
+| `02_21_daily_settlement_cognos.py` | `daily settlement/cognos` |
+| `02_22_daily_settlement_br_onshore_settlements.py` | `daily settlement/br-onshore-settlements` |
+| `02_23_daily_settlement_other_products_summary.py` | `daily settlement/other-products-summary` |
+| `02_24_pending_confirmation.py` | `pending-confirmation` — os snapshots diários |
+| `02_25_payrec.py` | `payrec` — o histórico da recon de Pay/Rec |
+| `02_26_reconciliation.py` | `reconciliation` — os caches por data das reconciliações |
 | `99_outros.py` | o RESTO de `cache/` — a rede de segurança |
 
-**Para cobrir tudo**, rode `01` + os dezenove `02_*` + `99` (ou apenas `00_completo`).
+**Para cobrir tudo**, rode `01` + os vinte e seis `02_*` + `99` (ou apenas `00_completo`).
 
 ### Se um bloco ainda for grande
 
@@ -82,9 +89,36 @@ Sem argumento nenhum, a origem e o destino já são os do share:
 
 ```
 python 01_cadastros.py
+python 02_1_new_deals_ndf_vanilla.py
+python 02_2_new_deals_ndf_fwdstart.py
+python 02_3_new_deals_ndf_otherpublisher.py
+python 02_4_new_deals_ndf_commodities.py
+python 02_5_new_deals_option_fxo.py
+python 02_6_new_deals_option_commodities.py
+python 02_7_new_deals_swap_rates.py
+python 02_8_new_deals_swap_commodities.py
+python 02_9_new_deals_intrag_ndf.py
+python 02_10_new_deals_intrag_option.py
+python 02_11_new_deals_intrag_swap.py
+python 02_12_b3_files_ndf.py
+python 02_13_b3_files_option.py
+python 02_14_b3_files_swap.py
+python 02_15_b3_files_operations.py
+python 02_16_daily_settlement_otm_settlement.py
+python 02_17_daily_settlement_ndf_cockpit.py
+python 02_18_daily_settlement_operations_b3.py
+python 02_19_daily_settlement_operacoes_jpm.py
+python 02_20_daily_settlement_eventos_swap_jpm.py
+python 02_21_daily_settlement_cognos.py
+python 02_22_daily_settlement_br_onshore_settlements.py
+python 02_23_daily_settlement_other_products_summary.py
+python 02_24_pending_confirmation.py
+python 02_25_payrec.py
+python 02_26_reconciliation.py
+python 99_outros.py
 ```
 
-Os vinte e um, para copiar:
+Os vinte e oito, para copiar:
 
 ```
 python 01_cadastros.py
