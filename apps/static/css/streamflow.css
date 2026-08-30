@@ -1799,11 +1799,38 @@ div[class*="-panel"]:not([class*="__"]):not(.row):hover::before,
 
 /* o bloom colorido fica mais CONCENTRADO — o cogni usa um círculo de 256px
    com blur de 80px, e não um degradê largo: é isso que o faz parecer uma luz
-   sob o cursor em vez de um fundo tingido */
+   sob o cursor em vez de um fundo tingido.
+
+   Os DOIS blocos abaixo repetem a lista de nomes próprios do §23.2, e essa
+   repetição é o ponto: escritos só com os seletores estruturais, eles deixavam
+   `.ob-item`, `.mc-item`, `.acc-stat` e os outros doze na dose ORIGINAL de 55%
+   de ciano — enquanto o `.card` já vinha suavizado duas vezes. O sintoma era um
+   cartão do Onboarding acendendo sob o ponteiro ao lado de um cartão calmo, sem
+   nada no CSS dizendo por quê. Toda regra que muda a força do brilho alcança as
+   duas famílias, ou a divergência volta. */
 [data-bs-theme=dark] .card::after,
 [data-bs-theme=dark] div[class*="-widget"]:not([class*="__"]):not(.row)::after,
 [data-bs-theme=dark] div[class*="-card"]:not([class*="__"]):not(.row)::after,
-[data-bs-theme=dark] .ab-feat::after, [data-bs-theme=dark] .ab-step::after {
+[data-bs-theme=dark] div[class*="-panel"]:not([class*="__"]):not(.row)::after,
+[data-bs-theme=dark] .ab-feat::after, [data-bs-theme=dark] .ab-step::after,
+[data-bs-theme=dark] .mc-item::after,
+[data-bs-theme=dark] .ob-item::after,
+[data-bs-theme=dark] .cp-ce-item::after,
+[data-bs-theme=dark] .ei-type-item::after,
+[data-bs-theme=dark] .map-type-item::after,
+[data-bs-theme=dark] .fi-tpl-item::after,
+[data-bs-theme=dark] .ei-doc-row::after,
+[data-bs-theme=dark] .fi-block::after,
+[data-bs-theme=dark] .pa-user::after,
+[data-bs-theme=dark] .pa-role::after,
+[data-bs-theme=dark] .cp-acc-row::after,
+[data-bs-theme=dark] .acc-stat::after,
+[data-bs-theme=dark] .acc-tcard::after,
+[data-bs-theme=dark] .acc-datecard::after,
+[data-bs-theme=dark] .qt-card::after,
+[data-bs-theme=dark] .pcm-mini::after,
+[data-bs-theme=dark] .ab-info::after,
+[data-bs-theme=dark] .ab-hero::after {
   background:
     radial-gradient(300px circle at var(--sf-mx, 50%) var(--sf-my, -8%),
       color-mix(in oklab, var(--sf-cyan) 9%, transparent) 0%,
@@ -1813,8 +1840,27 @@ div[class*="-panel"]:not([class*="__"]):not(.row):hover::before,
 :root:not([data-bs-theme=dark]) .card::after,
 :root:not([data-bs-theme=dark]) div[class*="-widget"]:not([class*="__"]):not(.row)::after,
 :root:not([data-bs-theme=dark]) div[class*="-card"]:not([class*="__"]):not(.row)::after,
+:root:not([data-bs-theme=dark]) div[class*="-panel"]:not([class*="__"]):not(.row)::after,
 :root:not([data-bs-theme=dark]) .ab-feat::after,
-:root:not([data-bs-theme=dark]) .ab-step::after {
+:root:not([data-bs-theme=dark]) .ab-step::after,
+:root:not([data-bs-theme=dark]) .mc-item::after,
+:root:not([data-bs-theme=dark]) .ob-item::after,
+:root:not([data-bs-theme=dark]) .cp-ce-item::after,
+:root:not([data-bs-theme=dark]) .ei-type-item::after,
+:root:not([data-bs-theme=dark]) .map-type-item::after,
+:root:not([data-bs-theme=dark]) .fi-tpl-item::after,
+:root:not([data-bs-theme=dark]) .ei-doc-row::after,
+:root:not([data-bs-theme=dark]) .fi-block::after,
+:root:not([data-bs-theme=dark]) .pa-user::after,
+:root:not([data-bs-theme=dark]) .pa-role::after,
+:root:not([data-bs-theme=dark]) .cp-acc-row::after,
+:root:not([data-bs-theme=dark]) .acc-stat::after,
+:root:not([data-bs-theme=dark]) .acc-tcard::after,
+:root:not([data-bs-theme=dark]) .acc-datecard::after,
+:root:not([data-bs-theme=dark]) .qt-card::after,
+:root:not([data-bs-theme=dark]) .pcm-mini::after,
+:root:not([data-bs-theme=dark]) .ab-info::after,
+:root:not([data-bs-theme=dark]) .ab-hero::after {
   background:
     radial-gradient(300px circle at var(--sf-mx, 50%) var(--sf-my, -8%),
       color-mix(in oklab, var(--sf-cyan) 6%, transparent) 0%,
@@ -2501,9 +2547,14 @@ div[class*="-dropzone"] i[class*="ti-"],
 
      Mesmo gesto, com HUE: o brilho é o ciano da casa em vez de branco, então
      ele CLAREIA sem dessaturar. */
+  /* A dose foi calibrada em CARTÃO PEQUENO, não no grande. O brilho é uma rampa
+     de 135° sobre o elemento inteiro: num painel largo ela se espalha e vira
+     material; num item de lista de ~110px de altura a mesma rampa fica
+     comprimida no mesmo espaço e vira um facho. A 15% de ciano os cartões do
+     Onboarding acendiam. */
   --sf-glass-sheen: linear-gradient(135deg,
-                      color-mix(in oklab, var(--sf-cyan) 15%, transparent),
-                      color-mix(in oklab, var(--sf-blue) 5%, transparent) 58%,
+                      color-mix(in oklab, var(--sf-cyan) 9%, transparent),
+                      color-mix(in oklab, var(--sf-blue) 3%, transparent) 55%,
                       transparent);
 }
 
