@@ -1,6 +1,6 @@
 # `scripts/convert/` — a carga JSON → DuckDB, repartida
 
-A conversão dos JSONs para os bancos DuckDB, em **29 fatias** que podem ser
+A conversão dos JSONs para os bancos DuckDB, em **35 fatias** que podem ser
 rodadas por pessoas diferentes ao mesmo tempo.
 
 Esta é a versão que roda **dentro do checkout**: ela pergunta ao `Config` do app
@@ -41,15 +41,21 @@ nunca escrevem no mesmo arquivo. Isso é prendido por teste
 | `02_15_b3_files_operations.py` | `b3 files/Operations` |
 | `02_16_daily_settlement_otm_settlement.py` | `daily settlement/otm-settlement` — o `.meta` ao lado vem no MESMO banco |
 | `02_17_daily_settlement_ndf_cockpit.py` | `daily settlement/ndf-cockpit` |
-| `02_18_daily_settlement_operations_b3.py` | `daily settlement/operations-b3` |
-| `02_19_daily_settlement_operacoes_jpm.py` | `daily settlement/operacoes-jpm` |
-| `02_20_daily_settlement_eventos_swap_jpm.py` | `daily settlement/eventos-swap-jpm` |
-| `02_21_daily_settlement_cognos.py` | `daily settlement/cognos` |
-| `02_22_daily_settlement_br_onshore_settlements.py` | `daily settlement/br-onshore-settlements` |
-| `02_23_daily_settlement_other_products_summary.py` | `daily settlement/other-products-summary` |
-| `02_24_pending_confirmation.py` | `pending-confirmation` — os snapshots diários |
-| `02_25_payrec.py` | `payrec` — o histórico da recon de Pay/Rec |
-| `02_26_reconciliation.py` | `reconciliation` — os caches por data das reconciliações |
+| `02_18_daily_settlement_operations_b3.py` | `daily settlement/operations-b3` — o arquivo DERIVADO que a página lê (JPM + MGT + o que a tela edita) |
+| `02_19_daily_settlement_operacoes_jpm.py` | `daily settlement/operacoes-jpm` — uma das ORIGENS dele |
+| `02_20_daily_settlement_operacoes_mgt.py` | `daily settlement/operacoes-mgt` — a outra |
+| `02_21_daily_settlement_eventos_swap_jpm.py` | `daily settlement/eventos-swap-jpm` |
+| `02_22_daily_settlement_eventos_swap_mgt.py` | `daily settlement/eventos-swap-mgt` |
+| `02_23_daily_settlement_latam_desk_position.py` | `daily settlement/latam-desk-position` |
+| `02_24_daily_settlement_swap_kapital_hybrids.py` | `daily settlement/swap-kapital-hybrids` |
+| `02_25_daily_settlement_cognos.py` | `daily settlement/cognos` |
+| `02_26_daily_settlement_br_onshore_settlements.py` | `daily settlement/br-onshore-settlements` |
+| `02_27_daily_settlement_other_products_summary.py` | `daily settlement/other-products-summary` |
+| `02_28_pending_confirmation.py` | `pending-confirmation` — os snapshots diários |
+| `02_29_payrec.py` | `payrec` — o histórico da recon de Pay/Rec |
+| `02_30_reconciliation_fxo.py` | `reconciliation/fxo` — o cache por data da recon de FXO |
+| `02_31_reconciliation_cgd.py` | `reconciliation/cgd` — idem, a de CGD |
+| `02_32_reconciliation_payrec.py` | `reconciliation/payrec` — idem, a de Pay/Rec |
 | `99_outros.py` | o RESTO de `cache/` — a rede de segurança |
 
 ---
@@ -62,7 +68,7 @@ Um comando só:
 python scripts/convert/00_completo.py
 ```
 
-Ou repartido — **vinte e um** arquivos, em qualquer ordem, ao mesmo tempo:
+Ou repartido — **trinta e quatro** arquivos, em qualquer ordem, ao mesmo tempo:
 
 ```bash
 python scripts/convert/01_cadastros.py
@@ -85,13 +91,19 @@ python scripts/convert/02_16_daily_settlement_otm_settlement.py
 python scripts/convert/02_17_daily_settlement_ndf_cockpit.py
 python scripts/convert/02_18_daily_settlement_operations_b3.py
 python scripts/convert/02_19_daily_settlement_operacoes_jpm.py
-python scripts/convert/02_20_daily_settlement_eventos_swap_jpm.py
-python scripts/convert/02_21_daily_settlement_cognos.py
-python scripts/convert/02_22_daily_settlement_br_onshore_settlements.py
-python scripts/convert/02_23_daily_settlement_other_products_summary.py
-python scripts/convert/02_24_pending_confirmation.py
-python scripts/convert/02_25_payrec.py
-python scripts/convert/02_26_reconciliation.py
+python scripts/convert/02_20_daily_settlement_operacoes_mgt.py
+python scripts/convert/02_21_daily_settlement_eventos_swap_jpm.py
+python scripts/convert/02_22_daily_settlement_eventos_swap_mgt.py
+python scripts/convert/02_23_daily_settlement_latam_desk_position.py
+python scripts/convert/02_24_daily_settlement_swap_kapital_hybrids.py
+python scripts/convert/02_25_daily_settlement_cognos.py
+python scripts/convert/02_26_daily_settlement_br_onshore_settlements.py
+python scripts/convert/02_27_daily_settlement_other_products_summary.py
+python scripts/convert/02_28_pending_confirmation.py
+python scripts/convert/02_29_payrec.py
+python scripts/convert/02_30_reconciliation_fxo.py
+python scripts/convert/02_31_reconciliation_cgd.py
+python scripts/convert/02_32_reconciliation_payrec.py
 python scripts/convert/99_outros.py
 ```
 
@@ -101,6 +113,12 @@ escrito. Elas eram um bloco cada e viravam o gargalo: as outras quatro rotinas
 terminam em minutos e o resto da equipe ficava esperando a maior. Repartir só
 até `new deals/NDF` ainda deixaria o **Vanilla** — o maior arquivo-dia do app —
 junto com os outros três.
+
+**Um escopo é sempre o caminho do banco que ele produz** — e é por isso que o
+Daily Settlement é repartido por ARQUIVO (ali quem separa os produtos é o nome,
+não a pasta) e que cada RECONCILIAÇÃO é uma fatia: as três têm pasta e banco
+próprios em `cache/reconciliation/`, e uma fatia só para as três seria a única
+da lista a escrever em mais de um `.db`.
 
 Uma pasta que a sua instância não tenha vira um aviso e a fatia sai limpa; e um
 produto que não esteja na lista (`new deals/NDF/Asian`) cai no `99_outros`, que
@@ -119,7 +137,7 @@ Ele **substitui** o escopo da fatia, não soma — não rode
 blocos existem, peça um que não existe: o aviso lista o que há naquele nível.
 
 O que **não** vale é rodar o `00_completo` junto com os outros: aí sim dois
-processos escreveriam no mesmo banco. Ou o `00`, ou os vinte e oito.
+processos escreveriam no mesmo banco. Ou o `00`, ou os trinta e quatro.
 
 O `99_outros` parece dispensável e não é: ele pega qualquer bloco de `cache/`
 que não tenha script próprio, e a poda dele é por **caminho** — tanto uma rotina

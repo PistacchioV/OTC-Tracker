@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-r"""convert 02_new_deals_swap_rates — a rotina `new deals/Swap/Rates` de cache/.
+r"""convert 02_payrec — a rotina `payrec` de cache/.
 
-Os swaps de taxa.
+O histórico diário da reconciliação de Pay/Rec.
 
 Versão AUTOCONTIDA: roda em QUALQUER máquina, sem o código do OTC Tracker por
 perto. Requisito único:  pip install duckdb
@@ -13,13 +13,13 @@ perto. Requisito único:  pip install duckdb
     Destino: ...\static\data\db   (a pasta db dentro da origem)
 
 Uso:
-    python 02_7_new_deals_swap_rates.py
-    python 02_7_new_deals_swap_rates.py --dry-run
-    python 02_7_new_deals_swap_rates.py --data-dir "D:\outra\pasta" --out-dir "D:\saida"
+    python 02_29_payrec.py
+    python 02_29_payrec.py --dry-run
+    python 02_29_payrec.py --data-dir "D:\outra\pasta" --out-dir "D:\saida"
 
-O ESCOPO é UM bloco de cache\: **new deals/Swap/Rates**.
+O ESCOPO é UM bloco de cache\: **payrec**.
 
-Os swaps de taxa.
+O histórico diário da reconciliação de Pay/Rec.
 
 Cada produto vira um banco e a pasta db\ ESPELHA a árvore de cache\
 (db\cache\new deals\NDF\Vanilla.db, db\cache\b3 files\Swap.db); só
@@ -1542,12 +1542,12 @@ def main(argv=None):
     print('janela : %s' % ('arquivo-dia a partir de %s (%d meses)'
                            % (desde.strftime('%d/%m/%Y'), args.meses)
                            if desde else 'historico INTEIRO (--meses 0)'))
-    print('escopo : cache/new deals/Swap/Rates (arquivo-dia)')
+    print('escopo : cache/payrec (arquivo-dia)')
 
     houve_erro = [False]
     # `--bloco` SUBSTITUI o escopo desta fatia; nao soma. Rodar a fatia inteira
     # em paralelo com um bloco dela poria dois processos no mesmo banco.
-    fatia = 'new deals/Swap/Rates'
+    fatia = 'payrec'
     if args.bloco:
         fatia = fatia.rstrip('/') + '/' + args.bloco.strip().strip('/')
         print('escopo : cache/%s (arquivo-dia) [--bloco]' % fatia)

@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""convert 02_daily_settlement_operacoes_jpm — o bloco `daily settlement/operacoes-jpm` de cache/.
+"""convert 02_reconciliation_cgd — o bloco `reconciliation/cgd` de cache/.
 
-O ESCOPO é UM bloco de cache/: **daily settlement/operacoes-jpm**.
+O ESCOPO é UM bloco de cache/: **reconciliation/cgd**.
 
-As operações do Banco J.P. Morgan, como
-importadas — uma das duas origens do
-operations-b3.
+A reconciliação de CGD (lista do FEP × posição da B3).
 
 Cada produto vira um banco e a pasta db/ espelha a árvore de cache/; só
 ano/mês/dia não viram pasta — cada dia é uma tabela dentro do banco.
@@ -36,6 +34,6 @@ from convert_json_to_duckdb import run    # noqa: E402
 
 
 if __name__ == '__main__':
-    sys.exit(run(escopo='cache/daily settlement/operacoes-jpm (arquivo-dia)',
-                 conversores=('daily',), familias=['daily settlement/operacoes-jpm'],
+    sys.exit(run(escopo='cache/reconciliation/cgd (arquivo-dia)',
+                 conversores=('daily',), familias=['reconciliation/cgd'],
                  doc=__doc__))

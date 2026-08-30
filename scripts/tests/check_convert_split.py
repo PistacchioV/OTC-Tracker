@@ -148,14 +148,30 @@ w('cache/daily settlement/2026/07/28/ndf-cockpit_20260728.json', [{'Trade Id': '
 w('cache/daily settlement/2026/07/28/operacoes-jpm_20260728.json', [{'Trade Id': '6'}])
 w('cache/daily settlement/2026/07/28/br-onshore-settlements_20260728.json', [{'T': '5'}])
 w('cache/daily settlement/2026/07/28/eventos-swap-jpm_20260728.json', [{'T': '4'}])
+# O `operations-b3` é o arquivo DERIVADO (o merge de JPM + MGT que a página lê);
+# os dois `operacoes-*` são as ORIGENS dele, e cada um tem o seu banco. Confundir
+# um com o outro é o erro que a lista de fatias existe para não deixar acontecer.
 w('cache/daily settlement/2026/07/28/operations-b3_20260728.json', [{'T': '3'}])
+w('cache/daily settlement/2026/07/28/operacoes-mgt_20260728.json', [{'T': '3b'}])
+w('cache/daily settlement/2026/07/28/eventos-swap-mgt_20260728.json', [{'T': '4b'}])
+w('cache/daily settlement/2026/07/28/latam-desk-position_20260728.json', [{'T': '2b'}])
+w('cache/daily settlement/2026/07/28/swap-kapital-hybrids_20260728.json', [{'T': '2c'}])
 w('cache/daily settlement/2026/07/28/other-products-summary_20260728.json', [{'T': '2'}])
 # Uma tag que NENHUMA fatia nomeia: tem de cair no 99_outros, como a rotina e o
 # produto novos. A lista de arquivos do Daily Settlement não é fechada.
 w('cache/daily settlement/2026/07/28/relatorio-novo_20260728.json', [{'T': '1'}])
 w('cache/pending-confirmation/2026/08/27/pending-confirmation_20260827.json', [{'T': '1'}])
 w('cache/payrec/2026/08/27/payrec_20260827.json', [{'V': '1'}])
-w('cache/reconciliation/2026/08/27/recon_20260827.json', [{'V': '2'}])
+# As reconciliações, como elas são em disco: uma PASTA por recon e a data no
+# NOME do arquivo (não em AAAA/MM/DD), mais o ponteiro `_last` que cada uma
+# mantém — ele não é um dia e não pode virar tabela.
+w('cache/reconciliation/fxo/2026-08-27.json', [{'V': '2'}])
+w('cache/reconciliation/fxo/_last.json', {'date': '2026-08-27'})
+w('cache/reconciliation/cgd/2026-08-27.json', [{'V': '3'}])
+w('cache/reconciliation/payrec/2026-08-27.json', [{'V': '4'}])
+# Uma recon que nenhuma fatia nomeia — a lista não é fechada, e o 99_outros a
+# cobre pela mesma poda por caminho das rotinas e dos produtos novos.
+w('cache/reconciliation/nova/2026-08-27.json', [{'V': '5'}])
 # Uma rotina que NENHUM script nomeia: tem de cair no 99_outros.
 w('cache/rotina-nova/2026/07/28/coisa_20260728.json', [{'A': '1'}])
 w('mappings/bank-name.json', [{'ID': '341', 'NAME': 'BANCO ITAU S/A'}])
@@ -224,12 +240,21 @@ check('o Daily Settlement veio repartido por ARQUIVO',
       ['cache/daily settlement/br-onshore-settlements.db',
        'cache/daily settlement/cognos.db',
        'cache/daily settlement/eventos-swap-jpm.db',
+       'cache/daily settlement/eventos-swap-mgt.db',
+       'cache/daily settlement/latam-desk-position.db',
        'cache/daily settlement/ndf-cockpit.db',
        'cache/daily settlement/operacoes-jpm.db',
+       'cache/daily settlement/operacoes-mgt.db',
        'cache/daily settlement/operations-b3.db',
        'cache/daily settlement/other-products-summary.db',
        'cache/daily settlement/otm-settlement.db',
-       'cache/daily settlement/relatorio-novo.db'])
+       'cache/daily settlement/relatorio-novo.db',
+       'cache/daily settlement/swap-kapital-hybrids.db'])
+# O derivado e as duas origens dele são bancos DISTINTOS — juntá-los faria a
+# página Operations B3 e os dois arquivos que a alimentam viverem no mesmo lugar.
+check('   e o operations-b3 (derivado) não se confunde com as origens',
+      all(('cache/daily settlement/%s.db' % t) in _arvore(OUT_FATIAS)
+          for t in ('operations-b3', 'operacoes-jpm', 'operacoes-mgt')))
 check('e a tag que nenhuma fatia nomeia caiu no 99_outros',
       'cache/daily settlement/relatorio-novo.db' in _arvore(OUT_FATIAS))
 check('e o B3 Files por produto (ali o produto já é o primeiro nível)',
@@ -237,6 +262,16 @@ check('e o B3 Files por produto (ali o produto já é o primeiro nível)',
       ['cache/b3 files/NDF.db', 'cache/b3 files/NDF/Extra.db',
        'cache/b3 files/Operations.db', 'cache/b3 files/Option.db',
        'cache/b3 files/Swap.db'])
+# Cada reconciliação tem o SEU banco — e, por isso, a sua fatia: um escopo é
+# sempre o caminho do banco que ele produz.
+check('cada reconciliação tem o seu banco',
+      sorted(d for d in _arvore(OUT_FATIAS) if d.startswith('cache/reconciliation/')),
+      ['cache/reconciliation/cgd.db', 'cache/reconciliation/fxo.db',
+       'cache/reconciliation/nova.db', 'cache/reconciliation/payrec.db'])
+check('   e a recon que nenhuma fatia nomeia caiu no 99_outros',
+      'cache/reconciliation/nova.db' in _arvore(OUT_FATIAS))
+check('   e o histórico de Pay/Rec continua num banco à parte do cache da recon',
+      'cache/payrec.db' in _arvore(OUT_FATIAS))
 
 print('\n== 3. as fatias não escrevem no mesmo banco ==')
 # Cada fatia sozinha, num destino próprio: o conjunto de bancos de uma não pode
@@ -283,6 +318,26 @@ rc, saida = _rodar('01_cadastros.py', os.path.join(DATA, 'z2'), ['--dry-run'])
 check('e a de cadastros NAO anuncia janela nenhuma', 'janela :' in saida, False)
 
 shutil.rmtree(DATA, ignore_errors=True)
+
+# ── 5. todo arquivo do Daily Settlement tem a SUA fatia ─────────────────────
+# Ali quem separa os produtos é o NOME do arquivo, e a lista de nomes é o
+# `_DS_IMPORTS` do routes — o registro dos cards de importação. Um card novo
+# fica coberto pelo `99_outros` (a rede de segurança faz o seu trabalho), e é
+# justamente por isso que a falta não aparece: o dado converte, só que na fatia
+# de todo mundo, que é a que ninguém quer esperar. Foi o que aconteceu com o
+# `operacoes-mgt`, o `eventos-swap-mgt`, o `latam-desk-position` e o
+# `swap-kapital-hybrids`.
+print('\n== 5. todo card de importação do Daily Settlement tem fatia própria ==')
+from apps.pages import routes as R                                  # noqa: E402
+_tags_ds = sorted({s['json'] for s in R._DS_IMPORTS if s.get('json')})
+_fatias_ds = {b.split('/')[-1] for b, _ in motor.ROTINAS_CACHE
+              if b.startswith('daily settlement/')}
+check('nenhum arquivo do Daily Settlement depende do 99_outros',
+      [t for t in _tags_ds if t not in _fatias_ds], [])
+# O contrário não vale: `operations-b3` e `other-products-summary` são
+# DERIVADOS — a rotina os grava sem que exista um card de importação para eles.
+check('   e os derivados também têm fatia',
+      all(t in _fatias_ds for t in ('operations-b3', 'other-products-summary')))
 
 print('\n%s' % ('TUDO OK' if not fails else 'FALHAS (%d): %r' % (len(fails), fails)))
 sys.exit(1 if fails else 0)

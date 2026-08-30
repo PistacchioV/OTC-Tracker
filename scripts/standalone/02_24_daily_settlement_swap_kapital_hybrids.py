@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-r"""convert 02_daily_settlement_br_onshore_settlements — a rotina `daily settlement/br-onshore-settlements` de cache/.
+r"""convert 02_daily_settlement_swap_kapital_hybrids — a rotina `daily settlement/swap-kapital-hybrids` de cache/.
 
-O BR Onshore Settlements.
+O Swap Kapital Hybrids.
 
 Versão AUTOCONTIDA: roda em QUALQUER máquina, sem o código do OTC Tracker por
 perto. Requisito único:  pip install duckdb
@@ -13,13 +13,13 @@ perto. Requisito único:  pip install duckdb
     Destino: ...\static\data\db   (a pasta db dentro da origem)
 
 Uso:
-    python 02_22_daily_settlement_br_onshore_settlements.py
-    python 02_22_daily_settlement_br_onshore_settlements.py --dry-run
-    python 02_22_daily_settlement_br_onshore_settlements.py --data-dir "D:\outra\pasta" --out-dir "D:\saida"
+    python 02_24_daily_settlement_swap_kapital_hybrids.py
+    python 02_24_daily_settlement_swap_kapital_hybrids.py --dry-run
+    python 02_24_daily_settlement_swap_kapital_hybrids.py --data-dir "D:\outra\pasta" --out-dir "D:\saida"
 
-O ESCOPO é UM bloco de cache\: **daily settlement/br-onshore-settlements**.
+O ESCOPO é UM bloco de cache\: **daily settlement/swap-kapital-hybrids**.
 
-O BR Onshore Settlements.
+O Swap Kapital Hybrids.
 
 Cada produto vira um banco e a pasta db\ ESPELHA a árvore de cache\
 (db\cache\new deals\NDF\Vanilla.db, db\cache\b3 files\Swap.db); só
@@ -917,9 +917,19 @@ ROTINAS_CACHE = (
     # `99_outros`, que exclui por tag do mesmo jeito.
     ('daily settlement/otm-settlement', 'O OTM Settlements.'),
     ('daily settlement/ndf-cockpit', 'O NDF Cockpit.'),
-    ('daily settlement/operations-b3', 'O Operations B3.'),
-    ('daily settlement/operacoes-jpm', 'As operações JPM/MGT.'),
-    ('daily settlement/eventos-swap-jpm', 'Os eventos de swap.'),
+    ('daily settlement/operations-b3', 'O arquivo DERIVADO que a página\n'
+                                       'Operations B3 lê: o merge das operações\n'
+                                       'JPM e MGT (`_ob_src`) mais o que a tela\n'
+                                       'edita. Não confundir com os dois\n'
+                                       'arquivos de ORIGEM ao lado.'),
+    ('daily settlement/operacoes-jpm', 'As operações do Banco J.P. Morgan, como\n'
+                                       'importadas — uma das duas origens do\n'
+                                       'operations-b3.'),
+    ('daily settlement/operacoes-mgt', 'Idem, as da MGT.'),
+    ('daily settlement/eventos-swap-jpm', 'Os eventos de swap do Banco.'),
+    ('daily settlement/eventos-swap-mgt', 'Idem, os da MGT.'),
+    ('daily settlement/latam-desk-position', 'O Latam Desk Position.'),
+    ('daily settlement/swap-kapital-hybrids', 'O Swap Kapital Hybrids.'),
     ('daily settlement/cognos', 'O Cognos.'),
     ('daily settlement/br-onshore-settlements', 'O BR Onshore Settlements.'),
     ('daily settlement/other-products-summary', 'O Other Products Summary — e o\n'
@@ -927,7 +937,16 @@ ROTINAS_CACHE = (
                                                 'mora no `.meta` ao lado.'),
     ('pending-confirmation', 'Os snapshots diários do Pending Confirmation.'),
     ('payrec', 'O histórico diário da reconciliação de Pay/Rec.'),
-    ('reconciliation', 'Os caches por data das reconciliações (Pay/Rec e afins).'),
+    # Cada reconciliação tem a SUA pasta em `cache/reconciliation/` e o seu
+    # banco, então cada uma é uma fatia — `reconciliation` inteira seria o único
+    # escopo da lista a produzir mais de um banco, e a fatia que roda três
+    # recons em série é a que não termina enquanto duas pessoas esperam. A
+    # recon de COMITENTES não está aqui de propósito: ela não tem cache JSON,
+    # grava direto no `matching_comitentes.db`.
+    ('reconciliation/fxo', 'A reconciliação de FXO (DPOSICAO × Athena EOD).'),
+    ('reconciliation/cgd', 'A reconciliação de CGD (lista do FEP × posição da B3).'),
+    ('reconciliation/payrec', 'Os caches por data da reconciliação de Pay/Rec —\n'
+                              'irmãos do histórico que mora em `cache/payrec`.'),
 )
 
 
@@ -1523,12 +1542,12 @@ def main(argv=None):
     print('janela : %s' % ('arquivo-dia a partir de %s (%d meses)'
                            % (desde.strftime('%d/%m/%Y'), args.meses)
                            if desde else 'historico INTEIRO (--meses 0)'))
-    print('escopo : cache/daily settlement/br-onshore-settlements (arquivo-dia)')
+    print('escopo : cache/daily settlement/swap-kapital-hybrids (arquivo-dia)')
 
     houve_erro = [False]
     # `--bloco` SUBSTITUI o escopo desta fatia; nao soma. Rodar a fatia inteira
     # em paralelo com um bloco dela poria dois processos no mesmo banco.
-    fatia = 'daily settlement/br-onshore-settlements'
+    fatia = 'daily settlement/swap-kapital-hybrids'
     if args.bloco:
         fatia = fatia.rstrip('/') + '/' + args.bloco.strip().strip('/')
         print('escopo : cache/%s (arquivo-dia) [--bloco]' % fatia)
