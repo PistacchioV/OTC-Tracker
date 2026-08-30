@@ -15155,3 +15155,44 @@ são em disco (pasta por recon, data no NOME do arquivo, mais o ponteiro
 `_last`), com uma quarta recon que ninguém nomeia para provar o `99_outros`.
 
 Suíte completa verde.
+
+## §352 — `Pu inicial` × `PU Inicial`: o identificador do DuckDB não tem caixa (2026-08-29)
+
+A carga do `b3 files/Swap` no share estourava um erro por DIA, sempre o mesmo:
+
+```
+ERRO cache/B3 Files/Swap/2026/06/10/73760_260610_DPOSICAO-SWAP.json:
+  _duckdb.CatalogException: Catalog Error: Column with name Pu inicial already exists!
+```
+
+O layout do DPOSICAO-SWAP repete nomes de coluna **por perna** — é um arquivo
+sem header, e o `_B3_SWAP_HEADERS_RAW` do `routes.py` guarda os nomes na ordem
+do arquivo. O `_b3_export_json` já sabia disso e desempata o repetido
+acrescentando `_2`, `_3`… Só que ele compara **com caixa**, e a grafia da B3
+não é estável: o mesmo campo aparece como `PU Inicial` na parte de termo e como
+`Pu inicial` na de cada perna. Para o JSON são duas chaves; **para o DuckDB são
+a mesma coluna**, porque o identificador dele é insensível a caixa mesmo quando
+citado. O `CREATE TABLE` recusava, e o arquivo do dia ficava inteiro de fora.
+
+O conserto é do CONVERSOR, não do exportador. O JSON é o contrato com a origem
+e não pode mudar — as duas chaves são campos diferentes, e renomear uma
+quebraria quem lê o arquivo. Quem desempata agora é o `nomes_sql` do motor, e
+são três decisões:
+
+- **a coluna é RENOMEADA, nunca descartada.** Descartar não daria erro nenhum —
+  uma perna do swap sumiria da tabela em silêncio — e o `_raw` ao lado ainda a
+  teria, o que faria o banco discordar de si mesmo;
+- **o candidato é conferido contra TODAS as chaves do arquivo**, não só contra
+  as já emitidas. `Pu inicial` desempataria para `Pu inicial_2`, que é uma
+  coluna de VERDADE do mesmo arquivo (o desempate do repetido exato), e a
+  colisão voltaria pela outra ponta. Daí `Pu inicial_3`;
+- **o sufixo é do BANCO, não do arquivo.** O `_raw` guarda a chave original, e
+  é dele que a leitura reconstrói — o flip continua byte a byte.
+
+`Denominação` e `denominacao` NÃO colidem: o acento é diferença de verdade para
+o DuckDB, e o desempate compara em minúsculas sem normalizar acento, que é
+exatamente a mesma pergunta que o banco faz.
+
+O guarda ganhou um DPOSICAO-SWAP na massa, com as três grafias e as duas do
+`Tipo/Classe`, provando os nomes finais, os valores das duas pernas distintos e
+o `_raw` sem sufixo nenhum. Suíte completa verde.

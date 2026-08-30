@@ -124,6 +124,14 @@ w('cache/daily settlement/2026/07/28/ndf-cockpit_20260728.json',
 # O `.meta` de um arquivo-dia: ele ANOTA o arquivo, não é um produto.
 w('cache/daily settlement/2026/07/28/otm-settlement_20260728.meta.json',
   {'source_date': '2026-07-28', 'rows': 1})
+# O DPOSICAO-SWAP: o layout da B3 repete nomes por PERNA e a grafia não é
+# estável, então o arquivo tem `PU Inicial` e `Pu inicial` — chaves diferentes
+# no JSON, a MESMA coluna para o DuckDB, que é insensível a caixa mesmo com o
+# nome citado. E `Pu inicial_2` já existe (o desempate do exato que o
+# `_b3_export_json` faz), então o sufixo tem de pular por cima dela.
+w('cache/b3 files/Swap/2026/06/10/73760_260610_DPOSICAO-SWAP.json',
+  [{'Contrato': 'CEMHYB-1', 'PU Inicial': '100', 'Pu inicial': '200',
+    'Pu inicial_2': '300', 'Tipo/Classe': 'A', 'tipo/classe': 'B'}])
 w('cache/reconciliation/payrec/2026-07-06.json',
   {'success': True, 'recon_date': '2026-07-06',
    'summary': [{'pay_receive': 'Pay', 'jpm_qty': 3, 'jpm_value': -226846.2276319994},
@@ -223,7 +231,8 @@ check('3. _last.json ficou de fora, avisado',
 # já são a tabela.
 check('3. a pasta db/ espelha a arvore de cache/, um banco por PRODUTO',
       sorted(os.path.relpath(p, OUT).replace(os.sep, '/') for p in st['dbs']),
-      ['cache/daily settlement/ndf-cockpit.db',
+      ['cache/b3 files/Swap.db',
+       'cache/daily settlement/ndf-cockpit.db',
        'cache/daily settlement/otm-settlement.db',
        'cache/new deals/NDF/Commodities.db',
        'cache/new deals/Option/FXO.db',
@@ -250,6 +259,30 @@ _marca = duckdb.connect(_PC, read_only=True)
 check('3. o banco que continua sendo alvo NAO e apagado nem recriado',
       _marca.execute('SELECT x FROM _marca').fetchone()[0], 1)
 _marca.close()
+# O DPOSICAO-SWAP: chave que só difere na CAIXA é a mesma coluna para o
+# DuckDB. A coluna é RENOMEADA, nunca descartada — uma perna do swap sumindo da
+# tabela não daria erro nenhum, e o `_raw` ao lado ainda a teria, o que faria o
+# banco discordar de si mesmo.
+_SW = duckdb.connect(os.path.join(OUT, 'cache', 'b3 files', 'Swap.db'), read_only=True)
+_cur = _SW.execute('SELECT * FROM main.d_20260610_73760_dposicao_swap')
+check('3. coluna que so difere na CAIXA e renomeada, nao perdida',
+      [d[0] for d in _cur.description],
+      ['Contrato', 'PU Inicial', 'Pu inicial_3', 'Pu inicial_2',
+       'Tipo/Classe', 'tipo/classe_2', '_seq', '_raw'])
+check('3.    e os valores das duas pernas continuam distintos',
+      _SW.execute('SELECT "PU Inicial", "Pu inicial_3", "Pu inicial_2" '
+                  'FROM main.d_20260610_73760_dposicao_swap').fetchone(), (100, 200, 300))
+# O `_raw` guarda a chave ORIGINAL: o sufixo é do banco, não do arquivo.
+check('3.    e o _raw mantem a chave do JSON, sem sufixo nenhum',
+      json.loads(_SW.execute('SELECT "_raw" FROM main.d_20260610_73760_dposicao_swap').fetchone()[0])
+      ['Pu inicial'], '200')
+_SW.close()
+# O desempate pula o nome que já é de OUTRA coluna do mesmo arquivo — senão
+# `Pu inicial` viraria `Pu inicial_2`, que existe, e a colisão voltaria.
+from apps.pages import json_to_duckdb as _motor               # noqa: E402
+check('3.    o sufixo pula por cima de uma coluna que ja existe',
+      _motor.nomes_sql(['PU Inicial', 'Pu inicial', 'Pu inicial_2']),
+      ['PU Inicial', 'Pu inicial_3', 'Pu inicial_2'])
 # O Daily Settlement é o caso do pedido: mesma pasta, um banco por arquivo.
 check('3. rotina sem pastas: o produto sai do NOME, dentro da pasta da rotina',
       [os.path.isfile(os.path.join(OUT, 'cache', 'daily settlement', f)) for f in
@@ -310,7 +343,7 @@ con.close()
 # ═══ 4. incremental ═════════════════════════════════════════════════════════
 st = conv.convert_daily(DATA, OUT)
 check('4. segunda rodada nao reconverte nada',
-      (len(st['converted']), len(st['skipped'])), (0, 7))
+      (len(st['converted']), len(st['skipped'])), (0, 8))
 
 alterado = w('cache/new deals/NDF/Commodities/2026/06/20260612_ndfcomm.json',
              DEALS + [dict(DEALS[0], Deal='DBH-1CCC')])
@@ -318,7 +351,7 @@ os.utime(alterado, (os.path.getmtime(alterado) + 5,) * 2)
 st = conv.convert_daily(DATA, OUT)
 check('4. arquivo alterado reconverte SO ele',
       (st['converted'], len(st['skipped'])),
-      (['cache/new deals/NDF/Commodities.db:' + nd], 6))
+      (['cache/new deals/NDF/Commodities.db:' + nd], 7))
 con = duckdb.connect(_NDFC, read_only=True)
 check('4. com o conteudo novo',
       con.execute("SELECT count(*) FROM %s" % nd).fetchone()[0], 3)
@@ -328,7 +361,7 @@ novo = w('cache/new deals/NDF/Commodities/2026/06/20260613_ndfcomm.json', DEALS[
 st = conv.convert_daily(DATA, OUT)
 check('4. dia novo vira tabela nova, sem tocar nas outras',
       (st['converted'], len(st['skipped'])),
-      (['cache/new deals/NDF/Commodities.db:main.d_20260613_ndfcomm'], 7))
+      (['cache/new deals/NDF/Commodities.db:main.d_20260613_ndfcomm'], 8))
 check('4. destino padrao e a pasta db/ de todos os bancos',
       conv._default_out_dir('/x'), os.path.join('/x', 'db'))
 
