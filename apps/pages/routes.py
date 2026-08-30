@@ -2655,14 +2655,19 @@ def _b3_export_json(src_path, json_cfg, dest_name, dref, skip_existing=False):
             header = list(_B3_SWAP_HEADERS.get(json_cfg.get('header_key', ''), []) or [])
             data_lines = lines
 
-        # De-duplicate repeated header names (SWAP position repeats many) so no
-        # field is silently overwritten: 1st keeps its name, repeats get _2, _3…
-        uniq_header = []
-        if header:
-            seen = {}
-            for h in header:
-                seen[h] = seen.get(h, 0) + 1
-                uniq_header.append(h if seen[h] == 1 else '{}_{}'.format(h, seen[h]))
+        # De-duplicate repeated header names (SWAP position repeats 38 of its
+        # 170) so no field is silently overwritten: 1st keeps its name, repeats
+        # get _2, _3… A regra é a MESMA do `nomes_unicos` do conversor, com a
+        # igualdade trocada: aqui é a CHAVE do JSON, onde `PU Inicial` e
+        # `Pu inicial` são dois campos e têm de continuar sendo — o desempate
+        # por CAIXA é do nome de coluna do DuckDB, e acontece lá.
+        #
+        # O que a função traz de novo é conferir o candidato contra TODOS os
+        # nomes do header: um layout com `X` duas vezes E uma coluna chamada
+        # `X_2` produzia dois `X_2`, e no dicionário o segundo apagava o
+        # primeiro — uma coluna perdida sem erro nenhum.
+        from apps.pages.json_to_duckdb import nomes_unicos
+        uniq_header = nomes_unicos(header, chave=lambda s: s) if header else []
 
         rows = []
         for ln in data_lines:

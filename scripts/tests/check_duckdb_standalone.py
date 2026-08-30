@@ -258,7 +258,7 @@ _buf = io.StringIO()
 with contextlib.redirect_stdout(_buf):
     mod.main(['--data-dir', CASE, '--out-dir', _OUT_CASE, '--meses', '0'])
 check('a fatia acha a rotina com outra grafia (B3 Files x b3 files)',
-      _arvore(_OUT_CASE), ['cache/B3 Files/Swap.db'])
+      _arvore(_OUT_CASE), ['cache/B3 Files/Swap/DPOSICAO-SWAP.db'])
 
 mod = _carregar('sa_case_outros', os.path.join(PASTA, '99_outros.py'))
 _buf = io.StringIO()
@@ -318,8 +318,11 @@ _full = _buf.getvalue()
 check('a segunda passada anuncia o histórico INTEIRO',
       'historico INTEIRO' in _full)
 _velho = (_hoje - datetime.timedelta(days=600)).strftime('%Y%m%d')
+# A tag do arquivo agora é o BANCO (o dia do Swap guarda posição, fluxo e
+# agenda de prêmios), então a tabela é só o dia.
 check('ela traz o dia que a janela tinha deixado de fora',
-      ('d_%s_dposicao_swap' % _velho) in _full)
+      ('Swap/DPOSICAO-SWAP.db:main.d_%s' % _velho) in
+      _full.replace(os.sep, '/'))
 # O dia recente já estava no banco: a segunda passada não o reescreve.
 # (`convertidos` conta também a remoção do legado, por isso a asserção é no
 # `inalterados`, que é onde a promessa incremental se lê.)
