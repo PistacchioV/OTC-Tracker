@@ -15196,3 +15196,84 @@ exatamente a mesma pergunta que o banco faz.
 O guarda ganhou um DPOSICAO-SWAP na massa, com as três grafias e as duas do
 `Tipo/Classe`, provando os nomes finais, os valores das duas pernas distintos e
 o `_raw` sem sufixo nenhum. Suíte completa verde.
+
+## §353 — o B3 Files também quebra por ARQUIVO, e a varredura dos 170 nomes (2026-08-29)
+
+Pedido do usuário: *"b3 files para swap precisa dividir um db para cada arquivo,
+o posicao, premio e fluxos"*. A pasta do dia de cada produto do B3 Files guarda
+mais de um arquivo — o Swap tem `DPOSICAO-SWAP`, `DFLUXO` e `DAGENDAPREMIOS` —,
+e os três caíam num banco só, como três tabelas do mesmo dia com tags
+diferentes.
+
+A causa era a regra que decidia "a tag nomeia o banco?": **a CONTAGEM de
+pastas**. `daily settlement` tem um nível de rotina e responde "sim";
+`b3 files/Swap` tem dois e respondia "não". Contar pastas acertava por acaso — a
+pergunta de verdade é *esta pasta de dia guarda mais de um produto?*, e a
+profundidade não a responde.
+
+Hoje quem responde é o `_por_arquivo`, com duas metades somadas:
+
+- **a rotina não se ramifica em pastas** (um nível só). É o default certo para
+  uma rotina NOVA: sem subpasta, o que separa os produtos só pode ser o nome;
+- **ou ela está em `_ROTINAS_POR_ARQUIVO`** — hoje só o `b3 files`, casado por
+  PREFIXO e sobre a chave normalizada, então cobre `B3 Files/Swap` e os irmãos
+  em qualquer grafia.
+
+A declaração é o preço de a função ser PURA sobre o caminho: o espelho vivo
+converte um arquivo por vez e não pode varrer o diretório para saber se ele tem
+vizinhos.
+
+Resultado: `db/cache/b3 files/Swap/73760_DPOSICAO-SWAP.db` e irmãos, com a
+tabela voltando a ser só o dia (`d_20260610`) porque a tag já está no nome do
+banco. Três detalhes que não dão erro nenhum:
+
+- **a data nem sempre está no FIM do nome.** Em `73760_260610_DPOSICAO-SWAP` ela
+  está no MEIO, e tirá-la deixava `73760__DPOSICAO-SWAP` — o `_` duplo que o
+  strip das pontas não alcança. No Daily Settlement a data é sufixo, e foi por
+  isso que ninguém viu antes;
+- **o banco da ROTINA INTEIRA vira órfão** (`cache/b3 files/Swap.db`): nada mais
+  o escreve, nada mais o lê, e quem consulta por fora do app encontra dois e
+  nada dizendo qual é o de hoje. O `_daily_pai_legado` o entrega ao
+  `_drop_legacy_dbs`, junto com o nome ACHATADO dele — que a linha de sempre
+  deixou de produzir no instante em que o alvo ganhou um nível;
+- **a fatia continua sendo por PRODUTO** (`b3 files/Swap` escreve os três
+  bancos). Um escopo é o caminho do que ele produz, e aqui ele produz uma PASTA
+  de bancos; para repartir mais, `--bloco 73760_DPOSICAO-SWAP` desce até um
+  arquivo — o `--bloco` já aceitava tag, e agora tem teste.
+
+### A varredura dos nomes repetidos
+
+Segundo pedido, na mesma linha: *"no arquivo de posicao swap tem varias colunas
+que tem o mesmo nome, nao so Pu Inicial, faça uma varredura"*. A varredura dos
+quatro layouts:
+
+| layout | colunas | nomes repetidos EXATOS | grupos que só a CAIXA separa |
+|---|---|---|---|
+| `swap_position` | 170 | **38** | 1 (`PU Inicial` / `Pu inicial`) |
+| `operations` | 37 | 0 | 0 |
+| `swap_fluxo` | 26 | 1 | 0 |
+| `swap_premio` | 10 | 0 | 0 |
+
+Os 38 repetidos exatos já eram desempatados pelo `_b3_export_json` com `_2`,
+`_3`… e o único par que ele deixava passar era o de CAIXA, que o §352 resolveu
+no banco. Ponta a ponta, os 170 viram 170 chaves de JSON distintas e 170 colunas
+de banco distintas — nada se perde.
+
+O que a varredura acrescentou foi fechar um buraco LATENTE do exportador: o
+desempate dele contava ocorrências, então um layout com `X` duas vezes **e** uma
+coluna literalmente chamada `X_2` produzia duas chaves `X_2`, e num dicionário a
+segunda apaga a primeira. Nenhum layout de hoje faz isso — mas o header dos
+arquivos COM cabeçalho vem do arquivo, não do código. Os dois desempates agora
+são a mesma função, `nomes_unicos`, parametrizada pela IGUALDADE:
+
+- **identidade** para a chave do JSON, onde `PU Inicial` e `Pu inicial` são dois
+  campos e têm de continuar sendo;
+- **`str.lower`** para a coluna do banco, porque o identificador do DuckDB é
+  insensível a caixa.
+
+As chaves dos quatro layouts saem BYTE A BYTE como antes — o buraco fechado é o
+que nunca aconteceu. A varredura virou a seção 6 do
+`check_json_to_duckdb.py`: ela varre os headers REAIS e cobra que nada colida em
+nenhuma das duas pontas, em vez de assertar o `Pu inicial`.
+
+Suíte completa verde.

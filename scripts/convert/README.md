@@ -37,7 +37,7 @@ nunca escrevem no mesmo arquivo. Isso é prendido por teste
 | `02_11_new_deals_intrag_swap.py` | `new deals/Intrag/Swap` |
 | `02_12_b3_files_ndf.py` | `b3 files/NDF` — DPOSICAO e DFLUXO da rotina Save CETIP Files |
 | `02_13_b3_files_option.py` | `b3 files/Option` |
-| `02_14_b3_files_swap.py` | `b3 files/Swap` — costuma ser o maior dos quatro |
+| `02_14_b3_files_swap.py` | `b3 files/Swap` — o maior dos quatro, e o único cujo dia guarda três arquivos (posição · fluxo · agenda de prêmios), um banco cada |
 | `02_15_b3_files_operations.py` | `b3 files/Operations` |
 | `02_16_daily_settlement_otm_settlement.py` | `daily settlement/otm-settlement` — o `.meta` ao lado vem no MESMO banco |
 | `02_17_daily_settlement_ndf_cockpit.py` | `daily settlement/ndf-cockpit` |
@@ -114,11 +114,16 @@ terminam em minutos e o resto da equipe ficava esperando a maior. Repartir só
 até `new deals/NDF` ainda deixaria o **Vanilla** — o maior arquivo-dia do app —
 junto com os outros três.
 
-**Um escopo é sempre o caminho do banco que ele produz** — e é por isso que o
-Daily Settlement é repartido por ARQUIVO (ali quem separa os produtos é o nome,
-não a pasta) e que cada RECONCILIAÇÃO é uma fatia: as três têm pasta e banco
-próprios em `cache/reconciliation/`, e uma fatia só para as três seria a única
-da lista a escrever em mais de um `.db`.
+**Um escopo é sempre o caminho do que ele produz** — e é por isso que o Daily
+Settlement é repartido por ARQUIVO (ali quem separa os produtos é o nome, não a
+pasta) e que cada RECONCILIAÇÃO é uma fatia: as três têm pasta e banco próprios
+em `cache/reconciliation/`.
+
+No **B3 Files** o produto é uma PASTA de bancos: a pasta do dia de cada produto
+guarda mais de um arquivo — o Swap tem posição, fluxo e agenda de prêmios —, e
+cada um vira o seu `.db`. A fatia continua sendo por produto (`b3 files/Swap`,
+que escreve os três); para repartir mais, `--bloco 73760_DPOSICAO-SWAP` desce
+até um arquivo.
 
 Uma pasta que a sua instância não tenha vira um aviso e a fatia sai limpa; e um
 produto que não esteja na lista (`new deals/NDF/Asian`) cai no `99_outros`, que

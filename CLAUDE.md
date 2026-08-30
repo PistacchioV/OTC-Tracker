@@ -460,10 +460,22 @@ São dois bancos:
   `subjacente.db` na raiz), o que de quebra tira a contenção que o banco
   compartilhado criava — o espelho reconvertendo UM mapping fechava a leitura
   dos outros 42. Três detalhes que não dão erro nenhum:
-  - o corte "tag no banco ou não" é pela CONTAGEM de pastas, nunca por olhar
-    os vizinhos em disco: o `_daily_rel_target` tem de ser puro sobre o
+  - o corte "tag no banco ou não" é **declarado** (`_por_arquivo`), nunca por
+    olhar os vizinhos em disco: o `_daily_rel_target` tem de ser puro sobre o
     caminho, porque o espelho vivo converte UM arquivo por vez e não pode
-    depender de varrer o diretório;
+    depender de varrer o diretório. São duas respostas somadas — a rotina que
+    **não se ramifica em pastas** (um nível só: o Daily Settlement, e o default
+    certo para uma rotina nova, onde sem subpasta o que separa os produtos só
+    pode ser o nome) **ou** a que está em `_ROTINAS_POR_ARQUIVO`. Hoje esta
+    lista tem o **B3 Files**, que se ramifica (NDF · Option · Swap ·
+    Operations) E mistura: o Swap grava posição, fluxo e agenda de prêmios lado
+    a lado, e contar pastas responde "não" ali — foi assim que os três caíram
+    num banco só. Cada produto do B3 Files é uma PASTA de bancos
+    (`db/cache/b3 files/Swap/73760_DPOSICAO-SWAP.db`), a fatia continua sendo
+    por produto e o `--bloco 73760_DPOSICAO-SWAP` reparte até o arquivo;
+  - a data sai do nome sem deixar separador dobrado, e ela nem sempre está no
+    FIM: em `73760_260610_DPOSICAO-SWAP` ela está no MEIO, e tirá-la deixaria
+    um `_` duplo que o strip das pontas não alcança (`73760__DPOSICAO-SWAP.db`);
   - a tag da TABELA é tudo-ou-nada. Podando token a token, o `DPOSICAO-SWAP`
     do `daily_b3_files_swap.db` perderia justamente o `swap` e ficaria
     indistinguível de um `DPOSICAO` da mesma pasta;
@@ -500,8 +512,11 @@ São dois bancos:
     (`new deals/NDF/Vanilla`), que é a folha da árvore e a unidade em que cada
     banco é escrito — e onde a rotina NÃO se ramifica em pastas o escopo é a
     **TAG do arquivo** (`daily settlement/otm-settlement`), porque ali quem
-    separa os produtos é o nome. Um escopo é sempre o CAMINHO do banco que ele
-    produz, o que dispensa uma segunda sintaxe para dizer a mesma coisa; o
+    separa os produtos é o nome. Um escopo é sempre o CAMINHO do que ele
+    produz — o banco, ou a PASTA de bancos quando o produto guarda vários
+    arquivos por dia (a fatia `b3 files/Swap` escreve os três; `--bloco
+    73760_DPOSICAO-SWAP` desce até um) —, o que dispensa uma segunda sintaxe
+    para dizer a mesma coisa; o
     `.meta.json` acompanha o arquivo que anota, no MESMO banco (`d_AAAAMMDD_meta`) — como bloco único elas eram o gargalo da carga, e repartir
     só até `new deals/NDF` ainda deixava o Vanilla junto com os outros três. O
     `99_outros` poda por CAMINHO, e é isso que faz a rede de segurança valer em
