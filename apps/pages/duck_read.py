@@ -21,6 +21,22 @@ import os
 
 import duckdb
 
+# A abertura vai pela CAMADA (`duckdb_read`) e não pelo `duckdb.connect` cru: é
+# ela que emite os eventos do farol do `database_access` (`connection_opened`,
+# `file_lock_*`, os tempos de espera) e que cria o `.lock` do banco na primeira
+# vez. Sem isso, os bancos do espelho — dezenas, e um NOVO a cada produto ou
+# cadastro que aparece — ficavam fora do painel: nenhum evento, nenhum lock, e
+# nenhuma pista de por que uma leitura DB-first demorou ou recusou.
+#
+# Não são caminhos que caibam no `DATABASE_ACCESS_PATHS` do config: aquela
+# tupla é a lista FIXA que a subida confere, e a árvore do espelho nasce dos
+# dados (um banco por produto de arquivo-dia, um por JSON avulso). O `.lock`
+# vem de graça na primeira abertura, que é o que a camada faz.
+#
+# Medido: 12,67 ms por abertura pela camada contra 12,82 ms crua — a abertura
+# do DuckDB domina, e o lock compartilhado mais o permit somem no ruído.
+from apps.pages.database_access import duckdb_read
+
 from apps.pages.json_to_duckdb import q
 
 
@@ -82,8 +98,7 @@ def table_rows(db_name, table, rel, schema='main', order_by=None, heal=None,
         if not os.path.isfile(db):
             _cura()
             return None
-        con = duckdb.connect(db, read_only=True)
-        try:
+        with duckdb_read(db) as con:
             row = con.execute('SELECT mtime, fsize FROM _manifest WHERE path = ?',
                               [manifest_key or rel]).fetchone()
             if not row or abs(row[0] - st.st_mtime) >= 1e-6 or row[1] != st.st_size:
@@ -95,8 +110,6 @@ def table_rows(db_name, table, rel, schema='main', order_by=None, heal=None,
             cur = con.execute(sql)
             cols = [d[0] for d in cur.description]
             return _limpo(dict(zip(cols, r)) for r in cur.fetchall())
-        finally:
-            con.close()
     except Exception:                                       # noqa: BLE001
         # Banco em uso pelo espelho, tabela ausente, formato inesperado: o
         # fallback é o JSON — nunca um erro para quem só pediu as linhas.
@@ -162,8 +175,7 @@ def day_payload(path):
         if not os.path.isfile(db):
             duck_mirror.notify_write(jpath)
             return None
-        con = duckdb.connect(db, read_only=True)
-        try:
+        with duckdb_read(db) as con:
             row = con.execute(
                 'SELECT mtime, fsize, targets FROM _manifest WHERE path = ?',
                 [core._dataset_manifest_key(rel)]).fetchone()
@@ -187,8 +199,6 @@ def day_payload(path):
                     return None
                 out.append(json.loads(cru))
             return out
-        finally:
-            con.close()
     except Exception:                                       # noqa: BLE001
         return None
 
