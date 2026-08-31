@@ -48,6 +48,11 @@ PERMITIDO = {
 # `features/support/infra/persistence.roles_by_sid`. Ao mover codigo daqui, o
 # nome NOVO entra nesta tupla na mesma mudanca.
 PROIBIDO_SEMPRE = ('_read_page_access', '_get_page_access', '_set_page_access',
+                   # A leitura da linha do usuario e a fonte dos DOIS: a
+                   # allowlist e o `Role` que o `refresh_session_role` grava na
+                   # sessao. Um dado parcial aqui e papel errado na sessao.
+                   '_read_user_authz', '_get_user_authz', '_get_user_role',
+                   'refresh_session_role',
                    'get_user_by_sid', 'insert_new_user', 'verify_code',
                    'save_verification_code', 'roles_by_sid',
                    '_session_is_master', '_session_is_admin')

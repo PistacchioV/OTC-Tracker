@@ -1944,11 +1944,26 @@ validar sem receber o aviso é o meio-caminho que não dá erro nenhum, porque a
 pessoa poderia carimbar e nunca saber que havia o que carimbar. Rejeitar segue a
 mesma regra: é a outra resposta à mesma pergunta.
 
-**Trocar o papel no cadastro NÃO alcança quem já está logado.** O `user_role`
-é gravado na sessão pelo `_set_session`, só no login, e com *Keep me signed in*
-a sessão dura **30 dias** — a pessoa promovida a `BO` continua sem o botão, e a
-despromovida continua com ele. Quem muda um papel tem de pedir logout/login;
-não há erro nenhum para ver.
+**Trocar o papel no cadastro alcança quem já está logado em até 30 s**, e isso
+é o `refresh_session_role` (um `before_request` próprio, em `platform/authz.py`).
+O `user_role` é gravado na sessão pelo `_set_session`, no login, e nada o relia:
+com *Keep me signed in* a sessão dura **30 dias**, então a pessoa promovida a
+`BO` continuava sem o botão e a despromovida continuava com ele — nos dois
+sentidos sem erro nenhum para ver. Ele é de graça: a linha do usuário já era
+lida por SID a cada 30 s para a allowlist do `Page_Access`, e o `Role` veio
+junto na mesma query. Quatro coisas o sustentam:
+
+- **`None` não mexe em nada.** Banco fora do ar, ou SID sem linha, deixa a
+  sessão como está. O fail-open da allowlist é aceitável; no papel, seria uma
+  falha de leitura deslogando a mesa da função dela. `''` **mexe** — papel vazio
+  é um papel de verdade, e é assim que se revoga;
+- **master não é tocado.** `MASTER` não é papel de banco, é o valor que o
+  `_set_session` grava para os SIDs de `_MASTER_SIDS`; sobrescrevê-lo com a
+  coluna `Role` rebaixaria o superusuário a cada request;
+- **só grava quando MUDA**, senão o cookie assinado é reemitido a cada request;
+- é um `before_request` **próprio**, e não uma carona no `enforce_page_access`:
+  aquele desiste cedo para master, `/api/*`, `/static*` e todo path fora do
+  menu — e é justamente em `/api/*` que a mesa valida a confirmação.
 
 Três camadas, e a que vale é a
 última: no Monitor o botão verde vira um de só leitura, na tela de validação
