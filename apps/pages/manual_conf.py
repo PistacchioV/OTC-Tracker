@@ -59,6 +59,7 @@ except Exception:                                    # pragma: no cover
 # estes só são usados depois dele.
 from apps.pages.data_paths import data_dir, data_path, data_write, mapping_file, mapping_write
 from apps.pages.database_access import duckdb_read, duckdb_write
+from apps.pages.request_cache import once_per_request as _once_per_request
 # Só o Config: importar o `routes` daqui seria circular (é ele quem importa este
 # módulo). O que se repete é a LEITURA da configuração, não o dado.
 from apps.config import Config
@@ -375,12 +376,18 @@ def sla_upgrade(rows):
 _SLA_CACHE = {'mtime': None, 'val': None}
 
 
+@_once_per_request
 def sla_days():
     """Mesa → dias úteis de prazo, do cadastro `manual-conf-sla`.
 
     Prazo em branco (ou que não seja um número) devolve o valor histórico do
     `SLA_BIZDAYS`: uma célula limpa pela tela não pode virar "sem prazo", que é
     como uma confirmação atrasada deixaria de acender o vermelho em silêncio.
+
+    `@_once_per_request` pela mesma razão do `_refdata_by_taxid`: o Monitor
+    pergunta o prazo TRÊS vezes por linha (via `sla_state`), e o cache por mtime
+    evita reler o cadastro sem evitar o `stat` que decide se ele mudou. No share
+    esse stat é ida à rede, e ele ficava dentro do laço de linhas.
     """
     try:
         mtime = os.path.getmtime(_mapping_path('manual-conf-sla'))

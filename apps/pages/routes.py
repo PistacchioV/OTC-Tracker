@@ -44,7 +44,8 @@ from apps.pages.data_paths import (
 # Cache de leitura por request + TTL curto entre requests para os JSONs do
 # dia (Operations B3, OTM Settlements...) — ver apps/pages/request_cache.py.
 from apps.pages.request_cache import (
-    req_cached as _req_cached, bump_cache_gen as _bump_cache_gen,
+    req_cached as _req_cached, once_per_request as _once_per_request,
+    bump_cache_gen as _bump_cache_gen,
 )
 from apps.pages import blueprint
 # Porte Python do parser de booking recap (o mesmo que otc-fileupload.js faz no
@@ -4866,8 +4867,15 @@ def _otm_cpty_name(spn):
     return _refdata_by_spn().get(k, '')
 
 
+@_once_per_request
 def _refdata_by_taxid():
     """{CNPJ só dígitos → COUNTERPARTY} do RefData.json, cacheado por mtime.
+
+    `@_once_per_request` porque as CINCO telas de Live Position resolvem o nome
+    da contraparte por aqui uma vez POR LINHA (`_lp_cpty_by_taxid`): o cache por
+    mtime já evitava reler o arquivo, mas não o `stat` que decide se ele mudou —
+    e esse stat ficava dentro do laço. Medido: 1,00 stat por linha. No share
+    isso é uma ida à rede por linha, e a tela levava minutos sem erro nenhum.
 
     Comparação por DÍGITOS: o RefData guarda mascarado (45.985.371/0001-08) e a
     posição da B3 guarda só números. Comparar as strings não casaria nada."""

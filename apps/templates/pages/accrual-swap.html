@@ -233,6 +233,35 @@ table.dt-acc thead tr.acc-th-filter input:focus { outline:none; border-color:var
 table.dt-acc tbody td { font-size:.8rem; color:var(--acc-ink); white-space:nowrap; padding:.5rem .6rem; vertical-align:middle; }
 table.dt-acc tbody tr { transition: background-color 120ms var(--acc-ease); }
 
+/* ── Padrão de tabela do app: cabeçalho E valores centralizados ─────────────
+   As duas telas gêmeas (Accrual e MtM de Swap) nasceram sem esta regra: o
+   `.acc-th-title th` e o `tbody td` abaixo declaram fonte, cor e padding, mas
+   nunca o alinhamento — e sem ele o texto cai no `start`, encostado à
+   esquerda, enquanto o resto do app centraliza (CLAUDE.md §3).
+
+   O seletor repete os CLONES de propósito: com `scrollX` o DataTables desenha
+   o cabeçalho numa tabela IRMÃ e REMOVE o id dela, então uma regra presa ao id
+   (ou só a `table.dt-acc`) não alcança justamente o cabeçalho que se vê — o
+   corpo ficaria centralizado e o header não, que é o desencontro que a §3
+   descreve.
+
+   O `!important` no `th` é o mesmo cinto de segurança do resto do app: o
+   `.dataTable thead th` do DataTables alinha à esquerda com a mesma
+   especificidade, e quem vence aí é a ordem de carga — que muda conforme a
+   página inclua o plugin antes ou depois do `extra_css`. */
+table.dt-acc thead th,
+.dt-scroll-head thead th,
+.dt-scroll-headInner thead th,
+.dataTables_scrollHeadInner thead th {
+    text-align: center !important;
+    vertical-align: middle !important;
+}
+table.dt-acc tbody td {
+    text-align: center;
+    vertical-align: middle;
+}
+
+
 .dataTables_wrapper .dataTables_info { font-size:.76rem; color:var(--acc-faint); padding-top:.5rem; }
 .dataTables_wrapper .dataTables_paginate .paginate_button { font-size:.78rem; }
 

@@ -15,6 +15,27 @@
    [data-bs-theme] (o atributo que o toggle de tema escreve no <html>) e não nas
    classes .logo-light/.logo-dark do layout, que reagem também a data-menu-color. */
 #tk-page .tk-agent-logo { width: 22px; height: 22px; object-fit: contain; }
+
+/* Cabeçalho e valores centralizados, como no resto do app (CLAUDE.md §3). A
+   classe `table-centered` do markup vem do tema comprado e NÃO existe em CSS
+   nenhum — não centralizava coisa alguma. O `!important` do `th` é porque a
+   regra do DataTables (`table.dataTable thead th`, (0,1,3)) alinha à esquerda
+   com especificidade maior que a daqui; e os clones entram no seletor porque
+   com scrollX o cabeçalho que se vê é uma tabela irmã, de onde o plugin REMOVE
+   o id. */
+#tk-table thead th,
+.dt-scroll-head thead th,
+.dt-scroll-headInner thead th,
+.dataTables_scrollHeadInner thead th {
+    font-size: .7rem;
+    vertical-align: middle !important;
+    text-align: center !important;
+}
+#tk-table tbody td {
+    font-size: .8rem;
+    vertical-align: middle;
+    text-align: center;
+}
 #tk-page .tk-agent-logo--dark  { display: none; }
 [data-bs-theme=dark] #tk-page .tk-agent-logo--dark  { display: inline-block; }
 [data-bs-theme=dark] #tk-page .tk-agent-logo--light { display: none; }

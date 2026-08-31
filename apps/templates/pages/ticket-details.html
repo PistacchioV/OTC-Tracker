@@ -16,6 +16,37 @@
 [data-bs-theme=dark] #tkd-page .tkd-agent-logo--dark  { display: inline-block; }
 [data-bs-theme=dark] #tkd-page .tkd-agent-logo--light { display: none; }
 
+/* ── Due Date ──────────────────────────────────────────────────────────────
+   O campo que se VÊ não é o `#tkd-due-inp`: é o `altInput` que o flatpickr cria
+   ao lado dele (o original fica escondido, com o valor em ISO). Esse elemento
+   novo herda a CLASSE do original — o `altInputClass` a copia — e NÃO o
+   `style=` dele. A largura estava justamente no inline style, então ela ficava
+   no campo escondido e o visível esticava a coluna inteira: era o campo
+   "gigante". Aqui ela é classe, e alcança os dois.
+
+   O ícone tem a mesma origem. O campo já foi um `type="date"`, que desenha o
+   calendário NATIVO — trocado pelo flatpickr (o nativo escreve no locale do
+   SISTEMA, e no Windows do JP isso é mm/dd/yyyy, §7), e o flatpickr não desenha
+   ícone nenhum. Ele vai como background do próprio input, então clicar nele é
+   clicar no campo e o picker abre — um `<i>` sobreposto exigiria envolver um
+   elemento que o flatpickr cria em tempo de execução. SVG embutido, e não um
+   arquivo: a instância do JPM roda sem internet.
+
+   `input.` na frente é o que ganha do `.form-control` do tema, que também
+   declara `background-image` e vem depois no `head-css` (§7). */
+#tkd-page input.tkd-due-field {
+    max-width: 190px;
+    padding-right: 2rem;
+    background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%2724%27%20height%3D%2724%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27%236c757d%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Crect%20x%3D%274%27%20y%3D%275%27%20width%3D%2716%27%20height%3D%2716%27%20rx%3D%272%27%2F%3E%3Cpath%20d%3D%27M16%203v4M8%203v4M4%2011h16%27%2F%3E%3C%2Fsvg%3E");
+    background-repeat: no-repeat;
+    background-position: right .55rem center;
+    background-size: 1rem 1rem;
+}
+/* Cor só de tema claro precisa do par escuro, senão a marca some no escuro. */
+[data-bs-theme=dark] #tkd-page input.tkd-due-field {
+    background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%2724%27%20height%3D%2724%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27%239aa4b2%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Crect%20x%3D%274%27%20y%3D%275%27%20width%3D%2716%27%20height%3D%2716%27%20rx%3D%272%27%2F%3E%3Cpath%20d%3D%27M16%203v4M8%203v4M4%2011h16%27%2F%3E%3C%2Fsvg%3E");
+}
+
 #tkd-page .tkd-desc { white-space: pre-wrap; }
 #tkd-page .tkd-empty { padding: 56px 16px; text-align: center; color: var(--ins-secondary-color); }
 #tkd-page .timeline-content .tkd-evdetail { white-space: pre-wrap; }
@@ -92,9 +123,9 @@
                         <div class="col-md-4">
                             <h6 class="tkd-label" data-lang="tkd-due">Due Date</h6>
                             <!-- Em branco até o master preencher (regra do usuário). -->
-                            <input class="form-control form-control-sm d-none" id="tkd-due-inp"
-                                   type="text" placeholder="dd/mm/aaaa" autocomplete="off"
-                                   style="max-width:200px;" />
+                            <input class="form-control form-control-sm tkd-due-field d-none"
+                                   id="tkd-due-inp"
+                                   type="text" placeholder="dd/mm/aaaa" autocomplete="off" />
                             <p class="mb-0 d-none" id="tkd-due-txt"></p>
                         </div>
                     </div>

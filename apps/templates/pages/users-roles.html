@@ -13,6 +13,16 @@
     overflow: hidden;
     font-size: 0.8rem;
     vertical-align: middle;
+    text-align: center;
+}
+/* Cabeçalho centralizado, como no resto do app (CLAUDE.md §3). A tabela já
+   trazia a regra do `td` — sem o alinhamento — e nenhuma do `th`: a classe
+   `table-centered` do markup é do tema comprado e NÃO existe em CSS nenhum,
+   então ela não centralizava nada. */
+#data-table thead th {
+    font-size: 0.7rem;
+    vertical-align: middle;
+    text-align: center;
 }
 
 /* Role summary cards — hover lift + Apple press micro-interaction */
