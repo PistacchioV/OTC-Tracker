@@ -5,6 +5,13 @@ Assinar e receber sao perguntas diferentes. Assinar e um ATO e e de uma mesa so
 e acompanhar, e o Back Office acompanha a esteira inteira -- foi ele que montou o
 documento e e para ele que o reject volta.
 
+Desde 31/08/2026 o ADMIN e lido como BO (`_MC_ROLE_ALIAS`): o `Role` do cadastro
+e UMA coluna, entao quem administra acessos nao podia tambem sentar na mesa de
+OTC Ops. O apelido vale nas DUAS perguntas -- validar e ser avisado --, e e por
+isso que ele e DERIVADO e nao escrito a mao nas quatro linhas com 'BO': ADMIN
+que assina o Pending OTC sem receber o aviso dele e o meio-caminho que nao da
+erro nenhum.
+
 O que este script prende:
 
   1. a etapa que decide o destino e o ESTADO DEPOIS do carimbo
@@ -53,18 +60,27 @@ check('   e `Ok` NAO tem (o fim da esteira vai para todos)',
 
 print('\n== 2. quem recebe cada etapa ==')
 check('Pending MO avisa MO e BO', set(R._MC_STAGE_NOTIFY_ROLES[M.PENDING_MO]),
-      {'MO', 'BO', 'MASTER'})
+      {'MO', 'BO', 'ADMIN', 'MASTER'})
 check('   e nao o FO', 'FO' in R._MC_STAGE_NOTIFY_ROLES[M.PENDING_MO], False)
 check('Pending FO avisa FO e BO', set(R._MC_STAGE_NOTIFY_ROLES[M.PENDING_FO]),
-      {'FO', 'BO', 'MASTER'})
+      {'FO', 'BO', 'ADMIN', 'MASTER'})
 check('   e nao o MO', 'MO' in R._MC_STAGE_NOTIFY_ROLES[M.PENDING_FO], False)
 check('Pending OTC avisa so o BO', set(R._MC_STAGE_NOTIFY_ROLES[M.PENDING_OTC]),
-      {'BO', 'MASTER'})
+      {'BO', 'ADMIN', 'MASTER'})
 check('as duas mesas em paralelo avisam as duas',
-      set(R._MC_STAGE_NOTIFY_ROLES[M.PENDING_MOFO]), {'MO', 'FO', 'BO', 'MASTER'})
-# ADMIN foi deixado de fora pelo mesmo motivo que o tirou da validacao.
-check('ADMIN nao entra em nenhuma',
-      any('ADMIN' in v for v in R._MC_STAGE_NOTIFY_ROLES.values()), False)
+      set(R._MC_STAGE_NOTIFY_ROLES[M.PENDING_MOFO]),
+      {'MO', 'FO', 'BO', 'ADMIN', 'MASTER'})
+
+# O apelido e DERIVADO da tabela de mesas: ADMIN aparece exatamente onde o BO
+# aparece, nunca numa etapa a mais nem a menos. Escrito a mao, a etapa
+# acrescentada amanha sairia com a lista pela metade -- e um aviso que nao chega
+# nao levanta erro nenhum.
+check('ADMIN acompanha o BO em todas as etapas, e so onde ele esta',
+      {e for e, v in R._MC_STAGE_NOTIFY_ROLES.items() if 'ADMIN' in v},
+      {e for e, v in R._MC_STAGE_NOTIFY_ROLES.items() if 'BO' in v})
+check('   e nenhuma mesa ganhou apelido por engano',
+      {e for e, v in R._MC_STAGE_NOTIFY_ROLES.items()
+       if 'ADMIN' in v and 'BO' not in v}, set())
 
 print('\n== 3. o destino sai do ESTADO, nao da etapa assinada ==')
 # Produto sem linha no cadastro cai em OTC + MO (DEFAULT_RULE), entao o FO nao
@@ -93,26 +109,28 @@ try:
                              'VALIDADO p/ FO': '10/08/2026'})
 
     check('antes do OTC carimbar, o aviso e do BO',
-          R._mc_notify_roles([so_otc]), 'BO,MASTER')
+          R._mc_notify_roles([so_otc]), 'BO,ADMIN,MASTER')
     check('depois do OTC, as duas mesas seguintes',
-          set(R._mc_notify_roles([pos_otc]).split(',')), {'MO', 'FO', 'BO', 'MASTER'})
+          set(R._mc_notify_roles([pos_otc]).split(',')),
+          {'MO', 'FO', 'BO', 'ADMIN', 'MASTER'})
     check('com o MO ja dado, so falta o FO',
-          set(R._mc_notify_roles([pos_mo]).split(',')), {'FO', 'BO', 'MASTER'})
+          set(R._mc_notify_roles([pos_mo]).split(',')), {'FO', 'BO', 'ADMIN', 'MASTER'})
     check('   e o MO sai da lista', 'MO' in R._mc_notify_roles([pos_mo]).split(','), False)
     check('com o FO ja dado, so falta o MO',
-          set(R._mc_notify_roles([pos_fo]).split(',')), {'MO', 'BO', 'MASTER'})
+          set(R._mc_notify_roles([pos_fo]).split(',')), {'MO', 'BO', 'ADMIN', 'MASTER'})
     check('confirmacao fechada volta a avisar TODOS',
           R._mc_notify_roles([fechada]), '')
     check('validada sem enviar (FepWeb) avisa o BO',
-          R._mc_notify_roles([aguarda_envio]), 'BO,MASTER')
+          R._mc_notify_roles([aguarda_envio]), 'BO,ADMIN,MASTER')
     # Um documento cobre varias operacoes e o cadastro e por Produto x LOB: o
     # lote pode cair em etapas diferentes. Recortar pela primeira linha deixaria
     # a outra mesa sem aviso.
     check('lote em etapas diferentes une os papeis',
           set(R._mc_notify_roles([pos_mo, pos_fo]).split(',')),
-          {'MO', 'FO', 'BO', 'MASTER'})
+          {'MO', 'FO', 'BO', 'ADMIN', 'MASTER'})
     check('   e uma linha fechada no meio nao alarga o alvo',
-          set(R._mc_notify_roles([pos_mo, fechada]).split(',')), {'FO', 'BO', 'MASTER'})
+          set(R._mc_notify_roles([pos_mo, fechada]).split(',')),
+          {'FO', 'BO', 'ADMIN', 'MASTER'})
 finally:
     M._mapping_rows = _real
 
@@ -154,6 +172,51 @@ check('Pending FO e do FO', R._MC_STAGE_ROLE['FO'], 'FO')
 # alguem teria fundido as duas perguntas.
 check('assinar e receber sao mapas diferentes',
       set(R._MC_STAGE_ROLE.values()) == set(R._MC_STAGE_NOTIFY_ROLES[M.PENDING_MO]), False)
+
+print('\n== 7. e do lado do ATO: quem pode carimbar ==')
+# `_mc_can_validate` le a sessao. Trocar o `session` do routes por um dict e o
+# mesmo caminho que o check_swap_advice usa -- a platform o alcanca por
+# `routes.session`, nunca por import direto, justamente para isto funcionar.
+_sessao, _master = R.session, R._session_is_master
+try:
+    R._session_is_master = lambda: False
+
+    def pode(papel, etapa):
+        R.session = {'user_role': papel}
+        return R._mc_can_validate(etapa)
+
+    check('BO assina o Pending OTC', pode('BO', 'OTC'), True)
+    check('MO assina o Pending MO', pode('MO', 'MO'), True)
+    check('FO assina o Pending FO', pode('FO', 'FO'), True)
+
+    # O apelido: a razao desta mudanca. A pessoa era admin e o Validate do
+    # Pending OTC nao existia para ela -- o `Role` e uma coluna so.
+    check('ADMIN assina o Pending OTC (lido como BO)', pode('ADMIN', 'OTC'), True)
+    # E o alias e ESTREITO: ele desfaz a separacao entre administrar e ser Back
+    # Office, nunca a que existe entre as tres MESAS. Um admin carimbando pelo
+    # MO logo depois de montar o documento e exatamente o que a regra impede.
+    check('   mas NAO pelo MO', pode('ADMIN', 'MO'), False)
+    check('   nem pelo FO', pode('ADMIN', 'FO'), False)
+
+    check('BO nao assina pelo MO', pode('BO', 'MO'), False)
+    check('FO nao assina pelo OTC', pode('FO', 'OTC'), False)
+    check('papel vazio nao assina nada', pode('', 'OTC'), False)
+    # Papel sem mesa nao pode cair no `None` do .get() e casar com o vazio.
+    check('   e papel sem mesa tambem nao', pode('HUB', 'OTC'), False)
+    check('etapa desconhecida nao e assinavel', pode('BO', 'XPTO'), False)
+
+    R._session_is_master = lambda: True
+    check('master assina qualquer etapa',
+          [pode('', e) for e in ('OTC', 'MO', 'FO')], [True, True, True])
+
+    # A recusa nomeia a MESA, nao o apelido: quem le a mensagem precisa saber a
+    # quem pedir, e 'ADMIN' ali mandaria a pessoa para a fila errada.
+    R._session_is_master = lambda: False
+    check('a recusa nomeia a mesa que assina',
+          'BO' in R._mc_stage_denied('OTC') and 'ADMIN' not in R._mc_stage_denied('OTC'),
+          True)
+finally:
+    R.session, R._session_is_master = _sessao, _master
 
 print('\n%s' % ('TUDO OK' if not fails else 'FALHAS (%d): %r' % (len(fails), fails)))
 sys.exit(1 if fails else 0)

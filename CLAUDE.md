@@ -1930,9 +1930,42 @@ valor antigo de um papel só continuando válido (HANDOFF §231).
 **Cada etapa é assinada pela SUA mesa** (`_MC_STAGE_ROLE`): Pending OTC → papel
 `BO` (a mesa de OTC Ops é o Back Office do cadastro de papéis), Pending MO → `MO`,
 Pending FO → `FO`. É o que separa as funções — quem monta o documento não pode
-assiná-lo pela mesa seguinte. **Master é a única exceção; `ADMIN` NÃO é passe
-livre**, porque administrar acessos não é sentar na mesa. Rejeitar segue a mesma
-regra: é a outra resposta à mesma pergunta. Três camadas, e a que vale é a
+assiná-lo pela mesa seguinte. Master é a exceção de sempre, e **`ADMIN` é lido
+como `BO`** (`_MC_ROLE_ALIAS`, 31/08/2026): o `Role` do cadastro é UMA coluna, e
+sem o apelido quem administra acessos não podia também sentar na mesa de OTC Ops
+— o Validate do Pending OTC simplesmente não existia para ela. O apelido é
+**estreito de propósito**: ele desfaz a separação entre administrar e ser Back
+Office, e não a que existe entre as TRÊS MESAS — o admin assina o Pending OTC e
+**só** ele, continuando sem carimbar pelo MO ou pelo FO. Elevar o SID a master
+resolveria pela pior porta, já que o master escapa de toda restrição. E o
+apelido vale nas DUAS perguntas — assinar (`_mc_session_desk`) e ser avisado
+(`_MC_STAGE_NOTIFY_ROLES`, derivado do mesmo mapa, nunca escrito à mão):
+validar sem receber o aviso é o meio-caminho que não dá erro nenhum, porque a
+pessoa poderia carimbar e nunca saber que havia o que carimbar. Rejeitar segue a
+mesma regra: é a outra resposta à mesma pergunta.
+
+**Trocar o papel no cadastro alcança quem já está logado em até 30 s**, e isso
+é o `refresh_session_role` (um `before_request` próprio, em `platform/authz.py`).
+O `user_role` é gravado na sessão pelo `_set_session`, no login, e nada o relia:
+com *Keep me signed in* a sessão dura **30 dias**, então a pessoa promovida a
+`BO` continuava sem o botão e a despromovida continuava com ele — nos dois
+sentidos sem erro nenhum para ver. Ele é de graça: a linha do usuário já era
+lida por SID a cada 30 s para a allowlist do `Page_Access`, e o `Role` veio
+junto na mesma query. Quatro coisas o sustentam:
+
+- **`None` não mexe em nada.** Banco fora do ar, ou SID sem linha, deixa a
+  sessão como está. O fail-open da allowlist é aceitável; no papel, seria uma
+  falha de leitura deslogando a mesa da função dela. `''` **mexe** — papel vazio
+  é um papel de verdade, e é assim que se revoga;
+- **master não é tocado.** `MASTER` não é papel de banco, é o valor que o
+  `_set_session` grava para os SIDs de `_MASTER_SIDS`; sobrescrevê-lo com a
+  coluna `Role` rebaixaria o superusuário a cada request;
+- **só grava quando MUDA**, senão o cookie assinado é reemitido a cada request;
+- é um `before_request` **próprio**, e não uma carona no `enforce_page_access`:
+  aquele desiste cedo para master, `/api/*`, `/static*` e todo path fora do
+  menu — e é justamente em `/api/*` que a mesa valida a confirmação.
+
+Três camadas, e a que vale é a
 última: no Monitor o botão verde vira um de só leitura, na tela de validação
 somem os dois botões, e o endpoint devolve **403 com `stage_forbidden`**. Abrir a
 tela continua livre de propósito — esconder a confirmação faria o OTC deixar de
@@ -2321,6 +2354,30 @@ Intrag ficavam com o valor cru sempre que o notional estava na moeda fraca
   tem o bloco e as três armadilhas do espelhamento (a letra da unidade é
   descartada, o `pushd` do `.bat` mapeia o share numa letra qualquer, e versões
   diferentes precisam de prefixos diferentes).
+- **A `SECRET_KEY` é estado da MÁQUINA, não do share.** Ela assina o cookie de
+  sessão, e sem uma chave estável todo mundo é deslogado a cada restart — por
+  isso o app recusa subir em produção sem ela. Quem a criava era um passo do
+  `start-otc-tracker.bat` (`%LOCALAPPDATA%\OTC-Tracker\secret_key.txt`, ao lado
+  do `.snapshot` do requirements), e isso era invisível enquanto a mesa toda
+  usava UMA instância; com cada pessoa rodando a sua, virou um passo manual por
+  máquina — e a máquina em que ele não roda **não sobe**, com uma mensagem
+  mandando definir a chave no `.env`, que é o único lugar em que ela não está.
+  Hoje o app mantém o arquivo sozinho (`_persisted_secret_key`): faltando a
+  variável, a chave sai do disco local e é CRIADA na primeira subida, com 0600 —
+  quem lê a chave assina cookie em nome de qualquer pessoa. Isso não afrouxa a
+  exigência: o que ela impede é a chave ALEATÓRIA a cada restart, e um arquivo
+  persistido é estável do mesmo jeito. Três coisas:
+  - **`SECRET_KEY` no ambiente continua vencendo**, e é assim que várias
+    máquinas compartilham sessão. Ela é relida no `create_app` e não só no corpo
+    do `Config` — lá a leitura acontece no IMPORT, então quem importasse
+    `apps.config` antes do `load_dotenv()` do `run.py` congelaria o fallback
+    aleatório **com a chave certa no `.env` ao lado**: app subindo sem erro e
+    deslogando todo mundo a cada restart;
+  - o arquivo **nunca vai para o share** (chave comum é chave que qualquer um
+    usa para forjar sessão) nem para `%TEMP%` (Limpeza de Disco apaga, e chave
+    apagada desloga todo mundo). `OTC_SECRET_KEY_FILE` o move;
+  - **caminho ingravável volta a recusar a subida**, e agora a mensagem nomeia
+    o arquivo que ele tentou.
 - **O `config.py` é o arquivo que fica para trás.** Ele é o único que se ajusta
   à mão na instância, e `git pull` **não sobrescreve arquivo modificado**: o
   resto da árvore atualiza e ele não, deixando o checkout com dois commits

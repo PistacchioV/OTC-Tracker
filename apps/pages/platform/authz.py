@@ -137,8 +137,12 @@ def _cp_card_allowed(allowed, card_id):
 # outro processo valeria pela vida deste. Trinta segundos é o atraso máximo de
 # uma revogação vinda de fora, e é o preço de não perguntar ao share a cada
 # clique.
+#
+# A MESMA leitura carrega o `Role` (ver `_get_user_role`): é a linha do usuário,
+# a consulta já vai ao banco por SID, e uma segunda query para a coluna vizinha
+# seria o dobro do custo pela mesma ida ao share.
 _PAGE_ACCESS_TTL = 30.0
-_page_access_cache = {}                      # sid → (expira_em, (configured, urls))
+_page_access_cache = {}              # sid → (expira_em, (configured, urls, role))
 _page_access_lock = threading.Lock()
 
 
@@ -151,11 +155,10 @@ def _page_access_forget(sid=None):
             _page_access_cache.pop((sid or '').strip().upper(), None)
 
 
-def _get_page_access(sid):
-    """(configured, urls_set). configured=False → not set yet (full access);
-    configured=True → the stored allowlist (possibly empty)."""
+def _get_user_authz(sid):
+    """(configured, urls_set, role) da linha do usuário, pelo cache por SID."""
     if not sid:
-        return (False, set())
+        return (False, set(), None)
     chave = sid.strip().upper()
     agora = time.time()
     with _page_access_lock:
@@ -164,28 +167,62 @@ def _get_page_access(sid):
         # Devolve uma CÓPIA do conjunto: o chamador não pode alterar o cache
         # sem querer, e um `allowed.add(...)` numa rota viraria concessão
         # permanente para o processo inteiro.
-        configurado, urls = em_cache[1]
-        return (configurado, set(urls))
-    resposta = _read_page_access(sid)
+        configurado, urls, papel = em_cache[1]
+        return (configurado, set(urls), papel)
+    resposta = _read_user_authz(sid)
     with _page_access_lock:
         _page_access_cache[chave] = (agora + _PAGE_ACCESS_TTL, resposta)
-    return (resposta[0], set(resposta[1]))
+    return (resposta[0], set(resposta[1]), resposta[2])
+
+
+def _get_page_access(sid):
+    """(configured, urls_set). configured=False → not set yet (full access);
+    configured=True → the stored allowlist (possibly empty)."""
+    configurado, urls, _papel = _get_user_authz(sid)
+    return (configurado, urls)
+
+
+def _get_user_role(sid):
+    """O papel COMO ESTÁ NO CADASTRO, ou `None` quando não deu para ler.
+
+    A distinção é a razão de a função existir: `''` é um papel de verdade (o
+    usuário sem papel atribuído) e `None` é "não perguntei / não respondeu". O
+    `_read_user_authz` já engole a exceção e devolve *não configurado* para a
+    allowlist, que é um fail-open aceitável ali — para o PAPEL o mesmo fail-open
+    seria rebaixar todo mundo a cada soluço do banco.
+    """
+    return _get_user_authz(sid)[2]
 
 
 def _read_page_access(sid):
     """A allowlist como está no banco, sem cache."""
+    configurado, urls, _papel = _read_user_authz(sid)
+    return (configurado, urls)
+
+
+def _read_user_authz(sid):
+    """A linha do usuário como está no banco, sem cache: (configured, urls, role)."""
     from apps.pages import routes
     try:
         conn = routes.get_db_connection(readonly=True)
         try:
-            row = conn.execute("SELECT Page_Access FROM users WHERE SID = ?", [sid]).fetchone()
+            row = conn.execute("SELECT Page_Access, Role FROM users WHERE SID = ?",
+                               [sid]).fetchone()
         finally:
             conn.close()
     except Exception:
-        return (False, set())
-    raw = ((row[0] if row else '') or '').strip()
+        # Falhou a leitura: a allowlist cai em *não configurada* (acesso total,
+        # o fail-open que já existia) e o papel vira `None` — "não sei", que é o
+        # que impede o `refresh_session_role` de rebaixar quem já está logado.
+        return (False, set(), None)
+    if not row:
+        # SID sem linha: não há papel a afirmar. Também `None`, e não `''` — o
+        # cadastro é que responde por papel, e ele não respondeu por este.
+        return (False, set(), None)
+    papel = ((row[1] if len(row) > 1 else '') or '').strip().upper()
+    raw = (row[0] or '').strip()
     if not raw:
-        return (False, set())
+        return (False, set(), papel)
     try:
         arr = json.loads(raw)
         if isinstance(arr, list):
@@ -195,10 +232,50 @@ def _read_page_access(sid):
             # O item CGD virou a seção Onboarding, e o mesmo vale para ele.
             _renomeadas = {'/file-interface': '/file-interpreter',
                            '/cgd': '/onboarding'}
-            return (True, set(_renomeadas.get(str(u), str(u)) for u in arr))
+            return (True, set(_renomeadas.get(str(u), str(u)) for u in arr), papel)
     except Exception:
         pass
-    return (False, set())
+    return (False, set(), papel)
+
+
+def refresh_session_role():
+    """Faz o papel do CADASTRO alcançar quem já está logado.
+
+    O `user_role` é gravado na sessão pelo `_set_session`, no login, e nada o
+    relia depois: com *Keep me signed in* a sessão dura 30 dias, então quem
+    fosse promovido a `BO` continuava sem o botão da mesa e quem fosse
+    despromovido continuava com ele. Nos dois sentidos não há erro nenhum para
+    ver — a tela simplesmente se comporta pelo papel de semanas atrás.
+
+    Ela é de graça: a linha do usuário já é lida por SID a cada 30 s para a
+    allowlist do `Page_Access`, e o `Role` veio junto na mesma query.
+
+    Três coisas que sustentam isso:
+
+      * **master não é tocado.** `MASTER` não é papel de banco — é o valor que o
+        `_set_session` grava para os SIDs de `_MASTER_SIDS`. Sobrescrevê-lo com
+        a coluna `Role` rebaixaria o superusuário a cada request;
+      * **`None` não mexe em nada.** Banco fora do ar, ou SID sem linha, deixa a
+        sessão como está. O contrário seria uma falha de leitura deslogando a
+        mesa da função dela;
+      * **só grava quando MUDA.** Escrever na sessão reemite o cookie assinado a
+        cada request, e a mudança de papel é rara.
+    """
+    from apps.pages import routes
+    if not routes.session.get('authenticated'):
+        return
+    if _session_is_master():
+        return
+    sid = (routes.session.get('user_sid') or '').strip()
+    if not sid:
+        return
+    novo = _get_user_role(sid)
+    if novo is None:
+        return
+    if (routes.session.get('user_role') or '').strip().upper() != novo:
+        routes.log.info('[authz] papel de %s atualizado pelo cadastro: %r → %r',
+                        sid, routes.session.get('user_role'), novo)
+        routes.session['user_role'] = novo
 
 
 def _set_page_access(sid, urls):

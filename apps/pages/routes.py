@@ -351,12 +351,27 @@ _cp_card_allowed = _pf_authz._cp_card_allowed
 _page_access_forget = _pf_authz._page_access_forget
 _get_page_access = _pf_authz._get_page_access
 _read_page_access = _pf_authz._read_page_access
+_get_user_authz = _pf_authz._get_user_authz
+_read_user_authz = _pf_authz._read_user_authz
+_get_user_role = _pf_authz._get_user_role
 _set_page_access = _pf_authz._set_page_access
 _MASTER_SIDS = _pf_authz._MASTER_SIDS
 _session_is_master = _pf_authz._session_is_master
 _session_is_admin = _pf_authz._session_is_admin
 _safe_landing = _pf_authz._safe_landing
 _user_can_access_page = _pf_authz._user_can_access_page
+
+
+@blueprint.before_request
+def refresh_session_role():
+    """O papel do cadastro alcança quem já está logado (ver `platform/authz.py`).
+
+    É um `before_request` PRÓPRIO, e não uma carona no `enforce_page_access`:
+    aquele desiste cedo para master, `/api/*`, `/static*` e todo path fora do
+    menu — e é exatamente em `/api/*` que a mesa valida a confirmação. Preso
+    ali, o papel só se atualizaria ao navegar por uma página do menu.
+    """
+    _pf_authz.refresh_session_role()
 
 
 @blueprint.before_request
