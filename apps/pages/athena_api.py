@@ -247,6 +247,26 @@ def build_session():
         session.verify = ca_bundle
     if HttpNegotiateAuth is not None:
         session.auth = HttpNegotiateAuth()
+    elif os.name == 'nt':
+        # No WINDOWS a ausência do pacote é uma falha, não uma degradação: sem o
+        # handler Negotiate a sessão sai SEM autenticação e o ADFS responde
+        # `401 Unauthorized` no endpoint `/adfs/oauth2/authorize/wia` — o de
+        # Windows Integrated Authentication. Esse 401 chega à tela como uma URL
+        # de duas mil letras que não menciona pacote nenhum, e nenhuma chamada
+        # à Athena pode dar certo enquanto ele não for instalado.
+        #
+        # Seguir em frente aqui é trocar uma mensagem que resolve o problema por
+        # outra que só descreve o sintoma. Fora do Windows não se levanta nada:
+        # o pacote é de SSPI e não existe no macOS/Linux, onde a Athena já é
+        # inalcançável de qualquer modo.
+        raise RuntimeError(
+            "requests-negotiate-sspi não está instalado, e sem ele a sessão vai "
+            "para a Athena sem SSO Kerberos — o ADFS responde 401 em "
+            "/adfs/oauth2/authorize/wia. Instale no venv desta máquina: "
+            "pip install requests-negotiate-sspi  (ele já está no "
+            "requirements.txt com marcador sys_platform == \"win32\", então "
+            "reinstalar os requirements também resolve)."
+        )
     # A Windows browser UA is required so ADFS negotiates Kerberos instead of
     # returning an HTML Forms-login page.
     session.headers.update({"User-Agent": WIA_USER_AGENT})

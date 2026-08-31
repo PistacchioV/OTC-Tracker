@@ -53,8 +53,16 @@ rapidfuzz>=3.0            # preferred, no C-extension build headaches
 # Degrades gracefully when absent (non-Windows / no Outlook).
 pywin32>=306; sys_platform == "win32"
 
-# Athena API Kerberos SSO - Windows-only, install on the JPM instance:
-# requests-negotiate-sspi>=0.5.2
+# Athena API Kerberos SSO. Windows-only, e com MARCADOR de plataforma pelo mesmo
+# motivo do pywin32 acima: o pip resolve sozinho — instala na instancia do JPM e
+# pula no macOS/Linux, onde o pacote nem existe.
+#
+# Ficou COMENTADO por um tempo, com um "instale na instancia" ao lado, e o passo
+# manual e exatamente o que se esquece num venv novo. Sem ele o
+# `athena_api.build_session()` sai sem a autenticacao Negotiate e o ADFS responde
+# 401 no endpoint `/adfs/oauth2/authorize/wia` — um erro que nao fala de pacote
+# nenhum e custa uma tarde para ligar a uma dependencia ausente.
+requests-negotiate-sspi>=0.5.2; sys_platform == "win32"
 
 # Relational database drivers - only needed when DB_ENGINE is set
 # (falls back to SQLite otherwise). Uncomment the one you use:
