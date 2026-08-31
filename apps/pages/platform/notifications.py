@@ -317,6 +317,26 @@ def _notif_avanca_sequencia(conn):
         log.warning('[notif-db] avanço da sequência falhou:\n%s', traceback.format_exc())
 
 
+# As assinaturas de "o arquivo tem outro dono", nos dois sistemas. O Windows
+# responde com a frase do próprio SO; o Linux e o macOS, com a do lock do
+# DuckDB. `already open` cobre o conflito DENTRO do processo, que é o mesmo
+# problema por outro caminho (o DuckDB guarda uma instância por arquivo e
+# recusa a segunda com outra configuração).
+_NOTIF_EM_USO = (
+    'used by another process',
+    'being used by another',
+    'could not set lock',
+    'conflicting lock',
+    'already open',
+)
+
+
+def _notif_arquivo_em_uso(exc):
+    """A falha de abertura foi disputa pelo arquivo, ou outra coisa?"""
+    texto = str(exc).lower()
+    return any(marca in texto for marca in _NOTIF_EM_USO)
+
+
 def _notif_schema_pronto():
     """As duas tabelas já existem? A pergunta é de LEITURA, e é ela que evita a
     abertura read-write no caso normal — que é a esmagadora maioria das vezes.
@@ -333,17 +353,37 @@ def _notif_schema_pronto():
     curso não custa nada — e é a resposta certa, porque uma leitura suja aqui
     decidiria criar schema por cima de um banco que já o tem.
 
-    Qualquer falha responde **False** de propósito, inclusive o arquivo que não
-    existe: "não consegui ver" e "não está lá" levam ao mesmo lugar, que é o
-    caminho de criação — e ele é idempotente (`CREATE TABLE IF NOT EXISTS`).
+    Três respostas, e a terceira foi acrescentada por um erro visto em produção:
+
+      True   as duas tabelas estão lá — nada a fazer.
+      False  consegui olhar (ou o arquivo não existe) e falta tabela — criar.
+      None   NÃO consegui olhar porque o arquivo está EM USO por outro processo.
+
+    O `None` existe porque "não consegui ver" e "não está lá" NÃO levam ao mesmo
+    lugar, embora a primeira versão os colapsasse em `False`. Se o arquivo está
+    em uso, ele existe e tem dono: abrir em read-write ali não pode dar certo — o
+    DuckDB recusa enquanto qualquer outro handle estiver aberto — e a tentativa
+    ainda acrescenta um concorrente disputando o mesmo arquivo no share. O
+    resultado observado foi uma tempestade: a sonda falha, o ensure tenta
+    escrever, falha, arma a espera de 5 min, e no meio disso todo poll do sino
+    esbarra no mesmo arquivo e devolve o sino vazio.
+
+    O arquivo que NÃO EXISTE continua em `False`: ali criar é exatamente o
+    certo, e o caminho é idempotente (`CREATE TABLE IF NOT EXISTS`).
+
+    A classificação é por MENSAGEM porque o DuckDB não dá um tipo próprio para
+    isso, e ela é conservadora: o que não casar com uma assinatura conhecida
+    volta a ser `False`, que é o comportamento de sempre. Errar para `False`
+    custa uma tentativa de escrita; errar para `None` deixaria um banco sem
+    schema para trás.
     """
     from apps.pages import routes
     try:
         with routes.duckdb_read(routes.NOTIF_DB_PATH) as con:
             achadas = {r[0] for r in con.execute(
                 "SELECT table_name FROM information_schema.tables").fetchall()}
-    except Exception:                                       # noqa: BLE001
-        return False
+    except Exception as exc:                                # noqa: BLE001
+        return None if _notif_arquivo_em_uso(exc) else False
     return {'notifications', 'push_subscriptions'} <= achadas
 
 
@@ -364,8 +404,21 @@ def _ensure_notif_db():
         if time.monotonic() < _notif_db_retry_at:
             return
         # A sonda primeiro: com o schema no lugar não se abre nada para escrita.
-        if _notif_schema_pronto():
+        pronto = _notif_schema_pronto()
+        if pronto:
             _notif_db_done = True
+            return
+        if pronto is None:
+            # O arquivo está EM USO por outro processo — a outra instância que
+            # enxerga o mesmo share, ou uma gravação em curso. Ele existe e tem
+            # dono, então não há schema a criar: a abertura read-write abaixo
+            # não pode dar certo, e tentá-la só acrescenta mais um concorrente
+            # disputando o mesmo arquivo. Espera e tenta depois, sem marcar o
+            # banco como pronto — pode faltar schema mesmo, e a resposta a essa
+            # pergunta é a sonda da próxima rodada, não um palpite agora.
+            _notif_db_retry_at = time.monotonic() + _NOTIF_DB_RETRY_SECONDS
+            log.warning('[notif-db] banco em uso por outro processo; '
+                        'nova tentativa em %ds', _NOTIF_DB_RETRY_SECONDS)
             return
         # O `try` começa ANTES do primeiro `duckdb_write`, e é onde estava o
         # buraco: quem falhava era a ABERTURA (o arquivo em uso por outro

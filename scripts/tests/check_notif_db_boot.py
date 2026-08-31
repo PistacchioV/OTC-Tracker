@@ -169,6 +169,44 @@ _write_falha[0] = False
 NP._notif_db_done = True
 
 
+# ── 4b. arquivo EM USO nao vira tentativa de escrita ────────────────────────
+# A sonda tem tres respostas, e a terceira e a que veio de um erro de producao:
+# "nao consegui olhar porque o arquivo esta em uso". Colapsada em False, ela
+# mandava o ensure abrir o banco em READ-WRITE — que nao pode dar certo (o
+# DuckDB recusa enquanto houver outro handle) e ainda poe mais um concorrente
+# disputando o mesmo arquivo no share, no exato momento em que ele ja esta
+# disputado. O poll do sino esbarrava no mesmo arquivo e devolvia vazio.
+NP._notif_db_done = False
+NP._notif_db_retry_at = 0.0
+_sonda = NP._notif_schema_pronto
+NP._notif_schema_pronto = lambda: None            # em uso: nao deu para olhar
+zera()
+try:
+    R._ensure_notif_db()
+    subiu = False
+except Exception:
+    subiu = True
+check('arquivo em uso NAO abre para escrita', contas['write'], 0)
+check('e nao relanca (nao ha o que o chamador conserte)', subiu, False)
+check('arma a espera', NP._notif_db_retry_at > R.time.monotonic(), True)
+check('e NAO marca como pronto (pode faltar schema mesmo)', NP._notif_db_done, False)
+
+# a classificacao e por mensagem, e conservadora: o que nao casar volta a False
+check('classifica a frase do Windows',
+      NP._notif_arquivo_em_uso(Exception(
+          'IO Error: Cannot open file "x.db": The process cannot access the '
+          'file because it is being used by another process.')), True)
+check('classifica o lock do DuckDB no POSIX',
+      NP._notif_arquivo_em_uso(Exception(
+          'IO Error: Could not set lock on file "x.db": Resource temporarily unavailable')), True)
+check('nao confunde com outra falha de IO',
+      NP._notif_arquivo_em_uso(Exception('IO Error: No such file or directory')), False)
+
+NP._notif_schema_pronto = _sonda
+NP._notif_db_retry_at = 0.0
+NP._notif_db_done = True
+
+
 # ── 5. o sino que nao abre devolve vazio, nunca 500 ─────────────────────────
 _gnc = R.get_notif_connection
 
