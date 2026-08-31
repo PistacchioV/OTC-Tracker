@@ -566,6 +566,36 @@ def _mc_flush_email_subjects(pares):
 # mesa de OTC Ops, que no cadastro de papéis é o Back Office.
 _MC_STAGE_ROLE = {'OTC': 'BO', 'MO': 'MO', 'FO': 'FO'}
 
+# ADMIN conta como BO (decisão da mesa, 31/08/2026). O `Role` do cadastro é UMA
+# coluna, então quem administra acessos não podia também sentar na mesa de OTC
+# Ops: a pessoa era admin e o Validate do Pending OTC simplesmente não existia
+# para ela. Elevar o SID a master resolveria pela pior porta — o master escapa
+# de TODA restrição e passaria a assinar pelo MO e pelo FO também.
+#
+# O alias é a resposta estreita: ADMIN é lido como BO, e BO assina só o Pending
+# OTC. A segregação entre as três mesas continua de pé — o que caiu foi a
+# separação entre administrar e ser Back Office, que é a que a mesa não quis.
+#
+# Ele mora aqui em cima porque decide as DUAS perguntas da esteira: quem assina
+# (`_mc_session_desk`) e quem recebe o aviso (`_MC_STAGE_NOTIFY_ROLES`, logo
+# abaixo). Deixar o ADMIN validar sem avisá-lo é o meio-caminho que não dá erro
+# nenhum: ele poderia carimbar o Pending OTC e nunca saber que havia o que
+# carimbar.
+_MC_ROLE_ALIAS = {'ADMIN': 'BO'}
+
+
+def _mc_session_desk():
+    """A mesa da sessão, já com os apelidos de `_MC_ROLE_ALIAS` resolvidos."""
+    from apps.pages import routes
+    papel = (routes.session.get('user_role') or '').strip().upper()
+    return _MC_ROLE_ALIAS.get(papel, papel)
+
+
+def _mc_alias_de(papel):
+    """Os papéis que são lidos como `papel` — ('BO',) → ('BO', 'ADMIN')."""
+    return (papel,) + tuple(a for a, real in sorted(_MC_ROLE_ALIAS.items())
+                            if real == papel)
+
 # Quem RECEBE o aviso quando a confirmação cai em cada etapa. Não é a mesma
 # pergunta de quem ASSINA (`_MC_STAGE_ROLE`): assinar é um ato, e é de uma mesa
 # só; ver é acompanhar, e o Back Office acompanha a esteira inteira — foi ele que
@@ -575,15 +605,21 @@ _MC_STAGE_ROLE = {'OTC': 'BO', 'MO': 'MO', 'FO': 'FO'}
 # de `_MASTER_SIDS` e o master escapa de toda restrição (§5). Sem ele na lista, o
 # superusuário perderia a esteira de vista — e em silêncio, que é o pior jeito.
 #
-# `ADMIN` NÃO entra: administrar acessos não é sentar na mesa, e foi o mesmo
-# raciocínio que o tirou da validação. Se a mesa quiser o admin vendo tudo, é
-# acrescentar 'ADMIN' aqui — uma linha, não uma regra nova.
+# `ADMIN` entra onde o `BO` entra, pelo apelido de `_MC_ROLE_ALIAS` — e pela
+# mesma razão que o deixou assinar: o `Role` do cadastro é uma coluna só.
+#
 # As chaves são os rótulos de `manual_conf.PENDING_*`. Escritos por extenso
 # porque o módulo é importado preguiçosamente (ele puxa os dois DuckDB da
 # esteira) e um dict de módulo não pode esperar por isso; `check_mc_notify.py`
 # prende os quatro contra as constantes, para o rótulo não poder mudar de um lado
 # só — se mudasse, a etapa cairia no `else` e o aviso voltaria a ir para todos.
-_MC_STAGE_NOTIFY_ROLES = {
+#
+# A tabela é escrita com as MESAS, e o apelido entra por DERIVAÇÃO: escrever
+# 'ADMIN' à mão nas quatro linhas que têm 'BO' faria dele um segundo cadastro da
+# mesma decisão, e a etapa acrescentada amanhã sairia com a lista pela metade —
+# um aviso que não chega não levanta erro nenhum.
+_MC_STAGE_NOTIFY_ROLES = {etapa: sum((_mc_alias_de(p) for p in papeis), ())
+                          for etapa, papeis in {
     'Pending OTC': ('BO', 'MASTER'),
     'Pending MO': ('MO', 'BO', 'MASTER'),
     'Pending FO': ('FO', 'BO', 'MASTER'),
@@ -593,7 +629,7 @@ _MC_STAGE_NOTIFY_ROLES = {
     # do jurídico e quem envia o documento pelo FepWeb.
     'Pending Legal': ('BO', 'MASTER'),
     'Pending FepWeb': ('BO', 'MASTER'),
-}
+}.items()}
 
 
 def _mc_notify_roles(rows):
@@ -630,15 +666,15 @@ def _mc_notify_roles(rows):
 def _mc_can_validate(stage):
     """A sessão pode validar/rejeitar esta etapa?
 
-    Master passa (§5: é o único que escapa de toda restrição). **ADMIN não é
-    passe livre** — administrar acessos não é sentar na mesa, e um admin
-    assinando pelo MO desfaz a segregação que esta regra existe para garantir.
+    Master passa (§5: é o único que escapa de toda restrição). O ADMIN passa
+    pelo apelido de `_MC_ROLE_ALIAS`, que o lê como BO — e por isso assina o
+    Pending OTC e **só** ele: continua sem poder carimbar pelo MO ou pelo FO,
+    que é a segregação entre as três mesas.
     """
     from apps.pages import routes
     if routes._session_is_master():
         return True
-    return ((routes.session.get('user_role') or '').strip().upper()
-            == _MC_STAGE_ROLE.get(str(stage or '').strip().upper()))
+    return _mc_session_desk() == _MC_STAGE_ROLE.get(str(stage or '').strip().upper())
 
 
 def _mc_stage_denied(stage):

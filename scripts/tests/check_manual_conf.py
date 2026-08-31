@@ -750,11 +750,19 @@ def _como(papel):
 # A matriz cobre os TRES positivos e os cruzamentos: so provar o 403 deixaria
 # passar uma regra que nega tudo, e so provar o 200 deixaria passar uma que
 # libera tudo.
+#
+# O ADMIN entra como QUARTO positivo desde 31/08/2026 (`_MC_ROLE_ALIAS`): ele e
+# lido como BO, porque o `Role` do cadastro e uma coluna so e quem administra
+# acessos nao podia tambem sentar na mesa de OTC Ops. As duas linhas de 403
+# dele sao o que sobra da regra, e sao as que importam -- o apelido desfaz a
+# separacao entre administrar e ser Back Office, nunca a que existe entre as
+# tres MESAS.
 for _papel, _etapa, _esperado in (('BO', 'OTC', 200), ('MO', 'MO', 200), ('FO', 'FO', 200),
+                                  ('ADMIN', 'OTC', 200),
                                   ('BO', 'MO', 403), ('BO', 'FO', 403),
                                   ('MO', 'OTC', 403), ('MO', 'FO', 403),
                                   ('FO', 'OTC', 403), ('FO', 'MO', 403),
-                                  ('ADMIN', 'OTC', 403), ('ADMIN', 'MO', 403),
+                                  ('ADMIN', 'MO', 403),
                                   ('ADMIN', 'FO', 403), ('HUB', 'FO', 403)):
     _como(_papel)
     check('%-5s não assina o Pending %s' % (_papel, _etapa) if _esperado == 403

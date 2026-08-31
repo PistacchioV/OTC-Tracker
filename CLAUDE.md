@@ -1930,9 +1930,27 @@ valor antigo de um papel só continuando válido (HANDOFF §231).
 **Cada etapa é assinada pela SUA mesa** (`_MC_STAGE_ROLE`): Pending OTC → papel
 `BO` (a mesa de OTC Ops é o Back Office do cadastro de papéis), Pending MO → `MO`,
 Pending FO → `FO`. É o que separa as funções — quem monta o documento não pode
-assiná-lo pela mesa seguinte. **Master é a única exceção; `ADMIN` NÃO é passe
-livre**, porque administrar acessos não é sentar na mesa. Rejeitar segue a mesma
-regra: é a outra resposta à mesma pergunta. Três camadas, e a que vale é a
+assiná-lo pela mesa seguinte. Master é a exceção de sempre, e **`ADMIN` é lido
+como `BO`** (`_MC_ROLE_ALIAS`, 31/08/2026): o `Role` do cadastro é UMA coluna, e
+sem o apelido quem administra acessos não podia também sentar na mesa de OTC Ops
+— o Validate do Pending OTC simplesmente não existia para ela. O apelido é
+**estreito de propósito**: ele desfaz a separação entre administrar e ser Back
+Office, e não a que existe entre as TRÊS MESAS — o admin assina o Pending OTC e
+**só** ele, continuando sem carimbar pelo MO ou pelo FO. Elevar o SID a master
+resolveria pela pior porta, já que o master escapa de toda restrição. E o
+apelido vale nas DUAS perguntas — assinar (`_mc_session_desk`) e ser avisado
+(`_MC_STAGE_NOTIFY_ROLES`, derivado do mesmo mapa, nunca escrito à mão):
+validar sem receber o aviso é o meio-caminho que não dá erro nenhum, porque a
+pessoa poderia carimbar e nunca saber que havia o que carimbar. Rejeitar segue a
+mesma regra: é a outra resposta à mesma pergunta.
+
+**Trocar o papel no cadastro NÃO alcança quem já está logado.** O `user_role`
+é gravado na sessão pelo `_set_session`, só no login, e com *Keep me signed in*
+a sessão dura **30 dias** — a pessoa promovida a `BO` continua sem o botão, e a
+despromovida continua com ele. Quem muda um papel tem de pedir logout/login;
+não há erro nenhum para ver.
+
+Três camadas, e a que vale é a
 última: no Monitor o botão verde vira um de só leitura, na tela de validação
 somem os dois botões, e o endpoint devolve **403 com `stage_forbidden`**. Abrir a
 tela continua livre de propósito — esconder a confirmação faria o OTC deixar de
