@@ -2354,6 +2354,30 @@ Intrag ficavam com o valor cru sempre que o notional estava na moeda fraca
   tem o bloco e as três armadilhas do espelhamento (a letra da unidade é
   descartada, o `pushd` do `.bat` mapeia o share numa letra qualquer, e versões
   diferentes precisam de prefixos diferentes).
+- **A `SECRET_KEY` é estado da MÁQUINA, não do share.** Ela assina o cookie de
+  sessão, e sem uma chave estável todo mundo é deslogado a cada restart — por
+  isso o app recusa subir em produção sem ela. Quem a criava era um passo do
+  `start-otc-tracker.bat` (`%LOCALAPPDATA%\OTC-Tracker\secret_key.txt`, ao lado
+  do `.snapshot` do requirements), e isso era invisível enquanto a mesa toda
+  usava UMA instância; com cada pessoa rodando a sua, virou um passo manual por
+  máquina — e a máquina em que ele não roda **não sobe**, com uma mensagem
+  mandando definir a chave no `.env`, que é o único lugar em que ela não está.
+  Hoje o app mantém o arquivo sozinho (`_persisted_secret_key`): faltando a
+  variável, a chave sai do disco local e é CRIADA na primeira subida, com 0600 —
+  quem lê a chave assina cookie em nome de qualquer pessoa. Isso não afrouxa a
+  exigência: o que ela impede é a chave ALEATÓRIA a cada restart, e um arquivo
+  persistido é estável do mesmo jeito. Três coisas:
+  - **`SECRET_KEY` no ambiente continua vencendo**, e é assim que várias
+    máquinas compartilham sessão. Ela é relida no `create_app` e não só no corpo
+    do `Config` — lá a leitura acontece no IMPORT, então quem importasse
+    `apps.config` antes do `load_dotenv()` do `run.py` congelaria o fallback
+    aleatório **com a chave certa no `.env` ao lado**: app subindo sem erro e
+    deslogando todo mundo a cada restart;
+  - o arquivo **nunca vai para o share** (chave comum é chave que qualquer um
+    usa para forjar sessão) nem para `%TEMP%` (Limpeza de Disco apaga, e chave
+    apagada desloga todo mundo). `OTC_SECRET_KEY_FILE` o move;
+  - **caminho ingravável volta a recusar a subida**, e agora a mensagem nomeia
+    o arquivo que ele tentou.
 - **O `config.py` é o arquivo que fica para trás.** Ele é o único que se ajusta
   à mão na instância, e `git pull` **não sobrescreve arquivo modificado**: o
   resto da árvore atualiza e ele não, deixando o checkout com dois commits

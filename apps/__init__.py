@@ -1,5 +1,7 @@
+import io
 import os
 import logging
+import secrets
 
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
@@ -124,6 +126,60 @@ def _seed_data_dir(app):
                         copiados, destino)
 
 
+def _secret_key_file():
+    r"""Onde a chave persistida mora — uma por MÁQUINA, e nunca no share.
+
+    O share é comum a todas as instâncias, e uma chave que assina cookie de
+    sessão lida por todo mundo é uma chave que qualquer um usa para forjar
+    sessão. `OTC_SECRET_KEY_FILE` move o arquivo; sem ela, o caminho é o mesmo
+    `%LOCALAPPDATA%\OTC-Tracker` em que o `.bat` da instância já guarda o que
+    precisa sobreviver a um restart (HANDOFF §322) — e `%TEMP%` está fora de
+    propósito: a Limpeza de Disco o apaga, e uma chave apagada desloga todo
+    mundo, que é exatamente o que este arquivo existe para evitar.
+    """
+    escolhido = os.getenv('OTC_SECRET_KEY_FILE', '').strip()
+    if escolhido:
+        return os.path.abspath(escolhido)
+    base = os.getenv('LOCALAPPDATA') or os.path.expanduser('~')
+    return os.path.join(base, 'OTC-Tracker', 'secret_key.txt')
+
+
+def _persisted_secret_key():
+    """A chave do disco local, criada na primeira subida. `None` se não der.
+
+    Ela existe porque a exigência de `SECRET_KEY` mudou de tamanho quando a mesa
+    passou a rodar UMA INSTÂNCIA POR MÁQUINA: o passo que a criava vivia no
+    `start-otc-tracker.bat`, que mora no share e não está no repositório, e a
+    máquina em que esse passo não roda não sobe — com uma mensagem que manda
+    definir a chave no `.env`, que é o único lugar em que ela NÃO está.
+
+    Isto não afrouxa a exigência, atende ao que ela quer: o que a guarda impede
+    é a chave ALEATÓRIA a cada restart, e um arquivo persistido é estável do
+    mesmo jeito que o `.env` seria. Uma `SECRET_KEY` explícita continua vencendo
+    — e continua sendo o jeito de fazer várias máquinas compartilharem sessão.
+    """
+    caminho = _secret_key_file()
+    try:
+        with io.open(caminho, encoding='utf-8') as fh:
+            chave = fh.read().strip()
+        if chave:
+            return chave
+    except (OSError, IOError, UnicodeDecodeError):
+        pass
+    try:
+        os.makedirs(os.path.dirname(caminho), exist_ok=True)
+        chave = secrets.token_hex(32)
+        # Criada com 0600 e por `os.open`: quem lê a chave assina cookie de
+        # sessão em nome de qualquer pessoa. `io.open` normal nasceria com a
+        # umask, que no Windows é permissiva.
+        descritor = os.open(caminho, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with io.open(descritor, 'w', encoding='utf-8') as fh:
+            fh.write(chave)
+        return chave
+    except (OSError, IOError):
+        return None
+
+
 def create_app(config):
     app = Flask(__name__)
     app.config.from_object(config)
@@ -141,13 +197,35 @@ def create_app(config):
     # `DEBUG=True` no ambiente, e o start de debug morre pedindo uma chave que
     # o modo debug não precisa. A pergunta passa a ser uma só: se QUALQUER uma
     # das duas diz debug, não é produção.
+    #
+    # Faltando a variável, a chave sai de um ARQUIVO por máquina antes de a
+    # subida ser recusada — ver `_persisted_secret_key`. Só quando nem ele dá é
+    # que o app não sobe, e aí a mensagem nomeia o arquivo que ele tentou.
+    #
+    # A variável é relida AQUI, e não só no `Config`: lá ela é lida no corpo da
+    # classe, ou seja no IMPORT, e quem importar `apps.config` antes do
+    # `load_dotenv()` do `run.py` congela o fallback aleatório com a chave certa
+    # no `.env` ao lado. Aí a app sobe — nenhum erro — e desloga todo mundo a
+    # cada restart, que é o defeito que esta guarda existe para impedir. A ordem
+    # de import deixa de decidir a chave.
+    _env_key = os.getenv('SECRET_KEY')
+    if _env_key:
+        app.config['SECRET_KEY'] = _env_key
     _debug_env = os.getenv('DEBUG', '').strip().lower() in ('1', 'true', 'yes', 'on')
-    if not app.config.get('DEBUG', False) and not _debug_env and not os.getenv('SECRET_KEY'):
-        raise RuntimeError(
-            'SECRET_KEY environment variable is required in production. '
-            'Para rodar em DEBUG, defina DEBUG=True no ambiente (ou passe o '
-            'DebugConfig para o create_app); para produção, defina SECRET_KEY '
-            'no .env.')
+    if not app.config.get('DEBUG', False) and not _debug_env and not _env_key:
+        _chave = _persisted_secret_key()
+        if not _chave:
+            raise RuntimeError(
+                'SECRET_KEY environment variable is required in production, e '
+                'também não consegui manter uma chave em {}. Para rodar em '
+                'DEBUG, defina DEBUG=True no ambiente (ou passe o DebugConfig '
+                'para o create_app); para produção, defina SECRET_KEY no .env '
+                'ou aponte OTC_SECRET_KEY_FILE para um caminho gravável.'
+                .format(_secret_key_file()))
+        app.config['SECRET_KEY'] = _chave
+        app.logger.info('[secret-key] chave de sessão lida de %s '
+                        '(defina SECRET_KEY no .env para fixá-la)',
+                        _secret_key_file())
 
     # Single reverse proxy in front of the app (127.0.0.1:9443). Trust exactly
     # one X-Forwarded-For hop so get_client_ip() reads the real client IP from
