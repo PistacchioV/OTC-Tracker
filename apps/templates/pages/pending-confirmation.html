@@ -361,12 +361,18 @@
     #column-search-inputs th input::placeholder {
         text-align: center;
     }
+    /* O CLONE do cabeçalho (o que se VÊ com scrollX) precisa de `!important`:
+       a regra do plugin é `table.dataTable thead th` — (0,1,3) —, esta é
+       (0,1,2), e por especificidade quem ganha é ele. O corpo não passava por
+       isso porque `#pending-confirmation-table thead th` leva id e vence. O
+       resultado era o desencontro que a §3 descreve: valores centralizados e
+       cabeçalho encostado à esquerda. */
     .dt-scroll-head thead th,
     .dt-scroll-headInner thead th,
     .dataTables_scrollHeadInner thead th {
         font-size: 0.7rem;
-        vertical-align: middle;
-        text-align: center;               /* center the (scrollX) column headers */
+        vertical-align: middle !important;
+        text-align: center !important;    /* center the (scrollX) column headers */
     }
     /* DataTables 2.x lays the sortable header out as flex — center its content
        (title + sort icon) so the label sits in the middle of the column. */
