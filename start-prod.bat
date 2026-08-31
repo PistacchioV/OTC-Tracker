@@ -62,10 +62,10 @@ REM  e continua - as deps normalmente ja estao instaladas no venv.
 REM  Para pular: start-prod.bat noinstall
 REM ---------------------------------------------------------------------------
 if /I "%~1"=="noinstall" (
-    echo [INFO] Instalacao de dependencias pulada (noinstall).
+    echo [INFO] Instalacao de dependencias pulada ^(noinstall^).
 ) else (
     echo.
-    echo [INFO] Instalando dependencias (requirements.txt)...
+    echo [INFO] Instalando dependencias ^(requirements.txt^)...
     "%PY%" -m pip install -r "%BASE%requirements.txt" --timeout 10 --retries 1 --disable-pip-version-check
     if errorlevel 1 (
         echo.
