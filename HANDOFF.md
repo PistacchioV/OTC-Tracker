@@ -16422,3 +16422,38 @@ Dois pedidos da mesa, os dois no par Overview × Track Docs:
   acusou `Unexpected EOF` e o markup foi re-ancorado depois do
   `.page-title-head`. Inserção por âncora textual em template com JS inline
   SEMPRE valida com o jsc depois.
+
+## §394 — Monitor: o chip vazava o card, e o Mark as sent passou a exigir o callback (2026-09-01)
+
+- **O chip de documento/e-mail VAZAVA o card** nos três quadros com fila. A
+  causa é o §393 pela outra ponta: o chip trocou `max-width: 15rem` por
+  `flex: 1 1 100%; max-width: 100%` (um chip por linha), e item de flex tem
+  `min-width: auto` — o min-content do texto `nowrap`, que num assunto de
+  recap é meio card a mais. **Min vence max**, e com o max em PORCENTAGEM o
+  navegador não o usa para capar o mínimo automático (com o `15rem` fixo
+  capava — por isso nunca vazou antes). A correção é `min-width: 0` no
+  próprio chip; o ellipsis volta a segurar o nome. Regra geral: **trocar um
+  max fixo por `100%` num item de flex `nowrap` exige o `min-width: 0`
+  junto**, senão o texto comprido estica o item e nada dá erro.
+- **Item com `no callback` não fecha mais pelo Mark as sent** (pedido da
+  mesa): o callback é a conferência por telefone e vem ANTES do envio ao
+  cliente. Duas metades, como sempre — a tela BLOQUEIA o clique com um
+  SweetAlert de aviso (`data-nocb` no botão, contagem do próprio item; aviso,
+  não confirmação: não há botão de seguir em frente) e o endpoint
+  `/api/manual-confirmation/fepweb-sent` é o guarda de verdade: **409 com
+  `callback_required`**, tudo-ou-nada no grupo (o mesmo desenho do
+  `sla_comment_required` — 409 porque o pedido está bem formado e é o ESTADO
+  que exige mais um passo). O teste de "tem callback?" é o `_mc._filled(r,
+  'Data Callback')` — o MESMO do badge do card (`_extra_card`), porque duas
+  escritas da mesma pergunta divergiriam no espaço em branco. A seção 10b do
+  `check_manual_conf.py` prende os dois lados (409 sem carimbar nada; com o
+  callback o mesmo POST fecha; o botão leva o `data-nocb` e as chaves de
+  aviso existem no HTML).
+- **As quatro capturas dark do Guia** (Monitor, Overview, New Request,
+  Tracking Docs) foram refeitas com o visual novo. Armadilha do playwright:
+  `full_page=True` com o rodapé FIXO carimba o rodapé no meio do conteúdo —
+  o certo é medir `document.body.scrollHeight`, esticar o viewport até lá e
+  fotografar SEM full_page; para o modal (que rola por dentro), o viewport
+  alto vai ANTES do clique que o abre. O Guia §9.3/§10 foi atualizado
+  (Banking fora, chips no Track Docs, ordem nova do formulário, a trava do
+  callback) e os dois `.docx` regerados pelo `build_sop_docx.py`.

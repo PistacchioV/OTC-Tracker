@@ -1937,7 +1937,11 @@ fim, porque linha sem idade não encabeça um relatório de atraso).
   dez não diz se falta em uma ou nas dez — por isso o número aparece no badge a
   partir de duas. A cor não reusa a do prazo (`.mc-sla-late`): as duas marcas
   podem valer ao mesmo tempo, e o vermelho daqui diz que falta um passo, não que
-  estourou o relógio.
+  estourou o relógio. **E a marca TRAVA o Mark as sent** (2026-09-01): a tela
+  bloqueia o clique com aviso e o `/fepweb-sent` recusa com **409
+  `callback_required`**, tudo-ou-nada no grupo — o teste é o mesmo
+  `_filled('Data Callback')` do badge, nunca um segundo teste sobre a mesma
+  coluna (HANDOFF §394).
 - **Planilha vazia VAI assim mesmo.** Um dia sem operação manual é ele próprio a
   métrica, e o único motivo de não enviar é lista de TO em branco
   (`no_recipient`), que o card mostra em âmbar — é relatório que não saiu de casa.
