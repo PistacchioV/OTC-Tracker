@@ -196,7 +196,10 @@ COLUMN_LABELS = {
     'Time Stamp FO': 'Time Stamp',
     'FO Comments': 'FO Comments',
     'Enviado p/ cliente (desbloqueado no fep)': 'Sent to Client (FepWeb released)',
-    'Nome fep': 'FepWeb Name',
+    # Rótulo pedido em 2026-09-01: a coluna guarda o numeroContrato do FepWeb —
+    # o MESMO que a geração grava na coluna FepWeb ID do Pending Confirmation —
+    # e "Name" dizia outra coisa. Só o rótulo muda; o nome do banco fica.
+    'Nome fep': 'FepWeb ID',
 }
 
 # Colunas de data (a tela usa máscara nelas, e o import normaliza para dd/mm/aaaa).
@@ -927,6 +930,14 @@ def load_rows(category):
     for r in raw:
         row = {c: ('' if v is None else str(v)) for c, v in zip(DB_COLUMNS, r)}
         refresh_derived(row, rules)
+        # Pseudo-campo de EXIBIÇÃO (começa com '_', o INSERT filtra por
+        # DB_COLUMNS e ele nunca persiste): produto que não passa por validação
+        # de FO mostra N/A nas três colunas da mesa — a célula vazia ali se
+        # leria como "falta validar", e não falta. Gravar 'N/A' no banco seria
+        # pior: viraria uma "validação" no dia em que o cadastro mudasse o
+        # produto para REQUESTED.
+        rule, _found = rule_for(row.get('Produto'), row.get('LOB'), rules)
+        row['_fo_na'] = not rule[STAGE_FO]
         out.append(row)
     return out
 
@@ -1033,6 +1044,27 @@ def set_email_subjects(pairs):
 
     Devolve quantas linhas foram efetivamente gravadas.
     """
+    return _set_cells('E-mail Subject', pairs)
+
+
+def set_fepweb_ids(pairs):
+    """Grava o numeroContrato do FepWeb na coluna 'Nome fep' (rótulo FepWeb ID).
+
+    `pairs` é {Trade ID: numeroContrato}. A FONTE é a coluna FepWeb ID do
+    Pending Confirmation, gravada pela geração da confirmação
+    (`_conf_pc_set_fepweb`) — o elo é o mesmo do `_mc_pc_sync`
+    (MC `Trade ID` = PC `Trade Number`). Mesmo contrato do E-mail Subject:
+    lote inteiro, só o que mudou.
+    """
+    return _set_cells('Nome fep', pairs)
+
+
+def _set_cells(column, pairs):
+    """Grava `pairs` ({Trade ID: valor}) na coluna, em lote, só o que mudou.
+
+    Recebe o LOTE inteiro de propósito (um `find_row` por chave releria os dois
+    bancos dezenas de vezes) e o valor igual não escreve nada — sem isso, cada
+    sincronização reescreveria a esteira inteira sem uma célula mudar."""
     alvo = {}
     for k, v in (pairs or {}).items():
         k = str(k or '').strip()
@@ -1045,9 +1077,9 @@ def set_email_subjects(pairs):
     for row in load_all():
         chave = str(row.get(KEY_COLUMN, '') or '').strip()
         novo = alvo.get(chave)
-        if not novo or str(row.get('E-mail Subject', '') or '').strip() == novo:
+        if not novo or str(row.get(column, '') or '').strip() == novo:
             continue
-        row['E-mail Subject'] = novo
+        row[column] = novo
         upsert_row(row)
         n += 1
     return n

@@ -524,7 +524,7 @@
             'VALIDADO p/ FO': 'Validado pelo FO', 'Time Stamp FO': 'Carimbo',
             'FO Comments': 'Comentários FO',
             'Enviado p/ cliente (desbloqueado no fep)': 'Enviado ao Cliente (liberado no FepWeb)',
-            'Nome fep': 'Nome FepWeb'
+            'Nome fep': 'FepWeb ID'
         },
         es: {
             'Pending': 'Pendiente', 'Aging Confirmação': 'Antigüedad',
@@ -546,7 +546,7 @@
             'VALIDADO p/ FO': 'Validado por FO', 'Time Stamp FO': 'Sello',
             'FO Comments': 'Comentarios FO',
             'Enviado p/ cliente (desbloqueado no fep)': 'Enviado al Cliente (liberado en FepWeb)',
-            'Nome fep': 'Nombre FepWeb'
+            'Nome fep': 'FepWeb ID'
         }
     };
     function label(c) {
@@ -721,6 +721,20 @@
                 // Nomes de arquivo enormes esticavam a coluna: trava com
                 // reticências (ver o CSS .mc-fep).
                 col.className = 'mc-fep text-center';
+            } else if (name === 'VALIDADO p/ FO' || name === 'Time Stamp FO' || name === 'FO Comments') {
+                // Produto que NÃO passa por validação de FO (cadastro
+                // manual-conf-validation → pseudo-campo `_fo_na` do servidor)
+                // mostra N/A nas três colunas da mesa: a célula vazia ali se
+                // leria como "falta validar", e não falta. Ortogonal: display e
+                // filtro (quem digita copia o que vê); o dado cru segue vazio
+                // no banco — gravar N/A viraria "validação" no dia em que o
+                // cadastro mudasse o produto para REQUESTED.
+                col.render = function (d, t, r) {
+                    var na = r && r._fo_na && !String(d == null ? '' : d).trim();
+                    if (t === 'display') return na ? '<span class="text-muted">N/A</span>' : (d == null ? '' : d);
+                    if (t === 'filter') return na ? 'N/A' : (d == null ? '' : String(d));
+                    return d == null ? '' : String(d);
+                };
             }
             defs.push(col);
         });

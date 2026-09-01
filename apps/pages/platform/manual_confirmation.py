@@ -537,6 +537,59 @@ def _mc_sync_email_subjects(docs, trades):
     return {}
 
 
+def _mc_sync_fepweb_ids(rows):
+    """Preenche a coluna 'Nome fep' (rótulo FepWeb ID) a partir do Pending
+    Confirmation, quando o Track carrega.
+
+    A FONTE é a coluna FepWeb ID que a geração da confirmação grava nos três
+    DBs do Pending Confirmation (`_conf_pc_set_fepweb`) — o elo é o do
+    `_mc_pc_sync`: MC `Trade ID` = PC `Trade Number`. Derivar aqui (e não num
+    segundo gravador dentro da geração) mantém UMA regra: o que aparece no
+    Track é sempre o que está no Pending Confirmation, histórico incluído.
+
+    Três coisas de custo: só consulta os DBs quando HÁ célula vazia com Trade
+    ID (o caso comum, tudo preenchido, não abre banco nenhum); é uma consulta
+    por DB para o lote inteiro; e grava só o que mudou (`set_fepweb_ids`).
+    Melhor esforço por DB: um banco que falha (coluna ausente num arquivo
+    antigo, lock) sai no log e não derruba a listagem, que é o serviço pedido.
+    Atualiza `rows` em memória para a resposta desta chamada já sair
+    preenchida — senão a célula só apareceria no reload seguinte.
+    """
+    from apps.pages import routes
+    vazios = []
+    for r in rows or []:
+        k = str(r.get(_mc_mod.KEY_COLUMN, '') or '').strip()
+        if k and not str(r.get('Nome fep', '') or '').strip():
+            vazios.append(k)
+    if not vazios:
+        return 0
+    achados = {}
+    ph = ', '.join('?' for _ in vazios)
+    for fname in routes._PC_DBS.values():
+        path = os.path.join(routes._PC_DB_DIR, fname)
+        if not os.path.isfile(path):
+            continue
+        try:
+            with routes.duckdb_read(path) as con:
+                for tn, fep in con.execute(
+                        'SELECT trim("Trade Number"), trim("FepWeb ID") FROM {} '
+                        "WHERE trim(\"Trade Number\") IN ({}) "
+                        "AND coalesce(trim(\"FepWeb ID\"), '') <> ''"
+                        .format(routes._PC_TABLE, ph), vazios).fetchall():
+                    achados.setdefault(str(tn or '').strip(), str(fep or '').strip())
+        except Exception:
+            log.warning('[manual-conf] FepWeb ID sync falhou em %s:\n%s',
+                        fname, traceback.format_exc())
+    if not achados:
+        return 0
+    n = _mc_mod.set_fepweb_ids(achados)
+    for r in rows:
+        k = str(r.get(_mc_mod.KEY_COLUMN, '') or '').strip()
+        if k in achados and not str(r.get('Nome fep', '') or '').strip():
+            r['Nome fep'] = achados[k]
+    return n
+
+
 def _mc_flush_email_subjects(pares):
     """Grava os assuntos coletados, sem deixar a falha chegar à tela.
 

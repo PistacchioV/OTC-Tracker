@@ -65,6 +65,13 @@ def api_mc_data():
     try:
         from apps.pages import manual_conf as _mc
         rows = _mc.load_all()
+        # FepWeb ID: a célula vazia é completada do Pending Confirmation (a
+        # fonte, gravada pela geração) — melhor esforço, e `rows` já volta
+        # preenchido nesta resposta. Ver `_mc_sync_fepweb_ids`.
+        try:
+            _R()._mc_sync_fepweb_ids(rows)
+        except Exception:
+            _R().log.warning('[manual-conf] FepWeb ID sync: %s', traceback.format_exc())
         return jsonify({'columns': _mc.COLUMNS, 'labels': _mc.COLUMN_LABELS,
                         'data': rows, 'counts': _R()._mc_counts(rows)})
     except Exception as e:
