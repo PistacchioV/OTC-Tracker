@@ -3709,11 +3709,28 @@ _SWAPCHAR_BOOL_COLS = {'Reset', 'Amortiza sem Troca de Diferencial', 'Agenda de 
 _SWAPCHAR_CPTY_NAME_COLS = {'CPF/CNPJ Cliente Contraparte'}
 
 
-def _swapchar_collect(ref):
+def _swap_day_path(ref, file_tpl, max_back=10, exact=False):
+    """Newest existing Swap day file (path, dref) walking back from `ref` —
+    mesmo contrato do `_opt_dposicao_path`: as telas de posição andam até dez
+    dias úteis para trás quando falta arquivo (é o que as mantém populadas), e
+    `exact=True` não anda — devolve o dia pedido ou nada (Advanced Export)."""
+    cur = ref
+    for _ in range(1 if exact else max_back):
+        dref = cur.strftime('%y%m%d')
+        p = os.path.join(B3_JSON_ROOT, 'Swap', _b3_date_subpath(dref), file_tpl.format(dref))
+        if os.path.isfile(p):
+            return p, dref
+        cur = _prev_anbima_bizday(cur)
+    return None, None
+
+
+def _swapchar_collect(ref, exact=False):
     """Build widgets + display rows from the DPOSICAO-SWAP file for `ref` (date).
     The saved position JSON carries all 146 fields IN ORDER (headerless file parsed
     with _B3_SWAP_HEADERS), so cells are read positionally by index; only the
-    _SWAPCHAR_DISPLAY_IDX subset is emitted. Missing file → empty payload (logged)."""
+    _SWAPCHAR_DISPLAY_IDX subset is emitted. Sem arquivo no dia, anda até dez
+    dias úteis para trás (`_swap_day_path`); `source_date` diz de que dia é o
+    arquivo lido — a tela sinaliza quando ele não é o dia pedido."""
     widgets = {
         'total': 0,
         'tipo':  {'total': 0, 'cashflow': 0, 'bullet': 0},
@@ -3725,20 +3742,24 @@ def _swapchar_collect(ref):
         'func':  {'total': 0, 'forward_start': 0, 'notional': 0, 'premio': 0,
                   'arrependimento': 0, 'sem': 0},
     }
-    dref = ref.strftime('%y%m%d')
-    path = os.path.join(B3_JSON_ROOT, 'Swap', _b3_date_subpath(dref),
-                        '73760_{}_DPOSICAO-SWAP.json'.format(dref))
+    path, src_dref = _swap_day_path(ref, '73760_{}_DPOSICAO-SWAP.json', exact=exact)
+    empty = {'widgets': widgets, 'columns': _SWAPCHAR_DISPLAY_LABELS, 'rows': [],
+             'source_date': _b3_dref_to_iso(src_dref)}
     rows_out = []
-    if not os.path.isfile(path):
-        log.warning("[swapchar] no DPOSICAO-SWAP for %s; page shows 0", dref)
-        return {'widgets': widgets, 'columns': _SWAPCHAR_DISPLAY_LABELS, 'rows': []}
+    if not path:
+        # Sem aviso no modo `exact`: ali o dia sem arquivo é PULADO por contrato
+        # (Advanced Export montando um intervalo), não é anomalia.
+        if not exact:
+            log.warning("[swapchar] no DPOSICAO-SWAP for %s (nem nos 10 dias úteis "
+                        "anteriores); page shows 0", ref.strftime('%y%m%d'))
+        return empty
     try:
         with open(path, encoding='utf-8') as fh:
             src = json.load(fh)
     except Exception:
-        return {'widgets': widgets, 'columns': _SWAPCHAR_DISPLAY_LABELS, 'rows': []}
+        return empty
     if not src:
-        return {'widgets': widgets, 'columns': _SWAPCHAR_DISPLAY_LABELS, 'rows': []}
+        return empty
 
     keys = list(src[0].keys())
     tipo_key = _fcst_resolve_key(keys, ['tipo de contrato', 'tipo do contrato', 'tipo contrato'])
@@ -3791,7 +3812,8 @@ def _swapchar_collect(ref):
         lob = _swapchar_lob(cid)
         widgets['lob']['total'] += 1
         widgets['lob'][lob] += 1
-    return {'widgets': widgets, 'columns': _SWAPCHAR_DISPLAY_LABELS, 'rows': rows_out}
+    return {'widgets': widgets, 'columns': _SWAPCHAR_DISPLAY_LABELS, 'rows': rows_out,
+            'source_date': _b3_dref_to_iso(src_dref)}
 
 
 # ── Live Position Swap Cashflow (DFLUXO) & Premium (DAGENDAPREMIOS) ───────────
@@ -3811,16 +3833,20 @@ _SWAPPREM_DISPLAY_IDX = list(range(len(_SWAPPREM_LABELS)))   # all 10 columns
 _SWAPPREM_TYPES = [_swapchar_coltype(l) for l in _SWAPPREM_LABELS]
 
 
-def _swap_simple_collect(ref, file_tpl, labels, display_idx, types):
+def _swap_simple_collect(ref, file_tpl, labels, display_idx, types, exact=False):
     """Read a headerless Swap position JSON (values in file order) and emit the
     display-column subset, formatted like Swap Characteristics. Returns
-    {widgets:{total}, columns, rows}. Missing file → empty payload (logged)."""
-    dref = ref.strftime('%y%m%d')
+    {widgets:{total}, columns, rows, source_date}. Sem arquivo no dia, anda até
+    dez dias úteis para trás (`_swap_day_path`) e `source_date` diz de que dia
+    é o arquivo lido."""
     disp_labels = [labels[i] for i in display_idx]
-    empty = {'widgets': {'total': 0}, 'columns': disp_labels, 'rows': []}
-    path = os.path.join(B3_JSON_ROOT, 'Swap', _b3_date_subpath(dref), file_tpl.format(dref))
-    if not os.path.isfile(path):
-        log.warning("[swap-simple] no %s for %s; page shows 0", file_tpl.format(dref), dref)
+    path, src_dref = _swap_day_path(ref, file_tpl, exact=exact)
+    empty = {'widgets': {'total': 0}, 'columns': disp_labels, 'rows': [],
+             'source_date': _b3_dref_to_iso(src_dref)}
+    if not path:
+        if not exact:
+            log.warning("[swap-simple] no %s (nem nos 10 dias úteis anteriores); "
+                        "page shows 0", file_tpl.format(ref.strftime('%y%m%d')))
         return empty
     try:
         with open(path, encoding='utf-8') as fh:
@@ -3846,7 +3872,8 @@ def _swap_simple_collect(ref, file_tpl, labels, display_idx, types):
             else:
                 disp.append(_swapchar_fmt_cell(raw, types[i]))
         rows_out.append(disp)
-    return {'widgets': {'total': len(rows_out)}, 'columns': disp_labels, 'rows': rows_out}
+    return {'widgets': {'total': len(rows_out)}, 'columns': disp_labels, 'rows': rows_out,
+            'source_date': _b3_dref_to_iso(src_dref)}
 
 
 def _swap_simple_ref(request_args):
@@ -3858,20 +3885,24 @@ def _swap_simple_ref(request_args):
         return _prev_anbima_bizday(datetime.now()).date()
 
 
-def _swapprem_collect(ref):
+def _swapprem_collect(ref, exact=False):
     """Swap Premium (DAGENDAPREMIOS) with an extra "Contraparte" column inserted
     right after "Nome Simplificado", joined from the DPOSICAO-SWAP position file by
-    "Codigo do Contrato" (the premium file carries only the contract code)."""
-    dref = ref.strftime('%y%m%d')
+    "Codigo do Contrato" (the premium file carries only the contract code).
+    Sem arquivo no dia, anda até dez dias úteis para trás (`_swap_day_path`);
+    o join de contraparte usa o dref do arquivo LIDO, para as duas fontes
+    falarem do mesmo dia."""
     labels, idx, types = _SWAPPREM_LABELS, _SWAPPREM_DISPLAY_IDX, _SWAPPREM_TYPES
     disp_labels = [labels[i] for i in idx]
     ins = disp_labels.index('Nome Simplificado') + 1
     out_labels = disp_labels[:ins] + ['Contraparte'] + disp_labels[ins:]
-    empty = {'widgets': {'total': 0}, 'columns': out_labels, 'rows': []}
-    path = os.path.join(B3_JSON_ROOT, 'Swap', _b3_date_subpath(dref),
-                        '73760_{}_DAGENDAPREMIOS.json'.format(dref))
-    if not os.path.isfile(path):
-        log.warning("[swap-premium] no DAGENDAPREMIOS for %s; page shows 0", dref)
+    path, src_dref = _swap_day_path(ref, '73760_{}_DAGENDAPREMIOS.json', exact=exact)
+    empty = {'widgets': {'total': 0}, 'columns': out_labels, 'rows': [],
+             'source_date': _b3_dref_to_iso(src_dref)}
+    if not path:
+        if not exact:
+            log.warning("[swap-premium] no DAGENDAPREMIOS for %s (nem nos 10 dias "
+                        "úteis anteriores); page shows 0", ref.strftime('%y%m%d'))
         return empty
     try:
         with open(path, encoding='utf-8') as fh:
@@ -3880,7 +3911,7 @@ def _swapprem_collect(ref):
         return empty
     if not src:
         return empty
-    cpty_map = _swap_contract_cpty_map(dref)
+    cpty_map = _swap_contract_cpty_map(src_dref)
     named = {_fcst_norm(k): k for k in src[0].keys()}
     rows_out = []
     for row in src:
@@ -3901,7 +3932,8 @@ def _swapprem_collect(ref):
             contrato_raw = row.get(k0, '') if k0 else ''
         disp.insert(ins, cpty_map.get(_fcst_norm_contract(contrato_raw), ''))
         rows_out.append(disp)
-    return {'widgets': {'total': len(rows_out)}, 'columns': out_labels, 'rows': rows_out}
+    return {'widgets': {'total': len(rows_out)}, 'columns': out_labels, 'rows': rows_out,
+            'source_date': _b3_dref_to_iso(src_dref)}
 
 
 # ── Other Products › OTM Settlements ─────────────────────────────────────────
@@ -7860,7 +7892,11 @@ def _opt_dposicao_path(ref, max_back=10, exact=False):
 
 
 def _lpopt_collect(ref, exact=False):
-    widgets = {'total': 0, 'a': 0, 'b': 0, 'c': 0}
+    # Cards do topo: contagem por Classe do Ativo Subjacente, em TRÊS baldes
+    # fixos (pedido de 2026-09-01): Commodities, Taxas de Câmbio e Equities —
+    # este último é o "todo o resto" (ações e o que mais aparecer), então os
+    # três FECHAM com o Total e uma classe nova não some da tela.
+    widgets = {'total': 0, 'commodities': 0, 'fx': 0, 'equities': 0}
     path, _src_dref = _opt_dposicao_path(ref, exact=exact)
     columns = list(_LPOPT_COLUMNS)
     rows_out = []
@@ -7910,7 +7946,22 @@ def _lpopt_collect(ref, exact=False):
             asian_labels = ['Média Asiática (data) {}'.format(i + 1) for i in range(len(date_keys))]
             columns = list(_LPOPT_COLUMNS) + asian_labels
 
+            classe_key = idx['Classe do ativo subjacente']
+            # Aceita as duas grafias (singular/plural), como o coletor do NDF:
+            # o arquivo de Opção escreve TAXA DE CAMBIO.
+            _fx_norms = {_fcst_norm('TAXA DE CAMBIO'), _fcst_norm('TAXAS DE CAMBIO')}
+            _comm_norm = _fcst_norm('COMMODITIES')
             for rec in data:
+                cnorm = _fcst_norm(str(rec.get(classe_key, '') or '')) if classe_key else ''
+                if cnorm == _comm_norm:
+                    widgets['commodities'] += 1
+                elif cnorm in _fx_norms:
+                    widgets['fx'] += 1
+                else:
+                    # Equities é o "todo o resto" (ações e o que mais vier),
+                    # linha sem classe incluída — é o que faz os três baldes
+                    # fecharem com o Total.
+                    widgets['equities'] += 1
                 row = []
                 for c in _LPOPT_COLUMNS:
                     v = rec.get(idx[c], '') if idx[c] else ''

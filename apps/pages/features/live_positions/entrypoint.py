@@ -36,7 +36,11 @@ def api_swapchar_data():
             _R()._prev_anbima_bizday(datetime.now()).date()
     except ValueError:
         ref = _R()._prev_anbima_bizday(datetime.now()).date()
-    payload = _R()._swapchar_collect(ref)
+    # `exact=1` desliga a busca para trás (contrato do Advanced Export — ver o
+    # comentário no endpoint do NDF); a TELA não manda nada e anda até dez dias
+    # úteis, com o `source_date` dizendo de que dia é o arquivo lido.
+    exact = str(request.args.get('exact', '')).strip() in ('1', 'true', 'yes')
+    payload = _R()._swapchar_collect(ref, exact=exact)
     payload.update({'success': True, 'ref_date': ref.strftime('%Y-%m-%d'),
                     'ref_date_fmt': ref.strftime('%d/%m/%Y')})
     return jsonify(payload)
@@ -55,8 +59,10 @@ def api_swapcash_data():
     if not session.get('authenticated'):
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
     ref = _R()._swap_simple_ref(request.args)
+    exact = str(request.args.get('exact', '')).strip() in ('1', 'true', 'yes')
     payload = _R()._swap_simple_collect(ref, '73760_{}_DFLUXO.json',
-                                   _R()._SWAPFLUX_LABELS, _R()._SWAPFLUX_DISPLAY_IDX, _R()._SWAPFLUX_TYPES)
+                                   _R()._SWAPFLUX_LABELS, _R()._SWAPFLUX_DISPLAY_IDX, _R()._SWAPFLUX_TYPES,
+                                   exact=exact)
     payload.update({'success': True, 'ref_date': ref.strftime('%Y-%m-%d'),
                     'ref_date_fmt': ref.strftime('%d/%m/%Y')})
     return jsonify(payload)
@@ -75,7 +81,8 @@ def api_swapprem_data():
     if not session.get('authenticated'):
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
     ref = _R()._swap_simple_ref(request.args)
-    payload = _R()._swapprem_collect(ref)
+    exact = str(request.args.get('exact', '')).strip() in ('1', 'true', 'yes')
+    payload = _R()._swapprem_collect(ref, exact=exact)
     payload.update({'success': True, 'ref_date': ref.strftime('%Y-%m-%d'),
                     'ref_date_fmt': ref.strftime('%d/%m/%Y')})
     return jsonify(payload)

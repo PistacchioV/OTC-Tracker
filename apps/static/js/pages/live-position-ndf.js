@@ -41,9 +41,15 @@
 
   var LANG = (localStorage.getItem('language') || 'en').toLowerCase();
   var _TRANS = {
-    en: { filterPh: 'Filter by column…', valuePh: 'Type value for "{f}" + Enter', status: 'In Custody' },
-    br: { filterPh: 'Filtrar por coluna…', valuePh: 'Digite o valor para "{f}" + Enter', status: 'Em Custódia' },
-    es: { filterPh: 'Filtrar por columna…', valuePh: 'Escriba el valor para "{f}" + Enter', status: 'En Custodia' },
+    en: { filterPh: 'Filter by column…', valuePh: 'Type value for "{f}" + Enter', status: 'In Custody',
+          srcNote: 'No file for the selected date — showing the position of {src}',
+          srcNone: 'No position file in the last 10 business days' },
+    br: { filterPh: 'Filtrar por coluna…', valuePh: 'Digite o valor para "{f}" + Enter', status: 'Em Custódia',
+          srcNote: 'Sem arquivo para a data escolhida — exibindo a posição de {src}',
+          srcNone: 'Sem arquivo de posição nos últimos 10 dias úteis' },
+    es: { filterPh: 'Filtrar por columna…', valuePh: 'Escriba el valor para "{f}" + Enter', status: 'En Custodia',
+          srcNote: 'Sin archivo para la fecha elegida — mostrando la posición de {src}',
+          srcNone: 'Sin archivo de posición en los últimos 10 días hábiles' },
   };
   function t(k) { return (_TRANS[LANG] || _TRANS.en)[k] || _TRANS.en[k]; }
   function esc(s) {
@@ -52,6 +58,32 @@
     });
   }
   function setVal(id, v) { var el = document.getElementById(id); if (el) el.textContent = v; }
+
+  // "Que dia estou vendo": o endpoint anda até dez dias úteis para trás quando
+  // falta o arquivo do dia, e o `source_date` do payload diz de que dia é o
+  // arquivo lido — aqui isso vira um aviso ao lado do Reference date.
+  function fmtBR(iso) {
+    var p = String(iso || '').split('-');
+    return p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0] : '';
+  }
+  function renderSrcNote(d, wrapId, noteId) {
+    var wrap = document.getElementById(wrapId);
+    if (!wrap || typeof d.source_date === 'undefined') return;
+    var msg = '';
+    if (!d.source_date) msg = t('srcNone');
+    else if (d.ref_date && d.source_date !== d.ref_date) {
+      msg = t('srcNote').replace('{src}', fmtBR(d.source_date));
+    }
+    var note = document.getElementById(noteId);
+    if (!msg) { if (note) note.remove(); return; }
+    if (!note) {
+      note = document.createElement('span');
+      note.id = noteId;
+      note.className = 'badge bg-warning-subtle text-warning ms-2';
+      wrap.parentNode.insertBefore(note, wrap.nextSibling);
+    }
+    note.textContent = msg;
+  }
 
   function load(dateStr) {
     fetch(API + (dateStr ? ('?date=' + encodeURIComponent(dateStr)) : ''), { credentials: 'same-origin' })
@@ -63,6 +95,7 @@
         setVal('ln-w-t0', w.t0 || 0); setVal('ln-w-commodities', w.commodities || 0);
         setVal('ln-w-total', w.total || 0);
         buildTable(d.columns || [], d.rows || []);
+        renderSrcNote(d, 'lnDateWrap', 'ln-src-note');
       })
       .catch(function () {});
   }
