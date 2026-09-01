@@ -40,10 +40,11 @@ plugins de `node_modules` para `apps/static/plugins/`.
 
 ## 2. Regras da casa (as que não se negociam)
 
-- **A branch de trabalho é `visual-refresh`** (desde 26/07/2026; `apple-design`
-  foi incorporada e aposentada). Todo commit e push vai para lá — nunca presuma
-  `main`. **`visual-refresh-prod` é a branch que a instância do JPM roda**, e ela
-  é a `visual-refresh` MAIS um commit no `apps/config.py`: **dados**, bancos e
+- **A branch de trabalho é `StreamFlow`** (desde 30/08/2026; era
+  `visual-refresh`, e antes dela `apple-design` — as duas continuam no
+  repositório, congeladas). Todo commit e push vai para lá — nunca presuma
+  `main`. **`StreamFlow-prod` é a branch que a instância do JPM roda**, e ela
+  é a `StreamFlow` MAIS um commit no `apps/config.py`: **dados**, bancos e
   share em
   `\\Nawest.ad.jpmorganchase.com\lac\BRA\intra` em vez de dentro da aplicação e
   `I:\`. A diferença é **um bloco de seis linhas** (entre `── ENV:DEV ──` e
@@ -60,7 +61,15 @@ plugins de `node_modules` para `apps/static/plugins/`.
   nada e os schedulers duplicam.
 - **Design: tokens `--vr-*` e `--ins-*`, jamais `--bs-*`.** O tema não define os
   `--bs-*`, então eles caem no fallback claro e produzem cartão branco no tema
-  escuro. Ver §7.
+  escuro. Ver §7. A pintura de hoje é o **StreamFlow**
+  (`static/css/streamflow.css` + `streamflow.js`), uma camada carregada **DEPOIS**
+  do `visual-refresh.css` que **redefine os mesmos tokens** — é por isso que as
+  ~1100 linhas da folha anterior repintaram sem uma linha editada, e é por isso
+  que continua valendo escrever `--vr-*`. O alcance dela vem de seletores
+  ESTRUTURAIS (`div[class*="-widget"]`, `[class*="-panel"]`), com exclusões
+  escritas (`:not(.row)`, `:not([class*="-chips"])`) porque nome de contêiner
+  contém o nome do que ele contém. Três armadilhas dessa camada moram no §7
+  (empilhamento, desfoque aninhado e as DUAS famílias de seletor de brilho).
 - **i18n: todo texto visível nasce em INGLÊS e é traduzido por `data-lang`**
   (arquivos `apps/static/data/translations/{en,br,es}.json`) — em toda página,
   SweetAlert incluído. O `I18nManager` do `app.js` traduz os `[data-lang]` UMA
@@ -179,6 +188,17 @@ Live Positions, o Track Confirmations e as três Recons).
   font-size:.8rem; white-space:nowrap` (+ ellipsis nas colunas de dado).
   Com `scrollX`, os clones `.dt-scroll-headInner` / `.dataTables_scrollHeadInner`
   precisam das mesmas regras — o DataTables remove o id da tabela clonada.
+  **Não existe regra GLOBAL de centralização** — o `visual-refresh.css`
+  centraliza só os campos da linha de filtro e o `streamflow.css` não declara
+  `text-align` em lugar nenhum —, então a tela que nasce sem a regra nasce torta
+  **sem ninguém errar nada**: foi o Accrual e o MtM de Swap. E o
+  `table-centered` que aparece no markup vem do tema comprado e **não existe em
+  CSS nenhum** (foi o Track de usuários e o Support Center) — ele não centraliza
+  coisa alguma. **A regra do clone vai com `!important`**: sem o id, a da página
+  compete como `.dt-scroll-headInner thead th`, que é **(0,1,2)** contra o
+  **(0,1,3)** do `table.dataTable thead th` do plugin — e perde, deixando o
+  cabeçalho à esquerda com o corpo centralizado (foi o Pending Confirmation).
+  `check_table_center.py` prende as duas metades.
 - **Linha de filtro por coluna** como 2ª linha do `<thead>`, montada **antes**
   do `.DataTable()` com `orderCellsTop: true` (ver a armadilha em §7). Inputs
   pequenos (12px/28px), texto centralizado, placeholder = nome da coluna.
@@ -317,7 +337,16 @@ Live Positions, o Track Confirmations e as três Recons).
     picker** (`el._flatpickr.setDate(v, false)`, ou `otcDateSync('#modal')`): o
     `value` do original muda, mas o campo que se VÊ é o outro, e ele ficaria com
     a data anterior — abrir o modal numa linha e depois noutra mostraria a data
-    da primeira.
+    da primeira. **E o mesmo vale para o ESTILO**: o `altInput` herda a `class`
+    do original (o `altInputClass` a copia) e **não herda o `style=`** — largura
+    escrita inline fica no campo ESCONDIDO e o visível estica a coluna inteira
+    (o Due Date do Ticket Details saía com 468px em vez de 190px). Largura e
+    afins vão em **classe**, que alcança os dois campos. O flatpickr também não
+    desenha ícone de calendário nenhum — o `type="date"` que ele substituiu
+    desenhava: quem quiser um o põe como **background do próprio input**, e aí
+    clicar no ícone é clicar no campo e o picker abre; **SVG embutido** e não
+    arquivo, porque a instância roda sem internet, e com o par claro/escuro,
+    senão a marca some no tema escuro.
   - **jQuery daterangepicker `singleDatePicker`** com
     `locale: { format: 'DD/MM/YYYY' }`, nas páginas que já carregam os assets
     dele (Other Products Summary, NDF Summary, MtM, Accrual, Control Panel,
@@ -361,8 +390,21 @@ São dois bancos:
   leitura com lock compartilhado) evita a abertura read-write no caso normal, o
   ensure que falha **espera** 5 min antes de tentar de novo, e a ABERTURA do sino
   está dentro do `try` — sem conexão ele devolve a lista vazia, na mesma forma da
-  resposta de sucesso. `check_notif_db_boot.py` prende as quatro. É idempotente e **não apaga** o que
-  copiou: o antigo fica como backup. `scripts/split_notifications_db.py
+  resposta de sucesso. **A sonda tem TRÊS respostas, não duas**: `True` (nada a
+  fazer), `False` (falta tabela, criar) e **`None` (não deu para olhar)**.
+  Colapsar as duas últimas num `False` só foi o que fez o *"file … used by
+  another process"* virar uma tentativa de ESCRITA: arquivo em uso **existe e
+  tem dono**, mas a sonda respondia `False`, o ensure abria em read-write — uma
+  abertura que não pode dar certo — e ainda acrescentava um concorrente
+  disputando o mesmo arquivo no share, no exato instante em que ele já estava
+  disputado. Com `None` o ensure arma a espera **sem abrir nada para escrita** e
+  **não marca o banco como pronto**: pode faltar schema de verdade, e quem
+  responde isso é a sonda da rodada seguinte. A classificação é **por MENSAGEM**
+  (o DuckDB não dá tipo próprio para disputa de arquivo) e é conservadora — o
+  que não casar com uma assinatura conhecida volta a `False`, porque errar para
+  `False` custa uma tentativa de escrita e errar para `None` deixaria um banco
+  sem schema para trás. `check_notif_db_boot.py` prende as quatro. É idempotente
+  e **não apaga** o que copiou: o antigo fica como backup. `scripts/split_notifications_db.py
   --dry-run` mostra o que vai ser copiado antes de reiniciar.
   Três detalhes que não dão erro nenhum: o schema é comitado numa transação
   SEPARADA da cópia (juntos, uma linha ruim desfazia o `CREATE TABLE` e o app
@@ -428,6 +470,25 @@ São dois bancos:
     `R._cpd_path = tmp` dos testes continua mandando;
   - **a ESCRITA continua nos JSONs** de propósito (rollback = reverter o
     commit; nenhuma migração de volta). `check_duck_read.py` prende tudo.
+  - **a leitura do espelho abre pelo `duckdb_read`**, nunca por um
+    `duckdb.connect` cru: é a camada do `database_access` que emite os eventos
+    do farol (`local_permit_*`, `file_lock_*`, `connection_opened/closed`,
+    `operation_completed`) e que cria o `.lock` do banco na PRIMEIRA abertura.
+    Aberto na mão, o banco fica fora do painel e a leitura DB-first que demora
+    ou recusa não deixa rastro nenhum de por quê. **Listar os caminhos no
+    `DATABASE_ACCESS_PATHS` não resolve isso**, por duas razões: aquela tupla é
+    consumida só pelo `validate_database_paths` (na subida, `makedirs` mais a
+    criação do arquivo de lock — uma conferência de gravabilidade) e **não liga
+    o farol**, que é da camada; e os caminhos do espelho **são dinâmicos** —
+    nascem dos dados, um banco por produto de arquivo-dia e um por JSON avulso,
+    74 só na máquina de dev e crescendo a cada produto novo. Uma tupla escrita à
+    mão envelheceria no primeiro mapping novo, e **lista parcial é pior que
+    nenhuma**, porque dá a impressão de cobertura. O custo foi medido: 12,67 ms
+    por abertura pela camada contra 12,82 ms crua — a abertura do DuckDB domina.
+    **A metade de ESCRITA ainda não passa por ali**: as quatro aberturas do
+    `json_to_duckdb.py` seguem cruas, e duas delas mantêm um POOL de conexões
+    vivo através de muitos arquivos. Até isso ser reestruturado, o lock
+    compartilhado das leituras dá **visibilidade, não exclusão mútua**.
   - **`json.dump` é PROIBIDO fora do funil** (`_atomic_write_json`) em
     `apps/pages` — a auditoria §335 achou ~30 escritores gravando DATA_DIR
     por fora, com os bancos envelhecendo em silêncio para quem os consulta
@@ -617,8 +678,19 @@ que parece:
   perdia. O `_UnlockedReadGate` do `database_access` coordena os dois EM
   MEMÓRIA (o conflito é só intra-processo; nenhuma ida ao share): a escrita
   espera os polls em voo fecharem, o poll espera um pouco por uma escrita em
-  curso e, no teto, degrada para o sino vazio de sempre — nunca para uma fila.
-  `check_unlocked_gate.py` prende os dois sentidos e os dois tetos. O aviso `file_lock_skipped` sai **uma vez por
+  curso e, no teto, degrada — nunca para uma fila. `check_unlocked_gate.py`
+  prende os dois sentidos e os dois tetos. E como no SHARE uma gravação dura
+  mais que essa espera toda (portão + retentativa ≈ 2s), o poll que ainda assim
+  esbarra na disputa — a mesma mensagem `different configuration`, agora do
+  LADO da leitura, ou o `used by another process` da instância vizinha — **serve
+  a última resposta boa daquele usuário** (`_notif_last_good`, por SID × papel,
+  já filtrada por página) em vez de piscar o sino vazio com ERROR no log a cada
+  gravação longa. O teto de idade (10 min) é o que preserva o alarme: uma
+  conexão de escrita VAZADA responde a mesma mensagem para sempre, e com o
+  cache vencido o caminho volta a ser o de sempre — ERROR uma vez, sino vazio.
+  Quem classifica a disputa é o `_notif_arquivo_em_uso` (o mesmo da sonda da
+  subida), nunca um teste novo sobre as mesmas mensagens.
+  `check_notif_db_boot.py` prende o cenário nos dois desfechos. O aviso `file_lock_skipped` sai **uma vez por
   banco**, não por leitura: ele é WARNING, WARNING passa pelo gate que silencia
   o ruído de INFO, e uma linha por poll seria a maior parte do log.
 - **Quem só faz SELECT abre com `get_db_connection(readonly=True)`.** O caminho
@@ -1428,6 +1500,74 @@ Complementando, no mesmo tema: a **animação padrão do ícone** (about → sid
 funda no hover do card. Cor só de tema claro precisa do par
 `[data-bs-theme=dark]`, senão a marca some no escuro.
 
+### As três armadilhas do vidro do StreamFlow
+
+A camada de vidro (§2) paga por três coisas que não aparecem no console, e as
+três já custaram uma rodada cada:
+
+- **`backdrop-filter` cria CONTEXTO DE EMPILHAMENTO.** O `z-index: 1055` de um
+  dropdown dentro de um contêiner com vidro passa a valer só entre os IRMÃOS
+  dele, e o contêiner fica na ordem do documento — abaixo da barra de
+  ferramentas, que vem depois no DOM. O sintoma se lê como "o menu está
+  transparente", e não é: `elementFromPoint` dentro da caixa do menu responde
+  `.btn-toolbar`. **`z-index` vai no WRAPPER, nunca no menu** — quem precisa
+  subir é o contexto inteiro, e mexer no menu não adianta porque ele já é o mais
+  alto de um contexto que está embaixo. É o mesmo defeito que o `.wrapper` com
+  `z-index: 1` causou nos modais, e por isso o `.wrapper` fica SEM `z-index` e as
+  camadas líquidas descem para `-1`.
+- **Dentro de uma raiz de backdrop, o desfoque do FILHO não amostra nada.** Ele
+  não tem o que ler fora da caixa do pai, então um `blur(34px)` num
+  `.dropdown-menu` dentro de um `.card` (que já tem `blur(30px)`) fica computado
+  e aplicado a nada. Por isso o fundo desses menus é **sólido** — a 80% a tabela
+  apareceria nítida por baixo. As sobreposições de nível de página (modal,
+  offcanvas, toast, SweetAlert) ficam penduradas no `<body>`, fora de qualquer
+  raiz de backdrop, e ali o desfoque funciona de verdade.
+- **Regra de força de brilho tem de alcançar as DUAS famílias de seletor.** A
+  camada mira por estrutura (`.card`, `[class*="-widget"]`, `[class*="-card"]`)
+  **e** por nomes próprios (`.ob-item`, `.mc-item`, `.acc-stat`, `.qt-card`,
+  `.pa-user`, `.ei-doc-row` — quinze classes). Calibrar só a estrutural deixa um
+  cartão acendendo ao lado de um cartão calmo, **sem nada no CSS explicando a
+  diferença**; já voltou três vezes. E o brilho se calibra por TIPO de
+  superfície: a rampa de 135° que vira material num painel largo vira facho num
+  item de ~110px de altura.
+
+Na mesma linha, e pela ordem de carga do `base.html` (o `extra_css` da página
+vem ANTES do `app.css` e do `head-css.html`): **classe do Bootstrap com a mesma
+especificidade vence a da página mesmo com `!important`** — `display: grid
+!important` em `.ab-steps` perdia para `.d-flex` até as classes saírem do
+markup. E **atalho zera o que ele não menciona**: o `background: … !important`
+com que o `visual-refresh.css` pinta `.card` apaga o `background-image`, então
+cartão com gradiente próprio (os de Total) tem a regra no `streamflow.css`, e
+não no `<style>` da página.
+
+### Um `stat` por LINHA é invisível na dev e custa minutos no share
+
+O cache por mtime evita reler o ARQUIVO; ele **não** evita o
+`os.path.getmtime` que decide se o arquivo mudou. Se a leitura acontece uma vez
+por linha, esse stat vai junto — foi o `_refdata_by_taxid` das cinco telas de
+Live Position (`_lp_cpty_by_taxid` → `_lp_taxid_names`), medido em **1,00 stat
+por linha**.
+
+Em disco local é um syscall de ~1 µs e some no ruído, e é exatamente por isso
+que o defeito **não aparece na máquina de desenvolvimento**. No share cada stat
+é ida e volta de rede: 3 mil linhas dão ~6 s só de stat, e uma posição de vinte
+mil dá quarenta segundos — **sem erro nenhum, nem no log**, porque ninguém
+falhou, todo mundo esperou.
+
+O remédio é o **`once_per_request`** (`apps/pages/request_cache.py`), que
+memoiza dentro de UM request. Duas decisões dele:
+
+- **só a camada de request, sem TTL entre requests** — um TTL mudaria a resposta
+  de quem edita o cadastro e recarrega, que é a garantia do §6 ("edição na tela
+  vale no request seguinte, sem restart");
+- **fora de um request não memoiza nada** — a rotina agendada é longa e tem de
+  continuar enxergando o arquivo mudar embaixo dela; memoizar ali trocaria um
+  defeito de lentidão por um de **dado velho**, que é pior porque não se vê.
+
+Ele já cobre também o `manual_conf.sla_days`, que o Monitor pergunta três vezes
+por linha. `check_stat_por_linha.py` **MEDE** o comportamento em vez de conferir
+texto.
+
 ### Um arquivo JS comanda CINCO páginas
 
 `static/js/pages/live-position-swap-characteristics.js` é um visualizador
@@ -1438,8 +1578,14 @@ Settlement Advice (Swap e NDF Commodities). O contrato são os ids
 qualquer um deixa a página **em branco, sem erro no console**. O que é
 específico de uma página (o botão Print Advice) vai no `<script>` dela, e o que
 for acrescentado ao arquivo compartilhado tem de ser **aditivo**: o array
-`statuses` por linha e o `window.scLoad` são opt-in, então as páginas que não
-mandam nada se comportam exatamente como antes (HANDOFF §184/§190).
+`statuses` por linha, o `window.scLoad` e o `source_date` do payload (o aviso
+"que dia estou vendo" das três Live Position de Swap — só aparece em quem manda
+o campo) são opt-in, então as páginas que não mandam nada se comportam
+exatamente como antes (HANDOFF §184/§190/§375). E **as CINCO telas de Live
+Position andam até dez dias úteis para trás quando falta o arquivo do dia**
+(`_opt_dposicao_path`/`_swap_day_path`), sinalizando ao lado do Reference date
+a data do arquivo LIDO — sem isso a tela abre com 0 em silêncio no dia em que a
+posição ainda não chegou, que se lê como "não está carregando".
 
 ### A família de liquidação do Other Products lê as MESMAS linhas
 
@@ -2316,8 +2462,20 @@ Intrag ficavam com o valor cru sempre que o notional estava na moeda fraca
   (erros repetidos rebaixados para `debug`). `build_session()` marca
   `trust_env=False` **de propósito**: herdar o proxy corporativo foi o que
   causou o `WinError 10061` na máquina Windows do time. O SSO Kerberos no
-  Windows precisa de `requests-negotiate-sspi`, que está **comentado** no
-  `requirements.txt` (só Windows) — instale na instância do JPM. O endpoint em
+  Windows precisa do **`requests-negotiate-sspi`**, hoje DECLARADO no
+  `requirements.txt` com marcador de plataforma (`sys_platform == "win32"`,
+  como o `pywin32` acima): o pip instala no Windows e pula no macOS/Linux, onde
+  o pacote de SSPI nem existe. Ele ficou **comentado** por um tempo, com um
+  "instale na instância do JPM" ao lado, e o passo manual é exatamente o que se
+  esquece num venv novo — o sintoma é um **`401` no
+  `/adfs/oauth2/authorize/wia`** (*Windows Integrated Authentication*), uma URL
+  de duas mil letras que não menciona pacote nenhum: sem o handler, o
+  `build_session` não anexa o `session.auth` e a requisição sai sem negociação
+  Kerberos. **No Windows o `build_session` agora LEVANTA** quando o pacote
+  falta, citando o pacote, o endpoint e o comando — seguir em frente ali troca
+  uma mensagem que RESOLVE por outra que só descreve o sintoma, e nenhuma
+  chamada à Athena pode dar certo enquanto ele faltar. Fora do Windows nada
+  muda. `check_athena_sso.py` prende as duas pontas. O endpoint em
   si não é mais constante: vem do mapping `api-links`, com
   `BASE_URL`/`TRADES_ENDPOINT` sobrando como fallback do New Deals.
 - **API de internet (BCB e Yahoo, na página Quotes): mesma sessão da Athena, mas
@@ -2354,6 +2512,18 @@ Intrag ficavam com o valor cru sempre que o notional estava na moeda fraca
   tem o bloco e as três armadilhas do espelhamento (a letra da unidade é
   descartada, o `pushd` do `.bat` mapeia o share numa letra qualquer, e versões
   diferentes precisam de prefixos diferentes).
+- **Nos `.bat` de subida, parêntese dentro de bloco `( … )` vai escapado.** O
+  `cmd` não tem parser de expressão: o PRIMEIRO `)` não escapado FECHA o bloco,
+  esteja ele onde estiver — inclusive no meio do texto de um `echo`. Um
+  `echo [INFO] … pulada (noinstall).` fechava o `if`, o `.` que sobrava virava
+  comando solto e o `start-debug.bat` morria com **`. was unexpected at this
+  time.`** antes de chegar no `run.py`. Dois motivos para isso ficar tanto tempo
+  em pé: **o erro é de PARSE, não de execução** — o `cmd` analisa o
+  `if … ( … ) else ( … )` inteiro antes de rodar qualquer coisa, então a chamada
+  sem argumento quebrava por causa de um ramo que nunca rodaria — e **nenhum
+  editor acusa**, porque o arquivo é sintaticamente plausível. Use `^(` e `^)`,
+  como o próprio arquivo já fazia no `^(rede/pypi^)`; `check_bat_blocks.py`
+  confere os `.bat` versionados.
 - **A `SECRET_KEY` é estado da MÁQUINA, não do share.** Ela assina o cookie de
   sessão, e sem uma chave estável todo mundo é deslogado a cada restart — por
   isso o app recusa subir em produção sem ela. Quem a criava era um passo do
@@ -2525,7 +2695,7 @@ delega a ele em vez de criar um arquivo vazio.
 ### As regras que não dão erro nenhum quando se quebram
 
 - **Módulo de feature nunca importa NOME do `routes` — só o MÓDULO, e dentro da
-  função.** Esta é a que causa perda silenciosa. Sessenta e um dos oitenta
+  função.** Esta é a que causa perda silenciosa. Cinquenta e seis dos cento e dez
   scripts de `scripts/tests/` trocam atributos no `routes` para não encostar em
   dado real (`R.DB_PATH = tmp`, `R._create_notification = espião`,
   `R.OTM_JSON_ROOT = tmp`). Um `from apps.pages.routes import get_db_connection`

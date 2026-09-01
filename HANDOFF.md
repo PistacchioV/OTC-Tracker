@@ -15324,3 +15324,761 @@ erro desta mudança, quando o guarda ainda montava a lista pelo eixo velho e
 simplesmente não rodava as fatias novas.
 
 Suíte completa verde.
+
+## §355 — StreamFlow: uma camada de refino sobre o visual-refresh (2026-08-30)
+
+Uma folha nova (`apps/static/css/streamflow.css`, 50 seções) e um script de ~90
+linhas (`streamflow.js`), enxertados **DEPOIS** do `visual-refresh.css` no
+`partials/head-css.html`. A camada **redefine os tokens `--vr-*`/`--ins-*`** que
+a folha anterior já consome, então as ~1100 linhas dela repintam sem uma linha
+editada — e nenhum template ganhou classe nova por causa disso.
+
+O alcance vem de seletores ESTRUTURAIS (`div[class*="-widget"]`,
+`[class*="-panel"]`), o que também explica as exclusões escritas
+(`:not(.row)`, `:not([class*="-chips"])`): nome de contêiner contém o nome do
+que ele contém, e sem a poda o seletor pega o contêiner junto com o conteúdo.
+
+Fundo líquido em `body::before/::after`, painéis de vidro, spotlight que segue o
+cursor (um `pointermove` delegado, coalescido por rAF, inerte sob
+`prefers-reduced-motion`), tags tingidas, malha técnica, os dois temas como
+cidadãos de primeira classe.
+
+Quatro decisões que o código sozinho não conta:
+
+- **o `.wrapper` fica SEM `z-index`.** Com ele vira contexto de empilhamento e o
+  `.modal-backdrop` (filho do `body`, z 1050) passa a pintar por cima do app
+  inteiro — modal e offcanvas ficavam borrados e inertes. As camadas líquidas
+  descem para `z-index: -1` em vez disso;
+- **a banda sólida do `<thead>` NÃO foi removida** para imitar o New Deals. A
+  varredura das 79 páginas deu correlação exata: as **38** tabelas com banda são
+  as 38 com `th` sticky; as **15** sem banda são as 15 com `th` estático. A
+  banda é a proteção da rolagem. Em vez de tirá-la, `--vr-thead-bg` recebeu a
+  cor MEDIDA do cartão (Δ de até 34 para no máximo 3): opaca, e invisível;
+- **o respiro acima da tabela é `margin-top`, nunca `padding-top`**: o
+  `.table-responsive` de tabela simples **é** o scrollport, e padding fica
+  dentro da área que rola — o cabeçalho sticky parava 16px abaixo do topo e as
+  linhas desfilavam pela fresta;
+- **o brilho diagonal do design system é branco puro na origem.** Sobre o
+  marinho daqui, branco dessatura e o app inteiro lia como cinza; ele foi
+  refeito com o ciano da casa. Pela mesma razão os cartões com gradiente próprio
+  (os de Total) ficam FORA dele: `background-image` não soma entre regras,
+  **substitui**.
+
+## §356 — About redesenhado na linguagem StreamFlow (2026-08-30)
+
+O `extra_css` inteiro da página foi reescrito: chips de índice em mono
+(`[ 02. Capabilities ]`), a grade de tecnologias virou esteira com trilha
+duplicada, e o "How it works" saiu de flex-wrap para CSS grid.
+
+Duas armadilhas resolvidas no caminho:
+
+- **o grid dos passos precisou PERDER as classes `d-flex` do Bootstrap.** Com
+  elas, `display: grid !important` continuava perdendo — `.ab-steps` e `.d-flex`
+  têm a MESMA especificidade, e o `app.css` é carregado **depois** do
+  `extra_css` da página (a ordem do `base.html`, a mesma armadilha do `.card` em
+  §7 do CLAUDE.md). Os passos saíam escalonados na diagonal;
+- **o logo agora é um par** (`.ab-logo--light`/`.ab-logo--dark`): havia um só, o
+  escuro, e no tema claro ele desaparecia contra o painel.
+
+A classe de revelação é **`in`**, e não `ab-in`: quem a aplica é o
+`IntersectionObserver` que já existia na página.
+
+## §357 — o card de Total padronizado nas três reconciliações (2026-08-30)
+
+As três telas divergiam entre si e do resto do app: no Comitente e na FXO o
+Total vinha no MEIO da fileira e sem a cor que o distingue dos demais; na CGD
+ele simplesmente **não existia**.
+
+- **Comitente e FXO**: o bloco do Total foi para o fim da sequência e ganhou a
+  cor própria. A regra do gradiente saiu do `<style>` da página e foi para o
+  `streamflow.css` por uma questão de **ORDEM**, não de gosto — o
+  `visual-refresh.css` pinta `.card` com o ATALHO `background: … !important`, e
+  atalho **zera o `background-image`**; carregado depois do `extra_css`, ele
+  apagava o gradiente escrito na página;
+- **CGD**: o card passou a existir, somando os demais por `reduce`, com
+  `data-b=""` para **não filtrar a grade ao ser clicado** (ele é a soma, não um
+  bucket) e o rótulo traduzido nos três idiomas.
+
+## §358 — filtro por coluna faltando em duas telas do Intrag (2026-08-30)
+
+NDF e Swap traziam `<th></th>` vazio nas colunas **Status** e **Intrag ID** da
+linha de filtro; o Option, com o mesmo layout, já trazia os dois campos. Medido
+no navegador, coluna a coluna: das quatro primeiras colunas de dado, duas não
+tinham como ser filtradas em duas das três telas.
+
+Não havia nada a mudar no JS — a ligação é por `cellIndex` do `<th>` que contém
+o input, então basta o campo existir. O Option ficou como referência, inclusive
+nos placeholders.
+
+## §359 — `--cp-faint` recalibrado para o fundo novo (2026-08-30)
+
+O subtítulo *"Operational routines hub"* quase sumiu no Control Panel. A cor não
+mudou — **o fundo mudou**: `#6e6e73` foi calibrado contra o quase-branco antigo,
+onde media 4.65:1, e sobre o azul do StreamFlow caiu para 3.56:1. `#5b5b63`
+devolve 5.6:1 sobre o fundo atual.
+
+Cor de texto se calibra **contra um fundo**, e o número escrito no comentário
+envelhece junto com ele — por isso o comentário agora diz qual é o fundo.
+
+## §360 — o par de branches agora é StreamFlow / StreamFlow-prod (2026-08-30)
+
+O comentário do bloco de ambiente do `apps/config.py` nomeia as duas branches, e
+ele é o **único lugar do código** que faz isso — quem abre o arquivo para
+entender por que existe um bloco condicional lê ali qual branch é qual. Com o
+par renomeado, ele apontava para nomes que não são mais o fluxo.
+
+A correção foi na **DEV**, de propósito: a invariante é que as duas branches
+diferem SÓ pelo bloco entre `── ENV:DEV ──` e `── /ENV ──`. Corrigir só de um
+lado criaria uma segunda diferença permanente, que é exatamente o que a
+invariante existe para evitar.
+
+## §361 — o brilho dos cartões pequenos: duas camadas somadas (2026-08-30)
+
+Os cartões do Onboarding acendiam sob o ponteiro. Eram DUAS camadas, e as duas
+pelo mesmo erro — calibrar num tipo de superfície e esquecer o outro:
+
+1. o brilho em repouso (`--sf-glass-sheen`) foi calibrado num painel largo, onde
+   a rampa de 135° se espalha e vira material. Num item de lista de ~110px de
+   altura a mesma rampa fica comprimida no mesmo espaço e vira **facho**. Ciano
+   de 15% para 9%;
+2. o bloom do hover estava na dose ORIGINAL de 55% de ciano nessas telas. A
+   suavização foi escrita só com os seletores **estruturais** (`.card`,
+   `[class*="-widget"]`, `[class*="-card"]`), e a lista de **nomes próprios**
+   ficou de fora — quinze classes: `.ob-item`, `.mc-item`, `.acc-stat`,
+   `.qt-card`, `.pa-user`, `.ei-doc-row` e as demais. Na tela isso é um cartão
+   acendendo ao lado de um cartão calmo, sem nada no CSS explicando a diferença.
+
+Medido no ponto do ponteiro, em `.ob-item` no tema escuro: o salto de cor caiu
+de ~105 para 17.
+
+É a **terceira** vez que essa divergência volta (aconteceu com o brilho no About
+e com o `background-image` dos cartões de Total), então o comentário do bloco
+agora diz que **regra de força de brilho tem de alcançar as DUAS famílias de
+seletor** — a estrutural e a de nomes próprios.
+
+## §362 — o dropdown "transparente" era EMPILHAMENTO (2026-08-30)
+
+O sintoma era *"o dropdown do filtro inteligente está totalmente
+transparente"*, e o primeiro diagnóstico — alfa baixo — estava errado: deixei o
+fundo do menu OPACO e a barra de ferramentas continuou aparecendo por cima dele.
+`elementFromPoint` dentro da caixa do menu respondia `.btn-toolbar`, não o
+`<li>`.
+
+Causa: ao dar vidro ao `.smart-filter-wrapper` eu lhe dei um `backdrop-filter`,
+e **`backdrop-filter` cria contexto de empilhamento**. O `z-index: 1055` do
+dropdown passou a valer só entre os irmãos dele, dentro de um contêiner com
+`z-index: auto` que fica na ordem do documento — abaixo da barra, que vem depois
+no DOM.
+
+É o mesmo defeito que o `.wrapper` com `z-index: 1` causou nos modais (§355):
+**`z-index` vai no WRAPPER e não no menu**, porque quem precisa subir é o
+contexto inteiro, e mexer no menu não adianta — ele já é o mais alto de um
+contexto que está embaixo.
+
+Junto veio um segundo defeito, real e independente: **dentro de uma raiz de
+backdrop o desfoque do FILHO não tem o que amostrar fora da caixa do pai** — o
+`blur(34px)` do menu estava computado e aplicado a nada. Resolvido o
+empilhamento, um menu a 80% deixaria a tabela nítida por baixo, então o fundo
+dele passa a ser **sólido**. Vale para todo `.dropdown-menu` dentro de um
+`.card`, porque o cartão também tem `blur(30px)`. As sobreposições de nível de
+página (modal, offcanvas, toast, SweetAlert) seguem penduradas no `<body>`, fora
+de qualquer raiz de backdrop, e ali o desfoque funciona de verdade.
+
+Conferido com `elementFromPoint` em NDF Commodities, Pending Confirmation e
+Intrag NDF, nos dois temas.
+
+## §363 — "arquivo em uso" virava tentativa de ESCRITA no banco do sino (2026-08-31)
+
+Erro visto na instância do JPM: o poll do sino falhando com *"the process cannot
+access the file because it is being used by another process"* no
+`Notifications_OTCTracker.db` do share. O endpoint já tenta DUAS vezes com
+250 ms de intervalo e reserva o ERROR para a falha que persiste — então o log
+prova que alguém segurou o arquivo em modo escrita por **mais de 250 ms**. Uma
+gravação de notificação é curta demais para isso; o que dura segundos é o
+`_ensure_notif_db`.
+
+Causa: a sonda `_notif_schema_pronto` colapsava duas perguntas diferentes no
+mesmo `False` — *"não está lá"* e *"não consegui olhar"*. Se o arquivo está EM
+USO ele existe e tem dono, mas a sonda respondia `False` e o ensure então abria
+em **READ-WRITE**: abertura que não pode dar certo (o DuckDB recusa enquanto
+houver qualquer outro handle) e que ainda acrescenta um concorrente disputando o
+mesmo arquivo no share, no exato instante em que ele já está disputado. Falha,
+arma a espera de 5 min, repete a cada 5 min — e nesse meio-tempo os polls do
+sino esbarram no mesmo arquivo e devolvem vazio.
+
+A sonda passou a ter **TRÊS respostas**: `True` (nada a fazer), `False` (falta
+tabela, criar) e `None` (não deu para olhar). Com `None` o ensure arma a espera
+**sem abrir nada para escrita**, e **não marca o banco como pronto** — pode
+faltar schema de verdade, e quem responde isso é a sonda da rodada seguinte, não
+um palpite agora.
+
+A classificação é **por MENSAGEM**, porque o DuckDB não dá um tipo próprio para
+disputa de arquivo, e é conservadora: o que não casar com uma assinatura
+conhecida volta a `False`, o comportamento de sempre. Errar para `False` custa
+uma tentativa de escrita; errar para `None` deixaria um banco sem schema para
+trás. Cobre a frase do Windows e a do lock do DuckDB no POSIX.
+
+`check_notif_db_boot.py` ganhou sete asserções. Isto **reduz o estrago** quando
+duas instâncias enxergam o mesmo share, mas não substitui a regra do §4 do
+CLAUDE.md — um processo só.
+
+## §364 — parêntese não escapado impedia o `start-debug.bat` de subir (2026-08-31)
+
+O `start-debug.bat` morria com `. was unexpected at this time.` logo depois do
+`[INFO] Usando Python: …`, sem chegar no `run.py`.
+
+O `cmd` não tem parser de expressão: dentro de um bloco `( … )`, o **PRIMEIRO
+`)` não escapado FECHA o bloco**, esteja ele onde estiver — inclusive no meio do
+texto de um `echo`. A linha
+
+    echo [INFO] Instalacao de dependencias pulada (noinstall).
+
+fechava o `if` no `)` de `(noinstall)`, e o `.` que sobrava virava um comando
+solto. Daí a mensagem, que não diz nada sobre parênteses nem aponta a linha.
+
+Dois detalhes explicam por que isso passou tanto tempo em pé:
+
+- **o erro é de PARSE, não de execução.** O ramo `noinstall` nunca rodaria numa
+  chamada sem argumento, e mesmo assim a chamada sem argumento quebrava — o
+  `cmd` analisa o `if … ( … ) else ( … )` inteiro antes de executar qualquer
+  coisa;
+- **nenhum editor acusa.** O arquivo é sintaticamente plausível, e o único
+  sintoma é uma linha críptica no terminal de quem tentou subir a aplicação.
+
+A mesma linha existia nos dois arquivos, e a segunda (`(requirements.txt)…`)
+tinha o mesmo defeito — o `start-prod.bat` só não tinha reclamado ainda. As
+quatro linhas usam `^(` e `^)`, que é o que o próprio arquivo já fazia duas
+linhas abaixo, no `^(rede/pypi^)`.
+
+`check_bat_blocks.py` confere os `.bat` versionados (nenhum `echo` dentro de
+bloco com parêntese cru, blocos equilibrados) e — o que importa — **verifica a
+si mesmo**, reprovando o caso que quebrou o start-debug: sem essa última
+asserção, afrouxar a regex deixaria o guarda verde por não enxergar mais nada,
+que é o mesmo verde de "está tudo certo". Os CRLF foram preservados (edição em
+bytes; 86 de 86 no debug, 126 de 126 no prod).
+
+## §365 — o 401 no ADFS era dependência de SSO ausente (2026-08-31)
+
+A importação da Athena falhava com `401 Client Error: Unauthorized for url:
+https://idag2.jpmorganchase.com/adfs/oauth2/authorize/wia?…` — uma URL de duas
+mil letras na tela, que não menciona pacote nenhum.
+
+O `wia` do endpoint é *Windows Integrated Authentication*: 401 ali significa que
+a requisição saiu **SEM** a negociação Kerberos. O `athena_api` importa o
+`HttpNegotiateAuth` do `requests-negotiate-sspi` num try/except e segue com
+`None` quando ele falta — o que é certo fora do Windows, onde o pacote de SSPI
+nem existe —, e o `build_session` simplesmente não anexava o `session.auth`.
+
+Duas correções, nas duas pontas:
+
+- o **`requirements.txt` passa a DECLARAR a dependência com marcador de
+  plataforma** (`sys_platform == "win32"`), do mesmo jeito que o `pywin32` uma
+  linha acima. Ela estava comentada, com um *"instale na instância do JPM"* ao
+  lado, e o passo manual é exatamente o que se esquece num venv novo — que foi o
+  caso aqui. Com o marcador o pip resolve sozinho: instala no Windows, pula no
+  macOS/Linux;
+- **no Windows o `build_session` LEVANTA** quando o pacote falta, com uma
+  mensagem que cita o pacote, o endpoint do 401 e o comando. Seguir em frente
+  ali é trocar uma mensagem que RESOLVE o problema por outra que só descreve o
+  sintoma — e nenhuma chamada à Athena pode dar certo enquanto ele faltar. Fora
+  do Windows nada muda: a sessão continua saindo sem auth, porque lá a Athena já
+  é inalcançável de qualquer modo.
+
+`check_athena_sso.py` prende as duas: a linha do requirements com o marcador
+avaliando SIM no win32 e NÃO no darwin, e o `build_session` levantando só no
+Windows, com os três elementos da mensagem.
+
+## §366 — ADMIN é lido como BO e assina o Pending OTC (2026-08-31)
+
+Relato: *"tem uma usuária que está como admin mas não consegue validar as
+confirmações no estágio de Pending OTC"*. Era por desenho — `_MC_STAGE_ROLE`
+manda `Pending OTC` para o papel `BO` —, e o `Role` do cadastro é **UMA**
+coluna: quem administra acessos não podia também sentar na mesa de OTC Ops.
+Elevar o SID a master resolveria pela pior porta, já que o master escapa de TODA
+restrição e passaria a assinar pelo MO e pelo FO também.
+
+`_MC_ROLE_ALIAS = {'ADMIN': 'BO'}` é a resposta estreita: ADMIN é lido como BO, e
+BO assina **só** o Pending OTC. A segregação entre as TRÊS MESAS continua de pé —
+o que caiu foi a separação entre administrar e ser Back Office, que é a que a
+mesa não quis.
+
+O apelido vale nas **DUAS** perguntas da esteira, e por isso mora num lugar só.
+Deixar o ADMIN validar sem avisá-lo é o meio-caminho que não dá erro nenhum: ele
+poderia carimbar o Pending OTC e nunca saber que havia o que carimbar. Por isso
+`_MC_STAGE_NOTIFY_ROLES` passou a ser **DERIVADO** do mapa de mesas em vez de
+escrito à mão — `'ADMIN'` repetido nas quatro linhas com `'BO'` seria um segundo
+cadastro da mesma decisão, e a etapa acrescentada amanhã sairia com a lista pela
+metade.
+
+## §367 — o papel do cadastro alcança quem já está logado (2026-08-31)
+
+Continuação do §366: *"eu alterei ela pra BO mas continuou sem poder validar"*.
+Trocar o papel no `/users-roles` **não mudava nada para quem já estava com a
+sessão aberta** — o `user_role` é gravado pelo `_set_session`, no login, e nada
+o relia depois. Com *Keep me signed in* a sessão dura **30 dias**: a pessoa
+promovida a `BO` continuava sem o botão da mesa, e a despromovida continuava com
+ele. Nos dois sentidos não há erro nenhum para ver, só uma tela se comportando
+pelo papel de semanas atrás.
+
+O `refresh_session_role` (um `before_request` em `platform/authz.py`) é **de
+graça**: a linha do usuário já era lida por SID a cada 30 s para a allowlist do
+`Page_Access`, e o `Role` passou a vir junto na MESMA query — o cache por SID
+guarda os dois, e o `_get_page_access` mantém o contrato de dois itens que os
+chamadores esperam.
+
+Quatro decisões sustentam isso:
+
+- **`None` NÃO mexe na sessão.** Banco fora do ar, ou SID sem linha, deixa o
+  papel como está. O fail-open da allowlist é aceitável e já existia; no papel,
+  seria uma falha de leitura deslogando a mesa da função dela. **`''` MEXE** —
+  papel vazio é um papel de verdade, e é assim que se revoga, que é o sentido
+  que importa para o controle;
+- **master não é tocado**: `MASTER` não é papel de banco, é o valor que o
+  `_set_session` grava para os SIDs de `_MASTER_SIDS`. Sobrescrevê-lo com a
+  coluna `Role` rebaixaria o superusuário a cada request;
+- **só grava quando MUDA**, senão o cookie assinado é reemitido a cada request
+  por um valor idêntico;
+- **é um `before_request` PRÓPRIO** e não uma carona no `enforce_page_access` —
+  aquele desiste cedo para master, `/api/*`, `/static*` e todo path fora do
+  menu, e é justamente em `/api/*` que a mesa valida.
+
+`Role` está na `CREATE TABLE` base e `Page_Access` é a coluna que nasceu de um
+`ALTER`, então **nenhum banco que responda a primeira pode faltar com a
+segunda** — a query com as duas colunas não regride ninguém.
+
+`check_session_role.py` (novo, com o DuckDB em tempfile) prende os quatro pontos
+e o efeito de ponta; os nomes novos entraram na lista `PROIBIDO_SEMPRE` do
+`check_unlocked_reads` (eles decidem acesso) e nas duas listas de fronteira do
+`check_soc_layers`.
+
+## §368 — a SECRET_KEY é estado da MÁQUINA, e o app passa a mantê-la (2026-08-31)
+
+Uma pessoa não conseguia subir a aplicação:
+
+    RuntimeError: SECRET_KEY environment variable is required in production.
+    … para produção, defina SECRET_KEY no .env.
+
+A guarda está certa — sem chave estável, todo cookie de sessão é invalidado a
+cada restart e a pessoa é deslogada sem motivo aparente. Mas quem **criava** a
+chave era um passo do `start-otc-tracker.bat`, que mora no share e não está no
+repositório (§322: `%LOCALAPPDATA%\OTC-Tracker`, ao lado do `.snapshot` do
+requirements).
+
+Isso era invisível enquanto a mesa inteira usava UMA instância. Com as travas do
+Windows 11 cada pessoa passou a rodar a sua, e o passo virou manual **por
+máquina**: a máquina em que ele não roda não sobe — e a mensagem manda definir a
+chave no `.env`, que é justamente o único lugar em que ela não está. Não há como
+acertar isso lendo o erro.
+
+O app passa a manter o arquivo sozinho (`_persisted_secret_key`). Isso **não
+afrouxa a exigência**: o que ela impede é a chave ALEATÓRIA a cada restart, e um
+arquivo persistido é estável do mesmo jeito que o `.env` seria. `SECRET_KEY` no
+ambiente continua vencendo, e continua sendo o jeito de várias máquinas
+compartilharem sessão.
+
+O teste achou de quebra uma fragilidade que já estava lá: **`Config.SECRET_KEY`
+é lida no CORPO DA CLASSE**, isto é, no import. Quem importasse `apps.config`
+antes do `load_dotenv()` do `run.py` congelava o fallback aleatório **com a
+chave certa no `.env` ao lado** — app subindo sem erro nenhum e deslogando todo
+mundo a cada restart. A variável passou a ser relida no `create_app`, então a
+ordem de import não decide mais a chave.
+
+Detalhes que importam: o arquivo nasce **0600** por `os.open` (quem lê a chave
+assina cookie em nome de qualquer pessoa, e no Windows a umask é permissiva);
+ele **nunca** vai para o share (chave comum é chave que qualquer um usa) nem
+para `%TEMP%` (Limpeza de Disco apaga, e chave apagada desloga todo mundo);
+`OTC_SECRET_KEY_FILE` o move; e caminho ingravável volta a **RECUSAR a subida**,
+agora com a mensagem nomeando o arquivo que ele tentou.
+`check_secret_key.py` prende os cinco pontos, a persistência entre duas subidas
+e o modo do arquivo.
+
+## §369 — cabeçalho e valores centralizados: cinco telas fora do padrão (2026-08-31)
+
+As tabelas do Accrual de Swap saíam com header e valores encostados à esquerda.
+A causa é que **NÃO existe regra global de centralização** — o
+`visual-refresh.css` centraliza só os campos da linha de filtro e o
+`streamflow.css` não declara `text-align` em lugar nenhum —, então cada tela
+declara a sua, e a que nasce sem ela **nasce torta sem ninguém errar nada**. O
+`.acc-th-title th` e o `tbody td` do Accrual declaravam fonte, cor e padding, e
+nunca o alinhamento.
+
+Varredura das 79 telas do menu no navegador (82 tabelas visíveis, computed
+style, célula real). **Cinco** estavam fora, por dois motivos diferentes:
+
+- **Accrual e MtM de Swap** não tinham regra nenhuma de alinhamento;
+- **Track de usuários e Support Center** também não: o `table-centered` do
+  markup vem do tema comprado e **não existe em CSS nenhum**, então não
+  centralizava coisa alguma;
+- **Pending Confirmation** tinha as regras, e ainda assim o cabeçalho saía à
+  esquerda com o corpo centralizado. Com `scrollX` o que se vê é o **CLONE**, de
+  onde o DataTables remove o id, e aí a regra da página compete sem o id que a
+  fazia ganhar: `table.dataTable thead th` é **(0,1,3)** contra **(0,1,2)**, e o
+  plugin vence. Confirmado por CDP, na cascata do elemento. A correção é o
+  `!important` que as outras 18 telas com `scrollX` já tinham.
+
+Ficaram de fora **de propósito**: a grade do `holidays-calendar` (é o
+FullCalendar, não tabela) e as três telas de DEMONSTRAÇÃO do tema comprado —
+`dashboard-2`, `users-profile` e `widgets` —, cujas linhas são fixas no HTML
+("E-Commerce Redesign", "15 Aug 2025") e cujas colunas numéricas levam
+`text-end` de propósito. São da mesma família do `horizontal.html`, que foi
+apagado; centralizá-las seria arrumar dado de mentira.
+
+`check_table_center.py` prende as duas metades, com o Accrual e o Pending
+Confirmation de antes como casos que ele **tem de reprovar**. O que ele não
+tenta responder é se o clone se salva por outro caminho: há três válidos no repo
+(o `!important`, a classe `.text-center` no markup da Recon de Comitentes e um
+seletor com id que alcança o clone por conter a página, nos dois Summaries), e
+distinguir isso é trabalho de navegador — **o `th` do UA já é
+`-internal-center`**, então quem decide é quem sobrescreve.
+
+## §370 — o Due Date do Ticket Details: o campo que se vê é OUTRO (2026-08-31)
+
+O campo que se **VÊ** não é o `#tkd-due-inp`: é o **`altInput`** que o flatpickr
+cria ao lado (o original fica escondido, com o valor em ISO). Esse elemento novo
+herda a **CLASSE** do original — o `altInputClass` a copia — e **NÃO o `style=`
+dele**. A largura estava justamente no inline `style="max-width:200px"`, então
+ela ficava no campo escondido e o visível esticava a coluna inteira: **468px em
+vez de 190px**.
+
+O ícone tem a mesma origem. O campo já foi um `type="date"`, que desenha o
+calendário nativo; ele foi trocado pelo flatpickr porque o nativo escreve no
+locale do SISTEMA e no Windows do JP isso é `mm/dd/yyyy` (§7 do CLAUDE.md) — e o
+flatpickr não desenha ícone nenhum.
+
+A largura virou **classe** (alcança os dois campos) e o ícone é **background do
+próprio input**, então clicar nele é clicar no campo e o picker abre — um `<i>`
+sobreposto exigiria envolver um elemento criado em tempo de execução. **SVG
+embutido e não arquivo**, porque a instância roda sem internet, e com o par de
+tema claro/escuro, senão a marca some no escuro (`#6c757d` no claro, `#9aa4b2`
+no escuro).
+
+## §371 — um `stat` por LINHA fazia o Live Position levar minutos (2026-08-31)
+
+Relato: *"está demorando MUITO para carregar as tabelas de live position, de
+qualquer produto"*.
+
+As cinco telas de Live Position resolvem o nome da contraparte pelo
+`RefData.json` uma vez por **LINHA** (`_lp_cpty_by_taxid` → `_lp_taxid_names` →
+`_refdata_by_taxid`). O cache por mtime evitava reler o **ARQUIVO**; ele não
+evitava o **`os.path.getmtime` que decide se o arquivo mudou** — e esse ficava
+dentro do laço de linhas.
+
+Medido, com arquivo-dia sintético e espião no `getmtime`: **1,00 stat por
+linha**. Em disco local é um syscall de ~1 µs e some no ruído, e é por isso que o
+defeito **não aparece na máquina de desenvolvimento**. No share do JPM cada stat
+é ida e volta de rede: 3 mil linhas dão ~6 s só de stat a 2 ms cada, e uma
+posição de vinte mil dá quarenta segundos. Sem erro nenhum, nem no log, porque
+ninguém falhou — todo mundo esperou.
+
+`once_per_request` (novo, em `request_cache.py`) memoiza dentro de UM request.
+Depois: **3000 stats → 1**. Duas decisões dele:
+
+- **só a camada de request, sem TTL entre requests.** Um TTL mudaria a resposta
+  de quem edita o cadastro e recarrega, que é a garantia de que "edição na tela
+  vale no request seguinte, sem restart" (§6 do CLAUDE.md);
+- **fora de um request não memoiza nada.** A rotina agendada é longa e tem de
+  continuar enxergando o arquivo mudar embaixo dela — memoizar ali trocaria um
+  defeito de lentidão por um de **dado velho**, que é pior porque não se vê.
+
+O mesmo decorador foi para o `manual_conf.sla_days`, que o Monitor pergunta
+**três vezes por linha** (via `sla_state`) e que tem exatamente a mesma forma.
+`check_stat_por_linha.py` **MEDE** o comportamento em vez de conferir texto, e
+prende também o lado de fora do request.
+
+## §372 — o farol alcança as leituras do espelho DuckDB (2026-08-31)
+
+Pedido: *"insira os dbs no config, pois todos precisam ter o `.db.lock` também
+para funcionar o farol"*. Os bancos do espelho — dezenas hoje, e um NOVO a cada
+produto ou cadastro que aparece — estavam fora do painel do `database_access`: o
+`duck_read.py` abria com `duckdb.connect` cru, então nenhum evento do farol era
+emitido e nenhum `.lock` era criado. Quando uma leitura DB-first demorava ou
+recusava, não havia rastro nenhum de por quê.
+
+Passando pelo **`duckdb_read`**, o ciclo completo volta a aparecer —
+`local_permit_*`, `file_lock_*`, `connection_opened/closed`,
+`operation_completed` (conferidos: **sete** eventos numa leitura de
+`db/mappings/mt300.db`) — e o `.lock` do banco nasce na PRIMEIRA abertura.
+
+Isso responde ao pedido pelo caminho que funciona. **Duas razões para não ser
+uma lista no `DATABASE_ACCESS_PATHS`:**
+
+- **a tupla do config não liga o farol.** Ela é consumida só pelo
+  `validate_database_paths`, que na subida faz `makedirs` e cria o arquivo de
+  lock — uma conferência de gravabilidade. Quem emite evento e toma lock é a
+  **CAMADA**, e os dois módulos do espelho não passavam por ela: listar caminhos
+  ali criaria `.lock` que ninguém usa;
+- **os caminhos são dinâmicos.** A árvore do espelho nasce dos DADOS (um banco
+  por produto de arquivo-dia, um por JSON avulso; 74 só nesta máquina, e o
+  `cache/` cresce a cada produto). Uma tupla escrita à mão envelheceria no
+  primeiro mapping novo — e uma lista **PARCIAL é pior que nenhuma**, porque dá
+  a impressão de cobertura.
+
+O custo foi medido antes: **12,67 ms** por abertura pela camada contra
+**12,82 ms** crua. A abertura do DuckDB domina; o lock compartilhado e o permit
+somem no ruído. E a leitura que estourasse timeout já cai no JSON pelo `except`
+que existe ali, que é o comportamento de melhor esforço desta camada.
+
+**FALTA a outra metade**: as quatro aberturas de **ESCRITA** do
+`json_to_duckdb.py` seguem cruas. Duas delas mantêm um **POOL** de conexões
+(`cons[db]`) vivo através de muitos arquivos, e convertê-las exige reestruturar
+o pool antes — não é uma troca de linha como esta. Enquanto isso, o lock
+compartilhado das leituras **não exclui o escritor**: ele dá visibilidade, não
+exclusão mútua.
+
+## §373 — a disputa pelo banco de notificações deixa de virar ERROR: o sino serve a última resposta boa (2026-08-31)
+
+Pedido: *"preciso resolver de vez o erro da imagem anexa"* — o log da instância
+do JPM com `ERROR [_notif_query_failed] … duckdb.ConnectionException: Can't
+open a connection to same database file with a different configuration than
+existing connections`, vindo do poll do sino (`api_get_notifications` →
+`duckdb_read_unlocked`).
+
+**A causa não é um defeito novo — é o teto do leitor menor que uma gravação no
+share.** O portão do §319 (`_UnlockedReadGate`) faz o poll esperar 1s por uma
+escrita em curso, e a retentativa do próprio endpoint soma 250ms + mais 1s de
+portão: ~2,25s de tolerância total. No share, um `duckdb_write` de notificação
+— abertura read-write, BEGIN, INSERT, COMMIT e close, cada um ida e volta de
+rede — passa disso com frequência. O poll então tentava o connect mesmo assim,
+o DuckDB recusava (uma instância por arquivo, configurações mistas não), e o
+endpoint fazia o que o desenho mandava: sino vazio + ERROR no log. Só que o
+ERROR saía **a cada gravação mais longa que a espera**, apontando um "problema"
+que o poll seguinte resolvia sozinho — e a mensagem ("o sino fica vazio até
+isto ser resolvido") mandava alguém investigar um estado que já tinha passado.
+
+**O que mudou** (o portão e a camada de banco ficaram como estavam):
+
+- **a abertura que falha por DISPUTA serve a última resposta boa** daquele
+  usuário (`_notif_last_good`, chave SID × papel — o payload é pós-filtro de
+  página, que é decisão por usuário), sem ERROR nenhum. O sino de alguns
+  segundos atrás continua certo, e é melhor que piscar vazio por um ciclo;
+- **quem classifica a disputa é o `_notif_arquivo_em_uso`** da platform — o
+  mesmo da sonda da subida (§notif-db), nunca um segundo teste sobre as mesmas
+  mensagens. A assinatura `different configuration` entrou na tupla
+  `_NOTIF_EM_USO` (é o conflito intra-processo, a mesma família do
+  `already open`), o que de quebra faz a sonda da subida responder `None` ("não
+  deu para olhar") também nesse caso, em vez de `False` ("criar schema");
+- **o teto de idade do cache (10 min) é o que preserva o alarme.** Uma conexão
+  de escrita VAZADA responde a MESMA mensagem para sempre; com o cache vencido
+  o caminho volta a ser o de sempre — ERROR uma vez (deduplicado por motivo),
+  sino vazio — que é a falha que pede alguém. Sem o teto, o cache esconderia o
+  vazamento atrás de um sino congelado;
+- toda OUTRA falha de abertura (arquivo inexistente, schema, IO) segue no
+  caminho antigo intacto: ERROR uma vez, sino vazio, poll seguinte corrige.
+
+Por que não os caminhos alternativos: esperar mais no portão é a FILA que o
+`unlocked` existe para evitar (uma thread do waitress parada por aba); abrir
+tudo read-write eliminaria o conflito de configuração ao custo de o processo
+segurar o arquivo exclusivo contra a instância vizinha; e um cache dos DADOS
+crus com filtro em Python duplicaria a regra de visibilidade do SQL — o cache é
+da RESPOSTA pronta, por usuário, e só é consultado na falha.
+
+Guardas: `check_notif_db_boot.py` ganhou a seção 6 (poll bom povoa o cache; a
+disputa serve a resposta boa SEM `_notif_query_failed`; cache vencido volta a
+ERROR + vazio) e a classificação da assinatura nova. `check_unlocked_gate`,
+`check_unlocked_reads` (continua UM ponto de chamada `unlocked=True`),
+`check_db_read_path`, `check_notif_sid` e `check_notif_page_url` seguem verdes.
+CLAUDE.md §4 atualizado.
+
+## §374 — os cards do Live Position Option contam por Classe do Ativo Subjacente (2026-09-01)
+
+Pedido: *"no live position option, os cards de metricas do inicio faça a
+contagem pela coluna de classe do ativo subjacente"*. Os três cards eram
+placeholders (`Metric A/B/C`, sempre 0) desde que a página nasceu.
+
+O domínio da coluna é do ARQUIVO (hoje `COMMODITIES`, `TAXA DE CAMBIO` e
+`ACOES`), então os cards são **dinâmicos**: `_lpopt_collect` devolve
+`widgets.classes` — `[{label, count}]` em ordem de contagem (desempate
+alfabético) — e o JS escreve rótulo e número nos três cards, por cima do
+placeholder. O rótulo é DADO, não texto de UI, por isso não passa por tradução
+(mesma regra dos cabeçalhos de coluna). Classe nova entra sozinha, sem de-para
+no código (§6 do CLAUDE.md); com menos de três classes o card sobrando fica
+`—`/0. Linha sem classe não vira card, mas conta no Total — que segue sendo a
+posição viva inteira.
+
+## §375 — as cinco Live Positions andam para trás quando falta o arquivo, e DIZEM de que dia é a posição (2026-09-01)
+
+Dois pedidos do mesmo defeito: *"se o arquivo do dia padrao de d-1 nao estiver
+disponivel, tem que trazer a info do ultimo arquivo disponivel, e sinalizar de
+qual data esta sendo considerada"* e *"no live position de swap, se eu mudo o
+dia de reference date, ele nao esta carregando"* — mais o WARNING
+`[swapchar] no DPOSICAO-SWAP for 260831; page shows 0` no log da instância.
+
+O "não carrega" era isto: NDF e Option já andavam até dez dias úteis para trás
+(`_opt_dposicao_path`, `max_back=10`), mas as três de Swap (Characteristics ·
+Cashflow · Premium) liam SÓ o dia pedido — dia sem arquivo (o D-1 de
+segunda-feira que ainda não chegou, ou qualquer data escolhida no picker sem
+posição) abria a tela com 0, sem nada dizendo por quê. E mesmo NDF/Option, que
+caíam para o arquivo anterior, não CONTAVAM isso a ninguém — o payload levava
+`source_date` e a tela o ignorava.
+
+- **`_swap_day_path(ref, file_tpl, max_back=10, exact=False)`** — o resolvedor
+  único dos três coletores de Swap, mesmo contrato do `_opt_dposicao_path`. O
+  join de contraparte do Premium usa o dref do arquivo LIDO, para as duas
+  fontes falarem do mesmo dia. Os três endpoints aceitam `exact=1` (contrato do
+  Advanced Export, §304) e devolvem `source_date` em TODO retorno — inclusive
+  os vazios; no modo `exact` o dia sem arquivo não gera WARNING (é pulado por
+  contrato, e um export de intervalo viraria spam no log).
+- **A sinalização é um badge ao lado do Reference date**, nas CINCO telas:
+  "Sem arquivo para a data escolhida — exibindo a posição de dd/mm/aaaa", e
+  "Sem arquivo de posição nos últimos 10 dias úteis" quando nem a janela achou
+  nada (senão a tela vazia continuaria muda). No JS compartilhado do swapchar o
+  aviso é ADITIVO — só age quando o payload manda `source_date`, então as
+  outras páginas do visualizador (Other Products Swap, Settlement Advices)
+  seguem exatamente como antes. i18n pelo `_TRANS` local de cada página, como o
+  resto do texto montado em JS.
+- O teto de dez dias úteis é o padrão da casa (é o que o §3 do CLAUDE.md já
+  documentava para as telas de posição); além dele, a falta de arquivo é
+  defeito da rotina de importação e a resposta certa é o aviso, não uma
+  varredura sem fim no share.
+
+Smoke: swapchar/cashflow pedidos em 28/07 caem para o arquivo de 24/07 com
+`source_date: 2026-07-24`; `exact=1` devolve vazio sem WARNING; premium sem
+arquivo em toda a janela devolve vazio com `source_date: ''`.
+`check_lp_counterparty_name`, `check_ops_equity_option`, `check_swap_advice`,
+`check_stat_por_linha` e `check_soc_layers` verdes.
+
+## §376 — o texto do sino não é mais cortado pelo token comprido (2026-09-01)
+
+Pedido: *"as notificaçoes estao saindo meio quebradas no texto, nao aparece
+100% do que foi feito"* — o item "Pending Bulk Update … FepWeb ID =
+FEPWEB_FX_051_…" aparecia com TODAS as linhas cortadas, inclusive a ação.
+
+O detail gravado está íntegro; o corte era visual e tinha DUAS causas somadas,
+por isso duas regras de CSS no topbar: o filho flex do texto tem `min-width`
+default `auto` e não encolhe abaixo do conteúdo — um token sem espaços (o
+FepWeb ID) alargava o bloco de texto além do dropdown, e o `overflow-x: hidden`
+do `#notif-list` cortava todas as linhas na mesma altura (por isso até o
+"Pending Bulk U" saía pela metade) —, e mesmo encolhendo o token não quebraria
+em linha. `min-width: 0` + `overflow-wrap: anywhere`, no item do sino e no
+toast, que desenham o mesmo corpo (`notifBodyHtml`).
+
+## §377 — ajustes da rodada de tela: baldes fixos no Option, o `?v=` que segurava o aviso das Swap, Cashflow e Indexes (2026-09-01)
+
+Quatro acertos sobre o §374/§375, todos pedidos com print na mão:
+
+- **Os cards do Live Position Option viraram TRÊS BALDES FIXOS** — Commodities,
+  Taxas de Câmbio e **Equities = tudo que não é os dois primeiros** (ações e o
+  que mais vier, linha sem classe incluída) — no lugar do top-3 dinâmico do
+  §374, que abria com `—`/0 quando o dia não tinha arquivo. Os baldes FECHAM
+  com o Total, então classe nova não some: cai em Equities. A comparação é
+  normalizada e aceita singular/plural (`TAXA DE CAMBIO` é como o arquivo de
+  Opção escreve; o coletor de NDF já aceitava as duas grafias). Os títulos
+  espelham os valores da coluna (dado, não texto de UI) e ficam sem
+  `data-lang`; `widgets` agora leva `commodities`/`fx`/`equities` no lugar de
+  `classes`.
+- **O aviso "sem arquivo" não aparecia nas três páginas de Swap por CAUSA DO
+  CACHE**: os templates pinam o JS compartilhado com `?v=20260721a`, então o
+  navegador seguia servindo a versão de julho — sem o `renderSrcNote`. O
+  código estava certo; o que faltou foi subir a versão. Os CINCO templates de
+  Live Position foram para `?v=20260901a`. **Lição: mexeu num JS de página,
+  suba o `?v=` do(s) template(s) que o incluem na MESMA mudança** — o sintoma
+  é "a mudança não funciona" só para quem já tinha visitado a página.
+- **O item do menu dizia "Flow" pela TRADUÇÃO, não pelo template**: o
+  `sidenav.html` já escrevia Cashflow, mas o `data-lang="nav-flow"` trocava o
+  texto no load pelos valores antigos (`Flow`/`Fluxo`/`Flujo`). As três
+  línguas agora dizem `Cashflow`, igual à chave irmã `nav-cashflow` — nome de
+  página não se traduz.
+- **"Indexers" → "Indexes"** no card do Swap Characteristics: template e as
+  três traduções (`Indexes`/`Índices`/`Índices`).
+
+Smoke: `_lpopt_collect` no arquivo de 24/07 → `{'total': 14, 'commodities': 9,
+'fx': 3, 'equities': 2}`. `check_lp_counterparty_name` e
+`check_ops_equity_option` verdes; JSONs de tradução validados por parse.
+
+## §378 — Track Confirmations: N/A nas colunas de FO isentas, e a coluna FepWeb ID que se preenche sozinha (2026-09-01)
+
+Dois pedidos na mesma tela:
+
+- **Produto que NÃO passa por validação de FO mostra `N/A`** nas três colunas
+  da mesa (Validated by FO · Time Stamp · FO Comments) — a célula vazia ali se
+  lia como "falta validar", e não falta. Quem responde é o cadastro
+  `manual-conf-validation` (o mesmo do `pending_stage`), via o pseudo-campo
+  **`_fo_na`** que o `load_rows` põe na linha: começa com `_`, o INSERT filtra
+  por `DB_COLUMNS` e ele NUNCA persiste. Gravar 'N/A' no banco seria pior —
+  viraria uma "validação" no dia em que o cadastro mudasse o produto para
+  REQUESTED, e tropeçaria nas regras do §232 (preencher validação pela grade É
+  validar). O render é ortogonal: display e filtro dizem N/A; o dado cru segue
+  vazio.
+- **A coluna `Nome fep` virou rótulo "FepWeb ID"** (só o rótulo — o nome do
+  banco não muda, §"NOMES × RÓTULOS") **e se preenche sozinha** com o
+  numeroContrato que a geração da confirmação grava na coluna FepWeb ID do
+  Pending Confirmation (`_conf_pc_set_fepweb`). Quem preenche é o
+  **`_mc_sync_fepweb_ids`** (platform), chamado quando o Track carrega: deriva
+  do PC — a FONTE — pelo elo do `_mc_pc_sync` (MC `Trade ID` = PC
+  `Trade Number`), o que cobre o histórico de graça e mantém UMA regra (um
+  segundo gravador dentro da geração seria a segunda cópia). Custos: nada de
+  banco quando não há célula vazia; uma consulta por DB para o lote; grava só
+  o que mudou (`set_fepweb_ids`, extraído do `set_email_subjects` no
+  `_set_cells` comum); melhor esforço por DB. Smoke em tempfile: fo_na por
+  produto, sync preenche+persiste, segunda chamada é no-op.
+
+## §379 — Tickets com IMAGENS: dropzone (arrastar · upload · Ctrl+V), miniaturas e lightbox (2026-09-01)
+
+Solicitação de usuário (ticket #OTC-0028). As imagens moram em
+**`{DATABASE_DIR}/tickets/images`** (a pasta que o usuário pediu, ao lado do
+espelho tickets.db), nomeadas **`<ID>_<n>.<ext>`** — o ID do ticket é o
+vínculo; nenhuma coluna nova no store. Fora do tickets.json de propósito:
+binário não pertence a um JSON que o espelho DuckDB reconverte a cada gravação.
+
+- **Store (`otc_tickets`)**: `images_dir`/`list_images`/`save_images`/
+  `delete_image` — extensão em whitelist (png/jpg/gif/webp/bmp), teto de 10 MB,
+  lote tudo-ou-nada, índice que não reusa número apagado; `delete()` do ticket
+  leva as imagens junto (melhor esforço).
+- **Rotas (support/entrypoint)**: POST/GET/DELETE em
+  `/api/tickets/<id>/images[/<nome>]`. Ver = quem vê o ticket (mesa); anexar e
+  apagar = **`can_edit_fields`** (requester enquanto aberto, master sempre) — a
+  imagem explica o problema, então é conteúdo, como a descrição. O GET serve
+  pela rota AUTENTICADA (a pasta vive na db/, fora do /static), e o nome só
+  passa se for um que o save gera E com o prefixo daquele ticket.
+- **Telas**: o New Ticket ganhou dropzone no modal (as imagens ficam em staging
+  e sobem DEPOIS do POST — é ele que dá o ID; falha vira aviso no balão, o
+  ticket já existe). O Ticket Details mostra miniaturas (clique = lightbox no
+  Swal local), com dropzone e X só para quem edita; Ctrl+V vale na página fora
+  de campo de texto (só captura IMAGEM do clipboard — colar texto segue
+  normal). i18n nos três jsons.
+
+Smoke por HTTP: upload multipart (jpeg→jpg), GET com a lista, serve 200,
+traversal 404, .exe recusado com 400 dizendo o motivo, delete individual, e o
+delete do ticket deixando a pasta limpa. `check_tickets` e `check_soc_layers`
+verdes.
+
+## §380 — a varredura do botão Columns: duas páginas escondiam a coluna ERRADA (2026-09-01)
+
+Pedido: *"na Pending Confirmation, desmarco Aging e não é ela que sai — veja
+todas as páginas que usam a função"*. A varredura cobriu as **29** superfícies
+com o menu (4 idiomas de implementação; as 9 páginas do `buildColumnsToggle` e
+as 4 do `columns().every()` derivam o menu dos `<th>` REAIS e não têm como
+desalinhar). Duas quebradas, o MESMO defeito — array de rótulos escrito à mão
+que driftou da tabela:
+
+- **pending-confirmation.html**: os cinco primeiros rótulos estavam
+  rotacionados (menu começava em LOB; a tabela começa em **Status**, col 2).
+  Desmarcar Aging (`data-column` 5) escondia **Client**. O próprio arquivo
+  tinha a prova da ordem certa no `PC_MASS_COLUMNS` e no `order [[6]]`;
+- **new_deals-opt-commodities.html**: **`Spot FXRate` entrou no `<thead>`
+  (col 27) sem entrar no array** — do FXConvDate para baixo o menu escondia a
+  coluna vizinha, e a última ("Quoted in Cents?") ficou inalcançável. A página
+  irmã de NDF Commodities tinha o array certo; a de Option não foi junto.
+
+Correção mínima nos dois arrays (a ordem é a do `<thead>`, coluna a coluna).
+Estrutural para o futuro: página nova deve preferir derivar o menu dos
+`columns().header()` reais, como as 13 que não têm como quebrar.
+
+## §381 — miudezas de tela da rodada (2026-09-01)
+
+- **Sidenav**: *Tracking Docs* → **Track Docs** — de novo a TRADUÇÃO era o
+  portador (chave `nav-onb-tracking` nas três línguas), como no nav-flow do
+  §377.
+- **Tickets List**: o New Ticket saía mais alto que o Export porque o
+  contêiner flex ESTICA os filhos até o mais alto (o campo de busca) — o
+  Export não estica porque vive dentro do wrapper `.dropdown`.
+  `align-items-center` no contêiner.
+- **Confirmations Monitor**: os chips de documento/e-mail do card tinham
+  `max-width: 15rem` e sobrava uma faixa à direita — agora um chip por linha
+  na largura do card (`flex: 1 1 100%`), ellipsis segurando os nomes longos.
+- **Control Panel, tema escuro**: o nome do arquivo no chip do dropzone sumia —
+  `--cp-ink` é tinta CLARA (#1d1d1f) e o chip era o único consumidor sem o par
+  `[data-bs-theme=dark]` (§7). E os chips ganharam **ícone por TIPO de
+  arquivo** (`cpFileIcon` — o mesmo mapa e cores do dropzone do New Deals no
+  otc-fileupload.js; os dropzones do New Deals já tinham). xlsx/csv =
+  planilha verde, pdf vermelho, txt, msg/eml = envelope, imagem, zip…
