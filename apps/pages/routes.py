@@ -5605,7 +5605,13 @@ def _optadv_collect(ref):
         # que TEM cotação — o outro jeito a mandaria para 'N/A' calada.
         fix_subj = _lcell(lrow, 'Data de fixing do ativo subjacente')
         if e_fx:
-            ptax, cot = fix_subj, _OPTADV_FX_NA
+            # VANILLA: a data da cotação (o fixing do subjacente, que em câmbio
+            # é a própria PTAX). ASIÁTICA: não há data única — vale a média do
+            # mês da 1ª data de verificação, o mesmo rótulo do aviso de termo.
+            # Era só o fixing, e a opção de câmbio asiática saía com a coluna
+            # Ptax VAZIA — que se lê como "faltou o dado" (2026-09-01).
+            ptax = fix_subj or _ndfadv_media_label(_lcell(lrow, 'Média Asiática (data) 1'))
+            cot = _OPTADV_FX_NA
         else:
             ptax = _lcell(lrow, 'Data de fixing da moeda do ativo subjacente')
             # Vazio é o caso da ASIÁTICA: não há data única, e o que vale é o
