@@ -45,6 +45,22 @@
 #tk-page th[data-tk-sort] { cursor: pointer; user-select: none; }
 #tk-page th[data-tk-sort]:hover { color: var(--ins-emphasis-color); }
 
+/* Dropzone de imagens do New Ticket (pedido 2026-09-01). Fora do #tk-page: o
+   Swal pendura o modal no <body>. */
+.tk-dropzone { border: 1.5px dashed rgba(128,128,128,.4); border-radius: 12px;
+    padding: 12px; text-align: center; cursor: pointer; font-size: .8rem;
+    color: var(--ins-secondary-color, #8a93a3); user-select: none;
+    transition: border-color .2s ease, background-color .2s ease; }
+.tk-dropzone.tk-dz-over { border-color: #0d6efd; background: rgba(13,110,253,.06); }
+.tk-drop-thumbs { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.tk-drop-thumbs .tk-thumb { position: relative; width: 64px; height: 64px;
+    border-radius: 8px; overflow: hidden; border: 1px solid rgba(128,128,128,.3); }
+.tk-drop-thumbs .tk-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.tk-drop-thumbs .tk-thumb button { position: absolute; top: 2px; right: 2px; width: 18px;
+    height: 18px; border: none; border-radius: 6px; padding: 0; font-size: .65rem;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(0,0,0,.55); color: #fff; cursor: pointer; }
+
 /* Campos do Swal: o tema escuro do SweetAlert não alcança inputs nativos. */
 .tk-swal-form { text-align: left; }
 .tk-swal-form .form-label { font-size: .78rem; font-weight: 600; text-transform: uppercase;
@@ -141,7 +157,11 @@
         <div class="col-12">
             <div class="card">
                 <div class="card-header border-light justify-content-between">
-                    <div class="d-flex gap-2">
+                    <!-- align-items-center: sem ele o flex ESTICA os filhos até o
+                         mais alto (o campo de busca) — o New Ticket, filho direto,
+                         saía maior que o Export, que não estica porque vive dentro
+                         do wrapper .dropdown. -->
+                    <div class="d-flex align-items-center gap-2">
                         <div class="app-search">
                             <input class="form-control" id="tk-search" type="search"
                                    placeholder="Search tickets..." data-lang-placeholder="tk-search-ph" />
@@ -559,12 +579,42 @@ document.addEventListener('DOMContentLoaded', function () {
                 '<input class="form-control" id="tk-f-tags" type="text" placeholder="' +
                     esc(t('tk-f-tags-ph', 'e.g. login, error, report')) + '" />' +
               '</div>' +
-              '<div>' +
+              '<div class="mb-2">' +
                 '<label class="form-label" for="tk-f-desc">' + esc(t('tk-f-desc', 'Description')) + '</label>' +
                 '<textarea class="form-control" id="tk-f-desc" rows="5" placeholder="' +
                     esc(t('tk-f-desc-ph', 'Describe the issue in detail...')) + '"></textarea>' +
               '</div>' +
+              '<div>' +
+                '<label class="form-label">' + esc(t('tk-f-images', 'Images')) + '</label>' +
+                '<div class="tk-dropzone" id="tk-f-drop"><i class="ti ti-photo-plus me-1"></i>' +
+                    esc(t('tk-f-drop-hint', 'Drag & drop, paste (Ctrl+V) or click to add images')) + '</div>' +
+                '<div class="tk-drop-thumbs" id="tk-f-thumbs"></div>' +
+                '<input type="file" id="tk-f-imgs" accept="image/*" multiple style="display:none">' +
+              '</div>' +
             '</div>';
+
+        // Imagens preparadas ANTES de o ticket existir: ficam aqui e sobem
+        // depois do POST /api/tickets, que é quem dá o ID que as nomeia.
+        var staged = [];
+        function renderThumbs() {
+            var box = document.getElementById('tk-f-thumbs');
+            if (!box) { return; }
+            box.innerHTML = staged.map(function (s, i) {
+                return '<div class="tk-thumb"><img src="' + s.url + '" alt="">' +
+                       '<button type="button" data-unstage="' + i + '"><i class="ti ti-x"></i></button></div>';
+            }).join('');
+        }
+        function stageFiles(files) {
+            Array.prototype.forEach.call(files || [], function (f) {
+                if (!f || (f.type || '').indexOf('image/') !== 0) { return; }
+                var name = f.name && f.name.indexOf('.') > 0
+                    ? f.name
+                    : ('pasted-' + (staged.length + 1) + '.' +
+                       ((f.type.split('/')[1] || 'png').replace('jpeg', 'jpg')));
+                staged.push({ file: f, name: name, url: URL.createObjectURL(f) });
+            });
+            renderThumbs();
+        }
 
         Swal.fire({
             title: t('tk-new-title', 'Create New Support Ticket'),
@@ -579,6 +629,38 @@ document.addEventListener('DOMContentLoaded', function () {
             didOpen: function () {
                 var s = document.getElementById('tk-f-subject');
                 if (s) { s.focus(); }
+                // Dropzone: clique abre o seletor; arrastar solta aqui; e o
+                // Ctrl+V vale no modal INTEIRO — só captura item de imagem do
+                // clipboard, então colar texto na descrição segue normal.
+                var dz = document.getElementById('tk-f-drop');
+                var inp = document.getElementById('tk-f-imgs');
+                dz.addEventListener('click', function () { inp.click(); });
+                inp.addEventListener('change', function () { stageFiles(this.files); this.value = ''; });
+                ['dragover', 'dragenter'].forEach(function (ev) {
+                    dz.addEventListener(ev, function (e) { e.preventDefault(); dz.classList.add('tk-dz-over'); });
+                });
+                ['dragleave', 'drop'].forEach(function (ev) {
+                    dz.addEventListener(ev, function (e) { e.preventDefault(); dz.classList.remove('tk-dz-over'); });
+                });
+                dz.addEventListener('drop', function (e) {
+                    stageFiles(e.dataTransfer && e.dataTransfer.files);
+                });
+                Swal.getPopup().addEventListener('paste', function (e) {
+                    var files = [];
+                    Array.prototype.forEach.call((e.clipboardData || {}).items || [], function (it) {
+                        if (it.kind === 'file' && (it.type || '').indexOf('image/') === 0) {
+                            var f = it.getAsFile();
+                            if (f) { files.push(f); }
+                        }
+                    });
+                    if (files.length) { e.preventDefault(); stageFiles(files); }
+                });
+                document.getElementById('tk-f-thumbs').addEventListener('click', function (e) {
+                    var b = e.target.closest('[data-unstage]');
+                    if (!b) { return; }
+                    staged.splice(parseInt(b.getAttribute('data-unstage'), 10), 1);
+                    renderThumbs();
+                });
             },
             preConfirm: function () {
                 var subject = (document.getElementById('tk-f-subject').value || '').trim();
@@ -606,7 +688,23 @@ document.addEventListener('DOMContentLoaded', function () {
                     .then(function (r) { return r.json(); })
                     .then(function (d) {
                         if (!d || !d.success) { throw new Error((d && d.error) || 'Could not create the ticket'); }
-                        return d.ticket;
+                        if (!staged.length) { return d.ticket; }
+                        // As imagens sobem DEPOIS do POST — é ele que dá o ID
+                        // que as nomeia. Falha aqui não desfaz o ticket (que já
+                        // existe): vira aviso no balão de sucesso.
+                        var fd = new FormData();
+                        staged.forEach(function (s) { fd.append('images', s.file, s.name); });
+                        return fetch('/api/tickets/' + encodeURIComponent(d.ticket.id) + '/images',
+                                     { method: 'POST', body: fd })
+                            .then(function (r2) { return r2.json(); })
+                            .then(function (u) {
+                                d.ticket._imgErr = (u && u.success) ? '' : ((u && u.error) || 'image upload failed');
+                                return d.ticket;
+                            })
+                            .catch(function (e2) {
+                                d.ticket._imgErr = String(e2.message || e2);
+                                return d.ticket;
+                            });
                     })
                     .catch(function (e) {
                         Swal.showValidationMessage(String(e.message || e));
@@ -619,7 +717,12 @@ document.addEventListener('DOMContentLoaded', function () {
                 Swal.fire({
                     title: t('tk-created-title', 'Ticket Created'),
                     html: t('tk-created-text', 'Your ticket was registered as') +
-                          ' <strong>#' + esc(res.value.id) + '</strong>.',
+                          ' <strong>#' + esc(res.value.id) + '</strong>.' +
+                          (res.value._imgErr
+                              ? '<br><small class="text-warning">' +
+                                esc(t('tk-img-warn', 'The ticket was created, but the images failed:')) +
+                                ' ' + esc(res.value._imgErr) + '</small>'
+                              : ''),
                     icon: 'success',
                     confirmButtonText: t('swal-close', 'Close'),
                     customClass: { confirmButton: 'btn btn-primary' },

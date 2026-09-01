@@ -23,6 +23,7 @@ CLAUDE.md, seção Concurrency).
 import io
 import json
 import os
+import re
 import tempfile
 import threading
 from apps.pages.data_paths import data_dir, data_path, data_write, mapping_file, mapping_write
@@ -291,7 +292,128 @@ def delete(ticket_id):
             return False
         state['tickets'] = keep
         _write(state)
+    # As imagens do ticket vão junto — melhor esforço: um arquivo preso no
+    # share não pode impedir a exclusão do chamado, que já aconteceu.
+    for img in list_images(tid):
+        try:
+            os.remove(os.path.join(images_dir(), img['name']))
+        except OSError:
+            pass
+    return True
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Imagens anexadas (pedido de usuário, 2026-09-01)
+#
+# Ficam FORA do tickets.json de propósito: binário não pertence a um JSON que o
+# espelho DuckDB reconverte a cada gravação. A pasta é `db/tickets/images`, ao
+# lado do espelho tickets.db — o caminho que o usuário pediu — e sai do
+# Config.DATABASE_DIR (§4: nenhum módulo monta o caminho da `db/` por conta
+# própria). O NOME do arquivo é `<ID>_<n>.<ext>` — o ID do ticket é o vínculo,
+# não há coluna nova no store: a listagem responde pelo prefixo.
+# ═════════════════════════════════════════════════════════════════════════════
+
+IMAGE_EXTS = ('png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp')
+IMAGE_MAX_BYTES = 10 * 1024 * 1024
+# O nome servível: o que o save gera, e NADA além dele — é o que o endpoint de
+# download confere antes do send_from_directory.
+_IMG_NAME_RE = re.compile(r'^[A-Z0-9-]+_\d+\.(?:png|jpe?g|gif|webp|bmp)$', re.I)
+
+
+def images_dir():
+    """`{DATABASE_DIR}/tickets/images` — só o caminho; quem grava cria."""
+    from apps.config import Config
+    return os.path.join(Config.DATABASE_DIR, 'tickets', 'images')
+
+
+def _img_tid(ticket_id):
+    """O ID do ticket como prefixo de arquivo ('#OTC-0028' → 'OTC-0028').
+
+    Vazio quando o ID não é o formato do store — ele entra num os.path.join e
+    num prefixo de listagem, então nada fora de [A-Z0-9-] passa."""
+    tid = (ticket_id or '').strip().upper().lstrip('#')
+    return tid if re.match(r'^[A-Z0-9-]+$', tid) else ''
+
+
+def _img_index(name):
+    m = re.search(r'_(\d+)\.[a-z]+$', name, re.I)
+    return int(m.group(1)) if m else 0
+
+
+def list_images(ticket_id):
+    """[{name, size}] das imagens do ticket, na ordem de inclusão (o índice do
+    nome). Pasta ausente é lista vazia — nenhum ticket anexou nada ainda."""
+    tid = _img_tid(ticket_id)
+    d = images_dir()
+    if not tid or not os.path.isdir(d):
+        return []
+    out = []
+    try:
+        for fn in os.listdir(d):
+            if fn.upper().startswith(tid + '_') and _IMG_NAME_RE.match(fn):
+                try:
+                    size = os.path.getsize(os.path.join(d, fn))
+                except OSError:
+                    size = 0
+                out.append({'name': fn, 'size': size})
+    except OSError:
+        return []
+    return sorted(out, key=lambda i: _img_index(i['name']))
+
+
+def save_images(ticket_id, files):
+    """Grava [(nome_original, bytes)] e devolve os nomes gravados.
+
+    O índice continua do maior existente — apagar a imagem 2 não faz a próxima
+    nascer com o nome dela. Extensão fora de IMAGE_EXTS e arquivo acima de
+    IMAGE_MAX_BYTES levantam ValueError com a mensagem pronta para a tela; a
+    validação vem ANTES de qualquer gravação, para o lote ser tudo-ou-nada.
+    """
+    tid = _img_tid(ticket_id)
+    if not tid:
+        raise ValueError('Invalid ticket id')
+    lote = []
+    for original, blob in files:
+        ext = (os.path.splitext(str(original or ''))[1] or '').lstrip('.').lower()
+        if ext == 'jpeg':
+            ext = 'jpg'
+        if ext not in IMAGE_EXTS:
+            raise ValueError('Only images are accepted ({}): {}'.format(
+                ', '.join(IMAGE_EXTS), original or '?'))
+        if not blob:
+            raise ValueError('Empty file: {}'.format(original or '?'))
+        if len(blob) > IMAGE_MAX_BYTES:
+            raise ValueError('File over {} MB: {}'.format(
+                IMAGE_MAX_BYTES // (1024 * 1024), original or '?'))
+        lote.append((ext, blob))
+    if not lote:
+        return []
+    d = images_dir()
+    os.makedirs(d, exist_ok=True)
+    with _lock:
+        n = max([_img_index(i['name']) for i in list_images(tid)] or [0])
+        saved = []
+        for ext, blob in lote:
+            n += 1
+            nome = '{}_{}.{}'.format(tid, n, ext)
+            with open(os.path.join(d, nome), 'wb') as fh:
+                fh.write(blob)
+            saved.append(nome)
+    return saved
+
+
+def delete_image(ticket_id, name):
+    """Remove UMA imagem do ticket. O nome tem de ser um que o save gera e com
+    o prefixo DESTE ticket — é o que impede a rota de apagar arquivo alheio."""
+    tid = _img_tid(ticket_id)
+    fn = str(name or '').strip()
+    if not tid or not _IMG_NAME_RE.match(fn) or not fn.upper().startswith(tid + '_'):
+        return False
+    try:
+        os.remove(os.path.join(images_dir(), fn))
         return True
+    except OSError:
+        return False
 
 
 def counts(tickets):

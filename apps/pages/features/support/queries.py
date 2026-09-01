@@ -36,3 +36,10 @@ def roles_for(ticket):
     if ticket.get('requester_role'):
         return None
     return persistence.roles_by_sid([ticket.get('requester_sid')])
+
+
+def images_for(ticket_id):
+    """As imagens anexadas ao chamado — nome e tamanho, na ordem de inclusão.
+    Só leitura de diretório; quem serve o arquivo é a rota, com o nome
+    conferido pelo store."""
+    return otc_tickets.list_images(ticket_id)

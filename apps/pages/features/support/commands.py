@@ -105,3 +105,14 @@ def delete_ticket(ticket, sid, name):
     routes.log.info('[tickets] %s deleted by %s (%s)', ticket.get('id'), name, sid)
     _notify_requester(sid, name, ticket,
                       '#{} — ticket deleted'.format(ticket.get('id') or ''))
+
+
+def add_images(ticket_id, files):
+    """Anexa imagens ([(nome_original, bytes)]) ao chamado — devolve os nomes
+    gravados. Validação (extensão, tamanho, lote tudo-ou-nada) é do store."""
+    return otc_tickets.save_images(ticket_id, files)
+
+
+def remove_image(ticket_id, name):
+    """Remove UMA imagem do chamado (nome conferido pelo store)."""
+    return otc_tickets.delete_image(ticket_id, name)
