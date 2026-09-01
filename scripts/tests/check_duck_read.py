@@ -212,6 +212,32 @@ with open(os.path.join(DBDIR, 'reference_data.db'), 'w') as fh:
 check('4. banco ilegivel: fallback JSON, sem erro',
       R._refdata_records()[0]['SPN'], '135742')
 
+# ── 5. o freio do share: leitura lenta arma o modo só-JSON e ele expira ─────
+# (HANDOFF §389) Uma leitura de espelho acima do teto liga o fallback para o
+# módulo INTEIRO por _FREIO_ESPERA; o dado continua certo porque None = "vale
+# o JSON". O teste arma na mão (não dá para deixar um share lento no CI).
+import time as _t
+from apps.pages import duck_read as DR
+os.rename(os.path.join(DBDIR, 'reference_data.db'),
+          os.path.join(DBDIR, 'reference_data.db.quebrado'))
+os.rename(os.path.join(DBDIR, 'reference_data.db.fora'),
+          os.path.join(DBDIR, 'reference_data.db'))
+check('5. antes do freio, o banco responde',
+      DR.refdata_rows() is not None)
+DR._freio_mede(DR._FREIO_LIMIAR + 1.0, 'x.db')          # leitura "lenta"
+check('5. leitura lenta ARMA o freio', DR._freio_armado())
+check('5. freio armado: table_rows devolve None (vale o JSON)',
+      DR.refdata_rows() is None)
+check('5. freio armado: day_payload devolve None',
+      DR.day_payload(vazio) is None)
+check('5. e o leitor de cima segue servindo pelo JSON',
+      R._refdata_records()[0]['SPN'], '135742')
+DR._freio['ate'] = _t.monotonic() - 1                    # expira
+check('5. freio expirado: o banco volta a responder',
+      DR.refdata_rows() is not None)
+check('5. leitura rapida NAO arma',
+      (DR._freio_mede(0.0, 'x.db'), DR._freio_armado())[1], False)
+
 print()
 if fails:
     print('FAILED: %d check(s)' % len(fails))

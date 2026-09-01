@@ -17,7 +17,10 @@ intra-processo com o espelho escrevendo vira exceção, capturada, `None`,
 fallback. Nenhuma fila, nenhum lock no share.
 """
 import json
+import logging
 import os
+import threading
+import time
 
 import duckdb
 
@@ -38,6 +41,60 @@ import duckdb
 from apps.pages.database_access import duckdb_read
 
 from apps.pages.json_to_duckdb import q
+
+
+log = logging.getLogger('otc_tracker')
+
+# ── O FREIO do share ─────────────────────────────────────────────────────────
+# O flip DB-first foi medido em disco local (~12 ms por abertura) e é grátis
+# ali. No SHARE cada abertura é lock de arquivo + páginas lidas por SMB, e a
+# MESMA leitura custa segundos — e o /cache/search do New Deals varre TODOS os
+# arquivos-dia do produto com o memo frio (a instância reinicia várias vezes
+# ao dia): centenas de bancos × segundos = a tela que leva minutos, sem erro
+# nenhum, porque o JSON de fallback responderia em milissegundos (leitura
+# SEQUENCIAL, que o SMB serve bem). O defeito é invisível na dev por
+# construção — é a classe do "um stat por linha" do §7 do CLAUDE.md.
+#
+# Daí o freio ADAPTATIVO, em vez de um flag por instância: toda leitura de
+# espelho é cronometrada e a que passar do teto arma um modo só-JSON por
+# `_FREIO_ESPERA` segundos, para o módulo INTEIRO — se um banco está lento,
+# todos os irmãos no mesmo volume estão. O contrato de frescor torna isso
+# seguro por construção: `None` aqui nunca é erro, é "vale o JSON de sempre",
+# que é exatamente o dado certo. Em disco local o teto nunca é atingido e o
+# flip continua valendo; num share lento a PRIMEIRA leitura cara liga o freio
+# e o resto do request (e os próximos 10 min) sai pelo JSON. O freio expira
+# sozinho: storage que melhorou volta ao DB-first sem restart.
+#
+# `OTC_DUCK_READ_SLOW_SECONDS` ajusta o teto; `0` desliga o freio (mede e não
+# arma). O aviso sai UMA vez por armada — um por leitura seria o log inteiro.
+try:
+    _FREIO_LIMIAR = float(os.getenv('OTC_DUCK_READ_SLOW_SECONDS', '0.35') or 0)
+except ValueError:
+    _FREIO_LIMIAR = 0.35
+_FREIO_ESPERA = 600.0
+_freio = {'ate': 0.0}
+_freio_lock = threading.Lock()
+
+
+def _freio_armado():
+    return time.monotonic() < _freio['ate']
+
+
+def _freio_mede(segundos, db):
+    """Cronômetro de UMA leitura de espelho: acima do teto, arma o modo
+    só-JSON. Chamado também no caminho de exceção — uma abertura que estourou
+    depois de pendurar no lock é o mesmo sintoma."""
+    if not _FREIO_LIMIAR or segundos < _FREIO_LIMIAR:
+        return
+    with _freio_lock:
+        rearmando = _freio_armado()
+        _freio['ate'] = time.monotonic() + _FREIO_ESPERA
+    if not rearmando:
+        log.warning(
+            '[duck-read] leitura do espelho levou %.2fs (%s) — modo só-JSON '
+            'por %d min (o fallback é o dado certo; teto em '
+            'OTC_DUCK_READ_SLOW_SECONDS)',
+            segundos, os.path.basename(str(db)), int(_FREIO_ESPERA // 60))
 
 
 def _data_root():
@@ -90,6 +147,8 @@ def table_rows(db_name, table, rel, schema='main', order_by=None, heal=None,
         except Exception:                                   # noqa: BLE001
             pass
 
+    if _freio_armado():
+        return None          # modo só-JSON; o espelho não tem culpa, sem cura
     try:
         from apps.pages import duck_mirror
         # `db_name` pode ser um CAMINHO relativo (`cache/new deals/NDF/Vanilla.db`):
@@ -98,18 +157,22 @@ def table_rows(db_name, table, rel, schema='main', order_by=None, heal=None,
         if not os.path.isfile(db):
             _cura()
             return None
-        with duckdb_read(db) as con:
-            row = con.execute('SELECT mtime, fsize FROM _manifest WHERE path = ?',
-                              [manifest_key or rel]).fetchone()
-            if not row or abs(row[0] - st.st_mtime) >= 1e-6 or row[1] != st.st_size:
-                _cura()
-                return None
-            sql = 'SELECT * FROM %s.%s' % (q(schema), q(table))
-            if order_by:
-                sql += ' ORDER BY ' + order_by
-            cur = con.execute(sql)
-            cols = [d[0] for d in cur.description]
-            return _limpo(dict(zip(cols, r)) for r in cur.fetchall())
+        t0 = time.monotonic()
+        try:
+            with duckdb_read(db) as con:
+                row = con.execute('SELECT mtime, fsize FROM _manifest WHERE path = ?',
+                                  [manifest_key or rel]).fetchone()
+                if not row or abs(row[0] - st.st_mtime) >= 1e-6 or row[1] != st.st_size:
+                    _cura()
+                    return None
+                sql = 'SELECT * FROM %s.%s' % (q(schema), q(table))
+                if order_by:
+                    sql += ' ORDER BY ' + order_by
+                cur = con.execute(sql)
+                cols = [d[0] for d in cur.description]
+                return _limpo(dict(zip(cols, r)) for r in cur.fetchall())
+        finally:
+            _freio_mede(time.monotonic() - t0, db)
     except Exception:                                       # noqa: BLE001
         # Banco em uso pelo espelho, tabela ausente, formato inesperado: o
         # fallback é o JSON — nunca um erro para quem só pediu as linhas.
@@ -155,6 +218,8 @@ def day_payload(path):
     sub-tabelas + `_meta`) fica com o JSON — remontar o objeto pelas tabelas
     normalizadas seria adivinhar chave e ordem. Banco frio/formato antigo →
     `None` com o espelho avisado, como em tudo."""
+    if _freio_armado():
+        return None          # modo só-JSON (ver o freio no topo do módulo)
     try:
         from apps.pages import duck_mirror
         from apps.pages import json_to_duckdb as core
@@ -175,30 +240,34 @@ def day_payload(path):
         if not os.path.isfile(db):
             duck_mirror.notify_write(jpath)
             return None
-        with duckdb_read(db) as con:
-            row = con.execute(
-                'SELECT mtime, fsize, targets FROM _manifest WHERE path = ?',
-                [core._dataset_manifest_key(rel)]).fetchone()
-            if not row or abs(row[0] - st.st_mtime) >= 1e-6 or row[1] != st.st_size:
-                duck_mirror.notify_write(jpath)
-                return None
-            if json.loads(row[2] or '[]') != ['%s.%s' % (schema, tabela)]:
-                return None                    # payload-objeto: fica no JSON
-            alvo_sql = '%s.%s' % (q(schema), q(tabela))
-            cols = [d[0] for d in
-                    con.execute('SELECT * FROM %s LIMIT 0' % alvo_sql).description]
-            if cols == ['_empty']:
-                return []                      # o dia existe e está vazio
-            if '_raw' not in cols or '_seq' not in cols:
-                return None
-            out = []
-            for (cru,) in con.execute(
-                    'SELECT "_raw" FROM %s ORDER BY CAST("_seq" AS BIGINT)'
-                    % alvo_sql).fetchall():
-                if not cru:
+        t0 = time.monotonic()
+        try:
+            with duckdb_read(db) as con:
+                row = con.execute(
+                    'SELECT mtime, fsize, targets FROM _manifest WHERE path = ?',
+                    [core._dataset_manifest_key(rel)]).fetchone()
+                if not row or abs(row[0] - st.st_mtime) >= 1e-6 or row[1] != st.st_size:
+                    duck_mirror.notify_write(jpath)
                     return None
-                out.append(json.loads(cru))
-            return out
+                if json.loads(row[2] or '[]') != ['%s.%s' % (schema, tabela)]:
+                    return None                # payload-objeto: fica no JSON
+                alvo_sql = '%s.%s' % (q(schema), q(tabela))
+                cols = [d[0] for d in
+                        con.execute('SELECT * FROM %s LIMIT 0' % alvo_sql).description]
+                if cols == ['_empty']:
+                    return []                  # o dia existe e está vazio
+                if '_raw' not in cols or '_seq' not in cols:
+                    return None
+                out = []
+                for (cru,) in con.execute(
+                        'SELECT "_raw" FROM %s ORDER BY CAST("_seq" AS BIGINT)'
+                        % alvo_sql).fetchall():
+                    if not cru:
+                        return None
+                    out.append(json.loads(cru))
+                return out
+        finally:
+            _freio_mede(time.monotonic() - t0, db)
     except Exception:                                       # noqa: BLE001
         return None
 
