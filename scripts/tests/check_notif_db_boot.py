@@ -15,7 +15,7 @@ fim, a falha o deixava em False e TODO poll seguinte tentava de novo: um 500 por
 aba a cada 8 segundos, cada um custando uma tentativa de lock exclusivo no
 share.
 
-Este script prende as quatro decisoes que consertam isso:
+Este script prende as cinco decisoes que consertam isso:
 
   1. a SUBIDA cria o schema (e a falha dela nao derruba o app);
   2. o caminho de LEITURA nunca abre para escrita — nem quando o flag esta em
@@ -23,7 +23,12 @@ Este script prende as quatro decisoes que consertam isso:
   3. a sonda de leitura (`_notif_schema_pronto`) evita a abertura read-write
      quando nao ha nada a fazer, que e o caso normal;
   4. o ensure que falha ESPERA antes de tentar de novo, e o sino que nao
-     consegue abrir devolve vazio em vez de 500.
+     consegue abrir devolve vazio em vez de 500;
+  5. a abertura que falha por DISPUTA (gravacao em curso — "different
+     configuration" no mesmo processo, "used by another process" no share)
+     serve a ULTIMA resposta boa daquele usuario em vez do sino vazio, sem
+     ERROR; o teto de idade do cache devolve o alarme quando a falha persiste
+     (conexao de escrita vazada).
 """
 import os, sys, tempfile
 from datetime import datetime, timedelta, timezone
@@ -199,6 +204,10 @@ check('classifica a frase do Windows',
 check('classifica o lock do DuckDB no POSIX',
       NP._notif_arquivo_em_uso(Exception(
           'IO Error: Could not set lock on file "x.db": Resource temporarily unavailable')), True)
+check('classifica o conflito intra-processo do DuckDB',
+      NP._notif_arquivo_em_uso(Exception(
+          "Connection Error: Can't open a connection to same database file "
+          "with a different configuration than existing connections")), True)
 check('nao confunde com outra falha de IO',
       NP._notif_arquivo_em_uso(Exception('IO Error: No such file or directory')), False)
 
@@ -235,6 +244,47 @@ corpo = resp.get_json()
 check('com a lista vazia', corpo.get('notifications'), [])
 check('e com a MESMA forma da resposta de sucesso',
       sorted(corpo.keys()), ['notifications', 'success', 'total_today'])
+
+
+# ── 6. a DISPUTA serve a ultima resposta boa, nunca o sino vazio ────────────
+# No share, uma gravacao de notificacao dura mais que a espera do portao + a
+# retentativa do poll: o DuckDB recusa o read-only durante um duckdb_write do
+# MESMO processo ("different configuration") e o poll caia no ERROR com o sino
+# vazio — a cada gravacao mais longa que ~2s, apontando um "problema" que o
+# poll seguinte resolvia sozinho. A disputa passa a servir a ultima resposta
+# boa daquele usuario, SEM error; o teto de idade preserva o alarme para a
+# conexao de escrita VAZADA, que falha para sempre.
+R._notif_last_good.clear()
+R._create_notification('E000001', 'Alguem', 'Testou', 'Dashboard')
+
+ok1 = cli.get('/api/notifications').get_json()
+check('o poll que da certo traz a notificacao', ok1.get('total_today', 0) >= 1, True)
+
+falhas = []
+_nqf = R._notif_query_failed
+R._notif_query_failed = lambda exc: falhas.append(str(exc))
+
+
+def config_conflict(*a, **kw):
+    raise Exception("Connection Error: Can't open a connection to same database "
+                    "file with a different configuration than existing connections")
+
+
+R.get_notif_connection = config_conflict
+corpo = cli.get('/api/notifications').get_json()
+check('a disputa serve a ultima resposta boa', corpo, ok1)
+check('sem ERROR no log', falhas, [])
+
+# O teto de idade: cache vencido volta ao caminho de sempre (ERROR + vazio) —
+# e a conexao vazada, que responde a MESMA mensagem para sempre, reaparece.
+_ttl = R._NOTIF_STALE_TTL_SECONDS
+R._NOTIF_STALE_TTL_SECONDS = 0
+corpo = cli.get('/api/notifications').get_json()
+check('cache vencido devolve o sino vazio', corpo.get('notifications'), [])
+check('e ai sim registra o motivo', len(falhas), 1)
+R._NOTIF_STALE_TTL_SECONDS = _ttl
+R.get_notif_connection = _gnc
+R._notif_query_failed = _nqf
 
 
 print(('FAIL: %d' % len(fails)) if fails else 'ok')

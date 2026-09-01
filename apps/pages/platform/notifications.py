@@ -319,15 +319,17 @@ def _notif_avanca_sequencia(conn):
 
 # As assinaturas de "o arquivo tem outro dono", nos dois sistemas. O Windows
 # responde com a frase do próprio SO; o Linux e o macOS, com a do lock do
-# DuckDB. `already open` cobre o conflito DENTRO do processo, que é o mesmo
-# problema por outro caminho (o DuckDB guarda uma instância por arquivo e
-# recusa a segunda com outra configuração).
+# DuckDB. `already open` e `different configuration` cobrem o conflito DENTRO
+# do processo, que é o mesmo problema por outro caminho (o DuckDB guarda uma
+# instância por arquivo e recusa a segunda com outra configuração — é o que o
+# poll do sino vê quando pede read-only durante um `duckdb_write` em curso).
 _NOTIF_EM_USO = (
     'used by another process',
     'being used by another',
     'could not set lock',
     'conflicting lock',
     'already open',
+    'different configuration',
 )
 
 

@@ -11600,6 +11600,17 @@ def _vanilla_verification_lines(deal, page_url, le_pair):
 # O último motivo já registrado, para o aviso do sino não repetir a cada poll.
 _notif_fail_last = {'msg': ''}
 
+# A última resposta BOA do sino, por (SID, papel) — já filtrada por página, que
+# é decisão por usuário. É o que o poll serve quando a abertura esbarra numa
+# DISPUTA pelo arquivo (gravação em curso neste processo ou na instância
+# vizinha): a disputa é transitória e o sino de alguns segundos atrás continua
+# certo — melhor do que piscar vazio. O teto de idade é o alarme: uma conexão de
+# escrita VAZADA também responde "different configuration", só que para sempre,
+# e com o cache vencido o caminho volta a ser o de sempre (ERROR uma vez, sino
+# vazio), que é o que pede alguém.
+_notif_last_good = {}
+_NOTIF_STALE_TTL_SECONDS = 600
+
 
 def _notif_query_failed(exc):
     """Registra a falha da consulta do sino UMA vez por motivo.
@@ -11655,6 +11666,21 @@ def api_get_notifications():
             if tentativa == 1:
                 time.sleep(0.25)
                 continue
+            # A abertura que falhou por DISPUTA — uma gravação de notificação
+            # em curso neste processo ("different configuration") ou a
+            # instância vizinha com o arquivo do share aberto ("used by
+            # another process") — não é defeito: no share, uma gravação dura
+            # mais do que a espera do portão + esta retentativa, e o poll caía
+            # aqui a cada gravação mais longa, com ERROR no log apontando um
+            # "problema" que o poll seguinte resolvia sozinho. Nesse caso vale
+            # a última resposta boa deste usuário, dentro do teto de idade —
+            # ver `_notif_last_good`. Toda OUTRA falha (e a disputa com o
+            # cache vencido) segue no caminho de sempre: ERROR uma vez, sino
+            # vazio.
+            if _pf_notif._notif_arquivo_em_uso(exc):
+                stale = _notif_last_good.get((user_sid, user_role))
+                if stale and time.monotonic() - stale['at'] < _NOTIF_STALE_TTL_SECONDS:
+                    return jsonify(stale['payload'])
             _notif_query_failed(exc)
             # Mesma FORMA da resposta de sucesso, `total_today` incluído: a
             # topbar lê o campo direto, e um payload pela metade trocaria o
@@ -11712,7 +11738,11 @@ def api_get_notifications():
                     return _cp_page_allowed(allowed)
                 return url in allowed
             notifs = [n for n in notifs if _visible(n)]
-    return jsonify({"success": True, "notifications": notifs, "total_today": len(notifs)})
+    payload = {"success": True, "notifications": notifs, "total_today": len(notifs)}
+    # A resposta boa fica guardada para o poll que esbarrar numa gravação em
+    # curso — ver o laço de abertura lá em cima.
+    _notif_last_good[(user_sid, user_role)] = {'payload': payload, 'at': time.monotonic()}
+    return jsonify(payload)
 
 
 @blueprint.route('/api/notifications', methods=['POST'])
