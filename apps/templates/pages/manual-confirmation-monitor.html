@@ -267,7 +267,12 @@
 #mc-monitor .mc-docs .mc-doc {
     font-size: .64rem; font-weight: 700; padding: .12rem .45rem; border-radius: 7px;
     border: 1px solid var(--ins-border-color); color: var(--vr-accent-1, #0066cc);
-    text-decoration: none; max-width: 15rem; overflow: hidden;
+    text-decoration: none; overflow: hidden;
+    /* Um chip por linha, na LARGURA do card (pedido 2026-09-01): com o
+       max-width fixo de antes (15rem) sobrava uma faixa à direita e cada chip
+       terminava num ponto diferente. O ellipsis continua segurando os nomes
+       compridos. */
+    flex: 1 1 100%; max-width: 100%;
     text-overflow: ellipsis; white-space: nowrap;
     transition: border-color 140ms var(--mc-ease), background 140ms var(--mc-ease);
 }
