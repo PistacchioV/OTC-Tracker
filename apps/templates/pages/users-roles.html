@@ -333,10 +333,10 @@
 
     <!-- Add Role Modal -->
     <div aria-hidden="true" aria-labelledby="addRoleModalLabel" class="modal fade" id="addRoleModal" tabindex="-1">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="addRoleModalLabel">Add New Role</h5>
+        <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content liquid-glass">
+                <div class="modal-header py-2">
+                    <h5 class="modal-title fs-6" id="addRoleModalLabel"><i class="ti ti-plus me-1"></i>Add New Role</h5>
                     <button aria-label="Close" class="btn-close" data-bs-dismiss="modal" type="button"></button>
                 </div>
                 <form id="addRoleForm">
@@ -376,9 +376,9 @@
                             </div>
                         </div>
                     </div>
-                    <div class="modal-footer">
-                        <button class="btn btn-light" data-bs-dismiss="modal" type="button">Cancel</button>
-                        <button class="btn btn-primary" type="submit">Add Role</button>
+                    <div class="modal-footer py-2">
+                        <button class="btn btn-sm btn-danger" data-bs-dismiss="modal" type="button" title="Cancel"><i class="ti ti-x"></i></button>
+                        <button class="btn btn-sm btn-success" type="submit" title="Add Role"><i class="ti ti-device-floppy"></i></button>
                     </div>
                 </form>
             </div>

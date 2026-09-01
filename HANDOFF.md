@@ -16179,3 +16179,47 @@ lado). O e-mail do aviso herda de graça — as linhas saem do mesmo coletor.
 velho servindo: resolveu com o restart da instância, sem mudança.)
 
 `check_optadv_ir` e `check_ops_equity_option` verdes.
+
+## §386 — varredura dos modais de formulário: 26 fora do padrão, todos alinhados (2026-09-01)
+
+Pedido: *"varredura para identificar quais modais não estão no padrão (o da
+foto — o Add row do Latam Desk Position) e ajustar"*. O padrão canônico é o do
+New Deals/mapping/Latam: `modal-dialog-centered` (+ `modal-xl/lg` e
+`scrollable` quando há muitos campos), `modal-content` com `liquid-glass`,
+cabeçalho `py-2` com título `fs-6` + ícone Tabler + `btn-close` com
+aria-label, e rodapé `py-2` com o PAR de botões-ícone `btn-sm` (danger `ti-x`
+Cancel · success `ti-device-floppy` Save, com `title=`).
+
+A varredura cobriu 53 modais; 18 já estavam no padrão, e os fora dele se
+dividiram em quatro níveis:
+
+- **faltava só o `modal-dialog-centered`** (10): os seis Add/Edit do New
+  Deals, os três do Intrag e o rdModal do Reference Data (este também ganhou o
+  aria-label);
+- **rodapé trocado** (4): os quatro modais do Index B3 Results — Cancel era
+  `btn-secondary` (virou danger, com o tooltip `tooltip-danger` que a página
+  já define) + centered + aria-label;
+- **cabeçalho e rodapé** (5): o addRowModal do Pending Confirmation (py-2,
+  fs-6, `ti-plus me-1`, botões `btn-sm` sem bg-gradient), os dois de edição
+  dos Settlement Advice (liquid-glass, fs-6, `row g-3`, par de ícones) e o
+  eiUploadModal do Electronic Inventory (py-2/fs-6, scrollable, par de
+  ícones);
+- **fora em quase tudo** (7): os uploads das duas recons (FXO e Comitente —
+  liquid-glass, header/footer py-2, ícone Tabler no título, `type="button"`,
+  e a ação Run/Process virou o botão-ícone `ti-player-play` success), os dois
+  modais do Holidays Calendar (que nem `modal-footer` tinham — os botões
+  moraram num d-flex do body; no event-modal o footer fica DENTRO do form,
+  porque o Save é `type=submit`; Delete = trash danger com `me-auto`, o
+  precedente do fiBuilderModal), o addRoleModal do Users & Roles, o
+  fiTplViewModal do File Interpreter (os 4 botões de texto viraram
+  botões-ícone com os mesmos ids/estados) e o modal do **Advanced Export**
+  (export-advanced.js — alcança ~40 páginas; centered + liquid-glass +
+  aria-label + par de ícones, com o Run mantendo o `ti-download`).
+
+Fora do escopo de propósito: `chat.html` e `calendar.html` (sem rota nenhuma —
+sobras do template comprado) e os desvios SECUNDÁRIOS que o relatório anotou
+(páginas sem a animação própria de entrada — fica a global `zoomInModal` do
+app.css; a classe morta `ob-add-modal` do Operations B3). Em todos os ajustes
+os IDs e handlers foram preservados (conferido: os JS só usam
+`disabled`/`display`/`click` nesses botões; o `modalTitle.text =` do Holidays
+é um no-op pré-existente).
