@@ -952,7 +952,21 @@
             exportOptions: {
                 columns: o.cols,
                 rows: function (idx) { return set[idx] === 1; },
-                modifier: { search: 'none', order: 'applied', page: 'all' }
+                modifier: { search: 'none', order: 'applied', page: 'all' },
+                // O que o Buttons faria sozinho (tirar HTML) MAIS o que o
+                // arquivo de origem obriga: célula cujo valor é um literal de
+                // ERRO do Excel ('#NULL!', '#N/A', '#REF!', …) sai VAZIA. O
+                // legado grava esses literais onde não tinha valor, e um
+                // '#NULL!' escrito no .xlsx se lê como a exportação quebrada
+                // (foi o MtM de Swap, 2026-09-01). Mesma regra dos botões de
+                // Export próprios do MtM/Accrual — os DOIS caminhos daqui (o
+                // dia da tela e o intervalo) passam por este conf, então a
+                // limpeza vale para toda página com Advanced Export.
+                format: { body: function (data) {
+                    if (typeof data !== 'string') return data;
+                    var v = plain(data);
+                    return /^#?(NULL!?|N\/A|REF!|VALUE!|DIV\/0!|NAME\?|NUM!)$/i.test(v) ? '' : v;
+                } }
             }
         };
         if (o.format === 'csvHtml5') { conf.fieldSeparator = o.sep; conf.bom = true; }
