@@ -315,8 +315,11 @@
     /* Um chip por linha, na LARGURA do card (pedido 2026-09-01): com o
        max-width fixo de antes (15rem) sobrava uma faixa à direita e cada chip
        terminava num ponto diferente. O ellipsis continua segurando os nomes
-       compridos. */
-    flex: 1 1 100%; max-width: 100%;
+       compridos. O min-width:0 é OBRIGATÓRIO aqui: item de flex tem
+       min-width:auto (= o min-content do texto nowrap) e min VENCE max — com
+       o max em rem o navegador capava o mínimo por ele, com 100% não, e o
+       nome comprido VAZAVA do card. */
+    flex: 1 1 100%; max-width: 100%; min-width: 0;
     text-overflow: ellipsis; white-space: nowrap;
     transition: border-color 140ms var(--mc-ease), background 140ms var(--mc-ease);
 }
@@ -425,6 +428,8 @@
               generateTip: 'the confirmation has not been generated yet — open the editor',
               noCb: 'no callback',
               noCbTip: 'Callback Date is empty — the client confirmation by phone is still missing',
+              noCbBlockTitle: 'Callback pending',
+              noCbBlockText: '{c} — {n} operation(s) have no Callback Date. The callback with the client must happen BEFORE marking the confirmation as sent. Fill the Callback Date on the Track Confirmations page and try again.',
               legalRelease: 'Release to OTC',
               legalTitle: 'Release to OTC?',
               legalText: '{c} — {n} operation(s) will leave Pending Legal and enter the OTC queue, here and on the Pending Confirmation page.',
@@ -451,6 +456,8 @@
               generateTip: 'a confirmação ainda não foi gerada — abrir o editor',
               noCb: 'sem callback',
               noCbTip: 'Data Callback em branco — falta a conferência por telefone com o cliente',
+              noCbBlockTitle: 'Callback pendente',
+              noCbBlockText: '{c} — {n} operação(ões) sem Data Callback. O callback com o cliente precisa acontecer ANTES de marcar a confirmação como enviada. Preencha a Data Callback no Track Confirmations e tente de novo.',
               legalRelease: 'Liberar p/ OTC',
               legalTitle: 'Liberar para o OTC?',
               legalText: '{c} — {n} operação(ões) saem de Pending Legal e entram na fila do OTC, aqui e na página Pending Confirmation.',
@@ -477,6 +484,8 @@
               generateTip: 'la confirmación aún no fue generada — abrir el editor',
               noCb: 'sin callback',
               noCbTip: 'Fecha de Callback en blanco — falta la conferencia telefónica con el cliente',
+              noCbBlockTitle: 'Callback pendiente',
+              noCbBlockText: '{c} — {n} operación(es) sin Fecha de Callback. El callback con el cliente debe ocurrir ANTES de marcar la confirmación como enviada. Complete la Fecha de Callback en Track Confirmations e intente de nuevo.',
               legalRelease: 'Liberar p/ OTC',
               legalTitle: '¿Liberar para el OTC?',
               legalText: '{c} — {n} operación(es) salen de Pending Legal y entran en la cola del OTC, aquí y en la página Pending Confirmation.',
@@ -613,8 +622,12 @@
             var cls = stage === 'LEGAL' ? 'btn-warning mc-act-legal' : 'btn-info mc-act-fep';
             var ico = stage === 'LEGAL' ? 'ti-arrow-big-right-lines' : 'ti-send';
             var lbl = stage === 'LEGAL' ? t('legalRelease') : t('fepSend');
+            // O botão do FepWeb carrega o no_callback do ITEM: o clique com
+            // callback pendente é BLOQUEADO na tela (aviso, não confirmação) —
+            // e o endpoint recusa de novo, porque a trava de verdade é a dele.
             return '<button type="button" class="btn btn-sm ' + cls + ' ms-auto" ' +
                    'data-keys="' + esc((it.keys || []).join(',')) + '" ' +
+                   'data-nocb="' + (it.no_callback || 0) + '" ' +
                    'data-cli="' + esc(it.Cliente || '') + '">' +
                    '<i class="ti ' + ico + ' me-1"></i>' + esc(lbl) + '</button>';
         }
@@ -767,6 +780,20 @@
                    'legalTitle', 'legalText', 'legalDone');
     });
     $(document).on('click', '#mc-cards .mc-act-fep', function () {
+        // Item com callback pendente não fecha (pedido 2026-09-01): o envio ao
+        // cliente pressupõe a conferência por telefone, e o badge "no callback"
+        // já diz que ela não aconteceu. O aviso substitui a confirmação — sem
+        // botão de seguir em frente — e o endpoint recusa de novo (409), porque
+        // um card desenhado antes do redraw pode estar com a contagem velha.
+        var nocb = parseInt(this.getAttribute('data-nocb') || '0', 10) || 0;
+        if (nocb > 0) {
+            Swal.fire({
+                icon: 'warning', title: t('noCbBlockTitle'),
+                html: t('noCbBlockText',
+                        { c: esc(this.getAttribute('data-cli') || ''), n: nocb })
+            });
+            return;
+        }
         cardAction(this, '/api/manual-confirmation/fepweb-sent',
                    'fepTitle', 'fepText', 'fepDone');
     });

@@ -440,19 +440,40 @@ def api_mc_fepweb_sent():
     payload = request.get_json(silent=True) or {}
     keys = [str(k).strip() for k in (payload.get('keys') or []) if str(k or '').strip()]
     hoje = datetime.now().strftime('%d/%m/%Y')
-    saved = []
+    alvo = []
     for k in keys:
         row = _mc.find_row(k)
         if row is None or _mc.upper_norm(row.get('Pending')) != _mc.upper_norm(_mc.PENDING_FEPWEB):
             continue                     # enviado é só para quem terminou a esteira
+        alvo.append(row)
+    if not alvo:
+        return jsonify({'success': False,
+                        'message': 'No confirmation in Pending FepWeb for these trades.'}), 404
+    # O callback vem ANTES do envio (pedido 2026-09-01): a Data Callback é a
+    # conferência por telefone com o cliente, e marcar como enviado sem ela
+    # fecharia a esteira com a conferência por fazer. O lote é tudo-ou-nada —
+    # como no mark_validated —, senão o grupo fechava pela metade e o card
+    # sumia com as operações sem callback ainda abertas. 409 e não 400: o
+    # pedido está bem formado, é o ESTADO que exige mais um passo. A tela já
+    # bloqueia o clique; aqui é o guarda de verdade (a contagem do card pode
+    # estar velha, e o POST direto não passa pela tela).
+    # `_filled` é o MESMO teste do badge "no callback" do card (manual_conf,
+    # `_extra_card`): duas escritas da mesma pergunta divergiriam no espaço em
+    # branco e o endpoint recusaria um item que o card não marca.
+    sem_cb = [r for r in alvo if not _mc._filled(r, 'Data Callback')]
+    if sem_cb:
+        return jsonify({'success': False, 'callback_required': True,
+                        'message': 'Callback pending: {} operation(s) have no '
+                                   'Callback Date. The client callback must '
+                                   'happen before marking as sent.'
+                                   .format(len(sem_cb))}), 409
+    saved = []
+    for row in alvo:
         if not str(row.get(_mc.SENT_COLUMN, '') or '').strip():
             row[_mc.SENT_COLUMN] = hoje
         _mc.refresh_derived(row)
         _mc.upsert_row(row)
         saved.append(row)
-    if not saved:
-        return jsonify({'success': False,
-                        'message': 'No confirmation in Pending FepWeb for these trades.'}), 404
     _R()._mc_pc_sync(saved)
     _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                          'Manual Confirmation', 'Confirmation',
