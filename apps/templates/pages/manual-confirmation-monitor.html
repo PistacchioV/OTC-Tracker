@@ -51,6 +51,12 @@
     display: flex; align-items: center; gap: .75rem;
     padding: 1.05rem 1.15rem .85rem;
 }
+/* Header da coluna num marinho mais fundo que o corpo (pedido 2026-09-01):
+   um degrau ESCURO sobre o vidro, com fio de luz embaixo separando da fila. */
+[data-bs-theme=dark] #mc-monitor .mc-card__head {
+    background: rgba(6, 16, 38, 0.58);
+    box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.08);
+}
 #mc-monitor .mc-card__ico {
     width: 42px; height: 42px; flex: 0 0 auto; border-radius: 12px;
     display: inline-flex; align-items: center; justify-content: center;
@@ -81,7 +87,13 @@
    Rolagem interna com altura máxima: um card com 60 confirmações não pode
    empurrar os outros dois para fora da tela — os três se leem lado a lado. */
 #mc-monitor .mc-list {
-    background: var(--ins-tertiary-bg, #eef0f4);
+    /* Liquid glass (pedido 2026-09-01): este fundo era o TERCIÁRIO OPACO, e
+       ele cobria quase todo o cartão — o `.mc-card` É vidro pela regra
+       estrutural do streamflow (§23), mas a fila pintada por cima devolvia a
+       coluna chapada, principalmente no escuro. Vira um degrau TRANSLÚCIDO,
+       sem blur próprio: dentro da raiz de backdrop do cartão o desfoque do
+       filho não amostra nada (§7 do CLAUDE.md). */
+    background: rgba(255, 255, 255, 0.28);
     /* Cards maiores (pedido da mesa): a fila cresce com a janela e o mínimo
        garante presença mesmo com pouca coisa pendente.
 
@@ -94,7 +106,39 @@
     flex: 1 1 auto;
     min-height: 24rem;
     max-height: calc(100vh - 21rem); overflow-y: auto; padding: .5rem;
-    border-top: 1px solid var(--ins-border-color);
+    border-top: 1px solid rgba(255, 255, 255, 0.40);
+}
+[data-bs-theme=dark] #mc-monitor .mc-list {
+    background: transparent;   /* corpo = a MESMA superfície do chip de stat */
+    border-top-color: rgba(255, 255, 255, 0.10);
+}
+/* No escuro o CARTÃO sobe para a receita do modal liquid-glass (o token
+   padrão, 4%, não desenha vidro sobre um fundo que já é escuro): alfa 0,10,
+   borda mais viva e os FIOS DE LUZ internos (inset) — é o que faz o painel
+   ler como vidro, não só o alfa. A fila fica quase transparente por cima. */
+[data-bs-theme=dark] #mc-monitor .mc-card {
+    /* O vidro é o MESMO dos chips de stat (pedido 2026-09-01: "igual
+       da primeira imagem"): fundo no token, borda hairline e o blur
+       estrutural do streamflow — nada de inset nem borda viva. O que
+       mantém a coluna glassy é a fila TRANSLÚCIDA por cima. */
+    /* blur BAIXO e alfa ABAIXO do token, de propósito (pedidos: "aumentar o
+       nível de translúcido" ×2): o desfoque alto homogeneíza o fundo e o véu
+       branco soma — com 5px e 2,5% a estrutura da página atravessa. */
+    background: rgba(255, 255, 255, 0.025);
+    border-color: var(--vr-card-border);
+    backdrop-filter: blur(5px) saturate(170%);
+    -webkit-backdrop-filter: blur(5px) saturate(170%);
+    box-shadow: var(--vr-card-shadow);
+}
+/* O item se separa da fila no escuro descendo, não subindo: com degrau
+   BRANCO por cima do cartão a 0,10 o item saía mais claro que tudo (e o
+   brilho vermelho do vizinho atravessava o corpo translúcido). O passo é um
+   translúcido ESCURO — o item afunda no vidro, e a borda hairline é quem
+   desenha o contorno. Pedido de 2026-09-01: "os cards que vão em cima
+   precisam ficar um pouco mais escuros". */
+[data-bs-theme=dark] #mc-monitor .mc-item {
+    background: rgba(9, 26, 61, 0.70);        /* marinho, pedido da mesa */
+    border-color: rgba(255, 255, 255, 0.10);
 }
 #mc-monitor .mc-item {
     background: var(--vr-card-bg, var(--ins-secondary-bg));
