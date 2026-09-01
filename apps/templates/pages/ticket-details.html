@@ -68,6 +68,15 @@
     background: rgba(13,110,253,.06); }
 /* Lightbox do Swal: fora do #tkd-page (o Swal pendura no <body>). */
 .tkd-lightbox-img { max-width: min(86vw, 1400px); max-height: 78vh; object-fit: contain; }
+/* O send da nota é o squircle padrão (spec .ops-row-act): 32×32 travado nos
+   DOIS eixos — só a largura deixaria uma regra de tema com min-height esticar
+   o botão —, raio 10px e ícone 1rem com !important de cinto de segurança. */
+#tkd-page .tkd-send {
+    min-width: 32px; max-width: 32px; min-height: 32px; max-height: 32px;
+    box-sizing: border-box; padding: 0; border-radius: 10px !important;
+    display: inline-flex; align-items: center; justify-content: center;
+}
+#tkd-page .tkd-send > i { font-size: 1rem !important; }
 #tkd-page .tkd-empty { padding: 56px 16px; text-align: center; color: var(--ins-secondary-color); }
 #tkd-page .timeline-content .tkd-evdetail { white-space: pre-wrap; }
 </style>
@@ -183,12 +192,17 @@
                     <!-- Comment -->
                     <div class="mb-4 d-none" id="tkd-comment-wrap">
                         <h6 class="tkd-label" data-lang="tkd-add-note">Add a Note</h6>
-                        <div class="d-flex gap-2">
+                        <!-- align-items-center: sem ele o flex ESTICA o botão até a
+                             altura do textarea e o send vira um botão gigante. O
+                             botão é o squircle padrão do app (spec .ops-row-act:
+                             32×32 travado, raio 10px, ti-brand-telegram/primary). -->
+                        <div class="d-flex align-items-center gap-2">
                             <textarea class="form-control" id="tkd-comment" rows="2"
                                       placeholder="Write an update for this ticket..."
                                       data-lang-placeholder="tkd-note-ph"></textarea>
-                            <button class="btn btn-outline-primary" id="tkd-comment-btn" type="button">
-                                <i class="ti ti-send-2 fs-xl"></i>
+                            <button class="btn btn-primary bg-gradient tkd-send" id="tkd-comment-btn"
+                                    type="button" title="Send">
+                                <i class="ti ti-brand-telegram"></i>
                             </button>
                         </div>
                     </div>
@@ -585,7 +599,28 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         var btn = this;
         btn.disabled = true;
-        fetch('/api/tickets/' + encodeURIComponent(TICKET.id), {
+        // Nota digitada e não enviada vai JUNTO do Save, e ANTES dele: o fluxo
+        // natural de quem resolve um chamado é escrever a resposta e clicar em
+        // Save Changes — sem isto a nota se perdia em silêncio, e o e-mail de
+        // Resolved/Closed (que imprime o Latest Activity) saía sem ela. A ordem
+        // importa: comentário primeiro, para o encerramento já o carregar. Se o
+        // comentário falhar, o Save PARA — seguir fecharia o chamado sem a
+        // resposta, que é exatamente o defeito.
+        var note = (TICKET.can_comment && $('tkd-comment')) ? ($('tkd-comment').value || '').trim() : '';
+        var pre = note
+            ? fetch('/api/tickets/' + encodeURIComponent(TICKET.id) + '/comment', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: note })
+                })
+                .then(function (r) { return r.json(); })
+                .then(function (d) {
+                    if (!d || !d.success) { throw new Error((d && d.error) || 'comment failed'); }
+                    $('tkd-comment').value = '';
+                })
+            : Promise.resolve();
+        pre.then(function () {
+        return fetch('/api/tickets/' + encodeURIComponent(TICKET.id), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body)
@@ -595,7 +630,9 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (!d || !d.success) { throw new Error((d && d.error) || 'save failed'); }
                 TICKET = d.ticket;
                 paint();
-                if (!d.changed) {
+                if (!d.changed && !note) {
+                    // Com uma NOTA enviada o save não foi um no-op: cai no
+                    // balão de sucesso normal, mesmo sem campo alterado.
                     Swal.fire({ title: t('tkd-nochange', 'Nothing Changed'),
                                 text: t('tkd-nochange-text', 'No field was different from what was already saved.'),
                                 icon: 'info', confirmButtonText: t('swal-close', 'Close') });
@@ -616,7 +653,8 @@ document.addEventListener('DOMContentLoaded', function () {
                             html: esc(t('tkd-saved-text', 'The changes were saved.')) + extra,
                             icon: d.email_error ? 'warning' : 'success',
                             confirmButtonText: t('swal-close', 'Close') });
-            })
+            });
+        })
             .catch(err)
             .then(function () { btn.disabled = false; });
     });
@@ -642,6 +680,10 @@ document.addEventListener('DOMContentLoaded', function () {
             })
             .catch(err)
             .then(function () { btn.disabled = false; });
+    });
+    // Ctrl+Enter envia a nota (Enter sozinho segue quebrando linha).
+    $('tkd-comment').addEventListener('keydown', function (e) {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { $('tkd-comment-btn').click(); }
     });
 
     // ── Delete ───────────────────────────────────────────────────────────
