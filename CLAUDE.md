@@ -1500,10 +1500,10 @@ Complementando, no mesmo tema: a **animação padrão do ícone** (about → sid
 funda no hover do card. Cor só de tema claro precisa do par
 `[data-bs-theme=dark]`, senão a marca some no escuro.
 
-### As três armadilhas do vidro do StreamFlow
+### As quatro armadilhas do vidro do StreamFlow
 
-A camada de vidro (§2) paga por três coisas que não aparecem no console, e as
-três já custaram uma rodada cada:
+A camada de vidro (§2) paga por quatro coisas que não aparecem no console, e
+todas já custaram uma rodada cada:
 
 - **`backdrop-filter` cria CONTEXTO DE EMPILHAMENTO.** O `z-index: 1055` de um
   dropdown dentro de um contêiner com vidro passa a valer só entre os IRMÃOS
@@ -1530,6 +1530,16 @@ três já custaram uma rodada cada:
   diferença**; já voltou três vezes. E o brilho se calibra por TIPO de
   superfície: a rampa de 135° que vira material num painel largo vira facho num
   item de ~110px de altura.
+- **A regra genérica das sobreposições (§34, `--sf-overlay-bg` a 82%) alcança
+  `.modal-content` e MATAVA o liquid glass de todo modal do app** — mesma
+  especificidade que o `.liquid-glass` do app.css, os dois `!important`, e a
+  ordem de carga decide pelo streamflow (HANDOFF §387). O alfa 0,82 é para
+  sobreposição SEM backdrop próprio (o sino sobre o breadcrumb); o modal tem o
+  `.modal-backdrop` desfocando a página inteira, então a exceção
+  `.modal-content.liquid-glass` (0,2,0 — ganha sem depender de ordem) devolve o
+  alfa de vidro e as sombras do `_modal.scss`, mantendo o `blur(34px)`. Uma
+  regra nova de sobreposição que cite `.modal-content` tem de poupar o
+  `.liquid-glass` — o defeito não dá erro: todo modal só fica de papel.
 
 Na mesma linha, e pela ordem de carga do `base.html` (o `extra_css` da página
 vem ANTES do `app.css` e do `head-css.html`): **classe do Bootstrap com a mesma

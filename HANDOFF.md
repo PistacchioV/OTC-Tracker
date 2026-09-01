@@ -16223,3 +16223,202 @@ app.css; a classe morta `ob-add-modal` do Operations B3). Em todos os ajustes
 os IDs e handlers foram preservados (conferido: os JS só usam
 `disabled`/`display`/`click` nesses botões; o `modalTitle.text =` do Holidays
 é um no-op pré-existente).
+
+## §387 — o liquid glass dos modais estava MORTO no app inteiro, e a varredura §386 não tinha como aparecer (2026-09-01)
+
+Depois da varredura o usuário voltou com o MESMO modal do Latam: *"e esse modal
+continua fora do padrao … a varredura nao foi eficiente"*, e a resposta ao "o
+que exatamente está fora?" foi **"liquid glass efetc"**. O markup estava certo
+(o esqueleto do Latam é byte a byte o do mapping e o do New Deals); o que
+faltava era o EFEITO — e ele faltava em TODO modal do app.
+
+A causa é a seção 34 do `streamflow.css`: a regra das sobreposições
+(`--sf-overlay-bg`, branco a 82% no claro) lista `.modal-content` junto de
+`.dropdown-menu`/`.toast`/etc., com `!important`. O `.liquid-glass` do
+`app.css` também é `!important` e tem a MESMA especificidade (0,1,0) — e aí
+decide a ordem de carga, que o streamflow vence. Resultado: desde que a camada
+StreamFlow entrou, o alfa de vidro (0,48) virou 0,82 quase opaco e a pilha de
+insets do brilho especular foi apagada pela sombra genérica — **em todos os
+modais, sem erro nenhum**, e nenhuma varredura de MARKUP tinha como consertar.
+Medido com playwright: `backgroundColor` computado `rgba(255,255,255,0.82)`
+nos dois temas.
+
+O conserto é uma exceção DEPOIS da regra, mais específica
+(`.modal-content.liquid-glass`, 0,2,0 — ganha sem depender de ordem): devolve
+o alfa e as sombras do desenho original do `_modal.scss`, por tema. O racional
+da seção 34 não vale para modal: o alfa 0,82 existe para sobreposição SEM
+backdrop próprio (o sino sobre o breadcrumb), e o modal tem o
+`.modal-backdrop` escurecendo e desfocando a página inteira por baixo. O
+`blur(34px)` da regra FICA — é ele que esconde a tabela atrás, e com ele o
+0,48 é legível. `?v=` do streamflow.css → `20260901a`.
+
+## §388 — o New Ticket era maior que o Export porque só o btn-primary tem padding de CTA (2026-09-01)
+
+*"o botao de new ticket continua bem maior que o ed export"* — e continuava
+mesmo com o `align-items-center` do §-anterior, porque a causa era outra: o
+tema dá a `.btn-primary:not(.btn-sm):not(.btn-lg)` um padding próprio de
+pílula de CTA (11px 22px), e SÓ a ele — o `btn-info` do Export fica no default
+de `.btn` (0.4532rem 1.1rem). Lado a lado, 42×35px de altura. As páginas de
+tabela não veem isso porque o `.btn-toolbar-all` delas achata os dois.
+
+A regra da página (`#tk-page #tk-new-btn`) devolve o New Ticket ao default —
+escrito com as MESMAS variáveis do `.btn` (`--ins-btn-padding-y/x`), para não
+descolar se o tema mudar o tamanho. Medido antes/depois com playwright:
+42.6px → 35px, igual ao Export.
+
+## §389 — o freio do share: leitura de espelho lenta liga o modo só-JSON (2026-09-01)
+
+*"as operacoes de Vanilla NDF estao demorando MUITO para carregar na versao
+prod. Nao deu nenhum erro"* — e no log, um `file_lock_held_slow` de leitura
+DuckDB. A conta fecha assim: o `/cache/search` genérico do New Deals varre
+TODOS os arquivos-dia do produto, e no MISS do memo cada um passa pelo
+`day_payload` (§334) — que abre um banco DuckDB **no share** por arquivo, com
+lock de arquivo e full scan por SMB. O flip foi medido em disco local (~12 ms
+por abertura) e é grátis ali; no share a MESMA leitura custa segundos, e o
+Vanilla é o maior cache do app: centenas de dias × segundos = a tela que leva
+minutos. Sem erro, porque o JSON de fallback teria respondido em
+milissegundos — leitura SEQUENCIAL, que o SMB serve bem. É a classe do "um
+stat por linha" do §7: invisível na dev por construção.
+
+O conserto não é um flag por instância: é um **freio adaptativo** no
+`duck_read.py`. Toda leitura de espelho é cronometrada; a que passar do teto
+(`OTC_DUCK_READ_SLOW_SECONDS`, padrão 0,35 s; `0` desliga) arma um modo
+só-JSON por 10 min **para o módulo inteiro** — se um banco está lento, os
+irmãos no mesmo volume estão. O contrato de frescor torna isso seguro por
+construção: `None` nunca é erro, é "vale o JSON de sempre", que é o dado
+certo. Três decisões:
+
+- **o freio arma também no caminho de exceção** (o `finally` mede): uma
+  abertura que estourou depois de pendurar no lock do escritor é o mesmo
+  sintoma;
+- **freio armado NÃO cura** (`notify_write`): o espelho não tem culpa, e a
+  cura enfileiraria reconversões — escrita no share — no exato momento em que
+  ele está lento;
+- **expira sozinho**: storage que melhorou volta ao DB-first sem restart. Em
+  disco local o teto nunca é atingido e o flip continua valendo.
+
+O aviso sai UMA vez por armada (um por leitura seria o log inteiro). A seção
+5 do `check_duck_read.py` prende: arma na mão, as duas portas (`table_rows` e
+`day_payload`) devolvem `None`, o leitor de cima segue certo pelo JSON, e o
+freio expira.
+
+## §390 — Confirmations Monitor: a fila pintava um terciário opaco por cima do vidro (2026-09-01)
+
+*"na parte do Confirmations Monitor precisa aplicar liquid glass efect"*. O
+`.mc-card` JÁ era vidro — a regra estrutural do streamflow (§23,
+`div[class*="-card"]`) o alcança —, mas o `.mc-list` (a fila, que ocupa quase
+o cartão inteiro) pintava `--ins-tertiary-bg` OPACO por cima, e a coluna
+inteira lia chapada, principalmente no escuro.
+
+A fila virou degrau translúcido (0,28 claro / 0,035 escuro), **sem blur
+próprio** — dentro da raiz de backdrop do cartão o desfoque do filho não
+amostra nada (§7). No escuro o CARTÃO sobe para a receita do modal
+liquid-glass (alfa 0,10, borda 0,18 e a pilha de INSETS — é o fio de luz que
+faz ler como vidro, não só o alfa), com um par `:hover` próprio porque a
+regra empata com a de hover da página e venceria por ordem. O brilho
+especular do topo vai no `::before` porque o `::after` desses painéis é do
+SPOTLIGHT do streamflow (§23.2) — usar o mesmo pseudo o apagaria em
+silêncio. E o `.mc-item` sobe um degrau no escuro (0,055 + borda 0,10); no
+claro o degrau já existia.
+
+## §391 — a rodada de desempenho do share: sete frentes na ordem do custo (2026-09-01)
+
+Pedido: *"passe um scan no que pode ser melhorado em desempenho"* e depois
+*"faça pela ordem sugerida por você"*. A varredura (agente, ~95 leituras)
+está resumida na conversa; o padrão dominante é sempre o do §7 do CLAUDE.md —
+custo invisível na dev que vira ida-e-volta de rede no share. O que MUDOU:
+
+1. **Finders do New Deals** (`_find_deal_in_cache`/`_find_fxo`): cada chamada
+   fazia `os.walk` da árvore inteira + `open()` de TODO arquivo do sufixo — e
+   os seis endpoints de bulk (delete, patch, Mapping B3) chamam por LINHA
+   selecionada (50 linhas × ~500 dias ≈ 25 mil aberturas num request). Agora a
+   LISTAGEM é uma por request (`_optcomm_file_list`/`_optfxo_file_list`,
+   `@once_per_request`) e a leitura vai pelo memo do daycache (`_day_json`).
+   Seguro porque quem grava reabre o arquivo fresco sob o `_cache_lock`, e as
+   escritas desses laços são in-place (não removem nem reordenam) — a
+   listagem do começo do request segue apontando para o par certo.
+2. **`_mapping_rows` com memo por request**, chaveado pelo caminho e
+   invalidado PELO FUNIL (`_map_req_forget` no `_atomic_write_json` — todo
+   escritor passa por lá, o `check_duck_writers` prende): o Trade Level pagava
+   ~11 stats por linha via `_otm_cpty_name`/`_ops_swap_ir_rate`/
+   `_ops_is_internal_cpty`. `_refdata_by_spn` e `_subjacente_map` ganharam o
+   `@_once_per_request` pelo mesmo motivo. A garantia do §6 ("edição vale no
+   request seguinte") fica de pé: o memo morre com o request.
+3. **Pending Confirmation em LOTE** (`_pc_upsert_rows`): o upsert linha a
+   linha eram 4 aberturas EXCLUSIVAS de banco por linha (delete nos três DBs +
+   insert no alvo), e o mass update da tela mandava um request por linha. O
+   lote persiste N linhas em até TRÊS aberturas (uma por categoria, deletes +
+   inserts na mesma transação), com a MESMA semântica — TN repetido vale a
+   última linha, linha sem TN entra assim mesmo. O endpoint `/upsert` aceita
+   `rows` (o `row` de uma linha continua valendo), a tela manda o lote
+   (`pcPersistRows`), o import de planilha e o `_mc_pc_sync` usam o lote.
+   `check_pc_mass_update` seção 7 CONTA as aberturas.
+4. **(§389)** o freio do share no `duck_read` — feito antes desta rodada.
+5. **/mapping**: os 43 fetches do load (um por cadastro, só para o badge de
+   contagem) viraram UM `GET /api/mappings` com as contagens; o conteúdo
+   continua lazy (o rail já carregava no clique). Contra 16 threads do
+   waitress os 43 enfileiravam três rodadas.
+6. **New Deals Monitor**: o snapshot varria a árvore INTEIRA com walk cru +
+   `open()` por arquivo, a cada request. Agora vai pelo `_day_files` com PODA
+   por data (só o ano/mês do ref é listado) e lê pelo memo do `_day_json` — o
+   e-mail das 19h reusa as entradas quentes.
+7. **Sondagens de existência**: `_forecast_latest_ref` (10 dias × 5 fontes de
+   `isfile`), `_ops_src_latest_path` (10 por fonte; o `src` é dict, então a
+   versão cacheada é por `key`) e o `_ops_batch_status` (SESSENTA `isfile`
+   dia a dia atrás do último batch) ganharam `@_req_cached` — request + TTL
+   de 5 s, com o dia na chave onde há ref (a gravação invalida pelo
+   `bump_cache_gen` do funil).
+
+**O que a varredura achou e AINDA NÃO mudou** (próxima rodada): os `os.walk`
+por request do MtM/Accrual `latest`, do Latam (2 walks no mesmo request) e do
+Intrag (dentro de laço por linha); o Send to Conecta das 6 telas mandando um
+PATCH por linha (agora barato pelo item 1, mas ainda N requests); o
+`Subjacente.json` de 4,2 MB baixado com cache-buster; `RefData.json` buscado
+55 vezes em 11 templates sem cache no cliente; `pdfmake`+fontes (2,25 MB) em
+21 templates, 4 sem botão de PDF; os `while os.path.exists` de nome livre; e
+a reescrita de arquivos dentro do laço do `/cache/search` (re-enriquecimento)
+sob o `_cache_lock`.
+
+Guardas da rodada: `check_stat_por_linha` (seção 4 estendida + medição do
+memo do `_mapping_rows`), `check_pc_mass_update` (seção 7), e os de sempre
+verdes: soc_layers, duck_read/writers/mirror, manual_conf, mc_notify,
+ops_trade_swap, swap_advice, optadv_ir, ops_equity_option.
+
+## §392 — o vidro do Confirmations Monitor e do Onboarding Overview, calibrado com a mesa (2026-09-01)
+
+Iteração guiada por prints (ver §390 para a causa-raiz — a fila opaca sobre o
+cartão de vidro). O desenho FINAL, igual nas duas telas:
+
+- **coluna** = a MESMA física do chip de stat (pedido: *"igual da primeira
+  imagem"*): fundo `--vr-card-bg`, borda `--vr-card-border`, blur estrutural
+  do streamflow — sem inset, sem borda viva. As receitas mais fortes (alfa
+  0,10–0,17, insets do modal, tinta marinho no cartão) foram tentadas e
+  DESCARTADAS pela mesa; não reintroduzir;
+- **fila** (`.mc-list`/`.ob-list`) = `transparent` no escuro (o corpo é a
+  própria superfície do cartão) e branco 0,28 no claro, borda-fio no topo;
+- **header da coluna** = marinho escuro `rgba(6,16,38,.58)` no escuro, com
+  fio de luz embaixo;
+- **item** = marinho fundo `rgba(9,26,61,.70)` no escuro (o item AFUNDA no
+  vidro; degrau branco o deixava mais claro que tudo e o brilho do vizinho
+  atravessava), borda branca 0,10; no claro fica o token de sempre.
+
+## §393 — Onboarding: o formulário reordenado e os chips de contagem mudaram de casa (2026-09-01)
+
+Dois pedidos da mesa, os dois no par Overview × Track Docs:
+
+- **New CGD Request, um ciclo de três campos**: linha 1 = *Signature Type* |
+  *Contacts*; linha 2 = *Client Domain in the Appendix* (o checkbox) |
+  *CGD - Client Domain*. É SÓ a ordem do `REQUEST_FORM` (`cgd_docs.py`) — o
+  grid é de `col-md-6`, então posição = ordem da lista, e o `enabled_by`
+  referencia por COLUNA, não por posição. `check_cgd_docs` verde.
+- **Os cinco chips de contagem (Documents · Pending · Active · Inactive ·
+  Cancelled) saíram do Overview e moram no Track Docs**, acima da grade que
+  eles resumem; o Overview fica só com as três filas das mesas. As contagens
+  continuam vindo do MESMO `/api/onboarding/overview` — contar no cliente
+  pela grade duplicaria a regra de Active/Inactive (§7: `INACTIVE` CONTÉM
+  `ACTIVE`). Armadilha que o guarda pegou no ato: a âncora "primeiro
+  `<div class="row`" do insert automatizado caiu DENTRO de uma string do JS
+  (o corpo do modal é montado por `.html('<div class="row …')`) — o jsc
+  acusou `Unexpected EOF` e o markup foi re-ancorado depois do
+  `.page-title-head`. Inserção por âncora textual em template com JS inline
+  SEMPRE valida com o jsc depois.
