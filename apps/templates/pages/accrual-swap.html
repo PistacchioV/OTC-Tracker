@@ -1363,6 +1363,14 @@ td .btn-sm.rounded-circle i { font-size: 1rem; }
                     return;
                 }
                 applyResult(res.j);
+                // O original vai junto para a pasta-fonte do dia; quando essa
+                // cópia falha (share fora do ar) o processamento JÁ valeu — o
+                // aviso diz que a pasta oficial ficou sem o arquivo, em vez de
+                // deixar isso sumir no log.
+                if (res.j.source_save_error) {
+                    Swal.fire({ icon: 'warning', title: t('acc-src-warn', 'Processed, but the file was not copied to the day folder'),
+                                text: res.j.source_save_error, confirmButtonColor: '#0066cc' });
+                }
             })
             .catch(function () {
                 setBusy(false);

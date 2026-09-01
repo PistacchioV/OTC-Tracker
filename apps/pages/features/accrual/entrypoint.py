@@ -32,8 +32,9 @@ def api_accrual_swap_process():
     f = request.files.get('file')
     if not f or not f.filename:
         return jsonify({'success': False, 'error': 'No file uploaded.'}), 400
+    blob = f.read()
     try:
-        rows = _R()._cc_read_rows(f.filename, f.read())
+        rows = _R()._cc_read_rows(f.filename, blob)
     except ValueError as e:
         return jsonify({'success': False, 'error': str(e)}), 400
     except Exception:
@@ -52,6 +53,16 @@ def api_accrual_swap_process():
     except Exception:
         _R().log.error('[accrual] save failed:\n%s', traceback.format_exc())
         result['date'] = datetime.now().strftime('%Y-%m-%d')
+
+    # O ORIGINAL vai para a pasta-fonte do dia DO DADO (result['date'] sai do
+    # próprio arquivo) — a mesma que o Import from folder lê e que o End
+    # Process usa como evidência. Depois do processamento, e com a falha
+    # voltando no payload em vez de sumir no log (pedido 2026-09-01).
+    ymd_src = str(result.get('date') or '').replace('-', '') or datetime.now().strftime('%Y%m%d')
+    src_path, src_err = persistence._accrual_store_source(ymd_src, f.filename, blob)
+    result['source_saved'] = src_path or ''
+    if src_err:
+        result['source_save_error'] = src_err
 
     _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                          'Accrual Imported', 'Accrual',
@@ -99,11 +110,16 @@ def api_accrual_swap_factors():
         _R().log.error('[accrual] factor save failed:\n%s', traceback.format_exc())
         return jsonify({'success': False, 'error': 'Failed to save the enriched data.'}), 500
 
+    # O arquivo de fatores solto no dropzone também vai para a pasta-fonte do
+    # dia — mesma regra do /process (ver o comentário lá).
+    ymd_src = str(data.get('date') or '').replace('-', '') or datetime.now().strftime('%Y%m%d')
+    src_path, src_err = persistence._accrual_store_source(ymd_src, f.filename, raw)
+
     _R().log.info('[accrual] %s factors: %d mapped, %d matched, %d missing', lob, len(fmap), matched, missing)
     _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                          'Accrual Mapped', 'Accrual',
                          '{} · {} matched, {} missing'.format(lob, matched, missing) + _R()._nd_token(data.get('date')))
-    return jsonify({
+    out = {
         'success': True,
         'headers': data.get('headers') or list(domain._ACC_FIXED_HEADERS),
         'tables':  data.get('tables') or {},
@@ -111,7 +127,11 @@ def api_accrual_swap_factors():
         'ref_date': data.get('ref_date'),
         'date': data.get('date'),
         'factors': {'lob': lob, 'matched': matched, 'missing': missing, 'mapped': len(fmap)},
-    })
+        'source_saved': src_path or '',
+    }
+    if src_err:
+        out['source_save_error'] = src_err
+    return jsonify(out)
 
 @blueprint.route('/api/accrual-swap/import-folder', methods=['POST'])
 def api_accrual_import_folder():
@@ -414,11 +434,17 @@ def api_accrual_recon():
     if not data or not data.get('tables'):
         return jsonify({'success': False, 'error': 'No saved data for this date.'}), 404
 
+    # O ymd ANTES do try: ele era definido só no ramo da pasta, e o caminho do
+    # UPLOAD estourava NameError na notificação lá embaixo — um 500 DEPOIS de o
+    # recon já ter sido salvo, que a tela mostrava como "Error" com o trabalho
+    # feito (achado em 2026-09-01, na mesma mexida do store do dropzone).
+    ymd = _R()._accrual_parse_date(date_arg) or datetime.now().strftime('%Y%m%d')
+    blob = None
     try:
         if f and f.filename:
-            rows = _R()._cc_read_rows(f.filename, f.read())
+            blob = f.read()
+            rows = _R()._cc_read_rows(f.filename, blob)
         else:
-            ymd = _R()._accrual_parse_date(date_arg) or datetime.now().strftime('%Y%m%d')
             folder = persistence._accrual_source_dir(ymd)
             op = persistence._acc_find_operacoes(folder)
             if not op:
@@ -439,10 +465,16 @@ def api_accrual_recon():
         _R().log.error('[accrual] recon save failed:\n%s', traceback.format_exc())
         return jsonify({'success': False, 'error': 'Failed to save the recon result.'}), 500
 
+    # O operações solto no dropzone também vai para a pasta-fonte do dia —
+    # mesma regra do /process; do ramo da pasta ele já veio de lá.
+    src_err = None
+    if blob is not None:
+        _sp, src_err = persistence._accrual_store_source(ymd, f.filename, blob)
+
     _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                          'Accrual Mapped', 'Accrual',
                          'Recon · {} ok, {} check'.format(summary['success_rows'], summary['check_rows']) + _R()._nd_token(ymd))
-    return jsonify({
+    out = {
         'success': True,
         'headers': data.get('headers') or list(domain._ACC_FIXED_HEADERS),
         'tables': data.get('tables') or {},
@@ -450,7 +482,10 @@ def api_accrual_recon():
         'recon': data.get('recon') or {},
         'ref_date': data.get('ref_date'), 'date': data.get('date'),
         'summary': summary,
-    })
+    }
+    if src_err:
+        out['source_save_error'] = src_err
+    return jsonify(out)
 
 @blueprint.route('/api/accrual-swap/row/comment', methods=['POST'])
 def api_accrual_row_comment():
