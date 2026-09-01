@@ -1826,8 +1826,13 @@ $(document).ready(function() {
             // ==============================================================
             // SHOW/HIDE COLUMNS DROPDOWN
             // ==============================================================
+            // A ORDEM daqui é a do <thead> real (Status é a 1ª coluna de dado,
+            // col 2) — o menu traduz por índice (data-column = index + 2), e
+            // com os cinco primeiros rótulos rotacionados o checkbox de Aging
+            // escondia a coluna Client (2026-09-01). O PC_MASS_COLUMNS acima e
+            // o order [[6]] do init são as provas da ordem certa.
             var columnLabels = [
-                "LOB", "SPN", "Client", "Aging", "Status", "Product Type", "Trade Date",
+                "Status", "LOB", "SPN", "Client", "Aging", "Product Type", "Trade Date",
                 "Maturity Date", "Trade Number", "Pending Status", "Owner", "EA",
                 "Send Date", "Return Date", "Break Reason",
                 "Comments", "Economic Group", "Signature Type",

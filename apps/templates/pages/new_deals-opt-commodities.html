@@ -2180,7 +2180,11 @@ $(document).ready(function() {
                 "Settlement Date", "SPN", "Accronym", "Client", "Tax ID",
                 "Trade Type", "Market", "Underlying Asset", "Commodities", "FX Holiday Schedule", "Total Notional",
                 "Instrument", "Contract", "Strike", "Strike Currency", "Direction",
-                "Premium", "PremiumPerUnit", "PremiumCCY", "SpotDate", "FXConvDate",
+                // "Spot FXRate" entrou no <thead> (col 27) sem entrar aqui, e o
+                // menu passou a esconder a coluna VIZINHA de FXConvDate para
+                // baixo — e a última ("Quoted in Cents?") ficou inalcançável
+                // (2026-09-01). A ordem tem de ser a do <thead>, coluna a coluna.
+                "Premium", "PremiumPerUnit", "PremiumCCY", "SpotDate", "Spot FXRate", "FXConvDate",
                 "FixingStartDate", "FixingEndDate", "TradingBook", "OtherBook", "Quoted in Cents?"
             ];
 
