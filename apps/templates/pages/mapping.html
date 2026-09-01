@@ -337,6 +337,7 @@
 
     var STATE = {};          // key → {columns, rows, loaded}
     var CUR = TYPES[0].key;  // mapping selecionado
+    var COUNTS = {};         // contagens do rail (endpoint /api/mappings)
     var EDIT = null;         // índice em edição (null = Add)
     var PAGE_LEN = 50;
     var PAGE = 0;            // página atual (0-based); volta a 0 em filtro/troca/salvar
@@ -397,9 +398,9 @@
     // procura no M. Como o `applyLang` rechama o `buildRail` quando as traduções
     // chegam, a ordem se acerta sozinha nos três idiomas.
     //
-    // A ordenação é só da EXIBIÇÃO — `TYPES` não é tocado. Ele é a ordem de
-    // carga (`TYPES.forEach(load)`) e, sobretudo, `TYPES[0]` é o mapping que a
-    // página abre: ordenar o array trocaria a aba inicial sem ninguém pedir.
+    // A ordenação é só da EXIBIÇÃO — `TYPES` não é tocado: `TYPES[0]` é o
+    // mapping que a página abre, e ordenar o array trocaria a aba inicial sem
+    // ninguém pedir.
     function railOrder() {
         return TYPES.slice().sort(function (a, b) {
             return t(a.lang, a.label).localeCompare(t(b.lang, b.label), undefined,
@@ -409,7 +410,8 @@
 
     function buildRail() {
         document.getElementById('mapTypeList').innerHTML = railOrder().map(function (tp) {
-            var n = STATE[tp.key] ? STATE[tp.key].rows.length : '…';
+            var n = STATE[tp.key] ? STATE[tp.key].rows.length
+                : (COUNTS[tp.key] != null ? COUNTS[tp.key] : '…');
             return '<a class="map-type-item' + (tp.key === CUR ? ' is-active' : '') + '" data-key="' + tp.key + '">' +
                 '<i class="ti ' + tp.icon + ' map-type-ico"></i>' +
                 '<span>' + esc(t(tp.lang, tp.label)) + '</span>' +
@@ -891,8 +893,18 @@
     document.addEventListener('DOMContentLoaded', function () {
         buildRail();
         renderHeader();
-        // carrega todos: os badges do rail mostram a contagem de cada mapping
-        TYPES.forEach(function (tp) { load(tp.key); });
+        // Os badges do rail saem de UMA resposta (/api/mappings): disparar 43
+        // fetches de uma vez — um por cadastro, só para escrever 43 números —
+        // enfileirava três rodadas contra as 16 threads do waitress, cada
+        // request pagando as idas ao share. O conteúdo continua LAZY: o rail
+        // já carrega cada cadastro no clique (e o save recarrega o atual).
+        fetch('/api/mappings', { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (d && d.success) { COUNTS = d.counts || {}; buildRail(); }
+            })
+            .catch(function () {});
+        load(CUR);
         // Seleção de célula + Ctrl+C — padrão New Deals (coluna 0 = Actions fora)
         if (window.otcCellCopy) otcCellCopy('#mapTable', { skip: [0] });
         if (window.lucide && lucide.createIcons) lucide.createIcons();

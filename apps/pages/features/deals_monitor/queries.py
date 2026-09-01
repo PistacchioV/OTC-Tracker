@@ -24,32 +24,37 @@ def _ndm_monitor_snapshot(ref):
     do que o usuário vê na tela."""
     want = ref.strftime('%Y%m%d')
 
-    # Um único walk: agrupa os arquivos DA DATA por produto (caminho sem os
-    # níveis de ano/mês), contando linhas por Status e por LE (_ndm_deal_le).
+    # A varredura vai pelo `_day_files` COM PODA por data (desde=ate=ref): o
+    # walk cru descia a árvore INTEIRA (todos os produtos × todos os meses) a
+    # cada request — dezenas de listagens no share para achar os arquivos de
+    # UMA data — e ainda abria cada um com `open()` cru, sem o memo que o
+    # resto das telas ganhou. Com a poda só o ano/mês da data é listado, e o
+    # `_day_json` serve do memo o arquivo que não mudou (o e-mail das 19h lê
+    # os mesmos arquivos logo depois da tela). Agrupamento por produto
+    # (caminho sem os níveis de dígitos), contando por Status e LE.
+    ref_date = ref.date() if hasattr(ref, 'date') else ref
     found, found_les = {}, {}
     if os.path.isdir(_R().NEW_DEALS_CACHE_ROOT):
-        for root, _dirs, files in os.walk(_R().NEW_DEALS_CACHE_ROOT):
-            for fname in files:
-                if not fname.endswith('.json') or fname[:8] != want:
-                    continue
-                rel = os.path.relpath(root, _R().NEW_DEALS_CACHE_ROOT).replace('\\', '/')
-                pkey = '/'.join([p for p in rel.split('/') if not p.isdigit()][:2])
-                try:
-                    with open(os.path.join(root, fname), encoding='utf-8') as fh:
-                        data = json.load(fh)
-                except Exception:
-                    continue
-                bucket = found.setdefault(pkey, _R().Counter())
-                les    = found_les.setdefault(pkey, _R().Counter())
-                for d in (data if isinstance(data, list) else [data]):
-                    if isinstance(d, dict):
-                        # Intrag entries carry lowercase 'status' — without the
-                        # fallback every intrag deal counted as 'New' forever.
-                        st = str(d.get('Status') or d.get('status') or 'New').strip() or 'New'
-                        if st == 'Canceled':      # cancelado via API: fora das métricas
-                            continue
-                        bucket[st] += 1
-                        les[domain._ndm_deal_le(pkey, d)] += 1
+        for fpath, fname, mtime, size in _R()._day_files(
+                _R().NEW_DEALS_CACHE_ROOT, '.json',
+                desde=ref_date, ate=ref_date):
+            if fname[:8] != want:
+                continue
+            root = os.path.dirname(fpath)
+            rel = os.path.relpath(root, _R().NEW_DEALS_CACHE_ROOT).replace('\\', '/')
+            pkey = '/'.join([p for p in rel.split('/') if not p.isdigit()][:2])
+            data = _R()._day_json(fpath, mtime, size)
+            bucket = found.setdefault(pkey, _R().Counter())
+            les    = found_les.setdefault(pkey, _R().Counter())
+            for d in (data if isinstance(data, list) else [data]):
+                if isinstance(d, dict):
+                    # Intrag entries carry lowercase 'status' — without the
+                    # fallback every intrag deal counted as 'New' forever.
+                    st = str(d.get('Status') or d.get('status') or 'New').strip() or 'New'
+                    if st == 'Canceled':      # cancelado via API: fora das métricas
+                        continue
+                    bucket[st] += 1
+                    les[domain._ndm_deal_le(pkey, d)] += 1
 
     cards, claimed = [], set()
     for c in domain._NDM_CARDS:

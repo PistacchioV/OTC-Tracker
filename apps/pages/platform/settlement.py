@@ -57,6 +57,23 @@ _OPS_SWAP_JOIN_TOKENS = {
 
 
 def _ops_src_latest_path(src, max_back=10):
+    """Cascata para a versão cacheada — o `src` é um dict (inhashável para a
+    chave do cache), então a memoização é pela `key` dele. A sondagem custa
+    até 10 `isfile` no share POR FONTE, e a tela pergunta pelas cinco."""
+    return _ops_src_latest_path_cached(str(src.get('key', '')), max_back)
+
+
+@_req_cached
+def _ops_src_latest_path_cached(src_key, max_back=10):
+    from apps.pages import routes
+    src = next((s for s in routes._FORECAST_SOURCES
+                if s.get('key') == src_key), None)
+    if src is None:
+        return None, None
+    return _ops_src_latest_path_uncached(src, max_back)
+
+
+def _ops_src_latest_path_uncached(src, max_back=10):
     """Newest existing snapshot (path, dref) for ONE forecast source, walking back
     from D-1 ANBIMA. Each product folder is saved independently and the dates can
     drift a day apart (e.g. the NDF TER file lands after the SWAP files, or the
@@ -1219,8 +1236,14 @@ def _ops_pos_swap_found(ref):
     return bool(_ops_swap_pos_terms(ref))
 
 
+@_req_cached
 def _ops_batch_status(ref):
     """Diagnóstico das fontes do dia: o que falta e onde tem batch.
+
+    `@_req_cached` (2026-09-01): o `last_batch` sonda até SESSENTA `isfile`
+    dia a dia no share, por request. O dia do `ref` entra na chave, então a
+    gravação de um arquivo-dia invalida na hora (bump_cache_gen no funil);
+    fora isso o TTL de 5 s cobre refresh/polling.
 
     `last_batch` procura para trás o dia mais recente com Operations B3 (60 dias
     corridos, teto arbitrário mas suficiente para um mês de férias) — sem essa

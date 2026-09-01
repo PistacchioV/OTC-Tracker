@@ -848,8 +848,8 @@ def _mc_pc_sync(rows):
                 if novo and str(pc.get('Pending Status', '') or '').strip() != novo:
                     pc['Pending Status'] = novo
                     updates.append(pc)
-        for pc in updates:          # fora do laço de leitura: o upsert reescreve os DBs
-            routes._pc_upsert_row(pc)
+        if updates:                 # fora do laço de leitura: o upsert reescreve os DBs
+            routes._pc_upsert_rows(updates)   # lote: 3 aberturas, não 4×N
     except Exception:
         log.warning('[manual-conf] espelho no Pending Confirmation falhou:\n%s',
                     traceback.format_exc())

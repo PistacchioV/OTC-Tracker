@@ -2235,7 +2235,7 @@ $(document).ready(function() {
 
             derive.then(function(res) {
                 var derived = (res && res.success && res.rows) ? res.rows : null;
-                var _persists = [];
+                var _lote = [];
                 rows.forEach(function(r, i) {
                     if (derived && derived[i]) {
                         cascade.forEach(function(name) {
@@ -2248,7 +2248,7 @@ $(document).ready(function() {
                         });
                     }
                     r.dtRow.data(r.d);
-                    _persists.push(pcPersistRow(r.d, false));
+                    _lote.push(r.d);
                 });
                 if (cascade.length && !derived) {
                     // O valor escolhido foi aplicado; o que não deu foi o
@@ -2272,7 +2272,7 @@ $(document).ready(function() {
                 // que viraram Concluded / Ok migram de banco).
                 table.draw(false);
                 updateWidgets();
-                Promise.all(_persists).then(function(){ sfApply(); });
+                pcPersistRows(_lote).then(function(){ sfApply(); });
             });
         });
     });
@@ -2629,6 +2629,17 @@ $(document).ready(function() {
           .catch(function(err){ console.error('pending upsert error', err); });
         if (reload !== false) p = p.then(function(){ sfApply(); });   // reload unless caller batches
         return p;
+    }
+    // O LOTE do mass update: um request com todas as linhas — por linha eram
+    // N requests × 4 aberturas exclusivas de banco no share cada (o servidor
+    // agora faz o lote inteiro em três aberturas).
+    function pcPersistRows(ds) {
+        if (!ds.length) return Promise.resolve();
+        return fetch('/api/pending-confirmation/upsert', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ rows: ds.map(pcArrayToRow) })
+        }).then(function(r){ return r.json(); })
+          .catch(function(err){ console.error('pending bulk upsert error', err); });
     }
     function pcDeleteRow(tradeNumber) {
         if (!tradeNumber) return Promise.resolve();

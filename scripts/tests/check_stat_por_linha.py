@@ -125,11 +125,48 @@ print('\n== 4. quem ja esta protegido ==')
 # A lista e o registro do que foi medido — se um deles perder o decorador, a
 # tela volta a ficar lenta em silencio.
 for mod, nome in (('apps.pages.routes', '_refdata_by_taxid'),
-                  ('apps.pages.manual_conf', 'sla_days')):
+                  ('apps.pages.manual_conf', 'sla_days'),
+                  # 2026-09-01: o Trade Level pagava ~11 stats por LINHA via
+                  # _mapping_rows (memo proprio, testado abaixo) e estes dois
+                  ('apps.pages.routes', '_refdata_by_spn'),
+                  ('apps.pages.routes', '_subjacente_map'),
+                  # e os finders dos bulks do New Deals refaziam o os.walk da
+                  # arvore inteira POR LINHA selecionada — a listagem e uma
+                  # por request
+                  ('apps.pages.platform.new_deals', '_optcomm_file_list'),
+                  ('apps.pages.platform.new_deals', '_optfxo_file_list')):
     __import__(mod)
     fn = getattr(sys.modules[mod], nome)
     check('%s.%s esta memoizado por request' % (mod.split('.')[-1], nome),
           getattr(fn, '__wrapped__', None) is not None)
+
+# _mapping_rows tem memo proprio (chaveado por caminho, invalidado pelo funil
+# _atomic_write_json): mede-se o comportamento, nao o texto. O _MAPPINGS_DIR
+# vai para um tmp — o seed recria o arquivo la, e nada de dado real e tocado.
+_tmpmap = tempfile.mkdtemp()
+_dir_real = R._MAPPINGS_DIR
+R._MAPPINGS_DIR = _tmpmap
+try:
+    with app.test_request_context('/'):
+        _stats = []
+        _orig = os.path.getmtime
+        os.path.getmtime = lambda p: (_stats.append(str(p)), _orig(p))[1]
+        try:
+            R._mapping_rows('bank-name')
+            R._mapping_rows('bank-name')
+            n = len([p for p in _stats if 'bank-name' in p])
+            check('_mapping_rows: 1 stat por request (veio %d)' % n, n == 1)
+            R._atomic_write_json(R._mapping_path('bank-name'),
+                                 list(R._mapping_rows('bank-name')))
+            R._mapping_rows('bank-name')
+            n = len([p for p in _stats if 'bank-name' in p])
+            check('_mapping_rows: escrita pelo funil derruba o memo (%d stats)' % n,
+                  n >= 2)
+        finally:
+            os.path.getmtime = _orig
+finally:
+    R._MAPPINGS_DIR = _dir_real
+    R._mapping_cache.pop('bank-name', None)
 
 print('\n%s' % ('TUDO OK' if not falhas else 'FALHAS (%d)' % len(falhas)))
 sys.exit(1 if falhas else 0)

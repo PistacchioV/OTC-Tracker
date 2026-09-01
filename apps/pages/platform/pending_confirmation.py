@@ -286,7 +286,7 @@ def _pc_import_update(raw_bytes):
             if _tn and _tn not in atual:
                 atual[_tn] = str(_r.get('Pending Status', '') or '')
 
-    updated, skipped = 0, 0
+    updated, skipped, lote = 0, 0, []
     for row in rows_iter:
         if row is None or not any(v not in (None, '') for v in row):
             continue
@@ -317,8 +317,13 @@ def _pc_import_update(raw_bytes):
         r['Pending Status'] = pending_status
         r['Owner'] = _pc_banker_for_spn(spn)
         _pc_refdata_enrich(r)        # Economic Group / Signature Type do RefData
-        _pc_upsert_row(r)
+        lote.append(r)
         updated += 1
+    # Um LOTE, não um upsert por linha: cada upsert abria os três bancos com
+    # lock exclusivo no share — planilha de 1.000 linhas eram ~4.000 aberturas
+    # num request só. O lote faz o mesmo em três.
+    if lote:
+        _pc_upsert_rows(lote)
     try:
         wb.close()
     except Exception:
@@ -508,18 +513,54 @@ def _pc_insert_into(category, row):
                               [row.get(c, '') for c in _PC_COLUMNS])])
 
 
+def _pc_upsert_rows(rows):
+    """Persist VÁRIAS linhas em até TRÊS aberturas de banco — uma por
+    categoria, cada uma com todos os deletes e inserts daquela categoria numa
+    transação só. O desenho anterior era 4 aberturas EXCLUSIVAS por linha
+    (delete nos três + insert no alvo), e cada abertura no share é lock de
+    arquivo + connect + commit: o import de planilha e o mass update da tela
+    chamavam isso por linha — 200 linhas ≈ 800 operações exclusivas
+    serializadas nos mesmos três arquivos, a tela de minutos sem erro nenhum.
+
+    A semântica é a do upsert linha a linha: refresh de aging/status, o Trade
+    Number some dos três bancos e a linha entra no banco a que pertence AGORA.
+    TN repetido no lote vale a ÚLTIMA linha (é o que a sequência de upserts
+    fazia — a última sobrescrevia). Devolve a lista de categorias-alvo, na
+    ordem das linhas de entrada."""
+    alvos = []
+    ultima_por_tn = {}
+    sem_tn = []                  # linha sem Trade Number entra assim mesmo
+    for row in rows:
+        _pc_refresh_aging_status(row)
+        tn = str(row.get('Trade Number', '') or '')
+        target = _pc_target_category(row)
+        alvos.append(target)
+        if tn:
+            ultima_por_tn[tn] = (target, row)
+        else:
+            sem_tn.append((target, row))
+
+    del_sql = 'DELETE FROM {} WHERE "Trade Number" = ?'.format(_PC_TABLE)
+    cols = ', '.join('"{}"'.format(c) for c in _PC_COLUMNS)
+    ph = ', '.join('?' for _ in _PC_COLUMNS)
+    ins_sql = 'INSERT INTO {} ({}) VALUES ({})'.format(_PC_TABLE, cols, ph)
+    for cat in ('backlog', 'pending', 'ok'):
+        ops = [(del_sql, [tn]) for tn in ultima_por_tn]
+        ops += [(ins_sql, [row.get(c, '') for c in _PC_COLUMNS])
+                for target, row in
+                (list(ultima_por_tn.values()) + sem_tn) if target == cat]
+        if ops:
+            _pc_write_exec(cat, ops)
+    return alvos
+
+
 def _pc_upsert_row(row):
     """Persist one row: refresh aging/status, remove its Trade Number from ALL
     three DBs, then insert it into the DB it now belongs to (this is what moves a
     row pending→ok when confirmed, or →backlog past 12 months). Returns the
-    target category."""
-    _pc_refresh_aging_status(row)
-    tn = str(row.get('Trade Number', '') or '')
-    target = _pc_target_category(row)
-    for cat in ('backlog', 'pending', 'ok'):
-        _pc_delete_tn(cat, tn)
-    _pc_insert_into(target, row)
-    return target
+    target category. Caso de UMA linha do `_pc_upsert_rows` — quem tem um lote
+    chama o lote."""
+    return _pc_upsert_rows([row])[0]
 
 
 def _pc_rewrite_db(category, rows):

@@ -25,7 +25,7 @@ from email.mime.multipart import MIMEMultipart
 import awmpy
 from flask import (
     render_template, request, redirect, send_from_directory,
-    url_for, session, flash, jsonify, make_response, has_app_context
+    url_for, session, flash, jsonify, make_response, has_app_context, g
 )
 from jinja2 import TemplateNotFound
 from werkzeug.exceptions import NotFound
@@ -2837,6 +2837,7 @@ _pc_write_exec = _pf_pc._pc_write_exec
 _pc_delete_tn = _pf_pc._pc_delete_tn
 _pc_insert_into = _pf_pc._pc_insert_into
 _pc_upsert_row = _pf_pc._pc_upsert_row
+_pc_upsert_rows = _pf_pc._pc_upsert_rows
 _pc_rewrite_db = _pf_pc._pc_rewrite_db
 _pc_snapshot_pending = _pf_pc._pc_snapshot_pending
 _pc_run_daily_maintenance = _pf_pc._pc_run_daily_maintenance
@@ -4726,8 +4727,11 @@ def _subjacente_commodity(code):
 _SUBJ_CACHE = {'mtime': None, 'map': {}}
 
 
+@_once_per_request
 def _subjacente_map():
-    """{código(upper) → Commodity} do Subjacente.json, cacheado por mtime.
+    """{código(upper) → Commodity} do Subjacente.json, cacheado por mtime —
+    e por REQUEST (§7): o cache por mtime não evita o getmtime, e há
+    consumidor por linha.
 
     O arquivo tem ~7.800 linhas e repete o mesmo código em várias (uma por Tipo
     IF: OPC, COE, TER…). A primeira com Commodity preenchida vence — as demais
@@ -4851,8 +4855,11 @@ def _refdata_triples():
     return _REFDATA_TRIPLE_CACHE['rows']
 
 
+@_once_per_request
 def _refdata_by_spn():
-    """{SPN → COUNTERPARTY} do RefData.json, cacheado por mtime."""
+    """{SPN → COUNTERPARTY} do RefData.json, cacheado por mtime — e por
+    REQUEST (§7): o `_otm_cpty_name` o consulta uma vez por LINHA das telas
+    da família de liquidação, e o getmtime ia junto."""
     path = os.path.join(_B3_DATA_DIR, 'RefData.json')
     try:
         mt = os.path.getmtime(path)
@@ -10720,11 +10727,26 @@ def _mapping_path(key):
 def _mapping_rows(key):
     """Linhas do mapping `key` (lista de dicts). Cria o arquivo com o SEED na
     primeira leitura; cacheia por mtime, então edição pela tela vale na
-    requisição seguinte."""
+    requisição seguinte.
+
+    E memoiza POR REQUEST (§7: o cache por mtime não evita o stat que decide
+    se o arquivo mudou, e há consumidor por LINHA — o Trade Level do Other
+    Products paga ~11 idas ao share por linha via `_otm_cpty_name`/
+    `_ops_swap_ir_rate`/`_ops_is_internal_cpty`, todas desembocando aqui). A
+    garantia do §6 fica de pé: o memo morre com o request, e a gravação NO
+    MEIO de um request o derruba pelo funil (`_map_req_forget` no
+    `_atomic_write_json` — todo escritor passa por lá). Fora de request,
+    nada muda."""
     d = _MAPPING_DEFS.get(key)
     if not d:
         return []
     path = _mapping_path(key)
+    _req_store = None
+    if has_app_context():
+        _req_store = g.setdefault('_map_rows_req', {})
+        _hit = _req_store.get(os.path.normpath(path))
+        if _hit is not None:
+            return _hit
     if not os.path.isfile(path):
         # Semear sob o lock: dois requests simultâneos na primeira leitura
         # gravariam o mesmo arquivo ao mesmo tempo. O re-teste de existência
@@ -10741,6 +10763,8 @@ def _mapping_rows(key):
         mtime = os.path.getmtime(path)
         cached = _mapping_cache.get(key)
         if cached and cached[0] == mtime:
+            if _req_store is not None:
+                _req_store[os.path.normpath(path)] = cached[1]
             return cached[1]
         # DB-first (fase 3): o banco DESTE cadastro (`mappings_<key>.db`, ou o
         # `<arquivo>.db` da raiz para os registros com `file`) quando o
@@ -10763,6 +10787,8 @@ def _mapping_rows(key):
         if up:
             rows = up(rows)
         _mapping_cache[key] = (mtime, rows)
+        if _req_store is not None:
+            _req_store[os.path.normpath(path)] = rows
         return rows
     except Exception:
         return list(d.get('seed') or [])

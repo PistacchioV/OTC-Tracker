@@ -32,8 +32,30 @@ from datetime import datetime, timedelta
 
 from apps.pages import otc_boxparse
 from apps.pages.data_paths import data_path
+from apps.pages.request_cache import once_per_request
 
 log = logging.getLogger('otc_tracker')
+
+
+@once_per_request
+def _optcomm_file_list():
+    """A listagem `(caminho, mtime, tamanho)` dos arquivos-dia do Opt
+    Commodities, UMA vez por request. Os endpoints de bulk (delete, patch,
+    Mapping B3) chamam o finder uma vez por LINHA selecionada, e cada chamada
+    refazia o `os.walk` da árvore inteira NO SHARE — 50 linhas × ~500 dias era
+    o request de minutos sem erro nenhum (§7 do CLAUDE.md, a classe do "um
+    stat por linha"). Fora de um request o decorator não memoiza e o
+    comportamento é o de sempre."""
+    from apps.pages import routes
+    return [(fp, mt, sz) for fp, _fn, mt, sz in
+            routes._day_files(routes.CACHE_BASE_DIR, '_optcomm.json')]
+
+
+@once_per_request
+def _optfxo_file_list():
+    from apps.pages import routes
+    return [(fp, mt, sz) for fp, _fn, mt, sz in
+            routes._day_files(routes.OPT_FXO_CACHE_DIR, '_optfxo.json')]
 
 def _ndf_ter_path(ref, max_back=10, exact=False):
     """Newest existing DPOSICAO-TER (path, dref) walking back from `ref` (D-1 ANBIMA).
@@ -55,40 +77,42 @@ def _ndf_ter_path(ref, max_back=10, exact=False):
 
 def _find_deal_in_cache(deal_name, client_name=None):
     """Search all YYYYMMDD_optcomm.json files for a deal by Deal + Client.
-    Returns (file_path, list_index) or (None, None)."""
+    Returns (file_path, list_index) or (None, None).
+
+    A leitura vai pelo `_day_json` (o memo por mtime/tamanho do daycache) e a
+    listagem pelo `_optcomm_file_list` (uma por request): antes cada chamada
+    abria TODO arquivo da árvore com `open()` cru — e os bulks chamam isto por
+    linha. O índice devolvido continua sendo o do arquivo: quem grava reabre o
+    arquivo fresco sob o `_cache_lock`, e as escritas desses laços são
+    in-place (não removem nem reordenam), então uma listagem do começo do
+    request segue apontando para o par certo."""
     from apps.pages import routes
     files_scanned     = 0
     deal_name_matches = []   # Deal matched but Client didn't
 
-    for root, _dirs, files in os.walk(routes.CACHE_BASE_DIR):
-        for fname in sorted(files, reverse=True):   # newest files first
-            if not fname.endswith('_optcomm.json'):
-                continue
-            fpath = os.path.join(root, fname)
-            files_scanned += 1
-            try:
-                with open(fpath, 'r', encoding='utf-8') as fh:
-                    deals = json.load(fh)
-                if not isinstance(deals, list):
-                    deals = [deals]
-                for i, deal in enumerate(deals):
-                    d_name   = (deal.get('Deal')   or '').strip()
-                    d_client = (deal.get('Client') or '').strip()
-                    if d_name == deal_name.strip():
-                        want = (client_name or '').strip()
-                        if not want or d_client == want:
-                            log.debug("[_find_opt] FOUND %r client=%r → %s[%d]",
-                                      deal_name, client_name, fname, i)
-                            return fpath, i
-                        else:
-                            deal_name_matches.append({
-                                'file': fname, 'idx': i,
-                                'stored_client': repr(d_client),
-                                'wanted_client': repr(want)
-                            })
-            except Exception:
-                log.warning("[_find_opt] Error reading %s: %s", fpath, traceback.format_exc())
-                continue
+    for fpath, mtime, size in reversed(_optcomm_file_list()):   # newest first
+        fname = os.path.basename(fpath)
+        files_scanned += 1
+        try:
+            deals = routes._day_json(fpath, mtime, size)
+            for i, deal in enumerate(deals):
+                d_name   = (deal.get('Deal')   or '').strip()
+                d_client = (deal.get('Client') or '').strip()
+                if d_name == deal_name.strip():
+                    want = (client_name or '').strip()
+                    if not want or d_client == want:
+                        log.debug("[_find_opt] FOUND %r client=%r → %s[%d]",
+                                  deal_name, client_name, fname, i)
+                        return fpath, i
+                    else:
+                        deal_name_matches.append({
+                            'file': fname, 'idx': i,
+                            'stored_client': repr(d_client),
+                            'wanted_client': repr(want)
+                        })
+        except Exception:
+            log.warning("[_find_opt] Error reading %s: %s", fpath, traceback.format_exc())
+            continue
 
     if deal_name_matches:
         log.warning(
@@ -185,27 +209,22 @@ def _deal_matches(deal, filters):
 # ==============================================================================
 def _find_fxo(deal_name, client_name=None):
     """Search all YYYYMMDD_optfxo.json files for a deal by Deal + Client.
-    Returns (file_path, list_index) or (None, None)."""
+    Returns (file_path, list_index) or (None, None). Mesma mecânica (e mesma
+    razão) do `_find_deal_in_cache` acima: listagem uma vez por request,
+    leitura pelo memo do daycache."""
     from apps.pages import routes
-    for root, _dirs, files in os.walk(routes.OPT_FXO_CACHE_DIR):
-        for fname in sorted(files, reverse=True):
-            if not fname.endswith('_optfxo.json'):
-                continue
-            fpath = os.path.join(root, fname)
-            try:
-                with open(fpath, 'r', encoding='utf-8') as fh:
-                    deals = json.load(fh)
-                if not isinstance(deals, list):
-                    deals = [deals]
-                for i, deal in enumerate(deals):
-                    d_name   = (deal.get('Deal')   or '').strip()
-                    d_client = (deal.get('Client') or '').strip()
-                    if deal_name and d_name == deal_name.strip():
-                        want = (client_name or '').strip()
-                        if not want or d_client == want:
-                            return fpath, i
-            except Exception:
-                continue
+    for fpath, mtime, size in reversed(_optfxo_file_list()):   # newest first
+        try:
+            deals = routes._day_json(fpath, mtime, size)
+            for i, deal in enumerate(deals):
+                d_name   = (deal.get('Deal')   or '').strip()
+                d_client = (deal.get('Client') or '').strip()
+                if deal_name and d_name == deal_name.strip():
+                    want = (client_name or '').strip()
+                    if not want or d_client == want:
+                        return fpath, i
+        except Exception:
+            continue
     return None, None
 
 

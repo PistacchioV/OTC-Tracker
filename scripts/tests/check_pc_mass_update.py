@@ -222,5 +222,50 @@ check('o combo so-de-status saiu', 'statusMassUpdate' in HTML_SRC, False)
 check('o dropdown de coluna existe', "id = 'pcMassColumnSelect'" in HTML_SRC, True)
 check('e a tela abre', cl.get('/pending-confirmation').status_code, 200)
 
+print('\n== 7. o upsert em LOTE (2026-09-01): 3 aberturas, nao 4 por linha ==')
+# Cada abertura de banco no share e lock exclusivo + connect + commit; o mass
+# update mandava um request por linha e cada upsert abria os TRES bancos mais o
+# alvo. O lote persiste N linhas em ate tres aberturas — este guarda CONTA.
+import tempfile as _tf
+from apps.pages.platform import pending_confirmation as _PC
+_dbdir = _tf.mkdtemp()
+_old_dbdir = R._PC_DB_DIR
+R._PC_DB_DIR = _dbdir
+_opens = []
+_orig_exec = _PC._pc_write_exec
+_PC._pc_write_exec = lambda cat, ops: (_opens.append(cat), _orig_exec(cat, ops))[1]
+try:
+    hoje = datetime.now().strftime('%d/%m/%Y')
+    linhas = [{'Trade Number': 'TN%d' % i, 'Client': 'C%d' % i,
+               'Trade Date': hoje, 'Pending Status': 'Pending Original'}
+              for i in range(5)]
+    resp = cl.post('/api/pending-confirmation/upsert', json={'rows': linhas})
+    check('o lote responde 200', resp.status_code, 200)
+    check('e devolve uma categoria por linha',
+          len((resp.get_json() or {}).get('categories') or []), 5)
+    check('5 linhas custam no maximo 3 aberturas (foram %d)' % len(_opens),
+          len(_opens) <= 3, True)
+    # TN repetido: vale a ULTIMA linha (a semantica do upsert sequencial)
+    _opens[:] = []
+    dupla = [{'Trade Number': 'TNX', 'Client': 'PRIMEIRA', 'Trade Date': hoje,
+              'Pending Status': 'Pending Original'},
+             {'Trade Number': 'TNX', 'Client': 'SEGUNDA', 'Trade Date': hoje,
+              'Pending Status': 'Pending Original'}]
+    cl.post('/api/pending-confirmation/upsert', json={'rows': dupla})
+    achadas = [r for r in R._pc_load_rows('pending') if r.get('Trade Number') == 'TNX']
+    check('TN repetido no lote: sobra UMA linha', len(achadas), 1)
+    check('   e ela e a ULTIMA', achadas[0].get('Client'), 'SEGUNDA')
+    # o formato de UMA linha continua aceito (compat)
+    um = cl.post('/api/pending-confirmation/upsert',
+                 json={'row': {'Trade Number': 'TNY', 'Client': 'SO UMA',
+                               'Trade Date': hoje,
+                               'Pending Status': 'Pending Original'}})
+    check('o formato antigo {row} segue valendo', um.status_code, 200)
+    check('a tela manda o lote (pcPersistRows)', 'pcPersistRows' in HTML_SRC
+          or 'pcPersistRows' in read('apps/templates/pages/pending-confirmation.html'), True)
+finally:
+    _PC._pc_write_exec = _orig_exec
+    R._PC_DB_DIR = _old_dbdir
+
 print('\n' + ('FALHOU: ' + ', '.join(fails) if fails else 'TUDO OK'))
 sys.exit(1 if fails else 0)
