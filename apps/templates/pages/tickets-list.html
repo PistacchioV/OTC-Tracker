@@ -40,6 +40,13 @@
 [data-bs-theme=dark] #tk-page .tk-agent-logo--dark  { display: inline-block; }
 [data-bs-theme=dark] #tk-page .tk-agent-logo--light { display: none; }
 
+/* O tema dá a `.btn-primary:not(.btn-sm):not(.btn-lg)` um padding maior
+   (11px 22px — a pílula de CTA), e só a ele: o Export (`btn-info`) fica no
+   padding default de `.btn`. Lado a lado na mesma barra os dois têm de medir
+   igual, então o New Ticket volta ao default — pelas MESMAS variáveis do
+   `.btn`, para não descolar se o tema mudar o tamanho. */
+#tk-page #tk-new-btn { padding: var(--ins-btn-padding-y) var(--ins-btn-padding-x); }
+
 #tk-page .tk-empty { padding: 44px 16px; text-align: center; color: var(--ins-secondary-color); }
 #tk-page .tk-due-empty { color: var(--ins-secondary-color); }
 #tk-page th[data-tk-sort] { cursor: pointer; user-select: none; }
