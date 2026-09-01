@@ -16082,3 +16082,100 @@ Estrutural para o futuro: página nova deve preferir derivar o menu dos
   arquivo** (`cpFileIcon` — o mesmo mapa e cores do dropzone do New Deals no
   otc-fileupload.js; os dropzones do New Deals já tinham). xlsx/csv =
   planilha verde, pdf vermelho, txt, msg/eml = envelope, imagem, zip…
+
+## §382 — a nota do ticket ia embora com o Save Changes, e o e-mail de encerramento saía sem ela (2026-09-01)
+
+Pedido: *"o Add a Note não está ficando salvo no Activity e nem sendo incluído
+no e-mail quando o ticket é resolvido ou fechado; e o botão redondo de send
+está feio e fora do padrão"*.
+
+O servidor estava CERTO — o `add_comment` grava na timeline e o e-mail de
+encerramento já imprime o `Latest Activity` (as 5 entradas mais recentes). O
+defeito era de FLUXO na tela: a nota só era enviada pelo botão de send, e o
+caminho natural de quem resolve um chamado é escrever a resposta, trocar o
+Status e clicar em **Save Changes** — que ignorava o textarea. A nota se
+perdia em silêncio, e o e-mail de Resolved/Closed saía sem ela porque ela
+nunca tinha virado comentário.
+
+- **O Save envia a nota pendente ANTES da gravação** (ordem importa: o
+  encerramento renderiza o ticket já com ela). Se o comentário falhar, o Save
+  PARA — seguir fecharia o chamado sem a resposta, que é exatamente o defeito.
+  Save só-com-nota não cai no balão de "Nothing Changed".
+- **Ctrl+Enter envia** (Enter sozinho segue quebrando linha).
+- **O botão virou o squircle padrão** (spec `.ops-row-act`: 32×32 travado nos
+  DOIS eixos, raio 10px, `ti-brand-telegram`/primary) — o gigante redondo era
+  o flex ESTICANDO o botão até a altura do textarea (mesma causa do New Ticket
+  no §381) + o raio do tema sobre um botão não-quadrado. `align-items-center`
+  no contêiner e a geometria travada.
+
+## §383 — '#NULL!' nos Excel do Advanced Export (2026-09-01)
+
+Pedido: *"alguns exports em excel, do swap mtm por exemplo, estão saindo com
+as informações como #NULL!"*. O literal vem do ARQUIVO de origem — o legado
+grava `#NULL!`/`#N/A`/`#REF!` onde a fórmula não tinha valor — e os botões de
+Export próprios do MtM/Accrual já limpavam isso (`xopts.format.body`). O que
+não limpava era o **Advanced Export**: os dois caminhos dele (o dia da tela e
+o INTERVALO) desembocam no `run()`, que monta a config do Buttons sem o
+sanitizador — e o `.xlsx` saía com `#NULL!` escrito, que se lê como a própria
+exportação quebrada.
+
+O `format.body` entrou no `run()` — `plain()` (o strip de HTML que o Buttons
+faria sozinho, e que a config própria SUBSTITUI) + o mesmo regex de literais
+de erro do MtM/Accrual — e vale de uma vez para TODA página com Advanced
+Export, nos cinco formatos. A tela continua mostrando o que está no arquivo,
+como os botões do MtM já decidiram: a limpeza é do EXPORT.
+
+## §384 — o arquivo solto no dropzone do MtM/Accrual vai para a pasta-fonte do dia (2026-09-01)
+
+Pedido: *"quando é jogado o arquivo no dropzone tanto do MtM quanto do Accrual,
+tem que ser processado e os arquivos salvos na pasta de destino"*. Os endpoints
+liam o upload EM MEMÓRIA (`f.read()`), montavam o dataset e gravavam o JSON —
+o arquivo original não ia para lugar nenhum. A pasta oficial do dia
+(`Regulatory\MTM\AAAA\mm. Month\DD` e `Regulatory\Accrual\...` — a MESMA que o
+Import from folder lê e que o End Process do Accrual usa como evidência)
+ficava sem o arquivo que gerou o dado, e o Import from folder de amanhã não o
+acharia.
+
+- **`_mtm_store_source` / `_accrual_store_source`** (infra de cada vertical):
+  gravam o blob na pasta-fonte do dia, DEPOIS do processamento dar certo —
+  arquivo que não parseou não vira cópia oficial. Sobrescreve o homônimo (é o
+  que a cópia manual pelo Explorer faria; o re-soltado É a versão nova).
+  Basename cortado nos DOIS separadores (fora do Windows o `os.path.basename`
+  não corta `\`, e um nome com caminho viraria um arquivo esquisito no macOS).
+- **A falha da cópia não desfaz o processamento** (que já foi salvo): volta no
+  payload (`source_save_error`) e as duas telas mostram um Swal de WARNING
+  dizendo que a pasta oficial ficou sem o arquivo — em vez de sumir no log.
+- Cobre TODAS as portas de upload das duas telas: `/process` (MtM: swap, COE e
+  os dois de valores; Accrual: VCP), `/factors` (CEM/EDG/HYB) e os dois
+  `/recon` (arquivo de retorno da B3 / operações) — no ramo "from folder" dos
+  recons não há o que copiar, o arquivo já veio de lá. O Accrual usa a data DO
+  DADO (`result['date']`, que sai do próprio arquivo); o MtM a do formulário,
+  como o resto da tela.
+- **De quebra, um bug latente**: no caminho de UPLOAD do `/recon` do Accrual o
+  `ymd` só era definido no ramo da pasta — a notificação estourava `NameError`
+  e o request virava 500 DEPOIS de o recon já ter sido salvo (a tela dizia
+  "Error" com o trabalho feito). O `ymd` subiu para antes do `try`.
+
+`check_mtm_api` e `check_fi_accrual` verdes; smoke dos dois helpers em tmp
+(caminho `AAAA/mm. Month/DD`, basename Windows, nome vazio recusado).
+
+## §385 — a Ptax da opção de câmbio: vanilla = data da cotação, asiática = média do mês (2026-09-01)
+
+Pedido: no aviso de Opção de Taxa de Câmbio, a coluna Ptax saía VAZIA. O ramo
+de câmbio do `_optadv_collect` imprimia SÓ o fixing do subjacente
+(`Data de fixing do ativo subjacente`, que em câmbio é a própria PTAX) — e a
+opção ASIÁTICA não tem data única de fixing: a cotação dela é a média do
+período. O ramo das DEMAIS classes já tinha o fallback (`_ndfadv_media_label`,
+o `Média {mês}/{ano}` da 1ª data de verificação, o mesmo rótulo do aviso de
+termo); o de câmbio, não — e a asiática saía com a célula vazia, que se lê
+como "faltou o dado".
+
+Agora: **vanilla** = a data da cotação (o fixing, quando o arquivo o traz);
+**asiática** = `Média {mês}/{ano}` da 1ª data de verificação. A Cotação Ativo
+Subjacente segue 'N/A' em câmbio (a taxa É o subjacente, e já sai na Ptax ao
+lado). O e-mail do aviso herda de graça — as linhas saem do mesmo coletor.
+
+(O outro sintoma do mesmo chamado — a imagem quebrada no e-mail — era código
+velho servindo: resolveu com o restart da instância, sem mudança.)
+
+`check_optadv_ir` e `check_ops_equity_option` verdes.
