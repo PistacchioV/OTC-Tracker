@@ -4561,23 +4561,36 @@ $(document).ready(function() {
                 calBanner = '<div style="margin-bottom:10px;padding:7px 10px;background:#eef2ff;border:1px solid #c5d0f0;border-radius:4px;font-size:0.81em;line-height:1.8">&#128197;&nbsp;' + _cl + _st + _sk + _bz + '</div>';
             }
 
-            function _fieldsTable(flds, maxH) {
+            /* `mirror` opcional = a lista de campos da perna espelhada: entra
+               como TERCEIRA coluna da mesma tabela (linhas casam 1:1 pelo seq,
+               os dois lados saem do mesmo bloco do cadastro). */
+            function _fieldsTable(flds, maxH, mirror) {
                 var rows = flds.map(function(f, i) {
                     var bg = i % 2 === 0 ? '#f8f9fa' : '#ffffff';
+                    var mCell = '';
+                    if (mirror) {
+                        var mv = mirror[i] ? String(mirror[i].value) : '';
+                        mCell = '<td style="padding:3px 8px;font-family:monospace;font-size:0.82em;border:none;word-break:break-all;background:#fff7e6">' +
+                            (mv.trim() !== '' ? mv : '<span style="color:#aaa">&mdash;</span>') +
+                        '</td>';
+                    }
                     return '<tr style="background:' + bg + '">' +
                         '<td style="padding:3px 8px;white-space:nowrap;font-weight:500;color:#495057;border:none;font-size:0.82em">' +
                             (i + 1) + '. ' + f.name +
                         '</td>' +
                         '<td style="padding:3px 8px;font-family:monospace;font-size:0.82em;border:none;word-break:break-all">' +
                             (f.value !== '' ? f.value : '<span style="color:#aaa">&mdash;</span>') +
-                        '</td>' +
+                        '</td>' + mCell +
                     '</tr>';
                 }).join('');
+                var mirrorTh = !mirror ? '' :
+                    '<th style="padding:5px 8px;text-align:left;font-weight:600"><span data-lang="nd-preview-col-mirror">Mirror (Bank file)</span></th>';
                 return '<div style="overflow-y:auto;max-height:' + maxH + ';border:1px solid #dee2e6;border-radius:4px">' +
                     '<table style="width:100%;border-collapse:collapse;font-size:0.85em">' +
                     '<thead><tr style="background:#343a40;color:#fff;position:sticky;top:0">' +
                     '<th style="padding:5px 8px;text-align:left;font-weight:600"><span data-lang="nd-preview-col-field">Field</span></th>' +
                     '<th style="padding:5px 8px;text-align:left;font-weight:600"><span data-lang="nd-preview-col-value">Value</span></th>' +
+                    mirrorTh +
                     '</tr></thead>' +
                     '<tbody>' + rows + '</tbody>' +
                     '</table></div>';
@@ -4591,10 +4604,10 @@ $(document).ready(function() {
                 tableHtml += _viewTitle('Banco &times; Lawton', false) + _fieldsTable(fields, '28vh') +
                              _viewTitle('Lawton &times; Banco', true) + _fieldsTable(mirrorFields, '28vh');
             } else if (mgtFields) {
-                tableHtml += _viewTitle('MGT &times; Cliente', false) + _fieldsTable(fields, '28vh') +
-                             _viewTitle('&#128257;&nbsp;<span data-lang="nd-preview-mgt-mirror">Bank file mirror (MGT x Client)</span>' +
-                                        ' &mdash; <span style="font-family:monospace">73760.20-5 x 04880.00-6</span>', true) +
-                             _fieldsTable(mgtFields, '28vh');
+                tableHtml += '<div style="margin-bottom:10px;padding:7px 10px;background:#fff7e6;border:1px solid #f0dcb4;border-radius:4px;font-size:0.81em;line-height:1.6">' +
+                             '&#128257;&nbsp;<b><span data-lang="nd-preview-mgt-mirror">Bank file mirror (MGT x Client)</span></b>' +
+                             ' &mdash; <span style="font-family:monospace">73760.20-5 x 04880.00-6</span></div>' +
+                             _fieldsTable(fields, '58vh', mgtFields);
             } else {
                 tableHtml += _fieldsTable(fields, '58vh');
             }

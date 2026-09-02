@@ -669,6 +669,7 @@
   "nd-col-quoted-cents": "Cotado em Centavos?",
   "nd-preview-col-field": "Campo",
   "nd-preview-mgt-mirror": "Espelho do arquivo do Banco (MGT x Cliente)",
+  "nd-preview-col-mirror": "Espelho (arquivo do Banco)",
   "nd-preview-col-value": "Valor",
   "nd-preview-col-op-code": "Código Operação",
   "nd-preview-title": "Pré-visualização",
