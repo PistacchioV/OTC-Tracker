@@ -167,13 +167,11 @@ O acesso é **por página**. Um administrador monta a sua lista de páginas em *
 
 **Se falta uma tela que você precisa:** abra um chamado no Support Center (capítulo 16) dizendo qual é a tela e por quê.
 
-### 3.7. O seu perfil
+### 3.7. O seu cadastro e o seu papel
 
-![Perfil do usuário](docs/sop-screenshots/users-profile.png)
+![O cadastro de usuários (Manage Roles)](docs/sop-screenshots/users-roles.png)
 
-**Para abrir:** clique nas suas iniciais na barra superior › **Profile**.
-
-A tela mostra o que o phonebook devolveu sobre você (nome, e-mail, cargo) e o **papel** que você tem no sistema — `ADMIN`, `BO` (Back Office), `MO` (Middle Office), `FO` (Front Office), `INSTITUTIONAL` ou `HUB`. O papel não se edita aqui: ele define o que você pode **assinar** (por exemplo, validar uma etapa da esteira de confirmação — capítulo 9.4) e é alterado em *Manage Roles* por um administrador.
+O seu cadastro vive em **Manage Roles** (Menu › Settings › Manage Roles — capítulo 15.1): é lá que estão o que o phonebook devolveu sobre você (nome, e-mail, cargo) e o **papel** que você tem no sistema — `ADMIN`, `BO` (Back Office), `MO` (Middle Office), `FO` (Front Office), `INSTITUTIONAL` ou `HUB`. O papel não se edita por você mesmo: ele define o que você pode **assinar** (por exemplo, validar uma etapa da esteira de confirmação — capítulo 9.4) e é alterado em *Manage Roles* por um administrador.
 
 ---
 
