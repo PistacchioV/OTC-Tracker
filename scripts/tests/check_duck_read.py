@@ -212,6 +212,32 @@ with open(os.path.join(DBDIR, 'reference_data.db'), 'w') as fh:
 check('4. banco ilegivel: fallback JSON, sem erro',
       R._refdata_records()[0]['SPN'], '135742')
 
+# ── 5. o cronômetro do share (era o freio): só TELEMETRIA na leitura DB-only ─
+# (HANDOFF §389; endurecido em 2026-09-02) A leitura lenta continua armando a
+# janela — mas ela agora é só o silenciador do AVISO no log: com a leitura
+# DB-only não existe mais modo só-JSON, e o banco CONTINUA respondendo com o
+# cronômetro armado. É a diferença entre "trocar de fonte em silêncio" (o
+# comportamento antigo, que servia o JSON) e "avisar que está lento".
+import time as _t
+from apps.pages import duck_read as DR
+os.rename(os.path.join(DBDIR, 'reference_data.db'),
+          os.path.join(DBDIR, 'reference_data.db.quebrado'))
+os.rename(os.path.join(DBDIR, 'reference_data.db.fora'),
+          os.path.join(DBDIR, 'reference_data.db'))
+check('5. antes do cronometro, o banco responde',
+      DR.refdata_rows() is not None)
+DR._freio_mede(DR._FREIO_LIMIAR + 1.0, 'x.db')          # leitura "lenta"
+check('5. leitura lenta ARMA a janela do aviso', DR._freio_armado())
+check('5. janela armada: table_rows SEGUE respondendo pelo banco',
+      DR.refdata_rows() is not None)
+check('5. janela armada: o leitor de cima segue servindo pelo BANCO',
+      R._refdata_records()[0]['SPN'], '135742')
+DR._freio['ate'] = _t.monotonic() - 1                    # expira
+check('5. janela expirada: o banco segue respondendo',
+      DR.refdata_rows() is not None)
+check('5. leitura rapida NAO arma',
+      (DR._freio_mede(0.0, 'x.db'), DR._freio_armado())[1], False)
+
 print()
 if fails:
     print('FAILED: %d check(s)' % len(fails))

@@ -15,6 +15,15 @@
     display: block;
     flex-shrink: 0;
   }
+  /* O texto do item tem de caber SEMPRE, e são duas regras porque são dois
+     defeitos: `min-width: 0` deixa o filho flex encolher abaixo do conteúdo
+     (o default `auto` não deixa, e um token comprido — um FepWeb ID no detail —
+     alargava o bloco de texto além do dropdown, com o overflow-x:hidden do
+     #notif-list cortando TODAS as linhas na mesma altura, inclusive a ação);
+     `overflow-wrap: anywhere` quebra esse token em linha em vez de estourar.
+     Vale para o sino e para o toast, que desenham o mesmo corpo. */
+  .notification-item .flex-grow-1,
+  .otc-notif-toast .flex-grow-1 { min-width: 0; overflow-wrap: anywhere; }
   /* Unread notifications: subtle tint + accent dot; read items render plain. */
   .notification-item { position: relative; }
   .notification-item.notif-unread {

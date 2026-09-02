@@ -50,11 +50,17 @@
   var LANG = (localStorage.getItem('language') || 'en').toLowerCase();
   var _TRANS = {
     en: { filterPh: 'Filter by column…', valuePh: 'Type value for "{f}" + Enter',
-          status: 'In Custody', pickCol: 'Pick a column' },
+          status: 'In Custody', pickCol: 'Pick a column',
+          srcNote: 'No file for the selected date — showing the position of {src}',
+          srcNone: 'No position file in the last 10 business days' },
     br: { filterPh: 'Filtrar por coluna…', valuePh: 'Digite o valor para "{f}" + Enter',
-          status: 'Em Custódia', pickCol: 'Escolha uma coluna' },
+          status: 'Em Custódia', pickCol: 'Escolha uma coluna',
+          srcNote: 'Sem arquivo para a data escolhida — exibindo a posição de {src}',
+          srcNone: 'Sem arquivo de posição nos últimos 10 dias úteis' },
     es: { filterPh: 'Filtrar por columna…', valuePh: 'Escriba el valor para "{f}" + Enter',
-          status: 'En Custodia', pickCol: 'Elija una columna' },
+          status: 'En Custodia', pickCol: 'Elija una columna',
+          srcNote: 'Sin archivo para la fecha elegida — mostrando la posición de {src}',
+          srcNone: 'Sin archivo de posición en los últimos 10 días hábiles' },
   };
   function t(k) { return (_TRANS[LANG] || _TRANS.en)[k] || _TRANS.en[k]; }
   function esc(s) {
@@ -72,10 +78,38 @@
         if (!d || !d.success) return;
         renderWidgets(d.widgets, d.ref_date_fmt);
         buildTable(d.columns, d.rows, d.statuses);
+        renderSrcNote(d);
         var asof = document.getElementById('sc-total-asof');
         if (asof) asof.textContent = d.ref_date_fmt || '—';
       })
       .catch(function () {});
+  }
+
+  // Aviso de "que dia estou vendo" — ADITIVO: só as páginas cujo payload manda
+  // `source_date` (as três Live Position de Swap, cujos endpoints andam até dez
+  // dias úteis para trás quando falta o arquivo do dia). As outras páginas
+  // deste visualizador não mandam o campo e seguem exatamente como antes.
+  function fmtBR(iso) {
+    var p = String(iso || '').split('-');
+    return p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0] : '';
+  }
+  function renderSrcNote(d) {
+    var wrap = document.getElementById('scDateWrap');
+    if (!wrap || typeof d.source_date === 'undefined') return;
+    var msg = '';
+    if (!d.source_date) msg = t('srcNone');
+    else if (d.ref_date && d.source_date !== d.ref_date) {
+      msg = t('srcNote').replace('{src}', fmtBR(d.source_date));
+    }
+    var note = document.getElementById('sc-src-note');
+    if (!msg) { if (note) note.remove(); return; }
+    if (!note) {
+      note = document.createElement('span');
+      note.id = 'sc-src-note';
+      note.className = 'badge bg-warning-subtle text-warning ms-2';
+      wrap.parentNode.insertBefore(note, wrap.nextSibling);
+    }
+    note.textContent = msg;
   }
 
   // Exposto para a página recarregar a tabela depois de uma ação própria (o

@@ -988,6 +988,15 @@ Este bloco acompanha a confirmação depois que a operação já está registrad
 2. Confirme na janela.
 3. O sistema carimba a data de *Enviado p/ cliente*, a confirmação vira **`Ok`** e a linha do Pending Confirmation passa a *Pending Digital Signature* ou *Pending Original*, conforme o tipo de assinatura do cliente no Reference Data.
 
+> **Item com `no callback` não fecha.** O callback — a conferência por telefone
+> com o cliente — precisa ter acontecido **antes** do envio, e o item com a marca
+> vermelha é justamente o que ainda não tem a *Callback Date*. O clique em
+> **Mark as sent** abre um **aviso** em vez da confirmação, dizendo quantas
+> operações estão sem callback. Preencha a **Callback Date** na grade do Track
+> Confirmations (9.5) e volte — o botão passa a funcionar. O grupo é
+> tudo-ou-nada: basta **uma** operação sem callback para o envio inteiro ficar
+> retido.
+
 ### 9.4. A tela de validação
 
 **Como se chega:** pelo botão **Validate** (ou **View**) de um item do Confirmations Monitor. Ela abre com o **PDF do documento de um lado** e o **checklist da etapa do outro**.
@@ -1062,25 +1071,23 @@ Acompanha a emissão dos **Contratos Globais de Derivativos**, desde a solicita�
 
 **Para que serve:** responde *quantos contratos estão em aberto e em que mesa cada um está parado*. É o painel de trabalho do onboarding.
 
-A faixa do alto traz quatro números e um link **Open Tracking Docs**:
+No alto ficam dois botões: **Open Tracking Docs** (a tabela completa) e **New
+Request** (a abertura de solicitação). Os contadores que viviam aqui moram agora
+no **Tracking Docs** (10.2) — o Overview é só as filas.
 
-| Número | O que conta |
-|---|---|
-| **Documents** | O total do banco |
-| **Pending** | O que está em alguma das três filas |
-| **Active** | O que já está pronto (`Status` = Active) |
-| **Closed** | O que foi encerrado sem concluir — `Inactive` e `Cancelado` |
-
-Os quatro fecham: **Documents = Pending + Active + Closed**.
-
-Abaixo, **quatro cartões verticais**, um por mesa da esteira, na ordem em que o documento passa por elas:
+A página são **três cartões verticais**, um por mesa da esteira:
 
 | Cartão | O que está esperando ali |
 |---|---|
-| **Banking** | A solicitação está sendo aberta — falta preencher um dos campos obrigatórios do formulário |
-| **Legal** | Falta a emissão / a assinatura do contrato |
-| **OTC** | Assinado; falta o carimbo do OTC |
-| **CEM MO** | Falta o carimbo do Middle Office |
+| **Legal** | Falta a emissão / a assinatura do contrato — a mesa fecha anexando o **Taxonomy** no próprio card |
+| **OTC** | Falta o carimbo do OTC (o modal do item: CGD abonado, datas e B3 ID) |
+| **CEM MO** | Falta o carimbo do Middle Office (Download + Complete) |
+
+> **Legal e OTC correm em paralelo**: a solicitação recém-criada já nasce
+> pendente **nas duas filas ao mesmo tempo** — o mesmo documento aparece nos
+> dois cartões até cada mesa dar o seu carimbo. Não existe mais a fila
+> *Banking*: a ação dela era preencher o formulário, e quem garante isso hoje é
+> o próprio **New Request**, que recusa gravar com campo obrigatório em branco.
 
 **Para abrir uma solicitação:**
 
@@ -1089,8 +1096,8 @@ Abaixo, **quatro cartões verticais**, um por mesa da esteira, na ordem em que o
 3. A **CGD - Solicitação** vem com a data de hoje e **não se edita** — é o dia em que o pedido está sendo aberto, e é dela que o aging conta.
 4. **Razão Social** e **CNPJ** aceitam **todas as entidades do grupo** — são campos de várias linhas.
 5. **CGD - Tipo de Assinatura** é uma lista: *FepWeb*, *DocuSign* ou *Manual* (a assinatura física).
-6. Em **CGD - Domínio cliente**, se o cliente não tiver domínio, escreva `NA`.
-7. Em **Contatos**, os e-mails que devem entrar na solicitação de SSI.
+6. Em **Contatos**, ao lado, os e-mails que devem entrar na solicitação de SSI.
+7. **Client Domain in the Appendix** é uma chave que já vem **marcada**: o domínio do cliente está no Apêndice anexado, e o campo **CGD - Domínio cliente** fica travado gravando *Included in the Appendix*. **Desmarque** quando o domínio NÃO estiver no Apêndice — aí digitá-lo vira obrigatório (se o cliente não tiver domínio, escreva `NA`).
 8. **Garantidor** já vem em *No*; troque para *Yes* se o cliente tiver um, e preencha **Informações do garantidor** com a razão social e o CNPJ dele (o campo vem com `N/A`).
 9. Em **Apêndice**, anexe o **template para emissão do CGD**.
 10. Clique no botão **verde** do rodapé para gravar. A solicitação entra na lista e aparece na fila da mesa correspondente.
@@ -1101,7 +1108,7 @@ Abaixo, **quatro cartões verticais**, um por mesa da esteira, na ordem em que o
 
 ![Nova solicitação de CGD](docs/sop-screenshots/onboarding-new-request.png)
 
-**Os campos obrigatórios da solicitação** — enquanto um deles estiver em branco, o documento fica no Banking:
+**Os campos obrigatórios da solicitação** — o formulário recusa gravar enquanto um deles estiver em branco (e marca em vermelho os que faltam):
 
 | Campo do formulário | Coluna da lista |
 |---|---|
@@ -1112,7 +1119,7 @@ Abaixo, **quatro cartões verticais**, um por mesa da esteira, na ordem em que o
 | **Contatos** | `Contacts` |
 | **Garantidor** | `Garantidor` |
 
-*Grupo*, *CGD - Domínio cliente* e *Informações do garantidor* não entram: são opcionais no formulário (o domínio se preenche com `NA` quando o cliente não tem, e as informações do garantidor com `N/A` quando não há garantidor), e cobrá-los deixaria na fila uma solicitação que já pode seguir.
+*Grupo* e *Informações do garantidor* não entram: são opcionais no formulário (as informações do garantidor ficam `N/A` quando não há garantidor), e cobrá-los travaria uma solicitação que já pode seguir. O **CGD - Domínio cliente** só vira obrigatório quando a chave *Client Domain in the Appendix* está **desmarcada** — marcada, o campo grava *Included in the Appendix* sozinho.
 
 **Passo a passo:**
 
@@ -1121,7 +1128,7 @@ Abaixo, **quatro cartões verticais**, um por mesa da esteira, na ordem em que o
 3. A etiqueta **derived** ao lado do status significa que a mesa foi **deduzida** pelo primeiro carimbo que falta, e não lida de um cadastro. Para fixar a mesa de um status, cadastre-o em **Mapping › `cgd-stage`** (13.3).
 4. Clique em **Open Tracking Docs** para ir à tabela completa.
 
-> **Só entra nos cartões o documento que ainda está em andamento.** O que está `Active` terminou e conta em *Active*; o que está `Inactive` ou `Cancelado` foi encerrado e conta em *Closed*. Nenhum dos dois é pendência de ninguém, e por isso nenhum aparece nas filas — antes, o encerrado caía na fila do **Legal** (a primeira etapa sem carimbo em quem nunca começou) e ficava lá envelhecendo no topo da lista.
+> **Só entra nos cartões o documento que ainda está em andamento.** O que está `Active` terminou; o que está `Inactive` ou `Cancelado` foi encerrado. Nenhum dos dois é pendência de ninguém, e por isso nenhum aparece nas filas — antes, o encerrado caía na fila do **Legal** (a primeira etapa sem carimbo em quem nunca começou) e ficava lá envelhecendo no topo da lista. Os contadores desses grupos estão nos **chips do Tracking Docs** (10.2).
 >
 > **Documento com todos os carimbos e ainda não `Active` fica na ÚLTIMA mesa** — devolvê-lo sem etapa o faria sumir das três filas, e um pendente que some é pior do que um pendente na fila errada.
 
@@ -1132,6 +1139,18 @@ Abaixo, **quatro cartões verticais**, um por mesa da esteira, na ordem em que o
 ![Tracking Docs](docs/sop-screenshots/onboarding_tracking-docs.png)
 
 **Para que serve:** é a lista completa de CGDs, com as trinta colunas da planilha do SharePoint mais duas do sistema.
+
+**A faixa de chips do alto** traz os cinco contadores da lista (eles moravam no Overview):
+
+| Chip | O que conta |
+|---|---|
+| **Documents** | O total do banco |
+| **Pending** | O que está em alguma das filas do Overview |
+| **Active** | O que já está pronto (`Status` = Active) |
+| **Inactive** | Encerrado como `Inactive` |
+| **Cancelled** | Encerrado como `Cancelado` |
+
+Os cinco fecham: **Documents = Pending + Active + Inactive + Cancelled**.
 
 **A faixa cinza acima da barra de ferramentas** mostra **de onde os dados vieram** — o caminho do banco e quantas linhas ele tem. Se o banco ainda não foi criado, essa faixa fica **vermelha** dizendo isso e o comando que resolve.
 

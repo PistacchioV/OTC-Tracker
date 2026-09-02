@@ -157,8 +157,8 @@ def _opb3_load_cached(ref):
     if not os.path.isfile(jp):
         return jp, None
     try:
-        with open(jp, encoding='utf-8') as fh:
-            data = json.load(fh) or []
+        from apps.pages import duck_read
+        data = duck_read.day_records(jp) or []
     except Exception:
         return jp, None
     _opb3_ensure_meta(data)
@@ -397,8 +397,8 @@ def _opb3_tipo_maps(ref):
         if not path:
             continue
         try:
-            with open(path, encoding='utf-8') as fh:
-                data = json.load(fh) or []
+            from apps.pages import duck_read
+            data = duck_read.day_records(path) or []
         except Exception:
             continue
         if not data:
@@ -445,8 +445,8 @@ def _opb3_collect(ref):
     tipo_maps = _opb3_tipo_maps(ref)
     if os.path.isfile(jp):
         try:
-            with open(jp, encoding='utf-8') as fh:
-                data = json.load(fh) or []
+            from apps.pages import duck_read
+            data = duck_read.day_records(jp) or []
         except Exception:
             data = []
         if _opb3_ensure_meta(data) and data:             # legacy JSON w/o meta → migrate once
@@ -538,9 +538,12 @@ def _opb3_refdata_by_account():
     """Conta CETIP ('B3 ACCOUNT', ex. 74220.00-5) → nome da contraparte (RefData)."""
     out = {}
     try:
-        with open(data_path('RefData.json'),
-                  encoding='utf-8') as fh:
-            for r in json.load(fh) or []:
+        from apps.pages import duck_read
+        rows = duck_read.refdata_rows()
+        if rows is None:
+            with open(data_path('RefData.json'), encoding='utf-8') as fh:
+                rows = json.load(fh)
+        for r in rows or []:
                 acc = str(r.get('B3 ACCOUNT', '') or '').strip()
                 name = str(r.get('COUNTERPARTY', '') or '').strip()
                 if acc and name and acc not in out:
@@ -627,8 +630,8 @@ def _opb3_internal_swapprem_map(ref):
     if not path:
         return out
     try:
-        with open(path, encoding='utf-8') as fh:
-            data = json.load(fh) or []
+        from apps.pages import duck_read
+        data = duck_read.day_records(path) or []
         if not data:
             return out
         keys = list(data[0].keys())

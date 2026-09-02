@@ -16,6 +16,8 @@ alcançado por import ATRASADO dentro da função, andaime declarado.
 import json
 import logging
 import os
+
+from apps.pages.request_cache import req_cached as _req_cached
 import re
 import traceback
 import unicodedata
@@ -275,8 +277,8 @@ def _swap_contract_ident_map(dref):
     if not os.path.isfile(path):
         return out
     try:
-        with open(path, 'r', encoding='utf-8') as fh:
-            rows = json.load(fh)
+        from apps.pages import duck_read
+        rows = duck_read.day_records(path)
     except Exception:
         log.warning("[forecast] could not read swap position for ident map:\n%s",
                     traceback.format_exc())
@@ -313,8 +315,8 @@ def _swap_contract_cpty_map(dref):
     if not os.path.isfile(path):
         return out
     try:
-        with open(path, 'r', encoding='utf-8') as fh:
-            rows = json.load(fh)
+        from apps.pages import duck_read
+        rows = duck_read.day_records(path)
     except Exception:
         return out
     if not rows:
@@ -356,8 +358,8 @@ def _forecast_collect(dref, spine):
             status.append(st)
             continue
         try:
-            with open(path, 'r', encoding='utf-8') as fh:
-                rows = json.load(fh)
+            from apps.pages import duck_read
+            rows = duck_read.day_records(path)
         except Exception:
             log.warning("[forecast] could not read %s:\n%s", path, traceback.format_exc())
             status.append(st)
@@ -513,8 +515,15 @@ def _forecast_has_files(ref):
     return False
 
 
+@_req_cached
 def _forecast_latest_ref(max_back=10):
     """Walk back from D-1 ANBIMA until a date with saved B3 JSONs is found.
+
+    `@_req_cached`: a sondagem custa até 10 dias × 5 fontes de `isfile` NO
+    SHARE (~50 idas à rede) só para responder "qual é a última posição" — e o
+    dashboard e o Other Products perguntam a cada load. O cache por request +
+    5 s cobre o refresh/polling; arquivo novo aparece no request seguinte ao
+    TTL, que para uma sonda de existência não muda decisão nenhuma.
     Returns that date, or None if none exist within `max_back` business days.
     Used by the dashboard chart, which should show the latest available data;
     the Control Panel run instead requires D-1 strictly."""

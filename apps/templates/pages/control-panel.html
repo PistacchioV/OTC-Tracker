@@ -146,6 +146,11 @@
 }
 .cp-dz-list .cp-dz-x { cursor: pointer; font-size: 1rem; line-height: 1; opacity: .6; padding: 0 2px; }
 .cp-dz-list .cp-dz-x:hover { opacity: 1; color: #dc3545; }
+/* O par escuro do chip: --cp-ink é tinta CLARA (#1d1d1f) e não tem override
+   global — todo consumidor leva o seu (§7: cor só de tema claro precisa do par
+   [data-bs-theme=dark], senão o nome do arquivo some no escuro, que foi
+   exatamente o que aconteceu aqui em 2026-09-01). */
+[data-bs-theme="dark"] .cp-dz-list li { color: #f5f5f7; }
 @media (prefers-reduced-motion: reduce) { .cp-dropzone { transition: none; } }
 
 /* ── Footer / meta / button ─────────────────────────────────── */
@@ -1194,6 +1199,36 @@ function cpRunRoutine(btn) {
         });
 }
 
+// O ícone do chip diz o TIPO do arquivo (pedido 2026-09-01) — o mesmo mapa e
+// as mesmas cores do dropzone do New Deals (otc-fileupload.js), para o app
+// falar uma língua só. Extensão fora do mapa cai no ti-file de sempre.
+function cpFileIcon(name) {
+    var ext = String(name || '').split('.').pop().toLowerCase();
+    var m = {
+        pdf:  ['ti-file-type-pdf', 'text-danger'],
+        xlsx: ['ti-file-spreadsheet', 'text-success'],
+        xls:  ['ti-file-spreadsheet', 'text-success'],
+        csv:  ['ti-file-spreadsheet', 'text-success'],
+        doc:  ['ti-file-type-doc', 'text-primary'],
+        docx: ['ti-file-type-doc', 'text-primary'],
+        txt:  ['ti-file-text', 'text-secondary'],
+        png:  ['ti-photo', 'text-info'],
+        jpg:  ['ti-photo', 'text-info'],
+        jpeg: ['ti-photo', 'text-info'],
+        zip:  ['ti-file-zip', 'text-warning'],
+        rar:  ['ti-file-zip', 'text-warning'],
+        ppt:  ['ti-file-type-ppt', 'text-danger'],
+        pptx: ['ti-file-type-ppt', 'text-danger'],
+        xml:  ['ti-file-code', 'text-warning'],
+        json: ['ti-file-code', 'text-warning'],
+        msg:  ['ti-mail', 'text-primary'],
+        eml:  ['ti-mail', 'text-primary'],
+        htm:  ['ti-file-code', 'text-info'],
+        html: ['ti-file-code', 'text-info'],
+    }[ext] || ['ti-file', 'text-muted'];
+    return '<i class="ti ' + m[0] + ' ' + m[1] + '"></i>';
+}
+
 // ── Single-file dropzone ─────────────────────────────────────────────────────
 // Turns a `.cp-dropzone` into the visible face of a hidden <input type=file>.
 // The input stays the SOURCE OF TRUTH — the drop only fills it, via DataTransfer
@@ -1209,7 +1244,7 @@ function cpWireDropzone(dropId, inputId, listId) {
     function render() {
         var f = input.files && input.files[0];
         listEl.innerHTML = f
-            ? '<li><i class="ti ti-file"></i>' + esch(f.name) + '<span class="cp-dz-x">&times;</span></li>'
+            ? '<li>' + cpFileIcon(f.name) + esch(f.name) + '<span class="cp-dz-x">&times;</span></li>'
             : '';
         var x = listEl.querySelector('.cp-dz-x');
         if (x) x.addEventListener('click', function (e) { e.stopPropagation(); input.value = ''; render(); });
@@ -1308,7 +1343,7 @@ document.addEventListener('click', function (e) {
     function esch(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
     function render() {
         listEl.innerHTML = files.map(function (f, i) {
-            return '<li><i class="ti ti-file"></i>' + esch(f.name) + '<span class="cp-dz-x" data-i="' + i + '">&times;</span></li>';
+            return '<li>' + cpFileIcon(f.name) + esch(f.name) + '<span class="cp-dz-x" data-i="' + i + '">&times;</span></li>';
         }).join('');
         listEl.querySelectorAll('.cp-dz-x').forEach(function (x) {
             x.addEventListener('click', function (e) { e.stopPropagation(); files.splice(+this.dataset.i, 1); render(); });

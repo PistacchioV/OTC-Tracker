@@ -36,7 +36,11 @@ def api_swapchar_data():
             _R()._prev_anbima_bizday(datetime.now()).date()
     except ValueError:
         ref = _R()._prev_anbima_bizday(datetime.now()).date()
-    payload = _R()._swapchar_collect(ref)
+    # `exact=1` desliga a busca para trás (contrato do Advanced Export — ver o
+    # comentário no endpoint do NDF); a TELA não manda nada e anda até dez dias
+    # úteis, com o `source_date` dizendo de que dia é o arquivo lido.
+    exact = str(request.args.get('exact', '')).strip() in ('1', 'true', 'yes')
+    payload = _R()._swapchar_collect(ref, exact=exact)
     payload.update({'success': True, 'ref_date': ref.strftime('%Y-%m-%d'),
                     'ref_date_fmt': ref.strftime('%d/%m/%Y')})
     return jsonify(payload)
@@ -55,8 +59,10 @@ def api_swapcash_data():
     if not session.get('authenticated'):
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
     ref = _R()._swap_simple_ref(request.args)
+    exact = str(request.args.get('exact', '')).strip() in ('1', 'true', 'yes')
     payload = _R()._swap_simple_collect(ref, '73760_{}_DFLUXO.json',
-                                   _R()._SWAPFLUX_LABELS, _R()._SWAPFLUX_DISPLAY_IDX, _R()._SWAPFLUX_TYPES)
+                                   _R()._SWAPFLUX_LABELS, _R()._SWAPFLUX_DISPLAY_IDX, _R()._SWAPFLUX_TYPES,
+                                   exact=exact)
     payload.update({'success': True, 'ref_date': ref.strftime('%Y-%m-%d'),
                     'ref_date_fmt': ref.strftime('%d/%m/%Y')})
     return jsonify(payload)
@@ -75,7 +81,8 @@ def api_swapprem_data():
     if not session.get('authenticated'):
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
     ref = _R()._swap_simple_ref(request.args)
-    payload = _R()._swapprem_collect(ref)
+    exact = str(request.args.get('exact', '')).strip() in ('1', 'true', 'yes')
+    payload = _R()._swapprem_collect(ref, exact=exact)
     payload.update({'success': True, 'ref_date': ref.strftime('%Y-%m-%d'),
                     'ref_date_fmt': ref.strftime('%d/%m/%Y')})
     return jsonify(payload)
@@ -107,6 +114,33 @@ def api_lpndf_data():
                     'ref_date_fmt': ref.strftime('%d/%m/%Y')})
     return jsonify(payload)
 
+def _lp_edit(kind):
+    """Corpo comum do Edit das duas telas: valida o pedido e delega ao
+    `_lp_edit_identifier` do routes (que grava no arquivo-dia pelo funil)."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    body = request.get_json(silent=True) or {}
+    ds = str(body.get('date') or '').strip()[:10]
+    try:
+        ref = datetime.strptime(ds, '%Y-%m-%d')
+    except ValueError:
+        return jsonify({'success': False, 'error': 'invalid_date'}), 400
+    key = str(body.get('key') or '').strip()
+    value = str(body.get('value') or '').strip()
+    if not key:
+        return jsonify({'success': False, 'error': 'missing_key'}), 400
+    # Identificador vazio é RECUSADO: é ele que casa a posição com o OTM na
+    # liquidação, e limpá-lo faria a linha sumir do batimento sem erro nenhum.
+    if not value:
+        return jsonify({'success': False, 'error': 'missing_value'}), 400
+    payload, status = _R()._lp_edit_identifier(kind, ref, key, value,
+                                               sid=session.get('user_sid', ''))
+    return jsonify(payload), status
+
+@blueprint.route('/api/live-position-ndf/edit', methods=['POST'])
+def api_lpndf_edit():
+    return _lp_edit('ndf')
+
 @blueprint.route('/live-position-option')
 def live_position_option():
     if not session.get('authenticated'):
@@ -133,3 +167,7 @@ def api_lpopt_data():
     payload.update({'success': True, 'ref_date': ref.strftime('%Y-%m-%d'),
                     'ref_date_fmt': ref.strftime('%d/%m/%Y')})
     return jsonify(payload)
+
+@blueprint.route('/api/live-position-option/edit', methods=['POST'])
+def api_lpopt_edit():
+    return _lp_edit('option')

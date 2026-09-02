@@ -524,11 +524,11 @@
      REFERENCE DATA — Add / Edit Modal
      ===================================================================== -->
 <div class="modal fade" id="rdModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+  <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
     <div class="modal-content liquid-glass">
       <div class="modal-header py-2">
         <h5 class="modal-title fs-6" id="rdModalTitle"><i class="ti ti-plus me-1"></i>Add New Record</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body">
         <div class="row g-2">
@@ -1540,6 +1540,26 @@ $(document).ready(function () {
             didOpen: function(popup){
                 _applyLang(popup);
                 bindButtons(popup);
+                // Cinto de segurança do X (2026-09-02: houve relato de clique
+                // sem resposta que não reproduzimos): um listener NATIVO em
+                // fase de CAPTURA, direto no botão — fecha mesmo que a
+                // delegação jQuery tenha caído (um erro de script anterior, um
+                // handler no meio do caminho engolindo o evento). E se o
+                // Swal.close() ficar preso na animação de saída, o container é
+                // removido na mão — só quando ESTE popup ainda está no DOM
+                // 400ms depois do clique, para nunca matar um diálogo novo
+                // aberto em seguida.
+                var x = popup.querySelector('[data-act="close"]');
+                if (x) x.addEventListener('click', function(){
+                    try { Swal.close(); } catch (e) { /* segue para o failsafe */ }
+                    setTimeout(function(){
+                        if (!document.body.contains(popup)) return;   // fechou direito
+                        var c = popup.closest('.swal2-container');
+                        if (c) c.remove();
+                        document.body.classList.remove('swal2-shown', 'swal2-height-auto');
+                        document.body.style.removeProperty('padding-right');
+                    }, 400);
+                }, true);
             }
         });
 

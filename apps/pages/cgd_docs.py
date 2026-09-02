@@ -491,16 +491,20 @@ REQUEST_FORM = (
     {'label': 'CGD - Signature Type', 'lang': 'ob-req-f-sig', 'column': SIGNATURE_COLUMN,
      'type': 'select', 'required': True, 'col': 'col-md-6',
      'hint': 'How the client will sign the CGD', 'hint_lang': 'ob-req-h-sig'},
+    {'label': 'Contacts', 'lang': 'ob-req-f-contacts', 'column': 'Contacts',
+     'type': 'textarea', 'required': True, 'col': 'col-md-6',
+     'hint': 'E-mails to be considered for the SSI request',
+     'hint_lang': 'ob-req-h-contacts'},
     # O domínio do cliente costuma já estar escrito no Apêndice anexado, e é o
     # caso comum — por isso o checkbox nasce MARCADO. A coluna começa com `_` e
     # NÃO é persistida (o update_row descarta chave desconhecida): o que fica
-    # gravado é o efeito dela no campo Dominio abaixo, via `enabled_by`.
+    # gravado é o efeito dela no campo Dominio ao lado, via `enabled_by`.
     {'label': 'Client Domain in the Appendix', 'lang': 'ob-req-f-domappx',
      'column': '_domain_in_appendix', 'type': 'checkbox', 'required': False,
      'col': 'col-md-6', 'default': 'Yes',
      'hint': 'Untick when the domain is NOT in the attached Appendix',
      'hint_lang': 'ob-req-h-domappx'},
-    # Desmarcado o checkbox acima, o domínio passa a ser DIGITADO e obrigatório;
+    # Desmarcado o checkbox AO LADO, o domínio passa a ser DIGITADO e obrigatório;
     # marcado, o campo trava e a coluna grava que ele está no Apêndice.
     {'label': 'CGD - Client Domain', 'lang': 'ob-req-f-dom', 'column': 'Dominio',
      'type': 'textarea', 'required': False, 'col': 'col-md-6',
@@ -509,10 +513,6 @@ REQUEST_FORM = (
      'enabled_by': {'column': '_domain_in_appendix', 'value': 'No',
                     'required_when_on': True,
                     'value_when_off': 'Included in the Appendix'}},
-    {'label': 'Contacts', 'lang': 'ob-req-f-contacts', 'column': 'Contacts',
-     'type': 'textarea', 'required': True, 'col': 'col-md-6',
-     'hint': 'E-mails to be considered for the SSI request',
-     'hint_lang': 'ob-req-h-contacts'},
     {'label': 'Guarantor', 'lang': 'ob-req-f-guar', 'column': 'Garantidor',
      'type': 'select', 'required': True, 'col': 'col-md-4',
      'hint': 'Yes = the client has a guarantor | No = it does not',

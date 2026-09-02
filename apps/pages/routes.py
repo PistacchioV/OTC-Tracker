@@ -25,7 +25,7 @@ from email.mime.multipart import MIMEMultipart
 import awmpy
 from flask import (
     render_template, request, redirect, send_from_directory,
-    url_for, session, flash, jsonify, make_response, has_app_context
+    url_for, session, flash, jsonify, make_response, has_app_context, g
 )
 from jinja2 import TemplateNotFound
 from werkzeug.exceptions import NotFound
@@ -1782,6 +1782,28 @@ def _type_from_product(product):
     return 'NDF'
 
 
+# ── Leitura DB-only (2026-09-02) ─────────────────────────────────────────────
+# Os leitores de payload-LISTA deste arquivo não abrem mais o JSON: passam por
+# estes dois helpers, que servem do BANCO do espelho (curando-o na hora quando
+# frio/defasado — ver duck_read) e só caem no JSON na EMERGÊNCIA (espelho
+# desligado nos testes, payload que o banco não reconstrói, conversão que
+# falhou). As exceções de arquivo continuam as de open/json.load, então cada
+# chamador mantém o `except` de sempre. Os leitores de META/ponteiro (dicts)
+# seguem no JSON de propósito: o banco não reconstrói objeto.
+
+def _db_day_records(path):
+    """Arquivo-dia payload-lista pela leitura DB-only (duck_read.day_records)."""
+    from apps.pages import duck_read
+    return duck_read.day_records(path)
+
+
+def _db_dataset_rows(path):
+    """O gêmeo do _db_day_records para JSON de DATASET (Subjacente, mappings
+    avulsos — o que não é arquivo-dia nem RefData/CPD)."""
+    from apps.pages import duck_read
+    return duck_read.dataset_rows(path)
+
+
 def _dash_file_deals(fp, fname, mtime, size, fdate, product, deal_type):
     """Os deals de UM arquivo-dia, já projetados, filtrados e anotados.
 
@@ -1795,8 +1817,7 @@ def _dash_file_deals(fp, fname, mtime, size, fdate, product, deal_type):
     if item and item[0] == mtime and item[1] == size:
         return item[2]
     try:
-        with open(fp, 'r', encoding='utf-8') as fh:
-            data = json.load(fh)
+        data = _db_day_records(fp)
     except Exception:                                       # noqa: BLE001
         return []
     saida = []
@@ -2284,8 +2305,7 @@ def api_dashboard_live_position():
             sources.append(st)
             continue
         try:
-            with open(path, 'r', encoding='utf-8') as fh:
-                rows = json.load(fh)
+            rows = _db_day_records(path)
         except Exception:
             sources.append(st)
             continue
@@ -2837,6 +2857,7 @@ _pc_write_exec = _pf_pc._pc_write_exec
 _pc_delete_tn = _pf_pc._pc_delete_tn
 _pc_insert_into = _pf_pc._pc_insert_into
 _pc_upsert_row = _pf_pc._pc_upsert_row
+_pc_upsert_rows = _pf_pc._pc_upsert_rows
 _pc_rewrite_db = _pf_pc._pc_rewrite_db
 _pc_snapshot_pending = _pf_pc._pc_snapshot_pending
 _pc_run_daily_maintenance = _pf_pc._pc_run_daily_maintenance
@@ -3172,8 +3193,7 @@ def _swap_pos_latest_records(max_back=15):
                             '73760_{}_DPOSICAO-SWAP.json'.format(dref))
         if os.path.isfile(path):
             try:
-                with open(path, 'r', encoding='utf-8') as fh:
-                    return json.load(fh), ref.strftime('%Y-%m-%d')
+                return _db_day_records(path), ref.strftime('%Y-%m-%d')
             except Exception:
                 log.error('[accrual] failed reading %s:\n%s', path, traceback.format_exc())
                 return [], None
@@ -3596,6 +3616,53 @@ def _lp_cpty_by_taxid(v):
     return _lp_cpty_name_by_taxid(v) or _lp_fmt_cnpj(v)
 
 
+_LP_ACCOUNT_NAME_CACHE = {'src': None, 'map': None}
+
+
+def _lp_account_names():
+    """{conta CETIP só dígitos → nome da contraparte}, do 'B3 ACCOUNT' do
+    RefData — o plano B da coluna de CPF/CNPJ da contraparte quando a POSIÇÃO
+    vem sem documento (pedido de 2026-09-02, Swap Characteristics): a conta
+    direta de terceiro identifica o cliente.
+
+    Duas exclusões seguram o lado perigoso do índice:
+    - conta GUARDA-CHUVA (`_b3_is_omnibus`) fica de fora: o cadastro inteiro
+      aponta para ela, e resolver por conta ali poria o titular do omnibus —
+      ou um cliente qualquer — no lugar do cliente da linha;
+    - conta que aparece com MAIS DE UM nome no RefData também sai: o primeiro
+      da lista seria o cliente errado sem erro nenhum. Vazio visível (fica em
+      branco) é o lado seguro; nome errado invisível não é.
+    Comparação por DÍGITOS dos dois lados (§197): o RefData guarda
+    '29407.00-0' e a posição da B3 '29407000'. O gatilho de reconstrução é o
+    mesmo do `_lp_taxid_names` — a troca de objeto do `_refdata_by_taxid()`,
+    que já é cacheado por mtime e memoizado por request."""
+    base = _refdata_by_taxid()
+    if _LP_ACCOUNT_NAME_CACHE['src'] is not base:
+        m, ambiguas = {}, set()
+        for rec in _refdata_records():
+            acc = ''.join(ch for ch in str(rec.get('B3 ACCOUNT', '') or '') if ch.isdigit())
+            nome = str(rec.get('COUNTERPARTY', '') or '').strip()
+            if not acc or not nome or acc in ambiguas:
+                continue
+            if _b3_is_omnibus(acc):
+                continue
+            atual = m.get(acc)
+            if atual is None:
+                m[acc] = nome
+            elif atual != nome:
+                del m[acc]
+                ambiguas.add(acc)
+        _LP_ACCOUNT_NAME_CACHE['src'] = base
+        _LP_ACCOUNT_NAME_CACHE['map'] = m
+    return _LP_ACCOUNT_NAME_CACHE['map']
+
+
+def _lp_cpty_by_account(v):
+    """Nome da contraparte pela conta CETIP, ou '' sem cadastro/ambígua."""
+    d = ''.join(ch for ch in str(v or '') if ch.isdigit())
+    return _lp_account_names().get(d, '') if d else ''
+
+
 def _lp_bool_ptbr(raw):
     """Flag de swap → texto. Cadastro `swap-code-labels`, campo `Sim/Não`
     (00 → Sim, 01 → Não — sim, nessa ordem, é a especificação). Valor fora do
@@ -3669,7 +3736,29 @@ def _swapchar_sinal_text(v):
     return s
 
 
+def _swapchar_is_xl_error(v):
+    """O valor é texto de ERRO de planilha? Aceita as variações que o arquivo
+    de origem realmente traz — '#NULL!', mas também 'NULL' sem cerquilha ou
+    sem exclamação, '#N/A'/'N/A', etc. — o MESMO conjunto do saneamento do
+    export-advanced.js (`/^#?(NULL!?|N\\/A|REF!|VALUE!|DIV\\/0!|NAME\\?|NUM!)$/i`),
+    para as duas pontas nunca discordarem sobre o que é erro."""
+    if not isinstance(v, str):
+        return False
+    s = v.strip().upper()
+    if not s:
+        return False
+    return s in _XL_ERROR_TEXT or bool(
+        re.match(r'^#?(NULL!?|N/A|REF!|VALUE!|DIV/0!|NAME\?|NUM!)$', s))
+
+
 def _swapchar_fmt_cell(value, ctype):
+    # Texto de ERRO do Excel ('#NULL!', 'NULL', '#N/A', …) vira VAZIO: é o
+    # que a planilha deixa no lugar da fórmula quebrada no arquivo de origem
+    # da posição, e re-exportado ele se lê como a exportação quebrada — a
+    # mesma regra do export-advanced.js e do Pending Confirmation. Vale para
+    # as três telas de swap, que formatam tudo por aqui.
+    if _swapchar_is_xl_error(value):
+        return ''
     if value in (None, ''):
         return ''
     if ctype == 'date':
@@ -3709,11 +3798,28 @@ _SWAPCHAR_BOOL_COLS = {'Reset', 'Amortiza sem Troca de Diferencial', 'Agenda de 
 _SWAPCHAR_CPTY_NAME_COLS = {'CPF/CNPJ Cliente Contraparte'}
 
 
-def _swapchar_collect(ref):
+def _swap_day_path(ref, file_tpl, max_back=10, exact=False):
+    """Newest existing Swap day file (path, dref) walking back from `ref` —
+    mesmo contrato do `_opt_dposicao_path`: as telas de posição andam até dez
+    dias úteis para trás quando falta arquivo (é o que as mantém populadas), e
+    `exact=True` não anda — devolve o dia pedido ou nada (Advanced Export)."""
+    cur = ref
+    for _ in range(1 if exact else max_back):
+        dref = cur.strftime('%y%m%d')
+        p = os.path.join(B3_JSON_ROOT, 'Swap', _b3_date_subpath(dref), file_tpl.format(dref))
+        if os.path.isfile(p):
+            return p, dref
+        cur = _prev_anbima_bizday(cur)
+    return None, None
+
+
+def _swapchar_collect(ref, exact=False):
     """Build widgets + display rows from the DPOSICAO-SWAP file for `ref` (date).
     The saved position JSON carries all 146 fields IN ORDER (headerless file parsed
     with _B3_SWAP_HEADERS), so cells are read positionally by index; only the
-    _SWAPCHAR_DISPLAY_IDX subset is emitted. Missing file → empty payload (logged)."""
+    _SWAPCHAR_DISPLAY_IDX subset is emitted. Sem arquivo no dia, anda até dez
+    dias úteis para trás (`_swap_day_path`); `source_date` diz de que dia é o
+    arquivo lido — a tela sinaliza quando ele não é o dia pedido."""
     widgets = {
         'total': 0,
         'tipo':  {'total': 0, 'cashflow': 0, 'bullet': 0},
@@ -3725,20 +3831,23 @@ def _swapchar_collect(ref):
         'func':  {'total': 0, 'forward_start': 0, 'notional': 0, 'premio': 0,
                   'arrependimento': 0, 'sem': 0},
     }
-    dref = ref.strftime('%y%m%d')
-    path = os.path.join(B3_JSON_ROOT, 'Swap', _b3_date_subpath(dref),
-                        '73760_{}_DPOSICAO-SWAP.json'.format(dref))
+    path, src_dref = _swap_day_path(ref, '73760_{}_DPOSICAO-SWAP.json', exact=exact)
+    empty = {'widgets': widgets, 'columns': _SWAPCHAR_DISPLAY_LABELS, 'rows': [],
+             'source_date': _b3_dref_to_iso(src_dref)}
     rows_out = []
-    if not os.path.isfile(path):
-        log.warning("[swapchar] no DPOSICAO-SWAP for %s; page shows 0", dref)
-        return {'widgets': widgets, 'columns': _SWAPCHAR_DISPLAY_LABELS, 'rows': []}
+    if not path:
+        # Sem aviso no modo `exact`: ali o dia sem arquivo é PULADO por contrato
+        # (Advanced Export montando um intervalo), não é anomalia.
+        if not exact:
+            log.warning("[swapchar] no DPOSICAO-SWAP for %s (nem nos 10 dias úteis "
+                        "anteriores); page shows 0", ref.strftime('%y%m%d'))
+        return empty
     try:
-        with open(path, encoding='utf-8') as fh:
-            src = json.load(fh)
+        src = _db_day_records(path)
     except Exception:
-        return {'widgets': widgets, 'columns': _SWAPCHAR_DISPLAY_LABELS, 'rows': []}
+        return empty
     if not src:
-        return {'widgets': widgets, 'columns': _SWAPCHAR_DISPLAY_LABELS, 'rows': []}
+        return empty
 
     keys = list(src[0].keys())
     tipo_key = _fcst_resolve_key(keys, ['tipo de contrato', 'tipo do contrato', 'tipo contrato'])
@@ -3766,6 +3875,12 @@ def _swapchar_collect(ref):
         disp = []
         for i in _SWAPCHAR_DISPLAY_IDX:
             raw = (vals[i] if i < len(vals) else '') if full else sparse.get(i, '')
+            # Texto de erro do Excel no arquivo de origem ('#NULL!', 'NULL',
+            # '#N/A'…) é VAZIO em qualquer coluna — aqui, antes dos ramos,
+            # para o Tipo, os booleanos e o CPF/CNPJ não deixarem o erro
+            # passar (o _swapchar_fmt_cell cobre só o ramo dele).
+            if _swapchar_is_xl_error(raw):
+                raw = ''
             if i == 0:                      # Tipo de Contrato: 02 → Bullet, 01 → Cashflow
                 rv = str(raw or '').strip()
                 if rv.endswith('.0'):
@@ -3777,7 +3892,16 @@ def _swapchar_collect(ref):
             elif _SWAPCHAR_LABELS[i] in _SWAPCHAR_BOOL_COLS:
                 disp.append(_lp_bool_ptbr(raw))
             elif _SWAPCHAR_LABELS[i] in _SWAPCHAR_CPTY_NAME_COLS:
-                disp.append(_lp_cpty_by_taxid(raw))
+                # Posição SEM documento (a célula vem em branco): resolve pela
+                # CONTA CETIP da Contraparte (índice 7) contra o B3 ACCOUNT do
+                # RefData — a conta direta de terceiro identifica o cliente
+                # (pedido de 2026-09-02). Documento presente segue a regra de
+                # sempre: nome pelo CNPJ, ou o número mascarado sem cadastro.
+                nome = _lp_cpty_by_taxid(raw)
+                if not nome:
+                    conta = (vals[7] if (full and 7 < len(vals)) else sparse.get(7, ''))
+                    nome = _lp_cpty_by_account(conta)
+                disp.append(nome)
             else:
                 disp.append(_swapchar_fmt_cell(raw, _SWAPCHAR_TYPES[i]))
         rows_out.append(disp)
@@ -3791,7 +3915,8 @@ def _swapchar_collect(ref):
         lob = _swapchar_lob(cid)
         widgets['lob']['total'] += 1
         widgets['lob'][lob] += 1
-    return {'widgets': widgets, 'columns': _SWAPCHAR_DISPLAY_LABELS, 'rows': rows_out}
+    return {'widgets': widgets, 'columns': _SWAPCHAR_DISPLAY_LABELS, 'rows': rows_out,
+            'source_date': _b3_dref_to_iso(src_dref)}
 
 
 # ── Live Position Swap Cashflow (DFLUXO) & Premium (DAGENDAPREMIOS) ───────────
@@ -3811,20 +3936,23 @@ _SWAPPREM_DISPLAY_IDX = list(range(len(_SWAPPREM_LABELS)))   # all 10 columns
 _SWAPPREM_TYPES = [_swapchar_coltype(l) for l in _SWAPPREM_LABELS]
 
 
-def _swap_simple_collect(ref, file_tpl, labels, display_idx, types):
+def _swap_simple_collect(ref, file_tpl, labels, display_idx, types, exact=False):
     """Read a headerless Swap position JSON (values in file order) and emit the
     display-column subset, formatted like Swap Characteristics. Returns
-    {widgets:{total}, columns, rows}. Missing file → empty payload (logged)."""
-    dref = ref.strftime('%y%m%d')
+    {widgets:{total}, columns, rows, source_date}. Sem arquivo no dia, anda até
+    dez dias úteis para trás (`_swap_day_path`) e `source_date` diz de que dia
+    é o arquivo lido."""
     disp_labels = [labels[i] for i in display_idx]
-    empty = {'widgets': {'total': 0}, 'columns': disp_labels, 'rows': []}
-    path = os.path.join(B3_JSON_ROOT, 'Swap', _b3_date_subpath(dref), file_tpl.format(dref))
-    if not os.path.isfile(path):
-        log.warning("[swap-simple] no %s for %s; page shows 0", file_tpl.format(dref), dref)
+    path, src_dref = _swap_day_path(ref, file_tpl, exact=exact)
+    empty = {'widgets': {'total': 0}, 'columns': disp_labels, 'rows': [],
+             'source_date': _b3_dref_to_iso(src_dref)}
+    if not path:
+        if not exact:
+            log.warning("[swap-simple] no %s (nem nos 10 dias úteis anteriores); "
+                        "page shows 0", file_tpl.format(ref.strftime('%y%m%d')))
         return empty
     try:
-        with open(path, encoding='utf-8') as fh:
-            src = json.load(fh)
+        src = _db_day_records(path)
     except Exception:
         return empty
     if not src:
@@ -3846,7 +3974,8 @@ def _swap_simple_collect(ref, file_tpl, labels, display_idx, types):
             else:
                 disp.append(_swapchar_fmt_cell(raw, types[i]))
         rows_out.append(disp)
-    return {'widgets': {'total': len(rows_out)}, 'columns': disp_labels, 'rows': rows_out}
+    return {'widgets': {'total': len(rows_out)}, 'columns': disp_labels, 'rows': rows_out,
+            'source_date': _b3_dref_to_iso(src_dref)}
 
 
 def _swap_simple_ref(request_args):
@@ -3858,29 +3987,32 @@ def _swap_simple_ref(request_args):
         return _prev_anbima_bizday(datetime.now()).date()
 
 
-def _swapprem_collect(ref):
+def _swapprem_collect(ref, exact=False):
     """Swap Premium (DAGENDAPREMIOS) with an extra "Contraparte" column inserted
     right after "Nome Simplificado", joined from the DPOSICAO-SWAP position file by
-    "Codigo do Contrato" (the premium file carries only the contract code)."""
-    dref = ref.strftime('%y%m%d')
+    "Codigo do Contrato" (the premium file carries only the contract code).
+    Sem arquivo no dia, anda até dez dias úteis para trás (`_swap_day_path`);
+    o join de contraparte usa o dref do arquivo LIDO, para as duas fontes
+    falarem do mesmo dia."""
     labels, idx, types = _SWAPPREM_LABELS, _SWAPPREM_DISPLAY_IDX, _SWAPPREM_TYPES
     disp_labels = [labels[i] for i in idx]
     ins = disp_labels.index('Nome Simplificado') + 1
     out_labels = disp_labels[:ins] + ['Contraparte'] + disp_labels[ins:]
-    empty = {'widgets': {'total': 0}, 'columns': out_labels, 'rows': []}
-    path = os.path.join(B3_JSON_ROOT, 'Swap', _b3_date_subpath(dref),
-                        '73760_{}_DAGENDAPREMIOS.json'.format(dref))
-    if not os.path.isfile(path):
-        log.warning("[swap-premium] no DAGENDAPREMIOS for %s; page shows 0", dref)
+    path, src_dref = _swap_day_path(ref, '73760_{}_DAGENDAPREMIOS.json', exact=exact)
+    empty = {'widgets': {'total': 0}, 'columns': out_labels, 'rows': [],
+             'source_date': _b3_dref_to_iso(src_dref)}
+    if not path:
+        if not exact:
+            log.warning("[swap-premium] no DAGENDAPREMIOS for %s (nem nos 10 dias "
+                        "úteis anteriores); page shows 0", ref.strftime('%y%m%d'))
         return empty
     try:
-        with open(path, encoding='utf-8') as fh:
-            src = json.load(fh)
+        src = _db_day_records(path)
     except Exception:
         return empty
     if not src:
         return empty
-    cpty_map = _swap_contract_cpty_map(dref)
+    cpty_map = _swap_contract_cpty_map(src_dref)
     named = {_fcst_norm(k): k for k in src[0].keys()}
     rows_out = []
     for row in src:
@@ -3901,7 +4033,8 @@ def _swapprem_collect(ref):
             contrato_raw = row.get(k0, '') if k0 else ''
         disp.insert(ins, cpty_map.get(_fcst_norm_contract(contrato_raw), ''))
         rows_out.append(disp)
-    return {'widgets': {'total': len(rows_out)}, 'columns': out_labels, 'rows': rows_out}
+    return {'widgets': {'total': len(rows_out)}, 'columns': out_labels, 'rows': rows_out,
+            'source_date': _b3_dref_to_iso(src_dref)}
 
 
 # ── Other Products › OTM Settlements ─────────────────────────────────────────
@@ -3959,8 +4092,7 @@ def _otm_load_cached(ref):
     if not os.path.isfile(jp):
         return jp, None
     try:
-        with open(jp, encoding='utf-8') as fh:
-            data = json.load(fh) or []
+        data = _db_day_records(jp) or []
     except Exception:
         return jp, None
     _otm_ensure_meta(data)
@@ -4151,8 +4283,7 @@ def _otm_collect(ref):
     rows_out = []
     if os.path.isfile(jp):
         try:
-            with open(jp, encoding='utf-8') as fh:
-                data = json.load(fh) or []
+            data = _db_day_records(jp) or []
         except Exception:
             data = []
         if _otm_ensure_meta(data) and data:              # legacy JSON w/o meta → migrate once
@@ -4233,8 +4364,7 @@ def _ds_display_collect(ref, json_key, columns=None, value_cols=None):
     rows_out, cols = [], list(columns) if columns else []
     if os.path.isfile(jp):
         try:
-            with open(jp, encoding='utf-8') as fh:
-                data = json.load(fh) or []
+            data = _db_day_records(jp) or []
         except Exception:
             data = []
         if data:
@@ -4694,8 +4824,11 @@ def _subjacente_commodity(code):
 _SUBJ_CACHE = {'mtime': None, 'map': {}}
 
 
+@_once_per_request
 def _subjacente_map():
-    """{código(upper) → Commodity} do Subjacente.json, cacheado por mtime.
+    """{código(upper) → Commodity} do Subjacente.json, cacheado por mtime —
+    e por REQUEST (§7): o cache por mtime não evita o getmtime, e há
+    consumidor por linha.
 
     O arquivo tem ~7.800 linhas e repete o mesmo código em várias (uma por Tipo
     IF: OPC, COE, TER…). A primeira com Commodity preenchida vence — as demais
@@ -4707,8 +4840,7 @@ def _subjacente_map():
         return {}
     if _SUBJ_CACHE['mtime'] != mt:
         try:
-            with open(path, encoding='utf-8') as fh:
-                data = json.load(fh) or []
+            data = _db_dataset_rows(path) or []
         except Exception:
             data = []
         m = {}
@@ -4819,8 +4951,11 @@ def _refdata_triples():
     return _REFDATA_TRIPLE_CACHE['rows']
 
 
+@_once_per_request
 def _refdata_by_spn():
-    """{SPN → COUNTERPARTY} do RefData.json, cacheado por mtime."""
+    """{SPN → COUNTERPARTY} do RefData.json, cacheado por mtime — e por
+    REQUEST (§7): o `_otm_cpty_name` o consulta uma vez por LINHA das telas
+    da família de liquidação, e o getmtime ia junto."""
     path = os.path.join(_B3_DATA_DIR, 'RefData.json')
     try:
         mt = os.path.getmtime(path)
@@ -5573,7 +5708,13 @@ def _optadv_collect(ref):
         # que TEM cotação — o outro jeito a mandaria para 'N/A' calada.
         fix_subj = _lcell(lrow, 'Data de fixing do ativo subjacente')
         if e_fx:
-            ptax, cot = fix_subj, _OPTADV_FX_NA
+            # VANILLA: a data da cotação (o fixing do subjacente, que em câmbio
+            # é a própria PTAX). ASIÁTICA: não há data única — vale a média do
+            # mês da 1ª data de verificação, o mesmo rótulo do aviso de termo.
+            # Era só o fixing, e a opção de câmbio asiática saía com a coluna
+            # Ptax VAZIA — que se lê como "faltou o dado" (2026-09-01).
+            ptax = fix_subj or _ndfadv_media_label(_lcell(lrow, 'Média Asiática (data) 1'))
+            cot = _OPTADV_FX_NA
         else:
             ptax = _lcell(lrow, 'Data de fixing da moeda do ativo subjacente')
             # Vazio é o caso da ASIÁTICA: não há data única, e o que vale é o
@@ -5910,8 +6051,7 @@ def _swaphyb_kap_to_cetip():
     path = data_path('mapping_swap-hyb.json')
     out = {}
     try:
-        with open(path, encoding='utf-8') as fh:
-            for rec in json.load(fh) or []:
+        for rec in _db_dataset_rows(path) or []:
                 k = str(rec.get('hybrids_id', '') or '').strip()
                 if k:
                     out[k] = str(rec.get('b3_id', '') or '').strip()
@@ -5929,8 +6069,7 @@ def _swaphyb_collect(ref):
     rows_out = []
     if os.path.isfile(jp):
         try:
-            with open(jp, encoding='utf-8') as fh:
-                data = json.load(fh) or []
+            data = _db_day_records(jp) or []
         except Exception:
             data = []
         cet = _swaphyb_kap_to_cetip()
@@ -6010,8 +6149,7 @@ def _vcp_events_map(ref):
     if not os.path.isfile(jp):
         return out
     try:
-        with open(jp, encoding='utf-8') as fh:
-            data = json.load(fh) or []
+        data = _db_day_records(jp) or []
     except Exception:
         return out
     if not data:
@@ -6285,8 +6423,7 @@ def _latam_load_cached(ref):
     if not os.path.isfile(jp):
         return jp, None
     try:
-        with open(jp, encoding='utf-8') as fh:
-            data = json.load(fh) or []
+        data = _db_day_records(jp) or []
     except Exception:
         return jp, None
     _latam_ensure_meta(data)
@@ -6598,8 +6735,7 @@ def _latam_collect(ref):
     rows_out = []
     if os.path.isfile(jp):
         try:
-            with open(jp, encoding='utf-8') as fh:
-                data = json.load(fh) or []
+            data = _db_day_records(jp) or []
         except Exception:
             data = []
         if _latam_ensure_meta(data) and data:              # JSON legado sem meta → migra uma vez
@@ -6735,8 +6871,7 @@ def _ndfc_load(ref):
     if not os.path.isfile(jp):
         return jp, None
     try:
-        with open(jp, encoding='utf-8') as fh:
-            data = json.load(fh) or []
+        data = _db_day_records(jp) or []
     except Exception:
         return jp, None
     _ndfc_ensure_meta(data)
@@ -6894,8 +7029,7 @@ def _ndfc_b3_maps(ref):
         path, _ = _ndf_ter_path(_prev_anbima_bizday(ref))
         if not path:
             return ident_map, pub_map, contr_map
-        with open(path, encoding='utf-8') as fh:
-            data = json.load(fh) or []
+        data = _db_day_records(path) or []
         if not data:
             return ident_map, pub_map, contr_map
         keys, _seen = [], set()
@@ -7035,8 +7169,7 @@ def _ndfc_collect(ref):
     rows_out = []
     if os.path.isfile(jp):
         try:
-            with open(jp, encoding='utf-8') as fh:
-                data = json.load(fh) or []
+            data = _db_day_records(jp) or []
         except Exception:
             data = []
         if _ndfc_ensure_meta(data) and data:          # legacy JSON w/o meta → migrate once
@@ -7422,8 +7555,7 @@ def _cog_load(ref):
     if not os.path.isfile(jp):
         return jp, None
     try:
-        with open(jp, encoding='utf-8') as fh:
-            data = json.load(fh) or []
+        data = _db_day_records(jp) or []
     except Exception:
         return jp, None
     _cog_ensure_meta(data)
@@ -7669,6 +7801,8 @@ _ndf_publisher_fonte_info = _pf_nd._ndf_publisher_fonte_info
 _generic_ndf_ter_line = _pf_nd._generic_ndf_ter_line
 _nd_lawton_mirror = _pf_nd._nd_lawton_mirror
 _nd_lawton_sig = _pf_nd._nd_lawton_sig
+_nd_mgt_mirror = _pf_nd._nd_mgt_mirror
+_TER_MGT_MIRROR_PARTICIPANT = _pf_nd._TER_MGT_MIRROR_PARTICIPANT
 _ND_MAPPING_ERRORABLE = _pf_nd._ND_MAPPING_ERRORABLE
 _generic_nd_mapping_candidates = _pf_nd._generic_nd_mapping_candidates
 
@@ -7680,8 +7814,7 @@ def _lpndf_collect(ref, exact=False):
     rows_out = []
     if path:
         try:
-            with open(path, encoding='utf-8') as fh:
-                data = json.load(fh) or []
+            data = _db_day_records(path) or []
         except Exception:
             data = []
         if data:
@@ -7860,14 +7993,17 @@ def _opt_dposicao_path(ref, max_back=10, exact=False):
 
 
 def _lpopt_collect(ref, exact=False):
-    widgets = {'total': 0, 'a': 0, 'b': 0, 'c': 0}
+    # Cards do topo: contagem por Classe do Ativo Subjacente, em TRÊS baldes
+    # fixos (pedido de 2026-09-01): Commodities, Taxas de Câmbio e Equities —
+    # este último é o "todo o resto" (ações e o que mais aparecer), então os
+    # três FECHAM com o Total e uma classe nova não some da tela.
+    widgets = {'total': 0, 'commodities': 0, 'fx': 0, 'equities': 0}
     path, _src_dref = _opt_dposicao_path(ref, exact=exact)
     columns = list(_LPOPT_COLUMNS)
     rows_out = []
     if path:
         try:
-            with open(path, encoding='utf-8') as fh:
-                data = json.load(fh) or []
+            data = _db_day_records(path) or []
         except Exception:
             data = []
         if data:
@@ -7910,7 +8046,22 @@ def _lpopt_collect(ref, exact=False):
             asian_labels = ['Média Asiática (data) {}'.format(i + 1) for i in range(len(date_keys))]
             columns = list(_LPOPT_COLUMNS) + asian_labels
 
+            classe_key = idx['Classe do ativo subjacente']
+            # Aceita as duas grafias (singular/plural), como o coletor do NDF:
+            # o arquivo de Opção escreve TAXA DE CAMBIO.
+            _fx_norms = {_fcst_norm('TAXA DE CAMBIO'), _fcst_norm('TAXAS DE CAMBIO')}
+            _comm_norm = _fcst_norm('COMMODITIES')
             for rec in data:
+                cnorm = _fcst_norm(str(rec.get(classe_key, '') or '')) if classe_key else ''
+                if cnorm == _comm_norm:
+                    widgets['commodities'] += 1
+                elif cnorm in _fx_norms:
+                    widgets['fx'] += 1
+                else:
+                    # Equities é o "todo o resto" (ações e o que mais vier),
+                    # linha sem classe incluída — é o que faz os três baldes
+                    # fecharem com o Total.
+                    widgets['equities'] += 1
                 row = []
                 for c in _LPOPT_COLUMNS:
                     v = rec.get(idx[c], '') if idx[c] else ''
@@ -7945,6 +8096,91 @@ def _lpopt_collect(ref, exact=False):
             'source_date': _b3_dref_to_iso(_src_dref)}
 
 
+# ── Live Position › edição do identificador ──────────────────────────────────
+#  O botão Edit das duas telas (NDF e Option) edita UM campo: o Codigo
+#  Identificador (NDF) / a Combinação de operações (Option). A gravação vai no
+#  ARQUIVO-DIA da posição — a mesma fonte que o NDF Summary, o Other Products e
+#  os dois Settlement Advices leem —, então a correção alcança a liquidação
+#  inteira sem um segundo cadastro. E vai pelo funil `_atomic_write_json`, que
+#  é atômico e avisa o espelho DuckDB (fase 2 da migração): o banco do produto
+#  reconverte sozinho.
+_LP_EDIT_SPECS = {
+    # key_col identifica a LINHA (é a chave que os consumidores usam:
+    # `by_contract` no aviso de termo, `by_codigo_if` no de opção); edit_col é
+    # o ÚNICO campo editável.
+    'ndf':    {'key_col': 'Contrato',  'edit_col': 'Codigo Identificador'},
+    'option': {'key_col': 'Código IF', 'edit_col': 'Combinação de operações'},
+}
+
+
+def _lp_resolve_key(keys, name):
+    """Nome de coluna → chave real do arquivo (a MESMA regra dos coletores:
+    igualdade cega a acento/caixa primeiro, header-superconjunto depois)."""
+    n = _fcst_norm(name)
+    low = [(k, _fcst_norm(k)) for k in keys]
+    for k, kn in low:
+        if kn == n:
+            return k
+    cands = [(k, kn) for k, kn in low if kn and n in kn]
+    if cands:
+        return min(cands, key=lambda t: len(t[1]))[0]
+    return None
+
+
+def _lp_edit_identifier(kind, ref, key_value, new_value, sid=''):
+    """Edita o identificador das linhas com aquela chave no arquivo-dia.
+
+    `exact=True` de propósito: a tela manda o `source_date` do payload que está
+    exibindo, e a edição tem de cair NAQUELE arquivo — com a busca para trás,
+    um dia sem posição gravaria em silêncio no arquivo de outro dia.
+    Devolve (payload, status HTTP)."""
+    spec = _LP_EDIT_SPECS.get(kind)
+    if spec is None:
+        return {'success': False, 'error': 'unknown_kind'}, 400
+    if kind == 'ndf':
+        path, dref = _ndf_ter_path(ref, exact=True)
+    else:
+        path, dref = _opt_dposicao_path(ref, exact=True)
+    if not path:
+        return {'success': False, 'error': 'file_not_found'}, 404
+
+    def _norm(v):
+        return str(v or '').strip().upper()
+
+    # Ciclo inteiro (ler → alterar → gravar) sob o _cache_lock — a escrita
+    # atômica sozinha evita corrupção, não perda de atualização (§4).
+    with _cache_lock:
+        try:
+            with open(path, encoding='utf-8') as fh:
+                data = json.load(fh) or []
+        except Exception:
+            return {'success': False, 'error': 'read_failed'}, 500
+        keys, _seen = [], set()
+        for rec in data:
+            for k in rec.keys():
+                if k not in _seen:
+                    _seen.add(k); keys.append(k)
+        kcol = _lp_resolve_key(keys, spec['key_col'])
+        ecol = _lp_resolve_key(keys, spec['edit_col'])
+        # Coluna ausente é RECUSA, nunca criação: um campo novo apendado no
+        # registro entraria na união de chaves e deslocaria o bloco POSICIONAL
+        # das médias asiáticas, que é resolvido por índice.
+        if not kcol or not ecol:
+            return {'success': False, 'error': 'column_not_found'}, 404
+        matched = [rec for rec in data if _norm(rec.get(kcol)) == _norm(key_value)]
+        if not matched:
+            return {'success': False, 'error': 'row_not_found'}, 404
+        old = str(matched[0].get(ecol, '') or '')
+        for rec in matched:
+            rec[ecol] = new_value
+        _atomic_write_json(path, data)
+    log.warning('[live-position] %s: %s %r -> %r (%s=%s, %d linha(s), por %s)',
+                kind, spec['edit_col'], old, new_value, spec['key_col'],
+                key_value, len(matched), sid or '?')
+    return {'success': True, 'updated': len(matched), 'old': old,
+            'source_date': _b3_dref_to_iso(dref)}, 200
+
+
 # ── Daily Settlement › NDF › Summary ─────────────────────────────────────────
 #  Page modelled on Other Products Summary: header cards from the latest
 #  DPOSICAO-TER position JSON + two tables now auto-populated per reference date
@@ -7968,8 +8204,11 @@ def _ndfsum_refdata_spn():
     (recon join rule: first record per name wins)."""
     out = {}
     try:
-        with open(os.path.join(_B3_DATA_DIR, 'RefData.json'), encoding='utf-8') as fh:
-            data = json.load(fh) or []
+        from apps.pages import duck_read
+        data = duck_read.refdata_rows()
+        if data is None:
+            with open(os.path.join(_B3_DATA_DIR, 'RefData.json'), encoding='utf-8') as fh:
+                data = json.load(fh) or []
     except (IOError, json.JSONDecodeError):
         data = []
     for rec in (data if isinstance(data, list) else []):
@@ -8077,8 +8316,7 @@ def _ndfsum_fx_map(ref):
     if not path:
         return out
     try:
-        with open(path, encoding='utf-8') as fh:
-            data = json.load(fh) or []
+        data = _db_day_records(path) or []
     except Exception:
         return out
     if not data:
@@ -8928,6 +9166,7 @@ _MC_SUBJECT_LOCK = _pf_mc._MC_SUBJECT_LOCK
 _mc_email_subject = _pf_mc._mc_email_subject
 _mc_confirmation_docs = _pf_mc._mc_confirmation_docs
 _mc_sync_email_subjects = _pf_mc._mc_sync_email_subjects
+_mc_sync_fepweb_ids = _pf_mc._mc_sync_fepweb_ids
 _mc_flush_email_subjects = _pf_mc._mc_flush_email_subjects
 _MC_STAGE_ROLE = _pf_mc._MC_STAGE_ROLE
 _MC_STAGE_NOTIFY_ROLES = _pf_mc._MC_STAGE_NOTIFY_ROLES
@@ -8947,8 +9186,11 @@ def _fxo_refdata_by_spn():
     """SPN (leading-zeros stripped) → RefData record, for client/taxid/acronym lookup."""
     out = {}
     try:
-        with open(os.path.join(_B3_DATA_DIR, 'RefData.json'), encoding='utf-8') as fh:
-            data = json.load(fh)
+        from apps.pages import duck_read
+        data = duck_read.refdata_rows()
+        if data is None:
+            with open(os.path.join(_B3_DATA_DIR, 'RefData.json'), encoding='utf-8') as fh:
+                data = json.load(fh)
         for rec in (data if isinstance(data, list) else []):
             key = _norm_spn(rec.get('SPN', ''))
             if key:
@@ -9763,7 +10005,7 @@ _MAPPING_DEFS = {
     # volta para a lista histórica quando o arquivo não existe (instância que
     # ainda não abriu a tela) ou está ilegível — ver `_ndf_pdf_set`.
     'ndf-pdf-cpty': {
-        'label': 'Settlement PDF (NDF Advice)',
+        'label': 'PDF (Settlement Advice)',
         'columns': [
             {'key': 'COUNTERPARTY', 'label': 'Counterparty (RefData name)'},
             {'key': 'NOTES', 'label': 'Notes'},
@@ -10662,11 +10904,26 @@ def _mapping_path(key):
 def _mapping_rows(key):
     """Linhas do mapping `key` (lista de dicts). Cria o arquivo com o SEED na
     primeira leitura; cacheia por mtime, então edição pela tela vale na
-    requisição seguinte."""
+    requisição seguinte.
+
+    E memoiza POR REQUEST (§7: o cache por mtime não evita o stat que decide
+    se o arquivo mudou, e há consumidor por LINHA — o Trade Level do Other
+    Products paga ~11 idas ao share por linha via `_otm_cpty_name`/
+    `_ops_swap_ir_rate`/`_ops_is_internal_cpty`, todas desembocando aqui). A
+    garantia do §6 fica de pé: o memo morre com o request, e a gravação NO
+    MEIO de um request o derruba pelo funil (`_map_req_forget` no
+    `_atomic_write_json` — todo escritor passa por lá). Fora de request,
+    nada muda."""
     d = _MAPPING_DEFS.get(key)
     if not d:
         return []
     path = _mapping_path(key)
+    _req_store = None
+    if has_app_context():
+        _req_store = g.setdefault('_map_rows_req', {})
+        _hit = _req_store.get(os.path.normpath(path))
+        if _hit is not None:
+            return _hit
     if not os.path.isfile(path):
         # Semear sob o lock: dois requests simultâneos na primeira leitura
         # gravariam o mesmo arquivo ao mesmo tempo. O re-teste de existência
@@ -10683,6 +10940,8 @@ def _mapping_rows(key):
         mtime = os.path.getmtime(path)
         cached = _mapping_cache.get(key)
         if cached and cached[0] == mtime:
+            if _req_store is not None:
+                _req_store[os.path.normpath(path)] = cached[1]
             return cached[1]
         # DB-first (fase 3): o banco DESTE cadastro (`mappings_<key>.db`, ou o
         # `<arquivo>.db` da raiz para os registros com `file`) quando o
@@ -10705,6 +10964,8 @@ def _mapping_rows(key):
         if up:
             rows = up(rows)
         _mapping_cache[key] = (mtime, rows)
+        if _req_store is not None:
+            _req_store[os.path.normpath(path)] = rows
         return rows
     except Exception:
         return list(d.get('seed') or [])
@@ -10890,8 +11151,7 @@ _anbima_add_biz = _pf_anbima._anbima_add_biz
 def _load_subjacente_lookup():
     try:
         fp = data_path('Subjacente.json')
-        with open(fp, 'r', encoding='utf-8') as fh:
-            rows = json.load(fh)
+        rows = _db_dataset_rows(fp)
         result = {}
         for row in rows:
             code = (row.get('Codigo do Ativo Subjacente') or '').strip().upper()
@@ -11600,6 +11860,17 @@ def _vanilla_verification_lines(deal, page_url, le_pair):
 # O último motivo já registrado, para o aviso do sino não repetir a cada poll.
 _notif_fail_last = {'msg': ''}
 
+# A última resposta BOA do sino, por (SID, papel) — já filtrada por página, que
+# é decisão por usuário. É o que o poll serve quando a abertura esbarra numa
+# DISPUTA pelo arquivo (gravação em curso neste processo ou na instância
+# vizinha): a disputa é transitória e o sino de alguns segundos atrás continua
+# certo — melhor do que piscar vazio. O teto de idade é o alarme: uma conexão de
+# escrita VAZADA também responde "different configuration", só que para sempre,
+# e com o cache vencido o caminho volta a ser o de sempre (ERROR uma vez, sino
+# vazio), que é o que pede alguém.
+_notif_last_good = {}
+_NOTIF_STALE_TTL_SECONDS = 600
+
 
 def _notif_query_failed(exc):
     """Registra a falha da consulta do sino UMA vez por motivo.
@@ -11655,6 +11926,21 @@ def api_get_notifications():
             if tentativa == 1:
                 time.sleep(0.25)
                 continue
+            # A abertura que falhou por DISPUTA — uma gravação de notificação
+            # em curso neste processo ("different configuration") ou a
+            # instância vizinha com o arquivo do share aberto ("used by
+            # another process") — não é defeito: no share, uma gravação dura
+            # mais do que a espera do portão + esta retentativa, e o poll caía
+            # aqui a cada gravação mais longa, com ERROR no log apontando um
+            # "problema" que o poll seguinte resolvia sozinho. Nesse caso vale
+            # a última resposta boa deste usuário, dentro do teto de idade —
+            # ver `_notif_last_good`. Toda OUTRA falha (e a disputa com o
+            # cache vencido) segue no caminho de sempre: ERROR uma vez, sino
+            # vazio.
+            if _pf_notif._notif_arquivo_em_uso(exc):
+                stale = _notif_last_good.get((user_sid, user_role))
+                if stale and time.monotonic() - stale['at'] < _NOTIF_STALE_TTL_SECONDS:
+                    return jsonify(stale['payload'])
             _notif_query_failed(exc)
             # Mesma FORMA da resposta de sucesso, `total_today` incluído: a
             # topbar lê o campo direto, e um payload pela metade trocaria o
@@ -11712,7 +11998,11 @@ def api_get_notifications():
                     return _cp_page_allowed(allowed)
                 return url in allowed
             notifs = [n for n in notifs if _visible(n)]
-    return jsonify({"success": True, "notifications": notifs, "total_today": len(notifs)})
+    payload = {"success": True, "notifications": notifs, "total_today": len(notifs)}
+    # A resposta boa fica guardada para o poll que esbarrar numa gravação em
+    # curso — ver o laço de abertura lá em cima.
+    _notif_last_good[(user_sid, user_role)] = {'payload': payload, 'at': time.monotonic()}
+    return jsonify(payload)
 
 
 @blueprint.route('/api/notifications', methods=['POST'])

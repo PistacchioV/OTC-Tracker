@@ -32,6 +32,34 @@ def _mtm_source_dir(ymd):
     return os.path.join(MTM_SOURCE_ROOT, ref.strftime('%Y'), month_folder, ref.strftime('%d'))
 
 
+def _mtm_store_source(ymd, filename, blob):
+    """Grava o arquivo SOLTO NO DROPZONE na pasta-fonte do dia (a mesma que o
+    Import from folder lê) — pedido de 2026-09-01: processar sem guardar o
+    original deixava a pasta oficial sem o arquivo que gerou o dado, e o
+    Import from folder de amanhã não o acharia. Devolve (caminho, erro): quem
+    chama decide o que mostrar — a falha aqui NÃO desfaz o processamento, que
+    já aconteceu e foi salvo; ela vira aviso, nunca silêncio.
+
+    Só o basename do nome (o navegador pode mandar caminho), e sobrescreve o
+    homônimo — é o mesmo que a cópia manual pelo Explorer faria, e o arquivo
+    re-soltado É a versão nova daquele relatório."""
+    # Os DOIS separadores à mão: fora do Windows o basename não corta '\',
+    # e um nome vindo do navegador com caminho viraria um arquivo esquisito.
+    fn = str(filename or '').replace('\\', '/').rsplit('/', 1)[-1].strip()
+    if not fn:
+        return None, 'invalid filename'
+    d = _mtm_source_dir(ymd)
+    try:
+        os.makedirs(d, exist_ok=True)
+        path = os.path.join(d, fn)
+        with open(path, 'wb') as fh:
+            fh.write(blob)
+        return path, None
+    except OSError as exc:
+        _R().log.warning('[mtm] não consegui guardar %s em %s: %s', fn, d, exc)
+        return None, str(exc)
+
+
 def _mtm_save(path, data):
     """Persist the MtM dataset, creating the YYYY/MM/DD dir first (mkstemp needs it).
     Trava por conta própria; como _cache_lock é RLock, isso não conflita com o

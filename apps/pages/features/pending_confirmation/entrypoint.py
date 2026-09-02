@@ -114,12 +114,22 @@ def api_pending_confirmation_upsert():
     if not session.get('authenticated'):
         return jsonify({'success': False, 'message': 'Not authenticated'}), 401
     body = request.get_json(silent=True) or {}
-    src = body.get('row') or {}
-    if not str(src.get('Trade Number', '') or '').strip():
-        return jsonify({'success': False, 'message': 'Trade Number required'}), 400
-    row = {c: str(src.get(c, '') or '') for c in _R()._PC_COLUMNS}
-    target = _R()._pc_upsert_row(row)
-    return jsonify({'success': True, 'category': target})
+    # `rows` (lote) veio depois do `row` (uma linha) e é o caminho do mass
+    # update: um upsert por linha eram 4 aberturas EXCLUSIVAS de banco no
+    # share por request, × um request por linha — o lote faz tudo em três.
+    srcs = body.get('rows')
+    if srcs is None:
+        srcs = [body.get('row') or {}]
+    if not isinstance(srcs, list) or not srcs:
+        return jsonify({'success': False, 'message': 'rows must be a list'}), 400
+    rows = []
+    for src in srcs:
+        if not isinstance(src, dict) or \
+                not str(src.get('Trade Number', '') or '').strip():
+            return jsonify({'success': False, 'message': 'Trade Number required'}), 400
+        rows.append({c: str(src.get(c, '') or '') for c in _R()._PC_COLUMNS})
+    targets = _R()._pc_upsert_rows(rows)
+    return jsonify({'success': True, 'category': targets[0], 'categories': targets})
 
 @blueprint.route('/api/pending-confirmation/derive', methods=['POST'])
 def api_pending_confirmation_derive():

@@ -893,6 +893,37 @@ check('caminho fora da pasta do cliente nao vira link',
       R._mc_ei_link('ACME', '/base/ACME', '/outro/x.pdf'), '')
 check('sem arquivo nao inventa link', R._mc_ei_link('ACME', '/base/ACME', ''), '')
 
+print('\n== 10b. o callback trava o Mark as sent (FepWeb) ==')
+# O envio ao cliente pressupõe o CALLBACK (a conferência por telefone): item com
+# Data Callback em branco não pode fechar pelo botão do card. A tela bloqueia o
+# clique com aviso, mas a trava que vale é a do endpoint — a contagem do card
+# pode estar velha, e um POST direto não passa pela tela. 409 e não 400: o
+# pedido está bem formado, é o ESTADO que exige mais um passo (o mesmo desenho
+# do sla_comment_required). O lote é tudo-ou-nada, como no mark_validated.
+_hoje = M.fmt_date(date.today())
+novo('CB1', **{'Conferido OTC': _hoje, 'VALIDADO p/ MO': _hoje})
+check('a linha validada e não enviada está em Pending FepWeb',
+      M.find_row('CB1').get('Pending'), M.PENDING_FEPWEB)
+_como('BO')
+_r = cl.post('/api/manual-confirmation/fepweb-sent', json={'keys': ['CB1']})
+check('sem Data Callback o Mark as sent é recusado', _r.status_code, 409)
+check('   dizendo que é o callback que falta',
+      _r.get_json().get('callback_required'), True)
+check('   sem carimbar nada', M.find_row('CB1').get(M.SENT_COLUMN, ''), '')
+# Com o callback preenchido, o mesmo POST fecha.
+_cb = M.find_row('CB1')
+_cb['Data Callback'] = _hoje
+M.upsert_row(_cb)
+_r = cl.post('/api/manual-confirmation/fepweb-sent', json={'keys': ['CB1']})
+check('com o callback o envio passa', _r.status_code, 200)
+check('   e o Enviado p/ cliente é carimbado',
+      M.find_row('CB1').get(M.SENT_COLUMN, '') != '', True)
+# E a metade da TELA: o botão carrega a contagem do item e o clique com
+# pendência abre o aviso em vez da confirmação.
+check('o botão do card leva o no_callback do item', 'data-nocb=' in MON, True)
+check('   e o clique com pendência avisa em vez de confirmar',
+      ('noCbBlockTitle' in MON, 'noCbBlockText' in MON), (True, True))
+
 print('\n== 11. o e-mail do reject ==')
 from apps.pages import otc_emails as E                            # noqa: E402
 d = E.build_mc_reject_email({'Trade ID': 'T9', 'Cliente': 'ACME S.A.', 'Produto': 'SWAP'},

@@ -369,7 +369,8 @@ def _fi_block_of(tpl, block_id):
     return None
 
 
-def _fi_build_line(key, block_id, values, page_url=None, le_pair=None, deal=None):
+def _fi_build_line(key, block_id, values, page_url=None, le_pair=None, deal=None,
+                   force_values=None):
     """Monta UMA linha do arquivo a partir do cadastro do File Interface.
 
     `values` = {seq: string JÁ formatada} dos campos não-Fixed ('4' e '04'
@@ -385,7 +386,15 @@ def _fi_build_line(key, block_id, values, page_url=None, le_pair=None, deal=None
     `le_pair` escolhe a VARIANTE do template ('MGT x JPM'): a cadastrada para
     o par vence; variante sem o bloco cai de volta no bloco do base — uma
     variante criada antes de o base ganhar um bloco não pode derrubar a
-    geração inteira."""
+    geração inteira.
+
+    `force_values` = {seq: string} vence TUDO — Fixed e fórmula — naquele
+    campo, naquela LINHA. É o canal da perna espelhada do MGT x Cliente: o
+    MESMO arquivo do banco (mesma variante JPM x MGT) carrega deals reais
+    com o Participante Fixed do cadastro (73760009) e a linha espelhada com
+    o omnibus do cliente (73760205) — uma decisão por linha, que nenhum
+    template tem como expressar. O valor entra verbatim, padded como valor
+    de gerador."""
     eff_key = _fi_variant_key(key, page_url, le_pair)
     tpl = _fi_tpl_cached(eff_key)
     block = _fi_block_of(tpl, block_id)
@@ -397,18 +406,24 @@ def _fi_build_line(key, block_id, values, page_url=None, le_pair=None, deal=None
         raise ValueError('file-interpreter template missing: {}/{}'.format(eff_key, block_id))
     positional = tpl.get('file_type') != 'delimited'
     vals = {_fi_seq_key(k): ('' if v is None else str(v)) for k, v in (values or {}).items()}
+    force = {_fi_seq_key(k): ('' if v is None else str(v))
+             for k, v in (force_values or {}).items()}
     parts = []
     for f in block.get('fields', []):
-        src = _fi_field_src(f, page_url)
-        fixed = str(src.get('source', '')) == 'Fixed'
-        val = str(src.get('source_detail', '')) if fixed \
-            else vals.get(_fi_seq_key(f.get('seq')), '')
-        if not fixed and deal is not None:
-            # Fórmula cadastrada no Source Field/Value vence o valor do
-            # gerador; texto que não parseia continua documentação (None).
-            calc = _fi_calc_value(src.get('source_detail'), deal, f.get('format'))
-            if calc is not None:
-                val = calc
+        if _fi_seq_key(f.get('seq')) in force:
+            fixed = False
+            val = force[_fi_seq_key(f.get('seq'))]
+        else:
+            src = _fi_field_src(f, page_url)
+            fixed = str(src.get('source', '')) == 'Fixed'
+            val = str(src.get('source_detail', '')) if fixed \
+                else vals.get(_fi_seq_key(f.get('seq')), '')
+            if not fixed and deal is not None:
+                # Fórmula cadastrada no Source Field/Value vence o valor do
+                # gerador; texto que não parseia continua documentação (None).
+                calc = _fi_calc_value(src.get('source_detail'), deal, f.get('format'))
+                if calc is not None:
+                    val = calc
         if positional:
             w = _fi_width(f.get('format'))
             if w is not None and len(val) < w:

@@ -92,10 +92,32 @@
 #lnopt-table tbody td { white-space: nowrap; font-size: 0.74rem; text-align: center; vertical-align: middle; }
 
 /* Colunas fixas de controle (o resto usa o min-width:120px genérico do thead th).
-   nth-child(1)=checkbox  (2)=Status  (3..62)=dados Option  (63+)=Média Asiática dinâmica.
+   nth-child(1)=checkbox  (2)=Status  (3)=Actions  (4..63)=dados Option  (64+)=Média Asiática dinâmica.
    scrollX:false → header não é clonado, então NÃO precisa de .dt-scroll-head. */
 #lnopt-table th:nth-child(1), #lnopt-table td:nth-child(1) { width: 44px;  min-width: 44px;  }  /* checkbox */
 #lnopt-table th:nth-child(2), #lnopt-table td:nth-child(2) { width: 110px; min-width: 110px; }  /* Status */
+#lnopt-table th:nth-child(3), #lnopt-table td:nth-child(3) { width: 70px;  min-width: 70px;  }  /* Actions */
+
+/* ── Ações de linha: squircle padrão do app (spec .ops-row-act) ─────────────
+   min/max travam a ALTURA também, não só a largura: uma regra de tema com
+   `min-height` em `.btn` deixaria o botão 32×34, que não é mais um quadrado
+   arredondado. `box-sizing:border-box` porque a borda entraria por fora. */
+#lnopt-table .btn-act {
+    width:32px; height:32px;
+    min-width:32px; max-width:32px; min-height:32px; max-height:32px;
+    padding:0; flex:0 0 auto; box-sizing:border-box;
+    display:inline-flex; align-items:center; justify-content:center;
+    line-height:1; border-radius:10px !important;
+}
+/* Cinto de segurança contra o `.fs-13` do tema (também !important). */
+#lnopt-table .btn-act > i { font-size:1rem !important; }
+#lnopt-table .btn-act { transition: transform 120ms var(--ln-ease-out), box-shadow 140ms ease; }
+#lnopt-table .btn-act:active { transform: scale(0.97); }
+@media (hover: hover) and (pointer: fine) {
+    #lnopt-table .btn-act:hover { transform: translateY(-1px); box-shadow: 0 2px 8px rgba(0,0,0,.18); }
+}
+/* Tooltip colorido do botão Edit (o CSS da classe tem de estar na página). */
+.tooltip-info .tooltip-inner { background-color: #0dcaf0; color: #000; }
 
 /* Per-column filter row — New Deals style */
 #lnopt-table thead tr.ln-th-filter th { padding: .3rem .4rem .5rem; border-top: 1px solid var(--ln-hairline); }
@@ -142,19 +164,22 @@
     {% set crumbs=['OTC Tracker', 'Live Position', 'Option'] %}
     {% include 'partials/page-title.html' %}
 
-    <!-- Widgets (placeholders — a definir por métrica) -->
+    <!-- Widgets: contagem por Classe do Ativo Subjacente em três baldes fixos —
+         Commodities, Taxas de Câmbio e Equities (o "todo o resto", ações
+         incluídas), que fecham com o Total. Os títulos espelham os VALORES da
+         coluna (dado, não texto de UI), por isso ficam sem data-lang. -->
     <div class="row ln-widgets row-cols-xxl-4 row-cols-md-2 row-cols-1 g-2">
         <div class="col"><div class="ln-widget"><div class="ln-widget__head">
             <span class="ln-widget__icon bg-primary-subtle text-primary"><i class="ti ti-circle-dot"></i></span>
-            <h3 class="ln-widget__title" data-lang="lo-w-a">Metric A</h3><span class="ln-widget__value" id="lo-w-a">0</span>
+            <h3 class="ln-widget__title">Commodities</h3><span class="ln-widget__value" id="lo-w-commodities">0</span>
         </div></div></div>
         <div class="col"><div class="ln-widget"><div class="ln-widget__head">
             <span class="ln-widget__icon bg-info-subtle text-info"><i class="ti ti-circle-dot"></i></span>
-            <h3 class="ln-widget__title" data-lang="lo-w-b">Metric B</h3><span class="ln-widget__value" id="lo-w-b">0</span>
+            <h3 class="ln-widget__title">Taxas de Câmbio</h3><span class="ln-widget__value" id="lo-w-fx">0</span>
         </div></div></div>
         <div class="col"><div class="ln-widget"><div class="ln-widget__head">
             <span class="ln-widget__icon bg-warning-subtle text-warning"><i class="ti ti-circle-dot"></i></span>
-            <h3 class="ln-widget__title" data-lang="lo-w-c">Metric C</h3><span class="ln-widget__value" id="lo-w-c">0</span>
+            <h3 class="ln-widget__title">Equities</h3><span class="ln-widget__value" id="lo-w-equities">0</span>
         </div></div></div>
         <div class="col"><div class="ln-widget ln-widget--total"><div class="ln-widget__head">
             <span class="ln-widget__icon"><i class="ti ti-sum"></i></span>
@@ -237,5 +262,5 @@
 <script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/table-std.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/export-advanced.js"></script>
-<script src="{{ config.ASSETS_ROOT }}/js/pages/live-position-option.js?v=20260721a"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/pages/live-position-option.js?v=20260902a"></script>
 {% endblock extra_javascript %}

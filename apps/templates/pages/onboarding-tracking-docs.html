@@ -114,6 +114,43 @@
     font-size: .7rem; color: var(--ins-secondary-color); margin-bottom: .75rem;
 }
 #ob-docs .ob-src code { font-size: .68rem; }
+
+/* ── Os cards de contagem por status (vindos do Overview — pedido
+   2026-09-01: o Overview fica só com as três filas das mesas; os números
+   moram aqui, onde está a grade que eles resumem). As contagens continuam
+   vindo do MESMO /api/onboarding/overview — contar no cliente duplicaria a
+   regra de Active/Inactive (§7: `INACTIVE` CONTÉM `ACTIVE`). */
+#ob-docs .ob-stat {
+    display: flex; align-items: center; gap: .75rem;
+    padding: .85rem 1rem;
+    background: var(--vr-card-bg, var(--ins-secondary-bg));
+    border: 1px solid var(--vr-card-border, var(--ins-border-color));
+    border-radius: var(--vr-card-radius, 18px);
+    box-shadow: var(--vr-card-shadow, 0 4px 14px rgba(15, 23, 42, .06));
+    height: 100%;
+    transition: box-shadow 260ms ease, border-color 260ms ease;
+}
+@media (hover: hover) and (pointer: fine) {
+    #ob-docs .ob-stat:hover {
+        box-shadow: var(--vr-card-shadow-hover, 0 18px 40px rgba(94, 92, 230, .14));
+    }
+    #ob-docs .ob-stat:hover .ob-stat__ico { transform: scale(1.1) rotate(-4deg); }
+}
+#ob-docs .ob-stat__ico {
+    width: 38px; height: 38px; flex: 0 0 auto; border-radius: 11px;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 1.1rem;
+    background: var(--vr-grad, linear-gradient(100deg, #0066cc, #5e5ce6 50%, #8b5cf6 80%, #d946ef));
+    box-shadow: 0 4px 12px rgba(94, 92, 230, .28);
+    transition: transform 260ms ease;
+}
+#ob-docs .ob-stat--total   .ob-stat__ico { background: linear-gradient(100deg, #0066cc, #5e5ce6); box-shadow: 0 4px 12px rgba(0,102,204,.28); }
+#ob-docs .ob-stat--pending .ob-stat__ico { background: linear-gradient(100deg, #b07500, #f7b84b); box-shadow: 0 4px 12px rgba(176,117,0,.28); }
+#ob-docs .ob-stat--active  .ob-stat__ico { background: linear-gradient(100deg, #1a7f37, #34c759); box-shadow: 0 4px 12px rgba(26,127,55,.28); }
+#ob-docs .ob-stat--inactive .ob-stat__ico { background: linear-gradient(100deg, #b3261e, #ff453a); box-shadow: 0 4px 12px rgba(179,38,30,.28); }
+#ob-docs .ob-stat--cancel  .ob-stat__ico { background: linear-gradient(100deg, #374151, #6b7280); box-shadow: 0 4px 12px rgba(55,65,81,.28); }
+#ob-docs .ob-stat__n { font-size: 1.35rem; font-weight: 800; letter-spacing: -.02em; font-variant-numeric: tabular-nums; color: var(--ins-body-color); line-height: 1.1; }
+#ob-docs .ob-stat__l { font-size: .68rem; text-transform: uppercase; letter-spacing: .04em; color: var(--ins-secondary-color); }
 </style>
 {% endblock extra_css %}
 
@@ -131,6 +168,46 @@
             </a>
         </div>
     </div>
+
+{# A contagem por status — um card por número (veio do Overview). #}
+    <div class="row g-3 mb-3">
+        <div class="col-6 col-md-4 col-xl">
+            <div class="ob-stat ob-stat--total">
+                <span class="ob-stat__ico"><i class="ti ti-files"></i></span>
+                <div><div class="ob-stat__n" id="ob-total">0</div>
+                     <div class="ob-stat__l" data-lang="ob-sum-total">Documents</div></div>
+            </div>
+        </div>
+        <div class="col-6 col-md-4 col-xl">
+            <div class="ob-stat ob-stat--pending">
+                <span class="ob-stat__ico"><i class="ti ti-hourglass-high"></i></span>
+                <div><div class="ob-stat__n" id="ob-pending">0</div>
+                     <div class="ob-stat__l" data-lang="ob-sum-pending">Pending</div></div>
+            </div>
+        </div>
+        <div class="col-6 col-md-4 col-xl">
+            <div class="ob-stat ob-stat--active">
+                <span class="ob-stat__ico"><i class="ti ti-circle-check"></i></span>
+                <div><div class="ob-stat__n" id="ob-active">0</div>
+                     <div class="ob-stat__l" data-lang="ob-sum-active">Active</div></div>
+            </div>
+        </div>
+        <div class="col-6 col-md-4 col-xl">
+            <div class="ob-stat ob-stat--inactive">
+                <span class="ob-stat__ico"><i class="ti ti-circle-off"></i></span>
+                <div><div class="ob-stat__n" id="ob-inactive">0</div>
+                     <div class="ob-stat__l" data-lang="ob-sum-inactive">Inactive</div></div>
+            </div>
+        </div>
+        <div class="col-6 col-md-4 col-xl">
+            <div class="ob-stat ob-stat--cancel">
+                <span class="ob-stat__ico"><i class="ti ti-ban"></i></span>
+                <div><div class="ob-stat__n" id="ob-cancelled">0</div>
+                     <div class="ob-stat__l" data-lang="ob-sum-cancelled">Cancelled</div></div>
+            </div>
+        </div>
+    </div>
+
 
     <div class="ob-panel">
 
@@ -930,6 +1007,19 @@
             }).then(function () { carrega(); });
         });
     });
+
+    // As contagens dos chips: o MESMO endpoint do Overview — uma regra só
+    // para Active/Inactive/Cancelled (contar aqui pela grade duplicaria).
+    fetch('/api/onboarding/overview', { credentials: 'same-origin' })
+        .then(function (r) { return r.json(); })
+        .then(function (j) {
+            if (!j || !j.success) return;
+            ['total', 'pending', 'active', 'inactive', 'cancelled'].forEach(function (k) {
+                var el = document.getElementById('ob-' + k);
+                if (el) el.textContent = j[k] || 0;
+            });
+        })
+        .catch(function () {});
 
     $(carrega);
 })(jQuery);

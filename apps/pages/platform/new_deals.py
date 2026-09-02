@@ -32,8 +32,30 @@ from datetime import datetime, timedelta
 
 from apps.pages import otc_boxparse
 from apps.pages.data_paths import data_path
+from apps.pages.request_cache import once_per_request
 
 log = logging.getLogger('otc_tracker')
+
+
+@once_per_request
+def _optcomm_file_list():
+    """A listagem `(caminho, mtime, tamanho)` dos arquivos-dia do Opt
+    Commodities, UMA vez por request. Os endpoints de bulk (delete, patch,
+    Mapping B3) chamam o finder uma vez por LINHA selecionada, e cada chamada
+    refazia o `os.walk` da árvore inteira NO SHARE — 50 linhas × ~500 dias era
+    o request de minutos sem erro nenhum (§7 do CLAUDE.md, a classe do "um
+    stat por linha"). Fora de um request o decorator não memoiza e o
+    comportamento é o de sempre."""
+    from apps.pages import routes
+    return [(fp, mt, sz) for fp, _fn, mt, sz in
+            routes._day_files(routes.CACHE_BASE_DIR, '_optcomm.json')]
+
+
+@once_per_request
+def _optfxo_file_list():
+    from apps.pages import routes
+    return [(fp, mt, sz) for fp, _fn, mt, sz in
+            routes._day_files(routes.OPT_FXO_CACHE_DIR, '_optfxo.json')]
 
 def _ndf_ter_path(ref, max_back=10, exact=False):
     """Newest existing DPOSICAO-TER (path, dref) walking back from `ref` (D-1 ANBIMA).
@@ -55,40 +77,42 @@ def _ndf_ter_path(ref, max_back=10, exact=False):
 
 def _find_deal_in_cache(deal_name, client_name=None):
     """Search all YYYYMMDD_optcomm.json files for a deal by Deal + Client.
-    Returns (file_path, list_index) or (None, None)."""
+    Returns (file_path, list_index) or (None, None).
+
+    A leitura vai pelo `_day_json` (o memo por mtime/tamanho do daycache) e a
+    listagem pelo `_optcomm_file_list` (uma por request): antes cada chamada
+    abria TODO arquivo da árvore com `open()` cru — e os bulks chamam isto por
+    linha. O índice devolvido continua sendo o do arquivo: quem grava reabre o
+    arquivo fresco sob o `_cache_lock`, e as escritas desses laços são
+    in-place (não removem nem reordenam), então uma listagem do começo do
+    request segue apontando para o par certo."""
     from apps.pages import routes
     files_scanned     = 0
     deal_name_matches = []   # Deal matched but Client didn't
 
-    for root, _dirs, files in os.walk(routes.CACHE_BASE_DIR):
-        for fname in sorted(files, reverse=True):   # newest files first
-            if not fname.endswith('_optcomm.json'):
-                continue
-            fpath = os.path.join(root, fname)
-            files_scanned += 1
-            try:
-                with open(fpath, 'r', encoding='utf-8') as fh:
-                    deals = json.load(fh)
-                if not isinstance(deals, list):
-                    deals = [deals]
-                for i, deal in enumerate(deals):
-                    d_name   = (deal.get('Deal')   or '').strip()
-                    d_client = (deal.get('Client') or '').strip()
-                    if d_name == deal_name.strip():
-                        want = (client_name or '').strip()
-                        if not want or d_client == want:
-                            log.debug("[_find_opt] FOUND %r client=%r → %s[%d]",
-                                      deal_name, client_name, fname, i)
-                            return fpath, i
-                        else:
-                            deal_name_matches.append({
-                                'file': fname, 'idx': i,
-                                'stored_client': repr(d_client),
-                                'wanted_client': repr(want)
-                            })
-            except Exception:
-                log.warning("[_find_opt] Error reading %s: %s", fpath, traceback.format_exc())
-                continue
+    for fpath, mtime, size in reversed(_optcomm_file_list()):   # newest first
+        fname = os.path.basename(fpath)
+        files_scanned += 1
+        try:
+            deals = routes._day_json(fpath, mtime, size)
+            for i, deal in enumerate(deals):
+                d_name   = (deal.get('Deal')   or '').strip()
+                d_client = (deal.get('Client') or '').strip()
+                if d_name == deal_name.strip():
+                    want = (client_name or '').strip()
+                    if not want or d_client == want:
+                        log.debug("[_find_opt] FOUND %r client=%r → %s[%d]",
+                                  deal_name, client_name, fname, i)
+                        return fpath, i
+                    else:
+                        deal_name_matches.append({
+                            'file': fname, 'idx': i,
+                            'stored_client': repr(d_client),
+                            'wanted_client': repr(want)
+                        })
+        except Exception:
+            log.warning("[_find_opt] Error reading %s: %s", fpath, traceback.format_exc())
+            continue
 
     if deal_name_matches:
         log.warning(
@@ -185,27 +209,22 @@ def _deal_matches(deal, filters):
 # ==============================================================================
 def _find_fxo(deal_name, client_name=None):
     """Search all YYYYMMDD_optfxo.json files for a deal by Deal + Client.
-    Returns (file_path, list_index) or (None, None)."""
+    Returns (file_path, list_index) or (None, None). Mesma mecânica (e mesma
+    razão) do `_find_deal_in_cache` acima: listagem uma vez por request,
+    leitura pelo memo do daycache."""
     from apps.pages import routes
-    for root, _dirs, files in os.walk(routes.OPT_FXO_CACHE_DIR):
-        for fname in sorted(files, reverse=True):
-            if not fname.endswith('_optfxo.json'):
-                continue
-            fpath = os.path.join(root, fname)
-            try:
-                with open(fpath, 'r', encoding='utf-8') as fh:
-                    deals = json.load(fh)
-                if not isinstance(deals, list):
-                    deals = [deals]
-                for i, deal in enumerate(deals):
-                    d_name   = (deal.get('Deal')   or '').strip()
-                    d_client = (deal.get('Client') or '').strip()
-                    if deal_name and d_name == deal_name.strip():
-                        want = (client_name or '').strip()
-                        if not want or d_client == want:
-                            return fpath, i
-            except Exception:
-                continue
+    for fpath, mtime, size in reversed(_optfxo_file_list()):   # newest first
+        try:
+            deals = routes._day_json(fpath, mtime, size)
+            for i, deal in enumerate(deals):
+                d_name   = (deal.get('Deal')   or '').strip()
+                d_client = (deal.get('Client') or '').strip()
+                if deal_name and d_name == deal_name.strip():
+                    want = (client_name or '').strip()
+                    if not want or d_client == want:
+                        return fpath, i
+        except Exception:
+            continue
     return None, None
 
 
@@ -1421,8 +1440,8 @@ def _ndf_fwdstart_cached_keys(ref):
                 if not fname.endswith('_ndffwdstart.json'):
                     continue
                 try:
-                    with open(os.path.join(dpath, fname), encoding='utf-8') as fh:
-                        data = json.load(fh)
+                    from apps.pages import duck_read
+                    data = duck_read.day_records(os.path.join(dpath, fname))
                 except (IOError, OSError, json.JSONDecodeError):
                     continue
                 for e in (data if isinstance(data, list) else []):
@@ -2158,13 +2177,18 @@ def _ndf_publisher_fonte_info(publisher):
     fi = str(_ndf_publisher_row(publisher).get('FONTE INFO', '') or '').strip() or '1'
     return fi.rjust(4)
 
-def _generic_ndf_ter_line(deal, is_fwd, page_url=None):
+def _generic_ndf_ter_line(deal, is_fwd, page_url=None, participant_override=None):
     """Linha tipo 1 (Dados Fixos) do TER de um deal FWD Start / Other
     Publisher. Devolve (bucket, linha) — bucket BANCO / LAWTON / MGT — ou
     None para deal cancelado. Os valores continuam calculados aqui, na
     largura exata de sempre; a ordem dos campos e os literais Fixed saem do
     cadastro (page_url decide os overrides de cada página). Template/bloco
-    ausente levanta ValueError."""
+    ausente levanta ValueError.
+
+    `participant_override` troca a conta do Lançamento do Participante
+    (campo 5) depois da resolução normal — é o que a perna espelhada do
+    MGT x Cliente usa: no arquivo do BANCO a parte é o CLIENTE no omnibus
+    (73760.20-5), uma conta que nenhuma combinação LE × Client produz."""
     from apps.pages import routes
     def _s(v):
         return re.sub(r'<[^>]+>', '', str(v or '')).strip()
@@ -2224,6 +2248,8 @@ def _generic_ndf_ter_line(deal, is_fwd, page_url=None):
             cpty = '73760009' if _is_jpm(client) else '04880109'
         else:
             cpty = '04880006' if _is_mgt(client) else '73760102'
+    if participant_override:
+        participant = participant_override
     taxid = '' if ('LAWTON' in le or _is_jpm(client) or _is_lawton(client) or _is_mgt(client)) \
         else re.sub(r'[.\-\/]', '', _s(deal.get('TaxID', '')))
 
@@ -2365,8 +2391,14 @@ def _generic_ndf_ter_line(deal, is_fwd, page_url=None):
     page_url = page_url or ('/new_deals-ndf-fwdstart' if is_fwd
                             else '/new_deals-ndf-otherpublisher')
     le_pair = routes._ter_le_pair(routes._TER_BUCKET_LE[bucket], client)
+    # O Participante FORÇADO vence o Fixed do cadastro: a variante JPM x MGT
+    # das páginas fixa o campo 5 em 73760009 (o deal real Banco x MGT), e a
+    # linha espelhada do MGT x Cliente vai no MESMO arquivo com o omnibus do
+    # cliente — decisão por linha, que o template não tem como expressar.
+    force = {'5': _pos(participant, 8)} if participant_override else None
     return bucket, routes._fi_build_line(routes._TER_FI_KEY, 'registro-dados-fixos', values,
-                                  page_url=page_url, le_pair=le_pair, deal=deal)
+                                  page_url=page_url, le_pair=le_pair, deal=deal,
+                                  force_values=force)
 
 
 def _nd_lawton_mirror(deal):
@@ -2379,6 +2411,34 @@ def _nd_lawton_mirror(deal):
     m = dict(deal)
     m['LE'] = 'LAWTON'
     m['Client'] = 'BANCO J.P. MORGAN S.A.'
+    d = str(deal.get('Direction', '') or '').strip().upper()
+    m['Direction'] = 'SELL' if d == 'BUY' else 'BUY'
+    return m
+
+
+# A conta do CLIENTE no omnibus do Banco — a "parte" da perna espelhada do
+# trade MGT x Cliente no arquivo do BANCO (73760.20-5, só dígitos, como as
+# demais contas deste gerador).
+_TER_MGT_MIRROR_PARTICIPANT = '73760205'
+
+
+def _nd_mgt_mirror(deal):
+    """A perna do trade MGT x Cliente vista do arquivo do BANCO: a mesa booka
+    contra a MGT (04880.00-6 x 73760.20-5, template já cadastrado no File
+    Interpreter) e o cliente senta no omnibus do Banco — o arquivo do banco
+    leva a MESMA operação com as contas trocadas (73760.20-5 x 04880.00-6) e o
+    Papel invertido, porque quem compra de um lado vende do outro. Não existe
+    deal com essa visão para cadastrar template: o espelho é sintetizado no
+    envio, como o do Lawton. LE = JPM + Client = MGT levam a
+    `_generic_ndf_ter_line` ao ramo BANCO x MGT (cpty 04880006, CNPJ em branco
+    como toda perna intragrupo); a conta da parte vem por
+    `participant_override`, porque nenhuma combinação LE × Client produz a
+    conta do omnibus. Datas, taxa, notional, publisher e Código Identificador
+    são do trade e ficam iguais."""
+    m = dict(deal)
+    m['LE'] = 'JPM'
+    m['Client'] = 'MGT'
+    m['TaxID'] = ''
     d = str(deal.get('Direction', '') or '').strip().upper()
     m['Direction'] = 'SELL' if d == 'BUY' else 'BUY'
     return m
@@ -2429,8 +2489,8 @@ def _generic_nd_mapping_candidates(cfg, product, ref_date):
     if not os.path.isfile(fpath):
         return []
     try:
-        with open(fpath, encoding='utf-8') as fh:
-            deals = json.load(fh)
+        from apps.pages import duck_read
+        deals = duck_read.day_records(fpath)
         if not isinstance(deals, list):
             deals = [deals]
     except (IOError, json.JSONDecodeError):

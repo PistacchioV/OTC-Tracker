@@ -92,6 +92,28 @@ def _accrual_source_dir(ymd):
     return os.path.join(ACCRUAL_SOURCE_ROOT, ref.strftime('%Y'), month_folder, ref.strftime('%d'))
 
 
+def _accrual_store_source(ymd, filename, blob):
+    """Grava o arquivo SOLTO NO DROPZONE na pasta-fonte do dia — a mesma que o
+    Import from folder lê e que o End Process usa como evidência (pedido de
+    2026-09-01; espelho do `_mtm_store_source`, ver a razão de cada decisão
+    lá). Devolve (caminho, erro); a falha não desfaz o processamento."""
+    # Os DOIS separadores à mão: fora do Windows o basename não corta '\',
+    # e um nome vindo do navegador com caminho viraria um arquivo esquisito.
+    fn = str(filename or '').replace('\\', '/').rsplit('/', 1)[-1].strip()
+    if not fn:
+        return None, 'invalid filename'
+    d = _accrual_source_dir(ymd)
+    try:
+        os.makedirs(d, exist_ok=True)
+        path = os.path.join(d, fn)
+        with open(path, 'wb') as fh:
+            fh.write(blob)
+        return path, None
+    except OSError as exc:
+        _R().log.warning('[accrual] não consegui guardar %s em %s: %s', fn, d, exc)
+        return None, str(exc)
+
+
 def _acc_find_operacoes(folder):
     if not os.path.isdir(folder):
         return None

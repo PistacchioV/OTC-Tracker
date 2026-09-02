@@ -51,6 +51,12 @@
     display: flex; align-items: center; gap: .75rem;
     padding: 1.05rem 1.15rem .85rem;
 }
+/* Header da coluna num marinho mais fundo que o corpo (pedido 2026-09-01):
+   um degrau ESCURO sobre o vidro, com fio de luz embaixo separando da fila. */
+[data-bs-theme=dark] #mc-monitor .mc-card__head {
+    background: rgba(6, 16, 38, 0.58);
+    box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.08);
+}
 #mc-monitor .mc-card__ico {
     width: 42px; height: 42px; flex: 0 0 auto; border-radius: 12px;
     display: inline-flex; align-items: center; justify-content: center;
@@ -81,7 +87,13 @@
    Rolagem interna com altura máxima: um card com 60 confirmações não pode
    empurrar os outros dois para fora da tela — os três se leem lado a lado. */
 #mc-monitor .mc-list {
-    background: var(--ins-tertiary-bg, #eef0f4);
+    /* Liquid glass (pedido 2026-09-01): este fundo era o TERCIÁRIO OPACO, e
+       ele cobria quase todo o cartão — o `.mc-card` É vidro pela regra
+       estrutural do streamflow (§23), mas a fila pintada por cima devolvia a
+       coluna chapada, principalmente no escuro. Vira um degrau TRANSLÚCIDO,
+       sem blur próprio: dentro da raiz de backdrop do cartão o desfoque do
+       filho não amostra nada (§7 do CLAUDE.md). */
+    background: rgba(255, 255, 255, 0.28);
     /* Cards maiores (pedido da mesa): a fila cresce com a janela e o mínimo
        garante presença mesmo com pouca coisa pendente.
 
@@ -94,7 +106,39 @@
     flex: 1 1 auto;
     min-height: 24rem;
     max-height: calc(100vh - 21rem); overflow-y: auto; padding: .5rem;
-    border-top: 1px solid var(--ins-border-color);
+    border-top: 1px solid rgba(255, 255, 255, 0.40);
+}
+[data-bs-theme=dark] #mc-monitor .mc-list {
+    background: transparent;   /* corpo = a MESMA superfície do chip de stat */
+    border-top-color: rgba(255, 255, 255, 0.10);
+}
+/* No escuro o CARTÃO sobe para a receita do modal liquid-glass (o token
+   padrão, 4%, não desenha vidro sobre um fundo que já é escuro): alfa 0,10,
+   borda mais viva e os FIOS DE LUZ internos (inset) — é o que faz o painel
+   ler como vidro, não só o alfa. A fila fica quase transparente por cima. */
+[data-bs-theme=dark] #mc-monitor .mc-card {
+    /* O vidro é o MESMO dos chips de stat (pedido 2026-09-01: "igual
+       da primeira imagem"): fundo no token, borda hairline e o blur
+       estrutural do streamflow — nada de inset nem borda viva. O que
+       mantém a coluna glassy é a fila TRANSLÚCIDA por cima. */
+    /* blur BAIXO e alfa ABAIXO do token, de propósito (pedidos: "aumentar o
+       nível de translúcido" ×2): o desfoque alto homogeneíza o fundo e o véu
+       branco soma — com 5px e 2,5% a estrutura da página atravessa. */
+    background: rgba(255, 255, 255, 0.025);
+    border-color: var(--vr-card-border);
+    backdrop-filter: blur(5px) saturate(170%);
+    -webkit-backdrop-filter: blur(5px) saturate(170%);
+    box-shadow: var(--vr-card-shadow);
+}
+/* O item se separa da fila no escuro descendo, não subindo: com degrau
+   BRANCO por cima do cartão a 0,10 o item saía mais claro que tudo (e o
+   brilho vermelho do vizinho atravessava o corpo translúcido). O passo é um
+   translúcido ESCURO — o item afunda no vidro, e a borda hairline é quem
+   desenha o contorno. Pedido de 2026-09-01: "os cards que vão em cima
+   precisam ficar um pouco mais escuros". */
+[data-bs-theme=dark] #mc-monitor .mc-item {
+    background: rgba(9, 26, 61, 0.70);        /* marinho, pedido da mesa */
+    border-color: rgba(255, 255, 255, 0.10);
 }
 #mc-monitor .mc-item {
     background: var(--vr-card-bg, var(--ins-secondary-bg));
@@ -267,7 +311,15 @@
 #mc-monitor .mc-docs .mc-doc {
     font-size: .64rem; font-weight: 700; padding: .12rem .45rem; border-radius: 7px;
     border: 1px solid var(--ins-border-color); color: var(--vr-accent-1, #0066cc);
-    text-decoration: none; max-width: 15rem; overflow: hidden;
+    text-decoration: none; overflow: hidden;
+    /* Um chip por linha, na LARGURA do card (pedido 2026-09-01): com o
+       max-width fixo de antes (15rem) sobrava uma faixa à direita e cada chip
+       terminava num ponto diferente. O ellipsis continua segurando os nomes
+       compridos. O min-width:0 é OBRIGATÓRIO aqui: item de flex tem
+       min-width:auto (= o min-content do texto nowrap) e min VENCE max — com
+       o max em rem o navegador capava o mínimo por ele, com 100% não, e o
+       nome comprido VAZAVA do card. */
+    flex: 1 1 100%; max-width: 100%; min-width: 0;
     text-overflow: ellipsis; white-space: nowrap;
     transition: border-color 140ms var(--mc-ease), background 140ms var(--mc-ease);
 }
@@ -376,6 +428,8 @@
               generateTip: 'the confirmation has not been generated yet — open the editor',
               noCb: 'no callback',
               noCbTip: 'Callback Date is empty — the client confirmation by phone is still missing',
+              noCbBlockTitle: 'Callback pending',
+              noCbBlockText: '{c} — {n} operation(s) have no Callback Date. The callback with the client must happen BEFORE marking the confirmation as sent. Fill the Callback Date on the Track Confirmations page and try again.',
               legalRelease: 'Release to OTC',
               legalTitle: 'Release to OTC?',
               legalText: '{c} — {n} operation(s) will leave Pending Legal and enter the OTC queue, here and on the Pending Confirmation page.',
@@ -402,6 +456,8 @@
               generateTip: 'a confirmação ainda não foi gerada — abrir o editor',
               noCb: 'sem callback',
               noCbTip: 'Data Callback em branco — falta a conferência por telefone com o cliente',
+              noCbBlockTitle: 'Callback pendente',
+              noCbBlockText: '{c} — {n} operação(ões) sem Data Callback. O callback com o cliente precisa acontecer ANTES de marcar a confirmação como enviada. Preencha a Data Callback no Track Confirmations e tente de novo.',
               legalRelease: 'Liberar p/ OTC',
               legalTitle: 'Liberar para o OTC?',
               legalText: '{c} — {n} operação(ões) saem de Pending Legal e entram na fila do OTC, aqui e na página Pending Confirmation.',
@@ -428,6 +484,8 @@
               generateTip: 'la confirmación aún no fue generada — abrir el editor',
               noCb: 'sin callback',
               noCbTip: 'Fecha de Callback en blanco — falta la conferencia telefónica con el cliente',
+              noCbBlockTitle: 'Callback pendiente',
+              noCbBlockText: '{c} — {n} operación(es) sin Fecha de Callback. El callback con el cliente debe ocurrir ANTES de marcar la confirmación como enviada. Complete la Fecha de Callback en Track Confirmations e intente de nuevo.',
               legalRelease: 'Liberar p/ OTC',
               legalTitle: '¿Liberar para el OTC?',
               legalText: '{c} — {n} operación(es) salen de Pending Legal y entran en la cola del OTC, aquí y en la página Pending Confirmation.',
@@ -564,8 +622,12 @@
             var cls = stage === 'LEGAL' ? 'btn-warning mc-act-legal' : 'btn-info mc-act-fep';
             var ico = stage === 'LEGAL' ? 'ti-arrow-big-right-lines' : 'ti-send';
             var lbl = stage === 'LEGAL' ? t('legalRelease') : t('fepSend');
+            // O botão do FepWeb carrega o no_callback do ITEM: o clique com
+            // callback pendente é BLOQUEADO na tela (aviso, não confirmação) —
+            // e o endpoint recusa de novo, porque a trava de verdade é a dele.
             return '<button type="button" class="btn btn-sm ' + cls + ' ms-auto" ' +
                    'data-keys="' + esc((it.keys || []).join(',')) + '" ' +
+                   'data-nocb="' + (it.no_callback || 0) + '" ' +
                    'data-cli="' + esc(it.Cliente || '') + '">' +
                    '<i class="ti ' + ico + ' me-1"></i>' + esc(lbl) + '</button>';
         }
@@ -718,6 +780,20 @@
                    'legalTitle', 'legalText', 'legalDone');
     });
     $(document).on('click', '#mc-cards .mc-act-fep', function () {
+        // Item com callback pendente não fecha (pedido 2026-09-01): o envio ao
+        // cliente pressupõe a conferência por telefone, e o badge "no callback"
+        // já diz que ela não aconteceu. O aviso substitui a confirmação — sem
+        // botão de seguir em frente — e o endpoint recusa de novo (409), porque
+        // um card desenhado antes do redraw pode estar com a contagem velha.
+        var nocb = parseInt(this.getAttribute('data-nocb') || '0', 10) || 0;
+        if (nocb > 0) {
+            Swal.fire({
+                icon: 'warning', title: t('noCbBlockTitle'),
+                html: t('noCbBlockText',
+                        { c: esc(this.getAttribute('data-cli') || ''), n: nocb })
+            });
+            return;
+        }
         cardAction(this, '/api/manual-confirmation/fepweb-sent',
                    'fepTitle', 'fepText', 'fepDone');
     });

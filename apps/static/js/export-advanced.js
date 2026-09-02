@@ -269,11 +269,11 @@
         el.id = MODAL_ID;
         el.tabIndex = -1;
         el.innerHTML =
-        '<div class="modal-dialog modal-lg modal-dialog-scrollable">' +
-          '<div class="modal-content">' +
+        '<div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">' +
+          '<div class="modal-content liquid-glass">' +
             '<div class="modal-header py-2">' +
               '<h5 class="modal-title fs-6"><i class="ti ti-adjustments-alt me-1"></i>' + esc(t('title')) + '</h5>' +
-              '<button type="button" class="btn-close" data-bs-dismiss="modal"></button>' +
+              '<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>' +
             '</div>' +
             '<div class="modal-body">' +
 
@@ -367,9 +367,9 @@
             '</div>' +
             '<div class="modal-footer py-2">' +
               '<span class="xa-count me-auto" id="xaCount"></span>' +
-              '<button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">' + esc(t('cancel')) + '</button>' +
-              '<button type="button" class="btn btn-sm btn-primary bg-gradient" id="xaRun">' +
-                '<i class="ti ti-download me-1"></i>' + esc(t('run')) + '</button>' +
+              '<button type="button" class="btn btn-sm btn-danger" data-bs-dismiss="modal" title="' + esc(t('cancel')) + '"><i class="ti ti-x"></i></button>' +
+              '<button type="button" class="btn btn-sm btn-success" id="xaRun" title="' + esc(t('run')) + '">' +
+                '<i class="ti ti-download"></i></button>' +
             '</div>' +
           '</div>' +
         '</div>';
@@ -952,7 +952,21 @@
             exportOptions: {
                 columns: o.cols,
                 rows: function (idx) { return set[idx] === 1; },
-                modifier: { search: 'none', order: 'applied', page: 'all' }
+                modifier: { search: 'none', order: 'applied', page: 'all' },
+                // O que o Buttons faria sozinho (tirar HTML) MAIS o que o
+                // arquivo de origem obriga: célula cujo valor é um literal de
+                // ERRO do Excel ('#NULL!', '#N/A', '#REF!', …) sai VAZIA. O
+                // legado grava esses literais onde não tinha valor, e um
+                // '#NULL!' escrito no .xlsx se lê como a exportação quebrada
+                // (foi o MtM de Swap, 2026-09-01). Mesma regra dos botões de
+                // Export próprios do MtM/Accrual — os DOIS caminhos daqui (o
+                // dia da tela e o intervalo) passam por este conf, então a
+                // limpeza vale para toda página com Advanced Export.
+                format: { body: function (data) {
+                    if (typeof data !== 'string') return data;
+                    var v = plain(data);
+                    return /^#?(NULL!?|N\/A|REF!|VALUE!|DIV\/0!|NAME\?|NUM!)$/i.test(v) ? '' : v;
+                } }
             }
         };
         if (o.format === 'csvHtml5') { conf.fieldSeparator = o.sep; conf.bom = true; }

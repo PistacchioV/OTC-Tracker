@@ -93,6 +93,24 @@ def _release_daily_slot(claim_file, slot, log_prefix):
                     log_prefix, slot, traceback.format_exc())
 
 
+
+def _map_req_forget(file_path):
+    """Derruba o memo POR REQUEST do `_mapping_rows` para este caminho.
+
+    O memo (routes._mapping_rows) existe porque o cache por mtime não evita o
+    stat, e há consumidor por LINHA (§7). Ele só é seguro porque TODO escritor
+    passa por este funil (`check_duck_writers` prende isso): o cadastro
+    reescrito no MEIO de um request derruba a entrada aqui, e o leitor
+    seguinte do mesmo request volta ao stat de sempre — sem isto, a gravação
+    intra-request ficaria invisível até o request acabar."""
+    try:
+        from flask import g, has_app_context
+        if has_app_context():
+            g.get('_map_rows_req', {}).pop(os.path.normpath(str(file_path)), None)
+    except Exception:                                       # noqa: BLE001
+        pass
+
+
 def _atomic_write_json(file_path, data):
     """Write JSON safely: atomic rename on POSIX; direct write fallback on Windows.
 
@@ -123,6 +141,7 @@ def _atomic_write_json(file_path, data):
         try:
             os.replace(tmp_path, file_path)
             _bump_cache_gen(file_path)
+            _map_req_forget(file_path)
             _duck_mirror_notify(file_path)
             return
         except PermissionError:
@@ -131,6 +150,7 @@ def _atomic_write_json(file_path, data):
         with open(file_path, 'w', encoding='utf-8') as fh:
             json.dump(data, fh, ensure_ascii=False, indent=2)
         _bump_cache_gen(file_path)
+        _map_req_forget(file_path)
         _duck_mirror_notify(file_path)
         try:
             os.unlink(tmp_path)

@@ -92,75 +92,76 @@
 #lnndf-table tbody td { white-space: nowrap; font-size: 0.74rem; text-align: center; vertical-align: middle; }
 
     /* Colunas específicas com larguras adequadas — um bloco por coluna */
-    /* nth-child(1)=checkbox  (2)=Status  (3..67)=dados TER  (68+)=Média Asiática dinâmica.
+    /* nth-child(1)=checkbox  (2)=Status  (3)=Actions  (4..68)=dados TER  (69+)=Média Asiática dinâmica.
        scrollX:false → header não é clonado, então NÃO precisa de .dt-scroll-head. Edite só o px (1×). */
     #lnndf-table th:nth-child(1), #lnndf-table td:nth-child(1) { width: 44px;  min-width: 44px;  }  /* checkbox */
     #lnndf-table th:nth-child(2), #lnndf-table td:nth-child(2) { width: 110px; min-width: 110px; } /* Status */
-    #lnndf-table th:nth-child(3), #lnndf-table td:nth-child(3) { width: 160px; min-width: 160px; } /* Codigo da Parte */
-    #lnndf-table th:nth-child(4), #lnndf-table td:nth-child(4) { width: 210px; min-width: 210px; } /* Nome da Parte */
-    #lnndf-table th:nth-child(5), #lnndf-table td:nth-child(5) { width: 170px; min-width: 170px; } /* CPF/CNPJ do Participante */
-    #lnndf-table th:nth-child(6), #lnndf-table td:nth-child(6) { width: 160px; min-width: 160px; } /* Codigo da Contraparte */
-    #lnndf-table th:nth-child(7), #lnndf-table td:nth-child(7) { width: 210px; min-width: 210px; } /* Nome da Contraparte */
-    #lnndf-table th:nth-child(8), #lnndf-table td:nth-child(8) { width: 170px; min-width: 170px; } /* CPF/CNPJ da Contraparte */
-    #lnndf-table th:nth-child(9), #lnndf-table td:nth-child(9) { width: 140px; min-width: 140px; } /* Contrato */
-    #lnndf-table th:nth-child(10), #lnndf-table td:nth-child(10) { width: 170px; min-width: 170px; } /* Classe do Ativo Subjacente */
-    #lnndf-table th:nth-child(11), #lnndf-table td:nth-child(11) { width: 150px; min-width: 150px; } /* Data de Emissao */
-    #lnndf-table th:nth-child(12), #lnndf-table td:nth-child(12) { width: 150px; min-width: 150px; } /* Data de Inicio de Vigencia */
-    #lnndf-table th:nth-child(13), #lnndf-table td:nth-child(13) { width: 150px; min-width: 150px; } /* Data de Vencimento */
-    #lnndf-table th:nth-child(14), #lnndf-table td:nth-child(14) { width: 150px; min-width: 150px; } /* Valor Base no registro */
-    #lnndf-table th:nth-child(15), #lnndf-table td:nth-child(15) { width: 150px; min-width: 150px; } /* Valor Base atual */
-    #lnndf-table th:nth-child(16), #lnndf-table td:nth-child(16) { width: 150px; min-width: 150px; } /* Taxa Forward */
-    #lnndf-table th:nth-child(17), #lnndf-table td:nth-child(17) { width: 150px; min-width: 150px; } /* Taxa de Cambio */
-    #lnndf-table th:nth-child(18), #lnndf-table td:nth-child(18) { width: 210px; min-width: 210px; } /* Descricao da posicao do Participante */
-    #lnndf-table th:nth-child(19), #lnndf-table td:nth-child(19) { width: 170px; min-width: 170px; } /* Tipo Indicador Financeiro */
-    #lnndf-table th:nth-child(20), #lnndf-table td:nth-child(20) { width: 170px; min-width: 170px; } /* Tipo do Contrato */
-    #lnndf-table th:nth-child(21), #lnndf-table td:nth-child(21) { width: 170px; min-width: 170px; } /* Situacao do Contrato */
-    #lnndf-table th:nth-child(22), #lnndf-table td:nth-child(22) { width: 160px; min-width: 160px; } /* Codigo Sisbacen da Moeda */
-    #lnndf-table th:nth-child(23), #lnndf-table td:nth-child(23) { width: 160px; min-width: 160px; } /* Simbolo da Moeda */
-    #lnndf-table th:nth-child(24), #lnndf-table td:nth-child(24) { width: 160px; min-width: 160px; } /* Codigo Sisbacen da Moeda Cotada */
-    #lnndf-table th:nth-child(25), #lnndf-table td:nth-child(25) { width: 160px; min-width: 160px; } /* Codigo do Ativo Subjacente */
-    #lnndf-table th:nth-child(26), #lnndf-table td:nth-child(26) { width: 150px; min-width: 150px; } /* Data de Fixing do Ativo Subjacente */
-    #lnndf-table th:nth-child(27), #lnndf-table td:nth-child(27) { width: 150px; min-width: 150px; } /* Data de Fixing da Moeda */
-    #lnndf-table th:nth-child(28), #lnndf-table td:nth-child(28) { width: 160px; min-width: 160px; } /* Codigo da Cotacao */
-    #lnndf-table th:nth-child(29), #lnndf-table td:nth-child(29) { width: 150px; min-width: 150px; } /* Cotacao de Moeda para o Vencimento */
-    #lnndf-table th:nth-child(30), #lnndf-table td:nth-child(30) { width: 170px; min-width: 170px; } /* Tipo de Cotacao */
-    #lnndf-table th:nth-child(31), #lnndf-table td:nth-child(31) { width: 150px; min-width: 150px; } /* Cross-Rate */
-    #lnndf-table th:nth-child(32), #lnndf-table td:nth-child(32) { width: 150px; min-width: 150px; } /* Codigo da Paridade Cross */
-    #lnndf-table th:nth-child(33), #lnndf-table td:nth-child(33) { width: 150px; min-width: 150px; } /* Data de fixing da Paridade Cross */
-    #lnndf-table th:nth-child(34), #lnndf-table td:nth-child(34) { width: 160px; min-width: 160px; } /* Codigo do Boletim */
-    #lnndf-table th:nth-child(35), #lnndf-table td:nth-child(35) { width: 130px; min-width: 130px; } /* Horario do Boletim */
-    #lnndf-table th:nth-child(36), #lnndf-table td:nth-child(36) { width: 150px; min-width: 150px; } /* Taxa de Paridade */
-    #lnndf-table th:nth-child(37), #lnndf-table td:nth-child(37) { width: 210px; min-width: 210px; } /* Nome do Feeder */
-    #lnndf-table th:nth-child(38), #lnndf-table td:nth-child(38) { width: 160px; min-width: 160px; } /* Tela funcao Consulta */
-    #lnndf-table th:nth-child(39), #lnndf-table td:nth-child(39) { width: 170px; min-width: 170px; } /* Tipo de Cotacao Moeda */
-    #lnndf-table th:nth-child(40), #lnndf-table td:nth-child(40) { width: 150px; min-width: 150px; } /* Tipo de Paridade */
-    #lnndf-table th:nth-child(41), #lnndf-table td:nth-child(41) { width: 150px; min-width: 150px; } /* Data de Avaliacao */
-    #lnndf-table th:nth-child(42), #lnndf-table td:nth-child(42) { width: 160px; min-width: 160px; } /* Indicador de Termo a Termo */
-    #lnndf-table th:nth-child(43), #lnndf-table td:nth-child(43) { width: 150px; min-width: 150px; } /* Data de Fixacao */
-    #lnndf-table th:nth-child(44), #lnndf-table td:nth-child(44) { width: 160px; min-width: 160px; } /* Forma de Atualizacao da taxa a termo */
-    #lnndf-table th:nth-child(45), #lnndf-table td:nth-child(45) { width: 150px; min-width: 150px; } /* Valor ou Percentual Negociado */
-    #lnndf-table th:nth-child(46), #lnndf-table td:nth-child(46) { width: 160px; min-width: 160px; } /* Ajustar Taxa */
-    #lnndf-table th:nth-child(47), #lnndf-table td:nth-child(47) { width: 160px; min-width: 160px; } /* Responsavel pelo Ajuste de Taxa */
-    #lnndf-table th:nth-child(48), #lnndf-table td:nth-child(48) { width: 150px; min-width: 150px; } /* Data inicial para o ajuste da taxa */
-    #lnndf-table th:nth-child(49), #lnndf-table td:nth-child(49) { width: 150px; min-width: 150px; } /* Data final para o ajuste da taxa */
-    #lnndf-table th:nth-child(50), #lnndf-table td:nth-child(50) { width: 150px; min-width: 150px; } /* Data do Ajuste da Taxa */
-    #lnndf-table th:nth-child(51), #lnndf-table td:nth-child(51) { width: 150px; min-width: 150px; } /* Cotacao para Fixing */
-    #lnndf-table th:nth-child(52), #lnndf-table td:nth-child(52) { width: 160px; min-width: 160px; } /* Atualizar Valor Base? */
-    #lnndf-table th:nth-child(53), #lnndf-table td:nth-child(53) { width: 150px; min-width: 150px; } /* Cotacao Inicial */
-    #lnndf-table th:nth-child(54), #lnndf-table td:nth-child(54) { width: 150px; min-width: 150px; } /* Valor Base Original */
-    #lnndf-table th:nth-child(55), #lnndf-table td:nth-child(55) { width: 160px; min-width: 160px; } /* Premio a ser pago pelo */
-    #lnndf-table th:nth-child(56), #lnndf-table td:nth-child(56) { width: 150px; min-width: 150px; } /* Valor do Premio */
-    #lnndf-table th:nth-child(57), #lnndf-table td:nth-child(57) { width: 170px; min-width: 170px; } /* Modalidade de Liquidacao */
-    #lnndf-table th:nth-child(58), #lnndf-table td:nth-child(58) { width: 150px; min-width: 150px; } /* Data de Liquidacao do Premio */
-    #lnndf-table th:nth-child(59), #lnndf-table td:nth-child(59) { width: 160px; min-width: 160px; } /* Premio em Moeda Estrangeira */
-    #lnndf-table th:nth-child(60), #lnndf-table td:nth-child(60) { width: 150px; min-width: 150px; } /* Data de Fixing da Moeda do Premio */
-    #lnndf-table th:nth-child(61), #lnndf-table td:nth-child(61) { width: 160px; min-width: 160px; } /* Codigo Identificador */
-    #lnndf-table th:nth-child(62), #lnndf-table td:nth-child(62) { width: 150px; min-width: 150px; } /* Data de Alteracao */
-    #lnndf-table th:nth-child(63), #lnndf-table td:nth-child(63) { width: 150px; min-width: 150px; } /* Valor Antecipado */
-    #lnndf-table th:nth-child(64), #lnndf-table td:nth-child(64) { width: 160px; min-width: 160px; } /* Criterio de Apuracao */
-    #lnndf-table th:nth-child(65), #lnndf-table td:nth-child(65) { width: 150px; min-width: 150px; } /* Taxa a Termo em Reais */
-    #lnndf-table th:nth-child(66), #lnndf-table td:nth-child(66) { width: 150px; min-width: 150px; } /* Data da Cotacao Inicial */
-    #lnndf-table th:nth-child(67), #lnndf-table td:nth-child(67) { width: 170px; min-width: 170px; } /* Tipo Media Asiatico */
+    #lnndf-table th:nth-child(3), #lnndf-table td:nth-child(3) { width: 70px;  min-width: 70px;  } /* Actions */
+    #lnndf-table th:nth-child(4), #lnndf-table td:nth-child(4) { width: 160px; min-width: 160px; } /* Codigo da Parte */
+    #lnndf-table th:nth-child(5), #lnndf-table td:nth-child(5) { width: 210px; min-width: 210px; } /* Nome da Parte */
+    #lnndf-table th:nth-child(6), #lnndf-table td:nth-child(6) { width: 170px; min-width: 170px; } /* CPF/CNPJ do Participante */
+    #lnndf-table th:nth-child(7), #lnndf-table td:nth-child(7) { width: 160px; min-width: 160px; } /* Codigo da Contraparte */
+    #lnndf-table th:nth-child(8), #lnndf-table td:nth-child(8) { width: 210px; min-width: 210px; } /* Nome da Contraparte */
+    #lnndf-table th:nth-child(9), #lnndf-table td:nth-child(9) { width: 170px; min-width: 170px; } /* CPF/CNPJ da Contraparte */
+    #lnndf-table th:nth-child(10), #lnndf-table td:nth-child(10) { width: 140px; min-width: 140px; } /* Contrato */
+    #lnndf-table th:nth-child(11), #lnndf-table td:nth-child(11) { width: 170px; min-width: 170px; } /* Classe do Ativo Subjacente */
+    #lnndf-table th:nth-child(12), #lnndf-table td:nth-child(12) { width: 150px; min-width: 150px; } /* Data de Emissao */
+    #lnndf-table th:nth-child(13), #lnndf-table td:nth-child(13) { width: 150px; min-width: 150px; } /* Data de Inicio de Vigencia */
+    #lnndf-table th:nth-child(14), #lnndf-table td:nth-child(14) { width: 150px; min-width: 150px; } /* Data de Vencimento */
+    #lnndf-table th:nth-child(15), #lnndf-table td:nth-child(15) { width: 150px; min-width: 150px; } /* Valor Base no registro */
+    #lnndf-table th:nth-child(16), #lnndf-table td:nth-child(16) { width: 150px; min-width: 150px; } /* Valor Base atual */
+    #lnndf-table th:nth-child(17), #lnndf-table td:nth-child(17) { width: 150px; min-width: 150px; } /* Taxa Forward */
+    #lnndf-table th:nth-child(18), #lnndf-table td:nth-child(18) { width: 150px; min-width: 150px; } /* Taxa de Cambio */
+    #lnndf-table th:nth-child(19), #lnndf-table td:nth-child(19) { width: 210px; min-width: 210px; } /* Descricao da posicao do Participante */
+    #lnndf-table th:nth-child(20), #lnndf-table td:nth-child(20) { width: 170px; min-width: 170px; } /* Tipo Indicador Financeiro */
+    #lnndf-table th:nth-child(21), #lnndf-table td:nth-child(21) { width: 170px; min-width: 170px; } /* Tipo do Contrato */
+    #lnndf-table th:nth-child(22), #lnndf-table td:nth-child(22) { width: 170px; min-width: 170px; } /* Situacao do Contrato */
+    #lnndf-table th:nth-child(23), #lnndf-table td:nth-child(23) { width: 160px; min-width: 160px; } /* Codigo Sisbacen da Moeda */
+    #lnndf-table th:nth-child(24), #lnndf-table td:nth-child(24) { width: 160px; min-width: 160px; } /* Simbolo da Moeda */
+    #lnndf-table th:nth-child(25), #lnndf-table td:nth-child(25) { width: 160px; min-width: 160px; } /* Codigo Sisbacen da Moeda Cotada */
+    #lnndf-table th:nth-child(26), #lnndf-table td:nth-child(26) { width: 160px; min-width: 160px; } /* Codigo do Ativo Subjacente */
+    #lnndf-table th:nth-child(27), #lnndf-table td:nth-child(27) { width: 150px; min-width: 150px; } /* Data de Fixing do Ativo Subjacente */
+    #lnndf-table th:nth-child(28), #lnndf-table td:nth-child(28) { width: 150px; min-width: 150px; } /* Data de Fixing da Moeda */
+    #lnndf-table th:nth-child(29), #lnndf-table td:nth-child(29) { width: 160px; min-width: 160px; } /* Codigo da Cotacao */
+    #lnndf-table th:nth-child(30), #lnndf-table td:nth-child(30) { width: 150px; min-width: 150px; } /* Cotacao de Moeda para o Vencimento */
+    #lnndf-table th:nth-child(31), #lnndf-table td:nth-child(31) { width: 170px; min-width: 170px; } /* Tipo de Cotacao */
+    #lnndf-table th:nth-child(32), #lnndf-table td:nth-child(32) { width: 150px; min-width: 150px; } /* Cross-Rate */
+    #lnndf-table th:nth-child(33), #lnndf-table td:nth-child(33) { width: 150px; min-width: 150px; } /* Codigo da Paridade Cross */
+    #lnndf-table th:nth-child(34), #lnndf-table td:nth-child(34) { width: 150px; min-width: 150px; } /* Data de fixing da Paridade Cross */
+    #lnndf-table th:nth-child(35), #lnndf-table td:nth-child(35) { width: 160px; min-width: 160px; } /* Codigo do Boletim */
+    #lnndf-table th:nth-child(36), #lnndf-table td:nth-child(36) { width: 130px; min-width: 130px; } /* Horario do Boletim */
+    #lnndf-table th:nth-child(37), #lnndf-table td:nth-child(37) { width: 150px; min-width: 150px; } /* Taxa de Paridade */
+    #lnndf-table th:nth-child(38), #lnndf-table td:nth-child(38) { width: 210px; min-width: 210px; } /* Nome do Feeder */
+    #lnndf-table th:nth-child(39), #lnndf-table td:nth-child(39) { width: 160px; min-width: 160px; } /* Tela funcao Consulta */
+    #lnndf-table th:nth-child(40), #lnndf-table td:nth-child(40) { width: 170px; min-width: 170px; } /* Tipo de Cotacao Moeda */
+    #lnndf-table th:nth-child(41), #lnndf-table td:nth-child(41) { width: 150px; min-width: 150px; } /* Tipo de Paridade */
+    #lnndf-table th:nth-child(42), #lnndf-table td:nth-child(42) { width: 150px; min-width: 150px; } /* Data de Avaliacao */
+    #lnndf-table th:nth-child(43), #lnndf-table td:nth-child(43) { width: 160px; min-width: 160px; } /* Indicador de Termo a Termo */
+    #lnndf-table th:nth-child(44), #lnndf-table td:nth-child(44) { width: 150px; min-width: 150px; } /* Data de Fixacao */
+    #lnndf-table th:nth-child(45), #lnndf-table td:nth-child(45) { width: 160px; min-width: 160px; } /* Forma de Atualizacao da taxa a termo */
+    #lnndf-table th:nth-child(46), #lnndf-table td:nth-child(46) { width: 150px; min-width: 150px; } /* Valor ou Percentual Negociado */
+    #lnndf-table th:nth-child(47), #lnndf-table td:nth-child(47) { width: 160px; min-width: 160px; } /* Ajustar Taxa */
+    #lnndf-table th:nth-child(48), #lnndf-table td:nth-child(48) { width: 160px; min-width: 160px; } /* Responsavel pelo Ajuste de Taxa */
+    #lnndf-table th:nth-child(49), #lnndf-table td:nth-child(49) { width: 150px; min-width: 150px; } /* Data inicial para o ajuste da taxa */
+    #lnndf-table th:nth-child(50), #lnndf-table td:nth-child(50) { width: 150px; min-width: 150px; } /* Data final para o ajuste da taxa */
+    #lnndf-table th:nth-child(51), #lnndf-table td:nth-child(51) { width: 150px; min-width: 150px; } /* Data do Ajuste da Taxa */
+    #lnndf-table th:nth-child(52), #lnndf-table td:nth-child(52) { width: 150px; min-width: 150px; } /* Cotacao para Fixing */
+    #lnndf-table th:nth-child(53), #lnndf-table td:nth-child(53) { width: 160px; min-width: 160px; } /* Atualizar Valor Base? */
+    #lnndf-table th:nth-child(54), #lnndf-table td:nth-child(54) { width: 150px; min-width: 150px; } /* Cotacao Inicial */
+    #lnndf-table th:nth-child(55), #lnndf-table td:nth-child(55) { width: 150px; min-width: 150px; } /* Valor Base Original */
+    #lnndf-table th:nth-child(56), #lnndf-table td:nth-child(56) { width: 160px; min-width: 160px; } /* Premio a ser pago pelo */
+    #lnndf-table th:nth-child(57), #lnndf-table td:nth-child(57) { width: 150px; min-width: 150px; } /* Valor do Premio */
+    #lnndf-table th:nth-child(58), #lnndf-table td:nth-child(58) { width: 170px; min-width: 170px; } /* Modalidade de Liquidacao */
+    #lnndf-table th:nth-child(59), #lnndf-table td:nth-child(59) { width: 150px; min-width: 150px; } /* Data de Liquidacao do Premio */
+    #lnndf-table th:nth-child(60), #lnndf-table td:nth-child(60) { width: 160px; min-width: 160px; } /* Premio em Moeda Estrangeira */
+    #lnndf-table th:nth-child(61), #lnndf-table td:nth-child(61) { width: 150px; min-width: 150px; } /* Data de Fixing da Moeda do Premio */
+    #lnndf-table th:nth-child(62), #lnndf-table td:nth-child(62) { width: 160px; min-width: 160px; } /* Codigo Identificador */
+    #lnndf-table th:nth-child(63), #lnndf-table td:nth-child(63) { width: 150px; min-width: 150px; } /* Data de Alteracao */
+    #lnndf-table th:nth-child(64), #lnndf-table td:nth-child(64) { width: 150px; min-width: 150px; } /* Valor Antecipado */
+    #lnndf-table th:nth-child(65), #lnndf-table td:nth-child(65) { width: 160px; min-width: 160px; } /* Criterio de Apuracao */
+    #lnndf-table th:nth-child(66), #lnndf-table td:nth-child(66) { width: 150px; min-width: 150px; } /* Taxa a Termo em Reais */
+    #lnndf-table th:nth-child(67), #lnndf-table td:nth-child(67) { width: 150px; min-width: 150px; } /* Data da Cotacao Inicial */
+    #lnndf-table th:nth-child(68), #lnndf-table td:nth-child(68) { width: 170px; min-width: 170px; } /* Tipo Media Asiatico */
 
 /* Per-column filter row — New Deals style */
 #lnndf-table thead tr.ln-th-filter th { padding: .3rem .4rem .5rem; border-top: 1px solid var(--ln-hairline); }
@@ -182,6 +183,27 @@
     #live-position-ndf-page * { transition: none !important; animation: none !important; }
     #live-position-ndf-page .btn:active { transform: none; }
 }
+
+/* ── Ações de linha: squircle padrão do app (spec .ops-row-act) ─────────────
+   min/max travam a ALTURA também, não só a largura: uma regra de tema com
+   `min-height` em `.btn` deixaria o botão 32×34, que não é mais um quadrado
+   arredondado. `box-sizing:border-box` porque a borda entraria por fora. */
+#lnndf-table .btn-act {
+    width:32px; height:32px;
+    min-width:32px; max-width:32px; min-height:32px; max-height:32px;
+    padding:0; flex:0 0 auto; box-sizing:border-box;
+    display:inline-flex; align-items:center; justify-content:center;
+    line-height:1; border-radius:10px !important;
+}
+/* Cinto de segurança contra o `.fs-13` do tema (também !important). */
+#lnndf-table .btn-act > i { font-size:1rem !important; }
+#lnndf-table .btn-act { transition: transform 120ms var(--ln-ease-out), box-shadow 140ms ease; }
+#lnndf-table .btn-act:active { transform: scale(0.97); }
+@media (hover: hover) and (pointer: fine) {
+    #lnndf-table .btn-act:hover { transform: translateY(-1px); box-shadow: 0 2px 8px rgba(0,0,0,.18); }
+}
+/* Tooltip colorido do botão Edit (o CSS da classe tem de estar na página). */
+.tooltip-info .tooltip-inner { background-color: #0dcaf0; color: #000; }
 
 /* Export collection dropdown — solid background (project standard, NOT scoped). */
 .dt-button-collection {
@@ -329,5 +351,5 @@
 <script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/table-std.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/export-advanced.js"></script>
-<script src="{{ config.ASSETS_ROOT }}/js/pages/live-position-ndf.js?v=20260721a"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/pages/live-position-ndf.js?v=20260902a"></script>
 {% endblock extra_javascript %}

@@ -28,6 +28,21 @@ def mapping_page():
         return redirect(url_for('pages_blueprint.sign_in_page'))
     return render_template('pages/mapping.html', segment='mapping')
 
+@_R().blueprint.route('/api/mappings', methods=['GET'])
+def api_mappings_counts():
+    """As CONTAGENS de todos os cadastros numa resposta só — é o que os badges
+    do rail do /mapping precisam no load. Antes a página disparava 43 fetches
+    de uma vez (um por cadastro, o maior com ~14 mil linhas) só para escrever
+    43 números: contra as 16 threads do waitress isso enfileirava três rodadas
+    e cada request pagava as idas ao share. Aqui é UM request, e o
+    `_mapping_rows` por baixo é memoizado por request (§7)."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    return jsonify({'success': True,
+                    'counts': {k: len(_R()._mapping_rows(k))
+                               for k in _R()._MAPPING_DEFS}})
+
+
 @_R().blueprint.route('/api/mappings/<key>', methods=['GET', 'POST'])
 def api_mappings(key):
     if not session.get('authenticated'):

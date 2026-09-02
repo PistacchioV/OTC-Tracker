@@ -1273,8 +1273,8 @@
     <div class="modal fade" id="addRowModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
             <div class="modal-content liquid-glass">
-                <div class="modal-header">
-                    <h5 class="modal-title"><i class="ti ti-circle-plus me-2"></i>Add New Record — Pending Confirmation</h5>
+                <div class="modal-header py-2">
+                    <h5 class="modal-title fs-6"><i class="ti ti-plus me-1"></i>Add New Record — Pending Confirmation</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
@@ -1433,11 +1433,11 @@
 
                     </div><!-- end row g-3 -->
                 </div><!-- end modal-body -->
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-danger bg-gradient" data-bs-dismiss="modal" title="Cancel">
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-sm btn-danger" data-bs-dismiss="modal" title="Cancel">
                         <i class="ti ti-x"></i>
                     </button>
-                    <button type="button" class="btn btn-success bg-gradient" id="arSaveBtn" title="Save">
+                    <button type="button" class="btn btn-sm btn-success" id="arSaveBtn" title="Save">
                         <i class="ti ti-device-floppy"></i>
                     </button>
                 </div>
@@ -1826,8 +1826,13 @@ $(document).ready(function() {
             // ==============================================================
             // SHOW/HIDE COLUMNS DROPDOWN
             // ==============================================================
+            // A ORDEM daqui é a do <thead> real (Status é a 1ª coluna de dado,
+            // col 2) — o menu traduz por índice (data-column = index + 2), e
+            // com os cinco primeiros rótulos rotacionados o checkbox de Aging
+            // escondia a coluna Client (2026-09-01). O PC_MASS_COLUMNS acima e
+            // o order [[6]] do init são as provas da ordem certa.
             var columnLabels = [
-                "LOB", "SPN", "Client", "Aging", "Status", "Product Type", "Trade Date",
+                "Status", "LOB", "SPN", "Client", "Aging", "Product Type", "Trade Date",
                 "Maturity Date", "Trade Number", "Pending Status", "Owner", "EA",
                 "Send Date", "Return Date", "Break Reason",
                 "Comments", "Economic Group", "Signature Type",
@@ -2230,7 +2235,7 @@ $(document).ready(function() {
 
             derive.then(function(res) {
                 var derived = (res && res.success && res.rows) ? res.rows : null;
-                var _persists = [];
+                var _lote = [];
                 rows.forEach(function(r, i) {
                     if (derived && derived[i]) {
                         cascade.forEach(function(name) {
@@ -2243,7 +2248,7 @@ $(document).ready(function() {
                         });
                     }
                     r.dtRow.data(r.d);
-                    _persists.push(pcPersistRow(r.d, false));
+                    _lote.push(r.d);
                 });
                 if (cascade.length && !derived) {
                     // O valor escolhido foi aplicado; o que não deu foi o
@@ -2267,7 +2272,7 @@ $(document).ready(function() {
                 // que viraram Concluded / Ok migram de banco).
                 table.draw(false);
                 updateWidgets();
-                Promise.all(_persists).then(function(){ sfApply(); });
+                pcPersistRows(_lote).then(function(){ sfApply(); });
             });
         });
     });
@@ -2624,6 +2629,17 @@ $(document).ready(function() {
           .catch(function(err){ console.error('pending upsert error', err); });
         if (reload !== false) p = p.then(function(){ sfApply(); });   // reload unless caller batches
         return p;
+    }
+    // O LOTE do mass update: um request com todas as linhas — por linha eram
+    // N requests × 4 aberturas exclusivas de banco no share cada (o servidor
+    // agora faz o lote inteiro em três aberturas).
+    function pcPersistRows(ds) {
+        if (!ds.length) return Promise.resolve();
+        return fetch('/api/pending-confirmation/upsert', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ rows: ds.map(pcArrayToRow) })
+        }).then(function(r){ return r.json(); })
+          .catch(function(err){ console.error('pending bulk upsert error', err); });
     }
     function pcDeleteRow(tradeNumber) {
         if (!tradeNumber) return Promise.resolve();

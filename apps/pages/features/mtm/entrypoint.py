@@ -233,8 +233,9 @@ def api_mtm_process():
     if not f or not f.filename:
         return jsonify({'success': False, 'error': 'No file provided.'}), 400
     ymd = _R()._accrual_parse_date(request.form.get('date')) or datetime.now().strftime('%Y%m%d')
+    blob = f.read()
     try:
-        rows = _R()._cc_read_rows(f.filename, f.read())
+        rows = _R()._cc_read_rows(f.filename, blob)
     except ValueError as e:
         return jsonify({'success': False, 'error': str(e)}), 400
     except Exception:
@@ -295,9 +296,18 @@ def api_mtm_process():
         except Exception:
             _R().log.error('[mtm] process save failed:\n%s', traceback.format_exc())
             return jsonify({'success': False, 'error': 'Failed to save.'}), 500
+    # O ORIGINAL vai para a pasta-fonte do dia (a que o Import from folder lê)
+    # — DEPOIS do processamento dar certo: arquivo que não parseou não vira
+    # cópia oficial. A falha da cópia não desfaz o que já foi salvo; ela volta
+    # no payload para a tela avisar, em vez de sumir no log (pedido 2026-09-01).
+    src_path, src_err = persistence._mtm_store_source(ymd, f.filename, blob)
+    resp = dict(data)
+    resp['source_saved'] = src_path or ''
+    if src_err:
+        resp['source_save_error'] = src_err
     _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                          'MTM Imported', 'MtM', f.filename + _R()._nd_token(ymd))
-    return jsonify(data)
+    return jsonify(resp)
 
 @blueprint.route('/api/mtm-swap/send-batch', methods=['POST'])
 def api_mtm_send_batch():
@@ -488,9 +498,11 @@ def api_mtm_recon():
         return jsonify({'success': False, 'error': 'No saved data for this date.'}), 404
 
     ymd = _R()._accrual_parse_date(date_arg) or datetime.now().strftime('%Y%m%d')
+    blob = None
     try:
         if f and f.filename:
-            rows = _R()._cc_read_rows(f.filename, f.read())
+            blob = f.read()
+            rows = _R()._cc_read_rows(f.filename, blob)
         else:
             op = persistence._mtm_find_recon_file(persistence._mtm_source_dir(ymd))
             if not op:
@@ -518,14 +530,23 @@ def api_mtm_recon():
             _R().log.error('[mtm] recon save failed:\n%s', traceback.format_exc())
             return jsonify({'success': False, 'error': 'Failed to save the recon result.'}), 500
 
+    # O arquivo de retorno solto no dropzone também vai para a pasta-fonte do
+    # dia — mesma regra do /process; do ramo da pasta ele já veio de lá.
+    src_err = None
+    if blob is not None:
+        _sp, src_err = persistence._mtm_store_source(ymd, f.filename, blob)
+
     _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                          'MTM Mapped', 'MtM',
                          'Recon · {} ok, {} check'.format(summary['success_rows'], summary['check_rows']) + _R()._nd_token(ymd))
-    return jsonify({
+    out = {
         'success': True,
         'tables': data.get('tables') or {},
         'counts': data.get('counts') or {},
         'recon': data.get('recon') or {},
         'ref_date': data.get('ref_date'), 'date': data.get('date'),
         'summary': summary,
-    })
+    }
+    if src_err:
+        out['source_save_error'] = src_err
+    return jsonify(out)

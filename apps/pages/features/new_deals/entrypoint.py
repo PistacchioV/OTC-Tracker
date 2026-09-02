@@ -2301,6 +2301,39 @@ def api_generic_nd_send_conecta(product):
             dest, fname = _fi_dest(b2, str(mirror.get('Client', '') or ''))
             dest['lines'].append(l2)
             counts[fname] += 1
+        # Quebra visão MGT x Cliente (as TRÊS páginas genéricas — Vanilla,
+        # FWD Start e Other Publisher): a mesa booka contra a MGT
+        # (04880.00-6 x 73760.20-5, template do File Interpreter já
+        # cadastrado) e o cliente senta no omnibus do BANCO — o arquivo do
+        # banco leva a perna espelhada (73760.20-5 x 04880.00-6, Papel
+        # invertido). Não há deal com essa visão para cadastrar template, então
+        # o espelho é sintetizado como o do Lawton; no Vanilla as linhas de
+        # verificação (tipo 2) acompanham — é a única das três que as emite —,
+        # senão o registro asiático do lado do banco iria para a B3 sem as
+        # datas.
+        for deal, bucket in made_by_deal:
+            if bucket != 'MGT':
+                continue
+            client_up = re.sub(r'<[^>]+>', '',
+                               str(deal.get('Client', '') or '')).strip().upper()
+            # Só a perna contra CLIENTE tem espelho: contra JPM/Lawton a
+            # outra visão já sai do próprio lote (ou do espelho Lawton).
+            if (re.search(r'J\.?P\.?\s*MORGAN', client_up)
+                    or 'LAWTON' in client_up or 'MGT' in client_up):
+                continue
+            mirror = _R()._nd_mgt_mirror(deal)
+            made = _R()._generic_ndf_ter_line(
+                mirror, is_fwd, page_url=page_url,
+                participant_override=_R()._TER_MGT_MIRROR_PARTICIPANT)
+            if made is None:
+                continue
+            b2, l2 = made
+            dest, fname = _fi_dest(b2, str(mirror.get('Client', '') or ''))
+            dest['lines'].append(l2)
+            counts[fname] += 1
+            if product == 'vanilla':
+                dest['lines'].extend(
+                    _R()._vanilla_verification_lines(mirror, page_url, dest['pair']))
         # O header é por ARQUIVO: a LE é a do bucket e a variante é a do par
         # do primeiro deal que caiu nele (mesma perna nossa → mesmo header).
         headers = {fname: _R()._ter_file_header(_R()._TER_BUCKET_LE[d['bucket']], today,
