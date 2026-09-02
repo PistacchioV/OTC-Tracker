@@ -2208,15 +2208,6 @@ def _generic_ndf_ter_line(deal, is_fwd, page_url=None, participant_override=None
         dt = routes._parse_date_any(_s(v))
         return dt.strftime('%Y%m%d') if dt else ''
 
-    def _is_jpm(c):
-        return bool(re.search(r'J\.?P\.?\s*MORGAN', c.upper()))
-
-    def _is_mgt(c):
-        return 'MGT' in c.upper()
-
-    def _is_lawton(c):
-        return 'LAWTON' in c.upper()
-
     if str(deal.get('Status', '') or '').strip() == 'Canceled':
         return None                     # cancelado via API: fora dos arquivos
     client   = _s(deal.get('Client', ''))
@@ -2229,10 +2220,18 @@ def _generic_ndf_ter_line(deal, is_fwd, page_url=None, participant_override=None
     # fixing logo abaixo (asian_fix), para o arquivo não depender de um
     # rótulo que pode ter vindo do XLSX ou de uma edição manual.
 
-    # Entity bucket + participant / counterparty accounts
+    # Entity bucket + participant / counterparty accounts.
+    # O lado do CLIENTE vem do MESMO _ter_le_side que escolhe o par/variante
+    # do template — cadastro le-spn (razão social exata) antes da heurística
+    # de substring. Bucket e par têm de responder juntos: a razão social da
+    # MGT ('JPMORGAN CHASE BANK, N.A. - SAO PAULO BRANCH') casa no regex do
+    # JPM, e com o teste cru o deal BANCO x MGT caía na regra da perna
+    # espelhada do Lawton — o arquivo saía na visão LAWTON com o preview
+    # (que já usa o side) mostrando as contas certas.
+    cli_side = routes._ter_le_side(client)
     if 'LAWTON' in le:                        # LE Lawton: parte Lawton × banco JPM
         bucket, participant, cpty = 'LAWTON', '00041007', '73760009'
-    elif _is_jpm(client) and le != 'MGT':     # Lawton-side mirror leg
+    elif cli_side == 'JPM' and le != 'MGT':   # Lawton-side mirror leg
         # LE MGT contra o banco NÃO é a perna espelhada do Lawton: é o deal
         # intragrupo MGT x Banco, e cai no ramo do MGT abaixo (parte 04880006,
         # contraparte 73760009, par MGT x JPM). Sem o guarda, a linha saía no
@@ -2241,15 +2240,17 @@ def _generic_ndf_ter_line(deal, is_fwd, page_url=None, participant_override=None
     else:
         bucket = 'MGT' if le == 'MGT' else 'BANCO'
         participant = '04880006' if le == 'MGT' else '73760009'
-        if _is_lawton(client):
+        if cli_side == 'LAWTON':
             cpty = '00041007'
         elif le == 'MGT':
-            cpty = '73760009' if _is_jpm(client) else '04880109'
+            cpty = '73760009' if cli_side == 'JPM' else '04880109'
         else:
-            cpty = '04880006' if _is_mgt(client) else '73760102'
+            cpty = '04880006' if cli_side == 'MGT' else '73760102'
     if participant_override:
         participant = participant_override
-    taxid = '' if ('LAWTON' in le or _is_jpm(client) or _is_lawton(client) or _is_mgt(client)) \
+    # Perna intragrupo não leva CNPJ (ATACAMA fica de fora: nunca ficou em
+    # branco pela regra antiga, e mudar isso é outra decisão).
+    taxid = '' if ('LAWTON' in le or cli_side in ('JPM', 'MGT', 'LAWTON')) \
         else re.sub(r'[.\-\/]', '', _s(deal.get('TaxID', '')))
 
     last_fix_dt = routes._parse_date_any(_s(deal.get('LastFixingDate', '')))

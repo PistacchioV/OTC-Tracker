@@ -3054,3 +3054,75 @@ table.dataTable.table-bordered td {
   position: relative;
   z-index: 20;
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   16. EFEITOS REDUZIDOS — renderização por SOFTWARE (`html.sf-reduced`)
+   --------------------------------------------------------------------------
+   Quem liga a classe é o streamflow.js (WebGL por software, Firefox/Windows,
+   ou o override `__OTC_TRACKER_FX__` do localStorage). Nas máquinas do JPM o
+   navegador compõe por software ("WebRender (Software)" no about:support), e
+   aí o vidro muda de preço: os DOIS fundos animados com blur de viewport
+   inteira e os ~80 `backdrop-filter` que os reamostram recompositam a página
+   inteira, quadro a quadro, mesmo com ela parada — a tela fica lenta sem erro
+   nenhum. Este bloco fica no FIM do arquivo de propósito: mesma ordem de
+   carga, ele vence as regras de vidro de cima sem depender de especificidade.
+
+   O que o modo preserva: tokens, cores, sombras, tipografia e os gradientes
+   estáticos — o app continua vestido de StreamFlow. O que sai é só o que
+   custa por QUADRO: desfoque, fundos em deriva e o halo do cursor.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* Todo backdrop-filter do app morre de uma vez — os do streamflow, os do
+   visual-refresh e o liquid-glass do app.css. É o grosso do custo. */
+html.sf-reduced *,
+html.sf-reduced *::before,
+html.sf-reduced *::after {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* Sem o desfoque para "puxar luz" do fundo, o vidro fino fica invisível no
+   escuro e transparente demais no claro — os tokens sobem de opacidade. O
+   seletor claro leva o `:not` porque o `--sf-overlay-bg` original do §34 é
+   declarado em `:root:not([data-bs-theme=dark])` (0,2,0), e um
+   `html.sf-reduced` sozinho (0,1,1) perderia justamente no tema claro. */
+html.sf-reduced:not([data-bs-theme=dark]) {
+  --vr-card-bg: rgba(255, 255, 255, 0.88);
+  --sf-overlay-bg: #f4f8ff;
+}
+html.sf-reduced[data-bs-theme=dark] {
+  --vr-card-bg: rgba(255, 255, 255, 0.075);
+  --sf-overlay-bg: #0d1320;
+}
+
+/* Sobreposições cobrem CONTEÚDO (não o fundo da página): sem blur atrás,
+   qualquer alfa mostra a tabela nítida por baixo — vão sólidas. A regra
+   alcança também o `.modal-content.liquid-glass` da exceção do §34. */
+html.sf-reduced .modal-content,
+html.sf-reduced .modal-content.liquid-glass,
+html.sf-reduced .offcanvas,
+html.sf-reduced .toast,
+html.sf-reduced .swal2-popup {
+  background-color: var(--sf-overlay-bg) !important;
+}
+
+/* Os dois fundos de viewport inteira: os blobs param (os radial-gradient já
+   nascem suaves — sem blur continuam fundo, não mancha) e os beams SOMEM —
+   as faixas deles só viram luz com o blur(46px); sem ele são listras duras. */
+html.sf-reduced body::before {
+  animation: none;
+  filter: none;
+  will-change: auto;
+}
+html.sf-reduced .wrapper::before {
+  display: none;
+}
+
+/* O que pulsa/cintila em loop também invalida quadro a quadro. */
+html.sf-reduced .page-title-head { animation: none; }
+html.sf-reduced .page-title-head h4 { animation: none; background-position: 0 0; }
+html.sf-reduced .page-title-head .flex-grow-1::before {
+  animation: none;
+  box-shadow: 0 0 0 4px rgba(41, 197, 246, 0.25);
+}
+html.sf-reduced .content-page .card { animation: none; }

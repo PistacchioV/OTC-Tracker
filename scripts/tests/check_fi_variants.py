@@ -52,6 +52,20 @@ DEAL_MGT_JPM = dict(
     Publisher='PTAX', QuantityCurrency='USD', OtherQuantityCurrency='BRL',
     Notional='750000', IsBRRFixed='NO')
 
+# O simétrico: BANCO x MGT. A razão social da MGT casa no regex do JPM, e o
+# bucket decidido pelo _is_jpm cru mandava a linha para a visão LAWTON — com
+# o preview (que classifica pelo _ter_le_side/le-spn) mostrando as contas
+# certas. O bucket usa o MESMO side do par desde este fix.
+DEAL_JPM_MGT = dict(
+    Deal='FWDS-BCO-3', Client='JPMORGAN CHASE BANK, N.A. - SAO PAULO BRANCH',
+    LE='JPM',
+    Status='Success', Direction='BUY', TaxID='',
+    TradeDate='2026-08-05', SettlementDate='2026-12-14',
+    FirstFixingDate='', LastFixingDate='2026-12-10',
+    StrikeSetDate='2026-08-28', StrikeSetOffset='0.80',
+    Publisher='PTAX', QuantityCurrency='USD', OtherQuantityCurrency='BRL',
+    Notional='500000', IsBRRFixed='NO')
+
 DEAL_JPM_CLI = dict(
     Deal='FWDS-CLI-1', Client='ACME EXPORTADORA S.A.', LE='JPM',
     Status='Success', Direction='BUY', TaxID='12.345.678/0001-90',
@@ -141,6 +155,16 @@ def main():
         check('bucket: LE MGT × banco → MGT', bkt_mgt == 'MGT', repr(bkt_mgt))
         check('linha MGT × banco: parte 04880006',
               base_mgt[20:28] == '04880006', repr(base_mgt[20:28]))
+
+        # O simétrico BANCO x MGT fica no bucket do BANCO (parte 73760009,
+        # contraparte 04880006, par JPM x MGT) — o _is_jpm cru lia a razão
+        # social da MGT como banco e mandava a linha para a visão LAWTON.
+        bkt_bco, base_bco = _line(DEAL_JPM_MGT)
+        check('bucket: LE JPM × MGT → BANCO', bkt_bco == 'BANCO', repr(bkt_bco))
+        check('linha BANCO × MGT: parte 73760009',
+              base_bco[20:28] == '73760009', repr(base_bco[20:28]))
+        check('linha BANCO × MGT: contraparte 04880006',
+              base_bco[43:51] == '04880006', repr(base_bco[43:51]))
 
         old_dir = R._FILE_INTERPRETER_DIR
         R._FILE_INTERPRETER_DIR = tmp
