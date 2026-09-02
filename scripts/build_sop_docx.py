@@ -83,6 +83,12 @@ def shrink(path):
         if im.width > IMG_MAX_PX:
             alt = int(round(im.height * IMG_MAX_PX / float(im.width)))
             im = im.convert('RGB').resize((IMG_MAX_PX, alt), Image.LANCZOS)
+            # A cópia embutida é QUANTIZADA (256 cores + dither), como os PNGs
+            # do repositório: o convert('RGB') acima joga a paleta fora, e as
+            # capturas DARK em RGB comprimem tão mal que o Guia voltava aos
+            # 55 MB mesmo com os arquivos do repo otimizados.
+            im = im.quantize(256, method=Image.FASTOCTREE,
+                             dither=Image.FLOYDSTEINBERG)
             tmp = tempfile.NamedTemporaryFile(suffix='.png', delete=False)
             im.save(tmp.name, 'PNG', optimize=True)
             out = tmp.name
