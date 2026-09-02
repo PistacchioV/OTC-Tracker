@@ -16457,3 +16457,148 @@ Dois pedidos da mesa, os dois no par Overview × Track Docs:
   alto vai ANTES do clique que o abre. O Guia §9.3/§10 foi atualizado
   (Banking fora, chips no Track Docs, ordem nova do formulário, a trava do
   callback) e os dois `.docx` regerados pelo `build_sop_docx.py`.
+
+## §395 — o PDF do Settlement Advice vazava valores, e a largura passou a ser MEDIDA (2026-09-02)
+
+- O PDF anexo do aviso de liquidação (`Liquidação de Operação de Derivativo`,
+  `_ndf_settlement_pdf` do `otc_emails.py`) **vazava valores pela direita da
+  tabela**: as colunas eram `515/N` iguais e as células string crua — e o
+  reportlab **não quebra nem encolhe** string crua; o que não cabe atravessa a
+  borda. Com o aviso de commodities em 10 colunas, a coluna precisa de ~62pt e
+  a fatia dava 51,5.
+- A correção tem três peças, e a primeira sozinha NÃO bastou (o primeiro
+  patch ainda quebrava token no meio — "COBRE(LOCAD/Y)"): **medir** cada
+  coluna com `pdfmetrics.stringWidth` (a linha inteira E o maior token
+  inquebrável), **descer a fonte numa escada** (7.5 → 6.0 em passos de 0.25)
+  até os mínimos caberem, e **garantir o maior token de cada coluna** antes de
+  repartir a folga proporcionalmente. Célula virou `Paragraph`, que quebra
+  linha de verdade; o padding real caiu para 3pt/lado + 2pt de folga de
+  arredondamento de float.
+- O mapping `ndf-pdf-cpty` mudou de rótulo: **PDF (Settlement Advice)** (era
+  "Settlement PDF (NDF Advice)") — routes, mapping.html e os três JSONs de
+  tradução juntos.
+
+## §396 — Live Position NDF/Option: Edit do identificador, gravado no arquivo que a TELA mostra (2026-09-02)
+
+- As duas páginas ganharam coluna **Actions** (índice 2 — checkbox 0, Status
+  1) com UM botão (Edit, squircle padrão), e um único campo editável por
+  página: **Codigo Identificador** (NDF) e **Combinação de operações**
+  (Option) — registro `_LP_EDIT_SPECS` (chave: Contrato / Código IF), endpoint
+  compartilhado `_lp_edit(kind)` na vertical, motor `_lp_edit_identifier` no
+  routes. A edição alcança a liquidação de graça: NDF Summary e Other Products
+  leem o mesmo arquivo-dia.
+- **O POST manda o `source_date` que a tela exibiu, e a resolução é
+  `exact=True`.** As cinco telas de Live Position andam até dez dias úteis
+  para trás quando falta o arquivo do dia — sem o exact, editar num dia sem
+  arquivo gravaria no arquivo de OUTRO dia, sem erro nenhum. O JS guarda o
+  `source_date` do payload (`srcDate`) e é ELE que viaja, não o Reference
+  date.
+- Ciclo inteiro sob `_cache_lock` (ler → alterar → `_atomic_write_json`), e
+  **linha sem a coluna é recusada**, nunca criada: no payload posicional da
+  Option, inventar a chave deslocaria o bloco asiático inteiro. Auditoria em
+  `log.warning` (quem, quando, de → para).
+- No front, inserir a coluna no índice 2 mexe em SEIS deslocamentos por
+  página (export `idx > 2`, filtros `data-col i+3`, `slice(3)`, chips
+  `c.idx + 3`, `otcCellCopy skip [0, 2]`, `columnDefs targets [0, 2]`) e nas
+  65 regras de nth-child do template do NDF — índice esquecido é célula sob a
+  coluna errada, sem erro. Tooltip delegado no primeiro hover, como manda o
+  padrão de tabela.
+
+## §397 — leitura DB-ONLY com cura síncrona: o JSON virou só o meio de escrita (2026-09-02)
+
+- Pedido do usuário, na sequência da pergunta "a leitura está toda nos
+  bancos?": **as leituras servem SÓ dos DuckDB; as escritas seguem nos JSONs
+  por enquanto**. O que mudou de contrato: o `duck_read` não devolve mais
+  `None` quando o manifest não prova frescor — ele **converte NA HORA**
+  (`duck_mirror.convert_sync`: a tarefa entra na FILA da thread do espelho
+  com um `threading.Event` anexado e é esperada — serializa com o trabalho
+  assíncrono de graça, nunca dois escritores no mesmo banco) e relê.
+- `None` sobrou como canal de EMERGÊNCIA (→ o chamador serve o JSON): espelho
+  desligado (`OTC_DISABLE_SCHEDULERS`/`OTC_DISABLE_DUCK_MIRROR` — os testes,
+  que trocam caminhos), timeout da fila, conversão que falhou,
+  `expected_path` trocado (superfície de patch) e payload-OBJETO (as recons —
+  o banco não reconstrói objeto, e cura não é disparada). O **freio do share
+  virou só telemetria**: a leitura lenta AVISA no log (janela de 10 min);
+  não existe mais modo só-JSON — `check_duck_read.py` seção 5 foi reescrito
+  na mesma mudança, porque prendia o comportamento antigo.
+- Dois helpers públicos fecham os leitores de módulo: `day_records(path)` e
+  `dataset_rows(path)` (com `_db_day_records`/`_db_dataset_rows` no routes),
+  e ~20 leitores de arquivo-dia payload-lista foram religados neles (dash,
+  swap collectors, OTM, daily settlement, latam, ndfc, cognos, live
+  positions, subjacente, refdata direto por `refdata_rows()`). Leitores de
+  META/ponteiro (dicts) e o read-modify-write da escrita seguem no JSON **de
+  propósito**. O CLAUDE.md §4 (fase 3) foi reescrito no mesmo commit.
+
+## §398 — espelho MGT x Cliente nas três páginas de NDF, e o force_values que vence o Fixed (2026-09-01/02)
+
+- Pedido da mesa: no trade **MGT x Cliente**, o template MGT
+  (04880.00-6 x 73760.20-5) já está no File Interpreter, mas **não existe deal
+  com a visão oposta** para cadastrar template — o arquivo do BANCO precisa da
+  perna espelhada sintetizada: **73760.20-5 x 04880.00-6** (a parte é o
+  CLIENTE no omnibus do Banco), Papel invertido, CNPJ em branco. Nasceu no
+  Vanilla e foi estendido a FWD Start e Other Publisher — mesmo desenho do
+  espelho Lawton (`_nd_mgt_mirror`: LE=JPM, Client=MGT, TaxID='', Direction
+  invertida), com a conta do omnibus por `participant_override`
+  (`_TER_MGT_MIRROR_PARTICIPANT = '73760205'`), porque nenhuma combinação
+  LE × Client a produz. Linhas de verificação (tipo 2) só no Vanilla, o único
+  das três que as emite; contra JPM/Lawton/MGT não há espelho (a outra visão
+  já sai do lote ou do espelho Lawton).
+- **A armadilha que o teste pegou na primeira rodada**: nas duas páginas
+  novas o cadastro TEM variante `JPM x MGT` com o Participante **Fixed =
+  73760009**, e Fixed vence o valor do gerador — o override chegava à função
+  e a linha saía com a conta do Banco mesmo assim (no Vanilla passou porque
+  não há variante para o par). O MESMO arquivo do banco carrega deals reais
+  (73760009) e a linha espelhada (73760205): decisão por LINHA, que template
+  nenhum expressa. Daí o **`force_values` do `_fi_build_line`** — `{seq:
+  valor}` que vence Fixed e fórmula naquele campo, naquela linha — com a
+  MESMA precedência replicada nos três previews (senão o preview mostraria
+  uma conta e a B3 receberia outra).
+- **O preview do espelho é uma COLUNA, não uma segunda tabela** (pedido do
+  usuário, após a primeira versão): Field · Value · **Mirror (Bank file)**
+  na mesma tabela — os dois lados saem do mesmo bloco do cadastro, então as
+  linhas casam 1:1 pelo seq. Banner âmbar com as contas acima da tabela; as
+  células do espelho ficaram na cor padrão (o fundo âmbar por célula foi
+  vetado). No Other Publisher o merge é o parâmetro `mirror` opcional do
+  `_fieldsTable`; a visão Banco × Lawton (duas tabelas tituladas) ficou como
+  estava. Tradução nova: `nd-preview-col-mirror`.
+
+## §399 — Swap Characteristics: o #NULL! do export e o nome pela conta CETIP (2026-09-02)
+
+- O Excel exportado saía com `#NULL!` nos Contratos: é o texto de ERRO que a
+  planilha de origem da posição deixa no lugar da fórmula quebrada, e ele
+  atravessava coletor → tela → export. A correção veio em DUAS rodadas porque
+  a primeira comparava contra o conjunto exato (`#NULL!`, `#N/A`…) e o
+  arquivo real também traz as formas SOLTAS (`NULL` sem cerquilha nem
+  exclamação). `_swapchar_is_xl_error` usa o MESMO regex do saneamento do
+  export-advanced.js (`^#?(NULL!?|N/A|REF!|VALUE!|DIV/0!|NAME\?|NUM!)$` — só
+  o NULL tem pontuação opcional; `REF`/`NUM` secos são texto legítimo), para
+  as duas pontas nunca discordarem. Ele roda no `_swapchar_fmt_cell` (as três
+  telas de swap) E no laço do coletor ANTES dos ramos — Tipo, booleanos e
+  CPF/CNPJ não passam pelo fmt_cell.
+- **CNPJ em branco resolve o nome pela conta CETIP** (pedido do usuário): a
+  coluna Contraparte (índice 7) casa com o **B3 ACCOUNT** do Reference Data
+  (`_lp_account_names` → `_lp_cpty_by_account`), só dígitos dos dois lados
+  (§197), com duas exclusões de segurança — conta **omnibus** (CLIENT 1/2:
+  ali o titular não é o cliente) e conta **ambígua** (dois nomes para a mesma
+  conta saem do mapa). Branco visível é o lado seguro; nome errado invisível
+  não é. O cache é chaveado pela identidade do objeto do `_refdata_by_taxid`,
+  então segue o mtime-cache dele sem stat próprio.
+- **A parte operacional que confundiu o diagnóstico**: o dado da dev não tem
+  NULL nenhum, então a correção não se VÊ localmente — os "continua vindo"
+  eram a instância do time sem pull/restart e a aba antiga (reloader
+  desligado + o Export do DataTables re-exporta as linhas que a aba carregou
+  na memória: sem recarregar a página, o export é o dado velho com o servidor
+  novo).
+
+## §400 — Reference Data: cinto de segurança no X do diálogo de detalhes (2026-09-02)
+
+- Relato de X que não fechava o diálogo de vidro da contraparte
+  (CGD/Settlement Net Type/Banking Data/Contacts). **Não reproduziu** em seis
+  cenários (tema claro/escuro, os quatro quadros, reabertura) — foi entregue
+  endurecimento defensivo em vez de correção às cegas: listener nativo em
+  fase de CAPTURA no `[data-act="close"]` chamando `Swal.close()` (imune a um
+  stopPropagation de terceiro) e um failsafe de 400ms que remove o
+  `.swal2-container` órfão — checando a IDENTIDADE do popup
+  (`document.body.contains(popup)`) para não derrubar um diálogo recém-aberto
+  por cima. Se voltar a acontecer, o primeiro suspeito é aba/instância com
+  código anterior ao deploy.

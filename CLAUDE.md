@@ -1288,6 +1288,17 @@ de propósito: `_lp_cpty_name_by_taxid` é a resolução CRUA (`''` sem cadastro
 os consumidores usam, e `_lp_cpty_by_taxid` é a de EXIBIÇÃO, que cai para o
 número (HANDOFF §291).
 
+No **Swap Characteristics** há duas camadas a mais (HANDOFF §399): texto de
+ERRO de planilha no arquivo de origem (`#NULL!`, e as formas soltas `NULL`/
+`N/A`) vira **vazio** em toda coluna — o teste é `_swapchar_is_xl_error`, com o
+MESMO regex do saneamento do export-advanced.js, e roda no coletor ANTES dos
+ramos, porque o `_swapchar_fmt_cell` não alcança Tipo, booleanos e o CPF/CNPJ —
+e a linha SEM documento resolve o nome pela **conta CETIP da Contraparte**
+contra o B3 ACCOUNT do Reference Data (`_lp_cpty_by_account`), comparando só
+dígitos e recusando conta omnibus (CLIENT 1/2 — ali o titular não é o cliente)
+e conta ambígua (dois nomes para a mesma conta ficam de fora: branco visível é
+o lado seguro; nome errado invisível não é).
+
 ### O Holidays Calendar monta a lista de calendários do REGISTRO
 
 Os calendários vêm de `apps/static/data/holiday-calendars.json` (semeado por
@@ -2332,7 +2343,31 @@ Intrag ficavam com o valor cru sempre que o notional estava na moeda fraca
   visão invertida. O par é por **termos econômicos** (`_nd_lawton_sig`: trade
   date, settlement, notional), nunca por Deal ID — cada perna intragrupo tem o
   seu —, e uma perna Lawton explícita no lote consome UMA assinatura para o
-  espelho daquele trade não duplicar (HANDOFF §243).
+  espelho daquele trade não duplicar (HANDOFF §243). **O trade MGT x Cliente
+  tem o mesmo desenho** nas TRÊS páginas genéricas (Vanilla incluído): a mesa
+  booka contra a MGT (04880.00-6 x 73760.20-5, template cadastrado) e o
+  arquivo do BANCO leva a perna espelhada sintetizada (`_nd_mgt_mirror` —
+  73760.20-5 x 04880.00-6, Papel invertido, CNPJ em branco), com a conta do
+  omnibus entrando por `participant_override`/`force_values` porque nenhuma
+  combinação LE × Client a produz e a variante do cadastro fixa a outra
+  (HANDOFF §398). No preview de duplo clique o espelho é a TERCEIRA coluna da
+  mesma tabela, não uma segunda tabela.
+- **O Edit das Live Position NDF/Option escreve no arquivo que a TELA mostra.**
+  As duas páginas têm botão de editar UM campo (Codigo Identificador no NDF,
+  Combinação de operações na Option — `_LP_EDIT_SPECS`), e o POST manda o
+  `source_date` que a tela exibiu com `exact=True`: as telas andam até dez dias
+  úteis para trás quando falta arquivo, e sem o exact a edição de um dia sem
+  arquivo cairia no arquivo de OUTRO dia, sem erro nenhum. O ciclo inteiro
+  (ler → alterar → gravar) roda sob o `_cache_lock`, e linha sem a coluna é
+  RECUSADA — no payload posicional da Option, inventar a chave deslocaria o
+  bloco asiático inteiro (HANDOFF §396). Os summaries de liquidação leem o
+  mesmo arquivo-dia, então a correção alcança a liquidação sozinha.
+- **A tabela do PDF do Settlement Advice tem largura MEDIDA, não dividida.**
+  `515/N` estourava com 10 colunas: reportlab não quebra nem encolhe string
+  crua. `_ndf_settlement_pdf` mede cada coluna com `stringWidth` (linha cheia
+  E maior token), desce a fonte numa escada (7.5→6.0) até caber e garante o
+  maior token de cada coluna antes de repartir a folga — célula vira
+  `Paragraph`, que quebra linha de verdade (HANDOFF §395).
 - **Os textos da Parte A do FWD Start vivem no `routes.py` de propósito**
   (Banco J.P. Morgan S.A. / Filial Brasileira, resolvidos pela LE do grupo):
   a grafia é a do documento assinado, diferente da do Reference Data que o
@@ -2412,7 +2447,13 @@ Intrag ficavam com o valor cru sempre que o notional estava na moeda fraca
   Asiático em branco para VANILLA). E o page-spec é **relido a cada abertura
   do preview** (`fiLoadSpec`), então template editado vale no próximo duplo
   clique, sem refresh da página; fetch que falha mantém o spec em memória. Fórmula **vence o valor do
-  gerador** (e Fixed vence tudo); texto que não parseia continua documentação
+  gerador** (e Fixed vence tudo — com UMA exceção: o `force_values` do
+  `_fi_build_line`, `{seq: valor}` por LINHA, vence Fixed e fórmula naquele
+  campo. É o canal da perna espelhada do MGT x Cliente: o MESMO arquivo do
+  banco carrega deals reais com o Participante Fixed da variante JPM x MGT
+  (73760009) e a linha espelhada com o omnibus do cliente (73760205) — uma
+  decisão por linha, que template nenhum tem como expressar. Os três previews
+  replicam a precedência — HANDOFF §398); texto que não parseia continua documentação
   — é o que mantém todo cadastro existente byte a byte. Quem executa é
   `_fi_calc_value` (hook `deal=` do `_fi_build_line`) e o espelho do preview
   é `FiTer.calc` (com `FiTer.prime` carregando ANBIMA e os mappings do
