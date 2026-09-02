@@ -7714,6 +7714,8 @@ _ndf_publisher_fonte_info = _pf_nd._ndf_publisher_fonte_info
 _generic_ndf_ter_line = _pf_nd._generic_ndf_ter_line
 _nd_lawton_mirror = _pf_nd._nd_lawton_mirror
 _nd_lawton_sig = _pf_nd._nd_lawton_sig
+_nd_mgt_mirror = _pf_nd._nd_mgt_mirror
+_TER_MGT_MIRROR_PARTICIPANT = _pf_nd._TER_MGT_MIRROR_PARTICIPANT
 _ND_MAPPING_ERRORABLE = _pf_nd._ND_MAPPING_ERRORABLE
 _generic_nd_mapping_candidates = _pf_nd._generic_nd_mapping_candidates
 

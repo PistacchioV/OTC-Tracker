@@ -4223,7 +4223,12 @@ $(document).ready(function() {
         return val;
     }
 
-    function buildConectaFields(deal, bizDayCount) {
+    /* `opts.participant` troca o Lançamento do Participante (f[4]) depois da
+       resolução normal — é a perna espelhada do MGT x Cliente, cuja parte é o
+       cliente no omnibus do Banco (73760.20-5), conta que nenhuma combinação
+       LE × Client produz. Mesmo contrato do `participant_override` do
+       servidor (_generic_ndf_ter_line). */
+    function buildConectaFields(deal, bizDayCount, opts) {
         function _date(val) {
             val = _sh(val);
             if (!val) return '';
@@ -4325,7 +4330,7 @@ $(document).ready(function() {
         f[2]  = '0001';
         f[3]  = String(Math.floor(Math.random() * 9000000000) + 1000000000);
         // Lançamento do Participante — pela LE do deal (JPM → 73760009, MGT → 04880006)
-        f[4]  = le === 'MGT' ? '04880006' : '73760009';
+        f[4]  = (opts && opts.participant) || (le === 'MGT' ? '04880006' : '73760009');
         f[5]  = direction.toUpperCase() === 'BUY' ? '0' : '1';
         f[6]  = '';
         f[7]  = _cpty(client, le);
@@ -4385,6 +4390,28 @@ $(document).ready(function() {
                    : (valuesBySeq[seq] !== undefined ? valuesBySeq[seq] : ''));
             return { name: fd.field, value: value };
         });
+    }
+
+    /* ── Espelho MGT x Cliente ───────────────────────────────────────────────
+       A mesa booka contra a MGT (04880.00-6 x 73760.20-5, template do File
+       Interpreter já cadastrado) e o cliente senta no omnibus do BANCO: o
+       arquivo do banco leva a MESMA operação com as contas trocadas
+       (73760.20-5 x 04880.00-6) e o Papel invertido. Não há deal com essa
+       visão para cadastrar template — o espelho é sintetizado, aqui e no
+       gerador do servidor (_nd_mgt_mirror), e o preview mostra a segunda
+       linha para a conferência ver o que o arquivo do banco leva. */
+    function isMgtClientDeal(deal) {
+        if (_sh(deal.LE || '').toUpperCase() !== 'MGT') return false;
+        var c = _sh(deal.Client || '').toUpperCase();
+        return !(/J\.?P\.?\s*MORGAN/.test(c) || c.indexOf('LAWTON') !== -1 || c.indexOf('MGT') !== -1);
+    }
+    function mgtMirrorDeal(deal) {
+        var m = Object.assign({}, deal);
+        m.LE = 'JPM';
+        m.Client = 'MGT';
+        m.TaxID = '';
+        m.Direction = _sh(deal.Direction || '').toUpperCase() === 'BUY' ? 'SELL' : 'BUY';
+        return m;
     }
 
     /* Apply [data-lang] translations inside a given container element */
@@ -4475,6 +4502,37 @@ $(document).ready(function() {
                 '</tr></thead>' +
                 '<tbody>' + rows + '</tbody>' +
                 '</table></div>';
+
+            // Segunda linha do MGT x Cliente: a visão do arquivo do BANCO
+            // (73760.20-5 x 04880.00-6, Papel invertido), a mesma que o Send
+            // Conecta/Download sintetiza.
+            if (isMgtClientDeal(deal)) {
+                var mirror = mgtMirrorDeal(deal);
+                var mFields = buildConectaFields(mirror, bizDayCount, { participant: '73760205' });
+                var mRows = mFields.map(function(f, i) {
+                    var bg = i % 2 === 0 ? '#f8f9fa' : '#ffffff';
+                    return '<tr style="background:' + bg + '">' +
+                        '<td style="padding:3px 8px;white-space:nowrap;font-weight:500;color:#495057;border:none;font-size:0.82em">' +
+                            (i + 1) + '. ' + f.name +
+                        '</td>' +
+                        '<td style="padding:3px 8px;font-family:monospace;font-size:0.82em;border:none;word-break:break-all">' +
+                            (String(f.value).trim() !== '' ? f.value : '<span style="color:#aaa">&mdash;</span>') +
+                        '</td>' +
+                    '</tr>';
+                }).join('');
+                tableHtml +=
+                    '<div style="margin-top:14px;padding:7px 10px;background:#fff7e6;border:1px solid #f0dcb4;border-radius:4px;font-size:0.81em;line-height:1.6">' +
+                    '&#128257;&nbsp;<b><span data-lang="nd-preview-mgt-mirror">Bank file mirror (MGT x Client)</span></b>' +
+                    ' &mdash; <span style="font-family:monospace">73760.20-5 x 04880.00-6</span></div>' +
+                    '<div style="overflow-y:auto;max-height:40vh;border:1px solid #dee2e6;border-radius:4px;margin-top:6px">' +
+                    '<table style="width:100%;border-collapse:collapse;font-size:0.85em">' +
+                    '<thead><tr style="background:#343a40;color:#fff;position:sticky;top:0">' +
+                    '<th style="padding:5px 8px;text-align:left;font-weight:600"><span data-lang="nd-preview-col-field">Field</span></th>' +
+                    '<th style="padding:5px 8px;text-align:left;font-weight:600"><span data-lang="nd-preview-col-value">Value</span></th>' +
+                    '</tr></thead>' +
+                    '<tbody>' + mRows + '</tbody>' +
+                    '</table></div>';
+            }
 
             if (fixingRows && fixingRows.length > 0) {
                 var fxRows = fixingRows.map(function(r, i) {

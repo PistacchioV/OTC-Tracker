@@ -2177,13 +2177,18 @@ def _ndf_publisher_fonte_info(publisher):
     fi = str(_ndf_publisher_row(publisher).get('FONTE INFO', '') or '').strip() or '1'
     return fi.rjust(4)
 
-def _generic_ndf_ter_line(deal, is_fwd, page_url=None):
+def _generic_ndf_ter_line(deal, is_fwd, page_url=None, participant_override=None):
     """Linha tipo 1 (Dados Fixos) do TER de um deal FWD Start / Other
     Publisher. Devolve (bucket, linha) — bucket BANCO / LAWTON / MGT — ou
     None para deal cancelado. Os valores continuam calculados aqui, na
     largura exata de sempre; a ordem dos campos e os literais Fixed saem do
     cadastro (page_url decide os overrides de cada página). Template/bloco
-    ausente levanta ValueError."""
+    ausente levanta ValueError.
+
+    `participant_override` troca a conta do Lançamento do Participante
+    (campo 5) depois da resolução normal — é o que a perna espelhada do
+    MGT x Cliente usa: no arquivo do BANCO a parte é o CLIENTE no omnibus
+    (73760.20-5), uma conta que nenhuma combinação LE × Client produz."""
     from apps.pages import routes
     def _s(v):
         return re.sub(r'<[^>]+>', '', str(v or '')).strip()
@@ -2243,6 +2248,8 @@ def _generic_ndf_ter_line(deal, is_fwd, page_url=None):
             cpty = '73760009' if _is_jpm(client) else '04880109'
         else:
             cpty = '04880006' if _is_mgt(client) else '73760102'
+    if participant_override:
+        participant = participant_override
     taxid = '' if ('LAWTON' in le or _is_jpm(client) or _is_lawton(client) or _is_mgt(client)) \
         else re.sub(r'[.\-\/]', '', _s(deal.get('TaxID', '')))
 
@@ -2398,6 +2405,34 @@ def _nd_lawton_mirror(deal):
     m = dict(deal)
     m['LE'] = 'LAWTON'
     m['Client'] = 'BANCO J.P. MORGAN S.A.'
+    d = str(deal.get('Direction', '') or '').strip().upper()
+    m['Direction'] = 'SELL' if d == 'BUY' else 'BUY'
+    return m
+
+
+# A conta do CLIENTE no omnibus do Banco — a "parte" da perna espelhada do
+# trade MGT x Cliente no arquivo do BANCO (73760.20-5, só dígitos, como as
+# demais contas deste gerador).
+_TER_MGT_MIRROR_PARTICIPANT = '73760205'
+
+
+def _nd_mgt_mirror(deal):
+    """A perna do trade MGT x Cliente vista do arquivo do BANCO: a mesa booka
+    contra a MGT (04880.00-6 x 73760.20-5, template já cadastrado no File
+    Interpreter) e o cliente senta no omnibus do Banco — o arquivo do banco
+    leva a MESMA operação com as contas trocadas (73760.20-5 x 04880.00-6) e o
+    Papel invertido, porque quem compra de um lado vende do outro. Não existe
+    deal com essa visão para cadastrar template: o espelho é sintetizado no
+    envio, como o do Lawton. LE = JPM + Client = MGT levam a
+    `_generic_ndf_ter_line` ao ramo BANCO x MGT (cpty 04880006, CNPJ em branco
+    como toda perna intragrupo); a conta da parte vem por
+    `participant_override`, porque nenhuma combinação LE × Client produz a
+    conta do omnibus. Datas, taxa, notional, publisher e Código Identificador
+    são do trade e ficam iguais."""
+    m = dict(deal)
+    m['LE'] = 'JPM'
+    m['Client'] = 'MGT'
+    m['TaxID'] = ''
     d = str(deal.get('Direction', '') or '').strip().upper()
     m['Direction'] = 'SELL' if d == 'BUY' else 'BUY'
     return m
