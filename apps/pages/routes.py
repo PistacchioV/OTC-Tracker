@@ -3616,6 +3616,53 @@ def _lp_cpty_by_taxid(v):
     return _lp_cpty_name_by_taxid(v) or _lp_fmt_cnpj(v)
 
 
+_LP_ACCOUNT_NAME_CACHE = {'src': None, 'map': None}
+
+
+def _lp_account_names():
+    """{conta CETIP só dígitos → nome da contraparte}, do 'B3 ACCOUNT' do
+    RefData — o plano B da coluna de CPF/CNPJ da contraparte quando a POSIÇÃO
+    vem sem documento (pedido de 2026-09-02, Swap Characteristics): a conta
+    direta de terceiro identifica o cliente.
+
+    Duas exclusões seguram o lado perigoso do índice:
+    - conta GUARDA-CHUVA (`_b3_is_omnibus`) fica de fora: o cadastro inteiro
+      aponta para ela, e resolver por conta ali poria o titular do omnibus —
+      ou um cliente qualquer — no lugar do cliente da linha;
+    - conta que aparece com MAIS DE UM nome no RefData também sai: o primeiro
+      da lista seria o cliente errado sem erro nenhum. Vazio visível (fica em
+      branco) é o lado seguro; nome errado invisível não é.
+    Comparação por DÍGITOS dos dois lados (§197): o RefData guarda
+    '29407.00-0' e a posição da B3 '29407000'. O gatilho de reconstrução é o
+    mesmo do `_lp_taxid_names` — a troca de objeto do `_refdata_by_taxid()`,
+    que já é cacheado por mtime e memoizado por request."""
+    base = _refdata_by_taxid()
+    if _LP_ACCOUNT_NAME_CACHE['src'] is not base:
+        m, ambiguas = {}, set()
+        for rec in _refdata_records():
+            acc = ''.join(ch for ch in str(rec.get('B3 ACCOUNT', '') or '') if ch.isdigit())
+            nome = str(rec.get('COUNTERPARTY', '') or '').strip()
+            if not acc or not nome or acc in ambiguas:
+                continue
+            if _b3_is_omnibus(acc):
+                continue
+            atual = m.get(acc)
+            if atual is None:
+                m[acc] = nome
+            elif atual != nome:
+                del m[acc]
+                ambiguas.add(acc)
+        _LP_ACCOUNT_NAME_CACHE['src'] = base
+        _LP_ACCOUNT_NAME_CACHE['map'] = m
+    return _LP_ACCOUNT_NAME_CACHE['map']
+
+
+def _lp_cpty_by_account(v):
+    """Nome da contraparte pela conta CETIP, ou '' sem cadastro/ambígua."""
+    d = ''.join(ch for ch in str(v or '') if ch.isdigit())
+    return _lp_account_names().get(d, '') if d else ''
+
+
 def _lp_bool_ptbr(raw):
     """Flag de swap → texto. Cadastro `swap-code-labels`, campo `Sim/Não`
     (00 → Sim, 01 → Não — sim, nessa ordem, é a especificação). Valor fora do
@@ -3690,6 +3737,14 @@ def _swapchar_sinal_text(v):
 
 
 def _swapchar_fmt_cell(value, ctype):
+    # Texto de ERRO do Excel ('#NULL!', '#N/A', '#REF!', …) vira VAZIO: é o
+    # que a planilha deixa no lugar da fórmula quebrada no arquivo de origem
+    # da posição, e re-exportado ele se lê como a exportação quebrada — a
+    # mesma regra do export-advanced.js e do Pending Confirmation
+    # (_XL_ERROR_TEXT). Vale para as três telas de swap, que formatam tudo
+    # por aqui.
+    if isinstance(value, str) and value.strip().upper() in _XL_ERROR_TEXT:
+        return ''
     if value in (None, ''):
         return ''
     if ctype == 'date':
@@ -3806,6 +3861,12 @@ def _swapchar_collect(ref, exact=False):
         disp = []
         for i in _SWAPCHAR_DISPLAY_IDX:
             raw = (vals[i] if i < len(vals) else '') if full else sparse.get(i, '')
+            # Texto de erro do Excel no arquivo de origem ('#NULL!', '#N/A'…)
+            # é VAZIO em qualquer coluna — aqui, antes dos ramos, para o Tipo,
+            # os booleanos e o CPF/CNPJ não deixarem o erro passar (o
+            # _swapchar_fmt_cell cobre só o ramo dele).
+            if isinstance(raw, str) and raw.strip().upper() in _XL_ERROR_TEXT:
+                raw = ''
             if i == 0:                      # Tipo de Contrato: 02 → Bullet, 01 → Cashflow
                 rv = str(raw or '').strip()
                 if rv.endswith('.0'):
@@ -3817,7 +3878,16 @@ def _swapchar_collect(ref, exact=False):
             elif _SWAPCHAR_LABELS[i] in _SWAPCHAR_BOOL_COLS:
                 disp.append(_lp_bool_ptbr(raw))
             elif _SWAPCHAR_LABELS[i] in _SWAPCHAR_CPTY_NAME_COLS:
-                disp.append(_lp_cpty_by_taxid(raw))
+                # Posição SEM documento (a célula vem em branco): resolve pela
+                # CONTA CETIP da Contraparte (índice 7) contra o B3 ACCOUNT do
+                # RefData — a conta direta de terceiro identifica o cliente
+                # (pedido de 2026-09-02). Documento presente segue a regra de
+                # sempre: nome pelo CNPJ, ou o número mascarado sem cadastro.
+                nome = _lp_cpty_by_taxid(raw)
+                if not nome:
+                    conta = (vals[7] if (full and 7 < len(vals)) else sparse.get(7, ''))
+                    nome = _lp_cpty_by_account(conta)
+                disp.append(nome)
             else:
                 disp.append(_swapchar_fmt_cell(raw, _SWAPCHAR_TYPES[i]))
         rows_out.append(disp)
