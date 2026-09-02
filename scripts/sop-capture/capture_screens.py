@@ -49,13 +49,29 @@ SIDENAV = os.path.join(ROOT, 'apps/templates/partials/sidenav.html')
 OUT = os.environ.get('SOP_OUT_DIR') or os.path.join(ROOT, 'docs/sop-screenshots')
 os.makedirs(OUT, exist_ok=True)
 
-# endpoints de dados a mockar (o mockgen decide o formato: tabela/cards/dashboard)
+# endpoints de dados a mockar (o mockgen decide o formato: tabela/cards/dashboard).
+# O mockgen fabrica linhas a partir das COLUNAS da resposta real, então um
+# endpoint preso à data que devolve rows vazias (a dev sem o arquivo do dia)
+# ainda rende uma tela populada — é por isso que a lista cobre também as
+# páginas de swap e os settlement advices.
 DATA_EPS = [
     '/api/live-position-ndf/data', '/api/live-position-option/data',
     '/api/live-position-swap-characteristics/data', '/api/otm-settlements/data',
     '/api/ndf-cockpit/data', '/api/cognos/data', '/api/operations-b3/data',
     '/api/other-products-summary/data', '/api/dashboard-stats', '/api/ndf-summary/cards',
+    '/api/live-position-swap-cashflow/data', '/api/live-position-swap-premium/data',
+    '/api/ndf-other-publisher/data',
+    '/api/other-products-ndf-settlement-advice/data',
+    '/api/other-products-option-settlement-advice/data',
+    '/api/other-products-swap-athena/data', '/api/other-products-swap-events/data',
+    '/api/other-products-swap-kapital-hybrids/data',
+    '/api/other-products-swap-settlement-advice/data',
+    '/api/other-products-swap-vcp/data',
 ]
+
+# Tema das capturas (o guia é DARK desde o StreamFlow). O config.js lê a chave
+# do localStorage no load e escreve o data-bs-theme — não há parâmetro de URL.
+THEME = os.environ.get('SOP_THEME', 'dark')
 
 
 def find_chrome():
@@ -127,6 +143,18 @@ def main():
             launch['executable_path'] = chrome
         b = p.chromium.launch(**launch)
         ctx = b.new_context(viewport={'width': 1600, 'height': 1000}, device_scale_factor=2)
+        # O tema não tem parâmetro de URL: o config.js lê esta chave no load.
+        # Semeada ANTES de navegar, toda página já abre no tema pedido. O
+        # objeto vai COMPLETO de propósito: o isInvalidConfig do config.js
+        # descarta config sem skin/layout/sidenav como estruturalmente
+        # inválida — um seed parcial cai no default CLARO em silêncio.
+        ctx.add_init_script(
+            "localStorage.setItem('__OTCTRACKER_CONFIG__', JSON.stringify("
+            "{skin: 'default', monochrome: false, theme: '%s',"
+            " layout: {position: 'fixed', dir: 'ltr'},"
+            " topbar: {color: '%s'}, menu: {color: '%s'},"
+            " sidenav: {size: 'default', user: false}}));"
+            % (THEME, THEME, THEME))
         ctx.route('**/api/**', handle_api)
         pg = ctx.new_page()
         pg.set_default_timeout(18000)
@@ -139,7 +167,16 @@ def main():
                 pg.wait_for_timeout(2200)
                 code = resp.status if resp else 0
                 if code == 200:
-                    pg.screenshot(path=os.path.join(OUT, name + '.png'), full_page=True)
+                    # NUNCA full_page=True: o rodapé é FIXO e o compositor o
+                    # carimba no meio do conteúdo (HANDOFF §394). O certo é
+                    # medir o documento, esticar o viewport até lá (com teto)
+                    # e fotografar a janela.
+                    h = pg.evaluate('document.body.scrollHeight') or 1000
+                    h = max(1000, min(int(h), 2600))
+                    pg.set_viewport_size({'width': 1600, 'height': h})
+                    pg.wait_for_timeout(600)
+                    pg.screenshot(path=os.path.join(OUT, name + '.png'))
+                    pg.set_viewport_size({'width': 1600, 'height': 1000})
                     ok.append((route, code))
                     print('OK  ', code, name)
                 else:

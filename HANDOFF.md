@@ -16602,3 +16602,41 @@ Dois pedidos da mesa, os dois no par Overview × Track Docs:
   (`document.body.contains(popup)`) para não derrubar um diálogo recém-aberto
   por cima. Se voltar a acontecer, o primeiro suspeito é aba/instância com
   código anterior ao deploy.
+
+## §401 — o Guia inteiro recapturado no DARK do StreamFlow (2026-09-02)
+
+- Pedido do usuário: substituir as capturas do Guia pelas do layout novo em
+  modo escuro. **63 das 67 imagens** foram refeitas (as quatro de 01/09 —
+  Onboarding ×3 e Monitor — já eram novas e ficaram); o walker é o
+  `scripts/sop-capture/capture_screens.py` de sempre, modernizado, e as onze
+  ESPECIAIS (login, topbar com o menu aberto, menu lateral, os cinco
+  `padrao-*`, ticket-create, users-profile) saíram de um script de sessão.
+  Quatro armadilhas novas ficaram no ferramental:
+  - **o seed do tema vai COMPLETO**: o `isInvalidConfig` do config.js descarta
+    config sem `skin`/`layout`/`sidenav` como estruturalmente inválida, e um
+    seed só com `{theme:'dark'}` cai no default CLARO em silêncio — a primeira
+    rodada inteira saiu clara por isso;
+  - **o menu lateral do StreamFlow é um DRAWER**: quem o abre é o
+    `.vr-menu-btn` (classe `vr-nav-open` no body); o `.sidenav-toggle-button`
+    do tema comprado existe e está oculto — o clique nele espera visibilidade
+    para sempre;
+  - o walker trocou `full_page=True` pela medida do documento + viewport
+    esticado (a armadilha do rodapé fixo do §394), e o `DATA_EPS` dobrou: o
+    mockgen fabrica linhas a partir das COLUNAS da resposta real, então os
+    endpoints presos à data (a dev parou em 24/07) rendem tela populada com
+    dado fictício;
+  - **PNG dark comprime MAL**: a rodada crua deu 278 MB. Os 63 PNGs foram
+    quantizados (1920 px, 256 cores + dither — sem banding visível), e o
+    `shrink` do `build_sop_docx.py` passou a quantizar também a CÓPIA
+    embutida: o `convert('RGB')` dele jogava a paleta fora e o Guia .docx
+    saía com 55 MB mesmo com os arquivos do repo pequenos (hoje: 10,5 MB o
+    Guia, 5,9 o SOP).
+- **O §4.9 do Guia estava DESATUALIZADO**, não só a imagem: dizia que a edição
+  acontece "na própria linha, não numa janela separada", e o app inteiro
+  migrou para MODAL no visual novo (Pending Confirmation `ar-edit` →
+  `Edit Record`, New Deals `addRowModal`, Mapping, Reference Data, Index B3).
+  O texto foi reescrito e a captura é o modal do Pending Confirmation.
+- O `padrao-export-menu` foi capturado no **Vanilla** de propósito: o menu
+  Export das Live Position NDF/Option só tem Copy · CSV · Excel · Advanced —
+  sem Print e PDF, um bug de consistência do padrão (§2 do CLAUDE.md) que
+  ficou ANOTADO e não corrigido nesta rodada.

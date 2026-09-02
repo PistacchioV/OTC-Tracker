@@ -300,14 +300,16 @@ Funciona em **toda** tabela do sistema, sem botão nenhum:
 
 ### 4.9. Editar uma linha
 
-![Uma linha em modo de edição](docs/sop-screenshots/padrao-linha-edicao.png)
+![A janela de edição de uma linha](docs/sop-screenshots/padrao-linha-edicao.png)
 
-Nas telas que permitem edição, ela acontece **na própria linha**, não numa janela separada:
+Nas telas que permitem edição, o botão da linha abre a **janela de edição**, já preenchida com os valores daquela linha:
 
 1. Clique no botão **Edit** (o quadrado azul-claro com o lápis) da linha.
-2. As células viram campos de digitação. Os campos derivados pelo sistema — o *Aging*, por exemplo — continuam bloqueados de propósito.
+2. A janela abre com os campos da linha. Os campos derivados pelo sistema — o *Aging* e o *Status*, por exemplo — aparecem bloqueados de propósito: quem os calcula é o sistema.
 3. Altere o que precisa. **Tab** anda para o campo seguinte.
-4. Clique em **Save** (o quadrado verde com o disquete) para gravar, ou em **Cancel** (o quadrado cinza com o ×) para desistir.
+4. Clique em **Save** (o botão verde com o disquete) para gravar, ou no **×** para desistir sem alterar nada.
+
+> Em algumas telas a edição é ainda mais direta: nas Live Positions de NDF e Option, por exemplo, o lápis abre uma janelinha com o **único** campo editável da linha (o Codigo Identificador / a Combinação de operações).
 
 ### 4.10. Os botões de ação da linha
 
