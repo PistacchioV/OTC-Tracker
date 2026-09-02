@@ -114,6 +114,33 @@ def api_lpndf_data():
                     'ref_date_fmt': ref.strftime('%d/%m/%Y')})
     return jsonify(payload)
 
+def _lp_edit(kind):
+    """Corpo comum do Edit das duas telas: valida o pedido e delega ao
+    `_lp_edit_identifier` do routes (que grava no arquivo-dia pelo funil)."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    body = request.get_json(silent=True) or {}
+    ds = str(body.get('date') or '').strip()[:10]
+    try:
+        ref = datetime.strptime(ds, '%Y-%m-%d')
+    except ValueError:
+        return jsonify({'success': False, 'error': 'invalid_date'}), 400
+    key = str(body.get('key') or '').strip()
+    value = str(body.get('value') or '').strip()
+    if not key:
+        return jsonify({'success': False, 'error': 'missing_key'}), 400
+    # Identificador vazio é RECUSADO: é ele que casa a posição com o OTM na
+    # liquidação, e limpá-lo faria a linha sumir do batimento sem erro nenhum.
+    if not value:
+        return jsonify({'success': False, 'error': 'missing_value'}), 400
+    payload, status = _R()._lp_edit_identifier(kind, ref, key, value,
+                                               sid=session.get('user_sid', ''))
+    return jsonify(payload), status
+
+@blueprint.route('/api/live-position-ndf/edit', methods=['POST'])
+def api_lpndf_edit():
+    return _lp_edit('ndf')
+
 @blueprint.route('/live-position-option')
 def live_position_option():
     if not session.get('authenticated'):
@@ -140,3 +167,7 @@ def api_lpopt_data():
     payload.update({'success': True, 'ref_date': ref.strftime('%Y-%m-%d'),
                     'ref_date_fmt': ref.strftime('%d/%m/%Y')})
     return jsonify(payload)
+
+@blueprint.route('/api/live-position-option/edit', methods=['POST'])
+def api_lpopt_edit():
+    return _lp_edit('option')

@@ -8009,6 +8009,91 @@ def _lpopt_collect(ref, exact=False):
             'source_date': _b3_dref_to_iso(_src_dref)}
 
 
+# ── Live Position › edição do identificador ──────────────────────────────────
+#  O botão Edit das duas telas (NDF e Option) edita UM campo: o Codigo
+#  Identificador (NDF) / a Combinação de operações (Option). A gravação vai no
+#  ARQUIVO-DIA da posição — a mesma fonte que o NDF Summary, o Other Products e
+#  os dois Settlement Advices leem —, então a correção alcança a liquidação
+#  inteira sem um segundo cadastro. E vai pelo funil `_atomic_write_json`, que
+#  é atômico e avisa o espelho DuckDB (fase 2 da migração): o banco do produto
+#  reconverte sozinho.
+_LP_EDIT_SPECS = {
+    # key_col identifica a LINHA (é a chave que os consumidores usam:
+    # `by_contract` no aviso de termo, `by_codigo_if` no de opção); edit_col é
+    # o ÚNICO campo editável.
+    'ndf':    {'key_col': 'Contrato',  'edit_col': 'Codigo Identificador'},
+    'option': {'key_col': 'Código IF', 'edit_col': 'Combinação de operações'},
+}
+
+
+def _lp_resolve_key(keys, name):
+    """Nome de coluna → chave real do arquivo (a MESMA regra dos coletores:
+    igualdade cega a acento/caixa primeiro, header-superconjunto depois)."""
+    n = _fcst_norm(name)
+    low = [(k, _fcst_norm(k)) for k in keys]
+    for k, kn in low:
+        if kn == n:
+            return k
+    cands = [(k, kn) for k, kn in low if kn and n in kn]
+    if cands:
+        return min(cands, key=lambda t: len(t[1]))[0]
+    return None
+
+
+def _lp_edit_identifier(kind, ref, key_value, new_value, sid=''):
+    """Edita o identificador das linhas com aquela chave no arquivo-dia.
+
+    `exact=True` de propósito: a tela manda o `source_date` do payload que está
+    exibindo, e a edição tem de cair NAQUELE arquivo — com a busca para trás,
+    um dia sem posição gravaria em silêncio no arquivo de outro dia.
+    Devolve (payload, status HTTP)."""
+    spec = _LP_EDIT_SPECS.get(kind)
+    if spec is None:
+        return {'success': False, 'error': 'unknown_kind'}, 400
+    if kind == 'ndf':
+        path, dref = _ndf_ter_path(ref, exact=True)
+    else:
+        path, dref = _opt_dposicao_path(ref, exact=True)
+    if not path:
+        return {'success': False, 'error': 'file_not_found'}, 404
+
+    def _norm(v):
+        return str(v or '').strip().upper()
+
+    # Ciclo inteiro (ler → alterar → gravar) sob o _cache_lock — a escrita
+    # atômica sozinha evita corrupção, não perda de atualização (§4).
+    with _cache_lock:
+        try:
+            with open(path, encoding='utf-8') as fh:
+                data = json.load(fh) or []
+        except Exception:
+            return {'success': False, 'error': 'read_failed'}, 500
+        keys, _seen = [], set()
+        for rec in data:
+            for k in rec.keys():
+                if k not in _seen:
+                    _seen.add(k); keys.append(k)
+        kcol = _lp_resolve_key(keys, spec['key_col'])
+        ecol = _lp_resolve_key(keys, spec['edit_col'])
+        # Coluna ausente é RECUSA, nunca criação: um campo novo apendado no
+        # registro entraria na união de chaves e deslocaria o bloco POSICIONAL
+        # das médias asiáticas, que é resolvido por índice.
+        if not kcol or not ecol:
+            return {'success': False, 'error': 'column_not_found'}, 404
+        matched = [rec for rec in data if _norm(rec.get(kcol)) == _norm(key_value)]
+        if not matched:
+            return {'success': False, 'error': 'row_not_found'}, 404
+        old = str(matched[0].get(ecol, '') or '')
+        for rec in matched:
+            rec[ecol] = new_value
+        _atomic_write_json(path, data)
+    log.warning('[live-position] %s: %s %r -> %r (%s=%s, %d linha(s), por %s)',
+                kind, spec['edit_col'], old, new_value, spec['key_col'],
+                key_value, len(matched), sid or '?')
+    return {'success': True, 'updated': len(matched), 'old': old,
+            'source_date': _b3_dref_to_iso(dref)}, 200
+
+
 # ── Daily Settlement › NDF › Summary ─────────────────────────────────────────
 #  Page modelled on Other Products Summary: header cards from the latest
 #  DPOSICAO-TER position JSON + two tables now auto-populated per reference date

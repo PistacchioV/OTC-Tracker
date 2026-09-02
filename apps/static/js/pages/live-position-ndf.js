@@ -1,7 +1,10 @@
 /**
  * Live Position › NDF  (model: Live Position Swap Characteristics)
- * Read-only view of the NDF book from the DPOSICAO-TER position file (columns
- * come from the server, including the dynamic "Média Asiática" date block).
+ * View of the NDF book from the DPOSICAO-TER position file (columns come from
+ * the server, including the dynamic "Média Asiática" date block). One field is
+ * editable — the Codigo Identificador, via the Actions column — and the edit
+ * lands on the position day-file itself, so every settlement consumer
+ * (NDF Summary, Settlement Advice) picks it up.
  * Widgets: Vanilla / Other Publisher / T+0 (NDF Summary classification, no
  * maturity filter) + Commodities (Classe do Ativo Subjacente = Commodities) +
  * Total (live-position row count). Smart filter + per-column
@@ -10,10 +13,10 @@
 (function () {
   'use strict';
 
-  // ':gt(1)' NÃO serve aqui: o thead tem duas linhas (títulos + filtros), o jQuery
-  // enumera 2×N <th> e os das colunas 0/1 da segunda linha caem em posição > 1,
-  // devolvendo checkbox e Actions para a exportação. Índice de COLUNA, então.
-  function exportFromData(idx) { return idx > 1; }
+  // ':gt(2)' NÃO serve aqui: o thead tem duas linhas (títulos + filtros), o jQuery
+  // enumera 2×N <th> e os das colunas 0/1/2 da segunda linha caem em posição > 2,
+  // devolvendo checkbox, Status e Actions para a exportação. Índice de COLUNA, então.
+  function exportFromData(idx) { return idx > 2; }
 
   // dd/mm/yyyy chronological sort — DataTables orders strings by default, so date
   // columns were sorted as text (by day). This type detector makes any date column
@@ -31,6 +34,11 @@
   }
 
   var API = '/api/live-position-ndf/data';
+  var EDIT_API = '/api/live-position-ndf/edit';
+  // O único campo editável da tela, e a chave que identifica a linha no
+  // arquivo-dia — os MESMOS nomes de _LPNDF_COLUMNS, que o servidor manda.
+  var EDIT_COL = 'Codigo Identificador';
+  var KEY_COL = 'Contrato';
   var page = document.getElementById('live-position-ndf-page');
   if (!page) return;
 
@@ -38,18 +46,32 @@
   var COLS = [];               // [{label, idx}]
   var activeField = null;      // smart-filter: column chosen, awaiting a value
   var chips = [];              // [{idx, value}]
+  var curDate = null;          // data pedida no load (para recarregar após editar)
+  var srcDate = null;          // source_date do payload — o ARQUIVO exibido, alvo do edit
 
   var LANG = (localStorage.getItem('language') || 'en').toLowerCase();
   var _TRANS = {
     en: { filterPh: 'Filter by column…', valuePh: 'Type value for "{f}" + Enter', status: 'In Custody',
           srcNote: 'No file for the selected date — showing the position of {src}',
-          srcNone: 'No position file in the last 10 business days' },
+          srcNone: 'No position file in the last 10 business days',
+          editTitle: 'Edit Código Identificador', editKey: 'Contrato: {k}',
+          editEmpty: 'The identifier cannot be empty', editSave: 'Save', editCancel: 'Cancel',
+          editSaved: 'Identifier updated', editFail: 'Update failed',
+          editNoFile: 'No position file loaded — nothing to edit' },
     br: { filterPh: 'Filtrar por coluna…', valuePh: 'Digite o valor para "{f}" + Enter', status: 'Em Custódia',
           srcNote: 'Sem arquivo para a data escolhida — exibindo a posição de {src}',
-          srcNone: 'Sem arquivo de posição nos últimos 10 dias úteis' },
+          srcNone: 'Sem arquivo de posição nos últimos 10 dias úteis',
+          editTitle: 'Editar Código Identificador', editKey: 'Contrato: {k}',
+          editEmpty: 'O identificador não pode ficar vazio', editSave: 'Salvar', editCancel: 'Cancelar',
+          editSaved: 'Identificador atualizado', editFail: 'Falha ao salvar',
+          editNoFile: 'Sem arquivo de posição carregado — nada a editar' },
     es: { filterPh: 'Filtrar por columna…', valuePh: 'Escriba el valor para "{f}" + Enter', status: 'En Custodia',
           srcNote: 'Sin archivo para la fecha elegida — mostrando la posición de {src}',
-          srcNone: 'Sin archivo de posición en los últimos 10 días hábiles' },
+          srcNone: 'Sin archivo de posición en los últimos 10 días hábiles',
+          editTitle: 'Editar Código Identificador', editKey: 'Contrato: {k}',
+          editEmpty: 'El identificador no puede quedar vacío', editSave: 'Guardar', editCancel: 'Cancelar',
+          editSaved: 'Identificador actualizado', editFail: 'Error al guardar',
+          editNoFile: 'Sin archivo de posición cargado — nada que editar' },
   };
   function t(k) { return (_TRANS[LANG] || _TRANS.en)[k] || _TRANS.en[k]; }
   function esc(s) {
@@ -86,10 +108,12 @@
   }
 
   function load(dateStr) {
+    curDate = dateStr || null;
     fetch(API + (dateStr ? ('?date=' + encodeURIComponent(dateStr)) : ''), { credentials: 'same-origin' })
       .then(function (r) { return r.json(); })
       .then(function (d) {
         if (!d || !d.success) return;
+        srcDate = d.source_date || null;
         var w = d.widgets || {};
         setVal('ln-w-vanilla', w.vanilla || 0); setVal('ln-w-other', w.other_publisher || 0);
         setVal('ln-w-t0', w.t0 || 0); setVal('ln-w-commodities', w.commodities || 0);
@@ -102,32 +126,46 @@
 
   function buildTable(columns, rows) {
     COLS = columns.map(function (label, i) { return { label: label, idx: i }; });
+    var keyIdx = columns.indexOf(KEY_COL);
+    var idIdx = columns.indexOf(EDIT_COL);
 
     var titleRow =
       '<tr id="lnndf-head">' +
       '<th class="text-center" style="min-width:38px"><input type="checkbox" id="lnCheckAll" class="form-check-input"></th>' +
       '<th data-lang="ln-status">Status</th>' +
+      '<th data-lang="ln-actions">Actions</th>' +
       columns.map(function (c) { return '<th>' + esc(c) + '</th>'; }).join('') + '</tr>';
     var filterRow =
       '<tr class="ln-th-filter">' +
-      '<th></th><th></th>' +
+      '<th></th><th></th><th></th>' +
       columns.map(function (c, i) {
         return '<th><input type="text" class="form-control form-control-sm ln-col-filter" data-col="' +
-          (i + 2) + '" placeholder="' + esc(c) + '" autocomplete="off"></th>';
+          (i + 3) + '" placeholder="' + esc(c) + '" autocomplete="off"></th>';
       }).join('') + '</tr>';
     document.querySelector('#lnndf-table thead').innerHTML = titleRow + filterRow;
 
     var statusBadge = '<span class="badge bg-secondary-subtle text-secondary">' + esc(t('status')) + '</span>';
+    // Botão Edit no squircle padrão (spec .ops-row-act) — edita SÓ o Codigo
+    // Identificador. Linha sem Contrato não tem chave para endereçar o edit.
+    function actionCell(r) {
+      var key = keyIdx >= 0 ? String(r[keyIdx] || '').trim() : '';
+      if (!key) return '<span class="text-muted">—</span>';
+      var cur = idIdx >= 0 ? String(r[idIdx] || '').trim() : '';
+      return '<div class="d-flex justify-content-center gap-1">' +
+        '<button type="button" class="btn btn-info btn-sm btn-act ln-edit-btn"' +
+        ' data-bs-toggle="tooltip" data-bs-placement="auto" data-bs-title="Edit" data-bs-custom-class="tooltip-info"' +
+        ' data-key="' + esc(key) + '" data-id="' + esc(cur) + '"><i class="ti ti-edit"></i></button></div>';
+    }
     var data = rows.map(function (r) {
-      return ['<input type="checkbox" class="form-check-input ln-row-check">', statusBadge]
+      return ['<input type="checkbox" class="form-check-input ln-row-check">', statusBadge, actionCell(r)]
         .concat(r.map(function (v) { return esc(v); }));
     });
 
     if (dt) { dt.destroy(); }
     dt = jQuery('#lnndf-table').DataTable({
       data: data,
-      columns: [{}, {}].concat(columns.map(function () { return {}; })),
-      columnDefs: [{ orderable: false, className: 'text-center', targets: 0 }],
+      columns: [{}, {}, {}].concat(columns.map(function () { return {}; })),
+      columnDefs: [{ orderable: false, className: 'text-center', targets: [0, 2] }],
       scrollX: false, autoWidth: false, orderCellsTop: true, deferRender: true,
       pageLength: 50, lengthMenu: [[25, 50, 100, 200, -1], [25, 50, 100, 200, 'All']], order: [],
       dom: "<'row'<'col-sm-12'tr>><'d-md-flex justify-content-between align-items-center mt-2'ip>",
@@ -154,7 +192,8 @@
     if (expWrap) { expWrap.innerHTML = ''; dt.buttons().container().appendTo(expWrap); }
 
     // Selecao de celula + Ctrl+C — padrao New Deals; opt-in via table-std.js
-    if (window.otcCellCopy) { window.otcCellCopy('#lnndf-table', { skip: [0] }); }
+    // (skip = checkbox e Actions)
+    if (window.otcCellCopy) { window.otcCellCopy('#lnndf-table', { skip: [0, 2] }); }
     // Item Advanced do menu Export — opt-in como o otcCellCopy: onde o
     // export-advanced.js não estiver carregado, é um no-op.
     if (window.otcExportAdvanced) window.otcExportAdvanced('#lnndf-table', { daily: '/api/live-position-ndf/data' });
@@ -183,10 +222,10 @@
   function buildColumnsToggle() {
     var wrap = document.querySelector('.columnToggleWrapper');
     if (!wrap) return;
-    var items = dt.columns().header().toArray().slice(2).map(function (th, index) {
+    var items = dt.columns().header().toArray().slice(3).map(function (th, index) {
       var label = th.textContent.trim();
       return '<li class="px-3 py-1"><div class="form-check">' +
-        '<input class="form-check-input toggle-vis" type="checkbox" data-column="' + (index + 2) + '" id="lnCol' + index + '" checked>' +
+        '<input class="form-check-input toggle-vis" type="checkbox" data-column="' + (index + 3) + '" id="lnCol' + index + '" checked>' +
         '<label class="form-check-label fw-medium" for="lnCol' + index + '">' + esc(label) + '</label>' +
         '</div></li>';
     }).join('');
@@ -209,7 +248,7 @@
     document.querySelectorAll('#lnndf-table .ln-col-filter').forEach(function (inp) {
       if (inp.value) dt.column(+inp.getAttribute('data-col')).search(inp.value);
     });
-    chips.forEach(function (c) { dt.column(c.idx + 2).search(c.value); });
+    chips.forEach(function (c) { dt.column(c.idx + 3).search(c.value); });
     dt.draw();
   }
 
@@ -289,6 +328,54 @@
     if (window.applyTranslations) { try { window.applyTranslations(); } catch (e) {} }
   }
 
+  // ── Edit do Codigo Identificador ───────────────────────────────────────────
+  // Delegado no NÓ da tabela (os <td> são reescritos a cada redraw — um laço no
+  // load pegaria só a primeira página); o tooltip inicializa no primeiro hover
+  // pela mesma razão. Grava no arquivo-dia exibido (srcDate) e recarrega.
+  function openEdit(key, current) {
+    if (!window.Swal) return;
+    if (!srcDate) { Swal.fire({ icon: 'warning', title: t('editNoFile') }); return; }
+    Swal.fire({
+      title: t('editTitle'),
+      html: '<div class="text-muted mb-1" style="font-size:.85rem">' + esc(t('editKey').replace('{k}', key)) + '</div>',
+      input: 'text', inputValue: current,
+      showCancelButton: true,
+      confirmButtonText: t('editSave'), cancelButtonText: t('editCancel'),
+      inputValidator: function (v) { if (!String(v || '').trim()) return t('editEmpty'); },
+    }).then(function (res) {
+      if (!res.isConfirmed) return;
+      fetch(EDIT_API, {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date: srcDate, key: key, value: String(res.value || '').trim() }),
+      })
+        .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+        .then(function (x) {
+          if (!x.ok || !x.d || !x.d.success) {
+            Swal.fire({ icon: 'error', title: t('editFail'), text: (x.d && x.d.error) || '' });
+            return;
+          }
+          Swal.fire({ icon: 'success', title: t('editSaved'), timer: 1400, showConfirmButton: false });
+          load(curDate);
+        })
+        .catch(function () { Swal.fire({ icon: 'error', title: t('editFail') }); });
+    });
+  }
+
+  function wireEdit() {
+    jQuery('#lnndf-table')
+      .off('click.lnedit').on('click.lnedit', '.ln-edit-btn', function () {
+        var tip = window.bootstrap && bootstrap.Tooltip && bootstrap.Tooltip.getInstance(this);
+        if (tip) tip.hide();
+        openEdit(this.getAttribute('data-key') || '', this.getAttribute('data-id') || '');
+      })
+      .off('mouseenter.lntip').on('mouseenter.lntip', '.btn-act[data-bs-toggle="tooltip"]', function () {
+        if (window.bootstrap && bootstrap.Tooltip && !bootstrap.Tooltip.getInstance(this)) {
+          new bootstrap.Tooltip(this).show();
+        }
+      });
+  }
+
   function wireDatePicker(attempt) {
     var inp = document.getElementById('ln-date');
     if (!inp) return;
@@ -325,6 +412,7 @@
     wireSmartFilter();
     wirePageLen();
     wireDatePicker();
+    wireEdit();
     load(page.getAttribute('data-ref-date'));
   });
 })();
