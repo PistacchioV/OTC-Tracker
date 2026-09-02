@@ -889,9 +889,68 @@ def _ndf_settlement_pdf(ref_date, headers, data_rows, summary_pairs,
     # de invadirem a coluna vizinha.
     head_cell = ParagraphStyle('thead', fontName='Helvetica-Bold', fontSize=6.5,
                                leading=8.5, textColor=colors.white, alignment=1)
-    tbl = Table([[Paragraph(str(h).upper(), head_cell) for h in headers]] +
-                [[str(c) for c in r] for r in data_rows],
-                colWidths=[515.0 / len(headers)] * len(headers), repeatRows=1)
+    # Larguras MEDIDAS pelo conteúdo, nunca 515/N: com as dez colunas do aviso
+    # de commodities a fatia igual dá ~51pt e um "(R$ 7.839.678,93)" precisa de
+    # ~62pt — e o reportlab não quebra nem encolhe string crua, então o valor
+    # desenhava por fora da borda direita da tabela.
+    from xml.sax.saxutils import escape as _xesc
+    from reportlab.pdfbase.pdfmetrics import stringWidth
+    # 3pt de padding de cada lado (declarado na TableStyle — os 6pt default
+    # custavam 120pt só de respiro nas dez colunas do aviso de commodities),
+    # mais 2pt de folga: a largura útil do Paragraph é colWidth − padding, e
+    # empatada NO EXATO com o token o arredondamento de float quebra um ID no
+    # meio.
+    TOTAL, PAD = 515.0, 8.0
+    body_rows = [[str(c) for c in r] for r in data_rows]
+    body_font = 7.5
+
+    def _measure(font_size):
+        """Por coluna: (largura da célula inteira numa linha, largura do maior
+        token indivisível) — o cabeçalho (Paragraph) quebra linha, então só a
+        palavra mais longa dele entra no mínimo."""
+        full, mins = [], []
+        for ci, h in enumerate(headers):
+            head_w = max((stringWidth(w, 'Helvetica-Bold', 6.5)
+                          for w in str(h).upper().split()), default=0.0)
+            cells = [r[ci] for r in body_rows if ci < len(r)]
+            cell_w = max((stringWidth(c, 'Helvetica', font_size)
+                          for c in cells), default=0.0)
+            tok_w = max((stringWidth(t, 'Helvetica', font_size)
+                         for c in cells for t in c.split()), default=0.0)
+            full.append(max(head_w, cell_w) + PAD)
+            mins.append(max(head_w, tok_w) + PAD)
+        return full, mins
+
+    # Encolhe a fonte (até o piso de 6pt) atrás do layout em que toda célula
+    # cabe numa linha só; sem esse laço a coluna sai um fio mais estreita que o
+    # conteúdo e o Paragraph quebra um ID ou uma data NO MEIO do token.
+    for f in (7.5, 7.25, 7.0, 6.75, 6.5, 6.25, 6.0):  # piso: 6pt ainda se lê
+        body_font = f
+        full, mins = _measure(f)
+        if sum(full) <= TOTAL:
+            break
+    if sum(full) <= TOTAL:
+        # sobra distribuída proporcionalmente; nada quebra linha
+        col_widths = [w * TOTAL / sum(full) for w in full]
+    elif sum(mins) <= TOTAL:
+        # não coube nem no piso: cada coluna garante o maior token (quebra só
+        # em espaço) e a folga vai para quem mais precisa
+        slack = TOTAL - sum(mins)
+        need = [max(f - m, 0.0) for f, m in zip(full, mins)]
+        col_widths = [m + (slack * n / sum(need) if sum(need) else 0.0)
+                      for m, n in zip(mins, need)]
+    else:
+        # último recurso: escala tudo — pode quebrar token, mas dentro da tabela
+        col_widths = [m * TOTAL / sum(mins) for m in mins]
+
+    # Corpo também como Paragraph: no caso extremo em que nem a fonte no piso
+    # cabe, a célula quebra linha DENTRO da coluna em vez de vazar da tabela.
+    cell_style = ParagraphStyle('tcell', fontName='Helvetica',
+                                fontSize=body_font, leading=body_font + 2.0,
+                                textColor=INK, alignment=1)
+    tbl = Table([[Paragraph(_xesc(str(h).upper()), head_cell) for h in headers]] +
+                [[Paragraph(_xesc(c), cell_style) for c in r] for r in body_rows],
+                colWidths=col_widths, repeatRows=1)
     zebra_cmds = [('BACKGROUND', (0, i), (-1, i), ZEBRA)
                   for i in range(2, len(data_rows) + 1, 2)]
     tbl.setStyle(TableStyle([
@@ -903,6 +962,8 @@ def _ndf_settlement_pdf(ref_date, headers, data_rows, summary_pairs,
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
         ('TOPPADDING', (0, 0), (-1, -1), 6),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ('LEFTPADDING', (0, 0), (-1, -1), 3),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 3),
         ('BOX', (0, 0), (-1, -1), 0.5, HAIR),
         ('LINEBELOW', (0, 0), (-1, -2), 0.5, colors.HexColor('#edeef1')),
     ] + zebra_cmds))

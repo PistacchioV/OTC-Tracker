@@ -9828,7 +9828,7 @@ _MAPPING_DEFS = {
     # volta para a lista histórica quando o arquivo não existe (instância que
     # ainda não abriu a tela) ou está ilegível — ver `_ndf_pdf_set`.
     'ndf-pdf-cpty': {
-        'label': 'Settlement PDF (NDF Advice)',
+        'label': 'PDF (Settlement Advice)',
         'columns': [
             {'key': 'COUNTERPARTY', 'label': 'Counterparty (RefData name)'},
             {'key': 'NOTES', 'label': 'Notes'},
