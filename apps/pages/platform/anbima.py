@@ -63,8 +63,8 @@ def _load_anbima():
         return
     try:
         path = data_path('anbima.json')
-        with open(path, 'r', encoding='utf-8') as fh:
-            data = json.load(fh)
+        from apps.pages import duck_read
+        data = duck_read.dataset_rows(path)
         _ANBIMA_HOLIDAYS = {d['date'] for d in data}
     except Exception as exc:
         log.warning('[ANBIMA] Failed to load anbima.json: %s', exc)
@@ -140,9 +140,10 @@ def _anbima_holidays():
         # `data_dir()` do app), e os testes o trocam LÁ (`R._B3_DATA_DIR = tmp`).
         from apps.pages import routes
         try:
-            with open(os.path.join(routes._B3_DATA_DIR, 'anbima.json'), encoding='utf-8') as fh:
-                _anbima_hols_cache = {(x.get('date') if isinstance(x, dict) else x)
-                                      for x in json.load(fh)}
+            from apps.pages import duck_read
+            _anbima_hols_cache = {(x.get('date') if isinstance(x, dict) else x)
+                                  for x in duck_read.dataset_rows(
+                                      os.path.join(routes._B3_DATA_DIR, 'anbima.json'))}
         except (IOError, json.JSONDecodeError):
             _anbima_hols_cache = set()
     return _anbima_hols_cache

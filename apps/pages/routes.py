@@ -1782,6 +1782,28 @@ def _type_from_product(product):
     return 'NDF'
 
 
+# ── Leitura DB-only (2026-09-02) ─────────────────────────────────────────────
+# Os leitores de payload-LISTA deste arquivo não abrem mais o JSON: passam por
+# estes dois helpers, que servem do BANCO do espelho (curando-o na hora quando
+# frio/defasado — ver duck_read) e só caem no JSON na EMERGÊNCIA (espelho
+# desligado nos testes, payload que o banco não reconstrói, conversão que
+# falhou). As exceções de arquivo continuam as de open/json.load, então cada
+# chamador mantém o `except` de sempre. Os leitores de META/ponteiro (dicts)
+# seguem no JSON de propósito: o banco não reconstrói objeto.
+
+def _db_day_records(path):
+    """Arquivo-dia payload-lista pela leitura DB-only (duck_read.day_records)."""
+    from apps.pages import duck_read
+    return duck_read.day_records(path)
+
+
+def _db_dataset_rows(path):
+    """O gêmeo do _db_day_records para JSON de DATASET (Subjacente, mappings
+    avulsos — o que não é arquivo-dia nem RefData/CPD)."""
+    from apps.pages import duck_read
+    return duck_read.dataset_rows(path)
+
+
 def _dash_file_deals(fp, fname, mtime, size, fdate, product, deal_type):
     """Os deals de UM arquivo-dia, já projetados, filtrados e anotados.
 
@@ -1795,8 +1817,7 @@ def _dash_file_deals(fp, fname, mtime, size, fdate, product, deal_type):
     if item and item[0] == mtime and item[1] == size:
         return item[2]
     try:
-        with open(fp, 'r', encoding='utf-8') as fh:
-            data = json.load(fh)
+        data = _db_day_records(fp)
     except Exception:                                       # noqa: BLE001
         return []
     saida = []
@@ -2284,8 +2305,7 @@ def api_dashboard_live_position():
             sources.append(st)
             continue
         try:
-            with open(path, 'r', encoding='utf-8') as fh:
-                rows = json.load(fh)
+            rows = _db_day_records(path)
         except Exception:
             sources.append(st)
             continue
@@ -3173,8 +3193,7 @@ def _swap_pos_latest_records(max_back=15):
                             '73760_{}_DPOSICAO-SWAP.json'.format(dref))
         if os.path.isfile(path):
             try:
-                with open(path, 'r', encoding='utf-8') as fh:
-                    return json.load(fh), ref.strftime('%Y-%m-%d')
+                return _db_day_records(path), ref.strftime('%Y-%m-%d')
             except Exception:
                 log.error('[accrual] failed reading %s:\n%s', path, traceback.format_exc())
                 return [], None
@@ -3755,8 +3774,7 @@ def _swapchar_collect(ref, exact=False):
                         "anteriores); page shows 0", ref.strftime('%y%m%d'))
         return empty
     try:
-        with open(path, encoding='utf-8') as fh:
-            src = json.load(fh)
+        src = _db_day_records(path)
     except Exception:
         return empty
     if not src:
@@ -3850,8 +3868,7 @@ def _swap_simple_collect(ref, file_tpl, labels, display_idx, types, exact=False)
                         "page shows 0", file_tpl.format(ref.strftime('%y%m%d')))
         return empty
     try:
-        with open(path, encoding='utf-8') as fh:
-            src = json.load(fh)
+        src = _db_day_records(path)
     except Exception:
         return empty
     if not src:
@@ -3906,8 +3923,7 @@ def _swapprem_collect(ref, exact=False):
                         "úteis anteriores); page shows 0", ref.strftime('%y%m%d'))
         return empty
     try:
-        with open(path, encoding='utf-8') as fh:
-            src = json.load(fh)
+        src = _db_day_records(path)
     except Exception:
         return empty
     if not src:
@@ -3992,8 +4008,7 @@ def _otm_load_cached(ref):
     if not os.path.isfile(jp):
         return jp, None
     try:
-        with open(jp, encoding='utf-8') as fh:
-            data = json.load(fh) or []
+        data = _db_day_records(jp) or []
     except Exception:
         return jp, None
     _otm_ensure_meta(data)
@@ -4184,8 +4199,7 @@ def _otm_collect(ref):
     rows_out = []
     if os.path.isfile(jp):
         try:
-            with open(jp, encoding='utf-8') as fh:
-                data = json.load(fh) or []
+            data = _db_day_records(jp) or []
         except Exception:
             data = []
         if _otm_ensure_meta(data) and data:              # legacy JSON w/o meta → migrate once
@@ -4266,8 +4280,7 @@ def _ds_display_collect(ref, json_key, columns=None, value_cols=None):
     rows_out, cols = [], list(columns) if columns else []
     if os.path.isfile(jp):
         try:
-            with open(jp, encoding='utf-8') as fh:
-                data = json.load(fh) or []
+            data = _db_day_records(jp) or []
         except Exception:
             data = []
         if data:
@@ -4743,8 +4756,7 @@ def _subjacente_map():
         return {}
     if _SUBJ_CACHE['mtime'] != mt:
         try:
-            with open(path, encoding='utf-8') as fh:
-                data = json.load(fh) or []
+            data = _db_dataset_rows(path) or []
         except Exception:
             data = []
         m = {}
@@ -5955,8 +5967,7 @@ def _swaphyb_kap_to_cetip():
     path = data_path('mapping_swap-hyb.json')
     out = {}
     try:
-        with open(path, encoding='utf-8') as fh:
-            for rec in json.load(fh) or []:
+        for rec in _db_dataset_rows(path) or []:
                 k = str(rec.get('hybrids_id', '') or '').strip()
                 if k:
                     out[k] = str(rec.get('b3_id', '') or '').strip()
@@ -5974,8 +5985,7 @@ def _swaphyb_collect(ref):
     rows_out = []
     if os.path.isfile(jp):
         try:
-            with open(jp, encoding='utf-8') as fh:
-                data = json.load(fh) or []
+            data = _db_day_records(jp) or []
         except Exception:
             data = []
         cet = _swaphyb_kap_to_cetip()
@@ -6055,8 +6065,7 @@ def _vcp_events_map(ref):
     if not os.path.isfile(jp):
         return out
     try:
-        with open(jp, encoding='utf-8') as fh:
-            data = json.load(fh) or []
+        data = _db_day_records(jp) or []
     except Exception:
         return out
     if not data:
@@ -6330,8 +6339,7 @@ def _latam_load_cached(ref):
     if not os.path.isfile(jp):
         return jp, None
     try:
-        with open(jp, encoding='utf-8') as fh:
-            data = json.load(fh) or []
+        data = _db_day_records(jp) or []
     except Exception:
         return jp, None
     _latam_ensure_meta(data)
@@ -6643,8 +6651,7 @@ def _latam_collect(ref):
     rows_out = []
     if os.path.isfile(jp):
         try:
-            with open(jp, encoding='utf-8') as fh:
-                data = json.load(fh) or []
+            data = _db_day_records(jp) or []
         except Exception:
             data = []
         if _latam_ensure_meta(data) and data:              # JSON legado sem meta → migra uma vez
@@ -6780,8 +6787,7 @@ def _ndfc_load(ref):
     if not os.path.isfile(jp):
         return jp, None
     try:
-        with open(jp, encoding='utf-8') as fh:
-            data = json.load(fh) or []
+        data = _db_day_records(jp) or []
     except Exception:
         return jp, None
     _ndfc_ensure_meta(data)
@@ -6939,8 +6945,7 @@ def _ndfc_b3_maps(ref):
         path, _ = _ndf_ter_path(_prev_anbima_bizday(ref))
         if not path:
             return ident_map, pub_map, contr_map
-        with open(path, encoding='utf-8') as fh:
-            data = json.load(fh) or []
+        data = _db_day_records(path) or []
         if not data:
             return ident_map, pub_map, contr_map
         keys, _seen = [], set()
@@ -7080,8 +7085,7 @@ def _ndfc_collect(ref):
     rows_out = []
     if os.path.isfile(jp):
         try:
-            with open(jp, encoding='utf-8') as fh:
-                data = json.load(fh) or []
+            data = _db_day_records(jp) or []
         except Exception:
             data = []
         if _ndfc_ensure_meta(data) and data:          # legacy JSON w/o meta → migrate once
@@ -7467,8 +7471,7 @@ def _cog_load(ref):
     if not os.path.isfile(jp):
         return jp, None
     try:
-        with open(jp, encoding='utf-8') as fh:
-            data = json.load(fh) or []
+        data = _db_day_records(jp) or []
     except Exception:
         return jp, None
     _cog_ensure_meta(data)
@@ -7727,8 +7730,7 @@ def _lpndf_collect(ref, exact=False):
     rows_out = []
     if path:
         try:
-            with open(path, encoding='utf-8') as fh:
-                data = json.load(fh) or []
+            data = _db_day_records(path) or []
         except Exception:
             data = []
         if data:
@@ -7917,8 +7919,7 @@ def _lpopt_collect(ref, exact=False):
     rows_out = []
     if path:
         try:
-            with open(path, encoding='utf-8') as fh:
-                data = json.load(fh) or []
+            data = _db_day_records(path) or []
         except Exception:
             data = []
         if data:
@@ -8119,8 +8120,11 @@ def _ndfsum_refdata_spn():
     (recon join rule: first record per name wins)."""
     out = {}
     try:
-        with open(os.path.join(_B3_DATA_DIR, 'RefData.json'), encoding='utf-8') as fh:
-            data = json.load(fh) or []
+        from apps.pages import duck_read
+        data = duck_read.refdata_rows()
+        if data is None:
+            with open(os.path.join(_B3_DATA_DIR, 'RefData.json'), encoding='utf-8') as fh:
+                data = json.load(fh) or []
     except (IOError, json.JSONDecodeError):
         data = []
     for rec in (data if isinstance(data, list) else []):
@@ -8228,8 +8232,7 @@ def _ndfsum_fx_map(ref):
     if not path:
         return out
     try:
-        with open(path, encoding='utf-8') as fh:
-            data = json.load(fh) or []
+        data = _db_day_records(path) or []
     except Exception:
         return out
     if not data:
@@ -9099,8 +9102,11 @@ def _fxo_refdata_by_spn():
     """SPN (leading-zeros stripped) → RefData record, for client/taxid/acronym lookup."""
     out = {}
     try:
-        with open(os.path.join(_B3_DATA_DIR, 'RefData.json'), encoding='utf-8') as fh:
-            data = json.load(fh)
+        from apps.pages import duck_read
+        data = duck_read.refdata_rows()
+        if data is None:
+            with open(os.path.join(_B3_DATA_DIR, 'RefData.json'), encoding='utf-8') as fh:
+                data = json.load(fh)
         for rec in (data if isinstance(data, list) else []):
             key = _norm_spn(rec.get('SPN', ''))
             if key:
@@ -11061,8 +11067,7 @@ _anbima_add_biz = _pf_anbima._anbima_add_biz
 def _load_subjacente_lookup():
     try:
         fp = data_path('Subjacente.json')
-        with open(fp, 'r', encoding='utf-8') as fh:
-            rows = json.load(fh)
+        rows = _db_dataset_rows(fp)
         result = {}
         for row in rows:
             code = (row.get('Codigo do Ativo Subjacente') or '').strip().upper()

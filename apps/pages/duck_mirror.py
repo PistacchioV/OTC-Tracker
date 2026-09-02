@@ -72,6 +72,33 @@ def _out_dir(data_dir):
     return os.path.join(data_dir, 'db')
 
 
+def _classify(file_path):
+    """Caminho → tarefa do espelho `(kind, raiz, rel)`, ou None para o que não
+    tem banco. É a triagem que o `notify_write` sempre fez, extraída para o
+    `convert_sync` classificar IGUAL — duas triagens divergindo fariam a cura
+    síncrona converter num banco e o espelho noutro."""
+    raiz = _data_root()
+    rel = os.path.relpath(os.path.normpath(str(file_path)), raiz)
+    if rel.startswith('..'):
+        return None
+    rel = rel.replace(os.sep, '/')
+    tarefa = _TOP_LEVEL_TASKS.get(rel)
+    if tarefa:
+        return (tarefa, raiz, None)
+    if not rel.endswith('.json') or os.path.basename(rel).startswith('_'):
+        return None
+    if rel.startswith('cache/'):
+        return ('daily', raiz, rel)
+    if rel.split('/', 1)[0] not in ('db', 'duckdb'):
+        # Qualquer OUTRO JSON do DATA_DIR é um dataset (mappings, cadastros
+        # B3, templates, configs) — a cobertura total. Arquivo de
+        # CALENDÁRIO também cai aqui pelo gancho genérico, e é o motor
+        # (`_dataset_rel_target`, na thread) que o reconhece pelo registro
+        # e o devolve como `ignored`: o dele é o `notify_holidays`.
+        return ('datasets', raiz, rel)
+    return None
+
+
 def notify_write(file_path):
     """O gancho dos funis de escrita: classifica o caminho e enfileira.
 
@@ -82,28 +109,43 @@ def notify_write(file_path):
     try:
         if not _enabled():
             return
-        raiz = _data_root()
-        rel = os.path.relpath(os.path.normpath(str(file_path)), raiz)
-        if rel.startswith('..'):
-            return
-        rel = rel.replace(os.sep, '/')
-        tarefa = _TOP_LEVEL_TASKS.get(rel)
+        tarefa = _classify(file_path)
         if tarefa:
-            _put((tarefa, raiz, None))
-        elif not rel.endswith('.json') or os.path.basename(rel).startswith('_'):
-            return
-        elif rel.startswith('cache/'):
-            _put(('daily', raiz, rel))
-        elif rel.split('/', 1)[0] not in ('db', 'duckdb'):
-            # Qualquer OUTRO JSON do DATA_DIR é um dataset (mappings, cadastros
-            # B3, templates, configs) — a cobertura total. Arquivo de
-            # CALENDÁRIO também cai aqui pelo gancho genérico, e é o motor
-            # (`_dataset_rel_target`, na thread) que o reconhece pelo registro
-            # e o devolve como `ignored`: o dele é o `notify_holidays`.
-            _put(('datasets', raiz, rel))
+            _put(tarefa)
     except Exception:                                       # noqa: BLE001
         # O espelho nunca derruba a gravação que o avisou.
         pass
+
+
+def convert_sync(file_path, timeout=30.0, kind=None):
+    """Converte AGORA o JSON dado e espera terminar — a CURA da leitura
+    DB-only (duck_read) que achou o banco frio ou defasado.
+
+    A conversão roda na MESMA thread do espelho (a tarefa entra na fila com um
+    Event anexado): serializa com o trabalho assíncrono de graça, então nunca
+    há dois escritores no mesmo banco. Devolve True quando AQUELA tarefa
+    terminou (o manifest então reflete o JSON, salvo erro de conversão — que o
+    chamador detecta ao reler o manifest); False com o espelho DESLIGADO
+    (`OTC_DISABLE_DUCK_MIRROR`/`OTC_DISABLE_SCHEDULERS` — os testes, que leem
+    o JSON com caminhos trocados) ou no timeout (fila atolada num share lento:
+    o chamador cai no JSON desta vez e a tarefa segue na fila para a próxima).
+
+    `kind` força a tarefa ('holidays' para arquivo de calendário, cujo nome só
+    o registro conhece — a triagem genérica o mandaria para datasets)."""
+    try:
+        if not _enabled():
+            return False
+        if kind:
+            tarefa = (kind, _data_root(), None)
+        else:
+            tarefa = _classify(file_path)
+        if not tarefa:
+            return False
+        feito = threading.Event()
+        _put(tarefa + (feito,))
+        return feito.wait(timeout)
+    except Exception:                                       # noqa: BLE001
+        return False
 
 
 def notify_holidays():
@@ -146,7 +188,11 @@ def _ensure_worker():
 def _loop():
     from apps.pages import json_to_duckdb as core
     while True:
-        kind, data_dir, rel = _q.get()
+        item = _q.get()
+        # Tarefa síncrona (convert_sync) traz um Event como 4º elemento; o
+        # aviso assíncrono continua a tripla de sempre.
+        kind, data_dir, rel = item[:3]
+        feito = item[3] if len(item) > 3 else None
         try:
             out = _out_dir(data_dir)
             if kind == 'daily':
@@ -164,4 +210,6 @@ def _loop():
             log.warning('[duck-mirror] conversão %s falhou:\n%s',
                         kind, traceback.format_exc())
         finally:
+            if feito is not None:
+                feito.set()
             _q.task_done()

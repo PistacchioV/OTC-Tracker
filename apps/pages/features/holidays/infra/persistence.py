@@ -148,12 +148,16 @@ def _load_holidays_db(filename):
         from apps.pages import json_to_duckdb as core
         # ORDEM pelo `_seq` (a posição no arquivo): dois feriados no mesmo dia
         # têm de voltar como o JSON os guarda.
+        # `sync_kind='holidays'`: o nome do arquivo de calendário só o registro
+        # conhece, então a cura síncrona (leitura DB-only) precisa da tarefa
+        # explícita — a triagem genérica o converteria como dataset e o banco
+        # continuaria frio.
         rows = duck_read.table_rows(
             'holiday_calendars.db', core.norm_ident(nome, 'cal'),
             str(filename).strip(),
             order_by='CAST("_seq" AS BIGINT)',
             manifest_key=core._dataset_manifest_key(str(filename).strip()),
-            heal=duck_mirror.notify_holidays)
+            heal=duck_mirror.notify_holidays, sync_kind='holidays')
     except Exception:                                       # noqa: BLE001
         return None
     if rows is None:

@@ -449,10 +449,22 @@ São dois bancos:
   sob o `_cache_lock`) e é melhor esforço: falha vai para o log e o manifest
   reconverte na rodada seguinte. `OTC_DISABLE_DUCK_MIRROR=1` desliga (o
   `OTC_DISABLE_SCHEDULERS=1` dos testes também), e `check_duck_mirror.py`
-  prende o ciclo. A **fase 3** (leitura DB-first) religa os consumidores pelo
-  `apps/pages/duck_read.py`, com contrato de FRESCOR: o banco só responde
-  quando o `_manifest` prova que ele reflete o JSON atual — senão vale o JSON
-  de sempre e o espelho se cura. **Para os CADASTROS o flip está COMPLETO**
+  prende o ciclo. A **fase 3** virou **leitura DB-ONLY com CURA SÍNCRONA**
+  (2026-09-02, pedido do usuário: leitura servida só pelos bancos; a escrita
+  segue nos JSONs): o `_manifest` continua tendo de provar que o banco reflete
+  o JSON atual, mas quando não prova o leitor **converte NA HORA**
+  (`duck_mirror.convert_sync` — a tarefa entra na fila da thread do espelho e
+  é esperada, então nunca há dois escritores no mesmo banco) e relê; o JSON só
+  é lido pelo conversor. `None` (→ o chamador serve o JSON) sobrou como canal
+  de EMERGÊNCIA: espelho desligado (`OTC_DISABLE_SCHEDULERS` dos testes, que
+  trocam caminhos), timeout da fila, conversão que falhou, `expected_path`
+  trocado e payload-OBJETO (as recons), que o banco não reconstrói — e o
+  antigo freio do share virou só TELEMETRIA (a leitura lenta AVISA no log; não
+  existe mais modo só-JSON). Os leitores de arquivo-dia payload-lista dos
+  módulos grandes passam por `duck_read.day_records`/`dataset_rows` (os
+  helpers `_db_day_records`/`_db_dataset_rows` do routes); leitores de
+  META/ponteiro (dicts) e o read-modify-write da escrita seguem no JSON de
+  propósito. **Para os CADASTROS o flip está COMPLETO**
   (HANDOFF §328/§330): todos os leitores de servidor de RefData e
   CounterpartyDetails, os feriados, e o NAVEGADOR — a rota `static_data_file`
   serve `RefData.json`/`CounterpartyDetails.json`/arquivos de calendário
@@ -462,8 +474,8 @@ São dois bancos:
     ao lado das tipadas): reconstruir por colunas poria chave com NULL onde o
     JSON não tinha chave — e o `_contacts_norm` decide "legado" pela
     AUSÊNCIA. O manifest leva a VERSÃO do formato na chave
-    (`RefData.json#raw1`): banco em formato antigo não casa, cai no JSON e o
-    espelho reconverte — upgrade sem script;
+    (`RefData.json#raw1`): banco em formato antigo não casa e a cura síncrona
+    o reconverte no novo antes de responder — upgrade sem script;
   - **`expected_path` é o guarda da superfície de patch**: o leitor com
     caminho próprio (`_cpd_path`, `data_path`) diz de que arquivo ELE leria, e
     se não for o canônico coberto pelo espelho o banco não responde — é como o

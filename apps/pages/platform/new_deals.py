@@ -1440,8 +1440,8 @@ def _ndf_fwdstart_cached_keys(ref):
                 if not fname.endswith('_ndffwdstart.json'):
                     continue
                 try:
-                    with open(os.path.join(dpath, fname), encoding='utf-8') as fh:
-                        data = json.load(fh)
+                    from apps.pages import duck_read
+                    data = duck_read.day_records(os.path.join(dpath, fname))
                 except (IOError, OSError, json.JSONDecodeError):
                     continue
                 for e in (data if isinstance(data, list) else []):
@@ -2483,8 +2483,8 @@ def _generic_nd_mapping_candidates(cfg, product, ref_date):
     if not os.path.isfile(fpath):
         return []
     try:
-        with open(fpath, encoding='utf-8') as fh:
-            deals = json.load(fh)
+        from apps.pages import duck_read
+        deals = duck_read.day_records(fpath)
         if not isinstance(deals, list):
             deals = [deals]
     except (IOError, json.JSONDecodeError):

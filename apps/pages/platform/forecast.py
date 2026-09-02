@@ -277,8 +277,8 @@ def _swap_contract_ident_map(dref):
     if not os.path.isfile(path):
         return out
     try:
-        with open(path, 'r', encoding='utf-8') as fh:
-            rows = json.load(fh)
+        from apps.pages import duck_read
+        rows = duck_read.day_records(path)
     except Exception:
         log.warning("[forecast] could not read swap position for ident map:\n%s",
                     traceback.format_exc())
@@ -315,8 +315,8 @@ def _swap_contract_cpty_map(dref):
     if not os.path.isfile(path):
         return out
     try:
-        with open(path, 'r', encoding='utf-8') as fh:
-            rows = json.load(fh)
+        from apps.pages import duck_read
+        rows = duck_read.day_records(path)
     except Exception:
         return out
     if not rows:
@@ -358,8 +358,8 @@ def _forecast_collect(dref, spine):
             status.append(st)
             continue
         try:
-            with open(path, 'r', encoding='utf-8') as fh:
-                rows = json.load(fh)
+            from apps.pages import duck_read
+            rows = duck_read.day_records(path)
         except Exception:
             log.warning("[forecast] could not read %s:\n%s", path, traceback.format_exc())
             status.append(st)

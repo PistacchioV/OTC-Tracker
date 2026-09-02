@@ -77,8 +77,8 @@ def _conf_subjacente_map():
         return _conf_subj_cache['map']
     out = {}
     try:
-        with open(fp, encoding='utf-8') as fh:
-            for rec in json.load(fh):
+        from apps.pages import duck_read
+        for rec in duck_read.dataset_rows(fp):
                 if not isinstance(rec, dict):
                     continue
                 code = str(rec.get('Codigo do Ativo Subjacente') or '').strip()
@@ -167,8 +167,8 @@ def _conf_load_ndfcomm(ref):
     if not os.path.isfile(fp):
         return []
     try:
-        with open(fp, encoding='utf-8') as fh:
-            data = json.load(fh)
+        from apps.pages import duck_read
+        data = duck_read.day_records(fp)
         return [d for d in data if isinstance(d, dict)] if isinstance(data, list) else []
     except Exception:
         log.warning('[conf] cannot read %s', fp)
@@ -884,8 +884,8 @@ def _conf_load_optcomm(ref):
     if not os.path.isfile(fp):
         return []
     try:
-        with open(fp, encoding='utf-8') as fh:
-            data = json.load(fh)
+        from apps.pages import duck_read
+        data = duck_read.day_records(fp)
         return [d for d in data if isinstance(d, dict)] if isinstance(data, list) else []
     except Exception:
         log.warning('[conf] cannot read %s', fp)
@@ -1038,8 +1038,8 @@ def _conf_load_optfxo(ref):
     if not os.path.isfile(fp):
         return []
     try:
-        with open(fp, encoding='utf-8') as fh:
-            data = json.load(fh)
+        from apps.pages import duck_read
+        data = duck_read.day_records(fp)
         return [d for d in data if isinstance(d, dict)] if isinstance(data, list) else []
     except Exception:
         log.warning('[conf] cannot read %s', fp)
@@ -1231,8 +1231,8 @@ def _conf_load_ndffwdstart(ref):
     if not os.path.isfile(fp):
         return []
     try:
-        with open(fp, encoding='utf-8') as fh:
-            data = json.load(fh)
+        from apps.pages import duck_read
+        data = duck_read.day_records(fp)
         return [d for d in data if isinstance(d, dict)] if isinstance(data, list) else []
     except Exception:
         log.warning('[conf] cannot read %s', fp)

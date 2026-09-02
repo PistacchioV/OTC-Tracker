@@ -341,8 +341,11 @@ def _pc_refdata_by_name():
     from apps.pages import routes
     out = {}
     try:
-        with open(os.path.join(routes._B3_DATA_DIR, 'RefData.json'), encoding='utf-8') as fh:
-            data = json.load(fh)
+        from apps.pages import duck_read
+        data = duck_read.refdata_rows()
+        if data is None:
+            with open(os.path.join(routes._B3_DATA_DIR, 'RefData.json'), encoding='utf-8') as fh:
+                data = json.load(fh)
         for rec in (data if isinstance(data, list) else []):
             nm = _pc_norm(rec.get('COUNTERPARTY', ''))
             if nm and nm not in out:
@@ -761,8 +764,8 @@ def _pc_latest_snapshot_rows():
             p = os.path.join(_PC_SNAPSHOT_DIR, d.strftime('%Y'), d.strftime('%m'), d.strftime('%d'),
                              'pending-confirmation_{}.json'.format(d.strftime('%Y%m%d')))
             if os.path.isfile(p):
-                with open(p, encoding='utf-8') as fh:
-                    rows = json.load(fh)
+                from apps.pages import duck_read
+                rows = duck_read.day_records(p)
                 if isinstance(rows, list):
                     return _pending_only(rows), d.strftime('%Y-%m-%d')
     except Exception:
@@ -832,8 +835,8 @@ def _pc_metrics_history():
                         continue
                     day = '{}-{}-{}'.format(*m.groups())
                     try:
-                        with open(os.path.join(root, fn), encoding='utf-8') as fh:
-                            rows = json.load(fh)
+                        from apps.pages import duck_read
+                        rows = duck_read.day_records(os.path.join(root, fn))
                     except Exception:
                         continue
                     if not isinstance(rows, list):

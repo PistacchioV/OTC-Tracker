@@ -132,8 +132,8 @@ def _ops_settlement_counts(settle_ref, pos_ref):
                         src['key'], fam)
             continue
         try:
-            with open(path, encoding='utf-8') as fh:
-                rows = json.load(fh)
+            from apps.pages import duck_read
+            rows = duck_read.day_records(path)
         except Exception:
             continue
         if not rows:
@@ -295,8 +295,8 @@ def _ops_swap_pos_terms(ref):
                          '73760_{}_DPOSICAO-SWAP.json'.format(dref))
         if os.path.isfile(p):
             try:
-                with open(p, encoding='utf-8') as fh:
-                    rows = json.load(fh) or []
+                from apps.pages import duck_read
+                rows = duck_read.day_records(p) or []
             except Exception:
                 log.warning("[ops-trade] posição SWAP ilegível (%s):\n%s", p, traceback.format_exc())
                 rows = []
