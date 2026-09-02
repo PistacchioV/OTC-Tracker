@@ -60,14 +60,17 @@
     }
 
     /* Par 'NOSSA PERNA x CONTRAPARTE' de um deal — a mesma regra do bucket
-       do gerador: LE Lawton (ou contraparte JPM = perna espelhada) → LAWTON;
-       LE MGT → MGT; senão JPM. Contraparte fora do grupo é CLI. */
+       do gerador: LE Lawton → LAWTON; LE MGT → MGT (inclusive contra o banco:
+       o deal intragrupo MGT x Banco NÃO é a perna espelhada do Lawton);
+       contraparte JPM = perna espelhada → LAWTON; senão JPM. Contraparte fora
+       do grupo é CLI. */
     function pairOf(le, client) {
         var leU = String(le || '').toUpperCase();
         var ours;
         if (leU.indexOf('LAWTON') !== -1) ours = 'LAWTON';
+        else if (leU.trim() === 'MGT') ours = 'MGT';
         else if (side(client) === 'JPM') ours = 'LAWTON';
-        else ours = leU.trim() === 'MGT' ? 'MGT' : 'JPM';
+        else ours = 'JPM';
         return ours + ' x ' + (side(client) || 'CLI');
     }
 

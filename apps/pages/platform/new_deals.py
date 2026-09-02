@@ -2236,9 +2236,12 @@ def _generic_ndf_ter_line(deal, is_fwd, page_url=None, participant_override=None
     # Entity bucket + participant / counterparty accounts
     if 'LAWTON' in le:                        # LE Lawton: parte Lawton × banco JPM
         bucket, participant, cpty = 'LAWTON', '00041007', '73760009'
-    elif _is_jpm(client):                     # Lawton-side mirror leg
-        bucket, participant = 'LAWTON', '00041007'
-        cpty = '04880006' if le == 'MGT' else '73760009'
+    elif _is_jpm(client) and le != 'MGT':     # Lawton-side mirror leg
+        # LE MGT contra o banco NÃO é a perna espelhada do Lawton: é o deal
+        # intragrupo MGT x Banco, e cai no ramo do MGT abaixo (parte 04880006,
+        # contraparte 73760009, par MGT x JPM). Sem o guarda, a linha saía no
+        # arquivo do LAWTON com o template LAWTON x JPM.
+        bucket, participant, cpty = 'LAWTON', '00041007', '73760009'
     else:
         bucket = 'MGT' if le == 'MGT' else 'BANCO'
         participant = '04880006' if le == 'MGT' else '73760009'
