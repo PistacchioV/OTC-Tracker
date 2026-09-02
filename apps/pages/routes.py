@@ -3736,14 +3736,28 @@ def _swapchar_sinal_text(v):
     return s
 
 
+def _swapchar_is_xl_error(v):
+    """O valor é texto de ERRO de planilha? Aceita as variações que o arquivo
+    de origem realmente traz — '#NULL!', mas também 'NULL' sem cerquilha ou
+    sem exclamação, '#N/A'/'N/A', etc. — o MESMO conjunto do saneamento do
+    export-advanced.js (`/^#?(NULL!?|N\\/A|REF!|VALUE!|DIV\\/0!|NAME\\?|NUM!)$/i`),
+    para as duas pontas nunca discordarem sobre o que é erro."""
+    if not isinstance(v, str):
+        return False
+    s = v.strip().upper()
+    if not s:
+        return False
+    return s in _XL_ERROR_TEXT or bool(
+        re.match(r'^#?(NULL!?|N/A|REF!|VALUE!|DIV/0!|NAME\?|NUM!)$', s))
+
+
 def _swapchar_fmt_cell(value, ctype):
-    # Texto de ERRO do Excel ('#NULL!', '#N/A', '#REF!', …) vira VAZIO: é o
+    # Texto de ERRO do Excel ('#NULL!', 'NULL', '#N/A', …) vira VAZIO: é o
     # que a planilha deixa no lugar da fórmula quebrada no arquivo de origem
     # da posição, e re-exportado ele se lê como a exportação quebrada — a
-    # mesma regra do export-advanced.js e do Pending Confirmation
-    # (_XL_ERROR_TEXT). Vale para as três telas de swap, que formatam tudo
-    # por aqui.
-    if isinstance(value, str) and value.strip().upper() in _XL_ERROR_TEXT:
+    # mesma regra do export-advanced.js e do Pending Confirmation. Vale para
+    # as três telas de swap, que formatam tudo por aqui.
+    if _swapchar_is_xl_error(value):
         return ''
     if value in (None, ''):
         return ''
@@ -3861,11 +3875,11 @@ def _swapchar_collect(ref, exact=False):
         disp = []
         for i in _SWAPCHAR_DISPLAY_IDX:
             raw = (vals[i] if i < len(vals) else '') if full else sparse.get(i, '')
-            # Texto de erro do Excel no arquivo de origem ('#NULL!', '#N/A'…)
-            # é VAZIO em qualquer coluna — aqui, antes dos ramos, para o Tipo,
-            # os booleanos e o CPF/CNPJ não deixarem o erro passar (o
-            # _swapchar_fmt_cell cobre só o ramo dele).
-            if isinstance(raw, str) and raw.strip().upper() in _XL_ERROR_TEXT:
+            # Texto de erro do Excel no arquivo de origem ('#NULL!', 'NULL',
+            # '#N/A'…) é VAZIO em qualquer coluna — aqui, antes dos ramos,
+            # para o Tipo, os booleanos e o CPF/CNPJ não deixarem o erro
+            # passar (o _swapchar_fmt_cell cobre só o ramo dele).
+            if _swapchar_is_xl_error(raw):
                 raw = ''
             if i == 0:                      # Tipo de Contrato: 02 → Bullet, 01 → Cashflow
                 rv = str(raw or '').strip()
