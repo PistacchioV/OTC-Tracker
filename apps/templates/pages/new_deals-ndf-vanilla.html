@@ -4381,6 +4381,12 @@ $(document).ready(function() {
         for (var vi = 0; vi < f.length; vi++) valuesBySeq[String(vi + 1)] = f[vi];
         return (block.fields || []).map(function(fd) {
             var seq = String(fd.seq || '').replace(/^0+(?=\d)/, '');   // '04' ≡ '4'
+            // Participante FORÇADO (perna espelhada do MGT x Cliente) vence o
+            // Fixed do cadastro — mesmo contrato do motor (_fi_build_line
+            // force_values): uma variante JPM x MGT que fixe o campo 5 não
+            // pode trocar a conta do espelho, nem aqui nem no arquivo.
+            if (opts && opts.participant && seq === '5')
+                return { name: fd.field, value: opts.participant };
             // Fórmula cadastrada no Source Field/Value vence o valor do
             // gerador — o mesmo contrato do motor (_fi_build_line + FiTer.calc).
             var _calc = window.FiTer ? FiTer.calc(fd.source_detail, deal, fd.format) : null;

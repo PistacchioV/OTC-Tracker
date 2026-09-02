@@ -2391,8 +2391,14 @@ def _generic_ndf_ter_line(deal, is_fwd, page_url=None, participant_override=None
     page_url = page_url or ('/new_deals-ndf-fwdstart' if is_fwd
                             else '/new_deals-ndf-otherpublisher')
     le_pair = routes._ter_le_pair(routes._TER_BUCKET_LE[bucket], client)
+    # O Participante FORÇADO vence o Fixed do cadastro: a variante JPM x MGT
+    # das páginas fixa o campo 5 em 73760009 (o deal real Banco x MGT), e a
+    # linha espelhada do MGT x Cliente vai no MESMO arquivo com o omnibus do
+    # cliente — decisão por linha, que o template não tem como expressar.
+    force = {'5': _pos(participant, 8)} if participant_override else None
     return bucket, routes._fi_build_line(routes._TER_FI_KEY, 'registro-dados-fixos', values,
-                                  page_url=page_url, le_pair=le_pair, deal=deal)
+                                  page_url=page_url, le_pair=le_pair, deal=deal,
+                                  force_values=force)
 
 
 def _nd_lawton_mirror(deal):
