@@ -553,15 +553,13 @@ def _nd_amend_same_entity(old, new, stored, incoming):
     Trocar o código dentro da entidade é registro; trocar de entidade muda a
     ponta do negócio.
 
-    Quando o produto carrega a coluna LE (os três NDFs), ela é a resposta: é
-    derivada do accronym e da settlement location, e é justamente a entidade.
-    O FXO não tem essa coluna, e aí a entidade sai do próprio accronym.
-    Entidade desconhecida nunca empata — dois códigos que ninguém sabe de onde
-    vêm podem ser de entidades diferentes, e o seguro é tratar como econômico."""
-    le_old = str(stored.get('LE', '') or '').strip().upper()
-    le_new = str(incoming.get('LE', '') or '').strip().upper()
-    if le_old or le_new:
-        return bool(le_old) and le_old == le_new
+    A resposta sai sempre do PRÓPRIO accronym (`_nd_amend_entity`: cadastro
+    le-accronym, depois o sufixo '-LAW'), nunca da coluna LE do deal: a LE é
+    SÓ a Settlement Location — a NOSSA perna —, e o accronym é a contraparte;
+    comparar LE responderia "mesma entidade" para qualquer troca de accronym
+    de cliente, porque a nossa perna não muda. Entidade desconhecida nunca
+    empata — dois códigos que ninguém sabe de onde vêm podem ser de entidades
+    diferentes, e o seguro é tratar como econômico."""
     ent_old, ent_new = _nd_amend_entity(old), _nd_amend_entity(new)
     return bool(ent_old) and ent_old == ent_new
 
@@ -1193,9 +1191,12 @@ def _ndf_deal_from_api(rec, sid, refmap_acr, today_dmy, refmap_spn=None):
     # interna (outra entidade JPM). Fora esse caso ela é None — e tem de ser.
     loc = str(get('SETTLEMENT LOCATION') or '').strip().upper()
     le_cp = _ndf_le_from_accronym(end_cp)
-    # LE da coluna da tela: a NOSSA perna. Cai para a Settlement Location, e sem
-    # cadastro a location crua fica visível.
-    le = le_cp or _ndf_le_from_location(loc) or loc
+    # LE da coluna da tela: SÓ a Settlement Location — a nossa perna. São duas
+    # partes distintas: o `le_cp` identifica a CONTRAPARTE e alimenta só a
+    # resolução de SPN/Client/TaxID abaixo; deixá-lo vencer aqui gravava a
+    # entidade da OUTRA ponta na coluna da nossa (o deal MGT contra um book do
+    # banco saía com LE = JPM). Sem cadastro, a location crua fica visível.
+    le = _ndf_le_from_location(loc) or loc
 
     # Contraparte, nesta ordem:
     #   1. accronym exato do End Counterparty no Reference Data (e o accronym
@@ -2055,10 +2056,10 @@ def _generic_nd_reenrich(deals, refmap_cache):
             refmap_cache['spn'] = routes._fxo_refdata_by_spn()
             refmap_cache['map'] = _fxo_refdata_by_accronym(refmap_cache['spn'])
         # Mapping Legal Entity × Accronym: o accronym gravado pode identificar a
-        # LE (é o caso do End Counterparty que é nome de book interno, importado
-        # antes de a linha existir). Quando ele identifica, a LE gravada estava
-        # errada — veio da Settlement Location — e é corrigida aqui, junto com a
-        # contraparte da entidade, sem precisar de novo pull da API.
+        # CONTRAPARTE como perna interna (End Counterparty que é nome de book
+        # interno). `le_map` alimenta SÓ a busca da contraparte — a coluna LE
+        # do deal NÃO é tocada: ela é a NOSSA perna (Settlement Location), e a
+        # entidade da outra ponta não a corrige. São duas partes distintas.
         #
         # Só `le_map` entra na busca da contraparte. Caindo para a LE gravada no
         # deal (que veio da Settlement Location, a NOSSA perna) um cliente sem
@@ -2070,12 +2071,7 @@ def _generic_nd_reenrich(deals, refmap_cache):
         # aqui justamente porque o campo veio vazio.
         rec = _ndf_ref_by_accronym(refmap_cache['map'], acr, le_map, refmap_cache['spn'])
         if not rec:
-            if le_map and le_map != str(deal.get('LE', '') or '').strip().upper():
-                deal['LE'] = le_map
-                changed = True
             continue
-        if le_map and le_map != str(deal.get('LE', '') or '').strip().upper():
-            deal['LE'] = le_map
         deal['SPN'] = str(rec.get('SPN', '') or '')
         deal['Client'] = rec.get('COUNTERPARTY', '') or ''
         deal['TaxID'] = rec.get('TAX ID', '') or ''
