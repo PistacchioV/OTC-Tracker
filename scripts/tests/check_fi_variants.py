@@ -94,16 +94,18 @@ def main():
         base = json.load(fh)
 
     variant = copy.deepcopy(base)
-    # O par LAWTON x JPM é o que o gerador de fato produz para a linha
-    # LE MGT × cliente JPM (a perna espelhada do Lawton). O `pairSimple`
-    # ('MGT x JPM') continua no espelho do navegador, mas nenhuma página o usa
+    # O par MGT x JPM é o que o gerador produz para a linha LE MGT × cliente
+    # JPM: o deal intragrupo MGT x Banco fica no bucket do MGT — a regra da
+    # perna espelhada do Lawton (cliente JPM → LAWTON) NÃO o captura, senão a
+    # linha saía no arquivo do Lawton com o template LAWTON x JPM (era o bug).
+    # O `pairSimple` continua no espelho do navegador, mas nenhuma página o usa
     # desde que o Vanilla passou a gerar arquivo — lá o preview escolhe a
     # variante pela mesma regra do gerador, senão a tela mostra um layout e a
     # B3 recebe outro.
-    variant['key'] = 'termo-multiclasses--lawton-x-jpm'
-    variant['name'] = base['name'] + ' — LAWTON x JPM'
+    variant['key'] = 'termo-multiclasses--mgt-x-jpm'
+    variant['name'] = base['name'] + ' — MGT x JPM'
     variant['base_key'] = 'termo-multiclasses'
-    variant['le_pair'] = 'LAWTON x JPM'
+    variant['le_pair'] = 'MGT x JPM'
     variant['file_name'] = 'FWDSTART_CUSTOM.txt'
     variant['linked_pages'] = [p for p in base.get('linked_pages', [])
                                if p.get('url') == '/new_deals-ndf-fwdstart']
@@ -130,8 +132,15 @@ def main():
         with open(os.path.join(tmp, variant['key'] + '.json'), 'w', encoding='utf-8') as fh:
             json.dump(variant, fh, ensure_ascii=False, indent=2)
 
-        base_mgt = _line(DEAL_MGT_JPM)[1]
+        # O deal LE MGT × banco fica no bucket do MGT (parte 04880006) — a
+        # regra da perna espelhada do Lawton (cliente JPM → LAWTON) não o
+        # captura. Era o bug: a linha saía no arquivo do Lawton (parte
+        # 00041007) com o template LAWTON x JPM.
+        bkt_mgt, base_mgt = _line(DEAL_MGT_JPM)
         base_cli = _line(DEAL_JPM_CLI)[1]
+        check('bucket: LE MGT × banco → MGT', bkt_mgt == 'MGT', repr(bkt_mgt))
+        check('linha MGT × banco: parte 04880006',
+              base_mgt[20:28] == '04880006', repr(base_mgt[20:28]))
 
         old_dir = R._FILE_INTERPRETER_DIR
         R._FILE_INTERPRETER_DIR = tmp
@@ -140,13 +149,13 @@ def main():
             # resolução da chave
             check('variant_key: par + página casam → variante',
                   R._fi_variant_key('termo-multiclasses', '/new_deals-ndf-fwdstart',
-                                    'LAWTON x JPM') == variant['key'])
+                                    'MGT x JPM') == variant['key'])
             check('variant_key: par cego a caixa/×',
                   R._fi_variant_key('termo-multiclasses', '/new_deals-ndf-fwdstart',
-                                    'lawton × jpm') == variant['key'])
+                                    'mgt × jpm') == variant['key'])
             check('variant_key: outra página → base',
                   R._fi_variant_key('termo-multiclasses', '/new_deals-ndf-otherpublisher',
-                                    'LAWTON x JPM') == 'termo-multiclasses')
+                                    'MGT x JPM') == 'termo-multiclasses')
             check('variant_key: par sem cadastro → base',
                   R._fi_variant_key('termo-multiclasses', '/new_deals-ndf-fwdstart',
                                     'JPM x CLI') == 'termo-multiclasses')
@@ -155,18 +164,18 @@ def main():
                                     None) == 'termo-multiclasses')
             check('file_name: da variante para o par',
                   R._fi_variant_file_name('termo-multiclasses', '/new_deals-ndf-fwdstart',
-                                          'LAWTON x JPM') == 'FWDSTART_CUSTOM.txt')
+                                          'MGT x JPM') == 'FWDSTART_CUSTOM.txt')
             check('file_name: sem variante → vazio',
                   R._fi_variant_file_name('termo-multiclasses', '/new_deals-ndf-fwdstart',
                                           'JPM x CLI') == '')
 
-            # linha do deal LE MGT × cliente JPM (par efetivo LAWTON x JPM):
+            # linha do deal LE MGT × cliente JPM (par efetivo MGT x JPM):
             # só o participante muda — o campo 5 vem depois de
             # TER(5)+tipo(1)+op(4)+controle X(10): posições 21-28
             var_mgt = _line(DEAL_MGT_JPM)[1]
-            check('deal LAWTON x JPM: participante vem do Fixed da variante',
+            check('deal MGT x JPM: participante vem do Fixed da variante',
                   var_mgt[20:28] == '99999999', repr(var_mgt[20:28]))
-            check('deal LAWTON x JPM: resto da linha idêntico ao base',
+            check('deal MGT x JPM: resto da linha idêntico ao base',
                   var_mgt[:20] == base_mgt[:20] and var_mgt[28:] == base_mgt[28:])
             check('linha da variante mantém 648 chars', len(var_mgt) == 648, str(len(var_mgt)))
 
@@ -175,20 +184,20 @@ def main():
                   _line(DEAL_JPM_CLI)[1] == base_cli)
 
             # header: Participante Fixed da variante, sem exigir b3-accounts
-            hdr = R._ter_file_header('LAWTON', '20260810', '/new_deals-ndf-fwdstart',
-                                     le_pair='LAWTON x JPM')
+            hdr = R._ter_file_header('MGT', '20260810', '/new_deals-ndf-fwdstart',
+                                     le_pair='MGT x JPM')
             check('header da variante: Participante do Fixed',
                   hdr[10:30] == 'CUSTOMNAME'.ljust(20), repr(hdr[10:30]))
-            hdr_base = R._ter_file_header('LAWTON', '20260810', '/new_deals-ndf-fwdstart')
+            hdr_base = R._ter_file_header('MGT', '20260810', '/new_deals-ndf-fwdstart')
             check('header sem par: o de sempre (b3-accounts)',
-                  hdr_base[10:30] == 'INTRAGLAWTONFDO'.ljust(20), repr(hdr_base[10:30]))
+                  hdr_base[10:30] == 'MORGANBC'.ljust(20), repr(hdr_base[10:30]))
 
             # bloco ausente na variante cai no bloco do base
             line2 = R._fi_build_line('termo-multiclasses', 'registro-dados-variaveis',
                                      {'4': '20260901'.ljust(8),
                                       '6': ''.ljust(18)},
                                      page_url='/new_deals-ndf-fwdstart',
-                                     le_pair='LAWTON x JPM')
+                                     le_pair='MGT x JPM')
             line2_base = R._fi_build_line('termo-multiclasses', 'registro-dados-variaveis',
                                           {'4': '20260901'.ljust(8),
                                            '6': ''.ljust(18)},
@@ -218,15 +227,19 @@ def main():
     ]
 
     def py_pair(le, client):
-        """A perna nossa como o gerador decide o bucket (LE Lawton, cliente
-        JPM = perna espelhada, LE MGT), depois o par pelo helper real."""
+        """A perna nossa como o gerador decide o bucket (LE Lawton; LE MGT —
+        inclusive contra o banco, o intragrupo MGT x Banco não é a perna
+        espelhada; cliente JPM = perna espelhada), depois o par pelo helper
+        real."""
         le_u = (le or '').upper()
         if 'LAWTON' in le_u:
             ours = 'LAWTON'
+        elif le_u.strip() == 'MGT':
+            ours = 'MGT'
         elif R._ter_le_side(client) == 'JPM':
             ours = 'LAWTON'
         else:
-            ours = 'MGT' if le_u.strip() == 'MGT' else 'JPM'
+            ours = 'JPM'
         return R._ter_le_pair(ours, client)
 
     if os.path.exists(jsc):
