@@ -26,12 +26,79 @@
      colunas no init e num segundo passe atrasado, e o que muda tamanho no meio
      dessa janela desalinha o cabeçalho do corpo sem dar erro nenhum.
    ========================================================================== */
+/* ── Efeitos reduzidos: a máquina SEM GPU não paga o vidro ──────────────────
+   Nas máquinas do JPM o navegador roda com a aceleração de hardware desligada
+   (Firefox `about:support` → Compositing: "WebRender (Software)"), e aí o
+   custo da camada muda de natureza: os dois fundos animados com blur de
+   viewport inteira e os ~80 backdrop-filter recompositam a página inteira por
+   software, quadro a quadro — a tela inteira fica lenta SEM erro nenhum.
+
+   A decisão é feita aqui (o CSS não enxerga o compositor) e vira a classe
+   `sf-reduced` no <html>; a seção 16 do streamflow.css faz o resto. Três
+   sinais, na ordem:
+
+   · override em localStorage `__OTC_TRACKER_FX__` = 'full' | 'reduced'
+     (qualquer outro valor = auto) — é a saída de emergência nos dois
+     sentidos, porque detecção de GPU por JS é heurística;
+   · WebGL por software (SwiftShader / llvmpipe / Microsoft Basic Render
+     Driver) ou indisponível — a assinatura do VDI e do driver bloqueado;
+   · Firefox no Windows — o par da mesa, onde o "WebRender (Software)" foi
+     CONFIRMADO e o WebGL pode responder pela GPU mesmo com o compositor em
+     software (caminhos independentes no Firefox). O custo do falso positivo
+     é estético (perde o desfoque, ficam tokens, cores e sombras); o do falso
+     negativo é a mesa inteira com o app lento — a assimetria decide.       */
+(function () {
+  "use strict";
+
+  function fxPref() {
+    try {
+      return String(localStorage.getItem("__OTC_TRACKER_FX__") || "auto").toLowerCase();
+    } catch (e) {
+      return "auto";
+    }
+  }
+
+  function softwareGl() {
+    try {
+      var c = document.createElement("canvas");
+      var gl = c.getContext("webgl") || c.getContext("experimental-webgl");
+      if (!gl) return true;
+      var ext = gl.getExtension("WEBGL_debug_renderer_info");
+      var r = ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL)
+                  : gl.getParameter(gl.RENDERER);
+      return /swiftshader|llvmpipe|software|basic render/i.test(String(r || ""));
+    } catch (e) {
+      return true;
+    }
+  }
+
+  var pref = fxPref();
+  var ua = navigator.userAgent || "";
+  var fxWin = /Windows/.test(ua) && /Firefox\//.test(ua);
+  var reduced =
+    pref === "reduced" ? true :
+    pref === "full" ? false :
+    (fxWin || softwareGl());
+
+  if (reduced) {
+    document.documentElement.classList.add("sf-reduced");
+    if (window.console && console.info) {
+      console.info(
+        "[streamflow] efeitos reduzidos (" +
+        (pref === "reduced" ? "localStorage" : fxWin ? "Firefox/Windows" : "WebGL por software") +
+        ") — localStorage.__OTC_TRACKER_FX__ = 'full' força o vidro; 'reduced' força este modo"
+      );
+    }
+  }
+})();
+
 (function () {
   "use strict";
 
   var reduce =
-    window.matchMedia &&
-    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    document.documentElement.classList.contains("sf-reduced") ||
+    (window.matchMedia &&
+     window.matchMedia("(prefers-reduced-motion: reduce)").matches);
   if (reduce) return;
 
   // As superfícies que têm halo. São as mesmas do streamflow.css — se uma
