@@ -1178,9 +1178,13 @@ continua no label inglês.
   painel em vez de imprimir em branco (HANDOFF §139).
 - **`quotes-equity`** e **`quotes-commodity`** — o código do Ativo Subjacente do
   Index B3 → o **símbolo de mercado** que o Yahoo entende (`AAPL34` →
-  `AAPL34.SA`). As OPÇÕES da tela não saem daqui: elas vêm do `Subjacente.json`
-  ao vivo, separadas pelo campo `Classe` e só as `ACTIVE` — este cadastro só
-  traduz. O `seed` vai **vazio de propósito**: os dois arquivos são versionados
+  `AAPL34.SA`). As OPÇÕES da tela são a **UNIÃO** de duas fontes: o
+  `Subjacente.json` ao vivo (campo `Classe`, só as `ACTIVE`) e as linhas
+  **LITERAIS** deste cadastro — o de-para aceita rótulo que não é código do
+  Subjacente (`S&P 500 Index` → `^GSPC`), e sem a segunda fonte o mapping
+  recém-criado ficava fora da lista (cadastrado, resolvível pela API,
+  invisível). Linha de padrão `"MY"` NÃO vira opção: é regra, não instrumento.
+  O `seed` vai **vazio de propósito**: os dois arquivos são versionados
   (471 + 17 linhas) e repetir centenas de pares no `routes.py` criaria uma
   segunda lista para divergir da primeira. Código sem símbolo devolve **404
   pedindo cadastro** e nunca tenta o código como ticker — a resposta seria um
