@@ -75,6 +75,12 @@ def main():
 
     # Reuse the exact maintenance the in-app 11:30 scheduler runs.
     buckets = R._pc_run_daily_maintenance(snapshot=not args.no_snapshot)
+    if buckets is None:
+        # Uma das três leituras falhou e NADA foi reescrito — reescrever por
+        # cima de uma leitura falhada apagaria o balde (ver o docstring da
+        # manutenção). O motivo está no log acima.
+        print('\nABORTED: could not read one of the DBs — nothing was rewritten.')
+        sys.exit(1)
     for cat in ('backlog', 'pending', 'ok'):
         print('  {:<8}: {}'.format(cat, len(buckets[cat])))
     print('\nDone.')

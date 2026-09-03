@@ -96,7 +96,7 @@ def _pc_ensure_db(path):
         log.warning('[pending-confirmation] could not create %s', path)
 
 
-def _pc_load_rows(category):
+def _pc_load_rows(category, strict=False):
     from apps.pages import routes
     path = os.path.join(routes._PC_DB_DIR, _PC_DBS.get(category, _PC_DBS['pending']))
     _pc_ensure_db(path)
@@ -113,6 +113,14 @@ def _pc_load_rows(category):
             _pc_refresh_aging_status(r)
         return out
     except Exception:
+        # Falha de leitura NÃO é banco vazio, e os dois consumidores tratam a
+        # diferença de jeitos opostos: a TELA serve o que conseguiu (melhor
+        # esforço, com o WARNING abaixo — a página não pode sumir porque um
+        # arquivo do share está em uso); quem vai REESCREVER os bancos pede
+        # `strict=True`, porque ler a falha como `[]` apagaria o balde inteiro
+        # na reescrita seguinte — e o backlog é só história: não se repovoa.
+        if strict:
+            raise
         log.warning('[pending-confirmation] query failed for %s:\n%s', path, traceback.format_exc())
         return []
 
@@ -605,10 +613,25 @@ def _pc_run_daily_maintenance(snapshot=True):
     """Re-route every row across the three DBs (refresh aging/status; backlog past
     12 months; ok when resolved; else pending), rewrite the DBs, and save the
     pending snapshot. Shared by the in-app 11:30 scheduler and the standalone
-    script. Idempotent."""
+    script. Idempotent.
+
+    **Aborta INTEIRA quando a leitura de um dos três falha** (devolve None, sem
+    reescrever nada). A reescrita grava o que a leitura devolveu, e a leitura
+    tolerante lê a falha como banco VAZIO — um dia em que o arquivo estava em
+    uso no share bastava para o balde inteiro ser reescrito sem as linhas.
+    Pending e ok se repovoam pelo uso do app; o backlog é só história e não
+    volta. Pular um dia é inofensivo (a manutenção é idempotente e roda de
+    novo amanhã); apagar não tem desfazer."""
     seen, all_rows = set(), []
     for cat in ('backlog', 'pending', 'ok'):
-        for r in _pc_load_rows(cat):
+        try:
+            rows = _pc_load_rows(cat, strict=True)
+        except Exception:
+            log.error('[pending-confirmation] daily maintenance ABORTED: could '
+                      'not read the %s DB — nothing was rewritten\n%s',
+                      cat, traceback.format_exc())
+            return None
+        for r in rows:
             tn = str(r.get('Trade Number', '') or '')
             key = tn or ('#' + str(len(all_rows)))
             if key in seen:
