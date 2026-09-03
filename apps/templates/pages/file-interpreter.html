@@ -93,13 +93,13 @@
     }
 
     /* ── Os blocos "lego" ─────────────────────────────────────────────── */
+    /* Sem recuo: os blocos alinham com o card do template no topo
+       (2026-09-03). A espinha tracejada e o conector de encaixe saíram com o
+       margin-left de 38px que existia para eles — atrás de um card de largura
+       cheia, os dois viravam risco perdido. Os "studs" do cabeçalho ficam. */
     #fi-page .fi-spine { position: relative; }
-    #fi-page .fi-spine::before {
-        content: ''; position: absolute; left: 18px; top: 10px; bottom: 10px;
-        border-left: 2px dashed var(--ins-border-color);
-    }
     #fi-page .fi-block {
-        position: relative; margin-left: 38px; margin-bottom: 1rem;
+        position: relative; margin-bottom: 1rem;
         background: var(--vr-card-bg, var(--ins-secondary-bg));
         border: 1px solid var(--ins-border-color); border-radius: 14px;
         overflow: hidden;
@@ -110,11 +110,6 @@
     @media (prefers-reduced-motion: reduce) {
         #fi-page .fi-block { animation: fiFade 200ms ease forwards; transform: none; }
         @keyframes fiFade { to { opacity: 1; } }
-    }
-    /* o "encaixe": conector do bloco na espinha */
-    #fi-page .fi-block::before {
-        content: ''; position: absolute; left: -21px; top: 26px;
-        width: 21px; border-top: 2px dashed var(--ins-border-color);
     }
     #fi-page .fi-block-head {
         display: flex; align-items: center; gap: .6rem; flex-wrap: wrap;
