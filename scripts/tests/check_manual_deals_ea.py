@@ -8,9 +8,15 @@ Duas rotinas no mesmo card, e o que erra em SILENCIO em cada uma:
    para excluir uma operacao que nao existe mais, deixando a que existe DENTRO
    do EA. O par so e visto junto no pull, e por isso ele e GRAVADO.
 
-2. **Other Publisher: so contraparte EXTERNA.** O teste e o ECONOMIC GROUP do
+2. **So contraparte EXTERNA — nas DUAS rotinas.** O teste e o ECONOMIC GROUP do
    Reference Data (`_pc_is_internal_counterparty`), nunca o nome comecar em
    "BANCO" — isso derrubaria Banco Safra, Bradesco e Santander, que sao clientes.
+   E o RefData sozinho nao fecha: ele so carrega `BANCO J.P MORGAN S.A` e
+   `LAWTON` como INTERNAL, e a `JPMORGAN CHASE BANK, N.A. - SAO PAULO BRANCH`
+   nao tem registro nenhum la — o fallback por nome exige "banco" E "morgan" e
+   deixa a MGT passar como se fosse cliente. Quem fecha e o cadastro `le-spn`,
+   que e a lista das NOSSAS entidades por definicao. O FWD Start nao tinha
+   filtro nenhum: o par de re-booking sai do pull e ia direto para o e-mail.
 
 3. **Lista vazia NAO envia**, ao contrario do BACC EA Metrics (la a planilha
    vazia e ela propria a metrica). Aqui o e-mail PEDE para excluir as operacoes
@@ -153,6 +159,38 @@ try:
     # "NDF FwdStartRebooks" na secao Others.
     check('o store do par fica FORA do cache do New Deals',
           R.NEW_DEALS_CACHE_ROOT in _orig['rebook'], False)
+
+    # O FWD Start tambem so manda contraparte EXTERNA. Ele nao tinha filtro
+    # nenhum — o par de re-booking sai do pull do NDF e ia direto para a tabela
+    # —, e o e-mail pedia para excluir do EA pernas internas (MGT x MGT,
+    # JPM x JPM), que nao sao operacao contra cliente.
+    #
+    # As duas entidades abaixo sao o caso REAL, e uma so delas o RefData pega:
+    # o stub aqui reproduz o cadastro de producao, onde `JPMORGAN CHASE BANK,
+    # N.A. - SAO PAULO BRANCH` nao tem linha nenhuma. Quem a corta e o cadastro
+    # `le-spn` (o mesmo de onde o e-mail tira a razao social da LE).
+    ALT = datetime(2026, 8, 13)
+    with app.test_request_context():
+        EC.record_rebooks([
+            ({'Deal': 'VAN-CLIENTE', 'Client': 'DAF CAMINHOES BRASIL INDUSTRIA LTDA',
+              'LE': 'MGT', 'SPN': '111'}, {'deal': 'FWD-1', 'trade': '20/07/2026'}),
+            ({'Deal': 'VAN-MGT', 'Client': 'JPMORGAN CHASE BANK, N.A. - SAO PAULO BRANCH',
+              'LE': 'MGT', 'SPN': '222'}, {'deal': 'FWD-2', 'trade': '20/07/2026'}),
+            ({'Deal': 'VAN-JPM', 'Client': 'BANCO J.P MORGAN S.A',
+              'LE': 'JPM', 'SPN': '333'}, {'deal': 'FWD-3', 'trade': '20/07/2026'}),
+            ({'Deal': 'VAN-LAWTON', 'Client': 'LAWTON MULTIMERCADO EXCLUSIVO',
+              'LE': 'JPM', 'SPN': '999'}, {'deal': 'FWD-4', 'trade': '20/07/2026'}),
+        ], ALT)
+        fs3 = [r['deal'] for r in EQ.rows('fwdstart', ALT)]
+    check('FWD Start: so a operacao contra CLIENTE entra', fs3, ['VAN-CLIENTE'])
+    check('   a perna MGT x MGT fica de fora', 'VAN-MGT' in fs3, False)
+    check('   a perna Banco J.P. Morgan fica de fora', 'VAN-JPM' in fs3, False)
+    check('   e a Lawton tambem', 'VAN-LAWTON' in fs3, False)
+    # Esta e a razao de existir a segunda porta: se o corte dependesse so do
+    # RefData, a MGT voltaria para o e-mail e ninguem veria.
+    check('   e o RefData sozinho NAO pegaria a MGT (por isso o cadastro le-spn)',
+          R._pc_is_internal_counterparty('JPMORGAN CHASE BANK, N.A. - SAO PAULO BRANCH', '222'),
+          False)
 
     print('\n== 3. Os desfechos do envio sao TRES, e nao dois ==')
     enviados = []
