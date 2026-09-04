@@ -296,7 +296,7 @@ i.ti-spin, .ti-spin, i.ti-loader, i.ti-loader-2, i.ti-loader-3 { display: inline
                         <table class="table table-striped dt-responsive align-middle mb-0" id="intrag-swap-table">
                             <thead class="thead-sm text-uppercase fs-xxs">
                                 <tr class="text-uppercase fs-xxs">
-                                    <th style="width:50px;"><input class="form-check-input form-check-input-light fs-14 mt-0" type="checkbox" id="selectAll"></th>
+                                    <th style="width:50px;"><input class="form-check-input form-check-input-light fs-14 mt-0 intrag-cb-all" type="checkbox" id="selectAll"></th>
                                     <th><span data-lang="nd-col-actions">Actions</span></th>
                                     <th><span data-lang="intrag-col-status">Status</span></th>
                                     <th><span data-lang="intrag-col-intrag-id">Intrag ID</span></th>
@@ -472,7 +472,7 @@ $(document).ready(function() {
                     $(node).find('.btn-row-approve').toggleClass('d-none', st!=='Pending');
                 }
             });
-            var total=api.rows({ search: 'applied' }).count(), sel=selectedRowIds.size, $sa=$('#selectAll');
+            var total=api.rows({ search: 'applied' }).count(), sel=selectedRowIds.size, $sa=$('.intrag-cb-all');
             if($sa.length) {
                 if(sel===0){$sa.prop('checked',false).prop('indeterminate',false);}
                 else if(sel>=total){$sa.prop('checked',true).prop('indeterminate',false);}
@@ -604,19 +604,25 @@ $(document).ready(function() {
     $('[data-table-rows]').on('change',function(){ table.page.len(parseInt(this.value)).draw(); });
     $('[data-table-rows]').val(String(table.page.len()));
 
-    $('#selectAll').on('click',function() {
+    // DELEGADO e pela CLASSE, nunca `$('#selectAll').on(...)`: com scrollX o
+    // DataTables 2 clona o <thead> para o .dt-scroll-head a cada draw e REMOVE
+    // os ids do clone — o checkbox que se vê não é o #selectAll, e o handler
+    // ligado por id ficava no original, escondido no corpo rolável (o mesmo
+    // defeito do DCE Option, 2026-09-04).
+    $(document).on('click','.intrag-cb-all',function() {
         selectedRowIds.clear();
         // Only the rows matching the current filter/search — never the whole dataset.
         if(this.checked) { table.rows({ search: 'applied' }).every(function(){ var d=this.data(),id=d?d[ID_COL]:null; if(id) selectedRowIds.add(id); }); }
         $('input[type="checkbox"]',table.rows({ search: 'applied' }).nodes()).prop('checked',this.checked);
         toggleDelBtn(this.checked&&selectedRowIds.size>=2);
+        $('.intrag-cb-all').prop('checked',this.checked).prop('indeterminate',false);   // original + clone
     });
 
     $('#intrag-swap-table tbody').on('change','input[type="checkbox"]',function() {
         var tr=$(this).closest('tr')[0], d=table.row(tr).data(), id=d?d[ID_COL]:null;
         if(id){ if(this.checked) selectedRowIds.add(id); else selectedRowIds.delete(id); }
-        var total=table.rows({ search: 'applied' }).count(), sel=selectedRowIds.size, sa=document.getElementById('selectAll');
-        if(sa){ if(sel===0){sa.checked=false;sa.indeterminate=false;} else if(sel>=total){sa.checked=true;sa.indeterminate=false;} else{sa.checked=false;sa.indeterminate=true;} }
+        var total=table.rows({ search: 'applied' }).count(), sel=selectedRowIds.size;
+        $('.intrag-cb-all').each(function(){ var sa=this; if(sel===0){sa.checked=false;sa.indeterminate=false;} else if(sel>=total){sa.checked=true;sa.indeterminate=false;} else{sa.checked=false;sa.indeterminate=true;} });
         toggleDelBtn(sel>=2);
     });
 
