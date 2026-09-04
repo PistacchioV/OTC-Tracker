@@ -916,7 +916,9 @@ São **43** mappings hoje: `currency-base`, `interbook-ndf`, `publisher-ndf`,
 (`cgd-stage`, `cgd-b3-participante`, `cgd-garantidor`, `cgd-conta-encerrada` —
 os três últimos eram abas do `Auxiliar.xlsx` do batimento, e as COLUNAS deles
 seguem a ordem e os nomes das abas: no `cgd-b3-participante` — rótulo
-**CGD — B3 Participants** — Razão Social · Nome Simplificado · CNPJ · **Conta**,
+**B3 Participants** (perdeu o "CGD — ": a mensageria do Operations B3 também o
+lê, HANDOFF §412; a CHAVE não muda, o motor da recon e o arquivo leem por
+ela) — Razão Social · Nome Simplificado · CNPJ · **Conta**,
 com as CHAVES antigas preservadas porque o motor da recon lê por elas; no
 `cgd-garantidor` a coluna `NOME` virou `EMPRESA` com `upgrade` na leitura.
 `scripts/import_cgd_auxiliar.py` carrega as três abas nos JSONs — idempotente,
@@ -968,7 +970,10 @@ continua no label inglês.
   `check_quote_type.py` prova que as duas concordam (HANDOFF §177). A tabela
   do /mapping abre ordenada por MARKET A→Z (só a exibição; o arquivo mantém a
   ordem de cadastro) e todo mapping ordena por clique no header.
-- **`api-links`** — o endpoint da Athena, uma linha por **uso × produto**
+- **`api-links`** — rótulo **API/Bob Reports Links** (HANDOFF §408): guarda o
+  `getTrades` da Athena E os extratos do bob-reports, e a coluna **SOURCE**
+  (API × Bob Report) diz qual linha é o quê — o `upgrade` a deriva da própria
+  URL nos arquivos antigos. Uma linha por **uso × produto**
   (`New Deals` × NDF/FXO/Commodities/Swaps, mais `Unwinds`), com `YYYYMMDD`
   marcando a data de referência. Produto aqui é o parâmetro `product` da API,
   **não a página**: NDF é um produto alimentando três páginas (Vanilla, Other
@@ -979,7 +984,9 @@ continua no label inglês.
   sem URL o consumidor falha pedindo cadastro, enquanto `New Deals` cai no
   endereço histórico (HANDOFF §173). O uso **`Recon FXO`** é outra Athena — o
   relatório EOD do `bob-reports`, não o `getTrades` — e a data dele fica no
-  **caminho** (`AAAA-MM-DD`), que é justamente para o que o placeholder serve.
+  **caminho** (`AAAA-MM-DD`), que é justamente para o que o placeholder serve;
+  o uso **`Intrag DCE`** (o ITAUDataExtract de FX Option da página Intrag ›
+  DCE › Option, §409) segue o mesmo desenho.
 - **`fxo-internal-cpty`** — a perna interna da reconciliação de FXO. A coluna
   **`INVERT DIRECTION`** decide *quando* a regra vale: `No` renomeia sempre;
   `Yes` é a perna espelhada e só entra quando Ctpty **e** JPM Dir estão os dois
@@ -1587,7 +1594,12 @@ WebGL por software ou **Firefox no Windows** ligam a classe `sf-reduced` no
 `<html>`, e a seção 16 do `streamflow.css` desliga os custos por quadro
 mantendo tokens, cores e sombras. Regra de token do modo vai como
 `html.sf-reduced:not([data-bs-theme=dark])` — `html.sf-reduced` sozinho (0,1,1)
-perde para o `:root:not(...)` (0,2,0) que define o valor normal.
+perde para o `:root:not(...)` (0,2,0) que define o valor normal. E **alfa sem
+blur não é material** (HANDOFF §414): sem o desfoque para virar fosco, qualquer
+transparência mostra os blobs do fundo nítidos — por isso no modo reduzido o
+cartão, a topbar e a sidenav são COR SÓLIDA composta (tokens do §16), e o
+defeito é invisível na dev, onde o macOS roda o modo full com blur. Mudança de
+tema/vidro se valida forçando `localStorage.__OTC_TRACKER_FX__ = 'reduced'`.
 
 ### Um `stat` por LINHA é invisível na dev e custa minutos no share
 

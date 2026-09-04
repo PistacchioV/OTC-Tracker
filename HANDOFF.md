@@ -16753,3 +16753,145 @@ Dois pedidos da mesa, os dois no par Overview × Track Docs:
   ficariam escondidos atrás dos cards de largura cheia, então saíram junto; os
   STUDS do cabeçalho ficam, segurando a identidade. Medido no navegador: card
   do template e blocos em left/width idênticos. Commit `2f078ad`.
+
+## §408 — Mapping: API Links vira API/Bob Reports Links, com a coluna Source (2026-09-04)
+
+- O cadastro passou a guardar dois tipos de endereço — o `getTrades` da Athena
+  (JSON, data em query string) e os extratos do bob-reports (texto delimitado,
+  data no CAMINHO) — e nada na tela dizia qual linha era o quê. A coluna
+  **SOURCE** (API × Bob Report) entra ANTES do Usage; o `upgrade` preenche os
+  arquivos antigos derivando da PRÓPRIA URL (contém `bob-reports` → Bob
+  Report), nunca de uma segunda lista de usos, que envelheceria no primeiro
+  uso novo. Commit `963736a`.
+- O seed ganha a linha do uso **`Intrag DCE`** (o extrato ITAUDataExtract de
+  FX Option, fonte do Import da página Intrag › DCE › Option), com o
+  placeholder `AAAA-MM-DD` no caminho, como a linha da Recon FXO. O banco
+  espelho (`db/mappings/api-links.db`) não precisa de migração: o
+  `duck_mirror` reconverte sozinho na próxima gravação (coluna `_raw`).
+
+## §409 — Intrag DCE Option: a quarta página da Intrag, nascida do bob-report (2026-09-04)
+
+- Sub-item **DCE** no menu Intrag (Option · Swap · NDF · DFW; só a Option tem
+  especificação — as outras três nascem páginas-esqueleto para o link não dar
+  404). Na grade, até a coluna Intrag ID a página é a Intrag Option; dali em
+  diante entram as 28 colunas do extrato ITAUDataExtract de FX Option.
+  Commits `4eaee16` e `ead6f17`.
+- As linhas **NÃO vêm do New Deals**: nascem do Import do bob-report (endereço
+  no cadastro API/Bob Reports Links, uso `Intrag DCE`, data no caminho — com
+  fallback no código porque o `registered_link` lê o JSON cru e o seed novo só
+  chega ao arquivo quando alguém salvar o /mapping). O parser casa coluna por
+  NOME normalizado, nunca por posição: coluna nova no relatório não desloca
+  nada, só sai contada em `unknown` no log. Cada linha cai no arquivo-dia do
+  PRÓPRIO Trade Date e o re-import preserva status/maker/checker/intrag_id —
+  importar de novo não desfaz esteira.
+- Daí em diante o ciclo é o das irmãs: editar (Pending, maker) → aprovar
+  (maker ≠ checker) → Mapping Intrag ID (Boletas CSV → Success) → enviar
+  (`Intrag-DCE-Option-AAAAMMDD.txt`, `;` sem header, mesma pasta e mesma
+  lógica de nome — nunca sobrescreve). O ramo de data exata do GET passa pelo
+  funil `_day_json` (DB-first): a busca do smart filter consulta o espelho
+  DuckDB da página em qualquer forma de data, não só no intervalo.
+- Foi junto: o rótulo nos TRÊS mapas de notificação (§246), o registro do
+  layout na biblioteca do File Interpreter, as traduções en/br/es e o guarda
+  `check_intrag_dce.py` (parser por nome, upsert preservando esteira, URL do
+  dia — tudo em tmp). O Import segue o padrão de data da casa (flatpickr
+  d/m/Y com guard, ícone SVG embutido no par claro/escuro) e o pós-import
+  arma os chips DE/ATÉ sobre o intervalo que o servidor materializou
+  (`date_min`/`date_max`) — o chip continua comandando o fetch.
+
+## §410 — Telemetria de requests lentos: quem segura as threads (2026-09-04)
+
+- O waitress avisa "Task queue depth is N" — as 16 threads ocupadas e N
+  requests na fila — mas não diz ocupadas COM O QUÊ, e com os dados no share o
+  suspeito é sempre um request preso em espera de rede segurando a vaga.
+  Commit `cefe6c1`.
+- Dois hooks no blueprint: request acima do teto (3s;
+  `OTC_SLOW_REQUEST_SECONDS` move, `0` desliga) sai em **WARNING** — o nível
+  que o log da instância mostra — com método, caminho, duração e quantos
+  requests estavam EM VOO quando ele começou, que é o número que correlaciona
+  com a fila do waitress. O contador é um gauge intra-processo (produção é 1
+  processo, §4). O **teardown** (e não `after_request`) é de propósito: roda
+  também quando o handler estoura — justamente um request que pode ter
+  segurado a thread por muito tempo.
+
+## §411 — Daily Settlement: a conta do COE entra no arquivo de operações (2026-09-04)
+
+- O Tipo Título COE já estava na lista do filtro de títulos do spec
+  `operacoes-jpm` — e nenhuma linha de COE entrava, porque TODAS chegam pela
+  conta 73760.40-1 e o filtro de CONTA (por dígitos) as derrubava antes de o
+  título ser olhado: sumiam sem erro nenhum do JSON que alimenta o Operations
+  B3, a mensageria, os avisos de liquidação e os cards de reconciliação.
+  Commit `64ef644`.
+- A conta entrou no filtro de dígitos; como os filtros são AND, ela não abre a
+  porta para títulos fora da lista (73760.40-1 × CDB continua fora — o guarda
+  `check_ds_operacoes` prende os dois lados). O spec da MGT não muda.
+
+## §412 — Mensageria: o nome cai no B3 Participants antes do apelido (2026-09-04)
+
+- A contraparte que não é cliente nosso nunca terá linha no Reference Data, e
+  o e-mail de mensageria saía com o apelido de 20 caracteres da B3 no lugar do
+  nome. A cadeia ganhou um degrau: Reference Data pela conta → `b3-accounts`
+  (a contraparte que é entidade nossa) → **RAZAO SOCIAL do cadastro
+  `cgd-b3-participante` pela CONTA** (comparada por DÍGITOS, §197) → só então
+  o Nome Simplificado do arquivo, como era. Commit `ee37fca`.
+- O cadastro perdeu o "CGD — " do RÓTULO (**B3 Participants**, nas quatro
+  pontas: def, TYPES do mapping.html e os três idiomas): deixou de ser assunto
+  só do CGD. A **CHAVE continua `cgd-b3-participante`** — renomeá-la órfaria o
+  arquivo em disco e o motor da recon de CGD, que lê por ela.
+
+## §413 — Operations B3: o select-all que só via a página 1, e o e-mail por conta (2026-09-04)
+
+- "Filtrar + select all + mensageria não funciona; selecionando uma a uma,
+  funciona": o select-all marcava só o que estava no DOM — e o tbody do
+  DataTables só tem a PÁGINA atual (200 linhas). Num dia com mais linhas, tudo
+  além da página 1 ficava de fora; linha a linha funcionava porque o usuário
+  PAGINAVA para clicar, e cada clique registrava no mapa `SELECTED`. Agora o
+  select-all percorre `dt.rows({search:'applied'})` — o conjunto filtrado
+  inteiro — com o id extraído do HTML da célula, porque com `deferRender` o nó
+  da linha pode nem existir. Bump do `?v=` do JS (parado em 20260729a).
+  Commit `2867510`.
+- O agrupamento do e-mail era por (tipo, CONTA contraparte, evento): a mesma
+  contraparte liquidando por duas contas no mesmo dia (o COE de 04/09) saía em
+  DOIS avisos cobrando o mesmo pagamento. A chave agora é o **NOME resolvido**
+  (a cadeia do §412), resolvido ANTES do agrupamento; cada linha mantém a sua
+  conta na tabela do e-mail e o total soma as contas. O BCC de compliance
+  (Atacama/Lawton) passou a olhar as contas de TODAS as linhas do grupo.
+- De quebra: seleção ÓRFÃ (ids que não casam com nenhuma linha do dia — página
+  aberta antes de uma reimportação que reatribuiu `_ob_id`, o caso das linhas
+  sem Num Ctrl Operação, cujo id não sobrevive ao merge) devolve **409
+  mandando recarregar**, em vez do "No pending" genérico que lia como botão
+  quebrado. `check_opb3_mensageria` §9 (duas contas, mesmo nome → um e-mail) e
+  §10 (órfãos → 409) prendem os dois.
+
+## §414 — sf-reduced: alfa sem blur não é material (2026-09-04)
+
+- Três rodadas de "na versão do banco continua tudo transparente" com TRÊS
+  causas empilhadas, cada uma escondendo a seguinte (commits `3a1b128`,
+  `a723042`, `4dae5df`, `a83f0fe`):
+  1. o ajuste de opacidade subiu os tokens e o **cache-buster ficou parado**
+     (20260902a): o Firefox da instância seguia servindo o CSS antigo do cache
+     — na dev não aparece porque o navegador local revalida;
+  2. com o CSS chegando, os cartões a 0.92/0.10 de alfa continuavam
+     transparentes NO ESCURO: **sem blur, alfa nenhum devolve o material** — o
+     desfoque é o que transforma transparência em fosco, e no sf-reduced ele
+     está desligado por definição. O que fica atrás do cartão são os blobs
+     coloridos, nítidos. Na dev o defeito é INVISÍVEL: macOS tem GPU, o modo
+     full roda com blur e o mesmo alfa parece sólido. O cartão do modo
+     reduzido virou **COR SÓLIDA composta** (`#f8fafd` claro / `#101828`
+     escuro — o tom que o vidro+blur produz visualmente, o desenho do
+     `--vr-thead-bg`), e os derivados por color-mix viram véus desse tom;
+  3. cartão sólido e a tela AINDA lia transparente no escuro: a **topbar (§7)
+     e a sidenav (§8)** são pintadas por regras próprias (40–62% do fundo da
+     página + blur) e ficaram de fora — sem blur, eram as duas maiores janelas
+     para os blobs. No claro o véu branco sobre fundo claro disfarça, e foi por
+     isso que o claro "resolveu" antes. As duas viram o degrau
+     página→superfície composto dos tokens (`color-mix` de `--vr-card-bg` 35%
+     sobre `--vr-page-bg`, os dois já sólidos no modo reduzido). Seletores aos
+     PARES claro/escuro, porque as regras claras do §25 têm (0,3,0) com
+     `!important` — o par (0,3,1) vence nos dois temas sem depender de ordem.
+- Como testar isso na dev, onde o modo nunca liga sozinho: semear
+  `localStorage.__OTC_TRACKER_FX__ = 'reduced'` antes do load (o probe de
+  Playwright valida por computed style — nenhuma superfície de croma pode ter
+  canal alfa). E o diagnóstico de 10 segundos na instância: **view-source e
+  conferir o `?v=` do streamflow.css** — versão velha = template velho =
+  Flask não reiniciado após o pull; versão nova com visual velho = problema
+  de CSS de verdade.
