@@ -10,7 +10,12 @@ O que ele prende:
   2. **edit reabre o ciclo**: status Pending, maker = quem editou, checker
      LIMPO; o id (ultima celula) e as quatro de ciclo nao sao editaveis;
   3. comment escreve na ULTIMA celula de dado (len-5);
-  4. data sem arquivo do dia devolve `empty` (nao 404): a tela abre vazia.
+  4. data sem arquivo do dia devolve `empty` (nao 404): a tela abre vazia;
+  5. **o /validation aceita as DUAS formas de arquivo gerado**: os books MID
+     guardam a linha pronta em `lines` e o COE guarda `rows` (dicts por
+     coluna). O resumo e o total liam so `rows` e estouravam em KeyError
+     DEPOIS de os .txt e o e-mail ja terem saido — a tela dizia erro com
+     tudo gerado (duas vezes: 2026-09-04, linhas 419 e 451).
 """
 import io, json, os, sys, tempfile
 from datetime import datetime, timedelta, timezone
@@ -119,6 +124,36 @@ check('celulas de dado editadas; ciclo resetado; id intacto',
 r = c.post('/api/mtm-swap/row/edit', json={'date': '2026-08-20', 'lob': 'CEM',
                                            'id': 'NAO-EXISTE', 'cells': []})
 check('linha inexistente e 404', r.status_code, 404)
+
+print('\n== 6. validation: book em `lines` e COE em `rows`, no mesmo lote ==')
+from apps.pages.features.mtm import commands as BC             # noqa: E402
+from apps.pages.features.mtm.infra import mail as BM           # noqa: E402
+# a geracao de verdade depende dos templates do File Interpreter e escreve no
+# share: aqui o que se prende e a CASCA (resumo, total, e-mail enfileirado),
+# entao os geradores devolvem as duas formas reais e a escrita e no-op.
+BC._mtm_generate_book = lambda lob, rows, ymd: {
+    'MtM_BANCO-' + lob: {'view': 'BANCO', 'header': 'H', 'lines': ['L1', 'L2']},
+    'MtM_LAWTON-' + lob: {'view': 'LAWTON', 'header': 'H', 'lines': ['L1']}}
+BC._mtm_generate_coe = lambda rows, ymd: {
+    'MtM_BANCO-COE': {'view': 'BANCO', 'header': 'H', 'cols': ['a'], 'rows': [{'a': '1'}, {'a': '2'}]}}
+BC._mtm_write_gen_files = lambda files, ymd: []
+ENVIOS = []
+BM._send_mtm_validation_email = lambda *a, **k: ENVIOS.append(a)
+R.CONECTA_NEW_PATH = os.path.join(TMP, 'conecta')
+no_disco = json.load(io.open(os.path.join(pasta, 'mtm_swap_20260820.json'), encoding='utf-8'))
+no_disco['tables']['COE'] = [linha('COE-0', '10.00')]
+io.open(os.path.join(pasta, 'mtm_swap_20260820.json'), 'w', encoding='utf-8').write(json.dumps(no_disco))
+r = c.post('/api/mtm-swap/validation', json={'date': '2026-08-20'})
+d = r.get_json() or {}
+check('200 (nao estoura no resumo nem no total)', (r.status_code, d.get('success')), (200, True))
+check('   resumo conta lines E rows',
+      sorted((f['filename'], f['count']) for f in d.get('files', [])),
+      [('MtM_BANCO-CEM.txt', 2), ('MtM_BANCO-COE.txt', 2), ('MtM_LAWTON-CEM.txt', 1)])
+check('   total soma os dois formatos', d.get('total'), 5)
+check('   so a visao LAWTON/ATACAMA vai anexa', d.get('attached'), ['MtM_LAWTON-CEM.txt'])
+no_disco = json.load(io.open(os.path.join(pasta, 'mtm_swap_20260820.json'), encoding='utf-8'))
+check('   toda linha vira Sent com o checker', {r[-4] for t in no_disco['tables'].values() for r in t}, {'Sent'})
+check('   e o sino recebe MTM Sent', NOTIFS[-1][0], 'MTM Sent')
 
 print(('FAIL: %d' % len(fails)) if fails else 'TUDO OK')
 sys.exit(1 if fails else 0)
