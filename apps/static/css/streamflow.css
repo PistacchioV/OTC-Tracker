@@ -3081,17 +3081,23 @@ html.sf-reduced *::after {
   -webkit-backdrop-filter: none !important;
 }
 
-/* Sem o desfoque para "puxar luz" do fundo, o vidro fino fica invisível no
-   escuro e transparente demais no claro — os tokens sobem de opacidade. O
-   seletor claro leva o `:not` porque o `--sf-overlay-bg` original do §34 é
-   declarado em `:root:not([data-bs-theme=dark])` (0,2,0), e um
-   `html.sf-reduced` sozinho (0,1,1) perderia justamente no tema claro. */
+/* Sem o desfoque para "puxar luz" do fundo, alfa NENHUM devolve o material:
+   o que fica atrás do cartão são os blobs coloridos do fundo, e sem o fosco
+   qualquer transparência os mostra nítidos — 10% de branco no escuro lia
+   como "tudo transparente" na máquina do JPM, enquanto a dev (modo full,
+   com blur) parecia sólida. O cartão vira COR SÓLIDA composta — o tom que o
+   vidro+blur produz visualmente (página + branco fino), o mesmo desenho do
+   `--vr-thead-bg` —, e os derivados por color-mix (hover, linhas zebradas)
+   viram véus desse tom em vez de véus do fundo. O seletor claro leva o
+   `:not` porque o `--sf-overlay-bg` original do §34 é declarado em
+   `:root:not([data-bs-theme=dark])` (0,2,0), e um `html.sf-reduced` sozinho
+   (0,1,1) perderia justamente no tema claro. */
 html.sf-reduced:not([data-bs-theme=dark]) {
-  --vr-card-bg: rgba(255, 255, 255, 0.92);
+  --vr-card-bg: #f8fafd;
   --sf-overlay-bg: #f4f8ff;
 }
 html.sf-reduced[data-bs-theme=dark] {
-  --vr-card-bg: rgba(255, 255, 255, 0.1);
+  --vr-card-bg: #101828;
   --sf-overlay-bg: #0d1320;
 }
 
