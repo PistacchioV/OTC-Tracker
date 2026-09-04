@@ -3087,11 +3087,11 @@ html.sf-reduced *::after {
    declarado em `:root:not([data-bs-theme=dark])` (0,2,0), e um
    `html.sf-reduced` sozinho (0,1,1) perderia justamente no tema claro. */
 html.sf-reduced:not([data-bs-theme=dark]) {
-  --vr-card-bg: rgba(255, 255, 255, 0.88);
+  --vr-card-bg: rgba(255, 255, 255, 0.92);
   --sf-overlay-bg: #f4f8ff;
 }
 html.sf-reduced[data-bs-theme=dark] {
-  --vr-card-bg: rgba(255, 255, 255, 0.075);
+  --vr-card-bg: rgba(255, 255, 255, 0.1);
   --sf-overlay-bg: #0d1320;
 }
 
