@@ -55,6 +55,7 @@ são:
   - reconciliation/fxo
   - reconciliation/cgd
   - reconciliation/payrec
+  - new deals/Intrag/DCE Option
 
 Se não houver nada fora dessa lista, este script não faz nada, e isso é o
 resultado esperado.
@@ -1079,6 +1080,13 @@ ROTINAS_CACHE = (
     ('reconciliation/cgd', 'A reconciliação de CGD (lista do FEP × posição da B3).'),
     ('reconciliation/payrec', 'Os caches por data da reconciliação de Pay/Rec —\n'
                               'irmãos do histórico que mora em `cache/payrec`.'),
+    ('new deals/Intrag/DCE Option', 'A opção de câmbio do DCE da Intrag (o extrato\n'
+                                    'ITAUDataExtract importado do bob-report, §409).\n'
+                                    'Nasceu depois das fatias (por isso é a última:\n'
+                                    'renumerar as outras trocaria o nome de vinte\n'
+                                    'scripts) e caía só no 99_outros:\n'
+                                    'sem banco próprio, parecia que o import não\n'
+                                    'gravava nada.'),
 )
 
 
@@ -1745,7 +1753,7 @@ def main(argv=None):
     # Tudo que os demais scripts NAO cobrem: e o que garante que uma rotina nova
     # em cache/ tenha conversor sem ninguem regerar nada.
     _resumo('daily', convert_daily(data_dir, out_dir, force=args.force,
-                                   dry_run=args.dry_run, excluir=['new deals/NDF/Vanilla', 'new deals/NDF/FwdStart', 'new deals/NDF/OtherPublisher', 'new deals/NDF/Commodities', 'new deals/Option/FXO', 'new deals/Option/Commodities', 'new deals/Swap/Rates', 'new deals/Swap/Commodities', 'new deals/Intrag/NDF', 'new deals/Intrag/Option', 'new deals/Intrag/Swap', 'b3 files/NDF', 'b3 files/Option', 'b3 files/Swap', 'b3 files/Operations', 'daily settlement/otm-settlement', 'daily settlement/ndf-cockpit', 'daily settlement/operations-b3', 'daily settlement/operacoes-jpm', 'daily settlement/operacoes-mgt', 'daily settlement/eventos-swap-jpm', 'daily settlement/eventos-swap-mgt', 'daily settlement/latam-desk-position', 'daily settlement/swap-kapital-hybrids', 'daily settlement/cognos', 'daily settlement/br-onshore-settlements', 'daily settlement/other-products-summary', 'pending-confirmation', 'payrec', 'reconciliation/fxo', 'reconciliation/cgd', 'reconciliation/payrec'],
+                                   dry_run=args.dry_run, excluir=['new deals/NDF/Vanilla', 'new deals/NDF/FwdStart', 'new deals/NDF/OtherPublisher', 'new deals/NDF/Commodities', 'new deals/Option/FXO', 'new deals/Option/Commodities', 'new deals/Swap/Rates', 'new deals/Swap/Commodities', 'new deals/Intrag/NDF', 'new deals/Intrag/Option', 'new deals/Intrag/Swap', 'b3 files/NDF', 'b3 files/Option', 'b3 files/Swap', 'b3 files/Operations', 'daily settlement/otm-settlement', 'daily settlement/ndf-cockpit', 'daily settlement/operations-b3', 'daily settlement/operacoes-jpm', 'daily settlement/operacoes-mgt', 'daily settlement/eventos-swap-jpm', 'daily settlement/eventos-swap-mgt', 'daily settlement/latam-desk-position', 'daily settlement/swap-kapital-hybrids', 'daily settlement/cognos', 'daily settlement/br-onshore-settlements', 'daily settlement/other-products-summary', 'pending-confirmation', 'payrec', 'reconciliation/fxo', 'reconciliation/cgd', 'reconciliation/payrec', 'new deals/Intrag/DCE Option'],
                                    desde=desde),
             houve_erro)
     return 1 if houve_erro[0] else 0

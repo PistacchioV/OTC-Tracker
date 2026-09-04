@@ -287,7 +287,7 @@
                         <table class="table table-striped dt-responsive align-middle mb-0" id="intrag-dce-table">
                             <thead class="thead-sm text-uppercase fs-xxs">
                                 <tr class="text-uppercase fs-xxs">
-                                    <th style="width:50px;"><input class="form-check-input form-check-input-light fs-14 mt-0" type="checkbox" id="selectAll"></th>
+                                    <th style="width:50px;"><input class="form-check-input form-check-input-light fs-14 mt-0 dce-cb-all" type="checkbox" id="selectAll"></th>
                                     <th data-lang="nd-col-actions">Actions</th>
                                     <th data-lang="intrag-col-status">Status</th>
                                     <th data-lang="intrag-col-intrag-id">Intrag ID</th>
@@ -502,7 +502,7 @@ $(document).ready(function() {
                     $(node).find('.btn-row-approve').toggleClass('d-none', (d?d[2]:'')!=='Pending');
                 }
             });
-            var total=api.rows({ search: 'applied' }).count(), sel=selectedRowIds.size, $sa=$('#selectAll');
+            var total=api.rows({ search: 'applied' }).count(), sel=selectedRowIds.size, $sa=$('.dce-cb-all');
             if($sa.length) {
                 if(sel===0){$sa.prop('checked',false).prop('indeterminate',false);}
                 else if(sel>=total){$sa.prop('checked',true).prop('indeterminate',false);}
@@ -668,6 +668,22 @@ $(document).ready(function() {
         });
     });
 
+    // ── A Reference Date do import COMANDA o chip de Trade Date do smart filter
+    // (pedido de 2026-09-04): trocar a data do bob-report troca o filtro junto e
+    // a busca dispara — o chip é quem decide que arquivo-dia o servidor lê. O
+    // flatpickr dispara `change` no próprio input ao escolher a data; digitada
+    // à mão (allowInput), o change vem no blur.
+    (function () {
+        var refInput = document.getElementById('dceRefDate'); if (!refInput) return;
+        refInput.addEventListener('change', function () {
+            var v = (this.value || '').trim();
+            if (!/^\d{2}\/\d{2}\/\d{4}$/.test(v)) return;
+            sfActive = sfActive.filter(function (f) { return !f.col.isDate; });
+            sfAddFilter(SF_COLS[3], v, 'exact');
+            document.getElementById('sfSearchBtn').click();
+        });
+    })();
+
     // ── Mapping Intrag ID (return-folder CSV → fill the Intrag ID column) ───────
     // Table cols: [2]=status, [3]=Intrag ID, [5]=Trade ID, [32]=row id.
     var _mappingDceRunning = false;
@@ -734,18 +750,25 @@ $(document).ready(function() {
     $('[data-table-rows]').on('change',function(){ table.page.len(parseInt(this.value)).draw(); });
     $('[data-table-rows]').val(String(table.page.len()));
 
-    $('#selectAll').on('click',function() {
+    // DELEGADO e pela CLASSE, nunca `$('#selectAll').on(...)`: com scrollX o
+    // DataTables 2 clona o <thead> para o .dt-scroll-head a cada draw e REMOVE
+    // os ids do clone — o checkbox que se vê não é o #selectAll, e o handler
+    // ligado por id ficava no original, escondido dentro do corpo rolável. O
+    // clique marcava o quadradinho e não selecionava nada: sem o Send em lote
+    // aparecer, sobrava o Send da linha, que manda UMA (2026-09-04).
+    $(document).on('click','.dce-cb-all',function() {
         selectedRowIds.clear();
         if(this.checked) { table.rows({ search: 'applied' }).every(function(){ var d=this.data(),id=d?d[DCE_ID_COL]:null; if(id) selectedRowIds.add(id); }); }
         $('input[type="checkbox"]',table.rows({ search: 'applied' }).nodes()).prop('checked',this.checked);
+        $('.dce-cb-all').prop('checked',this.checked).prop('indeterminate',false);   // original + clone
         toggleDelBtn(this.checked&&selectedRowIds.size>=2);
     });
 
     $('#intrag-dce-table tbody').on('change','input[type="checkbox"]',function() {
         var tr=$(this).closest('tr')[0], d=table.row(tr).data(), id=d?d[DCE_ID_COL]:null;
         if(id){ if(this.checked) selectedRowIds.add(id); else selectedRowIds.delete(id); }
-        var total=table.rows({ search: 'applied' }).count(), sel=selectedRowIds.size, sa=document.getElementById('selectAll');
-        if(sa){ if(sel===0){sa.checked=false;sa.indeterminate=false;} else if(sel>=total){sa.checked=true;sa.indeterminate=false;} else{sa.checked=false;sa.indeterminate=true;} }
+        var total=table.rows({ search: 'applied' }).count(), sel=selectedRowIds.size;
+        $('.dce-cb-all').each(function(){ var sa=this; if(sel===0){sa.checked=false;sa.indeterminate=false;} else if(sel>=total){sa.checked=true;sa.indeterminate=false;} else{sa.checked=false;sa.indeterminate=true;} });
         toggleDelBtn(sel>=2);
     });
 

@@ -1055,6 +1055,13 @@ ROTINAS_CACHE = (
     ('reconciliation/cgd', 'A reconciliação de CGD (lista do FEP × posição da B3).'),
     ('reconciliation/payrec', 'Os caches por data da reconciliação de Pay/Rec —\n'
                               'irmãos do histórico que mora em `cache/payrec`.'),
+    ('new deals/Intrag/DCE Option', 'A opção de câmbio do DCE da Intrag (o extrato\n'
+                                    'ITAUDataExtract importado do bob-report, §409).\n'
+                                    'Nasceu depois das fatias (por isso é a última:\n'
+                                    'renumerar as outras trocaria o nome de vinte\n'
+                                    'scripts) e caía só no 99_outros:\n'
+                                    'sem banco próprio, parecia que o import não\n'
+                                    'gravava nada.'),
 )
 
 
