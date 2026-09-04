@@ -2028,7 +2028,7 @@
   "ob-otc-issue": "Issue Date",
   "ob-otc-sig": "Signature Date",
   "map-tab-cgd-stage": "Onboarding — Status → Desk",
-  "map-tab-cgd-part": "CGD — B3 Participants",
+  "map-tab-cgd-part": "B3 Participants",
   "map-tab-cgd-guar": "CGD — Guarantors",
   "map-tab-cgd-closed": "CGD — Closed Accounts",
   "map-col-cgd-part-name": "Participant (Legal Name)",
