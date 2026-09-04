@@ -448,7 +448,9 @@ def api_mtm_validation():
     except Exception:
         _R().log.error('[mtm] validation e-mail prep failed:\n%s', traceback.format_exc())
 
-    total = sum(len(fd['rows']) for fd in files.values())
+    # o mesmo par lines/rows do resumo acima: só `rows` estourava aqui DEPOIS
+    # do e-mail já ter sido enfileirado — a tela dizia erro com tudo gerado.
+    total = sum(len(fd.get('lines', fd.get('rows')) or []) for fd in files.values())
     _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                          'MTM Sent', 'MtM',
                          'EOM Validation · {} file(s), {} attached'.format(len(files), len(attach)) + _R()._nd_token(ymd))

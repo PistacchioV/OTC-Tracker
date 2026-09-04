@@ -1706,7 +1706,16 @@ div[class*="-chip"]:not([class*="-chips"]), span[class*="-chip"]:not([class*="-c
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border-top: 1px solid var(--sf-hair);
-  margin-inline: 0 !important;
+  /* De BORDA a BORDA (pedido de 2026-09-04): o `.content-page` carrega 1.5rem
+     de padding lateral (§16), e com `margin-inline: 0` o footer parava 24px
+     antes de cada lado — uma faixa solta dentro do respiro. A margem negativa
+     cancela o padding do pai, e como é o `.content-page` que segue o pin do
+     menu (`margin-left` 0 no drawer, 240px dockado), o footer sai da tela
+     inteira com o menu recolhido e do menu até a borda com ele fixo, sem
+     esta regra saber qual dos dois vale. O padding lateral volta por dentro
+     para o texto não encostar na borda. */
+  margin-inline: -1.5rem !important;
+  padding-inline: 1.5rem !important;
   justify-content: center;
   padding-block: 1.1rem;
   color: var(--sf-micro);
@@ -1714,6 +1723,10 @@ div[class*="-chip"]:not([class*="-chips"]), span[class*="-chip"]:not([class*="-c
   letter-spacing: 0.03em;
 }
 .footer .container-fluid { width: 100%; }
+@media (max-width: 767.98px) {
+  /* o respiro do §16 cai para 0.85rem no celular — a margem acompanha */
+  .footer { margin-inline: -0.85rem !important; padding-inline: 0.85rem !important; }
+}
 .footer .fw-semibold { color: var(--ins-body-color); }
 
 /* ══════════════════════════════════════════════════════════════════════════
