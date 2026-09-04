@@ -548,9 +548,15 @@ def _dce_opt_import(ref_date=None, sid='', actor_name=''):
             _R()._atomic_write_json(file_path, entries)
         _R().log.info('[INTRAG DCE OPT] Imported %d row(s) → %s', len(grp['rows']), file_path)
 
+    # O intervalo dos Trade Dates importados: é com ele que a tela arma os
+    # chips DE/ATÉ do smart filter depois do import — o chip continua
+    # comandando o fetch, como nas outras páginas de Intrag.
+    chaves = sorted(groups)
     return {'success': True, 'imported': imported, 'files': len(groups),
             'skipped': skipped, 'unknown_headers': unknown,
-            'ref_date': ref_dt.strftime('%Y-%m-%d')}
+            'ref_date': ref_dt.strftime('%Y-%m-%d'),
+            'date_min': (chaves[0][:4] + '-' + chaves[0][4:6] + '-' + chaves[0][6:]) if chaves else '',
+            'date_max': (chaves[-1][:4] + '-' + chaves[-1][4:6] + '-' + chaves[-1][6:]) if chaves else ''}
 
 
 def _intrag_run_mapping(deals, match_col, match_val, b3_col, finder):

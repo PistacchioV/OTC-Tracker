@@ -150,8 +150,21 @@
   .btn-toolbar-all { font-size: 0.75rem !important; padding: 0.25rem 0.6rem !important; height: auto !important; line-height: 1.4 !important; white-space: nowrap !important; }
   /* Import (bob-report): teal fixo da toolbar da casa. */
   .btn-import-dce { background-color: #4a849b !important; border-color: #4a849b !important; color: #fff !important; }
-  #dceRefWrap .form-control { font-size: 12px; height: 28px; }
-  .dce-ref-field { width: 120px; }
+  /* Ícone de calendário no campo Reference Date (flatpickr abre no clique) —
+     o MESMO desenho do campo das páginas de New Deals com API linkada. O input
+     é de texto, não type=date, então o ícone nativo do navegador não existe;
+     SVG embutido (a instância roda sem internet) com o par claro/escuro. */
+  #dceRefDate {
+      background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236c757d' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='5' width='16' height='16' rx='2'/%3E%3Cpath d='M16 3v4M8 3v4M4 11h16'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 0.6rem center;
+      background-size: 1rem 1rem;
+      padding-right: 2rem;
+      cursor: pointer;
+  }
+  [data-bs-theme="dark"] #dceRefDate {
+      background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23adb5bd' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='5' width='16' height='16' rx='2'/%3E%3Cpath d='M16 3v4M8 3v4M4 11h16'/%3E%3C/svg%3E");
+  }
   .smart-filter-wrapper { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; border: 1px solid rgba(0,0,0,0.08); border-radius: 0.6875rem; padding: 4px 8px; min-height: 38px; background: var(--ins-secondary-bg, #fff); cursor: text; transition: border-color 0.15s ease, box-shadow 0.15s ease; }
   .smart-filter-wrapper:focus-within { border-color: #0066cc; box-shadow: 0 0 0 3px rgba(0,102,204,0.15); }
   .smart-filter-chips { display: flex; flex-wrap: wrap; gap: 4px; }
@@ -259,8 +272,9 @@
                          referência do CAMINHO do extrato ao lado — o mesmo desenho do
                          Import das páginas de New Deals com API linkada. -->
                     <div class="d-flex align-items-center gap-1" id="dceRefWrap">
-                        <input type="text" class="form-control form-control-sm dce-ref-field" id="dceRefDate" placeholder="dd/mm/aaaa" autocomplete="off" title="Reference date (bob-report path)">
-                        <button class="btn btn-sm bg-gradient btn-toolbar-all btn-import-dce" id="btnImportDce" type="button" data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-title="Import bob-report" data-bs-custom-class="tooltip-info"><i class="ti ti-download me-1"></i> Import</button>
+                        <label for="dceRefDate" class="form-label fs-xs text-muted mb-0 me-1 text-nowrap" data-lang="nd-ref-date">Reference Date</label>
+                        <input type="text" id="dceRefDate" class="form-control form-control-sm" style="width: 8.5rem;" placeholder="dd/mm/yyyy" autocomplete="off" data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-title="Date in the bob-report path" data-bs-custom-class="tooltip-teal">
+                        <button class="btn btn-sm bg-gradient btn-toolbar-all btn-import-dce" id="btnImportDce" type="button" data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-title="Import bob-report" data-bs-custom-class="tooltip-info"><i class="ti ti-upload me-1"></i> Import</button>
                     </div>
                     <button class="btn btn-sm btn-success bg-gradient btn-toolbar-all" id="btnMappingDce" type="button" data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-title="Mapping Intrag ID" data-bs-custom-class="tooltip-success"><i class="ti ti-refresh"></i></button>
                     <button class="btn btn-sm btn-danger bg-gradient btn-toolbar-all d-none" id="btnDelDce" data-del-selected><i class="ti ti-trash me-1"></i> Delete</button>
@@ -377,9 +391,20 @@
 // export-advanced.js; sem ele o campo degrada para texto comum.
 var DATE_FIELDS = ['dce-f-3', 'dce-f-11', 'dce-f-16', 'dce-f-20', 'dce-f-21', 'dce-f-25'];
 jQuery(function () {
+    // Reference Date do Import: o MESMO desenho do campo das páginas de New
+    // Deals com API linkada — texto dd/mm/yyyy com hoje por padrão e flatpickr
+    // d/m/Y abrindo no clique (com guard: sem a lib o campo degrada para texto).
+    var rd = document.getElementById('dceRefDate');
+    if (rd) {
+        var n = new Date();
+        rd.value = String(n.getDate()).padStart(2, '0') + '/' +
+                   String(n.getMonth() + 1).padStart(2, '0') + '/' + n.getFullYear();
+        if (typeof flatpickr !== 'undefined') {
+            flatpickr(rd, { dateFormat: 'd/m/Y', allowInput: true, disableMobile: true });
+        }
+    }
     if (!window.otcDateField) return;
     DATE_FIELDS.forEach(function (id) { window.otcDateField('#' + id); });
-    window.otcDateField('#dceRefDate');
 });
 
 var DCE_COLS = [
@@ -590,7 +615,9 @@ $(document).ready(function() {
         if (_importDceRunning) return;
         var btn = this;
         var refInput = document.getElementById('dceRefDate');
-        var refIso = (refInput && refInput.value ? refInput.value.trim() : '');
+        var refVal = (refInput && refInput.value ? refInput.value.trim() : '');
+        var refM = refVal.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+        var refIso = refM ? (refM[3] + '-' + refM[2] + '-' + refM[1]) : refVal;
         _importDceRunning = true;
         btn.style.pointerEvents = 'none';
         var _prevHtml = btn.innerHTML;
@@ -613,10 +640,25 @@ $(document).ready(function() {
             if (o.data.skipped) msg += ' (' + o.data.skipped + ' without a Trade ID skipped)';
             Swal.fire({ title: 'Import', text: msg + '.',
                 icon: (o.data.imported ? 'success' : 'info'), confirmButtonText: 'OK', confirmButtonColor: '#198754' });
-            // As linhas caem no arquivo-dia do PRÓPRIO Trade Date — a carga sem
-            // data mostra tudo, incluindo o que acabou de chegar.
-            sfActive = []; sfRenderChips();
-            intragLoad('', []);
+            // O padrão da casa: o chip de data COMANDA o fetch. As linhas caem
+            // no arquivo-dia do PRÓPRIO Trade Date, então depois do import o
+            // filtro vira DE/ATÉ cobrindo as datas importadas — o que chegou
+            // aparece, e o filtro continua dizendo o que a tela mostra.
+            function _isoToDmy(s) {
+                var m = String(s || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+                return m ? (m[3] + '/' + m[2] + '/' + m[1]) : '';
+            }
+            var dMin = _isoToDmy(o.data.date_min), dMax = _isoToDmy(o.data.date_max);
+            if (o.data.imported && dMin && dMax) {
+                sfActive = sfActive.filter(function (f) { return !f.col.isDate; });
+                if (dMin === dMax) {
+                    sfAddFilter(SF_COLS[3], dMin, 'exact');
+                } else {
+                    sfAddFilter(SF_COLS[3], dMin, 'from');
+                    sfAddFilter(SF_COLS[3], dMax, 'to');
+                }
+                document.getElementById('sfSearchBtn').click();
+            }
         })
         .catch(function(err) {
             _importDceRunning = false;
