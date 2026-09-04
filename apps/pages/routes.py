@@ -9361,24 +9361,41 @@ _MAP_MC_VALIDATION = ['REQUESTED', 'EXEMPT']
 _ATHENA_GETTRADES = ('https://athena-app.jpmchase.net/FXCASH/brazil-trade-data-api'
                      '/api/v1/getTrades?product={}&date=YYYYMMDD')
 
+# SOURCE separa as duas famílias de endereço: 'API' é o getTrades da Athena
+# (JSON, data em query string) e 'Bob Report' é o extrato servido pelo
+# bob-reports (texto delimitado, data no CAMINHO). A coluna é informativa para
+# quem cadastra — o consumidor continua escolhendo a linha por USE × PRODUCT.
+_MAP_API_SOURCES = ['API', 'Bob Report']
+
 _API_LINKS_SEED = (
-    {'USE': 'New Deals', 'PRODUCT': 'NDF', 'URL': _ATHENA_GETTRADES.format('NDF'),
+    {'SOURCE': 'API', 'USE': 'New Deals', 'PRODUCT': 'NDF',
+     'URL': _ATHENA_GETTRADES.format('NDF'),
      'NOTES': 'Alimenta Vanilla, Other Publisher e FWD Start — a página sai do roteamento'},
-    {'USE': 'New Deals', 'PRODUCT': 'FXO', 'URL': _ATHENA_GETTRADES.format('FXO'),
+    {'SOURCE': 'API', 'USE': 'New Deals', 'PRODUCT': 'FXO',
+     'URL': _ATHENA_GETTRADES.format('FXO'),
      'NOTES': ''},
-    {'USE': 'New Deals', 'PRODUCT': 'Commodities', 'URL': _ATHENA_GETTRADES.format('Commodities'),
+    {'SOURCE': 'API', 'USE': 'New Deals', 'PRODUCT': 'Commodities',
+     'URL': _ATHENA_GETTRADES.format('Commodities'),
      'NOTES': 'Sem consumidor: o pull de commodities ainda vem do box'},
-    {'USE': 'New Deals', 'PRODUCT': 'Swaps', 'URL': _ATHENA_GETTRADES.format('Swaps'),
+    {'SOURCE': 'API', 'USE': 'New Deals', 'PRODUCT': 'Swaps',
+     'URL': _ATHENA_GETTRADES.format('Swaps'),
      'NOTES': 'Sem consumidor ainda'},
-    {'USE': 'Unwinds', 'PRODUCT': '', 'URL': '',
+    {'SOURCE': 'API', 'USE': 'Unwinds', 'PRODUCT': '', 'URL': '',
      'NOTES': 'Preencher com a URL de unwinds quando ela existir'},
     # Recon FXO: outro Athena — o relatório EOD do bob-reports, não o getTrades.
     # A data fica no CAMINHO (AAAA-MM-DD), que é justamente o caso para o qual o
     # placeholder existe: nenhum parâmetro de query alcança ali.
-    {'USE': 'Recon FXO', 'PRODUCT': 'FXO',
+    {'SOURCE': 'Bob Report', 'USE': 'Recon FXO', 'PRODUCT': 'FXO',
      'URL': ('http://athena-reports.jpmchase.net:8080/bob-reports/'
              'YYYY-MM-DD/EOD/GEM_OFFICIAL_TRD/FXOEODReport/brazil_fxo_trades.csv'),
      'NOTES': 'Relatório EOD que a reconciliação de FXO compara com a posição B3'},
+    # Intrag DCE: o extrato ITAUDataExtract de FX Option do bob-reports — a fonte
+    # do Import da página Intrag › DCE › Option. Mesmo desenho do Recon FXO: a
+    # data vive no caminho (AAAA-MM-DD).
+    {'SOURCE': 'Bob Report', 'USE': 'Intrag DCE', 'PRODUCT': 'FXO',
+     'URL': ('http://169.19.201.153:8080/bob-reports/YYYY-MM-DD/GEM/Reports/'
+             'ITAU/ITAUDataExtract_FXO/ITAUDataExtractor_FXOption'),
+     'NOTES': 'Extrato de FX Option do ITAU — Import da página Intrag DCE Option'},
 )
 
 
@@ -9502,10 +9519,20 @@ def _api_links_upgrade(rows):
     produto sendo reescrito pela rotina. Ela vira a linha do NDF, e as dos outros
     produtos entram do seed — senão a instância que já abriu a tela ficaria com o
     FXO sem endereço cadastrado, que foi exatamente o que a mesa notou faltando.
+
+    A coluna SOURCE (API × Bob Report) nasceu depois de todas: no arquivo antigo
+    ela é derivada da própria URL — endereço de bob-reports é Bob Report, o
+    resto é API. Derivar do USE seria uma segunda lista dos mesmos usos, que
+    envelheceria no primeiro uso novo.
     """
     for r in rows:
-        if isinstance(r, dict) and 'PRODUCT' not in r:
+        if not isinstance(r, dict):
+            continue
+        if 'PRODUCT' not in r:
             r['PRODUCT'] = 'NDF' if _use_key_py(r.get('USE')) == 'newdeals' else ''
+        if not str(r.get('SOURCE') or '').strip():
+            r['SOURCE'] = ('Bob Report' if 'bob-reports' in str(r.get('URL') or '')
+                           else 'API')
     have = {(_use_key_py(r.get('USE')), str(r.get('PRODUCT') or '').strip().upper())
             for r in rows if isinstance(r, dict)}
     for s in _API_LINKS_SEED:
@@ -10063,10 +10090,12 @@ _MAPPING_DEFS = {
     # chamar um endpoint inventado. Sem URL, o consumidor falha dizendo que falta
     # cadastro; o New Deals, esse sim, cai no endereço histórico.
     'api-links': {
-        'label': 'API Links',
+        'label': 'API/Bob Reports Links',
         'columns': [
+            {'key': 'SOURCE', 'label': 'Source', 'type': 'select',
+             'options': _MAP_API_SOURCES},
             {'key': 'USE', 'label': 'Usage', 'type': 'select',
-             'options': ['New Deals', 'Unwinds', 'Recon FXO']},
+             'options': ['New Deals', 'Unwinds', 'Recon FXO', 'Intrag DCE']},
             {'key': 'PRODUCT', 'label': 'Product (blank = any)', 'type': 'select',
              'options': _MAP_API_PRODUCTS},
             {'key': 'URL', 'label': 'URL (YYYYMMDD = reference date)'},
