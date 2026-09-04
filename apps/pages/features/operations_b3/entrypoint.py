@@ -179,6 +179,7 @@ def api_opb3_mensageria():
     recips = _R()._opb3_msg_load_recipients()
     tipo_maps = _R()._opb3_tipo_maps(ref)
     names = _R()._opb3_refdata_by_account()
+    part_names = _R()._opb3_participant_name_by_account()
     # Linhas marcadas na tabela: só elas destravam a REgeração de uma operação
     # que já virou e-mail (status Generated). Sem marcação, o botão pega apenas
     # o que ainda não foi gerado.
@@ -259,10 +260,14 @@ def api_opb3_mensageria():
         # Nome da contraparte, nesta ordem: Reference Data pela conta (o cliente
         # de fora), o `Reference Data Name` do cadastro `b3-accounts` (a
         # contraparte que é entidade NOSSA — ela não tem linha no Reference Data
-        # pela conta B3) e, por último, o Nome Simplificado que veio no arquivo,
-        # que é o apelido de 20 caracteres da B3 (`INTRAGLAWTONFDO`).
+        # pela conta B3), a Razão Social do cadastro de participantes da B3
+        # (/mapping › B3 Participants, por conta — a contraparte que não é
+        # cliente nosso e por isso nunca terá Reference Data) e, por último, o
+        # Nome Simplificado que veio no arquivo, que é o apelido de 20
+        # caracteres da B3 (`INTRAGLAWTONFDO`).
         cpty = (names.get(g['conta_cp'])
                 or _R()._b3_account_refdata_name(g['conta_cp'])
+                or part_names.get(''.join(ch for ch in g['conta_cp'] if ch.isdigit()))
                 or str(recs[0].get('Contraparte (Nome Simpl.)', '') or '—'))
         total = sum(_R()._ndfc_valnum(r.get('Valor')) or 0.0 for r in recs)
 

@@ -3362,6 +3362,7 @@ _opb3_msg_load_recipients = _pf_opb3._opb3_msg_load_recipients
 _opb3_msg_save_recipients = _pf_opb3._opb3_msg_save_recipients
 _opb3_msg_route_key = _pf_opb3._opb3_msg_route_key
 _opb3_refdata_by_account = _pf_opb3._opb3_refdata_by_account
+_opb3_participant_name_by_account = _pf_opb3._opb3_participant_name_by_account
 _OPB3_LEGAL_SIDES = _pf_opb3._OPB3_LEGAL_SIDES
 _opb3_legal_side = _pf_opb3._opb3_legal_side
 _opb3_internal_ter_map = _pf_opb3._opb3_internal_ter_map
@@ -10928,8 +10929,12 @@ _MAPPING_DEFS = {
     # copiar-e-colar conferível coluna a coluna. As CHAVES são as antigas — o
     # motor da recon (`recon_cgd._participantes`) e os JSONs já gravados leem
     # por elas, e renomeá-las apagaria o cadastro existente em silêncio.
+    # O rótulo perdeu o "CGD — " quando a mensageria do Operations B3 passou a
+    # consultá-lo como fallback de nome de contraparte: a lista deixou de ser
+    # assunto só do CGD. A CHAVE continua `cgd-b3-participante` — renomeá-la
+    # órfãria o arquivo em disco e o motor da recon que lê por ela.
     'cgd-b3-participante': {
-        'label': 'CGD — B3 Participants',
+        'label': 'B3 Participants',
         'columns': [
             {'key': 'RAZAO SOCIAL', 'label': 'Participant (Legal Name)',
              'lang': 'map-col-cgd-part-name'},

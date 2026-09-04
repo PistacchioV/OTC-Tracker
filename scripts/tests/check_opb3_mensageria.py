@@ -140,13 +140,14 @@ print('\n== 4. o agrupamento, pelo endpoint de verdade ==')
 # A2 de premio (contraparte igual, e outro e-mail), e C1 de termo de commodity.
 
 
-def run_day(recs, internal_swap=None, internal_ndfc=None):
+def run_day(recs, internal_swap=None, internal_ndfc=None, participants=None):
     """Chama /api/operations-b3/mensageria e devolve os `group` de cada draft."""
     from apps import create_app
     from apps.config import DebugConfig
     seen = []
     real_build = otc_emails.build_opb3_mensageria_email
     real = (R._opb3_msg_load_recipients, R._opb3_refdata_by_account,
+            R._opb3_participant_name_by_account,
             R._opb3_tipo_maps, R._opb3_internal_ter_map, R._opb3_internal_swapprem_map,
             R._opb3_internal_swap_map, R._opb3_internal_ndfc_map, R.OTM_JSON_ROOT)
 
@@ -159,6 +160,7 @@ def run_day(recs, internal_swap=None, internal_ndfc=None):
     R._opb3_msg_load_recipients = lambda: {'cem': {'to': 'cem@x', 'cc': ''},
                                            'equities': {'to': 'eq@x', 'cc': ''}}
     R._opb3_refdata_by_account = lambda: {}
+    R._opb3_participant_name_by_account = lambda: dict(participants or {})
     R._opb3_tipo_maps = lambda ref: {}
     R._opb3_internal_ter_map = lambda ref: {}
     R._opb3_internal_swapprem_map = lambda ref: {}
@@ -181,6 +183,7 @@ def run_day(recs, internal_swap=None, internal_ndfc=None):
     finally:
         otc_emails.build_opb3_mensageria_email = real_build
         (R._opb3_msg_load_recipients, R._opb3_refdata_by_account,
+         R._opb3_participant_name_by_account,
          R._opb3_tipo_maps, R._opb3_internal_ter_map, R._opb3_internal_swapprem_map,
          R._opb3_internal_swap_map, R._opb3_internal_ndfc_map, R.OTM_JSON_ROOT) = real
         shutil.rmtree(tmp, ignore_errors=True)
@@ -289,6 +292,33 @@ check('swap: recebe date, nao datetime', type(arg), datetime(2026, 8, 5).date().
 arg, got = spy_map('_ops_ndfc_trade_rows', R._opb3_internal_ndfc_map)
 check('commodities: veio do Trade Level de NDF commodities', got, {'X1': 42.0})
 check('commodities: recebe date, nao datetime', type(arg), datetime(2026, 8, 5).date().__class__)
+
+# ─────────────────────────────────────────────────────────────────────────────
+print('\n== 8. o nome da contraparte: RefData -> B3 Participants -> apelido ==')
+# A conta que nao tem linha no Reference Data cai no cadastro de participantes
+# da B3 (/mapping > B3 Participants, RAZAO SOCIAL pela CONTA, comparada por
+# DIGITOS — os dois lados guardam pontuacao diferente). So sem os dois o
+# e-mail sai com o apelido de 20 caracteres do arquivo.
+resp, drafts = run_day([rec('A9', 'PAGAMENTO DE PREMIO', '7,00',
+                            cp='22222.22-2', cpn='APELIDOB3')],
+                       participants={'22222222': 'BANCO EXEMPLO LEGAL S.A.'})
+check('sem RefData, o nome vem do cadastro de participantes',
+      drafts[0].get('cpty'), 'BANCO EXEMPLO LEGAL S.A.')
+resp, drafts = run_day([rec('A9', 'PAGAMENTO DE PREMIO', '7,00',
+                            cp='22222.22-2', cpn='APELIDOB3')])
+check('sem RefData E sem participante, fica o apelido do arquivo',
+      drafts[0].get('cpty'), 'APELIDOB3')
+# E o mapa REAL le a RAZAO SOCIAL pela CONTA em digitos — a assinatura do
+# cadastro (`cgd-b3-participante`) que a recon de CGD tambem consome.
+_real_rows = R._mapping_rows
+R._mapping_rows = lambda k: ([{'RAZAO SOCIAL': 'FULANO S.A.', 'NOME CONTRAPARTE': 'FULANO',
+                               'CNPJ': '1', 'CONTA': '33333.33-3'}]
+                             if k == 'cgd-b3-participante' else _real_rows(k))
+try:
+    check('o mapa real: conta em digitos -> razao social',
+          R._opb3_participant_name_by_account(), {'33333333': 'FULANO S.A.'})
+finally:
+    R._mapping_rows = _real_rows
 
 print('\n' + ('FALHOU: ' + ', '.join(fails) if fails else 'TUDO OK'))
 sys.exit(1 if fails else 0)

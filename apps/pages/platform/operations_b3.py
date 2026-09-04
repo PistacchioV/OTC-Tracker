@@ -553,6 +553,28 @@ def _opb3_refdata_by_account():
     return out
 
 
+def _opb3_participant_name_by_account():
+    """Conta (SÓ DÍGITOS) → Razão Social do cadastro `cgd-b3-participante`
+    (/mapping › B3 Participants: Participant (Account) → Participant (Legal
+    Name)). É o fallback do nome da contraparte na mensageria para a conta que
+    não tem linha no Reference Data — a lista de participantes da B3 conhece
+    contrapartes que não são clientes nossos. A chave é por dígitos porque os
+    dois lados guardam pontuação diferente (§197)."""
+    out = {}
+    try:
+        from apps.pages import routes
+        for r in routes._mapping_rows('cgd-b3-participante'):
+            if not isinstance(r, dict):
+                continue
+            acc = ''.join(ch for ch in str(r.get('CONTA', '') or '') if ch.isdigit())
+            name = str(r.get('RAZAO SOCIAL', '') or '').strip()
+            if acc and name and acc not in out:
+                out[acc] = name
+    except Exception:
+        pass
+    return out
+
+
 # LEGAL do Cockpit ↔ conta de casa da B3. O Cockpit exibe as duas entidades
 # (`_ndfc_collect` filtra por BANCOJP*/JPMORGANCHASE*), então um negócio
 # intragrupo aparece DUAS vezes sob o mesmo contrato, uma perna por entidade e
