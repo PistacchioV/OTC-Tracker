@@ -1577,6 +1577,18 @@ com que o `visual-refresh.css` pinta `.card` apaga o `background-image`, então
 cartão com gradiente próprio (os de Total) tem a regra no `streamflow.css`, e
 não no `<style>` da página.
 
+E o vidro tem um **modo de efeitos reduzidos** (HANDOFF §402): nas máquinas do
+JPM o Firefox compõe por SOFTWARE (`about:support` → "WebRender (Software)"),
+e ali os fundos animados com blur de viewport e os ~80 `backdrop-filter`
+recompositam a página inteira por quadro — o app fica lento sem erro nenhum. A
+decisão é da primeira IIFE do `streamflow.js` (o CSS não enxerga o compositor):
+`localStorage.__OTC_TRACKER_FX__` = `full`/`reduced` vence tudo; no automático,
+WebGL por software ou **Firefox no Windows** ligam a classe `sf-reduced` no
+`<html>`, e a seção 16 do `streamflow.css` desliga os custos por quadro
+mantendo tokens, cores e sombras. Regra de token do modo vai como
+`html.sf-reduced:not([data-bs-theme=dark])` — `html.sf-reduced` sozinho (0,1,1)
+perde para o `:root:not(...)` (0,2,0) que define o valor normal.
+
 ### Um `stat` por LINHA é invisível na dev e custa minutos no share
 
 O cache por mtime evita reler o ARQUIVO; ele **não** evita o
@@ -2321,6 +2333,19 @@ Intrag ficavam com o valor cru sempre que o notional estava na moeda fraca
      *Client Treasury Allowance* também são pendências e ficavam de fora,
      envelhecendo para sempre numa operação já liquidada. As duas colunas mudam
      juntas — é isso que move a linha para o DB `ok`.
+- **A manutenção das 11:30 do Pending Confirmation ABORTA quando uma leitura
+  falha** (HANDOFF §406). Ela relê os três bancos (backlog/pending/ok),
+  re-roteia cada linha (backlog quando o Trade Date passa de 12 meses — o Ok
+  velho TAMBÉM vai; ok quando resolve; senão pending) e os REESCREVE — e quem
+  reescreve lê com `_pc_load_rows(strict=True)`, porque a leitura tolerante da
+  tela lê falha como banco VAZIO: um dia de "file is being used by another
+  process" no share reescrevia o balde sem as linhas. Pending e ok se repovoam
+  pelo uso; **o backlog é só história e não volta**. Pular um dia é inofensivo
+  (idempotente); apagar não tem desfazer. `check_pc_maintenance.py` prende o
+  ciclo e o aborto. E a arapuca de TELA correspondente: o chip
+  `Status = Pending` que a página cria sozinha no load **esconde o backlog** —
+  a linha >12 meses tem categoria recomputada `backlog`, então buscar por data
+  antiga exige remover o chip (sem chip, a busca soma os TRÊS bancos).
 - **A planilha de Pending de uma data anterior sobrescreve o arquivo de sempre,
   e isso é intencional.** O card Pending Confirmations Spreadsheet Metrics aceita
   uma **Reference date** (padrão hoje, futuro bloqueado). Hoje = a rotina de

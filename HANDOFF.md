@@ -16640,3 +16640,116 @@ Dois pedidos da mesa, os dois no par Overview × Track Docs:
   Export das Live Position NDF/Option só tem Copy · CSV · Excel · Advanced —
   sem Print e PDF, um bug de consistência do padrão (§2 do CLAUDE.md) que
   ficou ANOTADO e não corrigido nesta rodada.
+
+## §402 — StreamFlow: modo de efeitos reduzidos para máquina sem GPU (2026-09-02)
+
+- A lentidão relatada pela mesa ("tudo demorado desde 30/08") não era dado nem
+  rede: o Firefox das máquinas do JPM roda com **Compositing: WebRender
+  (Software)** (`about:support`, confirmado pelo usuário), e aí os dois fundos
+  animados com blur de viewport inteira e os ~80 `backdrop-filter` do vidro
+  recompositam a página inteira por software, quadro a quadro. O primeiro
+  suspeito foi o flip DB-only do mesmo dia — e estava errado: a versão do time
+  nem o tinha ainda. Commit `4226096`.
+- A decisão é do **JS** (CSS não enxerga o compositor): a primeira IIFE do
+  `streamflow.js` põe `sf-reduced` no `<html>` e a seção 16 do `streamflow.css`
+  faz o resto — `backdrop-filter: none` geral, fundos animados parados,
+  sobreposições com fundo sólido por tema. Tokens, cores e sombras ficam: o
+  que sai é o custo por quadro, não a identidade.
+- Três sinais, na ordem: `localStorage.__OTC_TRACKER_FX__` = `full`/`reduced`
+  (saída de emergência nos dois sentidos), WebGL por software
+  (SwiftShader/llvmpipe/Basic Render) ou indisponível, e **Firefox no
+  Windows** — onde o WebGL pode responder pela GPU com o compositor em
+  software. A assimetria decide: falso positivo custa estética, falso negativo
+  custa a mesa inteira lenta.
+- Armadilha de especificidade paga no caminho: `html.sf-reduced` (0,1,1) PERDE
+  para o `:root:not([data-bs-theme=dark])` (0,2,0) que define os tokens — as
+  regras de token do modo reduzido vão como
+  `html.sf-reduced:not([data-bs-theme=dark])` / `html.sf-reduced[data-bs-theme=dark]`.
+- O remédio do lado do DADO (refrear o DB-only com fallback de JSON) ficou
+  como segundo passo, só se a mesa continuar lenta com o vidro desligado.
+
+## §403 — FWD Start BANCO x MGT saía na visão LAWTON (2026-09-02)
+
+- O preview mostrava as contas certas e o ARQUIVO caía no bucket errado: o
+  `_generic_ndf_ter_line` classificava o cliente com regex cru (`_is_jpm` —
+  `J\.?P\.?\s*MORGAN`), e a razão social da MGT (`JPMORGAN CHASE BANK, N.A. -
+  SAO PAULO BRANCH`) casa nesse regex — o deal BANCO x MGT entrava na regra da
+  perna espelhada do Lawton. Commit `ddb5d0c`.
+- Bucket e par/variante agora respondem pelo MESMO `_ter_le_side` (cadastro
+  `le-spn` por razão social exata ANTES da heurística de substring) — que é o
+  que o preview, o espelho do navegador (`fi-ter-pair.js`) e o `py_pair` do
+  teste já usavam. O gerador era a única cópia desalinhada.
+- Consistência fechada dos três fluxos intragrupo: MGT x Banco → arquivo MGT;
+  BANCO x MGT → arquivo BANCO (parte 73760009 × cpty 04880006, par JPM x MGT);
+  MGT x Cliente → espelho no arquivo do BANCO via `force_values` (§398). O
+  TaxID da perna intragrupo continua em branco (ATACAMA ficou fora do teste de
+  propósito: nunca esteve em branco pela regra antiga, e mudar é outra
+  decisão). `check_fi_variants.py` ganhou o cenário e as posições 20:28/43:51.
+
+## §404 — Quotes: o mapping novo entra na lista de instrumentos (2026-09-03)
+
+- A lista da tela vinha SÓ do `Subjacente.json` (ACTIVE, por Classe) e o
+  cadastro do /mapping apenas traduzia — um mapping cujo LABEL não é código do
+  Subjacente (`S&P 500 Index` → `^GSPC`) ficava cadastrado, resolvível pela
+  API e INVISÍVEL no dropdown. Commit `6db7413`.
+- O `underlyings()` da vertical virou a UNIÃO das duas fontes. Três regras:
+  linha de padrão `"MY"` não vira opção (é regra, não instrumento); linha sem
+  símbolo não entra; rótulo que já é código do Subjacente não duplica
+  (`setdefault` cego a caixa/espaço — a grafia do Subjacente vence). Como a
+  lista é renderizada por request e o `_mapping_rows` é cacheado por mtime, o
+  mapping salvo vale na próxima abertura, sem restart.
+
+## §405 — Manual Deals EA: interentities fora do e-mail (2026-09-03)
+
+- O e-mail das 16:30 (FWD Start) saiu com MGT x MGT e Banco x Banco pedindo
+  exclusão de operação que não é contra cliente. Duas causas: o par de
+  re-booking do FWD Start não passava por filtro NENHUM, e o filtro do Other
+  Publisher só perguntava ao ECONOMIC GROUP do Reference Data — que não tem a
+  MGT, e o fallback por nome ("banco" E "morgan") a deixava passar. Commit
+  `164cd9e`.
+- O `is_internal` tem duas portas: o teste do Reference Data (o mesmo do
+  Pending Confirmation, que não derruba Banco Safra/Bradesco/Santander) MAIS o
+  cadastro `le-spn`, que é a lista das nossas entidades POR DEFINIÇÃO — sem
+  segunda heurística de nome. O campo testado é o MESMO que o e-mail imprime
+  (Client, ou Acronym quando vazio) e cada corte sai no log.
+- Nota de processo: a correção já estava ESCRITA no working tree quando o
+  usuário relatou — sessão anterior que nunca commitou. O e-mail errado saiu
+  da instância do time porque o código nunca tinha sido publicado.
+
+## §406 — Pending Confirmation: a manutenção que APAGAVA o backlog (2026-09-03)
+
+- Relato: a busca só trazia linhas de até 12 meses, mesmo sem o chip
+  `Status = Pending`. O caminho do código está CERTO (provado por HTTP nas
+  quatro combinações: sem chip soma os TRÊS bancos; só data antiga acha a
+  linha do backlog) — a arapuca de TELA é o chip `Pending` que a página cria
+  SOZINHA no load: com ele ativo, a linha >12 meses não vem, porque a
+  categoria recomputada dela é `backlog`. Filtrar por data antiga exige
+  REMOVER o chip (ou trocá-lo por `Backlog`).
+- E havia um defeito de verdade por trás do backlog vazio do time: a
+  manutenção das 11:30 relê os três bancos e os REESCREVE, e a leitura
+  tolerante lia falha como banco VAZIO — um dia de "file is being used by
+  another process" no share bastava para o balde ser reescrito sem as linhas.
+  Pending e ok se repovoam pelo uso; **o backlog é só história e não volta**.
+  Commit `33a1563`.
+- O conserto: `_pc_load_rows(strict=True)` para quem vai reescrever (a falha
+  LEVANTA) e a manutenção ABORTA inteira (ERROR no log, retorno `None`, nada
+  reescrito — pular um dia é inofensivo, apagar não tem desfazer). A TELA
+  continua melhor-esforço (falha vira `[]` com WARNING) e o
+  `pending_confirmation_daily.py` traduz o `None` em exit 1.
+  `check_pc_maintenance.py` prende o ciclo completo (Ok que passa de 12 meses
+  vai ao backlog sem perder linha) e o aborto.
+- PENDENTE na instância do time: confirmar o backlog vazio (chip `Backlog`,
+  ou `pending_confirmation_daily.py --dry-run`) e REPOVOAR — o fix tem de
+  chegar lá ANTES, senão a próxima 11:30 com lock apaga de novo. O resgate
+  menos destrutivo (import só-do-que-falta a partir da planilha) fica para
+  quando o usuário disser o que existe lá. Ficou também PROPOSTA (não feita):
+  chip `Pending` = "não resolvido em qualquer idade", que muda a visão diária
+  da mesa.
+
+## §407 — File Interpreter: blocos de seção na largura do card do template (2026-09-03)
+
+- Os cards de Header para baixo abriam com recuo de 38px por causa da espinha
+  de lego (linha tracejada + conector por bloco). Sem o recuo os dois traços
+  ficariam escondidos atrás dos cards de largura cheia, então saíram junto; os
+  STUDS do cabeçalho ficam, segurando a identidade. Medido no navegador: card
+  do template e blocos em left/width idênticos. Commit `2f078ad`.
