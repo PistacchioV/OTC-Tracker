@@ -118,12 +118,57 @@ check('e a classe nao esta declarada em duplicidade',
       len(re.findall(r'\.edit-actions-wrap\s*\{', IB)), 1)
 
 print('\n== 7. Save e Cancel dos modais ==')
-# Spec: Save `ti-device-floppy`/success + Cancel `ti-x`/SECONDARY. O Cancel
-# estava em `danger`, que na tabela ao lado quer dizer Delete.
+# Rodape de MODAL: Cancel `ti-x`/DANGER + Save `ti-device-floppy`/success — e
+# o par do Add/Edit Row do Intrag DCE Option, a referencia de 2026-09-04. O
+# Cancel/SECONDARY e o do modo de edicao NA LINHA (spec .ops-row-act), onde o
+# vermelho ao lado quer dizer Delete; no rodape do modal nao ha Delete ao lado.
 sv = re.findall(r'<button[^>]*class="btn btn-sm (btn-\w+) btn-act"[^>]*>'
                 r'<i class="ti (ti-[\w-]+)"></i></button>', IB)
-check('os quatro modais tem o par Cancel/secondary + Save/success',
-      sv, [('btn-secondary', 'ti-x'), ('btn-success', 'ti-device-floppy')] * 4)
+check('os quatro modais tem o par Cancel/danger + Save/success',
+      sv, [('btn-danger', 'ti-x'), ('btn-success', 'ti-device-floppy')] * 4)
+
+print('\n== 8. o padrao vale para o APP INTEIRO (2026-09-04) ==')
+# A regra GLOBAL do visual-refresh.css e o que faz o squircle alcancar toda
+# tabela — inclusive as que nao escrevem regra nenhuma (as quatro do swapchar).
+# Ela trava so a GEOMETRIA: `display` sem !important, senao venceria o .d-none
+# com que varias telas escondem um botao condicional.
+VR = read('apps/static/css/visual-refresh.css')
+bloco = VR.split('table td .btn.btn-act {', 1)[1].split('}', 1)[0] if 'table td .btn.btn-act {' in VR else ''
+for prop in ('width: 32px !important', 'height: 32px !important',
+             'min-width: 32px !important', 'max-width: 32px !important',
+             'min-height: 32px !important', 'max-height: 32px !important',
+             'padding: 0 !important', 'border-radius: 10px !important',
+             'box-sizing: border-box !important'):
+    check('visual-refresh: a regra global trava "%s"' % prop, prop in bloco, True)
+check('visual-refresh: `display` NAO leva !important (o .d-none tem de vencer)',
+      'display: inline-flex;' in bloco and 'display: inline-flex !important' not in bloco, True)
+check('visual-refresh: alcanca as quatro familias de classe',
+      all(sel in VR for sel in ('table td .btn.rounded-circle,', 'table td .btn.ops-row-act,',
+                                'table td .btn.sc-row-act,', 'table td .btn.btn-act {')), True)
+check('visual-refresh: o icone e 1rem !important',
+      bool(re.search(r'table td \.btn\.btn-act > i \{ font-size: 1rem !important', VR)), True)
+# E o markup de TODA celula de acao usa os icones canonicos: Edit e `ti-edit`
+# (nao `ti-pencil`), Confirm e `ti-check` (nao `ti-circle-check`), e nenhum
+# botao de linha e o `btn-default btn-icon` cinza do tema.
+import glob
+# `email.html`/`email-details.html` sao a demo do tema comprado, nao telas do app.
+DEMO = ('email.html', 'email-details.html')
+fontes = sorted(f for f in glob.glob('apps/templates/pages/*.html') + glob.glob('apps/static/js/pages/*.js')
+                if os.path.basename(f) not in DEMO)
+FAM = r'(?:rounded-circle|ops-row-act|sc-row-act|btn-act)'
+ruins = []
+for f in fontes:
+    for m in re.finditer(r'<(?:a|button)\b[^>]*class="[^"]*\b' + FAM + r'\b[^"]*"[^>]*>\s*<i class="ti (ti-[\w-]+)', read(f)):
+        if m.group(1) in ('ti-pencil', 'ti-circle-check'):
+            ruins.append((f, m.group(1)))
+check('nenhuma celula de acao usa ti-pencil / ti-circle-check', ruins, [])
+cinzas = [f for f in fontes if re.search(r'btn-default btn-icon btn-sm[^>]*>\s*<i class="ti ti-(?:eye|edit|check|trash)', read(f))]
+check('nenhum botao de linha e o btn-default btn-icon cinza', cinzas, [])
+# A referencia: a celula de acao do Intrag DCE Option.
+DCE = read('apps/templates/pages/intrag-dce-option.html')
+check('Intrag DCE Option: Edit/info ti-edit · Delete/danger ti-trash · Approve/success ti-check · Send/primary ti-brand-telegram',
+      re.findall(r'btn (btn-\w+) btn-sm rounded-circle btn-row-\w+" href="#" title="\w+"><i class="ti (ti-[\w-]+)"', DCE),
+      [('btn-info', 'ti-edit'), ('btn-danger', 'ti-trash'), ('btn-success', 'ti-check'), ('btn-primary', 'ti-brand-telegram')])
 
 print('\nFALHAS: %d' % len(fails))
 sys.exit(1 if fails else 0)

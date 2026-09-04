@@ -657,12 +657,12 @@
                 // O de abrir só existe quando a linha sabe ONDE está o
                 // documento: um botão que abre nada parece defeito.
                 var open = row['Confirmation Link']
-                    ? '<a class="btn btn-primary btn-sm rounded-circle me-1" title="' + esc(t('openDoc')) + '" target="_blank" rel="noopener" href="' +
+                    ? '<a class="btn btn-primary btn-sm rounded-circle" title="' + esc(t('openDoc')) + '" target="_blank" rel="noopener" href="' +
                       esc(row['Confirmation Link']) + '"><i class="ti ti-external-link"></i></a>'
                     : '';
-                return open +
-                    '<button class="btn btn-info btn-sm rounded-circle me-1" title="' + esc(t('edit')) + '" data-mc-edit="' + k + '"><i class="ti ti-pencil"></i></button>' +
-                    '<button class="btn btn-danger btn-sm rounded-circle" title="' + esc(t('del')) + '" data-mc-del="' + k + '"><i class="ti ti-trash"></i></button>';
+                return '<div class="d-flex justify-content-center gap-1">' + open +
+                    '<button class="btn btn-info btn-sm rounded-circle" title="' + esc(t('edit')) + '" data-mc-edit="' + k + '"><i class="ti ti-edit"></i></button>' +
+                    '<button class="btn btn-danger btn-sm rounded-circle" title="' + esc(t('del')) + '" data-mc-del="' + k + '"><i class="ti ti-trash"></i></button></div>';
             }
         }];
         COLUMNS.forEach(function (name) {

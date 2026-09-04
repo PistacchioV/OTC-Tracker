@@ -453,8 +453,8 @@ document.addEventListener('DOMContentLoaded', function () {
     function rowHtml(tk) {
         var href = '/ticket-details?id=' + encodeURIComponent(tk.id);
         var del = tk.can_delete
-            ? '<a class="btn btn-default btn-icon btn-sm rounded tk-del" href="#" data-id="' + esc(tk.id) +
-              '" title="' + esc(t('tk-delete', 'Delete')) + '"><i class="ti ti-trash fs-lg"></i></a>'
+            ? '<a class="btn btn-danger btn-sm rounded-circle tk-del" href="#" data-id="' + esc(tk.id) +
+              '" title="' + esc(t('tk-delete', 'Delete')) + '"><i class="ti ti-trash"></i></a>'
             : '';
         return '<tr>' +
             '<td class="ps-3"><a class="fw-semibold link-reset" href="' + href + '">#' + esc(tk.id) + '</a></td>' +
@@ -468,8 +468,8 @@ document.addEventListener('DOMContentLoaded', function () {
             '<td>' + (tk.due_date ? esc(fmtDate(tk.due_date))
                                   : '<span class="tk-due-empty">&mdash;</span>') + '</td>' +
             '<td><div class="d-flex align-items-center justify-content-center gap-1">' +
-                '<a class="btn btn-default btn-icon btn-sm rounded" href="' + href + '" title="' +
-                    esc(t('tk-view', 'View')) + '"><i class="ti ti-eye fs-lg"></i></a>' + del +
+                '<a class="btn btn-primary btn-sm rounded-circle" href="' + href + '" title="' +
+                    esc(t('tk-view', 'View')) + '"><i class="ti ti-eye"></i></a>' + del +
             '</div></td></tr>';
     }
 
