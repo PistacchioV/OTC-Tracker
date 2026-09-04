@@ -228,10 +228,19 @@
 
     var checkAll = document.getElementById('obCheckAll');
     if (checkAll) checkAll.addEventListener('change', function () {
+      // Pela API do DataTables, nunca pelo DOM: o tbody só tem a PÁGINA atual,
+      // então o laço por querySelectorAll marcava as 200 visíveis e deixava o
+      // resto do filtro de fora — sem erro nenhum, e a regeração "não pegava"
+      // as linhas das outras páginas. `search:'applied'` = o que o filtro por
+      // coluna deixou, em todas as páginas; o id sai do HTML da célula 0
+      // porque com deferRender o nó da linha pode nem existir ainda.
+      dt.rows({ search: 'applied' }).data().toArray().forEach(function (r) {
+        var m = /data-id="([^"]*)"/.exec(String(r[0] || ''));
+        if (!m || !m[1]) return;
+        if (checkAll.checked) SELECTED[m[1]] = true; else delete SELECTED[m[1]];
+      });
       document.querySelectorAll('#opb3-table tbody .ob-row-check').forEach(function (c) {
-        c.checked = checkAll.checked;
-        var id = c.getAttribute('data-id');
-        if (checkAll.checked) SELECTED[id] = true; else delete SELECTED[id];
+        c.checked = !!SELECTED[c.getAttribute('data-id')];
       });
     });
   }

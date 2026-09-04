@@ -184,6 +184,18 @@ def api_opb3_mensageria():
     # que já virou e-mail (status Generated). Sem marcação, o botão pega apenas
     # o que ainda não foi gerado.
     picked = {str(i) for i in (p.get('ids') or []) if str(i).strip()}
+    # Seleção ÓRFÃ = página desatualizada. O `_ob_id` é reatribuído quando o
+    # arquivo-dia é reimportado (Save Daily Settlement Files) e a linha não tem
+    # Num Ctrl Operação para carregar o meta adiante — a aba aberta continua
+    # com os ids antigos, e o POST casaria com NADA: as Generated marcadas
+    # ficariam de fora e o erro genérico de "No pending" leria como botão
+    # quebrado. Quando NENHUM id da seleção existe no dia, a resposta diz a
+    # causa e o remédio, em vez de descrever o sintoma.
+    if picked and not (picked & {str(r.get('_ob_id', '') or '') for r in data}):
+        return jsonify({'success': False,
+                        'error': 'Your selection no longer matches the data for {} — the day was '
+                                 're-imported after this page loaded. Refresh the page and select '
+                                 'the rows again.'.format(ref.strftime('%d/%m/%Y'))}), 409
 
     # De que VISÃO a mensagem sai — cadastro `b3-accounts`, coluna Messaging.
     # A liquidação intragrupo chega pelos dois arquivos, espelhada (a visão do
@@ -219,6 +231,21 @@ def api_opb3_mensageria():
             return str(rec.get('_ob_id', '') or '') in picked
         return True
 
+    # Nome da contraparte, nesta ordem: Reference Data pela conta (o cliente de
+    # fora), o `Reference Data Name` do cadastro `b3-accounts` (a contraparte
+    # que é entidade NOSSA — ela não tem linha no Reference Data pela conta B3),
+    # a Razão Social do cadastro de participantes da B3 (/mapping › B3
+    # Participants, por conta — a contraparte que não é cliente nosso e por
+    # isso nunca terá Reference Data) e, por último, o Nome Simplificado que
+    # veio no arquivo, que é o apelido de 20 caracteres da B3
+    # (`INTRAGLAWTONFDO`). Resolvido ANTES do agrupamento porque o nome é
+    # parte da CHAVE — ver abaixo.
+    def _cpty_name(conta_cp, rec):
+        return (names.get(conta_cp)
+                or _R()._b3_account_refdata_name(conta_cp)
+                or part_names.get(''.join(ch for ch in conta_cp if ch.isdigit()))
+                or str(rec.get('Contraparte (Nome Simpl.)', '') or '—'))
+
     groups = {}
     for rec in data:
         if not _eligible(rec):
@@ -226,6 +253,7 @@ def api_opb3_mensageria():
         tipo = _R()._opb3_tipo_for(rec, tipo_maps)
         conta_cp = str(rec.get('Conta Contraparte', '') or '').strip()
         tipo_op = str(rec.get('Tipo Operação', '') or '').strip()
+        cpty = _cpty_name(conta_cp, rec)
         # Um e-mail por Tipo Operação, MENOS os vencimentos de swap: amortização
         # e juros contra a mesma contraparte são o mesmo pagamento partido em dois
         # eventos pela B3, e o time acata um valor só. A tabela do e-mail continua
@@ -235,8 +263,13 @@ def api_opb3_mensageria():
         ev = ('vencimento swap'
               if otc_emails.opb3_msg_is_swap_venc(rec.get('Tipo Título', ''), tipo_op)
               else _R()._fcst_norm(tipo_op))
-        gkey = (tipo, conta_cp, ev)
-        groups.setdefault(gkey, {'tipo': tipo, 'conta_cp': conta_cp, 'tipo_op': tipo_op,
+        # A chave é o NOME resolvido, não a conta: a mesma contraparte pode
+        # liquidar por duas contas no mesmo dia (foi o COE de 04/09), e um
+        # e-mail por conta cobra o mesmo pagamento em dois avisos — o time
+        # acata um total só. A conta de cada linha continua na tabela do
+        # e-mail, então nada se perde ao juntar.
+        gkey = (tipo, _R()._fcst_norm(cpty), ev)
+        groups.setdefault(gkey, {'tipo': tipo, 'cpty': cpty, 'tipo_op': tipo_op,
                                  'recs': []})['recs'].append(rec)
 
     if not groups:
@@ -257,18 +290,7 @@ def api_opb3_mensageria():
         recs = g['recs']
         titn = _R()._fcst_norm(str(recs[0].get('Tipo Título', '') or ''))
         opn = _R()._fcst_norm(g['tipo_op'])
-        # Nome da contraparte, nesta ordem: Reference Data pela conta (o cliente
-        # de fora), o `Reference Data Name` do cadastro `b3-accounts` (a
-        # contraparte que é entidade NOSSA — ela não tem linha no Reference Data
-        # pela conta B3), a Razão Social do cadastro de participantes da B3
-        # (/mapping › B3 Participants, por conta — a contraparte que não é
-        # cliente nosso e por isso nunca terá Reference Data) e, por último, o
-        # Nome Simplificado que veio no arquivo, que é o apelido de 20
-        # caracteres da B3 (`INTRAGLAWTONFDO`).
-        cpty = (names.get(g['conta_cp'])
-                or _R()._b3_account_refdata_name(g['conta_cp'])
-                or part_names.get(''.join(ch for ch in g['conta_cp'] if ch.isdigit()))
-                or str(recs[0].get('Contraparte (Nome Simpl.)', '') or '—'))
+        cpty = g['cpty']
         total = sum(_R()._ndfc_valnum(r.get('Valor')) or 0.0 for r in recs)
 
         # Lado interno: TER de MOEDA → SETTLEMENT do card Trade Level do NDF
@@ -322,11 +344,18 @@ def api_opb3_mensageria():
         # Quem é a contraparte sai da CONTA no cadastro `b3-accounts`, e o Nome
         # Simplificado do arquivo é o plano B: a conta é o identificador, o
         # apelido de 20 caracteres é como aquele arquivo escreveu o nome — e uma
-        # entidade nova entra no cadastro, não aqui.
-        cp_le = _R()._b3_account_le(g['conta_cp'])
-        cp_simpl = str(recs[0].get('Contraparte (Nome Simpl.)', '') or '').strip().upper()
-        is_atacama = cp_le == 'ATACAMA' or (not cp_le and cp_simpl.startswith('INTRAGATACAMA'))
-        is_lawton = cp_le == 'LAWTON' or (not cp_le and cp_simpl.startswith('INTRAGLAWTON'))
+        # entidade nova entra no cadastro, não aqui. O grupo agora junta CONTAS
+        # da mesma contraparte, então a pergunta é feita por LINHA: se qualquer
+        # conta do grupo é da entidade, o grupo inteiro é dela (o nome resolvido
+        # é a chave, então contas do mesmo grupo são a mesma contraparte).
+        cp_les = {_R()._b3_account_le(str(r.get('Conta Contraparte', '') or '').strip())
+                  for r in recs} - {''}
+        cp_simpls = {str(r.get('Contraparte (Nome Simpl.)', '') or '').strip().upper()
+                     for r in recs}
+        is_atacama = 'ATACAMA' in cp_les or (not cp_les and any(
+            s.startswith('INTRAGATACAMA') for s in cp_simpls))
+        is_lawton = 'LAWTON' in cp_les or (not cp_les and any(
+            s.startswith('INTRAGLAWTON') for s in cp_simpls))
         bcc = ''
         if is_atacama:
             bcc = _R()._OPB3_MSG_GDT_BCC
