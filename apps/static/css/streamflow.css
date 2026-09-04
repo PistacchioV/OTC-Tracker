@@ -3101,6 +3101,22 @@ html.sf-reduced[data-bs-theme=dark] {
   --sf-overlay-bg: #0d1320;
 }
 
+/* A topbar e a sidenav são o MESMO caso dos cartões, e ficavam de fora: os
+   §7/§8 (e a recalibragem clara do §25) as pintam com 40–62% do fundo da
+   página + blur — sem o blur, são as duas maiores janelas para os blobs, e
+   no ESCURO é por elas que a tela inteira segue lendo "transparente" (no
+   claro o véu branco sobre fundo claro disfarça). O tom sólido é o degrau
+   página→superfície composto dos dois tokens, que no modo reduzido já são
+   sólidos. Os seletores vão AOS PARES por causa das regras claras do §25
+   (`:root:not(...) .sidenav-menu`, 0,3,0 com !important): o par tem (0,3,1)
+   e vence nos dois temas sem depender de ordem. */
+html.sf-reduced:not([data-bs-theme=dark]) .app-topbar,
+html.sf-reduced[data-bs-theme=dark] .app-topbar,
+html.sf-reduced:not([data-bs-theme=dark]) .sidenav-menu,
+html.sf-reduced[data-bs-theme=dark] .sidenav-menu {
+  background: color-mix(in oklab, var(--vr-card-bg) 35%, var(--vr-page-bg)) !important;
+}
+
 /* Sobreposições cobrem CONTEÚDO (não o fundo da página): sem blur atrás,
    qualquer alfa mostra a tabela nítida por baixo — vão sólidas. A regra
    alcança também o `.modal-content.liquid-glass` da exceção do §34. */
