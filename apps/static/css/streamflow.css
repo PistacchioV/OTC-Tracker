@@ -1664,6 +1664,10 @@ div[class*="-chip"]:not([class*="-chips"]), span[class*="-chip"]:not([class*="-c
   backdrop-filter: blur(26px) saturate(200%) brightness(1.05);
   -webkit-backdrop-filter: blur(26px) saturate(200%) brightness(1.05);
 }
+/* o footer acompanha a topbar no claro também — mesmo véu, sem o blur pesado */
+:root:not([data-bs-theme=dark]) .footer {
+  background: color-mix(in oklab, var(--vr-page-bg) 42%, transparent) !important;
+}
 :root:not([data-bs-theme=dark]) .sidenav-menu {
   background: color-mix(in oklab, var(--vr-page-bg) 40%, transparent) !important;
   backdrop-filter: blur(28px) saturate(200%) brightness(1.05);
@@ -1694,10 +1698,11 @@ div[class*="-chip"]:not([class*="-chips"]), span[class*="-chip"]:not([class*="-c
   position: sticky;
   bottom: 0;
   z-index: 5;
-  background-color: transparent !important;
-  background-image: none !important;
-  /* sem cor de fundo, como pedido — o desfoque é só o que impede o conteúdo
-     de passar LEGÍVEL por baixo do texto enquanto se rola */
+  /* Um véu leve do fundo da página, na MESMA proporção da topbar (§7: 62% no
+     escuro; §25: 42% no claro) — pedido de 2026-09-04. Era transparente, e só
+     o desfoque impedia o conteúdo de passar legível por baixo do texto; com o
+     véu ele passa mais atrás, como no alto da tela. */
+  background: color-mix(in oklab, var(--vr-page-bg) 62%, transparent) !important;
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border-top: 1px solid var(--sf-hair);
@@ -3113,7 +3118,9 @@ html.sf-reduced[data-bs-theme=dark] {
 html.sf-reduced:not([data-bs-theme=dark]) .app-topbar,
 html.sf-reduced[data-bs-theme=dark] .app-topbar,
 html.sf-reduced:not([data-bs-theme=dark]) .sidenav-menu,
-html.sf-reduced[data-bs-theme=dark] .sidenav-menu {
+html.sf-reduced[data-bs-theme=dark] .sidenav-menu,
+html.sf-reduced:not([data-bs-theme=dark]) .footer,
+html.sf-reduced[data-bs-theme=dark] .footer {
   background: color-mix(in oklab, var(--vr-card-bg) 35%, var(--vr-page-bg)) !important;
 }
 
