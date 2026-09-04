@@ -715,6 +715,7 @@
   "acc-confirm": "Confirm",
   "acc-batch-send": "Send batch",
   "mtm-new-mapping": "New Mapping",
+  "mtm-edit-title": "Edit Row — Swap MtM",
   "mtm-nm-required": "All three fields are required.",
   "mtm-nm-saved": "Mapping saved",
   "mtm-missing-title": "Missing MtM — file not generated",

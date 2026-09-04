@@ -426,7 +426,12 @@ def api_mtm_validation():
             _R().log.error('[mtm] validation status save failed:\n%s', traceback.format_exc())
 
     ref = datetime.strptime(ymd, '%Y%m%d')
-    summary = [{'filename': fn + '.txt', 'view': fd['view'], 'count': len(fd['rows'])}
+    # Os arquivos MID guardam a linha PRONTA em `lines` e o COE guarda `rows`
+    # (dicts por coluna); `_mtm_file_lines` aceita os dois, e o resumo tem de
+    # aceitar também — lendo só `rows`, o primeiro arquivo de book estourava
+    # em KeyError DEPOIS de os .txt já terem sido escritos no share.
+    summary = [{'filename': fn + '.txt', 'view': fd['view'],
+                'count': len(fd.get('lines', fd.get('rows')) or [])}
                for fn, fd in files.items()]
     attach = [os.path.join(_R().CONECTA_NEW_PATH, fn + '.txt')
               for fn, fd in files.items() if fd['view'] in ('LAWTON', 'ATACAMA')]

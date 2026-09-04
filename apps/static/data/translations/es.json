@@ -714,6 +714,7 @@
   "acc-confirm": "Confirmar",
   "acc-batch-send": "Enviar lote",
   "mtm-new-mapping": "Nuevo Mapeo",
+  "mtm-edit-title": "Editar Fila — Swap MtM",
   "mtm-nm-required": "Los tres campos son obligatorios.",
   "mtm-nm-saved": "Mapeo guardado",
   "mtm-missing-title": "Missing MtM — archivo no generado",
