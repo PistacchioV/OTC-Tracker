@@ -1,8 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-r"""convert 00_completo — TUDO de uma vez.
+r"""convert 02_new_deals_intrag_dce_option — a rotina `new deals/Intrag/DCE Option` de cache/.
 
-Converte os cadastros E todas as rotinas de arquivo-dia num comando só.
+A opção de câmbio do DCE da Intrag (o extrato
+ITAUDataExtract importado do bob-report, §409).
+Nasceu depois das fatias (por isso é a última:
+renumerar as outras trocaria o nome de vinte
+scripts) e caía só no 99_outros:
+sem banco próprio, parecia que o import não
+gravava nada.
 
 Versão AUTOCONTIDA: roda em QUALQUER máquina, sem o código do OTC Tracker por
 perto. Requisito único:  pip install duckdb
@@ -13,16 +19,33 @@ perto. Requisito único:  pip install duckdb
     Destino: ...\static\data\db   (a pasta db dentro da origem)
 
 Uso:
-    python 00_completo.py
-    python 00_completo.py --dry-run
-    python 00_completo.py --data-dir "D:\outra\pasta" --out-dir "D:\saida"
+    python 02_33_new_deals_intrag_dce_option.py
+    python 02_33_new_deals_intrag_dce_option.py --dry-run
+    python 02_33_new_deals_intrag_dce_option.py --data-dir "D:\outra\pasta" --out-dir "D:\saida"
 
-O ESCOPO é TUDO: os cadastros (feriados, RefData/CounterpartyDetails, mappings,
-control-panel, file-interpreter) e TODAS as rotinas de arquivo-dia de cache\.
-Se preferir repartir entre várias pessoas — para rodarem ao mesmo tempo, sem uma
-esperar a outra —, use os arquivos numerados ao lado deste: 01_cadastros e um
-02_* por rotina. Os bancos são um por produto, então as fatias nunca escrevem no
-mesmo arquivo.
+O ESCOPO é UM bloco de cache\: **new deals/Intrag/DCE Option**.
+
+A opção de câmbio do DCE da Intrag (o extrato
+ITAUDataExtract importado do bob-report, §409).
+Nasceu depois das fatias (por isso é a última:
+renumerar as outras trocaria o nome de vinte
+scripts) e caía só no 99_outros:
+sem banco próprio, parecia que o import não
+gravava nada.
+
+Cada produto vira um banco e a pasta db\ ESPELHA a árvore de cache\
+(db\cache\new deals\NDF\Vanilla.db, db\cache\b3 files\Swap.db); só
+ano/mês/dia não viram pasta — cada dia é uma tabela
+(d_AAAAMMDD[_tag]), tipada por inferência: dd/mm/aaaa e ISO viram DATE, número
+vira BIGINT/DOUBLE, zero à esquerda continua texto, '' vira NULL só em coluna
+tipada, e texto sai byte a byte.
+
+Como os bancos são um por produto, este script NÃO escreve em nada que os outros
+escrevem: pode rodar ao mesmo tempo que eles.
+
+Se nesta instância o bloco ainda for grande demais, `--bloco NOME` desce mais um
+nível (ex.: `--bloco Vanilla`). Ele SUBSTITUI o escopo desta fatia — não rode a
+fatia inteira em paralelo com um bloco dela.
 
 É IDEMPOTENTE e INCREMENTAL: cada banco guarda um `_manifest` com
 caminho/mtime/tamanho e só reconverte o arquivo que mudou — rodar de novo com
@@ -1692,8 +1715,10 @@ def main(argv=None):
                          'ou a letra I:, o que existir na máquina)')
     ap.add_argument('--out-dir', default=None,
                     help='destino dos .db (padrão: a pasta db dentro da origem)')
-    ap.add_argument('--only', choices=('holidays', 'refdata', 'datasets', 'daily'),
-                    default=None)
+    ap.add_argument('--bloco', default=None,
+                    help='restringe a UMA subpasta desta fatia (ex.: --bloco '
+                         'Vanilla). SUBSTITUI o escopo da fatia — nao rode a '
+                         'fatia inteira em paralelo com um bloco dela.')
     ap.add_argument('--force', action='store_true', help='reconverte mesmo sem mudança')
     ap.add_argument('--dry-run', action='store_true', help='só lista o que converteria')
     ap.add_argument('--meses', type=int, default=12,
@@ -1713,18 +1738,19 @@ def main(argv=None):
     print('janela : %s' % ('arquivo-dia a partir de %s (%d meses)'
                            % (desde.strftime('%d/%m/%Y'), args.meses)
                            if desde else 'historico INTEIRO (--meses 0)'))
-    print('escopo : tudo (cadastros + todas as rotinas de cache/)')
+    print('escopo : cache/new deals/Intrag/DCE Option (arquivo-dia)')
 
     houve_erro = [False]
-    conversores = {'holidays': convert_holidays, 'refdata': convert_refdata,
-                   'datasets': convert_datasets, 'daily': convert_daily}
-    escolhidos = [args.only] if args.only else list(conversores)
-    for nome in escolhidos:
-        # A janela so vale para o conversor de arquivo-dia; os cadastros nao
-        # tem data nenhuma para recortar.
-        extra = {'desde': desde} if nome == 'daily' else {}
-        _resumo(nome, conversores[nome](data_dir, out_dir, force=args.force,
-                                        dry_run=args.dry_run, **extra), houve_erro)
+    # `--bloco` SUBSTITUI o escopo desta fatia; nao soma. Rodar a fatia inteira
+    # em paralelo com um bloco dela poria dois processos no mesmo banco.
+    fatia = 'new deals/Intrag/DCE Option'
+    if args.bloco:
+        fatia = fatia.rstrip('/') + '/' + args.bloco.strip().strip('/')
+        print('escopo : cache/%s (arquivo-dia) [--bloco]' % fatia)
+    _resumo('daily', convert_daily(data_dir, out_dir, force=args.force,
+                                   dry_run=args.dry_run, familias=[fatia],
+                                   desde=desde),
+            houve_erro)
     return 1 if houve_erro[0] else 0
 
 
