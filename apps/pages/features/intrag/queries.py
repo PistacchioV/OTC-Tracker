@@ -97,6 +97,37 @@ def _find_intrag_opt_entry(deal_id, trade_date):
     return None, None, None
 
 
+def _find_intrag_dce_opt_entry(deal_id, trade_date):
+    """Locate an Intrag DCE Option entry by deal id (= Trade ID do extrato),
+    with the optional trade date narrowing the daily file."""
+    if not deal_id:
+        return None, None, None
+    ref = _R()._parse_date_any(trade_date) if trade_date else None
+    candidate_files = []
+    if ref is not None:
+        fp = os.path.join(persistence.INTRAG_DCE_OPT_CACHE_DIR, ref.strftime('%Y'), ref.strftime('%m'),
+                          ref.strftime('%Y%m%d') + '_intrag_dce_opt.json')
+        if os.path.isfile(fp):
+            candidate_files.append(fp)
+    if not candidate_files and os.path.isdir(persistence.INTRAG_DCE_OPT_CACHE_DIR):
+        for root, _, files in os.walk(persistence.INTRAG_DCE_OPT_CACHE_DIR):
+            for fname in files:
+                if fname.endswith('_intrag_dce_opt.json'):
+                    candidate_files.append(os.path.join(root, fname))
+    for fp in candidate_files:
+        try:
+            with open(fp, 'r', encoding='utf-8') as fh:
+                entries = json.load(fh)
+            if not isinstance(entries, list):
+                continue
+        except (json.JSONDecodeError, ValueError, OSError):
+            continue
+        idx = next((i for i, e in enumerate(entries) if e.get('_deal') == deal_id), None)
+        if idx is not None:
+            return fp, entries, idx
+    return None, None, None
+
+
 def _intrag_find_export_csv():
     """Most recent Boletas*.csv in the Return folder, or None."""
     try:

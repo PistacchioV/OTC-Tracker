@@ -1,0 +1,597 @@
+{
+  "key": "intrag-dce-option",
+  "name": "Intrag DCE Option (Extrato ITAU FX Option)",
+  "system_id": "INTRAG",
+  "category": "Intrag",
+  "manual_section": "",
+  "manual_pages": "",
+  "manual_version": "",
+  "description": "Instruction file of the Intrag · DCE · Option page. Up to the Intrag ID column the grid matches the Intrag · Option page; from there on the columns are the ones of the ITAU FX Option bob-report extract (ITAUDataExtract_FXO/ITAUDataExtractor_FXOption), imported with the reference date in the report path. One line per trade, ';'-delimited, 28 columns, no header.",
+  "file_name_rule": "Intrag-DCE-Option-AAAAMMDD.txt, written by the Send button of the Intrag · DCE · Option page into I:\\Confirmation\\Derivativos\\OTC Tracker\\Intrag\\AAAA\\mm. Mmmm\\dd (the same folder and naming logic as the other Intrag pages); an existing name gets a \" (n)\" copy suffix.",
+  "notes": "The rows are born from the bob-report Import (address registered in /mapping › API/Bob Reports Links, usage 'Intrag DCE'; the date lives in the PATH as AAAA-MM-DD). From there the cycle is the same as the sister Intrag pages: edit (Pending, maker) → approve (Approved, maker ≠ checker) → Mapping Intrag ID (return CSV → Success) → Send (New/Approved → Sent). The generated file has NO header line: each selected row becomes one ';'-delimited line, grouped by Trade Date — one file per date.",
+  "base_key": "",
+  "le_pair": "",
+  "variant_label": "",
+  "file_name": "",
+  "file_type": "delimited",
+  "separator": ";",
+  "record_length": null,
+  "status": "library",
+  "linked_pages": [
+    {
+      "label": "Intrag · DCE · Option",
+      "url": "/intrag-dce-option",
+      "columns": [
+        "Option Type",
+        "Trade ID",
+        "Portfolio Code",
+        "Trade Date",
+        "Operation Type",
+        "Holder or Writer Party",
+        "Holder or Writer Counterparty",
+        "Counterparty",
+        "Base Currency - Stocks/Index",
+        "Commodity",
+        "Quoted Currency",
+        "Maturity Date",
+        "Strike Price",
+        "Strike Price in BRL",
+        "Unit Price",
+        "Premium",
+        "Premium Settlement Date",
+        "Base Value/Quantity",
+        "Exercise Type",
+        "Asian Option Average",
+        "Initial Verification Date",
+        "Final Verification Date",
+        "Information Source",
+        "Quote for Maturity",
+        "Quote for Currency",
+        "Fixing Date",
+        "Bonus",
+        "Premium Holder"
+      ]
+    }
+  ],
+  "blocks": [
+    {
+      "id": "registro",
+      "title": "Registro",
+      "note": "One ';'-delimited line per trade — the 28 data columns of the grid, in order.",
+      "fields": [
+        {
+          "seq": "1",
+          "field": "Option Type",
+          "format": "",
+          "position": "",
+          "required": "",
+          "content": "PARIDADE",
+          "description": "Option style flag as it comes on the ITAU extract (e.g. PARIDADE).",
+          "source": "Page",
+          "source_detail": "Option Type",
+          "source_note": "Filled by the bob-report Import of the Intrag · DCE · Option page.",
+          "source_by_page": {
+            "/intrag-dce-option": {
+              "source": "Page",
+              "source_detail": "Option Type",
+              "source_note": ""
+            }
+          }
+        },
+        {
+          "seq": "2",
+          "field": "Trade ID",
+          "format": "",
+          "position": "",
+          "required": "",
+          "content": "CETIP_SDP-Y63Y1",
+          "description": "Trade identifier of the extract — the row key of the DCE Option grid.",
+          "source": "Page",
+          "source_detail": "Trade ID",
+          "source_note": "Filled by the bob-report Import of the Intrag · DCE · Option page.",
+          "source_by_page": {
+            "/intrag-dce-option": {
+              "source": "Page",
+              "source_detail": "Trade ID",
+              "source_note": ""
+            }
+          }
+        },
+        {
+          "seq": "3",
+          "field": "Portfolio Code",
+          "format": "",
+          "position": "",
+          "required": "",
+          "content": "GCCN",
+          "description": "Portfolio code of the trade.",
+          "source": "Page",
+          "source_detail": "Portfolio Code",
+          "source_note": "Filled by the bob-report Import of the Intrag · DCE · Option page.",
+          "source_by_page": {
+            "/intrag-dce-option": {
+              "source": "Page",
+              "source_detail": "Portfolio Code",
+              "source_note": ""
+            }
+          }
+        },
+        {
+          "seq": "4",
+          "field": "Trade Date",
+          "format": "",
+          "position": "",
+          "required": "",
+          "content": "2026-08-03",
+          "description": "Trade date (ISO on the extract) — groups the generated file: one file per date.",
+          "source": "Page",
+          "source_detail": "Trade Date",
+          "source_note": "Filled by the bob-report Import of the Intrag · DCE · Option page.",
+          "source_by_page": {
+            "/intrag-dce-option": {
+              "source": "Page",
+              "source_detail": "Trade Date",
+              "source_note": ""
+            }
+          }
+        },
+        {
+          "seq": "5",
+          "field": "Operation Type",
+          "format": "",
+          "position": "",
+          "required": "",
+          "content": "CALL",
+          "description": "CALL / PUT.",
+          "source": "Page",
+          "source_detail": "Operation Type",
+          "source_note": "Filled by the bob-report Import of the Intrag · DCE · Option page.",
+          "source_by_page": {
+            "/intrag-dce-option": {
+              "source": "Page",
+              "source_detail": "Operation Type",
+              "source_note": ""
+            }
+          }
+        },
+        {
+          "seq": "6",
+          "field": "Holder or Writer Party",
+          "format": "",
+          "position": "",
+          "required": "",
+          "content": "TITULAR",
+          "description": "Our side of the option (TITULAR / LANCADOR).",
+          "source": "Page",
+          "source_detail": "Holder or Writer Party",
+          "source_note": "Filled by the bob-report Import of the Intrag · DCE · Option page.",
+          "source_by_page": {
+            "/intrag-dce-option": {
+              "source": "Page",
+              "source_detail": "Holder or Writer Party",
+              "source_note": ""
+            }
+          }
+        },
+        {
+          "seq": "7",
+          "field": "Holder or Writer Counterparty",
+          "format": "",
+          "position": "",
+          "required": "",
+          "content": "LANCADOR",
+          "description": "Counterparty side of the option.",
+          "source": "Page",
+          "source_detail": "Holder or Writer Counterparty",
+          "source_note": "Filled by the bob-report Import of the Intrag · DCE · Option page.",
+          "source_by_page": {
+            "/intrag-dce-option": {
+              "source": "Page",
+              "source_detail": "Holder or Writer Counterparty",
+              "source_note": ""
+            }
+          }
+        },
+        {
+          "seq": "8",
+          "field": "Counterparty",
+          "format": "",
+          "position": "",
+          "required": "",
+          "content": "JPM",
+          "description": "Counterparty name/code.",
+          "source": "Page",
+          "source_detail": "Counterparty",
+          "source_note": "Filled by the bob-report Import of the Intrag · DCE · Option page.",
+          "source_by_page": {
+            "/intrag-dce-option": {
+              "source": "Page",
+              "source_detail": "Counterparty",
+              "source_note": ""
+            }
+          }
+        },
+        {
+          "seq": "9",
+          "field": "Base Currency - Stocks/Index",
+          "format": "",
+          "position": "",
+          "required": "",
+          "content": "USD",
+          "description": "Base currency (or stock/index) of the option.",
+          "source": "Page",
+          "source_detail": "Base Currency - Stocks/Index",
+          "source_note": "Filled by the bob-report Import of the Intrag · DCE · Option page.",
+          "source_by_page": {
+            "/intrag-dce-option": {
+              "source": "Page",
+              "source_detail": "Base Currency - Stocks/Index",
+              "source_note": ""
+            }
+          }
+        },
+        {
+          "seq": "10",
+          "field": "Commodity",
+          "format": "",
+          "position": "",
+          "required": "",
+          "content": "NÃO SE APLICA",
+          "description": "Commodity of the option, when applicable.",
+          "source": "Page",
+          "source_detail": "Commodity",
+          "source_note": "Filled by the bob-report Import of the Intrag · DCE · Option page.",
+          "source_by_page": {
+            "/intrag-dce-option": {
+              "source": "Page",
+              "source_detail": "Commodity",
+              "source_note": ""
+            }
+          }
+        },
+        {
+          "seq": "11",
+          "field": "Quoted Currency",
+          "format": "",
+          "position": "",
+          "required": "",
+          "content": "BRL",
+          "description": "Quoted currency.",
+          "source": "Page",
+          "source_detail": "Quoted Currency",
+          "source_note": "Filled by the bob-report Import of the Intrag · DCE · Option page.",
+          "source_by_page": {
+            "/intrag-dce-option": {
+              "source": "Page",
+              "source_detail": "Quoted Currency",
+              "source_note": ""
+            }
+          }
+        },
+        {
+          "seq": "12",
+          "field": "Maturity Date",
+          "format": "",
+          "position": "",
+          "required": "",
+          "content": "2026-08-11",
+          "description": "Maturity date.",
+          "source": "Page",
+          "source_detail": "Maturity Date",
+          "source_note": "Filled by the bob-report Import of the Intrag · DCE · Option page.",
+          "source_by_page": {
+            "/intrag-dce-option": {
+              "source": "Page",
+              "source_detail": "Maturity Date",
+              "source_note": ""
+            }
+          }
+        },
+        {
+          "seq": "13",
+          "field": "Strike Price",
+          "format": "",
+          "position": "",
+          "required": "",
+          "content": "5.5",
+          "description": "Strike price.",
+          "source": "Page",
+          "source_detail": "Strike Price",
+          "source_note": "Filled by the bob-report Import of the Intrag · DCE · Option page.",
+          "source_by_page": {
+            "/intrag-dce-option": {
+              "source": "Page",
+              "source_detail": "Strike Price",
+              "source_note": ""
+            }
+          }
+        },
+        {
+          "seq": "14",
+          "field": "Strike Price in BRL",
+          "format": "",
+          "position": "",
+          "required": "",
+          "content": "0",
+          "description": "Strike price converted to BRL.",
+          "source": "Page",
+          "source_detail": "Strike Price in BRL",
+          "source_note": "Filled by the bob-report Import of the Intrag · DCE · Option page.",
+          "source_by_page": {
+            "/intrag-dce-option": {
+              "source": "Page",
+              "source_detail": "Strike Price in BRL",
+              "source_note": ""
+            }
+          }
+        },
+        {
+          "seq": "15",
+          "field": "Unit Price",
+          "format": "",
+          "position": "",
+          "required": "",
+          "content": "0.5",
+          "description": "Unit price.",
+          "source": "Page",
+          "source_detail": "Unit Price",
+          "source_note": "Filled by the bob-report Import of the Intrag · DCE · Option page.",
+          "source_by_page": {
+            "/intrag-dce-option": {
+              "source": "Page",
+              "source_detail": "Unit Price",
+              "source_note": ""
+            }
+          }
+        },
+        {
+          "seq": "16",
+          "field": "Premium",
+          "format": "",
+          "position": "",
+          "required": "",
+          "content": "0",
+          "description": "Premium amount.",
+          "source": "Page",
+          "source_detail": "Premium",
+          "source_note": "Filled by the bob-report Import of the Intrag · DCE · Option page.",
+          "source_by_page": {
+            "/intrag-dce-option": {
+              "source": "Page",
+              "source_detail": "Premium",
+              "source_note": ""
+            }
+          }
+        },
+        {
+          "seq": "17",
+          "field": "Premium Settlement Date",
+          "format": "",
+          "position": "",
+          "required": "",
+          "content": "2026-08-11",
+          "description": "Settlement date of the premium.",
+          "source": "Page",
+          "source_detail": "Premium Settlement Date",
+          "source_note": "Filled by the bob-report Import of the Intrag · DCE · Option page.",
+          "source_by_page": {
+            "/intrag-dce-option": {
+              "source": "Page",
+              "source_detail": "Premium Settlement Date",
+              "source_note": ""
+            }
+          }
+        },
+        {
+          "seq": "18",
+          "field": "Base Value/Quantity",
+          "format": "",
+          "position": "",
+          "required": "",
+          "content": "1000000",
+          "description": "Base value / quantity of the option.",
+          "source": "Page",
+          "source_detail": "Base Value/Quantity",
+          "source_note": "Filled by the bob-report Import of the Intrag · DCE · Option page.",
+          "source_by_page": {
+            "/intrag-dce-option": {
+              "source": "Page",
+              "source_detail": "Base Value/Quantity",
+              "source_note": ""
+            }
+          }
+        },
+        {
+          "seq": "19",
+          "field": "Exercise Type",
+          "format": "",
+          "position": "",
+          "required": "",
+          "content": "EUROPEIA",
+          "description": "Exercise style.",
+          "source": "Page",
+          "source_detail": "Exercise Type",
+          "source_note": "Filled by the bob-report Import of the Intrag · DCE · Option page.",
+          "source_by_page": {
+            "/intrag-dce-option": {
+              "source": "Page",
+              "source_detail": "Exercise Type",
+              "source_note": ""
+            }
+          }
+        },
+        {
+          "seq": "20",
+          "field": "Asian Option Average",
+          "format": "",
+          "position": "",
+          "required": "",
+          "content": "NÃO SE APLICA",
+          "description": "Average clause of the asian option, when applicable.",
+          "source": "Page",
+          "source_detail": "Asian Option Average",
+          "source_note": "Filled by the bob-report Import of the Intrag · DCE · Option page.",
+          "source_by_page": {
+            "/intrag-dce-option": {
+              "source": "Page",
+              "source_detail": "Asian Option Average",
+              "source_note": ""
+            }
+          }
+        },
+        {
+          "seq": "21",
+          "field": "Initial Verification Date",
+          "format": "",
+          "position": "",
+          "required": "",
+          "content": "2026-08-05",
+          "description": "Initial verification date.",
+          "source": "Page",
+          "source_detail": "Initial Verification Date",
+          "source_note": "Filled by the bob-report Import of the Intrag · DCE · Option page.",
+          "source_by_page": {
+            "/intrag-dce-option": {
+              "source": "Page",
+              "source_detail": "Initial Verification Date",
+              "source_note": ""
+            }
+          }
+        },
+        {
+          "seq": "22",
+          "field": "Final Verification Date",
+          "format": "",
+          "position": "",
+          "required": "",
+          "content": "2026-08-10",
+          "description": "Final verification date.",
+          "source": "Page",
+          "source_detail": "Final Verification Date",
+          "source_note": "Filled by the bob-report Import of the Intrag · DCE · Option page.",
+          "source_by_page": {
+            "/intrag-dce-option": {
+              "source": "Page",
+              "source_detail": "Final Verification Date",
+              "source_note": ""
+            }
+          }
+        },
+        {
+          "seq": "23",
+          "field": "Information Source",
+          "format": "",
+          "position": "",
+          "required": "",
+          "content": "PTAX",
+          "description": "Information source of the fixing.",
+          "source": "Page",
+          "source_detail": "Information Source",
+          "source_note": "Filled by the bob-report Import of the Intrag · DCE · Option page.",
+          "source_by_page": {
+            "/intrag-dce-option": {
+              "source": "Page",
+              "source_detail": "Information Source",
+              "source_note": ""
+            }
+          }
+        },
+        {
+          "seq": "24",
+          "field": "Quote for Maturity",
+          "format": "",
+          "position": "",
+          "required": "",
+          "content": "5-2",
+          "description": "Quote convention for the maturity.",
+          "source": "Page",
+          "source_detail": "Quote for Maturity",
+          "source_note": "Filled by the bob-report Import of the Intrag · DCE · Option page.",
+          "source_by_page": {
+            "/intrag-dce-option": {
+              "source": "Page",
+              "source_detail": "Quote for Maturity",
+              "source_note": ""
+            }
+          }
+        },
+        {
+          "seq": "25",
+          "field": "Quote for Currency",
+          "format": "",
+          "position": "",
+          "required": "",
+          "content": "2",
+          "description": "Quote convention for the currency.",
+          "source": "Page",
+          "source_detail": "Quote for Currency",
+          "source_note": "Filled by the bob-report Import of the Intrag · DCE · Option page.",
+          "source_by_page": {
+            "/intrag-dce-option": {
+              "source": "Page",
+              "source_detail": "Quote for Currency",
+              "source_note": ""
+            }
+          }
+        },
+        {
+          "seq": "26",
+          "field": "Fixing Date",
+          "format": "",
+          "position": "",
+          "required": "",
+          "content": "2026-08-10",
+          "description": "Fixing date.",
+          "source": "Page",
+          "source_detail": "Fixing Date",
+          "source_note": "Filled by the bob-report Import of the Intrag · DCE · Option page.",
+          "source_by_page": {
+            "/intrag-dce-option": {
+              "source": "Page",
+              "source_detail": "Fixing Date",
+              "source_note": ""
+            }
+          }
+        },
+        {
+          "seq": "27",
+          "field": "Bonus",
+          "format": "",
+          "position": "",
+          "required": "",
+          "content": "",
+          "description": "Bonus column of the extract.",
+          "source": "Page",
+          "source_detail": "Bonus",
+          "source_note": "Filled by the bob-report Import of the Intrag · DCE · Option page.",
+          "source_by_page": {
+            "/intrag-dce-option": {
+              "source": "Page",
+              "source_detail": "Bonus",
+              "source_note": ""
+            }
+          }
+        },
+        {
+          "seq": "28",
+          "field": "Premium Holder",
+          "format": "",
+          "position": "",
+          "required": "",
+          "content": "PARTE",
+          "description": "Which side holds the premium (PARTE / CONTRAPARTE).",
+          "source": "Page",
+          "source_detail": "Premium Holder",
+          "source_note": "Filled by the bob-report Import of the Intrag · DCE · Option page.",
+          "source_by_page": {
+            "/intrag-dce-option": {
+              "source": "Page",
+              "source_detail": "Premium Holder",
+              "source_note": ""
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

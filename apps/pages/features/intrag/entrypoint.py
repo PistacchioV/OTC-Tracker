@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""As quinze rotas das telas da Intrag."""
+"""As rotas das telas da Intrag (NDF, Option, Swap e DCE Option)."""
 import json
 import os
 from datetime import datetime
@@ -609,6 +609,236 @@ def api_intrag_swap_mapping_intrag_id():
         return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
     deals = (request.get_json(silent=True) or {}).get('deals', [])
     results, err = commands._intrag_run_mapping(deals, 1, 'SWAP', 2, queries._find_intrag_swap_entry)
+    if results is None:
+        return jsonify({'ok': False, 'error': err}), 400
+    return jsonify({'ok': True, 'results': results})
+
+
+# ═════════════════════════ DCE Option ════════════════════════════════════════
+# A quarta página da Intrag: as linhas nascem do IMPORT do bob-report (o extrato
+# ITAUDataExtract de FX Option), não do New Deals. Daí para a frente o ciclo é o
+# mesmo das irmãs — editar (Pending) → aprovar (Approved, maker ≠ checker) →
+# mapear (Success) → enviar (.txt `;` na mesma pasta e com a mesma lógica de
+# nome das outras páginas de Intrag).
+
+@blueprint.route('/api/intrag/dce-option')
+def api_intrag_dce_option():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    date_str  = request.args.get('date', '').strip()
+    date_from = request.args.get('date_from', '').strip()
+    date_to   = request.args.get('date_to', '').strip()
+    suffix = '_intrag_dce_opt.json'
+    entries = []
+    if date_from or date_to:
+        d_from = _R()._parse_date_any(date_from)
+        d_to   = _R()._parse_date_any(date_to)
+        # Com intervalo há o que PODAR: ano e mês inteiros fora dele são
+        # descartados antes de o `scandir` entrar neles. Quem decide continua
+        # sendo a data no NOME do arquivo, logo abaixo.
+        for fp, fname, mtime, size in _R()._day_files(persistence.INTRAG_DCE_OPT_CACHE_DIR, suffix, d_from, d_to):
+            fdate = _R()._parse_date_any(fname[:8])
+            if fdate is None:
+                continue
+            if d_from and fdate < d_from:
+                continue
+            if d_to and fdate > d_to:
+                continue
+            entries.extend(_R()._day_json(fp, mtime, size))
+    elif date_str:
+        try:
+            ref = datetime.strptime(date_str, '%Y-%m-%d')
+            fp = os.path.join(persistence.INTRAG_DCE_OPT_CACHE_DIR, ref.strftime('%Y'), ref.strftime('%m'),
+                              ref.strftime('%Y%m%d') + suffix)
+            if os.path.isfile(fp):
+                # Pelo FUNIL do daycache, como os outros dois ramos: é ele que
+                # lê DB-first (o espelho DuckDB desta página) e cai no JSON só
+                # quando o banco está frio — a busca do smart filter consulta o
+                # banco em qualquer forma de data.
+                st = os.stat(fp)
+                entries = list(_R()._day_json(fp, st.st_mtime, st.st_size))
+        except Exception as exc:
+            _R().log.warning('[INTRAG DCE OPT] date load error date=%r: %s', date_str, exc)
+    else:
+        # Sem data nenhuma: a árvore inteira, e aí só o memo ajuda.
+        for fp, _fname, mtime, size in _R()._day_files(persistence.INTRAG_DCE_OPT_CACHE_DIR, suffix):
+            entries.extend(_R()._day_json(fp, mtime, size))
+    return jsonify({'success': True,
+                    'entries': queries._limpar_info_source(entries, 'information_source')})
+
+
+@blueprint.route('/api/intrag/dce-option/import-api', methods=['POST'])
+def api_intrag_dce_option_import_api():
+    """Import manual do bob-report (botão da página; `ref_date` = campo
+    Reference Date, default hoje) — o mesmo desenho dos import-api do New
+    Deals, com o endereço vindo do cadastro API/Bob Reports Links."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    ref_date = (request.get_json(silent=True) or {}).get('ref_date')
+    try:
+        result = commands._dce_opt_import(ref_date=ref_date,
+                                          sid=session.get('user_sid', '') or 'API',
+                                          actor_name=session.get('user_name', '') or 'Bob Report')
+    except Exception as e:                              # noqa: BLE001
+        _R().log.warning('[INTRAG DCE OPT] manual bob-report import failed: %s', e)
+        return jsonify({'success': False, 'message': str(e)}), 502
+    _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                         'Deals Imported', 'Intrag DCE Option',
+                         str(result.get('imported', 0)) + ' row(s) from the ' +
+                         str(result.get('ref_date', '')) + ' bob-report')
+    return jsonify(result)
+
+
+@blueprint.route('/api/intrag/dce-option/send-file', methods=['POST'])
+def api_intrag_dce_option_send_file():
+    """Generate the Intrag DCE Option .txt file(s) from the selected rows and
+    flip New/Approved → Sent. Same standard folder as the other Intrag pages;
+    file Intrag-DCE-Option-YYYYMMDD.txt.
+
+    Body: { "items": [ { "deal_id": str, "cells": [...28...] } ] }. Rows are
+    grouped by Trade Date (data col index 3) — one file per date."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+
+    payload = request.get_json(silent=True) or {}
+    items = payload.get('items')
+    if not isinstance(items, list) or not items:
+        rows = payload.get('rows')
+        if not isinstance(rows, list) or not rows:
+            return jsonify({'success': False, 'message': 'No rows provided'}), 400
+        items = [{'deal_id': '', 'cells': r} for r in rows if isinstance(r, list)]
+
+    TRADE_DATE_IDX = 3   # Trade Date within the 28 data columns
+    SENDABLE = {'New', 'Approved'}
+
+    groups = {}
+    sent_ids = []
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        cells = ['' if c is None else str(c) for c in (it.get('cells') or [])]
+        if not cells:
+            continue
+        td_raw = cells[TRADE_DATE_IDX] if len(cells) > TRADE_DATE_IDX else ''
+        ref = _R()._parse_date_any(td_raw) or datetime.now()
+        groups.setdefault(ref.strftime('%Y%m%d'), {'ref': ref, 'rows': []})['rows'].append(cells)
+        if it.get('deal_id'):
+            sent_ids.append((it['deal_id'], td_raw))
+
+    if not groups:
+        return jsonify({'success': False, 'message': 'No valid rows provided'}), 400
+
+    written = []
+    try:
+        with _R()._cache_lock:
+            for key, grp in groups.items():
+                ref = grp['ref']
+                month_folder = ref.strftime('%m') + '. ' + _R()._EN_MONTH_NAMES[ref.month - 1]
+                dir_path = os.path.join(persistence.INTRAG_NDF_SEND_DIR, ref.strftime('%Y'), month_folder, ref.strftime('%d'))
+                os.makedirs(dir_path, exist_ok=True)
+                base = 'Intrag-DCE-Option-' + key
+                candidate = base + '.txt'
+                n = 0
+                while os.path.exists(os.path.join(dir_path, candidate)):
+                    n += 1
+                    candidate = base + ' (' + str(n) + ').txt'
+                file_path = os.path.join(dir_path, candidate)
+                with open(file_path, 'w', encoding='utf-8') as fh:
+                    fh.write('\n'.join(';'.join(r) for r in grp['rows']))
+                written.append(file_path)
+                _R().log.info('[INTRAG DCE OPT] Wrote send file %s (%d row(s))', file_path, len(grp['rows']))
+
+            for deal_id, td_raw in sent_ids:
+                fp, entries, idx = queries._find_intrag_dce_opt_entry(deal_id, td_raw)
+                if idx is None:
+                    continue
+                if (entries[idx].get('status') or 'New') in SENDABLE:
+                    entries[idx]['status'] = 'Sent'
+                    _R()._atomic_write_json(fp, entries)
+    except Exception as exc:
+        _R().log.error('[INTRAG DCE OPT] send-file failed: %s', exc)
+        return jsonify({'success': False, 'message': 'File generation failed: ' + str(exc)}), 500
+
+    _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                         'Intrag Sent', 'Intrag DCE Option',
+                         str(len(items)) + ' row' + ('' if len(items) == 1 else 's') + ' sent')
+    return jsonify({'success': True, 'files': written, 'count': len(items)})
+
+
+@blueprint.route('/api/intrag/dce-option/edit', methods=['POST'])
+def api_intrag_dce_option_edit():
+    """Row-level edit on an Intrag DCE Option entry → status 'Pending', records maker."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    payload    = request.get_json(silent=True) or {}
+    deal_id    = (payload.get('deal_id') or '').strip()
+    trade_date = (payload.get('trade_date') or '').strip()
+    fields     = payload.get('fields') or {}
+    if not deal_id:
+        return jsonify({'success': False, 'message': 'Missing deal_id'}), 400
+    with _R()._cache_lock:
+        fp, entries, idx = queries._find_intrag_dce_opt_entry(deal_id, trade_date)
+        if idx is None:
+            return jsonify({'success': False, 'message': 'Entry not found'}), 404
+        if isinstance(fields, dict):
+            for k, v in fields.items():
+                if k in entries[idx] and k not in ('_deal', '_client', 'status', 'maker', 'checker'):
+                    entries[idx][k] = v
+        # Mesma regra das irmãs: Intrag ID digitado = Success (o desfecho do
+        # Mapping); sem mudança nele, a edição de dado segue o 4-eyes.
+        status = 'Pending'
+        if 'intrag_id' in payload:
+            novo   = str(payload.get('intrag_id') or '').strip()
+            antigo = str(entries[idx].get('intrag_id') or '').strip()
+            entries[idx]['intrag_id'] = novo
+            if novo and novo != antigo:
+                status = 'Success'
+        entries[idx]['status']  = status
+        entries[idx]['maker']   = session.get('user_sid', '')
+        entries[idx]['checker'] = ''
+        _R()._atomic_write_json(fp, entries)
+    _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                         'Deal Updated', 'Intrag DCE Option', deal_id)
+    return jsonify({'success': True, 'status': status})
+
+
+@blueprint.route('/api/intrag/dce-option/approve', methods=['POST'])
+def api_intrag_dce_option_approve():
+    """Move an Intrag DCE Option entry Pending → Approved (maker ≠ checker)."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    payload    = request.get_json(silent=True) or {}
+    deal_id    = (payload.get('deal_id') or '').strip()
+    trade_date = (payload.get('trade_date') or '').strip()
+    if not deal_id:
+        return jsonify({'success': False, 'message': 'Missing deal_id'}), 400
+    user_sid = session.get('user_sid', '')
+    with _R()._cache_lock:
+        fp, entries, idx = queries._find_intrag_dce_opt_entry(deal_id, trade_date)
+        if idx is None:
+            return jsonify({'success': False, 'message': 'Entry not found'}), 404
+        if (entries[idx].get('status') or '') != 'Pending':
+            return jsonify({'success': False, 'message': 'Only Pending entries can be approved.'}), 400
+        if entries[idx].get('maker') and entries[idx]['maker'] == user_sid:
+            return jsonify({'success': False,
+                            'message': 'Maker cannot approve their own change — a different user must check it.'}), 403
+        entries[idx]['status']  = 'Approved'
+        entries[idx]['checker'] = user_sid
+        _R()._atomic_write_json(fp, entries)
+    _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                         'Status Updated', 'Intrag DCE Option', deal_id + ' → Approved')
+    return jsonify({'success': True, 'status': 'Approved'})
+
+
+@blueprint.route('/api/intrag/dce-option/mapping-intrag-id', methods=['POST'])
+def api_intrag_dce_option_mapping_intrag_id():
+    # O mesmo processo das irmãs: linhas de opção do Boletas CSV (col C ==
+    # 'OPCAO', col I = id, col A = Intrag ID); a chave que a tela manda como
+    # `b3_id` é o Trade ID do extrato.
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
+    deals = (request.get_json(silent=True) or {}).get('deals', [])
+    results, err = commands._intrag_run_mapping(deals, 2, 'OPCAO', 8, queries._find_intrag_dce_opt_entry)
     if results is None:
         return jsonify({'ok': False, 'error': err}), 400
     return jsonify({'ok': True, 'results': results})

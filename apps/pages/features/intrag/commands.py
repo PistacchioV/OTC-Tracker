@@ -441,6 +441,118 @@ def _maybe_save_intrag_fxo(deal):
             _R().log.error('[INTRAG FXO] save failed for deal=%r: %s', deal.get('Deal', ''), exc)
 
 
+# O endereço do extrato quando o cadastro ainda não tem a linha `Intrag DCE`:
+# o `athena_api.registered_link` lê o JSON CRU, e o seed novo só chega ao
+# arquivo quando alguém salva a tela /mapping — sem o fallback, a instância que
+# nunca salvou ficaria com o Import morto pedindo um cadastro que o seed já
+# conhece (o mesmo desenho do `_ATHENA_FXO_FALLBACK` da Recon FXO).
+_DCE_OPT_URL_FALLBACK = ('http://169.19.201.153:8080/bob-reports/YYYY-MM-DD/'
+                         'GEM/Reports/ITAU/ITAUDataExtract_FXO/'
+                         'ITAUDataExtractor_FXOption')
+_DCE_API_USE = 'Intrag DCE'
+_DCE_API_PRODUCT = 'FXO'
+
+
+def _dce_opt_url(ref_dt):
+    """Endereço do extrato do dia, do cadastro `api-links` (uso `Intrag DCE`).
+
+    Como na Recon FXO, a data vive no CAMINHO (`AAAA-MM-DD`) — a substituição é
+    do placeholder, sem reescrever query string nenhuma."""
+    template = None
+    try:
+        from apps.pages import athena_api
+        template, _ = athena_api.registered_link(_DCE_API_USE, _DCE_API_PRODUCT)
+    except Exception as exc:                       # pragma: no cover - defensivo
+        _R().log.debug('[INTRAG DCE OPT] cadastro api-links indisponível: %s', exc)
+    if not template:
+        template = _DCE_OPT_URL_FALLBACK
+    return re.sub(r'yyyy[-/. ]?mm[-/. ]?dd', ref_dt.strftime('%Y-%m-%d'),
+                  template, flags=re.I)
+
+
+def _dce_opt_import(ref_date=None, sid='', actor_name=''):
+    """Baixa o extrato DCE de FX Option do bob-reports e o materializa nos
+    arquivos-dia da página Intrag › DCE › Option.
+
+    O `ref_date` é a data do CAMINHO do bob-report (o dia do extrato); cada
+    linha vai para o arquivo-dia do PRÓPRIO Trade Date, que é a chave que a
+    tela e o send usam — a mesma unidade das outras páginas de Intrag. O
+    re-import upserta pela chave `_deal` (Trade ID) preservando status, maker,
+    checker e o Intrag ID já mapeado: importar de novo não desfaz esteira.
+    """
+    ref_dt = _R()._api_ref_date(ref_date)
+    url = _dce_opt_url(ref_dt)
+    try:
+        from apps.pages import athena_api
+        session = athena_api.build_session()
+    except Exception:
+        import requests
+        session = requests.Session()
+        # Mesma razão do athena_api: o proxy corporativo recusa o host interno
+        # que o navegador alcança direto.
+        session.trust_env = False
+    resp = session.get(url, timeout=180)
+    resp.raise_for_status()
+    try:
+        text = resp.content.decode('utf-8-sig')
+    except UnicodeDecodeError:
+        text = resp.content.decode('latin-1')
+
+    rows, unknown = domain._dce_parse_report(text)
+    if unknown:
+        _R().log.warning('[INTRAG DCE OPT] colunas do extrato fora do mapa (ignoradas): %s',
+                         ', '.join(unknown))
+
+    groups, skipped = {}, 0
+    for row in rows:
+        deal_id = row.get('trade_id') or ''
+        if not deal_id:
+            skipped += 1
+            continue
+        td = _R()._parse_date_any(row.get('trade_date')) or ref_dt
+        entry = dict(row)
+        entry['_deal'] = deal_id
+        entry['_client'] = row.get('counterparty') or ''
+        entry['status'], entry['maker'], entry['checker'] = 'New', '', ''
+        groups.setdefault(td.strftime('%Y%m%d'), {'ref': td, 'rows': []})['rows'].append(entry)
+
+    imported = 0
+    for key, grp in groups.items():
+        ref = grp['ref']
+        dir_path = os.path.join(persistence.INTRAG_DCE_OPT_CACHE_DIR,
+                                ref.strftime('%Y'), ref.strftime('%m'))
+        os.makedirs(dir_path, exist_ok=True)
+        file_path = os.path.join(dir_path, key + '_intrag_dce_opt.json')
+        with _R()._cache_lock:
+            entries = []
+            if os.path.exists(file_path):
+                try:
+                    with open(file_path, 'r', encoding='utf-8') as fh:
+                        entries = json.load(fh)
+                    if not isinstance(entries, list):
+                        entries = []
+                except (json.JSONDecodeError, ValueError):
+                    entries = []
+            for entry in grp['rows']:
+                idx = next((i for i, e in enumerate(entries)
+                            if e.get('_deal') == entry['_deal']), None)
+                if idx is not None:
+                    # Preserva a esteira e o mapeamento no re-import.
+                    for k in ('status', 'maker', 'checker', 'intrag_id'):
+                        if entries[idx].get(k):
+                            entry[k] = entries[idx][k]
+                    entries[idx] = entry
+                else:
+                    entries.append(entry)
+                imported += 1
+            _R()._atomic_write_json(file_path, entries)
+        _R().log.info('[INTRAG DCE OPT] Imported %d row(s) → %s', len(grp['rows']), file_path)
+
+    return {'success': True, 'imported': imported, 'files': len(groups),
+            'skipped': skipped, 'unknown_headers': unknown,
+            'ref_date': ref_dt.strftime('%Y-%m-%d')}
+
+
 def _intrag_run_mapping(deals, match_col, match_val, b3_col, finder):
     """Map each requested deal's B3 ID → Intrag ID via the export CSV, persist the
     intrag_id onto the matching JSON entry (loaded rows only). Returns (results, err)."""
