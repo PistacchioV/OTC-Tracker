@@ -221,9 +221,18 @@ Live Positions, o Track Confirmations e as três Recons).
     primeiro hover — os `<td>` são reescritos a cada redraw do DataTables, então
     um laço no load pega só as linhas da primeira página e paginar devolve botões
     mudos. `title=` sozinho é o balão cinza do navegador, não o padrão.
-  A classe `rounded-circle` ainda aparece no markup por história, mas **o CSS da
-  página fixa o squircle** — sem o override o raio do tema sai OVAL, porque
-  círculo só é círculo em botão já quadrado. Ordem e cores canônicas:
+  A classe `rounded-circle` ainda aparece no markup por história, e desde
+  2026-09-04 **quem fixa o squircle é uma regra GLOBAL do `visual-refresh.css`**
+  (`table td .btn.rounded-circle / .ops-row-act / .sc-row-act / .btn-act`,
+  geometria com `!important`, `display` SEM — senão venceria o `.d-none` dos
+  botões condicionais): a referência é a coluna Actions do Intrag DCE Option, e
+  cada página escrevendo a própria cópia foi o que deixou o Latam Desk Position
+  em 28px redondo e as quatro telas do swapchar sem regra nenhuma. A regra da
+  página, onde existe, é redundante e pode ficar; sem override o raio do tema
+  sairia OVAL, porque círculo só é círculo em botão já quadrado.
+  `check_row_action_buttons.py` §8 prende a regra global e os ícones canônicos
+  (`ti-edit`, nunca `ti-pencil`; `ti-check`, nunca `ti-circle-check`). Ordem e
+  cores canônicas:
   **Confirm** `ti-check`/success → **Edit** `ti-edit`/info → **Delete**
   `ti-trash`/danger → **Send** `ti-brand-telegram`/primary; em modo edição,
   **Save** `ti-device-floppy`/success + **Cancel** `ti-x`/secondary. Wrapper

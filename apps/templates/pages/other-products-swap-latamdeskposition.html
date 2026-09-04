@@ -50,10 +50,12 @@
     align-items: center; justify-content: center; color: var(--bs-secondary-color); cursor: pointer;
 }
 #ldp-page .btn:active { transform: scale(0.97); }
-/* Row action buttons — solid circular (project standard, matches Intrag/OTM). */
-#ldp-table td .btn-sm.rounded-circle { width: 28px; height: 28px; flex: 0 0 28px; padding: 0;
-  font-size: 13px; display: inline-flex; align-items: center; justify-content: center;
-  border-radius: 50%; box-sizing: border-box; }
+/* Row action buttons — squircle padrão do app (spec .ops-row-act): era 28px e
+   círculo, a única tela fora do padrão. */
+#ldp-table td .btn-sm.rounded-circle { width: 32px; height: 32px; flex: 0 0 32px; padding: 0;
+  min-width: 32px; max-width: 32px;
+  font-size: 1rem; display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 10px !important; box-sizing: border-box; }
 /* Toolbar buttons — compact project standard. */
 #ldp-page .ldp-toolbar .btn {
     padding: .26rem .6rem; font-size: .72rem; font-weight: 600; border-radius: 8px; line-height: 1.2;
@@ -320,5 +322,5 @@
 <script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/table-std.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/export-advanced.js"></script>
-<script src="{{ config.ASSETS_ROOT }}/js/pages/other-products-swap-latamdeskposition.js?v=20260819a"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/pages/other-products-swap-latamdeskposition.js?v=20260904a"></script>
 {% endblock extra_javascript %}

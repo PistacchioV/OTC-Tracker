@@ -363,6 +363,40 @@ table thead th input:not([type]) {
   text-align: center;
 }
 
+/* ── Botões de AÇÃO DE LINHA: o squircle padrão, para TODAS as tabelas ──────
+   Referência: a coluna Actions do Intrag DCE Option (2026-09-04). Cada página
+   escrevia a própria cópia da regra e elas derivavam sem erro nenhum: 28px e
+   círculo no Latam Desk Position, regra NENHUMA nas quatro telas do swapchar
+   (o botão saía como `btn-sm` cru), ícone `fs-lg` cinza no Track de usuários e
+   no Support Center. Esta regra alcança as quatro famílias de classe que o app
+   usa na célula de ação e trava a GEOMETRIA com !important — só a geometria:
+   `display` vai SEM, senão venceria o `.d-none` com que várias telas escondem
+   um botão condicional (o Approve do DCE, o Confirm do Track de usuários), e
+   `!important` não se resolve por especificidade. Cor e ícone ficam no markup:
+   Confirm ti-check/success · Edit ti-edit/info · Delete ti-trash/danger ·
+   Send ti-brand-telegram/primary · Save ti-device-floppy/success ·
+   Cancel ti-x/secondary. A regra da página, onde existe, é redundante com
+   esta — e pode ficar: diz a mesma coisa. */
+table td .btn.rounded-circle,
+table td .btn.ops-row-act,
+table td .btn.sc-row-act,
+table td .btn.btn-act {
+    width: 32px !important; height: 32px !important;
+    min-width: 32px !important; max-width: 32px !important;
+    min-height: 32px !important; max-height: 32px !important;
+    padding: 0 !important; box-sizing: border-box !important;
+    border-radius: 10px !important; line-height: 1 !important;
+    flex: 0 0 auto;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 1rem;
+}
+/* O ícone em 1rem com !important: o `.fs-13`/`.fs-lg` do tema também são
+   !important, e o ícone sairia com outro tamanho dentro do mesmo quadrado. */
+table td .btn.rounded-circle > i,
+table td .btn.ops-row-act > i,
+table td .btn.sc-row-act > i,
+table td .btn.btn-act > i { font-size: 1rem !important; line-height: 1; }
+
 /* ── BOTÕES: estilo moderno unificado (Linear/Vercel) ─────────────────────── */
 .btn {
   --vr-btn-radius: 10px;

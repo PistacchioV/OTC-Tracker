@@ -488,6 +488,23 @@ td .btn-sm.rounded-circle i { font-size: 1rem; }
     </div>
 
 </div>
+
+<!-- Edit Row — modal no padrão do Intrag DCE Option (campos montados pelo openEditModal) -->
+<div class="modal fade" id="mtmEditModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content liquid-glass">
+      <div class="modal-header py-2">
+        <h5 class="modal-title fs-6"><i class="ti ti-edit me-1"></i>Edit Row — Swap MtM</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body"><div class="row g-2" id="mtmEditFields"></div></div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-sm btn-danger" data-bs-dismiss="modal" title="Cancel"><i class="ti ti-x"></i></button>
+        <button type="button" class="btn btn-sm btn-success" id="mtmEditSave" title="Save"><i class="ti ti-device-floppy"></i></button>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock page_content %}
 
 {% block extra_javascript %}
@@ -662,6 +679,13 @@ td .btn-sm.rounded-circle i { font-size: 1rem; }
         }
         return esc(v);
     }
+    // '0' para o que pede ação (Pending…, Missing…), '1' para o resto. Uma
+    // função só, usada pela coluna de rank escondida e pela chave de ordenação
+    // do Status — dois testes divergiriam no primeiro status novo.
+    function statusRank(d) {
+        var k = String(d || '').toLowerCase();
+        return (k.indexOf('missing') === 0 || k.indexOf('pending') === 0) ? '0' : '1';
+    }
     function statusBadge(s) {
         s = s || 'New';
         var key = String(s).toLowerCase();
@@ -673,7 +697,7 @@ td .btn-sm.rounded-circle i { font-size: 1rem; }
     function actionsCell() {
         return '<div class="acc-actions">' +
             '<a href="#" class="btn btn-info btn-sm rounded-circle acc-act-edit" title="' + esc(t('acc-edit', 'Edit')) + '"><i class="ti ti-edit"></i></a>' +
-            '<a href="#" class="btn btn-success btn-sm rounded-circle acc-act-send" title="' + esc(t('acc-confirm', 'Confirm')) + '"><i class="ti ti-circle-check"></i></a>' +
+            '<a href="#" class="btn btn-success btn-sm rounded-circle acc-act-send" title="' + esc(t('acc-confirm', 'Confirm')) + '"><i class="ti ti-check"></i></a>' +
             '<a href="#" class="btn btn-danger btn-sm rounded-circle acc-act-del" title="' + esc(t('acc-del', 'Delete')) + '"><i class="ti ti-trash"></i></a>' +
             '</div>';
     }
@@ -756,12 +780,13 @@ td .btn-sm.rounded-circle i { font-size: 1rem; }
         var titleTh = '<th class="acc-cb-th"><input type="checkbox" class="acc-cb-all" title="' + esc(t('acc-select-all', 'Select all')) + '"></th>' +
                       '<th class="acc-act-th">' + esc(t('acc-actions', 'Actions')) + '</th>' +
                       '<th class="acc-status-th">' + esc(t('acc-status', 'Status')) + '</th>' +
-                      headers.map(function (h) { return '<th>' + esc(h) + '</th>'; }).join('');
+                      headers.map(function (h) { return '<th>' + esc(h) + '</th>'; }).join('') +
+                      '<th class="acc-rank-th"></th>';   // coluna de RANK escondida (ver statusRank)
         var filterTh = '<th></th><th></th>' +
                        '<th><input type="text" class="acc-col-filter" data-col="2" placeholder="' + esc(t('acc-status', 'Status')) + '"></th>' +
                        headers.map(function (h, i) {
                            return '<th><input type="text" class="acc-col-filter" data-col="' + (i + 3) + '" placeholder="' + esc(h || t('acc-filter', 'Filter')) + '"></th>';
-                       }).join('');
+                       }).join('') + '<th></th>';
 
         card.innerHTML = head +
             '<div class="acc-tcard__body">' +
@@ -779,10 +804,9 @@ td .btn-sm.rounded-circle i { font-size: 1rem; }
             { data: null, orderable: false, searchable: false, className: 'acc-act-col',
               render: function () { return actionsCell(); } },
             { data: n, className: 'acc-status-col', render: function (d, type) {
-                // Sort key: any 'Missing …' status ranks first, then the rest.
+                // Sort key: Pending/Missing first (statusRank), then the rest A→Z.
                 if (type === 'sort' || type === 'type') {
-                    var k = String(d || '').toLowerCase();
-                    return (k.indexOf('missing') === 0 ? '0' : '1') + k;
+                    return statusRank(d) + String(d || '').toLowerCase();
                 }
                 if (type === 'export') return String(d || '');   // export plain status text
                 return statusBadge(d);
@@ -794,9 +818,20 @@ td .btn-sm.rounded-circle i { font-size: 1rem; }
             else                                  columns.push({ data: ci, defaultContent: '' });
         }
 
+        // Coluna de RANK, escondida: Pending/Missing = '0', o resto = '1'. É a
+        // ordenação FIXA do `orderFixed` — o que a pessoa escolhe no cabeçalho
+        // vale DENTRO desses dois grupos, então o que pede ação fica sempre no
+        // topo, em qualquer ordenação (pedido de 2026-09-04). Hidden: sem
+        // `td`, fora do export (o `cols` acima vai de 2 a n+2), e o dropdown
+        // de colunas a pula pela classe do cabeçalho.
+        var rankIdx = columns.length;
+        columns.push({ data: n, visible: false, searchable: false, className: 'acc-rank-col',
+                       render: function (d) { return statusRank(d); } });
+
         var dt = $('#' + tableId).DataTable({
             data: rows, columns: columns,
-            order: [[2, 'asc']],                             // permanent: Missing status first
+            orderFixed: { pre: [[rankIdx, 'asc']] },          // Pending/Missing SEMPRE primeiro
+            order: [[2, 'asc']],                             // e, dentro do grupo, Status A→Z
             orderCellsTop: true, autoWidth: true, scrollX: true,
         // Congela cabeçalho + linha de filtros: em modo scroll o thead vira uma
         // tabela irmã acima do corpo, então quem faz o header acompanhar o scroll
@@ -866,7 +901,7 @@ td .btn-sm.rounded-circle i { font-size: 1rem; }
             var html = '';
             dt.columns().every(function () {
                 var idx = this.index();
-                if (idx < 2) return;                         // skip checkbox + actions
+                if (idx < 2 || $(this.header()).hasClass('acc-rank-th')) return;   // skip checkbox + actions + rank
                 var title = $(this.header()).text() || ('Col ' + (idx + 1));
                 html += '<div class="form-check">' +
                     '<input class="form-check-input acc-col-vis" type="checkbox" checked data-col="' + idx + '" id="vis-' + tableId + '-' + idx + '">' +
@@ -939,10 +974,8 @@ td .btn-sm.rounded-circle i { font-size: 1rem; }
         });
         $(card).on('click.accrow', '.acc-bulk-del', function (e) { e.preventDefault(); confirmDelete(lob, tableId, Array.from(sel)); });
         $(card).on('click.accrow', '.acc-act-del',  function (e) { e.preventDefault(); confirmDelete(lob, tableId, [getRowId(dt, $(this).closest('tr')[0])]); });
-        $(card).on('click.accrow', '.acc-act-edit', function (e) { e.preventDefault(); startEdit(lob, tableId, $(this).closest('tr')[0]); });
+        $(card).on('click.accrow', '.acc-act-edit', function (e) { e.preventDefault(); openEditModal(lob, tableId, $(this).closest('tr')[0]); });
         $(card).on('click.accrow', '.acc-act-send', function (e) { e.preventDefault(); sendRow(lob, tableId, $(this).closest('tr')[0]); });
-        $(card).on('click.accrow', '.acc-act-save', function (e) { e.preventDefault(); saveEdit(lob, tableId, $(this).closest('tr')[0]); });
-        $(card).on('click.accrow', '.acc-act-cancel', function (e) { e.preventDefault(); dt.row($(this).closest('tr')[0]).invalidate().draw(false); });
         // Inline Comments (recon-enabled on Check rows) → save without changing status.
         $(card).on('change.accrow blur.accrow', '.acc-comment-inp', function () {
             var id = this.getAttribute('data-id'); if (!id) return;
@@ -988,28 +1021,38 @@ td .btn-sm.rounded-circle i { font-size: 1rem; }
         });
     }
 
-    function startEdit(lob, tableId, tr) {
+    // ── Edit Row: MODAL, no padrão do Intrag DCE Option — pedido de 2026-09-04
+    // (a edição era na própria linha). Os campos são os cabeçalhos da tabela
+    // do LOB, na ordem, e o Save manda as MESMAS `cells` que a edição inline
+    // mandava ao /row/edit: o servidor não mudou.
+    var editCtx = null;
+    function openEditModal(lob, tableId, tr) {
         var dt = dtInst[tableId]; var rd = dt.row(tr).data(); if (!rd) return;
-        var n = currentHeaders[tableId].length;
-        var $tds = $(tr).children('td');
+        var headers = currentHeaders[tableId]; var n = headers.length;
+        var html = '';
         for (var i = 0; i < n; i++) {
             var v = rd[i] == null ? '' : rd[i];
-            $tds.eq(3 + i).html('<input type="text" class="acc-edit-inp" value="' + esc(v) + '">');
+            html += '<div class="col-md-4"><label class="form-label form-label-sm mb-1">' + esc(headers[i] || ('Col ' + (i + 1))) + '</label>' +
+                    '<input type="text" class="form-control form-control-sm mtm-edit-f" data-i="' + i + '" value="' + esc(v) + '"></div>';
         }
-        $tds.eq(1).html('<div class="acc-actions">' +
-            '<a href="#" class="btn btn-success btn-sm rounded-circle acc-act-save" title="' + esc(t('acc-save', 'Save')) + '"><i class="ti ti-device-floppy"></i></a>' +
-            '<a href="#" class="btn btn-secondary btn-sm rounded-circle acc-act-cancel" title="' + esc(t('swal-cancel', 'Cancel')) + '"><i class="ti ti-x"></i></a></div>');
+        document.getElementById('mtmEditFields').innerHTML = html;
+        editCtx = { lob: lob, tableId: tableId, tr: tr };
+        var m = document.getElementById('mtmEditModal');
+        m.querySelector('.modal-title').innerHTML = '<i class="ti ti-edit me-1"></i>' +
+            esc(t('mtm-edit-title', 'Edit Row — Swap MtM')) + ' · ' + esc(lob.card || lob.key || '');
+        bootstrap.Modal.getOrCreateInstance(m).show();
     }
-
-    function saveEdit(lob, tableId, tr) {
-        var dt = dtInst[tableId]; var id = getRowId(dt, tr);
-        var n = currentHeaders[tableId].length; var cells = [];
-        $(tr).children('td').slice(3, 3 + n).each(function () { cells.push($(this).find('input').val()); });
-        postJSON('/api/mtm-swap/row/edit', { date: currentDate, lob: lob.key, id: id, cells: cells }).then(function (j) {
+    document.getElementById('mtmEditSave').addEventListener('click', function () {
+        if (!editCtx) return;
+        var ctx = editCtx, dt = dtInst[ctx.tableId]; if (!dt) return;
+        var id = getRowId(dt, ctx.tr), cells = [];
+        document.querySelectorAll('#mtmEditFields .mtm-edit-f').forEach(function (i) { cells.push(i.value); });
+        postJSON('/api/mtm-swap/row/edit', { date: currentDate, lob: ctx.lob.key, id: id, cells: cells }).then(function (j) {
             if (!j.success) { errSwal(j.error); return; }
-            if (j.row) dt.row(tr).data(j.row).draw(false);
+            if (j.row) dt.row(ctx.tr).data(j.row).draw(false);
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('mtmEditModal')).hide();
         }).catch(netErr);
-    }
+    });
 
     function sendRow(lob, tableId, tr) {
         var dt = dtInst[tableId]; var id = getRowId(dt, tr);
