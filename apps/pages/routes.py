@@ -182,6 +182,52 @@ log = logging.getLogger('otc_tracker')
 
 
 # ==============================================================================
+# TELEMETRIA DE REQUESTS LENTOS — quem está segurando as threads do waitress
+# ==============================================================================
+# O "Task queue depth is N" do waitress diz que as 16 threads estão ocupadas e
+# N requests esperam vaga — mas não diz OCUPADAS COM O QUÊ. Estes dois hooks
+# respondem isso: todo request que passar do teto sai em WARNING (o nível que o
+# log da instância mostra) com método, caminho, duração e quantos requests
+# estavam EM VOO quando ele começou — é o número que correlaciona com a fila.
+# O contador é um gauge intra-processo (produção é 1 processo, §4), e o custo
+# por request é um perf_counter e um incremento sob lock — nada de I/O.
+# `OTC_SLOW_REQUEST_SECONDS` move o teto; 0 desliga.
+_req_inflight = 0
+_req_inflight_lock = threading.Lock()
+try:
+    _SLOW_REQUEST_SECONDS = float(os.environ.get('OTC_SLOW_REQUEST_SECONDS', '') or 3.0)
+except ValueError:
+    _SLOW_REQUEST_SECONDS = 3.0
+
+
+@blueprint.before_request
+def _slow_request_start():
+    global _req_inflight
+    g._req_t0 = time.perf_counter()
+    with _req_inflight_lock:
+        _req_inflight += 1
+        g._req_inflight0 = _req_inflight
+
+
+@blueprint.teardown_request
+def _slow_request_stop(exc=None):
+    # teardown (e não after_request): roda mesmo quando o handler estoura, que
+    # é justamente um request que pode ter segurado a thread por muito tempo.
+    global _req_inflight
+    with _req_inflight_lock:
+        _req_inflight -= 1
+    t0 = g.get('_req_t0')
+    if t0 is None or _SLOW_REQUEST_SECONDS <= 0:
+        return
+    dur = time.perf_counter() - t0
+    if dur >= _SLOW_REQUEST_SECONDS:
+        log.warning('[slow-request] %s %s levou %.1fs (%d em voo no inicio%s)',
+                    request.method, request.path, dur,
+                    g.get('_req_inflight0', 0),
+                    ', terminou com excecao' if exc is not None else '')
+
+
+# ==============================================================================
 # SESSION EXPIRY — server-side check (independente do browser restaurar cookies)
 # ==============================================================================
 
