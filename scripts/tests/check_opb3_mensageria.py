@@ -140,7 +140,7 @@ print('\n== 4. o agrupamento, pelo endpoint de verdade ==')
 # A2 de premio (contraparte igual, e outro e-mail), e C1 de termo de commodity.
 
 
-def run_day(recs, internal_swap=None, internal_ndfc=None, participants=None):
+def run_day(recs, internal_swap=None, internal_ndfc=None, participants=None, ids=None):
     """Chama /api/operations-b3/mensageria e devolve os `group` de cada draft."""
     from apps import create_app
     from apps.config import DebugConfig
@@ -178,7 +178,10 @@ def run_day(recs, internal_swap=None, internal_ndfc=None, participants=None):
             s['user_name'] = 'T'
             s['user_email'] = 't@x'
             s['session_expires_at'] = (datetime.now(tz=timezone.utc) + timedelta(hours=8)).isoformat()
-        r = c.post('/api/operations-b3/mensageria', json={'date': '2026-08-05'})
+        body = {'date': '2026-08-05'}
+        if ids is not None:
+            body['ids'] = ids
+        r = c.post('/api/operations-b3/mensageria', json=body)
         return r, seen
     finally:
         otc_emails.build_opb3_mensageria_email = real_build
@@ -319,6 +322,49 @@ try:
           R._opb3_participant_name_by_account(), {'33333333': 'FULANO S.A.'})
 finally:
     R._mapping_rows = _real_rows
+
+# ─────────────────────────────────────────────────────────────────────────────
+print('\n== 9. o agrupamento e por NOME resolvido, nao por conta ==')
+# A mesma contraparte pode liquidar por DUAS contas no mesmo dia (o COE de
+# 04/09/2026): um e-mail por conta cobra o mesmo pagamento em dois avisos. As
+# duas contas resolvem para a mesma Razao Social no cadastro de participantes
+# -> UM e-mail, com as duas linhas e o total somado. Contraparte de nome
+# DIFERENTE continua num e-mail proprio.
+resp, drafts = run_day([
+    rec('K1', 'RESGATE', '100,00', tit='COE', cp='44444.44-4', cpn='APELIDO1'),
+    rec('K2', 'RESGATE', '200,00', tit='COE', cp='55555.55-5', cpn='APELIDO2'),
+    rec('K3', 'RESGATE', '900,00', tit='COE', cp='66666.66-6', cpn='OUTRA'),
+], participants={'44444444': 'MESMA CONTRAPARTE S.A.',
+                 '55555555': 'MESMA CONTRAPARTE S.A.',
+                 '66666666': 'OUTRA CONTRAPARTE LTDA'})
+check('o endpoint respondeu', resp.status_code, 200)
+check('duas contas, mesmo nome -> DOIS drafts no dia (um por contraparte)',
+      len(drafts), 2)
+mesma = next((d for d in drafts if d.get('cpty') == 'MESMA CONTRAPARTE S.A.'), {})
+check('o e-mail unido tem as DUAS linhas', len(mesma.get('rows') or []), 2)
+check('e o total soma as duas contas', mesma.get('total'), 300.0)
+contas = sorted(r[11] for r in (mesma.get('rows') or []))
+check('cada linha mantem a SUA conta na tabela', contas,
+      ['44444.44-4', '55555.55-5'])
+outra = next((d for d in drafts if d.get('cpty') == 'OUTRA CONTRAPARTE LTDA'), {})
+check('a outra contraparte fica no e-mail dela', len(outra.get('rows') or []), 1)
+
+# ─────────────────────────────────────────────────────────────────────────────
+print('\n== 10. selecao orfa = pagina desatualizada, e o erro DIZ isso ==')
+# O `_ob_id` e reatribuido quando a reimportacao nao consegue carregar o meta
+# adiante (linha sem Num Ctrl Operacao): a aba aberta manda ids que nao casam
+# com NADA, as Generated marcadas ficam de fora, e o "No pending" generico lia
+# como botao quebrado. Ids sem NENHUM correspondente no dia -> 409 nomeando o
+# remedio (recarregar). Id que casa continua destravando a regeracao.
+gen = dict(rec('G1', 'RESGATE', '10,00', tit='COE'),
+           _ob_id='K-GEN', _ob_status='Generated', _ob_maker='', _ob_checker='')
+resp, drafts = run_day([gen], ids=['id-que-nao-existe'])
+check('ids orfaos -> 409', resp.status_code, 409)
+check('e o erro manda recarregar', 'Refresh the page' in (resp.get_json() or {}).get('error', ''), True)
+check('nenhum draft foi gerado', len(drafts), 0)
+resp, drafts = run_day([gen], ids=['K-GEN'])
+check('id valido -> regenera a Generated marcada', resp.status_code, 200)
+check('com o draft dela', len(drafts), 1)
 
 print('\n' + ('FALHOU: ' + ', '.join(fails) if fails else 'TUDO OK'))
 sys.exit(1 if fails else 0)
