@@ -81,8 +81,15 @@ with io.open(os.path.join(tmp, 'Subjacente.json'), 'w', encoding='utf-8') as fh:
 
 MAPS = {
     'quotes-equity': [{'LABEL': 'PETR4', 'SYMBOL': 'PETR4.SA', 'NOTES': ''},
-                      {'LABEL': ' aapl34 ', 'SYMBOL': 'AAPL34.SA', 'NOTES': ''}],
-    'quotes-commodity': [{'LABEL': 'BRT', 'SYMBOL': 'BZ=F', 'NOTES': ''}],
+                      {'LABEL': ' aapl34 ', 'SYMBOL': 'AAPL34.SA', 'NOTES': ''},
+                      # Rotulo que NAO e codigo do Subjacente: o mapping novo
+                      # tem de aparecer na lista da tela (uniao das duas fontes).
+                      {'LABEL': 'S&P 500 Index', 'SYMBOL': '^GSPC', 'NOTES': ''},
+                      # Linha sem simbolo nao vira opcao: nao ha o que buscar.
+                      {'LABEL': 'SEM SIMBOLO', 'SYMBOL': '', 'NOTES': ''}],
+    'quotes-commodity': [{'LABEL': 'BRT', 'SYMBOL': 'BZ=F', 'NOTES': ''},
+                         # Linha de PADRAO e regra, nao instrumento.
+                         {'LABEL': 'BO"MY"', 'SYMBOL': 'ZL"MY".CBT', 'NOTES': ''}],
 }
 
 # A montagem das opcoes virou a vertical `features/quotes/`. O `_B3_DATA_DIR` e
@@ -103,9 +110,16 @@ finally:
     QP._cache['mtime'] = None
 
 check('equity traz as quatro classes de papel/indice, em ordem, sem o INACTIVE',
-      [p[0] for p in eq], ['AAPL34', 'IBOV', 'PETR4', 'SPX'])
+      [p[0] for p in eq], ['AAPL34', 'IBOV', 'PETR4', 'S&P 500 Index', 'SPX'])
 check('commodity traz so a classe COMMODITIES',
       [p[0] for p in com], ['BRT', 'WTI'])
+check('mapping cujo rotulo nao e codigo do Subjacente entra na lista, com o simbolo',
+      dict(eq).get('S&P 500 Index'), '^GSPC')
+check('rotulo que ja e codigo do Subjacente nao duplica (aapl34 ~ AAPL34)',
+      [p[0] for p in eq].count('AAPL34'), 1)
+check('linha sem simbolo nao vira opcao', 'SEM SIMBOLO' in dict(eq), False)
+check('linha de PADRAO ("MY") e regra, nao instrumento — fica fora da lista',
+      any('MY' in p[0] for p in com), False)
 check('classe de fora (TAXA DE JUROS) nao entra em nenhum dos dois',
       ['JUROS' in [p[0] for p in eq], 'JUROS' in [p[0] for p in com]], [False, False])
 check('o simbolo cadastrado vem junto (par [codigo, simbolo])',

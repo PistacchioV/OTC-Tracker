@@ -18,6 +18,14 @@ def underlyings(kind):
     ele, quem escolhe não distingue o que está cadastrado do que ainda vai
     falhar pedindo cadastro.
 
+    A lista é a UNIÃO de duas fontes: os ACTIVE do Subjacente (Index B3) e as
+    linhas LITERAIS do próprio cadastro do /mapping. A segunda existe porque o
+    de-para aceita rótulo que não é código do Subjacente (`S&P 500 Index` →
+    `^GSPC`), e sem ela o mapping recém-criado não aparecia na lista da tela —
+    cadastrado, resolvível pela API, e invisível para quem escolhe. Linha de
+    PADRÃO (`BO"MY"`) fica de fora: é regra, não instrumento — listada, viraria
+    uma opção que a busca literal não resolve.
+
     O cadastro é lido UMA vez e vira uma FUNÇÃO: em commodities ele tem linhas
     de PADRÃO (`BO"MY"` → `ZL"MY".CBT`), que só se resolvem contra o código
     concreto — um dicionário não daria conta, e reler o cadastro por subjacente
@@ -26,11 +34,22 @@ def underlyings(kind):
     key = domain.registry_for(kind)
     if not key:
         return []
-    simbolo = motor.symbol_lookup(_cadastro(key))
+    rows = _cadastro(key)
+    simbolo = motor.symbol_lookup(rows)
     vistos = {}
     por_classe = persistence.active_by_class()
     for classe in domain.classes_for(kind):
         vistos.update(por_classe.get(classe) or {})
+    for r in (rows or []):
+        rotulo = ' '.join(str(r.get('LABEL') or '').split())
+        if not rotulo or not str(r.get('SYMBOL') or '').strip():
+            continue
+        if motor.has_b3_marker(rotulo):
+            continue
+        # setdefault: o rótulo que JÁ é código do Subjacente mantém a grafia
+        # de lá — duplicar `PETR4` só porque o cadastro o escreveu `petr4`
+        # poria o mesmo instrumento duas vezes na lista.
+        vistos.setdefault(rotulo.upper(), rotulo)
     return [[code, simbolo(code)] for _k, code in sorted(vistos.items())]
 
 

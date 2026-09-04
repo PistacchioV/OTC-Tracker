@@ -1,0 +1,1085 @@
+{% extends 'layouts/vertical.html' %}
+
+{% block title %}Intrag — DCE Option{% endblock title %}
+
+{% block extra_css %}
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/responsive.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/select.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet" type="text/css"/>
+<style>
+  /* ti-spin: Tabler webfont 3.31 não anima .ti-spin E .ti não seta display:inline-block
+     (transform/rotate é ignorado em display:inline). Sem isto, o spinner dos botões de
+     mapping/import fica estático. !important garante sobre app.min.css (carrega depois). */
+  @keyframes ti-spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
+  i.ti-spin, .ti-spin, i.ti-loader, i.ti-loader-2, i.ti-loader-3 { display: inline-block !important; animation: ti-spin 0.8s linear infinite !important; }
+  @media (prefers-reduced-motion: reduce) { i.ti-spin, .ti-spin, i.ti-loader, i.ti-loader-2, i.ti-loader-3 { animation-duration: 1.6s !important; } }
+
+  /* Status 'Sent' — teal escurecido (diferencia do New; não tão escuro quanto Approved). */
+  .badge.badge-sent { background-color: #17a2b8 !important; color: #fff !important; }
+
+  /* Export dropdown: ensure solid background, no opacity artifact */
+  div.dt-button-collection {
+      opacity: 1 !important;
+      background-color: var(--ins-dropdown-bg, var(--ins-secondary-bg, #fff)) !important;
+      border: var(--ins-border-width, 1px) solid var(--ins-border-color, rgba(0,0,0,.1)) !important;
+      border-radius: var(--ins-dropdown-border-radius, 0.6875rem) !important;
+      box-shadow: 0 8px 24px rgba(0,0,0,.12) !important;
+  }
+  div.dt-button-collection .dropdown-item {
+      opacity: 1 !important;
+      color: var(--ins-dropdown-link-color, var(--ins-body-color)) !important;
+  }
+  div.dt-button-collection .dropdown-item:hover {
+      background-color: var(--ins-dropdown-link-hover-bg, rgba(0,102,204,.06)) !important;
+  }
+
+  .card-body { padding: 5px; }
+  .table-responsive { overflow-x: auto; }
+  .dt-scroll-head, .dataTables_scrollHead { padding-top: 8px; }
+  .dt-scroll-body thead, .dataTables_scrollBody thead { display: none !important; }
+  #intrag-dce-table thead th,
+  .dt-scroll-head thead th,
+  .dataTables_scrollHeadInner thead th,
+  .dataTables_scrollHead thead th { padding-top: 12px !important; vertical-align: middle; }
+  /* ── FIX DEFINITIVO alinhamento scrollX (ver intrag-option.html) ── */
+  .dt-scroll-headInner table,
+  .dataTables_scrollHeadInner table,
+  .dt-scroll-body > table,
+  .dataTables_scrollBody > table {
+      table-layout: fixed !important;
+  }
+  #intrag-dce-table th {
+      white-space: nowrap !important; padding: 8px 12px;
+      overflow: hidden; text-overflow: ellipsis;
+      text-align: center !important; vertical-align: middle !important; font-size: 0.7rem;
+  }
+  .dt-scroll-head thead th,
+  .dt-scroll-headInner thead th,
+  .dataTables_scrollHead thead th,
+  .dataTables_scrollHeadInner thead th {
+      white-space: nowrap !important; overflow: hidden; text-overflow: ellipsis;
+      text-align: center !important; vertical-align: middle !important; font-size: 0.7rem;
+  }
+  #intrag-dce-table td {
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      font-size: 0.8rem; text-align: center; vertical-align: middle;
+  }
+
+  /* Larguras: nth-child(1)=checkbox (2)=actions (3)=Status (4)=Intrag ID
+     (5..32)=28 colunas do extrato (33)=hidden ID. Cada regra alcança também o
+     CLONE do header (.dt-scroll-head/.dataTables_scrollHead) porque o
+     DataTables remove o id da tabela clonada — sem isso o header desalinha.
+     O default cobre toda coluna de dado; abaixo, só as exceções mais largas. */
+  #intrag-dce-table th, #intrag-dce-table td,
+  .dt-scroll-head thead th, .dataTables_scrollHead thead th { width: 135px; min-width: 135px; }
+
+  #intrag-dce-table th:nth-child(1),
+  #intrag-dce-table td:nth-child(1),
+  .dt-scroll-head thead th:nth-child(1),
+  .dataTables_scrollHead thead th:nth-child(1) { width: 50px;  min-width: 50px;  }
+
+  #intrag-dce-table th:nth-child(2),
+  #intrag-dce-table td:nth-child(2),
+  .dt-scroll-head thead th:nth-child(2),
+  .dataTables_scrollHead thead th:nth-child(2) { width: 160px; min-width: 160px; } /* Actions */
+
+  #intrag-dce-table th:nth-child(3),
+  #intrag-dce-table td:nth-child(3),
+  .dt-scroll-head thead th:nth-child(3),
+  .dataTables_scrollHead thead th:nth-child(3) { width: 110px; min-width: 110px; } /* Status */
+
+  #intrag-dce-table th:nth-child(4),
+  #intrag-dce-table td:nth-child(4),
+  .dt-scroll-head thead th:nth-child(4),
+  .dataTables_scrollHead thead th:nth-child(4) { width: 140px; min-width: 140px; } /* Intrag ID */
+
+  #intrag-dce-table th:nth-child(6),
+  #intrag-dce-table td:nth-child(6),
+  .dt-scroll-head thead th:nth-child(6),
+  .dataTables_scrollHead thead th:nth-child(6) { width: 170px; min-width: 170px; } /* Trade ID */
+
+  #intrag-dce-table th:nth-child(10),
+  #intrag-dce-table td:nth-child(10),
+  .dt-scroll-head thead th:nth-child(10),
+  .dataTables_scrollHead thead th:nth-child(10) { width: 220px; min-width: 220px; } /* Holder or Writer Cpty */
+
+  #intrag-dce-table th:nth-child(11),
+  #intrag-dce-table td:nth-child(11),
+  .dt-scroll-head thead th:nth-child(11),
+  .dataTables_scrollHead thead th:nth-child(11) { width: 190px; min-width: 190px; } /* Counterparty */
+
+  #intrag-dce-table th:nth-child(12),
+  #intrag-dce-table td:nth-child(12),
+  .dt-scroll-head thead th:nth-child(12),
+  .dataTables_scrollHead thead th:nth-child(12) { width: 205px; min-width: 205px; } /* Base Currency */
+
+  #intrag-dce-table th:nth-child(20),
+  #intrag-dce-table td:nth-child(20),
+  .dt-scroll-head thead th:nth-child(20),
+  .dataTables_scrollHead thead th:nth-child(20) { width: 185px; min-width: 185px; } /* Premium Settlement Date */
+
+  #intrag-dce-table th:nth-child(21),
+  #intrag-dce-table td:nth-child(21),
+  .dt-scroll-head thead th:nth-child(21),
+  .dataTables_scrollHead thead th:nth-child(21) { width: 165px; min-width: 165px; } /* Base Value/Quantity */
+
+  #intrag-dce-table th:nth-child(23),
+  #intrag-dce-table td:nth-child(23),
+  .dt-scroll-head thead th:nth-child(23),
+  .dataTables_scrollHead thead th:nth-child(23) { width: 170px; min-width: 170px; } /* Asian Option Average */
+
+  #intrag-dce-table th:nth-child(24),
+  #intrag-dce-table td:nth-child(24),
+  .dt-scroll-head thead th:nth-child(24),
+  .dataTables_scrollHead thead th:nth-child(24) { width: 180px; min-width: 180px; } /* Initial Verification Date */
+
+  #intrag-dce-table th:nth-child(25),
+  #intrag-dce-table td:nth-child(25),
+  .dt-scroll-head thead th:nth-child(25),
+  .dataTables_scrollHead thead th:nth-child(25) { width: 180px; min-width: 180px; } /* Final Verification Date */
+
+  #intrag-dce-table th:nth-child(26),
+  #intrag-dce-table td:nth-child(26),
+  .dt-scroll-head thead th:nth-child(26),
+  .dataTables_scrollHead thead th:nth-child(26) { width: 160px; min-width: 160px; } /* Information Source */
+
+  #column-search-inputs th { padding: 4px 8px; border-top: 1px solid rgba(0,0,0,0.08); text-align: center; vertical-align: middle; }
+  #column-search-inputs input { font-size: 12px; height: 28px; }
+  .btn-toolbar-all { font-size: 0.75rem !important; padding: 0.25rem 0.6rem !important; height: auto !important; line-height: 1.4 !important; white-space: nowrap !important; }
+  /* Import (bob-report): teal fixo da toolbar da casa. */
+  .btn-import-dce { background-color: #4a849b !important; border-color: #4a849b !important; color: #fff !important; }
+  #dceRefWrap .form-control { font-size: 12px; height: 28px; }
+  .dce-ref-field { width: 120px; }
+  .smart-filter-wrapper { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; border: 1px solid rgba(0,0,0,0.08); border-radius: 0.6875rem; padding: 4px 8px; min-height: 38px; background: var(--ins-secondary-bg, #fff); cursor: text; transition: border-color 0.15s ease, box-shadow 0.15s ease; }
+  .smart-filter-wrapper:focus-within { border-color: #0066cc; box-shadow: 0 0 0 3px rgba(0,102,204,0.15); }
+  .smart-filter-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+  .smart-filter-chip { display: inline-flex; align-items: center; gap: 5px; background: #6c757d; color: #fff; border-radius: 50rem; padding: 2px 8px; font-size: 10px; font-weight: 500; white-space: nowrap; }
+  .smart-filter-chip .sf-chip-remove { cursor: pointer; opacity: .75; font-size: 13px; line-height: 1; margin-left: 2px; }
+  .smart-filter-chip .sf-chip-remove:hover { opacity: 1; }
+  .smart-filter-input { border: none; outline: none; flex: 1; min-width: 200px; font-size: 0.82rem; background: transparent; padding: 2px 0; color: inherit; }
+  .smart-filter-dropdown { position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 1055; background: var(--ins-secondary-bg, #fff); border: 1px solid rgba(0,0,0,0.08); border-radius: 0.6875rem; box-shadow: 0 8px 32px rgba(0,0,0,0.12), 0 0 0 1px rgba(0,0,0,0.04); max-height: 240px; overflow-y: auto; display: none; padding: 4px 0; }
+  .smart-filter-dropdown li { padding: 6px 12px; cursor: pointer; font-size: 0.81rem; display: flex; align-items: center; gap: 8px; list-style: none; color: inherit; }
+  .smart-filter-dropdown li:hover, .smart-filter-dropdown li.sf-kbd-active { background: rgba(0,102,204,0.06); }
+  .sf-type-badge { font-size: 9px; padding: 1px 5px; border-radius: 50rem; text-transform: uppercase; font-weight: 600; color: #fff; opacity: .85; }
+  .sf-type-text   { background: #6c757d; }
+  .sf-type-date   { background: #0dcaf0; color: #000 !important; }
+  .sf-type-number { background: #ffc107; color: #000 !important; }
+  #intrag-dce-table .btn-sm.rounded-circle { width: 32px; height: 32px; flex: 0 0 32px; min-width: 32px; max-width: 32px; padding: 0; font-size: 1rem; display: flex; align-items: center; justify-content: center; border-radius: 10px !important; box-sizing: border-box; }  /* squircle padrão (spec .ops-row-act) */
+  #intrag-dce-table td:nth-child(2) > div { flex-wrap: nowrap; }
+  /* A célula de ações NÃO leva o padding lateral do tema (ver intrag-option.html). */
+  #intrag-dce-table td:nth-child(2) { padding-left: 0 !important; padding-right: 0 !important; }
+  /* Dark mode overrides */
+  [data-bs-theme=dark] .smart-filter-wrapper { background: var(--ins-secondary-bg) !important; border-color: rgba(255,255,255,0.1) !important; }
+  [data-bs-theme=dark] .smart-filter-wrapper:focus-within { border-color: #0066cc !important; }
+  [data-bs-theme=dark] .smart-filter-dropdown { background: var(--ins-secondary-bg) !important; border-color: rgba(255,255,255,0.08) !important; box-shadow: 0 8px 32px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.06) !important; }
+  [data-bs-theme=dark] .smart-filter-dropdown li:hover, [data-bs-theme=dark] .smart-filter-dropdown li.sf-kbd-active { background: rgba(0,102,204,0.12) !important; }
+  [data-bs-theme=dark] #column-search-inputs th { border-top-color: rgba(255,255,255,0.08) !important; }
+  [data-bs-theme=dark] #column-search-inputs input { background: var(--ins-secondary-bg) !important; color: var(--ins-body-color) !important; border-color: rgba(255,255,255,0.1) !important; }
+
+  /* ── Emil Design — button press + hover feedback ───────────── */
+  .container-fluid .btn {
+      transition: color 0.15s ease-in-out, background-color 0.15s ease-in-out,
+                  border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out,
+                  transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
+  .container-fluid .btn:active {
+      transform: scale(0.97) !important;
+      box-shadow: none !important;
+  }
+  @media (hover: hover) and (pointer: fine) {
+      .container-fluid .btn:not(:active):hover {
+          transform: translateY(-1px);
+          box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
+      }
+  }
+</style>
+{% endblock extra_css %}
+
+{% block page_content %}
+<div class="container-fluid" data-content="">
+    <div class="page-title-head d-flex align-items-center">
+        <div class="flex-grow-1">
+            <h4 class="fs-xl fw-bold m-0 d-flex align-items-center gap-2">
+                <i class="ti ti-file-import" style="color:#0066cc;font-size:22px;flex-shrink:0;"></i>
+                Intrag — DCE Option
+            </h4>
+        </div>
+        <div class="text-end">
+            <ol class="breadcrumb m-0 py-0">
+                <li class="breadcrumb-item"><a href="/">OTC Tracker</a></li>
+                <li class="breadcrumb-item">Intrag</li>
+                <li class="breadcrumb-item" data-lang="nav-dce">DCE</li>
+                <li class="breadcrumb-item active" data-lang="nav-option">Option</li>
+            </ol>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+
+                <!-- ── Smart filter bar: thin (input + search only) ─────────── -->
+                <div class="d-flex align-items-center gap-2 px-2 py-2 border-top border-bottom">
+                    <div class="flex-grow-1 position-relative">
+                        <div class="smart-filter-wrapper" id="sfWrapper">
+                            <div class="smart-filter-chips" id="sfChips"></div>
+                            <input type="text" class="smart-filter-input" id="sfInput" placeholder="Type to filter…" autocomplete="off">
+                            <ul class="smart-filter-dropdown mb-0 ps-0" id="sfDropdown"></ul>
+                        </div>
+                    </div>
+                    <div>
+                        <button class="btn btn-secondary bg-gradient btn-toolbar-all" type="button" id="sfSearchBtn">
+                            <i class="ti ti-search fs-xl me-1"></i> <span data-lang="b3-btn-search">Search</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- ── Show/entries ───────────────────────────────────────────── -->
+                <div class="card-header">
+                    <div class="d-flex align-items-center gap-2">
+                        <label class="form-label mb-0" data-lang="b3-show">Show</label>
+                        <select class="form-select form-select-sm" style="width:80px;" data-table-rows>
+                            <option value="15">15</option>
+                            <option value="25">25</option>
+                            <option value="50">50</option>
+                            <option value="100">100</option>
+                        </select>
+                        <label class="form-label mb-0" data-lang="b3-entries">entries</label>
+                    </div>
+                </div>
+
+                <!-- ── Action buttons ─────────────────────────────────────────── -->
+                <div class="card-header d-flex flex-wrap align-items-center gap-2">
+                    <div id="dceColToggleWrap"></div>
+                    <div id="dceExportWrap"></div>
+                    <button class="btn btn-sm btn-primary bg-gradient btn-toolbar-all" id="btnAddDce">Add Row +</button>
+                    <!-- Import do bob-report (ITAUDataExtract FX Option), com a data de
+                         referência do CAMINHO do extrato ao lado — o mesmo desenho do
+                         Import das páginas de New Deals com API linkada. -->
+                    <div class="d-flex align-items-center gap-1" id="dceRefWrap">
+                        <input type="text" class="form-control form-control-sm dce-ref-field" id="dceRefDate" placeholder="dd/mm/aaaa" autocomplete="off" title="Reference date (bob-report path)">
+                        <button class="btn btn-sm bg-gradient btn-toolbar-all btn-import-dce" id="btnImportDce" type="button" data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-title="Import bob-report" data-bs-custom-class="tooltip-info"><i class="ti ti-download me-1"></i> Import</button>
+                    </div>
+                    <button class="btn btn-sm btn-success bg-gradient btn-toolbar-all" id="btnMappingDce" type="button" data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-title="Mapping Intrag ID" data-bs-custom-class="tooltip-success"><i class="ti ti-refresh"></i></button>
+                    <button class="btn btn-sm btn-danger bg-gradient btn-toolbar-all d-none" id="btnDelDce" data-del-selected><i class="ti ti-trash me-1"></i> Delete</button>
+                    <button class="btn btn-sm btn-primary bg-gradient btn-toolbar-all d-none" id="btnSendDce"><i class="ti ti-brand-telegram me-1"></i> Send</button>
+                    <button class="btn btn-sm btn-outline-secondary btn-toolbar-all" id="btnClearFilters" type="button"><i class="ti ti-filter-off me-1"></i> <span data-lang="btn-clear-filters">Clear Filters</span></button>
+                </div>
+
+                <div class="card-body" style="padding-top:10px;">
+                    <div class="table-responsive">
+                        <table class="table table-striped dt-responsive align-middle mb-0" id="intrag-dce-table">
+                            <thead class="thead-sm text-uppercase fs-xxs">
+                                <tr class="text-uppercase fs-xxs">
+                                    <th style="width:50px;"><input class="form-check-input form-check-input-light fs-14 mt-0" type="checkbox" id="selectAll"></th>
+                                    <th data-lang="nd-col-actions">Actions</th>
+                                    <th data-lang="intrag-col-status">Status</th>
+                                    <th data-lang="intrag-col-intrag-id">Intrag ID</th>
+                                    <th data-lang="intrag-dce-col-0">Option Type</th>
+                                    <th data-lang="intrag-dce-col-1">Trade ID</th>
+                                    <th data-lang="intrag-dce-col-2">Portfolio Code</th>
+                                    <th data-lang="intrag-dce-col-3">Trade Date</th>
+                                    <th data-lang="intrag-dce-col-4">Operation Type</th>
+                                    <th data-lang="intrag-dce-col-5">Holder or Writer Party</th>
+                                    <th data-lang="intrag-dce-col-6">Holder or Writer Counterparty</th>
+                                    <th data-lang="intrag-dce-col-7">Counterparty</th>
+                                    <th data-lang="intrag-dce-col-8">Base Currency - Stocks/Index</th>
+                                    <th data-lang="intrag-dce-col-9">Commodity</th>
+                                    <th data-lang="intrag-dce-col-10">Quoted Currency</th>
+                                    <th data-lang="intrag-dce-col-11">Maturity Date</th>
+                                    <th data-lang="intrag-dce-col-12">Strike Price</th>
+                                    <th data-lang="intrag-dce-col-13">Strike Price in BRL</th>
+                                    <th data-lang="intrag-dce-col-14">Unit Price</th>
+                                    <th data-lang="intrag-dce-col-15">Premium</th>
+                                    <th data-lang="intrag-dce-col-16">Premium Settlement Date</th>
+                                    <th data-lang="intrag-dce-col-17">Base Value/Quantity</th>
+                                    <th data-lang="intrag-dce-col-18">Exercise Type</th>
+                                    <th data-lang="intrag-dce-col-19">Asian Option Average</th>
+                                    <th data-lang="intrag-dce-col-20">Initial Verification Date</th>
+                                    <th data-lang="intrag-dce-col-21">Final Verification Date</th>
+                                    <th data-lang="intrag-dce-col-22">Information Source</th>
+                                    <th data-lang="intrag-dce-col-23">Quote for Maturity</th>
+                                    <th data-lang="intrag-dce-col-24">Quote for Currency</th>
+                                    <th data-lang="intrag-dce-col-25">Fixing Date</th>
+                                    <th data-lang="intrag-dce-col-26">Bonus</th>
+                                    <th data-lang="intrag-dce-col-27">Premium Holder</th>
+                                    <th></th><!-- hidden row ID -->
+                                </tr>
+                                <tr id="column-search-inputs">
+                                    <th></th><th></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Status"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Intrag ID"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Option Type"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Trade ID"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Portfolio Code"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Trade Date"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Operation Type"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Holder or Writer Party"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Holder or Writer Counterparty"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Counterparty"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Base Currency - Stocks/Index"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Commodity"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Quoted Currency"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Maturity Date"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Strike Price"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Strike Price in BRL"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Unit Price"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Premium"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Premium Settlement Date"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Base Value/Quantity"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Exercise Type"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Asian Option Average"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Initial Verification Date"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Final Verification Date"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Information Source"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Quote for Maturity"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Quote for Currency"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Fixing Date"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Bonus"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Premium Holder"></th>
+                                    <th></th><!-- hidden row ID -->
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock page_content %}
+
+{% block extra_javascript %}
+<script src="{{ config.ASSETS_ROOT }}/plugins/jquery/jquery.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.responsive.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/responsive.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.buttons.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/jszip.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/pdfmake.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/vfs_fonts.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.html5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.print.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.select.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/select.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
+
+<script>
+// col index 2 = status, 3 = Intrag ID, 4-31 = 28 data cols, col 32 = hidden row ID.
+// Campos de DATA do modal: dd/mm/aaaa na tela e ISO no value, que é o formato
+// em que o extrato do bob-report grava as datas. O helper é o do
+// export-advanced.js; sem ele o campo degrada para texto comum.
+var DATE_FIELDS = ['dce-f-3', 'dce-f-11', 'dce-f-16', 'dce-f-20', 'dce-f-21', 'dce-f-25'];
+jQuery(function () {
+    if (!window.otcDateField) return;
+    DATE_FIELDS.forEach(function (id) { window.otcDateField('#' + id); });
+    window.otcDateField('#dceRefDate');
+});
+
+var DCE_COLS = [
+    'Option Type','Trade ID','Portfolio Code','Trade Date','Operation Type',
+    'Holder or Writer Party','Holder or Writer Counterparty','Counterparty',
+    'Base Currency - Stocks/Index','Commodity','Quoted Currency','Maturity Date',
+    'Strike Price','Strike Price in BRL','Unit Price','Premium',
+    'Premium Settlement Date','Base Value/Quantity','Exercise Type',
+    'Asian Option Average','Initial Verification Date','Final Verification Date',
+    'Information Source','Quote for Maturity','Quote for Currency','Fixing Date',
+    'Bonus','Premium Holder'
+];
+
+// JSON entry keys in the SAME order as DCE_COLS (28 data columns) — o contrato
+// com o `domain._DCE_OPT_FIELDS` do servidor.
+var DCE_ENTRY_FIELDS = [
+    'option_type','trade_id','portfolio_code','trade_date','operation_type',
+    'holder_writer_party','holder_writer_counterparty','counterparty',
+    'base_currency','commodity','quoted_currency','maturity_date',
+    'strike_price','strike_price_brl','unit_price','premium',
+    'premium_settlement_date','base_value_quantity','exercise_type',
+    'asian_option_average','initial_verification_date','final_verification_date',
+    'information_source','quote_for_maturity','quote_for_currency','fixing_date',
+    'bonus','premium_holder'
+];
+
+var DCE_ID_COL = 32;      // hidden row ID
+var DCE_DATA_END = 32;    // dados = cols 4..31 → slice(4, 32)
+
+var selectedRowIds = new Set();
+
+function _dceId() { return 'd' + Date.now() + Math.random().toString(36).substr(2,4); }
+
+// Status badge — a mesma paleta das outras páginas de Intrag.
+var DCE_STATUS_META = {
+    'New':      { cls: 'bg-info text-white', lang: 'intrag-status-new' },
+    'Pending':  { cls: 'text-bg-warning',    lang: 'intrag-status-pending' },
+    'Approved': { cls: 'text-bg-secondary',  lang: 'intrag-status-approved' },
+    'Sent':     { cls: 'badge-sent',       lang: 'intrag-status-sent' },
+    'Success':  { cls: 'text-bg-success',   lang: 'intrag-status-success' }
+};
+function statusBadge(status) {
+    var txt = (status == null ? '' : String(status)).replace(/<[^>]*>/g, '').trim();
+    var s = 'New';
+    for (var k in DCE_STATUS_META) { if (txt.toLowerCase() === k.toLowerCase()) { s = k; break; } }
+    var m = DCE_STATUS_META[s];
+    return '<span class="badge ' + m.cls + ' bg-gradient" data-lang="' + m.lang + '">' + s + '</span>';
+}
+
+$(document).ready(function() {
+    // Register JSZip with DataTables Buttons before table init (needed for Excel export)
+    if (typeof JSZip !== 'undefined') {
+        window.JSZip = JSZip;
+        if ($.fn.dataTable && $.fn.dataTable.Buttons &&
+            typeof $.fn.dataTable.Buttons.jszip === 'function') {
+            $.fn.dataTable.Buttons.jszip(JSZip);
+        }
+    }
+
+    function exportCols() { var a=[]; for(var i=3;i<=31;i++) a.push(i); return a; }
+    function fmtExport(data,row,col,node) {
+        if (node) { var inp=$(node).find('input[type!="checkbox"]'); if (inp.length) return inp.val()||''; }
+        return (data==null?'':String(data)).replace(/<[^>]*>/g,'').trim();
+    }
+
+    var table = window.intragDceTable = $('#intrag-dce-table').DataTable({
+        responsive: false, scrollX: true, scrollY: '60vh', scrollCollapse: true, autoWidth: false, pageLength: 15,
+        orderCellsTop: true,
+        select: { style:'os', items:'cell', selector:'td:not(:nth-child(1)):not(:nth-child(2))' },
+        columnDefs: [
+            { orderable: false, targets: [0,1] },
+            { targets: 2, render: function(data, type){ return type === 'display' ? statusBadge(data) : (data || 'New'); } },
+            { visible: false, targets: [DCE_ID_COL] }
+        ],
+        dom: "<'row'<'col-sm-12'tr>>" +
+             "<'d-md-flex justify-content-between align-items-center mt-2'ip>",
+        buttons: [{
+            extend:'collection', text:'<i class="ti ti-download me-1"></i> Export',
+            className:'btn btn-sm btn-info bg-gradient dropdown-toggle btn-toolbar-all',
+            autoClose:true, fade:0,
+            buttons:[
+                {extend:'copy',  text:'<i class="ti ti-copy me-1"></i> Copy',  className:'dropdown-item', title:'Intrag DCE Option', exportOptions:{columns:exportCols(),format:{body:fmtExport}}},
+                {extend:'csv',   text:'<i class="ti ti-file-type-csv me-1"></i> CSV',   className:'dropdown-item', bom:true, title:'Intrag DCE Option', exportOptions:{columns:exportCols(),format:{body:fmtExport}}},
+                {extend:'excel', text:'<i class="ti ti-file-spreadsheet me-1"></i> Excel', className:'dropdown-item', title:'Intrag DCE Option', exportOptions:{columns:exportCols(),format:{body:fmtExport}}},
+                {extend:'print', text:'<i class="ti ti-printer me-1"></i> Print', className:'dropdown-item', title:'Intrag DCE Option', exportOptions:{columns:exportCols(),format:{body:fmtExport}}}
+            ]
+        }],
+        language: { paginate: { first:'<i class="ti ti-chevrons-left"></i>', previous:'<i class="ti ti-chevron-left"></i>', next:'<i class="ti ti-chevron-right"></i>', last:'<i class="ti ti-chevrons-right"></i>' } },
+        drawCallback: function() {
+            var api = this.api();
+            api.rows().every(function() {
+                var d=this.data(), id=d?d[DCE_ID_COL]:null, node=this.node();
+                if(node) {
+                    $(node).find('input[type="checkbox"]').prop('checked',!!(id&&selectedRowIds.has(id)));
+                    $(node).find('.btn-row-approve').toggleClass('d-none', (d?d[2]:'')!=='Pending');
+                }
+            });
+            var total=api.rows({ search: 'applied' }).count(), sel=selectedRowIds.size, $sa=$('#selectAll');
+            if($sa.length) {
+                if(sel===0){$sa.prop('checked',false).prop('indeterminate',false);}
+                else if(sel>=total){$sa.prop('checked',true).prop('indeterminate',false);}
+                else{$sa.prop('checked',false).prop('indeterminate',true);}
+            }
+            toggleDelBtn(sel>=2);
+        },
+        initComplete: function() {
+            var api = this.api();
+
+            document.querySelectorAll('#column-search-inputs th').forEach(function(th){ th.addEventListener('click',function(e){e.stopPropagation();}); });
+            document.querySelectorAll('#column-search-inputs th input').forEach(function(inp) {
+                inp.addEventListener('click',function(e){e.stopPropagation();});
+                inp.addEventListener('keyup',function() {
+                    var ci=inp.closest('th').cellIndex;
+                    if(api.column(ci).search()!==this.value) api.column(ci).search(this.value).draw();
+                });
+            });
+
+            var ctw=document.getElementById('dceColToggleWrap');
+            if(ctw) {
+                var dd=document.createElement('div'); dd.className='dropdown';
+                var items=DCE_COLS.map(function(lbl,i){
+                    return '<li class="dropdown-item"><div class="form-check">' +
+                        '<input class="form-check-input form-check-input-light fs-14 mt-0 toggle-vis" type="checkbox"' +
+                        ' data-column="'+(i+4)+'" id="dceC'+i+'" checked>' +
+                        '<label class="form-check-label fw-medium" for="dceC'+i+'">'+lbl+'</label>' +
+                        '</div></li>';
+                }).join('');
+                dd.innerHTML='<button class="btn btn-sm btn-soft-primary dropdown-toggle btn-toolbar-all" type="button"' +
+                    ' data-bs-toggle="dropdown" data-bs-auto-close="outside"><i class="ti ti-columns me-1"></i> Columns</button>' +
+                    '<ul class="dropdown-menu" id="dceColMenu">'+items+'</ul>';
+                ctw.appendChild(dd);
+                document.getElementById('dceColMenu').addEventListener('change',function(e){
+                    if(e.target.classList.contains('toggle-vis')) table.column(parseInt(e.target.dataset.column)).visible(e.target.checked);
+                });
+            }
+        }
+    });
+
+    // Move Export button into filter bar static container
+    table.buttons().container().appendTo('#dceExportWrap');
+
+    function _dceActionsCell() {
+        return '<div class="d-flex justify-content-center gap-1">' +
+            '<a class="btn btn-info btn-sm rounded-circle btn-row-edit" href="#" title="Edit"><i class="ti ti-edit"></i></a>' +
+            '<a class="btn btn-danger btn-sm rounded-circle btn-row-delete" href="#" title="Delete"><i class="ti ti-trash"></i></a>' +
+            '<a class="btn btn-success btn-sm rounded-circle btn-row-approve" href="#" title="Approve"><i class="ti ti-check"></i></a>' +
+            '<a class="btn btn-primary btn-sm rounded-circle btn-row-send" href="#" title="Send"><i class="ti ti-brand-telegram"></i></a></div>';
+    }
+    function _todayDmy() {
+        var d = new Date();
+        return ('0'+d.getDate()).slice(-2)+'/'+('0'+(d.getMonth()+1)).slice(-2)+'/'+d.getFullYear();
+    }
+    function _dmyToIso(dmy) {
+        var p = (dmy || '').trim().split('/');
+        if (p.length !== 3 || p[2].length !== 4) return '';
+        return p[2] + '-' + p[1].padStart(2,'0') + '-' + p[0].padStart(2,'0');
+    }
+    // O smart filter COMANDA o fetch (como nas irmãs): o chip de Trade Date
+    // decide que arquivo(s)-dia o servidor lê; os demais filtram no cliente.
+    function intragLoad(qs, colFilters) {
+        fetch('/api/intrag/dce-option' + (qs ? '?'+qs : ''))
+            .then(function(r){ return r.json(); })
+            .then(function(data){
+                table.clear();
+                if (data.success && data.entries && data.entries.length) {
+                    data.entries.forEach(function(entry){
+                        var row = ['<input class="form-check-input form-check-input-light fs-14 mt-0" type="checkbox" value="">',
+                                   _dceActionsCell(), entry.status || 'New',
+                                   entry.intrag_id != null ? String(entry.intrag_id) : ''];
+                        DCE_ENTRY_FIELDS.forEach(function(f){ row.push(entry[f] != null ? String(entry[f]) : ''); });
+                        row.push(entry._deal || _dceId());
+                        table.row.add(row);
+                    });
+                }
+                table.columns().search('');
+                intragDateRanges = {};
+                (colFilters||[]).forEach(function(f){
+                    if (f.col.type === 'date') {
+                        var d = sfToDate(f.value);
+                        intragDateRanges[f.col.dtCol] = intragDateRanges[f.col.dtCol] || {from:null,to:null};
+                        if (f.mode === 'from') intragDateRanges[f.col.dtCol].from = d;
+                        else if (f.mode === 'to') intragDateRanges[f.col.dtCol].to = d;
+                        else { intragDateRanges[f.col.dtCol].from = d; intragDateRanges[f.col.dtCol].to = d; }
+                    } else {
+                        table.column(f.col.dtCol).search(f.value);
+                    }
+                });
+                table.draw();
+                setTimeout(function(){ table.columns.adjust().draw(false); }, 100);
+            })
+            .catch(function(err){ console.error('[Intrag DCE OPT] Load error:', err); });
+    }
+
+    // scrollX clona o <thead> antes do cálculo de altura; o adjust re-sincroniza.
+    setTimeout(function() { table.columns.adjust(); }, 100);
+
+    // Add Row button
+    document.getElementById('btnAddDce').addEventListener('click',function(){
+        var m=document.getElementById('dceModal');
+        $(m).removeData('editTr');
+        m.querySelector('.modal-title').innerHTML='<i class="ti ti-plus me-1"></i>Add Row — Intrag DCE Option';
+        bootstrap.Modal.getOrCreateInstance(m).show();
+    });
+
+    // ── Import do bob-report (extrato ITAUDataExtract de FX Option) ─────────────
+    var _importDceRunning = false;
+    document.getElementById('btnImportDce').addEventListener('click', function() {
+        if (_importDceRunning) return;
+        var btn = this;
+        var refInput = document.getElementById('dceRefDate');
+        var refIso = (refInput && refInput.value ? refInput.value.trim() : '');
+        _importDceRunning = true;
+        btn.style.pointerEvents = 'none';
+        var _prevHtml = btn.innerHTML;
+        btn.innerHTML = '<i class="ti ti-loader-2 ti-spin"></i>';
+        fetch('/api/intrag/dce-option/import-api', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ref_date: refIso })
+        })
+        .then(function(r){ return r.json().then(function(j){ return {ok:r.ok, data:j}; }); })
+        .then(function(o) {
+            _importDceRunning = false;
+            btn.style.pointerEvents = ''; btn.innerHTML = _prevHtml;
+            if (!o.ok || !o.data.success) {
+                Swal.fire({ title: 'Import', text: o.data.message || 'Bob-report import failed.',
+                    icon: 'error', confirmButtonText: 'OK', confirmButtonColor: '#dc3545' });
+                return;
+            }
+            if (window.fetchNotifications) window.fetchNotifications();
+            var msg = (o.data.imported || 0) + ' row(s) imported from the ' + (o.data.ref_date || '') + ' report';
+            if (o.data.skipped) msg += ' (' + o.data.skipped + ' without a Trade ID skipped)';
+            Swal.fire({ title: 'Import', text: msg + '.',
+                icon: (o.data.imported ? 'success' : 'info'), confirmButtonText: 'OK', confirmButtonColor: '#198754' });
+            // As linhas caem no arquivo-dia do PRÓPRIO Trade Date — a carga sem
+            // data mostra tudo, incluindo o que acabou de chegar.
+            sfActive = []; sfRenderChips();
+            intragLoad('', []);
+        })
+        .catch(function(err) {
+            _importDceRunning = false;
+            btn.style.pointerEvents = ''; btn.innerHTML = _prevHtml;
+            Swal.fire({ title: 'Error', text: 'Request failed: ' + err.message,
+                icon: 'error', confirmButtonText: 'OK', confirmButtonColor: '#dc3545' });
+        });
+    });
+
+    // ── Mapping Intrag ID (return-folder CSV → fill the Intrag ID column) ───────
+    // Table cols: [2]=status, [3]=Intrag ID, [5]=Trade ID, [32]=row id.
+    var _mappingDceRunning = false;
+    document.getElementById('btnMappingDce').addEventListener('click', function() {
+        if (_mappingDceRunning) return;
+        var btn = this;
+        var deals = [];
+        table.rows({ search: 'none', page: 'all' }).every(function() {
+            var d = this.data(); if (!d) return;
+            var rowId = d[DCE_ID_COL] || '', tid = (d[5] || '').toString().trim();
+            if (rowId && tid) deals.push({ id: rowId, b3_id: tid });
+        });
+        if (!deals.length) {
+            Swal.fire({ title: 'Mapping Intrag ID', text: 'No rows with a Trade ID to map.',
+                icon: 'info', confirmButtonText: 'OK', confirmButtonColor: '#198754' });
+            return;
+        }
+        _mappingDceRunning = true;
+        btn.style.pointerEvents = 'none';
+        var _prevHtml = btn.innerHTML;
+        btn.innerHTML = '<i class="ti ti-loader-2 ti-spin"></i>';
+        fetch('/api/intrag/dce-option/mapping-intrag-id', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ deals: deals })
+        })
+        .then(function(r){ return r.json(); })
+        .then(function(res) {
+            _mappingDceRunning = false;
+            btn.style.pointerEvents = ''; btn.innerHTML = _prevHtml;
+            if (!res.ok) {
+                Swal.fire({ title: 'Error', text: res.error || 'Failed to read the return file.',
+                    icon: 'error', confirmButtonText: 'OK', confirmButtonColor: '#dc3545' });
+                return;
+            }
+            var mapped = 0;
+            (res.results || []).forEach(function(result) {
+                if (result.status === 'Success') mapped++;
+                table.rows({ search: 'none', page: 'all' }).every(function() {
+                    var d = this.data(); if (!d || (d[DCE_ID_COL] || '') !== result.id) return;
+                    if (result.status === 'Success' && result.intrag_id != null) {
+                        table.cell(this.node(), 3).data(result.intrag_id);
+                        table.cell(this.node(), 2).data('Success');
+                    }
+                });
+            });
+            table.draw(false);
+            Swal.fire({ title: 'Mapping Intrag ID',
+                text: mapped ? (mapped + ' operation(s) mapped.') : 'No matching operations found in the return file.',
+                icon: mapped ? 'success' : 'info', confirmButtonText: 'OK', confirmButtonColor: '#198754' });
+        })
+        .catch(function(err) {
+            _mappingDceRunning = false;
+            btn.style.pointerEvents = ''; btn.innerHTML = _prevHtml;
+            Swal.fire({ title: 'Error', text: 'Request failed: ' + err.message,
+                icon: 'error', confirmButtonText: 'OK', confirmButtonColor: '#dc3545' });
+        });
+    });
+
+    function toggleDelBtn(show) {
+        var b=document.getElementById('btnDelDce'); if(b) b.classList.toggle('d-none',!show);
+        var s=document.getElementById('btnSendDce'); if(s) s.classList.toggle('d-none',!show);
+    }
+
+    $('[data-table-rows]').on('change',function(){ table.page.len(parseInt(this.value)).draw(); });
+    $('[data-table-rows]').val(String(table.page.len()));
+
+    $('#selectAll').on('click',function() {
+        selectedRowIds.clear();
+        if(this.checked) { table.rows({ search: 'applied' }).every(function(){ var d=this.data(),id=d?d[DCE_ID_COL]:null; if(id) selectedRowIds.add(id); }); }
+        $('input[type="checkbox"]',table.rows({ search: 'applied' }).nodes()).prop('checked',this.checked);
+        toggleDelBtn(this.checked&&selectedRowIds.size>=2);
+    });
+
+    $('#intrag-dce-table tbody').on('change','input[type="checkbox"]',function() {
+        var tr=$(this).closest('tr')[0], d=table.row(tr).data(), id=d?d[DCE_ID_COL]:null;
+        if(id){ if(this.checked) selectedRowIds.add(id); else selectedRowIds.delete(id); }
+        var total=table.rows({ search: 'applied' }).count(), sel=selectedRowIds.size, sa=document.getElementById('selectAll');
+        if(sa){ if(sel===0){sa.checked=false;sa.indeterminate=false;} else if(sel>=total){sa.checked=true;sa.indeterminate=false;} else{sa.checked=false;sa.indeterminate=true;} }
+        toggleDelBtn(sel>=2);
+    });
+
+    $(document).on('click','[data-del-selected]',function(e) {
+        e.preventDefault(); if(selectedRowIds.size===0) return;
+        var toDelete=[];
+        table.rows({ search: 'applied' }).every(function(){
+            var d=this.data(), id=d?d[DCE_ID_COL]:null;
+            if(id&&selectedRowIds.has(id)) toDelete.push({ rowIdx: this.index(), id: id });
+        });
+        if(!toDelete.length) return;
+        Swal.fire({ title:'Delete '+toDelete.length+' row(s)?', text:'This action cannot be undone.', icon:'warning',
+            showCancelButton:true, confirmButtonText:'Yes, delete', cancelButtonText:'Cancel',
+            confirmButtonColor:'#dc3545', cancelButtonColor:'#6c757d'
+        }).then(function(r){
+            if(!r.isConfirmed) return;
+            toDelete.sort(function(a,b){ return b.rowIdx - a.rowIdx; });
+            toDelete.forEach(function(r){ table.row(r.rowIdx).remove(); });
+            selectedRowIds.clear(); toggleDelBtn(false); table.draw(false);
+        });
+    });
+
+    $(document).on('click','#intrag-dce-table tbody .btn-row-delete',function(e) {
+        e.preventDefault(); var tr=$(this).closest('tr');
+        Swal.fire({ title:'Delete this row?', text:'This action cannot be undone.', icon:'warning',
+            showCancelButton:true, confirmButtonText:'Yes, delete', cancelButtonText:'Cancel',
+            confirmButtonColor:'#dc3545', cancelButtonColor:'#6c757d'
+        }).then(function(r){ if(r.isConfirmed) table.row(tr[0]).remove().draw(false); });
+    });
+
+    // ── Send (generate Intrag-DCE-Option-YYYYMMDD.txt on the Intrag network folder) ──
+    // Row array: [0]=checkbox, [1]=actions, [2]=status, [3]=Intrag ID, [4..31]=28 data cols, [32]=id.
+    var DCE_TRADEDATE_COL = 7;           // table col of Trade Date (data idx 3 + 4)
+    var DCE_SENDABLE = { 'New': 1, 'Approved': 1 };
+
+    function _intragRowData(d) { return d ? d.slice(4, DCE_DATA_END) : []; }   // 28 data cols
+    function _itemFromRow(d) { return { deal_id: (d[DCE_ID_COL] || ''), status: (d[2] || 'New'), cells: _intragRowData(d) }; }
+
+    function sendIntragDceItems(items) {
+        if (!items.length) return;
+        var blocked = items.filter(function(it){ return !DCE_SENDABLE[it.status]; });
+        if (blocked.length) {
+            Swal.fire({ title: 'Cannot send',
+                text: blocked.length + ' row(s) are not in a sendable state — only New or Approved can be sent.',
+                icon: 'warning', confirmButtonText: 'OK', confirmButtonColor: '#dc3545' });
+            return;
+        }
+        Swal.fire({ title: 'Send ' + items.length + ' row(s)?',
+            text: 'A .txt file will be generated on the Intrag network folder.',
+            icon: 'question', showCancelButton: true, confirmButtonText: 'Yes, send', cancelButtonText: 'Cancel',
+            confirmButtonColor: '#0d6efd', cancelButtonColor: '#6c757d'
+        }).then(function(r) {
+            if (!r.isConfirmed) return;
+            fetch('/api/intrag/dce-option/send-file', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ items: items.map(function(it){ return { deal_id: it.deal_id, cells: it.cells }; }) })
+            }).then(function(resp){ return resp.json(); }).then(function(res) {
+                if (res.success) {
+                    var ids = {}; items.forEach(function(it){ if(it.deal_id) ids[it.deal_id]=1; });
+                    table.rows().every(function(){ var d=this.data(); if(d && ids[d[DCE_ID_COL]]) { d[2]='Sent'; this.data(d); } });
+                    selectedRowIds.clear();
+                    table.draw(false);
+                    if (window.fetchNotifications) window.fetchNotifications();
+                    Swal.fire({ title: 'Sent', text: 'Generated ' + ((res.files && res.files.length) || 1) + ' file(s).',
+                        icon: 'success', confirmButtonText: 'OK', confirmButtonColor: '#0d6efd' });
+                } else {
+                    Swal.fire({ title: 'Error', text: res.message || 'File generation failed.',
+                        icon: 'error', confirmButtonText: 'OK', confirmButtonColor: '#dc3545' });
+                }
+            }).catch(function(err) {
+                Swal.fire({ title: 'Error', text: 'Request failed: ' + err.message,
+                    icon: 'error', confirmButtonText: 'OK', confirmButtonColor: '#dc3545' });
+            });
+        });
+    }
+
+    $(document).on('click','#intrag-dce-table tbody .btn-row-send',function(e) {
+        e.preventDefault();
+        var tr=$(this).closest('tr')[0], d=table.row(tr).data();
+        if(d) sendIntragDceItems([ _itemFromRow(d) ]);
+    });
+    document.getElementById('btnSendDce').addEventListener('click',function() {
+        if(selectedRowIds.size<2) return;
+        var items=[];
+        table.rows({ search: 'applied' }).every(function(){ var d=this.data(), id=d?d[DCE_ID_COL]:null; if(id&&selectedRowIds.has(id)) items.push(_itemFromRow(d)); });
+        sendIntragDceItems(items);
+    });
+
+    // ── Approve (Pending → Approved; maker ≠ checker enforced server-side) ───────
+    $(document).on('click','#intrag-dce-table tbody .btn-row-approve',function(e) {
+        e.preventDefault();
+        var tr=$(this).closest('tr')[0], rowApi=table.row(tr), d=rowApi.data(); if(!d) return;
+        if(d[2]!=='Pending') return;
+        Swal.fire({ title:'Approve this row?', text:'A second user (checker) confirms the row-level edit.',
+            icon:'question', showCancelButton:true, confirmButtonText:'Yes, approve', cancelButtonText:'Cancel',
+            confirmButtonColor:'#198754', cancelButtonColor:'#6c757d'
+        }).then(function(r){
+            if(!r.isConfirmed) return;
+            fetch('/api/intrag/dce-option/approve', {
+                method:'POST', headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({ deal_id: d[DCE_ID_COL]||'', trade_date: d[DCE_TRADEDATE_COL]||'' })
+            }).then(function(resp){ return resp.json().then(function(j){ return {ok:resp.ok, data:j}; }); })
+              .then(function(o){
+                if(o.ok && o.data.success){
+                    d[2]='Approved'; rowApi.data(d); table.draw(false);
+                    if (window.fetchNotifications) window.fetchNotifications();
+                    Swal.fire({ title:'Approved', icon:'success', confirmButtonText:'OK', confirmButtonColor:'#198754' });
+                } else {
+                    Swal.fire({ title:'Error', text:o.data.message||'Approval failed.', icon:'error', confirmButtonText:'OK', confirmButtonColor:'#dc3545' });
+                }
+              }).catch(function(err){
+                Swal.fire({ title:'Error', text:'Request failed: '+err.message, icon:'error', confirmButtonText:'OK', confirmButtonColor:'#dc3545' });
+              });
+        });
+    });
+
+    $(document).on('click','#intrag-dce-table tbody .btn-row-edit',function(e) {
+        e.preventDefault();
+        var tr=$(this).closest('tr')[0], d=table.row(tr).data(); if(!d) return;
+        var m=document.getElementById('dceModal');
+        m.querySelector('.modal-title').innerHTML='<i class="ti ti-edit me-1"></i>Edit Row — Intrag DCE Option';
+        DCE_COLS.forEach(function(col,i){ var inp=document.getElementById('dce-f-'+i); if(inp) inp.value=d[i+4]||''; });
+        var inpIntrag=document.getElementById('dce-f-intrag'); if(inpIntrag) inpIntrag.value=d[3]||'';
+        // O campo que se VÊ é o do flatpickr: sem o sync, abrir uma linha e
+        // depois outra mostraria a data da primeira.
+        if (window.otcDateSync) window.otcDateSync('#dceModal');
+        $(m).data('editTr',tr);
+        bootstrap.Modal.getOrCreateInstance(m).show();
+    });
+
+    document.getElementById('dceSaveBtn').addEventListener('click',function() {
+        var m=document.getElementById('dceModal'), editTr=$(m).data('editTr')||null;
+        var prevData = editTr ? table.row(editTr).data() : null;
+        var vals=[]; DCE_COLS.forEach(function(col,i){ var inp=document.getElementById('dce-f-'+i); vals.push(inp?inp.value.trim():''); });
+        var id = editTr ? (prevData[DCE_ID_COL]||_dceId()) : _dceId();
+        var inpIntrag=document.getElementById('dce-f-intrag');
+        var intragId = inpIntrag ? inpIntrag.value.trim()
+                                 : ((editTr && prevData) ? (prevData[3]||'') : '');
+
+        function _applyRow(newStatus) {
+            var row=['<input class="form-check-input form-check-input-light fs-14 mt-0" type="checkbox" value="">', _dceActionsCell(), newStatus, intragId];
+            vals.forEach(function(v){ row.push(v); });
+            row.push(id);
+            if(editTr) { table.row(editTr).data(row).draw(false); } else { table.row.add(row).draw(false); }
+            bootstrap.Modal.getInstance(m).hide();
+        }
+
+        if (editTr) {
+            var fields={}; DCE_ENTRY_FIELDS.forEach(function(f,i){ fields[f]=vals[i]; });
+            fetch('/api/intrag/dce-option/edit', {
+                method:'POST', headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({ deal_id: id, trade_date: vals[3], fields: fields, intrag_id: intragId })
+            }).then(function(resp){ return resp.json(); })
+              .then(function(j){ _applyRow((j && j.status) || 'Pending'); if (window.fetchNotifications) window.fetchNotifications(); })
+              .catch(function(){ _applyRow('Pending'); });
+        } else {
+            _applyRow('New');
+        }
+    });
+
+    $(document.getElementById('dceModal')).on('hidden.bs.modal',function() {
+        $(this).removeData('editTr');
+        DCE_COLS.forEach(function(col,i){ var inp=document.getElementById('dce-f-'+i); if(inp) inp.value=''; });
+        var inpIntrag=document.getElementById('dce-f-intrag'); if(inpIntrag) inpIntrag.value='';
+        if (window.otcDateSync) window.otcDateSync('#dceModal');
+    });
+
+    // Smart Filter
+    var sfInput=document.getElementById('sfInput'), sfDropdown=document.getElementById('sfDropdown'),
+        sfChips=document.getElementById('sfChips'), sfWrapper=document.getElementById('sfWrapper'),
+        sfActive=[], sfKbdIdx=-1;
+    var DCE_TYPES = {
+        'Trade Date':'date','Maturity Date':'date','Premium Settlement Date':'date',
+        'Initial Verification Date':'date','Final Verification Date':'date','Fixing Date':'date',
+        'Strike Price':'number','Strike Price in BRL':'number','Unit Price':'number',
+        'Premium':'number','Base Value/Quantity':'number'
+    };
+    var SF_COLS=DCE_COLS.map(function(lbl,i){
+        var c={label:lbl,dtCol:i+4,type:(DCE_TYPES[lbl]||'text')};
+        // Trade Date decide o(s) arquivo(s)-dia lidos no servidor — comanda o
+        // fetch, não é filtro de tabela.
+        if(lbl==='Trade Date') c.isDate=true;
+        return c;
+    });
+    SF_COLS.push({label:'Intrag ID', dtCol:3, type:'text'});   // extra column, searchable
+    function sfEsc(s){return String(s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+    function sfIsDateLike(s){return /^\d{1,2}[\/\-]\d/.test(s)||/^\d{4}[\/\-]/.test(s);}
+    function sfToDate(s){
+        s=String(s||'').trim().split('T')[0].split(' ')[0]; if(!s) return null; var m;
+        if((m=s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/))) return new Date(+m[3],+m[2]-1,+m[1]);
+        if((m=s.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/))) return new Date(+m[1],+m[2]-1,+m[3]);
+        if((m=s.match(/^(\d{4})(\d{2})(\d{2})$/)))                 return new Date(+m[1],+m[2]-1,+m[3]);
+        return null;
+    }
+    var SF_RANGE_WORDS={en:{from:'FROM',to:'TO'},br:{from:'DE',to:'ATÉ'},es:{from:'DESDE',to:'HASTA'}};
+    function sfRangeWord(mode){var lang=localStorage.getItem('__OTC_TRACKER_LANG__')||'en';var m=SF_RANGE_WORDS[lang]||SF_RANGE_WORDS.en;return mode==='from'?m.from:m.to;}
+    function sfFilterKey(col,mode){return col.type==='date'?(col.dtCol+'|'+mode):String(col.dtCol);}
+    function sfDateCandidates(){
+        var out=[];
+        SF_COLS.filter(function(c){return c.type==='date';}).forEach(function(col){
+            var hasFrom=sfActive.some(function(f){return f.col.dtCol===col.dtCol&&f.mode==='from';});
+            var hasTo=sfActive.some(function(f){return f.col.dtCol===col.dtCol&&f.mode==='to';});
+            if(hasFrom&&!hasTo){out.push({col:col,mode:'to',label:sfRangeWord('to')+': '+col.label});}
+            else{out.push({col:col,mode:'from',label:sfRangeWord('from')+': '+col.label});out.push({col:col,mode:'exact',label:col.label});}
+        });
+        out.sort(function(a,b){return (a.mode==='to'?0:1)-(b.mode==='to'?0:1);});
+        return out;
+    }
+    function sfCandidates(val){
+        if(!val) return [];
+        if(!/^\d/.test(val)) return SF_COLS.filter(function(c){return c.type==='text';}).map(function(c){return{col:c,mode:'text',label:c.label};});
+        if(sfIsDateLike(val)) return sfDateCandidates();
+        var out=[];
+        SF_COLS.forEach(function(c){
+            if(c.type==='number') out.push({col:c,mode:'number',label:c.label});
+            else if(c.type==='date') out.push({col:c,mode:'exact',label:c.label});
+        });
+        return out;
+    }
+    function sfRenderDropdown(val) {
+        sfDropdown.innerHTML=''; sfKbdIdx=-1;
+        var matches=sfCandidates(val);
+        if(!matches.length){sfDropdown.style.display='none';return;}
+        matches.forEach(function(cand) {
+            var col=cand.col, li=document.createElement('li');
+            li.innerHTML='<span class="sf-type-badge sf-type-'+col.type+'">'+col.type+'</span><span>'+sfEsc(cand.label)+'</span>';
+            li.addEventListener('mousedown',function(e){e.preventDefault();sfAddFilter(cand.col,sfInput.value.trim(),cand.mode);});
+            sfDropdown.appendChild(li);
+        });
+        sfDropdown.style.display='block';
+    }
+    function sfAddFilter(col,value,mode) {
+        if(!value) return;
+        mode = mode || (col.type==='date'?'exact':col.type);
+        if(col.type==='date'){
+            if(mode==='exact'){sfActive=sfActive.filter(function(f){return f.col.dtCol!==col.dtCol;});}
+            else{sfActive=sfActive.filter(function(f){return !(f.col.dtCol===col.dtCol&&(f.mode===mode||f.mode==='exact'));});}
+        } else {
+            sfActive=sfActive.filter(function(f){return f.col.dtCol!==col.dtCol;});
+        }
+        sfActive.push({col:col,value:value,mode:mode,key:sfFilterKey(col,mode)}); sfInput.value=''; sfDropdown.style.display='none'; sfKbdIdx=-1;
+        sfRenderChips(); sfInput.focus();
+    }
+    function sfChipPrefix(f){
+        if(f.col.type==='date'&&(f.mode==='from'||f.mode==='to')) return sfRangeWord(f.mode)+' '+f.col.label.toUpperCase();
+        return f.col.label.toUpperCase();
+    }
+    function sfRenderChips() {
+        sfChips.innerHTML='';
+        sfActive.forEach(function(f) {
+            var chip=document.createElement('span'); chip.className='smart-filter-chip';
+            chip.innerHTML='<strong>'+sfEsc(sfChipPrefix(f))+':</strong>&nbsp;'+sfEsc(f.value)+'<span class="sf-chip-remove">&#215;</span>';
+            chip.querySelector('.sf-chip-remove').addEventListener('click',function(){sfActive=sfActive.filter(function(x){return x.key!==f.key;});sfRenderChips();});
+            sfChips.appendChild(chip);
+        });
+    }
+    // Client-side date-range filter for date columns
+    var intragDateRanges = {};
+    $.fn.dataTable.ext.search.push(function(settings, rowData){
+        if(settings.nTable.id!=='intrag-dce-table') return true;
+        for(var k in intragDateRanges){
+            if(!intragDateRanges.hasOwnProperty(k)) continue;
+            var r=intragDateRanges[k], cell=sfToDate(rowData[+k]);
+            if(!cell) return false;
+            if(r.from&&cell<r.from) return false;
+            if(r.to&&cell>r.to) return false;
+        }
+        return true;
+    });
+    sfInput.addEventListener('input',function(){sfRenderDropdown(this.value.trim());});
+    sfInput.addEventListener('blur',function(){setTimeout(function(){sfDropdown.style.display='none';},160);});
+    sfInput.addEventListener('focus',function(){if(this.value.trim())sfRenderDropdown(this.value.trim());});
+    sfWrapper.addEventListener('click',function(){sfInput.focus();});
+    document.getElementById('sfSearchBtn').addEventListener('click',function(){
+        sfDropdown.style.display='none';
+        var dExact=sfActive.find(function(f){return f.col.isDate&&f.mode==='exact';});
+        var dFrom =sfActive.find(function(f){return f.col.isDate&&f.mode==='from';});
+        var dTo   =sfActive.find(function(f){return f.col.isDate&&f.mode==='to';});
+        var colChips=sfActive.filter(function(f){return !f.col.isDate&&f.col.dtCol>=0;});
+        var qs='';
+        if(dFrom||dTo){
+            var parts=[];
+            if(dFrom) parts.push('date_from='+encodeURIComponent(_dmyToIso(dFrom.value)));
+            if(dTo)   parts.push('date_to='+encodeURIComponent(_dmyToIso(dTo.value)));
+            qs=parts.join('&');
+        } else if(dExact){
+            qs='date='+encodeURIComponent(_dmyToIso(dExact.value));
+        }
+        intragLoad(qs,colChips);
+    });
+    document.getElementById('btnClearFilters').addEventListener('click',function(){
+        document.querySelectorAll('#column-search-inputs th input').forEach(function(inp){ inp.value=''; });
+        intragDateRanges={};
+        sfActive=[];
+        sfChips.innerHTML='';
+        sfInput.value='';
+        sfDropdown.style.display='none';
+        table.columns().search('').draw();
+    });
+    sfInput.addEventListener('keydown',function(e) {
+        var items=sfDropdown.querySelectorAll('li');
+        var dropdownOpen=sfDropdown.style.display!=='none'&&items.length;
+        if(e.key==='Backspace'&&!this.value&&sfActive.length){e.preventDefault();var last=sfActive[sfActive.length-1];sfActive=sfActive.filter(function(x){return x.key!==last.key;});sfRenderChips();return;}
+        if(e.key==='Enter'){
+            e.preventDefault();
+            if(dropdownOpen&&sfKbdIdx>=0&&items[sfKbdIdx]){items[sfKbdIdx].dispatchEvent(new MouseEvent('mousedown'));}
+            else{sfDropdown.style.display='none';document.getElementById('sfSearchBtn').click();}
+            return;
+        }
+        if(!items.length) return;
+        if(e.key==='ArrowDown'){e.preventDefault();sfKbdIdx=Math.min(sfKbdIdx+1,items.length-1);}
+        else if(e.key==='ArrowUp'){e.preventDefault();sfKbdIdx=Math.max(sfKbdIdx-1,0);}
+        else if(e.key==='Escape'){sfDropdown.style.display='none';return;}
+        items.forEach(function(li,i){li.classList.toggle('sf-kbd-active',i===sfKbdIdx);});
+    });
+
+    // Default view: Trade Date = today, fetched from the server (like the sisters).
+    sfAddFilter(SF_COLS[3], _todayDmy());
+    document.getElementById('sfSearchBtn').click();
+});
+</script>
+
+<!-- Modal -->
+<div class="modal fade" id="dceModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content liquid-glass">
+      <div class="modal-header py-2">
+        <h5 class="modal-title fs-6"><i class="ti ti-plus me-1"></i>Add Row — Intrag DCE Option</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-2">
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-col-intrag-id">Intrag ID</label><input type="text" class="form-control form-control-sm" id="dce-f-intrag"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-dce-col-0">Option Type</label><input type="text" class="form-control form-control-sm" id="dce-f-0"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-dce-col-1">Trade ID</label><input type="text" class="form-control form-control-sm" id="dce-f-1"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-dce-col-2">Portfolio Code</label><input type="text" class="form-control form-control-sm" id="dce-f-2"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-dce-col-3">Trade Date</label><input type="text" class="form-control form-control-sm" id="dce-f-3" placeholder="dd/mm/aaaa" autocomplete="off"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-dce-col-4">Operation Type</label><input type="text" class="form-control form-control-sm" id="dce-f-4"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-dce-col-5">Holder or Writer Party</label><input type="text" class="form-control form-control-sm" id="dce-f-5"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-dce-col-6">Holder or Writer Counterparty</label><input type="text" class="form-control form-control-sm" id="dce-f-6"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-dce-col-7">Counterparty</label><input type="text" class="form-control form-control-sm" id="dce-f-7"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-dce-col-8">Base Currency - Stocks/Index</label><input type="text" class="form-control form-control-sm" id="dce-f-8"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-dce-col-9">Commodity</label><input type="text" class="form-control form-control-sm" id="dce-f-9"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-dce-col-10">Quoted Currency</label><input type="text" class="form-control form-control-sm" id="dce-f-10"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-dce-col-11">Maturity Date</label><input type="text" class="form-control form-control-sm" id="dce-f-11" placeholder="dd/mm/aaaa" autocomplete="off"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-dce-col-12">Strike Price</label><input type="text" class="form-control form-control-sm" id="dce-f-12"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-dce-col-13">Strike Price in BRL</label><input type="text" class="form-control form-control-sm" id="dce-f-13"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-dce-col-14">Unit Price</label><input type="text" class="form-control form-control-sm" id="dce-f-14"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-dce-col-15">Premium</label><input type="text" class="form-control form-control-sm" id="dce-f-15"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-dce-col-16">Premium Settlement Date</label><input type="text" class="form-control form-control-sm" id="dce-f-16" placeholder="dd/mm/aaaa" autocomplete="off"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-dce-col-17">Base Value/Quantity</label><input type="text" class="form-control form-control-sm" id="dce-f-17"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-dce-col-18">Exercise Type</label><input type="text" class="form-control form-control-sm" id="dce-f-18"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-dce-col-19">Asian Option Average</label><input type="text" class="form-control form-control-sm" id="dce-f-19"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-dce-col-20">Initial Verification Date</label><input type="text" class="form-control form-control-sm" id="dce-f-20" placeholder="dd/mm/aaaa" autocomplete="off"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-dce-col-21">Final Verification Date</label><input type="text" class="form-control form-control-sm" id="dce-f-21" placeholder="dd/mm/aaaa" autocomplete="off"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-dce-col-22">Information Source</label><input type="text" class="form-control form-control-sm" id="dce-f-22"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-dce-col-23">Quote for Maturity</label><input type="text" class="form-control form-control-sm" id="dce-f-23"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-dce-col-24">Quote for Currency</label><input type="text" class="form-control form-control-sm" id="dce-f-24"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-dce-col-25">Fixing Date</label><input type="text" class="form-control form-control-sm" id="dce-f-25" placeholder="dd/mm/aaaa" autocomplete="off"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-dce-col-26">Bonus</label><input type="text" class="form-control form-control-sm" id="dce-f-26"></div>
+          <div class="col-md-4"><label class="form-label form-label-sm mb-1" data-lang="intrag-dce-col-27">Premium Holder</label><input type="text" class="form-control form-control-sm" id="dce-f-27"></div>
+        </div>
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-sm btn-danger" data-bs-dismiss="modal" title="Cancel"><i class="ti ti-x"></i></button>
+        <button type="button" class="btn btn-sm btn-success" id="dceSaveBtn" title="Save"><i class="ti ti-device-floppy"></i></button>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- Item "Advanced" do menu Export. Vai no FIM do bloco de propósito: precisa
+     da DataTable já inicializada. -->
+<script src="{{ config.ASSETS_ROOT }}/js/export-advanced.js"></script>
+<script>
+    jQuery(function () {
+        if (window.otcExportAdvanced) otcExportAdvanced('#intrag-dce-table');
+    });
+</script>
+{% endblock extra_javascript %}

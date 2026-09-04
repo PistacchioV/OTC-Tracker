@@ -29,6 +29,7 @@ var PAGE_URL = {
     'Reference Data': '/reference-data',
     'Control Panel': '/control-panel', 'Accrual': '/accrual-swap', 'MtM': '/mtm-swap',
     'Intrag Option': '/intrag-option', 'Intrag NDF': '/intrag-ndf',
+    'Intrag DCE Option': '/intrag-dce-option',
     'Intrag Swap': '/intrag-swap',
     'Support': '/tickets-list',
     'Other Products Summary': '/other-products-summary',

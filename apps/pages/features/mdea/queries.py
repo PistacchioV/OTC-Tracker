@@ -26,6 +26,44 @@ def le_names():
     return out
 
 
+def own_entity_names():
+    """{nome normalizado} das NOSSAS Legal Entities, do mesmo cadastro `le-spn`
+    que já dá o nome por extenso do e-mail.
+
+    O Reference Data sozinho não responde a pergunta: ele só carrega
+    `BANCO J.P MORGAN S.A` e `LAWTON` como ECONOMIC GROUP == INTERNAL, e a
+    `JPMORGAN CHASE BANK, N.A. - SAO PAULO BRANCH` não tem registro nenhum lá —
+    cai no fallback por nome do `_pc_is_internal_counterparty`, que exige
+    "banco" E "morgan" e deixa a MGT passar como se fosse cliente.
+
+    O cadastro de LE é a lista das nossas entidades POR DEFINIÇÃO, então é ele
+    que fecha o buraco — sem inventar uma segunda heurística de nome, que é
+    justamente o que o teste do Pending Confirmation evita (derrubaria Banco
+    Safra, Bradesco e Santander, que são clientes)."""
+    R = _routes()
+    out = set()
+    for r in R._mapping_rows('le-spn'):
+        nome = R._pc_norm(r.get('NAME', ''))
+        if nome:
+            out.add(nome)
+    return out
+
+
+def is_internal(deal, own):
+    """Contraparte interna — a linha NÃO vai no e-mail.
+
+    Duas portas: o ECONOMIC GROUP do Reference Data (o mesmo teste do Pending
+    Confirmation) ou o nome ser uma Legal Entity nossa. O nome testado é o MESMO
+    que o e-mail imprime (`domain.row`: Client, ou Acronym quando Client é
+    vazio); testar outro campo deixaria passar exatamente a linha que aparece."""
+    R = _routes()
+    cpty = (str(deal.get('Client', '') or '').strip()
+            or str(deal.get('Acronym', '') or '').strip())
+    if cpty and R._pc_norm(cpty) in own:
+        return True
+    return R._pc_is_internal_counterparty(deal.get('Client', ''), deal.get('SPN', ''))
+
+
 def date_key(v):
     """`dd/mm/aaaa` → `aaaa-mm-dd`, para comparar datas sem depender da grafia.
 
@@ -41,6 +79,7 @@ def rows(kind, ref):
     """As linhas do e-mail do dia, por rotina."""
     R = _routes()
     nomes = le_names()
+    own = own_entity_names()
     if kind == 'fwdstart':
         # A referência é a Strike Set Date, e o arquivo do dia da fixação é
         # justamente onde o par foi gravado. O Deal que sai é o do VANILLA.
@@ -68,6 +107,16 @@ def rows(kind, ref):
                            'fixado no mesmo dia (%s)',
                            r.get('FwdStartDeal') or r.get('Deal'), r.get('FwdStartTradeDate'))
                 continue
+            # Só contraparte EXTERNA — o mesmo corte da outra rotina. Faltava
+            # aqui: o par de re-booking sai do pull do NDF sem passar por
+            # filtro nenhum, e as pernas internas (MGT × MGT, JPM × JPM)
+            # entravam no e-mail pedindo exclusão de operação que não é contra
+            # cliente.
+            if is_internal(r, own):
+                R.log.info('[manual-deals-ea] FWD Start %s fora do e-mail: '
+                           'contraparte interna (%s)',
+                           r.get('Deal'), r.get('Client') or r.get('Acronym'))
+                continue
             out.append(domain.row(r, nomes))
         return out
     out = []
@@ -77,8 +126,12 @@ def rows(kind, ref):
         # Só contraparte EXTERNA. A pergunta é a mesma que o Pending Confirmation
         # já responde, então é a mesma função: o teste é o ECONOMIC GROUP do
         # Reference Data, e não o nome começar em "BANCO" — que derrubaria Banco
-        # Safra, Bradesco e Santander, que são clientes (CLAUDE.md §7).
-        if R._pc_is_internal_counterparty(d.get('Client', ''), d.get('SPN', '')):
+        # Safra, Bradesco e Santander, que são clientes (CLAUDE.md §7). O
+        # `is_internal` acrescenta a ele o cadastro de LE (ver o docstring).
+        if is_internal(d, own):
+            R.log.info('[manual-deals-ea] Other Publisher %s fora do e-mail: '
+                       'contraparte interna (%s)',
+                       d.get('Deal'), d.get('Client') or d.get('Acronym'))
             continue
         out.append(domain.row(d, nomes))
     return out
