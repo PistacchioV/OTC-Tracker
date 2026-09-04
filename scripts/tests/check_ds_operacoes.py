@@ -57,9 +57,11 @@ spec = R._opb3_spec()
 check('o spec existe', spec is not None, True)
 check('e alimenta a página Operations B3', spec.get('opb3'), True)
 contas = next(f[2] for f in spec['filters'] if f[0] == 'digits')
-# 73760.00-9 é a conta PRÓPRIA e 73760.20-5 a de CLIENTE 2 (ver `b3-accounts`).
+# 73760.00-9 é a conta PRÓPRIA, 73760.20-5 a de CLIENTE 2 (ver `b3-accounts`) e
+# 73760.40-1 a conta em que o COE é registrado — o Tipo Título COE já estava no
+# filtro de títulos e nenhuma linha entrava, porque todas chegam por esta conta.
 # A de CLIENTE 1 (73760.10-2) fica de fora, como sempre esteve.
-check('as contas do Banco que entram', contas, {'73760009', '73760205'})
+check('as contas do Banco que entram', contas, {'73760009', '73760205', '73760401'})
 check('a coluna da conta é a 2ª (1-based)',
       next(f[1] for f in spec['filters'] if f[0] == 'digits'), 2)
 
@@ -71,9 +73,15 @@ recs, total = R._ds_process(arquivo([
     linha('73760.10-2', 'TER'),         # CLIENT 1 — fora
     linha('04880.00-6', 'SWAP'),        # MGT — é o outro spec
     linha('73760.20-5', 'CDB'),         # tipo de título fora da lista
+    linha('73760.40-1', 'COE'),         # a conta do COE — entra
+    linha('73760.40-1', 'CDB'),         # conta certa, título fora — fora
 ]), spec)
-check('leu as seis linhas de dado', total, 6)
-check('manteve três', len(recs), 3)
+check('leu as oito linhas de dado', total, 8)
+check('manteve quatro', len(recs), 4)
+check('o COE entra pela conta dele',
+      [r for r in recs if r['Conta'] == '73760.40-1' and r['Tipo Título'] == 'COE'] != [], True)
+check('mas a conta do COE não abre a porta para outro título',
+      [r for r in recs if r['Tipo Título'] == 'CDB'], [])
 check('a própria entra', [r for r in recs if r['Conta'] == '73760.00-9'] != [], True)
 check('a de cliente 2 entra', [r for r in recs if r['Conta'] == '73760.20-5'] != [], True)
 # A conta chega ora `73760.20-5`, ora `7376020 5`: a comparação é por DÍGITOS, e

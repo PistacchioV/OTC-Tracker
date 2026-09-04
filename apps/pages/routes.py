@@ -2998,9 +2998,11 @@ _DS_IMPORTS = [
     {'key': 'ndfc', 'label': 'NDF Cockpit', 'json': 'ndf-cockpit', 'header': 4,
      'match': lambda n: n.startswith('settlement') and n.endswith('.xlsx'), 'ndfc': True, 'filters': []},
     # As contas do Banco J.P. Morgan que entram (coluna Conta): a PRÓPRIA
-    # (73760.00-9) e a de CLIENTE 2 (73760.20-5) — as duas estão no cadastro
-    # `b3-accounts`, que é onde se lê o que cada uma é. A de CLIENTE 1
-    # (73760.10-2) fica de fora, como sempre esteve.
+    # (73760.00-9), a de CLIENTE 2 (73760.20-5) e a 73760.40-1 — que é a conta
+    # em que o COE é registrado: o Tipo Título COE já estava no filtro de
+    # títulos e nenhuma linha entrava, porque TODAS chegavam por esta conta e o
+    # filtro de Conta as derrubava antes. A de CLIENTE 1 (73760.10-2) fica de
+    # fora, como sempre esteve.
     #
     # O que entra aqui alcança mais do que o card: este é o JSON que a página
     # Operations B3 lê (`opb3`), e é dele que saem a mensageria, os avisos de
@@ -3008,7 +3010,7 @@ _DS_IMPORTS = [
     # filtro não existe para nenhum deles — some sem erro nenhum.
     {'key': 'operacoes-jpm', 'label': 'Operações JPM', 'json': 'operacoes-jpm', 'header': 5,
      'match': lambda n: n.startswith('operacoes'),
-     'filters': [('digits', 2, {'73760009', '73760205'}),
+     'filters': [('digits', 2, {'73760009', '73760205', '73760401'}),
                  ('set', 10, {'OPC', 'OFVC', 'OFCC', 'SWAP', 'TER', 'COE'})],
      'opb3': True},                                 # also feeds the Operations B3 page json
     {'key': 'operacoes-mgt', 'label': 'Operações MGT', 'json': 'operacoes-mgt', 'header': 5,
