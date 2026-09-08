@@ -32,7 +32,8 @@
                     fim: 'Flow end', vencimento: 'Swap maturity', nocional: 'Remaining notional',
                     nocional_original: 'Original notional', amortizacao: 'Amortisation',
                     base_amortizacao: 'Amortisation base', indexador: 'index', taxa: 'rate',
-                    moeda: 'currency', tenor: 'tenor', ptax_inicial: 'initial fixing',
+                    moeda: 'currency', tenor: 'tenor', percentual: '% of CDI',
+                    base_ajuste: 'What settles', ptax_inicial: 'initial fixing',
                     ni_inicial: 'initial index number', preco_inicial: 'initial price',
                     ativa: 'Receiving leg', passiva: 'Paying leg' } },
     br: { show: 'Mostrar', entries: 'linhas', all: 'Todas', columns: 'Colunas', export: 'Exportar',
@@ -50,7 +51,8 @@
                     fim: 'Fim do fluxo', vencimento: 'Vencimento do swap', nocional: 'Notional remanescente',
                     nocional_original: 'Notional original', amortizacao: 'Amortização',
                     base_amortizacao: 'Base da amortização', indexador: 'índice', taxa: 'taxa',
-                    moeda: 'moeda', tenor: 'prazo', ptax_inicial: 'fixing inicial',
+                    moeda: 'moeda', tenor: 'prazo', percentual: '% do CDI',
+                    base_ajuste: 'O que liquida', ptax_inicial: 'fixing inicial',
                     ni_inicial: 'número-índice inicial', preco_inicial: 'preço inicial',
                     ativa: 'Ponta ativa', passiva: 'Ponta passiva' } },
     es: { show: 'Mostrar', entries: 'filas', all: 'Todas', columns: 'Columnas', export: 'Exportar',
@@ -68,7 +70,8 @@
                     fim: 'Fin del flujo', vencimento: 'Vencimiento del swap', nocional: 'Nocional remanente',
                     nocional_original: 'Nocional original', amortizacao: 'Amortización',
                     base_amortizacao: 'Base de la amortización', indexador: 'índice', taxa: 'tasa',
-                    moeda: 'moneda', tenor: 'plazo', ptax_inicial: 'fixing inicial',
+                    moeda: 'moneda', tenor: 'plazo', percentual: '% del CDI',
+                    base_ajuste: 'Qué liquida', ptax_inicial: 'fixing inicial',
                     ni_inicial: 'número índice inicial', preco_inicial: 'precio inicial',
                     ativa: 'Pata activa', passiva: 'Pata pasiva' } }
   };
@@ -354,7 +357,7 @@
       clearMarks();
       var f = d.fields || {};
       ['counterparty', 'data_operacao', 'inicio', 'fim', 'vencimento', 'nocional', 'nocional_original',
-       'amortizacao', 'base_amortizacao'].forEach(function (k) { setVal(k, f[k] || ''); });
+       'amortizacao', 'base_amortizacao', 'base_ajuste'].forEach(function (k) { setVal(k, f[k] || ''); });
       ['ativa', 'passiva'].forEach(function (lado) {
         var p = d[lado] || {};
         var sel = document.getElementById(lado + '_indexador');
@@ -363,14 +366,27 @@
           if (!p.indexador) sel.selectedIndex = -1;
           aplicarLado(lado);
         }
-        ['taxa', 'convencao', 'regime', 'moeda', 'tenor', 'ptax_inicial', 'ni_inicial', 'preco_inicial', 'ativo']
+        ['taxa', 'percentual', 'convencao', 'regime', 'moeda', 'tenor', 'ptax_inicial',
+         'ptax_final', 'ptax_offset', 'ni_inicial', 'preco_inicial', 'ativo']
           .forEach(function (k) { if (p[k] !== undefined && (p[k] !== '' || k === 'taxa')) setVal(lado + '_' + k, p[k]); });
+        // O spread do CDI tem input PRÓPRIO (mesmo `name`, id diferente): sem
+        // isto o campo visível da perna de CDI ficava com o valor anterior.
+        var spread = document.getElementById(lado + '_taxa_cdi');
+        if (spread) { spread.value = p.taxa === undefined ? '' : String(p.taxa); formatar(spread); }
         var mo = document.getElementById(lado + '_moeda_equity');
         if (mo && p.moeda) mo.value = p.moeda;
         // os campos que a ponta não usa voltam ao vazio
-        ['ptax_inicial', 'ni_inicial', 'preco_inicial', 'ativo'].forEach(function (k) {
+        ['ptax_inicial', 'ptax_final', 'ni_inicial', 'preco_inicial', 'ativo'].forEach(function (k) {
           if (!p[k]) setVal(lado + '_' + k, '');
         });
+        // De que dia é a PTAX que entrou — ou por que ela não entrou. Sem isto
+        // o campo de fixing é um número sem procedência.
+        var nota = document.getElementById(lado + '_ptax_nota');
+        if (nota) {
+          nota.textContent = p.ptax_data ? ('PTAX ' + p.ptax_data.split('-').reverse().join('/'))
+                                         : (p.ptax_erro || '');
+          nota.className = 'tl-help' + (p.ptax_erro ? ' text-danger' : '');
+        }
       });
       (d.missing || []).forEach(function (k) { mark(k.replace('.', '_'), 'tl-missing'); });
       (d.assumed || []).forEach(function (k) { mark(k, 'tl-assumed'); });

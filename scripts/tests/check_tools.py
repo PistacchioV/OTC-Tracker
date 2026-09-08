@@ -222,7 +222,7 @@ check('e nao ha json.dump solto no motor',
 # ─────────────────────────────────────────────────────────────────────────────
 print('\n== 5. o pre-preenchimento: a curva da posicao -> o indice da tela ==')
 REGRAS = [
-    {'MATCH': 'DI', 'MODE': 'Exact', 'INDEX': 'cdi_percentual'},
+    {'MATCH': 'DI', 'MODE': 'Exact', 'INDEX': 'cdi'},
     {'MATCH': 'PREFIXADO 252D', 'MODE': 'Exact', 'INDEX': 'pre',
      'DAY COUNT': 'du_252', 'REGIME': 'composto'},
     {'MATCH': 'DOLAR', 'MODE': 'Contains', 'INDEX': 'cambio', 'CURRENCY': 'USD'},
@@ -233,7 +233,7 @@ REGRAS = [
     {'MATCH': 'IPCA', 'MODE': 'Contains', 'INDEX': 'ipca'},
 ]
 cl = domain.classificar_indice
-check('DI casa exato', cl(REGRAS, 'DI')['INDEX'], 'cdi_percentual')
+check('DI casa exato', cl(REGRAS, 'DI')['INDEX'], 'cdi')
 check('PREFIXADO 252D casa exato', cl(REGRAS, 'PREFIXADO 252D')['INDEX'], 'pre')
 # Exact vence Contains, e entre os Contains vence o token mais longo — senao
 # `DOLAR DOS EUA 30/360` herdaria a contagem do `DOLAR` generico.
@@ -248,8 +248,17 @@ check('curva sem cadastro nao vira chute', cl(REGRAS, 'CURVA NOVA DA B3'), None)
 campos, faltando = domain.montar_ponta(None, None, None, 1.0, '', None)
 check('sem regra, o indice fica vazio e sinalizado',
       (campos['indexador'], faltando), ('', ['indexador']))
+# O CDI leva as DUAS colunas da posicao: o `Percentual` no percentual e a
+# `Taxa` no spread. 100% do CDI + 1,07% e um contrato comum, e com dois indices
+# excludentes ele entrava pela metade sem nada dizer isso.
 campos, faltando = domain.montar_ponta(cl(REGRAS, 'DI'), 1.10, None, 1.0, '', None)
-check('% do CDI leva o PERCENTUAL, nao a taxa', campos['taxa'], '1.1000')
+check('o CDI leva o PERCENTUAL no campo dele', campos['percentual'], '1.1000')
+check('e sem spread o campo fica VAZIO, nao zero', campos['taxa'], '')
+campos, _f = domain.montar_ponta(cl(REGRAS, 'DI'), 1.00, 0.0107, 1.0, '', None)
+check('com spread, os dois convivem',
+      (campos['percentual'], campos['taxa']), ('1.0000', '0.0107'))
+check('e o sinal da posicao inverte o spread',
+      domain.montar_ponta(cl(REGRAS, 'DI'), 1.00, 0.0107, -1.0, '', None)[0]['taxa'], '-0.0107')
 campos, faltando = domain.montar_ponta(cl(REGRAS, 'PREFIXADO 252D'), None, 0.14, 1.0, '', None)
 check('o pre leva a taxa e a contagem do cadastro',
       (campos['taxa'], campos['convencao'], campos['regime']),
@@ -276,6 +285,30 @@ check('a base da amortizacao sai do texto do tipo',
 # A celula da posicao escreve a virgula como DECIMAL, sem separador de milhar.
 check('a celula da posicao le a virgula como decimal',
       domain.numero_da_posicao('280000000,00'), 280000000.0)
+
+# A tela de Term SOFR mostra a curva IMPORTADA (1, 3, 6 e 12 meses), no desenho
+# da EURIBOR — e nao o overnight do NY Fed, que e a taxa REALIZADA e vive na
+# tela de SOFR Index, ao lado da composicao que a acumula. Duas fontes na mesma
+# pagina davam dois quadros de "valores publicados" com perguntas diferentes.
+print('\n== 5b. Term SOFR: a curva importada, no desenho da EURIBOR ==')
+from apps.pages.precificador import term_sofr as _ts                    # noqa: E402
+term_html = ler('apps/templates/pages/tools-term-sofr.html')
+idx_html = ler('apps/templates/pages/tools-sofr-index.html')
+# Os ROTULOS sao montados no Python (o `campos` do contexto), entao nao estao
+# no template — o que se confere aqui e a ESTRUTURA; os rotulos saem na pagina
+# renderizada, na secao 9.
+check('o Term SOFR itera os campos do term_sofr (tupla de tres)',
+      'for campo, rotulo, _m in campos' in term_html, True)
+check('e o SOFR Index os do sofr (tupla de dois)',
+      'for campo, rotulo in pb.campos' in idx_html, True)
+check('cada tela tem UM quadro de valores publicados',
+      (term_html.count('tl-published-values'), idx_html.count('tl-published-values')), (1, 0))
+check('a dropzone continua na tela do Term SOFR', 'tl-drop' in term_html, True)
+# Base vazia nao e erro: e quem ainda nao importou, e a tela diz isso.
+check('base vazia aponta para a importacao', 'tl-term-empty' in term_html, True)
+# A ORDEM dos prazos e a do CAMPOS, nao a do dicionario: 12 meses depois de 6.
+check('os prazos saem em ordem de vencimento',
+      [m for _c, _r, m in _ts.CAMPOS], [1, 3, 6, 12])
 
 # ─────────────────────────────────────────────────────────────────────────────
 print('\n== 6. o prefill pelo B3 ID, sobre uma posicao sintetica ==')
@@ -326,16 +359,45 @@ try:
     check('a ponta ativa e o PRE da primeira coluna',
           (d['ativa']['indexador'], d['ativa']['taxa']), ('pre', '0.1400'))
     check('a passiva e o DI da segunda, com o percentual',
-          (d['passiva']['indexador'], d['passiva']['taxa']), ('cdi_percentual', '1.1000'))
+          (d['passiva']['indexador'], d['passiva']['percentual']), ('cdi', '1.1000'))
     # Sem Reference Data no tmp a contraparte nao resolve — e isso e SINALIZADO,
     # nunca preenchido com a conta crua.
     check('contraparte que nao resolve fica em branco e sinalizada',
           (f['counterparty'], 'counterparty' in d['missing']), ('', True))
-    check('e o fluxo sem DFLUXO tambem',
-          ('inicio' in d['missing'], 'fim' in d['missing']), (True, True))
+    # Sem DFLUXO o fim cai em HOJE e vai marcado como ASSUMIDO — um campo de
+    # data vazio nao deixa a tela nem abrir a conta, e assumir calado seria
+    # pior. O inicio cai na data de inicio do swap, que a posicao tem.
+    check('sem DFLUXO, o fim e hoje e vai assumido',
+          (d['fields']['fim'], 'fim' in d['assumed'], 'fim' in d['missing']),
+          (date.today().isoformat(), True, False))
+    check('e o inicio cai no comeco do swap', d['fields']['inicio'], '2025-09-01')
+    # O `Tipo de Contrato` decide o que liquida: bullet so tem o pagamento
+    # final; cashflow deixa as DATAS decidirem (o `auto` do motor).
+    check('sem Tipo de Contrato, o que liquida fica no automatico',
+          d['fields']['base_ajuste'], liquidacao.BASE_AUTOMATICA)
     check('nenhum campo do prefill volta com valor inventado',
           [c for c in queries.CAMPOS_PREFILL
            if c in d['missing'] and str(f.get(c) or '') != ''], [])
+
+    # Bullet: so o pagamento final, e nada a amortizar no meio do caminho.
+    vals[0] = '02'
+    with io.open(os.path.join(pasta, '73760_%s_DPOSICAO-SWAP.json' % dref),
+                 'w', encoding='utf-8') as fh:
+        fh.write(json.dumps([{('c%03d' % i): v for i, v in enumerate(vals)}], ensure_ascii=False))
+    b = queries.swap_prefill('26G53382860')
+    check('bullet liquida pelo VALOR FUTURO',
+          (b['tipo_contrato'], b['fields']['base_ajuste']),
+          ('Bullet', liquidacao.BASE_VALOR_FUTURO))
+    check('e sem fluxo intermediario nao amortiza — resposta, nao lacuna',
+          (b['fields']['amortizacao'], 'amortizacao' in b['missing']), ('0', False))
+    vals[0] = '01'
+    with io.open(os.path.join(pasta, '73760_%s_DPOSICAO-SWAP.json' % dref),
+                 'w', encoding='utf-8') as fh:
+        fh.write(json.dumps([{('c%03d' % i): v for i, v in enumerate(vals)}], ensure_ascii=False))
+    c2 = queries.swap_prefill('26G53382860')
+    check('cashflow deixa as datas decidirem',
+          (c2['tipo_contrato'], c2['fields']['base_ajuste']),
+          ('Cashflow', liquidacao.BASE_AUTOMATICA))
 
     # ── 7. Swap Athena: o Edit do CETIP ID ──────────────────────────────────
     print('\n== 7. Swap Athena: Edit do CETIP ID ==')
@@ -455,6 +517,32 @@ for t in TELAS:
     check('%s: carrega o SweetAlert LOCAL' % t,
           'plugins/sweetalert2/sweetalert2.min.js' in html or
           'tools-assets-js.html' in html, True)
+
+# Os rotulos, na pagina RENDERIZADA — o template so itera o contexto.
+import datetime as _dt                                                 # noqa: E402
+_c = app.test_client()
+with _c.session_transaction() as _s:
+    _s.update(authenticated=True, user_sid='X1', user_name='t', user_role='ADMIN',
+              # UTC, nao o relogio local: com o horario de Brasilia o app le a
+              # sessao como VENCIDA e devolve a tela de login — o que se
+              # confere aqui sumiria sem nada dizer que foi o fuso.
+              session_expires_at=(_dt.datetime.now(_dt.timezone.utc).replace(tzinfo=None)
+                                  + _dt.timedelta(hours=1)).isoformat())
+from apps.pages.precificador import euribor as _eu, sofr as _sf         # noqa: E402
+_sf._ultima_sync['quando'] = 1e12                                       # zero rede no teste
+_eu._ultima_sync['quando'] = 1e12
+_term = _c.get('/tools/term-sofr').data.decode()
+_idx = _c.get('/tools/sofr-index').data.decode()
+check('a tela de Term SOFR nao traz o overnight do Fed', 'SOFR overnight' in _term, False)
+check('e a de SOFR Index traz', 'SOFR overnight' in _idx, True)
+# Com a base vazia (a dev nao importa nada) a tela pede a importacao em vez de
+# mostrar um quadro vazio — e ainda assim oferece a dropzone.
+if 'tl-term-empty' in _term:
+    check('base vazia: a tela pede o arquivo e mantem a dropzone',
+          ('tl-drop' in _term, 'tl-published-values' in _term), (True, False))
+else:
+    check('com base, os quatro prazos aparecem',
+          [r for _cc, r, _m in _ts.CAMPOS if r not in _term], [])
 
 js = ler('apps/templates/partials/tools-assets-js.html')
 # Sem esta linha todo plugin dali para baixo morre com `jQuery is not defined`,

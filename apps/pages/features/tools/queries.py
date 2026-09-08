@@ -53,11 +53,44 @@ def compor_sofr(form):
 # ── Term SOFR ───────────────────────────────────────────────────────────────
 
 def term_sofr_context(referencia, meses):
-    """A base realizada do NY Fed (janela + vigente) e a curva importada da CME."""
-    ctx = {'historico': None, 'erro': None, 'tabela': {}, 'campos': sofr.CAMPOS,
+    """A tela do Term SOFR: a curva IMPORTADA (1, 3, 6 e 12 meses), no mesmo
+    desenho da EURIBOR — taxas vigentes, gráfico e valores publicados.
+
+    A fonte é a base que o dropzone alimenta (`term_sofr_b3.json` e o
+    `db/tools/term_sofr_b3.db` do espelho), e não o NY Fed: esta página é a
+    curva a termo da CME. O overnight e as médias compostas do Fed são a taxa
+    REALIZADA e vivem na tela de SOFR Index, ao lado da composição que as usa —
+    as duas juntas aqui davam dois quadros de "valores publicados" na mesma
+    página, respondendo a perguntas diferentes.
+
+    Base vazia não é erro: é o estado normal de quem ainda não importou, e a
+    tela mostra a área de arrastar em vez de um aviso.
+    """
+    base = term_sofr.carregar()
+    ctx = {'curva': None, 'erro': None, 'tabela': {}, 'campos': term_sofr.CAMPOS,
            'referencia': referencia, 'meses': meses, 'vigente': None, 'taxas_vigentes': {},
-           'base': None, 'series': [], 'escala_x': [], 'escala_y': [],
-           'termo': termo_importado(referencia, meses), 'campos_termo': term_sofr.CAMPOS}
+           'base': None, 'series': [], 'escala_x': [], 'escala_y': [], 'vazio': base.vazio}
+    if base.vazio:
+        return ctx
+    vigente, taxas = base.em(referencia)
+    recorte = base.janela(soma_meses(para_data(referencia), -meses), referencia)
+    ctx.update({'curva': recorte, 'tabela': recorte.por_data(), 'vigente': vigente,
+                'taxas_vigentes': taxas,
+                'base': {'inicio': base.inicio, 'fim': base.fim, 'dias': len(base.datas)}})
+    ctx.update(series_term_sofr(recorte))
+    return ctx
+
+
+def sofr_publicados(referencia, meses):
+    """O que o NY Fed publica ABERTO — overnight, médias de 30/90/180 dias e o
+    SOFR Index —, para a tela de SOFR Index mostrar ao lado da composição.
+
+    Mora aqui e não na tela de Term SOFR porque é a taxa REALIZADA: ela é o que
+    a composição da mesma página acumula, e o Term SOFR é a cotada de antemão.
+    Falha de fonte devolve o `erro` e a tela segue sem o quadro."""
+    ctx = {'historico': None, 'erro': None, 'tabela': {}, 'campos': sofr.CAMPOS,
+           'vigente': None, 'taxas_vigentes': {}, 'base': None,
+           'series': [], 'escala_x': [], 'escala_y': []}
     try:
         completo = sofr.carregar_historico()
         if not completo.datas:
@@ -72,18 +105,6 @@ def term_sofr_context(referencia, meses):
     except sofr.ErroFed as exc:
         ctx['erro'] = str(exc)
     return ctx
-
-
-def termo_importado(referencia, meses):
-    """A curva da CME que o usuário importou. Base vazia não é erro."""
-    base = term_sofr.carregar()
-    if base.vazio:
-        return {'vazio': True}
-    vigente, taxas = base.em(referencia)
-    recorte = base.janela(soma_meses(para_data(referencia), -meses), referencia)
-    return {'vazio': False, 'vigente': vigente, 'taxas': taxas, 'tabela': recorte.por_data(),
-            'datas': recorte.datas, 'campos': recorte.campos,
-            'base': {'inicio': base.inicio, 'fim': base.fim, 'dias': len(base.datas)}}
 
 
 def term_sofr_taxa(meses, quando):
@@ -163,6 +184,13 @@ def series_euribor(curva):
 
 def series_sofr(historico):
     return _series(historico.datas, historico.por_data(), historico.campos, dict(sofr.CAMPOS))
+
+
+def series_term_sofr(curva):
+    """Os quatro prazos do Term SOFR no mesmo par de eixos — cinco séries só
+    ficam legíveis com escala compartilhada, e é o que o `_series` faz."""
+    rotulos = {campo: rotulo for campo, rotulo, _m in term_sofr.CAMPOS}
+    return _series(curva.datas, curva.por_data(), curva.campos, rotulos)
 
 
 # ── Fixed Income ────────────────────────────────────────────────────────────
@@ -251,18 +279,19 @@ def contagens_lado_a_lado(inicio, fim, cal_nome='ANBIMA'):
 # NA POSIÇÃO (o `_SWAPCHAR_LABELS` do routes): a primeira e a segunda coluna
 # de mesmo nome são a ponta da Parte e a da Contraparte.
 _POS = {
-    'contrato': 2, 'conta_cp': 7, 'doc_cp': 8, 'inicio': 11, 'vencimento': 12,
+    'tipo_contrato': 0, 'contrato': 2, 'conta_cp': 7, 'doc_cp': 8, 'inicio': 11, 'vencimento': 12,
     'valor_base': 14, 'remanescente': 15, 'valor_inicial': 24,
     'tipo_amort': 38, 'identificador': 145,
     # ponta 1 (Parte → ativa) / ponta 2 (Contraparte → passiva)
     'pct': (39, 49), 'indice': (40, 50), 'sinal': (42, 52), 'taxa': (43, 53),
-    'nome_classe': (69, 74), 'cupom_limpo': (76, 78),
+    'nome_classe': (69, 74), 'cupom_limpo': (76, 78), 'data_cotacao': (77, 79),
 }
 _FLX = {'contrato': 0, 'identificador': 10, 'tipo_amort': 8, 'evento': 11,
         'taxa_amort': (16, 21), 'inicio': 22, 'fim': 23}
 
 CAMPOS_PREFILL = ('counterparty', 'data_operacao', 'inicio', 'fim', 'vencimento',
-                  'nocional', 'nocional_original', 'amortizacao', 'base_amortizacao')
+                  'nocional', 'nocional_original', 'amortizacao', 'base_amortizacao',
+                  'base_ajuste')
 
 
 def _celula(vals, i):
@@ -336,6 +365,37 @@ def _fluxos_do_contrato(contrato, ident):
     return sorted(saida, key=lambda f: f['evento'])
 
 
+def _ptax_do_fixing(moeda, fim_iso, deslocamento):
+    """PTAX de VENDA da moeda no fixing: `fim` recuado `deslocamento` dias úteis.
+
+    Devolve `(valor, data, erro)`. Falha de rede ou moeda que o BCB não
+    boletina voltam com `valor=None` e o motivo — a tela deixa o campo em
+    branco e sinalizado, que é a regra: um fixing chutado muda o ajuste inteiro
+    e a conta continua fechando consigo mesma.
+
+    O calendário é o ANBIMA (o mesmo do resto do app). O `ptax_moeda` já anda
+    para trás sozinho até dez dias, o que resolve o feriado que o calendário
+    não previu e o dia corrente antes das 13h.
+    """
+    from apps.pages.precificador import cambio
+    from apps.pages.precificador.calendario import calendario_anbima
+    if not fim_iso:
+        return None, None, 'no flow end to count the offset from'
+    try:
+        base = para_data(fim_iso)
+    except ErroDeDado:
+        return None, None, 'invalid flow end'
+    n = int(deslocamento or 0)
+    quando = calendario_anbima().workday(base, -n) if n else base
+    if str(moeda).upper() not in liquidacao.MOEDAS_AUTOMATICAS:
+        return None, quando, '{} is not published in the BCB bulletin'.format(moeda)
+    try:
+        return cambio.ptax_moeda(moeda, quando).venda, quando, ''
+    except Exception as exc:                                # noqa: BLE001
+        _R().log.warning('[tools] PTAX %s em %s falhou: %s', moeda, quando, exc)
+        return None, quando, str(exc)
+
+
 def swap_prefill(b3_id):
     """Tudo que o Swap Calculator consegue puxar da posição para um B3 ID.
 
@@ -401,37 +461,69 @@ def swap_prefill(b3_id):
     if not f['nocional_original']:
         missing.append('nocional_original')
 
-    base_am = domain.base_da_amortizacao(R._swapchar_amort_text(_celula(vals, _POS['tipo_amort'])))
-    f['base_amortizacao'] = base_am or ''
-    if not base_am:
-        missing.append('base_amortizacao')
+    # O `Tipo de Contrato` já diz o que liquida: BULLET só tem o pagamento
+    # final, CASHFLOW tem fluxos intermediários. Com bullet a base é sempre o
+    # valor futuro; com cashflow ela sai das DATAS (fluxo antes do vencimento é
+    # intermediário), que é o `auto` do motor.
+    tipo_contrato = domain.tipo_de_contrato(_celula(vals, _POS['tipo_contrato']))
+    out['tipo_contrato'] = tipo_contrato
+    f['base_ajuste'] = (liquidacao.BASE_VALOR_FUTURO if tipo_contrato == 'Bullet'
+                        else liquidacao.BASE_AUTOMATICA)
 
-    # o fluxo: o último evento até hoje (o que está sendo liquidado), senão o próximo
+    # O fluxo: a ÚLTIMA `Data de ocorrência do Evento` até hoje — é o que
+    # acabou de liquidar, e é o que se quer calcular. Sem fluxo nenhum (bullet,
+    # ou DFLUXO ausente) o fim é HOJE, marcado como assumido: um campo de data
+    # vazio não deixa a tela nem abrir a conta.
     fluxos = _fluxos_do_contrato(contrato, ident)
     out['flows'] = fluxos
     hoje = date.today().isoformat()
-    escolhido = None
     passados = [x for x in fluxos if x['evento'] and x['evento'] <= hoje]
-    if passados:
-        escolhido = passados[-1]
-    elif fluxos:
-        escolhido = fluxos[0]
+    escolhido = passados[-1] if passados else (fluxos[0] if fluxos else None)
     if escolhido:
         anterior = None
         for x in fluxos:
             if x is escolhido:
                 break
             anterior = x
-        f['inicio'] = escolhido['inicio'] or (anterior['evento'] if anterior else inicio_swap)
-        f['fim'] = escolhido['fim'] or escolhido['evento']
-        f['amortizacao'] = ('{:.4f}'.format(escolhido['taxa_amort'])
-                            if escolhido['taxa_amort'] is not None else '')
+        # O início é o evento ANTERIOR (o fluxo abre onde o outro fechou); no
+        # primeiro, a data de início do swap.
+        f['inicio'] = (anterior['evento'] if anterior else '') or escolhido['inicio'] or inicio_swap
+        f['fim'] = escolhido['evento'] or escolhido['fim'] or hoje
         out['flow_event'] = escolhido['evento']
+        # `Tipo Amortização` e `Taxa Amortização` do PRÓPRIO evento: a coluna já
+        # diz se amortiza sobre o valor base original, sobre o remanescente ou
+        # só no vencimento, e a taxa já traz quanto amortiza NAQUELA data.
+        tipo_am = escolhido['tipo_amort'] or R._swapchar_amort_text(_celula(vals, _POS['tipo_amort']))
+        amortiza = domain.amortiza_no_fluxo(tipo_am)
+        base_am = domain.base_da_amortizacao(tipo_am)
+        f['base_amortizacao'] = base_am or ''
+        if not base_am:
+            missing.append('base_amortizacao')
+        if amortiza is False:
+            # "Na Data de Vencimento" / "Sem Troca de Amortização": não é
+            # lacuna, é a resposta — o fluxo não amortiza.
+            f['amortizacao'] = '0'
+        elif escolhido['taxa_amort'] is not None:
+            f['amortizacao'] = '{:.4f}'.format(escolhido['taxa_amort'])
+        else:
+            f['amortizacao'] = ''
+            missing.append('amortizacao')
     else:
-        f['inicio'] = f['fim'] = f['amortizacao'] = ''
-    for c in ('inicio', 'fim', 'amortizacao'):
-        if not f[c]:
-            missing.append(c)
+        f['inicio'] = inicio_swap
+        f['fim'] = hoje
+        assumed.append('fim')
+        base_am = domain.base_da_amortizacao(
+            R._swapchar_amort_text(_celula(vals, _POS['tipo_amort'])))
+        f['base_amortizacao'] = base_am or ''
+        if not base_am:
+            missing.append('base_amortizacao')
+        # Bullet não tem fluxo intermediário: não amortizar é o certo, não uma
+        # lacuna. Cashflow sem DFLUXO é lacuna de verdade.
+        f['amortizacao'] = '0' if tipo_contrato == 'Bullet' else ''
+        if not f['amortizacao']:
+            missing.append('amortizacao')
+    if not f['inicio']:
+        missing.append('inicio')
 
     # as duas pontas — a classificação do índice é do cadastro `tools-swap-index`
     regras = R._mapping_rows('tools-swap-index')
@@ -444,8 +536,23 @@ def swap_prefill(b3_id):
         taxa = domain.numero_da_posicao(_celula(vals, _POS['taxa'][k]))
         sinal = domain.sinal_da_posicao(_celula(vals, _POS['sinal'][k]))
         cot = domain.numero_da_posicao(_celula(vals, _POS['cupom_limpo'][k]))
-        campos, faltando = domain.montar_ponta(regra, pct, taxa, sinal, nome_classe, cot)
+        desloc = domain.numero_da_posicao(_celula(vals, _POS['data_cotacao'][k]))
+        campos, faltando = domain.montar_ponta(regra, pct, taxa, sinal, nome_classe, cot,
+                                               deslocamento=None if desloc is None else int(desloc))
         campos['fonte'] = {'codigo': codigo, 'curva': nome_curva, 'classe': nome_classe}
+        # A PTAX do fixing: a data é o FIM DO FLUXO recuado pelo deslocamento
+        # que o contrato manda (a `Data de Cotação`), em dias úteis ANBIMA — e
+        # o fim do fluxo é hoje quando não há evento, que é o caso "hoje D-2"
+        # da mesa. Vale para dólar e para qualquer moeda do boletim do BCB;
+        # o que muda entre elas é o código, não a regra.
+        if campos.get('indexador') in liquidacao.COM_MOEDA and campos.get('moeda'):
+            valor, quando, erro = _ptax_do_fixing(campos['moeda'], f.get('fim'), desloc)
+            if valor is None:
+                faltando.append('ptax_final')
+                campos['ptax_erro'] = erro
+            else:
+                campos['ptax_final'] = '{:.6f}'.format(valor)
+                campos['ptax_data'] = quando.isoformat()
         # taxa a termo (Term SOFR / EURIBOR): o fixing é D-2 úteis do início do
         # fluxo — a data vai preenchida para a mesa VER de que dia é a taxa
         if campos.get('indexador') in liquidacao.COM_FIXING and f.get('inicio'):
