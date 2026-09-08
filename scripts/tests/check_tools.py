@@ -493,6 +493,33 @@ try:
                and 'p_base_amort' in x) for x in _fl), True)
     check('e nenhum deles abre onde fecha',
           [x for x in _fl if x['p_inicio'] and x['p_inicio'] >= x['p_fim']], [])
+    # O `Codigo Identificador` PARECE chave e nao e: na instancia ele guarda a
+    # LOB (`CEM`) em toda operacao da mesa. Aceito ao lado do contrato, ele
+    # trazia para o fluxo de UM swap os eventos de todos os outros — e o
+    # sintoma nao era tela vazia: o "ultimo evento ate hoje" virava o de outro
+    # contrato e o "anterior" tinha a MESMA data, com o Flow start saindo igual
+    # ao Flow end.
+    alheio = [''] * 30
+    alheio[0], alheio[10], alheio[8] = '99Z99999999', 'CEM-2026-0001', '01'
+    alheio[22], alheio[23], alheio[11], alheio[16] = ontem, ontem, ontem, '90,0000'
+    _grava_fluxo(fl, fl2, alheio)
+    _lob = queries.swap_prefill('26G53382860')
+    check('fluxo de OUTRO contrato com o mesmo identificador fica de fora',
+          ([x['evento'] for x in _lob['flows']],
+           _lob['fields']['inicio'], _lob['fields']['fim']),
+          ([(date.today() - timedelta(days=40)).isoformat(),
+            (date.today() - timedelta(days=1)).isoformat()],
+           (date.today() - timedelta(days=40)).isoformat(),
+           (date.today() - timedelta(days=1)).isoformat()))
+    # O identificador so responde onde nao ha contrato — nos DOIS lados. Com a
+    # posicao trazendo contrato, uma linha de DFLUXO sem contrato nao entra:
+    # o `CEM` dela nao diz de que swap ela e.
+    sem_contrato = list(fl2)
+    sem_contrato[0] = ''
+    _grava_fluxo(fl, sem_contrato)
+    check('linha de DFLUXO sem contrato nao entra pelo identificador da LOB',
+          [x['evento'] for x in queries.swap_prefill('26G53382860')['flows']],
+          [(date.today() - timedelta(days=40)).isoformat()])
     os.remove(os.path.join(pasta, '73760_%s_DFLUXO.json' % dref))
 
     # O navegador nao remonta o periodo: ele LE o `p_*` que veio do servidor.

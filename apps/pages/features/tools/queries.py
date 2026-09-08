@@ -321,6 +321,11 @@ def _posicao_swap(b3_id):
         src = R._db_day_records(path) or []
     except Exception:                                       # noqa: BLE001
         return None, None
+    # O `Código Identificador` NÃO é uma chave: na instância ele guarda a LOB
+    # (`CEM` em toda operação da mesa). Por isso o Contrato é procurado PRIMEIRO
+    # em todas as linhas, e só depois o identificador — casando na ordem do
+    # arquivo, um `CEM` de outra operação venceria o contrato que se pediu.
+    achado_por_ident = None
     for row in src:
         vals = list(row.values())
         if len(vals) < 120:
@@ -330,13 +335,27 @@ def _posicao_swap(b3_id):
         else:
             contrato = _celula(vals, _POS['contrato'])
             ident = _celula(vals, _POS['identificador'])
-        if alvo in (domain.norm(contrato).replace(' ', ''), domain.norm(ident).replace(' ', '')):
-            return (vals if len(vals) >= 120 else None, row), R._b3_dref_to_iso(dref)
+        item = (vals if len(vals) >= 120 else None, row)
+        if alvo == domain.norm(contrato).replace(' ', ''):
+            return item, R._b3_dref_to_iso(dref)
+        if achado_por_ident is None and alvo == domain.norm(ident).replace(' ', ''):
+            achado_por_ident = item
+    if achado_por_ident is not None:
+        return achado_por_ident, R._b3_dref_to_iso(dref)
     return None, None
 
 
 def _fluxos_do_contrato(contrato, ident):
-    """As linhas do DFLUXO daquele contrato, em ordem de evento."""
+    """As linhas do DFLUXO daquele contrato, em ordem de evento.
+
+    A chave é o **Código do contrato**, e o `Código Identificador` só responde
+    quando a posição não traz contrato nenhum. Ele PARECE uma chave e não é: na
+    instância ele guarda a LOB (`CEM`), e aceitá-lo ao lado do contrato trazia
+    para dentro do fluxo de UM swap os eventos de todos os outros da mesma mesa
+    — milhares deles. O efeito não era uma tela vazia: o "último evento até
+    hoje" passava a ser o de outro contrato, e o "evento anterior" quase sempre
+    tinha a MESMA data, o que fazia o Flow start sair igual ao Flow end.
+    """
     R = _R()
     ref = R._prev_anbima_bizday(date.today())
     path, _dref = R._swap_day_path(ref, '73760_{}_DFLUXO.json')
@@ -346,7 +365,9 @@ def _fluxos_do_contrato(contrato, ident):
         src = R._db_day_records(path) or []
     except Exception:                                       # noqa: BLE001
         return []
-    chaves = {domain.norm(contrato).replace(' ', ''), domain.norm(ident).replace(' ', '')} - {''}
+    chave = domain.norm(contrato).replace(' ', '') or domain.norm(ident).replace(' ', '')
+    if not chave:
+        return []
     saida = []
     for row in src:
         vals = list(row.values())
@@ -354,7 +375,7 @@ def _fluxos_do_contrato(contrato, ident):
             continue                                        # mock esparso: sem fluxo
         c = domain.norm(_celula(vals, _FLX['contrato'])).replace(' ', '')
         i = domain.norm(_celula(vals, _FLX['identificador'])).replace(' ', '')
-        if not ({c, i} & chaves):
+        if (c or i) != chave:                           # o contrato manda; o ident supre
             continue
         saida.append({
             'evento': _iso(_celula(vals, _FLX['evento'])),
@@ -634,6 +655,15 @@ def swap_prefill(b3_id):
         campos, faltando = domain.montar_ponta(regra, pct, taxa, sinal, nome_classe, cot,
                                                deslocamento=None if desloc is None else int(desloc))
         campos['fonte'] = {'codigo': codigo, 'curva': nome_curva, 'classe': nome_classe}
+        if not regra:
+            # A tela já sinaliza (a nota vermelha da ponta escreve o mesmo),
+            # mas o log é o que se lê quando a mesa relata "não puxou": ele
+            # separa "a posição veio sem índice" de "falta a linha no
+            # cadastro", e diz o valor exato que não casou. É WARNING de
+            # propósito — na instância o log de módulo só sai a partir dele.
+            R.log.warning('[tools] ponta %s sem regra em tools-swap-index '
+                          '(codigo=%r curva=%r classe=%r, %d linhas no cadastro)',
+                          lado, codigo, nome_curva, nome_classe, len(regras or []))
         # A PTAX do fixing: a data é o FIM DO FLUXO recuado pelo deslocamento
         # que o contrato manda (a `Data de Cotação`), em dias úteis ANBIMA — e
         # o fim do fluxo é hoje quando não há evento, que é o caso "hoje D-2"
