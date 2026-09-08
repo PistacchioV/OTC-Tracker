@@ -54,14 +54,12 @@
 .widget-amend { background:#fde8e8; color:#b71c1c; border:1px solid #ef9a9a !important; }
 
 /* ── Status badges ───────────────────────────────────────────────── */
-.s-badge {
-    display:inline-block; font-size:.68rem; font-weight:700;
-    padding:.22rem .7rem; border-radius:20px; white-space:nowrap; letter-spacing:.03em;
-}
-.s-new   { background:#e9ecef; color:#495057; }
-.s-check { background:#fff3cd; color:#856404; }
-.s-ok    { background:#d1e7dd; color:#0a3622; }
-.s-amend { background:#f8d7da; color:#842029; }
+/* O Status é o badge pill do app (`badge rounded-pill text-bg-* bg-gradient`),
+   como nas outras três recons e em toda tabela — e não uma paleta própria:
+   a `.s-badge` de cores chapadas claras (#e9ecef, #fff3cd…) saía como pílula
+   branca sobre o vidro escuro, e era a única coluna de status do app fora do
+   padrão. Aqui só o tamanho, para o pill não crescer a linha. */
+#recon-table td .badge { font-size:.68rem; font-weight:700; padding:.28em .7em; letter-spacing:.03em; }
 
 /* ── Toolbar buttons ─────────────────────────────────────────────── */
 .btn-toolbar-all {
@@ -411,8 +409,12 @@ function scoreColor(val) {
 
 /* ── Status badge ────────────────────────────────────────────────── */
 function sBadge(s) {
-    const m = { New:'s-new', Check:'s-check', OK:'s-ok', Amend:'s-amend' };
-    return `<span class="s-badge ${m[s]||'s-new'}">${s||'—'}</span>`;
+    // A cor é a da GRAVIDADE, como o card do topo: New sem par ainda (cinza),
+    // Check casou com divergência a olhar (âmbar), OK fechou (verde), Amend
+    // diverge de verdade (vermelho). Status fora do mapa cai no cinza.
+    const m = { New:'text-bg-secondary', Check:'text-bg-warning', OK:'text-bg-success', Amend:'text-bg-danger' };
+    const t = String(s || '—').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    return `<span class="badge rounded-pill bg-gradient ${m[s]||'text-bg-secondary'}">${t}</span>`;
 }
 
 /* ── Score cell helper ───────────────────────────────────────────── */
@@ -443,7 +445,7 @@ const COLS = [
         data: _d('Status'), title:'Status', className:'text-center',
         // Orthogonal: o badge só no display. Devolver HTML em todos os tipos
         // fazia o DataTables ordenar e buscar pela string do markup — ou seja,
-        // pela classe CSS ('s-amend' < 's-check' < …), não pelo status.
+        // pela classe CSS ('text-bg-danger' < 'text-bg-success' < …), não pelo status.
         render: (d, type) => type === 'display' ? sBadge(d) : (d || '')
     },
     {
