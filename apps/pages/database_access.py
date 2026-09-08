@@ -214,6 +214,18 @@ _GATE_WRITE_WAIT_SECONDS = 10.0
 
 _semaphores = _SemaphoreRegistry()
 _unlocked_gates = _UnlockedGateRegistry()
+
+
+def db_gate(database_path: _PathLike) -> _UnlockedReadGate:
+    """O portão intra-processo leitor × escritor de UM banco, pelo caminho.
+
+    Nasceu para o poll sem lock do sino (§323) e passou a servir também os
+    bancos do ESPELHO (§422): o `duck_read` abre `read_only` e a thread do
+    `duck_mirror` abre em escrita, no mesmo processo, e o DuckDB recusa a
+    segunda configuração. O lock de arquivo não separa os dois — a escrita do
+    espelho não passa pela camada —, então o que resta é a coordenação em
+    memória, que é exatamente o que este portão faz."""
+    return _unlocked_gates.get(normalize_database_path(database_path))
 # Os bancos já avisados de que estão sendo lidos sem lock — ver `skip_file_lock`.
 _unlocked_warned: set = set()
 _thread_state = threading.local()
