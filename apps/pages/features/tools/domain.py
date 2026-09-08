@@ -87,8 +87,15 @@ def ponta_do_form(form, prefixo):
     taxa = 0.0
     if indexador != liquidacao.FATOR:
         taxa = taxa_do_form(form, campo('taxa'), '{} leg rate'.format(lado), 0.0)
+    # No CDI a taxa é o SPREAD e o percentual é campo próprio: a posição traz os
+    # dois na mesma perna (100% do CDI + 1,07%), e um campo só não os expressa.
+    # `100` e `1.10` valem a mesma coisa — quem digita escreve dos dois jeitos.
+    percentual = 1.0
+    if indexador == liquidacao.CDI and texto('percentual'):
+        bruto = numero_do_form(form, campo('percentual'), '{} leg % of CDI'.format(lado))
+        percentual = bruto / 100.0 if abs(bruto) > 5 else bruto
     return liquidacao.Ponta(
-        indexador=indexador, taxa=taxa,
+        indexador=indexador, taxa=taxa, percentual=percentual,
         convencao=form.get(campo('convencao')) or contagem.DU_252,
         regime=form.get(campo('regime')) or contagem.COMPOSTO,
         moeda=form.get(campo('moeda')) or liquidacao.SEM_CONVERSAO,
@@ -170,15 +177,57 @@ def sinal_da_posicao(v):
 
 
 def base_da_amortizacao(texto):
-    """O texto do Tipo de amortização → a base do Swap Calculator, ou None."""
+    """O `Tipo Amortização` do fluxo → a base do Swap Calculator, ou `None`.
+
+    A coluna tem quatro respostas no cadastro `swap-amortizacao`, e duas delas
+    NÃO são uma base — são a ausência de amortização neste fluxo:
+
+        Sobre Valor Base Original      → base = original
+        Sobre Valor Base Remanescente  → base = remanescente
+        Na Data de Vencimento          → só amortiza no fim; no fluxo, nada
+        Sem Troca de Amortização       → não amortiza
+
+    Por isso a pergunta "qual base" e a pergunta "amortiza aqui?" são duas
+    funções: colapsá-las faria um swap que amortiza só no vencimento cair na
+    lista do que "não deu para puxar" e aparecer em vermelho na tela, quando o
+    cadastro respondeu com precisão que não há amortização neste fluxo.
+    """
     t = norm(texto)
     if not t:
         return None
     if 'remanesc' in t or 'saldo' in t:
         return liquidacao.SOBRE_REMANESCENTE
-    if 'original' in t or 'valor base' in t or 'percentual' in t:
+    if 'original' in t or 'percentual' in t or 'valor base' in t:
+        return liquidacao.SOBRE_ORIGINAL
+    if 'vencimento' in t or 'sem troca' in t:
+        # A base não muda nada quando o percentual é zero; o original é o
+        # default histórico da tela e mantém o formulário coerente.
         return liquidacao.SOBRE_ORIGINAL
     return None
+
+
+def amortiza_no_fluxo(texto):
+    """O fluxo amortiza? `Na Data de Vencimento` e `Sem Troca de Amortização`
+    dizem que não — e é resposta, não lacuna."""
+    t = norm(texto)
+    if not t:
+        return None
+    return not ('vencimento' in t or 'sem troca' in t)
+
+
+def tipo_de_contrato(valor):
+    """`Tipo de Contrato` da posição → 'Bullet' | 'Cashflow' | ''.
+
+    A B3 escreve `02` para bullet e `01` para cashflow, com zero à esquerda e
+    às vezes com cauda decimal do Excel — a mesma normalização do Live
+    Position, para as duas telas lerem o arquivo do mesmo jeito.
+    """
+    v = str(valor or '').strip()
+    if v.endswith('.0'):
+        v = v[:-2]
+    if v.isdigit():
+        v = str(int(v))
+    return {'2': 'Bullet', '1': 'Cashflow'}.get(v, '')
 
 
 def tenor_do_texto(texto, padrao=None):
@@ -193,15 +242,17 @@ def tenor_do_texto(texto, padrao=None):
     return padrao
 
 
-def montar_ponta(regra, pct, taxa, sinal, nome_classe, cotacao_inicial):
+def montar_ponta(regra, pct, taxa, sinal, nome_classe, cotacao_inicial,
+                 deslocamento=None):
     """Os campos de UMA ponta do formulário a partir das células da posição.
 
     Devolve ``(campos, faltando)``: os campos prontos para o formulário e a
     lista do que não deu para puxar — a tela deixa esses em branco e os
     sinaliza. Nunca inventa: índice sem regra fica vazio, moeda sem coluna fica
     vazia, cotação inicial sem célula fica vazia."""
-    campos = {'indexador': '', 'taxa': '', 'convencao': '', 'regime': '', 'moeda': '',
-              'tenor': '', 'ptax_inicial': '', 'ni_inicial': '', 'preco_inicial': '',
+    campos = {'indexador': '', 'taxa': '', 'percentual': '', 'convencao': '', 'regime': '',
+              'moeda': '', 'tenor': '', 'taxa_indice': '', 'ptax_inicial': '',
+              'ptax_final': '', 'ptax_offset': '', 'ni_inicial': '', 'preco_inicial': '',
               'ativo': ''}
     faltando = []
     if not regra:
@@ -211,17 +262,23 @@ def montar_ponta(regra, pct, taxa, sinal, nome_classe, cotacao_inicial):
     conv, reg = liquidacao.convencao_padrao(idx)
     campos['convencao'] = str(regra.get('DAY COUNT', '') or '').strip() or conv
     campos['regime'] = str(regra.get('REGIME', '') or '').strip() or reg
-    # a taxa: o % do índice para o "% do CDI", a taxa/spread para o resto
-    if idx == liquidacao.CDI_PERCENTUAL:
-        valor = pct
-    elif idx in (liquidacao.MOEDA, liquidacao.FATOR):
-        valor = 0.0
+    # No CDI as duas colunas da posição entram em campos DIFERENTES: o
+    # `Percentual` no percentual e a `Taxa` (com o `Sinal Taxa`) no spread. A
+    # perna sem spread deixa o campo vazio — zero afirmaria um spread de zero,
+    # e vazio é o que a posição de fato traz.
+    if idx == liquidacao.CDI:
+        if pct is None:
+            faltando.append('percentual')
+        else:
+            campos['percentual'] = '{:.4f}'.format(pct)
+        campos['taxa'] = '' if taxa is None else '{:.4f}'.format(taxa * sinal)
     else:
-        valor = (taxa * sinal) if taxa is not None else None
-    if valor is None:
-        faltando.append('taxa')
-    else:
-        campos['taxa'] = '{:.4f}'.format(valor)
+        valor = 0.0 if idx in (liquidacao.MOEDA, liquidacao.FATOR) else (
+            (taxa * sinal) if taxa is not None else None)
+        if valor is None:
+            faltando.append('taxa')
+        else:
+            campos['taxa'] = '{:.4f}'.format(valor)
     # a moeda, onde o índice declara uma
     if idx in liquidacao.DECLARAM_MOEDA:
         moeda = str(regra.get('CURRENCY', '') or '').strip().upper() \
@@ -243,6 +300,13 @@ def montar_ponta(regra, pct, taxa, sinal, nome_classe, cotacao_inicial):
             campos['ptax_inicial'] = '{:.6f}'.format(cotacao_inicial)
         else:
             faltando.append('ptax_inicial')
+        # A `Data de Cotação` ao lado NÃO é uma data: é o DESLOCAMENTO em dias
+        # úteis (02 = D-2) da PTAX que o contrato manda usar. Guardá-la como
+        # data faria o campo mostrar 02/01/1900 sem erro nenhum.
+        if deslocamento is None:
+            faltando.append('ptax_offset')
+        else:
+            campos['ptax_offset'] = str(int(deslocamento))
     elif idx == liquidacao.IPCA:
         if cotacao_inicial is not None:
             campos['ni_inicial'] = '{:.6f}'.format(cotacao_inicial)

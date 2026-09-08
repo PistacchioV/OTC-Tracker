@@ -27,18 +27,35 @@
                 {% endfor %}
             </select>
         </div>
-        <div class="col-12 tl-field" data-leg="{{ lado }}" data-show-for="pre,cdi_percentual,cdi_spread,cambio,sofr,term_sofr,euribor,ipca,equity">
+        <div class="col-12 tl-field" data-leg="{{ lado }}" data-show-for="pre,cambio,sofr,term_sofr,euribor,ipca,equity">
             <label for="{{ lado }}_taxa" data-lang="tl-rate-or-spread">Contracted rate or spread</label>
             <input class="form-control form-control-sm" id="{{ lado }}_taxa" name="{{ lado }}_taxa" value="{{ f[lado ~ '_taxa'] }}" inputmode="decimal" data-format="pct">
-            <p class="tl-help" data-lang="tl-rate-help">14 for 14% p.a. · 100 for 100% of CDI · 2 for CDI+2% · 3.25 for a 3.25% coupon</p>
+            <p class="tl-help" data-lang="tl-rate-help">14 for 14% p.a. · 3.25 for a 3.25% coupon · 2 for a 2% spread</p>
         </div>
-        <div class="col-6 tl-field" data-leg="{{ lado }}" data-show-for="pre,cdi_spread,cambio,sofr,term_sofr,euribor,ipca,equity">
+
+        {# O CDI tem os DOIS campos, porque a posição traz os dois na mesma
+           perna: `Percentual` e `Taxa` (com o `Sinal Taxa`). 100% do CDI + 1,07%
+           é um contrato comum, e com um campo só ele entrava pela metade. #}
+        <div class="col-12" data-leg="{{ lado }}" data-show-for="cdi">
+            <div class="row g-2">
+                <div class="col-6 tl-field">
+                    <label for="{{ lado }}_percentual" data-lang="tl-cdi-pct">% of CDI</label>
+                    <input class="form-control form-control-sm" id="{{ lado }}_percentual" name="{{ lado }}_percentual" value="{{ f[lado ~ '_percentual'] }}" inputmode="decimal" data-format="pct" placeholder="100">
+                </div>
+                <div class="col-6 tl-field">
+                    <label for="{{ lado }}_taxa_cdi" data-lang="tl-cdi-spread">Spread (blank = none)</label>
+                    <input class="form-control form-control-sm" id="{{ lado }}_taxa_cdi" name="{{ lado }}_taxa" value="{{ f[lado ~ '_taxa'] }}" inputmode="decimal" data-format="pct">
+                </div>
+                <div class="col-12"><p class="tl-help" data-lang="tl-cdi-help">The percentage applies to the DAILY rate — 110% of CDI at 14% is 15.5031%, not 15.40%. The spread is multiplicative and compounds over the period: (1+CDI)·(1+spread).</p></div>
+            </div>
+        </div>
+        <div class="col-6 tl-field" data-leg="{{ lado }}" data-show-for="pre,cdi,cambio,sofr,term_sofr,euribor,ipca,equity">
             <label for="{{ lado }}_convencao" data-lang="tl-day-count">Day count</label>
             <select class="form-select form-select-sm" id="{{ lado }}_convencao" name="{{ lado }}_convencao">
                 {% for valor, nome, _t in convencoes %}<option value="{{ valor }}" {{ 'selected' if f[lado ~ '_convencao'] == valor }} data-lang="tl-dc-{{ valor }}">{{ nome }}</option>{% endfor %}
             </select>
         </div>
-        <div class="col-6 tl-field" data-leg="{{ lado }}" data-show-for="pre,cdi_spread,cambio,sofr,term_sofr,euribor,ipca,equity">
+        <div class="col-6 tl-field" data-leg="{{ lado }}" data-show-for="pre,cdi,cambio,sofr,term_sofr,euribor,ipca,equity">
             <label for="{{ lado }}_regime" data-lang="tl-compounding">Compounding</label>
             <select class="form-select form-select-sm" id="{{ lado }}_regime" name="{{ lado }}_regime">
                 {% for valor, nome in regimes %}<option value="{{ valor }}" {{ 'selected' if f[lado ~ '_regime'] == valor }} data-lang="tl-reg-{{ valor }}">{{ nome }}</option>{% endfor %}
@@ -60,7 +77,16 @@
                     <label for="{{ lado }}_ptax_final" data-lang="tl-fixing-final">Final currency fixing</label>
                     <input class="form-control form-control-sm" id="{{ lado }}_ptax_final" name="{{ lado }}_ptax_final" value="{{ f[lado ~ '_ptax_final'] }}" inputmode="decimal" data-format="price" placeholder="PTAX">
                 </div>
-                <div class="col-12"><p class="tl-help" data-lang="tl-fixing-help">Blank, both come from the BCB closing fixing of the business day before each date. In BRL there is no conversion. The BCB publishes ten currencies; outside them (the yuan, for instance) both fixings are typed in.</p></div>
+                {# O `Data de Cotação` da posição não é uma data: é o
+                   DESLOCAMENTO em dias úteis (02 = D-2) da PTAX que o contrato
+                   manda usar. Com ele o fixing final é buscado no BCB na data
+                   certa, em vez do D-1 que o motor assume no campo vazio. #}
+                <div class="col-4 tl-field">
+                    <label for="{{ lado }}_ptax_offset" data-lang="tl-fixing-offset">Fixing offset (business days)</label>
+                    <input class="form-control form-control-sm" id="{{ lado }}_ptax_offset" name="{{ lado }}_ptax_offset" value="{{ f[lado ~ '_ptax_offset'] }}" inputmode="numeric" data-format="int" placeholder="2">
+                    <p class="tl-help" id="{{ lado }}_ptax_nota"></p>
+                </div>
+                <div class="col-12"><p class="tl-help" data-lang="tl-fixing-help2">The offset comes from the contract's quotation column: D-2 means the PTAX two business days (ANBIMA) before the flow end. Blank, both fixings come from the BCB closing of the business day before each date. In BRL there is no conversion; outside the ten currencies the BCB publishes, both are typed in.</p></div>
             </div>
         </div>
         <div class="col-12" data-leg="{{ lado }}" data-show-for="moeda">
@@ -78,15 +104,16 @@
                     <label for="{{ lado }}_data_fixing" data-lang="tl-fixing-date">Fixing date</label>
                     <input class="form-control form-control-sm tl-date" id="{{ lado }}_data_fixing" name="{{ lado }}_data_fixing" value="{{ f[lado ~ '_data_fixing'] }}" autocomplete="off" placeholder="dd/mm/yyyy">
                 </div>
-                <div class="col-4 tl-field" data-leg="{{ lado }}" data-show-for="term_sofr">
+                <div class="col-4 tl-field" data-leg="{{ lado }}" data-show-for="term_sofr,euribor">
                     <label for="{{ lado }}_taxa_indice" data-lang="tl-fixing-rate">Fixing rate (% p.a.)</label>
                     <input class="form-control form-control-sm" id="{{ lado }}_taxa_indice" name="{{ lado }}_taxa_indice" value="{{ f[lado ~ '_taxa_indice'] }}" inputmode="decimal" data-format="rate">
+                    <p class="tl-help" id="{{ lado }}_fixing_nota"></p>
                 </div>
                 <div class="col-12"><p class="tl-help" data-lang="tl-forward-help">Forward-looking rate: fixed before the flow starts. Blank, the fixing date is 2 business days before the start.</p></div>
             </div>
         </div>
         <div class="col-12" data-leg="{{ lado }}" data-show-for="term_sofr">
-            <div class="tl-note tl-note--warn" data-lang="tl-term-note">Term SOFR is administered by CME and licensed — there is no public source. Blank, the rate comes from the report imported on the Term SOFR page; otherwise type it in.</div>
+            <div class="tl-note tl-note--warn" data-lang="tl-term-note">Term SOFR is administered by CME and licensed — there is no public source. The rate above is read from the base the Term SOFR page imports, at the tenor and fixing date chosen; type over it to use another.</div>
         </div>
         <div class="col-12" data-leg="{{ lado }}" data-show-for="sofr">
             <div class="row g-2">

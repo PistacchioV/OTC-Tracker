@@ -13,6 +13,9 @@
 {% endblock extra_css %}
 
 {% block page_content %}
+{# Esta tela é a curva a termo da CME — 1, 3, 6 e 12 meses —, no mesmo desenho
+   da EURIBOR. A fonte é a base que o dropzone alimenta; o overnight e as médias
+   compostas do NY Fed são a taxa REALIZADA e vivem na tela de SOFR Index. #}
 <div id="tl-term-sofr" class="container-fluid tl-page">
     {% set title='Term SOFR' %}
     {% set crumbs=['OTC Tracker', 'Tools', 'Term SOFR'] %}
@@ -33,15 +36,16 @@
                 </select>
             </div>
             <button type="submit" class="btn btn-sm btn-primary bg-gradient btn-toolbar-all"><i class="ti ti-calendar-search me-1"></i><span data-lang="tl-view">View</span></button>
+            {% if not vazio %}
             <a class="btn btn-sm btn-info bg-gradient btn-toolbar-all" href="/tools/term-sofr/csv"><i class="ti ti-download me-1"></i><span data-lang="tl-download-csv">Download CSV</span></a>
-            <button type="button" class="btn btn-sm btn-outline-secondary btn-toolbar-all" data-sync="/api/tools/term-sofr/sync"><i class="ti ti-refresh me-1"></i><span data-lang="tl-rebuild">Rebuild history</span></button>
+            {% endif %}
             {% if base %}
             <span class="text-muted fs-xs ms-auto"><span data-lang="tl-local-base">Local base</span>: {{ base.inicio | tl_date }} – {{ base.fim | tl_date }} · {{ base.dias | tl_num }} <span data-lang="tl-days-stored">days stored</span></span>
             {% endif %}
         </form>
     </div>
 
-    {# ── a curva a termo da CME, importada ─────────────────────────────────── #}
+    {# ── a importação: é por aqui que a curva entra ────────────────────────── #}
     <div class="tl-card">
         <div class="d-flex flex-wrap justify-content-between align-items-start gap-2">
             <div>
@@ -49,7 +53,6 @@
                 <p class="tl-title" data-lang="tl-term-title">Term SOFR 1, 3, 6 and 12 months</p>
                 <p class="tl-sub" data-lang="tl-term-licensed">Administered by CME and licensed: no public source may redistribute it. Whoever holds the licence holds the file — drop the B3 report here and the quotes stay on this instance.</p>
             </div>
-            {% if termo.base %}<span class="tl-pill">{{ termo.base.dias | tl_num }} <span data-lang="tl-days-in-base">days in the base</span> · {{ termo.base.inicio | tl_date }} – {{ termo.base.fim | tl_date }}</span>{% endif %}
         </div>
         <div class="mt-3" id="tl-drop" data-url="/api/tools/term-sofr/import">
             <label for="tl-file" class="tl-drop d-block mb-0">
@@ -60,50 +63,36 @@
             </label>
             <div class="tl-note mt-2" id="tl-drop-msg" hidden></div>
         </div>
-
-        {% if not termo.vazio %}
-        <div class="tl-stats mt-3">
-            {% for campo, rotulo, _m in campos_termo %}{% if campo in termo.taxas %}
-            <div class="tl-stat{{ ' tl-stat--hi' if loop.first }}"><div class="tl-stat__label">{{ rotulo }}</div><div class="tl-stat__value">{{ termo.taxas[campo] | tl_pct(5) }}</div><div class="tl-stat__note">{{ termo.vigente | tl_date }}</div></div>
-            {% endif %}{% endfor %}
-        </div>
-        <div class="table-responsive mt-3">
-            <table class="table table-sm table-hover table-striped mb-0 tl-dt" id="tl-term-table">
-                <thead><tr><th data-lang="tl-date">Date</th>{% for campo, rotulo, _m in campos_termo %}{% if campo in termo.campos %}<th>{{ rotulo }}</th>{% endif %}{% endfor %}</tr></thead>
-                <tbody>
-                {% for d in termo.datas | reverse %}
-                <tr><td>{{ d | tl_date }}</td>{% for campo, _r, _m in campos_termo %}{% if campo in termo.campos %}<td>{{ (termo.tabela[d][campo] | tl_pct(5)) if campo in termo.tabela[d] else '—' }}</td>{% endif %}{% endfor %}</tr>
-                {% endfor %}
-                </tbody>
-            </table>
-        </div>
-        {% endif %}
     </div>
 
     {% if erro %}<div class="alert alert-danger py-2 fs-xs"><i class="ti ti-alert-triangle me-1"></i>{{ erro }}</div>{% endif %}
 
-    {% if historico %}
+    {% if vazio %}
+    {# Base vazia não é erro: é quem ainda não importou. A tela diz isso e
+       aponta para a área de arrastar, em vez de mostrar um quadro vazio. #}
+    <div class="tl-card tl-card--dashed">
+        <i class="ti ti-file-upload"></i>
+        <span data-lang="tl-term-empty">No Term SOFR quotes imported yet. Drop the B3 report above and the curve appears here.</span>
+    </div>
+    {% elif curva %}
     <div class="tl-card">
         <div class="d-flex flex-wrap justify-content-between align-items-baseline gap-2 mb-2">
             <p class="tl-title"><span data-lang="tl-rates-on">Rates in force on</span> {{ vigente | tl_date }}</p>
             {% if vigente != referencia %}<span class="text-warning fs-xs"><span data-lang="tl-no-publication">no publication on</span> {{ referencia | tl_date }} — <span data-lang="tl-last-prior">the last prior one applies</span></span>{% endif %}
         </div>
         <div class="tl-stats">
-            {% for campo, rotulo in campos %}{% if campo in taxas_vigentes %}
+            {% for campo, rotulo, _m in campos %}{% if campo in taxas_vigentes %}
             <div class="tl-stat{{ ' tl-stat--hi' if loop.first }}"><div class="tl-stat__label">{{ rotulo }}</div><div class="tl-stat__value">{{ taxas_vigentes[campo] | tl_pct(5) }}</div><div class="tl-stat__note">{{ vigente | tl_date }}</div></div>
             {% endif %}{% endfor %}
-            {% if 'indice' in taxas_vigentes %}
-            <div class="tl-stat"><div class="tl-stat__label">SOFR Index</div><div class="tl-stat__value">{{ taxas_vigentes['indice'] | tl_money(8) }}</div><div class="tl-stat__note" data-lang="tl-accumulated-index">accumulated index</div></div>
-            {% endif %}
         </div>
     </div>
 
     <div class="tl-card">
         <div class="mb-2">
-            <p class="tl-title" data-lang="tl-sofr-daily-values">SOFR — daily values</p>
-            <p class="tl-sub">{{ historico.inicio | tl_date }} – {{ historico.fim | tl_date }} · {{ historico.datas | length }} <span data-lang="tl-days-published">days published</span></p>
+            <p class="tl-title" data-lang="tl-term-daily">Term SOFR — daily values</p>
+            <p class="tl-sub">{{ curva.inicio | tl_date }} – {{ curva.fim | tl_date }} · {{ curva.datas | length }} <span data-lang="tl-days-published">days published</span></p>
         </div>
-        <svg class="tl-svg" viewBox="0 0 900 320" preserveAspectRatio="xMidYMid meet" role="img" aria-label="SOFR daily values">
+        <svg class="tl-svg" viewBox="0 0 900 320" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Term SOFR daily values">
             {% for r in escala_y %}
             <line class="tl-grid" x1="52" x2="852" y1="{{ r.y }}" y2="{{ r.y }}" stroke-width="1"/>
             <text x="8" y="{{ r.y + 4 }}">{{ r.rotulo }}</text>
@@ -117,14 +106,14 @@
     <div class="tl-card">
         <div class="d-flex justify-content-between align-items-center mb-2">
             <p class="tl-title" data-lang="tl-published-values">Published values</p>
-            <span class="tl-pill">{{ historico.datas | length }} <span data-lang="tl-days">days</span></span>
+            <span class="tl-pill">{{ curva.datas | length }} <span data-lang="tl-days">days</span></span>
         </div>
         <div class="table-responsive">
-            <table class="table table-sm table-hover table-striped mb-0 tl-dt" id="tl-sofr-hist-table">
-                <thead><tr><th data-lang="tl-date">Date</th>{% for campo, rotulo in campos %}{% if campo in historico.campos %}<th>{{ rotulo }}</th>{% endif %}{% endfor %}<th>SOFR Index</th></tr></thead>
+            <table class="table table-sm table-hover table-striped mb-0 tl-dt" id="tl-term-table">
+                <thead><tr><th data-lang="tl-date">Date</th>{% for campo, rotulo, _m in campos %}{% if campo in curva.campos %}<th>{{ rotulo }}</th>{% endif %}{% endfor %}</tr></thead>
                 <tbody>
-                {% for d in historico.datas | reverse %}
-                <tr><td>{{ d | tl_date }}</td>{% for campo, _r in campos %}{% if campo in historico.campos %}<td>{{ (tabela[d][campo] | tl_pct(5)) if campo in tabela[d] else '—' }}</td>{% endif %}{% endfor %}<td>{{ (tabela[d]['indice'] | tl_money(8)) if 'indice' in tabela[d] else '—' }}</td></tr>
+                {% for d in curva.datas | reverse %}
+                <tr><td>{{ d | tl_date }}</td>{% for campo, _r, _m in campos %}{% if campo in curva.campos %}<td>{{ (tabela[d][campo] | tl_pct(5)) if campo in tabela[d] else '—' }}</td>{% endif %}{% endfor %}</tr>
                 {% endfor %}
                 </tbody>
             </table>
@@ -132,8 +121,7 @@
     </div>
 
     <div class="tl-note tl-note--warn">
-        <strong data-lang="tl-about-cme">About CME Term SOFR.</strong> <span data-lang="tl-about-cme-note">This section is the realised term structure the NY Fed publishes openly: the overnight and the compounded averages. CME's forward-looking curve is licensed and comes from the file you import above — the two live on the same page because they answer different questions.</span>
-        <a class="d-block mt-1" href="https://markets.newyorkfed.org/api/rates/secured/sofr/search.json" target="_blank" rel="noopener">markets.newyorkfed.org — SOFR</a>
+        <strong data-lang="tl-about-cme">About CME Term SOFR.</strong> <span data-lang="tl-about-cme-note">The forward-looking curve is licensed and comes from the file imported above — it does not download from anywhere. The realised term structure the NY Fed publishes openly (the overnight and the compounded averages) is on the SOFR Index page, next to the composition that uses it.</span>
     </div>
     {% endif %}
 </div>

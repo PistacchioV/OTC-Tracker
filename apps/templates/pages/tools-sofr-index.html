@@ -99,6 +99,56 @@
             {% endif %}
         </div>
     </form>
+
+    {# ── o que o NY Fed publica ABERTO ──────────────────────────────────────
+       Overnight, médias compostas de 30/90/180 dias e o SOFR Index. Vive nesta
+       tela porque é a taxa REALIZADA — a mesma que a composição acima acumula.
+       A curva a termo da CME, cotada de antemão, é a tela de Term SOFR. #}
+    {% set pb = publicados %}
+    {% if pb and pb.historico %}
+    <div class="tl-card mt-3">
+        <div class="d-flex flex-wrap justify-content-between align-items-baseline gap-2 mb-2">
+            <div>
+                <p class="tl-title" data-lang="tl-sofr-daily-values">SOFR — daily values</p>
+                <p class="tl-sub"><span data-lang="tl-rates-on">Rates in force on</span> {{ pb.vigente | tl_date }} · {{ pb.historico.datas | length }} <span data-lang="tl-days-published">days published</span></p>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                {% if pb.base %}<span class="text-muted fs-xs"><span data-lang="tl-local-base">Local base</span>: {{ pb.base.inicio | tl_date }} – {{ pb.base.fim | tl_date }} · {{ pb.base.dias | tl_num }} <span data-lang="tl-days-stored">days stored</span></span>{% endif %}
+                <a class="btn btn-sm btn-info bg-gradient btn-toolbar-all" href="/tools/sofr-index/csv"><i class="ti ti-download me-1"></i><span data-lang="tl-download-csv">Download CSV</span></a>
+                <button type="button" class="btn btn-sm btn-outline-secondary btn-toolbar-all" data-sync="/api/tools/term-sofr/sync"><i class="ti ti-refresh me-1"></i><span data-lang="tl-rebuild">Rebuild history</span></button>
+            </div>
+        </div>
+        <div class="tl-stats mb-3">
+            {% for campo, rotulo in pb.campos %}{% if campo in pb.taxas_vigentes %}
+            <div class="tl-stat{{ ' tl-stat--hi' if loop.first }}"><div class="tl-stat__label">{{ rotulo }}</div><div class="tl-stat__value">{{ pb.taxas_vigentes[campo] | tl_pct(5) }}</div><div class="tl-stat__note">{{ pb.vigente | tl_date }}</div></div>
+            {% endif %}{% endfor %}
+            {% if 'indice' in pb.taxas_vigentes %}
+            <div class="tl-stat"><div class="tl-stat__label">SOFR Index</div><div class="tl-stat__value">{{ pb.taxas_vigentes['indice'] | tl_money(8) }}</div><div class="tl-stat__note" data-lang="tl-accumulated-index">accumulated index</div></div>
+            {% endif %}
+        </div>
+        <svg class="tl-svg" viewBox="0 0 900 320" preserveAspectRatio="xMidYMid meet" role="img" aria-label="SOFR daily values">
+            {% for r in pb.escala_y %}
+            <line class="tl-grid" x1="52" x2="852" y1="{{ r.y }}" y2="{{ r.y }}" stroke-width="1"/>
+            <text x="8" y="{{ r.y + 4 }}">{{ r.rotulo }}</text>
+            {% endfor %}
+            {% for r in pb.escala_x %}<text x="{{ r.x }}" y="308" text-anchor="middle">{{ r.rotulo }}</text>{% endfor %}
+            {% for s in pb.series %}<path d="{{ s.caminho }}" fill="none" stroke="{{ s.cor }}" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>{% endfor %}
+        </svg>
+        <div class="tl-legend">{% for s in pb.series %}<span><i style="background:{{ s.cor }}"></i>{{ s.tenor }}</span>{% endfor %}</div>
+        <div class="table-responsive mt-3">
+            <table class="table table-sm table-hover table-striped mb-0 tl-dt" id="tl-sofr-hist-table">
+                <thead><tr><th data-lang="tl-date">Date</th>{% for campo, rotulo in pb.campos %}{% if campo in pb.historico.campos %}<th>{{ rotulo }}</th>{% endif %}{% endfor %}<th>SOFR Index</th></tr></thead>
+                <tbody>
+                {% for d in pb.historico.datas | reverse %}
+                <tr><td>{{ d | tl_date }}</td>{% for campo, _r in pb.campos %}{% if campo in pb.historico.campos %}<td>{{ (pb.tabela[d][campo] | tl_pct(5)) if campo in pb.tabela[d] else '—' }}</td>{% endif %}{% endfor %}<td>{{ (pb.tabela[d]['indice'] | tl_money(8)) if 'indice' in pb.tabela[d] else '—' }}</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% elif pb and pb.erro %}
+    <div class="tl-note tl-note--warn mt-3"><i class="ti ti-alert-triangle me-1"></i>{{ pb.erro }}</div>
+    {% endif %}
 </div>
 {% endblock page_content %}
 

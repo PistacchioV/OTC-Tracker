@@ -16,8 +16,7 @@ As três datas são separadas de propósito: data da operação (prazo do IR),
 início do fluxo (onde os índices começam), fim do fluxo (a data do ajuste).
 
     Pré              F = cap(i, τ)
-    % do CDI         F = Π [ 1 + ((1 + DI_k)^(1/252) − 1) · p ]
-    CDI + spread     F = Π (1 + DI_k)^(1/252) · cap(s, τ)
+    CDI              F = Π [ 1 + ((1 + DI_k)^(1/252) − 1) · p ] · cap(s, τ)
     Cambial          F = cap(c, τ)
     SOFR composto    F = Π (1 + SOFR_k · n/360) · cap(s, τ)
     Term SOFR        F = cap(fixing + s, τ)
@@ -40,8 +39,12 @@ from apps.pages.precificador.erros import ErroFerramenta
 from apps.pages.precificador.renda_fixa import aliquota_ir
 
 PRE = 'pre'
-CDI_PERCENTUAL = 'cdi_percentual'
-CDI_SPREAD = 'cdi_spread'
+# UM indexador de CDI, com percentual E spread — não dois mutuamente
+# exclusivos. A posição de swap traz as duas colunas na MESMA perna
+# (`Percentual` e `Taxa`, com o `Sinal Taxa` ao lado), e `100% do CDI + 1,07%`
+# é um contrato comum: com dois índices excludentes ele não tinha como ser
+# representado, e a perna entrava pela metade sem nada dizer isso.
+CDI = 'cdi'
 MOEDA = 'moeda'
 CAMBIO = 'cambio'
 SOFR = 'sofr'
@@ -53,8 +56,7 @@ FATOR = 'fator'
 
 INDEXADORES = [
     (PRE, 'Fixed — annual rate'),
-    (CDI_PERCENTUAL, 'CDI — % of realised CDI'),
-    (CDI_SPREAD, 'CDI + spread, realised'),
+    (CDI, 'CDI — % of CDI ± spread, realised'),
     (MOEDA, 'Currency — FX variation only'),
     (CAMBIO, 'FX variation + coupon'),
     (SOFR, 'Compounded SOFR + spread'),
@@ -66,7 +68,7 @@ INDEXADORES = [
 ]
 INDEXADOR_POR_CODIGO = dict(INDEXADORES)
 
-REALIZADOS = {CDI_PERCENTUAL, CDI_SPREAD, MOEDA, CAMBIO, SOFR, EURIBOR}
+REALIZADOS = {CDI, MOEDA, CAMBIO, SOFR, EURIBOR}
 COM_MOEDA = {MOEDA, CAMBIO, SOFR, TERM_SOFR, EURIBOR}
 QUANTO = {EQUITY}
 DECLARAM_MOEDA = COM_MOEDA | QUANTO
@@ -75,8 +77,7 @@ LIMITE_DEFASAGEM = 15
 
 CONVENCAO_PADRAO = {
     PRE: (contagem.DU_252, contagem.COMPOSTO),
-    CDI_PERCENTUAL: (contagem.DU_252, contagem.COMPOSTO),
-    CDI_SPREAD: (contagem.DU_252, contagem.COMPOSTO),
+    CDI: (contagem.DU_252, contagem.COMPOSTO),
     IPCA: (contagem.DU_252, contagem.COMPOSTO),
     EQUITY: (contagem.DU_252, contagem.COMPOSTO),
     FATOR: (contagem.DU_252, contagem.COMPOSTO),
@@ -167,7 +168,8 @@ def amortizar(nocional_original, saldo, percentual, base=SOBRE_ORIGINAL):
 class Ponta:
     """``taxa`` sempre decimal: 0,14 para 14% a.a., 1,10 para 110% do CDI."""
     indexador: str
-    taxa: float = 0.0
+    taxa: float = 0.0            # a taxa contratada — no CDI, o SPREAD
+    percentual: float = 1.0      # só no CDI: 1.10 = 110% do CDI
     convencao: str = contagem.DU_252
     regime: str = contagem.COMPOSTO
     moeda: str = 'USD'
@@ -345,19 +347,25 @@ def liquidar_ponta(ponta, nocional, inicio, fim, calendario=None, arredondar_di=
                       ('{taxa}% p.a. over τ = {tau}',
                        {'taxa': _numero(ponta.taxa * 100), 'tau': _numero(tau, 6)}))
 
-    if ponta.indexador in (CDI_PERCENTUAL, CDI_SPREAD):
-        com_spread = ponta.indexador == CDI_SPREAD
+    if ponta.indexador == CDI:
+        # O PERCENTUAL incide na taxa DIÁRIA — é a definição do índice, e é por
+        # isso que 110% do CDI a 14% dá 15,5031% e não os 15,40% de multiplicar
+        # a taxa anual. O SPREAD é multiplicativo e capitaliza sobre τ, na
+        # contagem escolhida: (1+CDI)·(1+spread).
+        pct = 1.0 if ponta.percentual is None else float(ponta.percentual)
         acumulado = cdi.acumular(cdi.serie(d0, d1), d0, d1, valor=1.0,
-                                 percentual=1.0 if com_spread else ponta.taxa,
-                                 arredondar=arredondar_di)
+                                 percentual=pct, arredondar=arredondar_di)
         indice = acumulado.fator
+        com_spread = bool(ponta.taxa)
         if com_spread:
             indice *= capitalizar(ponta.taxa)
-            molde = 'CDI + {taxa}% over {du} published business days'
-            valores = {'taxa': _numero(ponta.taxa * 100), 'du': acumulado.dias_uteis}
+            molde = '{pct}% of CDI {sinal} {taxa}% over {du} published business days'
+            valores = {'pct': _numero(pct * 100, 2), 'du': acumulado.dias_uteis,
+                       'sinal': '+' if ponta.taxa >= 0 else '−',
+                       'taxa': _numero(abs(ponta.taxa) * 100)}
         else:
-            molde = '{taxa}% of CDI over {du} published business days'
-            valores = {'taxa': _numero(ponta.taxa * 100, 2), 'du': acumulado.dias_uteis}
+            molde = '{pct}% of CDI over {du} published business days'
+            valores = {'pct': _numero(pct * 100, 2), 'du': acumulado.dias_uteis}
         return montar(indice, (molde, valores), fixings=_dias_do_cdi(acumulado),
                       contagem_vale_para_spread=com_spread)
 

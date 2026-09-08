@@ -27,12 +27,13 @@
           notFound: 'Not found', prefilled: 'Filled from the swap position of',
           missing: 'Could not pull from the position (left blank):',
           assumed: 'Assumed: the trade date is the swap start date.',
-          flow: 'flow', pickId: 'Type a B3 ID first.',
+          flow: 'flow', pickId: 'Type a B3 ID first.', fromBase: 'from the imported base of',
           fields: { counterparty: 'Counterparty', data_operacao: 'Trade date', inicio: 'Flow start',
                     fim: 'Flow end', vencimento: 'Swap maturity', nocional: 'Remaining notional',
                     nocional_original: 'Original notional', amortizacao: 'Amortisation',
                     base_amortizacao: 'Amortisation base', indexador: 'index', taxa: 'rate',
-                    moeda: 'currency', tenor: 'tenor', ptax_inicial: 'initial fixing',
+                    moeda: 'currency', tenor: 'tenor', percentual: '% of CDI',
+                    base_ajuste: 'What settles', ptax_inicial: 'initial fixing',
                     ni_inicial: 'initial index number', preco_inicial: 'initial price',
                     ativa: 'Receiving leg', passiva: 'Paying leg' } },
     br: { show: 'Mostrar', entries: 'linhas', all: 'Todas', columns: 'Colunas', export: 'Exportar',
@@ -45,12 +46,13 @@
           notFound: 'Não encontrado', prefilled: 'Preenchido pela posição de swap de',
           missing: 'Não foi possível puxar da posição (ficou em branco):',
           assumed: 'Assumido: a data da operação é a data de início do swap.',
-          flow: 'fluxo', pickId: 'Digite um B3 ID primeiro.',
+          flow: 'fluxo', pickId: 'Digite um B3 ID primeiro.', fromBase: 'da base importada de',
           fields: { counterparty: 'Contraparte', data_operacao: 'Data da operação', inicio: 'Início do fluxo',
                     fim: 'Fim do fluxo', vencimento: 'Vencimento do swap', nocional: 'Notional remanescente',
                     nocional_original: 'Notional original', amortizacao: 'Amortização',
                     base_amortizacao: 'Base da amortização', indexador: 'índice', taxa: 'taxa',
-                    moeda: 'moeda', tenor: 'prazo', ptax_inicial: 'fixing inicial',
+                    moeda: 'moeda', tenor: 'prazo', percentual: '% do CDI',
+                    base_ajuste: 'O que liquida', ptax_inicial: 'fixing inicial',
                     ni_inicial: 'número-índice inicial', preco_inicial: 'preço inicial',
                     ativa: 'Ponta ativa', passiva: 'Ponta passiva' } },
     es: { show: 'Mostrar', entries: 'filas', all: 'Todas', columns: 'Columnas', export: 'Exportar',
@@ -63,12 +65,13 @@
           notFound: 'No encontrado', prefilled: 'Completado desde la posición de swap de',
           missing: 'No se pudo traer de la posición (quedó en blanco):',
           assumed: 'Asumido: la fecha de la operación es la fecha de inicio del swap.',
-          flow: 'flujo', pickId: 'Escriba un B3 ID primero.',
+          flow: 'flujo', pickId: 'Escriba un B3 ID primero.', fromBase: 'de la base importada de',
           fields: { counterparty: 'Contraparte', data_operacao: 'Fecha de la operación', inicio: 'Inicio del flujo',
                     fim: 'Fin del flujo', vencimento: 'Vencimiento del swap', nocional: 'Nocional remanente',
                     nocional_original: 'Nocional original', amortizacao: 'Amortización',
                     base_amortizacao: 'Base de la amortización', indexador: 'índice', taxa: 'tasa',
-                    moeda: 'moneda', tenor: 'plazo', ptax_inicial: 'fixing inicial',
+                    moeda: 'moneda', tenor: 'plazo', percentual: '% del CDI',
+                    base_ajuste: 'Qué liquida', ptax_inicial: 'fixing inicial',
                     ni_inicial: 'número índice inicial', preco_inicial: 'precio inicial',
                     ativa: 'Pata activa', passiva: 'Pata pasiva' } }
   };
@@ -303,6 +306,48 @@
   var iniEl = document.getElementById('inicio');
   if (iniEl) iniEl.addEventListener('change', function () { fixingPadrao('ativa', true); fixingPadrao('passiva', true); });
 
+  // ── a taxa do Term SOFR vem da BASE que o dropzone alimenta ──────────────
+  // O motor já a buscava para calcular; sem preencher o campo, a tela parecia
+  // pedir o número à mão. Refaz a busca quando o prazo ou a data do fixing
+  // mudam, que são as duas coisas que a escolhem.
+  function buscarFixing(lado) {
+    var sel = document.getElementById(lado + '_indexador');
+    var alvo = document.getElementById(lado + '_taxa_indice');
+    var dt = document.getElementById(lado + '_data_fixing');
+    var tn = document.getElementById(lado + '_tenor');
+    var nota = document.getElementById(lado + '_fixing_nota');
+    if (!sel || !alvo || ['term_sofr', 'euribor'].indexOf(sel.value) === -1) return;
+    var quando = (dt && dt.value) || '';
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(quando)) return;
+    // UM endpoint para os dois: é a mesma pergunta, e o prazo vai como texto —
+    // a EURIBOR tem '1 week', que não cabe num número de meses.
+    fetch('/api/tools/fixing-rate?index=' + encodeURIComponent(sel.value) +
+          '&tenor=' + encodeURIComponent((tn && tn.value) || '3 month') +
+          '&date=' + encodeURIComponent(quando), { credentials: 'same-origin' })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+      .then(function (x) {
+        if (!x.ok || !x.d.success) {
+          if (nota) { nota.textContent = x.d.error || ''; nota.className = 'tl-help text-danger'; }
+          return;
+        }
+        alvo.value = x.d.percent.toFixed(8);
+        formatar(alvo);
+        if (nota) {
+          nota.textContent = t('fromBase') + ' ' + (x.d.date ? x.d.date.split('-').reverse().join('/') : '');
+          nota.className = 'tl-help';
+        }
+      })
+      .catch(function () { /* offline: fica o que estava no campo */ });
+  }
+  ['ativa', 'passiva'].forEach(function (lado) {
+    ['_tenor', '_data_fixing'].forEach(function (suf) {
+      var el = document.getElementById(lado + suf);
+      if (el) el.addEventListener('change', function () { buscarFixing(lado); });
+    });
+    var sel = document.getElementById(lado + '_indexador');
+    if (sel) sel.addEventListener('change', function () { buscarFixing(lado); });
+  });
+
   // ── Swap Calculator: o pré-preenchimento pelo B3 ID ──────────────────────
   (function () {
     var inp = document.getElementById('b3_id'), btn = document.getElementById('tl-lookup');
@@ -354,7 +399,7 @@
       clearMarks();
       var f = d.fields || {};
       ['counterparty', 'data_operacao', 'inicio', 'fim', 'vencimento', 'nocional', 'nocional_original',
-       'amortizacao', 'base_amortizacao'].forEach(function (k) { setVal(k, f[k] || ''); });
+       'amortizacao', 'base_amortizacao', 'base_ajuste'].forEach(function (k) { setVal(k, f[k] || ''); });
       ['ativa', 'passiva'].forEach(function (lado) {
         var p = d[lado] || {};
         var sel = document.getElementById(lado + '_indexador');
@@ -363,14 +408,33 @@
           if (!p.indexador) sel.selectedIndex = -1;
           aplicarLado(lado);
         }
-        ['taxa', 'convencao', 'regime', 'moeda', 'tenor', 'ptax_inicial', 'ni_inicial', 'preco_inicial', 'ativo']
+        ['taxa', 'percentual', 'convencao', 'regime', 'moeda', 'tenor', 'taxa_indice',
+         'ptax_inicial', 'ptax_final', 'ptax_offset', 'ni_inicial', 'preco_inicial', 'ativo']
           .forEach(function (k) { if (p[k] !== undefined && (p[k] !== '' || k === 'taxa')) setVal(lado + '_' + k, p[k]); });
+        // O spread do CDI tem input PRÓPRIO (mesmo `name`, id diferente): sem
+        // isto o campo visível da perna de CDI ficava com o valor anterior.
+        var spread = document.getElementById(lado + '_taxa_cdi');
+        if (spread) { spread.value = p.taxa === undefined ? '' : String(p.taxa); formatar(spread); }
         var mo = document.getElementById(lado + '_moeda_equity');
         if (mo && p.moeda) mo.value = p.moeda;
         // os campos que a ponta não usa voltam ao vazio
-        ['ptax_inicial', 'ni_inicial', 'preco_inicial', 'ativo'].forEach(function (k) {
+        ['ptax_inicial', 'ptax_final', 'ni_inicial', 'preco_inicial', 'ativo'].forEach(function (k) {
           if (!p[k]) setVal(lado + '_' + k, '');
         });
+        // De que dia é a PTAX que entrou — ou por que ela não entrou. Sem isto
+        // o campo de fixing é um número sem procedência.
+        var nota = document.getElementById(lado + '_ptax_nota');
+        if (nota) {
+          nota.textContent = p.ptax_data ? ('PTAX ' + p.ptax_data.split('-').reverse().join('/'))
+                                         : (p.ptax_erro || '');
+          nota.className = 'tl-help' + (p.ptax_erro ? ' text-danger' : '');
+        }
+        var fn = document.getElementById(lado + '_fixing_nota');
+        if (fn) {
+          fn.textContent = p.fixing_data ? (t('fromBase') + ' ' + p.fixing_data.split('-').reverse().join('/'))
+                                         : (p.fixing_erro || '');
+          fn.className = 'tl-help' + (p.fixing_erro ? ' text-danger' : '');
+        }
       });
       (d.missing || []).forEach(function (k) { mark(k.replace('.', '_'), 'tl-missing'); });
       (d.assumed || []).forEach(function (k) { mark(k, 'tl-assumed'); });

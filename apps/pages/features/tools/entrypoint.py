@@ -128,13 +128,15 @@ def _form_padrao_swap(hoje):
         'amortizacao': '0', 'base_amortizacao': liquidacao.SOBRE_ORIGINAL,
         'calendario': 'ANBIMA', 'arredondar_di': '', 'reter_ir': '1',
     }
-    padrao = {'ativa': (liquidacao.PRE, '14'), 'passiva': (liquidacao.CDI_PERCENTUAL, '100')}
+    padrao = {'ativa': (liquidacao.PRE, '14'), 'passiva': (liquidacao.CDI, '')}
     for lado, (idx, taxa) in padrao.items():
         conv, reg = liquidacao.convencao_padrao(idx)
         form.update({
             lado + '_indexador': idx, lado + '_taxa': taxa, lado + '_convencao': conv,
+            lado + '_percentual': '100' if idx == liquidacao.CDI else '',
             lado + '_regime': reg, lado + '_moeda': liquidacao.SEM_CONVERSAO,
-            lado + '_ptax_inicial': '', lado + '_ptax_final': '', lado + '_ni_inicial': '',
+            lado + '_ptax_inicial': '', lado + '_ptax_final': '', lado + '_ptax_offset': '',
+            lado + '_ni_inicial': '',
             lado + '_ni_final': '', lado + '_fator': '', lado + '_tenor': '3 month',
             lado + '_data_fixing': '', lado + '_taxa_indice': '', lado + '_lookback': '0',
             lado + '_shift': '0', lado + '_ativo': '', lado + '_preco_inicial': '',
@@ -205,6 +207,12 @@ def tools_sofr_index():
     ctx = {'form': {'inicio': (hoje - timedelta(days=90)).isoformat(), 'fim': hoje.isoformat(),
                     'lookback': '0', 'shift': '0'},
            'resultado': None, 'erro': None}
+    # O que o NY Fed publica ABERTO (overnight, médias de 30/90/180 dias e o
+    # índice) mora aqui, ao lado da composição que o acumula — é a taxa
+    # REALIZADA. A tela de Term SOFR é a curva a termo da CME, cotada de
+    # antemão: as duas na mesma página davam dois quadros de "valores
+    # publicados" respondendo a perguntas diferentes.
+    ctx['publicados'] = queries.sofr_publicados(hoje, 6)
     if request.method == 'POST':
         ctx['form'] = {k: v for k, v in request.form.items()}
         try:
@@ -266,8 +274,64 @@ def api_tools_term_sofr_rate():
                     'date': vigente.isoformat() if vigente else None, 'months': meses})
 
 
+@blueprint.route('/api/tools/fixing-rate')
+def api_tools_fixing_rate():
+    """A taxa a termo de um prazo numa data, da BASE local — Term SOFR (o que o
+    dropzone importou) e EURIBOR (a base do Banco da Finlândia).
+
+    UM endpoint para os dois porque é a MESMA pergunta: que taxa o contrato
+    fixou naquele prazo, naquele dia. Dois seriam duas respostas para divergir
+    no primeiro caso de borda — e o `/api/tools/term-sofr/rate` acima segue de
+    pé pela mesma implementação, para a aba já aberta não quebrar."""
+    r = _auth_api()
+    if r:
+        return r
+    idx = (request.args.get('index') or liquidacao.TERM_SOFR).strip()
+    if idx not in liquidacao.COM_FIXING:
+        return jsonify({'success': False,
+                        'error': '{} has no forward fixing.'.format(idx)}), 404
+    tenor = (request.args.get('tenor') or '3 month').strip()
+    quando = request.args.get('date') or date.today().isoformat()
+    try:
+        alvo = para_data(quando)
+    except ErroDeDado:
+        return jsonify({'success': False, 'error': 'Invalid date.'}), 400
+    taxa, vigente, motivo = queries.taxa_do_fixing(idx, tenor, alvo)
+    if taxa is None:
+        return jsonify({'success': False, 'error': motivo}), 404
+    return jsonify({'success': True, 'rate': taxa, 'percent': taxa * 100.0,
+                    'date': vigente.isoformat() if vigente else None,
+                    'index': idx, 'tenor': tenor})
+
+
 @blueprint.route('/tools/term-sofr/csv')
 def tools_term_sofr_csv():
+    """A curva IMPORTADA em CSV — o que a tela mostra. Exportar a base do Fed
+    de uma página que não a exibe entregaria um arquivo que não bate com nada
+    na frente de quem clicou."""
+    r = _auth_page()
+    if r:
+        return r
+    base = term_sofr.carregar()
+    if base.vazio:
+        return Response('empty base', status=404, mimetype='text/plain; charset=utf-8')
+    campos = base.campos
+    buf = io.StringIO()
+    w = csv.writer(buf, delimiter=';')
+    w.writerow(['Date'] + [rot for c, rot, _m in term_sofr.CAMPOS if c in campos])
+    tabela = base.por_data()
+    for d in base.datas:
+        linha = tabela[d]
+        w.writerow([d.strftime('%d/%m/%Y')]
+                   + ['{:.5f}'.format(linha[c] * 100) if c in linha else '' for c in campos])
+    nome = 'term_sofr_{:%Y%m%d}_{:%Y%m%d}.csv'.format(base.inicio, base.fim)
+    return Response('\ufeff' + buf.getvalue(), content_type='text/csv; charset=utf-8',
+                    headers={'Content-Disposition': 'attachment; filename="{}"'.format(nome)})
+
+
+@blueprint.route('/tools/sofr-index/csv')
+def tools_sofr_index_csv():
+    """A base realizada do NY Fed em CSV — o quadro que agora vive nesta tela."""
     r = _auth_page()
     if r:
         return r
