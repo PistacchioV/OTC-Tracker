@@ -30,19 +30,28 @@
           edit: 'Edit', del: 'Delete', confirm: 'Confirm', addTitle: 'Add row', editTitle: 'Edit row',
           delTitle: 'Delete row?', delText: 'This row will be removed and the change saved.', yes: 'Yes, delete',
           cancel: 'Cancel', saved: 'Saved', deleted: 'Deleted', confirmed: 'Confirmed',
-          sameUser: 'A different user must confirm a row you changed.', err: 'Action failed.' },
+          sameUser: 'A different user must confirm a row you changed.', err: 'Action failed.',
+          delAllTitle: 'Delete every row of this day?', delAllYes: 'Yes, delete everything',
+          delAllText: 'row(s) will be removed from', delAllNone: 'This day has no rows to delete.',
+          delAllUndo: 'There is no undo — re-import to bring them back.', delAllDone: 'Day cleared' },
     br: { filterPh: 'Filtrar…', ok: 'OK', pending: 'Pendente', newst: 'Novo', importing: 'Importando…',
           noFile: 'A API da Athena não respondeu.', imported: 'Importado', rows: 'linha(s)', updated: 'Atualizado',
           edit: 'Editar', del: 'Excluir', confirm: 'Confirmar', addTitle: 'Adicionar linha', editTitle: 'Editar linha',
           delTitle: 'Excluir linha?', delText: 'A linha será removida e a alteração salva.', yes: 'Sim, excluir',
           cancel: 'Cancelar', saved: 'Salvo', deleted: 'Excluído', confirmed: 'Confirmado',
-          sameUser: 'Outro usuário precisa confirmar uma linha que você alterou.', err: 'Falha na ação.' },
+          sameUser: 'Outro usuário precisa confirmar uma linha que você alterou.', err: 'Falha na ação.',
+          delAllTitle: 'Excluir todas as linhas deste dia?', delAllYes: 'Sim, excluir tudo',
+          delAllText: 'linha(s) serão removidas de', delAllNone: 'Este dia não tem linhas para excluir.',
+          delAllUndo: 'Não há desfazer — reimporte para trazê-las de volta.', delAllDone: 'Dia esvaziado' },
     es: { filterPh: 'Filtrar…', ok: 'OK', pending: 'Pendiente', newst: 'Nuevo', importing: 'Importando…',
           noFile: 'La API de Athena no respondió.', imported: 'Importado', rows: 'fila(s)', updated: 'Actualizado',
           edit: 'Editar', del: 'Eliminar', confirm: 'Confirmar', addTitle: 'Agregar fila', editTitle: 'Editar fila',
           delTitle: '¿Eliminar fila?', delText: 'La fila será eliminada y el cambio guardado.', yes: 'Sí, eliminar',
           cancel: 'Cancelar', saved: 'Guardado', deleted: 'Eliminado', confirmed: 'Confirmado',
-          sameUser: 'Otro usuario debe confirmar una fila que usted cambió.', err: 'Acción fallida.' },
+          sameUser: 'Otro usuario debe confirmar una fila que usted cambió.', err: 'Acción fallida.',
+          delAllTitle: '¿Eliminar todas las filas de este día?', delAllYes: 'Sí, eliminar todo',
+          delAllText: 'fila(s) serán eliminadas de', delAllNone: 'Este día no tiene filas para eliminar.',
+          delAllUndo: 'No hay deshacer — reimporte para traerlas de vuelta.', delAllDone: 'Día vaciado' },
   };
   function t(k) { return (_TRANS[LANG] || _TRANS.en)[k] || _TRANS.en[k]; }
   function esc(s) {
@@ -312,6 +321,44 @@
     if (window.Swal) Swal.fire({ icon: 'success', title: t(titleKey), timer: 1200, showConfirmButton: false });
   }
 
+  // Delete all → esvazia o dia. Irreversível e sem desfazer, então a
+  // confirmação diz QUANTAS linhas e de QUE dia, e o botão de confirmar carrega
+  // o verbo — um "OK" genérico num diálogo destrutivo se clica no automático.
+  // O número sai da TABELA carregada, não de um contador próprio: é o que a
+  // pessoa está vendo, e é sobre isso que ela decide.
+  function wireDeleteAll() {
+    var btn = document.getElementById('ndfcDeleteAllBtn');
+    if (!btn) return;
+    btn.addEventListener('click', function () {
+      var quantas = (dt && dt.rows().count()) || 0;
+      var quando = currentDate();
+      var quandoBR = quando ? quando.split('-').reverse().join('/') : '';
+      if (!quantas) {
+        if (window.Swal) Swal.fire({ icon: 'info', text: t('delAllNone') });
+        return;
+      }
+      function apagar() {
+        btn.disabled = true;
+        postJSON('/api/ndf-cockpit/rows/delete-all', { date: quando }).then(function (res) {
+          btn.disabled = false;
+          if (res.ok && res.body && res.body.success) { afterMutation('delAllDone'); }
+          else if (window.Swal) {
+            Swal.fire({ icon: 'error', title: 'OTM', text: (res.body && res.body.error) || t('err') });
+          }
+        });
+      }
+      if (!window.Swal) { apagar(); return; }
+      Swal.fire({
+        icon: 'warning', title: t('delAllTitle'),
+        html: '<b>' + quantas + '</b> ' + esc(t('delAllText')) + ' <b>' + esc(quandoBR) + '</b>.' +
+              '<br><span style="font-size:.85rem;opacity:.8">' + esc(t('delAllUndo')) + '</span>',
+        showCancelButton: true, focusCancel: true,
+        confirmButtonText: t('delAllYes'), cancelButtonText: t('cancel'),
+        confirmButtonColor: '#d33'
+      }).then(function (r) { if (r.isConfirmed) apagar(); });
+    });
+  }
+
   // Add row (or save edit) → persist to the day's JSON, then reload.
   function wireAddRow() {
     var btn = document.getElementById('ndfcAddBtn');
@@ -371,6 +418,7 @@
     wireImport();
     wirePageLen();
     wireAddRow();
+    wireDeleteAll();
     wireActions();
     wireDatePicker();
     load(page.getAttribute('data-today'));

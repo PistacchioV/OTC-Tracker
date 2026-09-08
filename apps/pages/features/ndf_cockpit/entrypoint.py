@@ -128,6 +128,40 @@ def api_ndfc_row_delete():
                          '{} ({})'.format(rec.get('ID_DEAL', ''), _R()._ndfc_ref_from(p).strftime('%Y-%m-%d')))
     return jsonify({'success': True})
 
+@blueprint.route('/api/ndf-cockpit/rows/delete-all', methods=['POST'])
+def api_ndfc_rows_delete_all():
+    """Esvazia o dia inteiro do Cockpit.
+
+    O arquivo do dia fica VAZIO em vez de ser apagado: o dia continua existindo
+    e importado, com zero linhas — apagar o arquivo faria a tela cair no
+    fallback de "dia sem arquivo", que se lê como "ainda não importaram" e não
+    como "esvaziaram de propósito".
+
+    Devolve quantas linhas saíram: o aviso do sino e a confirmação da tela
+    precisam do número, e depois da gravação ele não existe mais.
+    """
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    ref = _R()._ndfc_ref_from(p)
+    jp, data = _R()._ndfc_load(ref)
+    if data is None:
+        return jsonify({'success': False, 'error': 'No data for this date.'}), 404
+    quantas = len(data)
+    if not quantas:
+        return jsonify({'success': True, 'removed': 0})
+    try:
+        _R()._ndfc_save(jp, [])
+    except Exception:
+        _R().log.error('[ndfc] delete-all save failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': 'Save failed.'}), 500
+    _R().log.info('[ndfc] %d linha(s) de %s apagadas por %s', quantas,
+                  ref.strftime('%Y-%m-%d'), session.get('user_sid', '') or '?')
+    _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                              'NDF Cockpit Cleared', 'NDF Cockpit',
+                              '{} row(s) removed ({})'.format(quantas, ref.strftime('%Y-%m-%d')))
+    return jsonify({'success': True, 'removed': quantas})
+
 @blueprint.route('/api/ndf-cockpit/row/confirm', methods=['POST'])
 def api_ndfc_row_confirm():
     if not session.get('authenticated'):

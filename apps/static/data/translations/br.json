@@ -2297,5 +2297,6 @@
   "tl-cdi-help": "O percentual incide na taxa DIÁRIA — 110% do CDI a 14% dá 15,5031%, e não os 15,40% de multiplicar a taxa anual. O spread é multiplicativo e capitaliza sobre o período: (1+CDI)·(1+spread).",
   "tl-fixing-offset": "Deslocamento do fixing (dias úteis)",
   "tl-fixing-help2": "O deslocamento vem da coluna de cotação do contrato: D-2 é a PTAX de dois dias úteis (ANBIMA) antes do fim do fluxo. Em branco, os dois fixings vêm do fechamento do BCB do dia útil anterior a cada data. Em reais não há conversão; fora das dez moedas que o BCB boletina, os dois entram digitados.",
-  "tl-idx-cdi": "CDI — % do CDI ± spread, realizado"
+  "tl-idx-cdi": "CDI — % do CDI ± spread, realizado",
+  "ndfc-delete-all": "Excluir tudo"
 }
