@@ -1,0 +1,107 @@
+{% extends 'layouts/vertical.html' %}
+
+{% block title %}SOFR Index{% endblock title %}
+
+{% block extra_css %}
+{% include 'partials/tools-assets-css.html' %}
+<style>
+/* Padrão de tabela (§3): cabeçalho e valores centralizados, clone incluído. */
+#tl-sofr-index table thead th { text-align: center !important; vertical-align: middle !important; font-size: .7rem; white-space: normal; }
+#tl-sofr-index table tbody td { text-align: center; vertical-align: middle; font-size: .8rem; white-space: nowrap; }
+#tl-sofr-index .dt-scroll-headInner thead th, #tl-sofr-index .dataTables_scrollHeadInner thead th { text-align: center !important; }
+</style>
+{% endblock extra_css %}
+
+{% block page_content %}
+<div id="tl-sofr-index" class="container-fluid tl-page">
+    {% set title='SOFR Index' %}
+    {% set crumbs=['OTC Tracker', 'Tools', 'SOFR Index'] %}
+    {% include 'partials/page-title.html' %}
+
+    <form method="post" class="row g-3">
+        <div class="col-lg-5">
+            <div class="tl-card">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <p class="tl-kicker mb-0" data-lang="tl-sofr-period">Interest period</p>
+                    <button type="submit" class="btn btn-sm btn-primary bg-gradient btn-toolbar-all">
+                        <i class="ti ti-calculator me-1"></i><span data-lang="tl-compound">Compound</span>
+                    </button>
+                </div>
+                <div class="row g-2">
+                    <div class="col-6 tl-field">
+                        <label for="inicio" data-lang="tl-start">Start</label>
+                        <input class="form-control form-control-sm tl-date" id="inicio" name="inicio" value="{{ form.inicio }}" autocomplete="off" placeholder="dd/mm/yyyy" required>
+                    </div>
+                    <div class="col-6 tl-field">
+                        <label for="fim" data-lang="tl-end">End</label>
+                        <input class="form-control form-control-sm tl-date" id="fim" name="fim" value="{{ form.fim }}" autocomplete="off" placeholder="dd/mm/yyyy" required>
+                    </div>
+                    <div class="col-6 tl-field">
+                        <label for="lookback" data-lang="tl-lookback">Lookback (business days)</label>
+                        <input class="form-control form-control-sm" id="lookback" name="lookback" value="{{ form.lookback }}" inputmode="numeric" data-format="int">
+                    </div>
+                    <div class="col-6 tl-field">
+                        <label for="shift" data-lang="tl-shift">Observation shift (business days)</label>
+                        <input class="form-control form-control-sm" id="shift" name="shift" value="{{ form.shift }}" inputmode="numeric" data-format="int">
+                    </div>
+                    <div class="col-12">
+                        <div class="tl-note" data-lang="tl-sofr-lag-note">The shift moves the whole window — dates and weights. The lookback moves only the rate reading inside it. Both zero, the calculation observes the period itself; both equal, it is a lookback with observation shift. Usual values: 2 to 5 business days.</div>
+                    </div>
+                    <div class="col-12">
+                        <p class="tl-kicker tl-kicker--muted mb-1" data-lang="tl-formula">Formula</p>
+                        <div class="tl-formula">factor = Π (1 + r<sub>i</sub> · n<sub>i</sub>/360)<br>rate&nbsp;&nbsp; = (factor − 1) · 360/D</div>
+                        <p class="tl-help" data-lang="tl-sofr-formula-note">n<sub>i</sub> are the calendar days until the next business day — Friday's fixing earns three days.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-7">
+            {% if erro %}<div class="alert alert-danger py-2 fs-xs"><i class="ti ti-alert-triangle me-1"></i>{{ erro }}</div>{% endif %}
+            {% if resultado %}
+            {% set r = resultado.r %}
+            <div class="tl-card tl-card--accent">
+                <p class="tl-kicker" data-lang="tl-sofr-compounded">Compounded SOFR in the period</p>
+                <div class="tl-big">{{ r.taxa_composta | tl_pct(6) }}</div>
+                <p class="tl-sub">{{ r.inicio | tl_date }} – {{ r.fim | tl_date }} · {{ r.dias_corridos }} <span data-lang="tl-caldays">calendar days</span></p>
+                <div class="tl-stats mt-3">
+                    <div class="tl-stat"><div class="tl-stat__label" data-lang="tl-accrued-factor">Accrued factor</div><div class="tl-stat__value">{{ r.fator | tl_fixed(10) }}</div><div class="tl-stat__note" data-lang="tl-product-daily">product of the daily factors</div></div>
+                    <div class="tl-stat"><div class="tl-stat__label" data-lang="tl-simple-avg">Weighted simple average</div><div class="tl-stat__value">{{ r.taxa_media_simples | tl_pct(6) }}</div><div class="tl-stat__note" data-lang="tl-no-compounding">without compounding</div></div>
+                    <div class="tl-stat"><div class="tl-stat__label" data-lang="tl-bizdays-observed">Business days observed</div><div class="tl-stat__value">{{ r.dias | length }}</div><div class="tl-stat__note" data-lang="tl-fixings-used">fixings used</div></div>
+                    <div class="tl-stat"><div class="tl-stat__label" data-lang="tl-lag">Lag</div><div class="tl-stat__value">{% if r.lookback or r.shift %}{{ r.lookback }} / {{ r.shift }} bd{% else %}—{% endif %}</div><div class="tl-stat__note">{{ resultado.convencao }}</div></div>
+                </div>
+                {% if resultado.conferencia %}
+                <div class="tl-note tl-note--ok mt-3"><i class="ti ti-circle-check me-1"></i><span data-lang="tl-sofr-check">Checked against the official SOFR Index</span>: {{ resultado.conferencia.taxa | tl_pct(6) }} — <span data-lang="tl-difference-of">difference of</span> {{ '%.4f' | format(resultado.conferencia.diferenca_bp) }} bp.</div>
+                {% endif %}
+            </div>
+            <div class="tl-card">
+                <div class="mb-2">
+                    <p class="tl-title" data-lang="tl-sofr-daily">Day-by-day composition</p>
+                    <p class="tl-sub"><span data-lang="tl-last-fixing">last published fixing</span>: {{ resultado.ultimo_fixing.data | tl_date }} · {{ resultado.ultimo_fixing.taxa | tl_pct(3) }}</p>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover table-striped mb-0 tl-dt" id="tl-sofr-table">
+                        <thead><tr><th data-lang="tl-interest-day">Interest day</th><th data-lang="tl-observation">Observation</th><th>SOFR</th><th data-lang="tl-caldays-h">Calendar days</th><th data-lang="tl-day-factor">Day factor</th><th data-lang="tl-accrued">Accrued</th></tr></thead>
+                        <tbody>
+                        {% for d in r.dias %}
+                        <tr><td>{{ d.data_juros | tl_date }}</td><td{% if d.data_observacao != d.data_juros %} class="text-warning"{% endif %}>{{ d.data_observacao | tl_date }}</td><td>{{ d.taxa | tl_pct(3) }}</td><td>{{ d.dias }}</td><td>{{ d.fator_dia | tl_fixed(10) }}</td><td>{{ d.fator_acumulado | tl_fixed(10) }}</td></tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% else %}
+            <div class="tl-card tl-card--dashed">
+                <i class="ti ti-chart-line"></i>
+                <span data-lang="tl-sofr-empty">Pick the period and the convention.</span>
+                <p class="tl-help mt-2" data-lang="tl-sofr-empty-note">The fixings come from the NY Fed public API and the result is checked against the official SOFR Index.</p>
+            </div>
+            {% endif %}
+        </div>
+    </form>
+</div>
+{% endblock page_content %}
+
+{% block extra_javascript %}
+{% include 'partials/tools-assets-js.html' %}
+{% endblock extra_javascript %}

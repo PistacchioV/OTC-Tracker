@@ -11022,6 +11022,102 @@ _MAPPING_DEFS = {
              'NOTES': 'um aviso por commodity'},
         ],
     },
+    # ── Tools › Swap Calculator: a curva da posição → o índice da calculadora ──
+    # O pré-preenchimento pelo B3 ID lê o `Código índice` das duas pontas do
+    # DPOSICAO-SWAP, traduz o código em NOME pelo `swap-index` (C03 → DI,
+    # C99 → PREFIXADO 252D, 220 → DOLAR DOS EUA…) e procura AQUI que índice do
+    # Swap Calculator ele é. Quando a curva é VCP, o nome de verdade está no
+    # `Nome Tipo/Classe` da posição, e é ele que passa pelas mesmas regras
+    # (SOFR, TERM SOFR, EURIBOR, S&P…). `Exact` vence `Contains`; entre os
+    # `Contains` vence o token mais longo (`DOLAR DOS EUA 30/360` antes de
+    # `DOLAR`). Curva sem regra deixa o índice EM BRANCO e sinalizado na tela —
+    # nunca um chute. DAY COUNT/REGIME em branco = o padrão do índice
+    # (BUS/252 composto para o mercado local, ACT/360 simples para dólar e euro).
+    'tools-swap-index': {
+        'label': 'Tools — Swap Calculator Index',
+        'columns': [
+            {'key': 'MATCH', 'label': 'Curve name (B3 / Tipo-Classe)'},
+            {'key': 'MODE', 'label': 'Match', 'type': 'select', 'options': ['Exact', 'Contains']},
+            {'key': 'INDEX', 'label': 'Calculator index', 'type': 'select',
+             'options': ['pre', 'cdi_percentual', 'cdi_spread', 'moeda', 'cambio', 'sofr',
+                         'term_sofr', 'euribor', 'ipca', 'equity', 'fator']},
+            {'key': 'CURRENCY', 'label': 'Currency (blank = index default)'},
+            {'key': 'DAY COUNT', 'label': 'Day count (blank = default)', 'type': 'select',
+             'options': ['', 'du_252', 'act_360', 'act_365', '30_360', '30e_360', 'act_act']},
+            {'key': 'REGIME', 'label': 'Regime (blank = default)', 'type': 'select',
+             'options': ['', 'composto', 'simples']},
+            {'key': 'TENOR', 'label': 'Tenor (Term SOFR / EURIBOR)', 'type': 'select',
+             'options': ['', '1 week', '1 month', '3 month', '6 month', '12 month']},
+        ],
+        'seed': [
+            {'MATCH': 'DI', 'MODE': 'Exact', 'INDEX': 'cdi_percentual', 'CURRENCY': '',
+             'DAY COUNT': '', 'REGIME': '', 'TENOR': ''},
+            {'MATCH': 'DI 360D', 'MODE': 'Exact', 'INDEX': 'cdi_percentual', 'CURRENCY': '',
+             'DAY COUNT': '', 'REGIME': '', 'TENOR': ''},
+            {'MATCH': 'PREFIXADO 252D', 'MODE': 'Exact', 'INDEX': 'pre', 'CURRENCY': '',
+             'DAY COUNT': 'du_252', 'REGIME': 'composto', 'TENOR': ''},
+            {'MATCH': 'PREFIXADO 360D', 'MODE': 'Exact', 'INDEX': 'pre', 'CURRENCY': '',
+             'DAY COUNT': 'act_360', 'REGIME': 'simples', 'TENOR': ''},
+            {'MATCH': 'PRE LINEAR 360D', 'MODE': 'Exact', 'INDEX': 'pre', 'CURRENCY': '',
+             'DAY COUNT': 'act_360', 'REGIME': 'simples', 'TENOR': ''},
+            {'MATCH': 'PREFIXADO 365D', 'MODE': 'Exact', 'INDEX': 'pre', 'CURRENCY': '',
+             'DAY COUNT': 'act_365', 'REGIME': 'simples', 'TENOR': ''},
+            {'MATCH': 'PREFIXADO', 'MODE': 'Contains', 'INDEX': 'pre', 'CURRENCY': '',
+             'DAY COUNT': '', 'REGIME': '', 'TENOR': ''},
+            {'MATCH': 'IPCA', 'MODE': 'Contains', 'INDEX': 'ipca', 'CURRENCY': '',
+             'DAY COUNT': '', 'REGIME': '', 'TENOR': ''},
+            {'MATCH': 'SOFR', 'MODE': 'Contains', 'INDEX': 'sofr', 'CURRENCY': 'USD',
+             'DAY COUNT': '', 'REGIME': '', 'TENOR': ''},
+            {'MATCH': 'TSFR1M', 'MODE': 'Contains', 'INDEX': 'term_sofr', 'CURRENCY': 'USD',
+             'DAY COUNT': '', 'REGIME': '', 'TENOR': '1 month'},
+            {'MATCH': 'TSFR3M', 'MODE': 'Contains', 'INDEX': 'term_sofr', 'CURRENCY': 'USD',
+             'DAY COUNT': '', 'REGIME': '', 'TENOR': '3 month'},
+            {'MATCH': 'TSFR6M', 'MODE': 'Contains', 'INDEX': 'term_sofr', 'CURRENCY': 'USD',
+             'DAY COUNT': '', 'REGIME': '', 'TENOR': '6 month'},
+            {'MATCH': 'TSFR12M', 'MODE': 'Contains', 'INDEX': 'term_sofr', 'CURRENCY': 'USD',
+             'DAY COUNT': '', 'REGIME': '', 'TENOR': '12 month'},
+            {'MATCH': 'TERM SOFR', 'MODE': 'Contains', 'INDEX': 'term_sofr', 'CURRENCY': 'USD',
+             'DAY COUNT': '', 'REGIME': '', 'TENOR': ''},
+            {'MATCH': 'EURIBOR', 'MODE': 'Contains', 'INDEX': 'euribor', 'CURRENCY': 'EUR',
+             'DAY COUNT': '', 'REGIME': '', 'TENOR': ''},
+            {'MATCH': 'DOLAR DOS EUA 30/360', 'MODE': 'Exact', 'INDEX': 'cambio', 'CURRENCY': 'USD',
+             'DAY COUNT': '30_360', 'REGIME': 'simples', 'TENOR': ''},
+            {'MATCH': 'DOLAR', 'MODE': 'Contains', 'INDEX': 'cambio', 'CURRENCY': 'USD',
+             'DAY COUNT': '', 'REGIME': '', 'TENOR': ''},
+            {'MATCH': 'DOLAR CANADENSE', 'MODE': 'Contains', 'INDEX': 'cambio', 'CURRENCY': 'CAD',
+             'DAY COUNT': '', 'REGIME': '', 'TENOR': ''},
+            {'MATCH': 'DOLAR AUSTRALIANO', 'MODE': 'Contains', 'INDEX': 'cambio', 'CURRENCY': 'AUD',
+             'DAY COUNT': '', 'REGIME': '', 'TENOR': ''},
+            {'MATCH': 'EURO', 'MODE': 'Contains', 'INDEX': 'cambio', 'CURRENCY': 'EUR',
+             'DAY COUNT': '', 'REGIME': '', 'TENOR': ''},
+            {'MATCH': 'IENE', 'MODE': 'Contains', 'INDEX': 'cambio', 'CURRENCY': 'JPY',
+             'DAY COUNT': '', 'REGIME': '', 'TENOR': ''},
+            {'MATCH': 'LIBRA ESTERLINA', 'MODE': 'Contains', 'INDEX': 'cambio', 'CURRENCY': 'GBP',
+             'DAY COUNT': '', 'REGIME': '', 'TENOR': ''},
+            {'MATCH': 'FRANCO SUICO', 'MODE': 'Contains', 'INDEX': 'cambio', 'CURRENCY': 'CHF',
+             'DAY COUNT': '', 'REGIME': '', 'TENOR': ''},
+            {'MATCH': 'COROA DINAM', 'MODE': 'Contains', 'INDEX': 'cambio', 'CURRENCY': 'DKK',
+             'DAY COUNT': '', 'REGIME': '', 'TENOR': ''},
+            {'MATCH': 'COROA NORUE', 'MODE': 'Contains', 'INDEX': 'cambio', 'CURRENCY': 'NOK',
+             'DAY COUNT': '', 'REGIME': '', 'TENOR': ''},
+            {'MATCH': 'COROA SUECA', 'MODE': 'Contains', 'INDEX': 'cambio', 'CURRENCY': 'SEK',
+             'DAY COUNT': '', 'REGIME': '', 'TENOR': ''},
+            {'MATCH': 'IUAN RENMIMBI', 'MODE': 'Contains', 'INDEX': 'cambio', 'CURRENCY': 'CNY',
+             'DAY COUNT': '', 'REGIME': '', 'TENOR': ''},
+            {'MATCH': 'RENMINBI HONG KON', 'MODE': 'Contains', 'INDEX': 'cambio', 'CURRENCY': 'CNH',
+             'DAY COUNT': '', 'REGIME': '', 'TENOR': ''},
+            {'MATCH': 'ACOES', 'MODE': 'Contains', 'INDEX': 'equity', 'CURRENCY': 'BRL',
+             'DAY COUNT': '', 'REGIME': '', 'TENOR': ''},
+            {'MATCH': 'IBOVESPA', 'MODE': 'Contains', 'INDEX': 'equity', 'CURRENCY': 'BRL',
+             'DAY COUNT': '', 'REGIME': '', 'TENOR': ''},
+            {'MATCH': 'S&P', 'MODE': 'Contains', 'INDEX': 'equity', 'CURRENCY': 'USD',
+             'DAY COUNT': '', 'REGIME': '', 'TENOR': ''},
+            {'MATCH': 'COMMODITIES', 'MODE': 'Contains', 'INDEX': 'equity', 'CURRENCY': 'USD',
+             'DAY COUNT': '', 'REGIME': '', 'TENOR': ''},
+            {'MATCH': 'OURO', 'MODE': 'Contains', 'INDEX': 'equity', 'CURRENCY': 'USD',
+             'DAY COUNT': '', 'REGIME': '', 'TENOR': ''},
+        ],
+    },
     # ── Operations B3 › Mensageria: a classe do ativo no ASSUNTO ──────────────
     # Pedido do time (ticket OTC-0032): o assunto do bilateral precisa dizer se
     # é termo/opção de MOEDA ou de MERCADORIA (ou equities). A classe vem da
@@ -12790,4 +12886,5 @@ from apps.pages.features.live_positions import entrypoint as _f_live_positions  
 from apps.pages.features.mapping import entrypoint as _f_mapping                  # noqa: E402,F401
 from apps.pages.features.index_b3 import entrypoint as _f_index_b3                # noqa: E402,F401
 from apps.pages.features.daily_settlement import entrypoint as _f_daily_settlement# noqa: E402,F401
+from apps.pages.features.tools import entrypoint as _f_tools                      # noqa: E402,F401
 from apps.pages.features.new_deals import entrypoint as _f_new_deals              # noqa: E402,F401

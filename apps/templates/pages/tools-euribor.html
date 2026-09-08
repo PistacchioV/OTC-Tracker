@@ -1,0 +1,104 @@
+{% extends 'layouts/vertical.html' %}
+
+{% block title %}Euribor{% endblock title %}
+
+{% block extra_css %}
+{% include 'partials/tools-assets-css.html' %}
+<style>
+/* Padrão de tabela (§3): cabeçalho e valores centralizados, clone incluído. */
+#tl-euribor table thead th { text-align: center !important; vertical-align: middle !important; font-size: .7rem; white-space: normal; }
+#tl-euribor table tbody td { text-align: center; vertical-align: middle; font-size: .8rem; white-space: nowrap; }
+#tl-euribor .dt-scroll-headInner thead th, #tl-euribor .dataTables_scrollHeadInner thead th { text-align: center !important; }
+</style>
+{% endblock extra_css %}
+
+{% block page_content %}
+<div id="tl-euribor" class="container-fluid tl-page">
+    {% set title='Euribor' %}
+    {% set crumbs=['OTC Tracker', 'Tools', 'Euribor'] %}
+    {% include 'partials/page-title.html' %}
+
+    <div class="tl-card">
+        <form method="get" class="d-flex flex-wrap align-items-end gap-2">
+            <div class="tl-field" style="width:150px">
+                <label for="referencia" data-lang="tl-ref-date">Reference date</label>
+                <input class="form-control form-control-sm tl-date" id="referencia" name="referencia" value="{{ referencia.isoformat() }}" data-max="{{ hoje }}" autocomplete="off" placeholder="dd/mm/yyyy">
+            </div>
+            <div class="tl-field" style="width:150px">
+                <label for="meses" data-lang="tl-chart-window">Chart window</label>
+                <select class="form-select form-select-sm" id="meses" name="meses">
+                    {% for m, key, rotulo in [(1,'1m','1 month'),(3,'3m','3 months'),(6,'6m','6 months'),(12,'1y','1 year'),(60,'5y','5 years'),(240,'all','Everything')] %}
+                    <option value="{{ m }}" {{ 'selected' if meses == m }} data-lang="tl-win-{{ key }}">{{ rotulo }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button type="submit" class="btn btn-sm btn-primary bg-gradient btn-toolbar-all"><i class="ti ti-calendar-search me-1"></i><span data-lang="tl-view">View</span></button>
+            <a class="btn btn-sm btn-info bg-gradient btn-toolbar-all" href="/tools/euribor/csv"><i class="ti ti-download me-1"></i><span data-lang="tl-download-csv">Download CSV</span></a>
+            <button type="button" class="btn btn-sm btn-outline-secondary btn-toolbar-all" data-sync="/api/tools/euribor/sync"><i class="ti ti-refresh me-1"></i><span data-lang="tl-rebuild">Rebuild history</span></button>
+            {% if base %}
+            <span class="text-muted fs-xs ms-auto"><span data-lang="tl-local-base">Local base</span>: {{ base.inicio | tl_date }} – {{ base.fim | tl_date }} · {{ base.dias | tl_num }} <span data-lang="tl-days-stored">days stored</span></span>
+            {% endif %}
+        </form>
+    </div>
+
+    {% if erro %}<div class="alert alert-danger py-2 fs-xs"><i class="ti ti-alert-triangle me-1"></i>{{ erro }}</div>{% endif %}
+
+    {% if curva %}
+    <div class="tl-card">
+        <div class="d-flex flex-wrap justify-content-between align-items-baseline gap-2 mb-2">
+            <p class="tl-title"><span data-lang="tl-rates-on">Rates in force on</span> {{ vigente | tl_date }}</p>
+            {% if vigente != referencia %}<span class="text-warning fs-xs"><span data-lang="tl-no-publication">no publication on</span> {{ referencia | tl_date }} — <span data-lang="tl-last-prior">the last prior one applies</span></span>{% endif %}
+        </div>
+        <div class="tl-stats">
+            {% for p in curva.curva_do_dia(referencia) %}
+            <div class="tl-stat{{ ' tl-stat--hi' if loop.first }}"><div class="tl-stat__label">{{ p.tenor }}</div><div class="tl-stat__value">{{ p.taxa | tl_pct(3) }}</div><div class="tl-stat__note">{{ vigente | tl_date }}</div></div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="tl-card">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+            <div>
+                <p class="tl-title" data-lang="tl-euribor-daily">EURIBOR — daily values</p>
+                <p class="tl-sub">{{ curva.inicio | tl_date }} – {{ curva.fim | tl_date }} · {{ curva.datas | length }} <span data-lang="tl-days-published">days published</span></p>
+            </div>
+        </div>
+        <svg class="tl-svg" viewBox="0 0 900 320" preserveAspectRatio="xMidYMid meet" role="img" aria-label="EURIBOR daily values">
+            {% for r in escala_y %}
+            <line class="tl-grid" x1="52" x2="852" y1="{{ r.y }}" y2="{{ r.y }}" stroke-width="1"/>
+            <text x="8" y="{{ r.y + 4 }}">{{ r.rotulo }}</text>
+            {% endfor %}
+            {% for r in escala_x %}<text x="{{ r.x }}" y="308" text-anchor="middle">{{ r.rotulo }}</text>{% endfor %}
+            {% for s in series %}<path d="{{ s.caminho }}" fill="none" stroke="{{ s.cor }}" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>{% endfor %}
+        </svg>
+        <div class="tl-legend">{% for s in series %}<span><i style="background:{{ s.cor }}"></i>{{ s.tenor }}</span>{% endfor %}</div>
+    </div>
+
+    <div class="tl-card">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <p class="tl-title" data-lang="tl-published-values">Published values</p>
+            <span class="tl-pill">{{ curva.datas | length }} <span data-lang="tl-days">days</span></span>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-sm table-hover table-striped mb-0 tl-dt" id="tl-euribor-table">
+                <thead><tr><th data-lang="tl-date">Date</th>{% for tenor in curva.tenores %}<th>{{ tenor }}</th>{% endfor %}</tr></thead>
+                <tbody>
+                {% for d in curva.datas | reverse %}
+                <tr><td>{{ d | tl_date }}</td>{% for tenor in curva.tenores %}<td>{{ (tabela[d][tenor] | tl_pct(3)) if tenor in tabela[d] else '—' }}</td>{% endfor %}</tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="tl-note">
+        <strong data-lang="tl-source-limit">Source and limit.</strong> <span data-lang="tl-euribor-source-note">Bank of Finland, daily EURIBOR report. The source shows six months at a time, but its start-date selector goes back to January 2006 — the local base walks every window and keeps everything. On each load the current window is fetched again; dates not yet in the base come in, and nothing already stored is lost.</span>
+        <a class="d-block mt-1" href="{{ url_fonte }}" target="_blank" rel="noopener">{{ url_fonte }}</a>
+    </div>
+    {% endif %}
+</div>
+{% endblock page_content %}
+
+{% block extra_javascript %}
+{% include 'partials/tools-assets-js.html' %}
+{% endblock extra_javascript %}

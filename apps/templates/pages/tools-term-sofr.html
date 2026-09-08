@@ -1,0 +1,144 @@
+{% extends 'layouts/vertical.html' %}
+
+{% block title %}Term SOFR{% endblock title %}
+
+{% block extra_css %}
+{% include 'partials/tools-assets-css.html' %}
+<style>
+/* Padrão de tabela (§3): cabeçalho e valores centralizados, clone incluído. */
+#tl-term-sofr table thead th { text-align: center !important; vertical-align: middle !important; font-size: .7rem; white-space: normal; }
+#tl-term-sofr table tbody td { text-align: center; vertical-align: middle; font-size: .8rem; white-space: nowrap; }
+#tl-term-sofr .dt-scroll-headInner thead th, #tl-term-sofr .dataTables_scrollHeadInner thead th { text-align: center !important; }
+</style>
+{% endblock extra_css %}
+
+{% block page_content %}
+<div id="tl-term-sofr" class="container-fluid tl-page">
+    {% set title='Term SOFR' %}
+    {% set crumbs=['OTC Tracker', 'Tools', 'Term SOFR'] %}
+    {% include 'partials/page-title.html' %}
+
+    <div class="tl-card">
+        <form method="get" class="d-flex flex-wrap align-items-end gap-2">
+            <div class="tl-field" style="width:150px">
+                <label for="referencia" data-lang="tl-ref-date">Reference date</label>
+                <input class="form-control form-control-sm tl-date" id="referencia" name="referencia" value="{{ referencia.isoformat() }}" data-max="{{ hoje }}" autocomplete="off" placeholder="dd/mm/yyyy">
+            </div>
+            <div class="tl-field" style="width:150px">
+                <label for="meses" data-lang="tl-chart-window">Chart window</label>
+                <select class="form-select form-select-sm" id="meses" name="meses">
+                    {% for m, key, rotulo in [(1,'1m','1 month'),(3,'3m','3 months'),(6,'6m','6 months'),(12,'1y','1 year'),(60,'5y','5 years'),(240,'all','Everything')] %}
+                    <option value="{{ m }}" {{ 'selected' if meses == m }} data-lang="tl-win-{{ key }}">{{ rotulo }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button type="submit" class="btn btn-sm btn-primary bg-gradient btn-toolbar-all"><i class="ti ti-calendar-search me-1"></i><span data-lang="tl-view">View</span></button>
+            <a class="btn btn-sm btn-info bg-gradient btn-toolbar-all" href="/tools/term-sofr/csv"><i class="ti ti-download me-1"></i><span data-lang="tl-download-csv">Download CSV</span></a>
+            <button type="button" class="btn btn-sm btn-outline-secondary btn-toolbar-all" data-sync="/api/tools/term-sofr/sync"><i class="ti ti-refresh me-1"></i><span data-lang="tl-rebuild">Rebuild history</span></button>
+            {% if base %}
+            <span class="text-muted fs-xs ms-auto"><span data-lang="tl-local-base">Local base</span>: {{ base.inicio | tl_date }} – {{ base.fim | tl_date }} · {{ base.dias | tl_num }} <span data-lang="tl-days-stored">days stored</span></span>
+            {% endif %}
+        </form>
+    </div>
+
+    {# ── a curva a termo da CME, importada ─────────────────────────────────── #}
+    <div class="tl-card">
+        <div class="d-flex flex-wrap justify-content-between align-items-start gap-2">
+            <div>
+                <p class="tl-kicker" data-lang="tl-forward-curve">Forward curve</p>
+                <p class="tl-title" data-lang="tl-term-title">Term SOFR 1, 3, 6 and 12 months</p>
+                <p class="tl-sub" data-lang="tl-term-licensed">Administered by CME and licensed: no public source may redistribute it. Whoever holds the licence holds the file — drop the B3 report here and the quotes stay on this instance.</p>
+            </div>
+            {% if termo.base %}<span class="tl-pill">{{ termo.base.dias | tl_num }} <span data-lang="tl-days-in-base">days in the base</span> · {{ termo.base.inicio | tl_date }} – {{ termo.base.fim | tl_date }}</span>{% endif %}
+        </div>
+        <div class="mt-3" id="tl-drop" data-url="/api/tools/term-sofr/import">
+            <label for="tl-file" class="tl-drop d-block mb-0">
+                <i class="ti ti-file-download"></i>
+                <span class="fw-semibold fs-sm d-block" data-lang="tl-drop-here">Drop the B3 report here, or click to choose</span>
+                <span class="tl-help d-block" data-lang="tl-drop-help">Ticker in column L, date in O and value in P — .xlsx, .csv or .tsv. The value comes as a number (3.74231) and is converted to a rate on import.</span>
+                <input class="d-none" id="tl-file" name="file" type="file" accept=".xlsx,.csv,.tsv,.txt,.tab">
+            </label>
+            <div class="tl-note mt-2" id="tl-drop-msg" hidden></div>
+        </div>
+
+        {% if not termo.vazio %}
+        <div class="tl-stats mt-3">
+            {% for campo, rotulo, _m in campos_termo %}{% if campo in termo.taxas %}
+            <div class="tl-stat{{ ' tl-stat--hi' if loop.first }}"><div class="tl-stat__label">{{ rotulo }}</div><div class="tl-stat__value">{{ termo.taxas[campo] | tl_pct(5) }}</div><div class="tl-stat__note">{{ termo.vigente | tl_date }}</div></div>
+            {% endif %}{% endfor %}
+        </div>
+        <div class="table-responsive mt-3">
+            <table class="table table-sm table-hover table-striped mb-0 tl-dt" id="tl-term-table">
+                <thead><tr><th data-lang="tl-date">Date</th>{% for campo, rotulo, _m in campos_termo %}{% if campo in termo.campos %}<th>{{ rotulo }}</th>{% endif %}{% endfor %}</tr></thead>
+                <tbody>
+                {% for d in termo.datas | reverse %}
+                <tr><td>{{ d | tl_date }}</td>{% for campo, _r, _m in campos_termo %}{% if campo in termo.campos %}<td>{{ (termo.tabela[d][campo] | tl_pct(5)) if campo in termo.tabela[d] else '—' }}</td>{% endif %}{% endfor %}</tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+    </div>
+
+    {% if erro %}<div class="alert alert-danger py-2 fs-xs"><i class="ti ti-alert-triangle me-1"></i>{{ erro }}</div>{% endif %}
+
+    {% if historico %}
+    <div class="tl-card">
+        <div class="d-flex flex-wrap justify-content-between align-items-baseline gap-2 mb-2">
+            <p class="tl-title"><span data-lang="tl-rates-on">Rates in force on</span> {{ vigente | tl_date }}</p>
+            {% if vigente != referencia %}<span class="text-warning fs-xs"><span data-lang="tl-no-publication">no publication on</span> {{ referencia | tl_date }} — <span data-lang="tl-last-prior">the last prior one applies</span></span>{% endif %}
+        </div>
+        <div class="tl-stats">
+            {% for campo, rotulo in campos %}{% if campo in taxas_vigentes %}
+            <div class="tl-stat{{ ' tl-stat--hi' if loop.first }}"><div class="tl-stat__label">{{ rotulo }}</div><div class="tl-stat__value">{{ taxas_vigentes[campo] | tl_pct(5) }}</div><div class="tl-stat__note">{{ vigente | tl_date }}</div></div>
+            {% endif %}{% endfor %}
+            {% if 'indice' in taxas_vigentes %}
+            <div class="tl-stat"><div class="tl-stat__label">SOFR Index</div><div class="tl-stat__value">{{ taxas_vigentes['indice'] | tl_money(8) }}</div><div class="tl-stat__note" data-lang="tl-accumulated-index">accumulated index</div></div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="tl-card">
+        <div class="mb-2">
+            <p class="tl-title" data-lang="tl-sofr-daily-values">SOFR — daily values</p>
+            <p class="tl-sub">{{ historico.inicio | tl_date }} – {{ historico.fim | tl_date }} · {{ historico.datas | length }} <span data-lang="tl-days-published">days published</span></p>
+        </div>
+        <svg class="tl-svg" viewBox="0 0 900 320" preserveAspectRatio="xMidYMid meet" role="img" aria-label="SOFR daily values">
+            {% for r in escala_y %}
+            <line class="tl-grid" x1="52" x2="852" y1="{{ r.y }}" y2="{{ r.y }}" stroke-width="1"/>
+            <text x="8" y="{{ r.y + 4 }}">{{ r.rotulo }}</text>
+            {% endfor %}
+            {% for r in escala_x %}<text x="{{ r.x }}" y="308" text-anchor="middle">{{ r.rotulo }}</text>{% endfor %}
+            {% for s in series %}<path d="{{ s.caminho }}" fill="none" stroke="{{ s.cor }}" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>{% endfor %}
+        </svg>
+        <div class="tl-legend">{% for s in series %}<span><i style="background:{{ s.cor }}"></i>{{ s.tenor }}</span>{% endfor %}</div>
+    </div>
+
+    <div class="tl-card">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <p class="tl-title" data-lang="tl-published-values">Published values</p>
+            <span class="tl-pill">{{ historico.datas | length }} <span data-lang="tl-days">days</span></span>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-sm table-hover table-striped mb-0 tl-dt" id="tl-sofr-hist-table">
+                <thead><tr><th data-lang="tl-date">Date</th>{% for campo, rotulo in campos %}{% if campo in historico.campos %}<th>{{ rotulo }}</th>{% endif %}{% endfor %}<th>SOFR Index</th></tr></thead>
+                <tbody>
+                {% for d in historico.datas | reverse %}
+                <tr><td>{{ d | tl_date }}</td>{% for campo, _r in campos %}{% if campo in historico.campos %}<td>{{ (tabela[d][campo] | tl_pct(5)) if campo in tabela[d] else '—' }}</td>{% endif %}{% endfor %}<td>{{ (tabela[d]['indice'] | tl_money(8)) if 'indice' in tabela[d] else '—' }}</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="tl-note tl-note--warn">
+        <strong data-lang="tl-about-cme">About CME Term SOFR.</strong> <span data-lang="tl-about-cme-note">This section is the realised term structure the NY Fed publishes openly: the overnight and the compounded averages. CME's forward-looking curve is licensed and comes from the file you import above — the two live on the same page because they answer different questions.</span>
+        <a class="d-block mt-1" href="https://markets.newyorkfed.org/api/rates/secured/sofr/search.json" target="_blank" rel="noopener">markets.newyorkfed.org — SOFR</a>
+    </div>
+    {% endif %}
+</div>
+{% endblock page_content %}
+
+{% block extra_javascript %}
+{% include 'partials/tools-assets-js.html' %}
+{% endblock extra_javascript %}

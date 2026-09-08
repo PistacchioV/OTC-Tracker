@@ -110,3 +110,7 @@ apps/static/data/db/
 # front-end É versionado, e um curinga o varreria junto.
 *.db.lock
 *.sqlite3.lock
+
+# Tools (Apps › Tools): as bases vivas de EURIBOR, SOFR e Term SOFR nascem do seed
+# versionado em tools/seed/ e são reescritas a cada sincronização — ruído de commit.
+apps/static/data/tools/*.json
