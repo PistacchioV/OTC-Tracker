@@ -99,8 +99,12 @@ calls = {'url': None, 'payload': None}
 A.build_session = lambda: object()
 
 
-def _get_json_url(session, url, params=None):
+def _get_json_url(session, url, params=None, timeout=None):
+    # `timeout` na assinatura porque ele esta na REAL: um stub mais estreito que
+    # a funcao que ele imita transforma o argumento novo em TypeError, e o teste
+    # reprova por um motivo que nao e o que ele mede.
     calls['url'] = url
+    calls['timeout'] = timeout
     if isinstance(calls['payload'], Exception):
         raise calls['payload']
     return calls['payload']
@@ -190,6 +194,23 @@ try:
     calls['payload'] = RuntimeError('boom')
     res = R._ndfc_import(ref)
     check('erro de rede volta como erro', (res['success'], 'boom' in res['error']), (False, True))
+
+    # O tempo de leitura: este endpoint varre o LIVRO INTEIRO da data de
+    # liquidacao — e o dia em que ele herdou os 30 s do `getTrades` de UM produto
+    # estourou `ReadTimeout` no meio do replay do ADFS, com o traceback do
+    # urllib3 chegando a tela.
+    check('o Import pede o timeout de RELATORIO, nao o de getTrades',
+          (calls['timeout'], calls['timeout'] == A.REPORT_TIMEOUT,
+           A.REPORT_TIMEOUT > A.REQUEST_TIMEOUT), (A.REPORT_TIMEOUT, True, True))
+    # E o estouro tem mensagem PROPRIA: o repr do urllib3 nao diz quanto se
+    # esperou nem o que fazer, e o que se faz aqui e diferente de um 401 de SSO.
+    import requests as _rq
+    calls['payload'] = _rq.exceptions.ReadTimeout('read timed out')
+    res = R._ndfc_import(ref)
+    check('timeout diz os segundos e o remedio, sem repr de urllib3',
+          (res['success'], str(A.REPORT_TIMEOUT) + 's' in res['error'],
+           'ATHENA_REPORT_TIMEOUT' in res['error'], 'HTTPSConnectionPool' in res['error']),
+          (False, True, True, False))
     check('e nao grava JSON nenhum', os.path.isfile(R._ndfc_json_path(ref)), False)
 
     print('\n== 6. o import grava o JSON do dia pedido ==')

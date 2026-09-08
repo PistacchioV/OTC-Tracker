@@ -366,6 +366,9 @@ def api_opb3_mensageria():
             'tipo_operacao': g['tipo_op'], 'cpty': cpty, 'ref_date': ref_fmt,
             'rows': rows, 'total': total, 'internal': internal, 'to': to, 'cc': cc,
             'bcc': bcc,
+            # A classe do ativo no assunto (Moeda / Mercadoria / Equities) —
+            # cadastro `opb3-msg-asset`, a partir da coluna Type (OTC-0032).
+            'asset_label': _R()._opb3_msg_asset_label(g['tipo']),
         }))
         used.extend(recs)
 

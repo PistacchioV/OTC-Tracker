@@ -1,0 +1,413 @@
+{% extends 'layouts/vertical.html' %}
+
+{% block title %}Swap Calculator{% endblock title %}
+
+{% block extra_css %}
+{% include 'partials/tools-assets-css.html' %}
+<style>
+/* Padrão de tabela (§3): cabeçalho e valores centralizados, clone incluído. */
+#tl-swap-calculator table thead th { text-align: center !important; vertical-align: middle !important; font-size: .7rem; white-space: normal; }
+#tl-swap-calculator table tbody td { text-align: center; vertical-align: middle; font-size: .8rem; white-space: nowrap; }
+#tl-swap-calculator .dt-scroll-headInner thead th, #tl-swap-calculator .dataTables_scrollHeadInner thead th { text-align: center !important; }
+</style>
+{% endblock extra_css %}
+
+{# ── uma ponta do formulário: os campos aparecem conforme o índice (tools.js) ── #}
+{% macro ponta(lado, kicker_key, kicker_txt, classe) %}
+{% set f = form %}
+<div class="tl-leg {{ classe }}">
+    <p class="tl-kicker" data-lang="{{ kicker_key }}">{{ kicker_txt }}</p>
+    <div class="row g-2">
+        <div class="col-12 tl-field">
+            <label for="{{ lado }}_indexador" data-lang="tl-index">Index</label>
+            <select class="form-select form-select-sm tl-leg-index" id="{{ lado }}_indexador" name="{{ lado }}_indexador"
+                    data-leg="{{ lado }}" data-defaults="{{ convencao_padrao | tojson | forceescape }}">
+                {% for valor, nome in indexadores %}
+                <option value="{{ valor }}" {{ 'selected' if f[lado ~ '_indexador'] == valor }} data-lang="tl-idx-{{ valor }}">{{ nome }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-12 tl-field" data-leg="{{ lado }}" data-show-for="pre,cdi_percentual,cdi_spread,cambio,sofr,term_sofr,euribor,ipca,equity">
+            <label for="{{ lado }}_taxa" data-lang="tl-rate-or-spread">Contracted rate or spread</label>
+            <input class="form-control form-control-sm" id="{{ lado }}_taxa" name="{{ lado }}_taxa" value="{{ f[lado ~ '_taxa'] }}" inputmode="decimal" data-format="pct">
+            <p class="tl-help" data-lang="tl-rate-help">14 for 14% p.a. · 100 for 100% of CDI · 2 for CDI+2% · 3.25 for a 3.25% coupon</p>
+        </div>
+        <div class="col-6 tl-field" data-leg="{{ lado }}" data-show-for="pre,cdi_spread,cambio,sofr,term_sofr,euribor,ipca,equity">
+            <label for="{{ lado }}_convencao" data-lang="tl-day-count">Day count</label>
+            <select class="form-select form-select-sm" id="{{ lado }}_convencao" name="{{ lado }}_convencao">
+                {% for valor, nome, _t in convencoes %}<option value="{{ valor }}" {{ 'selected' if f[lado ~ '_convencao'] == valor }} data-lang="tl-dc-{{ valor }}">{{ nome }}</option>{% endfor %}
+            </select>
+        </div>
+        <div class="col-6 tl-field" data-leg="{{ lado }}" data-show-for="pre,cdi_spread,cambio,sofr,term_sofr,euribor,ipca,equity">
+            <label for="{{ lado }}_regime" data-lang="tl-compounding">Compounding</label>
+            <select class="form-select form-select-sm" id="{{ lado }}_regime" name="{{ lado }}_regime">
+                {% for valor, nome in regimes %}<option value="{{ valor }}" {{ 'selected' if f[lado ~ '_regime'] == valor }} data-lang="tl-reg-{{ valor }}">{{ nome }}</option>{% endfor %}
+            </select>
+        </div>
+        <div class="col-12" data-leg="{{ lado }}" data-show-for="moeda,cambio,sofr,term_sofr,euribor">
+            <div class="row g-2">
+                <div class="col-4 tl-field">
+                    <label for="{{ lado }}_moeda" data-lang="tl-flow-currency">Flow currency</label>
+                    <select class="form-select form-select-sm" id="{{ lado }}_moeda" name="{{ lado }}_moeda">
+                        {% for m in moedas %}<option value="{{ m.codigo }}" {{ 'selected' if f[lado ~ '_moeda'] == m.codigo }}>{{ m.codigo }} — {{ m.nome }}{{ ' · typed fixing' if not m.automatica }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div class="col-4 tl-field">
+                    <label for="{{ lado }}_ptax_inicial" data-lang="tl-fixing-initial">Initial currency fixing</label>
+                    <input class="form-control form-control-sm" id="{{ lado }}_ptax_inicial" name="{{ lado }}_ptax_inicial" value="{{ f[lado ~ '_ptax_inicial'] }}" inputmode="decimal" data-format="price" placeholder="PTAX">
+                </div>
+                <div class="col-4 tl-field">
+                    <label for="{{ lado }}_ptax_final" data-lang="tl-fixing-final">Final currency fixing</label>
+                    <input class="form-control form-control-sm" id="{{ lado }}_ptax_final" name="{{ lado }}_ptax_final" value="{{ f[lado ~ '_ptax_final'] }}" inputmode="decimal" data-format="price" placeholder="PTAX">
+                </div>
+                <div class="col-12"><p class="tl-help" data-lang="tl-fixing-help">Blank, both come from the BCB closing fixing of the business day before each date. In BRL there is no conversion. The BCB publishes ten currencies; outside them (the yuan, for instance) both fixings are typed in.</p></div>
+            </div>
+        </div>
+        <div class="col-12" data-leg="{{ lado }}" data-show-for="moeda">
+            <div class="tl-note" data-lang="tl-moeda-note">Only the currency move between the two dates, no coupon and no index. There is no rate to compound, so day count and compounding do not apply.</div>
+        </div>
+        <div class="col-12" data-leg="{{ lado }}" data-show-for="term_sofr,euribor">
+            <div class="row g-2">
+                <div class="col-4 tl-field">
+                    <label for="{{ lado }}_tenor" data-lang="tl-fixing-tenor">Fixing tenor</label>
+                    <select class="form-select form-select-sm" id="{{ lado }}_tenor" name="{{ lado }}_tenor">
+                        {% for tenor in tenores %}<option value="{{ tenor }}" {{ 'selected' if f[lado ~ '_tenor'] == tenor }}>{{ tenor }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div class="col-4 tl-field">
+                    <label for="{{ lado }}_data_fixing" data-lang="tl-fixing-date">Fixing date</label>
+                    <input class="form-control form-control-sm tl-date" id="{{ lado }}_data_fixing" name="{{ lado }}_data_fixing" value="{{ f[lado ~ '_data_fixing'] }}" autocomplete="off" placeholder="dd/mm/yyyy">
+                </div>
+                <div class="col-4 tl-field" data-leg="{{ lado }}" data-show-for="term_sofr">
+                    <label for="{{ lado }}_taxa_indice" data-lang="tl-fixing-rate">Fixing rate (% p.a.)</label>
+                    <input class="form-control form-control-sm" id="{{ lado }}_taxa_indice" name="{{ lado }}_taxa_indice" value="{{ f[lado ~ '_taxa_indice'] }}" inputmode="decimal" data-format="rate">
+                </div>
+                <div class="col-12"><p class="tl-help" data-lang="tl-forward-help">Forward-looking rate: fixed before the flow starts. Blank, the fixing date is 2 business days before the start.</p></div>
+            </div>
+        </div>
+        <div class="col-12" data-leg="{{ lado }}" data-show-for="term_sofr">
+            <div class="tl-note tl-note--warn" data-lang="tl-term-note">Term SOFR is administered by CME and licensed — there is no public source. Blank, the rate comes from the report imported on the Term SOFR page; otherwise type it in.</div>
+        </div>
+        <div class="col-12" data-leg="{{ lado }}" data-show-for="sofr">
+            <div class="row g-2">
+                <div class="col-6 tl-field">
+                    <label for="{{ lado }}_lookback" data-lang="tl-lookback">Lookback (business days)</label>
+                    <input class="form-control form-control-sm" id="{{ lado }}_lookback" name="{{ lado }}_lookback" value="{{ f[lado ~ '_lookback'] }}" inputmode="numeric" data-format="int">
+                </div>
+                <div class="col-6 tl-field">
+                    <label for="{{ lado }}_shift" data-lang="tl-shift">Observation shift (business days)</label>
+                    <input class="form-control form-control-sm" id="{{ lado }}_shift" name="{{ lado }}_shift" value="{{ f[lado ~ '_shift'] }}" inputmode="numeric" data-format="int">
+                </div>
+                <div class="col-12"><p class="tl-help" data-lang="tl-sofr-back-help">Compounded SOFR looks backwards: it accrues the fixings of the period itself, with no fixing date.</p></div>
+            </div>
+        </div>
+        <div class="col-12" data-leg="{{ lado }}" data-show-for="equity">
+            <div class="row g-2">
+                <div class="col-4 tl-field">
+                    <label for="{{ lado }}_ativo" data-lang="tl-share-or-index">Share or index</label>
+                    <input class="form-control form-control-sm" id="{{ lado }}_ativo" name="{{ lado }}_ativo" value="{{ f[lado ~ '_ativo'] }}" placeholder="IBOV, PETR4, S&amp;P 500">
+                </div>
+                <div class="col-4 tl-field">
+                    <label for="{{ lado }}_preco_inicial" data-lang="tl-price-initial">Initial price</label>
+                    <input class="form-control form-control-sm" id="{{ lado }}_preco_inicial" name="{{ lado }}_preco_inicial" value="{{ f[lado ~ '_preco_inicial'] }}" inputmode="decimal" data-format="price">
+                </div>
+                <div class="col-4 tl-field">
+                    <label for="{{ lado }}_preco_final" data-lang="tl-price-final">Final price</label>
+                    <input class="form-control form-control-sm" id="{{ lado }}_preco_final" name="{{ lado }}_preco_final" value="{{ f[lado ~ '_preco_final'] }}" inputmode="decimal" data-format="price">
+                </div>
+                <div class="col-12 tl-field">
+                    <label for="{{ lado }}_moeda_equity" data-lang="tl-quote-currency">Quote currency</label>
+                    <select class="form-select form-select-sm" id="{{ lado }}_moeda_equity" name="{{ lado }}_moeda">
+                        {% for m in moedas %}<option value="{{ m.codigo }}" {{ 'selected' if f[lado ~ '_moeda'] == m.codigo }}>{{ m.codigo }} — {{ m.nome }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div class="col-12"><div class="tl-note"><strong data-lang="tl-quanto">Quanto — no FX conversion.</strong> <span data-lang="tl-quanto-note">The leg earns the price change in the period and settles in BRL as a pure number. The currency above says which scale the price is quoted in; it does not enter the calculation. For the FX move use the FX leg.</span></div></div>
+            </div>
+        </div>
+        <div class="col-12" data-leg="{{ lado }}" data-show-for="ipca">
+            <div class="row g-2">
+                <div class="col-6 tl-field">
+                    <label for="{{ lado }}_ni_inicial" data-lang="tl-ni-initial">Initial index number</label>
+                    <input class="form-control form-control-sm" id="{{ lado }}_ni_inicial" name="{{ lado }}_ni_inicial" value="{{ f[lado ~ '_ni_inicial'] }}" inputmode="decimal" data-format="index">
+                </div>
+                <div class="col-6 tl-field">
+                    <label for="{{ lado }}_ni_final" data-lang="tl-ni-final">Final index number</label>
+                    <input class="form-control form-control-sm" id="{{ lado }}_ni_final" name="{{ lado }}_ni_final" value="{{ f[lado ~ '_ni_final'] }}" inputmode="decimal" data-format="index">
+                </div>
+            </div>
+        </div>
+        <div class="col-12 tl-field" data-leg="{{ lado }}" data-show-for="fator">
+            <label for="{{ lado }}_fator" data-lang="tl-accrued-factor">Accrued factor</label>
+            <input class="form-control form-control-sm" id="{{ lado }}_fator" name="{{ lado }}_fator" value="{{ f[lado ~ '_fator'] }}" inputmode="decimal" placeholder="1.1234567890">
+            <p class="tl-help" data-lang="tl-factor-help">The factor that came on the confirmation, nothing recalculated.</p>
+        </div>
+    </div>
+</div>
+{% endmacro %}
+
+{# ── o resumo de uma ponta liquidada ─────────────────────────────────────── #}
+{% macro resumo(p, rotulo_key, rotulo_txt, classe) %}
+<div class="tl-leg {{ classe }}">
+    <div class="d-flex justify-content-between align-items-start gap-2">
+        <div>
+            <p class="tl-kicker mb-1" data-lang="{{ rotulo_key }}">{{ rotulo_txt }}</p>
+            <p class="fw-semibold fs-sm mb-0" data-lang="tl-idx-{{ p.indexador }}">{{ tl_idx_name(p.indexador) }}</p>
+        </div>
+        <span class="tl-pill">{{ p.fator | tl_fixed(10) }}</span>
+    </div>
+    <div class="tl-big mt-2" style="font-size:1.5rem">R$ {{ p.valor | tl_money(2) }}</div>
+    <p class="tl-desc mb-2">{{ p.descricao_texto }}</p>
+    <div class="tl-kv"><span data-lang="tl-period-interest">Interest in the period</span><span>R$ {{ p.juros | tl_money(2) }}</span></div>
+    {% if p.efeito_cambial | round(2) != 0 %}
+    <div class="tl-kv"><span data-lang="tl-fx-move">Currency move</span><span class="{{ 'text-success' if p.efeito_cambial > 0 else 'text-danger' }}">R$ {{ p.efeito_cambial | tl_money(2) }}</span></div>
+    {% endif %}
+    {% if p.convencao %}
+    <div class="tl-kv"><span data-lang="tl-day-count">Day count</span><span>{{ tl_dc_name(p.convencao) }} · {{ p.dias_contados | tl_num }} <span data-lang="tl-days">days</span> · τ&nbsp;{{ '%.6f' | format(p.fracao_de_ano) }}</span></div>
+    {% endif %}
+    {% if p.ptax_inicial %}
+    <div class="tl-kv"><span><span data-lang="tl-fixing">Fixing</span> {{ p.moeda }}/BRL</span><span>{{ p.ptax_inicial | tl_money(4) }} → {{ p.ptax_final | tl_money(4) }}</span></div>
+    <div class="tl-kv"><span data-lang="tl-index-fx">Index · FX</span><span>{{ p.fator_do_indice | tl_fixed(8) }} · {{ p.fator_cambial | tl_fixed(8) }}</span></div>
+    {% endif %}
+    {% if p.data_fixing %}
+    <div class="tl-kv"><span><span data-lang="tl-fixing-of">Fixing of</span> {{ p.tenor }}</span><span>{{ p.taxa_do_fixing | tl_pct(5) }} <span data-lang="tl-on">on</span> {{ p.data_fixing | tl_date }}</span></div>
+    {% endif %}
+    {% if p.preco_inicial %}
+    <div class="tl-kv"><span>{{ p.ativo or 'Price' }}</span><span>{{ p.preco_inicial | tl_money(2) }} → {{ p.preco_final | tl_money(2) }}</span></div>
+    {% endif %}
+    {% if p.quanto %}
+    <div class="tl-kv"><span><span data-lang="tl-quoted-in">Quoted in</span> {{ p.moeda }}</span><span data-lang="tl-quanto-short">quanto · no FX</span></div>
+    {% endif %}
+    {% if p.contagem_vale_para_spread %}
+    <p class="tl-help text-warning mb-0" data-lang="tl-cdi-252-note">The daily CDI product is always 252 — the chosen day count compounds the spread.</p>
+    {% endif %}
+</div>
+{% endmacro %}
+
+{% block page_content %}
+<div id="tl-swap-calculator" class="container-fluid tl-page">
+    {% set title='Swap Calculator' %}
+    {% set crumbs=['OTC Tracker', 'Tools', 'Swap Calculator'] %}
+    {% include 'partials/page-title.html' %}
+
+    <form method="post" class="row g-3">
+        <div class="col-xl-6">
+            <div class="tl-card">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <p class="tl-kicker mb-0" data-lang="tl-the-trade">The trade</p>
+                    <button type="submit" class="btn btn-sm btn-primary bg-gradient btn-toolbar-all">
+                        <i class="ti ti-calculator me-1"></i><span data-lang="tl-calc-settlement">Calculate the settlement</span>
+                    </button>
+                </div>
+
+                {# ── B3 ID → a posição de swap preenche o resto ─────────────── #}
+                <div class="row g-2 mb-2">
+                    <div class="col-md-4 tl-field">
+                        <label for="b3_id">B3 ID</label>
+                        <div class="input-group input-group-sm">
+                            <input class="form-control form-control-sm" id="b3_id" name="b3_id" value="{{ form.b3_id }}" autocomplete="off" placeholder="26G53382860">
+                            <button class="btn btn-success bg-gradient" type="button" id="tl-lookup" title="Fill from the swap position"><i class="ti ti-search"></i></button>
+                        </div>
+                    </div>
+                    <div class="col-md-5 tl-field">
+                        <label for="counterparty" data-lang="tl-counterparty">Counterparty</label>
+                        <input class="form-control form-control-sm" id="counterparty" name="counterparty" value="{{ form.counterparty }}" readonly>
+                    </div>
+                    <div class="col-md-3 tl-field" hidden>
+                        <label for="tl-flow" data-lang="tl-cashflow-event">Cashflow event</label>
+                        <select class="form-select form-select-sm" id="tl-flow"></select>
+                    </div>
+                    <div class="col-12"><p class="tl-help" data-lang="tl-b3-help">Contract or Código Identificador from Live Position › Swap Characteristics. The position of the last business day fills counterparty, dates, notional, amortisation and both legs; what it cannot pull stays blank and marked in red.</p></div>
+                    <div class="col-12"><div class="tl-note mt-0" id="tl-lookup-status" hidden></div></div>
+                </div>
+
+                <div class="row g-2">
+                    <div class="col-md-4 tl-field">
+                        <label for="data_operacao" data-lang="tl-trade-date">Trade date</label>
+                        <input class="form-control form-control-sm tl-date" id="data_operacao" name="data_operacao" value="{{ form.data_operacao }}" autocomplete="off" placeholder="dd/mm/yyyy" required>
+                    </div>
+                    <div class="col-md-4 tl-field">
+                        <label for="inicio" data-lang="tl-flow-start">Flow start</label>
+                        <input class="form-control form-control-sm tl-date" id="inicio" name="inicio" value="{{ form.inicio }}" autocomplete="off" placeholder="dd/mm/yyyy" required>
+                    </div>
+                    <div class="col-md-4 tl-field">
+                        <label for="fim" data-lang="tl-flow-end">Flow end</label>
+                        <input class="form-control form-control-sm tl-date" id="fim" name="fim" value="{{ form.fim }}" autocomplete="off" placeholder="dd/mm/yyyy" required>
+                    </div>
+                    <div class="col-md-4 tl-field">
+                        <label for="vencimento" data-lang="tl-swap-maturity">Swap maturity</label>
+                        <input class="form-control form-control-sm tl-date" id="vencimento" name="vencimento" value="{{ form.vencimento }}" autocomplete="off" placeholder="dd/mm/yyyy">
+                    </div>
+                    <div class="col-md-8 tl-field">
+                        <label for="base_ajuste" data-lang="tl-what-settles">What settles</label>
+                        <select class="form-select form-select-sm" id="base_ajuste" name="base_ajuste">
+                            {% for valor, nome in bases_ajuste %}<option value="{{ valor }}" {{ 'selected' if form.base_ajuste == valor }} data-lang="tl-ba-{{ valor }}">{{ nome }}</option>{% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-12"><p class="tl-help" data-lang="tl-dates-help">The trade date counts the income-tax term; the flow is where the indices accrue. A flow that ends before maturity is interim: only the interest differential changes hands, and the principal carries on.</p></div>
+                </div>
+
+                <p class="tl-kicker mt-3" data-lang="tl-the-principal">The principal</p>
+                <div class="row g-2">
+                    <div class="col-md-6 tl-field">
+                        <label for="nocional" data-lang="tl-remaining-notional">Remaining notional (R$)</label>
+                        <input class="form-control form-control-sm" id="nocional" name="nocional" value="{{ form.nocional }}" inputmode="decimal" data-format="money" required>
+                        <p class="tl-help" data-lang="tl-remaining-help">The base that earns — this value multiplies the factor of both legs.</p>
+                    </div>
+                    <div class="col-md-6 tl-field">
+                        <label for="nocional_original" data-lang="tl-original-notional">Original notional (R$)</label>
+                        <input class="form-control form-control-sm" id="nocional_original" name="nocional_original" value="{{ form.nocional_original }}" inputmode="decimal" data-format="money">
+                        <p class="tl-help" data-lang="tl-original-help">The registered value, only to compute the amortisation on it.</p>
+                    </div>
+                    <div class="col-md-6 tl-field">
+                        <label for="amortizacao" data-lang="tl-amortisation">Amortisation at flow end (%)</label>
+                        <input class="form-control form-control-sm" id="amortizacao" name="amortizacao" value="{{ form.amortizacao }}" inputmode="decimal" data-format="pct">
+                    </div>
+                    <div class="col-md-6 tl-field">
+                        <label for="base_amortizacao" data-lang="tl-amort-on">Amortisation applies on</label>
+                        <select class="form-select form-select-sm" id="base_amortizacao" name="base_amortizacao">
+                            {% for valor, nome in bases_amortizacao %}<option value="{{ valor }}" {{ 'selected' if form.base_amortizacao == valor }} data-lang="tl-am-{{ valor }}">{{ nome }}</option>{% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <p class="tl-kicker mt-3" data-lang="tl-the-legs">The two legs</p>
+                <div class="d-grid gap-2">
+                    {{ ponta('ativa', 'tl-leg-receiving', 'Receiving leg — who receives the index', 'tl-leg--a') }}
+                    {{ ponta('passiva', 'tl-leg-paying', 'Paying leg — who pays the index', '') }}
+                </div>
+
+                <div class="row g-2 mt-1">
+                    <div class="col-md-4 tl-field">
+                        <label for="calendario" data-lang="tl-calendar">Calendar</label>
+                        <select class="form-select form-select-sm" id="calendario" name="calendario">
+                            {% for valor, desc in calendarios %}<option value="{{ valor }}" {{ 'selected' if form.calendario == valor }} title="{{ desc }}">{{ valor }}</option>{% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-8 d-grid gap-2">
+                        <label class="tl-check">
+                            <input type="checkbox" name="reter_ir" value="1" class="form-check-input" {{ 'checked' if form.reter_ir }}>
+                            <div><strong data-lang="tl-withhold-ir">Withhold income tax at source</strong>
+                                <span data-lang="tl-withhold-help">Regressive table on the term counted from the trade date. Only when the receiving leg loses — the withholding belongs to the paying source, and that is when the bank pays.</span></div>
+                        </label>
+                        <label class="tl-check">
+                            <input type="checkbox" name="arredondar_di" value="1" class="form-check-input" {{ 'checked' if form.arredondar_di }}>
+                            <div><strong data-lang="tl-round-di">Round the daily DI factor to 8 decimals</strong>
+                                <span data-lang="tl-round-di-help">B3/CETIP standard. Off, the factor runs at full precision — the default here.</span></div>
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-6">
+            {% if erro %}<div class="alert alert-danger py-2 fs-xs"><i class="ti ti-alert-triangle me-1"></i>{{ erro }}</div>{% endif %}
+            {% if resultado %}
+            {% set r = resultado.r %}
+            {% set recebe_ativa = r.quem_recebe == 'ativa' %}
+            <div class="tl-card {{ 'tl-card--good' if recebe_ativa else 'tl-card--bad' }}">
+                <p class="tl-kicker {{ 'text-success' if recebe_ativa else 'text-danger' }}"><span data-lang="tl-net-settlement-on">Net settlement on</span> {{ r.fim | tl_date }}</p>
+                <div class="tl-big {{ 'tl-big--good' if recebe_ativa else 'tl-big--bad' }}">R$ {{ (r.ajuste_liquido if r.ajuste_liquido >= 0 else -r.ajuste_liquido) | tl_money(2) }}</div>
+                <p class="tl-sub mt-1">{% if recebe_ativa %}<span data-lang="tl-passive-pays">The paying leg pays the receiving leg.</span>{% else %}<span data-lang="tl-active-pays">The receiving leg pays the paying leg.</span>{% endif %}</p>
+                <span class="tl-pill mt-2"><i class="ti {{ 'ti-refresh' if r.so_juros else 'ti-flag' }}"></i>{% if r.so_juros %}<span data-lang="tl-interim-flow">Interim flow — settles only the interest differential</span>{% else %}<span data-lang="tl-final-settlement">Final settlement — settles the future value of both legs</span>{% endif %}</span>
+                <div class="tl-stats mt-3">
+                    <div class="tl-stat"><div class="tl-stat__label" data-lang="tl-gross-settlement">Gross settlement</div><div class="tl-stat__value">R$ {{ r.ajuste_bruto | tl_money(2) }}</div><div class="tl-stat__note"><span data-lang="tl-factor-diff">factor difference of</span> {{ r.diferenca_de_fator | tl_fixed(10) }}</div></div>
+                    <div class="tl-stat"><div class="tl-stat__label" data-lang="tl-ir-withheld">Income tax withheld</div><div class="tl-stat__value">R$ {{ r.ir | tl_money(2) }}</div><div class="tl-stat__note">{% if r.aliquota_ir %}<span data-lang="tl-rate">rate</span> {{ r.aliquota_ir | tl_pct(1) }} · {{ r.dias_da_operacao | tl_num }} <span data-lang="tl-days-of-trade">days of trade</span>{% else %}<span data-lang="tl-no-withholding">no withholding when the receiving leg wins</span>{% endif %}</div></div>
+                    <div class="tl-stat tl-stat--hi"><div class="tl-stat__label" data-lang="tl-remaining-notional-s">Remaining notional</div><div class="tl-stat__value">R$ {{ r.nocional | tl_money(2) }}</div><div class="tl-stat__note" data-lang="tl-base-both-legs">base of both legs</div></div>
+                    <div class="tl-stat"><div class="tl-stat__label" data-lang="tl-balance-after">Balance after amortisation</div><div class="tl-stat__value">R$ {{ r.saldo_seguinte | tl_money(2) }}</div><div class="tl-stat__note">{% if r.valor_amortizado %}<span data-lang="tl-amortises">amortises</span> R$ {{ r.valor_amortizado | tl_money(2) }}{% else %}<span data-lang="tl-no-amortisation">no amortisation in this flow</span>{% endif %}</div></div>
+                </div>
+            </div>
+
+            <div class="row g-2 mb-3">
+                <div class="col-md-6">{{ resumo(r.ativa, 'tl-leg-receiving-s', 'Receiving leg', 'tl-leg--a') }}</div>
+                <div class="col-md-6">{{ resumo(r.passiva, 'tl-leg-paying-s', 'Paying leg', '') }}</div>
+            </div>
+
+            {% if r.efeito_cambial_do_principal | round(2) != 0 %}
+            <div class="tl-card">
+                <p class="tl-title" data-lang="tl-two-settlements">The two settlements, side by side</p>
+                <p class="tl-sub mb-2" data-lang="tl-two-settlements-note">What separates them is the FX move on the principal. On an interim flow it does not change hands, because the principal does not settle there — it carries on to the next period.</p>
+                <div class="table-responsive">
+                    <table class="table table-sm table-striped mb-0">
+                        <thead><tr><th data-lang="tl-base">Base</th><th data-lang="tl-calculation">Calculation</th><th data-lang="tl-gross-settlement">Gross settlement</th></tr></thead>
+                        <tbody>
+                            <tr><td data-lang="tl-interest-only">Interest only</td><td data-lang="tl-int-a-minus-p">receiving interest − paying interest</td><td>R$ {{ (r.juros_da_ativa - r.juros_da_passiva) | tl_money(2) }}</td></tr>
+                            <tr><td data-lang="tl-future-value">Future value</td><td data-lang="tl-fv-a-minus-p">receiving FV − paying FV</td><td>R$ {{ (r.ativa.valor - r.passiva.valor) | tl_money(2) }}</td></tr>
+                            <tr><td data-lang="tl-difference">Difference</td><td data-lang="tl-fx-on-principal">FX on the principal</td><td class="text-warning">R$ {{ r.efeito_cambial_do_principal | tl_money(2) }}</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if r.valor_amortizado %}
+            <div class="tl-card">
+                <p class="tl-title" data-lang="tl-principal-path">The path of the principal</p>
+                <p class="tl-sub mb-2" data-lang="tl-principal-path-note">The amortisation happens at the end of the flow: it does not enter this period's factor, which accrued on the opening balance. It sets the balance of the next flow.</p>
+                <div class="table-responsive">
+                    <table class="table table-sm table-striped mb-0">
+                        <thead><tr><th data-lang="tl-step">Step</th><th data-lang="tl-base">Base</th><th data-lang="tl-value">Value</th></tr></thead>
+                        <tbody>
+                            <tr><td data-lang="tl-original-notional-s">Original notional</td><td data-lang="tl-registered">registered</td><td>R$ {{ r.nocional_original | tl_money(2) }}</td></tr>
+                            <tr><td data-lang="tl-remaining-notional-s">Remaining notional</td><td data-lang="tl-flow-opening">flow opening</td><td>R$ {{ r.nocional | tl_money(2) }}</td></tr>
+                            <tr><td data-lang="tl-amortisation-s">Amortisation</td><td>{{ r.percentual_amortizacao | tl_pct(4) }} {% if r.base_amortizacao == 'original' %}<span data-lang="tl-on-original">on the original notional</span>{% else %}<span data-lang="tl-on-remaining">on the remaining balance</span>{% endif %}</td><td>R$ {{ r.valor_amortizado | tl_money(2) }}</td></tr>
+                            <tr><td data-lang="tl-next-balance">Next balance</td><td data-lang="tl-next-flow-opening">next flow opening</td><td>R$ {{ r.saldo_seguinte | tl_money(2) }}</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% endif %}
+
+            <div class="tl-card">
+                <p class="tl-title" data-lang="tl-same-period">The same period under each day count</p>
+                <p class="tl-sub mb-2">{{ r.inicio | tl_date }} – {{ r.fim | tl_date }} · {{ r.dias_corridos | tl_num }} <span data-lang="tl-caldays">calendar days</span> · {{ r.dias_uteis | tl_num }} <span data-lang="tl-bizdays-l">business days</span></p>
+                <div class="table-responsive">
+                    <table class="table table-sm table-striped mb-0">
+                        <thead><tr><th data-lang="tl-convention">Convention</th><th data-lang="tl-days-h">Days</th><th data-lang="tl-base">Base</th><th>τ</th></tr></thead>
+                        <tbody>
+                        {% for c in resultado.comparacao %}
+                        <tr><td class="{{ 'fw-semibold' if c.codigo in (r.ativa.convencao, r.passiva.convencao) }}" data-lang="tl-dc-{{ c.codigo }}">{{ c.nome }}</td><td>{{ c.dias | tl_num }}</td><td>{{ c.base if c.base else 'actual year' }}</td><td>{{ '%.6f' | format(c.fracao) }}</td></tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            {% if r.ativa.fixings or r.passiva.fixings %}
+            {% set p = r.ativa if r.ativa.fixings else r.passiva %}
+            {% set de_sofr = p.indexador == 'sofr' %}
+            <div class="tl-card">
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+                    <div>
+                        <p class="tl-title">{% if de_sofr %}<span data-lang="tl-sofr-accrual">SOFR accrual, day by day</span>{% else %}<span data-lang="tl-cdi-daily">CDI accrual, day by day</span>{% endif %}</p>
+                        <p class="tl-sub">{% if de_sofr %}<span data-lang="tl-nyfed">SOFR from the NY Fed</span>{% else %}<span data-lang="tl-bcb-series">BCB series 4389</span>{% endif %} · {{ p.fixings | length }} <span data-lang="tl-bizdays-l">business days</span>{% if de_sofr and p.obs_inicio %} · <span data-lang="tl-obs-window">observation window</span> {{ p.obs_inicio | tl_date }} – {{ p.obs_fim | tl_date }}{% endif %}</p>
+                    </div>
+                    {% if de_sofr %}{% set molde, valores = p.defasagem %}<span class="tl-pill">{{ molde.format(**valores) }}</span>{% endif %}
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover table-striped mb-0 tl-dt" id="tl-fix-table">
+                        <thead><tr><th data-lang="tl-date">Date</th>{% if de_sofr %}<th data-lang="tl-observation">Observation</th>{% endif %}<th>{% if de_sofr %}SOFR (% p.a.){% else %}CDI (% p.a.){% endif %}</th><th data-lang="tl-day-factor">Day factor</th><th data-lang="tl-accrued">Accrued</th></tr></thead>
+                        <tbody>
+                        {% for d in p.fixings %}
+                        <tr><td>{{ d.data | tl_date }}</td>{% if de_sofr %}<td{% if d.defasado %} class="text-warning"{% endif %}>{{ (d.data_observacao or d.data) | tl_date }}</td>{% endif %}<td>{{ d.taxa | tl_pct(2) }}</td><td>{{ d.fator_dia | tl_fixed(10) }}</td><td>{{ d.fator_acumulado | tl_fixed(10) }}</td></tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% endif %}
+
+            <div class="tl-note"><strong data-lang="tl-how-computed">How it is computed.</strong> <span data-lang="tl-how-computed-note">The swap principal is notional: it does not change hands. Only the difference between the future value of the two legs settles, and whoever has the negative result pays. Income tax follows the regressive table — up to 180 days 22.5% · 181 to 360 days 20% · 361 to 720 days 17.5% · above 720 days 15%.</span></div>
+            {% else %}
+            <div class="tl-card tl-card--dashed">
+                <i class="ti ti-arrows-exchange"></i>
+                <span data-lang="tl-swap-empty">Type a B3 ID to fill from the position, or enter the dates, the remaining balance and each leg's index.</span>
+            </div>
+            {% endif %}
+        </div>
+    </form>
+</div>
+{% endblock page_content %}
+
+{% block extra_javascript %}
+{% include 'partials/tools-assets-js.html' %}
+{% endblock extra_javascript %}

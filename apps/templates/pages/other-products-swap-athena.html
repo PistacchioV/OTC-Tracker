@@ -259,7 +259,10 @@
 {% endblock extra_css %}
 
 {% block page_content %}
-<div id="swapchar-page" class="container-fluid" data-content="" data-api="/api/other-products-swap-athena/data" data-ref-date="{{ ref_date }}">
+<!-- data-actions="edit" liga a coluna de Actions do visualizador compartilhado
+     com o botão de Edit SÓ: a única célula editável aqui é o CETIP ID, e o que
+     o clique faz é desta página (window.scRowAction), que é quem tem endpoint. -->
+<div id="swapchar-page" class="container-fluid" data-content="" data-api="/api/other-products-swap-athena/data" data-ref-date="{{ ref_date }}" data-actions="edit">
     {% set title='Swap Athena' %}
     {% set crumbs=['OTC Tracker', 'Daily Settlements', 'Other Products', 'Swap', 'Athena'] %}
     {% include 'partials/page-title.html' %}
@@ -360,4 +363,55 @@
 <script src="{{ config.ASSETS_ROOT }}/js/table-std.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/export-advanced.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/pages/live-position-swap-characteristics.js?v=20260705"></script>
+<!-- Edit do CETIP ID (pedido de 08/09/2026). O visualizador desenha o botão e
+     entrega o clique; a gravação é no arquivo-dia do br-onshore-settlements
+     exibido, pela chave Kapital ID (o CETIP ID é o que está sendo trocado). -->
+<script>
+(function () {
+    var page = document.getElementById('swapchar-page');
+    if (!page || !page.getAttribute('data-actions')) return;
+    var _T = {
+        en: { title: 'Edit CETIP ID', key: 'Kapital ID: {k}', save: 'Save', cancel: 'Cancel',
+              empty: 'Type the CETIP ID.', saved: 'CETIP ID updated', fail: 'Could not save' },
+        br: { title: 'Editar CETIP ID', key: 'Kapital ID: {k}', save: 'Salvar', cancel: 'Cancelar',
+              empty: 'Digite o CETIP ID.', saved: 'CETIP ID atualizado', fail: 'Não foi possível salvar' },
+        es: { title: 'Editar CETIP ID', key: 'Kapital ID: {k}', save: 'Guardar', cancel: 'Cancelar',
+              empty: 'Escriba el CETIP ID.', saved: 'CETIP ID actualizado', fail: 'No se pudo guardar' }
+    };
+    function t(k) { var l = 'en'; try { l = localStorage.getItem('__OTC_TRACKER_LANG__') || 'en'; } catch (e) {} return (_T[l] || _T.en)[k] || _T.en[k]; }
+    function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (ch) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]; }); }
+    // A data sai do MESMO campo que a tabela usa — gravar no dia que se vê.
+    function currentYmd() {
+        var v = (document.getElementById('sc-date') || {}).value || '';
+        var m = v.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+        return m ? (m[3] + '-' + m[2] + '-' + m[1]) : (page.getAttribute('data-ref-date') || '');
+    }
+    window.scRowAction = function (act, i, row, columns) {
+        if (act !== 'edit' || !window.Swal) return;
+        var ci = columns.indexOf('CETIP ID'), ki = columns.indexOf('Kapital ID');
+        if (ci < 0 || ki < 0) return;
+        var atual = String(row[ci] || ''), kapital = String(row[ki] || '');
+        Swal.fire({
+            title: t('title'),
+            html: '<div class="text-muted mb-1" style="font-size:.85rem">' + esc(t('key').replace('{k}', kapital)) + '</div>',
+            input: 'text', inputValue: atual, showCancelButton: true,
+            confirmButtonText: t('save'), cancelButtonText: t('cancel'),
+            inputValidator: function (v) { if (!String(v || '').trim()) return t('empty'); }
+        }).then(function (res) {
+            if (!res.isConfirmed) return;
+            fetch('/api/other-products-swap-athena/edit', {
+                method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ date: currentYmd(), kapital_id: kapital, cetip_id: atual,
+                                       value: String(res.value || '').trim() })
+            }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+              .then(function (x) {
+                  if (!x.ok || !x.d || !x.d.success) { Swal.fire({ icon: 'error', title: t('fail'), text: (x.d && x.d.error) || '' }); return; }
+                  Swal.fire({ icon: 'success', title: t('saved'), timer: 1400, showConfirmButton: false });
+                  if (window.scLoad) window.scLoad(currentYmd());
+              })
+              .catch(function () { Swal.fire({ icon: 'error', title: t('fail') }); });
+        });
+    };
+})();
+</script>
 {% endblock extra_javascript %}

@@ -1,0 +1,159 @@
+/* Tools (Apps › Tools) — a folha das cinco ferramentas portadas do
+ * Precificação Swap. Só tokens `--vr-*` / `--ins-*` (CLAUDE.md §2): o tema
+ * não define os `--bs-*`, e um cartão pintado com eles sai branco no escuro.
+ *
+ * Widget próprio (`.tl-card`), NUNCA `.card`: o `extra_css` da página entra
+ * antes do `head-css.html` e o `.card` do tema venceria estas regras (§7).
+ *
+ * A centralização das tabelas NÃO mora aqui de propósito: cada template
+ * declara a sua num <style> inline, que é o que o `check_table_center.py`
+ * confere — o guarda lê o template, não a folha externa. */
+
+.tl-page {
+    --tl-hairline: rgba(0, 0, 0, .08);
+    --tl-accent: var(--vr-accent-1, #0066cc);
+    --tl-accent-soft: rgba(0, 102, 204, .10);
+    --tl-ok: #198754;
+    --tl-warn: #d97706;
+    --tl-bad: #dc3545;
+}
+[data-bs-theme="dark"] .tl-page {
+    --tl-hairline: rgba(255, 255, 255, .10);
+    --tl-accent-soft: rgba(110, 168, 254, .16);
+}
+
+.tl-page .tl-card {
+    background: var(--vr-card-bg, var(--ins-secondary-bg, #fff));
+    border: 1px solid var(--vr-card-border, var(--tl-hairline));
+    border-radius: var(--vr-card-radius, 18px);
+    box-shadow: var(--vr-card-shadow, 0 4px 14px rgba(15, 23, 42, .06));
+    padding: 1.1rem 1.25rem;
+    margin-bottom: 1rem;
+}
+.tl-page .tl-card--accent {
+    border-color: var(--tl-accent);
+    box-shadow: 0 0 0 1px var(--tl-accent-soft), var(--vr-card-shadow, 0 4px 14px rgba(15, 23, 42, .06));
+}
+.tl-page .tl-card--good { border-color: var(--tl-ok); }
+.tl-page .tl-card--bad  { border-color: var(--tl-bad); }
+.tl-page .tl-card--dashed {
+    border-style: dashed; box-shadow: none; text-align: center;
+    padding: 2.5rem 1rem; color: var(--bs-secondary-color);
+}
+.tl-page .tl-card--dashed i { font-size: 2rem; display: block; margin-bottom: .5rem; opacity: .5; }
+
+.tl-page .tl-kicker {
+    font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em;
+    color: var(--tl-accent); margin: 0 0 .75rem;
+}
+.tl-page .tl-kicker--muted { color: var(--bs-secondary-color); }
+.tl-page .tl-title { font-size: 1rem; font-weight: 600; margin: 0; }
+.tl-page .tl-sub   { font-size: .78rem; color: var(--bs-secondary-color); margin: .15rem 0 0; }
+
+/* campos — o mesmo desenho compacto das buscas do app */
+.tl-page .tl-field label, .tl-page .tl-field .tl-label {
+    display: block; font-size: .68rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: .04em; color: var(--bs-secondary-color); margin-bottom: .25rem;
+}
+.tl-page .tl-field .form-control, .tl-page .tl-field .form-select { font-size: .82rem; }
+/* Número e percentual alinhados à ESQUERDA, junto do rótulo (pedido da mesa).
+   O `tabular-nums` fica: ele é o que mantém os dígitos na mesma largura, e é
+   disso que vem o alinhamento da vírgula quando os campos estão empilhados. */
+.tl-page .tl-field .form-control[data-format] { font-variant-numeric: tabular-nums; text-align: left; }
+
+/* Ícone de calendário nos campos de data — o MESMO desenho do Reference Date
+   do Intrag DCE e das páginas de New Deals. Ele é preciso porque o flatpickr
+   não desenha ícone nenhum, e o `type="date"` que ele substitui desenhava: sem
+   isto o campo fica visualmente igual a um campo de texto (CLAUDE.md §3).
+   SVG EMBUTIDO, porque a instância roda sem internet, e com o par claro/escuro,
+   senão a marca some no tema escuro.
+   O seletor é a CLASSE e não o id: o `altInput` do flatpickr — o campo que se
+   VÊ — herda a `class` do original (`altInputClass`) e não o id, então uma
+   regra por id pintaria justamente o input escondido. */
+.tl-page input.tl-date {
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236c757d' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='5' width='16' height='16' rx='2'/%3E%3Cpath d='M16 3v4M8 3v4M4 11h16'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right .6rem center;
+    background-size: 1rem 1rem;
+    padding-right: 2rem;
+    cursor: pointer;
+}
+[data-bs-theme="dark"] .tl-page input.tl-date {
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23adb5bd' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='5' width='16' height='16' rx='2'/%3E%3Cpath d='M16 3v4M8 3v4M4 11h16'/%3E%3C/svg%3E");
+}
+.tl-page .tl-help { font-size: .72rem; line-height: 1.35; color: var(--bs-secondary-color); margin: .3rem 0 0; }
+.tl-page .tl-note {
+    font-size: .74rem; line-height: 1.4; color: var(--bs-secondary-color);
+    border: 1px solid var(--tl-hairline); border-radius: 10px; padding: .55rem .75rem;
+    background: var(--tl-accent-soft);
+}
+.tl-page .tl-note--warn { background: rgba(217, 119, 6, .10); border-color: rgba(217, 119, 6, .35); }
+.tl-page .tl-note--ok   { background: rgba(25, 135, 84, .10); border-color: rgba(25, 135, 84, .35); }
+.tl-page .tl-formula { font-family: var(--bs-font-monospace); font-size: .74rem; line-height: 1.6; }
+.tl-page .tl-check { display: flex; gap: .6rem; align-items: flex-start; border: 1px solid var(--tl-hairline);
+    border-radius: 10px; padding: .55rem .75rem; cursor: pointer; }
+.tl-page .tl-check input { margin-top: .2rem; flex: 0 0 auto; }
+.tl-page .tl-check strong { display: block; font-size: .8rem; font-weight: 600; }
+.tl-page .tl-check span { font-size: .72rem; color: var(--bs-secondary-color); }
+
+/* as pontas do Swap Calculator */
+.tl-page .tl-leg { border: 1px solid var(--tl-hairline); border-radius: 12px; padding: .9rem 1rem; }
+.tl-page .tl-leg--a { border-color: var(--tl-accent); background: var(--tl-accent-soft); }
+.tl-page .tl-leg .tl-kicker { margin-bottom: .6rem; }
+
+/* o campo que o pré-preenchimento NÃO conseguiu puxar: em branco e SINALIZADO */
+.tl-page .tl-missing .form-control, .tl-page .tl-missing .form-select {
+    border-color: var(--tl-bad) !important; box-shadow: 0 0 0 .15rem rgba(220, 53, 69, .18);
+}
+.tl-page .tl-missing label::after {
+    content: ' •'; color: var(--tl-bad); font-size: .9rem; line-height: 0;
+}
+.tl-page .tl-assumed .form-control, .tl-page .tl-assumed .form-select {
+    border-color: var(--tl-warn) !important;
+}
+.tl-page .tl-assumed label::after { content: ' •'; color: var(--tl-warn); font-size: .9rem; line-height: 0; }
+
+/* estatísticas e o número grande */
+.tl-page .tl-stats { display: grid; gap: .6rem; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
+.tl-page .tl-stat { border: 1px solid var(--tl-hairline); border-radius: 12px; padding: .65rem .8rem; min-width: 0; }
+.tl-page .tl-stat--hi { border-color: var(--tl-accent); background: var(--tl-accent-soft); }
+.tl-page .tl-stat__label { font-size: .68rem; color: var(--bs-secondary-color); text-transform: uppercase; letter-spacing: .04em; }
+.tl-page .tl-stat__value { font-size: 1.1rem; font-weight: 600; font-variant-numeric: tabular-nums; margin-top: .15rem;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tl-page .tl-stat__note { font-size: .7rem; color: var(--bs-secondary-color); margin-top: .1rem; }
+.tl-page .tl-big { font-size: 2.1rem; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -.02em; line-height: 1.1; }
+.tl-page .tl-big--good { color: var(--tl-ok); }
+.tl-page .tl-big--bad  { color: var(--tl-bad); }
+.tl-page .tl-pill {
+    display: inline-flex; align-items: center; gap: .35rem; font-size: .72rem; padding: .2rem .6rem;
+    border-radius: 999px; border: 1px solid var(--tl-hairline); background: var(--vr-card-bg, transparent);
+}
+.tl-page .tl-kv { display: flex; justify-content: space-between; gap: .75rem; font-size: .76rem; padding: .18rem 0; }
+.tl-page .tl-kv span:first-child { color: var(--bs-secondary-color); }
+.tl-page .tl-kv span:last-child { font-variant-numeric: tabular-nums; text-align: right; }
+.tl-page .tl-desc { font-size: .76rem; color: var(--bs-secondary-color); }
+
+/* gráfico SVG: os eixos em currentColor para valerem nos dois temas */
+.tl-page .tl-svg { width: 100%; height: auto; display: block; color: var(--bs-secondary-color); }
+.tl-page .tl-svg .tl-grid { stroke: currentColor; opacity: .18; }
+.tl-page .tl-svg text { fill: currentColor; font-size: 10px; }
+.tl-page .tl-legend { display: flex; flex-wrap: wrap; gap: .9rem; font-size: .74rem; color: var(--bs-secondary-color); margin-top: .5rem; }
+.tl-page .tl-legend i { display: inline-block; width: 18px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: .35rem; }
+
+/* dropzone do Term SOFR */
+.tl-page .tl-drop {
+    border: 1px dashed var(--tl-hairline); border-radius: 14px; padding: 1.6rem 1rem; text-align: center;
+    cursor: pointer; transition: border-color .2s, background .2s;
+}
+.tl-page .tl-drop.is-over, .tl-page .tl-drop:hover { border-color: var(--tl-accent); background: var(--tl-accent-soft); }
+.tl-page .tl-drop i { font-size: 1.8rem; color: var(--tl-accent); display: block; margin-bottom: .35rem; }
+
+/* toolbar das tabelas montada pelo tools.js (o padrão da casa, §3) */
+.tl-page .tl-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin-bottom: 1rem; }
+.tl-page .btn-toolbar-all { font-size: .75rem; padding: .25rem .6rem; }
+.tl-page .btn-toolbar-all:hover { transform: translateY(-1px); }
+.tl-page .btn-toolbar-all:active { transform: scale(.96); }
+.tl-page .tl-table-wrap { max-height: 32rem; overflow: auto; }
+.tl-page table.tl-dt { width: 100%; }
+.tl-page table.tl-dt tbody td { font-variant-numeric: tabular-nums; }
+.tl-page .tl-col-filter { font-size: 12px; height: 28px; }

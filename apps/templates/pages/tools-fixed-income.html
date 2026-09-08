@@ -1,0 +1,165 @@
+{% extends 'layouts/vertical.html' %}
+
+{% block title %}Fixed Income{% endblock title %}
+
+{% block extra_css %}
+{% include 'partials/tools-assets-css.html' %}
+<style>
+/* Padrão de tabela (§3): cabeçalho e valores centralizados — inclusive no
+   clone do cabeçalho do DataTables, com !important. */
+#tl-fixed-income table thead th { text-align: center !important; vertical-align: middle !important; font-size: .7rem; white-space: normal; }
+#tl-fixed-income table tbody td { text-align: center; vertical-align: middle; font-size: .8rem; white-space: nowrap; }
+#tl-fixed-income .dt-scroll-headInner thead th, #tl-fixed-income .dataTables_scrollHeadInner thead th { text-align: center !important; }
+</style>
+{% endblock extra_css %}
+
+{% block page_content %}
+<div id="tl-fixed-income" class="container-fluid tl-page">
+    {% set title='Fixed Income' %}
+    {% set crumbs=['OTC Tracker', 'Tools', 'Fixed Income'] %}
+    {% include 'partials/page-title.html' %}
+
+    <form method="post" class="row g-3">
+        <div class="col-lg-5">
+            <div class="tl-card">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <p class="tl-kicker mb-0" data-lang="tl-rf-investment">Investment</p>
+                    <button type="submit" class="btn btn-sm btn-primary bg-gradient btn-toolbar-all">
+                        <i class="ti ti-calculator me-1"></i><span data-lang="tl-calculate">Calculate</span>
+                    </button>
+                </div>
+                <div class="row g-2">
+                    <div class="col-12 tl-field">
+                        <label for="valor" data-lang="tl-rf-amount">Invested amount (R$)</label>
+                        <input class="form-control form-control-sm" id="valor" name="valor" value="{{ form.valor }}" inputmode="decimal" data-format="money" required>
+                    </div>
+                    <div class="col-6 tl-field">
+                        <label for="inicio" data-lang="tl-rf-start">Investment date</label>
+                        <input class="form-control form-control-sm tl-date" id="inicio" name="inicio" value="{{ form.inicio }}" autocomplete="off" placeholder="dd/mm/yyyy" required>
+                    </div>
+                    <div class="col-6 tl-field">
+                        <label for="vencimento" data-lang="tl-rf-maturity">Maturity</label>
+                        <input class="form-control form-control-sm tl-date" id="vencimento" name="vencimento" value="{{ form.vencimento }}" data-max-today="{{ hoje }}" autocomplete="off" placeholder="dd/mm/yyyy" required>
+                    </div>
+                    <div class="col-12 tl-field">
+                        <label for="indexador" data-lang="tl-rf-index">Index / Benchmark</label>
+                        <select class="form-select form-select-sm" id="indexador" name="indexador" data-retro="{{ retroativos | join(',') }}">
+                            {% for valor, rotulo in indexadores %}
+                            <option value="{{ valor }}" {{ 'selected' if form.indexador == valor }} data-lang="tl-rf-i-{{ valor }}">{{ rotulo }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-12 tl-field">
+                        <label for="taxa" data-lang="tl-rf-rate">Contracted rate</label>
+                        <input class="form-control form-control-sm" id="taxa" name="taxa" value="{{ form.taxa }}" inputmode="decimal" data-format="pct" required>
+                        <p class="tl-help" data-lang="tl-rf-rate-help">110 for 110% of CDI · 2 for CDI+2% · 14 for 14% p.a. fixed · 6 for IPCA+6%</p>
+                    </div>
+                    <div class="col-12" id="tl-proj" {{ 'hidden' if form.indexador in retroativos }}>
+                        <div class="row g-2">
+                            <div class="col-6 tl-field">
+                                <label for="cdi" data-lang="tl-rf-cdi">Projected CDI (% p.a.)</label>
+                                <input class="form-control form-control-sm" id="cdi" name="cdi" value="{{ form.cdi }}" inputmode="decimal" data-format="pct">
+                            </div>
+                            <div class="col-6 tl-field">
+                                <label for="ipca" data-lang="tl-rf-ipca">Projected IPCA (% p.a.)</label>
+                                <input class="form-control form-control-sm" id="ipca" name="ipca" value="{{ form.ipca }}" inputmode="decimal" data-format="pct">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-12" id="tl-realised" {{ 'hidden' if form.indexador not in retroativos }}>
+                        <div class="tl-note" data-lang="tl-rf-realised-note">The CDI comes from BCB series 4389 and is accrued day by day on what actually happened. There is no projection, so the maturity cannot be after today.</div>
+                    </div>
+                    <div class="col-12">
+                        <label class="tl-check">
+                            <input type="checkbox" name="arredondar_di" value="1" class="form-check-input" {{ 'checked' if form.arredondar_di }}>
+                            <div><strong data-lang="tl-round-di">Round the daily DI factor to 8 decimals</strong>
+                                <span data-lang="tl-round-di-help">B3/CETIP standard. Off, the factor runs at full precision — the default here.</span></div>
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-7">
+            {% if erro %}<div class="alert alert-danger py-2 fs-xs"><i class="ti ti-alert-triangle me-1"></i>{{ erro }}</div>{% endif %}
+            {% if resultado %}
+            {% set r = resultado.r %}
+            <div class="tl-card tl-card--accent">
+                <div class="d-flex justify-content-between align-items-start gap-3">
+                    <div>
+                        <p class="tl-kicker" data-lang="tl-rf-net-at-maturity">Net value at maturity</p>
+                        <div class="tl-big">R$ {{ r.valor_liquido | tl_money(2) }}</div>
+                        <p class="tl-sub"><span data-lang="tl-rf-net-yield">net yield of</span> R$ {{ r.rendimento_liquido | tl_money(2) }} · {{ r.taxa_liquida_anual | tl_pct(4) }} <span data-lang="tl-rf-pa-equiv">p.a. equivalent</span></p>
+                    </div>
+                    {% if r.isento %}<span class="badge rounded-pill text-bg-success bg-gradient" data-lang="tl-rf-exempt">tax exempt</span>{% endif %}
+                </div>
+                <div class="tl-stats mt-3">
+                    <div class="tl-stat"><div class="tl-stat__label" data-lang="tl-rf-gross">Gross value</div><div class="tl-stat__value">R$ {{ r.valor_bruto | tl_money(2) }}</div><div class="tl-stat__note"><span data-lang="tl-rf-yield-of">yield of</span> R$ {{ r.rendimento_bruto | tl_money(2) }}</div></div>
+                    <div class="tl-stat"><div class="tl-stat__label" data-lang="tl-rf-gross-rate">Gross equivalent rate</div><div class="tl-stat__value">{{ r.taxa_anual_equivalente | tl_pct(4) }}</div><div class="tl-stat__note" data-lang="tl-rf-pa-252">per year, BUS/252</div></div>
+                    <div class="tl-stat"><div class="tl-stat__label">IR</div><div class="tl-stat__value">R$ {{ r.ir | tl_money(2) }}</div><div class="tl-stat__note">{% if r.isento %}<span data-lang="tl-rf-exempt-product">exempt product</span>{% else %}<span data-lang="tl-rate">rate</span> {{ r.aliquota_ir | tl_pct(1) }}{% endif %}</div></div>
+                    <div class="tl-stat"><div class="tl-stat__label">IOF</div><div class="tl-stat__value">R$ {{ r.iof | tl_money(2) }}</div><div class="tl-stat__note">{% if r.aliquota_iof %}<span data-lang="tl-rate">rate</span> {{ r.aliquota_iof | tl_pct(0) }}{% else %}<span data-lang="tl-rf-iof-zero">zero after 30 days</span>{% endif %}</div></div>
+                    <div class="tl-stat"><div class="tl-stat__label" data-lang="tl-bizdays">Business days</div><div class="tl-stat__value">{{ r.dias_uteis | tl_num }}</div><div class="tl-stat__note">{{ r.dias_corridos | tl_num }} <span data-lang="tl-caldays">calendar days</span></div></div>
+                    <div class="tl-stat"><div class="tl-stat__label" data-lang="tl-accrued-factor">Accrued factor</div><div class="tl-stat__value">{{ r.fator | tl_fixed(10) }}</div><div class="tl-stat__note">{{ r.taxa_periodo | tl_pct(4) }} <span data-lang="tl-in-period">in the period</span></div></div>
+                </div>
+            </div>
+
+            {% if resultado.acumulado %}
+            {% set a = resultado.acumulado %}
+            <div class="tl-card">
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+                    <div>
+                        <p class="tl-title" data-lang="tl-cdi-daily">CDI accrual, day by day</p>
+                        <p class="tl-sub"><span data-lang="tl-bcb-series">BCB series 4389</span> · {{ a.primeiro | tl_date }} – {{ a.ultimo | tl_date }} · {{ a.dias_uteis }} <span data-lang="tl-bizdays-l">business days</span></p>
+                    </div>
+                    <span class="tl-pill"><span data-lang="tl-factor">Factor</span>&nbsp;{{ a.fator | tl_fixed(8) }}</span>
+                </div>
+                <div class="tl-stats mb-3">
+                    <div class="tl-stat"><div class="tl-stat__label" data-lang="tl-rate-in-period">Rate in the period</div><div class="tl-stat__value">{{ a.taxa_periodo | tl_pct(4) }}</div><div class="tl-stat__note">{{ a.percentual | tl_pct(2) }} <span data-lang="tl-of-cdi">of CDI</span></div></div>
+                    <div class="tl-stat"><div class="tl-stat__label" data-lang="tl-base-value">Base value</div><div class="tl-stat__value">R$ {{ a.valor_base | tl_money(2) }}</div></div>
+                    <div class="tl-stat tl-stat--hi"><div class="tl-stat__label" data-lang="tl-computed-value">Computed value</div><div class="tl-stat__value">R$ {{ a.valor_calculado | tl_money(2) }}</div><div class="tl-stat__note" data-lang="tl-gross-before-tax">gross, before taxes</div></div>
+                </div>
+                <p class="tl-help mb-3" data-lang="tl-bcb-lag-note">The BCB publishes the CDI one day late. If the B3 calculator shows a slightly larger factor, it already has the last business day's fixing and the series does not yet.</p>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover table-striped mb-0 tl-dt" id="tl-cdi-table">
+                        <thead><tr><th data-lang="tl-date">Date</th><th data-lang="tl-cdi-pa">CDI (% p.a.)</th><th data-lang="tl-day-factor">Day factor</th><th data-lang="tl-accrued">Accrued</th></tr></thead>
+                        <tbody>
+                        {% for d in a.dias %}
+                        <tr><td>{{ d.data | tl_date }}</td><td>{{ d.taxa | tl_pct(2) }}</td><td>{{ d.fator_dia | tl_fixed(10) }}</td><td>{{ d.fator_acumulado | tl_fixed(10) }}</td></tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if resultado.comparacao %}
+            {% set c = resultado.comparacao %}
+            <div class="tl-card">
+                <p class="tl-title" data-lang="tl-rounding-title">What rounding to 8 decimals changes</p>
+                <p class="tl-sub mb-2"><span data-lang="tl-rounding-note">The B3/CETIP standard truncates the daily DI factor at the 8th decimal before accruing. Over</span> {{ r.dias_uteis | tl_num }} <span data-lang="tl-rounding-note-2">business days that makes a difference of</span> <strong>R$ {{ c.diferenca_reais | tl_money(4) }}</strong> <span data-lang="tl-on">on</span> R$ {{ r.valor_aplicado | tl_money(2) }}.</p>
+                <div class="table-responsive">
+                    <table class="table table-sm table-striped mb-0">
+                        <thead><tr><th data-lang="tl-factor">Factor</th><th data-lang="tl-value">Value</th><th data-lang="tl-gross-at-maturity">Gross at maturity</th></tr></thead>
+                        <tbody>
+                            <tr><td data-lang="tl-full-precision">Full precision</td><td>{{ c.fator_sem_arredondar | tl_fixed(12) }}</td><td>R$ {{ (c.fator_sem_arredondar * r.valor_aplicado) | tl_money(2) }}</td></tr>
+                            <tr><td data-lang="tl-rounded-8">Rounded to 8 decimals</td><td>{{ c.fator_arredondado | tl_fixed(12) }}</td><td>R$ {{ (c.fator_arredondado * r.valor_aplicado) | tl_money(2) }}</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% endif %}
+            <div class="tl-note" data-lang="tl-ir-table">Regressive income tax: up to 180 days 22.5% · 181 to 360 days 20% · 361 to 720 days 17.5% · above 720 days 15%. Regressive IOF on redemptions under 30 calendar days.</div>
+            {% else %}
+            <div class="tl-card tl-card--dashed">
+                <i class="ti ti-wallet"></i>
+                <span data-lang="tl-rf-empty">Enter the amount, the dates and the contracted rate.</span>
+            </div>
+            {% endif %}
+        </div>
+    </form>
+</div>
+{% endblock page_content %}
+
+{% block extra_javascript %}
+{% include 'partials/tools-assets-js.html' %}
+{% endblock extra_javascript %}

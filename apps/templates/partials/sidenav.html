@@ -377,11 +377,50 @@
                         </a>
                     </li>
 
+                    <!-- Tools: o antigo item Quotes virou o pai. As cinco irmãs
+                         são as ferramentas portadas do Precificação Swap
+                         (features/tools); o Quotes segue na vertical dele. -->
                     <li class="side-nav-item">
-                        <a href="/quotes" class="side-nav-link">
-                            <span class="menu-icon"><i data-lucide="candlestick-chart"></i></span>
-                            <span class="menu-text" data-lang="quotes"> Quotes </span>
+                        <a data-bs-toggle="collapse" href="#toolsSection" aria-expanded="false"
+                           aria-controls="toolsSection" class="side-nav-link">
+                            <span class="menu-icon"><i data-lucide="wrench"></i></span>
+                            <span class="menu-text" data-lang="tools">Tools</span>
+                            <span class="menu-arrow"></span>
                         </a>
+                        <div class="collapse" id="toolsSection">
+                            <ul class="sub-menu">
+                                <li class="side-nav-item">
+                                    <a href="/quotes" class="side-nav-link">
+                                        <span class="menu-text" data-lang="quotes"> Quotes </span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/tools/fixed-income" class="side-nav-link">
+                                        <span class="menu-text" data-lang="tl-nav-fixed-income">Fixed Income</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/tools/swap-calculator" class="side-nav-link">
+                                        <span class="menu-text" data-lang="tl-nav-swap-calculator">Swap Calculator</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/tools/sofr-index" class="side-nav-link">
+                                        <span class="menu-text" data-lang="tl-nav-sofr-index">SOFR Index</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/tools/term-sofr" class="side-nav-link">
+                                        <span class="menu-text" data-lang="tl-nav-term-sofr">Term SOFR</span>
+                                    </a>
+                                </li>
+                                <li class="side-nav-item">
+                                    <a href="/tools/euribor" class="side-nav-link">
+                                        <span class="menu-text" data-lang="tl-nav-euribor">Euribor</span>
+                                    </a>
+                                </li>
+                            </ul>
+                        </div>
                     </li>
                      <!-- Estrutura de "Daily Settlement" com seus subitens -->
                     <li class="side-nav-item">

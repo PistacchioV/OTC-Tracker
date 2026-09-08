@@ -3363,6 +3363,7 @@ _OPB3_B3_STATUS_DONE = _pf_opb3._OPB3_B3_STATUS_DONE
 _opb3_msg_load_recipients = _pf_opb3._opb3_msg_load_recipients
 _opb3_msg_save_recipients = _pf_opb3._opb3_msg_save_recipients
 _opb3_msg_route_key = _pf_opb3._opb3_msg_route_key
+_opb3_msg_asset_label = _pf_opb3._opb3_msg_asset_label
 _opb3_refdata_by_account = _pf_opb3._opb3_refdata_by_account
 _opb3_participant_name_by_account = _pf_opb3._opb3_participant_name_by_account
 _OPB3_LEGAL_SIDES = _pf_opb3._OPB3_LEGAL_SIDES
@@ -4510,6 +4511,57 @@ def _athena_settlements(ref):
             if nome:
                 row[ci] = nome
     return payload
+
+
+def _athena_edit_cetip_id(ref, kapital_id, cetip_atual, novo, sid=''):
+    """Troca o CETIP ID de UMA linha do br-onshore-settlements do dia `ref`.
+
+    A linha é achada pelo **Kapital ID** — o CETIP ID é o que está sendo
+    corrigido, então não pode ser a chave; quando o mesmo Kapital ID aparece
+    mais de uma vez (pernas), o CETIP ID atual desempata. O ciclo inteiro
+    (ler → alterar → gravar) roda sob o `_cache_lock`, no arquivo-dia EXIBIDO
+    (sem andar para trás: editar o dia sem arquivo cairia no arquivo de outro
+    dia, sem erro nenhum). Devolve ``(payload, status)``."""
+    novo = str(novo or '').strip()
+    kapital = str(kapital_id or '').strip()
+    if not novo:
+        return {'success': False, 'error': 'Type the CETIP ID.'}, 400
+    if not kapital:
+        return {'success': False, 'error': 'The row has no Kapital ID to key on.'}, 400
+    jp = _ds_display_json_path(ref, 'br-onshore-settlements')
+    if not os.path.isfile(jp):
+        return {'success': False, 'error': 'No Swap Athena file for {}.'.format(
+            ref.strftime('%d/%m/%Y'))}, 404
+    with _cache_lock:
+        try:
+            with open(jp, encoding='utf-8') as fh:
+                data = json.load(fh) or []
+        except Exception:
+            return {'success': False, 'error': 'Could not read the day file.'}, 500
+        if not data:
+            return {'success': False, 'error': 'The day file is empty.'}, 404
+        keys = list(data[0].keys())
+        k_cetip = _fcst_resolve_key(keys, ['CETIP ID'])
+        k_kap = _fcst_resolve_key(keys, ['Kapital ID'])
+        if not k_cetip or not k_kap:
+            return {'success': False, 'error': 'The file has no CETIP ID / Kapital ID columns.'}, 500
+        alvos = [r for r in data if str(r.get(k_kap, '') or '').strip() == kapital]
+        if len(alvos) > 1:
+            atual = str(cetip_atual or '').strip()
+            afinados = [r for r in alvos if str(r.get(k_cetip, '') or '').strip() == atual]
+            alvos = afinados or alvos[:1]
+        if not alvos:
+            return {'success': False, 'error': 'Kapital ID {} is not in the day file.'.format(kapital)}, 404
+        antigo = str(alvos[0].get(k_cetip, '') or '')
+        alvos[0][k_cetip] = novo
+        try:
+            _atomic_write_json(jp, data)
+        except Exception:
+            log.error('[swap-athena] edit save failed:\n%s', traceback.format_exc())
+            return {'success': False, 'error': 'Could not save the day file.'}, 500
+    log.info('[swap-athena] CETIP ID %s -> %s (Kapital %s, %s) por %s', antigo, novo, kapital,
+             ref.strftime('%Y-%m-%d'), sid or '?')
+    return {'success': True, 'kapital_id': kapital, 'old': antigo, 'new': novo}, 200
 
 
 # ── Other Products › Swap › Settlement Advice ────────────────────────────────
@@ -7135,11 +7187,26 @@ def _ndfc_import(ref=None):
                                            "the Athena API client is unavailable."}
     url = _ndfc_api_url(ref)
     try:
-        payload = athena_api.get_json_url(athena_api.build_session(), url)
+        # `REPORT_TIMEOUT` (180 s), e não os 30 s do `getTrades`: este endpoint
+        # varre o LIVRO INTEIRO da data de liquidação, como o EOD da Recon FXO e
+        # o extrato do Intrag DCE — os três são relatório, não consulta de um
+        # produto. Com os 30 s herdados ele estourava `ReadTimeout` no meio do
+        # replay do ADFS, e o erro chegava à tela como um traceback de urllib3.
+        payload = athena_api.get_json_url(athena_api.build_session(), url,
+                                          timeout=athena_api.REPORT_TIMEOUT)
     except Exception as exc:
         log.warning('[ndfc] Athena getTradesBySettle failed (%s):\n%s', url, traceback.format_exc())
-        return {'success': False, 'error': 'Athena API: {}: {}'.format(type(exc).__name__, exc),
-                'url': url}
+        # Timeout tem mensagem PRÓPRIA: o repr do urllib3 tem quatro linhas de
+        # pool e porta e não diz nem quanto se esperou nem o que fazer — e o que
+        # se faz é diferente de um 401 (SSO) ou de um 404 (cadastro errado).
+        nome = type(exc).__name__
+        if 'Timeout' in nome:
+            erro = ('Athena did not answer within {}s. This endpoint scans the whole book '
+                    'for the settlement date; raise ATHENA_REPORT_TIMEOUT in the .env if it '
+                    'needs longer.').format(athena_api.REPORT_TIMEOUT)
+        else:
+            erro = 'Athena API: {}: {}'.format(nome, exc)
+        return {'success': False, 'error': erro, 'url': url}
     records = athena_api.extract_records(payload)
     refmap_spn = _fxo_refdata_by_spn()
     refmap_acr = _fxo_refdata_by_accronym(refmap_spn)
@@ -10955,6 +11022,127 @@ _MAPPING_DEFS = {
              'NOTES': 'um aviso por commodity'},
         ],
     },
+    # ── Tools › Swap Calculator: a curva da posição → o índice da calculadora ──
+    # O pré-preenchimento pelo B3 ID lê o `Código índice` das duas pontas do
+    # DPOSICAO-SWAP, traduz o código em NOME pelo `swap-index` (C03 → DI,
+    # C99 → PREFIXADO 252D, 220 → DOLAR DOS EUA…) e procura AQUI que índice do
+    # Swap Calculator ele é. Quando a curva é VCP, o nome de verdade está no
+    # `Nome Tipo/Classe` da posição, e é ele que passa pelas mesmas regras
+    # (SOFR, TERM SOFR, EURIBOR, S&P…). `Exact` vence `Contains`; entre os
+    # `Contains` vence o token mais longo (`DOLAR DOS EUA 30/360` antes de
+    # `DOLAR`). Curva sem regra deixa o índice EM BRANCO e sinalizado na tela —
+    # nunca um chute. DAY COUNT/REGIME em branco = o padrão do índice
+    # (BUS/252 composto para o mercado local, ACT/360 simples para dólar e euro).
+    'tools-swap-index': {
+        'label': 'Tools — Swap Calculator Index',
+        'columns': [
+            {'key': 'MATCH', 'label': 'Curve name (B3 / Tipo-Classe)'},
+            {'key': 'MODE', 'label': 'Match', 'type': 'select', 'options': ['Exact', 'Contains']},
+            {'key': 'INDEX', 'label': 'Calculator index', 'type': 'select',
+             'options': ['pre', 'cdi_percentual', 'cdi_spread', 'moeda', 'cambio', 'sofr',
+                         'term_sofr', 'euribor', 'ipca', 'equity', 'fator']},
+            {'key': 'CURRENCY', 'label': 'Currency (blank = index default)'},
+            {'key': 'DAY COUNT', 'label': 'Day count (blank = default)', 'type': 'select',
+             'options': ['', 'du_252', 'act_360', 'act_365', '30_360', '30e_360', 'act_act']},
+            {'key': 'REGIME', 'label': 'Regime (blank = default)', 'type': 'select',
+             'options': ['', 'composto', 'simples']},
+            {'key': 'TENOR', 'label': 'Tenor (Term SOFR / EURIBOR)', 'type': 'select',
+             'options': ['', '1 week', '1 month', '3 month', '6 month', '12 month']},
+        ],
+        'seed': [
+            {'MATCH': 'DI', 'MODE': 'Exact', 'INDEX': 'cdi_percentual', 'CURRENCY': '',
+             'DAY COUNT': '', 'REGIME': '', 'TENOR': ''},
+            {'MATCH': 'DI 360D', 'MODE': 'Exact', 'INDEX': 'cdi_percentual', 'CURRENCY': '',
+             'DAY COUNT': '', 'REGIME': '', 'TENOR': ''},
+            {'MATCH': 'PREFIXADO 252D', 'MODE': 'Exact', 'INDEX': 'pre', 'CURRENCY': '',
+             'DAY COUNT': 'du_252', 'REGIME': 'composto', 'TENOR': ''},
+            {'MATCH': 'PREFIXADO 360D', 'MODE': 'Exact', 'INDEX': 'pre', 'CURRENCY': '',
+             'DAY COUNT': 'act_360', 'REGIME': 'simples', 'TENOR': ''},
+            {'MATCH': 'PRE LINEAR 360D', 'MODE': 'Exact', 'INDEX': 'pre', 'CURRENCY': '',
+             'DAY COUNT': 'act_360', 'REGIME': 'simples', 'TENOR': ''},
+            {'MATCH': 'PREFIXADO 365D', 'MODE': 'Exact', 'INDEX': 'pre', 'CURRENCY': '',
+             'DAY COUNT': 'act_365', 'REGIME': 'simples', 'TENOR': ''},
+            {'MATCH': 'PREFIXADO', 'MODE': 'Contains', 'INDEX': 'pre', 'CURRENCY': '',
+             'DAY COUNT': '', 'REGIME': '', 'TENOR': ''},
+            {'MATCH': 'IPCA', 'MODE': 'Contains', 'INDEX': 'ipca', 'CURRENCY': '',
+             'DAY COUNT': '', 'REGIME': '', 'TENOR': ''},
+            {'MATCH': 'SOFR', 'MODE': 'Contains', 'INDEX': 'sofr', 'CURRENCY': 'USD',
+             'DAY COUNT': '', 'REGIME': '', 'TENOR': ''},
+            {'MATCH': 'TSFR1M', 'MODE': 'Contains', 'INDEX': 'term_sofr', 'CURRENCY': 'USD',
+             'DAY COUNT': '', 'REGIME': '', 'TENOR': '1 month'},
+            {'MATCH': 'TSFR3M', 'MODE': 'Contains', 'INDEX': 'term_sofr', 'CURRENCY': 'USD',
+             'DAY COUNT': '', 'REGIME': '', 'TENOR': '3 month'},
+            {'MATCH': 'TSFR6M', 'MODE': 'Contains', 'INDEX': 'term_sofr', 'CURRENCY': 'USD',
+             'DAY COUNT': '', 'REGIME': '', 'TENOR': '6 month'},
+            {'MATCH': 'TSFR12M', 'MODE': 'Contains', 'INDEX': 'term_sofr', 'CURRENCY': 'USD',
+             'DAY COUNT': '', 'REGIME': '', 'TENOR': '12 month'},
+            {'MATCH': 'TERM SOFR', 'MODE': 'Contains', 'INDEX': 'term_sofr', 'CURRENCY': 'USD',
+             'DAY COUNT': '', 'REGIME': '', 'TENOR': ''},
+            {'MATCH': 'EURIBOR', 'MODE': 'Contains', 'INDEX': 'euribor', 'CURRENCY': 'EUR',
+             'DAY COUNT': '', 'REGIME': '', 'TENOR': ''},
+            {'MATCH': 'DOLAR DOS EUA 30/360', 'MODE': 'Exact', 'INDEX': 'cambio', 'CURRENCY': 'USD',
+             'DAY COUNT': '30_360', 'REGIME': 'simples', 'TENOR': ''},
+            {'MATCH': 'DOLAR', 'MODE': 'Contains', 'INDEX': 'cambio', 'CURRENCY': 'USD',
+             'DAY COUNT': '', 'REGIME': '', 'TENOR': ''},
+            {'MATCH': 'DOLAR CANADENSE', 'MODE': 'Contains', 'INDEX': 'cambio', 'CURRENCY': 'CAD',
+             'DAY COUNT': '', 'REGIME': '', 'TENOR': ''},
+            {'MATCH': 'DOLAR AUSTRALIANO', 'MODE': 'Contains', 'INDEX': 'cambio', 'CURRENCY': 'AUD',
+             'DAY COUNT': '', 'REGIME': '', 'TENOR': ''},
+            {'MATCH': 'EURO', 'MODE': 'Contains', 'INDEX': 'cambio', 'CURRENCY': 'EUR',
+             'DAY COUNT': '', 'REGIME': '', 'TENOR': ''},
+            {'MATCH': 'IENE', 'MODE': 'Contains', 'INDEX': 'cambio', 'CURRENCY': 'JPY',
+             'DAY COUNT': '', 'REGIME': '', 'TENOR': ''},
+            {'MATCH': 'LIBRA ESTERLINA', 'MODE': 'Contains', 'INDEX': 'cambio', 'CURRENCY': 'GBP',
+             'DAY COUNT': '', 'REGIME': '', 'TENOR': ''},
+            {'MATCH': 'FRANCO SUICO', 'MODE': 'Contains', 'INDEX': 'cambio', 'CURRENCY': 'CHF',
+             'DAY COUNT': '', 'REGIME': '', 'TENOR': ''},
+            {'MATCH': 'COROA DINAM', 'MODE': 'Contains', 'INDEX': 'cambio', 'CURRENCY': 'DKK',
+             'DAY COUNT': '', 'REGIME': '', 'TENOR': ''},
+            {'MATCH': 'COROA NORUE', 'MODE': 'Contains', 'INDEX': 'cambio', 'CURRENCY': 'NOK',
+             'DAY COUNT': '', 'REGIME': '', 'TENOR': ''},
+            {'MATCH': 'COROA SUECA', 'MODE': 'Contains', 'INDEX': 'cambio', 'CURRENCY': 'SEK',
+             'DAY COUNT': '', 'REGIME': '', 'TENOR': ''},
+            {'MATCH': 'IUAN RENMIMBI', 'MODE': 'Contains', 'INDEX': 'cambio', 'CURRENCY': 'CNY',
+             'DAY COUNT': '', 'REGIME': '', 'TENOR': ''},
+            {'MATCH': 'RENMINBI HONG KON', 'MODE': 'Contains', 'INDEX': 'cambio', 'CURRENCY': 'CNH',
+             'DAY COUNT': '', 'REGIME': '', 'TENOR': ''},
+            {'MATCH': 'ACOES', 'MODE': 'Contains', 'INDEX': 'equity', 'CURRENCY': 'BRL',
+             'DAY COUNT': '', 'REGIME': '', 'TENOR': ''},
+            {'MATCH': 'IBOVESPA', 'MODE': 'Contains', 'INDEX': 'equity', 'CURRENCY': 'BRL',
+             'DAY COUNT': '', 'REGIME': '', 'TENOR': ''},
+            {'MATCH': 'S&P', 'MODE': 'Contains', 'INDEX': 'equity', 'CURRENCY': 'USD',
+             'DAY COUNT': '', 'REGIME': '', 'TENOR': ''},
+            {'MATCH': 'COMMODITIES', 'MODE': 'Contains', 'INDEX': 'equity', 'CURRENCY': 'USD',
+             'DAY COUNT': '', 'REGIME': '', 'TENOR': ''},
+            {'MATCH': 'OURO', 'MODE': 'Contains', 'INDEX': 'equity', 'CURRENCY': 'USD',
+             'DAY COUNT': '', 'REGIME': '', 'TENOR': ''},
+        ],
+    },
+    # ── Operations B3 › Mensageria: a classe do ativo no ASSUNTO ──────────────
+    # Pedido do time (ticket OTC-0032): o assunto do bilateral precisa dizer se
+    # é termo/opção de MOEDA ou de MERCADORIA (ou equities). A classe vem da
+    # coluna Type do Operations B3 — para TER/OPC é a `Classe do Ativo
+    # Subjacente` da posição (TAXA DE CAMBIO, COMMODITIES, ACOES), para SWAP é o
+    # Código Identificador (o LOB: EDG, COMM, HYB). Este cadastro traduz o
+    # token que aparece ali no rótulo do assunto; token sem linha não põe rótulo
+    # nenhum (o assunto fica como sempre foi). O CEM de swap fica de fora de
+    # propósito: juros e moeda vivem na mesma LOB, e um rótulo ali mentiria.
+    'opb3-msg-asset': {
+        'label': 'Operations B3 — Messaging Asset Class',
+        'columns': [
+            {'key': 'MATCH', 'label': 'Type token (contains)'},
+            {'key': 'LABEL', 'label': 'Subject label'},
+        ],
+        'seed': [
+            {'MATCH': 'TAXA DE CAMBIO', 'LABEL': 'Moeda'},
+            {'MATCH': 'TAXAS DE CAMBIO', 'LABEL': 'Moeda'},
+            {'MATCH': 'COMMODITIES', 'LABEL': 'Mercadoria'},
+            {'MATCH': 'ACOES', 'LABEL': 'Equities'},
+            {'MATCH': 'EDG', 'LABEL': 'Equities'},
+            {'MATCH': 'COMM', 'LABEL': 'Mercadoria'},
+            {'MATCH': 'HYB', 'LABEL': 'Híbrido'},
+        ],
+    },
     'swap-funcionalidade': {
         'label': 'Swap — Funcionalidade',
         'columns': [
@@ -12698,4 +12886,5 @@ from apps.pages.features.live_positions import entrypoint as _f_live_positions  
 from apps.pages.features.mapping import entrypoint as _f_mapping                  # noqa: E402,F401
 from apps.pages.features.index_b3 import entrypoint as _f_index_b3                # noqa: E402,F401
 from apps.pages.features.daily_settlement import entrypoint as _f_daily_settlement# noqa: E402,F401
+from apps.pages.features.tools import entrypoint as _f_tools                      # noqa: E402,F401
 from apps.pages.features.new_deals import entrypoint as _f_new_deals              # noqa: E402,F401

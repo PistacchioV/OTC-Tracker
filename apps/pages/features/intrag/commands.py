@@ -485,13 +485,19 @@ def _dce_opt_import(ref_date=None, sid='', actor_name=''):
     try:
         from apps.pages import athena_api
         session = athena_api.build_session()
+        # O tempo de leitura de RELATÓRIO mora no `athena_api` (REPORT_TIMEOUT):
+        # este extrato, o EOD da Recon FXO e o `getTradesBySettle` do Cockpit
+        # esperam o mesmo, e o número escrito à mão em cada módulo era a mesma
+        # decisão em três lugares para divergir no primeiro ajuste.
+        espera = (athena_api.CONNECT_TIMEOUT, athena_api.REPORT_TIMEOUT)
     except Exception:
         import requests
         session = requests.Session()
         # Mesma razão do athena_api: o proxy corporativo recusa o host interno
         # que o navegador alcança direto.
         session.trust_env = False
-    resp = session.get(url, timeout=180)
+        espera = 180
+    resp = session.get(url, timeout=espera)
     resp.raise_for_status()
     try:
         text = resp.content.decode('utf-8-sig')
