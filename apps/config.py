@@ -101,8 +101,15 @@ class Config(object):
 
     USE_SQLITE  = True
 
+    # 30 s, e não os 15 s de antes: o permit local é tomado ANTES do lock de
+    # arquivo, e quem o segura pode esperar o lock por até
+    # DATABASE_READ_LOCK_TIMEOUT_SECONDS. Com os dois em 15 s, um escritor no
+    # share segurando o lock fazia os 4 leitores ocuparem os permits e o 5º
+    # estourar `local_permit_wait_timed_out` no MESMO instante em que os
+    # quatro desistiam — sem nunca ter tido a chance de tentar. O teto do
+    # semáforo tem de ser maior que o pior caso de quem o ocupa.
     DATABASE_LOCAL_SEMAPHORE_TIMEOUT_SECONDS = float(
-        os.getenv('DATABASE_LOCAL_SEMAPHORE_TIMEOUT_SECONDS', '15')
+        os.getenv('DATABASE_LOCAL_SEMAPHORE_TIMEOUT_SECONDS', '30')
     )
     DATABASE_READ_LOCK_TIMEOUT_SECONDS = float(os.getenv('DATABASE_READ_LOCK_TIMEOUT_SECONDS', '15'))
     DATABASE_WRITE_LOCK_TIMEOUT_SECONDS = float(os.getenv('DATABASE_WRITE_LOCK_TIMEOUT_SECONDS', '30'))
