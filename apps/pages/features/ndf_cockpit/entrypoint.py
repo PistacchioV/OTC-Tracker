@@ -43,7 +43,10 @@ def api_ndfc_data():
 def api_ndfc_import():
     if not session.get('authenticated'):
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
-    res = _R()._ndfc_import(datetime.now())
+    # A data do picker: o getTradesBySettle é POR DATA DE LIQUIDAÇÃO, então o
+    # import de um dia anterior é legítimo (era sempre hoje com o .xlsx).
+    p = request.get_json(silent=True) or {}
+    res = _R()._ndfc_import(_R()._api_ref_date(p.get('date')))
     if res.get('success'):
         _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                              'NDF Cockpit Imported', 'NDF Cockpit',
