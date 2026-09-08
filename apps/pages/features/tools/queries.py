@@ -368,6 +368,64 @@ def _fluxos_do_contrato(contrato, ident):
     return sorted(saida, key=lambda f: f['evento'])
 
 
+def _periodo_do_evento(fluxos, x, inicio_swap, data_operacao, hoje):
+    """O período de acumulação de UM evento do DFLUXO, gravado no próprio item.
+
+    Escreve `p_inicio`, `p_fim` e `p_assumido`. O fim é a data do evento — é o
+    dia em que o fluxo liquida. Para o início há quatro candidatos, nesta ordem:
+
+    1. o **evento ANTERIOR** — o fluxo abre onde o outro fechou;
+    2. a **`Data início`** do swap, no primeiro fluxo: é o dia em que o
+       contrato começou a correr;
+    3. a **`Data operação termo`** (a data de contratação), para o contrato que
+       veio sem data de início;
+    4. a `Data Início Composição da Taxa` do PRÓPRIO evento, como último
+       recurso — ela nem sempre é o começo do período.
+
+    E o candidato só vale se for ANTERIOR ao fim: um período que abre no dia em
+    que fecha não é um período, é o sintoma de a coluna não responder o que se
+    perguntou. Era assim que o Flow start saía igual ao Flow end — pelo evento
+    anterior de mesma data (o DFLUXO repete a data quando há mais de um
+    lançamento no dia) ou pela composição de taxa que o arquivo carimba com a
+    data do evento —, e uma janela de zero dia não acusa erro nenhum: ela
+    liquida com juros zero.
+    """
+    fim = x['evento'] or x['fim'] or hoje
+    anterior = ''
+    for y in fluxos:
+        if y['evento'] and y['evento'] < fim and y['evento'] > anterior:
+            anterior = y['evento']
+    x['p_fim'] = fim
+    for exato, candidato in ((True, anterior), (True, inicio_swap),
+                             (False, data_operacao), (False, x['inicio'])):
+        if candidato and candidato < fim:
+            x['p_inicio'], x['p_assumido'] = candidato, not exato
+            return x
+    x['p_inicio'], x['p_assumido'] = '', False
+    return x
+
+
+def _amortizacao_do_evento(x, tipo_amort_posicao):
+    """A amortização de UM evento: `p_amort` (o percentual) e `p_base_amort`.
+
+    `Tipo Amortização` e `Taxa Amortização` do PRÓPRIO evento — a coluna já diz
+    se amortiza sobre o valor base original, sobre o remanescente ou só no
+    vencimento, e a taxa já traz quanto amortiza NAQUELA data. Sem a coluna no
+    fluxo vale o `Tipo de amortização` da posição.
+    """
+    tipo = x['tipo_amort'] or tipo_amort_posicao
+    x['p_base_amort'] = domain.base_da_amortizacao(tipo) or ''
+    if domain.amortiza_no_fluxo(tipo) is False:
+        # "Na Data de Vencimento" / "Sem Troca de Amortização": não é lacuna,
+        # é a resposta — o fluxo não amortiza.
+        x['p_amort'] = '0'
+    elif x['taxa_amort'] is not None:
+        x['p_amort'] = '{:.4f}'.format(x['taxa_amort'])
+    else:
+        x['p_amort'] = ''
+    return x
+
+
 def taxa_do_fixing(indexador, tenor, quando):
     """A taxa a termo do prazo na data, da BASE local — `(taxa, data, motivo)`.
 
@@ -521,40 +579,28 @@ def swap_prefill(b3_id):
     fluxos = _fluxos_do_contrato(contrato, ident)
     out['flows'] = fluxos
     hoje = date.today().isoformat()
+    # O período de CADA evento é calculado aqui, e não só o do escolhido: trocar
+    # o evento no seletor da tela tem de dar a MESMA resposta que abrir nele, e
+    # com a regra escrita duas vezes (uma aqui, outra no `tools.js`) as duas
+    # divergiam — o `applyFlow` do navegador tomava o `inicio` do próprio evento
+    # primeiro, que é justamente o candidato menos confiável.
+    tipo_am_pos = R._swapchar_amort_text(_celula(vals, _POS['tipo_amort']))
+    for x in fluxos:
+        _periodo_do_evento(fluxos, x, inicio_swap, f['data_operacao'], hoje)
+        _amortizacao_do_evento(x, tipo_am_pos)
     passados = [x for x in fluxos if x['evento'] and x['evento'] <= hoje]
     escolhido = passados[-1] if passados else (fluxos[0] if fluxos else None)
     if escolhido:
-        anterior = None
-        for x in fluxos:
-            if x is escolhido:
-                break
-            anterior = x
-        # O início é o evento ANTERIOR (o fluxo abre onde o outro fechou). No
-        # PRIMEIRO fluxo não há anterior, e aí quem abre é a `Data início` do
-        # swap — é o dia em que o contrato começou a correr, e o `inicio` do
-        # próprio evento no DFLUXO nem sempre é ele. O evento fica como plano B,
-        # para o contrato que veio sem data de início.
-        f['inicio'] = ((anterior['evento'] if anterior else inicio_swap)
-                       or escolhido['inicio'] or inicio_swap)
-        f['fim'] = escolhido['evento'] or escolhido['fim'] or hoje
+        f['inicio'] = escolhido['p_inicio']
+        f['fim'] = escolhido['p_fim']
+        if escolhido['p_assumido']:
+            assumed.append('inicio')
         out['flow_event'] = escolhido['evento']
-        # `Tipo Amortização` e `Taxa Amortização` do PRÓPRIO evento: a coluna já
-        # diz se amortiza sobre o valor base original, sobre o remanescente ou
-        # só no vencimento, e a taxa já traz quanto amortiza NAQUELA data.
-        tipo_am = escolhido['tipo_amort'] or R._swapchar_amort_text(_celula(vals, _POS['tipo_amort']))
-        amortiza = domain.amortiza_no_fluxo(tipo_am)
-        base_am = domain.base_da_amortizacao(tipo_am)
-        f['base_amortizacao'] = base_am or ''
-        if not base_am:
+        f['base_amortizacao'] = escolhido['p_base_amort']
+        if not f['base_amortizacao']:
             missing.append('base_amortizacao')
-        if amortiza is False:
-            # "Na Data de Vencimento" / "Sem Troca de Amortização": não é
-            # lacuna, é a resposta — o fluxo não amortiza.
-            f['amortizacao'] = '0'
-        elif escolhido['taxa_amort'] is not None:
-            f['amortizacao'] = '{:.4f}'.format(escolhido['taxa_amort'])
-        else:
-            f['amortizacao'] = ''
+        f['amortizacao'] = escolhido['p_amort']
+        if not f['amortizacao']:
             missing.append('amortizacao')
     else:
         f['inicio'] = inicio_swap

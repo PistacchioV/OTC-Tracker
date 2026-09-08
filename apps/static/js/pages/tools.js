@@ -117,8 +117,39 @@
   }
   page.querySelectorAll('[data-format]').forEach(function (el) {
     el.addEventListener('blur', function () { formatar(el); });
-    el.addEventListener('focus', function () { el.value = el.value.replace(/\s*%\s*$/, ''); el.select(); });
+    el.addEventListener('focus', function () { el.value = el.value.replace(/\s*%\s*$/, ''); });
     formatar(el);
+  });
+
+  // ── clicar num campo seleciona o valor INTEIRO ───────────────────────────
+  // Estes campos se digitam por cima, não se editam letra a letra: o valor vem
+  // preenchido (da posição, ou da formatação de saída) e quem clica ali quer
+  // trocá-lo. O `select()` no `focus` sozinho NÃO resolve o clique de mouse —
+  // o navegador posiciona o cursor no `mouseup`, que vem DEPOIS, e desfaz a
+  // seleção; funcionava só com Tab, e era isso que parecia "não seleciona".
+  // Por isso a seleção é refeita no `mouseup`, e só quando o clique não
+  // arrastou (senão o arrasto para escolher um trecho seria descartado).
+  // Delegado no contêiner porque o campo de data que se VÊ é o `altInput` que
+  // o flatpickr cria — ele nem existe quando esta linha roda.
+  function selecionavel(el) {
+    return el && el.tagName === 'INPUT' && !el.readOnly && !el.disabled &&
+           ['text', 'search', 'tel', 'url', 'number', ''].indexOf(el.type) >= 0;
+  }
+  var focado = null;
+  page.addEventListener('focusin', function (ev) {
+    if (!selecionavel(ev.target)) return;
+    focado = ev.target;
+    try { ev.target.select(); } catch (e) { /* number em alguns navegadores */ }
+  });
+  page.addEventListener('mouseup', function (ev) {
+    var el = focado;
+    focado = null;
+    if (!el || el !== ev.target) return;
+    // `selectionStart` levanta em `input[type=number]` em parte dos
+    // navegadores — ali não há trecho a preservar, e a seleção segue.
+    try { if (el.selectionStart !== el.selectionEnd) return; } catch (e) { /* number */ }
+    ev.preventDefault();
+    try { el.select(); } catch (e) { /* idem */ }
   });
 
   // ── datas: flatpickr com altInput (o padrão da casa; nunca type=date visível) ──
@@ -389,16 +420,18 @@
       var p = key.split('.');
       return p.length === 2 ? tf(p[0]) + ' · ' + tf(p[1]) : tf(key);
     }
-    function applyFlow(flow, d) {
-      // o fluxo escolhido: início, fim e amortização do evento
-      var prev = null;
-      for (var i = 0; i < d.flows.length; i++) { if (d.flows[i] === flow) break; prev = d.flows[i]; }
-      setVal('inicio', flow.inicio || (prev ? prev.evento : d.fields.data_operacao));
-      setVal('fim', flow.fim || flow.evento);
-      setVal('amortizacao', flow.taxa_amort == null ? '' : flow.taxa_amort);
-      mark('inicio', flow.inicio ? '' : (prev ? 'tl-assumed' : 'tl-missing'));
-      mark('fim', flow.fim ? '' : 'tl-assumed');
-      mark('amortizacao', flow.taxa_amort == null ? 'tl-missing' : '');
+    function applyFlow(flow) {
+      // O período e a amortização do evento vêm PRONTOS do servidor (`p_*`).
+      // Montá-los aqui era ter a regra escrita duas vezes: trocar o evento no
+      // seletor dava uma resposta e abrir nele dava outra.
+      setVal('inicio', flow.p_inicio || '');
+      setVal('fim', flow.p_fim || '');
+      setVal('amortizacao', flow.p_amort || '');
+      setVal('base_amortizacao', flow.p_base_amort || '');
+      mark('inicio', flow.p_inicio ? (flow.p_assumido ? 'tl-assumed' : '') : 'tl-missing');
+      mark('fim', flow.p_fim ? '' : 'tl-missing');
+      mark('amortizacao', flow.p_amort ? '' : 'tl-missing');
+      mark('base_amortizacao', flow.p_base_amort ? '' : 'tl-missing');
     }
     function fill(d) {
       lastData = d;
@@ -509,7 +542,7 @@
     if (flows) flows.addEventListener('change', function () {
       if (!lastData || !lastData.flows) return;
       var fl = lastData.flows[parseInt(this.value, 10)];
-      if (fl) applyFlow(fl, lastData);
+      if (fl) applyFlow(fl);
     });
   })();
 

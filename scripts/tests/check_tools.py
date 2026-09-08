@@ -244,6 +244,12 @@ check('VCP cai no Nome Tipo/Classe', cl(REGRAS, 'VCP', 'TSFR3M')['INDEX'], 'term
 check('e o nome vazio tambem', cl(REGRAS, '', 'IPCA')['INDEX'], 'ipca')
 # Curva sem regra devolve None — a tela deixa o indice EM BRANCO e sinalizado.
 check('curva sem cadastro nao vira chute', cl(REGRAS, 'CURVA NOVA DA B3'), None)
+# O Nome Tipo/Classe e a SEGUNDA pergunta, e nao so no VCP: um `Codigo indice`
+# que o `swap-index` nao conhece chega aqui como o proprio codigo, que nao casa
+# com nada — e desistir ali deixaria a ponta em branco tendo a curva escrita na
+# coluna ao lado.
+check('curva que nao casa cai no Nome Tipo/Classe', cl(REGRAS, 'C03', 'DI')['INDEX'], 'cdi')
+check('e sem nada nas duas continua sem chute', cl(REGRAS, 'C03', 'XPTO'), None)
 
 campos, faltando = domain.montar_ponta(None, None, None, 1.0, '', None)
 check('sem regra, o indice fica vazio e sinalizado',
@@ -459,12 +465,46 @@ try:
     check('o primeiro fluxo abre na Data inicio do swap, nao no inicio do evento',
           (pr['fields']['inicio'], pr['fields']['fim']),
           ('2025-09-01', (date.today() - timedelta(days=1)).isoformat()))
+    fl[11] = (date.today() - timedelta(days=40)).strftime('%d/%m/%Y')
     fl2[11] = ontem                           # o segundo tambem ja ocorreu
     _grava_fluxo(fl, fl2)
     check('e o seguinte abre onde o anterior fechou',
-          queries.swap_prefill('CEM-2026-0001')['fields']['inicio'],
-          (date.today() - timedelta(days=1)).isoformat())
+          (queries.swap_prefill('CEM-2026-0001')['fields']['inicio'],
+           queries.swap_prefill('CEM-2026-0001')['fields']['fim']),
+          ((date.today() - timedelta(days=40)).isoformat(),
+           (date.today() - timedelta(days=1)).isoformat()))
+    # Um periodo que ABRE no dia em que FECHA nao e um periodo: ele liquida com
+    # juros zero e nao acusa erro nenhum. Quando o DFLUXO repete a data do
+    # evento (mais de um lancamento no dia) ou carimba a composicao da taxa com
+    # a propria data do evento, o candidato e DESCARTADO e a busca continua.
+    fl3 = list(fl2)
+    fl3[22], fl3[16] = ontem, '30,0000'       # composicao "comecando" no fim
+    _grava_fluxo(fl, fl2, fl3)
+    _deg = queries.swap_prefill('CEM-2026-0001')['fields']
+    check('flow start nunca sai igual ao flow end',
+          (_deg['inicio'] != _deg['fim'], _deg['inicio']),
+          (True, (date.today() - timedelta(days=40)).isoformat()))
+    # A regra do periodo e UMA: o servidor manda o periodo de CADA evento
+    # (`p_inicio`/`p_fim`), e o seletor da tela so le. Montada tambem no
+    # navegador, trocar de evento dava outra resposta que abrir nele.
+    _fl = queries.swap_prefill('CEM-2026-0001')['flows']
+    check('cada evento leva o proprio periodo calculado',
+          all(('p_inicio' in x and 'p_fim' in x and 'p_amort' in x
+               and 'p_base_amort' in x) for x in _fl), True)
+    check('e nenhum deles abre onde fecha',
+          [x for x in _fl if x['p_inicio'] and x['p_inicio'] >= x['p_fim']], [])
     os.remove(os.path.join(pasta, '73760_%s_DFLUXO.json' % dref))
+
+    # O navegador nao remonta o periodo: ele LE o `p_*` que veio do servidor.
+    _js = ler('apps/static/js/pages/tools.js')
+    check('o applyFlow do tools.js so le o periodo do servidor',
+          ("setVal('inicio', flow.p_inicio" in _js,
+           'prev ? prev.evento' in _js), (True, False))
+    # Clicar num campo seleciona o valor inteiro — e o `focus` sozinho nao
+    # resolve o clique de mouse, porque o cursor e posicionado no `mouseup`.
+    check('a selecao do valor inteiro e refeita no mouseup',
+          ("page.addEventListener('mouseup'" in _js and
+           'el.selectionStart !== el.selectionEnd' in _js), True)
 
     # ── 7. Swap Athena: o Edit do CETIP ID ──────────────────────────────────
     print('\n== 7. Swap Athena: Edit do CETIP ID ==')
