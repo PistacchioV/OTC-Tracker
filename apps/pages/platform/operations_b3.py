@@ -534,6 +534,28 @@ def _opb3_msg_route_key(tipo):
     return 'equities' if ('equit' in tn or 'edg' in tn or 'acao' in tn or 'acoes' in tn) else 'cem'
 
 
+def _opb3_msg_asset_label(tipo):
+    """O rótulo da classe do ativo para o ASSUNTO da mensageria, ou ''.
+
+    `tipo` é a coluna Type do Operations B3 — a `Classe do Ativo Subjacente`
+    da posição para TER/OPC (TAXA DE CAMBIO, COMMODITIES, ACOES) e o Código
+    Identificador para SWAP (CEMHYB-2026-9243). Quem traduz o token no rótulo é
+    o cadastro `opb3-msg-asset` (/mapping), casado por CONTÉM e cego a caixa e
+    acento; entre dois tokens que casam vence o mais longo (`COMMODITIES` antes
+    de `COMM`, que também está dentro dele). Sem linha, sem rótulo — o assunto
+    fica como sempre foi (ticket OTC-0032)."""
+    from apps.pages import routes
+    tn = routes._fcst_norm(str(tipo or ''))
+    if not tn:
+        return ''
+    melhor, tam = '', -1
+    for r in routes._mapping_rows('opb3-msg-asset') or []:
+        tok = routes._fcst_norm(str(r.get('MATCH', '') or '')).strip()
+        if tok and tok in tn and len(tok) > tam:
+            melhor, tam = str(r.get('LABEL', '') or '').strip(), len(tok)
+    return melhor
+
+
 def _opb3_refdata_by_account():
     """Conta CETIP ('B3 ACCOUNT', ex. 74220.00-5) → nome da contraparte (RefData)."""
     out = {}

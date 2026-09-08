@@ -3363,6 +3363,7 @@ _OPB3_B3_STATUS_DONE = _pf_opb3._OPB3_B3_STATUS_DONE
 _opb3_msg_load_recipients = _pf_opb3._opb3_msg_load_recipients
 _opb3_msg_save_recipients = _pf_opb3._opb3_msg_save_recipients
 _opb3_msg_route_key = _pf_opb3._opb3_msg_route_key
+_opb3_msg_asset_label = _pf_opb3._opb3_msg_asset_label
 _opb3_refdata_by_account = _pf_opb3._opb3_refdata_by_account
 _opb3_participant_name_by_account = _pf_opb3._opb3_participant_name_by_account
 _OPB3_LEGAL_SIDES = _pf_opb3._OPB3_LEGAL_SIDES
@@ -10968,6 +10969,31 @@ _MAPPING_DEFS = {
         'seed': [
             {'CLIENT': 'MONDELEZ', 'MATCH': 'Starts with',
              'NOTES': 'um aviso por commodity'},
+        ],
+    },
+    # ── Operations B3 › Mensageria: a classe do ativo no ASSUNTO ──────────────
+    # Pedido do time (ticket OTC-0032): o assunto do bilateral precisa dizer se
+    # é termo/opção de MOEDA ou de MERCADORIA (ou equities). A classe vem da
+    # coluna Type do Operations B3 — para TER/OPC é a `Classe do Ativo
+    # Subjacente` da posição (TAXA DE CAMBIO, COMMODITIES, ACOES), para SWAP é o
+    # Código Identificador (o LOB: EDG, COMM, HYB). Este cadastro traduz o
+    # token que aparece ali no rótulo do assunto; token sem linha não põe rótulo
+    # nenhum (o assunto fica como sempre foi). O CEM de swap fica de fora de
+    # propósito: juros e moeda vivem na mesma LOB, e um rótulo ali mentiria.
+    'opb3-msg-asset': {
+        'label': 'Operations B3 — Messaging Asset Class',
+        'columns': [
+            {'key': 'MATCH', 'label': 'Type token (contains)'},
+            {'key': 'LABEL', 'label': 'Subject label'},
+        ],
+        'seed': [
+            {'MATCH': 'TAXA DE CAMBIO', 'LABEL': 'Moeda'},
+            {'MATCH': 'TAXAS DE CAMBIO', 'LABEL': 'Moeda'},
+            {'MATCH': 'COMMODITIES', 'LABEL': 'Mercadoria'},
+            {'MATCH': 'ACOES', 'LABEL': 'Equities'},
+            {'MATCH': 'EDG', 'LABEL': 'Equities'},
+            {'MATCH': 'COMM', 'LABEL': 'Mercadoria'},
+            {'MATCH': 'HYB', 'LABEL': 'Híbrido'},
         ],
     },
     'swap-funcionalidade': {

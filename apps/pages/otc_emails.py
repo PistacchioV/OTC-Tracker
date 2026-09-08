@@ -1912,6 +1912,14 @@ def build_opb3_mensageria_email(group):
         base = 'Exercício Opção'
     else:
         base = (tipo_op.title() + (' ' + tit_label if tit_label else '')).strip()
+    # A classe do ativo entre parênteses, logo depois do evento: "Vencimento de
+    # Termo (Moeda)". Pedido do time (OTC-0032) — o bilateral de termo/opção
+    # precisa dizer se é moeda ou mercadoria sem abrir o e-mail. Quem resolve o
+    # rótulo é o chamador (cadastro `opb3-msg-asset`); sem ele o assunto fica
+    # como sempre foi.
+    asset = str(group.get('asset_label') or '').strip()
+    if asset:
+        base = '{} ({})'.format(base, asset)
     subject = '{} - Liquidação Banco x {} - {}'.format(base, cpty, ref_date)
 
     intro = (_ep('Bom dia,') +
