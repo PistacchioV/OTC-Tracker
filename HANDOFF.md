@@ -17381,7 +17381,21 @@ contratado, e a composição de taxa é o palpite menos confiável dos quatro.
   CASA**, e não só quando ela é `VCP` ou vazia. Um `Código índice` que o
   `swap-index` não conhece chega lá como o próprio código (`C03`), que não casa
   com regra nenhuma — e desistir ali deixa a ponta em branco tendo a curva
-  escrita na coluna ao lado. E a ponta que não classifica passou a sair no LOG
+  escrita na coluna ao lado. **E o DI que não puxava era isto**: o PRIMEIRO seed
+  do `tools-swap-index` usou os códigos da RENDA FIXA (`cdi_percentual` /
+  `cdi_spread`, que lá são duas formas do mesmo CDI); o seed foi corrigido para
+  `cdi` no commit seguinte, mas **seed só roda quando o arquivo NÃO existe** —
+  a instância que já tinha o cadastro em disco ficou com o código antigo para
+  sempre. Duas correções, porque cada uma cobre uma ponta: um `upgrade`
+  (`_tools_swap_index_upgrade`) traduz o código antigo na LEITURA, e
+  `montar_ponta` passou a RECUSAR um `INDEX` que não é indexador do motor,
+  devolvendo a ponta em branco e sinalizada. Sem a segunda o defeito era mudo
+  em dobro: a tela punha no `<select>` um valor sem opção correspondente — o
+  campo ficava vazio — e a nota de "não identificou" NÃO aparecia, porque o
+  servidor tinha respondido um índice. Um cadastro de tela pode guardar o valor
+  de um seed antigo, e é o consumidor que tem de conferir. O guarda passou a
+  provar que todo `INDEX` do seed e toda opção do `select` existem em
+  `liquidacao.INDEXADORES`. E a ponta que não classifica passou a sair no LOG
   em WARNING com o valor exato que não casou (código · curva · classe) e o
   tamanho do cadastro: é o que separa "a posição veio sem índice" de "falta a
   linha no `tools-swap-index`" quando a mesa relata "não puxou" — na instância
