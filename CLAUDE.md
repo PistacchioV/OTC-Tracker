@@ -111,6 +111,7 @@ importados pelas rotas — nenhum tem blueprint próprio:
 | Módulo | O que é |
 |---|---|
 | `athena_api.py` | cliente da API `getTrades` da Athena (SSO Kerberos/ADFS — §8) |
+| `precificador/` | o motor de mercado das **Tools** (calendário, contagem de dias, CDI, PTAX, SOFR, Term SOFR, EURIBOR, renda fixa, liquidação de swap) — porte do projeto *Precificação Swap*, sem Flask |
 | `confirmation_pdfs.py` | réplicas em reportlab dos documentos Word |
 | `manual_conf.py` | a esteira de confirmação manual (os dois DuckDBs, as derivadas, o agrupamento) |
 | `recon_fxo.py` | motor da reconciliação de FXO (DPOSICAO × Athena EOD) |
@@ -925,14 +926,15 @@ e um item no array `TYPES` de `apps/templates/pages/mapping.html`.
   colunas extras do arquivo** (`STATUS`/`MAKER`/`CHECKER`): o POST reescreve o
   arquivo inteiro e derrubaria o que não estivesse declarado (HANDOFF §188).
 
-São **43** mappings hoje: `currency-base`, `interbook-ndf`, `publisher-ndf`,
+São **45** mappings hoje: `currency-base`, `interbook-ndf`, `publisher-ndf`,
 `le-accronym`, `le-spn`, `commodities-b3`, `bank-name`, `fxo-conv-rate`,
 `ndf-pdf-cpty`, `swap-curves`, `cetip-files`, `api-links`, `opb3-events`,
 `swap-ir-client`, `swap-ir-term`, `swap-index`, `swap-funcionalidade`,
 `swap-amortizacao`, `swap-code-labels`, `ndfc-ir-exempt`, `ndfc-advice-split`,
 `b3-accounts`, `fxo-internal-cpty`, `fxo-book-disregard`,
 `bankers-email`, `manual-conf-validation`, `manual-conf-sla`, `quotes-equity`,
-`quotes-commodity`, `gdt-codes`, `settlement-exception`, `mt300`, e os sete
+`quotes-commodity`, `gdt-codes`, `settlement-exception`, `mt300`,
+`tools-swap-index`, `opb3-msg-asset`, e os sete
 `dce-*` dos domínios DCE (`dce-country`, `dce-type-of-derivative`,
 `dce-type-of-swap`, `dce-type-of-verification`, `dce-functionality`,
 `dce-underlying-asset-category`, `dce-underlying-asset`), mais os quatro do CGD
@@ -1206,6 +1208,25 @@ continua no label inglês.
     nossas entidades e nada mais —, e é por aí que o BCC de compliance sabe que a
     contraparte é o Lawton ou a Atacama, em vez de casar o prefixo do Nome
     Simplificado.
+- **`tools-swap-index`** — a curva da POSIÇÃO de swap → o indexador do **Swap
+  Calculator** (Tools). O pré-preenchimento pelo B3 ID lê o `Código índice` de
+  cada perna do DPOSICAO-SWAP, traduz o código em NOME pelo `swap-index`
+  (C03 → DI, C99 → PREFIXADO 252D, 220 → DOLAR DOS EUA) e procura aqui que
+  índice da calculadora ele é. Quando a curva é **VCP** o nome de verdade está
+  no `Nome Tipo/Classe` da posição, e é ele que passa pelas mesmas regras.
+  `Exact` vence `Contains`; entre dois `Contains` vence o token mais LONGO —
+  senão o `DOLAR DOS EUA 30/360` herdaria a contagem do `DOLAR` genérico.
+  **Curva sem linha deixa o índice EM BRANCO e sinalizado na tela**, nunca um
+  palpite: um indexador chutado numa ponta produz uma liquidação errada que
+  parece certa. `DAY COUNT`/`REGIME` em branco valem o padrão do índice.
+- **`opb3-msg-asset`** — o token da coluna **Type** do Operations B3 → o rótulo
+  da classe do ativo no ASSUNTO da mensageria (`Moeda`, `Mercadoria`,
+  `Equities`). O Type é a `Classe do Ativo Subjacente` da posição em TER/OPC e o
+  Código Identificador em SWAP, então a mesma lista serve os dois. O casamento é
+  por CONTÉM e o token mais longo vence — `COMMODITIES` contém `COMM`, e o de
+  quatro letras roubaria a linha se a ordem do arquivo decidisse. **Token sem
+  linha não põe rótulo nenhum** e o assunto fica como sempre foi: a mudança é
+  aditiva, e um rótulo errado no assunto é pior que a ausência dele.
 - **`fxo-conv-rate`** — alimenta as duas colunas de Taxa de Conversão da
   confirmação de FXO asiática (Moeda Base → nome da taxa + Venda/Compra) e vem
   semeado só com USD → USD PTAX / Venda; moeda não cadastrada gera aviso no
@@ -2605,6 +2626,25 @@ Intrag ficavam com o valor cru sempre que o notional estava na moeda fraca
   caminho citado em prosa continua permitido).
 - **SMTP** usa `mailhost.jpmchase.net` (relay interno, porta 25, sem auth) —
   fora da rede JPM o envio falha silenciosamente.
+- **A Athena tem DOIS tempos de leitura, e um de conexão.** `REQUEST_TIMEOUT`
+  (30 s) é a consulta de UM produto num dia — o `getTrades` do New Deals, que
+  responde em segundos. `REPORT_TIMEOUT` (180 s) é o RELATÓRIO, que varre o
+  livro inteiro de uma data: o EOD da Recon FXO, o ITAUDataExtract do Intrag DCE
+  e o `getTradesBySettle` do NDF Cockpit. Os dois primeiros já pediam 180
+  escritos à mão em cada módulo; o terceiro herdava os 30 do `getTrades` e
+  estourava `ReadTimeout` — e o erro chegava à tela como um traceback de
+  urllib3 que **não menciona tempo nenhum** e parece falha de SSO (foi o que se
+  viu em 08/09/2026; o Kerberos estava certo o tempo todo). O timeout vale para
+  o **POST do replay do ADFS** também, e não só para o GET: o `form_post` é o
+  hop que dispara a consulta de verdade e volta com os dados, então é nele que a
+  espera longa é gasta. `CONNECT_TIMEOUT` (10 s) é separado de propósito — ele é
+  pago quando o host não responde (VPN fora, endereço errado no cadastro), e com
+  um número só a tela esperava três minutos para dizer que não conectou. Os três
+  são cadastráveis (`ATHENA_TIMEOUT`, `ATHENA_REPORT_TIMEOUT`,
+  `ATHENA_CONNECT_TIMEOUT`), e **valor malformado cai no padrão com aviso no
+  log**: o módulo é importado no topo do `routes`, e um `.env` digitado errado
+  não pode transformar um ajuste de tempo numa aplicação que não sobe.
+  `check_athena_sso.py` prende os dois hops e o fallback.
 - **API `getTrades` da Athena** (`apps/pages/athena_api.py`): importa New Deals
   de NDF/FXO (botão manual + schedulers no app, NDF a cada 20 min, FXO de hora
   em hora, **os dois só entre 08:00 e 20:00 BRT** — ver §7). Precisa da rede JPM — fora dela o scheduler falha em silêncio
@@ -2779,12 +2819,14 @@ features/<nome>/
 linhas (−46%).** O catálogo, com a fronteira decidida de cada uma no docstring
 do próprio `__init__.py`:
 
-- **Desenho fino** (domain/queries/commands/infra) — **TODAS as 43**, desde o
+- **Desenho fino** (domain/queries/commands/infra) — **TODAS as 44**, desde o
   §321: não existe mais `engine.py` em feature nenhuma. As últimas sete a
   serem separadas por dentro foram `deals_monitor` e `counterparty_details`
   (§320) e `accrual`, `cetip`, `intrag`, `mtm` e `cognos` (§321) — este
   último estava listado como desenho fino sem ser, e a varredura por
-  `engine.py` o pegou.
+  `engine.py` o pegou. A 44ª é a **`tools`** (§424), que nasceu já assim: o
+  motor de mercado dela é o pacote `apps/pages/precificador/` — puro, fora da
+  vertical, como o `quotes.py` é o motor das Cotações.
 - **Casca** (só as rotas; motores/stores continuam no `routes` como
   plataforma): `electronic_inventory`, `manual_confirmation`, `otm`, `latam`,
   `ndf_summary`, `operations_b3`, `other_products`, `file_interpreter`,

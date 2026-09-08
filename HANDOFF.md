@@ -17165,3 +17165,96 @@ Dois pedidos da mesa, os dois no par Overview × Track Docs:
   de liquidações anteriores do mês; com o imposto dispensado, uma nota diz que
   ficou abaixo de R$ 1,00 e será acumulado. Sem nenhum dos dois, nada muda no
   documento. `check_ndfsum_ir.py` prende regra, ledger e notas.
+
+## §424 — Apps › Tools: o porte do *Precificação Swap*, e o timeout da Athena (2026-09-08)
+
+**O item Quotes do menu virou `Tools`**, com o Quotes como primeira filha e
+cinco ferramentas novas ao lado: **Fixed Income**, **Swap Calculator**,
+**SOFR Index**, **Term SOFR** e **Euribor**. As cinco são o porte do projeto
+`Precificação Swap` (as planilhas VBA do curso, já convertidas em Python lá)
+para dentro do app.
+
+- **O motor é um pacote puro** (`apps/pages/precificador/`), fora da vertical —
+  como o `quotes.py` é o motor das Cotações: calendário, contagem de dias
+  (DU/252, ACT/360, ACT/365, 30/360, 30E/360, ACT/ACT × composto/simples), CDI
+  da série 4389, PTAX de qualquer moeda do boletim, SOFR composto, Term SOFR,
+  EURIBOR, renda fixa e a liquidação de swap ponta a ponta. A vertical
+  `features/tools/` é a casca (domain/queries/commands/entrypoint).
+- **Três coisas mudaram no porte, e as três são regra da casa.** A rede é a do
+  Quotes (sessão Kerberos + a fila proxy → proxy do sistema → direta): duas
+  cadeias no mesmo processo seriam duas respostas para "por onde saio". Os
+  feriados vêm do **Holidays Calendar do app** (`anbima.json`, `sofr.json`,
+  `euribor.json`, pelo registro), então um feriado editado pela tela vale aqui
+  no request seguinte — fora do alcance do arquivo da EURIBOR vale a regra do
+  TARGET2. E todo texto visível nasce em inglês, com `data-lang` nos três
+  idiomas (250 chaves novas).
+- **As telas são renderizadas no SERVIDOR** (POST do formulário → a mesma
+  página com o resultado), ao contrário do padrão JS+API das outras verticais:
+  o resultado de uma liquidação são quatro quadros e três tabelas montados a
+  partir de dataclasses, e serializá-los para o navegador remontar seria uma
+  segunda cópia do desenho. Como o DOM inteiro existe no load, o `I18nManager`
+  alcança o resultado também.
+- **As bases locais viraram BANCO** (pedido da mesa): EURIBOR, SOFR e Term SOFR
+  gravam em `DATA_DIR/tools/*.json` pelo funil `_atomic_write_json`, e o espelho
+  vivo os converte em `db/tools/euribor_historico.db`, `sofr_historico.db` e
+  `term_sofr_b3.db`; a leitura é DB-first. Elas são **lista de registros**, um
+  por data — o dicionário-por-data do projeto de origem viraria uma tabela de
+  uma linha e cinco mil colunas. O seed versionado (`tools/seed/`) faz a
+  instância nova nascer com os vinte anos de EURIBOR e os oito de SOFR; a base
+  viva é gitignorada, porque é reescrita a cada sincronização.
+- **O Swap Calculator preenche pelo B3 ID.** Digitado o Contrato ou o Código
+  Identificador, a posição do último dia útil (DPOSICAO-SWAP, 170 campos lidos
+  POSICIONALMENTE, como no Live Position) devolve contraparte, datas, notional
+  remanescente, amortização e as DUAS pontas: a primeira e a segunda coluna de
+  mesmo nome são a perna da Parte e a da Contraparte. O `Código índice` vira
+  nome pelo `swap-index` e o nome vira indexador pelo cadastro novo
+  `tools-swap-index`; **VCP não é curva** — ali a curva de verdade está no `Nome
+  Tipo/Classe`. A coluna `Cupom Limpo` de cada perna é a **cotação inicial do
+  ativo**, e o campo que a recebe muda com o índice: fixing na moeda,
+  número-índice no IPCA, preço no equity. O fluxo (início, fim, amortização) sai
+  do DFLUXO, com um seletor quando há mais de um evento; o fixing de Term SOFR /
+  EURIBOR vem em D-2 úteis do início, que é o padrão de mercado e o que o motor
+  já assume no campo vazio.
+- **O que não se consegue puxar fica EM BRANCO e sinalizado** (pedido explícito):
+  vermelho no campo e a lista do que faltou logo acima; âmbar no que veio por
+  aproximação — a data da operação é a de início do swap, porque a posição não
+  guarda a de contratação. Um indexador ou uma cotação chutados produzem uma
+  liquidação errada que parece certa.
+- **Fixed Income** perdeu o campo *Product* (pedido): sobrou o Index/Benchmark,
+  que é o que muda a conta. A isenção de IR continua no motor.
+
+**A mensageria do Operations B3 diz a classe do ativo no assunto** (ticket
+OTC-0032): `Vencimento de Termo **(Moeda)**`, `(Mercadoria)`, `(Equities)`. O
+rótulo sai do cadastro `opb3-msg-asset` a partir da coluna **Type** — a Classe
+do Ativo Subjacente da posição em TER/OPC, o Código Identificador em SWAP.
+Token sem linha não põe rótulo e o assunto fica como sempre foi: a mudança é
+aditiva.
+
+**O Swap Athena ganhou a coluna Actions com o botão de Edit**, e ele edita **só
+o CETIP ID**. O visualizador compartilhado (`live-position-swap-characteristics.js`,
+que serve cinco telas) ganhou o modo `data-actions="edit"` — só o Edit, sem o
+Confirm e o Delete das duas páginas de advice, que não mudaram. A gravação acha
+a linha pelo **Kapital ID**: o CETIP ID é o que está sendo corrigido, então
+chavear por ele deixaria a linha sem chave na primeira edição; com o Kapital ID
+repetido (pernas), o CETIP ID atual desempata. O ciclo inteiro roda sob o
+`_cache_lock`, no arquivo-dia EXIBIDO.
+
+**E a API de liquidação estourava o tempo, não o SSO.** O `getTradesBySettle`
+do Cockpit voltava `ReadTimeout ... (read timeout=30)` na instância, com o
+traceback do urllib3 chegando à tela — que se lê como falha de autenticação e
+não é: o Kerberos estava certo desde o §421 (a chamada usa o mesmo
+`build_session()` do New Deals, e o erro acontecia DEPOIS do handshake, no
+replay do ADFS). O que faltava era tempo: aquele endpoint varre o **livro
+inteiro** de uma data de liquidação, como o EOD da Recon FXO e o extrato do
+Intrag DCE — os dois já pediam 180 s escritos à mão em cada módulo —, e ele
+herdava os 30 s do `getTrades` de UM produto. Agora o `athena_api` tem os três
+tempos nomeados (`CONNECT_TIMEOUT` 10 s, `REQUEST_TIMEOUT` 30 s,
+`REPORT_TIMEOUT` 180 s), cadastráveis por `.env` e com o malformado caindo no
+padrão; o timeout alcança o **POST do replay**, que é onde a consulta é de fato
+feita; e o estouro tem mensagem própria, dizendo os segundos e a variável, em
+vez do repr do urllib3. Ver §8. `check_athena_sso.py` prende os dois hops e o
+fallback do `.env`; `check_ndfc_api.py` prende que o Cockpit pede o timeout de
+RELATÓRIO — herdar os 30 de novo passaria batido.
+
+`check_tools.py` prende o motor, as bases, o pré-preenchimento, a casca, os
+dois cadastros novos e o Edit do Swap Athena.
