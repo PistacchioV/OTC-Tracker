@@ -17026,8 +17026,9 @@ Dois pedidos da mesa, os dois no par Overview × Track Docs:
 - Pedido: Daily Settlement › NDF passa a ler da API
   `…/api/v1/getTradesBySettle?product=NDF&date=AAAAMMDD` (as operações de NDF
   de moeda que LIQUIDAM na data) o que antes vinha do SETTLEMENT.xlsx do
-  Cockpit; o valor de liquidação é o `ForwardCashflow`, arredondado na segunda
-  casa. O botão Import da página (`/api/ndf-cockpit/import`) é que mudou de
+  Cockpit; o valor de liquidação é o primeiro `Rolled Positions` do bloco
+  `settlement`, arredondado na segunda casa (era o `ForwardCashflow` — corrigido
+  no mesmo dia, §425). O botão Import da página (`/api/ndf-cockpit/import`) é que mudou de
   fonte; o `.xlsx` largado no dropzone do Save Daily Settlement Files continua
   entrando (`_ds_handle` → `_ndfc_extract`) como plano B — as duas fontes gravam
   o MESMO JSON, com as MESMAS colunas, e o resto do app (NDF Summary,
@@ -17048,7 +17049,7 @@ Dois pedidos da mesa, os dois no par Overview × Track Docs:
     MÓDULO — o `_ndfc_strike_calc` divide o settlement pelo notional e decide o
     sinal pela posição do TER, e um notional negativo inverteria a conta;
   - **`VL_FORWARD_RATE` é o `Spot` do bloco `settlement`, e `VL_STRIKE_PRICE` o
-    `Strike`.** Confere com a fórmula da mesa que o Cockpit sempre usou:
+    `Strike`** (o `settlement` é uma LISTA de eventos, não um objeto — §425). Confere com a fórmula da mesa que o Cockpit sempre usou:
     strike = fixing ± |settlement| / notional_FC (5,1253 + 823.467,03 /
     5.302.427,75 = 5,2806). Par com moeda fraca inverte os dois
     (`_ndf_weak_leg`), como o Rate do New Deals;
@@ -17063,10 +17064,9 @@ Dois pedidos da mesa, os dois no par Overview × Track Docs:
   - `ID_SOURCE_DEAL` = Deal Name; `ID_DEAL` = `Event Name` da liquidação;
     `CD_CETIP_RETURN` = Cetip ID (a API já traz — o resgate por TER/Operations
     B3 do §105 continua valendo para a linha que vier sem);
-  - **`VL_TAX_INCOME`, `NB_BANK`, `CD_BRANCH` e `CD_BANK_ACCOUNT` ficam em
-    BRANCO**: a API não os traz (eram do Cockpit). O IR do Settlement Advice de
-    NDF lê o `VL_TAX_INCOME` — enquanto a API não o trouxer, o aviso sai sem a
-    retenção. Pendência declarada;
+  - **`NB_BANK`, `CD_BRANCH` e `CD_BANK_ACCOUNT` ficam em BRANCO**: a API não
+    os traz (eram do Cockpit). O `VL_TAX_INCOME` também nascia vazio, e a
+    pendência foi fechada no §425: o import o CALCULA pela regra do §423;
   - cancelado, GLOBAL_HOLDING_BOOK e **interbook ficam de fora** (contados em
     `skipped`). O interbook é o MESMO predicado do pull do New Deals
     (`_ndf_is_interbook`), lendo o cadastro `interbook-ndf` do /mapping (aba
@@ -17258,3 +17258,124 @@ RELATÓRIO — herdar os 30 de novo passaria batido.
 
 `check_tools.py` prende o motor, as bases, o pré-preenchimento, a casca, os
 dois cadastros novos e o Edit do Swap Athena.
+
+## §425 — NDF Cockpit: o `settlement` da API é uma LISTA, e o Delete vira de lote (2026-09-08)
+
+Três pedidos da mesa sobre o Import do §421, e um defeito que só apareceu com o
+payload de produção na frente.
+
+- **O de-para lia o bloco errado, e falhava calado.** O `settlement` do
+  `getTradesBySettle` é uma **LISTA de eventos**, não um objeto, e não existe
+  `ForwardCashflow` nenhum ali. O código lia dict e descartava a lista sem
+  reclamar: ID_DEAL, Spot e valor de liquidação chegavam VAZIOS à tela, com o
+  import respondendo sucesso. O valor é o **primeiro item numérico de
+  `Rolled Positions`**, com duas casas half-up — o segundo é o notional da
+  moeda, que é maior, então "pegar o maior" ou somar devolveria o número errado
+  sem erro nenhum. O `ForwardCashflow` ficou como plano B, para os dias já
+  gravados.
+- **Um trade com vários eventos vira uma linha por evento** — a lista é a
+  unidade de liquidação, e colapsá-la perderia liquidações do mesmo deal.
+- **Dois filtros novos, pedidos pela mesa**: só entra quem TEM `settlement` e
+  cujo **Trade Date não seja hoje**. Os dois são contados no `skipped`, ao lado
+  de cancelado e interbook — linha que some sem dizer nada vira "sumiu uma
+  operação do Cockpit".
+- **O `VL_TAX_INCOME` passou a ser calculado no import** (`_ndfc_apply_ir`),
+  fechando a pendência declarada no §421. Ele **reusa** o
+  `_ndfsum_ir_cockpit_groups` + `_ndfsum_ir_for_day` do NDF Summary em vez de
+  reimplementar o §423: duas fórmulas para o mesmo imposto discordariam no
+  primeiro caso de borda. E é aplicado ao DIA INTEIRO montado, nunca por
+  registro, porque o piso de R$ 1,00 é por contraparte dentro do mês. A célula
+  gravada é um SNAPSHOT — o Summary continua sendo a autoridade e recalcula na
+  leitura (§423). IR que não calcula deixa a coluna vazia, nunca um zero, que
+  se leria como "não há imposto".
+- **O botão Delete all virou Delete do LOTE marcado**, e só EXISTE a partir de
+  duas linhas selecionadas: uma linha já tem a lixeira da própria linha, e um
+  segundo caminho para a mesma ação é onde as duas confirmações passam a
+  divergir. A seleção precisou passar a existir de verdade — com `deferRender`
+  o DataTables desenha só a página visível, então a marca vive num conjunto de
+  ids e o `draw` reaplica os checkboxes; a marca que morasse no DOM sumiria ao
+  paginar e o lote apagaria menos do que a pessoa marcou. O "marcar tudo" do
+  cabeçalho vale para o que o FILTRO deixou, não só para a página na tela.
+- No servidor, `/rows/delete-all` virou `/rows/delete` com `ids`. O arquivo do
+  dia **continua ficando** mesmo quando o lote leva a última linha (apagá-lo faz
+  a tela cair no fallback de "dia sem arquivo", que se lê como "ainda não
+  importaram"), e o `removed` que volta é quantas SAÍRAM, não o tamanho do
+  pedido: id que outra aba já apagou é ignorado, e nenhum id casando é 404 — a
+  mesma resposta do delete de uma linha só.
+- A tabela passou a **abrir ordenada por NM_COUNTERPARTY, A→Z**. O índice é
+  procurado pelo NOME da coluna: elas vêm do servidor, e uma coluna nova antes
+  dela deslocaria um número fixo para a vizinha, que ordena do mesmo jeito e sem
+  erro nenhum.
+- `check_ndfc_api.py` ganhou o payload REAL no fixture (a lista, o `Rolled
+  Positions` com o notional ao lado) e três seções: os dois filtros mais o
+  fan-out por evento, o IR calculado nos cinco desfechos, e os quatro do Delete.
+  De passagem, o guarda gravava o imposto do fixture no ledger de VERDADE — o
+  `_B3_DATA_DIR` agora vai para o tmp junto com o `NDFC_JSON_ROOT`, no bloco de
+  setup e não no meio do arquivo.
+
+## §426 — Swap Calculator: a data da operação, e o primeiro fluxo (2026-09-08)
+
+- **A data da operação sai da `Data operação termo`** do Swap Characteristics
+  (índice 25 da posição), que é a data de contratação de verdade. O prefill dava
+  sempre a `Data início`, marcada como aproximação; agora ela só responde quando
+  a coluna vem em branco — o swap que não é a termo —, e aí sim segue marcada
+  como assumida. É dessa data que sai o prazo do IR, e assumir calado erra a
+  alíquota.
+- **O primeiro fluxo abre na `Data início` do swap.** Ele caía no `Data início`
+  do próprio evento no DFLUXO, que nem sempre é o dia em que o contrato começou
+  a correr; sem evento anterior de onde partir, quem abre é a data de início do
+  swap, e o evento ficou como plano B para o contrato que veio sem ela. Do
+  segundo fluxo em diante nada muda: ele abre onde o anterior fechou.
+- **A ponta cujo índice não resolve deixou de ser um campo mudo.** A promessa do
+  `tools-swap-index` é que curva sem linha fica em branco e SINALIZADA, mas a
+  tela só listava o nome do campo em falta — "não identificou" e "a posição veio
+  sem índice" eram a mesma tela em branco, e é justamente a diferença entre as
+  duas que se corrige. A nota escreve o que a posição trazia (Código índice ·
+  curva do `swap-index` · Nome Tipo/Classe) e manda cadastrar a curva no
+  Mapping. O servidor já devolvia isso em `fonte`; o que faltava era mostrar.
+- `check_tools.py` prende as duas regras de data, com o fixture do DFLUXO
+  trazendo um `inicio` de evento DIFERENTE da data do swap — iguais, a asserção
+  passaria por coincidência.
+
+## §427 — Swap Calculator: um período que abre onde fecha não é um período (2026-09-08)
+
+O Flow start do §426 continuou saindo errado na instância: ele vinha **igual ao
+Flow end**, os dois na data do evento. Duas causas somadas, e nenhuma delas dá
+erro — uma janela de zero dia liquida com juros zero e a tela fica plausível.
+
+- **O "evento anterior" era o item ANTERIOR NA LISTA, não o evento anterior em
+  DATA.** O DFLUXO repete a data quando há mais de um lançamento no dia, e aí o
+  anterior tinha a mesma data do escolhido. O item anterior podia inclusive ser
+  uma linha com o evento em branco, que caía no plano B sem ninguém ver.
+- **O plano B era a `Data Início Composição da Taxa` do próprio evento**, e em
+  parte dos contratos ela vem carimbada com a data do evento — o mesmo empate,
+  por outro caminho.
+
+A regra passou a ser uma só (`_periodo_do_evento`): o fim é a data do evento, e
+o início é o **primeiro candidato que for ANTERIOR ao fim** — evento anterior (o
+mais recente estritamente antes) → `Data início` do swap → `Data operação termo`
+→ composição de taxa do evento. Candidato que não é anterior ao fim é
+DESCARTADO, e a busca continua; os dois últimos entram marcados como assumidos.
+A `Data operação termo` é candidato novo: um contrato começa a correr quando é
+contratado, e a composição de taxa é o palpite menos confiável dos quatro.
+
+- **O período e a amortização de CADA evento vão prontos no payload**
+  (`p_inicio`/`p_fim`/`p_amort`/`p_base_amort`) e o `applyFlow` do `tools.js` só
+  lê. A regra estava escrita duas vezes e as duas discordavam: trocar o evento
+  no seletor tomava o `inicio` do próprio evento PRIMEIRO — o candidato menos
+  confiável —, então abrir num evento e escolher esse mesmo evento no seletor
+  davam respostas diferentes. E o seletor nem mexia no `base_amortizacao`, que
+  ficava o do evento de abertura.
+- **`classificar_indice` tenta o `Nome Tipo/Classe` também quando a curva NÃO
+  CASA**, e não só quando ela é `VCP` ou vazia. Um `Código índice` que o
+  `swap-index` não conhece chega lá como o próprio código (`C03`), que não casa
+  com regra nenhuma — e desistir ali deixa a ponta em branco tendo a curva
+  escrita na coluna ao lado.
+- **Clicar num campo seleciona o valor inteiro.** Esses campos se digitam por
+  cima: o valor chega preenchido (da posição, ou da formatação de saída) e quem
+  clica quer trocá-lo. O `select()` no `focus` — que já existia nos campos com
+  `data-format` — não resolve o clique de MOUSE: o navegador posiciona o cursor
+  no `mouseup`, que vem depois, e desfaz a seleção; funcionava só com Tab. Agora
+  a seleção é refeita no `mouseup`, preservada quando o clique arrastou para
+  escolher um trecho, e **delegada no contêiner**, porque o campo de data que se
+  VÊ é o `altInput` que o flatpickr cria depois.

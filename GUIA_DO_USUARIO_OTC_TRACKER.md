@@ -135,7 +135,7 @@ O menu é em **níveis**: um item com **›** à direita tem submenu. Clicar nel
 | Grupo | Itens |
 |---|---|
 | **NAVIGATION** | Dashboards › Dashboard 1 · Dashboard 2 — About |
-| **APPS** | Holidays Calendar · Electronic Inventory · Control Panel · File Interpreter · Quotes |
+| **APPS** | Holidays Calendar · Electronic Inventory · Control Panel · File Interpreter · Tools |
 | **APPS › Daily Settlement › NDF** | NDF Summary · NDF Cockpit · Other Publisher |
 | **APPS › Daily Settlement › Other Products** | Other Products Summary · OTM Settlements · Latam Desk Position · **Swap** (Settlement Advice · Athena · VCP · Events · Kapital Hybrids) · **NDF** (Settlement Advice) · **Option** (Settlement Advice · Cognos) |
 | **APPS › Daily Settlement** | Operations B3 |
@@ -578,6 +578,19 @@ A tela tem, de cima para baixo: as **abas de produto** (Vanilla · Other Publish
 2. Clique em **Import settlement** para trazer o arquivo do dia.
 3. Use os filtros de coluna para achar a operação (4.3).
 4. Para corrigir uma linha, clique em **Edit**, altere e salve.
+5. Para apagar VÁRIAS de uma vez, marque as caixas da primeira coluna e clique
+   em **Delete**, que aparece na barra a partir de duas linhas marcadas.
+
+Três coisas próprias desta tela:
+
+- **A tabela abre ordenada por contraparte, de A a Z.**
+- **A caixa do cabeçalho marca tudo o que o FILTRO deixou**, e não só a página
+  que está na tela: se você filtrou por contraparte e clicou nela, as linhas das
+  páginas seguintes vão junto.
+- **O Delete de lote não tem desfazer.** A confirmação diz quantas linhas e de
+  que dia; para trazê-las de volta só reimportando. Para apagar UMA linha, use a
+  lixeira da própria linha — é por isso que o botão de lote só aparece a partir
+  de duas.
 
 ### 6.3. Other Publisher
 
@@ -1332,9 +1345,38 @@ No **MtM** há ainda o botão **New Mapping**, para cadastrar um de-para novo se
 >
 > **Os valores não são aparados.** O espaço no fim de códigos B3 como `'C '` faz parte do código — não o apague achando que é sobra.
 
-### 13.4. Quotes
+### 13.4. Tools
 
-**Menu › Apps › Quotes**
+**Menu › Apps › Tools**
+
+O item que se chamava *Quotes* virou **Tools**, e agora abre seis telas de
+mercado: **Quotes**, **Fixed Income**, **Swap Calculator**, **SOFR Index**,
+**Term SOFR** e **Euribor**. As cinco novas vieram do projeto *Precificação
+Swap*; as três de taxa (SOFR Index, Term SOFR e Euribor) leem a base local que
+o dropzone de cada uma alimenta, porque a curva a termo é licenciada e não se
+baixa de fonte pública.
+
+O **Swap Calculator** liquida um fluxo de swap, e o campo **B3 ID** preenche a
+tela a partir da posição: contraparte, datas, notionais, amortização e as duas
+pontas. Duas coisas para ler com atenção:
+
+- **Campo em branco e sinalizado quer dizer que a posição não respondeu**, e
+  nunca um palpite. Quando o índice de uma ponta não resolve, a tela escreve em
+  vermelho o que a posição trazia (Código índice · curva · Nome Tipo/Classe) e
+  pede o cadastro em **Mapping › `tools-swap-index`**.
+- **A data da operação sai da coluna `Data operação termo`** do Swap
+  Characteristics; quando ela vem vazia, a `Data início` responde por ela e o
+  campo fica marcado como *assumido*. O **Flow start** do primeiro fluxo é a
+  `Data início` do swap; do segundo em diante, a data do evento anterior. O
+  seletor **Cashflow event** troca o período inteiro (início, fim, amortização e
+  base) para o evento escolhido.
+- **Clicar num campo seleciona o valor inteiro**, para você digitar por cima sem
+  apagar caractere a caractere. Se quiser corrigir só um pedaço, arraste sobre o
+  trecho — a seleção que você fez é preservada.
+
+#### 13.4.1. Quotes
+
+**Menu › Apps › Tools › Quotes**
 
 ![Quotes](docs/sop-screenshots/quotes.png)
 
@@ -1694,7 +1736,7 @@ Estes itens aparecem no menu, mas a tela ainda não existe — clicar neles devo
 | Electronic Inventory | Apps | 13.7 |
 | Control Panel | Apps | 14 |
 | File Interpreter | Apps | 13.6 |
-| Quotes | Apps | 13.4 |
+| Tools (Quotes · Fixed Income · Swap Calculator · SOFR Index · Term SOFR · Euribor) | Apps | 13.4 |
 | NDF Summary | Daily Settlement › NDF | 6.1 |
 | NDF Cockpit | Daily Settlement › NDF | 6.2 |
 | Other Publisher | Daily Settlement › NDF | 6.3 |
