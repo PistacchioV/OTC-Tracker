@@ -2298,5 +2298,5 @@
   "tl-fixing-offset": "Fixing offset (business days)",
   "tl-fixing-help2": "The offset comes from the contract's quotation column: D-2 means the PTAX two business days (ANBIMA) before the flow end. Blank, both fixings come from the BCB closing of the business day before each date. In BRL there is no conversion; outside the ten currencies the BCB publishes, both are typed in.",
   "tl-idx-cdi": "CDI — % of CDI ± spread, realised",
-  "ndfc-delete-all": "Delete all"
+  "ndfc-delete-sel": "Delete"
 }

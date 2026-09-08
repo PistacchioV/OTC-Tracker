@@ -22,6 +22,7 @@
   var COLS = [];               // current data columns (for the Add/Edit modal)
   var CURRENT_ROWS = [];       // last-loaded rows (each: [...18 data..., status, maker, checker, id])
   var EDIT_ID = null;          // id of the row being edited (null → Add mode)
+  var SELECTED = {};           // ids marcados (ver a seção de seleção em buildTable)
 
   var LANG = (localStorage.getItem('language') || 'en').toLowerCase();
   var _TRANS = {
@@ -31,27 +32,27 @@
           delTitle: 'Delete row?', delText: 'This row will be removed and the change saved.', yes: 'Yes, delete',
           cancel: 'Cancel', saved: 'Saved', deleted: 'Deleted', confirmed: 'Confirmed',
           sameUser: 'A different user must confirm a row you changed.', err: 'Action failed.',
-          delAllTitle: 'Delete every row of this day?', delAllYes: 'Yes, delete everything',
-          delAllText: 'row(s) will be removed from', delAllNone: 'This day has no rows to delete.',
-          delAllUndo: 'There is no undo — re-import to bring them back.', delAllDone: 'Day cleared' },
+          delSelTitle: 'Delete the selected rows?', delSelYes: 'Yes, delete',
+          delSelText: 'selected row(s) will be removed from',
+          delSelUndo: 'There is no undo — re-import to bring them back.', delSelDone: 'Rows deleted' },
     br: { filterPh: 'Filtrar…', ok: 'OK', pending: 'Pendente', newst: 'Novo', importing: 'Importando…',
           noFile: 'A API da Athena não respondeu.', imported: 'Importado', rows: 'linha(s)', updated: 'Atualizado',
           edit: 'Editar', del: 'Excluir', confirm: 'Confirmar', addTitle: 'Adicionar linha', editTitle: 'Editar linha',
           delTitle: 'Excluir linha?', delText: 'A linha será removida e a alteração salva.', yes: 'Sim, excluir',
           cancel: 'Cancelar', saved: 'Salvo', deleted: 'Excluído', confirmed: 'Confirmado',
           sameUser: 'Outro usuário precisa confirmar uma linha que você alterou.', err: 'Falha na ação.',
-          delAllTitle: 'Excluir todas as linhas deste dia?', delAllYes: 'Sim, excluir tudo',
-          delAllText: 'linha(s) serão removidas de', delAllNone: 'Este dia não tem linhas para excluir.',
-          delAllUndo: 'Não há desfazer — reimporte para trazê-las de volta.', delAllDone: 'Dia esvaziado' },
+          delSelTitle: 'Excluir as linhas selecionadas?', delSelYes: 'Sim, excluir',
+          delSelText: 'linha(s) selecionada(s) serão removidas de',
+          delSelUndo: 'Não há desfazer — reimporte para trazê-las de volta.', delSelDone: 'Linhas excluídas' },
     es: { filterPh: 'Filtrar…', ok: 'OK', pending: 'Pendiente', newst: 'Nuevo', importing: 'Importando…',
           noFile: 'La API de Athena no respondió.', imported: 'Importado', rows: 'fila(s)', updated: 'Actualizado',
           edit: 'Editar', del: 'Eliminar', confirm: 'Confirmar', addTitle: 'Agregar fila', editTitle: 'Editar fila',
           delTitle: '¿Eliminar fila?', delText: 'La fila será eliminada y el cambio guardado.', yes: 'Sí, eliminar',
           cancel: 'Cancelar', saved: 'Guardado', deleted: 'Eliminado', confirmed: 'Confirmado',
           sameUser: 'Otro usuario debe confirmar una fila que usted cambió.', err: 'Acción fallida.',
-          delAllTitle: '¿Eliminar todas las filas de este día?', delAllYes: 'Sí, eliminar todo',
-          delAllText: 'fila(s) serán eliminadas de', delAllNone: 'Este día no tiene filas para eliminar.',
-          delAllUndo: 'No hay deshacer — reimporte para traerlas de vuelta.', delAllDone: 'Día vaciado' },
+          delSelTitle: '¿Eliminar las filas seleccionadas?', delSelYes: 'Sí, eliminar',
+          delSelText: 'fila(s) seleccionada(s) serán eliminadas de',
+          delSelUndo: 'No hay deshacer — reimporte para traerlas de vuelta.', delSelDone: 'Filas eliminadas' },
   };
   function t(k) { return (_TRANS[LANG] || _TRANS.en)[k] || _TRANS.en[k]; }
   function esc(s) {
@@ -126,9 +127,12 @@
 
     var data = rows.map(function (r) {
       var m = metaOf(r);
-      return ['<input type="checkbox" class="form-check-input ndfc-row-check">', actionsHtml(m.id), statusBadge(m.status)]
+      return ['<input type="checkbox" class="form-check-input ndfc-row-check" data-id="' + esc(m.id) + '">',
+              actionsHtml(m.id), statusBadge(m.status)]
         .concat(r.slice(0, COLS.length).map(function (v) { return cellHtml(v); }));
     });
+
+    var cptyIdx = columns.indexOf('NM_COUNTERPARTY');
 
     if (dt) { dt.destroy(); }
     dt = jQuery('#ndfc-table').DataTable({
@@ -140,7 +144,12 @@
       ],
       // No scrollX: one table → header/body never misalign; .table-responsive scrolls.
       scrollX: false, autoWidth: false, orderCellsTop: true, deferRender: true,
-      pageLength: 200, order: [],
+      // A tabela ABRE ordenada por contraparte, A→Z. O índice é PROCURADO pelo
+      // nome da coluna, e não escrito: as colunas vêm do servidor, e uma coluna
+      // nova antes dela deslocaria um número fixo para a coluna vizinha — que
+      // ordena do mesmo jeito, sem erro nenhum. Sem a coluna, a ordem é a que o
+      // servidor mandou, como antes.
+      pageLength: 200, order: (cptyIdx >= 0 ? [[cptyIdx + 3, 'asc']] : []),
       dom: "<'row'<'col-sm-12'tr>><'d-md-flex justify-content-between align-items-center mt-2'ip>",
       buttons: [{
         extend: 'collection',
@@ -180,10 +189,54 @@
     if (window.lucide && lucide.createIcons) lucide.createIcons();
     applyTranslationsIfAny();
 
+    // ── seleção de linhas ──────────────────────────────────────────────
+    // A marca vive num objeto de IDs, e não nos checkboxes: com `deferRender` o
+    // DataTables desenha só a página visível, e paginar ou filtrar destrói os
+    // nós — a marca que morasse no DOM sumiria junto, sem erro nenhum, e o
+    // lote apagaria menos do que a pessoa marcou.
+    SELECTED = {};
+    syncDelSel();
+    jQuery('#ndfc-table tbody').off('change.ndfcsel')
+      .on('change.ndfcsel', '.ndfc-row-check', function () {
+        if (this.checked) SELECTED[this.getAttribute('data-id')] = 1;
+        else delete SELECTED[this.getAttribute('data-id')];
+        syncDelSel();
+      });
+    jQuery('#ndfc-table').off('draw.dt.ndfcsel').on('draw.dt.ndfcsel', restoreChecks);
+
     var checkAll = document.getElementById('ndfcCheckAll');
     if (checkAll) checkAll.addEventListener('change', function () {
-      document.querySelectorAll('#ndfc-table tbody .ndfc-row-check').forEach(function (c) { c.checked = checkAll.checked; });
+      // Marcar tudo vale para o que o FILTRO deixou, não só para a página
+      // visível: quem filtrou por contraparte e clicou no topo está pedindo
+      // aquelas linhas, inclusive as das páginas seguintes.
+      dt.rows({ search: 'applied' }).indexes().toArray().forEach(function (i) {
+        var id = String(metaOf(CURRENT_ROWS[i]).id);
+        if (checkAll.checked) SELECTED[id] = 1; else delete SELECTED[id];
+      });
+      restoreChecks();
+      syncDelSel();
     });
+  }
+
+  function selectedIds() { return Object.keys(SELECTED); }
+
+  function restoreChecks() {
+    document.querySelectorAll('#ndfc-table tbody .ndfc-row-check').forEach(function (c) {
+      c.checked = !!SELECTED[c.getAttribute('data-id')];
+    });
+  }
+
+  // O botão de lote só existe a partir de DUAS linhas: uma já tem a lixeira da
+  // própria linha, e um segundo caminho para a mesma ação é onde as duas
+  // confirmações passam a divergir. Ele leva a contagem porque o clique é
+  // irreversível — o número é a única conferência antes do diálogo.
+  function syncDelSel() {
+    var btn = document.getElementById('ndfcDeleteSelBtn');
+    if (!btn) return;
+    var n = selectedIds().length;
+    btn.classList.toggle('d-none', n < 2);
+    var badge = btn.querySelector('.ndfc-del-count');
+    if (badge) badge.textContent = n >= 2 ? ' (' + n + ')' : '';
   }
 
   function buildColumnsToggle() {
@@ -321,27 +374,23 @@
     if (window.Swal) Swal.fire({ icon: 'success', title: t(titleKey), timer: 1200, showConfirmButton: false });
   }
 
-  // Delete all → esvazia o dia. Irreversível e sem desfazer, então a
+  // Delete → apaga o LOTE marcado. Irreversível e sem desfazer, então a
   // confirmação diz QUANTAS linhas e de QUE dia, e o botão de confirmar carrega
   // o verbo — um "OK" genérico num diálogo destrutivo se clica no automático.
-  // O número sai da TABELA carregada, não de um contador próprio: é o que a
-  // pessoa está vendo, e é sobre isso que ela decide.
-  function wireDeleteAll() {
-    var btn = document.getElementById('ndfcDeleteAllBtn');
+  // O número sai da SELEÇÃO, que é o que a pessoa marcou e vê no próprio botão.
+  function wireDeleteSel() {
+    var btn = document.getElementById('ndfcDeleteSelBtn');
     if (!btn) return;
     btn.addEventListener('click', function () {
-      var quantas = (dt && dt.rows().count()) || 0;
+      var ids = selectedIds();
       var quando = currentDate();
       var quandoBR = quando ? quando.split('-').reverse().join('/') : '';
-      if (!quantas) {
-        if (window.Swal) Swal.fire({ icon: 'info', text: t('delAllNone') });
-        return;
-      }
+      if (ids.length < 2) return;               // o botão nem devia estar visível
       function apagar() {
         btn.disabled = true;
-        postJSON('/api/ndf-cockpit/rows/delete-all', { date: quando }).then(function (res) {
+        postJSON('/api/ndf-cockpit/rows/delete', { date: quando, ids: ids }).then(function (res) {
           btn.disabled = false;
-          if (res.ok && res.body && res.body.success) { afterMutation('delAllDone'); }
+          if (res.ok && res.body && res.body.success) { afterMutation('delSelDone'); }
           else if (window.Swal) {
             Swal.fire({ icon: 'error', title: 'OTM', text: (res.body && res.body.error) || t('err') });
           }
@@ -349,11 +398,11 @@
       }
       if (!window.Swal) { apagar(); return; }
       Swal.fire({
-        icon: 'warning', title: t('delAllTitle'),
-        html: '<b>' + quantas + '</b> ' + esc(t('delAllText')) + ' <b>' + esc(quandoBR) + '</b>.' +
-              '<br><span style="font-size:.85rem;opacity:.8">' + esc(t('delAllUndo')) + '</span>',
+        icon: 'warning', title: t('delSelTitle'),
+        html: '<b>' + ids.length + '</b> ' + esc(t('delSelText')) + ' <b>' + esc(quandoBR) + '</b>.' +
+              '<br><span style="font-size:.85rem;opacity:.8">' + esc(t('delSelUndo')) + '</span>',
         showCancelButton: true, focusCancel: true,
-        confirmButtonText: t('delAllYes'), cancelButtonText: t('cancel'),
+        confirmButtonText: t('delSelYes'), cancelButtonText: t('cancel'),
         confirmButtonColor: '#d33'
       }).then(function (r) { if (r.isConfirmed) apagar(); });
     });
@@ -418,7 +467,7 @@
     wireImport();
     wirePageLen();
     wireAddRow();
-    wireDeleteAll();
+    wireDeleteSel();
     wireActions();
     wireDatePicker();
     load(page.getAttribute('data-today'));
