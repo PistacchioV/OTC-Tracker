@@ -70,7 +70,13 @@ def _send_cetip_email(to_list, cc_list, subject, greeting, message_html,
                 _R().log.warning("[cetip] could not attach %s:\n%s", path, traceback.format_exc())
 
         recipients = list(to_list) + list(cc_list or [])
-        with _R().smtplib.SMTP(_R().SMTP_HOST, _R().SMTP_PORT, timeout=20) as server:
+        # 120 s, e não os 20 s dos outros remetentes: este é o único e-mail do app que
+        # leva os arquivos de posição INTEIROS (o do Sales Support carrega os quatro),
+        # e o relay varre os anexos antes de responder o 250 final do DATA. Com 20 s o
+        # `getreply` estourava depois de a mensagem já ter sido transmitida
+        # (`SMTPServerDisconnected: timed out`, 08/09/2026) — e retry aqui é proibido:
+        # o relay pode ter aceitado a mensagem, e reenviar entregaria em dobro.
+        with _R().smtplib.SMTP(_R().SMTP_HOST, _R().SMTP_PORT, timeout=120) as server:
             server.sendmail(_R().SHARED_MAILBOX, recipients, msg.as_string())
         _R().log.info("[cetip] e-mail '%s' sent to %s", subject, recipients)
         return True

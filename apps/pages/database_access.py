@@ -65,7 +65,7 @@ class DatabaseCleanupError(DatabaseAccessError):
 
 @dataclass(frozen=True)
 class DatabaseAccessSettings:
-    local_semaphore_timeout_seconds: float = 15.0
+    local_semaphore_timeout_seconds: float = 30.0
     read_lock_timeout_seconds: float = 15.0
     write_lock_timeout_seconds: float = 30.0
     sqlite_busy_timeout_seconds: int = 10_000
@@ -77,7 +77,7 @@ class DatabaseAccessSettings:
     def from_mapping(cls, settings: Mapping[str, object]) -> "DatabaseAccessSettings":
         return cls(
             local_semaphore_timeout_seconds=float(
-                settings.get("DATABASE_LOCAL_SEMAPHORE_TIMEOUT_SECONDS", 15)
+                settings.get("DATABASE_LOCAL_SEMAPHORE_TIMEOUT_SECONDS", 30)
             ),
             read_lock_timeout_seconds=float(settings.get("DATABASE_READ_LOCK_TIMEOUT_SECONDS", 15)),
             write_lock_timeout_seconds=float(settings.get("DATABASE_WRITE_LOCK_TIMEOUT_SECONDS", 30)),

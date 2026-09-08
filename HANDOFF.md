@@ -16895,3 +16895,128 @@ Dois pedidos da mesa, os dois no par Overview × Track Docs:
   conferir o `?v=` do streamflow.css** — versão velha = template velho =
   Flask não reiniciado após o pull; versão nova com visual velho = problema
   de CSS de verdade.
+
+## §415 — Footer de borda a borda, seguindo o pin do menu (2026-09-04)
+
+- Pedido: o rodapé tem de ocupar a linha inteira com o menu recolhido e, com
+  ele fixo, ir do sidenav até a borda direita — e não parar 24px antes de cada
+  lado. Commit `5abca3c`.
+- O footer é `position: sticky` DENTRO do `.content-page`, que carrega 1.5rem
+  de padding lateral (streamflow §16; 0.85rem abaixo de 767.98px). Com
+  `margin-inline: 0` ele ficava uma faixa solta dentro do respiro, nos dois
+  estados do drawer. A solução não sabe qual estado vale: `margin-inline`
+  NEGATIVA do tamanho do padding cancela o respiro do pai, e como quem segue o
+  pin é o próprio `.content-page` (`margin-left` 0 recolhido, 240px dockado
+  pelo `body.vr-nav-pinned`), o footer acompanha de graça — medido 0→1400
+  recolhido e 240→1400 fixo. O padding volta por dentro para o texto não
+  encostar na borda. Bump do `?v=` do streamflow.css (§414: sem ele a
+  instância serve o CSS em cache e o ajuste "não chegou").
+- Para reproduzir os dois estados no Playwright: o pin persiste em
+  `localStorage['otc_nav_pinned']` (`'1'`/`'0'`), semeado ANTES do load junto
+  com o `__OTCTRACKER_CONFIG__` completo (objeto com `layout`, `topbar`,
+  `menu`, `sidenav` — semear só uma string para `layout` é descartado).
+
+## §416 — MtM Validation: o SEGUNDO `KeyError: 'rows'`, depois do e-mail (2026-09-04)
+
+- "Continua dando o erro, mas o e-mail e os arquivos estão sendo gerados." A
+  `d6ea4b8` corrigiu o resumo dos arquivos (linha 419 do entrypoint) e deixou
+  o TOTAL, três linhas depois do e-mail já enfileirado, com `len(fd['rows'])`.
+  Os books MID guardam a linha pronta em `lines`; só o COE guarda `rows`
+  (dicts por coluna). Com qualquer book no lote o endpoint estourava com os
+  `.txt` já no share e o e-mail na fila — a tela dizia "Network error" com
+  tudo gerado, que é a pior forma da falha: quem tenta de novo gera duas
+  vezes. Commit `13472f5`.
+- Os dois pontos leem `fd.get('lines', fd.get('rows')) or []`, como o
+  `_mtm_file_lines` sempre fez. Regra para quem mexer no lote: o dicionário de
+  arquivo tem DUAS formas e todo consumidor novo passa pelo `_mtm_file_lines`,
+  nunca por chave direta.
+- `check_mtm_api.py` ganhou a seção 6: POST `/api/mtm-swap/validation` com um
+  book em `lines` e um COE em `rows` no MESMO lote, geradores, escrita e
+  e-mail stubados (a casca é o que se prende: resumo, total, anexos, status
+  `Sent` e a notificação `MTM Sent`). Contra o código antigo (`git stash` do
+  entrypoint) morre com o mesmo KeyError da captura.
+
+## §417 — Recon Comitente: o Status vira o pill do app (2026-09-04)
+
+- Era a única coluna de status do app fora do padrão: uma paleta própria
+  `.s-badge` de cores chapadas CLARAS (#e9ecef, #fff3cd…), que sobre o vidro
+  escuro saía como pílula branca. Trocada pelo `badge rounded-pill bg-gradient
+  text-bg-*` das outras três recons (§3 do CLAUDE.md — "Status sempre como
+  badge pill"), com a cor pela GRAVIDADE, como o card do topo: New cinza,
+  Check âmbar, OK verde, Amend vermelho; status fora do mapa cai no cinza.
+  Na página fica só o tamanho (`#recon-table td .badge`), para o pill não
+  crescer a linha. Texto escapado — o status vem do arquivo.
+
+## §418 — Dashboard da dev sem dado: `dev_seed_positions.py` (2026-09-04)
+
+- Live Position (0, "No position files for this date") e Settlement Forecast
+  ("No deals found") vazios no servidor local. Nada de código: o mock de
+  posição B3 da dev (`cache/b3 files/<Cat>/AAAA/MM/DD/73760_AAMMDD_<TAG>.json`,
+  5–8 colunas) parou em 24/07/2026, e os dois widgets andam no máximo DEZ dias
+  úteis ANBIMA para trás a partir de D-1 (`api_dashboard_live_position` e
+  `_forecast_latest_ref`) — passado agosto, o ref não acha arquivo nenhum. É a
+  classe "200 com gráfico vazio" do §4: parece que a tela não carrega.
+- `scripts/dev_seed_positions.py` (só na DEV, linha no §9 do CLAUDE.md) copia
+  o último dia com posição para a data alvo (padrão D-1 ANBIMA de hoje;
+  `--from`/`--to`/`--force`/`--dry-run`) e DESLOCA toda data dos registros
+  pelo mesmo número de dias úteis entre as duas referências, preservando o
+  formato de cada campo (AAAAMMDD no NDF, DD/MM/AAAA na Option/Swap). Renomeia
+  a tag `_AAMMDD_`, regrava `Data do Arquivo`, escrita atômica; o `.meta.json`
+  não vai. O espelho DuckDB cura sozinho na leitura seguinte (§4, fase 3).
+- Três coisas que não dão erro nenhum:
+  - **o AAAAMMDD só é deslocado em coluna cujo NOME diga que é data**
+    (`data`/`date`/`venc`/`evento`/`liquid`): na primeira rodada o
+    `Codigo da Contraparte` `00041007` casou no regex e virou `00041118` — uma
+    contraparte trocada em silêncio. Conferir arquivo a arquivo que SÓ as
+    colunas de data diferem é o teste;
+  - **depois da primeira rodada a origem automática passa a ser o dia
+    gerado**, então `--force` sozinho não regenera nada — é `--from 2026-07-24
+    --force`;
+  - **recusa rodar com o `Config.DATA_DIR` fora do repositório**
+    (`--allow-external` para o caso consciente): apontado ao share, ele
+    fabricaria uma posição que não existe no dia de hoje.
+- Resultado com 04/09: Live Position 49 operações (NDF/Option/Swap por LOB e
+  entidade), Forecast com 65 liquidações na janela de 15 dias úteis; o
+  `DAGENDAPREMIOS` continua ausente porque o mock nunca o teve.
+- Dois FAILs pré-existentes vistos de passagem, fora desta mudança:
+  `check_modal_standard.py` (a lista de dívida de modais envelheceu — cinco
+  templates já corrigidos ainda listados) e `check_config_names.py` (as duas
+  asserções "sem SECRET_KEY recusa subir" deixaram de valer desde o
+  `_persisted_secret_key` do §8 — a chave sai do disco local). Os dois falham
+  no HEAD anterior também.
+
+## §419 — CETIP: o e-mail do Sales Support estourava o SMTP em 20 s (2026-09-08)
+
+- Log da instância: `SMTPServerDisconnected: Connection unexpectedly closed:
+  timed out`, vindo de `data → getreply`, seguido dos INFO de CEM Latam e BACC
+  enviados. O que falhou foi o PRIMEIRO dos quatro e-mails da distribuição, o
+  `CETIP Consolidated - Corporate`, o único que leva os quatro arquivos de
+  posição INTEIROS (Contrato/SIC, TER, OPC, SWAP). A mensagem já tinha sido
+  transmitida; o relay varre os anexos antes de responder o `250` final e
+  levou mais que os 20 s de `timeout=` do `_send_cetip_email`
+  (`features/cetip/infra/mail.py`). Não é rede caindo: é o relay mais lento
+  que o prazo.
+- Timeout subiu para 120 s SÓ ali — os outros remetentes (20/30 s) carregam
+  anexos pequenos. **Sem retry**: a falha vem depois do DATA completo, então
+  o relay pode ter aceitado e entregue; reenviar duplicaria. Conferir com o
+  Sales Support se o e-mail de 04/09 chegou apesar do erro.
+
+## §420 — `local_permit_wait_timed_out` em leitura: semáforo 15 → 30 s (2026-09-08)
+
+- Log: `database_access event=local_permit_wait_timed_out mode=read
+  wait_seconds=15.0` e o `operation_completed category=lock_timeout
+  lock_hold_seconds=0` — a leitura nunca chegou ao banco: morreu esperando o
+  PERMIT local (o `BoundedSemaphore` de `DATABASE_READ_CONCURRENCY` = 4).
+- A causa é a ORDEM: `_acquire_permit` vem antes de `_acquire_file_lock`, e
+  quem segura o permit pode esperar o lock compartilhado do arquivo por até
+  `DATABASE_READ_LOCK_TIMEOUT_SECONDS` (15 s). Um escritor no share (ou a
+  instância vizinha) segurando o lock exclusivo faz os quatro primeiros
+  leitores ocuparem os permits e esperarem; o quinto espera o permit. Com os
+  dois tetos IGUAIS a 15 s, o quinto estourava no mesmo instante em que os
+  quatro desistiam — sem ter tido a chance de tentar o lock. O
+  `DATABASE_LOCAL_SEMAPHORE_TIMEOUT_SECONDS` passou a 30 s (default no
+  `config.py` e no dataclass do `database_access`): o teto do semáforo tem de
+  ser maior que o pior caso de quem o ocupa. `.env` continua vencendo.
+- O que isso NÃO resolve: o lock exclusivo segurado por muito tempo no share.
+  Se o aviso voltar com `wait_seconds=30`, o alvo é quem está escrevendo (o
+  `database_id` do evento identifica o banco), não o teto.
