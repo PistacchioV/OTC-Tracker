@@ -8619,6 +8619,146 @@ def _ndfsum_b3_val(legs, titulo, casa, cpty_acc):
     return ''
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+#  IR do termo de MOEDA — 0,005% com piso de R$ 1,00 acumulado no MÊS (§423)
+# ------------------------------------------------------------------------------
+#  A API (getTradesBySettle) não traz o imposto que o SETTLEMENT.xlsx do Cockpit
+#  trazia, então o IR passou a ser CALCULADO aqui, com a regra da mesa:
+#    · incide 0,005% sobre a liquidação em que o BANCO PAGA (settlement < 0),
+#      por operação, a 2 casas; contraparte do cadastro `ndfc-ir-exempt` não paga;
+#    · o imposto de uma liquidação (a soma das operações da contraparte no dia)
+#      MENOR que R$ 1,00 não é retido — o cliente recebe o bruto — e o valor fica
+#      ACUMULADO contra a contraparte;
+#    · na liquidação seguinte da mesma contraparte, o acumulado soma ao imposto
+#      do dia: se a soma continua abaixo de R$ 1,00, segue sem retenção (e
+#      acumula); se alcança R$ 1,00, retém-se a SOMA — o de hoje mais o que não
+#      foi retido antes;
+#    · a contagem é do MÊS: em mês novo o acumulado começa em zero.
+#  O acumulado vive num LEDGER mensal (`ndf-ir-ledger/ndf-ir-ledger_AAAAMM.json`,
+#  uma entrada por dia × contraparte), reescrito pelo `_ndfsum_collect` do dia
+#  que a tela mostra — a entrada do dia é SUBSTITUÍDA, nunca somada, então
+#  recarregar a tela não conta duas vezes. Dia útil anterior do mês sem entrada
+#  (ninguém abriu o Summary naquele dia) é CURADO a partir do arquivo do Cockpit
+#  dele, na ordem, antes de responder pelo dia pedido.
+# ══════════════════════════════════════════════════════════════════════════════
+_NDFSUM_IR_MIN = 1.00
+
+
+def _ndfsum_ir_ledger_path(ref):
+    return os.path.join(_B3_DATA_DIR, 'ndf-ir-ledger',
+                        'ndf-ir-ledger_{}.json'.format(ref.strftime('%Y%m')))
+
+
+def _ndfsum_ir_ledger_load(ref):
+    try:
+        with open(_ndfsum_ir_ledger_path(ref), encoding='utf-8') as fh:
+            data = json.load(fh)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _ndfsum_ir_apply(settlements, carry, exempt=False):
+    """A regra, PURA. `settlements` são os resultados das operações da
+    contraparte no dia (negativo = o banco paga); `carry` é o imposto não
+    retido nas liquidações anteriores do mês.
+
+    Devolve (taxes, due, withheld, carry_after): o IR por operação na MESMA
+    ordem, o imposto devido no dia, o retido e o acumulado que segue. Quando a
+    soma alcança o piso, o acumulado anterior entra na PRIMEIRA operação com
+    imposto — o aviso lista as operações uma a uma, e o total tem de fechar."""
+    carry = round(float(carry or 0.0), 2)
+    if exempt:
+        return [0.0] * len(settlements), 0.0, 0.0, carry
+    due_each = [round(abs(float(x)) * _NDFADV_IR_RATE, 2) if float(x) < 0 else 0.0
+                for x in settlements]
+    due = round(sum(due_each), 2)
+    total = round(carry + due, 2)
+    if due <= 0 or total < _NDFSUM_IR_MIN:
+        return [0.0] * len(settlements), due, 0.0, total
+    taxes = list(due_each)
+    for i, t in enumerate(taxes):
+        if t > 0:
+            taxes[i] = round(t + carry, 2)
+            break
+    return taxes, due, total, 0.0
+
+
+def _ndfsum_ir_cockpit_groups(records):
+    """{chave: {'name', 'settlements'}} a partir dos REGISTROS do Cockpit de um
+    dia — o mesmo universo do Summary: só as entidades JPM (o filtro do
+    `_ndfc_collect`), só linhas com contraparte e valor. É o que a CURA dos dias
+    anteriores usa; o dia da tela vem das linhas já montadas pelo Summary."""
+    groups = {}
+    for rec in (records or []):
+        legal = re.sub(r'[^A-Z0-9]', '', str(rec.get('LEGAL', '') or '').upper())
+        if legal and not (legal.startswith('BANCOJP') or legal.startswith('JPMORGANCHASE')):
+            continue
+        nm = str(rec.get('NM_COUNTERPARTY', '') or '').strip()
+        val = _ndfc_valnum(rec.get('[PROD] Cockpit.SETTLEMENT', ''))
+        if not nm or val is None:
+            continue
+        g = groups.setdefault(_fcst_norm(nm), {'name': nm, 'settlements': []})
+        g['settlements'].append(val)
+    return groups
+
+
+def _ndfsum_ir_day_entries(groups, carry_by_key):
+    """As entradas do ledger de UM dia: aplica a regra por contraparte a partir
+    do acumulado dado. Devolve ({chave: entrada}, {chave: taxes})."""
+    entries, taxes_by_key = {}, {}
+    for key, g in groups.items():
+        carry_in = float(carry_by_key.get(key, 0.0) or 0.0)
+        taxes, due, withheld, carry_after = _ndfsum_ir_apply(
+            g['settlements'], carry_in, exempt=_ndfc_ir_exempt(g['name']))
+        entries[key] = {'name': g['name'], 'due': due, 'withheld': withheld,
+                        'carry_in': round(carry_in, 2), 'carry_after': carry_after}
+        taxes_by_key[key] = taxes
+    return entries, taxes_by_key
+
+
+def _ndfsum_ir_for_day(ref, groups):
+    """IR por contraparte do dia `ref` (grupos no formato de
+    `_ndfsum_ir_cockpit_groups`), com o acumulado do mês: {chave: {'taxes',
+    'carry_in', 'withheld', 'due'}}. Cura os dias úteis anteriores do mês sem
+    entrada e grava o ledger — ciclo inteiro sob o `_cache_lock` (é
+    read-modify-write num JSON compartilhado)."""
+    ref_day = ref.date() if hasattr(ref, 'date') else ref
+    iso = ref_day.strftime('%Y-%m-%d')
+    with _cache_lock:
+        ledger = _ndfsum_ir_ledger_load(ref)
+        antes = json.dumps(ledger, sort_keys=True)
+        carry = {}
+        d = ref_day.replace(day=1)
+        while d < ref_day:
+            if _pcx_is_bizday(d):
+                k = d.strftime('%Y-%m-%d')
+                if k not in ledger:
+                    jp = _ndfc_json_path(datetime(d.year, d.month, d.day))
+                    if os.path.isfile(jp):
+                        try:
+                            recs = _db_day_records(jp) or []
+                        except Exception:
+                            recs = []
+                        ent, _ = _ndfsum_ir_day_entries(_ndfsum_ir_cockpit_groups(recs), carry)
+                        ledger[k] = ent
+                for key, e in (ledger.get(k) or {}).items():
+                    carry[key] = float(e.get('carry_after', 0.0) or 0.0)
+            d += timedelta(days=1)
+        entries, taxes_by_key = _ndfsum_ir_day_entries(groups, carry)
+        ledger[iso] = entries
+        if json.dumps(ledger, sort_keys=True) != antes:
+            try:
+                path = _ndfsum_ir_ledger_path(ref)
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                _atomic_write_json(path, ledger)
+            except Exception:
+                log.warning('[ndfsum] ledger de IR não gravado:\n%s', traceback.format_exc())
+    return {key: {'taxes': taxes_by_key[key], 'carry_in': entries[key]['carry_in'],
+                  'withheld': entries[key]['withheld'], 'due': entries[key]['due']}
+            for key in entries}
+
+
 def _ndfsum_collect(ref):
     ci = {c: i for i, c in enumerate(_NDFC_COLUMNS)}
     # Operations B3 settlement leg, já peneirado pelo cadastro `opb3-events` —
@@ -8683,6 +8823,7 @@ def _ndfsum_collect(ref):
         cpty = str(row[ci['NM_COUNTERPARTY']] or '').strip()
         if cpty and settle_n is not None:
             raws.append({
+                '_trade_idx': len(trade) - 1,
                 'counterparty': cpty,
                 'legal': str(row[ci['LEGAL']] or '').strip(),
                 'athena': str(row[ci['ID_SOURCE_DEAL']] or '').strip(),
@@ -8691,7 +8832,47 @@ def _ndfsum_collect(ref):
                 'ccy': str(row[ci['CCY_NOTIONAL_FC']] or '').strip(),
                 'settlement': settle_n,
                 'tax': abs(_mtm_parse_num(row[ci['VL_TAX_INCOME']]) or 0.0),
+                # A taxa de FIXING do aviso (coluna ao lado do notional, §423): é o
+                # VL_FORWARD_RATE do Cockpit — o `Spot` do bloco settlement da
+                # API (§421) —, na precisão de exibição da tela.
+                'fixing': str(row[ci['VL_FORWARD_RATE']] or '').strip(),
             })
+
+    # O IR é CALCULADO (regra do piso mensal, §423) e vence o VL_TAX_INCOME do
+    # Cockpit: a API não o traz, e duas fontes para o mesmo imposto fariam o
+    # aviso de um dia discordar do de outro. A célula do Trade Level mostra o
+    # valor calculado, para a tela e o aviso dizerem a mesma coisa.
+    ir_groups = {}
+    for r in raws:
+        g = ir_groups.setdefault(_fcst_norm(r['counterparty']),
+                                 {'name': r['counterparty'], 'settlements': [], 'rows': []})
+        g['settlements'].append(r['settlement'])
+        g['rows'].append(r)
+    try:
+        ir_res = _ndfsum_ir_for_day(ref, ir_groups)
+    except Exception:
+        log.warning('[ndfsum] IR mensal falhou — imposto do dia sem acumulado:\n%s',
+                    traceback.format_exc())
+        ir_res = {}
+        for key, g in ir_groups.items():
+            taxes, due, withheld, _ = _ndfsum_ir_apply(
+                g['settlements'], 0.0, exempt=_ndfc_ir_exempt(g['name']))
+            ir_res[key] = {'taxes': taxes, 'carry_in': 0.0, 'withheld': withheld, 'due': due}
+    for key, g in ir_groups.items():
+        res = ir_res.get(key) or {}
+        taxes = res.get('taxes') or [0.0] * len(g['rows'])
+        carry_in = float(res.get('carry_in', 0.0) or 0.0) if res.get('withheld') else 0.0
+        for r, t in zip(g['rows'], taxes):
+            r['tax'] = float(t or 0.0)
+            # O acumulado entrou na PRIMEIRA operação com imposto (`_ndfsum_ir_apply`):
+            # é ela que o aviso explica.
+            r['ir_carry'] = carry_in if (carry_in and r['tax'] > 0) else 0.0
+            if r['ir_carry']:
+                carry_in = 0.0
+            r['ir_waived'] = bool(res.get('due', 0.0) and not res.get('withheld', 0.0))
+            idx = r.pop('_trade_idx', None)
+            if idx is not None and 0 <= idx < len(trade):
+                trade[idx]['cells'][12] = _swapchar_fmt_value('{:.2f}'.format(r['tax'])) if r['tax'] else ''
 
     spn_by_name = _ndfsum_refdata_spn()
     cpd = _cpd_load()
