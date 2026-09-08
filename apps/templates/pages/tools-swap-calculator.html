@@ -26,6 +26,12 @@
                 <option value="{{ valor }}" {{ 'selected' if f[lado ~ '_indexador'] == valor }} data-lang="tl-idx-{{ valor }}">{{ nome }}</option>
                 {% endfor %}
             </select>
+            {# Índice que não resolveu não pode ficar só em branco: a nota diz o
+               que a POSIÇÃO trazia (o Código índice, a curva do `swap-index` e o
+               Nome Tipo/Classe) e manda cadastrar a linha no `tools-swap-index`.
+               Sem ela, "não identificou" e "a posição veio sem índice" são a
+               mesma tela, e não se sabe o que corrigir. #}
+            <p class="tl-help text-danger" id="{{ lado }}_indice_nota" hidden></p>
         </div>
         <div class="col-12 tl-field" data-leg="{{ lado }}" data-show-for="pre,cambio,sofr,term_sofr,euribor,ipca,equity">
             <label for="{{ lado }}_taxa" data-lang="tl-rate-or-spread">Contracted rate or spread</label>

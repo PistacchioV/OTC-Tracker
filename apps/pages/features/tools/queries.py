@@ -283,7 +283,7 @@ def contagens_lado_a_lado(inicio, fim, cal_nome='ANBIMA'):
 # de mesmo nome são a ponta da Parte e a da Contraparte.
 _POS = {
     'tipo_contrato': 0, 'contrato': 2, 'conta_cp': 7, 'doc_cp': 8, 'inicio': 11, 'vencimento': 12,
-    'valor_base': 14, 'remanescente': 15, 'valor_inicial': 24,
+    'valor_base': 14, 'remanescente': 15, 'valor_inicial': 24, 'data_termo': 25,
     'tipo_amort': 38, 'identificador': 145,
     # ponta 1 (Parte → ativa) / ponta 2 (Contraparte → passiva)
     'pct': (39, 49), 'indice': (40, 50), 'sinal': (42, 52), 'taxa': (43, 53),
@@ -442,8 +442,9 @@ def swap_prefill(b3_id):
     Devolve ``{'found': bool, ..., 'fields': {...}, 'ativa': {...},
     'passiva': {...}, 'flows': [...], 'missing': [...], 'assumed': [...]}``.
     Campo que não veio fica VAZIO e entra em `missing` — a tela o sinaliza;
-    `assumed` marca o que veio por aproximação (a data da operação é a Data
-    início do swap: a posição não guarda a data de contratação)."""
+    `assumed` marca o que veio por aproximação (a data da operação, quando a
+    posição não traz a `Data operação termo` e a `Data início` responde por
+    ela)."""
     R = _R()
     achado, source_date = _posicao_swap(b3_id)
     if achado is None:
@@ -481,12 +482,15 @@ def swap_prefill(b3_id):
     if not nome:
         missing.append('counterparty')
 
+    # A data da operação é a `Data operação termo`, que é a data de
+    # contratação de verdade. Em branco — o swap que não é a termo —, quem
+    # responde é a `Data início`, e aí é APROXIMAÇÃO: entra em `assumed`, porque
+    # é dessa data que sai o prazo do IR, e errá-la calada erra a alíquota.
     inicio_swap = _iso(_celula(vals, _POS['inicio']))
-    f['data_operacao'] = inicio_swap
-    if inicio_swap:
-        assumed.append('data_operacao')
-    else:
-        missing.append('data_operacao')
+    data_termo = _iso(_celula(vals, _POS['data_termo']))
+    f['data_operacao'] = data_termo or inicio_swap
+    if not data_termo:
+        (assumed if inicio_swap else missing).append('data_operacao')
     f['vencimento'] = _iso(_celula(vals, _POS['vencimento']))
     if not f['vencimento']:
         missing.append('vencimento')
@@ -525,9 +529,13 @@ def swap_prefill(b3_id):
             if x is escolhido:
                 break
             anterior = x
-        # O início é o evento ANTERIOR (o fluxo abre onde o outro fechou); no
-        # primeiro, a data de início do swap.
-        f['inicio'] = (anterior['evento'] if anterior else '') or escolhido['inicio'] or inicio_swap
+        # O início é o evento ANTERIOR (o fluxo abre onde o outro fechou). No
+        # PRIMEIRO fluxo não há anterior, e aí quem abre é a `Data início` do
+        # swap — é o dia em que o contrato começou a correr, e o `inicio` do
+        # próprio evento no DFLUXO nem sempre é ele. O evento fica como plano B,
+        # para o contrato que veio sem data de início.
+        f['inicio'] = ((anterior['evento'] if anterior else inicio_swap)
+                       or escolhido['inicio'] or inicio_swap)
         f['fim'] = escolhido['evento'] or escolhido['fim'] or hoje
         out['flow_event'] = escolhido['evento']
         # `Tipo Amortização` e `Taxa Amortização` do PRÓPRIO evento: a coluna já

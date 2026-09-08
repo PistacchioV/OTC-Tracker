@@ -26,7 +26,9 @@
           days: 'days in the base', lookingUp: 'Looking up the swap position…',
           notFound: 'Not found', prefilled: 'Filled from the swap position of',
           missing: 'Could not pull from the position (left blank):',
-          assumed: 'Assumed: the trade date is the swap start date.',
+          assumed: 'Assumed: with no Data operação termo, the trade date is the swap start date.',
+          noIndexRule: 'No line in the tools-swap-index mapping for this curve — register it in Mapping. The position had:',
+          noIndexCell: 'The position brings no index on this leg.',
           flow: 'flow', pickId: 'Type a B3 ID first.', fromBase: 'from the imported base of',
           fields: { counterparty: 'Counterparty', data_operacao: 'Trade date', inicio: 'Flow start',
                     fim: 'Flow end', vencimento: 'Swap maturity', nocional: 'Remaining notional',
@@ -45,7 +47,9 @@
           days: 'dias na base', lookingUp: 'Consultando a posição de swap…',
           notFound: 'Não encontrado', prefilled: 'Preenchido pela posição de swap de',
           missing: 'Não foi possível puxar da posição (ficou em branco):',
-          assumed: 'Assumido: a data da operação é a data de início do swap.',
+          assumed: 'Assumido: sem Data operação termo, a data da operação é a data de início do swap.',
+          noIndexRule: 'Nenhuma linha no cadastro tools-swap-index para esta curva — cadastre em Mapping. A posição trazia:',
+          noIndexCell: 'A posição não traz índice nesta perna.',
           flow: 'fluxo', pickId: 'Digite um B3 ID primeiro.', fromBase: 'da base importada de',
           fields: { counterparty: 'Contraparte', data_operacao: 'Data da operação', inicio: 'Início do fluxo',
                     fim: 'Fim do fluxo', vencimento: 'Vencimento do swap', nocional: 'Notional remanescente',
@@ -64,7 +68,9 @@
           days: 'días en la base', lookingUp: 'Consultando la posición de swap…',
           notFound: 'No encontrado', prefilled: 'Completado desde la posición de swap de',
           missing: 'No se pudo traer de la posición (quedó en blanco):',
-          assumed: 'Asumido: la fecha de la operación es la fecha de inicio del swap.',
+          assumed: 'Asumido: sin Data operação termo, la fecha de la operación es la de inicio del swap.',
+          noIndexRule: 'Ninguna línea en el registro tools-swap-index para esta curva — regístrela en Mapping. La posición traía:',
+          noIndexCell: 'La posición no trae índice en esta pata.',
           flow: 'flujo', pickId: 'Escriba un B3 ID primero.', fromBase: 'de la base importada de',
           fields: { counterparty: 'Contraparte', data_operacao: 'Fecha de la operación', inicio: 'Inicio del flujo',
                     fim: 'Fin del flujo', vencimento: 'Vencimiento del swap', nocional: 'Nocional remanente',
@@ -415,6 +421,20 @@
         // isto o campo visível da perna de CDI ficava com o valor anterior.
         var spread = document.getElementById(lado + '_taxa_cdi');
         if (spread) { spread.value = p.taxa === undefined ? '' : String(p.taxa); formatar(spread); }
+        // Índice que não resolveu não fica só em branco: a nota diz o que a
+        // POSIÇÃO trazia (Código índice · curva do swap-index · Nome
+        // Tipo/Classe) e manda cadastrar a curva. "Não identificou" e "a
+        // posição veio sem índice" são coisas diferentes, e a diferença é
+        // exatamente o que se corrige.
+        var inota = document.getElementById(lado + '_indice_nota');
+        if (inota) {
+          var src = p.fonte || {};
+          var trazia = [src.codigo, (src.curva && src.curva !== src.codigo) ? src.curva : '',
+                        src.classe].filter(Boolean).join(' · ');
+          inota.textContent = p.indexador ? '' : (trazia ? (t('noIndexRule') + ' ' + trazia)
+                                                         : t('noIndexCell'));
+          inota.hidden = !inota.textContent;
+        }
         var mo = document.getElementById(lado + '_moeda_equity');
         if (mo && p.moeda) mo.value = p.moeda;
         // os campos que a ponta não usa voltam ao vazio
