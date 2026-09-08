@@ -39,6 +39,10 @@
   // sem erro nenhum. LEAD é esse número, calculado UMA vez — e depois do `page`,
   // que é de onde a opção vem.
   var ACTIONS = !!page.getAttribute('data-actions');
+  // `data-actions="edit"`: só o botão de Edit (o Swap Athena edita UM campo, o
+  // CETIP ID, e não confirma nem apaga nada). Qualquer outro valor mantém os
+  // três botões de sempre — aditivo, as páginas de advice não mudam.
+  var ACTIONS_EDIT_ONLY = (page.getAttribute('data-actions') || '') === 'edit';
   var LEAD = ACTIONS ? 3 : 2;
 
   var dt = null;               // jQuery DataTables instance
@@ -181,8 +185,9 @@
     var actionsCell =
       '<div class="d-flex justify-content-center gap-1">' +
       '<a class="btn btn-info btn-sm sc-row-act sc-act" data-act="edit" href="#" title="Edit"><i class="ti ti-edit"></i></a>' +
+      (ACTIONS_EDIT_ONLY ? '' :
       '<a class="btn btn-success btn-sm sc-row-act sc-act" data-act="confirm" href="#" title="Confirm"><i class="ti ti-check"></i></a>' +
-      '<a class="btn btn-danger btn-sm sc-row-act sc-act" data-act="delete" href="#" title="Delete"><i class="ti ti-trash"></i></a>' +
+      '<a class="btn btn-danger btn-sm sc-row-act sc-act" data-act="delete" href="#" title="Delete"><i class="ti ti-trash"></i></a>') +
       '</div>';
     var data = rows.map(function (r, i) {
       var st = (statuses && statuses[i] && statusCell(statuses[i])) || statusBadge;

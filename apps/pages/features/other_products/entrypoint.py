@@ -341,6 +341,21 @@ def other_products_swap_athena():
                            segment='other-products-swap-athena',
                            ref_date=datetime.now().strftime('%Y-%m-%d'))
 
+@blueprint.route('/api/other-products-swap-athena/edit', methods=['POST'])
+def api_swap_athena_edit():
+    """Edita SÓ o CETIP ID de uma linha do Swap Athena (pedido de 08/09/2026)."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    ds = str(p.get('date') or '').strip()
+    try:
+        ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
+    except ValueError:
+        return jsonify({'success': False, 'error': 'Invalid date.'}), 400
+    payload, status = _R()._athena_edit_cetip_id(
+        ref, p.get('kapital_id'), p.get('cetip_id'), p.get('value'), session.get('user_sid', ''))
+    return jsonify(payload), status
+
 @blueprint.route('/api/other-products-swap-athena/data')
 def api_swap_athena_data():
     if not session.get('authenticated'):

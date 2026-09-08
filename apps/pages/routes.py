@@ -4513,6 +4513,57 @@ def _athena_settlements(ref):
     return payload
 
 
+def _athena_edit_cetip_id(ref, kapital_id, cetip_atual, novo, sid=''):
+    """Troca o CETIP ID de UMA linha do br-onshore-settlements do dia `ref`.
+
+    A linha é achada pelo **Kapital ID** — o CETIP ID é o que está sendo
+    corrigido, então não pode ser a chave; quando o mesmo Kapital ID aparece
+    mais de uma vez (pernas), o CETIP ID atual desempata. O ciclo inteiro
+    (ler → alterar → gravar) roda sob o `_cache_lock`, no arquivo-dia EXIBIDO
+    (sem andar para trás: editar o dia sem arquivo cairia no arquivo de outro
+    dia, sem erro nenhum). Devolve ``(payload, status)``."""
+    novo = str(novo or '').strip()
+    kapital = str(kapital_id or '').strip()
+    if not novo:
+        return {'success': False, 'error': 'Type the CETIP ID.'}, 400
+    if not kapital:
+        return {'success': False, 'error': 'The row has no Kapital ID to key on.'}, 400
+    jp = _ds_display_json_path(ref, 'br-onshore-settlements')
+    if not os.path.isfile(jp):
+        return {'success': False, 'error': 'No Swap Athena file for {}.'.format(
+            ref.strftime('%d/%m/%Y'))}, 404
+    with _cache_lock:
+        try:
+            with open(jp, encoding='utf-8') as fh:
+                data = json.load(fh) or []
+        except Exception:
+            return {'success': False, 'error': 'Could not read the day file.'}, 500
+        if not data:
+            return {'success': False, 'error': 'The day file is empty.'}, 404
+        keys = list(data[0].keys())
+        k_cetip = _fcst_resolve_key(keys, ['CETIP ID'])
+        k_kap = _fcst_resolve_key(keys, ['Kapital ID'])
+        if not k_cetip or not k_kap:
+            return {'success': False, 'error': 'The file has no CETIP ID / Kapital ID columns.'}, 500
+        alvos = [r for r in data if str(r.get(k_kap, '') or '').strip() == kapital]
+        if len(alvos) > 1:
+            atual = str(cetip_atual or '').strip()
+            afinados = [r for r in alvos if str(r.get(k_cetip, '') or '').strip() == atual]
+            alvos = afinados or alvos[:1]
+        if not alvos:
+            return {'success': False, 'error': 'Kapital ID {} is not in the day file.'.format(kapital)}, 404
+        antigo = str(alvos[0].get(k_cetip, '') or '')
+        alvos[0][k_cetip] = novo
+        try:
+            _atomic_write_json(jp, data)
+        except Exception:
+            log.error('[swap-athena] edit save failed:\n%s', traceback.format_exc())
+            return {'success': False, 'error': 'Could not save the day file.'}, 500
+    log.info('[swap-athena] CETIP ID %s -> %s (Kapital %s, %s) por %s', antigo, novo, kapital,
+             ref.strftime('%Y-%m-%d'), sid or '?')
+    return {'success': True, 'kapital_id': kapital, 'old': antigo, 'new': novo}, 200
+
+
 # ── Other Products › Swap › Settlement Advice ────────────────────────────────
 #  A planilha de aviso de liquidação, montada na tela. Uma linha por swap que
 #  liquida na data — MESMO universo do Trade Level (`_ops_swap_settling`), para

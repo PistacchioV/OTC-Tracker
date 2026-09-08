@@ -457,13 +457,19 @@ for frag in ("(i + 2)", "slice(2)", "(index + 2)", "c.idx + 2", "idx > 1", "[{},
     check('sem literal %r' % frag, frag in JS, False)
 for frag in ("(i + LEAD)", "slice(LEAD)", "(index + LEAD)", "c.idx + LEAD", "idx >= LEAD"):
     check('usa %r' % frag, frag in JS, True)
-# As outras quatro paginas nao pediram a coluna — e nao podem ganha-la.
+# As outras paginas nao pediram a coluna — e nao podem ganha-la. O Swap Athena
+# saiu desta lista em 08/09/2026: ele pediu UM botao (Edit do CETIP ID), e o
+# visualizador ganhou o modo `data-actions="edit"` para isso — os tres botoes
+# das duas paginas de advice continuam como estao (check_tools.py prende).
 for pg in ('live-position-swap-characteristics', 'live-position-swap-cashflow',
-           'live-position-swap-premium', 'other-products-swap-athena',
+           'live-position-swap-premium',
            'other-products-swap-events', 'other-products-swap-vcp',
            'other-products-ndf-settlement-advice'):
     other = read('apps/templates/pages/%s.html' % pg)
     check('%s segue sem Actions' % pg, 'data-actions' in other, False)
+athena = read('apps/templates/pages/other-products-swap-athena.html')
+check('o Swap Athena pede SO o Edit', 'data-actions="edit"' in athena, True)
+check('   e o compartilhado conhece o modo', 'ACTIONS_EDIT_ONLY' in JS, True)
 # O que os botoes FAZEM e da pagina: o arquivo compartilhado so entrega o clique.
 check('o compartilhado delega', 'window.scRowAction' in JS, True)
 check('e a pagina implementa', 'window.scRowAction = function' in HTML, True)
