@@ -133,27 +133,34 @@ def classificar_indice(regras, nome_curva, nome_classe=''):
 
     Precedência: `Exact` vence `Contains`, e entre os `Contains` vence o token
     mais longo — `DOLAR DOS EUA 30/360` tem de ganhar de `DOLAR`. Sem regra →
-    ``None``, e a tela deixa o índice em branco, sinalizado."""
-    alvo = norm(nome_curva)
-    if alvo == 'vcp' or not alvo:
-        alvo = norm(nome_classe)
-    if not alvo:
-        return None
-    exatas, contidas = [], []
-    for r in regras or []:
-        tok = norm(r.get('MATCH', ''))
-        if not tok:
-            continue
-        modo = norm(r.get('MODE', '')) or 'contains'
-        if modo.startswith('exact'):
-            if tok == alvo:
-                exatas.append(r)
-        elif tok in alvo:
-            contidas.append(r)
-    if exatas:
-        return exatas[0]
-    if contidas:
-        return max(contidas, key=lambda r: len(norm(r.get('MATCH', ''))))
+    ``None``, e a tela deixa o índice em branco, sinalizado.
+
+    O Nome Tipo/Classe é tentado em DOIS casos, não só no VCP: quando a curva
+    não casa com regra nenhuma ele volta como segunda pergunta. Um `Código
+    índice` que o `swap-index` não conhece chega aqui como o próprio código
+    (`C03`), que não casa com nada — e desistir ali deixaria a ponta em branco
+    tendo a curva escrita na coluna ao lado."""
+    alvos = []
+    for candidato in (nome_curva, nome_classe):
+        n = norm(candidato)
+        if n and n != 'vcp' and n not in alvos:
+            alvos.append(n)
+    for alvo in alvos:
+        exatas, contidas = [], []
+        for r in regras or []:
+            tok = norm(r.get('MATCH', ''))
+            if not tok:
+                continue
+            modo = norm(r.get('MODE', '')) or 'contains'
+            if modo.startswith('exact'):
+                if tok == alvo:
+                    exatas.append(r)
+            elif tok in alvo:
+                contidas.append(r)
+        if exatas:
+            return exatas[0]
+        if contidas:
+            return max(contidas, key=lambda r: len(norm(r.get('MATCH', ''))))
     return None
 
 

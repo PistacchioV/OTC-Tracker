@@ -1015,7 +1015,12 @@ continua no label inglês.
   o `getTradesBySettle` da Athena — as operações de NDF que LIQUIDAM na data —
   e alimenta o Import do NDF Cockpit no lugar do SETTLEMENT.xlsx (§421); o
   `.xlsx` no dropzone do Save Daily Settlement Files continua sendo o plano B,
-  e as duas fontes escrevem o mesmo JSON.
+  e as duas fontes escrevem o mesmo JSON. O bloco **`settlement` é uma LISTA de
+  eventos**, e o valor de liquidação é o **primeiro item numérico de `Rolled
+  Positions`** (o segundo é o notional da moeda, que é MAIOR — "pegar o maior"
+  ou somar devolve o número errado em silêncio); um trade com vários eventos
+  vira uma LINHA por evento, e só entra quem tem `settlement` e cujo Trade Date
+  não seja hoje (§425).
 - **`fxo-internal-cpty`** — a perna interna da reconciliação de FXO. A coluna
   **`INVERT DIRECTION`** decide *quando* a regra vale: `No` renomeia sempre;
   `Yes` é a perna espelhada e só entra quando Ctpty **e** JPM Dir estão os dois
@@ -1218,7 +1223,24 @@ continua no label inglês.
   senão o `DOLAR DOS EUA 30/360` herdaria a contagem do `DOLAR` genérico.
   **Curva sem linha deixa o índice EM BRANCO e sinalizado na tela**, nunca um
   palpite: um indexador chutado numa ponta produz uma liquidação errada que
-  parece certa. `DAY COUNT`/`REGIME` em branco valem o padrão do índice.
+  parece certa. E o sinal DIZ o que faltou (§426): a nota da ponta escreve o
+  que a posição trazia — Código índice · curva do `swap-index` · Nome
+  Tipo/Classe — e manda cadastrar a curva, porque "não identificou" e "a
+  posição veio sem índice" eram a mesma tela em branco e é a diferença entre as
+  duas que se corrige. O `Nome Tipo/Classe` é a SEGUNDA pergunta, e não só no
+  VCP: curva que não casa com regra nenhuma volta por ele — um `Código índice`
+  que o `swap-index` não conhece chega à classificação como o próprio código
+  (`C03`), e desistir ali deixaria a ponta em branco tendo a curva escrita na
+  coluna ao lado. `DAY COUNT`/`REGIME` em branco valem o padrão do índice.
+  **O PERÍODO de cada fluxo (§427) é do servidor, não da tela**: o payload leva
+  `p_inicio`/`p_fim`/`p_amort`/`p_base_amort` por evento e o seletor da tela só
+  lê. O fim é a data do evento; o início é o primeiro candidato ANTERIOR a ele —
+  evento anterior (o mais recente estritamente antes) → `Data início` do swap →
+  `Data operação termo` → `Data Início Composição da Taxa` do evento. Candidato
+  que não é anterior ao fim é DESCARTADO: o DFLUXO repete a data quando há mais
+  de um lançamento no dia, e a composição de taxa às vezes vem carimbada com a
+  data do próprio evento — nos dois casos o período abria no dia em que fechava,
+  e uma janela de zero dia liquida com juros zero sem acusar erro nenhum.
 - **`opb3-msg-asset`** — o token da coluna **Type** do Operations B3 → o rótulo
   da classe do ativo no ASSUNTO da mensageria (`Moeda`, `Mercadoria`,
   `Equities`). O Type é a `Classe do Ativo Subjacente` da posição em TER/OPC e o
@@ -1484,15 +1506,19 @@ linha que a tela está editando, e a importação seguinte renumera tudo.
 ### O IR do termo de MOEDA é calculado, com piso de R$ 1,00 acumulado no mês
 
 A API `getTradesBySettle` não traz o imposto que o SETTLEMENT.xlsx do Cockpit
-trazia, então o NDF Summary CALCULA (`_ndfsum_ir_apply`, §423): 0,005% por
+trazia, então ele é CALCULADO (`_ndfsum_ir_apply`, §423): 0,005% por
 operação em que o banco paga, isento pelo `ndfc-ir-exempt`; liquidação com
 imposto abaixo de R$ 1,00 sai BRUTA e o valor acumula contra a contraparte;
 na seguinte, acumulado + dia abaixo do piso segue bruto, alcançado o piso
 retém-se a SOMA; mês novo zera. O acumulado vive no ledger mensal
 `ndf-ir-ledger/ndf-ir-ledger_AAAAMM.json`, escrito pelo `_ndfsum_collect` do
 dia exibido — entrada do dia SUBSTITUÍDA (recarregar não dobra), dia anterior
-sem entrada CURADO do Cockpit dele. O IR calculado vence o `VL_TAX_INCOME` do
-Cockpit, inclusive na célula do Trade Level. O aviso leva também a coluna
+sem entrada CURADO do Cockpit dele. **O import do Cockpit também preenche a
+coluna** (`_ndfc_apply_ir`, §425), reusando as MESMAS funções em vez de
+reimplementar a regra, e aplicando-a ao DIA inteiro montado — nunca por
+registro, porque o piso é por contraparte dentro do mês; a célula gravada é um
+SNAPSHOT, e o IR calculado na leitura vence o `VL_TAX_INCOME` do Cockpit,
+inclusive na célula do Trade Level. O aviso leva também a coluna
 **Fixing** (o `Spot` da API, mín. 4 e máx. 8 casas). `check_ndfsum_ir.py`.
 
 ### O `SPB - outros bancos` da Recon Pay/Rec só casa com BANCO
