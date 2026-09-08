@@ -7085,7 +7085,53 @@ def _ndfc_api_iso(v):
     return d.strftime('%Y-%m-%d') if d else str(v or '').strip()
 
 
-def _ndfc_rec_from_api(rec, refmap_acr, refmap_spn):
+def _ndfc_api_rolled(sn):
+    """O valor de liquidação do evento: o PRIMEIRO item de `Rolled Positions`.
+
+    A lista traz as duas pernas do rolamento — o caixa em BRL primeiro e o
+    notional da moeda depois (`[-33273.3984, -113872.0]` com Quantity 113872) —,
+    e o que liquida é o primeiro. O `ForwardCashflow` que este de-para lia no
+    começo **não existe** no payload de produção: a coluna saía vazia, sem erro
+    em lugar nenhum, e com ela o NDF Summary somava zero. Ele fica como plano B
+    só para o registro histórico que o tinha.
+    """
+    rolled = _ndf_api_get(sn, 'ROLLED POSITIONS', 'ROLLEDPOSITIONS')
+    if isinstance(rolled, (list, tuple)):
+        for v in rolled:
+            n = _fxo_num(v)
+            if n is not None:
+                return n
+        return None
+    n = _fxo_num(rolled)
+    if n is not None:
+        return n
+    return _fxo_num(_ndf_api_get(sn, 'FORWARDCASHFLOW', 'FORWARD CASHFLOW'))
+
+
+def _ndfc_api_settlements(rec):
+    """O bloco `settlement` do registro, SEMPRE como lista de dicts.
+
+    A API devolve uma **lista** — vazia no trade que ainda não liquidou, com um
+    ou mais eventos no que liquidou. O código lia só `isinstance(stl, dict)`,
+    que é a forma do fixture do teste, e a lista caía fora em silêncio: com ela
+    iam o `Event Name`, o `Spot` e o `Rolled Positions`, ou seja o ID_DEAL, o
+    VL_FORWARD_RATE e o valor de liquidação — três colunas que a tela mostrava
+    vazias sem erro nenhum em lugar nenhum.
+
+    O objeto solto continua aceito: é o que o fixture histórico traz, e recusá-lo
+    trocaria um silêncio por outro.
+    """
+    if not isinstance(rec, dict):
+        return []
+    stl = _ndf_api_norm(rec).get('SETTLEMENT')
+    if isinstance(stl, dict):
+        return [stl] if stl else []
+    if isinstance(stl, list):
+        return [x for x in stl if isinstance(x, dict) and x]
+    return []
+
+
+def _ndfc_rec_from_api(rec, refmap_acr, refmap_spn, stl=None):
     """Um registro do getTradesBySettle → registro do Cockpit (as `_NDFC_COLUMNS`),
     ou (None, motivo) quando o registro não entra.
 
@@ -7104,10 +7150,13 @@ def _ndfc_rec_from_api(rec, refmap_acr, refmap_spn):
                          que é a conta do `_ndfc_strike_calc`). Par com moeda fraca
                          inverte os dois (`_ndf_weak_leg`), como o New Deals faz
                          com o Rate;
-      [PROD] Cockpit.SETTLEMENT ← ForwardCashflow, DUAS casas half-up;
+      [PROD] Cockpit.SETTLEMENT ← o PRIMEIRO `Rolled Positions` do evento (o caixa
+                         em BRL; o segundo é o notional da moeda), DUAS casas half-up;
       PUBLISHER        ← Publisher;
-      VL_TAX_INCOME, NB_BANK, CD_BRANCH, CD_BANK_ACCOUNT ← em branco: a API não
-                         os traz (eram do Cockpit).
+      NB_BANK, CD_BRANCH, CD_BANK_ACCOUNT ← em branco: a API não os traz;
+      VL_TAX_INCOME    ← CALCULADO no `_ndfc_apply_ir` depois de o dia inteiro
+                         estar montado (o piso de R$ 1,00 é por CONTRAPARTE, e
+                         não dá para decidir olhando uma operação de cada vez).
     """
     norm = _ndf_api_norm(rec)
     get = norm.get
@@ -7120,8 +7169,27 @@ def _ndfc_rec_from_api(rec, refmap_acr, refmap_spn):
     if 'GLOBAL_HOLDING_BOOK' in end_cp.upper().replace(' ', '_').replace('-', '_') \
             or _ndf_is_interbook(norm):
         return None, 'internal'
-    stl = get('SETTLEMENT')
-    sn = _ndf_api_norm(stl) if isinstance(stl, dict) else {}
+
+    # SÓ entra quem tem o bloco `settlement` preenchido: a resposta do
+    # getTradesBySettle traz também o trade que ainda NÃO liquidou, com
+    # `settlement: []`. Ele vira uma linha do Cockpit sem evento, sem fixing e
+    # sem valor — uma liquidação que não existe, somando zero no NDF Summary e
+    # aparecendo no aviso ao cliente.
+    if stl is None:
+        eventos = _ndfc_api_settlements(rec)
+        stl = eventos[0] if eventos else None
+    if not isinstance(stl, dict) or not stl:
+        return None, 'no_settlement'
+
+    # E o trade bookado HOJE não liquidou hoje: ele aparece na resposta porque
+    # a data de liquidação dele cai na data pedida, mas o evento ainda não
+    # ocorreu. A regra é da mesa, e é o par natural do corte acima — o registro
+    # da captura tem as duas marcas ao mesmo tempo.
+    dt_deal = _fcst_parse_date(get('TRADE DATE'))
+    if dt_deal and dt_deal == _br_now().date():
+        return None, 'booked_today'
+
+    sn = _ndf_api_norm(stl)
 
     loc = str(get('SETTLEMENT LOCATION') or '').strip().upper()
     le = _ndf_le_from_location(loc)
@@ -7167,11 +7235,59 @@ def _ndfc_rec_from_api(rec, refmap_acr, refmap_spn):
         'PUBLISHER': str(get('PUBLISHER') or '').strip(),
         'VL_TAX_INCOME': '',
         'ID_DEAL': str(sn.get('EVENT NAME') or '').strip(),
-        '[PROD] Cockpit.SETTLEMENT': _ndfc_api_money(
-            _fxo_num(_ndf_api_get(sn, 'FORWARDCASHFLOW', 'FORWARD CASHFLOW'))),
+        '[PROD] Cockpit.SETTLEMENT': _ndfc_api_money(_ndfc_api_rolled(sn)),
         'NB_BANK': '', 'CD_BRANCH': '', 'CD_BANK_ACCOUNT': '',
     }
     return out, None
+
+
+def _ndfc_apply_ir(ref, rows):
+    """Escreve o `VL_TAX_INCOME` de cada linha do dia, pela regra do §423.
+
+    A API não traz o imposto (ele era do Cockpit), e a regra é a mesma que o NDF
+    Summary já aplica: 0,005% sobre a liquidação em que o BANCO PAGA (valor
+    negativo), isenção pelo `ndfc-ir-exempt`, e o piso de R$ 1,00 acumulado por
+    contraparte DENTRO DO MÊS — abaixo dele o cliente recebe o bruto e o valor
+    fica guardado para a liquidação seguinte.
+
+    Reusa `_ndfsum_ir_cockpit_groups` + `_ndfsum_ir_for_day`, que são as MESMAS
+    funções da cura do Summary: uma segunda implementação da regra do imposto
+    divergiria no primeiro caso de borda, e o cliente veria um número na tela e
+    outro no aviso.
+
+    O que fica na célula é um INSTANTÂNEO: o Summary continua sendo a
+    autoridade e recalcula ao desenhar (§423), então importar um dia ANTERIOR
+    do mesmo mês depois deste muda o acumulado e o Summary passa a mostrar o
+    número novo — a célula gravada aqui só volta a acompanhar num reimport.
+    Falha ao computar deixa a coluna VAZIA e avisa no log: vazio pede
+    conferência, um zero afirmaria que não há imposto.
+    """
+    if not rows:
+        return
+    try:
+        grupos = _ndfsum_ir_cockpit_groups(rows)
+        if not grupos:
+            return
+        ir = _ndfsum_ir_for_day(ref, grupos)
+    except Exception:
+        log.warning('[ndfc] IR do dia não pôde ser calculado:\n%s', traceback.format_exc())
+        return
+    # As `taxes` saem na ORDEM em que o grupo colheu as liquidações, e o grupo
+    # as colheu varrendo estas mesmas linhas — então consumir uma por vez, com
+    # o MESMO filtro, mantém imposto e operação na mesma linha. Casar por valor
+    # trocaria os dois impostos de duas operações de mesmo valor.
+    pendente = {k: list(v.get('taxes') or []) for k, v in ir.items()}
+    for rec in rows:
+        legal = re.sub(r'[^A-Z0-9]', '', str(rec.get('LEGAL', '') or '').upper())
+        if legal and not (legal.startswith('BANCOJP') or legal.startswith('JPMORGANCHASE')):
+            continue
+        nm = str(rec.get('NM_COUNTERPARTY', '') or '').strip()
+        if not nm or _ndfc_valnum(rec.get('[PROD] Cockpit.SETTLEMENT', '')) is None:
+            continue
+        fila = pendente.get(_fcst_norm(nm))
+        if not fila:
+            continue
+        rec['VL_TAX_INCOME'] = '{:.2f}'.format(fila.pop(0))
 
 
 def _ndfc_import(ref=None):
@@ -7211,22 +7327,32 @@ def _ndfc_import(ref=None):
     refmap_spn = _fxo_refdata_by_spn()
     refmap_acr = _fxo_refdata_by_accronym(refmap_spn)
     by_key, order = {}, []
-    skipped = {'cancelled': 0, 'internal': 0, 'invalid': 0}
+    skipped = {'cancelled': 0, 'internal': 0, 'invalid': 0,
+               'no_settlement': 0, 'booked_today': 0}
     for rec in records:
         if not isinstance(rec, dict):
             skipped['invalid'] += 1
             continue
-        row, why = _ndfc_rec_from_api(rec, refmap_acr, refmap_spn)
-        if row is None:
-            skipped[why] += 1
-            continue
-        # Deal × evento de liquidação: a mesma operação repetida no payload
-        # (versões do registro) entraria duas vezes na soma do NDF Summary.
-        key = (row['ID_SOURCE_DEAL'], row['ID_DEAL'])
-        if key not in by_key:
-            order.append(key)
-        by_key[key] = row
+        # UMA linha por EVENTO: o bloco `settlement` é uma lista, e um trade
+        # pode liquidar em mais de um evento na mesma data (as rolagens). Ficar
+        # no primeiro perderia os demais — e a chave de dedupe abaixo já é
+        # deal × evento, ou seja o modelo sempre esperou vários.
+        eventos = _ndfc_api_settlements(rec) or [None]
+        for ev in eventos:
+            row, why = _ndfc_rec_from_api(rec, refmap_acr, refmap_spn, stl=ev)
+            if row is None:
+                skipped[why] = skipped.get(why, 0) + 1
+                continue
+            # Deal × evento de liquidação: a mesma operação repetida no payload
+            # (versões do registro) entraria duas vezes na soma do NDF Summary.
+            key = (row['ID_SOURCE_DEAL'], row['ID_DEAL'])
+            if key not in by_key:
+                order.append(key)
+            by_key[key] = row
     out = [by_key[k] for k in order]
+    # O imposto é CALCULADO (a API não o traz), pela mesma regra e pelas mesmas
+    # funções do NDF Summary — ver `_ndfc_apply_ir`.
+    _ndfc_apply_ir(ref, out)
     _ndfc_ensure_meta(out)
     jp = _ndfc_json_path(ref)
     _ndfc_save(jp, out)
