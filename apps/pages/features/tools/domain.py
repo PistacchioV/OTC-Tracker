@@ -265,6 +265,16 @@ def montar_ponta(regra, pct, taxa, sinal, nome_classe, cotacao_inicial,
     if not regra:
         return campos, ['indexador']
     idx = str(regra.get('INDEX', '') or '').strip()
+    if idx not in liquidacao.INDEXADOR_POR_CODIGO:
+        # Índice que o MOTOR não conhece é o mesmo que índice nenhum, e tem de
+        # sair pela mesma porta: a ponta em branco e SINALIZADA. Devolvê-lo
+        # punha no `<select>` da tela um valor sem opção correspondente — o
+        # campo ficava vazio, a nota de "não identificou" não aparecia (o
+        # servidor tinha respondido um índice) e não havia nada explicando o
+        # branco. O cadastro é editado à mão numa tela cujo `select` pode
+        # guardar o valor de um seed antigo (foi o `cdi_percentual`, código da
+        # Renda Fixa, no primeiro seed do `tools-swap-index`).
+        return campos, ['indexador']
     campos['indexador'] = idx
     conv, reg = liquidacao.convencao_padrao(idx)
     campos['convencao'] = str(regra.get('DAY COUNT', '') or '').strip() or conv

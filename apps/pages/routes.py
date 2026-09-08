@@ -10150,6 +10150,29 @@ _LE_SPN_SEED = (
 )
 
 
+# O `INDEX` deste cadastro tem de ser um indexador do MOTOR de liquidação
+# (`liquidacao.INDEXADORES`). O primeiro seed usou os códigos da RENDA FIXA
+# (`cdi_percentual`/`cdi_spread`, que lá são duas formas do mesmo CDI) e o seed
+# foi corrigido depois — mas seed só roda quando o arquivo NÃO existe, então a
+# instância que já tinha o cadastro em disco ficou com o código antigo para
+# sempre: a ponta de DI voltava com um indexador que a tela não tem na lista, e
+# o `<select>` ficava em BRANCO sem nada explicando por quê.
+_TOOLS_SWAP_INDEX_LEGADO = {'cdi_percentual': 'cdi', 'cdi_spread': 'cdi'}
+
+
+def _tools_swap_index_upgrade(rows):
+    """Traduz na LEITURA os `INDEX` de um seed anterior. Só toca no que casa
+    com a tabela de legado — código desconhecido fica como está, para a ponta
+    sair sinalizada em vez de virar um índice chutado."""
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        novo = _TOOLS_SWAP_INDEX_LEGADO.get(str(r.get('INDEX') or '').strip())
+        if novo:
+            r['INDEX'] = novo
+    return rows
+
+
 def _le_spn_upgrade(rows):
     """Garante uma linha por Legal Entity e traz a razão social para os arquivos
     gravados antes da coluna NAME existir.
@@ -11243,6 +11266,7 @@ _MAPPING_DEFS = {
             {'MATCH': 'OURO', 'MODE': 'Contains', 'INDEX': 'equity', 'CURRENCY': 'USD',
              'DAY COUNT': '', 'REGIME': '', 'TENOR': ''},
         ],
+        'upgrade': _tools_swap_index_upgrade,
     },
     # ── Operations B3 › Mensageria: a classe do ativo no ASSUNTO ──────────────
     # Pedido do time (ticket OTC-0032): o assunto do bilateral precisa dizer se
