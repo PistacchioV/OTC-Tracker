@@ -97,5 +97,70 @@ finally:
     os.name = _real_name
     A.HttpNegotiateAuth = _real_auth
 
+# ── o TRANSPORTE: conexao curta, leitura pelo chamador ───────────────────────
+# Kerberos resolvido, o que sobra e o tempo. Sao dois numeros e nao um: a espera
+# de CONEXAO e paga quando o host nao responde (VPN fora, endereco errado no
+# cadastro), e com um numero so ela custava o mesmo que uma consulta inteira —
+# tres minutos para dizer que nao conectou, agora que o relatorio pede 180 s.
+print()
+print('== o timeout: conexao x leitura ==')
+check('a conexao e curta', 0 < A.CONNECT_TIMEOUT <= 30)
+check('o getTrades de UM produto le em 30 s', A.REQUEST_TIMEOUT == 30)
+check('o RELATORIO le em muito mais', A.REPORT_TIMEOUT >= 120)
+check('e o padrao do get_json_url e o do getTrades',
+      A._timeout() == (A.CONNECT_TIMEOUT, A.REQUEST_TIMEOUT))
+check('quem pede relatorio troca SO a leitura',
+      A._timeout(A.REPORT_TIMEOUT) == (A.CONNECT_TIMEOUT, A.REPORT_TIMEOUT))
+
+# O timeout tem de alcancar o POST do replay do ADFS, e nao so o GET: o form_post
+# e o hop que dispara a consulta de verdade e volta com os dados, entao e NELE
+# que a espera longa e gasta. Foi ali que o `getTradesBySettle` estourou.
+_hops = []
+
+
+class _Resp(object):
+    def __init__(self, html):
+        self.headers = {'Content-Type': 'text/html' if html else 'application/json'}
+        self.text = '<form method="post" action="https://adfs/x"><input name="a" value="1"></form>'
+
+    def raise_for_status(self):
+        pass
+
+    def json(self):
+        return {'ok': True}
+
+
+class _Sess(object):
+    def get(self, url, params=None, timeout=None):
+        _hops.append(('GET', timeout))
+        return _Resp(True)
+
+    def post(self, url, data=None, timeout=None):
+        _hops.append(('POST', timeout))
+        return _Resp(False)
+
+
+A.get_json_url(_Sess(), 'https://athena/x', timeout=A.REPORT_TIMEOUT)
+check('o GET e o POST do replay recebem o MESMO timeout',
+      _hops == [('GET', (A.CONNECT_TIMEOUT, A.REPORT_TIMEOUT)),
+                ('POST', (A.CONNECT_TIMEOUT, A.REPORT_TIMEOUT))])
+del _hops[:]
+A.get_json_url(_Sess(), 'https://athena/x')
+check('e sem pedido nenhum fica no de getTrades (New Deals intacto)',
+      _hops == [('GET', (A.CONNECT_TIMEOUT, A.REQUEST_TIMEOUT)),
+                ('POST', (A.CONNECT_TIMEOUT, A.REQUEST_TIMEOUT))])
+
+# `.env` digitado errado nao pode derrubar a subida: este modulo e importado no
+# topo do routes, e um ajuste de tempo malformado viraria uma aplicacao que nao
+# abre. Cai no padrao e avisa no log (a mesma decisao do IMPORT_POLL_WINDOW).
+os.environ['ATHENA_X_TEST'] = 'abc'
+check('valor malformado cai no padrao', A._seconds('ATHENA_X_TEST', 42) == 42)
+os.environ['ATHENA_X_TEST'] = '0'
+check('zero tambem (esperar zero e nao esperar)', A._seconds('ATHENA_X_TEST', 42) == 42)
+os.environ['ATHENA_X_TEST'] = '240'
+check('e o numero valido vale', A._seconds('ATHENA_X_TEST', 42) == 240)
+os.environ.pop('ATHENA_X_TEST', None)
+check('ausente devolve o padrao', A._seconds('ATHENA_X_TEST', 42) == 42)
+
 print('FALHOU' if falhas else 'TUDO OK')
 sys.exit(1 if falhas else 0)

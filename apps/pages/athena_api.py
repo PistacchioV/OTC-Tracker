@@ -32,6 +32,7 @@ Requirements::
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 from apps.pages.data_paths import data_dir, data_path, data_write, mapping_file, mapping_write
@@ -75,7 +76,50 @@ WIA_USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64; Trident/7.0; rv:11.0) like Gecko"
 )
 
-REQUEST_TIMEOUT = 30
+def _seconds(nome, padrao):
+    """Segundos de uma variável de ambiente, com o padrão quando ela não presta.
+
+    Valor malformado **não** derruba a subida: este módulo é importado no topo
+    do `routes`, e um `.env` digitado errado não pode transformar um ajuste de
+    tempo numa aplicação que não abre. Mesma decisão do `IMPORT_POLL_WINDOW`
+    (CLAUDE.md §7) — cai no padrão e avisa no log.
+    """
+    bruto = (os.getenv(nome) or "").strip()
+    if not bruto:
+        return padrao
+    try:
+        valor = int(float(bruto))
+    except ValueError:
+        valor = 0
+    if valor <= 0:
+        logging.getLogger("otc_tracker").warning(
+            "[athena] %s=%r não é um número de segundos; usando %d", nome, bruto, padrao)
+        return padrao
+    return valor
+
+
+# O timeout de CONEXÃO é curto e separado do de LEITURA de propósito. Ele é pago
+# quando o host não responde — a VPN fora do ar, o endereço errado no cadastro —,
+# e com um número só os dois casos custavam o mesmo: a tela esperava o tempo de
+# uma consulta inteira para dizer que não conectou. É a mesma separação do
+# `quotes.py` (CLAUDE.md §8), e ela vale ainda mais aqui, onde o timeout de
+# leitura de relatório é de três minutos.
+CONNECT_TIMEOUT = _seconds("ATHENA_CONNECT_TIMEOUT", 10)
+# Leitura de um `getTrades` de UM produto num dia — a chamada do New Deals, que
+# responde em segundos.
+REQUEST_TIMEOUT = _seconds("ATHENA_TIMEOUT", 30)
+# Leitura de um RELATÓRIO: o EOD da Recon FXO, o ITAUDataExtract do Intrag DCE e
+# o `getTradesBySettle` do NDF Cockpit varrem o LIVRO INTEIRO de uma data, e não
+# um produto — os três passam de 30 s com folga. Os dois primeiros já pediam 180
+# escritos na mão em cada módulo; o terceiro herdava os 30 do `getTrades` e
+# estourava com `ReadTimeout` no meio do replay do ADFS, uma falha que chega à
+# tela como um traceback de urllib3 e não menciona tempo nenhum.
+REPORT_TIMEOUT = _seconds("ATHENA_REPORT_TIMEOUT", 180)
+
+
+def _timeout(read=None):
+    """`(conexão, leitura)` para o `requests` — a leitura é a do chamador."""
+    return (CONNECT_TIMEOUT, int(read or REQUEST_TIMEOUT))
 
 
 def is_available():
@@ -273,14 +317,26 @@ def build_session():
     return session
 
 
-def get_json(session, path: str, params: Optional[dict] = None):
+def get_json(session, path: str, params: Optional[dict] = None, timeout=None):
     """GET an Athena endpoint (path relative to BASE_URL) via Kerberos SSO."""
-    return get_json_url(session, BASE_URL + path, params=params)
+    return get_json_url(session, BASE_URL + path, params=params, timeout=timeout)
 
 
-def get_json_url(session, url: str, params: Optional[dict] = None):
-    """GET an absolute URL via Kerberos SSO, replaying ADFS form_post hops."""
-    resp = session.get(url, params=params, timeout=REQUEST_TIMEOUT)
+def get_json_url(session, url: str, params: Optional[dict] = None, timeout=None):
+    """GET an absolute URL via Kerberos SSO, replaying ADFS form_post hops.
+
+    `timeout` é a espera de LEITURA em segundos (a de conexão é sempre a curta):
+    quem chama um relatório passa o `REPORT_TIMEOUT`, quem chama um `getTrades`
+    de um produto não passa nada e fica no `REQUEST_TIMEOUT`.
+
+    O mesmo tempo vale para o POST do replay, e não é detalhe: o form_post do
+    ADFS é o hop que dispara a consulta de verdade e volta com os dados, então é
+    **nele** que a espera longa é gasta — foi ali que o `getTradesBySettle`
+    estourou os 30 s. Encurtá-lo por ser "só o redirecionamento" seria pôr o
+    limite justamente onde a conta é feita.
+    """
+    espera = _timeout(timeout)
+    resp = session.get(url, params=params, timeout=espera)
     resp.raise_for_status()
 
     # After SSO, ADFS returns auto-submitting form_post pages. Replay them
@@ -292,7 +348,7 @@ def get_json_url(session, url: str, params: Optional[dict] = None):
         parser.feed(resp.text)
         if not parser.action or parser.method != "post":
             break
-        resp = session.post(parser.action, data=parser.fields, timeout=REQUEST_TIMEOUT)
+        resp = session.post(parser.action, data=parser.fields, timeout=espera)
         resp.raise_for_status()
 
     return resp.json()

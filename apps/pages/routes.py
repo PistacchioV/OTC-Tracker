@@ -7135,11 +7135,26 @@ def _ndfc_import(ref=None):
                                            "the Athena API client is unavailable."}
     url = _ndfc_api_url(ref)
     try:
-        payload = athena_api.get_json_url(athena_api.build_session(), url)
+        # `REPORT_TIMEOUT` (180 s), e não os 30 s do `getTrades`: este endpoint
+        # varre o LIVRO INTEIRO da data de liquidação, como o EOD da Recon FXO e
+        # o extrato do Intrag DCE — os três são relatório, não consulta de um
+        # produto. Com os 30 s herdados ele estourava `ReadTimeout` no meio do
+        # replay do ADFS, e o erro chegava à tela como um traceback de urllib3.
+        payload = athena_api.get_json_url(athena_api.build_session(), url,
+                                          timeout=athena_api.REPORT_TIMEOUT)
     except Exception as exc:
         log.warning('[ndfc] Athena getTradesBySettle failed (%s):\n%s', url, traceback.format_exc())
-        return {'success': False, 'error': 'Athena API: {}: {}'.format(type(exc).__name__, exc),
-                'url': url}
+        # Timeout tem mensagem PRÓPRIA: o repr do urllib3 tem quatro linhas de
+        # pool e porta e não diz nem quanto se esperou nem o que fazer — e o que
+        # se faz é diferente de um 401 (SSO) ou de um 404 (cadastro errado).
+        nome = type(exc).__name__
+        if 'Timeout' in nome:
+            erro = ('Athena did not answer within {}s. This endpoint scans the whole book '
+                    'for the settlement date; raise ATHENA_REPORT_TIMEOUT in the .env if it '
+                    'needs longer.').format(athena_api.REPORT_TIMEOUT)
+        else:
+            erro = 'Athena API: {}: {}'.format(nome, exc)
+        return {'success': False, 'error': erro, 'url': url}
     records = athena_api.extract_records(payload)
     refmap_spn = _fxo_refdata_by_spn()
     refmap_acr = _fxo_refdata_by_accronym(refmap_spn)
