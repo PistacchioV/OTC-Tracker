@@ -17020,3 +17020,148 @@ Dois pedidos da mesa, os dois no par Overview × Track Docs:
 - O que isso NÃO resolve: o lock exclusivo segurado por muito tempo no share.
   Se o aviso voltar com `wait_seconds=30`, o alvo é quem está escrevendo (o
   `database_id` do evento identifica o banco), não o teto.
+
+## §421 — NDF Cockpit: o Import puxa do `getTradesBySettle`, não do SETTLEMENT.xlsx (2026-09-08)
+
+- Pedido: Daily Settlement › NDF passa a ler da API
+  `…/api/v1/getTradesBySettle?product=NDF&date=AAAAMMDD` (as operações de NDF
+  de moeda que LIQUIDAM na data) o que antes vinha do SETTLEMENT.xlsx do
+  Cockpit; o valor de liquidação é o `ForwardCashflow`, arredondado na segunda
+  casa. O botão Import da página (`/api/ndf-cockpit/import`) é que mudou de
+  fonte; o `.xlsx` largado no dropzone do Save Daily Settlement Files continua
+  entrando (`_ds_handle` → `_ndfc_extract`) como plano B — as duas fontes gravam
+  o MESMO JSON, com as MESMAS colunas, e o resto do app (NDF Summary,
+  mensageria, Other Publisher) lê o JSON sem saber de onde veio.
+- O endereço é CADASTRO: linha `Daily Settlement` × `NDF` no `api-links`
+  (uso novo no dropdown), semeada com o link que a mesa entregou — **host
+  UAT** (`athena-app-uat`); o de produção se troca pela tela. O fallback
+  `_NDFC_API_URL_FALLBACK` existe porque o `athena_api.registered_link` lê o
+  JSON cru e o seed só chega ao disco quando alguém salva o /mapping (o mesmo
+  desenho da Recon FXO e do Intrag DCE). Sessão e replay do ADFS são os do
+  `athena_api` (`build_session` + `get_json_url`).
+- O de-para (`_ndfc_rec_from_api`), e o que NÃO é óbvio nele:
+  - **datas gravadas em ISO** (`2026-06-10`), nunca dd/mm: o `_ndfc_fmt_date`
+    tenta `m/d/yyyy` PRIMEIRO (o formato do .xlsx), e um `10/06/2026` gravado
+    aqui viraria 6 de outubro na tela, sem erro nenhum;
+  - **LC é a perna em BRL, esteja ela em Quantity ou em Other Quantity**; FC é
+    a outra. Sem BRL nas duas (cross), LC = Quantity e FC = Other. Notionais em
+    MÓDULO — o `_ndfc_strike_calc` divide o settlement pelo notional e decide o
+    sinal pela posição do TER, e um notional negativo inverteria a conta;
+  - **`VL_FORWARD_RATE` é o `Spot` do bloco `settlement`, e `VL_STRIKE_PRICE` o
+    `Strike`.** Confere com a fórmula da mesa que o Cockpit sempre usou:
+    strike = fixing ± |settlement| / notional_FC (5,1253 + 823.467,03 /
+    5.302.427,75 = 5,2806). Par com moeda fraca inverte os dois
+    (`_ndf_weak_leg`), como o Rate do New Deals;
+  - **valor de liquidação com duas casas HALF-UP** (`Decimal`, não `round`: é
+    dinheiro, 0,125 é 0,13), sem separador de milhar — o `_ndfc_num` lê vírgula
+    como decimal;
+  - LEGAL sai da Settlement Location → LE (`le-accronym`) → razão social
+    (`le-spn`), e NM_COUNTERPARTY do Reference Data pelo accronym do End
+    Counterparty (e pelo SPN) — a MESMA resolução do New Deals, então o nome
+    que o NDF Summary agrupa e o SPN que ele procura são os do cadastro. Sem
+    cadastro fica a descrição da API / a location crua, visíveis;
+  - `ID_SOURCE_DEAL` = Deal Name; `ID_DEAL` = `Event Name` da liquidação;
+    `CD_CETIP_RETURN` = Cetip ID (a API já traz — o resgate por TER/Operations
+    B3 do §105 continua valendo para a linha que vier sem);
+  - **`VL_TAX_INCOME`, `NB_BANK`, `CD_BRANCH` e `CD_BANK_ACCOUNT` ficam em
+    BRANCO**: a API não os traz (eram do Cockpit). O IR do Settlement Advice de
+    NDF lê o `VL_TAX_INCOME` — enquanto a API não o trouxer, o aviso sai sem a
+    retenção. Pendência declarada;
+  - cancelado, GLOBAL_HOLDING_BOOK e **interbook ficam de fora** (contados em
+    `skipped`). O interbook é o MESMO predicado do pull do New Deals
+    (`_ndf_is_interbook`), lendo o cadastro `interbook-ndf` do /mapping (aba
+    Interbook API): perna mesa contra mesa não liquida contra cliente, e uma
+    que entrasse viraria aviso e TED para ninguém. Cadastro novo vale no
+    import seguinte, sem restart; deal × evento repetido no payload entra UMA
+    vez, senão a soma do NDF Summary dobraria.
+- O import grava o JSON **da data pedida** (o picker manda `date` no POST;
+  `_api_ref_date`), porque o endpoint é por data de liquidação e reimportar um
+  dia anterior é legítimo — com o .xlsx era sempre hoje. Erro de rede/SSO volta
+  como ERRO para a tela, nunca como JSON vazio: dia sem arquivo se lê como
+  "não há liquidação hoje".
+- `check_ndfc_api.py` prende tudo (registro da captura, campo a campo). De
+  passagem, a seção 5 do `check_api_links.py` estava vermelha desde 04/09: a
+  coluna SOURCE entrou na frente e o teste lia as opções por POSIÇÃO — passou a
+  ler por chave.
+
+## §422 — NDF Summary e Other Products Summary "infinitos" na instância: o espelho derrubava o leitor (2026-09-08)
+
+- Sintoma relatado: as duas telas demorando "infinito" para carregar dos bancos
+  na prod. Sem log da instância à mão, a causa saiu do código, e é DUPLA:
+  1. **o `duck_read` abre os bancos do espelho `read_only=True`, e a thread do
+     `duck_mirror` abre o MESMO arquivo em escrita, no MESMO processo** — e o
+     DuckDB (1.5.4, provado na dev nos dois sentidos) recusa a segunda conexão
+     com outra configuração. A escrita do espelho não passa pela camada do
+     `database_access`, então o lock de arquivo não separa os dois. Quando a
+     conversão falhava por isso, o manifest ficava DEFASADO e TODA leitura
+     seguinte daquele arquivo pagava uma cura síncrona (`convert_sync`, até
+     30 s) que voltava a colidir com o próximo leitor — um livelock sob carga,
+     com cada request caindo no JSON do share no fim. É o mesmo "different
+     configuration" do §323, agora entre o espelho e as telas;
+  2. **a mesma tela abre o mesmo banco várias vezes por request**: medido na
+     dev (mock esparso), o Other Products Summary abre `Commodities.db` 8× e
+     `DPOSICAO-SWAP` 4× num request; na prod, com o ano inteiro e cada abertura
+     custando ida e volta de rede, são dezenas de segundos — e com 4 vagas de
+     leitura por banco (`DATABASE_READ_CONCURRENCY`), quatro usuários bastam
+     para o quinto esperar (o `local_permit_wait_timed_out` do §420 é esse
+     retrato).
+- Duas correções, e um pedido:
+  - **portão em memória entre o espelho e o leitor**: o `_UnlockedReadGate`
+    do §323 ganhou uma porta pública (`database_access.db_gate(path)`). O
+    `duck_read` entra como leitor antes de abrir (espera até 10 s uma escrita
+    em curso); a thread do espelho entra como escritor antes do `connect`
+    (espera os leitores em voo fecharem, até 10 s, e avisa se estourar). O
+    motor `json_to_duckdb` **não pode importar `apps`** (o standalone copia o
+    corpo), então ele expõe os ganchos `ABRIR_BANCO`/`FECHAR_BANCO` — o
+    `duck_mirror._loop` injeta a versão com portão só na thread dele; scripts
+    de carga e standalone seguem com o connect cru. Os 40 standalone foram
+    regerados (`build_duckdb_standalone.py`);
+  - **memo por request no `duck_read`**: `day_payload` e `raw_records`
+    guardam os `_raw` (texto) em `flask.g`, chaveados por caminho + mtime +
+    tamanho — o mesmo arquivo-dia abre o banco UMA vez por tela, cada
+    consumidor recebe objetos seus (reparse), uma gravação no meio do request
+    invalida sozinha e fora de request nada é memoizado (a rotina agendada vê
+    o arquivo mudar);
+  - o que NÃO mudou e vale conferir na instância: as linhas `[duck-mirror] …
+    falhou … different configuration` e `[duck-read] leitura do espelho levou
+    Xs` no log confirmam (ou não) o diagnóstico; e
+    `DATABASE_READ_CONCURRENCY=16` no `.env` (o número de threads do waitress)
+    tira a fila de quatro por banco — decisão da mesa.
+- `check_duck_gate.py` prende os dois sentidos do portão, o memo e a ausência
+  dele fora de request; `check_duck_read`, `check_duck_mirror`,
+  `check_json_to_duckdb`, `check_duckdb_standalone`, `check_convert_split`,
+  `check_unlocked_gate` e `check_duck_writers` seguem verdes.
+
+## §423 — Aviso de termo de moeda: coluna Fixing e o IR com piso de R$ 1,00 no mês (2026-09-08)
+
+- **Fixing**: coluna à direita do Notional Original da Operação, no e-mail e no
+  PDF do aviso, com o `Spot` do bloco `settlement` da API — que é o
+  `VL_FORWARD_RATE` do Cockpit desde o §421. `_ndf_fixing_br`: vírgula
+  decimal, mínimo 4 casas (a PTAX é publicada com 4) e máximo 8 — o Cockpit
+  exibe com 8 e zeros à direita, e no documento ao cliente esses zeros só
+  diriam que a origem tinha menos precisão. O `email_trades` do
+  `_ndfsum_collect` leva `fixing`.
+- **IR calculado**, porque a API não traz o `VL_TAX_INCOME` do Cockpit. Regra
+  da mesa, em `_ndfsum_ir_apply` (pura): 0,005% por operação em que o BANCO
+  PAGA (settlement < 0), 2 casas, isento pelo `ndfc-ir-exempt`; o imposto da
+  liquidação (as operações da contraparte no dia) abaixo de R$ 1,00 **não é
+  retido** — o cliente recebe o bruto — e fica acumulado contra a contraparte;
+  na liquidação seguinte o acumulado soma ao do dia: abaixo do piso segue
+  bruto e acumula, alcançado o piso retém-se a SOMA (o acumulado entra na
+  PRIMEIRA operação com imposto, para a tabela do aviso fechar com o total);
+  **a contagem é do mês** — mês novo começa em zero.
+- O acumulado vive num **ledger mensal** (`<DATA_DIR>/ndf-ir-ledger/
+  ndf-ir-ledger_AAAAMM.json`, entrada por dia × contraparte com due/withheld/
+  carry_in/carry_after), escrito pelo `_ndfsum_collect` do dia exibido sob o
+  `_cache_lock`. Três decisões que não dão erro nenhum: a entrada do dia é
+  SUBSTITUÍDA (recarregar a tela não conta duas vezes); dia útil anterior do
+  mês sem entrada é CURADO do arquivo do Cockpit dele, na ordem, antes de
+  responder (quem não abriu o Summary num dia não perde o acumulado daquele
+  dia); e o IR calculado VENCE o `VL_TAX_INCOME` do Cockpit — inclusive na
+  célula do Trade Level —, porque duas fontes para o mesmo imposto fariam o
+  aviso de um dia discordar do de outro. Sem ledger (erro de disco) o dia sai
+  com a regra sem acumulado, avisando no log.
+- O aviso explica a diferença: com acumulado retido, uma nota diz quanto veio
+  de liquidações anteriores do mês; com o imposto dispensado, uma nota diz que
+  ficou abaixo de R$ 1,00 e será acumulado. Sem nenhum dos dois, nada muda no
+  documento. `check_ndfsum_ir.py` prende regra, ledger e notas.
