@@ -1232,6 +1232,12 @@ continua no label inglês.
   que o `swap-index` não conhece chega à classificação como o próprio código
   (`C03`), e desistir ali deixaria a ponta em branco tendo a curva escrita na
   coluna ao lado. `DAY COUNT`/`REGIME` em branco valem o padrão do índice.
+  **O `Código Identificador` da posição de swap NÃO é uma chave** (§427): na
+  instância ele guarda a LOB (`CEM` em toda operação da mesa). Quem casa o
+  DFLUXO com a posição é o **Código do contrato**; o identificador só responde
+  onde não há contrato. Usá-lo em OU com o contrato trazia para o fluxo de um
+  swap os eventos de todos os outros da mesma mesa — e não como tela vazia: o
+  "último evento até hoje" virava o de outro contrato.
   **O PERÍODO de cada fluxo (§427) é do servidor, não da tela**: o payload leva
   `p_inicio`/`p_fim`/`p_amort`/`p_base_amort` por evento e o seletor da tela só
   lê. O fim é a data do evento; o início é o primeiro candidato ANTERIOR a ele —

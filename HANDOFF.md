@@ -17343,6 +17343,17 @@ O Flow start do §426 continuou saindo errado na instância: ele vinha **igual a
 Flow end**, os dois na data do evento. Duas causas somadas, e nenhuma delas dá
 erro — uma janela de zero dia liquida com juros zero e a tela fica plausível.
 
+- **O `Código Identificador` não é uma chave, e era usado como uma.** Na
+  instância ele guarda a **LOB** (`CEM` em toda operação da mesa), e o
+  `_fluxos_do_contrato` casava por contrato **OU** por ele — então o fluxo de UM
+  swap trazia junto os eventos de todos os outros da mesma mesa, milhares deles.
+  O sintoma não foi tela vazia: o "último evento até hoje" passava a ser o de
+  outro contrato e o "anterior" quase sempre tinha a MESMA data. Hoje a chave é
+  o **Código do contrato**, e o identificador só responde onde não há contrato —
+  nos dois lados (a linha de DFLUXO sem contrato também não entra pelo `CEM`).
+  O `_posicao_swap` procura o contrato em TODAS as linhas antes de aceitar um
+  casamento por identificador: casando na ordem do arquivo, um `CEM` de outra
+  operação venceria o contrato que se pediu.
 - **O "evento anterior" era o item ANTERIOR NA LISTA, não o evento anterior em
   DATA.** O DFLUXO repete a data quando há mais de um lançamento no dia, e aí o
   anterior tinha a mesma data do escolhido. O item anterior podia inclusive ser
@@ -17370,7 +17381,11 @@ contratado, e a composição de taxa é o palpite menos confiável dos quatro.
   CASA**, e não só quando ela é `VCP` ou vazia. Um `Código índice` que o
   `swap-index` não conhece chega lá como o próprio código (`C03`), que não casa
   com regra nenhuma — e desistir ali deixa a ponta em branco tendo a curva
-  escrita na coluna ao lado.
+  escrita na coluna ao lado. E a ponta que não classifica passou a sair no LOG
+  em WARNING com o valor exato que não casou (código · curva · classe) e o
+  tamanho do cadastro: é o que separa "a posição veio sem índice" de "falta a
+  linha no `tools-swap-index`" quando a mesa relata "não puxou" — na instância
+  o log de módulo só sai a partir de WARNING.
 - **Clicar num campo seleciona o valor inteiro.** Esses campos se digitam por
   cima: o valor chega preenchido (da posição, ou da formatação de saída) e quem
   clica quer trocá-lo. O `select()` no `focus` — que já existia nos campos com
