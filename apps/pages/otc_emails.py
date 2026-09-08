@@ -1051,6 +1051,26 @@ def _ndf_settlement_pdf(ref_date, headers, data_rows, summary_pairs,
     return buf.getvalue()
 
 
+def _ndf_fixing_br(v):
+    """Taxa de fixing para o aviso: decimal com VÍRGULA, no mínimo 4 casas
+    (a PTAX é publicada com 4) e no máximo 8 — o Cockpit exibe a taxa com 8
+    casas e zeros à direita ('5.12530000'), e no documento ao cliente esses
+    zeros só dizem que a precisão da origem era menor. Texto não numérico passa
+    como veio; vazio fica '—'."""
+    t = str(v or '').strip()
+    if not t:
+        return '—'
+    try:
+        n = float(t.replace(' ', '').replace(',', '.'))
+    except ValueError:
+        return t
+    s8 = '{:.8f}'.format(n)
+    inteiro, dec = s8.split('.')
+    dec = dec.rstrip('0')
+    dec = (dec + '0000')[:4] if len(dec) < 4 else dec
+    return inteiro + ',' + dec
+
+
 def _ndf_settlement_email(items, contraparte, le_class, ref_date, cpd):
     apurado = sum(float(t.get('settlement') or 0.0) for t in items)
     ir = sum(float(t.get('tax') or 0.0) for t in items)
@@ -1067,6 +1087,7 @@ def _ndf_settlement_email(items, contraparte, le_class, ref_date, cpd):
         t.get('trade_date', '') or '—',
         ((str(t.get('ccy', '') or '').strip().upper() + ' ') if str(t.get('ccy', '') or '').strip() else '')
         + _br(abs(float(t.get('notional_fc') or 0.0))),
+        _ndf_fixing_br(t.get('fixing', '')),          # FIXING — o Spot da API (§423)
         _brl(float(t.get('settlement') or 0.0)),
         _brl(float(t.get('tax') or 0.0)),
         _brl(_ndf_liquido(t)),
@@ -1074,7 +1095,7 @@ def _ndf_settlement_email(items, contraparte, le_class, ref_date, cpd):
 
     table = _email_data_table(
         ['Nº da Confirmação', 'Data de Início da Operação', 'Notional Original da Operação',
-         'Resultado Apurado', 'IR (0,005%)', 'Resultado Líquido'],
+         'Fixing', 'Resultado Apurado', 'IR (0,005%)', 'Resultado Líquido'],
         data_rows)
 
     summary_pairs = [
@@ -1083,6 +1104,22 @@ def _ndf_settlement_email(items, contraparte, le_class, ref_date, cpd):
         ('Resultado Final',   'R$ ' + _br_currency(final),   True),
     ]
     summary = _email_summary(summary_pairs)
+    # O piso mensal do IR (§423): quando o imposto do dia ficou abaixo de R$ 1,00
+    # o aviso sai sem retenção e diz por quê; quando o acumulado de liquidações
+    # anteriores entrou na retenção de hoje, o aviso diz quanto — senão o IR de
+    # uma operação não bate com 0,005% dela e ninguém entende a diferença.
+    ir_carry = sum(float(t.get('ir_carry') or 0.0) for t in items)
+    ir_waived = ir <= 0 and apurado < 0 and any(t.get('ir_waived') for t in items)
+    ir_note = ''
+    if ir_carry > 0:
+        ir_note = _ep('O IR retido inclui R$ ' + _br(ir_carry) + ' referente(s) a liquidação(ões) '
+                      'anterior(es) deste mês em que o imposto, inferior a R$ 1,00, não foi retido.',
+                      muted=True)
+    elif ir_waived:
+        ir_note = _ep('IR inferior a R$ 1,00 nesta liquidação: não retido, e acumulado para as '
+                      'próximas liquidações do mês.', muted=True)
+    if ir_note:
+        summary += ir_note
 
     # Same settlement-instruction / banking logic as the premium notice: the
     # sign of the final result decides who transfers (negative → JPMorgan pays
@@ -1168,7 +1205,7 @@ def _ndf_settlement_email(items, contraparte, le_class, ref_date, cpd):
         pdf = _ndf_settlement_pdf(
             ref_date=ref_date,
             headers=['Nº da Confirmação', 'Data de Início da Operação',
-                     'Notional Original da Operação', 'Resultado Apurado',
+                     'Notional Original da Operação', 'Fixing', 'Resultado Apurado',
                      'IR (0,005%)', 'Resultado Líquido'],
             data_rows=data_rows, summary_pairs=summary_pairs,
             instr_text=instr_text, notice_text=notice_text,

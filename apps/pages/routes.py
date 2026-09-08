@@ -2995,6 +2995,8 @@ _DS_IMPORTS = [
     # _ds_handle uses _otm_extract + the OTM json path.
     {'key': 'otm', 'label': 'OTM Settlements', 'json': 'otm-settlement', 'header': 1,
      'match': lambda n: n.startswith('cashflows'), 'otm': True, 'filters': []},
+    # SETTLEMENT.xlsx do Cockpit — plano B do Import da página, que desde §421
+    # puxa o getTradesBySettle da Athena; as duas fontes escrevem o mesmo JSON.
     {'key': 'ndfc', 'label': 'NDF Cockpit', 'json': 'ndf-cockpit', 'header': 4,
      'match': lambda n: n.startswith('settlement') and n.endswith('.xlsx'), 'ndfc': True, 'filters': []},
     # As contas do Banco J.P. Morgan que entram (coluna Conta): a PRÓPRIA
@@ -6829,14 +6831,31 @@ def _latam_ref_from(payload):
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  NDF Cockpit — Daily Settlement › NDF › Cockpit
-#  Source: SETTLEMENT.xlsx (header on ROW 4 starting at column B, data from ROW 5).
+#  Source (Import da página, desde 08/09/2026): a API `getTradesBySettle` da Athena
+#  — as operações de NDF que LIQUIDAM na data de referência (§421). O
+#  SETTLEMENT.xlsx do Cockpit (header on ROW 4, data from ROW 5) continua aceito
+#  pelo dropzone do Save Daily Settlement Files (`_ds_handle` → `_ndfc_extract`),
+#  para o dia em que a API não responder. As duas fontes gravam o MESMO JSON com
+#  as MESMAS colunas — o resto do app (NDF Summary, mensageria, Other Publisher)
+#  lê o JSON e não sabe de onde ele veio.
 #  Modelled on OTM Settlements: per-day JSON, maker/checker CRUD, glass Add/Edit.
-#  Columns kept (the file has more; only these): the 16 below (by header name).
-#  Formatting: DT_* dates m/d/yyyy → dd/mm/yyyy; notional/tax/settlement → #,##0.00;
-#  VL_FORWARD_RATE → 0.000000; LEGAL & NM_COUNTERPARTY → UPPER (stored upper-cased).
+#  Columns kept (the file has more; only these): the 19 below (by header name).
+#  Formatting: DT_* dates m/d/yyyy (arquivo) ou AAAA-MM-DD (API) → dd/mm/yyyy;
+#  notional/tax/settlement → #,##0.00; VL_FORWARD_RATE → 0.00000000;
+#  LEGAL & NM_COUNTERPARTY → UPPER (stored upper-cased).
 # ══════════════════════════════════════════════════════════════════════════════
 NDFC_SOURCE_ROOT = os.getenv('NDFC_SOURCE_ROOT', SETTLEMENTS_ROOT)
 NDFC_JSON_ROOT = OTM_JSON_ROOT
+# O endereço da API mora no cadastro `api-links` (uso `Daily Settlement` ×
+# produto NDF); esta constante é o SEED da linha e o fallback de quem ainda não
+# tem a linha no arquivo — o `athena_api.registered_link` lê o JSON CRU, e o seed
+# novo só chega ao disco quando alguém salva a tela /mapping (mesmo desenho do
+# `_ATHENA_FXO_FALLBACK` da Recon FXO e do `_DCE_OPT_URL_FALLBACK` do Intrag).
+# `YYYYMMDD` é a data de LIQUIDAÇÃO pedida — o endpoint é "by settle".
+_NDFC_API_USE = 'Daily Settlement'
+_NDFC_API_PRODUCT = 'NDF'
+_NDFC_API_URL_FALLBACK = ('https://athena-app-uat.jpmchase.net/FXCASH/brazil-trade-data-api'
+                          '/api/v1/getTradesBySettle?product=NDF&date=YYYYMMDD')
 _NDFC_COLUMNS = [
     'LEGAL', 'NM_COUNTERPARTY', 'ID_SOURCE_DEAL', 'DT_DEAL', 'CD_CETIP_RETURN', 'DT_SETTLEMENT',
     'CCY_NOTIONAL_LC', 'VL_NOTIONAL_LC', 'CCY_NOTIONAL_FC', 'VL_NOTIONAL_FC',
@@ -6983,31 +7002,171 @@ def _ndfc_extract(rows):
     return out, len(out)
 
 
-def _ndfc_import(ref=None):
-    """Find SETTLEMENT*.xlsx in NDFC_SOURCE_ROOT, extract, write today's JSON, delete source."""
-    ref = ref or datetime.now()
-    if not os.path.isdir(NDFC_SOURCE_ROOT):
-        return {'success': False, 'error': 'Source folder not found: {}'.format(NDFC_SOURCE_ROOT)}
-    matches = sorted(f for f in os.listdir(NDFC_SOURCE_ROOT)
-                     if f.lower().startswith('settlement') and f.lower().endswith('.xlsx'))
-    if not matches:
-        return {'success': False, 'error': 'No SETTLEMENT*.xlsx found in {}'.format(NDFC_SOURCE_ROOT)}
-    src_path = os.path.join(NDFC_SOURCE_ROOT, matches[0])
+def _ndfc_api_url(ref):
+    """Endereço do getTradesBySettle do dia: cadastro `api-links` (uso Daily
+    Settlement × NDF), senão o fallback. A data é reescrita nos dois casos."""
+    from apps.pages import athena_api
+    ymd = ref.strftime('%Y%m%d')
+    url = None
     try:
-        with open(src_path, 'rb') as fh:
-            rows = _ndfc_read_rows(fh.read())
-    except Exception:
-        log.warning("[ndfc] read failed for %s:\n%s", src_path, traceback.format_exc())
-        return {'success': False, 'error': 'Could not read {}'.format(matches[0])}
-    out, kept = _ndfc_extract(rows)
+        url = athena_api.registered_url(_NDFC_API_USE, _NDFC_API_PRODUCT, date=ymd)
+    except Exception as exc:                        # pragma: no cover - defensivo
+        log.debug('[ndfc] cadastro api-links indisponível: %s', exc)
+    return url or athena_api.build_url(_NDFC_API_URL_FALLBACK, date=ymd, force_product=False)
+
+
+def _ndfc_api_money(v):
+    """Valor de liquidação → texto com DUAS casas, arredondado HALF-UP (é
+    dinheiro: 0,125 vira 0,13, e o `round` do float daria 0,12). Sem separador de
+    milhar de propósito — o `_ndfc_num` lê a vírgula como decimal."""
+    if v is None:
+        return ''
+    from decimal import Decimal, ROUND_HALF_UP
+    return str(Decimal(str(v)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
+
+
+def _ndfc_api_iso(v):
+    """Data da API (AAAA-MM-DD, com ou sem hora) → AAAA-MM-DD. O JSON guarda o
+    ISO, e não o dd/mm: o `_ndfc_fmt_date` tenta m/d/yyyy PRIMEIRO (o formato do
+    SETTLEMENT.xlsx), então um '10/06/2026' gravado aqui viraria 6 de outubro."""
+    d = _fcst_parse_date(str(v or ''))
+    return d.strftime('%Y-%m-%d') if d else str(v or '').strip()
+
+
+def _ndfc_rec_from_api(rec, refmap_acr, refmap_spn):
+    """Um registro do getTradesBySettle → registro do Cockpit (as `_NDFC_COLUMNS`),
+    ou (None, motivo) quando o registro não entra.
+
+    O de-para, coluna a coluna (§421):
+      LEGAL            ← Settlement Location → LE (le-accronym) → razão social (le-spn),
+                         a mesma resolução do New Deals; sem cadastro fica a location;
+      NM_COUNTERPARTY  ← Reference Data pelo accronym do End Counterparty (e SPN),
+                         como o New Deals; sem cadastro, a descrição da API;
+      ID_SOURCE_DEAL   ← Deal Name;   ID_DEAL ← Event Name do bloco `settlement`;
+      DT_DEAL / DT_SETTLEMENT ← Trade Date / Settlement Date (ISO no JSON);
+      CD_CETIP_RETURN  ← Cetip ID;
+      LC = a perna em BRL (Quantity ou Other Quantity), FC = a outra; sem BRL nas
+           duas pontas, LC = Quantity e FC = Other Quantity. Notionais em módulo;
+      VL_STRIKE_PRICE  ← Strike;   VL_FORWARD_RATE ← Spot do bloco `settlement`
+                         (a taxa de fixing: strike = fixing ± |settlement|/notional,
+                         que é a conta do `_ndfc_strike_calc`). Par com moeda fraca
+                         inverte os dois (`_ndf_weak_leg`), como o New Deals faz
+                         com o Rate;
+      [PROD] Cockpit.SETTLEMENT ← ForwardCashflow, DUAS casas half-up;
+      PUBLISHER        ← Publisher;
+      VL_TAX_INCOME, NB_BANK, CD_BRANCH, CD_BANK_ACCOUNT ← em branco: a API não
+                         os traz (eram do Cockpit).
+    """
+    norm = _ndf_api_norm(rec)
+    get = norm.get
+    if _api_rec_is_cancelled(norm):
+        return None, 'cancelled'
+    deal_name = str(get('DEAL NAME') or '').strip().replace('_', '-')
+    if not deal_name:
+        return None, 'invalid'
+    end_cp = str(get('END COUNTERPARTY') or '').strip()
+    if 'GLOBAL_HOLDING_BOOK' in end_cp.upper().replace(' ', '_').replace('-', '_') \
+            or _ndf_is_interbook(norm):
+        return None, 'internal'
+    stl = get('SETTLEMENT')
+    sn = _ndf_api_norm(stl) if isinstance(stl, dict) else {}
+
+    loc = str(get('SETTLEMENT LOCATION') or '').strip().upper()
+    le = _ndf_le_from_location(loc)
+    legal = (str(_ndf_le_row(le).get('NAME', '') or '').strip() if le else '') or le or loc
+
+    le_cp = _ndf_le_from_accronym(end_cp)
+    api_spn = str(_ndf_api_get(norm, 'END COUNTERPARTY SPN', 'SPN') or '').strip()
+    ref = _ndf_ref_by_accronym(refmap_acr, end_cp, le_cp, refmap_spn, api_spn) or {}
+    name = (str(ref.get('COUNTERPARTY', '') or '').strip()
+            or str(get('END COUNTERPARTY DESCRIPTION') or '').strip() or end_cp)
+
+    qty_ccy = _fxo_ccy(get('QUANTITY CURRENCY'))
+    oth_ccy = _fxo_ccy(get('OTHER QUANTITY UNITS'))
+    qty_v = _fxo_num(get('QUANTITY'))
+    oth_v = _fxo_num(get('OTHER QUANTITY'))
+    if oth_ccy == 'BRL' and qty_ccy != 'BRL':
+        lc_ccy, lc_v, fc_ccy, fc_v = oth_ccy, oth_v, qty_ccy, qty_v
+    else:
+        lc_ccy, lc_v, fc_ccy, fc_v = qty_ccy, qty_v, oth_ccy, oth_v
+
+    def _rate(raw):
+        n = _fxo_num(raw)
+        if n is None:
+            return str(raw or '').strip()
+        if n and _ndf_weak_leg(qty_ccy, oth_ccy):
+            return '{:.8f}'.format(1.0 / n)
+        return str(raw).strip()                      # as casas que a API mandou
+
+    def _abs2(n):
+        return '{:.2f}'.format(abs(n)) if n is not None else ''
+
+    out = {
+        'LEGAL': legal.upper(),
+        'NM_COUNTERPARTY': name.upper(),
+        'ID_SOURCE_DEAL': deal_name,
+        'DT_DEAL': _ndfc_api_iso(get('TRADE DATE')),
+        'CD_CETIP_RETURN': str(get('CETIP ID') or '').strip(),
+        'DT_SETTLEMENT': _ndfc_api_iso(get('SETTLEMENT DATE')),
+        'CCY_NOTIONAL_LC': lc_ccy, 'VL_NOTIONAL_LC': _abs2(lc_v),
+        'CCY_NOTIONAL_FC': fc_ccy, 'VL_NOTIONAL_FC': _abs2(fc_v),
+        'VL_STRIKE_PRICE': _rate(get('STRIKE')),
+        'VL_FORWARD_RATE': _rate(sn.get('SPOT')),
+        'PUBLISHER': str(get('PUBLISHER') or '').strip(),
+        'VL_TAX_INCOME': '',
+        'ID_DEAL': str(sn.get('EVENT NAME') or '').strip(),
+        '[PROD] Cockpit.SETTLEMENT': _ndfc_api_money(
+            _fxo_num(_ndf_api_get(sn, 'FORWARDCASHFLOW', 'FORWARD CASHFLOW'))),
+        'NB_BANK': '', 'CD_BRANCH': '', 'CD_BANK_ACCOUNT': '',
+    }
+    return out, None
+
+
+def _ndfc_import(ref=None):
+    """Import do Cockpit: puxa do getTradesBySettle as operações de NDF que
+    liquidam em `ref` (a data do picker; default hoje) e REESCREVE o JSON do dia
+    — como o import do SETTLEMENT.xlsx sempre fez. Falha de rede/SSO volta como
+    erro para a tela, nunca como JSON vazio: um dia sem arquivo se leria como
+    "não há liquidação hoje"."""
+    ref = ref or datetime.now()
+    from apps.pages import athena_api
+    if not athena_api.is_available():
+        return {'success': False, 'error': "The 'requests' package is not installed; "
+                                           "the Athena API client is unavailable."}
+    url = _ndfc_api_url(ref)
+    try:
+        payload = athena_api.get_json_url(athena_api.build_session(), url)
+    except Exception as exc:
+        log.warning('[ndfc] Athena getTradesBySettle failed (%s):\n%s', url, traceback.format_exc())
+        return {'success': False, 'error': 'Athena API: {}: {}'.format(type(exc).__name__, exc),
+                'url': url}
+    records = athena_api.extract_records(payload)
+    refmap_spn = _fxo_refdata_by_spn()
+    refmap_acr = _fxo_refdata_by_accronym(refmap_spn)
+    by_key, order = {}, []
+    skipped = {'cancelled': 0, 'internal': 0, 'invalid': 0}
+    for rec in records:
+        if not isinstance(rec, dict):
+            skipped['invalid'] += 1
+            continue
+        row, why = _ndfc_rec_from_api(rec, refmap_acr, refmap_spn)
+        if row is None:
+            skipped[why] += 1
+            continue
+        # Deal × evento de liquidação: a mesma operação repetida no payload
+        # (versões do registro) entraria duas vezes na soma do NDF Summary.
+        key = (row['ID_SOURCE_DEAL'], row['ID_DEAL'])
+        if key not in by_key:
+            order.append(key)
+        by_key[key] = row
+    out = [by_key[k] for k in order]
+    _ndfc_ensure_meta(out)
     jp = _ndfc_json_path(ref)
     _ndfc_save(jp, out)
-    _ds_write_updated(jp, ref.strftime('%H:%M:%S'))
-    try:
-        os.remove(src_path)
-    except OSError:
-        log.warning("[ndfc] could not delete source %s", src_path)
-    return {'success': True, 'file': matches[0], 'rows': kept, 'date': ref.strftime('%Y-%m-%d')}
+    _ds_write_updated(jp, datetime.now().strftime('%H:%M:%S'))
+    log.info('[ndfc] %d row(s) from %s (skipped %s)', len(out), url, skipped)
+    return {'success': True, 'file': 'Athena getTradesBySettle', 'rows': len(out),
+            'date': ref.strftime('%Y-%m-%d'), 'skipped': skipped, 'url': url}
 
 
 def _ndfc_num(v):
@@ -8460,6 +8619,146 @@ def _ndfsum_b3_val(legs, titulo, casa, cpty_acc):
     return ''
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+#  IR do termo de MOEDA — 0,005% com piso de R$ 1,00 acumulado no MÊS (§423)
+# ------------------------------------------------------------------------------
+#  A API (getTradesBySettle) não traz o imposto que o SETTLEMENT.xlsx do Cockpit
+#  trazia, então o IR passou a ser CALCULADO aqui, com a regra da mesa:
+#    · incide 0,005% sobre a liquidação em que o BANCO PAGA (settlement < 0),
+#      por operação, a 2 casas; contraparte do cadastro `ndfc-ir-exempt` não paga;
+#    · o imposto de uma liquidação (a soma das operações da contraparte no dia)
+#      MENOR que R$ 1,00 não é retido — o cliente recebe o bruto — e o valor fica
+#      ACUMULADO contra a contraparte;
+#    · na liquidação seguinte da mesma contraparte, o acumulado soma ao imposto
+#      do dia: se a soma continua abaixo de R$ 1,00, segue sem retenção (e
+#      acumula); se alcança R$ 1,00, retém-se a SOMA — o de hoje mais o que não
+#      foi retido antes;
+#    · a contagem é do MÊS: em mês novo o acumulado começa em zero.
+#  O acumulado vive num LEDGER mensal (`ndf-ir-ledger/ndf-ir-ledger_AAAAMM.json`,
+#  uma entrada por dia × contraparte), reescrito pelo `_ndfsum_collect` do dia
+#  que a tela mostra — a entrada do dia é SUBSTITUÍDA, nunca somada, então
+#  recarregar a tela não conta duas vezes. Dia útil anterior do mês sem entrada
+#  (ninguém abriu o Summary naquele dia) é CURADO a partir do arquivo do Cockpit
+#  dele, na ordem, antes de responder pelo dia pedido.
+# ══════════════════════════════════════════════════════════════════════════════
+_NDFSUM_IR_MIN = 1.00
+
+
+def _ndfsum_ir_ledger_path(ref):
+    return os.path.join(_B3_DATA_DIR, 'ndf-ir-ledger',
+                        'ndf-ir-ledger_{}.json'.format(ref.strftime('%Y%m')))
+
+
+def _ndfsum_ir_ledger_load(ref):
+    try:
+        with open(_ndfsum_ir_ledger_path(ref), encoding='utf-8') as fh:
+            data = json.load(fh)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _ndfsum_ir_apply(settlements, carry, exempt=False):
+    """A regra, PURA. `settlements` são os resultados das operações da
+    contraparte no dia (negativo = o banco paga); `carry` é o imposto não
+    retido nas liquidações anteriores do mês.
+
+    Devolve (taxes, due, withheld, carry_after): o IR por operação na MESMA
+    ordem, o imposto devido no dia, o retido e o acumulado que segue. Quando a
+    soma alcança o piso, o acumulado anterior entra na PRIMEIRA operação com
+    imposto — o aviso lista as operações uma a uma, e o total tem de fechar."""
+    carry = round(float(carry or 0.0), 2)
+    if exempt:
+        return [0.0] * len(settlements), 0.0, 0.0, carry
+    due_each = [round(abs(float(x)) * _NDFADV_IR_RATE, 2) if float(x) < 0 else 0.0
+                for x in settlements]
+    due = round(sum(due_each), 2)
+    total = round(carry + due, 2)
+    if due <= 0 or total < _NDFSUM_IR_MIN:
+        return [0.0] * len(settlements), due, 0.0, total
+    taxes = list(due_each)
+    for i, t in enumerate(taxes):
+        if t > 0:
+            taxes[i] = round(t + carry, 2)
+            break
+    return taxes, due, total, 0.0
+
+
+def _ndfsum_ir_cockpit_groups(records):
+    """{chave: {'name', 'settlements'}} a partir dos REGISTROS do Cockpit de um
+    dia — o mesmo universo do Summary: só as entidades JPM (o filtro do
+    `_ndfc_collect`), só linhas com contraparte e valor. É o que a CURA dos dias
+    anteriores usa; o dia da tela vem das linhas já montadas pelo Summary."""
+    groups = {}
+    for rec in (records or []):
+        legal = re.sub(r'[^A-Z0-9]', '', str(rec.get('LEGAL', '') or '').upper())
+        if legal and not (legal.startswith('BANCOJP') or legal.startswith('JPMORGANCHASE')):
+            continue
+        nm = str(rec.get('NM_COUNTERPARTY', '') or '').strip()
+        val = _ndfc_valnum(rec.get('[PROD] Cockpit.SETTLEMENT', ''))
+        if not nm or val is None:
+            continue
+        g = groups.setdefault(_fcst_norm(nm), {'name': nm, 'settlements': []})
+        g['settlements'].append(val)
+    return groups
+
+
+def _ndfsum_ir_day_entries(groups, carry_by_key):
+    """As entradas do ledger de UM dia: aplica a regra por contraparte a partir
+    do acumulado dado. Devolve ({chave: entrada}, {chave: taxes})."""
+    entries, taxes_by_key = {}, {}
+    for key, g in groups.items():
+        carry_in = float(carry_by_key.get(key, 0.0) or 0.0)
+        taxes, due, withheld, carry_after = _ndfsum_ir_apply(
+            g['settlements'], carry_in, exempt=_ndfc_ir_exempt(g['name']))
+        entries[key] = {'name': g['name'], 'due': due, 'withheld': withheld,
+                        'carry_in': round(carry_in, 2), 'carry_after': carry_after}
+        taxes_by_key[key] = taxes
+    return entries, taxes_by_key
+
+
+def _ndfsum_ir_for_day(ref, groups):
+    """IR por contraparte do dia `ref` (grupos no formato de
+    `_ndfsum_ir_cockpit_groups`), com o acumulado do mês: {chave: {'taxes',
+    'carry_in', 'withheld', 'due'}}. Cura os dias úteis anteriores do mês sem
+    entrada e grava o ledger — ciclo inteiro sob o `_cache_lock` (é
+    read-modify-write num JSON compartilhado)."""
+    ref_day = ref.date() if hasattr(ref, 'date') else ref
+    iso = ref_day.strftime('%Y-%m-%d')
+    with _cache_lock:
+        ledger = _ndfsum_ir_ledger_load(ref)
+        antes = json.dumps(ledger, sort_keys=True)
+        carry = {}
+        d = ref_day.replace(day=1)
+        while d < ref_day:
+            if _pcx_is_bizday(d):
+                k = d.strftime('%Y-%m-%d')
+                if k not in ledger:
+                    jp = _ndfc_json_path(datetime(d.year, d.month, d.day))
+                    if os.path.isfile(jp):
+                        try:
+                            recs = _db_day_records(jp) or []
+                        except Exception:
+                            recs = []
+                        ent, _ = _ndfsum_ir_day_entries(_ndfsum_ir_cockpit_groups(recs), carry)
+                        ledger[k] = ent
+                for key, e in (ledger.get(k) or {}).items():
+                    carry[key] = float(e.get('carry_after', 0.0) or 0.0)
+            d += timedelta(days=1)
+        entries, taxes_by_key = _ndfsum_ir_day_entries(groups, carry)
+        ledger[iso] = entries
+        if json.dumps(ledger, sort_keys=True) != antes:
+            try:
+                path = _ndfsum_ir_ledger_path(ref)
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                _atomic_write_json(path, ledger)
+            except Exception:
+                log.warning('[ndfsum] ledger de IR não gravado:\n%s', traceback.format_exc())
+    return {key: {'taxes': taxes_by_key[key], 'carry_in': entries[key]['carry_in'],
+                  'withheld': entries[key]['withheld'], 'due': entries[key]['due']}
+            for key in entries}
+
+
 def _ndfsum_collect(ref):
     ci = {c: i for i, c in enumerate(_NDFC_COLUMNS)}
     # Operations B3 settlement leg, já peneirado pelo cadastro `opb3-events` —
@@ -8524,6 +8823,7 @@ def _ndfsum_collect(ref):
         cpty = str(row[ci['NM_COUNTERPARTY']] or '').strip()
         if cpty and settle_n is not None:
             raws.append({
+                '_trade_idx': len(trade) - 1,
                 'counterparty': cpty,
                 'legal': str(row[ci['LEGAL']] or '').strip(),
                 'athena': str(row[ci['ID_SOURCE_DEAL']] or '').strip(),
@@ -8532,7 +8832,47 @@ def _ndfsum_collect(ref):
                 'ccy': str(row[ci['CCY_NOTIONAL_FC']] or '').strip(),
                 'settlement': settle_n,
                 'tax': abs(_mtm_parse_num(row[ci['VL_TAX_INCOME']]) or 0.0),
+                # A taxa de FIXING do aviso (coluna ao lado do notional, §423): é o
+                # VL_FORWARD_RATE do Cockpit — o `Spot` do bloco settlement da
+                # API (§421) —, na precisão de exibição da tela.
+                'fixing': str(row[ci['VL_FORWARD_RATE']] or '').strip(),
             })
+
+    # O IR é CALCULADO (regra do piso mensal, §423) e vence o VL_TAX_INCOME do
+    # Cockpit: a API não o traz, e duas fontes para o mesmo imposto fariam o
+    # aviso de um dia discordar do de outro. A célula do Trade Level mostra o
+    # valor calculado, para a tela e o aviso dizerem a mesma coisa.
+    ir_groups = {}
+    for r in raws:
+        g = ir_groups.setdefault(_fcst_norm(r['counterparty']),
+                                 {'name': r['counterparty'], 'settlements': [], 'rows': []})
+        g['settlements'].append(r['settlement'])
+        g['rows'].append(r)
+    try:
+        ir_res = _ndfsum_ir_for_day(ref, ir_groups)
+    except Exception:
+        log.warning('[ndfsum] IR mensal falhou — imposto do dia sem acumulado:\n%s',
+                    traceback.format_exc())
+        ir_res = {}
+        for key, g in ir_groups.items():
+            taxes, due, withheld, _ = _ndfsum_ir_apply(
+                g['settlements'], 0.0, exempt=_ndfc_ir_exempt(g['name']))
+            ir_res[key] = {'taxes': taxes, 'carry_in': 0.0, 'withheld': withheld, 'due': due}
+    for key, g in ir_groups.items():
+        res = ir_res.get(key) or {}
+        taxes = res.get('taxes') or [0.0] * len(g['rows'])
+        carry_in = float(res.get('carry_in', 0.0) or 0.0) if res.get('withheld') else 0.0
+        for r, t in zip(g['rows'], taxes):
+            r['tax'] = float(t or 0.0)
+            # O acumulado entrou na PRIMEIRA operação com imposto (`_ndfsum_ir_apply`):
+            # é ela que o aviso explica.
+            r['ir_carry'] = carry_in if (carry_in and r['tax'] > 0) else 0.0
+            if r['ir_carry']:
+                carry_in = 0.0
+            r['ir_waived'] = bool(res.get('due', 0.0) and not res.get('withheld', 0.0))
+            idx = r.pop('_trade_idx', None)
+            if idx is not None and 0 <= idx < len(trade):
+                trade[idx]['cells'][12] = _swapchar_fmt_value('{:.2f}'.format(r['tax'])) if r['tax'] else ''
 
     spn_by_name = _ndfsum_refdata_spn()
     cpd = _cpd_load()
@@ -9431,6 +9771,13 @@ _API_LINKS_SEED = (
      'NOTES': 'Sem consumidor ainda'},
     {'SOURCE': 'API', 'USE': 'Unwinds', 'PRODUCT': '', 'URL': '',
      'NOTES': 'Preencher com a URL de unwinds quando ela existir'},
+    # Daily Settlement › NDF (o Cockpit): o getTradesBySettle — as operações que
+    # LIQUIDAM na data, não as bookadas nela. Substituiu o SETTLEMENT.xlsx do
+    # Cockpit no Import da página (§421). O endereço é o que a mesa entregou
+    # (host UAT); troca-se pela tela.
+    {'SOURCE': 'API', 'USE': _NDFC_API_USE, 'PRODUCT': _NDFC_API_PRODUCT,
+     'URL': _NDFC_API_URL_FALLBACK,
+     'NOTES': 'NDF Cockpit — operações que liquidam na data (era o SETTLEMENT.xlsx)'},
     # Recon FXO: outro Athena — o relatório EOD do bob-reports, não o getTrades.
     # A data fica no CAMINHO (AAAA-MM-DD), que é justamente o caso para o qual o
     # placeholder existe: nenhum parâmetro de query alcança ali.
@@ -10144,7 +10491,7 @@ _MAPPING_DEFS = {
             {'key': 'SOURCE', 'label': 'Source', 'type': 'select',
              'options': _MAP_API_SOURCES},
             {'key': 'USE', 'label': 'Usage', 'type': 'select',
-             'options': ['New Deals', 'Unwinds', 'Recon FXO', 'Intrag DCE']},
+             'options': ['New Deals', 'Unwinds', 'Recon FXO', 'Intrag DCE', 'Daily Settlement']},
             {'key': 'PRODUCT', 'label': 'Product (blank = any)', 'type': 'select',
              'options': _MAP_API_PRODUCTS},
             {'key': 'URL', 'label': 'URL (YYYYMMDD = reference date)'},

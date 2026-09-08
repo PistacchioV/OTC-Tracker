@@ -1,6 +1,7 @@
 /**
  * Daily Settlement › NDF › Cockpit
- * Imports the SETTLEMENT.xlsx (server-side, replacing the legacy VBA macro) and
+ * Imports the day's settlements from the Athena getTradesBySettle API (server-side;
+ * the SETTLEMENT.xlsx of the Cockpit is still accepted by the Daily Settlement dropzone) and
  * shows the cleaned rows in a wide table with widgets, per-column filter, Columns
  * and Export. Settlement date defaults to today; the JSON is written per-day.
  */
@@ -25,19 +26,19 @@
   var LANG = (localStorage.getItem('language') || 'en').toLowerCase();
   var _TRANS = {
     en: { filterPh: 'Filter…', ok: 'OK', pending: 'Pending', newst: 'New', importing: 'Importing…',
-          noFile: 'No SETTLEMENT file found in the source folder.', imported: 'Imported', rows: 'row(s)', updated: 'Updated',
+          noFile: 'The Athena API did not answer.', imported: 'Imported', rows: 'row(s)', updated: 'Updated',
           edit: 'Edit', del: 'Delete', confirm: 'Confirm', addTitle: 'Add row', editTitle: 'Edit row',
           delTitle: 'Delete row?', delText: 'This row will be removed and the change saved.', yes: 'Yes, delete',
           cancel: 'Cancel', saved: 'Saved', deleted: 'Deleted', confirmed: 'Confirmed',
           sameUser: 'A different user must confirm a row you changed.', err: 'Action failed.' },
     br: { filterPh: 'Filtrar…', ok: 'OK', pending: 'Pendente', newst: 'Novo', importing: 'Importando…',
-          noFile: 'Nenhum arquivo SETTLEMENT na pasta de origem.', imported: 'Importado', rows: 'linha(s)', updated: 'Atualizado',
+          noFile: 'A API da Athena não respondeu.', imported: 'Importado', rows: 'linha(s)', updated: 'Atualizado',
           edit: 'Editar', del: 'Excluir', confirm: 'Confirmar', addTitle: 'Adicionar linha', editTitle: 'Editar linha',
           delTitle: 'Excluir linha?', delText: 'A linha será removida e a alteração salva.', yes: 'Sim, excluir',
           cancel: 'Cancelar', saved: 'Salvo', deleted: 'Excluído', confirmed: 'Confirmado',
           sameUser: 'Outro usuário precisa confirmar uma linha que você alterou.', err: 'Falha na ação.' },
     es: { filterPh: 'Filtrar…', ok: 'OK', pending: 'Pendiente', newst: 'Nuevo', importing: 'Importando…',
-          noFile: 'Ningún archivo SETTLEMENT en la carpeta de origen.', imported: 'Importado', rows: 'fila(s)', updated: 'Actualizado',
+          noFile: 'La API de Athena no respondió.', imported: 'Importado', rows: 'fila(s)', updated: 'Actualizado',
           edit: 'Editar', del: 'Eliminar', confirm: 'Confirmar', addTitle: 'Agregar fila', editTitle: 'Editar fila',
           delTitle: '¿Eliminar fila?', delText: 'La fila será eliminada y el cambio guardado.', yes: 'Sí, eliminar',
           cancel: 'Cancelar', saved: 'Guardado', deleted: 'Eliminado', confirmed: 'Confirmado',
@@ -225,13 +226,15 @@
     btn.addEventListener('click', function () {
       var info = document.getElementById('ndfc-import-info');
       btn.disabled = true; if (info) info.textContent = t('importing');
-      fetch(IMPORT_API, { method: 'POST', credentials: 'same-origin' })
+      fetch(IMPORT_API, { method: 'POST', credentials: 'same-origin',
+             headers: { 'Content-Type': 'application/json' },
+             body: JSON.stringify({ date: currentDate() }) })
         .then(function (r) { return r.json(); })
         .then(function (d) {
           btn.disabled = false;
           if (d && d.success) {
             if (info) info.textContent = t('imported') + ': ' + d.rows + ' ' + t('rows') + ' · ' + d.file;
-            // Import always writes today's JSON — sync the picker to today then load.
+            // The import writes the JSON of the date it pulled (the picker's) — sync and load.
             if (window.jQuery && jQuery('#ndfc-date').data('daterangepicker')) {
               jQuery('#ndfc-date').data('daterangepicker').setStartDate(moment(d.date, 'YYYY-MM-DD'));
             }

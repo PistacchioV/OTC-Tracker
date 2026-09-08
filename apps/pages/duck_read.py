@@ -49,7 +49,7 @@ import duckdb
 #
 # Medido: 12,67 ms por abertura pela camada contra 12,82 ms crua — a abertura
 # do DuckDB domina, e o lock compartilhado mais o permit somem no ruído.
-from apps.pages.database_access import duckdb_read
+from apps.pages.database_access import duckdb_read, db_gate
 
 from apps.pages.json_to_duckdb import q
 
@@ -75,6 +75,29 @@ except ValueError:
     _FREIO_LIMIAR = 0.35
 _FREIO_ESPERA = 600.0
 _freio = {'ate': 0.0}
+
+# Quanto o leitor espera uma ESCRITA do espelho em curso no mesmo banco antes
+# de conectar (§422). Passado o teto ele conecta assim mesmo: se a escrita
+# ainda estiver aberta o DuckDB recusa, o `_ler` devolve None e a cura síncrona
+# — que entra na MESMA fila do espelho — espera a escrita terminar de graça.
+_GATE_READ_WAIT_SECONDS = 10.0
+
+
+def _memo_req():
+    """Memo por REQUEST (Flask `g`); None fora de request. O mesmo arquivo-dia
+    é lido várias vezes na montagem de UMA tela (o Other Products Summary abre
+    o banco de NDF Commodities oito vezes), e no share cada abertura é ida e
+    volta de rede. A chave leva mtime e tamanho do JSON, então uma gravação no
+    meio do request invalida sozinha; e o que se guarda são os `_raw` (texto),
+    reparseados a cada hit — cada consumidor recebe objetos SEUS, como se
+    tivesse lido o arquivo."""
+    try:
+        from flask import g, has_app_context
+        if not has_app_context():
+            return None
+        return g.setdefault('_duck_read_memo', {})
+    except Exception:                                       # noqa: BLE001
+        return None
 _freio_lock = threading.Lock()
 
 
@@ -165,6 +188,8 @@ def table_rows(db_name, table, rel, schema='main', order_by=None, heal=None,
             if not os.path.isfile(db):
                 return None
             t0 = time.monotonic()
+            gate = db_gate(db)
+            gate.enter_read(_GATE_READ_WAIT_SECONDS)
             try:
                 with duckdb_read(db) as con:
                     row = con.execute('SELECT mtime, fsize FROM _manifest WHERE path = ?',
@@ -178,6 +203,7 @@ def table_rows(db_name, table, rel, schema='main', order_by=None, heal=None,
                     cols = [d[0] for d in cur.description]
                     return _limpo(dict(zip(cols, r)) for r in cur.fetchall())
             finally:
+                gate.exit_read()
                 _freio_mede(time.monotonic() - t0, db)
         except Exception:                                   # noqa: BLE001
             return None
@@ -210,13 +236,25 @@ def raw_records(db_name, table, rel, expected_path=None, manifest_key=None):
     Linha sem `_raw`/`_seq` (banco em formato antigo) devolve `None` — o
     manifest versionado já impede o caso, isto é o cinto de segurança."""
     from apps.pages.json_to_duckdb import _refdata_manifest_key
-    rows = table_rows(db_name, table, rel,
-                      manifest_key=manifest_key or _refdata_manifest_key(rel),
+    mkey = manifest_key or _refdata_manifest_key(rel)
+    memo, chave = None, None
+    try:
+        jpath = os.path.join(_data_root(), rel.replace('/', os.sep))
+        if expected_path is None or \
+                os.path.normpath(str(expected_path)) == os.path.normpath(jpath):
+            st = os.stat(jpath)
+            memo = _memo_req()
+            chave = ('raw', jpath, mkey, st.st_mtime, st.st_size)
+    except Exception:                                       # noqa: BLE001
+        memo = None
+    if memo is not None and chave in memo:
+        return [json.loads(c) for c in memo[chave]]
+    rows = table_rows(db_name, table, rel, manifest_key=mkey,
                       order_by='CAST("_seq" AS BIGINT)',
                       expected_path=expected_path)
     if rows is None:
         return None
-    out = []
+    crus, out = [], []
     for r in rows:
         cru = r.get('_raw')
         if not cru:
@@ -225,6 +263,9 @@ def raw_records(db_name, table, rel, expected_path=None, manifest_key=None):
             out.append(json.loads(cru))
         except ValueError:
             return None
+        crus.append(cru)
+    if memo is not None:
+        memo[chave] = crus
     return out
 
 
@@ -254,6 +295,11 @@ def day_payload(path):
             return None
         db_name, schema, tabela = alvo
         st = os.stat(jpath)
+        memo = _memo_req()
+        chave = ('day', jpath, st.st_mtime, st.st_size)
+        if memo is not None and chave in memo:
+            crus = memo[chave]
+            return None if crus is None else [json.loads(c) for c in crus]
 
         _OBJETO = object()       # sentinela: payload que o banco não reconstrói
 
@@ -267,6 +313,8 @@ def day_payload(path):
                 if not os.path.isfile(db):
                     return None
                 t0 = time.monotonic()
+                gate = db_gate(db)
+                gate.enter_read(_GATE_READ_WAIT_SECONDS)
                 try:
                     with duckdb_read(db) as con:
                         row = con.execute(
@@ -283,15 +331,17 @@ def day_payload(path):
                             return []          # o dia existe e está vazio
                         if '_raw' not in cols or '_seq' not in cols:
                             return None
-                        out = []
+                        crus = []
                         for (cru,) in con.execute(
                                 'SELECT "_raw" FROM %s ORDER BY CAST("_seq" AS BIGINT)'
                                 % alvo_sql).fetchall():
                             if not cru:
                                 return None
-                            out.append(json.loads(cru))
-                        return out
+                            json.loads(cru)                 # valida agora; reparse no consumo
+                            crus.append(cru)
+                        return crus                          # os _raw, em TEXTO
                 finally:
+                    gate.exit_read()
                     _freio_mede(time.monotonic() - t0, db)
             except Exception:                               # noqa: BLE001
                 return None
@@ -304,7 +354,15 @@ def day_payload(path):
                 dados = _ler()
             if dados is None:
                 duck_mirror.notify_write(jpath)
-        return None if dados is _OBJETO else dados
+        if dados is _OBJETO:
+            if memo is not None:
+                memo[chave] = None           # payload-objeto: não reabrir o banco neste request
+            return None
+        if dados is None:
+            return None
+        if memo is not None:
+            memo[chave] = dados
+        return [json.loads(c) for c in dados]
     except Exception:                                       # noqa: BLE001
         return None
 

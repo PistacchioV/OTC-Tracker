@@ -65,6 +65,14 @@ check('o FXO tem endereco proprio',
       A.build_url(SEED[('New Deals', 'FXO')]['URL'], date='20260728', force_product=False),
       A.BASE_URL + A.TRADES_ENDPOINT + '?product=FXO&date=20260728')
 check('o seed do Unwinds nasce SEM URL', SEED[('Unwinds', '')]['URL'], '')
+check('o Daily Settlement (NDF Cockpit) tem linha, e ela E o fallback do import',
+      SEED[('Daily Settlement', 'NDF')]['URL'], R._NDFC_API_URL_FALLBACK)
+check('o fallback do Cockpit e o getTradesBySettle com a data reescrita',
+      R._ndfc_api_url(__import__('datetime').datetime(2026, 9, 8)).endswith(
+          '/getTradesBySettle?product=NDF&date=20260908'), True)
+check('o uso Daily Settlement esta no dropdown da tela',
+      'Daily Settlement' in [c for c in R._MAPPING_DEFS['api-links']['columns']
+                             if c['key'] == 'USE'][0]['options'], True)
 
 print('\n== 2. build_url resolve o que o codigo manda ==')
 BASE = A.BASE_URL + A.TRADES_ENDPOINT
@@ -179,18 +187,20 @@ check('os produtos que faltavam entram',
 check('idempotente', len(R._api_links_upgrade(up)), len(up))
 
 print('\n== 5. o mapping esta ligado na tela ==')
-cols = [c['key'] for c in R._MAPPING_DEFS['api-links']['columns']]
-check('colunas', cols, ['USE', 'PRODUCT', 'URL', 'NOTES'])
+# Por CHAVE, e nao por posicao: a coluna SOURCE (§408) entrou na frente e o
+# teste indexado por [0]/[1] passou a ler a coluna errada em silencio.
+COLS = {c['key']: c for c in R._MAPPING_DEFS['api-links']['columns']}
+check('colunas', list(COLS), ['SOURCE', 'USE', 'PRODUCT', 'URL', 'NOTES'])
+check('SOURCE e um select API x Bob Report', COLS['SOURCE'].get('options'), ['API', 'Bob Report'])
 check('USE e um select com os usos cadastrados',
-      R._MAPPING_DEFS['api-links']['columns'][0].get('options'),
-      ['New Deals', 'Unwinds', 'Recon FXO'])
+      COLS['USE'].get('options'),
+      ['New Deals', 'Unwinds', 'Recon FXO', 'Intrag DCE', 'Daily Settlement'])
 # Todo uso que aparece no seed tem de estar na lista do select — senao a linha
 # existe no arquivo e nao ha como reeditá-la pela tela.
 check('   e cobre todos os usos do seed',
-      sorted({r['USE'] for r in R._API_LINKS_SEED}
-             - set(R._MAPPING_DEFS['api-links']['columns'][0]['options'])), [])
+      sorted({r['USE'] for r in R._API_LINKS_SEED} - set(COLS['USE']['options'])), [])
 check('PRODUCT lista os produtos da API',
-      R._MAPPING_DEFS['api-links']['columns'][1].get('options'),
+      COLS['PRODUCT'].get('options'),
       ['', 'NDF', 'FXO', 'Commodities', 'Swaps'])
 check('os produtos batem com os do cliente',
       sorted(p for p in R._MAP_API_PRODUCTS if p), sorted(A.PRODUCTS.values()))

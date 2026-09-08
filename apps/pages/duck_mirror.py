@@ -185,8 +185,45 @@ def _ensure_worker():
         _worker_started = True
 
 
+# Quanto o escritor espera os leitores em voo fecharem antes de conectar. São
+# SELECTs curtos; no share um banco grande pode levar alguns segundos, e passado
+# o teto o connect decide (falha → erro de conversão no log, como antes).
+_GATE_WRITE_WAIT_SECONDS = 10.0
+
+
+def _abrir_com_portao(path):
+    """`ABRIR_BANCO` do motor, na thread do espelho: declara a escrita no
+    portão do banco (leitor novo espera; os em voo fecham) e só então conecta.
+    Sem isto o `duckdb.connect` em escrita colidia com um `read_only` aberto
+    por uma tela — e a colisão não era rara: o Other Products Summary abre o
+    mesmo banco oito vezes num request (§422)."""
+    import duckdb
+    from apps.pages import database_access as DA
+    gate = DA.db_gate(path)
+    if not gate.enter_write(_GATE_WRITE_WAIT_SECONDS):
+        log.warning('[duck-mirror] leitores ainda abertos em %s depois de %.0fs — '
+                    'conectando assim mesmo', os.path.basename(path), _GATE_WRITE_WAIT_SECONDS)
+    try:
+        return duckdb.connect(path)
+    except Exception:
+        gate.exit_write()
+        raise
+
+
+def _fechar_com_portao(path, con):
+    from apps.pages import database_access as DA
+    try:
+        con.close()
+    finally:
+        DA.db_gate(path).exit_write()
+
+
 def _loop():
     from apps.pages import json_to_duckdb as core
+    # A abertura em escrita do motor passa a ser a COM PORTÃO — só nesta
+    # thread; os scripts de carga e os standalone ficam com o connect cru.
+    core.ABRIR_BANCO = _abrir_com_portao
+    core.FECHAR_BANCO = _fechar_com_portao
     while True:
         item = _q.get()
         # Tarefa síncrona (convert_sync) traz um Event como 4º elemento; o

@@ -314,6 +314,29 @@ def ensure_manifest(con):
                 "path VARCHAR PRIMARY KEY, mtime DOUBLE, fsize BIGINT, targets VARCHAR)")
 
 
+# ── Abertura dos bancos em ESCRITA — gancho que o app injeta ─────────────────
+# O leitor DB-only do app (`duck_read`) abre estes bancos `read_only=True`, e o
+# DuckDB recusa, no MESMO processo, uma segunda conexão com outra configuração:
+# a thread do espelho conectando em escrita enquanto uma tela lia estourava com
+# "Can't open a connection to same database file with a different configuration
+# than existing connections" — a conversão falhava, o manifest ficava defasado e
+# TODA leitura seguinte pagava uma cura síncrona que voltava a colidir (§422).
+# Quem coordena os dois lados em memória é o `database_access` do app; este
+# módulo não pode importá-lo (o standalone copia o corpo e recusa `apps`), então
+# o `duck_mirror` INJETA aqui a abertura com portão. O padrão é o connect cru —
+# é o que os scripts de carga e os standalone continuam usando.
+def _abrir_banco_padrao(path):
+    return duckdb.connect(path)
+
+
+def _fechar_banco_padrao(path, con):
+    con.close()
+
+
+ABRIR_BANCO = _abrir_banco_padrao
+FECHAR_BANCO = _fechar_banco_padrao
+
+
 def manifest_unchanged(con, rel, st):
     row = con.execute("SELECT mtime, fsize FROM _manifest WHERE path = ?", [rel]).fetchone()
     return bool(row) and abs(row[0] - st.st_mtime) < 1e-6 and row[1] == st.st_size
@@ -371,7 +394,7 @@ def convert_holidays(data_dir, out_dir, force=False, dry_run=False):
                                                            cal.get('file', '')))
         return stats
     os.makedirs(out_dir, exist_ok=True)
-    con = duckdb.connect(stats['db'])
+    con = ABRIR_BANCO(stats['db'])
     try:
         ensure_manifest(con)
         # O `_registry` também entra no manifest: é o que permite ao leitor
@@ -441,7 +464,7 @@ def convert_holidays(data_dir, out_dir, force=False, dry_run=False):
             except Exception:                                  # noqa: BLE001
                 stats['errors'].append((arquivo or nome, traceback.format_exc()))
     finally:
-        con.close()
+        FECHAR_BANCO(stats['db'], con)
     return stats
 
 
@@ -474,7 +497,7 @@ def convert_refdata(data_dir, out_dir, force=False, dry_run=False):
         stats['converted'] = ['tabela %s <- %s' % (t, f) for f, t in _REFDATA_TABLES]
         return stats
     os.makedirs(out_dir, exist_ok=True)
-    con = duckdb.connect(stats['db'])
+    con = ABRIR_BANCO(stats['db'])
     try:
         ensure_manifest(con)
         for arquivo, tabela in _REFDATA_TABLES:
@@ -501,7 +524,7 @@ def convert_refdata(data_dir, out_dir, force=False, dry_run=False):
             except Exception:                                  # noqa: BLE001
                 stats['errors'].append((arquivo, traceback.format_exc()))
     finally:
-        con.close()
+        FECHAR_BANCO(stats['db'], con)
     return stats
 
 
@@ -844,7 +867,7 @@ def _convert_daily_rels(data_dir, out_dir, rels, force, stats):
         db = os.path.join(out_dir, *nome.split('/'))
         if db not in cons:
             os.makedirs(os.path.dirname(db), exist_ok=True)
-            cons[db] = duckdb.connect(db)
+            cons[db] = ABRIR_BANCO(db)
             ensure_manifest(cons[db])
             stats['dbs'].append(db)
         return cons[db]
@@ -876,8 +899,8 @@ def _convert_daily_rels(data_dir, out_dir, rels, force, stats):
             except Exception:                                  # noqa: BLE001
                 stats['errors'].append((rel, traceback.format_exc()))
     finally:
-        for con in cons.values():
-            con.close()
+        for _path, con in cons.items():
+            FECHAR_BANCO(_path, con)
     return stats
 
 
@@ -1531,7 +1554,7 @@ def _convert_dataset_rels(data_dir, out_dir, rels, force, stats, cal_files):
         path = os.path.join(out_dir, *db.split('/'))
         if path not in cons:
             os.makedirs(os.path.dirname(path), exist_ok=True)
-            cons[path] = duckdb.connect(path)
+            cons[path] = ABRIR_BANCO(path)
             ensure_manifest(cons[path])
             stats['dbs'].append(path)
         return cons[path]
@@ -1558,8 +1581,8 @@ def _convert_dataset_rels(data_dir, out_dir, rels, force, stats, cal_files):
             except Exception:                                  # noqa: BLE001
                 stats['errors'].append((rel, traceback.format_exc()))
     finally:
-        for con in cons.values():
-            con.close()
+        for _path, con in cons.items():
+            FECHAR_BANCO(_path, con)
     return stats
 
 

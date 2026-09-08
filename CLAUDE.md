@@ -510,6 +510,20 @@ São dois bancos:
     `json_to_duckdb.py` seguem cruas, e duas delas mantêm um POOL de conexões
     vivo através de muitos arquivos. Até isso ser reestruturado, o lock
     compartilhado das leituras dá **visibilidade, não exclusão mútua**.
+  - **o espelho e o leitor DB-only passam por um PORTÃO em memória** (§422):
+    o `duck_read` abre `read_only` e a thread do `duck_mirror` abre o MESMO
+    arquivo em escrita, no mesmo processo, e o DuckDB recusa a segunda
+    configuração — sem o portão a conversão falhava, o manifest ficava
+    defasado e toda leitura seguinte pagava uma cura síncrona que voltava a
+    colidir (o NDF Summary "infinito" na instância). É o `db_gate(path)` do
+    `database_access` (o `_UnlockedReadGate` do sino): leitor entra antes de
+    abrir, escritor entra antes do `connect`. O motor `json_to_duckdb` **não
+    importa `apps`** (o standalone copia o corpo), então ele expõe os ganchos
+    `ABRIR_BANCO`/`FECHAR_BANCO` e o `duck_mirror._loop` injeta a versão com
+    portão — toda abertura em escrita do motor tem de passar por eles. E o
+    `duck_read` memoiza por REQUEST (`flask.g`, chave com mtime e tamanho) os
+    `_raw` de cada arquivo-dia: a mesma tela lia o mesmo banco oito vezes.
+    `check_duck_gate.py` prende os dois.
   - **`json.dump` é PROIBIDO fora do funil** (`_atomic_write_json`) em
     `apps/pages` — a auditoria §335 achou ~30 escritores gravando DATA_DIR
     por fora, com os bancos envelhecendo em silêncio para quem os consulta
@@ -995,7 +1009,11 @@ continua no label inglês.
   relatório EOD do `bob-reports`, não o `getTrades` — e a data dele fica no
   **caminho** (`AAAA-MM-DD`), que é justamente para o que o placeholder serve;
   o uso **`Intrag DCE`** (o ITAUDataExtract de FX Option da página Intrag ›
-  DCE › Option, §409) segue o mesmo desenho.
+  DCE › Option, §409) segue o mesmo desenho.  O uso **`Daily Settlement`** × NDF é
+  o `getTradesBySettle` da Athena — as operações de NDF que LIQUIDAM na data —
+  e alimenta o Import do NDF Cockpit no lugar do SETTLEMENT.xlsx (§421); o
+  `.xlsx` no dropzone do Save Daily Settlement Files continua sendo o plano B,
+  e as duas fontes escrevem o mesmo JSON.
 - **`fxo-internal-cpty`** — a perna interna da reconciliação de FXO. A coluna
   **`INVERT DIRECTION`** decide *quando* a regra vale: `No` renomeia sempre;
   `Yes` é a perna espelhada e só entra quando Ctpty **e** JPM Dir estão os dois
@@ -1441,6 +1459,20 @@ estão:
 
 O `_id` do banco é interno e **não é estável entre importações** — ele endereça a
 linha que a tela está editando, e a importação seguinte renumera tudo.
+
+### O IR do termo de MOEDA é calculado, com piso de R$ 1,00 acumulado no mês
+
+A API `getTradesBySettle` não traz o imposto que o SETTLEMENT.xlsx do Cockpit
+trazia, então o NDF Summary CALCULA (`_ndfsum_ir_apply`, §423): 0,005% por
+operação em que o banco paga, isento pelo `ndfc-ir-exempt`; liquidação com
+imposto abaixo de R$ 1,00 sai BRUTA e o valor acumula contra a contraparte;
+na seguinte, acumulado + dia abaixo do piso segue bruto, alcançado o piso
+retém-se a SOMA; mês novo zera. O acumulado vive no ledger mensal
+`ndf-ir-ledger/ndf-ir-ledger_AAAAMM.json`, escrito pelo `_ndfsum_collect` do
+dia exibido — entrada do dia SUBSTITUÍDA (recarregar não dobra), dia anterior
+sem entrada CURADO do Cockpit dele. O IR calculado vence o `VL_TAX_INCOME` do
+Cockpit, inclusive na célula do Trade Level. O aviso leva também a coluna
+**Fixing** (o `Spot` da API, mín. 4 e máx. 8 casas). `check_ndfsum_ir.py`.
 
 ### O `SPB - outros bancos` da Recon Pay/Rec só casa com BANCO
 
