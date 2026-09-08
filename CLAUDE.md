@@ -1232,6 +1232,15 @@ continua no label inglês.
   que o `swap-index` não conhece chega à classificação como o próprio código
   (`C03`), e desistir ali deixaria a ponta em branco tendo a curva escrita na
   coluna ao lado. `DAY COUNT`/`REGIME` em branco valem o padrão do índice.
+  **O `INDEX` tem de ser um indexador do MOTOR** (`liquidacao.INDEXADORES`), e
+  quem confere é o consumidor: `montar_ponta` recusa o que não conhece e devolve
+  a ponta em branco e sinalizada. Um `INDEX` estranho devolvido punha no
+  `<select>` da tela um valor sem opção correspondente — campo vazio — E calava
+  a nota de "não identificou", porque o servidor tinha respondido um índice: o
+  branco ficava sem explicação nenhuma. Foi o `cdi_percentual` (código da Renda
+  Fixa) do primeiro seed, que sobreviveu na instância porque **seed só roda
+  quando o arquivo não existe** — a correção do seed não alcança quem já tem o
+  cadastro em disco, e por isso ele também tem `upgrade`.
   **O `Código Identificador` da posição de swap NÃO é uma chave** (§427): na
   instância ele guarda a LOB (`CEM` em toda operação da mesa). Quem casa o
   DFLUXO com a posição é o **Código do contrato**; o identificador só responde

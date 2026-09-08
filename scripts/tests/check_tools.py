@@ -249,6 +249,35 @@ check('curva sem cadastro nao vira chute', cl(REGRAS, 'CURVA NOVA DA B3'), None)
 # com nada — e desistir ali deixaria a ponta em branco tendo a curva escrita na
 # coluna ao lado.
 check('curva que nao casa cai no Nome Tipo/Classe', cl(REGRAS, 'C03', 'DI')['INDEX'], 'cdi')
+# `INDEX` que o MOTOR nao conhece e o mesmo que indice nenhum, e sai pela MESMA
+# porta: em branco e SINALIZADO. Devolvido, ele punha no `<select>` da tela um
+# valor sem opcao correspondente — campo vazio, sem a nota de "nao identificou"
+# (o servidor tinha respondido um indice) e sem nada explicando o branco. Foi o
+# `cdi_percentual` (codigo da Renda Fixa) do primeiro seed do cadastro.
+_LEGADO = [{'MATCH': 'DI', 'MODE': 'Exact', 'INDEX': 'cdi_percentual'}]
+check('INDEX que o motor nao conhece sai em branco e sinalizado',
+      domain.montar_ponta(cl(_LEGADO, 'DI'), 1.0, 0.008, 1.0, '', None),
+      domain.montar_ponta(None, 1.0, 0.008, 1.0, '', None))
+# E o `upgrade` do cadastro traduz o codigo antigo na LEITURA: seed so roda
+# quando o arquivo NAO existe, entao a instancia que ja o tinha em disco nunca
+# receberia a correcao do seed.
+check('o upgrade traduz cdi_percentual/cdi_spread para cdi',
+      [r['INDEX'] for r in R._tools_swap_index_upgrade(
+          [{'INDEX': 'cdi_percentual'}, {'INDEX': 'cdi_spread'}, {'INDEX': 'pre'}])],
+      ['cdi', 'cdi', 'pre'])
+check('e nao inventa nada para um codigo que ele nao conhece',
+      R._tools_swap_index_upgrade([{'INDEX': 'xpto'}])[0]['INDEX'], 'xpto')
+check('o cadastro declara o upgrade',
+      R._MAPPING_DEFS['tools-swap-index'].get('upgrade') is R._tools_swap_index_upgrade, True)
+# O seed nao pode voltar a citar um indice que o motor nao tem — foi assim que
+# o `cdi_percentual` chegou ao disco da instancia.
+check('todo INDEX do seed e um indexador do motor',
+      sorted({r['INDEX'] for r in R._MAPPING_DEFS['tools-swap-index']['seed']
+              if r['INDEX'] not in liquidacao.INDEXADOR_POR_CODIGO}), [])
+check('e as opcoes do select tambem',
+      sorted({o for c in R._MAPPING_DEFS['tools-swap-index']['columns']
+              if c['key'] == 'INDEX' for o in c['options']
+              if o not in liquidacao.INDEXADOR_POR_CODIGO}), [])
 check('e sem nada nas duas continua sem chute', cl(REGRAS, 'C03', 'XPTO'), None)
 
 campos, faltando = domain.montar_ponta(None, None, None, 1.0, '', None)
