@@ -14,8 +14,8 @@ LIQUIDAM na data. O que este script prende (HANDOFF §421):
   4. Cancelado e perna interna ficam de fora; deal repetido no payload entra UMA vez.
   5. So entra quem TEM `settlement` (a lista, nao um objeto) e cujo Trade Date
      nao seja hoje; um trade com varios eventos vira uma linha por evento.
-  6. O `VL_TAX_INCOME` e CALCULADO no import (§423) e o Delete all esvazia o dia
-     sem apagar o arquivo.
+  6. O `VL_TAX_INCOME` e CALCULADO no import (§423) e o Delete apaga o LOTE
+     marcado sem apagar o arquivo do dia.
   5. O endereco sai do cadastro `api-links` (uso Daily Settlement) — sem linha, o
      fallback — e a data e reescrita; erro de rede volta como erro, nunca como
      JSON vazio.
@@ -342,9 +342,10 @@ try:
     check('e o import ja grava a celula preenchida',
           bool(gravado and gravado[0]['VL_TAX_INCOME']), True)
 
-    print('\n== 8. o Delete all esvazia o dia sem apagar o arquivo ==')
-    # O endpoint e casca (sessao → _ndfc_load → _ndfc_save), mas os TRES
-    # desfechos dele sao a regra: apagou N, ja estava vazio, dia sem arquivo.
+    print('\n== 8. o Delete apaga o LOTE marcado, sem apagar o arquivo ==')
+    # O endpoint e casca (sessao -> _ndfc_load -> _ndfc_save), mas os desfechos
+    # dele sao a regra: apagou N, id que nao existe mais e ignorado, nenhum id
+    # casando e 404, e o dia esvaziado continua sendo um dia IMPORTADO.
     from apps import create_app                                    # noqa: E402
     from apps.config import DebugConfig                             # noqa: E402
     app = create_app(DebugConfig)
@@ -357,28 +358,41 @@ try:
                   session_expires_at=(datetime.now(timezone.utc).replace(tzinfo=None)
                                       + timedelta(hours=1)).isoformat())
     R._create_notification = lambda *a, **k: None
-    r = cli.post('/api/ndf-cockpit/rows/delete-all', json={'date': '2026-09-08'})
-    check('devolve quantas linhas sairam', (r.status_code, r.get_json()['removed']), (200, 1))
     jp = R._ndfc_json_path(ref)
+    R._ndfc_save(jp, [{'ID_DEAL': 'A', '_nc_id': '1'},
+                      {'ID_DEAL': 'B', '_nc_id': '2'},
+                      {'ID_DEAL': 'C', '_nc_id': '3'}])
+    r = cli.post('/api/ndf-cockpit/rows/delete', json={'date': '2026-09-08', 'ids': ['1', '3']})
+    check('devolve quantas linhas sairam', (r.status_code, r.get_json()['removed']), (200, 2))
+    check('   e so as marcadas sairam',
+          [x['_nc_id'] for x in json.load(io.open(jp, encoding='utf-8'))], ['2'])
+    # Id que nao existe mais (outra aba apagou antes) NAO invalida o lote: o
+    # numero que volta descreve o que aconteceu, nao o tamanho do pedido.
+    r2 = cli.post('/api/ndf-cockpit/rows/delete', json={'date': '2026-09-08', 'ids': ['2', '99']})
+    check('id inexistente no lote e ignorado', (r2.status_code, r2.get_json()['removed']), (200, 1))
     # O ARQUIVO fica: o dia continua importado, com zero linhas. Apagado, a tela
     # cairia no fallback de "dia sem arquivo", que se le como "ainda nao
-    # importaram" e nao como "esvaziaram de proposito".
+    # importaram" e nao como "apagaram de proposito".
     check('o arquivo do dia continua la, vazio',
           (os.path.isfile(jp), json.load(io.open(jp, encoding='utf-8'))), (True, []))
-    r2 = cli.post('/api/ndf-cockpit/rows/delete-all', json={'date': '2026-09-08'})
-    check('dia ja vazio: sucesso com zero', (r2.status_code, r2.get_json()['removed']), (200, 0))
-    r3 = cli.post('/api/ndf-cockpit/rows/delete-all', json={'date': '2026-09-04'})
-    check('dia sem arquivo nenhum: 404', r3.status_code, 404)
-    r4 = app.test_client().post('/api/ndf-cockpit/rows/delete-all', json={'date': '2026-09-08'})
-    check('sem sessao: 401', r4.status_code, 401)
+    r3 = cli.post('/api/ndf-cockpit/rows/delete', json={'date': '2026-09-08', 'ids': ['1']})
+    check('nenhum id casando: 404', r3.status_code, 404)
+    r4 = cli.post('/api/ndf-cockpit/rows/delete', json={'date': '2026-09-08', 'ids': []})
+    check('lote vazio: 400', r4.status_code, 400)
+    r5 = cli.post('/api/ndf-cockpit/rows/delete', json={'date': '2026-09-04', 'ids': ['1']})
+    check('dia sem arquivo nenhum: 404', r5.status_code, 404)
+    r6 = app.test_client().post('/api/ndf-cockpit/rows/delete', json={'date': '2026-09-08', 'ids': ['1']})
+    check('sem sessao: 401', r6.status_code, 401)
     tpl = io.open('apps/templates/pages/ndf-cockpit.html', encoding='utf-8').read()
-    check('o botao Delete all esta na barra, em vermelho',
-          ('ndfcDeleteAllBtn' in tpl and 'btn-danger' in tpl and
-           'data-lang="ndfc-delete-all"' in tpl), True)
-    # Esvaziar o dia nao tem desfazer: o clique passa por uma confirmacao que
-    # diz o numero de linhas e a data.
+    check('o botao Delete esta na barra, em vermelho e ESCONDIDO',
+          ('ndfcDeleteSelBtn' in tpl and 'btn-danger' in tpl and 'd-none' in tpl
+           and 'data-lang="ndfc-delete-sel"' in tpl), True)
+    # Uma linha ja tem a lixeira da propria linha: o botao de lote so aparece a
+    # partir de DUAS marcadas, e o clique confirma antes de chamar o endpoint.
+    check('so aparece com 2+ linhas marcadas',
+          ("classList.toggle('d-none', n < 2)" in js), True)
     check('e o clique confirma antes de chamar o endpoint',
-          ("ndfcDeleteAllBtn" in js and "'/api/ndf-cockpit/rows/delete-all'" in js
+          ("ndfcDeleteSelBtn" in js and "'/api/ndf-cockpit/rows/delete'" in js
            and 'Swal.fire' in js), True)
 finally:
     A.API_LINKS_FILE = orig_links

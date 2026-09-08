@@ -128,37 +128,43 @@ def api_ndfc_row_delete():
                          '{} ({})'.format(rec.get('ID_DEAL', ''), _R()._ndfc_ref_from(p).strftime('%Y-%m-%d')))
     return jsonify({'success': True})
 
-@blueprint.route('/api/ndf-cockpit/rows/delete-all', methods=['POST'])
-def api_ndfc_rows_delete_all():
-    """Esvazia o dia inteiro do Cockpit.
+@blueprint.route('/api/ndf-cockpit/rows/delete', methods=['POST'])
+def api_ndfc_rows_delete():
+    """Apaga em LOTE as linhas marcadas na tela.
 
-    O arquivo do dia fica VAZIO em vez de ser apagado: o dia continua existindo
-    e importado, com zero linhas — apagar o arquivo faria a tela cair no
-    fallback de "dia sem arquivo", que se lê como "ainda não importaram" e não
-    como "esvaziaram de propósito".
+    O arquivo do dia FICA, mesmo quando o lote leva a última linha: o dia
+    continua existindo e importado, com zero linhas — apagar o arquivo faria a
+    tela cair no fallback de "dia sem arquivo", que se lê como "ainda não
+    importaram" e não como "apagaram de propósito".
 
-    Devolve quantas linhas saíram: o aviso do sino e a confirmação da tela
-    precisam do número, e depois da gravação ele não existe mais.
+    O que volta é quantas linhas SAÍRAM, e não o tamanho do pedido: id que já
+    não existe (outra aba apagou antes) é ignorado, e o número tem de descrever
+    o que de fato aconteceu. Nenhum id casando é 404, a mesma resposta do
+    delete de uma linha só.
     """
     if not session.get('authenticated'):
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
     p = request.get_json(silent=True) or {}
+    ids = set(str(i) for i in (p.get('ids') or []) if str(i).strip())
+    if not ids:
+        return jsonify({'success': False, 'error': 'No rows selected.'}), 400
     ref = _R()._ndfc_ref_from(p)
     jp, data = _R()._ndfc_load(ref)
     if data is None:
         return jsonify({'success': False, 'error': 'No data for this date.'}), 404
-    quantas = len(data)
+    ficam = [r for r in data if str(r.get('_nc_id', '')) not in ids]
+    quantas = len(data) - len(ficam)
     if not quantas:
-        return jsonify({'success': True, 'removed': 0})
+        return jsonify({'success': False, 'error': 'Row not found.'}), 404
     try:
-        _R()._ndfc_save(jp, [])
+        _R()._ndfc_save(jp, ficam)
     except Exception:
-        _R().log.error('[ndfc] delete-all save failed:\n%s', traceback.format_exc())
+        _R().log.error('[ndfc] bulk delete save failed:\n%s', traceback.format_exc())
         return jsonify({'success': False, 'error': 'Save failed.'}), 500
     _R().log.info('[ndfc] %d linha(s) de %s apagadas por %s', quantas,
                   ref.strftime('%Y-%m-%d'), session.get('user_sid', '') or '?')
     _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
-                              'NDF Cockpit Cleared', 'NDF Cockpit',
+                              'NDF Cockpit Rows Deleted', 'NDF Cockpit',
                               '{} row(s) removed ({})'.format(quantas, ref.strftime('%Y-%m-%d')))
     return jsonify({'success': True, 'removed': quantas})
 

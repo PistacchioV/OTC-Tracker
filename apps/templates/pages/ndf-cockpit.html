@@ -254,12 +254,16 @@
                     <button class="btn btn-sm btn-primary bg-gradient ndfc-addrow-btn" type="button" id="ndfcAddBtn">
                         <i class="ti ti-plus me-1"></i><span data-lang="ndfc-add-row">Add row</span>
                     </button>
-                    <!-- Esvaziar o dia é irreversível e não tem desfazer: por
+                    <!-- Apagar em lote é irreversível e não tem desfazer: por
                          isso o botão é VERMELHO (a cor de Delete da casa) e o
                          clique passa por uma confirmação que diz o número de
-                         linhas e a data. -->
-                    <button class="btn btn-sm btn-danger bg-gradient ndfc-addrow-btn" type="button" id="ndfcDeleteAllBtn">
-                        <i class="ti ti-trash me-1"></i><span data-lang="ndfc-delete-all">Delete all</span>
+                         linhas e a data. Ele nasce ESCONDIDO e só aparece com
+                         DUAS ou mais linhas marcadas: uma linha já tem a
+                         lixeira da própria linha, e um botão de lote sempre
+                         visível convida ao clique sem seleção nenhuma. -->
+                    <button class="btn btn-sm btn-danger bg-gradient ndfc-addrow-btn d-none" type="button" id="ndfcDeleteSelBtn">
+                        <i class="ti ti-trash me-1"></i><span data-lang="ndfc-delete-sel">Delete</span>
+                        <span class="ndfc-del-count"></span>
                     </button>
                     <div class="columnToggleWrapper"></div>
                     <div class="ndfcExportWrapper"></div>

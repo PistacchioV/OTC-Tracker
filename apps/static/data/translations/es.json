@@ -2298,5 +2298,5 @@
   "tl-fixing-offset": "Desplazamiento del fixing (días hábiles)",
   "tl-fixing-help2": "El desplazamiento viene de la columna de cotización del contrato: D-2 es la PTAX de dos días hábiles (ANBIMA) antes del fin del flujo. En blanco, los dos fixings vienen del cierre del BCB del día hábil anterior a cada fecha. En reales no hay conversión; fuera de las diez monedas que el BCB publica, los dos se ingresan a mano.",
   "tl-idx-cdi": "CDI — % del CDI ± spread, realizado",
-  "ndfc-delete-all": "Eliminar todo"
+  "ndfc-delete-sel": "Eliminar"
 }

@@ -358,10 +358,14 @@ try:
     vals[39], vals[40], vals[42], vals[43] = '', 'C99', '0', '0,14'   # ponta 1: PRE 252
     vals[49], vals[50], vals[52], vals[53] = '1,10', 'C03', '0', ''   # ponta 2: DI
     vals[145] = 'CEM-2026-0001'                 # Codigo Identificador
-    linha = {('c%03d' % i): v for i, v in enumerate(vals)}
-    with io.open(os.path.join(pasta, '73760_%s_DPOSICAO-SWAP.json' % dref),
-                 'w', encoding='utf-8') as fh:
-        fh.write(json.dumps([linha], ensure_ascii=False))
+
+    def _grava_pos():
+        with io.open(os.path.join(pasta, '73760_%s_DPOSICAO-SWAP.json' % dref),
+                     'w', encoding='utf-8') as fh:
+            fh.write(json.dumps([{('c%03d' % i): v for i, v in enumerate(vals)}],
+                                ensure_ascii=False))
+
+    _grava_pos()
 
     d = queries.swap_prefill('26G53382860')
     check('acha pelo Contrato', d['found'], True)
@@ -374,9 +378,10 @@ try:
     check('o notional e o REMANESCENTE (o que de fato rende)', f['nocional'], '8000000.00')
     check('e o original fica ao lado', f['nocional_original'], '10000000.00')
     check('a base da amortizacao sai do tipo', f['base_amortizacao'], liquidacao.SOBRE_ORIGINAL)
-    # A posicao nao guarda a data de CONTRATACAO: a de inicio e uma aproximacao,
-    # e ela vai marcada como tal — assumir calado seria errar o prazo do IR.
-    check('a data da operacao vem do inicio, ASSUMIDA',
+    # A data da operacao e a `Data operacao termo` da posicao. Em branco — o
+    # swap que nao e a termo — a de inicio responde por ela, e vai marcada como
+    # aproximacao: assumir calado seria errar o prazo do IR.
+    check('sem Data operacao termo, a data da operacao vem do inicio, ASSUMIDA',
           (f['data_operacao'], 'data_operacao' in d['assumed']), ('2025-09-01', True))
     check('a ponta ativa e o PRE da primeira coluna',
           (d['ativa']['indexador'], d['ativa']['taxa']), ('pre', '0.1400'))
@@ -420,6 +425,46 @@ try:
     check('cashflow deixa as datas decidirem',
           (c2['tipo_contrato'], c2['fields']['base_ajuste']),
           ('Cashflow', liquidacao.BASE_AUTOMATICA))
+
+    # `Data operacao termo` preenchida VENCE a data de inicio: e a data de
+    # contratacao de verdade, e ai nao ha aproximacao nenhuma a sinalizar.
+    vals[25] = '26/10/2017'                     # Data operacao termo
+    _grava_pos()
+    dt_ = queries.swap_prefill('26G53382860')
+    check('com Data operacao termo, e ELA a data da operacao',
+          (dt_['fields']['data_operacao'], 'data_operacao' in dt_['assumed'],
+           'data_operacao' in dt_['missing']), ('2017-10-26', False, False))
+    vals[25] = ''
+    _grava_pos()
+
+    # O DFLUXO. O PRIMEIRO fluxo abre na `Data inicio` do swap: nao ha evento
+    # anterior de onde partir, e o `inicio` do proprio evento no DFLUXO nem
+    # sempre e essa data (aqui, de proposito, e 15/09). Do segundo em diante, o
+    # fluxo abre onde o anterior fechou.
+    def _grava_fluxo(*linhas):
+        with io.open(os.path.join(pasta, '73760_%s_DFLUXO.json' % dref), 'w', encoding='utf-8') as fh:
+            fh.write(json.dumps([{('c%03d' % i): v for i, v in enumerate(x)} for x in linhas],
+                                ensure_ascii=False))
+
+    ontem = (date.today() - timedelta(days=1)).strftime('%d/%m/%Y')
+    amanha = (date.today() + timedelta(days=400)).strftime('%d/%m/%Y')
+    fl = [''] * 30
+    fl[0], fl[10], fl[8] = '26G53382860', 'CEM-2026-0001', '01'
+    fl[22], fl[23], fl[11], fl[16] = '15/09/2025', ontem, ontem, '10,0000'
+    fl2 = list(fl)
+    fl2[22], fl2[23], fl2[11], fl2[16] = ontem, amanha, amanha, '20,0000'
+
+    _grava_fluxo(fl, fl2)                     # so o primeiro evento ja ocorreu
+    pr = queries.swap_prefill('26G53382860')
+    check('o primeiro fluxo abre na Data inicio do swap, nao no inicio do evento',
+          (pr['fields']['inicio'], pr['fields']['fim']),
+          ('2025-09-01', (date.today() - timedelta(days=1)).isoformat()))
+    fl2[11] = ontem                           # o segundo tambem ja ocorreu
+    _grava_fluxo(fl, fl2)
+    check('e o seguinte abre onde o anterior fechou',
+          queries.swap_prefill('CEM-2026-0001')['fields']['inicio'],
+          (date.today() - timedelta(days=1)).isoformat())
+    os.remove(os.path.join(pasta, '73760_%s_DFLUXO.json' % dref))
 
     # ── 7. Swap Athena: o Edit do CETIP ID ──────────────────────────────────
     print('\n== 7. Swap Athena: Edit do CETIP ID ==')
