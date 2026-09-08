@@ -104,15 +104,16 @@
                     <label for="{{ lado }}_data_fixing" data-lang="tl-fixing-date">Fixing date</label>
                     <input class="form-control form-control-sm tl-date" id="{{ lado }}_data_fixing" name="{{ lado }}_data_fixing" value="{{ f[lado ~ '_data_fixing'] }}" autocomplete="off" placeholder="dd/mm/yyyy">
                 </div>
-                <div class="col-4 tl-field" data-leg="{{ lado }}" data-show-for="term_sofr">
+                <div class="col-4 tl-field" data-leg="{{ lado }}" data-show-for="term_sofr,euribor">
                     <label for="{{ lado }}_taxa_indice" data-lang="tl-fixing-rate">Fixing rate (% p.a.)</label>
                     <input class="form-control form-control-sm" id="{{ lado }}_taxa_indice" name="{{ lado }}_taxa_indice" value="{{ f[lado ~ '_taxa_indice'] }}" inputmode="decimal" data-format="rate">
+                    <p class="tl-help" id="{{ lado }}_fixing_nota"></p>
                 </div>
                 <div class="col-12"><p class="tl-help" data-lang="tl-forward-help">Forward-looking rate: fixed before the flow starts. Blank, the fixing date is 2 business days before the start.</p></div>
             </div>
         </div>
         <div class="col-12" data-leg="{{ lado }}" data-show-for="term_sofr">
-            <div class="tl-note tl-note--warn" data-lang="tl-term-note">Term SOFR is administered by CME and licensed — there is no public source. Blank, the rate comes from the report imported on the Term SOFR page; otherwise type it in.</div>
+            <div class="tl-note tl-note--warn" data-lang="tl-term-note">Term SOFR is administered by CME and licensed — there is no public source. The rate above is read from the base the Term SOFR page imports, at the tenor and fixing date chosen; type over it to use another.</div>
         </div>
         <div class="col-12" data-leg="{{ lado }}" data-show-for="sofr">
             <div class="row g-2">

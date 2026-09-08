@@ -310,6 +310,28 @@ check('base vazia aponta para a importacao', 'tl-term-empty' in term_html, True)
 check('os prazos saem em ordem de vencimento',
       [m for _c, _r, m in _ts.CAMPOS], [1, 3, 6, 12])
 
+# A taxa a termo vem da BASE, e a pergunta e UMA para os dois indices: que taxa
+# o contrato fixou naquele prazo, naquele dia. Dois endpoints seriam duas
+# respostas para divergir no primeiro caso de borda.
+print('\n== 5c. o fixing de Term SOFR e EURIBOR sai da base ==')
+from datetime import date as _d                                         # noqa: E402
+_quando = _d(2026, 9, 4)
+_tx, _vig, _mot = queries.taxa_do_fixing(liquidacao.EURIBOR, '3 month', _quando)
+check('a EURIBOR responde da base local', (_tx is not None, _mot), (True, ''))
+check('e o prazo de 1 semana tambem — que nao cabe num numero de meses',
+      queries.taxa_do_fixing(liquidacao.EURIBOR, '1 week', _quando)[0] is not None, True)
+check('prazo que a base nao tem volta com o MOTIVO, nao com zero',
+      queries.taxa_do_fixing(liquidacao.EURIBOR, '99 month', _quando)[0], None)
+# O Term SOFR e licenciado: sem importacao a base esta vazia, e a resposta tem
+# de dizer o que fazer — nao um numero inventado nem um 500.
+_tx, _v, _mot = queries.taxa_do_fixing(liquidacao.TERM_SOFR, '3 month', _quando)
+if _tx is None:
+    check('Term SOFR sem importacao diz o remedio', 'Term SOFR' in _mot, True)
+# O atalho antigo delega — duas implementacoes da mesma consulta divergiriam.
+_src = ler('apps/pages/features/tools/queries.py')
+check('o term_sofr_taxa delega ao taxa_do_fixing',
+      'taxa, vigente, _motivo = taxa_do_fixing(' in _src, True)
+
 # ─────────────────────────────────────────────────────────────────────────────
 print('\n== 6. o prefill pelo B3 ID, sobre uma posicao sintetica ==')
 _b3_root, _otm_root = R.B3_JSON_ROOT, R.OTM_JSON_ROOT
@@ -487,6 +509,7 @@ for rota in ('/tools/fixed-income', '/tools/swap-calculator', '/tools/sofr-index
              '/tools/term-sofr', '/tools/euribor', '/tools/term-sofr/csv',
              '/tools/euribor/csv', '/api/tools/swap-calculator/prefill',
              '/api/tools/term-sofr/import', '/api/tools/term-sofr/rate',
+             '/api/tools/fixing-rate', '/tools/sofr-index/csv',
              '/api/tools/term-sofr/sync', '/api/tools/euribor', '/api/tools/euribor/sync',
              '/api/other-products-swap-athena/edit'):
     check('%s registrada' % rota, rota in regras, True)

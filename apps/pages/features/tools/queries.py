@@ -107,13 +107,16 @@ def sofr_publicados(referencia, meses):
     return ctx
 
 
+_TENOR_POR_MESES = {1: '1 month', 3: '3 month', 6: '6 month', 12: '12 month'}
+
+
 def term_sofr_taxa(meses, quando):
-    """A taxa importada de um prazo numa data — para o Swap Calculator."""
-    base = term_sofr.carregar()
-    if base.vazio:
-        return None, None
-    vigente, _ = base.em(quando)
-    return base.taxa(meses, quando), vigente
+    """A taxa importada de um prazo numa data. Delega ao `taxa_do_fixing`: duas
+    implementações da mesma consulta divergiriam no primeiro caso de borda."""
+    taxa, vigente, _motivo = taxa_do_fixing(
+        liquidacao.TERM_SOFR, _TENOR_POR_MESES.get(int(meses or 3), '3 month'),
+        para_data(quando))
+    return taxa, vigente
 
 
 # ── EURIBOR ─────────────────────────────────────────────────────────────────
@@ -365,6 +368,43 @@ def _fluxos_do_contrato(contrato, ident):
     return sorted(saida, key=lambda f: f['evento'])
 
 
+def taxa_do_fixing(indexador, tenor, quando):
+    """A taxa a termo do prazo na data, da BASE local — `(taxa, data, motivo)`.
+
+    Term SOFR sai do que o dropzone importou (`term_sofr_b3.db`); EURIBOR, da
+    base do Banco da Finlândia. As duas guardam a última publicação ANTERIOR
+    quando o dia pedido não tem cotação (fim de semana, feriado), que é a taxa
+    que de fato valeria — devolver vazio ali faria a tela dizer que não há dado
+    quando há.
+
+    `None` com o motivo quando a base está vazia ou não alcança a data: a tela
+    deixa o campo em branco e sinalizado, e o número entra à mão. É o mesmo
+    contrato do fixing de moeda — uma taxa chutada muda o ajuste inteiro.
+    """
+    from apps.pages.precificador import euribor as _eu, term_sofr as _ts
+    from apps.pages.precificador import liquidacao as _lq
+    try:
+        if indexador == _lq.EURIBOR:
+            curva = _eu.CurvaEuribor.da_base()
+            vigente, linha = curva.em(quando)
+            taxa = (linha or {}).get(tenor)
+            if taxa is None:
+                return None, vigente, 'no EURIBOR {} published up to {:%d/%m/%Y}'.format(
+                    tenor, quando)
+            return taxa, vigente, ''
+        base = _ts.carregar()
+        if base.vazio:
+            return None, None, 'no Term SOFR imported — drop the B3 report on the Term SOFR page'
+        meses = _lq._MESES_DO_TENOR.get(tenor, 3)
+        taxa = base.taxa(meses, quando)
+        if taxa is None:
+            return None, None, 'no {}-month Term SOFR up to {:%d/%m/%Y}'.format(meses, quando)
+        return taxa, base.em(quando)[0], ''
+    except Exception as exc:                                # noqa: BLE001
+        _R().log.warning('[tools] fixing %s %s em %s falhou: %s', indexador, tenor, quando, exc)
+        return None, None, str(exc)
+
+
 def _ptax_do_fixing(moeda, fim_iso, deslocamento):
     """PTAX de VENDA da moeda no fixing: `fim` recuado `deslocamento` dias úteis.
 
@@ -553,10 +593,22 @@ def swap_prefill(b3_id):
             else:
                 campos['ptax_final'] = '{:.6f}'.format(valor)
                 campos['ptax_data'] = quando.isoformat()
-        # taxa a termo (Term SOFR / EURIBOR): o fixing é D-2 úteis do início do
-        # fluxo — a data vai preenchida para a mesa VER de que dia é a taxa
+        # Taxa a termo (Term SOFR / EURIBOR): o fixing é D-2 úteis do início do
+        # fluxo, e a data vai preenchida para a mesa VER de que dia é a taxa.
+        # A TAXA vem junto, da base que o dropzone alimenta — o motor já a
+        # buscava para calcular, e o campo em branco fazia a tela parecer que
+        # ela precisava ser digitada.
         if campos.get('indexador') in liquidacao.COM_FIXING and f.get('inicio'):
-            campos['data_fixing'] = liquidacao.data_de_fixing(f['inicio']).isoformat()
+            quando = liquidacao.data_de_fixing(f['inicio'])
+            campos['data_fixing'] = quando.isoformat()
+            taxa_idx, vigente, motivo = taxa_do_fixing(
+                campos['indexador'], campos.get('tenor') or '3 month', quando)
+            if taxa_idx is None:
+                faltando.append('taxa_indice')
+                campos['fixing_erro'] = motivo
+            else:
+                campos['taxa_indice'] = '{:.8f}'.format(taxa_idx * 100.0)
+                campos['fixing_data'] = vigente.isoformat() if vigente else ''
         out[lado] = campos
         missing.extend('{}.{}'.format(lado, c) for c in faltando)
     return out

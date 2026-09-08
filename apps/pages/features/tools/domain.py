@@ -251,8 +251,9 @@ def montar_ponta(regra, pct, taxa, sinal, nome_classe, cotacao_inicial,
     sinaliza. Nunca inventa: índice sem regra fica vazio, moeda sem coluna fica
     vazia, cotação inicial sem célula fica vazia."""
     campos = {'indexador': '', 'taxa': '', 'percentual': '', 'convencao': '', 'regime': '',
-              'moeda': '', 'tenor': '', 'ptax_inicial': '', 'ptax_final': '',
-              'ptax_offset': '', 'ni_inicial': '', 'preco_inicial': '', 'ativo': ''}
+              'moeda': '', 'tenor': '', 'taxa_indice': '', 'ptax_inicial': '',
+              'ptax_final': '', 'ptax_offset': '', 'ni_inicial': '', 'preco_inicial': '',
+              'ativo': ''}
     faltando = []
     if not regra:
         return campos, ['indexador']

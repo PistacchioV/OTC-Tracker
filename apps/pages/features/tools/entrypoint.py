@@ -274,6 +274,36 @@ def api_tools_term_sofr_rate():
                     'date': vigente.isoformat() if vigente else None, 'months': meses})
 
 
+@blueprint.route('/api/tools/fixing-rate')
+def api_tools_fixing_rate():
+    """A taxa a termo de um prazo numa data, da BASE local — Term SOFR (o que o
+    dropzone importou) e EURIBOR (a base do Banco da Finlândia).
+
+    UM endpoint para os dois porque é a MESMA pergunta: que taxa o contrato
+    fixou naquele prazo, naquele dia. Dois seriam duas respostas para divergir
+    no primeiro caso de borda — e o `/api/tools/term-sofr/rate` acima segue de
+    pé pela mesma implementação, para a aba já aberta não quebrar."""
+    r = _auth_api()
+    if r:
+        return r
+    idx = (request.args.get('index') or liquidacao.TERM_SOFR).strip()
+    if idx not in liquidacao.COM_FIXING:
+        return jsonify({'success': False,
+                        'error': '{} has no forward fixing.'.format(idx)}), 404
+    tenor = (request.args.get('tenor') or '3 month').strip()
+    quando = request.args.get('date') or date.today().isoformat()
+    try:
+        alvo = para_data(quando)
+    except ErroDeDado:
+        return jsonify({'success': False, 'error': 'Invalid date.'}), 400
+    taxa, vigente, motivo = queries.taxa_do_fixing(idx, tenor, alvo)
+    if taxa is None:
+        return jsonify({'success': False, 'error': motivo}), 404
+    return jsonify({'success': True, 'rate': taxa, 'percent': taxa * 100.0,
+                    'date': vigente.isoformat() if vigente else None,
+                    'index': idx, 'tenor': tenor})
+
+
 @blueprint.route('/tools/term-sofr/csv')
 def tools_term_sofr_csv():
     """A curva IMPORTADA em CSV — o que a tela mostra. Exportar a base do Fed
