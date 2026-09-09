@@ -28,6 +28,10 @@ import sys
 import tempfile
 
 os.environ.setdefault('OTC_DISABLE_SCHEDULERS', '1')
+# O default do Config e `I:\\`, absoluto so no Windows (§8): sem isto o
+# script morre no import do config no macOS/Linux, antes da 1a asercao.
+os.environ.setdefault('OTC_SHARED_DRIVE_ROOT', tempfile.mkdtemp(prefix='share-root-'))
+
 
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
 sys.path.insert(0, ROOT)
