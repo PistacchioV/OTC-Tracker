@@ -417,22 +417,43 @@ def day_payload(path):
                             return []          # o dia existe e está vazio
                         if '_raw' not in cols or '_seq' not in cols:
                             return None
-                        crus = []
-                        for (cru,) in con.execute(
-                                'SELECT "_raw" FROM %s ORDER BY CAST("_seq" AS BIGINT)'
-                                % alvo_sql).fetchall():
-                            if not cru:
-                                return None
-                            json.loads(cru)                 # valida agora; reparse no consumo
-                            crus.append(cru)
-                        return crus                          # os _raw, em TEXTO
+                        # SÓ a consulta acontece aqui dentro. A VALIDAÇÃO de
+                        # cada `_raw` é feita depois de fechar — ver abaixo.
+                        return [c for (c,) in con.execute(
+                            'SELECT "_raw" FROM %s ORDER BY CAST("_seq" AS BIGINT)'
+                            % alvo_sql).fetchall()]
                 finally:
                     gate.exit_read()
                     _freio_mede(time.monotonic() - t0, db)
             except Exception:                               # noqa: BLE001
                 return None
 
+        def _valida(crus):
+            """Todo `_raw` é JSON legível? Fora do lock, de propósito.
+
+            O `json.loads` de cada registro custa CPU e não precisa do banco
+            para nada, mas rodava DENTRO do `with duckdb_read(...)` — com a
+            conexão aberta e o lock de arquivo tomado. Numa posição TER de
+            dezenas de milhares de linhas isso segurou o banco por **235
+            segundos** na instância (`file_lock_held_slow ...
+            lock_hold_seconds=235.938`), e nesses quatro minutos o espelho não
+            conseguia converter: `Cannot open file ... used by another
+            process`. Era o e-mail de TEDs "rodando, rodando, rodando".
+
+            Devolve os crus, ou None quando algum não presta — e `None` continua
+            querendo dizer a mesma coisa de antes: banco suspeito, cure e releia."""
+            for c in crus:
+                if not c:
+                    return None
+                try:
+                    json.loads(c)
+                except ValueError:
+                    return None
+            return crus
+
         dados = _ler()
+        if isinstance(dados, list) and dados:
+            dados = _valida(dados)
         if dados is None:
             # CURA SÍNCRONA — ver table_rows; espelho desligado/timeout →
             # aviso assíncrono e o chamador cai no JSON.
