@@ -612,6 +612,24 @@
                         or leave empty to scan
                         the Settlements folder. Each page can also process its own file individually.
                     </p>
+                    <!-- Reference date: é a pasta do dia em que os JSONs são
+                         gravados, e as cinco telas que os leem procuram por ela.
+                         Nasce em HOJE (o comportamento de sempre); mudando,
+                         processa PARA aquele dia — que é como se reprocessa um
+                         arquivo que chegou atrasado. Futuro é bloqueado: o
+                         arquivo fecha um dia que ainda não aconteceu. -->
+                    <div class="cp-field">
+                        <label data-lang="cp-ref-date">Reference date</label>
+                        <div class="cp-datefield" id="cpDsDateWrap" data-default-today>
+                            <input type="text" id="cp-ds-date" data-input readonly
+                                   class="form-control form-control-sm" placeholder="dd/mm/aaaa">
+                            <a class="cp-cal-btn" data-toggle title="Open calendar"><i class="ti ti-calendar"></i></a>
+                        </div>
+                        <span class="cp-field__hint" data-lang="cp-ds-datehint">
+                            The day the processed JSONs are written to — today by default.
+                            Change it to process files that belong to an earlier day.
+                        </span>
+                    </div>
                     <div class="cp-field">
                         <label data-lang="cp-ds-files">Files</label>
                         <div class="cp-dropzone" id="cpDsDrop" tabindex="0">
@@ -1116,8 +1134,14 @@ function buildDsMessage(body) {
         ? t('cp-src-dropzone', 'dropzone') : t('cp-src-folder', 'folder');
     var out = '';
     if (processed.length) {
+        // A DATA no cabeçalho da mensagem: o dia deixou de ser implícito, e uma
+        // Reference date trocada por engano só apareceria como tela vazia dias
+        // depois se o aviso não a dissesse aqui.
+        var dt = String(body.date || '').split('-');
         out += processed.length + ' ' + t('cp-files-processed-via', 'file(s) processed via') +
-               ' ' + src + ':<br>';
+               ' ' + src +
+               (dt.length === 3 ? ' — ' + t('cp-ds-savedto', 'saved to') + ' ' +
+                                  dt[2] + '/' + dt[1] + '/' + dt[0] : '') + ':<br>';
         out += processed.map(function (p) {
             return '<b>' + _cpEsc(p.type) + '</b>: ' + p.kept + ' ' + t('cp-of', 'of') +
                    ' ' + p.total + ' ' + t('cp-lines', 'line(s)');
@@ -1365,11 +1389,20 @@ document.addEventListener('click', function (e) {
         saveBtn.disabled = true;
         if (label) label.textContent = t('cp-running', 'Running…');
         if (icon) icon.className = 'ti ti-loader-2 ti-spin';
+        // A Reference date vai nos DOIS caminhos: com arquivos o POST é
+        // multipart (campo de FORM), sem arquivos é JSON. Mandando só num
+        // deles, o campo valeria metade das vezes — e em silêncio.
+        var di = document.getElementById('cp-ds-date');
+        var mDt = (di && di.value || '').match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+        var iso = mDt ? (mDt[3] + '-' + mDt[2] + '-' + mDt[1]) : '';
         var opts;
         if (files.length) {
-            var fd = new FormData(); files.forEach(function (f) { fd.append('files', f); }); opts = { method: 'POST', body: fd };
+            var fd = new FormData(); files.forEach(function (f) { fd.append('files', f); });
+            if (iso) fd.append('date', iso);
+            opts = { method: 'POST', body: fd };
         } else {
-            opts = { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' };
+            opts = { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                     body: JSON.stringify(iso ? { date: iso } : {}) };
         }
         fetch('/api/control-panel/daily-settlement-save', opts)
             .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
