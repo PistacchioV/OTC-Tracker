@@ -108,16 +108,23 @@ class Calendario:
 def _arquivo_do_calendario(nome):
     """O arquivo de um calendário pelo REGISTRO; sem registro, o padrão."""
     alvo = nome.strip().upper()
-    try:
-        fp = data_path(REGISTRO)
-        if os.path.isfile(fp):
-            with open(fp, encoding='utf-8') as fh:
-                for row in json.load(fh) or []:
-                    if isinstance(row, dict) and str(row.get('name', '')).strip().upper() == alvo:
-                        arq = str(row.get('file', '') or '').strip()
-                        if arq:
-                            return arq
+    try:                                        # DB-first (fase 3)
+        from apps.pages import duck_read
+        linhas = duck_read.calendar_registry()
+        if linhas is None:
+            fp = data_path(REGISTRO)
+            linhas = []
+            if os.path.isfile(fp):
+                with open(fp, encoding='utf-8') as fh:
+                    linhas = json.load(fh) or []
+        for row in linhas:
+            if isinstance(row, dict) and str(row.get('name', '')).strip().upper() == alvo:
+                arq = str(row.get('file', '') or '').strip()
+                if arq:
+                    return arq
     except (OSError, ValueError):
+        pass
+    except Exception:                                       # noqa: BLE001
         pass
     return _ARQUIVO_PADRAO.get(alvo)
 
@@ -141,16 +148,24 @@ def _feriados_do_arquivo(nome):
     if guardado and guardado[0] == mt:
         return guardado[1]
     datas = set()
-    try:
-        with open(fp, encoding='utf-8') as fh:
-            for item in json.load(fh) or []:
-                texto = item.get('date') if isinstance(item, dict) else item
-                if texto:
-                    try:
-                        datas.add(para_data(str(texto)[:10]))
-                    except ErroDeDado:
-                        continue
+    try:                                        # DB-first (fase 3)
+        from apps.pages import duck_read
+        itens = duck_read.calendar_rows(fp)   # resolve pelo ARQUIVO: o nome
+                                              # pode vir do _ARQUIVO_PADRAO, que
+                                              # não passa pelo registro
+        if itens is None:
+            with open(fp, encoding='utf-8') as fh:
+                itens = json.load(fh) or []
+        for item in itens:
+            texto = item.get('date') if isinstance(item, dict) else item
+            if texto:
+                try:
+                    datas.add(para_data(str(texto)[:10]))
+                except ErroDeDado:
+                    continue
     except (OSError, ValueError):
+        return frozenset()
+    except Exception:                                       # noqa: BLE001
         return frozenset()
     saida = frozenset(datas)
     _cache[chave] = (mt, saida)

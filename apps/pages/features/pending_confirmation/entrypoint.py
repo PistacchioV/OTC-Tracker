@@ -53,8 +53,8 @@ def api_pending_confirmation_snapshot():
     recs = []
     if os.path.isfile(path):
         try:
-            with open(path, encoding='utf-8') as fh:
-                data = json.load(fh)
+            from apps.pages import duck_read      # DB-only (fase 3): arquivo-dia payload-LISTA.
+            data = duck_read.day_records(path)
             recs = data if isinstance(data, list) else []
         except (json.JSONDecodeError, IOError, OSError):
             _R().log.warning('[pc-snapshot] %s ilegível:\n%s', path, traceback.format_exc())

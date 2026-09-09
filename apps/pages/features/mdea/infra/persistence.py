@@ -109,8 +109,8 @@ def record_rebooks(rebooks, ref):
 
 def rebook_rows(ref):
     try:
-        with open(rebook_path(ref), encoding='utf-8') as fh:
-            rows = json.load(fh)
+        from apps.pages import duck_read          # DB-only (fase 3): arquivo-dia payload-LISTA.
+        rows = duck_read.day_records(rebook_path(ref))
     except (IOError, OSError, json.JSONDecodeError):
         return []
     return [r for r in rows if isinstance(r, dict)] if isinstance(rows, list) else []
@@ -124,8 +124,8 @@ def day_deals(product, ref):
     path = os.path.join(cfg['dir'], ref.strftime('%Y'), ref.strftime('%m'),
                         ref.strftime('%Y%m%d') + cfg['suffix'])
     try:
-        with open(path, encoding='utf-8') as fh:
-            data = json.load(fh)
+        from apps.pages import duck_read          # DB-only (fase 3): arquivo-dia payload-LISTA.
+        data = duck_read.day_records(path)
     except (IOError, OSError, json.JSONDecodeError):
         return []
     return [d for d in data if isinstance(d, dict)] if isinstance(data, list) else []

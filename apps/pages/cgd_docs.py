@@ -626,10 +626,9 @@ def _stage_map():
         return {}
     if _STAGE_MAP['mtime'] == mt and _STAGE_MAP['rows'] is not None:
         return _STAGE_MAP['rows']
-    import json
-    try:
-        with open(path, encoding='utf-8') as fh:
-            linhas = json.load(fh) or []
+    try:                                        # DB-first (fase 3)
+        from apps.pages import duck_read
+        linhas = duck_read.dataset_rows(path) or []
     except Exception:
         linhas = []
     mapa = {}

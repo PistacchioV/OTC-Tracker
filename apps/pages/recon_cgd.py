@@ -212,9 +212,14 @@ _ANBIMA = {'feriados': None}
 
 def _feriados():
     if _ANBIMA['feriados'] is None:
-        try:
-            with open(data_path('anbima.json'), encoding='utf-8') as fh:
-                _ANBIMA['feriados'] = {d['date'] for d in (json.load(fh) or []) if d.get('date')}
+        try:                                    # DB-first (fase 3)
+            from apps.pages import duck_read
+            path = data_path('anbima.json')
+            datas = duck_read.calendar_dates(path)
+            if datas is None:
+                with open(path, encoding='utf-8') as fh:
+                    datas = {d['date'] for d in (json.load(fh) or []) if d.get('date')}
+            _ANBIMA['feriados'] = datas
         except Exception:
             # Sem o arquivo o D-1 vira "ontem que não é fim de semana": erra por
             # feriado, mas a recon não some da tela.
@@ -281,9 +286,9 @@ def _mapping_rows(key):
     ent = _MAP_CACHE.get(key)
     if ent and ent[0] == mt:
         return ent[1]
-    try:
-        with open(path, encoding='utf-8') as fh:
-            linhas = json.load(fh) or []
+    try:                                        # DB-first (fase 3)
+        from apps.pages import duck_read
+        linhas = duck_read.dataset_rows(path) or []
     except Exception:
         linhas = []
     linhas = linhas if isinstance(linhas, list) else []

@@ -556,10 +556,9 @@ def _mapping_rows(key):
     SWAP CORPORATE, sem linha nenhuma, caía no DEFAULT_RULE (OTC + MO) — a regra
     errada, porque nele o FO também valida.
     """
-    import json
-    try:
-        with open(_mapping_path(key), encoding='utf-8') as fh:
-            rows = json.load(fh)
+    try:                                        # DB-first (fase 3)
+        from apps.pages import duck_read
+        rows = duck_read.dataset_rows(_mapping_path(key))
     except Exception:
         rows = []
     rows = [r for r in rows if isinstance(r, dict)] if isinstance(rows, list) else []
@@ -789,10 +788,14 @@ _ANBIMA = {'feriados': None}
 def _anbima_holidays():
     if _ANBIMA['feriados'] is None:
         import json
-        try:
+        try:                                    # DB-first (fase 3)
+            from apps.pages import duck_read
             path = data_path('anbima.json')
-            with open(path, encoding='utf-8') as fh:
-                _ANBIMA['feriados'] = {d['date'] for d in (json.load(fh) or []) if d.get('date')}
+            datas = duck_read.calendar_dates(path)
+            if datas is None:
+                with open(path, encoding='utf-8') as fh:
+                    datas = {d['date'] for d in (json.load(fh) or []) if d.get('date')}
+            _ANBIMA['feriados'] = datas
         except Exception:
             # Sem o arquivo o aging vira a contagem só de dias de semana, que
             # erra por feriado mas não some da tela nem estoura o request.

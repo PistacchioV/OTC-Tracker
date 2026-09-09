@@ -88,9 +88,9 @@ _MTM_HYB_MAP_PATH  = _R().data_path('mapping_swap-hyb.json')
 
 
 def _mtm_load_hyb_mapping():
-    try:
-        with open(_MTM_HYB_MAP_PATH, encoding='utf-8') as fh:
-            data = _R().json.load(fh)
+    try:                                        # DB-first (fase 3)
+        from apps.pages import duck_read
+        data = duck_read.dataset_rows(_MTM_HYB_MAP_PATH)
         return data if isinstance(data, list) else []
     except Exception:
         return []

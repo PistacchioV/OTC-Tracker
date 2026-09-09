@@ -128,9 +128,9 @@ _MAPPINGS_DIR = data_write('mappings')
 
 def _gdt_map():
     """{código do histórico → produto}, só as linhas COM produto."""
-    try:
-        with open(mapping_file('gdt-codes', _MAPPINGS_DIR), encoding='utf-8') as fh:
-            rows = json.load(fh)
+    try:                                        # DB-first (fase 3)
+        from apps.pages import duck_read
+        rows = duck_read.dataset_rows(mapping_file('gdt-codes', _MAPPINGS_DIR))
     except Exception:
         return {}
     out = {}
@@ -407,11 +407,12 @@ def _mapping_rows(key):
     """Linhas de um cadastro de /mapping, lidas do disco a cada chamada.
 
     Mesmo padrão do `recon_fxo._mapping_rows` e do `_gdt_map`: importar `routes`
-    daqui seria circular, e reler a cada chamada é o que faz a edição na tela
-    valer no run seguinte, sem restart."""
-    try:
-        with open(mapping_file(key, _MAPPINGS_DIR), encoding='utf-8') as fh:
-            rows = json.load(fh)
+    daqui seria circular (o `duck_read` não é o blueprint, então ele pode vir), e
+    reler a cada chamada é o que faz a edição na tela valer no run seguinte, sem
+    restart."""
+    try:                                        # DB-first (fase 3)
+        from apps.pages import duck_read
+        rows = duck_read.dataset_rows(mapping_file(key, _MAPPINGS_DIR))
     except Exception:
         return []
     return [r for r in rows if isinstance(r, dict)] if isinstance(rows, list) else []

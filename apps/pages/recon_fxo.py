@@ -248,13 +248,14 @@ def _parse_date(ref_date):
 def _mapping_rows(key):
     """Linhas de um cadastro de /mapping, lidas do disco a cada chamada.
 
-    Importar `routes` daqui seria circular; ler o JSON direto é o mesmo padrão de
+    Importar `routes` daqui seria circular; a leitura vai pelo `duck_read`, que
+    é a camada DB-only da fase 3 e não depende do blueprint — mesmo padrão de
     `athena_api._api_link_rows` e `otc_emails._ndf_pdf_set`. Ler a cada chamada é
     de propósito: edição na tela vale no próximo run, sem restart.
     """
-    try:
-        with open(mapping_file(key, _MAPPINGS_DIR), encoding='utf-8') as fh:
-            rows = json.load(fh)
+    try:                                        # DB-first (fase 3)
+        from apps.pages import duck_read
+        rows = duck_read.dataset_rows(mapping_file(key, _MAPPINGS_DIR))
     except Exception:
         return []
     rows = [r for r in rows if isinstance(r, dict)] if isinstance(rows, list) else []

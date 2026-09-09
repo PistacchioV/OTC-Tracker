@@ -764,8 +764,12 @@ def api_fxo_send_conecta():
             _sched_file = re.sub(r'[^A-Za-z0-9_]', '', fx_holiday_sched.replace('-', '_').lower())
             holiday_path = os.path.join(_R()._B3_DATA_DIR, '{}.json'.format(_sched_file)) if _sched_file else None
             try:
-                with open(holiday_path, encoding='utf-8') as _hf:
-                    _raw = _json.load(_hf)
+                # DB-first (fase 3): o schedule é um calendário do registro.
+                from apps.pages import duck_read
+                _raw = duck_read.calendar_rows(holiday_path)
+                if _raw is None:
+                    with open(holiday_path, encoding='utf-8') as _hf:
+                        _raw = _json.load(_hf)
                 _deal_holidays = set(item['date'] if isinstance(item, dict) else item for item in _raw)
             except Exception:
                 pass
@@ -1563,8 +1567,12 @@ def api_send_conecta():
             _sched_file2 = fx_holiday_sched.replace('-', '_')
             holiday_path = _R().data_path(f'{_sched_file2}.json')
             try:
-                with open(holiday_path, encoding='utf-8') as _hf:
-                    _raw = _json.load(_hf)
+                # DB-first (fase 3): o schedule é um calendário do registro.
+                from apps.pages import duck_read
+                _raw = duck_read.calendar_rows(holiday_path)
+                if _raw is None:
+                    with open(holiday_path, encoding='utf-8') as _hf:
+                        _raw = _json.load(_hf)
                 _deal_holidays = set(
                     item['date'] if isinstance(item, dict) else item
                     for item in _raw

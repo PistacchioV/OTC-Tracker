@@ -49,8 +49,8 @@ def rows_at(ref):
         return rows()
     path = persistence.snapshot_path(ref)
     try:
-        with open(path, encoding='utf-8') as fh:
-            dados = json.load(fh)
+        from apps.pages import duck_read          # DB-only (fase 3): arquivo-dia payload-LISTA.
+        dados = duck_read.day_records(path)
     except (IOError, OSError, json.JSONDecodeError):
         raise domain.NoSnapshot(path, ref)
     return [r for r in dados if isinstance(r, dict)] if isinstance(dados, list) else []

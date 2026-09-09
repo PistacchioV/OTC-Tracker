@@ -48,8 +48,8 @@ def api_ndf_summary_cards():
     path, dref = _R()._ndf_ter_path(_R()._prev_anbima_bizday(datetime.now()))
     if path:
         try:
-            with open(path, encoding='utf-8') as fh:
-                data = json.load(fh) or []
+            from apps.pages import duck_read      # DB-only (fase 3): arquivo-dia payload-LISTA.
+            data = duck_read.day_records(path) or []
         except Exception:
             data = []
         # Resolve "Tipo do Contrato" / "Codigo da Cotacao" by header (real TER only;
