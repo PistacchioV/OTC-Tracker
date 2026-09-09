@@ -143,6 +143,12 @@ def _cp_card_allowed(allowed, card_id):
 # seria o dobro do custo pela mesma ida ao share.
 _PAGE_ACCESS_TTL = 30.0
 _page_access_cache = {}              # sid → (expira_em, (configured, urls, role))
+# As renovações EM VOO, por SID: quem chega com o cache vencido enquanto outra
+# thread já está lendo o banco serve o valor vencido em vez de ler também.
+# Uma página dispara dezenas de `/static/*` ao mesmo tempo, e quando os 30 s
+# venciam TODAS erravam o cache juntas — cada uma abrindo o banco de usuários
+# no share pela mesma resposta (a tempestade que o TTL sozinho não evita).
+_page_access_inflight = {}           # sid → threading.Lock (tomado pelo dono)
 _page_access_lock = threading.Lock()
 
 
@@ -163,15 +169,51 @@ def _get_user_authz(sid):
     agora = time.time()
     with _page_access_lock:
         em_cache = _page_access_cache.get(chave)
-    if em_cache and em_cache[0] > agora:
-        # Devolve uma CÓPIA do conjunto: o chamador não pode alterar o cache
-        # sem querer, e um `allowed.add(...)` numa rota viraria concessão
-        # permanente para o processo inteiro.
+        if em_cache and em_cache[0] > agora:
+            dono = None
+        else:
+            # Vencido ou ausente: UMA thread renova (single-flight). O lock
+            # é tomado AQUI, sob o lock do cache, para a próxima que chegar
+            # já encontrá-lo ocupado — criado solto, ela o pegaria antes do
+            # dono e leria o banco também.
+            renov = _page_access_inflight.get(chave)
+            if renov is None:
+                renov = threading.Lock()
+                renov.acquire()
+                _page_access_inflight[chave] = renov
+                dono = renov
+            else:
+                dono = False
+    if dono is None or (dono is False and em_cache):
+        # Fresco — ou vencido com outra thread já renovando: serve o que há
+        # (o valor de até 30 s atrás continua certo; a revogação feita NESTE
+        # processo esquece o cache na hora e nunca cai aqui). Devolve uma
+        # CÓPIA do conjunto: o chamador não pode alterar o cache sem querer,
+        # e um `allowed.add(...)` numa rota viraria concessão permanente.
         configurado, urls, papel = em_cache[1]
         return (configurado, set(urls), papel)
-    resposta = _read_user_authz(sid)
-    with _page_access_lock:
-        _page_access_cache[chave] = (agora + _PAGE_ACCESS_TTL, resposta)
+    if dono is False:
+        # Sem valor algum a servir: espera o dono terminar e lê o cache dele.
+        with _page_access_lock:
+            renov = _page_access_inflight.get(chave)
+        if renov is not None:
+            with renov:
+                pass
+        with _page_access_lock:
+            em_cache = _page_access_cache.get(chave)
+        if em_cache:
+            configurado, urls, papel = em_cache[1]
+            return (configurado, set(urls), papel)
+        resposta = _read_user_authz(sid)          # o dono falhou: lê por conta própria
+        return (resposta[0], set(resposta[1]), resposta[2])
+    try:
+        resposta = _read_user_authz(sid)
+        with _page_access_lock:
+            _page_access_cache[chave] = (agora + _PAGE_ACCESS_TTL, resposta)
+    finally:
+        with _page_access_lock:
+            _page_access_inflight.pop(chave, None)
+        dono.release()
     return (resposta[0], set(resposta[1]), resposta[2])
 
 
@@ -266,6 +308,14 @@ def refresh_session_role():
         return
     if _session_is_master():
         return
+    # `/static*` fica de fora, como no `enforce_page_access`: são dezenas por
+    # página e nenhum decide nada pelo papel — e é neles que a expiração do
+    # cache virava uma tempestade de leituras do banco de usuários.
+    try:
+        if (routes.request.path or '').startswith('/static'):
+            return
+    except Exception:                                       # noqa: BLE001
+        pass
     sid = (routes.session.get('user_sid') or '').strip()
     if not sid:
         return
