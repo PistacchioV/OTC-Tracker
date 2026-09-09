@@ -3944,16 +3944,23 @@ def _swapchar_collect(ref, exact=False):
             elif _SWAPCHAR_LABELS[i] in _SWAPCHAR_BOOL_COLS:
                 disp.append(_lp_bool_ptbr(raw))
             elif _SWAPCHAR_LABELS[i] in _SWAPCHAR_CPTY_NAME_COLS:
-                # Posição SEM documento (a célula vem em branco): resolve pela
+                # CASCATA: o CPF/CNPJ primeiro e, quando ele NÃO RESOLVE, a
                 # CONTA CETIP da Contraparte (índice 7) contra o B3 ACCOUNT do
                 # RefData — a conta direta de terceiro identifica o cliente
-                # (pedido de 2026-09-02). Documento presente segue a regra de
-                # sempre: nome pelo CNPJ, ou o número mascarado sem cadastro.
-                nome = _lp_cpty_by_taxid(raw)
+                # (pedido de 2026-09-02, estendido em 09/09).
+                #
+                # A ordem antiga usava o `_lp_cpty_by_taxid`, que devolve o
+                # número MASCARADO quando não há cadastro. Número é verdadeiro,
+                # então a conta nunca era tentada com documento presente: a
+                # linha parava no CNPJ mesmo tendo a conta ao lado. Aqui a
+                # primeira tentativa é a resolução CRUA (`_lp_cpty_name_by_taxid`,
+                # '' sem cadastro), e o mascarado fica para o FIM — sem os dois,
+                # ele continua sendo o que denuncia quem falta cadastrar.
+                nome = _lp_cpty_name_by_taxid(raw)
                 if not nome:
                     conta = (vals[7] if (full and 7 < len(vals)) else sparse.get(7, ''))
                     nome = _lp_cpty_by_account(conta)
-                disp.append(nome)
+                disp.append(nome or _lp_cpty_by_taxid(raw))
             else:
                 disp.append(_swapchar_fmt_cell(raw, _SWAPCHAR_TYPES[i]))
         rows_out.append(disp)
@@ -6422,10 +6429,19 @@ def _vcp_collect(ref):
             ev = events.get(_acc_digits(contrato), {})
             cpty_conta = ev.get('cpty_conta', '')
             cpty_cnpj = ev.get('cpty_cnpj', '')
+            # CASCATA, e não um ou/ou. A conta DEDICADA identifica o cliente
+            # sozinha e por isso vem primeiro; a omnibus 73760.10-2 não (lá o
+            # titular da conta não é o cliente), e para ela quem responde é o
+            # CPF/CNPJ. Mas escolher UM dos dois e parar era o defeito: conta
+            # dedicada fora do cadastro não tentava o documento, e documento
+            # fora do cadastro não tentava a conta — a célula saía vazia com o
+            # outro identificador ali do lado, sem nada dizendo que faltava
+            # cadastro (foi o que deixou 3 dos 4 avisos de inexistência de PU
+            # sem contraparte em 08/09/2026). `by_acct` já exclui a omnibus,
+            # então o segundo passo nunca devolve o titular dela por engano.
             acct_dig = _acc_digits(cpty_conta)
-            if acct_dig and acct_dig != _VCP_SHARED_ACCT:      # dedicated account → by account
-                name = by_acct.get(acct_dig, '')
-            else:                                              # shared 73760.10-2 omnibus → by Tax ID
+            name = by_acct.get(acct_dig, '') if acct_dig else ''
+            if not name:
                 name = by_taxid.get(_acc_digits(cpty_cnpj), '')
             rows_out.append([name, contrato, parte_conta, ev.get('parte_ix', ''), '',
                              cpty_conta, cpty_cnpj, ev.get('cpty_ix', ''), ''])
