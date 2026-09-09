@@ -17607,6 +17607,16 @@ Três mudanças, e as três têm teste (`check_ndfsum_ir.py` §6):
   demorou. O texto de tabela vazia é "Loading…" durante a carga e só volta a
   "No rows for this date" depois da resposta.
 
+O **Other Products Summary** tinha o mesmo sintoma pela mesma causa: o
+`_ops_trade_rows` chama `_ndfadv_collect` e `_optadv_collect` com imposto, e
+cada um passa pelo `_ndfsum_ir_for_day` — duas curas do mesmo mês por request.
+A cura incremental o alcança de graça; o que ele ganhou por conta própria foi
+a mesma tela de estado (spinner, erro com Retry, `ir_partial`) e o
+`/api/other-products-summary/data` devolvendo `collect_failed` em JSON, com
+os widgets em `try` próprio — o endpoint só protegia o summary e os cards, e
+uma exceção em `_forecast_latest_ref`/`_ops_trade_rows`/`_ops_settlement_counts`
+virava o 500 em HTML que a página engolia.
+
 O que NÃO mudou: o teto continua em 15 s (`OTC_NDFSUM_IR_HEAL_SECONDS`) e
 continua valendo por request — ele só deixou de ser o motivo de a cura
 recomeçar do zero. O ambiente lento do share continua lento (é o §422 e o
