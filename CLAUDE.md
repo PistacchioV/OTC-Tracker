@@ -543,6 +543,32 @@ São dois bancos:
     commit). Quarentena acesa por muito tempo é problema de ambiente a
     resolver, não um modo de operação — o WARNING sai uma vez e nomeia o
     arquivo.
+  - **OCUPADO não é DEFASADO** (09/09/2026). O `_ler` do `duck_read` devolvia
+    `None` para TODA exceção, e `None` quer dizer "cure": o teto do permit
+    (30 s), o da trava (15 s) e o *"used by another process"* da instância
+    vizinha viravam 30 s de `convert_sync` reconvertendo um banco ÍNTEGRO, e
+    ainda a marca de quarentena. Hoje a disputa é classificada
+    (`is_file_in_use`, a mesma lista do sino): UMA retentativa curta e, se
+    persistir, o JSON desta vez — sem cura e sem quarentena, WARNING uma vez
+    por janela. E as leituras do espelho esperam POUCO pela trava
+    (`database_access.read_timeout`, um teto por thread só para LEITURA;
+    `OTC_DUCK_READ_LOCK_SECONDS`, padrão 5): quem lê tem para onde cair, e uma
+    thread do waitress parada 45 s esperando o banco que a vizinha está
+    convertendo é pior do que servir o JSON. A escrita fica com o teto cheio —
+    para ela não há emergência. `check_duck_read.py` §6b prende.
+  - **o `day_payload` tem memo de PROCESSO** (`_day_memo`, chave caminho ×
+    mtime × tamanho, guardando os `_raw`; teto em bytes,
+    `OTC_DUCK_DAY_MEMO_MB`, padrão 256). Ele memoizava só por request, e 24
+    leitores do `routes` (as cinco Live Position, Operations B3, OTM, Latam,
+    os Settlement Advice) reabriam o banco no share e refaziam o `json.loads`
+    de cada linha a cada F5 — numa posição TER de vinte mil linhas, uma
+    abertura de segundos por pessoa. É o gêmeo do `_daycache_memo` do
+    `_day_json`; o hit reparseia, então cada consumidor segue recebendo objetos
+    SEUS. Vale também FORA de request, porque o `stat` acontece a cada chamada
+    e é ele que compõe a chave — a rotina agendada enxerga o arquivo mudar; o
+    que se poupa é a ABERTURA. O funil `_atomic_write_json` esquece a entrada
+    (`day_memo_forget`) para não depender da resolução do relógio do share, e
+    o `prefetch_days` alimenta o memo de graça. `check_duck_gate.py` §4 mede.
   - **um banco por PRODUTO significa ler em LOTE, não dia a dia** (§428). A
     quebra dos bancos é por produto, então os ~500 arquivos-dia de
     `new deals/NDF/Vanilla` são 500 TABELAS do MESMO `Vanilla.db` — e o
@@ -789,7 +815,18 @@ que parece:
   cache vencido o caminho volta a ser o de sempre — ERROR uma vez, sino vazio.
   Quem classifica a disputa é o `_notif_arquivo_em_uso` (o mesmo da sonda da
   subida), nunca um teste novo sobre as mesmas mensagens.
-  `check_notif_db_boot.py` prende o cenário nos dois desfechos. O aviso `file_lock_skipped` sai **uma vez por
+  `check_notif_db_boot.py` prende o cenário nos dois desfechos. **A tabela do
+  sino é expurgada** (`_notif_purge_old`, thread `notif-purge` 3 min depois da
+  subida e uma vez por dia, `OTC_NOTIF_RETENTION_DAYS`, padrão 90; `0`
+  desliga): nada apagava `notifications`, o poll varre a tabela inteira por
+  aba a cada 15 s, e o sino só mostra o dia de hoje — o que passa da retenção
+  não tem leitor nenhum. O registro do laço fica no `routes`
+  (`_schedule_on_start`), como o dos schedulers das features, e respeita o
+  `OTC_DISABLE_SCHEDULERS`. E **as assinaturas de "arquivo em uso" moram no
+  `database_access`** (`FILE_IN_USE_SIGNATURES`/`is_file_in_use`, que também
+  responde `True` para o `DatabaseLockTimeout` da camada); o
+  `_notif_arquivo_em_uso` é alias, porque o leitor do espelho precisa da MESMA
+  resposta — ver a arapuca "ocupado não é defasado" nos bancos do espelho. O aviso `file_lock_skipped` sai **uma vez por
   banco**, não por leitura: ele é WARNING, WARNING passa pelo gate que silencia
   o ruído de INFO, e uma linha por poll seria a maior parte do log.
 - **Quem só faz SELECT abre com `get_db_connection(readonly=True)`.** O caminho
@@ -808,6 +845,18 @@ que parece:
   diferentes: a invalidação cobre a mudança feita NESTE processo, e o TTL cobre
   a instância vizinha que editou o mesmo banco. Era a consulta mais repetida do
   app — toda navegação e toda batida do sino — relendo o mesmo valor.
+- **A renovação da allowlist é SINGLE-FLIGHT** (`_page_access_inflight`,
+  09/09/2026): quando o TTL de 30 s vence, UMA thread lê o banco e as outras
+  servem o valor vencido — uma página dispara dezenas de `/static/*` ao mesmo
+  tempo, e sem isso todas erravam o cache juntas e cada uma abria o banco de
+  usuários no share pela mesma resposta. O `refresh_session_role` pula
+  `/static*` pela mesma razão. A revogação feita neste processo continua
+  valendo na hora: ela ESQUECE o cache, e quem não tem valor vencido espera o
+  dono. `check_db_read_path.py` §2b prende.
+- **Leitores não se excluem entre si**, então `DATABASE_READ_CONCURRENCY`
+  (o semáforo de conexões read-only do MESMO banco no processo) é **8** desde
+  09/09/2026. Com 16 threads no waitress, os 4 de antes punham o quinto leitor
+  da busca do New Deals numa fila de até 30 s sem ninguém estar escrevendo.
 - **Nunca faça trabalho lento segurando o lock** (rede, SMTP, varredura de
   arquivos, renderização de template). `_push_notify` é o modelo: lê a lista de
   inscritos, fecha, e só então dispara os HTTP pushes. A topbar consulta
@@ -815,6 +864,20 @@ que parece:
 - Conexões por banco (os DuckDBs do Pending Confirmation) são abertas sob
   demanda com retry/backoff e **têm de fechar no `finally`**: uma conexão
   vazada segura o lock de escrita pela vida do processo e derruba a página.
+  O retry é REAL desde 09/09/2026: o `DATABASE_LOCK_RETRY_LIMIT` era lido e
+  não fazia nada; hoje a ABERTURA em escrita retenta (curto, só por disputa —
+  `is_file_in_use`) antes de subir o erro. Leitura não retenta: ela tem o
+  canal de emergência dela.
+- **`ensure_db` roda UMA vez por processo e por arquivo** (`manual_conf`,
+  `cgd_docs`). A conferência de schema abre o banco em ESCRITA — trava de
+  arquivo EXCLUSIVA entre processos —, e ela ficava no `load_rows`/`load`: toda
+  LEITURA do Track, do Monitor, do BACC e do Tracking Docs tomava a trava
+  exclusiva dos bancos só para descobrir que não havia coluna a acrescentar,
+  excluindo por segundos os leitores das outras instâncias sobre o mesmo `db/`
+  do share, e estourando com *"used by another process"* (engolido) quando a
+  vizinha estava lendo. O schema é o do CÓDIGO; o que continua sendo
+  conferido a cada chamada é se o ARQUIVO existe (banco apagado por fora
+  renasce), e a marca só é posta quando a conferência DÁ CERTO.
 - Caches JSON (arquivos-dia do New Deals, mappings, MTM) são
   read-modify-write, então precisam de `with _cache_lock:` em volta do ciclo
   **inteiro** (ler → alterar → `_atomic_write_json`). A escrita atômica sozinha
@@ -1482,6 +1545,14 @@ criado pela tela (HANDOFF §288).
   `check_holiday_calendars.py` compara seed × fallback campo a campo.
 - O registro está no `.gitignore` — o seed o recria, e versioná-lo daria
   conflito de merge a cada calendário criado pela tela.
+- **O calendário ANBIMA em memória acompanha o mtime do `anbima.json`**
+  (`platform/anbima.py`, `_anbima_stamp` — um `stat` por request, via
+  `once_per_request`): o feriado cadastrado pela tela vale no request seguinte
+  para o SLA da esteira, o aging do CGD e o D-1 das recons, e não só depois do
+  restart. As DUAS cargas continuam existindo; o que mudou é a validade.
+  Calendário FIXADO à mão (teste que troca `_ANBIMA_HOLIDAYS`/`_anbima_loaded`
+  ou `_anbima_hols_cache` sem mtime) nunca é recarregado — o mtime `None` é a
+  marca.
 
 ### O Onboarding conta o aging, e a esteira do CGD é DERIVADA
 
@@ -1864,6 +1935,18 @@ memoiza dentro de UM request. Duas decisões dele:
 Ele já cobre também o `manual_conf.sla_days`, que o Monitor pergunta três vezes
 por linha. `check_stat_por_linha.py` **MEDE** o comportamento em vez de conferir
 texto.
+
+Dois parentes da mesma família, fechados em 09/09/2026: os finders
+`_find_ndf_deal_in_cache` e `_find_generic_nd_deal` faziam `os.walk` +
+`os.stat` por arquivo a CADA chamada — e os bulks (Mapping B3, delete) os
+chamam por linha selecionada —, do mais ANTIGO para o mais novo, então um deal
+de ontem percorria o histórico inteiro. Hoje os quatro finders do New Deals
+seguem a mesma receita: listagem uma vez por request (`_nd_file_list`, o
+gêmeo parametrizado do `_optcomm_file_list`), do mais novo para o mais antigo,
+leitura pelo funil `_day_json`. E a listagem de documentos do Electronic
+Inventory (`_ei_iter_files`) anda por `os.scandir` (`_ei_walk`) em vez de
+`os.walk` + `os.stat` por arquivo: o `DirEntry` guarda o que a listagem do SMB
+já trouxe, e cada documento da contraparte deixou de custar uma ida à rede.
 
 ### Um arquivo JS comanda CINCO páginas
 
