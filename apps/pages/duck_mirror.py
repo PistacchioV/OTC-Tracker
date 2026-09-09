@@ -207,6 +207,64 @@ _travas = {}
 _travas_lock = threading.Lock()
 
 
+class EscritaAdiada(RuntimeError):
+    """A escrita do espelho não tem o arquivo para ela e foi ADIADA.
+
+    São duas disputas, uma por camada, e o desfecho errado era o MESMO nas
+    duas: seguir assim mesmo, colher o erro previsível e mandar a tarefa
+    inteira para o `except` como conversão FALHADA — o `convert_sync` do leitor
+    voltava sem cura e o arquivo entrava em 5 min de quarentena. Uma disputa de
+    segundos apagava a conversão em vez de esperá-la.
+
+    Adiar não é desistir: a tarefa volta para a fila. Quem estava esperando a
+    cura pode estourar os 30 s dele e servir o JSON desta vez — mas a conversão
+    ACONTECE, e a leitura seguinte é servida pelo banco. Antes, ninguém a
+    fazia."""
+
+
+class TravaOcupada(EscritaAdiada):
+    """A trava EXCLUSIVA de arquivo não veio — outra INSTÂNCIA tem o banco
+    aberto (§8: cada pessoa roda a sua sobre o mesmo `db/`).
+
+    Era o caso que o log da instância mostrou em 09/09/2026: a trava não vinha
+    em 6 s, o espelho convertia sem ela e o `duckdb.connect` estourava com
+    *"The process cannot access the file because it is being used by another
+    process"* — que não é erro de conversão nenhum, é a disputa dita por outro
+    nome. Seguir sem a trava só faz sentido quando a disputa NÃO é a causa; e
+    quando ela é, seguir custa a conversão e a quarentena. Quem separa os dois
+    casos é a retentativa: disputa passa, impedimento de verdade volta na
+    última tentativa e falha como sempre falhou."""
+
+
+class LeitoresAbertos(EscritaAdiada):
+    """O portão do banco tem leitores em voo e a escrita foi ADIADA.
+
+    Não é falha de conversão: é a recusa de tentar o que não pode dar certo. O
+    DuckDB guarda uma instância por arquivo dentro do processo e recusa a
+    segunda conexão com outra configuração, então conectar em ESCRITA com um
+    `read_only` aberto estoura com *"different configuration than existing
+    connections"* — e o preço não era o erro, era o que vinha depois: a tarefa
+    inteira ia para o `except` como conversão FALHADA, o `convert_sync` do
+    leitor voltava sem cura e o arquivo entrava em quarentena por 5 min. Uma
+    leitura demorada de outra thread apagava a conversão em vez de esperá-la.
+    """
+
+
+# Quantas vezes uma tarefa é REENFILEIRADA quando o portão diz que há leitores
+# abertos, antes de a última tentativa conectar assim mesmo. O teto existe pelo
+# mesmo motivo do teto do portão: um leitor DOENTE (conexão vazada) não pode
+# calar o espelho para sempre — na última tentativa vale o comportamento
+# antigo, e aí o erro do connect aparece no log como sempre apareceu.
+_TENTATIVAS_PORTAO = 3
+# Pausa da thread do espelho antes de voltar ao laço depois de adiar. A tarefa
+# é reposta na fila ANTES (FIFO: ela volta atrás do que já estava esperando), e
+# a pausa é o que impede a fila vazia de virar giro em falso.
+_ESPERA_REQUEUE = 2.0
+# Só a thread do espelho lê e escreve isto — os ganchos ABRIR/FECHAR são
+# injetados por ela e por mais ninguém, então não precisa de lock.
+_forcar_abertura = False
+
+
 def _abrir_com_portao(path):
     """`ABRIR_BANCO` do motor, na thread do espelho: toma a trava EXCLUSIVA de
     arquivo, declara a escrita no portão do banco (leitor novo espera; os em
@@ -239,16 +297,28 @@ def _abrir_com_portao(path):
         trava = DA.hold_file_lock(path, write=True,
                                   timeout_seconds=_FILE_LOCK_WAIT_SECONDS)
     except DA.DatabaseLockTimeout:
+        if not _forcar_abertura:
+            raise TravaOcupada(os.path.basename(path))
         log.warning('[duck-mirror] a trava exclusiva de %s não veio a tempo — convertendo '
-                    'sem ela (se o rename falhar com "Access is denied", é outra instância '
-                    'com o banco aberto)', os.path.basename(path))
+                    'sem ela (última tentativa; se o open falhar com "used by another '
+                    'process", é outra instância com o banco aberto)',
+                    os.path.basename(path))
     except Exception:                                       # noqa: BLE001
         log.warning('[duck-mirror] não foi possível travar %s:\n%s',
                     os.path.basename(path), traceback.format_exc())
     gate = DA.db_gate(path)
     if not gate.enter_write(_GATE_WRITE_WAIT_SECONDS):
+        if not _forcar_abertura:
+            # ADIA em vez de conectar. Conectar aqui é gastar a conversão para
+            # colher um erro previsível, e o custo real cai sobre a LEITURA,
+            # que fica 5 min sem banco por causa de uma disputa de segundos.
+            gate.exit_write()
+            if trava is not None:
+                trava.release()
+            raise LeitoresAbertos(os.path.basename(path))
         log.warning('[duck-mirror] leitores ainda abertos em %s depois de %.0fs — '
-                    'conectando assim mesmo', os.path.basename(path), _GATE_WRITE_WAIT_SECONDS)
+                    'conectando assim mesmo (última tentativa)',
+                    os.path.basename(path), _GATE_WRITE_WAIT_SECONDS)
     try:
         con = duckdb.connect(path)
     except Exception:
@@ -291,6 +361,13 @@ def _loop():
         # aviso assíncrono continua a tripla de sempre.
         kind, data_dir, rel = item[:3]
         feito = item[3] if len(item) > 3 else None
+        # 5º elemento: quantas vezes esta tarefa já foi adiada pelo portão. O
+        # aviso assíncrono é uma tripla e a cura síncrona uma quádrupla, então
+        # ler pelo tamanho mantém as duas formas válidas.
+        tentativa = item[4] if len(item) > 4 else 0
+        global _forcar_abertura
+        _forcar_abertura = tentativa + 1 >= _TENTATIVAS_PORTAO
+        adiar = False
         try:
             out = _out_dir(data_dir)
             if kind == 'daily':
@@ -304,10 +381,29 @@ def _loop():
             for origem, erro in stats.get('errors', ()):
                 log.warning('[duck-mirror] %s falhou para %s: %s',
                             kind, origem, str(erro).strip().splitlines()[-1])
+        except EscritaAdiada as exc:
+            adiar = True
+            log.warning('[duck-mirror] %s adiado (%d/%d): %s em %s — escrever agora só '
+                        'queimaria a conversão e poria o arquivo em quarentena',
+                        kind, tentativa + 1, _TENTATIVAS_PORTAO,
+                        'a trava não veio' if isinstance(exc, TravaOcupada)
+                        else 'leitores ainda abertos', exc)
         except Exception:                                   # noqa: BLE001
-            log.warning('[duck-mirror] conversão %s falhou:\n%s',
-                        kind, traceback.format_exc())
+            # O ARQUIVO vai na mensagem. Sem ele a única linha que diz por
+            # que a cura não resolveu é ilegível para quem procura pelo nome do
+            # arquivo — foi o que aconteceu com o 73760_260908_DPOSICAO-TER: o
+            # `grep` pelo nome mostrava a trava e o portão (que são sintoma) e
+            # escondia justamente o traceback (que é a causa).
+            log.warning('[duck-mirror] conversão %s falhou para %s:\n%s',
+                        kind, rel or data_dir, traceback.format_exc())
         finally:
-            if feito is not None:
+            if adiar:
+                # A reposição vem ANTES do `task_done`: assim `unfinished_tasks`
+                # nunca chega a zero no meio do adiamento, e o `flush()` dos
+                # testes continua significando "a fila acabou".
+                _q.put((kind, data_dir, rel, feito, tentativa + 1))
+            elif feito is not None:
                 feito.set()
             _q.task_done()
+            if adiar:
+                time.sleep(_ESPERA_REQUEUE * (tentativa + 1))

@@ -1911,9 +1911,33 @@ def _dash_warm_memo():
         t0 = time.time()
         lidos = 0
         try:
-            for fp, fname, mtime, size in _dash_scan_files(NEW_DEALS_CACHE_ROOT, periodo, agora):
-                if fname.endswith('.tmp') or fname.endswith('.bak'):
-                    continue
+            arquivos = [t for t in _dash_scan_files(NEW_DEALS_CACHE_ROOT, periodo, agora)
+                        if not (t[1].endswith('.tmp') or t[1].endswith('.bak'))]
+            # §428, pela última porta que faltava. Sem isto o aquecimento abre
+            # o banco do produto UMA VEZ POR ARQUIVO-DIA: 483 aberturas e
+            # 97,3 s no share, medidos na instância em 09/09/2026. O custo não
+            # é só a espera — a thread fica segurando a trava COMPARTILHADA do
+            # share por minutos, e é dentro dessa janela que o espelho tenta a
+            # trava EXCLUSIVA para converter, com 6 s de orçamento. Ele perde,
+            # a conversão morre e o arquivo entra em quarentena por 5 min: um
+            # aquecimento que é otimização derrubando a leitura DB-only que ele
+            # existe para acelerar. Todo o resto que varre a árvore já passa
+            # pelo `_day_prefetch`; este era o único que tinha ficado de fora.
+            #
+            # A poda é pelo memo da PROJEÇÃO, e não só pelo do `_day_prefetch`:
+            # ele conhece o memo dos `_raw`, e o que decide se este laço vai
+            # ler o arquivo é o `_dash_file_memo` — sem podar por ele, a
+            # passada `all` logo depois da `year` mandaria ao banco os mesmos
+            # 483 dias que a primeira acabou de resolver.
+            pendentes = []
+            with _dash_memo_lock:
+                for t in arquivos:
+                    item = _dash_file_memo.get(t[0])
+                    if not (item and item[0] == t[2] and item[1] == t[3]):
+                        pendentes.append(t)
+            if pendentes:
+                _day_prefetch(pendentes)
+            for fp, fname, mtime, size in arquivos:
                 try:
                     fdate = datetime.strptime(fname[:8], '%Y%m%d')
                 except ValueError:

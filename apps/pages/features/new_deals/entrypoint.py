@@ -1066,7 +1066,15 @@ def api_ndf_update_deal_cache(deal_id):
         return jsonify({"success": False, "message": "No data provided"}), 400
 
     file_path, idx_found = _R()._find_ndf_deal_in_cache(deal_id, client)
-    _R().log.info("[NDF PATCH] _find_ndf_deal_in_cache → file=%s idx=%s", file_path, idx_found)
+    # O caminho é o ENDEREÇO do arquivo-dia — é por ele que tudo é chaveado —,
+    # não a fonte da leitura: o finder varre pelo funil `_day_json`, que é
+    # DB-only. Escrever só `file=<...>.json` num app cuja leitura sai do banco
+    # se lê como "continua lendo JSON", e foi assim que este log virou alarme
+    # falso em 09/09/2026. O `open` mais abaixo é a GRAVAÇÃO (§4, fase 3: o
+    # read-modify-write da escrita segue no JSON de propósito).
+    _R().log.info("[NDF PATCH] _find_ndf_deal_in_cache → arquivo-dia=%s idx=%s "
+                  "(busca pelo BANCO; o JSON é o meio de gravação)",
+                  file_path, idx_found)
 
     if file_path is None:
         # _find_ndf_deal_in_cache already emitted the detailed diagnosis (repr diffs, client mismatch list)

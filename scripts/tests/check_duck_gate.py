@@ -210,17 +210,32 @@ livre = portalocker.Lock(LOCK, mode='a+b', timeout=1.0,
 livre.acquire(); livre.release()
 check('5. e o proximo escritor a consegue', True)
 
-# Trava indisponivel NAO aborta a conversao: segue sem ela, avisando. Onde a
-# disputa nao e a causa, o comportamento continua o de antes.
+# Trava indisponivel ADIA a conversao (09/09/2026): outra INSTANCIA com o banco
+# aberto faz o open estourar com "used by another process", e converter assim
+# mesmo custava a conversao INTEIRA mais 5 min de quarentena do arquivo. A
+# tarefa volta para a fila; so a ULTIMA tentativa segue sem a trava, que e a
+# valvula para o caso em que a disputa nao e a causa.
 preso = portalocker.Lock(LOCK, mode='a+b', timeout=0.2,
                          flags=portalocker.LockFlags.EXCLUSIVE
                          | portalocker.LockFlags.NON_BLOCKING)
 preso.acquire()
 try:
-    con2 = M._abrir_com_portao(DB)
-    check('5. sem a trava, a conversao segue assim mesmo (nao aborta)', con2 is not None)
-    check('5. e nada fica preso no registro de travas', id(con2) in M._travas, False)
-    M._fechar_com_portao(DB, con2)
+    M._forcar_abertura = False
+    try:
+        M._abrir_com_portao(DB)
+        check('5. sem a trava, a escrita e ADIADA (nao converte as cegas)',
+              'converteu', 'TravaOcupada')
+    except M.TravaOcupada:
+        check('5. sem a trava, a escrita e ADIADA (nao converte as cegas)', True)
+
+    M._forcar_abertura = True
+    try:
+        con2 = M._abrir_com_portao(DB)
+        check('5. e a ultima tentativa segue assim mesmo (nao aborta)', con2 is not None)
+        check('5. e nada fica preso no registro de travas', id(con2) in M._travas, False)
+        M._fechar_com_portao(DB, con2)
+    finally:
+        M._forcar_abertura = False
 finally:
     preso.release()
 

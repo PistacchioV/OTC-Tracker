@@ -40,7 +40,23 @@ def pivot(rows):
             d['b3'] += 1
         if not d['banker']:
             d['banker'] = str(rec.get('BANKER', '') or r.get('Owner', '') or '').strip()
-        if R._pc_norm(rec.get('SIGNATURE TYPE', '')) == 'digital':
+        # A LINHA responde primeiro; o RefData é o complemento, não o juiz.
+        #
+        # A coluna `Signature Type` da linha é preenchida por
+        # `_pc_refdata_enrich` em TODO feed que insere no Pending Confirmation,
+        # e é ela que a tela mostra. Reresolver aqui pelo RefData criava uma
+        # SEGUNDA resposta para a mesma pergunta, e quando as duas discordam
+        # quem aparece é a do e-mail — pintada de branco, que a legenda chama
+        # de *Manually signed*. Foi o PROLEC em 09/09/2026: SPN e Client da
+        # linha batendo com o cadastro, `Pending Digital Signature` na tela, e
+        # o relatório dizendo que o cliente assina no papel.
+        #
+        # A ordem importa nos dois sentidos: linha calada (as antigas, de antes
+        # da coluna) continua caindo no RefData — sem isso o grupo inteiro
+        # perderia o verde que hoje tem.
+        assinatura = (str(r.get('Signature Type', '') or '').strip()
+                      or str(rec.get('SIGNATURE TYPE', '') or ''))
+        if R._pc_norm(assinatura) == 'digital':
             d['digital'] = True
     out = []
     for group, d in groups.items():

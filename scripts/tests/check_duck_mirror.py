@@ -19,6 +19,7 @@ por uma fila e uma thread daemon — nunca no caminho da gravação (o funil
 
 Tudo em tempfile; não toca em dado real.
 """
+import io
 import json
 import os
 import sys
@@ -154,6 +155,101 @@ finally:
     M._put = _put_original
 check('6. e o JSON foi gravado mesmo assim',
       json.load(open(dia, encoding='utf-8')), [{'Deal': 'DBH-1CCC'}])
+
+
+# ── 7. o portão ADIA a escrita em vez de queimar a conversão ────────────────
+# Leitor em voo no MESMO arquivo: `enter_write` volta False. Conectar ali é
+# colher um erro previsível do DuckDB ("different configuration") e mandar o
+# arquivo para 5 min de quarentena por causa de uma disputa de segundos — o
+# defeito medido na instância em 09/09/2026, com leituras segurando a trava
+# por 126–206 s. A tarefa tem de VOLTAR PARA A FILA, e só a última tentativa
+# conecta assim mesmo (senão um leitor VAZADO calaria o espelho para sempre).
+from apps.pages import database_access as DA                # noqa: E402
+
+alvo = os.path.join(DBDIR, 'portao_teste.db')
+os.makedirs(DBDIR, exist_ok=True)
+gate = DA.db_gate(alvo)
+gate.enter_read(0.0)                       # um leitor em voo, e ele NÃO fecha
+try:
+    M._forcar_abertura = False
+    try:
+        M._abrir_com_portao(alvo)
+        check('7. portao com leitor aberto ADIA a escrita', 'conectou', 'LeitoresAbertos')
+    except M.LeitoresAbertos:
+        check('7. portao com leitor aberto ADIA a escrita', True)
+    except Exception as e:                                  # noqa: BLE001
+        check('7. portao com leitor aberto ADIA a escrita', type(e).__name__,
+              'LeitoresAbertos')
+    # E o adiamento não pode deixar o portão marcado como "escrevendo": o
+    # leitor seguinte esperaria por uma escrita que desistiu.
+    check('7. e o adiamento devolve o portao (nenhum escritor pendurado)',
+          gate.enter_write(0.0) is False and True, True)
+    gate.exit_write()
+
+    # Última tentativa: conecta assim mesmo — a válvula contra leitor vazado.
+    M._forcar_abertura = True
+    con = None
+    try:
+        con = M._abrir_com_portao(alvo)
+        check('7. na ultima tentativa conecta assim mesmo', True)
+    except M.LeitoresAbertos:
+        check('7. na ultima tentativa conecta assim mesmo', 'adiou de novo', 'conectou')
+    finally:
+        if con is not None:
+            M._fechar_com_portao(alvo, con)
+        M._forcar_abertura = False
+finally:
+    gate.exit_read()
+
+# O laço repõe a tarefa na fila ANTES do `task_done`, e por isso o `flush()`
+# não pode dizer "acabou" no meio de um adiamento.
+fonte = io.open(os.path.join(ROOT, 'apps', 'pages', 'duck_mirror.py'),
+                encoding='utf-8').read()
+i_put = fonte.find('_q.put((kind, data_dir, rel, feito, tentativa + 1))')
+i_done = fonte.find('_q.task_done()', i_put)
+check('7. a reposicao na fila vem ANTES do task_done',
+      i_put > 0 and i_done > i_put, True)
+check('7. o teto de adiamentos existe', M._TENTATIVAS_PORTAO >= 1, True)
+
+# E a MESMA regra na outra camada: a trava exclusiva que não vem é outra
+# INSTÂNCIA com o banco aberto, e converter sem ela foi o que produziu o
+# `IO Error: ... used by another process` de 09/09/2026 — conversão perdida
+# mais quarentena, por uma disputa que passa sozinha.
+def _trava_nao_vem(path, *a, **k):
+    # A exceção REAL, construída como a camada a constrói (path, modo, teto) —
+    # um stub com outra assinatura cairia no `except Exception` genérico e o
+    # teste passaria a medir o caminho errado.
+    raise DA.DatabaseLockTimeout(path, 'write', M._FILE_LOCK_WAIT_SECONDS)
+
+_hold = DA.hold_file_lock
+DA.hold_file_lock = _trava_nao_vem
+try:
+    M._forcar_abertura = False
+    try:
+        M._abrir_com_portao(os.path.join(DBDIR, 'trava_teste.db'))
+        check('7. trava exclusiva ocupada ADIA a escrita', 'converteu', 'TravaOcupada')
+    except M.TravaOcupada:
+        check('7. trava exclusiva ocupada ADIA a escrita', True)
+    except Exception as e:                                  # noqa: BLE001
+        check('7. trava exclusiva ocupada ADIA a escrita', type(e).__name__, 'TravaOcupada')
+    check('7. e as duas recusas tem o mesmo tratamento no laco',
+          issubclass(M.TravaOcupada, M.EscritaAdiada)
+          and issubclass(M.LeitoresAbertos, M.EscritaAdiada), True)
+
+    M._forcar_abertura = True
+    con = None
+    try:
+        con = M._abrir_com_portao(os.path.join(DBDIR, 'trava_teste.db'))
+        check('7. sem trava, a ultima tentativa converte assim mesmo', True)
+    except M.EscritaAdiada:
+        check('7. sem trava, a ultima tentativa converte assim mesmo',
+              'adiou de novo', 'converteu')
+    finally:
+        if con is not None:
+            M._fechar_com_portao(os.path.join(DBDIR, 'trava_teste.db'), con)
+        M._forcar_abertura = False
+finally:
+    DA.hold_file_lock = _hold
 
 print()
 if fails:
