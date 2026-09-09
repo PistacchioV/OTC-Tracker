@@ -689,17 +689,37 @@ def swap_prefill(b3_id):
             missing.append('amortizacao')
     else:
         f['inicio'] = inicio_swap
-        f['fim'] = hoje
-        assumed.append('fim')
         base_am = domain.base_da_amortizacao(
             R._swapchar_amort_text(_celula(vals, _POS['tipo_amort'])))
-        f['base_amortizacao'] = base_am or ''
-        if not base_am:
-            missing.append('base_amortizacao')
-        # Bullet não tem fluxo intermediário: não amortizar é o certo, não uma
-        # lacuna. Cashflow sem DFLUXO é lacuna de verdade.
-        f['amortizacao'] = '0' if tipo_contrato == 'Bullet' else ''
-        if not f['amortizacao']:
+        if tipo_contrato == 'Bullet':
+            # O bullet não tem fluxo intermediário: o único fluxo dele termina
+            # no VENCIMENTO, e o vencimento está na posição. Terminá-lo em
+            # HOJE dava um número que não é liquidação nenhuma — é a marcação
+            # de um contrato no meio do caminho — e ainda saía marcado como
+            # "assumido", quando a data estava na coluna ao lado. Sem
+            # vencimento na posição o hoje volta, aí sim como aproximação.
+            f['fim'] = f['vencimento'] or hoje
+            if not f['vencimento']:
+                assumed.append('fim')
+            # E o que termina no vencimento amortiza 100%: é o principal
+            # inteiro voltando. Coluna `Tipo de amortização` vazia é
+            # **At Maturity**, que diz exatamente isso — não é lacuna, e o '0'
+            # de antes deixava o saldo seguinte igual ao notional num contrato
+            # que acabou. A BASE não muda nada a 100% (`amortizar` devolve o
+            # saldo pelos dois caminhos), então ela cai no original e não entra
+            # em `missing` — pedir cadastro para um campo que não altera o
+            # resultado é pedir trabalho à toa.
+            f['base_amortizacao'] = base_am or liquidacao.SOBRE_ORIGINAL
+            f['amortizacao'] = '100'
+        else:
+            # Cashflow sem DFLUXO é lacuna de verdade: o fluxo que liquidou não
+            # está em lugar nenhum, e a tela tem de dizer isso.
+            f['fim'] = hoje
+            assumed.append('fim')
+            f['base_amortizacao'] = base_am or ''
+            if not base_am:
+                missing.append('base_amortizacao')
+            f['amortizacao'] = ''
             missing.append('amortizacao')
     if not f['inicio']:
         missing.append('inicio')
