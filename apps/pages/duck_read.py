@@ -82,6 +82,59 @@ _freio = {'ate': 0.0}
 # — que entra na MESMA fila do espelho — espera a escrita terminar de graça.
 _GATE_READ_WAIT_SECONDS = 10.0
 
+# ── Cura que NÃO cura: a quarentena ─────────────────────────────────────────
+# A cura síncrona resolve o banco frio ou defasado, e para isso vale a espera.
+# Mas há falha de conversão que NÃO passa com uma segunda tentativa: no share
+# do JPM o DuckDB devolve `IO Error: Could not move file: Access is denied`
+# ao renomear o arquivo do banco, e ali toda leitura do dia pagava a fila do
+# espelho, a conversão inteira, o segundo `_ler` — e caía no JSON do mesmo
+# jeito. Pior: o `_cura()` do fim ainda ENFILEIRAVA uma retentativa, que
+# atravancava a cura síncrona da leitura seguinte. Uma tela que abre oito
+# arquivos-dia pagava isso oito vezes, e o Summary não terminava de carregar.
+#
+# Então o arquivo cuja cura não resolveu entra em QUARENTENA: pela janela, a
+# leitura vai DIRETO ao JSON, sem fila e sem retentativa. É a mesma forma do
+# `_ensure_notif_db` que falha e espera 5 min antes de tentar de novo — a
+# diferença entre um banco frio (curável, e a espera se paga) e um banco que
+# o ambiente não deixa escrever (incurável até alguém mexer no share).
+#
+# A quarentena é por ARQUIVO de origem e vive só no processo: reiniciar o app
+# ou esperar a janela tenta de novo, que é o que faz a correção do share valer
+# sem ninguém rodar nada. `OTC_DUCK_HEAL_RETRY_SECONDS` ajusta; `0` desliga.
+try:
+    _CURA_ESPERA = float(os.getenv('OTC_DUCK_HEAL_RETRY_SECONDS', '300') or 0)
+except ValueError:
+    _CURA_ESPERA = 300.0
+_cura_falhou = {}
+_cura_lock = threading.Lock()
+
+
+def _cura_em_quarentena(jpath):
+    if not _CURA_ESPERA:
+        return False
+    with _cura_lock:
+        return time.monotonic() < _cura_falhou.get(jpath, 0.0)
+
+
+def _cura_marca_falha(jpath):
+    """A cura rodou e o banco continua sem responder — não insista já."""
+    if not _CURA_ESPERA:
+        return
+    with _cura_lock:
+        novo = jpath not in _cura_falhou or _cura_falhou[jpath] < time.monotonic()
+        _cura_falhou[jpath] = time.monotonic() + _CURA_ESPERA
+    if novo:
+        log.warning('[duck-read] a cura não resolveu %s — servindo o JSON e '
+                    'sem tentar de novo por %.0f min (o log do duck-mirror diz '
+                    'por quê; ajuste em OTC_DUCK_HEAL_RETRY_SECONDS)',
+                    os.path.basename(jpath), _CURA_ESPERA / 60.0)
+
+
+def _cura_marca_ok(jpath):
+    if _CURA_ESPERA and jpath in _cura_falhou:
+        with _cura_lock:
+            _cura_falhou.pop(jpath, None)
+
 
 def _memo_req():
     """Memo por REQUEST (Flask `g`); None fora de request. O mesmo arquivo-dia
@@ -215,11 +268,16 @@ def table_rows(db_name, table, rel, schema='main', order_by=None, heal=None,
             # serializado, nunca dois escritores no mesmo banco) e relê. Com o
             # espelho desligado ou no timeout, sobra o aviso assíncrono e o
             # chamador cai no JSON — o canal de emergência.
+            if _cura_em_quarentena(jpath):
+                return None                       # já se sabe que não resolve
             from apps.pages import duck_mirror
             if duck_mirror.convert_sync(jpath, kind=sync_kind):
                 rows = _ler()
             if rows is None:
+                _cura_marca_falha(jpath)
                 _cura()
+        else:
+            _cura_marca_ok(jpath)
         return rows
     except Exception:                                       # noqa: BLE001
         return None
@@ -350,10 +408,15 @@ def day_payload(path):
         if dados is None:
             # CURA SÍNCRONA — ver table_rows; espelho desligado/timeout →
             # aviso assíncrono e o chamador cai no JSON.
+            if _cura_em_quarentena(jpath):
+                return None                       # já se sabe que não resolve
             if duck_mirror.convert_sync(jpath):
                 dados = _ler()
             if dados is None:
+                _cura_marca_falha(jpath)
                 duck_mirror.notify_write(jpath)
+        elif dados is not _OBJETO:
+            _cura_marca_ok(jpath)
         if dados is _OBJETO:
             if memo is not None:
                 memo[chave] = None           # payload-objeto: não reabrir o banco neste request

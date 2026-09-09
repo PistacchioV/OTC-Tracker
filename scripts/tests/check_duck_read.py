@@ -238,6 +238,51 @@ check('5. janela expirada: o banco segue respondendo',
 check('5. leitura rapida NAO arma',
       (DR._freio_mede(0.0, 'x.db'), DR._freio_armado())[1], False)
 
+# ── 6. a cura que NAO cura entra em QUARENTENA ──────────────────────────────
+# No share do JPM a conversao falha com `IO Error: Could not move file: Access
+# is denied` e NAO passa numa segunda tentativa. Sem quarentena, toda leitura
+# do dia pagava a fila do espelho + a conversao inteira + o segundo `_ler` e
+# caia no JSON do mesmo jeito — e ainda enfileirava uma retentativa que
+# atravancava a cura da leitura seguinte. Uma tela que abre oito arquivos-dia
+# pagava isso oito vezes: era o Summary que nao terminava de carregar.
+DIA = os.path.join(TMP, 'cache', 'new deals', 'NDF', 'Commodities', '2026', '06',
+                   '20260618_ndfcomm.json')
+R._atomic_write_json(DIA, [{'Deal': 'Q1'}])
+M.flush(20)
+check('6. antes de quebrar, o dia vem do BANCO', DR.day_payload(DIA), [{'Deal': 'Q1'}])
+
+tentativas = []
+_sync_real, _notify_real = M.convert_sync, M.notify_write
+# A conversao "roda" e nao converte. O aviso ASSINCRONO tambem e calado: a
+# thread do espelho converteria o arquivo por tras, e o que se testa aqui e a
+# leitura que continua batendo num banco que nao cura.
+M.convert_sync = lambda *a, **k: (tentativas.append(a[0] if a else None), True)[1]
+M.notify_write = lambda *a, **k: None
+# Escrita CRUA de proposito: o funil `_atomic_write_json` avisa o espelho, e a
+# thread dele converteria o arquivo por fora — o que se quer aqui e justamente
+# o banco ficando DEFASADO com a cura falhando.
+with open(DIA, 'w', encoding='utf-8') as fh:
+    fh.write(json.dumps([{'Deal': 'Q2'}], ensure_ascii=False))
+DR._cura_falhou.clear()
+check('6. a primeira leitura tenta curar e cai no JSON',
+      (DR.day_payload(DIA), len(tentativas)), (None, 1))
+check('6. a segunda NAO tenta de novo — quarentena',
+      (DR.day_payload(DIA), len(tentativas)), (None, 1))
+check('6. e o arquivo esta marcado', DR._cura_em_quarentena(DIA), True)
+check('6. quem cai aqui ainda LE, pelo JSON',
+      DR.day_records(DIA), [{'Deal': 'Q2'}])
+
+DR._cura_falhou[DIA] = _t.monotonic() - 1     # a janela expira
+check('6. janela expirada: tenta curar de novo',
+      (DR.day_payload(DIA), len(tentativas)), (None, 2))
+
+M.convert_sync, M.notify_write = _sync_real, _notify_real
+DR._cura_falhou.clear()
+M.notify_write(DIA)
+M.flush(20)
+check('6. curado de verdade, o banco volta a responder', DR.day_payload(DIA), [{'Deal': 'Q2'}])
+check('6. e o sucesso LIMPA a marca', DR._cura_em_quarentena(DIA), False)
+
 print()
 if fails:
     print('FAILED: %d check(s)' % len(fails))
