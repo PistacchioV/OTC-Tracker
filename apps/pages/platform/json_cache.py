@@ -296,6 +296,64 @@ def _day_files(raiz, sufixo='', desde=None, ate=None):
             yield (caminho, nome, mtime, size)
 
 
+def _day_prefetch(dias):
+    """Aquece o memo para uma lista de arquivos-dia, com UMA abertura por banco.
+
+    `dias` são as triplas do `_day_files`. Quem vai LER a árvore inteira chama
+    isto antes do laço; o `_day_json` de cada dia acha tudo no memo e não abre
+    banco nenhum.
+
+    Por que não está dentro do `_day_files`: nem todo mundo que enumera lê
+    tudo. O finder de deal para no primeiro que casa, e adiantar quinhentos
+    dias para ler três seria trocar um desperdício por outro. É opt-in, como o
+    `otcCellCopy` e o `otcExportAdvanced` — a tela que não chama se comporta
+    exatamente como antes.
+
+    O que já está no memo é PODADO antes de ir ao banco: no processo quente a
+    segunda busca não abre nada, e essa é a razão de o defeito só aparecer
+    depois de um restart — que na instância acontece várias vezes ao dia.
+
+    Melhor esforço em tudo: dia que o banco não responder fica de fora e o
+    `_day_json` faz o que sempre fez, cura síncrona incluída."""
+    pendentes = []
+    with _daycache_lock:
+        for item in (dias or []):
+            # O `_day_files` devolve `(caminho, NOME, mtime, tamanho)` e o
+            # `_optcomm_file_list` devolve `(caminho, mtime, tamanho)`. O que
+            # os dois têm em comum é o caminho na frente e o par (mtime,
+            # tamanho) no FIM, então é por aí que se lê — posicionar pelo
+            # começo lia o nome do arquivo como mtime, e a comparação com o
+            # manifest estourava calada, deixando o prefetch sem efeito
+            # nenhum com o laço abrindo o banco dia a dia como antes.
+            try:
+                fp, mtime, size = item[0], item[-2], item[-1]
+            except (TypeError, IndexError):
+                continue
+            achado = _daycache_memo.get(fp)
+            if achado and achado[0] == mtime and achado[1] == size:
+                continue
+            pendentes.append((fp, mtime, size))
+    if not pendentes:
+        return 0
+    try:
+        from apps.pages import duck_read
+        prontos = duck_read.prefetch_days(pendentes)
+    except Exception:                                       # noqa: BLE001
+        return 0
+    if not prontos:
+        return 0
+    achadas = {fp: (mt, sz) for fp, mt, sz in pendentes}
+    with _daycache_lock:
+        if len(_daycache_memo) + len(prontos) >= _DAYCACHE_MAX:
+            _daycache_memo.clear()
+        for fp, registros in prontos.items():
+            mt, sz = achadas.get(fp, (None, None))
+            if mt is None:
+                continue
+            _daycache_memo[fp] = (mt, sz, registros)
+    return len(prontos)
+
+
 def _day_json(fp, mtime, size, mutavel=False):
     """O conteúdo de um arquivo-dia como LISTA, memoizado por (mtime, tamanho).
 

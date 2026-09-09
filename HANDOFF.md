@@ -17408,3 +17408,156 @@ contratado, e a composição de taxa é o palpite menos confiável dos quatro.
   a seleção é refeita no `mouseup`, preservada quando o clique arrastou para
   escolher um trecho, e **delegada no contêiner**, porque o campo de data que se
   VÊ é o `altInput` que o flatpickr cria depois.
+
+---
+
+## §428 — A leitura em lote: um banco por PRODUTO, não um por DIA (2026-09-09)
+
+O relato foi "carregou, mas demorou MUIIIIITO", e a suspeita natural era a
+ENUMERAÇÃO: o `_day_files` varre a árvore de `cache/` com `os.scandir`, e no
+share cada pasta de mês é uma ida de rede. Medido com 500 arquivos-dia de 40
+registros — o volume de dois anos de um produto —, em disco LOCAL:
+
+```
+enumerar (scandir)  ...........      1,3 ms  (53 listagens de diretório)
+ler dia a dia .................  10256,9 ms  (500 aberturas de banco)
+ler em lote ...................    134,9 ms  (1 abertura)          → 76x
+```
+
+**A enumeração custa 0,01% do total.** O que custa é a LEITURA, e por um motivo
+que só aparece quando se olha a quebra dos bancos: ela é por PRODUTO (§336), e
+por isso os quinhentos arquivos-dia de `new deals/NDF/Vanilla` são quinhentas
+TABELAS do MESMO `Vanilla.db`. O `day_payload` é por CAMINHO, então abria esse
+mesmo arquivo uma vez por dia — no share, a 12,67 ms por abertura (§4), são
+~6,3 s só de abrir, e cada abertura toma o lock de arquivo que o espelho precisa
+para converter.
+
+`duck_read.prefetch_days(dias)` agrupa os dias por BANCO, abre cada um UMA vez,
+lê o `_manifest` inteiro numa consulta e depois as tabelas frescas. O
+`_day_prefetch` do `json_cache` é a porta: ele poda o que já está no memo (no
+processo quente não abre nada — e é por isso que o defeito só aparece depois de
+um restart, que na instância acontece várias vezes ao dia) e guarda o resultado
+no `_daycache_memo`, de onde o `_day_json` de cada dia serve sem tocar no banco.
+
+Três coisas que não dão erro nenhum:
+
+- **a validação dos `_raw` fica FORA do `with`**, como no `day_payload` — foi o
+  `json.loads` dentro da conexão que segurou um banco por 235 s na instância
+  (§4). Em lote isso pesaria mais, não menos: são todos os dias de uma vez;
+- **é OPT-IN.** Nem todo mundo que enumera lê tudo: o finder de deal para no
+  primeiro que casa, e adiantar quinhentos dias para ler três seria trocar um
+  desperdício por outro. Estão ligados os treze laços que leem a árvore inteira
+  (as quatro buscas de New Deals, o Deals Monitor e as oito da Intrag);
+- **caminho na frente, `(mtime, tamanho)` no FIM.** O `_day_files` devolve
+  `(caminho, NOME, mtime, tamanho)` e o `_optcomm_file_list` devolve
+  `(caminho, mtime, tamanho)`. Lendo pelas três primeiras posições, o NOME do
+  arquivo entrava como mtime, a comparação com o manifest estourava calada e o
+  prefetch não fazia efeito nenhum — com o laço abrindo o banco dia a dia como
+  antes, e o teste dizendo "1 abertura" porque parava de contar cedo demais.
+  `check_daycache.py` §8 MEDE as aberturas, e conta até o fim do laço.
+
+### E a enumeração, então?
+
+Ela também saiu do disco, mas só onde é seguro: `duck_read.day_files(raiz)` lê
+o `_manifest` — que guarda o caminho relativo, o mtime e o tamanho de cada
+arquivo convertido, exatamente as quatro coisas que o `_day_files` devolve — e
+responde sem listar diretório nenhum. `None` é o canal de emergência de sempre
+(espelho desligado, banco que ainda não existe), e aí a árvore é varrida.
+
+**O que o banco não converteu não aparece**, e é por isso que a árvore certa
+para ela é a que só a aplicação escreve. Hoje é uma só: o snapshot do Pending
+Confirmation, gravado pela manutenção das 11:30 pelo funil `_atomic_write_json`,
+que avisa o espelho na mesma hora. Numa árvore que alguém pode encher por fora,
+um arquivo posto à mão ficaria invisível — sem erro nenhum, que é a pior forma.
+
+## §429 — O Daily Metric ficava mais lento a cada dia (2026-09-09)
+
+A mesa reclamou da lentidão para gerar o e-mail do card **Daily Metric —
+Outstanding Confirmation Brazil OTC**. Perfilado, o card inteiro custa
+single-digit ms em tudo, menos numa coisa:
+
+```
+_pc_latest_snapshot_rows ....    4,8 ms
+_fxo_refdata_by_spn .........    6,3 ms
+queries.pivot ...............    1,9 ms
+_pc_metrics_history .........  187,8 ms   ← 26 aberturas de banco
+```
+
+`_pc_metrics_history` monta a série histórica lendo TODO snapshot já gravado, e
+fazia as três coisas erradas ao mesmo tempo: `os.walk` na árvore inteira, uma
+abertura de banco POR SNAPSHOT (eles são tabelas do mesmo
+`db/cache/pending-confirmation.db`) e nenhum memo — com o card E a página
+`/pending-confirmation/metrics` chamando a função.
+
+O detalhe que importa: a manutenção das 11:30 grava um snapshot por dia útil e
+não apaga nenhum, então **essa conta cresce todo dia**. Vinte e seis snapshots
+na dev são 26 aberturas; depois de um ano na instância são ~250, ou 3,2 s só de
+abrir, no share.
+
+Hoje: enumeração pelo `_manifest`, leitura pelo `_day_prefetch` e
+`@once_per_request` por cima — 187,8 ms → 24,3 ms, 26 aberturas → 2, zero
+listagens de diretório. Fora de um request o decorator não memoiza (§7), então a
+rotina agendada continua enxergando o snapshot novo aparecer embaixo dela.
+
+## §430 — O Delete da Intrag não apagava nada (2026-09-09)
+
+"Dou um delete all e importo de novo e ele vem com o mesmo status de Pending, e
+não como New."
+
+O Delete das QUATRO telas de Intrag (NDF, Option, Swap e DCE Option) era
+`table.row().remove()` e mais nada: nenhuma requisição, nenhum endpoint, nenhuma
+gravação. A linha sumia da tela e voltava no F5 — o "This action cannot be
+undone" do balão se desfazia com um refresh.
+
+Duas coisas plausíveis, uma escondendo a outra. O upsert do import preserva
+`status`, `maker`, `checker` e `intrag_id` da linha que já existe — é o que faz
+reimportar não desfazer a esteira (§409). Como a linha nunca tinha saído do
+arquivo, o import a reencontrava e devolvia o status ANTIGO. Apagava-se tudo,
+importava de novo, e as linhas voltavam `Pending`: o Delete parecia ter
+funcionado (a tela esvaziou) e o import parecia estar errado.
+
+`/api/intrag/<family>/delete` grava. Três decisões:
+
+- **a tela só remove a linha DEPOIS do sucesso do servidor.** Remover antes é o
+  que criava a diferença entre o que se vê e o que está gravado, que é o defeito
+  inteiro;
+- **as linhas são reagrupadas POR ARQUIVO antes de gravar.** Apagando uma a uma,
+  cada linha custaria um read-modify-write do dia inteiro — apagar 200 linhas
+  reescreveria o arquivo 200 vezes. O ciclo roda sob o `_cache_lock` e grava
+  pelo `_atomic_write_json`, que é quem avisa o espelho: gravar por fora
+  deixaria a tela lendo do banco a linha que o arquivo já não tem;
+- **o finder tenta DE NOVO sem a data** quando a primeira busca não acha. Ele
+  monta o caminho a partir da data e, quando o arquivo existe mas não tem o
+  deal, PARA ali — a varredura da árvore só roda quando não houve candidato
+  nenhum. A tela de Option manda a Registration Date, que nem sempre é a data do
+  arquivo, e sem a segunda tentativa a linha voltaria como "não encontrada"
+  tendo o arquivo dela em disco.
+
+Família desconhecida é **400**, nunca um sucesso vazio: apagar zero linhas em
+silêncio parecendo que apagou é o mesmo defeito de novo.
+
+## §431 — O VCP tem uma SEGUNDA fonte, e ela é a posição (2026-09-09)
+
+Depois da cascata CNPJ → conta (§427), os quatro avisos de inexistência de PU
+apareceram na tela — mas três deles com o Código do Contrato preenchido e o
+resto da linha vazio. Não era falta de cadastro: era que não havia identificador
+NENHUM para cadastrar.
+
+As quatro colunas da direita do VCP (conta da contraparte, CPF/CNPJ e os dois
+indexadores) saem todas do MESMO lugar, o arquivo de eventos
+(`eventos-swap-jpm`), por `ev = events.get(...)`. Contrato que não está lá sai
+com as quatro em branco de uma vez — e é essa simultaneidade que denuncia a
+causa: quando uma célula falta é cadastro, quando as quatro faltam juntas é o
+JOIN.
+
+`_vcp_position_map` é a segunda fonte: a DPOSICAO-SWAP tem os mesmos campos
+(`Contraparte` é a CONTA CETIP dela no índice 7, `CPF/CNPJ Cliente Contraparte`
+no 8, `Código índice` de cada perna no 40 e no 50), chaveados pelo `Contrato` —
+a mesma chave que o §427 fixou para o DFLUXO, e pela mesma razão: o `Código
+Identificador` é a LOB e se repete no dia inteiro. VCP não se nomeia pelo
+código, então o indexador cai no `Nome Tipo/Classe` da perna quando a curva
+resolve para VCP (§6).
+
+Ela é FALLBACK e não substituição: onde o evento responde, ele vence. O evento é
+do dia da liquidação e a posição é uma foto; preferir a posição trocaria um dado
+do evento por um mais genérico sem ninguém pedir.

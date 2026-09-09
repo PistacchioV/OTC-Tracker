@@ -22,7 +22,10 @@ O que este script prova:
   5. a ORDEM e por nome, nos dois niveis: a ordem crua do `scandir` e a do
      sistema de arquivos, e a mesma base renderia listas diferentes no share e
      na dev;
-  6. nenhum endpoint voltou a usar `os.walk`.
+  6. nenhum endpoint voltou a usar `os.walk`;
+  7. o PREFETCH abre o banco do produto UMA vez, nao uma por dia — e o
+     que ja esta no memo nao volta ao banco. E medido, nao lido: contar
+     texto nao provaria que o caminho quente mudou.
 """
 import ast
 import builtins
@@ -197,6 +200,37 @@ check('nenhuma rota varre a arvore com os.walk', sorted(_sobrou), [])
 # invalidaria, mas contar com isso e contar com a resolucao do relogio do share.
 check('a busca generica esquece o arquivo que reescreveu',
       '_daycache_forget(fpath)' in _src, True)
+
+print('\n== 8. o prefetch: UMA abertura de banco para o produto inteiro ==')
+# A quebra dos bancos e por PRODUTO (§4), entao os arquivos-dia de um produto
+# sao TABELAS do mesmo `.db`. O `day_payload` e por caminho e abria esse mesmo
+# arquivo uma vez por dia: medido com 500 dias em disco local, 9,7 s contra
+# 47 ms em lote — e no share cada abertura custa 12,67 ms so de abrir. Isto
+# MEDE as aberturas, como o check_stat_por_linha mede os stats: contar texto
+# nao provaria que o caminho quente mudou.
+import datetime as _dt                                     # noqa: E402
+import subprocess                                          # noqa: E402
+
+_PRE = os.path.join(ROOT, 'scripts', 'tests', '_daycache_prefetch_probe.py')
+_env = dict(os.environ)
+_env['OTC_DISABLE_SCHEDULERS'] = '1'
+_out = subprocess.run([sys.executable, _PRE], capture_output=True, text=True, env=_env)
+_linhas = [l for l in _out.stdout.split('\n') if l.startswith('PROBE ')]
+if not _linhas:
+    check('a sonda rodou', _out.stdout[-400:] + _out.stderr[-400:], 'PROBE ...')
+else:
+    _d = json.loads(_linhas[-1][6:])
+    # `dias - 1`: um dia fica de proposito FORA do banco, ver a sonda.
+    check('sem prefetch, uma abertura por dia', _d['solo_abre'], _d['dias'] - 1)
+    check('com prefetch, uma abertura so', _d['lote_abre'], 1)
+    check('e o conteudo e o mesmo', _d['solo_regs'] == _d['lote_regs'] and _d['solo_regs'] > 0, True)
+    # O que ja esta no memo nao volta ao banco: no processo quente a segunda
+    # busca nao abre nada, e e por isso que o defeito so aparece depois de um
+    # restart — que na instancia acontece varias vezes ao dia.
+    check('memo quente: o prefetch nao abre nada', _d['quente_abre'], 0)
+    # Prefetch e otimizacao, nunca decisao: o dia que o banco nao responde fica
+    # de fora e o `_day_json` faz o que sempre fez, cura sincrona incluida.
+    check('dia fora do banco continua sendo lido', _d['sem_banco_regs'] > 0, True)
 
 shutil.rmtree(TMP, ignore_errors=True)
 print('\n' + ('FALHOU: ' + ', '.join(fails) if fails else 'TUDO OK'))

@@ -2,6 +2,7 @@
 """As rotas das telas da Intrag (NDF, Option, Swap e DCE Option)."""
 import json
 import os
+import traceback
 from datetime import datetime
 
 from flask import jsonify, request, session
@@ -32,7 +33,11 @@ def api_intrag_ndf():
         # Com intervalo há o que PODAR: ano e mês inteiros fora dele são
         # descartados antes de o `scandir` entrar neles. Quem decide continua
         # sendo a data no NOME do arquivo, logo abaixo.
-        for fp, fname, mtime, size in _R()._day_files(persistence.INTRAG_NDF_CACHE_DIR, '_intrag_ndf.json', d_from, d_to):
+        _dias = list(_R()._day_files(persistence.INTRAG_NDF_CACHE_DIR, '_intrag_ndf.json', d_from, d_to))
+        # UMA abertura de banco para todos os dias enumerados, em vez de
+        # uma por dia: eles são tabelas do MESMO banco do produto (§4).
+        _R()._day_prefetch(_dias)
+        for fp, fname, mtime, size in _dias:
             fdate = _R()._parse_date_any(fname[:8])
             if fdate is None:
                 continue
@@ -55,7 +60,11 @@ def api_intrag_ndf():
             _R().log.warning('[INTRAG NDF] date load error date=%r: %s', date_str, exc)
     else:
         # Sem data nenhuma: a árvore inteira, e aí só o memo ajuda.
-        for fp, _fname, mtime, size in _R()._day_files(persistence.INTRAG_NDF_CACHE_DIR, '_intrag_ndf.json'):
+        _dias = list(_R()._day_files(persistence.INTRAG_NDF_CACHE_DIR, '_intrag_ndf.json'))
+        # UMA abertura de banco para todos os dias enumerados, em vez de
+        # uma por dia: eles são tabelas do MESMO banco do produto (§4).
+        _R()._day_prefetch(_dias)
+        for fp, _fname, mtime, size in _dias:
             entries.extend(_R()._day_json(fp, mtime, size))
     # `na_2` é a coluna Information Source dos dois layouts; linha gravada
     # antes da limpeza ainda traz `[`/`|` no arquivo — sai legível daqui.
@@ -76,7 +85,11 @@ def api_intrag_option():
         # Com intervalo há o que PODAR: ano e mês inteiros fora dele são
         # descartados antes de o `scandir` entrar neles. Quem decide continua
         # sendo a data no NOME do arquivo, logo abaixo.
-        for fp, fname, mtime, size in _R()._day_files(persistence.INTRAG_OPT_CACHE_DIR, suffix, d_from, d_to):
+        _dias = list(_R()._day_files(persistence.INTRAG_OPT_CACHE_DIR, suffix, d_from, d_to))
+        # UMA abertura de banco para todos os dias enumerados, em vez de
+        # uma por dia: eles são tabelas do MESMO banco do produto (§4).
+        _R()._day_prefetch(_dias)
+        for fp, fname, mtime, size in _dias:
             fdate = _R()._parse_date_any(fname[:8])
             if fdate is None:
                 continue
@@ -99,7 +112,11 @@ def api_intrag_option():
             _R().log.warning('[INTRAG OPT] date load error date=%r: %s', date_str, exc)
     else:
         # Sem data nenhuma: a árvore inteira, e aí só o memo ajuda.
-        for fp, _fname, mtime, size in _R()._day_files(persistence.INTRAG_OPT_CACHE_DIR, suffix):
+        _dias = list(_R()._day_files(persistence.INTRAG_OPT_CACHE_DIR, suffix))
+        # UMA abertura de banco para todos os dias enumerados, em vez de
+        # uma por dia: eles são tabelas do MESMO banco do produto (§4).
+        _R()._day_prefetch(_dias)
+        for fp, _fname, mtime, size in _dias:
             entries.extend(_R()._day_json(fp, mtime, size))
     return jsonify({'success': True,
                     'entries': queries._limpar_info_source(entries, 'information_source')})
@@ -445,7 +462,11 @@ def api_intrag_swap():
         # Com intervalo há o que PODAR: ano e mês inteiros fora dele são
         # descartados antes de o `scandir` entrar neles. Quem decide continua
         # sendo a data no NOME do arquivo, logo abaixo.
-        for fp, fname, mtime, size in _R()._day_files(persistence.INTRAG_SWAP_CACHE_DIR, suffix, d_from, d_to):
+        _dias = list(_R()._day_files(persistence.INTRAG_SWAP_CACHE_DIR, suffix, d_from, d_to))
+        # UMA abertura de banco para todos os dias enumerados, em vez de
+        # uma por dia: eles são tabelas do MESMO banco do produto (§4).
+        _R()._day_prefetch(_dias)
+        for fp, fname, mtime, size in _dias:
             fdate = _R()._parse_date_any(fname[:8])
             if fdate is None:
                 continue
@@ -468,7 +489,11 @@ def api_intrag_swap():
             _R().log.warning('[INTRAG SWAP] date load error date=%r: %s', date_str, exc)
     else:
         # Sem data nenhuma: a árvore inteira, e aí só o memo ajuda.
-        for fp, _fname, mtime, size in _R()._day_files(persistence.INTRAG_SWAP_CACHE_DIR, suffix):
+        _dias = list(_R()._day_files(persistence.INTRAG_SWAP_CACHE_DIR, suffix))
+        # UMA abertura de banco para todos os dias enumerados, em vez de
+        # uma por dia: eles são tabelas do MESMO banco do produto (§4).
+        _R()._day_prefetch(_dias)
+        for fp, _fname, mtime, size in _dias:
             entries.extend(_R()._day_json(fp, mtime, size))
     return jsonify({'success': True, 'entries': entries})
 
@@ -636,7 +661,11 @@ def api_intrag_dce_option():
         # Com intervalo há o que PODAR: ano e mês inteiros fora dele são
         # descartados antes de o `scandir` entrar neles. Quem decide continua
         # sendo a data no NOME do arquivo, logo abaixo.
-        for fp, fname, mtime, size in _R()._day_files(persistence.INTRAG_DCE_OPT_CACHE_DIR, suffix, d_from, d_to):
+        _dias = list(_R()._day_files(persistence.INTRAG_DCE_OPT_CACHE_DIR, suffix, d_from, d_to))
+        # UMA abertura de banco para todos os dias enumerados, em vez de
+        # uma por dia: eles são tabelas do MESMO banco do produto (§4).
+        _R()._day_prefetch(_dias)
+        for fp, fname, mtime, size in _dias:
             fdate = _R()._parse_date_any(fname[:8])
             if fdate is None:
                 continue
@@ -670,7 +699,11 @@ def api_intrag_dce_option():
             _R().log.warning('[INTRAG DCE OPT] date load error date=%r: %s', date_str, exc)
     else:
         # Sem data nenhuma: a árvore inteira, e aí só o memo ajuda.
-        for fp, _fname, mtime, size in _R()._day_files(persistence.INTRAG_DCE_OPT_CACHE_DIR, suffix):
+        _dias = list(_R()._day_files(persistence.INTRAG_DCE_OPT_CACHE_DIR, suffix))
+        # UMA abertura de banco para todos os dias enumerados, em vez de
+        # uma por dia: eles são tabelas do MESMO banco do produto (§4).
+        _R()._day_prefetch(_dias)
+        for fp, _fname, mtime, size in _dias:
             entries.extend(_R()._day_json(fp, mtime, size))
     return jsonify({'success': True,
                     'entries': queries._limpar_info_source(entries, 'information_source')})
@@ -851,3 +884,30 @@ def api_intrag_dce_option_mapping_intrag_id():
     if results is None:
         return jsonify({'ok': False, 'error': err}), 400
     return jsonify({'ok': True, 'results': results})
+
+@blueprint.route('/api/intrag/<family>/delete', methods=['POST'])
+def api_intrag_delete(family):
+    """Apaga linhas de uma família de Intrag DO ARQUIVO-DIA.
+
+    Existe porque o Delete das quatro telas era `table.row().remove()` e mais
+    nada — a linha sumia da tela e voltava no F5, e o re-import a reencontrava
+    com o status antigo (ver `commands._intrag_delete_entries`).
+
+    Família desconhecida é **400**, nunca um sucesso vazio: a tela que pedir a
+    família errada tem de dizer isso na hora, e não apagar zero linhas em
+    silêncio parecendo que apagou.
+    """
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    payload = request.get_json(silent=True) or {}
+    items = payload.get('items') or []
+    if not isinstance(items, list) or not items:
+        return jsonify({'success': False, 'message': 'No rows to delete'}), 400
+    try:
+        apagadas, nao_achadas = commands._intrag_delete_entries(family, items)
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
+    except Exception:
+        _R().log.error('[intrag-delete] %s failed:\n%s', family, traceback.format_exc())
+        return jsonify({'success': False, 'message': 'Delete failed'}), 500
+    return jsonify({'success': True, 'deleted': apagadas, 'not_found': nao_achadas})

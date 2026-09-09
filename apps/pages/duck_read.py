@@ -541,6 +541,220 @@ def day_payload(path):
         return None
 
 
+def day_files(raiz, sufixo=''):
+    """Os arquivos-dia de uma árvore SEGUNDO O BANCO — `None` se ele não sabe.
+
+    Devolve as mesmas quatro coisas que o `_day_files` do disco
+    (`caminho, nome, mtime, tamanho`), e devolve porque o `_manifest` guarda
+    exatamente isso: uma linha por arquivo convertido, com o caminho relativo,
+    o mtime e o tamanho do JSON que a gerou. Enumerar pelo banco é ler essa
+    tabela; nenhuma listagem de diretório acontece.
+
+    É a última ponta do DB-only (§4). A LEITURA de um dia já vinha do banco
+    desde a fase 3, mas quem dizia QUE DIAS EXISTEM continuava sendo o disco —
+    e no share cada pasta de mês é uma ida de rede, todo dia uma a mais.
+
+    `None` (→ o chamador varre o disco) é o canal de emergência de sempre:
+    espelho desligado, banco que não existe ainda, `_manifest` que não abre.
+    Diferente do `[]`, que é uma árvore que o banco conhece e está vazia.
+
+    **O que o banco não converteu não aparece aqui**, e é por isso que quem
+    chama tem de poder viver com isso: a árvore certa para esta função é a que
+    só a aplicação escreve (o snapshot do Pending Confirmation, gravado pela
+    manutenção das 11:30 pelo funil `_atomic_write_json`, que avisa o espelho
+    na mesma hora). Numa árvore que alguém pode encher por fora, um arquivo
+    posto à mão ficaria invisível — sem erro nenhum, que é a pior forma."""
+    try:
+        from apps.pages import duck_mirror
+        raiz_dados = _data_root()
+        raiz_abs = os.path.normpath(str(raiz))
+        rel_raiz = os.path.relpath(raiz_abs, raiz_dados)
+        if rel_raiz.startswith('..'):
+            return None
+        rel_raiz = rel_raiz.replace(os.sep, '/').strip('/')
+        out = duck_mirror._out_dir(raiz_dados)
+
+        # A pasta `db/` ESPELHA a árvore de origem (§4), então o banco de uma
+        # rotina é `<rel>.db` — e, quando o produto guarda mais de um arquivo
+        # por dia, uma PASTA de bancos com o mesmo `<rel>`. Os dois casos são
+        # uma conferência barata, e não uma varredura.
+        base = os.path.join(out, *rel_raiz.split('/')) if rel_raiz else out
+        bancos = []
+        if os.path.isfile(base + '.db'):
+            bancos.append(base + '.db')
+        if os.path.isdir(base):
+            try:
+                with os.scandir(base) as it:
+                    bancos.extend(sorted(e.path for e in it
+                                         if e.is_file() and e.name.endswith('.db')))
+            except OSError:
+                pass
+        if not bancos:
+            return None
+    except Exception:                                       # noqa: BLE001
+        return None
+
+    prefixo = (rel_raiz + '/') if rel_raiz else ''
+    achados, respondeu = {}, False
+    for db in bancos:
+        t0 = time.monotonic()
+        gate = db_gate(db)
+        try:
+            gate.enter_read(_GATE_READ_WAIT_SECONDS)
+        except Exception:                                   # noqa: BLE001
+            continue
+        try:
+            with duckdb_read(db) as con:
+                linhas = con.execute(
+                    'SELECT path, mtime, fsize FROM _manifest').fetchall()
+            respondeu = True
+        except Exception:                                   # noqa: BLE001
+            continue
+        finally:
+            gate.exit_read()
+            _freio_mede(time.monotonic() - t0, db)
+        for chave, mtime, fsize in linhas:
+            # A chave do manifest leva a VERSÃO do formato (`...json#raw2`) —
+            # o caminho é o que vem antes do `#`.
+            rel = str(chave or '').split('#', 1)[0]
+            if not rel.startswith(prefixo) or not rel.endswith('.json'):
+                continue
+            if sufixo and not rel.endswith(sufixo):
+                continue
+            caminho = os.path.normpath(os.path.join(raiz_dados, *rel.split('/')))
+            achados[caminho] = (caminho, os.path.basename(rel), mtime, fsize)
+    if not respondeu:
+        return None
+    # A ORDEM é a mesma do disco — por caminho —, senão a mesma base renderia
+    # listas diferentes conforme a fonte da enumeração.
+    return [achados[k] for k in sorted(achados)]
+
+
+def prefetch_days(dias):
+    """Vários arquivos-dia numa ABERTURA POR BANCO, em vez de uma por dia.
+
+    `dias` são as triplas `(caminho, mtime, tamanho)` que o `_day_files`
+    devolve — o mtime e o tamanho já vêm da listagem, então nada aqui volta ao
+    disco. O retorno é `{caminho: registros}`, e o dia que o banco não puder
+    responder simplesmente NÃO aparece: quem pediu cai no `day_payload` de
+    sempre, com cura síncrona e tudo. Prefetch é otimização, nunca decisão —
+    ele não recusa dia nenhum, só adianta o que dá.
+
+    Por que ele existe: a quebra dos bancos é por PRODUTO (§4), então os
+    quinhentos arquivos-dia de `new deals/NDF/Vanilla` são quinhentas TABELAS
+    do MESMO `Vanilla.db`. A busca da tela lê o histórico inteiro, e o
+    `day_payload` — que é por caminho — abria esse mesmo arquivo uma vez por
+    dia. Medido com 500 dias e 40 registros cada, em disco LOCAL:
+
+        enumerar (scandir)  ...........      1,3 ms  (53 listagens)
+        ler dia a dia .................  10256,9 ms  (500 aberturas)
+        ler em lote ...................    134,9 ms  (1 abertura)   → 76x
+
+    A varredura de diretório custa 0,01% do total: a ENUMERAÇÃO nunca foi o
+    problema, por mais que pareça ser. No share cada abertura foi medida em
+    12,67 ms (§4), então só o ABRIR são ~6,3 s — e cada uma toma o lock de
+    arquivo, que é o que o espelho precisa para converter. Era esta a conta
+    por trás de "carregou, mas demorou MUIIIIITO".
+
+    A VALIDAÇÃO dos `_raw` fica FORA do `with`, como no `day_payload`: foi o
+    `json.loads` dentro da conexão que segurou um banco por 235 s na instância.
+    Aqui isso pesaria mais, não menos — são todos os dias de uma vez."""
+    try:
+        from apps.pages import duck_mirror
+        from apps.pages import json_to_duckdb as core
+        raiz = _data_root()
+    except Exception:                                       # noqa: BLE001
+        return {}
+
+    # ── agrupar por BANCO ───────────────────────────────────────────────────
+    # A chave do agrupamento é o `db_name` do alvo, que é o que decide o
+    # arquivo aberto. Dois produtos da mesma rotina são dois bancos e por isso
+    # dois grupos — é a quebra por produto do §4, e ela vale aqui de graça.
+    grupos = {}
+    for item in (dias or []):
+        # Caminho na frente, (mtime, tamanho) no FIM — ver a nota do
+        # `_day_prefetch`: o `_day_files` põe o NOME do arquivo no meio.
+        try:
+            jpath, mtime, size = os.path.normpath(str(item[0])), item[-2], item[-1]
+        except (TypeError, IndexError):
+            continue
+        rel = os.path.relpath(jpath, raiz)
+        if rel.startswith('..'):
+            continue
+        rel = rel.replace(os.sep, '/')
+        alvo = core._daily_rel_target(rel)
+        if alvo is None:
+            continue
+        db_name, schema, tabela = alvo
+        grupos.setdefault(db_name, []).append((jpath, rel, schema, tabela, mtime, size))
+
+    out = {}
+    for db_name, itens in grupos.items():
+        db = os.path.join(duck_mirror._out_dir(raiz), *db_name.split('/'))
+        if not os.path.isfile(db):
+            continue
+        crus_por_dia = {}
+        t0 = time.monotonic()
+        gate = db_gate(db)
+        try:
+            gate.enter_read(_GATE_READ_WAIT_SECONDS)
+        except Exception:                                   # noqa: BLE001
+            continue
+        try:
+            with duckdb_read(db) as con:
+                # O manifest inteiro de uma vez: ele tem uma linha por
+                # arquivo-dia do produto e é a prova de frescor de todos eles.
+                # Uma consulta por dia seria o mesmo defeito numa escala menor.
+                try:
+                    frescor = {p: (mt, fs, tg) for p, mt, fs, tg in con.execute(
+                        'SELECT path, mtime, fsize, targets FROM _manifest').fetchall()}
+                except Exception:                           # noqa: BLE001
+                    frescor = {}
+                for jpath, rel, schema, tabela, mtime, size in itens:
+                    row = frescor.get(core._dataset_manifest_key(rel))
+                    if not row:
+                        continue
+                    if abs(row[0] - mtime) >= 1e-6 or row[1] != size:
+                        continue           # defasado: o day_payload cura
+                    try:
+                        if json.loads(row[2] or '[]') != ['%s.%s' % (schema, tabela)]:
+                            continue       # payload-objeto: fica no JSON
+                        alvo_sql = '%s.%s' % (q(schema), q(tabela))
+                        cols = [d[0] for d in con.execute(
+                            'SELECT * FROM %s LIMIT 0' % alvo_sql).description]
+                        if cols == ['_empty']:
+                            crus_por_dia[jpath] = []       # o dia existe e está vazio
+                            continue
+                        if '_raw' not in cols or '_seq' not in cols:
+                            continue
+                        crus_por_dia[jpath] = [c for (c,) in con.execute(
+                            'SELECT "_raw" FROM %s ORDER BY CAST("_seq" AS BIGINT)'
+                            % alvo_sql).fetchall()]
+                    except Exception:                       # noqa: BLE001
+                        continue
+        except Exception:                                   # noqa: BLE001
+            crus_por_dia = {}
+        finally:
+            gate.exit_read()
+            _freio_mede(time.monotonic() - t0, db)
+
+        # Fora da conexão e fora do lock — ver o docstring.
+        for jpath, crus in crus_por_dia.items():
+            registros = []
+            for c in crus:
+                if not c:
+                    registros = None
+                    break
+                try:
+                    registros.append(json.loads(c))
+                except ValueError:
+                    registros = None
+                    break
+            if registros is not None:
+                out[jpath] = registros
+    return out
+
+
 def day_records(path):
     """Leitura DB-ONLY de um arquivo-dia payload-LISTA, por caminho: o banco
     responde (curando-se na hora quando frio/defasado — `day_payload`); o JSON

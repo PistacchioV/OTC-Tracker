@@ -598,3 +598,82 @@ def _intrag_run_mapping(deals, match_col, match_val, b3_col, finder):
                 continue
             results.append({'id': did, 'intrag_id': intrag_id, 'status': 'Success'})
     return results, None
+
+
+# ── Delete: a linha sai do ARQUIVO, não só da tela ──────────────────────────
+# As quatro páginas de Intrag tinham um Delete que era `table.row().remove()` e
+# mais nada: nenhum endpoint, nenhuma gravação. A linha sumia da tela até o F5,
+# e o "This action cannot be undone" do balão se desfazia com um refresh.
+#
+# O estrago aparecia no re-import. O upsert do import preserva `status`,
+# `maker`, `checker` e `intrag_id` da linha que já existe — é o que faz
+# reimportar não desfazer a esteira. Como a linha nunca saiu do arquivo, o
+# import a reencontrava e devolvia o status ANTIGO: apagava-se tudo, importava
+# de novo, e as linhas voltavam `Pending` em vez de `New`. Duas coisas
+# plausíveis, uma escondendo a outra.
+_INTRAG_DELETE_FAMILIES = {
+    'ndf':      queries._find_intrag_ndf_entry,
+    'option':   queries._find_intrag_opt_entry,
+    'swap':     queries._find_intrag_swap_entry,
+    'dce-opt':  queries._find_intrag_dce_opt_entry,
+}
+
+
+def _intrag_delete_entries(family, items):
+    """Apaga entradas de uma família de Intrag. → (apagadas, não achadas).
+
+    `items` são `{deal_id, trade_date}` — o mesmo par que o edit e o approve
+    usam, e o mesmo que o finder resolve. Duas decisões:
+
+      * o ciclo inteiro (ler → tirar → gravar) roda sob o `_cache_lock` e a
+        gravação é pelo `_atomic_write_json` (§4), que é quem avisa o espelho:
+        gravar por fora deixaria a tela lendo do banco a linha que o arquivo
+        já não tem;
+      * a lista é reagrupada POR ARQUIVO antes de gravar. Apagando uma a uma,
+        cada linha custaria um read-modify-write do dia inteiro — e apagar 200
+        linhas de um dia reescreveria o arquivo 200 vezes.
+    """
+    finder = _INTRAG_DELETE_FAMILIES.get(family)
+    if finder is None:
+        raise ValueError('unknown intrag family: %r' % (family,))
+    apagadas, nao_achadas = 0, []
+    porarquivo = {}
+    with _R()._cache_lock:
+        for it in (items or []):
+            deal_id = str((it or {}).get('deal_id') or '').strip()
+            if not deal_id:
+                continue
+            td = str((it or {}).get('trade_date') or '').strip()
+            fp, entries, idx = finder(deal_id, td)
+            if fp is None and td:
+                # Data que não é a do arquivo-dia: o finder monta o caminho a
+                # partir dela e, quando o arquivo existe mas não tem o deal,
+                # PARA ali — a varredura da árvore só roda quando não houve
+                # candidato nenhum. A tela de Option manda a Registration Date,
+                # que nem sempre é a data do arquivo, e sem esta segunda
+                # tentativa a linha voltaria como "não encontrada" tendo o
+                # arquivo dela em disco.
+                fp, entries, idx = finder(deal_id, '')
+            if fp is None:
+                nao_achadas.append(deal_id)
+                continue
+            # O finder relê o arquivo a cada chamada; a partir da segunda linha
+            # do mesmo dia vale a cópia que já está sendo editada, senão a
+            # remoção anterior seria desfeita pela leitura nova.
+            if fp in porarquivo:
+                entries = porarquivo[fp]
+                idx = next((i for i, e in enumerate(entries)
+                            if e.get('_deal') == deal_id), None)
+                if idx is None:
+                    nao_achadas.append(deal_id)
+                    continue
+            entries.pop(idx)
+            porarquivo[fp] = entries
+            apagadas += 1
+        for fp, entries in porarquivo.items():
+            _R()._atomic_write_json(fp, entries)
+            _R()._daycache_forget(fp)
+    if apagadas:
+        _R().log.info('[INTRAG %s] %d linha(s) apagada(s) em %d arquivo(s)',
+                      family.upper(), apagadas, len(porarquivo))
+    return apagadas, nao_achadas

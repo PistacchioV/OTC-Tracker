@@ -66,6 +66,10 @@ def _fontes_com_rotas_(base):
                     partes.append(_io.open(_os.path.join(r, a), encoding='utf-8').read())
     return '\n'.join(partes)
 sys.path.insert(0, ROOT)
+# O default do Config e `I:\\`, absoluto so no Windows (§8): sem isto o
+# script morre no import do config no macOS/Linux, antes da 1a asercao.
+os.environ.setdefault('OTC_SHARED_DRIVE_ROOT', tempfile.mkdtemp(prefix='share-root-'))
+
 os.chdir(ROOT)
 
 from apps.pages import routes as R                        # noqa: E402
@@ -112,6 +116,28 @@ def invalida_dia(ref):
     """
     from apps.pages.request_cache import bump_cache_gen
     bump_cache_gen('x_{}.json'.format(ref.strftime('%Y%m%d')))
+
+
+def invalida_raiz():
+    """Esquece TUDO do cache curto entre requests — para quando a RAIZ muda.
+
+    O `invalida_dia` acima nao alcanca `_ops_src_latest_path_cached`: a chave do
+    `@_req_cached` e `cache_day_key(args[0])`, e o primeiro argumento dela e a
+    CHAVE DA FONTE ('swap_pos'), nao uma data. O bump por dia nunca casa com
+    isso, e a resposta — inclusive o `(None, None)` de "nao achei arquivo
+    nenhum" — fica valendo pelos 5 s do TTL.
+
+    Em producao isso e proposital e inofensivo: a raiz e fixa, cinco segundos e
+    a janela em que a sondagem de ate 10 `isfile` por fonte no share nao se
+    repete, e o `bump_cache_gen` do save invalida na hora. Aqui, nao: o teste
+    troca a raiz varias vezes na MESMA corrida e dentro do mesmo TTL, entao a
+    secao seguinte lia o `(None, None)` que a anterior deixou e as tres
+    contagens vinham 0 — com os arquivos no lugar certo, e sem nada acusando.
+    """
+    from apps.pages import request_cache as _rc
+    with _rc._shared_cache_lock:
+        _rc._shared_cache.clear()
+
 
 
 # ── Cadastro de mentira: RefData (nome -> SPN) e CounterpartyDetails (net type +
@@ -739,6 +765,7 @@ tmp = tempfile.mkdtemp(prefix='ops-cashflow-')
 _b3_root = R.B3_JSON_ROOT
 try:
     R.B3_JSON_ROOT = tmp
+    invalida_raiz()          # trocar a RAIZ e trocar o dado
     dref = R._prev_anbima_bizday(datetime.now()).strftime('%y%m%d')
     pos_src = next(s2 for s2 in R._FORECAST_SOURCES if s2['key'] == 'swap_pos')
     flx_src = next(s2 for s2 in R._FORECAST_SOURCES if s2['key'] == 'swap_flx')

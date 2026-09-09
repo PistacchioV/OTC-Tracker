@@ -504,6 +504,7 @@ i.ti-spin, .ti-spin, i.ti-loader, i.ti-loader-2, i.ti-loader-3 { display: inline
 
 {% block extra_javascript %}
 <script src="{{ config.ASSETS_ROOT }}/plugins/jquery/jquery.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/intrag-delete.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.responsive.min.js"></script>
@@ -812,13 +813,22 @@ $(document).ready(function() {
             confirmButtonColor:'#dc3545', cancelButtonColor:'#6c757d'
         }).then(function(r){
             if(!r.isConfirmed) return;
-            // Sort descending so each splice doesn't shift indices of remaining rows
-            toDelete.sort(function(a,b){ return b.rowIdx - a.rowIdx; });
-            toDelete.forEach(function(r){
-                console.log('[NDF-INTRAG DELETE] removing rowIdx:', r.rowIdx, 'id:', r.id);
-                table.row(r.rowIdx).remove();
+            var _itens = toDelete.map(function(r){
+                var d = table.row(r.rowIdx).data() || [];
+                return { deal_id: r.id, trade_date: (d[TRADE_DATE_COL] || '') };
             });
-            selectedRowIds.clear(); toggleDelBtn(false); table.draw(false);
+            // A linha so sai da tela DEPOIS de sair do arquivo. Removendo
+            // antes, o Delete era so visual: voltava no F5 e o re-import a
+            // reencontrava com o status antigo (Pending em vez de New).
+            otcIntragDelete('ndf', _itens).then(function(resp){
+                toDelete.sort(function(a,b){ return b.rowIdx - a.rowIdx; });
+                toDelete.forEach(function(r){ table.row(r.rowIdx).remove(); });
+                selectedRowIds.clear(); toggleDelBtn(false); table.draw(false);
+                otcIntragDeleteWarn(resp);
+            }).catch(function(err){
+                Swal.fire({ icon:'error', title:'Delete failed', text:String(err && err.message || err),
+                            confirmButtonColor:'#dc3545' });
+            });
         });
     });
 
@@ -827,7 +837,15 @@ $(document).ready(function() {
         Swal.fire({ title:'Delete this row?', text:'This action cannot be undone.', icon:'warning',
             showCancelButton:true, confirmButtonText:'Yes, delete', cancelButtonText:'Cancel',
             confirmButtonColor:'#dc3545', cancelButtonColor:'#6c757d'
-        }).then(function(r){ if(r.isConfirmed) table.row(tr[0]).remove().draw(false); });
+        }).then(function(r){
+            if(!r.isConfirmed) return;
+            var d = table.row(tr[0]).data() || [];
+            otcIntragDelete('ndf', [{ deal_id: (d[34] || ''),
+                                        trade_date: (d[TRADE_DATE_COL] || '') }])
+                .then(function(resp){ table.row(tr[0]).remove().draw(false); otcIntragDeleteWarn(resp); })
+                .catch(function(err){ Swal.fire({ icon:'error', title:'Delete failed',
+                    text:String(err && err.message || err), confirmButtonColor:'#dc3545' }); });
+        });
     });
 
     // ── Send (generate .txt on the Intrag network folder) ───────────────────────

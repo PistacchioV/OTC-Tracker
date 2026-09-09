@@ -543,6 +543,37 @@ São dois bancos:
     commit). Quarentena acesa por muito tempo é problema de ambiente a
     resolver, não um modo de operação — o WARNING sai uma vez e nomeia o
     arquivo.
+  - **um banco por PRODUTO significa ler em LOTE, não dia a dia** (§428). A
+    quebra dos bancos é por produto, então os ~500 arquivos-dia de
+    `new deals/NDF/Vanilla` são 500 TABELAS do MESMO `Vanilla.db` — e o
+    `day_payload`, que é por CAMINHO, abria esse arquivo uma vez por dia.
+    Medido com 500 dias em disco LOCAL: enumerar (scandir) **1,3 ms**, ler dia
+    a dia **10.257 ms** (500 aberturas), ler em lote **135 ms** (1 abertura) —
+    **76×**. No share cada abertura custa 12,67 ms, então só o abrir são ~6,3 s,
+    e cada uma toma o lock que o espelho precisa para converter. A varredura de
+    diretório, que é onde se olha primeiro, custa **0,01%** do total. Quem vai
+    ler a árvore inteira chama `_day_prefetch(dias)` antes do laço
+    (`duck_read.prefetch_days` agrupa por banco, lê o `_manifest` numa consulta
+    e depois as tabelas); o `_day_json` de cada dia serve do memo sem tocar no
+    banco. É **opt-in** — o finder de deal para no primeiro que casa, e
+    adiantar 500 dias para ler três é o desperdício ao contrário. Duas
+    armadilhas: a validação dos `_raw` fica FORA do `with` (é o mesmo
+    `json.loads` dos 235 s, agora com todos os dias de uma vez), e a tripla se
+    lê com o **caminho na frente e `(mtime, tamanho)` no FIM** — o `_day_files`
+    põe o NOME do arquivo no meio, e lendo pelas três primeiras posições o nome
+    entrava como mtime, a comparação com o manifest estourava calada e o
+    prefetch não fazia efeito nenhum. `check_daycache.py` §8 MEDE as aberturas.
+  - **a ENUMERAÇÃO de dias também sai do banco, onde é seguro** (§428).
+    `duck_read.day_files(raiz)` lê o `_manifest` — que guarda caminho relativo,
+    mtime e tamanho de cada arquivo convertido, exatamente as quatro coisas que
+    o `_day_files` do disco devolve — e responde sem listar diretório nenhum;
+    `None` é o canal de emergência de sempre e aí a árvore é varrida. **O que o
+    banco não converteu não aparece**, então a árvore certa para ela é a que só
+    a aplicação escreve: hoje é o snapshot do Pending Confirmation, gravado
+    pela manutenção das 11:30 pelo funil `_atomic_write_json`. Numa árvore que
+    alguém pode encher por fora, um arquivo posto à mão ficaria invisível — sem
+    erro nenhum. E como a enumeração custa 0,01% do tempo, **não é por
+    desempenho que se troca**: é para fechar o "só o DB".
   - **o espelho e o leitor DB-only passam por um PORTÃO em memória** (§422):
     o `duck_read` abre `read_only` e a thread do `duck_mirror` abre o MESMO
     arquivo em escrita, no mesmo processo, e o DuckDB recusa a segunda
@@ -1735,6 +1766,56 @@ transparência mostra os blobs do fundo nítidos — por isso no modo reduzido o
 cartão, a topbar e a sidenav são COR SÓLIDA composta (tokens do §16), e o
 defeito é invisível na dev, onde o macOS roda o modo full com blur. Mudança de
 tema/vidro se valida forçando `localStorage.__OTC_TRACKER_FX__ = 'reduced'`.
+
+### A série histórica que cresce um snapshot por dia
+
+O card **Daily Metric — Outstanding Confirmation Brazil OTC** ficou lento e a
+causa era uma só função: `_pc_metrics_history` custava **187,8 ms** contra
+single-digit de todo o resto do card. Ela monta a série lendo TODO snapshot já
+gravado, e fazia as três coisas erradas juntas — `os.walk` na árvore inteira,
+uma abertura de banco POR SNAPSHOT (eles são tabelas do mesmo
+`db/cache/pending-confirmation.db`) e nenhum memo, com o card E a página
+`/pending-confirmation/metrics` chamando.
+
+O que torna isso diferente de uma função só lenta: **a manutenção das 11:30
+grava um snapshot por dia útil e não apaga nenhum**, então a conta cresce todo
+dia. Vinte e seis na dev são 26 aberturas; depois de um ano na instância são
+~250, ou 3,2 s só de abrir no share. Hoje é enumeração pelo `_manifest`,
+leitura pelo `_day_prefetch` e `@once_per_request` por cima: 24,3 ms e 2
+aberturas. Fora de um request o decorator não memoiza, então a rotina agendada
+continua enxergando o snapshot novo (§429).
+
+### Um Delete que só apaga da tela reaparece como bug do IMPORT
+
+O Delete das quatro telas de Intrag era `table.row().remove()` e mais nada —
+nenhum endpoint, nenhuma gravação. A linha sumia da tela e voltava no F5, e o
+"This action cannot be undone" do balão se desfazia com um refresh.
+
+O estrago não aparecia ali: aparecia no re-import. O upsert preserva `status`,
+`maker`, `checker` e `intrag_id` da linha que já existe — é o que faz reimportar
+não desfazer a esteira —, e como a linha nunca saiu do arquivo, o import a
+reencontrava e devolvia o status ANTIGO. Apagava-se tudo, importava de novo, e
+as linhas voltavam `Pending` em vez de `New`: o Delete parecia ter funcionado e
+o IMPORT parecia estar errado. Hoje `/api/intrag/<family>/delete` grava, e **a
+tela só remove a linha depois do sucesso do servidor** — remover antes é o que
+criava a diferença entre o que se vê e o que está gravado (§430).
+
+### Quando as QUATRO células faltam juntas, o problema é o JOIN
+
+As quatro colunas da direita do Swap VCP (conta da contraparte, CPF/CNPJ e os
+dois indexadores) saem todas do arquivo de eventos, por um `events.get(...)` só.
+Contrato que não está lá sai com as quatro em branco de uma vez — e é essa
+simultaneidade que separa as duas causas: **uma célula vazia é cadastro; quatro
+vazias juntas são o join**. Depois da cascata CNPJ → conta, três dos quatro
+avisos de inexistência de PU ainda vinham vazios, e não era falta de cadastro:
+não havia identificador nenhum para cadastrar.
+
+`_vcp_position_map` é a segunda fonte — a DPOSICAO-SWAP tem os mesmos campos
+(`Contraparte` é a CONTA CETIP dela, índice 7; `CPF/CNPJ Cliente Contraparte`,
+8; `Código índice` de cada perna, 40 e 50), chaveados pelo `Contrato`, a mesma
+chave do §427 e pela mesma razão. É FALLBACK, não substituição: onde o evento
+responde, ele vence — o evento é do dia da liquidação e a posição é uma foto
+(§431).
 
 ### Um `stat` por LINHA é invisível na dev e custa minutos no share
 
