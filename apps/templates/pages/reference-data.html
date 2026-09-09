@@ -671,6 +671,7 @@ $(document).ready(function () {
         if      (st === 'ACTIVE')           { cls = 'text-bg-success';   lbl = 'Active'; }
         else if (st === 'INACTIVE')         { cls = 'text-bg-secondary'; lbl = 'Inactive'; }
         else if (st === 'PENDING INACTIVE') { cls = 'text-bg-danger';    lbl = 'Pend. Inactive'; }
+        else if (st === 'PENDING DELETE')   { cls = 'text-bg-danger';    lbl = 'Pend. Delete'; }
         else                                { cls = 'text-bg-warning';   lbl = 'Pending'; }
         return '<span class="badge rounded-pill pill-badge ' + cls + '">' + lbl + '</span>';
     }
@@ -685,7 +686,7 @@ $(document).ready(function () {
         return '<div class="d-flex justify-content-center gap-1">' +
             '<button class="btn btn-success btn-sm rounded-circle btn-act btn-rd-confirm" data-idx="' + idx + '" data-maker="' + (maker||'') + '" data-bs-toggle="tooltip" data-bs-placement="auto" data-bs-title="Confirm / Approve" data-bs-custom-class="tooltip-success"><i class="ti ti-check"></i></button>' +
             '<button class="btn btn-info btn-sm rounded-circle btn-act btn-rd-edit" data-idx="' + idx + '" data-bs-toggle="tooltip" data-bs-placement="auto" data-bs-title="Edit" data-bs-custom-class="tooltip-info"><i class="ti ti-edit"></i></button>' +
-            '<button class="btn btn-danger btn-sm rounded-circle btn-act btn-rd-delete" data-idx="' + idx + '" data-bs-toggle="tooltip" data-bs-placement="auto" data-bs-title="Deactivate" data-bs-custom-class="tooltip-danger"><i class="ti ti-trash"></i></button>' +
+            '<button class="btn btn-danger btn-sm rounded-circle btn-act btn-rd-delete" data-idx="' + idx + '" data-bs-toggle="tooltip" data-bs-placement="auto" data-bs-title="Delete" data-bs-custom-class="tooltip-danger"><i class="ti ti-trash"></i></button>' +
             '</div>';
     }
 
@@ -975,17 +976,27 @@ $(document).ready(function () {
     var _REAL_STATUS = {};
     function _spnKey(v){ return String(v == null ? '' : v).trim().toUpperCase(); }
 
-    /* ── Auto-load RefData.json ───────────────────────────────────────── */
-    fetch('{{ config.ASSETS_ROOT }}/data/RefData.json')
-        .then(function(r){ return r.json(); })
-        .then(function(data) {
-            data.forEach(function(r,i){ r._idx = i; });
-            dt.clear().rows.add(buildRows(data)).draw();
-            decorateAllPending();   // flag rows with pending details (if already loaded)
-            // scrollX clones the header into a separate table; resync widths after load.
-            setTimeout(function(){ dt.columns.adjust(); }, 100);
-        })
-        .catch(function(e){ console.error('RefData load error:', e); });
+    /* ── Carga do RefData.json ────────────────────────────────────────────
+       É uma FUNÇÃO porque a aprovação de um Pending Delete REMOVE o registro
+       do arquivo, e todo botão da grade carrega o `data-idx` — a posição no
+       array. Removido o item i, os seguintes deslocam: apagar só a linha do
+       DOM deixaria os vizinhos apontando para o registro errado, e a próxima
+       edição gravaria em cima de outro cliente sem erro nenhum. Depois de uma
+       remoção a tabela é RELIDA, e os índices voltam a valer. */
+    function reloadRefData(done) {
+        fetch('{{ config.ASSETS_ROOT }}/data/RefData.json?_=' + Date.now())
+            .then(function(r){ return r.json(); })
+            .then(function(data) {
+                data.forEach(function(r,i){ r._idx = i; });
+                dt.clear().rows.add(buildRows(data)).draw();
+                decorateAllPending();   // flag rows with pending details (if already loaded)
+                // scrollX clones the header into a separate table; resync widths after load.
+                setTimeout(function(){ dt.columns.adjust(); }, 100);
+                if (done) done();
+            })
+            .catch(function(e){ console.error('RefData load error:', e); if (done) done(); });
+    }
+    reloadRefData();
 
     /* ── Counterparty banking/contact details (indexed by SPN) ────────── */
     var _CPDETAILS = {};
@@ -1996,7 +2007,14 @@ $(document).ready(function () {
         }).then(function(result) {
             if (!result.isConfirmed) return;
             apiCall('/api/b3/update', {table:'refdata', idx:idx, action:'approve'}, function(res) {
-                if (res.ok) {
+                if (res.ok && res.removed) {
+                    // Aprovar um Pending Delete REMOVE o registro: os índices
+                    // das linhas seguintes deslocaram, então a tabela é relida
+                    // inteira em vez de perder só esta linha do DOM.
+                    reloadRefData(function(){
+                        Swal.fire({title: t('rd-swal-deleted','Deleted'), text: t('rd-swal-deleted-text','The record was removed.'), icon:'success', timer:1600, showConfirmButton:false});
+                    });
+                } else if (res.ok) {
                     var row   = dt.row($(btn).closest('tr'));
                     var cells = row.data();
                     _REAL_STATUS[_spnKey(_txt(cells[9]))] = res.new_status || 'ACTIVE';
@@ -2014,30 +2032,34 @@ $(document).ready(function () {
         });
     }
 
-    /* ── Deactivate (delete → PENDING INACTIVE, awaits approval) ────── */
-    function handleDeactivate(btn) {
+    /* ── Delete (→ PENDING DELETE; a aprovação é que remove) ──────────────
+       A lixeira NÃO apaga: ela pede. O registro fica na tela, marcado, até um
+       SID diferente aprovar — e é a aprovação que o tira do arquivo. Antes
+       este botão desativava (PENDING INACTIVE → INACTIVE), um estado que o
+       RefData não tinha consumidor nenhum lendo. */
+    function handleDelete(btn) {
         var idx = parseInt(btn.dataset.idx);
         Swal.fire({
-            title:             t('rd-swal-deactivate-title','Deactivate this record?'),
-            text:              t('rd-swal-deactivate-text','Status will be set to Pending Inactive and requires approval.'),
+            title:             t('rd-swal-delete-title','Delete this record?'),
+            text:              t('rd-swal-delete-text','Status will be set to Pending Delete. The record is only removed after another SID approves it.'),
             icon:              'warning',
             showCancelButton:  true,
-            confirmButtonText: t('rd-swal-deactivate-btn','Yes, deactivate'),
+            confirmButtonText: t('rd-swal-delete-btn','Yes, request delete'),
             cancelButtonText:  t('rd-swal-cancel','Cancel'),
-            confirmButtonColor:'#6c757d'
+            confirmButtonColor:'#fa5c7c'
         }).then(function(result) {
             if (!result.isConfirmed) return;
-            apiCall('/api/b3/update', {table:'refdata', idx:idx, action:'deactivate'}, function(res) {
+            apiCall('/api/b3/update', {table:'refdata', idx:idx, action:'request_delete'}, function(res) {
                 if (res.ok) {
                     var row   = dt.row($(btn).closest('tr'));
                     var cells = row.data();
-                    _REAL_STATUS[_spnKey(_txt(cells[9]))] = 'PENDING INACTIVE';
-                    cells[2] = statusBadge('PENDING INACTIVE');
+                    _REAL_STATUS[_spnKey(_txt(cells[9]))] = 'PENDING DELETE';
+                    cells[2] = statusBadge('PENDING DELETE');
                     cells[1] = actionBtns(idx, CURRENT_USER);
                     row.data(cells).draw(false);
-                    Swal.fire({title: t('rd-swal-deactivated','Deactivated!'), text: t('rd-swal-deactivated-text','Pending approval for final deactivation.'), icon:'success', timer:1800, showConfirmButton:false});
+                    Swal.fire({title: t('rd-swal-delete-requested','Delete requested'), text: t('rd-swal-delete-requested-text','Pending approval. The record stays until another SID approves it.'), icon:'success', timer:2000, showConfirmButton:false});
                 } else {
-                    Swal.fire(t('rd-swal-error','Error'), res.error || 'Failed to deactivate.', 'error');
+                    Swal.fire(t('rd-swal-error','Error'), res.error || 'Failed to request delete.', 'error');
                 }
             });
         });
@@ -2061,12 +2083,17 @@ $(document).ready(function () {
         });
 
         if (!candidates.length) {
-            Swal.fire(t('rd-swal-nothing-approve','Nothing to approve'), t('rd-swal-nothing-approve-text','Select rows with Pending or Pending Inactive status.'), 'info');
+            Swal.fire(t('rd-swal-nothing-approve','Nothing to approve'), t('rd-swal-nothing-approve-text','Select rows with Pending, Pending Inactive or Pending Delete status.'), 'info');
             return;
         }
 
         var blocked   = candidates.filter(function(r){ return r.maker && r.maker === CURRENT_USER; });
         var toApprove = candidates.filter(function(r){ return !r.maker || r.maker !== CURRENT_USER; });
+        // Do MAIOR índice para o menor. Aprovar um Pending Delete remove o
+        // registro do array, e isso desloca todo mundo DEPOIS dele — removendo
+        // de trás para a frente, os índices que ainda faltam continuam válidos.
+        // Na ordem natural, a segunda exclusão do lote acertaria o vizinho.
+        toApprove.sort(function(a, b){ return b.idx - a.idx; });
         var skipNote  = blocked.length ? blocked.length + ' record(s) were modified by you and will be skipped. ' : '';
 
         var bulkTitle = t('rd-swal-bulk-approve-title','Approve {count} record(s)?').replace('{count}', toApprove.length);
@@ -2088,26 +2115,36 @@ $(document).ready(function () {
 
             var done = 0, failed = 0;
 
+            var removidos = 0;
             function approveNext(list) {
                 if (!list.length) {
                     $('#ref-data-table .row-rd-check').prop('checked', false);
                     $('#rd-select-all').prop('checked', false);
                     var msg = done + ' approved' +
+                        (removidos ? ' (' + removidos + ' deleted)' : '') +
                         (blocked.length ? ', ' + blocked.length + ' skipped (own records)' : '') +
                         (failed ? ', ' + failed + ' failed' : '') + '.';
-                    Swal.fire({
-                        title: t('rd-swal-done','Done'),
-                        text: msg,
-                        icon: done > 0 ? 'success' : 'warning',
-                        timer: 2500,
-                        showConfirmButton: false
-                    });
+                    function fim() {
+                        Swal.fire({
+                            title: t('rd-swal-done','Done'),
+                            text: msg,
+                            icon: done > 0 ? 'success' : 'warning',
+                            timer: 2500,
+                            showConfirmButton: false
+                        });
+                    }
+                    // Houve exclusão: os índices de TODA a grade mudaram, então
+                    // ela é relida antes de o usuário poder clicar de novo.
+                    if (removidos) { reloadRefData(fim); } else { fim(); }
                     return;
                 }
                 var rec  = list[0];
                 var rest = list.slice(1);
                 apiCall('/api/b3/update', {table:'refdata', idx: rec.idx, action:'approve'}, function(res) {
-                    if (res.ok) {
+                    if (res.ok && res.removed) {
+                        removidos++;
+                        done++;
+                    } else if (res.ok) {
                         var row   = dt.row(rec.tr);
                         var cells = row.data();
                         _REAL_STATUS[_spnKey(_txt(cells[9]))] = res.new_status || 'ACTIVE';
@@ -2215,7 +2252,7 @@ $(document).ready(function () {
     });
 
     $(document).on('click', '.btn-rd-delete', function() {
-        handleDeactivate(this);
+        handleDelete(this);
     });
 
 }); // end ready

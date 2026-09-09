@@ -81,6 +81,8 @@ R._pc_metrics_history = lambda: {'gt30': {
                 {'period': '2026-08', 'volume': 167, 'pct': 11}],
     'daily':   [{'date': '2026-08-25', 'volume': 160, 'pct': None}],
 }}
+# A implementacao REAL, guardada antes do stub — a secao 2b a exercita.
+_FXO_REAL = R._fxo_refdata_by_spn
 R._fxo_refdata_by_spn = lambda: {R._norm_spn(k): v for k, v in REFDATA.items()}
 R._pc_refdata_by_name = lambda: {}
 NOTIFS = []
@@ -122,6 +124,34 @@ check('   linha calada continua caindo no RefData',
 check('   banker do RefData', [p['banker'] for p in pivot][:2], ['Fulano', 'Sicrano'])
 check('   totais fecham', (totals['b1'], totals['b2'], totals['b3'], totals['total']),
       (2, 1, 1, 4))
+
+# ── o desempate do indice por SPN ───────────────────────────────────────────
+# Duas linhas do cadastro reivindicando o MESMO SPN: era o ULTIMO do arquivo que
+# vencia, calado. Em 09/09/2026 o SPN 5166226 tinha o PROLEC completo e um
+# GE VERNOVA so com o SPN — e o vazio vencia, tirando o PROLEC do verde.
+print('\n== 2b. SPN duplicado: vence quem RESPONDE ==')
+from apps.pages import duck_read as _DR
+_rows_orig = _DR.refdata_rows
+CHEIO = {'SPN': '5166226', 'COUNTERPARTY': 'PROLEC GE BRASIL',
+         'ECONOMIC GROUP': 'PROLEC', 'SIGNATURE TYPE': 'DIGITAL',
+         'BANKER': 'Fulano', 'TAX ID': '33401635'}
+VAZIO = {'SPN': '5166226', 'COUNTERPARTY': 'GE VERNOVA TRANSFORMERS BRASIL',
+         'ECONOMIC GROUP': '', 'SIGNATURE TYPE': '', 'BANKER': '', 'TAX ID': ''}
+try:
+    for ordem, rotulo in (([CHEIO, VAZIO], 'completo primeiro'),
+                          ([VAZIO, CHEIO], 'vazio primeiro')):
+        _DR.refdata_rows = (lambda o: (lambda *a, **k: [dict(r) for r in o]))(ordem)
+        idx = _FXO_REAL()
+        check('   %s -> vence o completo' % rotulo,
+              idx.get('5166226', {}).get('SIGNATURE TYPE'), 'DIGITAL')
+    # Empate mantem o primeiro — o mesmo desempate do _pc_refdata_by_name.
+    A = dict(CHEIO, COUNTERPARTY='A')
+    B = dict(CHEIO, COUNTERPARTY='B')
+    _DR.refdata_rows = lambda *a, **k: [dict(A), dict(B)]
+    check('   empate mantem o primeiro',
+          _FXO_REAL().get('5166226', {}).get('COUNTERPARTY'), 'A')
+finally:
+    _DR.refdata_rows = _rows_orig
 
 print('\n== 3. o periodo em curso e carimbado com a leitura de agora ==')
 serie = [{'period': '2026-07', 'volume': 150, 'pct': None},
