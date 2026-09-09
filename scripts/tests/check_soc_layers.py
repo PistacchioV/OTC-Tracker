@@ -584,5 +584,42 @@ for _mod, _nomes in (
         check('routes.%s e o da platform' % _nm,
               getattr(R, _nm) is getattr(_mod, _nm), True)
 
+# ── 11. todo link do MENU chega a uma página ────────────────────────────────
+#  O `href` do sidenav e a rota sao escritos em lugares diferentes, e nada os
+#  amarrava: quatro itens de New Deals > DCE apontavam para `/new-deals/dce/*`
+#  enquanto as paginas viviam em `/intrag-dce-*` — clicar no menu dava 404 e o
+#  usuario lia isso como "a pagina caiu". O menu tambem e a fonte do
+#  `_load_nav_urls` (§5), entao link morto vira token de Page_Access que nunca
+#  casa com nada.
+#
+#  O catch-all `/<template>` do tema serve `pages/<nome>.html` para caminho de
+#  UM segmento, entao ele conta como rota: sem isso metade do menu apareceria
+#  como morta aqui.
+print('\n== 11. links do menu ==')
+import re as _re                                             # noqa: E402
+_TPL = os.path.join(ROOT, 'apps', 'templates', 'pages')
+_paginas = {f[:-5] for f in os.listdir(_TPL) if f.endswith('.html')}
+_nav = open(os.path.join(ROOT, 'apps', 'templates', 'partials', 'sidenav.html'),
+            encoding='utf-8').read()
+_regras_norm = {r.rstrip('/') or '/' for r in regras}
+# Placeholders de menu de funcionalidade que ainda nao existe (Unwinds e
+# Regulatory nasceram assim no commit inicial). Sao TOLERADOS, mas listados:
+# tirar um daqui sem criar a pagina volta a dar 404 no clique.
+_SEM_PAGINA = {'/unwinds/', '/regulatory/'}
+_mortos = []
+for _h in sorted({h for h in _re.findall(r'href="(/[^"#?]*)"', _nav)}):
+    _k = _h.rstrip('/') or '/'
+    _nome = _k.lstrip('/')
+    if _k in _regras_norm or ('/' not in _nome and _nome in _paginas):
+        continue
+    if any(_h.startswith(pref) for pref in _SEM_PAGINA):
+        continue
+    _mortos.append(_h)
+check('nenhum link do menu leva a 404', _mortos, [])
+# E os quatro do DCE, por nome: eles ja apontaram para o lugar errado tendo a
+# pagina pronta ao lado.
+for _dce in ('/intrag-dce-dfw', '/intrag-dce-ndf', '/intrag-dce-option', '/intrag-dce-swap'):
+    check('o menu aponta para %s' % _dce, ('href="%s"' % _dce) in _nav, True)
+
 print(('FAIL: %d' % len(fails)) if fails else 'TUDO OK')
 sys.exit(1 if fails else 0)
