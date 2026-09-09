@@ -313,10 +313,21 @@ def _norm_spn(value):
     return s or ('0' if value not in (None, '') else '')
 
 
+def _cpdetails():
+    """As linhas do CounterpartyDetails — DB-first (fase 3), como o `_refdata`
+    ao lado; sem isso o RefData vinha do banco e o cadastro irmão, do JSON."""
+    try:
+        from apps.pages import duck_read
+        rows = duck_read.cpd_records(expected_path=data_path('CounterpartyDetails.json'))
+    except Exception:                                       # noqa: BLE001
+        rows = None
+    return rows if rows is not None else _load_json('CounterpartyDetails.json')
+
+
 def _build_cpdetails_index():
     """SPN (leading-zeros/'.0' stripped) → counterparty banking/contact record."""
     idx = {}
-    for c in _load_json('CounterpartyDetails.json'):
+    for c in _cpdetails():
         spn = _norm_spn(c.get('SPN'))
         if spn:
             idx.setdefault(spn, c)
@@ -816,10 +827,9 @@ def _ndf_pdf_set():
     da instância em que ninguém abriu a tela de mappings ainda, onde cair para
     zero contraparte tiraria o anexo de quem sempre recebeu.
     """
-    try:
-        with open(mapping_file('ndf-pdf-cpty', _DATA_DIR + '/mappings'),
-                  encoding='utf-8') as fh:
-            rows = json.load(fh)
+    try:                                        # DB-first (fase 3)
+        from apps.pages import duck_read
+        rows = duck_read.dataset_rows(mapping_file('ndf-pdf-cpty', _DATA_DIR + '/mappings'))
     except Exception:
         return {_ndf_pdf_norm(n) for n in _NDF_PDF_COUNTERPARTIES}
     return {_ndf_pdf_norm(r.get('COUNTERPARTY')) for r in rows

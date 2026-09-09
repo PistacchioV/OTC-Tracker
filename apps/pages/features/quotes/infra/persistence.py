@@ -27,9 +27,9 @@ def active_by_class():
     except OSError:
         return {}
     if _cache['mtime'] != mt:
-        try:
-            with open(fp, encoding='utf-8') as fh:
-                data = json.load(fh) or []
+        try:                                    # DB-first (fase 3)
+            from apps.pages import duck_read
+            data = duck_read.dataset_rows(fp) or []
         except Exception:                                   # noqa: BLE001
             routes.log.warning('[quotes] Subjacente.json ilegível:\n%s',
                                traceback.format_exc())

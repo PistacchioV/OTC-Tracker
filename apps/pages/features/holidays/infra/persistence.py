@@ -138,37 +138,21 @@ def load_holidays(filename):
 
 
 def _load_holidays_db(filename):
+    """Os feriados de um calendário pelo banco — delegado ao `duck_read`, que é
+    onde a leitura mora desde que os outros cinco leitores de feriado do app
+    (SLA da esteira, aging do CGD, recon de CGD, precificador, schedules do
+    TER) passaram a usá-la. O `nome` vai resolvido daqui porque o registro
+    desta tela aceita o SEED, que o banco não tem como provar."""
     alvo = str(filename or '').strip().lower()
     nome = next((str(r.get('name', '') or '') for r in calendars()
                  if str(r.get('file', '') or '').strip().lower() == alvo), None)
     if not nome:
         return None
     try:
-        from apps.pages import duck_mirror, duck_read
-        from apps.pages import json_to_duckdb as core
-        # ORDEM pelo `_seq` (a posição no arquivo): dois feriados no mesmo dia
-        # têm de voltar como o JSON os guarda.
-        # `sync_kind='holidays'`: o nome do arquivo de calendário só o registro
-        # conhece, então a cura síncrona (leitura DB-only) precisa da tarefa
-        # explícita — a triagem genérica o converteria como dataset e o banco
-        # continuaria frio.
-        rows = duck_read.table_rows(
-            'holiday_calendars.db', core.norm_ident(nome, 'cal'),
-            str(filename).strip(),
-            order_by='CAST("_seq" AS BIGINT)',
-            manifest_key=core._dataset_manifest_key(str(filename).strip()),
-            heal=duck_mirror.notify_holidays, sync_kind='holidays')
+        from apps.pages import duck_read
+        return duck_read.calendar_rows(calendar_path(filename), nome=nome)
     except Exception:                                       # noqa: BLE001
         return None
-    if rows is None:
-        return None
-    out = []
-    for r in rows:
-        d = r.get('date')
-        out.append({'date': d.isoformat() if hasattr(d, 'isoformat') else (d or ''),
-                    'title': r.get('title') or '',
-                    'calendar': r.get('calendar') or ''})
-    return out
 
 
 def write_holidays(filename, holidays):

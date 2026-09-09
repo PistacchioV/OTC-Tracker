@@ -40,8 +40,8 @@ def _cog_collect(ref):
     rows_out = []
     if os.path.isfile(jp):
         try:
-            with open(jp, encoding='utf-8') as fh:
-                data = _R().json.load(fh) or []
+            from apps.pages import duck_read      # DB-only (fase 3): arquivo-dia payload-LISTA.
+            data = duck_read.day_records(jp) or []
         except Exception:
             data = []
         if _R()._cog_ensure_meta(data) and data:

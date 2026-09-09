@@ -341,6 +341,110 @@ NADA = os.path.join(TMP, 'cache', 'new deals', 'NDF', 'Commodities', '2026', '06
                     '20260613_ndfcomm.json')
 check('7. sem JSON e sem tabela, None', DR.day_payload(NADA), None)
 
+# ── 8. a VARREDURA: nenhum leitor de fonte volta a abrir o JSON como caminho ─
+#  A fase 3 diz que a LEITURA e servida so pelos bancos e que o JSON e o meio de
+#  ESCRITA. Ainda assim, trinta leitores tinham ficado para tras — cada um com o
+#  seu `with open(...) as fh: json.load(fh)` — e o defeito nao aparece na dev,
+#  onde `DATA_DIR` e a pasta do codigo e os dois lados batem sempre. Na instancia
+#  eles liam o SHARE por fora do banco: sem o farol do `database_access`, sem a
+#  cura, sem o memo — e uma tela lenta sem nada no log dizendo por que.
+#
+#  A assercao e por FUNCAO: cada uma tem de citar o `duck_read`. `open`/`json.load`
+#  CONTINUAM permitidos dentro delas, porque a emergencia (espelho desligado nos
+#  testes, conversao que falhou, payload-objeto) e parte do contrato — o que nao
+#  pode e o JSON ser o PRIMEIRO caminho.
+#
+#  O que NAO entra nesta lista, e por que: o read-modify-write da escrita (os 26
+#  do New Deals, os persist, os claims), os payloads-OBJETO que o banco nao
+#  reconstroi (as tres recons, o MtM, o Accrual, os templates do File
+#  Interpreter) e os `meta`/`status`/`recipients`, que sao dicts — para todos
+#  eles o `dataset_records` devolve `None` de proposito.
+import ast as _ast
+import io as _io
+
+_MIGRADOS = [
+    # (arquivo, funcao)                                          o que ele le
+    ('apps/pages/athena_api.py', '_api_link_rows'),              # api-links
+    ('apps/pages/cgd_docs.py', '_stage_map'),                    # cgd-stage
+    ('apps/pages/manual_conf.py', '_mapping_rows'),              # os da esteira
+    ('apps/pages/manual_conf.py', '_anbima_holidays'),           # calendario
+    ('apps/pages/recon_cgd.py', '_mapping_rows'),
+    ('apps/pages/recon_cgd.py', '_feriados'),
+    ('apps/pages/recon_fxo.py', '_mapping_rows'),
+    ('apps/pages/recon_payrec.py', '_mapping_rows'),
+    ('apps/pages/recon_payrec.py', '_gdt_map'),
+    ('apps/pages/otc_emails.py', '_ndf_pdf_set'),
+    ('apps/pages/otc_emails.py', '_cpdetails'),                  # CounterpartyDetails
+    ('apps/pages/precificador/calendario.py', '_arquivo_do_calendario'),
+    ('apps/pages/precificador/calendario.py', '_feriados_do_arquivo'),
+    ('apps/pages/features/boxscan/queries.py', 'refdata_by_accronym'),
+    ('apps/pages/features/boxscan/queries.py', 'subjacente_index'),
+    ('apps/pages/features/quotes/infra/persistence.py', 'active_by_class'),
+    ('apps/pages/features/mtm/infra/mappers.py', '_mtm_load_hyb_mapping'),
+    ('apps/pages/features/cognos/queries.py', '_cog_collect'),
+    ('apps/pages/features/deals_monitor/queries.py', '_ndm_monitor_snapshot'),
+    ('apps/pages/features/mdea/infra/persistence.py', 'rebook_rows'),
+    ('apps/pages/features/mdea/infra/persistence.py', 'day_deals'),
+    ('apps/pages/features/mt300/infra/persistence.py', 'load_day'),
+    ('apps/pages/features/pcx/queries.py', 'rows_at'),
+    ('apps/pages/features/pending_confirmation/entrypoint.py',
+     'api_pending_confirmation_snapshot'),
+    ('apps/pages/features/ndf_summary/entrypoint.py', 'api_ndf_summary_cards'),
+    ('apps/pages/features/intrag/queries.py', '_find_intrag_ndf_entry'),
+    ('apps/pages/features/intrag/queries.py', '_find_intrag_opt_entry'),
+    ('apps/pages/features/intrag/queries.py', '_find_intrag_dce_opt_entry'),
+    ('apps/pages/features/intrag/queries.py', '_find_intrag_swap_entry'),
+    ('apps/pages/features/intrag/entrypoint.py', 'api_intrag_ndf'),
+    ('apps/pages/features/intrag/entrypoint.py', 'api_intrag_option'),
+    ('apps/pages/features/intrag/entrypoint.py', 'api_intrag_swap'),
+    ('apps/pages/routes.py', '_vanilla_verification_lines'),
+    ('apps/pages/platform/new_deals.py', '_ndf_comm_ter_lines'),
+]
+# Os dois finders do New Deals varrem a arvore inteira, entao vao pelo FUNIL
+# `_day_json` (DB-only E memoizado por (mtime, tamanho)) — um `day_records` por
+# arquivo seria uma abertura de banco por dia, que e a armadilha do §428.
+_PELO_FUNIL = [
+    ('apps/pages/platform/new_deals.py', '_find_ndf_deal_in_cache'),
+    ('apps/pages/platform/new_deals.py', '_find_generic_nd_deal'),
+]
+
+
+def _corpo(rel, nome):
+    caminho = os.path.join(ROOT, rel)
+    if not os.path.isfile(caminho):
+        return None
+    origem = _io.open(caminho, encoding='utf-8').read()
+    linhas = origem.splitlines()
+    for no in _ast.walk(_ast.parse(origem)):
+        if isinstance(no, (_ast.FunctionDef, _ast.AsyncFunctionDef)) and no.name == nome:
+            return '\n'.join(linhas[no.lineno - 1:(no.end_lineno or no.lineno)])
+    return None
+
+
+_sem_db = []
+for rel, nome in _MIGRADOS:
+    corpo = _corpo(rel, nome)
+    if corpo is None or 'duck_read' not in corpo:
+        _sem_db.append('%s:%s' % (rel.split('/')[-1], nome))
+check('8. os %d leitores migrados citam o duck_read' % len(_MIGRADOS), _sem_db, [])
+
+_sem_funil = []
+for rel, nome in _PELO_FUNIL:
+    corpo = _corpo(rel, nome)
+    if corpo is None or '_day_json' not in corpo:
+        _sem_funil.append('%s:%s' % (rel.split('/')[-1], nome))
+check('8. os finders do New Deals vao pelo funil _day_json', _sem_funil, [])
+
+# O `duck_read` e a UNICA porta de leitura de calendario: sem `calendar_rows`,
+# cada um dos seis leitores de feriado voltaria a montar a sua.
+check('8. o duck_read expoe a leitura de calendario',
+      all(hasattr(DR, n) for n in ('calendar_rows', 'calendar_dates', 'calendar_registry')))
+# E a tela de Holidays DELEGA a ela, em vez de ter a segunda copia.
+_hol = _corpo('apps/pages/features/holidays/infra/persistence.py', '_load_holidays_db')
+check('8. a tela de Holidays delega ao duck_read.calendar_rows',
+      bool(_hol) and 'duck_read.calendar_rows' in _hol)
+
+
 print()
 if fails:
     print('FAILED: %d check(s)' % len(fails))

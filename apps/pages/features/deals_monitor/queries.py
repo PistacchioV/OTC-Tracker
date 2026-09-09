@@ -117,8 +117,8 @@ def _ndm_monitor_snapshot(ref):
             if not os.path.isfile(fp):
                 continue
             try:
-                with open(fp, encoding='utf-8') as fh:
-                    data = json.load(fh)
+                from apps.pages import duck_read  # DB-only (fase 3): arquivo-dia payload-LISTA.
+                data = duck_read.day_records(fp)
             except Exception:
                 data = []
             for d in (data if isinstance(data, list) else []):

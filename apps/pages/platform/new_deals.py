@@ -1671,8 +1671,12 @@ def _find_ndf_deal_in_cache(deal_name, client_name=None):
             fpath = os.path.join(root, fname)
             files_scanned += 1
             try:
-                with open(fpath, 'r', encoding='utf-8') as fh:
-                    deals = json.load(fh)
+                # Pelo FUNIL `_day_json`: DB-only (fase 3) e memoizado por
+                # (mtime, tamanho). O finder varre a árvore inteira, então um
+                # `open` por arquivo aqui seria uma abertura de banco por dia
+                # (§428) — e o memo ainda poupa a releitura entre requests.
+                _st = os.stat(fpath)
+                deals = routes._day_json(fpath, _st.st_mtime, _st.st_size)
                 if not isinstance(deals, list):
                     deals = [deals]
                 for i, deal in enumerate(deals):
@@ -1859,8 +1863,11 @@ def _ndf_comm_ter_lines(deal):
         _sched_file = re.sub(r'[^A-Za-z0-9_]', '', fx_holiday_sched.replace('-', '_'))
         holiday_path = data_path(f'{_sched_file}.json') if _sched_file else None
         try:
-            with open(holiday_path, encoding='utf-8') as _hf:
-                _raw = _json.load(_hf)
+            from apps.pages import duck_read     # DB-first (fase 3): o schedule é um calendário do registro.
+            _raw = duck_read.calendar_rows(holiday_path)
+            if _raw is None:
+                with open(holiday_path, encoding='utf-8') as _hf:
+                    _raw = _json.load(_hf)
             _deal_holidays = set(
                 item['date'] if isinstance(item, dict) else item
                 for item in _raw
@@ -2013,6 +2020,7 @@ def _generic_nd_pc_trigger(product, deal):
 def _find_generic_nd_deal(cfg, deal_name, client_name=None):
     """Locate a deal by Deal (+optional Client) across the product's cache files.
     Returns (file_path, list_index) or (None, None)."""
+    from apps.pages import routes
     base = cfg['dir']
     if not os.path.isdir(base):
         return None, None
@@ -2022,8 +2030,12 @@ def _find_generic_nd_deal(cfg, deal_name, client_name=None):
                 continue
             fpath = os.path.join(root, fname)
             try:
-                with open(fpath, 'r', encoding='utf-8') as fh:
-                    deals = json.load(fh)
+                # Pelo FUNIL `_day_json`: DB-only (fase 3) e memoizado por
+                # (mtime, tamanho). O finder varre a árvore inteira, então um
+                # `open` por arquivo aqui seria uma abertura de banco por dia
+                # (§428) — e o memo ainda poupa a releitura entre requests.
+                _st = os.stat(fpath)
+                deals = routes._day_json(fpath, _st.st_mtime, _st.st_size)
                 if not isinstance(deals, list):
                     deals = [deals]
                 for i, deal in enumerate(deals):

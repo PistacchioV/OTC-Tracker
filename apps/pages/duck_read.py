@@ -805,6 +805,83 @@ def dataset_records(path):
         return None
 
 
+def calendar_registry():
+    """O registro de calendários (nome, arquivo, cor) pela tabela `_registry`
+    do `holiday_calendars.db`. `None` quando o banco não prova o frescor — e aí
+    vale o `holiday-calendars.json`, que é quem SEMEIA: um registro recém-
+    nascido do seed nem tem arquivo para o manifest provar."""
+    from apps.pages import json_to_duckdb as core
+    return raw_records('holiday_calendars.db', '_registry', core.REGISTRY_FILE,
+                       manifest_key=core._dataset_manifest_key(core.REGISTRY_FILE))
+
+
+def calendar_rows(path, nome=None):
+    """As linhas de um arquivo de CALENDÁRIO (`anbima.json`, `sofr.json`, os
+    criados pela tela) pelo CAMINHO — do `holiday_calendars.db`.
+
+    Existe porque calendário não é dataset: o `_dataset_rel_target` devolve
+    `None` para ele de propósito (seriam duas tabelas para o mesmo arquivo), e
+    sem este atalho todo leitor de feriado que não fosse a própria tela de
+    Holidays — o SLA da esteira, o aging do CGD, o `_feriados` da recon, o
+    calendário do precificador, os schedules do TER — voltava a abrir o JSON
+    direto. Eram seis cópias da mesma leitura, e só uma delas era DB-only.
+
+    A tabela leva o nome do CALENDÁRIO (não o do arquivo), então é preciso o
+    registro para traduzir um no outro: `nome` é passado por quem já o
+    resolveu (a tela, que aceita o registro vindo do seed) e, sem ele, a
+    tradução sai da tabela `_registry` do próprio banco. Registro que não
+    responde → `None`, e vale o JSON de sempre.
+
+    Devolve `[{'date','title','calendar'}]` — a forma que o JSON sempre teve,
+    com a data como STRING ISO.
+    """
+    try:
+        from apps.pages import duck_mirror
+        from apps.pages import json_to_duckdb as core
+        raiz = _data_root()
+        rel = os.path.relpath(os.path.normpath(str(path)), raiz)
+        if rel.startswith('..'):
+            return None
+        rel = rel.replace(os.sep, '/')
+        if not nome:
+            registro = calendar_registry()
+            if registro is None:
+                return None
+            alvo = rel.lower()
+            nome = next((str(r.get('name', '') or '') for r in registro
+                         if isinstance(r, dict)
+                         and str(r.get('file', '') or '').strip().lower() == alvo), '')
+        if not nome:
+            return None
+        # ORDEM pelo `_seq`: dois feriados no mesmo dia voltam como o arquivo os
+        # guarda. `sync_kind='holidays'` porque a triagem genérica da cura o
+        # converteria como dataset — e aí o banco continuaria frio.
+        linhas = table_rows('holiday_calendars.db', core.norm_ident(str(nome).strip(), 'cal'),
+                            rel, order_by='CAST("_seq" AS BIGINT)',
+                            manifest_key=core._dataset_manifest_key(rel),
+                            heal=duck_mirror.notify_holidays, sync_kind='holidays')
+    except Exception:                                       # noqa: BLE001
+        return None
+    if linhas is None:
+        return None
+    saida = []
+    for r in linhas:
+        d = r.get('date')
+        saida.append({'date': d.isoformat() if hasattr(d, 'isoformat') else (d or ''),
+                      'title': r.get('title') or '',
+                      'calendar': r.get('calendar') or ''})
+    return saida
+
+
+def calendar_dates(path, nome=None):
+    """Só as datas ISO de um calendário, como `set` — a forma que os seis
+    leitores de feriado do app usam. `None` quando o banco não responde."""
+    linhas = calendar_rows(path, nome=nome)
+    if linhas is None:
+        return None
+    return {r['date'] for r in linhas if r.get('date')}
+
+
 def refdata_rows(expected_path=None):
     """Os registros originais do RefData — do `reference_data.db` quando fresco."""
     return raw_records('reference_data.db', 'refdata', 'RefData.json',

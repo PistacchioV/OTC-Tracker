@@ -12982,9 +12982,13 @@ def _vanilla_verification_lines(deal, page_url, le_pair):
                    _s(deal.get('FXHolidaySchedule')).replace('-', '_').lower())
     if sched:
         try:
-            with open(os.path.join(_B3_DATA_DIR, sched + '.json'), encoding='utf-8') as fh:
-                hols = {(x.get('date') if isinstance(x, dict) else x)
-                        for x in json.load(fh)}
+            from apps.pages import duck_read       # DB-first (fase 3): o schedule é um calendário do registro.
+            _cal = os.path.join(_B3_DATA_DIR, sched + '.json')
+            _itens = duck_read.calendar_rows(_cal)
+            if _itens is None:
+                with open(_cal, encoding='utf-8') as fh:
+                    _itens = json.load(fh)
+            hols = {(x.get('date') if isinstance(x, dict) else x) for x in _itens}
         except Exception:
             hols = set()
     cotv = _fi_effective_seq_value(_TER_FI_KEY, 'registro-dados-fixos', '15', {},

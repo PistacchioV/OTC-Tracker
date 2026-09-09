@@ -23,9 +23,13 @@ def refdata_by_accronym():
     por COMMODITIES ACCRONYM e, quando a chave ainda está livre, por FX CASH
     ACCRONYM (o primeiro a chegar vence, como no `if (fxAcr && !map[fxAcr])`)."""
     out = {}
-    try:
-        with open(os.path.join(_routes()._B3_DATA_DIR, 'RefData.json'), encoding='utf-8') as fh:
-            rows = json.load(fh) or []
+    caminho = os.path.join(_routes()._B3_DATA_DIR, 'RefData.json')
+    try:                                        # DB-first (fase 3)
+        from apps.pages import duck_read
+        rows = duck_read.refdata_rows(expected_path=caminho)
+        if rows is None:
+            with open(caminho, encoding='utf-8') as fh:
+                rows = json.load(fh) or []
     except Exception:
         _routes().log.warning('[boxscan] RefData.json ilegível:\n%s', traceback.format_exc())
         return out
@@ -50,9 +54,8 @@ def subjacente_index():
     código aparece com fatores conflitantes (§77.1)."""
     idx = {}
     try:
-        fp = data_path('Subjacente.json')
-        with open(fp, encoding='utf-8') as fh:
-            rows = json.load(fh) or []
+        from apps.pages import duck_read      # DB-first (fase 3)
+        rows = duck_read.dataset_rows(data_path('Subjacente.json')) or []
     except Exception:
         _routes().log.warning('[boxscan] Subjacente.json ilegível:\n%s', traceback.format_exc())
         return idx

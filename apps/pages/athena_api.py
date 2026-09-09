@@ -146,9 +146,10 @@ def is_available():
 # linha curinga: na linha de um produto, o endereço vale como está, porque foi
 # ela que o produto escolheu.
 #
-# Este módulo lê o JSON direto (mesmo padrão de `_ndf_pdf_set` em otc_emails.py):
-# importar `routes` daqui seria circular. Arquivo ausente/ilegível → fallback nas
-# constantes acima, que são também o seed da linha do New Deals.
+# A leitura vai pelo `duck_read` (DB-only, fase 3) e não pelo `routes`, cujo
+# import daqui seria circular — mesmo padrão do `_ndf_pdf_set` em otc_emails.py.
+# Arquivo ausente/ilegível → fallback nas constantes acima, que são também o seed
+# da linha do New Deals.
 
 _MAPPINGS_DIR = data_write("mappings")
 API_LINKS_FILE = mapping_file("api-links", _MAPPINGS_DIR)
@@ -168,9 +169,11 @@ def _use_key(value):
 
 
 def _api_link_rows():
+    # DB-first (fase 3): o cadastro sai do `db/mappings/api-links.db`, com o
+    # JSON como canal de emergencia dentro do proprio `dataset_rows`.
     try:
-        with open(API_LINKS_FILE, encoding="utf-8") as fh:
-            rows = json.load(fh)
+        from apps.pages import duck_read
+        rows = duck_read.dataset_rows(API_LINKS_FILE)
     except Exception:
         return []
     return [r for r in rows if isinstance(r, dict)] if isinstance(rows, list) else []

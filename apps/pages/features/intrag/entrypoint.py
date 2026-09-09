@@ -52,8 +52,8 @@ def api_intrag_ndf():
             fname = ref.strftime('%Y%m%d') + '_intrag_ndf.json'
             fp = os.path.join(persistence.INTRAG_NDF_CACHE_DIR, ref.strftime('%Y'), ref.strftime('%m'), fname)
             if os.path.isfile(fp):
-                with open(fp, 'r', encoding='utf-8') as fh:
-                    entries = json.load(fh)
+                from apps.pages import duck_read       # DB-only (fase 3)
+                entries = duck_read.day_records(fp)
                 if not isinstance(entries, list):
                     entries = []
         except Exception as exc:
@@ -104,8 +104,8 @@ def api_intrag_option():
             fp = os.path.join(persistence.INTRAG_OPT_CACHE_DIR, ref.strftime('%Y'), ref.strftime('%m'),
                               ref.strftime('%Y%m%d') + suffix)
             if os.path.isfile(fp):
-                with open(fp, 'r', encoding='utf-8') as fh:
-                    entries = json.load(fh)
+                from apps.pages import duck_read       # DB-only (fase 3)
+                entries = duck_read.day_records(fp)
                 if not isinstance(entries, list):
                     entries = []
         except Exception as exc:
@@ -481,8 +481,8 @@ def api_intrag_swap():
             fp = os.path.join(persistence.INTRAG_SWAP_CACHE_DIR, ref.strftime('%Y'), ref.strftime('%m'),
                               ref.strftime('%Y%m%d') + suffix)
             if os.path.isfile(fp):
-                with open(fp, 'r', encoding='utf-8') as fh:
-                    entries = json.load(fh)
+                from apps.pages import duck_read       # DB-only (fase 3)
+                entries = duck_read.day_records(fp)
                 if not isinstance(entries, list):
                     entries = []
         except Exception as exc:

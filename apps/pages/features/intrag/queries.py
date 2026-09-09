@@ -55,8 +55,12 @@ def _find_intrag_ndf_entry(deal_id, trade_date):
                     candidate_files.append(os.path.join(root, fname))
     for fp in candidate_files:
         try:
-            with open(fp, 'r', encoding='utf-8') as fh:
-                entries = json.load(fh)
+            # DB-only (fase 3). O `day_records` remonta a lista pelo `_seq`, na
+            # ordem do arquivo — e é ela que o `idx` devolvido endereça —, e
+            # devolve objetos NOVOS a cada chamada (o memo guarda os `_raw`),
+            # então o chamador pode alterar a entrada e gravar.
+            from apps.pages import duck_read
+            entries = duck_read.day_records(fp)
             if not isinstance(entries, list):
                 continue
         except (json.JSONDecodeError, ValueError, OSError):
@@ -85,8 +89,12 @@ def _find_intrag_opt_entry(deal_id, trade_date):
                     candidate_files.append(os.path.join(root, fname))
     for fp in candidate_files:
         try:
-            with open(fp, 'r', encoding='utf-8') as fh:
-                entries = json.load(fh)
+            # DB-only (fase 3). O `day_records` remonta a lista pelo `_seq`, na
+            # ordem do arquivo — e é ela que o `idx` devolvido endereça —, e
+            # devolve objetos NOVOS a cada chamada (o memo guarda os `_raw`),
+            # então o chamador pode alterar a entrada e gravar.
+            from apps.pages import duck_read
+            entries = duck_read.day_records(fp)
             if not isinstance(entries, list):
                 continue
         except (json.JSONDecodeError, ValueError, OSError):
@@ -116,8 +124,12 @@ def _find_intrag_dce_opt_entry(deal_id, trade_date):
                     candidate_files.append(os.path.join(root, fname))
     for fp in candidate_files:
         try:
-            with open(fp, 'r', encoding='utf-8') as fh:
-                entries = json.load(fh)
+            # DB-only (fase 3). O `day_records` remonta a lista pelo `_seq`, na
+            # ordem do arquivo — e é ela que o `idx` devolvido endereça —, e
+            # devolve objetos NOVOS a cada chamada (o memo guarda os `_raw`),
+            # então o chamador pode alterar a entrada e gravar.
+            from apps.pages import duck_read
+            entries = duck_read.day_records(fp)
             if not isinstance(entries, list):
                 continue
         except (json.JSONDecodeError, ValueError, OSError):
@@ -160,8 +172,12 @@ def _find_intrag_swap_entry(deal_id, trade_date):
                     candidate_files.append(os.path.join(root, fname))
     for fp in candidate_files:
         try:
-            with open(fp, 'r', encoding='utf-8') as fh:
-                entries = json.load(fh)
+            # DB-only (fase 3). O `day_records` remonta a lista pelo `_seq`, na
+            # ordem do arquivo — e é ela que o `idx` devolvido endereça —, e
+            # devolve objetos NOVOS a cada chamada (o memo guarda os `_raw`),
+            # então o chamador pode alterar a entrada e gravar.
+            from apps.pages import duck_read
+            entries = duck_read.day_records(fp)
             if not isinstance(entries, list):
                 continue
         except (json.JSONDecodeError, ValueError, OSError):

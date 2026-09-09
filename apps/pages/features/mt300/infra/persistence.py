@@ -65,8 +65,8 @@ def load_day(ref):
     path = os.path.join(cfg['dir'], ref.strftime('%Y'), ref.strftime('%m'),
                         ref.strftime('%Y%m%d') + cfg['suffix'])
     try:
-        with open(path, encoding='utf-8') as fh:
-            data = json.load(fh)
+        from apps.pages import duck_read          # DB-only (fase 3): arquivo-dia payload-LISTA.
+        data = duck_read.day_records(path)
     except (IOError, OSError, json.JSONDecodeError):
         return []
     return data if isinstance(data, list) else []
