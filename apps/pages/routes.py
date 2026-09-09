@@ -62,6 +62,7 @@ from apps.pages.database_access import (
     duckdb_read,
     duckdb_write,
 )
+from apps.pages import database_access as _dba  # noqa: E402
 # Os tipos de confirmação são UMA lista só, definida no módulo da esteira: ela
 # alimenta o Confirmation Type do upload do Electronic Inventory, o cadastro
 # Produto × LOB de `manual-conf-validation` e o dropdown de Produto do Track
@@ -207,6 +208,13 @@ def _slow_request_start():
     with _req_inflight_lock:
         _req_inflight += 1
         g._req_inflight0 = _req_inflight
+    # O rastro de banco do request (`database_access.DbTrace`): é o que diz
+    # ONDE o tempo foi — quais bancos, quantas aberturas, quantos timeouts,
+    # quantas quedas para o JSON — na linha do fim e no laço dos em voo.
+    try:
+        g._db_trace = _dba.trace_begin('%s %s' % (request.method, request.path))
+    except Exception:                                       # noqa: BLE001
+        g._db_trace = None
 
 
 @blueprint.teardown_request
@@ -216,15 +224,51 @@ def _slow_request_stop(exc=None):
     global _req_inflight
     with _req_inflight_lock:
         _req_inflight -= 1
+    trace = g.get('_db_trace')
+    if trace is not None:
+        _dba.trace_end(trace)
     t0 = g.get('_req_t0')
     if t0 is None or _SLOW_REQUEST_SECONDS <= 0:
         return
     dur = time.perf_counter() - t0
     if dur >= _SLOW_REQUEST_SECONDS:
-        log.warning('[slow-request] %s %s levou %.1fs (%d em voo no inicio%s)',
+        log.warning('[slow-request] %s %s levou %.1fs (%d em voo no inicio%s) — %s',
                     request.method, request.path, dur,
                     g.get('_req_inflight0', 0),
-                    ', terminou com excecao' if exc is not None else '')
+                    ', terminou com excecao' if exc is not None else '',
+                    trace.summary() if trace is not None else 'sem rastro')
+
+
+# O request que NÃO termina não aparece no `[slow-request]` — ele só sai no
+# teardown. Um Summary que leva minutos no share era, no log, uma tela em
+# "Loading..." sem NENHUMA linha dizendo que o request estava vivo e o que ele
+# estava esperando. Este laço lê os rastros em voo há mais de `_SLOW_WATCH_EVERY`
+# segundos e escreve uma linha por request a cada volta, com o mesmo resumo.
+_SLOW_WATCH_EVERY = 30.0
+_slow_watch_started = False
+
+
+def _slow_request_watch_loop():
+    while True:
+        time.sleep(_SLOW_WATCH_EVERY)
+        try:
+            for trace in _dba.traces_in_flight(_SLOW_WATCH_EVERY):
+                log.warning('[slow-request] %s em voo ha %.0fs (%s) — %s',
+                            trace.label, trace.age(), trace.thread, trace.summary())
+        except Exception:                                   # noqa: BLE001
+            log.debug('[slow-request] watch falhou:\n%s', traceback.format_exc())
+
+
+def _slow_request_watch_start():
+    global _slow_watch_started
+    if _slow_watch_started or _SLOW_REQUEST_SECONDS <= 0:
+        return
+    _slow_watch_started = True
+    threading.Thread(target=_slow_request_watch_loop, name='slow-request-watch',
+                     daemon=True).start()
+
+
+_schedule_on_start('slow-request-watch', _slow_request_watch_start)
 
 
 # ==============================================================================

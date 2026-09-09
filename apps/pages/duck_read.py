@@ -418,6 +418,7 @@ def table_rows(db_name, table, rel, schema='main', order_by=None, heal=None,
         rows = _le_ocupado(_ler)
         if rows is _OCUPADO:
             _ocupado_avisa(db_name)
+            _DA.trace_note('json', db_name)
             return None                       # o JSON desta vez; nada de cura
         if rows is None:
             # CURA SÍNCRONA: converte AGORA (na fila da thread do espelho —
@@ -427,6 +428,7 @@ def table_rows(db_name, table, rel, schema='main', order_by=None, heal=None,
             if _cura_em_quarentena(jpath):
                 return None                       # já se sabe que não resolve
             from apps.pages import duck_mirror
+            _DA.trace_note('cura', db_name)
             if duck_mirror.convert_sync(jpath, kind=sync_kind):
                 rows = _ler()
             if rows is None:
@@ -651,6 +653,7 @@ def day_payload(path):
         dados = _le_ocupado(_ler)
         if dados is _OCUPADO:
             _ocupado_avisa(db_name)
+            _DA.trace_note('json', db_name)
             return None                       # o JSON desta vez; nada de cura
         if isinstance(dados, list) and dados:
             dados = _valida(dados)
@@ -659,6 +662,7 @@ def day_payload(path):
             # aviso assíncrono e o chamador cai no JSON.
             if _cura_em_quarentena(jpath):
                 return None                       # já se sabe que não resolve
+            _DA.trace_note('cura', db_name)
             if duck_mirror.convert_sync(jpath):
                 dados = _ler()
             if dados is None:
