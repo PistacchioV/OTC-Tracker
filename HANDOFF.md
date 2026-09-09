@@ -17622,3 +17622,51 @@ continua valendo por request — ele só deixou de ser o motivo de a cura
 recomeçar do zero. O ambiente lento do share continua lento (é o §422 e o
 §428), mas a tela deixa de pagar por ele em cada abertura.
 
+## §433 — O Summary que "não carrega" e o log que não dizia onde ele estava (2026-09-09)
+
+O relato: NDF Summary e Other Products Summary em "Loading…" na instância,
+sem saber se estavam carregando ou parados. O log do processo (subido às
+18:47) trazia, nos seis minutos seguintes, leituras segurando a trava
+COMPARTILHADA por 8 a 33 s (`file_lock_held_slow mode=read`), uma leitura do
+espelho de 15,7 s (`NDF.db`, a posição TER), dois `file_lock_wait_timed_out`
+em `OtherPublisher.db` por trava EXCLUSIVA de outro processo (a conversão
+da instância vizinha — `AlreadyLocked ... locked a portion of the file`) já
+caindo para o JSON pelo §"ocupado não é defasado", e o `GET /ndf-summary`
+(a PÁGINA) em 16 s — a allowlist lendo o banco de usuários no mesmo share
+frio. Nenhuma linha dizia que request estava vivo, nem o que ele esperava:
+o `[slow-request]` só sai no teardown, e o request que não termina não sai
+nunca. E um aviso do portalocker na subida: `timeout has no effect in
+blocking mode`.
+
+O que mudou:
+
+- **o rastro de banco por request** (`database_access.DbTrace`,
+  `trace_begin`/`trace_end`/`trace_note`/`traces_in_flight`): a camada
+  registra cada operação (NOME do banco — os dois últimos segmentos, não o
+  hash —, modo, segundos, categoria) no rastro da thread, e o `duck_read`
+  anota as quedas para o JSON e as curas. O `before_request` abre o rastro, o
+  `[slow-request]` termina com o resumo ("9 abertura(s) de banco em 198.4s
+  (NDF/NDF.db read 33.1s · …); 2 espera(s) de lock estourada(s); 2 leitura(s)
+  servida(s) pelo JSON"), e o laço `slow-request-watch` escreve, a cada 30 s,
+  uma linha por request em voo há mais de 30 s com o mesmo resumo — é a
+  resposta à pergunta "está carregando ou está parado?";
+- **o aquecimento dos dois Summaries** (`summary-warm`, 4 min depois da
+  subida e a cada 30 min na janela 08–20 BRT; `OTC_SUMMARY_WARM_MINUTES=0`
+  desliga): roda as MESMAS coletas do request (`_ndfsum_collect`,
+  `_ops_trade_rows`, `_opssum_rows`) para hoje, num `test_request_context`,
+  enchendo o memo de PROCESSO do `day_payload` — quem clica depois paga só o
+  `stat`. Uma linha de WARNING por rodada, com o rastro: é a medida diária de
+  quanto o share está custando. Na dev, a segunda rodada já não reabre a TER;
+- **o lock do claim diário passou a NON_BLOCKING** (`_claim_daily_slot` e
+  `_release_daily_slot`): sem o flag o `timeout=15` era ignorado (o aviso do
+  portalocker) e o `LockFileEx` esperava sem teto pela instância que estava
+  com o claim;
+- **`_latam_all_dates` memoizada** (por request e por processo, TTL 5 min,
+  esquecida pelo `_latam_save`): era um `os.walk` da raiz INTEIRA do OTM —
+  Latam e OTM dividem a raiz — a cada chamada, e quem chama é o elo de equity
+  no caminho do Other Products Summary e dos dois Settlement Advice.
+
+O que NÃO mudou, e é o que o rastro vai mostrar: no share uma abertura fria
+de um banco com centenas de tabelas custa segundos, e os dois Summaries abrem
+uma dúzia deles em série. O aquecimento tira isso do clique; a próxima leitura
+do log da instância diz quais bancos, e quanto cada um. `check_db_trace.py`.

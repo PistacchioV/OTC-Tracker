@@ -46,8 +46,13 @@ def _claim_daily_slot(claim_file, claim_dir, slot, keep_last, log_prefix):
     anterior deste processo) já reservou. Cross-process via lock de arquivo."""
     os.makedirs(claim_dir, exist_ok=True)
     try:
+        # NON_BLOCKING é o que dá efeito ao `timeout`: sem ele o portalocker
+        # avisa ("timeout has no effect in blocking mode") e o `LockFileEx`
+        # espera SEM TETO pela instância que está com o claim — a thread do
+        # scheduler parava ali até a outra soltar.
         with portalocker.Lock(claim_file + '.lock', mode='a+b', timeout=15,
-                              flags=portalocker.LockFlags.EXCLUSIVE):
+                              flags=portalocker.LockFlags.EXCLUSIVE
+                              | portalocker.LockFlags.NON_BLOCKING):
             with _cache_lock:
                 try:
                     with open(claim_file, encoding='utf-8') as fh:
@@ -75,8 +80,13 @@ def _claim_daily_slot(claim_file, claim_dir, slot, keep_last, log_prefix):
 def _release_daily_slot(claim_file, slot, log_prefix):
     """Devolve `slot` (envio falhou) sob o mesmo lock cross-process do claim."""
     try:
+        # NON_BLOCKING é o que dá efeito ao `timeout`: sem ele o portalocker
+        # avisa ("timeout has no effect in blocking mode") e o `LockFileEx`
+        # espera SEM TETO pela instância que está com o claim — a thread do
+        # scheduler parava ali até a outra soltar.
         with portalocker.Lock(claim_file + '.lock', mode='a+b', timeout=15,
-                              flags=portalocker.LockFlags.EXCLUSIVE):
+                              flags=portalocker.LockFlags.EXCLUSIVE
+                              | portalocker.LockFlags.NON_BLOCKING):
             with _cache_lock:
                 try:
                     with open(claim_file, encoding='utf-8') as fh:

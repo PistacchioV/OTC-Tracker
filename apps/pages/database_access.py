@@ -306,6 +306,134 @@ def _sanitize_error(error: BaseException, operation: DatabaseOperation) -> str:
     return message[:500]
 
 
+# ── O rastro POR REQUEST ─────────────────────────────────────────────────────
+# O farol emite um evento por OPERAÇÃO, e o `[slow-request]` do routes diz só
+# quanto o request inteiro levou. Entre os dois faltava a resposta à pergunta
+# que se faz olhando o log da instância — "esse request está parado ONDE?":
+# quantos bancos abriu, quais, quanto cada um custou, quantas esperas de lock
+# estouraram, quantas leituras caíram para o JSON. Sem isso, um Summary que
+# leva minutos aparece como dezenas de `file_lock_held_slow` de bancos
+# identificados por hash, sem dizer que request os pediu — e o request que
+# NUNCA termina não aparece em lugar nenhum, porque o `[slow-request]` só sai
+# no fim.
+#
+# O rastro é um objeto por THREAD (`trace_begin`/`trace_end`), alimentado por
+# esta camada no fim de cada operação e pelo `duck_read` nas quedas para o
+# JSON e nas curas; o `routes` o abre no `before_request`, resume-o na linha
+# do `[slow-request]` e um laço lê os que ainda estão em voo
+# (`traces_in_flight`). Custo por operação: um append sob lock, nada de I/O.
+class DbTrace:
+    __slots__ = ("label", "started_at", "thread", "ops", "notes", "_lock")
+
+    def __init__(self, label: str) -> None:
+        self.label = label
+        self.started_at = time.monotonic()
+        self.thread = threading.current_thread().name
+        self.ops: list = []          # (banco, modo, segundos, categoria)
+        self.notes: list = []        # (tipo, detalhe)
+        self._lock = threading.Lock()
+
+    def record(self, database_path: str, mode: str, seconds: float, category: str) -> None:
+        with self._lock:
+            self.ops.append((_database_label(database_path), mode, float(seconds), category))
+
+    def note(self, kind: str, detail: object) -> None:
+        with self._lock:
+            self.notes.append((kind, str(detail)))
+
+    def age(self) -> float:
+        return time.monotonic() - self.started_at
+
+    def summary(self, top: int = 4) -> str:
+        """Uma frase para o log: aberturas, os bancos mais caros, timeouts, quedas."""
+        with self._lock:
+            ops = list(self.ops)
+            notes = list(self.notes)
+        if not ops and not notes:
+            return "nenhuma abertura de banco"
+        total = sum(seg for _n, _m, seg, _c in ops)
+        por_banco: dict = {}
+        for nome, modo, seg, _cat in ops:
+            chave = "%s %s" % (nome, modo)
+            n, s = por_banco.get(chave, (0, 0.0))
+            por_banco[chave] = (n + 1, s + seg)
+        maiores = sorted(por_banco.items(), key=lambda kv: kv[1][1], reverse=True)[:top]
+        cabeca = "%d abertura(s) de banco em %.1fs" % (len(ops), total)
+        if maiores:
+            cabeca += " (" + " · ".join(
+                "%s %s%.1fs" % (chave, ("%dx " % n) if n > 1 else "", s)
+                for chave, (n, s) in maiores) + ")"
+        partes = [cabeca]
+        timeouts = sum(1 for _n, _m, _s, cat in ops if cat == "lock_timeout")
+        if timeouts:
+            partes.append("%d espera(s) de lock estourada(s)" % timeouts)
+        json_ = sum(1 for kind, _d in notes if kind == "json")
+        if json_:
+            partes.append("%d leitura(s) servida(s) pelo JSON" % json_)
+        curas = sum(1 for kind, _d in notes if kind == "cura")
+        if curas:
+            partes.append("%d cura(s) sincrona(s)" % curas)
+        return "; ".join(partes)
+
+
+_traces_lock = threading.Lock()
+_traces: dict = {}
+
+
+def _database_label(path: object) -> str:
+    """Os dois últimos segmentos (`NDF/Vanilla.db`): identifica o banco sem
+    expor o caminho do share, como o `_database_id` — só que legível."""
+    parts = str(path).replace("\\", "/").rstrip("/").split("/")
+    return "/".join(parts[-2:]) if len(parts) >= 2 else str(path)
+
+
+def trace_begin(label: str) -> DbTrace:
+    """Abre o rastro desta thread e o registra entre os em voo."""
+    trace = DbTrace(label)
+    _thread_state.trace = trace
+    with _traces_lock:
+        _traces[id(trace)] = trace
+    return trace
+
+
+def trace_end(trace: Optional[DbTrace]) -> None:
+    if trace is None:
+        return
+    with _traces_lock:
+        _traces.pop(id(trace), None)
+    if getattr(_thread_state, "trace", None) is trace:
+        _thread_state.trace = None
+
+
+def trace_current() -> Optional[DbTrace]:
+    return getattr(_thread_state, "trace", None)
+
+
+def trace_note(kind: str, detail: object) -> None:
+    """Anota um fato fora da camada (queda para o JSON, cura) no rastro em curso."""
+    trace = trace_current()
+    if trace is not None:
+        try:
+            trace.note(kind, detail)
+        except Exception:                                   # noqa: BLE001
+            pass
+
+
+def traces_in_flight(min_age_seconds: float = 0.0) -> list:
+    with _traces_lock:
+        vivos = list(_traces.values())
+    return [t for t in vivos if t.age() >= min_age_seconds]
+
+
+def _trace_record(operation: DatabaseOperation, seconds: float, category: str) -> None:
+    trace = trace_current()
+    if trace is not None:
+        try:
+            trace.record(operation.database_path, operation.mode, seconds, category)
+        except Exception:                                   # noqa: BLE001
+            pass
+
+
 def _log_event(event: str, operation: DatabaseOperation, level: int = logging.INFO, **fields: object) -> None:
     """Emit one structured lifecycle event; observability cannot affect database safety."""
     # O silêncio vale para o ROTINEIRO (INFO), nunca para WARNING e ERROR. Oito
@@ -466,6 +594,8 @@ class HeldFileLock:
             return
         self._released = True
         held = time.monotonic() - self._acquired_at
+        _trace_record(self._operation, held,
+                      "committed" if self._operation.mode == "write" else "completed")
         try:
             self._lock.release()
         except Exception as exc:                            # noqa: BLE001
@@ -516,7 +646,12 @@ def hold_file_lock(
         started_at=time.monotonic(),
         engine=engine,
     )
-    return HeldFileLock(_acquire_file_lock(operation, timeout_seconds), operation)
+    try:
+        lock = _acquire_file_lock(operation, timeout_seconds)
+    except DatabaseLockTimeout:
+        _trace_record(operation, time.monotonic() - operation.started_at, "lock_timeout")
+        raise
+    return HeldFileLock(lock, operation)
 
 
 def _open_connection(engine: str, database_path: str, write: bool):
@@ -739,6 +874,7 @@ def _database_context(
             time.monotonic() - file_lock_acquired_at
             if file_lock_acquired_at is not None else 0
         )
+        _trace_record(operation, hold_seconds, outcome)
         _log_event(
             "operation_completed", operation,
             logging.WARNING if outcome in {"lock_timeout", "outcome_unknown", "cleanup_failed"} else logging.INFO,

@@ -62,6 +62,7 @@ from apps.pages.database_access import (
     duckdb_read,
     duckdb_write,
 )
+from apps.pages import database_access as _dba  # noqa: E402
 # Os tipos de confirmação são UMA lista só, definida no módulo da esteira: ela
 # alimenta o Confirmation Type do upload do Electronic Inventory, o cadastro
 # Produto × LOB de `manual-conf-validation` e o dropdown de Produto do Track
@@ -207,6 +208,13 @@ def _slow_request_start():
     with _req_inflight_lock:
         _req_inflight += 1
         g._req_inflight0 = _req_inflight
+    # O rastro de banco do request (`database_access.DbTrace`): é o que diz
+    # ONDE o tempo foi — quais bancos, quantas aberturas, quantos timeouts,
+    # quantas quedas para o JSON — na linha do fim e no laço dos em voo.
+    try:
+        g._db_trace = _dba.trace_begin('%s %s' % (request.method, request.path))
+    except Exception:                                       # noqa: BLE001
+        g._db_trace = None
 
 
 @blueprint.teardown_request
@@ -216,15 +224,51 @@ def _slow_request_stop(exc=None):
     global _req_inflight
     with _req_inflight_lock:
         _req_inflight -= 1
+    trace = g.get('_db_trace')
+    if trace is not None:
+        _dba.trace_end(trace)
     t0 = g.get('_req_t0')
     if t0 is None or _SLOW_REQUEST_SECONDS <= 0:
         return
     dur = time.perf_counter() - t0
     if dur >= _SLOW_REQUEST_SECONDS:
-        log.warning('[slow-request] %s %s levou %.1fs (%d em voo no inicio%s)',
+        log.warning('[slow-request] %s %s levou %.1fs (%d em voo no inicio%s) — %s',
                     request.method, request.path, dur,
                     g.get('_req_inflight0', 0),
-                    ', terminou com excecao' if exc is not None else '')
+                    ', terminou com excecao' if exc is not None else '',
+                    trace.summary() if trace is not None else 'sem rastro')
+
+
+# O request que NÃO termina não aparece no `[slow-request]` — ele só sai no
+# teardown. Um Summary que leva minutos no share era, no log, uma tela em
+# "Loading..." sem NENHUMA linha dizendo que o request estava vivo e o que ele
+# estava esperando. Este laço lê os rastros em voo há mais de `_SLOW_WATCH_EVERY`
+# segundos e escreve uma linha por request a cada volta, com o mesmo resumo.
+_SLOW_WATCH_EVERY = 30.0
+_slow_watch_started = False
+
+
+def _slow_request_watch_loop():
+    while True:
+        time.sleep(_SLOW_WATCH_EVERY)
+        try:
+            for trace in _dba.traces_in_flight(_SLOW_WATCH_EVERY):
+                log.warning('[slow-request] %s em voo ha %.0fs (%s) — %s',
+                            trace.label, trace.age(), trace.thread, trace.summary())
+        except Exception:                                   # noqa: BLE001
+            log.debug('[slow-request] watch falhou:\n%s', traceback.format_exc())
+
+
+def _slow_request_watch_start():
+    global _slow_watch_started
+    if _slow_watch_started or _SLOW_REQUEST_SECONDS <= 0:
+        return
+    _slow_watch_started = True
+    threading.Thread(target=_slow_request_watch_loop, name='slow-request-watch',
+                     daemon=True).start()
+
+
+_schedule_on_start('slow-request-watch', _slow_request_watch_start)
 
 
 # ==============================================================================
@@ -6827,6 +6871,7 @@ def _latam_save(jp, data):
     """
     os.makedirs(os.path.dirname(jp), exist_ok=True)
     _atomic_write_json(jp, data)                # funil: bump + espelho (§335)
+    _latam_dates_forget()                       # a data nova entra na lista já
 
 
 def _latam_find(data, rid):
@@ -6836,6 +6881,25 @@ def _latam_find(data, rid):
     return None
 
 
+# A listagem de datas do Latam é memoizada por REQUEST e por PROCESSO (TTL
+# curto). Ela era um `os.walk` da raiz INTEIRA — e a raiz é a do OTM
+# (`LATAM_JSON_ROOT = OTM_JSON_ROOT`), todo ano e todo mês dos dois —, a cada
+# chamada; no share cada pasta é uma ida de rede, e quem chama é o
+# `_latam_latest_ref` do elo de equity (`_ops_equity_link`), no caminho do
+# Other Products Summary e dos dois Settlement Advice. O import local esquece
+# o memo na hora (`_latam_dates_forget`, chamado pelo `_latam_save`); o TTL
+# cobre o import feito pela instância vizinha.
+_LATAM_DATES_TTL = 300.0
+_latam_dates_lock = threading.Lock()
+_latam_dates_memo = {'at': 0.0, 'dates': None}
+
+
+def _latam_dates_forget():
+    with _latam_dates_lock:
+        _latam_dates_memo['dates'] = None
+
+
+@_once_per_request
 def _latam_all_dates():
     """Datas (datetime) que TÊM JSON de Latam Desk Position, da mais nova para a
     mais antiga. O relatório não é diário, então é isso que a página usa para
@@ -6843,17 +6907,24 @@ def _latam_all_dates():
     root = os.path.normpath(LATAM_JSON_ROOT)
     if not os.path.isdir(root):
         return []
+    with _latam_dates_lock:
+        memo = _latam_dates_memo
+        if memo['dates'] is not None and time.monotonic() - memo['at'] < _LATAM_DATES_TTL:
+            return list(memo['dates'])
     pref = _LATAM_JSON_BASE + '_'
-    out = []
-    for _dirpath, _dirs, files in os.walk(root):
-        for f in files:
-            if not (f.startswith(pref) and f.endswith('.json')) or f.endswith('.meta.json'):
-                continue
-            try:
-                out.append(datetime.strptime(f[len(pref):-5], '%Y%m%d'))
-            except ValueError:
-                continue
-    return sorted(set(out), reverse=True)
+    out = set()
+    for _caminho, nome, _mtime, _size in _day_files(root, '.json'):
+        if not nome.startswith(pref) or nome.endswith('.meta.json'):
+            continue
+        try:
+            out.add(datetime.strptime(nome[len(pref):-5], '%Y%m%d'))
+        except ValueError:
+            continue
+    dates = sorted(out, reverse=True)
+    with _latam_dates_lock:
+        _latam_dates_memo['at'] = time.monotonic()
+        _latam_dates_memo['dates'] = list(dates)
+    return dates
 
 
 def _latam_latest_ref():
@@ -9469,6 +9540,69 @@ def _ndfsum_ir_warm_start():
 
 
 _schedule_on_start('ndfsum-ir-warm', _ndfsum_ir_warm_start)
+
+
+# ── O aquecimento dos dois Summaries ─────────────────────────────────────────
+# O NDF Summary e o Other Products Summary abrem, entre os dois, uma dúzia de
+# bancos no share (Operations B3, Cockpit, a posição TER de vinte mil linhas,
+# OTM, Latam, DPOSICAO-SWAP, os cadastros), e no share uma abertura FRIA custa
+# segundos — em série, o primeiro clique depois de um restart é de minutos, e a
+# instância reinicia várias vezes ao dia. O `day_payload` tem memo de PROCESSO
+# (chave caminho × mtime × tamanho): quem paga a abertura uma vez deixa o
+# arquivo em memória para todo mundo. Este laço paga por todo mundo, em
+# background: roda as MESMAS coletas que o request faz (`_ndfsum_collect`,
+# `_ops_trade_rows`, `_opssum_rows`), para hoje, num request-context de
+# mentira — o memo por request do `duck_read` e os `@_once_per_request` querem
+# um `g`. O que muda de mão (o arquivo reescrito por uma rotina) é reaberto
+# pelo próprio request, como sempre; o laço só faz o caso comum ser quente.
+# Uma linha de WARNING por rodada, com o rastro: é ela que diz, no log da
+# instância, quanto o share está custando hoje. `OTC_SUMMARY_WARM_MINUTES=0`
+# desliga; a janela é a das importações (08:00-20:00 BRT).
+_SUMMARY_WARM_DELAY = 240                     # s depois da subida (o IR aquece aos 120)
+try:
+    _SUMMARY_WARM_MINUTES = float(os.getenv('OTC_SUMMARY_WARM_MINUTES', '30') or 0)
+except ValueError:
+    _SUMMARY_WARM_MINUTES = 30.0
+_summary_warm_started = False
+
+
+def _summary_warm_once(hoje):
+    """As coletas dos dois Summaries para `hoje`, num request-context próprio.
+    Devolve o rastro de banco da rodada."""
+    trace = _dba.trace_begin('summary-warm')
+    try:
+        with _app_context(), _FLASK_APP.test_request_context('/__summary-warm'):
+            _ndfsum_collect(hoje)
+            trade = _ops_trade_rows(hoje.date())
+            _opssum_rows(trade, datetime(hoje.year, hoje.month, hoje.day))
+    finally:
+        _dba.trace_end(trace)
+    return trace
+
+
+def _summary_warm_loop():
+    time.sleep(_SUMMARY_WARM_DELAY)
+    while True:
+        if _FLASK_APP is not None and _import_window_open():
+            try:
+                t0 = time.monotonic()
+                trace = _summary_warm_once(_br_now())
+                log.warning('[summary-warm] NDF Summary e Other Products de hoje aquecidos '
+                            'em %.0fs — %s', time.monotonic() - t0, trace.summary())
+            except Exception:                               # noqa: BLE001
+                log.warning('[summary-warm] aquecimento falhou:\n%s', traceback.format_exc())
+        time.sleep(max(60.0, _SUMMARY_WARM_MINUTES * 60))
+
+
+def _summary_warm_start():
+    global _summary_warm_started
+    if _summary_warm_started or _SUMMARY_WARM_MINUTES <= 0:
+        return
+    _summary_warm_started = True
+    threading.Thread(target=_summary_warm_loop, name='summary-warm', daemon=True).start()
+
+
+_schedule_on_start('summary-warm', _summary_warm_start)
 
 
 def _ndfsum_collect(ref):

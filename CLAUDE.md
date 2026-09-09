@@ -1,96 +1,87 @@
 # CLAUDE.md
 
-Guia para o Claude Code (claude.ai/code) trabalhar neste repositório.
+Guia para o Claude Code trabalhar neste repositório. Reescrito do zero em
+09/09/2026: a versão anterior tinha 3.300 linhas acumuladas em ~430 sessões.
+O histórico de cada decisão continua no [`HANDOFF.md`](HANDOFF.md) — um `§N`
+neste arquivo aponta para a seção de lá.
 
-O OTC Tracker é uma aplicação Flask que cobre o ciclo de vida de derivativos de
-balcão: registro, economic affirmation, liquidação e documentos transacionais.
-É uma aplicação **interna do JPMorgan**, servida de um processo único para uma
-mesa inteira — o que explica quase todas as regras não óbvias abaixo.
+O OTC Tracker é uma aplicação Flask **interna do JPMorgan** que cobre o ciclo
+de vida de derivativos de balcão: registro, economic affirmation, liquidação e
+documentos transacionais. Duas coisas explicam quase toda regra não óbvia
+abaixo: **um processo só serve a mesa inteira**, e **os dados vivem num share
+SMB**, onde cada `stat`, cada abertura de banco e cada lock é ida e volta de
+rede.
 
 ---
 
 ## 1. Comandos
 
 ```bash
-# Ambiente (o diretório chama-se .venv311 mas o Python é 3.12)
-source .venv311/bin/activate
+source .venv311/bin/activate        # o diretório diz 311, o Python é 3.12
 pip install -r requirements.txt
-
-# Desenvolvimento — no macOS use 5005, NUNCA 5000 (ver §8)
-flask run --port=5005
-
-# Produção (Gunicorn, 0.0.0.0:5005)
-gunicorn --config gunicorn-cfg.py run:app
+flask run --port=5005               # macOS: NUNCA 5000 (AirPlay) — §9
+gunicorn --config gunicorn-cfg.py run:app   # produção alternativa; a instância usa waitress
 ```
 
 ```bash
-# Front-end
-npm install          # ou bun install
-npm run dev          # gulp em watch: SCSS → CSS
-npm run build        # compilação única
+npm install && npm run dev          # gulp em watch: scss/**/*.scss → static/css/
+npm run build
 ```
 
-Copie `env.sample` para `.env` e defina no mínimo `FLASK_APP=run.py`. O modo
-debug **não** vem do `.env`: é a flag `DEBUG` no topo do `run.py`.
+Copie `env.sample` para `.env` com pelo menos `FLASK_APP=run.py`. Fora do
+Windows **`OTC_SHARED_DRIVE_ROOT` é obrigatória** (§9). O modo debug é a flag
+`DEBUG` no topo do `run.py`, não o `.env`.
 
-Gulp compila `apps/static/scss/**/*.scss` → `apps/static/css/` e copia os
-plugins de `node_modules` para `apps/static/plugins/`.
+```bash
+OTC_SHARED_DRIVE_ROOT=/tmp/otc-share python scripts/tests/check_<nome>.py
+```
 
 ---
 
-## 2. Regras da casa (as que não se negociam)
+## 2. As regras que não se negociam
 
-- **A branch de trabalho é `StreamFlow`** (desde 30/08/2026; era
-  `visual-refresh`, e antes dela `apple-design` — as duas continuam no
-  repositório, congeladas). Todo commit e push vai para lá — nunca presuma
-  `main`. **`StreamFlow-prod` é a branch que a instância do JPM roda**, e ela
-  é a `StreamFlow` MAIS um commit no `apps/config.py`: **dados**, bancos e
-  share em
-  `\\Nawest.ad.jpmorganchase.com\lac\BRA\intra` em vez de dentro da aplicação e
-  `I:\`. A diferença é **um bloco de seis linhas** (entre `── ENV:DEV ──` e
-  `── /ENV ──`) e nada mais — código só nasce na dev e chega lá por merge
-  (`/commit` publica na dev; `/commitjp` faz o merge e troca o bloco). Corrigir
-  direto na prod é criar uma divergência que ninguém vê até o merge seguinte
-  conflitar.
-- **Nunca fixe um de-para novo no código.** Qualquer coisa mapeável tem de ser
-  cadastrável pela tela `/mapping` — é regra permanente do usuário. Ver §6.
+- **Branch de trabalho: `StreamFlow`. Prod do JPM: `StreamFlow-prod`.** A prod
+  é a dev MAIS um commit no `apps/config.py` — o bloco de seis linhas entre
+  `── ENV:DEV ──` e `── /ENV ──` (dados, bancos e share em
+  `\\Nawest.ad.jpmorganchase.com\lac\BRA\intra` em vez de dentro do checkout e
+  `I:\`). Código nasce na dev e chega lá por merge (`/commit` publica na dev,
+  `/commitjp` faz o merge). Corrigir direto na prod cria divergência invisível
+  até o merge seguinte conflitar. Nunca presuma `main`.
 - **O bloco DEV BYPASS (`/dev-login`) do `routes.py` nunca vai para o
-  repositório.** Ele é removido antes de cada commit. Se o único diff do
-  `routes.py` for esse bloco, basta não incluir o arquivo no `git add`.
-- **Mantenha um processo só.** Ver §4 — com mais de um, os locks não protegem
-  nada e os schedulers duplicam.
-- **Design: tokens `--vr-*` e `--ins-*`, jamais `--bs-*`.** O tema não define os
-  `--bs-*`, então eles caem no fallback claro e produzem cartão branco no tema
-  escuro. Ver §7. A pintura de hoje é o **StreamFlow**
-  (`static/css/streamflow.css` + `streamflow.js`), uma camada carregada **DEPOIS**
-  do `visual-refresh.css` que **redefine os mesmos tokens** — é por isso que as
-  ~1100 linhas da folha anterior repintaram sem uma linha editada, e é por isso
-  que continua valendo escrever `--vr-*`. O alcance dela vem de seletores
-  ESTRUTURAIS (`div[class*="-widget"]`, `[class*="-panel"]`), com exclusões
-  escritas (`:not(.row)`, `:not([class*="-chips"])`) porque nome de contêiner
-  contém o nome do que ele contém. Três armadilhas dessa camada moram no §7
-  (empilhamento, desfoque aninhado e as DUAS famílias de seletor de brilho).
-- **i18n: todo texto visível nasce em INGLÊS e é traduzido por `data-lang`**
-  (arquivos `apps/static/data/translations/{en,br,es}.json`) — em toda página,
-  SweetAlert incluído. O `I18nManager` do `app.js` traduz os `[data-lang]` UMA
-  vez, no load: **o que o JS insere depois nunca passa por ele**. Texto montado
-  dinamicamente (cards, itens de lista, SweetAlerts) sai de um mapa `_TRANS`
-  local com `t()`, lendo `localStorage['__OTC_TRACKER_LANG__']` — o padrão do
-  swapchar e do Confirmations Monitor. Texto de servidor que a tela exibe deve
-  vir **estruturado** (a lista, não a frase), para a frase ser montada no idioma
-  da aplicação — o `meta` da Recon FXO era a frase pronta em português e por isso
-  o resumo do alerta é montado na tela a partir de `counts`, ficando o `meta`
-  só para a notificação do sino, que é texto gravado uma vez.
-- **E-mail: o cabeçalho é cor sólida + gradiente CSS, nunca imagem/VML.** O
-  `<v:rect>` do Outlook pintava o banner ora mais estreito que a célula (faixa
-  sólida à direita), ora na largura da janela inteira. Ver o comentário em
-  `partials/email-gradient-header.html`; `_attach_email_gradient` é no-op de
-  propósito. A proibição é do BANNER, cuja largura tem de acompanhar a célula:
-  um `v:roundrect` de **largura fixa** para botão é o caso em que o VML se
-  comporta, e é o único jeito de o Outlook desktop arredondar canto. E botão
-  ganha altura com `height` + `line-height`, nunca com padding vertical —
-  o Word ignora padding em cima/embaixo de link e o botão sai magro
-  (HANDOFF §257).
+  repositório.** É removido antes de cada commit e restaurado depois.
+- **Nunca fixe um de-para novo no código.** Tudo que é mapeável se cadastra
+  pela tela `/mapping` (§6). Regra permanente do usuário.
+- **Um processo só.** waitress `--threads=16`, `workers = 1` no gunicorn. Com
+  dois processos o singleton do banco, o `_cache_lock` e os schedulers deixam
+  de proteger qualquer coisa (§4).
+- **Caminho de dado nunca se monta à mão.** JSONs pelo `data_paths.py`
+  (`data_path`/`data_write`/`mapping_file`), bancos pelo `Config.DATABASE_DIR`,
+  share pelo `Config.SHARED_DRIVE_ROOT`. Um literal `I:\...` ou
+  `static/data/...` no fonte continua lendo o lugar antigo no dia em que os
+  dados mudam de casa, sem erro nenhum. `check_config_names.py` recusa por AST.
+- **`json.dump` é proibido fora do funil `_atomic_write_json`** em
+  `apps/pages` (`check_duck_writers.py`): é o funil que avisa o espelho DuckDB.
+- **Todo valor de request/sessão/planilha/e-mail entra no SQL como parâmetro
+  `?`.** Só DDL sobre identificadores do próprio código (`_PC_TABLE`,
+  `_PC_COLUMNS`) monta string. Referência vendorizada:
+  `Docs/SQL_Injection_Prevention_Cheat_Sheet.md`.
+- **Design: tokens `--vr-*`/`--ins-*`, jamais `--bs-*`** (o tema não os define;
+  caem no fallback claro e viram cartão branco no escuro). A pintura atual é o
+  StreamFlow (`static/css/streamflow.css` + `streamflow.js`), camada carregada
+  DEPOIS do `visual-refresh.css` que redefine os mesmos tokens — por isso
+  continua se escrevendo `--vr-*`. Armadilhas do vidro em §7.
+- **i18n: texto visível nasce em INGLÊS e é traduzido por `data-lang`**
+  (`static/data/translations/{en,br,es}.json`). O `I18nManager` traduz UMA vez
+  no load; o que o JS insere depois sai de um mapa `_TRANS` local com `t()`
+  lendo `localStorage['__OTC_TRACKER_LANG__']`. Texto de servidor exibido pela
+  tela vem ESTRUTURADO (a lista, não a frase).
+- **E-mail: cabeçalho é cor sólida + gradiente CSS, nunca imagem/VML** (o
+  `<v:rect>` do Outlook pintava o banner na largura errada). VML só em botão de
+  largura FIXA (`v:roundrect`); botão ganha altura com `height` +
+  `line-height`, nunca padding vertical (§257).
+- **Escale com threads, não com workers.** Com os dados no share a maior parte
+  de um request é espera de rede com a thread parada; 4 threads (padrão do
+  waitress) param o servidor inteiro.
 
 ---
 
@@ -98,3215 +89,809 @@ plugins de `node_modules` para `apps/static/plugins/`.
 
 ### Ciclo do request
 
-`run.py` lê `DEBUG` → escolhe `DebugConfig` ou `ProductionConfig` de
-`apps/config.py` → chama `create_app()` em `apps/__init__.py`. A fábrica
-registra as extensões e descobre os blueprints iterando a tupla
-`apps = ('pages',)`, importando `apps.<nome>.routes`.
+`run.py` lê `DEBUG` → `DebugConfig`/`ProductionConfig` (`apps/config.py`) →
+`create_app()` (`apps/__init__.py`) registra extensões e importa
+`apps.pages.routes`. **Um único blueprint** (`pages_blueprint`) é dono de todas
+as rotas. `create_app` confere `_REQUIRED_CONFIG_NAMES` antes dos blueprints e
+recusa subir se o `config.py` ficou para trás num pull (§9).
 
-Existe **um único blueprint** (`pages_blueprint`, em `apps/pages/__init__.py`)
-que é dono de todas as rotas. A lógica vive em `apps/pages/routes.py`
-(~29,3 mil linhas). Ao lado dele, `apps/pages/` guarda módulos auxiliares
-importados pelas rotas — nenhum tem blueprint próprio:
+### Onde o código mora
 
-| Módulo | O que é |
+| Camada | O que é |
 |---|---|
-| `athena_api.py` | cliente da API `getTrades` da Athena (SSO Kerberos/ADFS — §8) |
-| `precificador/` | o motor de mercado das **Tools** (calendário, contagem de dias, CDI, PTAX, SOFR, Term SOFR, EURIBOR, renda fixa, liquidação de swap) — porte do projeto *Precificação Swap*, sem Flask |
-| `confirmation_pdfs.py` | réplicas em reportlab dos documentos Word |
-| `manual_conf.py` | a esteira de confirmação manual (os dois DuckDBs, as derivadas, o agrupamento) |
-| `recon_fxo.py` | motor da reconciliação de FXO (DPOSICAO × Athena EOD) |
-| `recon_cgd.py` | motor da reconciliação de CGD (lista do FEP × posição da B3) — tradução do workflow Alteryx `Batimento CGD` |
-| `cgd_docs.py` | o banco da lista de CGDs do SharePoint (Onboarding · Tracking Docs) |
-| `otc_boxparse.py` | parser do e-mail de booking recap |
-| `otc_tickets.py` | store JSON do Support Center |
-| `otc_emails.py`, `webpush.py`, `forecast_charts.py`, `otc_boxscan.py`, `recon_payrec.py`, `recon_comitente.py` | — |
+| `apps/pages/routes.py` (~13,6 mil linhas) | casca e plataforma miúda: sessão/authz-endpoints, sino, `_MAPPING_DEFS`, leitores `_ndfc_*`/`_ndfsum_*`/`_ndfadv_*`, Daily Settlement `_ds_*`, wiring das features e os ALIASES (`_x = _pf_anbima._x`) |
+| `apps/pages/platform/` (17 módulos) | infra horizontal: `anbima`, `authz`, `db`, `dates`, `json_cache`, `mail`, `notifications` e os motores `settlement`, `confirmations`, `counterparty`, `forecast`, `electronic_inventory`, `manual_confirmation`, `file_interpreter`, `pending_confirmation`, `operations_b3`, `new_deals` |
+| `apps/pages/features/<nome>/` (44 verticais) | `entrypoint.py` (rotas) · `commands.py` (escrita) · `queries.py` (leitura) · `domain.py` (regras puras) · `infra/` — todas em desenho fino; não existe mais `engine.py` |
+| `apps/pages/database_access.py` | a camada de banco: permit + lock de arquivo + farol de eventos (§4) |
+| `duck_read.py` · `duck_mirror.py` · `json_to_duckdb.py` | leitura DB-only, espelho vivo, motor de conversão (§4) |
+| `data_paths.py` · `request_cache.py` | caminhos de dado; `once_per_request`/`req_cached` |
+| `manual_conf.py` · `cgd_docs.py` · `otc_tickets.py` | donos dos bancos da esteira, do Onboarding e do store de tickets |
+| `athena_api.py` · `otc_boxparse.py` · `otc_boxscan.py` · `otc_emails.py` · `webpush.py` | Athena (SSO Kerberos), parser do recap, varredura do box, e-mails, push |
+| `recon_fxo.py` · `recon_cgd.py` · `recon_payrec.py` · `recon_comitente.py` | motores das recons |
+| `confirmation_pdfs.py` · `forecast_charts.py` · `quotes.py` · `precificador/` | PDFs em reportlab, gráficos, cotações, motor de mercado das Tools (puro, sem Flask) |
 
-**`confirmation_pdfs.py` tem um padrão a seguir:** FX Options é a exceção
-correta. `opcao_fx_pdf()` monta o PDF a partir do *HTML já renderizado* do
-documento (a mesma string que vira o `.doc`), via `_WordHtmlToFlowables` — as
-duas saídas não têm como divergir. Documento novo deve nascer assim
-(HANDOFF §139) — e é o que a **Opção de palm oil** faz: `word_html_pdf(doc_html)`
-é a função genérica desse caminho, e o registro de quem usa qual é o
-`_CONF_OPT_PDF_FROM_HTML` (o `opcao_pdf`, réplica em reportlab, continua
-servindo só as duas famílias que nasceram antes). Ali isso não é estilo: o
-Anexo I do palm oil tem **19** colunas e o `opcao_pdf` imprime as 16 de sempre —
-o documento assinado sairia sem a Taxa de Conversão da Mercadoria, que é como o
-preço em MYR vira USD.
-
-**`otc_boxparse.py` é a segunda cópia de uma regra que também vive no
-navegador** (`static/js/pages/otc-fileupload.js`). As duas precisam concordar
-campo a campo, e `scripts/tests/check_boxparse.py` é o que prova
-(HANDOFF §157).
-
-### Herança de templates
-
-```
-layouts/base.html            ← esqueleto HTML
-  └── layouts/vertical.html  ← o único layout (menu à esquerda)
-        └── pages/*.html
-```
-
-`layouts/horizontal.html` e `partials/horizontal-nav.html` **foram apagados**
-(HANDOFF §175): eram a navegação de demonstração do template comprado.
-`partials/sidenav.html` é o único menu do app.
+Templates: `layouts/base.html` → `layouts/vertical.html` (o único layout) →
+`pages/*.html`. `partials/sidenav.html` é o único menu.
 
 ### Adicionar uma página
 
-1. Rota em `apps/pages/routes.py` devolvendo
-   `render_template('pages/<nome>.html', segment='<nome>')`
-2. Template em `apps/templates/pages/<nome>.html` estendendo um layout
-3. Opcionalmente SCSS em `apps/static/scss/` (o Gulp pega todo `*.scss`)
-4. Se a página tem tabela, ela segue o **padrão de tabela** abaixo — sem exceção.
+1. Rota no entrypoint da vertical (ou no `routes.py` se for plataforma)
+   devolvendo `render_template('pages/<nome>.html', segment='<nome>')`.
+2. Template em `apps/templates/pages/` estendendo o layout.
+3. SCSS opcional em `apps/static/scss/`.
+4. Tabela → padrão de tabela do §7, sem exceção.
+5. Notificação nova → rótulo nos TRÊS mapas (§8, Notificações).
 
-### O padrão de tabela (referência: `new_deals-ndf-vanilla.html`)
+### As regras das verticais (quebram sem erro)
 
-Todo o app segue o desenho das páginas de New Deals. Página nova com tabela
-nasce assim; página velha que divergir é bug de consistência (a varredura de
-2026-08-07 alinhou Reference Data, Index B3, Mapping, os dois Summaries, as
-Live Positions, o Track Confirmations e as três Recons).
+- **Feature nunca importa NOME do `routes`, só o MÓDULO, e dentro da função**
+  (`from apps.pages import routes` → `routes.X`). Cinquenta e tantos testes
+  trocam atributos no `routes` (`R.DB_PATH = tmp`, `R._create_notification =
+  espião`); um `from routes import X` congela o valor no import e o teste passa
+  lendo dado REAL.
+- **Toda travessia entre camadas é pelo atributo do módulo**
+  (`queries._x(...)`), nunca `from .queries import x` — é o que deixa o espião
+  interceptar a chamada que vem de outra camada. `domain` é puro: não importa
+  `routes`, não toca banco nem SMTP; para log usa
+  `logging.getLogger('otc_tracker')`.
+- **Entrypoint que o `routes.py` não importa é rota que não existe** (404, sem
+  aviso). O bloco de imports fica no FIM do `routes.py` de propósito.
+- **Scheduler de feature é registrado no `routes.py`** (`_schedule_on_start`),
+  não no módulo da feature — importar `routes` de lá fecharia o ciclo. Todos
+  respeitam `OTC_DISABLE_SCHEDULERS=1` (kill-switch dos testes).
+- **Platform nunca importa feature nem nome do routes**; o que ainda é do
+  `routes` é busca atrasada dentro da função. Estado mora na platform (alias de
+  objeto rebindado apontaria para o velho); constante que referencia outro
+  módulo da platform importa direto.
+- **Chamada interna do módulo não passa pelo alias**: teste que troca função
+  chamada por DENTRO da fatia troca nos dois lugares. `session` do Flask é
+  superfície de patch (`routes.session`).
+- **Guarda que varre `routes.py` por AST para de cobrir o que saiu de lá.**
+  Ao mover código, atualize o guarda na mesma mudança; o certo é varrer
+  `routes.py` + `features/**` + `platform/**` de uma vez (`_fontes_com_rotas`).
+- **Mexeu no motor `json_to_duckdb.py`: regere `scripts/standalone/` e
+  `scripts/convert/`** (`build_duckdb_standalone.py`, `build_convert_split.py`)
+  e commite. `check_duckdb_standalone.py`/`check_convert_split.py` reprovam.
 
-- **A página carrega o SweetAlert2 LOCAL** (`plugins/sweetalert2/sweetalert2.min.js`),
-  nunca o CDN: a instância do JPM roda sem internet, e do CDN a lib não chega.
-  Sem ela, todo `Swal.fire` da página morre com `Swal is not defined` DENTRO do
-  handler — e o que se perde não é o balão, é a **ação que vinha depois dele**: o
-  Delete da linha não apaga, o Run não avisa, e a tela não diz nada. Quarenta e
-  seis templates usam o caminho local; quatro ainda apontam para o CDN.
-- **A página carrega o `plugins/jquery/jquery.min.js` ANTES do bloco de
-  DataTables.** O `vendors.min.js` do tema **não** expõe o jQuery, então sem essa
-  linha todo plugin dali para baixo morre com `jQuery is not defined` e a página
-  abre com a barra de ferramentas e **sem tabela nenhuma** — o erro fica só no
-  console do navegador, e na tela parece uma página que "não carregou os dados".
-  Foi o que aconteceu com o Tracking Docs e a Recon CGD, as duas únicas telas com
-  DataTables que nasceram sem ela.
-- **Declare o `dom`.** Sem ele o DataTables desenha o próprio campo de busca e o
-  próprio `Show N entries`, que duplicam os da barra de ferramentas da casa e
-  aparecem soltos por cima do cabeçalho. O padrão é
-  `dom: "rt<'d-md-flex justify-content-between align-items-center mt-2'ip>"` —
-  tabela, info e paginação, nada mais.
-- **Tabela centralizada.** `th`: `text-align:center !important;
-  vertical-align:middle !important; font-size:.7rem` (quebra de linha
-  permitida no header). `td`: `text-align:center; vertical-align:middle;
-  font-size:.8rem; white-space:nowrap` (+ ellipsis nas colunas de dado).
-  Com `scrollX`, os clones `.dt-scroll-headInner` / `.dataTables_scrollHeadInner`
-  precisam das mesmas regras — o DataTables remove o id da tabela clonada.
-  **Não existe regra GLOBAL de centralização** — o `visual-refresh.css`
-  centraliza só os campos da linha de filtro e o `streamflow.css` não declara
-  `text-align` em lugar nenhum —, então a tela que nasce sem a regra nasce torta
-  **sem ninguém errar nada**: foi o Accrual e o MtM de Swap. E o
-  `table-centered` que aparece no markup vem do tema comprado e **não existe em
-  CSS nenhum** (foi o Track de usuários e o Support Center) — ele não centraliza
-  coisa alguma. **A regra do clone vai com `!important`**: sem o id, a da página
-  compete como `.dt-scroll-headInner thead th`, que é **(0,1,2)** contra o
-  **(0,1,3)** do `table.dataTable thead th` do plugin — e perde, deixando o
-  cabeçalho à esquerda com o corpo centralizado (foi o Pending Confirmation).
-  `check_table_center.py` prende as duas metades.
-- **Linha de filtro por coluna** como 2ª linha do `<thead>`, montada **antes**
-  do `.DataTable()` com `orderCellsTop: true` (ver a armadilha em §7). Inputs
-  pequenos (12px/28px), texto centralizado, placeholder = nome da coluna.
-- **Botões de ação da linha**: **squircle** colorido — geometria única no app
-  inteiro (spec `.ops-row-act`): **32×32 travado com min/max nos DOIS eixos**
-  (`min/max-width` **e** `min/max-height`, mais `box-sizing:border-box` — com só
-  a largura travada, uma regra de tema com `min-height` em `.btn` deixa um botão
-  mais alto que o vizinho, e 32×34 não é um quadrado arredondado), `padding:0`,
-  `border-radius:10px !important`, ícone Tabler `1rem`, tooltip colorido
-  (`data-bs-custom-class="tooltip-{cor}"` — e o CSS de `tooltip-{cor}` tem de
-  estar na página).
-  - **O ícone nunca leva `.fs-13`.** É classe do tema com `font-size:13px
-    !important`, e `!important` não se resolve por especificidade: ela vence a
-    regra da página e o ícone sai com 13 px onde o app usa 16 — o quadrado fica
-    do tamanho certo e o desenho dentro dele, menor. Foi o que fez o Index B3
-    Results e o Reference Data parecerem de outra tela (HANDOFF §290). A regra da
-    página vai `.btn-act > i { font-size:1rem !important }`, como cinto de
-    segurança para quem copiar o markup de outro lugar.
-  - **Tooltip em botão que a tabela redesenha se inicializa DELEGADO**, no
-    primeiro hover — os `<td>` são reescritos a cada redraw do DataTables, então
-    um laço no load pega só as linhas da primeira página e paginar devolve botões
-    mudos. `title=` sozinho é o balão cinza do navegador, não o padrão.
-  A classe `rounded-circle` ainda aparece no markup por história, e desde
-  2026-09-04 **quem fixa o squircle é uma regra GLOBAL do `visual-refresh.css`**
-  (`table td .btn.rounded-circle / .ops-row-act / .sc-row-act / .btn-act`,
-  geometria com `!important`, `display` SEM — senão venceria o `.d-none` dos
-  botões condicionais): a referência é a coluna Actions do Intrag DCE Option, e
-  cada página escrevendo a própria cópia foi o que deixou o Latam Desk Position
-  em 28px redondo e as quatro telas do swapchar sem regra nenhuma. A regra da
-  página, onde existe, é redundante e pode ficar; sem override o raio do tema
-  sairia OVAL, porque círculo só é círculo em botão já quadrado.
-  `check_row_action_buttons.py` §8 prende a regra global e os ícones canônicos
-  (`ti-edit`, nunca `ti-pencil`; `ti-check`, nunca `ti-circle-check`). Ordem e
-  cores canônicas:
-  **Confirm** `ti-check`/success → **Edit** `ti-edit`/info → **Delete**
-  `ti-trash`/danger → **Send** `ti-brand-telegram`/primary; em modo edição,
-  **Save** `ti-device-floppy`/success + **Cancel** `ti-x`/secondary. Wrapper
-  `d-flex justify-content-center gap-1`.
-- **Toolbar** — todos os botões levam `.btn-toolbar-all` (`font-size:.75rem;
-  padding:.25rem .6rem`; hover `translateY(-1px)`, active `scale(.96)`), e as
-  cores são fixas por função: **Columns** = `btn-soft-primary` (dropdown de
-  checkboxes), **Add Row** = `btn-primary bg-gradient`, **Export** = `btn-info
-  bg-gradient` (dropdown com o conjunto COMPLETO, nesta ordem: **Copy · CSV ·
-  Excel · Print · PDF** — menos que isso é bug de consistência, foi o Track
-  Confirmations com só CSV e Copy. A implementação é DataTables Buttons como no
-  New Deals; numa tabela sem `buttons:` no init, crie
-  `new $.fn.dataTable.Buttons(table, …)` depois e dispare pelos itens do
-  dropdown com `table.button('<nome>:name').trigger()`. Exporta o que está NA
-  TELA — filtros e ordenação aplicados, só colunas visíveis. CSV com
-  `fieldSeparator: ';'` e `bom: true`, que é o que o Excel pt-BR precisa para
-  separar colunas e manter acentos; Excel exige o snippet síncrono de registro
-  do JSZip depois do `buttons.html5` — HANDOFF §247), **Import** = teal
-  `#4a849b`, **Mapping/refresh** = `btn-success bg-gradient`, **Clear
-  Filters** = `btn-outline-secondary`. `Show [N] entries` ao lado. A barra vai
-  com **`mb-3`, não `mb-2`**: o DataTables desenha a própria caixa encostada no
-  elemento anterior e come a margem do irmão de cima, então o `mb-2` mede 0 px
-  na tela e os botões ficam colados no cabeçalho (HANDOFF §233).
-- **O menu Export termina no `Advanced Export`**, e ele é uma linha por tela:
-  `otcExportAdvanced('#tabela', { daily: '<endpoint do dia>' })`, opt-in como o
-  `otcCellCopy` e no-op onde o `export-advanced.js` não estiver carregado. Ele se
-  enxerta na collection do Buttons (ou num `<ul>` da página, com `menu:`) e faz
-  o export pelo MESMO Buttons — um gerador próprio seria um segundo CSV, com
-  outro separador e outro BOM. Três coisas decidem se ele funciona (HANDOFF §304):
-  - **`daily` é o endpoint que a PRÓPRIA página consulta** para desenhar um dia
-    (`{columns, rows}`; as recons usam `recon_date`/`data`, o resto `date`/`rows`).
-    Ler os JSON do cache por fora seria uma segunda regra sobre os mesmos
-    arquivos. Tela sem arquivo-dia não declara `daily` e a seção nasce
-    desabilitada com o motivo escrito — some, e parece defeito.
-  - **O intervalo pede `exact=1` e confere o `source_date` da resposta.** As
-    telas de posição andam para trás até dez dias úteis quando falta arquivo — o
-    que as mantém populadas —, e numa SÉRIE isso é o arquivo de outro dia
-    carimbado com a data pedida. Endpoint com fallback tem de aceitar o `exact` e
-    devolver a data do arquivo que leu.
-  - **Dia sem arquivo é pulado, não é erro**; o que falha leva o motivo junto; e
-    há teto de 60 s por dia, porque a leitura é em série e um dia que não
-    responde segurava a fila inteira.
-- **Alinhamento valor × coluna é parte do padrão**, e são TRÊS coisas — a Recon
-  FXO saiu desalinhada duas vezes por ter só a primeira. Com `scrollX` o
-  cabeçalho vive numa tabela irmã do corpo:
-  1. depois de todo `rows.add(...).draw()` chame **`table.columns.adjust()`**,
-     mais um segundo passe atrasado (`setTimeout(…, 150)` com
-     `.adjust().draw(false)`) e um handler de `resize`;
-  2. **`autoWidth: true`**. Com `false` o DataTables não mede nada e cada tabela
-     é dimensionada pelo navegador a partir do próprio conteúdo — o cabeçalho
-     carrega o nome longo e o campo de filtro, fica sempre mais largo, e o
-     desencontro **cresce coluna a coluna**;
-  3. as regras de `th` valem para o CLONE também. O DataTables **remove o id**
-     da tabela do cabeçalho, então `#minha-tabela th` não alcança o cabeçalho
-     que se vê: repita o seletor em `.dt-scroll-head thead th`,
-     `.dt-scroll-headInner thead th` e `.dataTables_scrollHeadInner thead th`.
-     Sem isso o header fica com a fonte e o padding do tema e o corpo com os da
-     página, e as duas tabelas medem larguras diferentes. O header vai com
-     `white-space: normal` — com `nowrap`, um nome longo impõe uma largura
-     mínima que o corpo não tem.
-
-  Confira o alinhamento em TODA tela nova antes de dar por pronta.
-- **Seleção de célula para copiar — em TODA tabela, sem exceção.** Há dois
-  caminhos, e conferir só um deles esconde metade das telas: New Deals e as três
-  de Intrag usam a extensão `select` do DataTables (`items:'cell'`); todas as
-  outras carregam o **`static/js/table-std.js`** e chamam
-  `otcCellCopy('#id', { skip: [0, 1] })` **depois do `.DataTable()`** (skip =
-  checkbox e Actions). Mesmo visual (azul `#b3d7ff`/`#0066cc`, hover
-  `cursor:cell`, flash verde ao copiar), Ctrl/Cmd+C copia com `\t`/`\n` (cola
-  no Excel), Esc limpa. O helper é idempotente e delega no nó da tabela, então
-  sobrevive a redraws; ele ignora cliques em `input`/`select`/`button`, então
-  convive com edição na linha. Numa página que monta **uma tabela por card**
-  (Accrual e MtM de Swap), a chamada é por tabela, dentro do laço — um seletor
-  fixo pegaria só a primeira.
-- **Linha de filtro por coluna: texto e placeholder centralizados**, e isso vem
-  do `visual-refresh.css` (`table thead th input[...]`), não de cada página. O
-  seletor é estrutural porque cada tela batiza a classe do próprio campo, e era
-  essa repetição que fazia a tela nova nascer sem a regra — 10 das 27 páginas
-  com filtro por coluna estavam sem ela.
-- **Números.** Valor sai em `#,##0.00`
-  (`toLocaleString('en-US', {min/maxFractionDigits: 2})`) com
-  `font-variant-numeric: tabular-nums`. **Taxa não é valor**: Strike fica com as
-  casas que tem (a Recon FXO usa 8) — duas casas fariam dois strikes diferentes
-  aparecerem iguais na tela. A formatação é **ortogonal**: só o `display`; o
-  `sort` sai pelo número cru (senão `1,000.00` vem antes de `9.00`) e o `filter`
-  pelo texto que está na tela, porque quem digita no filtro copia o que vê.
-- **Status** sempre como badge pill `bg-gradient` (mapa de cores por status).
-- **Sugestão/autocomplete de domínio aberto NUNCA usa `<datalist>` nativo.** O
-  popup é do navegador: ignora o tema, não acompanha a largura do campo e, com
-  lista grande (as ~560 contrapartes do Reference Data), cobre a tela inteira —
-  foi o Counterparty do MT300 no /mapping. O padrão é o dropdown próprio
-  **abaixo do campo, com a MESMA largura e `max-height` (~220px) com rolagem**:
-  `mapAttachDrop`/`.map-ac-drop` no mapping.html (refdata e `type: 'datalist'`)
-  e `.ar-ac-drop` no Add/Edit Deal do New Deals. Detalhes que importam: o
-  clique do item é por **`mousedown`** (dispara antes do `blur` do input) e
-  reemite `input`/`change` — é o que deixa o `wireRefdata` completar os campos
-  irmãos —, e o esconder vem DEPOIS desses eventos, senão o próprio `input`
-  reabre a lista. O domínio continua aberto: a lista é sugestão, não trava.
-- **Data é SEMPRE `dd/mm/aaaa` na tela, e `<input type="date">` visível é
-  proibido.** O campo nativo desenha no locale do SISTEMA: no Windows do JP isso
-  é `mm/dd/yyyy`, e a mesa lê `03/04` como 3 de abril onde o campo quis dizer 4
-  de março — um erro de data que não dá erro nenhum. Há dois jeitos aceitos, e os
-  dois mostram `dd/mm/aaaa`:
-  - **flatpickr com `altInput`** — o padrão geral, e o do
-    `otcDateField`/`otcDateSync` (expostos pelo `static/js/export-advanced.js`,
-    que é o único helper de data do app). Ele esconde o input original — que
-    segue com o `value` em **ISO**, e por isso o código em volta não muda — e
-    desenha ao lado o campo em dd/mm/aaaa. O flatpickr é global (vem no
-    `vendors.min.js`), mas a chamada leva guard: sem ele o campo tem de degradar
-    para texto comum, não quebrar. **Quem escreve no campo por código avisa o
-    picker** (`el._flatpickr.setDate(v, false)`, ou `otcDateSync('#modal')`): o
-    `value` do original muda, mas o campo que se VÊ é o outro, e ele ficaria com
-    a data anterior — abrir o modal numa linha e depois noutra mostraria a data
-    da primeira. **E o mesmo vale para o ESTILO**: o `altInput` herda a `class`
-    do original (o `altInputClass` a copia) e **não herda o `style=`** — largura
-    escrita inline fica no campo ESCONDIDO e o visível estica a coluna inteira
-    (o Due Date do Ticket Details saía com 468px em vez de 190px). Largura e
-    afins vão em **classe**, que alcança os dois campos. O flatpickr também não
-    desenha ícone de calendário nenhum — o `type="date"` que ele substituiu
-    desenhava: quem quiser um o põe como **background do próprio input**, e aí
-    clicar no ícone é clicar no campo e o picker abre; **SVG embutido** e não
-    arquivo, porque a instância roda sem internet, e com o par claro/escuro,
-    senão a marca some no tema escuro.
-  - **jQuery daterangepicker `singleDatePicker`** com
-    `locale: { format: 'DD/MM/YYYY' }`, nas páginas que já carregam os assets
-    dele (Other Products Summary, NDF Summary, MtM, Accrual, Control Panel,
-    dashboard). Fallback: campo de texto dd/mm/aaaa.
-
-  O `type="date"` só continua legítimo **invisível**, como picker atrás de um
-  campo de texto readonly em dd/mm/aaaa — é o `.date-wrap` das duas Recons
-  (`opacity:0` por cima do texto) e o botão de calendário do CGD no Reference
-  Data. Ali o que se lê é sempre o texto; o nativo é só o calendário.
+`check_soc_layers.py` prende tudo isso, inclusive subindo o app e conferindo o
+`url_map`, e desmonta o bytecode das features cobrando que todo `LOAD_GLOBAL`
+exista no módulo (`__module__` mente sob `functools.wraps`; quem diz é o
+`co_filename`).
 
 ---
 
-## 4. Bancos e concorrência
+## 4. Dados, bancos e concorrência
 
-São dois bancos:
+### Onde cada coisa vive
 
-- **DuckDB** (`Users_OTCTracker.db`) — tabelas `users` e `verification_codes`.
-  As **notificações moram noutro arquivo** (`Notifications_OTCTracker.db`,
-  `Config.NOTIFICATIONS_DATABASE_PATH`), com `notifications` e
-  `push_subscriptions`. O lock desta camada é por ARQUIVO: com as quatro juntas,
-  cada gravação de notificação — e elas acontecem a cada ação de qualquer pessoa
-  — segurava o arquivo inteiro em modo exclusivo, e com ele o login, a allowlist
-  do `Page_Access` e a gestão de usuários; some a isso o sino, que consulta por
-  aba aberta, e o banco vivia travado. Quem abre o de notificação é o
-  `get_notif_connection()`, com o mesmo contrato do `get_db_connection()`.
-  A separação acontece **sozinha na subida** (`_ensure_notif_db`, chamado pelo
-  `record_once` do blueprint), copiando o que está no arquivo antigo — um script
-  "rode depois do pull" é a forma mais confiável de a mesa ficar sem o sino.
-  **Na subida, e nunca no poll do sino**: o `_ensure_notif_db` abre o banco em
-  modo READ-WRITE e, na primeira vez, migra — no share isso segurou o lock
-  exclusivo por 9,4 segundos —, e ele ficava no topo do `get_notif_connection`,
-  onde quem pagava a conta era a consulta mais repetida do app, a única que abre
-  sem lock nenhum e a declarada de melhor esforço. O DuckDB não perdoa: um
-  handle read-only aberto (outra aba, outra thread, a instância vizinha que
-  enxerga o mesmo share) **bloqueia** a abertura read-write, e o open estoura com
-  *"the process cannot access the file because it is being used by another
-  process"* — que não diz nada sobre schema. Como o flag só é marcado no fim, a
-  falha o deixava em `False` e todo poll seguinte tentava de novo: um 500 por aba
-  a cada 8 segundos, cada um custando uma tentativa de lock exclusivo no share.
-  Hoje o caminho de LEITURA não chama o ensure, uma **sonda** (`_notif_schema_pronto`,
-  leitura com lock compartilhado) evita a abertura read-write no caso normal, o
-  ensure que falha **espera** 5 min antes de tentar de novo, e a ABERTURA do sino
-  está dentro do `try` — sem conexão ele devolve a lista vazia, na mesma forma da
-  resposta de sucesso. **A sonda tem TRÊS respostas, não duas**: `True` (nada a
-  fazer), `False` (falta tabela, criar) e **`None` (não deu para olhar)**.
-  Colapsar as duas últimas num `False` só foi o que fez o *"file … used by
-  another process"* virar uma tentativa de ESCRITA: arquivo em uso **existe e
-  tem dono**, mas a sonda respondia `False`, o ensure abria em read-write — uma
-  abertura que não pode dar certo — e ainda acrescentava um concorrente
-  disputando o mesmo arquivo no share, no exato instante em que ele já estava
-  disputado. Com `None` o ensure arma a espera **sem abrir nada para escrita** e
-  **não marca o banco como pronto**: pode faltar schema de verdade, e quem
-  responde isso é a sonda da rodada seguinte. A classificação é **por MENSAGEM**
-  (o DuckDB não dá tipo próprio para disputa de arquivo) e é conservadora — o
-  que não casar com uma assinatura conhecida volta a `False`, porque errar para
-  `False` custa uma tentativa de escrita e errar para `None` deixaria um banco
-  sem schema para trás. `check_notif_db_boot.py` prende as quatro. É idempotente
-  e **não apaga** o que copiou: o antigo fica como backup. `scripts/split_notifications_db.py
-  --dry-run` mostra o que vai ser copiado antes de reiniciar.
-  Três detalhes que não dão erro nenhum: o schema é comitado numa transação
-  SEPARADA da cópia (juntos, uma linha ruim desfazia o `CREATE TABLE` e o app
-  subia sem a tabela, com o sino estourando a cada consulta); a sequência
-  `seq_notif_id` nasce depois do maior `id` migrado, porque o DuckDB não deixa
-  alterar sequência de que uma coluna depende (`ALTER … RESTART` não existe e o
-  `DROP` bate em *dependency error*); e `NULL` vira `''` nas colunas `NOT NULL`,
-  senão UMA linha antiga aborta o lote inteiro.
-  `DB_PATH` é o `Config.DATABASE_PATH`, e ele sai do **`Config.DATABASE_DIR`**,
-  que é a pasta de TODOS os bancos do app: o da lista de CGDs (`cgd_docs.DB_PATH`),
-  os três do Pending Confirmation
-  (`_PC_DB_DIR`), os dois da esteira (`manual_conf._DB_DIR`), o de comitentes
-  (`recon_comitente.DB_PATH`) e os três scripts de migração. **Nenhum deles monta
-  o caminho por conta própria** — cada um que montasse ficaria lendo o banco
-  local no dia em que os outros fossem para o share, sem erro nenhum. Caminho
-  **normalizado para absoluto**, então não depende do diretório de trabalho;
-  relativo é **recusado na subida** (`must be an absolute path`), em vez de virar
-  uma árvore criada por engano dentro do cwd. Mover tudo de lugar é uma coisa só:
-  `OTC_DATABASE_DIR` no `.env` (ou o bloco de ENV do config na branch de prod —
-  §2). `DATABASE_PATH` continua movendo só o banco de usuários.
-- **Os JSON** (cache dos arquivos-dia, cadastros do /mapping, tickets,
-  `RefData.json`, calendário, templates do File Interpreter) saem do
-  **`Config.DATA_DIR`**, e o caminho é montado pelo **`apps/pages/data_paths.py`**
-  — `data_path()` para ler, `data_write()` para gravar, `mapping_file(key, base)`
-  para um cadastro. **Nenhum módulo monta `static/data` por conta própria**, e o
-  `check_config_names.py` recusa por AST quem tentar.
+- **`Config.DATA_DIR`** — os JSON: arquivos-dia (`cache/<rotina>/.../AAAA/MM/DD`),
+  os 45 cadastros do `/mapping` (`mappings/`), `RefData.json`,
+  `CounterpartyDetails.json`, calendários, templates do File Interpreter,
+  tickets, control-panel. Gitignorado, montado por `data_paths.py`. Na subida
+  `_seed_data_dir()` copia para lá o que vem versionado e ainda não existe,
+  **sem sobrescrever** (o arquivo do share é o que a mesa editou); `db/` fica
+  de fora. **Leitura cai para a cópia empacotada** quando falta o arquivo;
+  **escrita nunca cai** (gravar no checkout é gravar onde o pull conflita).
+- **`Config.DATABASE_DIR`** (`OTC_DATABASE_DIR`) — TODOS os bancos: usuários,
+  notificações, os três do Pending Confirmation, os dois da esteira, o do
+  Onboarding, o de comitentes e os espelhos em `db/`. Absoluto obrigatório;
+  relativo é recusado na subida.
+- **`Config.SHARED_DRIVE_ROOT`** (`OTC_SHARED_DRIVE_ROOT`, padrão `I:\`) — os
+  destinos do share: confirmações, Electronic Inventory, CETIP, B3 Files, os
+  pontos de entrada das recons, o `link.txt` da versão.
+- **`/static/data/...` do navegador também sai do `DATA_DIR`**: a rota
+  `static_data_file` resolve pelo `data_path()` e vence o `/static/<path>`
+  embutido; serve RefData/CPD/calendários do BANCO quando fresco. Raiz e caminho
+  relativo vão separados ao `send_from_directory` (é o `safe_join` dele que
+  recusa `..`).
 
-  Isso existe porque o cache é **gitignorado**: os módulos montavam o caminho a
-  partir do próprio `__file__`, o que amarra o dado ao diretório do CÓDIGO. Na
-  dev as duas pastas são a mesma e nada aparece; na instância do JPM não são, e
-  um checkout novo não tem arquivo-dia nenhum — a tela abre, a API responde
-  **200** e o gráfico vem vazio, como se não houvesse operação no dia. É a falha
-  que menos parece falha.
+### JSON é o meio de ESCRITA; a leitura é DB-only
 
-  **Todo JSON coberto pelos bancos DuckDB tem um espelho vivo** (fase 2 da
-  migração — HANDOFF §326): a escrita avisa o `apps/pages/duck_mirror.py`
-  (gancho no funil `_atomic_write_json`, mais `_b3_save`, `_cpd_save_list` e o
-  `write_holidays` da vertical), e uma thread daemon reconverte na hora com o
-  motor `apps/pages/json_to_duckdb.py` — o banco de cada produto de arquivo-dia,
-  o de cada JSON avulso, `reference_data.db` e `holiday_calendars.db` da pasta
-  `db/` ficam sempre atualizados sem rodar script. O aviso só ENFILEIRA (nada de DuckDB no share
-  sob o `_cache_lock`) e é melhor esforço: falha vai para o log e o manifest
-  reconverte na rodada seguinte. `OTC_DISABLE_DUCK_MIRROR=1` desliga (o
-  `OTC_DISABLE_SCHEDULERS=1` dos testes também), e `check_duck_mirror.py`
-  prende o ciclo. A **fase 3** virou **leitura DB-ONLY com CURA SÍNCRONA**
-  (2026-09-02, pedido do usuário: leitura servida só pelos bancos; a escrita
-  segue nos JSONs): o `_manifest` continua tendo de provar que o banco reflete
-  o JSON atual, mas quando não prova o leitor **converte NA HORA**
-  (`duck_mirror.convert_sync` — a tarefa entra na fila da thread do espelho e
-  é esperada, então nunca há dois escritores no mesmo banco) e relê; o JSON só
-  é lido pelo conversor. `None` (→ o chamador serve o JSON) sobrou como canal
-  de EMERGÊNCIA: espelho desligado (`OTC_DISABLE_SCHEDULERS` dos testes, que
-  trocam caminhos), timeout da fila, conversão que falhou, `expected_path`
-  trocado e payload-OBJETO (as recons), que o banco não reconstrói — e o
-  antigo freio do share virou só TELEMETRIA (a leitura lenta AVISA no log; não
-  existe mais modo só-JSON). Os leitores de arquivo-dia payload-lista dos
-  módulos grandes passam por `duck_read.day_records`/`dataset_rows` (os
-  helpers `_db_day_records`/`_db_dataset_rows` do routes); leitores de
-  META/ponteiro (dicts) e o read-modify-write da escrita seguem no JSON de
-  propósito. **Para os CADASTROS o flip está COMPLETO**
-  (HANDOFF §328/§330): todos os leitores de servidor de RefData e
-  CounterpartyDetails, os feriados, e o NAVEGADOR — a rota `static_data_file`
-  serve `RefData.json`/`CounterpartyDetails.json`/arquivos de calendário
-  direto do banco quando fresco, sem uma linha de JS. Três regras que
-  sustentam isso:
-  - **a fidelidade vem da coluna `_raw`** (o registro EXATO como texto JSON,
-    ao lado das tipadas): reconstruir por colunas poria chave com NULL onde o
-    JSON não tinha chave — e o `_contacts_norm` decide "legado" pela
-    AUSÊNCIA. O manifest leva a VERSÃO do formato na chave
-    (`RefData.json#raw1`): banco em formato antigo não casa e a cura síncrona
-    o reconverte no novo antes de responder — upgrade sem script;
-  - **`expected_path` é o guarda da superfície de patch**: o leitor com
-    caminho próprio (`_cpd_path`, `data_path`) diz de que arquivo ELE leria, e
-    se não for o canônico coberto pelo espelho o banco não responde — é como o
-    `R._cpd_path = tmp` dos testes continua mandando;
-  - **a ESCRITA continua nos JSONs** de propósito (rollback = reverter o
-    commit; nenhuma migração de volta). `check_duck_read.py` prende tudo.
-  - **a leitura do espelho abre pelo `duckdb_read`**, nunca por um
-    `duckdb.connect` cru: é a camada do `database_access` que emite os eventos
-    do farol (`local_permit_*`, `file_lock_*`, `connection_opened/closed`,
-    `operation_completed`) e que cria o `.lock` do banco na PRIMEIRA abertura.
-    Aberto na mão, o banco fica fora do painel e a leitura DB-first que demora
-    ou recusa não deixa rastro nenhum de por quê. **Listar os caminhos no
-    `DATABASE_ACCESS_PATHS` não resolve isso**, por duas razões: aquela tupla é
-    consumida só pelo `validate_database_paths` (na subida, `makedirs` mais a
-    criação do arquivo de lock — uma conferência de gravabilidade) e **não liga
-    o farol**, que é da camada; e os caminhos do espelho **são dinâmicos** —
-    nascem dos dados, um banco por produto de arquivo-dia e um por JSON avulso,
-    74 só na máquina de dev e crescendo a cada produto novo. Uma tupla escrita à
-    mão envelheceria no primeiro mapping novo, e **lista parcial é pior que
-    nenhuma**, porque dá a impressão de cobertura. O custo foi medido: 12,67 ms
-    por abertura pela camada contra 12,82 ms crua — a abertura do DuckDB domina.
-    **A escrita do ESPELHO VIVO passa por ali desde 09/09/2026**: o
-    `_abrir_com_portao` toma a trava de arquivo EXCLUSIVA
-    (`database_access.hold_file_lock`, um objeto e não um `with`, porque o motor
-    tem o par `ABRIR_BANCO`/`FECHAR_BANCO`) e a solta **depois** do `close()` —
-    é no fechar que o DuckDB faz o checkpoint e mexe nos arquivos. Sem ela a
-    escrita era a ÚNICA operação do app que tocava o share sem excluir ninguém,
-    e como cada pessoa roda a própria instância sobre o mesmo `db/` (§8), o
-    leitor de uma mantinha o arquivo ABERTO enquanto o escritor de outra tentava
-    renomeá-lo: no SMB isso não é permitido, e o DuckDB estourava com
-    **`IO Error: Could not move file: Access is denied`** — mensagem que não fala
-    nem de lock nem de concorrência. O teto da espera é **6 s**, e não os 30 s do
-    ajuste, porque a cura síncrona da tela espera esta tarefa com 30 s de
-    orçamento: gastá-los na trava garantiria o estouro dela, e a tela cairia no
-    JSON justamente por causa da coordenação que existe para mantê-la no banco.
-    Trava que não vem **não aborta** a conversão — segue sem ela, avisando —,
-    então onde a disputa não é a causa nada muda. A **carga completa**
-    (`convert_json_to_duckdb`/standalone) segue com o connect cru de propósito:
-    os ganchos são injetados só pela thread do espelho, e é lá que mora o POOL
-    de conexões vivo através de muitos arquivos, que travado excluiria os
-    leitores por minutos.
-  - **cura que não cura entra em QUARENTENA** (09/09/2026). A leitura DB-only
-    cura o banco frio na hora e vale a espera; mas há falha que NÃO passa numa
-    segunda tentativa — o `Access is denied` acima é uma. Contra ela, cada
-    leitura pagava a fila do espelho, a conversão inteira e o segundo `_ler`,
-    caía no JSON do mesmo jeito e ainda ENFILEIRAVA uma retentativa que
-    atravancava a cura da leitura seguinte: uma tela que abre dez arquivos-dia
-    pagava isso dez vezes. Agora o arquivo cuja cura não resolveu fica de
-    quarentena por 5 min (`OTC_DUCK_HEAL_RETRY_SECONDS`), e **duas falhas
-    seguidas abrem um DISJUNTOR geral** — a marca por arquivo sozinha não
-    ajudava a PRIMEIRA carga, porque a marca de A não diz nada sobre B e cada
-    arquivo pagava o seu timeout. Leitura pelo banco que dá certo limpa a marca
-    e zera a contagem. **Isto é o canal de EMERGÊNCIA, não o caminho**: a
-    leitura é DB-only e o JSON é só o meio de ESCRITA (o rollback é reverter o
-    commit). Quarentena acesa por muito tempo é problema de ambiente a
-    resolver, não um modo de operação — o WARNING sai uma vez e nomeia o
-    arquivo.
-  - **OCUPADO não é DEFASADO** (09/09/2026). O `_ler` do `duck_read` devolvia
-    `None` para TODA exceção, e `None` quer dizer "cure": o teto do permit
-    (30 s), o da trava (15 s) e o *"used by another process"* da instância
-    vizinha viravam 30 s de `convert_sync` reconvertendo um banco ÍNTEGRO, e
-    ainda a marca de quarentena. Hoje a disputa é classificada
-    (`is_file_in_use`, a mesma lista do sino): UMA retentativa curta e, se
-    persistir, o JSON desta vez — sem cura e sem quarentena, WARNING uma vez
-    por janela. E as leituras do espelho esperam POUCO pela trava
-    (`database_access.read_timeout`, um teto por thread só para LEITURA;
-    `OTC_DUCK_READ_LOCK_SECONDS`, padrão 5): quem lê tem para onde cair, e uma
-    thread do waitress parada 45 s esperando o banco que a vizinha está
-    convertendo é pior do que servir o JSON. A escrita fica com o teto cheio —
-    para ela não há emergência. `check_duck_read.py` §6b prende.
-  - **o `day_payload` tem memo de PROCESSO** (`_day_memo`, chave caminho ×
-    mtime × tamanho, guardando os `_raw`; teto em bytes,
-    `OTC_DUCK_DAY_MEMO_MB`, padrão 256). Ele memoizava só por request, e 24
-    leitores do `routes` (as cinco Live Position, Operations B3, OTM, Latam,
-    os Settlement Advice) reabriam o banco no share e refaziam o `json.loads`
-    de cada linha a cada F5 — numa posição TER de vinte mil linhas, uma
-    abertura de segundos por pessoa. É o gêmeo do `_daycache_memo` do
-    `_day_json`; o hit reparseia, então cada consumidor segue recebendo objetos
-    SEUS. Vale também FORA de request, porque o `stat` acontece a cada chamada
-    e é ele que compõe a chave — a rotina agendada enxerga o arquivo mudar; o
-    que se poupa é a ABERTURA. O funil `_atomic_write_json` esquece a entrada
-    (`day_memo_forget`) para não depender da resolução do relógio do share, e
-    o `prefetch_days` alimenta o memo de graça. `check_duck_gate.py` §4 mede.
-  - **um banco por PRODUTO significa ler em LOTE, não dia a dia** (§428). A
-    quebra dos bancos é por produto, então os ~500 arquivos-dia de
-    `new deals/NDF/Vanilla` são 500 TABELAS do MESMO `Vanilla.db` — e o
-    `day_payload`, que é por CAMINHO, abria esse arquivo uma vez por dia.
-    Medido com 500 dias em disco LOCAL: enumerar (scandir) **1,3 ms**, ler dia
-    a dia **10.257 ms** (500 aberturas), ler em lote **135 ms** (1 abertura) —
-    **76×**. No share cada abertura custa 12,67 ms, então só o abrir são ~6,3 s,
-    e cada uma toma o lock que o espelho precisa para converter. A varredura de
-    diretório, que é onde se olha primeiro, custa **0,01%** do total. Quem vai
-    ler a árvore inteira chama `_day_prefetch(dias)` antes do laço
-    (`duck_read.prefetch_days` agrupa por banco, lê o `_manifest` numa consulta
-    e depois as tabelas); o `_day_json` de cada dia serve do memo sem tocar no
-    banco. É **opt-in** — o finder de deal para no primeiro que casa, e
-    adiantar 500 dias para ler três é o desperdício ao contrário. Duas
-    armadilhas: a validação dos `_raw` fica FORA do `with` (é o mesmo
-    `json.loads` dos 235 s, agora com todos os dias de uma vez), e a tripla se
-    lê com o **caminho na frente e `(mtime, tamanho)` no FIM** — o `_day_files`
-    põe o NOME do arquivo no meio, e lendo pelas três primeiras posições o nome
-    entrava como mtime, a comparação com o manifest estourava calada e o
-    prefetch não fazia efeito nenhum. `check_daycache.py` §8 MEDE as aberturas.
-  - **a ENUMERAÇÃO de dias também sai do banco, onde é seguro** (§428).
-    `duck_read.day_files(raiz)` lê o `_manifest` — que guarda caminho relativo,
-    mtime e tamanho de cada arquivo convertido, exatamente as quatro coisas que
-    o `_day_files` do disco devolve — e responde sem listar diretório nenhum;
-    `None` é o canal de emergência de sempre e aí a árvore é varrida. **O que o
-    banco não converteu não aparece**, então a árvore certa para ela é a que só
-    a aplicação escreve: hoje é o snapshot do Pending Confirmation, gravado
-    pela manutenção das 11:30 pelo funil `_atomic_write_json`. Numa árvore que
-    alguém pode encher por fora, um arquivo posto à mão ficaria invisível — sem
-    erro nenhum. E como a enumeração custa 0,01% do tempo, **não é por
-    desempenho que se troca**: é para fechar o "só o DB".
-  - **o espelho e o leitor DB-only passam por um PORTÃO em memória** (§422):
-    o `duck_read` abre `read_only` e a thread do `duck_mirror` abre o MESMO
-    arquivo em escrita, no mesmo processo, e o DuckDB recusa a segunda
-    configuração — sem o portão a conversão falhava, o manifest ficava
-    defasado e toda leitura seguinte pagava uma cura síncrona que voltava a
-    colidir (o NDF Summary "infinito" na instância). É o `db_gate(path)` do
-    `database_access` (o `_UnlockedReadGate` do sino): leitor entra antes de
-    abrir, escritor entra antes do `connect`. O motor `json_to_duckdb` **não
-    importa `apps`** (o standalone copia o corpo), então ele expõe os ganchos
-    `ABRIR_BANCO`/`FECHAR_BANCO` e o `duck_mirror._loop` injeta a versão com
-    portão — toda abertura em escrita do motor tem de passar por eles. E o
-    `duck_read` memoiza por REQUEST (`flask.g`, chave com mtime e tamanho) os
-    `_raw` de cada arquivo-dia: a mesma tela lia o mesmo banco oito vezes.
-    `check_duck_gate.py` prende os dois.
-  - **`json.dump` é PROIBIDO fora do funil** (`_atomic_write_json`) em
-    `apps/pages` — a auditoria §335 achou ~30 escritores gravando DATA_DIR
-    por fora, com os bancos envelhecendo em silêncio para quem os consulta
-    por fora do app. `check_duck_writers.py` reprova o próximo, com arquivo
-    e linha; as exceções (o funil e os dois stores com aviso próprio) são a
-    allowlist dele.
+Todo JSON coberto tem um espelho DuckDB vivo (`duck_mirror.py`, thread daemon):
+a escrita pelo funil `_atomic_write_json` (e `_b3_save`, `_cpd_save_list`,
+`write_holidays`) só ENFILEIRA; a thread reconverte com o motor
+`json_to_duckdb.py`. A leitura (`duck_read.py`: `day_payload`, `day_records`,
+`dataset_rows`, `table_rows`, `day_files`, `prefetch_days`) é **DB-only com
+cura síncrona**: o `_manifest` tem de provar que o banco reflete o JSON
+(caminho, mtime, tamanho, versão do formato `#raw1`/`#raw2`); quando não prova,
+`duck_mirror.convert_sync` converte NA HORA e relê. `None` (→ o chamador serve
+o JSON) é canal de EMERGÊNCIA: espelho desligado, timeout, conversão falhada,
+`expected_path` trocado, payload-objeto (as recons). Rollback é reverter o
+commit; nenhuma migração de volta.
 
-  O flip alcança também os DATASETS (§333): o `_mapping_rows` (os 43
-  cadastros — o `upgrade` roda igual nas duas fontes, porque o `_raw` é o
-  arquivo byte a byte), o `_b3_load` inteiro (Subjacente/VCP/Dominio/
-  SwapIndex) e o estático dos `mappings/` e dos JSONs de raiz. A
-  reconstrução sai NA ORDEM do arquivo pela coluna `_seq`
-  (`CAST` na ordenação — como texto, '10' < '2'), formato `#raw2` no
-  manifest. E os ARQUIVO-DIA fecham o mapa
-  (§334): o funil `_day_json` tenta o `day_payload` no MISS do memo — as
-  tabelas diárias também levam `_seq`/`_raw`, e o payload-LISTA volta byte a
-  byte na ordem do arquivo; payload-objeto (as recons) e os leitores de data
-  exata seguem no JSON de propósito.
+- **Fidelidade pela coluna `_raw`** (o registro exato como texto), ordem pela
+  `_seq` (`CAST` na ordenação). Reconstruir por colunas poria chave NULL onde
+  o JSON não tinha chave, e `_contacts_norm` decide "legado" pela ausência.
+- **`expected_path` guarda a superfície de patch**: leitor com caminho próprio
+  diz de que arquivo leria; se não é o canônico, o banco não responde (é como
+  `R._cpd_path = tmp` dos testes continua mandando).
+- **Um banco por PRODUTO de arquivo-dia e um por JSON avulso**, com `db/`
+  espelhando a árvore de origem: `db/cache/new deals/NDF/Vanilla.db` (ano/mês/dia
+  viram TABELA, `.meta.json` em `d_AAAAMMDD_meta`), `db/mappings/mt300.db`,
+  `db/cache/daily settlement/otm-settlement.db` (onde a pasta do dia mistura
+  produtos, a TAG do nome vira o banco — `_por_arquivo`, declarado, nunca por
+  olhar os vizinhos; B3 Files está em `_ROTINAS_POR_ARQUIVO` porque se ramifica
+  E mistura). Regras do motor: escopo casado por nome NORMALIZADO
+  (`chave_familia` — a dev tem `b3 files`, o share `B3 Files`); a tag da tabela
+  é tudo-ou-nada; a data sai do CAMINHO e nunca do mtime; colisão de tabela é
+  ERRO; identificador DuckDB é insensível a caixa mesmo citado (`nomes_sql`
+  RENOMEIA a coluna repetida, nunca descarta — o `_raw` guarda a chave
+  original); bancos legados são removidos por LISTA DE NOMES e por
+  `samefile`, nunca por varredura de `*.db`; janela padrão de 12 meses
+  (`--meses 0` = tudo, e só ele apaga legado).
+- **Ler em LOTE, não dia a dia** (§428): 500 dias do mesmo `Vanilla.db` são
+  500 tabelas de UM arquivo — `_day_prefetch(dias)` antes do laço (1 abertura
+  contra 500; 76× medido). Opt-in: finder que para no primeiro que casa não
+  adianta 500 dias. A tripla se lê com caminho na frente e `(mtime, tamanho)`
+  no FIM. `day_files(raiz)` enumera pelo `_manifest` onde só a aplicação
+  escreve a árvore (o snapshot do Pending Confirmation) — arquivo posto à mão
+  ficaria invisível.
+- **Portão em memória** (`db_gate(path)`, `_UnlockedReadGate`): o leitor abre
+  `read_only` e a thread do espelho abre o MESMO arquivo em escrita no mesmo
+  processo; o DuckDB recusa a segunda configuração. O motor não importa `apps`,
+  então expõe `ABRIR_BANCO`/`FECHAR_BANCO` e o `duck_mirror._loop` injeta a
+  versão com portão.
+- **A escrita do espelho toma a trava de arquivo EXCLUSIVA**
+  (`hold_file_lock`, solta DEPOIS do `close()` — é no fechar que o DuckDB faz
+  checkpoint), teto de 6 s (a cura síncrona espera 30 s e não pode gastá-los na
+  trava); trava que não vem não aborta. Sem ela: `IO Error: Could not move
+  file: Access is denied` no SMB, com o leitor da instância vizinha segurando o
+  arquivo.
+- **Cura que não cura entra em QUARENTENA** (5 min,
+  `OTC_DUCK_HEAL_RETRY_SECONDS`); duas falhas seguidas abrem um DISJUNTOR
+  geral; leitura boa limpa. Quarentena acesa por muito tempo é problema de
+  ambiente, não modo de operação.
+- **OCUPADO não é DEFASADO**: disputa de arquivo (`is_file_in_use`, a mesma
+  lista do sino) recebe UMA retentativa curta e cai no JSON desta vez — sem cura
+  e sem quarentena. Leitura do espelho espera POUCO pela trava
+  (`read_timeout`, `OTC_DUCK_READ_LOCK_SECONDS`, padrão 5); escrita fica com o
+  teto cheio. `check_duck_read.py` §6b.
+- **`day_payload` tem memo de PROCESSO** (`_day_memo`, chave caminho × mtime ×
+  tamanho, teto `OTC_DUCK_DAY_MEMO_MB` = 256): 24 leitores do `routes` reabriam
+  o banco a cada F5. O hit reparseia (cada consumidor recebe objetos seus);
+  vale fora de request porque o `stat` compõe a chave; o funil esquece a entrada
+  (`day_memo_forget`); `prefetch_days` alimenta de graça. Gêmeo do
+  `_daycache_memo` do `_day_json`. `check_duck_gate.py` §4 mede.
+- Quem lê arquivo-dia payload-lista passa por `duck_read.day_records`/
+  `dataset_rows` (`_db_day_records`/`_db_dataset_rows` do routes); leitores de
+  META (dicts) e o read-modify-write da escrita seguem no JSON de propósito.
 
-  **A quebra dos bancos é por PRODUTO, um DB por arquivo-dia e um DB por JSON
-  avulso** (§336), e a pasta `db/` ESPELHA a árvore de origem (§342): o caminho
-  de `cache/` vira PASTA e o produto vira o arquivo
-  (`db/cache/new deals/NDF/Vanilla.db`, `db/cache/new deals/Option/FXO.db`),
-  com só ano/mês/dia virando TABELA. Onde a pasta do DIA guarda mais de um
-  arquivo, quem separa os produtos é o NOME, e a tag dele vira o banco — é o
-  Daily Settlement, dez arquivos por dia na mesma pasta virando
-  `db/cache/daily settlement/otm-settlement.db` e irmãos, e é cada produto do
-  B3 Files, cujo Swap tem posição, fluxo e agenda de prêmios lado a lado
-  (`db/cache/b3 files/Swap/73760_DPOSICAO-SWAP.db`). Os demais
-  JSONs seguem a mesma ideia: um banco por ARQUIVO, na pasta do arquivo
-  (`db/mappings/mt300.db`, `db/control-panel/mt300_status.db`,
-  `db/file-interpreter/termo.db`, `Subjacente.db` na raiz), o que de quebra
-  tira a contenção que o banco compartilhado criava — o espelho reconvertendo
-  UM mapping fechava a leitura dos outros 42. Três detalhes que não dão erro
-  nenhum:
-  - o corte "tag no banco ou não" é **declarado** (`_por_arquivo`), nunca por
-    olhar os vizinhos em disco: o `_daily_rel_target` tem de ser puro sobre o
-    caminho, porque o espelho vivo converte UM arquivo por vez e não pode
-    depender de varrer o diretório. São duas respostas somadas — a rotina que
-    **não se ramifica em pastas** (um nível só: o Daily Settlement, e o default
-    certo para uma rotina nova, onde sem subpasta o que separa os produtos só
-    pode ser o nome) **ou** a que está em `_ROTINAS_POR_ARQUIVO`. Hoje esta
-    lista tem o **B3 Files**, que se ramifica (NDF · Option · Swap ·
-    Operations) E mistura: o Swap grava posição, fluxo e agenda de prêmios lado
-    a lado, e contar pastas responde "não" ali — foi assim que os três caíram
-    num banco só. Cada produto do B3 Files é uma PASTA de bancos
-    (`db/cache/b3 files/Swap/73760_DPOSICAO-SWAP.db`), a fatia continua sendo
-    por produto e o `--bloco 73760_DPOSICAO-SWAP` reparte até o arquivo;
-  - a data sai do nome sem deixar separador dobrado, e ela nem sempre está no
-    FIM: em `73760_260610_DPOSICAO-SWAP` ela está no MEIO, e tirá-la deixaria
-    um `_` duplo que o strip das pontas não alcança (`73760__DPOSICAO-SWAP.db`);
-  - a tag da TABELA é tudo-ou-nada. Podando token a token, o `DPOSICAO-SWAP`
-    do `db/cache/b3 files/Swap.db` perderia justamente o `swap` e ficaria
-    indistinguível de um `DPOSICAO` da mesma pasta;
-  - os bancos dos desenhos ANTERIORES são apagados na carga completa
-    (`_drop_legacy_dbs`), **menos o que ainda é alvo** — apagá-lo custaria uma
-    reconversão inteira à toa. A remoção é por LISTA DE NOMES DERIVADOS
-    (`_legacy_flat_name`), **nunca por varredura de `*.db`**: o
-    `DATABASE_DIR` é a casa de TODOS os bancos do app — usuários,
-    notificações, os três do Pending Confirmation, os dois da esteira, o do
-    Onboarding —, e varrer ali apagaria dado que nada recria;
-  - **o que decide a remoção é o ARQUIVO, não o nome** (`os.path.samefile`). O
-    JSON de raiz passou a manter a caixa do original (`Subjacente.db`) e o
-    nome legado era normalizado (`subjacente.db`): em macOS e Windows os dois
-    são o MESMO arquivo, e remover o "legado" apagaria o banco recém-criado —
-    no Linux são dois de verdade, e aí o antigo tem de sair;
-  - dois arquivos que reivindiquem a mesma tabela viram ERRO na carga completa
-    (`_colisoes`), nunca sobrescrita silenciosa;
-  - **o identificador do DuckDB é insensível a CAIXA, mesmo citado**, e por isso
-    duas chaves do JSON que só diferem no caso são a MESMA coluna para o banco:
-    o arquivo converte com *"Column with name X already exists"* e o dia inteiro
-    fica de fora. É o `DPOSICAO-SWAP`, cujo layout repete nomes por perna com
-    grafia instável (`PU Inicial` e `Pu inicial`) — o `_b3_export_json` já
-    desempata o repetido EXATO com `_2`, mas compara COM caixa e deixa passar
-    esse par. Quem desempata para o banco é o `nomes_sql`, com duas regras: o
-    candidato é conferido contra TODAS as chaves do arquivo (senão o desempate
-    de `Pu inicial` produziria `Pu inicial_2`, que é uma coluna de verdade do
-    mesmo arquivo, e a colisão voltaria pela outra ponta), e a coluna é
-    **RENOMEADA, nunca descartada** — uma perna do swap sumindo da tabela não
-    daria erro nenhum, e o `_raw` ao lado ainda a teria, o que faria o banco
-    discordar de si mesmo. O sufixo é só do BANCO: o `_raw` guarda a chave
-    original, e é dele que a leitura reconstrói;
-  - **o escopo de `cache/` é um CAMINHO** (`new deals/NDF`), não só a rotina de
-    primeiro nível: as rotinas grandes se repartem até o PRODUTO
-    (`new deals/NDF/Vanilla`), que é a folha da árvore e a unidade em que cada
-    banco é escrito — e onde a rotina NÃO se ramifica em pastas o escopo é a
-    **TAG do arquivo** (`daily settlement/otm-settlement`), porque ali quem
-    separa os produtos é o nome. Um escopo é sempre o CAMINHO do que ele
-    produz — o banco, ou a PASTA de bancos quando o produto guarda vários
-    arquivos por dia (a fatia `b3 files/Swap` escreve os três; `--bloco
-    73760_DPOSICAO-SWAP` desce até um) —, o que dispensa uma segunda sintaxe
-    para dizer a mesma coisa; o
-    `.meta.json` acompanha o arquivo que anota, no MESMO banco (`d_AAAAMMDD_meta`) — como bloco único elas eram o gargalo da carga, e repartir
-    só até `new deals/NDF` ainda deixava o Vanilla junto com os outros três. O
-    `99_outros` poda por CAMINHO, e é isso que faz a rede de segurança valer em
-    TODOS os níveis: uma rotina nova (`cache/equity`), um bloco novo
-    (`cache/new deals/Equity`) e um produto novo (`cache/new deals/NDF/Asian`)
-    caem os três nele. Podando por
-    primeiro nível, `new deals` sairia inteira e o bloco novo ficaria sem
-    conversor nenhum — sem erro, sem banco. E a fatia de sub-bloco **não apaga o
-    banco legado da ROTINA**: ele guarda também os blocos que quem está rodando
-    ao lado ainda vai converter.
-  - **o escopo é casado pelo nome NORMALIZADO** (`chave_familia`, segmento a
-    segmento), nunca por string exata. O nome da pasta é escrito por quem criou a árvore e
-    as instâncias não concordam: a dev tem `b3 files` e o share do JPM tem
-    `B3 Files`. Casando por igualdade, o `02_2_b3_files.py` não achava a pasta e
-    saía com `convertidos: 0` — a fatia inteira de fora, sem erro nenhum — e o
-    `99_outros`, que exclui pela MESMA lista, não a reconhecia como coberta e a
-    convertia junto: dois scripts no mesmo banco, que é exatamente o que a
-    divisão em fatias promete não acontecer. O banco herda a grafia que está em
-    DISCO (`db/cache/B3 Files/Swap.db`), porque a pasta espelha a origem.
-    **Bloco pedido que não existe vai para `avisos`, que o resumo IMPRIME** —
-    e ele lista o que há **no nível em que parou**, nunca a listagem da raiz: um
-    escopo de dois segmentos falha quase sempre no segundo, e mostrar as rotinas
-    de primeiro nível ali responderia a pergunta errada. Contado só em `ignored`, ele
-    saía como um `fora deste conversor: 1` indistinguível de um ponteiro `_last`;
-  - **a JANELA da carga é de 12 meses por padrão** (`--meses`, `0` = histórico
-    inteiro), e ela vale só para os ARQUIVO-DIA — os cadastros não têm data para
-    cortar, e o `01_cadastros.py` nem recebe o argumento. A data vem do
-    **caminho** (`dia_do_rel`), nunca do `mtime`: um dia de 2024 recopiado para o
-    share este mês entraria na janela como se fosse recente. Três coisas que não
-    dão erro nenhum: a janela é **declarada na tela** e o que fica de fora sai
-    contado (`fora da janela: N`) — recorte silencioso faria a segunda passada
-    parecer desnecessária; **com janela não se apaga banco legado**, porque ele
-    guarda o histórico INTEIRO e a passada escreve só doze meses (trocar um pelo
-    outro é perda até a segunda passada terminar — quem limpa é o `--meses 0`); e
-    o guarda roda as asserções de ÁRVORE com `--meses 0`, senão as datas fixas
-    dos arquivos de teste sairiam da janela sozinhas quando o relógio passasse
-    de doze meses.
+### A camada `database_access`
 
-  Duas garantias sustentam a troca: a **leitura cai para a cópia empacotada**
-  quando o arquivo não existe no `DATA_DIR` (`anbima.json`, `Subjacente.json`, as
-  seeds — sem isso, subir apontando para um share vazio apagaria os 42 cadastros
-  versionados), e a **escrita nunca cai** — gravar dentro do checkout é gravar
-  onde o próximo `git pull` conflita e a outra instância não enxerga. Na subida,
-  `_seed_data_dir()` copia para o `DATA_DIR` o que vem versionado e ainda não
-  está lá, **sem nunca sobrescrever**: o arquivo que já está no share é o que a
-  mesa editou pela tela, e ele vence. `db/` fica de fora — é do `DATABASE_DIR`,
-  e copiar banco por cima de banco corrompe dado.
+Toda abertura de DuckDB passa por `duckdb_read`/`duckdb_write` (nunca
+`duckdb.connect` cru): semáforo por banco (`DATABASE_READ_CONCURRENCY` = **8**
+desde 09/09/2026; era 4 contra 16 threads), lock de arquivo `.lock` via
+portalocker (compartilhado na leitura, exclusivo na escrita), retry REAL da
+abertura em escrita por disputa (`DATABASE_LOCK_RETRY_LIMIT`), e o farol de
+eventos (`local_permit_*`, `file_lock_*`, `connection_opened/closed`) que o
+painel lê. Custo medido: 12,67 ms por abertura pela camada contra 12,82 crua —
+a abertura domina. `DATABASE_ACCESS_PATHS` é só a conferência de gravabilidade
+da subida e NÃO liga o farol; os caminhos do espelho são dinâmicos.
 
-  **O `/static/data/...` do NAVEGADOR também sai do `DATA_DIR`.** São 71 `fetch`
-  em 15 telas lendo JSON por URL estática (`RefData.json`, `Subjacente.json`,
-  `anbima.json`, os cadastros do /mapping), e como URL estática o Flask os
-  serviria da pasta do CÓDIGO — a ponta que a regra acima não alcançava. A rota
-  `static_data_file` resolve pelo mesmo `data_path()` e é mais específica que o
-  `/static/<path:filename>` embutido, então ganha dele no roteamento; a dev não
-  vê diferença, porque lá as duas pastas são a mesma. Sem ela a mesa editava o
-  Reference Data pela tela, o app gravava no share e a tela recarregava
-  mostrando a cópia versionada, de antes do último pull — nenhum erro, dois
-  arquivos, e a edição que "não salvou" salva no lugar certo. A rota entrega
-  **raiz e caminho relativo separados** ao `send_from_directory`: quem recusa o
-  `..` é o `safe_join` dele, e com o caminho já resolvido a pasta traversada
-  vira a raiz permitida (`/static/data/../../config.py` serviria o config).
-- **SQLite** (`apps/db.sqlite3`) — Flask-SQLAlchemy. Hoje **não é usado** pela
-  lógica da aplicação; `configure_database()` chama `db.create_all()` **uma vez
-  na subida**, não a cada request.
+### Os dois bancos de plataforma
 
-> Se o DuckDB recusar abrir depois de rodar sob outra versão
-> (`INTERNAL Error … replaying WAL`), renomeie o `Users_OTCTracker.db.wal`
-> perdido para o lado — o `.db` principal está íntegro.
+- **`Users_OTCTracker.db`** (`users`, `verification_codes`) — conexão
+  singleton atrás de `_duckdb_conn_lock`; `get_db_connection()` devolve um
+  handle que **segura o lock até o `close()`**: todo chamador é
+  `conn = get_db_connection()` + `try … finally: conn.close()`. Sem o
+  `finally` o app inteiro trava para todo mundo. **Quem só faz SELECT abre com
+  `readonly=True`** (lock compartilhado + semáforo); o caminho de escrita é fila
+  de UM.
+- **`Notifications_OTCTracker.db`** (`notifications`, `push_subscriptions`) —
+  separado porque cada gravação de notificação segurava o banco de usuários em
+  exclusivo. `get_notif_connection()`, mesmo contrato. A separação acontece
+  sozinha na subida (`_ensure_notif_db`, no `record_once`; idempotente, não
+  apaga o antigo; schema numa transação SEPARADA da cópia; `seq_notif_id`
+  nasce depois do maior id; NULL vira `''` em `NOT NULL`). **O ensure roda na
+  subida e nunca no poll**: uma sonda de leitura (`_notif_schema_pronto`) com
+  TRÊS respostas — `True`, `False` (falta tabela) e `None` (não deu para olhar:
+  arquivo em uso, classificado por mensagem) — evita a abertura read-write; o
+  ensure que falha espera 5 min. `check_notif_db_boot.py`.
+- **Leitura SEM lock (`unlocked=True`) é do poll do sino, e só dele** (melhor
+  esforço: falha devolve sino vazio). Em autorização, dado parcial vira acesso
+  errado — `check_unlocked_reads.py` barra por nome. O `_UnlockedReadGate`
+  coordena o poll `read_only` com o `duckdb_write` do `_create_notification`
+  (mesmo arquivo, configurações diferentes → "different configuration"); no
+  teto degrada, nunca enfileira. Poll que ainda esbarra serve `_notif_last_good`
+  (por SID × papel, teto 10 min — preserva o alarme de conexão vazada).
+- **Assinaturas de "arquivo em uso" moram no `database_access`**
+  (`FILE_IN_USE_SIGNATURES`/`is_file_in_use`, `True` também para
+  `DatabaseLockTimeout`); `_notif_arquivo_em_uso` é alias. Aviso
+  `file_lock_skipped` sai uma vez por banco.
+- **A tabela do sino é expurgada** (`_notif_purge_old`, thread `notif-purge` 3
+  min após a subida e diária; `OTC_NOTIF_RETENTION_DAYS` = 90, `0` desliga).
+  O poll filtra `created_at >= CURRENT_DATE` (sem `DATE()` na coluna).
+- **Todo request tem um RASTRO de banco** (`database_access.DbTrace`, aberto
+  no `before_request`): cada operação da camada entra com o NOME do banco,
+  modo, segundos e categoria, e o `duck_read` anota queda para o JSON e cura.
+  A linha `[slow-request]` termina com o resumo, e o laço `slow-request-watch`
+  loga a cada 30 s o request em voo há mais de 30 s — o request que não
+  termina também deixa rastro. Thread de fundo que quer o mesmo usa
+  `trace_begin`/`trace_end` à mão (o `summary-warm` faz). `check_db_trace.py`.
+- **Lock de arquivo com `timeout` leva `NON_BLOCKING`** (portalocker): sem o
+  flag o timeout é ignorado com um aviso na subida e a espera não tem teto.
+  Foi o claim diário (`_claim_daily_slot`).
 
-### A parte que quebra o app para todos
+### Regras de concorrência (a parte que quebra para todos)
 
-O app serve vários usuários de **um processo só**, então isto importa mais do
-que parece:
-
-- O DuckDB de usuários é uma **conexão singleton atrás de um lock global**
-  (`_duckdb_conn_lock`). `get_db_connection()` devolve um `_DuckDBHandle` que
-  **segura o lock até o `close()`**. Todo chamador tem de ser
-  `conn = get_db_connection()` seguido de `try: … finally: conn.close()` — os
-  21 chamadores atuais são. Sem o `finally`, o lock nunca é liberado e **o app
-  inteiro trava para todo mundo**, não só para o request que falhou.
-- **A leitura SEM lock (`unlocked=True`) é do poll do sino, e só dele.** Ela
-  dispensa até o lock compartilhado — o que coordena PROCESSOS —, então não
-  espera nem por uma gravação em curso; em troca, pode pegar o arquivo no meio
-  de um commit e falhar. Ali é aceitável porque o sino é consulta de MELHOR
-  ESFORÇO: o endpoint já devolve o sino vazio quando a consulta falha, e o poll
-  seguinte corrige. **Em qualquer outro lugar é um tiro no pé que não dá erro**
-  — a allowlist do `Page_Access`, o login e o papel que filtra os tickets
-  DECIDEM coisas, e um dado parcial ali vira autorização errada. O
-  `check_unlocked_reads.py` prende os pontos de chamada por AST e barra por nome
-  as funções de autorização. E a leitura sem lock tem um efeito colateral que
-  não é dela: o DuckDB guarda UMA instância por arquivo dentro do processo e
-  recusa a segunda conexão com outra configuração — com um poll aberto
-  `read_only`, era o **`duckdb_write` do `_create_notification` que estourava**
-  ("different configuration than existing connections") e a notificação se
-  perdia. O `_UnlockedReadGate` do `database_access` coordena os dois EM
-  MEMÓRIA (o conflito é só intra-processo; nenhuma ida ao share): a escrita
-  espera os polls em voo fecharem, o poll espera um pouco por uma escrita em
-  curso e, no teto, degrada — nunca para uma fila. `check_unlocked_gate.py`
-  prende os dois sentidos e os dois tetos. E como no SHARE uma gravação dura
-  mais que essa espera toda (portão + retentativa ≈ 2s), o poll que ainda assim
-  esbarra na disputa — a mesma mensagem `different configuration`, agora do
-  LADO da leitura, ou o `used by another process` da instância vizinha — **serve
-  a última resposta boa daquele usuário** (`_notif_last_good`, por SID × papel,
-  já filtrada por página) em vez de piscar o sino vazio com ERROR no log a cada
-  gravação longa. O teto de idade (10 min) é o que preserva o alarme: uma
-  conexão de escrita VAZADA responde a mesma mensagem para sempre, e com o
-  cache vencido o caminho volta a ser o de sempre — ERROR uma vez, sino vazio.
-  Quem classifica a disputa é o `_notif_arquivo_em_uso` (o mesmo da sonda da
-  subida), nunca um teste novo sobre as mesmas mensagens.
-  `check_notif_db_boot.py` prende o cenário nos dois desfechos. **A tabela do
-  sino é expurgada** (`_notif_purge_old`, thread `notif-purge` 3 min depois da
-  subida e uma vez por dia, `OTC_NOTIF_RETENTION_DAYS`, padrão 90; `0`
-  desliga): nada apagava `notifications`, o poll varre a tabela inteira por
-  aba a cada 15 s, e o sino só mostra o dia de hoje — o que passa da retenção
-  não tem leitor nenhum. O registro do laço fica no `routes`
-  (`_schedule_on_start`), como o dos schedulers das features, e respeita o
-  `OTC_DISABLE_SCHEDULERS`. E **as assinaturas de "arquivo em uso" moram no
-  `database_access`** (`FILE_IN_USE_SIGNATURES`/`is_file_in_use`, que também
-  responde `True` para o `DatabaseLockTimeout` da camada); o
-  `_notif_arquivo_em_uso` é alias, porque o leitor do espelho precisa da MESMA
-  resposta — ver a arapuca "ocupado não é defasado" nos bancos do espelho. O aviso `file_lock_skipped` sai **uma vez por
-  banco**, não por leitura: ele é WARNING, WARNING passa pelo gate que silencia
-  o ruído de INFO, e uma linha por poll seria a maior parte do log.
-- **Quem só faz SELECT abre com `get_db_connection(readonly=True)`.** O caminho
-  de escrita é EXCLUSIVO nos dois níveis — `BoundedSemaphore(1)` dentro do
-  processo e lock de arquivo exclusivo entre eles —, então uma consulta aberta
-  por ali põe toda leitura numa fila de UM. Com o banco no share, onde cada
-  operação custa ida e volta de rede, o sino da topbar (uma consulta por aba
-  aberta) consome a fila sozinho e a página que o usuário pediu espera atrás
-  dela: a tela levava MINUTOS, sem erro nenhum no log, porque ninguém falhou —
-  todo mundo esperou. A leitura toma lock COMPARTILHADO e um semáforo de
-  `DATABASE_READ_CONCURRENCY`, e segue excluída do escritor, que é a garantia
-  que importa. Os sete chamadores de leitura estão migrados; escrita continua
-  no modo padrão.
-- **A allowlist do `Page_Access` é cacheada por SID** (`_get_page_access`), com
-  invalidação na escrita e TTL de 30 s por cima. Os dois existem por razões
-  diferentes: a invalidação cobre a mudança feita NESTE processo, e o TTL cobre
-  a instância vizinha que editou o mesmo banco. Era a consulta mais repetida do
-  app — toda navegação e toda batida do sino — relendo o mesmo valor.
-- **A renovação da allowlist é SINGLE-FLIGHT** (`_page_access_inflight`,
-  09/09/2026): quando o TTL de 30 s vence, UMA thread lê o banco e as outras
-  servem o valor vencido — uma página dispara dezenas de `/static/*` ao mesmo
-  tempo, e sem isso todas erravam o cache juntas e cada uma abria o banco de
-  usuários no share pela mesma resposta. O `refresh_session_role` pula
-  `/static*` pela mesma razão. A revogação feita neste processo continua
-  valendo na hora: ela ESQUECE o cache, e quem não tem valor vencido espera o
-  dono. `check_db_read_path.py` §2b prende.
-- **Leitores não se excluem entre si**, então `DATABASE_READ_CONCURRENCY`
-  (o semáforo de conexões read-only do MESMO banco no processo) é **8** desde
-  09/09/2026. Com 16 threads no waitress, os 4 de antes punham o quinto leitor
-  da busca do New Deals numa fila de até 30 s sem ninguém estar escrevendo.
-- **Nunca faça trabalho lento segurando o lock** (rede, SMTP, varredura de
-  arquivos, renderização de template). `_push_notify` é o modelo: lê a lista de
-  inscritos, fecha, e só então dispara os HTTP pushes. A topbar consulta
-  notificações a cada 15 s por aba aberta — esse lock é tomado o tempo todo.
-- Conexões por banco (os DuckDBs do Pending Confirmation) são abertas sob
-  demanda com retry/backoff e **têm de fechar no `finally`**: uma conexão
-  vazada segura o lock de escrita pela vida do processo e derruba a página.
-  O retry é REAL desde 09/09/2026: o `DATABASE_LOCK_RETRY_LIMIT` era lido e
-  não fazia nada; hoje a ABERTURA em escrita retenta (curto, só por disputa —
-  `is_file_in_use`) antes de subir o erro. Leitura não retenta: ela tem o
-  canal de emergência dela.
+- **Allowlist do `Page_Access` cacheada por SID** (TTL 30 s + invalidação na
+  escrita: uma cobre este processo, a outra a instância vizinha) e a renovação
+  é **SINGLE-FLIGHT** (`_page_access_inflight`): uma página dispara dezenas de
+  `/static/*` ao mesmo tempo. `refresh_session_role` pula `/static*`.
+  `check_db_read_path.py` §2b.
 - **`ensure_db` roda UMA vez por processo e por arquivo** (`manual_conf`,
-  `cgd_docs`). A conferência de schema abre o banco em ESCRITA — trava de
-  arquivo EXCLUSIVA entre processos —, e ela ficava no `load_rows`/`load`: toda
-  LEITURA do Track, do Monitor, do BACC e do Tracking Docs tomava a trava
-  exclusiva dos bancos só para descobrir que não havia coluna a acrescentar,
-  excluindo por segundos os leitores das outras instâncias sobre o mesmo `db/`
-  do share, e estourando com *"used by another process"* (engolido) quando a
-  vizinha estava lendo. O schema é o do CÓDIGO; o que continua sendo
-  conferido a cada chamada é se o ARQUIVO existe (banco apagado por fora
-  renasce), e a marca só é posta quando a conferência DÁ CERTO.
-- Caches JSON (arquivos-dia do New Deals, mappings, MTM) são
-  read-modify-write, então precisam de `with _cache_lock:` em volta do ciclo
-  **inteiro** (ler → alterar → `_atomic_write_json`). A escrita atômica sozinha
-  evita corrupção, não perda de atualização. `_cache_lock` é um `Lock` comum
-  (**não reentrante**): nunca chame um helper que trava de dentro de um bloco
-  travado.
-- **Escale com threads, não com workers.** Produção é waitress
-  (`start-prod.bat`, **`--threads=16`**) e o `gunicorn-cfg.py` fixa
-  `workers = 1`. Com mais de um processo o singleton e o `_cache_lock` não
-  protegem nada, o banco de usuários não abre no segundo processo e cada
-  processo sobe os próprios schedulers (pulls duplicados). O padrão do waitress
-  é **4**, e com os dados no share a maior parte de um request é espera de rede
-  com a thread parada segurando a vaga: quatro esperas dessas param o servidor
-  inteiro, inclusive o arquivo estático e a página que nem banco usa.
+  `cgd_docs`): a conferência de schema abre em ESCRITA (trava exclusiva entre
+  instâncias), e ficava em toda LEITURA. O que segue conferido é se o ARQUIVO
+  existe; a marca só é posta quando dá certo.
+- **Nunca trabalho lento segurando lock** (rede, SMTP, varredura, template).
+  `_push_notify` é o modelo: lê inscritos, fecha, dispara.
+- **Caches JSON são read-modify-write sob `with _cache_lock:` no ciclo
+  INTEIRO** (ler → alterar → `_atomic_write_json`). `_cache_lock` não é
+  reentrante: nunca chame helper que trava de dentro do bloco.
+- **Conexões dos bancos por produto fecham no `finally`**; vazada, segura o lock
+  de escrita pela vida do processo.
+- **Um `stat` por LINHA é invisível na dev e custa minutos no share.** O cache
+  por mtime evita reler o arquivo, não o `getmtime` que decide. Remédio:
+  `once_per_request` (`request_cache.py`) — memoiza só dentro de UM request,
+  sem TTL (edição na tela vale no request seguinte), e **fora de request não
+  memoiza nada** (a rotina agendada tem de ver o arquivo mudar).
+  `check_stat_por_linha.py` MEDE. Já protegidos: `_refdata_by_taxid`,
+  `manual_conf.sla_days`, `_pc_metrics_history`, `_anbima_stamp`, os quatro
+  finders do New Deals (`_nd_file_list`, do mais novo ao mais antigo, leitura
+  pelo `_day_json`) e a listagem do Electronic Inventory (`_ei_walk` por
+  `scandir`, sem `stat` por arquivo).
+- **O calendário ANBIMA em memória acompanha o mtime do `anbima.json`**
+  (`_anbima_stamp`): feriado cadastrado vale no request seguinte. Calendário
+  FIXADO à mão (teste com mtime `None`) nunca é recarregado.
+- **SQLite** (`apps/db.sqlite3`) não é usado pela lógica; `create_all()` roda
+  uma vez na subida.
 
-### SQL injection
-
-Referência: [`Docs/SQL_Injection_Prevention_Cheat_Sheet.md`](Docs/SQL_Injection_Prevention_Cheat_Sheet.md)
-— o cheat sheet da OWASP, vendorizado no repo (CC BY-SA 3.0, cabeçalho de
-proveniência no topo; para atualizar, rebaixe o arquivo, não edite à mão).
-
-O código já segue a defesa primária e precisa continuar assim:
-
-- **Todo valor vindo de request, sessão, planilha ou e-mail entra como
-  parâmetro `?`**, nunca interpolado:
-  `conn.execute("SELECT Page_Access FROM users WHERE SID = ?", [sid])`. No
-  DuckDB a lista de parâmetros é o segundo argumento do `execute`;
-  `executemany` para lotes.
-- As poucas queries com `'...{}'.format(...)` são **DDL sobre identificadores
-  do próprio código** (`_PC_TABLE`, colunas de `_PC_COLUMNS`) — nome de tabela
-  e de coluna não podem ser bindados, e é o único caso que o cheat sheet
-  permite montar string. Mantenha essas listas como constantes de módulo: no
-  instante em que um nome puder vir do request, ele precisa de validação
-  contra uma tupla fixa (a "Defense Option 3"), não de escape.
-- O login é por SID vindo do phonebook, mas o SID **ainda** chega ao banco como
-  parâmetro bindado — não "otimize" para f-string.
+> DuckDB recusando abrir depois de rodar sob outra versão (`replaying WAL`):
+> renomeie o `.wal` para o lado — o `.db` está íntegro.
 
 ---
 
 ## 5. Autenticação e autorização
 
-### Login
-
-Não há usuário/senha: a autenticação é por **SID** de funcionário.
-
-1. O usuário informa o SID (1 letra + 6 dígitos, ex. `A123456`)
-2. `awmpy.get_phonebook_data(sid)` traz nome, e-mail e cargo do phonebook
-3. SID no banco **e** IP do cliente igual ao IP gravado → sessão direta
-4. Caso contrário → código de 6 dígitos gravado em `verification_codes`,
-   enviado por SMTP, e o usuário vai para a tela de 2FA
-5. `/verify-2fa` valida o código (10 min de validade) e marca
-   `session['authenticated'] = True`
-
-Chaves de sessão: `authenticated`, `user_sid`, `user_name`, `user_email`,
+**Login por SID** (1 letra + 6 dígitos), sem senha: `awmpy.get_phonebook_data`
+traz nome/e-mail/cargo; SID no banco **e** IP igual ao gravado → sessão
+direta; senão código de 6 dígitos por SMTP (`verification_codes`, 10 min) e
+`/verify-2fa`. Sessão: `authenticated`, `user_sid`, `user_name`, `user_email`,
 `user_role`.
 
-### Papéis e acesso
-
-A autorização vive no `routes.py` e é aplicada em três camadas (before_request,
-JS do menu, feed de notificações).
-
-- **Papéis.** `user_role` vem do banco (`ADMIN`, `BO`, `MO`, `FO`,
-  `INSTITUTIONAL`, `HUB`). **Master** é superusuário fixado por SID
-  (`_MASTER_SIDS`, hoje `{'E930179'}`) — **não** é papel concedível, então não
-  se atribui pela gestão de usuários. `_session_is_master()` é por SID;
-  `_session_is_admin()` = papel `ADMIN` **ou** master. Só o master altera o
-  acesso de um admin (ou de outro master), e só ele escapa de toda restrição.
-- **Por página.** `users.Page_Access` guarda um array JSON de URLs permitidas.
-  Vazio/ausente = *não configurado* = acesso total. `_load_nav_urls()` extrai
-  de `partials/sidenav.html` o conjunto de páginas controláveis.
-  `enforce_page_access` (before_request) bloqueia quem tem allowlist
-  configurada. Admins também são barrados **se o master os configurou**;
-  não configurados (inclusive admins) mantêm acesso total.
-  - `_ALWAYS_ALLOWED_PATHS` é **apenas** `{'/users-profile', '/page-access'}`.
-    **O dashboard NÃO é sempre permitido** — ele virou concedível, e é por isso
-    que o bloqueio redireciona para `_safe_landing(allowed)` (uma página que a
-    pessoa realmente alcança, com `/users-profile` como último recurso) e não
-    para `/dashboard`, que ela pode não ter.
-  - Requests `/api/*` e `/static*` nunca são bloqueados aqui: têm a própria
-    autenticação.
-- **Por card (Control Panel).** A página é controlada por card: tokens
-  `"/control-panel#<id>"` (registro `_CONTROL_PANEL_CARDS`) liberam rotinas
-  individuais. A página abre com ≥1 card liberado (`_cp_page_allowed`);
-  `enforce_control_panel_cards` bloqueia o endpoint de cada rotina sem o card
-  (`_CP_ENDPOINT_CARD`). Uma concessão legada da página inteira implica todos
-  os cards.
-  - A página é dividida em **seis seções** — Intraday, Settlement Reporting,
-    Pending Confirmation, Economic Affirmation, Reference Data e Application —,
-    e o que
-    agrupa não é o que a rotina FAZ e sim *quando* ela acontece e sobre o que
-    responde: não há seção de "salvamento de arquivo", o Save CETIP Files está
-    na Intraday (roda ao longo do pregão) e o Save Daily Settlement Files na
-    Settlement Reporting. A **Application** é a única que não fala de operação:
-    ela guarda as rotinas sobre a própria ferramenta, e hoje tem um card só, o
-    **New Version Released** — o aviso de que há versão nova e de que ela
-    precisa ser iniciada à mão. A versão dele NÃO se digita: sai do `link.txt`
-    que fica ao lado do `start-otc-tracker.bat`, na pasta Application (o caminho
-    pende do `SHARED_DRIVE_ROOT`, §8, e `OTC_VERSION_FILE` o move). Sem versão
-    reconhecida o envio é **recusado** — um aviso de "nova versão" sem o número
-    não diz nada a quem recebe —, e o destinatário é quem está `Active` no
-    cadastro de usuários, não quem está `Pending`. A seção de cada card **é o DOM**: o cabeçalho
-    (`data-cp-hdr`), a
-    `.row.cp-cards` logo abaixo, e os cards dentro dela. Havia um mapa
-    card → grupo escrito à mão no JS, e ele envelhecia calado no dia em que um
-    card mudasse de seção: o cabeçalho ficava sozinho na tela, ou sumia com
-    cards embaixo dele. Card novo só precisa nascer dentro de uma seção.
-  - O que se esconde de quem não tem acesso é o **`.cp-reveal` do card**, e só
-    depois a coluna que ficou sem nenhum card visível: a coluna empilhada (dois
-    cards) levava junto o card que a pessoa PODE ver.
-  - O **`id` é o token** gravado no `Page_Access` (`/control-panel#<id>`) —
-    renomeá-lo revoga o acesso em silêncio. A **ordem** de
-    `_CONTROL_PANEL_CARDS` é a da tela, seção por seção, porque é ela que monta
-    a checklist do `/page-access` (HANDOFF §285).
-- **Tela de administração.** `/page-access` (admin/master) é o editor;
-  `/api/page-access/<sid>` GET/POST persiste. A checklist é montada no
-  navegador a partir do DOM vivo do menu, agrupada pela hierarquia completa,
-  com o Control Panel explodido em seção própria.
-- **Support Center: a unidade da visibilidade é a MESA, não a pessoa.** Quem é
-  do Back Office vê os chamados abertos pelo Back Office, quem é do Middle vê os
-  do Middle — a fila de uma mesa é assunto da mesa, e antes o colega que abriu o
-  mesmo pedido ontem não tinha como saber. **Ver não é poder**: editar, comentar
-  e apagar continuam sendo do REQUESTER (e do master), então o chamado do colega
-  abre em leitura. Três detalhes que não dão erro nenhum:
-  - o papel fica **gravado no ticket** (`requester_role`), e é o de quem abriu,
-    não o que a pessoa tem hoje: sair do BO para o MO não leva os chamados
-    antigos para a fila nova;
-  - o ticket ANTERIOR a essa coluna tem o papel resolvido no cadastro de
-    usuários (`_tk_roles_by_sid`, uma consulta por LOTE e com cache — por
-    ticket, a listagem abriria o banco de usuários uma vez por linha da tela).
-    Sem esse resgate, a fila inteira de antes sumiria da mesa que a abriu, e um
-    chamado que some é pior do que um que aparece para gente demais;
-  - **papel vazio não casa com nada.** Dois usuários sem papel no cadastro não
-    são uma mesa, e tratá-los como uma abriria a fila de um para o outro — nesse
-    caso vale a regra antiga, só o próprio.
+- **Papéis** (`Role` no banco): `ADMIN`, `BO`, `MO`, `FO`, `INSTITUTIONAL`,
+  `HUB`. **Master** é por SID (`_MASTER_SIDS = {'E930179'}` em
+  `platform/authz.py`), não concedível; `_session_is_admin()` = ADMIN ou
+  master. Só o master altera acesso de admin/master e escapa de toda restrição.
+- **Por página**: `users.Page_Access` é array JSON de URLs. Vazio = não
+  configurado = acesso total (admins incluídos). `enforce_page_access`
+  bloqueia quem tem allowlist e redireciona para `_safe_landing(allowed)` — o
+  dashboard é concedível, não sempre permitido. `_ALWAYS_ALLOWED_PATHS` =
+  `{'/users-profile', '/page-access'}`. `/api/*` e `/static*` nunca são
+  bloqueados aqui.
+- **Por card (Control Panel)**: tokens `/control-panel#<id>`
+  (`_CONTROL_PANEL_CARDS`, na ordem da tela — monta a checklist do
+  `/page-access`); `enforce_control_panel_cards` bloqueia o endpoint da rotina
+  sem o card (`_CP_ENDPOINT_CARD`). **O `id` é o token gravado**: renomear
+  revoga em silêncio. A seção do card é o DOM (`data-cp-hdr` + `.row.cp-cards`),
+  nunca um mapa no JS. Seis seções: Intraday, Settlement Reporting, Pending
+  Confirmation, Economic Affirmation, Reference Data, Application (o card *New
+  Version Released* lê a versão do `link.txt` ao lado do
+  `start-otc-tracker.bat`; sem versão o envio é recusado; destinatário é quem
+  está `Active`).
+- **`refresh_session_role`** (`before_request` próprio): o papel do cadastro
+  alcança quem já está logado em até 30 s, pela mesma leitura da allowlist.
+  `None` não mexe (banco mudo não rebaixa a mesa); `''` mexe (é revogação);
+  master não é tocado; só grava quando muda. `check_session_role.py`.
+- **Support Center: a unidade de visibilidade é a MESA** (`requester_role`
+  gravado no ticket; ticket antigo resolve pelo cadastro em lote,
+  `_tk_roles_by_sid`); ver não é poder (editar/comentar/apagar é do requester e
+  do master); papel vazio não casa com nada.
 
 ---
 
-## 6. Mappings (os de-para que se editam na tela, não no código)
+## 6. Mappings (os de-para que se editam na tela)
 
-**Nunca fixe um de-para novo no código.** Acrescente uma entrada em
-`_MAPPING_DEFS` no `routes.py` (`key → {label, columns, seed[, file, upgrade]}`)
-e um item no array `TYPES` de `apps/templates/pages/mapping.html`.
+Entrada em `_MAPPING_DEFS` (`key → {label, columns, seed[, file, upgrade]}`) +
+item no `TYPES` de `mapping.html`. Arquivo em `static/data/mappings/<key>.json`
+(versionado; `BaseMoeda.json` também está lá). `_mapping_rows(key)` semeia na
+primeira leitura e cacheia por mtime — **edição vale no request seguinte, sem
+restart**. API `/api/mappings/<key>` GET/POST; o POST substitui o arquivo
+inteiro; valores **não são trimados** (`'C '` é código B3). O front mantém os
+literais antigos como fallback. `upgrade` converte formato antigo na leitura;
+**seed só roda quando o arquivo não existe** — correção de seed não alcança
+quem já tem o cadastro, e por isso precisa de `upgrade`. `autofill` preenche
+outra coluna; tipo **`refdata`** liga nome/SPN/Tax ID ao Reference Data (um
+escolhido, os outros dois se preenchem). **`file`** aponta para um JSON já
+existente (o `swap-index` edita o mesmo `SwapIndex.json` do Index Results —
+declare as colunas extras, senão o POST as derruba).
 
-- Os arquivos ficam em `apps/static/data/mappings/` (um JSON por mapping,
-  versionado). `BaseMoeda.json` também está lá (movido em `f789d02` — o caminho
-  antigo `apps/static/data/BaseMoeda.json` não existe mais).
-- `_mapping_rows(key)` semeia o arquivo na primeira leitura e cacheia por
-  mtime: **edição na tela vale no request seguinte, sem restart** — ao
-  contrário de mudanças no `routes.py`, que exigem reinício na instância do
-  time.
-- O seed tem de carregar **exatamente** os valores que estavam fixos no código,
-  para o comportamento ser idêntico até alguém editar a tabela.
-- API genérica `/api/mappings/<key>` GET/POST. O POST **substitui o arquivo
-  inteiro**. Os valores **não são trimados** de propósito (o espaço no fim de
-  códigos B3 como `'C '` faz parte do código).
-- O front-end consome via `fetch` e mantém os literais antigos como fallback,
-  então um fetch que falha degrada para o comportamento anterior.
-- `upgrade` opcional converte formatos antigos na leitura; `autofill` opcional
-  numa coluna `select` faz o modal preencher outra coluna a partir das linhas
-  já cadastradas.
-- O tipo de coluna **`refdata`** liga o campo ao Reference Data
-  (`/api/reference-data/counterparties`): escolhido **qualquer** um dos três —
-  nome, SPN ou Tax ID —, os outros dois se preenchem. É o mesmo cliente escrito
-  de três jeitos, e digitar os três à mão é criar a chance de o SPN de um
-  conviver com o nome de outro: a linha casaria por um identificador e apareceria
-  no consumidor com o outro. O tipo é genérico, então o próximo cadastro que
-  precise disso não reescreve nada (o `mt300` é o primeiro — HANDOFF §280).
-- **`file`** opcional aponta o registro para um JSON **já existente** em vez de
-  `mappings/<key>.json`. `swap-index` usa isso para editar o mesmo
-  `SwapIndex.json` que a página de Index Results edita — um arquivo, dois
-  editores, sem chance de divergirem. Ao fazer isso, **declare também as
-  colunas extras do arquivo** (`STATUS`/`MAKER`/`CHECKER`): o POST reescreve o
-  arquivo inteiro e derrubaria o que não estivesse declarado (HANDOFF §188).
+São **45**: `currency-base`, `interbook-ndf`, `commodities-b3`,
+`publisher-ndf`, `le-accronym`, `le-spn`, `bank-name`, `fxo-conv-rate`,
+`ndf-pdf-cpty`, `swap-curves`, `cetip-files`, `api-links`,
+`manual-conf-validation`, `manual-conf-sla`, `fxo-internal-cpty`,
+`fxo-book-disregard`, `opb3-events`, `swap-ir-client`, `swap-ir-term`,
+`bankers-email`, `swap-index`, `ndfc-ir-exempt`, `b3-accounts`,
+`ndfc-advice-split`, `tools-swap-index`, `opb3-msg-asset`,
+`swap-funcionalidade`, `swap-amortizacao`, `swap-code-labels`,
+`quotes-equity`, `quotes-commodity`, `mt300`, `settlement-exception`,
+`gdt-codes`, os sete `dce-*` e os quatro `cgd-*`.
 
-São **45** mappings hoje: `currency-base`, `interbook-ndf`, `publisher-ndf`,
-`le-accronym`, `le-spn`, `commodities-b3`, `bank-name`, `fxo-conv-rate`,
-`ndf-pdf-cpty`, `swap-curves`, `cetip-files`, `api-links`, `opb3-events`,
-`swap-ir-client`, `swap-ir-term`, `swap-index`, `swap-funcionalidade`,
-`swap-amortizacao`, `swap-code-labels`, `ndfc-ir-exempt`, `ndfc-advice-split`,
-`b3-accounts`, `fxo-internal-cpty`, `fxo-book-disregard`,
-`bankers-email`, `manual-conf-validation`, `manual-conf-sla`, `quotes-equity`,
-`quotes-commodity`, `gdt-codes`, `settlement-exception`, `mt300`,
-`tools-swap-index`, `opb3-msg-asset`, e os sete
-`dce-*` dos domínios DCE (`dce-country`, `dce-type-of-derivative`,
-`dce-type-of-swap`, `dce-type-of-verification`, `dce-functionality`,
-`dce-underlying-asset-category`, `dce-underlying-asset`), mais os quatro do CGD
-(`cgd-stage`, `cgd-b3-participante`, `cgd-garantidor`, `cgd-conta-encerrada` —
-os três últimos eram abas do `Auxiliar.xlsx` do batimento, e as COLUNAS deles
-seguem a ordem e os nomes das abas: no `cgd-b3-participante` — rótulo
-**B3 Participants** (perdeu o "CGD — ": a mensageria do Operations B3 também o
-lê, HANDOFF §412; a CHAVE não muda, o motor da recon e o arquivo leem por
-ela) — Razão Social · Nome Simplificado · CNPJ · **Conta**,
-com as CHAVES antigas preservadas porque o motor da recon lê por elas; no
-`cgd-garantidor` a coluna `NOME` virou `EMPRESA` com `upgrade` na leitura.
-`scripts/import_cgd_auxiliar.py` carrega as três abas nos JSONs — idempotente,
-reescreve cada cadastro) — seeds vazios com os
-JSONs versionados, como os dois Quotes (o `dce-underlying-asset` tem ~14 mil
-linhas). As colunas dos `dce-*` carregam `lang` (chave i18n): o `colLabel` do
-mapping.html traduz cabeçalho, filtro, export e modal — coluna sem `lang`
-continua no label inglês.
+### Regras fáceis de quebrar pela tela
 
-### Os que têm regra fácil de quebrar pela tela
-
-- **`opb3-events`** — quais linhas do Operations B3 entram numa apuração de
-  liquidação, e é a MESMA resposta para o NDF Summary, o Other Products, os
-  avisos e a mensageria. A linha é uma **regra** sobre Tipo Título × Tipo
-  Operação × Status B3, com **campo em branco = coringa** e `USE` = Consider /
-  Disregard. Precedência: Disregard vence; um Tipo Título com ao menos um
-  Consider próprio vira lista branca; Tipo Título sem Consider não é filtrado.
-  Era o `swap-b3-events` (só o Tipo Operação do swap) — HANDOFF §213, inclusive
-  a mudança de semântica da tabela vazia.
-- **`publisher-ndf`** — uma linha **sem** Match Tokens casa **só com o texto
-  completo** (é o que permite `PTAX` e `PTAX|BRR|PTAX` serem cadastros
-  independentes), e a coluna **`NOTES = BACEN` é o que roteia para Vanilla** em
-  vez de Other Publisher. Tirar o `BACEN` da linha `PTAX` manda PTAX puro para
-  Other Publisher — o único jeito de quebrar o comportamento histórico
-  (HANDOFF §166).
-- **`commodities-b3`** e **`cetip-files`** — o texto cadastrado carrega um
-  **padrão**, não um literal: `"MY"` entre aspas é letra do mês B3 + ano
-  (`X_"MY"` → `X Z7`), `_` é espaço literal, e `YYMMDD` num nome de arquivo
-  CETIP é a Reference Date do card. O trecho `MY` é destacado na tabela para
-  ler separado da parte fixa (HANDOFF §164). `commodities-b3` tem a coluna
-  **TRADE TYPE** (VANILLA / ASIAN / BOTH; em branco = BOTH): a linha só vale
-  para o tipo de trade que ela diz, e é o que permite um market ter códigos
-  diferentes por tipo — o BRT_IPE tem DUAS linhas: a `SPECIAL`, **só ASIAN**,
-  leva os dois códigos (`B3 CODE` = `CO"MY"` para o contrato do mês seguinte à
-  liquidação e `B3 CODE FAR` = `CO1-2` para dois meses ou mais — HANDOFF §212)
-  e a `PREFIX`, **só VANILLA**, o `CO"MY"` padrão (§251). O WTI segue o mesmo
-  desenho: `PREFIX`/VANILLA `WTI"MY"` e `FIXED`/ASIAN `CL1` (§252). Os mapas
-  dos consumidores são por tipo (`{mkt: {V, A}}` — `_box_commodity_maps` e os
-  dois JS), com valor plano do formato antigo valendo para os dois. Carrega
-  ainda o **Tipo de Cotação / Fonte de Informação** escritos nos arquivos
-  Conecta (`QUOTE TYPE NDF`, `QUOTE TYPE OPT`, `INFO SOURCE`): a coluna guarda
-  o **código do layout**, e há duas colunas de tipo de cotação porque os
-  layouts de Termo e Opção usam domínios diferentes (letra vs número) para a
-  mesma mercadoria. Coluna em branco — ou subjacente sem linha — devolve o
-  default histórico `A` / `5` / `358` (`_b3_quote_cfg`); o flag **FIXED QUOTE
-  foi aposentado** (§252): o F/340 das linhas que eram YES está materializado
-  nas colunas, e o upgrade faz isso ao ler arquivo antigo antes de remover o
-  flag. A cópia da regra no navegador é o `static/js/b3-quote-config.js`, e
-  `check_quote_type.py` prova que as duas concordam (HANDOFF §177). A tabela
-  do /mapping abre ordenada por MARKET A→Z (só a exibição; o arquivo mantém a
-  ordem de cadastro) e todo mapping ordena por clique no header.
-- **`api-links`** — rótulo **API/Bob Reports Links** (HANDOFF §408): guarda o
-  `getTrades` da Athena E os extratos do bob-reports, e a coluna **SOURCE**
-  (API × Bob Report) diz qual linha é o quê — o `upgrade` a deriva da própria
-  URL nos arquivos antigos. Uma linha por **uso × produto**
-  (`New Deals` × NDF/FXO/Commodities/Swaps, mais `Unwinds`), com `YYYYMMDD`
-  marcando a data de referência. Produto aqui é o parâmetro `product` da API,
-  **não a página**: NDF é um produto alimentando três páginas (Vanilla, Other
-  Publisher, FWD Start), separadas por roteamento e não por endereço. `PRODUCT`
-  em branco é coringa daquele uso. `date` é sempre reescrito; `product` só na
-  linha coringa — linha específica de produto é usada como cadastrada, já que
-  foi escolhida *por* produto. A linha `Unwinds` vai **vazia de propósito**:
-  sem URL o consumidor falha pedindo cadastro, enquanto `New Deals` cai no
-  endereço histórico (HANDOFF §173). O uso **`Recon FXO`** é outra Athena — o
-  relatório EOD do `bob-reports`, não o `getTrades` — e a data dele fica no
-  **caminho** (`AAAA-MM-DD`), que é justamente para o que o placeholder serve;
-  o uso **`Intrag DCE`** (o ITAUDataExtract de FX Option da página Intrag ›
-  DCE › Option, §409) segue o mesmo desenho.  O uso **`Daily Settlement`** × NDF é
-  o `getTradesBySettle` da Athena — as operações de NDF que LIQUIDAM na data —
-  e alimenta o Import do NDF Cockpit no lugar do SETTLEMENT.xlsx (§421); o
-  `.xlsx` no dropzone do Save Daily Settlement Files continua sendo o plano B,
-  e as duas fontes escrevem o mesmo JSON. O bloco **`settlement` é uma LISTA de
-  eventos**, e o valor de liquidação é o **primeiro item numérico de `Rolled
-  Positions`** (o segundo é o notional da moeda, que é MAIOR — "pegar o maior"
-  ou somar devolve o número errado em silêncio); um trade com vários eventos
-  vira uma LINHA por evento, e só entra quem tem `settlement` e cujo Trade Date
-  não seja hoje (§425).
-- **`fxo-internal-cpty`** — a perna interna da reconciliação de FXO. A coluna
-  **`INVERT DIRECTION`** decide *quando* a regra vale: `No` renomeia sempre;
-  `Yes` é a perna espelhada e só entra quando Ctpty **e** JPM Dir estão os dois
-  NOK — aplicá-la sempre inverteria a direção de operações que estavam certas
-  (HANDOFF §216). A coluna **`USE`** decide se a linha entra: `Disregard` tira
-  do batimento, **antes do merge**, as linhas da Athena cuja **contraparte** casa
-  com o nome cadastrado — é a perna interna que não tem par na CETIP e
-  viraria `Unmatched Athena` todo dia (a conta GEM é a semeada assim). Cortar
-  depois do merge não adiantaria: o DealID dela já teria ocupado a chave em
-  `base_athena_para_match` e poderia roubar o par de uma operação de verdade. O
-  corte é **cego a pontuação** (`_nome_cru`), olha as **DUAS** colunas de
-  contraparte (`CounterpartyName` e `MatchingCounterpartyName`: a operação
-  intragrupo chega ao relatório pelos dois lados, e é a segunda que a tela mostra
-  em ATH Cntpy — cortar por uma só deixava metade do par na recon exibindo o nome
-  que o cadastro mandou tirar, HANDOFF §228) e é **avisado** no painel — linha que
-  some sem dizer nada vira "sumiu uma operação da recon". Uma linha `Disregard`
-  deixa de valer como renomeação/espelho: uma linha, uma decisão. O `upgrade`
-  mora no **`recon_fxo`**, e não no `routes`, porque quem lê esse cadastro a cada
-  run é o motor — com ele só na tela de /mapping, a instância que nunca abriu
-  aquela tela leria o JSON cru, sem a coluna. O Counterparty → CNPJ **não tem
-  cadastro**: sai do Reference Data (`lookup_cnpj` indexa COUNTERPARTY, FX CASH
-  ACCRONYM e SPN pelo mesmo TAX ID), porque um de-para paralelo seria uma segunda
-  lista dos mesmos clientes e envelheceria sozinho.
-- **`bankers-email`** — nome do banker → e-mail, o Cc do e-mail de coleta de
-  assinatura. O `BANKER` do Reference Data traz o GRUPO por extenso ("Fulano e
-  Sicrano") e é esta lista que resolve cada nome num endereço. Era o
-  `signature_collection_bankers.json`, mantido à mão: banker novo só entrava por
-  commit, e até lá o e-mail saía sem ele no Cc. Hoje o arquivo é o
-  `mappings/bankers-email.json`, como os demais cadastros, e mudou de
-  `{"bankers": [...]}` para a LISTA que o /mapping entende. Cadastro vazio deixa
-  o Cc só com as caixas fixas e o e-mail vai embora do mesmo jeito, então
-  `_sigcoll_bankers_index` **avisa no log** quando a lista volta vazia.
-- **`fxo-book-disregard`** — a MESMA exclusão do cadastro acima, por outro
-  identificador que não o nome da contraparte. A perna interbook é a mesa contra
-  a mesa, não tem registro na CETIP e viraria `Unmatched Athena` todo dia. Cada
-  linha é uma **conjunção de até três critérios `coluna = valor`**, com a coluna
-  escolhida num dropdown do cabeçalho real do relatório
-  (`_ATHENA_FXO_COLUMNS`): um critério tira tudo que tem aquele valor naquela
-  coluna, dois tiram só o que tem os dois, três só o que tem os três.
-  - **A coluna é ESCOLHIDA, não fixada.** A primeira versão deste cadastro tinha
-    colunas fixas `TRADING BOOK` / `OTHER BOOK` — nomes que o relatório da Athena
-    **não tem** (ele tem `Portfolio`, `CounterpartyName`, `INT_EXT`…), e a regra
-    nunca casaria. Quem sabe em que coluna mora cada valor é quem opera; a lista
-    do dropdown é conveniência de tela e pode envelhecer sem quebrar nada, porque
-    o motor aceita o nome que estiver gravado.
-  - **Par pela metade não conta** (coluna sem valor, ou valor sem coluna): é o
-    que permite escrever a regra de um critério só sem inventar coringa. E a
-    linha SEM critério nenhum é **ignorada** — sem nada a exigir ela casaria com
-    o relatório inteiro, e a linha vazia criada por engano na tela apagaria o
-    lado da Athena da recon.
-  - O **valor** é comparado por `_nome_cru` (cego a caixa, espaço e pontuação) e
-    o **nome da coluna** também é resolvido normalizado (`INT_EXT` ≡ `int ext`),
-    porque a grafia depende de quem gerou o arquivo.
-  - **Regra que cite coluna inexistente é PULADA com aviso**, nunca com o
-    critério ignorado: ignorando, a regra passaria a exigir menos e derrubaria
-    mais linhas do que o cadastro pediu.
-
-  O `upgrade` traduz o formato antigo (as três colunas fixas) para os pares,
-  preservando os VALORES e levando o nome antigo para o dropdown — de onde ele é
-  corrigido em um clique. O corte é **antes do merge**, pela mesma razão do outro
-  cadastro (depois, o DealID da linha cortada já teria ocupado a chave), e é
-  **avisado** no painel. O endpoint `/reconciliation-fxo/run` toca os **dois**
-  cadastros antes de rodar, só para materializar o seed: o motor lê o JSON direto
-  (importar `routes` seria circular) e não tem como semear — sem isso, na
-  instância em que ninguém abriu a tela de /mapping o arquivo não existe e as
-  regras não valem, sem erro nenhum.
-- **`manual-conf-validation`** — quem valida a confirmação de cada produto
-  (Produto × LOB → OTC / MO / FO, `REQUESTED` ou `EXEMPT`). **LOB em branco é
-  coringa** do produto. MO e FO correm em **paralelo**, não em fila. Produto
-  sem linha cai em OTC + MO e a tela **avisa** — em vez de deixar a confirmação
-  parada num Pending que ninguém sabe de quem é (HANDOFF §217).
-  - A coluna **PRODUCT é um `select`** sobre `manual_conf.CONFIRMATION_TYPES` —
-    **uma lista só**, e ela tem QUATRO consumidores: o *Confirmation Type* do
-    upload do Electronic Inventory (`routes._EI_CONFIRMATION_TYPES` aponta para
-    ela), a **pasta** em que o documento é gravado (`TYPE_FOLDER`), este cadastro
-    e o dropdown de Produto do Track Confirmations. Eram listas escritas à mão, e
-    o cadastro dizia `OPTION` onde a tela de upload dizia `FXO`: o mesmo
-    documento com dois nomes. São **doze tipos, sempre em MAIÚSCULO e SEM
-    ACENTO** (é código, não rótulo — a comparação entre as telas é feita sobre
-    ele):
-
-    `NDF VANILLA` · `NDF FWD START` · `NDF OTHER PUBLISHER` · `NDF COMM` ·
-    `OPTION COMM` · `FXO` · `SWAP` · `SWAP CORPORATE` · `TERMO DE RESILICAO` ·
-    `AMENDMENT` · `ADDENDUM` · `RERATIFICATION`
-
-    O **sem acento** não é estilo: `confirmation_type()` compara
-    `upper_norm(produto)` com a tupla, e o `upper_norm` normaliza em NFKD e
-    descarta as marcas de combinação. Um `TERMO DE RESILIÇÃO` cadastrado com
-    cedilha chegaria à comparação como `TERMO DE RESILICAO` e **nunca casaria
-    consigo mesmo** — o tipo não resolveria e a pasta não seria achada
-    (`_product_folder` faz o mesmo lookup), sem erro nenhum. O lado bom da mesma
-    normalização é que quem digita "Termo de Resilição" com acento no cadastro
-    resolve para o código certo.
-
-    As três páginas de NDF do New Deals gravam o mesmo Product Type e têm cada
-    uma o seu tipo aqui: o documento que sai de cada uma é diferente, e um `NDF`
-    genérico obrigava a adivinhar qual delas gerou a linha.
-
-    **Tipo novo mexe em três listas**, e as três têm teste: `CONFIRMATION_TYPES`,
-    `TYPE_FOLDER_LEGACY` (com tupla VAZIA quando o tipo nunca existiu sob outro
-    nome — a entrada existe para um tipo ausente não se confundir com um
-    histórico esquecido) e `VALIDATION_SEED`, sem a qual o tipo cairia no
-    `DEFAULT_RULE` sem ninguém ter decidido nada.
-  - **A pasta É o código do tipo** — `TYPE_FOLDER` é a identidade, e é ela que os
-    quatro `save` do New Deals e o upload manual consultam em vez de escrever a
-    string. Antes o app gravava num nome bonito (`FX Options`) e o upload no
-    código (`FXO`): o mesmo produto em duas pastas, e como o Monitor procurava o
-    PDF só onde o app grava, a confirmação subida à mão ficava invisível com o
-    arquivo lá. Dar ao app um segundo nome recriava a divergência pela outra
-    ponta; o share já está cheio de pastas com o nome do tipo, que é o que a mesa
-    reconhece.
-  - **`TYPE_FOLDER_LEGACY` é só de LEITURA**, e é obrigatório: os nomes antigos
-    (`NDF Vanilla`, `NDF FWD Start`, `NDF Other Publisher`, `NDF Commodities`,
-    `Commodities Options`, `FX Options`, `Swap`, `Swap Corporate`) continuam
-    cheios no share. Quem procura o documento usa
-    **`confirmation_folders()`** — a pasta de escrita primeiro, as antigas
-    depois, e o mesmo nome de arquivo só uma vez. `confirmation_folder()`
-    (singular) devolve só a de escrita. Unificar o nome sem isto apagaria da tela
-    toda confirmação anterior, com os arquivos intactos no share.
-  - Os dois lados da comparação passam por **`manual_conf.confirmation_type()`**,
-    que traduz a nomenclatura de quem criou a linha (`OPTION`, e o `NDF` × LOB
-    `COMMODITY` da planilha legada) para o nome único. Ele classifica **pela
-    pasta** (`_product_folder`) antes de aceitar um nome que já está na lista —
-    `NDF` × COMMODITY tem um produto que por acaso está lá, e devolvê-lo direto o
-    classificaria como termo de moeda.
-  - O **`upgrade` faz duas coisas**, e as duas são obrigatórias. Traduz os nomes
-    antigos (sem ele, a instância que já tem o arquivo em disco abriria o
-    `select` sem a opção correspondente, e o primeiro Save trocaria o produto da
-    linha sem ninguém pedir) e **completa o arquivo com os tipos que não têm
-    linha nenhuma**, a partir do `_MC_VALIDATION_SEED`. Sem a segunda, um tipo
-    novo cairia no `DEFAULT_RULE` (OTC + MO) — que para o `SWAP CORPORATE` é a
-    regra errada, porque nele o FO também valida. A completação é **por produto,
-    não por par Produto × LOB**: quem apagou a linha coringa e deixou só a da sua
-    LOB fez isso de propósito.
-  - `OPTION EDG` **não era um produto**: era a opção de câmbio na LOB EDG, e o
-    `upgrade` a converte em `FXO` × LOB `EDG` — o desenho Produto × LOB que a
-    tabela sempre teve.
-- **`swap-index`** — código de curva B3 → nome (`C00` → `VCP`). Aponta para o
-  **mesmo `SwapIndex.json`** da página de Index Results (ver `file` acima), e
-  toda tradução código→texto do módulo de Swap passa por registro:
-  `swap-funcionalidade`, `swap-amortizacao` e `swap-code-labels`. Live Position
-  **Termo e Opção não têm de-para nenhum** — só formatação de número e data —,
-  então não há o que cadastrar lá (HANDOFF §188).
-- **`ndfc-ir-exempt`** — quem NÃO paga o IR de 0,005% do termo de mercadoria. A
-  **mesma lista serve o Settlement Advice e o Trade Level**: mesmo imposto,
-  mesma operação, e duas listas divergiriam com uma tela retendo e a outra não.
-  O seed vai **além da fórmula da planilha** (que isentava só LAWTON) porque
-  ATACAMA / BANCO / JPMorgan foram pedidos por nome (HANDOFF §195).
-- **`ndfc-advice-split`** — contrapartes que recebem **um aviso por mercadoria**
-  (semeado com `MONDELEZ`). O split roda **depois** do split por tipo de net,
-  então um Pay/Rec da Mondelez sai por direção *e* por mercadoria (§196).
-- **`b3-accounts`** — as contas B3 de cada entidade nossa (LE · Nome
-  Simplificado · Conta · Tipo · Reference Data Name · Messaging), e ele responde
-  TRÊS perguntas. Era o `b3-omnibus-account`, que listava só a conta
-  guarda-chuva e onde **estar na tabela era a resposta** (§287).
-  - **A conta identifica o cliente?** Só **CLIENT 1 / CLIENT 2** são
-    guarda-chuva: nelas o nome que vem da B3 é o do titular do omnibus, e o
-    cliente é resolvido por **CNPJ** contra o `RefData.json`. Com a conta
-    PRÓPRIA dentro da mesma tabela, quem responde passou a ser o **TIPO** — se
-    voltasse a ser a presença na lista, a posição da casa iria procurar cliente
-    pelo CNPJ onde não há cliente nenhum. As duas comparações (CNPJ e conta) são
-    **só de dígitos** — os lados guardam pontuação diferente, e comparar string
-    casa silenciosamente nada (§197). O tipo é um `select` e a leitura é cega a
-    caixa e acento (`Própria` ≡ `OWN`, `CLIENTE 1` ≡ `CLIENT 1`): digitado à
-    mão, um `Cliente1` viraria conta própria sem erro nenhum.
-  - **Quem é o Participante** do header dos arquivos TER (campo X(20), "Nome
-    Simplificado do Emissor"): `_ter_file_header(le, …)` resolve pela **LE da
-    visão** que está sendo gerada, e o motor completa com espaços até os 20
-    caracteres. Era o dicionário fixo `_TER_PARTICIPANT_NAME`, com a mesma
-    resposta repetida no `source_note` do File Interpreter. O que sobrou fixo é
-    a tradução `_TER_BUCKET_LE` — o gerador fala em balde (`BANCO`) e o cadastro
-    em LE (`JPM`). **LE sem Nome Simplificado levanta erro** dizendo qual falta,
-    em vez de mandar para a B3 um header com o campo em branco.
-  - **A mensageria sai na visão desta conta?** Coluna **MESSAGING**
-    (Consider/Disregard). A liquidação intragrupo chega pelos DOIS arquivos,
-    espelhada, e as duas pontas virando e-mail cobrariam duas vezes o mesmo
-    pagamento: o Banco assina; MGT, Lawton e Atacama são `Disregard`. Era uma
-    regra escrita no endpoint (`casa == MGT e contraparte == Banco`) que conhecia
-    esse par e só ele — Lawton e Atacama passavam direto (§306). **Conta fora do
-    cadastro GERA**: é a conta de terceiro, e travá-la por falta de linha calaria
-    a rotina inteira onde ninguém abriu o /mapping. O `upgrade` completa a coluna
-    pelo seed (por conta e por LE) — um default cego `Consider` faria a mensagem
-    sair pelas duas pontas, e `Disregard` cego a faria não sair de nenhuma, que é
-    pior porque some sem erro.
-  - O **Reference Data Name** é como a entidade está escrita no Reference Data,
-    e existe porque o Nome Simplificado ao lado é o apelido de 20 caracteres da
-    B3 (`INTRAGLAWTONFDO`), que não endereça documento nenhum. A coluna é do tipo
-    `refdata`, então o nome se escolhe da lista.
-  - **Estar no cadastro é ser conta INTERNA** — a tabela lista as contas B3 das
-    nossas entidades e nada mais —, e é por aí que o BCC de compliance sabe que a
-    contraparte é o Lawton ou a Atacama, em vez de casar o prefixo do Nome
-    Simplificado.
-- **`tools-swap-index`** — a curva da POSIÇÃO de swap → o indexador do **Swap
-  Calculator** (Tools). O pré-preenchimento pelo B3 ID lê o `Código índice` de
-  cada perna do DPOSICAO-SWAP, traduz o código em NOME pelo `swap-index`
-  (C03 → DI, C99 → PREFIXADO 252D, 220 → DOLAR DOS EUA) e procura aqui que
-  índice da calculadora ele é. Quando a curva é **VCP** o nome de verdade está
-  no `Nome Tipo/Classe` da posição, e é ele que passa pelas mesmas regras.
-  `Exact` vence `Contains`; entre dois `Contains` vence o token mais LONGO —
-  senão o `DOLAR DOS EUA 30/360` herdaria a contagem do `DOLAR` genérico.
-  **Curva sem linha deixa o índice EM BRANCO e sinalizado na tela**, nunca um
-  palpite: um indexador chutado numa ponta produz uma liquidação errada que
-  parece certa. E o sinal DIZ o que faltou (§426): a nota da ponta escreve o
-  que a posição trazia — Código índice · curva do `swap-index` · Nome
-  Tipo/Classe — e manda cadastrar a curva, porque "não identificou" e "a
-  posição veio sem índice" eram a mesma tela em branco e é a diferença entre as
-  duas que se corrige. O `Nome Tipo/Classe` é a SEGUNDA pergunta, e não só no
-  VCP: curva que não casa com regra nenhuma volta por ele — um `Código índice`
-  que o `swap-index` não conhece chega à classificação como o próprio código
-  (`C03`), e desistir ali deixaria a ponta em branco tendo a curva escrita na
-  coluna ao lado. `DAY COUNT`/`REGIME` em branco valem o padrão do índice.
-  **O `INDEX` tem de ser um indexador do MOTOR** (`liquidacao.INDEXADORES`), e
-  quem confere é o consumidor: `montar_ponta` recusa o que não conhece e devolve
-  a ponta em branco e sinalizada. Um `INDEX` estranho devolvido punha no
-  `<select>` da tela um valor sem opção correspondente — campo vazio — E calava
-  a nota de "não identificou", porque o servidor tinha respondido um índice: o
-  branco ficava sem explicação nenhuma. Foi o `cdi_percentual` (código da Renda
-  Fixa) do primeiro seed, que sobreviveu na instância porque **seed só roda
-  quando o arquivo não existe** — a correção do seed não alcança quem já tem o
-  cadastro em disco, e por isso ele também tem `upgrade`.
-  **O `Código Identificador` da posição de swap NÃO é uma chave** (§427): na
-  instância ele guarda a LOB (`CEM` em toda operação da mesa). Quem casa o
-  DFLUXO com a posição é o **Código do contrato**; o identificador só responde
-  onde não há contrato. Usá-lo em OU com o contrato trazia para o fluxo de um
-  swap os eventos de todos os outros da mesma mesa — e não como tela vazia: o
-  "último evento até hoje" virava o de outro contrato.
-  **O PERÍODO de cada fluxo (§427) é do servidor, não da tela**: o payload leva
-  `p_inicio`/`p_fim`/`p_amort`/`p_base_amort` por evento e o seletor da tela só
-  lê. O fim é a data do evento; o início é o primeiro candidato ANTERIOR a ele —
-  evento anterior (o mais recente estritamente antes) → `Data início` do swap →
-  `Data operação termo` → `Data Início Composição da Taxa` do evento. Candidato
-  que não é anterior ao fim é DESCARTADO: o DFLUXO repete a data quando há mais
-  de um lançamento no dia, e a composição de taxa às vezes vem carimbada com a
-  data do próprio evento — nos dois casos o período abria no dia em que fechava,
-  e uma janela de zero dia liquida com juros zero sem acusar erro nenhum.
-- **`opb3-msg-asset`** — o token da coluna **Type** do Operations B3 → o rótulo
-  da classe do ativo no ASSUNTO da mensageria (`Moeda`, `Mercadoria`,
-  `Equities`). O Type é a `Classe do Ativo Subjacente` da posição em TER/OPC e o
-  Código Identificador em SWAP, então a mesma lista serve os dois. O casamento é
-  por CONTÉM e o token mais longo vence — `COMMODITIES` contém `COMM`, e o de
-  quatro letras roubaria a linha se a ordem do arquivo decidisse. **Token sem
-  linha não põe rótulo nenhum** e o assunto fica como sempre foi: a mudança é
-  aditiva, e um rótulo errado no assunto é pior que a ausência dele.
-- **`fxo-conv-rate`** — alimenta as duas colunas de Taxa de Conversão da
-  confirmação de FXO asiática (Moeda Base → nome da taxa + Venda/Compra) e vem
-  semeado só com USD → USD PTAX / Venda; moeda não cadastrada gera aviso no
-  painel em vez de imprimir em branco (HANDOFF §139).
-- **`quotes-equity`** e **`quotes-commodity`** — o código do Ativo Subjacente do
-  Index B3 → o **símbolo de mercado** que o Yahoo entende (`AAPL34` →
-  `AAPL34.SA`). As OPÇÕES da tela são a **UNIÃO** de duas fontes: o
-  `Subjacente.json` ao vivo (campo `Classe`, só as `ACTIVE`) e as linhas
-  **LITERAIS** deste cadastro — o de-para aceita rótulo que não é código do
-  Subjacente (`S&P 500 Index` → `^GSPC`), e sem a segunda fonte o mapping
-  recém-criado ficava fora da lista (cadastrado, resolvível pela API,
-  invisível). Linha de padrão `"MY"` NÃO vira opção: é regra, não instrumento.
-  O `seed` vai **vazio de propósito**: os dois arquivos são versionados
-  (471 + 17 linhas) e repetir centenas de pares no `routes.py` criaria uma
-  segunda lista para divergir da primeira. Código sem símbolo devolve **404
-  pedindo cadastro** e nunca tenta o código como ticker — a resposta seria um
-  404 obscuro da fonte em vez de "falta cadastrar" (HANDOFF §266). A lista de
-  moedas da PTAX **não é cadastro**: é o domínio do endpoint do BCB.
-  - **Em commodities as DUAS colunas aceitam o padrão `"MY"`** — a mesma notação
-    do `commodities-b3` (letra do mês + ano; `_` = espaço literal), e uma linha
-    passa a valer para **todos os vencimentos** daquela mercadoria:
-    `BO"MY"` → `ZL"MY".CBT` resolve `BOK6` → `ZLK26.CBT`. Eram 70 linhas para 10
-    mercadorias, e mais uma linha a cada vencimento que a B3 abrisse. Quem
-    expande é o `quotes.symbol_lookup`, e ele resolve as duas assimetrias que
-    condenavam o de-para literal: o **ano** tem um dígito ou dois na B3 e sempre
-    dois no símbolo de mercado (o dígito único cai na década corrente, virando
-    para a seguinte quando o ano ficaria mais de um ano no passado — contrato
-    futuro aponta para a frente), e o `"MY"` do símbolo fica no **meio**
-    (`ZL"MY".CBT`), porque o sufixo de bolsa vem depois do vencimento.
-  - O miolo casado **tem de ser mês+ano de contrato**, e o prefixo mais longo
-    vence: sem as duas regras, `C_"MY"` (milho) casaria com `CCZ6` (cacau) e com
-    `COZ6` (Brent) e devolveria o preço da mercadoria errada, em silêncio.
-    Linha **sem** `"MY"` continua literal e **vence** o padrão — é assim que se
-    cadastra a exceção de um vencimento só, ou o contrato contínuo (`C 1` →
-    `ZC=F`). Equities não têm vencimento e são todas literais; o motor é um só,
-    sem ramo por tipo.
-  - O registro do de-para (sufixos de bolsa do Yahoo, códigos de mês, as 471
-    equities e as pendências conhecidas) está em
-    [`DE_PARA_TICKERS_COTACOES.md`](DE_PARA_TICKERS_COTACOES.md), gerado em Word
-    pelo `scripts/build_sop_docx.py` como o SOP e o Guia.
+- **`opb3-events`** — regra Tipo Título × Tipo Operação × Status B3, campo em
+  branco = coringa, `USE` Consider/Disregard. Disregard vence; Tipo Título com
+  um Consider próprio vira lista branca; sem Consider não é filtrado. A MESMA
+  resposta para NDF Summary, Other Products, avisos e mensageria (§213).
+- **`publisher-ndf`** — linha sem Match Tokens casa só com o texto completo;
+  `NOTES = BACEN` é o que roteia para Vanilla (§166).
+- **`commodities-b3`/`cetip-files`** — padrão, não literal: `"MY"` = letra do
+  mês + ano, `_` = espaço, `YYMMDD` = Reference Date. `TRADE TYPE`
+  (VANILLA/ASIAN/BOTH) por linha (BRT_IPE e WTI têm duas); `QUOTE TYPE
+  NDF/OPT` e `INFO SOURCE` guardam o código do layout Conecta, default
+  `A`/`5`/`358` (`_b3_quote_cfg`); cópia no navegador em
+  `b3-quote-config.js`, `check_quote_type.py` prova a paridade.
+- **`api-links`** — uma linha por uso × produto (`New Deals` × NDF/FXO/
+  Commodities/Swaps, `Unwinds` vazio de propósito, `Recon FXO`, `Intrag DCE`,
+  `Daily Settlement` × NDF = `getTradesBySettle`); `SOURCE` API × Bob Report;
+  `YYYYMMDD` é a data; produto é o parâmetro da API, não a página. O
+  `settlement` da API é LISTA e o valor é o primeiro item numérico de `Rolled
+  Positions` (§425).
+- **`fxo-internal-cpty`** — `INVERT DIRECTION = Yes` é a perna espelhada e só
+  entra com Ctpty e Dir os dois NOK; `USE = Disregard` corta ANTES do merge, por
+  `_nome_cru`, nas DUAS colunas de contraparte, avisando no painel. O `upgrade`
+  mora no `recon_fxo`. CNPJ sai do Reference Data (`lookup_cnpj`).
+- **`fxo-book-disregard`** — conjunção de até três `coluna = valor` com a
+  coluna ESCOLHIDA do cabeçalho real (`_ATHENA_FXO_COLUMNS`); par pela metade
+  não conta; linha sem critério é ignorada; coluna inexistente PULA a regra com
+  aviso. O `/reconciliation-fxo/run` toca os dois cadastros para semear.
+- **`manual-conf-validation`** — Produto × LOB → OTC/MO/FO `REQUESTED`/
+  `EXEMPT`; LOB em branco = coringa; MO e FO em paralelo; produto sem linha cai
+  em OTC + MO com aviso. PRODUCT é `select` sobre
+  `manual_conf.CONFIRMATION_TYPES` — **doze tipos em MAIÚSCULO SEM ACENTO**
+  (`upper_norm` compara em NFKD; `TERMO DE RESILIÇÃO` com cedilha nunca casaria
+  consigo mesmo). **A pasta É o código** (`TYPE_FOLDER`); `TYPE_FOLDER_LEGACY`
+  é só leitura (`confirmation_folders()` = escrita + antigas). Tipo novo mexe
+  em `CONFIRMATION_TYPES`, `TYPE_FOLDER_LEGACY` (tupla vazia se nunca existiu)
+  e `VALIDATION_SEED`. O `upgrade` traduz nomes antigos E completa os tipos sem
+  linha (por produto). `OPTION EDG` vira `FXO` × LOB `EDG`.
+- **`b3-accounts`** — responde três perguntas: só `CLIENT 1/2` são omnibus
+  (cliente por CNPJ, só dígitos; conta própria não procura cliente — quem
+  decide é o TIPO, cego a caixa/acento); Participante do header TER
+  (`_ter_file_header`, LE sem Nome Simplificado levanta erro); `MESSAGING`
+  Consider/Disregard (intragrupo chega pelos dois arquivos; conta fora do
+  cadastro GERA). Estar no cadastro é ser conta INTERNA.
+- **`tools-swap-index`** — curva da posição → indexador do Swap Calculator;
+  `Exact` vence `Contains`, token mais longo vence; VCP resolve pelo `Nome
+  Tipo/Classe`, que é a SEGUNDA pergunta em toda curva; sem linha o índice fica
+  em branco e a nota DIZ o que a posição trazia; `INDEX` tem de ser do motor
+  (`liquidacao.INDEXADORES`). O `Código Identificador` da posição NÃO é chave
+  (guarda a LOB); quem casa o DFLUXO é o `Código do contrato` (§427). O período
+  de cada fluxo é do servidor (`p_inicio`/`p_fim`), candidato não anterior ao
+  fim é descartado.
+- **`quotes-*`** — código → símbolo Yahoo; opções da tela = `Subjacente.json`
+  ativo ∪ linhas literais do cadastro; sem símbolo é 404 pedindo cadastro; em
+  commodities as DUAS colunas aceitam `"MY"` (`quotes.symbol_lookup`, ano de 1
+  ou 2 dígitos, sufixo de bolsa depois do vencimento, prefixo mais longo vence,
+  literal vence padrão). Registro em `DE_PARA_TICKERS_COTACOES.md`.
+- **`ndfc-ir-exempt`** (uma lista para Advice e Trade Level),
+  **`ndfc-advice-split`** (um aviso por mercadoria, depois do split por net),
+  **`bankers-email`** (Cc da coleta de assinatura; vazio avisa no log),
+  **`opb3-msg-asset`** (token do Type → rótulo no assunto; contém, mais longo
+  vence, sem linha não põe rótulo), **`fxo-conv-rate`** (moeda não cadastrada
+  avisa em vez de imprimir em branco), **`swap-index`** (C00 → VCP; Termo e
+  Opção não têm de-para), **`cgd-*`** (colunas na ordem das abas do
+  `Auxiliar.xlsx`; `import_cgd_auxiliar.py` carrega).
 
 ---
 
-## 7. Armadilhas que não dão erro nenhum
-
-Esta seção é o que o código **não** conta. Cada item aqui custou pelo menos uma
-rodada de depuração.
-
-### A contraparte vem do accronym do End Counterparty, nunca do Settlement Location
-
-A ordem em `_ndf_ref_by_accronym` é: accronym (exato, depois sem o sufixo da
-entidade) → **se o accronym for perna interna**, a identidade da própria
-entidade (`_ndf_le_refdata`: o Reference Data Name do `le-spn` buscado por nome
-normalizado, depois os accronyms da LE, depois o SPN cadastrado) → **senão** o
-SPN da API → nada. Três coisas para não confundir:
-
-- o **Settlement Location é a *nossa* perna**, não a da contraparte. Jogá-lo no
-  lookup fez um cliente resolver para Banco J.P. Morgan. O argumento `le` de
-  `_ndf_ref_by_accronym` tem de ser a entidade do accronym *da própria
-  contraparte* (`_ndf_le_from_accronym(end_cp)`), que é `None` a menos que a
-  contraparte seja perna interna do JPM (HANDOFF §147/§148);
-- o `SPN` da API já carregou o SPN da Legal Entity; hoje carrega o da
-  contraparte, por isso é o **último** passo — e nunca é consultado para perna
-  interna, o que reintroduziria a armadilha acima por outro caminho (§174);
-- **perna interna resolve pelo nome legal da entidade**, porque nome de book
-  (`LM-FWDECOMBRR FXC`) não tem accronym no Reference Data — foi isso que
-  deixou essas linhas sem SPN/Client/Tax ID. A linha **mantém o accronym da
-  API** (o book), e o badge só poupa perna interna que voltou com SPN.
-
-Nada casando = linha vazia + badge "Missing Counterparty", que é a falha
-desejada: pede cadastro em vez de inventar contraparte. Num **amend da API** a
-contraparte é rechecada e aplicada; a linha gravada é achada por
-`(Deal, Client)` e, quando o Client mudou, **só pelo Deal ID se ele for único
-no arquivo-dia** — senão o amend entraria como linha duplicada. Um deal
-`Success` só volta para `Amend` quando o **accronym** mudou de entidade; um
-lookup melhor do mesmo accronym apenas realça as células. Esse badge é só DOM,
-por isso os filtros por coluna roteiam o termo `missing c…` (9+ caracteres,
-para não colidir com "Missing Index B3") pelo `missing-counterparty.js` em vez
-da busca do DataTables.
-
-### `table.rows({search:'none', page:'all'})` NÃO é "tudo do dia"
-
-Devolve as linhas **carregadas**, e as tabelas de New Deals são frequentemente
-carregadas de uma busca no servidor (`/cache/search`, os chips do topo).
-Qualquer ação montada varrendo a tabela cobre só a última busca. O mapping do
-arquivo de retorno da B3 foi corrigido mandando a **Reference Date** e deixando
-o servidor montar a lista a partir do arquivo-dia
-(`_generic_nd_mapping_candidates`, HANDOFF §152) — o que também significa que o
-servidor persiste em deals que não estão na tela. A limitação continua valendo
-para Opt FXO / Opt Commodities / NDF Commodities, que têm endpoints próprios.
-
-### Inserir uma coluna nas páginas de NDF do New Deals mexe em 14 lugares
-
-`<th>` do cabeçalho, `<th>` da linha de filtro, `COL_TO_JSON_FIELD`,
-`AMEND_FIELD_COLS`, `dealJsonToRow`, `ND_COL_KEYS`, `columnDefs` ocultas,
-`columnLabels`, opções da edição em massa, `SF_COLS`, `SF_LABEL_TO_FIELD`,
-`extractRowDeal`, `rowDataToNdfDeal`, `rowMaker`. Índice desatualizado aqui já
-causou corrupção silenciosa de dados **duas vezes** (HANDOFF §132). A coluna
-Maker é alcançada pela constante `MAKER_COL_INDEX` — mantenha assim.
-
-### A coluna de CPF/CNPJ da contraparte das Live Position mostra o NOME
-
-Nas três telas (NDF, Option e Swap Characteristics) essa coluna resolve o nome
-no `RefData.json`. Vazio continua vazio; documento **sem cadastro volta como
-número mascarado**, não em branco — apagá-lo esconderia quem falta cadastrar. A
-chave normaliza o zero à esquerda **dos dois lados** (`_lp_taxid_key`): 158 dos
-553 cadastros começam com zero, e comparar sem normalizar casa nada em silêncio
-(§197). A coluna da **Parte** não muda — é a nossa perna, e o nome dela já está
-na célula ao lado.
-
-**Essa coluna tem outros leitores, e eles não são a tela.** Os dois Settlement
-Advice (NDF Commodities e Opção) consomem o payload do Live Position e tiravam
-dali o CPF/CNPJ para resolver o cliente da conta omnibus. Hoje usam a resolução
-da própria coluna, e `_lp_is_taxid` é o que separa "resolveu" (nome) de "não
-resolveu" (documento) — o teste é a ausência de LETRA, porque razão social com
-número (`3M DO BRASIL`) não pode ser confundida com documento. São três funções
-de propósito: `_lp_cpty_name_by_taxid` é a resolução CRUA (`''` sem cadastro) que
-os consumidores usam, e `_lp_cpty_by_taxid` é a de EXIBIÇÃO, que cai para o
-número (HANDOFF §291).
-
-No **Swap Characteristics** há duas camadas a mais (HANDOFF §399): texto de
-ERRO de planilha no arquivo de origem (`#NULL!`, e as formas soltas `NULL`/
-`N/A`) vira **vazio** em toda coluna — o teste é `_swapchar_is_xl_error`, com o
-MESMO regex do saneamento do export-advanced.js, e roda no coletor ANTES dos
-ramos, porque o `_swapchar_fmt_cell` não alcança Tipo, booleanos e o CPF/CNPJ —
-e a linha SEM documento resolve o nome pela **conta CETIP da Contraparte**
-contra o B3 ACCOUNT do Reference Data (`_lp_cpty_by_account`), comparando só
-dígitos e recusando conta omnibus (CLIENT 1/2 — ali o titular não é o cliente)
-e conta ambígua (dois nomes para a mesma conta ficam de fora: branco visível é
-o lado seguro; nome errado invisível não é).
-
-### O Holidays Calendar monta a lista de calendários do REGISTRO
-
-Os calendários vêm de `apps/static/data/holiday-calendars.json` (semeado por
-`_HOLIDAY_CAL_SEED` com os onze de sempre, cacheado por mtime), e é dele que
-saem as **quatro** superfícies da tela: as pills da barra lateral, as opções do
-`<select>` do modal, o mapa de cores do popup do feriado e o CSS. Eram cinco
-listas escritas à mão — inclusive o `_HOLIDAY_FILE_MAP` que o
-`/api/holidays/save` consultava — e nenhuma delas podia conhecer um calendário
-criado pela tela (HANDOFF §288).
-
-- **Calendário novo nasce de uma planilha**, pelo botão *Create New Calendar*:
-  uma aba, coluna A a data e coluna B a descrição (a terceira, Holiday Type,
-  não entra). O cabeçalho é descartado por **não ser data**, nunca por posição.
-- A **cor é sorteada de uma paleta** (`_HOLIDAY_CAL_PALETTE`), preferindo as que
-  ninguém usa, e o **CSS dele nasce no navegador** (`hcInjectCalendarCss`) a
-  partir dessa cor — CSS de calendário criado hoje não estaria escrito no
-  arquivo. Os onze built-in mantêm as classes do `<style>` da página; a função
-  só gera para `hc-cal-<slug>`.
-- O **slug vira caminho em disco e classe de CSS**, então só aceita
-  `[a-z0-9_-]` — é ele que entra num `os.path.join`.
-- O JS mantém `HC_CAL_FALLBACK` (os mesmos onze) para o fetch que falha, e
-  `check_holiday_calendars.py` compara seed × fallback campo a campo.
-- O registro está no `.gitignore` — o seed o recria, e versioná-lo daria
-  conflito de merge a cada calendário criado pela tela.
-- **O calendário ANBIMA em memória acompanha o mtime do `anbima.json`**
-  (`platform/anbima.py`, `_anbima_stamp` — um `stat` por request, via
-  `once_per_request`): o feriado cadastrado pela tela vale no request seguinte
-  para o SLA da esteira, o aging do CGD e o D-1 das recons, e não só depois do
-  restart. As DUAS cargas continuam existindo; o que mudou é a validade.
-  Calendário FIXADO à mão (teste que troca `_ANBIMA_HOLIDAYS`/`_anbima_loaded`
-  ou `_anbima_hols_cache` sem mtime) nunca é recarregado — o mtime `None` é a
-  marca.
-
-### O Onboarding conta o aging, e a esteira do CGD é DERIVADA
-
-A lista de CGDs vem do SharePoint (`Sharepoint-CGD.xlsx` → `cgd_sharepoint.db`,
-pelo `scripts/import_cgd_sharepoint.py`), e duas colunas dela não são lidas como
-estão:
-
-- **`Aging` é refeito a cada leitura** (`cgd_docs.aging_of`), em dias ÚTEIS
-  ANBIMA, da `Data Solicitação` até hoje — ou até o `Conclusion - Stamp`, quando
-  ele existe: o CGD que concluiu parou de envelhecer. O da planilha é do dia da
-  exportação e envelheceria parado no banco por semanas. Sem `Data Solicitação`
-  o aging fica **vazio**, nunca zero: zero se lê como "entrou hoje".
-- **O formulário de abertura vive no SERVIDOR** (`REQUEST_FORM`): rótulo, coluna
-  do banco, tipo, obrigatoriedade e dica de cada campo. Dele saem DUAS coisas — o
-  modal de *New Request* (partial `partials/onboarding-new-request.html`, incluído
-  pelo Overview e pelo Tracking Docs) e o `REQUEST_FIELDS` que a validação do
-  Save exige. Escrito no template, o dia em que um campo deixasse de ser
-  obrigatório o modal pararia de pedi-lo. O formulário pede também Document Type
-  (o domínio é o `DOC_TYPES` = Transactional Type do EI), a Legal Entity
-  (`LEGAL_ENTITIES`, Banco por default), ECI/SPN/CASID/UCN, e dois CHECKBOXES
-  (gravam Yes/No): Financial Institution e o *Client Domain in the Appendix* —
-  este com coluna PSEUDO `_domain_in_appendix` (começa com `_`, não persiste;
-  só liga o `enabled_by` do Dominio: marcado, o campo trava e grava `Included
-  in the Appendix`; desmarcado, digitar o domínio vira obrigatório). E o
-  `check_cgd_docs` confere que toda coluna real citada no formulário EXISTE —
-  nome errado ali não dá erro, o `update_row` ignora a chave e o campo
-  preenchido some no caminho.
-- **A esteira tem TRÊS mesas, e Legal e OTC correm em PARALELO**: Legal · OTC ·
-  CEM MO. O `Banking` saiu — a ação dele é o próprio **New Request** (que valida
-  os `REQUEST_FIELDS` antes de gravar), então a solicitação criada já nasce
-  pendente **nas duas filas ao mesmo tempo** (`pending_stages` devolve LISTA; o
-  `pending_stage` singular é a primeira). O que fecha cada mesa é o carimbo
-  dela: **Legal** termina anexando o **Taxonomy** no card do Overview (Excel ou
-  PDF; sobe pelo Electronic Inventory como `CGD TAXONOMY` e a coluna `Taxonomy`
-  — à esquerda do Captis, FORA de `DATE_COLUMNS` porque guarda `data · SID` e o
-  fmt_date jogaria o SID fora — recebe o carimbo, passando a pendência ao CEM
-  MO); **OTC** termina no modal do item (dropzone do CGD abonado → EI como
-  `CGD ABONADO`, Issue Date, Signature Date e o B3 ID — que cai em `B3 ID - JPM`
-  ou `B3 ID - MGT` conforme a **Legal Entity** da solicitação, `b3_id_column`);
-  **CEM MO** tem dois botões — Download (o taxonomy e o abonado mais recentes do
-  EI da contraparte) e Complete (`MO - STAMP` + `Conclusion - Stamp` + Status
-  `Active`). Quem escreve data e SID é o SERVIDOR
-  (`/api/onboarding/docs/stamp`), e o upload vem ANTES do carimbo — a mesma
-  ordem do New Request. Um STAGE `Banking` ainda cadastrado no `cgd-stage` cai
-  na derivação, senão o item sumiria das filas.
-- **O `Apêndice` do formulário é ARQUIVO e não tem coluna**: ele vai para o
-  Electronic Inventory da contraparte, pasta `Transactional`, com o prefixo
-  `CGD TEMPLATE` (`APPENDIX_EI_TYPE`/`APPENDIX_EI_SUBTYPE`) — é onde os
-  documentos por cliente já vivem, e uma pasta nova só do Onboarding seria um
-  segundo lugar para o mesmo papel. A contraparte é a **primeira linha** da Razão
-  Social: o campo pede todas as entidades do grupo e a pasta do inventário é de
-  UM cliente. O upload vem **antes** da gravação da linha — ele é a parte que
-  depende do share e é a que falha; na ordem inversa, um share fora do ar deixaria
-  a solicitação criada sem o template, sem nada na tela dizendo isso. E o
-  `REQUEST_FIELDS` filtra `f['column']`: sendo obrigatório e sem coluna, o
-  Apêndice entraria na regra do Banking como a coluna `''`, que nunca está
-  preenchida — TODO documento ficaria preso na primeira fila, para sempre e sem
-  erro nenhum.
-- **`Signature Type` é domínio fechado de TRÊS valores** (`SIGNATURE_TYPES`):
-  `FepWeb`, `DocuSign` e `Manual`. O valor gravado é o código em inglês —
-  *Física* é só como o `Manual` aparece na tela em português, e gravar os dois
-  faria metade da lista deixar de casar com a outra metade. Na grade, o campo é um
-  `select` alimentado pelo servidor (`signature_types` no payload de
-  `/api/onboarding/docs`), e o valor JÁ GRAVADO entra na lista mesmo fora dos três
-  — escondê-lo faria o primeiro Save trocar o tipo da linha sem ninguém pedir. Não
-  é cadastro do /mapping: é o domínio de UM campo, não um de-para.
-- **As etapas** de todo documento que não está encerrado saem do cadastro
-  **`cgd-stage`** (STATUS → mesa, uma só — quem cadastrou foi explícito) e, sem
-  linha cadastrada, são DERIVADAS pelos carimbos: sem `Taxonomy` → Legal; com
-  `Taxonomy` e sem `MO - STAMP` → CEM MO; sem `OTC - STAMP` → OTC — Legal e OTC
-  ao mesmo tempo é o estado normal da solicitação recém-criada. As datas de
-  `Emissão`/`Signature Date` NÃO derivam mais nada: quem as grava é o modal do
-  OTC. O item vem MARCADO como derivado, para ninguém confundir dedução com
-  cadastro. Documento com todos os carimbos e ainda não `Active` fica na ÚLTIMA
-  mesa: devolvê-lo sem etapa o faria sumir das filas, e um pendente que some é
-  pior que um pendente na fila errada. Na grade do Tracking Docs a coluna
-  *Pending with* é SEMPRE badge pill — uma por mesa pendente, ou o `Finalized`
-  do encerrado.
-
-- **Encerrado não é pendência de ninguém.** `is_active` responde só pelo
-  `Active` (comparação EXATA: `Inactive` normaliza para `INACTIVE`, que CONTÉM
-  `ACTIVE`, e um teste por pedaço contaria o morto como vivo), e quem tira o
-  documento das filas é o **`is_closed`** — `Active`, `Inactive` e `Cancelado`
-  (por pedaço, que a grafia vem do SharePoint e é livre). Sem ele o encerrado
-  caía na fila do **Legal**, que é a primeira etapa sem carimbo em quem nunca
-  começou, e ficava lá envelhecendo para sempre no topo — empurrando para baixo
-  o que alguém de fato tem de fazer. O Overview mostra **quatro** números que
-  FECHAM (`total = pending + active + closed`): com três, a diferença entre o
-  total e a soma era justamente o que tinha sumido das filas.
-- **O badge de status é o do app** (`badge rounded-pill text-bg-* bg-gradient`),
-  não uma paleta própria da página — e o teste do `INACTIV` vem ANTES do do
-  `ACTIVE` pela mesma razão de cima: com o `indexOf('ACTIVE')` sozinho, o
-  documento morto saía com o mesmo verde do que está de pé, que é exatamente a
-  diferença que a coluna existe para dizer. No **Overview** a cor é da MESA (a
-  do cartão), e não do status: lá o badge responde "de quem é a fila".
-
-O `_id` do banco é interno e **não é estável entre importações** — ele endereça a
-linha que a tela está editando, e a importação seguinte renumera tudo.
-
-### O IR do termo de MOEDA é calculado, com piso de R$ 1,00 acumulado no mês
-
-A API `getTradesBySettle` não traz o imposto que o SETTLEMENT.xlsx do Cockpit
-trazia, então ele é CALCULADO (`_ndfsum_ir_apply`, §423): 0,005% por
-operação em que o banco paga, isento pelo `ndfc-ir-exempt`; liquidação com
-imposto abaixo de R$ 1,00 sai BRUTA e o valor acumula contra a contraparte;
-na seguinte, acumulado + dia abaixo do piso segue bruto, alcançado o piso
-retém-se a SOMA; mês novo zera. O acumulado vive no ledger mensal
-`ndf-ir-ledger/ndf-ir-ledger_AAAAMM.json`, escrito pelo `_ndfsum_collect` do
-dia exibido — entrada do dia SUBSTITUÍDA (recarregar não dobra), dia anterior
-sem entrada CURADO do Cockpit dele. **O import do Cockpit também preenche a
-coluna** (`_ndfc_apply_ir`, §425), reusando as MESMAS funções em vez de
-reimplementar a regra, e aplicando-a ao DIA inteiro montado — nunca por
-registro, porque o piso é por contraparte dentro do mês; a célula gravada é um
-SNAPSHOT, e o IR calculado na leitura vence o `VL_TAX_INCOME` do Cockpit,
-inclusive na célula do Trade Level. O aviso leva também a coluna
-**Fixing** (o `Spot` da API, mín. 4 e máx. 8 casas). `check_ndfsum_ir.py`.
-
-**A cura do ledger é INCREMENTAL e roda FORA do `_cache_lock`** (§432 — era o
-"NDF Summary infinito" da instância). Cada dia útil anterior sem entrada custa
-Cockpit + Operations B3 + Live Position + OTM, e no share UM dia já passa do
-teto de 15 s; como o ledger só era gravado com o mês INTEIRO curado, no share
-ele nunca era gravado — toda abertura do Summary (e dos dois Settlement Advice
-de mercadoria, que usam o mesmo ledger) recoletava os mesmos dias, segurando o
-lock global do app, e desistia no mesmo ponto. Hoje `_ndfsum_ir_cure_month`
-grava cada dia assim que ele fica pronto (`_ndfsum_ir_ledger_merge`, RMW sob o
-lock só na gravação; dia já em disco não é sobrescrito — as entradas são
-determinísticas), só o DIA PEDIDO fica de fora enquanto o acumulado está
-incompleto — e a tela é avisada (`ir_partial` no `/data`, faixa âmbar com
-Retry). O laço `ndfsum-ir-warm` cura o mês até a VÉSPERA 2 min depois da
-subida e a cada 4 h, sem teto, para a mesa nunca pagar a cura. E a página
-mostra o ESTADO da carga (spinner com segundos, erro com Retry): o `/data`
-devolve a falha como JSON `collect_failed` em vez de um 500 em HTML que o
-`.catch` vazio engolia — "No rows for this date" só quando o dia está vazio
-de verdade. O **Other Products Summary** segue o mesmo desenho (mesmo estado
-de tela, mesmo `collect_failed`, mesmo `ir_partial`): o `_ops_trade_rows` passa
-duas vezes pelo mesmo ledger, uma por Advice de mercadoria.
-
-### O `SPB - outros bancos` da Recon Pay/Rec só casa com BANCO
-
-A liquidação interbancária capturada do `HistoricoMensagens` **não traz nome de
-contraparte nenhum** — só o código LTR (0004 paga / 0005 recebe), o status
-`Sucesso` e o VALOR. Por isso ela é casada só por valor e com a tolerância larga
-que a tarifa interbancária exige (**±R$20**, `_TOL_BANK`).
-
-Essa janela precisa de um guarda de ELEGIBILIDADE, e ele vem ANTES de qualquer
-tolerância (`_match_allowed`): o outro lado de um interbancário é um **BANCO**.
-Sem ele, ±R$20 casa com qualquer perna pequena do dia — um recebimento de
-**R$7,02 da Saint Gobain fechou contra um SPB de R$6,68 e saiu `Settled`**, com
-o cliente sem ter liquidado nada. E o estrago é maior do que uma linha errada: a
-linha SPB nasce `drop_if_unmatched` (é RUÍDO por construção e seria descartada
-em silêncio), então o ruído **rouba o par de uma liquidação de verdade e ainda a
-carimba como paga** — some justamente o alerta que a mesa precisava ver.
-
-- **Quem responde "é banco?" é o cadastro `bank-name`** (/mapping), nunca a
-  palavra `banco` no nome: esse teste erra dos dois lados — Banco Safra,
-  Bradesco e Santander aparecem como CLIENTES, e o `BOFA MERRILL LYNCH BM S/A`
-  é banco sem a palavra. Casa quando TODAS as palavras do nome cadastrado estão
-  no nome da contraparte, o que absorve as variantes de grafia (`BANCO ITAU S/A`
-  × `Banco Itau Unibanco S.A.`).
-- **A comparação é por PALAVRA, nunca por substring.** O `_norm` cola o nome
-  inteiro (`saintgobaindobrasil`), e aí o `brasil` do *Banco do Brasil* casa
-  DENTRO de `SAINT GOBAIN DO BRASIL` — a primeira versão da guarda respondeu que
-  TODA contraparte era banco. Daí o `_name_tokens`, que compara conjuntos.
-- **`banco` é token SIGNIFICATIVO** e não entra nos stopwords: é ele que separa
-  o `BANCO JOHN DEERE S/A` da John Deere montadora, que é cliente. O que se
-  descarta são só sufixos societários e conectivos (`sa`, `ltda`, `bm`, `do`…).
-- **A guarda vale nos TRÊS estágios do match**, o bucket exato incluído: valores
-  que caem na mesma unidade inteira casam ali sem passar por tolerância nenhuma.
-- **A direção entra pela mesma porta.** Com ±R$20 dois valores pequenos de
-  sinais OPOSTOS ficam dentro da janela (um Pay de −3,00 fechava com um Receive
-  de +9,00), e um pagamento nunca é o par de um recebimento.
-- **Banco fora do cadastro responde NÃO**, e isso é o lado seguro do erro: a
-  perna vira `Pending` (falso alarme, que se vê) em vez de casar com um SPB que
-  não é dela (falso `Settled`, que não se vê). Cadastrar é uma linha na tela,
-  válida no run seguinte sem restart.
-
-### A recon de CGD lê o D-1, e o cache tem de casar com ele
-
-`recon_cgd` bate a lista do FEP contra a posição da B3 do **último dia útil**.
-Cinco coisas:
-
-- **o arquivo da B3 é o que a rotina Save CETIP Files GRAVA**, na pasta de
-  DESTINO (`CETIP_DEST_ROOT` — a mesma raiz e o mesmo env var do `recon_fxo`),
-  `{AAAA}/{MM}. {Month}/{DD}/CETIP21_{AAMMDD}_DPOSICAO-NET.txt`. Não é a pasta de
-  ORIGEM: ali está o arquivo cru que a B3 despeja, com o nome do dia do download,
-  e quem o filtra, renomeia para a convenção da casa e o guarda no dia certo é a
-  rotina. Lendo a origem, a recon leria antes de a rotina passar — e no dia em que
-  ela não rodasse acharia um arquivo e diria que está tudo certo com a posição da
-  véspera. O nome SEM o `.txt` fica como segunda tentativa, para o arquivo posto
-  na pasta à mão;
-
-- **a lista do FEP vem do ANEXO de um e-mail, não de uma pasta**
-  (`baixar_fep_do_box`): o `.xlsx` do relatório do FepWeb chega em
-  `Inbox > Automatico > FEPWEB-CGD-ContratoGlobalDerivativos - SEM FILTRO DATAS`
-  do box compartilhado — o MESMO que a varredura de booking recap e a Recon de
-  Comitentes já leem. Ninguém salva esse arquivo em disco, então apontar o
-  batimento para uma pasta era apontá-lo para um arquivo que alguém teria de
-  copiar à mão todo dia, e no dia em que esquecesse a recon rodaria com a lista
-  da semana passada sem dizer nada. Lê-se o e-mail **mais recente**
-  (`Sort('[ReceivedTime]', True)` — o relatório é reemitido e a pasta acumula, e
-  a ordem natural devolve o mais ANTIGO), e o **assunto e a data** do e-mail
-  escolhido voltam no resultado como `fep_file`: "de que dia é esta lista" é a
-  primeira pergunta de quem olha uma quebra, e o nome do temporário em que o
-  anexo foi salvo não responde nenhuma. `path` explícito vence (upload manual e
-  testes); sem Outlook — o Linux, a máquina de desenvolvimento — cai para
-  `CGD_INPUT_ROOT` **avisando qual das duas fontes valeu**, porque rodar com a
-  lista errada e não saber é a única falha daqui que não aparece: ela devolve
-  uma tela plausível. Nada é apagado nem movido no box: a rotina só LÊ;
-
-- as contas que definem "nosso" saem do cadastro `b3-accounts` (`ACCOUNT TYPE =
-  OWN` + `LE` em `CGD_LES`), nunca de dois números escritos no filtro; cadastro
-  vazio **avisa** em vez de deixar o arquivo inteiro entrar no batimento;
-- **CNPJ compara por dígito** dos dois lados (§197), e a linha da B3 que vem sem
-  CNPJ é resolvida pelo cadastro `cgd-b3-participante` — sem cadastro ela sai, e
-  a recon diz quantas saíram;
-- o cache do dia é gravado com a data da POSIÇÃO. A leitura sem data usa o mesmo
-  default (`dia_util_anterior`), e não `hoje`: com `today()` de um lado só, o
-  batimento rodava e o GET seguinte dizia que ninguém tinha rodado.
-
-### Duas armadilhas de tela que não aparecem no console (HANDOFF §218)
-
-- **A linha de filtro por coluna tem de ser montada ANTES do `.DataTable()`**,
-  com `orderCellsTop: true`. Com `scrollX: true` o DataTables desenha o
-  cabeçalho duas vezes (a cópia visível vai para `.dt-scroll-headInner`, o
-  `<thead>` real fica escondido no corpo rolável), e `api.table().node()`
-  devolve a tabela do **corpo** — acrescentar a linha no `initComplete` a deixa
-  no DOM e invisível.
-- **Não use `.card` para um widget seu.** O `layouts/base.html` carrega o
-  `extra_css` da página **antes** do `head-css.html`, então o `.card` do tema
-  (`background-color`, `border`, `border-radius`, `color`) vence qualquer regra
-  da página sem `!important`. O padrão da casa é um `<div>` com classe própria
-  (`.ndm-card`, `.fxo-widget`, `.mc-card`), usando `--vr-card-*` e `--vr-grad`.
-
-Complementando, no mesmo tema: a **animação padrão do ícone** (about → sidenav
-→ New Deals Monitor) é `transform: scale(1.1) rotate(-4deg)` com sombra mais
-funda no hover do card. Cor só de tema claro precisa do par
-`[data-bs-theme=dark]`, senão a marca some no escuro.
-
-### As quatro armadilhas do vidro do StreamFlow
-
-A camada de vidro (§2) paga por quatro coisas que não aparecem no console, e
-todas já custaram uma rodada cada:
-
-- **`backdrop-filter` cria CONTEXTO DE EMPILHAMENTO.** O `z-index: 1055` de um
-  dropdown dentro de um contêiner com vidro passa a valer só entre os IRMÃOS
-  dele, e o contêiner fica na ordem do documento — abaixo da barra de
-  ferramentas, que vem depois no DOM. O sintoma se lê como "o menu está
-  transparente", e não é: `elementFromPoint` dentro da caixa do menu responde
-  `.btn-toolbar`. **`z-index` vai no WRAPPER, nunca no menu** — quem precisa
-  subir é o contexto inteiro, e mexer no menu não adianta porque ele já é o mais
-  alto de um contexto que está embaixo. É o mesmo defeito que o `.wrapper` com
-  `z-index: 1` causou nos modais, e por isso o `.wrapper` fica SEM `z-index` e as
-  camadas líquidas descem para `-1`.
-- **Dentro de uma raiz de backdrop, o desfoque do FILHO não amostra nada.** Ele
-  não tem o que ler fora da caixa do pai, então um `blur(34px)` num
-  `.dropdown-menu` dentro de um `.card` (que já tem `blur(30px)`) fica computado
-  e aplicado a nada. Por isso o fundo desses menus é **sólido** — a 80% a tabela
-  apareceria nítida por baixo. As sobreposições de nível de página (modal,
-  offcanvas, toast, SweetAlert) ficam penduradas no `<body>`, fora de qualquer
-  raiz de backdrop, e ali o desfoque funciona de verdade.
-- **Regra de força de brilho tem de alcançar as DUAS famílias de seletor.** A
-  camada mira por estrutura (`.card`, `[class*="-widget"]`, `[class*="-card"]`)
-  **e** por nomes próprios (`.ob-item`, `.mc-item`, `.acc-stat`, `.qt-card`,
-  `.pa-user`, `.ei-doc-row` — quinze classes). Calibrar só a estrutural deixa um
-  cartão acendendo ao lado de um cartão calmo, **sem nada no CSS explicando a
-  diferença**; já voltou três vezes. E o brilho se calibra por TIPO de
-  superfície: a rampa de 135° que vira material num painel largo vira facho num
-  item de ~110px de altura.
-- **A regra genérica das sobreposições (§34, `--sf-overlay-bg` a 82%) alcança
-  `.modal-content` e MATAVA o liquid glass de todo modal do app** — mesma
-  especificidade que o `.liquid-glass` do app.css, os dois `!important`, e a
-  ordem de carga decide pelo streamflow (HANDOFF §387). O alfa 0,82 é para
-  sobreposição SEM backdrop próprio (o sino sobre o breadcrumb); o modal tem o
-  `.modal-backdrop` desfocando a página inteira, então a exceção
-  `.modal-content.liquid-glass` (0,2,0 — ganha sem depender de ordem) devolve o
-  alfa de vidro e as sombras do `_modal.scss`, mantendo o `blur(34px)`. Uma
-  regra nova de sobreposição que cite `.modal-content` tem de poupar o
-  `.liquid-glass` — o defeito não dá erro: todo modal só fica de papel.
-
-Na mesma linha, e pela ordem de carga do `base.html` (o `extra_css` da página
-vem ANTES do `app.css` e do `head-css.html`): **classe do Bootstrap com a mesma
-especificidade vence a da página mesmo com `!important`** — `display: grid
-!important` em `.ab-steps` perdia para `.d-flex` até as classes saírem do
-markup. E **atalho zera o que ele não menciona**: o `background: … !important`
-com que o `visual-refresh.css` pinta `.card` apaga o `background-image`, então
-cartão com gradiente próprio (os de Total) tem a regra no `streamflow.css`, e
-não no `<style>` da página.
-
-E o vidro tem um **modo de efeitos reduzidos** (HANDOFF §402): nas máquinas do
-JPM o Firefox compõe por SOFTWARE (`about:support` → "WebRender (Software)"),
-e ali os fundos animados com blur de viewport e os ~80 `backdrop-filter`
-recompositam a página inteira por quadro — o app fica lento sem erro nenhum. A
-decisão é da primeira IIFE do `streamflow.js` (o CSS não enxerga o compositor):
-`localStorage.__OTC_TRACKER_FX__` = `full`/`reduced` vence tudo; no automático,
-WebGL por software ou **Firefox no Windows** ligam a classe `sf-reduced` no
-`<html>`, e a seção 16 do `streamflow.css` desliga os custos por quadro
-mantendo tokens, cores e sombras. Regra de token do modo vai como
-`html.sf-reduced:not([data-bs-theme=dark])` — `html.sf-reduced` sozinho (0,1,1)
-perde para o `:root:not(...)` (0,2,0) que define o valor normal. E **alfa sem
-blur não é material** (HANDOFF §414): sem o desfoque para virar fosco, qualquer
-transparência mostra os blobs do fundo nítidos — por isso no modo reduzido o
-cartão, a topbar e a sidenav são COR SÓLIDA composta (tokens do §16), e o
-defeito é invisível na dev, onde o macOS roda o modo full com blur. Mudança de
-tema/vidro se valida forçando `localStorage.__OTC_TRACKER_FX__ = 'reduced'`.
-
-### A série histórica que cresce um snapshot por dia
-
-O card **Daily Metric — Outstanding Confirmation Brazil OTC** ficou lento e a
-causa era uma só função: `_pc_metrics_history` custava **187,8 ms** contra
-single-digit de todo o resto do card. Ela monta a série lendo TODO snapshot já
-gravado, e fazia as três coisas erradas juntas — `os.walk` na árvore inteira,
-uma abertura de banco POR SNAPSHOT (eles são tabelas do mesmo
-`db/cache/pending-confirmation.db`) e nenhum memo, com o card E a página
-`/pending-confirmation/metrics` chamando.
-
-O que torna isso diferente de uma função só lenta: **a manutenção das 11:30
-grava um snapshot por dia útil e não apaga nenhum**, então a conta cresce todo
-dia. Vinte e seis na dev são 26 aberturas; depois de um ano na instância são
-~250, ou 3,2 s só de abrir no share. Hoje é enumeração pelo `_manifest`,
-leitura pelo `_day_prefetch` e `@once_per_request` por cima: 24,3 ms e 2
-aberturas. Fora de um request o decorator não memoiza, então a rotina agendada
-continua enxergando o snapshot novo (§429).
-
-### Um Delete que só apaga da tela reaparece como bug do IMPORT
-
-O Delete das quatro telas de Intrag era `table.row().remove()` e mais nada —
-nenhum endpoint, nenhuma gravação. A linha sumia da tela e voltava no F5, e o
-"This action cannot be undone" do balão se desfazia com um refresh.
-
-O estrago não aparecia ali: aparecia no re-import. O upsert preserva `status`,
-`maker`, `checker` e `intrag_id` da linha que já existe — é o que faz reimportar
-não desfazer a esteira —, e como a linha nunca saiu do arquivo, o import a
-reencontrava e devolvia o status ANTIGO. Apagava-se tudo, importava de novo, e
-as linhas voltavam `Pending` em vez de `New`: o Delete parecia ter funcionado e
-o IMPORT parecia estar errado. Hoje `/api/intrag/<family>/delete` grava, e **a
-tela só remove a linha depois do sucesso do servidor** — remover antes é o que
-criava a diferença entre o que se vê e o que está gravado (§430).
-
-### Quando as QUATRO células faltam juntas, o problema é o JOIN
-
-As quatro colunas da direita do Swap VCP (conta da contraparte, CPF/CNPJ e os
-dois indexadores) saem todas do arquivo de eventos, por um `events.get(...)` só.
-Contrato que não está lá sai com as quatro em branco de uma vez — e é essa
-simultaneidade que separa as duas causas: **uma célula vazia é cadastro; quatro
-vazias juntas são o join**. Depois da cascata CNPJ → conta, três dos quatro
-avisos de inexistência de PU ainda vinham vazios, e não era falta de cadastro:
-não havia identificador nenhum para cadastrar.
-
-`_vcp_position_map` é a segunda fonte — a DPOSICAO-SWAP tem os mesmos campos
-(`Contraparte` é a CONTA CETIP dela, índice 7; `CPF/CNPJ Cliente Contraparte`,
-8; `Código índice` de cada perna, 40 e 50), chaveados pelo `Contrato`, a mesma
-chave do §427 e pela mesma razão. É FALLBACK, não substituição: onde o evento
-responde, ele vence — o evento é do dia da liquidação e a posição é uma foto
-(§431).
-
-### Um `stat` por LINHA é invisível na dev e custa minutos no share
-
-O cache por mtime evita reler o ARQUIVO; ele **não** evita o
-`os.path.getmtime` que decide se o arquivo mudou. Se a leitura acontece uma vez
-por linha, esse stat vai junto — foi o `_refdata_by_taxid` das cinco telas de
-Live Position (`_lp_cpty_by_taxid` → `_lp_taxid_names`), medido em **1,00 stat
-por linha**.
-
-Em disco local é um syscall de ~1 µs e some no ruído, e é exatamente por isso
-que o defeito **não aparece na máquina de desenvolvimento**. No share cada stat
-é ida e volta de rede: 3 mil linhas dão ~6 s só de stat, e uma posição de vinte
-mil dá quarenta segundos — **sem erro nenhum, nem no log**, porque ninguém
-falhou, todo mundo esperou.
-
-O remédio é o **`once_per_request`** (`apps/pages/request_cache.py`), que
-memoiza dentro de UM request. Duas decisões dele:
-
-- **só a camada de request, sem TTL entre requests** — um TTL mudaria a resposta
-  de quem edita o cadastro e recarrega, que é a garantia do §6 ("edição na tela
-  vale no request seguinte, sem restart");
-- **fora de um request não memoiza nada** — a rotina agendada é longa e tem de
-  continuar enxergando o arquivo mudar embaixo dela; memoizar ali trocaria um
-  defeito de lentidão por um de **dado velho**, que é pior porque não se vê.
-
-Ele já cobre também o `manual_conf.sla_days`, que o Monitor pergunta três vezes
-por linha. `check_stat_por_linha.py` **MEDE** o comportamento em vez de conferir
-texto.
-
-Dois parentes da mesma família, fechados em 09/09/2026: os finders
-`_find_ndf_deal_in_cache` e `_find_generic_nd_deal` faziam `os.walk` +
-`os.stat` por arquivo a CADA chamada — e os bulks (Mapping B3, delete) os
-chamam por linha selecionada —, do mais ANTIGO para o mais novo, então um deal
-de ontem percorria o histórico inteiro. Hoje os quatro finders do New Deals
-seguem a mesma receita: listagem uma vez por request (`_nd_file_list`, o
-gêmeo parametrizado do `_optcomm_file_list`), do mais novo para o mais antigo,
-leitura pelo funil `_day_json`. E a listagem de documentos do Electronic
-Inventory (`_ei_iter_files`) anda por `os.scandir` (`_ei_walk`) em vez de
-`os.walk` + `os.stat` por arquivo: o `DirEntry` guarda o que a listagem do SMB
-já trouxe, e cada documento da contraparte deixou de custar uma ida à rede.
-
-### Um arquivo JS comanda CINCO páginas
-
-`static/js/pages/live-position-swap-characteristics.js` é um visualizador
-genérico `{columns, rows}` escolhido pelo `data-api` da página: Live Position
-Swap Characteristics, Other Products Swap (Athena · Events · VCP) e as duas de
-Settlement Advice (Swap e NDF Commodities). O contrato são os ids
-**`swapchar-page`** e **`swapchar-table`** mais o `data-api` — renomear
-qualquer um deixa a página **em branco, sem erro no console**. O que é
-específico de uma página (o botão Print Advice) vai no `<script>` dela, e o que
-for acrescentado ao arquivo compartilhado tem de ser **aditivo**: o array
-`statuses` por linha, o `window.scLoad` e o `source_date` do payload (o aviso
-"que dia estou vendo" das três Live Position de Swap — só aparece em quem manda
-o campo) são opt-in, então as páginas que não mandam nada se comportam
-exatamente como antes (HANDOFF §184/§190/§375). E **as CINCO telas de Live
-Position andam até dez dias úteis para trás quando falta o arquivo do dia**
-(`_opt_dposicao_path`/`_swap_day_path`), sinalizando ao lado do Reference date
-a data do arquivo LIDO — sem isso a tela abre com 0 em silêncio no dia em que a
-posição ainda não chegou, que se lê como "não está carregando".
-
-### A família de liquidação do Other Products lê as MESMAS linhas
-
-Settlement Summary, Trade Level e as duas de Settlement Advice leem as mesmas
-linhas derivadas — o card conta o que a tabela mostra, e o aviso imprime o que
-a tabela mostra. **`_ops_trade_rows(settle_ref)` é o único lugar que sabe quais
-famílias de produto existem** (hoje SWAP + NDF Commodities); a página, os cards
-de reconciliação e o e-mail de TED chamam todos ele. O endpoint de TED remontava
-a lista sozinho e silenciosamente parou de pedir os TEDs de commodities no dia
-em que NDF entrou (HANDOFF §199). O status do aviso (`New → Generated → Sent`)
-vive uma vez só, no overlay do dia
-`other-products-summary_YYYYMMDD.json`, chaveado por **contraparte × LOB ×
-produto**, e as duas telas leem essa mesma chave (§183/§189/§190).
-
-**A linha que NETA ZERO diz `0.00` no Receive** (`_opssum_rows`), e não sai com
-as duas células em branco: vazio se lê como "não deu para calcular", e aqui o
-zero é o resultado — a operação liquida por valores que se anulam. Fica no
-Receive porque é o lado que a Direction já aponta (`total >= 0` → RECEIVE); o
-Pay continua vazio, senão a mesma linha diria que paga e recebe zero ao mesmo
-tempo. O gêmeo do NDF Summary (`_ndfsum_collect`) **não** mudou — a regra foi
-pedida para o Other Products, e igualar os dois é outra decisão (§264).
-
-**O Trade Level abre por Product → LOB → Counterparty**, nessa precedência, que
-é a da conferência: o produto agrupa, a LOB separa a mesa dentro dele e o
-cliente ordena a lista final. Só por Counterparty, swap, termo e opção do mesmo
-cliente ficavam intercalados. O `initTable` da página aceita um número **ou uma
-lista** de índices de ordenação; o Settlement Summary não passa nada e continua
-abrindo na ordem em que o servidor mandou. Os índices são posicionais, então
-`check_ops_trade_swap.py` confere que os três casam com o cabeçalho real —
-índice errado ordena pela coluna vizinha sem erro nenhum.
-
-**Equity é registrado na B3 como SWAP, então a linha já existe — o que falta é
-o outro lado.** O `br-onshore-settlements` (Swap Athena) é **só de CEM** e não
-tem equity: sem isso a linha saía com o nome curto da B3 (`SAFRABM`), sem
-Internal ID, sem Settlement e com as três colunas de valor em branco — e, sem
-Settlement, ficava fora do Settlement Summary. `_ops_equity_link(ref)` monta o
-que o Athena daria, por uma rota de três paradas: **Operations B3 (Título) →
-Latam Desk Position (`CLEARING_TRD_ID_INT`/`CLNT` → `Deal_Ref`) → OTM
-Settlements (`270WI`/`270WC` + `Deal_Ref`)**. Qual perna é a do Título sai de
-**qual coluna de clearing casou** — INT leva ao `270WI`, CLNT ao `270WC`. Do OTM
-saem: Internal ID, contraparte (Reference Data pelo `Cpty SPN`), Settlement, e as
-três colunas do aviso — **Curva Banco = os fluxos positivos, Curva Cliente = os
-negativos, Resultado Bruto = a soma**. O Type é **trocado** pelo ativo subjacente
-(não completado: VCP/Calculado vem do arquivo de eventos, que não tem equity, e
-toda linha sairia dizendo `Calculado`) — e o subjacente sai de uma **cadeia**,
-porque nenhuma fonte preenche sempre: `Underlying_Name` → `UNDERLYING_RIC` do
-Latam → `Underlying` do OTM → `Instrument_Name` → `RIC` → `Instrument_ID`. As
-duas primeiras colunas são de derivativo *sobre* um ativo e vêm vazias no swap de
-equity, onde o próprio instrumento é a ação; foi assim que as linhas de EDG
-apareceram com o Type em branco já tendo Internal ID e valor. O prazo do IR sai do **`Trade_Date` do
-Latam**, porque a posição de swap não tem essas operações. O de-para lê o
-**último** Latam disponível e compara **só dígitos, sem zeros à esquerda**. O
-produto continua `SWAP` — é como a B3 registra, e é dessa linha que sai o
-Settlement B3; quem rotula é a LOB (`EQUITIES` quando não há token cadastrado).
-Partir do OTM em vez do Título criava uma **segunda linha** para o mesmo trade
-(HANDOFF §227).
-
-**O mesmo elo é o plano B da OPÇÃO de equity** (`_optadv_collect`). Ali o
-Resultado Apurado sai do OTM pelo **sufixo da `Combinação de operações`** da Live
-Position de Opção — campo que a opção de **ação** não preenche. Sem sufixo não
-havia valor, e o efeito era duplo e calado: a linha aparecia no Trade Level com a
-célula **vazia** e **sumia do Settlement Summary**, que descarta quem não tem o
-que liquidar. O elo responde por **duas** coisas — o valor e o **SPN**, e é o SPN
-que troca o `SAFRABM` da B3 pela razão social do cadastro, que é por onde o
-Summary agrupa. Três coisas que não dão erro nenhum: ele vem **depois** do sufixo
-(quando o sufixo existe é join direto, e é o mais confiável dos dois), a chave é
-o **Título em MAIÚSCULA** (a mesma forma que o swap usa — outra grafia não casa
-nada, em silêncio) e é resolvido **uma vez por linha**, senão o valor e o SPN
-podem vir de trades diferentes (HANDOFF §281).
-
-**Perna interna não gera aviso**, e a regra NÃO é "o nome começa em BANCO" —
-isso derrubaria Banco Safra, Bradesco e Santander, que são clientes.
-`_ops_is_internal_cpty` responde pelo cadastro `le-spn` (SPN, nome, e o **token
-da LE** como palavra, porque o `Reference Data Name` nasce vazio em algumas
-entidades) e pelo `_pc_is_internal_counterparty`, que é a resposta que o Pending
-Confirmation já dá para a mesma pergunta. O que a marca tira é o **documento**,
-não a linha: ela **fica** no Trade Level (visão de trade) **e no Settlement
-Summary** (visão de liquidação — a perna interna liquida, e o total tem de fechar
-com o Trade Level), sem marca nenhuma na tela; e **sai** do Settlement
-Advice, que é o documento endereçado ao cliente, e do **e-mail de TED**, porque
-não se transfere dinheiro para si mesmo — o `_is_jpmorgan` do TED não cobre isso
-sozinho, já que a entidade pode ser um fundo nosso sem "J.P. Morgan" no nome
-(HANDOFF §229/§234).
-
-**O nome da contraparte sai do SPN, nunca do texto do arquivo.** O
-`br-onshore-settlements` traz o `CounterParty` como texto livre da mesa
-(`S T E S A L`) e o `SPN` ao lado; `_athena_settlements(ref)` troca um pelo
-outro via `_otm_cpty_name` — cadastro `le-spn` quando é entidade nossa, Reference
-Data quando é cliente, ignorando zeros à esquerda dos dois lados. É **uma coleta
-só** para a página Swap Athena, o Settlement Advice de Swap e o Trade Level:
-resolver o nome em cada tela é como elas passariam a mostrar clientes diferentes
-para a mesma operação — e é por esse nome que a alíquota do `swap-ir-client` é
-procurada. O OTM Settlements faz o mesmo pelo **`Cpty SPN`** da própria linha, e
-**na leitura**, não na importação: corrigir o Reference Data vale na hora, sem
-reimportar o dia. Sem SPN ou sem cadastro, o nome do arquivo fica — a linha não
-pode sair anônima.
-
-### A Recon FXO tem DOIS lados órfãos, e o join precisa ser `outer`
-
-**A chave é o `DealID`; o `MatchingDealID` é a segunda tentativa, e só entra
-quando ele existe do lado da B3.** Duas condições, e as duas importam. A
-prioridade do DealID evita a mesma operação casar duas vezes (com o desempate
-escolhendo qualquer uma). O filtro contra as `Combinação de operações` da base
-âncora é o que impede o **`Unmatched Athena` fantasma**: o MatchingDealID
-identifica a perna do OUTRO lado, quase nunca tem registro na CETIP, e cada valor
-sem par entrava no join `outer` como uma linha a mais da Athena sem
-correspondência — a MESMA operação repetida pela chave da perna oposta. Por isso
-`base_athena_para_match` recebe as chaves da B3: sem elas não há como saber o que
-descartar. Efeito colateral conhecido e histórico: quem casa por MatchingDealID
-**aparece duas vezes** — uma `Matched` naquela chave e uma `Unmatched Athena` na
-chave própria, que a CETIP não tem.
-
-O status da 1ª coluna tem quatro estados, na ordem da gravidade — que é também a
-ordenação padrão da tabela (por rank, não alfabética):
-
-| Status | O que é | Cor |
-|---|---|---|
-| `Unmatched B3` | está na CETIP/B3, não achou par na Athena (falta bookar) | vermelho |
-| `Unmatched Athena` | está na Athena, não achou par na B3 (falta registrar) | vermelho |
-| `Partial - <campos>` | casou, e os campos listados divergem | laranja |
-| `Matched` | fechou | verde |
-
-O `Unmatched Athena` **só existe porque o merge é `outer`**. Com o `left`
-anterior, a operação que existia só na Athena simplesmente não aparecia na tela —
-uma quebra do mesmo tamanho, com a diferença de que ninguém a via. Três coisas
-quebram junto quando se mexe nisso:
-
-- `df_anc['_veio_da_b3'] = True` antes do merge é o que distingue as duas
-  órfãs depois dele: as duas saem com metade das colunas vazias;
-- `alerta_chave_duplicada` vem `NaN` na linha só-Athena, e **`if nan` é
-  verdadeiro** — o teste é `pd.notna(x) and bool(x)`. E não `x is True`: depois
-  do merge o valor é um `numpy.bool_`, e `numpy.True_ is True` é **falso**, o que
-  apagava a marca de todas as linhas;
-- `_aplicar_perna_espelhada` recebe a máscara das linhas com os dois lados. A
-  assinatura que ela procura (Ctpty e Dir os dois NOK) acontece por falta de par
-  numa órfã, e ela "corrigiria" a linha para um par que não existe.
-
-**A justificativa é do TRADE, não da execução.** O comentário fica em
-`apps/static/data/recon-fxo-comments.json` (fora do cache por data, no
-`.gitignore`), chaveado pela `Combinação de operações`, e `aplicar_comentarios()`
-roda na gravação **e na leitura** — um comentário escrito hoje aparece na recon
-de ontem que já está em cache. Com comentário, `Unmatched`/`Partial` viram
-`Justified`; `Matched` não (comentar o que fechou é anotação, e promovê-lo
-esconderia o único estado que não pede atenção). O status cru fica em `_status`,
-**fora de `COLUMNS`** — é ele que permite apagar o comentário e a linha voltar a
-dizer `Partial - Cntpy` em vez de ficar `Justified` para sempre.
-
-### O card de Confirmations do New Deals Monitor mostra UM ciclo só — e ele termina no OTC
-
-`New → Generated → … → Success` é a geração, e depois dela só o **Pending
-OTC** segura o grupo aberto: validado o OTC, a confirmação conta como **100%**
-no card/seção e sai do e-mail de pendências das 19h. Pending MO/FO é assunto do
-Confirmations Monitor — o New Deals Monitor cobra a ação da mesa de OTC, e
-manter o grupo aberto por etapa alheia cobraria trabalho que não é dela.
-`_conf_esteira_stages` traduz toda etapa depois do OTC para `Ok` na leitura, e
-o e-mail conta `Ok` como concluído junto com `Success`. Quando o grupo já tem
-linha na esteira, a etapa dela **vence** o status do documento (mostrar
-`Generated` numa confirmação já em Pending OTC é parar o relógio na metade), e
-o anel de progresso fecha em verde no `Ok`.
-
-O join é pelos **Trade IDs** (`_conf_segregate` coleta `Deal` e `B3_ID` de cada
-grupo), nunca por contraparte × mercadoria: os dois lados normalizam nome e
-mercadoria de jeitos diferentes, e um de-para por texto casaria errado em
-silêncio. Os dois identificadores vão juntos porque a chave da esteira é o Deal
-para quase todo produto e o **B3 ID** para o FWD Start. O grupo vale pela
-operação **menos avançada** (`_CONF_STAGE_ORDER`) — dizer `Ok` porque uma das dez
-foi validada esconderia as nove restantes —, e operação que ainda não entrou na
-esteira não conta, senão um documento recém-gerado nasceria vermelho. O índice é
-lido **uma vez por request** e passado aos quatro cards: dentro do
-`_conf_stage_counts` ele abriria os dois DuckDB oito vezes na mesma tela.
-
-### O ciclo da esteira tem cinco paradas, e duas não são de mesa (§254)
-
-`(Pending Legal, opcional) → Pending OTC → Pending MO e/ou FO → Pending FepWeb
-→ Ok`. **Pending Legal** é hold manual (vence a derivação até ser solto).
-**`Pending OTC` digitado REABRE a esteira** (§255): confirmação regerada volta
-para a fila do OTC — o upsert limpa as três validações e o Enviado p/ cliente
-(carimbos caem no undo; comentários ficam) e a mesa de OTC Ops é exigida quando
-há algo a limpar; numa linha só em hold ele age como o release de antes.
-**Pending FepWeb** é derivado e nunca se digita: validações feitas, envio
-pendente — **Ok exige o `Enviado p/ cliente` preenchido**. Toda gravação da
-esteira espelha no Pending Confirmation via `_mc_pc_sync` (chave MC `Trade ID`
-= PC `Trade Number`): o estágio entra verbatim no Pending Status, e o Ok vira
-Pending Digital Signature / Pending Original pelo SIGNATURE TYPE do RefData.
-O Monitor tem CINCO cards (Legal e FepWeb nas pontas, botões de soltar/enviar
-com trava da mesa de OTC Ops).
-
-### A esteira de confirmação manual é um gancho para a frente
-
-`_mc_save_from_deal` espelha para Manual Confirmations a operação que acabou de
-ser mapeada, e é chamado **de dentro de `_pc_save_from_deal`** de propósito:
-quem decide se um deal vira confirmação de cliente (perna interna? intragrupo?)
-é aquela função, e repetir o teste criaria uma segunda resposta para a mesma
-pergunta. Ele dispara no instante em que o deal vira `Success` — **não
-retroage**. Tudo que foi mapeado antes de a esteira existir alimentou o Pending
-Confirmation e parou ali; é para isso que existe o
-`backfill_manual_confirmations.py` (§9). Só os produtos de
-`_MC_CONFIRMATION_SOURCES` geram documento: NDF Vanilla e Other Publisher
-ficam de fora de propósito.
-
-**Só as páginas genéricas de NDF trazem a entidade no deal** (campo `LE`:
-JPM/MGT/LAWTON, resolvido do Settlement Location pelo `le-accronym`). Mercadoria
-e FXO não têm o campo, e o fallback para `TradingBook` escrevia o nome do BOOK
-(`ALUM-BRAZIL-BANCO`) na coluna Legal Entity. `_mc_legal_entity` resolve pela
-lista `_MC_JPM_SOURCES`: mercadoria **e FXO** são sempre **JPM** — a mesa booka
-termo e opção de commodity e a opção de câmbio no Banco J.P. Morgan, e é uma
-entidade só. A FXO ficava em BRANCO esperando cadastro linha a linha, e as
-confirmações que fechavam em Success no New Deals chegavam ao Track
-Confirmations sem Legal Entity nenhuma — uma coluna vazia que ninguém tinha como
-preencher, porque a resposta é sempre a mesma. A lista é a da **Legal Entity**, e
-não a de LOB (`_COMMODITY_SOURCES`): a FXO é CEM e ainda assim é bookada no
-Banco, então amarrar as duas perguntas na mesma resposta erraria uma das duas. A
-razão social sai do `le-spn` (LE → NAME), nunca de um literal — `JPM` →
-`BANCO J.P MORGAN S.A`.
-
-### O prazo da esteira, e por que ele é em dias ÚTEIS
-
-Cada mesa tem um SLA contado da **DATA DA OPERAÇÃO** (trade date) e não da data
-em que a confirmação foi gerada — o prazo é do trade, e gerar o documento com
-atraso não compra tempo novo. **OTC D+3, MO D+4, FO D+6**. Eles não se somam: MO
-e FO correm em paralelo depois do OTC, e os dois contam do mesmo trade date.
-
-Os prazos são **cadastráveis** (`manual-conf-sla`, uma linha por mesa) e o
-`SLA_BIZDAYS` virou o fallback com os valores históricos. Quem lê é
-`sla_days()`, cacheado por mtime porque o Monitor pergunta o prazo três vezes por
-linha; **prazo em branco devolve o valor histórico**, e não "sem prazo" — uma
-célula limpa pela tela apagaria o vermelho de toda confirmação atrasada em
-silêncio.
-
-**Dias úteis pelo calendário ANBIMA**, o mesmo `static/data/anbima.json` que o
-resto do app usa (`manual_conf` relê o arquivo em vez de importar o `routes`, que
-seria circular — o que se repete é a leitura, não o dado). O `aging` também é em
-dias úteis: contando corridos, a confirmação de sexta-feira nascia com três dias
-de atraso na segunda, e o vermelho aparecia sem ninguém ter deixado de
-trabalhar.
-
-`sla_state()` devolve a luz — `ok` (2+ dias de folga), `warn` (véspera ou o
-próprio dia), `late`, e **`done` para a etapa já validada**: o prazo dela parou
-de correr, e mantê-la vermelha cobraria um trabalho que já foi feito. No Monitor
-o item vale pela operação **mais apertada** do grupo (um documento cobre várias
-operações; se uma estourou, o grupo estourou). O verde é neutro no card de
-propósito — pintar o que está no prazo é pintar quase a fila inteira, e aí o
-vermelho some no meio.
-
-**Preencher a coluna de validação pela GRADE do Track é validar**, e passa
-pelas mesmas três regras do `mark_validated` — carimbo de quem assinou, mesa
-certa e justificativa fora do prazo. Antes, `api_mc_upsert` copiava
-`VALIDADO p/ MO` como texto livre: a validação entrava sem dono, sem motivo do
-atraso e assinada por qualquer papel. O que separa validação de ajuste de
-cadastro é a **transição** (a coluna estava vazia e passou a ter data), o prazo é
-medido no estado **anterior** (depois da escrita a própria `sla_state` diz
-`done`), a data digitada é preservada, apagar a data apaga o carimbo, e o lote é
-tudo-ou-nada (HANDOFF §232).
-
-**Passado o prazo, a validação exige justificativa.** `mark_validated` levanta
-`SlaCommentRequired` e o endpoint devolve **409 com `sla_comment_required`** —
-409 e não 400 porque o pedido está bem formado, o *estado* é que pede mais um
-campo. O motivo vai para a coluna daquela mesa (`OTC Comments`, `MO Comments`,
-`FO Comments`) — uma por etapa, porque o atraso do MO não explica o do FO e um
-campo único faria a segunda mesa sobrescrever a explicação da primeira. A tela é
-onde se pede; o endpoint é onde se garante.
-
-### A cobrança das validações é um card do Control Panel (§257)
-
-`confescalation` manda por e-mail o que está parado na esteira, e lê a **mesma**
-`manual_conf.load_all()` com o `Pending` derivado que o Track e o Monitor
-mostram — um relatório que conta de outro jeito cobra uma fila que a tela não
-tem, e a mesa deixa de acreditar nos dois. São **sete listas** de destinatários
-(`_CE_REC_KEYS`), uma por e-mail: OTC, Sales Support (rotina), Sales Support
-(escalação) e os quatro grupos de Front Office de `_CE_FO_GROUPS`. Quatro coisas
-que não dão erro nenhum quando se mexe:
-
-- o grupo de FO casa pelo **tipo de confirmação** (`confirmation_type`), nunca
-  pelo texto cru da coluna. **`OPTION EDG` não é produto** — é `FXO` × LOB
-  `EDG`; cadastrado como produto, o grupo nunca casa com linha nenhuma, em
-  silêncio;
-- **Pending FO sem grupo vai para `unmatched`** (amarelo no card e linha no
-  log), porque confirmação que some do relatório é confirmação que ninguém
-  cobra;
-- a rotina é segunda e quinta, e o feriado **ROLA** para o próximo dia útil —
-  `_ce_is_routine_day` pergunta ao contrário (*que segunda/quinta desemboca em
-  hoje?*), senão a semana inteira se perde quando a quinta é feriado;
-- a escalação leva o **último dia** (`left == 0`) e o vencido, nunca a véspera:
-  o `warn` do SLA acende em D-1, e escalar ali chega com a mesa ainda dentro do
-  prazo. `empty` (nada pendente) e `no_recipient` (lista vazia) são desfechos
-  **distintos** — o segundo é cobrança que não saiu de casa.
-
-### O BACC EA Metrics é a mesma esteira, extraída para o time de métricas
-
-O card **BACC EA Metrics** (Control Panel › *Economic Affirmation Routines*,
-ao lado do Manual Deals EA e do MT300) manda, todo dia útil ANBIMA às
-**16:00 BRT**, um e-mail com as operações manuais em anexo `.xlsx`. A fonte é a
-MESMA `manual_conf.load_all()` que o Track Confirmations mostra, com DOIS cortes
-e ordenada pelo **Aging do maior para o menor** — quem espera há mais tempo vem
-primeiro, como na fila do Monitor (a chave da ordenação é numérica: o aging é
-gravado como TEXTO, e por texto `'10'` viria antes de `'9'`; vazio vai para o
-fim, porque linha sem idade não encabeça um relatório de atraso).
-
-- **Sem Data Callback**, e o teste é a CÉLULA em branco, não um status. O
-  callback é a conferência por telefone com o cliente e é ele que fecha a
-  operação manual do ponto de vista da métrica; a planilha é a lista do que
-  ainda falta. A coluna vazia é exatamente o que o Track Confirmations mostra —
-  derivar de um Pending ou de um estágio criaria uma segunda regra, que
-  discordaria da tela no primeiro caso de borda.
-- **Pending diferente de `Ok`**, e este é o status, porque `Ok` é justamente o
-  nome do fim da esteira: a confirmação que terminou saiu da fila. De quebra,
-  isso deixa o anexo restrito ao banco `pending` — o mesmo conjunto que o
-  Monitor mostra, e o único cujo E-mail Subject o app preenche sozinho.
-- **O notional ocupa TRÊS colunas**, e as duas últimas saem repartidas da coluna
-  `Notional Amount CCY` da esteira por `manual_conf.split_notional_ccy`:
-  `Notional/Qty` (o número cru), `National Currency` (o CÓDIGO) e
-  `Notional Amount` (o VALOR). A moeda **não sai da coluna `Moeda`**: aquela é o
-  ATIVO da confirmação e em mercadoria guarda a commodity (OLEO, PLATTS), que
-  não é moeda nenhuma — era isso que essa coluna dizia antes.
-- **O TIPO é declarado por coluna** (`text` / `num` / `money` / `date`), não
-  adivinhado do conteúdo. A versão anterior escrevia como inteiro tudo que
-  "parecia dígito", e errava dos dois lados: um notional com centavos
-  (`250000.50`) não passava no teste e ia para o Excel como TEXTO — sem somar e
-  sem ordenar —, e um Trade ID todo numérico viraria número, perdendo o zero à
-  esquerda. `_bacc_num` aceita as duas escritas que convivem no banco
-  (`1500000` e `1.500.000,00`).
-- **`money` é valor e leva a máscara de milhar; `num` é contagem e não leva** —
-  o Aging em `12,00` dias não quer dizer nada. E o código da máscara é escrito na
-  convenção INVARIANTE do formato de arquivo (`#,##0.00`, com `,` de milhar e
-  `.` de decimal), **sempre**: quem desenha a célula é o Excel de quem abre, com
-  o separador do idioma DELE, e num Excel pt-BR esse mesmo código sai
-  `1.500.000,00`. Escrever `#.##0,00` (a máscara como ela se lê em português)
-  produziria um código malformado e o valor sairia errado sem erro nenhum. Valor
-  que não parseia fica texto e **sem** máscara: máscara sobre texto não faz nada,
-  mas prometeria um número. A largura da coluna mede o que se VÊ — `1500000` são
-  7 caracteres e a célula desenha 12; sem isso a coluna nasce estreita e o Excel
-  mostra `####`.
-- **A mesma falta vira badge no Monitor**, e só no card de **Pending FepWeb**:
-  ali a confirmação está validada esperando o envio ao cliente, e o callback é o
-  que precisa ter acontecido ANTES desse envio — nos outros estados a coluna
-  está em aberto por construção, e o vermelho só diria que a esteira mal
-  começou. O item traz `no_callback` como CONTAGEM (`_extra_card`), não como
-  bandeira: um documento cobre várias operações, e "falta callback" num grupo de
-  dez não diz se falta em uma ou nas dez — por isso o número aparece no badge a
-  partir de duas. A cor não reusa a do prazo (`.mc-sla-late`): as duas marcas
-  podem valer ao mesmo tempo, e o vermelho daqui diz que falta um passo, não que
-  estourou o relógio. **E a marca TRAVA o Mark as sent** (2026-09-01): a tela
-  bloqueia o clique com aviso e o `/fepweb-sent` recusa com **409
-  `callback_required`**, tudo-ou-nada no grupo — o teste é o mesmo
-  `_filled('Data Callback')` do badge, nunca um segundo teste sobre a mesma
-  coluna (HANDOFF §394).
-- **Planilha vazia VAI assim mesmo.** Um dia sem operação manual é ele próprio a
-  métrica, e o único motivo de não enviar é lista de TO em branco
-  (`no_recipient`), que o card mostra em âmbar — é relatório que não saiu de casa.
-- As colunas de `_BACC_COLUMNS` são contrato com quem consolida, **grafia
-  incluída**: `Conterparty Name` está escrito assim de propósito. `Born Age`,
-  `Notional Amount` e `Notional Amount USD` saem sempre **vazias** (preenchidas
-  do outro lado) e continuam no arquivo porque a POSIÇÃO das colunas é o que o
-  consumidor casa. `Comments` carrega o **assunto do e-mail de recap**.
-- **Auto-fit é contagem de caracteres**, não medida de texto: o openpyxl não tem
-  auto-fit de verdade. Daí o teto por coluna — o assunto em `Comments` tem 120
-  caracteres e, sem ele, empurraria as outras onze para fora da tela.
-- O corpo do e-mail **não repete a tabela**: ele nomeia o anexo e diz quantas
-  linhas são, que é o que distingue "não havia nada hoje" de "o anexo veio
-  truncado".
-
-### A coluna E-mail Subject se escreve sozinha
-
-Ela guarda o assunto do **recap interno** que está na pasta da confirmação, e
-quem sabe a resposta é o arquivo — não quem digita. Quem varre a pasta é
-`_mc_confirmation_docs`, então a coluna se atualiza nos dois lugares que o
-chamam: o `/api/manual-confirmation/docs` (os chips de e-mail dos cards do
-Monitor) e a **tela de validação**. `_mc_email_subject` lê o assunto memorizado
-por **(caminho, mtime, tamanho)** — o caminho sozinho manteria o assunto do
-e-mail substituído pela vida do processo —, `_mc_sync_email_subjects` junta
-`{Trade ID: assunto}` e `_mc.set_email_subjects` grava **só o que mudou**, num
-lote por chamada.
-
-**O casamento é em DOIS passos, e a ordem separa o certo do plausível:**
-
-1. **pelo Trade ID no NOME do arquivo** — a mesa salva
-   `Internal Recap DBH-1AAA.msg` ao lado do PDF de cada operação, e este passo é
-   exato;
-2. **recap ÚNICO na pasta** — ninguém nomeia operação, mas só há um e-mail; ele
-   é o recap daquele booking e vale para o grupo inteiro (é o recap nomeado por
-   contraparte/data).
-
-Fora disso **não se escreve nada**. A primeira versão pegava o *primeiro* recap
-da pasta e o carimbava em todas as operações do grupo: a `DBH-1BBB` ficava com o
-e-mail da `DBH-1AAA`, e uma operação **sem recap próprio** recebia o assunto de
-outra confirmação — porque a pasta é cliente × dia × produto e guarda mais de uma
-(OLEO e PLATTS do mesmo dia), e `_mc_confirmation_docs` cai para a listagem
-inteira quando o funil não casa. Célula vazia pede o dado; célula errada aponta
-para um e-mail que não confirma aquele trade.
-
-Três coisas que não dão erro nenhum: sem o "só o que mudou", cada abertura do
-Monitor reescreveria a esteira inteira; sem o lote, cada chave releria os dois
-DuckDB (o Monitor manda até 200 itens de uma vez); e a falha da gravação é
-engolida com log, porque listar documentos é o serviço que a página pediu — um
-banco travado não pode transformar o Monitor inteiro em "no PDF".
-
-Dois limites conhecidos: o arquivo só é reconhecido como recap se o NOME contém
-`internal` ou `recap` (`_MC_MAIL_TOKENS`) — salvo com outro nome ele não vira
-chip nem assunto —, e a coluna só se preenche quando alguém OLHA a confirmação
-(card do Monitor ou tela de validação). Linha que já saiu da esteira (banco `ok`)
-não passa por nenhum dos dois e fica com a célula como estava.
-
-### Validar é abrir o documento, não clicar num botão
-
-O Validate do Monitor abre **`/manual-confirmation/validate`** (PDF do Electronic
-Inventory de um lado, checklist do outro), e não carimba no clique: quem assina
-está dizendo que olhou o documento.
-
-Ela é **irmã** da `confirmations/validate.html` (o checklist do OTC no New Deals)
-e não uma evolução dela — aquela valida a confirmação que a tela de geração
-acabou de produzir, chaveada por contraparte × mercadoria × data; esta valida uma
-**etapa da esteira**, chaveada pelos Trade IDs do grupo, e serve as três mesas.
-Fundi-las obrigaria uma a carregar os dois modelos de chave.
-
-**Gerar é gravar.** O checklist do New Deals fecha o ciclo do DOCUMENTO
-(New → Generated → Success) e **não carimba a etapa do OTC na esteira** — o
-`_mc_stamp_otc_validated` foi removido dos quatro `/validate` do New Deals, e só
-o `_mc_stamp_generated` continua. Carimbando, a confirmação nascia já na mesa
-seguinte e a fila de Pending OTC do Monitor ficava vazia por construção: o OTC
-não tinha onde conferir o que ele mesmo acabara de emitir, com o D+3 correndo em
-silêncio. **E ele não avisa no sino**: os quatro `/validate` do New Deals
-emitiam um `Confirmation Validated`, e a mesma confirmação gerava DOIS itens
-dizendo validado — este, do documento, e o `Validated by OTC` da esteira, que é
-o que a mesa precisa ver (diz quem assinou, quantas operações e para quem). O
-ciclo do documento continua no card de Confirmations do New Deals Monitor, que é
-onde ele já era acompanhado.
-
-**O aviso da esteira leva ao Confirmations Monitor**, e não à página que emitiu
-o documento: quem recebe vai CONFERIR a confirmação, e conferir é lá. O rótulo
-`page` é `'Confirmation'` (o mesmo da esteira — ver `_NOTIF_PAGE_URL`); o
-produto vive no texto do aviso, que é onde ele continua legível.
-
-**GERAR também é só no Monitor**, e com isso o ciclo inteiro mora num lugar só.
-O botão **Confirmation** saiu da barra das quatro páginas de New Deals (o
-contêiner `.confirmationBtn` e o diálogo de grupos foram apagados): o card de
-**Pending OTC** oferece **Generate** enquanto não há PDF na pasta da confirmação
-e **Validate** depois que há — é a mesma condição que já riscava o botão, agora
-com um destino em vez de um aviso. Só o OTC (nas etapas de MO e FO, sem contrato
-o botão continua riscado: elas conferem o papel, não o produzem).
-
-O que traduz uma coisa na outra é **`/manual-confirmation/generate?keys=…`**: a
-esteira conhece a LINHA (Trade ID, Produto, data da operação) e o New Deals
-conhece o GRUPO (contraparte × mercadoria × família), que é a unidade do
-documento. O casamento é pelos **Trade IDs** — os mesmos do card de Confirmations
-do New Deals Monitor —, nunca por contraparte × mercadoria, que seria um de-para
-por texto entre dois cadastros que normalizam nomes de jeitos diferentes. Sem
-destino, a rota devolve 404 com a `manual-generate-error.html` dizendo o motivo
-exato (produto sem tela, linha sem data, arquivo-dia sem a operação); um 404 seco
-não diz qual dos três é.
-
-No editor sobrou **um botão**: o `Salvar Word + PDF no Inventory`. O
-`Imprimir / Salvar PDF` saiu dos nove templates de confirmação — o PDF é gravado
-no Inventory, e imprimir por fora produzia um documento que a esteira não vê. E
-quando o editor foi aberto pelo Monitor (a rota manda **`mc_keys`** na URL), a
-tela que abre depois de gravar é a validação da **ESTEIRA**, não o checklist do
-documento: é o mesmo ato — quem gerou está com o papel na frente e assina pela
-mesa de OTC. Validando, a confirmação segue para MO/FO; fechando sem validar, ela
-continua em Pending OTC, agora com o PDF na pasta, e o card volta a oferecer
-Validate. Sem `mc_keys` nada muda (abre o checklist do documento), e é por isso
-que o `openValidate` é o único ponto tocado nos nove arquivos.
-
-O ciclo do DOCUMENTO (New → Generated → Success) continua fechando no card de
-Confirmations do New Deals Monitor sem ninguém marcar nada: quando o grupo já tem
-linha na esteira, **a etapa dela vence o status do documento**, e
-`_conf_esteira_stages` traduz toda etapa depois do OTC para `Ok`.
-
-**Validar é SÓ no Monitor.** O botão Validate saiu dos diálogos de
-Confirmations das quatro páginas de New Deals (FWD Start, NDF Comm, Opt Comm,
-Opt FXO) — dois lugares validando era ter duas respostas para a mesma pergunta
-(HANDOFF §241).
-
-**Validar e Rejeitar vivem os dois na tela de validação**, não no card do
-Monitor. São as duas respostas à mesma pergunta — o documento está certo? — e as
-duas exigem tê-lo aberto; no card, o Reject ficava a um clique de quem nunca viu
-o papel. O card tem um botão só. O Reject continua sendo só das mesas seguintes
-(`can_reject = stage != OTC`): o OTC é quem monta o documento e não tem a quem
-devolvê-lo.
-
-**O aviso do sino vai para a mesa em que a confirmação CAIU**, e não para o
-time inteiro (`_MC_STAGE_NOTIFY_ROLES`): Pending OTC → `BO`, Pending MO →
-`MO`+`BO`, Pending FO → `FO`+`BO`, Pending MO/FO → as três. `MASTER` entra em
-todas (sem isso o superusuário perde a esteira de vista, em silêncio) e `ADMIN`
-em nenhuma. A etapa sai de `pending_stage(row)` **depois** do carimbo — do
-ESTADO, não da etapa que acabou de ser assinada —, e é isso que faz o cadastro
-`manual-conf-validation` valer de graça: produto isento de FO nunca avisa o FO.
-Confirmação em `Ok` volta a avisar todos. O Back Office entra em todas porque
-**assinar e receber são perguntas diferentes**: assinar é um ato de uma mesa só,
-receber é acompanhar, e o documento é dele. Para isso a coluna `target_role`
-passou a aceitar vários papéis separados por vírgula (`_notif_roles`), com o
-valor antigo de um papel só continuando válido (HANDOFF §231).
-
-**Cada etapa é assinada pela SUA mesa** (`_MC_STAGE_ROLE`): Pending OTC → papel
-`BO` (a mesa de OTC Ops é o Back Office do cadastro de papéis), Pending MO → `MO`,
-Pending FO → `FO`. É o que separa as funções — quem monta o documento não pode
-assiná-lo pela mesa seguinte. Master é a exceção de sempre, e **`ADMIN` é lido
-como `BO`** (`_MC_ROLE_ALIAS`, 31/08/2026): o `Role` do cadastro é UMA coluna, e
-sem o apelido quem administra acessos não podia também sentar na mesa de OTC Ops
-— o Validate do Pending OTC simplesmente não existia para ela. O apelido é
-**estreito de propósito**: ele desfaz a separação entre administrar e ser Back
-Office, e não a que existe entre as TRÊS MESAS — o admin assina o Pending OTC e
-**só** ele, continuando sem carimbar pelo MO ou pelo FO. Elevar o SID a master
-resolveria pela pior porta, já que o master escapa de toda restrição. E o
-apelido vale nas DUAS perguntas — assinar (`_mc_session_desk`) e ser avisado
-(`_MC_STAGE_NOTIFY_ROLES`, derivado do mesmo mapa, nunca escrito à mão):
-validar sem receber o aviso é o meio-caminho que não dá erro nenhum, porque a
-pessoa poderia carimbar e nunca saber que havia o que carimbar. Rejeitar segue a
-mesma regra: é a outra resposta à mesma pergunta.
-
-**Trocar o papel no cadastro alcança quem já está logado em até 30 s**, e isso
-é o `refresh_session_role` (um `before_request` próprio, em `platform/authz.py`).
-O `user_role` é gravado na sessão pelo `_set_session`, no login, e nada o relia:
-com *Keep me signed in* a sessão dura **30 dias**, então a pessoa promovida a
-`BO` continuava sem o botão e a despromovida continuava com ele — nos dois
-sentidos sem erro nenhum para ver. Ele é de graça: a linha do usuário já era
-lida por SID a cada 30 s para a allowlist do `Page_Access`, e o `Role` veio
-junto na mesma query. Quatro coisas o sustentam:
-
-- **`None` não mexe em nada.** Banco fora do ar, ou SID sem linha, deixa a
-  sessão como está. O fail-open da allowlist é aceitável; no papel, seria uma
-  falha de leitura deslogando a mesa da função dela. `''` **mexe** — papel vazio
-  é um papel de verdade, e é assim que se revoga;
-- **master não é tocado.** `MASTER` não é papel de banco, é o valor que o
-  `_set_session` grava para os SIDs de `_MASTER_SIDS`; sobrescrevê-lo com a
-  coluna `Role` rebaixaria o superusuário a cada request;
-- **só grava quando MUDA**, senão o cookie assinado é reemitido a cada request;
-- é um `before_request` **próprio**, e não uma carona no `enforce_page_access`:
-  aquele desiste cedo para master, `/api/*`, `/static*` e todo path fora do
-  menu — e é justamente em `/api/*` que a mesa valida a confirmação.
-
-Três camadas, e a que vale é a
-última: no Monitor o botão verde vira um de só leitura, na tela de validação
-somem os dois botões, e o endpoint devolve **403 com `stage_forbidden`**. Abrir a
-tela continua livre de propósito — esconder a confirmação faria o OTC deixar de
-ver o que o MO está conferindo.
-
-**O checklist muda por mesa: MO e FO conferem só os DADOS ECONÔMICOS**
-(`CHECKLIST_ECONOMICO` = operações da Tabela de Referência + datas). Contraparte,
-CNPJ e a data do CGD são cadastro e contrato, e quem responde por eles é o OTC,
-que é quem monta o documento — pedir os quatro itens às três mesas faria duas
-delas assinarem por uma conferência que não é sua.
-
-### As colunas novas do banco não precisam de script de migração
-
-`ensure_db()` roda `ALTER TABLE … ADD COLUMN IF NOT EXISTS` para toda coluna de
-`DB_COLUMNS` que faltar. Isso importa porque `apps/static/data/db/` está no
-`.gitignore`: o banco da instância do time é anterior à coluna, e o `INSERT` —
-que lista as colunas explicitamente — falharia com *column not found*, derrubando
-as duas telas depois de um pull. **Coluna nova em `COLUMNS` é só isso**; não
-escreva um script em `scripts/` para ela.
-
-### O relatório do dia é o MAIS RECENTE, não o primeiro em ordem alfabética
-
-O Latam Desk Position é **reemitido no mesmo dia**, e quando é, a pasta passa a
-ter dois `FbiRptLatamDeskPostion-NY-*`: o consumido de manhã só é apagado quando
-alguma linha entrou (`kept`), e o novo chega ao lado. `sorted(...)[0]` pegava o
-**mais antigo** e regravava o JSON do dia com a posição da manhã dizendo
-*"sucesso, N linhas"* — falha que se reporta como êxito. O Save Daily Settlement
-era pior: processava os dois na ordem crua do `os.listdir`, então o vencedor
-dependia do sistema de arquivos e os dois caminhos podiam **discordar sobre qual
-é o relatório do dia**.
-
-`_latam_pick_source` é o seletor único dos dois — **mtime mais recente, nome só
-desempata**. Os preteridos **ficam em disco** (apagar um arquivo que não foi lido
-destrói a única cópia) e voltam em `ignored`, que o SweetAlert do import mostra:
-pasta com dois relatórios é o estado que produz o defeito, e ele não pode ficar
-invisível. Isso alcança mais do que a tela — `_latam_equity_b3_index` lê o
-**último** Latam disponível, então um Latam parado na manhã deixa o swap **e a
-opção** de equity sem valor (HANDOFF §281).
-
-### A inversão da moeda fraca é do PAR, não da coluna
-
-A API manda o strike da moeda fraca como **moeda/BRL** (3,33 MXN por real;
-1,2956 CNH por real) e a aplicação inteira trabalha com **R$/moeda**. Quem
-decide a inversão é `_ndf_weak_leg(qty_ccy, other_ccy)`: a moeda fraca **em
-qualquer das duas pernas**, porque qual delas carrega o notional depende de como
-a mesa bookou, não da moeda. Par com as **duas** pernas fracas devolve `None` —
-sem BRL não há convenção para apontar, e inverter seria chute.
-
-A inversão acontece **uma vez, na importação**; daí para a frente o `Rate`
-gravado é R$/moeda e ninguém mais mexe nele. O arquivo TER só **arredonda** pelas
-casas do cadastro (`INV DECIMALS`). Antes eram duas regras olhando pernas
-opostas — a importação a `Other Quantity Units`, o TER a `Quantity Currency` —, e
-como as condições são complementares o arquivo saía certo **por compensação**,
-enquanto a coluna Rate da tela, o contravalor do MT300 (`qty × rate`) e a taxa do
-Intrag ficavam com o valor cru sempre que o notional estava na moeda fraca
-(HANDOFF §282).
-
-### Outras
-
+## 7. O padrão de tela
+
+### Tabela (referência: `new_deals-ndf-vanilla.html`)
+
+- SweetAlert2 e jQuery **LOCAIS** (`plugins/sweetalert2/`, `plugins/jquery/`
+  ANTES do DataTables): a instância roda sem internet e o `vendors.min.js` não
+  expõe o jQuery — sem isso a página abre sem tabela, erro só no console.
+- `dom: "rt<'d-md-flex justify-content-between align-items-center mt-2'ip>"`.
+- **Centralizada**: `th` `.7rem` centro/middle (quebra permitida), `td` `.8rem`
+  centro/middle `nowrap`. Não existe regra global; com `scrollX` os clones
+  `.dt-scroll-headInner`/`.dataTables_scrollHeadInner thead th` levam as mesmas
+  regras **com `!important`** (o DataTables remove o id da tabela clonada e a
+  regra da página perde para `table.dataTable thead th`). `table-centered` não
+  existe em CSS nenhum. `check_table_center.py`.
+- **Linha de filtro por coluna** como 2ª linha do `<thead>`, montada ANTES do
+  `.DataTable()` com `orderCellsTop: true` (no `initComplete` ela fica no
+  `<thead>` escondido do corpo rolável). Centralização dos inputs vem do
+  `visual-refresh.css`. `blank` sozinho no campo casa célula vazia.
+- **Botões de ação: squircle 32×32** travado nos DOIS eixos, `padding:0`,
+  `border-radius:10px !important`, ícone Tabler `1rem` (nunca `.fs-13`),
+  tooltip colorido delegado no primeiro hover (os `<td>` são reescritos a cada
+  redraw). Regra GLOBAL no `visual-refresh.css`; ordem Confirm `ti-check` →
+  Edit `ti-edit` → Delete `ti-trash` → Send `ti-brand-telegram`; edição Save
+  `ti-device-floppy` + Cancel `ti-x`. `check_row_action_buttons.py`.
+- **Toolbar** `mb-3` (o DataTables come a margem do irmão), `.btn-toolbar-all`;
+  cores por função: Columns soft-primary, Add Row primary, Export info
+  (**Copy · CSV · Excel · Print · PDF**, DataTables Buttons; CSV `;` + BOM;
+  Excel exige o registro síncrono do JSZip), Import teal `#4a849b`,
+  Mapping/refresh success, Clear Filters outline-secondary. Export termina no
+  **Advanced Export** (`otcExportAdvanced('#t', { daily: '<endpoint que a
+  própria página consulta>' })`, `exact=1` + confere `source_date`, dia sem
+  arquivo é pulado, teto 60 s/dia — §304).
+- **Alinhamento com `scrollX` são TRÊS coisas**: `columns.adjust()` depois de
+  todo draw (+ passe atrasado 150 ms + `resize`); `autoWidth: true`; regras de
+  `th` repetidas nos clones com `white-space: normal`.
+- **Seleção de célula em TODA tabela**: extensão `select` (New Deals, Intrag)
+  ou `table-std.js` + `otcCellCopy('#id', { skip: [...] })` DEPOIS do
+  `.DataTable()` (por tabela quando há uma por card).
+- **Números** `#,##0.00` com `tabular-nums`; taxa NÃO é valor (Strike fica com
+  as casas que tem); formatação só no `display`, sort pelo cru. **Status** é
+  badge pill `bg-gradient`.
+- **Autocomplete nunca é `<datalist>`**: dropdown próprio abaixo do campo, mesma
+  largura, `max-height` ~220px, item por `mousedown` (antes do `blur`),
+  reemitindo `input`/`change` (`mapAttachDrop`, `.ar-ac-drop`).
+- **Data é SEMPRE `dd/mm/aaaa` e `<input type="date">` visível é proibido** (o
+  nativo desenha no locale do sistema — `mm/dd` no Windows do JP). flatpickr
+  com `altInput` (`otcDateField`/`otcDateSync` do `export-advanced.js`; quem
+  escreve por código chama `el._flatpickr.setDate`; largura em CLASSE porque o
+  `style=` fica no campo escondido; ícone como background SVG embutido) ou
+  daterangepicker `singlePicker` `DD/MM/YYYY`. `type="date"` só invisível atrás
+  de texto readonly (`.date-wrap` das recons).
+
+### Layout e vidro
+
+- **Não use `.card` para widget seu** — o `extra_css` da página carrega ANTES
+  do tema e perde. Padrão: `<div>` com classe própria (`.ndm-card`,
+  `.fxo-widget`) com `--vr-card-*`/`--vr-grad`. Pela mesma ordem, classe
+  Bootstrap de mesma especificidade vence a da página mesmo com `!important`,
+  e o `background: … !important` do `.card` apaga `background-image` (cartão
+  com gradiente vai no `streamflow.css`).
+- **`backdrop-filter` cria contexto de empilhamento**: `z-index` vai no
+  WRAPPER, nunca no menu; o `.wrapper` fica sem `z-index`.
+- **Dentro de uma raiz de backdrop o desfoque do filho não amostra nada**:
+  dropdown dentro de card tem fundo SÓLIDO; modal/offcanvas/toast/Swal pendem do
+  `<body>`.
+- **Regra de brilho alcança as DUAS famílias de seletor** (estrutural
+  `[class*="-widget"]` e as quinze classes próprias), calibrada por tipo de
+  superfície.
+- **`.modal-content.liquid-glass` é exceção da regra genérica das
+  sobreposições** (`--sf-overlay-bg` a 82% matava o vidro dos modais, §387).
+- **Modo de efeitos reduzidos** (`sf-reduced` no `<html>`, decidido pela IIFE
+  do `streamflow.js`: WebGL por software ou Firefox no Windows;
+  `localStorage.__OTC_TRACKER_FX__` vence): sem blur, alfa não é material —
+  superfícies viram cor SÓLIDA (seção 16 do CSS). Token do modo vai como
+  `html.sf-reduced:not([data-bs-theme=dark])`. Valide forçando `'reduced'`.
+- Cor só de tema claro precisa do par `[data-bs-theme=dark]`.
+
+---
+
+## 8. Armadilhas por domínio (não dão erro nenhum)
+
+### New Deals
+
+- **Contraparte vem do accronym do End Counterparty, nunca do Settlement
+  Location** (que é a NOSSA perna). Ordem em `_ndf_ref_by_accronym`: accronym
+  exato → sem sufixo → se perna interna, identidade da entidade
+  (`_ndf_le_refdata`) → senão o SPN da API → nada (badge *Missing
+  Counterparty*, que é a falha desejada). Amend recheca; linha achada por
+  `(Deal, Client)`, e só pelo Deal se ele for único no arquivo-dia.
+- **`table.rows({search:'none'})` NÃO é "tudo do dia"** — é a última busca. O
+  servidor monta a lista pela Reference Date (`_generic_nd_mapping_candidates`).
+- **Coluna nova nas páginas de NDF mexe em 14 lugares** (`COL_TO_JSON_FIELD`,
+  `AMEND_FIELD_COLS`, `dealJsonToRow`, `ND_COL_KEYS`, `columnDefs`,
+  `columnLabels`, edição em massa, `SF_COLS`, `SF_LABEL_TO_FIELD`,
+  `extractRowDeal`, `rowDataToNdfDeal`, `rowMaker`…); `MAKER_COL_INDEX`.
 - **`Sent` e `Success` só voltam para Amend por dado ECONÔMICO**
-  (`_ND_AMEND_KEEP_STATUS`). `Sent` é o arquivo de registro já enviado à B3 e vem
-  **antes** do `Success`, então a janela desprotegida era justamente a da espera
-  do retorno: um pull que trocasse o Other Book devolvia para a fila, sem
-  Checker, a operação que a mesa acabou de mandar registrar. A célula segue
-  **destacada** (`AmendChanged`) nos dois casos — o que não regride é o status —,
-  e os demais status caem para `Amend` sempre. A varredura do box de commodities
-  **não** tem essa proteção de propósito: a regra dela é a mesma do caminho do
-  navegador (`otc-fileupload.js`), e mexer num lado só faria o mesmo recap
-  amendar de dois jeitos (HANDOFF §283).
-- **O Strike do NDF FWD Start não derruba um Success para Amend.** O que a B3
-  registra é o **Strike Set Offset** — o spread sobre uma taxa que só se conhece
-  no dia do fixing; o Strike da linha é a projeção dessa taxa no momento do
-  booking, e a Athena a recalcula a cada pull. A operação não mudou, mudou o
-  mercado, e sem isso todo FWD Start já registrado voltava sozinho para a fila. A
-  célula continua destacada (o campo entra em `AmendChanged` como qualquer
-  outro); o que não regride é o status. A lista é
-  `_ND_AMEND_COSMETIC_BY_PRODUCT`, **por produto** — o Strike é econômico em
-  todos os outros —, e por isso `_nd_api_amend` recebe o `product` de quem
-  chama. Produto vazio ("não sei") vale só a lista geral: o default é econômico,
-  porque um campo esquecido virando Amend custa uma revisão e o contrário custa
-  uma operação registrada errada.
-- **`Notional Amount CCY` é a moeda DO NOTIONAL, e a coluna `Moeda` ao lado não
-  serve para isso**: aquela é o ATIVO da confirmação, e em mercadoria guarda a
-  commodity (OLEO, PLATTS). A moeda vem do campo que a carrega em CADA produto
-  (`_MC_NOTIONAL_CCY_FIELD`), e não de uma cadeia de fallback — um `first(...)`
-  genérico pegaria o primeiro campo preenchido, que nem sempre é o que a mesa
-  chama de moeda do notional: **Strike Currency** em termo e opção de mercadoria
-  e em opção de câmbio, **Quantity Currency** nos NDF genéricos. A célula guarda
-  os dois num texto só (`USD 1500000`) com o número CRU — a formatação é
-  ortogonal e mora na tela, e gravar `1,500,000.00` obrigaria o relatório do BACC
-  a desfazer a máscara para escrever um número no Excel. Ela é escrita no
-  MAPEAMENTO, então vale para as linhas novas; as antigas ficam em branco porque
-  a moeda de mercadoria não existe em lugar nenhum da linha para ser derivada
-  depois.
-- **`blank` no filtro por coluna traz o que está VAZIO.** É o único jeito de
-  procurar a ausência: o campo casa por conteúdo, e "nada" não se digita. O termo
-  vira a regex `^\s*$` com **smart search desligado** — ligado, o DataTables
-  reescreve a expressão e ela deixa de casar a célula vazia. A palavra só é
-  reservada quando é a ÚNICA coisa no campo, senão uma contraparte chamada
-  "Blank Trading" ficaria impossível de procurar; e o `title` do campo é onde ela
-  se anuncia, porque num texto livre ninguém adivinha que existe.
-- **Os NOMES das colunas da esteira são os da planilha legada, os RÓTULOS são
-  ingleses.** Os nomes (`Data de vencimento`, `Moeda`, `VALIDADO p/ MO`) são o
-  esquema dos dois DuckDB e não podem mudar — renomear um quebraria o banco de
-  quem já o tem em disco. Quem traduz é o `COLUMN_LABELS`, que por isso é a lista
-  **COMPLETA** das colunas: coluna sem entrada apareceria na tela com o nome do
-  banco. A tradução br/es fica no `COLTR` do template, e não em `data-lang`,
-  porque o cabeçalho é montado em JS depois do load — o I18nManager traduz os
-  `[data-lang]` uma vez, no load. Nas LISTAS (edição em massa, painel de colunas)
-  vale o `labelFull`: os três `Time Stamp` compartilham o rótulo curto de
-  propósito, e só quando há empate o nome do banco entra, porque ele já diz a
-  mesa.
-- **Thread de scheduler não tem application context.** `render_template` (o
-  corpo dos e-mails) e `current_app` (o `_get_logo_path`) exigem um, e sem ele o
-  disparo morre com *Working outside of application context*. O sintoma engana:
-  o botão **Run** do Control Panel funciona, porque roda dentro de um request, e
-  só o automático falha — foi assim que o aviso das 19:00 do Deals Monitor parou
-  em silêncio. Use `with _app_context():` (no-op dentro de um request; o app é
-  capturado no `record_once` do blueprint) e envolva a **montagem inteira** da
-  mensagem, não só o `render_template` — envolver só ele troca o erro por outro
-  três linhas abaixo, no logo.
-- **Jobs agendados rodam no horário do Brasil, não no do servidor.**
-  `_br_now()` (`zoneinfo` `America/Sao_Paulo`, caindo para `-03:00` fixo quando
-  falta `tzdata` — o caso Windows) sustenta o e-mail de pendências das 19:00/
-  19:30, a manutenção das 11:30 do Pending Confirmation e a planilha de
-  Pending das 10:45 (HANDOFF §240). `datetime.now()` é o
-  relógio local do servidor e disparava tudo na hora errada, em silêncio. Como
-  a instância reinicia várias vezes ao dia, `_ndm_pending_catch_up()` também
-  dispara na subida as janelas já passadas do dia; o arquivo de claim em disco
-  é o que impede isso de virar e-mail repetido.
-- **Os três schedulers de IMPORTAÇÃO só trabalham entre 08:00 e 20:00 BRT** — a
-  API de NDF, a de FXO e a varredura do box de commodities. O **intervalo de
-  cada um continua sendo o dele** (20/60/30 min); o que a janela decide é se
-  aquele tique faz alguma coisa, e o `continue` fica **antes do `try`** — dentro
-  dele o poll já teria custado a ida à Athena. As duas pontas são **inclusivas**
-  (o tique das 20h em ponto ainda importa) e a janela é cadastrável em
-  `IMPORT_POLL_WINDOW`; valor malformado deixa a janela **sempre aberta** com
-  aviso no log, porque um `.env` digitado errado não pode desligar a importação
-  do dia em silêncio. Ela aparece no log de subida dos três, ao lado do
-  intervalo (HANDOFF §283).
-- **O Pending Status tem TRÊS donos, e eles não se pisam.** Quem escreve a coluna
-  do Pending Confirmation depende do produto:
-  1. **Só NDF Vanilla e NDF Other Publisher** caem na regra de **prazo e
-     assinatura** (`_pc_signature_pending_status`): prazo (Settlement − Trade)
-     ≤ 60 dias corridos → `Exception FepWeb`; senão, pelo SIGNATURE TYPE do
-     Reference Data — Internal → `Exception Digital Fep Web`, Digital →
-     `Pending Digital Signature`, Manual **e não cadastrado** → `Pending
-     Original`. É uma função só, chamada pelo New Deals, pela importação do
-     Pending Update e pela edição em massa da tela; eram três cópias e elas
-     divergiam em silêncio (o prazo curto saía com dois rótulos diferentes e o
-     ramo `internal` só existia num dos lados).
-  2. **Todo o resto passa pela esteira** de validação, e o Pending Status dele é
-     a **etapa** (`_PC_ESTEIRA_STATUSES`). Prazo e assinatura **não opinam**:
-     `_pc_signature_status` recebe o status atual e devolve a etapa intacta
-     quando ela é de esteira. Sem isso, mexer na data de uma linha em `Pending
-     MO` a devolvia para `Pending Original` e a confirmação sumia da fila da
-     mesa sem ninguém ter validado nada — a tela manda o Pending Status atual no
-     payload do `/derive` justamente para o servidor saber disso, e a importação
-     lê o estágio que cada Trade Number já tem antes do upsert. **FWD Start
-     entra na esteira mesmo com prazo curto**, e por isso o teste de produto vem
-     ANTES do de prazo em `_generic_nd_pending_status`.
-  3. **A regra do VENCIDO é a única universal** (`_pc_apply_auto_rules`):
-     Maturity ≤ hoje e status **não resolvido** → `Exception FepWeb` **e** Status
-     `Ok`, em qualquer produto e qualquer etapa, esteira inclusive. O teste é
-     `not _pc_is_ok_status(...)` e não "começa com Pending": *Abonado via PDF* e
-     *Client Treasury Allowance* também são pendências e ficavam de fora,
-     envelhecendo para sempre numa operação já liquidada. As duas colunas mudam
-     juntas — é isso que move a linha para o DB `ok`.
-- **A manutenção das 11:30 do Pending Confirmation ABORTA quando uma leitura
-  falha** (HANDOFF §406). Ela relê os três bancos (backlog/pending/ok),
-  re-roteia cada linha (backlog quando o Trade Date passa de 12 meses — o Ok
-  velho TAMBÉM vai; ok quando resolve; senão pending) e os REESCREVE — e quem
-  reescreve lê com `_pc_load_rows(strict=True)`, porque a leitura tolerante da
-  tela lê falha como banco VAZIO: um dia de "file is being used by another
-  process" no share reescrevia o balde sem as linhas. Pending e ok se repovoam
-  pelo uso; **o backlog é só história e não volta**. Pular um dia é inofensivo
-  (idempotente); apagar não tem desfazer. `check_pc_maintenance.py` prende o
-  ciclo e o aborto. E a arapuca de TELA correspondente: o chip
-  `Status = Pending` que a página cria sozinha no load **esconde o backlog** —
-  a linha >12 meses tem categoria recomputada `backlog`, então buscar por data
-  antiga exige remover o chip (sem chip, a busca soma os TRÊS bancos).
-- **A planilha de Pending de uma data anterior sobrescreve o arquivo de sempre,
-  e isso é intencional.** O card Pending Confirmations Spreadsheet Metrics aceita
-  uma **Reference date** (padrão hoje, futuro bloqueado). Hoje = a rotina de
-  sempre, situação viva dos três DBs. Data anterior monta a planilha do
-  **snapshot** daquele dia (`cache/pending-confirmation/AAAA/MM/DD`, a foto que a
-  manutenção das 11:30 grava) e grava no **mesmo** `PENDING - Outstanding
-  Confirmation OTC.xlsx`: o time global de métricas lê esse caminho por OLEDB
-  (`Confirmation_Latam`) e tem um caminho só — um arquivo datado ao lado não
-  seria visto por quem consome. Pedida a data anterior, grava-se, o time puxa, e
-  a corrida seguinte (Run com a data de hoje, ou a rotina das 10:45) devolve o
-  arquivo. Três regras que não dão erro nenhum se caírem:
-  - o snapshot **não** é refiltrado por `_pc_target_category` — ele já é o balde
-    `pending` daquele dia, e recomputar responderia pelo calendário de hoje;
-  - snapshot ausente é **404**, nunca queda para os dados de hoje: como o nome do
-    arquivo é o mesmo, nada distinguiria a planilha certa da errada;
-  - o **`ref` do `_pcx_status_write`** é o que diz que foto está no share neste
-    momento (linha âmbar no card). Sem ela, o arquivo com dado de 08/08 é
-    indistinguível do de hoje — o preço de reusar o nome canônico. Ela cai
-    sozinha na gravação seguinte, que reescreve o status inteiro.
-- **A API nunca entrega a perna Lawton como deal próprio.** O arquivo visão
-  Lawton do registro TER (Other Publisher e FWD Start) sai de um **espelho
-  sintetizado no envio** (`_nd_lawton_mirror` → o mesmo
-  `_generic_ndf_ter_line`): deal do balde BANCO com LAWTON no Client gera a
-  visão invertida. O par é por **termos econômicos** (`_nd_lawton_sig`: trade
-  date, settlement, notional), nunca por Deal ID — cada perna intragrupo tem o
-  seu —, e uma perna Lawton explícita no lote consome UMA assinatura para o
-  espelho daquele trade não duplicar (HANDOFF §243). **O trade MGT x Cliente
-  tem o mesmo desenho** nas TRÊS páginas genéricas (Vanilla incluído): a mesa
-  booka contra a MGT (04880.00-6 x 73760.20-5, template cadastrado) e o
-  arquivo do BANCO leva a perna espelhada sintetizada (`_nd_mgt_mirror` —
-  73760.20-5 x 04880.00-6, Papel invertido, CNPJ em branco), com a conta do
-  omnibus entrando por `participant_override`/`force_values` porque nenhuma
-  combinação LE × Client a produz e a variante do cadastro fixa a outra
-  (HANDOFF §398). No preview de duplo clique o espelho é a TERCEIRA coluna da
-  mesma tabela, não uma segunda tabela.
-- **O Edit das Live Position NDF/Option escreve no arquivo que a TELA mostra.**
-  As duas páginas têm botão de editar UM campo (Codigo Identificador no NDF,
-  Combinação de operações na Option — `_LP_EDIT_SPECS`), e o POST manda o
-  `source_date` que a tela exibiu com `exact=True`: as telas andam até dez dias
-  úteis para trás quando falta arquivo, e sem o exact a edição de um dia sem
-  arquivo cairia no arquivo de OUTRO dia, sem erro nenhum. O ciclo inteiro
-  (ler → alterar → gravar) roda sob o `_cache_lock`, e linha sem a coluna é
-  RECUSADA — no payload posicional da Option, inventar a chave deslocaria o
-  bloco asiático inteiro (HANDOFF §396). Os summaries de liquidação leem o
-  mesmo arquivo-dia, então a correção alcança a liquidação sozinha.
-- **A tabela do PDF do Settlement Advice tem largura MEDIDA, não dividida.**
-  `515/N` estourava com 10 colunas: reportlab não quebra nem encolhe string
-  crua. `_ndf_settlement_pdf` mede cada coluna com `stringWidth` (linha cheia
-  E maior token), desce a fonte numa escada (7.5→6.0) até caber e garante o
-  maior token de cada coluna antes de repartir a folga — célula vira
-  `Paragraph`, que quebra linha de verdade (HANDOFF §395).
-- **Os textos da Parte A do FWD Start vivem no `routes.py` de propósito**
-  (Banco J.P. Morgan S.A. / Filial Brasileira, resolvidos pela LE do grupo):
-  a grafia é a do documento assinado, diferente da do Reference Data que o
-  `le-spn` guarda. Não os converta em mapping — seria uma segunda lista das
-  mesmas entidades (HANDOFF §239). LE ausente/mista deixa a Parte A em branco
-  com aviso, e o Save recusa (`400 missing_partea`).
-- **Botão de e-mail precisa de endereço ABSOLUTO, e ele é configuração.**
-  `url_for` é relativo (não serve fora do navegador) e `request.url_root` não
-  existe na thread de um scheduler — num Run local ele devolveria
-  `http://localhost:5005`, link morto para quem recebe. `_otc_app_url()` lê
-  **`OTC_TRACKER_URL`** do `.env` e, sem ela, monta `http://<hostname>:8051`
-  — a porta é o **`routes.APP_PORT`**, UMA constante, porque o número aparece em
-  três lugares que se leem de fora do código (o botão de e-mail, o link do
-  e-mail de versão nova e o `run.py`) e os três diziam 8050 enquanto a instância
-  subia na 8051. Botão de e-mail com a porta errada não dá erro: leva a pessoa a
-  uma página que não abre. Defina a variável na instância do
-  time — o padrão só acerta se o hostname resolver na rede de quem lê o e-mail
-  (HANDOFF §257).
-- **`reportlab` é importado preguiçosamente** (PDFs de confirmação e folha de
-  liquidação do NDF Summary): sem a lib o e-mail sai *sem* o anexo, em vez de
-  falhar.
-- **Só `isCancelled = true` significa cancelado** na Athena. `isDead` é estado
-  interno e esses registros *são* importados (`_api_rec_is_cancelled`, §173).
-- **No File Interpreter** (a tela; TODO o nome é `file-interpreter` desde
-  2026-08-21 — página `/file-interpreter`, APIs `/api/file-interpreter/*` e
-  dados em `static/data/file-interpreter/`. O legado não quebra: a URL antiga
-  `/file-interface` redireciona, as APIs antigas são ALIAS das novas (aba
-  aberta com HTML de antes do deploy), o valor antigo no `Page_Access` é
-  normalizado na leitura (`_get_page_access`), o sino aceita os dois rótulos
-  nos três mapas, e a pasta antiga é MIGRADA na subida — template criado pela
-  tela na instância do time não está no git, e renomear diretório não pode
-  sumir com cadastro de runtime), **"campo em branco" se cadastra como Source
-  `Fixed` com valor VAZIO** — nunca como Page com o dropdown limpo ou origem "—": Source =
-  Page significa "o gerador manda o valor" (o motor injeta o calculado pelo
-  `seq`; o detalhe da origem é documentação), então limpar o detalhe não
-  esvazia nada, em silêncio. Foi a Data de Fixing do FWD Start (HANDOFF §249).
-- **Um template do File Interpreter pode ter VARIANTES por par de pernas**
-  (`base_key` + `le_pair`, criadas pelo Add Template do cabeçalho): o gerador
-  continua chamando o motor pela chave BASE e quem escolhe a variante é o
-  motor (`_fi_variant_key`), pelo par do deal — variante ligada à página vence
-  a sem página; sem variante para o par, vale o base byte a byte. A variante é
-  cópia completa (mais campos podem virar Fixed — conta, Participante do
-  header, que aí dispensa o `b3-accounts`) e pode cadastrar o **`file_name`**
-  do arquivo gerado (em branco = `{PREFIX}_{BUCKET}.txt` de sempre). Três
-  coisas que não dão erro nenhum: o par das **quatro** páginas que geram
-  arquivo (FWD Start, Other Publisher, Commodities e agora o **Vanilla**) usa a
-  regra do BUCKET — linha com cliente JPM é a perna espelhada → `LAWTON x JPM`
-  —, e o preview de cada uma escolhe a variante por essa MESMA regra, senão a
-  tela mostra um layout e a B3 recebe outro. O `pairSimple` (LE × contraparte,
-  `MGT x JPM`) segue no espelho do navegador mas nenhuma página o usa: ele era
-  do tempo em que o Vanilla só exibia. A cópia da regra no navegador
-  é o `static/js/fi-ter-pair.js` e `check_fi_variants.py` prova que as duas
-  concordam; e o modal de criação **achata o `source_by_page`** da página
-  escolhida nos campos planos — sem isso o override herdado do base venceria
-  a edição feita na variante, em silêncio.
-- **Nem toda variante é por par de pernas.** Os arquivos da **Intrag** (seção
-  `Intrag` da biblioteca: `intrag-ndf` e `intrag-option`, `;`-delimitados, 30 e
-  38 colunas, sem header) se dividem por **PRODUTO**, e é o `variant_label` que
-  as nomeia — `le_pair` fica vazio. O rótulo é **só de tela**: quem o motor
-  consulta para escolher variante continua sendo o `le_pair`, então as quatro
-  versões (`NDF Commodities`, `NDF Vanilla / Other Publisher`, `Opt
-  Commodities`, `Opt FXO`) são **catálogo** — documentam o layout que
-  `_save_intrag_ndf_entry`, `_save_intrag_ndf_moeda_entry` e
-  `_save_intrag_opt_entry` gravam, e por isso nascem `status: library`. Sem o
-  rótulo as duas versões apareciam as duas como "Default" na tela, e a tabela
-  de moeda é a de mercadoria com **outro significado** da coluna Trade Price em
-  diante — cada divergência vive num `source_by_page` do base. Onde se alcança
-  a versão é o seletor **Versions** do cartão do template (a variante não vive
-  no rail), e ele é um `select` e não uma fileira de chips porque o Termo tem
-  quinze.
-- **O Source Field/Value aceita FÓRMULA cadastrada** (builder por dropdowns no
-  Edit Sources e no modal da variante): `FIELD`, `DATE`, `BIZDIFF`, `ADDBIZ`,
-  `LOOKUP(mapping; IN; OUT; Campo)` e `CASE(Campo; DE=PARA; …)`, argumentos por
-  `;`, campo casado com o deal pelo nome da COLUNA cego a caixa/espaço. No
-  `CASE`, valor fora da lista devolve VAZIO e o motor o completa com espaços na
-  largura — é assim que se cadastra "e no resto, branco" (o Tipo Média
-  Asiático em branco para VANILLA). E o page-spec é **relido a cada abertura
-  do preview** (`fiLoadSpec`), então template editado vale no próximo duplo
-  clique, sem refresh da página; fetch que falha mantém o spec em memória. Fórmula **vence o valor do
-  gerador** (e Fixed vence tudo — com UMA exceção: o `force_values` do
-  `_fi_build_line`, `{seq: valor}` por LINHA, vence Fixed e fórmula naquele
-  campo. É o canal da perna espelhada do MGT x Cliente: o MESMO arquivo do
-  banco carrega deals reais com o Participante Fixed da variante JPM x MGT
-  (73760009) e a linha espelhada com o omnibus do cliente (73760205) — uma
-  decisão por linha, que template nenhum tem como expressar. Os três previews
-  replicam a precedência — HANDOFF §398); texto que não parseia continua documentação
-  — é o que mantém todo cadastro existente byte a byte. Quem executa é
-  `_fi_calc_value` (hook `deal=` do `_fi_build_line`) e o espelho do preview
-  é `FiTer.calc` (com `FiTer.prime` carregando ANBIMA e os mappings do
-  LOOKUP); `check_fi_calc.py` compara as duas cópias. O BIZDIFF é
-  zero-padded pela LARGURA do format (9(01) → `3`, 9(02) → `03`). E a
-  **Cotação para o Vencimento (campo 15 do TER) EFETIVA** (> 0 — Fixed da
-  variante ou fórmula) **desloca as datas das linhas de verificação (tipo 2)
-  N dias úteis para frente**, no calendário do deal: no gerador do NDF
-  Commodities, no Vanilla (o único das três páginas genéricas que emite tipo 2,
-  e emite nos DOIS caminhos — download e Send Conecta, senão o arquivo baixado
-  para conferência difere do que vai para a B3) e nos previews das duas
-  páginas — hoje o campo nasce em branco, então nada muda sem cadastro.
-- **Notificação nova exige o rótulo `page` nos TRÊS mapas de destino** —
-  `_NOTIF_PAGE_URL` (routes.py), `PAGE_URL` do `partials/topbar.html` e do
-  `static/js/sw-push.js`. Sem a entrada o aviso aparece normal e o clique não
-  vai a lugar nenhum (o item nasce `<div>` em vez de `<a>`, sem erro no
-  console) — foi o TED Release, e havia NOVE páginas assim. Depois de mexer em
-  `_create_notification` ou nos mapas, rode `check_notif_page_url.py`: o
-  check 7 varre o routes.py por AST e recusa rótulo literal fora do mapa
-  (HANDOFF §246).
-- **`Docs/` e `docs/` coexistem** (3 arquivos versionados no capitalizado, 47
-  no minúsculo — artefato de filesystem case-insensitive). As capturas ficam em
-  **`docs/sop-screenshots/`** minúsculo, que é o que o `SOP_PROCESSAMENTO_OTC.md`
-  e o `GUIA_DO_USUARIO_OTC_TRACKER.md` referenciam. Como o diretório em disco é
-  `Docs`, um `git add docs/...` comum grava o caminho **capitalizado** e os
-  arquivos caem noutra árvore — invisível no macOS, imagem quebrada no
-  Linux/Windows. Use
-  `git -c core.ignorecase=false add docs/sop-screenshots/` e confira o índice.
-  Os dois documentos são gerados do `.md` (a fonte única) por
-  `scripts/build_sop_docx.py`, que aceita o arquivo de origem como argumento
-  opcional (§155 para as armadilhas de captura).
+  (`_ND_AMEND_KEEP_STATUS`); o Strike do FWD Start é cosmético
+  (`_ND_AMEND_COSMETIC_BY_PRODUCT`, por produto — produto vazio = econômico).
+  A varredura do box não tem a proteção de propósito (paridade com
+  `otc-fileupload.js`).
+- **Só `isCancelled` é cancelado** na Athena; `isDead` importa normalmente.
+- **A inversão da moeda fraca é do PAR** (`_ndf_weak_leg`), uma vez na
+  importação; o TER só arredonda pelo `INV DECIMALS`.
+- **A API nunca entrega a perna Lawton/MGT**: `_nd_lawton_mirror` e
+  `_nd_mgt_mirror` sintetizam no envio, pareando por termos econômicos
+  (`_nd_lawton_sig`), com `force_values` por linha para a conta do omnibus.
+- **Os textos da Parte A do FWD Start vivem no `routes.py`** de propósito (a
+  grafia é a do documento assinado) — LE ausente deixa em branco com aviso e o
+  Save recusa (`400 missing_partea`).
+- **Cache das três páginas genéricas: `NDF/Vanilla`, `NDF/FwdStart`,
+  `NDF/OtherPublisher` SEM espaço** (`check_nd_cache_dirs.py`).
+- `otc_boxparse.py` e `otc-fileupload.js` são duas cópias da mesma regra;
+  `check_boxparse.py` prova (precisa do `jsc` do macOS).
+- Só produtos de `_MC_CONFIRMATION_SOURCES` geram documento na esteira;
+  `_mc_save_from_deal` é chamado de dentro de `_pc_save_from_deal` e não
+  retroage (`backfill_manual_confirmations.py`). Mercadoria e FXO são sempre
+  JPM (`_MC_JPM_SOURCES`); razão social do `le-spn`.
+
+### Live Position (cinco telas, um JS)
+
+- `live-position-swap-characteristics.js` serve cinco páginas por `data-api`;
+  contrato: ids `swapchar-page`/`swapchar-table` — renomear deixa a página em
+  branco. Acréscimos são aditivos/opt-in.
+- **Andam até dez dias úteis para trás** quando falta arquivo
+  (`_opt_dposicao_path`/`_swap_day_path`), sinalizando a data LIDA. O Edit
+  manda `source_date` com `exact=True` e roda sob `_cache_lock`.
+- **A coluna CPF/CNPJ mostra o NOME** (`_lp_cpty_by_taxid`, zero à esquerda
+  normalizado dos dois lados; sem cadastro volta o número). `_lp_is_taxid`
+  separa resolveu/não resolveu (ausência de LETRA). Swap Characteristics:
+  erro de planilha vira vazio (`_swapchar_is_xl_error`) e linha sem documento
+  resolve pela conta CETIP (`_lp_cpty_by_account`, recusa omnibus e ambígua).
+- **Quatro células vazias juntas no VCP é o JOIN**, não cadastro:
+  `_vcp_position_map` é fallback da DPOSICAO-SWAP pelo `Contrato` (§431).
+- **O Latam é reemitido no dia**: `_latam_pick_source` = mtime mais recente;
+  preteridos ficam em disco e voltam em `ignored`.
+
+### Liquidação (Other Products, NDF Summary, Settlement Advice)
+
+- **`_ops_trade_rows(settle_ref)` é o único lugar que sabe quais famílias
+  existem** (SWAP + NDF Commodities); página, cards e e-mail de TED chamam
+  ele. Status do aviso vive no overlay `other-products-summary_YYYYMMDD.json`
+  por contraparte × LOB × produto. Linha que neta zero diz `0.00` no Receive.
+  Trade Level ordena Product → LOB → Counterparty (`check_ops_trade_swap.py`).
+- **Equity é SWAP na B3; o outro lado vem do elo** `_ops_equity_link`
+  (Operations B3 → Latam → OTM), Type trocado pelo subjacente por cadeia; o
+  mesmo elo é o plano B da opção de equity (`_optadv_collect`, chave Título
+  MAIÚSCULO, resolvido uma vez por linha).
+- **Perna interna não gera aviso** (`_ops_is_internal_cpty` pelo `le-spn` +
+  `_pc_is_internal_counterparty`, nunca "começa com BANCO"): fica no Trade
+  Level e no Summary, sai do Advice e do TED.
+- **Nome da contraparte sai do SPN** (`_athena_settlements` → `_otm_cpty_name`;
+  OTM pelo `Cpty SPN`, na leitura).
+- **IR do termo de moeda é CALCULADO** (`_ndfsum_ir_apply`, §423): 0,005%,
+  isento pelo `ndfc-ir-exempt`, piso de R$ 1,00 acumulado no mês no ledger
+  `ndf-ir-ledger_AAAAMM.json`; o import do Cockpit reusa as mesmas funções
+  (`_ndfc_apply_ir`), o calculado vence o `VL_TAX_INCOME`. **A cura do ledger é
+  INCREMENTAL e roda FORA do `_cache_lock`** (§432 — era o Summary
+  "infinito"): grava dia a dia, só o dia pedido fica de fora com `ir_partial`;
+  laço `ndfsum-ir-warm` cura até a véspera; `/data` devolve `collect_failed`
+  como JSON. Other Products segue o mesmo desenho.
+- **A tabela do PDF do Advice tem largura MEDIDA** (`stringWidth`, escada de
+  fonte, `Paragraph`), nunca `515/N`.
+
+### Esteira de confirmação manual
+
+- Ciclo: `(Pending Legal) → Pending OTC → Pending MO e/ou FO → Pending FepWeb
+  → Ok`. Legal é hold manual; FepWeb é derivado; Ok exige `Enviado p/
+  cliente`; `Pending OTC` digitado REABRE (limpa validações). Toda gravação
+  espelha no Pending Confirmation (`_mc_pc_sync`).
+- **SLA em dias ÚTEIS ANBIMA a partir do TRADE DATE**: OTC D+3, MO D+4, FO D+6
+  em paralelo (`manual-conf-sla`, branco = histórico). `sla_state()`: ok/warn/
+  late/**done**. Passado o prazo a validação exige justificativa (409
+  `sla_comment_required`, coluna por mesa).
+- **Cada etapa é assinada pela SUA mesa** (`_MC_STAGE_ROLE`: OTC → `BO`, MO →
+  `MO`, FO → `FO`); `ADMIN` é lido como `BO` (`_MC_ROLE_ALIAS`, só o Pending
+  OTC) nas DUAS perguntas — assinar e ser avisado
+  (`_MC_STAGE_NOTIFY_ROLES`, derivado). Endpoint devolve 403
+  `stage_forbidden`. MO e FO conferem só `CHECKLIST_ECONOMICO`.
+- **Validar é abrir o documento** (`/manual-confirmation/validate`), nunca um
+  clique no card; Validate e Reject vivem lá (Reject só das mesas seguintes).
+  **Gerar também é só no Monitor** (Pending OTC oferece Generate/Validate;
+  `/manual-confirmation/generate?keys=…` casa pelos Trade IDs; 404 explicado).
+  Os `/validate` do New Deals só carimbam `_mc_stamp_generated`, não a etapa
+  do OTC, e não avisam no sino.
+- **Preencher a coluna de validação pela grade do Track é validar** (mesmas
+  regras do `mark_validated`; a transição é vazio → data; lote tudo-ou-nada).
+- **E-mail Subject se escreve sozinho** (`_mc_sync_email_subjects`): por Trade
+  ID no nome do arquivo, ou recap ÚNICO na pasta; fora disso nada. Memo por
+  (caminho, mtime, tamanho); grava só o que mudou, em lote.
+- **Aviso do sino vai para a mesa em que a confirmação CAIU** (etapa do ESTADO
+  depois do carimbo); `MASTER` em todas, `ADMIN` em nenhuma; `target_role`
+  aceita vários papéis por vírgula. Destino do aviso é o Confirmations Monitor
+  (`page = 'Confirmation'`).
+- **Callback**: falta de `Data Callback` é badge só no card Pending FepWeb (como
+  CONTAGEM) e TRAVA o Mark as sent (409 `callback_required`).
+- Nomes de coluna são os da planilha legada (schema dos DuckDB); rótulos pelo
+  `COLUMN_LABELS` completo. Coluna nova em `DB_COLUMNS` é só isso — `ensure_db`
+  faz `ADD COLUMN IF NOT EXISTS`, sem script.
+- **Cobrança** (`conf_escalation`, sete listas em `domain.REC_KEYS`; seg/qui
+  rolando feriado, escalação em `left == 0`; grupo de FO casa por
+  `confirmation_type`; Pending FO sem grupo vai para `unmatched`).
+- **BACC EA Metrics** (16:00 BRT, `.xlsx`): sem Data Callback, Pending ≠ Ok,
+  Aging decrescente numérico; tipo por coluna, máscara `#,##0.00` invariante;
+  planilha vazia VAI; `Conterparty Name` é grafia de contrato.
+
+### Pending Confirmation
+
+- **Pending Status tem TRÊS donos**: NDF Vanilla/Other Publisher pela regra de
+  prazo e assinatura (`_pc_signature_pending_status`: ≤ 60 dias → `Exception
+  FepWeb`, senão pelo SIGNATURE TYPE); todo o resto pela ETAPA da esteira
+  (`_PC_ESTEIRA_STATUSES`, FWD Start incluído mesmo com prazo curto); a regra
+  do VENCIDO é universal (`_pc_apply_auto_rules`: Maturity ≤ hoje e não
+  resolvido → `Exception FepWeb` + `Ok`).
+- **A manutenção das 11:30 ABORTA quando uma leitura falha**
+  (`_pc_load_rows(strict=True)`) — a leitura tolerante lê falha como banco
+  vazio e o backlog não volta (§406). O chip `Status = Pending` esconde o
+  backlog.
+- **Planilha de data anterior sobrescreve o arquivo de sempre** (o time global
+  lê um caminho só); snapshot não é refiltrado; ausente é 404; o `ref` do
+  status diz que foto está no share.
+- **`_pc_metrics_history` cresce um snapshot por dia**: enumeração pelo
+  `_manifest`, `_day_prefetch`, `once_per_request` (§429).
+- **Os dois Summaries são AQUECIDOS em background** (`summary-warm`, 4 min
+  após a subida e a cada 30 min na janela 08–20 BRT; `OTC_SUMMARY_WARM_MINUTES`,
+  `0` desliga): as MESMAS coletas do request para hoje, num
+  `test_request_context`, enchendo o memo de processo do `day_payload`. No
+  share cada abertura fria custa segundos e os dois abrem uma dúzia de bancos
+  em série; o clique depois do aquecimento paga só o `stat`. Uma linha de
+  WARNING por rodada com o rastro (§433). E `_latam_all_dates` é memoizada
+  por processo (TTL 5 min, esquecida pelo `_latam_save`): era um `os.walk` da
+  raiz inteira do OTM a cada chamada, no caminho do Other Products.
+
+### Recons
+
+- **FXO**: chave `DealID`, `MatchingDealID` só quando existe do lado da B3;
+  join `outer` (o `Unmatched Athena` só existe por isso); `_veio_da_b3` antes
+  do merge; `pd.notna(x) and bool(x)` (nunca `is True` — `numpy.bool_`);
+  `_aplicar_perna_espelhada` só nas linhas com os dois lados. Justificativa é
+  do TRADE (`recon-fxo-comments.json`, `aplicar_comentarios` na gravação e na
+  leitura; `_status` cru fora de `COLUMNS`).
+- **Pay/Rec**: `SPB - outros bancos` casa só com BANCO (`_match_allowed`, pelo
+  `bank-name`, por PALAVRA nunca substring, `banco` é token significativo,
+  direção entra pela mesma porta, vale nos três estágios; fora do cadastro
+  responde NÃO). Só linha `Sucesso` entra (`check_spb_status.py`).
+- **CGD**: lê o D-1 do arquivo que o Save CETIP Files GRAVA (`CETIP_DEST_ROOT`),
+  a lista do FEP vem do ANEXO do e-mail mais recente do box
+  (`baixar_fep_do_box`; `path` vence; sem Outlook cai para `CGD_INPUT_ROOT`
+  avisando); contas nossas do `b3-accounts`; CNPJ por dígito; cache gravado
+  com a data da POSIÇÃO.
+
+### Onboarding (CGD)
+
+- Lista do SharePoint (`import_cgd_sharepoint.py` → `cgd_sharepoint.db`).
+  **`Aging` é refeito a cada leitura** em dias úteis até hoje ou o `Conclusion -
+  Stamp`; sem `Data Solicitação` fica vazio, nunca zero.
+- **Formulário no SERVIDOR** (`REQUEST_FORM` → modal e `REQUEST_FIELDS`); o
+  Apêndice é ARQUIVO (EI da contraparte, `CGD TEMPLATE`), sem coluna, e o
+  upload vem ANTES da gravação. `_domain_in_appendix` é pseudo-coluna.
+- **Três mesas, Legal e OTC em PARALELO** (`pending_stages` é lista); Legal
+  fecha com o Taxonomy, OTC com o modal (abonado + B3 ID por `b3_id_column`),
+  CEM MO com Complete. Etapas do `cgd-stage` ou DERIVADAS dos carimbos.
+  **Encerrado não é pendência** (`is_closed`: Active/Inactive/Cancelado;
+  `is_active` compara EXATO — `INACTIVE` contém `ACTIVE`). `Signature Type` é
+  domínio fechado (`SIGNATURE_TYPES`), valor gravado entra na lista. `_id` não
+  é estável entre importações.
+
+### Holidays e calendário
+
+- Calendários saem do registro `holiday-calendars.json` (seed
+  `_HOLIDAY_CAL_SEED`, gitignorado): pills, `<select>`, cores e CSS. Novo nasce
+  de planilha (coluna A data, B descrição; cabeçalho descartado por não ser
+  data); cor da paleta; slug `[a-z0-9_-]` (vira caminho e classe); CSS gerado
+  no navegador. `HC_CAL_FALLBACK` = os onze; `check_holiday_calendars.py`.
+- `_anbima_holidays` é horizontal (SLA, aging, schedulers, D-1) e mora na
+  platform, não na vertical.
+
+### File Interpreter
+
+- Nome é `file-interpreter` em tudo; legado redireciona/alias/normaliza/migra.
+- **Campo em branco se cadastra como `Fixed` VAZIO**, nunca Page com dropdown
+  limpo (Source = Page é "o gerador manda").
+- **Variantes por par de pernas** (`base_key` + `le_pair`, `_fi_variant_key`),
+  regra do BUCKET nas quatro páginas geradoras e nos previews; `file_name`
+  cadastrável; o modal achata o `source_by_page`. Intrag divide por PRODUTO via
+  `variant_label` (só de tela, catálogo `status: library`).
+- **Fórmulas** (`FIELD`, `DATE`, `BIZDIFF`, `ADDBIZ`, `LOOKUP`, `CASE`) em
+  `_fi_calc_value` e espelho `FiTer.calc` (`check_fi_calc.py`); precedência
+  `force_values` > Fixed > fórmula > gerador; spec relido a cada preview;
+  Cotação para o Vencimento efetiva desloca as linhas tipo 2.
+
+### Notificações, e-mail e schedulers
+
+- **Notificação nova exige o rótulo `page` nos TRÊS mapas** (`_NOTIF_PAGE_URL`,
+  `PAGE_URL` do `topbar.html` e do `sw-push.js`); sem ele o clique não vai a
+  lugar nenhum. `check_notif_page_url.py` varre por AST.
+- **Thread de scheduler não tem application context**: `with _app_context():`
+  em volta da montagem INTEIRA do e-mail (o botão Run funciona e o automático
+  morre em silêncio).
+- **Jobs rodam no horário do Brasil** (`_br_now`), com catch-up na subida
+  (`_ndm_pending_catch_up`, claim em disco). **Os três schedulers de
+  importação só entre 08:00 e 20:00 BRT** (`IMPORT_POLL_WINDOW`; malformado =
+  sempre aberta com aviso), `continue` antes do `try`.
+- **Botão de e-mail precisa de endereço ABSOLUTO**: `_otc_app_url()` lê
+  `OTC_TRACKER_URL` ou monta `http://<hostname>:APP_PORT` (`routes.APP_PORT`,
+  `OTC_TRACKER_PORT`, padrão 8051 — UMA constante para os três lugares).
+- `reportlab` é importado preguiçosamente (sem ele, e-mail sem anexo).
+- Um Delete que só apaga da tela reaparece como bug do IMPORT (o upsert
+  preserva status da linha que ainda está no arquivo): a tela remove DEPOIS do
+  sucesso do servidor (§430).
+- `Docs/` e `docs/` coexistem; capturas em `docs/sop-screenshots/` com
+  `git -c core.ignorecase=false add`. SOP e Guia são gerados do `.md` por
+  `build_sop_docx.py`.
+- `confirmation_pdfs.py`: documento novo nasce do HTML renderizado
+  (`word_html_pdf`, `_CONF_OPT_PDF_FROM_HTML`), não de réplica em reportlab.
 
 ---
 
-## 8. Ambiente local e instância do time
+## 9. Ambiente local e instância do time
 
-- **`awmpy` é biblioteca interna do JPMorgan** e não está no PyPI. Sem ela o
-  app falha no login/registro (consulta ao phonebook). Para **dev fora da rede
-  JPM**, um stub mínimo de `awmpy` no venv deixa o servidor subir — login real
-  por SID não funciona, então use a rota `/dev-login` do DEV BYPASS (bloco que
-  é removido antes de todo commit — §2).
-- **macOS: use `flask run --port=5005`.** A porta 5000 é do AirPlay Receiver e
-  devolve 403 "AirTunes". O venv aqui é Python 3.12 (no diretório `.venv311`);
-  `duckdb` e `flask-minify` são obrigatórios (ambos no `requirements.txt`).
-- **Fora do Windows, `OTC_SHARED_DRIVE_ROOT` é obrigatória.** Todo destino no
-  share pende dela (`Config.SHARED_DRIVE_ROOT`, o padrão é `I:\`), e o app
-  **recusa subir** com um valor relativo — que é o que o `I:\` é em qualquer
-  sistema que não seja Windows. Sem isso o `os.makedirs` do dia a dia criava a
-  árvore inteira dentro do diretório de trabalho: as pastas
-  `I:\Confirmation\...` na raiz do repositório vieram daí, e é por isso que a
-  falha agora é na subida e não em silêncio. Na instância do time a variável
-  não é necessária — `os.path.join('I:\\', 'Confirmation', …)` devolve o mesmo
-  literal que estava fixo antes, byte a byte.
-
-  **E nenhum módulo escreve a raiz à mão.** O `Config.SHARED_DRIVE_ROOT` só vale
-  para quem pergunta a ele: um `r"I:\Confirmation\..."` no fonte mantém AQUELE
-  caminho na letra mapeada depois de a instância do JPM passar a falar com o
-  UNC — e a falha aparece como *"o arquivo do dia não chegou"*, não como erro de
-  configuração, porque quem lê o arquivo simplesmente não o encontra. Era o caso
-  das três recons (`recon_fxo`, `recon_comitente` e `recon_payrec`: a raiz das
-  posições CETIP, as duas pastas do Comitente e a de entrada do Pay/Rec) e dos
-  cinco scripts que espelham um destino do app. Na dev nada muda — o default
-  do config **é** o `I:\`, e o `os.path.join` devolve o literal de antes. O
-  `check_config_names.py` guarda a regra: varre por AST os literais dos módulos
-  versionados de `apps/` e recusa qualquer coisa que comece por letra de unidade
-  ou `\\servidor` (comentário e docstring ficam de fora por construção, então o
-  caminho citado em prosa continua permitido).
-- **SMTP** usa `mailhost.jpmchase.net` (relay interno, porta 25, sem auth) —
-  fora da rede JPM o envio falha silenciosamente.
-- **A Athena tem DOIS tempos de leitura, e um de conexão.** `REQUEST_TIMEOUT`
-  (30 s) é a consulta de UM produto num dia — o `getTrades` do New Deals, que
-  responde em segundos. `REPORT_TIMEOUT` (180 s) é o RELATÓRIO, que varre o
-  livro inteiro de uma data: o EOD da Recon FXO, o ITAUDataExtract do Intrag DCE
-  e o `getTradesBySettle` do NDF Cockpit. Os dois primeiros já pediam 180
-  escritos à mão em cada módulo; o terceiro herdava os 30 do `getTrades` e
-  estourava `ReadTimeout` — e o erro chegava à tela como um traceback de
-  urllib3 que **não menciona tempo nenhum** e parece falha de SSO (foi o que se
-  viu em 08/09/2026; o Kerberos estava certo o tempo todo). O timeout vale para
-  o **POST do replay do ADFS** também, e não só para o GET: o `form_post` é o
-  hop que dispara a consulta de verdade e volta com os dados, então é nele que a
-  espera longa é gasta. `CONNECT_TIMEOUT` (10 s) é separado de propósito — ele é
-  pago quando o host não responde (VPN fora, endereço errado no cadastro), e com
-  um número só a tela esperava três minutos para dizer que não conectou. Os três
-  são cadastráveis (`ATHENA_TIMEOUT`, `ATHENA_REPORT_TIMEOUT`,
-  `ATHENA_CONNECT_TIMEOUT`), e **valor malformado cai no padrão com aviso no
-  log**: o módulo é importado no topo do `routes`, e um `.env` digitado errado
-  não pode transformar um ajuste de tempo numa aplicação que não sobe.
-  `check_athena_sso.py` prende os dois hops e o fallback.
-- **API `getTrades` da Athena** (`apps/pages/athena_api.py`): importa New Deals
-  de NDF/FXO (botão manual + schedulers no app, NDF a cada 20 min, FXO de hora
-  em hora, **os dois só entre 08:00 e 20:00 BRT** — ver §7). Precisa da rede JPM — fora dela o scheduler falha em silêncio
-  (erros repetidos rebaixados para `debug`). `build_session()` marca
-  `trust_env=False` **de propósito**: herdar o proxy corporativo foi o que
-  causou o `WinError 10061` na máquina Windows do time. O SSO Kerberos no
-  Windows precisa do **`requests-negotiate-sspi`**, hoje DECLARADO no
-  `requirements.txt` com marcador de plataforma (`sys_platform == "win32"`,
-  como o `pywin32` acima): o pip instala no Windows e pula no macOS/Linux, onde
-  o pacote de SSPI nem existe. Ele ficou **comentado** por um tempo, com um
-  "instale na instância do JPM" ao lado, e o passo manual é exatamente o que se
-  esquece num venv novo — o sintoma é um **`401` no
-  `/adfs/oauth2/authorize/wia`** (*Windows Integrated Authentication*), uma URL
-  de duas mil letras que não menciona pacote nenhum: sem o handler, o
-  `build_session` não anexa o `session.auth` e a requisição sai sem negociação
-  Kerberos. **No Windows o `build_session` agora LEVANTA** quando o pacote
-  falta, citando o pacote, o endpoint e o comando — seguir em frente ali troca
-  uma mensagem que RESOLVE por outra que só descreve o sintoma, e nenhuma
-  chamada à Athena pode dar certo enquanto ele faltar. Fora do Windows nada
-  muda. `check_athena_sso.py` prende as duas pontas. O endpoint em
-  si não é mais constante: vem do mapping `api-links`, com
-  `BASE_URL`/`TRADES_ENDPOINT` sobrando como fallback do New Deals.
-- **API de internet (BCB e Yahoo, na página Quotes): mesma sessão da Athena, mas
-  o proxy volta — e é uma FILA.** A sessão é a mesma (`build_session`, Kerberos),
-  só que esses hosts são EXTERNOS: o `trust_env=False` que protege a Athena
-  também os deixa sem proxy, e em boa parte da rede JPM a conexão só sai por ele.
-  A saída é tentada em ordem — `QUOTES_PROXY` (padrão
-  `http://proxy.jpmchase.net:**9443**`) → proxy do sistema (`getproxies()`, as
-  Opções de Internet no Windows) → `10443` → conexão direta —, e a primeira que
-  responder fica memorizada no processo. O proxy do sistema é **copiado** para a
-  sessão, nunca herdado: com `trust_env=True` ele voltaria a valer para a Athena.
-  A **10443 é a porta do app de desktop e não atende em toda máquina** (responde
-  *connection refused*, o mesmo `WinError 10061` por outro motivo). Erro de rede
-  tenta a próxima rota, erro HTTP para na hora — menos 407/502/504, que vêm do
-  proxy. Nada disso exige `.env` por máquina; `QUOTES_PROXY=` vazio força o
-  direto (HANDOFF §266).
-- **A instância do time roda com o reloader desligado**: depois de um
-  `git pull` que tocou `routes.py` ou um template, o Flask **tem de ser
-  reiniciado** ou o código velho continua servindo. Vários "não está
-  funcionando" vieram daí. Edição de mapping pela tela é a exceção — vale no
-  request seguinte.
-- **O bytecode não pode ser gravado no share** (`PYTHONPYCACHEPREFIX` no `.bat`
-  de subida). Sem isso o Python cria um `__pycache__` ao lado de CADA `.py` —
-  que ali é remoto — e um pull grande vira centenas de gravações atômicas via
-  rede: a subida fica minutos parada no `importlib` **sem imprimir nada** e
-  parece travada. Quem cancela vê um `KeyboardInterrupt` no import de um módulo
-  qualquer, e o módulo **muda a cada tentativa** — essa é a assinatura, porque
-  o culpado não é ele, é o que estava na vez. O caminho vai para
-  `%LOCALAPPDATA%`, nunca `%TEMP%` (Limpeza de Disco apaga e a subida seguinte
-  recompila tudo), e **nunca** use `PYTHONDONTWRITEBYTECODE`: evita a escrita
-  ao custo de recompilar a cada subida, e a instância reinicia várias vezes ao
-  dia. O `start-prod.bat` já tem a linha; o `start-otc-tracker.bat` da
-  instância mora no share, não está no repo, e é colado à mão — HANDOFF §322
-  tem o bloco e as três armadilhas do espelhamento (a letra da unidade é
-  descartada, o `pushd` do `.bat` mapeia o share numa letra qualquer, e versões
-  diferentes precisam de prefixos diferentes).
-- **Nos `.bat` de subida, parêntese dentro de bloco `( … )` vai escapado.** O
-  `cmd` não tem parser de expressão: o PRIMEIRO `)` não escapado FECHA o bloco,
-  esteja ele onde estiver — inclusive no meio do texto de um `echo`. Um
-  `echo [INFO] … pulada (noinstall).` fechava o `if`, o `.` que sobrava virava
-  comando solto e o `start-debug.bat` morria com **`. was unexpected at this
-  time.`** antes de chegar no `run.py`. Dois motivos para isso ficar tanto tempo
-  em pé: **o erro é de PARSE, não de execução** — o `cmd` analisa o
-  `if … ( … ) else ( … )` inteiro antes de rodar qualquer coisa, então a chamada
-  sem argumento quebrava por causa de um ramo que nunca rodaria — e **nenhum
-  editor acusa**, porque o arquivo é sintaticamente plausível. Use `^(` e `^)`,
-  como o próprio arquivo já fazia no `^(rede/pypi^)`; `check_bat_blocks.py`
-  confere os `.bat` versionados.
-- **A `SECRET_KEY` é estado da MÁQUINA, não do share.** Ela assina o cookie de
-  sessão, e sem uma chave estável todo mundo é deslogado a cada restart — por
-  isso o app recusa subir em produção sem ela. Quem a criava era um passo do
-  `start-otc-tracker.bat` (`%LOCALAPPDATA%\OTC-Tracker\secret_key.txt`, ao lado
-  do `.snapshot` do requirements), e isso era invisível enquanto a mesa toda
-  usava UMA instância; com cada pessoa rodando a sua, virou um passo manual por
-  máquina — e a máquina em que ele não roda **não sobe**, com uma mensagem
-  mandando definir a chave no `.env`, que é o único lugar em que ela não está.
-  Hoje o app mantém o arquivo sozinho (`_persisted_secret_key`): faltando a
-  variável, a chave sai do disco local e é CRIADA na primeira subida, com 0600 —
-  quem lê a chave assina cookie em nome de qualquer pessoa. Isso não afrouxa a
-  exigência: o que ela impede é a chave ALEATÓRIA a cada restart, e um arquivo
-  persistido é estável do mesmo jeito. Três coisas:
-  - **`SECRET_KEY` no ambiente continua vencendo**, e é assim que várias
-    máquinas compartilham sessão. Ela é relida no `create_app` e não só no corpo
-    do `Config` — lá a leitura acontece no IMPORT, então quem importasse
-    `apps.config` antes do `load_dotenv()` do `run.py` congelaria o fallback
-    aleatório **com a chave certa no `.env` ao lado**: app subindo sem erro e
-    deslogando todo mundo a cada restart;
-  - o arquivo **nunca vai para o share** (chave comum é chave que qualquer um
-    usa para forjar sessão) nem para `%TEMP%` (Limpeza de Disco apaga, e chave
-    apagada desloga todo mundo). `OTC_SECRET_KEY_FILE` o move;
-  - **caminho ingravável volta a recusar a subida**, e agora a mensagem nomeia
-    o arquivo que ele tentou.
-- **O `config.py` é o arquivo que fica para trás.** Ele é o único que se ajusta
-  à mão na instância, e `git pull` **não sobrescreve arquivo modificado**: o
-  resto da árvore atualiza e ele não, deixando o checkout com dois commits
-  misturados. Foi assim que a instância subiu com o `manual_conf.py` novo e o
-  `config.py` velho (`AttributeError: … has no attribute 'DATABASE_DIR'`, vinte
-  frames dentro de um import). Hoje `create_app` confere
-  `_REQUIRED_CONFIG_NAMES` **antes** dos blueprints e recusa subir dizendo o
-  nome que falta e o comando (`git checkout -- apps/config.py`) — nunca caindo
-  para um default, que faria o app abrir o banco LOCAL com os bancos no share,
-  sem erro nenhum. **Chave nova do config que outro módulo leia direto do
-  `Config` entra nessa lista** (HANDOFF §308).
-- `flask_login`, `flask_wtf` e `flask_migrate` estão no `requirements.txt` mas
-  **não são usados**; o app gerencia sessão e banco diretamente.
+- **`awmpy` é interna do JPM** (não está no PyPI): fora da rede, stub mínimo
+  no venv + `/dev-login` do DEV BYPASS.
+- **macOS: porta 5005.** `duckdb` e `flask-minify` obrigatórios.
+- **`OTC_SHARED_DRIVE_ROOT` obrigatória fora do Windows** (o app recusa valor
+  relativo; `I:\` é relativo em qualquer sistema que não seja Windows — as
+  pastas `I:\Confirmation\...` na raiz do repo vieram daí).
+- **SMTP** `mailhost.jpmchase.net:25` sem auth; fora da rede falha em silêncio.
+- **Athena**: `build_session()` com `trust_env=False` (o proxy corporativo
+  causava `WinError 10061`); no Windows exige `requests-negotiate-sspi`
+  (declarado com marcador de plataforma; sem ele `401` no
+  `/adfs/oauth2/authorize/wia`, e o `build_session` LEVANTA nomeando o
+  pacote). Três timeouts: `REQUEST_TIMEOUT` 30 s (um produto/dia),
+  `REPORT_TIMEOUT` 180 s (EOD da Recon FXO, Intrag DCE, `getTradesBySettle`),
+  `CONNECT_TIMEOUT` 10 s; cadastráveis, malformado cai no padrão com aviso.
+  `check_athena_sso.py`.
+- **BCB/Yahoo (Quotes)**: mesma sessão, proxy volta como FILA (`QUOTES_PROXY`
+  → proxy do sistema COPIADO → `10443` → direto), primeira que responde fica.
+- **A instância roda sem reloader**: pull que tocou `.py` ou template exige
+  restart. Mapping pela tela é a exceção.
+- **`PYTHONPYCACHEPREFIX` no `.bat`** apontando para `%LOCALAPPDATA%` (nunca
+  `%TEMP%`, nunca `PYTHONDONTWRITEBYTECODE`): sem isso a subida fica minutos
+  gravando `__pycache__` no share sem imprimir nada. O `start-otc-tracker.bat`
+  mora no share, fora do repo (§322).
+- **Parêntese dentro de bloco `( … )` do `.bat` vai escapado** (`^(`/`^)`) —
+  erro de PARSE. `check_bat_blocks.py`.
+- **`SECRET_KEY` é estado da máquina**: sem variável, o app mantém
+  `%LOCALAPPDATA%\OTC-Tracker\secret_key.txt` (0600, `OTC_SECRET_KEY_FILE`);
+  variável vence e é relida no `create_app`. Caminho ingravável recusa a
+  subida.
+- **O `config.py` é o arquivo que fica para trás** (é editado à mão na
+  instância; `git pull` não sobrescreve modificado): `_REQUIRED_CONFIG_NAMES`
+  recusa subir dizendo o nome e o comando. Chave nova lida do `Config` por
+  outro módulo entra na lista.
+- Cada pessoa roda a própria instância sobre o MESMO `db/` do share — é por
+  isso que toda disputa de arquivo entre "instâncias vizinhas" existe.
+- `flask_login`, `flask_wtf`, `flask_migrate` estão no requirements e não são
+  usados.
 
 ---
 
-## 9. Scripts e testes
+## 10. Scripts e testes
 
-### Migrações de uma vez só (`scripts/`)
-
-Rodam **uma vez na instância do time depois do pull**. Todas idempotentes.
+### `scripts/` (rodam uma vez na instância depois do pull; idempotentes)
 
 | Script | Para quê |
 |---|---|
-| `update_pending_confirmation_dbs.py` | migração de schema do Pending Confirmation (§128) |
-| `update_pending_confirmation_bankers.py` | idem, coluna de banker |
-| `import_manual_confirmations.py` | **cria** os dois DuckDBs da esteira e semeia do `MANUAIS.xlsx` (`--xlsx`, `--schema-only`) |
-| `backfill_manual_confirmations.py` | traz para a esteira o que foi mapeado **antes** dela existir (`--dry-run`, `--source`) |
-| `dev_seed_positions.py` | **só na DEV**: reemite a última posição B3 local (DPOSICAO*/DFLUXO) numa data recente (padrão D-1 ANBIMA), deslocando toda data dos registros pelo mesmo número de dias úteis — é o que mantém a Live Position e o Settlement Forecast do dashboard com dado de demonstração, porque o mock esparso da dev parou em 24/07/2026 e os dois só olham 10 dias úteis para trás. O AAAAMMDD só é deslocado em coluna cujo nome diga que é data (um código de conta de oito dígitos é uma data válida para o regex). Recusa rodar com o `DATA_DIR` fora do repositório; depois da primeira rodada a origem automática passa a ser o dia gerado, então para regerar use `--from 2026-07-24 --force` |
-| `import_cgd_sharepoint.py` | carrega a lista de CGDs do SharePoint (`Sharepoint-CGD.xlsx`) no DuckDB do Onboarding (`--xlsx`, `--sheet`, `--dry-run`, `--schema-only`). REESCREVE a tabela: rodar de novo dá o mesmo resultado |
-| `build_duckdb_standalone.py` | gera os **`scripts/standalone/*.py`** — os conversores para rodar numa máquina SEM o código do app (sem Config, sem import de `apps`, caminhos do share fixos, `pip install duckdb` como requisito único). São **39**, e a divisão é operacional: a carga no share é longa, e repartida ela pode ser rodada **em paralelo por várias pessoas** — `01_cadastros` (os cadastros SEM pasta própria: calendários, RefData/CPD e os JSONs de raiz) mais um `01_*` por PASTA de cadastro (`mappings`, `file-interpreter`, `control-panel`, `tickets` — o eixo é o `PASTAS_DATASET` do motor, e o `01_cadastros` é o complemento delas, como o `99_outros` é o dos blocos), um `02_*` por BLOCO de `cache/` (as que quebram por DIA, com New Deals e B3 Files repartidos até o PRODUTO, o Daily Settlement por ARQUIVO e uma fatia por RECONCILIAÇÃO), o `99_outros` (a rede de segurança: bloco novo em `cache/` nunca fica sem conversor, porque a poda é por CAMINHO) e o `00_completo` para quem prefere um comando só. É seguro porque os bancos são um por produto: duas fatias nunca escrevem no mesmo `.db`. Eles são VERSIONADOS para serem entregues junto com o código, e **gerados — nunca editados à mão**: são cópias de um motor que vive noutro lugar, e por três vezes o motor mudou e elas tiveram de ser regeradas (HANDOFF §331/§333/§334) até que na quarta passou batido (§336/§339). O gerador copia o corpo do `json_to_duckdb.py` por programa (a única adaptação é o seed do registro de calendários, que no app vem da vertical de feriados) e **recusa gerar** se sobrar qualquer outra referência a `apps` — que é como uma dependência nova viraria `ImportError` na máquina de quem só tem o duckdb. A LISTA DE ROTINAS não é dele: mora no motor (`ROTINAS_CACHE`), porque o `scripts/convert/` a consome também — ele a carrega do ARQUIVO por importlib, e não por `from apps.pages...`, senão o gerador passaria a depender do blueprint do Flask. **Mexeu no motor, rode isto e commite**; o `check_duckdb_standalone.py` reprova quem esquecer, com o comando na mensagem |
-| `convert_json_to_duckdb.py` | a CARGA COMPLETA da migração JSON → DuckDB (HANDOFF §324–§331; o dia a dia é do espelho vivo `duck_mirror`, e o MOTOR dos dois é o `apps/pages/json_to_duckdb.py`): materializa TODOS os JSONs do `Config.DATA_DIR` no **`Config.DATABASE_DIR`** (a `db/` de todos os bancos), numa árvore que **espelha a de origem**: `convert_datasets` cobre os JSONs avulsos com **um banco por ARQUIVO na pasta do arquivo** (`db/mappings/mt300.db`, `db/control-panel/mt300_status.db`, `db/file-interpreter/termo.db`, `db/tickets/…`, e o JSON de raiz na raiz), com a coluna `_raw` nas listas de registros; SÓ `translations/` fica em JSON (i18n do navegador, versionado como código — §332) — `holiday_calendars.db` (uma tabela por calendário do registro), `reference_data.db` (`refdata` + `counterparty_details`, tudo VARCHAR — zero à esquerda) e **um banco por PRODUTO de arquivo-dia** sob `db/cache/`, com a árvore de `cache/` virando pasta (`db/cache/new deals/NDF/Vanilla.db`, `db/cache/b3 files/Swap.db`, `db/cache/daily settlement/otm-settlement.db`) e **ano/mês/dia virando TABELA, nunca pasta**. Ao contrário das demais, é feito para RODAR DE NOVO: incremental por `_manifest` (mtime/tamanho), só reconverte o que mudou; calendário/dia/produto novos viram tabela/banco novos (`--only`, `--force`, `--dry-run`). **`--meses` é a JANELA dos arquivo-dia, e o padrão é 12**: a carga completa no share leva horas de rede e o dado recente é o que a mesa consulta, então o histórico entra numa SEGUNDA passada (`--meses 0`). Ver a armadilha em §7. A CLI é REPARTIDA em `scripts/convert/` — **39** fatias que várias pessoas rodam ao mesmo tempo (`01_cadastros` + quatro `01_*` por PASTA de cadastro + trinta e dois `02_*` por BLOCO de `cache/` + `99_outros`, ou o `00_completo` sozinho), espelhando o corte do `scripts/standalone/`. As duas rotinas grandes (New Deals e B3 Files) são repartidas até o PRODUTO — a folha da árvore, abaixo da qual já vem AAAA/MM/DD, e a unidade em que cada banco é escrito: repartir só até `new deals/NDF` deixaria o Vanilla, o maior arquivo-dia do app, junto com os outros três; `--bloco` desce mais um nível sem arquivo novo, SUBSTITUINDO o escopo da fatia. Os arquivos são GERADOS (`build_convert_split.py`), e o gerador REMOVE a fatia que saiu do `ROTINAS_CACHE` — órfão continuaria rodando com um escopo que o `99_outros` agora também cobre, dois processos no mesmo banco. A implementação é UMA (`convert_json_to_duckdb.run`, parametrizada pelo escopo) e a lista de rotinas mora no MOTOR (`ROTINAS_CACHE`), porque os dois splits a consomem — escrita em cada script, uma rotina acrescentada num lado ficaria coberta só pelo `99_outros` do outro, e a diferença apareceria como uma fatia que demora muito mais do que a irmã, nunca como erro. `check_convert_split.py` prende os dois |
+| `update_pending_confirmation_dbs.py` · `..._bankers.py` | migrações de schema do Pending Confirmation |
+| `import_manual_confirmations.py` | cria os dois DuckDB da esteira e semeia do `MANUAIS.xlsx` |
+| `backfill_manual_confirmations.py` | traz para a esteira o que foi mapeado antes dela (FWD Start pelo B3 ID; `--dry-run` lembra as chaves da passada) |
+| `import_cgd_sharepoint.py` · `import_cgd_auxiliar.py` | lista de CGDs e as três abas do `Auxiliar.xlsx` |
+| `split_notifications_db.py --dry-run` | mostra o que a separação do sino vai copiar |
+| `dev_seed_positions.py` | só na DEV: reemite a última posição B3 numa data recente (`--from … --force`) |
+| `convert_json_to_duckdb.py` + `scripts/convert/` (40 fatias) | a CARGA COMPLETA JSON → DuckDB, incremental por `_manifest`, `--meses` 12 por padrão, `--only/--force/--dry-run/--bloco` |
+| `scripts/standalone/` (40, GERADOS por `build_duckdb_standalone.py`) | os mesmos conversores para máquina sem o código (`pip install duckdb` só) — nunca editar à mão |
+| `build_sop_docx.py` | SOP e Guia em Word a partir do `.md` |
 
-> `apps/static/data/db/` está no **`.gitignore`**, então os bancos **não vêm no
-> pull**. Sem rodar `import_manual_confirmations.py` as duas telas de Manual
-> Confirmation abrem vazias e **não há nada errado com o código** — é a mesma
-> classe de "não funciona" que as migrações do Pending Confirmation já
-> produziram.
+`apps/static/data/db/` é gitignorado: bancos não vêm no pull. Telas vazias
+depois de um pull são migração não rodada, não bug.
 
-O `backfill_manual_confirmations.py` reusa as **mesmas** funções que o
-mapeamento chama (`_pc_is_internal_counterparty` + `_mc_save_from_deal`) em vez
-de reescrever a regra. Duas armadilhas dele: **FWD Start é chaveado pelo B3 ID,
-não pelo Deal** (chavear pelo Deal cria uma segunda linha para o mesmo trade no
-mapeamento seguinte), e o `--dry-run` precisa lembrar as chaves da própria
-passada — o mesmo Deal aparece em vários arquivos-dia, e sem isso ele prometia
-73 linhas onde o run real criava 39.
+### `scripts/tests/` (119 scripts)
 
-### Testes de regressão (`scripts/tests/`)
-
-Scripts autocontidos, sem framework: cada um imprime `ok`/`FAIL` por asserção,
-sai 0/1, resolve a raiz do repo pelo próprio caminho e **não toca em dado real**
-(tickets vão para `tempfile`, o DuckDB é recriado em tmp, Outlook/SMTP são
-stubados). O [`scripts/tests/README.md`](scripts/tests/README.md) mapeia cada
-script ao módulo que ele protege — **rode o correspondente depois de mexer
-naquele módulo**. `check_boxparse.py` é o único que precisa de binário externo
-(o `jsc` do macOS, para rodar a cópia da regra que vive no navegador), então não
-roda na máquina Windows do time (§163).
+Autocontidos, sem framework, `ok`/`FAIL` por asserção, saída 0/1, sem tocar
+dado real (tmp, stubs de Outlook/SMTP). O
+[`README.md`](scripts/tests/README.md) mapeia script → módulo — **rode o
+correspondente depois de mexer no módulo**, com
+`OTC_SHARED_DRIVE_ROOT=/tmp/otc-share`. Vários sobem o app e trocam atributos
+no `routes` (por isso a regra de import atrasado do §3). Os que MEDEM em vez
+de conferir texto: `check_stat_por_linha`, `check_duck_gate`,
+`check_daycache` §8, `check_db_read_path`. `check_boxparse` precisa do `jsc`.
 
 ---
 
-## 10. As verticais (`apps/pages/features/`)
+## 11. Como trabalhar aqui
 
-O `routes.py` TINHA **39 mil linhas** porque toda funcionalidade nasceu nele.
-A saída foi levar **uma feature de cada vez** para
-`apps/pages/features/<nome>/`, seguindo a skill
-[`separation-of-concerns`](.claude/skills/separation-of-concerns/SKILL.md) —
-sempre com rede de caracterização ANTES, a mesma rede verde DEPOIS, e os
-guardas atualizados na mesma mudança.
-
-```
-features/<nome>/
-├── entrypoint.py   as rotas: sessão → comando/consulta → JSON. Só código de status.
-├── commands.py     escrita (gravar + avisar + e-mail). Sem regra de negócio.
-├── queries.py      leitura, sem efeito nenhum.
-├── domain.py       as regras. PURAS: sem Flask, sem banco, sem SMTP.
-└── infra/          persistence.py · mail.py · mappers.py
-```
-
-**A campanha fechou em 27/08/2026: 43 verticais, e o `routes.py` em 21.322
-linhas (−46%).** O catálogo, com a fronteira decidida de cada uma no docstring
-do próprio `__init__.py`:
-
-- **Desenho fino** (domain/queries/commands/infra) — **TODAS as 44**, desde o
-  §321: não existe mais `engine.py` em feature nenhuma. As últimas sete a
-  serem separadas por dentro foram `deals_monitor` e `counterparty_details`
-  (§320) e `accrual`, `cetip`, `intrag`, `mtm` e `cognos` (§321) — este
-  último estava listado como desenho fino sem ser, e a varredura por
-  `engine.py` o pegou. A 44ª é a **`tools`** (§424), que nasceu já assim: o
-  motor de mercado dela é o pacote `apps/pages/precificador/` — puro, fora da
-  vertical, como o `quotes.py` é o motor das Cotações.
-- **Casca** (só as rotas; motores/stores continuam no `routes` como
-  plataforma): `electronic_inventory`, `manual_confirmation`, `otm`, `latam`,
-  `ndf_summary`, `operations_b3`, `other_products`, `file_interpreter`,
-  `confirmation`, `ndf_cockpit`, `ndf_other_publisher`, `pending_confirmation`,
-  `live_positions`, `mapping`, `index_b3`, `daily_settlement` e **`new_deals`**
-  (44 rotas, a maior).
-
-O que FICA no `routes.py` é só plataforma: sessão/authz, notificações/push,
-banco, ANBIMA, dashboard, o registro `_MAPPING_DEFS`, e os motores
-compartilhados (New Deals, família de liquidação, File Interpreter, Pending
-Confirmation, EI, CPD) — o material da futura fase `apps/pages/platform/`.
-
-**O guarda ganhou a seção 9** (`check_soc_layers`): desmonta o bytecode de toda
-função das features e cobra que cada `LOAD_GLOBAL` exista no módulo — é o que
-pega o nome que a religação por AST deixou escapar, que só viraria `NameError`
-quando aquele caminho rodasse (pegou um `traceback` sem import no pcx no
-primeiro giro).
-
-**`deals_monitor` e `cetip` foram movidos VERBATIM** (`engine.py` +
-`entrypoint.py`): os nomes internos foram preservados — inclusive para os
-testes que os trocam — e o que é de plataforma é alcançado por `_R().<nome>`
-(busca atrasada gerada por AST). A separação interna em domain/queries/commands
-é trabalho futuro; a fronteira com o `routes.py`, e o guarda que a prende, já
-valem. A ferramenta que faz isso é o `extract_verbatim.py` (scratchpad da
-sessão): copia os corpos por AST e religa todo `Name(Load)` sem dono.
-
-**O `bacc` foi o primeiro com SCHEDULER, e o registro dele NÃO veio junto.** O
-laço vive em `commands.scheduler_loop`, mas o `_schedule_on_start('bacc-ea', …)`
-fica no bloco de wiring do `routes.py`, ao lado do import do entrypoint:
-chamá-lo do corpo do módulo da feature exigiria importar o `routes` ali — o
-ciclo que a regra abaixo proíbe. O gancho é de plataforma; a feature só expõe o
-`start_scheduler`. O mesmo desenho vale para `mt300`, `mdea` e
-`conf_escalation`; o `appver` não tem scheduler (só o botão do card). E os
-laços todos respeitam **`OTC_DISABLE_SCHEDULERS=1`** (`_start_schedulers`): é o
-kill-switch dos testes que sobem o app várias vezes — um catch-up de
-16h/17h/19h30 num processo de TESTE tentaria reivindicar o slot REAL do dia.
-
-**O `mdea` tem a única entrada de fora**: o pull do NDF grava os pares
-(vanilla ↔ FWD Start) via `_mdea.record_rebooks(...)` — import atrasado dentro
-da função, porque os entrypoints só são importados no fim do `routes.py`. E o
-`_otc_app_url` NÃO foi com o `conf_escalation`: endereço absoluto para botão de
-e-mail é plataforma (§7), e ficou no `routes.py` para o próximo e-mail com botão
-não importar a vertical da cobrança.
-
-**O `holidays` foi o primeiro com fronteira a decidir.** Ele tinha três
-referências de entrada, e as três eram para o `_anbima_holidays` — que não é o
-calendário DAQUELA tela e sim o de dias úteis do app inteiro (SLA da esteira,
-aging do CGD, schedulers, D-1 das recons). Ele é **horizontal** e ficou no
-`routes.py` esperando o `platform/`; vir junto obrigaria meia dúzia de features
-a importar a vertical de Feriados para saber se sexta é dia útil. Entrada não
-é sinal de que a feature não sai — é sinal de que há plataforma misturada nela.
-
-Nem toda vertical tem `domain.py`: o do Onboarding é o `apps/pages/cgd_docs.py`,
-e ele **fica onde está** porque a Recon de CGD e o /mapping também o consultam —
-é horizontal, não vertical. Feature cujo domínio já mora num módulo próprio
-delega a ele em vez de criar um arquivo vazio.
-
-### As regras que não dão erro nenhum quando se quebram
-
-- **Módulo de feature nunca importa NOME do `routes` — só o MÓDULO, e dentro da
-  função.** Esta é a que causa perda silenciosa. Cinquenta e seis dos cento e dez
-  scripts de `scripts/tests/` trocam atributos no `routes` para não encostar em
-  dado real (`R.DB_PATH = tmp`, `R._create_notification = espião`,
-  `R.OTM_JSON_ROOT = tmp`). Um `from apps.pages.routes import get_db_connection`
-  no topo do módulo **congela o valor no import**: o teste troca o atributo, o
-  módulo continua com o original, e o teste passa lendo o banco de VERDADE. O
-  jeito certo é `from apps.pages import routes` DENTRO da função e `routes.X` no
-  ponto de uso — busca atrasada, que de quebra torna o ciclo impossível.
-- **Entrypoint que o `routes.py` não importa é rota que não existe.** Em Flask o
-  `@blueprint.route` só roda quando o módulo é importado. Sem a linha no bloco
-  do fim do `routes.py`, a página responde **404** e a subida não diz nada. O
-  bloco fica no FIM de propósito: as features buscam no `routes` o que ainda é
-  de plataforma, e importá-las no topo fecharia o ciclo.
-- **Guarda que varre `routes.py` por AST para de cobrir o que saiu de lá.** São
-  32 scripts com o caminho escrito na mão, e o `check_unlocked_reads` casa por
-  **nome de função** — o `_tk_roles_by_sid` virou `roles_by_sid` e saiu da lista
-  proibida em silêncio. Ao mover código, atualize o guarda na MESMA mudança.
-  Quando o guarda varre o arquivo INTEIRO, a correção é fazê-lo ler o
-  `routes.py` **mais** `features/**/*.py` de uma vez — é o que o
-  `check_notif_page_url` faz hoje (`_fontes_com_rotas`), e assim ele não precisa
-  ser editado a cada extração. O sintoma de não fazer isso nem sempre é
-  vermelho: às vezes é uma asserção que simplesmente deixa de existir.
-- **O teste da feature é o que autoriza a extração.** O Support Center foi o
-  primeiro porque nada no resto do `routes.py` o chamava (zero referências de
-  entrada) **e** o `check_tickets.py` já o prendia ponta a ponta por HTTP.
-  Extrair sem uma rede dessas é mudar 39 mil linhas no escuro. Feature sem teste
-  de caracterização: escreva o teste primeiro, com o código ainda no lugar.
-
-`check_soc_layers.py` prende tudo isso, inclusive subindo o app para conferir as
-rotas no `url_map` — import escrito e import que executou são coisas diferentes.
-
-### A fase `platform/` (começou em 27/08/2026 — HANDOFF §314–§317)
-
-A fila de features acabou — as 43 fatias saíram na ordem do acoplamento medido,
-histórico no HANDOFF §310–§313 — e a camada de INFRA horizontal já mora em
-`apps/pages/platform/`, sete módulos: **`anbima.py`** (o calendário de dias
-úteis — `_br_now`, `_prev_anbima_bizday`, `_pcx_is_bizday`, as DUAS cargas
-históricas do `anbima.json` preservadas de propósito), **`notifications.py`**
-(o motor do sino e do Web Push — `_NOTIF_PAGE_URL`, `get_notif_connection`, o
-ensure/migração da subida, `_create_notification` → `_push_notify`),
-**`json_cache.py`** (o armazém JSON — `_cache_lock`, `_atomic_write_json`, os
-claims diários cross-process, o daycache `_day_files`/`_day_json`),
-**`mail.py`** (relay/caixa da mesa, logo, `_parse_emails`,
-`_email_drafts_response`, `_otc_app_url` — os senders ficam com os donos),
-**`dates.py`** (`_parse_date_any`/`_parse_deal_date` — parse aqui, calendário
-no anbima), **`db.py`** (`_DuckDBHandle` + `get_db_connection`; as primitivas
-seguem no `database_access.py`) e **`authz.py`** (master/admin, allowlist do
-`Page_Access` com cache por SID, o registro de cards do Control Panel). Os
-endpoints do sino e os dois `before_request` continuam no `routes.py`: rota e
-registro em blueprint são casca.
-
-**DEZ MOTORES já saíram (§316–§319):** **`settlement.py`** (a família
-de liquidação — `_ops_trade_rows` e todo o `_ops_*`/`_opssum_*`/`_opsadv_*`,
-mais o elo de equity `_ops_equity_link`/`_latam_equity_b3_index`),
-**`confirmations.py`** (o motor `_conf_*` das quatro famílias — segregação,
-estado New→Generated→Success, `_conf_esteira_stages`, as páginas de geração e
-o XML da B3), **`counterparty.py`** (o CounterpartyDetails.json — `_cpd_*`,
-`_norm_spn`, os normalizadores e o parser `_cc_*` do Update Contacts),
-**`forecast.py`** (a matriz do Settlement Forecast — `_forecast_collect`/
-`_forecast_payload`, `_fcst_*` e os mapas de contrato de swap, que a família
-de liquidação também lê), **`electronic_inventory.py`** (resolução de pasta no
-share, o scanner com cache, versões ordinais e listagem — o
-**`ELECTRONIC_INVENTORY_ROOT` FICA no routes** de propósito: é superfície de
-patch do check_ei_api, como `_B3_DATA_DIR`), **`manual_confirmation.py`** (a
-cola `_mc_*` da esteira — `_mc_save_from_deal`, `_mc_confirmation_docs`,
-`_MC_STAGE_ROLE`/`_MC_STAGE_NOTIFY_ROLES`, `_mc_generate_url`, `_mc_pc_sync`;
-o dono do banco segue sendo o `manual_conf.py`, importado direto como
-`_mc_mod`), **`file_interpreter.py`** (§318 — templates, variantes,
-`_fi_calc_value`/`_fi_build_line`; o `_FILE_INTERPRETER_DIR` fica no routes,
-superfície de patch dos check_fi_*), **`pending_confirmation.py`** (§318 — os
-três DuckDBs, `_pc_derive_row`, as regras de Pending Status, a manutenção das
-11:30, o snapshot e o `_pc_save_from_deal`; `_PC_DB_DIR` fica no routes),
-**`operations_b3.py`** (§318 — o arquivo-dia, as regras do `opb3-events`, o
-breakdown, os mapas de perna interna e a mensageria; os dois loaders
-`@_req_cached` foram junto) e **`new_deals.py`** (§319, a maior — os caches de
-deal das quatro páginas, os dois pulls da Athena com schedulers, a regra de
-Amend, a resolução de contraparte por accronym, a perna fraca, o espelho
-Lawton e a geração TER; os caminhos de cache, o `_fxo_refdata_by_spn` e o par
-`_GENERIC_ND_PRODUCTS`/`_generic_nd_cfg` FICAM no routes — patchados pelos
-testes E chamados por dentro da fatia, só interceptam todos os caminhos
-morando lá; o `_nd_token` também ficou: é helper de NOTIFICAÇÃO, o Accrual o
-usa. A "única entrada de fora" do mdea virou o gancho
-`routes._mdea_record_rebooks` — platform não importa feature, quem conhece as
-verticais é a casca).
-
-Lições do lote §316/§317: **chamada interna do módulo não passa pelo alias** —
-teste que troca uma função chamada por DENTRO da própria fatia (`_cpd_path`,
-`_conf_cgd_lookup`, `_opssum_meta_load`, `_latam_equity_b3_index`) troca nos
-DOIS lugares (`R.` cobre quem chega de fora, o módulo cobre a chamada
-interna); **`session` do Flask é superfície de patch** (`R.session = {...}` no
-check_swap_advice), então na platform ele é alcançado por `routes.session`,
-nunca por import direto; **constante de módulo que referencia outro módulo da
-platform importa DIRETO** (o `_MC_GENERATE_PRODUCTS` referencia os grupos das
-confirmações no nível do módulo, e o alias do routes ainda não existe naquele
-ponto do import — são os mesmos objetos). O `@_req_cached` vem do
-`request_cache.py` por import direto — e o guarda da seção 10 aprendeu que
-`__module__` mente sob `functools.wraps`: quem diz onde o código mora é o
-`co_filename`, e o corpo decorado é conferido via `__wrapped__`. O helper
-`_fontes_com_rotas_` dos oito testes ancorados em texto varre `platform/`
-junto de `features/`, então as próximas fatias não o editam.
-
-**A fila de MOTORES acabou no §319.** O que resta no `routes.py` (~11,9 mil
-linhas) é casca e plataforma miúda: sessão/authz-endpoints, o registro
-`_MAPPING_DEFS`, os leitores `_ndfc_*`/`_ndfsum_*`/`_ndfadv_*` da liquidação
-de NDF, o Daily Settlement (`_ds_*`), o wiring das features e os aliases. O
-trabalho que segue é o desenho fino das camadas onde ele ainda for raso — a
-fila de EXTRAÇÕES acabou. As sete separações internas saíram no §320
-(`deals_monitor`, `counterparty_details`) e no §321 (`accrual`, `cetip`,
-`intrag`, `mtm`, `cognos`), e com elas **não há mais `engine.py` no
-repositório**.
-
-O padrão que elas fixaram, e que vale para qualquer camada nova:
-
-- **toda travessia entre camadas é pelo ATRIBUTO do módulo**
-  (`queries._ndm_pending_blocks(...)`, `persistence._mtm_path_for(...)`),
-  nunca `from .queries import nome` — é o que deixa o espião do teste,
-  patchado no módulo DONO, interceptar também as chamadas que vêm de outra
-  camada. Chamada dentro da MESMA camada fica de graça (resolve pelos globals
-  do módulo);
-- **`domain` é puro de verdade**: nenhum dos 43 importa `routes` (o guarda
-  recusa), então função que precisa de helper de plataforma — `_cc_cell` para
-  ler célula, `_acc_digits`, `_fi_build_line`, `_mtm_parse_num` — mora em
-  `queries`/`commands`/`infra`, não no domain. Quando a única dependência é o
-  LOG, o domain usa `logging.getLogger('otc_tracker')` direto: é o mesmo
-  objeto que o `routes.log`, sem a dependência (foi o `cetip/domain.py`);
-- **montar caminho é infra, não regra**: `_mtm_path_for` parecia domínio e é
-  `infra/persistence` — ele monta sobre o `MTM_JSON_ROOT`;
-- **o gancho que o resto do app conhece não muda de nome**: o
-  `routes._intrag_engine()` continua se chamando assim e passou a devolver o
-  `commands` — os quatro nomes que o New Deals chama nele são todos de
-  escrita.
-
-O padrão da fase, que qualquer fatia futura repete:
-
-- **o `routes.py` mantém os nomes como ALIAS** (`_x = _pf_anbima._x`): features
-  seguem alcançando por `routes.<nome>` e os testes que trocam a FUNÇÃO no
-  `routes` (`R._create_notification = espião`) continuam interceptando todos;
-- **o ESTADO mora na platform** (`_ANBIMA_HOLIDAYS`, `_notif_db_done`): alias de
-  objeto mutável apontaria para o set velho quando a carga rebinda o global.
-  Teste que troca estado troca LÁ, e leitor inline do estado no `routes` é
-  reescrito para a função (foi o `_forecast_spine` → `_pcx_is_bizday`). O
-  critério é o REBIND, não o tipo: `_cache_lock`, `_daycache_memo` e
-  `_page_access_cache` são mutados in place e nunca rebindados, então o alias
-  deles continua vivo e os testes não mudam;
-- **caminho relativo a `__file__` muda de valor com a mudança de casa** — o
-  `_load_nav_urls` precisou de `../../templates` (era `../` no routes);
-- **platform nunca importa feature nem NOME do routes**; o que ainda é do
-  `routes` (`DB_PATH`, `NOTIF_DB_PATH`, `_DuckDBHandle`, `duckdb_*`) é busca
-  atrasada dentro da função — andaime declarado até a camada de banco ter
-  fatia. O `duckdb_read_unlocked` segue importado no `routes` DE PROPÓSITO,
-  mesmo com o pyflakes o marcando: é superfície de patch dos testes e atributo
-  que a platform alcança;
-- **guardas na mesma mudança** — `check_soc_layers` seção 10 (fronteiras da
-  platform + o alias do routes É o objeto da platform), seção 8 com os `def`
-  movidos, `check_notif_page_url` varrendo `platform/` junto das features, e
-  `check_mc_notify` lendo `_push_notify` no arquivo novo.
-
-A ferramenta que fez as cinco separações do §321 é o `split_engine.py`
-(scratchpad da sessão): reparte um `engine.py` por AST, copia os corpos
-verbatim e reescreve só as referências CRUZADAS para `<camada>.<nome>`. Uma
-armadilha dele vale para qualquer ferramenta que edite fonte por posição: o
-`col_offset` do AST é em **bytes UTF-8**, não em caracteres — uma linha com
-acento antes da referência desloca a coluna, e a edição sai no lugar errado
-(foi o `'Data Referência': … _mtm_gen_min_value` do MtM). A edição é feita
-sobre os bytes da linha, e o `assert` de que o recorte é o nome esperado é o
-que transformou isso em erro em vez de corrupção silenciosa.
+- **Rede antes, rede depois.** Mudança em módulo com teste: rode o teste antes
+  (para saber o que já falha — `check_holiday_calendars` e `check_tickets` têm
+  falhas pré-existentes conhecidas em 09/09/2026) e depois. Feature sem teste
+  de caracterização: escreva o teste primeiro.
+- **Guardas na mesma mudança.** Mover função = atualizar o guarda que a cita;
+  tipo novo = três listas; notificação nova = três mapas; mapping novo =
+  `_MAPPING_DEFS` + `TYPES`; motor de conversão = regerar os splits.
+- **A causa-raiz vai no commit e no HANDOFF**, não a lista de arquivos. O
+  padrão do repositório é `tipo(escopo): o que estava errado e por quê`.
+- **Não versione**: `apps/static/data/control-panel/`, `*.bak`,
+  `apps/pages/routes 2.py`, `apps/pages/cotaçoes.py`, as pastas `I:\...` da
+  raiz, `.claude/skills/`, capturas `.png`, caches de runtime. Nunca `git add
+  -A`/`.`/`-u`.
+- **Na dúvida sobre a instância** (§9): pull feito? restart feito? aba
+  recarregada? log de módulo só sai em WARNING. Share frio e pastas gêmeas
+  (`B3 Files` × `b3 files`) explicam a maioria dos "não funciona".
+- **macOS**: não há `timeout`; no zsh, `--include='*.py'` vai entre aspas.
