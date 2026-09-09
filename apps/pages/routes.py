@@ -6413,6 +6413,82 @@ def _vcp_events_map(ref):
     return out
 
 
+# Índices da POSIÇÃO de swap (DPOSICAO-SWAP) que o VCP precisa quando o arquivo
+# de EVENTOS não tem o contrato. O arquivo não tem cabeçalho: os campos vêm na
+# ordem do `_B3_SWAP_HEADERS['swap_position']` e são lidos por índice, como o
+# `_swapchar_collect` já faz.
+_VCP_POS_IDX = {
+    'contrato':   2,    # Contrato
+    'cpty_conta': 7,    # Contraparte  (a CONTA CETIP dela, não o nome)
+    'cpty_cnpj':  8,    # CPF/CNPJ Cliente Contraparte
+    'parte_ix':  40,    # Código índice — perna 1
+    'cpty_ix':   50,    # Código índice — perna 2
+    'classe':    30,    # Nome Tipo/Classe — o nome de verdade quando a curva é VCP
+}
+
+
+def _vcp_position_map(ref):
+    """{contract-digits → leg dict} pela POSIÇÃO de swap — a SEGUNDA fonte do VCP.
+
+    O `_vcp_events_map` responde pelo arquivo de eventos, e dele saem as QUATRO
+    colunas da direita da tela: conta da contraparte, CPF/CNPJ e os dois
+    indexadores. Contrato que não está lá saía com as quatro em branco de uma
+    vez — e foi assim que, dos quatro avisos de inexistência de PU de
+    08/09/2026, três apareceram na tela com o Código do Contrato preenchido e o
+    resto da linha vazio. Não era falta de cadastro (a cascata CNPJ → conta já
+    tinha sido feita): era que não havia identificador NENHUM para cadastrar,
+    porque o evento não existia.
+
+    A posição tem os mesmos campos, chaveados pelo `Contrato` — a mesma chave
+    que o §427 fixou para o DFLUXO, e pela mesma razão: o `Código
+    Identificador` é a LOB e se repete no dia inteiro.
+
+    Ela é FALLBACK e não substituição: onde o evento responde, ele vence. O
+    evento é do dia da liquidação e a posição é uma foto; preferir a posição
+    trocaria um dado do evento por um mais genérico sem ninguém pedir."""
+    path, _dref = _swap_day_path(ref, '73760_{}_DPOSICAO-SWAP.json')
+    out = {}
+    if not path:
+        return out
+    try:
+        src = _db_day_records(path) or []
+    except Exception:                                       # noqa: BLE001
+        return out
+    if not src:
+        return out
+    idx = _swapindex_lookup()
+
+    def _ix(code, classe):
+        """Código índice → nome da curva. VCP não se nomeia pelo código: o nome
+        de verdade está no `Nome Tipo/Classe` da perna (§6)."""
+        nome = _swapindex_name(code) if code else ''
+        if _fcst_norm(nome) == 'vcp' and classe:
+            return str(classe).strip()
+        return nome or str(code or '').strip()
+
+    keys = list(src[0].keys())
+    contrato_key = _fcst_resolve_key(keys, ['contrato'])
+    for row in src:
+        vals = list(row.values())
+        full = len(vals) >= 120          # mock esparso da dev → só o que der
+        def _v(nome):
+            i = _VCP_POS_IDX[nome]
+            return str((vals[i] if i < len(vals) else '') or '').strip() if full else ''
+        contrato = _v('contrato') or (str(row.get(contrato_key, '') or '').strip()
+                                      if contrato_key else '')
+        cc = _acc_digits(contrato)
+        if not cc:
+            continue
+        classe = _v('classe')
+        out.setdefault(cc, {
+            'parte_ix':   _ix(_v('parte_ix'), classe),
+            'cpty_conta': _v('cpty_conta'),
+            'cpty_cnpj':  _v('cpty_cnpj'),
+            'cpty_ix':    _ix(_v('cpty_ix'), classe),
+        })
+    return out
+
+
 def _vcp_collect(ref):
     """VCP display rows: Operations B3 'AVISO DE INEXISTENCIA DE PU' entries joined
     to the Events file legs and the RefData counterparty name."""
@@ -6421,13 +6497,16 @@ def _vcp_collect(ref):
     if ops:
         by_acct, by_taxid = _vcp_refdata_maps()
         events = _vcp_events_map(ref)
+        # SEGUNDA fonte: o contrato que não está no arquivo de eventos saía com
+        # as quatro colunas da direita em branco de uma vez. Ver `_vcp_position_map`.
+        posicao = _vcp_position_map(ref)
         aviso = _fcst_norm(_VCP_AVISO_TYPE)
         for rec in ops:
             if _fcst_norm(rec.get('Tipo Operação', '')) != aviso:
                 continue
             contrato = str(rec.get('Título', '') or '').strip()
             parte_conta = str(rec.get('Conta', '') or '').strip()
-            ev = events.get(_acc_digits(contrato), {})
+            ev = events.get(_acc_digits(contrato)) or posicao.get(_acc_digits(contrato), {})
             cpty_conta = ev.get('cpty_conta', '')
             cpty_cnpj = ev.get('cpty_cnpj', '')
             # CASCATA, e não um ou/ou. A conta DEDICADA identifica o cliente
