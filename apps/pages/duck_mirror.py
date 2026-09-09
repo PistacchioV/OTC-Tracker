@@ -190,32 +190,93 @@ def _ensure_worker():
 # o teto o connect decide (falha → erro de conversão no log, como antes).
 _GATE_WRITE_WAIT_SECONDS = 10.0
 
+# Quanto o escritor espera a trava EXCLUSIVA entre processos. É bem menor que o
+# teto da camada (30s) de propósito: a cura síncrona da tela espera esta tarefa
+# com 30s de orçamento, e gastar todos eles esperando trava garantiria o
+# estouro dela — a tela cairia no JSON justamente por causa da coordenação que
+# existe para mantê-la no banco. Leitor do espelho é SELECT curto; o que passa
+# de alguns segundos é outra instância em conversão, e aí a rodada seguinte
+# converte.
+_FILE_LOCK_WAIT_SECONDS = 6.0
+
+
+# As travas de arquivo das conexões de escrita vivas, por conexão. O motor tem
+# um par ABRIR/FECHAR e mantém a conexão através de muitos arquivos, então a
+# trava não cabe num `with` — ela é presa aqui e solta no fechar.
+_travas = {}
+_travas_lock = threading.Lock()
+
 
 def _abrir_com_portao(path):
-    """`ABRIR_BANCO` do motor, na thread do espelho: declara a escrita no
-    portão do banco (leitor novo espera; os em voo fecham) e só então conecta.
-    Sem isto o `duckdb.connect` em escrita colidia com um `read_only` aberto
-    por uma tela — e a colisão não era rara: o Other Products Summary abre o
-    mesmo banco oito vezes num request (§422)."""
+    """`ABRIR_BANCO` do motor, na thread do espelho: toma a trava EXCLUSIVA de
+    arquivo, declara a escrita no portão do banco (leitor novo espera; os em
+    voo fecham) e só então conecta.
+
+    São DUAS coordenações, e cada uma resolve o que a outra não alcança:
+
+    · o **portão** é em MEMÓRIA e cobre este processo — sem ele o
+      `duckdb.connect` em escrita colidia com um `read_only` aberto por uma
+      tela, e a colisão não era rara: o Other Products Summary abre o mesmo
+      banco oito vezes num request (§422);
+
+    · a **trava de arquivo** é ENTRE PROCESSOS, e é ela que faltava. Cada
+      pessoa roda a própria instância apontando para o mesmo `db/` do share
+      (§8), e a escrita do espelho era a única operação do app que ia ao share
+      sem passar pela camada: ela não excluía ninguém. Enquanto isso o leitor
+      de outra instância mantém o arquivo ABERTO, e no SMB não se renomeia um
+      arquivo que alguém tem aberto — o DuckDB estoura no checkpoint com
+      `IO Error: Could not move file: Access is denied`, que não menciona nem
+      lock nem concorrência. Com a trava exclusiva o escritor ESPERA os
+      leitores fecharem, e o rename passa a ter o arquivo só para ele.
+
+    Timeout da trava não aborta a conversão: segue sem ela, avisando. Onde a
+    disputa não é a causa, o comportamento continua o de antes; onde é, o log
+    passa a dizer."""
     import duckdb
     from apps.pages import database_access as DA
+    trava = None
+    try:
+        trava = DA.hold_file_lock(path, write=True,
+                                  timeout_seconds=_FILE_LOCK_WAIT_SECONDS)
+    except DA.DatabaseLockTimeout:
+        log.warning('[duck-mirror] a trava exclusiva de %s não veio a tempo — convertendo '
+                    'sem ela (se o rename falhar com "Access is denied", é outra instância '
+                    'com o banco aberto)', os.path.basename(path))
+    except Exception:                                       # noqa: BLE001
+        log.warning('[duck-mirror] não foi possível travar %s:\n%s',
+                    os.path.basename(path), traceback.format_exc())
     gate = DA.db_gate(path)
     if not gate.enter_write(_GATE_WRITE_WAIT_SECONDS):
         log.warning('[duck-mirror] leitores ainda abertos em %s depois de %.0fs — '
                     'conectando assim mesmo', os.path.basename(path), _GATE_WRITE_WAIT_SECONDS)
     try:
-        return duckdb.connect(path)
+        con = duckdb.connect(path)
     except Exception:
         gate.exit_write()
+        if trava is not None:
+            trava.release()
         raise
+    if trava is not None:
+        with _travas_lock:
+            _travas[id(con)] = trava
+    return con
 
 
 def _fechar_com_portao(path, con):
+    """A trava só é solta DEPOIS do `close()`: é no fechar que o DuckDB faz o
+    checkpoint e mexe nos arquivos — soltar antes devolveria a corrida no exato
+    instante em que ela dói."""
     from apps.pages import database_access as DA
+    with _travas_lock:
+        trava = _travas.pop(id(con), None)
     try:
         con.close()
     finally:
-        DA.db_gate(path).exit_write()
+        try:
+            DA.db_gate(path).exit_write()
+        finally:
+            if trava is not None:
+                trava.release()
 
 
 def _loop():

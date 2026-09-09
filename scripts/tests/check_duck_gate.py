@@ -175,5 +175,54 @@ DR.day_records(dia)
 check('4. duas leituras fora de request → duas aberturas', aberturas.count('Commodities.db'), 2)
 DA._database_context = _ctx
 
+print('\n== 5. a trava de arquivo: a escrita do espelho exclui OUTRO processo ==')
+# O portao acima e em MEMORIA e so cobre este processo. Cada pessoa roda a
+# propria instancia apontando para o mesmo `db/` do share (§8), e a escrita do
+# espelho era a UNICA operacao do app que ia ao share sem passar pela camada:
+# nao excluia ninguem. Enquanto isso o leitor de outra instancia mantem o
+# arquivo ABERTO, e no SMB nao se renomeia um arquivo que alguem tem aberto — o
+# DuckDB estoura no checkpoint com `Could not move file: Access is denied`.
+import portalocker                                           # noqa: E402
+LOCK = DA.lock_file_path(DB)
+check('5. o banco do espelho tem arquivo de trava', os.path.isfile(LOCK))
+
+# A escrita do motor passa a PRENDER a trava, e a solta so no fechar — e no
+# fechar que o DuckDB faz o checkpoint e mexe nos arquivos.
+con_w = M._abrir_com_portao(DB)
+try:
+    check('5. abrindo em escrita, a trava fica presa a conexao', id(con_w) in M._travas)
+    outro = portalocker.Lock(LOCK, mode='a+b', timeout=0.2,
+                             flags=portalocker.LockFlags.EXCLUSIVE
+                             | portalocker.LockFlags.NON_BLOCKING)
+    negado = False
+    try:
+        outro.acquire()
+        outro.release()
+    except portalocker.exceptions.LockException:
+        negado = True
+    check('5. e outro escritor (outra instancia) nao consegue a trava', negado)
+finally:
+    M._fechar_com_portao(DB, con_w)
+check('5. fechada a conexao, a trava e solta', id(con_w) in M._travas, False)
+livre = portalocker.Lock(LOCK, mode='a+b', timeout=1.0,
+                         flags=portalocker.LockFlags.EXCLUSIVE
+                         | portalocker.LockFlags.NON_BLOCKING)
+livre.acquire(); livre.release()
+check('5. e o proximo escritor a consegue', True)
+
+# Trava indisponivel NAO aborta a conversao: segue sem ela, avisando. Onde a
+# disputa nao e a causa, o comportamento continua o de antes.
+preso = portalocker.Lock(LOCK, mode='a+b', timeout=0.2,
+                         flags=portalocker.LockFlags.EXCLUSIVE
+                         | portalocker.LockFlags.NON_BLOCKING)
+preso.acquire()
+try:
+    con2 = M._abrir_com_portao(DB)
+    check('5. sem a trava, a conversao segue assim mesmo (nao aborta)', con2 is not None)
+    check('5. e nada fica preso no registro de travas', id(con2) in M._travas, False)
+    M._fechar_com_portao(DB, con2)
+finally:
+    preso.release()
+
 print('\n%s' % ('TUDO OK' if not fails else 'FALHAS (%d): %r' % (len(fails), fails)))
 sys.exit(1 if fails else 0)
