@@ -57,19 +57,30 @@ _DCE_OPT_FIELDS = (
     'option_type', 'trade_id', 'portfolio_code', 'trade_date', 'operation_type',
     'holder_writer_party', 'holder_writer_counterparty', 'counterparty',
     'base_currency', 'commodity', 'quoted_currency', 'maturity_date',
-    'strike_price', 'strike_price_brl', 'unit_price', 'premium',
+    'strike_price', 'strike_price_brl', 'unit_price',
     'premium_settlement_date', 'base_value_quantity', 'exercise_type',
     'asian_option_average', 'initial_verification_date',
     'final_verification_date', 'information_source', 'quote_for_maturity',
-    'quote_for_currency', 'fixing_date', 'bonus', 'premium_holder',
+    'quote_for_currency', 'fixing_date', 'remarks', 'premium_holder',
 )
+# 27 campos, a contagem do extrato. Já foram 28: havia um `premium` entre o
+# `unit_price` e o `premium_settlement_date`, e um `bonus` onde o relatório traz
+# REMARKS. O extrato NÃO tem coluna PREMIUM — o valor unitário do prêmio é o
+# `UNIT PRICE` —, então aquela coluna nascia vazia em toda linha; e o REMARKS
+# caía em `unknown_headers` enquanto a tela mostrava um "Bonus" que nunca
+# preenchia. Como o casamento é por NOME, nada disso deslocava coluna: eram
+# duas células vazias e um dado descartado.
 
 
 # Cabeçalho do extrato → campo. O casamento é por NOME NORMALIZADO (caixa
 # alta, pontuação → espaço), nunca por POSIÇÃO: uma coluna nova no relatório
 # desloca tudo num mapa posicional em silêncio; por nome ela só fica de fora,
-# contada em `unknown`. 'SETTLEMENT DATE' aparece como sinônimo porque o
-# cabeçalho real pode trazer o prêmio e a data como colunas separadas.
+# contada em `unknown`. 'SETTLEMENT DATE' aparece como sinônimo porque nem todo
+# extrato escreve 'PREMIUM SETTLEMENT DATE' por extenso.
+#
+# Cabeçalho que este mapa não conhece é AVISADO, e é por isso que tirar uma
+# entrada daqui é seguro: um extrato que volte a trazer PREMIUM ou BONUS não
+# some em silêncio — ele aparece em `unknown_headers` e a tela reclama.
 _DCE_OPT_HEADER_MAP = {
     'OPTION TYPE': 'option_type',
     'TRADE ID': 'trade_id',
@@ -87,7 +98,6 @@ _DCE_OPT_HEADER_MAP = {
     'STRIKE PRICE': 'strike_price',
     'STRIKE PRICE IN BRL': 'strike_price_brl',
     'UNIT PRICE': 'unit_price',
-    'PREMIUM': 'premium',
     'PREMIUM SETTLEMENT DATE': 'premium_settlement_date',
     'SETTLEMENT DATE': 'premium_settlement_date',
     'BASE VALUE QUANTITY': 'base_value_quantity',
@@ -99,7 +109,7 @@ _DCE_OPT_HEADER_MAP = {
     'QUOTE FOR MATURITY': 'quote_for_maturity',
     'QUOTE FOR CURRENCY': 'quote_for_currency',
     'FIXING DATE': 'fixing_date',
-    'BONUS': 'bonus',
+    'REMARKS': 'remarks',
     'PREMIUM HOLDER': 'premium_holder',
 }
 

@@ -68,7 +68,7 @@
   }
 
   /* Larguras: nth-child(1)=checkbox (2)=actions (3)=Status (4)=Intrag ID
-     (5..32)=28 colunas do extrato (33)=hidden ID. Cada regra alcança também o
+     (5..31)=27 colunas do extrato (32)=hidden ID. Cada regra alcança também o
      CLONE do header (.dt-scroll-head/.dataTables_scrollHead) porque o
      DataTables remove o id da tabela clonada — sem isso o header desalinha.
      O default cobre toda coluna de dado; abaixo, só as exceções mais largas. */
@@ -306,7 +306,6 @@
                                     <th data-lang="intrag-dce-col-12">Strike Price</th>
                                     <th data-lang="intrag-dce-col-13">Strike Price in BRL</th>
                                     <th data-lang="intrag-dce-col-14">Unit Price</th>
-                                    <th data-lang="intrag-dce-col-15">Premium</th>
                                     <th data-lang="intrag-dce-col-16">Premium Settlement Date</th>
                                     <th data-lang="intrag-dce-col-17">Base Value/Quantity</th>
                                     <th data-lang="intrag-dce-col-18">Exercise Type</th>
@@ -317,7 +316,7 @@
                                     <th data-lang="intrag-dce-col-23">Quote for Maturity</th>
                                     <th data-lang="intrag-dce-col-24">Quote for Currency</th>
                                     <th data-lang="intrag-dce-col-25">Fixing Date</th>
-                                    <th data-lang="intrag-dce-col-26">Bonus</th>
+                                    <th data-lang="intrag-dce-col-26">Remarks</th>
                                     <th data-lang="intrag-dce-col-27">Premium Holder</th>
                                     <th></th><!-- hidden row ID -->
                                 </tr>
@@ -340,7 +339,6 @@
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Strike Price"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Strike Price in BRL"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Unit Price"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Premium"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Premium Settlement Date"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Base Value/Quantity"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Exercise Type"></th>
@@ -351,7 +349,7 @@
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Quote for Maturity"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Quote for Currency"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Fixing Date"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Bonus"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Remarks"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Premium Holder"></th>
                                     <th></th><!-- hidden row ID -->
                                 </tr>
@@ -385,7 +383,11 @@
 <script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
 
 <script>
-// col index 2 = status, 3 = Intrag ID, 4-31 = 28 data cols, col 32 = hidden row ID.
+// col index 2 = status, 3 = Intrag ID, 4-30 = 27 data cols, col 31 = hidden row ID.
+// Eram 28: a coluna `Premium` saiu porque o extrato NÃO a tem (o valor
+// unitário do prêmio é o `Unit Price`) e ela nascia vazia em toda linha, e
+// `Bonus` virou `Remarks`, que é o nome real do campo no relatório — o dado
+// dele caía em `unknown_headers` e a coluna ficava sempre em branco.
 // Campos de DATA do modal: dd/mm/aaaa na tela e ISO no value, que é o formato
 // em que o extrato do bob-report grava as datas. O helper é o do
 // export-advanced.js; sem ele o campo degrada para texto comum.
@@ -411,11 +413,11 @@ var DCE_COLS = [
     'Option Type','Trade ID','Portfolio Code','Trade Date','Operation Type',
     'Holder or Writer Party','Holder or Writer Counterparty','Counterparty',
     'Base Currency - Stocks/Index','Commodity','Quoted Currency','Maturity Date',
-    'Strike Price','Strike Price in BRL','Unit Price','Premium',
+    'Strike Price','Strike Price in BRL','Unit Price',
     'Premium Settlement Date','Base Value/Quantity','Exercise Type',
     'Asian Option Average','Initial Verification Date','Final Verification Date',
     'Information Source','Quote for Maturity','Quote for Currency','Fixing Date',
-    'Bonus','Premium Holder'
+    'Remarks','Premium Holder'
 ];
 
 // JSON entry keys in the SAME order as DCE_COLS (28 data columns) — o contrato
@@ -424,15 +426,15 @@ var DCE_ENTRY_FIELDS = [
     'option_type','trade_id','portfolio_code','trade_date','operation_type',
     'holder_writer_party','holder_writer_counterparty','counterparty',
     'base_currency','commodity','quoted_currency','maturity_date',
-    'strike_price','strike_price_brl','unit_price','premium',
+    'strike_price','strike_price_brl','unit_price',
     'premium_settlement_date','base_value_quantity','exercise_type',
     'asian_option_average','initial_verification_date','final_verification_date',
     'information_source','quote_for_maturity','quote_for_currency','fixing_date',
-    'bonus','premium_holder'
+    'remarks','premium_holder'
 ];
 
-var DCE_ID_COL = 32;      // hidden row ID
-var DCE_DATA_END = 32;    // dados = cols 4..31 → slice(4, 32)
+var DCE_ID_COL = 31;      // hidden row ID
+var DCE_DATA_END = 31;    // dados = cols 4..30 → slice(4, 31)
 
 var selectedRowIds = new Set();
 
@@ -464,7 +466,7 @@ $(document).ready(function() {
         }
     }
 
-    function exportCols() { var a=[]; for(var i=3;i<=31;i++) a.push(i); return a; }
+    function exportCols() { var a=[]; for(var i=3;i<=30;i++) a.push(i); return a; }
     function fmtExport(data,row,col,node) {
         if (node) { var inp=$(node).find('input[type!="checkbox"]'); if (inp.length) return inp.val()||''; }
         return (data==null?'':String(data)).replace(/<[^>]*>/g,'').trim();
@@ -800,11 +802,11 @@ $(document).ready(function() {
     });
 
     // ── Send (generate Intrag-DCE-Option-YYYYMMDD.txt on the Intrag network folder) ──
-    // Row array: [0]=checkbox, [1]=actions, [2]=status, [3]=Intrag ID, [4..31]=28 data cols, [32]=id.
+    // Row array: [0]=checkbox, [1]=actions, [2]=status, [3]=Intrag ID, [4..30]=27 data cols, [31]=id.
     var DCE_TRADEDATE_COL = 7;           // table col of Trade Date (data idx 3 + 4)
     var DCE_SENDABLE = { 'New': 1, 'Approved': 1 };
 
-    function _intragRowData(d) { return d ? d.slice(4, DCE_DATA_END) : []; }   // 28 data cols
+    function _intragRowData(d) { return d ? d.slice(4, DCE_DATA_END) : []; }   // 27 data cols
     function _itemFromRow(d) { return { deal_id: (d[DCE_ID_COL] || ''), status: (d[2] || 'New'), cells: _intragRowData(d) }; }
 
     function sendIntragDceItems(items) {
