@@ -2,6 +2,7 @@
 """As rotas das telas da Intrag (NDF, Option, Swap e DCE Option)."""
 import json
 import os
+import traceback
 from datetime import datetime
 
 from flask import jsonify, request, session
@@ -884,3 +885,29 @@ def api_intrag_dce_option_mapping_intrag_id():
         return jsonify({'ok': False, 'error': err}), 400
     return jsonify({'ok': True, 'results': results})
 
+@blueprint.route('/api/intrag/<family>/delete', methods=['POST'])
+def api_intrag_delete(family):
+    """Apaga linhas de uma família de Intrag DO ARQUIVO-DIA.
+
+    Existe porque o Delete das quatro telas era `table.row().remove()` e mais
+    nada — a linha sumia da tela e voltava no F5, e o re-import a reencontrava
+    com o status antigo (ver `commands._intrag_delete_entries`).
+
+    Família desconhecida é **400**, nunca um sucesso vazio: a tela que pedir a
+    família errada tem de dizer isso na hora, e não apagar zero linhas em
+    silêncio parecendo que apagou.
+    """
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    payload = request.get_json(silent=True) or {}
+    items = payload.get('items') or []
+    if not isinstance(items, list) or not items:
+        return jsonify({'success': False, 'message': 'No rows to delete'}), 400
+    try:
+        apagadas, nao_achadas = commands._intrag_delete_entries(family, items)
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
+    except Exception:
+        _R().log.error('[intrag-delete] %s failed:\n%s', family, traceback.format_exc())
+        return jsonify({'success': False, 'message': 'Delete failed'}), 500
+    return jsonify({'success': True, 'deleted': apagadas, 'not_found': nao_achadas})
