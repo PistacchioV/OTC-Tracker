@@ -51,6 +51,31 @@ def _optcomm_file_list():
             routes._day_files(routes.CACHE_BASE_DIR, '_optcomm.json')]
 
 
+def _nd_file_list(base, suffix):
+    """`(caminho, mtime, tamanho)` dos arquivos-dia de `base` com `suffix`,
+    UMA vez por request e por (pasta, sufixo) — o gêmeo parametrizado do
+    `_optcomm_file_list`. Os dois finders genéricos de NDF faziam `os.walk` +
+    `os.stat` por arquivo a cada chamada, e os bulks os chamam por LINHA
+    selecionada: 50 linhas × ~500 dias no share era o request de minutos sem
+    erro nenhum. Fora de request não memoiza (a rotina longa enxerga o
+    arquivo novo aparecer)."""
+    from apps.pages import routes
+    store = None
+    try:
+        from flask import g, has_app_context
+        if has_app_context():
+            store = g.setdefault('_nd_file_lists', {})
+    except Exception:                                       # noqa: BLE001
+        store = None
+    chave = (os.path.normpath(str(base)), suffix)
+    if store is not None and chave in store:
+        return store[chave]
+    lista = [(fp, mt, sz) for fp, _fn, mt, sz in routes._day_files(base, suffix)]
+    if store is not None:
+        store[chave] = lista
+    return lista
+
+
 @once_per_request
 def _optfxo_file_list():
     from apps.pages import routes
@@ -1653,7 +1678,13 @@ def _ndf_api_start_scheduler():
 
 def _find_ndf_deal_in_cache(deal_name, client_name=None):
     """Search all YYYYMMDD_ndfcomm.json files for a deal by Deal + Client.
-    Returns (file_path, list_index) or (None, None)."""
+    Returns (file_path, list_index) or (None, None).
+
+    A listagem vem do `_nd_file_list` (UMA por request, e do mais NOVO para o
+    mais antigo) e a leitura do funil `_day_json` (DB-only, memoizado por
+    mtime/tamanho) — a mesma receita do `_find_deal_in_cache`. Era `os.walk` +
+    `os.stat` por arquivo, do mais antigo para o mais novo: um deal de ontem
+    percorria o histórico inteiro no share, e os bulks chamam isto por linha."""
     from apps.pages import routes
     files_scanned     = 0
     deals_scanned     = 0
@@ -1664,42 +1695,34 @@ def _find_ndf_deal_in_cache(deal_name, client_name=None):
         log.error("[_find_ndf] CACHE DIR MISSING: %s", routes.NDF_COMM_CACHE_DIR)
         return None, None
 
-    for root, _dirs, files in os.walk(routes.NDF_COMM_CACHE_DIR):
-        for fname in sorted(files):
-            if not fname.endswith('_ndfcomm.json'):
-                continue
-            fpath = os.path.join(root, fname)
-            files_scanned += 1
-            try:
-                # Pelo FUNIL `_day_json`: DB-only (fase 3) e memoizado por
-                # (mtime, tamanho). O finder varre a árvore inteira, então um
-                # `open` por arquivo aqui seria uma abertura de banco por dia
-                # (§428) — e o memo ainda poupa a releitura entre requests.
-                _st = os.stat(fpath)
-                deals = routes._day_json(fpath, _st.st_mtime, _st.st_size)
-                if not isinstance(deals, list):
-                    deals = [deals]
-                for i, deal in enumerate(deals):
-                    deals_scanned += 1
-                    d_name   = deal.get('Deal', '')
-                    d_client = deal.get('Client', '')
-                    all_names_seen.append((fname, d_name, d_client))
-                    # Trim-tolerant match: a stray leading/trailing space in the
-                    # cache or in the request must not cause a phantom 404.
-                    if (d_name or '').strip() == (deal_name or '').strip():
-                        if client_name is None or (d_client or '').strip() == (client_name or '').strip():
-                            log.debug("[_find_ndf] FOUND %r client=%r → %s[%d]",
-                                      deal_name, client_name, fname, i)
-                            return fpath, i
-                        else:
-                            deal_name_matches.append({
-                                'file': fname, 'idx': i,
-                                'stored_client': repr(d_client),
-                                'wanted_client': repr(client_name)
-                            })
-            except Exception:
-                log.warning("[_find_ndf] Error reading %s: %s", fpath, traceback.format_exc())
-                continue
+    for fpath, mtime, size in reversed(_nd_file_list(routes.NDF_COMM_CACHE_DIR, '_ndfcomm.json')):
+        fname = os.path.basename(fpath)
+        files_scanned += 1
+        try:
+            deals = routes._day_json(fpath, mtime, size)
+            if not isinstance(deals, list):
+                deals = [deals]
+            for i, deal in enumerate(deals):
+                deals_scanned += 1
+                d_name   = deal.get('Deal', '')
+                d_client = deal.get('Client', '')
+                all_names_seen.append((fname, d_name, d_client))
+                # Trim-tolerant match: a stray leading/trailing space in the
+                # cache or in the request must not cause a phantom 404.
+                if (d_name or '').strip() == (deal_name or '').strip():
+                    if client_name is None or (d_client or '').strip() == (client_name or '').strip():
+                        log.debug("[_find_ndf] FOUND %r client=%r → %s[%d]",
+                                  deal_name, client_name, fname, i)
+                        return fpath, i
+                    else:
+                        deal_name_matches.append({
+                            'file': fname, 'idx': i,
+                            'stored_client': repr(d_client),
+                            'wanted_client': repr(client_name)
+                        })
+        except Exception:
+            log.warning("[_find_ndf] Error reading %s: %s", fpath, traceback.format_exc())
+            continue
 
     # ── Not found — emit targeted diagnosis ──────────────────────────────
     if deal_name_matches:
@@ -2019,30 +2042,24 @@ def _generic_nd_pc_trigger(product, deal):
 
 def _find_generic_nd_deal(cfg, deal_name, client_name=None):
     """Locate a deal by Deal (+optional Client) across the product's cache files.
-    Returns (file_path, list_index) or (None, None)."""
+    Returns (file_path, list_index) or (None, None).
+
+    Listagem `_nd_file_list` (uma por request, do mais novo para o mais
+    antigo) e leitura pelo funil `_day_json` — ver `_find_ndf_deal_in_cache`."""
     from apps.pages import routes
     base = cfg['dir']
     if not os.path.isdir(base):
         return None, None
-    for root, _dirs, files in os.walk(base):
-        for fname in sorted(files):
-            if not fname.endswith(cfg['suffix']):
-                continue
-            fpath = os.path.join(root, fname)
-            try:
-                # Pelo FUNIL `_day_json`: DB-only (fase 3) e memoizado por
-                # (mtime, tamanho). O finder varre a árvore inteira, então um
-                # `open` por arquivo aqui seria uma abertura de banco por dia
-                # (§428) — e o memo ainda poupa a releitura entre requests.
-                _st = os.stat(fpath)
-                deals = routes._day_json(fpath, _st.st_mtime, _st.st_size)
-                if not isinstance(deals, list):
-                    deals = [deals]
-                for i, deal in enumerate(deals):
-                    if deal.get('Deal', '') == deal_name and (client_name is None or deal.get('Client', '') == client_name):
-                        return fpath, i
-            except Exception:
-                continue
+    for fpath, mtime, size in reversed(_nd_file_list(base, cfg['suffix'])):
+        try:
+            deals = routes._day_json(fpath, mtime, size)
+            if not isinstance(deals, list):
+                deals = [deals]
+            for i, deal in enumerate(deals):
+                if deal.get('Deal', '') == deal_name and (client_name is None or deal.get('Client', '') == client_name):
+                    return fpath, i
+        except Exception:
+            continue
     return None, None
 
 

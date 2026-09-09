@@ -317,6 +317,50 @@ check('6. curado de verdade, o banco volta a responder', DR.day_payload(DIA), [{
 check('6. e o sucesso LIMPA a marca', DR._cura_em_quarentena(DIA), False)
 check('6. o sucesso tambem zera a contagem do disjuntor', DR._cura_geral['seguidas'], 0)
 
+# ── 6b. OCUPADO nao e DEFASADO: disputa nao cura nem poe em quarentena ───────
+# O teto do permit/da trava e o "used by another process" da instancia vizinha
+# sao banco INTEGRO com outro dono neste instante. Tratados como defasados,
+# custavam 30 s de `convert_sync` reconvertendo o que estava certo — e a marca
+# de quarentena por cima. Agora: uma retentativa curta e o JSON desta vez.
+from apps.pages import database_access as _DAx             # noqa: E402
+OCUP = os.path.join(TMP, 'cache', 'new deals', 'NDF', 'Commodities', '2026', '06',
+                    '20260612_ndfcomm.json')
+R._atomic_write_json(OCUP, [{'Deal': 'OC-1'}])
+M.flush(20)
+check('6b. antes, o banco responde', DR.day_payload(OCUP), [{'Deal': 'OC-1'}])
+DR.day_memo_forget()
+tentativas = []
+_sync_real = M.convert_sync
+M.convert_sync = lambda *a, **k: (tentativas.append(a[0] if a else None), True)[1]
+_dr_real = DR.duckdb_read
+_chamadas = []
+
+
+def _ocupado(path, **kw):
+    _chamadas.append(os.path.basename(str(path)))
+    raise _DAx.DatabaseLockTimeout(str(path), 'read', 0.1)
+
+
+DR.duckdb_read = _ocupado
+DR._ocupado_aviso['ate'] = 0.0
+DR._cura_falhou.clear()
+DR._cura_geral.update({'ate': 0.0, 'seguidas': 0})
+check('6b. banco ocupado: cai no JSON SEM curar',
+      (DR.day_payload(OCUP), len(tentativas)), (None, 0))
+check('6b. com UMA retentativa antes de desistir', _chamadas.count('Commodities.db'), 2)
+check('6b. e sem marcar quarentena', DR._cura_em_quarentena(OCUP), False)
+check('6b. quem cai aqui ainda LE, pelo JSON', DR.day_records(OCUP), [{'Deal': 'OC-1'}])
+_chamadas[:] = []
+check('6b. o cadastro (table_rows) segue a mesma regra',
+      (DR.refdata_rows() if os.path.isfile(os.path.join(TMP, 'RefData.json')) else None) is None
+      and len(tentativas) == 0)
+DR.duckdb_read = _dr_real
+M.convert_sync = _sync_real
+check('6b. passada a disputa, o banco volta a responder', DR.day_payload(OCUP), [{'Deal': 'OC-1'}])
+# O teto de espera das leituras do espelho e CURTO e vale so para LEITURA.
+check('6b. o teto curto e configuravel e cobre so a leitura',
+      DR._LEITURA_TETO is not None and DR._LEITURA_TETO <= 15)
+
 # ── 7. JSON AUSENTE: o banco responde sozinho ───────────────────────────────
 # A leitura e DB-only e o JSON e o meio de ESCRITA (§4). Exigir o arquivo para
 # LER era exigir o meio de escrita: com o dia no banco e o JSON fora do disco a

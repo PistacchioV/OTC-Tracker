@@ -630,6 +630,9 @@ _notif_maior_id_antigo = _pf_notif._notif_maior_id_antigo
 _notif_avanca_sequencia = _pf_notif._notif_avanca_sequencia
 _notif_schema_pronto = _pf_notif._notif_schema_pronto
 _ensure_notif_db = _pf_notif._ensure_notif_db
+# O expurgo do sino vive na platform; o REGISTRO é gancho de plataforma (como
+# o dos schedulers das features) e respeita o `OTC_DISABLE_SCHEDULERS`.
+_schedule_on_start('notif-purge', _pf_notif.start_purge)
 
 
 def init_db():
@@ -13281,7 +13284,7 @@ def api_get_notifications():
             rows = conn.execute("""
                 SELECT id, actor_sid, actor_name, action, page, detail, target_role, created_at
                 FROM notifications
-                WHERE DATE(created_at) = CURRENT_DATE
+                WHERE created_at >= CURRENT_DATE
                   AND (COALESCE(target_sid, '') = '' OR COALESCE(target_sid, '') = ?)
                   AND (COALESCE(target_role, '') = ''
                        OR list_contains(string_split(target_role, ','), ?))

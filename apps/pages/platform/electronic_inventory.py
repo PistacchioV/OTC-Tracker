@@ -261,6 +261,39 @@ def _ei_human_size(n):
     return ''
 
 
+
+def _ei_walk(raiz):
+    """`(pasta, nome, caminho, stat)` de cada arquivo sob `raiz`, por
+    `os.scandir` — a mesma receita do `_day_files` do daycache. O `DirEntry`
+    guarda o que a listagem já trouxe, então o `stat` de cada arquivo não
+    volta à rede. Ordem por nome dentro de cada pasta, pastas em profundidade
+    (quem consome ordena por `modified` depois). Pasta que não abre é pulada:
+    meia lista é melhor do que um 500 com o share piscando."""
+    pilha = [raiz]
+    while pilha:
+        atual = pilha.pop()
+        subdirs, arquivos = [], []
+        try:
+            with os.scandir(atual) as it:
+                for e in it:
+                    try:
+                        if e.is_dir():
+                            subdirs.append(e.path)
+                        else:
+                            arquivos.append(e)
+                    except OSError:
+                        continue
+        except OSError:
+            continue
+        for d in sorted(subdirs, reverse=True):
+            pilha.append(d)
+        for e in sorted(arquivos, key=lambda x: x.name):
+            try:
+                st = e.stat()
+            except OSError:
+                continue
+            yield atual, e.name, e.path, st
+
 def _ei_iter_files(base, doctype):
     """Yield a dict per file under <base>/<doctype>. Confirmations recurses and
     reads a dd/mm/yyyy date from the YYYY/MM/DD path; Transactional derives a
@@ -278,52 +311,50 @@ def _ei_iter_files(base, doctype):
         sub = _ei_extended(os.path.normpath(os.path.abspath(sub)))
     if not os.path.isdir(sub):
         return
-    for dirpath, _dirs, files in os.walk(sub):
-        for fn in files:
-            if fn.startswith('.') or fn.startswith('~$'):
-                continue
-            ext = os.path.splitext(fn)[1].lower()
-            # Lista tudo que o Upload aceita (SSI costuma ser scan JPG/PNG, CGD
-            # chega como .msg, …) — só PDF deixava sumir arquivo presente na
-            # pasta (SSI da AMAGGI). Lixo de sistema (Thumbs.db, temporários)
-            # continua fora por não estar no whitelist.
-            if ext not in _EI_ALLOWED_UPLOAD:
-                continue
-            full = os.path.join(dirpath, fn)
-            try:
-                st = os.stat(full)
-            except Exception:
-                continue
-            rel_within = os.path.relpath(dirpath, sub).replace('\\', '/')
-            parts = [p for p in rel_within.split('/') if p and p != '.']
-            doc_date = ''
-            if doctype == 'Confirmations' and len(parts) >= 3:
-                mdir = _EI_MONTH_DIR_RE.match(parts[1])
-                if (re.match(r'^\d{4}$', parts[0]) and mdir and re.match(r'^\d{2}$', parts[2])):
-                    doc_date = '%s/%s/%s' % (parts[2], mdir.group(1), parts[0])
-            subtype = ''
-            if doctype in ('Transactional', 'Confirmations'):
-                # Drop the version marker ('2nd CGD AMENDMENT - …', '#2 NDF - …')
-                # so the sub-type still matches every copy of the same kind.
-                m = re.match(r'^\s*(?:(?:#\d+|\d+(?:st|nd|rd|th))\s+)?([A-Za-z0-9/&.\- ]+?)\s+-\s+',
-                             fn, re.IGNORECASE)
-                subtype = (m.group(1).strip().upper() if m else '')
-            yield {
-                'name': fn,
-                'doctype': doctype,
-                'subtype': subtype,
-                # Montado das partes, não de relpath(full, base): `full` pode
-                # estar na forma \\?\ e `base` na comum — relpath entre as duas
-                # não tem raiz em comum. O resultado é byte a byte o de antes.
-                'rel': '/'.join([doctype] + parts + [fn]),
-                'ext': ext.lstrip('.').upper(),
-                'previewable': ext in _EI_PREVIEWABLE,
-                'size': st.st_size,
-                'size_h': _ei_human_size(st.st_size),
-                'doc_date': doc_date,
-                'modified': int(st.st_mtime),
-                'modified_h': datetime.fromtimestamp(st.st_mtime).strftime('%d/%m/%Y %H:%M'),
-            }
+    # `_ei_walk` e não `os.walk`: a listagem do SMB já devolve tamanho e mtime
+    # de cada entrada (no Windows `entry.stat()` não custa chamada nenhuma), e
+    # o `os.walk` jogava isso fora para o laço pagar um `os.stat` POR ARQUIVO —
+    # uma ida à rede por documento da contraparte a cada abertura da tela.
+    for dirpath, fn, full, st in _ei_walk(sub):
+        if fn.startswith('.') or fn.startswith('~$'):
+            continue
+        ext = os.path.splitext(fn)[1].lower()
+        # Lista tudo que o Upload aceita (SSI costuma ser scan JPG/PNG, CGD
+        # chega como .msg, …) — só PDF deixava sumir arquivo presente na
+        # pasta (SSI da AMAGGI). Lixo de sistema (Thumbs.db, temporários)
+        # continua fora por não estar no whitelist.
+        if ext not in _EI_ALLOWED_UPLOAD:
+            continue
+        rel_within = os.path.relpath(dirpath, sub).replace('\\', '/')
+        parts = [p for p in rel_within.split('/') if p and p != '.']
+        doc_date = ''
+        if doctype == 'Confirmations' and len(parts) >= 3:
+            mdir = _EI_MONTH_DIR_RE.match(parts[1])
+            if (re.match(r'^\d{4}$', parts[0]) and mdir and re.match(r'^\d{2}$', parts[2])):
+                doc_date = '%s/%s/%s' % (parts[2], mdir.group(1), parts[0])
+        subtype = ''
+        if doctype in ('Transactional', 'Confirmations'):
+            # Drop the version marker ('2nd CGD AMENDMENT - …', '#2 NDF - …')
+            # so the sub-type still matches every copy of the same kind.
+            m = re.match(r'^\s*(?:(?:#\d+|\d+(?:st|nd|rd|th))\s+)?([A-Za-z0-9/&.\- ]+?)\s+-\s+',
+                         fn, re.IGNORECASE)
+            subtype = (m.group(1).strip().upper() if m else '')
+        yield {
+            'name': fn,
+            'doctype': doctype,
+            'subtype': subtype,
+            # Montado das partes, não de relpath(full, base): `full` pode
+            # estar na forma \\?\ e `base` na comum — relpath entre as duas
+            # não tem raiz em comum. O resultado é byte a byte o de antes.
+            'rel': '/'.join([doctype] + parts + [fn]),
+            'ext': ext.lstrip('.').upper(),
+            'previewable': ext in _EI_PREVIEWABLE,
+            'size': st.st_size,
+            'size_h': _ei_human_size(st.st_size),
+            'doc_date': doc_date,
+            'modified': int(st.st_mtime),
+            'modified_h': datetime.fromtimestamp(st.st_mtime).strftime('%d/%m/%Y %H:%M'),
+        }
 
 
 # Cache for the (slow) network-share folder scan. The I:\ drive can take far

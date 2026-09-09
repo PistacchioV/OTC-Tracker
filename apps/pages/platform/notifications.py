@@ -29,6 +29,13 @@ import threading
 import time
 import traceback
 
+# As assinaturas de "o arquivo tem outro dono" moram na camada de banco
+# (`database_access.FILE_IN_USE_SIGNATURES`): o leitor do espelho precisa da
+# MESMA resposta que o sino, e duas listas divergiriam na primeira mensagem
+# nova. O nome antigo fica como alias — é o que os testes e o poll do sino leem.
+from apps.pages.database_access import (                       # noqa: F401
+    FILE_IN_USE_SIGNATURES as _NOTIF_EM_USO, is_file_in_use as _notif_arquivo_em_uso)
+
 log = logging.getLogger('otc_tracker')
 
 # Rótulo do Daily Settlement › NDF › Other Publisher. Ele NÃO pode ser o mesmo
@@ -318,28 +325,6 @@ def _notif_avanca_sequencia(conn):
         log.warning('[notif-db] avanço da sequência falhou:\n%s', traceback.format_exc())
 
 
-# As assinaturas de "o arquivo tem outro dono", nos dois sistemas. O Windows
-# responde com a frase do próprio SO; o Linux e o macOS, com a do lock do
-# DuckDB. `already open` e `different configuration` cobrem o conflito DENTRO
-# do processo, que é o mesmo problema por outro caminho (o DuckDB guarda uma
-# instância por arquivo e recusa a segunda com outra configuração — é o que o
-# poll do sino vê quando pede read-only durante um `duckdb_write` em curso).
-_NOTIF_EM_USO = (
-    'used by another process',
-    'being used by another',
-    'could not set lock',
-    'conflicting lock',
-    'already open',
-    'different configuration',
-)
-
-
-def _notif_arquivo_em_uso(exc):
-    """A falha de abertura foi disputa pelo arquivo, ou outra coisa?"""
-    texto = str(exc).lower()
-    return any(marca in texto for marca in _NOTIF_EM_USO)
-
-
 def _notif_schema_pronto():
     """As duas tabelas já existem? A pergunta é de LEITURA, e é ela que evita a
     abertura read-write no caso normal — que é a esmagadora maioria das vezes.
@@ -467,6 +452,63 @@ def _ensure_notif_db():
             # parte — o que muda aqui é só a ESPERA antes da próxima tentativa.
             _notif_db_retry_at = time.monotonic() + _NOTIF_DB_RETRY_SECONDS
             raise
+
+
+# ── o expurgo: a tabela do sino não cresce para sempre ──────────────────────
+# Nada apagava `notifications`: o poll varre a tabela inteira (uma vez por aba
+# a cada 15 s) filtrando pelo dia, e em dois anos são dezenas de milhares de
+# linhas num arquivo do share. O sino mostra só o dia de hoje, então o que
+# passa da retenção não tem leitor nenhum. Roda em thread própria alguns
+# minutos depois da subida (a subida já disputa o share com o resto) e uma vez
+# por dia; é idempotente, então duas instâncias expurgando não se atrapalham.
+# `OTC_NOTIF_RETENTION_DAYS=0` desliga.
+try:
+    _NOTIF_RETENTION_DAYS = int(os.getenv('OTC_NOTIF_RETENTION_DAYS', '90') or 0)
+except ValueError:
+    _NOTIF_RETENTION_DAYS = 90
+_NOTIF_PURGE_DELAY = 180
+_notif_purge_started = False
+
+
+def _notif_purge_old(days=None):
+    """Apaga as notificações mais velhas que `days`; devolve quantas."""
+    from datetime import datetime, timedelta
+    days = _NOTIF_RETENTION_DAYS if days is None else days
+    if not days or days <= 0:
+        return 0
+    corte = datetime.now() - timedelta(days=days)
+    conn = get_notif_connection()
+    try:
+        antes = conn.execute('SELECT COUNT(*) FROM notifications WHERE created_at < ?',
+                             [corte]).fetchone()[0]
+        if antes:
+            conn.execute('DELETE FROM notifications WHERE created_at < ?', [corte])
+        conn.commit()
+    finally:
+        conn.close()
+    if antes:
+        log.info('[notif-db] expurgo: %d notificação(ões) com mais de %d dias apagadas',
+                 antes, days)
+    return int(antes or 0)
+
+
+def _notif_purge_loop():
+    time.sleep(_NOTIF_PURGE_DELAY)
+    while True:
+        try:
+            _notif_purge_old()
+        except Exception:                                   # noqa: BLE001
+            log.warning('[notif-db] expurgo falhou:\n%s', traceback.format_exc())
+        time.sleep(24 * 3600)
+
+
+def start_purge():
+    """Gancho de plataforma: o `routes` o registra em `_schedule_on_start`."""
+    global _notif_purge_started
+    if _notif_purge_started or not _NOTIF_RETENTION_DAYS:
+        return
+    _notif_purge_started = True
+    threading.Thread(target=_notif_purge_loop, name='notif-purge', daemon=True).start()
 
 
 def _notif_roles(target_role):

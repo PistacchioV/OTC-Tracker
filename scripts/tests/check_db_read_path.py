@@ -23,6 +23,11 @@ ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)),
 sys.path.insert(0, ROOT)
 os.chdir(ROOT)
 
+# Sem os schedulers: o aquecimento do dashboard e os laços agendados leem
+# bancos em thread de fundo, e o espião abaixo contaria essas operações como se
+# fossem da allowlist — o teste ficava intermitente.
+os.environ['OTC_DISABLE_SCHEDULERS'] = '1'
+
 TMP = tempfile.mkdtemp(prefix='db-read-path-')
 DB = os.path.join(TMP, 'Users_OTCTracker.db')
 
@@ -64,7 +69,11 @@ def _spy(path, *, engine, write, operation_id=None, skip_file_lock=False):
     # exercitaria um caminho que a aplicacao nao usa.
     with _real_ctx(path, engine=engine, write=write, operation_id=operation_id,
                    skip_file_lock=skip_file_lock) as conn:
-        ops.append(('unlocked ' if skip_file_lock else '') + ('write' if write else 'read'))
+        # So o banco de USUARIOS e o do SINO contam: o espelho abre dezenas
+        # de outros arquivos pela mesma camada, e eles nao sao o assunto aqui.
+        if os.path.normpath(str(path)) in (os.path.normpath(DB),
+                                           os.path.normpath(str(R.NOTIF_DB_PATH))):
+            ops.append(('unlocked ' if skip_file_lock else '') + ('write' if write else 'read'))
         yield conn
 
 
@@ -126,6 +135,41 @@ for _ in range(20):
     R._get_page_access('A111111')
 check('a primeira foi uma so', primeira, 1)
 check('e as 20 seguintes, nenhuma', len(ops) - primeira, 0)
+
+print('\n== 2b. cache vencido: UMA thread renova, as outras servem o vencido ==')
+# Uma pagina dispara dezenas de /static ao mesmo tempo; quando o TTL vencia,
+# todas erravam o cache juntas e cada uma abria o banco no share.
+import threading as _th                                      # noqa: E402
+with R._pf_authz._page_access_lock:
+    _k = 'A111111'
+    _v = R._pf_authz._page_access_cache[_k]
+    R._pf_authz._page_access_cache[_k] = (0.0, _v[1])        # vencido
+_real_read = R._pf_authz._read_user_authz
+_gate = _th.Event()
+
+
+def _lento(sid):
+    _gate.wait(2)                                            # segura o dono
+    return _real_read(sid)
+
+
+R._pf_authz._read_user_authz = _lento
+ops[:] = []
+_res = []
+_ts = [_th.Thread(target=lambda: _res.append(R._get_page_access('A111111'))) for _ in range(12)]
+for _t in _ts:
+    _t.start()
+import time as _time                                         # noqa: E402
+_time.sleep(0.3)
+check('as 11 que chegaram com o dono em voo ja responderam (servindo o vencido)',
+      len(_res) >= 11, True)
+_gate.set()
+for _t in _ts:
+    _t.join(5)
+R._pf_authz._read_user_authz = _real_read
+check('12 chamadas com o cache vencido → UMA leitura do banco', len(ops), 1)
+check('e todas responderam a mesma allowlist',
+      all(r[1] == _res[0][1] for r in _res) and len(_res) == 12, True)
 
 print('\n== 3. o cache devolve COPIA, nao o proprio conjunto ==')
 _, urls = R._get_page_access('A111111')

@@ -49,6 +49,7 @@ import duckdb
 #
 # Medido: 12,67 ms por abertura pela camada contra 12,82 ms crua — a abertura
 # do DuckDB domina, e o lock compartilhado mais o permit somem no ruído.
+from apps.pages import database_access as _DA
 from apps.pages.database_access import duckdb_read, db_gate
 
 from apps.pages.json_to_duckdb import q
@@ -75,6 +76,130 @@ except ValueError:
     _FREIO_LIMIAR = 0.35
 _FREIO_ESPERA = 600.0
 _freio = {'ate': 0.0}
+
+# ── OCUPADO não é DEFASADO ──────────────────────────────────────────────────
+# O `_ler` devolvia `None` para TODA exceção, e `None` quer dizer "banco frio ou
+# defasado: cure". Mas o teto do permit (30 s), o da trava de arquivo (15 s) e o
+# "used by another process" da instância vizinha são banco OCUPADO — íntegro,
+# só que com outro dono neste instante. Tratados como defasados, custavam uma
+# espera de trava, mais 30 s de `convert_sync` reconvertendo um banco que
+# estava certo, mais a marca de quarentena. Agora a disputa é classificada
+# (`database_access.is_file_in_use`, a mesma resposta do sino): UMA retentativa
+# curta e, persistindo, o JSON desta vez — sem cura e sem quarentena.
+#
+# E o teto de espera das leituras do espelho é CURTO (`read_timeout`): quem lê
+# tem para onde cair, e uma thread do waitress parada 45 s esperando o banco
+# que a vizinha está convertendo é pior do que servir o JSON.
+_OCUPADO = object()
+_OCUPADO_ESPERA = 0.3
+try:
+    _LEITURA_TETO = float(os.getenv('OTC_DUCK_READ_LOCK_SECONDS', '5') or 0) or None
+except ValueError:
+    _LEITURA_TETO = 5.0
+_ocupado_aviso = {'ate': 0.0}
+_ocupado_lock = threading.Lock()
+
+
+def _classifica(exc):
+    """Exceção da leitura → `_OCUPADO` (disputa; não cure) ou `None` (o resto:
+    banco frio/defasado/ilegível; cure)."""
+    try:
+        return _OCUPADO if _DA.is_file_in_use(exc) else None
+    except Exception:                                       # noqa: BLE001
+        return None
+
+
+def _ocupado_avisa(db):
+    """WARNING uma vez por janela de 10 min — a disputa é transitória e uma
+    linha por leitura seria o log inteiro num share atolado."""
+    with _ocupado_lock:
+        agora = time.monotonic()
+        if agora < _ocupado_aviso['ate']:
+            return
+        _ocupado_aviso['ate'] = agora + _FREIO_ESPERA
+    log.warning('[duck-read] %s está OCUPADO (outro processo/escrita em curso) e a '
+                'retentativa não passou — servindo o JSON desta vez, sem reconverter '
+                '(teto da espera em OTC_DUCK_READ_LOCK_SECONDS)', os.path.basename(str(db)))
+
+
+def _le_ocupado(ler):
+    """Roda `ler()`; se voltar `_OCUPADO`, espera um pouco e tenta UMA vez mais."""
+    out = ler()
+    if out is _OCUPADO:
+        time.sleep(_OCUPADO_ESPERA)
+        out = ler()
+    return out
+
+
+# ── memo de PROCESSO dos arquivos-dia ───────────────────────────────────────
+# O `day_payload` memoizava só por REQUEST (`flask.g`): a cada F5 as cinco Live
+# Position, o Operations B3, o OTM e os Settlement Advice reabriam o banco no
+# share e refaziam o `json.loads` de cada linha — numa posição TER de vinte mil
+# linhas, uma abertura de segundos mais dezenas de ms de CPU por request e por
+# pessoa. O `_day_json` já tinha o que faltava (memo de processo por caminho ×
+# mtime × tamanho — `json_cache._daycache_memo`); este é o gêmeo dele para o
+# `day_payload`, e guarda os `_raw` (texto): o hit reparseia, então cada
+# consumidor continua recebendo objetos SEUS e pode alterá-los e gravar.
+#
+# A chave leva mtime e tamanho, então um arquivo reescrito nunca é servido
+# velho — e é por isso que ele vale também FORA de request (a rotina agendada
+# continua enxergando o arquivo mudar: o `stat` acontece a cada chamada). O que
+# se poupa é a ABERTURA do banco, não o `stat`. Teto por BYTES (os `_raw` de um
+# TER são dezenas de MB), despejando o mais antigo; `OTC_DUCK_DAY_MEMO_MB=0`
+# desliga.
+try:
+    _DAY_MEMO_MAX_BYTES = int(float(os.getenv('OTC_DUCK_DAY_MEMO_MB', '256') or 0) * 1024 * 1024)
+except ValueError:
+    _DAY_MEMO_MAX_BYTES = 256 * 1024 * 1024
+_day_memo = {}                  # (jpath, mtime, size) → list[str] | None (payload-objeto)
+_day_memo_bytes = {'n': 0}
+_day_memo_lock = threading.Lock()
+_MISS = object()
+
+
+def _day_memo_get(chave):
+    if not _DAY_MEMO_MAX_BYTES:
+        return _MISS
+    with _day_memo_lock:
+        if chave not in _day_memo:
+            return _MISS
+        crus = _day_memo.pop(chave)         # reinsere no fim: o mais usado fica
+        _day_memo[chave] = crus
+        return crus
+
+
+def _day_memo_put(chave, crus):
+    if not _DAY_MEMO_MAX_BYTES:
+        return
+    tamanho = sum(len(c) for c in crus) if crus else 0
+    if tamanho > _DAY_MEMO_MAX_BYTES:
+        return                              # um arquivo maior que o teto não cabe
+    with _day_memo_lock:
+        antigo = _day_memo.pop(chave, None)
+        if antigo:
+            _day_memo_bytes['n'] -= sum(len(c) for c in antigo)
+        while _day_memo and _day_memo_bytes['n'] + tamanho > _DAY_MEMO_MAX_BYTES:
+            _k, velho = next(iter(_day_memo.items()))
+            del _day_memo[_k]
+            _day_memo_bytes['n'] -= sum(len(c) for c in velho) if velho else 0
+        _day_memo[chave] = crus
+        _day_memo_bytes['n'] += tamanho
+
+
+def day_memo_forget(path=None):
+    """Esquece um arquivo-dia (todas as versões dele) ou tudo. O mtime novo já
+    invalida; isto é para quem não quer contar com a resolução do relógio do
+    share, como o `_daycache_forget`."""
+    with _day_memo_lock:
+        if path is None:
+            _day_memo.clear()
+            _day_memo_bytes['n'] = 0
+            return
+        alvo = os.path.normpath(str(path))
+        for k in [k for k in _day_memo if k[1] == alvo]:
+            velho = _day_memo.pop(k)
+            _day_memo_bytes['n'] -= sum(len(c) for c in velho) if velho else 0
+
 
 # Quanto o leitor espera uma ESCRITA do espelho em curso no mesmo banco antes
 # de conectar (§422). Passado o teto ele conecta assim mesmo: se a escrita
@@ -272,7 +397,7 @@ def table_rows(db_name, table, rel, schema='main', order_by=None, heal=None,
             gate = db_gate(db)
             gate.enter_read(_GATE_READ_WAIT_SECONDS)
             try:
-                with duckdb_read(db) as con:
+                with _DA.read_timeout(_LEITURA_TETO), duckdb_read(db) as con:
                     row = con.execute('SELECT mtime, fsize FROM _manifest WHERE path = ?',
                                       [manifest_key or rel]).fetchone()
                     if not row or abs(row[0] - st.st_mtime) >= 1e-6 or row[1] != st.st_size:
@@ -286,11 +411,14 @@ def table_rows(db_name, table, rel, schema='main', order_by=None, heal=None,
             finally:
                 gate.exit_read()
                 _freio_mede(time.monotonic() - t0, db)
-        except Exception:                                   # noqa: BLE001
-            return None
+        except Exception as exc:                            # noqa: BLE001
+            return _classifica(exc)
 
     try:
-        rows = _ler()
+        rows = _le_ocupado(_ler)
+        if rows is _OCUPADO:
+            _ocupado_avisa(db_name)
+            return None                       # o JSON desta vez; nada de cura
         if rows is None:
             # CURA SÍNCRONA: converte AGORA (na fila da thread do espelho —
             # serializado, nunca dois escritores no mesmo banco) e relê. Com o
@@ -375,7 +503,7 @@ def _dia_sem_json(db_name, schema, tabela, jpath):
         gate.enter_read(_GATE_READ_WAIT_SECONDS)
         t0 = time.monotonic()
         try:
-            with duckdb_read(db) as con:
+            with _DA.read_timeout(_LEITURA_TETO), duckdb_read(db) as con:
                 cols = [d[0] for d in
                         con.execute('SELECT * FROM %s LIMIT 0' % alvo_sql).description]
                 if cols == ['_empty']:
@@ -448,6 +576,13 @@ def day_payload(path):
         if memo is not None and chave in memo:
             crus = memo[chave]
             return None if crus is None else [json.loads(c) for c in crus]
+        # O memo de PROCESSO (ver `_day_memo`): mesma chave, então o arquivo
+        # reescrito não é servido velho; o que se poupa é a abertura do banco.
+        crus = _day_memo_get(chave)
+        if crus is not _MISS:
+            if memo is not None:
+                memo[chave] = crus
+            return None if crus is None else [json.loads(c) for c in crus]
 
         _OBJETO = object()       # sentinela: payload que o banco não reconstrói
 
@@ -464,7 +599,7 @@ def day_payload(path):
                 gate = db_gate(db)
                 gate.enter_read(_GATE_READ_WAIT_SECONDS)
                 try:
-                    with duckdb_read(db) as con:
+                    with _DA.read_timeout(_LEITURA_TETO), duckdb_read(db) as con:
                         row = con.execute(
                             'SELECT mtime, fsize, targets FROM _manifest WHERE path = ?',
                             [core._dataset_manifest_key(rel)]).fetchone()
@@ -487,8 +622,8 @@ def day_payload(path):
                 finally:
                     gate.exit_read()
                     _freio_mede(time.monotonic() - t0, db)
-            except Exception:                               # noqa: BLE001
-                return None
+            except Exception as exc:                        # noqa: BLE001
+                return _classifica(exc)
 
         def _valida(crus):
             """Todo `_raw` é JSON legível? Fora do lock, de propósito.
@@ -513,7 +648,10 @@ def day_payload(path):
                     return None
             return crus
 
-        dados = _ler()
+        dados = _le_ocupado(_ler)
+        if dados is _OCUPADO:
+            _ocupado_avisa(db_name)
+            return None                       # o JSON desta vez; nada de cura
         if isinstance(dados, list) and dados:
             dados = _valida(dados)
         if dados is None:
@@ -531,11 +669,13 @@ def day_payload(path):
         if dados is _OBJETO:
             if memo is not None:
                 memo[chave] = None           # payload-objeto: não reabrir o banco neste request
+            _day_memo_put(chave, None)       # nem nos seguintes: converter não muda a forma
             return None
         if dados is None:
             return None
         if memo is not None:
             memo[chave] = dados
+        _day_memo_put(chave, dados)
         return [json.loads(c) for c in dados]
     except Exception:                                       # noqa: BLE001
         return None
@@ -604,7 +744,7 @@ def day_files(raiz, sufixo=''):
         except Exception:                                   # noqa: BLE001
             continue
         try:
-            with duckdb_read(db) as con:
+            with _DA.read_timeout(_LEITURA_TETO), duckdb_read(db) as con:
                 linhas = con.execute(
                     'SELECT path, mtime, fsize FROM _manifest').fetchall()
             respondeu = True
@@ -701,7 +841,7 @@ def prefetch_days(dias):
         except Exception:                                   # noqa: BLE001
             continue
         try:
-            with duckdb_read(db) as con:
+            with _DA.read_timeout(_LEITURA_TETO), duckdb_read(db) as con:
                 # O manifest inteiro de uma vez: ele tem uma linha por
                 # arquivo-dia do produto e é a prova de frescor de todos eles.
                 # Uma consulta por dia seria o mesmo defeito numa escala menor.
@@ -739,6 +879,7 @@ def prefetch_days(dias):
             _freio_mede(time.monotonic() - t0, db)
 
         # Fora da conexão e fora do lock — ver o docstring.
+        meta = {jpath: (mtime, size) for jpath, _r, _s, _t, mtime, size in itens}
         for jpath, crus in crus_por_dia.items():
             registros = []
             for c in crus:
@@ -752,6 +893,12 @@ def prefetch_days(dias):
                     break
             if registros is not None:
                 out[jpath] = registros
+                # O lote alimenta também o memo de processo do `day_payload`:
+                # o dia que o prefetch trouxe não paga abertura no leitor
+                # unitário do request seguinte.
+                mt, sz = meta.get(jpath, (None, None))
+                if mt is not None:
+                    _day_memo_put(('day', jpath, mt, sz), crus)
     return out
 
 

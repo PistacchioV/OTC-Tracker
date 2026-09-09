@@ -43,6 +43,7 @@ três com o rótulo curto, encostadas em quem validou, que é como se lê.
 import logging
 import os
 import re
+import threading
 import time
 import traceback
 import unicodedata
@@ -875,6 +876,11 @@ def db_path(category):
     return os.path.join(_DB_DIR, DBS[category])
 
 
+# Os bancos já conferidos POR ESTE PROCESSO — ver `ensure_db`.
+_ENSURED = set()
+_ENSURED_LOCK = threading.Lock()
+
+
 def ensure_db(path):
     """Cria o banco vazio se ele não existir e ACRESCENTA as colunas que faltam.
 
@@ -884,12 +890,27 @@ def ensure_db(path):
     `INSERT` — que lista as colunas explicitamente — falharia com "column not
     found" e a tela inteira sumiria depois de um pull.
 
-    `ADD COLUMN IF NOT EXISTS` é idempotente, então isto pode rodar a cada
-    leitura sem custo.
+    **Roda UMA vez por processo e por arquivo.** `ADD COLUMN IF NOT EXISTS` é
+    idempotente, mas não é de graça: a conferência abre o banco em ESCRITA —
+    trava de arquivo EXCLUSIVA entre processos e semáforo de UM dentro dele —
+    e ela ficava no `load_rows`, ou seja, em toda LEITURA. Cada abertura do
+    Track, do Monitor, do BACC e da escalação tomava a trava exclusiva dos
+    dois bancos só para descobrir que não havia coluna a acrescentar, excluindo
+    por alguns segundos os leitores das outras instâncias sobre o mesmo `db/`
+    do share (§8) — e quando a vizinha estava lendo, o open estourava com
+    *"used by another process"*, engolido logo abaixo. Uma trava exclusiva por
+    leitura, sem pista nenhuma no log. O schema é o do CÓDIGO, então a
+    resposta não muda dentro do processo; o que continua sendo conferido a
+    cada chamada é se o ARQUIVO existe (um `stat`, que o `load_rows` já
+    pagava), porque um banco apagado por fora tem de renascer.
     """
     if duckdb is None:
         return
     novo = not os.path.isfile(path)
+    if not novo:
+        with _ENSURED_LOCK:
+            if path in _ENSURED:
+                return
     try:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         # O `with` fecha a conexão e solta o lock em QUALQUER saída, inclusive na
@@ -910,6 +931,10 @@ def ensure_db(path):
                     _LOG.info('[manual-conf] coluna %r acrescentada a %s', c, path)
         if novo:
             _LOG.info('[manual-conf] banco vazio criado em %s', path)
+        # Só depois de a conferência DAR CERTO: a que falhou (arquivo em uso
+        # por outro processo) volta a ser tentada na chamada seguinte.
+        with _ENSURED_LOCK:
+            _ENSURED.add(path)
     except Exception:
         _LOG.warning('[manual-conf] não consegui preparar %s:\n%s', path, traceback.format_exc())
 

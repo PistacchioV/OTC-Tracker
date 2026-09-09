@@ -27,6 +27,7 @@ Três coisas que não são óbvias:
 
 import logging
 import os
+import threading
 from datetime import date, datetime
 
 try:
@@ -193,6 +194,11 @@ def aging_of(row, hoje=None):
 
 # ── Banco ────────────────────────────────────────────────────────────────────
 
+# Os bancos já conferidos POR ESTE PROCESSO — ver `ensure_db`.
+_ENSURED = set()
+_ENSURED_LOCK = threading.Lock()
+
+
 def ensure_db(path=None):
     """Cria o banco vazio e ACRESCENTA as colunas que faltarem.
 
@@ -204,6 +210,16 @@ def ensure_db(path=None):
     path = path or DB_PATH
     if duckdb is None:
         return path
+    # UMA vez por processo e por arquivo — a mesma regra, pela mesma razão, do
+    # `manual_conf.ensure_db`: a conferência abre o banco em ESCRITA (trava
+    # exclusiva entre processos), e chamada do `load` ela virava uma trava
+    # exclusiva por LEITURA da lista de CGDs, excluindo os leitores das outras
+    # instâncias do share. O schema é o do código e não muda no processo; se o
+    # arquivo existe continua sendo perguntado (banco apagado por fora renasce).
+    if os.path.isfile(path):
+        with _ENSURED_LOCK:
+            if path in _ENSURED:
+                return path
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with duckdb_write(path) as con:
         cols = ', '.join('"{}" VARCHAR'.format(c) for c in DB_COLUMNS)
@@ -217,6 +233,9 @@ def ensure_db(path=None):
                 # caso em que o cheat sheet da OWASP permite montar a string.
                 con.execute('ALTER TABLE {} ADD COLUMN IF NOT EXISTS "{}" VARCHAR'
                             .format(TABLE, c))
+    # Só depois de a conferência DAR CERTO (o `with` que estoura não chega aqui).
+    with _ENSURED_LOCK:
+        _ENSURED.add(path)
     return path
 
 

@@ -152,6 +152,7 @@ def _conta(path, **kw):
 
 
 DA._database_context = _conta
+DR.day_memo_forget()            # o memo de PROCESSO (§4) ja esta quente: zera para medir
 with app.app_context():
     a = DR.day_records(dia)
     b = DR.day_records(dia)
@@ -168,11 +169,25 @@ with app.app_context():
     r1 = DR.refdata_rows() if os.path.isfile(os.path.join(TMP, 'RefData.json')) else None
     check('3. sem RefData no tmp o raw_records nao explode', r1, None)
 
-print('\n== 4. fora de request nao memoiza ==')
+print('\n== 4. fora de request: o memo de PROCESSO, por mtime/tamanho ==')
+# O `day_payload` ganhou o gemeo do `_daycache_memo`: a segunda leitura do MESMO
+# arquivo (mesmo mtime, mesmo tamanho) nao abre o banco nem dentro nem fora de
+# request. A rotina agendada continua enxergando o arquivo mudar, porque o
+# `stat` acontece a cada chamada e e ele que compoe a chave.
+DR.day_memo_forget()
+aberturas.clear()
+a = DR.day_records(dia)
+b = DR.day_records(dia)
+check('4. duas leituras fora de request → UMA abertura', aberturas.count('Commodities.db'), 1)
+check('4. e objetos SEUS a cada chamada', a == b and a[0] is not b[0])
+R._atomic_write_json(dia, [{'Deal': 'DBH-1EEE', 'TradeDate': '15/06/2026'}])
+M.flush(20)
+aberturas.clear()
+check('4. arquivo reescrito: reabre e traz o novo',
+      (DR.day_records(dia)[0]['Deal'], aberturas.count('Commodities.db')), ('DBH-1EEE', 1))
 aberturas.clear()
 DR.day_records(dia)
-DR.day_records(dia)
-check('4. duas leituras fora de request → duas aberturas', aberturas.count('Commodities.db'), 2)
+check('4. e a leitura seguinte volta a nao abrir', aberturas.count('Commodities.db'), 0)
 DA._database_context = _ctx
 
 print('\n== 5. a trava de arquivo: a escrita do espelho exclui OUTRO processo ==')

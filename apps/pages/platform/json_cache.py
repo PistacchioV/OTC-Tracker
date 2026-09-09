@@ -94,6 +94,19 @@ def _release_daily_slot(claim_file, slot, log_prefix):
 
 
 
+def _day_memo_forget(file_path):
+    """Derruba o memo de PROCESSO do `duck_read.day_payload` para este
+    arquivo-dia. O mtime novo já invalidaria a entrada — isto é para não
+    contar com a resolução do relógio do share (um arquivo reescrito com o
+    mesmo tamanho dentro do mesmo segundo), pela mesma razão do
+    `_daycache_forget`. Melhor esforço: gravar nunca falha por causa do memo."""
+    try:
+        from apps.pages import duck_read
+        duck_read.day_memo_forget(file_path)
+    except Exception:                                       # noqa: BLE001
+        pass
+
+
 def _map_req_forget(file_path):
     """Derruba o memo POR REQUEST do `_mapping_rows` para este caminho.
 
@@ -142,6 +155,7 @@ def _atomic_write_json(file_path, data):
             os.replace(tmp_path, file_path)
             _bump_cache_gen(file_path)
             _map_req_forget(file_path)
+            _day_memo_forget(file_path)
             _duck_mirror_notify(file_path)
             return
         except PermissionError:
@@ -151,6 +165,7 @@ def _atomic_write_json(file_path, data):
             json.dump(data, fh, ensure_ascii=False, indent=2)
         _bump_cache_gen(file_path)
         _map_req_forget(file_path)
+        _day_memo_forget(file_path)
         _duck_mirror_notify(file_path)
         try:
             os.unlink(tmp_path)
