@@ -192,5 +192,26 @@ check('o aviso nao refaz o lookup por CNPJ',
       "cliente = _refdata_by_taxid().get(cnpj, '')" in SRC, False)
 check('ele le a celula ja resolvida', "cliente = '' if _lp_is_taxid(doc) else doc" in SRC, True)
 
+# ── a CASCATA: CPF/CNPJ, depois a CONTA, e o numero mascarado por ULTIMO ────
+#  O `_lp_cpty_by_taxid` devolve o numero MASCARADO quando nao ha cadastro, e
+#  numero e verdadeiro — entao, com documento presente, a conta nunca era
+#  tentada: a linha parava no CNPJ tendo a conta CETIP ao lado. Foi o que deixou
+#  3 dos 4 avisos de inexistencia de PU sem contraparte em 08/09/2026.
+print('\n== a cascata CNPJ -> conta -> numero ==')
+check('a primeira tentativa e a resolucao CRUA (nao a de exibicao)',
+      'nome = _lp_cpty_name_by_taxid(raw)' in SRC, True)
+check('a conta e o plano B', 'nome = _lp_cpty_by_account(conta)' in SRC, True)
+check('e o numero mascarado fica para o FIM',
+      "disp.append(nome or _lp_cpty_by_taxid(raw))" in SRC, True)
+# O VCP era um ou/ou: conta dedicada NAO tentava o documento, e documento fora
+# do cadastro NAO tentava a conta.
+_blk = SRC.split('def _vcp_collect(', 1)[1].split('\ndef ', 1)[0]
+check('o VCP tenta a conta E depois o documento',
+      ("name = by_acct.get(acct_dig, '') if acct_dig else ''" in _blk
+       and "if not name:" in _blk
+       and "name = by_taxid.get(_acc_digits(cpty_cnpj), '')" in _blk), True)
+check('e nao ha mais o ou/ou',
+      "else:                                              # shared" in _blk, False)
+
 print('\nFALHAS: %d' % len(fails))
 sys.exit(1 if fails else 0)
