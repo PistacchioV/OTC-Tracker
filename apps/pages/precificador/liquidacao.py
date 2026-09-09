@@ -145,10 +145,19 @@ BASES_DE_AJUSTE = [
 
 SOBRE_ORIGINAL = 'original'
 SOBRE_REMANESCENTE = 'remanescente'
+#  `At Maturity` é a resposta do BULLET e do que a coluna `Tipo de amortização`
+#  da posição deixa em branco: não há parcela, há o principal inteiro voltando
+#  no vencimento. Como base de CÁLCULO ela é o saldo remanescente — a 100% os
+#  dois caminhos dão o mesmo número (`amortizar` devolve `min(saldo, ref×1,0)`)
+#  —, mas ela existe como opção própria porque as outras duas descrevem uma
+#  PARCELA, e escolher "sobre o valor original" num bullet faz a tela afirmar
+#  um cronograma de amortização que aquele contrato não tem.
+AT_MATURITY = 'vencimento'
 
 BASES_AMORTIZACAO = [
     (SOBRE_ORIGINAL, 'On the original notional — constant instalment'),
     (SOBRE_REMANESCENTE, 'On the remaining balance — decreasing instalment'),
+    (AT_MATURITY, 'At maturity — the whole principal at the end'),
 ]
 
 
@@ -157,10 +166,15 @@ class ErroLiquidacao(ErroFerramenta, ValueError):
 
 
 def amortizar(nocional_original, saldo, percentual, base=SOBRE_ORIGINAL):
-    """A amortização acontece no FIM do fluxo: define o saldo do seguinte."""
+    """A amortização acontece no FIM do fluxo: define o saldo do seguinte.
+
+    `AT_MATURITY` calcula sobre o SALDO: o que volta no vencimento é o que
+    ainda está de pé, não uma fração do valor registrado — num contrato que já
+    amortizou antes, o original é maior que o saldo e a conta pelo original
+    seria aparada pelo `min` só por sorte."""
     if percentual <= 0:
         return 0.0
-    referencia = saldo if base == SOBRE_REMANESCENTE else nocional_original
+    referencia = saldo if base in (SOBRE_REMANESCENTE, AT_MATURITY) else nocional_original
     return min(saldo, referencia * percentual)
 
 

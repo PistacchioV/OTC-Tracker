@@ -206,9 +206,16 @@ def base_da_amortizacao(texto):
         return liquidacao.SOBRE_REMANESCENTE
     if 'original' in t or 'percentual' in t or 'valor base' in t:
         return liquidacao.SOBRE_ORIGINAL
-    if 'vencimento' in t or 'sem troca' in t:
-        # A base não muda nada quando o percentual é zero; o original é o
-        # default histórico da tela e mantém o formulário coerente.
+    if 'vencimento' in t:
+        # `Na Data de Vencimento` tem base PRÓPRIA na tela (At Maturity): as
+        # outras duas descrevem uma PARCELA, e dizer "sobre o valor original"
+        # num contrato que só amortiza no fim afirma um cronograma que ele não
+        # tem. Num fluxo intermediário o percentual é zero e a base não muda
+        # nada de qualquer jeito (`amortiza_no_fluxo` responde isso).
+        return liquidacao.AT_MATURITY
+    if 'sem troca' in t:
+        # Não amortiza nunca: aqui o original é o default histórico da tela, e
+        # com o percentual em zero ele não muda número nenhum.
         return liquidacao.SOBRE_ORIGINAL
     return None
 
