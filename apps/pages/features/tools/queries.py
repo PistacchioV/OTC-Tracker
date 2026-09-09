@@ -5,6 +5,7 @@ Nada aqui grava. O que precisa do `routes` (a posição de swap do Live
 Position, os cadastros do /mapping) chega por busca ATRASADA — ver
 `features/support/infra/persistence.py`.
 """
+import os
 from datetime import date, timedelta
 
 from apps.pages.features.tools import domain
@@ -307,14 +308,72 @@ def _iso(v):
     return d.strftime('%Y-%m-%d') if d else ''
 
 
+def _subpastas_num(pasta):
+    """Os nomes NUMÉRICOS de subpasta (ano, mês ou dia), do maior para o menor."""
+    try:
+        nomes = os.listdir(pasta)
+    except OSError:
+        return []
+    return sorted((n for n in nomes
+                   if n.isdigit() and os.path.isdir(os.path.join(pasta, n))),
+                  reverse=True)
+
+
+def _swap_day_file(file_tpl, ref=None):
+    """(path, dref) do arquivo de posição de swap mais recente que EXISTE.
+
+    O caminho normal é o `_swap_day_path`: anda até dez dias úteis para trás a
+    partir do D-1, que é o que cobre o dia cujo arquivo ainda não foi salvo.
+    Aqueles dez dias são um TETO, porém, e o que está atrás dele não é "sem
+    posição" — é a última posição que a mesa tem. Sem esta segunda porta, uma
+    rotina de save parada por duas semanas fazia o B3 ID responder *not found*,
+    que se lê como "esse swap não existe" e não como "o arquivo do dia não
+    chegou".
+
+    Passado o teto, o mais recente é achado descendo a árvore `AAAA/MM/DD` pelo
+    fim — três `listdir`, e não um `stat` por dia, que no share é ida e volta de
+    rede por dia varrido. Nada ADIANTE do `ref` entra: ele é o mesmo ponto de
+    partida da janela, e um arquivo de hoje que entrasse por uma porta e ficasse
+    de fora da outra faria a mesma consulta responder duas coisas."""
+    R = _R()
+    ref = ref or R._prev_anbima_bizday(date.today())
+    path, dref = R._swap_day_path(ref, file_tpl)
+    if path:
+        return path, dref
+    raiz = os.path.join(R.B3_JSON_ROOT, 'Swap')
+    for ano in _subpastas_num(raiz):
+        for mes in _subpastas_num(os.path.join(raiz, ano)):
+            base = os.path.join(raiz, ano, mes)
+            for dia in _subpastas_num(base):
+                try:
+                    d = date(int(ano), int(mes), int(dia))
+                except ValueError:
+                    continue
+                if d > ref:
+                    continue
+                dref = d.strftime('%y%m%d')
+                p = os.path.join(base, dia, file_tpl.format(dref))
+                if os.path.isfile(p):
+                    return p, dref
+    return None, None
+
+
+def _data_iso(iso):
+    """'AAAA-MM-DD' → date, ou None."""
+    try:
+        y, m, d = str(iso or '').split('-')
+        return date(int(y), int(m), int(d))
+    except (ValueError, AttributeError):
+        return None
+
+
 def _posicao_swap(b3_id):
     """(linha da posição como lista, source_date) ou (None, None)."""
     R = _R()
     alvo = domain.norm(b3_id).replace(' ', '')
     if not alvo:
         return None, None
-    ref = R._prev_anbima_bizday(date.today())
-    path, dref = R._swap_day_path(ref, '73760_{}_DPOSICAO-SWAP.json')
+    path, dref = _swap_day_file('73760_{}_DPOSICAO-SWAP.json')
     if not path:
         return None, None
     try:
@@ -345,8 +404,14 @@ def _posicao_swap(b3_id):
     return None, None
 
 
-def _fluxos_do_contrato(contrato, ident):
+def _fluxos_do_contrato(contrato, ident, dia_posicao=None):
     """As linhas do DFLUXO daquele contrato, em ordem de evento.
+
+    O DFLUXO é procurado a partir do dia da POSIÇÃO, e não do D-1: os dois
+    arquivos são gravados lado a lado mas são dois arquivos, e cada um andando
+    para trás por conta própria pode parar em dias diferentes — o fluxo de
+    ontem contra a posição da semana passada não dá erro nenhum, dá um período
+    que não é o daquele saldo.
 
     A chave é o **Código do contrato**, e o `Código Identificador` só responde
     quando a posição não traz contrato nenhum. Ele PARECE uma chave e não é: na
@@ -357,8 +422,7 @@ def _fluxos_do_contrato(contrato, ident):
     tinha a MESMA data, o que fazia o Flow start sair igual ao Flow end.
     """
     R = _R()
-    ref = R._prev_anbima_bizday(date.today())
-    path, _dref = R._swap_day_path(ref, '73760_{}_DFLUXO.json')
+    path, _dref = _swap_day_file('73760_{}_DFLUXO.json', ref=dia_posicao)
     if not path:
         return []
     try:
@@ -597,7 +661,7 @@ def swap_prefill(b3_id):
     # acabou de liquidar, e é o que se quer calcular. Sem fluxo nenhum (bullet,
     # ou DFLUXO ausente) o fim é HOJE, marcado como assumido: um campo de data
     # vazio não deixa a tela nem abrir a conta.
-    fluxos = _fluxos_do_contrato(contrato, ident)
+    fluxos = _fluxos_do_contrato(contrato, ident, _data_iso(source_date))
     out['flows'] = fluxos
     hoje = date.today().isoformat()
     # O período de CADA evento é calculado aqui, e não só o do escolhido: trocar
