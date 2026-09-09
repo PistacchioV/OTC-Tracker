@@ -95,8 +95,30 @@ pivot, totals = DM_pivot([dict(r) for r in LINHAS])
 check('so aging >= 30 entra, agrupado pelo ECONOMIC GROUP do RefData',
       [(p['group'], p['b1'], p['b2'], p['b3'], p['total']) for p in pivot],
       [('GRUPO ACME', 1, 1, 0, 2), ('GRUPO BETA', 0, 0, 1, 1), ('NOVO SEM REF', 1, 0, 0, 1)])
-check('   verde so quando o RefData diz DIGITAL',
+check('   verde so quando a assinatura e DIGITAL',
       [p['digital'] for p in pivot], [True, False, False])
+
+# A LINHA responde antes do RefData: era o PROLEC de 09/09/2026, com SPN e
+# Client batendo com o cadastro, `Pending Digital Signature` na tela e o e-mail
+# pintando o grupo de branco — que a legenda chama de "Manually signed". Aqui o
+# RefData e' apagado de proposito: so a coluna da linha responde.
+SEM_REF = [{'Client': 'ACME SA', 'SPN': '100', 'Aging': '45', 'LOB': 'CEM',
+            'Signature Type': 'DIGITAL'}]
+_by_spn, _by_name = R._fxo_refdata_by_spn, R._pc_refdata_by_name
+R._fxo_refdata_by_spn = lambda: {}
+R._pc_refdata_by_name = lambda: {}
+try:
+    piv2, _ = DM_pivot([dict(r) for r in SEM_REF])
+    check('   a coluna da LINHA vale quando o RefData nao responde',
+          [p['digital'] for p in piv2], [True])
+finally:
+    R._fxo_refdata_by_spn, R._pc_refdata_by_name = _by_spn, _by_name
+
+# E o contrario: linha calada (as antigas, de antes da coluna) continua caindo
+# no RefData — sem isso o grupo perderia o verde que hoje tem.
+piv3, _ = DM_pivot([{'Client': 'ACME SA', 'SPN': '100', 'Aging': '45', 'LOB': 'CEM'}])
+check('   linha calada continua caindo no RefData',
+      [p['digital'] for p in piv3], [True])
 check('   banker do RefData', [p['banker'] for p in pivot][:2], ['Fulano', 'Sicrano'])
 check('   totais fecham', (totals['b1'], totals['b2'], totals['b3'], totals['total']),
       (2, 1, 1, 4))
