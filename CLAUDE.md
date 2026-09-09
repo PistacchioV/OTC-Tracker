@@ -507,10 +507,42 @@ São dois bancos:
     mão envelheceria no primeiro mapping novo, e **lista parcial é pior que
     nenhuma**, porque dá a impressão de cobertura. O custo foi medido: 12,67 ms
     por abertura pela camada contra 12,82 ms crua — a abertura do DuckDB domina.
-    **A metade de ESCRITA ainda não passa por ali**: as quatro aberturas do
-    `json_to_duckdb.py` seguem cruas, e duas delas mantêm um POOL de conexões
-    vivo através de muitos arquivos. Até isso ser reestruturado, o lock
-    compartilhado das leituras dá **visibilidade, não exclusão mútua**.
+    **A escrita do ESPELHO VIVO passa por ali desde 09/09/2026**: o
+    `_abrir_com_portao` toma a trava de arquivo EXCLUSIVA
+    (`database_access.hold_file_lock`, um objeto e não um `with`, porque o motor
+    tem o par `ABRIR_BANCO`/`FECHAR_BANCO`) e a solta **depois** do `close()` —
+    é no fechar que o DuckDB faz o checkpoint e mexe nos arquivos. Sem ela a
+    escrita era a ÚNICA operação do app que tocava o share sem excluir ninguém,
+    e como cada pessoa roda a própria instância sobre o mesmo `db/` (§8), o
+    leitor de uma mantinha o arquivo ABERTO enquanto o escritor de outra tentava
+    renomeá-lo: no SMB isso não é permitido, e o DuckDB estourava com
+    **`IO Error: Could not move file: Access is denied`** — mensagem que não fala
+    nem de lock nem de concorrência. O teto da espera é **6 s**, e não os 30 s do
+    ajuste, porque a cura síncrona da tela espera esta tarefa com 30 s de
+    orçamento: gastá-los na trava garantiria o estouro dela, e a tela cairia no
+    JSON justamente por causa da coordenação que existe para mantê-la no banco.
+    Trava que não vem **não aborta** a conversão — segue sem ela, avisando —,
+    então onde a disputa não é a causa nada muda. A **carga completa**
+    (`convert_json_to_duckdb`/standalone) segue com o connect cru de propósito:
+    os ganchos são injetados só pela thread do espelho, e é lá que mora o POOL
+    de conexões vivo através de muitos arquivos, que travado excluiria os
+    leitores por minutos.
+  - **cura que não cura entra em QUARENTENA** (09/09/2026). A leitura DB-only
+    cura o banco frio na hora e vale a espera; mas há falha que NÃO passa numa
+    segunda tentativa — o `Access is denied` acima é uma. Contra ela, cada
+    leitura pagava a fila do espelho, a conversão inteira e o segundo `_ler`,
+    caía no JSON do mesmo jeito e ainda ENFILEIRAVA uma retentativa que
+    atravancava a cura da leitura seguinte: uma tela que abre dez arquivos-dia
+    pagava isso dez vezes. Agora o arquivo cuja cura não resolveu fica de
+    quarentena por 5 min (`OTC_DUCK_HEAL_RETRY_SECONDS`), e **duas falhas
+    seguidas abrem um DISJUNTOR geral** — a marca por arquivo sozinha não
+    ajudava a PRIMEIRA carga, porque a marca de A não diz nada sobre B e cada
+    arquivo pagava o seu timeout. Leitura pelo banco que dá certo limpa a marca
+    e zera a contagem. **Isto é o canal de EMERGÊNCIA, não o caminho**: a
+    leitura é DB-only e o JSON é só o meio de ESCRITA (o rollback é reverter o
+    commit). Quarentena acesa por muito tempo é problema de ambiente a
+    resolver, não um modo de operação — o WARNING sai uma vez e nomeia o
+    arquivo.
   - **o espelho e o leitor DB-only passam por um PORTÃO em memória** (§422):
     o `duck_read` abre `read_only` e a thread do `duck_mirror` abre o MESMO
     arquivo em escrita, no mesmo processo, e o DuckDB recusa a segunda

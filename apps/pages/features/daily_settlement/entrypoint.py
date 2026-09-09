@@ -20,13 +20,41 @@ def api_cp_daily_settlement_save():
     card's dropzone (multipart 'files'); if none were attached, fall back to
     scanning SETTLEMENTS_ROOT. Each recognised file is read (tab-delimited),
     filtered per the VBA ImportarTexto rules and written to a per-type JSON under
-    the daily-settlement cache (today's date). Folder sources are deleted after
-    processing (mirrors the VBA Kill). OTM cashflows are handled on their own
-    page and are ignored here. No file anywhere → error (UI warns the user)."""
+    the daily-settlement cache, na REFERENCE DATE do card. Folder sources are
+    deleted after processing (mirrors the VBA Kill). OTM cashflows are handled on
+    their own page and are ignored here. No file anywhere → error (UI warns the
+    user).
+
+    A `date` (AAAA-MM-DD) vem do campo Reference date, que nasce em HOJE — o
+    comportamento de sempre. Mudando o campo, os JSONs são gravados na pasta
+    daquele dia, e é assim que se reprocessa um arquivo que chegou atrasado:
+    antes o dia era o relógio do servidor e um arquivo de ontem processado hoje
+    ia parar no dia de hoje, onde as cinco telas que leem esses JSONs nunca o
+    procurariam. Futuro é recusado: o arquivo é o fechamento de um dia que
+    ainda não aconteceu.
+
+    A data chega no FORM quando há arquivos (o POST é multipart) e no JSON
+    quando o dropzone está vazio — os dois caminhos são lidos, senão o campo
+    valeria só metade das vezes, em silêncio."""
     if not session.get('authenticated'):
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
 
-    ref = _R().datetime.now()
+    R = _R()
+    hoje = R._br_now()
+    ref = hoje
+    raw = str(request.form.get('date')
+              or (request.get_json(silent=True) or {}).get('date') or '').strip()
+    if raw:
+        d = R._parse_date_any(raw)
+        if d is None:
+            return jsonify({'success': False,
+                            'error': 'Invalid reference date: {}.'.format(raw)}), 400
+        if d > hoje.date():
+            return jsonify({'success': False,
+                            'error': 'Reference date {} is in the future — the settlement '
+                                     'files close a day that has already '
+                                     'happened.'.format(d.strftime('%d/%m/%Y'))}), 400
+        ref = R.datetime(d.year, d.month, d.day)
     uploaded = [f for f in request.files.getlist('files') if f and f.filename]
     processed, skipped = [], []
     source = 'dropzone'
@@ -84,5 +112,9 @@ def api_cp_daily_settlement_save():
         msg += ('<br><br>' if msg else '') + \
             '<span class="text-muted">{} ignored (unrecognized): {}</span>'.format(
                 len(skipped), ', '.join(skipped[:8]) + ('…' if len(skipped) > 8 else ''))
+    # `date` volta na resposta porque o dia deixou de ser implícito: quem
+    # processou precisa ver em que dia os JSONs foram gravados, senão uma data
+    # trocada por engano só apareceria como uma tela vazia dias depois.
     return jsonify({'success': True, 'source': source, 'processed': processed,
-                    'skipped': skipped, 'message': msg or 'Nothing to process.'})
+                    'skipped': skipped, 'date': ref.strftime('%Y-%m-%d'),
+                    'message': msg or 'Nothing to process.'})

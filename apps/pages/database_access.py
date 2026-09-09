@@ -343,8 +343,11 @@ def _acquire_permit(
     )
 
 
-def _acquire_file_lock(operation: DatabaseOperation) -> portalocker.Lock:
-    timeout = (
+def _acquire_file_lock(
+    operation: DatabaseOperation,
+    timeout_seconds: Optional[float] = None,
+) -> portalocker.Lock:
+    timeout = timeout_seconds if timeout_seconds is not None else (
         _settings.write_lock_timeout_seconds
         if operation.mode == "write"
         else _settings.read_lock_timeout_seconds
@@ -379,6 +382,84 @@ def _acquire_file_lock(operation: DatabaseOperation) -> portalocker.Lock:
             wait_seconds=round(waited, 3),
         )
     return lock
+
+
+class HeldFileLock:
+    """A trava de arquivo de uma conexão cujo tempo de vida é do CHAMADOR.
+
+    O `_database_context` cobre o caso normal — abre, trava, fecha, destrava —,
+    mas o motor do espelho (`json_to_duckdb`) tem um par `ABRIR_BANCO` /
+    `FECHAR_BANCO` e mantém a conexão viva através de muitos arquivos. Para ele
+    a trava precisa ser um OBJETO, não um `with`. Os eventos são os mesmos do
+    farol, então a escrita do espelho passa a aparecer no painel ao lado das
+    leituras — que era metade do problema: ela era a única operação do app que
+    tocava o share sem deixar rastro.
+    """
+
+    __slots__ = ("_lock", "_operation", "_acquired_at", "_released")
+
+    def __init__(self, lock, operation: DatabaseOperation) -> None:
+        self._lock = lock
+        self._operation = operation
+        self._acquired_at = time.monotonic()
+        self._released = False
+
+    def release(self) -> None:
+        if self._released:
+            return
+        self._released = True
+        held = time.monotonic() - self._acquired_at
+        try:
+            self._lock.release()
+        except Exception as exc:                            # noqa: BLE001
+            _log_event(
+                "operation_completed", self._operation, logging.ERROR,
+                category="cleanup_failed", operation_seconds=round(held, 3),
+                lock_hold_seconds=round(held, 3),
+                error_type=type(exc).__name__,
+                error_message=_sanitize_error(exc, self._operation),
+            )
+            return
+        _log_event(
+            "operation_completed", self._operation,
+            category="committed" if self._operation.mode == "write" else "completed",
+            operation_seconds=round(held, 3), lock_hold_seconds=round(held, 3),
+            error_type="", error_message="",
+        )
+        if held >= _settings.slow_lock_warning_seconds:
+            _log_event(
+                "file_lock_held_slow", self._operation, logging.WARNING,
+                lock_hold_seconds=round(held, 3),
+            )
+
+
+def hold_file_lock(
+    database_path: _PathLike,
+    *,
+    write: bool,
+    engine: str = "duckdb",
+    operation_id: Optional[str] = None,
+    timeout_seconds: Optional[float] = None,
+) -> HeldFileLock:
+    """Toma a trava de arquivo (EXCLUSIVA em escrita, COMPARTILHADA em leitura)
+    para uma conexão que o chamador vai abrir e fechar por conta própria.
+
+    `timeout_seconds` sobrepõe o teto do ajuste: quem chama pode ter um
+    orçamento MENOR que o da camada — o espelho tem, porque a cura síncrona da
+    tela espera por ele e esperar o teto de 30s garantiria o estouro dela.
+
+    Levanta `DatabaseLockTimeout` como o caminho normal — quem chama decide se
+    espera, desiste ou segue sem coordenação."""
+    normalized_path = normalize_database_path(database_path)
+    operation = DatabaseOperation(
+        operation_id=operation_id or uuid.uuid4().hex,
+        database_path=normalized_path,
+        lock_path=lock_file_path(normalized_path),
+        mode="write" if write else "read",
+        started_at=time.monotonic(),
+        engine=engine,
+    )
+    return HeldFileLock(_acquire_file_lock(operation, timeout_seconds), operation)
 
 
 def _open_connection(engine: str, database_path: str, write: bool):

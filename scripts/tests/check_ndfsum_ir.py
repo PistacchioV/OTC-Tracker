@@ -190,6 +190,39 @@ try:
     it3 = list(OPTC['2026-12-02'])
     R._optadv_apply_ir(it3, e2)
     check('4. abaixo do piso a opcao sai BRUTA', it3[0]['ir'], 0.0)
+
+    # ── 5. o ledger nunca segura a tela ─────────────────────────────────────
+    #  A cura dos dias anteriores le, por dia, o Cockpit + Operations B3 + Live
+    #  Position + OTM. No share isso custa mais que a tela inteira, e um mes tem
+    #  vinte dias. Estourado o teto a cura para, o dia pedido sai com o
+    #  acumulado que deu tempo de somar, e o ledger NAO e gravado — nada errado
+    #  fica em disco e a proxima abertura cura o que faltou.
+    print('\n== 5. o teto da cura ==')
+    e9 = datetime(2026, 12, 9)
+    for dia in (3, 4, 7, 8):
+        cockpit(datetime(2026, 12, dia),
+                [('BANCO J.P MORGAN S.A', 'DELTA SA', -900000.0)])   # 45,00/dia
+    led_antes = json.dumps(R._ndfsum_ir_ledger_load(e9), sort_keys=True)
+    _teto = R._NDFSUM_IR_CURA_TETO
+    R._NDFSUM_IR_CURA_TETO = -1.0                 # nenhum dia cabe no teto
+    try:
+        r9 = R._ndfsum_ir_for_day(e9, R._ndfsum_ir_cockpit_groups(
+            [{'LEGAL': 'BANCO J.P MORGAN S.A', 'NM_COUNTERPARTY': 'DELTA SA',
+              '[PROD] Cockpit.SETTLEMENT': '-900000.00'}]))
+    finally:
+        R._NDFSUM_IR_CURA_TETO = _teto
+    check('5. com o teto estourado a tela AINDA recebe o imposto do dia',
+          r9[R._fcst_norm('DELTA SA')]['taxes'], [45.0])
+    check('5. e nada foi gravado — a proxima abertura cura',
+          json.dumps(R._ndfsum_ir_ledger_load(e9), sort_keys=True), led_antes)
+    r9b = R._ndfsum_ir_for_day(e9, R._ndfsum_ir_cockpit_groups(
+        [{'LEGAL': 'BANCO J.P MORGAN S.A', 'NM_COUNTERPARTY': 'DELTA SA',
+          '[PROD] Cockpit.SETTLEMENT': '-900000.00'}]))
+    check('5. sem o teto, a cura completa e o ledger grava os dias',
+          sorted(k for k in R._ndfsum_ir_ledger_load(e9)
+                 if k.startswith('2026-12-0')) [-1], '2026-12-09')
+    check('5. e o dia sai com o acumulado dos quatro dias curados',
+          r9b[R._fcst_norm('DELTA SA')]['carry_in'], 0.0)
 finally:
     shutil.rmtree(TMP, ignore_errors=True)
 

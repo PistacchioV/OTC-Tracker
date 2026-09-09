@@ -8934,6 +8934,18 @@ def _ndfsum_b3_val(legs, titulo, casa, cpty_acc):
 _NDFSUM_IR_MIN = 1.00
 #  A ordem é o contrato da fatia: os impostos voltam concatenados nesta ordem.
 _NDFSUM_IR_SOURCES = ('moeda', 'ndfc', 'optc')
+#  TETO da CURA dos dias anteriores. O ledger é uma conta LATERAL da tela, e no
+#  share ele pode custar mais que a tela inteira: cada dia curado lê o Cockpit,
+#  o Operations B3, a Live Position e o OTM, e um mês tem vinte dias. Estourado
+#  o teto, a cura para onde está, o dia pedido é calculado com o acumulado que
+#  deu tempo de somar e o ledger NÃO é gravado — assim nada errado fica em
+#  disco e a próxima abertura, mais calma, cura os dias que faltaram. Nunca
+#  vale segurar o Summary por causa do imposto: sem ele a tela abre com o IR
+#  incompleto, que se vê; com ele a tela não abre. `0` desliga o teto.
+try:
+    _NDFSUM_IR_CURA_TETO = float(os.getenv('OTC_NDFSUM_IR_HEAL_SECONDS', '15') or 0)
+except ValueError:
+    _NDFSUM_IR_CURA_TETO = 15.0
 
 
 def _ndfsum_ir_ledger_path(ref):
@@ -9150,11 +9162,24 @@ def _ndfsum_ir_for_day(ref, groups, src='moeda'):
         ledger = _ndfsum_ir_ledger_load(ref)
         antes = json.dumps(ledger, sort_keys=True)
         carry = {}
+        completo = True
+        t0 = time.monotonic()
         d = ref_day.replace(day=1)
         while d < ref_day:
             if _pcx_is_bizday(d):
                 k = d.strftime('%Y-%m-%d')
                 if k not in ledger:
+                    if _NDFSUM_IR_CURA_TETO and \
+                            time.monotonic() - t0 > _NDFSUM_IR_CURA_TETO:
+                        # O dia NÃO é gravado vazio: uma entrada falsa nunca
+                        # mais seria recalculada (`k not in ledger`), e o mês
+                        # ficaria com um buraco silencioso no acumulado.
+                        completo = False
+                        log.warning('[ndfsum] a cura do ledger de IR passou de %.0fs e parou '
+                                    'em %s — o dia sai com o acumulado incompleto e nada é '
+                                    'gravado (teto em OTC_NDFSUM_IR_HEAL_SECONDS)',
+                                    _NDFSUM_IR_CURA_TETO, k)
+                        break
                     ent, _ = _ndfsum_ir_day_entries(_ndfsum_ir_day_groups(d), carry)
                     ledger[k] = ent
                 for key, e in (ledger.get(k) or {}).items():
@@ -9163,7 +9188,7 @@ def _ndfsum_ir_for_day(ref, groups, src='moeda'):
         entries, taxes_by_key = _ndfsum_ir_day_entries(
             _ndfsum_ir_day_groups(ref_day, groups, src), carry)
         ledger[iso] = entries
-        if json.dumps(ledger, sort_keys=True) != antes:
+        if completo and json.dumps(ledger, sort_keys=True) != antes:
             try:
                 path = _ndfsum_ir_ledger_path(ref)
                 os.makedirs(os.path.dirname(path), exist_ok=True)
