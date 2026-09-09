@@ -276,12 +276,46 @@ DR._cura_falhou[DIA] = _t.monotonic() - 1     # a janela expira
 check('6. janela expirada: tenta curar de novo',
       (DR.day_payload(DIA), len(tentativas)), (None, 2))
 
+# O DISJUNTOR: a marca por arquivo nao basta quando o share recusa a escrita,
+# porque ai TODA conversao falha e uma tela que abre dez arquivos-dia pagaria
+# dez curas — cada uma ate o timeout do `convert_sync`. Passadas
+# `_CURA_FALHAS_SEGUIDAS` falhas, a quarentena vale para qualquer arquivo.
+OUTRO = os.path.join(TMP, 'cache', 'new deals', 'NDF', 'Commodities', '2026', '06',
+                     '20260617_ndfcomm.json')
+R._atomic_write_json(OUTRO, [{'Deal': 'R1'}])
+M.flush(20)
+DR._cura_falhou.clear()
+DR._cura_geral.update({'ate': 0.0, 'seguidas': 0})
+with open(OUTRO, 'w', encoding='utf-8') as fh:
+    fh.write(json.dumps([{'Deal': 'R2'}], ensure_ascii=False))
+tentativas[:] = []
+check('6. a primeira falha ainda tenta o arquivo dela',
+      (DR.day_payload(OUTRO), len(tentativas)), (None, 1))
+check('6. o disjuntor NAO abriu com uma falha so', DR._cura_geral['ate'] > _t.monotonic(), False)
+with open(DIA, 'w', encoding='utf-8') as fh:
+    fh.write(json.dumps([{'Deal': 'Q3'}], ensure_ascii=False))
+DR._cura_falhou.pop(DIA, None)
+check('6. a segunda falha, em OUTRO arquivo, abre o disjuntor',
+      (DR.day_payload(DIA), len(tentativas), DR._cura_geral['ate'] > _t.monotonic()),
+      (None, 2, True))
+# Um TERCEIRO arquivo, nunca tentado, ja nasce em quarentena — e e isso que
+# tira o timeout de 30s de cada um dos dez arquivos da tela.
+TERCEIRO = os.path.join(TMP, 'cache', 'new deals', 'NDF', 'Commodities', '2026', '06',
+                        '20260616_ndfcomm.json')
+with open(TERCEIRO, 'w', encoding='utf-8') as fh:
+    fh.write(json.dumps([{'Deal': 'S1'}], ensure_ascii=False))
+check('6. com o disjuntor aberto, arquivo NOVO nem tenta',
+      (DR.day_payload(TERCEIRO), len(tentativas)), (None, 2))
+check('6. e ele ainda LE, pelo JSON', DR.day_records(TERCEIRO), [{'Deal': 'S1'}])
+
 M.convert_sync, M.notify_write = _sync_real, _notify_real
 DR._cura_falhou.clear()
+DR._cura_geral.update({'ate': 0.0, 'seguidas': 0})
 M.notify_write(DIA)
 M.flush(20)
-check('6. curado de verdade, o banco volta a responder', DR.day_payload(DIA), [{'Deal': 'Q2'}])
+check('6. curado de verdade, o banco volta a responder', DR.day_payload(DIA), [{'Deal': 'Q3'}])
 check('6. e o sucesso LIMPA a marca', DR._cura_em_quarentena(DIA), False)
+check('6. o sucesso tambem zera a contagem do disjuntor', DR._cura_geral['seguidas'], 0)
 
 print()
 if fails:

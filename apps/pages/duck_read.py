@@ -105,7 +105,16 @@ try:
     _CURA_ESPERA = float(os.getenv('OTC_DUCK_HEAL_RETRY_SECONDS', '300') or 0)
 except ValueError:
     _CURA_ESPERA = 300.0
+# Quantas curas seguidas podem falhar antes de a quarentena valer para TODOS os
+# arquivos. A marca por arquivo sozinha não bastava: quando o share recusa a
+# escrita, TODA conversão falha, e uma tela que abre dez arquivos-dia ainda
+# pagava dez curas — cada uma até o timeout de 30s do `convert_sync`, porque a
+# marca do arquivo A não diz nada sobre o B. Cinco minutos de espera não
+# ajudam quem está esperando a PRIMEIRA carga. Com o disjuntor, a primeira
+# falha custa uma cura e o resto da tela vai direto ao JSON.
+_CURA_FALHAS_SEGUIDAS = 2
 _cura_falhou = {}
+_cura_geral = {'ate': 0.0, 'seguidas': 0}
 _cura_lock = threading.Lock()
 
 
@@ -113,7 +122,8 @@ def _cura_em_quarentena(jpath):
     if not _CURA_ESPERA:
         return False
     with _cura_lock:
-        return time.monotonic() < _cura_falhou.get(jpath, 0.0)
+        agora = time.monotonic()
+        return agora < _cura_geral['ate'] or agora < _cura_falhou.get(jpath, 0.0)
 
 
 def _cura_marca_falha(jpath):
@@ -121,9 +131,21 @@ def _cura_marca_falha(jpath):
     if not _CURA_ESPERA:
         return
     with _cura_lock:
-        novo = jpath not in _cura_falhou or _cura_falhou[jpath] < time.monotonic()
-        _cura_falhou[jpath] = time.monotonic() + _CURA_ESPERA
-    if novo:
+        agora = time.monotonic()
+        novo = _cura_falhou.get(jpath, 0.0) < agora
+        _cura_falhou[jpath] = agora + _CURA_ESPERA
+        _cura_geral['seguidas'] += 1
+        disjuntor = (_cura_geral['seguidas'] >= _CURA_FALHAS_SEGUIDAS
+                     and _cura_geral['ate'] < agora)
+        if disjuntor:
+            _cura_geral['ate'] = agora + _CURA_ESPERA
+    if disjuntor:
+        log.warning('[duck-read] %d curas seguidas não resolveram (a última em %s) — '
+                    'toda leitura vai ao JSON pelos próximos %.0f min, sem tentar '
+                    'converter. O log do duck-mirror diz o motivo; ajuste em '
+                    'OTC_DUCK_HEAL_RETRY_SECONDS',
+                    _cura_geral['seguidas'], os.path.basename(jpath), _CURA_ESPERA / 60.0)
+    elif novo:
         log.warning('[duck-read] a cura não resolveu %s — servindo o JSON e '
                     'sem tentar de novo por %.0f min (o log do duck-mirror diz '
                     'por quê; ajuste em OTC_DUCK_HEAL_RETRY_SECONDS)',
@@ -131,9 +153,15 @@ def _cura_marca_falha(jpath):
 
 
 def _cura_marca_ok(jpath):
-    if _CURA_ESPERA and jpath in _cura_falhou:
+    """Leitura pelo banco deu certo: some a marca do arquivo e o disjuntor
+    volta a zero — a contagem é de falhas SEGUIDAS, e uma conversão que
+    funcionou diz que o share voltou."""
+    if not _CURA_ESPERA:
+        return
+    if jpath in _cura_falhou or _cura_geral['seguidas']:
         with _cura_lock:
             _cura_falhou.pop(jpath, None)
+            _cura_geral['seguidas'] = 0
 
 
 def _memo_req():
