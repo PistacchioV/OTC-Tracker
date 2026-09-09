@@ -48,14 +48,18 @@ CENTER = re.compile(r'text-align\s*:\s*center', re.I)
 CENTER_IMP = re.compile(r'text-align\s*:\s*center\s*!\s*important', re.I)
 CLONE = re.compile(r'dt-scroll-head|dataTables_scrollHead', re.I)
 
-# Telas de DEMONSTRACAO do tema comprado: as linhas sao fixas no HTML
-# ("Blazor Admin Theme - Final QA", "E-Commerce Redesign", "15 Aug 2025") e as
-# colunas numericas levam `text-end` de proposito. Nao sao tabela de dado do
-# app -- sao da mesma familia do `horizontal.html`, que foi APAGADO (§3).
-# `dashboard-2.html`, `widgets.html` e `chat.html` sairam do repositorio em
-# 09/09/2026, junto com os assets de demonstracao do tema; sobrou o
-# `users-profile.html`, que e tela de VERDADE com um bloco de demo dentro.
-DEMO_DO_TEMA = ('users-profile.html',)
+# Telas de DEMONSTRACAO do tema comprado, isentas da regra: as linhas eram
+# fixas no HTML ("Blazor Admin Theme - Final QA", "E-Commerce Redesign") e as
+# colunas numericas levavam `text-end` de proposito -- nao eram tabela de dado
+# do app, e sim da familia do `horizontal.html`, que foi APAGADO (§3).
+#
+# A lista esta VAZIA desde 09/09/2026: `dashboard-2.html`, `widgets.html` e
+# `chat.html` sairam do repositorio junto com os assets de demonstracao, e o
+# `users-profile.html` -- que era a ultima -- foi reescrito com dado real da
+# sessao e nao tem mais tabela nenhuma. Ela fica aqui, vazia, porque e a porta
+# por onde uma tela de demo NOVA entraria: o guarda continua cobrando a regra
+# de todas, e quem quiser isentar alguma precisa escrever o nome aqui.
+DEMO_DO_TEMA = ()
 
 falhas = []
 
