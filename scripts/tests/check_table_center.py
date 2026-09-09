@@ -51,9 +51,11 @@ CLONE = re.compile(r'dt-scroll-head|dataTables_scrollHead', re.I)
 # Telas de DEMONSTRACAO do tema comprado: as linhas sao fixas no HTML
 # ("Blazor Admin Theme - Final QA", "E-Commerce Redesign", "15 Aug 2025") e as
 # colunas numericas levam `text-end` de proposito. Nao sao tabela de dado do
-# app -- sao da mesma familia do `horizontal.html`, que foi APAGADO (§3). Se um
-# dia elas sairem do repositorio, esta lista sai junto.
-DEMO_DO_TEMA = ('dashboard-2.html', 'users-profile.html', 'widgets.html')
+# app -- sao da mesma familia do `horizontal.html`, que foi APAGADO (§3).
+# `dashboard-2.html`, `widgets.html` e `chat.html` sairam do repositorio em
+# 09/09/2026, junto com os assets de demonstracao do tema; sobrou o
+# `users-profile.html`, que e tela de VERDADE com um bloco de demo dentro.
+DEMO_DO_TEMA = ('users-profile.html',)
 
 falhas = []
 
