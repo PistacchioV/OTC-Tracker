@@ -313,9 +313,8 @@ def _safe_landing(allowed):
     is redirected, so it never bounces to a page they also can't see (the dashboards
     are now grantable, so '/dashboard' is not guaranteed). '/users-profile' is the
     always-open last resort."""
-    for u in ('/dashboard', '/dashboard-2'):
-        if u in allowed:
-            return u
+    if '/dashboard' in allowed:
+        return '/dashboard'
     if _cp_page_allowed(allowed):
         return '/control-panel'
     for u in sorted(allowed):
