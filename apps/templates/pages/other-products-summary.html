@@ -147,6 +147,13 @@
    Mesmas classes e mesmos valores, de propósito: as duas telas mostram a mesma
    ideia e um usuário que aprendeu a ler uma tem de conseguir ler a outra. */
 .ops-recon .ops-widget__head { margin-bottom: .7rem; }
+/* Estado de carga do lote (ao lado do subtítulo): carregando / erro / IR parcial */
+.ops-load-state { display: inline-flex; align-items: center; gap: .35rem; min-height: 1.25rem;
+                  color: var(--ins-secondary-color, #6e6e73); }
+.ops-load-state.is-busy .spinner-border { width: .85rem; height: .85rem; border-width: .15em; }
+.ops-load-state.is-err  { color: #dc2626; }
+.ops-load-state.is-warn { color: #b45309; }
+.ops-load-state a { font-weight: 600; text-decoration: underline; color: inherit; }
 .ops-recon-badge {
     margin-left: auto; display: inline-flex; align-items: center; gap: .25rem;
     font-size: .68rem; font-weight: 700; letter-spacing: .02em;
@@ -244,7 +251,10 @@
     <!-- Reference date -->
     <div class="row mb-3">
         <div class="col-12 d-flex justify-content-between align-items-center flex-wrap gap-2">
-            <p class="text-muted mb-0 fs-sm" data-lang="ops-sub">Settlement batch for the reference date (defaults to today).</p>
+            <div class="d-flex align-items-center gap-3 flex-wrap">
+                <p class="text-muted mb-0 fs-sm" data-lang="ops-sub">Settlement batch for the reference date (defaults to today).</p>
+                <span id="opsLoadState" class="ops-load-state fs-sm" aria-live="polite"></span>
+            </div>
             <div class="ops-datefield d-flex align-items-center gap-2">
                 <label class="fs-sm fw-semibold mb-0" data-lang="ops-ref-date">Reference date</label>
                 <div class="ops-datewrap" id="opsDateWrap">
@@ -818,12 +828,62 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // ── Reference date → (re)load from the settlement batch endpoint ──────────
     var currentYmd = '{{ today }}';
+    // O estado da carga é VISÍVEL (mesmo desenho do NDF Summary, §432): enquanto
+    // o servidor monta o lote — no share são dezenas de segundos — a tela dizia
+    // "No rows for this date" e um 500 morria no `.catch` vazio.
+    var _loadSeq = 0, _loadTimer = null;
+    var stateEl = document.getElementById('opsLoadState');
+    var EMPTY_TXT = function () { return t('ops-empty', 'No rows for this date yet — add one or pick another date.'); };
+    function setEmptyText(text) {
+        [dtSummary, dtTrade].forEach(function (dt) { dt.settings()[0].oLanguage.sEmptyTable = text; });
+    }
+    function showState(kind, html) {
+        if (!stateEl) return;
+        stateEl.className = 'ops-load-state fs-sm' + (kind ? ' is-' + kind : '');
+        stateEl.innerHTML = html || '';
+    }
+    function retryLink() {
+        return ' <a href="#" class="ops-retry">' + esc(t('ops-retry', 'Retry')) + '</a>';
+    }
+    if (stateEl) stateEl.addEventListener('click', function (ev) {
+        if (ev.target.closest('.ops-retry')) { ev.preventDefault(); loadDate(currentYmd); }
+    });
     function loadDate(ymd) {
         currentYmd = ymd || currentYmd;
+        var seq = ++_loadSeq, t0 = Date.now();
+        clearInterval(_loadTimer);
+        setEmptyText(t('ops-loading-table', 'Loading…'));
+        dtTrade.clear().draw(); dtSummary.clear().draw();
+        function tick() {
+            var s = Math.round((Date.now() - t0) / 1000);
+            showState('busy', '<span class="spinner-border" role="status"></span> ' +
+                esc(t('ops-loading', 'Loading the settlement batch… {s}s').replace('{s}', s)));
+        }
+        tick(); _loadTimer = setInterval(tick, 1000);
+        function done() { clearInterval(_loadTimer); setEmptyText(EMPTY_TXT()); }
+        function fail(reason) {
+            if (seq !== _loadSeq) return;                  // resposta de uma data já trocada
+            done(); dtTrade.draw(); dtSummary.draw();
+            showState('err', '<i class="ti ti-alert-triangle"></i> ' +
+                esc(t('ops-load-err', 'Could not load the settlement batch ({e}).').replace('{e}', reason)) + retryLink());
+        }
         fetch('/api/other-products-summary/data?date=' + encodeURIComponent(ymd))
-            .then(function (r) { return r.json(); })
-            .then(function (j) {
-                if (!j || !j.success) return;
+            .then(function (r) {
+                return r.text().then(function (txt) {
+                    var j = null; try { j = JSON.parse(txt); } catch (e) {}
+                    return { status: r.status, j: j };
+                });
+            })
+            .then(function (res) {
+                if (seq !== _loadSeq) return;
+                var j = res.j;
+                if (!j || !j.success) {
+                    fail(j && j.error === 'collect_failed'
+                        ? t('ops-load-err-server', 'server error — see the application log')
+                        : 'HTTP ' + res.status);
+                    return;
+                }
+                done();
                 dtSummary.clear(); dtTrade.clear();
                 // Linha DERIVADA (mesma razão do Trade Level): texto puro, não
                 // <input>. A EXCEÇÃO é a Observação, que é o único campo que a
@@ -856,7 +916,15 @@ document.addEventListener('DOMContentLoaded', function () {
                 dtSummary.draw(false); dtTrade.draw(false);
                 setWidgets(j.widgets); setRecon(j.recon);
                 setSources(j.sources, j.date);
-            }).catch(function () {});
+                var secs = Math.round((Date.now() - t0) / 1000);
+                if (j.ir_partial) {
+                    showState('warn', '<i class="ti ti-alert-triangle"></i> ' +
+                        esc(t('ops-ir-partial', "The month's IR accumulation is still being computed — the withheld tax may change on the next reload.")) + retryLink());
+                } else {
+                    showState('', secs >= 5 ? esc(t('ops-loaded-in', 'Loaded in {s}s').replace('{s}', secs)) : '');
+                }
+            })
+            .catch(function () { fail(t('ops-load-err-net', 'no response from the server')); });
     }
 
     // ── Por que as tabelas estão vazias ──────────────────────────────────────

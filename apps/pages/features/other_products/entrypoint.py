@@ -5,10 +5,11 @@ Só a casca: _ops_trade_rows é o ÚNICO lugar que sabe as famílias; coletores/
 """
 import os
 import re
+import time
 import traceback
 from datetime import datetime
 
-from flask import (jsonify, redirect, render_template, request,
+from flask import (g, jsonify, redirect, render_template, request,
                    session, url_for)
 
 from apps.pages import blueprint
@@ -38,8 +39,18 @@ def api_ops_data():
         settle_ref = datetime.strptime(ds[:10], '%Y-%m-%d').date() if ds else datetime.now().date()
     except ValueError:
         settle_ref = datetime.now().date()
-    pos_ref = _R()._forecast_latest_ref()          # cards read the LATEST available position JSON
-    trade = _R()._ops_trade_rows(settle_ref)
+    # A falha sai como JSON, com código (§432): a tela lia um 500 em HTML como
+    # "sem resposta" e engolia no `.catch` — o Summary ficava em "No rows" sem
+    # dizer que o servidor tinha estourado. O motivo vai para o log.
+    t0 = time.monotonic()
+    try:
+        pos_ref = _R()._forecast_latest_ref()      # cards read the LATEST available position JSON
+        trade = _R()._ops_trade_rows(settle_ref)
+    except Exception:                                       # noqa: BLE001
+        _R().log.warning('[ops-summary] /api/other-products-summary/data falhou para %s:\n%s',
+                         settle_ref.strftime('%Y-%m-%d'), traceback.format_exc())
+        return jsonify({'success': False, 'error': 'collect_failed',
+                        'date': settle_ref.strftime('%Y-%m-%d')}), 500
     try:
         summary = _R()._opssum_rows(trade, datetime(settle_ref.year, settle_ref.month, settle_ref.day))
     except Exception:
@@ -60,11 +71,20 @@ def api_ops_data():
     except Exception:
         _R().log.error("[ops-summary] falha no diagnóstico das fontes:\n%s", traceback.format_exc())
         sources = {'missing': [], 'blocking': False, 'last_batch': None}
+    try:
+        widgets = _R()._ops_settlement_counts(settle_ref, pos_ref)
+    except Exception:                                       # noqa: BLE001
+        _R().log.error("[ops-summary] falha nos widgets:\n%s", traceback.format_exc())
+        widgets = {}
     return jsonify({'success': True, 'date': settle_ref.strftime('%Y-%m-%d'),
                     'pos_date': pos_ref.strftime('%Y-%m-%d') if pos_ref else None,
-                    'widgets': _R()._ops_settlement_counts(settle_ref, pos_ref),
+                    'widgets': widgets,
                     'sources': sources, 'recon': recon,
-                    'summary': summary, 'trade': trade})
+                    'summary': summary, 'trade': trade,
+                    # O acumulado de IR do mês ainda não estava inteiro (a cura
+                    # parou no teto): o imposto retido pode mudar na recarga.
+                    'ir_partial': bool(g.get('_ndfsum_ir_partial', False)),
+                    'elapsed': round(time.monotonic() - t0, 1)})
 
 @blueprint.route('/api/other-products-summary/ted-email', methods=['POST'])
 def api_ops_summary_ted_email():

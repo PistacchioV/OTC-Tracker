@@ -1615,7 +1615,9 @@ subida e a cada 4 h, sem teto, para a mesa nunca pagar a cura. E a página
 mostra o ESTADO da carga (spinner com segundos, erro com Retry): o `/data`
 devolve a falha como JSON `collect_failed` em vez de um 500 em HTML que o
 `.catch` vazio engolia — "No rows for this date" só quando o dia está vazio
-de verdade.
+de verdade. O **Other Products Summary** segue o mesmo desenho (mesmo estado
+de tela, mesmo `collect_failed`, mesmo `ir_partial`): o `_ops_trade_rows` passa
+duas vezes pelo mesmo ledger, uma por Advice de mercadoria.
 
 ### O `SPB - outros bancos` da Recon Pay/Rec só casa com BANCO
 
