@@ -2317,5 +2317,11 @@
   "ndfc-rows": "filas",
   "ndfc-add-title": "Añadir fila",
   "ndfc-actions": "Acciones",
-  "ndfc-status": "Estado"
+  "ndfc-status": "Estado",
+  "up-sid": "SID",
+  "up-name": "Nombre",
+  "up-email": "Correo",
+  "up-role": "Rol",
+  "up-access": "Páginas a las que accede",
+  "up-loading": "Cargando…"
 }
