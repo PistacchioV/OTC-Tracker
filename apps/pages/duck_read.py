@@ -355,6 +355,58 @@ def raw_records(db_name, table, rel, expected_path=None, manifest_key=None):
     return out
 
 
+# Arquivos-dia já servidos SEM o JSON ao lado — o aviso sai uma vez por arquivo.
+_sem_json_avisado = set()
+
+
+def _dia_sem_json(db_name, schema, tabela, jpath):
+    """A tabela do dia, lida do banco quando o JSON não está no disco.
+
+    Não há manifest a conferir (ele compara com o arquivo que não existe), e
+    também não há cura possível — o conversor lê o JSON. Então ou o banco tem a
+    tabela, ou não há dado. `None` nos dois casos ruins, como sempre."""
+    try:
+        from apps.pages import duck_mirror
+        db = os.path.join(duck_mirror._out_dir(_data_root()), *db_name.split('/'))
+        if not os.path.isfile(db):
+            return None
+        alvo_sql = '%s.%s' % (q(schema), q(tabela))
+        gate = db_gate(db)
+        gate.enter_read(_GATE_READ_WAIT_SECONDS)
+        t0 = time.monotonic()
+        try:
+            with duckdb_read(db) as con:
+                cols = [d[0] for d in
+                        con.execute('SELECT * FROM %s LIMIT 0' % alvo_sql).description]
+                if cols == ['_empty']:
+                    return []
+                if '_raw' not in cols or '_seq' not in cols:
+                    return None
+                crus = [c for (c,) in con.execute(
+                    'SELECT "_raw" FROM %s ORDER BY CAST("_seq" AS BIGINT)'
+                    % alvo_sql).fetchall()]
+        finally:
+            gate.exit_read()
+            _freio_mede(time.monotonic() - t0, db)
+    except Exception:                                       # noqa: BLE001
+        return None
+    dados = []
+    for c in crus:
+        if not c:
+            return None
+        try:
+            dados.append(json.loads(c))
+        except ValueError:
+            return None
+    if jpath not in _sem_json_avisado:
+        _sem_json_avisado.add(jpath)
+        log.warning('[duck-read] %s não está no disco e o banco respondeu por ele '
+                    '(%d registro(s)) — a leitura é DB-only; o JSON é o meio de '
+                    'escrita, e a falta dele não esconde o dia',
+                    os.path.basename(jpath), len(dados))
+    return dados
+
+
 def day_payload(path):
     """O conteúdo de UM arquivo-dia pelo banco da rotina — a LISTA original,
     na ordem do arquivo. Banco frio ou defasado é CURADO na hora
@@ -380,7 +432,17 @@ def day_payload(path):
         if alvo is None:
             return None
         db_name, schema, tabela = alvo
-        st = os.stat(jpath)
+        try:
+            st = os.stat(jpath)
+        except OSError:
+            # JSON AUSENTE e banco com o dia: o banco responde sozinho. A
+            # leitura é DB-only e o JSON é só o meio de ESCRITA (§4) — exigi-lo
+            # aqui era exigir o meio de escrita para poder LER. Sem ele não há
+            # com que comparar mtime/tamanho, então a prova de frescor não
+            # existe: serve-se o que o banco tem, que é a única fonte. Some o
+            # arquivo do share e a tela continua de pé; some o banco também e aí
+            # não há dado nenhum a mostrar, que é a verdade.
+            return _dia_sem_json(db_name, schema, tabela, jpath)
         memo = _memo_req()
         chave = ('day', jpath, st.st_mtime, st.st_size)
         if memo is not None and chave in memo:

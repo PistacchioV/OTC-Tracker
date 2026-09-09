@@ -650,13 +650,22 @@ def api_intrag_dce_option():
             ref = datetime.strptime(date_str, '%Y-%m-%d')
             fp = os.path.join(persistence.INTRAG_DCE_OPT_CACHE_DIR, ref.strftime('%Y'), ref.strftime('%m'),
                               ref.strftime('%Y%m%d') + suffix)
-            if os.path.isfile(fp):
-                # Pelo FUNIL do daycache, como os outros dois ramos: é ele que
-                # lê DB-first (o espelho DuckDB desta página) e cai no JSON só
-                # quando o banco está frio — a busca do smart filter consulta o
-                # banco em qualquer forma de data.
+            # Pelo FUNIL do daycache, como os outros dois ramos: é ele que lê
+            # DB-first (o espelho DuckDB desta página) — a busca do smart filter
+            # consulta o banco em qualquer forma de data.
+            #
+            # E SEM o `isfile` na frente: a leitura é DB-only e o JSON é o meio
+            # de ESCRITA (§4), então exigir o arquivo aqui era exigir o meio de
+            # escrita para poder LER — com o dia no banco e o JSON fora do
+            # disco, a tela vinha vazia dizendo "No data available". Ausente, o
+            # `os.stat` falha e a chave do memo vira (0, 0), que é justamente o
+            # que faz o memo não guardar um dia que ainda vai chegar.
+            try:
                 st = os.stat(fp)
-                entries = list(_R()._day_json(fp, st.st_mtime, st.st_size))
+                mtime, size = st.st_mtime, st.st_size
+            except OSError:
+                mtime, size = 0, 0
+            entries = list(_R()._day_json(fp, mtime, size))
         except Exception as exc:
             _R().log.warning('[INTRAG DCE OPT] date load error date=%r: %s', date_str, exc)
     else:
