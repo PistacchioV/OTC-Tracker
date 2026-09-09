@@ -32,7 +32,11 @@ def api_intrag_ndf():
         # Com intervalo há o que PODAR: ano e mês inteiros fora dele são
         # descartados antes de o `scandir` entrar neles. Quem decide continua
         # sendo a data no NOME do arquivo, logo abaixo.
-        for fp, fname, mtime, size in _R()._day_files(persistence.INTRAG_NDF_CACHE_DIR, '_intrag_ndf.json', d_from, d_to):
+        _dias = list(_R()._day_files(persistence.INTRAG_NDF_CACHE_DIR, '_intrag_ndf.json', d_from, d_to))
+        # UMA abertura de banco para todos os dias enumerados, em vez de
+        # uma por dia: eles são tabelas do MESMO banco do produto (§4).
+        _R()._day_prefetch(_dias)
+        for fp, fname, mtime, size in _dias:
             fdate = _R()._parse_date_any(fname[:8])
             if fdate is None:
                 continue
@@ -55,7 +59,11 @@ def api_intrag_ndf():
             _R().log.warning('[INTRAG NDF] date load error date=%r: %s', date_str, exc)
     else:
         # Sem data nenhuma: a árvore inteira, e aí só o memo ajuda.
-        for fp, _fname, mtime, size in _R()._day_files(persistence.INTRAG_NDF_CACHE_DIR, '_intrag_ndf.json'):
+        _dias = list(_R()._day_files(persistence.INTRAG_NDF_CACHE_DIR, '_intrag_ndf.json'))
+        # UMA abertura de banco para todos os dias enumerados, em vez de
+        # uma por dia: eles são tabelas do MESMO banco do produto (§4).
+        _R()._day_prefetch(_dias)
+        for fp, _fname, mtime, size in _dias:
             entries.extend(_R()._day_json(fp, mtime, size))
     # `na_2` é a coluna Information Source dos dois layouts; linha gravada
     # antes da limpeza ainda traz `[`/`|` no arquivo — sai legível daqui.
@@ -76,7 +84,11 @@ def api_intrag_option():
         # Com intervalo há o que PODAR: ano e mês inteiros fora dele são
         # descartados antes de o `scandir` entrar neles. Quem decide continua
         # sendo a data no NOME do arquivo, logo abaixo.
-        for fp, fname, mtime, size in _R()._day_files(persistence.INTRAG_OPT_CACHE_DIR, suffix, d_from, d_to):
+        _dias = list(_R()._day_files(persistence.INTRAG_OPT_CACHE_DIR, suffix, d_from, d_to))
+        # UMA abertura de banco para todos os dias enumerados, em vez de
+        # uma por dia: eles são tabelas do MESMO banco do produto (§4).
+        _R()._day_prefetch(_dias)
+        for fp, fname, mtime, size in _dias:
             fdate = _R()._parse_date_any(fname[:8])
             if fdate is None:
                 continue
@@ -99,7 +111,11 @@ def api_intrag_option():
             _R().log.warning('[INTRAG OPT] date load error date=%r: %s', date_str, exc)
     else:
         # Sem data nenhuma: a árvore inteira, e aí só o memo ajuda.
-        for fp, _fname, mtime, size in _R()._day_files(persistence.INTRAG_OPT_CACHE_DIR, suffix):
+        _dias = list(_R()._day_files(persistence.INTRAG_OPT_CACHE_DIR, suffix))
+        # UMA abertura de banco para todos os dias enumerados, em vez de
+        # uma por dia: eles são tabelas do MESMO banco do produto (§4).
+        _R()._day_prefetch(_dias)
+        for fp, _fname, mtime, size in _dias:
             entries.extend(_R()._day_json(fp, mtime, size))
     return jsonify({'success': True,
                     'entries': queries._limpar_info_source(entries, 'information_source')})
@@ -445,7 +461,11 @@ def api_intrag_swap():
         # Com intervalo há o que PODAR: ano e mês inteiros fora dele são
         # descartados antes de o `scandir` entrar neles. Quem decide continua
         # sendo a data no NOME do arquivo, logo abaixo.
-        for fp, fname, mtime, size in _R()._day_files(persistence.INTRAG_SWAP_CACHE_DIR, suffix, d_from, d_to):
+        _dias = list(_R()._day_files(persistence.INTRAG_SWAP_CACHE_DIR, suffix, d_from, d_to))
+        # UMA abertura de banco para todos os dias enumerados, em vez de
+        # uma por dia: eles são tabelas do MESMO banco do produto (§4).
+        _R()._day_prefetch(_dias)
+        for fp, fname, mtime, size in _dias:
             fdate = _R()._parse_date_any(fname[:8])
             if fdate is None:
                 continue
@@ -468,7 +488,11 @@ def api_intrag_swap():
             _R().log.warning('[INTRAG SWAP] date load error date=%r: %s', date_str, exc)
     else:
         # Sem data nenhuma: a árvore inteira, e aí só o memo ajuda.
-        for fp, _fname, mtime, size in _R()._day_files(persistence.INTRAG_SWAP_CACHE_DIR, suffix):
+        _dias = list(_R()._day_files(persistence.INTRAG_SWAP_CACHE_DIR, suffix))
+        # UMA abertura de banco para todos os dias enumerados, em vez de
+        # uma por dia: eles são tabelas do MESMO banco do produto (§4).
+        _R()._day_prefetch(_dias)
+        for fp, _fname, mtime, size in _dias:
             entries.extend(_R()._day_json(fp, mtime, size))
     return jsonify({'success': True, 'entries': entries})
 
@@ -636,7 +660,11 @@ def api_intrag_dce_option():
         # Com intervalo há o que PODAR: ano e mês inteiros fora dele são
         # descartados antes de o `scandir` entrar neles. Quem decide continua
         # sendo a data no NOME do arquivo, logo abaixo.
-        for fp, fname, mtime, size in _R()._day_files(persistence.INTRAG_DCE_OPT_CACHE_DIR, suffix, d_from, d_to):
+        _dias = list(_R()._day_files(persistence.INTRAG_DCE_OPT_CACHE_DIR, suffix, d_from, d_to))
+        # UMA abertura de banco para todos os dias enumerados, em vez de
+        # uma por dia: eles são tabelas do MESMO banco do produto (§4).
+        _R()._day_prefetch(_dias)
+        for fp, fname, mtime, size in _dias:
             fdate = _R()._parse_date_any(fname[:8])
             if fdate is None:
                 continue
@@ -670,7 +698,11 @@ def api_intrag_dce_option():
             _R().log.warning('[INTRAG DCE OPT] date load error date=%r: %s', date_str, exc)
     else:
         # Sem data nenhuma: a árvore inteira, e aí só o memo ajuda.
-        for fp, _fname, mtime, size in _R()._day_files(persistence.INTRAG_DCE_OPT_CACHE_DIR, suffix):
+        _dias = list(_R()._day_files(persistence.INTRAG_DCE_OPT_CACHE_DIR, suffix))
+        # UMA abertura de banco para todos os dias enumerados, em vez de
+        # uma por dia: eles são tabelas do MESMO banco do produto (§4).
+        _R()._day_prefetch(_dias)
+        for fp, _fname, mtime, size in _dias:
             entries.extend(_R()._day_json(fp, mtime, size))
     return jsonify({'success': True,
                     'entries': queries._limpar_info_source(entries, 'information_source')})
@@ -851,3 +883,4 @@ def api_intrag_dce_option_mapping_intrag_id():
     if results is None:
         return jsonify({'ok': False, 'error': err}), 400
     return jsonify({'ok': True, 'results': results})
+

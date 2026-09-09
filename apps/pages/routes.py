@@ -1696,6 +1696,7 @@ _DAYCACHE_MAX = _pf_jcache._DAYCACHE_MAX
 _daycache_dir_ok = _pf_jcache._daycache_dir_ok
 _day_files = _pf_jcache._day_files
 _day_json = _pf_jcache._day_json
+_day_prefetch = _pf_jcache._day_prefetch
 _daycache_forget = _pf_jcache._daycache_forget
 
 # ── A varredura do painel: podar, e ler a árvore UMA vez ─────────────────────

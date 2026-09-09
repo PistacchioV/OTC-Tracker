@@ -35,9 +35,13 @@ def _ndm_monitor_snapshot(ref):
     ref_date = ref.date() if hasattr(ref, 'date') else ref
     found, found_les = {}, {}
     if os.path.isdir(_R().NEW_DEALS_CACHE_ROOT):
-        for fpath, fname, mtime, size in _R()._day_files(
+        _dias = list(_R()._day_files(
                 _R().NEW_DEALS_CACHE_ROOT, '.json',
-                desde=ref_date, ate=ref_date):
+                desde=ref_date, ate=ref_date))
+        # UMA abertura de banco para todos os dias enumerados, em vez de
+        # uma por dia: eles são tabelas do MESMO banco do produto (§4).
+        _R()._day_prefetch(_dias)
+        for fpath, fname, mtime, size in _dias:
             if fname[:8] != want:
                 continue
             root = os.path.dirname(fpath)
