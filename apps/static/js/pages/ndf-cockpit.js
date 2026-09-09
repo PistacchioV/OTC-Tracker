@@ -62,8 +62,11 @@
   }
   function setVal(id, v) { var el = document.getElementById(id); if (el) el.textContent = v; }
 
+  // Devolve a promessa: o Import gira o spinner ate a tabela estar DESENHADA,
+  // e nao so ate o POST voltar — o `getTradesBySettle` da Athena e a leitura do
+  // dia sao duas esperas, e a segunda tambem e "carregando".
   function load(dateStr) {
-    fetch(API + (dateStr ? ('?date=' + encodeURIComponent(dateStr)) : ''), { credentials: 'same-origin' })
+    return fetch(API + (dateStr ? ('?date=' + encodeURIComponent(dateStr)) : ''), { credentials: 'same-origin' })
       .then(function (r) { return r.json(); })
       .then(function (d) {
         if (!d || !d.success) return;
@@ -285,31 +288,44 @@
   function wireImport() {
     var btn = document.getElementById('ndfcImportBtn');
     if (!btn) return;
+    // O spinner troca a CLASSE do icone, nunca o innerHTML do botao: o rotulo
+    // ao lado tem `data-lang` e o I18nManager o traduz UMA vez, no load —
+    // reescrever o miolo o devolveria em ingles no meio da importacao.
+    var ico = btn.querySelector('i'), icoCls = ico ? ico.className : '';
+    function busy(on) {
+      btn.disabled = on;
+      if (ico) ico.className = on ? 'spinner-border spinner-border-sm me-1' : icoCls;
+    }
     btn.addEventListener('click', function () {
       var info = document.getElementById('ndfc-import-info');
-      btn.disabled = true; if (info) info.textContent = t('importing');
+      busy(true); if (info) info.textContent = t('importing');
       fetch(IMPORT_API, { method: 'POST', credentials: 'same-origin',
              headers: { 'Content-Type': 'application/json' },
              body: JSON.stringify({ date: currentDate() }) })
         .then(function (r) { return r.json(); })
         .then(function (d) {
-          btn.disabled = false;
           if (d && d.success) {
             if (info) info.textContent = t('imported') + ': ' + d.rows + ' ' + t('rows') + ' · ' + d.file;
             // The import writes the JSON of the date it pulled (the picker's) — sync and load.
             if (window.jQuery && jQuery('#ndfc-date').data('daterangepicker')) {
               jQuery('#ndfc-date').data('daterangepicker').setStartDate(moment(d.date, 'YYYY-MM-DD'));
             }
-            load(d.date);
-            if (window.Swal) Swal.fire({ icon: 'success', title: t('imported'), text: d.rows + ' ' + t('rows'), timer: 1800, showConfirmButton: false });
-          } else {
-            var msg = (d && d.error) || t('noFile');
-            if (info) info.textContent = msg;
-            if (window.Swal) Swal.fire({ icon: 'warning', title: 'OTM', text: msg });
+            // O spinner so para quando a TABELA esta na tela: a importacao puxa
+            // da Athena e a tela le o dia gravado, e as duas esperas sao o
+            // mesmo "carregando" para quem clicou. `finally` nao existe em
+            // navegador antigo, entao o desligamento vai nos dois ramos.
+            return load(d.date).then(function () {
+              busy(false);
+              if (window.Swal) Swal.fire({ icon: 'success', title: t('imported'), text: d.rows + ' ' + t('rows'), timer: 1800, showConfirmButton: false });
+            }, function () { busy(false); });
           }
-          if (window.fetchNotifications) window.fetchNotifications();
+          busy(false);
+          var msg = (d && d.error) || t('noFile');
+          if (info) info.textContent = msg;
+          if (window.Swal) Swal.fire({ icon: 'warning', title: 'OTM', text: msg });
         })
-        .catch(function () { btn.disabled = false; });
+        .then(function () { if (window.fetchNotifications) window.fetchNotifications(); })
+        .catch(function () { busy(false); });
     });
   }
 
