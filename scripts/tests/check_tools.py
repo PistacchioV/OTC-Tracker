@@ -31,6 +31,7 @@ Nada sai da maquina: a rede nao e tocada e os arquivos vao para um tmp.
 import io
 import json
 import os
+import shutil
 import sys
 import tempfile
 from datetime import date, datetime, timedelta
@@ -550,6 +551,50 @@ try:
           [x['evento'] for x in queries.swap_prefill('26G53382860')['flows']],
           [(date.today() - timedelta(days=40)).isoformat()])
     os.remove(os.path.join(pasta, '73760_%s_DFLUXO.json' % dref))
+
+    # A janela de dez dias uteis do `_swap_day_path` e um TETO, e o que esta
+    # atras dele nao e "sem posicao": e a ultima posicao que a mesa tem. Com a
+    # rotina de save parada por semanas, o B3 ID respondia *not found*, que se
+    # le como "esse swap nao existe". Aqui a posicao do D-1 sai de cena e a
+    # unica que resta e de 40 dias atras — bem alem do teto.
+    velho = ref - timedelta(days=40)
+    dref_velho = velho.strftime('%y%m%d')
+    pasta_velha = os.path.join(R.B3_JSON_ROOT, 'Swap', R._b3_date_subpath(dref_velho))
+    os.makedirs(pasta_velha, exist_ok=True)
+    with io.open(os.path.join(pasta_velha, '73760_%s_DPOSICAO-SWAP.json' % dref_velho),
+                 'w', encoding='utf-8') as fh:
+        fh.write(json.dumps([{('c%03d' % i): v for i, v in enumerate(vals)}],
+                            ensure_ascii=False))
+    os.rename(os.path.join(pasta, '73760_%s_DPOSICAO-SWAP.json' % dref),
+              os.path.join(pasta, 'guardado.json'))
+    _alem = queries.swap_prefill('26G53382860')
+    check('passado o teto de dez dias uteis, acha a ultima posicao que existe',
+          (_alem['found'], _alem.get('source_date')), (True, velho.isoformat()))
+    # E nada ADIANTE do D-1 entra pela segunda porta: o arquivo de hoje ficaria
+    # de fora da janela e dentro da varredura, e a mesma consulta responderia
+    # duas coisas conforme a porta.
+    hoje_dref = date.today().strftime('%y%m%d')
+    pasta_hoje = os.path.join(R.B3_JSON_ROOT, 'Swap', R._b3_date_subpath(hoje_dref))
+    os.makedirs(pasta_hoje, exist_ok=True)
+    with io.open(os.path.join(pasta_hoje, '73760_%s_DPOSICAO-SWAP.json' % hoje_dref),
+                 'w', encoding='utf-8') as fh:
+        fh.write(json.dumps([{('c%03d' % i): v for i, v in enumerate(vals)}],
+                            ensure_ascii=False))
+    check('a varredura nao anda para a frente do D-1',
+          queries.swap_prefill('26G53382860').get('source_date'), velho.isoformat())
+    shutil.rmtree(pasta_hoje)
+    shutil.rmtree(pasta_velha)
+    os.rename(os.path.join(pasta, 'guardado.json'),
+              os.path.join(pasta, '73760_%s_DPOSICAO-SWAP.json' % dref))
+
+    # O DFLUXO e procurado a partir do dia da POSICAO, nao do D-1: cada um
+    # andando para tras por conta propria para em dias diferentes, e o fluxo de
+    # ontem contra a posicao da semana passada nao da erro nenhum — da um
+    # periodo que nao e o daquele saldo.
+    _fx_src = ler('apps/pages/features/tools/queries.py')
+    check('o DFLUXO e ancorado no dia da posicao',
+          ("_fluxos_do_contrato(contrato, ident, _data_iso(source_date))" in _fx_src and
+           "_swap_day_file('73760_{}_DFLUXO.json', ref=dia_posicao)" in _fx_src), True)
 
     # O navegador nao remonta o periodo: ele LE o `p_*` que veio do servidor.
     _js = ler('apps/static/js/pages/tools.js')
