@@ -6,10 +6,11 @@ Só a casca: os coletores (_ndfsum_*), o overlay do dia e o TED são a família 
 import json
 import os
 import re
+import time
 import traceback
 from datetime import datetime
 
-from flask import (jsonify, redirect, render_template, request,
+from flask import (g, jsonify, redirect, render_template, request,
                    session, url_for)
 
 from apps.pages import blueprint
@@ -99,9 +100,23 @@ def api_ndf_summary_data():
         ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
     except ValueError:
         ref = datetime.now()
-    payload = _R()._ndfsum_collect(ref)
+    # A falha sai como JSON, com código: a tela lia um 500 em HTML como "sem
+    # resposta" e engolia no `.catch` — o Summary ficava em "No rows" sem
+    # dizer que o servidor tinha estourado. O motivo vai para o log.
+    t0 = time.monotonic()
+    try:
+        payload = _R()._ndfsum_collect(ref)
+    except Exception:                                       # noqa: BLE001
+        _R().log.warning('[ndfsum] /api/ndf-summary/data falhou para %s:\n%s',
+                         ref.strftime('%Y-%m-%d'), traceback.format_exc())
+        return jsonify({'success': False, 'error': 'collect_failed',
+                        'date': ref.strftime('%Y-%m-%d')}), 500
     payload.pop('email_trades', None)          # backend-only (settlement notices)
-    payload.update({'success': True, 'date': ref.strftime('%Y-%m-%d')})
+    payload.update({'success': True, 'date': ref.strftime('%Y-%m-%d'),
+                    # O acumulado de IR do mês ainda não estava inteiro (a cura
+                    # parou no teto): o imposto retido pode mudar na recarga.
+                    'ir_partial': bool(g.get('_ndfsum_ir_partial', False)),
+                    'elapsed': round(time.monotonic() - t0, 1)})
     return jsonify(payload)
 
 @blueprint.route('/api/ndf-summary/settlement-emails', methods=['POST'])

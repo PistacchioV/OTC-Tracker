@@ -223,6 +223,57 @@ try:
                  if k.startswith('2026-12-0')) [-1], '2026-12-09')
     check('5. e o dia sai com o acumulado dos quatro dias curados',
           r9b[R._fcst_norm('DELTA SA')]['carry_in'], 0.0)
+
+    # ── 6. a cura e INCREMENTAL (§432) ──────────────────────────────────────
+    #  No share UM dia ja passa do teto, e gravar so com o mes inteiro curado
+    #  queria dizer NUNCA: toda abertura recoletava os mesmos dias e desistia
+    #  no mesmo ponto. Hoje o dia curado e gravado NA HORA — so o dia pedido
+    #  fica de fora enquanto o acumulado esta incompleto — e a rodada seguinte
+    #  continua de onde a anterior parou. A coleta roda FORA do _cache_lock.
+    print('\n== 6. a cura incremental ==')
+    import time as _time
+    e6 = datetime(2026, 8, 6)                     # uteis antes: 03, 04, 05
+    for dia in (3, 4, 5):
+        cockpit(datetime(2026, 8, dia),
+                [('BANCO J.P MORGAN S.A', 'DELTA SA', -900000.0)])   # 45,00/dia
+    g6 = R._ndfsum_ir_cockpit_groups(
+        [{'LEGAL': 'BANCO J.P MORGAN S.A', 'NM_COUNTERPARTY': 'DELTA SA',
+          '[PROD] Cockpit.SETTLEMENT': '-900000.00'}])
+    _orig_groups = R._ndfsum_ir_day_groups
+    lock_livre = []
+
+    def _lento(d, groups=None, src='moeda'):
+        # a coleta NAO pode estar sob o lock global: outro thread tem de
+        # conseguir toma-lo enquanto um dia e curado
+        lock_livre.append(R._cache_lock.acquire(timeout=0.5))
+        if lock_livre[-1]:
+            R._cache_lock.release()
+        _time.sleep(0.05)
+        return _orig_groups(d, groups, src)
+    R._ndfsum_ir_day_groups = _lento
+    R._NDFSUM_IR_CURA_TETO = 0.03                  # cabe UM dia, o segundo estoura
+    try:
+        r6 = R._ndfsum_ir_for_day(e6, g6)
+    finally:
+        R._ndfsum_ir_day_groups = _orig_groups
+        R._NDFSUM_IR_CURA_TETO = _teto
+    led6 = R._ndfsum_ir_ledger_load(e6)
+    check('6. o dia curado antes do teto FICOU gravado', '2026-08-03' in led6)
+    check('6. o dia em que o teto estourou nao foi curado', '2026-08-04' not in led6)
+    check('6. o dia pedido NAO e gravado com o acumulado incompleto', '2026-08-06' not in led6)
+    check('6. e a tela ainda recebe o imposto do dia', r6[R._fcst_norm('DELTA SA')]['taxes'], [45.0])
+    check('6. a coleta rodou FORA do _cache_lock', all(lock_livre) and len(lock_livre) >= 2)
+    r6b = R._ndfsum_ir_for_day(e6, g6)             # sem teto: continua de onde parou
+    check('6. a rodada seguinte completa o mes e grava o dia pedido',
+          sorted(k for k in R._ndfsum_ir_ledger_load(e6) if k.startswith('2026-08')),
+          ['2026-08-03', '2026-08-04', '2026-08-05', '2026-08-06'])
+    check('6. com os tres dias retidos, o acumulado que entra e zero',
+          r6b[R._fcst_norm('DELTA SA')]['carry_in'], 0.0)
+    # o aquecimento em background cura ate a VESPERA e nunca o dia pedido
+    led7, carry7, ok7 = R._ndfsum_ir_cure_month(datetime(2026, 8, 10), teto=None)
+    check('6. o aquecimento cura ate a vespera (07 sem Cockpit vira entrada vazia)',
+          ok7 and led7.get('2026-08-07') == {} and '2026-08-10' not in led7)
+    check('6. e devolve o acumulado da vespera', carry7.get(R._fcst_norm('DELTA SA')), 0.0)
 finally:
     shutil.rmtree(TMP, ignore_errors=True)
 

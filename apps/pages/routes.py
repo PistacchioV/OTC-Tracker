@@ -9118,11 +9118,20 @@ _NDFSUM_IR_SOURCES = ('moeda', 'ndfc', 'optc')
 #  TETO da CURA dos dias anteriores. O ledger é uma conta LATERAL da tela, e no
 #  share ele pode custar mais que a tela inteira: cada dia curado lê o Cockpit,
 #  o Operations B3, a Live Position e o OTM, e um mês tem vinte dias. Estourado
-#  o teto, a cura para onde está, o dia pedido é calculado com o acumulado que
-#  deu tempo de somar e o ledger NÃO é gravado — assim nada errado fica em
-#  disco e a próxima abertura, mais calma, cura os dias que faltaram. Nunca
-#  vale segurar o Summary por causa do imposto: sem ele a tela abre com o IR
-#  incompleto, que se vê; com ele a tela não abre. `0` desliga o teto.
+#  o teto, a cura para onde está e o dia pedido é calculado com o acumulado que
+#  deu tempo de somar — e a tela é AVISADA (`ir_partial`). Nunca vale segurar o
+#  Summary por causa do imposto: sem ele a tela abre com o IR incompleto, que
+#  se vê; com ele a tela não abre. `0` desliga o teto.
+#
+#  A cura é INCREMENTAL (§432): cada dia curado é gravado NA HORA, e só o dia
+#  pedido fica de fora quando o acumulado está incompleto. Antes, o ledger só
+#  era gravado com o mês inteiro curado — e no share, onde UM dia já passa do
+#  teto, isso queria dizer NUNCA: toda abertura do Summary (e dos dois Advice
+#  de mercadoria, que usam o mesmo ledger) recoletava os mesmos dias, sob o
+#  `_cache_lock` global, e desistia no mesmo ponto. Era o "NDF Summary
+#  infinito" da instância. Hoje a coleta roda fora do lock, o que está curado
+#  fica curado, e o aquecimento em background (`_ndfsum_ir_warm_loop`) deixa
+#  o mês pronto antes de a mesa abrir a tela.
 try:
     _NDFSUM_IR_CURA_TETO = float(os.getenv('OTC_NDFSUM_IR_HEAL_SECONDS', '15') or 0)
 except ValueError:
@@ -9327,6 +9336,70 @@ def _ndfsum_ir_day_groups(d, groups=None, src='moeda'):
     return _ndfsum_ir_merge(*baldes)
 
 
+def _ndfsum_ir_ledger_merge(ref, updates, replace=False):
+    """Read-modify-write do ledger mensal — o `_cache_lock` só pelo tempo da
+    GRAVAÇÃO. `updates` é {dia: entradas}. Com `replace=False` o dia que JÁ
+    está em disco fica como está: é a cura de outra instância (ou de outra
+    aba) que chegou antes, e as entradas são determinísticas — a dela é igual
+    a esta. Com `replace=True` o dia é SUBSTITUÍDO (o dia pedido pela tela,
+    montado inteiro). Grava só se mudou; falha vira aviso, nunca tela em branco."""
+    with _cache_lock:
+        ledger = _ndfsum_ir_ledger_load(ref)
+        antes = json.dumps(ledger, sort_keys=True)
+        for k, ent in updates.items():
+            if replace or k not in ledger:
+                ledger[k] = ent
+        if json.dumps(ledger, sort_keys=True) != antes:
+            try:
+                path = _ndfsum_ir_ledger_path(ref)
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                _atomic_write_json(path, ledger)
+            except Exception:                               # noqa: BLE001
+                log.warning('[ndfsum] ledger de IR não gravado:\n%s', traceback.format_exc())
+        return ledger
+
+
+def _ndfsum_ir_cure_month(ref, teto=None):
+    """Cura, na ordem, os dias úteis do mês ANTERIORES a `ref` que ainda não
+    têm entrada no ledger — e GRAVA cada dia assim que ele fica pronto.
+
+    Devolve (ledger, carry, completo): `carry` é o acumulado por contraparte
+    na véspera de `ref`; `completo` é False quando o `teto` (segundos) parou
+    a cura antes do fim. O que foi curado FICOU em disco, então a rodada
+    seguinte continua de onde esta parou em vez de recomeçar — é isso que
+    torna o custo de cada dia um custo de UMA vez, por instância nenhuma.
+
+    A COLETA roda fora do `_cache_lock`: cada dia lê Cockpit + Operations B3 +
+    Live Position + OTM, e no share isso são dezenas de segundos. Segurando o
+    lock global, era o app inteiro parado (toda gravação de JSON) enquanto
+    UMA tela somava imposto. O lock entra só na gravação (`_ndfsum_ir_ledger_merge`)."""
+    ref_day = ref.date() if hasattr(ref, 'date') else ref
+    with _cache_lock:
+        ledger = _ndfsum_ir_ledger_load(ref)
+    carry, completo = {}, True
+    t0 = time.monotonic()
+    d = ref_day.replace(day=1)
+    while d < ref_day:
+        if _pcx_is_bizday(d):
+            k = d.strftime('%Y-%m-%d')
+            if k not in ledger:
+                if teto and time.monotonic() - t0 > teto:
+                    completo = False
+                    log.warning('[ndfsum] a cura do ledger de IR passou de %.0fs e parou '
+                                'em %s — o que ficou pronto está gravado; o dia pedido sai '
+                                'com o acumulado incompleto e não é gravado (teto em '
+                                'OTC_NDFSUM_IR_HEAL_SECONDS; o aquecimento em background '
+                                'termina o mês)', teto, k)
+                    break
+                ent, _ = _ndfsum_ir_day_entries(_ndfsum_ir_day_groups(d), carry)
+                ledger[k] = ent
+                _ndfsum_ir_ledger_merge(ref, {k: ent})       # curado é curado: grava JÁ
+            for key, e in (ledger.get(k) or {}).items():
+                carry[key] = float(e.get('carry_after', 0.0) or 0.0)
+        d += timedelta(days=1)
+    return ledger, carry, completo
+
+
 def _ndfsum_ir_for_day(ref, groups, src='moeda'):
     """IR por contraparte do dia `ref`, com o acumulado do mês:
     {chave: {'taxes' (a fatia de MOEDA), 'ndfc', 'optc', 'carry_in',
@@ -9334,53 +9407,65 @@ def _ndfsum_ir_for_day(ref, groups, src='moeda'):
 
     `groups` são as liquidações que o chamador já tem para a fonte `src`; as
     outras duas fontes do dia são coletadas aqui, porque `ledger[dia]` é
-    SUBSTITUÍDO e gravar só uma delas apagaria a outra. Cura os dias úteis
-    anteriores do mês sem entrada e grava o ledger — ciclo inteiro sob o
-    `_cache_lock` (é read-modify-write num JSON compartilhado)."""
+    SUBSTITUÍDO e gravar só uma delas apagaria a outra. Os dias úteis
+    anteriores do mês sem entrada são curados por `_ndfsum_ir_cure_month`
+    (incremental, dentro do teto); o dia pedido só é gravado com o acumulado
+    COMPLETO — com ele incompleto a resposta vale para a tela, que é avisada
+    (`g._ndfsum_ir_partial`), e nada errado fica em disco."""
     ref_day = ref.date() if hasattr(ref, 'date') else ref
     iso = ref_day.strftime('%Y-%m-%d')
-    with _cache_lock:
-        ledger = _ndfsum_ir_ledger_load(ref)
-        antes = json.dumps(ledger, sort_keys=True)
-        carry = {}
-        completo = True
-        t0 = time.monotonic()
-        d = ref_day.replace(day=1)
-        while d < ref_day:
-            if _pcx_is_bizday(d):
-                k = d.strftime('%Y-%m-%d')
-                if k not in ledger:
-                    if _NDFSUM_IR_CURA_TETO and \
-                            time.monotonic() - t0 > _NDFSUM_IR_CURA_TETO:
-                        # O dia NÃO é gravado vazio: uma entrada falsa nunca
-                        # mais seria recalculada (`k not in ledger`), e o mês
-                        # ficaria com um buraco silencioso no acumulado.
-                        completo = False
-                        log.warning('[ndfsum] a cura do ledger de IR passou de %.0fs e parou '
-                                    'em %s — o dia sai com o acumulado incompleto e nada é '
-                                    'gravado (teto em OTC_NDFSUM_IR_HEAL_SECONDS)',
-                                    _NDFSUM_IR_CURA_TETO, k)
-                        break
-                    ent, _ = _ndfsum_ir_day_entries(_ndfsum_ir_day_groups(d), carry)
-                    ledger[k] = ent
-                for key, e in (ledger.get(k) or {}).items():
-                    carry[key] = float(e.get('carry_after', 0.0) or 0.0)
-            d += timedelta(days=1)
-        entries, taxes_by_key = _ndfsum_ir_day_entries(
-            _ndfsum_ir_day_groups(ref_day, groups, src), carry)
-        ledger[iso] = entries
-        if completo and json.dumps(ledger, sort_keys=True) != antes:
-            try:
-                path = _ndfsum_ir_ledger_path(ref)
-                os.makedirs(os.path.dirname(path), exist_ok=True)
-                _atomic_write_json(path, ledger)
-            except Exception:
-                log.warning('[ndfsum] ledger de IR não gravado:\n%s', traceback.format_exc())
+    _ledger, carry, completo = _ndfsum_ir_cure_month(ref, _NDFSUM_IR_CURA_TETO)
+    entries, taxes_by_key = _ndfsum_ir_day_entries(
+        _ndfsum_ir_day_groups(ref_day, groups, src), carry)
+    if completo:
+        _ndfsum_ir_ledger_merge(ref, {iso: entries}, replace=True)
+    elif has_app_context():
+        g._ndfsum_ir_partial = True
     return {key: {'taxes': taxes_by_key[key]['moeda'],
                   'ndfc': taxes_by_key[key]['ndfc'], 'optc': taxes_by_key[key]['optc'],
                   'carry_in': entries[key]['carry_in'],
                   'withheld': entries[key]['withheld'], 'due': entries[key]['due']}
             for key in entries}
+
+
+# ── O aquecimento do ledger: o mês curado ANTES de alguém abrir a tela ───────
+#  A cura de um dia no share custa dezenas de segundos, e quem pagava era a
+#  primeira pessoa a abrir o Summary depois de uma subida (a instância sobe
+#  várias vezes ao dia). Este laço cura os dias até a VÉSPERA logo depois da
+#  subida e a cada poucas horas — idempotente e barato quando não há o que
+#  curar (uma leitura do JSON). Ele nunca toca o dia de hoje: esse é da tela,
+#  que o monta com as liquidações que está mostrando. Sem teto, porque aqui
+#  ninguém espera.
+_NDFSUM_IR_WARM_DELAY = 120                   # s depois da subida (deixa o boot respirar)
+_NDFSUM_IR_WARM_EVERY = 4 * 3600
+_ndfsum_ir_warm_started = False
+
+
+def _ndfsum_ir_warm_loop():
+    time.sleep(_NDFSUM_IR_WARM_DELAY)
+    while True:
+        try:
+            hoje = _br_now()
+            t0 = time.monotonic()
+            with _app_context():
+                ledger, _carry, _ok = _ndfsum_ir_cure_month(hoje, teto=None)
+            log.info('[ndfsum] ledger de IR de %s aquecido em %.1fs (%d dia(s) no arquivo)',
+                     hoje.strftime('%Y-%m'), time.monotonic() - t0, len(ledger))
+        except Exception:                                   # noqa: BLE001
+            log.warning('[ndfsum] aquecimento do ledger de IR falhou:\n%s',
+                        traceback.format_exc())
+        time.sleep(_NDFSUM_IR_WARM_EVERY)
+
+
+def _ndfsum_ir_warm_start():
+    global _ndfsum_ir_warm_started
+    if _ndfsum_ir_warm_started:
+        return
+    _ndfsum_ir_warm_started = True
+    threading.Thread(target=_ndfsum_ir_warm_loop, name='ndfsum-ir-warm', daemon=True).start()
+
+
+_schedule_on_start('ndfsum-ir-warm', _ndfsum_ir_warm_start)
 
 
 def _ndfsum_collect(ref):
