@@ -317,6 +317,30 @@ check('6. curado de verdade, o banco volta a responder', DR.day_payload(DIA), [{
 check('6. e o sucesso LIMPA a marca', DR._cura_em_quarentena(DIA), False)
 check('6. o sucesso tambem zera a contagem do disjuntor', DR._cura_geral['seguidas'], 0)
 
+# ── 7. JSON AUSENTE: o banco responde sozinho ───────────────────────────────
+# A leitura e DB-only e o JSON e o meio de ESCRITA (§4). Exigir o arquivo para
+# LER era exigir o meio de escrita: com o dia no banco e o JSON fora do disco a
+# tela vinha vazia ("No data available"), e o log nao dizia nada. Sem o JSON nao
+# ha manifest a conferir — nem cura possivel, porque o conversor le o JSON —,
+# entao serve-se o que o banco tem, que e a unica fonte que restou.
+SEMJ = os.path.join(TMP, 'cache', 'new deals', 'NDF', 'Commodities', '2026', '06',
+                    '20260614_ndfcomm.json')
+R._atomic_write_json(SEMJ, [{'Deal': 'SJ-1'}, {'Deal': 'SJ-2'}])
+M.flush(20)
+check('7. com o JSON, o banco ja respondia', DR.day_payload(SEMJ), [{'Deal': 'SJ-1'}, {'Deal': 'SJ-2'}])
+DR._sem_json_avisado.clear()
+os.remove(SEMJ)
+check('7. SEM o JSON, o banco responde igual',
+      DR.day_payload(SEMJ), [{'Deal': 'SJ-1'}, {'Deal': 'SJ-2'}])
+check('7. e o funil do daycache tambem (mtime/size = 0)',
+      R._day_json(SEMJ, 0, 0), [{'Deal': 'SJ-1'}, {'Deal': 'SJ-2'}])
+check('7. o aviso sai UMA vez por arquivo', SEMJ in DR._sem_json_avisado)
+# Sem JSON e sem tabela no banco nao ha dado nenhum — e isso e a verdade, nao
+# um erro: `None`, como qualquer outro caminho que nao pode responder.
+NADA = os.path.join(TMP, 'cache', 'new deals', 'NDF', 'Commodities', '2026', '06',
+                    '20260613_ndfcomm.json')
+check('7. sem JSON e sem tabela, None', DR.day_payload(NADA), None)
+
 print()
 if fails:
     print('FAILED: %d check(s)' % len(fails))
