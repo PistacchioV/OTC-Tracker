@@ -17561,3 +17561,54 @@ resolve para VCP (§6).
 Ela é FALLBACK e não substituição: onde o evento responde, ele vence. O evento é
 do dia da liquidação e a posição é uma foto; preferir a posição trocaria um dado
 do evento por um mais genérico sem ninguém pedir.
+
+## §432 — O NDF Summary "infinito" era o ledger de IR que nunca gravava (2026-09-09)
+
+Na instância o `/api/ndf-summary/data` não voltava; na dev, instantâneo. O
+log da instância mostrava só o ambiente lento (`file_lock_held_slow`, leitura
+do `reference_data.db` em 29 s) — nenhum erro, porque ninguém falhava: todo
+mundo esperava. E a tela dizia "No rows for this date yet" enquanto esperava,
+porque o `.catch` do fetch era vazio e o texto de tabela vazia era o mesmo
+para "carregando", "falhou" e "não há nada".
+
+A causa estava na cura do ledger mensal de IR (§423). Para cada dia útil
+anterior do mês sem entrada, `_ndfsum_ir_for_day` recoletava o dia inteiro —
+Cockpit, Operations B3, Live Position NDF, OTM, e pelos dois Advice de
+mercadoria também Live Position de Opção, Latam e Cognos — sob o `_cache_lock`
+GLOBAL, com um teto de 15 s conferido entre um dia e outro. Estourado o teto, o
+ledger NÃO era gravado ("nada errado fica em disco"). No share UM dia já passa
+dos 15 s, então o ledger nunca era gravado: cada abertura do Summary — e de
+cada Settlement Advice de mercadoria, que usam o mesmo ledger — refazia a
+cura do mesmo primeiro dia, estourava no mesmo ponto, e segurava o lock global
+do app o tempo todo. Na dev os arquivos são locais e o mês inteiro cabe no
+teto, por isso lá "carrega normal".
+
+Três mudanças, e as três têm teste (`check_ndfsum_ir.py` §6):
+
+- **a cura é INCREMENTAL** (`_ndfsum_ir_cure_month`): cada dia curado é
+  gravado NA HORA por `_ndfsum_ir_ledger_merge` — read-modify-write sob o
+  lock só pelo tempo da gravação, e um dia que já está em disco não é
+  sobrescrito (a cura de outra instância chegou antes; as entradas são
+  determinísticas, então a dela é igual). Só o DIA PEDIDO fica de fora
+  enquanto o acumulado está incompleto, e aí `g._ndfsum_ir_partial` marca o
+  request. Curado é curado: a rodada seguinte continua de onde a anterior
+  parou, e o custo de cada dia é pago UMA vez por mês, por quem chegar
+  primeiro. A coleta roda FORA do `_cache_lock` — o teste toma o lock de outro
+  thread durante a cura para provar;
+- **o aquecimento em background** (`ndfsum-ir-warm`, registrado por
+  `_schedule_on_start`): 2 min depois da subida e a cada 4 h cura o mês até a
+  VÉSPERA, sem teto, dentro de `_app_context()`. Nunca toca o dia de hoje —
+  esse é da tela, que o monta com as liquidações que está mostrando. Barato
+  quando não há o que curar (uma leitura do JSON);
+- **a tela diz em que estado está**: spinner com os segundos enquanto o
+  `/data` não volta, faixa vermelha com Retry quando falha (o endpoint devolve
+  `collect_failed` em JSON com 500, em vez do 500 em HTML que o `.catch`
+  engolia), faixa âmbar com Retry quando `ir_partial`, e "Loaded in Ns" quando
+  demorou. O texto de tabela vazia é "Loading…" durante a carga e só volta a
+  "No rows for this date" depois da resposta.
+
+O que NÃO mudou: o teto continua em 15 s (`OTC_NDFSUM_IR_HEAL_SECONDS`) e
+continua valendo por request — ele só deixou de ser o motivo de a cura
+recomeçar do zero. O ambiente lento do share continua lento (é o §422 e o
+§428), mas a tela deixa de pagar por ele em cada abertura.
+

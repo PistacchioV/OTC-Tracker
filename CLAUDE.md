@@ -1599,6 +1599,24 @@ SNAPSHOT, e o IR calculado na leitura vence o `VL_TAX_INCOME` do Cockpit,
 inclusive na célula do Trade Level. O aviso leva também a coluna
 **Fixing** (o `Spot` da API, mín. 4 e máx. 8 casas). `check_ndfsum_ir.py`.
 
+**A cura do ledger é INCREMENTAL e roda FORA do `_cache_lock`** (§432 — era o
+"NDF Summary infinito" da instância). Cada dia útil anterior sem entrada custa
+Cockpit + Operations B3 + Live Position + OTM, e no share UM dia já passa do
+teto de 15 s; como o ledger só era gravado com o mês INTEIRO curado, no share
+ele nunca era gravado — toda abertura do Summary (e dos dois Settlement Advice
+de mercadoria, que usam o mesmo ledger) recoletava os mesmos dias, segurando o
+lock global do app, e desistia no mesmo ponto. Hoje `_ndfsum_ir_cure_month`
+grava cada dia assim que ele fica pronto (`_ndfsum_ir_ledger_merge`, RMW sob o
+lock só na gravação; dia já em disco não é sobrescrito — as entradas são
+determinísticas), só o DIA PEDIDO fica de fora enquanto o acumulado está
+incompleto — e a tela é avisada (`ir_partial` no `/data`, faixa âmbar com
+Retry). O laço `ndfsum-ir-warm` cura o mês até a VÉSPERA 2 min depois da
+subida e a cada 4 h, sem teto, para a mesa nunca pagar a cura. E a página
+mostra o ESTADO da carga (spinner com segundos, erro com Retry): o `/data`
+devolve a falha como JSON `collect_failed` em vez de um 500 em HTML que o
+`.catch` vazio engolia — "No rows for this date" só quando o dia está vazio
+de verdade.
+
 ### O `SPB - outros bancos` da Recon Pay/Rec só casa com BANCO
 
 A liquidação interbancária capturada do `HistoricoMensagens` **não traz nome de
