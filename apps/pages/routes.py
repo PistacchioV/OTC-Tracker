@@ -10195,8 +10195,39 @@ _mc_pc_sync = _pf_mc._mc_pc_sync
 
 
 
+# As colunas que os consumidores do índice por SPN de fato leem. Servem de PESO
+# para desempatar duas linhas que reivindiquem o mesmo SPN — ver abaixo.
+_REFDATA_SPN_CAMPOS = ('COUNTERPARTY', 'ECONOMIC GROUP', 'SIGNATURE TYPE',
+                       'BANKER', 'TAX ID')
+
+
+def _refdata_spn_peso(rec):
+    return sum(1 for k in _REFDATA_SPN_CAMPOS if str(rec.get(k, '') or '').strip())
+
+
 def _fxo_refdata_by_spn():
-    """SPN (leading-zeros stripped) → RefData record, for client/taxid/acronym lookup."""
+    """SPN (leading-zeros stripped) → RefData record, for client/taxid/acronym lookup.
+
+    **Duas linhas do cadastro podem reivindicar o MESMO SPN**, e o índice guarda
+    uma só — então quem vence decide a resposta de meia dúzia de telas. Era o
+    ÚLTIMO do arquivo, calado, e isso não é desempate nenhum: é a ordem em que
+    alguém cadastrou. Em 09/09/2026 o SPN 5166226 tinha o `PROLEC GE BRASIL
+    TRANSMISSAO DE ENERGIA S.A.` completo e um `GE VERNOVA TRANSFORMERS BRASIL
+    S.A.` com o SPN e **todo o resto em branco**; o segundo vencia, e com ele o
+    PROLEC saía do relatório de métricas como *Manually signed* — porque o
+    `SIGNATURE TYPE` que respondia era o vazio.
+
+    Hoje vence quem RESPONDE: o registro com mais dos campos que os
+    consumidores leem. Uma linha que só tem o SPN nunca derruba uma completa, e
+    o critério é do CONTEÚDO, não da posição no arquivo — duas passadas sobre o
+    mesmo cadastro dão a mesma resposta. Empate mantém o primeiro, que é o mesmo
+    desempate do `_pc_refdata_by_name` (a assimetria entre os dois índices era
+    ela própria uma armadilha).
+
+    Isto NÃO conserta o cadastro: dois clientes com o mesmo SPN continuam sendo
+    um erro a corrigir na tela. O que muda é que o erro deixa de escolher a
+    resposta errada sozinho.
+    """
     out = {}
     try:
         from apps.pages import duck_read
@@ -10206,7 +10237,10 @@ def _fxo_refdata_by_spn():
                 data = json.load(fh)
         for rec in (data if isinstance(data, list) else []):
             key = _norm_spn(rec.get('SPN', ''))
-            if key:
+            if not key:
+                continue
+            atual = out.get(key)
+            if atual is None or _refdata_spn_peso(rec) > _refdata_spn_peso(atual):
                 out[key] = rec
     except (IOError, json.JSONDecodeError):
         pass
