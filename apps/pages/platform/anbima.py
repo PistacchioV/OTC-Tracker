@@ -23,6 +23,7 @@ import os
 from datetime import datetime, timedelta, timezone
 
 from apps.pages.data_paths import data_path
+from apps.pages.request_cache import once_per_request as _once_per_request
 
 log = logging.getLogger('otc_tracker')
 
@@ -55,12 +56,32 @@ def _br_now():
 
 _ANBIMA_HOLIDAYS: set = set()
 _anbima_loaded = False
+# O mtime do arquivo que a carga viu. `None` com `_anbima_loaded=True` é o
+# calendário FIXADO à mão (os testes trocam `_ANBIMA_HOLIDAYS`/`_anbima_loaded`
+# para um de mentira): esse nunca é recarregado.
+_anbima_mtime = None
+
+
+@_once_per_request
+def _anbima_stamp():
+    """O mtime do `anbima.json`, UMA vez por request — o feriado cadastrado
+    pela tela de Holidays passa a valer no request seguinte (SLA da esteira,
+    aging do CGD, D-1 das recons), e não só depois do restart. Fora de request
+    é um `stat` por chamada, como qualquer cache por mtime do app."""
+    try:
+        return os.path.getmtime(data_path('anbima.json'))
+    except OSError:
+        return None
 
 
 def _load_anbima():
-    global _ANBIMA_HOLIDAYS, _anbima_loaded
+    global _ANBIMA_HOLIDAYS, _anbima_loaded, _anbima_mtime
     if _anbima_loaded:
-        return
+        if _anbima_mtime is None:
+            return                              # fixado à mão: não recarrega
+        if _anbima_stamp() == _anbima_mtime:
+            return
+    stamp = _anbima_stamp()
     try:
         path = data_path('anbima.json')
         from apps.pages import duck_read
@@ -70,6 +91,7 @@ def _load_anbima():
         log.warning('[ANBIMA] Failed to load anbima.json: %s', exc)
         _ANBIMA_HOLIDAYS = set()
     _anbima_loaded = True
+    _anbima_mtime = stamp
 
 
 def _prev_anbima_bizday(ref):
@@ -131,11 +153,16 @@ def _pcx_is_bizday(d):
 
 
 _anbima_hols_cache = None
+_anbima_hols_mtime = None       # `None` com cache preenchido = fixado à mão
 
 
 def _anbima_holidays():
-    global _anbima_hols_cache
+    global _anbima_hols_cache, _anbima_hols_mtime
+    if _anbima_hols_cache is not None and _anbima_hols_mtime is not None \
+            and _anbima_stamp() != _anbima_hols_mtime:
+        _anbima_hols_cache = None               # o arquivo mudou: recarrega
     if _anbima_hols_cache is None:
+        _anbima_hols_mtime = _anbima_stamp()
         # Andaime declarado: o `_B3_DATA_DIR` ainda é do `routes` (é o mesmo
         # `data_dir()` do app), e os testes o trocam LÁ (`R._B3_DATA_DIR = tmp`).
         from apps.pages import routes
