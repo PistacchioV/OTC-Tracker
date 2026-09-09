@@ -133,9 +133,19 @@ REM  onde o cmd quebra em silencio.
 REM ============================================================================
 
 :considera
+REM A linha vem do robocopy em modo lista, e ele ALINHA a saida em colunas: o
+REM caminho chega precedido de tabs e espacos. O for /f la em cima esta com
+REM delims= VAZIO de proposito (nome de arquivo pode ter espaco), entao ele nao
+REM apara nada - quem tem de aparar e aqui. A forma com * do replace remove tudo
+REM ate a primeira ocorrencia INCLUSIVE, e nao so a ocorrencia, que e o que
+REM deixava o preenchimento na frente do relativo: o destino virava
+REM "...\v15\<tabs>pages\routes.py" e o Windows respondia "The filename,
+REM directory name, or volume label syntax is incorrect" uma vez por arquivo.
+REM O SRC e remontado da raiz pelo mesmo motivo - ele carrega o mesmo lixo.
 set "SRC=%~1"
-set "REL=!SRC:%SOURCE_ROOT%\=!"
+set "REL=!SRC:*%SOURCE_ROOT%\=!"
 if "!REL!"=="!SRC!" goto :eof
+set "SRC=%SOURCE_ROOT%\!REL!"
 set /a COUNT+=1
 echo    !REL!
 if not "%APPLY%"=="1" goto :eof
