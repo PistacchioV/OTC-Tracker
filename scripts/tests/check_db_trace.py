@@ -119,6 +119,31 @@ check(tr5 not in DA.traces_in_flight(3600.0), 'o filtro de idade mínima o exclu
 DA.trace_end(tr5)
 check(tr5 not in DA.traces_in_flight(0.0), 'encerrado, sai da lista')
 
+# A pilha da thread presa: um rastro sem operação nenhuma diz ONDE está parado.
+import threading                                          # noqa: E402
+import time as _time                                      # noqa: E402
+_solta = threading.Event()
+_rastro = {}
+
+
+def _presa():
+    _rastro['t'] = DA.trace_begin('presa')
+    _solta.wait()
+    DA.trace_end(_rastro['t'])
+
+
+_th = threading.Thread(target=_presa, name='presa', daemon=True)
+_th.start()
+for _ in range(100):
+    if 't' in _rastro:
+        break
+    _time.sleep(0.01)
+_time.sleep(0.05)
+pilha = DA.trace_stack(_rastro['t'])
+check('wait' in pilha and '_presa' in pilha, 'trace_stack mostra a thread parada no wait: %s' % pilha[:120])
+_solta.set()
+_th.join(2)
+
 # ── 3. a linha do slow-request carrega o resumo ─────────────────────────────
 print('\n§3 [slow-request]')
 from apps.pages import routes as R                        # noqa: E402

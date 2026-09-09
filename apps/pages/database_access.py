@@ -9,6 +9,8 @@ import re
 import socket
 import sqlite3
 import threading
+import traceback
+import sys
 import time
 import uuid
 from contextlib import contextmanager
@@ -323,12 +325,13 @@ def _sanitize_error(error: BaseException, operation: DatabaseOperation) -> str:
 # do `[slow-request]` e um laço lê os que ainda estão em voo
 # (`traces_in_flight`). Custo por operação: um append sob lock, nada de I/O.
 class DbTrace:
-    __slots__ = ("label", "started_at", "thread", "ops", "notes", "_lock")
+    __slots__ = ("label", "started_at", "thread", "thread_id", "ops", "notes", "_lock")
 
     def __init__(self, label: str) -> None:
         self.label = label
         self.started_at = time.monotonic()
         self.thread = threading.current_thread().name
+        self.thread_id = threading.get_ident()
         self.ops: list = []          # (banco, modo, segundos, categoria)
         self.notes: list = []        # (tipo, detalhe)
         self._lock = threading.Lock()
@@ -419,6 +422,28 @@ def trace_note(kind: str, detail: object) -> None:
             pass
 
 
+def trace_stack(trace: DbTrace, limit: int = 8) -> str:
+    """A pilha ATUAL da thread do rastro, do quadro mais interno para fora.
+
+    É o que responde "parado ONDE?" quando o rastro não tem operação nenhuma
+    — o request preso num lock em memória, numa cura síncrona, numa leitura
+    de JSON no share. `sys._current_frames` é uma foto; custa só quando o
+    laço de vigilância pede, para um request já lento."""
+    try:
+        frame = sys._current_frames().get(trace.thread_id)
+        if frame is None:
+            return ""
+        quadros = traceback.extract_stack(frame)
+        partes = []
+        for fs in reversed(quadros):
+            partes.append("%s:%d %s" % (os.path.basename(fs.filename), fs.lineno, fs.name))
+            if len(partes) >= limit:
+                break
+        return " <- ".join(partes)
+    except Exception:                                       # noqa: BLE001
+        return ""
+
+
 def traces_in_flight(min_age_seconds: float = 0.0) -> list:
     with _traces_lock:
         vivos = list(_traces.values())
@@ -454,6 +479,7 @@ def _log_event(event: str, operation: DatabaseOperation, level: int = logging.IN
         "mode": operation.mode,
         "hostname": socket.gethostname(),
         "pid": os.getpid(),
+        "thread": threading.current_thread().name,
         **fields,
     }
     try:

@@ -245,7 +245,12 @@ commit; nenhuma migração de volta.
   lista do sino) recebe UMA retentativa curta e cai no JSON desta vez — sem cura
   e sem quarentena. Leitura do espelho espera POUCO pela trava
   (`read_timeout`, `OTC_DUCK_READ_LOCK_SECONDS`, padrão 5); escrita fica com o
-  teto cheio. `check_duck_read.py` §6b.
+  teto cheio. **Disputa perdida MARCA o banco** (`_ocupado_ate`, janela
+  `OTC_DUCK_BUSY_SKIP_SECONDS` = 60): as leituras seguintes do mesmo banco vão
+  direto ao JSON sem esperar — a vizinha convertendo o `Vanilla.db` o segura
+  por minutos, e o `dashboard-warm` pagava 11,5 s por ARQUIVO. Leitura que
+  chega ao banco limpa a marca; o `prefetch_days` respeita e alimenta o memo.
+  `check_duck_read.py` §6b.
 - **`day_payload` tem memo de PROCESSO** (`_day_memo`, chave caminho × mtime ×
   tamanho, teto `OTC_DUCK_DAY_MEMO_MB` = 256): 24 leitores do `routes` reabriam
   o banco a cada F5. O hit reparseia (cada consumidor recebe objetos seus);
@@ -305,9 +310,12 @@ da subida e NÃO liga o farol; os caminhos do espelho são dinâmicos.
   no `before_request`): cada operação da camada entra com o NOME do banco,
   modo, segundos e categoria, e o `duck_read` anota queda para o JSON e cura.
   A linha `[slow-request]` termina com o resumo, e o laço `slow-request-watch`
-  loga a cada 30 s o request em voo há mais de 30 s — o request que não
-  termina também deixa rastro. Thread de fundo que quer o mesmo usa
-  `trace_begin`/`trace_end` à mão (o `summary-warm` faz). `check_db_trace.py`.
+  loga a cada 30 s o request em voo há mais de 30 s **com a PILHA da thread**
+  (`trace_stack`) — é o que separa "lento no banco" de "preso num lock em
+  memória" ou "lendo JSON no share", e vale para o request sem operação
+  nenhuma. Todo evento do farol leva `thread=`. Thread de fundo que quer o
+  mesmo usa `trace_begin`/`trace_end` à mão (o `summary-warm` faz).
+  `check_db_trace.py`.
 - **Lock de arquivo com `timeout` leva `NON_BLOCKING`** (portalocker): sem o
   flag o timeout é ignorado com um aviso na subida e a espera não tem teto.
   Foi o claim diário (`_claim_daily_slot`).
