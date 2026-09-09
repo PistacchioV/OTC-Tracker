@@ -28,6 +28,7 @@ import traceback
 from datetime import datetime, timedelta
 
 from apps.pages.data_paths import data_dir
+from apps.pages.request_cache import once_per_request
 
 log = logging.getLogger('otc_tracker')
 
@@ -832,10 +833,31 @@ def _pc_metrics_offenders(rows):
     }
 
 
+@once_per_request
 def _pc_metrics_history():
     """>30d volume history: seed (external report) merged with any internal daily
     snapshots. Returns {gt30:{monthly,daily}, all:{monthly,daily}} where each point
-    is {period|date, volume, pct} (pct = MoM/DoD change vs the previous point)."""
+    is {period|date, volume, pct} (pct = MoM/DoD change vs the previous point).
+
+    Ela lê a HISTÓRIA INTEIRA — um snapshot por dia útil, gravado pela
+    manutenção das 11:30 e nunca apagado —, e por isso é a única coisa aqui que
+    fica mais lenta a cada dia que passa. Três coisas a mantêm barata, e as três
+    já eram regra da casa em outro lugar:
+
+      * `_day_files` no lugar do `os.walk` (§7): o `scandir` já devolve mtime e
+        tamanho na listagem, que é o que o memo do arquivo-dia precisa — com o
+        `walk` eles custariam um `stat` por snapshot;
+      * `_day_prefetch` antes do laço: os snapshots são TABELAS do mesmo
+        `db/cache/pending-confirmation.db` (a quebra é por produto, §4), e abrir
+        um banco por snapshot era abrir o MESMO arquivo N vezes. Medido na dev
+        com 26 snapshots: 187,8 ms e 26 aberturas; no share cada abertura custa
+        12,67 ms, e a instância ganha um snapshot por dia útil — depois de um
+        ano são ~250, ou 3,2 s só de abrir, crescendo todo dia. Era isto por
+        trás da lentidão do card Daily Metric;
+      * `once_per_request`: o card e a página `/pending-confirmation/metrics`
+        chamam esta função, e ela não tinha memo nenhum. FORA de um request o
+        decorator não memoiza (§7), então a rotina agendada continua enxergando
+        o snapshot novo aparecer embaixo dela."""
     seed = {}
     try:
         with open(_PC_METRICS_HISTORY_FILE, encoding='utf-8') as fh:
@@ -849,29 +871,37 @@ def _pc_metrics_history():
     internal_gt30, internal_all = {}, {}     # day 'YYYY-MM-DD' -> volume
     try:
         if os.path.isdir(_PC_SNAPSHOT_DIR):
-            for root, _dirs, files in os.walk(_PC_SNAPSHOT_DIR):
-                for fn in files:
-                    if not fn.endswith('.json'):
-                        continue
-                    m = re.search(r'(\d{4})(\d{2})(\d{2})', fn)
-                    if not m:
-                        continue
-                    day = '{}-{}-{}'.format(*m.groups())
-                    try:
-                        from apps.pages import duck_read
-                        rows = duck_read.day_records(os.path.join(root, fn))
-                    except Exception:
-                        continue
-                    if not isinstance(rows, list):
-                        continue
-                    # Snapshots taken under older rules may still carry rows whose
-                    # Pending Status is now considered OK (any Exception*). Exclude
-                    # them so the >30d history never counts a resolved confirmation.
-                    rows = [r for r in rows if not _pc_is_ok_status(r.get('Pending Status', ''))]
-                    internal_gt30[day] = sum(
-                        1 for r in rows
-                        if (_pc_metrics_int(r.get('Aging')) or 0) > _PC_METRICS_AGING_THRESHOLD)
-                    internal_all[day] = len(rows)
+            from apps.pages import duck_read, routes
+            # A ENUMERAÇÃO sai do banco, não do disco: o `_manifest` tem uma
+            # linha por snapshot, com caminho, mtime e tamanho — que é tudo o
+            # que o laço precisa. `None` é o canal de emergência de sempre
+            # (espelho desligado, banco que ainda não existe), e aí a árvore é
+            # varrida como antes.
+            dias = duck_read.day_files(_PC_SNAPSHOT_DIR, '.json')
+            if dias is None:
+                dias = list(routes._day_files(_PC_SNAPSHOT_DIR, '.json'))
+            # E a LEITURA em lote: os snapshots são tabelas do MESMO banco, e
+            # abrir um por arquivo era abrir o mesmo arquivo N vezes.
+            routes._day_prefetch(dias)
+            for fp, fn, mtime, size in dias:
+                m = re.search(r'(\d{4})(\d{2})(\d{2})', fn)
+                if not m:
+                    continue
+                day = '{}-{}-{}'.format(*m.groups())
+                try:
+                    rows = routes._day_json(fp, mtime, size)
+                except Exception:
+                    continue
+                if not isinstance(rows, list):
+                    continue
+                # Snapshots taken under older rules may still carry rows whose
+                # Pending Status is now considered OK (any Exception*). Exclude
+                # them so the >30d history never counts a resolved confirmation.
+                rows = [r for r in rows if not _pc_is_ok_status(r.get('Pending Status', ''))]
+                internal_gt30[day] = sum(
+                    1 for r in rows
+                    if (_pc_metrics_int(r.get('Aging')) or 0) > _PC_METRICS_AGING_THRESHOLD)
+                internal_all[day] = len(rows)
     except Exception:
         log.warning('[pc-metrics] internal snapshot scan failed:\n%s', traceback.format_exc())
 
