@@ -6404,12 +6404,19 @@ def _vcp_events_map(ref):
         cc = _acc_digits(rec.get(k_contract, '')) if k_contract else ''
         if not cc:
             continue
-        out.setdefault(cc, {
-            'parte_ix': str(rec.get(k_parte_ix, '') or '').strip() if k_parte_ix else '',
-            'cpty_conta': str(rec.get(k_cpty_conta, '') or '').strip() if k_cpty_conta else '',
-            'cpty_cnpj': str(rec.get(k_cpty_cnpj, '') or '').strip() if k_cpty_cnpj else '',
-            'cpty_ix': str(rec.get(k_cpty_ix, '') or '').strip() if k_cpty_ix else '',
-        })
+        # O arquivo tem uma linha por EVENTO, e o mesmo contrato aparece em
+        # várias. Guardar só a PRIMEIRA (o `setdefault` de antes) calava as
+        # demais: quando a primeira vinha sem as pernas — acontece — o contrato
+        # ficava no mapa com as quatro chaves VAZIAS, e como um dict de valores
+        # vazios é VERDADEIRO, ele ainda derrubava o fallback da posição no
+        # `_vcp_collect`. Aqui a primeira resposta NÃO-VAZIA de cada campo
+        # vence, campo a campo.
+        atual = out.setdefault(cc, {'parte_ix': '', 'cpty_conta': '',
+                                    'cpty_cnpj': '', 'cpty_ix': ''})
+        for campo, chave in (('parte_ix', k_parte_ix), ('cpty_conta', k_cpty_conta),
+                             ('cpty_cnpj', k_cpty_cnpj), ('cpty_ix', k_cpty_ix)):
+            if chave and not atual[campo]:
+                atual[campo] = str(rec.get(chave, '') or '').strip()
     return out
 
 
@@ -6506,9 +6513,22 @@ def _vcp_collect(ref):
                 continue
             contrato = str(rec.get('Título', '') or '').strip()
             parte_conta = str(rec.get('Conta', '') or '').strip()
-            ev = events.get(_acc_digits(contrato)) or posicao.get(_acc_digits(contrato), {})
-            cpty_conta = ev.get('cpty_conta', '')
-            cpty_cnpj = ev.get('cpty_cnpj', '')
+            # O fallback é por CAMPO, nunca pela linha inteira. `events.get(cc)`
+            # devolve um dict com as quatro chaves ainda que TODAS venham
+            # vazias, e dict com valores vazios é VERDADEIRO: o `or` sobre ele
+            # nunca chegava à posição, então o contrato que ESTÁ no arquivo de
+            # eventos com as pernas em branco saía com as quatro células vazias
+            # e o fallback do §431 morria calado — sem nada distinguindo isso
+            # de "o contrato não está no arquivo". O evento continua vencendo
+            # onde ele RESPONDE (§431); a pergunta é só por CÉLULA.
+            cc = _acc_digits(contrato)
+            ev, pos = events.get(cc) or {}, posicao.get(cc) or {}
+            def _campo(nome, _e=ev, _p=pos):
+                return str(_e.get(nome, '') or '').strip() or str(_p.get(nome, '') or '').strip()
+            parte_ix = _campo('parte_ix')
+            cpty_ix = _campo('cpty_ix')
+            cpty_conta = _campo('cpty_conta')
+            cpty_cnpj = _campo('cpty_cnpj')
             # CASCATA, e não um ou/ou. A conta DEDICADA identifica o cliente
             # sozinha e por isso vem primeiro; a omnibus 73760.10-2 não (lá o
             # titular da conta não é o cliente), e para ela quem responde é o
@@ -6523,8 +6543,8 @@ def _vcp_collect(ref):
             name = by_acct.get(acct_dig, '') if acct_dig else ''
             if not name:
                 name = by_taxid.get(_acc_digits(cpty_cnpj), '')
-            rows_out.append([name, contrato, parte_conta, ev.get('parte_ix', ''), '',
-                             cpty_conta, cpty_cnpj, ev.get('cpty_ix', ''), ''])
+            rows_out.append([name, contrato, parte_conta, parte_ix, '',
+                             cpty_conta, cpty_cnpj, cpty_ix, ''])
     # Sort by Contraparte A→Z (accent-insensitive); rows with no name go last.
     rows_out.sort(key=lambda r: (r[0] == '', _fcst_norm(r[0])))
     return {'widgets': {'total': len(rows_out)}, 'columns': list(_VCP_COLUMNS),
