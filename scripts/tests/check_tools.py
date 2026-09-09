@@ -451,8 +451,26 @@ try:
     check('bullet liquida pelo VALOR FUTURO',
           (b['tipo_contrato'], b['fields']['base_ajuste']),
           ('Bullet', liquidacao.BASE_VALOR_FUTURO))
-    check('e sem fluxo intermediario nao amortiza — resposta, nao lacuna',
-          (b['fields']['amortizacao'], 'amortizacao' in b['missing']), ('0', False))
+    # O bullet nao tem fluxo intermediario: o unico fluxo dele termina no
+    # VENCIMENTO, que esta na posicao. Terminando em HOJE, a conta saia de um
+    # contrato no meio do caminho — e ainda marcada como assumida, com a data
+    # na coluna ao lado.
+    check('o fluxo do bullet termina no VENCIMENTO, e nao e aproximacao',
+          (b['fields']['fim'], 'fim' in b['assumed'], 'fim' in b['missing']),
+          ('2027-03-02', False, False))
+    # E o que termina no vencimento amortiza 100%: o principal inteiro volta.
+    # A coluna `Tipo de amortizacao` esta VAZIA aqui, e vazia e At Maturity —
+    # nao e lacuna. A base nao muda nada a 100% (`amortizar` devolve o saldo
+    # pelos dois caminhos), entao ela cai no original em vez de pedir cadastro.
+    check('bullet amortiza 100% no vencimento',
+          (b['fields']['amortizacao'], 'amortizacao' in b['missing']), ('100', False))
+    check('coluna de amortizacao vazia e At Maturity, nao lacuna',
+          (b['fields']['base_amortizacao'], 'base_amortizacao' in b['missing']),
+          (liquidacao.SOBRE_ORIGINAL, False))
+    check('a 100% as duas bases dao o mesmo — por isso a base nao e cobrada',
+          (liquidacao.amortizar(10000000.0, 8000000.0, 1.0, liquidacao.SOBRE_ORIGINAL),
+           liquidacao.amortizar(10000000.0, 8000000.0, 1.0, liquidacao.SOBRE_REMANESCENTE)),
+          (8000000.0, 8000000.0))
     vals[0] = '01'
     with io.open(os.path.join(pasta, '73760_%s_DPOSICAO-SWAP.json' % dref),
                  'w', encoding='utf-8') as fh:
@@ -461,6 +479,13 @@ try:
     check('cashflow deixa as datas decidirem',
           (c2['tipo_contrato'], c2['fields']['base_ajuste']),
           ('Cashflow', liquidacao.BASE_AUTOMATICA))
+    # Cashflow sem DFLUXO e lacuna de verdade: o fluxo que liquidou nao esta em
+    # lugar nenhum, e a regra do bullet nao pode cobrir isso — ali o vencimento
+    # E o fim do fluxo, aqui nao se sabe qual fluxo era.
+    check('cashflow sem DFLUXO continua lacuna, nao 100% no vencimento',
+          (c2['fields']['fim'], 'fim' in c2['assumed'],
+           c2['fields']['amortizacao'], 'amortizacao' in c2['missing']),
+          (date.today().isoformat(), True, '', True))
 
     # `Data operacao termo` preenchida VENCE a data de inicio: e a data de
     # contratacao de verdade, e ai nao ha aproximacao nenhuma a sinalizar.
