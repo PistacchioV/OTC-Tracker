@@ -29,6 +29,13 @@ import threading
 import time
 import traceback
 
+# As assinaturas de "o arquivo tem outro dono" moram na camada de banco
+# (`database_access.FILE_IN_USE_SIGNATURES`): o leitor do espelho precisa da
+# MESMA resposta que o sino, e duas listas divergiriam na primeira mensagem
+# nova. O nome antigo fica como alias — é o que os testes e o poll do sino leem.
+from apps.pages.database_access import (                       # noqa: F401
+    FILE_IN_USE_SIGNATURES as _NOTIF_EM_USO, is_file_in_use as _notif_arquivo_em_uso)
+
 log = logging.getLogger('otc_tracker')
 
 # Rótulo do Daily Settlement › NDF › Other Publisher. Ele NÃO pode ser o mesmo
@@ -316,28 +323,6 @@ def _notif_avanca_sequencia(conn):
         log.warning('[notif-db] não consegui avançar a sequência além de %d', maior)
     except Exception:                                       # noqa: BLE001
         log.warning('[notif-db] avanço da sequência falhou:\n%s', traceback.format_exc())
-
-
-# As assinaturas de "o arquivo tem outro dono", nos dois sistemas. O Windows
-# responde com a frase do próprio SO; o Linux e o macOS, com a do lock do
-# DuckDB. `already open` e `different configuration` cobrem o conflito DENTRO
-# do processo, que é o mesmo problema por outro caminho (o DuckDB guarda uma
-# instância por arquivo e recusa a segunda com outra configuração — é o que o
-# poll do sino vê quando pede read-only durante um `duckdb_write` em curso).
-_NOTIF_EM_USO = (
-    'used by another process',
-    'being used by another',
-    'could not set lock',
-    'conflicting lock',
-    'already open',
-    'different configuration',
-)
-
-
-def _notif_arquivo_em_uso(exc):
-    """A falha de abertura foi disputa pelo arquivo, ou outra coisa?"""
-    texto = str(exc).lower()
-    return any(marca in texto for marca in _NOTIF_EM_USO)
 
 
 def _notif_schema_pronto():

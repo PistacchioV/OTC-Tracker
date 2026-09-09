@@ -116,7 +116,11 @@ class Config(object):
     DATABASE_SQLITE_BUSY_TIMEOUT_SECONDS = int(os.getenv('DATABASE_SQLITE_BUSY_TIMEOUT_SECONDS', '10000'))
     DATABASE_SLOW_LOCK_WARNING_SECONDS = float(os.getenv('DATABASE_SLOW_LOCK_WARNING_SECONDS', '5'))
     DATABASE_LOCK_RETRY_LIMIT = int(os.getenv('DATABASE_LOCK_RETRY_LIMIT', '4'))
-    DATABASE_READ_CONCURRENCY = int(os.getenv('DATABASE_READ_CONCURRENCY', '4'))
+    # Leitores não se excluem entre si (lock COMPARTILHADO); o semáforo só
+    # limita quantas conexões read-only do MESMO banco vivem ao mesmo tempo
+    # no processo. Com 16 threads no waitress, 4 punha o quinto leitor da
+    # busca do New Deals numa fila de até 30 s sem ninguém estar escrevendo.
+    DATABASE_READ_CONCURRENCY = int(os.getenv('DATABASE_READ_CONCURRENCY', '8'))
     # Todo banco que o app abre. É esta lista que o `validate_database_paths`
     # confere na subida (pasta gravável + arquivo de lock), então um banco que
     # não estiver aqui só acusa problema no primeiro request que o abrir.

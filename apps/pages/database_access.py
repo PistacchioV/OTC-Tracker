@@ -71,7 +71,7 @@ class DatabaseAccessSettings:
     sqlite_busy_timeout_seconds: int = 10_000
     slow_lock_warning_seconds: float = 5.0
     retry_limit: int = 2
-    read_concurrency: int = 4
+    read_concurrency: int = 8
 
     @classmethod
     def from_mapping(cls, settings: Mapping[str, object]) -> "DatabaseAccessSettings":
@@ -84,7 +84,7 @@ class DatabaseAccessSettings:
             sqlite_busy_timeout_seconds=int(settings.get("DATABASE_SQLITE_BUSY_TIMEOUT_SECONDS", 10_000)),
             slow_lock_warning_seconds=float(settings.get("DATABASE_SLOW_LOCK_WARNING_SECONDS", 5)),
             retry_limit=int(settings.get("DATABASE_LOCK_RETRY_LIMIT", 2)),
-            read_concurrency=int(settings.get("DATABASE_READ_CONCURRENCY", 4)),
+            read_concurrency=int(settings.get("DATABASE_READ_CONCURRENCY", 8)),
         )
 
 
@@ -212,6 +212,57 @@ class _UnlockedGateRegistry:
 _GATE_READ_WAIT_SECONDS = 1.0
 _GATE_WRITE_WAIT_SECONDS = 10.0
 
+# As assinaturas de "o arquivo tem outro dono", nos dois sistemas. O Windows
+# responde com a frase do próprio SO; o Linux e o macOS, com a do lock do
+# DuckDB. `already open` e `different configuration` cobrem o conflito DENTRO
+# do processo, que é o mesmo problema por outro caminho (o DuckDB guarda uma
+# instância por arquivo e recusa a segunda com outra configuração). A lista
+# nasceu no sino (`_notif_arquivo_em_uso`) e mora AQUI porque o leitor do
+# espelho (`duck_read`) precisa da mesma resposta: banco OCUPADO não é banco
+# defasado, e tratá-lo como defasado custava uma reconversão inteira. UMA
+# lista — o sino delega para cá.
+FILE_IN_USE_SIGNATURES = (
+    'used by another process',
+    'being used by another',
+    'could not set lock',
+    'conflicting lock',
+    'already open',
+    'different configuration',
+)
+
+
+def is_file_in_use(exc: BaseException) -> bool:
+    """A falha foi DISPUTA pelo arquivo (outro processo, outra configuração no
+    mesmo processo, ou o teto de trava desta camada), e não outra coisa?"""
+    if isinstance(exc, DatabaseLockTimeout):
+        return True
+    texto = str(exc).lower()
+    return any(marca in texto for marca in FILE_IN_USE_SIGNATURES)
+
+
+@contextmanager
+def read_timeout(seconds: Optional[float]) -> Iterator[None]:
+    """Teto MENOR de espera (permit + trava de arquivo) para as LEITURAS
+    abertas dentro do bloco, nesta thread.
+
+    Existe para o leitor do espelho: os tetos do ajuste (30 s de permit, 15 s
+    de trava) foram pensados para o banco de usuários, onde não há para onde
+    cair. O `duck_read` TEM para onde cair — o JSON é o canal de emergência —,
+    e uma thread do waitress parada 45 s esperando um banco que a instância
+    vizinha está convertendo é pior do que servir o JSON desta vez. Vale só
+    para leitura: a escrita continua com o teto cheio, porque para ela não há
+    emergência. `None` não muda nada."""
+    anterior = getattr(_thread_state, "read_timeout", None)
+    _thread_state.read_timeout = seconds
+    try:
+        yield
+    finally:
+        _thread_state.read_timeout = anterior
+
+
+def _read_timeout_override() -> Optional[float]:
+    return getattr(_thread_state, "read_timeout", None)
+
 _semaphores = _SemaphoreRegistry()
 _unlocked_gates = _UnlockedGateRegistry()
 
@@ -329,14 +380,16 @@ def _acquire_permit(
 ) -> None:
     _log_event("local_permit_wait_started", operation)
     started_at = time.monotonic()
-    if not semaphore.acquire(timeout=_settings.local_semaphore_timeout_seconds):
+    timeout = _settings.local_semaphore_timeout_seconds
+    override = _read_timeout_override() if operation.mode == "read" else None
+    if override is not None:
+        timeout = min(timeout, override)
+    if not semaphore.acquire(timeout=timeout):
         _log_event(
             "local_permit_wait_timed_out", operation, logging.WARNING,
             wait_seconds=round(time.monotonic() - started_at, 3),
         )
-        raise DatabaseLockTimeout(
-            operation.database_path, operation.mode, _settings.local_semaphore_timeout_seconds
-        )
+        raise DatabaseLockTimeout(operation.database_path, operation.mode, timeout)
     _log_event(
         "local_permit_acquired", operation,
         wait_seconds=round(time.monotonic() - started_at, 3),
@@ -352,6 +405,10 @@ def _acquire_file_lock(
         if operation.mode == "write"
         else _settings.read_lock_timeout_seconds
     )
+    if timeout_seconds is None and operation.mode == "read":
+        override = _read_timeout_override()
+        if override is not None:
+            timeout = min(timeout, override)
     lock_mode = (
         portalocker.LockFlags.EXCLUSIVE
         if operation.mode == "write"
@@ -481,6 +538,35 @@ def _open_connection(engine: str, database_path: str, write: bool):
     raise ValueError("Unsupported database engine: {}".format(engine))
 
 
+def _open_with_retry(engine: str, database_path: str, write: bool,
+                     operation: DatabaseOperation):
+    """`_open_connection` com retentativa curta na ESCRITA quando a abertura
+    falha por DISPUTA pelo arquivo.
+
+    O `DATABASE_LOCK_RETRY_LIMIT` do config era lido e não fazia nada — os
+    docstrings da esteira e do Pending Confirmation diziam que "o retry passou
+    a ser do `duckdb_write`", e não tinha passado. O caso que ele cobre é o do
+    share: a trava de arquivo exclusiva já veio, mas a instância vizinha ainda
+    está FECHANDO um handle read-only (aberto sem a camada, ou antes de a
+    trava valer), e o `duckdb.connect` estoura com *"used by another process"*
+    por alguns milissegundos. Só disputa é retentada (`is_file_in_use`); outra
+    falha sobe na hora, como sempre. A leitura não retenta: quem lê tem o
+    canal de emergência dele."""
+    tentativas = max(0, int(_settings.retry_limit)) if write else 0
+    for i in range(tentativas + 1):
+        try:
+            return _open_connection(engine, database_path, write)
+        except Exception as exc:                            # noqa: BLE001
+            if i >= tentativas or not is_file_in_use(exc):
+                raise
+            _log_event(
+                "connection_open_retry", operation, logging.WARNING,
+                attempt=i + 1, error_type=type(exc).__name__,
+                error_message=_sanitize_error(exc, operation),
+            )
+            time.sleep(0.25 * (i + 1))
+
+
 def _begin_transaction(connection, engine: str) -> None:
     connection.execute("BEGIN IMMEDIATE" if engine == "sqlite" else "BEGIN TRANSACTION")
 
@@ -570,7 +656,7 @@ def _database_context(
                     if not gate.enter_write(_GATE_WRITE_WAIT_SECONDS):
                         _log_event("unlocked_gate_wait_timed_out", operation,
                                    logging.WARNING)
-            connection = _open_connection(engine, normalized_path, write)
+            connection = _open_with_retry(engine, normalized_path, write, operation)
             _log_event("connection_opened", operation)
             if write:
                 _begin_transaction(connection, engine)
