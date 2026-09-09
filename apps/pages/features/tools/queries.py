@@ -705,11 +705,11 @@ def swap_prefill(b3_id):
             # inteiro voltando. Coluna `Tipo de amortização` vazia é
             # **At Maturity**, que diz exatamente isso — não é lacuna, e o '0'
             # de antes deixava o saldo seguinte igual ao notional num contrato
-            # que acabou. A BASE não muda nada a 100% (`amortizar` devolve o
-            # saldo pelos dois caminhos), então ela cai no original e não entra
-            # em `missing` — pedir cadastro para um campo que não altera o
-            # resultado é pedir trabalho à toa.
-            f['base_amortizacao'] = base_am or liquidacao.SOBRE_ORIGINAL
+            # que acabou. A base é a At Maturity, e não o original: a 100% as
+            # três dão o mesmo número, mas as outras duas descrevem uma PARCELA
+            # e afirmariam na tela um cronograma de amortização que o bullet não
+            # tem. Por isso ela também não entra em `missing`.
+            f['base_amortizacao'] = base_am or liquidacao.AT_MATURITY
             f['amortizacao'] = '100'
         else:
             # Cashflow sem DFLUXO é lacuna de verdade: o fluxo que liquidou não

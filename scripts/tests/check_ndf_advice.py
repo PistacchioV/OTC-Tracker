@@ -284,9 +284,13 @@ check('LAWTON isenta', R._ndfc_ir_exempt('LAWTON MULTIMERCADO EXCLUSIVO'), True)
 check('ATACAMA isenta', R._ndfc_ir_exempt('ATACAMA FIC FIM'), True)
 check('banco isento', R._ndfc_ir_exempt('BANCO DO BRASIL S.A.'), True)
 check('cliente comum NAO e isento', R._ndfc_ir_exempt('AMG BRASIL S.A.'), False)
-# As duas telas chamam a MESMA funcao — duas listas divergiriam sem erro nenhum,
-# uma tela retendo e a outra nao.
-check('o aviso usa _ndfc_ir', '_ndfc_ir(apurado, cliente)' in SRC0, True)
+# As duas telas chamam a MESMA regra — duas listas divergiriam sem erro nenhum,
+# uma tela retendo e a outra nao. O imposto do aviso passa pelo LEDGER (o piso
+# de R$ 1,00 do balde da contraparte, §423) e `_ndfc_ir` ficou como o fallback
+# de quando ele falha; a isencao continua saindo do mesmo cadastro.
+check('o aviso passa pelo ledger do piso, com _ndfc_ir de fallback',
+      ("_ndfsum_ir_for_day(ref, grupos, src='ndfc')" in SRC0,
+       "_ndfc_ir(r['apurado'], g['name'])" in SRC0), (True, True))
 adv_ir = by_b3['C1']['ir']
 check('o mesmo IR nas duas telas', R._ops_fmt_amt(adv_ir), t['tax_income'])
 

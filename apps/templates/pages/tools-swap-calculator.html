@@ -382,7 +382,7 @@
                         <tbody>
                             <tr><td data-lang="tl-original-notional-s">Original notional</td><td data-lang="tl-registered">registered</td><td>R$ {{ r.nocional_original | tl_money(2) }}</td></tr>
                             <tr><td data-lang="tl-remaining-notional-s">Remaining notional</td><td data-lang="tl-flow-opening">flow opening</td><td>R$ {{ r.nocional | tl_money(2) }}</td></tr>
-                            <tr><td data-lang="tl-amortisation-s">Amortisation</td><td>{{ r.percentual_amortizacao | tl_pct(4) }} {% if r.base_amortizacao == 'original' %}<span data-lang="tl-on-original">on the original notional</span>{% else %}<span data-lang="tl-on-remaining">on the remaining balance</span>{% endif %}</td><td>R$ {{ r.valor_amortizado | tl_money(2) }}</td></tr>
+                            <tr><td data-lang="tl-amortisation-s">Amortisation</td><td>{{ r.percentual_amortizacao | tl_pct(4) }} {% if r.base_amortizacao == 'original' %}<span data-lang="tl-on-original">on the original notional</span>{% elif r.base_amortizacao == 'vencimento' %}<span data-lang="tl-on-maturity">at maturity</span>{% else %}<span data-lang="tl-on-remaining">on the remaining balance</span>{% endif %}</td><td>R$ {{ r.valor_amortizado | tl_money(2) }}</td></tr>
                             <tr><td data-lang="tl-next-balance">Next balance</td><td data-lang="tl-next-flow-opening">next flow opening</td><td>R$ {{ r.saldo_seguinte | tl_money(2) }}</td></tr>
                         </tbody>
                     </table>

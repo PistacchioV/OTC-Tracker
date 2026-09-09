@@ -318,6 +318,20 @@ check('a base da amortizacao sai do texto do tipo',
        domain.base_da_amortizacao('SOBRE O SALDO REMANESCENTE'),
        domain.base_da_amortizacao('QUALQUER OUTRA COISA')),
       (liquidacao.SOBRE_ORIGINAL, liquidacao.SOBRE_REMANESCENTE, None))
+# `Na Data de Vencimento` tem base PROPRIA: as outras duas descrevem uma
+# PARCELA, e dizer "sobre o valor original" num contrato que so amortiza no fim
+# afirma um cronograma que ele nao tem. `Sem Troca` continua no original — la o
+# percentual e zero e a base nao muda numero nenhum.
+check('Na Data de Vencimento vira At Maturity, Sem Troca nao',
+      (domain.base_da_amortizacao('NA DATA DE VENCIMENTO'),
+       domain.base_da_amortizacao('SEM TROCA DE AMORTIZACAO')),
+      (liquidacao.AT_MATURITY, liquidacao.SOBRE_ORIGINAL))
+# A 100% as tres bases dao o mesmo numero — e por isso a escolha e sobre o que
+# a tela AFIRMA, nao sobre a conta.
+check('At Maturity amortiza o SALDO, nao uma fracao do original',
+      (liquidacao.amortizar(10000000.0, 8000000.0, 1.0, liquidacao.AT_MATURITY),
+       liquidacao.amortizar(10000000.0, 8000000.0, 0.5, liquidacao.AT_MATURITY)),
+      (8000000.0, 4000000.0))
 # A celula da posicao escreve a virgula como DECIMAL, sem separador de milhar.
 check('a celula da posicao le a virgula como decimal',
       domain.numero_da_posicao('280000000,00'), 280000000.0)
@@ -464,9 +478,25 @@ try:
     # pelos dois caminhos), entao ela cai no original em vez de pedir cadastro.
     check('bullet amortiza 100% no vencimento',
           (b['fields']['amortizacao'], 'amortizacao' in b['missing']), ('100', False))
-    check('coluna de amortizacao vazia e At Maturity, nao lacuna',
+    check('com a coluna preenchida, a base e a que ela diz',
           (b['fields']['base_amortizacao'], 'base_amortizacao' in b['missing']),
           (liquidacao.SOBRE_ORIGINAL, False))
+    # Coluna VAZIA e At Maturity — nao lacuna, e nao o original: o dropdown da
+    # tela tem a opcao propria justamente para o bullet nao sair afirmando um
+    # cronograma de parcelas.
+    _guardado = vals[38]
+    vals[38] = ''
+    with io.open(os.path.join(pasta, '73760_%s_DPOSICAO-SWAP.json' % dref),
+                 'w', encoding='utf-8') as fh:
+        fh.write(json.dumps([{('c%03d' % i): v for i, v in enumerate(vals)}], ensure_ascii=False))
+    _vaz = queries.swap_prefill('26G53382860')['fields']
+    check('coluna de amortizacao vazia e At Maturity, nao lacuna',
+          (_vaz['base_amortizacao'], _vaz['amortizacao']),
+          (liquidacao.AT_MATURITY, '100'))
+    vals[38] = _guardado
+    with io.open(os.path.join(pasta, '73760_%s_DPOSICAO-SWAP.json' % dref),
+                 'w', encoding='utf-8') as fh:
+        fh.write(json.dumps([{('c%03d' % i): v for i, v in enumerate(vals)}], ensure_ascii=False))
     check('a 100% as duas bases dao o mesmo — por isso a base nao e cobrada',
           (liquidacao.amortizar(10000000.0, 8000000.0, 1.0, liquidacao.SOBRE_ORIGINAL),
            liquidacao.amortizar(10000000.0, 8000000.0, 1.0, liquidacao.SOBRE_REMANESCENTE)),

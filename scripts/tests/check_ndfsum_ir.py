@@ -119,6 +119,77 @@ try:
     d = E._ndf_settlement_email([dict(base, settlement=-240000.0, tax=12.0, ir_carry=0.0, ir_waived=False)],
                                 'YARA', 'JPM', '04/09/2026', {})
     check('3. sem acumulado nem dispensa, nenhuma nota', 'R$ 1,00' not in d['html'])
+
+    # ── 4. o balde e da CONTRAPARTE, com os TRES produtos dentro ────────────
+    #  O piso de R$ 1,00 e do beneficiario, nao do produto: o mesmo cliente
+    #  liquidando termo de moeda, termo de mercadoria e opcao de mercadoria no
+    #  mesmo mes soma tudo num acumulado so. Com um balde por produto as tres
+    #  parcelas ficariam abaixo do piso para sempre, e a diferenca nao apareceria
+    #  em lugar nenhum.
+    print('\n== 4. o balde unico por contraparte (moeda + mercadoria) ==')
+    e1, e2 = datetime(2026, 12, 1), datetime(2026, 12, 2)
+
+    def _linha_ndfc(nm, ap):
+        return {'counterparty': nm, 'apurado': ap, 'ir': 0.0, 'liquido': ap,
+                'cells': [''] * len(R._NDFADV_COLUMNS)}
+
+    def _linha_optc(nm, ap):
+        return {'counterparty': nm, 'apurado': ap, 'premium': True, 'ir': 0.0,
+                'liquido': ap, 'cells': [''] * 12}
+
+    NDFC = {'2026-12-01': [_linha_ndfc('ACME LTDA', -6000.0)]}     # 0,30
+    OPTC = {'2026-12-01': [_linha_optc('ACME LTDA', -4000.0)]}     # 0,20 (o net)
+    R._ndfadv_collect = lambda ref, with_ir=True: NDFC.get(ref.strftime('%Y-%m-%d'), [])
+    R._optadv_collect = lambda ref, with_ir=True: OPTC.get(ref.strftime('%Y-%m-%d'), [])
+
+    cockpit(e1, [('BANCO J.P MORGAN S.A', 'ACME LTDA', -5000.0)])   # 0,25
+    g = R._ndfsum_ir_cockpit_groups(
+        [{'LEGAL': 'BANCO J.P MORGAN S.A', 'NM_COUNTERPARTY': 'ACME LTDA',
+          '[PROD] Cockpit.SETTLEMENT': '-6000.00'}])                # 0,30 no dia 02
+    r2 = R._ndfsum_ir_for_day(e2, g)
+    acme2 = r2[R._fcst_norm('ACME LTDA')]
+    # dia 01: 0,25 (moeda) + 0,30 (termo merc) + 0,20 (opcao merc) = 0,75, tudo
+    # abaixo do piso → nada retido, 0,75 acumulado.
+    led = R._ndfsum_ir_ledger_load(e1)['2026-12-01'][R._fcst_norm('ACME LTDA')]
+    check('4. as tres fontes do dia somam no MESMO devido', led['due'], 0.75)
+    check('4. abaixo do piso, nada retido e tudo acumula',
+          (led['withheld'], led['carry_after']), (0.0, 0.75))
+    # dia 02: 0,75 + 0,30 = 1,05 → retem a soma. Com um balde por produto o
+    # acumulado de moeda seria so 0,25 e nada seria retido aqui.
+    check('4. o acumulado dos TRES produtos entra no dia seguinte', acme2['carry_in'], 0.75)
+    check('4. e a soma alcanca o piso: retem 1,05', (acme2['taxes'], acme2['withheld']),
+          ([1.05], 1.05))
+
+    # A fatia volta por FONTE, na ordem, e cada tela le a sua.
+    r1 = R._ndfsum_ir_for_day(e1, R._ndfsum_ir_cockpit_groups(
+        [{'LEGAL': 'BANCO J.P MORGAN S.A', 'NM_COUNTERPARTY': 'ACME LTDA',
+          '[PROD] Cockpit.SETTLEMENT': '-5000.00'}]), src='moeda')
+    fat = r1[R._fcst_norm('ACME LTDA')]
+    check('4. cada fonte recebe a fatia dela, no tamanho certo',
+          (len(fat['taxes']), len(fat['ndfc']), len(fat['optc'])), (1, 1, 1))
+
+    # E gravar pela tela de MERCADORIA nao apaga a contribuicao da moeda: o
+    # `ledger[dia]` e substituido, entao o dia e montado inteiro venha a chamada
+    # de onde vier. Sem isso o acumulado do mes sairia menor, sem erro nenhum.
+    it = [_linha_ndfc('ACME LTDA', -6000.0)]
+    R._ndfadv_apply_ir(e1, it)
+    led2 = R._ndfsum_ir_ledger_load(e1)['2026-12-01'][R._fcst_norm('ACME LTDA')]
+    check('4. o aviso de mercadoria nao apaga a moeda do dia', led2['due'], 0.75)
+    check('4. e a linha do aviso fica bruta abaixo do piso',
+          (it[0]['ir'], it[0]['liquido']), (0.0, -6000.0))
+    check('4. a celula do IR e a do liquido sao reescritas',
+          (it[0]['cells'][R._NDFADV_IR_COL], it[0]['cells'][R._NDFADV_LIQ_COL]) != ('', ''), True)
+
+    # A opcao entra com o NET como UMA entrada, e o rateio usa o valor que o
+    # ledger devolveu — nao `abs(net) * taxa`.
+    OPTC['2026-12-02'] = [_linha_optc('BETA SA', -900000.0)]        # 45,00, acima do piso
+    it2 = list(OPTC['2026-12-02'])
+    R._optadv_apply_ir(it2, e2)
+    check('4. acima do piso a opcao retem normalmente', it2[0]['ir'], 45.0)
+    OPTC['2026-12-02'] = [_linha_optc('GAMA SA', -4000.0)]          # 0,20, abaixo
+    it3 = list(OPTC['2026-12-02'])
+    R._optadv_apply_ir(it3, e2)
+    check('4. abaixo do piso a opcao sai BRUTA', it3[0]['ir'], 0.0)
 finally:
     shutil.rmtree(TMP, ignore_errors=True)
 

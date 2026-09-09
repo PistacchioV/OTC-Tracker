@@ -5294,8 +5294,59 @@ def _ndfadv_otm_by_suffix(ref):
     return out, spn
 
 
-def _ndfadv_collect(ref):
-    """Linhas do NDF Settlement Advice (commodities) para a data `ref`."""
+_NDFADV_IR_COL = 9                             # 'IR 0,005% (R$)'
+_NDFADV_LIQ_COL = 10                           # 'Resultado Líquido (R$)'
+
+
+def _ndfadv_apply_ir(ref, items):
+    """Aplica o IR de 0,005% às linhas do aviso de termo de mercadoria, IN PLACE.
+
+    Cada CONTRATO paga o seu (é o que separa esta tela da opção, onde a base é o
+    net), mas o piso de R$ 1,00 é do BALDE DA CONTRAPARTE no mês — e nele
+    entram também o termo de moeda e a opção de mercadoria (§423). Por isso o
+    imposto vem do ledger e não de `_ndfc_ir`: liquidação abaixo do piso sai
+    BRUTA e o valor acumula, e é a soma que retém quando alcança R$ 1,00.
+
+    A ordem importa e é o contrato com o ledger: as liquidações vão na ordem
+    das linhas que PAGAM e voltam na mesma ordem. Falha no ledger cai no
+    cálculo sem acumulado (`_ndfc_ir`), que é o comportamento anterior — o
+    imposto pode sair a mais, e a mais se vê; a tela em branco não."""
+    linhas = [r for r in items if r.get('apurado') is not None
+              and str(r.get('counterparty', '') or '').strip()]
+    grupos = {}
+    for r in linhas:
+        nm = str(r['counterparty']).strip()
+        g = grupos.setdefault(_fcst_norm(nm), {'name': nm, 'settlements': [], 'rows': []})
+        g['settlements'].append(r['apurado'])
+        g['rows'].append(r)
+    if grupos:
+        try:
+            res = _ndfsum_ir_for_day(ref, grupos, src='ndfc')
+        except Exception:                                   # noqa: BLE001
+            log.warning('[ndfadv] IR mensal falhou — imposto do dia sem acumulado:\n%s',
+                        traceback.format_exc())
+            res = {}
+        for key, g in grupos.items():
+            taxes = (res.get(key) or {}).get('ndfc')
+            if taxes is None or len(taxes) != len(g['rows']):
+                taxes = [_ndfc_ir(r['apurado'], g['name']) for r in g['rows']]
+            for r, t in zip(g['rows'], taxes):
+                r['ir'] = float(t or 0.0)
+    for r in items:
+        ap, ir = r.get('apurado'), r.get('ir') or 0.0
+        r['ir'] = ir
+        # O IR retido sempre ENCOLHE o que se movimenta (regra do aviso de FX).
+        r['liquido'] = None if ap is None else (ap - ir if ap >= 0 else ap + ir)
+        r['cells'][_NDFADV_IR_COL] = _ops_fmt_amt(ir)
+        r['cells'][_NDFADV_LIQ_COL] = _ops_fmt_amt(r['liquido'])
+    return items
+
+
+def _ndfadv_collect(ref, with_ir=True):
+    """Linhas do NDF Settlement Advice (commodities) para a data `ref`.
+
+    `with_ir=False` devolve as linhas SEM imposto: é como o ledger colhe as
+    liquidações do dia sem chamar de volta a si mesmo (`_ndfsum_ir_commodity_groups`)."""
     # Peneirado pelo `opb3-events` UMA vez, no topo: a lista de Títulos e a soma
     # do Settlement B3 lá embaixo têm de enxergar as mesmas linhas. Filtrar só a
     # seleção deixava a operação cancelada fora da tabela e dentro do total.
@@ -5375,9 +5426,12 @@ def _ndfadv_collect(ref):
             cot = _ndfadv_media_label(_lcell(lrow, 'Média Asiática (data) 1'))
 
         apurado = otm_by_suffix.get(suf) if suf else None
-        ir = _ndfc_ir(apurado, cliente)
-        # O IR retido sempre ENCOLHE o que se movimenta (regra do aviso de FX).
-        liq = None if apurado is None else (apurado - ir if apurado >= 0 else apurado + ir)
+        # O imposto NÃO sai daqui: ele depende do acumulado do mês da
+        # contraparte (piso de R$ 1,00, §423) e das outras liquidações do dia,
+        # então é um passe depois do laço — `_ndfadv_apply_ir`. A linha nasce
+        # com zero e o líquido igual ao apurado; quem os reescreve é ele.
+        ir = 0.0
+        liq = apurado
 
         # SPN: o do OTM quando existe (é o mesmo que deu o nome); senão, o de
         # sempre, pelo nome no Reference Data. Guardar o do OTM evita o caminho
@@ -5416,7 +5470,10 @@ def _ndfadv_collect(ref):
             'apurado': apurado, 'ir': ir, 'liquido': liq,
             'b3': sum(b3_vals) if b3_vals else None,
         })
-    return out
+    # O imposto é do BALDE da contraparte no mês, então só dá para calculá-lo
+    # com as linhas do dia todas na mão — por isso ele é um passe depois do
+    # laço, e não parte dele (mesmo desenho do aviso de opção).
+    return _ndfadv_apply_ir(ref, out) if with_ir else out
 
 
 # O aviso impresso começa em "B3 ID": Contraparte é o destinatário e
@@ -5631,7 +5688,7 @@ _OPTADV_IR_COL = 9                             # 'IR 0,005% (R$)'
 _OPTADV_LIQ_COL = 10                           # 'Resultado Líquido (R$)'
 
 
-def _optadv_apply_ir(items):
+def _optadv_apply_ir(items, ref=None):
     """Aplica o IR de 0,005% às linhas do aviso de opção, IN PLACE.
 
     O imposto da opção NÃO é da linha, e é aqui que ele difere do termo de
@@ -5664,18 +5721,39 @@ def _optadv_apply_ir(items):
     as duas metades quase se anulavam, e o rodapé do aviso — que soma a coluna —
     imprimia `(28.884,13)` onde o net com imposto é `(28.882,73)`. De um lado só,
     a coluna fecha com o rodapé e o rodapé fecha com o net, que é a mesma conta
-    do Pay/Rec (HANDOFF §205: net Pay −219.047,36 → −219.036,41)."""
+    do Pay/Rec (HANDOFF §205: net Pay −219.047,36 → −219.036,41).
+
+    4. **O piso de R$ 1,00 é do BALDE DA CONTRAPARTE no mês** (§423), e nele
+       entram também o termo de moeda e o de mercadoria. Com `ref`, o total
+       deixa de sair de `abs(net) * taxa` e passa a vir do ledger: net abaixo
+       do piso sai BRUTO e acumula, e a soma retém quando alcança R$ 1,00. O
+       net entra no balde como UMA entrada — quebrá-lo em linhas contradiria a
+       regra 2. Sem `ref` (ou com o ledger falhando) vale a conta direta, que é
+       o comportamento anterior: imposto a mais se vê, tela em branco não."""
     grupos = {}
     for r in items:
         if not r.get('premium') or r.get('apurado') is None:
             continue
         grupos.setdefault(_fcst_norm(r.get('counterparty', '')).strip(), []).append(r)
 
+    do_ledger = {}
+    if ref is not None and grupos:
+        baldes = {k: {'name': str(l[0].get('counterparty', '') or '').strip(),
+                      'settlements': [sum(r['apurado'] for r in l)]}
+                  for k, l in grupos.items()}
+        try:
+            res = _ndfsum_ir_for_day(ref, baldes, src='optc')
+            do_ledger = {k: (v.get('optc') or [None])[0] for k, v in res.items()}
+        except Exception:                                   # noqa: BLE001
+            log.warning('[optadv] IR mensal falhou — imposto do dia sem acumulado:\n%s',
+                        traceback.format_exc())
+
     for cliente, linhas in grupos.items():
         net = sum(r['apurado'] for r in linhas)
         if net >= 0 or _ndfc_ir_exempt(linhas[0].get('counterparty', '')):
             continue
-        total = round(abs(net) * _NDFADV_IR_RATE, 2)
+        total = do_ledger.get(cliente)
+        total = round(abs(net) * _NDFADV_IR_RATE, 2) if total is None else round(float(total), 2)
         if not total:
             continue
         # Só o lado que paga. `net < 0` garante que ele existe.
@@ -5702,7 +5780,7 @@ def _optadv_apply_ir(items):
     return items
 
 
-def _optadv_collect(ref):
+def _optadv_collect(ref, with_ir=True):
     """Linhas do Option Settlement Advice (commodities, equities e câmbio) da
     data `ref`."""
     # Peneirado pelo `opb3-events` UMA vez, no topo — mesma razão do aviso de
@@ -5903,8 +5981,10 @@ def _optadv_collect(ref):
             'b3': sum(b3_vals) if b3_vals else None,
         })
     # O IR é do NET por contraparte, então só dá para calculá-lo com as linhas do
-    # dia todas na mão — por isso ele é um passe depois do laço, e não parte dele.
-    return _optadv_apply_ir(out)
+    # dia todas na mão — por isso ele é um passe depois do laço, e não parte
+    # dele. `with_ir=False` devolve as linhas cruas: é como o ledger colhe o net
+    # do dia sem chamar de volta a si mesmo (`_ndfsum_ir_commodity_groups`).
+    return _optadv_apply_ir(out, ref) if with_ir else out
 
 
 # ── Edições manuais do aviso de Opção ────────────────────────────────────────
@@ -8831,10 +8911,29 @@ def _ndfsum_b3_val(legs, titulo, casa, cpty_acc):
 #  uma entrada por dia × contraparte), reescrito pelo `_ndfsum_collect` do dia
 #  que a tela mostra — a entrada do dia é SUBSTITUÍDA, nunca somada, então
 #  recarregar a tela não conta duas vezes. Dia útil anterior do mês sem entrada
-#  (ninguém abriu o Summary naquele dia) é CURADO a partir do arquivo do Cockpit
-#  dele, na ordem, antes de responder pelo dia pedido.
+#  (ninguém abriu o Summary naquele dia) é CURADO a partir dos arquivos dele,
+#  na ordem, antes de responder pelo dia pedido.
+#
+#  O BALDE É POR CONTRAPARTE, e nele entram os TRÊS produtos: o termo de moeda,
+#  o termo de mercadoria e a opção de mercadoria. O piso de R$ 1,00 é do
+#  benefício — o beneficiário é o mesmo cliente e o imposto é o mesmo —, então
+#  três liquidações de R$ 0,40 no mesmo mês, uma de cada produto, somam R$ 1,20
+#  e retêm. Um acumulado por produto deixaria as três passarem sem retenção, e
+#  a diferença não apareceria em lugar nenhum. Daí `src`: cada fonte contribui
+#  a sua LISTA de liquidações e recebe de volta a fatia dela dos impostos, na
+#  mesma ordem — as três compartilham o acumulado e nenhuma vê a conta da outra.
+#
+#  A opção entra com o NET do dia como UMA entrada: a regra dela já é do net
+#  por contraparte (`_optadv_apply_ir`), e quebrar isso em linhas faria dois
+#  prêmios que se anulam pagarem imposto sobre um caixa que não existe.
+#
+#  E o dia é montado INTEIRO de uma vez, venha a chamada de que tela vier: como
+#  `ledger[dia]` é substituído, uma tela gravando só a própria fonte apagaria a
+#  contribuição da outra — e o acumulado do mês sairia menor, sem erro nenhum.
 # ══════════════════════════════════════════════════════════════════════════════
 _NDFSUM_IR_MIN = 1.00
+#  A ordem é o contrato da fatia: os impostos voltam concatenados nesta ordem.
+_NDFSUM_IR_SOURCES = ('moeda', 'ndfc', 'optc')
 
 
 def _ndfsum_ir_ledger_path(ref):
@@ -8896,26 +8995,155 @@ def _ndfsum_ir_cockpit_groups(records):
     return groups
 
 
+def _ndfsum_ir_src(g):
+    """As liquidações de um grupo por FONTE, na ordem de `_NDFSUM_IR_SOURCES`.
+
+    Grupo com `settlements` solto é o formato antigo (só termo de moeda) e
+    continua valendo — é o que o Summary e a importação do Cockpit montam."""
+    src = dict(g.get('src') or {})
+    if 'settlements' in g and 'moeda' not in src:
+        src['moeda'] = g['settlements']
+    return {k: list(src.get(k) or []) for k in _NDFSUM_IR_SOURCES}
+
+
+def _ndfsum_ir_plain(g):
+    """A lista de liquidações de um grupo de fonte ÚNICA — o formato que cada
+    coletor monta (`{'name', 'settlements'}`) e que as telas já passavam."""
+    return list(g.get('settlements') or [])
+
+
+def _ndfsum_ir_merge(*grupos):
+    """Funde grupos de fontes diferentes num balde por contraparte."""
+    out = {}
+    for g_dict in grupos:
+        for key, g in (g_dict or {}).items():
+            alvo = out.setdefault(key, {'name': g.get('name', ''),
+                                        'src': {k: [] for k in _NDFSUM_IR_SOURCES}})
+            if not alvo['name']:
+                alvo['name'] = g.get('name', '')
+            for k, vals in _ndfsum_ir_src(g).items():
+                alvo['src'][k].extend(vals)
+    return out
+
+
 def _ndfsum_ir_day_entries(groups, carry_by_key):
     """As entradas do ledger de UM dia: aplica a regra por contraparte a partir
-    do acumulado dado. Devolve ({chave: entrada}, {chave: taxes})."""
+    do acumulado dado. Devolve ({chave: entrada}, {chave: {fonte: taxes}}).
+
+    As três fontes entram numa lista SÓ — é isso que faz o piso ser do balde e
+    não do produto —, e os impostos voltam fatiados na mesma ordem."""
     entries, taxes_by_key = {}, {}
     for key, g in groups.items():
+        por_fonte = _ndfsum_ir_src(g)
+        flat = [v for k in _NDFSUM_IR_SOURCES for v in por_fonte[k]]
         carry_in = float(carry_by_key.get(key, 0.0) or 0.0)
         taxes, due, withheld, carry_after = _ndfsum_ir_apply(
-            g['settlements'], carry_in, exempt=_ndfc_ir_exempt(g['name']))
+            flat, carry_in, exempt=_ndfc_ir_exempt(g['name']))
         entries[key] = {'name': g['name'], 'due': due, 'withheld': withheld,
                         'carry_in': round(carry_in, 2), 'carry_after': carry_after}
-        taxes_by_key[key] = taxes
+        fatias, i = {}, 0
+        for k in _NDFSUM_IR_SOURCES:
+            n = len(por_fonte[k])
+            fatias[k] = taxes[i:i + n]
+            i += n
+        taxes_by_key[key] = fatias
     return entries, taxes_by_key
 
 
-def _ndfsum_ir_for_day(ref, groups):
-    """IR por contraparte do dia `ref` (grupos no formato de
-    `_ndfsum_ir_cockpit_groups`), com o acumulado do mês: {chave: {'taxes',
-    'carry_in', 'withheld', 'due'}}. Cura os dias úteis anteriores do mês sem
-    entrada e grava o ledger — ciclo inteiro sob o `_cache_lock` (é
-    read-modify-write num JSON compartilhado)."""
+def _ndfsum_ir_moeda_groups(d):
+    """Balde de MOEDA de um dia, a partir do arquivo-dia do Cockpit."""
+    jp = _ndfc_json_path(datetime(d.year, d.month, d.day))
+    if not os.path.isfile(jp):
+        return {}
+    try:
+        recs = _db_day_records(jp) or []
+    except Exception:                                       # noqa: BLE001
+        return {}
+    return _ndfsum_ir_cockpit_groups(recs)
+
+
+@_req_cached
+def _ndfsum_ir_ndfc_groups(iso):
+    """Balde do TERMO DE MERCADORIA de um dia — uma liquidação por CONTRATO.
+
+    O coletor é chamado SEM imposto (`with_ir=False`), e é isso que quebra a
+    recursão: aplicar o imposto é justamente consultar este ledger. Melhor
+    esforço — uma falha aqui não pode derrubar o Summary, então vira aviso no
+    log e o balde da família fica vazio (imposto a menos, que a conferência vê,
+    em vez de tela em branco).
+
+    `@_req_cached` porque as três telas perguntam pelo mesmo dia dentro do
+    mesmo request, e cada resposta custa Operations B3 + Live Position + OTM no
+    share."""
+    out = {}
+    try:
+        for r in (_ndfadv_collect(datetime.strptime(iso, '%Y-%m-%d'), with_ir=False) or []):
+            ap, nm = r.get('apurado'), str(r.get('counterparty', '') or '').strip()
+            if ap is None or not nm:
+                continue
+            g = out.setdefault(_fcst_norm(nm), {'name': nm, 'settlements': []})
+            g['settlements'].append(ap)
+    except Exception:                                       # noqa: BLE001
+        log.warning('[ndfsum] balde de IR do termo de mercadoria em %s falhou:\n%s',
+                    iso, traceback.format_exc())
+    return out
+
+
+@_req_cached
+def _ndfsum_ir_optc_groups(iso):
+    """Balde da OPÇÃO DE MERCADORIA de um dia — UMA entrada por contraparte, o
+    NET dos prêmios. A regra do imposto da opção já é do net (`_optadv_apply_ir`),
+    e quebrá-lo em linhas faria dois prêmios que se anulam pagarem imposto sobre
+    um caixa que não existe. Mesmas ressalvas do irmão acima."""
+    nets = {}
+    try:
+        for r in (_optadv_collect(datetime.strptime(iso, '%Y-%m-%d'), with_ir=False) or []):
+            if not r.get('premium') or r.get('apurado') is None:
+                continue
+            nm = str(r.get('counterparty', '') or '').strip()
+            if not nm:
+                continue
+            n = nets.setdefault(_fcst_norm(nm), {'name': nm, 'settlements': [0.0]})
+            n['settlements'][0] += r['apurado']
+    except Exception:                                       # noqa: BLE001
+        log.warning('[ndfsum] balde de IR da opção de mercadoria em %s falhou:\n%s',
+                    iso, traceback.format_exc())
+    return nets
+
+
+def _ndfsum_ir_day_groups(d, groups=None, src='moeda'):
+    """O balde COMPLETO de um dia — as três fontes fundidas por contraparte.
+
+    `groups` é o que a tela chamadora já tem na mão para a PRÓPRIA fonte
+    (`src`): ela usa esses valores em vez de recoletá-los, e assim o imposto
+    que ela mostra sai das mesmas linhas que ela desenha — e a fonte dela não é
+    coletada duas vezes. As outras duas são buscadas aqui."""
+    iso = d.strftime('%Y-%m-%d')
+    prontos = {src: groups} if groups is not None else {}
+    fontes = {
+        'moeda': lambda: _ndfsum_ir_moeda_groups(d),
+        'ndfc':  lambda: _ndfsum_ir_ndfc_groups(iso),
+        'optc':  lambda: _ndfsum_ir_optc_groups(iso),
+    }
+    baldes = []
+    for k in _NDFSUM_IR_SOURCES:
+        g_dict = prontos[k] if k in prontos else fontes[k]()
+        baldes.append({key: {'name': g.get('name', ''),
+                             'src': {k: _ndfsum_ir_plain(g)}}
+                       for key, g in (g_dict or {}).items()})
+    return _ndfsum_ir_merge(*baldes)
+
+
+def _ndfsum_ir_for_day(ref, groups, src='moeda'):
+    """IR por contraparte do dia `ref`, com o acumulado do mês:
+    {chave: {'taxes' (a fatia de MOEDA), 'ndfc', 'optc', 'carry_in',
+    'withheld', 'due'}}.
+
+    `groups` são as liquidações que o chamador já tem para a fonte `src`; as
+    outras duas fontes do dia são coletadas aqui, porque `ledger[dia]` é
+    SUBSTITUÍDO e gravar só uma delas apagaria a outra. Cura os dias úteis
+    anteriores do mês sem entrada e grava o ledger — ciclo inteiro sob o
+    `_cache_lock` (é read-modify-write num JSON compartilhado)."""
     ref_day = ref.date() if hasattr(ref, 'date') else ref
     iso = ref_day.strftime('%Y-%m-%d')
     with _cache_lock:
@@ -8927,18 +9155,13 @@ def _ndfsum_ir_for_day(ref, groups):
             if _pcx_is_bizday(d):
                 k = d.strftime('%Y-%m-%d')
                 if k not in ledger:
-                    jp = _ndfc_json_path(datetime(d.year, d.month, d.day))
-                    if os.path.isfile(jp):
-                        try:
-                            recs = _db_day_records(jp) or []
-                        except Exception:
-                            recs = []
-                        ent, _ = _ndfsum_ir_day_entries(_ndfsum_ir_cockpit_groups(recs), carry)
-                        ledger[k] = ent
+                    ent, _ = _ndfsum_ir_day_entries(_ndfsum_ir_day_groups(d), carry)
+                    ledger[k] = ent
                 for key, e in (ledger.get(k) or {}).items():
                     carry[key] = float(e.get('carry_after', 0.0) or 0.0)
             d += timedelta(days=1)
-        entries, taxes_by_key = _ndfsum_ir_day_entries(groups, carry)
+        entries, taxes_by_key = _ndfsum_ir_day_entries(
+            _ndfsum_ir_day_groups(ref_day, groups, src), carry)
         ledger[iso] = entries
         if json.dumps(ledger, sort_keys=True) != antes:
             try:
@@ -8947,7 +9170,9 @@ def _ndfsum_ir_for_day(ref, groups):
                 _atomic_write_json(path, ledger)
             except Exception:
                 log.warning('[ndfsum] ledger de IR não gravado:\n%s', traceback.format_exc())
-    return {key: {'taxes': taxes_by_key[key], 'carry_in': entries[key]['carry_in'],
+    return {key: {'taxes': taxes_by_key[key]['moeda'],
+                  'ndfc': taxes_by_key[key]['ndfc'], 'optc': taxes_by_key[key]['optc'],
+                  'carry_in': entries[key]['carry_in'],
                   'withheld': entries[key]['withheld'], 'due': entries[key]['due']}
             for key in entries}
 
