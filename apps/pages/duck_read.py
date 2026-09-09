@@ -99,6 +99,50 @@ except ValueError:
 _ocupado_aviso = {'ate': 0.0}
 _ocupado_lock = threading.Lock()
 
+# ── O memo de OCUPADO por banco ─────────────────────────────────────────────
+# Uma disputa que a retentativa não resolveu não é transitória: a instância
+# vizinha convertendo o Vanilla.db (quinhentas tabelas e o checkpoint, no
+# share) o segura por MINUTOS, e cada leitor pagava 5 s + 0,3 s + 5 s por
+# ARQUIVO antes de cair no JSON — o `dashboard-warm` da subida, que anda por
+# centenas de arquivos-dia do Vanilla, pagava horas, e cada tentativa era mais
+# uma disputa no arquivo que já estava disputado. Depois da disputa perdida,
+# as leituras seguintes do MESMO banco vão direto ao JSON por
+# `_OCUPADO_JANELA` segundos (`OTC_DUCK_BUSY_SKIP_SECONDS`, `0` desliga);
+# passada a janela tenta-se de novo, e a leitura que dá certo limpa a marca.
+try:
+    _OCUPADO_JANELA = float(os.getenv('OTC_DUCK_BUSY_SKIP_SECONDS', '60') or 0)
+except ValueError:
+    _OCUPADO_JANELA = 60.0
+_ocupado_ate = {}                   # db_name → monotonic até quando pular o banco
+
+
+def _ocupado_marcado(db):
+    if not _OCUPADO_JANELA:
+        return False
+    with _ocupado_lock:
+        return time.monotonic() < _ocupado_ate.get(db, 0.0)
+
+
+def _ocupado_marca(db):
+    if not _OCUPADO_JANELA:
+        return
+    with _ocupado_lock:
+        _ocupado_ate[db] = time.monotonic() + _OCUPADO_JANELA
+
+
+def _ocupado_limpa(db):
+    with _ocupado_lock:
+        _ocupado_ate.pop(db, None)
+
+
+def ocupado_forget(db=None):
+    """Esquece a marca de um banco (ou de todos) — para os testes."""
+    with _ocupado_lock:
+        if db is None:
+            _ocupado_ate.clear()
+        else:
+            _ocupado_ate.pop(db, None)
+
 
 def _classifica(exc):
     """Exceção da leitura → `_OCUPADO` (disputa; não cure) ou `None` (o resto:
@@ -122,12 +166,21 @@ def _ocupado_avisa(db):
                 '(teto da espera em OTC_DUCK_READ_LOCK_SECONDS)', os.path.basename(str(db)))
 
 
-def _le_ocupado(ler):
-    """Roda `ler()`; se voltar `_OCUPADO`, espera um pouco e tenta UMA vez mais."""
+def _le_ocupado(ler, db=None):
+    """Roda `ler()`; se voltar `_OCUPADO`, espera um pouco e tenta UMA vez mais.
+    Com `db`, respeita e alimenta o memo de OCUPADO: dentro da janela nem
+    tenta; disputa perdida marca; leitura que chegou ao banco limpa."""
+    if db is not None and _ocupado_marcado(db):
+        return _OCUPADO
     out = ler()
     if out is _OCUPADO:
         time.sleep(_OCUPADO_ESPERA)
         out = ler()
+    if db is not None:
+        if out is _OCUPADO:
+            _ocupado_marca(db)
+        else:
+            _ocupado_limpa(db)
     return out
 
 
@@ -415,7 +468,7 @@ def table_rows(db_name, table, rel, schema='main', order_by=None, heal=None,
             return _classifica(exc)
 
     try:
-        rows = _le_ocupado(_ler)
+        rows = _le_ocupado(_ler, db_name)
         if rows is _OCUPADO:
             _ocupado_avisa(db_name)
             _DA.trace_note('json', db_name)
@@ -650,7 +703,7 @@ def day_payload(path):
                     return None
             return crus
 
-        dados = _le_ocupado(_ler)
+        dados = _le_ocupado(_ler, db_name)
         if dados is _OCUPADO:
             _ocupado_avisa(db_name)
             _DA.trace_note('json', db_name)
@@ -837,6 +890,9 @@ def prefetch_days(dias):
         db = os.path.join(duck_mirror._out_dir(raiz), *db_name.split('/'))
         if not os.path.isfile(db):
             continue
+        if _ocupado_marcado(db_name):
+            _DA.trace_note('json', db_name)   # disputa recente: os dias saem do JSON
+            continue
         crus_por_dia = {}
         t0 = time.monotonic()
         gate = db_gate(db)
@@ -876,8 +932,12 @@ def prefetch_days(dias):
                             % alvo_sql).fetchall()]
                     except Exception:                       # noqa: BLE001
                         continue
-        except Exception:                                   # noqa: BLE001
+        except Exception as exc:                            # noqa: BLE001
             crus_por_dia = {}
+            if _classifica(exc) is _OCUPADO:
+                _ocupado_marca(db_name)
+                _ocupado_avisa(db_name)
+                _DA.trace_note('json', db_name)
         finally:
             gate.exit_read()
             _freio_mede(time.monotonic() - t0, db)

@@ -253,8 +253,11 @@ def _slow_request_watch_loop():
         time.sleep(_SLOW_WATCH_EVERY)
         try:
             for trace in _dba.traces_in_flight(_SLOW_WATCH_EVERY):
-                log.warning('[slow-request] %s em voo ha %.0fs (%s) — %s',
-                            trace.label, trace.age(), trace.thread, trace.summary())
+                # A pilha diz ONDE a thread está agora — é o que separa "lento
+                # no banco" de "preso num lock em memória" ou "lendo JSON".
+                log.warning('[slow-request] %s em voo ha %.0fs (%s) — %s — pilha: %s',
+                            trace.label, trace.age(), trace.thread, trace.summary(),
+                            _dba.trace_stack(trace) or '?')
         except Exception:                                   # noqa: BLE001
             log.debug('[slow-request] watch falhou:\n%s', traceback.format_exc())
 

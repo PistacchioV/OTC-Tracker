@@ -17670,3 +17670,35 @@ O que NÃO mudou, e é o que o rastro vai mostrar: no share uma abertura fria
 de um banco com centenas de tabelas custa segundos, e os dois Summaries abrem
 uma dúzia deles em série. O aquecimento tira isso do clique; a próxima leitura
 do log da instância diz quais bancos, e quanto cada um. `check_db_trace.py`.
+
+### §433-b — O segundo log: dois requests parados SEM abrir banco, e o `dashboard-warm` pagando 11,5 s por arquivo
+
+Com o rastro no ar, o log das 20:05–20:10 mostrou o que o primeiro não podia:
+o `GET /api/ndf-summary/data` da thread `waitress-0` parou depois de DUAS
+aberturas (Operations B3 6,2 s e o mapping `opb3-events` 2,9 s) e ficou
+300 s sem tocar na camada de banco; um segundo request do mesmo endpoint
+(`waitress-5`) ficou 336 s sem abertura NENHUMA. Os dois estão presos fora
+da camada — lock em memória, cura síncrona ou leitura de JSON no share —,
+e o resumo de operações não alcança isso. Ao mesmo tempo, uma thread sem
+rastro estourava o `Vanilla.db` (`223e1a78…`) a cada ~12 s, o ciclo exato
+de `5 s + 0,3 s + 5 s` do "ocupado não é defasado", com a vizinha segurando
+o arquivo em exclusivo: é o `dashboard-warm` da subida andando pelos
+arquivos-dia do New Deals, um por um.
+
+Três coisas a mais:
+
+- **a pilha da thread no laço de vigilância** (`database_access.trace_stack`,
+  `sys._current_frames` da thread do rastro): a linha "em voo ha Ns" passa a
+  terminar com os oito quadros mais internos — `threading.py wait <-
+  json_cache.py _atomic_write_json <- …` diz o lock; `json.load` diz o
+  share. É a resposta que o resumo não dá quando não há operação;
+- **`thread=` em todo evento do farol**: o `file_lock_wait_timed_out` de uma
+  thread de fundo passa a dizer que thread é (`dashboard-warm`, `duck-mirror`,
+  `waitress-3`);
+- **o memo de OCUPADO por banco** (`_ocupado_ate`, `OTC_DUCK_BUSY_SKIP_SECONDS`
+  = 60): disputa que a retentativa não resolveu marca o banco, e as leituras
+  seguintes dele vão direto ao JSON sem esperar duas vezes o teto. Leitura
+  que chega ao banco limpa; `prefetch_days` respeita e alimenta. Sem isso, a
+  varredura de centenas de dias do Vanilla, com a vizinha convertendo por
+  minutos, custava horas — e cada tentativa era mais um concorrente no
+  arquivo já disputado.

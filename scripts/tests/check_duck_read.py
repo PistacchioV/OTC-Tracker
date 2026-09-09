@@ -348,6 +348,12 @@ DR._cura_geral.update({'ate': 0.0, 'seguidas': 0})
 check('6b. banco ocupado: cai no JSON SEM curar',
       (DR.day_payload(OCUP), len(tentativas)), (None, 0))
 check('6b. com UMA retentativa antes de desistir', _chamadas.count('Commodities.db'), 2)
+# Disputa perdida marca o banco: dentro da janela o banco NEM e tentado (era
+# 5 s + 0,3 s + 5 s por ARQUIVO enquanto a vizinha convertia por minutos).
+_chamadas[:] = []
+check('6b. dentro da janela de OCUPADO o banco nem e tentado',
+      (DR.day_payload(OCUP), len(_chamadas)), (None, 0))
+check('6b. a janela e configuravel e curta', 0 < DR._OCUPADO_JANELA <= 300)
 check('6b. e sem marcar quarentena', DR._cura_em_quarentena(OCUP), False)
 check('6b. quem cai aqui ainda LE, pelo JSON', DR.day_records(OCUP), [{'Deal': 'OC-1'}])
 _chamadas[:] = []
@@ -356,7 +362,9 @@ check('6b. o cadastro (table_rows) segue a mesma regra',
       and len(tentativas) == 0)
 DR.duckdb_read = _dr_real
 M.convert_sync = _sync_real
+DR.ocupado_forget()                    # a janela passou
 check('6b. passada a disputa, o banco volta a responder', DR.day_payload(OCUP), [{'Deal': 'OC-1'}])
+check('6b. e a leitura que deu certo limpa a marca', DR._ocupado_marcado('cache/new deals/NDF/Commodities.db'), False)
 # O teto de espera das leituras do espelho e CURTO e vale so para LEITURA.
 check('6b. o teto curto e configuravel e cobre so a leitura',
       DR._LEITURA_TETO is not None and DR._LEITURA_TETO <= 15)
