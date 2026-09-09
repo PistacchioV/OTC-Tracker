@@ -1036,7 +1036,20 @@ class I18nManager {
             const key = el.getAttribute(this.translationKeyAttribute);
             const value = getNestedValue(translations, key);
             if (value) {
-                el.innerHTML = value;
+                // O DataTables 2.x embrulha o conteúdo de cada <th> em
+                // `.dt-column-title` (o rótulo) + `.dt-column-order` (a seta de
+                // ordenação). Num `<th data-lang="...">`, escrever no innerHTML
+                // do <th> APAGA os dois — e o estrago não é só a seta que some:
+                // `column().title()` passa a devolver `null`, e o export para
+                // Excel do Buttons chama `.length` nesse título e morre antes
+                // de gerar o arquivo. CSV, Copy e Print sobrevivem, então a
+                // tela fica com "só o Excel não funciona" e nada no console.
+                //
+                // Traduzir DENTRO do span preserva a estrutura. Quem põe o
+                // `data-lang` num <span> ao redor do texto (o padrão do
+                // intrag-ndf) nunca sofreu disso; quem põe no <th> sofria.
+                const alvo = el.querySelector('.dt-column-title') || el;
+                alvo.innerHTML = value;
             } else {
                 console.warn(`Missing translation for key: ${key}`);
             }

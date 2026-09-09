@@ -538,5 +538,42 @@ check('e nao do parser de uso geral',
 check('e o formatador da celula usa a MESMA funcao',
       '_swapchar_value_num(s)' in SRC, True)
 
+# ── a liquidacao da Athena SEM Titulo no B3 nao vira linha, e isso e AVISADO ──
+#  A lista do aviso sai do Operations B3; a Athena entra so no JOIN pelo CETIP
+#  ID. Uma liquidacao que esta na Athena e nao tem Titulo no B3 simplesmente
+#  nao aparece — a mesa via duas operacoes na tela do Swap Athena e uma no
+#  aviso, sem nada dizendo por que (foi o swap da SUZANO em 08/09/2026, cujo
+#  CETIP ID veio errado no relatorio). Corrigir o ID conserta o JOIN; NAO cria
+#  a linha, porque a linha nunca dependeu da Athena.
+print('\n== 9. a orfa da Athena e avisada ==')
+_avisos = []
+_log_real = R.log.warning
+R.log.warning = lambda *a, **k: _avisos.append(a[0] % a[1:] if len(a) > 1 else a[0])
+try:
+    R._swadv_orfas_avisadas.clear()
+    R._swadv_avisa_orfas(REF, {'A1': [], 'NAO-EXISTE-NO-B3': []}, [('A1', {})])
+    check('a orfa vira UM aviso no log',
+          len([m for m in _avisos if 'sem Título no' in m]), 1)
+    check('e o aviso nomeia o CETIP ID',
+          any('NAO-EXISTE-NO-B3' in m for m in _avisos), True)
+    _avisos[:] = []
+    R._swadv_avisa_orfas(REF, {'A1': [], 'NAO-EXISTE-NO-B3': []}, [('A1', {})])
+    check('a repeticao NAO reescreve o log (uma vez por dia x conjunto)', _avisos, [])
+    _avisos[:] = []
+    R._swadv_avisa_orfas(REF, {'A1': []}, [('A1', {})])
+    check('sem orfa, nenhum aviso', _avisos, [])
+    # E resolvido o problema, um aviso NOVO volta a sair — senao a marca do dia
+    # calaria a proxima orfa de verdade.
+    R._swadv_avisa_orfas(REF, {'A1': [], 'OUTRA': []}, [('A1', {})])
+    check('resolvida e reaberta, o aviso volta',
+          any('OUTRA' in m for m in _avisos), True)
+finally:
+    R.log.warning = _log_real
+    R._swadv_orfas_avisadas.clear()
+# O aviso e do COLETOR, nao de quem chama: a tela e o e-mail passam os dois por
+# `_swadv_collect`, e prende-lo num deles calaria o outro.
+check('o coletor e quem avisa',
+      '_swadv_avisa_orfas(ref, by_cetip, titulos)' in SRC, True)
+
 print('\n%s' % ('TUDO OK' if not fails else 'FALHAS (%d): %r' % (len(fails), fails)))
 sys.exit(1 if fails else 0)

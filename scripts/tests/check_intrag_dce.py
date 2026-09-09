@@ -10,7 +10,13 @@ O que este script prende:
    novo não desfaz validação nem mapeamento;
 3. a URL do dia sai do cadastro `api-links` (uso `Intrag DCE`) com a data no
    CAMINHO, e sem cadastro cai no fallback — nunca em erro;
-4. a lista de campos tem 28 entradas, o contrato com o template da página.
+4. a lista de campos tem 27 entradas — a contagem do EXTRATO —, o contrato com
+   o template da página. Foram 28 até 09/09/2026: havia um `premium` entre o
+   `unit_price` e o `premium_settlement_date` e um `bonus` onde o relatório traz
+   REMARKS. O extrato NÃO tem coluna PREMIUM (o valor unitário do prêmio é o
+   `UNIT PRICE`), então aquela coluna nascia vazia em toda linha, e o REMARKS
+   caía em `unknown_headers` enquanto a tela mostrava um "Bonus" sempre em
+   branco. O cabeçalho abaixo é o do extrato REAL, colado do bob-report.
 
 Roda em tmp: o cache da página é apontado para um diretório temporário e o
 download é stubado — nada de rede, nada de dado real.
@@ -34,16 +40,17 @@ def check(nome, cond):
         FALHAS.append(nome)
 
 
+# O cabeçalho do extrato REAL, 27 colunas, colado do bob-report.
 HEADER = ('OPTION TYPE;TRADE ID;PORTFOLIO CODE;TRADE DATE;OPERATION TYPE;'
           'HOLDER OR WRITER PARTY;HOLDER OR WRITER COUNTERPARTY;COUNTERPARTY;'
           'BASE CURRENCY - STOCKS/INDEX;COMMODITY;QUOTED CURRENCY;MATURITY DATE;'
-          'STRIKE PRICE;STRIKE PRICE IN BRL;UNIT PRICE;PREMIUM;'
+          'STRIKE PRICE;STRIKE PRICE IN BRL;UNIT PRICE;'
           'PREMIUM SETTLEMENT DATE;BASE VALUE/QUANTITY;EXERCISE TYPE;'
           'ASIAN OPTION AVERAGE;INITIAL VERIFICATION DATE;FINAL VERIFICATION DATE;'
           'INFORMATION SOURCE;QUOTE FOR MATURITY;QUOTE FOR CURRENCY;FIXING DATE;'
-          'BONUS;PREMIUM HOLDER')
+          'REMARKS;PREMIUM HOLDER')
 LINHA = ('PARIDADE;CETIP_SDP-Y63Y1;GCCN;2026-08-03;CALL;TITULAR;LANCADOR;JPM;'
-         'USD;NÃO SE APLICA;BRL;2026-08-11;5.5;0;0.5;0;2026-08-11;1000000;'
+         'USD;NÃO SE APLICA;BRL;2026-08-11;5.5;0;0.5;2026-08-11;1000000;'
          'EUROPEIA;NÃO SE APLICA;2026-08-05;2026-08-10;PTAX;5-2;2;2026-08-10;;PARTE')
 
 
@@ -58,7 +65,17 @@ def main():
     r = rows[0]
     check('trade_id certo', r['trade_id'] == 'CETIP_SDP-Y63Y1')
     check('premium_holder na última coluna', r['premium_holder'] == 'PARTE')
-    check('28 campos no contrato', len(domain._DCE_OPT_FIELDS) == 28)
+    check('27 campos no contrato — a contagem do extrato',
+          len(domain._DCE_OPT_FIELDS) == 27)
+    # As duas colunas que NÃO existem no extrato saíram do contrato. Se voltarem
+    # a aparecer num extrato futuro, o parser as conta em `unknown` e AVISA —
+    # que é o desfecho certo, e o oposto de uma coluna vazia para sempre.
+    check('sem `premium` e sem `bonus` no contrato',
+          'premium' not in domain._DCE_OPT_FIELDS and 'bonus' not in domain._DCE_OPT_FIELDS)
+    check('o REMARKS do extrato tem campo', 'remarks' in domain._DCE_OPT_FIELDS)
+    _extra, _ = domain._dce_parse_report('TRADE ID;PREMIUM;BONUS\nX;9;9')
+    check('PREMIUM/BONUS num extrato antigo não viram campo',
+          'premium' not in _extra[0] and 'bonus' not in _extra[0])
     check('toda chave do parse é do contrato',
           set(r) == set(domain._DCE_OPT_FIELDS))
 
@@ -70,7 +87,7 @@ def main():
           rows2 and rows2[0]['trade_id'] == 'CETIP_SDP-Y63Y1'
           and rows2[0]['counterparty'] == 'JPM')
     check('coluna desconhecida sai em unknown', unknown2 == ['COLUNA NOVA'])
-    check('campo sem coluna fica vazio', rows2[0]['premium'] == '')
+    check('campo sem coluna fica vazio', rows2[0]['remarks'] == '')
 
     print('== 2. import: arquivo-dia do Trade Date, re-import preserva a esteira ==')
     tmp = tempfile.mkdtemp(prefix='otc-dce-')

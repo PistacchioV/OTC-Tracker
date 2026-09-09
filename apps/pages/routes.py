@@ -4739,7 +4739,48 @@ def _swadv_collect(ref):
             'curva_banco': curva_banco_n,
             'curva_cliente': curva_cliente_n,
         })
+    _swadv_avisa_orfas(ref, by_cetip, titulos)
     return out
+
+
+# Uma vez por (dia, conjunto de órfãs): o aviso é remontado a cada abertura da
+# tela e a cada e-mail, e uma linha por leitura seria a maior parte do log.
+_swadv_orfas_avisadas = {}
+
+
+def _swadv_avisa_orfas(ref, by_cetip, titulos):
+    """AVISA quando o relatório da Athena traz uma liquidação que o Operations
+    B3 não tem.
+
+    A lista de linhas do aviso sai do Operations B3 (`_ops_swap_settling`), e a
+    Athena entra só no JOIN pelo CETIP ID — ela dá o Cliente, as duas curvas e o
+    Resultado Bruto. Consequência que não dava erro nenhum: uma liquidação que
+    está na Athena e não tem Título no B3 simplesmente NÃO VIRA LINHA, e a mesa
+    via duas operações na tela do Swap Athena e uma no aviso, sem nada dizendo
+    por quê — foi o swap da SUZANO em 08/09/2026, cujo CETIP ID veio errado no
+    relatório. Corrigir o ID conserta o JOIN; não cria a linha, porque a linha
+    nunca dependeu da Athena.
+
+    Fica no log e não na tela de propósito: a ausência pode ser legítima (o
+    evento não é de liquidação, ou o cadastro `opb3-events` o descarta), então
+    isto é pista para quem investiga, não alarme para quem opera."""
+    try:
+        vistos = {str(t).upper() for t, _r in (titulos or [])}
+        fora = sorted(c for c in (by_cetip or {}) if c not in vistos)
+        if not fora:
+            _swadv_orfas_avisadas.pop(ref.strftime('%Y-%m-%d'), None)
+            return
+        chave = ref.strftime('%Y-%m-%d')
+        if _swadv_orfas_avisadas.get(chave) == tuple(fora):
+            return
+        _swadv_orfas_avisadas[chave] = tuple(fora)
+        log.warning('[swap-advice] %d liquidação(ões) da Athena em %s sem Título no '
+                    'Operations B3 — elas NÃO viram linha do aviso: %s. O aviso sai do '
+                    'Operations B3 (Tipo Título = SWAP + cadastro `opb3-events`); o CETIP '
+                    'ID da Athena só entra no join.',
+                    len(fora), ref.strftime('%d/%m/%Y'), ', '.join(fora))
+    except Exception:                                       # noqa: BLE001
+        pass
 
 
 def _swadv_email_rows(ref):
