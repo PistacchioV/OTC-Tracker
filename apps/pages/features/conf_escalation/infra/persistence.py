@@ -5,6 +5,7 @@ import os
 import traceback
 
 from apps.pages.features.conf_escalation import domain
+from apps.pages import data_store as _store  # noqa: E402
 
 # O horário do disparo — configuração, com o parse (e a queda para 17:00) no
 # `domain.time_of`.
@@ -37,8 +38,7 @@ def load_recipients():
     """As listas do card. Cada uma é um público diferente."""
     vazio = {k: '' for k in domain.REC_KEYS}
     try:
-        with open(recipients_file(), encoding='utf-8') as fh:
-            d = json.load(fh)
+        d = _store.read(recipients_file())
         if not isinstance(d, dict):
             return vazio
         out = {k: str(d.get(k, '') or '') for k in domain.REC_KEYS}
@@ -80,8 +80,7 @@ def write_status(mode, slot, result, when):
     R = _routes()
     with R._cache_lock:
         try:
-            with open(status_file(), encoding='utf-8') as fh:
-                d = json.load(fh)
+            d = _store.read(status_file())
             if not isinstance(d, dict):
                 d = {}
         except (IOError, OSError, json.JSONDecodeError):
@@ -98,8 +97,7 @@ def write_status(mode, slot, result, when):
 
 def read_status():
     try:
-        with open(status_file(), encoding='utf-8') as fh:
-            d = json.load(fh)
+        d = _store.read(status_file())
         return d if isinstance(d, dict) else {}
     except (IOError, OSError, json.JSONDecodeError):
         return {}

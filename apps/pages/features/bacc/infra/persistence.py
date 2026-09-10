@@ -3,6 +3,7 @@
 import json
 import os
 import traceback
+from apps.pages import data_store as _store  # noqa: E402
 
 # O horário do disparo. Fica aqui — e não no domain — porque ler variável de
 # ambiente é configuração; quem PARSEIA (com a queda para 16:00) é o
@@ -42,8 +43,7 @@ def load_recipients():
     responde pela métrica, o CC é quem acompanha."""
     vazio = {'to': '', 'cc': ''}
     try:
-        with open(recipients_file(), encoding='utf-8') as fh:
-            d = json.load(fh)
+        d = _store.read(recipients_file())
         if not isinstance(d, dict):
             return vazio
         return {k: str(d.get(k, '') or '') for k in vazio}
@@ -85,8 +85,7 @@ def write_status(slot, result, when):
 
 def read_status():
     try:
-        with open(status_file(), encoding='utf-8') as fh:
-            d = json.load(fh)
+        d = _store.read(status_file())
         return d if isinstance(d, dict) else {}
     except Exception:                                       # noqa: BLE001
         return {}

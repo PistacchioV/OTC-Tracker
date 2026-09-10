@@ -25,6 +25,7 @@ casca, e a casca do sino ainda mora lá.
 """
 import logging
 import os
+from apps.pages import data_store as _store  # noqa: E402
 import threading
 import time
 import traceback
@@ -227,7 +228,7 @@ def _notif_migrar_do_antigo(conn):
     """
     from apps.pages import routes
     inseriu = False
-    if not os.path.isfile(routes.DB_PATH):
+    if not _store.isfile(routes.DB_PATH):
         return inseriu                                      # instalação nova
     # Pela CAMADA (`duckdb_read`) e não pelo `duckdb.connect` cru: ela toma o
     # lock compartilhado do arquivo, então a migração não atropela quem estiver
@@ -290,7 +291,7 @@ def _notif_maior_id_antigo():
     Lido ANTES de criar o schema — é ele que decide onde a sequência começa.
     """
     from apps.pages import routes
-    if not os.path.isfile(routes.DB_PATH):
+    if not _store.isfile(routes.DB_PATH):
         return 0
     try:
         with routes.duckdb_read(routes.DB_PATH) as antigo:

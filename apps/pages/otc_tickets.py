@@ -20,13 +20,11 @@ alteração do primeiro (mesma regra do `_cache_lock` do routes.py — ver
 CLAUDE.md, seção Concurrency).
 """
 
-import io
-import json
 import os
+
+from apps.pages.data_paths import data_dir
 import re
-import tempfile
 import threading
-from apps.pages.data_paths import data_dir, data_path, data_write, mapping_file, mapping_write
 from datetime import datetime
 
 _DIR = os.path.normpath(os.path.join(
@@ -58,43 +56,10 @@ def _now():
 
 
 def _atomic_write(path, data):
-    """Grava JSON sem deixar o arquivo pela metade. Igual ao
-    `_atomic_write_json` do routes.py, incluindo o fallback de Windows: lá o
-    os.replace() levanta PermissionError se um leitor concorrente estiver com o
-    arquivo aberto sem FILE_SHARE_DELETE."""
-    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), suffix='.tmp')
-    try:
-        with os.fdopen(fd, 'w', encoding='utf-8') as fh:
-            json.dump(data, fh, ensure_ascii=False, indent=2)
-        try:
-            os.replace(tmp, path)
-            _duck_notify(path)
-            return
-        except PermissionError:
-            pass
-        with io.open(path, 'w', encoding='utf-8') as fh:
-            json.dump(data, fh, ensure_ascii=False, indent=2)
-        _duck_notify(path)
-        try:
-            os.unlink(tmp)
-        except OSError:
-            pass
-    except Exception:
-        try:
-            os.unlink(tmp)
-        except OSError:
-            pass
-        raise
-
-
-def _duck_notify(path):
-    """Espelho vivo (auditoria §335): o tickets.db acompanha cada gravação.
-    Melhor esforço — o store nunca falha por causa do espelho."""
-    try:
-        from apps.pages import duck_mirror
-        duck_mirror.notify_write(path)
-    except Exception:                                       # noqa: BLE001
-        pass
+    """Grava o store — pelo ARMAZÉM (DB-only, HANDOFF §434): o caminho é o de
+    sempre, quem guarda é o banco do arquivo."""
+    from apps.pages import data_store
+    data_store.write(path, data)
 
 
 def _read():
@@ -102,8 +67,8 @@ def _read():
     estado vazio em vez de estourar — a página de tickets não pode derrubar o
     app por causa de um JSON quebrado."""
     try:
-        with io.open(_FILE, encoding='utf-8') as fh:
-            data = json.load(fh)
+        from apps.pages import data_store
+        data = data_store.read(_FILE)
     except (IOError, OSError, ValueError):
         return {'seq': 0, 'tickets': []}
     if not isinstance(data, dict):

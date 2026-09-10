@@ -12,6 +12,7 @@ from flask import (jsonify, redirect, render_template, request,
                    session, url_for)
 
 from apps.pages import blueprint
+from apps.pages import data_store as _store  # noqa: E402
 
 
 def _R():
@@ -51,7 +52,7 @@ def api_pending_confirmation_snapshot():
                         ref.strftime('%d'),
                         'pending-confirmation_{}.json'.format(ref.strftime('%Y%m%d')))
     recs = []
-    if os.path.isfile(path):
+    if _store.isfile(path):
         try:
             from apps.pages import duck_read      # DB-only (fase 3): arquivo-dia payload-LISTA.
             data = duck_read.day_records(path)
@@ -61,7 +62,7 @@ def api_pending_confirmation_snapshot():
     rows = [[('' if r.get(c) is None else str(r.get(c, ''))) for c in _R()._PC_COLUMNS]
             for r in recs if isinstance(r, dict)]
     return jsonify({'success': True, 'columns': list(_R()._PC_COLUMNS), 'rows': rows,
-                    'date': ref.strftime('%Y-%m-%d'), 'found': os.path.isfile(path)})
+                    'date': ref.strftime('%Y-%m-%d'), 'found': _store.isfile(path)})
 
 @blueprint.route('/api/pending-confirmation/search', methods=['POST'])
 def api_pending_confirmation_search():

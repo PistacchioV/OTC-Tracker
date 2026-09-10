@@ -22,6 +22,7 @@ import re
 import traceback
 import unicodedata
 from datetime import datetime, timedelta
+from apps.pages import data_store as _store  # noqa: E402
 
 log = logging.getLogger('otc_tracker')
 
@@ -274,7 +275,7 @@ def _swap_contract_ident_map(dref):
     path = os.path.join(routes.B3_JSON_ROOT, 'Swap', routes._b3_date_subpath(dref),
                         '73760_{}_DPOSICAO-SWAP.json'.format(dref))
     out = {}
-    if not os.path.isfile(path):
+    if not _store.isfile(path):
         return out
     try:
         from apps.pages import duck_read
@@ -312,7 +313,7 @@ def _swap_contract_cpty_map(dref):
     path = os.path.join(routes.B3_JSON_ROOT, 'Swap', routes._b3_date_subpath(dref),
                         '73760_{}_DPOSICAO-SWAP.json'.format(dref))
     out = {}
-    if not os.path.isfile(path):
+    if not _store.isfile(path):
         return out
     try:
         from apps.pages import duck_read
@@ -354,7 +355,7 @@ def _forecast_collect(dref, spine):
         path = os.path.join(routes.B3_JSON_ROOT, src['category'], routes._b3_date_subpath(dref), src['file'](dref))
         st = {'label': src['label'], 'file': os.path.basename(path),
               'found': False, 'records': 0, 'counted': 0}
-        if not os.path.isfile(path):
+        if not _store.isfile(path):
             status.append(st)
             continue
         try:
@@ -510,7 +511,7 @@ def _forecast_has_files(ref):
     from apps.pages import routes
     dref = ref.strftime('%y%m%d')
     for src in _FORECAST_SOURCES:
-        if os.path.isfile(os.path.join(routes.B3_JSON_ROOT, src['category'], routes._b3_date_subpath(dref), src['file'](dref))):
+        if _store.isfile(os.path.join(routes.B3_JSON_ROOT, src['category'], routes._b3_date_subpath(dref), src['file'](dref))):
             return True
     return False
 

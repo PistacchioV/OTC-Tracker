@@ -5,6 +5,7 @@ arquivo e o Settlement Advice de Opção lê o PRM de lá).
 """
 import os
 from datetime import datetime
+from apps.pages import data_store as _store  # noqa: E402
 
 def _R():
     """Busca ATRASADA no routes — plataforma (ver features/support/infra)."""
@@ -38,7 +39,7 @@ def _cog_collect(ref):
     widgets = {'total': 0, 'call': 0, 'put': 0}
     jp = _R()._cog_json_path(ref)
     rows_out = []
-    if os.path.isfile(jp):
+    if _store.isfile(jp):
         try:
             from apps.pages import duck_read      # DB-only (fase 3): arquivo-dia payload-LISTA.
             data = duck_read.day_records(jp) or []

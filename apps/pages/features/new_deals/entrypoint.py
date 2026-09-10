@@ -16,6 +16,7 @@ from datetime import datetime
 from flask import jsonify, request, session
 
 from apps.pages import blueprint
+from apps.pages import data_store as _store  # noqa: E402
 
 
 def _R():
@@ -52,10 +53,9 @@ def api_save_deal_cache():
     file_path = os.path.join(dir_path, fname)
 
     with _R()._cache_lock:
-        if os.path.exists(file_path):
+        if _store.exists(file_path):
             try:
-                with open(file_path, 'r', encoding='utf-8') as fh:
-                    deals = json.load(fh)
+                deals = _store.read(file_path)
                 if not isinstance(deals, list):
                     deals = [deals]
             except (json.JSONDecodeError, ValueError):
@@ -121,8 +121,7 @@ def api_update_deal_cache(deal_id):
 
     with _R()._cache_lock:
         try:
-            with open(file_path, 'r', encoding='utf-8') as fh:
-                deals = json.load(fh)
+            deals = _store.read(file_path)
         except (json.JSONDecodeError, ValueError):
             deals = []
         idx = next((i for i, d in enumerate(deals)
@@ -178,8 +177,7 @@ def api_delete_deal_cache(deal_id):
 
     with _R()._cache_lock:
         try:
-            with open(file_path, 'r', encoding='utf-8') as fh:
-                deals = json.load(fh)
+            deals = _store.read(file_path)
         except (json.JSONDecodeError, ValueError):
             deals = []
         idx = next((i for i, d in enumerate(deals)
@@ -219,8 +217,7 @@ def api_bulk_delete_deal_cache():
     for fp, pairs_in_file in file_pairs.items():
         with _R()._cache_lock:
             try:
-                with open(fp, 'r', encoding='utf-8') as fh:
-                    deals = json.load(fh)
+                deals = _store.read(fp)
             except (json.JSONDecodeError, ValueError):
                 deals = []
             if not isinstance(deals, list):
@@ -265,8 +262,7 @@ def api_opt_bulk_patch_deal_cache():
     for fp, file_ops in file_patches.items():
         with _R()._cache_lock:
             try:
-                with open(fp, 'r', encoding='utf-8') as fh:
-                    deals = json.load(fh)
+                deals = _store.read(fp)
             except (json.JSONDecodeError, ValueError):
                 deals = []
             for deal_id, client, updates in file_ops:
@@ -310,10 +306,9 @@ def api_save_fxo_cache():
     file_path = os.path.join(dir_path, ref_date.strftime('%Y%m%d') + '_optfxo.json')
 
     with _R()._cache_lock:
-        if os.path.exists(file_path):
+        if _store.exists(file_path):
             try:
-                with open(file_path, 'r', encoding='utf-8') as fh:
-                    deals = json.load(fh)
+                deals = _store.read(file_path)
                 if not isinstance(deals, list):
                     deals = [deals]
             except (json.JSONDecodeError, ValueError):
@@ -372,8 +367,7 @@ def api_update_fxo_cache(deal_id):
 
     with _R()._cache_lock:
         try:
-            with open(file_path, 'r', encoding='utf-8') as fh:
-                deals = json.load(fh)
+            deals = _store.read(file_path)
         except (json.JSONDecodeError, ValueError):
             deals = []
         idx = next((i for i, d in enumerate(deals)
@@ -424,8 +418,7 @@ def api_delete_fxo_cache(deal_id):
 
     with _R()._cache_lock:
         try:
-            with open(file_path, 'r', encoding='utf-8') as fh:
-                deals = json.load(fh)
+            deals = _store.read(file_path)
         except (json.JSONDecodeError, ValueError):
             deals = []
         idx = next((i for i, d in enumerate(deals)
@@ -462,8 +455,7 @@ def api_bulk_delete_fxo_cache():
     for fp, pairs_in_file in file_pairs.items():
         with _R()._cache_lock:
             try:
-                with open(fp, 'r', encoding='utf-8') as fh:
-                    deals = json.load(fh)
+                deals = _store.read(fp)
             except (json.JSONDecodeError, ValueError):
                 deals = []
             if not isinstance(deals, list):
@@ -506,8 +498,7 @@ def api_fxo_bulk_patch_deal_cache():
     for fp, file_ops in file_patches.items():
         with _R()._cache_lock:
             try:
-                with open(fp, 'r', encoding='utf-8') as fh:
-                    deals = json.load(fh)
+                deals = _store.read(fp)
             except (json.JSONDecodeError, ValueError):
                 deals = []
             for deal_id, client, updates in file_ops:
@@ -768,8 +759,7 @@ def api_fxo_send_conecta():
                 from apps.pages import duck_read
                 _raw = duck_read.calendar_rows(holiday_path)
                 if _raw is None:
-                    with open(holiday_path, encoding='utf-8') as _hf:
-                        _raw = _json.load(_hf)
+                    _raw = _store.read(holiday_path)
                 _deal_holidays = set(item['date'] if isinstance(item, dict) else item for item in _raw)
             except Exception:
                 pass
@@ -888,11 +878,11 @@ def api_fxo_mapping_b3():
     mapping = {}
     files_to_delete = []
     try:
-        if not os.path.isdir(_R().RETURN_PATH):
+        if not _store.isdir(_R().RETURN_PATH):
             return jsonify({'ok': False, 'error': 'Return folder not found: {}'.format(_R().RETURN_PATH)}), 400
-        for fname in os.listdir(_R().RETURN_PATH):
+        for fname in _store.listdir(_R().RETURN_PATH):
             fpath = os.path.join(_R().RETURN_PATH, fname)
-            if not os.path.isfile(fpath):
+            if not _store.isfile(fpath):
                 continue
             try:
                 with open(fpath, encoding='utf-8', errors='replace') as fh:
@@ -941,8 +931,7 @@ def api_fxo_mapping_b3():
             intrag_candidate = None
             with _R()._cache_lock:
                 try:
-                    with open(file_path, 'r', encoding='utf-8') as fh:
-                        deals_list = json.load(fh)
+                    deals_list = _store.read(file_path)
                     deals_list[idx].update(updates)
                     _R()._atomic_write_json(file_path, deals_list)
                     if new_status == 'Success':
@@ -962,7 +951,7 @@ def api_fxo_mapping_b3():
 
     for fpath in files_to_delete:
         try:
-            os.remove(fpath)
+            _store.remove(fpath)
         except Exception:
             pass
 
@@ -995,10 +984,9 @@ def api_ndf_save_deal_cache():
     file_path = os.path.join(dir_path, fname)
 
     with _R()._cache_lock:
-        if os.path.exists(file_path):
+        if _store.exists(file_path):
             try:
-                with open(file_path, 'r', encoding='utf-8') as fh:
-                    deals = json.load(fh)
+                deals = _store.read(file_path)
                 if not isinstance(deals, list):
                     deals = [deals]
             except (json.JSONDecodeError, ValueError):
@@ -1084,8 +1072,7 @@ def api_ndf_update_deal_cache(deal_id):
 
     with _R()._cache_lock:
         try:
-            with open(file_path, 'r', encoding='utf-8') as fh:
-                deals = json.load(fh)
+            deals = _store.read(file_path)
         except (json.JSONDecodeError, ValueError):
             _R().log.error("[NDF PATCH] JSON parse error in file=%s", file_path)
             deals = []
@@ -1149,8 +1136,7 @@ def api_ndf_delete_deal_cache(deal_id):
 
     with _R()._cache_lock:
         try:
-            with open(file_path, 'r', encoding='utf-8') as fh:
-                deals = json.load(fh)
+            deals = _store.read(file_path)
         except (json.JSONDecodeError, ValueError):
             deals = []
         idx = next((i for i, d in enumerate(deals)
@@ -1205,8 +1191,7 @@ def api_ndf_bulk_delete_deal_cache():
     for fp, pairs_in_file in file_pairs.items():
         with _R()._cache_lock:
             try:
-                with open(fp, 'r', encoding='utf-8') as fh:
-                    deals = json.load(fh)
+                deals = _store.read(fp)
             except (json.JSONDecodeError, ValueError):
                 _R().log.error("[NDF BULK-DELETE] JSON parse error in %s", fp)
                 deals = []
@@ -1262,8 +1247,7 @@ def api_ndf_bulk_patch_deal_cache():
     for fp, file_ops in file_patches.items():
         with _R()._cache_lock:
             try:
-                with open(fp, 'r', encoding='utf-8') as fh:
-                    deals = json.load(fh)
+                deals = _store.read(fp)
             except (json.JSONDecodeError, ValueError):
                 deals = []
             for deal_id, client, updates in file_ops:
@@ -1363,12 +1347,12 @@ def api_ndf_mapping_b3():
     mapping         = {}
     files_to_delete = []
     try:
-        if not os.path.isdir(_R().RETURN_PATH):
+        if not _store.isdir(_R().RETURN_PATH):
             return jsonify({'ok': False, 'error': f'Return folder not found: {_R().RETURN_PATH}'}), 400
 
-        for fname in os.listdir(_R().RETURN_PATH):
+        for fname in _store.listdir(_R().RETURN_PATH):
             fpath = os.path.join(_R().RETURN_PATH, fname)
-            if not os.path.isfile(fpath):
+            if not _store.isfile(fpath):
                 continue
             try:
                 with open(fpath, 'r', encoding='latin-1') as fh:
@@ -1421,8 +1405,7 @@ def api_ndf_mapping_b3():
             if file_path is not None:
                 with _R()._cache_lock:
                     try:
-                        with open(file_path, 'r', encoding='utf-8') as fh:
-                            deals_list = json.load(fh)
+                        deals_list = _store.read(file_path)
                         deals_list[idx].update(updates)
                         _R()._atomic_write_json(file_path, deals_list)   # funil (§335)
                         if new_status == 'Success':
@@ -1448,7 +1431,7 @@ def api_ndf_mapping_b3():
 
     for fpath in files_to_delete:
         try:
-            os.remove(fpath)
+            _store.remove(fpath)
         except Exception:
             pass
 
@@ -1579,8 +1562,7 @@ def api_send_conecta():
                 from apps.pages import duck_read
                 _raw = duck_read.calendar_rows(holiday_path)
                 if _raw is None:
-                    with open(holiday_path, encoding='utf-8') as _hf:
-                        _raw = _json.load(_hf)
+                    _raw = _store.read(holiday_path)
                 _deal_holidays = set(
                     item['date'] if isinstance(item, dict) else item
                     for item in _raw
@@ -1706,12 +1688,12 @@ def api_mapping_b3():
     mapping       = {}   # deal_text -> {'b3_id': str, 'ok': bool}
     files_to_delete = []
     try:
-        if not os.path.isdir(_R().RETURN_PATH):
+        if not _store.isdir(_R().RETURN_PATH):
             return jsonify({'ok': False, 'error': f'Return folder not found: {_R().RETURN_PATH}'}), 400
 
-        for fname in os.listdir(_R().RETURN_PATH):
+        for fname in _store.listdir(_R().RETURN_PATH):
             fpath = os.path.join(_R().RETURN_PATH, fname)
-            if not os.path.isfile(fpath):
+            if not _store.isfile(fpath):
                 continue
             try:
                 with open(fpath, encoding='utf-8', errors='replace') as fh:
@@ -1770,8 +1752,7 @@ def api_mapping_b3():
                 intrag_candidate = None
                 with _R()._cache_lock:
                     try:
-                        with open(file_path, 'r', encoding='utf-8') as fh:
-                            deals_list = json.load(fh)
+                        deals_list = _store.read(file_path)
                         deals_list[idx].update(updates)
                         _R()._atomic_write_json(file_path, deals_list)   # funil (§335)
                         if new_status == 'Success':
@@ -1792,7 +1773,7 @@ def api_mapping_b3():
     # ── delete processed return files ────────────────────────────────
     for fpath in files_to_delete:
         try:
-            os.remove(fpath)
+            _store.remove(fpath)
         except Exception:
             pass
 
@@ -2001,10 +1982,9 @@ def api_generic_nd_save_cache(product):
     file_path = os.path.join(dir_path, ref_date.strftime('%Y%m%d') + cfg['suffix'])
 
     with _R()._cache_lock:
-        if os.path.exists(file_path):
+        if _store.exists(file_path):
             try:
-                with open(file_path, 'r', encoding='utf-8') as fh:
-                    deals = json.load(fh)
+                deals = _store.read(file_path)
                 if not isinstance(deals, list):
                     deals = [deals]
             except (json.JSONDecodeError, ValueError):
@@ -2081,8 +2061,7 @@ def api_generic_nd_update_cache(product, deal_id):
 
     with _R()._cache_lock:
         try:
-            with open(file_path, 'r', encoding='utf-8') as fh:
-                deals = json.load(fh)
+            deals = _store.read(file_path)
         except (json.JSONDecodeError, ValueError):
             deals = []
         idx = next((i for i, d in enumerate(deals)
@@ -2135,8 +2114,7 @@ def api_generic_nd_delete_cache(product, deal_id):
 
     with _R()._cache_lock:
         try:
-            with open(file_path, 'r', encoding='utf-8') as fh:
-                deals = json.load(fh)
+            deals = _store.read(file_path)
         except (json.JSONDecodeError, ValueError):
             deals = []
         idx = next((i for i, d in enumerate(deals)
@@ -2174,8 +2152,7 @@ def api_generic_nd_bulk_delete_cache(product):
     for fp, pairs_in_file in file_pairs.items():
         with _R()._cache_lock:
             try:
-                with open(fp, 'r', encoding='utf-8') as fh:
-                    deals = json.load(fh)
+                deals = _store.read(fp)
             except (json.JSONDecodeError, ValueError):
                 deals = []
             if not isinstance(deals, list):
@@ -2220,8 +2197,7 @@ def api_generic_nd_bulk_patch_cache(product):
     for fp, file_ops in file_patches.items():
         with _R()._cache_lock:
             try:
-                with open(fp, 'r', encoding='utf-8') as fh:
-                    deals = json.load(fh)
+                deals = _store.read(fp)
             except (json.JSONDecodeError, ValueError):
                 deals = []
             success_deals = []
@@ -2432,12 +2408,12 @@ def api_generic_nd_mapping_b3(product):
     mapping         = {}
     files_to_delete = []
     try:
-        if not os.path.isdir(_R().RETURN_PATH):
+        if not _store.isdir(_R().RETURN_PATH):
             return jsonify({'ok': False, 'error': f'Return folder not found: {_R().RETURN_PATH}'}), 400
 
-        for fname in os.listdir(_R().RETURN_PATH):
+        for fname in _store.listdir(_R().RETURN_PATH):
             fpath = os.path.join(_R().RETURN_PATH, fname)
-            if not os.path.isfile(fpath):
+            if not _store.isfile(fpath):
                 continue
             try:
                 with open(fpath, 'r', encoding='latin-1') as fh:
@@ -2500,8 +2476,7 @@ def api_generic_nd_mapping_b3(product):
             if file_path is not None:
                 with _R()._cache_lock:
                     try:
-                        with open(file_path, 'r', encoding='utf-8') as fh:
-                            deals_list = json.load(fh)
+                        deals_list = _store.read(file_path)
                         deals_list[idx].update(updates)
                         _R()._atomic_write_json(file_path, deals_list)
                         if new_status == 'Success':
@@ -2534,7 +2509,7 @@ def api_generic_nd_mapping_b3(product):
 
     for fpath in files_to_delete:
         try:
-            os.remove(fpath)
+            _store.remove(fpath)
         except Exception:
             pass
 

@@ -10,6 +10,7 @@ from flask import (jsonify, redirect, render_template, request,
                    session, url_for)
 
 from apps.pages import blueprint
+from apps.pages import data_store as _store  # noqa: E402
 
 
 def _R():
@@ -43,7 +44,7 @@ def api_file_interpreter_page_spec():
     url = (request.args.get('url') or '').strip()
     out = []
     try:
-        names = sorted(os.listdir(_R()._FILE_INTERPRETER_DIR))
+        names = sorted(_store.listdir(_R()._FILE_INTERPRETER_DIR))
     except OSError:
         names = []
     for fn in names:
@@ -93,7 +94,7 @@ def api_file_interpreter_list():
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
     items = []
     try:
-        names = sorted(os.listdir(_R()._FILE_INTERPRETER_DIR))
+        names = sorted(_store.listdir(_R()._FILE_INTERPRETER_DIR))
     except OSError:
         names = []
     for fn in names:
@@ -127,7 +128,7 @@ def api_file_interpreter_template(key):
     if request.method == 'DELETE':
         with _R()._cache_lock:
             try:
-                os.remove(_R()._fi_path(key))
+                _store.remove(_R()._fi_path(key))
             except FileNotFoundError:
                 return jsonify({'success': False, 'error': 'Unknown template.'}), 404
             except OSError as e:

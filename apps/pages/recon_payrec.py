@@ -39,6 +39,7 @@ from datetime import datetime
 # A raiz do share sai do Config (ver `_INPUT_BASE` abaixo).
 from apps.pages.data_paths import data_dir, data_path, data_write, mapping_file, mapping_write
 from apps.config import Config
+from apps.pages import data_store as _store  # noqa: E402
 
 _LOG = logging.getLogger(__name__)
 _MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -326,7 +327,7 @@ def _load_net_type_map():
     CounterpartyDetails (SPN→NET.value). Only an Active (approved) net type
     overrides the default; everything else stays 'Total Net' (safe)."""
     # DB-first (fase 3): as duas pernas do join saem do reference_data.db
-    # quando ele está fresco; senão, os JSONs de sempre. O `expected_path` é o
+    # (§434: só ele — não há mais JSON para cair). O `expected_path` é o
     # guarda da superfície de patch: caminho trocado → o banco não responde.
     def _db(fn, path):
         try:
@@ -337,9 +338,7 @@ def _load_net_type_map():
 
     name_to_spn = {}
     try:
-        refs = _db('refdata_rows', _REFDATA_PATH)
-        if refs is None:
-            refs = json.load(open(_REFDATA_PATH, encoding='utf-8'))
+        refs = _db('refdata_rows', _REFDATA_PATH) or []
         for r in refs:
             nm = _norm(r.get('COUNTERPARTY', ''))
             spn = str(r.get('SPN', '') or '').strip()
@@ -349,9 +348,7 @@ def _load_net_type_map():
         return {}
     spn_to_net = {}
     try:
-        cpds = _db('cpd_records', _CPD_PATH)
-        if cpds is None:
-            cpds = json.load(open(_CPD_PATH, encoding='utf-8'))
+        cpds = _db('cpd_records', _CPD_PATH) or []
         for r in cpds:
             spn = str(r.get('SPN', '') or '').strip()
             net = r.get('NET') or {}
@@ -1210,7 +1207,7 @@ def _persist_uploads(files):
     can_save = False
     try:
         os.makedirs(_INPUT_BASE, exist_ok=True)
-        can_save = os.path.isdir(_INPUT_BASE)
+        can_save = _store.isdir(_INPUT_BASE)
     except Exception as e:
         _LOG.warning('[payrec] could not access input folder %s: %s', _INPUT_BASE, e)
     for f in files:
@@ -1243,7 +1240,7 @@ def _gather_sources(files, mode):
     if mode == 'manual' and files:
         items = _persist_uploads(files)
     else:
-        if not os.path.isdir(_INPUT_BASE):
+        if not _store.isdir(_INPUT_BASE):
             raise FileNotFoundError('Pay/Rec input folder not found: %s' % _INPUT_BASE)
         items = [(os.path.basename(p), p) for p in sorted(glob.glob(os.path.join(_INPUT_BASE, '*.*')))]
     for name, src in items:
@@ -1276,8 +1273,7 @@ def _prev_finalized(recon_date):
     if not best:
         return None
     try:
-        with open(best, encoding='utf-8') as fh:
-            return json.load(fh), best_dt.strftime('%Y-%m-%d')
+        return _store.read(best), best_dt.strftime('%Y-%m-%d')
     except Exception:
         return None
 
@@ -1554,9 +1550,8 @@ def _load_flat(recon_date=''):
             cand = os.path.join(_CACHE_DIR, recon_date.replace('/', '-') + '.json')
         else:
             cand = os.path.join(_CACHE_DIR, '_last.json')
-        if os.path.exists(cand):
-            with open(cand, encoding='utf-8') as fh:
-                return json.load(fh)
+        if _store.exists(cand):
+            return _store.read(cand)
     except Exception:
         pass
     return None
@@ -1621,10 +1616,9 @@ def load_last(recon_date=''):
     then the working cache, then an empty shell."""
     if recon_date:
         p = _history_path(recon_date)
-        if p and os.path.exists(p):
+        if p and _store.exists(p):
             try:
-                with open(p, encoding='utf-8') as fh:
-                    return json.load(fh)
+                return _store.read(p)
             except Exception:
                 pass
     data = _load_flat(recon_date)
@@ -1706,7 +1700,7 @@ def send_payrec_email(recon_date):
     try:
         for lp in [os.path.join(current_app.root_path, 'static', 'images', 'logo.png'),
                    os.path.normpath(os.path.join(current_app.root_path, '..', 'static', 'images', 'logo.png'))]:
-            if os.path.exists(lp):
+            if _store.exists(lp):
                 with open(lp, 'rb') as f:
                     img = MIMEImage(f.read())
                     img.add_header('Content-ID', '<otc_logo>')

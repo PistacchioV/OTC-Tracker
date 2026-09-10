@@ -8,6 +8,7 @@ das duas (§4).
 import json
 import os
 from datetime import datetime
+from apps.pages import data_store as _store  # noqa: E402
 
 def _R():
     """Busca ATRASADA no routes — plataforma (ver features/support/infra)."""
@@ -48,10 +49,9 @@ def _intrag_ndf_persist(entry, td):
     file_path = os.path.join(dir_path, fname)
 
     with _R()._cache_lock:
-        if os.path.exists(file_path):
+        if _store.exists(file_path):
             try:
-                with open(file_path, 'r', encoding='utf-8') as fh:
-                    entries = json.load(fh)
+                entries = _store.read(file_path)
                 if not isinstance(entries, list):
                     entries = []
             except (json.JSONDecodeError, ValueError):

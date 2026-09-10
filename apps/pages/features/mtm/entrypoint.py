@@ -9,6 +9,7 @@ from flask import jsonify, render_template, request, session
 from apps.pages import blueprint
 from apps.pages.features.mtm import commands, domain, queries
 from apps.pages.features.mtm.infra import mail, mappers, persistence
+from apps.pages import data_store as _store  # noqa: E402
 
 
 def _R():
@@ -81,7 +82,7 @@ def api_mtm_import_folder():
     p   = request.get_json(silent=True) or {}
     ymd = _R()._accrual_parse_date(p.get('date')) or datetime.now().strftime('%Y%m%d')
     folder = persistence._mtm_source_dir(ymd)
-    if not os.path.isdir(folder):
+    if not _store.isdir(folder):
         return jsonify({'success': False, 'error': 'Folder not found: {}'.format(folder)}), 400
     try:
         result, (swap_fn, coe_fn) = queries._mtm_build_from_folder(folder)

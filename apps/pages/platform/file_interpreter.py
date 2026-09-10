@@ -22,6 +22,7 @@ import os
 import re
 
 from apps.pages.data_paths import data_dir
+from apps.pages import data_store as _store  # noqa: E402
 
 log = logging.getLogger('otc_tracker')
 
@@ -57,8 +58,7 @@ def _fi_load(key):
     """Template completo (dict) ou None. Sem cache: a página é de consulta
     eventual e os arquivos são pequenos — mtime-cache aqui seria zelo à toa."""
     try:
-        with open(_fi_path(key), encoding='utf-8') as fh:
-            data = json.load(fh)
+        data = _store.read(_fi_path(key))
         return data if isinstance(data, dict) else None
     except Exception:
         return None
@@ -154,7 +154,7 @@ def _fi_tpl_cached(key):
     leem a cada request e o arquivo só é reparseado quando muda."""
     path = _fi_path(key)
     try:
-        mt = os.path.getmtime(path)
+        mt = _store.getmtime(path)
     except OSError:
         return None
     hit = _fi_tpl_cache.get(key)
@@ -197,7 +197,7 @@ def _fi_variant_key(base_key, page_url=None, le_pair=None):
         return base_key
     wildcard = None
     try:
-        names = sorted(os.listdir(routes._FILE_INTERPRETER_DIR))
+        names = sorted(_store.listdir(routes._FILE_INTERPRETER_DIR))
     except OSError:
         return base_key
     for fn in names:

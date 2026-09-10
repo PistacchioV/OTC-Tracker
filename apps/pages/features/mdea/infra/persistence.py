@@ -6,6 +6,7 @@ import traceback
 
 from apps.pages.data_paths import data_dir
 from apps.pages.features.mdea import domain
+from apps.pages import data_store as _store  # noqa: E402
 
 
 def _routes():
@@ -68,8 +69,7 @@ def record_rebooks(rebooks, ref):
     path = rebook_path(ref)
     with R._cache_lock:
         try:
-            with open(path, encoding='utf-8') as fh:
-                atual = json.load(fh)
+            atual = _store.read(path)
             if not isinstance(atual, list):
                 atual = []
         except (IOError, OSError, json.JSONDecodeError):
@@ -133,8 +133,7 @@ def day_deals(product, ref):
 
 def load_recipients():
     try:
-        with open(recipients_file(), encoding='utf-8') as fh:
-            d = json.load(fh)
+        d = _store.read(recipients_file())
         if isinstance(d, dict):
             return {'to': str(d.get('to', '') or ''),
                     'cc': str(d.get('cc', domain.CC_DEFAULT) or '')}
@@ -183,8 +182,7 @@ def write_status(kind, result, when):
 
 def read_status():
     try:
-        with open(status_file(), encoding='utf-8') as fh:
-            d = json.load(fh)
+        d = _store.read(status_file())
         return d if isinstance(d, dict) else {}
     except Exception:                                       # noqa: BLE001
         return {}

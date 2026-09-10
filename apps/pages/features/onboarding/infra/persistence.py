@@ -3,6 +3,7 @@
 import os
 
 from apps.pages import cgd_docs
+from apps.pages import data_store as _store  # noqa: E402
 
 
 def db_ready():
@@ -14,4 +15,4 @@ def db_ready():
     opostos. O banco está no `.gitignore`, então o segundo caso é o normal num
     checkout novo.
     """
-    return os.path.isfile(cgd_docs.DB_PATH), cgd_docs.DB_PATH
+    return _store.isfile(cgd_docs.DB_PATH), cgd_docs.DB_PATH

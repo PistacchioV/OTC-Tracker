@@ -11,6 +11,7 @@ from flask import (jsonify, redirect, render_template, request,
                    send_file, session, url_for)
 
 from apps.pages import blueprint
+from apps.pages import data_store as _store  # noqa: E402
 
 
 def _R():
@@ -112,8 +113,8 @@ def api_conf_ndfcomm_save():
     try:
         os.makedirs(_R()._ei_long_path(dir_path), exist_ok=True)
         candidate, n = base, 0
-        while os.path.exists(_R()._ei_long_path(os.path.join(dir_path, candidate + '.doc'))) or \
-                os.path.exists(_R()._ei_long_path(os.path.join(dir_path, candidate + '.pdf'))):
+        while _store.exists(_R()._ei_long_path(os.path.join(dir_path, candidate + '.doc'))) or \
+                _store.exists(_R()._ei_long_path(os.path.join(dir_path, candidate + '.pdf'))):
             n += 1
             candidate = '{} ({})'.format(base, n)
         doc_path = os.path.join(dir_path, candidate + '.doc')
@@ -137,7 +138,7 @@ def api_conf_ndfcomm_save():
             # (NDF_Comm_YYYYMMDD_MERC) e não dizia de qual confirmação era.
             xbase = candidate
             xcand, xn = xbase, 0
-            while os.path.exists(_R()._ei_long_path(os.path.join(dir_path, xcand + '.xml'))):
+            while _store.exists(_R()._ei_long_path(os.path.join(dir_path, xcand + '.xml'))):
                 xn += 1
                 xcand = '{} ({})'.format(xbase, xn)
             xml_path = os.path.join(dir_path, xcand + '.xml')
@@ -197,7 +198,7 @@ def api_conf_ndfcomm_pdf():
     if err:
         return err
     pdf_path = (entry or {}).get('pdf') or ''
-    if not pdf_path or not os.path.isfile(pdf_path):
+    if not pdf_path or not _store.isfile(pdf_path):
         return ('PDF não encontrado no Inventory ({}).'.format(pdf_path), 404)
     return send_file(pdf_path, mimetype='application/pdf', as_attachment=False,
                      download_name=os.path.basename(pdf_path))
@@ -352,8 +353,8 @@ def api_conf_optcomm_save():
     try:
         os.makedirs(_R()._ei_long_path(dir_path), exist_ok=True)
         candidate, n = base, 0
-        while os.path.exists(_R()._ei_long_path(os.path.join(dir_path, candidate + '.doc'))) or \
-                os.path.exists(_R()._ei_long_path(os.path.join(dir_path, candidate + '.pdf'))):
+        while _store.exists(_R()._ei_long_path(os.path.join(dir_path, candidate + '.doc'))) or \
+                _store.exists(_R()._ei_long_path(os.path.join(dir_path, candidate + '.pdf'))):
             n += 1
             candidate = '{} ({})'.format(base, n)
         doc_path = os.path.join(dir_path, candidate + '.doc')
@@ -381,7 +382,7 @@ def api_conf_optcomm_save():
             # (NDF_Comm_YYYYMMDD_MERC) e não dizia de qual confirmação era.
             xbase = candidate
             xcand, xn = xbase, 0
-            while os.path.exists(_R()._ei_long_path(os.path.join(dir_path, xcand + '.xml'))):
+            while _store.exists(_R()._ei_long_path(os.path.join(dir_path, xcand + '.xml'))):
                 xn += 1
                 xcand = '{} ({})'.format(xbase, xn)
             xml_path = os.path.join(dir_path, xcand + '.xml')
@@ -438,7 +439,7 @@ def api_conf_optcomm_pdf():
     if err:
         return err
     pdf_path = (entry or {}).get('pdf') or ''
-    if not pdf_path or not os.path.isfile(pdf_path):
+    if not pdf_path or not _store.isfile(pdf_path):
         return ('PDF não encontrado no Inventory ({}).'.format(pdf_path), 404)
     return send_file(pdf_path, mimetype='application/pdf', as_attachment=False,
                      download_name=os.path.basename(pdf_path))
@@ -583,8 +584,8 @@ def api_conf_optfxo_save():
     try:
         os.makedirs(_R()._ei_long_path(dir_path), exist_ok=True)
         candidate, n = base, 0
-        while os.path.exists(_R()._ei_long_path(os.path.join(dir_path, candidate + '.doc'))) or \
-                os.path.exists(_R()._ei_long_path(os.path.join(dir_path, candidate + '.pdf'))):
+        while _store.exists(_R()._ei_long_path(os.path.join(dir_path, candidate + '.doc'))) or \
+                _store.exists(_R()._ei_long_path(os.path.join(dir_path, candidate + '.pdf'))):
             n += 1
             candidate = '{} ({})'.format(base, n)
         doc_path = os.path.join(dir_path, candidate + '.doc')
@@ -609,7 +610,7 @@ def api_conf_optfxo_save():
             # ficam juntos na listagem da pasta.
             xbase = candidate
             xcand, xn = xbase, 0
-            while os.path.exists(_R()._ei_long_path(os.path.join(dir_path, xcand + '.xml'))):
+            while _store.exists(_R()._ei_long_path(os.path.join(dir_path, xcand + '.xml'))):
                 xn += 1
                 xcand = '{} ({})'.format(xbase, xn)
             xml_path = os.path.join(dir_path, xcand + '.xml')
@@ -666,7 +667,7 @@ def api_conf_optfxo_pdf():
     if err:
         return err
     pdf_path = (entry or {}).get('pdf') or ''
-    if not pdf_path or not os.path.isfile(pdf_path):
+    if not pdf_path or not _store.isfile(pdf_path):
         return ('PDF não encontrado no Inventory ({}).'.format(pdf_path), 404)
     return send_file(pdf_path, mimetype='application/pdf', as_attachment=False,
                      download_name=os.path.basename(pdf_path))
@@ -860,8 +861,8 @@ def api_conf_fwdstart_save():
     try:
         os.makedirs(_R()._ei_long_path(dir_path), exist_ok=True)
         candidate, n = base, 0
-        while os.path.exists(_R()._ei_long_path(os.path.join(dir_path, candidate + '.doc'))) or \
-                os.path.exists(_R()._ei_long_path(os.path.join(dir_path, candidate + '.pdf'))):
+        while _store.exists(_R()._ei_long_path(os.path.join(dir_path, candidate + '.doc'))) or \
+                _store.exists(_R()._ei_long_path(os.path.join(dir_path, candidate + '.pdf'))):
             n += 1
             candidate = '{} ({})'.format(base, n)
         doc_path = os.path.join(dir_path, candidate + '.doc')
@@ -888,7 +889,7 @@ def api_conf_fwdstart_save():
                 ccy_field='QuantityCurrency', warn_no_spot=False,
                 legs_fn=_R()._conf_fx_legs, ccy=merc)
             xcand, xn = candidate, 0
-            while os.path.exists(_R()._ei_long_path(os.path.join(dir_path, xcand + '.xml'))):
+            while _store.exists(_R()._ei_long_path(os.path.join(dir_path, xcand + '.xml'))):
                 xn += 1
                 xcand = '{} ({})'.format(candidate, xn)
             xml_path = os.path.join(dir_path, xcand + '.xml')
@@ -945,7 +946,7 @@ def api_conf_fwdstart_pdf():
     if err:
         return err
     pdf_path = (entry or {}).get('pdf') or ''
-    if not pdf_path or not os.path.isfile(pdf_path):
+    if not pdf_path or not _store.isfile(pdf_path):
         return ('PDF não encontrado no Inventory ({}).'.format(pdf_path), 404)
     return send_file(pdf_path, mimetype='application/pdf', as_attachment=False,
                      download_name=os.path.basename(pdf_path))

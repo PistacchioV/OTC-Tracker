@@ -28,6 +28,7 @@ import traceback
 from datetime import datetime
 
 from apps.pages.manual_conf import CONFIRMATION_TYPES as _CONFIRMATION_TYPES
+from apps.pages import data_store as _store  # noqa: E402
 
 log = logging.getLogger('otc_tracker')
 
@@ -88,9 +89,9 @@ def _ei_actual_dir_name(folder):
         # creates it under the sanitized name. No point re-listing the share.
         return folder
     try:
-        if os.path.isdir(routes.ELECTRONIC_INVENTORY_ROOT):
-            for entry in os.listdir(routes.ELECTRONIC_INVENTORY_ROOT):
-                if (os.path.isdir(os.path.join(routes.ELECTRONIC_INVENTORY_ROOT, entry))
+        if _store.isdir(routes.ELECTRONIC_INVENTORY_ROOT):
+            for entry in _store.listdir(routes.ELECTRONIC_INVENTORY_ROOT):
+                if (_store.isdir(os.path.join(routes.ELECTRONIC_INVENTORY_ROOT, entry))
                         and _ei_match_key(entry) == key):
                     return entry
     except Exception:
@@ -127,10 +128,10 @@ def _ei_client_dir_names(client):
         # Scan ainda correndo: uma listagem direta é lenta mas correta — e é o
         # mesmo fallback que `_ei_actual_dir_name` já paga nesse estado.
         try:
-            if os.path.isdir(routes.ELECTRONIC_INVENTORY_ROOT):
-                nomes = [e for e in os.listdir(routes.ELECTRONIC_INVENTORY_ROOT)
+            if _store.isdir(routes.ELECTRONIC_INVENTORY_ROOT):
+                nomes = [e for e in _store.listdir(routes.ELECTRONIC_INVENTORY_ROOT)
                          if _ei_match_key(e) == key
-                         and os.path.isdir(os.path.join(routes.ELECTRONIC_INVENTORY_ROOT, e))]
+                         and _store.isdir(os.path.join(routes.ELECTRONIC_INVENTORY_ROOT, e))]
         except Exception:
             nomes = []
     return nomes or [folder]
@@ -169,8 +170,7 @@ def _ei_refdata_clients():
         rows = None
     if rows is None:
         try:
-            with open(os.path.join(routes._B3_DATA_DIR, 'RefData.json'), encoding='utf-8') as fh:
-                rows = json.load(fh)
+            rows = _store.read(os.path.join(routes._B3_DATA_DIR, 'RefData.json'))
         except Exception:
             return []
     out = []
@@ -239,7 +239,7 @@ def _ei_next_ordinal(target_dir, prefix, cname):
         % (re.escape(prefix), re.escape(cname)), re.IGNORECASE)
     highest = 0
     try:
-        for entry in os.listdir(_ei_long_path(target_dir)):
+        for entry in _store.listdir(_ei_long_path(target_dir)):
             m = pat.match(entry)
             if m:
                 seen = m.group(1) or m.group(2)
@@ -309,7 +309,7 @@ def _ei_iter_files(base, doctype):
     # descendo dele (Confirmations desce ano/mês/dia/produto).
     if os.name == 'nt':
         sub = _ei_extended(os.path.normpath(os.path.abspath(sub)))
-    if not os.path.isdir(sub):
+    if not _store.isdir(sub):
         return
     # `_ei_walk` e não `os.walk`: a listagem do SMB já devolve tamanho e mtime
     # de cada entrada (no Windows `entry.stat()` não custa chamada nenhuma), e
@@ -374,7 +374,7 @@ def _ei_scan_root_worker():
     from apps.pages import routes
     exists, dirs, multi, ok = False, {}, {}, False
     try:
-        exists = os.path.isdir(routes.ELECTRONIC_INVENTORY_ROOT)
+        exists = _store.isdir(routes.ELECTRONIC_INVENTORY_ROOT)
         if exists:
             with os.scandir(routes.ELECTRONIC_INVENTORY_ROOT) as it:
                 for entry in it:
@@ -483,6 +483,6 @@ def _ei_locate_file(client, rel):
         if not (cand == base_abs or cand.startswith(base_abs + os.sep)):
             raise ValueError('rel escapes the client folder')
         cand = _ei_long_path(cand)
-        if os.path.isfile(cand):
+        if _store.isfile(cand):
             return cand
     return None

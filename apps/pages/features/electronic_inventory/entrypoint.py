@@ -13,6 +13,7 @@ from datetime import datetime
 from flask import jsonify, request, session
 
 from apps.pages import blueprint
+from apps.pages import data_store as _store  # noqa: E402
 
 
 def _R():
@@ -61,7 +62,7 @@ def api_ei_documents():
     if not client:
         return jsonify({'success': False, 'message': 'client required'}), 400
     base = _R()._ei_resolve_client_dir(client)
-    folder_exists = bool(base) and os.path.isdir(_R()._ei_long_path(base))
+    folder_exists = bool(base) and _store.isdir(_R()._ei_long_path(base))
     docs = []
     if folder_exists:
         types = _R().EI_SUBFOLDERS if doctype in ('all', '', 'All') else (doctype,)
@@ -112,7 +113,7 @@ def api_ei_upload():
     ext = os.path.splitext(f.filename)[1].lower()
     if ext not in _R()._EI_ALLOWED_UPLOAD:
         return jsonify({'success': False, 'message': 'File type %s is not allowed.' % (ext or '?')}), 400
-    if not os.path.isdir(_R().ELECTRONIC_INVENTORY_ROOT):
+    if not _store.isdir(_R().ELECTRONIC_INVENTORY_ROOT):
         return jsonify({'success': False, 'message': 'Electronic Inventory share is not reachable.'}), 503
     digits = re.sub(r'\D', '', date_s)
     ddmmyyyy = digits if len(digits) == 8 else datetime.now().strftime('%d%m%Y')
@@ -152,7 +153,7 @@ def api_ei_upload():
         dest = os.path.join(target_dir, fname)
         stem, e = os.path.splitext(dest)
         i = 2
-        while os.path.exists(_R()._ei_long_path(dest)):   # same kind AND same date — still never clobber
+        while _store.exists(_R()._ei_long_path(dest)):   # same kind AND same date — still never clobber
             dest = '%s (%d)%s' % (stem, i, e)
             i += 1
         f.save(_R()._ei_long_path(dest))     # `dest` itself stays clean for relpath/basename below

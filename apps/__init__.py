@@ -81,49 +81,69 @@ def _require_config_names(cfg):
 
 
 def _seed_data_dir(app):
-    """Copia para o `DATA_DIR` o que vem versionado no repositório e ainda não
-    está lá.
+    """Leva para o ARMAZÉM (os bancos) o que vem versionado no repositório e
+    ainda não está lá — e copia para o `DATA_DIR` o que não é JSON.
 
-    Na dev as duas pastas são a MESMA e isto não faz nada. Na instância do JPM o
-    `DATA_DIR` aponta para o share, que numa subida nova está vazio: sem este
-    passo os cadastros do /mapping voltariam à seed, o `anbima.json` sumiria e o
-    File Interpreter abriria sem template nenhum — tudo sem erro, porque cada um
-    desses arquivos tem um caminho "arquivo ausente" que devolve vazio.
+    Na dev as duas pastas são a MESMA e a cópia não faz nada; a importação
+    para o banco vale nas duas. Na instância do JPM o `DATA_DIR` aponta para
+    o share, que numa subida nova está vazio: sem este passo os cadastros do
+    /mapping voltariam à seed, o `anbima.json` sumiria e o File Interpreter
+    abriria sem template nenhum — tudo sem erro, porque cada um desses
+    arquivos tem um caminho "ausente" que devolve vazio.
 
-    NUNCA sobrescreve: o arquivo que já está no share é o que a mesa editou pela
-    tela, e ele vence a cópia do repositório. É por isso que a operação é
-    idempotente e pode rodar em toda subida.
+    NUNCA sobrescreve: o que já está no banco é o que a mesa editou pela
+    tela, e ele vence a cópia do repositório. Idempotente, roda em toda
+    subida. Falha em UM arquivo não derruba os outros nem a subida.
     """
+    import json
     import shutil
     from apps.pages.data_paths import PACKAGED_DIR
 
     destino = app.config.get('DATA_DIR')
-    if not destino or os.path.normpath(destino) == PACKAGED_DIR:
+    if not destino:
         return
-    copiados = 0
+    try:
+        from apps.pages import data_store
+    except Exception:                                       # noqa: BLE001
+        data_store = None
+    copiados = importados = 0
     for raiz, _dirs, arquivos in os.walk(PACKAGED_DIR):
         rel = os.path.relpath(raiz, PACKAGED_DIR)
+        top = rel.split(os.sep)[0]
         # O `db/` é do `DATABASE_DIR`, que tem a sua própria configuração — e
         # copiar banco por cima de banco é o tipo de ajuda que corrompe dado.
-        if rel.split(os.sep)[0] == 'db':
+        if top == 'db':
             continue
         alvo_dir = os.path.join(destino, rel) if rel != '.' else destino
         for nome in arquivos:
             # `.bak` e `.lock` são sujeira local de quem desenvolve, não dado.
-            if nome.endswith(('.bak', '.lock')):
+            if nome.endswith(('.bak', '.lock', '.tmp')):
                 continue
+            origem = os.path.join(raiz, nome)
             alvo = os.path.join(alvo_dir, nome)
-            if os.path.exists(alvo):
+            if data_store is not None and nome.endswith('.json') and top != 'translations':
+                try:
+                    if data_store.isfile(alvo):
+                        continue
+                    with open(origem, encoding='utf-8') as fh:
+                        payload = json.load(fh)
+                    data_store.write(alvo, payload)
+                    importados += 1
+                except Exception:                           # noqa: BLE001
+                    app.logger.warning('[data-dir] não consegui importar %s para o banco',
+                                       alvo, exc_info=True)
+                continue
+            if os.path.normpath(destino) == PACKAGED_DIR or os.path.exists(alvo):
                 continue
             try:
                 os.makedirs(alvo_dir, exist_ok=True)
-                shutil.copy2(os.path.join(raiz, nome), alvo)
+                shutil.copy2(origem, alvo)
                 copiados += 1
             except OSError:
                 app.logger.warning('[data-dir] não consegui copiar %s', alvo)
-    if copiados:
-        app.logger.info('[data-dir] %d arquivo(s) versionado(s) copiado(s) para %s',
-                        copiados, destino)
+    if copiados or importados:
+        app.logger.info('[data-dir] %d arquivo(s) versionado(s) importado(s) para o banco, '
+                        '%d copiado(s) para %s', importados, copiados, destino)
 
 
 def _secret_key_file():

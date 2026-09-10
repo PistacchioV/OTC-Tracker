@@ -13,6 +13,7 @@ from apps.pages.precificador import (calendario, cdi, contagem, euribor, liquida
                                      renda_fixa, sofr, term_sofr)
 from apps.pages.precificador.calendario import obter_calendario, para_data, soma_meses
 from apps.pages.precificador.erros import ErroDeDado
+from apps.pages import data_store as _store  # noqa: E402
 
 
 def _R():
@@ -311,11 +312,11 @@ def _iso(v):
 def _subpastas_num(pasta):
     """Os nomes NUMÉRICOS de subpasta (ano, mês ou dia), do maior para o menor."""
     try:
-        nomes = os.listdir(pasta)
+        nomes = _store.listdir(pasta)
     except OSError:
         return []
     return sorted((n for n in nomes
-                   if n.isdigit() and os.path.isdir(os.path.join(pasta, n))),
+                   if n.isdigit() and _store.isdir(os.path.join(pasta, n))),
                   reverse=True)
 
 
@@ -353,7 +354,7 @@ def _swap_day_file(file_tpl, ref=None):
                     continue
                 dref = d.strftime('%y%m%d')
                 p = os.path.join(base, dia, file_tpl.format(dref))
-                if os.path.isfile(p):
+                if _store.isfile(p):
                     return p, dref
     return None, None
 

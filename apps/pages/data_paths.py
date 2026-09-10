@@ -60,10 +60,20 @@ def data_path(*parts):
     alguém saber onde procurar.
     """
     alvo = data_write(*parts)
-    if os.path.exists(alvo) or Config.DATA_DIR == PACKAGED_DIR:
+    if _existe(alvo) or Config.DATA_DIR == PACKAGED_DIR:
         return alvo
     empacotado = os.path.normpath(os.path.join(PACKAGED_DIR, *parts))
     return empacotado if os.path.exists(empacotado) else alvo
+
+
+def _existe(caminho):
+    """Existe no ARMAZÉM (o banco responde por todo `.json` do `DATA_DIR`) ou
+    no disco. Import atrasado: o armazém importa este módulo."""
+    try:
+        from apps.pages import data_store
+        return data_store.exists(caminho)
+    except Exception:                                       # noqa: BLE001
+        return os.path.exists(caminho)
 
 
 # ── Os cadastros do /mapping ────────────────────────────────────────────────
@@ -85,7 +95,7 @@ def with_fallback(caminho):
     diretório temporário, e cair para o repositório ali faria o teste ler o dado
     de verdade em vez do que ele mesmo escreveu.
     """
-    if not os.path.exists(caminho) and Config.DATA_DIR != PACKAGED_DIR:
+    if not _existe(caminho) and Config.DATA_DIR != PACKAGED_DIR:
         try:
             rel = os.path.relpath(caminho, Config.DATA_DIR)
         except ValueError:                      # unidades diferentes, no Windows

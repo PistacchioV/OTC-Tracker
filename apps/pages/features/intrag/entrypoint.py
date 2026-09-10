@@ -10,6 +10,7 @@ from flask import jsonify, request, session
 from apps.pages import blueprint
 from apps.pages.features.intrag import commands, queries
 from apps.pages.features.intrag.infra import persistence
+from apps.pages import data_store as _store  # noqa: E402
 
 
 def _R():
@@ -51,7 +52,7 @@ def api_intrag_ndf():
             ref = datetime.strptime(date_str, '%Y-%m-%d')
             fname = ref.strftime('%Y%m%d') + '_intrag_ndf.json'
             fp = os.path.join(persistence.INTRAG_NDF_CACHE_DIR, ref.strftime('%Y'), ref.strftime('%m'), fname)
-            if os.path.isfile(fp):
+            if _store.isfile(fp):
                 from apps.pages import duck_read       # DB-only (fase 3)
                 entries = duck_read.day_records(fp)
                 if not isinstance(entries, list):
@@ -103,7 +104,7 @@ def api_intrag_option():
             ref = datetime.strptime(date_str, '%Y-%m-%d')
             fp = os.path.join(persistence.INTRAG_OPT_CACHE_DIR, ref.strftime('%Y'), ref.strftime('%m'),
                               ref.strftime('%Y%m%d') + suffix)
-            if os.path.isfile(fp):
+            if _store.isfile(fp):
                 from apps.pages import duck_read       # DB-only (fase 3)
                 entries = duck_read.day_records(fp)
                 if not isinstance(entries, list):
@@ -170,7 +171,7 @@ def api_intrag_option_send_file():
                 base = 'Intrag-Option-' + key
                 candidate = base + '.txt'
                 n = 0
-                while os.path.exists(os.path.join(dir_path, candidate)):
+                while _store.exists(os.path.join(dir_path, candidate)):
                     n += 1
                     candidate = base + ' (' + str(n) + ').txt'
                 file_path = os.path.join(dir_path, candidate)
@@ -324,7 +325,7 @@ def api_intrag_ndf_send_file():
                 base = 'Intrag-NDF-' + key
                 candidate = base + '.txt'
                 n = 0
-                while os.path.exists(os.path.join(dir_path, candidate)):
+                while _store.exists(os.path.join(dir_path, candidate)):
                     n += 1
                     candidate = base + ' (' + str(n) + ').txt'
                 file_path = os.path.join(dir_path, candidate)
@@ -480,7 +481,7 @@ def api_intrag_swap():
             ref = datetime.strptime(date_str, '%Y-%m-%d')
             fp = os.path.join(persistence.INTRAG_SWAP_CACHE_DIR, ref.strftime('%Y'), ref.strftime('%m'),
                               ref.strftime('%Y%m%d') + suffix)
-            if os.path.isfile(fp):
+            if _store.isfile(fp):
                 from apps.pages import duck_read       # DB-only (fase 3)
                 entries = duck_read.day_records(fp)
                 if not isinstance(entries, list):
@@ -546,7 +547,7 @@ def api_intrag_swap_send_file():
                 base = 'Intrag-Swap-' + key
                 candidate = base + '.txt'
                 n = 0
-                while os.path.exists(os.path.join(dir_path, candidate)):
+                while _store.exists(os.path.join(dir_path, candidate)):
                     n += 1
                     candidate = base + ' (' + str(n) + ').txt'
                 file_path = os.path.join(dir_path, candidate)
@@ -690,7 +691,7 @@ def api_intrag_dce_option():
             # `os.stat` falha e a chave do memo vira (0, 0), que é justamente o
             # que faz o memo não guardar um dia que ainda vai chegar.
             try:
-                st = os.stat(fp)
+                st = _store.stat(fp)
                 mtime, size = st.st_mtime, st.st_size
             except OSError:
                 mtime, size = 0, 0
@@ -781,7 +782,7 @@ def api_intrag_dce_option_send_file():
                 base = 'Intrag-DCE-Option-' + key
                 candidate = base + '.txt'
                 n = 0
-                while os.path.exists(os.path.join(dir_path, candidate)):
+                while _store.exists(os.path.join(dir_path, candidate)):
                     n += 1
                     candidate = base + ' (' + str(n) + ').txt'
                 file_path = os.path.join(dir_path, candidate)

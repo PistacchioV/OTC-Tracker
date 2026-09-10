@@ -11,7 +11,6 @@ import threading
 import traceback
 import unicodedata
 import uuid
-import shutil
 import base64
 import logging
 import time
@@ -63,6 +62,7 @@ from apps.pages.database_access import (
     duckdb_write,
 )
 from apps.pages import database_access as _dba  # noqa: E402
+from apps.pages import data_store as _store  # noqa: E402
 # Os tipos de confirmação são UMA lista só, definida no módulo da esteira: ela
 # alimenta o Confirmation Type do upload do Electronic Inventory, o cadastro
 # Produto × LOB de `manual-conf-validation` e o dropdown de Produto do Track
@@ -1300,7 +1300,7 @@ def _asset_v(rel_path):
     que é o comportamento de hoje — nunca uma página quebrada.
     """
     try:
-        return str(int(os.path.getmtime(os.path.join(_STATIC_DIR, rel_path))))
+        return str(int(_store.getmtime(os.path.join(_STATIC_DIR, rel_path))))
     except Exception:
         return '0'
 
@@ -1328,13 +1328,13 @@ def _ensure_duckdb_file():
     """Remove o arquivo se for SQLite (criado pelo SQLAlchemy antigo) para o DuckDB recriar."""
     db_path = os.path.abspath(DB_PATH)
     os.makedirs(os.path.dirname(db_path), exist_ok=True)
-    if os.path.exists(db_path):
+    if _store.exists(db_path):
         try:
             with open(db_path, 'rb') as f:
                 header = f.read(16)
             if header.startswith(b'SQLite format 3\x00'):
                 print(f"[DB] Arquivo SQLite detectado em {db_path} — removendo para recriar como DuckDB.")
-                os.remove(db_path)
+                _store.remove(db_path)
         except Exception as e:
             print(f"[DB] Erro ao verificar formato do arquivo: {e}")
 
@@ -1811,43 +1811,25 @@ def _dash_dir_matters(nome, pai, period, now):
 def _dash_scan_files(raiz, period, now):
     """Gera (caminho, nome, mtime, tamanho) dos arquivos da árvore, podando.
 
-    `os.scandir` no lugar de `os.walk` de propósito — ver o comentário acima: é
-    o que faz a checagem do memo não custar uma ida a mais por arquivo.
-
-    Um diretório que não abre é PULADO com aviso, não derruba a varredura: o
-    share fica indisponível de vez em quando, e meia tela é melhor do que um 500
-    no painel inteiro.
+    Pelo ARMAZÉM (DB-only, §434): a lista vem do manifest dos bancos da
+    árvore — nenhuma pasta é listada — e a poda de período é a mesma de
+    sempre (`_dash_dir_matters`), aplicada aos segmentos de ano/mês do
+    CAMINHO. ORDENADO por caminho: a ordem de leitura decide o desempate da
+    lista de "Recent deals", e o mesmo dado tem de render a mesma lista no
+    share do JPM e no disco da dev.
     """
-    pilha = [(raiz, '')]
-    while pilha:
-        atual, pai = pilha.pop()
-        subdirs, arquivos = [], []
-        try:
-            with os.scandir(atual) as entradas:
-                for e in entradas:
-                    try:
-                        if e.is_dir():
-                            if _dash_dir_matters(e.name, pai, period, now):
-                                subdirs.append((e.name, e.path))
-                            continue
-                        if not e.name.endswith('.json'):
-                            continue
-                        st = e.stat()
-                        arquivos.append((e.name, e.path, st.st_mtime, st.st_size))
-                    except OSError:
-                        continue
-        except OSError:
-            log.warning('[dashboard] não consegui listar %s', atual)
-            continue
-        # ORDENADO, e por nome — nos dois níveis. A ordem de leitura decide o
-        # desempate da lista de "Recent deals" (deals do MESMO dia saem na ordem
-        # em que entraram), e a ordem crua do `scandir` é a do sistema de
-        # arquivos: o mesmo dado renderia listas diferentes no share do JPM e no
-        # disco da dev. A pilha é LIFO, então os subdiretórios entram ao
-        # contrário para sair em ordem.
-        for nome, caminho in sorted(subdirs, reverse=True):
-            pilha.append((caminho, nome))
-        for nome, caminho, mtime, size in sorted(arquivos):
+    base = os.path.normpath(raiz)
+    for caminho, nome, mtime, size in _store.day_files(base, sufixo='.json'):
+        rel = os.path.relpath(caminho, base).replace(os.sep, '/')
+        partes = rel.split('/')[:-1]
+        pai = ''
+        ok = True
+        for seg in partes:
+            if not _dash_dir_matters(seg, pai, period, now):
+                ok = False
+                break
+            pai = seg
+        if ok:
             yield (caminho, nome, mtime, size)
 
 
@@ -1954,7 +1936,7 @@ def _dash_file_deals(fp, fname, mtime, size, fdate, product, deal_type):
 # no dashboard.js); `all` depois, para quem troca o filtro. A ordem importa: com
 # `all` primeiro, o período que a tela usa só ficaria pronto no fim.
 def _dash_warm_memo():
-    if not os.path.isdir(NEW_DEALS_CACHE_ROOT):
+    if not _store.isdir(NEW_DEALS_CACHE_ROOT):
         return
     agora = datetime.now()
     for periodo in ('year', 'all'):
@@ -1967,12 +1949,10 @@ def _dash_warm_memo():
             # o banco do produto UMA VEZ POR ARQUIVO-DIA: 483 aberturas e
             # 97,3 s no share, medidos na instância em 09/09/2026. O custo não
             # é só a espera — a thread fica segurando a trava COMPARTILHADA do
-            # share por minutos, e é dentro dessa janela que o espelho tenta a
-            # trava EXCLUSIVA para converter, com 6 s de orçamento. Ele perde,
-            # a conversão morre e o arquivo entra em quarentena por 5 min: um
-            # aquecimento que é otimização derrubando a leitura DB-only que ele
-            # existe para acelerar. Todo o resto que varre a árvore já passa
-            # pelo `_day_prefetch`; este era o único que tinha ficado de fora.
+            # share por minutos, e é dentro dessa janela que toda gravação (o
+            # funil, sob a trava EXCLUSIVA) fica esperando: um aquecimento que
+            # é otimização segurando a tela que grava. Todo o resto que varre a
+            # árvore já passa pelo `_day_prefetch`; este era o único de fora.
             #
             # A poda é pelo memo da PROJEÇÃO, e não só pelo do `_day_prefetch`:
             # ele conhece o memo dos `_raw`, e o que decide se este laço vai
@@ -2046,7 +2026,7 @@ def api_data_files_status():
                 'from': 'DATA_DIR' if os.path.dirname(alvo) == os.path.normpath(Config.DATA_DIR)
                         else 'packaged'}
         try:
-            st = os.stat(alvo)
+            st = _store.stat(alvo)
         except OSError as e:
             item.update(exists=False, error='{}: {}'.format(type(e).__name__, e))
             return item
@@ -2055,8 +2035,7 @@ def api_data_files_status():
         # A contagem é o que separa "o arquivo está lá" de "o arquivo serve":
         # um `[]` de 2 bytes existe, tem data e não enche select nenhum.
         try:
-            with open(alvo, encoding='utf-8') as fh:
-                dados = json.load(fh)
+            dados = _store.read(alvo)
             item['records'] = len(dados) if isinstance(dados, (list, dict)) else None
             item['is_list'] = isinstance(dados, list)
         except Exception as e:                              # noqa: BLE001
@@ -2124,7 +2103,7 @@ def api_dashboard_stats():
 
     # Generic scan of all new deals cache directories
     all_deals = []
-    if os.path.isdir(NEW_DEALS_CACHE_ROOT):
+    if _store.isdir(NEW_DEALS_CACHE_ROOT):
         for fp, fname, mtime, size in _dash_scan_files(NEW_DEALS_CACHE_ROOT, period, now):
             if fname.endswith('.tmp') or fname.endswith('.bak'):
                 continue
@@ -2226,7 +2205,7 @@ def api_dashboard_stats():
     monthly_ndf_vanilla  = [0] * 12
     monthly_ndf_otherpub = [0] * 12
     monthly_ndf_fwdstart = [0] * 12
-    if os.path.isdir(NEW_DEALS_CACHE_ROOT):
+    if _store.isdir(NEW_DEALS_CACHE_ROOT):
         # Segunda passada pela MESMA árvore — os contadores por mês são sempre do
         # ano inteiro e ignoram o período pedido. Ela usa o mesmo `_dash_scan_files`
         # e o mesmo memo da primeira: com `period='year'` os arquivos já foram
@@ -2405,7 +2384,7 @@ def api_dashboard_live_position():
     def _live_has_files(dr):
         for src in _LIVE_POSITION_SOURCES:
             p = os.path.join(B3_JSON_ROOT, src['category'], _b3_date_subpath(dr), src['file'](dr))
-            if os.path.isfile(p):
+            if _store.isfile(p):
                 return True
         return False
 
@@ -2422,7 +2401,7 @@ def api_dashboard_live_position():
     for src in _LIVE_POSITION_SOURCES:
         path = os.path.join(B3_JSON_ROOT, src['category'], _b3_date_subpath(dref), src['file'](dref))
         st = {'label': src['label'], 'file': os.path.basename(path), 'found': False, 'count': 0}
-        if not os.path.isfile(path):
+        if not _store.isfile(path):
             sources.append(st)
             continue
         try:
@@ -2797,7 +2776,7 @@ def _b3_export_json(src_path, json_cfg, dest_name, dref, skip_existing=False):
         out_dir = os.path.join(B3_JSON_ROOT, json_cfg['category'], _b3_date_subpath(dref))
         json_name = os.path.splitext(dest_name)[0] + '.json'
         json_path = os.path.join(out_dir, json_name)
-        if skip_existing and os.path.exists(json_path):
+        if skip_existing and _store.exists(json_path):
             return json_path
 
         with open(src_path, 'r', encoding='latin-1', newline='') as fh:
@@ -3268,7 +3247,7 @@ def _ds_write(jp, recs, name, spec, total, processed, delete_path):
     processed.append({'file': name, 'type': spec['label'], 'kept': len(recs), 'total': total})
     if delete_path:                                    # mirror the VBA Kill (folder source only)
         try:
-            os.remove(delete_path)
+            _store.remove(delete_path)
         except OSError:
             log.warning("[ds] could not delete %s", delete_path)
 
@@ -3316,7 +3295,7 @@ def _swap_pos_latest_records(max_back=15):
         dref = ref.strftime('%y%m%d')
         path = os.path.join(B3_JSON_ROOT, 'Swap', _b3_date_subpath(dref),
                             '73760_{}_DPOSICAO-SWAP.json'.format(dref))
-        if os.path.isfile(path):
+        if _store.isfile(path):
             try:
                 return _db_day_records(path), ref.strftime('%Y-%m-%d')
             except Exception:
@@ -3934,7 +3913,7 @@ def _swap_day_path(ref, file_tpl, max_back=10, exact=False):
     for _ in range(1 if exact else max_back):
         dref = cur.strftime('%y%m%d')
         p = os.path.join(B3_JSON_ROOT, 'Swap', _b3_date_subpath(dref), file_tpl.format(dref))
-        if os.path.isfile(p):
+        if _store.isfile(p):
             return p, dref
         cur = _prev_anbima_bizday(cur)
     return None, None
@@ -4223,7 +4202,7 @@ def _otm_ensure_meta(data, default_status='OK'):
 def _otm_load_cached(ref):
     """A leitura em si — é este resultado que o cache guarda. Ver `_otm_load`."""
     jp = _otm_json_path(ref)
-    if not os.path.isfile(jp):
+    if not _store.isfile(jp):
         return jp, None
     try:
         data = _db_day_records(jp) or []
@@ -4293,14 +4272,13 @@ def _ds_write_updated(json_path, hhmmss):
 
 def _ds_read_updated(json_path):
     mp = _ds_meta_path(json_path)
-    if os.path.isfile(mp):
+    if _store.isfile(mp):
         try:
-            with open(mp, encoding='utf-8') as fh:
-                return (json.load(fh) or {}).get('updated', '')
+            return (_store.read(mp) or {}).get('updated', '')
         except Exception:
             pass
-    if os.path.isfile(json_path):                    # fallback: file mtime
-        return datetime.fromtimestamp(os.path.getmtime(json_path)).strftime('%H:%M:%S')
+    if _store.isfile(json_path):                    # fallback: file mtime
+        return datetime.fromtimestamp(_store.getmtime(json_path)).strftime('%H:%M:%S')
     return ''
 
 
@@ -4365,9 +4343,9 @@ def _otm_import(ref=None):
     """Find cashflows_*.xlsx in OTM_SOURCE_ROOT, clean + extract the reporting
     columns, write today's JSON and delete the source. Returns a summary dict."""
     ref = ref or datetime.now()
-    if not os.path.isdir(OTM_SOURCE_ROOT):
+    if not _store.isdir(OTM_SOURCE_ROOT):
         return {'success': False, 'error': 'Source folder not found: {}'.format(OTM_SOURCE_ROOT)}
-    matches = sorted(f for f in os.listdir(OTM_SOURCE_ROOT)
+    matches = sorted(f for f in _store.listdir(OTM_SOURCE_ROOT)
                      if f.lower().startswith('cashflows_') and f.lower().endswith('.xlsx'))
     if not matches:
         return {'success': False, 'error': 'No cashflows_*.xlsx found in {}'.format(OTM_SOURCE_ROOT)}
@@ -4386,7 +4364,7 @@ def _otm_import(ref=None):
     _atomic_write_json(jp, out)                 # funil: bump + espelho (§335)
     _ds_write_updated(jp, ref.strftime('%H:%M:%S'))      # cashflows has no in-file time → import time
     try:
-        os.remove(src_path)
+        _store.remove(src_path)
     except OSError:
         log.warning("[otm] could not delete source %s", src_path)
     log.info("[otm] imported %s: kept %d (deleted %d, filtered %d) → %s",
@@ -4415,7 +4393,7 @@ def _otm_collect(ref):
     widgets = {'total': 0, 'rates': 0, 'equities': 0, 'commodities': 0}
     jp = _otm_json_path(ref)
     rows_out = []
-    if os.path.isfile(jp):
+    if _store.isfile(jp):
         try:
             data = _db_day_records(jp) or []
         except Exception:
@@ -4496,7 +4474,7 @@ def _ds_display_collect(ref, json_key, columns=None, value_cols=None):
     _ds_value heuristic; a set/collection → those exact names get #,##0.00."""
     jp = _ds_display_json_path(ref, json_key)
     rows_out, cols = [], list(columns) if columns else []
-    if os.path.isfile(jp):
+    if _store.isfile(jp):
         try:
             data = _db_day_records(jp) or []
         except Exception:
@@ -4611,13 +4589,12 @@ def _athena_edit_cetip_id(ref, kapital_id, cetip_atual, novo, sid=''):
     if not kapital:
         return {'success': False, 'error': 'The row has no Kapital ID to key on.'}, 400
     jp = _ds_display_json_path(ref, 'br-onshore-settlements')
-    if not os.path.isfile(jp):
+    if not _store.isfile(jp):
         return {'success': False, 'error': 'No Swap Athena file for {}.'.format(
             ref.strftime('%d/%m/%Y'))}, 404
     with _cache_lock:
         try:
-            with open(jp, encoding='utf-8') as fh:
-                data = json.load(fh) or []
+            data = _store.read(jp) or []
         except Exception:
             return {'success': False, 'error': 'Could not read the day file.'}, 500
         if not data:
@@ -4923,8 +4900,7 @@ def _swadv_edits_path(ref):
 def _swadv_edits_load(ref):
     fp = _swadv_edits_path(ref)
     try:
-        with open(fp, encoding='utf-8') as fh:
-            d = json.load(fh)
+        d = _store.read(fp)
         return (fp, d) if isinstance(d, dict) else (fp, {})
     except Exception:
         return fp, {}
@@ -5061,7 +5037,7 @@ def _subjacente_map():
     trazem o MESMO nome, e uma linha sem Commodity não pode apagar a que tem."""
     path = os.path.join(_B3_DATA_DIR, 'Subjacente.json')
     try:
-        mt = os.path.getmtime(path)
+        mt = _store.getmtime(path)
     except OSError:
         return {}
     if _SUBJ_CACHE['mtime'] != mt:
@@ -5135,8 +5111,7 @@ def _refdata_records():
         return rows
     path = os.path.join(_B3_DATA_DIR, 'RefData.json')
     try:
-        with open(path, encoding='utf-8') as fh:
-            data = json.load(fh) or []
+        data = _store.read(path) or []
     except Exception:                                       # noqa: BLE001
         data = []
     return data if isinstance(data, list) else []
@@ -5154,7 +5129,7 @@ def _refdata_triples():
     quem tem nome E pelo menos um dos dois identificadores."""
     path = os.path.join(_B3_DATA_DIR, 'RefData.json')
     try:
-        mt = os.path.getmtime(path)
+        mt = _store.getmtime(path)
     except OSError:
         return []
     if _REFDATA_TRIPLE_CACHE['mtime'] != mt:
@@ -5184,7 +5159,7 @@ def _refdata_by_spn():
     da família de liquidação, e o getmtime ia junto."""
     path = os.path.join(_B3_DATA_DIR, 'RefData.json')
     try:
-        mt = os.path.getmtime(path)
+        mt = _store.getmtime(path)
     except OSError:
         return {}
     if _REFDATA_SPN_CACHE['mtime'] != mt:
@@ -5242,7 +5217,7 @@ def _refdata_by_taxid():
     posição da B3 guarda só números. Comparar as strings não casaria nada."""
     path = os.path.join(_B3_DATA_DIR, 'RefData.json')
     try:
-        mt = os.path.getmtime(path)
+        mt = _store.getmtime(path)
     except OSError:
         return {}
     if _REFDATA_TAXID_CACHE['mtime'] != mt:
@@ -6133,8 +6108,7 @@ def _optadv_edits_path(ref):
 def _optadv_edits_load(ref):
     fp = _optadv_edits_path(ref)
     try:
-        with open(fp, encoding='utf-8') as fh:
-            d = json.load(fh)
+        d = _store.read(fp)
         return (fp, d) if isinstance(d, dict) else (fp, {})
     except Exception:
         return fp, {}
@@ -6373,7 +6347,7 @@ def _swaphyb_collect(ref):
     Cetip ID from the mapping."""
     jp = _ds_display_json_path(ref, _SWAPHYB_JSON)
     rows_out = []
-    if os.path.isfile(jp):
+    if _store.isfile(jp):
         try:
             data = _db_day_records(jp) or []
         except Exception:
@@ -6452,7 +6426,7 @@ def _vcp_events_map(ref):
     by header name so a small layout drift still matches."""
     jp = _ds_display_json_path(ref, 'eventos-swap-jpm')
     out = {}
-    if not os.path.isfile(jp):
+    if not _store.isfile(jp):
         return out
     try:
         data = _db_day_records(jp) or []
@@ -6815,7 +6789,7 @@ def _latam_pick_source(names, root):
         return None, []
     def _mtime(n):
         try:
-            return os.path.getmtime(os.path.join(root, n))
+            return _store.getmtime(os.path.join(root, n))
         except OSError:
             return 0.0
     cands.sort(key=lambda n: (_mtime(n), n), reverse=True)
@@ -6834,7 +6808,7 @@ def _latam_json_path(ref):
 def _latam_load_cached(ref):
     """A leitura em si — é este resultado que o cache guarda. Ver `_latam_load`."""
     jp = _latam_json_path(ref)
-    if not os.path.isfile(jp):
+    if not _store.isfile(jp):
         return jp, None
     try:
         data = _db_day_records(jp) or []
@@ -6908,7 +6882,7 @@ def _latam_all_dates():
     mais antiga. O relatório não é diário, então é isso que a página usa para
     saber o que existe."""
     root = os.path.normpath(LATAM_JSON_ROOT)
-    if not os.path.isdir(root):
+    if not _store.isdir(root):
         return []
     with _latam_dates_lock:
         memo = _latam_dates_memo
@@ -6948,10 +6922,9 @@ def _latam_write_meta(jp, hhmmss, fname=''):
 
 def _latam_read_meta(jp):
     mp = _ds_meta_path(jp)
-    if os.path.isfile(mp):
+    if _store.isfile(mp):
         try:
-            with open(mp, encoding='utf-8') as fh:
-                d = json.load(fh) or {}
+            d = _store.read(mp) or {}
             return str(d.get('updated', '') or ''), str(d.get('file', '') or '')
         except Exception:
             pass
@@ -7125,9 +7098,9 @@ def _latam_import(ref=None):
     antes de dar para investigar. Os demais candidatos ficam em disco intactos e
     voltam na resposta em `ignored`."""
     ref = ref or datetime.now()
-    if not os.path.isdir(LATAM_SOURCE_ROOT):
+    if not _store.isdir(LATAM_SOURCE_ROOT):
         return {'success': False, 'error': 'Source folder not found: {}'.format(LATAM_SOURCE_ROOT)}
-    chosen, ignored = _latam_pick_source(os.listdir(LATAM_SOURCE_ROOT), LATAM_SOURCE_ROOT)
+    chosen, ignored = _latam_pick_source(_store.listdir(LATAM_SOURCE_ROOT), LATAM_SOURCE_ROOT)
     if not chosen:
         return {'success': False,
                 'error': 'No FbiRptLatamDeskPostion-NY-* found in {}'.format(LATAM_SOURCE_ROOT)}
@@ -7157,7 +7130,7 @@ def _latam_import(ref=None):
     deleted = False
     if kept:
         try:
-            os.remove(src)
+            _store.remove(src)
             deleted = True
         except OSError:
             log.warning('[latam] could not delete source %s', src)
@@ -7174,7 +7147,7 @@ def _latam_collect(ref):
     widgets = {'calls': 0, 'puts': 0, 'counterparties': 0, 'total': 0}
     jp = _latam_json_path(ref)
     rows_out = []
-    if os.path.isfile(jp):
+    if _store.isfile(jp):
         try:
             data = _db_day_records(jp) or []
         except Exception:
@@ -7326,7 +7299,7 @@ def _ndfc_ensure_meta(data, default_status='OK'):
 
 def _ndfc_load(ref):
     jp = _ndfc_json_path(ref)
-    if not os.path.isfile(jp):
+    if not _store.isfile(jp):
         return jp, None
     try:
         data = _db_day_records(jp) or []
@@ -7906,7 +7879,7 @@ def _ndfc_collect(ref):
     widgets = {'total': 0, 'counterparties': 0, 'notional': '0.00', 'settlement': '0.00'}
     jp = _ndfc_json_path(ref)
     rows_out = []
-    if os.path.isfile(jp):
+    if _store.isfile(jp):
         try:
             data = _db_day_records(jp) or []
         except Exception:
@@ -8057,8 +8030,7 @@ def _ndfop_meta_load(ref):
     that differ from the derived value) and `deleted` hides the row."""
     p = _ndfop_meta_path(ref)
     try:
-        with open(p, encoding='utf-8') as fh:
-            data = json.load(fh) or {}
+        data = _store.read(p) or {}
         return p, (data if isinstance(data, dict) else {})
     except Exception:
         return p, {}
@@ -8291,7 +8263,7 @@ def _cog_json_path(ref):
 
 def _cog_load(ref):
     jp = _cog_json_path(ref)
-    if not os.path.isfile(jp):
+    if not _store.isfile(jp):
         return jp, None
     try:
         data = _db_day_records(jp) or []
@@ -8725,7 +8697,7 @@ def _opt_dposicao_path(ref, max_back=10, exact=False):
         dref = cur.strftime('%y%m%d')
         p = os.path.join(B3_JSON_ROOT, 'Option', _b3_date_subpath(dref),
                          '73760_{}_DPOSICAO.json'.format(dref))
-        if os.path.isfile(p):
+        if _store.isfile(p):
             return p, dref
         cur = _prev_anbima_bizday(cur)
     return None, None
@@ -8890,8 +8862,7 @@ def _lp_edit_identifier(kind, ref, key_value, new_value, sid=''):
     # atômica sozinha evita corrupção, não perda de atualização (§4).
     with _cache_lock:
         try:
-            with open(path, encoding='utf-8') as fh:
-                data = json.load(fh) or []
+            data = _store.read(path) or []
         except Exception:
             return {'success': False, 'error': 'read_failed'}, 500
         keys, _seen = [], set()
@@ -8946,8 +8917,7 @@ def _ndfsum_refdata_spn():
         from apps.pages import duck_read
         data = duck_read.refdata_rows()
         if data is None:
-            with open(os.path.join(_B3_DATA_DIR, 'RefData.json'), encoding='utf-8') as fh:
-                data = json.load(fh) or []
+            data = _store.read(os.path.join(_B3_DATA_DIR, 'RefData.json')) or []
     except (IOError, json.JSONDecodeError):
         data = []
     for rec in (data if isinstance(data, list) else []):
@@ -8979,8 +8949,7 @@ def _ndfsum_meta_path(ref):
 def _ndfsum_meta_load(ref):
     path = _ndfsum_meta_path(ref)
     try:
-        with open(path, encoding='utf-8') as fh:
-            data = json.load(fh)
+        data = _store.read(path)
         return path, (data if isinstance(data, dict) else {})
     except Exception:
         return path, {}
@@ -9222,8 +9191,7 @@ def _ndfsum_ir_ledger_path(ref):
 
 def _ndfsum_ir_ledger_load(ref):
     try:
-        with open(_ndfsum_ir_ledger_path(ref), encoding='utf-8') as fh:
-            data = json.load(fh)
+        data = _store.read(_ndfsum_ir_ledger_path(ref))
         return data if isinstance(data, dict) else {}
     except Exception:
         return {}
@@ -9332,7 +9300,7 @@ def _ndfsum_ir_day_entries(groups, carry_by_key):
 def _ndfsum_ir_moeda_groups(d):
     """Balde de MOEDA de um dia, a partir do arquivo-dia do Cockpit."""
     jp = _ndfc_json_path(datetime(d.year, d.month, d.day))
-    if not os.path.isfile(jp):
+    if not _store.isfile(jp):
         return {}
     try:
         recs = _db_day_records(jp) or []
@@ -9808,10 +9776,10 @@ def _ted_ssi_attachment(cpty):
     try:
         folder = _ei_actual_dir_name(_ei_sanitize(cpty))
         ssi_dir = os.path.join(ELECTRONIC_INVENTORY_ROOT, folder, 'SSI')
-        if not os.path.isdir(ssi_dir):
+        if not _store.isdir(ssi_dir):
             return None
-        files = [os.path.join(ssi_dir, f) for f in os.listdir(ssi_dir)
-                 if os.path.isfile(os.path.join(ssi_dir, f))]
+        files = [os.path.join(ssi_dir, f) for f in _store.listdir(ssi_dir)
+                 if _store.isfile(os.path.join(ssi_dir, f))]
         return max(files, key=os.path.getmtime) if files else None
     except Exception:
         return None
@@ -10458,8 +10426,7 @@ def _fxo_refdata_by_spn():
         from apps.pages import duck_read
         data = duck_read.refdata_rows()
         if data is None:
-            with open(os.path.join(_B3_DATA_DIR, 'RefData.json'), encoding='utf-8') as fh:
-                data = json.load(fh)
+            data = _store.read(os.path.join(_B3_DATA_DIR, 'RefData.json'))
         for rec in (data if isinstance(data, list) else []):
             key = _norm_spn(rec.get('SPN', ''))
             if not key:
@@ -12381,12 +12348,12 @@ def _mapping_rows(key):
         _hit = _req_store.get(os.path.normpath(path))
         if _hit is not None:
             return _hit
-    if not os.path.isfile(path):
+    if not _store.isfile(path):
         # Semear sob o lock: dois requests simultâneos na primeira leitura
         # gravariam o mesmo arquivo ao mesmo tempo. O re-teste de existência
         # dentro do lock evita a segunda escrita.
         with _cache_lock:
-            if not os.path.isfile(path):
+            if not _store.isfile(path):
                 try:
                     os.makedirs(os.path.dirname(path), exist_ok=True)
                     _atomic_write_json(path, list(d.get('seed') or []))
@@ -12394,7 +12361,7 @@ def _mapping_rows(key):
                     log.warning('[mappings] seed write failed for %s:\n%s', key, traceback.format_exc())
                     return list(d.get('seed') or [])
     try:
-        mtime = os.path.getmtime(path)
+        mtime = _store.getmtime(path)
         cached = _mapping_cache.get(key)
         if cached and cached[0] == mtime:
             if _req_store is not None:
@@ -12412,8 +12379,7 @@ def _mapping_rows(key):
         except Exception:                                   # noqa: BLE001
             rows = None
         if rows is None:
-            with open(path, encoding='utf-8') as fh:
-                rows = json.load(fh) or []
+            rows = _store.read(path) or []
         if not isinstance(rows, list):
             rows = []
         rows = [r for r in rows if isinstance(r, dict)]
@@ -12547,13 +12513,21 @@ _fi_calc_value = _pf_fi._fi_calc_value
 _fi_effective_seq_value = _pf_fi._fi_effective_seq_value
 _fi_block_of = _pf_fi._fi_block_of
 _fi_build_line = _pf_fi._fi_build_line
+# A mudança de pasta é NO BANCO (§434): ler pelo armazém, gravar no caminho
+# novo, apagar o antigo — um `shutil.move` aqui moveria um arquivo que não
+# existe mais em disco. Falha em UM template não trava os outros.
 try:
-    if os.path.isdir(_FI_LEGACY_DIR):
-        os.makedirs(_FILE_INTERPRETER_DIR, exist_ok=True)
-        for _fn in os.listdir(_FI_LEGACY_DIR):
+    if _store.isdir(_FI_LEGACY_DIR):
+        for _fn in _store.listdir(_FI_LEGACY_DIR):
             _dst = os.path.join(_FILE_INTERPRETER_DIR, _fn)
-            if _fn.endswith('.json') and not os.path.exists(_dst):
-                shutil.move(os.path.join(_FI_LEGACY_DIR, _fn), _dst)
+            if not _fn.endswith('.json') or _store.exists(_dst):
+                continue
+            try:
+                _src = os.path.join(_FI_LEGACY_DIR, _fn)
+                _store.write(_dst, _store.read(_src))
+                _store.remove(_src)
+            except (IOError, OSError, ValueError):
+                log.warning('[file-interpreter] não consegui migrar %s da pasta antiga', _fn)
 except OSError:
     pass
 
@@ -12630,7 +12604,7 @@ _subjacente_cache = {'mtime': None, 'data': {}}
 def _subjacente_by_code():
     fp = data_path('Subjacente.json')
     try:
-        mtime = os.path.getmtime(fp)
+        mtime = _store.getmtime(fp)
     except OSError:
         return _subjacente_cache['data']
     if _subjacente_cache['mtime'] != mtime:
@@ -12697,11 +12671,11 @@ def static_data_file(filename):
     checagem — a pasta traversada VIRA a raiz permitida, e
     `/static/data/../../config.py` passa a servir o config.
 
-    **Os JSONs cobertos pelos bancos saem SERVIDOS DO BANCO quando ele está
-    fresco** (fase 3, HANDOFF §330): é o flip de leitura do NAVEGADOR — os
-    `fetch` de RefData, CounterpartyDetails e dos arquivos de calendário
-    respondem pelo DuckDB sem mudar uma linha de JS. Qualquer dúvida (banco
-    frio, arquivo não coberto, subpasta) cai no arquivo, como sempre foi.
+    **Todo `.json` sob o `DATA_DIR` sai do ARMAZÉM** (DB-only, §434): é o
+    flip de leitura do NAVEGADOR — os 71 `fetch` de RefData, cadastros do
+    /mapping, Subjacente e calendários respondem pelo DuckDB sem mudar uma
+    linha de JS. O que não vive no banco (`translations/`, a cópia empacotada
+    de um arquivo que nunca foi gravado) cai no disco, como sempre foi.
     """
     resp = _duck_static_json(filename)
     if resp is not None:
@@ -12714,57 +12688,28 @@ def static_data_file(filename):
     raise NotFound()
 
 
-# Os arquivos de primeiro nível que NÃO são calendário de feriado — poupa a
-# consulta ao registro no fetch dos pesados (o Subjacente tem 4 MB). A lista
-# pode envelhecer sem quebrar nada: um nome fora dela só paga uma consulta ao
-# registro que devolve "não é calendário".
-_DUCK_STATIC_NAO_CALENDARIO = frozenset({
-    'Subjacente.json', 'VCP.json', 'Dominio.json', 'SwapIndex.json',
-    'datatables-rendering.json', 'datatables.json', 'treeview-data.json',
-    'typeahead-data-2.json', 'typeahead.json', 'holiday-calendars.json',
-})
-
-
 def _duck_static_json(filename):
-    """A resposta do banco para um `/static/data/<arquivo>` coberto — ou `None`.
+    """A resposta do ARMAZÉM para um `/static/data/<arquivo>.json` — ou `None`
+    (não é JSON, é `translations/`, não há dado): aí vale o disco, que é onde
+    a i18n e a cópia empacotada moram.
 
     Melhor esforço de ponta a ponta: este caminho nunca pode ser a razão de um
     fetch falhar, então toda exceção vira `None` e o arquivo é servido do
     disco."""
     try:
         nome = str(filename or '').replace('\\', '/').strip('/')
-        if not nome.endswith('.json'):
+        if not nome.endswith('.json') or '..' in nome.split('/'):
             return None
-        from apps.pages import duck_read
-        rows = None
-        if '/' in nome:
-            # Subpasta: só os cadastros do /mapping — o resto (translations,
-            # file-interpreter) fica com o arquivo.
-            if nome.startswith('mappings/') and nome.count('/') == 1:
-                rows = duck_read.dataset_records(
-                    os.path.join(_B3_DATA_DIR, *nome.split('/')))
-            else:
-                return None
-        elif nome == 'RefData.json':
-            rows = duck_read.refdata_rows()
-        elif nome == 'CounterpartyDetails.json':
-            rows = duck_read.cpd_records()
-        else:
-            if nome not in _DUCK_STATIC_NAO_CALENDARIO:
-                from apps.pages.features.holidays.infra import persistence as _hp
-                if any(str(r.get('file', '') or '').strip().lower() == nome.lower()
-                       for r in _hp.calendars()):
-                    rows = _hp._load_holidays_db(nome)
-            if rows is None:
-                # Qualquer outro JSON de raiz coberto pelos DATASETS
-                # (Subjacente, Dominio, VCP, SwapIndex, …) — lista de
-                # registros sai do banco; payload que não é lista fica com o
-                # arquivo (dataset_records devolve None).
-                rows = duck_read.dataset_records(os.path.join(_B3_DATA_DIR, nome))
-        if rows is None:
+        from apps.pages import data_store
+        caminho = os.path.join(_B3_DATA_DIR, *nome.split('/'))
+        if not data_store.managed(caminho):
+            return None
+        try:
+            payload = data_store.read(caminho)
+        except FileNotFoundError:
             return None
         from flask import Response
-        return Response(json.dumps(rows, ensure_ascii=False),
+        return Response(json.dumps(payload, ensure_ascii=False),
                         mimetype='application/json')
     except Exception:                                       # noqa: BLE001
         return None
@@ -12795,8 +12740,7 @@ def _b3_load(table):
         rows = None
     if rows is not None:
         return rows, path
-    with open(path, encoding='utf-8') as fh:
-        return json.load(fh), path
+    return _store.read(path), path
 
 
 def _b3_save(path, records):
@@ -13269,8 +13213,7 @@ def _vanilla_verification_lines(deal, page_url, le_pair):
             _cal = os.path.join(_B3_DATA_DIR, sched + '.json')
             _itens = duck_read.calendar_rows(_cal)
             if _itens is None:
-                with open(_cal, encoding='utf-8') as fh:
-                    _itens = json.load(fh)
+                _itens = _store.read(_cal)
             hols = {(x.get('date') if isinstance(x, dict) else x) for x in _itens}
         except Exception:
             hols = set()

@@ -10,6 +10,7 @@ import os
 import traceback
 
 from apps.pages.features.cetip import domain
+from apps.pages import data_store as _store  # noqa: E402
 
 
 def _R():
@@ -25,8 +26,7 @@ _CETIP_RECIPIENTS_FILE = os.path.normpath(os.path.join(
 
 def _load_cetip_recipients():
     try:
-        with open(_CETIP_RECIPIENTS_FILE, encoding='utf-8') as fh:
-            d = _R().json.load(fh)
+        d = _store.read(_CETIP_RECIPIENTS_FILE)
         if isinstance(d, dict):
             return {k: d.get(k, '') or '' for k in domain._CETIP_RECIPIENT_KEYS}
     except Exception:
@@ -68,7 +68,7 @@ def _ensure_cetip_roots():
         return
     for root in (_R().CETIP_SOURCE_ROOT, _R().CETIP_DEST_ROOT):
         try:
-            if not os.path.isdir(root):
+            if not _store.isdir(root):
                 os.makedirs(root, exist_ok=True)
                 _R().log.info("[cetip] created root folder: %s", root)
         except Exception:
@@ -111,10 +111,9 @@ def _cetip_update_vcp_json(src_path):
 
         # Load the existing table + index by Qualification ID (as string).
         current = []
-        if os.path.isfile(_R().VCP_JSON):
+        if _store.isfile(_R().VCP_JSON):
             try:
-                with open(_R().VCP_JSON, encoding='utf-8') as fh:
-                    current = _R().json.load(fh) or []
+                current = _store.read(_R().VCP_JSON) or []
             except Exception:
                 current = []
         by_id = {str(r.get('ID da Qualificação')): r for r in current}

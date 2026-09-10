@@ -40,6 +40,7 @@ from apps.pages.database_access import duckdb_read, duckdb_write
 # Só o Config: importar o `routes` daqui seria circular (é ele quem importa este
 # módulo). O que se repete é a LEITURA da configuração, não o dado.
 from apps.config import Config
+from apps.pages import data_store as _store  # noqa: E402
 
 _LOG = logging.getLogger(__name__)
 
@@ -216,7 +217,7 @@ def ensure_db(path=None):
     # exclusiva por LEITURA da lista de CGDs, excluindo os leitores das outras
     # instâncias do share. O schema é o do código e não muda no processo; se o
     # arquivo existe continua sendo perguntado (banco apagado por fora renasce).
-    if os.path.isfile(path):
+    if _store.isfile(path):
         with _ENSURED_LOCK:
             if path in _ENSURED:
                 return path
@@ -279,7 +280,7 @@ def load_all(path=None):
     leitura tinha ficado de fora.
     """
     path = path or DB_PATH
-    if duckdb is None or not os.path.isfile(path):
+    if duckdb is None or not _store.isfile(path):
         return []
     path = ensure_db(path)
     cols = ', '.join('"{}"'.format(c) for c in DB_COLUMNS)
@@ -639,7 +640,7 @@ def _stage_map():
     """
     path = mapping_file('cgd-stage', _MAPPINGS_DIR)
     try:
-        mt = os.path.getmtime(path)
+        mt = _store.getmtime(path)
     except OSError:
         _STAGE_MAP['mtime'], _STAGE_MAP['rows'] = None, {}
         return {}

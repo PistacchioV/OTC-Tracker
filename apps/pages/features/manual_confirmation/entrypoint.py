@@ -15,6 +15,7 @@ from flask import (jsonify, redirect, render_template, request,
                    session, url_for)
 
 from apps.pages import blueprint
+from apps.pages import data_store as _store  # noqa: E402
 
 
 def _R():
@@ -147,7 +148,7 @@ def api_mc_docs_batch():
     # Raiz inacessível é o diagnóstico que NENHUM item consegue dar sozinho:
     # cada um só vê a própria pasta "inexistente". Um drive mapeado que o
     # processo não enxerga produz exatamente um Monitor 100% 'no PDF'.
-    if not os.path.isdir(_R().ELECTRONIC_INVENTORY_ROOT):
+    if not _store.isdir(_R().ELECTRONIC_INVENTORY_ROOT):
         _R().log.warning('[manual-conf] docs: raiz do Electronic Inventory inacessível '
                     'deste processo: %s', _R().ELECTRONIC_INVENTORY_ROOT)
     else:
@@ -650,7 +651,7 @@ def api_mc_email_preview():
     # Mesmo teto do /api/parse-msg-html: o parser OLE/CFB não pode receber um
     # arquivo sem limite de tamanho.
     _MAX = 25 * 1024 * 1024
-    if os.path.getsize(full) > _MAX:
+    if _store.getsize(full) > _MAX:
         return abort(413)
     subject = sender = to = when = ''
     body_html = ''

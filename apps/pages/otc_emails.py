@@ -36,6 +36,7 @@ from datetime import datetime
 
 _LOG = logging.getLogger(__name__)
 from email.header import Header
+from apps.pages import data_store as _store  # noqa: E402
 
 _DATA_DIR = data_dir()
 
@@ -253,8 +254,7 @@ def _email_shell(title, ref_date, intro_html, body_html, footer_extra=''):
 # ──────────────────────────────────────────────────────────────────────────
 def _load_json(name):
     try:
-        with open(data_path(name), encoding='utf-8') as fh:
-            return json.load(fh)
+        return _store.read(data_path(name))
     except Exception:
         return []
 

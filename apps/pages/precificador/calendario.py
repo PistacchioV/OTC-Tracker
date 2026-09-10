@@ -21,6 +21,7 @@ from datetime import date, datetime, timedelta
 
 from apps.pages.data_paths import data_path
 from apps.pages.precificador.erros import ErroDeDado
+from apps.pages import data_store as _store  # noqa: E402
 
 REGISTRO = 'holiday-calendars.json'
 # O arquivo de cada calendário quando o registro não responde — é a mesma
@@ -114,9 +115,8 @@ def _arquivo_do_calendario(nome):
         if linhas is None:
             fp = data_path(REGISTRO)
             linhas = []
-            if os.path.isfile(fp):
-                with open(fp, encoding='utf-8') as fh:
-                    linhas = json.load(fh) or []
+            if _store.isfile(fp):
+                linhas = _store.read(fp) or []
         for row in linhas:
             if isinstance(row, dict) and str(row.get('name', '')).strip().upper() == alvo:
                 arq = str(row.get('file', '') or '').strip()
@@ -140,7 +140,7 @@ def _feriados_do_arquivo(nome):
         return frozenset()
     fp = data_path(arq)
     try:
-        mt = os.path.getmtime(fp)
+        mt = _store.getmtime(fp)
     except OSError:
         return frozenset()
     chave = (nome.upper(), fp)
@@ -154,8 +154,7 @@ def _feriados_do_arquivo(nome):
                                               # pode vir do _ARQUIVO_PADRAO, que
                                               # não passa pelo registro
         if itens is None:
-            with open(fp, encoding='utf-8') as fh:
-                itens = json.load(fh) or []
+            itens = _store.read(fp) or []
         for item in itens:
             texto = item.get('date') if isinstance(item, dict) else item
             if texto:

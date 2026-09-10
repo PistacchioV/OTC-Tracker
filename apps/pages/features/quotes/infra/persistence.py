@@ -3,6 +3,7 @@
 import json
 import os
 import traceback
+from apps.pages import data_store as _store  # noqa: E402
 
 _cache = {'mtime': None, 'data': {}}
 
@@ -23,7 +24,7 @@ def active_by_class():
     from apps.pages import routes
     fp = os.path.join(routes._B3_DATA_DIR, 'Subjacente.json')
     try:
-        mt = os.path.getmtime(fp)
+        mt = _store.getmtime(fp)
     except OSError:
         return {}
     if _cache['mtime'] != mt:

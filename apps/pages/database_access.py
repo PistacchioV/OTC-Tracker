@@ -255,6 +255,11 @@ def read_timeout(seconds: Optional[float]) -> Iterator[None]:
     para leitura: a escrita continua com o teto cheio, porque para ela não há
     emergência. `None` não muda nada."""
     anterior = getattr(_thread_state, "read_timeout", None)
+    # Blocos ANINHADOS ficam com o MENOR teto: o armazém abre cada leitura com
+    # o teto dele, e quem o envolveu com um teto mais curto (um teste, um
+    # chamador com orçamento) não pode ver o seu ser alongado por dentro.
+    if seconds is not None and anterior is not None:
+        seconds = min(seconds, anterior)
     _thread_state.read_timeout = seconds
     try:
         yield
@@ -273,11 +278,11 @@ def db_gate(database_path: _PathLike) -> _UnlockedReadGate:
     """O portão intra-processo leitor × escritor de UM banco, pelo caminho.
 
     Nasceu para o poll sem lock do sino (§323) e passou a servir também os
-    bancos do ESPELHO (§422): o `duck_read` abre `read_only` e a thread do
-    `duck_mirror` abre em escrita, no mesmo processo, e o DuckDB recusa a
-    segunda configuração. O lock de arquivo não separa os dois — a escrita do
-    espelho não passa pela camada —, então o que resta é a coordenação em
-    memória, que é exatamente o que este portão faz."""
+    bancos do ARMAZÉM (§422/§434): o leitor do `data_store` abre `read_only`
+    e o funil abre o mesmo arquivo em escrita, no mesmo processo, e o DuckDB
+    recusa a segunda configuração. O lock de arquivo (compartilhado × exclusivo)
+    não separa os dois dentro de um processo, então o que resta é a
+    coordenação em memória, que é exatamente o que este portão faz."""
     return _unlocked_gates.get(normalize_database_path(database_path))
 # Os bancos já avisados de que estão sendo lidos sem lock — ver `skip_file_lock`.
 _unlocked_warned: set = set()

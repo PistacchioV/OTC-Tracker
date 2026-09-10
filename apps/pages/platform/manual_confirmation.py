@@ -26,6 +26,7 @@ da função, andaime declarado.
 """
 import logging
 import os
+from apps.pages import data_store as _store  # noqa: E402
 import re
 import threading
 import time
@@ -293,8 +294,8 @@ def _mc_folder_files(folder):
             return hit[1]
     try:
         long_folder = routes._ei_long_path(os.path.normpath(os.path.abspath(folder)))
-        nomes = (sorted(os.listdir(long_folder))
-                 if os.path.isdir(long_folder) else [])
+        nomes = (sorted(_store.listdir(long_folder))
+                 if _store.isdir(long_folder) else [])
     except Exception:
         # Share fora do ar não pode virar cache: guardar [] aqui faria a tela
         # dizer "sem PDF" pelo minuto seguinte, com os arquivos lá.
@@ -348,7 +349,7 @@ def _mc_email_subject(full):
     """
     from apps.pages import routes
     try:
-        st = os.stat(routes._ei_long_path(os.path.normpath(os.path.abspath(full))))
+        st = _store.stat(routes._ei_long_path(os.path.normpath(os.path.abspath(full))))
         chave = (full, int(st.st_mtime), st.st_size)
     except Exception:
         return ''
@@ -449,7 +450,7 @@ def _mc_confirmation_docs(row, trades=None):
             # módulos sai a partir de WARNING, e um diagnóstico que o console
             # descarta não diagnostica nada.
             estados = ', '.join(
-                '%s (%s)' % (b, 'existe' if os.path.isdir(
+                '%s (%s)' % (b, 'existe' if _store.isdir(
                     routes._ei_long_path(os.path.normpath(os.path.abspath(b)))) else 'NAO EXISTE')
                 for b in bases)
             log.warning('[manual-conf] docs: nenhum PDF para %r — pasta(s) do cliente: %s; tentadas: %s',
@@ -567,7 +568,7 @@ def _mc_sync_fepweb_ids(rows):
     ph = ', '.join('?' for _ in vazios)
     for fname in routes._PC_DBS.values():
         path = os.path.join(routes._PC_DB_DIR, fname)
-        if not os.path.isfile(path):
+        if not _store.isfile(path):
             continue
         try:
             with routes.duckdb_read(path) as con:

@@ -68,6 +68,7 @@ from datetime import date, datetime, timedelta
 
 from apps.pages.data_paths import data_dir, data_path, data_write, mapping_file, mapping_write
 from apps.config import Config
+from apps.pages import data_store as _store  # noqa: E402
 
 _LOG = logging.getLogger(__name__)
 
@@ -217,8 +218,7 @@ def _feriados():
             path = data_path('anbima.json')
             datas = duck_read.calendar_dates(path)
             if datas is None:
-                with open(path, encoding='utf-8') as fh:
-                    datas = {d['date'] for d in (json.load(fh) or []) if d.get('date')}
+                datas = {d['date'] for d in (_store.read(path) or []) if d.get('date')}
             _ANBIMA['feriados'] = datas
         except Exception:
             # Sem o arquivo o D-1 vira "ontem que não é fim de semana": erra por
@@ -259,10 +259,10 @@ def caminho_b3(dia):
         '{}. {}'.format(dia.strftime('%m'), _EN_MONTHS[dia.month - 1]),
         dia.strftime('%d'))
     principal = os.path.join(pasta, B3_FILE_TPL.format(yymmdd=dia.strftime('%y%m%d')))
-    if os.path.isfile(principal):
+    if _store.isfile(principal):
         return principal
     alt = os.path.join(pasta, B3_FILE_ALT.format(yymmdd=dia.strftime('%y%m%d')))
-    return alt if os.path.isfile(alt) else principal
+    return alt if _store.isfile(alt) else principal
 
 
 # ── Cadastros (/mapping) ─────────────────────────────────────────────────────
@@ -280,7 +280,7 @@ def _mapping_rows(key):
     """
     path = mapping_file(key, _MAPPINGS_DIR)
     try:
-        mt = os.path.getmtime(path)
+        mt = _store.getmtime(path)
     except OSError:
         return []
     ent = _MAP_CACHE.get(key)
@@ -361,7 +361,7 @@ def ler_b3(dia, avisos):
     descarta as que continuaram sem.
     """
     path = caminho_b3(dia)
-    if not os.path.isfile(path):
+    if not _store.isfile(path):
         avisos.append('Arquivo da B3 não encontrado: {}'.format(path))
         return {}, path
 
@@ -544,7 +544,7 @@ def ler_fep(avisos, path=None):
             path = os.path.join(CGD_INPUT_ROOT, FEP_XLSX)
             avisos.append('Usei a lista em pasta ({}) em vez do anexo do e-mail.'
                           .format(path))
-    if not os.path.isfile(path):
+    if not _store.isfile(path):
         avisos.append('Lista do FEP não encontrada: {}'.format(path))
         return {}, origem or path
     # `path` é o ARQUIVO, que o openpyxl abre; `rotulo` é o que o painel e o
@@ -735,8 +735,7 @@ def carregar(ref=None):
     de novo é uma decisão de quem opera, não do carregamento da página."""
     path = _cache_path(ref)
     try:
-        with open(path, encoding='utf-8') as fh:
-            return json.load(fh)
+        return _store.read(path)
     except Exception:
         return None
 

@@ -8,8 +8,8 @@ entra pelo arquivo que o usuário importa, e não desce de fonte nenhuma).
 
 Cada base é um JSON com uma LISTA DE REGISTROS, um por data
 (`{"date": "2026-09-08", "1 week": 0.0192, …}`), e não um dicionário por data:
-é a forma que o espelho DuckDB converte em TABELA. A gravação passa pelo funil
-(`_atomic_write_json`), que avisa o `duck_mirror`, e o motor cria
+é a forma que vira TABELA no banco. A gravação passa pelo funil
+(`_atomic_write_json`), que grava no banco (DB-only, §434), e o motor cria
 `db/tools/euribor_historico.db`, `db/tools/term_sofr_b3.db` e
 `db/tools/sofr_historico.db` — as cotações extraídas ficam num banco, como a
 mesa pediu, e a leitura é DB-FIRST (`duck_read.dataset_rows`): banco frio ou
@@ -27,7 +27,6 @@ Quatro regras da casa moram aqui:
   cada sincronização não pode virar ruído de commit;
 * **o read-modify-write roda sob o `_cache_lock`** do armazém JSON.
 """
-import json
 import os
 
 from apps.pages.data_paths import data_path, data_write
@@ -48,8 +47,8 @@ def caminho_do_seed(nome):
 
 def _ler_json(fp):
     try:
-        with open(fp, encoding='utf-8') as fh:
-            return json.load(fh)
+        from apps.pages import data_store
+        return data_store.read(fp)
     except (OSError, ValueError):
         return None
 
@@ -81,7 +80,7 @@ def carregar(nome):
 
 
 def salvar(nome, registros):
-    """Grava a base viva pelo funil (atômico; o espelho é avisado)."""
+    """Grava a base viva pelo funil (no banco, §434)."""
     fp = caminho(nome)
     os.makedirs(os.path.dirname(fp), exist_ok=True)
     _jc._atomic_write_json(fp, list(registros))

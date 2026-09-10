@@ -7,6 +7,7 @@ import os
 
 from apps.pages.features.intrag import domain
 from apps.pages.features.intrag.infra import persistence
+from apps.pages import data_store as _store  # noqa: E402
 
 def _R():
     """Busca ATRASADA no routes — plataforma (ver features/support/infra)."""
@@ -46,10 +47,10 @@ def _find_intrag_ndf_entry(deal_id, trade_date):
             persistence.INTRAG_NDF_CACHE_DIR, ref.strftime('%Y'), ref.strftime('%m'),
             ref.strftime('%Y%m%d') + '_intrag_ndf.json'
         )
-        if os.path.isfile(fp):
+        if _store.isfile(fp):
             candidate_files.append(fp)
-    if not candidate_files and os.path.isdir(persistence.INTRAG_NDF_CACHE_DIR):
-        for root, _, files in os.walk(persistence.INTRAG_NDF_CACHE_DIR):
+    if not candidate_files and _store.isdir(persistence.INTRAG_NDF_CACHE_DIR):
+        for root, _, files in _store.walk(persistence.INTRAG_NDF_CACHE_DIR):
             for fname in files:
                 if fname.endswith('_intrag_ndf.json'):
                     candidate_files.append(os.path.join(root, fname))
@@ -80,10 +81,10 @@ def _find_intrag_opt_entry(deal_id, trade_date):
     if ref is not None:
         fp = os.path.join(persistence.INTRAG_OPT_CACHE_DIR, ref.strftime('%Y'), ref.strftime('%m'),
                           ref.strftime('%Y%m%d') + '_intrag_opt.json')
-        if os.path.isfile(fp):
+        if _store.isfile(fp):
             candidate_files.append(fp)
-    if not candidate_files and os.path.isdir(persistence.INTRAG_OPT_CACHE_DIR):
-        for root, _, files in os.walk(persistence.INTRAG_OPT_CACHE_DIR):
+    if not candidate_files and _store.isdir(persistence.INTRAG_OPT_CACHE_DIR):
+        for root, _, files in _store.walk(persistence.INTRAG_OPT_CACHE_DIR):
             for fname in files:
                 if fname.endswith('_intrag_opt.json'):
                     candidate_files.append(os.path.join(root, fname))
@@ -115,10 +116,10 @@ def _find_intrag_dce_opt_entry(deal_id, trade_date):
     if ref is not None:
         fp = os.path.join(persistence.INTRAG_DCE_OPT_CACHE_DIR, ref.strftime('%Y'), ref.strftime('%m'),
                           ref.strftime('%Y%m%d') + '_intrag_dce_opt.json')
-        if os.path.isfile(fp):
+        if _store.isfile(fp):
             candidate_files.append(fp)
-    if not candidate_files and os.path.isdir(persistence.INTRAG_DCE_OPT_CACHE_DIR):
-        for root, _, files in os.walk(persistence.INTRAG_DCE_OPT_CACHE_DIR):
+    if not candidate_files and _store.isdir(persistence.INTRAG_DCE_OPT_CACHE_DIR):
+        for root, _, files in _store.walk(persistence.INTRAG_DCE_OPT_CACHE_DIR):
             for fname in files:
                 if fname.endswith('_intrag_dce_opt.json'):
                     candidate_files.append(os.path.join(root, fname))
@@ -143,12 +144,12 @@ def _find_intrag_dce_opt_entry(deal_id, trade_date):
 def _intrag_find_export_csv():
     """Most recent Boletas*.csv in the Return folder, or None."""
     try:
-        cands = [os.path.join(_R().RETURN_PATH, fn) for fn in os.listdir(_R().RETURN_PATH)
+        cands = [os.path.join(_R().RETURN_PATH, fn) for fn in _store.listdir(_R().RETURN_PATH)
                  if fn.lower().startswith('boletas') and fn.lower().endswith('.csv')]
     except OSError:
         return None
-    cands = [p for p in cands if os.path.isfile(p)]
-    return max(cands, key=lambda p: os.path.getmtime(p)) if cands else None
+    cands = [p for p in cands if _store.isfile(p)]
+    return max(cands, key=lambda p: _store.getmtime(p)) if cands else None
 
 
 def _find_intrag_swap_entry(deal_id, trade_date):
@@ -163,10 +164,10 @@ def _find_intrag_swap_entry(deal_id, trade_date):
             persistence.INTRAG_SWAP_CACHE_DIR, ref.strftime('%Y'), ref.strftime('%m'),
             ref.strftime('%Y%m%d') + '_intrag_swap.json'
         )
-        if os.path.isfile(fp):
+        if _store.isfile(fp):
             candidate_files.append(fp)
-    if not candidate_files and os.path.isdir(persistence.INTRAG_SWAP_CACHE_DIR):
-        for root, _, files in os.walk(persistence.INTRAG_SWAP_CACHE_DIR):
+    if not candidate_files and _store.isdir(persistence.INTRAG_SWAP_CACHE_DIR):
+        for root, _, files in _store.walk(persistence.INTRAG_SWAP_CACHE_DIR):
             for fname in files:
                 if fname.endswith('_intrag_swap.json'):
                     candidate_files.append(os.path.join(root, fname))
