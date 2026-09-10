@@ -18222,3 +18222,38 @@ Agora: formato `fx` no JS (mínimo 4, máximo 8, sem zeros inventados),
 número volta com as casas que tem, e a PTAX de 4 continua com 4.
 `check_tools.py` §11 prende, inclusive o form entregando as 8 casas ao
 cálculo com ponto ou vírgula.
+
+## §440 — Varredura do armazém (3ª): quem ainda perguntava ao DISCO (2026-09-10)
+
+Ângulo desta passada: `os.path.*`, `os.walk`, `glob`, `open`+`json.load`
+sobre caminhos que desde o §434 só existem no banco. O app está quase limpo
+(o que sobrou é share, anexos, imagens de ticket e PDFs), mas três coisas
+escaparam, e duas apagavam dado:
+
+- **`precificador/bases.py` re-semeava a base a cada leitura.** `carregar`
+  decidia "há base viva?" por `os.path.isfile` — que para um caminho gravado
+  pelo funil responde False para sempre. Cada leitura do EURIBOR/SOFR/Term
+  SOFR re-lia o seed e o REGRAVAVA (uma trava exclusiva no share por
+  leitura), apagando o que a sincronização do NY Fed/Finlândia tinha
+  trazido e o Term SOFR que o usuário importou. Agora a pergunta é ao
+  armazém, e banco ocupado sobe em vez de virar re-semeadura.
+  `check_tools.py` §12.
+- **`data_paths._existe` lia OCUPADO como "não há".** O `except Exception`
+  em volta do `data_store.exists` engolia o `BancoOcupado`, `data_path()`
+  caía para a cópia do repositório, e o cadastro que a mesa editou virava a
+  seed enquanto durasse a trava — sem erro nenhum. Ocupado agora conta como
+  existe no `DATA_DIR`; quem lê esbarra no ocupado de verdade.
+  `check_duck_read.py` §7.
+- **Sete scripts liam `apps/static/data/*.json` do CHECKOUT** (RefData,
+  anbima, os arquivos-dia do New Deals) com `open`+`json.load` e `os.walk`
+  — a seed do repositório, não o dado da instância, e desde o cutover nem
+  isso. Passam a resolver pelo `data_path` e ler pelo armazém
+  (`create_counterparty_folders`, `create_cetip_folders`,
+  `import_pending_confirmation`, `update_pending_confirmation_bankers`/
+  `_dbs`, `backfill_manual_confirmations`, `export_new_deals_excel`;
+  `fix_cgd_economic_group` já usava o `data_path` e passa a ler pelo
+  armazém). `recover_json_cache.py` fica como está: é o socorro de um JSON
+  corrompido em disco, que o armazém não tem mais.
+
+Fica anotado, sem mexer: 96 `os.makedirs` antes de gravações que hoje vão
+para o banco — criam a pasta vazia no share, sem efeito no dado.

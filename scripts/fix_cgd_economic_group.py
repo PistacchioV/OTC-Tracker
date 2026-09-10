@@ -116,8 +116,8 @@ def carrega_refdata(caminho=None):
     aqui faria o script corrigir o banco do share com o RefData do checkout.
     """
     caminho = caminho or data_path('RefData.json')
-    with io.open(caminho, encoding='utf-8') as fh:
-        dados = json.load(fh) or []
+    from apps.pages import data_store                               # o armazém (§440)
+    dados = data_store.read(caminho) or []
     por_cnpj, por_nome, ambiguos = {}, {}, set()
     for rec in (dados if isinstance(dados, list) else []):
         grupo = str(rec.get('ECONOMIC GROUP', '') or '').strip()

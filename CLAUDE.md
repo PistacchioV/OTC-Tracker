@@ -240,7 +240,12 @@ nomes que o app conhecia (`day_records`, `dataset_rows`, `refdata_rows`,
   antes disso, `data_path()` devolve o caminho do repositório (fora da raiz,
   lido do disco). O armazém em si nunca cai para o pacote — um leitor com
   caminho explícito lê o que pediu, ou nada (é o que deixa um teste com a
-  raiz num tmp ler só o que gravou).
+  raiz num tmp ler só o que gravou). Para o `data_path()`, banco OCUPADO
+  conta como EXISTE no `DATA_DIR` — lido como "não há", ele caía para a
+  seed do repositório e o cadastro editado sumia enquanto durasse a trava
+  (§440). E "há base viva?" se pergunta ao armazém, nunca a
+  `os.path.isfile`: as bases das Tools (`precificador/bases.py`) eram
+  re-semeadas e regravadas a cada leitura por isso.
 - **Legado em disco: importação PREGUIÇOSA no ponto, nunca na enumeração.**
   A primeira leitura de um caminho que o banco não tem e o disco tem responde
   pelo ARQUIVO na hora e manda a importação para uma thread (`store-import`,
@@ -925,6 +930,7 @@ São **45**: `currency-base`, `interbook-ndf`, `commodities-b3`,
 | `update_pending_confirmation_dbs.py` · `..._bankers.py` | migrações de schema do Pending Confirmation |
 | `import_manual_confirmations.py` | cria os dois DuckDB da esteira e semeia do `MANUAIS.xlsx` |
 | `backfill_manual_confirmations.py` | traz para a esteira o que foi mapeado antes dela (FWD Start pelo B3 ID; `--dry-run` lembra as chaves da passada) |
+| os scripts que leem RefData/calendário/arquivos-dia (`create_counterparty_folders`, `create_cetip_folders`, `import_pending_confirmation`, `update_pending_confirmation_*`, `backfill_manual_confirmations`, `export_new_deals_excel`, `fix_cgd_economic_group`) | leem pelo ARMAZÉM e pelo `data_path` (§440): o `apps/static/data/*.json` do checkout é a seed, não o dado |
 | `import_cgd_sharepoint.py` · `import_cgd_auxiliar.py` | lista de CGDs e as três abas do `Auxiliar.xlsx` |
 | `split_notifications_db.py --dry-run` | mostra o que a separação do sino vai copiar |
 | `dev_seed_positions.py` | só na DEV: reemite a última posição B3 numa data recente (`--from … --force`) |

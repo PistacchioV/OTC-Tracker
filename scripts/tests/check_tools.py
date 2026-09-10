@@ -871,6 +871,48 @@ check('o JS formata fx com 4 a 8 casas, sem arredondar a 4', 'fx: { min: 4, max:
 check('nenhum prefill de fixing sobra com 6 casas fixas',
       "'{:.6f}'.format(cotacao_inicial)\n" in ler('apps/pages/features/tools/domain.py').split("campos['ptax_inicial']")[1][:60], False)
 
+# ─────────────────────────────────────────────────────────────────────────────
+print('\n== 12. a base viva mora no BANCO: ler nao re-semeia, e ocupado nao e "nao ha" (§440) ==')
+# `carregar` decidia "nao ha base viva" por os.path.isfile — que desde o §434
+# responde False para sempre (a base gravada pelo funil so existe no banco):
+# cada leitura re-semeava e REGRAVAVA a base, apagando a sincronizacao e o
+# Term SOFR importado. A pergunta e ao armazem.
+from apps.pages import data_store as _S
+_raiz_antes = R._B3_DATA_DIR
+R._B3_DATA_DIR = TMP
+_cam_antes, _seed_antes, _sem_antes = bases.caminho, bases.caminho_do_seed, bases._semear
+bases.caminho = lambda nome: os.path.join(TMP, 'tools', nome)
+bases.caminho_do_seed = lambda nome: os.path.join(TMP, 'tools', 'seed', nome)
+os.makedirs(os.path.join(TMP, 'tools', 'seed'), exist_ok=True)
+with io.open(os.path.join(TMP, 'tools', 'seed', 'x_base.json'), 'w', encoding='utf-8') as fh:
+    json.dump([{'date': '2026-01-02', '1 week': 0.01}], fh)
+_semeadas = []
+bases._semear = lambda nome: (_semeadas.append(nome), _sem_antes(nome))[1]
+try:
+    check('sem base viva, a primeira leitura semeia', bases.carregar('x_base.json'), [{'date': '2026-01-02', '1 week': 0.01}])
+    _S.import_wait(30)
+    bases.salvar('x_base.json', [{'date': '2026-01-05', '1 week': 0.02}])
+    check('a base viva esta so no banco (nada em disco)', os.path.isfile(os.path.join(TMP, 'tools', 'x_base.json')), False)
+    _semeadas[:] = []
+    check('ler de novo devolve o que foi gravado, nao o seed',
+          (bases.carregar('x_base.json'), bases.carregar('x_base.json')),
+          ([{'date': '2026-01-05', '1 week': 0.02}], [{'date': '2026-01-05', '1 week': 0.02}]))
+    check('   e nao re-semeou', _semeadas, [])
+    _read_real = _S.read
+    _S.read = lambda path, default=_S.AUSENTE: (_ for _ in ()).throw(_S.BancoOcupado(path))
+    try:
+        try:
+            bases.carregar('x_base.json')
+            check('banco OCUPADO sobe, nunca vira re-semeadura', 'nao levantou', 'BancoOcupado')
+        except _S.BancoOcupado:
+            check('banco OCUPADO sobe, nunca vira re-semeadura', 'BancoOcupado', 'BancoOcupado')
+        check('   e nada foi semeado por cima', _semeadas, [])
+    finally:
+        _S.read = _read_real
+finally:
+    bases.caminho, bases.caminho_do_seed, bases._semear = _cam_antes, _seed_antes, _sem_antes
+    R._B3_DATA_DIR = _raiz_antes
+
 print()
 print('FALHAS: %d' % len(falhas) if falhas else 'TUDO OK')
 sys.exit(1 if falhas else 0)

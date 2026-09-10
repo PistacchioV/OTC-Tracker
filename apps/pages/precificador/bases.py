@@ -46,10 +46,13 @@ def caminho_do_seed(nome):
 
 
 def _ler_json(fp):
+    """O payload do caminho, pelo armazém; `None` só quando NÃO HÁ. Banco
+    ocupado sobe (é um `IOError` que os leitores tratam) — lido como "não
+    há", a base viva seria re-semeada por cima."""
     try:
         from apps.pages import data_store
         return data_store.read(fp)
-    except (OSError, ValueError):
+    except (FileNotFoundError, ValueError):
         return None
 
 
@@ -66,16 +69,18 @@ def _semear(nome):
 
 
 def carregar(nome):
-    """Os registros da base: do BANCO quando fresco, senão do JSON; sem base
-    viva, o seed (que vira a base viva). ``[]`` quando não há nada."""
-    fp = caminho(nome)
-    if not os.path.isfile(fp):
+    """Os registros da base: do armazém (o banco, §434); sem base viva, o
+    seed (que vira a base viva). ``[]`` quando não há nada.
+
+    A pergunta "há base viva?" é ao ARMAZÉM, nunca `os.path.isfile`: desde
+    o §434 a base gravada pelo funil só existe no banco, e o `isfile` do disco
+    respondia "não" para sempre — cada leitura re-semeava e REGRAVAVA a base
+    (uma trava exclusiva no share por leitura), apagando o que a sincronização
+    do NY Fed/Finlândia tinha trazido e o Term SOFR que o usuário importou
+    (varredura de 10/09/2026, §440)."""
+    registros = _ler_json(caminho(nome))
+    if registros is None:
         return _semear(nome) or []
-    try:
-        from apps.pages import duck_read
-        registros = duck_read.dataset_rows(fp)
-    except Exception:                                       # noqa: BLE001
-        registros = _ler_json(fp)
     return registros if isinstance(registros, list) else []
 
 
