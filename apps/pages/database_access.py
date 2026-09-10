@@ -577,7 +577,7 @@ def _acquire_permit(
 # `_WRITE_INTENT_BACKOFF_SECONDS`. Intenção velha (o processo morreu) é
 # ignorada pela idade — ninguém fica preso a um arquivo órfão.
 _WRITE_INTENT_SUFFIX = ".w"
-_WRITE_INTENT_MAX_AGE_SECONDS = 15.0
+_WRITE_INTENT_MAX_AGE_SECONDS = 60.0      # no share uma gravação legítima passa de 15 s; órfã é a de mais de um minuto
 _WRITE_INTENT_BACKOFF_SECONDS = 1.0
 
 

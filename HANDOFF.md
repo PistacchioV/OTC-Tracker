@@ -17945,3 +17945,42 @@ OCUPADO é a entrada mais recente do caminho (só há uma versão por caminho
 depois de cada gravação, que esquece todas), payload maior que o teto não
 entra (e por isso não tem cópia para o ocupado — irrelevante em 256 MB).
 Nada para corrigir nesse ângulo.
+
+**Os tetos eram da dev, não do share (10/09, noite).** A instância subiu
+com o log cheio de tracebacks `AlreadyLocked → DatabaseLockTimeout →
+BancoOcupado` vindos da semeadura (`_seed_data_dir`): a vizinha estava
+gravando, o leitor esperou os 5 s do teto, tentou de novo 0,3 s depois e
+desistiu — e no share uma gravação legítima (a semeadura da outra
+instância, um dia grande, a importação em lote) passa disso com folga. O
+usuário pediu esperas mais longas para o servidor: `OTC_DUCK_READ_LOCK_SECONDS`
+20 s por tentativa (era 5), 1 s entre as duas (era 0,3), o portão de
+leitura em memória 20 s (era 10, e vencido ele mandava o leitor bater na
+trava do próprio processo), a intenção de escrita órfã só com mais de
+60 s (era 15). E a semeadura trata `BancoOcupado` à parte: uma linha por
+banco, sem traceback, "fica para a próxima subida" — e é o `isfile` que
+levanta (varredura da manhã) que a impede de sobrescrever o cadastro da
+mesa com a cópia do repositório quando o banco está preso.
+
+O resto do log disse QUEM: `GET /api/ndf-summary/data` → `_ndfsum_fx_map` →
+`_ndf_ter_path` → `_store.isfile` do `cache/b3 files/NDF/73760_DPOSICAO-TER.db`,
+preso em exclusivo por outro processo — `read 2x 10.3s`, duas esperas de
+lock estouradas, o Summary falhou. Quem segura esse banco por tanto tempo é
+uma gravação de DPOSICAO-TER (milhares de linhas): a do dia, ou a importação
+PREGUIÇOSA de um dia que o banco ainda não tinha — que rodava dentro do
+request de quem leu primeiro, sob a trava exclusiva, e derrubava em OCUPADO
+quem lia o mesmo banco enquanto isso (o aquecimento do Summary, a instância
+vizinha). Duas mudanças no `data_store`:
+
+- **`stat`/`isfile` sob OCUPADO respondem pela última cópia boa em memória**
+  (`_pmemo_last_key`: a chave do memo é o carimbo), como o `read` já fazia —
+  o `_ndf_ter_path` que andava dez dias úteis para trás por `isfile` deixa de
+  estourar quando o memo está quente (o aquecimento do Summary o enche).
+  Sem cópia continua levantando (a regra da manhã: ocupado nunca é "não
+  existe").
+- **A importação do legado saiu do request**: a primeira leitura serve o
+  arquivo do disco na hora e manda a gravação para a thread `store-import`
+  (uma por caminho, com o TEXTO do arquivo — o chamador pode alterar o objeto
+  que recebeu), que desiste já sob a trava se o banco ganhou o caminho nesse
+  meio-tempo (`write(..., so_se_ausente=True)` — uma gravação da tela que
+  entrou antes vence). `import_wait()` para testes e scripts.
+  `check_duck_read.py` §6/§7 prendem os dois.
