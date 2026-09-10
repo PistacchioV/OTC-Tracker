@@ -689,26 +689,43 @@ check('8. pasta de trabalho sem renome e recusada ANTES da copia, com o remedio'
       (_p.returncode, 'NÃO deixa renomear' in _p.stdout, '--work-dir' in _p.stdout,
        'Traceback' in _p.stdout, 'copiado' in _p.stdout), (1, True, True, False, False))
 shutil.rmtree(_TRAVADA, ignore_errors=True)
-# E o acesso negado passageiro (o antivirus lendo os MB recem-escritos) e RETENTADO.
-_prova = subprocess.run([sys.executable, '-c', """
-import os, sys, duckdb
+# Acesso negado na abertura da copia local: e o `MoveFileW` com que o DuckDB grava
+# o `.wal.recovery` (no Windows ele recusa, mesmo com o destino fora do caminho). A
+# saida e fundir os dois WALs A MAO — a MESMA operacao, por copia em vez de rename —
+# e abrir de novo, sem perder nada do que so estava no WAL.
+_PROVA = """
+import os, sys, shutil, duckdb
 sys.path.insert(0, os.path.join(%r, 'scripts'))
 import recover_duckdb_wal as R
-db = os.path.join(%r, 'retry.db')
-duckdb.connect(db).close()
+orig, work = %r, %r
+local = os.path.join(work, 'fusao.db')
+shutil.copy2(orig, local)
+for s in ('.wal', '.wal.checkpoint'):
+    shutil.copy2(orig + s, local + s)
 real, chamadas = duckdb.connect, []
 def falso(*a, **k):
     chamadas.append(1)
-    if len(chamadas) == 1:
+    if len(chamadas) <= 2:
         raise duckdb.IOException('IO Error: Could not move file: Access is denied.')
     return real(*a, **k)
 duckdb.connect = falso
-R._recupera_local(db, tentativas=3, espera=0)
+R._recupera_local(local, origem=orig, tentativas=2, espera=0)
+duckdb.connect = real
+con = duckdb.connect(local, read_only=True)
+print('SOBRAS', sorted(R._store.wal_irmaos(local)))
+print('LASTRO', con.execute('SELECT count(*) FROM main.lastro').fetchone()[0])
 print('TENTATIVAS', len(chamadas))
-""" % (ROOT, _WORK)], capture_output=True, text=True, env=dict(os.environ))
-check('8. acesso negado na copia local e RETENTADO, nao mata o banco',
-      (_prova.returncode, 'TENTATIVAS 2' in _prova.stdout,
-       'acesso negado na cópia local' in _prova.stdout), (0, True, True))
+""" % (ROOT, _LIMBO, _WORK)
+_prova = subprocess.run([sys.executable, '-c', _PROVA],
+                        capture_output=True, text=True, env=dict(os.environ))
+check('8. rename negado: os WALs sao fundidos A MAO e o banco sai do limbo',
+      (_prova.returncode, 'SOBRAS []' in _prova.stdout, 'TENTATIVAS 3' in _prova.stdout,
+       'fundindo À MÃO' in _prova.stdout), (0, True, True, True))
+if _prova.returncode:
+    print(_prova.stdout[-800:], _prova.stderr[-800:])
+check('8.   e o que so estava no WAL veio junto na fusao',
+      int((_prova.stdout.split('LASTRO ')[1].split()[0]) if 'LASTRO ' in _prova.stdout else 0) >= 200000,
+      True)
 
 _p = subprocess.run([sys.executable, os.path.join(ROOT, 'scripts', 'recover_duckdb_wal.py'),
                      '--db-dir', OUT, '--work-dir', _WORK],
