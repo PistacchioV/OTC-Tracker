@@ -721,8 +721,8 @@ def salvar(res):
     path = _cache_path(res.get('ref'))
     try:
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        # Pelo FUNIL (auditoria §335): a mesma escrita atômica, com o espelho
-        # DuckDB avisado de graça.
+        # Pelo FUNIL (auditoria §335): a gravação vai para o BANCO do
+        # caminho (armazém, §434) — o makedirs é só a pasta do disco.
         from apps.pages import routes
         routes._atomic_write_json(path, res)
     except Exception:

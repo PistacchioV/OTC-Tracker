@@ -724,12 +724,19 @@ class _Stat:
 
 def stat(path):
     """`(st_mtime, st_size)` de um caminho — do manifest; do disco para o
-    legado ainda não importado e para a cópia empacotada."""
+    legado ainda não importado e para a cópia empacotada.
+
+    Banco OCUPADO sem manifest conhecido levanta `BancoOcupado` (`strict`),
+    nunca `FileNotFoundError`: "não existe" é o que um read-modify-write
+    (`if exists: ler; alterar; gravar`) lê como "dia vazio" — e gravaria só o
+    registro novo por cima do dia inteiro assim que a instância vizinha
+    soltasse a trava. Ocupado tem de PARAR o chamador (o `except IOError` dos
+    leitores, ou o 503 do tratador global), não responder por ele."""
     if not managed(path):
         return os.stat(path)
     rel = rel_of(path)
     for alvo in _alvos(rel):
-        ent = _manifest(_db_abs(alvo[0])).get(rel)
+        ent = _manifest(_db_abs(alvo[0]), strict=True).get(rel)
         if ent is not None:
             return _Stat(ent[0], ent[1])
     if os.path.isfile(path):
@@ -746,11 +753,15 @@ def getsize(path):
 
 
 def isfile(path):
+    """Existe no banco (ou no disco, legado)? `BancoOcupado` sobe — ver
+    `stat`: só `FileNotFoundError` é "não"."""
     if not managed(path):
         return os.path.isfile(path)
     try:
         stat(path)
         return True
+    except BancoOcupado:
+        raise
     except OSError:
         return False
 

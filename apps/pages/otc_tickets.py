@@ -270,9 +270,9 @@ def delete(ticket_id):
 # ═════════════════════════════════════════════════════════════════════════════
 # Imagens anexadas (pedido de usuário, 2026-09-01)
 #
-# Ficam FORA do tickets.json de propósito: binário não pertence a um JSON que o
-# espelho DuckDB reconverte a cada gravação. A pasta é `db/tickets/images`, ao
-# lado do espelho tickets.db — o caminho que o usuário pediu — e sai do
+# Ficam FORA do tickets.json de propósito: binário não pertence a um payload
+# que o armazém reconstrói no banco a cada gravação (§434). A pasta é
+# `db/tickets/images`, ao lado do tickets.db — o caminho que o usuário pediu — e sai do
 # Config.DATABASE_DIR (§4: nenhum módulo monta o caminho da `db/` por conta
 # própria). O NOME do arquivo é `<ID>_<n>.<ext>` — o ID do ticket é o vínculo,
 # não há coluna nova no store: a listagem responde pelo prefixo.

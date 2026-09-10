@@ -275,6 +275,31 @@ _schedule_on_start('slow-request-watch', _slow_request_watch_start)
 
 
 # ==============================================================================
+# BANCO OCUPADO — a resposta ÚNICA para a disputa que escapou do handler (§434)
+# ==============================================================================
+# O armazém levanta `BancoOcupado` (um IOError) quando a instância vizinha
+# segura a trava exclusiva e não há cópia boa em memória; a camada de banco
+# levanta `DatabaseLockTimeout` quando a gravação esgota a retentativa. Os
+# LEITORES tratam o primeiro como arquivo ilegível (`except IOError`), mas os
+# caminhos de ESCRITA — read-modify-write sob `_cache_lock`, que só capturavam
+# erro de parse — deixavam a exceção subir, e sem tratador o Flask respondia
+# 500 em HTML, que a tela mostrava como "Internal Server Error". Aqui vira 503
+# JSON com `Retry-After`: a disputa é transitória, e o `error` estruturado é o
+# que a tela pode traduzir. Uma linha de WARNING com a rota e o banco.
+
+@blueprint.app_errorhandler(_store.BancoOcupado)
+@blueprint.app_errorhandler(_dba.DatabaseLockTimeout)
+def _handle_database_busy(exc):
+    log.warning('[db-busy] %s %s respondeu 503: %s', request.method, request.path, exc)
+    resp = jsonify({'success': False, 'error': 'database_busy',
+                    'message': 'The database is busy (another instance is writing). '
+                               'Please try again in a few seconds.'})
+    resp.status_code = 503
+    resp.headers['Retry-After'] = '5'
+    return resp
+
+
+# ==============================================================================
 # SESSION EXPIRY — server-side check (independente do browser restaurar cookies)
 # ==============================================================================
 
@@ -12708,11 +12733,31 @@ def _duck_static_json(filename):
             payload = data_store.read(caminho)
         except FileNotFoundError:
             return None
+        except data_store.BancoOcupado:
+            # A instância vizinha está com a trava e não há cópia boa em
+            # memória: o navegador recebe a cópia de DISCO do `DATA_DIR`, que
+            # depois do corte (§434) não é mais regravada — pode estar velha.
+            # Melhor esforço de propósito (um dropdown com dado de ontem é
+            # melhor que um erro de JS), mas avisado, e só uma vez por minuto.
+            _static_busy_warn(nome)
+            return None
         from flask import Response
         return Response(json.dumps(payload, ensure_ascii=False),
                         mimetype='application/json')
     except Exception:                                       # noqa: BLE001
         return None
+
+
+_static_busy_warn_ate = {'t': 0.0}
+
+
+def _static_busy_warn(nome):
+    agora = time.monotonic()
+    if agora < _static_busy_warn_ate['t']:
+        return
+    _static_busy_warn_ate['t'] = agora + 60.0
+    log.warning('[static-data] %s: banco OCUPADO sem cópia em memória — servindo a cópia de '
+                'DISCO do DATA_DIR, que pode estar velha (não é mais regravada desde o §434)', nome)
 
 
 _B3_DATA_DIR = data_dir()
@@ -12729,9 +12774,8 @@ def _b3_load(table):
     path = os.path.join(_B3_DATA_DIR, _B3_FILE_MAP[table])
     # DB-first (fase 3): o refdata pelo reference_data.db, os demais quatro
     # (Subjacente, VCP, Dominio, SwapIndex) pelo banco de CADA UM
-    # (`subjacente.db`, `vcp.db`, …) — quando o manifest prova o frescor. O
-    # caminho devolvido segue sendo o do JSON: é
-    # nele que o _b3_save grava, e o espelho realinha o banco em seguida.
+    # (`subjacente.db`, `vcp.db`, …). O caminho devolvido segue sendo o do
+    # JSON: é a CHAVE que o _b3_save grava — no banco, pelo funil (§434).
     try:
         from apps.pages import duck_read
         rows = (duck_read.refdata_rows() if table == 'refdata'
@@ -12744,8 +12788,8 @@ def _b3_load(table):
 
 
 def _b3_save(path, records):
-    # Pelo FUNIL (auditoria §335): atômico e com o espelho avisado de graça —
-    # o notify manual da fase 2 saiu junto com o write cru.
+    # Pelo FUNIL (auditoria §335): a gravação vai para o BANCO do caminho
+    # (§434), com os memos esquecidos de graça.
     _atomic_write_json(path, records)
 
 
