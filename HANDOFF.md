@@ -17702,3 +17702,141 @@ Três coisas a mais:
   varredura de centenas de dias do Vanilla, com a vizinha convertendo por
   minutos, custava horas — e cada tentativa era mais um concorrente no
   arquivo já disputado.
+
+## §434 — Sem espelho: escrita e leitura SÓ nos bancos (2026-09-09)
+
+Pedido do usuário, depois do dia dos Summaries (§433): tirar o espelho,
+deixar a escrita apenas no banco, leitura e escrita apenas nos DuckDB, e um
+script pronto para converter a diferença dos bancos para os JSONs caso se
+decida voltar.
+
+Dito antes de fazer, e continua valendo: a lentidão do dia não era o
+espelho, era o share — cada abertura de banco no SMB custa segundos e a
+instância vizinha segura o arquivo em exclusivo enquanto converte. Com a
+escrita direta, cada gravação reconstrói a tabela DENTRO do request (os 26 s
+de `mode=write` do log passam a ser do request), e o JSON deixa de existir
+como canal de emergência para o banco ocupado. E a instância tem só 12 meses
+nos bancos: antes do cutover, `scripts/convert_json_to_duckdb.py --meses 0`.
+
+O desenho: **`apps/pages/data_store.py`**, o `DATA_DIR` como sistema de
+arquivos VIRTUAL sobre os DuckDB de sempre. O app continua falando em
+caminhos de `.json`; `read`/`isfile`/`stat`/`listdir`/`walk`/`day_files`/
+`remove` respondem pelo `_manifest` e pelas tabelas; o funil
+`_atomic_write_json` grava a tabela do caminho pelo `duckdb_write` (trava
+exclusiva + portão + retentativa) e não escreve JSON. Caminho fora do
+`DATA_DIR` (o share dos documentos, anexos) cai em `os.*`; `translations/`
+e `db/` também. Foi isso que deixou a varredura ser MECÂNICA: 92 `open` +
+`json.load` viraram `_store.read` por regex, 7 à mão; 185 `isfile`/`exists`/
+`isdir`, 24 `stat`, 34 `listdir`/`walk` e 11 `remove` trocaram o prefixo
+`os.` por `_store.` em todo o `apps/pages`, e onde o caminho não é de dado
+nada muda.
+
+O que mudou no motor (`json_to_duckdb`, sem `apps`, para o standalone
+seguir sendo gerado): `target_of(rel, cal_files)` unifica a triagem dos
+quatro conversores e acrescenta a regra final — TODO `.json` do `DATA_DIR`
+tem banco, inclusive os ponteiros `_last` e configs sem data;
+`escrever_payload`/`ler_crus`/`ler_payload`/`apagar_payload` gravam e
+reconstroem um payload por caminho; o payload-OBJETO ganha a tabela
+`<tabela>__raw` de uma linha com o objeto inteiro como texto (remontar pelas
+sub-tabelas era adivinhar chave e ordem); `reconstruivel` faz a importação
+reconverter o objeto antigo mesmo com o manifest casando. Os conversores de
+importação (`_convert_daily_rels`, `_convert_dataset_rels`,
+`convert_refdata`) passaram a escrever pelo MESMO `escrever_payload`, então
+banco importado e banco gravado pela tela têm uma forma só.
+
+Decisões que não são detalhe:
+
+- **legado em disco: importação preguiçosa no PONTO, nunca na enumeração.**
+  A primeira leitura de um caminho que o banco não tem e o disco tem grava
+  no banco e responde. `listdir`/`walk`/`day_files` são só pelo banco:
+  arquivo que ninguém leu fica invisível para quem enumera — daí a carga
+  completa no cutover. Fora da raiz de dados a enumeração continua sendo o
+  scandir de sempre (é como os testes que apontam a pasta de um módulo para
+  um tmp seguem funcionando);
+- **o armazém não cai para a cópia empacotada.** Quem cai é o `data_path()`
+  (devolve o caminho do repositório, lido do disco), e `_seed_data_dir`
+  importa o versionado para o banco na subida. Na primeira versão o armazém
+  caía, e um teste com a raiz num tmp leu o ledger de IR REAL da dev pela
+  pasta `static/data` do checkout;
+- **o "mudou?" é o stat do próprio `.db`** (o checkpoint reescreve o arquivo):
+  manifest em cache por banco, canal cru por (rel, mtime, fsize) com teto em
+  bytes, `_day_json` memoizando o parseado — os memos de antes, com outra
+  chave;
+- **OCUPADO serve a última cópia boa em memória; sem cópia, `BancoOcupado`**
+  (um `IOError`). A janela de 60 s do §433-b continua;
+- **`data_path()` pergunta ao armazém** se o caminho existe (import
+  atrasado), senão devolveria o pacote para todo cadastro que só existe no
+  banco.
+
+O que saiu: `duck_mirror.py`, `check_duck_mirror.py`, a cura síncrona, a
+quarentena, o disjuntor, o freio, o `notify_holidays`, o `.bak` do
+CounterpartyDetails, o `_duck_notify` dos tickets. O `duck_read.py` virou a
+fachada com os nomes antigos sobre o armazém.
+
+O rollback: `scripts/export_duckdb_to_json.py` lê o `_manifest` de cada
+banco e reconstrói, no `DATA_DIR`, cada JSON ausente ou mais velho que o
+carimbo do banco (`--dry-run`, `--force`, `--only <subárvore>`); na dev, com
+os JSONs de antes no disco, a primeira rodada disse "221 iguais, 0 a
+escrever". Reverter o commit e rodá-lo é o caminho de volta.
+
+Testes: `check_duck_read.py` (reescrito: funil no banco sem JSON, leitura
+do banco provada por adulteração, objeto exato, legado importado, OCUPADO,
+enumeração, remoção, mappings e `/static/data` pelo banco),
+`check_duck_gate.py` (portão nos dois sentidos, memos, trava de outro
+processo), `check_daycache.py`/`check_dashboard_walk.py` (enumeração pelo
+banco, memo por aberturas) e a sonda do prefetch; os que gravavam JSON com
+`json.dump` e esperavam o app ver passaram a gravar pelo funil.
+
+**Varredura depois do corte** (o pedido foi "veja se nada ficou para trás"),
+com o que ela achou e fechou:
+
+- **O claim diário lia o DISCO e gravava no BANCO.** `_claim_daily_slot` /
+  `_release_daily_slot` (`json_cache.py`) abriam o `*_sent.json` do
+  control-panel com `open` + `json.load` e reservavam o slot pelo funil — que
+  agora grava no banco. A leitura nunca veria a reserva da volta anterior, e
+  os seis envios agendados (Deals Monitor, BACC, Manual Deals EA, MT300,
+  planilha do Pending, cobrança de confirmação) sairiam DUAS vezes. Leitura
+  pelo `data_store.read` (ausente/ocupado/ilegível = lista vazia, como
+  antes). `check_manual_deals_ea.py` §5 prende o claim.
+- **`recon_payrec` caía para o JSON em disco** quando o `refdata_rows` /
+  `cpd_records` respondia `None` — a queda que o §434 aboliu. Agora é lista
+  vazia.
+- **Sete scripts gravavam JSON em disco dentro do `DATA_DIR`**, onde o app
+  já não olha: `import_cgd_auxiliar` (os `cgd-*` do `/mapping`),
+  `update_b3_ids` (arquivos-dia de Commodities), `dev_seed_positions`
+  (posições da dev), `update_base_from_xlsx`, `import_dados_bancarios`,
+  `import_cgd_bank`, `import_client_contacts`, `clean_placeholder_contacts`
+  (RefData/CounterpartyDetails — estes cinco ainda montavam o caminho pelo
+  checkout, `apps/static/data`, que na instância nem é o `DATA_DIR`). Todos
+  leem e gravam pelo `data_store` e resolvem o caminho pelo `data_paths`; o
+  `.bak` que alguns deixavam continua, escrito do payload atual do banco.
+  `recover_json_cache.py` ficou como está: é ferramenta de JSON em disco.
+- **A migração da pasta antiga do File Interpreter (`file-interface` →
+  `file-interpreter`, na subida) fazia `shutil.move` em disco** de arquivos
+  que o armazém enumerava pelo banco — e que em disco podem já não existir.
+  O primeiro `OSError` abortava o laço inteiro. Agora é ler pelo armazém,
+  gravar no caminho novo e apagar o antigo, template a template.
+- `_managed_dir` comparava a raiz com o caminho em caixa EXATA; no Windows
+  da instância a raiz chega em qualquer caixa, e a própria raiz cairia para
+  `os.listdir`. Agora `normcase` (o `relpath` já comparava sem caixa).
+- **O rollback não reconstruía payload-OBJETO.** Prova ponta a ponta numa
+  fatia da dev (134 JSONs → `--meses 0` → JSONs fora de cena → app só com os
+  bancos → `export_duckdb_to_json`): o app lia tudo exato (mappings, RefData,
+  CPD, templates, control-panel, arquivos-dia), mas o export dizia "sem canal
+  de reconstrução" para 14 arquivos do control-panel e devolvia uma LISTA
+  para os 44 templates do File Interpreter. O script escolhia como tabela "o
+  primeiro target que não é `__raw`" — num objeto é o `__meta`, e o
+  `ler_payload` procurava `__meta__raw`. Agora o nome sai do `__raw` (ou do
+  `target_of`). Depois da correção: 134 iguais, 0 diferentes.
+  `check_export_rollback.py` prende cada forma (lista, dataset, mapping,
+  RefData, objeto, `.meta.json`, `_last`, calendário), a idempotência, o
+  `--force` e o `--only`.
+- Docstrings que ainda descreviam o espelho como vivo (`json_to_duckdb`,
+  `convert_json_to_duckdb`, `db_gate`, README) e o `OTC_DISABLE_DUCK_MIRROR`
+  morto em três lugares.
+
+O que a varredura confirmou limpo: nenhum `json.load`/`json.dump`/
+`duckdb.connect` fora do armazém em `apps/pages`; todo `os.*` que sobrou é
+sobre caminho fora do `DATA_DIR` (share de documentos, imagens de ticket,
+pacote versionado); todo nome pedido ao `duck_read`/`data_store` existe;
+templates e JS não conheciam o espelho.
