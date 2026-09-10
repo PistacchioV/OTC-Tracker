@@ -18168,3 +18168,39 @@ NÃO rode a carga completa `--meses 0` antes disso.
 De caminho, o §436 respondeu: a coluna Account do NDF Summary é decidida
 pelos dados (nome × Reference Data × default aprovado), e o
 `scripts/diag_ndfsum_account.py` diz por contraparte onde a cadeia quebra.
+
+## §438 — O Fixing do aviso de NDF saía com a forward: o §421 cruzou Strike e Spot (2026-09-10)
+
+Pedido: no aviso de liquidação de NDF de taxa de câmbio, o campo Fixing tem de
+ser o `Spot` do evento da API (o fixing da liquidação), nunca a taxa forward
+fechada no trade date.
+
+**A semântica do Cockpit** (e da Trade Level do NDF Summary, pelos
+cabeçalhos): `VL_FORWARD_RATE` = FORWARD RATE, a taxa fechada no trade date;
+`VL_STRIKE_PRICE` = FIXING RATE, o fixing da liquidação — na era do
+SETTLEMENT.xlsx ele vinha do arquivo ou era derivado pelo
+`_ndfc_strike_calc` (forward ± |settlement|/notional, `check_ndfsum_fwd_rate`).
+O Other Publisher lê `VL_STRIKE_PRICE` como TX PARIDADE pela mesma razão.
+
+**O que o §421 fez:** mapeou pelo NOME que a API usa — `Strike` → 
+`VL_STRIKE_PRICE`, `Spot` → `VL_FORWARD_RATE`. Mas o `Strike` da API é a
+forward do trade date (5,2806) e o `Spot` do evento é o fixing (5,1253); a
+fórmula do próprio §421 (5,1253 + 823.467/5.302.427 = 5,2806) já mostrava
+isso. Resultado: nas linhas importadas da API, a coluna FORWARD RATE mostrava
+o fixing e a FIXING RATE mostrava a forward; o `_ndfc_opb3_rescue`, que
+compara `VL_FORWARD_RATE` com a forward do TER, nunca casava; e o aviso
+(§423), que lia `VL_FORWARD_RATE` "porque é o Spot", só acertava enquanto
+ninguém tocasse a linha — uma edição na grade "corrigindo" as duas colunas
+para o que os nomes dizem, ou o SETTLEMENT.xlsx largado no Save Daily
+Settlement Files, punha a forward no campo Fixing do documento.
+
+**Agora:** `VL_FORWARD_RATE` ← `Strike`, `VL_STRIKE_PRICE` ← `Spot` — as
+colunas voltam a dizer o que os nomes dizem, o cálculo derivado bate com a
+API e o rescue volta a casar. O Spot vai TAMBÉM em `_nc_fixing` no registro
+(meta, sobrevive à edição da linha), e é ele que o aviso imprime
+(`_ndfsum_fixing`): sem ele, a célula FIXING RATE; nunca a forward. Evento
+sem `Spot` avisa no log do import com os deals. Dia importado pela API
+ANTES disto está com as duas colunas cruzadas e sem `_nc_fixing`: reimportar
+o dia (Import Settlement) resolve.
+
+`check_ndfc_api.py` prende o mapeamento, o `_nc_fixing` e a escolha do aviso.

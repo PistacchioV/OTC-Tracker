@@ -7481,11 +7481,19 @@ def _ndfc_rec_from_api(rec, refmap_acr, refmap_spn, stl=None):
       CD_CETIP_RETURN  ← Cetip ID;
       LC = a perna em BRL (Quantity ou Other Quantity), FC = a outra; sem BRL nas
            duas pontas, LC = Quantity e FC = Other Quantity. Notionais em módulo;
-      VL_STRIKE_PRICE  ← Strike;   VL_FORWARD_RATE ← Spot do bloco `settlement`
-                         (a taxa de fixing: strike = fixing ± |settlement|/notional,
-                         que é a conta do `_ndfc_strike_calc`). Par com moeda fraca
+      VL_FORWARD_RATE  ← Strike (a taxa FORWARD fechada no trade date — a API a
+                         chama de Strike);
+      VL_STRIKE_PRICE  ← Spot do bloco `settlement` (o FIXING da liquidação).
+                         É a semântica do Cockpit e da Trade Level: FORWARD
+                         RATE = VL_FORWARD_RATE, FIXING RATE = VL_STRIKE_PRICE,
+                         e o `_ndfc_strike_calc` deriva o fixing do forward
+                         (forward ± |settlement|/notional). O §421 tinha cruzado
+                         os dois pelo NOME que a API usa, e o aviso saía com a
+                         forward no campo Fixing (§438). Par com moeda fraca
                          inverte os dois (`_ndf_weak_leg`), como o New Deals faz
-                         com o Rate;
+                         com o Rate. O Spot vai também em `_nc_fixing`: o campo
+                         que o aviso imprime, imune a uma edição da grade ou ao
+                         SETTLEMENT.xlsx reescrevendo as colunas;
       [PROD] Cockpit.SETTLEMENT ← o PRIMEIRO `Rolled Positions` do evento (o caixa
                          em BRL; o segundo é o notional da moeda), DUAS casas half-up;
       PUBLISHER        ← Publisher;
@@ -7566,14 +7574,15 @@ def _ndfc_rec_from_api(rec, refmap_acr, refmap_spn, stl=None):
         'DT_SETTLEMENT': _ndfc_api_iso(get('SETTLEMENT DATE')),
         'CCY_NOTIONAL_LC': lc_ccy, 'VL_NOTIONAL_LC': _abs2(lc_v),
         'CCY_NOTIONAL_FC': fc_ccy, 'VL_NOTIONAL_FC': _abs2(fc_v),
-        'VL_STRIKE_PRICE': _rate(get('STRIKE')),
-        'VL_FORWARD_RATE': _rate(sn.get('SPOT')),
+        'VL_FORWARD_RATE': _rate(get('STRIKE')),
+        'VL_STRIKE_PRICE': _rate(sn.get('SPOT')),
         'PUBLISHER': str(get('PUBLISHER') or '').strip(),
         'VL_TAX_INCOME': '',
         'ID_DEAL': str(sn.get('EVENT NAME') or '').strip(),
         '[PROD] Cockpit.SETTLEMENT': _ndfc_api_money(_ndfc_api_rolled(sn)),
         'NB_BANK': '', 'CD_BRANCH': '', 'CD_BANK_ACCOUNT': '',
     }
+    out['_nc_fixing'] = _rate(sn.get('SPOT'))
     return out, None
 
 
@@ -7686,6 +7695,13 @@ def _ndfc_import(ref=None):
                 order.append(key)
             by_key[key] = row
     out = [by_key[k] for k in order]
+    sem_spot = [r['ID_SOURCE_DEAL'] for r in out if not str(r.get('_nc_fixing', '') or '').strip()]
+    if sem_spot:
+        # O aviso ao cliente imprime este campo: sem ele sai '—', e é melhor
+        # o log dizer de que operação do que a mesa descobrir no documento.
+        log.warning('[ndfc] %d evento(s) sem `Spot` no getTradesBySettle de %s — o Fixing do '
+                    'aviso sai vazio: %s', len(sem_spot), ref.strftime('%Y-%m-%d'),
+                    ', '.join(sem_spot[:10]))
     # O imposto é CALCULADO (a API não o traz), pela mesma regra e pelas mesmas
     # funções do NDF Summary — ver `_ndfc_apply_ir`.
     _ndfc_apply_ir(ref, out)
@@ -9034,6 +9050,14 @@ def _ndfsum_obs_auto(banking):
                       for label, internal in parts.items())
 
 
+def _ndfsum_fixing(api_spot, fixing_cell):
+    """O Fixing que o aviso imprime: o Spot da API quando a linha o tem; senão
+    a célula FIXING RATE (`VL_STRIKE_PRICE`). Vazio fica vazio — o aviso mostra
+    '—', nunca a forward."""
+    v = str(api_spot or '').strip()
+    return v if v else str(fixing_cell or '').strip()
+
+
 def _ndfsum_fx_map(ref):
     """{CETIP contract (upper) → 'vanilla' | 't0' | 'other'} for the FX NDFs
     (Classe do Ativo Subjacente = TAXAS DE CAMBIO) maturing on `ref`, read from
@@ -9622,6 +9646,14 @@ def _ndfsum_collect(ref):
                  for k in ('vanilla', 't0', 'other', 'total')}
 
     _, _, contr_map = _ndfc_b3_maps(ref)
+    # O Spot que a API entregou, por linha (`_nc_fixing`, memoizado pelo
+    # daycache): é o que o aviso imprime como Fixing. A célula FIXING RATE
+    # (`VL_STRIKE_PRICE`, derivada do forward quando o registro não a traz) é
+    # o plano B — linha do SETTLEMENT.xlsx ou digitada na grade.
+    _, _recs = _ndfc_load(ref)
+    fix_by_id = {str(r.get('_nc_id', '') or ''): str(r.get('_nc_fixing', '') or '').strip()
+                 for r in (_recs or [])}
+    _i_id = len(_NDFC_COLUMNS) + 3                  # [.., _nc_status, _nc_maker, _nc_checker, _nc_id]
     trade, raws = [], []
     for row in _ndfc_collect(ref)['rows']:
         b3 = str(row[ci['CD_CETIP_RETURN']] or '').strip()
@@ -9674,10 +9706,12 @@ def _ndfsum_collect(ref):
                 'ccy': str(row[ci['CCY_NOTIONAL_FC']] or '').strip(),
                 'settlement': settle_n,
                 'tax': abs(_mtm_parse_num(row[ci['VL_TAX_INCOME']]) or 0.0),
-                # A taxa de FIXING do aviso (coluna ao lado do notional, §423): é o
-                # VL_FORWARD_RATE do Cockpit — o `Spot` do bloco settlement da
-                # API (§421) —, na precisão de exibição da tela.
-                'fixing': str(row[ci['VL_FORWARD_RATE']] or '').strip(),
+                # A taxa de FIXING do aviso (coluna ao lado do notional, §423): o
+                # `Spot` do evento da API (`_nc_fixing`, §438); sem ele, a célula
+                # FIXING RATE da tela. Nunca a FORWARD RATE, que é a taxa fechada
+                # no trade date.
+                'fixing': _ndfsum_fixing(fix_by_id.get(str(row[_i_id] or '')),
+                                         row[ci['VL_STRIKE_PRICE']]),
             })
 
     # O IR é CALCULADO (regra do piso mensal, §423) e vence o VL_TAX_INCOME do
