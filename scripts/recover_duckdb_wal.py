@@ -24,7 +24,10 @@ O que este script faz, banco a banco (só nos que estão em limbo — ver
   1. copia `.db` + WALs para `--work-dir` (local; padrão
      `%LOCALAPPDATA%\\OTC-Tracker\\recover`);
   2. abre a cópia em escrita (o DuckDB funde e refaz o replay), `CHECKPOINT`,
-     fecha — e confere que não sobrou WAL nenhum;
+     fecha — e confere que não sobrou WAL nenhum; a cópia perde o
+     SOMENTE-LEITURA herdado do share (senão o rename da fusão morre em
+     `Could not move file: Access is denied`) e o acesso negado é RETENTADO,
+     que é o antivírus lendo os megabytes recém-escritos;
   3. emagrece a cópia (`slim_duckdb.emagrecer`, a forma do §437; `--no-slim`
      pula) e lê o `_manifest` dela;
   4. copia de volta como `<db>.novo`, MOVE o `.db` velho e os WALs para
@@ -44,6 +47,7 @@ import argparse
 import io
 import os
 import shutil
+import stat
 import sys
 import tempfile
 import time
@@ -78,6 +82,50 @@ def _em_uso(exc):
         return False
 
 
+def _liberar(caminho):
+    """Tira o SOMENTE-LEITURA da cópia local. O `copy2` herda os atributos do
+    arquivo do share, e o `MoveFileEx` que o DuckDB usa para fundir os WALs
+    (`.wal.checkpoint` + `.wal` → `.wal.recovery` → `.wal`) recusa SOBRESCREVER
+    um destino com o atributo posto: a recuperação morre num
+    `IO Error: Could not move file: Access is denied` — na CÓPIA, com a trava
+    do share na mão (§442)."""
+    try:
+        os.chmod(caminho, stat.S_IWRITE | stat.S_IREAD)
+    except OSError:
+        pass
+
+
+def _acesso_negado(exc):
+    """O erro é o Windows recusando mexer no arquivo (atributo, antivírus lendo
+    o que acabou de ser escrito, indexador)? Vale uma nova tentativa."""
+    m = str(exc)
+    return 'Could not move file' in m or 'denied' in m.lower()
+
+
+def _recupera_local(local, tentativas=3, espera=10):
+    """Abre a cópia LOCAL em escrita (é aqui que o DuckDB funde os WALs e refaz
+    o replay) e força o `CHECKPOINT`. Retenta o acesso negado: o antivírus
+    corporativo costuma estar lendo os megabytes recém-escritos quando o DuckDB
+    pede o rename, e a segunda tentativa passa."""
+    for n in range(1, tentativas + 1):
+        for s in ('',) + _store.WAL_SUFIXOS:
+            if os.path.isfile(local + s):
+                _liberar(local + s)
+        try:
+            con = duckdb.connect(local)
+            try:
+                con.execute('CHECKPOINT')
+            finally:
+                con.close()
+            return
+        except Exception as exc:                             # noqa: BLE001
+            if n >= tentativas or not _acesso_negado(exc):
+                raise
+            _diz('     acesso negado na cópia local (%s); tentando de novo em %ds [%d/%d]'
+                 % (exc, espera, n, tentativas))
+            time.sleep(espera)
+
+
 def _manifest_linhas(db):
     """Linhas do `_manifest` (ou -1 quando o banco não é do armazém), abrindo só leitura."""
     con = duckdb.connect(db, read_only=True)
@@ -109,18 +157,16 @@ def recuperar(db, work_dir, db_dir, slim=True, carimbo=None):
     # 1. para o disco local
     t0 = time.time()
     shutil.copy2(db, local)
+    _liberar(local)
     for s in irm:
         shutil.copy2(db + s, local + s)
+        _liberar(local + s)
     resumo['t_copia'] = time.time() - t0
     _diz('     copiado %s + %s de WAL em %.0fs' % (_mb(os.path.getsize(db)), _mb(sum(irm.values())),
                                                   resumo['t_copia']))
     # 2. o DuckDB recupera no local
     t0 = time.time()
-    con = duckdb.connect(local)
-    try:
-        con.execute('CHECKPOINT')
-    finally:
-        con.close()
+    _recupera_local(local)
     sobras = _store.wal_irmaos(local)
     if sobras:
         raise RuntimeError('%s: depois do CHECKPOINT ainda há WAL na cópia local (%s)'

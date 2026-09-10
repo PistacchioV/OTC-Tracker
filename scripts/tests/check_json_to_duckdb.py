@@ -665,6 +665,34 @@ check('8. banco preso por outro processo e PULADO com recado, sem traceback (rc 
 check('8.   e o banco preso ficou como estava',
       ('.wal.checkpoint' in _S.wal_irmaos(_LIMBO), os.path.isfile(_LIMBO + '.novo')), (True, False))
 
+# O arquivo do share pode vir SOMENTE-LEITURA, e o `copy2` leva o atributo para a
+# copia local: ai o rename com que o DuckDB funde os WALs morre em `Could not move
+# file: Access is denied` DENTRO da copia, com a trava do share na mao. A copia tem
+# de perder o atributo antes de abrir.
+for _s in ('',) + _S.WAL_SUFIXOS:
+    if os.path.isfile(_LIMBO + _s):
+        os.chmod(_LIMBO + _s, 0o444)
+# E o acesso negado passageiro (o antivirus lendo os MB recem-escritos) e RETENTADO.
+_prova = subprocess.run([sys.executable, '-c', """
+import os, sys, duckdb
+sys.path.insert(0, os.path.join(%r, 'scripts'))
+import recover_duckdb_wal as R
+db = os.path.join(%r, 'retry.db')
+duckdb.connect(db).close()
+real, chamadas = duckdb.connect, []
+def falso(*a, **k):
+    chamadas.append(1)
+    if len(chamadas) == 1:
+        raise duckdb.IOException('IO Error: Could not move file: Access is denied.')
+    return real(*a, **k)
+duckdb.connect = falso
+R._recupera_local(db, tentativas=3, espera=0)
+print('TENTATIVAS', len(chamadas))
+""" % (ROOT, _WORK)], capture_output=True, text=True, env=dict(os.environ))
+check('8. acesso negado na copia local e RETENTADO, nao mata o banco',
+      (_prova.returncode, 'TENTATIVAS 2' in _prova.stdout,
+       'acesso negado na cópia local' in _prova.stdout), (0, True, True))
+
 _p = subprocess.run([sys.executable, os.path.join(ROOT, 'scripts', 'recover_duckdb_wal.py'),
                      '--db-dir', OUT, '--work-dir', _WORK],
                     capture_output=True, text=True, env=dict(os.environ))
