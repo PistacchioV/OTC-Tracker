@@ -18257,3 +18257,34 @@ escaparam, e duas apagavam dado:
 
 Fica anotado, sem mexer: 96 `os.makedirs` antes de gravações que hoje vão
 para o banco — criam a pasta vazia no share, sem efeito no dado.
+
+## §441 — Varredura do armazém (4ª): banco ILEGÍVEL lido como vazio (2026-09-10)
+
+Ângulos desta passada: as portas laterais ao armazém (o navegador pedindo
+`/static/data/*.json`, pandas lendo/gravando JSON, downloads de arquivo de
+dado) — todas limpas: a rota `static_data_file` responde pelo banco, o
+pandas só lê insumos do share, nenhum download manda JSON de dado — e a
+caixa dos caminhos (todas as raízes de `cache/` são minúsculas; não há
+chave gêmea no manifest).
+
+O que escapou: **um `.db` que existe e o DuckDB não abre** (cabeçalho
+corrompido, `.wal` de outra versão — o "replaying WAL" do CLAUDE.md, que a
+instância já viveu —, arquivo truncado) era lido como VAZIO. Provado num
+tmp: depois de zerar o cabeçalho, `isfile` False, `read` "não existe",
+`day_files` `[]`, e só um `log.debug` invisível. É a mesma classe do
+ocupado lido como "não há" (§434): a manutenção do Pending Confirmation
+(`strict`) veria o backlog sumido em vez de abortar, o Summary viria vazio,
+e um read-modify-write partiria de "dia vazio" (a gravação falharia no
+mesmo arquivo, mas nada diria por quê).
+
+Agora `_manifest` distingue: `BancoIlegivel`, SUBCLASSE de `BancoOcupado`
+(mesmos `except`, mesma última cópia em memória, mesmo 503 — com
+`error=database_unreadable` e ERROR no log, porque retry não resolve), UM
+WARNING por banco por minuto com o nome do arquivo e a mensagem do DuckDB.
+`check_duck_read.py` §7b prende: com cópia em memória serve; sem ela
+levanta em `read`/`isfile`/`exists`/`stat`; restaurado o arquivo, volta.
+
+De caminho: com as tabelas-dia só `_seq`/`_raw` (§437), a carga completa
+`convert_json_to_duckdb.py --meses 0` voltou a ser barata — depois do
+`slim_duckdb.py`, é ela que torna enumerável o histórico que hoje só existe
+em disco.

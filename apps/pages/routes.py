@@ -290,6 +290,15 @@ _schedule_on_start('slow-request-watch', _slow_request_watch_start)
 @blueprint.app_errorhandler(_store.BancoOcupado)
 @blueprint.app_errorhandler(_dba.DatabaseLockTimeout)
 def _handle_database_busy(exc):
+    if isinstance(exc, _store.BancoIlegivel):
+        # Não é disputa: o arquivo não abre. Retry não resolve; o log diz qual.
+        log.error('[db-unreadable] %s %s respondeu 503: %s', request.method, request.path, exc)
+        resp = jsonify({'success': False, 'error': 'database_unreadable',
+                        'message': 'A database file could not be opened (not a lock — see the '
+                                   'application log). The data is not gone; the file needs '
+                                   'attention before this page can answer.'})
+        resp.status_code = 503
+        return resp
     log.warning('[db-busy] %s %s respondeu 503: %s', request.method, request.path, exc)
     resp = jsonify({'success': False, 'error': 'database_busy',
                     'message': 'The database is busy (another instance is writing). '
