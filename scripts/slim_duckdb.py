@@ -160,7 +160,16 @@ def _emagrecer(db, novo, dry_run):
                 con.execute('CREATE SCHEMA IF NOT EXISTS %s' % core.q(schema))
             origem = '%s.%s' % (core.q(ORIGEM), _q(schema, tabela))
             destino = _q(schema, tabela)
-            if (schema, tabela) in magras_set:
+            if (schema, tabela) == ('main', '_manifest'):
+                # O `_manifest` nasce do SCHEMA, nunca de um `AS SELECT`: o CTAS
+                # copia os dados e DEIXA A PRIMARY KEY PARA TRÁS, e sem ela o
+                # `INSERT OR REPLACE` que registra cada gravação estoura em
+                # `Binder Error: There are no UNIQUE/PRIMARY KEY constraints`
+                # (§443) — o banco emagrecido virava somente-leitura sem que
+                # nada avisasse.
+                core.ensure_manifest(con)
+                con.execute('INSERT INTO main._manifest SELECT * FROM %s' % origem)
+            elif (schema, tabela) in magras_set:
                 con.execute('CREATE TABLE %s ("_seq" BIGINT, "_raw" VARCHAR)' % destino)
                 con.execute('INSERT INTO %s SELECT CAST("_seq" AS BIGINT), "_raw" FROM %s '
                             'ORDER BY CAST("_seq" AS BIGINT)' % (destino, origem))

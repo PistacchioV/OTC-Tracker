@@ -18430,3 +18430,53 @@ sobrescrita. `check_duck_read.py` §12 prende os quatro. Na instância que
 já tem o JSON no share, a primeira leitura resolve sozinha; no checkout
 de dev, o restart (a seed) resolve — ou `convert_json_to_duckdb.py --only
 file-interpreter`.
+
+## §443 — O slim deixava a PRIMARY KEY do `_manifest` para trás, e o banco virava somente-leitura (2026-09-10)
+
+**O sintoma, em três telas diferentes:** o Delete do New Deals tirava o deal
+da tela e estourava no servidor; o `bulk-delete` do NDF Commodities voltava
+com exceção depois de 18,9 s; o Index B3 dizia "Added!" e a inclusão não
+aparecia em lugar nenhum. Sempre a mesma pilha, e ela termina no lugar mais
+improvável:
+
+```
+data_store.py:770 write → json_to_duckdb.py:1929 escrever_payload
+  → json_to_duckdb.py:387 manifest_record
+      con.execute("INSERT OR REPLACE INTO _manifest VALUES (?, ?, ?, ?)")
+duckdb.BinderException: Binder Error: There are no UNIQUE/PRIMARY KEY
+constraints that refer to this table, specify ON CONFLICT columns manually
+```
+
+**A causa.** O `INSERT OR REPLACE` do DuckDB é açúcar para um upsert e EXIGE
+uma restrição UNIQUE/PRIMARY KEY na tabela. O `ensure_manifest` cria o
+`_manifest` com `path VARCHAR PRIMARY KEY` — mas o `scripts/slim_duckdb.py`
+copiava TODA tabela do banco velho para o novo com
+`CREATE TABLE <t> AS SELECT * FROM <origem>`, e um CTAS leva os DADOS e deixa
+a CHAVE para trás (provado num tmp: `information_schema.table_constraints` do
+destino volta vazio, e o `INSERT OR REPLACE` seguinte estoura exatamente
+assim). Ou seja: **todo banco que passou pelo slim ficou somente-leitura**, e
+sem aviso nenhum — as leituras seguem perfeitas, e só a gravação morre, no
+fim de um request que já pagou os segundos do share. Foi o que aconteceu na
+instância depois do "slim rodou".
+
+**A correção, nos dois lados:**
+
+- `manifest_record` não usa mais upsert: `DELETE FROM _manifest WHERE path=?`
+  seguido de `INSERT`. Não há restrição a atender, o par roda na MESMA conexão
+  sob a trava exclusiva do arquivo (atômico para quem lê), e **isto cura os
+  bancos que já foram emagrecidos** — a instância precisa só de pull +
+  restart, sem rodar nada.
+- `slim_duckdb._emagrecer` recria o `_manifest` pelo SCHEMA
+  (`core.ensure_manifest` + `INSERT INTO … SELECT`), nunca por CTAS, para que
+  o banco emagrecido de hoje em diante saia com a chave.
+
+Mexer no motor obriga a regerar `scripts/standalone/` e `scripts/convert/`
+(feito). `check_json_to_duckdb.py` §7 emagrece um banco de verdade e GRAVA
+nele em seguida: sem a correção, os três asserts novos reproduzem o
+`BinderException` da instância palavra por palavra.
+
+**O que isto explica de quebra:** as gravações que "não aconteciam" nas telas
+do Index B3 e do New Deals nunca foram concorrência, share lento nem o limbo
+de checkpoint do §442 — eram este erro, que só aparece no log do servidor.
+Toda tela que grava por `_atomic_write_json` estava atingida nos bancos
+emagrecidos.
