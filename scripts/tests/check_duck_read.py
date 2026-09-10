@@ -142,9 +142,13 @@ with open(LEG, 'w', encoding='utf-8') as fh:
     json.dump([{'Deal': 'LEG-1'}], fh)
 check('6. isfile ve o legado em disco', S.isfile(LEG), True)
 check('6. a primeira leitura serve e IMPORTA', DR.day_records(LEG), [{'Deal': 'LEG-1'}])
+check('6. a importacao roda FORA do request (thread) e termina', S.import_wait(60), True)
 os.remove(LEG)
 S.memo_forget()
 check('6. importado: responde sem o arquivo', DR.day_records(LEG), [{'Deal': 'LEG-1'}])
+check('6. a importacao desiste se o banco ja tem o caminho (so_se_ausente)',
+      S.write(LEG, [{'Deal': 'PERDIDO'}], so_se_ausente=True), False)
+check('6.   e o que estava no banco fica', DR.day_records(LEG), [{'Deal': 'LEG-1'}])
 
 # ── 7. OCUPADO ──────────────────────────────────────────────────────────────
 OCUP = _p('cache', 'new deals', 'NDF', 'Commodities', '2026', '06', '20260612_ndfcomm.json')
@@ -170,6 +174,9 @@ check('7. com UMA retentativa antes de desistir', _chamadas.count('Commodities.d
 _chamadas[:] = []
 check('7. dentro da janela o banco nem e tentado', (DR.day_payload(OCUP), len(_chamadas)), ([{'Deal': 'OC-1'}], 0))
 check('7. a janela e curta e configuravel', 0 < S._OCUPADO_JANELA <= 300)
+S._forget_db(os.path.join(DBDIR, 'cache', 'new deals', 'NDF', 'Commodities.db'))
+check('7. com copia em memoria, isfile responde True sob OCUPADO', S.isfile(OCUP), True)
+check('7. e stat responde com o carimbo da copia', S.stat(OCUP).st_size > 0, True)
 S.ocupado_forget()
 S.memo_forget()
 S._forget_db(os.path.join(DBDIR, 'cache', 'new deals', 'NDF', 'Commodities.db'))

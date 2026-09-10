@@ -28,6 +28,7 @@
   var _TRANS = {
     en: { filterPh: 'Filter…', ok: 'OK', pending: 'Pending', newst: 'New', importing: 'Importing…',
           noFile: 'The Athena API did not answer.', imported: 'Imported', rows: 'row(s)', updated: 'Updated',
+          loading: 'Loading the table…',
           edit: 'Edit', del: 'Delete', confirm: 'Confirm', addTitle: 'Add row', editTitle: 'Edit row',
           delTitle: 'Delete row?', delText: 'This row will be removed and the change saved.', yes: 'Yes, delete',
           cancel: 'Cancel', saved: 'Saved', deleted: 'Deleted', confirmed: 'Confirmed',
@@ -37,6 +38,7 @@
           delSelUndo: 'There is no undo — re-import to bring them back.', delSelDone: 'Rows deleted' },
     br: { filterPh: 'Filtrar…', ok: 'OK', pending: 'Pendente', newst: 'Novo', importing: 'Importando…',
           noFile: 'A API da Athena não respondeu.', imported: 'Importado', rows: 'linha(s)', updated: 'Atualizado',
+          loading: 'Carregando a tabela…',
           edit: 'Editar', del: 'Excluir', confirm: 'Confirmar', addTitle: 'Adicionar linha', editTitle: 'Editar linha',
           delTitle: 'Excluir linha?', delText: 'A linha será removida e a alteração salva.', yes: 'Sim, excluir',
           cancel: 'Cancelar', saved: 'Salvo', deleted: 'Excluído', confirmed: 'Confirmado',
@@ -46,6 +48,7 @@
           delSelUndo: 'Não há desfazer — reimporte para trazê-las de volta.', delSelDone: 'Linhas excluídas' },
     es: { filterPh: 'Filtrar…', ok: 'OK', pending: 'Pendiente', newst: 'Nuevo', importing: 'Importando…',
           noFile: 'La API de Athena no respondió.', imported: 'Importado', rows: 'fila(s)', updated: 'Actualizado',
+          loading: 'Cargando la tabla…',
           edit: 'Editar', del: 'Eliminar', confirm: 'Confirmar', addTitle: 'Agregar fila', editTitle: 'Editar fila',
           delTitle: '¿Eliminar fila?', delText: 'La fila será eliminada y el cambio guardado.', yes: 'Sí, eliminar',
           cancel: 'Cancelar', saved: 'Guardado', deleted: 'Eliminado', confirmed: 'Confirmado',
@@ -292,20 +295,36 @@
     // ao lado tem `data-lang` e o I18nManager o traduz UMA vez, no load —
     // reescrever o miolo o devolveria em ingles no meio da importacao.
     var ico = btn.querySelector('i'), icoCls = ico ? ico.className : '';
-    function busy(on) {
+    var info = document.getElementById('ndfc-import-info');
+    // O rotulo ao lado do botao CONTA os segundos e diz a ETAPA (Athena, depois
+    // a tabela): no share o import leva dezenas de segundos — o
+    // getTradesBySettle varre o livro inteiro da data, o IR do dia cura o
+    // ledger do mes, e a tela ainda recarrega o dia — e um spinner parado num
+    // rotulo fixo era lido como "travou". O contador e a prova de que a pagina
+    // esta viva; a etapa diz o que se espera.
+    var tick = null, t0 = 0;
+    function busy(on, stage) {
       btn.disabled = on;
       if (ico) ico.className = on ? 'spinner-border spinner-border-sm me-1' : icoCls;
+      if (tick) { clearInterval(tick); tick = null; }
+      if (!on) return;
+      t0 = Date.now();
+      var label = stage || t('importing');
+      if (info) info.textContent = label;
+      tick = setInterval(function () {
+        if (info) info.textContent = label + ' ' + Math.round((Date.now() - t0) / 1000) + 's';
+      }, 1000);
     }
     btn.addEventListener('click', function () {
-      var info = document.getElementById('ndfc-import-info');
-      busy(true); if (info) info.textContent = t('importing');
+      busy(true);
       fetch(IMPORT_API, { method: 'POST', credentials: 'same-origin',
              headers: { 'Content-Type': 'application/json' },
              body: JSON.stringify({ date: currentDate() }) })
         .then(function (r) { return r.json(); })
         .then(function (d) {
           if (d && d.success) {
-            if (info) info.textContent = t('imported') + ': ' + d.rows + ' ' + t('rows') + ' · ' + d.file;
+            var resumo = t('imported') + ': ' + d.rows + ' ' + t('rows') + ' · ' + d.file;
+            busy(true, t('loading'));
             // The import writes the JSON of the date it pulled (the picker's) — sync and load.
             if (window.jQuery && jQuery('#ndfc-date').data('daterangepicker')) {
               jQuery('#ndfc-date').data('daterangepicker').setStartDate(moment(d.date, 'YYYY-MM-DD'));
@@ -316,8 +335,9 @@
             // navegador antigo, entao o desligamento vai nos dois ramos.
             return load(d.date).then(function () {
               busy(false);
+              if (info) info.textContent = resumo;
               if (window.Swal) Swal.fire({ icon: 'success', title: t('imported'), text: d.rows + ' ' + t('rows'), timer: 1800, showConfirmButton: false });
-            }, function () { busy(false); });
+            }, function () { busy(false); if (info) info.textContent = resumo; });
           }
           busy(false);
           var msg = (d && d.error) || t('noFile');

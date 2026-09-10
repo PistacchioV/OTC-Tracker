@@ -234,8 +234,13 @@ nomes que o app conhecia (`day_records`, `dataset_rows`, `refdata_rows`,
   caminho explícito lê o que pediu, ou nada (é o que deixa um teste com a
   raiz num tmp ler só o que gravou).
 - **Legado em disco: importação PREGUIÇOSA no ponto, nunca na enumeração.**
-  A primeira leitura de um caminho que o banco não tem e o disco tem grava o
-  arquivo no banco e responde por ele. `listdir`/`walk`/`day_files` são só
+  A primeira leitura de um caminho que o banco não tem e o disco tem responde
+  pelo ARQUIVO na hora e manda a importação para uma thread (`store-import`,
+  uma por caminho, que desiste sob a trava se o banco ganhou o caminho nesse
+  meio-tempo — `so_se_ausente`): no share um DPOSICAO-TER leva dezenas de
+  segundos para entrar no banco, e importá-lo dentro do request parava quem
+  clicou e derrubava em OCUPADO quem lia o mesmo banco. Teste que precisa do
+  banco pronto chama `data_store.import_wait()`. `listdir`/`walk`/`day_files` são só
   pelo banco — arquivo que ninguém leu fica invisível para quem enumera, e
   por isso o cutover pede a carga completa
   (`scripts/convert_json_to_duckdb.py --meses 0`): a instância tem 12 meses
@@ -247,13 +252,14 @@ nomes que o app conhecia (`day_records`, `dataset_rows`, `refdata_rows`,
   O `_day_json` do daycache continua memoizando o payload PARSEADO por
   (mtime, tamanho); o `_day_prefetch` lê em lote (uma abertura por banco).
 - **OCUPADO** (a instância vizinha com a trava exclusiva): UMA retentativa
-  curta (`OTC_DUCK_READ_LOCK_SECONDS`, padrão 5), depois a **última cópia boa
+  curta (`OTC_DUCK_READ_LOCK_SECONDS`, padrão 20 — é o share, não a dev), depois a **última cópia boa
   em memória**; sem cópia, `BancoOcupado` (um `IOError`, que os `except` dos
   leitores tratam como arquivo ilegível). A disputa perdida marca o banco por
   `OTC_DUCK_BUSY_SKIP_SECONDS` (60): as leituras seguintes nem tentam.
   **Não há mais JSON para cair.** E OCUPADO nunca é "não existe":
-  `isfile`/`exists`/`stat` também levantam `BancoOcupado` quando o banco
-  está preso sem manifest conhecido — lido como "não existe", um
+  `isfile`/`exists`/`stat` respondem pela última cópia boa em memória (a
+  chave do memo é o carimbo) e, sem ela, também levantam `BancoOcupado` quando
+  o banco está preso sem manifest conhecido — lido como "não existe", um
   read-modify-write (`if exists: ler; alterar; gravar`) gravaria só o
   registro novo por cima do dia inteiro. O que escapa do handler cai no
   tratador global (`_handle_database_busy`, `routes.py`): 503 JSON
@@ -289,7 +295,7 @@ nomes que o app conhecia (`day_records`, `dataset_rows`, `refdata_rows`,
   gravação sob oito leitores em laço. ENTRE instâncias o portão não alcança:
   o escritor deixa uma INTENÇÃO (`<db>.lock.w`) enquanto pede a trava, e o
   leitor com trava recua até 1 s se ela é recente (um `stat` por abertura;
-  órfã de mais de 15 s é ignorada). Sem isso a gravação da instância vizinha
+  órfã de mais de 60 s é ignorada). Sem isso a gravação da instância vizinha
   esperava até 8 s por um instante sem leitor; com, 0,3 s (§7 prende). O motor `json_to_duckdb` não importa `apps` (o standalone copia
   o corpo); `check_duck_read.py` prende o armazém ponta a ponta.
 

@@ -244,6 +244,15 @@ def _pmemo_last(rel):
     return _MISS
 
 
+def _pmemo_last_key(rel):
+    """A chave `(rel, mtime, fsize)` da última cópia boa — o `stat` do ocupado."""
+    with _plock:
+        for k in reversed(list(_pmemo)):
+            if k[0] == rel:
+                return k
+    return _MISS
+
+
 def _pmemo_put(chave, crus):
     if not _PMEMO_MAX:
         return
@@ -308,17 +317,22 @@ def _forget_db(db):
 
 
 # ── OCUPADO: a disputa entre instâncias ─────────────────────────────────────
+# Os tetos são do SHARE, não da dev: lá uma gravação legítima da instância
+# vizinha (a semeadura da subida, um dia grande, a importação em lote) segura
+# a trava exclusiva por dezenas de segundos, e um leitor que desiste em 5 s
+# lia isso como OCUPADO — na subida, era a semeadura inteira falhando com
+# traceback (10/09/2026). Vinte segundos por tentativa, uma de intervalo.
 try:
-    _LEITURA_TETO = float(os.getenv('OTC_DUCK_READ_LOCK_SECONDS', '5') or 0) or None
+    _LEITURA_TETO = float(os.getenv('OTC_DUCK_READ_LOCK_SECONDS', '20') or 0) or None
 except ValueError:
-    _LEITURA_TETO = 5.0
+    _LEITURA_TETO = 20.0
 try:
     _OCUPADO_JANELA = float(os.getenv('OTC_DUCK_BUSY_SKIP_SECONDS', '60') or 0)
 except ValueError:
     _OCUPADO_JANELA = 60.0
-_OCUPADO_ESPERA = 0.3
+_OCUPADO_ESPERA = 1.0
 _AVISO_JANELA = 600.0
-_GATE_READ_WAIT_SECONDS = 10.0
+_GATE_READ_WAIT_SECONDS = 20.0            # o mesmo fôlego do teto: a gravação deste processo no share
 _olock = threading.Lock()
 _ocupado_ate = {}
 _ocupado_aviso = {'ate': 0.0}
@@ -506,6 +520,72 @@ def _read_fs(path, default=AUSENTE):
         return default
 
 
+def _read_fs_text(path):
+    with open(path, encoding='utf-8') as fh:
+        return fh.read()
+
+
+# ── a importação do legado, FORA do request ─────────────────────────────────
+# A primeira leitura de um caminho que o banco não tem e o disco tem serve o
+# ARQUIVO na hora e manda a importação para uma thread. Antes ela rodava no
+# próprio request, sob a trava exclusiva: um DPOSICAO-TER de milhares de
+# linhas no share são dezenas de segundos — quem clicou esperava tudo isso, e
+# quem lia o mesmo banco enquanto isso (o aquecimento do Summary, a instância
+# vizinha) estourava o teto e caía em OCUPADO (10/09/2026). A thread recebe o
+# TEXTO do arquivo (o chamador pode alterar o objeto que recebeu), uma por
+# caminho (`_import_em_voo`), e grava só se o banco continua sem o caminho
+# (`so_se_ausente`): uma gravação da tela que entrou antes dela vence.
+_import_lock = threading.Lock()
+_import_em_voo = set()
+_import_threads = []
+
+
+def _importar_legado(path, rel, texto, st):
+    try:
+        if write(path, json.loads(texto), stamp=(st.st_mtime, st.st_size), so_se_ausente=True):
+            log.info('[data-store] %s importado do disco para o banco', rel)
+    except Exception:                                       # noqa: BLE001
+        log.warning('[data-store] não consegui importar %s:\n%s', rel, traceback.format_exc())
+    finally:
+        with _import_lock:
+            _import_em_voo.discard(rel)
+            _import_threads[:] = [t for t in _import_threads
+                                  if t is not threading.current_thread() and t.is_alive()]
+
+
+def _importar_legado_async(path, rel, texto):
+    with _import_lock:
+        if rel in _import_em_voo:
+            return
+        _import_em_voo.add(rel)
+    try:
+        st = os.stat(path)
+    except OSError:
+        with _import_lock:
+            _import_em_voo.discard(rel)
+        return
+    t = threading.Thread(target=_importar_legado, args=(path, rel, texto, st),
+                         name='store-import', daemon=True)
+    with _import_lock:
+        _import_threads.append(t)
+    t.start()
+
+
+def import_wait(timeout=120.0):
+    """Espera as importações de legado em voo (testes, scripts). True se
+    todas terminaram dentro do teto."""
+    fim = time.monotonic() + timeout
+    while True:
+        with _import_lock:
+            vivos = [t for t in _import_threads if t.is_alive()]
+        if not vivos:
+            return True
+        for t in vivos:
+            t.join(max(0.0, fim - time.monotonic()))
+        if time.monotonic() >= fim:
+            return False
+
+
 def _read_target(rel, alvo, default=AUSENTE):
     """O payload de `rel` no alvo dado — sem a importação preguiçosa nem a
     cópia empacotada (é o miolo do `read`, e o que o registro de calendários
@@ -567,13 +647,9 @@ def read(path, default=AUSENTE):
     # que devolve o caminho do repositório (fora da raiz de dados, lido do
     # disco): um leitor com caminho explícito lê o que pediu, ou nada.
     if os.path.isfile(path):
-        payload = _read_fs(path)
-        try:
-            st = os.stat(path)
-            write(path, payload, stamp=(st.st_mtime, st.st_size))
-            log.info('[data-store] %s importado do disco para o banco', rel)
-        except Exception:                                   # noqa: BLE001
-            log.warning('[data-store] não consegui importar %s:\n%s', rel, traceback.format_exc())
+        texto = _read_fs_text(path)
+        payload = json.loads(texto)
+        _importar_legado_async(path, rel, texto)
         return payload
     if default is AUSENTE:
         raise FileNotFoundError(path)
@@ -643,27 +719,33 @@ def _after_write(db, path, rel):
         pass
 
 
-def write(path, payload, stamp=None):
+def write(path, payload, stamp=None, so_se_ausente=False):
     """Grava `payload` no banco do caminho — a tabela é RECONSTRUÍDA, sob a
     trava exclusiva do arquivo (camada `database_access`: permit, trava,
     portão, retentativa). `stamp` = `(mtime, fsize)` para a importação de um
-    arquivo legado; sem ele, o relógio e o tamanho do texto."""
+    arquivo legado; sem ele, o relógio e o tamanho do texto. `so_se_ausente`
+    (a importação do legado) desiste, já sob a trava, se o banco ganhou o
+    caminho nesse meio-tempo. Devolve True quando gravou."""
     if not managed(path):
         _write_fs_atomic(path, payload)
         _after_write_fs(path)
-        return
+        return True
     rel = rel_of(path)
     alvo = target(rel)
     if alvo is None:
         _write_fs_atomic(path, payload)
         _after_write_fs(path)
-        return
+        return True
     db_rel, schema, tabela, kind = alvo
     db = _db_abs(db_rel)
     os.makedirs(os.path.dirname(db), exist_ok=True)
     nome_cal = _cal_files().get(rel.lower()) if kind == core.KIND_CALENDAR else None
     mtime, fsize = (stamp if stamp else (None, None))
     with duckdb_write(db) as con:
+        if so_se_ausente:
+            core.ensure_manifest(con)
+            if core.manifest_targets(con, core.manifest_key_of(rel, kind)):
+                return False
         core.escrever_payload(con, rel, payload, kind, tabela, schema,
                               nome_cal=nome_cal, mtime=mtime, fsize=fsize)
     _after_write(db, path, rel)
@@ -678,6 +760,7 @@ def write(path, payload, stamp=None):
                 _after_write(odb, path, rel)
             except Exception:                               # noqa: BLE001
                 log.debug('[data-store] não apaguei %s do alvo alternativo', rel, exc_info=True)
+    return True
 
 
 def remove(path):
@@ -736,7 +819,15 @@ def stat(path):
         return os.stat(path)
     rel = rel_of(path)
     for alvo in _alvos(rel):
-        ent = _manifest(_db_abs(alvo[0]), strict=True).get(rel)
+        try:
+            ent = _manifest(_db_abs(alvo[0]), strict=True).get(rel)
+        except BancoOcupado:
+            # A mesma resposta do `read`: a última cópia boa em memória diz
+            # que o caminho existe, com o carimbo dela (a chave do memo).
+            chave = _pmemo_last_key(rel)
+            if chave is not _MISS:
+                return _Stat(chave[1], chave[2])
+            raise
         if ent is not None:
             return _Stat(ent[0], ent[1])
     if os.path.isfile(path):

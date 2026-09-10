@@ -107,6 +107,7 @@ def _seed_data_dir(app):
     except Exception:                                       # noqa: BLE001
         data_store = None
     copiados = importados = 0
+    ocupados = set()
     for raiz, _dirs, arquivos in os.walk(PACKAGED_DIR):
         rel = os.path.relpath(raiz, PACKAGED_DIR)
         top = rel.split(os.sep)[0]
@@ -129,6 +130,16 @@ def _seed_data_dir(app):
                         payload = json.load(fh)
                     data_store.write(alvo, payload)
                     importados += 1
+                except data_store.BancoOcupado as exc:
+                    # A instância vizinha está gravando nesse banco: o que ele
+                    # tem fica como está (é a regra — a semeadura nunca
+                    # sobrescreve), e a próxima subida completa. Uma linha por
+                    # banco, sem traceback: não é defeito, é a mesa em uso.
+                    banco = os.path.basename(str(exc))
+                    if banco not in ocupados:
+                        ocupados.add(banco)
+                        app.logger.warning('[data-dir] %s está ocupado por outra instância — a '
+                                           'semeadura desse banco fica para a próxima subida', banco)
                 except Exception:                           # noqa: BLE001
                     app.logger.warning('[data-dir] não consegui importar %s para o banco',
                                        alvo, exc_info=True)
