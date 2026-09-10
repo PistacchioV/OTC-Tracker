@@ -176,20 +176,28 @@ class _UnlockedReadGate:
             if self._readers <= 0:
                 self._cond.notify_all()
 
-    def enter_write(self, timeout_seconds: float) -> bool:
-        """Declara a escrita e espera (com teto) os leitores sem lock fecharem.
-
-        Devolve False quando o teto venceu com leitores ainda abertos — a
-        escrita segue assim mesmo, e o `duckdb.connect` dirá se deu."""
-        deadline = time.monotonic() + timeout_seconds
+    def declare_write(self) -> None:
+        """Declara a escrita: leitor NOVO passa a esperar em `enter_read`."""
         with self._cond:
             self._writers += 1
+
+    def await_readers(self, timeout_seconds: float) -> bool:
+        """Espera (com teto) os leitores em voo fecharem. False quando o teto
+        venceu com leitores ainda abertos — a escrita segue assim mesmo, e o
+        `duckdb.connect` dirá se deu."""
+        deadline = time.monotonic() + timeout_seconds
+        with self._cond:
             while self._readers:
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
                     return False
                 self._cond.wait(remaining)
             return True
+
+    def enter_write(self, timeout_seconds: float) -> bool:
+        """`declare_write` + `await_readers`."""
+        self.declare_write()
+        return self.await_readers(timeout_seconds)
 
     def exit_write(self) -> None:
         with self._cond:
@@ -815,11 +823,27 @@ def _database_context(
                     gate.enter_read(_GATE_READ_WAIT_SECONDS)
                     gate_read = True
             else:
+                if write and gate is not None:
+                    # A escrita é DECLARADA no portão ANTES da trava de
+                    # arquivo, e os leitores do armazém (`data_store`, que
+                    # entram no portão antes de pedir a trava COMPARTILHADA)
+                    # são drenados aqui. Na ordem inversa — trava primeiro,
+                    # portão depois — o escritor segurava a trava exclusiva
+                    # esperando um leitor que segurava o portão esperando a
+                    # trava compartilhada: um ciclo que só o timeout desfazia
+                    # (12 s por gravação com leitores ativos, §434). E é a
+                    # declaração antes da trava que dá ao escritor a
+                    # preferência: com leitores em laço a trava exclusiva,
+                    # pedida por tentativa, não entrava nunca.
+                    gate_write = True
+                    gate.declare_write()
+                    gate.await_readers(_GATE_WRITE_WAIT_SECONDS)
                 file_lock = _acquire_file_lock(operation)
                 file_lock_acquired_at = time.monotonic()
                 if write and gate is not None:
-                    gate_write = True
-                    if not gate.enter_write(_GATE_WRITE_WAIT_SECONDS):
+                    # Segunda drenagem: o poll sem trava do sino pode ter
+                    # entrado enquanto a trava era pedida.
+                    if not gate.await_readers(_GATE_WRITE_WAIT_SECONDS):
                         _log_event("unlocked_gate_wait_timed_out", operation,
                                    logging.WARNING)
             connection = _open_with_retry(engine, normalized_path, write, operation)

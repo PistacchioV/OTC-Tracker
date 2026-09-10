@@ -11,7 +11,12 @@ connect (pelo `duckdb_write`). O que se prova, em tempfile:
      objetos SEUS por consumidor, gravação no meio invalida;
   4. fora de request: o memo de PROCESSO, por mtime/tamanho do manifest;
   5. a trava de arquivo: outro PROCESSO com a trava exclusiva bloqueia a
-     leitura (BancoOcupado sem cópia em memória) e a escrita espera.
+     leitura (BancoOcupado sem cópia em memória) e a escrita espera;
+  6. PREFERÊNCIA ao escritor: com oito leitores em laço, a gravação entra
+     em milissegundos e nenhuma leitura desiste — a escrita é declarada no
+     portão ANTES da trava de arquivo (na ordem inversa, o ciclo leitor ×
+     escritor só se desfazia por timeout: 12 s por gravação, e o banco
+     marcado OCUPADO por 60 s; medido em 10/09/2026).
 """
 import contextlib
 import os
@@ -173,6 +178,51 @@ check('5. e desiste rapido (%.1fs)' % (time.monotonic() - t0), time.monotonic() 
 trava.release()
 S.ocupado_forget()
 check('5. solta a trava, o banco volta a responder', DR.day_records(dia)[0]['Deal'], 'DBH-1EEE')
+
+print('\n== 6. preferencia ao escritor: 8 leitores em laco, a gravacao entra em ms ==')
+import random                                                # noqa: E402
+_dias = []
+for _i in range(5):
+    _fp = os.path.join(TMP, 'cache', 'new deals', 'NDF', 'Commodities', '2026', '07', '2026070%d_ndfcomm.json' % (_i + 1))
+    R._atomic_write_json(_fp, [{'Deal': 'S%d' % _i}])
+    _dias.append(_fp)
+_fim = time.monotonic() + 4.0
+_ocupados = []
+_lats = []
+
+
+def _leitor():
+    k = 0
+    while time.monotonic() < _fim:
+        try:
+            S.read(random.choice(_dias))
+            if k % 5 == 0:
+                S.memo_forget()
+        except S.BancoOcupado:
+            _ocupados.append(1)
+        k += 1
+
+
+def _escritor():
+    time.sleep(0.5)                                          # os leitores ja em laco
+    while time.monotonic() < _fim:
+        t0 = time.monotonic()
+        R._atomic_write_json(random.choice(_dias), [{'Deal': 'W'}])
+        _lats.append(time.monotonic() - t0)
+        time.sleep(0.2)
+
+
+_ts = [threading.Thread(target=_leitor, daemon=True) for _ in range(8)] + [threading.Thread(target=_escritor, daemon=True)]
+for _t in _ts:
+    _t.start()
+for _t in _ts:
+    _t.join(30)
+_lats.sort()
+check('6. houve gravacoes durante o laco (%d)' % len(_lats), len(_lats) >= 5)
+check('6. a mediana da gravacao e de milissegundos (%.3fs)' % (_lats[len(_lats) // 2] if _lats else -1),
+      bool(_lats) and _lats[len(_lats) // 2] < 1.0)
+check('6. a pior gravacao nao esperou timeout (%.3fs)' % (_lats[-1] if _lats else -1), bool(_lats) and _lats[-1] < 3.0)
+check('6. nenhuma leitura desistiu por OCUPADO (%d)' % len(_ocupados), len(_ocupados), 0)
 
 print('\n%s' % ('TUDO OK' if not fails else 'FALHAS (%d): %r' % (len(fails), fails)))
 sys.exit(1 if fails else 0)
