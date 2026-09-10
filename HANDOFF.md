@@ -18561,11 +18561,34 @@ de share por banco —, e a fusão pela metade que uma tentativa deixe para trá
 pode ser a única cópia do que não foi checkpointado. O original nunca é
 apagado: vai inteiro para `db/_recuperado/`.
 
-`check_json_to_duckdb.py` §8 prende os quatro: deixa o banco de origem em `0444`
+**E nem isso bastou:** com o `.wal.recovery` fora do caminho, o
+`duckdb.connect()` da cópia continuou negando. Ou seja, o rename que o DuckDB
+não consegue fazer é o de CRIAR esse arquivo — o `MoveFileW` dele, naquele
+ambiente, não completa nem com o destino livre. Como não dá para consertar o
+DuckDB por fora, o script passou a fazer a fusão no lugar dele: junta o `.wal`
+e o `.wal.checkpoint` num `.wal` só, POR CÓPIA (que o Windows permite) em vez
+de rename, e abre de novo — o DuckDB então vê um banco com um WAL comum e faz
+o replay de sempre, sem fusão e sem rename. A ordem natural é `.wal` (o
+antigo) seguido do `.wal.checkpoint` (o que commitou durante o checkpoint); se
+o replay recusar, tenta a inversa, sempre sobre uma cópia NOVA do `.db`, porque
+uma abertura que morreu no meio do replay pode tê-lo mexido. Os dois originais
+ficam ao lado como `.orig` (renome, instantâneo) até a fusão dar certo.
+
+Nada disso toca o share: a troca continua sendo o último passo, e o
+`_manifest` do recuperado é conferido contra o do share antes e depois dela.
+Uma ressalva honesta: que a fusão seja a CONCATENAÇÃO dos dois vem dos
+tamanhos da instância (a soma exata em três dos cinco bancos) e do laboratório
+com um `.wal.checkpoint` vazio; se a ordem estiver trocada, o replay recusa e
+o script tenta a outra — não existe caminho em que um WAL mal montado seja
+gravado no share.
+
+`check_json_to_duckdb.py` §8 prende os cinco: deixa o banco de origem em `0444`
 antes da rodada boa (sem `_liberar` o recover inteiro falha), força um
 `Could not move file` na primeira abertura para provar que a segunda passa, e
 aponta a rodada para uma pasta sem permissão de renome para provar que ela é
 recusada ANTES da cópia (com o remédio e sem traceback), e põe um
 `.wal.recovery` ao lado do banco fabricado para cobrar que ele NÃO chegue ao
 disco local, que o log diga isso, que o dia volte exato mesmo assim e que o
-arquivo original apareça em `_recuperado/`.
+arquivo original apareça em `_recuperado/`; e nega o rename na abertura da
+cópia para provar que a fusão à mão entra, que nenhum WAL sobra e que as 200
+mil linhas que só existiam no WAL vêm junto.

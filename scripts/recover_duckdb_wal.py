@@ -24,10 +24,12 @@ O que este script faz, banco a banco (só nos que estão em limbo — ver
   1. copia `.db` + WALs para `--work-dir` (local; padrão
      `%LOCALAPPDATA%\\OTC-Tracker\\recover`);
   2. abre a cópia em escrita (o DuckDB funde e refaz o replay), `CHECKPOINT`,
-     fecha — e confere que não sobrou WAL nenhum; a cópia perde o
-     SOMENTE-LEITURA herdado do share (senão o rename da fusão morre em
-     `Could not move file: Access is denied`) e o acesso negado é RETENTADO,
-     que é o antivírus lendo os megabytes recém-escritos;
+     fecha — e confere que não sobrou WAL nenhum. A cópia perde o
+     SOMENTE-LEITURA herdado do share, e se o rename da fusão for NEGADO
+     (`Could not move file: Access is denied`: no Windows o `MoveFileW` com que
+     o DuckDB grava o `.wal.recovery` recusou mesmo com o destino fora do
+     caminho) os dois WALs são fundidos À MÃO — a mesma operação, por cópia em
+     vez de rename — e a abertura é refeita;
   3. emagrece a cópia (`slim_duckdb.emagrecer`, a forma do §437; `--no-slim`
      pula) e lê o `_manifest` dela;
   4. copia de volta como `<db>.novo`, MOVE o `.db` velho e os WALs para
@@ -135,49 +137,23 @@ def _prova_de_renome(work_dir):
                     pass
 
 
-def _espera_renomear(caminho, tentativas, espera):
-    """Prova que ESTE arquivo pode ser renomeado antes de entregá-lo ao DuckDB.
-    Recém-copiado, ele costuma estar aberto pelo antivírus (que varre no
-    fechamento), e um handle sem `FILE_SHARE_DELETE` faz o `MoveFile` do
-    DuckDB voltar `Access is denied`. Esperar aqui é esperar UMA vez, em vez de
-    refazer o replay inteiro a cada tentativa."""
-    tmp = caminho + '.ren'
-    for n in range(1, tentativas + 1):
-        try:
-            os.replace(caminho, tmp)
-            os.replace(tmp, caminho)
-            return True
-        except OSError as exc:
-            if n >= tentativas:
-                _diz('     AVISO %s continua sem poder ser renomeado (%s); vou tentar mesmo assim'
-                     % (os.path.basename(caminho), exc))
-                return False
-            _diz('     %s ainda preso (%s); esperando %ds [%d/%d]'
-                 % (os.path.basename(caminho), exc, espera, n, tentativas))
-            time.sleep(espera)
-
-
 def _a_copiar(irmaos):
     """Quais WALs vão para a cópia local. O `.wal.recovery` é o produto da FUSÃO
     do `.wal` com o `.wal.checkpoint` — na instância os tamanhos batem na soma
-    exata (17 + 1104 = 1121 MB), e nos parciais dão menos —, e o DuckDB o
-    REFAZ a partir dos dois. Levá-lo junto não acrescenta dado nenhum e é o que
-    quebra a recuperação no Windows: o `MoveFileW` com que o DuckDB grava esse
-    nome recusa um destino que já existe, e volta `Could not move file: Access
-    is denied` — dentro do %LOCALAPPDATA%, com a trava do share na mão, depois
-    de copiar 1,1 GB à toa (§444). Só vai junto quando um dos dois FALTA: aí o
-    `.wal.recovery` pode ser a única cópia do que ainda não foi checkpointado.
-    O original nunca é apagado: vai inteiro para `db/_recuperado/`."""
+    exata (17 + 1104 = 1121 MB), e nos parciais dão menos —, e ele é REFEITO a
+    partir dos dois. Levá-lo junto não acrescenta dado nenhum e ainda custa de
+    92 MB a 1,1 GB de share por banco. Só vai quando um dos dois FALTA: aí pode
+    ser a única cópia do que não foi checkpointado. O original nunca é apagado:
+    vai inteiro para `db/_recuperado/`."""
     fusao_completa = '.wal' in irmaos and '.wal.checkpoint' in irmaos
     return [s for s in _store.WAL_SUFIXOS
             if s in irmaos and not (s == '.wal.recovery' and fusao_completa)]
 
 
-def _recupera_local(local, tentativas=5, espera=15):
-    """Abre a cópia LOCAL em escrita (é aqui que o DuckDB funde os WALs e refaz
-    o replay) e força o `CHECKPOINT`. Retenta o acesso negado: o antivírus
-    corporativo costuma estar lendo os megabytes recém-escritos quando o DuckDB
-    pede o rename, e a segunda tentativa passa."""
+def _abre_e_checkpoint(local, tentativas, espera):
+    """Abre a cópia LOCAL em escrita — é aqui que o DuckDB refaz o replay — e
+    força o `CHECKPOINT`. Retenta o acesso negado passageiro (o antivírus lendo
+    os megabytes recém-escritos quando o DuckDB pede o rename)."""
     for n in range(1, tentativas + 1):
         # A fusão pela metade que a tentativa anterior deixou é o destino que o
         # `MoveFileW` da próxima vai recusar: some com ela (o `.wal` e o
@@ -188,7 +164,6 @@ def _recupera_local(local, tentativas=5, espera=15):
         for s in ('',) + _store.WAL_SUFIXOS:
             if os.path.isfile(local + s):
                 _liberar(local + s)
-                _espera_renomear(local + s, tentativas, espera)
         try:
             con = duckdb.connect(local)
             try:
@@ -202,6 +177,87 @@ def _recupera_local(local, tentativas=5, espera=15):
             _diz('     acesso negado na cópia local (%s); tentando de novo em %ds [%d/%d]'
                  % (exc, espera, n, tentativas))
             time.sleep(espera)
+
+
+def _funde_wal(local, ordem):
+    """Faz À MÃO o que o DuckDB faz para sair do limbo: um `.wal` só, com o
+    conteúdo dos dois. É a MESMA operação — os tamanhos da instância mostram o
+    `.wal.recovery` sendo a soma exata do `.wal` com o `.wal.checkpoint` —, mas
+    por CÓPIA em vez de rename, e é o rename que o Windows nega. Guarda os dois
+    originais ao lado (`.orig`, renome: instantâneo) para poder desfazer.
+    Devolve o mapa da guarda, ou None se algum dos dois não estiver aqui."""
+    guarda = {}
+    for s in ('.wal', '.wal.checkpoint'):
+        if not os.path.isfile(local + s):
+            for g in guarda.values():
+                os.replace(g, g[:-len('.orig')])
+            return None
+        g = local + s + '.orig'
+        if os.path.isfile(g):
+            _liberar(g)
+            os.remove(g)
+        _liberar(local + s)
+        os.replace(local + s, g)
+        guarda[s] = g
+    with io.open(local + '.wal', 'wb') as saida:
+        for s in ordem:
+            with io.open(guarda[s], 'rb') as fh:
+                shutil.copyfileobj(fh, saida, 1 << 20)
+    return guarda
+
+
+def _desfaz_fusao(local, guarda):
+    """Volta os dois WALs para o lugar (a tentativa seguinte precisa deles)."""
+    for s, g in guarda.items():
+        if os.path.isfile(local + s):
+            _liberar(local + s)
+            os.remove(local + s)
+        os.replace(g, local + s)
+
+
+def _recupera_local(local, origem=None, tentativas=5, espera=15):
+    """Tira a cópia local do limbo. Primeiro deixa o DuckDB fazer o que ele
+    faria sozinho; se o rename da fusão for NEGADO — no Windows o `MoveFileW`
+    com que ele grava o `.wal.recovery` recusa destino existente, e negou
+    também com o destino fora do caminho —, funde os dois WALs à mão e abre de
+    novo. A ordem natural é `.wal` (o antigo) seguido do `.wal.checkpoint` (o
+    que commitou durante o checkpoint); se o replay recusar, tenta a inversa,
+    sempre sobre uma cópia NOVA do `.db` — uma abertura que falhou no meio do
+    replay pode ter mexido nele."""
+    try:
+        _abre_e_checkpoint(local, 2, espera)
+        return
+    except Exception as exc:                                 # noqa: BLE001
+        if not _acesso_negado(exc):
+            raise
+        primeiro = exc
+    _diz('     o DuckDB não conseguiu fundir os WALs sozinho (%s)' % primeiro)
+    _diz('     fundindo À MÃO — o `.wal.recovery` que ele tenta escrever É o `.wal` '
+         'seguido do `.wal.checkpoint`')
+    for ordem in (('.wal', '.wal.checkpoint'), ('.wal.checkpoint', '.wal')):
+        guarda = _funde_wal(local, ordem)
+        if guarda is None:
+            raise primeiro
+        try:
+            _abre_e_checkpoint(local, tentativas, espera)
+            _diz('     fundido à mão na ordem %s: recuperado' % ' + '.join(ordem))
+            for g in guarda.values():
+                if os.path.isfile(g):
+                    os.remove(g)
+            return
+        except Exception as exc:                             # noqa: BLE001
+            _diz('     a fusão %s não serviu (%s)' % (' + '.join(ordem), exc))
+            if os.path.isfile(local + '.wal'):
+                _liberar(local + '.wal')
+                os.remove(local + '.wal')
+            _desfaz_fusao(local, guarda)
+            if origem is None:
+                raise
+            _liberar(local)
+            os.remove(local)
+            shutil.copy2(origem, local)
+            _liberar(local)
+    raise primeiro
 
 
 def _manifest_linhas(db):
@@ -248,7 +304,7 @@ def recuperar(db, work_dir, db_dir, slim=True, carimbo=None):
                                                   resumo['t_copia']))
     # 2. o DuckDB recupera no local
     t0 = time.time()
-    _recupera_local(local)
+    _recupera_local(local, origem=db)
     sobras = _store.wal_irmaos(local)
     if sobras:
         raise RuntimeError('%s: depois do CHECKPOINT ainda há WAL na cópia local (%s)'
