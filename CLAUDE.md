@@ -271,10 +271,15 @@ nomes que o app conhecia (`day_records`, `dataset_rows`, `refdata_rows`,
   chama `_day_prefetch(dias)` antes do laço; `data_store.prefetch` agrupa por
   banco e lê o manifest e as tabelas numa abertura. `check_daycache.py` §8
   MEDE.
-- **Portão em memória** (`db_gate`): o leitor abre `read_only` e o funil
-  abre em escrita no mesmo processo; `duckdb_write` entra no portão antes do
-  connect e espera os leitores fecharem; `check_duck_gate.py` prende os dois
-  sentidos. O motor `json_to_duckdb` não importa `apps` (o standalone copia
+- **Portão em memória** (`db_gate`) dá PREFERÊNCIA ao escritor dentro do
+  processo, e a ORDEM é a mesma nos dois lados: portão, depois trava de
+  arquivo. O `duckdb_write` DECLARA a escrita antes de pedir a trava
+  exclusiva (leitor novo do armazém espera, os em voo terminam) e drena de
+  novo depois dela (o poll sem trava do sino). Na ordem inversa o escritor
+  segurava a trava esperando o portão e o leitor segurava o portão esperando
+  a trava: 12 s por gravação com leitores ativos, e o banco marcado OCUPADO
+  por 60 s. `check_duck_gate.py` prende os dois sentidos e §6 MEDE a
+  gravação sob oito leitores em laço. O motor `json_to_duckdb` não importa `apps` (o standalone copia
   o corpo); `check_duck_read.py` prende o armazém ponta a ponta.
 
 ### A camada `database_access`

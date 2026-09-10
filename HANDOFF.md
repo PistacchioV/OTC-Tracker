@@ -17840,3 +17840,40 @@ O que a varredura confirmou limpo: nenhum `json.load`/`json.dump`/
 sobre caminho fora do `DATA_DIR` (share de documentos, imagens de ticket,
 pacote versionado); todo nome pedido ao `duck_read`/`data_store` existe;
 templates e JS não conheciam o espelho.
+
+**Varredura de 10/09/2026, depois da publicação** — um estresse (8 leitores
+em laço sobre um produto, 2 escritores) achou o defeito mais grave do
+corte, que nenhum teste de sequência via:
+
+- **Ciclo leitor × escritor entre a trava de arquivo e o portão.** O
+  `duckdb_write` pegava a trava EXCLUSIVA e só depois esperava o portão
+  esvaziar; o leitor do armazém (`_com_leitura`) entrava no portão e só
+  depois pedia a trava COMPARTILHADA. Cada um segurava o que o outro
+  queria, e só o timeout desfazia (5 s do leitor, 10 s do escritor): uma
+  gravação com leitores ativos levava 12 s e o leitor que estourou marcava
+  o banco OCUPADO por 60 s. Tirar o leitor do portão não bastou — sem
+  preferência, oito leitores seguram a trava compartilhada quase o tempo
+  todo e a exclusiva, pedida por tentativa, entrava a cada 9 s. A solução
+  é a ordem: o escritor DECLARA a escrita no portão (`declare_write`)
+  antes da trava de arquivo, os leitores novos param, os em voo terminam,
+  a trava exclusiva vem sem disputa, e uma segunda drenagem
+  (`await_readers`) cobre o poll sem trava do sino que entrou no meio.
+  Medido: gravação de 9-12 s para 10 ms (p50) / 29 ms (máx), leitura
+  igual, zero OCUPADO. `check_duck_gate.py` §6 prende.
+
+O que a mesma varredura MEDIU e deixou como está:
+
+- **Reescrever o mesmo dia 300 vezes não faz o `.db` crescer** (1.036 KB
+  antes e depois; o DuckDB reaproveita os blocos livres no checkpoint, e
+  não fica `.wal` para trás). A tabela reconstruída a cada gravação não
+  vira espaço no share.
+- **Escritor de OUTRO processo contra leitores em laço deste**: as
+  leituras não sentem (p50 2 ms, nenhum OCUPADO), mas a gravação da
+  instância vizinha esperou até 8 s pela trava exclusiva — o portão é em
+  memória e não alcança o outro processo; a trava exclusiva é pedida por
+  tentativa (`NON_BLOCKING`, a cada 0,25 s) e só entra num instante sem
+  leitor. É o mesmo limite que o espelho tinha, e na instância os leitores
+  em laço (o aquecimento dos Summaries) leem em LOTE pelo `prefetch`, uma
+  abertura por banco, o que deixa a trava livre quase o tempo todo. Um
+  sinal cross-process (arquivo de intenção ao lado do `.db`) custaria um
+  `stat` no share por leitura; não vale por enquanto.

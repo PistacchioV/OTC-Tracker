@@ -387,8 +387,20 @@ def _le_ocupado(fn, db):
 
 
 def _com_leitura(db, fn):
-    """Abre `db` em LEITURA pela camada (permit + trava compartilhada + portão)
-    com o teto curto, e roda `fn(con)`."""
+    """Abre `db` em LEITURA pela camada (portão em memória + permit + trava
+    COMPARTILHADA de arquivo) com o teto curto, e roda `fn(con)`.
+
+    O portão (`db_gate`) é o que dá PREFERÊNCIA ao escritor dentro do
+    processo: um `duckdb_write` DECLARA a escrita antes de pedir a trava de
+    arquivo, os leitores novos param aqui (teto `_GATE_READ_WAIT_SECONDS`),
+    os em voo terminam, e a trava exclusiva vem sem disputa. Sem isso, oito
+    leitores em laço (o aquecimento dos Summaries lendo um produto) seguram
+    a trava compartilhada quase o tempo todo e a exclusiva, pedida por
+    tentativa, não entra: uma gravação levava 9-12 s. A ordem importa e é
+    a mesma nos dois lados — portão, depois trava de arquivo: o escritor
+    que pegava a trava ANTES de esperar o portão fechava um ciclo com o
+    leitor que entrava no portão antes de pedir a trava, e só o timeout
+    desfazia. Medido no estresse de 10/09/2026."""
     def _uma():
         gate = db_gate(db)
         gate.enter_read(_GATE_READ_WAIT_SECONDS)
