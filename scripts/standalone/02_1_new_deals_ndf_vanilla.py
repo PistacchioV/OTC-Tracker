@@ -50,7 +50,9 @@ import datetime
 import json
 import os
 import re
+import time
 import traceback
+from collections import namedtuple
 
 import duckdb
 
@@ -317,8 +319,8 @@ def ensure_manifest(con):
 # TODA leitura seguinte pagava uma cura síncrona que voltava a colidir (§422).
 # Quem coordena os dois lados em memória é o `database_access` do app; este
 # módulo não pode importá-lo (o standalone copia o corpo e recusa `apps`), então
-# o `duck_mirror` INJETA aqui a abertura com portão. O padrão é o connect cru —
-# é o que os scripts de carga e os standalone continuam usando.
+# quem abre com portão é o armazém (`data_store`, pelo `duckdb_write`). O
+# padrão é o connect cru — é o que os scripts de carga e os standalone usam.
 def _abrir_banco_padrao(path):
     return duckdb.connect(path)
 
@@ -509,12 +511,10 @@ def convert_refdata(data_dir, out_dir, force=False, dry_run=False):
                     stats['skipped'].append(arquivo)
                     continue
                 rows = _load_json(fp) or []
-                rows = [r for r in rows if isinstance(r, dict)]
-                # `_seq`/`_raw` = ordem e registro EXATOS do JSON — as colunas
-                # que o flip de leitura consome; as tipadas ficam para o SQL.
-                n = write_rows_table(con, q(tabela), _com_raw(rows), force_varchar=True)
-                manifest_record(con, chave, st, [tabela])
-                stats['converted'].append('%s (%d linhas)' % (tabela, n))
+                escrever_payload(con, arquivo, rows, KIND_REFDATA, tabela,
+                                 mtime=st.st_mtime, fsize=st.st_size)
+                stats['converted'].append('%s (%d linhas)' % (
+                    tabela, sum(1 for r in rows if isinstance(r, dict))))
             except Exception:                                  # noqa: BLE001
                 stats['errors'].append((arquivo, traceback.format_exc()))
     finally:
@@ -873,22 +873,16 @@ def _convert_daily_rels(data_dir, out_dir, rels, force, stats):
             try:
                 con = _con_do_banco(banco)
                 st = os.stat(os.path.join(data_dir, rel.replace('/', os.sep)))
-                if not force and manifest_unchanged(con, chave, st):
+                if not force and manifest_unchanged(con, chave, st) and reconstruivel(con, chave):
                     stats['skipped'].append(rel)
                     continue
-                _drop_targets(con, manifest_targets(con, chave))
-                if schema != 'main':
-                    con.execute('CREATE SCHEMA IF NOT EXISTS %s' % q(schema))
                 payload = _load_json(os.path.join(data_dir, rel.replace('/', os.sep)))
-                # `raw=True` desde o flip dos arquivo-dia (§334): o `_day_json`
-                # reconstrói a lista pelo `_raw`, na ordem do `_seq`.
-                # Num arquivo `.meta.json` a tabela chave→valor é a do próprio
-                # arquivo: ele já é o metadado, e o `__meta` de sempre repetiria
-                # a palavra.
-                criadas = _convert_daily_payload(
-                    con, schema, tabela, payload, raw=True,
-                    meta_tabela=tabela if rel.endswith(_META_SUFIXO + '.json') else None)
-                manifest_record(con, chave, st, criadas)
+                # O MESMO escritor da app (`escrever_payload`): `_raw`/`_seq`
+                # na lista, `__raw` no payload-objeto, manifest com o carimbo
+                # do ARQUIVO (mtime/tamanho) — é assim que a importação de um
+                # JSON legado e a gravação pela tela produzem o mesmo banco.
+                criadas = escrever_payload(con, rel, payload, KIND_DAILY, tabela, schema,
+                                           mtime=st.st_mtime, fsize=st.st_size)
                 stats['converted'].extend('%s:%s' % (banco, c) for c in criadas)
             except Exception:                                  # noqa: BLE001
                 stats['errors'].append((rel, traceback.format_exc()))
@@ -901,10 +895,9 @@ def _convert_daily_rels(data_dir, out_dir, rels, force, stats):
 def convert_daily_files(data_dir, out_dir, rels, force=False):
     """Converte SÓ os arquivos-dia dados (caminhos relativos ao `data_dir`).
 
-    É a porta do espelho vivo (`duck_mirror`): o JSON que acabou de ser gravado
-    reconverte sozinho, sem varrer a árvore inteira de `cache/` — que no share
-    da instância é uma caminhada cara. Caminho que não é arquivo-dia volta em
-    `ignored`, nunca em erro."""
+    Reconverte um punhado de arquivos-dia sem varrer a árvore inteira de
+    `cache/` — que no share da instância é uma caminhada cara. Caminho que não
+    é arquivo-dia volta em `ignored`, nunca em erro."""
     stats = _novo_daily_stats()
     validos = []
     for rel in (rels or []):
@@ -1564,13 +1557,12 @@ def _convert_dataset_rels(data_dir, out_dir, rels, force, stats, cal_files):
             try:
                 con = _con(db)
                 st = os.stat(os.path.join(data_dir, rel.replace('/', os.sep)))
-                if not force and manifest_unchanged(con, chave, st):
+                if not force and manifest_unchanged(con, chave, st) and reconstruivel(con, chave):
                     stats['skipped'].append(rel)
                     continue
-                _drop_targets(con, manifest_targets(con, chave))
                 payload = _load_json(os.path.join(data_dir, rel.replace('/', os.sep)))
-                criadas = _convert_daily_payload(con, 'main', tabela, payload, raw=True)
-                manifest_record(con, chave, st, criadas)
+                criadas = escrever_payload(con, rel, payload, KIND_DATASET, tabela,
+                                           mtime=st.st_mtime, fsize=st.st_size)
                 stats['converted'].extend('%s:%s' % (db, c) for c in criadas)
             except Exception:                                  # noqa: BLE001
                 stats['errors'].append((rel, traceback.format_exc()))
@@ -1678,6 +1670,248 @@ def convert_datasets(data_dir, out_dir, force=False, dry_run=False,
     _drop_legacy_dbs(out_dir, legados, {a[0] for a, _ in alvos},
                      stats, 'agora a pasta db/ espelha a arvore de origem')
     return _convert_dataset_rels(data_dir, out_dir, rels, force, stats, cal_files)
+
+
+# ── O ARMAZÉM DB-ONLY: um payload por CAMINHO (09/09/2026) ─────────────────
+# Desde que a escrita deixou de passar pelo JSON, o banco é a ÚNICA cópia de
+# cada dado, e o motor precisa de duas coisas que a conversão em lote nunca
+# precisou: gravar um payload que está NA MEMÓRIA (não num arquivo) e
+# reconstruí-lo EXATO na leitura. As três primitivas abaixo são isso —
+# `target_of` (que banco/tabela um caminho ocupa), `escrever_payload` e
+# `ler_payload` —, e são as MESMAS que a importação de JSON legado usa, para
+# um banco importado e um banco gravado pela tela não terem duas formas.
+#
+# O canal de fidelidade da LISTA de registros já existia (`_seq`/`_raw`). O
+# do payload-OBJETO (as recons, os `.meta.json`, os ponteiros) é novo: além
+# das sub-tabelas de análise que o `_convert_daily_payload` sempre criou, o
+# objeto INTEIRO vai como texto numa tabela `<tabela>__raw` de uma linha —
+# remontá-lo pelas sub-tabelas seria adivinhar chave e ordem. Banco anterior
+# a isto tem o objeto sem o `__raw`, e `reconstruivel` é o que faz a
+# importação reconvertê-lo mesmo com o manifest casando.
+_Stamp = namedtuple('_Stamp', 'st_mtime st_size')
+RAW_SUFIXO = '__raw'
+KIND_DAILY = 'daily'
+KIND_DATASET = 'dataset'
+KIND_REFDATA = 'refdata'
+KIND_REGISTRY = 'registry'
+KIND_CALENDAR = 'calendar'
+AUSENTE = object()          # o manifest não tem o caminho
+
+
+def target_of(rel, cal_files=None):
+    """`(banco relativo, schema, tabela, kind)` de um caminho relativo ao
+    DATA_DIR — ou `None` para o que não tem banco (`db/`, `translations/`,
+    o que não é `.json`).
+
+    `cal_files` é `{arquivo.lower(): nome do calendário}` vindo do registro:
+    é o que separa um arquivo de calendário (tabela tipada no
+    `holiday_calendars.db`) de um dataset qualquer da raiz. A ordem das
+    regras é a dos conversores de sempre — RefData/CPD, registro, calendário,
+    arquivo-dia, dataset — mais UMA no fim: todo outro `.json` (os ponteiros
+    `_last`, um config sem data dentro de `cache/`) vira dataset na pasta em
+    que está. Antes esses ficavam fora dos bancos de propósito, porque o JSON
+    respondia por eles; sem o JSON, nada pode ficar de fora."""
+    rel = str(rel or '').replace('\\', '/').strip('/')
+    if not rel or not rel.endswith('.json'):
+        return None
+    parts = rel.split('/')
+    if parts[0] in ('db', 'duckdb', 'translations'):
+        return None
+    tabelas = dict(_REFDATA_TABLES)
+    if rel in tabelas:
+        return 'reference_data.db', 'main', tabelas[rel], KIND_REFDATA
+    if rel == REGISTRY_FILE:
+        return 'holiday_calendars.db', 'main', '_registry', KIND_REGISTRY
+    cal = cal_files or {}
+    if len(parts) == 1 and rel.lower() in cal:
+        nome = str(cal[rel.lower()] or '').strip()
+        return 'holiday_calendars.db', 'main', norm_ident(nome, 'cal'), KIND_CALENDAR
+    alvo = _daily_rel_target(rel)
+    if alvo:
+        return alvo[0], alvo[1], alvo[2], KIND_DAILY
+    alvo = _dataset_rel_target(rel, set(cal))
+    if alvo:
+        return alvo[0], 'main', alvo[1], KIND_DATASET
+    stem = parts[-1][:-5]
+    db = '/'.join([_nome_seguro(p) for p in parts[:-1]] + [_nome_seguro(stem)]) + '.db'
+    return db, 'main', (norm_ident(stem, 't') or 't'), KIND_DATASET
+
+
+def manifest_key_of(rel, kind):
+    """A chave do caminho no `_manifest` — a de sempre, com a versão do formato."""
+    return _refdata_manifest_key(rel) if kind == KIND_REFDATA else _dataset_manifest_key(rel)
+
+
+def manifest_stat(con, chave):
+    """`(mtime, fsize, targets)` de uma chave do manifest, ou `None`."""
+    row = con.execute("SELECT mtime, fsize, targets FROM _manifest WHERE path = ?",
+                      [chave]).fetchone()
+    if not row:
+        return None
+    try:
+        targets = json.loads(row[2]) if row[2] else []
+    except ValueError:
+        targets = []
+    return float(row[0] or 0.0), int(row[1] or 0), targets
+
+
+def manifest_rows(con):
+    """Todas as linhas do manifest: `{rel: (mtime, fsize, targets)}` — a chave
+    volta SEM o sufixo de formato, que é o caminho que quem enumera quer."""
+    out = {}
+    for chave, mtime, fsize, targets in con.execute(
+            'SELECT path, mtime, fsize, targets FROM _manifest').fetchall():
+        rel = str(chave or '').split('#', 1)[0]
+        try:
+            tg = json.loads(targets) if targets else []
+        except ValueError:
+            tg = []
+        out[rel] = (float(mtime or 0.0), int(fsize or 0), tg)
+    return out
+
+
+def _colunas(con, qualified):
+    return [d[0] for d in con.execute('SELECT * FROM %s LIMIT 0' % qualified).description]
+
+
+def _qual(alvo):
+    return '.'.join(q(p) for p in alvo.split('.') if p)
+
+
+def reconstruivel(con, chave):
+    """O payload desta chave volta EXATO do banco? Lista com `_raw`, ou objeto
+    com a tabela `__raw`. Banco de antes do `__raw` responde False para o
+    objeto, e a importação o reconverte mesmo com o manifest casando."""
+    targets = manifest_targets(con, chave)
+    if not targets:
+        return False
+    if any(t.endswith(RAW_SUFIXO) for t in targets):
+        return True
+    if len(targets) != 1:
+        return False
+    try:
+        cols = _colunas(con, _qual(targets[0]))
+    except Exception:                                          # noqa: BLE001
+        return False
+    return cols == ['_empty'] or '_raw' in cols
+
+
+def escrever_calendario(con, tabela, feriados, nome):
+    """A tabela TIPADA de um calendário (`date`, `title`, `calendar`, `_seq`) —
+    o mesmo layout do `convert_holidays`, para o SQL de quem consulta."""
+    con.execute('CREATE OR REPLACE TABLE %s '
+                '("date" DATE, "title" VARCHAR, "calendar" VARCHAR, "_seq" BIGINT)'
+                % q(tabela))
+    data = []
+    for h in (feriados or []):
+        if not isinstance(h, dict):
+            continue
+        data.append([_parse_date(str(h.get('date', '')).strip()),
+                     str(h.get('title', h.get('name', '')) or ''),
+                     str(h.get('calendar', '') or nome or ''), len(data)])
+    if data:
+        con.executemany('INSERT INTO %s VALUES (?, ?, ?, ?)' % q(tabela), data)
+    return tabela
+
+
+def escrever_payload(con, rel, payload, kind, tabela, schema='main', nome_cal=None,
+                     mtime=None, fsize=None):
+    """Grava `payload` como a(s) tabela(s) do caminho `rel` e registra no
+    manifest. Devolve os nomes das tabelas criadas.
+
+    `mtime`/`fsize` são o carimbo que o manifest guarda — o do ARQUIVO quando
+    a origem é um JSON (importação), o relógio e o tamanho do texto quando a
+    origem é a memória (a gravação pela app). Os dois são só a chave dos memos
+    de leitura; nada compara com arquivo nenhum."""
+    ensure_manifest(con)
+    chave = manifest_key_of(rel, kind)
+    _drop_targets(con, manifest_targets(con, chave))
+    if schema != 'main':
+        con.execute('CREATE SCHEMA IF NOT EXISTS %s' % q(schema))
+    alvo = lambda t: '%s.%s' % (q(schema), q(t))               # noqa: E731
+    if kind == KIND_REFDATA:
+        rows = [r for r in (payload or []) if isinstance(r, dict)]
+        write_rows_table(con, alvo(tabela), _com_raw(rows), force_varchar=True)
+        criadas = [tabela]
+    elif kind == KIND_REGISTRY:
+        rows = [r for r in (payload or [])
+                if isinstance(r, dict) and str(r.get('name', '')).strip()]
+        write_rows_table(con, alvo('_registry'), _com_raw(rows), force_varchar=True)
+        criadas = ['_registry']
+    elif kind == KIND_CALENDAR:
+        criadas = [escrever_calendario(con, tabela, payload, nome_cal)]
+    else:
+        criadas = _convert_daily_payload(
+            con, schema, tabela, payload, raw=True,
+            meta_tabela=tabela if rel.endswith(_META_SUFIXO + '.json') else None)
+        if not _lista_de_objetos(payload):
+            # O objeto INTEIRO, como texto: é dele que a leitura remonta.
+            write_rows_table(con, alvo(tabela + RAW_SUFIXO),
+                             [{'_seq': 0, '_raw': json.dumps(payload, ensure_ascii=False)}],
+                             force_varchar=True)
+            criadas.append('%s.%s' % (schema, tabela + RAW_SUFIXO))
+    if fsize is None:
+        fsize = len(json.dumps(payload, ensure_ascii=False).encode('utf-8'))
+    manifest_record(con, chave, _Stamp(time.time() if mtime is None else mtime, fsize), criadas)
+    return criadas
+
+
+def ler_crus(con, rel, kind, tabela, schema='main'):
+    """O canal de reconstrução de um caminho, SEM parsear: `('list', [raw…])`
+    para a lista de registros (na ordem do `_seq`), `('obj', raw)` para o
+    payload-objeto, `('cal', [linhas])` para um calendário. `AUSENTE` quando
+    o manifest não tem o caminho; `None` quando o banco tem a entrada mas não
+    o canal (formato anterior ao `__raw` — reimportar)."""
+    chave = manifest_key_of(rel, kind)
+    est = manifest_stat(con, chave)
+    if est is None:
+        return AUSENTE
+    targets = est[2]
+    if kind == KIND_CALENDAR:
+        linhas = con.execute('SELECT "date", "title", "calendar" FROM %s ORDER BY "_seq"'
+                             % q(tabela)).fetchall()
+        return ('cal', [{'date': d.isoformat() if hasattr(d, 'isoformat') else (d or ''),
+                         'title': t or '', 'calendar': c or ''} for d, t, c in linhas])
+    principal = '%s.%s' % (schema, tabela)
+    raw_t = '%s.%s' % (schema, tabela + RAW_SUFIXO)
+    if raw_t in targets:
+        row = con.execute('SELECT "_raw" FROM %s LIMIT 1' % _qual(raw_t)).fetchone()
+        return ('obj', row[0] if row else 'null')
+    if principal not in targets and tabela not in targets:
+        return None
+    qualified = _qual(principal)
+    cols = _colunas(con, qualified)
+    if cols == ['_empty']:
+        return ('list', [])
+    if '_raw' not in cols:
+        return None
+    return ('list', [c for (c,) in con.execute(
+        'SELECT "_raw" FROM %s ORDER BY CAST("_seq" AS BIGINT)' % qualified).fetchall()])
+
+
+def parsear_crus(crus):
+    """O payload a partir do canal de `ler_crus` — objetos NOVOS a cada chamada."""
+    forma, dados = crus
+    if forma == 'list':
+        return [json.loads(c) for c in dados]
+    if forma == 'obj':
+        return json.loads(dados)
+    return [dict(r) for r in dados]
+
+
+def ler_payload(con, rel, kind, tabela, schema='main'):
+    crus = ler_crus(con, rel, kind, tabela, schema)
+    if crus is AUSENTE or crus is None:
+        return crus
+    return parsear_crus(crus)
+
+
+def apagar_payload(con, rel, kind):
+    """Tira um caminho do banco: as tabelas dele e a linha do manifest."""
+    ensure_manifest(con)
+    chave = manifest_key_of(rel, kind)
+    _drop_targets(con, manifest_targets(con, chave))
+    con.execute('DELETE FROM _manifest WHERE path = ?', [chave])
 
 # ── CLI (caminhos fixos do share — versão standalone) ───────────────────────
 import argparse

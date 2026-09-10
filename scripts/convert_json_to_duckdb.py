@@ -3,12 +3,13 @@
 """convert_json_to_duckdb.py — a carga completa da conversão JSON → DuckDB.
 
 CLI fina sobre o MOTOR `apps/pages/json_to_duckdb.py` (fase 2 da migração —
-HANDOFF §324–§326): o motor virou módulo do app porque o **espelho vivo**
-(`apps/pages/duck_mirror.py`) reconverte na hora cada JSON gravado, e a regra
-de conversão não pode existir em dois lugares. Este script é a carga completa
-— a primeira materialização numa instância, ou a reconciliação depois de um
-período com o app parado. Idempotente e incremental (manifest por banco):
-rodar de novo só reconverte o que mudou.
+HANDOFF §324–§326): o motor virou módulo do app porque o **armazém**
+(`apps/pages/data_store.py`, §434) grava cada payload no banco pela mesma
+regra, e ela não pode existir em dois lugares. Este script é a carga do que
+ainda está em JSON — o cutover do §434 (`--meses 0`, com o app parado), a
+primeira materialização numa instância, ou o legado fora da janela.
+Idempotente e incremental (manifest por banco): rodar de novo só reconverte
+o que mudou.
 
 Origem: `Config.DATA_DIR` (na instância do JPM, o `...\\static\\data` do
 share). Destino: `Config.DATABASE_DIR` — a pasta `db/` de todos os bancos
@@ -69,7 +70,7 @@ def _default_data_dir():
 def _default_out_dir(data_dir):
     """A pasta de TODOS os bancos (`Config.DATABASE_DIR`) quando a origem é o
     `DATA_DIR` do app; para uma origem avulsa, o `db/` ao lado dela — a mesma
-    regra do `duck_mirror`."""
+    regra do armazém (`data_store.db_root`)."""
     from apps.config import Config
     if os.path.normpath(os.path.abspath(data_dir)) == os.path.normpath(Config.DATA_DIR):
         return Config.DATABASE_DIR

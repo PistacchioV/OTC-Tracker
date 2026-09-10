@@ -55,9 +55,25 @@ import sys
 from datetime import datetime
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DATA = os.path.join(ROOT, 'apps', 'static', 'data')
-REFDATA_PATH = os.path.join(DATA, 'RefData.json')
-CPD_PATH = os.path.join(DATA, 'CounterpartyDetails.json')
+
+# O cadastro vive no BANCO (HANDOFF §434): caminho pelo `data_path` e
+# leitura/escrita pelo armazém. Fora do Windows o `Config` exige o share
+# absoluto; este script não encosta nele.
+sys.path.insert(0, ROOT)
+os.environ.setdefault('OTC_SHARED_DRIVE_ROOT', os.path.join(ROOT, '.import-share'))
+from apps.pages import data_store                                   # noqa: E402
+from apps.pages.data_paths import data_path                         # noqa: E402
+
+
+def _backup(path, stamp):
+    """Grava em disco, ao lado do caminho, o payload ATUAL do banco (`.bak`)."""
+    bak = '%s.%s.bak' % (path, stamp)
+    os.makedirs(os.path.dirname(bak) or '.', exist_ok=True)
+    with open(bak, 'w', encoding='utf-8') as fh:
+        json.dump(data_store.read(path), fh, ensure_ascii=False, indent=2)
+    return bak
+REFDATA_PATH = data_path('RefData.json')
+CPD_PATH = data_path('CounterpartyDetails.json')
 ROUTES_PATH = os.path.join(ROOT, 'apps', 'pages', 'routes.py')
 
 DEFAULT_XLSX = r'C:\Users\e930179\Downloads\Atualizar Base.xlsx'
@@ -222,8 +238,8 @@ def main():
     rows = read_sheet(args.xlsx)
     print('Linhas com SPN na aba %r: %d\n' % (SHEET, len(rows)))
 
-    refdata = json.load(open(args.refdata, encoding='utf-8'))
-    cpd = json.load(open(args.cpd, encoding='utf-8'))
+    refdata = data_store.read(args.refdata)
+    cpd = data_store.read(args.cpd)
     ref_by_spn = {}
     for r in refdata:
         ref_by_spn.setdefault(norm_spn(r.get('SPN')), r)
@@ -350,10 +366,8 @@ def main():
 
     stamp = datetime.now().strftime('%Y%m%d-%H%M%S')
     for path, data in ((args.refdata, refdata), (args.cpd, cpd)):
-        bak = '%s.%s.bak' % (path, stamp)
-        shutil.copy2(path, bak)
-        with open(path, 'w', encoding='utf-8') as fh:
-            json.dump(data, fh, ensure_ascii=False, indent=2)
+        bak = _backup(path, stamp)
+        data_store.write(path, data)
         print('Gravado %s (backup: %s)' % (os.path.basename(path), os.path.basename(bak)))
 
 

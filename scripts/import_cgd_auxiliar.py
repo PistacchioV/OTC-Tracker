@@ -52,6 +52,7 @@ if REPO_ROOT not in sys.path:
 os.environ.setdefault('OTC_SHARED_DRIVE_ROOT', os.path.join(REPO_ROOT, '.import-share'))
 
 from apps.pages.data_paths import mapping_write                     # noqa: E402
+from apps.pages import data_store                                   # noqa: E402
 
 DEFAULT_XLSX_CANDIDATES = [
     os.path.expanduser('~/Downloads/Auxiliar.xlsx'),
@@ -192,13 +193,9 @@ def main():
                  '  (dry-run, nada gravado)' if args.dry_run else ''))
         if args.dry_run:
             continue
-        os.makedirs(os.path.dirname(destino), exist_ok=True)
-        # Escrita atômica, como a do /mapping: meia lista em disco é pior que a
-        # lista de ontem.
-        tmp = destino + '.tmp'
-        with open(tmp, 'w', encoding='utf-8') as fh:
-            json.dump(rows, fh, ensure_ascii=False, indent=2)
-        os.replace(tmp, destino)
+        # Pelo ARMAZÉM, como o /mapping (§434): o cadastro vive no banco, e um
+        # JSON em disco aqui seria invisível para o app.
+        data_store.write(destino, rows)
     return 1 if falhou else 0
 
 
