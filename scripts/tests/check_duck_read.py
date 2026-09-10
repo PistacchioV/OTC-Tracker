@@ -16,7 +16,9 @@ sobre os DuckDB de sempre. O que este script prova, em tempfile:
      cópia, levanta BancoOcupado; a janela pula o banco; leitura boa limpa;
   8. enumeração pelo banco: `isdir`, `listdir`, `walk`, `day_files` e o
      `_day_files` do daycache; `remove` apaga tabela e manifest;
-  9. os cadastros do /mapping e o `static_data_file` respondem pelo banco.
+  9. os cadastros do /mapping e o `static_data_file` respondem pelo banco;
+  10. a gravação é ATÔMICA: uma que estoura depois de derrubar as tabelas
+     deixa o dado anterior e o carimbo anterior (ROLLBACK desfaz o DDL).
 Nada aqui toca em dado real.
 """
 import json
@@ -227,6 +229,40 @@ check('9. /static/data/<mapping>.json sai do banco',
 with app.test_request_context('/'):
     resp = R._duck_static_json('translations/en.json')
 check('9. translations fica no disco', resp, None)
+
+# ── 10. a gravação é ATÔMICA: falha no meio não perde o dado anterior ───────
+# `escrever_payload` começa DERRUBANDO as tabelas do caminho (`_drop_targets`)
+# e só depois cria as novas e regrava o manifest. Tudo isso roda dentro da
+# transação do `duckdb_write` (BEGIN antes do corpo, ROLLBACK na exceção) — e
+# o DuckDB desfaz DDL também. Sem isso, uma gravação que estourasse depois do
+# DROP deixaria o caminho sem tabela e o manifest apontando para ela.
+ATOM = _p('cache', 'new deals', 'NDF', 'Commodities', '2026', '06', '20260614_ndfcomm.json')
+R._atomic_write_json(ATOM, [{'Deal': 'ANTES-1'}, {'Deal': 'ANTES-2'}])
+_stamp_antes = (S.stat(ATOM).st_mtime, S.stat(ATOM).st_size)
+_escrever_real = S.core.escrever_payload
+
+
+def _escrever_e_estoura(con, rel, payload, kind, tabela, schema='main', **kw):
+    _escrever_real(con, rel, payload, kind, tabela, schema, **kw)   # DROP + CREATE + manifest
+    raise RuntimeError('estourou depois de reescrever')
+
+
+S.core.escrever_payload = _escrever_e_estoura
+try:
+    R._atomic_write_json(ATOM, [{'Deal': 'DEPOIS-1'}])
+    check('10. a gravacao que estoura LEVANTA (nao engole)', False)
+except RuntimeError:
+    check('10. a gravacao que estoura LEVANTA (nao engole)', True)
+finally:
+    S.core.escrever_payload = _escrever_real
+S.memo_forget()
+S._forget_db(os.path.join(DBDIR, 'cache', 'new deals', 'NDF', 'Commodities.db'))
+check('10. e o dado ANTERIOR continua la (ROLLBACK desfez o DROP e o manifest)',
+      [d['Deal'] for d in S.read(ATOM)], ['ANTES-1', 'ANTES-2'])
+check('10. com o carimbo anterior no manifest', (S.stat(ATOM).st_mtime, S.stat(ATOM).st_size), _stamp_antes)
+check('10. e o vizinho de banco nao foi tocado', S.read(OCUP), [{'Deal': 'OC-1'}])
+R._atomic_write_json(ATOM, [{'Deal': 'DEPOIS-2'}])
+check('10. a gravacao seguinte vale normalmente', [d['Deal'] for d in S.read(ATOM)], ['DEPOIS-2'])
 
 print()
 print('FAIL: %d' % len(fails) if fails else 'TUDO OK')
