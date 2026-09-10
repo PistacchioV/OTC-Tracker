@@ -18099,3 +18099,17 @@ Enquanto o request está preso no connect ele segura a trava COMPARTILHADA
 do banco, o permit e o portão: todo escritor daquele banco, em qualquer
 instância, estoura os 30 s × 2 e falha — é a cascata que apareceu como
 `BancoOcupado` na subida e no `_ndf_ter_path`.
+
+**"Continua sem a conta, com os defaults aprovados."** A cadeia foi provada
+de ponta a ponta num DATA_DIR de teste (`scripts/diag_ndfsum_account.py`):
+nome igual ao do Reference Data + `current` no slot certo → `BCO: 341 | AG:
+0910 | CC: 967`. O que deixa em branco, cada um visível no script: (1) o
+NOME da linha do Cockpit não bate com o `COUNTERPARTY` do Reference Data —
+a busca é pelo nome normalizado, e `BETA SA` ≠ `BETA S.A.`; a linha da API
+só recebe o nome do Reference Data quando o accronym/SPN resolve, senão fica
+a descrição da Athena; (2) o SPN resolvido não tem registro no Counterparty
+Details; (3) o slot da DIREÇÃO está só `pending` (o checker não aprovou o
+default, só a conta) — banco RECEIVE lê `DEFAULT_PAY`, banco PAY lê
+`DEFAULT_RECEIVE`; (4) `_cpd_load` falhando (agora sobe, antes era `[]`).
+O script roda na instância e imprime a cadeia por contraparte, com os nomes
+parecidos do Reference Data quando o nome não casa.
