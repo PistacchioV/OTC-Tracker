@@ -917,6 +917,7 @@ São **45**: `currency-base`, `interbook-ndf`, `commodities-b3`,
 | `export_duckdb_to_json.py` | o ROLLBACK: reconstrói do banco os JSONs com diferença (`--dry-run`, `--force`, `--only`); `check_export_rollback.py` prova que cada forma volta exata |
 | `scripts/standalone/` (40, GERADOS por `build_duckdb_standalone.py`) | os mesmos conversores para máquina sem o código (`pip install duckdb` só) — nunca editar à mão |
 | `build_sop_docx.py` | SOP e Guia em Word a partir do `.md` |
+| `diag_ndfsum_account.py [AAAA-MM-DD]` | DIAGNÓSTICO da coluna Account do Settlement Summary: nome da linha → SPN no Reference Data → registro do Counterparty Details → defaults → conta, dizendo onde a cadeia quebra (§436) |
 
 `apps/static/data/db/` é gitignorado: bancos não vêm no pull. Telas vazias
 depois de um pull são migração não rodada, não bug.
