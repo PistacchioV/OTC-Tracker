@@ -279,7 +279,11 @@ nomes que o app conhecia (`day_records`, `dataset_rows`, `refdata_rows`,
   segurava a trava esperando o portão e o leitor segurava o portão esperando
   a trava: 12 s por gravação com leitores ativos, e o banco marcado OCUPADO
   por 60 s. `check_duck_gate.py` prende os dois sentidos e §6 MEDE a
-  gravação sob oito leitores em laço. O motor `json_to_duckdb` não importa `apps` (o standalone copia
+  gravação sob oito leitores em laço. ENTRE instâncias o portão não alcança:
+  o escritor deixa uma INTENÇÃO (`<db>.lock.w`) enquanto pede a trava, e o
+  leitor com trava recua até 1 s se ela é recente (um `stat` por abertura;
+  órfã de mais de 15 s é ignorada). Sem isso a gravação da instância vizinha
+  esperava até 8 s por um instante sem leitor; com, 0,3 s (§7 prende). O motor `json_to_duckdb` não importa `apps` (o standalone copia
   o corpo); `check_duck_read.py` prende o armazém ponta a ponta.
 
 ### A camada `database_access`

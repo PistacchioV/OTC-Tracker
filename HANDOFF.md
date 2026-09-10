@@ -17860,6 +17860,17 @@ corte, que nenhum teste de sequência via:
   (`await_readers`) cobre o poll sem trava do sino que entrou no meio.
   Medido: gravação de 9-12 s para 10 ms (p50) / 29 ms (máx), leitura
   igual, zero OCUPADO. `check_duck_gate.py` §6 prende.
+- **E a mesma disputa ENTRE instâncias** (a varredura seguinte): o portão
+  é em memória e não alcança o outro processo; a trava exclusiva, pedida
+  por tentativa, só entra num instante sem leitor — o escritor vizinho
+  esperava até 8 s, e tentar a cada 50 ms em vez de 250 não muda nada. O
+  escritor passa a deixar um arquivo de INTENÇÃO (`<db>.lock.w`) enquanto
+  pede a trava, e o leitor com trava olha o `stat` dele antes da
+  compartilhada — uma ida ao share no custo de uma abertura que já é
+  várias — e recua por até 1 s se é recente; órfã (o processo morreu) é
+  ignorada pela idade (15 s). Medido: escritor vizinho de 7,9 s para
+  0,33 s no pior caso, leitura p50 igual, pior leitura 0,37 s, nenhum
+  órfão. `check_duck_gate.py` §7 prende (recuo, órfã ignorada, limpeza).
 
 O que a mesma varredura MEDIU e deixou como está:
 
@@ -17868,12 +17879,6 @@ O que a mesma varredura MEDIU e deixou como está:
   não fica `.wal` para trás). A tabela reconstruída a cada gravação não
   vira espaço no share.
 - **Escritor de OUTRO processo contra leitores em laço deste**: as
-  leituras não sentem (p50 2 ms, nenhum OCUPADO), mas a gravação da
-  instância vizinha esperou até 8 s pela trava exclusiva — o portão é em
-  memória e não alcança o outro processo; a trava exclusiva é pedida por
-  tentativa (`NON_BLOCKING`, a cada 0,25 s) e só entra num instante sem
-  leitor. É o mesmo limite que o espelho tinha, e na instância os leitores
-  em laço (o aquecimento dos Summaries) leem em LOTE pelo `prefetch`, uma
-  abertura por banco, o que deixa a trava livre quase o tempo todo. Um
-  sinal cross-process (arquivo de intenção ao lado do `.db`) custaria um
-  `stat` no share por leitura; não vale por enquanto.
+  leituras não sentiam (p50 2 ms, nenhum OCUPADO), mas a gravação da
+  instância vizinha esperava até 8 s — fechado na varredura seguinte com a
+  intenção de escrita (acima).

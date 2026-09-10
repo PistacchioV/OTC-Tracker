@@ -221,6 +221,7 @@ class _UnlockedGateRegistry:
 
 _GATE_READ_WAIT_SECONDS = 1.0
 _GATE_WRITE_WAIT_SECONDS = 10.0
+_LOCK_CHECK_INTERVAL_SECONDS = 0.05
 
 # As assinaturas de "o arquivo tem outro dono", nos dois sistemas. O Windows
 # responde com a frase do próprio SO; o Linux e o macOS, com a do lock do
@@ -563,6 +564,50 @@ def _acquire_permit(
     )
 
 
+# ── a INTENÇÃO de escrita, entre processos ───────────────────────────────────
+# O portão em memória dá preferência ao escritor DENTRO do processo; entre
+# instâncias sobre o mesmo db/ do share ele não alcança, e a trava exclusiva,
+# pedida por tentativa, só entra num instante em que nenhum leitor da OUTRA
+# instância segura a compartilhada — com leitores em laço lá, o escritor daqui
+# esperava até 8 s (medido em 10/09/2026; tentar mais vezes não muda). O
+# escritor deixa um arquivo de intenção ao lado do `.lock` enquanto pede a
+# trava; o leitor que vai abrir COM trava olha o `stat` dele (uma ida ao share,
+# no custo de uma abertura que já é várias) e, se é recente, recua por até
+# `_WRITE_INTENT_BACKOFF_SECONDS`. Intenção velha (o processo morreu) é
+# ignorada pela idade — ninguém fica preso a um arquivo órfão.
+_WRITE_INTENT_SUFFIX = ".w"
+_WRITE_INTENT_MAX_AGE_SECONDS = 15.0
+_WRITE_INTENT_BACKOFF_SECONDS = 1.0
+
+
+def _write_intent_touch(path: str) -> None:
+    try:
+        with open(path, "a"):
+            pass
+        os.utime(path, None)
+    except OSError:
+        pass
+
+
+def _write_intent_clear(path: str) -> None:
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+
+
+def _write_intent_backoff(path: str) -> None:
+    deadline = time.monotonic() + _WRITE_INTENT_BACKOFF_SECONDS
+    while time.monotonic() < deadline:
+        try:
+            st = os.stat(path)
+        except OSError:
+            return
+        if time.time() - st.st_mtime > _WRITE_INTENT_MAX_AGE_SECONDS:
+            return
+        time.sleep(_LOCK_CHECK_INTERVAL_SECONDS)
+
+
 def _acquire_file_lock(
     operation: DatabaseOperation,
     timeout_seconds: Optional[float] = None,
@@ -581,16 +626,32 @@ def _acquire_file_lock(
         if operation.mode == "write"
         else portalocker.LockFlags.SHARED
     )
+    # `check_interval`: a trava é pedida por TENTATIVA (NON_BLOCKING). O
+    # padrão do portalocker (0,25 s) fazia um escritor esperar um quarto de
+    # segundo por uma leitura de milissegundos; 50 ms é uma chamada de lock
+    # por tentativa, sem leitura de dado. Quem resolve a disputa com leitores
+    # em LAÇO de outra instância não é o intervalo, é a intenção de escrita
+    # (abaixo).
     lock = portalocker.Lock(
         operation.lock_path,
         mode="a+b",
         timeout=timeout,
+        check_interval=_LOCK_CHECK_INTERVAL_SECONDS,
         flags=lock_mode | portalocker.LockFlags.NON_BLOCKING,
     )
     _log_event("file_lock_wait_started", operation)
     started_at = time.monotonic()
+    intent = operation.lock_path + _WRITE_INTENT_SUFFIX
+    if operation.mode == "write":
+        _write_intent_touch(intent)
+    else:
+        _write_intent_backoff(intent)
     try:
-        lock.acquire()
+        try:
+            lock.acquire()
+        finally:
+            if operation.mode == "write":
+                _write_intent_clear(intent)
     except portalocker.exceptions.LockException as exc:
         _log_event(
             "file_lock_wait_timed_out", operation, logging.WARNING,
