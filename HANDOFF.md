@@ -18582,6 +18582,24 @@ com um `.wal.checkpoint` vazio; se a ordem estiver trocada, o replay recusa e
 o script tenta a outra — não existe caminho em que um WAL mal montado seja
 gravado no share.
 
+**A fusão à mão funcionou** (`fundido à mão na ordem .wal + .wal.checkpoint:
+recuperado`), e o que barrou foi a conferência do próprio script: o DuckDB
+deixa um `.wal.recovery` PARA TRÁS depois de recuperar. É o prefixo VÁLIDO do
+WAL que ele salvou — o processo morreu no meio de uma entrada e a última fica
+pela metade —, já replayado e já gravado no `.db` pelo `CHECKPOINT`. É resto,
+não dado (a abertura seguinte nem o lê), e some; senão o banco recuperado
+voltaria ao share já contando como limbo.
+
+Isso também fecha o `Could not move file` original: o rename que falha é o com
+que o DuckDB devolve esse prefixo salvo ao lugar do `.wal`. Não é antivírus,
+nem atributo, nem pasta — é uma operação que aquele Windows nega, e que a
+fusão por cópia dispensa.
+
+O tamanho do resto virou a MEDIDA da recuperação: se o prefixo salvo for menor
+que os dois WALs que entraram, o replay parou no meio e o resto se perderia na
+troca — o script então RECUSA o banco dizendo os dois números, e o share fica
+como estava.
+
 `check_json_to_duckdb.py` §8 prende os cinco: deixa o banco de origem em `0444`
 antes da rodada boa (sem `_liberar` o recover inteiro falha), força um
 `Could not move file` na primeira abertura para provar que a segunda passa, e
@@ -18591,4 +18609,6 @@ recusada ANTES da cópia (com o remédio e sem traceback), e põe um
 disco local, que o log diga isso, que o dia volte exato mesmo assim e que o
 arquivo original apareça em `_recuperado/`; e nega o rename na abertura da
 cópia para provar que a fusão à mão entra, que nenhum WAL sobra e que as 200
-mil linhas que só existiam no WAL vêm junto.
+mil linhas que só existiam no WAL vêm junto, com o resto do DuckDB sumindo
+sozinho quando tem o tamanho do WAL que entrou e RECUSANDO a troca quando é
+menor.
