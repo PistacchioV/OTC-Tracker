@@ -157,12 +157,34 @@ def _espera_renomear(caminho, tentativas, espera):
             time.sleep(espera)
 
 
+def _a_copiar(irmaos):
+    """Quais WALs vão para a cópia local. O `.wal.recovery` é o produto da FUSÃO
+    do `.wal` com o `.wal.checkpoint` — na instância os tamanhos batem na soma
+    exata (17 + 1104 = 1121 MB), e nos parciais dão menos —, e o DuckDB o
+    REFAZ a partir dos dois. Levá-lo junto não acrescenta dado nenhum e é o que
+    quebra a recuperação no Windows: o `MoveFileW` com que o DuckDB grava esse
+    nome recusa um destino que já existe, e volta `Could not move file: Access
+    is denied` — dentro do %LOCALAPPDATA%, com a trava do share na mão, depois
+    de copiar 1,1 GB à toa (§444). Só vai junto quando um dos dois FALTA: aí o
+    `.wal.recovery` pode ser a única cópia do que ainda não foi checkpointado.
+    O original nunca é apagado: vai inteiro para `db/_recuperado/`."""
+    fusao_completa = '.wal' in irmaos and '.wal.checkpoint' in irmaos
+    return [s for s in _store.WAL_SUFIXOS
+            if s in irmaos and not (s == '.wal.recovery' and fusao_completa)]
+
+
 def _recupera_local(local, tentativas=5, espera=15):
     """Abre a cópia LOCAL em escrita (é aqui que o DuckDB funde os WALs e refaz
     o replay) e força o `CHECKPOINT`. Retenta o acesso negado: o antivírus
     corporativo costuma estar lendo os megabytes recém-escritos quando o DuckDB
     pede o rename, e a segunda tentativa passa."""
     for n in range(1, tentativas + 1):
+        # A fusão pela metade que a tentativa anterior deixou é o destino que o
+        # `MoveFileW` da próxima vai recusar: some com ela (o `.wal` e o
+        # `.wal.checkpoint` que a geram continuam aqui).
+        if n > 1 and os.path.isfile(local + '.wal.recovery'):
+            _liberar(local + '.wal.recovery')
+            os.remove(local + '.wal.recovery')
         for s in ('',) + _store.WAL_SUFIXOS:
             if os.path.isfile(local + s):
                 _liberar(local + s)
@@ -214,7 +236,11 @@ def recuperar(db, work_dir, db_dir, slim=True, carimbo=None):
     t0 = time.time()
     shutil.copy2(db, local)
     _liberar(local)
-    for s in irm:
+    copiar = _a_copiar(irm)
+    if '.wal.recovery' in irm and '.wal.recovery' not in copiar:
+        _diz('     descartei o .wal.recovery (%s): ele É a fusão do .wal com o '
+             '.wal.checkpoint, que vão inteiros' % _mb(irm['.wal.recovery']))
+    for s in copiar:
         shutil.copy2(db + s, local + s)
         _liberar(local + s)
     resumo['t_copia'] = time.time() - t0
