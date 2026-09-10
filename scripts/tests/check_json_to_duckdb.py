@@ -625,6 +625,23 @@ _p = subprocess.run([sys.executable, os.path.join(ROOT, 'scripts', 'recover_duck
 check('8. --dry-run lista o banco e os MB sem tocar em nada',
       (_p.returncode, 'preso.db' in _p.stdout, '.wal.checkpoint' in _p.stdout,
        '.wal.checkpoint' in _S.wal_irmaos(_LIMBO)), (0, True, True, True))
+# Com alguem VIVO segurando o arquivo (a instancia de pe, ou o `store-import`
+# preso meia hora dentro do duckdb.connect) a trava exclusiva nao vem: o banco
+# e PULADO com um recado de uma linha, nao com traceback, e nada e tocado.
+from apps.pages import database_access as _DA                 # noqa: E402
+_trava_teste = _DA.hold_file_lock(_LIMBO, write=True, timeout_seconds=10)
+try:
+    _p = subprocess.run([sys.executable, os.path.join(ROOT, 'scripts', 'recover_duckdb_wal.py'),
+                         '--db-dir', OUT, '--work-dir', _WORK, '--lock-seconds', '1'],
+                        capture_output=True, text=True, env=dict(os.environ))
+finally:
+    _trava_teste.release()
+check('8. banco preso por outro processo e PULADO com recado, sem traceback (rc 1)',
+      (_p.returncode, 'EM USO' in _p.stdout, 'pare TODAS as instâncias' in _p.stdout,
+       'Traceback' in _p.stdout), (1, True, True, False))
+check('8.   e o banco preso ficou como estava',
+      ('.wal.checkpoint' in _S.wal_irmaos(_LIMBO), os.path.isfile(_LIMBO + '.novo')), (True, False))
+
 _p = subprocess.run([sys.executable, os.path.join(ROOT, 'scripts', 'recover_duckdb_wal.py'),
                      '--db-dir', OUT, '--work-dir', _WORK],
                     capture_output=True, text=True, env=dict(os.environ))
