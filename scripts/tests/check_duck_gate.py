@@ -16,7 +16,10 @@ connect (pelo `duckdb_write`). O que se prova, em tempfile:
      em milissegundos e nenhuma leitura desiste — a escrita é declarada no
      portão ANTES da trava de arquivo (na ordem inversa, o ciclo leitor ×
      escritor só se desfazia por timeout: 12 s por gravação, e o banco
-     marcado OCUPADO por 60 s; medido em 10/09/2026).
+     marcado OCUPADO por 60 s; medido em 10/09/2026);
+  7. a INTENÇÃO de escrita entre processos: o arquivo `.lock.w` recente faz
+     o leitor recuar (até 1 s) antes da trava compartilhada; um órfão velho
+     é ignorado; e o escritor o apaga ao pegar a trava.
 """
 import contextlib
 import os
@@ -223,6 +226,25 @@ check('6. a mediana da gravacao e de milissegundos (%.3fs)' % (_lats[len(_lats) 
       bool(_lats) and _lats[len(_lats) // 2] < 1.0)
 check('6. a pior gravacao nao esperou timeout (%.3fs)' % (_lats[-1] if _lats else -1), bool(_lats) and _lats[-1] < 3.0)
 check('6. nenhuma leitura desistiu por OCUPADO (%d)' % len(_ocupados), len(_ocupados), 0)
+
+print('\n== 7. a intencao de escrita entre processos ==')
+_intent = DA.lock_file_path(DB) + DA._WRITE_INTENT_SUFFIX
+open(_intent, 'a').close()                                   # como faria a instancia vizinha
+os.utime(_intent, None)
+S.memo_forget()
+t0 = time.monotonic()
+DR.day_records(dia)
+_esp = time.monotonic() - t0
+check('7. intencao recente: a leitura recuou (%.2fs)' % _esp, 0.8 <= _esp <= 3.0)
+os.utime(_intent, (time.time() - 120, time.time() - 120))   # orfa: o processo morreu
+S.memo_forget()
+t0 = time.monotonic()
+DR.day_records(dia)
+_esp = time.monotonic() - t0
+check('7. intencao velha e ignorada (%.2fs)' % _esp, _esp < 0.5)
+R._atomic_write_json(dia, [{'Deal': 'DBH-1FFF', 'TradeDate': '15/06/2026'}])
+check('7. o escritor apaga a intencao ao pegar a trava', os.path.exists(_intent), False)
+check('7. e gravou', DR.day_records(dia)[0]['Deal'], 'DBH-1FFF')
 
 print('\n%s' % ('TUDO OK' if not fails else 'FALHAS (%d): %r' % (len(fails), fails)))
 sys.exit(1 if fails else 0)
