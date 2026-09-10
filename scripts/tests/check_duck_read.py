@@ -176,7 +176,14 @@ try:
     check('7. sem copia em memoria, BancoOcupado (nunca "nao ha dado")', False)
 except S.BancoOcupado:
     check('7. sem copia em memoria, BancoOcupado (nunca "nao ha dado")', True)
-check('7. e isfile responde False sem estourar', S.isfile(OCUP), False)
+# OCUPADO nunca e "nao existe" (§434, varredura de 10/09): `isfile` sobe
+# BancoOcupado — lido como False, o read-modify-write dos handlers gravaria so
+# o registro novo por cima do dia inteiro quando a vizinha soltasse a trava.
+try:
+    S.isfile(OCUP)
+    check('7. e isfile sob OCUPADO levanta BancoOcupado (nunca False)', 'nao levantou', True)
+except S.BancoOcupado:
+    check('7. e isfile sob OCUPADO levanta BancoOcupado (nunca False)', True, True)
 S.duckdb_read = _dr_real
 S.ocupado_forget()
 check('7. passada a disputa, o banco volta a responder', DR.day_payload(OCUP), [{'Deal': 'OC-1'}])

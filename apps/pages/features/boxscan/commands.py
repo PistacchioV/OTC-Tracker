@@ -93,6 +93,7 @@ def pull(product):
 
 
 def scheduler_loop():
+    from apps.pages import data_store
     last_err = {}
     while True:
         time.sleep(max(60, POLL_MIN * 60))
@@ -102,6 +103,12 @@ def scheduler_loop():
             try:
                 pull(product)
                 last_err.pop(product, None)
+            except data_store.BancoOcupado as e:
+                # É um IOError, e cairia no `EnvironmentError` abaixo como "sem
+                # Outlook" em INFO — é a instância vizinha gravando (§434):
+                # avisa e tenta na volta seguinte.
+                _routes().log.warning('[boxscan] %s: banco ocupado, fica para a próxima volta (%s)',
+                                      product, e)
             except EnvironmentError as e:
                 # Sem Outlook (host não-Windows): estado esperado, não é falha.
                 if last_err.get(product) != str(e):

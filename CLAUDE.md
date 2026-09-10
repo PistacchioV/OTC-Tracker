@@ -251,7 +251,14 @@ nomes que o app conhecia (`day_records`, `dataset_rows`, `refdata_rows`,
   em memória**; sem cópia, `BancoOcupado` (um `IOError`, que os `except` dos
   leitores tratam como arquivo ilegível). A disputa perdida marca o banco por
   `OTC_DUCK_BUSY_SKIP_SECONDS` (60): as leituras seguintes nem tentam.
-  **Não há mais JSON para cair.**
+  **Não há mais JSON para cair.** E OCUPADO nunca é "não existe":
+  `isfile`/`exists`/`stat` também levantam `BancoOcupado` quando o banco
+  está preso sem manifest conhecido — lido como "não existe", um
+  read-modify-write (`if exists: ler; alterar; gravar`) gravaria só o
+  registro novo por cima do dia inteiro. O que escapa do handler cai no
+  tratador global (`_handle_database_busy`, `routes.py`): 503 JSON
+  `error=database_busy` com `Retry-After`, nunca 500 HTML. O claim diário
+  lê ocupado como "a outra instância cuida" (não envia).
 - **O que se paga:** a gravação reconstrói a tabela DENTRO do request, sob a
   trava exclusiva — no share são os segundos que o espelho pagava em
   background — e o `_cache_lock` de quem faz read-modify-write fica preso

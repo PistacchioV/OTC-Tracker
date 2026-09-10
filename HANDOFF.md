@@ -17882,3 +17882,48 @@ O que a mesma varredura MEDIU e deixou como está:
   leituras não sentiam (p50 2 ms, nenhum OCUPADO), mas a gravação da
   instância vizinha esperava até 8 s — fechado na varredura seguinte com a
   intenção de escrita (acima).
+
+A varredura de 10/09 pelo ângulo "o que apaga, serve ou empacota caminho do
+`DATA_DIR`, e que exceção o armazém levanta contra o que o chamador captura"
+achou um furo de PERDA DE DADO sob disputa:
+
+- **OCUPADO lido como "não existe".** `stat`/`isfile`/`exists` consultavam o
+  manifest sem `strict`: banco preso pela instância vizinha e sem manifest
+  em cache (a subida fria, ou logo depois de uma gravação deste processo,
+  que esquece o cache do banco) respondia `{}` → `FileNotFoundError` →
+  `False`. Os 22 handlers de read-modify-write do New Deals/Intrag fazem
+  `if exists: ler; alterar; gravar` — e com False gravariam SÓ o registro
+  novo por cima do dia inteiro assim que a vizinha soltasse a trava, sem
+  erro nenhum. Agora as três levantam `BancoOcupado` (só
+  `FileNotFoundError` é "não"); a enumeração (`listdir`/`walk`/`day_files`)
+  continua respondendo vazio sob ocupado, porque ninguém grava a partir
+  dela.
+- **E sem tratador, `BancoOcupado` num POST era 500 em HTML** — esses
+  handlers só capturam erro de parse, e a tela mostrava "Internal Server
+  Error". `_handle_database_busy` (`routes.py`, `app_errorhandler` para
+  `BancoOcupado` e `DatabaseLockTimeout`) responde 503 JSON
+  `error=database_busy` com `Retry-After: 5` e uma linha de WARNING.
+- **O claim diário** (`_claim_daily_slot`) engolia `BancoOcupado` como
+  "lista vazia" (o `except IOError` que a varredura anterior pôs para o
+  claim ausente) e assumia o slot — o envio duplo por outra porta. Ocupado
+  agora sobe e vira `False` ("a outra instância cuida"), como a disputa
+  pelo lock do claim já era.
+- Comentários que ainda falavam do espelho como vivo (`_b3_load`/`_b3_save`,
+  as três recons, `otc_tickets`, `database_access`) reescritos. O motor
+  `json_to_duckdb` ficou como está: os dele são história do desenho, e
+  tocá-lo regera 80 arquivos gerados por cosmética.
+
+`check_duck_gate.py` §5b prende os três (isfile/exists/stat sobem, o POST
+responde 503 estruturado, o dia fica intacto).
+
+Na continuação: o `/static/data/*.json` sob OCUPADO sem cópia em memória
+serve o JSON de disco do `DATA_DIR`, que depois do corte não é mais
+regravado — ficou assim de propósito (só os `fetch` de leitura do navegador
+passam por ali — RefData, Subjacente, anbima —, e um dropdown com dado de
+ontem é melhor que um erro de JS; os cadastros do /mapping vão pela API),
+mas agora AVISADO (`_static_busy_warn`, uma linha por minuto). Os laços de
+scheduler foram conferidos (todo `while True` tem `try` no corpo); o do
+boxscan capturava `EnvironmentError` e leria `BancoOcupado` como "sem
+Outlook" em INFO — ganhou o `except` próprio, em WARNING. Ficou anotado sem
+mexer: 47 `os.makedirs` precedem uma gravação que vai para o banco e criam
+pastas vazias de ano/mês no share (uma ida por gravação, inofensiva).

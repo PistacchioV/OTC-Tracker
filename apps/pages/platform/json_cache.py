@@ -55,12 +55,16 @@ def _claim_daily_slot(claim_file, claim_dir, slot, keep_last, log_prefix):
                 # A leitura é pelo ARMAZÉM, como a gravação (§434): o claim vive
                 # no banco do control-panel, e ler o disco aqui seria nunca ver
                 # o slot que a volta anterior reservou — todo envio sairia duas
-                # vezes. Ausente/ocupado/ilegível = lista vazia, como antes.
+                # vezes. Ausente/ilegível = lista vazia, como antes; OCUPADO
+                # (a instância vizinha gravando) sobe e vira "ela cuida" abaixo
+                # — ler ocupado como vazio é o mesmo envio duplo por outra porta.
                 from apps.pages import data_store
                 try:
                     sent = data_store.read(claim_file)
                     if not isinstance(sent, list):
                         sent = []
+                except data_store.BancoOcupado:
+                    raise
                 except (IOError, OSError, ValueError):
                     sent = []
                 if slot in sent:
@@ -74,7 +78,15 @@ def _claim_daily_slot(claim_file, claim_dir, slot, keep_last, log_prefix):
         log.warning('[%s] claim lock busy — assuming another instance is handling %s',
                     log_prefix, slot)
         return False
-    except Exception:                                       # noqa: BLE001
+    except Exception as exc:                                # noqa: BLE001
+        from apps.pages import database_access as _dba
+        if _dba.is_file_in_use(exc):
+            # O banco do claim está com a instância vizinha (leitura OCUPADA ou
+            # a gravação esgotou a retentativa): quem está gravando é quem vai
+            # enviar. Assumir o slot aqui seria o envio duplo que o claim evita.
+            log.warning('[%s] banco do claim ocupado — assumindo que outra instância cuida de %s',
+                        log_prefix, slot)
+            return False
         log.warning('[%s] não consegui gravar o claim:\n%s', log_prefix, traceback.format_exc())
         return True
 

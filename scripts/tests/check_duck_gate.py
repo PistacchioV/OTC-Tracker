@@ -20,6 +20,10 @@ connect (pelo `duckdb_write`). O que se prova, em tempfile:
   7. a INTENÇÃO de escrita entre processos: o arquivo `.lock.w` recente faz
      o leitor recuar (até 1 s) antes da trava compartilhada; um órfão velho
      é ignorado; e o escritor o apaga ao pegar a trava.
+  5b. OCUPADO nunca é "não existe": `isfile`/`exists`/`stat` levantam
+     `BancoOcupado`, o POST de read-modify-write responde 503 `database_busy`
+     (tratador global) e o dia fica intacto — lido como "não existe", o
+     handler gravaria só o registro novo por cima do dia inteiro.
 """
 import contextlib
 import os
@@ -178,7 +182,38 @@ try:
 except S.BancoOcupado:
     check('5. leitura com a trava presa por outro processo levanta BancoOcupado', True)
 check('5. e desiste rapido (%.1fs)' % (time.monotonic() - t0), time.monotonic() - t0 < 5)
+
+# 5b. OCUPADO nao pode parecer "nao existe": `isfile`/`exists`/`stat` sobem
+# BancoOcupado. Um read-modify-write (`if exists: ler; alterar; gravar`) que
+# lesse False gravaria SO o registro novo por cima do dia inteiro assim que a
+# vizinha soltasse a trava — e o tratador global responde 503 `database_busy`
+# em vez do 500 HTML que a tela mostrava como "Internal Server Error".
+for _nome, _fn in (('isfile', S.isfile), ('exists', S.exists), ('stat', S.stat)):
+    try:
+        _fn(dia)
+        check('5b. %s com o banco ocupado levanta BancoOcupado (nao "nao existe")' % _nome, False)
+    except S.BancoOcupado:
+        check('5b. %s com o banco ocupado levanta BancoOcupado (nao "nao existe")' % _nome, True)
+    except FileNotFoundError:
+        check('5b. %s com o banco ocupado levanta BancoOcupado (nao "nao existe")' % _nome, 'FileNotFoundError', True)
+from datetime import datetime, timedelta                    # noqa: E402
+R.NDF_COMM_CACHE_DIR = os.path.join(TMP, 'cache', 'new deals', 'NDF', 'Commodities')
+app.config['TESTING'] = True
+_cl = app.test_client()
+with _cl.session_transaction() as _s:
+    _s.update(authenticated=True, user_sid='X1', user_name='X', user_role='BO', user_email='x@x',
+              session_expires_at=(datetime.now() + timedelta(days=1)).isoformat())
+_resp = _cl.post('/api/new-deals/ndf-commodities/cache',
+                 json={'Deal': 'DBH-NOVO', 'Client': 'C', 'TradeDate': '15/06/2026'})
+check('5b. o POST de read-modify-write responde 503 (nao 500)', _resp.status_code, 503)
+check('5b. e o corpo e JSON estruturado (error=database_busy)',
+      (_resp.get_json() or {}).get('error'), 'database_busy')
+check('5b. com Retry-After', _resp.headers.get('Retry-After'), '5')
 trava.release()
+S.ocupado_forget()
+S.memo_forget()
+check('5b. e o dia NAO foi sobrescrito pelo registro novo',
+      [d['Deal'] for d in DR.day_records(dia)], ['DBH-1EEE'])
 S.ocupado_forget()
 check('5. solta a trava, o banco volta a responder', DR.day_records(dia)[0]['Deal'], 'DBH-1EEE')
 
