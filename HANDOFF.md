@@ -18288,3 +18288,128 @@ De caminho: com as tabelas-dia só `_seq`/`_raw` (§437), a carga completa
 `convert_json_to_duckdb.py --meses 0` voltou a ser barata — depois do
 `slim_duckdb.py`, é ela que torna enumerável o histórico que hoje só existe
 em disco.
+
+## §442 — O limbo de checkpoint do DuckDB: era o WAL, não (só) o catálogo (2026-09-10)
+
+O que o `dir /s` do `db\cache\b3 files` da instância mostrou, depois do
+slim (§437) "rodado":
+
+| banco | `.db` (data) | `.wal` | `.wal.checkpoint` | `.wal.recovery` |
+|---|---|---|---|---|
+| NDF/DPOSICAO-TER | 264 MB (31/08) | 16,8 MB | 75 MB (31/08 17:12) | 46 MB (10/09 16:07, crescendo) |
+| Operations/DOPERACOES | 104 MB (31/08) | 16,8 MB | 75 MB (01/09) | 91 MB (10/09) |
+| Option/DPOSICAO | 283 MB (31/08) | 16,8 MB | 615 MB (02/09) | 267 MB (10/09 15:59) |
+| Swap/DFLUXO | 32 MB (31/08) | 16,8 MB | 605 MB (06/09) | 622 MB (10/09) |
+| Swap/DPOSICAO-SWAP | 532 MB (31/08) | 16,8 MB | 1.104 MB (03/09) | 1.121 MB (09/09) |
+
+Mais `73760_DOPERACOES.db.slim`, `DFLUXO.db.slim`, `DAGENDAPREMIOS.db.slim`
+de 12 KB (10/09), e NENHUM JSON em `cache/b3 files/*/2026/09/10` (ninguém
+grava JSON; a hipótese da instância em código antigo caiu).
+
+**Leitura.** Todo `.db` parado em 31/08 = nenhum checkpoint terminou desde a
+carga. O `.wal` de 16,8 MB em todos = o `checkpoint_threshold` do DuckDB
+(16 MB): ao bater nele o DuckDB começa um checkpoint DENTRO do commit
+(`WALStartCheckpoint`), e as gravações seguintes vão para um segundo WAL,
+o `.wal.checkpoint`. O checkpoint de um banco de 300–500 MB com o catálogo
+de 134 MB do §437, pelo share, leva minutos — e a instância sobe várias
+vezes ao dia. Morto no meio, ficam os dois WALs, e o DuckDB entra no que
+ele chama de recuperação: **toda abertura só-leitura refaz o replay dos
+DOIS** (16 MB + até 1,1 GB, pelo share: os "minutos por abertura" de
+§436/§437, que eu atribuí só ao catálogo); **toda abertura em ESCRITA
+primeiro FUNDE os dois num `.wal.recovery`** (copia 1,1 GB pelo share),
+depois refaz o replay, depois tenta o checkpoint de novo — e é morta de
+novo. O `.wal.recovery` datado de hoje é o `store-import` de
+`2026/09/09/…DPOSICAO-TER.json` (o único legado em disco: escrito pelo
+código anterior na manhã do cutover) preso há 28 min DENTRO do
+`duckdb.connect` (fase `abrindo`, o rastro de §436 mostrou), segurando a
+trava EXCLUSIVA do TER — e a irmã dele no Option, que é de onde vieram os
+dois timeouts de 15 s do Summary (`option/73760_dposicao.db read 2x 43.6s`).
+O Summary carregou em 70 s: 55 s em 8 aberturas, 30 s delas esperando
+essas travas; o resto é a latência base do share (1,5–3,5 s por abertura
+fria — até o sino, um banco minúsculo, paga 3,5 s).
+
+E o slim: o `ATTACH … READ_ONLY` do banco em limbo refaz o mesmo replay
+pelo share — travou (ou foi morto) nos três `.slim` de 12 KB, e TER/Option
+nem começaram (a trava exclusiva estava com a `store-import`). Os cinco
+bancos grandes continuam na forma tipada E em limbo.
+
+**Confirmado na fonte do DuckDB 1.5.4** (`storage_manager.cpp`,
+`wal_replay.cpp`): `GetCheckpointWALPath() = .wal.checkpoint`,
+`GetRecoveryWALPath() = .wal.recovery`; `WALStartCheckpoint` fecha o `.wal`
+com o marcador e abre o checkpoint WAL para as gravações concorrentes;
+`WALFinishCheckpoint` o move por cima do `.wal`; no load, "checkpoint
+existe e não terminou": só-leitura replica os dois, escrita
+`MergeIntoRecoveryWAL` e replica. Reproduzido em tmp
+(`debug_checkpoint_abort` + gravação concorrente + `os._exit`): fica
+`.db` + `.wal` + `.wal.checkpoint`; a abertura só-leitura vê tudo
+(inclusive o que só estava no WAL) e não muda nada; a abertura em escrita
++ `CHECKPOINT` + close deixa SÓ o `.db`. **Num disco local é segundos.**
+
+**O que foi feito:**
+
+- `scripts/recover_duckdb_wal.py` — com TODAS as instâncias paradas, para
+  cada banco em limbo (`data_store.wal_em_limbo`: há `.wal.checkpoint` ou
+  `.wal.recovery`, ou `.wal` > 16 MB; `--all` pega qualquer WAL): copia
+  `.db` + WALs para um disco LOCAL (`--work-dir`, padrão
+  `%LOCALAPPDATA%\OTC-Tracker\recover`), abre em escrita (o DuckDB funde e
+  replica), `CHECKPOINT`, confere que não sobrou WAL, lê o `_manifest`,
+  emagrece de caminho (`slim_duckdb.emagrecer`, `--no-slim` pula), copia
+  de volta como `.novo`, MOVE o `.db` velho e os WALs para
+  `db/_recuperado/<carimbo>/<caminho>` (renome no share: instantâneo; a
+  pasta se apaga depois de conferir o app), troca, e relê o `_manifest` no
+  share. A troca é o último passo: qualquer conferência falhando deixa o
+  share como estava. Toma a trava exclusiva da camada (uma `store-import`
+  presa a segura — por isso app parado). MESMA versão de duckdb da
+  instância (o WAL é da versão que o escreveu), pelo python do `.bat`
+  (o `python` do cmd da instância não está no PATH).
+- `slim_duckdb.py` RECUSA banco em limbo apontando o recover (rc 1), nunca
+  deixa `.db.slim` para trás (pulado, sem manifest ou erro) e não entra em
+  `_recuperado/`.
+- Subida: `_warn_wal_pendente` (um `os.walk` de `db/`) loga UM WARNING por
+  banco em limbo, com os MB e o nome do script — o estado era invisível, o
+  log só mostrava requests lentos.
+- `check_json_to_duckdb.py` §8 (o limbo fabricado, o slim recusando, o
+  recover ponta a ponta com o dado que só estava no WAL voltando e o banco
+  saindo magro, `_recuperado` fora das varreduras) e `check_duck_read.py`
+  §11 (a sonda e o aviso da subida).
+
+**Na instância, nesta ordem:** pull; TODAS as instâncias paradas (a de
+cada pessoa da mesa); `python scripts\recover_duckdb_wal.py --dry-run`
+(lista os bancos e os MB); `python scripts\recover_duckdb_wal.py` (o TER,
+Option e DPOSICAO-SWAP são 1–2 GB cada de cópia ida e volta pelo share:
+conte dezenas de minutos no total, mas é UMA vez, e o script imprime cada
+passo); restart; conferir o Summary; apagar `db\_recuperado\<carimbo>`.
+Depois disso o `slim_duckdb.py` não tem mais o que fazer nesses (o recover
+emagreceu) e a carga completa `--meses 0` volta a valer.
+
+**Por que não volta a acontecer:** o checkpoint que a instância não
+conseguia terminar era o do catálogo de 134 MB (§437); magro, são 7 blocos
+mais os blocos do dia — segundos pelo share, dentro do restart mais curto.
+E se voltar, a subida avisa e o recover resolve.
+
+**O que ainda é a latência base:** 1,5–3,5 s por abertura fria neste
+share, oito bancos por coleta do Summary. A memória do processo (manifest
+por banco, payload por carimbo) e o `summary-warm` já cobrem a segunda
+visita; o que falta para a PRIMEIRA depois de um restart é o snapshot
+persistido do Summary por data (chave = carimbos dos bancos de origem),
+desenhado e não feito.
+
+**De caminho — "file-interpreter template missing: taxacambioter/registro"**
+(o Send do NDF Other Publisher, num checkout Windows de dev): o rastro
+mostrou o `file-interpreter/taxacambioter.db` aberto em 1 s — o banco
+respondeu. A seed TEM o bloco `registro` desde 21/08. O que faltava era o
+CANAL: o objeto foi convertido naquele checkout antes de existir a
+`__raw`, `ler_crus` devolve `None`, `_read_target` levantava um `IOError`
+genérico ("formato anterior ao __raw — reimporte") e o `_fi_load` engolia
+QUALQUER exceção como "sem template". Agora: `SemCanal(IOError)` no
+armazém; `read` cai para o JSON legado em disco quando ele existe e a
+importação SUBSTITUI o objeto sem canal (`so_se_ausente` passou a ser
+"ausente ou sem canal" — a gravação da tela sempre tem `__raw` e continua
+vencendo); sem disco, sobe com o caminho e o remédio; `_fi_load` loga
+WARNING com o motivo (ocupado sobe, como manda o §440); e `_seed_data_dir`
+reimporta da cópia do repositório o payload-OBJETO que o banco tem sem
+canal (`data_store.tem_raw`), avisando — lista continua nunca sendo
+sobrescrita. `check_duck_read.py` §12 prende os quatro. Na instância que
+já tem o JSON no share, a primeira leitura resolve sozinha; no checkout
+de dev, o restart (a seed) resolve — ou `convert_json_to_duckdb.py --only
+file-interpreter`.

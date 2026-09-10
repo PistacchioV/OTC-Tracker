@@ -80,6 +80,28 @@ def _require_config_names(cfg):
     )
 
 
+def _warn_wal_pendente():
+    """UM WARNING por banco preso na recuperação de checkpoint do DuckDB
+    (§442): `.wal.checkpoint`/`.wal.recovery` ao lado do `.db`, ou um `.wal`
+    além do teto. Nesse estado TODA abertura refaz o replay do WAL inteiro —
+    no share, os minutos por abertura que pareciam "banco ocupado" — e o
+    app não tem como sair dele sozinho (a recuperação é do
+    `scripts/recover_duckdb_wal.py`, fora do share, com o app parado). Sem o
+    aviso o estado é invisível: o log só mostra requests lentos."""
+    try:
+        from apps.pages import data_store
+        pendentes = data_store.wal_pendentes()
+    except Exception:                                       # noqa: BLE001
+        logging.getLogger('otc_tracker').debug('[boot] sonda de WAL falhou', exc_info=True)
+        return
+    for db, irm in pendentes:
+        logging.getLogger('otc_tracker').warning(
+            '[boot] banco em RECUPERAÇÃO DE CHECKPOINT do DuckDB: %s — %s. Toda abertura '
+            'refaz o replay disso (minutos no share). Com o app PARADO, rode '
+            'scripts\\recover_duckdb_wal.py (§442).',
+            db, ', '.join('%s %.0f MB' % (s, b / 1e6) for s, b in sorted(irm.items())))
+
+
 def _seed_data_dir(app):
     """Leva para o ARMAZÉM (os bancos) o que vem versionado no repositório e
     ainda não está lá — e copia para o `DATA_DIR` o que não é JSON.
@@ -124,10 +146,18 @@ def _seed_data_dir(app):
             alvo = os.path.join(alvo_dir, nome)
             if data_store is not None and nome.endswith('.json') and top != 'translations':
                 try:
-                    if data_store.isfile(alvo):
-                        continue
                     with open(origem, encoding='utf-8') as fh:
                         payload = json.load(fh)
+                    if data_store.isfile(alvo):
+                        # O banco tem — mas um payload-OBJETO convertido antes
+                        # do `__raw` (§442) é ilegível (o File Interpreter lia
+                        # "template missing"). Esse é reimportado da cópia do
+                        # repositório, avisando; lista é sempre legível.
+                        if not isinstance(payload, dict) or not data_store.sem_canal(alvo):
+                            continue
+                        app.logger.warning('[data-dir] %s estava no banco sem o canal exato '
+                                           '(objeto anterior ao __raw) — reimportado da cópia '
+                                           'do repositório', alvo)
                     data_store.write(alvo, payload)
                     importados += 1
                 except data_store.BancoOcupado as exc:
@@ -304,6 +334,7 @@ def create_app(config):
     # vários módulos leem cadastro logo na subida. Semear depois seria semear
     # tarde.
     _seed_data_dir(app)
+    _warn_wal_pendente()
 
     register_extensions(app)
     register_blueprints(app)

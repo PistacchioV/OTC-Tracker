@@ -224,8 +224,14 @@ nomes que o app conhecia (`day_records`, `dataset_rows`, `refdata_rows`,
 - **Payload-OBJETO volta EXATO** (recons, `.meta.json`, ponteiros `_last`):
   além das sub-tabelas de análise, o objeto inteiro vai como texto na tabela
   `<tabela>__raw` de uma linha. Banco anterior a isto tem o objeto sem o
-  `__raw`; `reconstruivel` faz a importação reconvertê-lo mesmo com o manifest
-  casando. Todo `.json` do `DATA_DIR` tem banco — inclusive os ponteiros
+  `__raw` — **`SemCanal`** (um `IOError` com o caminho e o remédio, §442),
+  nunca "ausente": `read` cai para o JSON legado em disco se ele existe e a
+  importação SUBSTITUI o objeto sem canal (`so_se_ausente` = ausente OU sem
+  canal; a gravação da tela sempre tem `__raw` e vence); a semeadura
+  reimporta da cópia do repositório o objeto que o banco tem sem canal
+  (`tem_raw`), avisando. Leitor que engole `Exception` como "não há"
+  esconde isso (era o "template missing" do File Interpreter): ocupado
+  sobe, o resto vai para o log com o motivo. Todo `.json` do `DATA_DIR` tem banco — inclusive os ponteiros
   `_last` e configs sem data, que antes ficavam de fora porque o JSON
   respondia por eles.
 - **Caminho fora do `DATA_DIR` é disco de verdade.** As funções do armazém
@@ -420,8 +426,18 @@ da subida e NÃO liga o farol; os caminhos do espelho são dinâmicos.
 - **SQLite** (`apps/db.sqlite3`) não é usado pela lógica; `create_all()` roda
   uma vez na subida.
 
-> DuckDB recusando abrir depois de rodar sob outra versão (`replaying WAL`):
-> renomeie o `.wal` para o lado — o `.db` está íntegro.
+> **`.wal.checkpoint`/`.wal.recovery` ao lado de um `.db` é o LIMBO de
+> checkpoint do DuckDB (§442)**: um checkpoint começou (o `.wal` bateu os
+> 16 MB do `checkpoint_threshold`) e o processo morreu antes de terminar.
+> Daí TODA abertura, mesmo só leitura, refaz o replay dos dois WALs (na
+> instância, 75 MB a 1,1 GB por banco, pelo share: os "minutos por
+> abertura" que pareciam banco ocupado), e toda abertura em escrita ainda
+> os funde num `.wal.recovery` antes — e é morta de novo. O app avisa na
+> subida (`[boot] banco em RECUPERAÇÃO DE CHECKPOINT`); a saída é
+> `scripts/recover_duckdb_wal.py` com TODAS as instâncias paradas: recupera
+> numa cópia LOCAL (segundos), emagrece, troca. Nunca apague o WAL à mão:
+> o dado desde o último checkpoint só existe nele. O `slim_duckdb.py`
+> recusa banco nesse estado (o `ATTACH` refaria o replay pelo share).
 
 ---
 
@@ -939,7 +955,8 @@ São **45**: `currency-base`, `interbook-ndf`, `commodities-b3`,
 | `split_notifications_db.py --dry-run` | mostra o que a separação do sino vai copiar |
 | `dev_seed_positions.py` | só na DEV: reemite a última posição B3 numa data recente (`--from … --force`) |
 | `convert_json_to_duckdb.py` + `scripts/convert/` (40 fatias) | a IMPORTAÇÃO JSON → DuckDB (o cutover do §434 e o legado fora da janela), incremental por `_manifest`, `--meses` 12 por padrão (`0` = tudo), `--only/--force/--dry-run/--bloco`; reconverte sozinho o payload-objeto sem `__raw` |
-| `slim_duckdb.py [--db-dir] [--only cache] [--dry-run]` | emagrece os bancos de arquivo-dia JÁ existentes para a forma do §437 (lista só `_seq`/`_raw`, objeto só `__raw`), copiando do PRÓPRIO banco e trocando o arquivo; com o app PARADO; idempotente |
+| `slim_duckdb.py [--db-dir] [--only cache] [--dry-run]` | emagrece os bancos de arquivo-dia JÁ existentes para a forma do §437 (lista só `_seq`/`_raw`, objeto só `__raw`), copiando do PRÓPRIO banco e trocando o arquivo; com o app PARADO; idempotente; RECUSA banco em limbo de checkpoint (vai pelo recover) |
+| `recover_duckdb_wal.py [--db-dir] [--only] [--work-dir] [--dry-run] [--no-slim] [--all]` | tira do LIMBO de checkpoint (§442: `.wal.checkpoint`/`.wal.recovery` ao lado, ou `.wal` > 16 MB) copiando `.db` + WALs para um disco LOCAL, abrindo em escrita + `CHECKPOINT`, emagrecendo e trocando no share; o que substituiu vai para `db/_recuperado/<carimbo>/` (apague depois de conferir); TODAS as instâncias paradas, mesma versão de duckdb |
 | `export_duckdb_to_json.py` | o ROLLBACK: reconstrói do banco os JSONs com diferença (`--dry-run`, `--force`, `--only`); `check_export_rollback.py` prova que cada forma volta exata |
 | `scripts/standalone/` (40, GERADOS por `build_duckdb_standalone.py`) | os mesmos conversores para máquina sem o código (`pip install duckdb` só) — nunca editar à mão |
 | `build_sop_docx.py` | SOP e Guia em Word a partir do `.md` |
