@@ -17984,3 +17984,33 @@ vizinha). Duas mudanças no `data_store`:
   meio-tempo (`write(..., so_se_ausente=True)` — uma gravação da tela que
   entrou antes vence). `import_wait()` para testes e scripts.
   `check_duck_read.py` §6/§7 prendem os dois.
+
+## §435 — O spinner do Import Settlement do NDF Cockpit "travava" (2026-09-10)
+
+Relato: "o spinner do import settlement da página ndf cockpit não está
+rodando, ele trava". Provado num Chromium real (Playwright, `/dev-login`,
+`/import` atrasado por rota interceptada) que a animação do `spinner-border`
+roda contínua por segundos — inclusive no modo de efeitos reduzidos
+(`sf-reduced`) das máquinas do JPM — e a thread do navegador fica livre
+(100 ticks/s). O CSS está no `app.min.css` e nada no tema o desliga. O que
+existia era uma espera longa com o rótulo fixo "Importing…", lida como
+congelamento: no share o import leva dezenas de segundos — o
+`getTradesBySettle` varre o livro inteiro da data (teto 180 s), o IR do dia
+cura o ledger do mês (teto 15 s), três gravações no banco (o dia, o `.meta`,
+o ledger — cada uma esperando a trava exclusiva até 30 s se a vizinha
+grava), e a tela ainda recarrega o dia (Live Position + Operations B3 nos
+lookups).
+
+O rótulo ao lado do botão (`ndf-cockpit.js`, `wireImport`) passa a CONTAR
+os segundos e dizer a ETAPA: "Importing… 12s" enquanto a Athena responde,
+"Loading the table… 3s" enquanto a tela recarrega, e o resumo "Imported: N
+row(s)" só quando a tabela está na tela. O contador é a prova de que a
+página está viva; a etapa diz o que se espera. Chave `loading` no mapa
+local das três línguas. Se ficar minutos, o log da instância diz onde: a
+linha `[slow-request] POST /api/ndf-cockpit/import em voo ha Ns — pilha:`
+sai a cada 30 s (§433) e separa "esperando a Athena" de "preso na trava do
+banco".
+
+De passagem: 42 páginas pedem `plugins/datatables/dataTables.bootstrap5.min.css`,
+que não existe na pasta (404 por página aberta; o estilo vem do bundle do
+tema). Inofensivo, não mexido.
