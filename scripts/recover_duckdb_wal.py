@@ -329,8 +329,9 @@ def recuperar(db, work_dir, db_dir, slim=True, carimbo=None):
         shutil.copy2(db + s, local + s)
         _liberar(local + s)
     resumo['t_copia'] = time.time() - t0
-    _diz('     copiado %s + %s de WAL em %.0fs' % (_mb(os.path.getsize(db)), _mb(sum(irm.values())),
-                                                  resumo['t_copia']))
+    resumo['wal_copiado'] = sum(irm[s] for s in copiar)
+    _diz('     copiado %s + %s de WAL em %.0fs' % (_mb(os.path.getsize(db)),
+                                                  _mb(resumo['wal_copiado']), resumo['t_copia']))
     # 2. o DuckDB recupera no local
     t0 = time.time()
     _recupera_local(local, origem=db)
