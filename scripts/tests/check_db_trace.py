@@ -111,6 +111,17 @@ check(estourou, 'leitura com a trava exclusiva tomada estoura o teto curto')
 check(any(c == 'lock_timeout' for *_r, c in tr4.ops), 'o timeout entra no rastro como lock_timeout')
 check('espera(s) de lock estourada(s)' in tr4.summary(), 'e o resumo conta a espera: %s' % tr4.summary())
 
+# ── 1b. a operação EM CURSO aparece no resumo ──────────────────────────────
+print('\n§1b operação em curso')
+tr6 = DA.trace_begin('curso')
+with DA.duckdb_read(DB) as _con:
+    r6 = tr6.summary()
+check('em curso:' in r6 and '(aberta)' in r6 and os.path.basename(DB) in r6,
+      'dentro da abertura o resumo diz o banco e a fase: %s' % r6)
+r6b = tr6.summary()
+check('em curso' not in r6b, 'fechada, some do resumo: %s' % r6b)
+DA.trace_end(tr6)
+
 # ── 2. em voo ───────────────────────────────────────────────────────────────
 print('\n§2 traces_in_flight')
 tr5 = DA.trace_begin('voo')

@@ -240,7 +240,10 @@ nomes que o app conhecia (`day_records`, `dataset_rows`, `refdata_rows`,
   meio-tempo — `so_se_ausente`): no share um DPOSICAO-TER leva dezenas de
   segundos para entrar no banco, e importá-lo dentro do request parava quem
   clicou e derrubava em OCUPADO quem lia o mesmo banco. Teste que precisa do
-  banco pronto chama `data_store.import_wait()`. `listdir`/`walk`/`day_files` são só
+  banco pronto chama `data_store.import_wait()`. O TEXTO do arquivo entra no
+  memo de processo com o carimbo do disco (a chave que o manifest vai ter):
+  os leitores seguintes do mesmo caminho e o aquecimento não releem o share
+  até a importação landar. `listdir`/`walk`/`day_files` são só
   pelo banco — arquivo que ninguém leu fica invisível para quem enumera, e
   por isso o cutover pede a carga completa
   (`scripts/convert_json_to_duckdb.py --meses 0`): a instância tem 12 meses
@@ -264,7 +267,11 @@ nomes que o app conhecia (`day_records`, `dataset_rows`, `refdata_rows`,
   registro novo por cima do dia inteiro. O que escapa do handler cai no
   tratador global (`_handle_database_busy`, `routes.py`): 503 JSON
   `error=database_busy` com `Retry-After`, nunca 500 HTML. O claim diário
-  lê ocupado como "a outra instância cuida" (não envia).
+  lê ocupado como "a outra instância cuida" (não envia). E `_cpd_load` (o
+  Counterparty Details) NUNCA devolve `[]` por falha de leitura: quem grava
+  faz ler → achar/criar o registro → `_cpd_save_list(data)`, e a lista vazia
+  reescrevia o cadastro inteiro com um registro (§436). Ocupado sobe (503);
+  outra falha sobe com o motivo no log; só caminho ausente é lista vazia.
 - **O que se paga:** a gravação reconstrói a tabela DENTRO do request, sob a
   trava exclusiva — no share são os segundos que o espelho pagava em
   background — e o `_cache_lock` de quem faz read-modify-write fica preso
@@ -351,8 +358,12 @@ da subida e NÃO liga o farol; os caminhos do espelho são dinâmicos.
   loga a cada 30 s o request em voo há mais de 30 s **com a PILHA da thread**
   (`trace_stack`) — é o que separa "lento no banco" de "preso num lock em
   memória" ou "lendo JSON no share", e vale para o request sem operação
-  nenhuma. Todo evento do farol leva `thread=`. Thread de fundo que quer o
-  mesmo usa `trace_begin`/`trace_end` à mão (o `summary-warm` faz).
+  nenhuma. O resumo diz também a operação EM CURSO (banco, modo, fase
+  `permit`/`trava`/`abrindo`/`aberta`, há quantos segundos): é o que separa
+  "esperando a trava do vizinho" de "preso dentro do `duckdb.connect`"
+  (§436). Todo evento do farol leva `thread=`. Thread de fundo que quer o
+  mesmo usa `trace_begin`/`trace_end` à mão (o `summary-warm` e a
+  `store-import` fazem).
   `check_db_trace.py`.
 - **Lock de arquivo com `timeout` leva `NON_BLOCKING`** (portalocker): sem o
   flag o timeout é ignorado com um aviso na subida e a espera não tem teto.

@@ -18014,3 +18014,88 @@ banco".
 De passagem: 42 páginas pedem `plugins/datatables/dataTables.bootstrap5.min.css`,
 que não existe na pasta (404 por página aberta; o estilo vem do bundle do
 tema). Inofensivo, não mexido.
+
+## §436 — Counterparty Details lido como VAZIO apagava o cadastro; o legado relido do share (2026-09-10)
+
+Sintoma reportado: o card Settlement Summary do NDF Summary sem a coluna
+Account, e o `/api/ndf-summary/data` em voo há mais de 1000 s na instância.
+
+**De onde sai a conta.** A API (`getTradesBySettle`) não traz banco/agência/
+conta — as colunas `NB_BANK`/`CD_BRANCH`/`CD_BANK_ACCOUNT` do Cockpit nascem
+em branco. A coluna Account é o default APROVADO do Counterparty Details
+(`BANKING.DEFAULT_PAY/RECEIVE.current`, cruzado com a Direction: banco
+RECEIVE → cliente paga → DEFAULT_PAY), achado pelo SPN que o nome da linha
+resolve no Reference Data (`_ndfsum_refdata_spn`, nome normalizado). Sem
+default aprovado, ou com o nome do Cockpit diferente do cadastro, fica em
+branco por desenho. Provado localmente, ida e volta pelo banco (funil e
+legado importado): `BCO: 341 | AG: 0910 | CC: 967`.
+
+**O que estava errado.** `_cpd_load` fazia `except Exception` na leitura do
+banco e, na segunda tentativa, `except IOError: return []`. Com o
+`reference_data.db` preso pela instância vizinha (ou uma tabela sem `_raw`),
+o cadastro inteiro virava lista vazia EM SILÊNCIO: Account em branco, Net
+Type `Total Net` para todos, contatos sumidos da tela. Pior: quem grava
+(`_bank_get_record`, `_cpd_get_record`, o import de contatos) faz ler →
+achar/criar → `_cpd_save_list(data)` — com `[]`, a gravação seguinte
+reescrevia o banco com UM registro por cima dos 439. É o mesmo
+read-modify-write do §434 (`stat` ocupado lido como "não existe"), numa
+porta que a varredura não cobriu porque o `[]` vinha de dentro do módulo.
+Agora `BancoOcupado` sobe (o tratador global responde 503 `database_busy`),
+outra falha sobe com o motivo em WARNING, e só caminho ausente é `[]`.
+`check_cpd_api.py` §7 prende: sob ocupado o endpoint de conta dá 503 e o
+arquivo fica intacto.
+
+Se a instância já passou por isso, o sinal é o Reference Data com as
+contas/contatos de quase todo mundo em branco. O JSON no disco é a cópia de
+antes do cutover (`convert_json_to_duckdb.py --only CounterpartyDetails
+--force` recupera o que havia até ali).
+
+**O legado relido do share.** A leitura de um caminho que o banco não tem
+servia o arquivo e disparava a importação — mas não memoizava: até a thread
+`store-import` landar (dezenas de segundos para um DPOSICAO-TER), cada
+leitor do mesmo caminho no mesmo request (`_ndfsum_fx_map`, os mapas do
+Cockpit, o aquecimento em paralelo) relia os megabytes do share e parseava
+de novo. Agora o TEXTO entra no `_pmemo` com o carimbo do disco — a mesma
+chave `(rel, mtime, fsize)` que o manifest ganha na importação (`stamp`) —
+e `stat`/`isfile` sob ocupado respondem por ele. `check_duck_read.py` §6
+prende que a segunda leitura não abre o arquivo.
+
+**Os 1000 s.** O front espera a resposta (contador na tela; 503 vira "HTTP
+503" com Retry). A linha `[slow-request] GET /api/ndf-summary/data em voo há
+Ns — pilha:` sai a cada 30 s no log da instância com a pilha da thread — é
+ela que diz se o request está num lock de arquivo, no `_cache_lock` de outro
+request (o Import do Cockpit segura o dele enquanto grava três bancos no
+share) ou lendo o share. Sem essa linha não há diagnóstico.
+
+**O log chegou (10:21–10:27).** `/api/ndf-summary/data` em voo há 287 s → 317 s
+e o `summary-warm` há 639 s → 999 s, os dois com a MESMA pilha:
+`database_access.py:760` (o `duckdb.connect` de `_open_connection`) ←
+`:794 _open_with_retry` ← `:911 _database_context` ← `data_store._com_leitura`
+← `_manifest`. Ou seja: já passaram pelo portão e pela trava COMPARTILHADA
+do `.lock` (linha 903) e estão parados DENTRO do `duckdb.connect(read_only)`,
+que é C++ e nenhum teto do Python alcança. O resumo dizia só "nenhuma
+abertura de banco" porque o rastro registrava operação CONCLUÍDA. Enquanto
+isso o `ndf-athena-api-scheduler` abria e fechava outros bancos em 5–7 s.
+
+Não dá para dizer daqui o que o connect espera no share (localmente, com
+outro processo escrevendo, ele falha na hora com "Could not set lock on
+file", sem bloquear; um `.wal` deixado por processo morto também não pesa —
+o DuckDB 1.x grava os blocos direto no arquivo, o WAL fica em KB). Hipóteses
+que o próximo log separa: o mutex por caminho da instância única do DuckDB
+(uma thread deste MESMO processo — a `store-import` do DPOSICAO-TER — presa
+num connect de ESCRITA do mesmo banco, e todo leitor do mesmo caminho
+enfileira atrás dela), ou o open/lock do SMB esperando um handle de um
+processo morto no outro host. O que este commit faz para o log responder:
+
+- o rastro registra a operação EM CURSO: `em curso: <banco> <modo>
+  (permit|trava|abrindo|aberta) ha Ns` no resumo do `[slow-request]`
+  (`DbTrace.begin_op/phase/end_op`, `_trace_phase` no `_database_context`).
+  `check_db_trace.py` §1b.
+- a thread `store-import` entra no rastro (`trace_begin('store-import
+  <rel>')`): o laço de vigilância passa a listá-la, com o banco em curso e
+  a pilha, quando ela fica mais de 30 s numa importação.
+
+Enquanto o request está preso no connect ele segura a trava COMPARTILHADA
+do banco, o permit e o portão: todo escritor daquele banco, em qualquer
+instância, estoura os 30 s × 2 e falha — é a cascata que apareceu como
+`BancoOcupado` na subida e no `_ndf_ter_path`.
