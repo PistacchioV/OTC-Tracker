@@ -8,6 +8,7 @@ import traceback
 from datetime import datetime
 
 from apps.pages.features.mtm.infra import mappers
+from apps.pages import data_store as _store  # noqa: E402
 
 def _R():
     """Busca ATRASADA no routes — plataforma (ver features/support/infra)."""
@@ -73,11 +74,10 @@ def _mtm_save(path, data):
 def _mtm_load(date_str):
     ymd = _R()._accrual_parse_date(date_str) or datetime.now().strftime('%Y%m%d')
     path = _mtm_path_for(ymd)
-    if not os.path.isfile(path):
+    if not _store.isfile(path):
         return None, None
     try:
-        with open(path, encoding='utf-8') as fh:
-            return path, _R().json.load(fh)
+        return path, _store.read(path)
     except Exception:
         _R().log.error('[mtm] read failed %s:\n%s', path, traceback.format_exc())
         return None, None
@@ -85,9 +85,9 @@ def _mtm_load(date_str):
 
 def _mtm_latest_ymd():
     latest = None
-    if not os.path.isdir(MTM_JSON_ROOT):
+    if not _store.isdir(MTM_JSON_ROOT):
         return None
-    for _root, _dirs, files in os.walk(MTM_JSON_ROOT):
+    for _root, _dirs, files in _store.walk(MTM_JSON_ROOT):
         for fn in files:
             m = re.match(r'mtm_swap_(\d{8})\.json$', fn)
             if m and (latest is None or m.group(1) > latest):
@@ -96,9 +96,9 @@ def _mtm_latest_ymd():
 
 
 def _mtm_find_recon_file(folder):
-    if not os.path.isdir(folder):
+    if not _store.isdir(folder):
         return None
-    for fn in os.listdir(folder):
-        if os.path.isfile(os.path.join(folder, fn)) and mappers._mtm_is_recon_name(fn):
+    for fn in _store.listdir(folder):
+        if _store.isfile(os.path.join(folder, fn)) and mappers._mtm_is_recon_name(fn):
             return os.path.join(folder, fn)
     return None

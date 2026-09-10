@@ -6,6 +6,7 @@ import traceback
 
 from apps.config import Config
 from apps.pages.features.appver import domain
+from apps.pages import data_store as _store  # noqa: E402
 
 
 def _routes():
@@ -110,8 +111,7 @@ def active_users():
 
 def load_recipients():
     try:
-        with open(recipients_file(), encoding='utf-8') as fh:
-            d = json.load(fh)
+        d = _store.read(recipients_file())
         if isinstance(d, dict):
             return {'cc': d.get('cc', '') or ''}
     except Exception:                                       # noqa: BLE001
@@ -139,8 +139,7 @@ def write_status(result, when):
 
 def read_status():
     try:
-        with open(status_file(), encoding='utf-8') as fh:
-            d = json.load(fh)
+        d = _store.read(status_file())
         return d if isinstance(d, dict) else {}
     except Exception:                                       # noqa: BLE001
         return {}

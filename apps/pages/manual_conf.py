@@ -64,6 +64,7 @@ from apps.pages.request_cache import once_per_request as _once_per_request
 # Só o Config: importar o `routes` daqui seria circular (é ele quem importa este
 # módulo). O que se repete é a LEITURA da configuração, não o dado.
 from apps.config import Config
+from apps.pages import data_store as _store  # noqa: E402
 
 _LOG = logging.getLogger(__name__)
 
@@ -394,7 +395,7 @@ def sla_days():
     esse stat é ida à rede, e ele ficava dentro do laço de linhas.
     """
     try:
-        mtime = os.path.getmtime(_mapping_path('manual-conf-sla'))
+        mtime = _store.getmtime(_mapping_path('manual-conf-sla'))
     except OSError:
         mtime = None
     if _SLA_CACHE['val'] is not None and _SLA_CACHE['mtime'] == mtime:
@@ -794,8 +795,7 @@ def _anbima_holidays():
             path = data_path('anbima.json')
             datas = duck_read.calendar_dates(path)
             if datas is None:
-                with open(path, encoding='utf-8') as fh:
-                    datas = {d['date'] for d in (json.load(fh) or []) if d.get('date')}
+                datas = {d['date'] for d in (_store.read(path) or []) if d.get('date')}
             _ANBIMA['feriados'] = datas
         except Exception:
             # Sem o arquivo o aging vira a contagem só de dias de semana, que
@@ -906,7 +906,7 @@ def ensure_db(path):
     """
     if duckdb is None:
         return
-    novo = not os.path.isfile(path)
+    novo = not _store.isfile(path)
     if not novo:
         with _ENSURED_LOCK:
             if path in _ENSURED:
@@ -942,7 +942,7 @@ def ensure_db(path):
 def load_rows(category):
     path = db_path(category)
     ensure_db(path)
-    if duckdb is None or not os.path.isfile(path):
+    if duckdb is None or not _store.isfile(path):
         return []
     try:
         # `duckdb_read`: lock COMPARTILHADO (as leituras da tela não se excluem

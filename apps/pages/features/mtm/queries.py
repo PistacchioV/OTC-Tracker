@@ -7,6 +7,7 @@ from datetime import datetime
 
 from apps.pages.features.mtm import domain
 from apps.pages.features.mtm.infra import mappers
+from apps.pages import data_store as _store  # noqa: E402
 
 def _R():
     """Busca ATRASADA no routes — plataforma (ver features/support/infra)."""
@@ -99,7 +100,7 @@ def _mtm_normalize_zeros(data):
 
 
 def _mtm_build_from_folder(folder):
-    files = [fn for fn in os.listdir(folder) if os.path.isfile(os.path.join(folder, fn))]
+    files = [fn for fn in _store.listdir(folder) if _store.isfile(os.path.join(folder, fn))]
     swap_fn = next((fn for fn in files if domain._mtm_is_swap_name(fn)), None)
     coe_fn  = next((fn for fn in files if domain._mtm_is_coe_name(fn)), None)
     buckets = {k: [] for k in domain._MTM_SWAP_BOOKS}

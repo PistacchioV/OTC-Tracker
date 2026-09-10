@@ -28,8 +28,6 @@ Só para a DEV: recusa rodar quando o `DATA_DIR` está fora do repositório
     python scripts/dev_seed_positions.py --from 2026-07-24 --to 2026-09-04 --force
 """
 import argparse
-import io
-import json
 import os
 import re
 import sys
@@ -40,10 +38,10 @@ sys.path.insert(0, ROOT)
 os.chdir(ROOT)
 os.environ.setdefault('OTC_SHARED_DRIVE_ROOT', ROOT)
 os.environ['OTC_DISABLE_SCHEDULERS'] = '1'
-os.environ['OTC_DISABLE_DUCK_MIRROR'] = '1'
 
 from apps.config import Config                           # noqa: E402
 from apps.pages import routes as R                       # noqa: E402
+from apps.pages import data_store as S                   # noqa: E402
 
 CATEGORIES = ('NDF', 'Option', 'Swap', 'Operations')
 _RE_YMD = re.compile(r'^(\d{4})(\d{2})(\d{2})$')
@@ -103,8 +101,8 @@ def _latest_source_day(max_back_days=400):
     for _ in range(max_back_days):
         for cat in CATEGORIES:
             d = _day_dir(cat, cur)
-            if os.path.isdir(d) and any(f.endswith('.json') and not f.endswith('.meta.json')
-                                        for f in os.listdir(d)):
+            if S.isdir(d) and any(f.endswith('.json') and not f.endswith('.meta.json')
+                                  for f in S.listdir(d)):
                 return cur.replace(hour=0, minute=0, second=0, microsecond=0)
         cur -= timedelta(days=1)
     return None
@@ -144,16 +142,15 @@ def main():
     written, skipped = 0, 0
     for cat in CATEGORIES:
         sdir = _day_dir(cat, src_ref)
-        if not os.path.isdir(sdir):
+        if not S.isdir(sdir):
             continue
-        for fname in sorted(os.listdir(sdir)):
+        for fname in sorted(S.listdir(sdir)):
             if not fname.endswith('.json') or fname.endswith('.meta.json'):
                 continue
             if src_tag not in fname:
                 print('  pulo {} (nome sem a data {})'.format(fname, src_tag))
                 continue
-            with io.open(os.path.join(sdir, fname), encoding='utf-8') as fh:
-                payload = json.load(fh)
+            payload = S.read(os.path.join(sdir, fname))
             if not isinstance(payload, list):
                 print('  pulo {} (payload não é lista)'.format(fname))
                 continue
@@ -170,18 +167,14 @@ def main():
             ddir = _day_dir(cat, dst_ref)
             dpath = os.path.join(ddir, fname.replace(src_tag, dst_tag))
             rel = os.path.relpath(dpath, R.B3_JSON_ROOT)
-            if os.path.exists(dpath) and not a.force:
+            if S.exists(dpath) and not a.force:
                 print('  existe {} (use --force)'.format(rel))
                 skipped += 1
                 continue
             print('  {} {}  ({} registros)'.format('[dry] ' if a.dry_run else 'grava', rel, len(out)))
             if a.dry_run:
                 continue
-            os.makedirs(ddir, exist_ok=True)
-            tmp = dpath + '.tmp'
-            with io.open(tmp, 'w', encoding='utf-8') as fh:
-                json.dump(out, fh, ensure_ascii=False, indent=2)
-            os.replace(tmp, dpath)
+            S.write(dpath, out)                          # no banco (§434)
             written += 1
     print('gravados: {}   pulados: {}'.format(written, skipped))
     return 0

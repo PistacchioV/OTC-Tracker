@@ -10,6 +10,7 @@ from datetime import datetime
 
 from apps.pages.features.intrag import domain, queries
 from apps.pages.features.intrag.infra import mappers, persistence
+from apps.pages import data_store as _store  # noqa: E402
 
 def _R():
     """Busca ATRASADA no routes — plataforma (ver features/support/infra)."""
@@ -396,10 +397,9 @@ def _save_intrag_opt_entry(deal, is_fxo=False):
     file_path = os.path.join(dir_path, fname)
 
     with _R()._cache_lock:
-        if os.path.exists(file_path):
+        if _store.exists(file_path):
             try:
-                with open(file_path, 'r', encoding='utf-8') as fh:
-                    entries = json.load(fh)
+                entries = _store.read(file_path)
                 if not isinstance(entries, list):
                     entries = []
             except (json.JSONDecodeError, ValueError):
@@ -531,10 +531,9 @@ def _dce_opt_import(ref_date=None, sid='', actor_name=''):
         file_path = os.path.join(dir_path, key + '_intrag_dce_opt.json')
         with _R()._cache_lock:
             entries = []
-            if os.path.exists(file_path):
+            if _store.exists(file_path):
                 try:
-                    with open(file_path, 'r', encoding='utf-8') as fh:
-                        entries = json.load(fh)
+                    entries = _store.read(file_path)
                     if not isinstance(entries, list):
                         entries = []
                 except (json.JSONDecodeError, ValueError):

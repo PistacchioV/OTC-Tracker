@@ -13,10 +13,8 @@ Usage
     python scripts\\update_b3_ids.py "C:\\path\\to\\mapping.xlsx"
 """
 
-import json
 import os
 import sys
-import tempfile
 from datetime import datetime, date
 
 try:
@@ -29,14 +27,18 @@ except ImportError:
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT  = os.path.dirname(SCRIPT_DIR)
 
+# Os arquivos-dia vivem no BANCO (HANDOFF §434): raiz pelo `data_dir()` e
+# leitura/escrita pelo armazém. Fora do Windows o `Config` exige o share
+# absoluto; este script não encosta nele.
+sys.path.insert(0, REPO_ROOT)
+os.environ.setdefault('OTC_SHARED_DRIVE_ROOT', os.path.join(REPO_ROOT, '.import-share'))
+from apps.pages import data_store                                   # noqa: E402
+from apps.pages.data_paths import data_dir                          # noqa: E402
+
 DEFAULT_XLSX = r"C:\Users\e930179\Downloads\mapping.xlsx"
 
-NDF_CACHE = os.path.normpath(os.path.join(
-    REPO_ROOT, "apps", "static", "data", "cache", "new deals", "NDF", "Commodities"
-))
-OPT_CACHE = os.path.normpath(os.path.join(
-    REPO_ROOT, "apps", "static", "data", "cache", "new deals", "Option", "Commodities"
-))
+NDF_CACHE = os.path.join(data_dir(), "cache", "new deals", "NDF", "Commodities")
+OPT_CACHE = os.path.join(data_dir(), "cache", "new deals", "Option", "Commodities")
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
@@ -62,28 +64,8 @@ def _normalize_date(v):
 
 
 def _atomic_write_json(file_path, data):
-    dir_name = os.path.dirname(file_path)
-    fd, tmp_path = tempfile.mkstemp(dir=dir_name, suffix=".tmp")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            json.dump(data, fh, ensure_ascii=False, indent=2)
-        try:
-            os.replace(tmp_path, file_path)
-            return
-        except PermissionError:
-            pass
-        with open(file_path, "w", encoding="utf-8") as fh:
-            json.dump(data, fh, ensure_ascii=False, indent=2)
-        try:
-            os.unlink(tmp_path)
-        except OSError:
-            pass
-    except Exception:
-        try:
-            os.unlink(tmp_path)
-        except OSError:
-            pass
-        raise
+    """Pelo armazém: a tabela do caminho é reconstruída sob a trava do banco."""
+    data_store.write(file_path, data)
 
 
 def _read_sheet(ws):
@@ -128,18 +110,17 @@ def _update_cache(cache_dir, suffix, mapping, has_b3_field):
     stats = {"files_touched": 0, "deals_updated": 0, "not_found": []}
     remaining = dict(mapping)  # track unmatched deal IDs
 
-    if not os.path.isdir(cache_dir):
+    if not data_store.isdir(cache_dir):
         print(f"  WARNING: cache directory not found: {cache_dir}")
         return stats
 
-    for root, _, files in os.walk(cache_dir):
+    for root, _, files in data_store.walk(cache_dir):
         for fname in sorted(files):
             if not fname.endswith(suffix):
                 continue
             fp = os.path.join(root, fname)
             try:
-                with open(fp, "r", encoding="utf-8") as fh:
-                    deals = json.load(fh)
+                deals = data_store.read(fp)
             except Exception as exc:
                 print(f"  SKIP (parse error): {fp} — {exc}")
                 continue

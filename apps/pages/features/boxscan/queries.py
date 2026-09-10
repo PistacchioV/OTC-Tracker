@@ -10,6 +10,7 @@ import traceback
 
 from apps.pages import otc_boxparse
 from apps.pages.data_paths import data_path
+from apps.pages import data_store as _store  # noqa: E402
 
 
 def _routes():
@@ -28,8 +29,7 @@ def refdata_by_accronym():
         from apps.pages import duck_read
         rows = duck_read.refdata_rows(expected_path=caminho)
         if rows is None:
-            with open(caminho, encoding='utf-8') as fh:
-                rows = json.load(fh) or []
+            rows = _store.read(caminho) or []
     except Exception:
         _routes().log.warning('[boxscan] RefData.json ilegível:\n%s', traceback.format_exc())
         return out

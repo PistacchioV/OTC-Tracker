@@ -2,6 +2,7 @@
 """O arquivo de destinatários do card."""
 import json
 import os
+from apps.pages import data_store as _store  # noqa: E402
 
 
 def _routes():
@@ -20,8 +21,7 @@ def recipients_file():
 
 def load_recipients():
     try:
-        with open(recipients_file(), encoding='utf-8') as fh:
-            d = json.load(fh)
+        d = _store.read(recipients_file())
         if isinstance(d, dict):
             return {'to': d.get('to', '') or '', 'cc': d.get('cc', '') or ''}
     except Exception:                                       # noqa: BLE001

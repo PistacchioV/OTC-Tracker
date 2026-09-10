@@ -9,6 +9,7 @@ from flask import jsonify, render_template, request, session
 from apps.pages import blueprint
 from apps.pages.features.accrual import commands, domain, queries
 from apps.pages.features.accrual.infra import mappers, persistence
+from apps.pages import data_store as _store  # noqa: E402
 
 
 def _R():
@@ -143,10 +144,10 @@ def api_accrual_import_folder():
     p   = request.get_json(silent=True) or {}
     ymd = _R()._accrual_parse_date(p.get('date')) or datetime.now().strftime('%Y%m%d')
     folder = persistence._accrual_source_dir(ymd)
-    if not os.path.isdir(folder):
+    if not _store.isdir(folder):
         return jsonify({'success': False, 'error': 'Folder not found: {}'.format(folder)}), 400
 
-    files = [fn for fn in os.listdir(folder) if os.path.isfile(os.path.join(folder, fn))]
+    files = [fn for fn in _store.listdir(folder) if _store.isfile(os.path.join(folder, fn))]
     vcp = next((fn for fn in files if domain._accrual_is_vcp_name(fn)), None)
     if not vcp:
         return jsonify({'success': False,

@@ -9,6 +9,7 @@ from flask import jsonify, request, session
 from apps.pages import blueprint
 from apps.pages.features.cetip import commands, queries
 from apps.pages.features.cetip.infra import mail, persistence
+from apps.pages import data_store as _store  # noqa: E402
 
 
 def _R():
@@ -86,18 +87,18 @@ def api_cp_cetip_settlement():
 
     # Ensure the dated source folder exists (B3 daily drop). On Windows create it
     # in the standard layout if missing; on dev (POSIX) just error out cleanly.
-    if not os.path.isdir(src_dir):
+    if not _store.isdir(src_dir):
         if os.name == 'nt':
             try:
                 os.makedirs(src_dir, exist_ok=True)
                 _R().log.info("[cetip] created source folder: %s", src_dir)
             except Exception:
                 _R().log.warning("[cetip] could not create source %s:\n%s", src_dir, traceback.format_exc())
-        if not os.path.isdir(src_dir):
+        if not _store.isdir(src_dir):
             return jsonify({'success': False,
                             'error': 'Source folder not found: {}'.format(src_dir)}), 400
 
-    files = [f for f in os.listdir(src_dir) if os.path.isfile(os.path.join(src_dir, f))]
+    files = [f for f in _store.listdir(src_dir) if _store.isfile(os.path.join(src_dir, f))]
     if not files:
         return jsonify({'success': False,
                         'error': 'No files found in the source folder: {}'.format(src_dir)}), 400

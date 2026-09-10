@@ -9,6 +9,7 @@ import traceback
 
 from apps.pages.features.cetip import domain, queries
 from apps.pages.features.cetip.infra import mail, mappers
+from apps.pages import data_store as _store  # noqa: E402
 
 
 def _R():
@@ -115,7 +116,7 @@ def _cetip_distribute_emails(ref, dest_dir, send_mail, ss_to_list=None, cem_to_l
     cem_to_list = cem_to_list or _R().CETIP_CEM_LATAM_EMAILS
     bacc_to_list = bacc_to_list or []
     hub_to_list  = hub_to_list  or []
-    if not os.path.isdir(dest_dir):
+    if not _store.isdir(dest_dir):
         return _R().jsonify({'success': False,
                         'error': 'No saved files found for this date. Run "Save CETIP Files" first.'}), 400
     ref_yymmdd = ref.strftime('%y%m%d')
@@ -139,7 +140,7 @@ def _cetip_distribute_emails(ref, dest_dir, send_mail, ss_to_list=None, cem_to_l
         except Exception:
             continue
         dest_path = os.path.join(dest_dir, dest_name)
-        if not os.path.isfile(dest_path):
+        if not _store.isfile(dest_path):
             # Só o HUB reclama do arquivo que faltou. É reconciliação de POSIÇÃO:
             # um e-mail com três dos quatro arquivos se parece com um e-mail
             # completo, e a posição que falta é a que ninguém vai conferir.

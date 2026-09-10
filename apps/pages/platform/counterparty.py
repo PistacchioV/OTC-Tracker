@@ -23,8 +23,8 @@ import json
 import logging
 import os
 import re
-import shutil
 import uuid
+from apps.pages import data_store as _store  # noqa: E402
 
 log = logging.getLogger('otc_tracker')
 
@@ -231,8 +231,7 @@ def _cpd_load():
         data = None
     if data is None:
         try:
-            with open(_cpd_path(), encoding='utf-8') as fh:
-                data = json.load(fh)
+            data = _store.read(_cpd_path())
             data = data if isinstance(data, list) else []
         except (json.JSONDecodeError, IOError, FileNotFoundError):
             return []
@@ -282,20 +281,10 @@ def _cpd_find(data, spn):
 
 
 def _cpd_save_list(data):
-    path = _cpd_path()
-    try:
-        shutil.copy2(path, path + '.bak')
-    except (IOError, OSError):
-        pass
-    with open(path, 'w', encoding='utf-8') as fh:
-        json.dump(data, fh, ensure_ascii=False, indent=2)
-    # Espelho vivo (fase 2): a tabela counterparty_details do
-    # reference_data.db acompanha na hora. Melhor esforço.
-    try:
-        from apps.pages import duck_mirror
-        duck_mirror.notify_write(path)
-    except Exception:                                       # noqa: BLE001
-        pass
+    # Pelo funil (DB-only, §434): a tabela counterparty_details do
+    # reference_data.db É o dado; não há mais JSON nem cópia .bak.
+    from apps.pages import routes
+    routes._atomic_write_json(_cpd_path(), data)
 
 def _contacts_norm(contacts):
     """Coerce stored CONTACTS into maker/checker items. `status` keeps the business

@@ -29,6 +29,7 @@ from datetime import datetime, timedelta
 
 from apps.pages.data_paths import data_dir
 from apps.pages.request_cache import once_per_request
+from apps.pages import data_store as _store  # noqa: E402
 
 log = logging.getLogger('otc_tracker')
 
@@ -81,7 +82,7 @@ def _pc_ensure_db(path):
     """Create an empty pending_confirmation DB (schema only) if the file is
     missing, so the page works before the first spreadsheet import runs."""
     from apps.pages import routes
-    if os.path.isfile(path):
+    if _store.isfile(path):
         return
     try:
         os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -101,7 +102,7 @@ def _pc_load_rows(category, strict=False):
     from apps.pages import routes
     path = os.path.join(routes._PC_DB_DIR, _PC_DBS.get(category, _PC_DBS['pending']))
     _pc_ensure_db(path)
-    if not os.path.isfile(path):
+    if not _store.isfile(path):
         return []
     try:
         # `duckdb_read`: lock de arquivo COMPARTILHADO (as leituras não se
@@ -353,8 +354,7 @@ def _pc_refdata_by_name():
         from apps.pages import duck_read
         data = duck_read.refdata_rows()
         if data is None:
-            with open(os.path.join(routes._B3_DATA_DIR, 'RefData.json'), encoding='utf-8') as fh:
-                data = json.load(fh)
+            data = _store.read(os.path.join(routes._B3_DATA_DIR, 'RefData.json'))
         for rec in (data if isinstance(data, list) else []):
             nm = _pc_norm(rec.get('COUNTERPARTY', ''))
             if nm and nm not in out:
@@ -787,7 +787,7 @@ def _pc_latest_snapshot_rows():
             d = datetime.now() - timedelta(days=back)
             p = os.path.join(_PC_SNAPSHOT_DIR, d.strftime('%Y'), d.strftime('%m'), d.strftime('%d'),
                              'pending-confirmation_{}.json'.format(d.strftime('%Y%m%d')))
-            if os.path.isfile(p):
+            if _store.isfile(p):
                 from apps.pages import duck_read
                 rows = duck_read.day_records(p)
                 if isinstance(rows, list):
@@ -860,8 +860,7 @@ def _pc_metrics_history():
         o snapshot novo aparecer embaixo dela."""
     seed = {}
     try:
-        with open(_PC_METRICS_HISTORY_FILE, encoding='utf-8') as fh:
-            seed = json.load(fh)
+        seed = _store.read(_PC_METRICS_HISTORY_FILE)
     except Exception:
         log.warning('[pc-metrics] could not read history seed')
     seed_gt30 = (seed.get('gt30') or {})
@@ -870,7 +869,7 @@ def _pc_metrics_history():
 
     internal_gt30, internal_all = {}, {}     # day 'YYYY-MM-DD' -> volume
     try:
-        if os.path.isdir(_PC_SNAPSHOT_DIR):
+        if _store.isdir(_PC_SNAPSHOT_DIR):
             from apps.pages import duck_read, routes
             # A ENUMERAÇÃO sai do banco, não do disco: o `_manifest` tem uma
             # linha por snapshot, com caminho, mtime e tamanho — que é tudo o

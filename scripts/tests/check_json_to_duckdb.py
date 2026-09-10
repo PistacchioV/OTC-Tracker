@@ -346,7 +346,7 @@ check('3. o .meta acompanha o arquivo dele, no MESMO banco',
       sorted(r[0] for r in con.execute(
           "SELECT table_name FROM information_schema.tables "
           "WHERE table_schema='main' AND table_name LIKE 'd_%'").fetchall()),
-      ['d_20260728', 'd_20260728_meta'])
+      ['d_20260728', 'd_20260728_meta', 'd_20260728_meta__raw'])
 con.close()
 check('3. e nao sobra um banco com o nome torto',
       os.path.isfile(os.path.join(OUT, 'cache', 'daily settlement',

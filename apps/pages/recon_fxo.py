@@ -61,6 +61,7 @@ import pandas as pd
 # letra mapeada enquanto o resto do app já fala com o servidor.
 from apps.pages.data_paths import data_dir, data_path, data_write, mapping_file, mapping_write
 from apps.config import Config
+from apps.pages import data_store as _store  # noqa: E402
 
 _LOG = logging.getLogger(__name__)
 
@@ -354,7 +355,7 @@ def _refdata_rows():
     """
     path = data_path('RefData.json')
     try:
-        mtime = os.path.getmtime(path)
+        mtime = _store.getmtime(path)
     except OSError:
         return []
     if _REFDATA_CACHE['mtime'] == mtime:
@@ -371,8 +372,7 @@ def _refdata_rows():
         _REFDATA_CACHE['rows'] = db_rows
         return db_rows
     try:
-        with open(path, encoding='utf-8') as fh:
-            data = json.load(fh)
+        data = _store.read(path)
         rows = [r for r in data if isinstance(r, dict)] if isinstance(data, list) else []
     except Exception:
         _LOG.warning('[recon_fxo] não consegui ler o Reference Data')
@@ -1285,8 +1285,7 @@ def _status_atual(s):
 def load_comments():
     """{chave: comentário} do disco. Arquivo ausente ou ilegível = {}."""
     try:
-        with open(_COMMENTS_PATH, encoding='utf-8') as fh:
-            data = json.load(fh)
+        data = _store.read(_COMMENTS_PATH)
     except Exception:
         return {}
     if not isinstance(data, dict):
@@ -1380,11 +1379,10 @@ def load_last(recon_date=''):
         path = _cache_path(recon_date)
     except ValueError:
         return vazio
-    if not os.path.exists(path):
+    if not _store.exists(path):
         return vazio
     try:
-        with open(path, encoding='utf-8') as fh:
-            payload = json.load(fh)
+        payload = _store.read(path)
     except Exception:
         return vazio
     # As colunas são SEMPRE as de agora: um cache gravado antes da coluna de
@@ -1447,7 +1445,7 @@ def run_fxo(recon_date, files=None, mode='auto'):
                  'athena': 'trades da Athena (CSV)'}[n] for n in faltando))
     else:
         caminho = dposicao_path(recon_date)
-        if not os.path.exists(caminho):
+        if not _store.exists(caminho):
             raise FileNotFoundError(caminho)
         origem['dposicao'] = read_dposicao(caminho)
         origem['athena'] = read_athena(_baixar_athena(recon_date))

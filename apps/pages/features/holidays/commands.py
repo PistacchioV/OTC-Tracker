@@ -5,6 +5,7 @@ import traceback
 
 from apps.pages.features.holidays import domain
 from apps.pages.features.holidays.infra import persistence
+from apps.pages import data_store as _store  # noqa: E402
 
 
 class CalendarConflict(Exception):
@@ -59,7 +60,7 @@ def create_calendar(nome, feriados):
         if any(str(r.get('file', '')).strip().lower() == filename for r in rows):
             raise CalendarConflict(
                 'Another calendar already uses the file {}.'.format(filename))
-        if os.path.exists(persistence.calendar_path(filename)):
+        if _store.exists(persistence.calendar_path(filename)):
             raise CalendarConflict(
                 'The file {} already exists in the data folder.'.format(filename))
         classe = 'hc-cal-{}'.format(slug)

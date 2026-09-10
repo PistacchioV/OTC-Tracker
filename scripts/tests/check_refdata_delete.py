@@ -30,11 +30,11 @@ sys.path.insert(0, ROOT)
 os.chdir(ROOT)
 os.environ.setdefault('OTC_SHARED_DRIVE_ROOT', ROOT)
 os.environ['OTC_DISABLE_SCHEDULERS'] = '1'
-os.environ['OTC_DISABLE_DUCK_MIRROR'] = '1'
 
 TMP = tempfile.mkdtemp()
 
 from apps.pages import routes as R                          # noqa: E402
+from apps.pages import data_store as S                      # noqa: E402
 from apps import create_app                                 # noqa: E402
 from apps.config import DebugConfig                         # noqa: E402
 
@@ -59,18 +59,18 @@ def check(label, got, exp=True):
 
 
 def semear():
-    io.open(PATH, 'w', encoding='utf-8').write(json.dumps([
+    R._atomic_write_json(PATH, ([
         {'SPN': '111', 'COUNTERPARTY': 'ALPHA SA', 'STATUS': 'ACTIVE',
          'MAKER': 'A111111', 'CHECKER': 'B222222'},
         {'SPN': '222', 'COUNTERPARTY': 'BETA LTDA', 'STATUS': 'ACTIVE',
          'MAKER': 'A111111', 'CHECKER': 'B222222'},
         {'SPN': '333', 'COUNTERPARTY': 'GAMA SA', 'STATUS': 'PENDING',
          'MAKER': 'A111111', 'CHECKER': None},
-    ], ensure_ascii=False))
+    ]))
 
 
 def registros():
-    return json.load(io.open(PATH, encoding='utf-8'))
+    return S.read(PATH)
 
 
 def cliente(sid):

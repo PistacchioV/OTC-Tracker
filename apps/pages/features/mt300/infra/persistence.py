@@ -5,6 +5,7 @@ import os
 import traceback
 
 from apps.pages.features.mt300 import domain
+from apps.pages import data_store as _store  # noqa: E402
 
 
 def _routes():
@@ -36,8 +37,7 @@ def claim_file():
 
 def load_recipients():
     try:
-        with open(recipients_file(), encoding='utf-8') as fh:
-            d = json.load(fh)
+        d = _store.read(recipients_file())
         if isinstance(d, dict):
             return {'to': str(d.get('to', '') or ''),
                     'cc': str(d.get('cc', domain.CC_DEFAULT) or '')}
@@ -97,8 +97,7 @@ def write_status(result, when):
 
 def read_status():
     try:
-        with open(status_file(), encoding='utf-8') as fh:
-            d = json.load(fh)
+        d = _store.read(status_file())
         return d if isinstance(d, dict) else {}
     except Exception:                                       # noqa: BLE001
         return {}

@@ -112,8 +112,8 @@ for saver in ('_otm_save', '_latam_save'):
 _jcache_src = io.open(os.path.join(RAIZ, 'apps', 'pages', 'platform', 'json_cache.py'),
                       encoding='utf-8').read()
 _jcache_fn = _jcache_src.split('def _atomic_write_json', 1)[1].split('\ndef ', 1)[0]
-ok('_bump_cache_gen(file_path)' in _jcache_fn,
-   '_atomic_write_json invalida o cache — o funil dos demais gravadores')
+ok('data_store.write(file_path, data)' in _jcache_fn,
+   '_atomic_write_json grava pelo armazém (que invalida o cache) — o funil dos demais gravadores')
 
 # E NENHUM outro gravador direto pode aparecer sem invalidar. A varredura é
 # por AST sobre quem monta o caminho de um arquivo-dia decorado

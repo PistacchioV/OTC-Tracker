@@ -24,6 +24,7 @@ from datetime import datetime, timedelta, timezone
 
 from apps.pages.data_paths import data_path
 from apps.pages.request_cache import once_per_request as _once_per_request
+from apps.pages import data_store as _store  # noqa: E402
 
 log = logging.getLogger('otc_tracker')
 
@@ -69,7 +70,7 @@ def _anbima_stamp():
     aging do CGD, D-1 das recons), e não só depois do restart. Fora de request
     é um `stat` por chamada, como qualquer cache por mtime do app."""
     try:
-        return os.path.getmtime(data_path('anbima.json'))
+        return _store.getmtime(data_path('anbima.json'))
     except OSError:
         return None
 

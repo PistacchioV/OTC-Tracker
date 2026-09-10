@@ -13,6 +13,7 @@ import traceback
 from datetime import datetime
 
 from apps.pages.features.accrual import domain
+from apps.pages import data_store as _store  # noqa: E402
 
 
 def _R():
@@ -39,9 +40,9 @@ def _accrual_latest_ymd():
     most recent dataset when no explicit date is requested (e.g. from a bell
     notification), instead of an empty 'today'."""
     latest = None
-    if not os.path.isdir(ACCRUAL_JSON_ROOT):
+    if not _store.isdir(ACCRUAL_JSON_ROOT):
         return None
-    for _root, _dirs, files in os.walk(ACCRUAL_JSON_ROOT):
+    for _root, _dirs, files in _store.walk(ACCRUAL_JSON_ROOT):
         for fn in files:
             m = re.match(r'accrual_swap_(\d{8})\.json$', fn)
             if m and (latest is None or m.group(1) > latest):
@@ -52,11 +53,10 @@ def _accrual_latest_ymd():
 def _accrual_load(date_str):
     ymd = _R()._accrual_parse_date(date_str) or datetime.now().strftime('%Y%m%d')
     path = _accrual_path_for(ymd)
-    if not os.path.isfile(path):
+    if not _store.isfile(path):
         return None, None
     try:
-        with open(path, 'r', encoding='utf-8') as fh:
-            return path, domain._accrual_migrate(_R().json.load(fh))
+        return path, domain._accrual_migrate(_store.read(path))
     except Exception:
         _R().log.error('[accrual] read failed %s:\n%s', path, traceback.format_exc())
         return None, None
@@ -115,10 +115,10 @@ def _accrual_store_source(ymd, filename, blob):
 
 
 def _acc_find_operacoes(folder):
-    if not os.path.isdir(folder):
+    if not _store.isdir(folder):
         return None
-    for fn in os.listdir(folder):
-        if not os.path.isfile(os.path.join(folder, fn)):
+    for fn in _store.listdir(folder):
+        if not _store.isfile(os.path.join(folder, fn)):
             continue
         base = os.path.splitext(fn)[0].lower()
         base = (base.replace('ç', 'c').replace('õ', 'o').replace('ã', 'a')

@@ -40,8 +40,24 @@ import pandas as pd
 
 # ── Paths ──────────────────────────────────────────────────────────────────
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-JSON_PATH = os.path.normpath(os.path.join(
-    _SCRIPT_DIR, '..', 'apps', 'static', 'data', 'CounterpartyDetails.json'))
+
+# O cadastro vive no BANCO (HANDOFF §434): caminho pelo `data_path` e
+# leitura/escrita pelo armazém. Fora do Windows o `Config` exige o share
+# absoluto; este script não encosta nele.
+sys.path.insert(0, os.path.join(_SCRIPT_DIR, '..'))
+os.environ.setdefault('OTC_SHARED_DRIVE_ROOT', os.path.join(os.path.join(_SCRIPT_DIR, '..'), '.import-share'))
+from apps.pages import data_store                                   # noqa: E402
+from apps.pages.data_paths import data_path                         # noqa: E402
+
+
+def _backup(path, stamp):
+    """Grava em disco, ao lado do caminho, o payload ATUAL do banco (`.bak`)."""
+    bak = '%s.%s.bak' % (path, stamp)
+    os.makedirs(os.path.dirname(bak) or '.', exist_ok=True)
+    with open(bak, 'w', encoding='utf-8') as fh:
+        json.dump(data_store.read(path), fh, ensure_ascii=False, indent=2)
+    return bak
+JSON_PATH = data_path('CounterpartyDetails.json')
 DOWNLOADS = os.path.expanduser('~/Downloads')
 
 # 0-based column indices
@@ -163,8 +179,7 @@ def main(argv):
     print('Parsed: {} data rows, {} unique SPNs'.format(rows_seen, len(groups)))
 
     # load JSON and index by normalized SPN
-    with open(JSON_PATH, encoding='utf-8') as fh:
-        data = json.load(fh)
+    data = data_store.read(JSON_PATH)
     by_nspn = {}
     for rec in data:
         by_nspn.setdefault(norm_spn(rec.get('SPN', '')), rec)
@@ -205,10 +220,8 @@ def main(argv):
         print(json.dumps(by_nspn[sample_nspn], ensure_ascii=False, indent=2)[:1200])
         return 0
 
-    bak = JSON_PATH + '.' + datetime.now().strftime('%Y%m%d_%H%M%S') + '.bak'
-    shutil.copy2(JSON_PATH, bak)
-    with open(JSON_PATH, 'w', encoding='utf-8') as fh:
-        json.dump(data, fh, ensure_ascii=False, indent=2)
+    bak = _backup(JSON_PATH, datetime.now().strftime('%Y%m%d_%H%M%S'))
+    data_store.write(JSON_PATH, data)
     print('Backup: ' + bak)
     print('Saved:  ' + JSON_PATH)
     return 0

@@ -58,17 +58,19 @@ R._ndf_ter_path = lambda ref, exact=False: (_dia, ref)
 
 app = create_app(DebugConfig)
 app.config['TESTING'] = True
-_real_getmtime = os.path.getmtime
+# DB-only (§434): o "mudou?" de um cadastro e o `os.stat` do `.db` dele,
+# memoizado por request pelo armazem — e o que se espiona e conta.
+_real_stat = os.stat
 
 
 def conta(dentro_de_request):
     contador = collections.Counter()
 
-    def espiao(path):
+    def espiao(path, *a, **k):
         contador[os.path.basename(str(path))] += 1
-        return _real_getmtime(path)
+        return _real_stat(path, *a, **k)
 
-    os.path.getmtime = espiao
+    os.stat = espiao
     try:
         if dentro_de_request:
             with app.test_request_context('/api/live-position-ndf/data'):
@@ -76,15 +78,15 @@ def conta(dentro_de_request):
         else:
             saida = R._lpndf_collect(datetime(2026, 8, 28))
     finally:
-        os.path.getmtime = _real_getmtime
+        os.stat = _real_stat
     return len(saida.get('rows', [])), contador
 
 
 print('== 1. dentro de um request, o stat NAO acompanha as linhas ==')
 n, c = conta(True)
 check('a coleta devolveu as %d linhas do arquivo' % LINHAS, n == LINHAS)
-check('o RefData.json e statado no MAXIMO uma vez (foi %d, para %d linhas)'
-      % (c.get('RefData.json', 0), n), c.get('RefData.json', 0) <= 1)
+check('o reference_data.db e statado no MAXIMO uma vez (foi %d, para %d linhas)'
+      % (c.get('reference_data.db', 0), n), c.get('reference_data.db', 0) <= 1)
 # O teto vale para o arquivo INTEIRO de stats, nao so o RefData: qualquer
 # loader novo que entre no laco de linhas cai aqui.
 total = sum(c.values())
@@ -99,7 +101,7 @@ print('\n== 2. fora de um request, nada e memoizado ==')
 n2, c2 = conta(False)
 check('a mesma coleta funciona fora de request', n2 == LINHAS)
 check('   e ali o loader volta a perguntar ao disco',
-      c2.get('RefData.json', 0) > 1)
+      c2.get('reference_data.db', 0) > 1)
 
 
 print('\n== 3. o decorador em si ==')
@@ -148,22 +150,24 @@ _dir_real = R._MAPPINGS_DIR
 R._MAPPINGS_DIR = _tmpmap
 try:
     with app.test_request_context('/'):
+        # DB-only (§434): o "mudou?" do cadastro e o stat do `.db` dele —
+        # memoizado por request pelo armazem. Espiona-se o os.stat.
         _stats = []
-        _orig = os.path.getmtime
-        os.path.getmtime = lambda p: (_stats.append(str(p)), _orig(p))[1]
+        _orig = os.stat
+        os.stat = lambda p, *a, **k: (_stats.append(str(p)), _orig(p, *a, **k))[1]
         try:
             R._mapping_rows('bank-name')
             R._mapping_rows('bank-name')
-            n = len([p for p in _stats if 'bank-name' in p])
-            check('_mapping_rows: 1 stat por request (veio %d)' % n, n == 1)
+            n = len([p for p in _stats if p.endswith(('bank-name.db', 'bank-name.json'))])
+            check('_mapping_rows: ate 3 stats por request, nunca por linha (veio %d)' % n, 1 <= n <= 3)
             R._atomic_write_json(R._mapping_path('bank-name'),
                                  list(R._mapping_rows('bank-name')))
             R._mapping_rows('bank-name')
-            n = len([p for p in _stats if 'bank-name' in p])
+            n = len([p for p in _stats if p.endswith(('bank-name.db', 'bank-name.json'))])
             check('_mapping_rows: escrita pelo funil derruba o memo (%d stats)' % n,
                   n >= 2)
         finally:
-            os.path.getmtime = _orig
+            os.stat = _orig
 finally:
     R._MAPPINGS_DIR = _dir_real
     R._mapping_cache.pop('bank-name', None)

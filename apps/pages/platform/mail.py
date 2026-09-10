@@ -17,6 +17,7 @@ atrasada.
 import logging
 import os
 import re
+from apps.pages import data_store as _store  # noqa: E402
 
 log = logging.getLogger('otc_tracker')
 
@@ -34,7 +35,7 @@ def _get_logo_path():
     ]
     for path in candidates:
         path = os.path.normpath(path)
-        if os.path.exists(path):
+        if _store.exists(path):
             return path
     return None
 
@@ -50,7 +51,7 @@ def _get_email_asset(filename):
     ]
     for path in candidates:
         path = os.path.normpath(path)
-        if os.path.exists(path):
+        if _store.exists(path):
             return path
     return None
 

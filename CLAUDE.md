@@ -60,7 +60,11 @@ OTC_SHARED_DRIVE_ROOT=/tmp/otc-share python scripts/tests/check_<nome>.py
   `static/data/...` no fonte continua lendo o lugar antigo no dia em que os
   dados mudam de casa, sem erro nenhum. `check_config_names.py` recusa por AST.
 - **`json.dump` é proibido fora do funil `_atomic_write_json`** em
-  `apps/pages` (`check_duck_writers.py`): é o funil que avisa o espelho DuckDB.
+  `apps/pages` (`check_duck_writers.py`), e o funil grava NO BANCO: desde
+  09/09/2026 (§434) escrita e leitura de dado são só nos DuckDB — não existe
+  mais JSON como cópia de escrita nem espelho. Leitura de dado é pelo
+  `data_store` (`read`/`isfile`/`stat`/`listdir`/`walk`), nunca `open` +
+  `json.load` num caminho do `DATA_DIR`.
 - **Todo valor de request/sessão/planilha/e-mail entra no SQL como parâmetro
   `?`.** Só DDL sobre identificadores do próprio código (`_PC_TABLE`,
   `_PC_COLUMNS`) monta string. Referência vendorizada:
@@ -103,7 +107,7 @@ recusa subir se o `config.py` ficou para trás num pull (§9).
 | `apps/pages/platform/` (17 módulos) | infra horizontal: `anbima`, `authz`, `db`, `dates`, `json_cache`, `mail`, `notifications` e os motores `settlement`, `confirmations`, `counterparty`, `forecast`, `electronic_inventory`, `manual_confirmation`, `file_interpreter`, `pending_confirmation`, `operations_b3`, `new_deals` |
 | `apps/pages/features/<nome>/` (44 verticais) | `entrypoint.py` (rotas) · `commands.py` (escrita) · `queries.py` (leitura) · `domain.py` (regras puras) · `infra/` — todas em desenho fino; não existe mais `engine.py` |
 | `apps/pages/database_access.py` | a camada de banco: permit + lock de arquivo + farol de eventos (§4) |
-| `duck_read.py` · `duck_mirror.py` · `json_to_duckdb.py` | leitura DB-only, espelho vivo, motor de conversão (§4) |
+| `data_store.py` · `duck_read.py` · `json_to_duckdb.py` | o ARMAZÉM (o `DATA_DIR` como sistema de arquivos virtual sobre os DuckDB), a fachada de leitura com os nomes antigos, o motor de conversão (§4) |
 | `data_paths.py` · `request_cache.py` | caminhos de dado; `once_per_request`/`req_cached` |
 | `manual_conf.py` · `cgd_docs.py` · `otc_tickets.py` | donos dos bancos da esteira, do Onboarding e do store de tickets |
 | `athena_api.py` · `otc_boxparse.py` · `otc_boxscan.py` · `otc_emails.py` · `webpush.py` | Athena (SSO Kerberos), parser do recap, varredura do box, e-mails, push |
@@ -164,18 +168,22 @@ exista no módulo (`__module__` mente sob `functools.wraps`; quem diz é o
 
 ### Onde cada coisa vive
 
-- **`Config.DATA_DIR`** — os JSON: arquivos-dia (`cache/<rotina>/.../AAAA/MM/DD`),
-  os 45 cadastros do `/mapping` (`mappings/`), `RefData.json`,
-  `CounterpartyDetails.json`, calendários, templates do File Interpreter,
-  tickets, control-panel. Gitignorado, montado por `data_paths.py`. Na subida
-  `_seed_data_dir()` copia para lá o que vem versionado e ainda não existe,
-  **sem sobrescrever** (o arquivo do share é o que a mesa editou); `db/` fica
-  de fora. **Leitura cai para a cópia empacotada** quando falta o arquivo;
-  **escrita nunca cai** (gravar no checkout é gravar onde o pull conflita).
+- **`Config.DATA_DIR`** — a raiz dos CAMINHOS de dado: arquivos-dia
+  (`cache/<rotina>/.../AAAA/MM/DD`), os 45 cadastros do `/mapping`
+  (`mappings/`), `RefData.json`, `CounterpartyDetails.json`, calendários,
+  templates do File Interpreter, tickets, control-panel. O app fala nesses
+  caminhos `.json`, mas desde §434 o CONTEÚDO vive nos bancos (seção
+  seguinte); no disco ficam só o que não é JSON (anexos, imagens de ticket,
+  `.lock` do claim) e `translations/`. Gitignorado, montado por
+  `data_paths.py`. Na subida `_seed_data_dir()` importa para o banco o JSON
+  versionado que o banco não tem, **sem sobrescrever** (o que está no banco é
+  o que a mesa editou), e copia o que não é JSON; `db/` fica de fora.
+  **Leitura cai para a cópia empacotada** (pelo `data_path()`) quando o banco
+  não tem o caminho; **escrita nunca cai**.
 - **`Config.DATABASE_DIR`** (`OTC_DATABASE_DIR`) — TODOS os bancos: usuários,
   notificações, os três do Pending Confirmation, os dois da esteira, o do
-  Onboarding, o de comitentes e os espelhos em `db/`. Absoluto obrigatório;
-  relativo é recusado na subida.
+  Onboarding, o de comitentes e os bancos por produto do armazém em `db/`.
+  Absoluto obrigatório; relativo é recusado na subida.
 - **`Config.SHARED_DRIVE_ROOT`** (`OTC_SHARED_DRIVE_ROOT`, padrão `I:\`) — os
   destinos do share: confirmações, Electronic Inventory, CETIP, B3 Files, os
   pontos de entrada das recons, o `link.txt` da versão.
@@ -185,81 +193,89 @@ exista no módulo (`__module__` mente sob `functools.wraps`; quem diz é o
   relativo vão separados ao `send_from_directory` (é o `safe_join` dele que
   recusa `..`).
 
-### JSON é o meio de ESCRITA; a leitura é DB-only
+### O ARMAZÉM: escrita e leitura SÓ nos bancos (09/09/2026, §434)
 
-Todo JSON coberto tem um espelho DuckDB vivo (`duck_mirror.py`, thread daemon):
-a escrita pelo funil `_atomic_write_json` (e `_b3_save`, `_cpd_save_list`,
-`write_holidays`) só ENFILEIRA; a thread reconverte com o motor
-`json_to_duckdb.py`. A leitura (`duck_read.py`: `day_payload`, `day_records`,
-`dataset_rows`, `table_rows`, `day_files`, `prefetch_days`) é **DB-only com
-cura síncrona**: o `_manifest` tem de provar que o banco reflete o JSON
-(caminho, mtime, tamanho, versão do formato `#raw1`/`#raw2`); quando não prova,
-`duck_mirror.convert_sync` converte NA HORA e relê. `None` (→ o chamador serve
-o JSON) é canal de EMERGÊNCIA: espelho desligado, timeout, conversão falhada,
-`expected_path` trocado, payload-objeto (as recons). Rollback é reverter o
-commit; nenhuma migração de volta.
+Todo dado do app vive nos DuckDB, e só neles. O `apps/pages/data_store.py`
+apresenta o `DATA_DIR` como um **sistema de arquivos virtual** sobre os
+bancos: o app continua falando em caminhos de `.json` (`jp`, `fpath`), mas
+`read`/`isfile`/`stat`/`listdir`/`walk`/`day_files`/`remove` respondem pelo
+`_manifest` e pelas tabelas, e o funil `_atomic_write_json` grava a tabela
+do caminho (reconstruída sob a trava exclusiva do arquivo, pelo
+`duckdb_write`) — nenhum JSON é escrito. O espelho (`duck_mirror`) e a cura
+síncrona/quarentena deixaram de existir; o `duck_read` é só a fachada com os
+nomes que o app conhecia (`day_records`, `dataset_rows`, `refdata_rows`,
+`calendar_rows`, `day_files`, `prefetch_days`).
 
-- **Fidelidade pela coluna `_raw`** (o registro exato como texto), ordem pela
-  `_seq` (`CAST` na ordenação). Reconstruir por colunas poria chave NULL onde
-  o JSON não tinha chave, e `_contacts_norm` decide "legado" pela ausência.
-- **`expected_path` guarda a superfície de patch**: leitor com caminho próprio
-  diz de que arquivo leria; se não é o canônico, o banco não responde (é como
-  `R._cpd_path = tmp` dos testes continua mandando).
-- **Um banco por PRODUTO de arquivo-dia e um por JSON avulso**, com `db/`
-  espelhando a árvore de origem: `db/cache/new deals/NDF/Vanilla.db` (ano/mês/dia
-  viram TABELA, `.meta.json` em `d_AAAAMMDD_meta`), `db/mappings/mt300.db`,
-  `db/cache/daily settlement/otm-settlement.db` (onde a pasta do dia mistura
-  produtos, a TAG do nome vira o banco — `_por_arquivo`, declarado, nunca por
-  olhar os vizinhos; B3 Files está em `_ROTINAS_POR_ARQUIVO` porque se ramifica
-  E mistura). Regras do motor: escopo casado por nome NORMALIZADO
-  (`chave_familia` — a dev tem `b3 files`, o share `B3 Files`); a tag da tabela
-  é tudo-ou-nada; a data sai do CAMINHO e nunca do mtime; colisão de tabela é
-  ERRO; identificador DuckDB é insensível a caixa mesmo citado (`nomes_sql`
-  RENOMEIA a coluna repetida, nunca descarta — o `_raw` guarda a chave
-  original); bancos legados são removidos por LISTA DE NOMES e por
-  `samefile`, nunca por varredura de `*.db`; janela padrão de 12 meses
-  (`--meses 0` = tudo, e só ele apaga legado).
-- **Ler em LOTE, não dia a dia** (§428): 500 dias do mesmo `Vanilla.db` são
-  500 tabelas de UM arquivo — `_day_prefetch(dias)` antes do laço (1 abertura
-  contra 500; 76× medido). Opt-in: finder que para no primeiro que casa não
-  adianta 500 dias. A tripla se lê com caminho na frente e `(mtime, tamanho)`
-  no FIM. `day_files(raiz)` enumera pelo `_manifest` onde só a aplicação
-  escreve a árvore (o snapshot do Pending Confirmation) — arquivo posto à mão
-  ficaria invisível.
-- **Portão em memória** (`db_gate(path)`, `_UnlockedReadGate`): o leitor abre
-  `read_only` e a thread do espelho abre o MESMO arquivo em escrita no mesmo
-  processo; o DuckDB recusa a segunda configuração. O motor não importa `apps`,
-  então expõe `ABRIR_BANCO`/`FECHAR_BANCO` e o `duck_mirror._loop` injeta a
-  versão com portão.
-- **A escrita do espelho toma a trava de arquivo EXCLUSIVA**
-  (`hold_file_lock`, solta DEPOIS do `close()` — é no fechar que o DuckDB faz
-  checkpoint), teto de 6 s (a cura síncrona espera 30 s e não pode gastá-los na
-  trava); trava que não vem não aborta. Sem ela: `IO Error: Could not move
-  file: Access is denied` no SMB, com o leitor da instância vizinha segurando o
-  arquivo.
-- **Cura que não cura entra em QUARENTENA** (5 min,
-  `OTC_DUCK_HEAL_RETRY_SECONDS`); duas falhas seguidas abrem um DISJUNTOR
-  geral; leitura boa limpa. Quarentena acesa por muito tempo é problema de
-  ambiente, não modo de operação.
-- **OCUPADO não é DEFASADO**: disputa de arquivo (`is_file_in_use`, a mesma
-  lista do sino) recebe UMA retentativa curta e cai no JSON desta vez — sem cura
-  e sem quarentena. Leitura do espelho espera POUCO pela trava
-  (`read_timeout`, `OTC_DUCK_READ_LOCK_SECONDS`, padrão 5); escrita fica com o
-  teto cheio. **Disputa perdida MARCA o banco** (`_ocupado_ate`, janela
-  `OTC_DUCK_BUSY_SKIP_SECONDS` = 60): as leituras seguintes do mesmo banco vão
-  direto ao JSON sem esperar — a vizinha convertendo o `Vanilla.db` o segura
-  por minutos, e o `dashboard-warm` pagava 11,5 s por ARQUIVO. Leitura que
-  chega ao banco limpa a marca; o `prefetch_days` respeita e alimenta o memo.
-  `check_duck_read.py` §6b.
-- **`day_payload` tem memo de PROCESSO** (`_day_memo`, chave caminho × mtime ×
-  tamanho, teto `OTC_DUCK_DAY_MEMO_MB` = 256): 24 leitores do `routes` reabriam
-  o banco a cada F5. O hit reparseia (cada consumidor recebe objetos seus);
-  vale fora de request porque o `stat` compõe a chave; o funil esquece a entrada
-  (`day_memo_forget`); `prefetch_days` alimenta de graça. Gêmeo do
-  `_daycache_memo` do `_day_json`. `check_duck_gate.py` §4 mede.
-- Quem lê arquivo-dia payload-lista passa por `duck_read.day_records`/
-  `dataset_rows` (`_db_day_records`/`_db_dataset_rows` do routes); leitores de
-  META (dicts) e o read-modify-write da escrita seguem no JSON de propósito.
+- **O banco é o de sempre.** Mesma quebra por produto (`db/` espelha a
+  árvore de origem), mesmas tabelas com `_seq`/`_raw`, mesmo `_manifest`
+  (caminho, mtime, tamanho, targets). Quem diz que banco/tabela um caminho
+  ocupa é `json_to_duckdb.target_of` — o mesmo da importação de JSON legado,
+  então banco importado e banco gravado pela tela têm uma forma só. Os
+  `mtime`/`fsize` do manifest passaram a ser o relógio da gravação e o
+  tamanho do texto: são só a chave dos memos.
+- **Payload-OBJETO volta EXATO** (recons, `.meta.json`, ponteiros `_last`):
+  além das sub-tabelas de análise, o objeto inteiro vai como texto na tabela
+  `<tabela>__raw` de uma linha. Banco anterior a isto tem o objeto sem o
+  `__raw`; `reconstruivel` faz a importação reconvertê-lo mesmo com o manifest
+  casando. Todo `.json` do `DATA_DIR` tem banco — inclusive os ponteiros
+  `_last` e configs sem data, que antes ficavam de fora porque o JSON
+  respondia por eles.
+- **Caminho fora do `DATA_DIR` é disco de verdade.** As funções do armazém
+  caem em `os.*` para o que não é `.json` sob a raiz de dados (o share dos
+  documentos, uploads, anexos) e para `translations/` (i18n, versionada como
+  código) e `db/`. É o que torna a troca `open+json.load → _store.read`
+  segura onde o chamador não sabe de onde o caminho veio — e é por isso que a
+  varredura mecânica trocou os ~110 leitores, 185 `isfile`, 34 varreduras e
+  24 `stat` de uma vez.
+- **A cópia empacotada continua sendo do `data_path()`**: `_seed_data_dir`
+  importa para o banco, na subida, todo JSON versionado que o banco não tem;
+  antes disso, `data_path()` devolve o caminho do repositório (fora da raiz,
+  lido do disco). O armazém em si nunca cai para o pacote — um leitor com
+  caminho explícito lê o que pediu, ou nada (é o que deixa um teste com a
+  raiz num tmp ler só o que gravou).
+- **Legado em disco: importação PREGUIÇOSA no ponto, nunca na enumeração.**
+  A primeira leitura de um caminho que o banco não tem e o disco tem grava o
+  arquivo no banco e responde por ele. `listdir`/`walk`/`day_files` são só
+  pelo banco — arquivo que ninguém leu fica invisível para quem enumera, e
+  por isso o cutover pede a carga completa
+  (`scripts/convert_json_to_duckdb.py --meses 0`): a instância tem 12 meses
+  nos bancos, o resto só no disco.
+- **O "mudou?" é o `stat` do PRÓPRIO `.db`** (o DuckDB reescreve o arquivo no
+  checkpoint), memoizado por request; o manifest de cada banco fica em cache
+  enquanto o `.db` não muda, e o canal cru de cada caminho no memo de
+  processo por (rel, mtime, fsize) com teto em bytes (`OTC_DUCK_DAY_MEMO_MB`).
+  O `_day_json` do daycache continua memoizando o payload PARSEADO por
+  (mtime, tamanho); o `_day_prefetch` lê em lote (uma abertura por banco).
+- **OCUPADO** (a instância vizinha com a trava exclusiva): UMA retentativa
+  curta (`OTC_DUCK_READ_LOCK_SECONDS`, padrão 5), depois a **última cópia boa
+  em memória**; sem cópia, `BancoOcupado` (um `IOError`, que os `except` dos
+  leitores tratam como arquivo ilegível). A disputa perdida marca o banco por
+  `OTC_DUCK_BUSY_SKIP_SECONDS` (60): as leituras seguintes nem tentam.
+  **Não há mais JSON para cair.**
+- **O que se paga:** a gravação reconstrói a tabela DENTRO do request, sob a
+  trava exclusiva — no share são os segundos que o espelho pagava em
+  background — e o `_cache_lock` de quem faz read-modify-write fica preso
+  durante ela. Uma gravação que falha levanta (a camada `database_access`
+  retenta a abertura por disputa).
+- **Script que mexe em dado grava pelo `data_store.write`** e resolve o
+  caminho pelo `data_paths` (`import_cgd_auxiliar`, `update_b3_ids`,
+  `update_base_from_xlsx`, os editores do CounterpartyDetails,
+  `dev_seed_positions`): um JSON escrito em disco dentro do `DATA_DIR` é
+  invisível para o app até alguém rodar a importação — e ela sobrescreveria
+  o que a tela gravou depois.
+- **Rollback**: `scripts/export_duckdb_to_json.py` reconstrói do banco os
+  JSONs que têm diferença com o disco (ausentes ou mais velhos que o carimbo
+  do banco); `--dry-run`, `--force`, `--only <subárvore>`. Reverter o commit
+  e rodá-lo é o caminho de volta.
+- **Ler em LOTE continua valendo** (§428): quem vai ler a árvore inteira
+  chama `_day_prefetch(dias)` antes do laço; `data_store.prefetch` agrupa por
+  banco e lê o manifest e as tabelas numa abertura. `check_daycache.py` §8
+  MEDE.
+- **Portão em memória** (`db_gate`): o leitor abre `read_only` e o funil
+  abre em escrita no mesmo processo; `duckdb_write` entra no portão antes do
+  connect e espera os leitores fecharem; `check_duck_gate.py` prende os dois
+  sentidos. O motor `json_to_duckdb` não importa `apps` (o standalone copia
+  o corpo); `check_duck_read.py` prende o armazém ponta a ponta.
 
 ### A camada `database_access`
 
@@ -864,14 +880,15 @@ São **45**: `currency-base`, `interbook-ndf`, `commodities-b3`,
 | `import_cgd_sharepoint.py` · `import_cgd_auxiliar.py` | lista de CGDs e as três abas do `Auxiliar.xlsx` |
 | `split_notifications_db.py --dry-run` | mostra o que a separação do sino vai copiar |
 | `dev_seed_positions.py` | só na DEV: reemite a última posição B3 numa data recente (`--from … --force`) |
-| `convert_json_to_duckdb.py` + `scripts/convert/` (40 fatias) | a CARGA COMPLETA JSON → DuckDB, incremental por `_manifest`, `--meses` 12 por padrão, `--only/--force/--dry-run/--bloco` |
+| `convert_json_to_duckdb.py` + `scripts/convert/` (40 fatias) | a IMPORTAÇÃO JSON → DuckDB (o cutover do §434 e o legado fora da janela), incremental por `_manifest`, `--meses` 12 por padrão (`0` = tudo), `--only/--force/--dry-run/--bloco`; reconverte sozinho o payload-objeto sem `__raw` |
+| `export_duckdb_to_json.py` | o ROLLBACK: reconstrói do banco os JSONs com diferença (`--dry-run`, `--force`, `--only`); `check_export_rollback.py` prova que cada forma volta exata |
 | `scripts/standalone/` (40, GERADOS por `build_duckdb_standalone.py`) | os mesmos conversores para máquina sem o código (`pip install duckdb` só) — nunca editar à mão |
 | `build_sop_docx.py` | SOP e Guia em Word a partir do `.md` |
 
 `apps/static/data/db/` é gitignorado: bancos não vêm no pull. Telas vazias
 depois de um pull são migração não rodada, não bug.
 
-### `scripts/tests/` (119 scripts)
+### `scripts/tests/` (120 scripts)
 
 Autocontidos, sem framework, `ok`/`FAIL` por asserção, saída 0/1, sem tocar
 dado real (tmp, stubs de Outlook/SMTP). O
@@ -887,8 +904,9 @@ de conferir texto: `check_stat_por_linha`, `check_duck_gate`,
 ## 11. Como trabalhar aqui
 
 - **Rede antes, rede depois.** Mudança em módulo com teste: rode o teste antes
-  (para saber o que já falha — `check_holiday_calendars` e `check_tickets` têm
-  falhas pré-existentes conhecidas em 09/09/2026) e depois. Feature sem teste
+  (para saber o que já falha — `check_about_page`, `check_holiday_calendars`,
+  `check_modal_standard` e `check_req_cache` têm falhas pré-existentes
+  conhecidas em 09/09/2026) e depois. Feature sem teste
   de caracterização: escreva o teste primeiro.
 - **Guardas na mesma mudança.** Mover função = atualizar o guarda que a cita;
   tipo novo = três listas; notificação nova = três mapas; mapping novo =

@@ -5,6 +5,7 @@ import os
 from datetime import datetime
 
 from apps.pages.features.boxscan import domain
+from apps.pages import data_store as _store  # noqa: E402
 
 
 def _routes():
@@ -47,8 +48,7 @@ def persist_deals(product, deals):
         # evita arquivo pela metade, não perda de atualização de outro usuário.
         with R._cache_lock:
             try:
-                with open(fpath, encoding='utf-8') as fh:
-                    existing = json.load(fh)
+                existing = _store.read(fpath)
                 if not isinstance(existing, list):
                     existing = [existing]
             except (IOError, json.JSONDecodeError):

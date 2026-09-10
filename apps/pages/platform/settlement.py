@@ -31,6 +31,7 @@ from datetime import datetime, timedelta
 # Cache de leitura por request — módulo próprio (apps/pages/request_cache.py),
 # o MESMO objeto que o routes importa: o decorador não é superfície de patch.
 from apps.pages.request_cache import req_cached as _req_cached
+from apps.pages import data_store as _store  # noqa: E402
 
 log = logging.getLogger('otc_tracker')
 
@@ -85,7 +86,7 @@ def _ops_src_latest_path_uncached(src, max_back=10):
     for _ in range(max_back):
         dref = ref.strftime('%y%m%d')
         path = os.path.join(routes.B3_JSON_ROOT, src['category'], routes._b3_date_subpath(dref), src['file'](dref))
-        if os.path.isfile(path):
+        if _store.isfile(path):
             return path, dref
         ref = routes._prev_anbima_bizday(ref)
     return None, None
@@ -293,7 +294,7 @@ def _ops_swap_pos_terms(ref):
         dref = probe.strftime('%y%m%d')
         p = os.path.join(routes.B3_JSON_ROOT, 'Swap', routes._b3_date_subpath(dref),
                          '73760_{}_DPOSICAO-SWAP.json'.format(dref))
-        if os.path.isfile(p):
+        if _store.isfile(p):
             try:
                 from apps.pages import duck_read
                 rows = duck_read.day_records(p) or []
@@ -1070,8 +1071,7 @@ def _opssum_meta_path(ref):
 def _opssum_meta_load(ref):
     path = _opssum_meta_path(ref)
     try:
-        with open(path, encoding='utf-8') as fh:
-            data = json.load(fh)
+        data = _store.read(path)
         return path, (data if isinstance(data, dict) else {})
     except Exception:
         return path, {}
@@ -1251,7 +1251,7 @@ def _ops_batch_status(ref):
     from apps.pages import routes
     missing, required_missing = [], False
     for key, label, required in _OPS_SOURCES:
-        if not os.path.isfile(routes._ds_display_json_path(ref, key)):
+        if not _store.isfile(routes._ds_display_json_path(ref, key)):
             missing.append(label)
             required_missing = required_missing or required
     if not _ops_pos_swap_found(ref):
@@ -1260,7 +1260,7 @@ def _ops_batch_status(ref):
     last_batch = None
     probe = ref - timedelta(days=1)
     for _ in range(60):
-        if os.path.isfile(routes._ds_display_json_path(probe, 'operations-b3')):
+        if _store.isfile(routes._ds_display_json_path(probe, 'operations-b3')):
             last_batch = probe.strftime('%Y-%m-%d')
             break
         probe -= timedelta(days=1)

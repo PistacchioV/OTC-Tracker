@@ -9,6 +9,7 @@ import os
 import traceback
 
 from apps.pages.features.deals_monitor import domain
+from apps.pages import data_store as _store  # noqa: E402
 
 
 def _R():
@@ -30,8 +31,7 @@ def _load_ndm_pending_recipients():
     vale o default da mesa — assim a rotina já funciona no pull, antes de
     alguém abrir o Control Panel."""
     try:
-        with open(_NDM_PENDING_RECIPIENTS_FILE, encoding='utf-8') as fh:
-            d = json.load(fh)
+        d = _store.read(_NDM_PENDING_RECIPIENTS_FILE)
         if isinstance(d, dict) and (d.get('to') or d.get('cc')):
             return {'to': d.get('to', '') or '', 'cc': d.get('cc', '') or ''}
     except Exception:

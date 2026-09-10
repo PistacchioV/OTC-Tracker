@@ -162,21 +162,22 @@ dados de verdade estão em três lugares:
 - **DuckDB** — usuários/2FA (`Users_OTCTracker.db`), notificações
   (`Notifications_OTCTracker.db`) e os bancos de Pending Confirmation, esteira
   de confirmação e Onboarding. Todos sob `Config.DATABASE_DIR`.
-- **JSON** — os arquivo-dia (cache), os 43 cadastros do `/mapping`, RefData,
-  calendários e templates, sob `Config.DATA_DIR`. **É aqui que a aplicação
-  escreve**, e é o que se reverte num rollback.
-- **DuckDB espelhado** — cada JSON gravado é reconvertido na hora
-  (`apps/pages/duck_mirror.py`) para um banco em `db/`, e a leitura usa o banco
-  quando ele comprovadamente reflete o JSON atual.
+- **DuckDB por produto (`db/`)** — os arquivo-dia (cache), os 45 cadastros do
+  `/mapping`, RefData, calendários e templates. Desde 09/09/2026 (HANDOFF §434)
+  **escrita e leitura são só nos bancos**: o app continua falando em caminhos
+  de `.json` sob `Config.DATA_DIR`, mas quem responde é o `data_store` (o
+  `DATA_DIR` como sistema de arquivos virtual sobre os bancos). Nenhum JSON é
+  escrito; o rollback é `scripts/export_duckdb_to_json.py`.
 
 Mover tudo de lugar é uma variável só: `OTC_DATABASE_DIR` (bancos) e
 `OTC_DATA_DIR` (JSONs). Ver **CLAUDE.md §4**.
 
 #### Materializar os bancos DuckDB numa instância nova
 
-O espelho cuida do dia a dia; a carga inicial (ou a reconciliação depois de um
-período com o app parado) é feita por script. Ela é **idempotente e
-incremental**, e converte só os arquivo-dia dos **últimos 12 meses** por padrão:
+O app grava direto no banco; o que ainda está em JSON (a carga inicial, o
+cutover do §434 — que exige `--meses 0` com o app parado — ou o legado fora
+da janela) entra por script. Ele é **idempotente e incremental**, e converte
+só os arquivo-dia dos **últimos 12 meses** por padrão:
 
 ```bash
 python scripts/convert/00_completo.py            # tudo num comando

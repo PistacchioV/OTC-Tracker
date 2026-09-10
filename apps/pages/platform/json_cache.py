@@ -14,13 +14,11 @@ mesma camada que esta); nada aqui alcança o `routes`.
 import json
 import logging
 import os
-import tempfile
 import threading
 import traceback
 
 import portalocker
 
-from apps.pages.request_cache import bump_cache_gen as _bump_cache_gen
 
 log = logging.getLogger('otc_tracker')
 
@@ -54,12 +52,16 @@ def _claim_daily_slot(claim_file, claim_dir, slot, keep_last, log_prefix):
                               flags=portalocker.LockFlags.EXCLUSIVE
                               | portalocker.LockFlags.NON_BLOCKING):
             with _cache_lock:
+                # A leitura é pelo ARMAZÉM, como a gravação (§434): o claim vive
+                # no banco do control-panel, e ler o disco aqui seria nunca ver
+                # o slot que a volta anterior reservou — todo envio sairia duas
+                # vezes. Ausente/ocupado/ilegível = lista vazia, como antes.
+                from apps.pages import data_store
                 try:
-                    with open(claim_file, encoding='utf-8') as fh:
-                        sent = json.load(fh)
+                    sent = data_store.read(claim_file)
                     if not isinstance(sent, list):
                         sent = []
-                except (IOError, OSError, json.JSONDecodeError):
+                except (IOError, OSError, ValueError):
                     sent = []
                 if slot in sent:
                     return False
@@ -88,12 +90,12 @@ def _release_daily_slot(claim_file, slot, log_prefix):
                               flags=portalocker.LockFlags.EXCLUSIVE
                               | portalocker.LockFlags.NON_BLOCKING):
             with _cache_lock:
+                from apps.pages import data_store
                 try:
-                    with open(claim_file, encoding='utf-8') as fh:
-                        sent = json.load(fh)
+                    sent = data_store.read(claim_file)
                     if not isinstance(sent, list):
                         return
-                except (IOError, OSError, json.JSONDecodeError):
+                except (IOError, OSError, ValueError):
                     return
                 if slot not in sent:
                     return
@@ -105,14 +107,10 @@ def _release_daily_slot(claim_file, slot, log_prefix):
 
 
 def _day_memo_forget(file_path):
-    """Derruba o memo de PROCESSO do `duck_read.day_payload` para este
-    arquivo-dia. O mtime novo já invalidaria a entrada — isto é para não
-    contar com a resolução do relógio do share (um arquivo reescrito com o
-    mesmo tamanho dentro do mesmo segundo), pela mesma razão do
-    `_daycache_forget`. Melhor esforço: gravar nunca falha por causa do memo."""
+    """Derruba o memo de PROCESSO do armazém para este caminho."""
     try:
-        from apps.pages import duck_read
-        duck_read.day_memo_forget(file_path)
+        from apps.pages import data_store
+        data_store.memo_forget(file_path)
     except Exception:                                       # noqa: BLE001
         pass
 
@@ -135,72 +133,24 @@ def _map_req_forget(file_path):
 
 
 def _atomic_write_json(file_path, data):
-    """Write JSON safely: atomic rename on POSIX; direct write fallback on Windows.
+    """O FUNIL de escrita do app — todo JSON de dado passa aqui.
 
-    On Windows, os.replace() raises PermissionError if a concurrent reader holds
-    the file open without FILE_SHARE_DELETE (e.g. _find_deal_in_cache). In that
-    case we fall back to a direct write — safe because _cache_lock already
-    serialises all concurrent writes to the same file.
+    Desde 09/09/2026 (HANDOFF §434) ele grava NO BANCO: o caminho é o de
+    sempre (o vocabulário do app continua sendo o do `.json` sob o
+    `DATA_DIR`), mas quem o guarda é o `data_store` — a tabela do caminho é
+    reconstruída sob a trava exclusiva do arquivo, e nenhum JSON é escrito.
+    Caminho que não vive no banco (fora do `DATA_DIR`, não-JSON) segue com o
+    escritor atômico de sempre.
 
-    **O `bump_cache_gen` fica AQUI, e não em cada `*_save`.** O
-    `request_cache` pede que quem grava invalide o cache curto do dia, senão a
-    edição de quem salvou fica escondida atrás do TTL de 5 s — a pessoa salva,
-    a tela recarrega e mostra o valor anterior, sem erro nenhum. São 74
-    chamadores deste funil: pedir a chamada em cada um é criar 74 chances de
-    esquecer, e a que faltasse só apareceria como "salvei e não mudou" num
-    caso de borda. No funil, é impossível esquecer.
-
-    Invalidar demais não custa correção, só um relê a mais: o
-    `bump_cache_gen` ignora nome de arquivo sem `YYYYMMDD`, e um arquivo-dia
-    que nenhum loader decorado lê apenas incrementa uma geração que ninguém
-    consulta. O commit é DEPOIS da gravação bem-sucedida — antes, um erro no
-    `os.replace` invalidaria o cache de um dado que continua igual em disco.
+    **O `bump_cache_gen` e os esquecimentos de memo ficam AQUI** (no armazém,
+    depois da gravação), e não em cada `*_save`: são 150 chamadores, e o que
+    ficasse de fora mostraria o valor anterior por até 5 s sem erro nenhum.
+    O funil roda sob o `_cache_lock` de quem faz read-modify-write, e a
+    gravação no banco acontece dentro dele — é o preço de não ter mais o
+    espelho em background; no share são os segundos que ele pagava sozinho.
     """
-    dir_name = os.path.dirname(file_path)
-    fd, tmp_path = tempfile.mkstemp(dir=dir_name, suffix='.tmp')
-    try:
-        with os.fdopen(fd, 'w', encoding='utf-8') as fh:
-            json.dump(data, fh, ensure_ascii=False, indent=2)
-        try:
-            os.replace(tmp_path, file_path)
-            _bump_cache_gen(file_path)
-            _map_req_forget(file_path)
-            _day_memo_forget(file_path)
-            _duck_mirror_notify(file_path)
-            return
-        except PermissionError:
-            pass  # Windows: target held open by a reader — fall through
-        # Fallback: copy content then remove temp
-        with open(file_path, 'w', encoding='utf-8') as fh:
-            json.dump(data, fh, ensure_ascii=False, indent=2)
-        _bump_cache_gen(file_path)
-        _map_req_forget(file_path)
-        _day_memo_forget(file_path)
-        _duck_mirror_notify(file_path)
-        try:
-            os.unlink(tmp_path)
-        except OSError:
-            pass
-    except Exception:
-        try:
-            os.unlink(tmp_path)
-        except OSError:
-            pass
-        raise
-
-
-def _duck_mirror_notify(file_path):
-    """O espelho vivo JSON → DuckDB (fase 2 — `apps/pages/duck_mirror.py`).
-
-    Fica no FUNIL pela mesma razão do `bump_cache_gen`: são 74 chamadores, e o
-    que ficasse de fora envelheceria o banco em silêncio. O aviso só enfileira
-    (nada de trabalho no share aqui — este funil roda sob o `_cache_lock`) e é
-    à prova de exceção: gravar o JSON nunca falha por causa do espelho."""
-    try:
-        from apps.pages import duck_mirror
-        duck_mirror.notify_write(file_path)
-    except Exception:                                       # noqa: BLE001
-        pass
+    from apps.pages import data_store
+    data_store.write(file_path, data)
 
 
 def _unique_filepath(output_dir, filename):
@@ -282,43 +232,14 @@ def _daycache_dir_ok(nome, pai, desde, ate):
 
 
 def _day_files(raiz, sufixo='', desde=None, ate=None):
-    """Gera `(caminho, nome, mtime, tamanho)` dos arquivos-dia da árvore.
+    """Gera `(caminho, nome, mtime, tamanho)` dos arquivos-dia da árvore —
+    pelo BANCO (`data_store.day_files`): o manifest de cada banco da árvore
+    guarda caminho, mtime e tamanho, e nenhuma pasta é listada.
 
-    `desde`/`ate` são `date`/`datetime` e servem só para PODAR: o chamador
-    continua filtrando pela data do nome, que é a que vale.
-
-    Diretório que não abre é PULADO com aviso, não derruba a varredura: o share
-    fica indisponível de vez em quando, e meia lista é melhor do que um 500.
-    """
-    if not os.path.isdir(raiz):
-        return
-    pilha = [(raiz, '')]
-    while pilha:
-        atual, pai = pilha.pop()
-        subdirs, arquivos = [], []
-        try:
-            with os.scandir(atual) as entradas:
-                for e in entradas:
-                    try:
-                        if e.is_dir():
-                            if _daycache_dir_ok(e.name, pai, desde, ate):
-                                subdirs.append((e.name, e.path))
-                            continue
-                        if sufixo and not e.name.endswith(sufixo):
-                            continue
-                        st = e.stat()
-                        arquivos.append((e.name, e.path, st.st_mtime, st.st_size))
-                    except OSError:
-                        continue
-        except OSError:
-            log.warning('[daycache] não consegui listar %s', atual)
-            continue
-        # A pilha é LIFO, então os subdiretórios entram ao contrário para sair
-        # em ordem; os arquivos saem por nome, como o `sorted(files)` de antes.
-        for nome, caminho in sorted(subdirs, reverse=True):
-            pilha.append((caminho, nome))
-        for nome, caminho, mtime, size in sorted(arquivos):
-            yield (caminho, nome, mtime, size)
+    `desde`/`ate` são `date`/`datetime` e podam pela data do CAMINHO; o
+    chamador continua filtrando pela data do nome, que é a que vale."""
+    from apps.pages import data_store
+    yield from data_store.day_files(raiz, sufixo=sufixo, desde=desde, ate=ate)
 
 
 def _day_prefetch(dias):
@@ -361,8 +282,8 @@ def _day_prefetch(dias):
     if not pendentes:
         return 0
     try:
-        from apps.pages import duck_read
-        prontos = duck_read.prefetch_days(pendentes)
+        from apps.pages import data_store
+        prontos = data_store.prefetch([fp for fp, _mt, _sz in pendentes])
     except Exception:                                       # noqa: BLE001
         return 0
     if not prontos:
@@ -401,20 +322,15 @@ def _day_json(fp, mtime, size, mutavel=False):
         # LISTA quando o manifest prova o frescor — o memo por (mtime, tamanho)
         # continua sendo o cache, então o banco só é consultado quando o
         # arquivo mudou. Payload-objeto e banco frio caem no JSON de sempre.
-        dados = None
+        # Pelo ARMAZÉM (DB-only): o memo por (mtime, tamanho) continua sendo
+        # o cache; o banco só é consultado quando o caminho mudou.
         try:
-            from apps.pages import duck_read
-            dados = duck_read.day_payload(fp)
+            from apps.pages import data_store
+            dados = data_store.read(fp)
         except Exception:                                   # noqa: BLE001
-            dados = None
-        if dados is None:
-            try:
-                with open(fp, 'r', encoding='utf-8') as fh:
-                    dados = json.load(fh)
-            except Exception:                               # noqa: BLE001
-                return []
-            if not isinstance(dados, list):
-                dados = [dados] if isinstance(dados, dict) else []
+            return []
+        if not isinstance(dados, list):
+            dados = [dados] if isinstance(dados, dict) else []
         with _daycache_lock:
             if len(_daycache_memo) >= _DAYCACHE_MAX:
                 _daycache_memo.clear()

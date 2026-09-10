@@ -1,1106 +1,143 @@
 # -*- coding: utf-8 -*-
-"""Leitura DB-ONLY com CURA SÍNCRONA — a fase 3 da migração, endurecida
-(2026-09-02: leitura servida só pelos bancos; o JSON fica como meio de
-ESCRITA, com o espelho convertendo).
+"""A fachada de LEITURA sobre o armazém (`data_store`) — os nomes que o app e
+os testes conhecem desde a fase 3 (`day_records`, `dataset_rows`,
+`refdata_rows`, `calendar_rows`, `day_files`, `prefetch_days`…), agora todos
+respondendo pelo banco e SÓ por ele (HANDOFF §434).
 
-O leitor continua não confiando cegamente no banco: o `_manifest` (caminho,
-mtime, tamanho — gravado pelo motor a cada conversão) tem de provar que a
-tabela reflete o JSON **como ele está agora** em disco. O que mudou é o
-DESFECHO quando não prova: em vez de devolver `None` e deixar o chamador
-servir o JSON, o leitor **converte AGORA** (`duck_mirror.convert_sync` —
-a tarefa entra na fila da thread do espelho e é esperada, então nunca há
-dois escritores no mesmo banco) e relê. A resposta sai do banco; o JSON só é
-LIDO pelo conversor. É o que mantém a garantia do §6 ("edição na tela vale no
-request seguinte") com a leitura DB-only: a escrita grava o JSON, e a
-primeira leitura que chegar antes do espelho paga a conversão e lê o banco já
-curado.
-
-`None` ainda existe, e é o canal de EMERGÊNCIA (o chamador mantém o caminho
-JSON de sempre): espelho DESLIGADO (`OTC_DISABLE_SCHEDULERS`/
-`OTC_DISABLE_DUCK_MIRROR` — os testes, que trocam caminhos e leem o JSON),
-timeout da fila num share atolado, conversão que falhou (JSON corrompido), o
-`expected_path` de um caminho trocado, e os payloads que o banco não
-reconstrói (objeto — as recons).
-
-As conexões aqui são as CRUAS do DuckDB (como as do motor/espelho), não as do
-`database_access`: os bancos espelhados têm um escritor só (a thread do
-espelho, ou o script de carga) e leitores de melhor esforço — a colisão
-intra-processo com o espelho escrevendo vira exceção, capturada, cura, releitura.
+O que este módulo era — a leitura DB-only com cura síncrona, quarentena,
+disjuntor, freio e o memo de processo — saiu com o espelho: não há mais JSON
+para curar nem para cair. O que sobrou é tradução de assinatura: cada função
+abaixo recebe o caminho (ou o par banco/tabela) de sempre e devolve o que o
+`data_store.read` devolve. `None` continua querendo dizer "não há dado" para
+quem já tratava assim.
 """
-import json
-import logging
 import os
-import threading
-import time
 
-import duckdb
+from apps.pages import data_store as _S
+from apps.pages import json_to_duckdb as _core
 
-# A abertura vai pela CAMADA (`duckdb_read`) e não pelo `duckdb.connect` cru: é
-# ela que emite os eventos do farol do `database_access` (`connection_opened`,
-# `file_lock_*`, os tempos de espera) e que cria o `.lock` do banco na primeira
-# vez. Sem isso, os bancos do espelho — dezenas, e um NOVO a cada produto ou
-# cadastro que aparece — ficavam fora do painel: nenhum evento, nenhum lock, e
-# nenhuma pista de por que uma leitura DB-first demorou ou recusou.
-#
-# Não são caminhos que caibam no `DATABASE_ACCESS_PATHS` do config: aquela
-# tupla é a lista FIXA que a subida confere, e a árvore do espelho nasce dos
-# dados (um banco por produto de arquivo-dia, um por JSON avulso). O `.lock`
-# vem de graça na primeira abertura, que é o que a camada faz.
-#
-# Medido: 12,67 ms por abertura pela camada contra 12,82 ms crua — a abertura
-# do DuckDB domina, e o lock compartilhado mais o permit somem no ruído.
-from apps.pages import database_access as _DA
-from apps.pages.database_access import duckdb_read, db_gate
-
-from apps.pages.json_to_duckdb import q
-
-
-log = logging.getLogger('otc_tracker')
-
-# ── O cronômetro do share (era o FREIO) ──────────────────────────────────────
-# O flip DB-first foi medido em disco local (~12 ms por abertura); no SHARE a
-# mesma abertura custa segundos, e havia aqui um freio ADAPTATIVO que armava
-# um modo só-JSON por 10 min quando uma leitura estourava o teto. Com a
-# leitura DB-ONLY (2026-09-02) o modo só-JSON deixou de existir — não há mais
-# fallback para o freio escolher —, então o que sobra é a TELEMETRIA: a
-# leitura lenta continua cronometrada e avisada no log (com a mesma janela de
-# 10 min silenciando a repetição, senão o aviso seria o log inteiro), para a
-# lentidão do share não virar um "a tela demora" sem pista. Se a instância do
-# time sofrer com isso, a resposta é operacional (mover os bancos, ajustar o
-# storage) — não um retorno silencioso ao JSON.
-#
-# `OTC_DUCK_READ_SLOW_SECONDS` ajusta o teto do aviso; `0` desliga a medição.
-try:
-    _FREIO_LIMIAR = float(os.getenv('OTC_DUCK_READ_SLOW_SECONDS', '0.35') or 0)
-except ValueError:
-    _FREIO_LIMIAR = 0.35
-_FREIO_ESPERA = 600.0
-_freio = {'ate': 0.0}
-
-# ── OCUPADO não é DEFASADO ──────────────────────────────────────────────────
-# O `_ler` devolvia `None` para TODA exceção, e `None` quer dizer "banco frio ou
-# defasado: cure". Mas o teto do permit (30 s), o da trava de arquivo (15 s) e o
-# "used by another process" da instância vizinha são banco OCUPADO — íntegro,
-# só que com outro dono neste instante. Tratados como defasados, custavam uma
-# espera de trava, mais 30 s de `convert_sync` reconvertendo um banco que
-# estava certo, mais a marca de quarentena. Agora a disputa é classificada
-# (`database_access.is_file_in_use`, a mesma resposta do sino): UMA retentativa
-# curta e, persistindo, o JSON desta vez — sem cura e sem quarentena.
-#
-# E o teto de espera das leituras do espelho é CURTO (`read_timeout`): quem lê
-# tem para onde cair, e uma thread do waitress parada 45 s esperando o banco
-# que a vizinha está convertendo é pior do que servir o JSON.
-_OCUPADO = object()
-_OCUPADO_ESPERA = 0.3
-try:
-    _LEITURA_TETO = float(os.getenv('OTC_DUCK_READ_LOCK_SECONDS', '5') or 0) or None
-except ValueError:
-    _LEITURA_TETO = 5.0
-_ocupado_aviso = {'ate': 0.0}
-_ocupado_lock = threading.Lock()
-
-# ── O memo de OCUPADO por banco ─────────────────────────────────────────────
-# Uma disputa que a retentativa não resolveu não é transitória: a instância
-# vizinha convertendo o Vanilla.db (quinhentas tabelas e o checkpoint, no
-# share) o segura por MINUTOS, e cada leitor pagava 5 s + 0,3 s + 5 s por
-# ARQUIVO antes de cair no JSON — o `dashboard-warm` da subida, que anda por
-# centenas de arquivos-dia do Vanilla, pagava horas, e cada tentativa era mais
-# uma disputa no arquivo que já estava disputado. Depois da disputa perdida,
-# as leituras seguintes do MESMO banco vão direto ao JSON por
-# `_OCUPADO_JANELA` segundos (`OTC_DUCK_BUSY_SKIP_SECONDS`, `0` desliga);
-# passada a janela tenta-se de novo, e a leitura que dá certo limpa a marca.
-try:
-    _OCUPADO_JANELA = float(os.getenv('OTC_DUCK_BUSY_SKIP_SECONDS', '60') or 0)
-except ValueError:
-    _OCUPADO_JANELA = 60.0
-_ocupado_ate = {}                   # db_name → monotonic até quando pular o banco
-
-
-def _ocupado_marcado(db):
-    if not _OCUPADO_JANELA:
-        return False
-    with _ocupado_lock:
-        return time.monotonic() < _ocupado_ate.get(db, 0.0)
-
-
-def _ocupado_marca(db):
-    if not _OCUPADO_JANELA:
-        return
-    with _ocupado_lock:
-        _ocupado_ate[db] = time.monotonic() + _OCUPADO_JANELA
-
-
-def _ocupado_limpa(db):
-    with _ocupado_lock:
-        _ocupado_ate.pop(db, None)
-
-
-def ocupado_forget(db=None):
-    """Esquece a marca de um banco (ou de todos) — para os testes."""
-    with _ocupado_lock:
-        if db is None:
-            _ocupado_ate.clear()
-        else:
-            _ocupado_ate.pop(db, None)
-
-
-def _classifica(exc):
-    """Exceção da leitura → `_OCUPADO` (disputa; não cure) ou `None` (o resto:
-    banco frio/defasado/ilegível; cure)."""
-    try:
-        return _OCUPADO if _DA.is_file_in_use(exc) else None
-    except Exception:                                       # noqa: BLE001
-        return None
-
-
-def _ocupado_avisa(db):
-    """WARNING uma vez por janela de 10 min — a disputa é transitória e uma
-    linha por leitura seria o log inteiro num share atolado."""
-    with _ocupado_lock:
-        agora = time.monotonic()
-        if agora < _ocupado_aviso['ate']:
-            return
-        _ocupado_aviso['ate'] = agora + _FREIO_ESPERA
-    log.warning('[duck-read] %s está OCUPADO (outro processo/escrita em curso) e a '
-                'retentativa não passou — servindo o JSON desta vez, sem reconverter '
-                '(teto da espera em OTC_DUCK_READ_LOCK_SECONDS)', os.path.basename(str(db)))
-
-
-def _le_ocupado(ler, db=None):
-    """Roda `ler()`; se voltar `_OCUPADO`, espera um pouco e tenta UMA vez mais.
-    Com `db`, respeita e alimenta o memo de OCUPADO: dentro da janela nem
-    tenta; disputa perdida marca; leitura que chegou ao banco limpa."""
-    if db is not None and _ocupado_marcado(db):
-        return _OCUPADO
-    out = ler()
-    if out is _OCUPADO:
-        time.sleep(_OCUPADO_ESPERA)
-        out = ler()
-    if db is not None:
-        if out is _OCUPADO:
-            _ocupado_marca(db)
-        else:
-            _ocupado_limpa(db)
-    return out
-
-
-# ── memo de PROCESSO dos arquivos-dia ───────────────────────────────────────
-# O `day_payload` memoizava só por REQUEST (`flask.g`): a cada F5 as cinco Live
-# Position, o Operations B3, o OTM e os Settlement Advice reabriam o banco no
-# share e refaziam o `json.loads` de cada linha — numa posição TER de vinte mil
-# linhas, uma abertura de segundos mais dezenas de ms de CPU por request e por
-# pessoa. O `_day_json` já tinha o que faltava (memo de processo por caminho ×
-# mtime × tamanho — `json_cache._daycache_memo`); este é o gêmeo dele para o
-# `day_payload`, e guarda os `_raw` (texto): o hit reparseia, então cada
-# consumidor continua recebendo objetos SEUS e pode alterá-los e gravar.
-#
-# A chave leva mtime e tamanho, então um arquivo reescrito nunca é servido
-# velho — e é por isso que ele vale também FORA de request (a rotina agendada
-# continua enxergando o arquivo mudar: o `stat` acontece a cada chamada). O que
-# se poupa é a ABERTURA do banco, não o `stat`. Teto por BYTES (os `_raw` de um
-# TER são dezenas de MB), despejando o mais antigo; `OTC_DUCK_DAY_MEMO_MB=0`
-# desliga.
-try:
-    _DAY_MEMO_MAX_BYTES = int(float(os.getenv('OTC_DUCK_DAY_MEMO_MB', '256') or 0) * 1024 * 1024)
-except ValueError:
-    _DAY_MEMO_MAX_BYTES = 256 * 1024 * 1024
-_day_memo = {}                  # (jpath, mtime, size) → list[str] | None (payload-objeto)
-_day_memo_bytes = {'n': 0}
-_day_memo_lock = threading.Lock()
-_MISS = object()
-
-
-def _day_memo_get(chave):
-    if not _DAY_MEMO_MAX_BYTES:
-        return _MISS
-    with _day_memo_lock:
-        if chave not in _day_memo:
-            return _MISS
-        crus = _day_memo.pop(chave)         # reinsere no fim: o mais usado fica
-        _day_memo[chave] = crus
-        return crus
-
-
-def _day_memo_put(chave, crus):
-    if not _DAY_MEMO_MAX_BYTES:
-        return
-    tamanho = sum(len(c) for c in crus) if crus else 0
-    if tamanho > _DAY_MEMO_MAX_BYTES:
-        return                              # um arquivo maior que o teto não cabe
-    with _day_memo_lock:
-        antigo = _day_memo.pop(chave, None)
-        if antigo:
-            _day_memo_bytes['n'] -= sum(len(c) for c in antigo)
-        while _day_memo and _day_memo_bytes['n'] + tamanho > _DAY_MEMO_MAX_BYTES:
-            _k, velho = next(iter(_day_memo.items()))
-            del _day_memo[_k]
-            _day_memo_bytes['n'] -= sum(len(c) for c in velho) if velho else 0
-        _day_memo[chave] = crus
-        _day_memo_bytes['n'] += tamanho
-
-
-def day_memo_forget(path=None):
-    """Esquece um arquivo-dia (todas as versões dele) ou tudo. O mtime novo já
-    invalida; isto é para quem não quer contar com a resolução do relógio do
-    share, como o `_daycache_forget`."""
-    with _day_memo_lock:
-        if path is None:
-            _day_memo.clear()
-            _day_memo_bytes['n'] = 0
-            return
-        alvo = os.path.normpath(str(path))
-        for k in [k for k in _day_memo if k[1] == alvo]:
-            velho = _day_memo.pop(k)
-            _day_memo_bytes['n'] -= sum(len(c) for c in velho) if velho else 0
-
-
-# Quanto o leitor espera uma ESCRITA do espelho em curso no mesmo banco antes
-# de conectar (§422). Passado o teto ele conecta assim mesmo: se a escrita
-# ainda estiver aberta o DuckDB recusa, o `_ler` devolve None e a cura síncrona
-# — que entra na MESMA fila do espelho — espera a escrita terminar de graça.
-_GATE_READ_WAIT_SECONDS = 10.0
-
-# ── Cura que NÃO cura: a quarentena ─────────────────────────────────────────
-# A cura síncrona resolve o banco frio ou defasado, e para isso vale a espera.
-# Mas há falha de conversão que NÃO passa com uma segunda tentativa: no share
-# do JPM o DuckDB devolve `IO Error: Could not move file: Access is denied`
-# ao renomear o arquivo do banco, e ali toda leitura do dia pagava a fila do
-# espelho, a conversão inteira, o segundo `_ler` — e caía no JSON do mesmo
-# jeito. Pior: o `_cura()` do fim ainda ENFILEIRAVA uma retentativa, que
-# atravancava a cura síncrona da leitura seguinte. Uma tela que abre oito
-# arquivos-dia pagava isso oito vezes, e o Summary não terminava de carregar.
-#
-# Então o arquivo cuja cura não resolveu entra em QUARENTENA: pela janela, a
-# leitura vai DIRETO ao JSON, sem fila e sem retentativa. É a mesma forma do
-# `_ensure_notif_db` que falha e espera 5 min antes de tentar de novo — a
-# diferença entre um banco frio (curável, e a espera se paga) e um banco que
-# o ambiente não deixa escrever (incurável até alguém mexer no share).
-#
-# A quarentena é por ARQUIVO de origem e vive só no processo: reiniciar o app
-# ou esperar a janela tenta de novo, que é o que faz a correção do share valer
-# sem ninguém rodar nada. `OTC_DUCK_HEAL_RETRY_SECONDS` ajusta; `0` desliga.
-try:
-    _CURA_ESPERA = float(os.getenv('OTC_DUCK_HEAL_RETRY_SECONDS', '300') or 0)
-except ValueError:
-    _CURA_ESPERA = 300.0
-# Quantas curas seguidas podem falhar antes de a quarentena valer para TODOS os
-# arquivos. A marca por arquivo sozinha não bastava: quando o share recusa a
-# escrita, TODA conversão falha, e uma tela que abre dez arquivos-dia ainda
-# pagava dez curas — cada uma até o timeout de 30s do `convert_sync`, porque a
-# marca do arquivo A não diz nada sobre o B. Cinco minutos de espera não
-# ajudam quem está esperando a PRIMEIRA carga. Com o disjuntor, a primeira
-# falha custa uma cura e o resto da tela vai direto ao JSON.
-_CURA_FALHAS_SEGUIDAS = 2
-_cura_falhou = {}
-_cura_geral = {'ate': 0.0, 'seguidas': 0}
-_cura_lock = threading.Lock()
-
-
-def _cura_em_quarentena(jpath):
-    if not _CURA_ESPERA:
-        return False
-    with _cura_lock:
-        agora = time.monotonic()
-        return agora < _cura_geral['ate'] or agora < _cura_falhou.get(jpath, 0.0)
-
-
-def _cura_marca_falha(jpath):
-    """A cura rodou e o banco continua sem responder — não insista já."""
-    if not _CURA_ESPERA:
-        return
-    with _cura_lock:
-        agora = time.monotonic()
-        novo = _cura_falhou.get(jpath, 0.0) < agora
-        _cura_falhou[jpath] = agora + _CURA_ESPERA
-        _cura_geral['seguidas'] += 1
-        disjuntor = (_cura_geral['seguidas'] >= _CURA_FALHAS_SEGUIDAS
-                     and _cura_geral['ate'] < agora)
-        if disjuntor:
-            _cura_geral['ate'] = agora + _CURA_ESPERA
-    if disjuntor:
-        log.warning('[duck-read] %d curas seguidas não resolveram (a última em %s) — '
-                    'toda leitura vai ao JSON pelos próximos %.0f min, sem tentar '
-                    'converter. O log do duck-mirror diz o motivo; ajuste em '
-                    'OTC_DUCK_HEAL_RETRY_SECONDS',
-                    _cura_geral['seguidas'], os.path.basename(jpath), _CURA_ESPERA / 60.0)
-    elif novo:
-        log.warning('[duck-read] a cura não resolveu %s — servindo o JSON e '
-                    'sem tentar de novo por %.0f min (o log do duck-mirror diz '
-                    'por quê; ajuste em OTC_DUCK_HEAL_RETRY_SECONDS)',
-                    os.path.basename(jpath), _CURA_ESPERA / 60.0)
-
-
-def _cura_marca_ok(jpath):
-    """Leitura pelo banco deu certo: some a marca do arquivo e o disjuntor
-    volta a zero — a contagem é de falhas SEGUIDAS, e uma conversão que
-    funcionou diz que o share voltou."""
-    if not _CURA_ESPERA:
-        return
-    if jpath in _cura_falhou or _cura_geral['seguidas']:
-        with _cura_lock:
-            _cura_falhou.pop(jpath, None)
-            _cura_geral['seguidas'] = 0
-
-
-def _memo_req():
-    """Memo por REQUEST (Flask `g`); None fora de request. O mesmo arquivo-dia
-    é lido várias vezes na montagem de UMA tela (o Other Products Summary abre
-    o banco de NDF Commodities oito vezes), e no share cada abertura é ida e
-    volta de rede. A chave leva mtime e tamanho do JSON, então uma gravação no
-    meio do request invalida sozinha; e o que se guarda são os `_raw` (texto),
-    reparseados a cada hit — cada consumidor recebe objetos SEUS, como se
-    tivesse lido o arquivo."""
-    try:
-        from flask import g, has_app_context
-        if not has_app_context():
-            return None
-        return g.setdefault('_duck_read_memo', {})
-    except Exception:                                       # noqa: BLE001
-        return None
-_freio_lock = threading.Lock()
-
-
-def _freio_armado():
-    return time.monotonic() < _freio['ate']
-
-
-def _freio_mede(segundos, db):
-    """Cronômetro de UMA leitura de espelho: acima do teto, WARNING no log
-    (um por janela de 10 min). Chamado também no caminho de exceção — uma
-    abertura que estourou depois de pendurar no lock é o mesmo sintoma."""
-    if not _FREIO_LIMIAR or segundos < _FREIO_LIMIAR:
-        return
-    with _freio_lock:
-        rearmando = _freio_armado()
-        _freio['ate'] = time.monotonic() + _FREIO_ESPERA
-    if not rearmando:
-        log.warning(
-            '[duck-read] leitura do espelho levou %.2fs (%s) — a leitura é '
-            'DB-only, então isto é latência de tela, não troca de fonte '
-            '(teto do aviso em OTC_DUCK_READ_SLOW_SECONDS)',
-            segundos, os.path.basename(str(db)), )
+# Superfícies que os testes e o routes ainda consultam.
+_LEITURA_TETO = _S._LEITURA_TETO
+_OCUPADO_JANELA = _S._OCUPADO_JANELA
+ocupado_forget = _S.ocupado_forget
+_ocupado_marcado = _S._ocupado_marcado
+day_memo_forget = _S.memo_forget
+BancoOcupado = _S.BancoOcupado
 
 
 def _data_root():
-    from apps.pages import routes
-    return os.path.normpath(routes._B3_DATA_DIR)
+    return _S.data_root()
 
 
-def _limpo(rows):
-    """NULL → '' nas colunas de texto: o JSON de origem guarda string em tudo
-    que existe, e um `str(None)` no consumidor viraria o literal 'None'."""
-    out = []
-    for r in rows:
-        out.append({k: ('' if v is None else v) for k, v in r.items()})
-    return out
+def day_payload(path):
+    """O conteúdo de UM arquivo-dia (a lista original, na ordem do arquivo).
+    `None` quando o banco não o tem."""
+    try:
+        return _S.read(path)
+    except FileNotFoundError:
+        return None
+
+
+def day_records(path):
+    """Leitura de um arquivo-dia payload-LISTA. Levanta `FileNotFoundError`
+    quando não há — o `except (IOError, ...)` do chamador continua valendo."""
+    return _S.read(path)
+
+
+def dataset_rows(path):
+    """Um JSON de DATASET (mappings, cadastros B3, Subjacente…), pelo caminho."""
+    return _S.read(path)
+
+
+def dataset_records(path):
+    """Os registros de um dataset, ou `None` quando não há."""
+    try:
+        return _S.read(path)
+    except FileNotFoundError:
+        return None
+
+
+def _rel_path(rel):
+    return os.path.join(_S.data_root(), *rel.split('/'))
+
+
+def raw_records(db_name, table, rel, expected_path=None, manifest_key=None):
+    """Os registros originais de `rel` — pelo caminho, como tudo aqui. O par
+    banco/tabela é ignorado: quem decide é o `target_of` do motor.
+    `expected_path` continua sendo o guarda da superfície de patch: quem lê
+    de outro arquivo lê pelo caminho dele."""
+    path = expected_path if expected_path is not None else _rel_path(rel)
+    try:
+        return _S.read(path)
+    except FileNotFoundError:
+        return None
 
 
 def table_rows(db_name, table, rel, schema='main', order_by=None, heal=None,
                manifest_key=None, expected_path=None, sync_kind=None):
-    """As linhas de `table`, servidas pelo BANCO. Banco frio ou defasado é
-    CURADO na hora (`convert_sync`) e relido — `None` só sobra para a
-    emergência: espelho desligado (testes), timeout, conversão que falhou.
-
-    `rel` é o caminho relativo à raiz de dados; `manifest_key` é a CHAVE no
-    `_manifest` quando ela difere do caminho (as tabelas de cadastro levam a
-    versão do formato no sufixo — um banco no formato antigo simplesmente não
-    casa e a cura reconverte no novo). `heal` troca o aviso ASSÍNCRONO padrão
-    (`notify_write` do caminho) e `sync_kind` força a tarefa da cura síncrona
-    — os arquivos de calendário precisam dos dois ('holidays'), porque o nome
-    deles só o registro conhece."""
-    try:
-        raiz = _data_root()
-        jpath = os.path.join(raiz, rel.replace('/', os.sep))
-        # `expected_path` é o guarda da SUPERFÍCIE DE PATCH: o chamador diz de
-        # que arquivo ELE leria, e se não for o canônico que o espelho cobre
-        # (um `_cpd_path`/`data_path` trocado por teste ou config), o banco não
-        # responde — refletir OUTRO arquivo com carimbo de fresco seria a
-        # fonte errada.
-        if expected_path is not None and \
-                os.path.normpath(str(expected_path)) != os.path.normpath(jpath):
-            return None
-        st = os.stat(jpath)
-    except Exception:                                       # noqa: BLE001
-        return None
-
-    def _cura():
-        try:
-            from apps.pages import duck_mirror
-            if heal is not None:
-                heal()
-            else:
-                duck_mirror.notify_write(jpath)
-        except Exception:                                   # noqa: BLE001
-            pass
-
-    def _ler():
-        """Uma tentativa de leitura pelo banco; None = frio/defasado/em uso —
-        o chamador cura e tenta de novo. Exceção aqui é o mesmo sintoma
-        (banco sendo escrito pelo espelho neste instante), então vira None
-        também: a cura síncrona ESPERA a fila do espelho, que é justamente o
-        que resolve a colisão."""
-        try:
-            from apps.pages import duck_mirror
-            # `db_name` pode ser um CAMINHO relativo (`cache/new deals/NDF/Vanilla.db`):
-            # a pasta `db/` espelha a árvore de origem desde a quebra em subpastas.
-            db = os.path.join(duck_mirror._out_dir(raiz), *db_name.split('/'))
-            if not os.path.isfile(db):
-                return None
-            t0 = time.monotonic()
-            gate = db_gate(db)
-            gate.enter_read(_GATE_READ_WAIT_SECONDS)
-            try:
-                with _DA.read_timeout(_LEITURA_TETO), duckdb_read(db) as con:
-                    row = con.execute('SELECT mtime, fsize FROM _manifest WHERE path = ?',
-                                      [manifest_key or rel]).fetchone()
-                    if not row or abs(row[0] - st.st_mtime) >= 1e-6 or row[1] != st.st_size:
-                        return None
-                    sql = 'SELECT * FROM %s.%s' % (q(schema), q(table))
-                    if order_by:
-                        sql += ' ORDER BY ' + order_by
-                    cur = con.execute(sql)
-                    cols = [d[0] for d in cur.description]
-                    return _limpo(dict(zip(cols, r)) for r in cur.fetchall())
-            finally:
-                gate.exit_read()
-                _freio_mede(time.monotonic() - t0, db)
-        except Exception as exc:                            # noqa: BLE001
-            return _classifica(exc)
-
-    try:
-        rows = _le_ocupado(_ler, db_name)
-        if rows is _OCUPADO:
-            _ocupado_avisa(db_name)
-            _DA.trace_note('json', db_name)
-            return None                       # o JSON desta vez; nada de cura
-        if rows is None:
-            # CURA SÍNCRONA: converte AGORA (na fila da thread do espelho —
-            # serializado, nunca dois escritores no mesmo banco) e relê. Com o
-            # espelho desligado ou no timeout, sobra o aviso assíncrono e o
-            # chamador cai no JSON — o canal de emergência.
-            if _cura_em_quarentena(jpath):
-                return None                       # já se sabe que não resolve
-            from apps.pages import duck_mirror
-            _DA.trace_note('cura', db_name)
-            if duck_mirror.convert_sync(jpath, kind=sync_kind):
-                rows = _ler()
-            if rows is None:
-                _cura_marca_falha(jpath)
-                _cura()
-        else:
-            _cura_marca_ok(jpath)
-        return rows
-    except Exception:                                       # noqa: BLE001
-        return None
+    """As linhas de uma tabela — hoje o payload do caminho `rel`."""
+    return raw_records(db_name, table, rel, expected_path=expected_path)
 
 
-def raw_records(db_name, table, rel, expected_path=None, manifest_key=None):
-    """Os REGISTROS ORIGINAIS de uma tabela de registros — a coluna `_raw`
-    (cada registro exatamente como está no JSON), na ordem do arquivo
-    (`_seq`; o CAST cobre a tabela que o gravou como texto).
-
-    É o canal de fidelidade do flip: reconstruir pelo conjunto de colunas
-    poria chave com NULL onde o JSON não tinha chave nenhuma, e há consumidor
-    que decide pela AUSÊNCIA (o `_contacts_norm` do CounterpartyDetails).
-    Linha sem `_raw`/`_seq` (banco em formato antigo) devolve `None` — o
-    manifest versionado já impede o caso, isto é o cinto de segurança."""
-    from apps.pages.json_to_duckdb import _refdata_manifest_key
-    mkey = manifest_key or _refdata_manifest_key(rel)
-    memo, chave = None, None
-    try:
-        jpath = os.path.join(_data_root(), rel.replace('/', os.sep))
-        if expected_path is None or \
-                os.path.normpath(str(expected_path)) == os.path.normpath(jpath):
-            st = os.stat(jpath)
-            memo = _memo_req()
-            chave = ('raw', jpath, mkey, st.st_mtime, st.st_size)
-    except Exception:                                       # noqa: BLE001
-        memo = None
-    if memo is not None and chave in memo:
-        return [json.loads(c) for c in memo[chave]]
-    rows = table_rows(db_name, table, rel, manifest_key=mkey,
-                      order_by='CAST("_seq" AS BIGINT)',
-                      expected_path=expected_path)
-    if rows is None:
-        return None
-    crus, out = [], []
-    for r in rows:
-        cru = r.get('_raw')
-        if not cru:
-            return None
-        try:
-            out.append(json.loads(cru))
-        except ValueError:
-            return None
-        crus.append(cru)
-    if memo is not None:
-        memo[chave] = crus
-    return out
+def refdata_rows(expected_path=None):
+    return raw_records('reference_data.db', 'refdata', 'RefData.json',
+                       expected_path=expected_path)
 
 
-# Arquivos-dia já servidos SEM o JSON ao lado — o aviso sai uma vez por arquivo.
-_sem_json_avisado = set()
-
-
-def _dia_sem_json(db_name, schema, tabela, jpath):
-    """A tabela do dia, lida do banco quando o JSON não está no disco.
-
-    Não há manifest a conferir (ele compara com o arquivo que não existe), e
-    também não há cura possível — o conversor lê o JSON. Então ou o banco tem a
-    tabela, ou não há dado. `None` nos dois casos ruins, como sempre."""
-    try:
-        from apps.pages import duck_mirror
-        db = os.path.join(duck_mirror._out_dir(_data_root()), *db_name.split('/'))
-        if not os.path.isfile(db):
-            return None
-        alvo_sql = '%s.%s' % (q(schema), q(tabela))
-        gate = db_gate(db)
-        gate.enter_read(_GATE_READ_WAIT_SECONDS)
-        t0 = time.monotonic()
-        try:
-            with _DA.read_timeout(_LEITURA_TETO), duckdb_read(db) as con:
-                cols = [d[0] for d in
-                        con.execute('SELECT * FROM %s LIMIT 0' % alvo_sql).description]
-                if cols == ['_empty']:
-                    return []
-                if '_raw' not in cols or '_seq' not in cols:
-                    return None
-                crus = [c for (c,) in con.execute(
-                    'SELECT "_raw" FROM %s ORDER BY CAST("_seq" AS BIGINT)'
-                    % alvo_sql).fetchall()]
-        finally:
-            gate.exit_read()
-            _freio_mede(time.monotonic() - t0, db)
-    except Exception:                                       # noqa: BLE001
-        return None
-    dados = []
-    for c in crus:
-        if not c:
-            return None
-        try:
-            dados.append(json.loads(c))
-        except ValueError:
-            return None
-    if jpath not in _sem_json_avisado:
-        _sem_json_avisado.add(jpath)
-        log.warning('[duck-read] %s não está no disco e o banco respondeu por ele '
-                    '(%d registro(s)) — a leitura é DB-only; o JSON é o meio de '
-                    'escrita, e a falta dele não esconde o dia',
-                    os.path.basename(jpath), len(dados))
-    return dados
-
-
-def day_payload(path):
-    """O conteúdo de UM arquivo-dia pelo banco da rotina — a LISTA original,
-    na ordem do arquivo. Banco frio ou defasado é CURADO na hora
-    (`convert_sync`) e relido; `None` sobra para a emergência (espelho
-    desligado, timeout, conversão falhou) e para o payload-OBJETO.
-
-    Só o payload-LISTA reconstrói (é a forma dos New Deals, Pending
-    Confirmation, arquivos B3…): o manifest diz que a conversão gerou UMA
-    tabela, e ela carrega `_raw`/`_seq`. Payload-objeto (as recons, que viram
-    sub-tabelas + `_meta`) fica com o JSON — remontar o objeto pelas tabelas
-    normalizadas seria adivinhar chave e ordem — e NÃO dispara cura: converter
-    de novo não muda a forma dele."""
-    try:
-        from apps.pages import duck_mirror
-        from apps.pages import json_to_duckdb as core
-        raiz = _data_root()
-        jpath = os.path.normpath(str(path))
-        rel = os.path.relpath(jpath, raiz)
-        if rel.startswith('..'):
-            return None
-        rel = rel.replace(os.sep, '/')
-        alvo = core._daily_rel_target(rel)
-        if alvo is None:
-            return None
-        db_name, schema, tabela = alvo
-        try:
-            st = os.stat(jpath)
-        except OSError:
-            # JSON AUSENTE e banco com o dia: o banco responde sozinho. A
-            # leitura é DB-only e o JSON é só o meio de ESCRITA (§4) — exigi-lo
-            # aqui era exigir o meio de escrita para poder LER. Sem ele não há
-            # com que comparar mtime/tamanho, então a prova de frescor não
-            # existe: serve-se o que o banco tem, que é a única fonte. Some o
-            # arquivo do share e a tela continua de pé; some o banco também e aí
-            # não há dado nenhum a mostrar, que é a verdade.
-            return _dia_sem_json(db_name, schema, tabela, jpath)
-        memo = _memo_req()
-        chave = ('day', jpath, st.st_mtime, st.st_size)
-        if memo is not None and chave in memo:
-            crus = memo[chave]
-            return None if crus is None else [json.loads(c) for c in crus]
-        # O memo de PROCESSO (ver `_day_memo`): mesma chave, então o arquivo
-        # reescrito não é servido velho; o que se poupa é a abertura do banco.
-        crus = _day_memo_get(chave)
-        if crus is not _MISS:
-            if memo is not None:
-                memo[chave] = crus
-            return None if crus is None else [json.loads(c) for c in crus]
-
-        _OBJETO = object()       # sentinela: payload que o banco não reconstrói
-
-        def _ler():
-            """(dados) | None = frio/defasado (curável) | _OBJETO = fica no JSON."""
-            try:
-                # `db_name` pode ser um CAMINHO relativo
-                # (`cache/new deals/NDF/Vanilla.db`): a pasta `db/` espelha a
-                # árvore de origem desde a quebra em subpastas.
-                db = os.path.join(duck_mirror._out_dir(raiz), *db_name.split('/'))
-                if not os.path.isfile(db):
-                    return None
-                t0 = time.monotonic()
-                gate = db_gate(db)
-                gate.enter_read(_GATE_READ_WAIT_SECONDS)
-                try:
-                    with _DA.read_timeout(_LEITURA_TETO), duckdb_read(db) as con:
-                        row = con.execute(
-                            'SELECT mtime, fsize, targets FROM _manifest WHERE path = ?',
-                            [core._dataset_manifest_key(rel)]).fetchone()
-                        if not row or abs(row[0] - st.st_mtime) >= 1e-6 or row[1] != st.st_size:
-                            return None
-                        if json.loads(row[2] or '[]') != ['%s.%s' % (schema, tabela)]:
-                            return _OBJETO     # payload-objeto: fica no JSON
-                        alvo_sql = '%s.%s' % (q(schema), q(tabela))
-                        cols = [d[0] for d in
-                                con.execute('SELECT * FROM %s LIMIT 0' % alvo_sql).description]
-                        if cols == ['_empty']:
-                            return []          # o dia existe e está vazio
-                        if '_raw' not in cols or '_seq' not in cols:
-                            return None
-                        # SÓ a consulta acontece aqui dentro. A VALIDAÇÃO de
-                        # cada `_raw` é feita depois de fechar — ver abaixo.
-                        return [c for (c,) in con.execute(
-                            'SELECT "_raw" FROM %s ORDER BY CAST("_seq" AS BIGINT)'
-                            % alvo_sql).fetchall()]
-                finally:
-                    gate.exit_read()
-                    _freio_mede(time.monotonic() - t0, db)
-            except Exception as exc:                        # noqa: BLE001
-                return _classifica(exc)
-
-        def _valida(crus):
-            """Todo `_raw` é JSON legível? Fora do lock, de propósito.
-
-            O `json.loads` de cada registro custa CPU e não precisa do banco
-            para nada, mas rodava DENTRO do `with duckdb_read(...)` — com a
-            conexão aberta e o lock de arquivo tomado. Numa posição TER de
-            dezenas de milhares de linhas isso segurou o banco por **235
-            segundos** na instância (`file_lock_held_slow ...
-            lock_hold_seconds=235.938`), e nesses quatro minutos o espelho não
-            conseguia converter: `Cannot open file ... used by another
-            process`. Era o e-mail de TEDs "rodando, rodando, rodando".
-
-            Devolve os crus, ou None quando algum não presta — e `None` continua
-            querendo dizer a mesma coisa de antes: banco suspeito, cure e releia."""
-            for c in crus:
-                if not c:
-                    return None
-                try:
-                    json.loads(c)
-                except ValueError:
-                    return None
-            return crus
-
-        dados = _le_ocupado(_ler, db_name)
-        if dados is _OCUPADO:
-            _ocupado_avisa(db_name)
-            _DA.trace_note('json', db_name)
-            return None                       # o JSON desta vez; nada de cura
-        if isinstance(dados, list) and dados:
-            dados = _valida(dados)
-        if dados is None:
-            # CURA SÍNCRONA — ver table_rows; espelho desligado/timeout →
-            # aviso assíncrono e o chamador cai no JSON.
-            if _cura_em_quarentena(jpath):
-                return None                       # já se sabe que não resolve
-            _DA.trace_note('cura', db_name)
-            if duck_mirror.convert_sync(jpath):
-                dados = _ler()
-            if dados is None:
-                _cura_marca_falha(jpath)
-                duck_mirror.notify_write(jpath)
-        elif dados is not _OBJETO:
-            _cura_marca_ok(jpath)
-        if dados is _OBJETO:
-            if memo is not None:
-                memo[chave] = None           # payload-objeto: não reabrir o banco neste request
-            _day_memo_put(chave, None)       # nem nos seguintes: converter não muda a forma
-            return None
-        if dados is None:
-            return None
-        if memo is not None:
-            memo[chave] = dados
-        _day_memo_put(chave, dados)
-        return [json.loads(c) for c in dados]
-    except Exception:                                       # noqa: BLE001
-        return None
-
-
-def day_files(raiz, sufixo=''):
-    """Os arquivos-dia de uma árvore SEGUNDO O BANCO — `None` se ele não sabe.
-
-    Devolve as mesmas quatro coisas que o `_day_files` do disco
-    (`caminho, nome, mtime, tamanho`), e devolve porque o `_manifest` guarda
-    exatamente isso: uma linha por arquivo convertido, com o caminho relativo,
-    o mtime e o tamanho do JSON que a gerou. Enumerar pelo banco é ler essa
-    tabela; nenhuma listagem de diretório acontece.
-
-    É a última ponta do DB-only (§4). A LEITURA de um dia já vinha do banco
-    desde a fase 3, mas quem dizia QUE DIAS EXISTEM continuava sendo o disco —
-    e no share cada pasta de mês é uma ida de rede, todo dia uma a mais.
-
-    `None` (→ o chamador varre o disco) é o canal de emergência de sempre:
-    espelho desligado, banco que não existe ainda, `_manifest` que não abre.
-    Diferente do `[]`, que é uma árvore que o banco conhece e está vazia.
-
-    **O que o banco não converteu não aparece aqui**, e é por isso que quem
-    chama tem de poder viver com isso: a árvore certa para esta função é a que
-    só a aplicação escreve (o snapshot do Pending Confirmation, gravado pela
-    manutenção das 11:30 pelo funil `_atomic_write_json`, que avisa o espelho
-    na mesma hora). Numa árvore que alguém pode encher por fora, um arquivo
-    posto à mão ficaria invisível — sem erro nenhum, que é a pior forma."""
-    try:
-        from apps.pages import duck_mirror
-        raiz_dados = _data_root()
-        raiz_abs = os.path.normpath(str(raiz))
-        rel_raiz = os.path.relpath(raiz_abs, raiz_dados)
-        if rel_raiz.startswith('..'):
-            return None
-        rel_raiz = rel_raiz.replace(os.sep, '/').strip('/')
-        out = duck_mirror._out_dir(raiz_dados)
-
-        # A pasta `db/` ESPELHA a árvore de origem (§4), então o banco de uma
-        # rotina é `<rel>.db` — e, quando o produto guarda mais de um arquivo
-        # por dia, uma PASTA de bancos com o mesmo `<rel>`. Os dois casos são
-        # uma conferência barata, e não uma varredura.
-        base = os.path.join(out, *rel_raiz.split('/')) if rel_raiz else out
-        bancos = []
-        if os.path.isfile(base + '.db'):
-            bancos.append(base + '.db')
-        if os.path.isdir(base):
-            try:
-                with os.scandir(base) as it:
-                    bancos.extend(sorted(e.path for e in it
-                                         if e.is_file() and e.name.endswith('.db')))
-            except OSError:
-                pass
-        if not bancos:
-            return None
-    except Exception:                                       # noqa: BLE001
-        return None
-
-    prefixo = (rel_raiz + '/') if rel_raiz else ''
-    achados, respondeu = {}, False
-    for db in bancos:
-        t0 = time.monotonic()
-        gate = db_gate(db)
-        try:
-            gate.enter_read(_GATE_READ_WAIT_SECONDS)
-        except Exception:                                   # noqa: BLE001
-            continue
-        try:
-            with _DA.read_timeout(_LEITURA_TETO), duckdb_read(db) as con:
-                linhas = con.execute(
-                    'SELECT path, mtime, fsize FROM _manifest').fetchall()
-            respondeu = True
-        except Exception:                                   # noqa: BLE001
-            continue
-        finally:
-            gate.exit_read()
-            _freio_mede(time.monotonic() - t0, db)
-        for chave, mtime, fsize in linhas:
-            # A chave do manifest leva a VERSÃO do formato (`...json#raw2`) —
-            # o caminho é o que vem antes do `#`.
-            rel = str(chave or '').split('#', 1)[0]
-            if not rel.startswith(prefixo) or not rel.endswith('.json'):
-                continue
-            if sufixo and not rel.endswith(sufixo):
-                continue
-            caminho = os.path.normpath(os.path.join(raiz_dados, *rel.split('/')))
-            achados[caminho] = (caminho, os.path.basename(rel), mtime, fsize)
-    if not respondeu:
-        return None
-    # A ORDEM é a mesma do disco — por caminho —, senão a mesma base renderia
-    # listas diferentes conforme a fonte da enumeração.
-    return [achados[k] for k in sorted(achados)]
-
-
-def prefetch_days(dias):
-    """Vários arquivos-dia numa ABERTURA POR BANCO, em vez de uma por dia.
-
-    `dias` são as triplas `(caminho, mtime, tamanho)` que o `_day_files`
-    devolve — o mtime e o tamanho já vêm da listagem, então nada aqui volta ao
-    disco. O retorno é `{caminho: registros}`, e o dia que o banco não puder
-    responder simplesmente NÃO aparece: quem pediu cai no `day_payload` de
-    sempre, com cura síncrona e tudo. Prefetch é otimização, nunca decisão —
-    ele não recusa dia nenhum, só adianta o que dá.
-
-    Por que ele existe: a quebra dos bancos é por PRODUTO (§4), então os
-    quinhentos arquivos-dia de `new deals/NDF/Vanilla` são quinhentas TABELAS
-    do MESMO `Vanilla.db`. A busca da tela lê o histórico inteiro, e o
-    `day_payload` — que é por caminho — abria esse mesmo arquivo uma vez por
-    dia. Medido com 500 dias e 40 registros cada, em disco LOCAL:
-
-        enumerar (scandir)  ...........      1,3 ms  (53 listagens)
-        ler dia a dia .................  10256,9 ms  (500 aberturas)
-        ler em lote ...................    134,9 ms  (1 abertura)   → 76x
-
-    A varredura de diretório custa 0,01% do total: a ENUMERAÇÃO nunca foi o
-    problema, por mais que pareça ser. No share cada abertura foi medida em
-    12,67 ms (§4), então só o ABRIR são ~6,3 s — e cada uma toma o lock de
-    arquivo, que é o que o espelho precisa para converter. Era esta a conta
-    por trás de "carregou, mas demorou MUIIIIITO".
-
-    A VALIDAÇÃO dos `_raw` fica FORA do `with`, como no `day_payload`: foi o
-    `json.loads` dentro da conexão que segurou um banco por 235 s na instância.
-    Aqui isso pesaria mais, não menos — são todos os dias de uma vez."""
-    try:
-        from apps.pages import duck_mirror
-        from apps.pages import json_to_duckdb as core
-        raiz = _data_root()
-    except Exception:                                       # noqa: BLE001
-        return {}
-
-    # ── agrupar por BANCO ───────────────────────────────────────────────────
-    # A chave do agrupamento é o `db_name` do alvo, que é o que decide o
-    # arquivo aberto. Dois produtos da mesma rotina são dois bancos e por isso
-    # dois grupos — é a quebra por produto do §4, e ela vale aqui de graça.
-    grupos = {}
-    for item in (dias or []):
-        # Caminho na frente, (mtime, tamanho) no FIM — ver a nota do
-        # `_day_prefetch`: o `_day_files` põe o NOME do arquivo no meio.
-        try:
-            jpath, mtime, size = os.path.normpath(str(item[0])), item[-2], item[-1]
-        except (TypeError, IndexError):
-            continue
-        rel = os.path.relpath(jpath, raiz)
-        if rel.startswith('..'):
-            continue
-        rel = rel.replace(os.sep, '/')
-        alvo = core._daily_rel_target(rel)
-        if alvo is None:
-            continue
-        db_name, schema, tabela = alvo
-        grupos.setdefault(db_name, []).append((jpath, rel, schema, tabela, mtime, size))
-
-    out = {}
-    for db_name, itens in grupos.items():
-        db = os.path.join(duck_mirror._out_dir(raiz), *db_name.split('/'))
-        if not os.path.isfile(db):
-            continue
-        if _ocupado_marcado(db_name):
-            _DA.trace_note('json', db_name)   # disputa recente: os dias saem do JSON
-            continue
-        crus_por_dia = {}
-        t0 = time.monotonic()
-        gate = db_gate(db)
-        try:
-            gate.enter_read(_GATE_READ_WAIT_SECONDS)
-        except Exception:                                   # noqa: BLE001
-            continue
-        try:
-            with _DA.read_timeout(_LEITURA_TETO), duckdb_read(db) as con:
-                # O manifest inteiro de uma vez: ele tem uma linha por
-                # arquivo-dia do produto e é a prova de frescor de todos eles.
-                # Uma consulta por dia seria o mesmo defeito numa escala menor.
-                try:
-                    frescor = {p: (mt, fs, tg) for p, mt, fs, tg in con.execute(
-                        'SELECT path, mtime, fsize, targets FROM _manifest').fetchall()}
-                except Exception:                           # noqa: BLE001
-                    frescor = {}
-                for jpath, rel, schema, tabela, mtime, size in itens:
-                    row = frescor.get(core._dataset_manifest_key(rel))
-                    if not row:
-                        continue
-                    if abs(row[0] - mtime) >= 1e-6 or row[1] != size:
-                        continue           # defasado: o day_payload cura
-                    try:
-                        if json.loads(row[2] or '[]') != ['%s.%s' % (schema, tabela)]:
-                            continue       # payload-objeto: fica no JSON
-                        alvo_sql = '%s.%s' % (q(schema), q(tabela))
-                        cols = [d[0] for d in con.execute(
-                            'SELECT * FROM %s LIMIT 0' % alvo_sql).description]
-                        if cols == ['_empty']:
-                            crus_por_dia[jpath] = []       # o dia existe e está vazio
-                            continue
-                        if '_raw' not in cols or '_seq' not in cols:
-                            continue
-                        crus_por_dia[jpath] = [c for (c,) in con.execute(
-                            'SELECT "_raw" FROM %s ORDER BY CAST("_seq" AS BIGINT)'
-                            % alvo_sql).fetchall()]
-                    except Exception:                       # noqa: BLE001
-                        continue
-        except Exception as exc:                            # noqa: BLE001
-            crus_por_dia = {}
-            if _classifica(exc) is _OCUPADO:
-                _ocupado_marca(db_name)
-                _ocupado_avisa(db_name)
-                _DA.trace_note('json', db_name)
-        finally:
-            gate.exit_read()
-            _freio_mede(time.monotonic() - t0, db)
-
-        # Fora da conexão e fora do lock — ver o docstring.
-        meta = {jpath: (mtime, size) for jpath, _r, _s, _t, mtime, size in itens}
-        for jpath, crus in crus_por_dia.items():
-            registros = []
-            for c in crus:
-                if not c:
-                    registros = None
-                    break
-                try:
-                    registros.append(json.loads(c))
-                except ValueError:
-                    registros = None
-                    break
-            if registros is not None:
-                out[jpath] = registros
-                # O lote alimenta também o memo de processo do `day_payload`:
-                # o dia que o prefetch trouxe não paga abertura no leitor
-                # unitário do request seguinte.
-                mt, sz = meta.get(jpath, (None, None))
-                if mt is not None:
-                    _day_memo_put(('day', jpath, mt, sz), crus)
-    return out
-
-
-def day_records(path):
-    """Leitura DB-ONLY de um arquivo-dia payload-LISTA, por caminho: o banco
-    responde (curando-se na hora quando frio/defasado — `day_payload`); o JSON
-    é a EMERGÊNCIA (espelho desligado nos testes, payload-objeto, conversão
-    que falhou). Levanta as exceções de `open`/`json.load` quando nem o JSON
-    dá — o transplante de um `with open(...)` existente preserva o `except`
-    do chamador."""
-    dados = day_payload(path)
-    if dados is not None:
-        return dados
-    with open(path, encoding='utf-8') as fh:
-        return json.load(fh)
-
-
-def dataset_rows(path):
-    """Leitura DB-ONLY de um JSON de DATASET (mappings, cadastros B3,
-    Subjacente…), por caminho — o gêmeo do `day_records` para o que não é
-    arquivo-dia. Banco frio cura na hora (via table_rows); a emergência é o
-    JSON, com as exceções do chamador preservadas."""
-    dados = dataset_records(path)
-    if dados is not None:
-        return dados
-    with open(path, encoding='utf-8') as fh:
-        return json.load(fh)
-
-
-def dataset_records(path):
-    """Os registros originais de um JSON coberto pelos DATASETS (mappings,
-    cadastros B3, …), pelo caminho ABSOLUTO de quem lê — que também é o
-    guarda: fora da raiz espelhada, ou arquivo de outro conversor, → `None`
-    e vale o JSON. Payload que não é lista de registros (os dicts viram
-    `_meta`/sub-tabelas) também devolve `None` — a reconstrução fiel é só da
-    lista."""
-    try:
-        from apps.pages import json_to_duckdb as core
-        raiz = _data_root()
-        rel = os.path.relpath(os.path.normpath(str(path)), raiz)
-        if rel.startswith('..'):
-            return None
-        rel = rel.replace(os.sep, '/')
-        alvo = core._dataset_rel_target(rel, core._holiday_files(raiz))
-        if alvo is None:
-            return None
-        db, tabela = alvo
-        return raw_records(db, tabela, rel,
-                           manifest_key=core._dataset_manifest_key(rel))
-    except Exception:                                       # noqa: BLE001
-        return None
+def cpd_records(expected_path=None):
+    return raw_records('reference_data.db', 'counterparty_details',
+                       'CounterpartyDetails.json', expected_path=expected_path)
 
 
 def calendar_registry():
-    """O registro de calendários (nome, arquivo, cor) pela tabela `_registry`
-    do `holiday_calendars.db`. `None` quando o banco não prova o frescor — e aí
-    vale o `holiday-calendars.json`, que é quem SEMEIA: um registro recém-
-    nascido do seed nem tem arquivo para o manifest provar."""
-    from apps.pages import json_to_duckdb as core
-    return raw_records('holiday_calendars.db', '_registry', core.REGISTRY_FILE,
-                       manifest_key=core._dataset_manifest_key(core.REGISTRY_FILE))
+    """O registro de calendários — `None` quando o banco não o tem (e aí vale
+    o seed da vertical)."""
+    try:
+        return _S.read(_rel_path(_core.REGISTRY_FILE))
+    except FileNotFoundError:
+        return None
 
 
 def calendar_rows(path, nome=None):
-    """As linhas de um arquivo de CALENDÁRIO (`anbima.json`, `sofr.json`, os
-    criados pela tela) pelo CAMINHO — do `holiday_calendars.db`.
-
-    Existe porque calendário não é dataset: o `_dataset_rel_target` devolve
-    `None` para ele de propósito (seriam duas tabelas para o mesmo arquivo), e
-    sem este atalho todo leitor de feriado que não fosse a própria tela de
-    Holidays — o SLA da esteira, o aging do CGD, o `_feriados` da recon, o
-    calendário do precificador, os schedules do TER — voltava a abrir o JSON
-    direto. Eram seis cópias da mesma leitura, e só uma delas era DB-only.
-
-    A tabela leva o nome do CALENDÁRIO (não o do arquivo), então é preciso o
-    registro para traduzir um no outro: `nome` é passado por quem já o
-    resolveu (a tela, que aceita o registro vindo do seed) e, sem ele, a
-    tradução sai da tabela `_registry` do próprio banco. Registro que não
-    responde → `None`, e vale o JSON de sempre.
-
-    Devolve `[{'date','title','calendar'}]` — a forma que o JSON sempre teve,
-    com a data como STRING ISO.
-    """
+    """As linhas de um arquivo de calendário: `[{'date','title','calendar'}]`,
+    com a data como STRING ISO. `None` quando não há."""
     try:
-        from apps.pages import duck_mirror
-        from apps.pages import json_to_duckdb as core
-        raiz = _data_root()
-        rel = os.path.relpath(os.path.normpath(str(path)), raiz)
-        if rel.startswith('..'):
-            return None
-        rel = rel.replace(os.sep, '/')
-        if not nome:
-            registro = calendar_registry()
-            if registro is None:
-                return None
-            alvo = rel.lower()
-            nome = next((str(r.get('name', '') or '') for r in registro
-                         if isinstance(r, dict)
-                         and str(r.get('file', '') or '').strip().lower() == alvo), '')
-        if not nome:
-            return None
-        # ORDEM pelo `_seq`: dois feriados no mesmo dia voltam como o arquivo os
-        # guarda. `sync_kind='holidays'` porque a triagem genérica da cura o
-        # converteria como dataset — e aí o banco continuaria frio.
-        linhas = table_rows('holiday_calendars.db', core.norm_ident(str(nome).strip(), 'cal'),
-                            rel, order_by='CAST("_seq" AS BIGINT)',
-                            manifest_key=core._dataset_manifest_key(rel),
-                            heal=duck_mirror.notify_holidays, sync_kind='holidays')
-    except Exception:                                       # noqa: BLE001
+        linhas = _S.read(path)
+    except FileNotFoundError:
         return None
-    if linhas is None:
+    if not isinstance(linhas, list):
         return None
-    saida = []
+    out = []
     for r in linhas:
-        d = r.get('date')
-        saida.append({'date': d.isoformat() if hasattr(d, 'isoformat') else (d or ''),
-                      'title': r.get('title') or '',
-                      'calendar': r.get('calendar') or ''})
-    return saida
+        if not isinstance(r, dict):
+            continue
+        d = r.get('date', '')
+        out.append({'date': d.isoformat() if hasattr(d, 'isoformat') else (d or ''),
+                    'title': r.get('title', r.get('name', '')) or '',
+                    'calendar': r.get('calendar', '') or (nome or '')})
+    return out
 
 
 def calendar_dates(path, nome=None):
-    """Só as datas ISO de um calendário, como `set` — a forma que os seis
-    leitores de feriado do app usam. `None` quando o banco não responde."""
     linhas = calendar_rows(path, nome=nome)
     if linhas is None:
         return None
     return {r['date'] for r in linhas if r.get('date')}
 
 
-def refdata_rows(expected_path=None):
-    """Os registros originais do RefData — do `reference_data.db` quando fresco."""
-    return raw_records('reference_data.db', 'refdata', 'RefData.json',
-                       expected_path=expected_path)
+def day_files(raiz, sufixo=''):
+    """`(caminho, nome, mtime, tamanho)` dos arquivos-dia de uma árvore, pelo
+    banco. `None` quando a árvore não tem banco nenhum."""
+    itens = list(_S.day_files(raiz, sufixo=sufixo))
+    return itens if itens else (None if not _S.isdir(raiz) else [])
 
 
-def cpd_records(expected_path=None):
-    """Os registros originais do CounterpartyDetails — fidelidade total,
-    chave-ausente incluída."""
-    return raw_records('reference_data.db', 'counterparty_details',
-                       'CounterpartyDetails.json', expected_path=expected_path)
+def prefetch_days(dias):
+    """Aquece o memo para as triplas do `_day_files`: `{caminho: registros}`."""
+    caminhos = []
+    for item in (dias or []):
+        try:
+            caminhos.append(item[0])
+        except (TypeError, IndexError):
+            continue
+    return _S.prefetch(caminhos)

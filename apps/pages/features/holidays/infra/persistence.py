@@ -5,6 +5,7 @@ import os
 import traceback
 
 from apps.pages.features.holidays import domain
+from apps.pages import data_store as _store  # noqa: E402
 
 _cache = {'mtime': None, 'rows': None}
 
@@ -72,9 +73,9 @@ def calendars():
         return linhas
     R = _routes()
     path = registry_path()
-    if not os.path.isfile(path):
+    if not _store.isfile(path):
         with R._cache_lock:
-            if not os.path.isfile(path):
+            if not _store.isfile(path):
                 try:
                     os.makedirs(data_dir(), exist_ok=True)
                     R._atomic_write_json(path, [dict(r) for r in domain.CAL_SEED])
@@ -83,11 +84,10 @@ def calendars():
                                   traceback.format_exc())
                     return [dict(r) for r in domain.CAL_SEED]
     try:
-        mt = os.path.getmtime(path)
+        mt = _store.getmtime(path)
         if _cache['mtime'] == mt and _cache['rows'] is not None:
             return _cache['rows']
-        with open(path, encoding='utf-8') as fh:
-            rows = json.load(fh) or []
+        rows = _store.read(path) or []
         rows = [r for r in rows if isinstance(r, dict) and str(r.get('name', '')).strip()]
         _cache['mtime'] = mt
         _cache['rows'] = rows
@@ -122,17 +122,16 @@ def load_holidays(filename):
     """Os feriados de um calendário. Arquivo ausente ou ilegível → lista vazia.
 
     DB-first (fase 3): a tabela do calendário responde quando o manifest prova
-    que ela reflete o arquivo atual — senão vale o JSON de sempre, e o espelho
+    que ela reflete o arquivo atual — senão vale o JSON de sempre (DB-only: §434)
     é avisado. A data volta como STRING ISO, a forma que o JSON sempre teve."""
     linhas = _load_holidays_db(filename)
     if linhas is not None:
         return linhas
     try:
         fp = calendar_path(filename)
-        if not os.path.exists(fp):
+        if not _store.exists(fp):
             return []
-        with open(fp, encoding='utf-8') as f:
-            return json.load(f)
+        return _store.read(fp)
     except (json.JSONDecodeError, IOError):
         return []
 
@@ -160,7 +159,7 @@ def write_holidays(filename, holidays):
 
     A escrita é ATÔMICA — o navegador lê este arquivo por URL estática
     (`/static/data/<file>`), e um fetch no meio de um write não pode ver JSON
-    pela metade — e avisa o espelho vivo: a tabela do calendário no
+    pela metade — e, desde o §434, grava a tabela do calendário no
     `holiday_calendars.db` acompanha na hora. O aviso é explícito porque o
     nome do arquivo de calendário só o registro conhece — o gancho genérico
     do funil não teria como classificá-lo."""
@@ -168,11 +167,6 @@ def write_holidays(filename, holidays):
         _routes()._atomic_write_json(calendar_path(filename), holidays)
     except Exception as e:                                  # noqa: BLE001
         return str(e)
-    try:
-        from apps.pages import duck_mirror
-        duck_mirror.notify_holidays()
-    except Exception:                                       # noqa: BLE001
-        pass
     return None
 
 
@@ -188,7 +182,7 @@ def fx_schedule_names():
         'treeview-data.json', 'typeahead-data-2.json', 'typeahead.json',
         domain.CAL_FILE,
     }
-    nomes = [f[:-5] for f in os.listdir(data_dir())
+    nomes = [f[:-5] for f in _store.listdir(data_dir())
              if f.endswith('.json') and f not in sistema]
     nomes.sort()
     return nomes

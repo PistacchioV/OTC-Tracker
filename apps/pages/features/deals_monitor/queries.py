@@ -9,6 +9,7 @@ from datetime import timedelta
 
 from apps.pages.features.deals_monitor import domain
 from apps.pages.features.deals_monitor.infra import persistence
+from apps.pages import data_store as _store  # noqa: E402
 
 
 def _R():
@@ -34,7 +35,7 @@ def _ndm_monitor_snapshot(ref):
     # (caminho sem os níveis de dígitos), contando por Status e LE.
     ref_date = ref.date() if hasattr(ref, 'date') else ref
     found, found_les = {}, {}
-    if os.path.isdir(_R().NEW_DEALS_CACHE_ROOT):
+    if _store.isdir(_R().NEW_DEALS_CACHE_ROOT):
         _dias = list(_R()._day_files(
                 _R().NEW_DEALS_CACHE_ROOT, '.json',
                 desde=ref_date, ate=ref_date))
@@ -114,7 +115,7 @@ def _ndm_monitor_snapshot(ref):
         for cache_dir in cache_dirs:
             fp = os.path.join(cache_dir, ref.strftime('%Y'), ref.strftime('%m'),
                               ref.strftime('%Y%m%d') + suffix)
-            if not os.path.isfile(fp):
+            if not _store.isfile(fp):
                 continue
             try:
                 from apps.pages import duck_read  # DB-only (fase 3): arquivo-dia payload-LISTA.
@@ -241,8 +242,7 @@ def _ndm_pending_status():
     resposta."""
     last = {}
     try:
-        with open(persistence._NDM_PENDING_STATUS_FILE, encoding='utf-8') as fh:
-            d = json.load(fh)
+        d = _store.read(persistence._NDM_PENDING_STATUS_FILE)
         if isinstance(d, dict):
             last = d
     except Exception:                                       # noqa: BLE001

@@ -26,7 +26,24 @@ import sys
 from datetime import datetime
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-JSON_PATH = os.path.join(ROOT, 'apps', 'static', 'data', 'CounterpartyDetails.json')
+
+# O cadastro vive no BANCO (HANDOFF §434): caminho pelo `data_path` e
+# leitura/escrita pelo armazém. Fora do Windows o `Config` exige o share
+# absoluto; este script não encosta nele.
+sys.path.insert(0, ROOT)
+os.environ.setdefault('OTC_SHARED_DRIVE_ROOT', os.path.join(ROOT, '.import-share'))
+from apps.pages import data_store                                   # noqa: E402
+from apps.pages.data_paths import data_path                         # noqa: E402
+
+
+def _backup(path, stamp):
+    """Grava em disco, ao lado do caminho, o payload ATUAL do banco (`.bak`)."""
+    bak = '%s.%s.bak' % (path, stamp)
+    os.makedirs(os.path.dirname(bak) or '.', exist_ok=True)
+    with open(bak, 'w', encoding='utf-8') as fh:
+        json.dump(data_store.read(path), fh, ensure_ascii=False, indent=2)
+    return bak
+JSON_PATH = data_path('CounterpartyDetails.json')
 ROUTES_PATH = os.path.join(ROOT, 'apps', 'pages', 'routes.py')
 
 
@@ -58,8 +75,7 @@ def main():
 
     is_usable = load_predicate()
 
-    with open(args.json, encoding='utf-8') as fh:
-        data = json.load(fh)
+    data = data_store.read(args.json)
 
     dropped = []
     total_contacts = 0
@@ -94,10 +110,8 @@ def main():
         print('Nothing to remove.')
         return
 
-    bak = '%s.%s.bak' % (args.json, datetime.now().strftime('%Y%m%d-%H%M%S'))
-    shutil.copy2(args.json, bak)
-    with open(args.json, 'w', encoding='utf-8') as fh:
-        json.dump(data, fh, ensure_ascii=False, indent=2)
+    bak = _backup(args.json, datetime.now().strftime('%Y%m%d-%H%M%S'))
+    data_store.write(args.json, data)
     print('Removed %d contacts.\nBackup: %s' % (len(dropped), bak))
 
 

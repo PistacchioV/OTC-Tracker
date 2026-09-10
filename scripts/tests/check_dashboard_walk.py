@@ -1,31 +1,19 @@
-"""A varredura do painel: poda, memo e ORDEM estavel.
+"""check_dashboard_walk.py — a varredura do painel (dashboard) sobre o ARMAZÉM
+(DB-only, HANDOFF §434).
 
-O painel varria a arvore inteira do cache de New Deals DUAS vezes (uma para os
-totais, outra para os contadores por mes) e abria todo JSON do periodo. Na dev e
-um SSD com dezenas de arquivos; na instancia do JPM a arvore esta num share,
-cada operacao e ida e volta de rede, e dois anos de historico sao milhares de
-arquivos — a tela fica em "Carregando os dados do painel..." por minutos, sem
-erro nenhum, porque nada falhou: o servidor esta lendo.
-
-O que este script prova:
-
-  1. a PODA por periodo descarta ano e mes inteiros, e nao muda o resultado — o
-     filtro que decide continua sendo a data no NOME do arquivo;
-  2. o MEMO evita reabrir o que nao mudou, e NAO evita reabrir o que mudou (o
-     arquivo-dia de hoje e reescrito a cada importacao, e um amend entra no
-     arquivo de um dia antigo);
-  3. as duas passadas compartilham o memo — o mesmo arquivo nao e lido duas
-     vezes na mesma tela;
-  4. a projecao `_DASH_DEAL_FIELDS` cobre TODO campo que o endpoint le do deal.
-     Campo de fora volta `None` sem erro nenhum, e o painel mostraria zero;
-  5. a ORDEM e estavel. O desempate dos Top 5 e da lista de recentes vinha da
-     ordem de leitura da arvore, que e a do sistema de arquivos: a mesma base
-     rendia listas diferentes no share e na dev.
+`_dash_scan_files` enumera os arquivos-dia do New Deals pelo `_manifest` dos
+bancos, podando ano/mês pela regra de sempre (`_dash_dir_matters`) aplicada
+aos segmentos do CAMINHO; `_dash_file_deals` memoiza a projeção por (mtime,
+tamanho). O que se prova, em tempfile:
+  1. a poda descarta ano e mês inteiros;
+  2. o memo evita reabrir o que não mudou;
+  3. e NÃO evita reabrir o que mudou (regravado pelo funil);
+  4. a projeção cobre todo campo que o endpoint lê;
+  5. o aquecimento do memo sobe com o app e enche o memo;
+  6. a ordem não depende do sistema de arquivos.
 """
 import ast
-import builtins
 import io
-import json
 import os
 import re
 import shutil
@@ -37,8 +25,10 @@ ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)),
 sys.path.insert(0, ROOT)
 os.chdir(ROOT)
 os.environ.setdefault('OTC_SHARED_DRIVE_ROOT', tempfile.mkdtemp(prefix='share-root-'))
+os.environ['OTC_DISABLE_SCHEDULERS'] = '1'
 
 from apps.pages import routes as R                         # noqa: E402
+from apps.pages import data_store as S                     # noqa: E402
 
 fails = []
 
@@ -52,19 +42,19 @@ def check(label, got, exp):
 
 # ── uma arvore com dois anos, dois produtos ─────────────────────────────────
 TMP = tempfile.mkdtemp(prefix='dash-walk-')
+R._B3_DATA_DIR = TMP
+RAIZ = os.path.join(TMP, 'cache', 'new deals')
 HOJE = datetime(2026, 8, 26)
 
 
 def dia(d, produto=('NDF', 'Vanilla'), n=3):
-    pasta = os.path.join(TMP, produto[0], produto[1], d.strftime('%Y'), d.strftime('%m'))
-    os.makedirs(pasta, exist_ok=True)
-    fp = os.path.join(pasta, d.strftime('%Y%m%d') + '_x.json')
-    with io.open(fp, 'w', encoding='utf-8') as fh:
-        json.dump([{'Deal': '%s-%02d' % (d.strftime('%Y%m%d'), i), 'Client': 'CLI %d' % (i % 2),
-                    'Status': 'Success', 'TradeDate': d.strftime('%d/%m/%Y'), 'LE': 'JPM',
-                    'Commodity': '', 'Commodities': '', 'UnderlyingAsset': '',
-                    'CampoQueNinguemLe': 'x' * 50}
-                   for i in range(n)], fh)
+    fp = os.path.join(RAIZ, produto[0], produto[1], d.strftime('%Y'), d.strftime('%m'),
+                      d.strftime('%Y%m%d') + '_x.json')
+    R._atomic_write_json(fp, [{'Deal': '%s-%02d' % (d.strftime('%Y%m%d'), i), 'Client': 'CLI %d' % (i % 2),
+                               'Status': 'Success', 'TradeDate': d.strftime('%d/%m/%Y'), 'LE': 'JPM',
+                               'Commodity': '', 'Commodities': '', 'UnderlyingAsset': '',
+                               'CampoQueNinguemLe': 'x' * 50}
+                              for i in range(n)])
     return fp
 
 
@@ -73,41 +63,32 @@ for _d in DIAS:
     dia(_d)
     dia(_d, ('Option', 'FXO'))
 
-R.NEW_DEALS_CACHE_ROOT = TMP
+R.NEW_DEALS_CACHE_ROOT = RAIZ
 
-# ── espia as idas ao disco ──────────────────────────────────────────────────
-cont = {'listagens': 0, 'aberturas': 0}
-_scandir_real, _open_real = os.scandir, builtins.open
+# ── espia as aberturas de banco ─────────────────────────────────────────────
+cont = {'aberturas': 0}
+_dr_real = S.duckdb_read
 
 
-class _Scan(object):
-    def __init__(self, p):
-        self.p = p
+class _Conta(object):
+    def __init__(self, *a, **k):
+        cont['aberturas'] += 1
+        self._cm = _dr_real(*a, **k)
 
     def __enter__(self):
-        cont['listagens'] += 1
-        self.it = _scandir_real(self.p)
-        return self.it
+        return self._cm.__enter__()
 
     def __exit__(self, *a):
-        self.it.close()
-        return False
+        return self._cm.__exit__(*a)
 
 
-def _abre(p, *a, **k):
-    if isinstance(p, str) and p.endswith('.json') and TMP in p:
-        cont['aberturas'] += 1
-    return _open_real(p, *a, **k)
-
-
-os.scandir = lambda p: _Scan(p)
-builtins.open = _abre
+S.duckdb_read = _Conta
 
 
 def varre(period, now=HOJE):
-    cont.update(listagens=0, aberturas=0)
+    cont.update(aberturas=0)
     achados = []
-    for fp, fname, mtime, size in R._dash_scan_files(TMP, period, now):
+    for fp, fname, mtime, size in R._dash_scan_files(RAIZ, period, now):
         achados.append(fname)
         R._dash_file_deals(fp, fname, mtime, size,
                            datetime.strptime(fname[:8], '%Y%m%d'), 'NDF Vanilla', 'NDF')
@@ -118,33 +99,29 @@ print('== 1. a poda descarta ano e mes inteiros ==')
 R._dash_file_memo.clear()
 todos = varre('all')
 check('all ve os 8 arquivos', len(todos), 8)
-lista_all = cont['listagens']
+check('e nenhuma pasta existe no disco', os.path.isdir(RAIZ), False)
 R._dash_file_memo.clear()
 ano = varre('year')
 check('year ve so 2026', sorted(set(f[:4] for f in ano)), ['2026'])
-check('e visita menos diretorios', cont['listagens'] < lista_all, True)
 R._dash_file_memo.clear()
 mes = varre('month')
 check('month ve so 2026-08', sorted(set(f[:6] for f in mes)), ['202608'])
 
 print('\n== 2. o memo evita reabrir o que nao mudou ==')
 R._dash_file_memo.clear()
+S.memo_forget()
 varre('all')
-check('a primeira passada abre tudo', cont['aberturas'], 8)
+check('a primeira passada abre os bancos', cont['aberturas'] >= 2, True)
 varre('all')
 check('a segunda nao abre nada', cont['aberturas'], 0)
-check('mas ainda lista os diretorios', cont['listagens'] > 0, True)
 
 print('\n== 3. e NAO evita reabrir o que mudou ==')
-# O arquivo-dia de hoje e reescrito a cada importacao, e um amend entra no
-# arquivo do dia da OPERACAO, que pode ser antigo. Pelo caminho sozinho o painel
-# mostraria o dia congelado na primeira leitura do processo.
-alvo = dia(datetime(2025, 3, 10), n=7)                     # reescreve um dia ANTIGO
-os.utime(alvo, (0, 0))                                     # mtime diferente, garantido
+alvo = dia(datetime(2025, 3, 10), n=7)                     # reescreve um dia ANTIGO, pelo funil
+S.memo_forget()
 varre('all')
-check('reabre o arquivo reescrito', cont['aberturas'], 1)
+check('reabre o produto reescrito (manifest + o dia)', 1 <= cont['aberturas'] <= 2, True)
 _fp, _fn = alvo, os.path.basename(alvo)
-_st = os.stat(alvo)
+_st = S.stat(alvo)
 check('e o conteudo novo e o que vale',
       len(R._dash_file_deals(_fp, _fn, _st.st_mtime, _st.st_size,
                              datetime(2025, 3, 10), 'NDF Vanilla', 'NDF')), 7)
@@ -158,9 +135,6 @@ for _n in ast.walk(_tree):
         _fn_src = '\n'.join(_src.split('\n')[_n.lineno - 1:_n.end_lineno])
         break
 check('achei a funcao', bool(_fn_src), True)
-# `d.get('X')` e `d['X']` dentro da funcao. As chaves internas (`_fdate`,
-# `_product`, `_type`) sao postas pela leitura; `period`/`authenticated` sao do
-# request, nao do deal.
 _INTERNAS = {'_fdate', '_product', '_type', 'period', 'authenticated'}
 _lidas = set(re.findall(r"\bd\.get\(\s*'([^']+)'", _fn_src))
 _lidas |= set(re.findall(r"\bd\[\s*'([^']+)'\s*\]", _fn_src))
@@ -169,28 +143,19 @@ check('nenhum campo lido fica fora de _DASH_DEAL_FIELDS', _faltando, [])
 check('e a tupla nao tem campo a mais',
       sorted(set(R._DASH_DEAL_FIELDS) - _lidas), [])
 
-builtins.open = _open_real
-os.scandir = _scandir_real
-
 print('\n== 5. o aquecimento do memo ==')
-# A instancia reinicia varias vezes ao dia e o memo volta a zero: sem aquecer,
-# QUEM ABRIR O PAINEL PRIMEIRO paga a leitura inteira da arvore, e e quase
-# sempre alguem. A thread faz essa leitura fora do request.
 check('o aquecimento sobe com o APP',
       any(l == 'dashboard-warm' for l, _ in R._SCHEDULERS), True)
-# `_product_from_path` e `_type_from_product` tem de ser de MODULO: o memo grava
-# o `_product`/`_type` junto de cada deal, e aninhadas no endpoint o
-# aquecimento nao as alcanca — ele morria com `NameError` e nada aparecia na
-# tela (o painel seguia certo, so voltava a pagar a leitura).
 check('_product_from_path e de modulo', callable(getattr(R, '_product_from_path', None)), True)
 check('_type_from_product e de modulo', callable(getattr(R, '_type_from_product', None)), True)
 R._dash_file_memo.clear()
 R._dash_warm_memo()
 check('e ele enche o memo', len(R._dash_file_memo) > 0, True)
-cont.update(listagens=0, aberturas=0)
-_antes = dict(R._dash_file_memo)
+cont.update(aberturas=0)
 R._dash_warm_memo()
 check('   rodar de novo nao reabre nada', cont['aberturas'], 0)
+
+S.duckdb_read = _dr_real
 
 print('\n== 6. a ordem nao depende do sistema de arquivos ==')
 R._DASH_TTL = 0
@@ -208,7 +173,6 @@ _um = cl.get('/api/dashboard-stats?period=all').get_json()
 R._dash_file_memo.clear()
 _dois = cl.get('/api/dashboard-stats?period=all').get_json()
 check('duas leituras dao o mesmo payload', _um, _dois)
-# O desempate dos Top 5 e por nome, e o dos recentes leva o Deal junto.
 check('top5 sem most_common (desempate por insercao)',
       'most_common(5)' in _fn_src, False)
 check('a lista de recentes desempata pelo Deal',

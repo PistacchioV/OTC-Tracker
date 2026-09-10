@@ -25,6 +25,7 @@ import re
 
 from apps.pages.data_paths import data_path
 from apps.pages.request_cache import req_cached as _req_cached
+from apps.pages import data_store as _store  # noqa: E402
 
 log = logging.getLogger('otc_tracker')
 
@@ -154,7 +155,7 @@ def _opb3_ensure_meta(data, default_status='New'):
 def _opb3_load_cached(ref):
     """A leitura em si — é este resultado que o cache guarda. Ver `_opb3_load`."""
     jp = _opb3_json_path(ref)
-    if not os.path.isfile(jp):
+    if not _store.isfile(jp):
         return jp, None
     try:
         from apps.pages import duck_read
@@ -299,10 +300,9 @@ def _opb3_side_write(recs, raw, ref, src_key):
     b3_new = _opb3_map_recs(recs)
     b3_jp = _opb3_json_path(ref)
     existing = []
-    if os.path.isfile(b3_jp):
+    if _store.isfile(b3_jp):
         try:
-            with open(b3_jp, encoding='utf-8') as fh:
-                existing = json.load(fh) or []
+            existing = _store.read(b3_jp) or []
         except Exception:
             existing = []
     b3_rows = _opb3_merge(existing, b3_new, src_key)
@@ -321,13 +321,13 @@ def _opb3_updated_from(rows):
 def _opb3_import(ref=None):
     from apps.pages import routes
     ref = ref or datetime.now()
-    if not os.path.isdir(routes.OPB3_SOURCE_ROOT):
+    if not _store.isdir(routes.OPB3_SOURCE_ROOT):
         return {'success': False, 'error': 'Source folder not found: {}'.format(routes.OPB3_SOURCE_ROOT)}
     # Pick up every source that feeds this page (operacoes* → JPM, mgt.* → MGT). Each
     # is filtered by its own spec (house account + operation-type) and MERGED into the
     # day's json so the two counterparties coexist instead of overwriting each other.
-    files = sorted(f for f in os.listdir(routes.OPB3_SOURCE_ROOT)
-                   if os.path.isfile(os.path.join(routes.OPB3_SOURCE_ROOT, f)))
+    files = sorted(f for f in _store.listdir(routes.OPB3_SOURCE_ROOT)
+                   if _store.isfile(os.path.join(routes.OPB3_SOURCE_ROOT, f)))
     handled, total_rows, last_updated = [], 0, ''
     for name in files:
         spec = routes._ds_match_spec(name)
@@ -346,7 +346,7 @@ def _opb3_import(ref=None):
         total_rows += len(filtered)
         last_updated = _opb3_updated_from(routes._ds_read_rows(raw)) or last_updated
         try:
-            os.remove(src_path)
+            _store.remove(src_path)
         except OSError:
             log.warning("[opb3] could not delete source %s", src_path)
     if not handled:
@@ -390,7 +390,7 @@ def _opb3_tipo_maps(ref):
         for _ in range(10):
             p = os.path.join(routes.B3_JSON_ROOT, cat, routes._b3_date_subpath(probe.strftime('%y%m%d')),
                              fname(probe.strftime('%y%m%d')))
-            if os.path.isfile(p):
+            if _store.isfile(p):
                 path = p
                 break
             probe = routes._prev_anbima_bizday(probe)
@@ -443,7 +443,7 @@ def _opb3_collect(ref):
     jp = _opb3_json_path(ref)
     rows_out, data = [], []
     tipo_maps = _opb3_tipo_maps(ref)
-    if os.path.isfile(jp):
+    if _store.isfile(jp):
         try:
             from apps.pages import duck_read
             data = duck_read.day_records(jp) or []
@@ -500,8 +500,7 @@ _OPB3_B3_STATUS_DONE = 'FINALIZADA'
 def _opb3_msg_load_recipients():
     from apps.pages import routes
     try:
-        with open(routes._OPB3_MSG_RECIPIENTS_FILE, encoding='utf-8') as fh:
-            d = json.load(fh) or {}
+        d = _store.read(routes._OPB3_MSG_RECIPIENTS_FILE) or {}
     except Exception:
         d = {}
     out = {}
@@ -563,8 +562,7 @@ def _opb3_refdata_by_account():
         from apps.pages import duck_read
         rows = duck_read.refdata_rows()
         if rows is None:
-            with open(data_path('RefData.json'), encoding='utf-8') as fh:
-                rows = json.load(fh)
+            rows = _store.read(data_path('RefData.json'))
         for r in rows or []:
                 acc = str(r.get('B3 ACCOUNT', '') or '').strip()
                 name = str(r.get('COUNTERPARTY', '') or '').strip()
@@ -667,7 +665,7 @@ def _opb3_internal_swapprem_map(ref):
     for _ in range(10):
         p = os.path.join(routes.B3_JSON_ROOT, 'Swap', routes._b3_date_subpath(probe.strftime('%y%m%d')),
                          '73760_{}_DAGENDAPREMIOS.json'.format(probe.strftime('%y%m%d')))
-        if os.path.isfile(p):
+        if _store.isfile(p):
             path = p
             break
         probe = routes._prev_anbima_bizday(probe)

@@ -7,6 +7,7 @@ from datetime import datetime
 
 from apps.config import Config
 from apps.pages.features.pcx import domain
+from apps.pages import data_store as _store  # noqa: E402
 
 
 def _routes():
@@ -30,8 +31,7 @@ def status_file():
 
 def read_status():
     try:
-        with open(status_file(), encoding='utf-8') as fh:
-            d = json.load(fh)
+        d = _store.read(status_file())
         return d if isinstance(d, dict) else {}
     except (IOError, OSError, json.JSONDecodeError):
         return {}

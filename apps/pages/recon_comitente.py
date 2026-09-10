@@ -34,6 +34,7 @@ _log = logging.getLogger(__name__)
 # partir do diretório do pacote deixaria este banco para trás no dia em que os
 # outros forem para o share.
 from apps.config import Config
+from apps.pages import data_store as _store  # noqa: E402
 
 _MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.normpath(os.path.join(Config.DATABASE_DIR, 'matching_comitentes.db'))
@@ -549,7 +550,7 @@ def run_reconciliation(file_b3_cgd, file_dcad, file_party, recon_date_str=None):
 
 
 def load_from_db():
-    if not os.path.exists(DB_PATH):
+    if not _store.exists(DB_PATH):
         return {'data': [], 'counts': {'total':0,'new':0,'check':0,'ok':0,'amend':0}}
     try:
         with sqlite_read(DB_PATH) as conn:
@@ -769,7 +770,7 @@ def send_recon_comitente_email(recon_date_str, counts, filepath, filename):
         except Exception:
             pass
         for lp in logo_candidates:
-            if os.path.exists(lp):
+            if _store.exists(lp):
                 with open(lp, 'rb') as f:
                     logo_img = MIMEImage(f.read())
                     logo_img.add_header('Content-ID', '<otc_logo>')
@@ -788,7 +789,7 @@ def send_recon_comitente_email(recon_date_str, counts, filepath, filename):
         msg.attach(msg_related)
 
         # Anexo Excel
-        if filepath and os.path.exists(filepath):
+        if filepath and _store.exists(filepath):
             with open(filepath, 'rb') as f:
                 xlsx = MIMEApplication(f.read(), _subtype='xlsx')
                 xlsx.add_header('Content-Disposition', 'attachment', filename=filename)
@@ -941,7 +942,7 @@ def run_auto(recon_date_str: str):
             month_en  = _MONTH_EN[month_num]
             dcad_name = f'SIC_{str_date}_DCADCOMITENTES.txt'
             path_dcad = os.path.join(_CETIP_DEST_BASE, year, f'{month_num}. {month_en}', day, dcad_name)
-            if not os.path.exists(path_dcad):
+            if not _store.exists(path_dcad):
                 missing.append('dcad')
 
             if missing:

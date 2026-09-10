@@ -27,7 +27,6 @@ import tempfile
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 os.environ.setdefault('OTC_DISABLE_SCHEDULERS', '1')
-os.environ.setdefault('OTC_DISABLE_DUCK_MIRROR', '1')
 if os.name != 'nt' and not os.environ.get('OTC_SHARED_DRIVE_ROOT'):
     os.environ['OTC_SHARED_DRIVE_ROOT'] = tempfile.mkdtemp(prefix='otc-share-')
 

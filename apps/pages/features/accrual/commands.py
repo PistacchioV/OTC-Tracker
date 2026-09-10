@@ -10,6 +10,7 @@ import re
 import traceback
 
 from apps.pages.features.accrual import domain
+from apps.pages import data_store as _store  # noqa: E402
 
 
 def _R():
@@ -92,7 +93,7 @@ def _acc_write_batch_files(data, lob, today, evidence_dir=None):
         with open(fpath, 'w', encoding='utf-8') as fh:
             fh.write(content)
         # Evidence copy (same base name), best-effort — never blocks the Conecta write.
-        if evidence_dir and os.path.isdir(evidence_dir):
+        if evidence_dir and _store.isdir(evidence_dir):
             try:
                 with open(os.path.join(evidence_dir, os.path.basename(fpath)), 'w', encoding='utf-8') as fh:
                     fh.write(content)

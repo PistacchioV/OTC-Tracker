@@ -5,6 +5,7 @@ Só a casca: o `_ds_handle` e os stores por dia são plataforma — cinco telas 
 """
 
 from flask import jsonify, request, session
+from apps.pages import data_store as _store  # noqa: E402
 
 
 
@@ -65,10 +66,10 @@ def api_cp_daily_settlement_save():
     else:
         source = 'folder'
         folder_files = []
-        if _R().os.path.isdir(_R().SETTLEMENTS_ROOT):
+        if _R()._store.isdir(_R().SETTLEMENTS_ROOT):
             try:
-                folder_files = [f for f in _R().os.listdir(_R().SETTLEMENTS_ROOT)
-                                if _R().os.path.isfile(_R().os.path.join(_R().SETTLEMENTS_ROOT, f))]
+                folder_files = [f for f in _R()._store.listdir(_R().SETTLEMENTS_ROOT)
+                                if _R()._store.isfile(_R().os.path.join(_R().SETTLEMENTS_ROOT, f))]
             except OSError:
                 folder_files = []
         if not folder_files:

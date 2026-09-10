@@ -33,6 +33,7 @@ from datetime import datetime, timedelta
 from apps.pages import otc_boxparse
 from apps.pages.data_paths import data_path
 from apps.pages.request_cache import once_per_request
+from apps.pages import data_store as _store  # noqa: E402
 
 log = logging.getLogger('otc_tracker')
 
@@ -95,7 +96,7 @@ def _ndf_ter_path(ref, max_back=10, exact=False):
         dref = cur.strftime('%y%m%d')
         p = os.path.join(routes.B3_JSON_ROOT, 'NDF', routes._b3_date_subpath(dref),
                          '73760_{}_DPOSICAO-TER.json'.format(dref))
-        if os.path.isfile(p):
+        if _store.isfile(p):
             return p, dref
         cur = routes._prev_anbima_bizday(cur)
     return None, None
@@ -477,8 +478,7 @@ def _fxo_persist_deals(deals):
         for fpath, (dir_path, ds) in by_file.items():
             os.makedirs(dir_path, exist_ok=True)
             try:
-                with open(fpath, encoding='utf-8') as fh:
-                    existing = json.load(fh)
+                existing = _store.read(fpath)
                 if not isinstance(existing, list):
                     existing = [existing]
             except (IOError, json.JSONDecodeError):
@@ -727,12 +727,11 @@ def _nd_cancel_in_file(fpath, deal_name):
 
     Retorna (removidas, marcadas_canceled)."""
     from apps.pages import routes
-    if not deal_name or not os.path.isfile(fpath):
+    if not deal_name or not _store.isfile(fpath):
         return 0, 0
     with routes._cache_lock:
         try:
-            with open(fpath, encoding='utf-8') as fh:
-                deals = json.load(fh)
+            deals = _store.read(fpath)
             if not isinstance(deals, list):
                 deals = [deals]
         except (IOError, json.JSONDecodeError):
@@ -774,8 +773,7 @@ def _fxo_persist_new_deals(deals):
             if fpath not in seen_files:
                 existing = []
                 try:
-                    with open(fpath, encoding='utf-8') as fh:
-                        existing = json.load(fh)
+                    existing = _store.read(fpath)
                     if not isinstance(existing, list):
                         existing = [existing]
                 except (IOError, json.JSONDecodeError):
@@ -1364,8 +1362,7 @@ def _generic_nd_persist_new_deals(product, deals):
             if fpath not in seen_files:
                 existing = []
                 try:
-                    with open(fpath, encoding='utf-8') as fh:
-                        existing = json.load(fh)
+                    existing = _store.read(fpath)
                     if not isinstance(existing, list):
                         existing = [existing]
                 except (IOError, json.JSONDecodeError):
@@ -1456,10 +1453,10 @@ def _ndf_fwdstart_cached_keys(ref):
     for base in (os.path.join(routes.NEW_DEALS_CACHE_ROOT, 'NDF', 'FwdStart'),):
         for m in months:
             dpath = os.path.join(base, m.strftime('%Y'), m.strftime('%m'))
-            if not os.path.isdir(dpath):
+            if not _store.isdir(dpath):
                 continue
             try:
-                fnames = os.listdir(dpath)
+                fnames = _store.listdir(dpath)
             except OSError:
                 continue
             for fname in fnames:
@@ -1691,7 +1688,7 @@ def _find_ndf_deal_in_cache(deal_name, client_name=None):
     deal_name_matches = []   # where Deal matched but Client didn't
     all_names_seen    = []   # sample of (fname, deal_name, client) for every deal scanned
 
-    if not os.path.isdir(routes.NDF_COMM_CACHE_DIR):
+    if not _store.isdir(routes.NDF_COMM_CACHE_DIR):
         log.error("[_find_ndf] CACHE DIR MISSING: %s", routes.NDF_COMM_CACHE_DIR)
         return None, None
 
@@ -1736,7 +1733,7 @@ def _find_ndf_deal_in_cache(deal_name, client_name=None):
         # Directory exists but contains no _ndfcomm.json files
         try:
             tree = []
-            for root2, _dirs2, files2 in os.walk(routes.NDF_COMM_CACHE_DIR):
+            for root2, _dirs2, files2 in _store.walk(routes.NDF_COMM_CACHE_DIR):
                 level = root2.replace(routes.NDF_COMM_CACHE_DIR, '').count(os.sep)
                 indent = '  ' * level
                 tree.append(f"{indent}{os.path.basename(root2)}/")
@@ -1889,8 +1886,7 @@ def _ndf_comm_ter_lines(deal):
             from apps.pages import duck_read     # DB-first (fase 3): o schedule é um calendário do registro.
             _raw = duck_read.calendar_rows(holiday_path)
             if _raw is None:
-                with open(holiday_path, encoding='utf-8') as _hf:
-                    _raw = _json.load(_hf)
+                _raw = _store.read(holiday_path)
             _deal_holidays = set(
                 item['date'] if isinstance(item, dict) else item
                 for item in _raw
@@ -2048,7 +2044,7 @@ def _find_generic_nd_deal(cfg, deal_name, client_name=None):
     antigo) e leitura pelo funil `_day_json` — ver `_find_ndf_deal_in_cache`."""
     from apps.pages import routes
     base = cfg['dir']
-    if not os.path.isdir(base):
+    if not _store.isdir(base):
         return None, None
     for fpath, mtime, size in reversed(_nd_file_list(base, cfg['suffix'])):
         try:
@@ -2515,7 +2511,7 @@ def _generic_nd_mapping_candidates(cfg, product, ref_date):
         return []
     fpath = os.path.join(cfg['dir'], ref.strftime('%Y'), ref.strftime('%m'),
                          ref.strftime('%Y%m%d') + cfg['suffix'])
-    if not os.path.isfile(fpath):
+    if not _store.isfile(fpath):
         return []
     try:
         from apps.pages import duck_read

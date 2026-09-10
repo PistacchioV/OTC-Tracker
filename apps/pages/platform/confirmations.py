@@ -33,6 +33,7 @@ from datetime import datetime, timedelta
 from flask import redirect, render_template, request, session, url_for
 
 from apps.pages.data_paths import data_dir, data_path
+from apps.pages import data_store as _store  # noqa: E402
 
 log = logging.getLogger('otc_tracker')
 
@@ -68,7 +69,7 @@ def _conf_subjacente_map():
     agora ele também DIZ que o problema é o arquivo, e não o cadastro."""
     fp = data_path('Subjacente.json')
     try:
-        mt = os.path.getmtime(fp)
+        mt = _store.getmtime(fp)
     except OSError:
         log.warning('[conf] Subjacente.json não encontrado em %s — toda operação '
                     'vai sair com "sem cadastro no Subjacente".', fp)
@@ -164,7 +165,7 @@ def _conf_load_ndfcomm(ref):
     from apps.pages import routes
     fname = ref.strftime('%Y%m%d') + '_ndfcomm.json'
     fp = os.path.join(routes.NDF_COMM_CACHE_DIR, ref.strftime('%Y'), ref.strftime('%m'), fname)
-    if not os.path.isfile(fp):
+    if not _store.isfile(fp):
         return []
     try:
         from apps.pages import duck_read
@@ -214,11 +215,10 @@ def _conf_key(acr, merc, fam):
 
 def _conf_state_load(ref, product='ndf-comm'):
     fp = _conf_state_path(ref, product)
-    if not os.path.isfile(fp):
+    if not _store.isfile(fp):
         return {}
     try:
-        with open(fp, encoding='utf-8') as fh:
-            data = json.load(fh)
+        data = _store.read(fp)
         return data if isinstance(data, dict) else {}
     except Exception:
         return {}
@@ -800,7 +800,7 @@ def _conf_pc_set_fepweb(trade_numbers, numero):
     placeholders = ', '.join('?' for _ in tns)
     for fname in routes._PC_DBS.values():
         path = os.path.join(routes._PC_DB_DIR, fname)
-        if not os.path.isfile(path):
+        if not _store.isfile(path):
             continue
         try:
             with routes.duckdb_write(path) as con:
@@ -881,7 +881,7 @@ def _conf_load_optcomm(ref):
     from apps.pages import routes
     fname = ref.strftime('%Y%m%d') + '_optcomm.json'
     fp = os.path.join(routes.CACHE_BASE_DIR, ref.strftime('%Y'), ref.strftime('%m'), fname)
-    if not os.path.isfile(fp):
+    if not _store.isfile(fp):
         return []
     try:
         from apps.pages import duck_read
@@ -1035,7 +1035,7 @@ def _conf_load_optfxo(ref):
     from apps.pages import routes
     fname = ref.strftime('%Y%m%d') + '_optfxo.json'
     fp = os.path.join(routes.OPT_FXO_CACHE_DIR, ref.strftime('%Y'), ref.strftime('%m'), fname)
-    if not os.path.isfile(fp):
+    if not _store.isfile(fp):
         return []
     try:
         from apps.pages import duck_read
@@ -1228,7 +1228,7 @@ def _conf_load_ndffwdstart(ref):
     cfg = routes._GENERIC_ND_PRODUCTS['fwd-start']
     fname = ref.strftime('%Y%m%d') + cfg['suffix']
     fp = os.path.join(cfg['dir'], ref.strftime('%Y'), ref.strftime('%m'), fname)
-    if not os.path.isfile(fp):
+    if not _store.isfile(fp):
         return []
     try:
         from apps.pages import duck_read
