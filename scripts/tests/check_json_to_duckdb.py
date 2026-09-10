@@ -665,6 +665,19 @@ finally:
 check('8. banco preso por outro processo e PULADO com recado, sem traceback (rc 1)',
       (_p.returncode, 'EM USO' in _p.stdout, 'pare TODAS as instâncias' in _p.stdout,
        'Traceback' in _p.stdout), (1, True, True, False))
+# E `--insistir` fica tentando enquanto a trava nao abre (aqui ela NUNCA abre, entao
+# `--insistir-rodadas` e quem encerra) — a trava do vizinho vai e volta na instancia.
+_trava_teste = _DA.hold_file_lock(_LIMBO, write=True, timeout_seconds=10)
+try:
+    _pi = subprocess.run([sys.executable, os.path.join(ROOT, 'scripts', 'recover_duckdb_wal.py'),
+                          '--db-dir', OUT, '--work-dir', _WORK, '--lock-seconds', '1',
+                          '--insistir', '1', '--insistir-rodadas', '2'],
+                         capture_output=True, text=True, env=dict(os.environ))
+finally:
+    _trava_teste.release()
+check('8. --insistir retenta o banco EM USO e desiste depois das rodadas pedidas',
+      (_pi.returncode, _pi.stdout.count('não toquei nele'), 'nova tentativa em 1s' in _pi.stdout,
+       'desisti: 2 rodada(s)' in _pi.stdout), (1, 3, True, True))
 check('8.   e o banco preso ficou como estava',
       ('.wal.checkpoint' in _S.wal_irmaos(_LIMBO), os.path.isfile(_LIMBO + '.novo')), (True, False))
 

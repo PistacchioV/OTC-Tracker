@@ -42,8 +42,12 @@ Rode com TODAS as instâncias PARADAS, na MESMA versão de duckdb da instância
 tomado na trava EXCLUSIVA da camada antes de qualquer coisa; com alguém de pé
 ela não vem (uma instância lê esses bancos em laço no `summary-warm`, e um
 `store-import` preso no limbo fica meia hora dentro do `duckdb.connect`
-segurando a exclusiva), e o banco é PULADO dizendo `EM USO`. `--dry-run` só
-lista os bancos e os MB.
+segurando a exclusiva), e o banco é PULADO dizendo `EM USO` — a trava é o
+`LockFileEx` do nosso próprio código, então quem a segura é um OTC Tracker
+vivo em alguma máquina (o `.lock` que fica na pasta não trava nada; apagá-lo
+não adianta). Como ela vai e volta entre uma leitura e outra do vizinho,
+`--insistir 60` fica tentando os pulados até a brecha aparecer.
+`--dry-run` só lista os bancos e os MB.
 """
 import argparse
 import io
@@ -387,6 +391,12 @@ def main(argv=None):
     ap.add_argument('--no-slim', action='store_true', help='não emagrece de caminho')
     ap.add_argument('--lock-seconds', type=int, default=30,
                     help='quanto esperar pela trava exclusiva de cada banco (padrão: 30)')
+    ap.add_argument('--insistir', type=int, default=0, metavar='SEGUNDOS',
+                    help='fica tentando os bancos EM USO a cada N segundos (a trava do vizinho '
+                         'vai e volta; Ctrl+C para parar)')
+    ap.add_argument('--insistir-rodadas', type=int, default=0, metavar='N',
+                    help='com --insistir, desiste do último banco preso depois de N rodadas sem '
+                         'nenhum progresso (padrão: nunca desiste)')
     ap.add_argument('--all', action='store_true',
                     help='recupera qualquer banco com WAL ao lado, não só os em limbo')
     args = ap.parse_args(argv)
@@ -421,36 +431,62 @@ def main(argv=None):
         _diz('  ERRO %s' % exc)
         return 1
     carimbo = datetime.now().strftime('%Y%m%d-%H%M%S')
-    erros = []
-    presos = []
-    for db, _irm in alvos:
-        rel = os.path.relpath(db, db_dir)
-        _diz('  -> %s' % rel)
-        trava = None
-        t0 = time.time()
-        try:
+
+    def _rodada(lista):
+        """Uma passada pela lista. Devolve (erros, presos)."""
+        erros, presos = [], []
+        for db in lista:
+            rel = os.path.relpath(db, db_dir)
+            _diz('  -> %s' % rel)
+            trava = None
+            t0 = time.time()
             try:
-                trava = slim_duckdb._trava(db, args.lock_seconds)
-            except Exception as exc:                         # noqa: BLE001
-                if not _em_uso(exc):
-                    raise
-                presos.append(db)
-                _diz('  EM USO %s — um processo VIVO ainda segura o arquivo; não toquei nele' % rel)
-                continue
-            recuperar(db, work_dir, db_dir, slim=not args.no_slim, carimbo=carimbo)
-            _diz('  ok   %s em %.0fs' % (rel, time.time() - t0))
-        except Exception:                                    # noqa: BLE001
-            erros.append(db)
-            _diz('  ERRO %s\n%s' % (db, traceback.format_exc()))
-        finally:
-            if trava is not None:
-                trava.release()
+                try:
+                    trava = slim_duckdb._trava(db, args.lock_seconds)
+                except Exception as exc:                     # noqa: BLE001
+                    if not _em_uso(exc):
+                        raise
+                    presos.append(db)
+                    _diz('  EM USO %s — um processo VIVO ainda segura o arquivo; não toquei nele' % rel)
+                    continue
+                recuperar(db, work_dir, db_dir, slim=not args.no_slim, carimbo=carimbo)
+                _diz('  ok   %s em %.0fs' % (rel, time.time() - t0))
+            except Exception:                                # noqa: BLE001
+                erros.append(db)
+                _diz('  ERRO %s\n%s' % (db, traceback.format_exc()))
+            finally:
+                if trava is not None:
+                    trava.release()
+        return erros, presos
+
+    erros, presos = _rodada([db for db, _irm in alvos])
+    # A trava do vizinho VAI E VOLTA: uma instância de pé lê esses bancos em laço
+    # (summary-warm) e larga entre uma leitura e outra. Insistir pega a brecha sem
+    # precisar caçar de quem é o processo — e é o que sobra quando ninguém assume a
+    # janela do `.bat` que ficou aberta.
+    sem_progresso = 0
+    while presos and args.insistir:
+        _diz('%d banco(s) EM USO; nova tentativa em %ds (Ctrl+C para parar; o share está intacto)'
+             % (len(presos), args.insistir))
+        try:
+            time.sleep(args.insistir)
+        except KeyboardInterrupt:
+            _diz('  parei a pedido')
+            break
+        antes = len(presos)
+        mais_erros, presos = _rodada(presos)
+        erros.extend(mais_erros)
+        sem_progresso = 0 if len(presos) < antes else sem_progresso + 1
+        if args.insistir_rodadas and sem_progresso >= args.insistir_rodadas:
+            _diz('  desisti: %d rodada(s) seguidas sem nenhuma trava abrir' % sem_progresso)
+            break
     if presos:
         _diz('%d banco(s) EM USO: pare TODAS as instâncias do time (a sua inclusive) e rode de novo.\n'
-             '     A trava não cai sozinha: uma instância de pé lê esses bancos em laço (summary-warm) e um\n'
-             '     `store-import` preso no limbo fica MEIA HORA dentro do duckdb.connect com a trava\n'
-             '     EXCLUSIVA — só o fim do processo a solta. Confira que não sobrou python.exe/waitress.'
-             % len(presos))
+             '     A trava é do LockFileEx do nosso próprio código — só o app e estes scripts a tomam,\n'
+             '     então é um OTC Tracker vivo em alguma máquina (a janela do `.bat` minimizada conta: o\n'
+             '     summary-warm lê esses bancos em laço). O arquivo `.lock` que fica na pasta NÃO trava\n'
+             '     nada, não adianta apagar. Confira que não sobrou python.exe/waitress, ou rode com\n'
+             '     `--insistir 60`, que fica tentando até a brecha aparecer.' % len(presos))
     if erros or presos:
         _diz('%d banco(s) sem recuperar — o share ficou como estava neles' % (len(erros) + len(presos)))
         return 1

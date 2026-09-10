@@ -18600,6 +18600,17 @@ que os dois WALs que entraram, o replay parou no meio e o resto se perderia na
 troca — o script então RECUSA o banco dizendo os dois números, e o share fica
 como estava.
 
+**E o `EM USO` que não passa:** a trava é o `LockFileEx` do nosso próprio
+código — só o app e estes scripts a tomam —, então quem a segura é sempre um
+OTC Tracker vivo em alguma máquina, e a janela do `.bat` minimizada conta (o
+`summary-warm` lê esses bancos em laço a cada 30 min sem ninguém tocar em
+nada). O arquivo `.lock` que fica na pasta NÃO trava coisa alguma: a trava
+morre com o processo, e apagá-lo não ajuda. Como ela vai e volta entre uma
+leitura e outra — foi por isso que o `EM USO` mudou de banco a cada rodada —,
+o `--insistir N` refaz os pulados a cada N segundos até a brecha aparecer, com
+`--insistir-rodadas` para desistir depois de N rodadas sem nenhum progresso.
+Pegar a brecha resolve sem precisar caçar de quem é o processo.
+
 `check_json_to_duckdb.py` §8 prende os cinco: deixa o banco de origem em `0444`
 antes da rodada boa (sem `_liberar` o recover inteiro falha), força um
 `Could not move file` na primeira abertura para provar que a segunda passa, e
