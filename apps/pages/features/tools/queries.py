@@ -760,7 +760,7 @@ def swap_prefill(b3_id):
                 faltando.append('ptax_final')
                 campos['ptax_erro'] = erro
             else:
-                campos['ptax_final'] = '{:.6f}'.format(valor)
+                campos['ptax_final'] = domain.fx8(valor)
                 campos['ptax_data'] = quando.isoformat()
         # Taxa a termo (Term SOFR / EURIBOR): o fixing é D-2 úteis do início do
         # fluxo, e a data vai preenchida para a mesa VER de que dia é a taxa.

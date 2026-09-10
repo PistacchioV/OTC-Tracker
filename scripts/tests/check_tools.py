@@ -305,7 +305,7 @@ check('o sinal da posicao inverte a taxa',
 # A "Cupom Limpo" e a cotacao inicial do ativo, e o campo que a recebe muda com
 # o indice: fixing na moeda, numero-indice no IPCA, preco no equity.
 campos, _f = domain.montar_ponta(cl(REGRAS, 'DOLAR DOS EUA'), None, 0.03, 1.0, '', 5.4321)
-check('na moeda, a cotacao inicial e o FIXING', campos['ptax_inicial'], '5.432100')
+check('na moeda, a cotacao inicial e o FIXING (as casas que tem, ate 8 — §439)', campos['ptax_inicial'], '5.4321')
 campos, _f = domain.montar_ponta(cl(REGRAS, 'IPCA'), None, 0.06, 1.0, '', 7545.53)
 check('no IPCA, e o NUMERO-INDICE', campos['ni_inicial'], '7545.530000')
 campos, faltando = domain.montar_ponta(cl(REGRAS, 'DOLAR DOS EUA'), None, 0.03, 1.0, '', None)
@@ -846,6 +846,30 @@ for idioma in ('br', 'es'):
 check('e nenhuma sobra so no %s' % 'br/es',
       sorted(k for d in (trad['br'], trad['es']) for k in d
              if (k.startswith('tl-') or k == 'tools') and k not in trad['en']), [])
+
+# ─────────────────────────────────────────────────────────────────────────────
+print('\n== 11. o fixing de moeda considera ate 8 casas (§439) ==')
+# O blur da tela reescrevia o campo com 4 casas (`data-format="price"`) e o
+# prefill vinha com 6: o calculo recebia a cotacao arredondada sem aviso.
+from apps.pages.features.tools import domain as _dom, entrypoint as _ep
+check('fx8: 8 casas ficam inteiras', _dom.fx8(5.12345678), '5.12345678')
+check('fx8: a PTAX de 4 casas nao ganha zero', _dom.fx8(5.1253), '5.1253')
+check('fx8: curta sobe ao piso de 4', _dom.fx8(5.1), '5.1000')
+check('fx8: 6 casas ficam 6', _dom.fx8(5.123456), '5.123456')
+check('o filtro tl_fx e o mesmo formatador', (_ep.tl_fx(5.12345678), _ep.tl_fx(None)), ('5.12345678', '—'))
+_ponta = _dom.ponta_do_form({'ativa_indexador': 'cambio', 'ativa_taxa': '5', 'ativa_moeda': 'USD',
+                             'ativa_ptax_inicial': '5.12345678', 'ativa_ptax_final': '5,87654321'}, 'ativa')
+check('o form entrega as 8 casas ao calculo, com ponto ou virgula',
+      (_ponta.ptax_inicial, _ponta.ptax_final), (5.12345678, 5.87654321))
+_html = ler('apps/templates/pages/tools-swap-calculator.html')
+check('os dois fixings de moeda usam o formato fx',
+      _html.count('_ptax_inicial" name="{{ lado }}_ptax_inicial" value="{{ f[lado ~ \'_ptax_inicial\'] }}" inputmode="decimal" data-format="fx"')
+      + _html.count('_ptax_final" name="{{ lado }}_ptax_final" value="{{ f[lado ~ \'_ptax_final\'] }}" inputmode="decimal" data-format="fx"'), 2)
+check('e o resultado mostra as casas que o fixing tem', 'p.ptax_inicial | tl_fx' in _html, True)
+_js = ler('apps/static/js/pages/tools.js')
+check('o JS formata fx com 4 a 8 casas, sem arredondar a 4', 'fx: { min: 4, max: 8 }' in _js, True)
+check('nenhum prefill de fixing sobra com 6 casas fixas',
+      "'{:.6f}'.format(cotacao_inicial)\n" in ler('apps/pages/features/tools/domain.py').split("campos['ptax_inicial']")[1][:60], False)
 
 print()
 print('FALHAS: %d' % len(falhas) if falhas else 'TUDO OK')
