@@ -18,6 +18,7 @@ porque testes os trocam no `routes`. O ESTADO do cache de template
 """
 import json
 import logging
+import traceback
 import os
 import re
 
@@ -60,7 +61,15 @@ def _fi_load(key):
     try:
         data = _store.read(_fi_path(key))
         return data if isinstance(data, dict) else None
+    except _store.BancoOcupado:
+        raise                       # ocupado/ilegível não é "template ausente" (§442)
+    except FileNotFoundError:
+        return None
     except Exception:
+        # O motivo tem de aparecer: "template missing" escondia um banco com o
+        # objeto anterior ao `__raw` (`SemCanal`), que só a reimportação corrige.
+        log.warning('[file-interpreter] template %s ilegível no banco — lido como ausente:\n%s',
+                     key, traceback.format_exc())
         return None
 
 
@@ -155,6 +164,8 @@ def _fi_tpl_cached(key):
     path = _fi_path(key)
     try:
         mt = _store.getmtime(path)
+    except _store.BancoOcupado:
+        raise                       # o banco preso sobe (503), não vira "sem template"
     except OSError:
         return None
     hit = _fi_tpl_cache.get(key)
