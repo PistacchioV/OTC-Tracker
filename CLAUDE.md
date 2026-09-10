@@ -221,6 +221,12 @@ nomes que o app conhecia (`day_records`, `dataset_rows`, `refdata_rows`,
   registro) continuam tipados + `_raw`: um banco, uma tabela, catálogo
   barato. Banco antigo na forma tipada segue legível; `scripts/slim_duckdb.py`
   o leva à forma nova NO LUGAR, copiando do próprio banco (nunca do JSON).
+- **O registro do `_manifest` é DELETE + INSERT, nunca `INSERT OR REPLACE`**
+  (§443): o upsert do DuckDB exige uma PRIMARY KEY, e o banco que passou pelo
+  slim antigo não tem mais a dele — o `CREATE TABLE … AS SELECT` copia os
+  dados e deixa a chave para trás. Sem isso o banco vira SOMENTE-LEITURA sem
+  aviso: as leituras seguem perfeitas e toda gravação morre em `Binder Error:
+  There are no UNIQUE/PRIMARY KEY constraints`, no fim do request.
 - **Payload-OBJETO volta EXATO** (recons, `.meta.json`, ponteiros `_last`):
   além das sub-tabelas de análise, o objeto inteiro vai como texto na tabela
   `<tabela>__raw` de uma linha. Banco anterior a isto tem o objeto sem o
@@ -955,7 +961,7 @@ São **45**: `currency-base`, `interbook-ndf`, `commodities-b3`,
 | `split_notifications_db.py --dry-run` | mostra o que a separação do sino vai copiar |
 | `dev_seed_positions.py` | só na DEV: reemite a última posição B3 numa data recente (`--from … --force`) |
 | `convert_json_to_duckdb.py` + `scripts/convert/` (40 fatias) | a IMPORTAÇÃO JSON → DuckDB (o cutover do §434 e o legado fora da janela), incremental por `_manifest`, `--meses` 12 por padrão (`0` = tudo), `--only/--force/--dry-run/--bloco`; reconverte sozinho o payload-objeto sem `__raw` |
-| `slim_duckdb.py [--db-dir] [--only cache] [--dry-run]` | emagrece os bancos de arquivo-dia JÁ existentes para a forma do §437 (lista só `_seq`/`_raw`, objeto só `__raw`), copiando do PRÓPRIO banco e trocando o arquivo; com o app PARADO; idempotente; RECUSA banco em limbo de checkpoint (vai pelo recover) |
+| `slim_duckdb.py [--db-dir] [--only cache] [--dry-run]` | emagrece os bancos de arquivo-dia JÁ existentes para a forma do §437 (lista só `_seq`/`_raw`, objeto só `__raw`), copiando do PRÓPRIO banco e trocando o arquivo; com o app PARADO; idempotente; RECUSA banco em limbo de checkpoint (vai pelo recover); o `_manifest` é recriado pelo SCHEMA e não por `AS SELECT` — o CTAS deixa a PRIMARY KEY para trás e o banco vira somente-leitura (§443) |
 | `recover_duckdb_wal.py [--db-dir] [--only] [--work-dir] [--dry-run] [--no-slim] [--all]` | tira do LIMBO de checkpoint (§442: `.wal.checkpoint`/`.wal.recovery` ao lado, ou `.wal` > 16 MB) copiando `.db` + WALs para um disco LOCAL, abrindo em escrita + `CHECKPOINT`, emagrecendo e trocando no share; o que substituiu vai para `db/_recuperado/<carimbo>/` (apague depois de conferir); TODAS as instâncias paradas, mesma versão de duckdb (banco preso por processo VIVO é PULADO com `EM USO`, sem tocar em nada — `--lock-seconds` regula a espera) |
 | `export_duckdb_to_json.py` | o ROLLBACK: reconstrói do banco os JSONs com diferença (`--dry-run`, `--force`, `--only`); `check_export_rollback.py` prova que cada forma volta exata |
 | `scripts/standalone/` (40, GERADOS por `build_duckdb_standalone.py`) | os mesmos conversores para máquina sem o código (`pip install duckdb` só) — nunca editar à mão |

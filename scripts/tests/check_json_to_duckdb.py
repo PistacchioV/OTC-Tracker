@@ -548,6 +548,29 @@ _p = subprocess.run([sys.executable, os.path.join(ROOT, 'scripts', 'slim_duckdb.
 check('7. rodar de novo pula o que ja esta magro', 'já magro' in _p.stdout, True)
 check('7. e nao deixa .slim para tras', os.path.isfile(_VELHO + '.slim'), False)
 
+# O banco emagrecido continua GRAVÁVEL. O slim copiava toda tabela com
+# `CREATE TABLE … AS SELECT`, que leva os dados e DEIXA A PRIMARY KEY para trás
+# — e sem ela o `INSERT OR REPLACE` do `manifest_record` estoura em
+# `Binder Error: There are no UNIQUE/PRIMARY KEY constraints` (§443). O banco
+# virava somente-leitura sem aviso nenhum: o Delete do New Deals tirava o deal
+# da tela e morria no banco, e o Index B3 dizia "Added!" sem gravar.
+_con = duckdb.connect(_VELHO)
+try:
+    core.manifest_record(_con, core.manifest_key_of(_REL1, core.KIND_DAILY),
+                         core._Stamp(9.0, 90), ['main.d_20260101'])
+    _erro_grav = ''
+except Exception as _exc:                                     # noqa: BLE001
+    _erro_grav = '%s: %s' % (type(_exc).__name__, _exc)
+_linhas_man = _con.execute('SELECT count(*), max(mtime) FROM _manifest WHERE path = ?',
+                           [core.manifest_key_of(_REL1, core.KIND_DAILY)]).fetchall()
+_con.close()
+check('7. o banco emagrecido continua GRAVAVEL (o _manifest guardou a chave)', _erro_grav, '')
+check('7.   e o registro foi TROCADO, nao duplicado', _linhas_man, [(1, 9.0)])
+check('7.   a PRIMARY KEY do _manifest sobreviveu ao slim',
+      bool(duckdb.connect(_VELHO, read_only=True).execute(
+          "SELECT count(*) FROM information_schema.table_constraints "
+          "WHERE table_name='_manifest' AND constraint_type='PRIMARY KEY'").fetchone()[0]), True)
+
 # ═══ 8. recover_duckdb_wal.py: o banco em LIMBO de checkpoint sai dele fora do share ═
 # O estado da instância (§442): `.wal.checkpoint` ao lado do `.db` — um
 # checkpoint começou e o processo morreu — e toda abertura refazendo o replay

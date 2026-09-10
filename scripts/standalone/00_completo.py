@@ -334,7 +334,18 @@ def manifest_targets(con, rel):
 
 
 def manifest_record(con, rel, st, targets):
-    con.execute("INSERT OR REPLACE INTO _manifest VALUES (?, ?, ?, ?)",
+    # DELETE + INSERT, e NÃO `INSERT OR REPLACE`: o upsert do DuckDB exige uma
+    # PRIMARY KEY na tabela, e o `_manifest` de um banco que passou pelo
+    # `scripts/slim_duckdb.py` não tem mais — o `CREATE TABLE … AS SELECT` com
+    # que ele copiava as tabelas leva os DADOS e deixa a CHAVE para trás
+    # (§443). Toda gravação nesses bancos morria aqui, em
+    # `Binder Error: There are no UNIQUE/PRIMARY KEY constraints`: o Delete do
+    # New Deals tirava o deal da tela e estourava no banco, e o Index B3 dizia
+    # "Added!" sem gravar. Sem o upsert não há restrição para atender — e o
+    # par roda dentro da MESMA conexão, sob a trava exclusiva do arquivo, que
+    # é o que o torna atômico para quem lê.
+    con.execute("DELETE FROM _manifest WHERE path = ?", [rel])
+    con.execute("INSERT INTO _manifest VALUES (?, ?, ?, ?)",
                 [rel, st.st_mtime, st.st_size, json.dumps(targets)])
 
 
