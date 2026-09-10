@@ -61,6 +61,16 @@ def taxa_do_form(valores, campo, rotulo, padrao=None):
     return numero / 100.0 if abs(numero) >= 1.0 or '%' in bruto else numero
 
 
+def fx8(valor):
+    """Cotação de moeda como texto: no mínimo 4 casas (a PTAX é publicada com
+    4), no máximo 8 (a precisão que a mesa usa), sem zeros inventados à
+    direita — '5.1253' fica '5.1253', 5.12345678 fica inteiro (§439)."""
+    s = '{:.8f}'.format(float(valor))
+    inteiro, dec = s.split('.')
+    dec = dec.rstrip('0')
+    return inteiro + '.' + (dec + '0000')[:4] if len(dec) < 4 else inteiro + '.' + dec
+
+
 def ligado(valores, campo):
     return str(valores.get(campo) or '').lower() in ('1', 'on', 'true')
 
@@ -321,7 +331,7 @@ def montar_ponta(regra, pct, taxa, sinal, nome_classe, cotacao_inicial,
     # a cotação inicial do ativo — a coluna "Cupom Limpo" da posição
     if idx in liquidacao.COM_MOEDA:
         if cotacao_inicial is not None:
-            campos['ptax_inicial'] = '{:.6f}'.format(cotacao_inicial)
+            campos['ptax_inicial'] = fx8(cotacao_inicial)
         else:
             faltando.append('ptax_inicial')
         # A `Data de Cotação` ao lado NÃO é uma data: é o DESLOCAMENTO em dias

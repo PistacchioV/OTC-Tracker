@@ -18204,3 +18204,21 @@ ANTES disto está com as duas colunas cruzadas e sem `_nc_fixing`: reimportar
 o dia (Import Settlement) resolve.
 
 `check_ndfc_api.py` prende o mapeamento, o `_nc_fixing` e a escolha do aviso.
+
+## §439 — Swap Calculator: o fixing de moeda considera até 8 casas (2026-09-10)
+
+Pedido: as taxas de câmbio usadas no cálculo do Swap Calculator têm de
+considerar até 8 casas decimais.
+
+O cálculo em si nunca arredondou (`ponta_do_form` lê o número inteiro e
+`_fator_cambial` divide os floats), mas o valor nunca chegava inteiro: os
+campos Initial/Final currency fixing eram `data-format="price"`, e o blur da
+tela reescrevia o campo com 4 casas — quem digitava 5,12345678 via 5,1235 e
+era isso que o form mandava; o prefill pela posição (`Cupom Limpo`) e pela
+PTAX do BCB saía com 6 fixas; e o resultado mostrava o par com 4.
+
+Agora: formato `fx` no JS (mínimo 4, máximo 8, sem zeros inventados),
+`domain.fx8` para os dois prefills e o filtro `tl_fx` no resultado — o
+número volta com as casas que tem, e a PTAX de 4 continua com 4.
+`check_tools.py` §11 prende, inclusive o form entregando as 8 casas ao
+cálculo com ponto ou vírgula.

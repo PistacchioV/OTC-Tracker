@@ -56,7 +56,12 @@ def tl_fixed(valor, casas=10):
     return '—' if valor is None else '{:.{c}f}'.format(float(valor), c=casas)
 
 
-for _f in (tl_money, tl_pct, tl_num, tl_date, tl_fixed):
+def tl_fx(valor):
+    """Fixing de moeda: 4 a 8 casas, as que o valor tem (`domain.fx8`)."""
+    return '—' if valor is None else domain.fx8(valor)
+
+
+for _f in (tl_money, tl_pct, tl_num, tl_date, tl_fixed, tl_fx):
     blueprint.add_app_template_filter(_f, _f.__name__)
 blueprint.add_app_template_global(lambda c: liquidacao.INDEXADOR_POR_CODIGO.get(c, c), 'tl_idx_name')
 blueprint.add_app_template_global(contagem.nome_curto, 'tl_dc_name')

@@ -88,7 +88,10 @@
   function tf(k) { var m = (_TRANS[lang()] || _TRANS.en).fields; return m[k] || _TRANS.en.fields[k] || k; }
 
   // ── números: en-US na tela (#,##0.00), leitura tolerante aos dois padrões ──
-  var CASAS = { money: 2, pct: 4, rate: 8, price: 4, index: 6, int: 0 };
+  // `fx` é o fixing de moeda: a PTAX sai com 4 casas, mas a mesa digita a
+  // cotação com até 8 — e o blur não pode arredondar o que o cálculo vai
+  // usar. Mínimo 4, máximo 8, sem zeros inventados (§439).
+  var CASAS = { money: 2, pct: 4, rate: 8, price: 4, fx: { min: 4, max: 8 }, index: 6, int: 0 };
   function ler(texto) {
     var s = String(texto || '').replace(/%/g, '').replace(/\s/g, '').trim();
     if (!s) return null;
@@ -106,7 +109,9 @@
     return isFinite(v) ? v : null;
   }
   function escrever(v, casas) {
-    return v.toLocaleString('en-US', { minimumFractionDigits: casas, maximumFractionDigits: casas });
+    var min = typeof casas === 'number' ? casas : casas.min;
+    var max = typeof casas === 'number' ? casas : casas.max;
+    return v.toLocaleString('en-US', { minimumFractionDigits: min, maximumFractionDigits: max });
   }
   function formatar(el) {
     var casas = CASAS[el.getAttribute('data-format')];

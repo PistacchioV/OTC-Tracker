@@ -77,11 +77,11 @@
                 </div>
                 <div class="col-4 tl-field">
                     <label for="{{ lado }}_ptax_inicial" data-lang="tl-fixing-initial">Initial currency fixing</label>
-                    <input class="form-control form-control-sm" id="{{ lado }}_ptax_inicial" name="{{ lado }}_ptax_inicial" value="{{ f[lado ~ '_ptax_inicial'] }}" inputmode="decimal" data-format="price" placeholder="PTAX">
+                    <input class="form-control form-control-sm" id="{{ lado }}_ptax_inicial" name="{{ lado }}_ptax_inicial" value="{{ f[lado ~ '_ptax_inicial'] }}" inputmode="decimal" data-format="fx" placeholder="PTAX">
                 </div>
                 <div class="col-4 tl-field">
                     <label for="{{ lado }}_ptax_final" data-lang="tl-fixing-final">Final currency fixing</label>
-                    <input class="form-control form-control-sm" id="{{ lado }}_ptax_final" name="{{ lado }}_ptax_final" value="{{ f[lado ~ '_ptax_final'] }}" inputmode="decimal" data-format="price" placeholder="PTAX">
+                    <input class="form-control form-control-sm" id="{{ lado }}_ptax_final" name="{{ lado }}_ptax_final" value="{{ f[lado ~ '_ptax_final'] }}" inputmode="decimal" data-format="fx" placeholder="PTAX">
                 </div>
                 {# O `Data de Cotação` da posição não é uma data: é o
                    DESLOCAMENTO em dias úteis (02 = D-2) da PTAX que o contrato
@@ -198,7 +198,7 @@
     <div class="tl-kv"><span data-lang="tl-day-count">Day count</span><span>{{ tl_dc_name(p.convencao) }} · {{ p.dias_contados | tl_num }} <span data-lang="tl-days">days</span> · τ&nbsp;{{ '%.6f' | format(p.fracao_de_ano) }}</span></div>
     {% endif %}
     {% if p.ptax_inicial %}
-    <div class="tl-kv"><span><span data-lang="tl-fixing">Fixing</span> {{ p.moeda }}/BRL</span><span>{{ p.ptax_inicial | tl_money(4) }} → {{ p.ptax_final | tl_money(4) }}</span></div>
+    <div class="tl-kv"><span><span data-lang="tl-fixing">Fixing</span> {{ p.moeda }}/BRL</span><span>{{ p.ptax_inicial | tl_fx }} → {{ p.ptax_final | tl_fx }}</span></div>
     <div class="tl-kv"><span data-lang="tl-index-fx">Index · FX</span><span>{{ p.fator_do_indice | tl_fixed(8) }} · {{ p.fator_cambial | tl_fixed(8) }}</span></div>
     {% endif %}
     {% if p.data_fixing %}
