@@ -18532,8 +18532,40 @@ antivírus de tempo real). Então o script passou a:
   replay a cada tentativa;
 - retentar cinco vezes com 15 s, em vez de três com 10.
 
-`check_json_to_duckdb.py` §8 prende os três: deixa o banco de origem em `0444`
+**E a causa de verdade, que só a terceira rodada isolou:** com o pré-teste da
+pasta PASSANDO e cada arquivo copiado podendo ser renomeado por nós, as cinco
+tentativas continuaram morrendo iguais — logo não era atributo, nem pasta, nem
+antivírus. É o **`.wal.recovery` que já existe**. A conta dos tamanhos na
+instância diz o que ele é:
+
+```
+DPOSICAO-TER    17 +   75 =   92   recovery   92   (fusão completa)
+DFLUXO          17 +  605 =  622   recovery  622
+DPOSICAO-SWAP   17 + 1104 = 1121   recovery 1121
+Option          17 +  615 =  632   recovery  267   (fusão pela metade)
+```
+
+O `.wal.recovery` É o `.wal` concatenado com o `.wal.checkpoint` — o produto
+da fusão, que o DuckDB REFAZ a partir dos dois. Levá-lo para a cópia local não
+acrescenta dado nenhum e cria o destino que o `MoveFileW` do DuckDB (sem
+`REPLACE_EXISTING`) recusa: `Could not move file: Access is denied`. Provado no
+laboratório com o duckdb 1.5.4: com `.wal` + `.wal.checkpoint` e SEM
+`.wal.recovery`, a recuperação vai até o fim e as 50 mil linhas voltam; com um
+`.wal.recovery` ao lado, ele nem é lido (um arquivo de lixo de 14 bytes
+sobrevive intacto à recuperação bem-sucedida).
+
+Então a cópia local não leva mais o `.wal.recovery` quando o `.wal` e o
+`.wal.checkpoint` estão os dois lá — o que ainda economiza de 92 MB a 1,1 GB
+de share por banco —, e a fusão pela metade que uma tentativa deixe para trás
+é apagada antes da seguinte. Ele só vai junto quando um dos dois FALTA: aí
+pode ser a única cópia do que não foi checkpointado. O original nunca é
+apagado: vai inteiro para `db/_recuperado/`.
+
+`check_json_to_duckdb.py` §8 prende os quatro: deixa o banco de origem em `0444`
 antes da rodada boa (sem `_liberar` o recover inteiro falha), força um
 `Could not move file` na primeira abertura para provar que a segunda passa, e
 aponta a rodada para uma pasta sem permissão de renome para provar que ela é
-recusada ANTES da cópia, com o remédio e sem traceback.
+recusada ANTES da cópia (com o remédio e sem traceback), e põe um
+`.wal.recovery` ao lado do banco fabricado para cobrar que ele NÃO chegue ao
+disco local, que o log diga isso, que o dia volte exato mesmo assim e que o
+arquivo original apareça em `_recuperado/`.

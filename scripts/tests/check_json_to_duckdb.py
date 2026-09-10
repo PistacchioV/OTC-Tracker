@@ -628,6 +628,9 @@ os._exit(0)
 _p = subprocess.run([sys.executable, _FAB], capture_output=True, text=True, env=dict(os.environ))
 _irm = core_store_irmaos = None
 from apps.pages import data_store as _S                       # noqa: E402
+# E o `.wal.recovery` da instancia: a FUSAO do .wal com o .wal.checkpoint, que o
+# DuckDB refaz sozinho — levá-lo para a copia local e o que quebra no Windows.
+shutil.copy2(_LIMBO + '.wal', _LIMBO + '.wal.recovery')
 _irm = _S.wal_irmaos(_LIMBO)
 check('8. a fabrica deixou o banco em limbo (.wal.checkpoint ao lado)',
       ('.wal.checkpoint' in _irm, _S.wal_em_limbo(_irm)), (True, True))
@@ -714,6 +717,9 @@ check('8. o recover roda (rc 0)', _p.returncode, 0)
 if _p.returncode:
     print(_p.stdout[-1200:], _p.stderr[-1200:])
 check('8. nenhum WAL sobrou ao lado do .db', _S.wal_irmaos(_LIMBO), {})
+check('8. o .wal.recovery NAO foi copiado para o disco local (e o dito no log)',
+      ('descartei o .wal.recovery' in _p.stdout,
+       os.path.isfile(os.path.join(_WORK, 'preso.db.wal.recovery'))), (True, False))
 check('8. o banco abre e o dia volta EXATO (com o que estava so no WAL)',
       core.ler_payload(duckdb.connect(_LIMBO, read_only=True), _REL3, core.KIND_DAILY, 'd_20260201')[:2],
       [{'Deal': 'L0', 'SPN': '000', 'Qty': 0}, {'Deal': 'L1', 'SPN': '001', 'Qty': 1}])
@@ -728,8 +734,9 @@ _guarda = os.path.join(OUT, _S.RECUPERADO_DIR)
 _guardados = sorted(f for _d, _ds, fs in os.walk(_guarda) for f in fs)
 check('8. o .db velho e os WALs foram para db/_recuperado/<carimbo>/cache/limbo',
       (_guardados[:1], any(f.endswith('.wal.checkpoint') for f in _guardados),
+       any(f.endswith('.wal.recovery') for f in _guardados),
        os.path.isdir(os.path.join(_guarda, os.listdir(_guarda)[0], 'cache', 'limbo'))),
-      (['preso.db'], True, True))
+      (['preso.db'], True, True, True))
 check('8. wal_pendentes nao ve mais nada (e nao entra na pasta do recover)', _S.wal_pendentes(OUT), [])
 _p = subprocess.run([sys.executable, os.path.join(ROOT, 'scripts', 'recover_duckdb_wal.py'),
                      '--db-dir', OUT, '--work-dir', _WORK],
