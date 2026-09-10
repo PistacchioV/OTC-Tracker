@@ -229,9 +229,9 @@ _LOCK_CHECK_INTERVAL_SECONDS = 0.05
 # do processo, que é o mesmo problema por outro caminho (o DuckDB guarda uma
 # instância por arquivo e recusa a segunda com outra configuração). A lista
 # nasceu no sino (`_notif_arquivo_em_uso`) e mora AQUI porque o leitor do
-# espelho (`duck_read`) precisa da mesma resposta: banco OCUPADO não é banco
-# defasado, e tratá-lo como defasado custava uma reconversão inteira. UMA
-# lista — o sino delega para cá.
+# armazém (`data_store._le_ocupado`) precisa da mesma resposta: banco OCUPADO
+# não é banco corrompido nem vazio — é a retentativa curta, a última cópia boa
+# em memória, e só então `BancoOcupado`. UMA lista — o sino delega para cá.
 FILE_IN_USE_SIGNATURES = (
     'used by another process',
     'being used by another',
@@ -256,13 +256,14 @@ def read_timeout(seconds: Optional[float]) -> Iterator[None]:
     """Teto MENOR de espera (permit + trava de arquivo) para as LEITURAS
     abertas dentro do bloco, nesta thread.
 
-    Existe para o leitor do espelho: os tetos do ajuste (30 s de permit, 15 s
+    Existe para o leitor do armazém: os tetos do ajuste (30 s de permit, 15 s
     de trava) foram pensados para o banco de usuários, onde não há para onde
-    cair. O `duck_read` TEM para onde cair — o JSON é o canal de emergência —,
+    cair. O `data_store` TEM para onde cair — a última cópia boa em memória, e
+    sem ela o `BancoOcupado` que os leitores tratam como arquivo ilegível —,
     e uma thread do waitress parada 45 s esperando um banco que a instância
-    vizinha está convertendo é pior do que servir o JSON desta vez. Vale só
-    para leitura: a escrita continua com o teto cheio, porque para ela não há
-    emergência. `None` não muda nada."""
+    vizinha está gravando é pior do que responder com a cópia desta vez. Vale
+    só para leitura: a escrita continua com o teto cheio, porque para ela não
+    há emergência. `None` não muda nada."""
     anterior = getattr(_thread_state, "read_timeout", None)
     # Blocos ANINHADOS ficam com o MENOR teto: o armazém abre cada leitura com
     # o teto dele, e quem o envolveu com um teto mais curto (um teste, um
@@ -673,10 +674,10 @@ class HeldFileLock:
     """A trava de arquivo de uma conexão cujo tempo de vida é do CHAMADOR.
 
     O `_database_context` cobre o caso normal — abre, trava, fecha, destrava —,
-    mas o motor do espelho (`json_to_duckdb`) tem um par `ABRIR_BANCO` /
-    `FECHAR_BANCO` e mantém a conexão viva através de muitos arquivos. Para ele
-    a trava precisa ser um OBJETO, não um `with`. Os eventos são os mesmos do
-    farol, então a escrita do espelho passa a aparecer no painel ao lado das
+    mas a importação em lote (`json_to_duckdb`, pelo `convert_json_to_duckdb`)
+    tem um par `ABRIR_BANCO` / `FECHAR_BANCO` e mantém a conexão viva através
+    de muitos arquivos. Para ela a trava precisa ser um OBJETO, não um `with`.
+    Os eventos são os mesmos do farol, então a importação aparece no painel ao lado das
     leituras — que era metade do problema: ela era a única operação do app que
     tocava o share sem deixar rastro.
     """
@@ -732,8 +733,8 @@ def hold_file_lock(
     para uma conexão que o chamador vai abrir e fechar por conta própria.
 
     `timeout_seconds` sobrepõe o teto do ajuste: quem chama pode ter um
-    orçamento MENOR que o da camada — o espelho tem, porque a cura síncrona da
-    tela espera por ele e esperar o teto de 30s garantiria o estouro dela.
+    orçamento MENOR que o da camada — a importação em lote tem, porque um
+    banco preso por outra instância não deve segurar a carga inteira 30 s.
 
     Levanta `DatabaseLockTimeout` como o caminho normal — quem chama decide se
     espera, desiste ou segue sem coordenação."""

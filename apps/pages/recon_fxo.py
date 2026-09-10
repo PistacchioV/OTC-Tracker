@@ -1312,8 +1312,9 @@ def save_comment(key, comment):
             data.pop(k, None)
         try:
             os.makedirs(os.path.dirname(_COMMENTS_PATH), exist_ok=True)
-            # Pelo FUNIL (auditoria §335): atômico E avisando o espelho — o
-            # tmp+replace local fazia o mesmo sem o banco ficar sabendo.
+            # Pelo FUNIL (auditoria §335): a gravação vai para o BANCO do
+            # caminho (armazém, §434) — o tmp+replace local escrevia um JSON
+            # que hoje ninguém lê.
             from apps.pages import routes
             routes._atomic_write_json(_COMMENTS_PATH, data)
         except Exception as exc:
@@ -1361,7 +1362,7 @@ def _cache_path(recon_date):
 def _persist(recon_date, payload):
     try:
         os.makedirs(_CACHE_DIR, exist_ok=True)
-        # Pelo FUNIL (auditoria §335): atômico e com o espelho avisado.
+        # Pelo FUNIL (auditoria §335): a gravação vai para o BANCO (§434).
         from apps.pages import routes
         routes._atomic_write_json(_cache_path(recon_date), payload)
     except Exception as exc:                       # pragma: no cover - defensivo

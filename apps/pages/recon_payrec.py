@@ -1523,8 +1523,8 @@ def _persist(recon_date, payload):
     try:
         os.makedirs(_CACHE_DIR, exist_ok=True)
         key = (recon_date or 'last').replace('/', '-')
-        # Pelo FUNIL (auditoria §335): atômico e com o espelho avisado — o
-        # `_last.json` o espelho ignora sozinho (ponteiro, começa com `_`).
+        # Pelo FUNIL (auditoria §335): a gravação vai para o BANCO (§434) — o
+        # `_last.json` também (o ponteiro tem tabela, como todo `.json` da raiz).
         from apps.pages import routes
         routes._atomic_write_json(os.path.join(_CACHE_DIR, key + '.json'), payload)
         routes._atomic_write_json(os.path.join(_CACHE_DIR, '_last.json'), payload)
@@ -1570,7 +1570,7 @@ def finalize_history(recon_date):
     try:
         os.makedirs(os.path.dirname(p), exist_ok=True)
         from apps.pages import routes
-        routes._atomic_write_json(p, data)      # funil: atômico + espelho
+        routes._atomic_write_json(p, data)      # funil: grava no banco (§434)
         return p
     except Exception:
         return None
