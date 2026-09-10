@@ -18480,3 +18480,39 @@ do Index B3 e do New Deals nunca foram concorrência, share lento nem o limbo
 de checkpoint do §442 — eram este erro, que só aparece no log do servidor.
 Toda tela que grava por `_atomic_write_json` estava atingida nos bancos
 emagrecidos.
+
+## §444 — A segunda rodada do recover na instância: atributo somente-leitura e acesso negado (2026-09-10)
+
+Com as instâncias paradas, o `recover_duckdb_wal.py` achou os cinco bancos do
+B3 Files em limbo (17 MB de `.wal` cada, mais `.wal.checkpoint`/`.wal.recovery`
+de 75 MB a 1,1 GB) e esbarrou em DUAS coisas diferentes — que é bom separar,
+porque a mensagem parece a mesma:
+
+1. **`EM USO` no `73760_DPOSICAO-TER.db`** (`AlreadyLocked`, `[Errno 13]
+   Permission denied` depois de 38 s pedindo a exclusiva). É o §442 fazendo o
+   que devia: alguém do time ainda estava de pé — cada pessoa roda a própria
+   instância sobre o MESMO `db/` do share, e este banco é justamente o que o
+   `summary-warm` lê em laço. O script não tocou no arquivo.
+2. **`IO Error: Could not move file: Access is denied` no
+   `73760_DOPERACOES.db`** — e este NÃO é trava: o banco deu a exclusiva, os
+   104 MB + 183 MB de WAL foram para o disco local em 35 s, e quem falhou foi
+   o `duckdb.connect()` da CÓPIA. O rename morreu dentro de
+   `%LOCALAPPDATA%`, não no share.
+
+A causa do segundo: o `shutil.copy2` copia os ATRIBUTOS junto, e arquivo do
+share que venha somente-leitura chega assim ao disco local; o `MoveFileEx`
+com que o DuckDB funde `.wal.checkpoint` + `.wal` em `.wal.recovery` (e
+depois o devolve a `.wal`) recusa SOBRESCREVER um destino com o atributo
+posto, e devolve `ERROR_ACCESS_DENIED`. O mesmo texto sai quando o antivírus
+corporativo ainda está lendo os megabytes recém-escritos no instante do
+rename.
+
+**A correção:** a cópia local perde o somente-leitura antes de qualquer
+abertura (`_liberar`, no `.db` e em cada WAL), e o acesso negado passageiro é
+RETENTADO — três tentativas, 10 s entre elas (`_recupera_local`), dizendo o
+motivo em uma linha em vez de matar o banco no meio da fila. Um banco que
+falha continua sem tocar no share: a troca é o último passo.
+
+`check_json_to_duckdb.py` §8 prende os dois: deixa o banco de origem em `0444`
+antes da rodada boa (sem `_liberar` o recover inteiro falha) e força um
+`Could not move file` na primeira abertura para provar que a segunda passa.
