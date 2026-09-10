@@ -23,6 +23,34 @@ import unicodedata
 import duckdb
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+REPO_ROOT = ROOT
+
+
+# ── o dado vem do ARMAZÉM, não da cópia do repositório ──────────────────────
+# `apps/static/data/*.json` no checkout é a SEED; na instância o dado vive no
+# DATA_DIR (o share) e, desde o §434, dentro dos bancos. Ler o JSON do
+# repositório aqui era ler o Reference Data de meses atrás (§440).
+def _caminho_de_dado(*parts):
+    try:
+        if REPO_ROOT not in sys.path:
+            sys.path.insert(0, REPO_ROOT)
+        os.environ.setdefault('OTC_SHARED_DRIVE_ROOT', REPO_ROOT)
+        from apps.pages.data_paths import data_path
+        return data_path(*parts)
+    except Exception:                                       # noqa: BLE001
+        return os.path.join(REPO_ROOT, 'apps', 'static', 'data', *parts)
+
+
+def _armazem():
+    if REPO_ROOT not in sys.path:
+        sys.path.insert(0, REPO_ROOT)
+    os.environ.setdefault('OTC_SHARED_DRIVE_ROOT', REPO_ROOT)
+    from apps.pages import data_store
+    return data_store
+
+
+def _ler_json_do_armazem(path):
+    return _armazem().read(path)
 def _db_dir():
     """A pasta dos bancos — a MESMA que a aplicação usa (`Config.DATABASE_DIR`).
 
@@ -39,7 +67,7 @@ def _db_dir():
 
 
 DB_DIR = _db_dir()
-REFDATA = os.path.join(ROOT, 'apps', 'static', 'data', 'RefData.json')
+REFDATA = _caminho_de_dado('RefData.json')
 DBS = ['pending-confirmation-backlog.db',
        'pending-confirmation-pending.db',
        'pending-confirmation-ok.db']
@@ -60,8 +88,7 @@ def norm_name(s):
 
 
 def load_refdata():
-    with open(REFDATA, encoding='utf-8') as fh:
-        rows = json.load(fh)
+    rows = _ler_json_do_armazem(REFDATA)
     by_spn, by_name = {}, {}
     for rec in rows:
         banker = str(rec.get('BANKER', '') or '').strip()

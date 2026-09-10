@@ -198,6 +198,17 @@ try:
     check('7. e isfile sob OCUPADO levanta BancoOcupado (nunca False)', 'nao levantou', True)
 except S.BancoOcupado:
     check('7. e isfile sob OCUPADO levanta BancoOcupado (nunca False)', True, True)
+# E o `data_path()` (a queda para a copia do repositorio) le OCUPADO como
+# EXISTE: lido como "nao ha", o cadastro editado pela mesa virava a seed do
+# repositorio enquanto durasse a trava (§440).
+from apps.pages import data_paths as DP                     # noqa: E402
+_exists_real = S.exists
+S.exists = lambda path: (_ for _ in ()).throw(S.BancoOcupado(path))
+try:
+    check('7. data_path: OCUPADO conta como existe no DATA_DIR (nao cai para o pacote)',
+          DP._existe(OCUP), True)
+finally:
+    S.exists = _exists_real
 S.duckdb_read = _dr_real
 S.ocupado_forget()
 check('7. passada a disputa, o banco volta a responder', DR.day_payload(OCUP), [{'Deal': 'OC-1'}])

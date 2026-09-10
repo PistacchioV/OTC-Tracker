@@ -68,10 +68,22 @@ def data_path(*parts):
 
 def _existe(caminho):
     """Existe no ARMAZÉM (o banco responde por todo `.json` do `DATA_DIR`) ou
-    no disco. Import atrasado: o armazém importa este módulo."""
+    no disco. Import atrasado: o armazém importa este módulo.
+
+    Banco OCUPADO (a instância vizinha com a trava) conta como EXISTE: o
+    `except` genérico lia o `BancoOcupado` como "não há", e `data_path()`
+    caía para a cópia do repositório — o cadastro que a mesa editou virava a
+    seed, em silêncio, enquanto durasse a trava (varredura de 10/09/2026,
+    §440). Devolvendo o caminho do `DATA_DIR`, quem lê esbarra no ocupado de
+    verdade (a última cópia em memória, ou o 503)."""
     try:
         from apps.pages import data_store
+    except Exception:                                       # noqa: BLE001
+        return os.path.exists(caminho)
+    try:
         return data_store.exists(caminho)
+    except data_store.BancoOcupado:
+        return True
     except Exception:                                       # noqa: BLE001
         return os.path.exists(caminho)
 

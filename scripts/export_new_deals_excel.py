@@ -16,6 +16,7 @@ Usage:
 """
 
 import os
+import sys
 import json
 from datetime import datetime
 
@@ -24,9 +25,37 @@ import pandas as pd
 # ── paths ─────────────────────────────────────────────────────────────────────
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-CACHE_ROOT = os.path.normpath(os.path.join(
-    SCRIPT_DIR, "..", "apps", "static", "data", "cache", "new deals"
-))
+REPO_ROOT = os.path.dirname(SCRIPT_DIR)
+
+
+# ── o dado vem do ARMAZÉM, não da cópia do repositório ──────────────────────
+# `apps/static/data/*.json` no checkout é a SEED; na instância o dado vive no
+# DATA_DIR (o share) e, desde o §434, dentro dos bancos. Ler o JSON do
+# repositório aqui era ler o Reference Data de meses atrás (§440).
+def _caminho_de_dado(*parts):
+    try:
+        if REPO_ROOT not in sys.path:
+            sys.path.insert(0, REPO_ROOT)
+        os.environ.setdefault('OTC_SHARED_DRIVE_ROOT', REPO_ROOT)
+        from apps.pages.data_paths import data_path
+        return data_path(*parts)
+    except Exception:                                       # noqa: BLE001
+        return os.path.join(REPO_ROOT, 'apps', 'static', 'data', *parts)
+
+
+def _armazem():
+    if REPO_ROOT not in sys.path:
+        sys.path.insert(0, REPO_ROOT)
+    os.environ.setdefault('OTC_SHARED_DRIVE_ROOT', REPO_ROOT)
+    from apps.pages import data_store
+    return data_store
+
+
+def _ler_json_do_armazem(path):
+    return _armazem().read(path)
+
+
+CACHE_ROOT = _caminho_de_dado("cache", "new deals")
 DOWNLOADS = os.path.join(os.path.expanduser("~"), "Downloads")
 
 META_COLS = ["Type", "Product", "FileDate", "SourceFile"]
@@ -44,11 +73,11 @@ def _product_from_path(file_path):
 def collect_deals():
     """Walk the cache and return a flat list of deal dicts with metadata."""
     rows = []
-    if not os.path.isdir(CACHE_ROOT):
+    if not _armazem().isdir(CACHE_ROOT):
         print(f"⚠️  Cache root not found: {CACHE_ROOT}")
         return rows
 
-    for root, _dirs, files in os.walk(CACHE_ROOT):
+    for root, _dirs, files in _armazem().walk(CACHE_ROOT):
         # Skip the Intrag subtree — those belong to the Intrag pages, not New Deals
         if os.sep + "Intrag" + os.sep in root + os.sep:
             continue
@@ -63,8 +92,7 @@ def collect_deals():
                 file_date = ""
             deal_type, product = _product_from_path(fp)
             try:
-                with open(fp, "r", encoding="utf-8") as fh:
-                    data = json.load(fh)
+                data = _ler_json_do_armazem(fp)
             except Exception as exc:
                 print(f"⚠️  Could not read {fp}: {exc}")
                 continue

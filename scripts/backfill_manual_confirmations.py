@@ -39,7 +39,34 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.dirname(SCRIPT_DIR)
 sys.path.insert(0, REPO_ROOT)
 
-CACHE_ROOT = os.path.join(REPO_ROOT, 'apps', 'static', 'data', 'cache', 'new deals')
+# ── o dado vem do ARMAZÉM, não da cópia do repositório ──────────────────────
+# `apps/static/data/*.json` no checkout é a SEED; na instância o dado vive no
+# DATA_DIR (o share) e, desde o §434, dentro dos bancos. Ler o JSON do
+# repositório aqui era ler o Reference Data de meses atrás (§440).
+def _caminho_de_dado(*parts):
+    try:
+        if REPO_ROOT not in sys.path:
+            sys.path.insert(0, REPO_ROOT)
+        os.environ.setdefault('OTC_SHARED_DRIVE_ROOT', REPO_ROOT)
+        from apps.pages.data_paths import data_path
+        return data_path(*parts)
+    except Exception:                                       # noqa: BLE001
+        return os.path.join(REPO_ROOT, 'apps', 'static', 'data', *parts)
+
+
+def _armazem():
+    if REPO_ROOT not in sys.path:
+        sys.path.insert(0, REPO_ROOT)
+    os.environ.setdefault('OTC_SHARED_DRIVE_ROOT', REPO_ROOT)
+    from apps.pages import data_store
+    return data_store
+
+
+def _ler_json_do_armazem(path):
+    return _armazem().read(path)
+
+
+CACHE_ROOT = _caminho_de_dado('cache', 'new deals')
 
 # Pasta do cache → o `source` que o mapeamento daquela página passa. É a mesma
 # string de `_MC_CONFIRMATION_SOURCES`; uma pasta fora deste mapa não é varrida.
@@ -58,16 +85,15 @@ FAMILIES = {
 def iter_deals(family_dir):
     """Todos os deals dos arquivos-dia da família, na ordem das datas."""
     root = os.path.join(CACHE_ROOT, family_dir)
-    if not os.path.isdir(root):
+    if not _armazem().isdir(root):
         return
-    for dirpath, _dirs, files in os.walk(root):
+    for dirpath, _dirs, files in _armazem().walk(root):
         for fname in sorted(files):
             if not fname.endswith('.json'):
                 continue
             path = os.path.join(dirpath, fname)
             try:
-                with open(path, encoding='utf-8') as fh:
-                    deals = json.load(fh)
+                deals = _ler_json_do_armazem(path)
             except (OSError, ValueError):
                 print('  ! não consegui ler {}'.format(os.path.relpath(path, REPO_ROOT)))
                 continue

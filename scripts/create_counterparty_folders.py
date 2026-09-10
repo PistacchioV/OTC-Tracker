@@ -48,7 +48,36 @@ import sys
 
 SCRIPT_DIR   = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT    = os.path.dirname(SCRIPT_DIR)
-REFDATA_JSON = os.path.join(REPO_ROOT, 'apps', 'static', 'data', 'RefData.json')
+
+
+# ── o dado vem do ARMAZÉM, não da cópia do repositório ──────────────────────
+# `apps/static/data/*.json` no checkout é a SEED; na instância o dado vive no
+# DATA_DIR (o share) e, desde o §434, dentro dos bancos. Ler o JSON do
+# repositório aqui era ler o Reference Data de meses atrás (§440).
+def _caminho_de_dado(*parts):
+    try:
+        if REPO_ROOT not in sys.path:
+            sys.path.insert(0, REPO_ROOT)
+        os.environ.setdefault('OTC_SHARED_DRIVE_ROOT', REPO_ROOT)
+        from apps.pages.data_paths import data_path
+        return data_path(*parts)
+    except Exception:                                       # noqa: BLE001
+        return os.path.join(REPO_ROOT, 'apps', 'static', 'data', *parts)
+
+
+def _armazem():
+    if REPO_ROOT not in sys.path:
+        sys.path.insert(0, REPO_ROOT)
+    os.environ.setdefault('OTC_SHARED_DRIVE_ROOT', REPO_ROOT)
+    from apps.pages import data_store
+    return data_store
+
+
+def _ler_json_do_armazem(path):
+    return _armazem().read(path)
+
+
+REFDATA_JSON = _caminho_de_dado('RefData.json')
 
 # Same default as apps/pages/routes.py (ELECTRONIC_INVENTORY_ROOT). Overridable
 # via the ELECTRONIC_INVENTORY_ROOT env var or the --root flag.
@@ -99,8 +128,7 @@ def norm_key(name):
 
 def load_counterparties(active_only):
     try:
-        with open(REFDATA_JSON, 'r', encoding='utf-8') as fh:
-            data = json.load(fh)
+        data = _ler_json_do_armazem(REFDATA_JSON)
     except Exception as exc:
         sys.exit('ERROR: could not read RefData.json ({}): {}'.format(REFDATA_JSON, exc))
 
