@@ -340,7 +340,7 @@ def _sanitize_error(error: BaseException, operation: DatabaseOperation) -> str:
 # do `[slow-request]` e um laço lê os que ainda estão em voo
 # (`traces_in_flight`). Custo por operação: um append sob lock, nada de I/O.
 class DbTrace:
-    __slots__ = ("label", "started_at", "thread", "thread_id", "ops", "notes", "_lock")
+    __slots__ = ("label", "started_at", "thread", "thread_id", "ops", "notes", "inflight", "_lock")
 
     def __init__(self, label: str) -> None:
         self.label = label
@@ -349,11 +349,31 @@ class DbTrace:
         self.thread_id = threading.get_ident()
         self.ops: list = []          # (banco, modo, segundos, categoria)
         self.notes: list = []        # (tipo, detalhe)
+        self.inflight = None         # (banco, modo, fase, monotonic do inicio)
         self._lock = threading.Lock()
 
     def record(self, database_path: str, mode: str, seconds: float, category: str) -> None:
         with self._lock:
             self.ops.append((_database_label(database_path), mode, float(seconds), category))
+
+    def begin_op(self, database_path: str, mode: str, phase: str) -> None:
+        """A operação EM CURSO — o que o `[slow-request]` mostra quando o
+        rastro não tem operação concluída: qual banco, que modo, em que
+        fase (trava · abrindo · aberta) e há quanto tempo. É o que separa
+        "esperando a trava do vizinho" de "preso dentro do `duckdb.connect`"
+        (10/09/2026: dois requests 300 s e 1000 s num connect de leitura no
+        share, e o resumo dizia só "nenhuma abertura de banco")."""
+        with self._lock:
+            self.inflight = (_database_label(database_path), mode, phase, time.monotonic())
+
+    def phase(self, phase: str) -> None:
+        with self._lock:
+            if self.inflight is not None:
+                self.inflight = self.inflight[:2] + (phase, self.inflight[3])
+
+    def end_op(self) -> None:
+        with self._lock:
+            self.inflight = None
 
     def note(self, kind: str, detail: object) -> None:
         with self._lock:
@@ -367,8 +387,13 @@ class DbTrace:
         with self._lock:
             ops = list(self.ops)
             notes = list(self.notes)
+            em_curso = self.inflight
+        curso = ""
+        if em_curso is not None:
+            curso = "em curso: %s %s (%s) ha %.0fs" % (
+                em_curso[0], em_curso[1], em_curso[2], time.monotonic() - em_curso[3])
         if not ops and not notes:
-            return "nenhuma abertura de banco"
+            return ("nenhuma abertura de banco concluida; " + curso) if curso else "nenhuma abertura de banco"
         total = sum(seg for _n, _m, seg, _c in ops)
         por_banco: dict = {}
         for nome, modo, seg, _cat in ops:
@@ -391,6 +416,8 @@ class DbTrace:
         curas = sum(1 for kind, _d in notes if kind == "cura")
         if curas:
             partes.append("%d cura(s) sincrona(s)" % curas)
+        if curso:
+            partes.append(curso)
         return "; ".join(partes)
 
 
@@ -463,6 +490,22 @@ def traces_in_flight(min_age_seconds: float = 0.0) -> list:
     with _traces_lock:
         vivos = list(_traces.values())
     return [t for t in vivos if t.age() >= min_age_seconds]
+
+
+def _trace_phase(operation: DatabaseOperation, phase: Optional[str]) -> None:
+    """Fase da operação em curso no rastro desta thread; `None` encerra."""
+    trace = trace_current()
+    if trace is None:
+        return
+    try:
+        if phase is None:
+            trace.end_op()
+        elif trace.inflight is None:
+            trace.begin_op(operation.database_path, operation.mode, phase)
+        else:
+            trace.phase(phase)
+    except Exception:                                       # noqa: BLE001
+        pass
 
 
 def _trace_record(operation: DatabaseOperation, seconds: float, category: str) -> None:
@@ -865,7 +908,9 @@ def _database_context(
         active_writes.add(normalized_path)
 
     try:
+        _trace_phase(operation, "permit")
         _acquire_permit(permit, operation)
+        _trace_phase(operation, "trava")
         try:
             if skip_file_lock:
                 # No cross-process coordination: this read may overlap an
@@ -908,7 +953,9 @@ def _database_context(
                     if not gate.await_readers(_GATE_WRITE_WAIT_SECONDS):
                         _log_event("unlocked_gate_wait_timed_out", operation,
                                    logging.WARNING)
+            _trace_phase(operation, "abrindo")
             connection = _open_with_retry(engine, normalized_path, write, operation)
+            _trace_phase(operation, "aberta")
             _log_event("connection_opened", operation)
             if write:
                 _begin_transaction(connection, engine)
@@ -970,6 +1017,7 @@ def _database_context(
             outcome = "outcome_unknown"
         raise
     finally:
+        _trace_phase(operation, None)
         if write:
             active_writes.remove(normalized_path)
         if cleanup_error is not None and primary_error is None:

@@ -142,6 +142,11 @@ with open(LEG, 'w', encoding='utf-8') as fh:
     json.dump([{'Deal': 'LEG-1'}], fh)
 check('6. isfile ve o legado em disco', S.isfile(LEG), True)
 check('6. a primeira leitura serve e IMPORTA', DR.day_records(LEG), [{'Deal': 'LEG-1'}])
+_fs_real, _fs_n = S._read_fs_text, []
+S._read_fs_text = lambda path: (_fs_n.append(path), _fs_real(path))[1]
+check('6. a segunda leitura do legado vem do memo (nao rele o arquivo do share)',
+      (DR.day_records(LEG), _fs_n), ([{'Deal': 'LEG-1'}], []))
+S._read_fs_text = _fs_real
 check('6. a importacao roda FORA do request (thread) e termina', S.import_wait(60), True)
 os.remove(LEG)
 S.memo_forget()

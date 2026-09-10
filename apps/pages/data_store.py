@@ -50,6 +50,7 @@ instância serve a última cópia boa em memória, e sem cópia levanta
 import json
 import logging
 import os
+import stat as _statmod
 import tempfile
 import threading
 import time
@@ -213,6 +214,7 @@ _plock = threading.Lock()
 _pmemo = {}
 _pbytes = {'n': 0}
 _MISS = object()
+_S_ISDIR = _statmod.S_ISDIR
 
 
 def _tamanho(crus):
@@ -541,29 +543,35 @@ _import_threads = []
 
 
 def _importar_legado(path, rel, texto, st):
+    # Com rastro: o laço de vigilância (`slow-request-watch`) lista a thread
+    # com o banco em curso e a pilha — uma importação presa na trava ou no
+    # `connect` de escrita do share deixa de ser invisível.
+    tr = _DA.trace_begin('store-import %s' % rel)
     try:
         if write(path, json.loads(texto), stamp=(st.st_mtime, st.st_size), so_se_ausente=True):
             log.info('[data-store] %s importado do disco para o banco', rel)
     except Exception:                                       # noqa: BLE001
         log.warning('[data-store] não consegui importar %s:\n%s', rel, traceback.format_exc())
     finally:
+        _DA.trace_end(tr)
         with _import_lock:
             _import_em_voo.discard(rel)
             _import_threads[:] = [t for t in _import_threads
                                   if t is not threading.current_thread() and t.is_alive()]
 
 
-def _importar_legado_async(path, rel, texto):
+def _importar_legado_async(path, rel, texto, st=None):
     with _import_lock:
         if rel in _import_em_voo:
             return
         _import_em_voo.add(rel)
-    try:
-        st = os.stat(path)
-    except OSError:
-        with _import_lock:
-            _import_em_voo.discard(rel)
-        return
+    if st is None:
+        try:
+            st = os.stat(path)
+        except OSError:
+            with _import_lock:
+                _import_em_voo.discard(rel)
+            return
     t = threading.Thread(target=_importar_legado, args=(path, rel, texto, st),
                          name='store-import', daemon=True)
     with _import_lock:
@@ -646,11 +654,24 @@ def read(path, default=AUSENTE):
     # cópia EMPACOTADA não entra aqui — quem cai para ela é o `data_path()`,
     # que devolve o caminho do repositório (fora da raiz de dados, lido do
     # disco): um leitor com caminho explícito lê o que pediu, ou nada.
-    if os.path.isfile(path):
-        texto = _read_fs_text(path)
-        payload = json.loads(texto)
-        _importar_legado_async(path, rel, texto)
-        return payload
+    try:
+        st = os.stat(path)
+    except OSError:
+        st = None
+    if st is not None and not _S_ISDIR(st.st_mode):
+        # O TEXTO do arquivo entra no memo de processo com o carimbo do disco
+        # — a mesma chave que o manifest vai ter quando a importação landar
+        # (`stamp`): até lá, cada leitor do mesmo caminho (o fx_map, os mapas
+        # do Cockpit, o aquecimento do Summary) reaproveita a cópia em vez de
+        # reler um DPOSICAO-TER de megabytes do share.
+        chave = (rel, st.st_mtime, st.st_size)
+        crus = _pmemo_get(chave)
+        if crus is _MISS:
+            texto = _read_fs_text(path)
+            crus = ('obj', texto)
+            _pmemo_put(chave, crus)
+            _importar_legado_async(path, rel, texto, st)
+        return core.parsear_crus(crus)
     if default is AUSENTE:
         raise FileNotFoundError(path)
     return default
