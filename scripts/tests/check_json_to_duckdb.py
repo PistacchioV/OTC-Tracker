@@ -546,6 +546,118 @@ _con.close()
 _p = subprocess.run([sys.executable, os.path.join(ROOT, 'scripts', 'slim_duckdb.py'), '--db-dir', OUT],
                     capture_output=True, text=True, env=dict(os.environ))
 check('7. rodar de novo pula o que ja esta magro', 'já magro' in _p.stdout, True)
+check('7. e nao deixa .slim para tras', os.path.isfile(_VELHO + '.slim'), False)
+
+# ═══ 8. recover_duckdb_wal.py: o banco em LIMBO de checkpoint sai dele fora do share ═
+# O estado da instância (§442): `.wal.checkpoint` ao lado do `.db` — um
+# checkpoint começou e o processo morreu — e toda abertura refazendo o replay
+# pelo share. Aqui o limbo é FABRICADO num subprocesso: escrita concorrente
+# durante um checkpoint que o `debug_checkpoint_abort` interrompe, e o
+# processo sai sem fechar. Fica `.db` + `.wal` + `.wal.checkpoint`.
+print()
+import io                                                     # noqa: E402
+import shutil                                                 # noqa: E402
+import tempfile                                               # noqa: E402
+_LIMBO_DIR = os.path.join(OUT, 'cache', 'limbo')
+os.makedirs(_LIMBO_DIR, exist_ok=True)
+_LIMBO = os.path.join(_LIMBO_DIR, 'preso.db')
+_REL3 = 'cache/limbo/2026/02/20260201_preso.json'
+_FAB = os.path.join(OUT, '_fabrica_limbo.py')
+with io.open(_FAB, 'w', encoding='utf-8') as _fh:
+    _fh.write('''import os, sys, threading, time, json
+sys.path.insert(0, %r)
+import duckdb
+from apps.pages import json_to_duckdb as core
+db = %r
+con = duckdb.connect(db)
+core.ensure_manifest(con)
+rows = [{'Deal': 'L%%d' %% i, 'SPN': '00%%d' %% i, 'Qty': i} for i in range(3000)]
+core.write_rows_table(con, 'main.d_20260201', core._com_raw(rows))
+core.manifest_record(con, core.manifest_key_of(%r, core.KIND_DAILY), core._Stamp(3.0, 30), ['main.d_20260201'])
+con.execute('CHECKPOINT')
+con.execute("CREATE TABLE main.lastro AS SELECT range i, repeat('x', 200) s FROM range(200000)")
+con.execute("SET debug_checkpoint_abort='before_header'")
+def escreve():
+    k = con.cursor()
+    for i in range(40):
+        try:
+            k.execute("INSERT INTO main.lastro VALUES (%%d, 'z')" %% (900000 + i))
+        except Exception:
+            return
+        time.sleep(0.02)
+th = threading.Thread(target=escreve); th.start()
+time.sleep(0.1)
+try:
+    con.execute('CHECKPOINT')
+except Exception:
+    pass
+th.join(5)
+# O `.wal.checkpoint` nasce quando uma gravacao concorrente COMMITA durante o
+# checkpoint (`WALStartCheckpoint` o cria vazio e lazy); num SSD o checkpoint
+# acaba antes do commit seguinte, entao o arquivo e posto aqui, VAZIO — o
+# estado exato que o DuckDB deixa quando o processo morre entre o inicio do
+# checkpoint e a primeira gravacao concorrente (provado a mao: o rw open o
+# consome). O `.wal` ao lado e REAL, do checkpoint abortado.
+open(db + '.wal.checkpoint', 'wb').close()
+print('FAB', json.dumps(sorted(os.path.basename(f) for f in os.listdir(os.path.dirname(db)))), flush=True)
+os._exit(0)
+''' % (ROOT, _LIMBO, _REL3))
+_p = subprocess.run([sys.executable, _FAB], capture_output=True, text=True, env=dict(os.environ))
+_irm = core_store_irmaos = None
+from apps.pages import data_store as _S                       # noqa: E402
+_irm = _S.wal_irmaos(_LIMBO)
+check('8. a fabrica deixou o banco em limbo (.wal.checkpoint ao lado)',
+      ('.wal.checkpoint' in _irm, _S.wal_em_limbo(_irm)), (True, True))
+if '.wal.checkpoint' not in _irm:
+    print(_p.stdout[-600:], _p.stderr[-600:])
+check('8. wal_pendentes lista so ele',
+      [os.path.basename(d) for d, _i in _S.wal_pendentes(OUT)], ['preso.db'])
+_p = subprocess.run([sys.executable, os.path.join(ROOT, 'scripts', 'slim_duckdb.py'), '--db-dir', OUT],
+                    capture_output=True, text=True, env=dict(os.environ))
+check('8. o slim RECUSA o banco em limbo apontando o recover (rc 1)',
+      (_p.returncode, 'recover_duckdb_wal' in _p.stdout, 'preso.db' in _p.stdout), (1, True, True))
+check('8.   e nao deixa .slim para tras', os.path.isfile(_LIMBO + '.slim'), False)
+check('8.   nem o resto do slim (velho.db segue magro)', 'já magro' in _p.stdout, True)
+_WORK = tempfile.mkdtemp(prefix='recover-work-')
+_p = subprocess.run([sys.executable, os.path.join(ROOT, 'scripts', 'recover_duckdb_wal.py'),
+                     '--db-dir', OUT, '--work-dir', _WORK, '--dry-run'],
+                    capture_output=True, text=True, env=dict(os.environ))
+check('8. --dry-run lista o banco e os MB sem tocar em nada',
+      (_p.returncode, 'preso.db' in _p.stdout, '.wal.checkpoint' in _p.stdout,
+       '.wal.checkpoint' in _S.wal_irmaos(_LIMBO)), (0, True, True, True))
+_p = subprocess.run([sys.executable, os.path.join(ROOT, 'scripts', 'recover_duckdb_wal.py'),
+                     '--db-dir', OUT, '--work-dir', _WORK],
+                    capture_output=True, text=True, env=dict(os.environ))
+check('8. o recover roda (rc 0)', _p.returncode, 0)
+if _p.returncode:
+    print(_p.stdout[-1200:], _p.stderr[-1200:])
+check('8. nenhum WAL sobrou ao lado do .db', _S.wal_irmaos(_LIMBO), {})
+check('8. o banco abre e o dia volta EXATO (com o que estava so no WAL)',
+      core.ler_payload(duckdb.connect(_LIMBO, read_only=True), _REL3, core.KIND_DAILY, 'd_20260201')[:2],
+      [{'Deal': 'L0', 'SPN': '000', 'Qty': 0}, {'Deal': 'L1', 'SPN': '001', 'Qty': 1}])
+_con = duckdb.connect(_LIMBO, read_only=True)
+check('8. e saiu MAGRO de caminho (a tabela-dia so _seq/_raw)',
+      [d[:2] for d in _con.execute('DESCRIBE main.d_20260201').fetchall()],
+      [('_seq', 'BIGINT'), ('_raw', 'VARCHAR')])
+check('8. o lastro gravado durante o checkpoint interrompido esta la',
+      _con.execute('SELECT count(*) FROM main.lastro').fetchone()[0] >= 200000, True)
+_con.close()
+_guarda = os.path.join(OUT, _S.RECUPERADO_DIR)
+_guardados = sorted(f for _d, _ds, fs in os.walk(_guarda) for f in fs)
+check('8. o .db velho e os WALs foram para db/_recuperado/<carimbo>/cache/limbo',
+      (_guardados[:1], any(f.endswith('.wal.checkpoint') for f in _guardados),
+       os.path.isdir(os.path.join(_guarda, os.listdir(_guarda)[0], 'cache', 'limbo'))),
+      (['preso.db'], True, True))
+check('8. wal_pendentes nao ve mais nada (e nao entra na pasta do recover)', _S.wal_pendentes(OUT), [])
+_p = subprocess.run([sys.executable, os.path.join(ROOT, 'scripts', 'recover_duckdb_wal.py'),
+                     '--db-dir', OUT, '--work-dir', _WORK],
+                    capture_output=True, text=True, env=dict(os.environ))
+check('8. rodar de novo nao acha nada', (_p.returncode, '0 banco(s)' in _p.stdout), (0, True))
+_p = subprocess.run([sys.executable, os.path.join(ROOT, 'scripts', 'slim_duckdb.py'), '--db-dir', OUT],
+                    capture_output=True, text=True, env=dict(os.environ))
+check('8. e o slim passa a pular o recuperado como ja magro (e nao entra em _recuperado)',
+      (_p.returncode, _p.stdout.count('já magro') >= 2, '_recuperado' in _p.stdout), (0, True, False))
+shutil.rmtree(_WORK, ignore_errors=True)
 
 print()
 if fails:

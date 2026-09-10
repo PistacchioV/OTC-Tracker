@@ -81,6 +81,15 @@ class BancoIlegivel(BancoOcupado):
     sumido em vez de abortar (varredura de 10/09/2026, §441)."""
 
 
+class SemCanal(IOError):
+    """O banco TEM o caminho, mas sem o canal de reconstrução: payload-objeto
+    convertido antes do `__raw` (§442). Não é ausente (o manifest o lista) nem
+    ocupado (a leitura correu) — é um formato que só a reimportação corrige.
+    `read` cai para o arquivo legado em disco quando ele existe (e o importa,
+    substituindo); sem arquivo, sobe com o motivo, para o log dizer QUAL
+    caminho e o que fazer."""
+
+
 # ── raízes ───────────────────────────────────────────────────────────────────
 
 def data_root():
@@ -103,6 +112,52 @@ def db_root(raiz=None):
     if raiz == os.path.normpath(Config.DATA_DIR):
         return Config.DATABASE_DIR
     return os.path.join(raiz, 'db')
+
+
+WAL_SUFIXOS = ('.wal', '.wal.checkpoint', '.wal.recovery')
+WAL_LIMBO_MB = 16.0                      # o `checkpoint_threshold` do DuckDB
+RECUPERADO_DIR = '_recuperado'           # onde o recover deixa o que substituiu
+
+
+def wal_irmaos(db):
+    """{sufixo: bytes} dos arquivos de WAL ao lado de um `.db` (só os que existem)."""
+    out = {}
+    for s in WAL_SUFIXOS:
+        try:
+            out[s] = os.path.getsize(db + s)
+        except OSError:
+            continue
+    return out
+
+
+def wal_em_limbo(irmaos, limite_mb=WAL_LIMBO_MB):
+    """Banco preso na recuperação de checkpoint do DuckDB (§442): há um
+    `.wal.checkpoint` (um checkpoint começou e nunca terminou) ou um
+    `.wal.recovery` (a fusão dos dois WALs que toda abertura em escrita
+    refaz), ou o `.wal` passou do teto em que o DuckDB checkpointa sozinho.
+    Toda abertura, mesmo só leitura, refaz o replay de tudo isso — no share,
+    minutos por MB."""
+    if '.wal.checkpoint' in irmaos or '.wal.recovery' in irmaos:
+        return True
+    return irmaos.get('.wal', 0) > limite_mb * 1e6
+
+
+def wal_pendentes(db_dir=None):
+    """[(caminho do .db, {sufixo: bytes})] dos bancos em limbo sob `db_dir`
+    (padrão: a raiz dos bancos). Pula a pasta do recover. É a sonda da
+    subida: um `os.walk` da pasta de bancos, uma vez."""
+    raiz = db_dir or db_root()
+    out = []
+    for pasta, dirs, arquivos in os.walk(raiz):
+        dirs[:] = sorted(d for d in dirs if not d.startswith(RECUPERADO_DIR))
+        for a in sorted(arquivos):
+            if not a.lower().endswith('.db'):
+                continue
+            db = os.path.join(pasta, a)
+            irm = wal_irmaos(db)
+            if irm and wal_em_limbo(irm):
+                out.append((db, irm))
+    return out
 
 
 def rel_of(path, raiz=None):
@@ -659,9 +714,10 @@ def _read_target(rel, alvo, default=AUSENTE):
                 raise FileNotFoundError(rel)
             return default
         if crus is None:
-            raise IOError('%s: o banco tem o caminho mas não o canal de reconstrução '
-                          '(formato anterior ao __raw) — reimporte com '
-                          'scripts/convert_json_to_duckdb.py' % rel)
+            raise SemCanal('%s: o banco tem o caminho mas não o canal de reconstrução '
+                           '(payload-objeto anterior ao __raw) — reimporte com '
+                           'scripts/convert_json_to_duckdb.py --only <pasta>, ou deixe o JSON '
+                           'ao lado para a leitura importar (§442)' % rel)
         _pmemo_put(chave, crus)
     return core.parsear_crus(crus)
 
@@ -676,11 +732,14 @@ def read(path, default=AUSENTE):
     alvos = _alvos(rel)
     if not alvos:
         return _read_fs(path, default)
+    sem_canal = None
     for alvo in alvos:
         try:
             return _read_target(rel, alvo)
         except FileNotFoundError:
             continue
+        except SemCanal as exc:
+            sem_canal = exc                   # o disco pode responder (e reimportar)
     # O banco não tem: o arquivo legado no disco é IMPORTADO (uma vez). A
     # cópia EMPACOTADA não entra aqui — quem cai para ela é o `data_path()`,
     # que devolve o caminho do repositório (fora da raiz de dados, lido do
@@ -703,6 +762,8 @@ def read(path, default=AUSENTE):
             _pmemo_put(chave, crus)
             _importar_legado_async(path, rel, texto, st)
         return core.parsear_crus(crus)
+    if sem_canal is not None:
+        raise sem_canal
     if default is AUSENTE:
         raise FileNotFoundError(path)
     return default
@@ -796,7 +857,10 @@ def write(path, payload, stamp=None, so_se_ausente=False):
     with duckdb_write(db) as con:
         if so_se_ausente:
             core.ensure_manifest(con)
-            if core.manifest_targets(con, core.manifest_key_of(rel, kind)):
+            # "ausente" inclui o caminho sem canal (§442): a gravação da tela
+            # que entrou antes tem o `__raw` e vence; o objeto anterior ao
+            # `__raw` não é legível e a importação o substitui.
+            if core.reconstruivel(con, core.manifest_key_of(rel, kind)):
                 return False
         core.escrever_payload(con, rel, payload, kind, tabela, schema,
                               nome_cal=nome_cal, mtime=mtime, fsize=fsize)
@@ -893,6 +957,43 @@ def getmtime(path):
 
 def getsize(path):
     return stat(path).st_size
+
+
+def _canal_no_banco(path):
+    """Tri-estado do canal exato de um caminho: `None` quando o banco NÃO tem
+    o caminho (banco inexistente, sem entrada no manifest, ou ocupado sem
+    resposta), `True` quando tem COM o canal (`__raw` para objeto, `_raw`
+    para lista), `False` quando tem SEM (objeto anterior ao `__raw`)."""
+    if not managed(path):
+        return None
+    rel = rel_of(path)
+    for alvo in _alvos(rel):
+        db_rel, _schema, _tabela, kind = alvo
+        db = _db_abs(db_rel)
+        if not os.path.isfile(db):
+            continue
+        try:
+            if rel not in _manifest(db, strict=True):
+                continue
+            return bool(_com_leitura(db, lambda con: core.reconstruivel(
+                con, core.manifest_key_of(rel, kind))))
+        except BancoOcupado:
+            return None
+    return None
+
+
+def tem_raw(path):
+    """O caminho está no banco COM o canal exato? Ausente ou ocupado → False."""
+    return _canal_no_banco(path) is True
+
+
+def sem_canal(path):
+    """O banco TEM o caminho e NÃO tem o canal (§442) — só esse caso. É a
+    pergunta da semeadura: esse objeto é reimportado da cópia do repositório
+    em vez de ficar ilegível; o que o banco não tem fica com a importação
+    preguiçosa (o JSON do share pode ser mais novo que a seed) e o que tem
+    com canal é o que a mesa editou."""
+    return _canal_no_banco(path) is False
 
 
 def isfile(path):

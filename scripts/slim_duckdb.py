@@ -18,6 +18,11 @@ montado ao lado — listas só com `_seq`/`_raw`, payload-objeto só com a
 Rode com o APP PARADO (o arquivo é substituído; um processo com o banco
 aberto seguraria o antigo). Toma a trava exclusiva da camada para a
 instância vizinha esperar. Idempotente: banco já magro é pulado.
+
+Banco com `.wal.checkpoint`/`.wal.recovery` ao lado (o limbo de checkpoint
+do DuckDB, HANDOFF §442) é RECUSADO com a mensagem: nele o `ATTACH` refaz o
+replay do WAL inteiro pelo share. Esse passa pelo `recover_duckdb_wal.py`,
+que recupera FORA do share e emagrece de caminho.
 """
 import argparse
 import io
@@ -34,6 +39,7 @@ os.environ.setdefault('OTC_DISABLE_SCHEDULERS', '1')
 
 import duckdb                                                # noqa: E402
 from apps.pages import json_to_duckdb as core                # noqa: E402
+from apps.pages import data_store as _store                 # noqa: E402
 
 
 ORIGEM = '_slim_origem'
@@ -99,8 +105,32 @@ def planejar(con, catalogo):
 
 
 def emagrecer(db, dry_run=False):
-    """Um banco: devolve um dict com o resumo, ou None quando não é do armazém."""
+    """Um banco: devolve um dict com o resumo, ou None quando não é do armazém.
+
+    Banco em limbo de checkpoint do DuckDB (§442) é RECUSADO: o `ATTACH`
+    refaria o replay do WAL inteiro pelo share — foi onde a primeira rodada
+    na instância travou, deixando `.db.slim` de 12 KB ao lado. O caminho
+    dele é o `recover_duckdb_wal.py`, que emagrece de caminho."""
+    irm = _store.wal_irmaos(db)
+    if _store.wal_em_limbo(irm):
+        raise RuntimeError('%s: em recuperação de checkpoint (%s) — rode '
+                           'scripts/recover_duckdb_wal.py com o app parado; ele emagrece de caminho'
+                           % (db, ', '.join('%s %.0f MB' % (s, b / 1e6) for s, b in sorted(irm.items()))))
     novo = db + '.slim'
+    trocado = False
+    try:
+        return _emagrecer(db, novo, dry_run)
+    finally:
+        # o `.slim` só fica quando virou o banco (o `os.replace` o consome);
+        # pulado, sem manifest ou erro, ele sai — a rodada seguinte não pode
+        # tropeçar num arquivo de 12 KB deixado por uma abertura que não deu
+        if os.path.isfile(novo):
+            os.remove(novo)
+        if os.path.isfile(novo + '.wal'):
+            os.remove(novo + '.wal')
+
+
+def _emagrecer(db, novo, dry_run):
     con = duckdb.connect(novo if not dry_run else ':memory:')
     try:
         # O alias não pode ser o nome de banco nenhum: o DuckDB batiza o catálogo
@@ -164,8 +194,6 @@ def emagrecer(db, dry_run=False):
         if os.path.isfile(db + sufixo):
             os.remove(db + sufixo)
     os.replace(novo, db)
-    if os.path.isfile(novo + '.wal'):
-        os.remove(novo + '.wal')
     resumo['bytes_depois'] = os.path.getsize(db)
     return resumo
 
@@ -192,7 +220,8 @@ def main(argv=None):
         db_dir = Config.DATABASE_DIR
     raiz = os.path.join(db_dir, *args.only.replace('\\', '/').strip('/').split('/')) if args.only else db_dir
     bancos = []
-    for pasta, _dirs, arquivos in os.walk(raiz):
+    for pasta, dirs, arquivos in os.walk(raiz):
+        dirs[:] = [d for d in dirs if not d.startswith(_store.RECUPERADO_DIR)]
         for a in arquivos:
             if a.lower().endswith('.db'):
                 bancos.append(os.path.join(pasta, a))
@@ -207,6 +236,10 @@ def main(argv=None):
             if not args.dry_run:
                 trava = _trava(db)
             r = emagrecer(db, dry_run=args.dry_run)
+        except RuntimeError as exc:
+            erros.append(db)
+            print('  !!   %s' % exc)
+            continue
         except Exception:                                    # noqa: BLE001
             erros.append(db)
             print('  ERRO %s\n%s' % (db, traceback.format_exc()))

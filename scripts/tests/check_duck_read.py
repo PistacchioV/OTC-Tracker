@@ -321,6 +321,146 @@ check('10. e o vizinho de banco nao foi tocado', S.read(OCUP), [{'Deal': 'OC-1'}
 R._atomic_write_json(ATOM, [{'Deal': 'DEPOIS-2'}])
 check('10. a gravacao seguinte vale normalmente', [d['Deal'] for d in S.read(ATOM)], ['DEPOIS-2'])
 
+print('\n== 11. a sonda do limbo de checkpoint (§442) ==')
+# So nomes e tamanhos: e o que o DuckDB deixa no disco quando um checkpoint
+# comecou e o processo morreu (.wal.checkpoint) ou quando a abertura em
+# escrita fundiu os WALs (.wal.recovery). O `.wal` sozinho e normal ate o teto.
+import logging as _logging                                 # noqa: E402
+import shutil                                              # noqa: E402
+_LB = tempfile.mkdtemp(prefix='limbo-')
+_lb = lambda *p: os.path.join(_LB, *p)                     # noqa: E731
+os.makedirs(_lb('cache', 'x'))
+os.makedirs(_lb(S.RECUPERADO_DIR, '20260910-120000', 'cache'))
+for nome, tam in (('cache/x/a.db', 10), ('cache/x/a.db.wal', 100),
+                  ('cache/x/b.db', 10), ('cache/x/b.db.wal', 100), ('cache/x/b.db.wal.checkpoint', 0),
+                  ('cache/x/c.db', 10), ('cache/x/c.db.wal.recovery', 5),
+                  ('cache/x/d.db', 10), ('cache/x/d.db.wal', int(S.WAL_LIMBO_MB * 1e6) + 1),
+                  ('cache/x/e.db', 10),
+                  (S.RECUPERADO_DIR + '/20260910-120000/cache/z.db', 10),
+                  (S.RECUPERADO_DIR + '/20260910-120000/cache/z.db.wal.checkpoint', 0)):
+    with open(_lb(*nome.split('/')), 'wb') as fh:
+        fh.write(b'\0' * tam)
+check('11. .wal pequeno sozinho nao e limbo', S.wal_em_limbo(S.wal_irmaos(_lb('cache', 'x', 'a.db'))), False)
+check('11. .wal.checkpoint e limbo (mesmo vazio)', S.wal_em_limbo(S.wal_irmaos(_lb('cache', 'x', 'b.db'))), True)
+check('11. .wal.recovery e limbo', S.wal_em_limbo(S.wal_irmaos(_lb('cache', 'x', 'c.db'))), True)
+check('11. .wal alem do teto e limbo', S.wal_em_limbo(S.wal_irmaos(_lb('cache', 'x', 'd.db'))), True)
+check('11. sem irmao nenhum', S.wal_irmaos(_lb('cache', 'x', 'e.db')), {})
+check('11. wal_pendentes lista b, c, d — e nao entra em _recuperado',
+      [os.path.basename(d) for d, _i in S.wal_pendentes(_LB)], ['b.db', 'c.db', 'd.db'])
+
+
+class _Pega(_logging.Handler):
+    def __init__(self):
+        _logging.Handler.__init__(self)
+        self.msgs = []
+
+    def emit(self, rec):
+        self.msgs.append(rec.getMessage())
+
+
+_h = _Pega()
+_logging.getLogger('otc_tracker').addHandler(_h)
+_db_root_real = S.db_root
+S.db_root = lambda raiz=None: _LB
+try:
+    from apps import _warn_wal_pendente
+    _warn_wal_pendente()
+finally:
+    S.db_root = _db_root_real
+    _logging.getLogger('otc_tracker').removeHandler(_h)
+_avisos = [m for m in _h.msgs if 'RECUPERAÇÃO DE CHECKPOINT' in m]
+check('11. a subida avisa UMA vez por banco em limbo, nomeando o script',
+      (len(_avisos), all('recover_duckdb_wal' in m for m in _avisos),
+       sorted(os.path.basename(m.split(' — ')[0].split(': ')[-1]) for m in _avisos)),
+      (3, True, ['b.db', 'c.db', 'd.db']))
+shutil.rmtree(_LB, ignore_errors=True)
+
+print('\n== 12. o payload-objeto anterior ao __raw (SemCanal, §442) ==')
+# O banco converteu o objeto antes de existir a `__raw`: manifest o lista, mas
+# não há canal exato. Era um IOError generico engolido pelo leitor ("template
+# missing" no File Interpreter). Fabricado aqui derrubando a `__raw` e
+# reescrevendo os targets do manifest.
+TPL = _p('file-interpreter', 'sem-canal.json')
+OBJ_TPL = {'key': 'sem-canal', 'blocks': [{'id': 'registro', 'fields': [{'seq': 1}]}], 'n': 2}
+R._atomic_write_json(TPL, OBJ_TPL)
+check('12. gravado pelo funil, tem o canal exato', S.tem_raw(TPL), True)
+_alvo = S.core.target_of('file-interpreter/sem-canal.json')
+_chave = S.core.manifest_key_of('file-interpreter/sem-canal.json', _alvo[3])
+_con = duckdb.connect(os.path.join(DBDIR, 'file-interpreter', 'sem-canal.db'))
+_tg = [t for t in json.loads(_con.execute('SELECT targets FROM _manifest WHERE path = ?', [_chave]).fetchone()[0])
+       if not t.endswith('__raw')]
+_con.execute('DROP TABLE %s' % S.core.q(_alvo[2] + '__raw'))
+_con.execute('UPDATE _manifest SET targets = ? WHERE path = ?', [json.dumps(_tg), _chave])
+_con.close()
+S.memo_forget()
+check('12. sem a __raw, tem_raw diz False', S.tem_raw(TPL), False)
+check('12. e isfile continua True (o manifest o lista)', S.isfile(TPL), True)
+try:
+    S.read(TPL)
+    check('12. read sem disco levanta SemCanal', 'nao levantou', 'SemCanal')
+except S.SemCanal as exc:
+    check('12. read sem disco levanta SemCanal (um IOError com o motivo)',
+          (isinstance(exc, IOError), 'sem-canal.json' in str(exc), '__raw' in str(exc)), (True, True, True))
+from apps.pages.platform import file_interpreter as FI    # noqa: E402
+_h = _Pega()
+_logging.getLogger('otc_tracker').addHandler(_h)
+_fi_dir_real = R._FILE_INTERPRETER_DIR
+R._FILE_INTERPRETER_DIR = _p('file-interpreter')
+try:
+    check('12. _fi_load le como ausente MAS avisa no log com o motivo',
+          (FI._fi_load('sem-canal'), any('sem-canal' in m and 'ilegível' in m for m in _h.msgs)), (None, True))
+finally:
+    R._FILE_INTERPRETER_DIR = _fi_dir_real
+    _logging.getLogger('otc_tracker').removeHandler(_h)
+# o JSON legado ao lado: a leitura responde por ele e a importacao SUBSTITUI
+os.makedirs(os.path.dirname(TPL), exist_ok=True)
+with open(TPL, 'w', encoding='utf-8') as fh:
+    json.dump(OBJ_TPL, fh)
+S.memo_forget()
+check('12. com o JSON em disco, read responde por ele', S.read(TPL), OBJ_TPL)
+S.import_wait()
+os.remove(TPL)
+S.memo_forget()
+check('12. e a importacao substituiu o objeto sem canal (le do banco, sem o disco)',
+      (S.tem_raw(TPL), S.read(TPL)), (True, OBJ_TPL))
+# a semeadura: objeto do repositorio que o banco tem SEM canal e reimportado
+_con = duckdb.connect(os.path.join(DBDIR, 'file-interpreter', 'sem-canal.db'))
+_con.execute('DROP TABLE %s' % S.core.q(_alvo[2] + '__raw'))
+_con.execute('UPDATE _manifest SET targets = ? WHERE path = ?', [json.dumps(_tg), _chave])
+_con.close()
+S.memo_forget()
+_PK = tempfile.mkdtemp(prefix='packaged-')
+os.makedirs(os.path.join(_PK, 'file-interpreter'))
+with open(os.path.join(_PK, 'file-interpreter', 'sem-canal.json'), 'w', encoding='utf-8') as fh:
+    json.dump(dict(OBJ_TPL, n=99), fh)
+with open(os.path.join(_PK, 'file-interpreter', 'lista.json'), 'w', encoding='utf-8') as fh:
+    json.dump([{'a': 1}], fh)
+R._atomic_write_json(_p('file-interpreter', 'lista.json'), [{'a': 'da tela'}])
+from apps import _seed_data_dir                             # noqa: E402
+from apps.pages import data_paths as _DP                    # noqa: E402
+
+
+class _App(object):
+    config = {'DATA_DIR': TMP}
+    logger = _logging.getLogger('otc_tracker')
+
+
+_pk_real = _DP.PACKAGED_DIR
+_DP.PACKAGED_DIR = _PK
+_h = _Pega()
+_logging.getLogger('otc_tracker').addHandler(_h)
+try:
+    _seed_data_dir(_App())
+finally:
+    _DP.PACKAGED_DIR = _pk_real
+    _logging.getLogger('otc_tracker').removeHandler(_h)
+S.memo_forget()
+check('12. a semeadura reimporta o objeto sem canal da copia do repositorio, avisando',
+      (S.read(TPL).get('n'), any('sem-canal' in m and 'reimportado' in m for m in _h.msgs)), (99, True))
+check('12.   e NAO sobrescreve a lista que o banco ja tem', S.read(_p('file-interpreter', 'lista.json')),
+      [{'a': 'da tela'}])
+shutil.rmtree(_PK, ignore_errors=True)
+
 print()
 print('FAIL: %d' % len(fails) if fails else 'TUDO OK')
 sys.exit(1 if fails else 0)
