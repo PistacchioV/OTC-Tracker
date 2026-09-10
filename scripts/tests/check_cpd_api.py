@@ -122,5 +122,28 @@ check('   e o contato sumiu do arquivo', dados[0]['CONTACTS'], [])
 check('   toda acao avisou no sino (Reference Data)',
       all(p == 'Reference Data' for _, p in NOTIFS), True)
 
+print('\n== 7. banco OCUPADO nao vira cadastro vazio (e o save nao apaga ninguem) ==')
+# `_cpd_load` le pelo `data_store.read`; com o reference_data.db preso pela
+# instancia vizinha ele devolvia [] em silencio, e o `_bank_get_record` do
+# endpoint seguinte gravava a lista com UM registro por cima do cadastro.
+from apps.pages import data_store as S
+antes = json.load(io.open(CPD_FILE, encoding='utf-8'))
+_read_real = S.read
+S.read = lambda path, default=S.AUSENTE: (_ for _ in ()).throw(S.BancoOcupado(path))
+try:
+    try:
+        PCD._cpd_load()
+        check('_cpd_load sob OCUPADO levanta BancoOcupado', False, True)
+    except S.BancoOcupado:
+        check('_cpd_load sob OCUPADO levanta BancoOcupado', True, True)
+    r = maker.post('/api/counterparty-details/banking/account/add',
+                   json={'SPN': '999', 'bank': 'X', 'agency': '1', 'account': '2'})
+    check('   o endpoint responde 503 database_busy',
+          (r.status_code, (r.get_json() or {}).get('error')), (503, 'database_busy'))
+finally:
+    S.read = _read_real
+depois = json.load(io.open(CPD_FILE, encoding='utf-8'))
+check('   e o cadastro esta INTACTO', depois, antes)
+
 print(('FAIL: %d' % len(fails)) if fails else 'TUDO OK')
 sys.exit(1 if fails else 0)

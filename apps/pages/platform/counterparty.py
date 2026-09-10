@@ -23,6 +23,7 @@ import json
 import logging
 import os
 import re
+import traceback
 import uuid
 from apps.pages import data_store as _store  # noqa: E402
 
@@ -223,18 +224,29 @@ def _cpd_load():
     # arquivo próprio) tem de continuar mandando — o banco reflete OUTRO
     # arquivo, e responder por ele seria ler a fonte errada com carimbo de
     # fresca.
-    data = None
+    # Falha de leitura NUNCA vira "cadastro vazio" (10/09/2026): quem chama
+    # para gravar (`_bank_get_record`, `_cpd_get_record`, o import de
+    # contatos) faz ler → achar/criar o registro → `_cpd_save_list(data)` —
+    # com `[]` no lugar do cadastro, a gravação seguinte reescrevia o
+    # reference_data.db com UM registro, e os outros 400 e tantos sumiam com
+    # os contatos, as contas e os defaults de todo mundo. Banco OCUPADO (a
+    # instância vizinha com a trava) sobe como `BancoOcupado`, que o tratador
+    # global responde com 503; qualquer outra falha sobe com o motivo no log.
+    # Só "não há cadastro" (caminho ausente) é lista vazia.
     try:
         from apps.pages import duck_read
         data = duck_read.cpd_records(expected_path=_cpd_path())
-    except Exception:                                       # noqa: BLE001
-        data = None
+    except _store.BancoOcupado:
+        raise
+    except (IOError, ValueError):
+        log.warning('[counterparty-details] o cadastro não pôde ser lido — a tela e os '
+                    'summaries ficam sem contas/net até o banco responder:\n%s',
+                    traceback.format_exc())
+        raise
     if data is None:
-        try:
-            data = _store.read(_cpd_path())
-            data = data if isinstance(data, list) else []
-        except (json.JSONDecodeError, IOError, FileNotFoundError):
-            return []
+        return []
+    if not isinstance(data, list):
+        data = []
     # Migração one-shot do formato legado (BANKING.PAY/RECEIVE, contatos sem
     # id/appr, CGD string, NET ausente): normaliza TODOS os registros e
     # persiste na primeira leitura em que algo mudou. Sem isso os ids de
