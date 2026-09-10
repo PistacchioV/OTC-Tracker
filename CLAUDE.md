@@ -712,6 +712,13 @@ São **45**: `currency-base`, `interbook-ndf`, `commodities-b3`,
   como JSON. Other Products segue o mesmo desenho.
 - **A tabela do PDF do Advice tem largura MEDIDA** (`stringWidth`, escada de
   fonte, `Paragraph`), nunca `515/N`.
+- **No Cockpit, `VL_FORWARD_RATE` é a forward do trade date e
+  `VL_STRIKE_PRICE` é o FIXING** (é o que a Trade Level chama de FORWARD RATE
+  e FIXING RATE; o `_ndfc_strike_calc` deriva o fixing do forward). Na API o
+  `Strike` é a forward e o `Spot` do evento é o fixing — o §421 tinha cruzado
+  os dois pelo nome. O Fixing do aviso é o Spot da API guardado em
+  `_nc_fixing` na importação (`_ndfsum_fixing`); sem ele, a célula FIXING
+  RATE; nunca a forward (§438).
 
 ### Esteira de confirmação manual
 

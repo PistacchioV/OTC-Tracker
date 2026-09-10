@@ -148,15 +148,23 @@ try:
     check('ISO passa pelo _ndfc_fmt_date como dd/mm', R._ndfc_fmt_date(row['DT_DEAL']), '10/06/2026')
     check('LC = a perna em BRL', (row['CCY_NOTIONAL_LC'], row['VL_NOTIONAL_LC']), ('BRL', '28000000.00'))
     check('FC = a outra perna, em modulo', (row['CCY_NOTIONAL_FC'], row['VL_NOTIONAL_FC']), ('USD', '5302427.75'))
-    check('VL_STRIKE_PRICE = Strike, as casas da API', row['VL_STRIKE_PRICE'], '5.2806')
-    check('VL_FORWARD_RATE = Spot do bloco settlement', row['VL_FORWARD_RATE'], '5.1253')
+    # A semantica e a do Cockpit/Trade Level (FORWARD RATE = VL_FORWARD_RATE,
+    # FIXING RATE = VL_STRIKE_PRICE): o `Strike` da API e a forward fechada no
+    # trade date, e o `Spot` do evento e o fixing da liquidacao (§438).
+    check('VL_FORWARD_RATE = Strike da API (a forward do trade date)', row['VL_FORWARD_RATE'], '5.2806')
+    check('VL_STRIKE_PRICE = Spot do bloco settlement (o fixing)', row['VL_STRIKE_PRICE'], '5.1253')
+    check('e o Spot vai tambem em _nc_fixing, o campo que o aviso imprime', row['_nc_fixing'], '5.1253')
+    check('o aviso prefere o Spot da API e nunca cai na forward',
+          (R._ndfsum_fixing(row['_nc_fixing'], row['VL_STRIKE_PRICE']),
+           R._ndfsum_fixing('', '5.1253'), R._ndfsum_fixing('', '')), ('5.1253', '5.1253', ''))
     check('PUBLISHER', row['PUBLISHER'], 'PTAX')
     check('o que a API nao traz fica em branco',
           [row[c] for c in ('VL_TAX_INCOME', 'NB_BANK', 'CD_BRANCH', 'CD_BANK_ACCOUNT')], ['', '', '', ''])
     # O imposto nasce vazio AQUI de proposito: o piso de R$ 1,00 e por
     # CONTRAPARTE no mes, e nao da para decidir olhando uma operacao de cada
     # vez. Quem o escreve e o `_ndfc_apply_ir`, com o dia inteiro montado.
-    check('todas as colunas do Cockpit, e so elas', sorted(row), sorted(R._NDFC_COLUMNS))
+    check('todas as colunas do Cockpit, e so elas (mais o _nc_fixing do aviso)',
+          sorted(row), sorted(list(R._NDFC_COLUMNS) + ['_nc_fixing']))
     check('o strike do Cockpit fecha com o registro (fixing + |settle|/notional)',
           round(5.1253 + 823467.03 / 5302427.75, 4), 5.2806)
 
@@ -197,8 +205,9 @@ try:
     rec4 = dict(REC, **{'Quantity Currency': 'BRR', 'Other Quantity Units': 'MXN', 'Strike': 3.2,
                         'settlement': [dict(REC['settlement'][0], Spot=3.33)]})
     row4, _ = R._ndfc_rec_from_api(rec4, REF, {})
-    check('moeda fraca inverte strike e spot, 8 casas',
-          (row4['VL_STRIKE_PRICE'], row4['VL_FORWARD_RATE']), ('0.31250000', '0.30030030'))
+    check('moeda fraca inverte forward e fixing, 8 casas',
+          (row4['VL_FORWARD_RATE'], row4['VL_STRIKE_PRICE'], row4['_nc_fixing']),
+          ('0.31250000', '0.30030030', '0.30030030'))
     WEAK.clear()
 
     print('\n== 4. quem fica de fora ==')
