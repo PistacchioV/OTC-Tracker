@@ -17927,3 +17927,21 @@ boxscan capturava `EnvironmentError` e leria `BancoOcupado` como "sem
 Outlook" em INFO — ganhou o `except` próprio, em WARNING. Ficou anotado sem
 mexer: 47 `os.makedirs` precedem uma gravação que vai para o banco e criam
 pastas vazias de ano/mês no share (uma ida por gravação, inofensiva).
+
+A varredura seguinte (10/09, à tarde) olhou a ATOMICIDADE da gravação e o
+memo de processo. `escrever_payload` começa derrubando as tabelas do caminho
+(`_drop_targets`) e só depois cria as novas e regrava o manifest — se
+estourasse no meio fora de transação, o caminho ficava sem tabela e o
+manifest apontando para ela. Está dentro da transação do `duckdb_write`
+(BEGIN antes do corpo, ROLLBACK na exceção, COMMIT no fim), e o DuckDB
+desfaz DDL: provado com uma gravação que estoura depois de reescrever —
+o dado e o carimbo anteriores continuam lá, o vizinho de banco intacto, a
+gravação seguinte vale (`check_duck_read.py` §10). `COMMIT` que falha
+levanta `TransactionOutcomeUnknown` e o `write` não esquece os memos — o
+manifest se valida pelo stat do `.db` e o `_pmemo` pela chave
+(rel, mtime, fsize), então a leitura seguinte se cura sozinha. O memo:
+LRU por bytes (`OTC_DUCK_DAY_MEMO_MB`, 256), a "última cópia boa" do
+OCUPADO é a entrada mais recente do caminho (só há uma versão por caminho
+depois de cada gravação, que esquece todas), payload maior que o teto não
+entra (e por isso não tem cópia para o ocupado — irrelevante em 256 MB).
+Nada para corrigir nesse ângulo.
