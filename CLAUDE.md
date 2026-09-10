@@ -206,13 +206,21 @@ síncrona/quarentena deixaram de existir; o `duck_read` é só a fachada com os
 nomes que o app conhecia (`day_records`, `dataset_rows`, `refdata_rows`,
 `calendar_rows`, `day_files`, `prefetch_days`).
 
-- **O banco é o de sempre.** Mesma quebra por produto (`db/` espelha a
-  árvore de origem), mesmas tabelas com `_seq`/`_raw`, mesmo `_manifest`
+- **O banco é o de sempre, e a tabela-dia é SÓ o canal cru** (§437). Mesma
+  quebra por produto (`db/` espelha a árvore de origem), mesmo `_manifest`
   (caminho, mtime, tamanho, targets). Quem diz que banco/tabela um caminho
   ocupa é `json_to_duckdb.target_of` — o mesmo da importação de JSON legado,
   então banco importado e banco gravado pela tela têm uma forma só. Os
   `mtime`/`fsize` do manifest passaram a ser o relógio da gravação e o
-  tamanho do texto: são só a chave dos memos.
+  tamanho do texto: são só a chave dos memos. **Arquivo-dia (`cache/`) vira
+  `_seq`/`_raw` e nada mais; payload-objeto de dia vira só a `<tabela>__raw`**
+  — o DuckDB lê o CATÁLOGO inteiro a cada `connect`, e 250 dias × 170
+  colunas tipadas do DPOSICAO-TER eram 524 blocos de metadado (134 MB em
+  sub-blocos de 4 KB, cada um uma ida e volta no share): minutos por
+  abertura. Só com `_seq`/`_raw`, 7 blocos. Datasets (mappings, RefData, CPD,
+  registro) continuam tipados + `_raw`: um banco, uma tabela, catálogo
+  barato. Banco antigo na forma tipada segue legível; `scripts/slim_duckdb.py`
+  o leva à forma nova NO LUGAR, copiando do próprio banco (nunca do JSON).
 - **Payload-OBJETO volta EXATO** (recons, `.meta.json`, ponteiros `_last`):
   além das sub-tabelas de análise, o objeto inteiro vai como texto na tabela
   `<tabela>__raw` de uma linha. Banco anterior a isto tem o objeto sem o
@@ -914,6 +922,7 @@ São **45**: `currency-base`, `interbook-ndf`, `commodities-b3`,
 | `split_notifications_db.py --dry-run` | mostra o que a separação do sino vai copiar |
 | `dev_seed_positions.py` | só na DEV: reemite a última posição B3 numa data recente (`--from … --force`) |
 | `convert_json_to_duckdb.py` + `scripts/convert/` (40 fatias) | a IMPORTAÇÃO JSON → DuckDB (o cutover do §434 e o legado fora da janela), incremental por `_manifest`, `--meses` 12 por padrão (`0` = tudo), `--only/--force/--dry-run/--bloco`; reconverte sozinho o payload-objeto sem `__raw` |
+| `slim_duckdb.py [--db-dir] [--only cache] [--dry-run]` | emagrece os bancos de arquivo-dia JÁ existentes para a forma do §437 (lista só `_seq`/`_raw`, objeto só `__raw`), copiando do PRÓPRIO banco e trocando o arquivo; com o app PARADO; idempotente |
 | `export_duckdb_to_json.py` | o ROLLBACK: reconstrói do banco os JSONs com diferença (`--dry-run`, `--force`, `--only`); `check_export_rollback.py` prova que cada forma volta exata |
 | `scripts/standalone/` (40, GERADOS por `build_duckdb_standalone.py`) | os mesmos conversores para máquina sem o código (`pip install duckdb` só) — nunca editar à mão |
 | `build_sop_docx.py` | SOP e Guia em Word a partir do `.md` |
