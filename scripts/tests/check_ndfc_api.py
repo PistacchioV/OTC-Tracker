@@ -40,6 +40,7 @@ os.environ.setdefault('OTC_SHARED_DRIVE_ROOT', tempfile.mkdtemp(prefix='otc-shar
 
 from apps.pages import athena_api as A                        # noqa: E402
 from apps.pages import routes as R                            # noqa: E402
+from apps.pages import data_store as S                      # noqa: E402
 
 fails = []
 
@@ -280,7 +281,7 @@ try:
         dict(REC, **{'Trade Date': '2026-01-02'}), REF, {})[1], None)
     jp = R._ndfc_json_path(ref)
     check('JSON no caminho do dia', jp.endswith(os.path.join('2026', '09', '08', 'ndf-cockpit_20260908.json')), True)
-    data = json.load(io.open(jp, encoding='utf-8'))
+    data = S.read(jp)
     check('deal repetido no payload entra uma vez', len(data), 1)
     check('meta do maker/checker carimbada OK', (data[0]['_nc_status'], bool(data[0]['_nc_id'])), ('OK', True))
     check('o timestamp do import fica ao lado', bool(R._ds_read_updated(jp)), True)
@@ -294,7 +295,7 @@ try:
                                       'Rolled Positions': [-100.005, -28000000.0]})]})
     calls['payload'] = {'trades': [dois]}
     res = R._ndfc_import(ref)
-    linhas = json.load(io.open(R._ndfc_json_path(ref), encoding='utf-8'))
+    linhas = S.read(R._ndfc_json_path(ref))
     check('um trade com DOIS eventos vira duas linhas', res['rows'], 2)
     check('   com o evento e o valor de cada um',
           sorted((l['ID_DEAL'], l['[PROD] Cockpit.SETTLEMENT']) for l in linhas),
@@ -338,7 +339,7 @@ try:
     # E o import escreve a coluna sozinho, sem ninguem chamar nada.
     calls['payload'] = {'trades': [REC]}
     R._ndfc_import(ref)
-    gravado = json.load(io.open(R._ndfc_json_path(ref), encoding='utf-8'))
+    gravado = S.read(R._ndfc_json_path(ref))
     check('e o import ja grava a celula preenchida',
           bool(gravado and gravado[0]['VL_TAX_INCOME']), True)
 
@@ -365,7 +366,7 @@ try:
     r = cli.post('/api/ndf-cockpit/rows/delete', json={'date': '2026-09-08', 'ids': ['1', '3']})
     check('devolve quantas linhas sairam', (r.status_code, r.get_json()['removed']), (200, 2))
     check('   e so as marcadas sairam',
-          [x['_nc_id'] for x in json.load(io.open(jp, encoding='utf-8'))], ['2'])
+          [x['_nc_id'] for x in S.read(jp)], ['2'])
     # Id que nao existe mais (outra aba apagou antes) NAO invalida o lote: o
     # numero que volta descreve o que aconteceu, nao o tamanho do pedido.
     r2 = cli.post('/api/ndf-cockpit/rows/delete', json={'date': '2026-09-08', 'ids': ['2', '99']})
@@ -374,7 +375,7 @@ try:
     # cairia no fallback de "dia sem arquivo", que se le como "ainda nao
     # importaram" e nao como "apagaram de proposito".
     check('o arquivo do dia continua la, vazio',
-          (os.path.isfile(jp), json.load(io.open(jp, encoding='utf-8'))), (True, []))
+          (S.isfile(jp), S.read(jp)), (True, []))
     r3 = cli.post('/api/ndf-cockpit/rows/delete', json={'date': '2026-09-08', 'ids': ['1']})
     check('nenhum id casando: 404', r3.status_code, 404)
     r4 = cli.post('/api/ndf-cockpit/rows/delete', json={'date': '2026-09-08', 'ids': []})

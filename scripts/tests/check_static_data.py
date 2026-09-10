@@ -24,6 +24,7 @@ os.chdir(ROOT)
 
 SHARE = tempfile.mkdtemp(prefix='static-data-share-')
 os.environ['OTC_DATA_DIR'] = SHARE
+os.environ['OTC_DATABASE_DIR'] = os.path.join(SHARE, 'db')   # os bancos do cenario, fora do checkout
 os.environ.setdefault('SECRET_KEY', 'x')
 os.environ.setdefault('OTC_SHARED_DRIVE_ROOT', tempfile.mkdtemp(prefix='share-root-'))
 
@@ -49,11 +50,14 @@ print('== 0. o cenario da instancia: DATA_DIR fora do checkout ==')
 check('as duas pastas sao diferentes', DebugConfig.DATA_DIR == PACKAGED_DIR, False)
 
 print('\n== 1. o que o app GRAVA e o que a tela LE ==')
-with open(os.path.join(SHARE, 'RefData.json'), 'w', encoding='utf-8') as fh:
-    json.dump([{'COUNTERPARTY': 'CLIENTE EDITADO NA TELA'}], fh)
+# Pelo FUNIL (DB-only, §434): a edicao da tela vai para o banco do share, e e
+# de la que o /static/data/RefData.json responde.
+from apps.pages import routes as R                        # noqa: E402
+R._atomic_write_json(os.path.join(SHARE, 'RefData.json'),
+                     [{'COUNTERPARTY': 'CLIENTE EDITADO NA TELA'}])
 r = cl.get('/static/data/RefData.json')
 check('a tela recebe 200', r.status_code, 200)
-check('e le o arquivo do DATA_DIR',
+check('e le o dado do DATA_DIR (importado para o banco)',
       [d.get('COUNTERPARTY') for d in r.get_json(force=True)], ['CLIENTE EDITADO NA TELA'])
 
 print('\n== 2. o que so existe no repositorio continua servido ==')

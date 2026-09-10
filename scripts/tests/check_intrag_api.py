@@ -34,6 +34,7 @@ app.config['TESTING'] = True
 # O Intrag mora em features/intrag, separado em camadas (§321): os
 # arquivos-dia e a gravação são de `infra/persistence`.
 from apps.pages.features.intrag.infra import persistence as B   # noqa: E402
+from apps.pages import data_store as S                      # noqa: E402
 B.INTRAG_NDF_CACHE_DIR = os.path.join(TMP, 'ndf')
 B.INTRAG_OPT_CACHE_DIR = os.path.join(TMP, 'opt')
 B.INTRAG_SWAP_CACHE_DIR = os.path.join(TMP, 'swap')
@@ -197,9 +198,8 @@ IN_persist({'_deal': 'D-4', '_client': 'DELTA', 'na_2': 'PTAX|BRR[PTAX'}, dateti
 e = next(x for x in maker.get('/api/intrag/ndf?date=2026-08-22').get_json()['entries']
          if x['_deal'] == 'D-4')
 check('linha antiga sai limpa na listagem', e['na_2'], 'PTAX BRR PTAX')
-with open(os.path.join(B.INTRAG_NDF_CACHE_DIR, '2026', '08', '20260822_intrag_ndf.json'),
-          encoding='utf-8') as fh:
-    cru = next(x for x in json.load(fh) if x['_deal'] == 'D-4')
+cru = next(x for x in S.read(os.path.join(B.INTRAG_NDF_CACHE_DIR, '2026', '08',
+                                             '20260822_intrag_ndf.json')) if x['_deal'] == 'D-4')
 check('   e o arquivo-dia fica como esta (limpeza e de leitura)',
       cru['na_2'], 'PTAX|BRR[PTAX')
 

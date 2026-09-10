@@ -98,7 +98,7 @@ for arq in esperados:
 
 # ── 2. o que faz deles standalone ────────────────────────────────────────────
 print('\n== 2. autocontidos: nada de `apps`, nada de Config ==')
-_PERMITIDOS = {'argparse', 'datetime', 'duckdb', 'json', 'os', 're', 'sys', 'traceback'}
+_PERMITIDOS = {'argparse', 'collections', 'datetime', 'duckdb', 'json', 'os', 're', 'sys', 'time', 'traceback'}
 for arq in existentes:
     s = _ler(os.path.join(PASTA, arq))
     check('%s não importa `apps` nem lê Config' % arq,

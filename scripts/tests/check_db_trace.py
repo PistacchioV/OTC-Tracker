@@ -203,10 +203,9 @@ check(not any('timeout has no effect' in str(a.message) for a in avisos),
 print('\n§5 _latam_all_dates')
 latam_root = os.path.join(TMP, 'otm')
 R.LATAM_JSON_ROOT = latam_root
-os.makedirs(os.path.join(latam_root, '2026', '09', '01'))
-with open(os.path.join(latam_root, '2026', '09', '01', 'latam-desk-position_20260901.json'),
-          'w', encoding='utf-8') as fh:
-    fh.write('[]')
+R._B3_DATA_DIR = TMP                      # a raiz de dados do armazém é o tmp
+R._atomic_write_json(os.path.join(latam_root, '2026', '09', '01',
+                                  'latam-desk-position_20260901.json'), [])
 varreduras = {'n': 0}
 _day_files_real = R._day_files
 

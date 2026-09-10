@@ -59,6 +59,7 @@ sys.path.insert(0, ROOT)
 os.chdir(ROOT)
 
 from apps.pages import routes as R                        # noqa: E402
+from apps.pages import data_store as S                      # noqa: E402
 from apps.pages import otc_emails                         # noqa: E402
 
 fails = []
@@ -72,9 +73,7 @@ def check(label, got, exp):
 
 
 def write_json(path, data):
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with io.open(path, 'w', encoding='utf-8') as fh:
-        json.dump(data, fh, ensure_ascii=False)
+    R._atomic_write_json(path, data)          # pelo FUNIL: o dado vive no banco
 
 
 # ─────────────────────────────────────────────────────────────────────────────

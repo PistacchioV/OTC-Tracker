@@ -27,7 +27,15 @@ _fake_apps = types.ModuleType('apps')
 _fake_apps.pages = _fake_pages
 sys.modules['apps'] = _fake_apps
 sys.modules['apps.pages'] = _fake_pages
-ns = {'os': os, 'json': json}
+def _ler(p):
+    with io.open(p, encoding='utf-8') as fh:
+        return json.load(fh)
+# O corpo cortado fala com o armazém (`_store`); aqui, sem app, ele é o disco.
+_fake_store = types.SimpleNamespace(
+    isfile=os.path.isfile, exists=os.path.exists, isdir=os.path.isdir, read=_ler,
+    read_json=_ler, remove=os.remove, getmtime=os.path.getmtime, listdir=os.listdir,
+    walk=os.walk, write=_atomic_write_json)
+ns = {'os': os, 'json': json, '_store': _fake_store}
 exec(compile(m.group(0), 'cut', 'exec'), ns)
 fn = ns['_nd_cancel_in_file']
 

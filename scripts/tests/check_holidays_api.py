@@ -36,6 +36,7 @@ os.environ.setdefault('OTC_SHARED_DRIVE_ROOT', ROOT)
 TMP = tempfile.mkdtemp()
 
 from apps.pages import routes as R                          # noqa: E402
+from apps.pages import data_store as S                      # noqa: E402
 from apps import create_app                                 # noqa: E402
 from apps.config import DebugConfig                         # noqa: E402
 
@@ -117,7 +118,7 @@ nomes = [r['name'] for r in d['calendars']]
 check('   os onze do seed', len(nomes), 11)
 check('   com ANBIMA e SOFR entre eles',
       ['ANBIMA' in nomes, 'SOFR' in nomes], [True, True])
-check('   e o arquivo foi criado', os.path.isfile(os.path.join(TMP, 'holiday-calendars.json')), True)
+check('   e o registro esta no banco', S.isfile(os.path.join(TMP, 'holiday-calendars.json')), True)
 
 print('\n== 3. o Save resolve pelo REGISTRO ==')
 st = c.post('/api/holidays/save', json={'calendar': 'SOFR', 'date': '2026-12-25'})
@@ -155,7 +156,7 @@ check('   mas com OUTRA caixa duplica (verruga conhecida)',
 # O arquivo sai do REGISTRO, nao de um nome adivinhado: e essa indirecao
 # que faz o Save achar tambem o calendario criado pela tela.
 _sofr_file = [r['file'] for r in d['calendars'] if r['name'] == 'SOFR'][0]
-gravado = json.load(io.open(os.path.join(TMP, _sofr_file), encoding='utf-8'))
+gravado = S.read(os.path.join(TMP, _sofr_file))
 check('   gravado em ordem de data', [x['date'] for x in gravado],
       ['2026-01-01', '2026-01-01', '2026-12-25'])
 
@@ -198,7 +199,7 @@ check('   e a classe de CSS', d['calendar']['class'], 'hc-cal-nova_mesa')
 check('   com cor da paleta', d['calendar']['color'] in R._HOLIDAY_CAL_PALETTE
       if hasattr(R, '_HOLIDAY_CAL_PALETTE') else True, True)
 check('   dois feriados (a data repetida entra uma vez)', d['total'], 2)
-feriados = json.load(io.open(os.path.join(TMP, 'nova_mesa.json'), encoding='utf-8'))
+feriados = S.read(os.path.join(TMP, 'nova_mesa.json'))
 check('   o datetime do Excel virou ISO', feriados[0]['date'], '2026-05-01')
 check('   e o texto tambem', feriados[1]['date'], '2026-09-07')
 check('   com o calendario carimbado', feriados[0]['calendar'], 'NOVA MESA')

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""check_duck_writers.py — TODA gravação de JSON avisa o espelho DuckDB.
+"""check_duck_writers.py — TODA gravação de dado passa pelo funil, e o funil grava no BANCO.
 
 A auditoria da migração (HANDOFF §335) achou a classe inteira: ~30 escritores
 gravavam JSON do DATA_DIR com `json.dump` direto, fora do funil
@@ -8,11 +8,10 @@ JSON), mas os BANCOS ficavam defasados em silêncio para quem os consulta por
 fora, até a próxima carga completa. Todos foram migrados para o funil (que é
 atômico e avisa o espelho); este script impede o próximo de nascer.
 
-A regra: `json.dump(` (inclusive `_R().json.dump(`) só pode existir em
-apps/pages dentro da ALLOWLIST — o próprio funil e os dois stores com
-gravação própria, que têm de conter o aviso ao espelho no arquivo. Qualquer
-outro site é reprovado apontando arquivo e linha: o caminho certo é
-`_atomic_write_json` (routes/`_R()`/`_routes()`), nunca um write cru.
+A regra (§434, DB-only): `json.dump(` só pode existir em apps/pages dentro
+da ALLOWLIST — o armazém (`data_store`), que é quem grava o que NÃO vive no
+banco. Qualquer outro site é reprovado apontando arquivo e linha: o caminho
+certo é `_atomic_write_json` (routes/`_R()`/`_routes()`), que grava no banco.
 """
 import os
 import re
@@ -22,9 +21,8 @@ ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)),
 
 # Quem PODE conter json.dump — e o que o arquivo tem de conter junto.
 ALLOW = {
-    os.path.join('apps', 'pages', 'platform', 'json_cache.py'): None,  # o funil
-    os.path.join('apps', 'pages', 'otc_tickets.py'): '_duck_notify',
-    os.path.join('apps', 'pages', 'platform', 'counterparty.py'): 'duck_mirror.notify_write',
+    # O escritor atômico do que NÃO vive no banco mora no armazém (§434).
+    os.path.join('apps', 'pages', 'data_store.py'): 'def write(',
 }
 
 fails = []
@@ -64,11 +62,11 @@ for dirpath, dirs, files in os.walk(raiz):
 check('nenhum json.dump fora do funil em apps/pages', not achados,
       '\n        '.join(achados))
 
-# E o funil de fato avisa o espelho.
+# E o funil de fato grava no ARMAZÉM (DB-only, §434): nenhum JSON é escrito.
 funil = open(os.path.join(ROOT, 'apps', 'pages', 'platform', 'json_cache.py'),
              encoding='utf-8').read()
-check('o funil chama o espelho nas DUAS saídas de sucesso',
-      funil.count('_duck_mirror_notify(file_path)') >= 2)
+check('o funil delega ao armazém (data_store.write) e não grava JSON',
+      'data_store.write(file_path, data)' in funil and 'json.dump(' not in funil)
 
 print(('FAIL: %d' % len(fails)) if fails else 'TUDO OK')
 sys.exit(1 if fails else 0)
