@@ -32,10 +32,13 @@ O que este script faz, banco a banco (só nos que estão em limbo — ver
      share; apague a pasta quando o app estiver de pé e conferido), troca o
      `.novo` pelo `.db` e relê o `_manifest` no share.
 
-Rode com TODAS as instâncias PARADAS (a trava exclusiva da camada é tomada,
-mas um `store-import` preso a segura por meia hora), na MESMA versão de
-duckdb da instância (o WAL é da versão que o escreveu), a partir do python do
-`.bat`. `--dry-run` só lista os bancos e os MB.
+Rode com TODAS as instâncias PARADAS, na MESMA versão de duckdb da instância
+(o WAL é da versão que o escreveu), a partir do python do `.bat`. Cada banco é
+tomado na trava EXCLUSIVA da camada antes de qualquer coisa; com alguém de pé
+ela não vem (uma instância lê esses bancos em laço no `summary-warm`, e um
+`store-import` preso no limbo fica meia hora dentro do `duckdb.connect`
+segurando a exclusiva), e o banco é PULADO dizendo `EM USO`. `--dry-run` só
+lista os bancos e os MB.
 """
 import argparse
 import io
@@ -64,6 +67,15 @@ def _mb(n):
 
 def _diz(msg):
     print(msg, flush=True)
+
+
+def _em_uso(exc):
+    """O erro é "o arquivo está preso por alguém" (a trava exclusiva não veio)?"""
+    try:
+        from apps.pages import database_access as DA
+        return DA.is_file_in_use(exc)
+    except ImportError:
+        return False
 
 
 def _manifest_linhas(db):
@@ -159,6 +171,8 @@ def main(argv=None):
                     help='pasta LOCAL de trabalho (padrão: %%LOCALAPPDATA%%\\OTC-Tracker\\recover)')
     ap.add_argument('--dry-run', action='store_true', help='só lista os bancos em limbo e os MB')
     ap.add_argument('--no-slim', action='store_true', help='não emagrece de caminho')
+    ap.add_argument('--lock-seconds', type=int, default=30,
+                    help='quanto esperar pela trava exclusiva de cada banco (padrão: 30)')
     ap.add_argument('--all', action='store_true',
                     help='recupera qualquer banco com WAL ao lado, não só os em limbo')
     args = ap.parse_args(argv)
@@ -189,22 +203,37 @@ def main(argv=None):
     _diz('trabalho local em %s' % work_dir)
     carimbo = datetime.now().strftime('%Y%m%d-%H%M%S')
     erros = []
+    presos = []
     for db, _irm in alvos:
-        _diz('  -> %s' % os.path.relpath(db, db_dir))
+        rel = os.path.relpath(db, db_dir)
+        _diz('  -> %s' % rel)
         trava = None
         t0 = time.time()
         try:
-            trava = slim_duckdb._trava(db)
+            try:
+                trava = slim_duckdb._trava(db, args.lock_seconds)
+            except Exception as exc:                         # noqa: BLE001
+                if not _em_uso(exc):
+                    raise
+                presos.append(db)
+                _diz('  EM USO %s — um processo VIVO ainda segura o arquivo; não toquei nele' % rel)
+                continue
             recuperar(db, work_dir, db_dir, slim=not args.no_slim, carimbo=carimbo)
-            _diz('  ok   %s em %.0fs' % (os.path.relpath(db, db_dir), time.time() - t0))
+            _diz('  ok   %s em %.0fs' % (rel, time.time() - t0))
         except Exception:                                    # noqa: BLE001
             erros.append(db)
             _diz('  ERRO %s\n%s' % (db, traceback.format_exc()))
         finally:
             if trava is not None:
                 trava.release()
-    if erros:
-        _diz('%d banco(s) com erro — o share ficou como estava neles' % len(erros))
+    if presos:
+        _diz('%d banco(s) EM USO: pare TODAS as instâncias do time (a sua inclusive) e rode de novo.\n'
+             '     A trava não cai sozinha: uma instância de pé lê esses bancos em laço (summary-warm) e um\n'
+             '     `store-import` preso no limbo fica MEIA HORA dentro do duckdb.connect com a trava\n'
+             '     EXCLUSIVA — só o fim do processo a solta. Confira que não sobrou python.exe/waitress.'
+             % len(presos))
+    if erros or presos:
+        _diz('%d banco(s) sem recuperar — o share ficou como estava neles' % (len(erros) + len(presos)))
         return 1
     _diz('pronto: o que foi substituído está em %s (apague depois de conferir o app)'
          % os.path.join(db_dir, _store.RECUPERADO_DIR, carimbo))

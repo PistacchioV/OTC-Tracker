@@ -198,12 +198,12 @@ def _emagrecer(db, novo, dry_run):
     return resumo
 
 
-def _trava(db):
+def _trava(db, timeout_seconds=30):
     """A trava exclusiva da camada (a instância vizinha espera); sem a camada
     (máquina sem o app inteiro), segue sem ela."""
     try:
         from apps.pages import database_access as DA
-        return DA.hold_file_lock(db, write=True, timeout_seconds=30)
+        return DA.hold_file_lock(db, write=True, timeout_seconds=timeout_seconds)
     except ImportError:
         return None
 

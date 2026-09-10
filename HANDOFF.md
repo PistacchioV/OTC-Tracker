@@ -18394,6 +18394,23 @@ visita; o que falta para a PRIMEIRA depois de um restart é o snapshot
 persistido do Summary por data (chave = carimbos dos bancos de origem),
 desenhado e não feito.
 
+**A primeira rodada na instância (10/09, 16h):** o `--dry-run` do checkout
+`C:\Users\e930179\ds\OTCTracker-StreamFlow-prod` (o `otc-source\v15` do
+share não tem git nem os scripts novos) listou exatamente os cinco:
+DPOSICAO-TER, DOPERACOES, Option DPOSICAO, DFLUXO e DPOSICAO-SWAP, cada um
+com `.wal` de 17 MB e `.wal.checkpoint`/`.wal.recovery` de 75 MB a 1,1 GB.
+A rodada real morreu em `DatabaseLockTimeout … write access … after 30
+seconds` (`AlreadyLocked`/`PermissionError` do portalocker embaixo): o app
+estava DE PÉ. A trava exclusiva não é formalidade aqui — uma instância
+viva lê esses bancos em laço no `summary-warm`, e o `store-import` preso no
+limbo fica meia hora dentro do `duckdb.connect` com a EXCLUSIVA na mão. O
+script agora separa esse caso: `_em_uso` (o `is_file_in_use` da camada),
+recado de uma linha `EM USO … um processo VIVO ainda segura o arquivo`,
+banco PULADO sem tocar em nada, rc 1 e o parágrafo dizendo o que fazer;
+`--lock-seconds` regula a espera. `check_json_to_duckdb.py` §8 segura a
+trava de dentro do teste e prova que o banco fica como estava e que não
+sai traceback.
+
 **De caminho — "file-interpreter template missing: taxacambioter/registro"**
 (o Send do NDF Other Publisher, num checkout Windows de dev): o rastro
 mostrou o `file-interpreter/taxacambioter.db` aberto em 1 s — o banco
