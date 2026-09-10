@@ -715,6 +715,19 @@ con = duckdb.connect(local, read_only=True)
 print('SOBRAS', sorted(R._store.wal_irmaos(local)))
 print('LASTRO', con.execute('SELECT count(*) FROM main.lastro').fetchone()[0])
 print('TENTATIVAS', len(chamadas))
+con.close()
+# O resto que o DuckDB deixa depois de recuperar: do tamanho do WAL que entrou,
+# e resto e some sozinho; menor, o replay parou no meio e a troca e RECUSADA.
+with open(local + '.wal.recovery', 'wb') as fh:
+    fh.write(b'x' * 1000)
+print('SOBRA_OK', R._resolve_sobra_recovery(local, 1000))
+with open(local + '.wal.recovery', 'wb') as fh:
+    fh.write(b'x' * 10)
+try:
+    R._resolve_sobra_recovery(local, 1000)
+    print('SOBRA_PEQ nao recusou')
+except RuntimeError as erro:
+    print('SOBRA_PEQ recusou', 'validou só' in str(erro))
 """ % (ROOT, _LIMBO, _WORK)
 _prova = subprocess.run([sys.executable, '-c', _PROVA],
                         capture_output=True, text=True, env=dict(os.environ))
@@ -723,6 +736,10 @@ check('8. rename negado: os WALs sao fundidos A MAO e o banco sai do limbo',
        'fundindo À MÃO' in _prova.stdout), (0, True, True, True))
 if _prova.returncode:
     print(_prova.stdout[-800:], _prova.stderr[-800:])
+check('8.   o .wal.recovery que o DuckDB deixa e resto ja replayado: some sozinho',
+      'SOBRA_OK {}' in _prova.stdout, True)
+check('8.   mas prefixo salvo MENOR que o WAL que entrou recusa a troca',
+      'SOBRA_PEQ recusou True' in _prova.stdout, True)
 check('8.   e o que so estava no WAL veio junto na fusao',
       int((_prova.stdout.split('LASTRO ')[1].split()[0]) if 'LASTRO ' in _prova.stdout else 0) >= 200000,
       True)

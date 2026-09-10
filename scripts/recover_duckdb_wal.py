@@ -260,6 +260,35 @@ def _recupera_local(local, origem=None, tentativas=5, espera=15):
     raise primeiro
 
 
+def _resolve_sobra_recovery(local, wal_bytes):
+    """Depois de uma recuperação BEM SUCEDIDA o DuckDB deixa um `.wal.recovery`
+    para trás: é o prefixo VÁLIDO do WAL que ele salvou (o processo morreu no
+    meio de uma entrada, e a última fica pela metade). Ele já foi replayado e o
+    `CHECKPOINT` acima gravou tudo no `.db` — é resto, não dado; a abertura
+    seguinte nem o lê (provado com um arquivo de lixo com esse nome). Some com
+    ele, senão o banco recuperado voltaria ao share EM LIMBO pela conta do
+    `wal_em_limbo`.
+
+    Só que o tamanho dele é a MEDIDA de quanto do WAL validou: se o salvo for
+    bem menor que os dois WALs que entraram, o replay parou no meio e o resto
+    seria PERDIDO na troca — aí é melhor não trocar nada e dizer o número.
+    Devolve o que restou (vazio = pode seguir)."""
+    sobras = _store.wal_irmaos(local)
+    if set(sobras) != {'.wal.recovery'}:
+        return sobras
+    salvo = sobras['.wal.recovery']
+    if wal_bytes and salvo < wal_bytes * 0.99:
+        raise RuntimeError('o DuckDB validou só %s dos %s de WAL que entraram (o resto não '
+                           'replayou) — não troquei nada' % (_mb(salvo), _mb(wal_bytes)))
+    _diz('     o DuckDB deixou um .wal.recovery de %s (o prefixo válido que ele salvou, de %s '
+         'que entraram); já replayado e checkpointado, apaguei' % (_mb(salvo), _mb(wal_bytes)))
+    _liberar(local + '.wal.recovery')
+    os.remove(local + '.wal.recovery')
+    con = duckdb.connect(local, read_only=True)              # confere que abre limpo
+    con.close()
+    return _store.wal_irmaos(local)
+
+
 def _manifest_linhas(db):
     """Linhas do `_manifest` (ou -1 quando o banco não é do armazém), abrindo só leitura."""
     con = duckdb.connect(db, read_only=True)
@@ -305,7 +334,7 @@ def recuperar(db, work_dir, db_dir, slim=True, carimbo=None):
     # 2. o DuckDB recupera no local
     t0 = time.time()
     _recupera_local(local, origem=db)
-    sobras = _store.wal_irmaos(local)
+    sobras = _resolve_sobra_recovery(local, irm.get('.wal', 0) + irm.get('.wal.checkpoint', 0))
     if sobras:
         raise RuntimeError('%s: depois do CHECKPOINT ainda há WAL na cópia local (%s)'
                            % (db, ', '.join(sobras)))
