@@ -672,6 +672,20 @@ check('8.   e o banco preso ficou como estava',
 for _s in ('',) + _S.WAL_SUFIXOS:
     if os.path.isfile(_LIMBO + _s):
         os.chmod(_LIMBO + _s, 0o444)
+# Pasta de trabalho que nao deixa RENOMEAR (politica, %LOCALAPPDATA% redirecionado)
+# e dita ANTES de copiar 1,2 GB pelo share, com o remedio, e sem traceback.
+_TRAVADA = tempfile.mkdtemp(prefix='recover-ro-')
+os.chmod(_TRAVADA, 0o555)
+try:
+    _p = subprocess.run([sys.executable, os.path.join(ROOT, 'scripts', 'recover_duckdb_wal.py'),
+                         '--db-dir', OUT, '--work-dir', _TRAVADA],
+                        capture_output=True, text=True, env=dict(os.environ))
+finally:
+    os.chmod(_TRAVADA, 0o755)
+check('8. pasta de trabalho sem renome e recusada ANTES da copia, com o remedio',
+      (_p.returncode, 'NÃO deixa renomear' in _p.stdout, '--work-dir' in _p.stdout,
+       'Traceback' in _p.stdout, 'copiado' in _p.stdout), (1, True, True, False, False))
+shutil.rmtree(_TRAVADA, ignore_errors=True)
 # E o acesso negado passageiro (o antivirus lendo os MB recem-escritos) e RETENTADO.
 _prova = subprocess.run([sys.executable, '-c', """
 import os, sys, duckdb
