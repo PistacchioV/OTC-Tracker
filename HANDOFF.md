@@ -18513,6 +18513,27 @@ RETENTADO — três tentativas, 10 s entre elas (`_recupera_local`), dizendo o
 motivo em uma linha em vez de matar o banco no meio da fila. Um banco que
 falha continua sem tocar no share: a troca é o último passo.
 
-`check_json_to_duckdb.py` §8 prende os dois: deixa o banco de origem em `0444`
-antes da rodada boa (sem `_liberar` o recover inteiro falha) e força um
-`Could not move file` na primeira abertura para provar que a segunda passa.
+**A rodada seguinte mostrou que era sistemático:** os QUATRO bancos que
+pegaram a trava morreram no MESMO ponto, sempre no `duckdb.connect()` da
+cópia. Quando falha em todos, não é o arquivo — é a PASTA DE TRABALHO não
+deixando renomear (política corporativa, `%LOCALAPPDATA%` redirecionado,
+antivírus de tempo real). Então o script passou a:
+
+- **provar o renome na pasta de trabalho ANTES de qualquer cópia** (escreve um
+  arquivo de um byte, renomeia, apaga) e, se não der, recusar a rodada
+  inteira em uma linha com o remédio (`--work-dir C:\Temp\otc-recover`) — em
+  vez de descobrir isso depois de copiar 1,2 GB pelo share com a trava do
+  banco na mão;
+- **esperar cada arquivo copiado poder ser renomeado** antes de entregá-lo ao
+  DuckDB (`os.replace` de ida e volta): recém-escrito, ele costuma estar
+  aberto pelo antivírus, que varre no fechamento, e um handle sem
+  `FILE_SHARE_DELETE` é exatamente o que faz o `MoveFile` do DuckDB voltar
+  `Access is denied`. Esperar aqui é esperar UMA vez, em vez de refazer o
+  replay a cada tentativa;
+- retentar cinco vezes com 15 s, em vez de três com 10.
+
+`check_json_to_duckdb.py` §8 prende os três: deixa o banco de origem em `0444`
+antes da rodada boa (sem `_liberar` o recover inteiro falha), força um
+`Could not move file` na primeira abertura para provar que a segunda passa, e
+aponta a rodada para uma pasta sem permissão de renome para provar que ela é
+recusada ANTES da cópia, com o remédio e sem traceback.

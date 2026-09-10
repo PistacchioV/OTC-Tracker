@@ -102,7 +102,62 @@ def _acesso_negado(exc):
     return 'Could not move file' in m or 'denied' in m.lower()
 
 
-def _recupera_local(local, tentativas=3, espera=10):
+def _prova_de_renome(work_dir):
+    """O DuckDB não RECUPERA nada sem renomear arquivo (é assim que ele funde
+    `.wal.checkpoint` + `.wal`). Se a pasta de trabalho não deixa renomear —
+    política corporativa, `%LOCALAPPDATA%` redirecionado para a rede, antivírus
+    de tempo real —, é melhor descobrir AGORA do que depois de copiar 1,2 GB
+    pelo share e morrer com a trava do banco na mão. Levanta com o remédio."""
+    os.makedirs(work_dir, exist_ok=True)
+    a = os.path.join(work_dir, '_prova_renome.tmp')
+    b = a + '.2'
+    for x in (a, b):
+        if os.path.isfile(x):
+            os.remove(x)
+    try:
+        with io.open(a, 'wb') as fh:
+            fh.write(b'x')
+        os.replace(a, b)
+        os.remove(b)
+    except OSError as exc:
+        raise RuntimeError(
+            'a pasta de trabalho %s NÃO deixa renomear arquivo (%s).\n'
+            '     O DuckDB precisa disso para fundir os WALs, e é o que devolve\n'
+            '     `IO Error: Could not move file: Access is denied` DEPOIS da cópia.\n'
+            '     Rode com outra pasta LOCAL, por exemplo:\n'
+            '       --work-dir C:\\Temp\\otc-recover' % (work_dir, exc))
+    finally:
+        for x in (a, b):
+            if os.path.isfile(x):
+                try:
+                    os.remove(x)
+                except OSError:
+                    pass
+
+
+def _espera_renomear(caminho, tentativas, espera):
+    """Prova que ESTE arquivo pode ser renomeado antes de entregá-lo ao DuckDB.
+    Recém-copiado, ele costuma estar aberto pelo antivírus (que varre no
+    fechamento), e um handle sem `FILE_SHARE_DELETE` faz o `MoveFile` do
+    DuckDB voltar `Access is denied`. Esperar aqui é esperar UMA vez, em vez de
+    refazer o replay inteiro a cada tentativa."""
+    tmp = caminho + '.ren'
+    for n in range(1, tentativas + 1):
+        try:
+            os.replace(caminho, tmp)
+            os.replace(tmp, caminho)
+            return True
+        except OSError as exc:
+            if n >= tentativas:
+                _diz('     AVISO %s continua sem poder ser renomeado (%s); vou tentar mesmo assim'
+                     % (os.path.basename(caminho), exc))
+                return False
+            _diz('     %s ainda preso (%s); esperando %ds [%d/%d]'
+                 % (os.path.basename(caminho), exc, espera, n, tentativas))
+            time.sleep(espera)
+
+
+def _recupera_local(local, tentativas=5, espera=15):
     """Abre a cópia LOCAL em escrita (é aqui que o DuckDB funde os WALs e refaz
     o replay) e força o `CHECKPOINT`. Retenta o acesso negado: o antivírus
     corporativo costuma estar lendo os megabytes recém-escritos quando o DuckDB
@@ -111,6 +166,7 @@ def _recupera_local(local, tentativas=3, espera=10):
         for s in ('',) + _store.WAL_SUFIXOS:
             if os.path.isfile(local + s):
                 _liberar(local + s)
+                _espera_renomear(local + s, tentativas, espera)
         try:
             con = duckdb.connect(local)
             try:
@@ -247,6 +303,11 @@ def main(argv=None):
     if args.dry_run or not alvos:
         return 0
     _diz('trabalho local em %s' % work_dir)
+    try:
+        _prova_de_renome(work_dir)
+    except RuntimeError as exc:                              # noqa: BLE001
+        _diz('  ERRO %s' % exc)
+        return 1
     carimbo = datetime.now().strftime('%Y%m%d-%H%M%S')
     erros = []
     presos = []
