@@ -626,13 +626,32 @@ def _com_raw(rows):
     return out
 
 
+def write_raw_table(con, qualified, rows):
+    """A tabela de uma LISTA de registros de arquivo-dia: SÓ `_seq` (a posição
+    no arquivo — a ordem da reconstrução) e `_raw` (o registro EXATO como
+    texto JSON). É o canal que o app lê (`ler_crus`); as colunas tipadas que
+    as tabelas-dia tinham eram peso morto no CATÁLOGO, e o catálogo é o que
+    o DuckDB lê inteiro a cada `connect`: 250 dias × 170 colunas do
+    DPOSICAO-TER = 524 blocos de metadado (134 MB em pedaços de 4 KB), e no
+    share cada pedaço é uma ida e volta — minutos por abertura (10/09/2026,
+    HANDOFF §437). As mesmas 250 tabelas só com `_seq`/`_raw`: 7 blocos."""
+    con.execute('CREATE OR REPLACE TABLE %s ("_seq" BIGINT, "_raw" VARCHAR)' % qualified)
+    data = [[i, json.dumps(r, ensure_ascii=False)] for i, r in enumerate(rows)]
+    if data:
+        con.executemany('INSERT INTO %s VALUES (?, ?)' % qualified, data)
+    return len(data)
+
+
 def _convert_daily_payload(con, schema, tabela, payload, raw=False,
                            meta_tabela=None):
-    """Grava o payload de UM arquivo-dia; devolve os nomes das tabelas criadas.
+    """Grava o payload de um DATASET (cadastros e configs) em tabelas
+    TIPADAS; devolve os nomes das tabelas criadas. Os arquivo-dia NÃO passam
+    mais por aqui (`escrever_payload` grava só o canal cru deles, ver
+    `write_raw_table`): um banco de dataset tem UMA tabela, e a tipagem lá é
+    barata e útil para consulta.
 
-    `raw=True` (os DATASETS — cadastros e configs) acrescenta a coluna `_raw`
-    em toda tabela lista-de-objetos, para o flip de leitura ter o registro
-    exato; os arquivo-dia ficam sem ela de propósito (volume).
+    `raw=True` acrescenta a coluna `_raw` em toda tabela lista-de-objetos,
+    para o flip de leitura ter o registro exato.
 
     `meta_tabela` nomeia a tabela chave→valor de um payload-OBJETO em vez do
     `<tabela>__meta` de sempre. Serve ao arquivo `.meta.json`, que já É
@@ -1850,6 +1869,20 @@ def escrever_payload(con, rel, payload, kind, tabela, schema='main', nome_cal=No
         criadas = ['_registry']
     elif kind == KIND_CALENDAR:
         criadas = [escrever_calendario(con, tabela, payload, nome_cal)]
+    elif kind == KIND_DAILY:
+        # Arquivo-dia: SÓ o canal cru. A lista vira `_seq`/`_raw`; o objeto
+        # (recon, `.meta`, ponteiro) vira só a `<tabela>__raw` de uma linha —
+        # sem sub-tabelas de análise nem `__meta`. São centenas de tabelas por
+        # banco, e cada coluna tipada era um sub-bloco de metadado lido a cada
+        # abertura no share (`write_raw_table`, HANDOFF §437).
+        if _lista_de_objetos(payload):
+            write_raw_table(con, alvo(tabela), payload)
+            criadas = ['%s.%s' % (schema, tabela)]
+        else:
+            write_rows_table(con, alvo(tabela + RAW_SUFIXO),
+                             [{'_seq': 0, '_raw': json.dumps(payload, ensure_ascii=False)}],
+                             force_varchar=True)
+            criadas = ['%s.%s' % (schema, tabela + RAW_SUFIXO)]
     else:
         criadas = _convert_daily_payload(
             con, schema, tabela, payload, raw=True,

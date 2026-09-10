@@ -18113,3 +18113,58 @@ default, só a conta) — banco RECEIVE lê `DEFAULT_PAY`, banco PAY lê
 `DEFAULT_RECEIVE`; (4) `_cpd_load` falhando (agora sobe, antes era `[]`).
 O script roda na instância e imprime a cadeia por contraparte, com os nomes
 parecidos do Reference Data quando o nome não casa.
+
+## §437 — O `connect` de minutos era o CATÁLOGO: tabela-dia só com `_seq`/`_raw` (2026-09-10)
+
+Com o rastro do §436 no ar, o log da instância disse o que faltava:
+`em curso: ndf/73760_dposicao-ter.db read (abrindo) ha 300s` — o
+`/api/ndf-summary/data` e o `summary-warm` presos dentro do
+`duckdb.connect(read_only=True)` do banco do DPOSICAO-TER, depois de
+passarem pelo portão e pela trava. Nenhum lock nosso: o próprio open.
+
+**A causa, medida.** O DuckDB lê o catálogo INTEIRO a cada `connect`, e o
+catálogo mora em sub-blocos de 4 KB dentro de blocos de 256 KB, um sub-bloco
+por coluna por tabela. O DPOSICAO-TER tem 170 colunas e o banco guarda uma
+tabela por dia. Localmente (`pragma_metadata_info()`):
+
+| forma | blocos de metadado | sub-blocos | open local |
+|---|---|---|---|
+| 250 dias × 170 colunas tipadas + `_raw` | 524 (134 MB) | 33.509 | 0,21 s |
+| 22 dias × 170 colunas (um mês) | 49 | 3.080 | 0,02 s |
+| 250 dias só `_seq`/`_raw` | 7 | 430 | 0,01 s |
+
+No SSD 134 MB em pedaços de 4 KB são 0,2 s; no share cada pedaço é uma ida
+e volta dependente da anterior — os minutos do log. E piora um dia por dia:
+a carga completa (`--meses 0`) que eu tinha recomendado teria multiplicado
+isso por anos. O `operations-b3.db` abrindo em 9,5 s e o `opb3-events.db`
+em 4,7 s (mesma linha do log) são o mesmo custo em bancos menores. Enquanto
+o request está preso no open ele segura a trava compartilhada, o permit e
+o portão: é a cascata de `BancoOcupado` da subida e do `_ndf_ter_path`.
+
+**O que as colunas tipadas faziam pelo app: nada.** A leitura sempre foi
+pelo `_raw` (`ler_crus` → `parsear_crus`); a tipagem servia a quem consultasse
+o banco por fora. Então:
+
+- `escrever_payload` grava a tabela-dia (`KIND_DAILY`) só com `_seq`/`_raw`
+  (`write_raw_table`); o payload-objeto de dia (recon, `.meta`, ponteiro)
+  vira só a `<tabela>__raw` — sem sub-tabelas nem `__meta`. Datasets
+  (mappings, RefData, CPD, registro) e calendários continuam como eram: um
+  banco, uma tabela, catálogo barato e útil.
+- `scripts/slim_duckdb.py` leva os bancos JÁ existentes à forma nova NO
+  LUGAR: para cada banco de `cache/` com `_manifest`, monta um arquivo ao
+  lado a partir do PRÓPRIO banco (nunca do JSON do disco, velho desde o
+  cutover), reescreve os targets do manifest e troca o arquivo. Com o app
+  parado; toma a trava exclusiva da camada; idempotente; `--dry-run`. A
+  troca de arquivo é o que também devolve o espaço: o DuckDB não encolhe
+  arquivo sozinho.
+- Banco antigo continua legível até lá (`reconstruivel` só pede o `_raw`).
+- Splits regenerados (`scripts/standalone/`, `scripts/convert/`);
+  `check_json_to_duckdb.py` §3 e §7 (o slim) provam a forma e a migração.
+
+**Na instância, nesta ordem:** pull; app parado; `python scripts\slim_duckdb.py`
+(ele imprime, por banco, blocos de metadado antes → depois e MB); restart.
+NÃO rode a carga completa `--meses 0` antes disso.
+
+De caminho, o §436 respondeu: a coluna Account do NDF Summary é decidida
+pelos dados (nome × Reference Data × default aprovado), e o
+`scripts/diag_ndfsum_account.py` diz por contraparte onde a cadeia quebra.

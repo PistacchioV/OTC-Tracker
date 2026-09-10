@@ -306,19 +306,19 @@ duckdb.connect(_ORF).close()
 conv.convert_daily(DATA, OUT)
 check('3.    e o banco da rotina inteira, de antes da quebra, e removido',
       os.path.isfile(_ORF), False)
-# O DPOSICAO-SWAP: chave que só difere na CAIXA é a mesma coluna para o
-# DuckDB. A coluna é RENOMEADA, nunca descartada — uma perna do swap sumindo da
-# tabela não daria erro nenhum, e o `_raw` ao lado ainda a teria, o que faria o
-# banco discordar de si mesmo.
+# O DPOSICAO-SWAP: chaves que só diferem na CAIXA (`PU Inicial` × `Pu
+# inicial`) são duas pernas do swap. A tabela-dia é só o canal cru (§437), e
+# o `_raw` guarda o registro byte a byte — as duas pernas voltam distintas,
+# sem o desempate de coluna que a tabela tipada precisava.
+from apps.pages import json_to_duckdb as _motor               # noqa: E402
 _SW = duckdb.connect(os.path.join(OUT, 'cache', 'b3 files', 'Swap', '73760_DPOSICAO-SWAP.db'), read_only=True)
 _cur = _SW.execute('SELECT * FROM main.d_20260610')
-check('3. coluna que so difere na CAIXA e renomeada, nao perdida',
-      [d[0] for d in _cur.description],
-      ['Contrato', 'PU Inicial', 'Pu inicial_3', 'Pu inicial_2',
-       'Tipo/Classe', 'tipo/classe_2', '_seq', '_raw'])
-check('3.    e os valores das duas pernas continuam distintos',
-      _SW.execute('SELECT "PU Inicial", "Pu inicial_3", "Pu inicial_2" '
-                  'FROM main.d_20260610').fetchone(), (100, 200, 300))
+check('3. a tabela-dia do layout de 170 colunas e so _seq/_raw',
+      [d[0] for d in _cur.description], ['_seq', '_raw'])
+_sw_rec = _motor.ler_payload(_SW, 'cache/b3 files/Swap/2026/06/10/73760_260610_DPOSICAO-SWAP.json',
+                             _motor.KIND_DAILY, 'd_20260610')[0]
+check('3.    e as pernas que so diferem na CAIXA continuam distintas no _raw',
+      (_sw_rec['PU Inicial'], _sw_rec['Pu inicial'], _sw_rec['Pu inicial_2']), ('100', '200', '300'))
 # O `_raw` guarda a chave ORIGINAL: o sufixo é do banco, não do arquivo.
 check('3.    e o _raw mantem a chave do JSON, sem sufixo nenhum',
       json.loads(_SW.execute('SELECT "_raw" FROM main.d_20260610').fetchone()[0])
@@ -326,7 +326,6 @@ check('3.    e o _raw mantem a chave do JSON, sem sufixo nenhum',
 _SW.close()
 # O desempate pula o nome que já é de OUTRA coluna do mesmo arquivo — senão
 # `Pu inicial` viraria `Pu inicial_2`, que existe, e a colisão voltaria.
-from apps.pages import json_to_duckdb as _motor               # noqa: E402
 check('3.    o sufixo pula por cima de uma coluna que ja existe',
       _motor.nomes_sql(['PU Inicial', 'Pu inicial', 'Pu inicial_2']),
       ['PU Inicial', 'Pu inicial_3', 'Pu inicial_2'])
@@ -337,7 +336,7 @@ check('3. rotina sem pastas: o produto sai do NOME, dentro da pasta da rotina',
 con = duckdb.connect(os.path.join(OUT, 'cache', 'daily settlement', 'otm-settlement.db'),
                      read_only=True)
 check('3. e a tabela e so o dia: a tag ja esta no nome do banco',
-      con.execute('SELECT "Curve" FROM main.d_20260728').fetchone()[0], 'PRE')
+      con.execute('SELECT json_extract_string("_raw", \'$.Curve\') FROM main.d_20260728').fetchone()[0], 'PRE')
 # O `.meta` vai para o banco do arquivo que ele anota, com `_meta` na tabela.
 # Num banco próprio ele sairia como `otm-settlement_.meta.db` — a data está no
 # MEIO do nome, então tirá-la deixa um `_` que o strip das pontas não alcança —
@@ -346,7 +345,7 @@ check('3. o .meta acompanha o arquivo dele, no MESMO banco',
       sorted(r[0] for r in con.execute(
           "SELECT table_name FROM information_schema.tables "
           "WHERE table_schema='main' AND table_name LIKE 'd_%'").fetchall()),
-      ['d_20260728', 'd_20260728_meta', 'd_20260728_meta__raw'])
+      ['d_20260728', 'd_20260728_meta__raw'])
 con.close()
 check('3. e nao sobra um banco com o nome torto',
       os.path.isfile(os.path.join(OUT, 'cache', 'daily settlement',
@@ -359,32 +358,29 @@ check('3. o caminho vai para o NOME do banco: nada de schema extra',
           "WHERE table_schema NOT IN ('main')").fetchall()},
       set())
 nd = 'main.d_20260612_ndfcomm'
-tipos = {d[0]: d[1] for d in con.execute("DESCRIBE %s" % nd).fetchall()}
-check('3. dd/mm/aaaa e ISO viram DATE',
-      (tipos['TradeDate'], tipos['SettlementDate']), ('DATE', 'DATE'))
-check('3. numero vira numero (BIGINT/DOUBLE), id com zero fica texto',
-      (tipos['TotalNotional'], tipos['Strike'], tipos['Qty'], tipos['SPN']),
-      ('BIGINT', 'DOUBLE', 'BIGINT', 'VARCHAR'))
-check('3. valores: data real, strike de 8 casas, vazio->NULL so no tipado',
-      con.execute("SELECT \"TradeDate\", \"Strike\", \"TotalNotional\", \"Maker\" "
-                  "FROM %s ORDER BY \"Deal\"" % nd).fetchall(),
-      [(datetime.date(2026, 6, 12), 5.12345678, 1500000, ''),
-       (datetime.date(2026, 6, 12), 4.9, None, 'A123456')])
-check('3. arquivo-dia tambem leva _seq/_raw (o canal do _day_json)',
-      ('_raw' in tipos and tipos['_seq']), 'BIGINT')
+# Arquivo-dia é SÓ o canal cru (§437): as colunas tipadas do layout eram
+# catálogo que o DuckDB lê inteiro a cada abertura — minutos no share.
+check('3. arquivo-dia e so _seq/_raw: nada de coluna tipada no catalogo',
+      [d[:2] for d in con.execute("DESCRIBE %s" % nd).fetchall()],
+      [('_seq', 'BIGINT'), ('_raw', 'VARCHAR')])
+check('3. e o dia volta EXATO pelo _raw (zero a esquerda, vazio, acento)',
+      _motor.ler_payload(con, 'cache/new deals/NDF/Commodities/2026/06/20260612_ndfcomm.json',
+                         _motor.KIND_DAILY, 'd_20260612_ndfcomm'), DEALS)
 con.close()
 con = duckdb.connect(_PC, read_only=True)
 check('3. tag que so repete o nome do banco cai: a tabela e so o dia',
-      con.execute("SELECT \"Trade Number\" FROM main.d_20260827").fetchone()[0], '0012345')
+      con.execute("SELECT json_extract_string(\"_raw\", '$.\"Trade Number\"') FROM main.d_20260827").fetchone()[0], '0012345')
 con.close()
 con = duckdb.connect(os.path.join(OUT, 'cache', 'reconciliation', 'payrec.db'),
                      read_only=True)
-check('3. payload-objeto: lista interna vira tabela',
-      con.execute("SELECT count(*) FROM main.d_20260706_summary").fetchone()[0], 2)
-meta = dict(con.execute("SELECT key, value FROM main.d_20260706__meta").fetchall())
-check('3. e o resto vira _meta chave->valor',
-      (json.loads(meta['success']), json.loads(meta['recon_date'])),
-      (True, '2026-07-06'))
+check('3. payload-objeto de arquivo-dia: SO a __raw (sem sub-tabela nem __meta)',
+      sorted(r[0] for r in con.execute(
+          "SELECT table_name FROM information_schema.tables "
+          "WHERE table_schema='main' AND table_name LIKE 'd_20260706%'").fetchall()),
+      ['d_20260706__raw'])
+check('3. e o objeto volta exato',
+      _motor.ler_payload(con, 'cache/reconciliation/payrec/2026-07-06.json',
+                         _motor.KIND_DAILY, 'd_20260706')['summary'][1]['jpm_value'], 5133335.27)
 con.close()
 
 # ═══ 4. incremental ═════════════════════════════════════════════════════════
@@ -497,6 +493,59 @@ check('6.    e a coluna do banco NAO, porque o DuckDB nao distingue',
 check('6. o sufixo pula por cima de uma coluna que ja se chama assim',
       core.nomes_unicos(['X', 'X', 'X_2'], chave=lambda s: s),
       ['X', 'X_3', 'X_2'])
+
+# ═══ 7. slim_duckdb.py: o banco JA existente vai para a mesma forma, no lugar ═
+# O motor passou a gravar as tabelas-dia só com `_seq`/`_raw` (§437); o banco
+# da instância tem meses na forma antiga (tipada + _raw, e o payload-objeto
+# com sub-tabelas + __meta + __raw). O script copia do PRÓPRIO banco — nunca
+# do JSON do disco, que está velho desde o cutover — e troca o arquivo.
+print()
+import subprocess                                             # noqa: E402
+_VELHO = os.path.join(OUT, 'cache', 'velho.db')
+_con = duckdb.connect(_VELHO)
+core.ensure_manifest(_con)
+_ROWS = [{'Deal': 'A', 'TradeDate': '12/06/2026', 'SPN': '007', 'Qty': 1},
+         {'Deal': 'B', 'TradeDate': '13/06/2026', 'SPN': '135742', 'Qty': 2}]
+_REL1 = 'cache/velho/2026/01/20260101_velho.json'
+core.write_rows_table(_con, 'main.d_20260101', core._com_raw(_ROWS))
+core.manifest_record(_con, core.manifest_key_of(_REL1, core.KIND_DAILY),
+                     core._Stamp(1.0, 10), ['main.d_20260101'])
+_OBJ = {'ok': True, 'recon_date': '2026-01-02', 'summary': [{'a': 1}, {'a': 2}]}
+_REL2 = 'cache/velho/2026/01/20260102_velho.json'
+_criadas = core._convert_daily_payload(_con, 'main', 'd_20260102', _OBJ, raw=True)
+core.write_rows_table(_con, 'main.d_20260102__raw',
+                      [{'_seq': 0, '_raw': json.dumps(_OBJ)}], force_varchar=True)
+core.manifest_record(_con, core.manifest_key_of(_REL2, core.KIND_DAILY),
+                     core._Stamp(2.0, 20), _criadas + ['main.d_20260102__raw'])
+_con.close()
+check('7. o banco velho tem a forma antiga (tipada + _raw; objeto com sub-tabela e __meta)',
+      len(_criadas) >= 2 and len(duckdb.connect(_VELHO, read_only=True).execute('DESCRIBE main.d_20260101').fetchall()) > 2, True)
+_p = subprocess.run([sys.executable, os.path.join(ROOT, 'scripts', 'slim_duckdb.py'), '--db-dir', OUT],
+                    capture_output=True, text=True, env=dict(os.environ))
+check('7. o script roda (rc 0)', (_p.returncode, 'velho.db' in _p.stdout), (0, True))
+if _p.returncode:
+    print(_p.stdout[-800:], _p.stderr[-800:])
+_con = duckdb.connect(_VELHO, read_only=True)
+check('7. a lista ficou so _seq/_raw',
+      [d[:2] for d in _con.execute('DESCRIBE main.d_20260101').fetchall()],
+      [('_seq', 'BIGINT'), ('_raw', 'VARCHAR')])
+check('7. o objeto ficou so com a __raw; sub-tabela e __meta sumiram',
+      sorted(r[0] for r in _con.execute(
+          "SELECT table_name FROM information_schema.tables WHERE table_schema='main'").fetchall()),
+      ['_manifest', 'd_20260101', 'd_20260102__raw'])
+check('7. o manifest aponta so para a __raw',
+      core.manifest_targets(_con, core.manifest_key_of(_REL2, core.KIND_DAILY)), ['main.d_20260102__raw'])
+check('7. e os dois voltam EXATOS',
+      (core.ler_payload(_con, _REL1, core.KIND_DAILY, 'd_20260101'),
+       core.ler_payload(_con, _REL2, core.KIND_DAILY, 'd_20260102')), (_ROWS, _OBJ))
+_con.close()
+_con = duckdb.connect(os.path.join(OUT, 'reference_data.db'), read_only=True)
+check('7. o reference_data.db (dataset, fora de cache/) continua tipado',
+      len(_con.execute('DESCRIBE refdata').fetchall()) > 2, True)
+_con.close()
+_p = subprocess.run([sys.executable, os.path.join(ROOT, 'scripts', 'slim_duckdb.py'), '--db-dir', OUT],
+                    capture_output=True, text=True, env=dict(os.environ))
+check('7. rodar de novo pula o que ja esta magro', 'já magro' in _p.stdout, True)
 
 print()
 if fails:
