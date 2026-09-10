@@ -279,7 +279,11 @@ nomes que o app conhecia (`day_records`, `dataset_rows`, `refdata_rows`,
   read-modify-write (`if exists: ler; alterar; gravar`) gravaria só o
   registro novo por cima do dia inteiro. O que escapa do handler cai no
   tratador global (`_handle_database_busy`, `routes.py`): 503 JSON
-  `error=database_busy` com `Retry-After`, nunca 500 HTML. O claim diário
+  `error=database_busy` com `Retry-After`, nunca 500 HTML. Banco ILEGÍVEL
+  (o `.db` existe e o DuckDB não abre: `.wal` de outra versão, arquivo
+  truncado) é `BancoIlegivel`, subclasse do ocupado: mesma resposta, nunca
+  "vazio"; UM WARNING por banco por minuto diz qual e por quê, e o 503 sai
+  como `database_unreadable` (§441). O claim diário
   lê ocupado como "a outra instância cuida" (não envia). E `_cpd_load` (o
   Counterparty Details) NUNCA devolve `[]` por falha de leitura: quem grava
   faz ler → achar/criar o registro → `_cpd_save_list(data)`, e a lista vazia

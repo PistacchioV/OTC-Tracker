@@ -72,6 +72,15 @@ class BancoOcupado(IOError):
     tratam como arquivo que não deu para ler, que é o que é."""
 
 
+class BancoIlegivel(BancoOcupado):
+    """O `.db` existe e o DuckDB não o abre — arquivo truncado, `.wal` de outra
+    versão (o "replaying WAL" do CLAUDE.md), cabeçalho corrompido. Subclasse
+    de `BancoOcupado` de propósito: é a MESMA resposta que o ocupado — nunca
+    "não há dado". Lido como vazio, `isfile` dizia False, a enumeração vinha
+    vazia e a manutenção do Pending Confirmation (`strict`) via um backlog
+    sumido em vez de abortar (varredura de 10/09/2026, §441)."""
+
+
 # ── raízes ───────────────────────────────────────────────────────────────────
 
 def data_root():
@@ -338,6 +347,21 @@ _GATE_READ_WAIT_SECONDS = 20.0            # o mesmo fôlego do teto: a gravaçã
 _olock = threading.Lock()
 _ocupado_ate = {}
 _ocupado_aviso = {'ate': 0.0}
+_ilegivel_aviso = {}                       # db → monotonic até quando o aviso cala
+
+
+def _ilegivel_avisa(db, exc):
+    """UM WARNING por banco a cada 60 s: um banco quebrado é lido por dezenas
+    de requests por minuto, e o log tem de dizer QUAL e POR QUÊ sem virar
+    só isso."""
+    with _olock:
+        agora = time.monotonic()
+        if agora < _ilegivel_aviso.get(db, 0.0):
+            return
+        _ilegivel_aviso[db] = agora + 60.0
+    log.warning('[data-store] banco ILEGÍVEL (não é ocupado): %s — %s: %s. Lido como '
+                'indisponível, nunca como vazio; veja o .wal ao lado e a versão do duckdb.',
+                db, type(exc).__name__, str(exc).split('\n', 1)[0][:200])
 
 
 def _ocupado_marcado(db):
@@ -460,9 +484,16 @@ def _manifest(db, strict=False):
         if strict:
             raise
         return {}
-    except Exception:                                       # noqa: BLE001
-        log.debug('[data-store] manifest ilegível em %s:\n%s', db, traceback.format_exc())
-        return ent[1] if ent else {}
+    except Exception as exc:                                # noqa: BLE001
+        # O arquivo existe e não abre: NÃO é "não há dado". Quem só pergunta
+        # (existe? lista?) leva o último manifest conhecido ou vazio; quem
+        # vai LER leva `BancoIlegivel` — o mesmo contrato do ocupado.
+        _ilegivel_avisa(db, exc)
+        if ent:
+            return ent[1]
+        if strict:
+            raise BancoIlegivel('%s: %s' % (db, str(exc).split('\n', 1)[0][:200])) from exc
+        return {}
     with _mlock:
         _mcache[db] = (st, rows)
     return rows

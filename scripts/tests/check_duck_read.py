@@ -198,6 +198,40 @@ try:
     check('7. e isfile sob OCUPADO levanta BancoOcupado (nunca False)', 'nao levantou', True)
 except S.BancoOcupado:
     check('7. e isfile sob OCUPADO levanta BancoOcupado (nunca False)', True, True)
+# ── 7b. ILEGÍVEL: o .db existe e o DuckDB nao o abre ─────────────────────────
+# E a mesma classe do ocupado (§441): lido como vazio, isfile dizia False e a
+# enumeracao vinha vazia — um `.wal` de outra versao do duckdb bastava.
+S.duckdb_read = _dr_real
+S.ocupado_forget()
+S.memo_forget()
+_DBC = os.path.join(DBDIR, 'cache', 'new deals', 'NDF', 'Commodities.db')
+S._forget_db(_DBC)
+check('7b. antes, o banco responde', DR.day_payload(OCUP), [{'Deal': 'OC-1'}])
+with open(_DBC, 'rb') as fh:
+    _cabecalho = fh.read(4096)
+with open(_DBC, 'r+b') as fh:
+    fh.seek(0)
+    fh.write(b'\x00' * 4096)
+S._forget_db(_DBC)
+check('7b. com copia em memoria, serve a ultima copia boa', DR.day_payload(OCUP), [{'Deal': 'OC-1'}])
+S.memo_forget()
+S._forget_db(_DBC)
+for _nome, _fn in (('read', lambda: S.read(OCUP)), ('isfile', lambda: S.isfile(OCUP)),
+                   ('exists', lambda: S.exists(OCUP)), ('stat', lambda: S.stat(OCUP))):
+    try:
+        _fn()
+        check('7b. %s de banco ilegivel levanta BancoIlegivel (nunca "nao ha")' % _nome, 'nao levantou', 'BancoIlegivel')
+    except S.BancoIlegivel:
+        check('7b. %s de banco ilegivel levanta BancoIlegivel (nunca "nao ha")' % _nome, 'BancoIlegivel', 'BancoIlegivel')
+check('7b. e BancoIlegivel e um BancoOcupado (mesmos handlers, mesmo 503)',
+      issubclass(S.BancoIlegivel, S.BancoOcupado) and issubclass(S.BancoIlegivel, IOError), True)
+with open(_DBC, 'r+b') as fh:
+    fh.seek(0)
+    fh.write(_cabecalho)
+S._forget_db(_DBC)
+check('7b. arquivo restaurado, o banco volta a responder', DR.day_payload(OCUP), [{'Deal': 'OC-1'}])
+S.duckdb_read = _ocupado
+
 # E o `data_path()` (a queda para a copia do repositorio) le OCUPADO como
 # EXISTE: lido como "nao ha", o cadastro editado pela mesa virava a seed do
 # repositorio enquanto durasse a trava (§440).
