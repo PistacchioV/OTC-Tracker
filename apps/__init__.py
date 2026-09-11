@@ -129,7 +129,7 @@ def _seed_data_dir(app):
         from apps.pages import data_store
     except Exception:                                       # noqa: BLE001
         data_store = None
-    copiados = importados = 0
+    copiados = importados = so_em_disco = 0
     ocupados = set()
     ilegiveis = set()
     comeco = time.monotonic()
@@ -153,6 +153,18 @@ def _seed_data_dir(app):
             origem = os.path.join(raiz, nome)
             alvo = os.path.join(alvo_dir, nome)
             if data_store is not None and nome.endswith('.json') and top != 'translations':
+                if mesma_pasta and top == 'cache':
+                    # ARQUIVO-DIA não se semeia: ele não vem do repositório
+                    # (`cache/**/*.json` é gitignorado) e são os MILHARES de
+                    # dias que a mesa acumulou na pasta. Como aqui `origem` é
+                    # o próprio `alvo`, importar cada um na SUBIDA — ~2 s por
+                    # arquivo, sob trava exclusiva — é fazer o cutover dentro
+                    # do boot, com o app sem atender. Quem carrega
+                    # arquivo-dia é o `convert_json_to_duckdb.py` (uma vez,
+                    # com o app parado) ou a primeira leitura da data, que
+                    # responde pelo disco e importa em background.
+                    so_em_disco += 1
+                    continue
                 try:
                     with open(origem, encoding='utf-8') as fh:
                         payload = json.load(fh)
@@ -227,6 +239,16 @@ def _seed_data_dir(app):
                 copiados += 1
             except OSError:
                 app.logger.warning('[data-dir] não consegui copiar %s', alvo)
+    if so_em_disco:
+        # Não é defeito, é a divisão de trabalho — mas TEM de estar no log:
+        # quem enumera dia (`listdir`/`walk`/`day_files`) só vê o que está no
+        # banco, e uma tela com menos dias do que a pasta tem é exatamente o
+        # que faz alguém caçar bug onde não há.
+        app.logger.warning('[data-dir] %d arquivo(s) de cache/ não passam pela semeadura (o '
+                           'checkout É o DATA_DIR): arquivo-dia entra pelo '
+                           'convert_json_to_duckdb.py ou pela primeira leitura da data, nunca '
+                           'na subida. Quem ENUMERA dia só vê o que já está no banco.',
+                           so_em_disco)
     gasto = time.monotonic() - comeco
     if copiados or importados:
         app.logger.info('[data-dir] %d arquivo(s) versionado(s) importado(s) para o banco, '
