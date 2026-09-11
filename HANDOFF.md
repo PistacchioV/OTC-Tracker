@@ -18704,3 +18704,65 @@ abrindo, mais UMA escrita de verdade (um Add no Index B3, que é o teste do
 §443: banco sem PRIMARY KEY grava em silêncio até o fim do request) — apague
 `db\_recuperado\20260910-191839\`. É a cópia do que foi substituído; enquanto
 a verificação não acontece, ela é o único caminho de volta.
+
+---
+
+## §447 — O WAL que NÃO REPLAYA: o banco do DPOSICAO-SWAP ilegível para sempre (2026-09-11)
+
+**O sintoma.** O log da instância repetindo, a cada poucos segundos, o mesmo
+traceback no `_manifest` de
+`db\cache\B3 Files\Swap\73760_DPOSICAO-SWAP.db`:
+
+```
+_duckdb.CatalogException: Catalog Error: Failure while replaying WAL file
+"…\73760_DPOSICAO-SWAP.db.wal": Table with name "d_20260119" already exists!
+```
+
+**A causa.** É o §442 pelo outro lado. Lá o WAL era GRANDE demais para
+replayar a cada abertura; aqui ele **não replaya de jeito nenhum**: o `.db` já
+tem a tabela que a entrada do WAL manda criar, porque `.db` e `.wal` deixaram
+de ser o mesmo par — um checkpoint gravou o catálogo e não truncou o WAL, um
+`.db` foi trocado com o WAL antigo ainda ao lado (o recover/slim deste mês
+mexeram justamente nesses arquivos), ou o WAL veio de outra versão do duckdb
+(cada pessoa roda a própria instância sobre o MESMO `db/` — foi o que o §87 já
+tinha visto no `Users_OTCTracker.db.wal`).
+
+A consequência é pior do que o limbo: **nenhuma abertura passa do replay, nem
+a de leitura**. O banco é `BancoIlegivel` para sempre, o app não sai disso
+sozinho e o `recover_duckdb_wal.py` também não — a recuperação dele abre a
+cópia local em ESCRITA, que é o mesmo replay.
+
+**O que foi feito.**
+
+- `data_store.wal_replay_falhou(exc)` reconhece a assinatura (`replaying WAL`),
+  e o aviso de banco ILEGÍVEL passou a imprimir o COMANDO em vez de "veja o
+  `.wal` ao lado": `recover_duckdb_wal.py --all --descartar-wal --only <o
+  banco>` (o `--only` sai do próprio caminho, por `_only_de`). Um `.wal`
+  pequeno não é limbo, então a sonda da subida não vê esse estado — quem
+  denuncia é a leitura que falha, e agora ela diz o que fazer.
+- `recover_duckdb_wal.py --descartar-wal`: quando a abertura da cópia local
+  falha com essa assinatura (na primeira tentativa ou depois de as duas ordens
+  de fusão do §444 não servirem), o script põe os WALs de lado na CÓPIA
+  (`.descartado`), abre só o `.db`, checkpointa e segue o fluxo de sempre —
+  slim, troca, conferência do `_manifest`. Sem o flag ele não toca em nada e
+  explica o que se perde. O WAL original nunca é apagado: vai inteiro para
+  `db/_recuperado/<carimbo>/` junto com o `.db` velho.
+- `--only` passou a aceitar um `.db` (antes só subpasta: o `os.walk` sobre um
+  arquivo não devolve nada, e o comando do aviso não teria como apontar para
+  UM banco).
+- O resumo final grita quais bancos voltaram ao último checkpoint e o que isso
+  significa: o gravado depois dele não está no banco — no `cache/` volta pela
+  importação do JSON legado ou pela rotina do dia.
+
+**O que se perde.** O descarte é opt-in porque perde dado de verdade: tudo que
+entrou no banco desde o último checkpoint. Para os bancos de `cache/` isso é
+reconstituível (o arquivo-dia no share continua lá, e a primeira leitura o
+reimporta); para um banco de cadastro seria a edição da tela, e aí a decisão é
+de quem roda.
+
+**Provado.** `scripts/tests/check_duck_read.py` §11 ganhou o classificador e o
+aviso com o comando. O ciclo inteiro foi reproduzido em laboratório com duckdb
+1.5.4 (matar o processo com o `CREATE` no WAL, checkpointar o `.db` sozinho e
+devolver o WAL velho para o lado dá exatamente a mensagem da instância): sem o
+flag o script recusa e não toca no share; com ele, o banco volta a abrir e o
+par original fica em `db/_recuperado/`.

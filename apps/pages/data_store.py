@@ -130,6 +130,24 @@ def wal_irmaos(db):
     return out
 
 
+def wal_replay_falhou(exc):
+    """O erro é o WAL que NÃO REPLAYA? (`Failure while replaying WAL file … Table
+    with name "d_20260119" already exists!`, 11/09/2026.)
+
+    É o outro fim do §442: não um WAL GRANDE demais para replayar a cada
+    abertura, mas um WAL que o DuckDB não consegue aplicar de jeito nenhum —
+    o `.db` já tem a tabela que a entrada manda criar. Acontece quando o `.db`
+    e o `.wal` ao lado deixam de ser o mesmo par (um checkpoint que gravou o
+    catálogo e não truncou o WAL; um `.db` trocado com o WAL antigo ainda ao
+    lado; WAL escrito por outra versão do duckdb — a instância é uma por
+    pessoa sobre o MESMO `db/`). O banco fica ILEGÍVEL para sempre, em leitura
+    e em escrita: nenhuma abertura passa do replay, então nem o app nem o
+    `recover_duckdb_wal.py` saem disso sozinhos — a saída é DESCARTAR o WAL
+    (`--descartar-wal`), que é o que o §87 já fazia à mão."""
+    m = str(exc)
+    return 'replaying WAL' in m or 'replay of WAL' in m
+
+
 def wal_em_limbo(irmaos, limite_mb=WAL_LIMBO_MB):
     """Banco preso na recuperação de checkpoint do DuckDB (§442): há um
     `.wal.checkpoint` (um checkpoint começou e nunca terminou) ou um
@@ -405,6 +423,16 @@ _ocupado_aviso = {'ate': 0.0}
 _ilegivel_aviso = {}                       # db → monotonic até quando o aviso cala
 
 
+def _only_de(db):
+    """O `--only` que aponta para ESTE banco (o caminho dentro de `db/`), para o
+    aviso trazer o comando pronto. Fora da raiz, o caminho inteiro."""
+    try:
+        rel = os.path.relpath(db, db_root())
+    except (OSError, ValueError):                           # noqa: PERF203
+        return db
+    return db if rel.startswith('..') else rel.replace(os.sep, '/')
+
+
 def _ilegivel_avisa(db, exc):
     """UM WARNING por banco a cada 60 s: um banco quebrado é lido por dezenas
     de requests por minuto, e o log tem de dizer QUAL e POR QUÊ sem virar
@@ -414,9 +442,17 @@ def _ilegivel_avisa(db, exc):
         if agora < _ilegivel_aviso.get(db, 0.0):
             return
         _ilegivel_aviso[db] = agora + 60.0
+    remedio = 'veja o .wal ao lado e a versão do duckdb.'
+    if wal_replay_falhou(exc):
+        # O WAL não replaya: o app não sai disso em abertura nenhuma, e o log
+        # tem de trazer o comando em vez de deixar o banco piscando o mesmo
+        # traceback a cada request.
+        remedio = ('o .wal ao lado NÃO REPLAYA (o .db já tem a tabela que ele manda criar). '
+                   'Com o app PARADO: scripts\\recover_duckdb_wal.py --all --descartar-wal '
+                   '--only %s (§442).' % _only_de(db))
     log.warning('[data-store] banco ILEGÍVEL (não é ocupado): %s — %s: %s. Lido como '
-                'indisponível, nunca como vazio; veja o .wal ao lado e a versão do duckdb.',
-                db, type(exc).__name__, str(exc).split('\n', 1)[0][:200])
+                'indisponível, nunca como vazio; %s',
+                db, type(exc).__name__, str(exc).split('\n', 1)[0][:200], remedio)
 
 
 def _ocupado_marcado(db):
