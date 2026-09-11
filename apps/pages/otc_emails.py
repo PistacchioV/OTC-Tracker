@@ -24,6 +24,7 @@ Eligibility:
 """
 
 import os
+import re
 import io
 import json
 import base64
@@ -430,8 +431,12 @@ def _is_lawton(name, acronym=''):
 
 
 def _is_jpmorgan(name):
-    n = str(name or '').upper()
-    return 'JPMORGAN' in n or 'JP MORGAN' in n or 'J.P. MORGAN' in n
+    """O nome é uma entidade nossa, pela grafia? Cego a pontuação e espaço:
+    'BANCO J.P MORGAN S.A' (sem o segundo ponto, como a API escreve) passava
+    pela lista de 'JP MORGAN'/'J.P. MORGAN' e ia parar no e-mail de TED como
+    contraparte. 'BJPM' é a sigla dos books da mesa ('TW NDF BJPM')."""
+    n = re.sub(r'[^A-Z0-9]', '', str(name or '').upper())
+    return 'JPMORGAN' in n or 'BJPM' in n
 
 
 def _first_bank(cp, prefer='PAY'):

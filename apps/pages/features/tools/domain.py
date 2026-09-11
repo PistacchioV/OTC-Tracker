@@ -7,6 +7,7 @@ linhas do cadastro, as células da posição) chega por parâmetro.
 import re
 import unicodedata
 
+from apps.pages.platform import swap_flows as _sf
 from apps.pages.precificador import contagem, ipca, liquidacao
 from apps.pages.precificador.calendario import para_data
 from apps.pages.precificador.erros import ErroFerramenta
@@ -136,13 +137,12 @@ def ponta_do_form(form, prefixo):
 
 # ── o pré-preenchimento pela posição de swap ────────────────────────────────
 
-def norm(s):
-    """Minúsculas sem acento, espaços colapsados — como o `_fcst_norm`."""
-    s = unicodedata.normalize('NFKD', str(s or '').lower())
-    s = ''.join(c for c in s if not unicodedata.combining(c))
-    return ' '.join(s.split())
-
-
+# Movidos para a platform (`swap_flows`, §452): o Swap VCP faz a mesma
+# pergunta e uma feature não importa outra. Os nomes ficam aqui como aliases.
+norm = _sf.norm
+numero_da_posicao = _sf.numero_da_posicao
+base_da_amortizacao = _sf.base_da_amortizacao
+amortiza_no_fluxo = _sf.amortiza_no_fluxo
 def classificar_indice(regras, nome_curva, nome_classe=''):
     """A regra do cadastro `tools-swap-index` que casa com a curva da ponta.
 
@@ -184,69 +184,12 @@ def classificar_indice(regras, nome_curva, nome_classe=''):
     return None
 
 
-def numero_da_posicao(v):
-    """Célula numérica do arquivo de posição (vírgula DECIMAL, sem milhar)."""
-    s = str(v or '').strip()
-    if not s:
-        return None
-    try:
-        return float(s.replace(' ', '').replace(',', '.'))
-    except ValueError:
-        return None
-
-
 def sinal_da_posicao(v):
     """'1' (ou '-') é negativo; o resto, positivo."""
     s = str(v or '').strip()
     if s.endswith('.0'):
         s = s[:-2]
     return -1.0 if s in ('1', '01', '-') else 1.0
-
-
-def base_da_amortizacao(texto):
-    """O `Tipo Amortização` do fluxo → a base do Swap Calculator, ou `None`.
-
-    A coluna tem quatro respostas no cadastro `swap-amortizacao`, e duas delas
-    NÃO são uma base — são a ausência de amortização neste fluxo:
-
-        Sobre Valor Base Original      → base = original
-        Sobre Valor Base Remanescente  → base = remanescente
-        Na Data de Vencimento          → só amortiza no fim; no fluxo, nada
-        Sem Troca de Amortização       → não amortiza
-
-    Por isso a pergunta "qual base" e a pergunta "amortiza aqui?" são duas
-    funções: colapsá-las faria um swap que amortiza só no vencimento cair na
-    lista do que "não deu para puxar" e aparecer em vermelho na tela, quando o
-    cadastro respondeu com precisão que não há amortização neste fluxo.
-    """
-    t = norm(texto)
-    if not t:
-        return None
-    if 'remanesc' in t or 'saldo' in t:
-        return liquidacao.SOBRE_REMANESCENTE
-    if 'original' in t or 'percentual' in t or 'valor base' in t:
-        return liquidacao.SOBRE_ORIGINAL
-    if 'vencimento' in t:
-        # `Na Data de Vencimento` tem base PRÓPRIA na tela (At Maturity): as
-        # outras duas descrevem uma PARCELA, e dizer "sobre o valor original"
-        # num contrato que só amortiza no fim afirma um cronograma que ele não
-        # tem. Num fluxo intermediário o percentual é zero e a base não muda
-        # nada de qualquer jeito (`amortiza_no_fluxo` responde isso).
-        return liquidacao.AT_MATURITY
-    if 'sem troca' in t:
-        # Não amortiza nunca: aqui o original é o default histórico da tela, e
-        # com o percentual em zero ele não muda número nenhum.
-        return liquidacao.SOBRE_ORIGINAL
-    return None
-
-
-def amortiza_no_fluxo(texto):
-    """O fluxo amortiza? `Na Data de Vencimento` e `Sem Troca de Amortização`
-    dizem que não — e é resposta, não lacuna."""
-    t = norm(texto)
-    if not t:
-        return None
-    return not ('vencimento' in t or 'sem troca' in t)
 
 
 def tipo_de_contrato(valor):

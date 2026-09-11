@@ -43,6 +43,9 @@
   // CETIP ID, e não confirma nem apaga nada). Qualquer outro valor mantém os
   // três botões de sempre — aditivo, as páginas de advice não mudam.
   var ACTIONS_EDIT_ONLY = (page.getAttribute('data-actions') || '') === 'edit';
+  // `data-actions="send"`: só o botão de Send (o Swap VCP manda o arquivo de
+  // PU/Fator da linha; editar é na segunda tabela dele). Aditivo como o edit.
+  var ACTIONS_SEND_ONLY = (page.getAttribute('data-actions') || '') === 'send';
   var LEAD = ACTIONS ? 3 : 2;
 
   var dt = null;               // jQuery DataTables instance
@@ -83,6 +86,9 @@
         renderWidgets(d.widgets, d.ref_date_fmt);
         buildTable(d.columns, d.rows, d.statuses);
         renderSrcNote(d);
+        // Gancho ADITIVO: a página que quiser o payload inteiro (o Swap VCP
+        // monta a segunda tabela dele) o recebe depois da tabela pronta.
+        if (typeof window.scOnData === 'function') { try { window.scOnData(d, dateStr); } catch (e) {} }
         var asof = document.getElementById('sc-total-asof');
         if (asof) asof.textContent = d.ref_date_fmt || '—';
       })
@@ -182,7 +188,10 @@
     // quando o botao ja e quadrado, e com o padding do .btn-sm ele sai OVAL. A
     // classe trava 32x32 e arredonda os cantos — mesmo padrao do .ops-row-act do
     // Other Products Summary.
-    var actionsCell =
+    var actionsCell = ACTIONS_SEND_ONLY ?
+      '<div class="d-flex justify-content-center gap-1">' +
+      '<a class="btn btn-primary btn-sm sc-row-act sc-act" data-act="send" href="#" title="Send"><i class="ti ti-brand-telegram"></i></a>' +
+      '</div>' :
       '<div class="d-flex justify-content-center gap-1">' +
       '<a class="btn btn-info btn-sm sc-row-act sc-act" data-act="edit" href="#" title="Edit"><i class="ti ti-edit"></i></a>' +
       (ACTIONS_EDIT_ONLY ? '' :
@@ -282,6 +291,11 @@
     var checkAll = document.getElementById('scCheckAll');
     if (checkAll) checkAll.addEventListener('change', function () {
       document.querySelectorAll('#swapchar-table tbody .sc-row-check').forEach(function (c) { c.checked = checkAll.checked; });
+      if (typeof window.scOnSelect === 'function') window.scOnSelect();
+    });
+    // A seleção também é da página (o Send em lote do Swap VCP aparece com 2+).
+    jQuery('#swapchar-table tbody').off('change.scsel').on('change.scsel', '.sc-row-check', function () {
+      if (typeof window.scOnSelect === 'function') window.scOnSelect();
     });
   }
 

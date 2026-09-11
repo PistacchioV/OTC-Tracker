@@ -183,9 +183,12 @@ exista no módulo (`__module__` mente sob `functools.wraps`; quem diz é o
   `convert_json_to_duckdb.py`. E na DEV, onde o checkout É o `DATA_DIR`
   (`origem` e `alvo` o mesmo arquivo), ela NÃO reimporta na subida o objeto
   que o banco tem sem canal: o `read` cai para esse mesmo arquivo e importa
-  em background. Eram centenas de `.meta.json` de `cache/` a 2 s cada — nem
-  versionados são (`cache/**/*.json` é gitignorado) — e a subida parecia
-  travada (§447).
+  em background. Na mesma situação, `cache/` inteiro fica FORA da semeadura:
+  arquivo-dia não vem do repositório (`cache/**/*.json` é gitignorado) e
+  convertê-lo na subida é fazer o cutover dentro do boot, a ~2 s por arquivo,
+  com o app sem atender — quem carrega dia é o `convert_json_to_duckdb.py`
+  (com o app parado) ou a primeira leitura da data. Uma linha de log lembra
+  que, até lá, quem ENUMERA dia só vê o que está no banco (§447).
   **Leitura cai para a cópia empacotada** (pelo `data_path()`) quando o banco
   não tem o caminho; **escrita nunca cai**.
 - **`Config.DATABASE_DIR`** (`OTC_DATABASE_DIR`) — TODOS os bancos: usuários,
@@ -780,9 +783,22 @@ São **45**: `currency-base`, `interbook-ndf`, `commodities-b3`,
   (Operations B3 → Latam → OTM), Type trocado pelo subjacente por cadeia; o
   mesmo elo é o plano B da opção de equity (`_optadv_collect`, chave Título
   MAIÚSCULO, resolvido uma vez por linha).
+- **Swap VCP: o fator da perna VCP é `(juros + diff B3 da OUTRA perna) ÷
+  VBR + 1`, na 8ª casa** (§452, `other_products/domain.py`): juros = |curva
+  do OTM pelo Athena ID| − notional amortizado (VBR × % do DFLUXO do dia,
+  base pelo tipo — a regra do Swap Calculator, agora em
+  `platform/swap_flows.py`); a diff é `Valor Juros` da B3 (Swap Eventos,
+  lido CRU — a coleta de exibição arredonda) − juros JP na perna calculada.
+  Só a perna VCP vai no arquivo, que é o do Accrual (`platform/pu_fator.py`,
+  `ACCRUAL_<VIEW>-<LOB>.txt`). Valor que não resolve é `None`, nunca zero.
 - **Perna interna não gera aviso** (`_ops_is_internal_cpty` pelo `le-spn` +
   `_pc_is_internal_counterparty`, nunca "começa com BANCO"): fica no Trade
-  Level e no Summary, sai do Advice e do TED.
+  Level e no Summary, sai do Advice e do TED — o e-mail de TED do NDF faz a
+  mesma pergunta por SPN (§451); entidade nossa fora do `le-spn`/INTERNAL
+  ainda passa, e se corrige no cadastro. **A SSI anexada ao TED é
+  procurada em TODAS as pastas gêmeas do Electronic Inventory**
+  (`_ei_client_dir_names`): olhar só a vencedora do scan dizia "não
+  localizada" com o arquivo salvo na outra.
 - **Nome da contraparte sai do SPN** (`_athena_settlements` → `_otm_cpty_name`;
   OTM pelo `Cpty SPN`, na leitura).
 - **IR do termo de moeda é CALCULADO** (`_ndfsum_ir_apply`, §423): 0,005%,

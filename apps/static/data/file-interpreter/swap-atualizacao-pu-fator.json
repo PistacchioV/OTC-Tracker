@@ -37,6 +37,7 @@
       "url": "/other-products-swap-vcp",
       "columns": [
         "Contraparte",
+        "Athena ID",
         "Código do Contrato",
         "PARTE / Conta",
         "PARTE / Indexador",

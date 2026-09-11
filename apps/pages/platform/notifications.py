@@ -65,6 +65,7 @@ _NOTIF_PAGE_URL = {
     'Intrag NDF': '/intrag-ndf', 'Intrag Swap': '/intrag-swap',
     'Intrag DCE Option': '/intrag-dce-option',
     'Intrag DCE Swap': '/intrag-dce-swap',
+    'Swap VCP': '/other-products-swap-vcp',
     'Reconciliation': '/reconciliation-payrec',
     'Pending Confirmation': '/pending-confirmation',
     # A esteira de confirmação manual. O rótulo é 'Confirmation' (e não

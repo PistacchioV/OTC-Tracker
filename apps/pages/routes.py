@@ -9865,15 +9865,22 @@ _TED_EMAIL_TO = ['brazil.otc.ops@jpmorgan.com', 'brazil.otc.settlements@jpmorgan
 
 def _ted_ssi_attachment(cpty):
     """Newest file inside the counterparty's Electronic Inventory SSI folder
-    (ELECTRONIC_INVENTORY_ROOT/<cpty>/SSI), or None when the folder is missing
-    or empty."""
+    (ELECTRONIC_INVENTORY_ROOT/<cpty>/SSI), or None when no folder has one.
+
+    Olha em TODAS as pastas da raiz que casam com o nome (`_ei_client_dir_names`),
+    não só na vencedora do scan: o share guarda pastas gêmeas da mesma
+    contraparte ('S.A' × 'SA', criadas antes de o casamento ignorar pontuação),
+    com os documentos repartidos entre elas. Com uma pasta só, a SSI da
+    JOHNSON & JOHNSON estava na gêmea e o e-mail dizia "SSI não localizada" com
+    o arquivo salvo (§451). Leitura em todas, escrita continua numa só."""
     try:
-        folder = _ei_actual_dir_name(_ei_sanitize(cpty))
-        ssi_dir = os.path.join(ELECTRONIC_INVENTORY_ROOT, folder, 'SSI')
-        if not _store.isdir(ssi_dir):
-            return None
-        files = [os.path.join(ssi_dir, f) for f in _store.listdir(ssi_dir)
-                 if _store.isfile(os.path.join(ssi_dir, f))]
+        files = []
+        for folder in _ei_client_dir_names(cpty):
+            ssi_dir = os.path.join(ELECTRONIC_INVENTORY_ROOT, folder, 'SSI')
+            if not _store.isdir(ssi_dir):
+                continue
+            files.extend(os.path.join(ssi_dir, f) for f in _store.listdir(ssi_dir)
+                         if _store.isfile(os.path.join(ssi_dir, f)))
         return max(files, key=os.path.getmtime) if files else None
     except Exception:
         return None

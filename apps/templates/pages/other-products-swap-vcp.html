@@ -255,11 +255,28 @@
     background: rgba(255,255,255,.08) !important;
     color: #6ea8fe !important;
 }
+
+/* ── Fatores (segunda tabela, §452): padrão de tabela do projeto, clones com !important ── */
+#vcp-factors thead th { text-align: center !important; vertical-align: middle !important; font-size: .7rem; white-space: normal; }
+#vcp-factors tbody td { text-align: center; vertical-align: middle; font-size: .8rem; white-space: nowrap; }
+#vcp-factors_wrapper .dt-scroll-headInner thead th, #vcp-factors_wrapper .dataTables_scrollHeadInner thead th { text-align: center !important; vertical-align: middle !important; font-size: .7rem; white-space: normal !important; }
+#vcp-factors tbody td.vcp-num { font-variant-numeric: tabular-nums; }
+#vcp-factors tbody td.vcp-manual { font-weight: 600; color: #0066cc; }
+[data-bs-theme="dark"] #vcp-factors tbody td.vcp-manual { color: #6ea8fe; }
+#vcp-factors thead tr.vcp-th-filter input { width: 100%; min-width: 90px; height: 30px; font-size: .72rem; text-align: center; padding: 3px 9px; border: 1px solid var(--sc-hairline); border-radius: 8px; background: var(--bs-tertiary-bg, #f8f9fa); color: var(--ins-body-color); }
+#vcp-factors thead tr.vcp-th-filter input:focus { outline: none; border-color: #0066cc; box-shadow: 0 0 0 3px rgba(0,102,204,.15); }
+#swapchar-page .vcp-bulk-send { display: none; }
+#swapchar-page .vcp-bulk-send.is-on { display: inline-flex; }
+#vcpModal .form-control-sm { font-variant-numeric: tabular-nums; }
+#vcpModal .vcp-calc { font-size: .68rem; color: var(--ins-secondary-color, #6e6e73); margin: .15rem 0 0; }
 </style>
 {% endblock extra_css %}
 
 {% block page_content %}
-<div id="swapchar-page" class="container-fluid" data-content="" data-api="/api/other-products-swap-vcp/data" data-ref-date="{{ ref_date }}">
+<!-- data-actions="send" liga a coluna de Actions do visualizador compartilhado com SÓ
+     o botão de Send: a linha manda o arquivo de PU/Fator (o mesmo do Accrual). O que o
+     clique faz é desta página (window.scRowAction); o Send em lote aparece com 2+ marcadas. -->
+<div id="swapchar-page" class="container-fluid" data-content="" data-api="/api/other-products-swap-vcp/data" data-ref-date="{{ ref_date }}" data-actions="send">
     {% set title='Swap VCP' %}
     {% set crumbs=['OTC Tracker', 'Daily Settlements', 'Other Products', 'Swap', 'VCP'] %}
     {% include 'partials/page-title.html' %}
@@ -329,6 +346,9 @@
                     <button class="btn btn-sm btn-soft-secondary" type="button" id="scClearFilters">
                         <i class="ti ti-filter-off me-1"></i><span data-lang="sc-clear-filters">Clear filters</span>
                     </button>
+                    <button class="btn btn-sm btn-primary bg-gradient vcp-bulk-send align-items-center" type="button" id="vcpBulkSend">
+                        <i class="ti ti-brand-telegram me-1"></i><span data-lang="sc-vcp-send-selected">Send selected</span> (<span id="vcpBulkCount">0</span>)
+                    </button>
                 </div>
                 <div class="text-muted fs-xs">
                     <span data-lang="sc-showing">Showing</span> <span id="sc-count">0</span> <span>rows</span>
@@ -342,6 +362,76 @@
             </div>
         </div>
     </div>
+
+    <!-- Section 3: os fatores de juros da perna VCP (§452) -->
+    <div class="card mt-2">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+                <div>
+                    <h5 class="mb-1" data-lang="sc-vcp-factors-title">Interest factors (VCP leg)</h5>
+                    <p class="text-muted fs-xs mb-0" data-lang="sc-vcp-factors-note">Per contract: the amortisation of the day's flow (% and type from the DFLUXO, the Swap Calculator rule), the interest of each leg from the OTM curves, the difference to what B3 calculated (Swap Events) on the calculated leg, and the factor of the VCP leg that goes into the PU/Factor file — (interest + the other leg's B3 difference) ÷ VBR + 1, 8 decimals.</p>
+                </div>
+                <div class="d-flex align-items-center gap-2 btn-toolbar-all">
+                    <div class="vcpExportWrapper"></div>
+                </div>
+            </div>
+            <div class="table-responsive">
+                <table id="vcp-factors" class="table table-sm table-hover table-striped mb-0" style="width:100%">
+                    <thead>
+                        <tr>
+                            <th style="min-width:38px"><input type="checkbox" id="vcpCheckAll" class="form-check-input"></th>
+                            <th data-lang="sc-actions">Actions</th>
+                            <th data-lang="sc-status">Status</th>
+                            <th>Athena ID</th><th>Código do Contrato</th><th>Contraparte</th><th>VBR</th>
+                            <th>% Amortização do Fluxo</th><th>Tipo Amortização</th><th>Notional Amortizado</th>
+                            <th>Juros Parte</th><th>Diff B3</th><th>Juros Contraparte</th><th>Diff B3</th>
+                            <th>Fator Parte</th><th>Fator Contraparte</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- O modal de Edit da tabela de fatores: campos editáveis, Close e Confirm só ícones. -->
+<div class="modal fade" id="vcpModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content liquid-glass">
+      <div class="modal-header py-2">
+        <h6 class="modal-title mb-0"><span data-lang="sc-vcp-edit-title">Edit factors</span> · <span id="vcpModalContract"></span></h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-2">
+          <div class="col-md-4"><label class="form-label fs-xs mb-1" data-lang="sc-vcp-vbr">VBR (remaining base)</label><input class="form-control form-control-sm vcp-f" data-f="vbr" inputmode="decimal"><p class="vcp-calc" data-calc="vbr"></p></div>
+          <div class="col-md-4"><label class="form-label fs-xs mb-1" data-lang="sc-vcp-pct">% amortisation of the flow</label><input class="form-control form-control-sm vcp-f" data-f="pct" inputmode="decimal"><p class="vcp-calc" data-calc="pct"></p></div>
+          <div class="col-md-4"><label class="form-label fs-xs mb-1" data-lang="sc-vcp-tipo">Amortisation type</label>
+            <select class="form-select form-select-sm vcp-f" data-f="tipo">
+              <option value=""></option>
+              <option value="Sobre Valor Base Original">Sobre Valor Base Original</option>
+              <option value="Sobre Valor Base Remanescente">Sobre Valor Base Remanescente</option>
+              <option value="Na Data de Vencimento">Na Data de Vencimento</option>
+              <option value="Sem Troca de Amortização">Sem Troca de Amortização</option>
+            </select><p class="vcp-calc" data-calc="tipo"></p></div>
+          <div class="col-md-4"><label class="form-label fs-xs mb-1" data-lang="sc-vcp-amort">Amortised notional</label><input class="form-control form-control-sm vcp-f" data-f="amortizado" inputmode="decimal"><p class="vcp-calc" data-calc="amortizado"></p></div>
+          <div class="col-md-4"><label class="form-label fs-xs mb-1" data-lang="sc-vcp-juros-p">Interest · Parte</label><input class="form-control form-control-sm vcp-f" data-f="juros_p" inputmode="decimal"><p class="vcp-calc" data-calc="juros_p"></p></div>
+          <div class="col-md-4"><label class="form-label fs-xs mb-1" data-lang="sc-vcp-diff-p">Diff B3 · Parte</label><input class="form-control form-control-sm vcp-f" data-f="diff_p" inputmode="decimal"><p class="vcp-calc" data-calc="diff_p"></p></div>
+          <div class="col-md-4"><label class="form-label fs-xs mb-1" data-lang="sc-vcp-juros-c">Interest · Contraparte</label><input class="form-control form-control-sm vcp-f" data-f="juros_c" inputmode="decimal"><p class="vcp-calc" data-calc="juros_c"></p></div>
+          <div class="col-md-4"><label class="form-label fs-xs mb-1" data-lang="sc-vcp-diff-c">Diff B3 · Contraparte</label><input class="form-control form-control-sm vcp-f" data-f="diff_c" inputmode="decimal"><p class="vcp-calc" data-calc="diff_c"></p></div>
+          <div class="col-md-4"></div>
+          <div class="col-md-4"><label class="form-label fs-xs mb-1" data-lang="sc-vcp-fator-p">Factor · Parte</label><input class="form-control form-control-sm vcp-f" data-f="fator_p" inputmode="decimal"><p class="vcp-calc" data-calc="fator_p"></p></div>
+          <div class="col-md-4"><label class="form-label fs-xs mb-1" data-lang="sc-vcp-fator-c">Factor · Contraparte</label><input class="form-control form-control-sm vcp-f" data-f="fator_c" inputmode="decimal"><p class="vcp-calc" data-calc="fator_c"></p></div>
+        </div>
+        <p class="text-muted fs-xs mt-2 mb-0" data-lang="sc-vcp-edit-hint">Blank returns the field to the calculated value. Whoever edits becomes the maker and cannot send the row.</p>
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal" title="Close"><i class="ti ti-x"></i></button>
+        <button type="button" class="btn btn-sm btn-success" id="vcpConfirmBtn" title="Confirm"><i class="ti ti-check"></i></button>
+      </div>
+    </div>
+  </div>
 </div>
 {% endblock page_content %}
 
@@ -359,5 +449,197 @@
 <script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/table-std.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/export-advanced.js"></script>
-<script src="{{ config.ASSETS_ROOT }}/js/pages/live-position-swap-characteristics.js?v=20260705"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/pages/live-position-swap-characteristics.js?v=20260911"></script>
+<script>
+// ── Swap VCP: a segunda tabela (fatores), o Edit no modal e o Send (§452) ──
+(function () {
+  'use strict';
+  var page = document.getElementById('swapchar-page');
+  if (!page) return;
+  var DATE = page.getAttribute('data-ref-date') || '';
+  var FACTORS = [];              // as linhas do payload, por índice
+  var dt = null;
+  var current = null;            // a linha aberta no modal
+  var KEYS = ['vbr', 'pct', 'tipo', 'amortizado', 'juros_p', 'diff_p', 'juros_c', 'diff_c', 'fator_p', 'fator_c'];
+
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (m) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]; }); }
+  function n2(v) { return (v == null || v === '') ? '' : Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function n4(v) { return (v == null || v === '') ? '' : Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 }); }
+  function f8(v) { return (v == null || v === '') ? '' : Number(v).toFixed(8); }
+  function pill(st) {
+    var cls = { Sent: 'text-bg-primary', New: 'text-bg-info' }[st] || 'text-bg-secondary';
+    return '<span class="badge ' + cls + ' bg-gradient rounded-pill">' + esc(st || 'New') + '</span>';
+  }
+  function postJSON(url, body) {
+    return fetch(url, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); });
+  }
+  function reload() { if (typeof window.scLoad === 'function') window.scLoad(DATE); }
+
+  // ── a tabela de fatores ──
+  function buildFactors(rows) {
+    FACTORS = rows || [];
+    var thead = document.querySelector('#vcp-factors thead');
+    var old = thead.querySelector('tr.vcp-th-filter'); if (old) old.remove();
+    var n = thead.querySelector('tr').children.length;
+    var filt = '<tr class="vcp-th-filter"><th></th><th></th>' + new Array(n - 2).fill(0).map(function (_x, i) {
+      var label = thead.querySelector('tr').children[i + 2].textContent.trim();
+      return '<th><input type="text" data-col="' + (i + 2) + '" placeholder="' + esc(label) + '" autocomplete="off"></th>';
+    }).join('') + '</tr>';
+    thead.insertAdjacentHTML('beforeend', filt);
+    var data = FACTORS.map(function (f, i) {
+      var manual = f.manual || [];
+      function cell(k, txt) { return '<span class="' + (manual.indexOf(k) >= 0 ? 'vcp-manual' : '') + '" title="' + (manual.indexOf(k) >= 0 ? 'edited' : '') + '">' + esc(txt) + '</span>'; }
+      var miss = (f.missing || []).length ? ' <i class="ti ti-alert-triangle text-warning" title="missing: ' + esc(f.missing.join(', ')) + '"></i>' : '';
+      return [
+        '<input type="checkbox" class="form-check-input vcp-row-check" data-i="' + i + '">',
+        '<div class="d-flex justify-content-center gap-1"><a class="btn btn-info btn-sm sc-row-act vcp-act" data-act="edit" data-i="' + i + '" href="#" title="Edit"><i class="ti ti-edit"></i></a>' +
+          '<a class="btn btn-primary btn-sm sc-row-act vcp-act" data-act="send" data-i="' + i + '" href="#" title="Send"><i class="ti ti-brand-telegram"></i></a></div>',
+        pill(f.status),
+        esc(f.athena_id) + miss, esc(f.contrato), esc(f.contraparte),
+        cell('vbr', n2(f.vbr)), cell('pct', n4(f.pct)), cell('tipo', f.tipo), cell('amortizado', n2(f.amortizado)),
+        cell('juros_p', n2(f.juros_p)), cell('diff_p', n2(f.diff_p)), cell('juros_c', n2(f.juros_c)), cell('diff_c', n2(f.diff_c)),
+        cell('fator_p', f.vcp_p ? f8(f.fator_p) : (f.fator_p == null ? '' : f8(f.fator_p) + ' (B3)')),
+        cell('fator_c', f.vcp_c ? f8(f.fator_c) : (f.fator_c == null ? '' : f8(f.fator_c) + ' (B3)'))
+      ];
+    });
+    if (dt) dt.destroy();
+    dt = jQuery('#vcp-factors').DataTable({
+      data: data, scrollX: true, autoWidth: true, orderCellsTop: true, deferRender: true, pageLength: 25, order: [],
+      dom: "rt<'d-md-flex justify-content-between align-items-center mt-2'ip>",
+      columnDefs: [{ orderable: false, targets: [0, 1] }, { className: 'text-center', targets: '_all' },
+                   { className: 'vcp-num', targets: [6, 7, 9, 10, 11, 12, 13, 14, 15] }],
+      language: { paginate: { first: '<i class="ti ti-chevrons-left"></i>', previous: '<i class="ti ti-chevron-left"></i>', next: '<i class="ti ti-chevron-right"></i>', last: '<i class="ti ti-chevrons-right"></i>' } },
+      buttons: [{ extend: 'collection', text: '<i class="ti ti-download me-1"></i> Export', className: 'btn btn-sm btn-info bg-gradient dropdown-toggle', autoClose: true,
+        buttons: [
+          { extend: 'copy', text: '<i class="ti ti-copy me-1"></i> Copy', className: 'dropdown-item', exportOptions: { columns: ':gt(1)' } },
+          { extend: 'csv', text: '<i class="ti ti-file-type-csv me-1"></i> CSV', className: 'dropdown-item', fieldSeparator: ';', bom: true, exportOptions: { columns: ':gt(1)' } },
+          { extend: 'excel', text: '<i class="ti ti-file-spreadsheet me-1"></i> Excel', className: 'dropdown-item', exportOptions: { columns: ':gt(1)' } },
+          { extend: 'print', text: '<i class="ti ti-printer me-1"></i> Print', className: 'dropdown-item', exportOptions: { columns: ':gt(1)' } }
+        ] }],
+      drawCallback: function () { setTimeout(function () { if (dt) dt.columns.adjust(); }, 150); }
+    });
+    var wrap = document.querySelector('.vcpExportWrapper');
+    if (wrap) { wrap.innerHTML = ''; dt.buttons().container().appendTo(wrap); }
+    if (window.otcExportAdvanced) window.otcExportAdvanced('#vcp-factors');
+    if (window.otcCellCopy) window.otcCellCopy('#vcp-factors', { skip: [0, 1] });
+    jQuery('#vcp-factors thead').off('keyup.vcp change.vcp').on('keyup.vcp change.vcp', 'tr.vcp-th-filter input', function () {
+      var col = +this.getAttribute('data-col');
+      if (dt.column(col).search() !== this.value) dt.column(col).search(this.value).draw();
+    });
+    dt.columns.adjust();
+    if (window.applyTranslations) { try { window.applyTranslations(); } catch (e) {} }
+  }
+  jQuery(window).on('resize', function () { if (dt) dt.columns.adjust(); });
+
+  // ── o payload da primeira tabela alimenta a segunda ──
+  window.scOnData = function (d, dateStr) {
+    if (dateStr) DATE = dateStr;
+    buildFactors(d.factors || []);
+    updateBulk();
+  };
+
+  // ── seleção: o Send em lote aparece com 2+ marcadas (nas duas tabelas) ──
+  function selectedContracts() {
+    var out = {};
+    document.querySelectorAll('#swapchar-table tbody .sc-row-check:checked').forEach(function (c) {
+      var tr = c.closest('tr'); if (!tr) return;
+      var i = parseInt(c.getAttribute('data-i'), 10);
+      // o índice da linha do payload — o contrato está na coluna 'Código do Contrato' (2ª de dados)
+      var cols = (window.__vcpCols || []);
+      var td = tr.querySelectorAll('td');
+      var ci = cols.indexOf('Código do Contrato');
+      var v = ci >= 0 && td[ci + 3] ? td[ci + 3].textContent.trim() : '';
+      if (v) out[v] = 1;
+    });
+    document.querySelectorAll('#vcp-factors tbody .vcp-row-check:checked').forEach(function (c) {
+      var f = FACTORS[parseInt(c.getAttribute('data-i'), 10)]; if (f) out[f.contrato] = 1;
+    });
+    return Object.keys(out);
+  }
+  function updateBulk() {
+    var ids = selectedContracts();
+    var btn = document.getElementById('vcpBulkSend');
+    if (!btn) return;
+    btn.classList.toggle('is-on', ids.length >= 2);
+    var cnt = document.getElementById('vcpBulkCount'); if (cnt) cnt.textContent = ids.length;
+  }
+  window.scOnSelect = updateBulk;
+  jQuery(document).on('change', '#vcp-factors tbody .vcp-row-check', updateBulk);
+  var chkAll = document.getElementById('vcpCheckAll');
+  if (chkAll) chkAll.addEventListener('change', function () {
+    document.querySelectorAll('#vcp-factors tbody .vcp-row-check').forEach(function (c) { c.checked = chkAll.checked; });
+    updateBulk();
+  });
+  // guarda as colunas do payload para achar o contrato na primeira tabela
+  var _origOnData = window.scOnData;
+  window.scOnData = function (d, dateStr) { window.__vcpCols = d.columns || []; _origOnData(d, dateStr); };
+
+  // ── Send ──
+  function send(contracts) {
+    if (!contracts.length) return;
+    Swal.fire({ title: 'Send ' + contracts.length + ' contract(s)?',
+      text: 'The PU/Factor file (ACCRUAL_<VIEW>-<LOB>.txt, the same as the Accrual page) will be generated on the Batch Conecta folder.',
+      icon: 'question', showCancelButton: true, confirmButtonText: '<i class="ti ti-brand-telegram"></i>', cancelButtonText: '<i class="ti ti-x"></i>',
+      confirmButtonColor: '#0066cc', cancelButtonColor: '#6c757d' })
+    .then(function (r) {
+      if (!r.isConfirmed) return;
+      postJSON('/api/other-products-swap-vcp/send', { date: DATE, contracts: contracts }).then(function (x) {
+        if (!x.ok || !x.d.success) {
+          var msg = x.d.problems ? x.d.problems.join('\n') : (x.d.error || 'Send failed');
+          Swal.fire({ title: 'Not sent', text: msg, icon: 'error', confirmButtonText: 'OK', confirmButtonColor: '#dc3545' });
+          return;
+        }
+        var files = (x.d.files || []).map(function (f) { return f.filename + ' (' + f.count + ')'; }).join(', ');
+        Swal.fire({ title: 'Sent', text: files, icon: 'success', confirmButtonText: 'OK', confirmButtonColor: '#0066cc' }).then(reload);
+      }).catch(function (e) { Swal.fire({ title: 'Error', text: 'Request failed: ' + e.message, icon: 'error', confirmButtonText: 'OK', confirmButtonColor: '#dc3545' }); });
+    });
+  }
+  window.scRowAction = function (act, i, row, columns) {
+    if (act !== 'send') return;
+    var ci = columns.indexOf('Código do Contrato');
+    var contrato = ci >= 0 ? String(row[ci] || '').trim() : '';
+    if (contrato) send([contrato]);
+  };
+  var bulk = document.getElementById('vcpBulkSend');
+  if (bulk) bulk.addEventListener('click', function () { send(selectedContracts()); });
+
+  // ── Edit (modal) ──
+  var modalEl = document.getElementById('vcpModal');
+  var modal = modalEl && window.bootstrap ? new bootstrap.Modal(modalEl) : null;
+  function openEdit(f) {
+    current = f;
+    document.getElementById('vcpModalContract').textContent = f.contrato + (f.athena_id ? ' · ' + f.athena_id : '');
+    KEYS.forEach(function (k) {
+      var el = modalEl.querySelector('.vcp-f[data-f="' + k + '"]');
+      var manual = (f.manual || []).indexOf(k) >= 0;
+      var val = f[k];
+      if (el.tagName === 'SELECT') el.value = val || '';
+      else el.value = manual ? (val == null ? '' : String(val)) : '';
+      var calc = modalEl.querySelector('.vcp-calc[data-calc="' + k + '"]');
+      if (calc) calc.textContent = manual ? 'edited' : ('calculated: ' + (k === 'tipo' ? (val || '—') : (k.indexOf('fator') === 0 ? (f8(val) || '—') : (n4(val) || '—'))));
+      if (el.tagName !== 'SELECT') el.placeholder = k.indexOf('fator') === 0 ? (f8(val) || '') : (val == null ? '' : String(val));
+    });
+    if (modal) modal.show();
+  }
+  jQuery(document).on('click', '#vcp-factors .vcp-act', function (e) {
+    e.preventDefault();
+    var f = FACTORS[parseInt(this.getAttribute('data-i'), 10)];
+    if (!f) return;
+    if (this.getAttribute('data-act') === 'edit') openEdit(f);
+    else send([f.contrato]);
+  });
+  var confirmBtn = document.getElementById('vcpConfirmBtn');
+  if (confirmBtn) confirmBtn.addEventListener('click', function () {
+    if (!current) return;
+    var fields = {};
+    KEYS.forEach(function (k) { var el = modalEl.querySelector('.vcp-f[data-f="' + k + '"]'); fields[k] = (el.value || '').trim(); });
+    postJSON('/api/other-products-swap-vcp/factors/edit', { date: DATE, contrato: current.contrato, fields: fields }).then(function (x) {
+      if (!x.ok || !x.d.success) { Swal.fire({ title: 'Error', text: x.d.error || 'Save failed', icon: 'error', confirmButtonText: 'OK', confirmButtonColor: '#dc3545' }); return; }
+      if (modal) modal.hide();
+      reload();
+    }).catch(function (e) { Swal.fire({ title: 'Error', text: 'Request failed: ' + e.message, icon: 'error', confirmButtonText: 'OK', confirmButtonColor: '#dc3545' }); });
+  });
+})();
+</script>
 {% endblock extra_javascript %}

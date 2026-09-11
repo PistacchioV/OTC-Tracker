@@ -10,6 +10,7 @@ import re
 import traceback
 
 from apps.pages.features.accrual import domain
+from apps.pages.platform import pu_fator as _pf
 from apps.pages import data_store as _store  # noqa: E402
 
 
@@ -19,49 +20,10 @@ def _R():
     return routes
 
 
-def _acc_swap_header(view, today):
-    """Linha de header (tipo 0) — literais e larguras do cadastro; participante
-    e data entram por seq."""
-    return _R()._fi_build_line(domain._ACC_FI_KEY, 'header',
-                          {'4': domain._ACC_VIEW_PART_NAME.get(view, view), '5': today},
-                          page_url='/accrual-swap')
-
-
-def _acc_swap_records(row, today):
-    """Return a list of {view, line} for one accrual row (empty when no VCP leg)."""
-    codigo = str(row[0] or '').strip()
-    accP, idxP = row[3], str(row[5] or '').strip().upper()
-    accC, idxC = row[6], str(row[8] or '').strip().upper()
-    fatP, fatC = row[9], row[10]
-    digP = re.sub(r'\D', '', str(accP or '')); digC = re.sub(r'\D', '', str(accC or ''))
-    numP = int(digP or '0'); numC = int(digC or '0')
-    roleP = '01' if numP > numC else '00'
-    roleC = '01' if numC > numP else '00'
-    legs = []                                       # (curva, fator) per VCP leg
-    if idxP == 'VCP': legs.append((roleP, fatP))
-    if idxC == 'VCP': legs.append((roleC, fatC))
-    if not legs:
-        return []
-    prefP, prefC = digP[:5], digC[:5]
-    updaters = [(roleP, prefP)]                      # PARTE (our house entity) always updates
-    if prefC in domain._ACC_VIEW_BY_PREFIX and prefC != prefP:
-        updaters.append((roleC, prefC))             # group counterparty also submits its view
-    out = []
-    for papel, pref in updaters:
-        view = domain._ACC_VIEW_BY_PREFIX.get(pref)
-        if not view:
-            continue
-        for curva, fat in legs:
-            meu = ''.join(_R().random.choice('0123456789') for _ in range(10))
-            line = _R()._fi_build_line(domain._ACC_FI_KEY, 'registro',
-                                  {'4': codigo, '5': papel, '7': curva,
-                                   '8': today, '9': meu,
-                                   '11': domain._acc_swap_fator(fat)},
-                                  page_url='/accrual-swap')
-            out.append({'view': view, 'line': line})
-    return out
-
-
+# O header e os registros do arquivo de PU/Fator moram na platform
+# (`pu_fator`, §452) — o Swap VCP manda o mesmo arquivo. Aliases.
+_acc_swap_header = _pf.acc_swap_header
+_acc_swap_records = _pf.acc_swap_records
 def _acc_write_batch_files(data, lob, today, evidence_dir=None):
     """Generate + write ACCRUAL_<view>-<lob>.txt for one LOB book, split by view.
     Written to the Batch Conecta folder AND (best-effort) to the evidence folder
@@ -74,33 +36,8 @@ def _acc_write_batch_files(data, lob, today, evidence_dir=None):
             continue
         for rec in _acc_swap_records(r, today):
             by_view.setdefault(rec['view'], []).append(rec['line'])
-    if not by_view:
-        return []
     lob_tag = domain._ACC_LOB_TAG.get(lob, str(lob).upper())
-    os.makedirs(_R().CONECTA_NEW_PATH, exist_ok=True)
-    if evidence_dir:
-        try:
-            os.makedirs(evidence_dir, exist_ok=True)
-        except Exception:
-            _R().log.warning('[accrual] could not create evidence dir %s:\n%s', evidence_dir, traceback.format_exc())
-    generated = []
-    for view in ('BANCO', 'LAWTON', 'ATACAMA'):
-        lines = by_view.get(view)
-        if not lines:
-            continue
-        content = '\n'.join([_acc_swap_header(view, today)] + lines)
-        fpath = _R()._unique_filepath(_R().CONECTA_NEW_PATH, 'ACCRUAL_{}-{}.txt'.format(view, lob_tag))
-        with open(fpath, 'w', encoding='utf-8') as fh:
-            fh.write(content)
-        # Evidence copy (same base name), best-effort — never blocks the Conecta write.
-        if evidence_dir and _store.isdir(evidence_dir):
-            try:
-                with open(os.path.join(evidence_dir, os.path.basename(fpath)), 'w', encoding='utf-8') as fh:
-                    fh.write(content)
-            except Exception:
-                _R().log.warning('[accrual] evidence copy failed for %s:\n%s', fpath, traceback.format_exc())
-        generated.append({'filename': os.path.basename(fpath), 'path': fpath, 'view': view, 'count': len(lines)})
-    return generated
+    return _pf.write_view_files(by_view, lob_tag, today, evidence_dir)
 
 
 def _acc_run_recon(data, rows):
