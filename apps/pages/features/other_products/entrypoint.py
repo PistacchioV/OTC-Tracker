@@ -13,6 +13,7 @@ from flask import (g, jsonify, redirect, render_template, request,
                    session, url_for)
 
 from apps.pages import blueprint
+from apps.pages.features.other_products import commands, queries
 
 
 def _R():
@@ -910,7 +911,54 @@ def api_swap_vcp_data():
         ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
     except ValueError:
         ref = datetime.now()
-    payload = _R()._vcp_collect(ref)
+    # As linhas de sempre + Athena ID, os fatores da perna VCP e a segunda
+    # tabela (§452) — uma coleta só para as duas tabelas.
+    payload = queries.vcp_payload(ref)
     payload.update({'success': True, 'ref_date': ref.strftime('%Y-%m-%d'),
                     'ref_date_fmt': ref.strftime('%d/%m/%Y')})
     return jsonify(payload)
+
+
+def _vcp_ref(payload):
+    ds = str((payload or {}).get('date', '') or '').strip()
+    try:
+        return datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
+    except ValueError:
+        return datetime.now()
+
+
+@blueprint.route('/api/other-products-swap-vcp/factors/edit', methods=['POST'])
+def api_swap_vcp_factors_edit():
+    """O modal de Edit da tabela de fatores: grava o que a mesa digitou (campo
+    a campo; vazio apaga a edição e o calculado volta) e devolve a linha
+    refeita. Quem edita vira maker e não pode enviar."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    try:
+        body, status = commands.vcp_factors_edit(_vcp_ref(p), p.get('contrato'), p.get('fields') or {},
+                                                 sid=session.get('user_sid', ''))
+    except Exception:                                       # noqa: BLE001
+        _R().log.error('[swap-vcp] edit failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': 'Save failed.'}), 500
+    return jsonify(body), status
+
+
+@blueprint.route('/api/other-products-swap-vcp/send', methods=['POST'])
+def api_swap_vcp_send():
+    """Send (uma linha) e o Send em lote (2+ selecionadas): o arquivo de
+    PU/Fator do Accrual para os contratos pedidos, e as linhas viram Sent."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    contratos = p.get('contracts') or ([p.get('contrato')] if p.get('contrato') else [])
+    try:
+        body, status = commands.vcp_send(_vcp_ref(p), contratos, sid=session.get('user_sid', ''))
+    except ValueError:
+        _R().log.error('[swap-vcp] send failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False,
+                        'error': 'File Interpreter template missing/invalid — check /file-interpreter'}), 500
+    except Exception:                                       # noqa: BLE001
+        _R().log.error('[swap-vcp] send failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': 'Failed to write the batch files.'}), 500
+    return jsonify(body), status

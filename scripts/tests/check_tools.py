@@ -647,9 +647,10 @@ try:
     # ontem contra a posicao da semana passada nao da erro nenhum — da um
     # periodo que nao e o daquele saldo.
     _fx_src = ler('apps/pages/features/tools/queries.py')
+    _sf_src = ler('apps/pages/platform/swap_flows.py')          # a leitura mora na platform (§452)
     check('o DFLUXO e ancorado no dia da posicao',
           ("_fluxos_do_contrato(contrato, ident, _data_iso(source_date))" in _fx_src and
-           "_swap_day_file('73760_{}_DFLUXO.json', ref=dia_posicao)" in _fx_src), True)
+           "swap_day_file('73760_{}_DFLUXO.json', ref=dia_posicao)" in _sf_src), True)
 
     # O navegador nao remonta o periodo: ele LE o `p_*` que veio do servidor.
     _js = ler('apps/static/js/pages/tools.js')

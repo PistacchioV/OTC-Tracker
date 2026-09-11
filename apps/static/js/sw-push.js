@@ -31,6 +31,7 @@ var PAGE_URL = {
     'Intrag Option': '/intrag-option', 'Intrag NDF': '/intrag-ndf',
     'Intrag DCE Option': '/intrag-dce-option',
     'Intrag DCE Swap': '/intrag-dce-swap',
+    'Swap VCP': '/other-products-swap-vcp',
     'Intrag Swap': '/intrag-swap',
     'Support': '/tickets-list',
     'Other Products Summary': '/other-products-summary',

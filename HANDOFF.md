@@ -19024,3 +19024,147 @@ sessão. Se a Quotes mostrar o mesmo 407, o caminho é o mesmo.
 
 `check_tools_rede.py` prende com um COM simulado.
 
+## §451 — TED do NDF: a SSI "não localizada" estava na pasta gêmea, e a perna interna entrava como contraparte (2026-09-11)
+
+**O e-mail de 11/09.** Dois avisos no rodapé: `SSI não localizada para
+BANCO J.P MORGAN S.A, JOHNSON & JOHNSON DO BRASIL ..., TW NDF BJPM`. O
+Theodoro conferiu: a SSI da J&J está salva — "tem as duas na pasta".
+
+**A SSI.** `_ted_ssi_attachment` olhava UMA pasta: `_ei_actual_dir_name`,
+que devolve a vencedora do scan da raiz por chave sem pontuação. O share
+guarda pastas GÊMEAS da mesma contraparte (o app criou a sanitizada ao
+lado da 'S.A' antes de o casamento ignorar pontuação — a história do
+`_ei_client_dir_names`), com os documentos repartidos. A SSI estava na
+gêmea que perdeu o scan, e o e-mail dizia que não existia. Agora a busca
+percorre TODAS as pastas que casam com o nome (`_ei_client_dir_names`, a
+mesma leitura do Monitor) e anexa o arquivo mais novo entre elas. A
+ESCRITA segue numa pasta só, como antes.
+
+**A lista.** `BANCO J.P MORGAN S.A` (sem o segundo ponto, como a API
+escreve) passava pelo `_is_jpmorgan`, que comparava três grafias fixas;
+`TW NDF BJPM` é book da mesa. E o pedido da mesa é mais amplo: **só
+contraparte CORPORATE recebe TED** — Banco, Lawton, MGT, os fundos
+(Atacama) e os books liquidam no Summary, mas não se pede TED para si
+mesmo. A pergunta já existia: `_ops_is_internal_cpty(name, spn)` (`le-spn`
+por SPN e nome, depois `ECONOMIC GROUP = INTERNAL` do Reference Data,
+intragrupo por nome como último recurso) é a que tira a perna interna do
+aviso de liquidação, e o endpoint do NDF passou a fazê-la por trade, com
+o SPN. O Other Products já a fazia pela coluna `internal` das linhas. O
+`_is_jpmorgan` ficou cego a pontuação e espaço (`JPMORGAN` no nome só
+com letras) e conhece `BJPM`. Entidade nossa que não esteja no `le-spn`
+nem como INTERNAL no Reference Data ainda passa — o cadastro é o lugar de
+corrigir, não o código.
+
+`check_ted_release.py` prende os três: as grafias, as gêmeas (tmp) e o
+endpoint com SMTP e fontes stubados.
+
+
+**A subida travada, parte 2: faltava a outra metade (mesmo dia, 12:50).** A
+correção das 11h tirou do boot a REIMPORTAÇÃO do objeto sem canal, mas deixou
+de pé o ramo silencioso, que é o caro: para todo JSON que o banco NÃO TEM, a
+semeadura chama `data_store.write` — ~2 s cada, sob trava exclusiva, sem
+imprimir nada. Na dev, onde o checkout é o `DATA_DIR`, isso são os MILHARES de
+arquivos-dia de `cache/` que a mesa acumulou na pasta: a subida virava o
+cutover inteiro, feito dentro do boot, com o app sem atender — e ainda
+disputando cada banco com o `convert_json_to_duckdb.py` que rodava ao lado
+justamente para fazer esse trabalho.
+
+Regra nova, só para o caso `origem == alvo`: `cache/` não passa pela
+semeadura. Arquivo-dia entra pelo conversor (uma vez, com o app parado) ou
+pela primeira leitura da data (responde pelo disco, importa em background). O
+resto da semeadura — os ~110 JSONs versionados de `mappings/`,
+`file-interpreter/`, calendários, RefData, control-panel — continua igual, e é
+rápido. Na instância do JPM nada muda (pastas diferentes).
+
+O preço, dito no log em vez de escondido: enquanto o conversor não roda, quem
+ENUMERA dia (`listdir`/`walk`/`day_files`, que são só pelo banco) vê menos dias
+do que a pasta tem. Uma tela com menos dias do que o disco é exatamente o tipo
+de coisa que manda alguém caçar bug onde não há — então a subida diz quantos
+arquivos de `cache/` ficaram de fora e o que rodar. `check_duck_read.py` §12
+prende: o arquivo-dia em disco não vira banco na subida, e a linha sai.
+
+## §452 — Swap VCP: o fator de juros da perna VCP, calculado na tela e enviado no arquivo do Accrual (2026-09-11)
+
+**O pedido.** Na página Swap VCP (Daily Settlements › Other Products › Swap ›
+VCP), uma segunda tabela com o que a mesa calculava à mão: % e tipo da
+amortização do fluxo, notional amortizado, juros de cada perna, a diferença
+para o que a B3 calculou, e os fatores; VBR, código do contrato e Athena ID;
+checkbox e Edit (modal com os campos editáveis, Close e Confirm só ícones).
+Na tabela de cima, Athena ID entre Contraparte e Código do Contrato, Actions
+com Send, e um Send em lote que aparece com 2+ linhas marcadas. O arquivo é
+o MESMO do Accrual Swap (Registro de Atualização de PU/Fator).
+
+**A conta**, na ordem da mesa (`other_products/domain.py`, pura):
+
+    notional amortizado = VBR (ou original) × % do fluxo do dia   ← DFLUXO, base pelo tipo
+    juros da perna      = |curva da perna (OTM)| − amortizado
+    diff B3             = Valor Juros da B3 (Swap Eventos) − juros JP   (só na perna CALCULADA)
+    fator VCP           = round((juros VCP + diff B3 da OUTRA perna) / VBR + 1, 8)
+
+A diff da perna calculada entra no fator da perna VCP de propósito: o que
+liquida é a diferença das duas curvas, e se a B3 calculou a outra perna
+acima do JP em D, somar D à perna VCP faz o líquido na B3 fechar com o
+interno. Só a perna VCP recebe fator; a calculada mostra o `Fator de Juros`
+da B3 para conferência. Valor que não se resolve é `None`, nunca zero (zero
+é um fator 1,00000000 que a B3 aceita e liquida errado); a linha leva
+`missing` e a tela põe o triângulo.
+
+**As fontes** (`other_products/queries.py`), todas do dia da liquidação:
+Operations B3 (os avisos de inexistência de PU — `_vcp_collect` de sempre);
+Swap Athena pelo CETIP ID → Athena ID (Kapital); OTM pelo Athena ID → as
+curvas (Amount + = Parte/JP recebe, − = Contraparte; sem OTM, as colunas
+`Owner/Counterparty curve` do próprio Athena); Swap Eventos → `Valor Juros`
+e `Fator de Juros` por perna, lidos CRUS por `_db_day_records` — a coleta
+de exibição formata `#,##0.00` e o fator 1,0169 saía 1,02; POSIÇÃO → VBR
+(`Valor Base Remanescente`), original, tipo de amortização e a LOB
+(`Código Identificador` → `_accrual_lob`); DFLUXO → o evento que liquida em
+`ref` → % e base pela regra do Swap Calculator. O usuário foi explícito:
+a amortização NÃO sai do arquivo de eventos ("desconsidere o valor de
+amortização dessa página"), sai do DFLUXO com a base do tipo (original ×
+remanescente × vencimento).
+
+**Dois movimentos para a platform**, porque uma feature não importa outra
+(SoC-003) e o guarda `check_soc_layers` recusa até o import atrasado:
+
+* `platform/swap_flows.py` — a leitura da posição e do DFLUXO por contrato
+  e a amortização de um evento (`fluxos_do_contrato`, `periodo_do_evento`,
+  `amortizacao_do_evento`, `base_da_amortizacao`, `amortiza_no_fluxo`,
+  `numero_da_posicao`, `swap_day_file`…), que moravam na Tools. A Tools
+  expõe os nomes antigos como aliases (`queries._fluxos_do_contrato`,
+  `domain.base_da_amortizacao`) e o pré-preenchimento chama por eles — é
+  onde os testes trocam. Novos: `posicoes_swap(ref)` (um mapa por contrato,
+  uma leitura) e `amortizacao_do_dia(...)`. O `check_tools.py` que lia o
+  texto de `_fluxos_do_contrato` no arquivo da Tools passou a ler na platform.
+* `platform/pu_fator.py` — o gerador do arquivo (`acc_swap_header`,
+  `acc_swap_records`, `write_view_files`, `acc_swap_fator`, as visões por
+  prefixo de conta, a pasta de evidência), que morava no Accrual. O Accrual
+  expõe aliases (`domain._ACC_*`, `commands._acc_swap_records`) e o
+  `_acc_write_batch_files` dele virou "monta por visão + `write_view_files`".
+  O template do File Interpreter é o mesmo (`swap-atualizacao-pu-fator`); a
+  página VCP ganhou o `Athena ID` nas colunas ligadas.
+
+**Persistência** (`other_products/infra/persistence.py`):
+`swap-vcp-factors_AAAAMMDD.json` ao lado dos outros JSON do Daily
+Settlement, pelo funil e sob o `_cache_lock`. Guarda só o DELTA — os campos
+editados (`overrides`), `status`/`maker`/`checker` e os arquivos gerados. O
+calculado é refeito a cada leitura: gravar o cálculo congelaria um número
+que muda quando o OTM ou o evento chega mais tarde. Edição: o editado vence
+campo a campo e os derivados são refeitos (juros editado muda o fator);
+vazio devolve o calculado; quem edita vira maker e não envia (403 como no
+Accrual). Envio: só a perna VCP gera registro; linha sem fator ou sem perna
+VCP recusa o LOTE inteiro (meio lote na B3 é pior que nenhum); um arquivo
+por LOB e visão; Sent nas duas tabelas; aviso `Accrual Sent` na página
+`Swap VCP` (os três mapas).
+
+**A tela.** O JS compartilhado (`live-position-swap-characteristics.js`)
+ganhou duas coisas aditivas: `data-actions="send"` (só o botão de Send) e
+os ganchos `window.scOnData(payload)` / `window.scOnSelect()` — é por eles
+que a página monta a segunda tabela do mesmo payload e mostra o Send em
+lote com 2+ marcadas em qualquer das duas tabelas. A segunda tabela é
+DataTables no padrão (scrollX, filtro por coluna, squircle, select de
+célula, Export com Advanced); campo editado sai em azul e negrito.
+
+`check_swap_vcp_factors.py` prende tudo num tmp; `check_tools`,
+`check_tools_ipca`, `check_fi_accrual`, `check_vcp_join` e
+`check_soc_layers` seguem verdes depois dos dois movimentos.
+

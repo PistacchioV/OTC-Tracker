@@ -10,6 +10,8 @@ precisa do mundo chega por parâmetro. O que depende de helper de plataforma
 """
 import re
 
+from apps.pages.platform import pu_fator as _pf
+
 _ACC_HEADER_ROW = 9                                # 1-based: headers on row 9
 
 _ACC_ACCOUNT_COL = 10                              # col K — house-account filter
@@ -27,14 +29,13 @@ _ACC_DISPLAY_SRC = [0, 5, 6, 10, 11, 13, 16, 17, 19, None, None, None]
 
 _ACC_FACTOR_STATUS_MISSING = 'Missing Accrual'
 
-_ACC_FI_KEY = 'swap-atualizacao-pu-fator'            # cadastro do File Interface
-
-_ACC_VIEW_BY_PREFIX = {'73760': 'BANCO', '04880': 'BANCO', '85398': 'ATACAMA', '00041': 'LAWTON'}
-
-_ACC_VIEW_PART_NAME = {'BANCO': 'JPMORGANBM', 'LAWTON': 'INTRAGLAWTONFDO', 'ATACAMA': 'INTRAGATACAMAFDO'}
-
-_ACC_LOB_TAG = {'CEM': 'CEM', 'EDG': 'EDG', 'Hybrids': 'HYB', 'Commodities': 'COMM'}
-
+# O gerador do arquivo de PU/Fator mora na platform (`pu_fator`, §452): o
+# Swap VCP manda o mesmo arquivo e uma feature não importa outra. Aliases.
+_ACC_FI_KEY = _pf.ACC_FI_KEY
+_ACC_VIEW_BY_PREFIX = _pf.VIEW_BY_PREFIX
+_ACC_VIEW_PART_NAME = _pf.VIEW_PART_NAME
+_ACC_LOB_TAG = _pf.LOB_TAG
+_acc_swap_fator = _pf.acc_swap_fator
 _ACC_RECON_ACCOUNTS = {'04880006', '73760009'}
 
 _ACC_RECON_MARKER = 'REGISTRO DE PU/FATOR'
@@ -181,16 +182,6 @@ def _acc_check_status_rows(data):
                 if not comment:
                     pending.append(item)
     return checks, pending
-
-
-def _acc_swap_fator(f):
-    """Factor → 2 integer + 8 decimal digits, no separator, absolute. 1.0 → '0100000000'."""
-    try:
-        n = abs(float(str(f or '').replace(',', '.')))
-    except (ValueError, TypeError):
-        n = 0.0
-    ip, fp = '{:.8f}'.format(n).split('.')
-    return ip[-2:].rjust(2, '0') + fp
 
 
 def _accrual_is_vcp_name(n):

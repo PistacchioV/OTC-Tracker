@@ -13,6 +13,7 @@ import traceback
 from datetime import datetime
 
 from apps.pages.features.accrual import domain
+from apps.pages.platform import pu_fator as _pf
 from apps.pages import data_store as _store  # noqa: E402
 
 
@@ -24,11 +25,9 @@ def _R():
 
 ACCRUAL_JSON_ROOT = _R().data_write('cache', 'accrual')
 
-ACCRUAL_SOURCE_ROOT = os.getenv('ACCRUAL_SOURCE_ROOT', os.path.join(
-    _R().Config.SHARED_DRIVE_ROOT, 'Confirmation', 'Derivativos', 'OTC Tracker', 'Regulatory',
-    'Accrual'))
-
-
+# A pasta de evidência do dia mora na platform (`pu_fator`, §452). Aliases.
+ACCRUAL_SOURCE_ROOT = _pf.ACCRUAL_SOURCE_ROOT
+_accrual_source_dir = _pf.accrual_source_dir
 def _accrual_path_for(ymd):
     return os.path.join(ACCRUAL_JSON_ROOT, ymd[:4], ymd[4:6], ymd[6:8],
                         'accrual_swap_{}.json'.format(ymd))
@@ -83,13 +82,6 @@ def _accrual_persist(result, source_file, ymd=None):
     _R()._atomic_write_json(path, saved)        # funil: atômico + espelho (§335)
     _R().log.info('[accrual] saved %s', path)
     return path, saved
-
-
-def _accrual_source_dir(ymd):
-    """ACCRUAL_SOURCE_ROOT\\YYYY\\mm. Month\\DD for a 'YYYYMMDD' run date."""
-    ref = datetime.strptime(ymd, '%Y%m%d')
-    month_folder = ref.strftime('%m') + '. ' + _R()._EN_MONTH_NAMES[ref.month - 1]
-    return os.path.join(ACCRUAL_SOURCE_ROOT, ref.strftime('%Y'), month_folder, ref.strftime('%d'))
 
 
 def _accrual_store_source(ymd, filename, blob):
