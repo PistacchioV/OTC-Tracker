@@ -452,8 +452,8 @@ da subida e NÃO liga o farol; os caminhos do espelho são dinâmicos.
 > WAL antigo ao lado, WAL de outra versão do duckdb — cada pessoa roda a
 > própria instância sobre o MESMO `db/`). Aqui NENHUMA abertura passa do
 > replay, nem a de leitura: o banco é `BancoIlegivel` para sempre e o log
-> repete o traceback a cada request. Fundir, inverter a ordem ou recuperar
-> no disco local não muda nada — a única saída é DESCARTAR o WAL
+> repete o traceback a cada request. Fundir, inverter a ordem, tentar cada
+> WAL sozinho ou recuperar no disco local não muda nada — a única saída é DESCARTAR o WAL
 > (`recover_duckdb_wal.py --all --descartar-wal --only <o banco>`), o que
 > perde o que foi gravado depois do último checkpoint (no `cache/` isso
 > volta na importação ou na rotina do dia). É opt-in de propósito, e o WAL

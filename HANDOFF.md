@@ -18766,3 +18766,27 @@ aviso com o comando. O ciclo inteiro foi reproduzido em laboratório com duckdb
 devolver o WAL velho para o lado dá exatamente a mensagem da instância): sem o
 flag o script recusa e não toca no share; com ele, o banco volta a abrir e o
 par original fica em `db/_recuperado/`.
+
+**Na instância (11/09/2026, 09:48).** O banco tinha os DOIS estados ao mesmo
+tempo: limbo de checkpoint (`.wal` 17 MB + `.wal.checkpoint` 1104 MB) e WAL
+sem replay. O script passou pelo §444 inteiro — rename negado, fusão à mão —
+e as duas ordens falharam:
+
+```
+a fusão .wal + .wal.checkpoint não serviu (… Table with name "d_20260119" already exists!)
+a fusão .wal.checkpoint + .wal não serviu (… Table with name "d_20260122" already exists!)
+```
+
+**Cada ordem morre numa tabela DIFERENTE, e sempre no PRIMEIRO arquivo da
+fusão** — `d_20260119` está no `.wal`, `d_20260122` está no `.wal.checkpoint`.
+Ou seja: os dois WALs, cada um por si, já carregam tabela que o `.db` tem. Não
+existe ordem que sirva, e **tentar cada WAL SOZINHO também não serviria** (a
+ideia é tentadora quando se vê 1,1 GB indo fora — fica aqui refutada pelo
+próprio log, para ninguém gastar outra recópia de 1,5 GB descobrindo isso).
+
+Com o descarte: recuperado em 91 s, `_manifest` com 249 linhas, slim de
+1507 MB → 1159 MB, troca em 1 s, 133 s no total. O `database_access` loga um
+`file_lock_held_slow … lock_hold_seconds=132.7` nessa janela — é o próprio
+script segurando a trava exclusiva do banco, com o app parado, e não um
+vazamento. O par original (2,6 GB) ficou em
+`db/_recuperado/20260911-094859/cache/B3 Files/Swap/`.
