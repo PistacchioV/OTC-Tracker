@@ -171,7 +171,7 @@
                         {% for valor, nome in fixings_ipca %}<option value="{{ valor }}" {{ 'selected' if f[lado ~ '_ipca_fixing'] == valor }} data-lang="tl-ipca-{{ valor }}">{{ nome }}</option>{% endfor %}
                     </select>
                     {% set meses = ipca_meses[lado] if ipca_meses else None %}
-                    <p class="tl-help" id="{{ lado }}_ipca_nota"{{ '' if meses else ' hidden' }}>{% if meses %}<span data-lang="tl-ipca-source">IBGE index number</span> {{ meses[0] }} → {{ meses[1] }}{% endif %}</p>
+                    <p class="tl-help" id="{{ lado }}_ipca_nota"{{ '' if meses else ' hidden' }}>{% if meses %}<span data-lang="tl-ipca-source">IBGE index number</span> {% if meses[0] %}{{ meses[0] }} → {{ meses[1] }}{% else %}{{ meses[1] }} · <span data-lang="tl-ipca-initial-contract">initial from the contract</span>{% endif %}{% endif %}</p>
                 </div>
                 <div class="col-6 tl-field">
                     <label for="{{ lado }}_ni_inicial" data-lang="tl-ni-initial">Initial index number</label>
@@ -181,7 +181,7 @@
                     <label for="{{ lado }}_ni_final" data-lang="tl-ni-final">Final index number</label>
                     <input class="form-control form-control-sm" id="{{ lado }}_ni_final" name="{{ lado }}_ni_final" value="{{ f[lado ~ '_ni_final'] }}" inputmode="decimal" data-format="index">
                 </div>
-                <div class="col-12"><p class="tl-help" data-lang="tl-ipca-fixing-help">M-1 uses the IPCA of the month before the flow end for the final number and before the flow start for the initial one; M-2, two months before each. Calculate fetches both from IBGE (table 1737, index number Dec/1993 = 100) and fills the fields — a month IBGE has not published yet is an error, never a guess. Blank, the numbers typed above are used.</p></div>
+                <div class="col-12"><p class="tl-help" data-lang="tl-ipca-fixing-help">The final index number is the IPCA of the month before the flow end (M-1) or two months before (M-2), fetched from IBGE (table 1737, index number Dec/1993 = 100) on Calculate — a month IBGE has not published yet is an error, never a guess. The initial number is the contract's (the position's initial quote, or what you type); blank, it is fetched the same way from the flow start. Only the real coupon settles on an interim flow: the inflation adjustment stays in the principal.</p></div>
             </div>
         </div>
         <div class="col-12 tl-field" data-leg="{{ lado }}" data-show-for="fator">
@@ -209,6 +209,9 @@
     {% if p.efeito_cambial | round(2) != 0 %}
     <div class="tl-kv"><span data-lang="tl-fx-move">Currency move</span><span class="{{ 'text-success' if p.efeito_cambial > 0 else 'text-danger' }}">R$ {{ p.efeito_cambial | tl_money(2) }}</span></div>
     {% endif %}
+    {% if p.efeito_correcao | round(2) != 0 %}
+    <div class="tl-kv"><span data-lang="tl-inflation-adj">Inflation adjustment on the principal</span><span class="{{ 'text-success' if p.efeito_correcao > 0 else 'text-danger' }}">R$ {{ p.efeito_correcao | tl_money(2) }}</span></div>
+    {% endif %}
     {% if p.convencao %}
     <div class="tl-kv"><span data-lang="tl-day-count">Day count</span><span>{{ tl_dc_name(p.convencao) }} · {{ p.dias_contados | tl_num }} <span data-lang="tl-days">days</span> · τ&nbsp;{{ '%.6f' | format(p.fracao_de_ano) }}</span></div>
     {% endif %}
@@ -223,7 +226,7 @@
     <div class="tl-kv"><span>{{ p.ativo or 'Price' }}</span><span>{{ p.preco_inicial | tl_money(2) }} → {{ p.preco_final | tl_money(2) }}</span></div>
     {% endif %}
     {% if p.ni_inicial %}
-    <div class="tl-kv"><span><span data-lang="tl-index-number">Index number</span>{% if p.mes_ni_inicial %} · IBGE {{ p.ipca_fixing | upper | replace('M', 'M-') }}{% endif %}</span><span>{{ p.ni_inicial | tl_money(2) }}{% if p.mes_ni_inicial %} ({{ p.mes_ni_inicial }}){% endif %} → {{ p.ni_final | tl_money(2) }}{% if p.mes_ni_final %} ({{ p.mes_ni_final }}){% endif %}</span></div>
+    <div class="tl-kv"><span><span data-lang="tl-index-number">Index number</span>{% if p.mes_ni_inicial %} · IBGE {{ p.ipca_fixing | upper | replace('M', 'M-') }}{% endif %}</span><span>{{ p.ni_inicial | tl_money(2) }} ({{ p.mes_ni_inicial or 'contract' }}) → {{ p.ni_final | tl_money(2) }}{% if p.mes_ni_final %} ({{ p.mes_ni_final }}){% endif %}</span></div>
     {% endif %}
     {% if p.quanto %}
     <div class="tl-kv"><span><span data-lang="tl-quoted-in">Quoted in</span> {{ p.moeda }}</span><span data-lang="tl-quanto-short">quanto · no FX</span></div>
@@ -376,14 +379,14 @@
             {% if r.efeito_cambial_do_principal | round(2) != 0 %}
             <div class="tl-card">
                 <p class="tl-title" data-lang="tl-two-settlements">The two settlements, side by side</p>
-                <p class="tl-sub mb-2" data-lang="tl-two-settlements-note">What separates them is the FX move on the principal. On an interim flow it does not change hands, because the principal does not settle there — it carries on to the next period.</p>
+                <p class="tl-sub mb-2" data-lang="tl-two-settlements-note">What separates them is the FX move or the inflation adjustment on the principal. On an interim flow it does not change hands, because the principal does not settle there — it carries on to the next period.</p>
                 <div class="table-responsive">
                     <table class="table table-sm table-striped mb-0">
                         <thead><tr><th data-lang="tl-base">Base</th><th data-lang="tl-calculation">Calculation</th><th data-lang="tl-gross-settlement">Gross settlement</th></tr></thead>
                         <tbody>
                             <tr><td data-lang="tl-interest-only">Interest only</td><td data-lang="tl-int-a-minus-p">receiving interest − paying interest</td><td>R$ {{ (r.juros_da_ativa - r.juros_da_passiva) | tl_money(2) }}</td></tr>
                             <tr><td data-lang="tl-future-value">Future value</td><td data-lang="tl-fv-a-minus-p">receiving FV − paying FV</td><td>R$ {{ (r.ativa.valor - r.passiva.valor) | tl_money(2) }}</td></tr>
-                            <tr><td data-lang="tl-difference">Difference</td><td data-lang="tl-fx-on-principal">FX on the principal</td><td class="text-warning">R$ {{ r.efeito_cambial_do_principal | tl_money(2) }}</td></tr>
+                            <tr><td data-lang="tl-difference">Difference</td><td data-lang="tl-fx-on-principal">FX / inflation on the principal</td><td class="text-warning">R$ {{ r.efeito_cambial_do_principal | tl_money(2) }}</td></tr>
                         </tbody>
                     </table>
                 </div>

@@ -21,7 +21,7 @@ início do fluxo (onde os índices começam), fim do fluxo (a data do ajuste).
     SOFR composto    F = Π (1 + SOFR_k · n/360) · cap(s, τ)
     Term SOFR        F = cap(fixing + s, τ)
     EURIBOR          F = cap(fixing + s, τ)
-    IPCA             F = (NI_final / NI_inicial) · cap(c, τ)   NI digitado ou do IBGE (M-1/M-2)
+    IPCA             F = (NI_final / NI_inicial) · cap(c, τ)   NI final do IBGE (M-1/M-2); só o cupom liquida no fluxo
     Equity           F = (preço_final / preço_inicial) · cap(s, τ)
 
 Uma ponta em moeda estrangeira multiplica tudo pela variação cambial
@@ -246,6 +246,13 @@ class PontaLiquidada:
     quanto: bool = False
     fator_cambial: float = 1.0
     fator_do_indice: float = 1.0
+    # A correção monetária da perna IPCA (NI_final / NI_inicial). Fica FORA
+    # do `fator_do_indice` pelo mesmo motivo do `fator_cambial`: no fluxo
+    # intermediário só o CUPOM liquida — a correção fica no principal, que
+    # segue corrigido para o fluxo seguinte. A planilha da mesa faz
+    # `VBR × correção × (cupom − 1)`, e somar a correção aos juros dava
+    # 2,4 milhões a mais num fluxo de 1 bilhão.
+    fator_correcao: float = 1.0
     ptax_inicial: Optional[float] = None
     ptax_final: Optional[float] = None
     data_ptax_inicial: Optional[date] = None
@@ -268,13 +275,21 @@ class PontaLiquidada:
 
     @property
     def juros(self):
-        """Só o que a TAXA rendeu, trazida a reais pelo fixing do fim."""
-        return self.nocional * self.fator_cambial * (self.fator_do_indice - 1.0)
+        """Só o que a TAXA rendeu, sobre o principal corrigido (IPCA) e
+        trazido a reais pelo fixing do fim."""
+        return (self.nocional * self.fator_cambial * self.fator_correcao
+                * (self.fator_do_indice - 1.0))
 
     @property
     def efeito_cambial(self):
-        """O que a moeda fez com o principal — ``juros + efeito == valor − nocional``."""
+        """O que a moeda fez com o principal —
+        ``juros + efeito_cambial + efeito_correcao == valor − nocional``."""
         return self.nocional * (self.fator_cambial - 1.0)
+
+    @property
+    def efeito_correcao(self):
+        """O que a inflação fez com o principal (perna IPCA), em reais."""
+        return self.nocional * self.fator_cambial * (self.fator_correcao - 1.0)
 
     @property
     def descricao_texto(self):
@@ -360,7 +375,7 @@ def liquidar_ponta(ponta, nocional, inicio, fim, calendario=None, arredondar_di=
         return contagem.fator(taxa, ponta.convencao, ponta.regime, d0, d1, cal)
 
     def montar(indice, descricao, **extra):
-        fator = fx * indice
+        fator = fx * extra.get('fator_correcao', 1.0) * indice
         return PontaLiquidada(fator=fator, valor=nocional * fator, fator_do_indice=indice,
                               descricao=descricao, **comum, **extra)
 
@@ -463,26 +478,38 @@ def liquidar_ponta(ponta, nocional, inicio, fim, calendario=None, arredondar_di=
     if ponta.indexador == IPCA:
         ni0, ni1, mes0, mes1 = ponta.ni_inicial, ponta.ni_final, None, None
         if ponta.ipca_fixing:
-            # O fixing manda: os números vêm do IBGE pelo mês da defasagem,
-            # e o que estava digitado é ignorado — meio a meio (um digitado,
-            # um buscado) seria uma correção de meses trocados sem aviso.
-            m0 = ipca.mes_do_fixing(d0, ponta.ipca_fixing)
+            # O fixing diz de que mês é o número FINAL: M-n contado da data
+            # de liquidação do fluxo. O INICIAL é do CONTRATO — a cotação
+            # inicial que a posição da B3 traz (o pré-preenchimento a põe no
+            # campo) ou o que a mesa digitou — e só cai para o IBGE, pela
+            # mesma defasagem contada do início do fluxo, quando está em
+            # branco. Buscar os dois sobrescrevia o do contrato: num swap
+            # fechado em 15/06 a base é maio (o último publicado), e M-2 do
+            # início dava abril — 0,58% de correção que não existe.
             m1 = ipca.mes_do_fixing(d1, ponta.ipca_fixing)
-            numeros = ipca.numeros_indice([m0, m1])
-            ni0, ni1 = numeros[m0], numeros[m1]
-            mes0, mes1 = ipca.rotulo(*m0), ipca.rotulo(*m1)
+            pedidos = [m1]
+            m0 = None
+            if not ni0:
+                m0 = ipca.mes_do_fixing(d0, ponta.ipca_fixing)
+                pedidos.append(m0)
+            numeros = ipca.numeros_indice(pedidos)
+            ni1, mes1 = numeros[m1], ipca.rotulo(*m1)
+            if m0:
+                ni0, mes0 = numeros[m0], ipca.rotulo(*m0)
         if not ni0 or ni1 is None:
             raise ErroLiquidacao('the IPCA leg needs the initial and the final index number')
         correcao = ni1 / ni0
-        if mes0:
-            molde = ('{correcao}% inflation adjustment ({mes0} → {mes1}, IBGE) plus a '
-                     '{taxa}% p.a. real coupon')
+        if mes1:
+            molde = ('{correcao}% inflation adjustment ({de} → {mes1}, IBGE) on the principal '
+                     'plus a {taxa}% p.a. real coupon')
         else:
-            molde = '{correcao}% inflation adjustment plus a {taxa}% p.a. real coupon'
+            molde = ('{correcao}% inflation adjustment on the principal plus a {taxa}% p.a. '
+                     'real coupon')
         return montar(
-            correcao * capitalizar(ponta.taxa),
+            capitalizar(ponta.taxa),
             (molde, {'correcao': _numero((correcao - 1) * 100), 'taxa': _numero(ponta.taxa * 100),
-                     'mes0': mes0, 'mes1': mes1}),
+                     'de': mes0 or 'contract', 'mes1': mes1}),
+            fator_correcao=correcao,
             ni_inicial=ni0, ni_final=ni1, mes_ni_inicial=mes0, mes_ni_final=mes1,
             ipca_fixing=ponta.ipca_fixing)
 
