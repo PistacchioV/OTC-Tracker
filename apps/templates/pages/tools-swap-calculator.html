@@ -159,6 +159,20 @@
         </div>
         <div class="col-12" data-leg="{{ lado }}" data-show-for="ipca">
             <div class="row g-2">
+                {# O fixing diz de QUAL mês é cada número-índice: M-1 é o mês
+                   anterior à liquidação do fluxo (o inicial conta do início, o
+                   final conta do fim), M-2 o segundo anterior. Escolhido, o
+                   Calculate busca os dois no IBGE (tabela 1737, variável 2266)
+                   e escreve nos campos; em branco, valem os digitados. #}
+                <div class="col-12 tl-field">
+                    <label for="{{ lado }}_ipca_fixing" data-lang="tl-ipca-fixing">Fixing</label>
+                    <select class="form-select form-select-sm tl-ipca-fixing" id="{{ lado }}_ipca_fixing" name="{{ lado }}_ipca_fixing" data-leg="{{ lado }}">
+                        <option value="" {{ 'selected' if not f[lado ~ '_ipca_fixing'] }} data-lang="tl-ipca-fixing-typed">Typed index numbers</option>
+                        {% for valor, nome in fixings_ipca %}<option value="{{ valor }}" {{ 'selected' if f[lado ~ '_ipca_fixing'] == valor }} data-lang="tl-ipca-{{ valor }}">{{ nome }}</option>{% endfor %}
+                    </select>
+                    {% set meses = ipca_meses[lado] if ipca_meses else None %}
+                    <p class="tl-help" id="{{ lado }}_ipca_nota"{{ '' if meses else ' hidden' }}>{% if meses %}<span data-lang="tl-ipca-source">IBGE index number</span> {{ meses[0] }} → {{ meses[1] }}{% endif %}</p>
+                </div>
                 <div class="col-6 tl-field">
                     <label for="{{ lado }}_ni_inicial" data-lang="tl-ni-initial">Initial index number</label>
                     <input class="form-control form-control-sm" id="{{ lado }}_ni_inicial" name="{{ lado }}_ni_inicial" value="{{ f[lado ~ '_ni_inicial'] }}" inputmode="decimal" data-format="index">
@@ -167,6 +181,7 @@
                     <label for="{{ lado }}_ni_final" data-lang="tl-ni-final">Final index number</label>
                     <input class="form-control form-control-sm" id="{{ lado }}_ni_final" name="{{ lado }}_ni_final" value="{{ f[lado ~ '_ni_final'] }}" inputmode="decimal" data-format="index">
                 </div>
+                <div class="col-12"><p class="tl-help" data-lang="tl-ipca-fixing-help">M-1 uses the IPCA of the month before the flow end for the final number and before the flow start for the initial one; M-2, two months before each. Calculate fetches both from IBGE (table 1737, index number Dec/1993 = 100) and fills the fields — a month IBGE has not published yet is an error, never a guess. Blank, the numbers typed above are used.</p></div>
             </div>
         </div>
         <div class="col-12 tl-field" data-leg="{{ lado }}" data-show-for="fator">
@@ -206,6 +221,9 @@
     {% endif %}
     {% if p.preco_inicial %}
     <div class="tl-kv"><span>{{ p.ativo or 'Price' }}</span><span>{{ p.preco_inicial | tl_money(2) }} → {{ p.preco_final | tl_money(2) }}</span></div>
+    {% endif %}
+    {% if p.ni_inicial %}
+    <div class="tl-kv"><span><span data-lang="tl-index-number">Index number</span>{% if p.mes_ni_inicial %} · IBGE {{ p.ipca_fixing | upper | replace('M', 'M-') }}{% endif %}</span><span>{{ p.ni_inicial | tl_money(2) }}{% if p.mes_ni_inicial %} ({{ p.mes_ni_inicial }}){% endif %} → {{ p.ni_final | tl_money(2) }}{% if p.mes_ni_final %} ({{ p.mes_ni_final }}){% endif %}</span></div>
     {% endif %}
     {% if p.quanto %}
     <div class="tl-kv"><span><span data-lang="tl-quoted-in">Quoted in</span> {{ p.moeda }}</span><span data-lang="tl-quanto-short">quanto · no FX</span></div>

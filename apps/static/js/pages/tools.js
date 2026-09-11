@@ -30,6 +30,7 @@
           noIndexRule: 'No line in the tools-swap-index mapping for this curve — register it in Mapping. The position had:',
           noIndexCell: 'The position brings no index on this leg.',
           flow: 'flow', pickId: 'Type a B3 ID first.', fromBase: 'from the imported base of',
+          ipcaAuto: 'fetched from IBGE on Calculate',
           fields: { counterparty: 'Counterparty', data_operacao: 'Trade date', inicio: 'Flow start',
                     fim: 'Flow end', vencimento: 'Swap maturity', nocional: 'Remaining notional',
                     nocional_original: 'Original notional', amortizacao: 'Amortisation',
@@ -51,6 +52,7 @@
           noIndexRule: 'Nenhuma linha no cadastro tools-swap-index para esta curva — cadastre em Mapping. A posição trazia:',
           noIndexCell: 'A posição não traz índice nesta perna.',
           flow: 'fluxo', pickId: 'Digite um B3 ID primeiro.', fromBase: 'da base importada de',
+          ipcaAuto: 'buscado no IBGE ao calcular',
           fields: { counterparty: 'Contraparte', data_operacao: 'Data da operação', inicio: 'Início do fluxo',
                     fim: 'Fim do fluxo', vencimento: 'Vencimento do swap', nocional: 'Notional remanescente',
                     nocional_original: 'Notional original', amortizacao: 'Amortização',
@@ -72,6 +74,7 @@
           noIndexRule: 'Ninguna línea en el registro tools-swap-index para esta curva — regístrela en Mapping. La posición traía:',
           noIndexCell: 'La posición no trae índice en esta pata.',
           flow: 'flujo', pickId: 'Escriba un B3 ID primero.', fromBase: 'de la base importada de',
+          ipcaAuto: 'traído del IBGE al calcular',
           fields: { counterparty: 'Contraparte', data_operacao: 'Fecha de la operación', inicio: 'Inicio del flujo',
                     fim: 'Fin del flujo', vencimento: 'Vencimiento del swap', nocional: 'Nocional remanente',
                     nocional_original: 'Nocional original', amortizacao: 'Amortización',
@@ -381,6 +384,31 @@
       })
       .catch(function () { /* offline: fica o que estava no campo */ });
   }
+  // ── IPCA: com M-1/M-2 os números-índice vêm do IBGE no Calculate ─────────
+  // Os campos ficam só-leitura para a tela não sugerir que o digitado vale:
+  // o motor ignora os dois quando o fixing está escolhido.
+  function aplicarFixingIpca(lado) {
+    var sel = document.getElementById(lado + '_ipca_fixing');
+    if (!sel) return;
+    var auto = !!sel.value;
+    ['_ni_inicial', '_ni_final'].forEach(function (suf) {
+      var el = document.getElementById(lado + suf);
+      if (!el) return;
+      el.readOnly = auto;
+      el.placeholder = auto ? t('ipcaAuto') : '';
+      el.classList.toggle('tl-readonly', auto);
+    });
+  }
+  page.querySelectorAll('select.tl-ipca-fixing').forEach(function (sel) {
+    var lado = sel.getAttribute('data-leg');
+    aplicarFixingIpca(lado);
+    sel.addEventListener('change', function () {
+      aplicarFixingIpca(lado);
+      var nota = document.getElementById(lado + '_ipca_nota');
+      if (nota) { nota.hidden = true; nota.textContent = ''; }
+    });
+  });
+
   ['ativa', 'passiva'].forEach(function (lado) {
     ['_tenor', '_data_fixing'].forEach(function (suf) {
       var el = document.getElementById(lado + suf);
