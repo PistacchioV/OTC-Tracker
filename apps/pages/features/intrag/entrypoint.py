@@ -1162,7 +1162,7 @@ def api_intrag_dce_swap_send_file():
     """Gera o arquivo da Intrag dos deals selecionados e vira New/Approved →
     Sent. Body: { "items": [ { "deal_id", "trade_date" } ] }. A linha é
     montada AQUI, do arquivo-dia (não das células da tela), agrupada por
-    Trade Date — um arquivo por data, `LAWTON_OFF_SWAP_AAAAMMDD.txt` na pasta
+    Trade Date — um arquivo por data, `Intrag-DCE-Swap-AAAAMMDD.txt` na pasta
     padrão da Intrag. Um deal sem par Pay+Rec recusa o lote INTEIRO com 400
     dizendo qual — nada é escrito pela metade."""
     if not session.get('authenticated'):

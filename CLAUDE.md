@@ -734,7 +734,7 @@ São **45**: `currency-base`, `interbook-ndf`, `commodities-b3`,
   evento do DFLUXO sem Taxa Amortização é **0%**, não lacuna.
 - **Intrag DCE Swap: a unidade é o DEAL e a linha é traduzida no servidor**
   (§448). A planilha do dropzone traz duas tabelas (pernas e fluxos)
-  ligadas pelo Deal Name; o arquivo `LAWTON_OFF_SWAP_AAAAMMDD.txt` é UMA
+  ligadas pelo Deal Name; o arquivo `Intrag-DCE-Swap-AAAAMMDD.txt` é UMA
   linha por deal montada do par Pay + Rec (`domain._dce_swap_intrag_fields`,
   porte do script da mesa — o teste compara byte a byte). Send/preview
   leem o arquivo-dia, nunca as células da tela; deal sem Pay+Rec recusa o

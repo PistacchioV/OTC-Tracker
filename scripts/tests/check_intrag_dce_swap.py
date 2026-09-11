@@ -145,7 +145,7 @@ def main():
           and any(p.get('url') == '/intrag-dce-swap' for p in tpl.get('linked_pages', [])))
     check('os Fixed do template gravado reproduzem o script',
           ';'.join(commands._dce_swap_line_fields(entry)) == ESPERADO)
-    check('nome do arquivo é o do script', commands._dce_swap_file_name(datetime(2026, 9, 11)) == 'LAWTON_OFF_SWAP_20260911.txt')
+    check('nome do arquivo segue as irmãs da Intrag', commands._dce_swap_file_name(datetime(2026, 9, 11)) == 'Intrag-DCE-Swap-20260911.txt')
 
     print('== 4. import no arquivo-dia da Trade Date; re-import preserva a esteira ==')
     tmp = tempfile.mkdtemp(prefix='otc-dces-')

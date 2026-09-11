@@ -671,8 +671,9 @@ def _dce_swap_line_fields(entry):
 
 def _dce_swap_file_name(ref_dt):
     """Nome do arquivo gerado: o `file_name` do template quando cadastrado
-    (com `AAAAMMDD`/`YYYYMMDD` trocado pela data), senão o do script da mesa —
-    `LAWTON_OFF_SWAP_AAAAMMDD.txt`."""
+    (com `AAAAMMDD`/`YYYYMMDD` trocado pela data), senão o padrão das irmãs
+    da Intrag — `Intrag-DCE-Swap-AAAAMMDD.txt` (o script da mesa escrevia
+    `LAWTON_OFF_SWAP_`, mas o nome na pasta é o mesmo das outras páginas)."""
     try:
         nome = _R()._fi_variant_file_name(_DCE_SWAP_FI_KEY)
     except Exception:                                   # noqa: BLE001
@@ -680,7 +681,7 @@ def _dce_swap_file_name(ref_dt):
     ymd = ref_dt.strftime('%Y%m%d')
     if nome:
         return nome.replace('AAAAMMDD', ymd).replace('YYYYMMDD', ymd)
-    return 'LAWTON_OFF_SWAP_' + ymd + '.txt'
+    return 'Intrag-DCE-Swap-' + ymd + '.txt'
 
 
 _INTRAG_DELETE_FAMILIES = {

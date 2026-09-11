@@ -18814,7 +18814,7 @@ vazamento. O par original (2,6 GB) ficou em
   Pay; Rate sai como veio na planilha). É por isso que a página tem o
   **preview de duplo clique**: a grade mostra a planilha como veio e o
   arquivo é outra coisa. O Send monta a linha do arquivo-dia (não das células
-  da tela), um arquivo por Trade Date, `LAWTON_OFF_SWAP_AAAAMMDD.txt` na
+  da tela), um arquivo por Trade Date, `Intrag-DCE-Swap-AAAAMMDD.txt` (o padrão das irmãs; o script da mesa escrevia `LAWTON_OFF_SWAP_`) na
   pasta padrão da Intrag (um `file_name` cadastrado no template vence); deal
   sem par Pay+Rec recusa o LOTE inteiro com 400 dizendo qual — nada sai pela
   metade. Trade Date é a escolhida no dropzone (default hoje — o script
