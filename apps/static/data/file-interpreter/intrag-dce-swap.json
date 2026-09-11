@@ -1,0 +1,992 @@
+{
+ "key": "intrag-dce-swap",
+ "name": "Intrag DCE Swap (Instrução Swap Lawton)",
+ "system_id": "INTRAG",
+ "category": "Intrag",
+ "manual_section": "",
+ "manual_pages": "",
+ "manual_version": "",
+ "description": "Instruction file of the Intrag · DCE · Swap page. The rows are born from the Athena swap spreadsheet (NewDealsAndCashflowDetails.xlsx) dropped on the page: two tables linked by Deal Name — the swap characteristics (one row per leg, Pay and Rec) and the cashflows (one row per coupon). The file has ONE line per deal, translated from the Pay + Rec pair: 48 ';'-delimited fields, no header.",
+ "file_name_rule": "LAWTON_OFF_SWAP_AAAAMMDD.txt (the name of the desk script; a `file_name` registered here with AAAAMMDD wins), written by the Send button of the Intrag · DCE · Swap page into I:\\Confirmation\\Derivativos\\OTC Tracker\\Intrag\\AAAA\\mm. Mmmm\\dd — the same folder as the other Intrag pages; an existing name gets a \" (n)\" copy suffix.",
+ "notes": "Party leg = REC leg of the spreadsheet; Counterparty leg = PAY leg. The grid shows the spreadsheet as it came (legs and cashflows); the Intrag line is built on the server from the deal (double-click a leg row for the preview). The cycle is the same as the sister Intrag pages: edit (Pending, maker) → approve (Approved, maker ≠ checker) → Mapping Intrag ID (Boletas CSV, SWAP rows keyed by the Deal Name → Success) → Send (New/Approved → Sent). Fixed literals registered here override the generator; the calculated fields follow the desk script translate_athena_intrag_swap.py.",
+ "base_key": "",
+ "le_pair": "",
+ "variant_label": "",
+ "file_name": "",
+ "file_type": "delimited",
+ "separator": ";",
+ "record_length": null,
+ "status": "library",
+ "linked_pages": [
+  {
+   "label": "Intrag · DCE · Swap",
+   "url": "/intrag-dce-swap",
+   "columns": [
+    "Deal Name",
+    "Leg Name",
+    "Counterparty",
+    "SPN",
+    "Trading Entity",
+    "Inst Leg Name",
+    "Direction",
+    "Quantity",
+    "Rates/Spread",
+    "Currency",
+    "Start Date",
+    "End Date",
+    "Pay Freq",
+    "Initial Exchange",
+    "Final Exchange",
+    "DCC",
+    "Acc Adj",
+    "Pay Adj",
+    "Pay Rel To",
+    "Notional Exch Date Adj",
+    "Comp Freq",
+    "Comp Meth",
+    "Compounding Formula",
+    "Index Name",
+    "Index Tenor",
+    "Reset Adj",
+    "Leverage",
+    "Index Start Value",
+    "Index Start Date",
+    "Index End Date",
+    "Notional Pay Date",
+    "Roll Convention",
+    "Roll Day",
+    "Initial Stub Method",
+    "Initial Interp Tenor",
+    "Final Stub Method",
+    "Final Interp Tenor",
+    "Custom Rt(%)",
+    "Settlement Ccy",
+    "FX Reset Anchor",
+    "FX Fix Date Adj",
+    "FX Fix Pub",
+    "Trade Date"
+   ]
+  }
+ ],
+ "blocks": [
+  {
+   "id": "registro",
+   "title": "Registro",
+   "note": "One ';'-delimited line per deal — the 48 fields of the Lawton swap instruction, in order. Fields 10–26 describe the Party leg (REC), 27–43 the Counterparty leg (PAY).",
+   "fields": [
+    {
+     "seq": "1",
+     "field": "File Code",
+     "format": "",
+     "position": "",
+     "required": "",
+     "content": "13",
+     "description": "File code of the Intrag swap layout.",
+     "source": "Fixed",
+     "source_detail": "13",
+     "source_note": "Fixed literal — editing it here changes the generated file.",
+     "source_by_page": {
+      "/intrag-dce-swap": {
+       "source": "Fixed",
+       "source_detail": "13",
+       "source_note": ""
+      }
+     }
+    },
+    {
+     "seq": "2",
+     "field": "Trade Number",
+     "format": "",
+     "position": "",
+     "required": "",
+     "content": "0",
+     "description": "Trade number — always 0 on registration.",
+     "source": "Fixed",
+     "source_detail": "0",
+     "source_note": "Fixed literal — editing it here changes the generated file.",
+     "source_by_page": {
+      "/intrag-dce-swap": {
+       "source": "Fixed",
+       "source_detail": "0",
+       "source_note": ""
+      }
+     }
+    },
+    {
+     "seq": "3",
+     "field": "Portfolio Code",
+     "format": "",
+     "position": "",
+     "required": "",
+     "content": "GCCN",
+     "description": "Portfolio code of the fund.",
+     "source": "Fixed",
+     "source_detail": "GCCN",
+     "source_note": "Fixed literal — editing it here changes the generated file.",
+     "source_by_page": {
+      "/intrag-dce-swap": {
+       "source": "Fixed",
+       "source_detail": "GCCN",
+       "source_note": ""
+      }
+     }
+    },
+    {
+     "seq": "4",
+     "field": "Counterparty Code",
+     "format": "",
+     "position": "",
+     "required": "",
+     "content": "JPM",
+     "description": "Counterparty code at Intrag.",
+     "source": "Fixed",
+     "source_detail": "JPM",
+     "source_note": "Fixed literal — editing it here changes the generated file.",
+     "source_by_page": {
+      "/intrag-dce-swap": {
+       "source": "Fixed",
+       "source_detail": "JPM",
+       "source_note": ""
+      }
+     }
+    },
+    {
+     "seq": "5",
+     "field": "Contract Number",
+     "format": "",
+     "position": "",
+     "required": "",
+     "content": "D8DV-2CEZBY",
+     "description": "The Deal Name of the spreadsheet (Pay leg) — the key the Boletas return echoes for the Mapping Intrag ID.",
+     "source": "Page",
+     "source_detail": "Deal Name",
+     "source_note": "Read from the leg rows of the Intrag · DCE · Swap grid.",
+     "source_by_page": {
+      "/intrag-dce-swap": {
+       "source": "Page",
+       "source_detail": "Deal Name",
+       "source_note": ""
+      }
+     }
+    },
+    {
+     "seq": "6",
+     "field": "Trade Date",
+     "format": "",
+     "position": "",
+     "required": "",
+     "content": "20260911",
+     "description": "The Trade Date chosen on the dropzone when the spreadsheet was imported (the desk script used today), AAAAMMDD.",
+     "source": "Calculated",
+     "source_detail": "DATE(Trade Date)",
+     "source_note": "Computed by the page from the two legs (see description).",
+     "source_by_page": {
+      "/intrag-dce-swap": {
+       "source": "Calculated",
+       "source_detail": "DATE(Trade Date)",
+       "source_note": ""
+      }
+     }
+    },
+    {
+     "seq": "7",
+     "field": "Start Date",
+     "format": "",
+     "position": "",
+     "required": "",
+     "content": "20260902",
+     "description": "Start Date of the PAY leg, AAAAMMDD.",
+     "source": "Page",
+     "source_detail": "Start Date",
+     "source_note": "Read from the leg rows of the Intrag · DCE · Swap grid.",
+     "source_by_page": {
+      "/intrag-dce-swap": {
+       "source": "Page",
+       "source_detail": "Start Date",
+       "source_note": ""
+      }
+     }
+    },
+    {
+     "seq": "8",
+     "field": "Maturity Date",
+     "format": "",
+     "position": "",
+     "required": "",
+     "content": "20261002",
+     "description": "End Date of the PAY leg, AAAAMMDD.",
+     "source": "Page",
+     "source_detail": "End Date",
+     "source_note": "Read from the leg rows of the Intrag · DCE · Swap grid.",
+     "source_by_page": {
+      "/intrag-dce-swap": {
+       "source": "Page",
+       "source_detail": "End Date",
+       "source_note": ""
+      }
+     }
+    },
+    {
+     "seq": "9",
+     "field": "Notional Value",
+     "format": "",
+     "position": "",
+     "required": "",
+     "content": "-25000000,00",
+     "description": "Quantity of the PAY leg, 2 decimals, comma as decimal separator (sign as it comes on the spreadsheet).",
+     "source": "Page",
+     "source_detail": "Quantity",
+     "source_note": "Read from the leg rows of the Intrag · DCE · Swap grid.",
+     "source_by_page": {
+      "/intrag-dce-swap": {
+       "source": "Page",
+       "source_detail": "Quantity",
+       "source_note": ""
+      }
+     }
+    },
+    {
+     "seq": "10",
+     "field": "Index (Party)",
+     "format": "",
+     "position": "",
+     "required": "",
+     "content": "USD SOFR",
+     "description": "Party leg = REC leg. Index Name when filled; otherwise Currency + \" \" + Comp Meth, with the fixed legs (StdFixedXccyLeg, StdFixedXccyLegND, StdIRSFixedLeg, IRFixedLeg) mapped to FIXED.",
+     "source": "Calculated",
+     "source_detail": "Index Name | Currency + Comp Meth",
+     "source_note": "Computed by the page from the two legs (see description).",
+     "source_by_page": {
+      "/intrag-dce-swap": {
+       "source": "Calculated",
+       "source_detail": "Index Name | Currency + Comp Meth",
+       "source_note": ""
+      }
+     }
+    },
+    {
+     "seq": "11",
+     "field": "Percentage (Party)",
+     "format": "",
+     "position": "",
+     "required": "",
+     "content": "100",
+     "description": "Percentage of the index — always 100.",
+     "source": "Fixed",
+     "source_detail": "100",
+     "source_note": "Fixed literal — editing it here changes the generated file.",
+     "source_by_page": {
+      "/intrag-dce-swap": {
+       "source": "Fixed",
+       "source_detail": "100",
+       "source_note": ""
+      }
+     }
+    },
+    {
+     "seq": "12",
+     "field": "FX Rate (Party)",
+     "format": "",
+     "position": "",
+     "required": "",
+     "content": "-0,180000",
+     "description": "Quantity of the REC leg divided by the Quantity of the PAY leg, 6 decimals, comma as decimal separator; empty when the Pay quantity is zero or missing.",
+     "source": "Calculated",
+     "source_detail": "Quantity (Rec) / Quantity (Pay)",
+     "source_note": "Computed by the page from the two legs (see description).",
+     "source_by_page": {
+      "/intrag-dce-swap": {
+       "source": "Calculated",
+       "source_detail": "Quantity (Rec) / Quantity (Pay)",
+       "source_note": ""
+      }
+     }
+    },
+    {
+     "seq": "13",
+     "field": "Rate (Party)",
+     "format": "",
+     "position": "",
+     "required": "",
+     "content": "1.25",
+     "description": "Rates/Spread of the REC leg, as it comes.",
+     "source": "Page",
+     "source_detail": "Rates/Spread",
+     "source_note": "Read from the leg rows of the Intrag · DCE · Swap grid.",
+     "source_by_page": {
+      "/intrag-dce-swap": {
+       "source": "Page",
+       "source_detail": "Rates/Spread",
+       "source_note": ""
+      }
+     }
+    },
+    {
+     "seq": "14",
+     "field": "Base (Party)",
+     "format": "",
+     "position": "",
+     "required": "",
+     "content": "360",
+     "description": "The base of the REC leg DCC: act/360 → 360, 30/360 → 360 (the text after the slash).",
+     "source": "Calculated",
+     "source_detail": "DCC → base",
+     "source_note": "Computed by the page from the two legs (see description).",
+     "source_by_page": {
+      "/intrag-dce-swap": {
+       "source": "Calculated",
+       "source_detail": "DCC → base",
+       "source_note": ""
+      }
+     }
+    },
+    {
+     "seq": "15",
+     "field": "Interest Type (Party)",
+     "format": "",
+     "position": "",
+     "required": "",
+     "content": "E",
+     "description": "Interest type — always E.",
+     "source": "Fixed",
+     "source_detail": "E",
+     "source_note": "Fixed literal — editing it here changes the generated file.",
+     "source_by_page": {
+      "/intrag-dce-swap": {
+       "source": "Fixed",
+       "source_detail": "E",
+       "source_note": ""
+      }
+     }
+    },
+    {
+     "seq": "16",
+     "field": "Accrual (Party)",
+     "format": "",
+     "position": "",
+     "required": "",
+     "content": "E",
+     "description": "Accrual — always E.",
+     "source": "Fixed",
+     "source_detail": "E",
+     "source_note": "Fixed literal — editing it here changes the generated file.",
+     "source_by_page": {
+      "/intrag-dce-swap": {
+       "source": "Fixed",
+       "source_detail": "E",
+       "source_note": ""
+      }
+     }
+    },
+    {
+     "seq": "17",
+     "field": "Days (Party)",
+     "format": "",
+     "position": "",
+     "required": "",
+     "content": "C",
+     "description": "Days — always C.",
+     "source": "Fixed",
+     "source_detail": "C",
+     "source_note": "Fixed literal — editing it here changes the generated file.",
+     "source_by_page": {
+      "/intrag-dce-swap": {
+       "source": "Fixed",
+       "source_detail": "C",
+       "source_note": ""
+      }
+     }
+    },
+    {
+     "seq": "18",
+     "field": "Pay Frequency (Party)",
+     "format": "",
+     "position": "",
+     "required": "",
+     "content": "Zero",
+     "description": "Pay Freq of the REC leg.",
+     "source": "Page",
+     "source_detail": "Pay Freq",
+     "source_note": "Read from the leg rows of the Intrag · DCE · Swap grid.",
+     "source_by_page": {
+      "/intrag-dce-swap": {
+       "source": "Page",
+       "source_detail": "Pay Freq",
+       "source_note": ""
+      }
+     }
+    },
+    {
+     "seq": "19",
+     "field": "Accrual Adjust (Party)",
+     "format": "",
+     "position": "",
+     "required": "",
+     "content": "ModifiedFollowing(GBLO,USNY)",
+     "description": "Acc Adj of the REC leg.",
+     "source": "Page",
+     "source_detail": "Acc Adj",
+     "source_note": "Read from the leg rows of the Intrag · DCE · Swap grid.",
+     "source_by_page": {
+      "/intrag-dce-swap": {
+       "source": "Page",
+       "source_detail": "Acc Adj",
+       "source_note": ""
+      }
+     }
+    },
+    {
+     "seq": "20",
+     "field": "Payment Adjust (Party)",
+     "format": "",
+     "position": "",
+     "required": "",
+     "content": "ModifiedFollowing(GBLO,USNY)",
+     "description": "Pay Adj of the REC leg.",
+     "source": "Page",
+     "source_detail": "Pay Adj",
+     "source_note": "Read from the leg rows of the Intrag · DCE · Swap grid.",
+     "source_by_page": {
+      "/intrag-dce-swap": {
+       "source": "Page",
+       "source_detail": "Pay Adj",
+       "source_note": ""
+      }
+     }
+    },
+    {
+     "seq": "21",
+     "field": "Custom Rate (Party)",
+     "format": "",
+     "position": "",
+     "required": "",
+     "content": "0",
+     "description": "Custom Rt(%) of the REC leg; empty → 0.",
+     "source": "Page",
+     "source_detail": "Custom Rt(%)",
+     "source_note": "Read from the leg rows of the Intrag · DCE · Swap grid.",
+     "source_by_page": {
+      "/intrag-dce-swap": {
+       "source": "Page",
+       "source_detail": "Custom Rt(%)",
+       "source_note": ""
+      }
+     }
+    },
+    {
+     "seq": "22",
+     "field": "Initial Stub Method (Party)",
+     "format": "",
+     "position": "",
+     "required": "",
+     "content": "",
+     "description": "Initial Stub Method of the REC leg; DefaultRate or empty → empty.",
+     "source": "Page",
+     "source_detail": "Initial Stub Method",
+     "source_note": "Read from the leg rows of the Intrag · DCE · Swap grid.",
+     "source_by_page": {
+      "/intrag-dce-swap": {
+       "source": "Page",
+       "source_detail": "Initial Stub Method",
+       "source_note": ""
+      }
+     }
+    },
+    {
+     "seq": "23",
+     "field": "Initial Interp Tenor (Party)",
+     "format": "",
+     "position": "",
+     "required": "",
+     "content": "",
+     "description": "Initial Interp Tenor of the REC leg.",
+     "source": "Page",
+     "source_detail": "Initial Interp Tenor",
+     "source_note": "Read from the leg rows of the Intrag · DCE · Swap grid.",
+     "source_by_page": {
+      "/intrag-dce-swap": {
+       "source": "Page",
+       "source_detail": "Initial Interp Tenor",
+       "source_note": ""
+      }
+     }
+    },
+    {
+     "seq": "24",
+     "field": "Final Stub Method (Party)",
+     "format": "",
+     "position": "",
+     "required": "",
+     "content": "",
+     "description": "Final Stub Method of the REC leg; DefaultRate or empty → empty.",
+     "source": "Page",
+     "source_detail": "Final Stub Method",
+     "source_note": "Read from the leg rows of the Intrag · DCE · Swap grid.",
+     "source_by_page": {
+      "/intrag-dce-swap": {
+       "source": "Page",
+       "source_detail": "Final Stub Method",
+       "source_note": ""
+      }
+     }
+    },
+    {
+     "seq": "25",
+     "field": "Final Interp Tenor (Party)",
+     "format": "",
+     "position": "",
+     "required": "",
+     "content": "",
+     "description": "Final Interp Tenor of the REC leg.",
+     "source": "Page",
+     "source_detail": "Final Interp Tenor",
+     "source_note": "Read from the leg rows of the Intrag · DCE · Swap grid.",
+     "source_by_page": {
+      "/intrag-dce-swap": {
+       "source": "Page",
+       "source_detail": "Final Interp Tenor",
+       "source_note": ""
+      }
+     }
+    },
+    {
+     "seq": "26",
+     "field": "Observation (Party)",
+     "format": "",
+     "position": "",
+     "required": "",
+     "content": "",
+     "description": "Observation — always empty.",
+     "source": "Fixed",
+     "source_detail": "",
+     "source_note": "Fixed literal — editing it here changes the generated file.",
+     "source_by_page": {
+      "/intrag-dce-swap": {
+       "source": "Fixed",
+       "source_detail": "",
+       "source_note": ""
+      }
+     }
+    },
+    {
+     "seq": "27",
+     "field": "Index (Cpty)",
+     "format": "",
+     "position": "",
+     "required": "",
+     "content": "BRL FIXED",
+     "description": "Counterparty leg = PAY leg. Same rule as the Party index, on the PAY leg.",
+     "source": "Calculated",
+     "source_detail": "Index Name | Currency + Comp Meth",
+     "source_note": "Computed by the page from the two legs (see description).",
+     "source_by_page": {
+      "/intrag-dce-swap": {
+       "source": "Calculated",
+       "source_detail": "Index Name | Currency + Comp Meth",
+       "source_note": ""
+      }
+     }
+    },
+    {
+     "seq": "28",
+     "field": "Percentage (Cpty)",
+     "format": "",
+     "position": "",
+     "required": "",
+     "content": "100",
+     "description": "Percentage of the index — always 100.",
+     "source": "Fixed",
+     "source_detail": "100",
+     "source_note": "Fixed literal — editing it here changes the generated file.",
+     "source_by_page": {
+      "/intrag-dce-swap": {
+       "source": "Fixed",
+       "source_detail": "100",
+       "source_note": ""
+      }
+     }
+    },
+    {
+     "seq": "29",
+     "field": "FX Rate (Cpty)",
+     "format": "",
+     "position": "",
+     "required": "",
+     "content": "",
+     "description": "FX Rate of the counterparty leg — always empty.",
+     "source": "Fixed",
+     "source_detail": "",
+     "source_note": "Fixed literal — editing it here changes the generated file.",
+     "source_by_page": {
+      "/intrag-dce-swap": {
+       "source": "Fixed",
+       "source_detail": "",
+       "source_note": ""
+      }
+     }
+    },
+    {
+     "seq": "30",
+     "field": "Rate (Cpty)",
+     "format": "",
+     "position": "",
+     "required": "",
+     "content": "0.0",
+     "description": "Rates/Spread of the PAY leg, as it comes.",
+     "source": "Page",
+     "source_detail": "Rates/Spread",
+     "source_note": "Read from the leg rows of the Intrag · DCE · Swap grid.",
+     "source_by_page": {
+      "/intrag-dce-swap": {
+       "source": "Page",
+       "source_detail": "Rates/Spread",
+       "source_note": ""
+      }
+     }
+    },
+    {
+     "seq": "31",
+     "field": "Base (Cpty)",
+     "format": "",
+     "position": "",
+     "required": "",
+     "content": "360",
+     "description": "The base of the REC leg DCC (as on the desk template — not the Pay leg).",
+     "source": "Calculated",
+     "source_detail": "DCC → base",
+     "source_note": "Computed by the page from the two legs (see description).",
+     "source_by_page": {
+      "/intrag-dce-swap": {
+       "source": "Calculated",
+       "source_detail": "DCC → base",
+       "source_note": ""
+      }
+     }
+    },
+    {
+     "seq": "32",
+     "field": "Interest Type (Cpty)",
+     "format": "",
+     "position": "",
+     "required": "",
+     "content": "E",
+     "description": "Interest type — always E.",
+     "source": "Fixed",
+     "source_detail": "E",
+     "source_note": "Fixed literal — editing it here changes the generated file.",
+     "source_by_page": {
+      "/intrag-dce-swap": {
+       "source": "Fixed",
+       "source_detail": "E",
+       "source_note": ""
+      }
+     }
+    },
+    {
+     "seq": "33",
+     "field": "Accrual (Cpty)",
+     "format": "",
+     "position": "",
+     "required": "",
+     "content": "E",
+     "description": "Accrual — always E.",
+     "source": "Fixed",
+     "source_detail": "E",
+     "source_note": "Fixed literal — editing it here changes the generated file.",
+     "source_by_page": {
+      "/intrag-dce-swap": {
+       "source": "Fixed",
+       "source_detail": "E",
+       "source_note": ""
+      }
+     }
+    },
+    {
+     "seq": "34",
+     "field": "Days (Cpty)",
+     "format": "",
+     "position": "",
+     "required": "",
+     "content": "C",
+     "description": "Days — always C.",
+     "source": "Fixed",
+     "source_detail": "C",
+     "source_note": "Fixed literal — editing it here changes the generated file.",
+     "source_by_page": {
+      "/intrag-dce-swap": {
+       "source": "Fixed",
+       "source_detail": "C",
+       "source_note": ""
+      }
+     }
+    },
+    {
+     "seq": "35",
+     "field": "Pay Frequency (Cpty)",
+     "format": "",
+     "position": "",
+     "required": "",
+     "content": "Zero",
+     "description": "Pay Freq of the PAY leg.",
+     "source": "Page",
+     "source_detail": "Pay Freq",
+     "source_note": "Read from the leg rows of the Intrag · DCE · Swap grid.",
+     "source_by_page": {
+      "/intrag-dce-swap": {
+       "source": "Page",
+       "source_detail": "Pay Freq",
+       "source_note": ""
+      }
+     }
+    },
+    {
+     "seq": "36",
+     "field": "Accrual Adjust (Cpty)",
+     "format": "",
+     "position": "",
+     "required": "",
+     "content": "ModifiedFollowing(GBLO,USNY)",
+     "description": "Acc Adj of the PAY leg.",
+     "source": "Page",
+     "source_detail": "Acc Adj",
+     "source_note": "Read from the leg rows of the Intrag · DCE · Swap grid.",
+     "source_by_page": {
+      "/intrag-dce-swap": {
+       "source": "Page",
+       "source_detail": "Acc Adj",
+       "source_note": ""
+      }
+     }
+    },
+    {
+     "seq": "37",
+     "field": "Payment Adjust (Cpty)",
+     "format": "",
+     "position": "",
+     "required": "",
+     "content": "ModifiedFollowing(GBLO,USNY)",
+     "description": "Pay Adj of the PAY leg.",
+     "source": "Page",
+     "source_detail": "Pay Adj",
+     "source_note": "Read from the leg rows of the Intrag · DCE · Swap grid.",
+     "source_by_page": {
+      "/intrag-dce-swap": {
+       "source": "Page",
+       "source_detail": "Pay Adj",
+       "source_note": ""
+      }
+     }
+    },
+    {
+     "seq": "38",
+     "field": "Custom Rate (Cpty)",
+     "format": "",
+     "position": "",
+     "required": "",
+     "content": "0",
+     "description": "Custom Rt(%) of the PAY leg; empty → 0.",
+     "source": "Page",
+     "source_detail": "Custom Rt(%)",
+     "source_note": "Read from the leg rows of the Intrag · DCE · Swap grid.",
+     "source_by_page": {
+      "/intrag-dce-swap": {
+       "source": "Page",
+       "source_detail": "Custom Rt(%)",
+       "source_note": ""
+      }
+     }
+    },
+    {
+     "seq": "39",
+     "field": "Initial Stub Method (Cpty)",
+     "format": "",
+     "position": "",
+     "required": "",
+     "content": "",
+     "description": "Initial Stub Method of the PAY leg; DefaultRate or empty → empty.",
+     "source": "Page",
+     "source_detail": "Initial Stub Method",
+     "source_note": "Read from the leg rows of the Intrag · DCE · Swap grid.",
+     "source_by_page": {
+      "/intrag-dce-swap": {
+       "source": "Page",
+       "source_detail": "Initial Stub Method",
+       "source_note": ""
+      }
+     }
+    },
+    {
+     "seq": "40",
+     "field": "Initial Interp Tenor (Cpty)",
+     "format": "",
+     "position": "",
+     "required": "",
+     "content": "",
+     "description": "Initial Interp Tenor of the PAY leg.",
+     "source": "Page",
+     "source_detail": "Initial Interp Tenor",
+     "source_note": "Read from the leg rows of the Intrag · DCE · Swap grid.",
+     "source_by_page": {
+      "/intrag-dce-swap": {
+       "source": "Page",
+       "source_detail": "Initial Interp Tenor",
+       "source_note": ""
+      }
+     }
+    },
+    {
+     "seq": "41",
+     "field": "Final Stub Method (Cpty)",
+     "format": "",
+     "position": "",
+     "required": "",
+     "content": "",
+     "description": "Final Stub Method of the PAY leg; DefaultRate or empty → empty.",
+     "source": "Page",
+     "source_detail": "Final Stub Method",
+     "source_note": "Read from the leg rows of the Intrag · DCE · Swap grid.",
+     "source_by_page": {
+      "/intrag-dce-swap": {
+       "source": "Page",
+       "source_detail": "Final Stub Method",
+       "source_note": ""
+      }
+     }
+    },
+    {
+     "seq": "42",
+     "field": "Final Interp Tenor (Cpty)",
+     "format": "",
+     "position": "",
+     "required": "",
+     "content": "",
+     "description": "Final Interp Tenor of the PAY leg.",
+     "source": "Page",
+     "source_detail": "Final Interp Tenor",
+     "source_note": "Read from the leg rows of the Intrag · DCE · Swap grid.",
+     "source_by_page": {
+      "/intrag-dce-swap": {
+       "source": "Page",
+       "source_detail": "Final Interp Tenor",
+       "source_note": ""
+      }
+     }
+    },
+    {
+     "seq": "43",
+     "field": "Observation (Cpty)",
+     "format": "",
+     "position": "",
+     "required": "",
+     "content": "",
+     "description": "Observation — always empty.",
+     "source": "Fixed",
+     "source_detail": "",
+     "source_note": "Fixed literal — editing it here changes the generated file.",
+     "source_by_page": {
+      "/intrag-dce-swap": {
+       "source": "Fixed",
+       "source_detail": "",
+       "source_note": ""
+      }
+     }
+    },
+    {
+     "seq": "44",
+     "field": "Settlement Date",
+     "format": "",
+     "position": "",
+     "required": "",
+     "content": "20261002",
+     "description": "End Date of the PAY leg, AAAAMMDD.",
+     "source": "Page",
+     "source_detail": "End Date",
+     "source_note": "Read from the leg rows of the Intrag · DCE · Swap grid.",
+     "source_by_page": {
+      "/intrag-dce-swap": {
+       "source": "Page",
+       "source_detail": "End Date",
+       "source_note": ""
+      }
+     }
+    },
+    {
+     "seq": "45",
+     "field": "Settlement Ccy",
+     "format": "",
+     "position": "",
+     "required": "",
+     "content": "USD",
+     "description": "Settlement Ccy of the PAY leg; empty → REC leg; both empty → DSW.",
+     "source": "Page",
+     "source_detail": "Settlement Ccy",
+     "source_note": "Read from the leg rows of the Intrag · DCE · Swap grid.",
+     "source_by_page": {
+      "/intrag-dce-swap": {
+       "source": "Page",
+       "source_detail": "Settlement Ccy",
+       "source_note": ""
+      }
+     }
+    },
+    {
+     "seq": "46",
+     "field": "FX Fixing Date",
+     "format": "",
+     "position": "",
+     "required": "",
+     "content": "PaymentDate",
+     "description": "FX Reset Anchor of the PAY leg; empty → REC leg.",
+     "source": "Page",
+     "source_detail": "FX Reset Anchor",
+     "source_note": "Read from the leg rows of the Intrag · DCE · Swap grid.",
+     "source_by_page": {
+      "/intrag-dce-swap": {
+       "source": "Page",
+       "source_detail": "FX Reset Anchor",
+       "source_note": ""
+      }
+     }
+    },
+    {
+     "seq": "47",
+     "field": "FX Fixing Adjust",
+     "format": "",
+     "position": "",
+     "required": "",
+     "content": "-2D(BRSP,USNY)",
+     "description": "FX Fix Date Adj of the PAY leg; empty → REC leg.",
+     "source": "Page",
+     "source_detail": "FX Fix Date Adj",
+     "source_note": "Read from the leg rows of the Intrag · DCE · Swap grid.",
+     "source_by_page": {
+      "/intrag-dce-swap": {
+       "source": "Page",
+       "source_detail": "FX Fix Date Adj",
+       "source_note": ""
+      }
+     }
+    },
+    {
+     "seq": "48",
+     "field": "FX Fixing Publisher",
+     "format": "",
+     "position": "",
+     "required": "",
+     "content": "PTAX",
+     "description": "FX Fix Pub of the PAY leg; empty → REC leg.",
+     "source": "Page",
+     "source_detail": "FX Fix Pub",
+     "source_note": "Read from the leg rows of the Intrag · DCE · Swap grid.",
+     "source_by_page": {
+      "/intrag-dce-swap": {
+       "source": "Page",
+       "source_detail": "FX Fix Pub",
+       "source_note": ""
+      }
+     }
+    }
+   ]
+  }
+ ]
+}

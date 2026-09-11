@@ -18790,3 +18790,81 @@ Com o descarte: recuperado em 91 s, `_manifest` com 249 linhas, slim de
 script segurando a trava exclusiva do banco, com o app parado, e não um
 vazamento. O par original (2,6 GB) ficou em
 `db/_recuperado/20260911-094859/cache/B3 Files/Swap/`.
+
+## §448 — Intrag DCE Swap: a quinta página da Intrag, nascida de uma PLANILHA (2026-09-11)
+
+- A página `/intrag-dce-swap` deixou de ser esqueleto. Diferente das irmãs
+  (New Deals → arquivo-dia; DCE Option → bob-report), as linhas nascem de uma
+  planilha solta no **dropzone** da própria página — o
+  `NewDealsAndCashflowDetails.xlsx` da Athena, que traz DUAS tabelas ligadas
+  pelo Deal Name: as **características** (uma linha por perna, Pay e Rec, 42
+  colunas) e os **fluxos** (uma linha por cupom, 14 colunas). A tela tem as
+  duas grades; checkbox, ações e status ficam só na primeira, e a **unidade
+  da esteira é o DEAL** (status/maker/checker/intrag_id vivem nele; marcar
+  uma perna marca as duas). Clicar numa perna filtra a grade de fluxos pelo
+  deal (chip "Cashflows of"); Edit abre o deal INTEIRO (Intrag ID + as duas
+  grades editáveis); Add Row grava um deal novo no servidor (as irmãs só
+  punham a linha na tela — aqui uma linha só de tela não teria preview nem
+  send, porque a linha é montada no servidor).
+- **A linha da Intrag é UMA por deal, traduzida do par Pay + Rec no
+  servidor** (`domain._dce_swap_intrag_fields`, porte VERBATIM do
+  `translate_athena_intrag_swap.py` da mesa — 48 campos `;`, Party = REC,
+  Counterparty = PAY, inclusive as excentricidades: o Base da perna Pay lê o
+  DCC da REC "conforme template"; o Notional sai com o sinal da Quantity da
+  Pay; Rate sai como veio na planilha). É por isso que a página tem o
+  **preview de duplo clique**: a grade mostra a planilha como veio e o
+  arquivo é outra coisa. O Send monta a linha do arquivo-dia (não das células
+  da tela), um arquivo por Trade Date, `LAWTON_OFF_SWAP_AAAAMMDD.txt` na
+  pasta padrão da Intrag (um `file_name` cadastrado no template vence); deal
+  sem par Pay+Rec recusa o LOTE inteiro com 400 dizendo qual — nada sai pela
+  metade. Trade Date é a escolhida no dropzone (default hoje — o script
+  usava `date.today()`), e é o arquivo-dia onde o deal cai
+  (`cache/new deals/Intrag/DCE Swap/AAAA/MM/`).
+- O parser (`_dce_swap_parse_grid`) acha as duas tabelas pelo CABEÇALHO
+  (Deal Name + Direction → pernas; Deal Name + Coupon → fluxos), na mesma
+  aba ou em abas distintas, coladas ou separadas, e casa coluna por NOME
+  normalizado (`Custom Rt(%)`, `(Adj)RateValue(%)`, `Notional(%)` incluídos)
+  — coluna nova só sai em `unknown_headers`, avisada no balão do import.
+  O leitor de upload (`infra/xlsx_grid.py`) aceita xlsx/xlsm (openpyxl),
+  xls (xlrd) e texto `;`/tab/`,`, com célula → texto DETERMINÍSTICO (data
+  ISO, inteiro sem `.0`, booleano TRUE/FALSE). Re-import preserva a esteira
+  (upsert por Deal Name).
+- Foi junto: o template **`intrag-dce-swap`** na biblioteca do File
+  Interpreter (48 campos com Fixed/Page/Calculated; os Fixed vencem o
+  gerador via `_dce_swap_apply_fixed`), o rótulo `Intrag DCE Swap` nos TRÊS
+  mapas de notificação, as traduções en/br/es (`intrag-dces-*`), a família
+  `dce-swap` do Delete, o Mapping Intrag ID pelo Boletas CSV (linhas SWAP,
+  chave = Deal Name, o Contract Number do arquivo) e o guarda
+  `check_intrag_dce_swap.py`, cujo oráculo da linha é a saída do script da
+  mesa. O script `apps/pages/translate_athena_intrag_swap.py` continua fora
+  do repositório — a regra viva mora no `domain`.
+
+**O segundo banco, e o que o log mentia (mesmo dia, 10:07).** A subida seguinte
+mostrou que o DPOSICAO-SWAP não estava sozinho:
+`db\control-panel\operations_b3_mensageria_recipients.db` tem o mesmo WAL sem
+replay, e o aviso novo já saiu com o comando pronto. Mas a linha seguinte,
+essa da SEMEADURA, dizia outra coisa:
+
+```
+[data-dir] operations_b3_mensageria_recipients.db.wal": Table with name
+"operations_b3_mensageria_ está ocupado por outra instância — a semeadura
+desse banco fica para a próxima subida
+```
+
+Duas mentiras numa linha só, e as duas pela mesma causa: `BancoIlegivel` é
+subclasse de `BancoOcupado` (§441, de propósito — para os leitores é a MESMA
+resposta), então o `except BancoOcupado` do `_seed_data_dir` engolia o
+ilegível. O nome do banco saía do `os.path.basename(str(exc))`, que num
+`Catalog Error` cheio de caminho e aspas dá o lixo acima; e o remédio
+("fica para a próxima subida") nunca chega, porque nenhuma abertura passa do
+replay — a próxima subida imprime exatamente a mesma linha.
+
+Onde os dois se PARECEM (ler é a mesma resposta) a herança serve; onde eles
+se SEPARAM é no que o operador faz a seguir, e aí quem trata tem de ramificar
+ANTES. `_seed_data_dir` ganhou o `except data_store.BancoIlegivel` na frente,
+dizendo que a semeadura desse banco NÃO volta sozinha e trazendo o mesmo
+comando do aviso de leitura (`data_store.remedio_ilegivel`, extraída do
+`_ilegivel_avisa` para não viver duplicada). E o `BancoIlegivel` passou a
+carregar o banco no atributo `.db`: picar caminho de dentro de mensagem de
+erro é o que gerou o lixo. `check_duck_read.py` §12 prende — uma linha
+ILEGÍVEL com o comando, nenhuma linha de "ocupado".

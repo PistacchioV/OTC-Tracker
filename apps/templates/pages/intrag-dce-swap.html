@@ -2,17 +2,186 @@
 
 {% block title %}Intrag — DCE Swap{% endblock title %}
 
+{% block extra_css %}
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/responsive.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/select.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet" type="text/css"/>
+<style>
+  /* ti-spin: ver intrag-dce-option.html. */
+  @keyframes ti-spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
+  i.ti-spin, .ti-spin, i.ti-loader, i.ti-loader-2, i.ti-loader-3 { display: inline-block !important; animation: ti-spin 0.8s linear infinite !important; }
+  @media (prefers-reduced-motion: reduce) { i.ti-spin, .ti-spin, i.ti-loader, i.ti-loader-2, i.ti-loader-3 { animation-duration: 1.6s !important; } }
+
+  .badge.badge-sent { background-color: #17a2b8 !important; color: #fff !important; }
+
+  div.dt-button-collection {
+      opacity: 1 !important;
+      background-color: var(--ins-dropdown-bg, var(--ins-secondary-bg, #fff)) !important;
+      border: var(--ins-border-width, 1px) solid var(--ins-border-color, rgba(0,0,0,.1)) !important;
+      border-radius: var(--ins-dropdown-border-radius, 0.6875rem) !important;
+      box-shadow: 0 8px 24px rgba(0,0,0,.12) !important;
+  }
+  div.dt-button-collection .dropdown-item { opacity: 1 !important; color: var(--ins-dropdown-link-color, var(--ins-body-color)) !important; }
+  div.dt-button-collection .dropdown-item:hover { background-color: var(--ins-dropdown-link-hover-bg, rgba(0,102,204,.06)) !important; }
+
+  .card-body { padding: 5px; }
+  .table-responsive { overflow-x: auto; }
+  .dt-scroll-head, .dataTables_scrollHead { padding-top: 8px; }
+  .dt-scroll-body thead, .dataTables_scrollBody thead { display: none !important; }
+  .dces-table thead th,
+  .dt-scroll-head thead th,
+  .dataTables_scrollHeadInner thead th,
+  .dataTables_scrollHead thead th { padding-top: 12px !important; vertical-align: middle; }
+  .dt-scroll-headInner table, .dataTables_scrollHeadInner table,
+  .dt-scroll-body > table, .dataTables_scrollBody > table { table-layout: fixed !important; }
+  .dces-table th {
+      white-space: nowrap !important; padding: 8px 12px; overflow: hidden; text-overflow: ellipsis;
+      text-align: center !important; vertical-align: middle !important; font-size: 0.7rem;
+  }
+  .dt-scroll-head thead th, .dt-scroll-headInner thead th,
+  .dataTables_scrollHead thead th, .dataTables_scrollHeadInner thead th {
+      white-space: nowrap !important; overflow: hidden; text-overflow: ellipsis;
+      text-align: center !important; vertical-align: middle !important; font-size: 0.7rem;
+  }
+  .dces-table td { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.8rem; text-align: center; vertical-align: middle; }
+
+  /* Larguras — escopadas pelo WRAPPER de cada tabela (`<id>_wrapper`), porque
+     o DataTables remove o id da tabela clonada do header e há DUAS tabelas na
+     página: uma regra solta em `.dt-scroll-head th:nth-child(n)` alcançaria
+     as duas. Legs: (1)=checkbox (2)=actions (3)=Status (4)=Intrag ID
+     (5)=Trade Date (6..47)=42 colunas da planilha (48)=hidden ID. */
+  #intrag-dces-legs th, #intrag-dces-legs td,
+  #intrag-dces-legs_wrapper .dt-scroll-head thead th, #intrag-dces-legs_wrapper .dataTables_scrollHead thead th { width: 135px; min-width: 135px; }
+  #intrag-dces-legs th:nth-child(1), #intrag-dces-legs td:nth-child(1),
+  #intrag-dces-legs_wrapper .dt-scroll-head thead th:nth-child(1), #intrag-dces-legs_wrapper .dataTables_scrollHead thead th:nth-child(1) { width: 50px; min-width: 50px; }
+  #intrag-dces-legs th:nth-child(2), #intrag-dces-legs td:nth-child(2),
+  #intrag-dces-legs_wrapper .dt-scroll-head thead th:nth-child(2), #intrag-dces-legs_wrapper .dataTables_scrollHead thead th:nth-child(2) { width: 160px; min-width: 160px; }
+  #intrag-dces-legs th:nth-child(3), #intrag-dces-legs td:nth-child(3),
+  #intrag-dces-legs_wrapper .dt-scroll-head thead th:nth-child(3), #intrag-dces-legs_wrapper .dataTables_scrollHead thead th:nth-child(3) { width: 110px; min-width: 110px; }
+  #intrag-dces-legs th:nth-child(5), #intrag-dces-legs td:nth-child(5),
+  #intrag-dces-legs_wrapper .dt-scroll-head thead th:nth-child(5), #intrag-dces-legs_wrapper .dataTables_scrollHead thead th:nth-child(5) { width: 110px; min-width: 110px; }
+  #intrag-dces-legs th:nth-child(6), #intrag-dces-legs td:nth-child(6),
+  #intrag-dces-legs_wrapper .dt-scroll-head thead th:nth-child(6), #intrag-dces-legs_wrapper .dataTables_scrollHead thead th:nth-child(6) { width: 150px; min-width: 150px; }
+  #intrag-dces-legs th:nth-child(8), #intrag-dces-legs td:nth-child(8),
+  #intrag-dces-legs_wrapper .dt-scroll-head thead th:nth-child(8), #intrag-dces-legs_wrapper .dataTables_scrollHead thead th:nth-child(8) { width: 220px; min-width: 220px; }
+  #intrag-dces-legs th:nth-child(11), #intrag-dces-legs td:nth-child(11),
+  #intrag-dces-legs_wrapper .dt-scroll-head thead th:nth-child(11), #intrag-dces-legs_wrapper .dataTables_scrollHead thead th:nth-child(11) { width: 170px; min-width: 170px; }
+  #intrag-dces-legs th:nth-child(22), #intrag-dces-legs td:nth-child(22),
+  #intrag-dces-legs th:nth-child(23), #intrag-dces-legs td:nth-child(23),
+  #intrag-dces-legs th:nth-child(25), #intrag-dces-legs td:nth-child(25),
+  #intrag-dces-legs_wrapper .dt-scroll-head thead th:nth-child(22), #intrag-dces-legs_wrapper .dataTables_scrollHead thead th:nth-child(22),
+  #intrag-dces-legs_wrapper .dt-scroll-head thead th:nth-child(23), #intrag-dces-legs_wrapper .dataTables_scrollHead thead th:nth-child(23),
+  #intrag-dces-legs_wrapper .dt-scroll-head thead th:nth-child(25), #intrag-dces-legs_wrapper .dataTables_scrollHead thead th:nth-child(25) { width: 230px; min-width: 230px; }
+  #intrag-dces-legs th:nth-child(27), #intrag-dces-legs td:nth-child(27),
+  #intrag-dces-legs_wrapper .dt-scroll-head thead th:nth-child(27), #intrag-dces-legs_wrapper .dataTables_scrollHead thead th:nth-child(27) { width: 170px; min-width: 170px; }
+  /* Flows: (1)=Deal Name … (14)=Notional(%) (15)=hidden ID. */
+  #intrag-dces-flows th, #intrag-dces-flows td,
+  #intrag-dces-flows_wrapper .dt-scroll-head thead th, #intrag-dces-flows_wrapper .dataTables_scrollHead thead th { width: 140px; min-width: 140px; }
+  #intrag-dces-flows th:nth-child(1), #intrag-dces-flows td:nth-child(1),
+  #intrag-dces-flows_wrapper .dt-scroll-head thead th:nth-child(1), #intrag-dces-flows_wrapper .dataTables_scrollHead thead th:nth-child(1) { width: 150px; min-width: 150px; }
+  #intrag-dces-flows th:nth-child(3), #intrag-dces-flows td:nth-child(3),
+  #intrag-dces-flows_wrapper .dt-scroll-head thead th:nth-child(3), #intrag-dces-flows_wrapper .dataTables_scrollHead thead th:nth-child(3) { width: 170px; min-width: 170px; }
+
+  .dces-filter-row th { padding: 4px 8px; border-top: 1px solid rgba(0,0,0,0.08); text-align: center; vertical-align: middle; }
+  .dces-filter-row input { font-size: 12px; height: 28px; }
+  .btn-toolbar-all { font-size: 0.75rem !important; padding: 0.25rem 0.6rem !important; height: auto !important; line-height: 1.4 !important; white-space: nowrap !important; }
+  /* Trade Date do import: o campo de data da casa (ícone SVG embutido, par claro/escuro). */
+  #dcesTradeDate {
+      background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236c757d' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='5' width='16' height='16' rx='2'/%3E%3Cpath d='M16 3v4M8 3v4M4 11h16'/%3E%3C/svg%3E");
+      background-repeat: no-repeat; background-position: right 0.6rem center; background-size: 1rem 1rem; padding-right: 2rem; cursor: pointer;
+  }
+  [data-bs-theme="dark"] #dcesTradeDate {
+      background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23adb5bd' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='5' width='16' height='16' rx='2'/%3E%3Cpath d='M16 3v4M8 3v4M4 11h16'/%3E%3C/svg%3E");
+  }
+
+  /* ── Dropzone (slim, o desenho do Accrual) ──────────────────────────── */
+  .dces-drop {
+      flex: 1 1 320px; min-width: 260px;
+      border: 1.5px dashed rgba(0,0,0,.14); border-radius: 12px;
+      background: var(--vr-card-bg, var(--ins-secondary-bg, #fff));
+      padding: .55rem .9rem; display: flex; align-items: center; gap: .75rem;
+      cursor: pointer; text-align: left;
+      transition: border-color 180ms ease, background-color 180ms ease, transform 120ms ease;
+  }
+  .dces-drop:hover  { border-color: #4a849b; }
+  .dces-drop:active { transform: scale(0.99); }
+  .dces-drop.is-drag { border-color: #0066cc; background: rgba(0,102,204,.05); }
+  .dces-drop__icon { flex: 0 0 auto; width: 32px; height: 32px; border-radius: 9px; display: grid; place-items: center; background: rgba(74,132,155,.14); color: #4a849b; font-size: 1.05rem; }
+  .dces-drop__title { font-size: .8rem; font-weight: 600; margin: 0; line-height: 1.2; }
+  .dces-drop__hint  { font-size: .7rem; color: #6c757d; margin: .1rem 0 0; }
+  .dces-drop__spin  { display: none; }
+  .dces-drop.is-busy { pointer-events: none; opacity: .85; }
+  .dces-drop.is-busy .dces-drop__glyph { display: none; }
+  .dces-drop.is-busy .dces-drop__spin  { display: inline-block; }
+  [data-bs-theme=dark] .dces-drop { border-color: rgba(255,255,255,.14); }
+  [data-bs-theme=dark] .dces-drop__hint { color: #adb5bd; }
+
+  /* Chip "Cashflows of: <deal>" sobre a grade de fluxos. */
+  .dces-flows-chip { display: inline-flex; align-items: center; gap: 6px; background: #4a849b; color: #fff; border-radius: 50rem; padding: 2px 10px; font-size: 11px; font-weight: 500; }
+  .dces-flows-chip .sf-chip-remove { cursor: pointer; opacity: .8; font-size: 14px; line-height: 1; }
+  .dces-flows-chip .sf-chip-remove:hover { opacity: 1; }
+
+  /* Grades editáveis do modal (pernas e fluxos): inputs em linha, rolagem horizontal. */
+  .dces-edit-wrap { overflow-x: auto; max-height: 34vh; overflow-y: auto; border: 1px solid rgba(0,0,0,.08); border-radius: 8px; }
+  [data-bs-theme=dark] .dces-edit-wrap { border-color: rgba(255,255,255,.1); }
+  /* `width: max-content`: a grade é mais larga que o modal de propósito (43
+     colunas) e rola dentro do wrap — com `table-layout: fixed` a 100% as 43
+     colunas eram espremidas a ~30px e os cabeçalhos se sobrepunham. */
+  .dces-edit-table { margin: 0; table-layout: auto; width: max-content; min-width: 100%; }
+  .dces-edit-table th { font-size: .66rem; text-transform: uppercase; white-space: nowrap; text-align: center; vertical-align: middle; padding: 6px 6px; min-width: 150px; position: sticky; top: 0; background: var(--vr-thead-bg, var(--ins-tertiary-bg, #f8f9fa)); z-index: 1; }
+  .dces-edit-table th:first-child, .dces-edit-table td:first-child { min-width: 40px; width: 40px; text-align: center; }
+  .dces-edit-table td { padding: 2px 3px; min-width: 150px; }
+  .dces-edit-table td:first-child { min-width: 40px; }
+  .dces-edit-table input { font-size: .75rem; height: 28px; width: 100%; min-width: 140px; }
+  .dces-edit-table .dces-row-del { width: 26px; height: 26px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 8px; }
+
+  /* Preview do arquivo (duplo clique). */
+  .dces-preview-line { font-family: monospace; font-size: .76rem; white-space: pre-wrap; word-break: break-all; background: rgba(0,0,0,.04); border-radius: 8px; padding: 8px 10px; }
+  [data-bs-theme=dark] .dces-preview-line { background: rgba(255,255,255,.06); }
+
+  .smart-filter-wrapper { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; border: 1px solid rgba(0,0,0,0.08); border-radius: 0.6875rem; padding: 4px 8px; min-height: 38px; background: var(--ins-secondary-bg, #fff); cursor: text; transition: border-color 0.15s ease, box-shadow 0.15s ease; }
+  .smart-filter-wrapper:focus-within { border-color: #0066cc; box-shadow: 0 0 0 3px rgba(0,102,204,0.15); }
+  .smart-filter-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+  .smart-filter-chip { display: inline-flex; align-items: center; gap: 5px; background: #6c757d; color: #fff; border-radius: 50rem; padding: 2px 8px; font-size: 10px; font-weight: 500; white-space: nowrap; }
+  .smart-filter-chip .sf-chip-remove { cursor: pointer; opacity: .75; font-size: 13px; line-height: 1; margin-left: 2px; }
+  .smart-filter-chip .sf-chip-remove:hover { opacity: 1; }
+  .smart-filter-input { border: none; outline: none; flex: 1; min-width: 200px; font-size: 0.82rem; background: transparent; padding: 2px 0; color: inherit; }
+  .smart-filter-dropdown { position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 1055; background: var(--ins-secondary-bg, #fff); border: 1px solid rgba(0,0,0,0.08); border-radius: 0.6875rem; box-shadow: 0 8px 32px rgba(0,0,0,0.12), 0 0 0 1px rgba(0,0,0,0.04); max-height: 240px; overflow-y: auto; display: none; padding: 4px 0; }
+  .smart-filter-dropdown li { padding: 6px 12px; cursor: pointer; font-size: 0.81rem; display: flex; align-items: center; gap: 8px; list-style: none; color: inherit; }
+  .smart-filter-dropdown li:hover, .smart-filter-dropdown li.sf-kbd-active { background: rgba(0,102,204,0.06); }
+  .sf-type-badge { font-size: 9px; padding: 1px 5px; border-radius: 50rem; text-transform: uppercase; font-weight: 600; color: #fff; opacity: .85; }
+  .sf-type-text   { background: #6c757d; }
+  .sf-type-date   { background: #0dcaf0; color: #000 !important; }
+  .sf-type-number { background: #ffc107; color: #000 !important; }
+  .dces-table .btn-sm.rounded-circle { width: 32px; height: 32px; flex: 0 0 32px; min-width: 32px; max-width: 32px; padding: 0; font-size: 1rem; display: flex; align-items: center; justify-content: center; border-radius: 10px !important; box-sizing: border-box; }
+  #intrag-dces-legs td:nth-child(2) > div { flex-wrap: nowrap; }
+  #intrag-dces-legs td:nth-child(2) { padding-left: 0 !important; padding-right: 0 !important; }
+  [data-bs-theme=dark] .smart-filter-wrapper { background: var(--ins-secondary-bg) !important; border-color: rgba(255,255,255,0.1) !important; }
+  [data-bs-theme=dark] .smart-filter-wrapper:focus-within { border-color: #0066cc !important; }
+  [data-bs-theme=dark] .smart-filter-dropdown { background: var(--ins-secondary-bg) !important; border-color: rgba(255,255,255,0.08) !important; box-shadow: 0 8px 32px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.06) !important; }
+  [data-bs-theme=dark] .smart-filter-dropdown li:hover, [data-bs-theme=dark] .smart-filter-dropdown li.sf-kbd-active { background: rgba(0,102,204,0.12) !important; }
+  [data-bs-theme=dark] .dces-filter-row th { border-top-color: rgba(255,255,255,0.08) !important; }
+  [data-bs-theme=dark] .dces-filter-row input { background: var(--ins-secondary-bg) !important; color: var(--ins-body-color) !important; border-color: rgba(255,255,255,0.1) !important; }
+
+  .container-fluid .btn {
+      transition: color 0.15s ease-in-out, background-color 0.15s ease-in-out, border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out, transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
+  .container-fluid .btn:active { transform: scale(0.97) !important; box-shadow: none !important; }
+  @media (hover: hover) and (pointer: fine) {
+      .container-fluid .btn:not(:active):hover { transform: translateY(-1px); box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1); }
+  }
+</style>
+{% endblock extra_css %}
+
 {% block page_content %}
-{# Página-esqueleto: o item de menu Intrag › DCE › Swap já existe, mas o extrato
-   e o layout do arquivo ainda não foram especificados — quando forem, esta
-   página segue o desenho da Intrag › DCE › Option (import do bob-report,
-   editar → aprovar → mapear → enviar). #}
 <div class="container-fluid" data-content="">
     <div class="page-title-head d-flex align-items-center">
         <div class="flex-grow-1">
             <h4 class="fs-xl fw-bold m-0 d-flex align-items-center gap-2">
                 <i class="ti ti-file-import" style="color:#0066cc;font-size:22px;flex-shrink:0;"></i>
-                Intrag — DCE Swap
+                <span data-lang="intrag-dces-title">Intrag — DCE Swap</span>
             </h4>
         </div>
         <div class="text-end">
@@ -24,16 +193,942 @@
             </ol>
         </div>
     </div>
+
     <div class="row">
         <div class="col-12">
             <div class="card">
-                <div class="card-body text-center py-5">
-                    <i class="ti ti-tools fs-1 text-muted"></i>
-                    <h5 class="mt-3" data-lang="dce-pending-title">Under construction</h5>
-                    <p class="text-muted mb-0" data-lang="dce-pending-body">This DCE page is reserved — the report layout has not been specified yet.</p>
+
+                <!-- ── Smart filter bar ─────────────────────────────────────── -->
+                <div class="d-flex align-items-center gap-2 px-2 py-2 border-top border-bottom">
+                    <div class="flex-grow-1 position-relative">
+                        <div class="smart-filter-wrapper" id="sfWrapper">
+                            <div class="smart-filter-chips" id="sfChips"></div>
+                            <input type="text" class="smart-filter-input" id="sfInput" placeholder="Type to filter…" autocomplete="off">
+                            <ul class="smart-filter-dropdown mb-0 ps-0" id="sfDropdown"></ul>
+                        </div>
+                    </div>
+                    <div>
+                        <button class="btn btn-secondary bg-gradient btn-toolbar-all" type="button" id="sfSearchBtn">
+                            <i class="ti ti-search fs-xl me-1"></i> <span data-lang="b3-btn-search">Search</span>
+                        </button>
+                    </div>
                 </div>
+
+                <!-- ── Show/entries ─────────────────────────────────────────── -->
+                <div class="card-header">
+                    <div class="d-flex align-items-center gap-2">
+                        <label class="form-label mb-0" data-lang="b3-show">Show</label>
+                        <select class="form-select form-select-sm" style="width:80px;" data-table-rows>
+                            <option value="15">15</option>
+                            <option value="25">25</option>
+                            <option value="50">50</option>
+                            <option value="100">100</option>
+                        </select>
+                        <label class="form-label mb-0" data-lang="b3-entries">entries</label>
+                    </div>
+                </div>
+
+                <!-- ── Action buttons ───────────────────────────────────────── -->
+                <div class="card-header d-flex flex-wrap align-items-center gap-2">
+                    <div id="dcesColToggleWrap"></div>
+                    <div id="dcesExportWrap"></div>
+                    <button class="btn btn-sm btn-primary bg-gradient btn-toolbar-all" id="btnAddDces">Add Row +</button>
+                    <button class="btn btn-sm btn-success bg-gradient btn-toolbar-all" id="btnMappingDces" type="button" data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-title="Mapping Intrag ID" data-bs-custom-class="tooltip-success"><i class="ti ti-refresh"></i></button>
+                    <button class="btn btn-sm btn-danger bg-gradient btn-toolbar-all d-none" id="btnDelDces" data-del-selected><i class="ti ti-trash me-1"></i> Delete</button>
+                    <button class="btn btn-sm btn-primary bg-gradient btn-toolbar-all d-none" id="btnSendDces"><i class="ti ti-brand-telegram me-1"></i> Send</button>
+                    <button class="btn btn-sm btn-outline-secondary btn-toolbar-all" id="btnClearFilters" type="button"><i class="ti ti-filter-off me-1"></i> <span data-lang="btn-clear-filters">Clear Filters</span></button>
+                    <span class="text-muted fs-xs ms-auto d-none d-lg-inline" data-lang="intrag-dces-preview-hint">Double-click a leg row to preview the translated Intrag line of its deal.</span>
+                </div>
+
+                <!-- ── Dropzone + Trade Date do import ──────────────────────── -->
+                <div class="card-header d-flex flex-wrap align-items-center gap-2">
+                    <div class="d-flex align-items-center gap-1">
+                        <label for="dcesTradeDate" class="form-label fs-xs text-muted mb-0 me-1 text-nowrap" data-lang="intrag-dces-col-trade-date">Trade Date</label>
+                        <input type="text" id="dcesTradeDate" class="form-control form-control-sm" style="width: 8.5rem;" placeholder="dd/mm/yyyy" autocomplete="off" data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-title="Trade Date of the deals in the file (field 6 of the Intrag line)" data-bs-custom-class="tooltip-teal">
+                    </div>
+                    <div class="dces-drop" id="dcesDrop" role="button" tabindex="0" aria-label="Upload swap spreadsheet">
+                        <div class="dces-drop__icon">
+                            <i class="ti ti-upload dces-drop__glyph"></i>
+                            <i class="ti ti-loader-2 ti-spin dces-drop__spin"></i>
+                        </div>
+                        <div>
+                            <p class="dces-drop__title" data-lang="intrag-dces-drop-title">Drop the Athena swap spreadsheet here, or click to browse</p>
+                            <p class="dces-drop__hint" data-lang="intrag-dces-drop-hint">NewDealsAndCashflowDetails.xlsx — the two tables (characteristics and cashflows) linked by Deal Name · .xlsx, .xls, .csv or .txt</p>
+                        </div>
+                        <input type="file" id="dcesFile" accept=".xlsx,.xlsm,.xls,.csv,.txt" hidden>
+                    </div>
+                </div>
+
+                <!-- ── Tabela 1: características (uma linha por perna) ──────── -->
+                <div class="card-header py-1">
+                    <span class="fw-semibold fs-xs text-uppercase" data-lang="intrag-dces-legs-title">Swap characteristics (one row per leg)</span>
+                </div>
+                <div class="card-body" style="padding-top:10px;">
+                    <div class="table-responsive">
+                        <table class="table table-striped dt-responsive align-middle mb-0 dces-table" id="intrag-dces-legs">
+                            <thead class="thead-sm text-uppercase fs-xxs">
+                                <tr class="text-uppercase fs-xxs" id="dcesLegsHead">
+                                    <th style="width:50px;"><input class="form-check-input form-check-input-light fs-14 mt-0 dces-cb-all" type="checkbox" id="selectAll"></th>
+                                    <th data-lang="nd-col-actions">Actions</th>
+                                    <th data-lang="intrag-col-status">Status</th>
+                                    <th data-lang="intrag-col-intrag-id">Intrag ID</th>
+                                    <th data-lang="intrag-dces-col-trade-date">Trade Date</th>
+                                    <!-- as 42 colunas da planilha entram por JS (DCES_LEG_COLS) -->
+                                    <th></th><!-- hidden deal ID -->
+                                </tr>
+                                <tr class="dces-filter-row" id="dcesLegsFilter">
+                                    <th></th><th></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Status"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Intrag ID"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Trade Date"></th>
+                                    <th></th><!-- hidden deal ID -->
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- ── Tabela 2: fluxos (uma linha por cupom), ligada pelo Deal Name ── -->
+                <div class="card-header py-1 d-flex flex-wrap align-items-center gap-2">
+                    <span class="fw-semibold fs-xs text-uppercase" data-lang="intrag-dces-flows-title">Cashflows (one row per coupon)</span>
+                    <span class="dces-flows-chip d-none" id="dcesFlowsChip"><span data-lang="intrag-dces-flows-of">Cashflows of</span>: <b id="dcesFlowsChipDeal"></b><span class="sf-chip-remove" id="dcesFlowsChipClear">&#215;</span></span>
+                    <div class="ms-auto" id="dcesFlowsExportWrap"></div>
+                </div>
+                <div class="card-body" style="padding-top:10px;">
+                    <div class="table-responsive">
+                        <table class="table table-striped dt-responsive align-middle mb-0 dces-table" id="intrag-dces-flows">
+                            <thead class="thead-sm text-uppercase fs-xxs">
+                                <tr class="text-uppercase fs-xxs" id="dcesFlowsHead"><th></th></tr>
+                                <tr class="dces-filter-row" id="dcesFlowsFilter"><th></th></tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+
             </div>
         </div>
     </div>
 </div>
 {% endblock page_content %}
+
+{% block extra_javascript %}
+<script src="{{ config.ASSETS_ROOT }}/plugins/jquery/jquery.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/intrag-delete.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.responsive.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/responsive.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.buttons.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/jszip.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/pdfmake.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/vfs_fonts.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.html5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.print.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.select.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/select.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/export-advanced.js"></script>
+
+<script>
+// ── Contratos com o servidor (domain._DCE_SWAP_LEG_FIELDS / _FLOW_FIELDS, na ordem) ──
+var DCES_LEG_COLS = [
+    'Deal Name','Leg Name','Counterparty','SPN','Trading Entity','Inst Leg Name','Direction','Quantity',
+    'Rates/Spread','Currency','Start Date','End Date','Pay Freq','Initial Exchange','Final Exchange','DCC',
+    'Acc Adj','Pay Adj','Pay Rel To','Notional Exch Date Adj','Comp Freq','Comp Meth','Compounding Formula',
+    'Index Name','Index Tenor','Reset Adj','Leverage','Index Start Value','Index Start Date','Index End Date',
+    'Notional Pay Date','Roll Convention','Roll Day','Initial Stub Method','Initial Interp Tenor',
+    'Final Stub Method','Final Interp Tenor','Custom Rt(%)','Settlement Ccy','FX Reset Anchor',
+    'FX Fix Date Adj','FX Fix Pub'
+];
+var DCES_LEG_FIELDS = [
+    'deal_name','leg_name','counterparty','spn','trading_entity','inst_leg_name','direction','quantity',
+    'rates_spread','currency','start_date','end_date','pay_freq','initial_exchange','final_exchange','dcc',
+    'acc_adj','pay_adj','pay_rel_to','notional_exch_date_adj','comp_freq','comp_meth','compounding_formula',
+    'index_name','index_tenor','reset_adj','leverage','index_start_value','index_start_date','index_end_date',
+    'notional_pay_date','roll_convention','roll_day','initial_stub_method','initial_interp_tenor',
+    'final_stub_method','final_interp_tenor','custom_rt','settlement_ccy','fx_reset_anchor',
+    'fx_fix_date_adj','fx_fix_pub'
+];
+var DCES_FLOW_COLS = [
+    'Deal Name','Leg Name','Inst Leg Name','Coupon','Settlement Date','Accrual Start Date','Accrual End Date',
+    '(Adj)RateValue(%)','Spread(%)','DCF Fraction','Adj Start','Adj End','Notional(Absolute)','Notional(%)'
+];
+var DCES_FLOW_FIELDS = [
+    'deal_name','leg_name','inst_leg_name','coupon','settlement_date','accrual_start_date','accrual_end_date',
+    'adj_rate_value','spread','dcf_fraction','adj_start','adj_end','notional_absolute','notional_pct'
+];
+// Campos de DATA (dd/mm/aaaa na tela, ISO no value — o padrão da casa).
+var DCES_DATE_FIELDS = { start_date:1, end_date:1, index_start_date:1, index_end_date:1, notional_pay_date:1,
+                         settlement_date:1, accrual_start_date:1, accrual_end_date:1 };
+var DCES_NUM_COLS = { 'Quantity':1, 'Rates/Spread':1, 'Leverage':1, 'Index Start Value':1, 'Custom Rt(%)':1 };
+
+// Legs: [0]=checkbox [1]=actions [2]=status [3]=Intrag ID [4]=Trade Date [5..46]=42 colunas [47]=deal id.
+var L_OFF = 5, L_ID = 5 + DCES_LEG_COLS.length, L_TD = 4;
+// Flows: [0..13]=14 colunas [14]=deal id.
+var F_ID = DCES_FLOW_COLS.length;
+
+var ENTRIES = [];          // os deals do último fetch, na ordem do servidor
+var DEALS = {};            // deal id → entry
+var selectedDeals = new Set();
+var FI_SPEC = null;        // template intrag-dce-swap do File Interpreter (page-spec)
+
+var DCES_STATUS_META = {
+    'New':      { cls: 'bg-info text-white', lang: 'intrag-status-new' },
+    'Pending':  { cls: 'text-bg-warning',    lang: 'intrag-status-pending' },
+    'Approved': { cls: 'text-bg-secondary',  lang: 'intrag-status-approved' },
+    'Sent':     { cls: 'badge-sent',         lang: 'intrag-status-sent' },
+    'Success':  { cls: 'text-bg-success',    lang: 'intrag-status-success' }
+};
+function statusBadge(status) {
+    var txt = (status == null ? '' : String(status)).replace(/<[^>]*>/g, '').trim();
+    var s = 'New';
+    for (var k in DCES_STATUS_META) { if (txt.toLowerCase() === k.toLowerCase()) { s = k; break; } }
+    var m = DCES_STATUS_META[s];
+    return '<span class="badge ' + m.cls + ' bg-gradient" data-lang="' + m.lang + '">' + s + '</span>';
+}
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+function _t(key, fallback) {
+    // O I18nManager traduz os [data-lang] uma vez no load; o que o JS monta
+    // depois lê o mesmo dicionário quando ele está exposto.
+    try {
+        var lang = localStorage.getItem('__OTC_TRACKER_LANG__') || 'en';
+        var d = window.__OTC_TRANSLATIONS__ && window.__OTC_TRANSLATIONS__[lang];
+        if (d && d[key]) return d[key];
+    } catch (e) {}
+    return fallback;
+}
+
+// Cabeçalhos das duas grades montados por JS a partir dos contratos — a lista
+// de 42 + 14 colunas vive num lugar só nesta página.
+(function buildHeads() {
+    var lh = document.getElementById('dcesLegsHead'), lf = document.getElementById('dcesLegsFilter');
+    var hid = lh.lastElementChild, fid = lf.lastElementChild;
+    DCES_LEG_COLS.forEach(function (lbl, i) {
+        var th = document.createElement('th'); th.setAttribute('data-lang', 'intrag-dces-leg-col-' + i); th.textContent = lbl;
+        lh.insertBefore(th, hid);
+        var tf = document.createElement('th');
+        tf.innerHTML = '<input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="' + esc(lbl) + '">';
+        lf.insertBefore(tf, fid);
+    });
+    var fh = document.getElementById('dcesFlowsHead'), ff = document.getElementById('dcesFlowsFilter');
+    var fhid = fh.lastElementChild, ffid = ff.lastElementChild;
+    DCES_FLOW_COLS.forEach(function (lbl, i) {
+        var th = document.createElement('th'); th.setAttribute('data-lang', 'intrag-dces-flow-col-' + i); th.textContent = lbl;
+        fh.insertBefore(th, fhid);
+        var tf = document.createElement('th');
+        tf.innerHTML = '<input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="' + esc(lbl) + '">';
+        ff.insertBefore(tf, ffid);
+    });
+})();
+
+jQuery(function () {
+    var rd = document.getElementById('dcesTradeDate');
+    if (rd) {
+        var n = new Date();
+        rd.value = String(n.getDate()).padStart(2, '0') + '/' + String(n.getMonth() + 1).padStart(2, '0') + '/' + n.getFullYear();
+        if (typeof flatpickr !== 'undefined') flatpickr(rd, { dateFormat: 'd/m/Y', allowInput: true, disableMobile: true });
+    }
+});
+
+$(document).ready(function() {
+    if (typeof JSZip !== 'undefined') {
+        window.JSZip = JSZip;
+        if ($.fn.dataTable && $.fn.dataTable.Buttons && typeof $.fn.dataTable.Buttons.jszip === 'function') $.fn.dataTable.Buttons.jszip(JSZip);
+    }
+    function fmtExport(data,row,col,node) {
+        if (node) { var inp=$(node).find('input[type!="checkbox"]'); if (inp.length) return inp.val()||''; }
+        return (data==null?'':String(data)).replace(/<[^>]*>/g,'').trim();
+    }
+    function exportButtons(cols, title) {
+        return [{
+            extend:'collection', text:'<i class="ti ti-download me-1"></i> Export',
+            className:'btn btn-sm btn-info bg-gradient dropdown-toggle btn-toolbar-all', autoClose:true, fade:0,
+            buttons:[
+                {extend:'copy',  text:'<i class="ti ti-copy me-1"></i> Copy',  className:'dropdown-item', title:title, exportOptions:{columns:cols,format:{body:fmtExport}}},
+                {extend:'csv',   text:'<i class="ti ti-file-type-csv me-1"></i> CSV',   className:'dropdown-item', bom:true, fieldSeparator:';', title:title, exportOptions:{columns:cols,format:{body:fmtExport}}},
+                {extend:'excel', text:'<i class="ti ti-file-spreadsheet me-1"></i> Excel', className:'dropdown-item', title:title, exportOptions:{columns:cols,format:{body:fmtExport}}},
+                {extend:'print', text:'<i class="ti ti-printer me-1"></i> Print', className:'dropdown-item', title:title, exportOptions:{columns:cols,format:{body:fmtExport}}},
+                {extend:'pdf',   text:'<i class="ti ti-file-text me-1"></i> PDF',   className:'dropdown-item', title:title, orientation:'landscape', pageSize:'A3', exportOptions:{columns:cols,format:{body:fmtExport}}}
+            ]
+        }];
+    }
+    function range(a, b) { var o=[]; for (var i=a;i<=b;i++) o.push(i); return o; }
+    var PAGINATE = { paginate: { first:'<i class="ti ti-chevrons-left"></i>', previous:'<i class="ti ti-chevron-left"></i>', next:'<i class="ti ti-chevron-right"></i>', last:'<i class="ti ti-chevrons-right"></i>' } };
+
+    function wireColumnFilters(api, rowId) {
+        document.querySelectorAll('#' + rowId + ' th').forEach(function(th){ th.addEventListener('click',function(e){e.stopPropagation();}); });
+        document.querySelectorAll('#' + rowId + ' th input').forEach(function(inp) {
+            inp.addEventListener('click',function(e){e.stopPropagation();});
+            inp.addEventListener('keyup',function() {
+                var ci=inp.closest('th').cellIndex;
+                if(api.column(ci).search()!==this.value) api.column(ci).search(this.value).draw();
+            });
+        });
+    }
+
+    // ── Tabela 1: pernas ─────────────────────────────────────────────────────
+    var legs = window.intragDcesLegs = $('#intrag-dces-legs').DataTable({
+        responsive: false, scrollX: true, scrollY: '48vh', scrollCollapse: true, autoWidth: false, pageLength: 15,
+        orderCellsTop: true, order: [],
+        select: { style:'os', items:'cell', selector:'td:not(:nth-child(1)):not(:nth-child(2))' },
+        columnDefs: [
+            { orderable: false, targets: [0,1] },
+            { targets: 2, render: function(data, type){ return type === 'display' ? statusBadge(data) : (data || 'New'); } },
+            { visible: false, targets: [L_ID] }
+        ],
+        dom: "<'row'<'col-sm-12'tr>>" + "<'d-md-flex justify-content-between align-items-center mt-2'ip>",
+        buttons: exportButtons(range(2, L_ID - 1), 'Intrag DCE Swap — Legs'),
+        language: PAGINATE,
+        drawCallback: function() {
+            var api = this.api();
+            api.rows().every(function() {
+                var d=this.data(), id=d?d[L_ID]:null, node=this.node();
+                if(node) {
+                    $(node).find('input[type="checkbox"]').prop('checked',!!(id&&selectedDeals.has(id)));
+                    $(node).find('.btn-row-approve').toggleClass('d-none', (d?d[2]:'')!=='Pending');
+                }
+            });
+            syncSelectAll();
+        },
+        initComplete: function() {
+            var api = this.api();
+            wireColumnFilters(api, 'dcesLegsFilter');
+            var ctw=document.getElementById('dcesColToggleWrap');
+            if(ctw) {
+                var dd=document.createElement('div'); dd.className='dropdown';
+                var items=DCES_LEG_COLS.map(function(lbl,i){
+                    return '<li class="dropdown-item"><div class="form-check">' +
+                        '<input class="form-check-input form-check-input-light fs-14 mt-0 toggle-vis" type="checkbox" data-column="'+(i+L_OFF)+'" id="dcesC'+i+'" checked>' +
+                        '<label class="form-check-label fw-medium" for="dcesC'+i+'">'+esc(lbl)+'</label></div></li>';
+                }).join('');
+                dd.innerHTML='<button class="btn btn-sm btn-soft-primary dropdown-toggle btn-toolbar-all" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside"><i class="ti ti-columns me-1"></i> Columns</button>' +
+                    '<ul class="dropdown-menu" id="dcesColMenu" style="max-height:60vh;overflow-y:auto;">'+items+'</ul>';
+                ctw.appendChild(dd);
+                document.getElementById('dcesColMenu').addEventListener('change',function(e){
+                    if(e.target.classList.contains('toggle-vis')) legs.column(parseInt(e.target.dataset.column)).visible(e.target.checked);
+                });
+            }
+        }
+    });
+    legs.buttons().container().appendTo('#dcesExportWrap');
+
+    // ── Tabela 2: fluxos ─────────────────────────────────────────────────────
+    var flows = window.intragDcesFlows = $('#intrag-dces-flows').DataTable({
+        responsive: false, scrollX: true, scrollY: '36vh', scrollCollapse: true, autoWidth: false, pageLength: 15,
+        orderCellsTop: true, order: [],
+        select: { style:'os', items:'cell' },
+        columnDefs: [ { visible: false, targets: [F_ID] } ],
+        dom: "<'row'<'col-sm-12'tr>>" + "<'d-md-flex justify-content-between align-items-center mt-2'ip>",
+        buttons: exportButtons(range(0, F_ID - 1), 'Intrag DCE Swap — Cashflows'),
+        language: PAGINATE,
+        initComplete: function() { wireColumnFilters(this.api(), 'dcesFlowsFilter'); }
+    });
+    flows.buttons().container().appendTo('#dcesFlowsExportWrap');
+
+    setTimeout(function() { legs.columns.adjust(); flows.columns.adjust(); }, 150);
+    $(window).on('resize', function(){ legs.columns.adjust(); flows.columns.adjust(); });
+
+    function _actionsCell() {
+        return '<div class="d-flex justify-content-center gap-1">' +
+            '<a class="btn btn-info btn-sm rounded-circle btn-row-edit" href="#" title="Edit"><i class="ti ti-edit"></i></a>' +
+            '<a class="btn btn-danger btn-sm rounded-circle btn-row-delete" href="#" title="Delete"><i class="ti ti-trash"></i></a>' +
+            '<a class="btn btn-success btn-sm rounded-circle btn-row-approve" href="#" title="Approve"><i class="ti ti-check"></i></a>' +
+            '<a class="btn btn-primary btn-sm rounded-circle btn-row-send" href="#" title="Send"><i class="ti ti-brand-telegram"></i></a></div>';
+    }
+    function _todayDmy() { var d = new Date(); return ('0'+d.getDate()).slice(-2)+'/'+('0'+(d.getMonth()+1)).slice(-2)+'/'+d.getFullYear(); }
+    function _dmyToIso(dmy) { var p=(dmy||'').trim().split('/'); if(p.length!==3||p[2].length!==4) return ''; return p[2]+'-'+p[1].padStart(2,'0')+'-'+p[0].padStart(2,'0'); }
+    function _isoToDmy(s) { var m=String(s||'').match(/^(\d{4})-(\d{2})-(\d{2})$/); return m?(m[3]+'/'+m[2]+'/'+m[1]):''; }
+
+    // ── Render: as duas grades nascem dos DEALS (o servidor manda o deal inteiro) ──
+    function legRow(entry, leg) {
+        var row = ['<input class="form-check-input form-check-input-light fs-14 mt-0" type="checkbox" value="">',
+                   _actionsCell(), entry.status || 'New',
+                   entry.intrag_id != null ? String(entry.intrag_id) : '',
+                   entry.trade_date || ''];
+        DCES_LEG_FIELDS.forEach(function(f){ row.push(leg[f] != null ? String(leg[f]) : ''); });
+        row.push(entry._deal);
+        return row;
+    }
+    function flowRow(entry, fl) {
+        var row = [];
+        DCES_FLOW_FIELDS.forEach(function(f){ row.push(fl[f] != null ? String(fl[f]) : ''); });
+        row.push(entry._deal);
+        return row;
+    }
+    function renderAll() {
+        legs.clear(); flows.clear(); DEALS = {};
+        ENTRIES.forEach(function(entry){
+            if (!entry || !entry._deal) return;
+            DEALS[entry._deal] = entry;
+            (entry.legs || []).forEach(function(leg){ legs.row.add(legRow(entry, leg)); });
+            (entry.flows || []).forEach(function(fl){ flows.row.add(flowRow(entry, fl)); });
+        });
+        legs.draw(); flows.draw();
+        setTimeout(function(){ legs.columns.adjust().draw(false); flows.columns.adjust().draw(false); }, 100);
+    }
+    function upsertEntry(entry) {
+        var i = ENTRIES.findIndex(function(e){ return e && e._deal === entry._deal; });
+        if (i >= 0) ENTRIES[i] = entry; else ENTRIES.push(entry);
+        renderAll();
+    }
+    function removeEntries(ids) {
+        var set = {}; ids.forEach(function(x){ set[x]=1; });
+        ENTRIES = ENTRIES.filter(function(e){ return !(e && set[e._deal]); });
+        ids.forEach(function(x){ selectedDeals.delete(x); });
+        renderAll();
+    }
+
+    // O smart filter COMANDA o fetch: o chip de Trade Date decide o(s)
+    // arquivo(s)-dia; os demais filtram a grade de pernas no cliente.
+    var intragDateRanges = {};
+    function intragLoad(qs, colFilters) {
+        fetch('/api/intrag/dce-swap' + (qs ? '?'+qs : ''), { credentials: 'same-origin' })
+            .then(function(r){ return r.json(); })
+            .then(function(data){
+                ENTRIES = (data.success && data.entries) ? data.entries : [];
+                legs.columns().search('');
+                intragDateRanges = {};
+                (colFilters||[]).forEach(function(f){
+                    if (f.col.type === 'date') {
+                        var d = sfToDate(f.value);
+                        intragDateRanges[f.col.dtCol] = intragDateRanges[f.col.dtCol] || {from:null,to:null};
+                        if (f.mode === 'from') intragDateRanges[f.col.dtCol].from = d;
+                        else if (f.mode === 'to') intragDateRanges[f.col.dtCol].to = d;
+                        else { intragDateRanges[f.col.dtCol].from = d; intragDateRanges[f.col.dtCol].to = d; }
+                    } else {
+                        legs.column(f.col.dtCol).search(f.value);
+                    }
+                });
+                clearFlowsChip();
+                renderAll();
+            })
+            .catch(function(err){ console.error('[Intrag DCE SWAP] Load error:', err); });
+    }
+
+    // ── Ligação entre as grades: clicar numa perna filtra os fluxos do deal ──
+    function setFlowsChip(deal) {
+        var chip = document.getElementById('dcesFlowsChip');
+        document.getElementById('dcesFlowsChipDeal').textContent = deal;
+        chip.classList.remove('d-none');
+        flows.column(0).search('^' + deal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', true, false).draw();
+    }
+    function clearFlowsChip() {
+        document.getElementById('dcesFlowsChip').classList.add('d-none');
+        flows.column(0).search('').draw();
+    }
+    document.getElementById('dcesFlowsChipClear').addEventListener('click', clearFlowsChip);
+    $('#intrag-dces-legs tbody').on('click', 'td', function(e) {
+        var ci = $(this).index(); if (ci <= 1) return;
+        var d = legs.row($(this).closest('tr')[0]).data(); if (!d) return;
+        setFlowsChip(d[L_ID]);
+    });
+
+    // ── Preview do duplo clique: a linha da Intrag traduzida no servidor ─────
+    function fiLoadSpec() {
+        return fetch('/api/file-interpreter/page-spec?url=' + encodeURIComponent(window.location.pathname), { credentials: 'same-origin' })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (d) {
+                FI_SPEC = null;
+                if (!d || !d.templates) return;
+                for (var i = 0; i < d.templates.length; i++) { if (d.templates[i].key === 'intrag-dce-swap') { FI_SPEC = d.templates[i]; return; } }
+                FI_SPEC = d.templates[0] || null;
+            }).catch(function () {});
+    }
+    function fiFieldsBySeq() {
+        var out = {};
+        ((FI_SPEC && FI_SPEC.blocks) || []).forEach(function(b){ (b.fields||[]).forEach(function(f){ out[String(parseInt(f.seq,10))] = f; }); });
+        return out;
+    }
+    $('#intrag-dces-legs tbody').on('dblclick', 'tr', function(e) {
+        if ($(e.target).closest('td').index() <= 1) return;
+        var d = legs.row(this).data(); if (!d) return;
+        var dealId = d[L_ID], td = d[L_TD];
+        // Recarrega o cadastro ANTES de montar — template editado vale sem refresh.
+        fiLoadSpec().then(function(){
+            return fetch('/api/intrag/dce-swap/preview?deal_id=' + encodeURIComponent(dealId) + '&trade_date=' + encodeURIComponent(td || ''), { credentials: 'same-origin' });
+        }).then(function(r){ return r.json().then(function(j){ return {ok:r.ok, data:j}; }); })
+          .then(function(o){
+            if (!o.ok || !o.data.success) {
+                Swal.fire({ title: _t('intrag-dces-preview-title', 'Intrag file preview'), text: o.data.message || 'Preview failed.',
+                            icon: 'warning', confirmButtonText: 'OK', confirmButtonColor: '#dc3545' });
+                return;
+            }
+            var tpl = fiFieldsBySeq();
+            var rows = (o.data.fields || []).map(function(f, i) {
+                var bg = i % 2 === 0 ? 'rgba(0,0,0,.03)' : 'transparent';
+                var t = tpl[String(f.seq)] || {};
+                var name = t.field || f.field;
+                var src = t.source ? '<span class="badge text-bg-light border ms-1" style="font-size:9px">' + esc(t.source) + '</span>' : '';
+                return '<tr style="background:' + bg + '">' +
+                    '<td style="padding:3px 8px;white-space:nowrap;font-weight:500;border:none;font-size:0.82em">' + f.seq + '. ' + esc(name) + src + '</td>' +
+                    '<td style="padding:3px 8px;font-family:monospace;font-size:0.82em;border:none;word-break:break-all">' +
+                        (String(f.value).trim() !== '' ? esc(f.value) : '<span style="color:#aaa">&mdash;</span>') + '</td></tr>';
+            }).join('');
+            var html = '<div class="text-start fs-xs text-muted mb-2"><b>' + esc(dealId) + '</b> &nbsp;·&nbsp; ' + esc(o.data.file_name || '') + '</div>' +
+                '<div style="overflow-y:auto;max-height:52vh;border:1px solid rgba(0,0,0,.12);border-radius:6px">' +
+                '<table style="width:100%;border-collapse:collapse;font-size:0.85em"><thead><tr style="background:#343a40;color:#fff;position:sticky;top:0">' +
+                '<th style="padding:5px 8px;text-align:left;font-weight:600"><span data-lang="nd-preview-col-field">Field</span></th>' +
+                '<th style="padding:5px 8px;text-align:left;font-weight:600"><span data-lang="nd-preview-col-value">Value</span></th></tr></thead>' +
+                '<tbody>' + rows + '</tbody></table></div>' +
+                '<div class="dces-preview-line text-start mt-2">' + esc(o.data.line || '') + '</div>';
+            Swal.fire({ title: _t('intrag-dces-preview-title', 'Intrag file preview'), html: html, width: 900,
+                        showCloseButton: true, showConfirmButton: false });
+        }).catch(function(err){
+            Swal.fire({ title: 'Error', text: 'Request failed: ' + err.message, icon: 'error', confirmButtonText: 'OK', confirmButtonColor: '#dc3545' });
+        });
+    });
+
+    // ── Import: dropzone → /import-file (multipart) ──────────────────────────
+    var drop = document.getElementById('dcesDrop'), fileInput = document.getElementById('dcesFile');
+    function setBusy(b) { drop.classList.toggle('is-busy', b); }
+    function uploadFile(file) {
+        if (!file) return;
+        setBusy(true);
+        var fd = new FormData();
+        fd.append('file', file);
+        fd.append('trade_date', (document.getElementById('dcesTradeDate').value || '').trim());
+        fetch('/api/intrag/dce-swap/import-file', { method: 'POST', body: fd, credentials: 'same-origin' })
+            .then(function(r){ return r.json().then(function(j){ return {ok:r.ok, data:j}; }); })
+            .then(function(o){
+                setBusy(false);
+                if (!o.ok || !o.data.success) {
+                    Swal.fire({ title: 'Import', text: o.data.message || 'Import failed.', icon: 'error', confirmButtonText: 'OK', confirmButtonColor: '#dc3545' });
+                    return;
+                }
+                if (window.fetchNotifications) window.fetchNotifications();
+                var msg = (o.data.imported || 0) + ' deal(s) imported (' + (o.data.legs || 0) + ' leg(s), ' + (o.data.flows || 0) + ' cashflow(s)) with Trade Date ' + _isoToDmy(o.data.trade_date) + '.';
+                var extra = '';
+                if (o.data.missing_leg && o.data.missing_leg.length) extra += '<div class="text-start mt-2 fs-xs"><b>Without a Pay + Rec pair (kept, cannot be sent):</b><br>' + o.data.missing_leg.map(esc).join('<br>') + '</div>';
+                if (o.data.unknown_headers && o.data.unknown_headers.length) extra += '<div class="text-start mt-2 fs-xs text-muted">Ignored columns: ' + esc(o.data.unknown_headers.join(', ')) + '</div>';
+                Swal.fire({ title: 'Import', html: esc(msg) + extra, icon: (o.data.missing_leg && o.data.missing_leg.length) ? 'warning' : 'success', confirmButtonText: 'OK', confirmButtonColor: '#198754' });
+                // O chip de data COMANDA o fetch: vira a Trade Date do import.
+                var dmy = _isoToDmy(o.data.trade_date);
+                if (dmy) {
+                    sfActive = sfActive.filter(function (f) { return !f.col.isDate; });
+                    sfAddFilter(SF_TRADE_DATE, dmy, 'exact');
+                    document.getElementById('sfSearchBtn').click();
+                }
+            })
+            .catch(function(err){
+                setBusy(false);
+                Swal.fire({ title: 'Error', text: 'Request failed: ' + err.message, icon: 'error', confirmButtonText: 'OK', confirmButtonColor: '#dc3545' });
+            });
+    }
+    drop.addEventListener('click', function () { fileInput.click(); });
+    drop.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); } });
+    fileInput.addEventListener('change', function () { if (this.files && this.files[0]) uploadFile(this.files[0]); this.value = ''; });
+    ['dragenter', 'dragover'].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); e.stopPropagation(); drop.classList.add('is-drag'); }); });
+    ['dragleave', 'drop'].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); e.stopPropagation(); drop.classList.remove('is-drag'); }); });
+    drop.addEventListener('drop', function (e) { var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]; if (f) uploadFile(f); });
+
+    // ── Mapping Intrag ID (Boletas CSV → Intrag ID; a chave é o Deal Name) ──
+    var _mappingRunning = false;
+    document.getElementById('btnMappingDces').addEventListener('click', function() {
+        if (_mappingRunning) return;
+        var btn = this;
+        var deals = Object.keys(DEALS).map(function(id){ return { id: id, b3_id: id }; });
+        if (!deals.length) {
+            Swal.fire({ title: 'Mapping Intrag ID', text: 'No deals to map.', icon: 'info', confirmButtonText: 'OK', confirmButtonColor: '#198754' });
+            return;
+        }
+        _mappingRunning = true; btn.style.pointerEvents = 'none';
+        var _prevHtml = btn.innerHTML; btn.innerHTML = '<i class="ti ti-loader-2 ti-spin"></i>';
+        fetch('/api/intrag/dce-swap/mapping-intrag-id', { method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin', body: JSON.stringify({ deals: deals }) })
+        .then(function(r){ return r.json(); })
+        .then(function(res) {
+            _mappingRunning = false; btn.style.pointerEvents = ''; btn.innerHTML = _prevHtml;
+            if (!res.ok) {
+                Swal.fire({ title: 'Error', text: res.error || 'Failed to read the return file.', icon: 'error', confirmButtonText: 'OK', confirmButtonColor: '#dc3545' });
+                return;
+            }
+            var mapped = 0;
+            (res.results || []).forEach(function(result) {
+                if (result.status !== 'Success' || result.intrag_id == null) return;
+                mapped++;
+                var e = DEALS[result.id]; if (e) { e.intrag_id = result.intrag_id; e.status = 'Success'; }
+            });
+            renderAll();
+            Swal.fire({ title: 'Mapping Intrag ID', text: mapped ? (mapped + ' deal(s) mapped.') : 'No matching deals found in the return file.',
+                        icon: mapped ? 'success' : 'info', confirmButtonText: 'OK', confirmButtonColor: '#198754' });
+        })
+        .catch(function(err) {
+            _mappingRunning = false; btn.style.pointerEvents = ''; btn.innerHTML = _prevHtml;
+            Swal.fire({ title: 'Error', text: 'Request failed: ' + err.message, icon: 'error', confirmButtonText: 'OK', confirmButtonColor: '#dc3545' });
+        });
+    });
+
+    // ── Seleção POR DEAL: marcar uma perna marca as duas ─────────────────────
+    function toggleBulkBtns(show) {
+        var b=document.getElementById('btnDelDces'); if(b) b.classList.toggle('d-none',!show);
+        var s=document.getElementById('btnSendDces'); if(s) s.classList.toggle('d-none',!show);
+    }
+    function syncSelectAll() {
+        var total = Object.keys(DEALS).length, sel = selectedDeals.size;
+        $('.dces-cb-all').each(function(){ if(sel===0){this.checked=false;this.indeterminate=false;} else if(sel>=total){this.checked=true;this.indeterminate=false;} else{this.checked=false;this.indeterminate=true;} });
+        toggleBulkBtns(sel >= 1);
+    }
+    $('[data-table-rows]').on('change',function(){ legs.page.len(parseInt(this.value)).draw(); flows.page.len(parseInt(this.value)).draw(); });
+    $('[data-table-rows]').val(String(legs.page.len()));
+
+    // Delegado e pela CLASSE (o clone do header do scrollX perde o id — ver intrag-dce-option.html).
+    $(document).on('click','.dces-cb-all',function() {
+        selectedDeals.clear();
+        if(this.checked) { legs.rows({ search: 'applied' }).every(function(){ var d=this.data(),id=d?d[L_ID]:null; if(id) selectedDeals.add(id); }); }
+        legs.draw(false);
+    });
+    $('#intrag-dces-legs tbody').on('change','input[type="checkbox"]',function() {
+        var tr=$(this).closest('tr')[0], d=legs.row(tr).data(), id=d?d[L_ID]:null;
+        if(id){ if(this.checked) selectedDeals.add(id); else selectedDeals.delete(id); }
+        legs.draw(false);            // sincroniza a perna irmã
+    });
+
+    // ── Delete (do ARQUIVO, via família dce-swap) ─────────────────────────────
+    function deleteDeals(ids) {
+        if (!ids.length) return;
+        Swal.fire({ title:'Delete '+ids.length+' deal(s)?', text:'Both legs and all cashflows of each deal are removed. This action cannot be undone.', icon:'warning',
+            showCancelButton:true, confirmButtonText:'Yes, delete', cancelButtonText:'Cancel', confirmButtonColor:'#dc3545', cancelButtonColor:'#6c757d'
+        }).then(function(r){
+            if(!r.isConfirmed) return;
+            var itens = ids.map(function(id){ return { deal_id: id, trade_date: (DEALS[id] && DEALS[id].trade_date) || '' }; });
+            otcIntragDelete('dce-swap', itens).then(function(resp){
+                removeEntries(ids);
+                otcIntragDeleteWarn(resp);
+            }).catch(function(err){
+                Swal.fire({ icon:'error', title:'Delete failed', text:String(err && err.message || err), confirmButtonColor:'#dc3545' });
+            });
+        });
+    }
+    $(document).on('click','[data-del-selected]',function(e) { e.preventDefault(); deleteDeals(Array.from(selectedDeals)); });
+    $(document).on('click','#intrag-dces-legs tbody .btn-row-delete',function(e) {
+        e.preventDefault(); var d = legs.row($(this).closest('tr')[0]).data(); if (d) deleteDeals([d[L_ID]]);
+    });
+
+    // ── Send (a linha é montada no servidor; um arquivo por Trade Date) ──────
+    var DCES_SENDABLE = { 'New': 1, 'Approved': 1 };
+    function sendDeals(ids) {
+        if (!ids.length) return;
+        var blocked = ids.filter(function(id){ var e=DEALS[id]; return !e || !DCES_SENDABLE[e.status || 'New']; });
+        if (blocked.length) {
+            Swal.fire({ title: 'Cannot send', text: blocked.length + ' deal(s) are not in a sendable state — only New or Approved can be sent.',
+                        icon: 'warning', confirmButtonText: 'OK', confirmButtonColor: '#dc3545' });
+            return;
+        }
+        Swal.fire({ title: 'Send ' + ids.length + ' deal(s)?', text: 'The Intrag swap file (LAWTON_OFF_SWAP_AAAAMMDD.txt) will be generated on the Intrag network folder.',
+            icon: 'question', showCancelButton: true, confirmButtonText: 'Yes, send', cancelButtonText: 'Cancel', confirmButtonColor: '#0d6efd', cancelButtonColor: '#6c757d'
+        }).then(function(r) {
+            if (!r.isConfirmed) return;
+            var items = ids.map(function(id){ return { deal_id: id, trade_date: (DEALS[id] && DEALS[id].trade_date) || '' }; });
+            fetch('/api/intrag/dce-swap/send-file', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials:'same-origin', body: JSON.stringify({ items: items }) })
+            .then(function(resp){ return resp.json(); }).then(function(res) {
+                if (res.success) {
+                    ids.forEach(function(id){ if (DEALS[id]) DEALS[id].status = 'Sent'; });
+                    selectedDeals.clear(); renderAll();
+                    if (window.fetchNotifications) window.fetchNotifications();
+                    Swal.fire({ title: 'Sent', text: 'Generated ' + ((res.files && res.files.length) || 1) + ' file(s).', icon: 'success', confirmButtonText: 'OK', confirmButtonColor: '#0d6efd' });
+                } else {
+                    Swal.fire({ title: 'Error', text: res.message || 'File generation failed.', icon: 'error', confirmButtonText: 'OK', confirmButtonColor: '#dc3545' });
+                }
+            }).catch(function(err) {
+                Swal.fire({ title: 'Error', text: 'Request failed: ' + err.message, icon: 'error', confirmButtonText: 'OK', confirmButtonColor: '#dc3545' });
+            });
+        });
+    }
+    $(document).on('click','#intrag-dces-legs tbody .btn-row-send',function(e) {
+        e.preventDefault(); var d=legs.row($(this).closest('tr')[0]).data(); if(d) sendDeals([d[L_ID]]);
+    });
+    document.getElementById('btnSendDces').addEventListener('click',function() { sendDeals(Array.from(selectedDeals)); });
+
+    // ── Approve (Pending → Approved; maker ≠ checker no servidor) ────────────
+    $(document).on('click','#intrag-dces-legs tbody .btn-row-approve',function(e) {
+        e.preventDefault();
+        var d=legs.row($(this).closest('tr')[0]).data(); if(!d || d[2]!=='Pending') return;
+        var id = d[L_ID];
+        Swal.fire({ title:'Approve this deal?', text:'A second user (checker) confirms the edit.', icon:'question',
+            showCancelButton:true, confirmButtonText:'Yes, approve', cancelButtonText:'Cancel', confirmButtonColor:'#198754', cancelButtonColor:'#6c757d'
+        }).then(function(r){
+            if(!r.isConfirmed) return;
+            fetch('/api/intrag/dce-swap/approve', { method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin',
+                body: JSON.stringify({ deal_id: id, trade_date: (DEALS[id] && DEALS[id].trade_date) || '' }) })
+            .then(function(resp){ return resp.json().then(function(j){ return {ok:resp.ok, data:j}; }); })
+            .then(function(o){
+                if(o.ok && o.data.success){
+                    if (DEALS[id]) DEALS[id].status = 'Approved';
+                    renderAll();
+                    if (window.fetchNotifications) window.fetchNotifications();
+                    Swal.fire({ title:'Approved', icon:'success', confirmButtonText:'OK', confirmButtonColor:'#198754' });
+                } else {
+                    Swal.fire({ title:'Error', text:o.data.message||'Approval failed.', icon:'error', confirmButtonText:'OK', confirmButtonColor:'#dc3545' });
+                }
+            }).catch(function(err){ Swal.fire({ title:'Error', text:'Request failed: '+err.message, icon:'error', confirmButtonText:'OK', confirmButtonColor:'#dc3545' }); });
+        });
+    });
+
+    // ── Modal: o deal INTEIRO (Intrag ID + pernas + fluxos) ──────────────────
+    var modalEl = document.getElementById('dcesModal');
+    function buildEditGrid(kind, rows) {
+        var cols = kind === 'legs' ? DCES_LEG_COLS : DCES_FLOW_COLS;
+        var fields = kind === 'legs' ? DCES_LEG_FIELDS : DCES_FLOW_FIELDS;
+        var lang = kind === 'legs' ? 'intrag-dces-leg-col-' : 'intrag-dces-flow-col-';
+        var html = '<table class="table table-sm dces-edit-table"><thead><tr><th></th>' +
+            cols.map(function(c, i){ return '<th data-lang="' + lang + i + '">' + esc(c) + '</th>'; }).join('') + '</tr></thead><tbody>';
+        rows.forEach(function(row){ html += editRowHtml(fields, row); });
+        html += '</tbody></table>';
+        var wrap = document.getElementById(kind === 'legs' ? 'dcesEditLegs' : 'dcesEditFlows');
+        wrap.innerHTML = html;
+        wireDateInputs(wrap);
+    }
+    function editRowHtml(fields, row) {
+        return '<tr><td><button type="button" class="btn btn-outline-danger dces-row-del" title="Remove"><i class="ti ti-x"></i></button></td>' +
+            fields.map(function(f){
+                return '<td><input type="text" class="form-control form-control-sm' + (DCES_DATE_FIELDS[f] ? ' dces-date' : '') + '" data-f="' + f + '" value="' + esc(row[f] || '') + '"' + (DCES_DATE_FIELDS[f] ? ' placeholder="dd/mm/aaaa" autocomplete="off"' : '') + '></td>';
+            }).join('') + '</tr>';
+    }
+    function wireDateInputs(root) {
+        if (!window.otcDateField) return;
+        root.querySelectorAll('input.dces-date').forEach(function(el){ window.otcDateField(el); });
+    }
+    function readGrid(kind) {
+        var fields = kind === 'legs' ? DCES_LEG_FIELDS : DCES_FLOW_FIELDS;
+        var wrap = document.getElementById(kind === 'legs' ? 'dcesEditLegs' : 'dcesEditFlows');
+        var out = [];
+        wrap.querySelectorAll('tbody tr').forEach(function(tr){
+            var row = {};
+            fields.forEach(function(f){ var inp = tr.querySelector('input[data-f="' + f + '"]'); row[f] = inp ? inp.value.trim() : ''; });
+            out.push(row);
+        });
+        return out;
+    }
+    function openModal(entry) {
+        $(modalEl).removeData('dealId');
+        var isEdit = !!entry;
+        modalEl.querySelector('.modal-title').innerHTML = isEdit
+            ? '<i class="ti ti-edit me-1"></i>Edit Deal — Intrag DCE Swap · ' + esc(entry._deal)
+            : '<i class="ti ti-plus me-1"></i>Add Deal — Intrag DCE Swap';
+        document.getElementById('dces-f-intrag').value = isEdit ? (entry.intrag_id || '') : '';
+        document.getElementById('dces-f-trade').value = isEdit ? _isoToDmy(entry.trade_date) : (document.getElementById('dcesTradeDate').value || '');
+        buildEditGrid('legs', isEdit ? (entry.legs || []) : [{ direction: 'Pay' }, { direction: 'Rec' }]);
+        buildEditGrid('flows', isEdit ? (entry.flows || []) : []);
+        if (isEdit) $(modalEl).data('dealId', entry._deal);
+        bootstrap.Modal.getOrCreateInstance(modalEl).show();
+    }
+    document.getElementById('btnAddDces').addEventListener('click', function(){ openModal(null); });
+    $(document).on('click','#intrag-dces-legs tbody .btn-row-edit',function(e) {
+        e.preventDefault(); var d=legs.row($(this).closest('tr')[0]).data(); if(!d) return;
+        var entry = DEALS[d[L_ID]]; if (entry) openModal(entry);
+    });
+    $(modalEl).on('click', '.dces-row-del', function(){ $(this).closest('tr').remove(); });
+    document.getElementById('dcesAddLeg').addEventListener('click', function(){
+        var tb = document.querySelector('#dcesEditLegs tbody'); if (!tb) return;
+        var first = readGrid('legs')[0] || {};
+        tb.insertAdjacentHTML('beforeend', editRowHtml(DCES_LEG_FIELDS, { deal_name: first.deal_name || '' }));
+        wireDateInputs(tb.lastElementChild);
+    });
+    document.getElementById('dcesAddFlow').addEventListener('click', function(){
+        var tb = document.querySelector('#dcesEditFlows tbody'); if (!tb) return;
+        var first = readGrid('legs')[0] || {};
+        tb.insertAdjacentHTML('beforeend', editRowHtml(DCES_FLOW_FIELDS, { deal_name: first.deal_name || '' }));
+        wireDateInputs(tb.lastElementChild);
+    });
+    document.getElementById('dcesSaveBtn').addEventListener('click', function() {
+        var dealId = $(modalEl).data('dealId') || null;
+        var payload = { intrag_id: document.getElementById('dces-f-intrag').value.trim(), legs: readGrid('legs'), flows: readGrid('flows') };
+        var url;
+        if (dealId) { url = '/api/intrag/dce-swap/edit'; payload.deal_id = dealId; payload.trade_date = (DEALS[dealId] && DEALS[dealId].trade_date) || ''; }
+        else { url = '/api/intrag/dce-swap/add'; payload.trade_date = document.getElementById('dces-f-trade').value.trim(); }
+        fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin', body: JSON.stringify(payload) })
+        .then(function(resp){ return resp.json().then(function(j){ return {ok:resp.ok, data:j}; }); })
+        .then(function(o){
+            if (!o.ok || !o.data.success) {
+                Swal.fire({ title:'Error', text:o.data.message||'Save failed.', icon:'error', confirmButtonText:'OK', confirmButtonColor:'#dc3545' });
+                return;
+            }
+            if (o.data.entry) upsertEntry(o.data.entry);
+            bootstrap.Modal.getInstance(modalEl).hide();
+            if (window.fetchNotifications) window.fetchNotifications();
+        })
+        .catch(function(err){ Swal.fire({ title:'Error', text:'Request failed: '+err.message, icon:'error', confirmButtonText:'OK', confirmButtonColor:'#dc3545' }); });
+    });
+    $(modalEl).on('hidden.bs.modal', function(){ $(this).removeData('dealId'); document.getElementById('dcesEditLegs').innerHTML=''; document.getElementById('dcesEditFlows').innerHTML=''; });
+
+    // ── Smart Filter (sobre a grade de pernas; Trade Date comanda o fetch) ───
+    var sfInput=document.getElementById('sfInput'), sfDropdown=document.getElementById('sfDropdown'),
+        sfChips=document.getElementById('sfChips'), sfWrapper=document.getElementById('sfWrapper'),
+        sfActive=[], sfKbdIdx=-1;
+    var SF_COLS=DCES_LEG_COLS.map(function(lbl,i){
+        var f = DCES_LEG_FIELDS[i];
+        return {label:lbl, dtCol:i+L_OFF, type:(DCES_DATE_FIELDS[f] ? 'date' : (DCES_NUM_COLS[lbl] ? 'number' : 'text'))};
+    });
+    var SF_TRADE_DATE = {label:'Trade Date', dtCol:L_TD, type:'date', isDate:true};
+    SF_COLS.unshift(SF_TRADE_DATE);
+    SF_COLS.push({label:'Intrag ID', dtCol:3, type:'text'});
+    function sfEsc(s){return esc(s);}
+    function sfIsDateLike(s){return /^\d{1,2}[\/\-]\d/.test(s)||/^\d{4}[\/\-]/.test(s);}
+    function sfToDate(s){
+        s=String(s||'').trim().split('T')[0].split(' ')[0]; if(!s) return null; var m;
+        if((m=s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/))) return new Date(+m[3],+m[2]-1,+m[1]);
+        if((m=s.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/))) return new Date(+m[1],+m[2]-1,+m[3]);
+        if((m=s.match(/^(\d{4})(\d{2})(\d{2})$/)))                 return new Date(+m[1],+m[2]-1,+m[3]);
+        return null;
+    }
+    var SF_RANGE_WORDS={en:{from:'FROM',to:'TO'},br:{from:'DE',to:'ATÉ'},es:{from:'DESDE',to:'HASTA'}};
+    function sfRangeWord(mode){var lang=localStorage.getItem('__OTC_TRACKER_LANG__')||'en';var m=SF_RANGE_WORDS[lang]||SF_RANGE_WORDS.en;return mode==='from'?m.from:m.to;}
+    function sfFilterKey(col,mode){return col.type==='date'?(col.dtCol+'|'+mode):String(col.dtCol);}
+    function sfDateCandidates(){
+        var out=[];
+        SF_COLS.filter(function(c){return c.type==='date';}).forEach(function(col){
+            var hasFrom=sfActive.some(function(f){return f.col.dtCol===col.dtCol&&f.mode==='from';});
+            var hasTo=sfActive.some(function(f){return f.col.dtCol===col.dtCol&&f.mode==='to';});
+            if(hasFrom&&!hasTo){out.push({col:col,mode:'to',label:sfRangeWord('to')+': '+col.label});}
+            else{out.push({col:col,mode:'from',label:sfRangeWord('from')+': '+col.label});out.push({col:col,mode:'exact',label:col.label});}
+        });
+        out.sort(function(a,b){return (a.mode==='to'?0:1)-(b.mode==='to'?0:1);});
+        return out;
+    }
+    function sfCandidates(val){
+        if(!val) return [];
+        if(!/^\d/.test(val)) return SF_COLS.filter(function(c){return c.type==='text';}).map(function(c){return{col:c,mode:'text',label:c.label};});
+        if(sfIsDateLike(val)) return sfDateCandidates();
+        var out=[];
+        SF_COLS.forEach(function(c){ if(c.type==='number') out.push({col:c,mode:'number',label:c.label}); else if(c.type==='date') out.push({col:c,mode:'exact',label:c.label}); });
+        return out;
+    }
+    function sfRenderDropdown(val) {
+        sfDropdown.innerHTML=''; sfKbdIdx=-1;
+        var matches=sfCandidates(val);
+        if(!matches.length){sfDropdown.style.display='none';return;}
+        matches.forEach(function(cand) {
+            var col=cand.col, li=document.createElement('li');
+            li.innerHTML='<span class="sf-type-badge sf-type-'+col.type+'">'+col.type+'</span><span>'+sfEsc(cand.label)+'</span>';
+            li.addEventListener('mousedown',function(e){e.preventDefault();sfAddFilter(cand.col,sfInput.value.trim(),cand.mode);});
+            sfDropdown.appendChild(li);
+        });
+        sfDropdown.style.display='block';
+    }
+    function sfAddFilter(col,value,mode) {
+        if(!value) return;
+        mode = mode || (col.type==='date'?'exact':col.type);
+        if(col.type==='date'){
+            if(mode==='exact'){sfActive=sfActive.filter(function(f){return f.col.dtCol!==col.dtCol;});}
+            else{sfActive=sfActive.filter(function(f){return !(f.col.dtCol===col.dtCol&&(f.mode===mode||f.mode==='exact'));});}
+        } else { sfActive=sfActive.filter(function(f){return f.col.dtCol!==col.dtCol;}); }
+        sfActive.push({col:col,value:value,mode:mode,key:sfFilterKey(col,mode)}); sfInput.value=''; sfDropdown.style.display='none'; sfKbdIdx=-1;
+        sfRenderChips(); sfInput.focus();
+    }
+    function sfChipPrefix(f){ if(f.col.type==='date'&&(f.mode==='from'||f.mode==='to')) return sfRangeWord(f.mode)+' '+f.col.label.toUpperCase(); return f.col.label.toUpperCase(); }
+    function sfRenderChips() {
+        sfChips.innerHTML='';
+        sfActive.forEach(function(f) {
+            var chip=document.createElement('span'); chip.className='smart-filter-chip';
+            chip.innerHTML='<strong>'+sfEsc(sfChipPrefix(f))+':</strong>&nbsp;'+sfEsc(f.value)+'<span class="sf-chip-remove">&#215;</span>';
+            chip.querySelector('.sf-chip-remove').addEventListener('click',function(){sfActive=sfActive.filter(function(x){return x.key!==f.key;});sfRenderChips();});
+            sfChips.appendChild(chip);
+        });
+    }
+    $.fn.dataTable.ext.search.push(function(settings, rowData){
+        if(settings.nTable.id!=='intrag-dces-legs') return true;
+        for(var k in intragDateRanges){
+            if(!intragDateRanges.hasOwnProperty(k)) continue;
+            var r=intragDateRanges[k], cell=sfToDate(rowData[+k]);
+            if(!cell) return false;
+            if(r.from&&cell<r.from) return false;
+            if(r.to&&cell>r.to) return false;
+        }
+        return true;
+    });
+    sfInput.addEventListener('input',function(){sfRenderDropdown(this.value.trim());});
+    sfInput.addEventListener('blur',function(){setTimeout(function(){sfDropdown.style.display='none';},160);});
+    sfInput.addEventListener('focus',function(){if(this.value.trim())sfRenderDropdown(this.value.trim());});
+    sfWrapper.addEventListener('click',function(){sfInput.focus();});
+    document.getElementById('sfSearchBtn').addEventListener('click',function(){
+        sfDropdown.style.display='none';
+        var dExact=sfActive.find(function(f){return f.col.isDate&&f.mode==='exact';});
+        var dFrom =sfActive.find(function(f){return f.col.isDate&&f.mode==='from';});
+        var dTo   =sfActive.find(function(f){return f.col.isDate&&f.mode==='to';});
+        var colChips=sfActive.filter(function(f){return !f.col.isDate&&f.col.dtCol>=0;});
+        var qs='';
+        if(dFrom||dTo){
+            var parts=[];
+            if(dFrom) parts.push('date_from='+encodeURIComponent(_dmyToIso(dFrom.value)));
+            if(dTo)   parts.push('date_to='+encodeURIComponent(_dmyToIso(dTo.value)));
+            qs=parts.join('&');
+        } else if(dExact){ qs='date='+encodeURIComponent(_dmyToIso(dExact.value)); }
+        intragLoad(qs,colChips);
+    });
+    document.getElementById('btnClearFilters').addEventListener('click',function(){
+        document.querySelectorAll('.dces-filter-row th input').forEach(function(inp){ inp.value=''; });
+        intragDateRanges={}; sfActive=[]; sfChips.innerHTML=''; sfInput.value=''; sfDropdown.style.display='none';
+        legs.columns().search('').draw(); clearFlowsChip(); flows.columns().search('').draw();
+    });
+    sfInput.addEventListener('keydown',function(e) {
+        var items=sfDropdown.querySelectorAll('li');
+        var dropdownOpen=sfDropdown.style.display!=='none'&&items.length;
+        if(e.key==='Backspace'&&!this.value&&sfActive.length){e.preventDefault();var last=sfActive[sfActive.length-1];sfActive=sfActive.filter(function(x){return x.key!==last.key;});sfRenderChips();return;}
+        if(e.key==='Enter'){
+            e.preventDefault();
+            if(dropdownOpen&&sfKbdIdx>=0&&items[sfKbdIdx]){items[sfKbdIdx].dispatchEvent(new MouseEvent('mousedown'));}
+            else{sfDropdown.style.display='none';document.getElementById('sfSearchBtn').click();}
+            return;
+        }
+        if(!items.length) return;
+        if(e.key==='ArrowDown'){e.preventDefault();sfKbdIdx=Math.min(sfKbdIdx+1,items.length-1);}
+        else if(e.key==='ArrowUp'){e.preventDefault();sfKbdIdx=Math.max(sfKbdIdx-1,0);}
+        else if(e.key==='Escape'){sfDropdown.style.display='none';return;}
+        items.forEach(function(li,i){li.classList.toggle('sf-kbd-active',i===sfKbdIdx);});
+    });
+
+    // A Trade Date do import COMANDA o chip (como o Reference Date do DCE Option).
+    (function () {
+        var refInput = document.getElementById('dcesTradeDate'); if (!refInput) return;
+        refInput.addEventListener('change', function () {
+            var v = (this.value || '').trim();
+            if (!/^\d{2}\/\d{2}\/\d{4}$/.test(v)) return;
+            sfActive = sfActive.filter(function (f) { return !f.col.isDate; });
+            sfAddFilter(SF_TRADE_DATE, v, 'exact');
+            document.getElementById('sfSearchBtn').click();
+        });
+    })();
+
+    // Default view: Trade Date = today.
+    fiLoadSpec();
+    sfAddFilter(SF_TRADE_DATE, _todayDmy());
+    document.getElementById('sfSearchBtn').click();
+
+    if (window.otcExportAdvanced) otcExportAdvanced('#intrag-dces-legs');
+});
+</script>
+
+<!-- Modal: o deal inteiro (Intrag ID + pernas + fluxos, ligados pelo Deal Name) -->
+<div class="modal fade" id="dcesModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable" style="max-width: 96vw;">
+    <div class="modal-content liquid-glass">
+      <div class="modal-header py-2">
+        <h5 class="modal-title fs-6"><i class="ti ti-edit me-1"></i>Edit Deal — Intrag DCE Swap</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-2 mb-2">
+          <div class="col-md-3"><label class="form-label form-label-sm mb-1" data-lang="intrag-col-intrag-id">Intrag ID</label><input type="text" class="form-control form-control-sm" id="dces-f-intrag"></div>
+          <div class="col-md-3"><label class="form-label form-label-sm mb-1" data-lang="intrag-dces-col-trade-date">Trade Date</label><input type="text" class="form-control form-control-sm" id="dces-f-trade" placeholder="dd/mm/aaaa" readonly></div>
+        </div>
+        <div class="d-flex align-items-center gap-2 mb-1">
+          <span class="fw-semibold fs-xs text-uppercase" data-lang="intrag-dces-modal-legs">Legs</span>
+          <button type="button" class="btn btn-sm btn-soft-primary btn-toolbar-all" id="dcesAddLeg"><i class="ti ti-plus me-1"></i><span data-lang="intrag-dces-add-leg">Add leg</span></button>
+        </div>
+        <div class="dces-edit-wrap mb-3" id="dcesEditLegs"></div>
+        <div class="d-flex align-items-center gap-2 mb-1">
+          <span class="fw-semibold fs-xs text-uppercase" data-lang="intrag-dces-modal-flows">Cashflows</span>
+          <button type="button" class="btn btn-sm btn-soft-primary btn-toolbar-all" id="dcesAddFlow"><i class="ti ti-plus me-1"></i><span data-lang="intrag-dces-add-flow">Add cashflow</span></button>
+        </div>
+        <div class="dces-edit-wrap" id="dcesEditFlows"></div>
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-sm btn-danger" data-bs-dismiss="modal" title="Cancel"><i class="ti ti-x"></i></button>
+        <button type="button" class="btn btn-sm btn-success" id="dcesSaveBtn" title="Save"><i class="ti ti-device-floppy"></i></button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock extra_javascript %}
