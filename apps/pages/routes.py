@@ -2379,7 +2379,8 @@ _LIVE_BANCO_COUNTERPARTIES = {'BANCO', 'LAWTON', 'MGT', 'ATACAMA'}
 # yet counted (no logic wired) — shows 0 until the counting rule arrives.
 _LIVE_PLACEHOLDER_PRODUCTS = ['NDF Moeda', 'NDF Commodities', 'Option FXO',
                              'Option Commodities', 'Option EDG',
-                             'SWAP CEM', 'SWAP EDG', 'SWAP CEMHYB', 'COE']
+                             'SWAP CEM', 'SWAP EDG', 'SWAP CEMHYB', 'SWAP COMM',
+                             'COE']
 # Fixed display order for the Live Position product bar (unknown products last).
 _LIVE_PRODUCT_ORDER = {p: i for i, p in enumerate(_LIVE_PLACEHOLDER_PRODUCTS)}
 
@@ -2478,15 +2479,25 @@ def api_dashboard_live_position():
         pmode, pspec = src['product']
         prod_key = _fcst_resolve_key(keys, pspec)
         cnt = 0
+        sem_lob = []
         for row in rows:
             if pmode == 'ndfclass':
                 product = _fcst_ndf_product(row.get(prod_key, '') if prod_key else '')
             elif pmode == 'optclass':
                 product = _fcst_opt_class_product(row.get(prod_key, '') if prod_key else '')
             elif pmode == 'lob':
-                lob = _fcst_lob(row.get(prod_key, '') if prod_key else '')
+                bruto = row.get(prod_key, '') if prod_key else ''
+                lob = _fcst_lob(bruto)
                 if lob is None:
-                    continue      # unclassified swap: leave uncounted, not mislabeled
+                    # Unclassified swap: leave uncounted, not mislabeled — mas
+                    # NUNCA calado. Um arquivo achado que conta zero desenha a
+                    # mesma barra vazia que um arquivo ausente, e sem esta lista
+                    # não há como saber qual dos dois é: era só reabrir o card e
+                    # ver o swap sumido. O valor cru vai junto porque é ele que
+                    # diz se falta token novo no `_fcst_lob` ou se a coluna
+                    # resolveu errado.
+                    sem_lob.append(str(bruto))
+                    continue
                 product = 'SWAP ' + lob
             else:
                 product = src['label']
@@ -2503,6 +2514,15 @@ def api_dashboard_live_position():
                     by_entity['BANCO'] = by_entity.get('BANCO', 0) + 1
             cnt += 1
         st['count'] = cnt
+        if sem_lob:
+            # `st['skipped']` viaja no payload: quem abre a API vê o número sem
+            # precisar do log da instância.
+            st['skipped'] = len(sem_lob)
+            amostra = sorted({v for v in sem_lob if v.strip()})[:5]
+            log.warning('[live-position] %s: %d de %d linha(s) sem LOB reconhecido em %r '
+                        '— ficaram FORA do card. Valores: %s',
+                        st['file'], len(sem_lob), len(rows), prod_key,
+                        ', '.join(amostra) if amostra else '(coluna vazia)')
         sources.append(st)
 
     # Only surface the product bar when there is real position data. COE (and any

@@ -39,7 +39,7 @@ _FCST_ENTITY_MAP = {
 }
 _FCST_ENTITY_ORDER = ['LAWTON', 'MGT', 'ATACAMA']
 _FCST_PRODUCT_ORDER = ['NDF Moeda', 'NDF Commodities', 'Option FXO', 'Option Commodities',
-                       'Option EDG', 'SWAP CEM', 'SWAP EDG', 'SWAP CEMHYB']
+                       'Option EDG', 'SWAP CEM', 'SWAP EDG', 'SWAP CEMHYB', 'SWAP COMM']
 
 # One entry per JSON source. Field resolution is by NAME token (case-insensitive
 # "contains", first match wins) so it survives small header differences.
@@ -48,7 +48,7 @@ _FCST_PRODUCT_ORDER = ['NDF Moeda', 'NDF Commodities', 'Option FXO', 'Option Com
 #   product : ('fixed', label)        → constant product label
 #             ('ndfclass', tokens)    → NDF Moeda / NDF Commodities from class field
 #             ('sisbacen', tokens)    → option product by Código SISBACEN
-#             ('lob', tokens)         → SWAP CEM/EDG/CEMHYB from "Código Identificador"
+#             ('lob', tokens)         → SWAP CEM/EDG/CEMHYB/COMM from "Código Identificador"
 #             ('lob_join', tokens)    → same, but the source has only the contract
 #                                       code; join it to the DPOSICAO-SWAP position
 #                                       map to recover the identifier first
@@ -197,18 +197,34 @@ def _fcst_opt_class_product(asset_class):
 def _fcst_lob(identifier):
     """SWAP line of business from the "Código Identificador" string, or None when
     the identifier carries no recognizable token.
-    Order matters: hybrid is tested BEFORE CEM/EDG, because a hybrid's identifier
-    also contains 'CEM' (e.g. 'CEMHYB', 'CEM-HIB') — testing 'CEM' first would
-    swallow every hybrid into CEM and leave SWAP CEMHYB at zero.
+    Order matters: hybrid is tested BEFORE COMM/CEM/EDG, because a hybrid's
+    identifier also contains 'CEM' (e.g. 'CEMHYB', 'CEM-HIB') — testing 'CEM'
+    first would swallow every hybrid into CEM and leave SWAP CEMHYB at zero.
     Accent-insensitive and tolerant of PT/EN hybrid spellings: the mock uses the
-    English 'CEMHYB'/'HYB', but real B3 identifiers may use the Portuguese
-    'HÍBRIDO'/'HIB'. Returns None (rather than defaulting to CEMHYB) when nothing
-    matches, so callers can leave the row UNCLASSIFIED instead of mislabeling it —
-    e.g. a premium whose contract has no match in the position file. Mirrors
-    _accrual_lob (same field), which also returns None for the unmatched case."""
+    English 'CEMHYB'/'HYB', real B3 identifiers may use the Portuguese
+    'HÍBRIDO'/'HIB'.
+
+    O vocabulário é o MESMO do `_accrual_lob` (mesmo campo, mesma ordem), e isso
+    não é estilo: os tokens que a B3 escreve de verdade neste campo são quatro —
+    `CEM`, `EDG`, `CEMHYB` e `COMM`. O `COMM` ficou de fora daqui até
+    11/09/2026 (o `_accrual_lob` sempre o teve), então todo swap de mercadoria
+    voltava None e ia para o `continue` dos dois chamadores: a mesma linha que a
+    Swap Characteristics listava sumia do Live Position e do Settlement
+    Forecast, sem erro nenhum.
+
+    O ramo do híbrido casa por `hyb`/`hib` em vez do `cemhyb` inteiro só por
+    tolerância de grafia (`HÍBRIDO`, `CEM-HIB`); o token real é o `CEMHYB`, e
+    `HYB` é como ele é EXIBIDO na tela (`liveDisplayLabel`), não como ele é
+    gravado. Um balde só de híbrido, como no `_accrual_lob`.
+
+    Returns None (rather than defaulting to a bucket) when nothing matches, so
+    callers can leave the row UNCLASSIFIED instead of mislabeling it — e.g. a
+    premium whose contract has no match in the position file."""
     s = _fcst_norm(identifier)   # lower-case + accent-stripped
-    if 'cemhyb' in s or 'hib' in s:
+    if 'hyb' in s or 'hib' in s:
         return 'CEMHYB'
+    if 'comm' in s:
+        return 'COMM'
     if 'edg' in s:
         return 'EDG'
     if 'cem' in s:
