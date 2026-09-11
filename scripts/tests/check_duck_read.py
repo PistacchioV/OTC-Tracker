@@ -373,6 +373,34 @@ check('11. a subida avisa UMA vez por banco em limbo, nomeando o script',
       (len(_avisos), all('recover_duckdb_wal' in m for m in _avisos),
        sorted(os.path.basename(m.split(' — ')[0].split(': ')[-1]) for m in _avisos)),
       (3, True, ['b.db', 'c.db', 'd.db']))
+
+# O OUTRO estado do §442: o WAL que NAO REPLAYA. Nao e limbo (o `.wal` e
+# pequeno e esta sozinho) e nenhuma abertura passa dele — o aviso de banco
+# ILEGIVEL tem de trazer o comando com o --descartar-wal, senao o log so
+# repete o traceback a cada request.
+check('11. wal_replay_falhou reconhece o replay que estoura',
+      (S.wal_replay_falhou(Exception('Catalog Error: Failure while replaying WAL file '
+                                     '"p.db.wal": Table with name "d_20260119" already exists!')),
+       S.wal_replay_falhou(Exception('IO Error: Could not move file'))),
+      (True, False))
+_h2 = _Pega()
+_logging.getLogger('otc_tracker').addHandler(_h2)
+_db_root_real2 = S.db_root
+S.db_root = lambda raiz=None: _LB
+try:
+    S._ilegivel_aviso.clear()
+    S._ilegivel_avisa(_lb('cache', 'x', 'a.db'),
+                      Exception('Catalog Error: Failure while replaying WAL file "a.db.wal": '
+                                'Table with name "d_20260119" already exists!'))
+    S._ilegivel_aviso.clear()
+    S._ilegivel_avisa(_lb('cache', 'x', 'e.db'), Exception('database is truncated'))
+finally:
+    S.db_root = _db_root_real2
+    _logging.getLogger('otc_tracker').removeHandler(_h2)
+check('11. o aviso do WAL sem replay traz o comando e o --only do banco',
+      ('--descartar-wal' in _h2.msgs[0] and 'cache/x/a.db' in _h2.msgs[0],
+       '--descartar-wal' in _h2.msgs[1]),
+      (True, False))
 shutil.rmtree(_LB, ignore_errors=True)
 
 print('\n== 12. o payload-objeto anterior ao __raw (SemCanal, §442) ==')

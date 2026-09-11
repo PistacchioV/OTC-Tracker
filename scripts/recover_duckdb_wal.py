@@ -5,7 +5,9 @@ recuperando-o FORA do share, e o devolve magro.
 
     python scripts/recover_duckdb_wal.py [--db-dir PASTA] [--only SUBCAMINHO]
                                          [--work-dir PASTA_LOCAL] [--dry-run]
-                                         [--no-slim] [--all]
+                                         [--no-slim] [--all] [--descartar-wal]
+
+`--only` aceita um `.db` (um banco só) ou uma subpasta.
 
 O estado (HANDOFF §442): ao lado do `.db` há um `.wal.checkpoint` — um
 checkpoint do DuckDB COMEÇOU (o `.wal` bateu o `checkpoint_threshold` de
@@ -36,6 +38,22 @@ O que este script faz, banco a banco (só nos que estão em limbo — ver
      `db/_recuperado/<AAAAMMDD-HHMMSS>/<caminho>` (renome: instantâneo no
      share; apague a pasta quando o app estiver de pé e conferido), troca o
      `.novo` pelo `.db` e relê o `_manifest` no share.
+
+O OUTRO estado, com o mesmo remédio de sempre e um passo a mais (11/09/2026):
+o WAL que **não replaya** — `Catalog Error: Failure while replaying WAL file
+"…DPOSICAO-SWAP.db.wal": Table with name "d_20260119" already exists!`. Aqui o
+`.db` e o `.wal` ao lado deixaram de ser o mesmo par (um checkpoint gravou o
+catálogo e não truncou o WAL, um `.db` foi trocado com o WAL antigo ao lado,
+ou o WAL é de outra versão do duckdb — cada pessoa roda a própria instância
+sobre o MESMO `db/`), e NENHUMA abertura passa do replay, nem a de leitura:
+o banco fica ILEGÍVEL para sempre e o app repete o traceback a cada request.
+Fundir, inverter a ordem dos WALs ou recuperar no disco local não muda nada —
+a única saída é DESCARTAR o WAL (`--descartar-wal`), o que perde o que foi
+gravado depois do último checkpoint (no `cache/` isso volta na importação ou
+na rotina do dia). Sem o flag o banco é deixado como está, com o motivo; com
+ele, o WAL original vai inteiro para `db/_recuperado/` do mesmo jeito. Como
+um `.wal` pequeno não é "limbo", este caso pede `--all` (e o `--only` do
+banco que o log nomeia).
 
 Rode com TODAS as instâncias PARADAS, na MESMA versão de duckdb da instância
 (o WAL é da versão que o escreveu), a partir do python do `.bat`. Cada banco é
@@ -106,6 +124,27 @@ def _acesso_negado(exc):
     o que acabou de ser escrito, indexador)? Vale uma nova tentativa."""
     m = str(exc)
     return 'Could not move file' in m or 'denied' in m.lower()
+
+
+def _descarta_wal(local):
+    """Tira os WALs de perto da cópia LOCAL (renomeando para `.descartado`) para
+    que a abertura seguinte seja só o `.db`. Só faz sentido com o WAL que NÃO
+    REPLAYA: aí ele não é dado que falta gravar, é dado que não entra em lugar
+    nenhum — nenhuma abertura, de leitura ou de escrita, passa dele. Os
+    ORIGINAIS no share não são tocados por aqui: a troca do passo 4 os move
+    inteiros para `db/_recuperado/`, que é de onde alguém os tira se um dia
+    aparecer como lê-los."""
+    fora = []
+    for s in _store.WAL_SUFIXOS:
+        if os.path.isfile(local + s):
+            _liberar(local + s)
+            alvo = local + s + '.descartado'
+            if os.path.isfile(alvo):
+                _liberar(alvo)
+                os.remove(alvo)
+            os.replace(local + s, alvo)
+            fora.append(s)
+    return fora
 
 
 def _prova_de_renome(work_dir):
@@ -219,7 +258,37 @@ def _desfaz_fusao(local, guarda):
         os.replace(g, local + s)
 
 
-def _recupera_local(local, origem=None, tentativas=5, espera=15):
+def _wal_sem_replay(local, exc, descartar, tentativas, espera):
+    """O WAL não REPLAYA (`Failure while replaying WAL file … already exists`):
+    o `.db` e o `.wal` ao lado não são mais o mesmo par — um checkpoint gravou
+    o catálogo e não truncou o WAL, o `.db` foi trocado com o WAL antigo ao
+    lado, ou o WAL é de outra versão do duckdb (cada pessoa roda a própria
+    instância sobre o MESMO `db/`). Não há fusão, ordem de WAL nem disco local
+    que resolva: NENHUMA abertura passa do replay, nem em leitura — o banco
+    fica ilegível para sempre e o app só repete o traceback.
+
+    A única saída é DESCARTAR o WAL, e isso PERDE o que foi gravado depois do
+    último checkpoint. Por isso é opt-in (`--descartar-wal`): sem o flag, o
+    banco é deixado exatamente como está, com o número na mensagem. O que se
+    perde do `cache/` volta pela importação (o JSON legado no share) ou pela
+    própria rotina do dia; o WAL original vai inteiro para `db/_recuperado/`."""
+    if not descartar:
+        raise RuntimeError(
+            'o WAL ao lado NÃO REPLAYA (%s).\n'
+            '     Não é o limbo de checkpoint: fundir, inverter a ordem ou copiar para o disco\n'
+            '     local não muda nada — o `.db` já tem a tabela que a entrada manda criar, e\n'
+            '     toda abertura (até a de leitura) morre aqui. A saída é DESCARTAR o WAL, o que\n'
+            '     PERDE o que foi gravado depois do último checkpoint (no `cache/` isso volta na\n'
+            '     importação ou na rotina do dia). Se topar, rode de novo com --descartar-wal;\n'
+            '     o WAL original vai inteiro para db/_recuperado/.' % str(exc).split('\n', 1)[0])
+    fora = _descarta_wal(local)
+    _diz('     o WAL não replaya (%s)' % str(exc).split('\n', 1)[0])
+    _diz('     --descartar-wal: segui SÓ com o .db (deixei de lado %s na cópia local); o banco '
+         'volta ao último CHECKPOINT' % ', '.join(fora))
+    _abre_e_checkpoint(local, tentativas, espera)
+
+
+def _recupera_local(local, origem=None, tentativas=5, espera=15, descartar=False):
     """Tira a cópia local do limbo. Primeiro deixa o DuckDB fazer o que ele
     faria sozinho; se o rename da fusão for NEGADO — no Windows o `MoveFileW`
     com que ele grava o `.wal.recovery` recusa destino existente, e negou
@@ -232,6 +301,9 @@ def _recupera_local(local, origem=None, tentativas=5, espera=15):
         _abre_e_checkpoint(local, 2, espera)
         return
     except Exception as exc:                                 # noqa: BLE001
+        if _store.wal_replay_falhou(exc):
+            _wal_sem_replay(local, exc, descartar, tentativas, espera)
+            return
         if not _acesso_negado(exc):
             raise
         primeiro = exc
@@ -261,6 +333,12 @@ def _recupera_local(local, origem=None, tentativas=5, espera=15):
             os.remove(local)
             shutil.copy2(origem, local)
             _liberar(local)
+            ultimo = exc
+    if descartar:
+        # Nenhuma ordem de fusão serviu e o operador já assinou embaixo do
+        # descarte: o `.db` sozinho é melhor do que um banco ilegível.
+        _wal_sem_replay(local, ultimo, True, tentativas, espera)
+        return
     raise primeiro
 
 
@@ -310,7 +388,7 @@ def _work_dir_padrao():
     return os.path.join(base, 'OTC-Tracker', 'recover')
 
 
-def recuperar(db, work_dir, db_dir, slim=True, carimbo=None):
+def recuperar(db, work_dir, db_dir, slim=True, carimbo=None, descartar=False):
     """Um banco. Devolve o resumo (dict). Levanta se qualquer conferência falhar
     — e aí o share fica como estava (a troca é o ÚLTIMO passo)."""
     irm = _store.wal_irmaos(db)
@@ -319,8 +397,10 @@ def recuperar(db, work_dir, db_dir, slim=True, carimbo=None):
     resumo = {'db': db, 'wal_mb': sum(irm.values()) / 1e6, 'irmaos': irm}
     os.makedirs(work_dir, exist_ok=True)
     for s in ('',) + _store.WAL_SUFIXOS + ('.slim', '.novo'):
-        if os.path.isfile(local + s):
-            os.remove(local + s)
+        for x in (local + s, local + s + '.descartado'):
+            if os.path.isfile(x):
+                _liberar(x)
+                os.remove(x)
     # 1. para o disco local
     t0 = time.time()
     shutil.copy2(db, local)
@@ -338,7 +418,9 @@ def recuperar(db, work_dir, db_dir, slim=True, carimbo=None):
                                                   _mb(resumo['wal_copiado']), resumo['t_copia']))
     # 2. o DuckDB recupera no local
     t0 = time.time()
-    _recupera_local(local, origem=db)
+    _recupera_local(local, origem=db, descartar=descartar)
+    resumo['descartado'] = sorted(s for s in _store.WAL_SUFIXOS
+                                  if os.path.isfile(local + s + '.descartado'))
     sobras = _resolve_sobra_recovery(local, irm.get('.wal', 0) + irm.get('.wal.checkpoint', 0))
     if sobras:
         raise RuntimeError('%s: depois do CHECKPOINT ainda há WAL na cópia local (%s)'
@@ -399,6 +481,10 @@ def main(argv=None):
                          'nenhum progresso (padrão: nunca desiste)')
     ap.add_argument('--all', action='store_true',
                     help='recupera qualquer banco com WAL ao lado, não só os em limbo')
+    ap.add_argument('--descartar-wal', action='store_true',
+                    help='quando o WAL NÃO REPLAYA (`Failure while replaying WAL file … already '
+                         'exists`), segue só com o .db — PERDE o que foi gravado depois do último '
+                         'checkpoint; o WAL original vai inteiro para db/_recuperado/')
     args = ap.parse_args(argv)
     db_dir = args.db_dir
     if not db_dir:
@@ -408,7 +494,12 @@ def main(argv=None):
             if args.only else db_dir)
     work_dir = args.work_dir or _work_dir_padrao()
     alvos = []
-    for pasta, dirs, arquivos in os.walk(raiz):
+    um_banco = os.path.isfile(raiz)                          # --only apontando para UM `.db`
+    if um_banco:
+        irm = _store.wal_irmaos(raiz)
+        if irm:
+            alvos.append((raiz, irm))
+    for pasta, dirs, arquivos in ([] if um_banco else os.walk(raiz)):
         dirs[:] = sorted(d for d in dirs if not d.startswith(_store.RECUPERADO_DIR))
         for a in sorted(arquivos):
             if not a.lower().endswith('.db'):
@@ -432,6 +523,8 @@ def main(argv=None):
         return 1
     carimbo = datetime.now().strftime('%Y%m%d-%H%M%S')
 
+    descartados = []
+
     def _rodada(lista):
         """Uma passada pela lista. Devolve (erros, presos)."""
         erros, presos = [], []
@@ -449,7 +542,10 @@ def main(argv=None):
                     presos.append(db)
                     _diz('  EM USO %s — um processo VIVO ainda segura o arquivo; não toquei nele' % rel)
                     continue
-                recuperar(db, work_dir, db_dir, slim=not args.no_slim, carimbo=carimbo)
+                r = recuperar(db, work_dir, db_dir, slim=not args.no_slim, carimbo=carimbo,
+                              descartar=args.descartar_wal)
+                if r.get('descartado'):
+                    descartados.append((rel, r['descartado']))
                 _diz('  ok   %s em %.0fs' % (rel, time.time() - t0))
             except Exception:                                # noqa: BLE001
                 erros.append(db)
@@ -490,6 +586,11 @@ def main(argv=None):
     if erros or presos:
         _diz('%d banco(s) sem recuperar — o share ficou como estava neles' % (len(erros) + len(presos)))
         return 1
+    for rel, sufixos in descartados:
+        _diz('ATENÇÃO %s voltou ao último CHECKPOINT: o WAL não replayava e foi descartado (%s).\n'
+             '     O que foi gravado depois dele NÃO está no banco — no cache/ isso volta na\n'
+             '     importação ou na rotina do dia; o original está em db/%s/%s.'
+             % (rel, ', '.join(sufixos), _store.RECUPERADO_DIR, carimbo))
     _diz('pronto: o que foi substituído está em %s (apague depois de conferir o app)'
          % os.path.join(db_dir, _store.RECUPERADO_DIR, carimbo))
     return 0
