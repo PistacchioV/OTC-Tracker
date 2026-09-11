@@ -544,6 +544,11 @@ S.memo_forget()
 os.makedirs(os.path.dirname(TPL), exist_ok=True)
 with open(TPL, 'w', encoding='utf-8') as fh:
     json.dump(OBJ_TPL, fh)
+_dia = _p('cache', 'b3 files', 'NDF', '2026', '09', '11', '73760_x.json')
+os.makedirs(os.path.dirname(_dia), exist_ok=True)
+with open(_dia, 'w', encoding='utf-8') as fh:
+    json.dump([{'a': 1}], fh)
+_banco_dia = S._db_abs(S.core.target_of('cache/b3 files/NDF/2026/09/11/73760_x.json')[0])
 _h = _Pega()
 _logging.getLogger('otc_tracker').addHandler(_h)
 _DP.PACKAGED_DIR = os.path.normpath(TMP)
@@ -556,6 +561,12 @@ S.memo_forget()
 check('12. com o checkout SENDO o DATA_DIR, a semeadura nao reimporta na subida',
       (any('reimportado' in m for m in _h.msgs), S.tem_raw(TPL)), (False, False))
 check('12.   e o read continua respondendo pelo arquivo em disco', S.read(TPL), OBJ_TPL)
+# o arquivo-dia nem e olhado: converte-lo na subida e fazer o cutover DENTRO do
+# boot (~2 s por arquivo, com o app sem atender). Quem carrega dia e o
+# convert_json_to_duckdb.py, ou a primeira leitura da data.
+check('12.   e o arquivo-dia em disco NAO vira banco na subida (mas o log diz)',
+      (os.path.isfile(_banco_dia), any('semeadura' in m and 'cache/' in m for m in _h.msgs)),
+      (False, True))
 S.import_wait()
 shutil.rmtree(_PK, ignore_errors=True)
 
