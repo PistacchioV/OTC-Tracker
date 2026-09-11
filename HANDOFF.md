@@ -18868,3 +18868,15 @@ comando do aviso de leitura (`data_store.remedio_ilegivel`, extraída do
 carregar o banco no atributo `.db`: picar caminho de dentro de mensagem de
 erro é o que gerou o lixo. `check_duck_read.py` §12 prende — uma linha
 ILEGÍVEL com o comando, nenhuma linha de "ocupado".
+
+**E a terceira linha do mesmo log.** Logo abaixo vinha
+`[data-dir] não consegui importar …\mappings\ndfc-ir-exempt.json para o banco`
+com um traceback cortado na tela, apontando o `open(origem)` do próprio
+`_seed_data_dir`. A falha era **ler o arquivo em DISCO** — a cópia do
+repositório —, e a mensagem mandava caçar do lado do banco. A leitura ganhou o
+seu próprio `except`, dizendo "não consegui ler a cópia do repositório", e as
+duas mensagens passaram a trazer `tipo: motivo` na LINHA: o traceback é o que
+rola para fora da tela, e sem ele não dá para separar um `PermissionError`
+(arquivo em uso, antivírus — passageiro) de um `JSONDecodeError` (cadastro
+corrompido, que muda número na tela). `check_duck_read.py` §12 prende as duas.
+Quando a linha nova aparecer na instância, ela diz sozinha qual dos dois é.

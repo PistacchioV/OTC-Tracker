@@ -487,6 +487,50 @@ check('12. a semeadura reimporta o objeto sem canal da copia do repositorio, avi
       (S.read(TPL).get('n'), any('sem-canal' in m and 'reimportado' in m for m in _h.msgs)), (99, True))
 check('12.   e NAO sobrescreve a lista que o banco ja tem', S.read(_p('file-interpreter', 'lista.json')),
       [{'a': 'da tela'}])
+
+# Banco ILEGIVEL na semeadura (o WAL que nao replaya, §447): como BancoIlegivel
+# e subclasse de BancoOcupado, o ramo do ocupado engolia o caso e dizia "fica
+# para a proxima subida" — que nunca chega, porque nenhuma abertura passa do
+# replay. Tem de sair como ILEGIVEL, com o banco (do atributo, nao picado da
+# mensagem) e o comando do recover.
+with open(os.path.join(_PK, 'file-interpreter', 'ilegivel.json'), 'w', encoding='utf-8') as fh:
+    json.dump({'x': 1}, fh)                    # o banco nao tem: a semeadura VAI gravar
+with open(os.path.join(_PK, 'file-interpreter', 'quebrado.json'), 'w', encoding='utf-8') as fh:
+    fh.write('{isso nao e json')               # falha ANTES do banco: e disco
+_h = _Pega()
+_logging.getLogger('otc_tracker').addHandler(_h)
+_write_real = S.write
+_ilegivel = S.BancoIlegivel('Catalog Error: Failure while replaying WAL file "x.db.wal": '
+                            'Table with name "d_20260119" already exists!')
+_ilegivel.db = os.path.join(DBDIR, 'cache', 'x', 'p.db')
+_db_root_real3 = S.db_root
+
+
+def _write_ilegivel(path, payload):
+    raise _ilegivel
+
+
+S.write = _write_ilegivel
+S.db_root = lambda raiz=None: DBDIR
+_DP.PACKAGED_DIR = _PK
+try:
+    _seed_data_dir(_App())
+finally:
+    S.write = _write_real
+    S.db_root = _db_root_real3
+    _DP.PACKAGED_DIR = _pk_real
+    _logging.getLogger('otc_tracker').removeHandler(_h)
+_ileg = [m for m in _h.msgs if 'ILEG' in m]
+_leitura = [m for m in _h.msgs if 'ler a cópia do repositório' in m]
+check('12. a semeadura separa ILEGIVEL de OCUPADO e traz o comando',
+      (len(_ileg), bool(_ileg) and '--descartar-wal' in _ileg[0] and 'cache/x/p.db' in _ileg[0],
+       any('ocupado por outra' in m for m in _h.msgs)),
+      (1, True, False))
+# e a falha de LER o arquivo do repositorio nao se disfarca de falha do banco
+check('12. JSON do repositorio ilegivel sai como DISCO, com o tipo na linha',
+      (len(_leitura), bool(_leitura) and 'quebrado.json' in _leitura[0]
+       and 'JSONDecodeError' in _leitura[0]),
+      (1, True))
 shutil.rmtree(_PK, ignore_errors=True)
 
 print()

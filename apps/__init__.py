@@ -130,6 +130,7 @@ def _seed_data_dir(app):
         data_store = None
     copiados = importados = 0
     ocupados = set()
+    ilegiveis = set()
     for raiz, _dirs, arquivos in os.walk(PACKAGED_DIR):
         rel = os.path.relpath(raiz, PACKAGED_DIR)
         top = rel.split(os.sep)[0]
@@ -148,6 +149,17 @@ def _seed_data_dir(app):
                 try:
                     with open(origem, encoding='utf-8') as fh:
                         payload = json.load(fh)
+                except Exception as exc:                    # noqa: BLE001
+                    # Falhou LENDO A CÓPIA DO REPOSITÓRIO — disco, não banco.
+                    # Ficava no mesmo `except` do banco, com a mensagem
+                    # "não consegui importar … para o banco", e mandava caçar
+                    # do lado errado (11/09/2026). O tipo e o motivo vão na
+                    # LINHA: o traceback rola para fora da tela.
+                    app.logger.warning('[data-dir] não consegui ler a cópia do repositório %s '
+                                       '(%s: %s) — o banco fica com o que já tem',
+                                       origem, type(exc).__name__, exc)
+                    continue
+                try:
                     if data_store.isfile(alvo):
                         # O banco tem — mas um payload-OBJETO convertido antes
                         # do `__raw` (§442) é ilegível (o File Interpreter lia
@@ -160,6 +172,21 @@ def _seed_data_dir(app):
                                            'do repositório', alvo)
                     data_store.write(alvo, payload)
                     importados += 1
+                except data_store.BancoIlegivel as exc:
+                    # ILEGÍVEL não é OCUPADO, e a diferença é o que o operador
+                    # faz a seguir: o ocupado sai sozinho na próxima subida,
+                    # este NÃO sai de nenhuma — nem o app nem a semeadura
+                    # abrem esse banco outra vez sem o recover. Como
+                    # `BancoIlegivel` é subclasse de `BancoOcupado`, sem este
+                    # ramo ANTES ele saía como "ocupado por outra instância",
+                    # com o nome picado do meio de um `Catalog Error` (o
+                    # `basename` de uma mensagem com caminho e aspas).
+                    db = getattr(exc, 'db', None) or alvo
+                    if db not in ilegiveis:
+                        ilegiveis.add(db)
+                        app.logger.warning('[data-dir] %s está ILEGÍVEL — a semeadura desse '
+                                           'banco NÃO volta sozinha na próxima subida: %s',
+                                           db, data_store.remedio_ilegivel(db, exc))
                 except data_store.BancoOcupado as exc:
                     # A instância vizinha está gravando nesse banco: o que ele
                     # tem fica como está (é a regra — a semeadura nunca
@@ -170,9 +197,9 @@ def _seed_data_dir(app):
                         ocupados.add(banco)
                         app.logger.warning('[data-dir] %s está ocupado por outra instância — a '
                                            'semeadura desse banco fica para a próxima subida', banco)
-                except Exception:                           # noqa: BLE001
-                    app.logger.warning('[data-dir] não consegui importar %s para o banco',
-                                       alvo, exc_info=True)
+                except Exception as exc:                    # noqa: BLE001
+                    app.logger.warning('[data-dir] não consegui importar %s para o banco '
+                                       '(%s: %s)', alvo, type(exc).__name__, exc, exc_info=True)
                 continue
             if os.path.normpath(destino) == PACKAGED_DIR or os.path.exists(alvo):
                 continue
