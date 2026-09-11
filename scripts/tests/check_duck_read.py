@@ -531,6 +531,32 @@ check('12. JSON do repositorio ilegivel sai como DISCO, com o tipo na linha',
       (len(_leitura), bool(_leitura) and 'quebrado.json' in _leitura[0]
        and 'JSONDecodeError' in _leitura[0]),
       (1, True))
+
+# Na dev o checkout E o DATA_DIR: `origem` e `alvo` sao o MESMO arquivo, e a
+# reimportacao sincrona so atrasa a subida (o `read` cai para esse arquivo e
+# importa em background). Centenas de `.meta.json` de `cache/` a 2 s cada eram
+# a subida "travada" de 11/09/2026.
+_con = duckdb.connect(os.path.join(DBDIR, 'file-interpreter', 'sem-canal.db'))
+_con.execute('DROP TABLE %s' % S.core.q(_alvo[2] + '__raw'))
+_con.execute('UPDATE _manifest SET targets = ? WHERE path = ?', [json.dumps(_tg), _chave])
+_con.close()
+S.memo_forget()
+os.makedirs(os.path.dirname(TPL), exist_ok=True)
+with open(TPL, 'w', encoding='utf-8') as fh:
+    json.dump(OBJ_TPL, fh)
+_h = _Pega()
+_logging.getLogger('otc_tracker').addHandler(_h)
+_DP.PACKAGED_DIR = os.path.normpath(TMP)
+try:
+    _seed_data_dir(_App())
+finally:
+    _DP.PACKAGED_DIR = _pk_real
+    _logging.getLogger('otc_tracker').removeHandler(_h)
+S.memo_forget()
+check('12. com o checkout SENDO o DATA_DIR, a semeadura nao reimporta na subida',
+      (any('reimportado' in m for m in _h.msgs), S.tem_raw(TPL)), (False, False))
+check('12.   e o read continua respondendo pelo arquivo em disco', S.read(TPL), OBJ_TPL)
+S.import_wait()
 shutil.rmtree(_PK, ignore_errors=True)
 
 print()

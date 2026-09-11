@@ -18936,3 +18936,27 @@ segue o caminho de sempre (debugger na dev, 500 na instância). O
 `check_tools_ipca.py` prende tudo (rede stubada, resultado conferido no
 número); `check_tools.py` e `check_soc_layers.py` seguem verdes.
 
+
+**A subida "travada" (mesmo dia, 11:02).** Depois de tudo isso o app da dev
+levava MINUTOS para atender, parado depois do banner. Não era banco quebrado:
+era o `_seed_data_dir`. Na dev o checkout É o `DATA_DIR`, então `origem` e
+`alvo` são o MESMO arquivo — e a semeadura, que existe para trazer a cópia do
+repositório, estava reimportando um a um os `.meta.json` de
+`cache/daily settlement/**` a ~2 s cada (cada `write` reabre o banco sob trava
+exclusiva e reconstrói a tabela). Esses arquivos nem vêm do repositório:
+`cache/**/*.json` é gitignorado, são os arquivos-dia que as rotinas produzem —
+o log dizia "reimportado da cópia do repositório" sobre dado de runtime.
+
+Onde `origem == alvo` a reimportação SÍNCRONA é redundante: o `read` já cai
+para esse mesmo arquivo em disco e manda a importação para a thread
+`store-import` (§434). Então ela passa a ser pulada nesse caso, e o resto da
+semeadura (o que o banco NÃO tem, que a enumeração precisa) continua igual. Na
+instância do JPM nada muda: lá o `DATA_DIR` é o share e o `PACKAGED_DIR` é o
+checkout, pastas diferentes.
+
+Junto: a semeadura passou a MEDIR-SE e, acima de 30 s, a dizer no log que é
+ela que segura a subida, apontando o `convert_json_to_duckdb.py --meses 0`
+para pagar isso com o app parado. Uma subida que não imprime nada por minutos
+é indistinguível de uma subida travada — e foi assim que ela pareceu.
+`check_duck_read.py` §12 prende os dois lados (pastas diferentes reimporta,
+mesma pasta não, e o `read` continua respondendo pelo arquivo em disco).
