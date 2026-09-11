@@ -18,8 +18,10 @@ critério aqui criaria uma segunda resposta para "esta operação gera confirma�
 — que é exatamente como as duas telas passariam a discordar.
 
 Quais famílias entram: só as que GERAM DOCUMENTO de confirmação
-(`_MC_CONFIRMATION_SOURCES`). NDF Vanilla e Other Publisher ficam de fora de
-propósito — alimentam o Pending Confirmation e param aí. Swap e Intrag também.
+(`_MC_CONFIRMATION_SOURCES`). O NDF Vanilla entra PELA METADE — só o de MGT
+contra cliente gera documento (§453), e quem decide deal a deal é a mesma
+função do mapeamento. Other Publisher fica de fora de propósito: alimenta o
+Pending Confirmation e para aí. Swap e Intrag também.
 
 Uso
     python scripts/backfill_manual_confirmations.py --dry-run   # só relata
@@ -74,17 +76,44 @@ CACHE_ROOT = _caminho_de_dado('cache', 'new deals')
 # confirmação, e é a única cuja linha é chaveada pelo B3 ID (ver
 # `_generic_nd_pc_trigger`) — sem isso o backfill criaria a linha com o nome do
 # deal, e o mapeamento seguinte criaria uma SEGUNDA linha com o B3 ID.
+#
+# `generic` é a chave da página no `_GENERIC_ND_PRODUCTS`, e ela responde as
+# DUAS perguntas de uma vez:
+#
+#   * a PASTA sai de `cfg['dir']` do próprio gerador, nunca de um literal aqui.
+#     As três páginas genéricas gravam em `NDF/Vanilla`, `NDF/FwdStart` e
+#     `NDF/OtherPublisher` — SEM espaço (`check_nd_cache_dirs.py`). Este script
+#     escrevia `NDF/FWD Start`, que é o RÓTULO de tela e não existe em disco:
+#     uma pasta inexistente não dá erro, casa com nada, e o backfill do FWD
+#     Start varria zero arquivo em silêncio desde que a pasta ganhou o nome
+#     atual.
+#   * o SOURCE sai do `_generic_nd_mc_source`, por DEAL. É o que faz o Vanilla
+#     entrar pela metade: só o de MGT contra cliente gera documento (§453), e o
+#     do BANCO responde None. Um `source` fixo traria a página inteira — a de
+#     maior volume — para a esteira. E perguntar à função do mapeamento, em vez
+#     de repetir o teste de `LE` aqui, é o que impede backfill e mapeamento de
+#     discordarem de quem tem documento.
+#
+# As famílias que não são página genérica declaram a pasta em `dir`, relativa ao
+# cache do New Deals.
 FAMILIES = {
-    os.path.join('NDF', 'Commodities'):    {'source': 'NDF COMM',      'key': 'deal'},
-    os.path.join('Option', 'Commodities'): {'source': 'OPTION COMM',   'key': 'deal'},
-    os.path.join('Option', 'FXO'):         {'source': 'OPTION',        'key': 'deal'},
-    os.path.join('NDF', 'FWD Start'):      {'source': 'NDF FWD START', 'key': 'b3id'},
+    'NDF Commodities':    {'dir': ('NDF', 'Commodities'),    'source': 'NDF COMM',      'key': 'deal'},
+    'Option Commodities': {'dir': ('Option', 'Commodities'), 'source': 'OPTION COMM',   'key': 'deal'},
+    'Option FXO':         {'dir': ('Option', 'FXO'),         'source': 'OPTION',        'key': 'deal'},
+    'NDF FWD Start':      {'generic': 'fwd-start',           'source': 'NDF FWD START', 'key': 'b3id'},
+    'NDF Vanilla':        {'generic': 'vanilla',             'source': 'NDF VANILLA',   'key': 'deal'},
 }
 
 
-def iter_deals(family_dir):
+def family_root(cfg, R):
+    """A pasta da família: a do próprio gerador quando é página genérica."""
+    if cfg.get('generic'):
+        return R._GENERIC_ND_PRODUCTS[cfg['generic']]['dir']
+    return os.path.join(CACHE_ROOT, *cfg['dir'])
+
+
+def iter_deals(root):
     """Todos os deals dos arquivos-dia da família, na ordem das datas."""
-    root = os.path.join(CACHE_ROOT, family_dir)
     if not _armazem().isdir(root):
         return
     for dirpath, _dirs, files in _armazem().walk(root):
@@ -118,10 +147,10 @@ def main():
     from apps.pages import manual_conf as MC                      # noqa: E402
 
     wanted = set(args.source) if args.source else None
-    totals = {'varridos': 0, 'success': 0, 'internos': 0,
+    totals = {'varridos': 0, 'success': 0, 'internos': 0, 'fora_regra': 0,
               'sem_chave': 0, 'ja_existiam': 0, 'criados': 0}
 
-    for family_dir, cfg in sorted(FAMILIES.items()):
+    for family, cfg in sorted(FAMILIES.items()):
         source = cfg['source']
         if wanted and source not in wanted:
             continue
@@ -132,12 +161,21 @@ def main():
             continue
 
         criados = existiam = internos = sem_chave = success = varridos = 0
+        fora_regra = 0
         # O MESMO Deal aparece em mais de um arquivo-dia (amend, remapeação, e no
         # mock simplesmente repetido). Sem este conjunto o --dry-run conta cada
         # repetição como uma linha nova — ele não enxerga a própria gravação que
         # não fez, e prometia 73 onde o run real criava 39.
         vistos = set()
-        for deal in iter_deals(family_dir):
+        root = family_root(cfg, R)
+        if not _armazem().isdir(root):
+            # Pasta que não existe casa com NADA e não levanta: é assim que o
+            # FWD Start varria zero em silêncio. Dizer o caminho é o que separa
+            # "não há o que trazer" de "estou olhando no lugar errado".
+            print('· {:20s} {:22s} pasta inexistente: {}'.format(
+                family, source, root))
+            continue
+        for deal in iter_deals(root):
             varridos += 1
             if str(deal.get('Status', '') or '').strip() != 'Success':
                 continue
@@ -147,6 +185,22 @@ def main():
             if R._pc_is_internal_counterparty(client, deal.get('SPN', '')):
                 internos += 1
                 continue
+
+            # Família de source condicional: pergunta a regra do mapeamento por
+            # DEAL. O Vanilla do BANCO responde None e fica de fora — é a
+            # maioria da página, e por isso o contador existe: sem ele a linha
+            # do resumo diria `varridos=5000 criados=12` e pareceria defeito.
+            # Página genérica: a regra do MAPEAMENTO responde por deal. O
+            # FWD Start responde sempre o mesmo; o Vanilla do BANCO responde
+            # None e fica de fora — é a maioria da página, e por isso o contador
+            # existe: sem ele a linha do resumo diria `varridos=5000 criados=12`
+            # e pareceria defeito.
+            deal_source = cfg['source']
+            if cfg.get('generic'):
+                deal_source = R._generic_nd_mc_source(cfg['generic'], deal)
+                if deal_source is None:
+                    fora_regra += 1
+                    continue
 
             if cfg['key'] == 'b3id':
                 key = str(deal.get('B3_ID', '') or '').strip()
@@ -162,20 +216,22 @@ def main():
             vistos.add(key)
 
             if not args.dry_run:
-                R._mc_save_from_deal(deal, source, trade_number=key)
+                R._mc_save_from_deal(deal, deal_source, trade_number=key)
                 if MC.find_row(key) is None:
                     print('  ! {} não gravou (ver log [manual-conf])'.format(key))
                     continue
             criados += 1
 
-        print('· {:14s} {:22s} varridos={:4d} success={:3d} internos={:3d} '
-              'sem-chave={:2d} já-existiam={:3d} {}={:3d}'.format(
-                  family_dir, source, varridos, success, internos, sem_chave,
-                  existiam, 'entrariam' if args.dry_run else 'criados', criados))
+        print('· {:20s} {:22s} varridos={:4d} success={:3d} internos={:3d} '
+              'fora-da-regra={:4d} sem-chave={:2d} já-existiam={:3d} {}={:3d}'.format(
+                  family, source, varridos, success, internos, fora_regra,
+                  sem_chave, existiam,
+                  'entrariam' if args.dry_run else 'criados', criados))
 
         totals['varridos'] += varridos
         totals['success'] += success
         totals['internos'] += internos
+        totals['fora_regra'] += fora_regra
         totals['sem_chave'] += sem_chave
         totals['ja_existiam'] += existiam
         totals['criados'] += criados
@@ -183,8 +239,9 @@ def main():
     verbo = 'entrariam na esteira' if args.dry_run else 'entraram na esteira'
     print()
     print('{} deals varridos · {} mapeados (Success) · {} pernas internas · '
-          '{} já na esteira'.format(totals['varridos'], totals['success'],
-                                    totals['internos'], totals['ja_existiam']))
+          '{} fora da regra do produto · {} já na esteira'.format(
+              totals['varridos'], totals['success'], totals['internos'],
+              totals['fora_regra'], totals['ja_existiam']))
     print('{} {}{}'.format(totals['criados'], verbo,
                            ' (--dry-run: nada foi gravado)' if args.dry_run else ''))
     return 0
