@@ -453,13 +453,17 @@ da subida e NÃO liga o farol; os caminhos do espelho são dinâmicos.
 > própria instância sobre o MESMO `db/`). Aqui NENHUMA abertura passa do
 > replay, nem a de leitura: o banco é `BancoIlegivel` para sempre e o log
 > repete o traceback a cada request. Fundir, inverter a ordem, tentar cada
-> WAL sozinho ou recuperar no disco local não muda nada — a única saída é DESCARTAR o WAL
-> (`recover_duckdb_wal.py --all --descartar-wal --only <o banco>`), o que
+> WAL sozinho ou recuperar no disco local não muda nada — a única saída é
+> DESCARTAR o WAL (`recover_duckdb_wal.py --all --descartar-wal --only
+> <o banco>`), o que
 > perde o que foi gravado depois do último checkpoint (no `cache/` isso
 > volta na importação ou na rotina do dia). É opt-in de propósito, e o WAL
 > original vai inteiro para `db/_recuperado/`. O aviso de ILEGÍVEL do
 > `data_store` reconhece o caso (`wal_replay_falhou`) e imprime esse
-> comando; a sonda da subida NÃO o vê (um `.wal` pequeno não é limbo).
+> comando — na leitura e na SEMEADURA da subida, que ramifica o ilegível
+> ANTES do ocupado (a herança do §441 junta os dois para LER e os separa
+> para AGIR: o ocupado sai sozinho na próxima subida, este não sai de
+> nenhuma). A sonda da subida NÃO o vê (um `.wal` pequeno não é limbo).
 
 ---
 

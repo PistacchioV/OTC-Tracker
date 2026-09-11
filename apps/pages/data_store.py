@@ -433,6 +433,20 @@ def _only_de(db):
     return db if rel.startswith('..') else rel.replace(os.sep, '/')
 
 
+def remedio_ilegivel(db, exc):
+    """O que fazer com ESTE banco ilegível, em uma linha. Mora aqui porque quem
+    avisa são dois — a leitura (`_ilegivel_avisa`) e a semeadura da subida — e
+    o remédio do WAL que não replaya é comprido demais para viver duplicado."""
+    if wal_replay_falhou(exc):
+        # O WAL não replaya: o app não sai disso em abertura nenhuma, e o log
+        # tem de trazer o comando em vez de deixar o banco piscando o mesmo
+        # traceback a cada request.
+        return ('o .wal ao lado NÃO REPLAYA (o .db já tem a tabela que ele manda criar). '
+                'Com o app PARADO: scripts\\recover_duckdb_wal.py --all --descartar-wal '
+                '--only %s (§442).' % _only_de(db))
+    return 'veja o .wal ao lado e a versão do duckdb.'
+
+
 def _ilegivel_avisa(db, exc):
     """UM WARNING por banco a cada 60 s: um banco quebrado é lido por dezenas
     de requests por minuto, e o log tem de dizer QUAL e POR QUÊ sem virar
@@ -442,14 +456,7 @@ def _ilegivel_avisa(db, exc):
         if agora < _ilegivel_aviso.get(db, 0.0):
             return
         _ilegivel_aviso[db] = agora + 60.0
-    remedio = 'veja o .wal ao lado e a versão do duckdb.'
-    if wal_replay_falhou(exc):
-        # O WAL não replaya: o app não sai disso em abertura nenhuma, e o log
-        # tem de trazer o comando em vez de deixar o banco piscando o mesmo
-        # traceback a cada request.
-        remedio = ('o .wal ao lado NÃO REPLAYA (o .db já tem a tabela que ele manda criar). '
-                   'Com o app PARADO: scripts\\recover_duckdb_wal.py --all --descartar-wal '
-                   '--only %s (§442).' % _only_de(db))
+    remedio = remedio_ilegivel(db, exc)
     log.warning('[data-store] banco ILEGÍVEL (não é ocupado): %s — %s: %s. Lido como '
                 'indisponível, nunca como vazio; %s',
                 db, type(exc).__name__, str(exc).split('\n', 1)[0][:200], remedio)
@@ -583,7 +590,12 @@ def _manifest(db, strict=False):
         if ent:
             return ent[1]
         if strict:
-            raise BancoIlegivel('%s: %s' % (db, str(exc).split('\n', 1)[0][:200])) from exc
+            ilegivel = BancoIlegivel('%s: %s' % (db, str(exc).split('\n', 1)[0][:200]))
+            # O BANCO vai no atributo: quem trata (a semeadura da subida) não
+            # tem como picá-lo da mensagem — um `Catalog Error` do replay vem
+            # cheio de caminho e aspas, e o `basename` disso era lixo.
+            ilegivel.db = db
+            raise ilegivel from exc
         return {}
     with _mlock:
         _mcache[db] = (st, rows)
