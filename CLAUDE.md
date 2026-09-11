@@ -295,7 +295,10 @@ nomes que o app conhecia (`day_records`, `dataset_rows`, `refdata_rows`,
   (o `.db` existe e o DuckDB não abre: `.wal` de outra versão, arquivo
   truncado) é `BancoIlegivel`, subclasse do ocupado: mesma resposta, nunca
   "vazio"; UM WARNING por banco por minuto diz qual e por quê, e o 503 sai
-  como `database_unreadable` (§441). O claim diário
+  como `database_unreadable` (§441). **Toda OUTRA exceção que escapa de uma
+  rota `/api/*` vira JSON 500 com `tipo: mensagem`** (`_handle_api_exception`,
+  §449) e o traceback no log como `[api-error]`; a tela lia a página HTML do
+  Flask e mostrava só `Unexpected token '<'`. O claim diário
   lê ocupado como "a outra instância cuida" (não envia). E `_cpd_load` (o
   Counterparty Details) NUNCA devolve `[]` por falha de leitura: quem grava
   faz ler → achar/criar o registro → `_cpd_save_list(data)`, e a lista vazia
@@ -723,6 +726,12 @@ São **45**: `currency-base`, `interbook-ndf`, `commodities-b3`,
   retroage (`backfill_manual_confirmations.py`). Mercadoria e FXO são sempre
   JPM (`_MC_JPM_SOURCES`); razão social do `le-spn`.
 
+- **Swap Calculator, perna IPCA: o fixing M-1/M-2 busca os DOIS
+  números-índice no IBGE** (`precificador/ipca.py`, tabela 1737 variável
+  2266, §449): o inicial é M-n contado do INÍCIO do fluxo, o final M-n do
+  FIM; com fixing escolhido os digitados são ignorados. Mês não publicado
+  NÃO vem na série e é erro com o mês, nunca o anterior. No pré-preenchimento,
+  evento do DFLUXO sem Taxa Amortização é **0%**, não lacuna.
 - **Intrag DCE Swap: a unidade é o DEAL e a linha é traduzida no servidor**
   (§448). A planilha do dropzone traz duas tabelas (pernas e fluxos)
   ligadas pelo Deal Name; o arquivo `LAWTON_OFF_SWAP_AAAAMMDD.txt` é UMA

@@ -18880,3 +18880,59 @@ rola para fora da tela, e sem ele não dá para separar um `PermissionError`
 (arquivo em uso, antivírus — passageiro) de um `JSONDecodeError` (cadastro
 corrompido, que muda número na tela). `check_duck_read.py` §12 prende as duas.
 Quando a linha nova aparecer na instância, ela diz sozinha qual dos dois é.
+
+## §449 — Swap Calculator: a perna IPCA busca o número-índice no IBGE (M-1/M-2), o 0% do fluxo sem taxa, e o erro de API que dizia só "<!doctype" (2026-09-11)
+
+**O pedido.** Na perna IPCA do Swap Calculator, um campo *Fixing* com M-1 e
+M-2: escolhido, o Calculate puxa os números-índice da API do IBGE — a mesma
+URL da macro VBA da mesa (`agregados/1737/periodos/AAAAMM-AAAAMM`). M-1 é o
+mês anterior à data de liquidação do fluxo, M-2 o segundo anterior.
+
+**O desenho.** `precificador/ipca.py` é a fonte, no molde do `cdi.py`: a
+saída pela `rede.obter_json` (a fila de rotas do Quotes), `ErroIBGE` como
+`ErroDeFonte` (a tela já captura a base). Duas decisões que não estão no
+pedido e mudam número:
+
+* **A variável vai FIXADA na URL** (`/variaveis/2266`, *Número-índice, base
+  dez/1993 = 100*). A macro pedia `/variaveis` e pegava `json(1)` — "a
+  primeira que vier"; a tabela 1737 tem seis variáveis e a primeira é a
+  variação mensal. Com a variável na URL a resposta tem uma só.
+* **A mesma defasagem nas duas pontas do fluxo.** O contrato diz "M-1" e a
+  correção é `NI_final / NI_inicial`: o inicial é o M-1 contado do INÍCIO do
+  fluxo e o final o M-1 contado do FIM. Um fluxo 11/03 → 11/09/2026 com M-1
+  corrige de 02/2026 a 08/2026. Com fixing escolhido os números digitados
+  são IGNORADOS (meio a meio seria uma correção de meses trocados sem
+  aviso) e os campos ficam só-leitura na tela; o servidor escreve neles o
+  que o motor usou e a nota diz os meses.
+
+**Mês não publicado não vem na série** — a chave falta, não vem zero. O IPCA
+sai por volta do dia 10 do mês seguinte, e um fluxo que liquida no dia 5 com
+M-1 pede um número que não existe: `ErroIBGE` com o mês (`the IPCA index
+number of 09/2026 is not published yet`), na tela como erro do formulário.
+Nunca um índice inventado, nunca o mês anterior "para não parar". O que já
+foi publicado não muda: memo de processo por mês, e só o que falta é pedido.
+
+**O 0% do fluxo.** No pré-preenchimento pelo B3 ID, o evento do DFLUXO com
+`Taxa Amortização` vazia caía em `p_amort = ''` e a tela marcava
+"não deu para puxar". No cronograma real (33,33 nos três últimos eventos e
+nada nos outros) a célula vazia É o fluxo que só paga juros: agora vale `0`,
+como já valia para *Na Data de Vencimento* / *Sem Troca*.
+
+**O erro do Intrag DCE Swap na instância.** `Request failed: Unexpected
+token '<', "<!doctype "... is not valid JSON` — a tela lê `r.json()` e o
+Flask respondeu a página HTML de 500. A frase é sobre o FORMATO do erro e
+não diz uma palavra sobre o erro. Na dev o mesmo fluxo (um xlsx como o
+anexo da Athena: linha de título, duas abas, colunas extras, datas como
+datetime) importa, lista e faz preview, então a causa está na instância e
+o log dela é o único lugar onde ela aparece. Para a próxima vez não ser
+outra adivinhação, `routes.py` ganhou `_handle_api_exception`: toda exceção
+que escapa de uma rota `/api/*` vira JSON 500 com `tipo: mensagem` e o
+traceback vai para o log com a rota (`[api-error]`). `HTTPException`
+(404/405/413) volta como ela mesma — registrada em `Exception`, alcançaria
+todas por herança, e um 404 virando 500 esconderia o que é; página HTML
+segue o caminho de sempre (debugger na dev, 500 na instância). O
+`_handle_database_busy` continua na frente por ser mais específico.
+
+`check_tools_ipca.py` prende tudo (rede stubada, resultado conferido no
+número); `check_tools.py` e `check_soc_layers.py` seguem verdes.
+
