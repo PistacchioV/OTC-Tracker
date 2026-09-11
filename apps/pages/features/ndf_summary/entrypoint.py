@@ -284,6 +284,14 @@ def api_ndf_summary_ted_email():
         name = str(t.get('counterparty', '') or '').strip()
         if not name or otc_emails._is_lawton(name) or otc_emails._is_jpmorgan(name):
             continue
+        # Só contraparte CORPORATE recebe TED: a perna interna (Banco, Lawton,
+        # MGT, os fundos como Atacama, os books) liquida no Summary mas não se
+        # pede TED para si mesmo. A pergunta é a mesma do aviso de liquidação —
+        # `le-spn` por SPN e nome, depois o ECONOMIC GROUP = INTERNAL do
+        # Reference Data —, e não "o nome tem Morgan": 'ATACAMA FUNDO ...' não
+        # tem, e passava.
+        if _R()._ops_is_internal_cpty(name, t.get('spn', '')):
+            continue
         groups.setdefault((otc_emails._ndf_legal_class(t.get('legal')), name), []).append(t)
 
     cpd = _R()._cpd_load()
