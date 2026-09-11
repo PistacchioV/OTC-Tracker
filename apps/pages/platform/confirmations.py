@@ -1222,10 +1222,17 @@ def _conf_fwdstart_partea(picked, warnings):
     return '', ''
 
 
-def _conf_load_ndffwdstart(ref):
-    """Deals do day-file de NDF FWD Start da reference date."""
+def _conf_is_mgt(deal):
+    """A operação é da JPMORGAN CHASE (MGT) contra cliente? Pelo campo `LE`
+    das páginas genéricas de NDF (resolvido do Settlement Location pelo
+    `le-accronym`)."""
+    return str((deal or {}).get('LE') or '').strip().upper() == 'MGT'
+
+
+def _conf_load_generic_nd(ref, product):
+    """Deals do day-file de uma das três páginas genéricas de NDF."""
     from apps.pages import routes
-    cfg = routes._GENERIC_ND_PRODUCTS['fwd-start']
+    cfg = routes._GENERIC_ND_PRODUCTS[product]
     fname = ref.strftime('%Y%m%d') + cfg['suffix']
     fp = os.path.join(cfg['dir'], ref.strftime('%Y'), ref.strftime('%m'), fname)
     if not _store.isfile(fp):
@@ -1237,6 +1244,14 @@ def _conf_load_ndffwdstart(ref):
     except Exception:
         log.warning('[conf] cannot read %s', fp)
         return []
+
+
+def _conf_load_ndffwdstart(ref):
+    """Deals do day-file de NDF FWD Start da reference date — SEM os de MGT:
+    a confirmação da JPMORGAN CHASE contra cliente é outro documento (o
+    template MGT, §453) e sai pela família `ndf-mgt`. Deixá-los aqui
+    listaria a mesma operação em dois cards e geraria dois papéis."""
+    return [d for d in _conf_load_generic_nd(ref, 'fwd-start') if not _conf_is_mgt(d)]
 
 
 def _conf_fwdstart_family(deal, subj):
@@ -1268,6 +1283,70 @@ def _conf_fwdstart_groups(ref):
 def _conf_pick_fwdstart(ref, acr, merc, family):
     return _conf_pick_eligible(_conf_load_ndffwdstart(ref), acr, merc, family,
                                _conf_fwdstart_family, merc_fn=_conf_fwdstart_moeda)
+
+
+# ── NDF da JPMORGAN CHASE (MGT) contra cliente: Vanilla e FWD Start (§453) ──
+#  A mesa pediu que as confirmações de MGT contra cliente passem pela esteira
+#  (OTC e MO, o cadastro de sempre) e saiam num documento próprio — o template
+#  `mgt-fwd-vanilla` que ela escreveu, com a Parte A fixa na filial brasileira
+#  da JPMORGAN CHASE, a cláusula de contratação do BANCO como agente de registro
+#  e três assinaturas. UMA família de geração para os dois produtos: o texto é o
+#  mesmo; o que muda entre Vanilla e FWD Start são três colunas do Anexo I
+#  (Taxa Forward, Data de Verificação da Taxa Forward e Pontos de Termo) — e a
+#  pasta do Electronic Inventory, que é o TIPO da confirmação. Por isso o eixo
+#  `family` da segregação é o PRODUTO ('vanilla' / 'fwd-start'): um grupo por
+#  contraparte × moeda × produto, cada um na sua pasta.
+_CONF_MGT_FAMILY_TEMPLATES = {
+    'vanilla':   ('confirmations/ndf-mgt-strike-me.html', '/confirmation/ndf-mgt/vanilla'),
+    'fwd-start': ('confirmations/ndf-mgt-strike-me.html', '/confirmation/ndf-mgt/fwd-start'),
+}
+_CONF_MGT_FAMILY_LABEL = {'vanilla': 'NDF Vanilla', 'fwd-start': 'NDF FWD Start'}
+# A pasta do Electronic Inventory (= o tipo da confirmação) por família.
+_CONF_MGT_FAMILY_TYPE = {'vanilla': 'NDF VANILLA', 'fwd-start': 'NDF FWD START'}
+_CONF_MGT_PARTEA = _CONF_FWDSTART_PARTEA['MGT']
+
+
+def _conf_load_ndfmgt(ref):
+    """Os deals de MGT contra cliente das duas páginas (Vanilla e FWD Start),
+    cada um carimbado com `_conf_src` — é o que separa as famílias."""
+    out = []
+    for product in ('vanilla', 'fwd-start'):
+        for d in _conf_load_generic_nd(ref, product):
+            if _conf_is_mgt(d):
+                d = dict(d)
+                d['_conf_src'] = product
+                out.append(d)
+    return out
+
+
+def _conf_mgt_family(deal, subj):
+    return str(deal.get('_conf_src') or 'vanilla')
+
+
+def _conf_mgt_groups(ref):
+    return _conf_segregate(_conf_load_ndfmgt(ref), _conf_mgt_family,
+                           merc_fn=_conf_fwdstart_moeda)
+
+
+def _conf_pick_mgt(ref, acr, merc, family):
+    return _conf_pick_eligible(_conf_load_ndfmgt(ref), acr, merc, family,
+                               _conf_mgt_family, merc_fn=_conf_fwdstart_moeda)
+
+
+def _conf_mgt_rows(picked, warnings):
+    """As linhas do Anexo I do documento MGT: as do FWD Start como são, e no
+    Vanilla a Taxa Forward é a taxa contratada (o `Rate`, cláusula 4.2.l.1) e
+    não há Data de Verificação da Taxa Forward nem Pontos de Termo — saem
+    "Não Aplicável", declarados, não em branco."""
+    rows = _conf_fwdstart_rows(picked, warnings)
+    for (deal, _s), r in zip(picked, rows):
+        if str(deal.get('_conf_src') or '') == 'vanilla':
+            r['dtVerifFwd'] = 'Não Aplicável'
+            r['pontosTermo'] = 'Não Aplicável'
+            if not str(deal.get('Rate') or '').strip():
+                warnings.append('Operação {} sem taxa (Rate) — a Taxa Forward do Anexo I '
+                                'sai "Não Aplicável".'.format(r.get('num') or deal.get('Deal') or ''))
+    return rows
 
 
 def _conf_fwdstart_rows(picked, warnings):

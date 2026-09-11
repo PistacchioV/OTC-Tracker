@@ -8577,6 +8577,8 @@ _ndf_comm_ter_lines = _pf_nd._ndf_comm_ter_lines
 _GENERIC_ND_PC_TYPE = _pf_nd._GENERIC_ND_PC_TYPE
 _GENERIC_ND_MC_SOURCE = _pf_nd._GENERIC_ND_MC_SOURCE
 _generic_nd_pending_status = _pf_nd._generic_nd_pending_status
+_generic_nd_is_mgt = _pf_nd._generic_nd_is_mgt
+_generic_nd_mc_source = _pf_nd._generic_nd_mc_source
 _generic_nd_pc_trigger = _pf_nd._generic_nd_pc_trigger
 _find_generic_nd_deal = _pf_nd._find_generic_nd_deal
 _generic_nd_reenrich = _pf_nd._generic_nd_reenrich
@@ -13072,6 +13074,17 @@ _conf_fwdstart_moeda = _pf_conf._conf_fwdstart_moeda
 _conf_fwdstart_groups = _pf_conf._conf_fwdstart_groups
 _conf_pick_fwdstart = _pf_conf._conf_pick_fwdstart
 _conf_fwdstart_rows = _pf_conf._conf_fwdstart_rows
+_conf_is_mgt = _pf_conf._conf_is_mgt
+_conf_load_generic_nd = _pf_conf._conf_load_generic_nd
+_CONF_MGT_FAMILY_TEMPLATES = _pf_conf._CONF_MGT_FAMILY_TEMPLATES
+_CONF_MGT_FAMILY_LABEL = _pf_conf._CONF_MGT_FAMILY_LABEL
+_CONF_MGT_FAMILY_TYPE = _pf_conf._CONF_MGT_FAMILY_TYPE
+_CONF_MGT_PARTEA = _pf_conf._CONF_MGT_PARTEA
+_conf_load_ndfmgt = _pf_conf._conf_load_ndfmgt
+_conf_mgt_family = _pf_conf._conf_mgt_family
+_conf_mgt_groups = _pf_conf._conf_mgt_groups
+_conf_pick_mgt = _pf_conf._conf_pick_mgt
+_conf_mgt_rows = _pf_conf._conf_mgt_rows
 
 
 

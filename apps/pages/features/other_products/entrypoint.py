@@ -944,6 +944,21 @@ def api_swap_vcp_factors_edit():
     return jsonify(body), status
 
 
+@blueprint.route('/api/other-products-swap-vcp/preview')
+def api_swap_vcp_preview():
+    """Duplo clique na linha: o que o Send escreveria no arquivo de PU/Fator
+    para este contrato, campo a campo — pelo mesmo gerador do envio."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    ref = _vcp_ref({'date': request.args.get('date', '')})
+    try:
+        body, status = queries.vcp_preview(ref, request.args.get('contrato', ''))
+    except Exception:                                       # noqa: BLE001
+        _R().log.error('[swap-vcp] preview failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'error': 'Preview failed.'}), 500
+    return jsonify(body), status
+
+
 @blueprint.route('/api/other-products-swap-vcp/send', methods=['POST'])
 def api_swap_vcp_send():
     """Send (uma linha) e o Send em lote (2+ selecionadas): o arquivo de
@@ -953,7 +968,8 @@ def api_swap_vcp_send():
     p = request.get_json(silent=True) or {}
     contratos = p.get('contracts') or ([p.get('contrato')] if p.get('contrato') else [])
     try:
-        body, status = commands.vcp_send(_vcp_ref(p), contratos, sid=session.get('user_sid', ''))
+        body, status = commands.vcp_send(_vcp_ref(p), contratos, sid=session.get('user_sid', ''),
+                                         nome=session.get('user_name', ''))
     except ValueError:
         _R().log.error('[swap-vcp] send failed:\n%s', traceback.format_exc())
         return jsonify({'success': False,

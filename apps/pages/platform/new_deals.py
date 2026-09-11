@@ -1998,6 +1998,27 @@ _GENERIC_ND_PC_TYPE = {'fwd-start': 'NDF',
 _GENERIC_ND_MC_SOURCE = {'fwd-start': 'NDF FWD START'}
 
 
+def _generic_nd_is_mgt(deal):
+    """A operação é da JPMORGAN CHASE (MGT)? Pelo campo `LE` que as páginas
+    genéricas de NDF carregam (Settlement Location → `le-accronym`)."""
+    return str((deal or {}).get('LE') or '').strip().upper() == 'MGT'
+
+
+def _generic_nd_mc_source(product, deal):
+    """O `source` da esteira de Manual Confirmations para um deal genérico de
+    NDF, ou None quando o produto não gera documento.
+
+    O FWD Start sempre gera. O Vanilla só gera quando é MGT contra cliente
+    (§453): a mesa pediu que essas confirmações passem pela esteira (OTC e
+    MO) e saiam no documento próprio da JPMORGAN CHASE. O Vanilla do BANCO
+    continua sem documento — alimenta o Pending Confirmation e para por aí."""
+    if product == 'fwd-start':
+        return 'NDF FWD START'
+    if product == 'vanilla' and _generic_nd_is_mgt(deal):
+        return 'NDF VANILLA'
+    return None
+
+
 def _generic_nd_pending_status(product, deal):
     """Pending Status de um deal genérico de NDF que virou Success.
 
@@ -2014,6 +2035,10 @@ def _generic_nd_pending_status(product, deal):
     """
     from apps.pages import routes
     if product == 'fwd-start':
+        return 'Pending OTC'
+    # O Vanilla de MGT contra cliente entra na esteira como o FWD Start (§453):
+    # a etapa de quem entra é Pending OTC, e o prazo não a substitui.
+    if product == 'vanilla' and _generic_nd_is_mgt(deal):
         return 'Pending OTC'
     return routes._pc_signature_pending_status(
         routes._fxo_refdata_by_spn().get(routes._norm_spn(deal.get('SPN', '')), {}),
@@ -2034,7 +2059,7 @@ def _generic_nd_pc_trigger(product, deal):
     routes._pc_save_from_deal(deal, _GENERIC_ND_PC_TYPE.get(product, 'NDF'),
                        pending_status=_generic_nd_pending_status(product, deal),
                        trade_number=tn,
-                       source=_GENERIC_ND_MC_SOURCE.get(product))
+                       source=_generic_nd_mc_source(product, deal))
 
 def _find_generic_nd_deal(cfg, deal_name, client_name=None):
     """Locate a deal by Deal (+optional Client) across the product's cache files.

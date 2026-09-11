@@ -48,7 +48,7 @@ def vcp_factors_edit(ref, contrato, campos, sid=''):
     return {'success': True, 'row': linha}, 200
 
 
-def vcp_send(ref, contratos, sid=''):
+def vcp_send(ref, contratos, sid='', nome=''):
     """Gera o arquivo de PU/Fator para os contratos pedidos (um lote), marca
     `Sent` e devolve os arquivos. Recusa o LOTE inteiro quando alguma linha
     não pode ir — meio lote na B3 é pior que nenhum."""
@@ -73,21 +73,30 @@ def vcp_send(ref, contratos, sid=''):
     if problemas:
         return {'success': False, 'error': 'blocked', 'problems': problemas}, 400
     today = datetime.now().strftime('%Y%m%d')
-    por_lob = {}
+    # UM arquivo (VCP_CLIENT.TXT), não um por livro: o nome pedido pela mesa
+    # não carrega a LOB, e dois livros no mesmo nome virariam "VCP_CLIENT (1)"
+    # sem nada dizendo qual é qual. A separação que resta é por VISÃO, que é de
+    # participante diferente (`vcp_file_name`).
+    # A chave é o ARQUIVO: a visão mais o tipo do swap. Contra cliente tudo vai
+    # no VCP_CLIENT.TXT; no intragrupo (BANCO x LAWTON) cada participante manda
+    # o seu — VCP_BANCO.TXT e VCP_LAWTON.TXT.
+    por_arquivo = {}
     for f in aceitas:
+        intra = _pf.is_intragroup(f['conta_p'], f['conta_c'])
         row = domain.linha_para_arquivo(f['contrato'], f['conta_p'], f['idx_p'], f['conta_c'],
                                         f['idx_c'], f['fator_p'] if f['vcp_p'] else None,
                                         f['fator_c'] if f['vcp_c'] else None)
         for rec in _pf.acc_swap_records(row, today):
-            por_lob.setdefault(f['lob'], {}).setdefault(rec['view'], []).append(rec['line'])
+            por_arquivo.setdefault((rec['view'], intra), []).append(rec['line'])
     gerados = []
-    for lob, by_view in por_lob.items():
-        tag = _pf.LOB_TAG.get(lob, str(lob).upper())
-        gerados.extend(_pf.write_view_files(by_view, tag, today,
-                                            evidence_dir=_pf.accrual_source_dir(today)))
+    for (view, intra), linhas in sorted(por_arquivo.items()):
+        gerados.extend(_pf.write_view_files(
+            {view: linhas}, '', today, evidence_dir=_pf.accrual_source_dir(today),
+            name_fn=lambda v, _t, _i=intra: _pf.vcp_file_name(v, _i)))
     if not gerados:
         return {'success': False, 'error': 'No VCP record to send.'}, 400
     nomes = [g['filename'] for g in gerados]
+    plural = lambda n, s: '{} {}{}'.format(n, s, '' if n == 1 else 's')   # noqa: E731
 
     def mudar(data):
         for f in aceitas:
@@ -99,8 +108,14 @@ def vcp_send(ref, contratos, sid=''):
 
     persistence._vcp_factors_update(ref, mudar)
     total = sum(g['count'] for g in gerados)
-    _R()._create_notification(sid, '', 'Accrual Sent', 'Swap VCP',
-                              '{} contract(s) · {} file(s), {} line(s)'.format(len(aceitas), len(gerados), total)
+    # O aviso diz o que a mesa precisa conferir: QUAIS arquivos saíram (o nome
+    # é a diferença entre o do cliente e os do intragrupo) e quantos contratos.
+    # A ação tem rótulo próprio — 'Accrual Sent' mandava para a página do
+    # Accrual quem clicasse, e o arquivo não é o de lá.
+    _R()._create_notification(sid, nome, 'VCP Factors Sent', 'Swap VCP',
+                              '{} · {} · {}'.format(', '.join(nomes),
+                                                    plural(len(aceitas), 'contract'),
+                                                    plural(total, 'line'))
                               + _R()._nd_token(ref.strftime('%Y%m%d')))
     return {'success': True, 'files': [{'filename': g['filename'], 'view': g['view'], 'count': g['count']}
                                        for g in gerados],

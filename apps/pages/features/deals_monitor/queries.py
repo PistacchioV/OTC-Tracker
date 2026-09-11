@@ -155,6 +155,22 @@ def _ndm_monitor_snapshot(ref):
         'conf-ndf-fwdstart', 'NDF FWD Start', '/new_deals-ndf-fwdstart',
         (os.path.join(_R().NEW_DEALS_CACHE_ROOT, 'NDF', 'FwdStart'),),
         '_ndffwdstart.json', False))
+    # NDF da JPMORGAN CHASE (MGT) contra cliente — Vanilla e FWD Start no
+    # documento MGT (§453): ciclo próprio, um grupo por contraparte × moeda ×
+    # produto. Os deals de MGT saem do card do FWD Start do BANCO e entram aqui.
+    mgt_groups, _mgt_deal_statuses, _mgt_total = _R()._conf_mgt_groups(ref)
+    mgt_state = _R()._conf_state_load(ref, 'ndf-mgt')
+    mgt_statuses = _R()._conf_stage_counts(
+        mgt_groups, mgt_state,
+        lambda g: _R()._conf_key(g['acronym'], g['mercadoria'], g['family']), conf_stages)
+    conf_cards.append({
+        'key': 'conf-ndf-mgt', 'label': 'NDF MGT x Client',
+        'url': '/new_deals-ndf-vanilla', 'soon': False,
+        'total': len(mgt_groups), 'statuses': mgt_statuses,
+        'groups': [{'label': '{} · {} · {}'.format(g['acronym'], g['mercadoria'],
+                                                   _R()._CONF_MGT_FAMILY_LABEL.get(g['family'], g['family'])),
+                    'family': g['family'], 'count': g['count']} for g in mgt_groups],
+    })
     # Commodities Options: ciclo próprio da confirmação, igual ao NDF Comm.
     opt_groups, _opt_deal_statuses, _opt_total = _R()._conf_optcomm_groups(ref)
     opt_state = _R()._conf_state_load(ref, 'opt-comm')

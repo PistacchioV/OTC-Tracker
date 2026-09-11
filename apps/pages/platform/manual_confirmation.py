@@ -40,8 +40,9 @@ from apps.pages import manual_conf as _mc_mod
 # das confirmacoes vem depois no routes.py) — sao os MESMOS objetos.
 from apps.pages.platform.confirmations import (
     _conf_ndfcomm_groups, _conf_optcomm_groups, _conf_optfxo_groups,
-    _conf_fwdstart_groups, _CONF_FAMILY_TEMPLATES, _CONF_OPT_FAMILY_TEMPLATES,
-    _CONF_FXO_FAMILY_TEMPLATES, _CONF_FWDSTART_FAMILY_TEMPLATES,
+    _conf_fwdstart_groups, _conf_mgt_groups, _CONF_FAMILY_TEMPLATES,
+    _CONF_OPT_FAMILY_TEMPLATES, _CONF_FXO_FAMILY_TEMPLATES,
+    _CONF_FWDSTART_FAMILY_TEMPLATES, _CONF_MGT_FAMILY_TEMPLATES,
 )
 
 log = logging.getLogger('otc_tracker')
@@ -52,7 +53,11 @@ log = logging.getLogger('otc_tracker')
 # A chave é o `source` (ver `_pc_save_from_deal`), não o Product Type — as três
 # páginas genéricas de NDF gravam com o mesmo 'NDF', e olhar o Product Type
 # traria Vanilla e Other Publisher junto com o FWD Start.
-_MC_CONFIRMATION_SOURCES = {'NDF COMM', 'OPTION COMM', 'OPTION', 'NDF FWD START'}
+# 'NDF VANILLA' entrou em 11/09/2026 (§453) SÓ para a JPMORGAN CHASE (MGT)
+# contra cliente: é o `_generic_nd_mc_source` do New Deals que manda esse
+# source, e só quando a LE do deal é MGT — o Vanilla do BANCO segue alimentando
+# o Pending Confirmation pela regra de prazo/assinatura e parando por aí.
+_MC_CONFIRMATION_SOURCES = {'NDF COMM', 'OPTION COMM', 'OPTION', 'NDF FWD START', 'NDF VANILLA'}
 
 
 # LOB da linha espelhada. As duas telas gravavam 'CEM' para tudo, e a mesa de
@@ -88,6 +93,7 @@ _MC_NOTIONAL_CCY_FIELD = {
     'OPTION COMM':   'StrikeCurrency',
     'OPTION':        'StrikeCurrency',
     'NDF FWD START': 'QuantityCurrency',
+    'NDF VANILLA':   'QuantityCurrency',
 }
 
 
@@ -206,10 +212,15 @@ def _mc_conf_trade_keys(picked, product):
     as linhas de FWD Start sem carimbo, e sem erro nenhum: elas simplesmente não
     seriam encontradas.
     """
-    field = 'B3_ID' if product == 'ndf-fwdstart' else 'Deal'
     out = []
     for item in (picked or []):
         d = item[0] if isinstance(item, (list, tuple)) else item
+        # A família MGT junta Vanilla (chave = Deal) e FWD Start (chave = B3
+        # ID) no mesmo gerador: cada deal diz de que página veio.
+        if product == 'ndf-mgt':
+            field = 'B3_ID' if str((d or {}).get('_conf_src') or '') == 'fwd-start' else 'Deal'
+        else:
+            field = 'B3_ID' if product == 'ndf-fwdstart' else 'Deal'
         k = str((d or {}).get(field, '') or '').strip()
         if k:
             out.append(k)
@@ -756,7 +767,37 @@ _MC_GENERATE_PRODUCTS = {
     'OPTION COMM':   (lambda ref: _conf_optcomm_groups(ref),  lambda: _CONF_OPT_FAMILY_TEMPLATES),
     'FXO':           (lambda ref: _conf_optfxo_groups(ref),   lambda: _CONF_FXO_FAMILY_TEMPLATES),
     'NDF FWD START': (lambda ref: _conf_fwdstart_groups(ref), lambda: _CONF_FWDSTART_FAMILY_TEMPLATES),
+    # Vanilla só gera documento quando é MGT contra cliente (§453); a linha da
+    # esteira só existe nesse caso, então o gerador é o da família MGT.
+    'NDF VANILLA':   (lambda ref: _conf_mgt_groups(ref),      lambda: _CONF_MGT_FAMILY_TEMPLATES),
 }
+# O FWD Start da JPMORGAN CHASE (MGT) contra cliente também sai pela família
+# MGT — o documento é outro. A linha da esteira diz a entidade na coluna Legal
+# Entity (a razão social do `le-spn`), e é por ela que se escolhe o gerador.
+_MC_GENERATE_MGT = (lambda ref: _conf_mgt_groups(ref), lambda: _CONF_MGT_FAMILY_TEMPLATES)
+
+
+def _mc_row_is_mgt(row):
+    """A linha da esteira é da JPMORGAN CHASE (MGT)? Pela coluna Legal Entity —
+    a razão social cadastrada no `le-spn` para a sigla MGT, ou a classe da
+    entidade pelo nome (`_ndf_legal_class`)."""
+    from apps.pages import routes
+    le = str((row or {}).get('Legal Entity', '') or '').strip()
+    if not le:
+        return False
+    if le.upper() == 'MGT':
+        return True
+    try:
+        nome = str(routes._ndf_le_row('MGT').get('NAME', '') or '').strip()
+        if nome and _mc_mod.upper_norm(nome) == _mc_mod.upper_norm(le):
+            return True
+    except Exception:                                   # noqa: BLE001
+        pass
+    try:
+        from apps.pages import otc_emails
+        return otc_emails._ndf_legal_class(le) == 'MGT'
+    except Exception:                                   # noqa: BLE001
+        return False
 
 
 def _mc_generate_url(row, keys):
@@ -770,6 +811,8 @@ def _mc_generate_url(row, keys):
     from apps.pages import manual_conf as _mc
     tipo = _mc.confirmation_type(row.get('Produto'), row.get('LOB'))
     alvo = _MC_GENERATE_PRODUCTS.get(tipo)
+    if tipo in ('NDF FWD START', 'NDF VANILLA') and _mc_row_is_mgt(row):
+        alvo = _MC_GENERATE_MGT
     if alvo is None:
         return '', ('O produto {} não tem tela de geração no OTC Tracker — a '
                     'confirmação dele é montada fora do app.'.format(tipo or '(em branco)'))

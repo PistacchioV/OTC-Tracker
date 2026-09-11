@@ -101,12 +101,57 @@ def acc_swap_records(row, today):
     return out
 
 
-def write_view_files(by_view, lob_tag, today, evidence_dir=None):
-    """Grava `ACCRUAL_<VIEW>-<lob_tag>.txt` por visão a partir de
-    `{view: [linhas de registro]}` — no Batch Conecta e (best-effort) na pasta
-    de evidência do dia. Devolve [{filename, path, view, count}]. Era o miolo
-    do `_acc_write_batch_files` do Accrual; o Swap VCP monta as linhas dele e
-    grava pelo mesmo caminho."""
+def accrual_file_name(view, lob_tag):
+    """O nome do Accrual: `ACCRUAL_<VIEW>-<LOB>.txt`."""
+    return 'ACCRUAL_{}-{}.txt'.format(view, lob_tag)
+
+
+def view_of_account(acct):
+    """A visão (BANCO / LAWTON / ATACAMA) de uma conta CETIP pelos cinco
+    primeiros dígitos, ou '' quando a conta não é de entidade do grupo — é a
+    MESMA leitura que o `acc_swap_records` faz para decidir quem atualiza."""
+    return VIEW_BY_PREFIX.get(re.sub(r'\D', '', str(acct or ''))[:5], '')
+
+
+def is_intragroup(conta_parte, conta_contraparte):
+    """O swap é intragrupo (BANCO x LAWTON) — isto é, a contraparte é uma
+    entidade do grupo com participante PRÓPRIO?
+
+    É a MESMA pergunta que o `acc_swap_records` faz para decidir se há uma
+    segunda visão atualizando: a conta da contraparte tem prefixo de grupo
+    **e** de visão diferente da parte. O `!=` é o que separa a Lawton do
+    omnibus do próprio Banco (73760.10-2): a conta é do grupo, mas a visão é
+    a mesma — o swap ali é contra CLIENTE, e um arquivo só."""
+    v = view_of_account(conta_contraparte)
+    return bool(v) and v != view_of_account(conta_parte)
+
+
+def vcp_file_name(view, intragrupo=False):
+    """O nome do arquivo do Swap VCP (§452).
+
+    Swap contra CLIENTE: **VCP_CLIENT.TXT** — um arquivo só, sem a LOB no
+    nome (pedido da mesa). Swap **intragrupo** (BANCO x LAWTON): cada
+    participante manda o SEU, e o nome diz de quem é — **VCP_BANCO.TXT** e
+    **VCP_LAWTON.TXT**. Sem isso os dois cairiam no mesmo nome e o
+    `_unique_filepath` salvaria um deles como "(1)", com a visão só legível
+    dentro do header.
+
+    A visão do cliente que não seja a do Banco (raro) entra no nome pelo
+    mesmo motivo.
+    """
+    if intragrupo:
+        return 'VCP_{}.TXT'.format(view)
+    return 'VCP_CLIENT.TXT' if view == 'BANCO' else 'VCP_CLIENT_{}.TXT'.format(view)
+
+
+def write_view_files(by_view, lob_tag, today, evidence_dir=None, name_fn=None):
+    """Grava um arquivo por visão a partir de `{view: [linhas de registro]}` —
+    no Batch Conecta e (best-effort) na pasta de evidência do dia. Devolve
+    [{filename, path, view, count}].
+
+    `name_fn(view, lob_tag)` dá o nome; sem ele vale o do Accrual
+    (`ACCRUAL_<VIEW>-<LOB>.txt`), que era o miolo do `_acc_write_batch_files`.
+    O Swap VCP passa o `vcp_file_name`."""
     if not by_view:
         return []
     os.makedirs(_R().CONECTA_NEW_PATH, exist_ok=True)
@@ -121,7 +166,8 @@ def write_view_files(by_view, lob_tag, today, evidence_dir=None):
         if not lines:
             continue
         content = '\n'.join([acc_swap_header(view, today)] + lines)
-        fpath = _R()._unique_filepath(_R().CONECTA_NEW_PATH, 'ACCRUAL_{}-{}.txt'.format(view, lob_tag))
+        fpath = _R()._unique_filepath(_R().CONECTA_NEW_PATH,
+                                      (name_fn or accrual_file_name)(view, lob_tag))
         with open(fpath, 'w', encoding='utf-8') as fh:
             fh.write(content)
         if evidence_dir and _store.isdir(evidence_dir):
