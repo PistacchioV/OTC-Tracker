@@ -15,7 +15,7 @@ from flask import (Response, jsonify, redirect, render_template, request, sessio
 
 from apps.pages import blueprint
 from apps.pages.features.tools import commands, domain, queries
-from apps.pages.precificador import contagem, liquidacao, renda_fixa, sofr, term_sofr
+from apps.pages.precificador import contagem, ipca, liquidacao, renda_fixa, sofr, term_sofr
 from apps.pages.precificador.calendario import CALENDARIOS_DISPONIVEIS, para_data
 from apps.pages.precificador.erros import ErroDeDado, ErroDeFonte, ErroFerramenta
 
@@ -141,7 +141,7 @@ def _form_padrao_swap(hoje):
             lado + '_percentual': '100' if idx == liquidacao.CDI else '',
             lado + '_regime': reg, lado + '_moeda': liquidacao.SEM_CONVERSAO,
             lado + '_ptax_inicial': '', lado + '_ptax_final': '', lado + '_ptax_offset': '',
-            lado + '_ni_inicial': '',
+            lado + '_ni_inicial': '', lado + '_ipca_fixing': '',
             lado + '_ni_final': '', lado + '_fator': '', lado + '_tenor': '3 month',
             lado + '_data_fixing': '', lado + '_taxa_indice': '', lado + '_lookback': '0',
             lado + '_shift': '0', lado + '_ativo': '', lado + '_preco_inicial': '',
@@ -164,8 +164,10 @@ def tools_swap_calculator():
         'bases_ajuste': liquidacao.BASES_DE_AJUSTE,
         'convencao_padrao': {c: list(liquidacao.convencao_padrao(c)) for c, _ in liquidacao.INDEXADORES},
         'tenores': liquidacao.TENORES_EURIBOR,
+        'fixings_ipca': ipca.FIXINGS,
         'calendarios': [(nome, desc) for nome, _f, desc in CALENDARIOS_DISPONIVEIS],
         'hoje': hoje.isoformat(), 'resultado': None, 'erro': None,
+        'ipca_meses': {'ativa': None, 'passiva': None},
     }
     if request.method == 'POST':
         ctx['form'] = {k: v for k, v in request.form.items()}
@@ -173,6 +175,16 @@ def tools_swap_calculator():
             ctx['resultado'] = queries.liquidar(request.form)
         except _ERROS_DE_TELA as exc:
             ctx['erro'] = str(exc)
+        else:
+            # A perna IPCA com fixing M-1/M-2 buscou os números no IBGE: eles
+            # voltam para os campos da tela (o que o motor USOU, não o que
+            # estava digitado) e a nota diz de que meses são.
+            r = ctx['resultado']['r']
+            for lado, p in (('ativa', r.ativa), ('passiva', r.passiva)):
+                if p.mes_ni_inicial:
+                    ctx['form'][lado + '_ni_inicial'] = '{:.6f}'.format(p.ni_inicial)
+                    ctx['form'][lado + '_ni_final'] = '{:.6f}'.format(p.ni_final)
+                    ctx['ipca_meses'][lado] = (p.mes_ni_inicial, p.mes_ni_final)
     return render_template('pages/tools-swap-calculator.html', segment='tools-swap-calculator', **ctx)
 
 

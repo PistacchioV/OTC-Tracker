@@ -21,7 +21,7 @@ início do fluxo (onde os índices começam), fim do fluxo (a data do ajuste).
     SOFR composto    F = Π (1 + SOFR_k · n/360) · cap(s, τ)
     Term SOFR        F = cap(fixing + s, τ)
     EURIBOR          F = cap(fixing + s, τ)
-    IPCA             F = (NI_final / NI_inicial) · cap(c, τ)
+    IPCA             F = (NI_final / NI_inicial) · cap(c, τ)   NI digitado ou do IBGE (M-1/M-2)
     Equity           F = (preço_final / preço_inicial) · cap(s, τ)
 
 Uma ponta em moeda estrangeira multiplica tudo pela variação cambial
@@ -33,7 +33,7 @@ from dataclasses import dataclass, field
 from datetime import date, timedelta
 from typing import List, Optional
 
-from apps.pages.precificador import cambio, cdi, contagem, euribor, sofr, term_sofr
+from apps.pages.precificador import cambio, cdi, contagem, euribor, ipca, sofr, term_sofr
 from apps.pages.precificador.calendario import calendario_anbima, calendario_sofr, para_data
 from apps.pages.precificador.erros import ErroFerramenta
 from apps.pages.precificador.renda_fixa import aliquota_ir
@@ -191,6 +191,9 @@ class Ponta:
     ptax_final: Optional[float] = None
     ni_inicial: Optional[float] = None
     ni_final: Optional[float] = None
+    # '' = números digitados; 'm1'/'m2' = buscados no IBGE pela defasagem
+    # contada do início (inicial) e do fim (final) do fluxo — `ipca.py`.
+    ipca_fixing: str = ''
     fator_manual: Optional[float] = None
     ativo: str = ''
     preco_inicial: Optional[float] = None
@@ -253,6 +256,11 @@ class PontaLiquidada:
     ativo: Optional[str] = None
     preco_inicial: Optional[float] = None
     preco_final: Optional[float] = None
+    ni_inicial: Optional[float] = None
+    ni_final: Optional[float] = None
+    mes_ni_inicial: Optional[str] = None     # '02/2026' — só quando veio do IBGE
+    mes_ni_final: Optional[str] = None
+    ipca_fixing: str = ''
     defasagem: tuple = ('', {})
     obs_inicio: Optional[date] = None
     obs_fim: Optional[date] = None
@@ -453,13 +461,30 @@ def liquidar_ponta(ponta, nocional, inicio, fim, calendario=None, arredondar_di=
             preco_final=ponta.preco_final)
 
     if ponta.indexador == IPCA:
-        if not ponta.ni_inicial or ponta.ni_final is None:
+        ni0, ni1, mes0, mes1 = ponta.ni_inicial, ponta.ni_final, None, None
+        if ponta.ipca_fixing:
+            # O fixing manda: os números vêm do IBGE pelo mês da defasagem,
+            # e o que estava digitado é ignorado — meio a meio (um digitado,
+            # um buscado) seria uma correção de meses trocados sem aviso.
+            m0 = ipca.mes_do_fixing(d0, ponta.ipca_fixing)
+            m1 = ipca.mes_do_fixing(d1, ponta.ipca_fixing)
+            numeros = ipca.numeros_indice([m0, m1])
+            ni0, ni1 = numeros[m0], numeros[m1]
+            mes0, mes1 = ipca.rotulo(*m0), ipca.rotulo(*m1)
+        if not ni0 or ni1 is None:
             raise ErroLiquidacao('the IPCA leg needs the initial and the final index number')
-        correcao = ponta.ni_final / ponta.ni_inicial
+        correcao = ni1 / ni0
+        if mes0:
+            molde = ('{correcao}% inflation adjustment ({mes0} → {mes1}, IBGE) plus a '
+                     '{taxa}% p.a. real coupon')
+        else:
+            molde = '{correcao}% inflation adjustment plus a {taxa}% p.a. real coupon'
         return montar(
             correcao * capitalizar(ponta.taxa),
-            ('{correcao}% inflation adjustment plus a {taxa}% p.a. real coupon',
-             {'correcao': _numero((correcao - 1) * 100), 'taxa': _numero(ponta.taxa * 100)}))
+            (molde, {'correcao': _numero((correcao - 1) * 100), 'taxa': _numero(ponta.taxa * 100),
+                     'mes0': mes0, 'mes1': mes1}),
+            ni_inicial=ni0, ni_final=ni1, mes_ni_inicial=mes0, mes_ni_final=mes1,
+            ipca_fixing=ponta.ipca_fixing)
 
     if ponta.indexador == FATOR:
         if ponta.fator_manual is None:

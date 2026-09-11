@@ -7,7 +7,7 @@ linhas do cadastro, as células da posição) chega por parâmetro.
 import re
 import unicodedata
 
-from apps.pages.precificador import contagem, liquidacao
+from apps.pages.precificador import contagem, ipca, liquidacao
 from apps.pages.precificador.calendario import para_data
 from apps.pages.precificador.erros import ErroFerramenta
 
@@ -81,6 +81,15 @@ def texto_data(valores, campo):
     return para_data(v) if v else None
 
 
+def fixing_ipca(texto):
+    """'' (números digitados), 'm1' ou 'm2' — qualquer outra coisa é erro
+    de formulário, não um fixing presumido."""
+    v = str(texto or '').strip().lower()
+    if v and v not in ipca.DEFASAGEM:
+        raise ErroFormulario('unknown IPCA fixing: {fixing}', fixing=v)
+    return v
+
+
 def ponta_do_form(form, prefixo):
     """Uma das duas pontas da liquidação — só os campos que o índice usa."""
     def campo(nome):
@@ -113,6 +122,7 @@ def ponta_do_form(form, prefixo):
         ptax_final=opcional('ptax_final', '{} leg final fixing'.format(lado)),
         ni_inicial=opcional('ni_inicial', '{} leg initial index number'.format(lado)),
         ni_final=opcional('ni_final', '{} leg final index number'.format(lado)),
+        ipca_fixing=fixing_ipca(texto('ipca_fixing')),
         fator_manual=opcional('fator', '{} leg factor'.format(lado)),
         ativo=texto('ativo'),
         preco_inicial=opcional('preco_inicial', '{} leg initial price'.format(lado)),

@@ -508,7 +508,12 @@ def _amortizacao_do_evento(x, tipo_amort_posicao):
     elif x['taxa_amort'] is not None:
         x['p_amort'] = '{:.4f}'.format(x['taxa_amort'])
     else:
-        x['p_amort'] = ''
+        # O evento existe no DFLUXO e a `Taxa Amortização` dele está vazia:
+        # num contrato que amortiza por fluxo, a célula em branco é o fluxo
+        # que só paga juros (o cronograma traz 33,33 nos três últimos e nada
+        # nos outros). Zero é a resposta, não a ausência dela — em branco a
+        # tela marcava "não deu para puxar" e a mesa digitava 0 à mão.
+        x['p_amort'] = '0'
     return x
 
 

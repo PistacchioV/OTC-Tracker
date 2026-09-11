@@ -27,7 +27,7 @@ from flask import (
     url_for, session, flash, jsonify, make_response, has_app_context, g
 )
 from jinja2 import TemplateNotFound
-from werkzeug.exceptions import NotFound
+from werkzeug.exceptions import HTTPException, NotFound
 
 # Caminhos de infraestrutura (banco de usuários e raiz do share) saem do
 # `Config`, que os resolve para ABSOLUTOS e recusa um valor relativo. Era aqui
@@ -305,6 +305,32 @@ def _handle_database_busy(exc):
                                'Please try again in a few seconds.'})
     resp.status_code = 503
     resp.headers['Retry-After'] = '5'
+    return resp
+
+
+# Toda outra exceção que escapa de uma rota de API vira JSON, nunca a página
+# "Internal Server Error" do Flask: a tela lê a resposta com `r.json()` e o
+# que chegava ao usuário era `Unexpected token '<', "<!doctype "... is not
+# valid JSON` — uma frase sobre o FORMATO do erro, sem uma palavra sobre o
+# erro (foi o Intrag DCE Swap na instância, §449). Aqui a resposta diz a
+# classe e a mensagem da exceção, e o traceback inteiro vai para o log com a
+# rota. Só para `/api/`: uma página HTML continua com o tratamento de sempre
+# (o debugger na dev, a página 500 na instância). `HTTPException` (404, 405,
+# 413…) segue o caminho dela — o `Exception` registrado alcançaria todas por
+# herança, e um 404 de rota que não existe virando 500 esconderia o que é.
+
+@blueprint.app_errorhandler(Exception)
+def _handle_api_exception(exc):
+    if isinstance(exc, HTTPException):
+        return exc                      # o 404/405/413 É a resposta dele
+    if not str(request.path or '').startswith('/api/'):
+        raise exc                       # página: o caminho de sempre
+    log.error('[api-error] %s %s: %s\n%s', request.method, request.path, exc,
+              traceback.format_exc())
+    resp = jsonify({'success': False, 'error': 'internal_error',
+                    'message': 'Internal error in {}: {}: {}'.format(
+                        request.path, type(exc).__name__, exc)})
+    resp.status_code = 500
     return resp
 
 
