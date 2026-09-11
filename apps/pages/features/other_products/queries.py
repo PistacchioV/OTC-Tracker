@@ -18,6 +18,7 @@ liquidação (`ref`), e cada uma responde por uma chave:
 
 O arquivo-dia dos fatores (`persistence`) traz o que a mesa editou e o
 status; o `domain.calcular` fecha a conta. Nada aqui grava."""
+import re
 from datetime import datetime
 
 from apps.pages.features.other_products import domain
@@ -120,10 +121,15 @@ def vcp_payload(ref):
         f = by_ct.get(str(r[ci['Código do Contrato']] or '').strip().upper())
         if f:
             r[ci['Athena ID']] = f['athena_id']
-            r[ci['PARTE / Fator']] = _f8(f['fator_p']) if f['vcp_p'] else ''
-            r[ci['CONTRAPARTE/ Fator']] = _f8(f['fator_c']) if f['vcp_c'] else ''
+            # "-" onde não há fator: a perna calculada e a VCP que ainda não
+            # resolveu. Célula vazia parecia um valor que faltou digitar.
+            r[ci['PARTE / Fator']] = (_f8(f['fator_p'])
+                                      if f['vcp_p'] and f['fator_p'] is not None else '-')
+            r[ci['CONTRAPARTE/ Fator']] = (_f8(f['fator_c'])
+                                           if f['vcp_c'] and f['fator_c'] is not None else '-')
             statuses.append(f['status'])
         else:
+            r[ci['PARTE / Fator']] = r[ci['CONTRAPARTE/ Fator']] = '-'
             statuses.append('New')
     base.update({'columns': cols, 'rows': rows, 'statuses': statuses,
                  'factors': factors, 'factor_columns': list(COLUNAS_FATORES)})
@@ -132,6 +138,67 @@ def vcp_payload(ref):
 
 def _f8(v):
     return '' if v is None else '{:.8f}'.format(float(v))
+
+
+def _fi_larguras(R):
+    """[(seq, rótulo, largura)] dos campos do bloco `registro` do template de
+    PU/Fator. A largura sai do FORMATO cadastrado (`X(11)`, `9(02)V9(08)`) —
+    é o mesmo número que o `_fi_build_line` usa para montar a linha, então o
+    preview fatia exatamente o que o arquivo leva. Vazio sem template."""
+    try:
+        from apps.pages.platform import pu_fator as _pf
+        tpl = R._fi_tpl_cached(_pf.ACC_FI_KEY) or {}
+    except Exception:                                       # noqa: BLE001
+        return []
+    out = []
+    for b in (tpl.get('blocks') or []):
+        if str(b.get('id') or '') != 'registro':
+            continue
+        for f in (b.get('fields') or []):
+            n = sum(int(x) for x in re.findall(r'\((\d+)\)', str(f.get('format') or '')))
+            # O rótulo do campo é a chave `field` do cadastro — `label`/`name`
+            # não existem lá, e o preview saía com a coluna Field vazia.
+            out.append((str(f.get('seq') or ''), str(f.get('field') or ''), n))
+    return out
+
+
+def vcp_preview(ref, contrato):
+    """O que o Send desta linha escreveria no arquivo de PU/Fator: uma linha de
+    registro por perna VCP × visão, fatiada pelos campos do template.
+
+    As linhas são montadas pelo MESMO gerador do envio (`pu_fator`), não por
+    uma segunda formatação: um preview que monta a linha por conta própria é
+    como ele passa a mostrar uma coisa e a B3 receber outra."""
+    from datetime import datetime as _dt
+    from apps.pages.features.other_products import domain
+    from apps.pages.platform import pu_fator as _pf
+    R = _R()
+    key = str(contrato or '').strip().upper()
+    f = next((x for x in vcp_factor_rows(ref) if x['contrato'].upper() == key), None)
+    if not f:
+        return {'success': False, 'error': 'Contract not on the page.'}, 404
+    ruins = domain.problemas_para_envio(f)
+    if ruins:
+        return {'success': False, 'error': 'blocked',
+                'problems': ['{}: {}'.format(key, ', '.join(ruins))]}, 422
+    today = _dt.now().strftime('%Y%m%d')
+    row = domain.linha_para_arquivo(f['contrato'], f['conta_p'], f['idx_p'], f['conta_c'],
+                                    f['idx_c'], f['fator_p'] if f['vcp_p'] else None,
+                                    f['fator_c'] if f['vcp_c'] else None)
+    larguras = _fi_larguras(R)
+    intra = _pf.is_intragroup(f['conta_p'], f['conta_c'])
+    records = []
+    for rec in _pf.acc_swap_records(row, today):
+        line, pos, campos = rec['line'], 0, []
+        for seq, label, n in larguras:
+            campos.append({'seq': seq, 'label': label, 'value': line[pos:pos + n]})
+            pos += n
+        records.append({'view': rec['view'], 'line': line, 'fields': campos,
+                        'file_name': _pf.vcp_file_name(rec['view'], intra),
+                        'header': _pf.acc_swap_header(rec['view'], today)})
+    nomes = sorted({r['file_name'] for r in records})
+    return {'success': True, 'contrato': f['contrato'], 'lob': f['lob'],
+            'intragroup': intra, 'file_name': ' · '.join(nomes), 'records': records}, 200
 
 
 def vcp_factor_rows(ref, rows=None, ci=None):

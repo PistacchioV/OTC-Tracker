@@ -75,7 +75,8 @@ c = domain.calcular(base)
 check('calcular: a perna VCP e a Contraparte', (c['vcp_p'], c['vcp_c']), (False, True))
 check('calcular: amortizado, juros das duas pernas', (c['amortizado'], c['juros_p'], c['juros_c']), (333300.0, 16700.0, 11700.0))
 check('calcular: diff so na perna calculada', (c['diff_p'], c['diff_c']), (200.0, None))
-check('calcular: fator VCP com a diff da outra; a calculada mostra o da B3', (c['fator_c'], c['fator_p']), (1.0119, 1.0169))
+check('calcular: fator VCP com a diff da outra; a calculada fica sem (a tela poe "-")',
+      (c['fator_c'], c['fator_p']), (1.0119, None))
 c2 = domain.calcular(base, {'juros_c': '12000', 'tipo': ''})
 check('editado vence e refaz o fator', (c2['juros_c'], c2['fator_c'], c2['manual']), (12000.0, 1.0122, ['juros_c']))
 c3 = domain.calcular(dict(base, tipo='Na Data de Vencimento'))
@@ -105,9 +106,9 @@ def _flx(contrato, evento, taxa, tipo='0', ident='CEM-2026-0001'):
     return {('c%03d' % i): v for i, v in enumerate(fl)}
 
 
-def _ev(contrato, jp, jc, fp, fc, ixp, ixc):
+def _ev(contrato, jp, jc, fp, fc, ixp, ixc, conta='73760.10-2'):
     return {'Código do Contrato': contrato, 'PARTE / Indexador': ixp, 'CONTRAPARTE / Indexador': ixc,
-            'CONTRAPARTE / Contraparte': '73760.10-2', 'CONTRAPARTE / CPF/CNPJ': '16.404.287/0001-55',
+            'CONTRAPARTE / Contraparte': conta, 'CONTRAPARTE / CPF/CNPJ': '16.404.287/0001-55',
             'PARTE / Valor Juros': jp, 'CONTRAPARTE / Valor Juros': jc,
             'PARTE / Fator de Juros': fp, 'CONTRAPARTE / Fator de Juros': fc, 'Valor Base Remanescente': '1000000,00'}
 
@@ -122,7 +123,7 @@ def _escrever():
             json.dump(data, fh, ensure_ascii=False)
     w(os.path.join(ds, 'eventos-swap-jpm_20260908.json'), [
         _ev('21C00035804', '16900,00', '', '1,0169', '', 'DI', 'VCP'),
-        _ev('24H02170822', '', '5000,00', '', '1,005', 'VCP', 'DI'),
+        _ev('24H02170822', '', '5000,00', '', '1,005', 'VCP', 'DI', conta='00041.00-1'),
     ])
     w(os.path.join(ds, 'br-onshore-settlements_20260908.json'), [
         {'CETIP ID': '21C00035804', 'Kapital ID': 'K-001', 'Owner Legal Entity': 'Bco J.P. Morgan S.A.',
@@ -138,7 +139,7 @@ def _escrever():
     ])                                                     # K-002 sem OTM: cai nas colunas do Athena
     w(os.path.join(b3, '73760_260908_DPOSICAO-SWAP.json'), [
         _pos('21C00035804', '73760.10-2', 'C03', 'C99', '1000000,00', '1000000,00', '1000000,00'),
-        _pos('24H02170822', '73760.10-2', 'C99', 'C03', '500000,00', '500000,00', '500000,00', ident='EDG-2026-1'),
+        _pos('24H02170822', '00041.00-1', 'C99', 'C03', '500000,00', '500000,00', '500000,00', ident='EDG-2026-1'),
     ])
     w(os.path.join(b3, '73760_260908_DFLUXO.json'), [
         _flx('21C00035804', '08/09/2026', '33,3300'),
@@ -174,10 +175,10 @@ try:
     check('curvas do OTM pelo Athena ID', (f1['curva_p'], f1['curva_c']), (350000.0, 345000.0))
     check('a conta fecha: amortizado, juros, diff, fator VCP',
           (f1['amortizado'], f1['juros_p'], f1['juros_c'], f1['diff_p'], f1['diff_c'], f1['fator_c'], f1['fator_p']),
-          (333300.0, 16700.0, 11700.0, 200.0, None, 1.0119, 1.0169))
+          (333300.0, 16700.0, 11700.0, 200.0, None, 1.0119, None))
     check('a primeira tabela recebe o fator SO da perna VCP',
           (linhas['21C00035804'][cols.index('PARTE / Fator')], linhas['21C00035804'][cols.index('CONTRAPARTE/ Fator')]),
-          ('', '1.01190000'))
+          ('-', '1.01190000'))
     check('status New nas duas tabelas', (pay['statuses'], f1['status']), (['New', 'New'], 'New'))
     f2 = fat['24H02170822']
     check('sem OTM as curvas caem nas colunas do Athena', (f2['curva_p'], f2['curva_c']), (9000.0, 4000.0))
@@ -204,16 +205,46 @@ try:
     R._fi_tpl_cache.clear() if hasattr(R, '_fi_tpl_cache') else None
     body, st = commands.vcp_send(REF, ['21C00035804', '24H02170822'], sid='E2')
     check('o lote sai', (st, body.get('success')), (200, True))
+    # UM arquivo, com o nome que a mesa pediu — nao um por livro: o nome nao
+    # carrega a LOB, e dois livros no mesmo nome virariam "VCP_CLIENT (1)".
+    # O nome do arquivo diz o que o swap e: contra CLIENTE tudo num
+    # VCP_CLIENT.TXT; no INTRAGRUPO (o 24H e contra a conta 00041 da Lawton)
+    # cada participante manda o seu — VCP_BANCO.TXT e VCP_LAWTON.TXT. No mesmo
+    # nome, o `_unique_filepath` salvaria um deles como "(1)".
     nomes = sorted(f['filename'] for f in body['files'])
-    check('um arquivo por LOB, visao BANCO', nomes, ['ACCRUAL_BANCO-CEM.txt', 'ACCRUAL_BANCO-EDG.txt'])
-    txt = io.open(os.path.join(TMP, 'conecta', 'ACCRUAL_BANCO-CEM.txt'), encoding='utf-8').read().split('\n')
-    check('header + 1 registro (so a perna VCP)', len(txt), 2)
+    check('cliente e intragrupo em arquivos proprios', nomes,
+          ['VCP_BANCO.TXT', 'VCP_CLIENT.TXT', 'VCP_LAWTON.TXT'])
+    check('a conta do grupo diz a visao (a mesma leitura do Accrual)',
+          (PF.view_of_account('00041.00-1'), PF.view_of_account('73760.10-2'), PF.view_of_account('12345.67-8')),
+          ('LAWTON', 'BANCO', ''))
+    # O omnibus do proprio Banco (73760.10-2) e conta do grupo mas MESMA visao
+    # da parte: ali o swap e contra CLIENTE, e vai num arquivo so. E a mesma
+    # pergunta que o `acc_swap_records` faz para achar a segunda visao.
+    check('intragrupo e visao DIFERENTE da parte, nao "conta do grupo"',
+          (PF.is_intragroup('73760.00-9', '00041.00-1'), PF.is_intragroup('73760.00-9', '73760.10-2'),
+           PF.is_intragroup('73760.00-9', '12345.67-8')), (True, False, False))
+    check('nome: cliente x intragrupo',
+          (PF.vcp_file_name('BANCO'), PF.vcp_file_name('BANCO', True), PF.vcp_file_name('LAWTON', True)),
+          ('VCP_CLIENT.TXT', 'VCP_BANCO.TXT', 'VCP_LAWTON.TXT'))
+    check('o Accrual segue com o nome dele', PF.accrual_file_name('BANCO', 'CEM'), 'ACCRUAL_BANCO-CEM.txt')
+    txt = io.open(os.path.join(TMP, 'conecta', 'VCP_CLIENT.TXT'), encoding='utf-8').read().split('\n')
+    check('o do cliente: header + o registro da perna VCP', len(txt), 2)
+    lw = io.open(os.path.join(TMP, 'conecta', 'VCP_LAWTON.TXT'), encoding='utf-8').read().split('\n')
+    check('o da Lawton leva o header DELA (a logica do Accrual)',
+          lw[0], PF.acc_swap_header('LAWTON', datetime.now().strftime('%Y%m%d')))
+    check('   e uma linha do mesmo contrato', len(lw) == 2 and '24H02170822' in lw[1], True)
     check('o fator vai com 2+8 digitos', txt[1][-10:], '0101190000')
-    check('a evidencia foi copiada', os.path.isfile(os.path.join(PF.accrual_source_dir(datetime.now().strftime('%Y%m%d')), 'ACCRUAL_BANCO-CEM.txt')), True)
+    check('a evidencia foi copiada', os.path.isfile(os.path.join(PF.accrual_source_dir(datetime.now().strftime('%Y%m%d')), 'VCP_CLIENT.TXT')), True)
     pay2 = queries.vcp_payload(REF)
     check('enviado vira Sent nas duas tabelas', (pay2['statuses'], [f['status'] for f in pay2['factors']]),
           (['Sent', 'Sent'], ['Sent', 'Sent']))
-    check('aviso no sino com a pagina Swap VCP', (_notifs[-1][2], _notifs[-1][3]), ('Accrual Sent', 'Swap VCP'))
+    # O aviso tem rotulo PROPRIO: 'Accrual Sent' mandava para a pagina do
+    # Accrual quem clicasse, e o arquivo nao e o de la. E o detalhe diz QUAIS
+    # arquivos sairam — o nome separa o do cliente dos do intragrupo.
+    check('aviso no sino: acao propria, pagina Swap VCP e os arquivos no detalhe',
+          (_notifs[-1][2], _notifs[-1][3], _notifs[-1][4].split(' [ND:')[0]),
+          ('VCP Factors Sent', 'Swap VCP',
+           'VCP_CLIENT.TXT, VCP_BANCO.TXT, VCP_LAWTON.TXT · 2 contracts · 3 lines'))
     body, st = commands.vcp_send(REF, ['99Z'], sid='E2')
     check('contrato fora da pagina recusa', (st, body['problems']), (400, ['99Z: not on the page']))
 
@@ -232,9 +263,45 @@ try:
     check('POST edit', (r.status_code, r.get_json()['row']['fator_c'], r.get_json()['row']['status']), (200, 1.02, 'New'))
     r = cl.post('/api/other-products-swap-vcp/send', json={'date': '2026-09-08', 'contrato': '21C00035804'})
     check('POST send pelo maker e bloqueado', (r.status_code, r.get_json()['error']), (400, 'blocked'))
+    # O preview do duplo clique: as MESMAS linhas do envio, fatiadas pelos
+    # campos do template (um preview que formata por conta propria e como ele
+    # passa a mostrar uma coisa e a B3 a receber outra).
+    pv = cl.get('/api/other-products-swap-vcp/preview?date=2026-09-08&contrato=21C00035804').get_json()
+    campos = {f['label']: f['value'] for f in pv['records'][0]['fields']}
+    check('preview: um registro por perna VCP x visao, no arquivo VCP_CLIENT.TXT',
+          (pv.get('success'), [r['view'] for r in pv['records']], pv.get('file_name'), pv.get('intragroup')),
+          (True, ['BANCO'], 'VCP_CLIENT.TXT', False))
+    pvi = cl.get('/api/other-products-swap-vcp/preview?date=2026-09-08&contrato=24H02170822').get_json()
+    check('preview do intragrupo: os dois participantes, cada um no seu arquivo',
+          (pvi.get('intragroup'), sorted(r['file_name'] for r in pvi['records'])),
+          (True, ['VCP_BANCO.TXT', 'VCP_LAWTON.TXT']))
+    check('   e cada registro leva o header do SEU participante',
+          [r['header'][5:] == PF.acc_swap_header(r['view'], datetime.now().strftime('%Y%m%d'))[5:] for r in pvi['records']],
+          [True, True])
+    check('preview: os campos saem do template (o rotulo e a chave `field`)',
+          (campos['Código do Contrato'].strip(), campos['ID do Sistema'].strip()), ('21C00035804', 'SWAP'))
+    # O preview mostra o estado ATUAL da linha — inclusive a edicao que acabou
+    # de entrar (fator_c = 1.02). Um preview que ignorasse a edicao mostraria um
+    # numero e a B3 receberia outro.
+    check('preview: o fator e o EDITADO, com 2+8 digitos', campos['Fator para Atualização'], '0102000000')
+    # E a fatia bate com a linha: concatenar os campos devolve a linha inteira,
+    # no comprimento do registro do cadastro (77).
+    linha_pv = pv['records'][0]['line']
+    check('preview: os campos concatenados reconstroem a linha',
+          (''.join(f['value'] for f in pv['records'][0]['fields']), len(linha_pv)), (linha_pv, 77))
+    pv2 = cl.get('/api/other-products-swap-vcp/preview?date=2026-09-08&contrato=99Z')
+    check('preview de contrato fora da pagina e 404', (pv2.status_code, pv2.get_json().get('success')), (404, False))
     html = cl.get('/other-products-swap-vcp').get_data(as_text=True)
     check('a pagina tem a segunda tabela, o modal e o Send em lote',
           all(x in html for x in ('id="vcp-factors"', 'id="vcpModal"', 'id="vcpBulkSend"', 'data-actions="send"')), True)
+    # A linha de filtro da tabela de baixo e a MESMA da de cima (sc-col-filter),
+    # a de baixo so tem Edit, e o duplo clique da de cima abre o preview.
+    check('o filtro por coluna da tabela de baixo esta no padrao',
+          ("class=\"sc-th-filter\"" in html and 'sc-col-filter" data-col=' in html
+           and 'vcp-th-filter' not in html), True)
+    check('a tabela de baixo so tem Edit', "data-act=\"send\"" in html.split('#vcp-factors')[-1], False)
+    check('e o duplo clique da tabela de cima abre o preview',
+          "on('dblclick', '#swapchar-table tbody tr'" in html, True)
 finally:
     (R.OTM_JSON_ROOT, R.B3_JSON_ROOT, R._opb3_load, R._vcp_refdata_maps, R.CONECTA_NEW_PATH,
      PF.ACCRUAL_SOURCE_ROOT, _s) = real

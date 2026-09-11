@@ -13,8 +13,8 @@ Operations B3): o fator vem do JP. A conta, na ordem em que a mesa a faz:
 A diff da perna que a B3 já calcula entra no fator da perna VCP de
 propósito: o que liquida é a DIFERENÇA das duas curvas, e se a B3 calculou a
 outra perna acima do JP em D, só somar D à perna VCP faz o líquido na B3
-fechar com o interno. Só a perna VCP recebe fator; a calculada mostra o da
-B3, para conferência.
+fechar com o interno. Só a perna VCP recebe fator; a calculada fica sem, e a
+tela escreve "-".
 
 Tudo aqui é número puro: quem lê arquivo é `queries`, quem grava é
 `commands`. Valor que não se resolve é `None`, nunca zero — zero é um fator
@@ -112,8 +112,11 @@ def calcular(base, overrides=None):
     juros_c = pega('juros_c', juros(num(base.get('curva_c')), amortizado))
     diff_p = pega('diff_p', None if vcp_p else diff_b3(num(base.get('b3_juros_p')), juros_p))
     diff_c = pega('diff_c', None if vcp_c else diff_b3(num(base.get('b3_juros_c')), juros_c))
-    fator_p = pega('fator_p', fator(juros_p, diff_c, vbr) if vcp_p else num(base.get('b3_fator_p')))
-    fator_c = pega('fator_c', fator(juros_c, diff_p, vbr) if vcp_c else num(base.get('b3_fator_c')))
+    # Só a perna VCP tem fator — é o que vai para a B3. A calculada fica sem, e
+    # a tela escreve "-": mostrar ali o Fator de Juros da B3 parecia um fator
+    # nosso, editável e enviável (pedido da mesa, 11/09/2026).
+    fator_p = pega('fator_p', fator(juros_p, diff_c, vbr) if vcp_p else None)
+    fator_c = pega('fator_c', fator(juros_c, diff_p, vbr) if vcp_c else None)
     return {'vbr': vbr, 'pct': pct, 'tipo': tipo, 'base_amort': base_amort,
             'amortizado': amortizado, 'juros_p': juros_p, 'juros_c': juros_c,
             'diff_p': diff_p, 'diff_c': diff_c, 'fator_p': fator_p, 'fator_c': fator_c,

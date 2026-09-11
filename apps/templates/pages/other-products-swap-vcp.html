@@ -176,8 +176,8 @@
   #swapchar-table th:nth-child(68), #swapchar-table td:nth-child(68) { min-width: 120px; width: 120px; } /* Código Identificador */
 
 /* Per-column filter row — New Deals style (subtle rounded inputs, Action Blue focus). */
-#swapchar-table thead tr.sc-th-filter th { padding: .3rem .4rem .5rem; border-top: 1px solid var(--sc-hairline); }
-#swapchar-table thead tr.sc-th-filter input.sc-col-filter {
+#swapchar-table thead tr.sc-th-filter th, #vcp-factors thead tr.sc-th-filter th { padding: .3rem .4rem .5rem; border-top: 1px solid var(--sc-hairline); }
+#swapchar-table thead tr.sc-th-filter input.sc-col-filter, #vcp-factors thead tr.sc-th-filter input.sc-col-filter {
     width: 100%; min-width: 96px; height: 30px; font-size: .72rem; font-weight: 400;
     text-align: center; padding: 3px 9px;
     border: 1px solid var(--sc-hairline); border-radius: 8px;
@@ -186,21 +186,21 @@
                 box-shadow 150ms cubic-bezier(0.23,1,0.32,1),
                 background-color 150ms cubic-bezier(0.23,1,0.32,1);
 }
-#swapchar-table thead tr.sc-th-filter input.sc-col-filter::placeholder { color: var(--ins-secondary-color); opacity: .8; font-weight: 400; }
+#swapchar-table thead tr.sc-th-filter input.sc-col-filter::placeholder, #vcp-factors thead tr.sc-th-filter input.sc-col-filter::placeholder { color: var(--ins-secondary-color); opacity: .8; font-weight: 400; }
 @media (hover: hover) and (pointer: fine) {
-    #swapchar-table thead tr.sc-th-filter input.sc-col-filter:hover { border-color: rgba(0,102,204,.35); }
+    #swapchar-table thead tr.sc-th-filter input.sc-col-filter:hover, #vcp-factors thead tr.sc-th-filter input.sc-col-filter:hover { border-color: rgba(0,102,204,.35); }
 }
-#swapchar-table thead tr.sc-th-filter input.sc-col-filter:focus {
+#swapchar-table thead tr.sc-th-filter input.sc-col-filter:focus, #vcp-factors thead tr.sc-th-filter input.sc-col-filter:focus {
     outline: none; border-color: #0066cc;
     background: var(--ins-secondary-bg, #fff);
     box-shadow: 0 0 0 3px rgba(0,102,204,.15);
 }
 /* Active filter (has a value) keeps a subtle Action Blue tint. */
-#swapchar-table thead tr.sc-th-filter input.sc-col-filter.sc-has-val {
+#swapchar-table thead tr.sc-th-filter input.sc-col-filter.sc-has-val, #vcp-factors thead tr.sc-th-filter input.sc-col-filter.sc-has-val {
     border-color: rgba(0,102,204,.55); background: rgba(0,102,204,.06); font-weight: 500;
 }
 @media (prefers-reduced-motion: reduce) {
-    #swapchar-table thead tr.sc-th-filter input.sc-col-filter { transition: none; }
+    #swapchar-table thead tr.sc-th-filter input.sc-col-filter, #vcp-factors thead tr.sc-th-filter input.sc-col-filter { transition: none; }
 }
 #swapchar-page .toggle-vis + label { cursor: pointer; }
 #swapchar-page .btn:active { transform: scale(0.97); }
@@ -263,8 +263,6 @@
 #vcp-factors tbody td.vcp-num { font-variant-numeric: tabular-nums; }
 #vcp-factors tbody td.vcp-manual { font-weight: 600; color: #0066cc; }
 [data-bs-theme="dark"] #vcp-factors tbody td.vcp-manual { color: #6ea8fe; }
-#vcp-factors thead tr.vcp-th-filter input { width: 100%; min-width: 90px; height: 30px; font-size: .72rem; text-align: center; padding: 3px 9px; border: 1px solid var(--sc-hairline); border-radius: 8px; background: var(--bs-tertiary-bg, #f8f9fa); color: var(--ins-body-color); }
-#vcp-factors thead tr.vcp-th-filter input:focus { outline: none; border-color: #0066cc; box-shadow: 0 0 0 3px rgba(0,102,204,.15); }
 #swapchar-page .vcp-bulk-send { display: none; }
 #swapchar-page .vcp-bulk-send.is-on { display: inline-flex; }
 #vcpModal .form-control-sm { font-variant-numeric: tabular-nums; }
@@ -480,11 +478,14 @@
   function buildFactors(rows) {
     FACTORS = rows || [];
     var thead = document.querySelector('#vcp-factors thead');
-    var old = thead.querySelector('tr.vcp-th-filter'); if (old) old.remove();
+    var old = thead.querySelector('tr.sc-th-filter'); if (old) old.remove();
     var n = thead.querySelector('tr').children.length;
-    var filt = '<tr class="vcp-th-filter"><th></th><th></th>' + new Array(n - 2).fill(0).map(function (_x, i) {
+    // A linha de filtro é a MESMA da tabela de cima: classe `sc-th-filter` +
+    // `sc-col-filter`, que é onde o CSS do padrão mora.
+    var filt = '<tr class="sc-th-filter"><th></th><th></th>' + new Array(n - 2).fill(0).map(function (_x, i) {
       var label = thead.querySelector('tr').children[i + 2].textContent.trim();
-      return '<th><input type="text" data-col="' + (i + 2) + '" placeholder="' + esc(label) + '" autocomplete="off"></th>';
+      return '<th><input type="text" class="form-control form-control-sm sc-col-filter" data-col="' +
+        (i + 2) + '" placeholder="' + esc(label) + '" autocomplete="off"></th>';
     }).join('') + '</tr>';
     thead.insertAdjacentHTML('beforeend', filt);
     var data = FACTORS.map(function (f, i) {
@@ -493,14 +494,14 @@
       var miss = (f.missing || []).length ? ' <i class="ti ti-alert-triangle text-warning" title="missing: ' + esc(f.missing.join(', ')) + '"></i>' : '';
       return [
         '<input type="checkbox" class="form-check-input vcp-row-check" data-i="' + i + '">',
-        '<div class="d-flex justify-content-center gap-1"><a class="btn btn-info btn-sm sc-row-act vcp-act" data-act="edit" data-i="' + i + '" href="#" title="Edit"><i class="ti ti-edit"></i></a>' +
-          '<a class="btn btn-primary btn-sm sc-row-act vcp-act" data-act="send" data-i="' + i + '" href="#" title="Send"><i class="ti ti-brand-telegram"></i></a></div>',
+        '<div class="d-flex justify-content-center gap-1"><a class="btn btn-info btn-sm sc-row-act vcp-act" data-i="' + i + '" href="#" title="Edit"><i class="ti ti-edit"></i></a></div>',
         pill(f.status),
         esc(f.athena_id) + miss, esc(f.contrato), esc(f.contraparte),
         cell('vbr', n2(f.vbr)), cell('pct', n4(f.pct)), cell('tipo', f.tipo), cell('amortizado', n2(f.amortizado)),
         cell('juros_p', n2(f.juros_p)), cell('diff_p', n2(f.diff_p)), cell('juros_c', n2(f.juros_c)), cell('diff_c', n2(f.diff_c)),
-        cell('fator_p', f.vcp_p ? f8(f.fator_p) : (f.fator_p == null ? '' : f8(f.fator_p) + ' (B3)')),
-        cell('fator_c', f.vcp_c ? f8(f.fator_c) : (f.fator_c == null ? '' : f8(f.fator_c) + ' (B3)'))
+        // o fator só existe na perna VCP; a calculada (e a VCP sem número) sai "-"
+        cell('fator_p', (f.vcp_p && f.fator_p != null) ? f8(f.fator_p) : '-'),
+        cell('fator_c', (f.vcp_c && f.fator_c != null) ? f8(f.fator_c) : '-')
       ];
     });
     if (dt) dt.destroy();
@@ -523,8 +524,9 @@
     if (wrap) { wrap.innerHTML = ''; dt.buttons().container().appendTo(wrap); }
     if (window.otcExportAdvanced) window.otcExportAdvanced('#vcp-factors');
     if (window.otcCellCopy) window.otcCellCopy('#vcp-factors', { skip: [0, 1] });
-    jQuery('#vcp-factors thead').off('keyup.vcp change.vcp').on('keyup.vcp change.vcp', 'tr.vcp-th-filter input', function () {
+    jQuery('#vcp-factors thead').off('keyup.vcp change.vcp').on('keyup.vcp change.vcp', 'tr.sc-th-filter input', function () {
       var col = +this.getAttribute('data-col');
+      this.classList.toggle('sc-has-val', !!this.value);
       if (dt.column(col).search() !== this.value) dt.column(col).search(this.value).draw();
     });
     dt.columns.adjust();
@@ -579,7 +581,7 @@
   function send(contracts) {
     if (!contracts.length) return;
     Swal.fire({ title: 'Send ' + contracts.length + ' contract(s)?',
-      text: 'The PU/Factor file (ACCRUAL_<VIEW>-<LOB>.txt, the same as the Accrual page) will be generated on the Batch Conecta folder.',
+      text: 'The PU/Factor file will be generated on the Batch Conecta folder.',
       icon: 'question', showCancelButton: true, confirmButtonText: '<i class="ti ti-brand-telegram"></i>', cancelButtonText: '<i class="ti ti-x"></i>',
       confirmButtonColor: '#0066cc', cancelButtonColor: '#6c757d' })
     .then(function (r) {
@@ -625,9 +627,78 @@
   jQuery(document).on('click', '#vcp-factors .vcp-act', function (e) {
     e.preventDefault();
     var f = FACTORS[parseInt(this.getAttribute('data-i'), 10)];
-    if (!f) return;
-    if (this.getAttribute('data-act') === 'edit') openEdit(f);
-    else send([f.contrato]);
+    if (f) openEdit(f);
+  });
+
+  // ── Preview: duplo clique na linha da operação (tabela de cima) ──────────
+  // Mostra o que o Send escreveria no arquivo de PU/Fator — a linha inteira e
+  // os campos fatiados pelo template, montados pelo MESMO gerador do envio.
+  function contractOfTopRow(tr) {
+    var cols = window.__vcpCols || [];
+    var ci = cols.indexOf('Código do Contrato');
+    var td = tr.querySelectorAll('td');
+    return (ci >= 0 && td[ci + 3]) ? td[ci + 3].textContent.trim() : '';
+  }
+  function preview(contrato) {
+    fetch('/api/other-products-swap-vcp/preview?date=' + encodeURIComponent(DATE) +
+          '&contrato=' + encodeURIComponent(contrato), { credentials: 'same-origin' })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+      .then(function (x) {
+        if (!x.ok || !x.d.success) {
+          var msg = x.d.problems ? x.d.problems.join('\n') : (x.d.error || 'Preview failed');
+          Swal.fire({ title: 'No file for this row', text: msg, icon: 'warning',
+                      confirmButtonText: 'OK', confirmButtonColor: '#0066cc' });
+          return;
+        }
+        // Mesmo desenho do preview do Accrual Swap: uma LINHA por campo e uma
+        // COLUNA por registro (a visão no cabeçalho), monospace, e o padding
+        // todo em branco como pontos cinza — é o que deixa ver que o campo foi
+        // preenchido com espaços e não esquecido.
+        var recs = x.d.records || [];
+        var multi = recs.length > 1;
+        var thead = '<tr style="background:#343a40;color:#fff;position:sticky;top:0">' +
+          '<th style="padding:5px 8px;text-align:left;font-weight:600;font-size:.78em">Field</th>' +
+          recs.map(function (r, i) {
+            return '<th style="padding:5px 8px;text-align:left;font-weight:600;font-size:.78em;white-space:nowrap">' +
+              (multi ? '#' + (i + 1) + ' ' : '') + esc(r.view) + ' · ' + esc(r.file_name) + '</th>';
+          }).join('') + '</tr>';
+        var tbody = (recs[0] ? recs[0].fields : []).map(function (f0, fi) {
+          var bg = fi % 2 === 0 ? '#f8f9fa' : '#fff';
+          var cells = recs.map(function (r) {
+            var raw = String((r.fields[fi] || {}).value == null ? '' : r.fields[fi].value);
+            var disp = (raw !== '' && raw.trim() === '')
+              ? '<span style="color:#bbb">' + '·'.repeat(raw.length) + '</span>' : esc(raw);
+            return '<td style="padding:3px 8px;font-family:monospace;font-size:.8em;border:none;white-space:pre">' + disp + '</td>';
+          }).join('');
+          return '<tr style="background:' + bg + '">' +
+            '<td style="padding:3px 8px;white-space:nowrap;font-weight:500;color:#495057;border:none;font-size:.8em">' +
+            (fi + 1) + '. ' + esc(f0.label) + '</td>' + cells + '</tr>';
+        }).join('');
+        var html =
+          '<div style="font-size:.8em;color:#6c757d;margin-bottom:8px">' + esc(x.d.file_name) + ' · ' +
+            recs.length + ' record(s)' + (x.d.intragroup ? ' · intragroup' : '') + '</div>' +
+          '<div style="overflow:auto;max-height:60vh;border:1px solid #dee2e6;border-radius:4px">' +
+          '<table style="border-collapse:collapse;width:100%"><thead>' + thead + '</thead><tbody>' + tbody +
+          '</tbody></table></div>' +
+          // O header do arquivo é o MESMO do Accrual (`acc_swap_header`): sai
+          // aqui embaixo para a mesa conferir o participante e a data.
+          '<div style="font-size:.72em;color:#6c757d;margin-top:8px">Header</div>' +
+          '<pre style="font-size:.72rem;white-space:pre;overflow-x:auto;background:rgba(0,0,0,.06);padding:6px;border-radius:4px;margin:2px 0 0">' +
+          recs.map(function (r) { return esc(r.header) + '\n' + esc(r.line); }).join('\n') + '</pre>';
+        Swal.fire({ title: '<span style="font-size:1rem">PU / Factor preview — ' + esc(x.d.contrato) + '</span>',
+                    html: html, width: (recs.length > 2 ? 760 : 620),
+                    showCloseButton: true, showConfirmButton: false,
+                    customClass: { htmlContainer: 'text-start' } });
+      })
+      .catch(function (e) {
+        Swal.fire({ title: 'Error', text: 'Request failed: ' + e.message, icon: 'error',
+                    confirmButtonText: 'OK', confirmButtonColor: '#dc3545' });
+      });
+  }
+  jQuery(document).on('dblclick', '#swapchar-table tbody tr', function (e) {
+    if (e.target.closest('a, button, input')) return;
+    var contrato = contractOfTopRow(this);
+    if (contrato) preview(contrato);
   });
   var confirmBtn = document.getElementById('vcpConfirmBtn');
   if (confirmBtn) confirmBtn.addEventListener('click', function () {
