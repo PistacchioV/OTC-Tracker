@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""As rotas das telas da Intrag (NDF, Option, Swap e DCE Option)."""
+"""As rotas das telas da Intrag (NDF, Option, Swap, DCE Option e DCE Swap)."""
 import json
 import os
 import traceback
@@ -8,8 +8,8 @@ from datetime import datetime
 from flask import jsonify, request, session
 
 from apps.pages import blueprint
-from apps.pages.features.intrag import commands, queries
-from apps.pages.features.intrag.infra import persistence
+from apps.pages.features.intrag import commands, domain, queries
+from apps.pages.features.intrag.infra import persistence, xlsx_grid
 from apps.pages import data_store as _store  # noqa: E402
 
 
@@ -912,3 +912,327 @@ def api_intrag_delete(family):
         _R().log.error('[intrag-delete] %s failed:\n%s', family, traceback.format_exc())
         return jsonify({'success': False, 'message': 'Delete failed'}), 500
     return jsonify({'success': True, 'deleted': apagadas, 'not_found': nao_achadas})
+
+
+# ═════════════════════════ DCE Swap ══════════════════════════════════════════
+# A quinta página da Intrag: as linhas nascem de uma PLANILHA solta no
+# dropzone (as duas tabelas da Athena — características por perna e fluxos
+# por cupom — ligadas pelo Deal Name), não do New Deals nem do bob-report. A
+# unidade da esteira é o DEAL (status/maker/checker/intrag_id vivem nele; a
+# grade de pernas e a de fluxos são só as suas duas faces), e o arquivo da
+# Intrag é UMA linha por deal, traduzida do par Pay + Rec no servidor
+# (`commands._dce_swap_line_fields`) — por isso a página tem preview de duplo
+# clique: o que se vê na grade não é o que vai no arquivo.
+
+_DCES_SUFFIX = '_intrag_dce_swap.json'
+
+
+def _dces_entries(date_str, date_from, date_to):
+    """Os deals do(s) arquivo(s)-dia pedidos — o mesmo desenho do DCE Option."""
+    entries = []
+    if date_from or date_to:
+        d_from = _R()._parse_date_any(date_from)
+        d_to   = _R()._parse_date_any(date_to)
+        _dias = list(_R()._day_files(persistence.INTRAG_DCE_SWAP_CACHE_DIR, _DCES_SUFFIX, d_from, d_to))
+        _R()._day_prefetch(_dias)
+        for fp, fname, mtime, size in _dias:
+            fdate = _R()._parse_date_any(fname[:8])
+            if fdate is None:
+                continue
+            if d_from and fdate < d_from:
+                continue
+            if d_to and fdate > d_to:
+                continue
+            entries.extend(_R()._day_json(fp, mtime, size))
+    elif date_str:
+        try:
+            ref = datetime.strptime(date_str, '%Y-%m-%d')
+            fp = persistence._intrag_dce_swap_day_path(ref)
+            try:
+                st = _store.stat(fp)
+                mtime, size = st.st_mtime, st.st_size
+            except OSError:
+                mtime, size = 0, 0
+            entries = list(_R()._day_json(fp, mtime, size))
+        except Exception as exc:
+            _R().log.warning('[INTRAG DCE SWAP] date load error date=%r: %s', date_str, exc)
+    else:
+        _dias = list(_R()._day_files(persistence.INTRAG_DCE_SWAP_CACHE_DIR, _DCES_SUFFIX))
+        _R()._day_prefetch(_dias)
+        for fp, _fname, mtime, size in _dias:
+            entries.extend(_R()._day_json(fp, mtime, size))
+    return [e for e in entries if isinstance(e, dict)]
+
+
+@blueprint.route('/api/intrag/dce-swap')
+def api_intrag_dce_swap():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    entries = _dces_entries(request.args.get('date', '').strip(),
+                            request.args.get('date_from', '').strip(),
+                            request.args.get('date_to', '').strip())
+    return jsonify({'success': True, 'entries': entries,
+                    'leg_fields': list(domain._DCE_SWAP_LEG_FIELDS),
+                    'flow_fields': list(domain._DCE_SWAP_FLOW_FIELDS)})
+
+
+@blueprint.route('/api/intrag/dce-swap/import-file', methods=['POST'])
+def api_intrag_dce_swap_import_file():
+    """A planilha do dropzone (multipart `file`; `trade_date` opcional em
+    dd/mm/aaaa ou ISO, default hoje) → deals no arquivo-dia da Trade Date."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    f = request.files.get('file')
+    if f is None or not f.filename:
+        return jsonify({'success': False, 'message': 'No file received'}), 400
+    ref_dt = _R()._api_ref_date(request.form.get('trade_date'))
+    try:
+        grid, sheets = xlsx_grid.grid_from_upload(f.filename, f.read())
+    except Exception as exc:                                # noqa: BLE001
+        _R().log.warning('[INTRAG DCE SWAP] unreadable upload %r: %s', f.filename, exc)
+        return jsonify({'success': False, 'message': 'Could not read the file: ' + str(exc)}), 400
+    try:
+        result = commands._dce_swap_import_grid(grid, ref_dt, sid=session.get('user_sid', ''), sheets=sheets)
+    except Exception as exc:                                # noqa: BLE001
+        _R().log.error('[INTRAG DCE SWAP] import failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'message': 'Import failed: ' + str(exc)}), 500
+    if not result.get('imported'):
+        return jsonify({'success': False,
+                        'message': 'No deal found — the file needs the two tables '
+                                   '(Deal Name/Direction… and Deal Name/Coupon…).',
+                        'unknown_headers': result.get('unknown_headers', [])}), 400
+    _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                              'Deals Imported', 'Intrag DCE Swap',
+                              str(result.get('imported', 0)) + ' deal(s) from ' + str(f.filename))
+    result['file'] = f.filename
+    return jsonify(result)
+
+
+def _dces_clean_rows(rows, fields):
+    """Pernas/fluxos vindos da tela: só as chaves do contrato, tudo texto."""
+    out = []
+    for r in (rows or []):
+        if not isinstance(r, dict):
+            continue
+        row = {k: ('' if r.get(k) is None else str(r.get(k))).strip() for k in fields}
+        if any(row.values()):
+            out.append(row)
+    return out
+
+
+@blueprint.route('/api/intrag/dce-swap/edit', methods=['POST'])
+def api_intrag_dce_swap_edit():
+    """Edição do DEAL (pernas + fluxos + Intrag ID) → status 'Pending', maker.
+    Intrag ID digitado = Success (o desfecho do Mapping), como nas irmãs."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    payload    = request.get_json(silent=True) or {}
+    deal_id    = (payload.get('deal_id') or '').strip()
+    trade_date = (payload.get('trade_date') or '').strip()
+    if not deal_id:
+        return jsonify({'success': False, 'message': 'Missing deal_id'}), 400
+    with _R()._cache_lock:
+        fp, entries, idx = queries._find_intrag_dce_swap_entry(deal_id, trade_date)
+        if idx is None:
+            return jsonify({'success': False, 'message': 'Entry not found'}), 404
+        e = entries[idx]
+        if 'legs' in payload:
+            e['legs'] = _dces_clean_rows(payload.get('legs'), domain._DCE_SWAP_LEG_FIELDS)
+        if 'flows' in payload:
+            e['flows'] = _dces_clean_rows(payload.get('flows'), domain._DCE_SWAP_FLOW_FIELDS)
+        pay = next((l for l in e.get('legs') or []
+                    if str(l.get('direction') or '').strip().lower() == 'pay'), None)
+        if pay:
+            e['_client'] = pay.get('counterparty') or e.get('_client') or ''
+        status = 'Pending'
+        if 'intrag_id' in payload:
+            novo   = str(payload.get('intrag_id') or '').strip()
+            antigo = str(e.get('intrag_id') or '').strip()
+            e['intrag_id'] = novo
+            if novo and novo != antigo:
+                status = 'Success'
+        e['status']  = status
+        e['maker']   = session.get('user_sid', '')
+        e['checker'] = ''
+        _R()._atomic_write_json(fp, entries)
+    _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                              'Deal Updated', 'Intrag DCE Swap', deal_id)
+    return jsonify({'success': True, 'status': status, 'entry': e})
+
+
+@blueprint.route('/api/intrag/dce-swap/add', methods=['POST'])
+def api_intrag_dce_swap_add():
+    """Deal digitado à mão (Add Row): nasce New no arquivo-dia da Trade Date.
+    Diferente das irmãs, aqui o Add GRAVA — um deal só de tela não teria
+    preview nem send, porque a linha é montada no servidor."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    payload = request.get_json(silent=True) or {}
+    legs  = _dces_clean_rows(payload.get('legs'), domain._DCE_SWAP_LEG_FIELDS)
+    flows = _dces_clean_rows(payload.get('flows'), domain._DCE_SWAP_FLOW_FIELDS)
+    deal_id = next((l['deal_name'] for l in legs if l.get('deal_name')), '')
+    if not deal_id:
+        return jsonify({'success': False, 'message': 'Deal Name is required (on a leg)'}), 400
+    for l in legs:
+        l['deal_name'] = l['deal_name'] or deal_id
+    ref_dt = _R()._api_ref_date(payload.get('trade_date'))
+    pay = next((l for l in legs if str(l.get('direction') or '').strip().lower() == 'pay'), None)
+    entry = {'_deal': deal_id, '_client': (pay or legs[0]).get('counterparty') or '',
+             'trade_date': ref_dt.strftime('%Y-%m-%d'),
+             'intrag_id': str(payload.get('intrag_id') or '').strip(),
+             'legs': legs, 'flows': flows, 'status': 'New', 'maker': '', 'checker': ''}
+    persistence._intrag_dce_swap_upsert(ref_dt, [entry])
+    return jsonify({'success': True, 'entry': entry})
+
+
+@blueprint.route('/api/intrag/dce-swap/approve', methods=['POST'])
+def api_intrag_dce_swap_approve():
+    """Pending → Approved (maker ≠ checker)."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    payload    = request.get_json(silent=True) or {}
+    deal_id    = (payload.get('deal_id') or '').strip()
+    trade_date = (payload.get('trade_date') or '').strip()
+    if not deal_id:
+        return jsonify({'success': False, 'message': 'Missing deal_id'}), 400
+    user_sid = session.get('user_sid', '')
+    with _R()._cache_lock:
+        fp, entries, idx = queries._find_intrag_dce_swap_entry(deal_id, trade_date)
+        if idx is None:
+            return jsonify({'success': False, 'message': 'Entry not found'}), 404
+        if (entries[idx].get('status') or '') != 'Pending':
+            return jsonify({'success': False, 'message': 'Only Pending entries can be approved.'}), 400
+        if entries[idx].get('maker') and entries[idx]['maker'] == user_sid:
+            return jsonify({'success': False,
+                            'message': 'Maker cannot approve their own change — a different user must check it.'}), 403
+        entries[idx]['status']  = 'Approved'
+        entries[idx]['checker'] = user_sid
+        _R()._atomic_write_json(fp, entries)
+    _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                              'Status Updated', 'Intrag DCE Swap', deal_id + ' → Approved')
+    return jsonify({'success': True, 'status': 'Approved'})
+
+
+@blueprint.route('/api/intrag/dce-swap/mapping-intrag-id', methods=['POST'])
+def api_intrag_dce_swap_mapping_intrag_id():
+    # O mesmo processo da Intrag Swap: linhas de swap do Boletas CSV (col B ==
+    # 'SWAP', id na col C, Intrag ID na col A); a chave que a tela manda como
+    # `b3_id` é o Deal Name — o Contract Number que vai no arquivo.
+    if not session.get('authenticated'):
+        return jsonify({'ok': False, 'error': 'Not authenticated'}), 401
+    deals = (request.get_json(silent=True) or {}).get('deals', [])
+    results, err = commands._intrag_run_mapping(deals, 1, 'SWAP', 2, queries._find_intrag_dce_swap_entry)
+    if results is None:
+        return jsonify({'ok': False, 'error': err}), 400
+    return jsonify({'ok': True, 'results': results})
+
+
+def _dces_preview_payload(entry):
+    fields = commands._dce_swap_line_fields(entry)
+    names = domain._DCE_SWAP_FILE_FIELDS
+    return {'fields': [{'seq': i + 1, 'field': names[i] if i < len(names) else '', 'value': v}
+                       for i, v in enumerate(fields)],
+            'line': ';'.join(fields)}
+
+
+@blueprint.route('/api/intrag/dce-swap/preview')
+def api_intrag_dce_swap_preview():
+    """A linha da Intrag de UM deal, campo a campo — o preview do duplo clique.
+    Deal sem par Pay+Rec devolve 422 com o motivo (é o que o Send recusaria)."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    deal_id    = (request.args.get('deal_id') or '').strip()
+    trade_date = (request.args.get('trade_date') or '').strip()
+    fp, entries, idx = queries._find_intrag_dce_swap_entry(deal_id, trade_date)
+    if idx is None:
+        return jsonify({'success': False, 'message': 'Entry not found'}), 404
+    entry = entries[idx]
+    try:
+        out = _dces_preview_payload(entry)
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 422
+    ref = _R()._parse_date_any(entry.get('trade_date')) or datetime.now()
+    out.update({'success': True, 'deal_id': deal_id,
+                'file_name': commands._dce_swap_file_name(ref)})
+    return jsonify(out)
+
+
+@blueprint.route('/api/intrag/dce-swap/send-file', methods=['POST'])
+def api_intrag_dce_swap_send_file():
+    """Gera o arquivo da Intrag dos deals selecionados e vira New/Approved →
+    Sent. Body: { "items": [ { "deal_id", "trade_date" } ] }. A linha é
+    montada AQUI, do arquivo-dia (não das células da tela), agrupada por
+    Trade Date — um arquivo por data, `LAWTON_OFF_SWAP_AAAAMMDD.txt` na pasta
+    padrão da Intrag. Um deal sem par Pay+Rec recusa o lote INTEIRO com 400
+    dizendo qual — nada é escrito pela metade."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    payload = request.get_json(silent=True) or {}
+    items = payload.get('items')
+    if not isinstance(items, list) or not items:
+        return jsonify({'success': False, 'message': 'No rows provided'}), 400
+    SENDABLE = {'New', 'Approved'}
+    groups, problemas, alvos = {}, [], []
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        deal_id = str(it.get('deal_id') or '').strip()
+        td_raw = str(it.get('trade_date') or '').strip()
+        if not deal_id:
+            continue
+        fp, entries, idx = queries._find_intrag_dce_swap_entry(deal_id, td_raw)
+        if idx is None:
+            problemas.append(deal_id + ': not found')
+            continue
+        entry = entries[idx]
+        if (entry.get('status') or 'New') not in SENDABLE:
+            problemas.append(deal_id + ': status ' + str(entry.get('status') or 'New'))
+            continue
+        try:
+            fields = commands._dce_swap_line_fields(entry)
+        except ValueError as exc:
+            problemas.append(deal_id + ': ' + str(exc))
+            continue
+        ref = _R()._parse_date_any(entry.get('trade_date')) or datetime.now()
+        groups.setdefault(ref.strftime('%Y%m%d'), {'ref': ref, 'rows': []})['rows'].append(fields)
+        alvos.append((deal_id, entry.get('trade_date') or td_raw))
+    if problemas:
+        return jsonify({'success': False, 'message': 'Nothing sent — ' + '; '.join(problemas)}), 400
+    if not groups:
+        return jsonify({'success': False, 'message': 'No valid rows provided'}), 400
+
+    written = []
+    try:
+        with _R()._cache_lock:
+            for key, grp in groups.items():
+                ref = grp['ref']
+                month_folder = ref.strftime('%m') + '. ' + _R()._EN_MONTH_NAMES[ref.month - 1]
+                dir_path = os.path.join(persistence.INTRAG_NDF_SEND_DIR, ref.strftime('%Y'), month_folder, ref.strftime('%d'))
+                os.makedirs(dir_path, exist_ok=True)
+                nome = commands._dce_swap_file_name(ref)
+                base, ext = os.path.splitext(nome)
+                candidate = nome
+                n = 0
+                while _store.exists(os.path.join(dir_path, candidate)):
+                    n += 1
+                    candidate = base + ' (' + str(n) + ')' + ext
+                file_path = os.path.join(dir_path, candidate)
+                with open(file_path, 'w', encoding='utf-8') as fh:
+                    fh.write('\n'.join(';'.join(r) for r in grp['rows']))
+                written.append(file_path)
+                _R().log.info('[INTRAG DCE SWAP] Wrote send file %s (%d row(s))', file_path, len(grp['rows']))
+            for deal_id, td_raw in alvos:
+                fp, entries, idx = queries._find_intrag_dce_swap_entry(deal_id, td_raw)
+                if idx is None:
+                    continue
+                if (entries[idx].get('status') or 'New') in SENDABLE:
+                    entries[idx]['status'] = 'Sent'
+                    _R()._atomic_write_json(fp, entries)
+    except Exception as exc:
+        _R().log.error('[INTRAG DCE SWAP] send-file failed: %s', exc)
+        return jsonify({'success': False, 'message': 'File generation failed: ' + str(exc)}), 500
+
+    _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                              'Intrag Sent', 'Intrag DCE Swap',
+                              str(len(alvos)) + ' deal' + ('' if len(alvos) == 1 else 's') + ' sent')
+    return jsonify({'success': True, 'files': written, 'count': len(alvos)})

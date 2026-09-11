@@ -71,3 +71,50 @@ def _intrag_ndf_persist(entry, td):
             entries.append(entry)
         _R()._atomic_write_json(file_path, entries)
     _R().log.info('[INTRAG NDF] Saved entry deal=%r → %s', deal_id, file_path)
+
+
+INTRAG_DCE_SWAP_CACHE_DIR = os.path.normpath(os.path.join(
+    _R().data_dir(), "cache", "new deals", "Intrag", "DCE Swap"
+))
+
+
+def _intrag_dce_swap_day_path(ref):
+    """Caminho do arquivo-dia do DCE Swap para a data `ref` (datetime)."""
+    return os.path.join(INTRAG_DCE_SWAP_CACHE_DIR, ref.strftime('%Y'), ref.strftime('%m'),
+                        ref.strftime('%Y%m%d') + '_intrag_dce_swap.json')
+
+
+def _intrag_dce_swap_upsert(ref, novas):
+    """Upsert de deals no arquivo-dia do DCE Swap (chave `_deal`).
+
+    `novas` é a lista de entradas prontas (legs/flows/trade_date). Deal que já
+    existe no dia tem legs/flows SUBSTITUÍDOS e a esteira PRESERVADA
+    (status/maker/checker/intrag_id) — reimportar a planilha não desfaz
+    validação nem mapeamento, como no DCE Option. O ciclo inteiro (ler →
+    alterar → gravar) roda sob o `_cache_lock`. → quantidade gravada."""
+    file_path = _intrag_dce_swap_day_path(ref)
+    os.makedirs(os.path.dirname(file_path), exist_ok=True)
+    n = 0
+    with _R()._cache_lock:
+        entries = []
+        if _store.exists(file_path):
+            try:
+                entries = _store.read(file_path)
+                if not isinstance(entries, list):
+                    entries = []
+            except (json.JSONDecodeError, ValueError):
+                entries = []
+        for entry in novas:
+            idx = next((i for i, e in enumerate(entries)
+                        if e.get('_deal') == entry['_deal']), None)
+            if idx is not None:
+                for k in ('status', 'maker', 'checker', 'intrag_id'):
+                    if entries[idx].get(k):
+                        entry[k] = entries[idx][k]
+                entries[idx] = entry
+            else:
+                entries.append(entry)
+            n += 1
+        _R()._atomic_write_json(file_path, entries)
+    _R().log.info('[INTRAG DCE SWAP] Saved %d deal(s) → %s', n, file_path)
+    return n

@@ -187,3 +187,33 @@ def _find_intrag_swap_entry(deal_id, trade_date):
         if idx is not None:
             return fp, entries, idx
     return None, None, None
+
+
+def _find_intrag_dce_swap_entry(deal_id, trade_date):
+    """Locate an Intrag DCE Swap entry by deal id (= Deal Name da planilha),
+    with the optional trade date narrowing the daily file."""
+    if not deal_id:
+        return None, None, None
+    ref = _R()._parse_date_any(trade_date) if trade_date else None
+    candidate_files = []
+    if ref is not None:
+        fp = persistence._intrag_dce_swap_day_path(ref)
+        if _store.isfile(fp):
+            candidate_files.append(fp)
+    if not candidate_files and _store.isdir(persistence.INTRAG_DCE_SWAP_CACHE_DIR):
+        for root, _, files in _store.walk(persistence.INTRAG_DCE_SWAP_CACHE_DIR):
+            for fname in files:
+                if fname.endswith('_intrag_dce_swap.json'):
+                    candidate_files.append(os.path.join(root, fname))
+    for fp in candidate_files:
+        try:
+            from apps.pages import duck_read
+            entries = duck_read.day_records(fp)
+            if not isinstance(entries, list):
+                continue
+        except (json.JSONDecodeError, ValueError, OSError):
+            continue
+        idx = next((i for i, e in enumerate(entries) if e.get('_deal') == deal_id), None)
+        if idx is not None:
+            return fp, entries, idx
+    return None, None, None

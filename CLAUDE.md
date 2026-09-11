@@ -719,6 +719,14 @@ São **45**: `currency-base`, `interbook-ndf`, `commodities-b3`,
   retroage (`backfill_manual_confirmations.py`). Mercadoria e FXO são sempre
   JPM (`_MC_JPM_SOURCES`); razão social do `le-spn`.
 
+- **Intrag DCE Swap: a unidade é o DEAL e a linha é traduzida no servidor**
+  (§448). A planilha do dropzone traz duas tabelas (pernas e fluxos)
+  ligadas pelo Deal Name; o arquivo `LAWTON_OFF_SWAP_AAAAMMDD.txt` é UMA
+  linha por deal montada do par Pay + Rec (`domain._dce_swap_intrag_fields`,
+  porte do script da mesa — o teste compara byte a byte). Send/preview
+  leem o arquivo-dia, nunca as células da tela; deal sem Pay+Rec recusa o
+  lote. Os `Fixed` do template `intrag-dce-swap` vencem o gerador.
+
 ### Live Position (cinco telas, um JS)
 
 - `live-position-swap-characteristics.js` serve cinco páginas por `data-api`;

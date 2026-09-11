@@ -610,11 +610,85 @@ def _intrag_run_mapping(deals, match_col, match_val, b3_col, finder):
 # import a reencontrava e devolvia o status ANTIGO: apagava-se tudo, importava
 # de novo, e as linhas voltavam `Pending` em vez de `New`. Duas coisas
 # plausíveis, uma escondendo a outra.
+# ── DCE Swap: a planilha do dropzone → arquivo-dia; a linha da Intrag ───────
+_DCE_SWAP_FI_KEY = 'intrag-dce-swap'
+
+
+def _dce_swap_import_grid(grid, ref_dt, sid='', sheets=None):
+    """A grade (todas as abas da planilha) → deals no arquivo-dia da data
+    `ref_dt` (a Trade Date escolhida no dropzone; o script da mesa usava
+    HOJE). Cada deal entra com as pernas e os fluxos que a planilha traz,
+    `_client` = contraparte da perna Pay (ou da primeira perna), esteira
+    `New`. O re-import upserta por Deal Name preservando a esteira.
+
+    Devolve o resumo para a tela: quantos deals, quais ficaram sem par
+    Pay+Rec (ficam gravados — é o preview/send que os recusa —, mas a tela
+    avisa na hora) e os cabeçalhos que o mapa não conhece."""
+    deals, unknown = domain._dce_swap_parse_grid(grid)
+    if unknown:
+        _R().log.warning('[INTRAG DCE SWAP] colunas da planilha fora do mapa (ignoradas): %s',
+                         ', '.join(unknown))
+    trade_iso = ref_dt.strftime('%Y-%m-%d')
+    novas, sem_par = [], []
+    for name, d in deals.items():
+        legs, flows = d['legs'], d['flows']
+        pay = next((l for l in legs if str(l.get('direction') or '').strip().lower() == 'pay'), None)
+        entry = {
+            '_deal': name,
+            '_client': (pay or (legs[0] if legs else {})).get('counterparty') or '',
+            'trade_date': trade_iso,
+            'intrag_id': '',
+            'legs': legs, 'flows': flows,
+            'status': 'New', 'maker': '', 'checker': '',
+        }
+        try:
+            domain._dce_swap_legs(entry)
+        except ValueError as exc:
+            sem_par.append(name + ' (' + str(exc) + ')')
+        novas.append(entry)
+    imported = persistence._intrag_dce_swap_upsert(ref_dt, novas) if novas else 0
+    return {'success': True, 'imported': imported, 'legs': sum(len(d['legs']) for d in deals.values()),
+            'flows': sum(len(d['flows']) for d in deals.values()),
+            'missing_leg': sem_par, 'unknown_headers': unknown,
+            'sheets': list(sheets or []), 'trade_date': trade_iso}
+
+
+def _dce_swap_line_fields(entry):
+    """Os 48 campos da linha da Intrag de um deal, já com os literais Fixed do
+    template do File Interpreter aplicados (o cadastro comanda; sem template
+    vale o gerador). Levanta ValueError quando falta perna."""
+    td = domain._dces_fmt_data(entry.get('trade_date'))
+    fields = domain._dce_swap_intrag_fields(entry, td)
+    try:
+        tpl = _R()._fi_tpl_cached(_DCE_SWAP_FI_KEY)
+    except Exception:                                   # noqa: BLE001 — ocupado/ilegível: o gerador vale
+        tpl = None
+    tpl_fields = []
+    for b in ((tpl or {}).get('blocks') or []):
+        tpl_fields.extend(b.get('fields') or [])
+    return domain._dce_swap_apply_fixed(fields, tpl_fields)
+
+
+def _dce_swap_file_name(ref_dt):
+    """Nome do arquivo gerado: o `file_name` do template quando cadastrado
+    (com `AAAAMMDD`/`YYYYMMDD` trocado pela data), senão o do script da mesa —
+    `LAWTON_OFF_SWAP_AAAAMMDD.txt`."""
+    try:
+        nome = _R()._fi_variant_file_name(_DCE_SWAP_FI_KEY)
+    except Exception:                                   # noqa: BLE001
+        nome = ''
+    ymd = ref_dt.strftime('%Y%m%d')
+    if nome:
+        return nome.replace('AAAAMMDD', ymd).replace('YYYYMMDD', ymd)
+    return 'LAWTON_OFF_SWAP_' + ymd + '.txt'
+
+
 _INTRAG_DELETE_FAMILIES = {
     'ndf':      queries._find_intrag_ndf_entry,
     'option':   queries._find_intrag_opt_entry,
     'swap':     queries._find_intrag_swap_entry,
     'dce-opt':  queries._find_intrag_dce_opt_entry,
+    'dce-swap': queries._find_intrag_dce_swap_entry,
 }
 
 
