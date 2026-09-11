@@ -119,6 +119,7 @@ def _seed_data_dir(app):
     """
     import json
     import shutil
+    import time
     from apps.pages.data_paths import PACKAGED_DIR
 
     destino = app.config.get('DATA_DIR')
@@ -131,6 +132,12 @@ def _seed_data_dir(app):
     copiados = importados = 0
     ocupados = set()
     ilegiveis = set()
+    comeco = time.monotonic()
+    # Na dev o checkout É o `DATA_DIR`: `origem` e `alvo` são o MESMO arquivo.
+    # Aí "trazer a cópia do repositório" não quer dizer nada — e o que está lá
+    # nem versionado é (`cache/**/*.json` é gitignorado: são os arquivos-dia
+    # que as rotinas produzem). Ver o uso abaixo.
+    mesma_pasta = os.path.normpath(destino) == PACKAGED_DIR
     for raiz, _dirs, arquivos in os.walk(PACKAGED_DIR):
         rel = os.path.relpath(raiz, PACKAGED_DIR)
         top = rel.split(os.sep)[0]
@@ -166,6 +173,17 @@ def _seed_data_dir(app):
                         # "template missing"). Esse é reimportado da cópia do
                         # repositório, avisando; lista é sempre legível.
                         if not isinstance(payload, dict) or not data_store.sem_canal(alvo):
+                            continue
+                        if mesma_pasta:
+                            # O objeto está no banco sem o canal E o arquivo em
+                            # disco é este mesmo: o `read` cai para ele e manda
+                            # a reimportação para a thread `store-import`
+                            # (§434). Fazer isso aqui só ATRASA A SUBIDA — e na
+                            # instância de 11/09/2026 eram centenas de
+                            # `.meta.json` de `cache/`, 2 s cada, arquivo-dia
+                            # que nem vem do repositório. Quem quer tudo no
+                            # banco de uma vez roda o
+                            # `scripts/convert_json_to_duckdb.py`.
                             continue
                         app.logger.warning('[data-dir] %s estava no banco sem o canal exato '
                                            '(objeto anterior ao __raw) — reimportado da cópia '
@@ -209,9 +227,18 @@ def _seed_data_dir(app):
                 copiados += 1
             except OSError:
                 app.logger.warning('[data-dir] não consegui copiar %s', alvo)
+    gasto = time.monotonic() - comeco
     if copiados or importados:
         app.logger.info('[data-dir] %d arquivo(s) versionado(s) importado(s) para o banco, '
-                        '%d copiado(s) para %s', importados, copiados, destino)
+                        '%d copiado(s) para %s, em %.0fs', importados, copiados, destino, gasto)
+    if gasto > 30:
+        # A semeadura é SÍNCRONA: enquanto ela roda, a subida não termina e o
+        # app não atende. Quando passa de meio minuto, o log tem de dizer que
+        # é ela — senão a subida parece travada (foi o que pareceu).
+        app.logger.warning('[data-dir] a semeadura levou %.0fs (%d arquivo(s) importado(s)): '
+                           'é ela que segura a subida. Para pagar isso FORA do boot, rode '
+                           'scripts/convert_json_to_duckdb.py --meses 0 com o app parado.',
+                           gasto, importados)
 
 
 def _secret_key_file():

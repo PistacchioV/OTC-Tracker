@@ -178,6 +178,14 @@ exista no módulo (`__module__` mente sob `functools.wraps`; quem diz é o
   `data_paths.py`. Na subida `_seed_data_dir()` importa para o banco o JSON
   versionado que o banco não tem, **sem sobrescrever** (o que está no banco é
   o que a mesa editou), e copia o que não é JSON; `db/` fica de fora.
+  Ela é SÍNCRONA — enquanto roda, o app não atende —, então acima de 30 s
+  avisa que é ela que segura a subida e aponta o
+  `convert_json_to_duckdb.py`. E na DEV, onde o checkout É o `DATA_DIR`
+  (`origem` e `alvo` o mesmo arquivo), ela NÃO reimporta na subida o objeto
+  que o banco tem sem canal: o `read` cai para esse mesmo arquivo e importa
+  em background. Eram centenas de `.meta.json` de `cache/` a 2 s cada — nem
+  versionados são (`cache/**/*.json` é gitignorado) — e a subida parecia
+  travada (§447).
   **Leitura cai para a cópia empacotada** (pelo `data_path()`) quando o banco
   não tem o caminho; **escrita nunca cai**.
 - **`Config.DATABASE_DIR`** (`OTC_DATABASE_DIR`) — TODOS os bancos: usuários,
