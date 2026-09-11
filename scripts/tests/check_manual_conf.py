@@ -728,6 +728,37 @@ MON = cl.get('/manual-confirmation/monitor').data.decode('utf-8')
 check('o card do Monitor não rejeita', 'data-mc-reject' in MON, False)
 check('   e o Validate abre a tela de validação',
       '/manual-confirmation/validate?stage=' in MON, True)
+# ── O chip de documento não pode VAZAR do card ───────────────────────────────
+# O nome do arquivo é longo e o chip é `white-space: nowrap`, então o seu
+# min-content é a largura INTEIRA do texto. Todo ancestral que seja FLEX ITEM no
+# caminho até o card precisa de `min-width: 0`: flex item nasce com
+# `min-width: auto` (= min-content) e o mínimo VENCE o máximo, então sem isso o
+# contêiner se recusa a encolher, o `max-width: 100%` do chip mede contra a
+# largura já inflada e o texto sai pela direita do card por cima da coluna
+# vizinha — com ellipsis e tudo, só cortando no lugar errado. Medido em
+# 11/09/2026: 191px de transbordo por falta do min-width:0 na `.mc-docs`, que é
+# flex item da `.mc-item__acts`.
+def _corpo_regra(seletor):
+    """O corpo `{...}` da primeira regra CSS cujo seletor contém o texto."""
+    i = MON.find(seletor)
+    if i < 0:
+        return ''
+    a = MON.find('{', i)
+    return MON[a + 1:MON.find('}', a)] if a > 0 else ''
+
+
+check('a coluna do card não alarga (min-width:0)',
+      'min-width: 0' in _corpo_regra('#mc-cards > [class*="col"]'), True)
+check('   a .mc-docs também — ela é flex item da .mc-item__acts',
+      'min-width: 0' in _corpo_regra('#mc-monitor .mc-docs {'), True)
+check('   e ocupa a linha inteira, deixando o botão descer',
+      'flex: 1 1 100%' in _corpo_regra('#mc-monitor .mc-docs {'), True)
+_chip = _corpo_regra('#mc-monitor .mc-docs a,')
+check('   o chip mantém o min-width:0 e o ellipsis',
+      ('min-width: 0' in _chip, 'text-overflow: ellipsis' in _chip), (True, True))
+check('   e o card continua recortando o que passar (overflow:hidden)',
+      'overflow: hidden' in _corpo_regra('#mc-monitor .mc-card {'), True)
+
 HTML = cl.get('/manual-confirmation/track').data.decode('utf-8')
 # O que vem do servidor sai num bloco `application/json`, e não interpolado no
 # meio do JS: `var X = {{ … }}` roda, mas o editor lê o <script> como JavaScript

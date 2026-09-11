@@ -302,7 +302,18 @@
 }
 /* O botão responde ao toque: sem isso a lista parece congelada num clique. */
 #mc-monitor .mc-item__acts .btn:active { transform: scale(.97); }
-#mc-monitor .mc-docs { display: flex; flex-wrap: wrap; gap: .25rem; }
+/* `min-width: 0` AQUI, e não só no chip: a `.mc-docs` é flex item da
+   `.mc-item__acts`, então ela nasce com `min-width: auto` — o min-content do
+   conteúdo, que com os chips em `white-space: nowrap` é a largura INTEIRA do
+   nome do arquivo. Ela se recusava a encolher, o `max-width: 100%` do chip
+   media contra essa largura já inflada, e o nome comprido saía pela direita do
+   card por cima da coluna vizinha (com ellipsis e tudo — ele existia, só
+   cortava no lugar errado). O `flex: 1 1 100%` é o que mantém o desenho atual:
+   os chips ocupam a linha inteira e o botão de ação desce para a seguinte. */
+#mc-monitor .mc-docs {
+    display: flex; flex-wrap: wrap; gap: .25rem;
+    flex: 1 1 100%; min-width: 0;
+}
 /* Só o e-mail de recap é clicável (abre em nova aba); o PDF virou chip
    INFORMATIVO — a confirmação se abre pelo Validate, e dois caminhos para o
    mesmo documento convidavam a "validar" sem passar pela tela de validação.
