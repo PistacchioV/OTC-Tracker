@@ -740,9 +740,13 @@ São **45**: `currency-base`, `interbook-ndf`, `commodities-b3`,
   OTC`; o do BANCO segue sem esteira. O FWD Start do BANCO deixou de listar
   os de MGT, e o Generate do Monitor escolhe o editor pela Legal Entity.
 - Só produtos de `_MC_CONFIRMATION_SOURCES` geram documento na esteira;
-  `_mc_save_from_deal` é chamado de dentro de `_pc_save_from_deal` e não
-  retroage (`backfill_manual_confirmations.py`). Mercadoria e FXO são sempre
-  JPM (`_MC_JPM_SOURCES`); razão social do `le-spn`.
+  `_mc_save_from_deal` é chamado de dentro de `_pc_save_from_deal` e **não
+  retroage** — quem recupera o passado é o `backfill_manual_confirmations.py`,
+  e **produto novo na lista exige família nova lá** (`check_mc_backfill.py`
+  prende a paridade). Sem ela as operações NOVAS entram na esteira e as
+  ANTIGAS ficam invisíveis para sempre no Confirmations Monitor, sem erro
+  nenhum — foi o que aconteceu com o `NDF VANILLA` de MGT. Mercadoria e FXO são
+  sempre JPM (`_MC_JPM_SOURCES`); razão social do `le-spn`.
 
 - **Swap Calculator, perna IPCA: o fixing M-1/M-2 busca o número-índice
   FINAL no IBGE** (`precificador/ipca.py`, tabela 1737 variável 2266, §449):
@@ -1038,7 +1042,7 @@ São **45**: `currency-base`, `interbook-ndf`, `commodities-b3`,
 |---|---|
 | `update_pending_confirmation_dbs.py` · `..._bankers.py` | migrações de schema do Pending Confirmation |
 | `import_manual_confirmations.py` | cria os dois DuckDB da esteira e semeia do `MANUAIS.xlsx` |
-| `backfill_manual_confirmations.py` | traz para a esteira o que foi mapeado antes dela (FWD Start pelo B3 ID; `--dry-run` lembra as chaves da passada) |
+| `backfill_manual_confirmations.py` | traz para a esteira o que foi mapeado antes dela (FWD Start pelo B3 ID; `--dry-run` lembra as chaves da passada). A família de página genérica tira a PASTA do `_GENERIC_ND_PRODUCTS` e o SOURCE do `_generic_nd_mc_source`, por deal — é o que faz o Vanilla entrar só no de MGT (§453) e o que impede o rótulo de tela (`NDF/FWD Start`) de virar caminho. Source de `_MC_CONFIRMATION_SOURCES` sem família aqui = operação antiga invisível para sempre no Monitor: `check_mc_backfill.py` |
 | os scripts que leem RefData/calendário/arquivos-dia (`create_counterparty_folders`, `create_cetip_folders`, `import_pending_confirmation`, `update_pending_confirmation_*`, `backfill_manual_confirmations`, `export_new_deals_excel`, `fix_cgd_economic_group`) | leem pelo ARMAZÉM e pelo `data_path` (§440): o `apps/static/data/*.json` do checkout é a seed, não o dado |
 | `import_cgd_sharepoint.py` · `import_cgd_auxiliar.py` | lista de CGDs e as três abas do `Auxiliar.xlsx` |
 | `split_notifications_db.py --dry-run` | mostra o que a separação do sino vai copiar |
