@@ -111,9 +111,13 @@
   .dces-drop__icon { flex: 0 0 auto; width: 32px; height: 32px; border-radius: 9px; display: grid; place-items: center; background: rgba(74,132,155,.14); color: #4a849b; font-size: 1.05rem; }
   .dces-drop__title { font-size: .8rem; font-weight: 600; margin: 0; line-height: 1.2; }
   .dces-drop__hint  { font-size: .7rem; color: #6c757d; margin: .1rem 0 0; }
-  .dces-drop__spin  { display: none; }
+  /* O spinner do dropzone só existe enquanto o upload está em voo. O `!important`
+     é obrigatório: a regra genérica do ti-spin acima força `display:inline-block
+     !important` em todo `i.ti-loader-2`, e sem ele o ícone girava eternamente
+     ao lado do de upload. */
+  .dces-drop:not(.is-busy) .dces-drop__spin { display: none !important; }
   .dces-drop.is-busy { pointer-events: none; opacity: .85; }
-  .dces-drop.is-busy .dces-drop__glyph { display: none; }
+  .dces-drop.is-busy .dces-drop__glyph { display: none !important; }
   .dces-drop.is-busy .dces-drop__spin  { display: inline-block; }
   [data-bs-theme=dark] .dces-drop { border-color: rgba(255,255,255,.14); }
   [data-bs-theme=dark] .dces-drop__hint { color: #adb5bd; }
@@ -816,7 +820,7 @@ $(document).ready(function() {
                         icon: 'warning', confirmButtonText: 'OK', confirmButtonColor: '#dc3545' });
             return;
         }
-        Swal.fire({ title: 'Send ' + ids.length + ' deal(s)?', text: 'The Intrag swap file (LAWTON_OFF_SWAP_AAAAMMDD.txt) will be generated on the Intrag network folder.',
+        Swal.fire({ title: 'Send ' + ids.length + ' deal(s)?', text: 'The Intrag swap file (Intrag-DCE-Swap-AAAAMMDD.txt) will be generated on the Intrag network folder.',
             icon: 'question', showCancelButton: true, confirmButtonText: 'Yes, send', cancelButtonText: 'Cancel', confirmButtonColor: '#0d6efd', cancelButtonColor: '#6c757d'
         }).then(function(r) {
             if (!r.isConfirmed) return;

@@ -7,7 +7,7 @@
  "manual_pages": "",
  "manual_version": "",
  "description": "Instruction file of the Intrag · DCE · Swap page. The rows are born from the Athena swap spreadsheet (NewDealsAndCashflowDetails.xlsx) dropped on the page: two tables linked by Deal Name — the swap characteristics (one row per leg, Pay and Rec) and the cashflows (one row per coupon). The file has ONE line per deal, translated from the Pay + Rec pair: 48 ';'-delimited fields, no header.",
- "file_name_rule": "LAWTON_OFF_SWAP_AAAAMMDD.txt (the name of the desk script; a `file_name` registered here with AAAAMMDD wins), written by the Send button of the Intrag · DCE · Swap page into I:\\Confirmation\\Derivativos\\OTC Tracker\\Intrag\\AAAA\\mm. Mmmm\\dd — the same folder as the other Intrag pages; an existing name gets a \" (n)\" copy suffix.",
+ "file_name_rule": "Intrag-DCE-Swap-AAAAMMDD.txt (a `file_name` registered here with AAAAMMDD wins), written by the Send button of the Intrag · DCE · Swap page into I:\\Confirmation\\Derivativos\\OTC Tracker\\Intrag\\AAAA\\mm. Mmmm\\dd — the same folder as the other Intrag pages; an existing name gets a \" (n)\" copy suffix.",
  "notes": "Party leg = REC leg of the spreadsheet; Counterparty leg = PAY leg. The grid shows the spreadsheet as it came (legs and cashflows); the Intrag line is built on the server from the deal (double-click a leg row for the preview). The cycle is the same as the sister Intrag pages: edit (Pending, maker) → approve (Approved, maker ≠ checker) → Mapping Intrag ID (Boletas CSV, SWAP rows keyed by the Deal Name → Success) → Send (New/Approved → Sent). Fixed literals registered here override the generator; the calculated fields follow the desk script translate_athena_intrag_swap.py.",
  "base_key": "",
  "le_pair": "",
