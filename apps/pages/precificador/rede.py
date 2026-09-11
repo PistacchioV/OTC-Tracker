@@ -20,8 +20,12 @@ O que o Quotes não tinha e as fontes daqui pedem:
   viewstate (`SessaoNavegada`). A rota é escolhida na PRIMEIRA chamada e fica:
   trocar de saída no meio jogaria fora o cookie e o formulário voltaria ao
   começo sem dizer nada.
+* **a saída pelo próprio Windows** (`obter`, só no Windows): o proxy do JPM
+  pede autenticação (407) que o `requests` não sabe dar — a mesma que a macro
+  VBA da mesa dá sem perceber, pelo WinInet. Ver o bloco `_via_winhttp`.
 """
 import logging
+import sys
 
 from apps.pages import quotes as _q
 from apps.pages.precificador.erros import ErroDeFonte
@@ -76,24 +80,154 @@ def _cabecalho(extra):
     return cab
 
 
+# ── a saída pelo próprio Windows: o que a macro da mesa usa ─────────────────
+# Na instância o proxy `proxy.jpmchase.net:9443` responde 407 (proxy
+# authentication required) e a conexão direta expira. O `requests` com o
+# `requests-negotiate-sspi` negocia Kerberos com o SERVIDOR de destino (o
+# 401 do ADFS), não com o PROXY: o 407 fica sem resposta e a fila inteira
+# morre. A macro VBA da mesa (`MSXML2.XMLHTTP`) nunca viu isso porque o
+# WinInet manda as credenciais do usuário logado ao proxy sozinho. Aqui as
+# duas saídas do Windows entram na fila DEPOIS das do `requests`: o WinHTTP
+# (`WinHttpRequest.5.1`, com proxy explícito, auto-logon e timeouts) e, por
+# último, o WinInet da macro (`MSXML2.XMLHTTP`, Opções de Internet, sem
+# timeout — o último recurso, não o primeiro). A que responder fica
+# memorizada no `_route_ok` do Quotes como as outras, então a chamada
+# seguinte vai direto nela em vez de pagar de novo o 407 e o timeout.
+# Fora do Windows (ou sem pywin32) a lista é vazia e nada muda.
+
+_COM_WINHTTP = 'winhttp (Windows credentials)'
+_COM_WININET = 'wininet (Internet Options, like the desk macro)'
+
+
+def _tem_com():
+    if sys.platform != 'win32':
+        return False
+    try:
+        import win32com.client  # noqa: F401
+        import pythoncom  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
+def _proxy_winhttp():
+    """`host:porta` para o `SetProxy` do WinHTTP: o proxy cadastrado do Quotes,
+    senão o do sistema; vazio = a configuração do WinHTTP da máquina."""
+    alvo = _q.QUOTES_PROXY or ''
+    if not alvo:
+        try:
+            from urllib.request import getproxies
+            sistema = getproxies()
+            alvo = sistema.get('https') or sistema.get('http') or ''
+        except Exception:                           # noqa: BLE001
+            alvo = ''
+    alvo = str(alvo).strip()
+    if '://' in alvo:
+        alvo = alvo.split('://', 1)[1]
+    return alvo.rstrip('/')
+
+
+def _via_winhttp(url, cab, timeout):
+    """GET pelo WinHTTP: proxy explícito, credenciais do Windows no 407."""
+    import pythoncom
+    import win32com.client
+    pythoncom.CoInitialize()
+    try:
+        req = win32com.client.Dispatch('WinHttp.WinHttpRequest.5.1')
+        proxy = _proxy_winhttp()
+        if proxy:
+            req.SetProxy(2, proxy, '<local>')          # HTTPREQUEST_PROXYSETTING_PROXY
+        ms_conn = int(_q.QUOTES_CONNECT_TIMEOUT) * 1000
+        ms_io = int(timeout) * 1000
+        req.SetTimeouts(ms_conn, ms_conn, ms_io, ms_io)
+        req.Open('GET', url, False)
+        req.SetAutoLogonPolicy(0)                     # AutoLogonPolicy_Always (após o Open)
+        for k, v in cab.items():
+            req.SetRequestHeader(k, v)
+        req.Send()
+        return int(req.Status), _corpo_com(req), str(req.StatusText or '')
+    finally:
+        pythoncom.CoUninitialize()
+
+
+def _via_wininet(url, cab, timeout):
+    """GET pelo WinInet (`MSXML2.XMLHTTP`): exatamente a macro da mesa."""
+    import pythoncom
+    import win32com.client
+    pythoncom.CoInitialize()
+    try:
+        req = win32com.client.Dispatch('MSXML2.XMLHTTP')
+        req.open('GET', url, False)
+        for k, v in cab.items():
+            req.setRequestHeader(k, v)
+        req.send()
+        return int(req.status), _corpo_com(req), str(req.statusText or '')
+    finally:
+        pythoncom.CoUninitialize()
+
+
+def _corpo_com(req):
+    """Os bytes da resposta: `responseBody` é um SAFEARRAY de bytes que o
+    pywin32 entrega como `bytes`/`memoryview`; sem ele, o texto em UTF-8."""
+    try:
+        corpo = req.ResponseBody
+        if corpo is not None:
+            return bytes(corpo)
+    except Exception:                               # noqa: BLE001
+        pass
+    return str(req.ResponseText or '').encode('utf-8')
+
+
+def _rotas_com():
+    if not _tem_com():
+        return []
+    return [(_COM_WINHTTP, _via_winhttp), (_COM_WININET, _via_wininet)]
+
+
+def _uma_com(fn, nome, url, cab, timeout):
+    try:
+        status, corpo, texto = fn(url, cab, timeout)
+    except Exception as exc:                        # noqa: BLE001
+        raise _q._RouteError(_q._short_error(exc))
+    if status in (407, 502, 504):
+        raise _q._RouteError('the proxy answered HTTP {}'.format(status))
+    if status >= 400:
+        raise ErroRede('HTTP {codigo} from {url}', status=status, codigo=status, url=url)
+    return corpo
+
+
+def _tentativas():
+    """As saídas na ordem: as do `requests` (o Quotes), depois as do Windows;
+    a memorizada vai na frente, seja qual for."""
+    fila = [(nome, ('requests', proxies)) for nome, proxies in _q._routes()]
+    fila += [(nome, ('com', fn)) for nome, fn in _rotas_com()]
+    nome_ok = _q._route_ok.get('name')
+    if nome_ok:
+        fila.sort(key=lambda r: 0 if r[0] == nome_ok else 1)
+    return fila
+
+
 def obter(url, cabecalho=None, timeout=TIMEOUT):
     """GET que devolve bytes, tentando as saídas em ordem."""
     cab = _cabecalho(cabecalho)
     tentativas = []
-    for nome, proxies in _q._routes():
-        s = _sessao(proxies)
+    for nome, (tipo, alvo) in _tentativas():
         try:
-            try:
-                conteudo = _uma(s, 'GET', url, cab, None, timeout)
-            except _q._RouteError as exc:
-                tentativas.append('{}: {}'.format(nome, exc))
-                log.warning('[tools] %s por %s falhou: %s', url, nome, exc)
-                continue
-        finally:
-            try:
-                s.close()
-            except Exception:                       # noqa: BLE001
-                pass
+            if tipo == 'com':
+                conteudo = _uma_com(alvo, nome, url, cab, timeout)
+            else:
+                s = _sessao(alvo)
+                try:
+                    conteudo = _uma(s, 'GET', url, cab, None, timeout)
+                finally:
+                    try:
+                        s.close()
+                    except Exception:               # noqa: BLE001
+                        pass
+        except _q._RouteError as exc:
+            tentativas.append('{}: {}'.format(nome, exc))
+            log.warning('[tools] %s por %s falhou: %s', url, nome, exc)
+            continue
         if _q._route_ok.get('name') != nome:
             log.info('[tools] saída em uso: %s', nome)
             _q._route_ok['name'] = nome

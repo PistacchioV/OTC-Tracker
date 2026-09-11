@@ -973,6 +973,10 @@ São **45**: `currency-base`, `interbook-ndf`, `commodities-b3`,
   `check_athena_sso.py`.
 - **BCB/Yahoo (Quotes)**: mesma sessão, proxy volta como FILA (`QUOTES_PROXY`
   → proxy do sistema COPIADO → `10443` → direto), primeira que responde fica.
+  **O proxy do JPM responde 407 e o `requests` não sabe autenticar nele**
+  (o SSPI negocia com o servidor, não com o proxy): as Tools
+  (`precificador/rede.py`) caem para o WinHTTP com auto-logon e, por último,
+  o WinInet da macro da mesa (§450); a Quotes ainda não tem essa queda.
 - **A instância roda sem reloader**: pull que tocou `.py` ou template exige
   restart. Mapping pela tela é a exceção.
 - **`PYTHONPYCACHEPREFIX` no `.bat`** apontando para `%LOCALAPPDATA%` (nunca

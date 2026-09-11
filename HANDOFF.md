@@ -18960,3 +18960,42 @@ para pagar isso com o app parado. Uma subida que não imprime nada por minutos
 é indistinguível de uma subida travada — e foi assim que ela pareceu.
 `check_duck_read.py` §12 prende os dois lados (pastas diferentes reimporta,
 mesma pasta não, e o `read` continua respondendo pelo arquivo em disco).
+
+## §450 — Tools: o proxy do JPM pede autenticação que o `requests` não dá; a macro passava pelo WinInet (2026-09-11)
+
+**O sintoma.** Swap Calculator na instância: `could not fetch BCB series
+4389: could not reach https://api.bcb.gov.br/... (proxy
+http://proxy.jpmchase.net:9443: could not reach the proxy (proxy
+authentication required); direct connection: timed out)`. O IPCA do §449
+sai pela mesma porta e cai igual. A macro VBA da mesa
+(`MSXML2.XMLHTTP` → `servicodados.ibge.gov.br`) sempre funcionou na mesma
+máquina.
+
+**A causa.** A fila de saída das Tools é a do Quotes (`_q._routes`): sessão
+`requests` com o proxy explícito, proxy do sistema, direta. O proxy do JPM
+responde **407** e espera Negotiate/NTLM com as credenciais do usuário. O
+`requests-negotiate-sspi` que a sessão da Athena carrega negocia com o
+**servidor** de destino (o 401 do ADFS), não com o **proxy**: o 407 fica sem
+resposta e a rota é dada como morta; a direta expira porque a rede só sai
+pelo proxy. A macro nunca viu nada disso porque o WinInet responde ao 407
+sozinho, com o usuário logado.
+
+**O remédio.** `rede.obter` ganhou as duas saídas do Windows DEPOIS das do
+`requests` (`_rotas_com`, só no Windows com pywin32): o **WinHTTP**
+(`WinHttp.WinHttpRequest.5.1` — `SetProxy(2, 'proxy.jpmchase.net:9443')`
+a partir do `QUOTES_PROXY`, `SetAutoLogonPolicy(0)` depois do `Open`,
+`SetTimeouts` com a conexão curta do Quotes e a leitura pedida) e, por
+último, o **WinInet** da macro (`MSXML2.XMLHTTP`, Opções de Internet, sem
+timeout — por isso é o último recurso). A que responder fica memorizada no
+`_route_ok` do Quotes como as outras: a chamada seguinte vai direto nela em
+vez de pagar de novo o 407 e o timeout da direta. `407/502/504` pelo COM é
+rota ruim (tenta a próxima); `>= 400` é da fonte (para). `CoInitialize` por
+chamada porque as threads do waitress não têm apartamento COM.
+
+**O que NÃO mudou.** `SessaoNavegada` (o formulário do Banco da Finlândia,
+com cookie e POST) segue só no `requests`; e o `quotes.py` (`_fetch`, a
+página Quotes) tem a mesma fila e a mesma falha — não foi tocado nesta
+sessão. Se a Quotes mostrar o mesmo 407, o caminho é o mesmo.
+
+`check_tools_rede.py` prende com um COM simulado.
+
