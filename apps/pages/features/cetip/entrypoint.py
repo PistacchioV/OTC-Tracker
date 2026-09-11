@@ -115,6 +115,16 @@ def api_cp_cetip_settlement():
     # expected-but-absent files (expected name derived from the reference date).
     ref_yymmdd = ref.strftime('%y%m%d')
     missing = []
+    # O arquivo salvo NÃO é o que as telas leem: quem alimenta o Live Position, o
+    # Settlement Forecast, a Swap Characteristics e o Other Products é o JSON que
+    # o `_b3_export_json` deriva dele. Ele é best-effort e devolve None quando
+    # falha — e o retorno era DESCARTADO, então a rotina dizia "N file(s) saved"
+    # e o e-mail dizia "required for the KPI generation have been saved
+    # successfully" com o JSON do dia inexistente. As telas então caíam no dia
+    # anterior (o walk-back de cada uma) e ficavam certas e desatualizadas ao
+    # mesmo tempo, que é o pior dos dois mundos: nada na tela, no e-mail ou no
+    # retorno da rotina dizia que faltava o dia.
+    json_falhou = []
     for rule in queries._cetip_rules():
         rule_matched = False
         for name in files:
@@ -136,7 +146,13 @@ def api_cp_cetip_settlement():
                 # Also emit a tidy JSON (NDF / Option / Swap / Operations), split
                 # into per-day folders (<category>/YYYY/MM/DD/).
                 if rule.get('json'):
-                    _R()._b3_export_json(dest_path, rule['json'], dest_name, dref)
+                    if _R()._b3_export_json(dest_path, rule['json'], dest_name, dref) is None:
+                        json_falhou.append({'dest': dest_name, 'type': rule['label']})
+                        _R().log.warning('[cetip] %s salvo, mas o JSON do dia NAO foi gerado '
+                                         '(categoria %s, ref %s): as telas que leem esse '
+                                         'arquivo vao continuar no dia anterior. O motivo esta '
+                                         'na linha [b3-json] logo acima.',
+                                         dest_name, rule['json'].get('category', '?'), dref)
                 # INDEXADORESSWAP_VCP → refresh the VCP indexer reference JSON.
                 if rule.get('vcp_update'):
                     persistence._cetip_update_vcp_json(dest_path)
@@ -174,6 +190,15 @@ def api_cp_cetip_settlement():
         if missing:
             ops_msg += (' <b>{}</b> expected file(s) were <b>not found</b> in the source folder '
                         'and are flagged as <i>Not found</i> in the table.'.format(len(missing)))
+        if json_falhou:
+            # Sem esta frase o e-mail afirma que os arquivos do KPI estão prontos
+            # justamente no dia em que não estão.
+            ops_msg += (' <b>Warning:</b> <b>{}</b> file(s) were saved but their per-day JSON '
+                        'could <b>not</b> be generated ({}). The screens that read them '
+                        '(Live Position, Settlement Forecast, Swap Characteristics, Other '
+                        'Products) will keep showing the previous day until this is '
+                        'reprocessed.'.format(len(json_falhou),
+                                              ', '.join(j['dest'] for j in json_falhou)))
         mail_ops = mail._send_cetip_email(
             [_R().CETIP_OTC_OPS_EMAIL], [], 'CETIP Files Saved',
             'Hello,', ops_msg,
@@ -182,6 +207,10 @@ def api_cp_cetip_settlement():
     msg = '<b>{}</b> file(s) saved.'.format(len(saved))
     if errors:
         msg += '<br><span class="text-warning">{} file(s) skipped/failed.</span>'.format(len(errors))
+    if json_falhou:
+        msg += ('<br><span class="text-warning">{} file(s) saved WITHOUT their per-day JSON '
+                '({}) — the screens that read them stay on the previous day.</span>'
+                .format(len(json_falhou), ', '.join(j['dest'] for j in json_falhou)))
     if send_mail and saved:
         # _send_cetip_email returns True on success or an error string on failure.
         if mail_ops is True:
@@ -191,5 +220,6 @@ def api_cp_cetip_settlement():
                     .format(mail_ops))
 
     return jsonify({'success': True, 'message': msg, 'saved': saved, 'errors': errors,
+                    'json_failed': json_falhou,
                     'source': src_dir, 'destination': dest_dir,
                     'email_sent': {'otc_ops': mail_ops}})
