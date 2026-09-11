@@ -686,7 +686,11 @@ São **45**: `currency-base`, `interbook-ndf`, `commodities-b3`,
   importação; o TER só arredonda pelo `INV DECIMALS`.
 - **A API nunca entrega a perna Lawton/MGT**: `_nd_lawton_mirror` e
   `_nd_mgt_mirror` sintetizam no envio, pareando por termos econômicos
-  (`_nd_lawton_sig`), com `force_values` por linha para a conta do omnibus.
+  (`_nd_lawton_sig`), com `force_values` por linha para a conta do omnibus e
+  para o **CPF/CNPJ Cliente Parte** (campo 7) — na visão CLI x MGT a parte é o
+  omnibus 73760.20-5, que não identifica ninguém, e o documento sai do deal
+  ORIGINAL (o espelho zera o `TaxID`, que é do campo 9 e é intragrupo). O
+  preview do modal tem a cópia da regra (§445).
 - **Os textos da Parte A do FWD Start vivem no `routes.py`** de propósito (a
   grafia é a do documento assinado) — LE ausente deixa em branco com aviso e o
   Save recusa (`400 missing_partea`).

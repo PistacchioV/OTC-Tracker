@@ -18623,3 +18623,84 @@ cópia para provar que a fusão à mão entra, que nenhum WAL sobra e que as 200
 mil linhas que só existiam no WAL vêm junto, com o resto do DuckDB sumindo
 sozinho quando tem o tamanho do WAL que entrou e RECUSANDO a troca quando é
 menor.
+
+---
+
+## §445 — O espelho CLI x MGT saía sem o CPF/CNPJ da parte (2026-09-10)
+
+O arquivo do BANCO leva, além dos deals reais, a perna espelhada do trade
+MGT x Cliente: a mesa booka contra a MGT (04880.00-6 x 73760.20-5) e o
+cliente senta no OMNIBUS do Banco, então a mesma operação sai na visão
+`73760.20-5 x 04880.00-6` com o Papel invertido (§: `_nd_mgt_mirror`, o
+`participant_override` do `_generic_ndf_ter_line`). Essa linha ia para a B3
+com o campo 7 — `CPF/CNPJ Cliente Parte` — em branco, como manda o cadastro
+do File Interpreter para todas as outras.
+
+Só que é justamente nessa linha que o branco não serve. Nas demais a parte é
+uma conta PRÓPRIA (73760.00-9 do Banco, 04880.00-6 da MGT, 00041.00-7 do
+Lawton): a conta já identifica quem é a ponta, e o campo é opcional por isso.
+No espelho a parte é a conta COLETIVA de clientes — 73760.20-5 não diz de
+quem é a posição, e o único lugar do layout que diz é o campo 7. A B3 recebia
+a ponta anônima.
+
+A correção é do mesmo feitio do override da conta, e pela mesma razão: é uma
+decisão por LINHA, que o template não tem como expressar (o mesmo arquivo,
+com a mesma variante JPM x MGT, carrega deals reais que devem manter o campo
+vazio e a linha espelhada que precisa dele). `_generic_ndf_ter_line` ganhou
+`party_taxid`, que entra pelo `force_values` do `_fi_build_line` — vencendo o
+Fixed do cadastro — normalizado como o campo 9 já era (só dígitos, largura
+14). O valor sai do deal ORIGINAL, não do espelho: `_nd_mgt_mirror` zera o
+`TaxID` de propósito, porque a CONTRAPARTE dele é a MGT e perna intragrupo
+não leva documento no campo 9. Vale para as três páginas genéricas — Vanilla,
+FWD Start e Other Publisher —, que são as que sintetizam o espelho.
+
+O preview do modal mostra o espelho como terceira coluna e é uma segunda
+implementação da mesma regra (as três páginas têm a cópia no navegador): o
+`opts.partyTaxid` do `buildConectaFields` acompanhou, senão a conferência
+veria um campo em branco que o arquivo não tem — a mesma classe de
+divergência que o `check_boxparse` existe para impedir.
+
+`check_fi_ter.py` cobra a linha do espelho com e sem o parâmetro: em branco
+sem ele, `11222333000144` nas posições 30-43 com ele, a conta da parte
+seguindo 73760205, o CPF/CNPJ da contraparte (MGT) seguindo em branco,
+NENHUM outro byte mudando e a largura 648 preservada; e a linha normal do
+mesmo deal continua com o campo vazio.
+
+---
+
+## §446 — O que ficou pendente NA INSTÂNCIA depois do §442/§444 (2026-09-11)
+
+Anotado aqui porque é trabalho que não mora no repositório: ele acontece na
+máquina que roda a instância do time, e a sessão que o descobriu acaba.
+
+**O que rodar, no `C:\Users\e930179\ds\OTCTracker-StreamFlow-prod`:**
+
+```
+git pull
+python scripts\recover_duckdb_wal.py --insistir 60
+```
+
+O `--insistir 60` existe porque a trava do vizinho VAI E VOLTA: banco preso
+por processo vivo é PULADO com `EM USO` (o script não toca em nada), e a
+retentativa pega a janela em que a outra instância soltou. Ficaram em limbo,
+na última passada: DPOSICAO-SWAP, Option, DFLUXO e DOPERACOES.
+
+**Os dois enganos que essa recuperação prega, e a resposta dos dois:**
+
+- **O `.lock` que sobra ao lado do banco não tranca nada.** A trava é
+  `LockFileEx` do portalocker, que o Windows solta quando o processo morre —
+  o arquivo é só o objeto em que ela é tomada. Apagar não ajuda e não atrapalha.
+- **Ninguém está usando e continua travado.** É a `store-import` (§434): uma
+  importação preguiçosa que entrou em `duckdb.connect` de um banco em limbo
+  fica lá dentro refazendo o replay dos dois WALs pelo share — dezenas de
+  minutos — segurando a trava EXCLUSIVA. É um ciclo que se alimenta: cada
+  leitura nova acha o banco ocupado, e o limbo é o que faz a abertura demorar.
+  Ele se rompe quando o banco sai do limbo. Por isso o caminho mais rápido é
+  pedir ao time que feche a janela do `.bat` por dez minutos: com a instância
+  parada, a fila inteira roda em ~2 min por banco.
+
+**E só DEPOIS de o app subir e a tela responder** — B3 Files e Live Position
+abrindo, mais UMA escrita de verdade (um Add no Index B3, que é o teste do
+§443: banco sem PRIMARY KEY grava em silêncio até o fim do request) — apague
+`db\_recuperado\20260910-191839\`. É a cópia do que foi substituído; enquanto
+a verificação não acontece, ela é o único caminho de volta.

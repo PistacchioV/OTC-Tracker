@@ -2198,7 +2198,8 @@ def _ndf_publisher_fonte_info(publisher):
     fi = str(_ndf_publisher_row(publisher).get('FONTE INFO', '') or '').strip() or '1'
     return fi.rjust(4)
 
-def _generic_ndf_ter_line(deal, is_fwd, page_url=None, participant_override=None):
+def _generic_ndf_ter_line(deal, is_fwd, page_url=None, participant_override=None,
+                          party_taxid=None):
     """Linha tipo 1 (Dados Fixos) do TER de um deal FWD Start / Other
     Publisher. Devolve (bucket, linha) — bucket BANCO / LAWTON / MGT — ou
     None para deal cancelado. Os valores continuam calculados aqui, na
@@ -2209,7 +2210,14 @@ def _generic_ndf_ter_line(deal, is_fwd, page_url=None, participant_override=None
     `participant_override` troca a conta do Lançamento do Participante
     (campo 5) depois da resolução normal — é o que a perna espelhada do
     MGT x Cliente usa: no arquivo do BANCO a parte é o CLIENTE no omnibus
-    (73760.20-5), uma conta que nenhuma combinação LE × Client produz."""
+    (73760.20-5), uma conta que nenhuma combinação LE × Client produz.
+
+    `party_taxid` preenche o CPF/CNPJ Cliente Parte (campo 7), que o cadastro
+    deixa em branco para todo mundo. Ele existe pela MESMA razão do override
+    da conta: quando a parte é um OMNIBUS, a conta não identifica ninguém e a
+    B3 só sabe de quem é a ponta pelo documento — é o caso da linha espelhada
+    CLI x MGT, em que o cliente senta no 73760.20-5 do Banco. Na linha normal
+    a parte é a própria LE (conta própria), e aí o campo continua vazio."""
     from apps.pages import routes
     def _s(v):
         return re.sub(r'<[^>]+>', '', str(v or '')).strip()
@@ -2421,6 +2429,12 @@ def _generic_ndf_ter_line(deal, is_fwd, page_url=None, participant_override=None
     # linha espelhada do MGT x Cliente vai no MESMO arquivo com o omnibus do
     # cliente — decisão por linha, que o template não tem como expressar.
     force = {'5': _pos(participant, 8)} if participant_override else None
+    # CPF/CNPJ Cliente Parte (campo 7): mesma normalização do campo 9 (só
+    # dígitos, na largura 14). Só a linha que pede o preenche — o cadastro
+    # continua mandando branco para todas as outras.
+    if _s(party_taxid):
+        force = dict(force or {})
+        force['7'] = _pos(re.sub(r'[.\-\/]', '', _s(party_taxid)), 14)
     return bucket, routes._fi_build_line(routes._TER_FI_KEY, 'registro-dados-fixos', values,
                                   page_url=page_url, le_pair=le_pair, deal=deal,
                                   force_values=force)

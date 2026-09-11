@@ -604,6 +604,36 @@ def main():
     canc['Status'] = 'Canceled'
     check('generic: deal Canceled devolve None', R._generic_ndf_ter_line(canc, True) is None)
 
+    # ── Espelho CLI x MGT: a parte é o omnibus do Banco, e aí a linha leva o
+    #    CPF/CNPJ do cliente (campo 7, posições 30-43). Sem isso a B3 recebe
+    #    uma ponta identificada só pela conta coletiva.
+    mgt_deal = dict(GENERIC_DEALS['fwdstart LE MGT'])
+    mirror = R._nd_mgt_mirror(mgt_deal)
+    random.seed(7)
+    sem = R._generic_ndf_ter_line(
+        mirror, True, participant_override=R._TER_MGT_MIRROR_PARTICIPANT)[1]
+    random.seed(7)
+    com = R._generic_ndf_ter_line(
+        mirror, True, participant_override=R._TER_MGT_MIRROR_PARTICIPANT,
+        party_taxid=mgt_deal['TaxID'])[1]
+    check('espelho: o cadastro sozinho deixa o CPF/CNPJ Parte em branco',
+          sem[29:43] == ' ' * 14, repr(sem[29:43]))
+    check('espelho: party_taxid põe o CNPJ do cliente só com dígitos',
+          com[29:43] == '11222333000144', repr(com[29:43]))
+    check('espelho: a conta da parte continua o omnibus do Banco',
+          com[20:28] == '73760205', repr(com[20:28]))
+    check('espelho: o CPF/CNPJ da CONTRAPARTE (MGT) segue em branco',
+          com[51:65] == ' ' * 14, repr(com[51:65]))
+    check('espelho: nenhum outro byte da linha muda',
+          com[:29] == sem[:29] and com[43:] == sem[43:], _first_diff(sem, com))
+    check('espelho: largura 648 preservada', len(com) == 648, str(len(com)))
+
+    # a linha normal (parte = conta própria da LE) não ganha o campo
+    random.seed(7)
+    normal = R._generic_ndf_ter_line(dict(mgt_deal), True)[1]
+    check('linha normal: CPF/CNPJ Parte segue em branco',
+          normal[29:43] == ' ' * 14, repr(normal[29:43]))
+
     # headers dos três arquivos. O Participante deixou de ser um dicionário
     # fixo e sai do cadastro `b3-accounts` pela LE da visão — o golden aqui é
     # justamente o que prova que a linha não mudou um byte.

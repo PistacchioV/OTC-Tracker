@@ -2330,9 +2330,14 @@ def api_generic_nd_send_conecta(product):
                     or 'LAWTON' in client_up or 'MGT' in client_up):
                 continue
             mirror = _R()._nd_mgt_mirror(deal)
+            # O CPF/CNPJ da PARTE sai do deal ORIGINAL (o espelho zera o
+            # TaxID porque a contraparte dele é a MGT, intragrupo): na visão
+            # CLI x MGT a parte é o cliente no omnibus do Banco, e a conta
+            # omnibus sozinha não diz para a B3 de quem é a ponta.
             made = _R()._generic_ndf_ter_line(
                 mirror, is_fwd, page_url=page_url,
-                participant_override=_R()._TER_MGT_MIRROR_PARTICIPANT)
+                participant_override=_R()._TER_MGT_MIRROR_PARTICIPANT,
+                party_taxid=deal.get('TaxID'))
             if made is None:
                 continue
             b2, l2 = made
