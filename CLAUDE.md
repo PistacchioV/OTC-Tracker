@@ -734,12 +734,15 @@ São **45**: `currency-base`, `interbook-ndf`, `commodities-b3`,
   retroage (`backfill_manual_confirmations.py`). Mercadoria e FXO são sempre
   JPM (`_MC_JPM_SOURCES`); razão social do `le-spn`.
 
-- **Swap Calculator, perna IPCA: o fixing M-1/M-2 busca os DOIS
-  números-índice no IBGE** (`precificador/ipca.py`, tabela 1737 variável
-  2266, §449): o inicial é M-n contado do INÍCIO do fluxo, o final M-n do
-  FIM; com fixing escolhido os digitados são ignorados. Mês não publicado
-  NÃO vem na série e é erro com o mês, nunca o anterior. No pré-preenchimento,
-  evento do DFLUXO sem Taxa Amortização é **0%**, não lacuna.
+- **Swap Calculator, perna IPCA: o fixing M-1/M-2 busca o número-índice
+  FINAL no IBGE** (`precificador/ipca.py`, tabela 1737 variável 2266, §449):
+  M-n contado da liquidação do fluxo. O INICIAL é do contrato (a cotação
+  inicial da posição, ou o digitado) e só cai para o IBGE em branco — M-2 do
+  início dava o mês errado. **Só o cupom é juros**: a correção fica no
+  principal (`fator_correcao`, como o `fator_cambial`), é o que a planilha
+  da mesa faz. Mês não publicado NÃO vem na série e é erro com o mês, nunca
+  o anterior. No pré-preenchimento, evento do DFLUXO sem Taxa Amortização é
+  **0%**, não lacuna.
 - **Intrag DCE Swap: a unidade é o DEAL e a linha é traduzida no servidor**
   (§448). A planilha do dropzone traz duas tabelas (pernas e fluxos)
   ligadas pelo Deal Name; o arquivo `Intrag-DCE-Swap-AAAAMMDD.txt` é UMA

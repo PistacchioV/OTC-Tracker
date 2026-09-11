@@ -181,9 +181,10 @@ def tools_swap_calculator():
             # estava digitado) e a nota diz de que meses são.
             r = ctx['resultado']['r']
             for lado, p in (('ativa', r.ativa), ('passiva', r.passiva)):
-                if p.mes_ni_inicial:
-                    ctx['form'][lado + '_ni_inicial'] = '{:.6f}'.format(p.ni_inicial)
+                if p.mes_ni_final:
                     ctx['form'][lado + '_ni_final'] = '{:.6f}'.format(p.ni_final)
+                    if p.mes_ni_inicial:
+                        ctx['form'][lado + '_ni_inicial'] = '{:.6f}'.format(p.ni_inicial)
                     ctx['ipca_meses'][lado] = (p.mes_ni_inicial, p.mes_ni_final)
     return render_template('pages/tools-swap-calculator.html', segment='tools-swap-calculator', **ctx)
 

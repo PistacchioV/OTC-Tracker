@@ -18936,6 +18936,31 @@ segue o caminho de sempre (debugger na dev, 500 na instância). O
 `check_tools_ipca.py` prende tudo (rede stubada, resultado conferido no
 número); `check_tools.py` e `check_soc_layers.py` seguem verdes.
 
+**A conferência com a planilha da mesa (mesmo dia, VIBRA 26F03049396,
+fluxo 15/06 → 11/09/2026, VBR 1.044.042.991,00).** A perna CDI bateu
+(26.674.145,33) e a IPCA saiu bem fora, por DOIS motivos:
+
+1. **O número inicial é do CONTRATO, não do IBGE.** A planilha usa Ativo
+   Início 7.640,15 — o índice de MAIO, que a posição da B3 traz como
+   cotação inicial (o pré-preenchimento já o punha no campo). O fixing M-2
+   contado do início (15/06) dava ABRIL (7.596,09): 0,58% de correção que
+   o contrato não tem. O fixing diz o mês do número FINAL (M-n contado da
+   liquidação do fluxo: 11/09 com M-2 → julho, 7.657,73, que bateu); o
+   inicial digitado/pré-preenchido vale, e só cai para o IBGE em branco.
+2. **No fluxo intermediário só o CUPOM liquida.** A planilha faz
+   `Juros = VBR × correção × (cupom − 1)` = 13.848.372,29 e mostra `Fator`
+   = 1,013233727 (só o cupom). Eu somava a correção aos juros
+   (`VBR × (correção × cupom − 1)`), 2,4 milhões a mais. A correção
+   monetária é do PRINCIPAL, que segue corrigido para o fluxo seguinte —
+   o mesmo desenho do `fator_cambial`: `PontaLiquidada.fator_correcao`
+   separado, `juros = N × fx × correção × (cupom − 1)`,
+   `efeito_correcao` ao lado do `efeito_cambial`, e a identidade
+   `juros + efeito_cambial + efeito_correcao == valor − nocional`. No
+   valor futuro (vencimento) o principal corrigido entra inteiro.
+
+`check_tools_ipca.py` §3 reproduz a planilha: 63 DU, 13.848.372,29 (±1),
+cupom 1,013233727.
+
 
 **A subida "travada" (mesmo dia, 11:02).** Depois de tudo isso o app da dev
 levava MINUTOS para atender, parado depois do banner. Não era banco quebrado:
