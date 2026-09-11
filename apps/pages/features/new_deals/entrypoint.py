@@ -1960,6 +1960,39 @@ def api_ndffwdstart_confirmations():
         })
     return jsonify({'success': True, 'date': ref.strftime('%Y-%m-%d'), 'groups': out})
 
+@blueprint.route('/api/new-deals/ndf-mgt/confirmations')
+def api_ndfmgt_confirmations():
+    """Grupos de confirmação da JPMORGAN CHASE (MGT) contra cliente — Vanilla
+    e FWD Start — da reference date (§453)."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    ds = (request.args.get('date') or '').strip()
+    try:
+        ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
+    except ValueError:
+        ref = datetime.now()
+    groups, _statuses, _total = _R()._conf_mgt_groups(ref)
+    state = _R()._conf_state_load(ref, 'ndf-mgt')
+    out = []
+    for g in groups:
+        available = g['family'] in _R()._CONF_MGT_FAMILY_TEMPLATES
+        entry = state.get(_R()._conf_key(g['acronym'], g['mercadoria'], g['family'])) or {}
+        status = entry.get('status') or 'New'
+        qs = ('date=' + ref.strftime('%Y-%m-%d')
+              + '&acronym=' + _R().quote(g['acronym'])
+              + '&mercadoria=' + _R().quote(g['mercadoria']))
+        url = _R()._CONF_MGT_FAMILY_TEMPLATES[g['family']][1] + '?' + qs if available else None
+        validate_url = ('/confirmation/ndf-mgt/validate?' + qs + '&family=' + _R().quote(g['family'])) \
+            if status in ('Generated', 'Success') else None
+        out.append({
+            'acronym': g['acronym'], 'client': g['client'],
+            'mercadoria': g['mercadoria'], 'family': g['family'],
+            'count': g['count'], 'eligible': g['eligible'],
+            'available': available, 'url': url,
+            'status': status, 'validate_url': validate_url,
+        })
+    return jsonify({'success': True, 'date': ref.strftime('%Y-%m-%d'), 'groups': out})
+
 @blueprint.route('/api/new-deals/<product>/cache', methods=['POST'])
 def api_generic_nd_save_cache(product):
     if not session.get('authenticated'):

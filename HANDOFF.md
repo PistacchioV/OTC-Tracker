@@ -19168,3 +19168,92 @@ célula, Export com Advanced); campo editado sai em azul e negrito.
 `check_tools_ipca`, `check_fi_accrual`, `check_vcp_join` e
 `check_soc_layers` seguem verdes depois dos dois movimentos.
 
+**A segunda rodada, com a tela na frente da mesa** (11/09/2026):
+
+* **O arquivo não é o do Accrual.** O nome é **`VCP_CLIENT.TXT`** no swap
+  contra cliente e, no **intragrupo** (BANCO x LAWTON), um por
+  participante: **`VCP_BANCO.TXT`** e **`VCP_LAWTON.TXT`**. Como o nome não
+  carrega a LOB, o envio deixou de separar por livro — um arquivo só, e a
+  única separação que resta é a de VISÃO, que é de participante diferente.
+  Quem diz se é intragrupo é a MESMA pergunta do `acc_swap_records`
+  (`pu_fator.is_intragroup`): a conta da contraparte tem prefixo de grupo
+  **e** visão diferente da parte. O `!=` é o que separa a Lawton do omnibus
+  do próprio Banco (73760.10-2) — conta do grupo, mesma visão, swap contra
+  CLIENTE e arquivo único. O header de cada arquivo é o do Accrual
+  (`acc_swap_header`), com o participante da visão.
+* **Só a perna VCP tem fator.** A calculada mostrava o `Fator de Juros` da
+  B3 e parecia um fator nosso, editável e enviável; agora fica sem, e as
+  duas tabelas escrevem **"-"** onde não há fator (célula vazia lia como
+  "faltou digitar").
+* **Preview no duplo clique da linha da operação** (tabela de cima), no
+  MESMO desenho do Accrual: uma LINHA por campo e uma COLUNA por registro,
+  com a visão e o nome do arquivo no cabeçalho da coluna, monospace, e o
+  padding todo em branco como pontos cinza. Os campos são fatiados pelas
+  larguras do cadastro (`X(11)`, `9(02)V9(08)`) e as linhas vêm do MESMO
+  gerador do envio — um preview que formata por conta própria é como ele
+  passa a mostrar uma coisa e a B3 a receber outra. O rótulo do campo é a
+  chave **`field`** do cadastro (`label`/`name` não existem lá, e a coluna
+  Field saía vazia).
+* **A linha de filtro da tabela de baixo é a de cima** (`sc-th-filter` +
+  `sc-col-filter`, o CSS do padrão), e a tabela de baixo ficou **só com o
+  Edit** — o Send é da linha da operação.
+
+## §453 — Confirmação de NDF da JPMORGAN CHASE (MGT) contra cliente: documento próprio e esteira (2026-09-11)
+
+**O pedido.** "As confirmações de MGT contra clientes vão precisar passar
+pela esteira de validação por enquanto, BO e SS." Mais o template que a
+mesa escreveu (`confirmations/mgt-fwd-vanilla.html`), que serve as DUAS
+pontas: Vanilla e FWD Start.
+
+**As mesas.** BO e SS já são as duas primeiras etapas da esteira: `OTC`
+(papel `BO`) e `MO` (papel `MO`, que é o **Sales Support** — é assim que o
+e-mail de cobrança e o Control Panel já o chamam). Então não houve etapa
+nova nem papel novo: o produto entra na esteira e o cadastro
+`manual-conf-validation` decide quem valida. O seed de `NDF VANILLA` já é
+OTC `REQUESTED` + MO `REQUESTED` + FO `EXEMPT`, que é exatamente BO e SS.
+
+**O que passou a alimentar a esteira.** Até aqui só o FWD Start das três
+páginas genéricas de NDF gerava confirmação (`_GENERIC_ND_MC_SOURCE`).
+Agora `_generic_nd_mc_source(product, deal)` decide por DEAL: FWD Start
+sempre; Vanilla **só quando a LE é MGT**. O Vanilla do BANCO segue como
+sempre — alimenta o Pending Confirmation pela regra de prazo/assinatura e
+para por aí. E o `_generic_nd_pending_status` ganhou o mesmo recorte: o
+Vanilla de MGT nasce `Pending OTC` (a etapa de quem entra na esteira), não
+na regra de prazo — com o prazo na frente, um Vanilla de 30 dias nasceria
+`Exception FepWeb` (resolvido) no Pending Confirmation enquanto a esteira o
+mantinha na fila do OTC. `NDF VANILLA` entrou em
+`_MC_CONFIRMATION_SOURCES`: são CINCO produtos agora.
+
+**A família de geração.** `_conf_mgt_*` em `platform/confirmations.py`, com
+o template novo `confirmations/ndf-mgt-strike-me.html` — o documento da
+mesa com o painel de edição e o laço do Anexo I do FWD Start enxertados
+(`out_*` nas lacunas, `data-k` nas células). UMA família para os dois
+produtos, porque o texto é o mesmo; o eixo `family` da segregação é o
+PRODUTO (`vanilla` / `fwd-start`), e não o template, por duas razões: as
+três colunas do forward start (Taxa Forward, Data de Verificação da Taxa
+Forward, Pontos de Termo) e a **pasta** do Electronic Inventory, que é o
+TIPO da confirmação (`NDF VANILLA` × `NDF FWD START`). No Vanilla a Taxa
+Forward é o `Rate` contratado (cláusula 4.2.l.1) e as outras duas saem
+"Não Aplicável" — declaradas, não em branco.
+
+**A Parte A é FIXA** na filial brasileira da JPMORGAN CHASE (46.518.205/
+0001-64): só operações de MGT entram nesta família, então não há LE mista
+a resolver no painel como no documento do BANCO.
+
+**O FWD Start do BANCO deixou de listar os de MGT** (`_conf_load_ndffwdstart`
+filtra). Sem isso a mesma operação apareceria em dois cards e geraria dois
+papéis. E o Monitor ganhou o card **NDF MGT x Client**, com a API
+`/api/new-deals/ndf-mgt/confirmations`.
+
+**O Generate do Monitor escolhe o editor pela ENTIDADE da linha**
+(`_mc_row_is_mgt`, pela coluna Legal Entity — a razão social do `le-spn`,
+com o `_ndf_legal_class` como último recurso): Vanilla ou FWD Start de MGT
+abrem `/confirmation/ndf-mgt/<family>`; o FWD Start do BANCO segue no
+editor de sempre. As chaves da esteira acompanham: no Vanilla é o `Deal` e
+no FWD Start é o `B3 ID`, e a família MGT junta os dois — por isso o
+`_mc_conf_trade_keys` passou a perguntar a cada deal de que página ele
+veio (`_conf_src`).
+
+`check_mgt_conf.py` prende a família, o eixo, as colunas do Anexo I, a
+Parte A fixa, o Generate por entidade e o save na pasta do tipo.
+

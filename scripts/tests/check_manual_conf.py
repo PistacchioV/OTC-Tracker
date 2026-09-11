@@ -21,10 +21,11 @@ O que este teste prende:
   5. **o carimbo leva hora E SPN**, e o SPN vem da sessão — aceitar o SPN do
      corpo do POST deixaria qualquer sessão assinar por outra pessoa.
 
-  6. **só os quatro produtos que geram confirmação** entram na esteira. Vanilla
-     e Other Publisher alimentam o Pending Confirmation e param por aí; o
-     recorte é pelo `source`, porque as três páginas de NDF gravam o mesmo
-     Product Type.
+  6. **só os produtos que geram confirmação** entram na esteira. Vanilla e
+     Other Publisher alimentam o Pending Confirmation e param por aí — exceto
+     o Vanilla de MGT contra cliente (§453), que gera o documento MGT e entra
+     na esteira; o recorte é pelo `source`, porque as três páginas de NDF
+     gravam o mesmo Product Type.
 
 Não encosta em dado real: os bancos são recriados num diretório temporário e o
 cadastro vai para outro.
@@ -480,16 +481,28 @@ check('a chave é o Trade ID', M.KEY_COLUMN, 'Trade ID')
 
 print('\n== 9. só os produtos que geram confirmação entram ==')
 from apps.pages import routes as R                                # noqa: E402
-check('os quatro produtos', sorted(R._MC_CONFIRMATION_SOURCES),
-      ['NDF COMM', 'NDF FWD START', 'OPTION', 'OPTION COMM'])
+# 'NDF VANILLA' entrou em 11/09/2026 (§453) SÓ para a JPMORGAN CHASE (MGT)
+# contra cliente — é o `_generic_nd_mc_source` que manda esse source, e só
+# quando a LE do deal é MGT.
+check('os cinco produtos', sorted(R._MC_CONFIRMATION_SOURCES),
+      ['NDF COMM', 'NDF FWD START', 'NDF VANILLA', 'OPTION', 'OPTION COMM'])
 # As três páginas genéricas de NDF gravam o MESMO Product Type: o recorte tem de
 # ser pelo `source`, senão Vanilla e Other Publisher entrariam junto.
 check('as três páginas de NDF gravam o mesmo Product Type',
       sorted(set(R._GENERIC_ND_PC_TYPE.values())), ['NDF'])
 check('e só o FWD Start tem source de confirmação',
       R._GENERIC_ND_MC_SOURCE, {'fwd-start': 'NDF FWD START'})
-check('   que é um dos quatro',
+check('   que é um dos cinco',
       R._GENERIC_ND_MC_SOURCE['fwd-start'] in R._MC_CONFIRMATION_SOURCES, True)
+# O Vanilla só ganha source quando é MGT contra cliente (§453); o do BANCO
+# continua sem documento e sem esteira.
+check('Vanilla MGT tem source de confirmação',
+      R._generic_nd_mc_source('vanilla', {'LE': 'MGT'}), 'NDF VANILLA')
+check('Vanilla do BANCO não', R._generic_nd_mc_source('vanilla', {'LE': 'JPM'}), None)
+check('Other Publisher nunca', R._generic_nd_mc_source('other-publishers', {'LE': 'MGT'}), None)
+check('e o Vanilla MGT nasce em Pending OTC (a esteira), não na regra de prazo',
+      R._generic_nd_pending_status('vanilla', {'LE': 'MGT', 'SPN': '', 'TradeDate': '01/09/2026',
+                                               'SettlementDate': '15/09/2026'}), 'Pending OTC')
 # O upload manual do Electronic Inventory e o `save` do app gravavam em pastas
 # DIFERENTES para o mesmo produto ('FXO' × 'FX Options'), e o Monitor procura só
 # onde o app grava — a confirmação subida à mão ficava invisível para ele.

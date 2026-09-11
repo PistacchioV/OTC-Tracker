@@ -732,6 +732,13 @@ São **45**: `currency-base`, `interbook-ndf`, `commodities-b3`,
   `NDF/OtherPublisher` SEM espaço** (`check_nd_cache_dirs.py`).
 - `otc_boxparse.py` e `otc-fileupload.js` são duas cópias da mesma regra;
   `check_boxparse.py` prova (precisa do `jsc` do macOS).
+- **NDF de MGT contra cliente tem documento PRÓPRIO e entra na esteira**
+  (§453): `ndf-mgt-strike-me.html` serve Vanilla e FWD Start, com a Parte A
+  fixa na filial brasileira da JPMORGAN CHASE e o eixo de grupo por PRODUTO
+  (a pasta do Inventory é o tipo). O Vanilla só ganha `source` de
+  confirmação quando a LE é MGT (`_generic_nd_mc_source`) e nasce `Pending
+  OTC`; o do BANCO segue sem esteira. O FWD Start do BANCO deixou de listar
+  os de MGT, e o Generate do Monitor escolhe o editor pela Legal Entity.
 - Só produtos de `_MC_CONFIRMATION_SOURCES` geram documento na esteira;
   `_mc_save_from_deal` é chamado de dentro de `_pc_save_from_deal` e não
   retroage (`backfill_manual_confirmations.py`). Mercadoria e FXO são sempre
@@ -789,8 +796,12 @@ São **45**: `currency-base`, `interbook-ndf`, `commodities-b3`,
   base pelo tipo — a regra do Swap Calculator, agora em
   `platform/swap_flows.py`); a diff é `Valor Juros` da B3 (Swap Eventos,
   lido CRU — a coleta de exibição arredonda) − juros JP na perna calculada.
-  Só a perna VCP vai no arquivo, que é o do Accrual (`platform/pu_fator.py`,
-  `ACCRUAL_<VIEW>-<LOB>.txt`). Valor que não resolve é `None`, nunca zero.
+  **Só a perna VCP tem fator** (a calculada sai "-"). O arquivo é o do
+  Accrual (`platform/pu_fator.py`) com nome PRÓPRIO: `VCP_CLIENT.TXT`
+  contra cliente e `VCP_<VISÃO>.TXT` no intragrupo — e intragrupo é visão
+  da contraparte DIFERENTE da parte (`is_intragroup`), não "conta do
+  grupo": o omnibus 73760.10-2 é do Banco e ali o swap é de cliente. Valor
+  que não resolve é `None`, nunca zero.
 - **Perna interna não gera aviso** (`_ops_is_internal_cpty` pelo `le-spn` +
   `_pc_is_internal_counterparty`, nunca "começa com BANCO"): fica no Trade
   Level e no Summary, sai do Advice e do TED — o e-mail de TED do NDF faz a

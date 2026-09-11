@@ -1011,3 +1011,294 @@ def api_conf_fwdstart_validate():
     # card de Confirmations do New Deals Monitor, que é onde ele já era
     # acompanhado; o que saiu foi só a linha no sino.
     return jsonify({'success': True, 'status': 'Success'})
+
+
+# ── NDF da JPMORGAN CHASE (MGT) contra cliente: Vanilla e FWD Start no documento MGT (§453) ──
+@blueprint.route('/confirmation/ndf-mgt/<family>')
+def confirmation_mgt(family):
+    """Confirmação da JPMORGAN CHASE (MGT) contra cliente — Vanilla ou FWD
+    Start (a `family`) — pré-preenchida para um grupo contraparte × moeda base
+    da reference date, no documento próprio da MGT (§453)."""
+    if not session.get('authenticated'):
+        return redirect(url_for('pages_blueprint.sign_in_page'))
+    if family not in _R()._CONF_MGT_FAMILY_TEMPLATES:
+        return ('Família {} desconhecida (vanilla / fwd-start).'.format(family), 404)
+    ds = (request.args.get('date') or '').strip()
+    acr = (request.args.get('acronym') or '').strip()
+    merc = (request.args.get('mercadoria') or '').strip().upper()
+    try:
+        ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
+    except ValueError:
+        ref = datetime.now()
+
+    picked = _R()._conf_pick_mgt(ref, acr, merc, family)
+    if not picked:
+        return ('Nenhuma operação elegível para essa confirmação '
+                '(contraparte {} × {} em {}).'.format(acr, merc, ref.strftime('%d/%m/%Y')), 404)
+
+    first = picked[0][0]
+    warnings = []
+    rows = _R()._conf_mgt_rows(picked, warnings)
+
+    cgd_txt = _R()._conf_cgd_lookup(first)
+    if not cgd_txt:
+        warnings.append('CGD não cadastrado no Reference Data — preencha no painel.')
+
+    # A Parte A é FIXA: o documento é o da JPMORGAN CHASE (MGT), e só operações
+    # de MGT entram nesta família (`_conf_load_ndfmgt`).
+    partea_nome, partea_cnpj = _R()._CONF_MGT_PARTEA
+
+    trade_date = first.get('TradeDate') or ref
+    conf = {
+        'ref_date':     ref.strftime('%Y-%m-%d'),
+        # Nº do cabeçalho: o B3 ID quando o grupo tem UMA operação — com várias
+        # não há um número que represente o documento, e chutar o da primeira
+        # daria à confirmação o número de uma das operações que ela contém.
+        'num_conf':     rows[0]['num'] if len(rows) == 1 else '',
+        'cgd_date':     cgd_txt,
+        'partea_nome':  partea_nome,
+        'partea_cnpj':  partea_cnpj,
+        'parteb_nome':  str(first.get('Client') or '').strip(),
+        'parteb_cnpj':  _R()._conf_fmt_cnpj(first.get('TaxID')),
+        'data_neg':     _R()._conf_fmt_date(trade_date),
+        'data_extenso': _R()._conf_date_extenso(trade_date),
+        'mercadoria':   merc,
+        'acronym':      acr,
+        'family':       family,
+        'family_label': _R()._CONF_MGT_FAMILY_LABEL.get(family, family),
+        'rows':         rows,
+        'warnings':     warnings,
+    }
+    return render_template(_R()._CONF_MGT_FAMILY_TEMPLATES[family][0], conf=conf)
+
+@blueprint.route('/api/confirmation/ndf-mgt/save', methods=['POST'])
+def api_conf_mgt_save():
+    """Salva a confirmação MGT (Word + PDF + XML) no Electronic Inventory, na
+    pasta do TIPO da família (NDF VANILLA / NDF FWD START), e grava o
+    numeroContrato na coluna FepWeb ID."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    payload = request.get_json(silent=True) or {}
+    family = (payload.get('family') or 'vanilla').strip()
+    if family not in _R()._CONF_MGT_FAMILY_TEMPLATES:
+        return jsonify({'success': False, 'message': 'Template not available for this family yet.'}), 400
+    fields = payload.get('fields') or {}
+    rows = [r for r in (payload.get('rows') or []) if isinstance(r, dict)]
+    if not rows:
+        return jsonify({'success': False, 'message': 'No operations to save.'}), 400
+    if not str(fields.get('cgd_date') or '').strip():
+        return jsonify({'success': False, 'error': 'missing_cgd',
+                        'message': 'Data do CGD não cadastrada para esta contraparte. '
+                                   'Cadastre o CGD no Reference Data (ou preencha o campo '
+                                   'Data do CGD no painel) antes de salvar a confirmação.'}), 400
+    # A Parte A em branco sairia num documento assinado sem dizer QUEM assina —
+    # a rota da página só a deixa vazia quando a LE do grupo não a define
+    # (ausente/mista), e aí o painel é onde a mesa decide.
+    if not str(fields.get('partea_nome') or '').strip():
+        return jsonify({'success': False, 'error': 'missing_partea',
+                        'message': 'Parte A em branco — a Legal Entity das operações não a '
+                                   'define. Preencha o nome (e o CNPJ) da Parte A no painel '
+                                   'antes de salvar a confirmação.'}), 400
+
+    acr = str(payload.get('acronym') or '').strip() or 'CONFIRMATION'
+    merc = str(payload.get('mercadoria') or '').strip()
+    conf = {
+        'ref_date':     str(payload.get('date') or '').strip(),
+        'num_conf':     str(fields.get('num_conf') or '').strip(),
+        'cgd_date':     str(fields.get('cgd_date') or '').strip(),
+        'partea_nome':  str(fields.get('partea_nome') or '').strip(),
+        'partea_cnpj':  str(fields.get('partea_cnpj') or '').strip(),
+        'parteb_nome':  str(fields.get('parteb_nome') or '').strip(),
+        'parteb_cnpj':  str(fields.get('parteb_cnpj') or '').strip(),
+        'data_neg':     str(fields.get('data_neg') or '').strip(),
+        'data_extenso': str(fields.get('data_extenso') or '').strip(),
+        'acronym':      acr,
+        'mercadoria':   merc,
+        'family':       family,
+        'family_label': _R()._CONF_MGT_FAMILY_LABEL.get(family, family),
+        'rows':         rows,
+        'warnings':     [],
+    }
+
+    # O documento sai PRIMEIRO e o PDF sai DELE — mesma regra do FXO (§139): uma
+    # segunda transcrição do texto do Word é a forma conhecida de os dois
+    # arquivos divergirem sem ninguém notar.
+    doc_html = render_template(_R()._CONF_MGT_FAMILY_TEMPLATES[family][0],
+                               conf=conf, doc_only=True)
+    try:
+        from apps.pages.confirmation_pdfs import word_html_pdf
+        pdf_bytes = word_html_pdf(doc_html)
+    except ImportError:
+        return jsonify({'success': False,
+                        'message': 'reportlab is not installed — run pip install -r requirements.txt.'}), 500
+    except Exception:
+        _R().log.error('[conf] PDF build failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'message': 'PDF generation failed.'}), 500
+
+    ref = _R()._parse_date_any(payload.get('date')) or _R()._parse_date_any(conf['data_neg']) or datetime.now()
+    client_dir = _R()._ei_resolve_client_dir(conf['parteb_nome'] or acr, create=True)
+    dir_path = os.path.join(client_dir, 'Confirmations',
+                            ref.strftime('%Y'), _R()._ei_month_folder(ref.strftime('%m')),
+                            ref.strftime('%d'), _R()._mc_mod.TYPE_FOLDER[_R()._CONF_MGT_FAMILY_TYPE[family]])
+    if len(rows) == 1 and str(rows[0].get('num') or '').strip():
+        base = '{} - {} - CONFIRMAÇÃO DE OPERAÇÕES DE DERIVATIVOS nº {}'.format(
+            acr, merc, str(rows[0]['num']).strip())
+    else:
+        base = '{} - {} - CONFIRMAÇÃO DE OPERAÇÕES DE DERIVATIVOS - {}'.format(
+            acr, merc, ref.strftime('%Y%m%d'))
+    base = _R()._ei_sanitize(base)
+
+    try:
+        os.makedirs(_R()._ei_long_path(dir_path), exist_ok=True)
+        candidate, n = base, 0
+        while _store.exists(_R()._ei_long_path(os.path.join(dir_path, candidate + '.doc'))) or \
+                _store.exists(_R()._ei_long_path(os.path.join(dir_path, candidate + '.pdf'))):
+            n += 1
+            candidate = '{} ({})'.format(base, n)
+        doc_path = os.path.join(dir_path, candidate + '.doc')
+        pdf_path = os.path.join(dir_path, candidate + '.pdf')
+        with open(_R()._ei_long_path(doc_path), 'w', encoding='utf-8') as fh:
+            fh.write(doc_html)
+        with open(_R()._ei_long_path(pdf_path), 'wb') as fh:
+            fh.write(pdf_bytes)
+
+        xml_files, numero_contrato, xml_warns, fep_updated = [], '', [], 0
+        picked = _R()._conf_pick_mgt(ref, acr, merc, family)
+        if picked:
+            # A moeda do XML é a Moeda Base (a estrangeira do par), a mesma que
+            # dá nome ao grupo — não a Quantity Currency, que pode ser o BRL.
+            # `tipoOperacao` = **NDF**, e não `Termo`. O FWD Start é um NDF —
+            # o que ele tem de próprio é a data de início lá na frente, não o
+            # tipo de operação. `Termo` não pertence ao domínio que o FepWeb
+            # espera nesse campo, e o arquivo era recusado / classificado errado
+            # do outro lado. As outras três confirmações que geram XML já usam o
+            # nome do produto: NDF Commodities manda `NDF` e as duas de opção,
+            # `Option`.
+            numero_contrato, xml_str, xml_warns = _R()._conf_ndf_xml(
+                picked, merc, ref, tipo='NDF',
+                prefixo='NDF_FwdStart' if family == 'fwd-start' else 'NDF_Vanilla',
+                ccy_field='QuantityCurrency', warn_no_spot=False,
+                legs_fn=_R()._conf_fx_legs, ccy=merc)
+            xcand, xn = candidate, 0
+            while _store.exists(_R()._ei_long_path(os.path.join(dir_path, xcand + '.xml'))):
+                xn += 1
+                xcand = '{} ({})'.format(candidate, xn)
+            xml_path = os.path.join(dir_path, xcand + '.xml')
+            with open(_R()._ei_long_path(xml_path), 'w', encoding='utf-8') as fh:
+                fh.write(xml_str)
+            xml_files.append(xml_path)
+            fep_updated = _R()._conf_pc_set_fepweb([d.get('Deal') for d, _s in picked],
+                                              numero_contrato)
+        else:
+            xml_warns = ['XML não gerado: nenhuma operação com status Success no grupo.']
+    except Exception as exc:
+        _R().log.error('[conf] save failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'message': 'Could not write to the Inventory share: ' + str(exc)}), 500
+
+    ref_state = _R()._parse_date_any(payload.get('date')) or ref
+    with _R()._cache_lock:
+        state = _R()._conf_state_load(ref_state, 'ndf-mgt')
+        state[_R()._conf_key(acr, merc, family)] = {
+            'status': 'Generated', 'doc': doc_path, 'pdf': pdf_path,
+            'saved_by': session.get('user_sid', ''),
+            'saved_at': datetime.now().strftime('%d/%m/%Y %H:%M:%S'),
+            'checks': {}, 'validated_by': '', 'validated_at': '',
+        }
+        _R()._conf_state_save(ref_state, state, 'ndf-mgt')
+
+    _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                         'Confirmation Saved', _R()._CONF_MGT_FAMILY_LABEL.get(family, 'NDF Vanilla'),
+                         '{} · {} ({} op{})'.format(acr, merc, len(rows),
+                                                    '' if len(rows) == 1 else 's'))
+    validate_url = ('/confirmation/ndf-mgt/validate?date=' + ref_state.strftime('%Y-%m-%d')
+                    + '&acronym=' + _R().quote(acr) + '&mercadoria=' + _R().quote(merc)
+                    + '&family=' + _R().quote(family))
+    # A confirmação saiu: carimba a Data envio validação OTC nas linhas de
+    # Manual Confirmations e guarda o endereço do PDF no Electronic
+    # Inventory — é para onde o botão Abrir do Monitor manda. O link é do
+    # papel que foi gravado, não da tela que o reconstrói: quem valida
+    # precisa ver o que vai ao cliente, e a tela de geração pode montar
+    # outra coisa se o day-file mudou desde então.
+    _R()._mc_stamp_generated(picked, 'ndf-mgt',
+                        link=_R()._mc_ei_link(conf['parteb_nome'] or acr,
+                                         client_dir, pdf_path))
+    return jsonify({'success': True, 'files': [doc_path, pdf_path] + xml_files,
+                    'numero_contrato': numero_contrato,
+                    'fepweb_updated': fep_updated,
+                    'warnings': xml_warns,
+                    'validate_url': validate_url})
+
+@blueprint.route('/api/confirmation/ndf-mgt/pdf')
+def api_conf_mgt_pdf():
+    """Preview inline do PDF salvo da confirmação MGT."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    _ref, _key, entry, err = _R()._conf_state_entry_or_404(request.args, 'ndf-mgt')
+    if err:
+        return err
+    pdf_path = (entry or {}).get('pdf') or ''
+    if not pdf_path or not _store.isfile(pdf_path):
+        return ('PDF não encontrado no Inventory ({}).'.format(pdf_path), 404)
+    return send_file(pdf_path, mimetype='application/pdf', as_attachment=False,
+                     download_name=os.path.basename(pdf_path))
+
+@blueprint.route('/confirmation/ndf-mgt/validate')
+def confirmation_mgt_validate():
+    """Janela de validação da confirmação MGT (checklist + preview)."""
+    if not session.get('authenticated'):
+        return redirect(url_for('pages_blueprint.sign_in_page'))
+    ref, _key, entry, err = _R()._conf_state_entry_or_404(request.args, 'ndf-mgt')
+    if err:
+        return err
+    acr = (request.args.get('acronym') or '').strip()
+    merc = (request.args.get('mercadoria') or '').strip().upper()
+    fam = (request.args.get('family') or 'vanilla').strip()
+    qs = ('date=' + ref.strftime('%Y-%m-%d') + '&acronym=' + _R().quote(acr)
+          + '&mercadoria=' + _R().quote(merc) + '&family=' + _R().quote(fam))
+    return render_template('confirmations/validate.html',
+                           acronym=acr, mercadoria=merc, family=fam,
+                           ref_date=ref.strftime('%Y-%m-%d'),
+                           ref_date_disp=ref.strftime('%d/%m/%Y'),
+                           status=entry.get('status') or 'Generated',
+                           saved_by=entry.get('saved_by') or '',
+                           saved_at=entry.get('saved_at') or '',
+                           validated_by=entry.get('validated_by') or '',
+                           validated_at=entry.get('validated_at') or '',
+                           checks=entry.get('checks') or {},
+                           api_base='/api/confirmation/ndf-mgt',
+                           pdf_url='/api/confirmation/ndf-mgt/pdf?' + qs)
+
+@blueprint.route('/api/confirmation/ndf-mgt/validate', methods=['POST'])
+def api_conf_mgt_validate():
+    """Marca a confirmação MGT como Success após o checklist."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    payload = request.get_json(silent=True) or {}
+    ref, key, entry, err = _R()._conf_state_entry_or_404(payload, 'ndf-mgt')
+    if err:
+        return jsonify({'success': False, 'message': err[0]}), err[1]
+    checks = payload.get('checks') or {}
+    if not checks or not all(bool(v) for v in checks.values()):
+        return jsonify({'success': False,
+                        'message': 'Todos os itens do checklist precisam ser confirmados.'}), 400
+    with _R()._cache_lock:
+        state = _R()._conf_state_load(ref, 'ndf-mgt')
+        entry = state.get(key) or entry
+        entry['status'] = 'Success'
+        entry['checks'] = {str(k): True for k in checks}
+        entry['validated_by'] = session.get('user_sid', '')
+        entry['validated_at'] = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+        state[key] = entry
+        _R()._conf_state_save(ref, state, 'ndf-mgt')
+    # O checklist fecha o ciclo do DOCUMENTO. A etapa do OTC na esteira NÃO é
+    # carimbada aqui — ela é validada no Monitor. Ver o comentário onde o
+    # `_mc_stamp_otc_validated` existia.
+    #
+    # E ele NÃO gera aviso no sino. Gerava um 'Confirmation Validated', e o sino
+    # ficava com DOIS itens dizendo validado para a mesma confirmação: este, do
+    # documento, e o 'Validated by OTC' da esteira — que é o que a mesa precisa
+    # ver, porque diz quem assinou, quantas operações e para quem a confirmação
+    # foi. O ciclo do documento (New → Generated → Success) continua visível no
+    # card de Confirmations do New Deals Monitor, que é onde ele já era
+    # acompanhado; o que saiu foi só a linha no sino.
+    return jsonify({'success': True, 'status': 'Success'})
