@@ -91,10 +91,24 @@
 /* ── Table cards + toolbar ─────────────────────────────────── */
 #ops-page .ops-tcard .card-header { border-bottom: 1px dashed var(--ops-hairline); }
 #ops-page .ops-tcard .card-title { font-weight: 700; letter-spacing: -.2px; margin: 0; }
-.ops-toolbar { display: flex; gap: .4rem; flex-wrap: wrap; justify-content: flex-end; }
+/* align-items: center (e NAO o stretch padrao) e o que mantem TODO botao da
+   barra com a mesma altura: os filhos diretos (TEDs, Print Advice, Add row,
+   Delete) esticavam ate a altura da linha — ditada pelo <select> do "Show …
+   entries" — enquanto Export e Columns, que moram dentro de um wrapper
+   .dropdown (o do Columns e criado pelo JS), ficavam com a altura natural.
+   Botao novo dentro de dropdown entra certo por esta regra. */
+.ops-toolbar { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; justify-content: flex-end; }
+/* O wrapper do dropdown nao pode esticar nem encolher o botao que carrega. */
+.ops-toolbar > .dropdown { display: inline-flex; align-items: center; }
 .ops-toolbar .btn {
     padding: .26rem .6rem; font-size: .72rem; font-weight: 600; border-radius: 8px; line-height: 1.2;
     transition: transform 140ms var(--ops-ease-out), background-color 140ms ease, box-shadow 140ms ease, filter 140ms ease;
+    /* min-height trava a altura como em .ops-row-act: as variantes solidas do
+       tema (.btn-info, .btn-danger, …) zeram a borda e as soft mantem 1px, o
+       que sozinho ja deixava Export/Add row/Delete 2px mais baixos que
+       Print Advice/TEDs/Columns. Botao novo entra com a mesma altura. */
+    min-height: 26px;
+    display: inline-flex; align-items: center; justify-content: center;
 }
 .ops-toolbar .btn i { font-size: .95em; }
 .ops-toolbar .btn:active { transform: scale(0.97); }
@@ -402,7 +416,7 @@
                             <i class="ti ti-printer me-1"></i><span data-lang="ops-print-advice">Print Advice</span>
                         </button>
                         <button type="button" class="btn btn-sm btn-primary bg-gradient ops-add"><i class="ti ti-plus me-1"></i><span data-lang="ops-add-row">Add row</span></button>
-                        <div class="dropdown d-inline-block"><button type="button" class="btn btn-sm btn-info bg-gradient dropdown-toggle ops-export" data-bs-toggle="dropdown"><i class="ti ti-download me-1"></i><span data-lang="map-export">Export</span></button><ul class="dropdown-menu"><li><a class="dropdown-item ops-export-csv" href="#"><i class="ti ti-file-type-csv me-1"></i> CSV</a></li><li><a class="dropdown-item ops-export-copy" href="#"><i class="ti ti-copy me-1"></i> Copy</a></li></ul></div>
+                        <div class="dropdown"><button type="button" class="btn btn-sm btn-info bg-gradient dropdown-toggle ops-export" data-bs-toggle="dropdown"><i class="ti ti-download me-1"></i><span data-lang="map-export">Export</span></button><ul class="dropdown-menu"><li><a class="dropdown-item ops-export-csv" href="#"><i class="ti ti-file-type-csv me-1"></i> CSV</a></li><li><a class="dropdown-item ops-export-copy" href="#"><i class="ti ti-copy me-1"></i> Copy</a></li></ul></div>
                         <button type="button" class="btn btn-sm btn-soft-primary ops-colvis"><i class="ti ti-columns me-1"></i><span data-lang="ops-colvis">Columns</span></button>
                         <button type="button" class="btn btn-sm btn-danger bg-gradient ops-del" disabled><i class="ti ti-trash me-1"></i><span data-lang="ops-del">Delete</span></button>
                     </div>
@@ -473,7 +487,7 @@
                             <label class="form-label mb-0 fs-xs text-muted" data-lang="ops-entries">entries</label>
                         </div>
                         <button type="button" class="btn btn-sm btn-primary bg-gradient ops-add"><i class="ti ti-plus me-1"></i><span data-lang="ops-add-row">Add row</span></button>
-                        <div class="dropdown d-inline-block"><button type="button" class="btn btn-sm btn-info bg-gradient dropdown-toggle ops-export" data-bs-toggle="dropdown"><i class="ti ti-download me-1"></i><span data-lang="map-export">Export</span></button><ul class="dropdown-menu"><li><a class="dropdown-item ops-export-csv" href="#"><i class="ti ti-file-type-csv me-1"></i> CSV</a></li><li><a class="dropdown-item ops-export-copy" href="#"><i class="ti ti-copy me-1"></i> Copy</a></li></ul></div>
+                        <div class="dropdown"><button type="button" class="btn btn-sm btn-info bg-gradient dropdown-toggle ops-export" data-bs-toggle="dropdown"><i class="ti ti-download me-1"></i><span data-lang="map-export">Export</span></button><ul class="dropdown-menu"><li><a class="dropdown-item ops-export-csv" href="#"><i class="ti ti-file-type-csv me-1"></i> CSV</a></li><li><a class="dropdown-item ops-export-copy" href="#"><i class="ti ti-copy me-1"></i> Copy</a></li></ul></div>
                         <button type="button" class="btn btn-sm btn-soft-primary ops-colvis"><i class="ti ti-columns me-1"></i><span data-lang="ops-colvis">Columns</span></button>
                         <button type="button" class="btn btn-sm btn-danger bg-gradient ops-del" disabled><i class="ti ti-trash me-1"></i><span data-lang="ops-del">Delete</span></button>
                     </div>
