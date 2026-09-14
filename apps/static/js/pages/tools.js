@@ -30,6 +30,7 @@
           noIndexRule: 'No line in the tools-swap-index mapping for this curve — register it in Mapping. The position had:',
           noIndexCell: 'The position brings no index on this leg.',
           flow: 'flow', pickId: 'Type a B3 ID first.', fromBase: 'from the imported base of',
+          closeOf: 'close of',
           ipcaAuto: 'fetched from IBGE on Calculate',
           fields: { counterparty: 'Counterparty', data_operacao: 'Trade date', inicio: 'Flow start',
                     fim: 'Flow end', vencimento: 'Swap maturity', nocional: 'Remaining notional',
@@ -52,6 +53,7 @@
           noIndexRule: 'Nenhuma linha no cadastro tools-swap-index para esta curva — cadastre em Mapping. A posição trazia:',
           noIndexCell: 'A posição não traz índice nesta perna.',
           flow: 'fluxo', pickId: 'Digite um B3 ID primeiro.', fromBase: 'da base importada de',
+          closeOf: 'fechamento de',
           ipcaAuto: 'buscado no IBGE ao calcular',
           fields: { counterparty: 'Contraparte', data_operacao: 'Data da operação', inicio: 'Início do fluxo',
                     fim: 'Fim do fluxo', vencimento: 'Vencimento do swap', nocional: 'Notional remanescente',
@@ -74,6 +76,7 @@
           noIndexRule: 'Ninguna línea en el registro tools-swap-index para esta curva — regístrela en Mapping. La posición traía:',
           noIndexCell: 'La posición no trae índice en esta pata.',
           flow: 'flujo', pickId: 'Escriba un B3 ID primero.', fromBase: 'de la base importada de',
+          closeOf: 'cierre de',
           ipcaAuto: 'traído del IBGE al calcular',
           fields: { counterparty: 'Contraparte', data_operacao: 'Fecha de la operación', inicio: 'Inicio del flujo',
                     fim: 'Fin del flujo', vencimento: 'Vencimiento del swap', nocional: 'Nocional remanente',
@@ -481,7 +484,8 @@
           aplicarLado(lado);
         }
         ['taxa', 'percentual', 'convencao', 'regime', 'moeda', 'tenor', 'taxa_indice',
-         'ptax_inicial', 'ptax_final', 'ptax_offset', 'ni_inicial', 'preco_inicial', 'ativo']
+         'ptax_inicial', 'ptax_final', 'ptax_offset', 'ni_inicial', 'preco_inicial',
+         'preco_final', 'ativo']
           .forEach(function (k) { if (p[k] !== undefined && (p[k] !== '' || k === 'taxa')) setVal(lado + '_' + k, p[k]); });
         // O spread do CDI tem input PRÓPRIO (mesmo `name`, id diferente): sem
         // isto o campo visível da perna de CDI ficava com o valor anterior.
@@ -504,7 +508,7 @@
         var mo = document.getElementById(lado + '_moeda_equity');
         if (mo && p.moeda) mo.value = p.moeda;
         // os campos que a ponta não usa voltam ao vazio
-        ['ptax_inicial', 'ptax_final', 'ni_inicial', 'preco_inicial', 'ativo'].forEach(function (k) {
+        ['ptax_inicial', 'ptax_final', 'ni_inicial', 'preco_inicial', 'preco_final', 'ativo'].forEach(function (k) {
           if (!p[k]) setVal(lado + '_' + k, '');
         });
         // De que dia é a PTAX que entrou — ou por que ela não entrou. Sem isto
@@ -514,6 +518,13 @@
           nota.textContent = p.ptax_data ? ('PTAX ' + p.ptax_data.split('-').reverse().join('/'))
                                          : (p.ptax_erro || '');
           nota.className = 'tl-help' + (p.ptax_erro ? ' text-danger' : '');
+        }
+        // De que pregão é o fechamento do equity — ou por que ele não veio.
+        var pn = document.getElementById(lado + '_preco_nota');
+        if (pn) {
+          pn.textContent = p.preco_data ? (t('closeOf') + ' ' + p.preco_data.split('-').reverse().join('/'))
+                                        : (p.preco_erro || '');
+          pn.className = 'tl-help' + (p.preco_erro ? ' text-danger' : '');
         }
         var fn = document.getElementById(lado + '_fixing_nota');
         if (fn) {

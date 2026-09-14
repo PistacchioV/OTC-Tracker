@@ -143,6 +143,30 @@ norm = _sf.norm
 numero_da_posicao = _sf.numero_da_posicao
 base_da_amortizacao = _sf.base_da_amortizacao
 amortiza_no_fluxo = _sf.amortiza_no_fluxo
+# A curva de equity se identifica pelo PRÓPRIO nome: a posição traz o ativo na
+# convenção do Bloomberg — `FLRY3 BZ Equity`, ticker + país + classe. Não há
+# de-para a fazer aí (o "índice" É a ação), e exigir uma linha no
+# `tools-swap-index` por papel deixaria a ponta em branco toda vez que a mesa
+# fechasse um swap sobre uma ação nova.
+_RE_EQUITY_SUFIXO = re.compile(r'\s+(?:[A-Za-z]{2}\s+)?EQUITY\s*$', re.IGNORECASE)
+
+
+def e_curva_equity(*nomes):
+    """Algum destes nomes diz que a curva é de EQUITY?"""
+    return any('equity' in norm(n) for n in nomes if n)
+
+
+def ativo_de_equity(nome):
+    """`'FLRY3 BZ Equity'` → `'FLRY3'`; `'IBOV Index'` → `'IBOV INDEX'`.
+
+    Só o sufixo de CLASSE sai (o `Equity` e o código de país de duas letras
+    antes dele) — o que sobra é o código do papel, que é por onde o cadastro
+    `quotes-equity` acha o símbolo do Yahoo. Mantendo o sufixo, a busca de
+    cotação não casaria nada e o preço final ficaria vazio sem dizer por quê."""
+    s = re.sub(r'\s+', ' ', str(nome or '')).strip()
+    return _RE_EQUITY_SUFIXO.sub('', s).strip().upper()
+
+
 def classificar_indice(regras, nome_curva, nome_classe=''):
     """A regra do cadastro `tools-swap-index` que casa com a curva da ponta.
 
@@ -181,6 +205,14 @@ def classificar_indice(regras, nome_curva, nome_classe=''):
             return exatas[0]
         if contidas:
             return max(contidas, key=lambda r: len(norm(r.get('MATCH', ''))))
+    # Última instância, e só DEPOIS do cadastro: curva cujo nome diz EQUITY é
+    # equity. O cadastro continua vencendo — uma linha que mande `FLRY3 BZ
+    # EQUITY` para outro índice é respeitada —, mas sem linha nenhuma a ponta
+    # deixa de sair em branco. Equity liquida em reais sem conversão (`QUANTO`
+    # no motor), e é isso que a moeda declara.
+    if e_curva_equity(nome_curva, nome_classe):
+        return {'INDEX': liquidacao.EQUITY, 'MATCH': '', 'MODE': '',
+                'CURRENCY': liquidacao.SEM_CONVERSAO, 'INFERIDA': 'equity-no-nome'}
     return None
 
 
@@ -230,7 +262,7 @@ def montar_ponta(regra, pct, taxa, sinal, nome_classe, cotacao_inicial,
     campos = {'indexador': '', 'taxa': '', 'percentual': '', 'convencao': '', 'regime': '',
               'moeda': '', 'tenor': '', 'taxa_indice': '', 'ptax_inicial': '',
               'ptax_final': '', 'ptax_offset': '', 'ni_inicial': '', 'preco_inicial': '',
-              'ativo': ''}
+              'preco_final': '', 'ativo': ''}
     faltando = []
     if not regra:
         return campos, ['indexador']
@@ -300,7 +332,9 @@ def montar_ponta(regra, pct, taxa, sinal, nome_classe, cotacao_inicial,
         else:
             faltando.append('ni_inicial')
     elif idx == liquidacao.EQUITY:
-        campos['ativo'] = str(nome_classe or '').strip()
+        # O TICKER, não o rótulo do Bloomberg: é ele que o `quotes-equity`
+        # conhece, e é dele que sai o fechamento do fixing.
+        campos['ativo'] = ativo_de_equity(nome_classe)
         if cotacao_inicial is not None:
             campos['preco_inicial'] = '{:.6f}'.format(cotacao_inicial)
         else:

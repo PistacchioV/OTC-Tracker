@@ -6,7 +6,7 @@ Position, os cadastros do /mapping) chega por busca ATRASADA — ver
 `features/support/infra/persistence.py`.
 """
 import os
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from apps.pages.features.tools import domain
 from apps.pages.platform import swap_flows as _sf
@@ -409,6 +409,64 @@ def _ptax_do_fixing(moeda, fim_iso, deslocamento):
         return None, quando, str(exc)
 
 
+def _preco_do_fixing(ativo, fim_iso, deslocamento):
+    """FECHAMENTO do papel no fixing: `fim` recuado `deslocamento` dias úteis.
+
+    Devolve `(valor, data, erro)`, o mesmo contrato do `_ptax_do_fixing` e pela
+    mesma razão: preço chutado muda o ajuste inteiro e a conta continua
+    fechando consigo mesma. Sem preço, o campo fica em branco e SINALIZADO.
+
+    Três coisas que não são óbvias:
+
+    - a coluna é **Close**, não Adj Close. O contrato liquida pelo preço que o
+      pregão fechou; o ajustado reescreve a série a cada provento e faria o
+      mesmo swap dar resultados diferentes conforme o dia em que se abre a
+      tela;
+    - o deslocamento é o MESMO da `Data de Cotação` do contrato (02 = D-2), em
+      dias úteis ANBIMA — a regra que a PTAX já seguia;
+    - o dia do fixing pode não ter pregão (feriado de bolsa que o calendário
+      ANBIMA não conhece, papel sem negócio). Vale então o último fechamento
+      ANTES dele, dentro de uma janela curta — é o que a mesa faz à mão, e a
+      data volta junto para a tela dizer de que dia é o preço.
+    """
+    from apps.pages import quotes
+    from apps.pages.precificador.calendario import calendario_anbima
+    codigo = str(ativo or '').strip()
+    if not codigo:
+        return None, None, 'the position did not say which share'
+    if not fim_iso:
+        return None, None, 'no flow end to count the offset from'
+    try:
+        base = para_data(fim_iso)
+    except ErroDeDado:
+        return None, None, 'invalid flow end'
+    n = int(deslocamento or 0)
+    quando = calendario_anbima().workday(base, -n) if n else base
+    simbolo = quotes.symbol_for(_R()._mapping_rows('quotes-equity'), codigo)
+    if not simbolo:
+        return None, quando, ('no symbol registered for {} in the quotes-equity '
+                              'mapping'.format(codigo))
+    try:
+        _cols, linhas = quotes.fetch_ohlc(simbolo, quando - timedelta(days=15), quando)
+    except Exception as exc:                                # noqa: BLE001
+        _R().log.warning('[tools] cotação de %s (%s) em %s falhou: %s',
+                         codigo, simbolo, quando, exc)
+        return None, quando, str(exc)
+    # As linhas vêm da mais recente para a mais antiga: a primeira com
+    # fechamento é o último pregão até o fixing.
+    for linha in linhas or []:
+        fecho = linha[2] if len(linha) > 2 else None
+        if fecho in (None, ''):
+            continue
+        try:
+            dia = datetime.strptime(str(linha[0]), '%d/%m/%Y').date()
+        except (ValueError, TypeError):
+            continue
+        if dia <= quando:
+            return float(fecho), dia, ''
+    return None, quando, 'no {} close up to {:%d/%m/%Y}'.format(simbolo, quando)
+
+
 def swap_prefill(b3_id):
     """Tudo que o Swap Calculator consegue puxar da posição para um B3 ID.
 
@@ -607,6 +665,18 @@ def swap_prefill(b3_id):
             else:
                 campos['taxa_indice'] = '{:.8f}'.format(taxa_idx * 100.0)
                 campos['fixing_data'] = vigente.isoformat() if vigente else ''
+        # Equity: o preço FINAL é o fechamento do papel no fixing. O inicial
+        # segue sendo o do contrato (o Cupom Limpo da posição, posto pelo
+        # `montar_ponta`) — buscar os dois sobrescreveria a base contratada,
+        # que é o mesmo cuidado que o IPCA já toma com o número-índice.
+        if campos.get('indexador') == liquidacao.EQUITY:
+            valor, quando, erro = _preco_do_fixing(campos.get('ativo'), f.get('fim'), desloc)
+            if valor is None:
+                faltando.append('preco_final')
+                campos['preco_erro'] = erro
+            else:
+                campos['preco_final'] = '{:.6f}'.format(valor)
+                campos['preco_data'] = quando.isoformat()
         out[lado] = campos
         missing.extend('{}.{}'.format(lado, c) for c in faltando)
     return out

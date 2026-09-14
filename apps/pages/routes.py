@@ -11151,14 +11151,46 @@ def _commodities_b3_upgrade(rows):
 
 # Prefixo do Trade Id do OTM × perna do Latam Desk Position (cadastro
 # `equity-leg-prefix`). `Internal` é a nossa entidade (CLEARING_TRD_ID_INT),
-# `Client` é o cliente externo (CLEARING_TRD_ID_CLNT) — a LETRA final do
-# prefixo é que diz qual, e é por isso que `270RI` nasce como Internal.
+# `Client` é o cliente externo (CLEARING_TRD_ID_CLNT).
+#
+# A LETRA FINAL do prefixo NÃO decide: `270RI` é de CLIENTE, e cliente externo
+# aparece com RI. A simetria `WI`=internal / `WC`=client é coincidência dos
+# dois primeiros — foi lida como mnemônico e o `270RI` nasceu errado. Perna
+# trocada não deixa a célula em branco: ela mostra a contraparte da OUTRA
+# ponta, com valor, sem nada indicando a troca.
 _MAP_EQ_LEG_OPTIONS = ('Internal', 'Client')
 _MAP_EQ_LEG_SEED = (
     {'PREFIX': '270WI', 'LEG': 'Internal', 'NOTES': 'Perna da nossa entidade'},
     {'PREFIX': '270WC', 'LEG': 'Client', 'NOTES': 'Perna do cliente externo'},
-    {'PREFIX': '270RI', 'LEG': 'Internal', 'NOTES': 'Perna da nossa entidade'},
+    {'PREFIX': '270RI', 'LEG': 'Client', 'NOTES': 'Perna do cliente externo'},
 )
+# A linha EXATA que o seed errado gravou. O `upgrade` só corrige o que ainda
+# está idêntica a ela: mexeu na tela (outro LEG, outra nota), é decisão da
+# mesa e fica como está. Sem esse recorte, a correção viraria uma regra
+# permanente brigando com quem editar o cadastro depois.
+_MAP_EQ_LEG_SEED_RUIM = {'PREFIX': '270RI', 'LEG': 'Internal',
+                         'NOTES': 'Perna da nossa entidade'}
+
+
+def _equity_leg_prefix_upgrade(rows):
+    """Corrige na LEITURA o `270RI` que o primeiro seed gravou como Internal.
+
+    O seed só roda quando o arquivo NÃO existe (§6), então a instância que já
+    abriu a tela — ou que só carregou um Settlement Advice, porque é a leitura
+    que semeia — ficaria com a perna trocada para sempre. É o caso que o
+    `upgrade` existe para resolver.
+
+    Corrige UMA linha e só quando ela ainda é a do seed errado, letra por
+    letra. É uma correção de estreia, não uma regra."""
+    for r in rows:
+        if isinstance(r, dict) and all(
+                str(r.get(k, '') or '').strip() == v
+                for k, v in _MAP_EQ_LEG_SEED_RUIM.items()):
+            r['LEG'] = 'Client'
+            r['NOTES'] = 'Perna do cliente externo'
+            log.warning('[equity-link] cadastro equity-leg-prefix: 270RI corrigido de '
+                        'Internal para Client na leitura (o primeiro seed saiu errado)')
+    return rows
 
 
 _MAPPING_DEFS = {
@@ -11715,6 +11747,7 @@ _MAPPING_DEFS = {
             {'key': 'NOTES', 'label': 'Notes'},
         ],
         'seed': list(_MAP_EQ_LEG_SEED),
+        'upgrade': _equity_leg_prefix_upgrade,
     },
     # IR do swap, parte 1: as EXCEÇÕES por cliente, testadas antes de tudo. Vêm
     # do IF encadeado da planilha de avisos — bancos e as duas entidades JPM.

@@ -794,9 +794,16 @@ def _ops_opt_trade_rows(settle_ref):
 #  agrupar, e o aviso saía com o nome curto da B3 e os valores em branco, sem
 #  erro nenhum. Esta tupla é só a SEMENTE (e o que vale quando o cadastro não
 #  responde).
+#
+#  E a LETRA FINAL do prefixo NÃO diz a perna: `270RI` é de CLIENTE externo,
+#  não interna. A simetria `WI`=internal / `WC`=client é coincidência dos dois
+#  primeiros, e ler o prefixo como se fosse mnemônico põe o Trade Id na perna
+#  ERRADA — o que é pior do que em nenhuma: a linha exibe a contraparte da
+#  outra ponta, com valor, sem nada indicando a troca. Quem responde é o
+#  cadastro, e só ele.
 _OPS_EQ_LEG_PREFIX = (('CLEARING_TRD_ID_INT', '270WI'),
                       ('CLEARING_TRD_ID_CLNT', '270WC'),
-                      ('CLEARING_TRD_ID_INT', '270RI'))
+                      ('CLEARING_TRD_ID_CLNT', '270RI'))
 _OPS_EQ_LEG_COLUNA = {'internal': 'CLEARING_TRD_ID_INT', 'client': 'CLEARING_TRD_ID_CLNT'}
 
 
