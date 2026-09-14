@@ -382,8 +382,10 @@
                             <th data-lang="sc-status">Status</th>
                             <th>Internal ID</th><th>LOB</th><th>Código do Contrato</th><th>Contraparte</th><th>VBR</th>
                             <th>% Amortização do Fluxo</th><th>Tipo Amortização</th><th>Notional Amortizado</th>
-                            <th>Juros Parte</th><th>Diff B3</th><th>Juros Contraparte</th><th>Diff B3</th>
+                            <th>Indexador Parte</th><th>Juros Parte</th><th>Diff B3</th>
+                            <th>Indexador Contraparte</th><th>Juros Contraparte</th><th>Diff B3</th>
                             <th>Fator Parte</th><th>Fator Contraparte</th>
+                            <th>Internal Settlement</th><th>VCP Settlement</th><th>Diferença</th>
                         </tr>
                     </thead>
                     <tbody></tbody>
@@ -464,6 +466,12 @@
   function n2(v) { return (v == null || v === '') ? '' : Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
   function n4(v) { return (v == null || v === '') ? '' : Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 }); }
   function f8(v) { return (v == null || v === '') ? '' : Number(v).toFixed(8); }
+  // Ok/Check da coluna Diferença: badge, como o Status — é um veredito, não um
+  // valor, e em texto puro ele se perderia numa linha de dezoito números.
+  function vered(v) {
+    var cls = v === 'Check' ? 'text-bg-warning' : 'text-bg-success';
+    return '<span class="badge ' + cls + ' bg-gradient rounded-pill ms-1">' + esc(v) + '</span>';
+  }
   function pill(st) {
     var cls = { Sent: 'text-bg-primary', New: 'text-bg-info' }[st] || 'text-bg-secondary';
     return '<span class="badge ' + cls + ' bg-gradient rounded-pill">' + esc(st || 'New') + '</span>';
@@ -501,11 +509,23 @@
         // As duas Diff B3 saem "-" quando não há número, como as colunas de
         // Fator: célula vazia se lê como "faltou digitar", e aqui a ausência é
         // a resposta — é a perna que não tem diferença a comparar.
-        cell('juros_p', n2(f.juros_p)), cell('diff_p', n2(f.diff_p) || '-'),
-        cell('juros_c', n2(f.juros_c)), cell('diff_c', n2(f.diff_c) || '-'),
+        // Os indexadores são os MESMOS da tabela de cima (`idx_p`/`idx_c` já
+        // vêm no item): cada um ao lado do juro da SUA perna, para conferir a
+        // linha sem voltar à outra tabela — as duas pernas têm colunas de nome
+        // igual aqui (`Diff B3` duas vezes).
+        esc(f.idx_p || ''), cell('juros_p', n2(f.juros_p)), cell('diff_p', n2(f.diff_p) || '-'),
+        esc(f.idx_c || ''), cell('juros_c', n2(f.juros_c)), cell('diff_c', n2(f.diff_c) || '-'),
         // o fator só existe na perna VCP; a calculada (e a VCP sem número) sai "-"
         cell('fator_p', (f.vcp_p && f.fator_p != null) ? f8(f.fator_p) : '-'),
-        cell('fator_c', (f.vcp_c && f.fator_c != null) ? f8(f.fator_c) : '-')
+        cell('fator_c', (f.vcp_c && f.fator_c != null) ? f8(f.fator_c) : '-'),
+        // A conferência da linha. O veredito acompanha a Diferença em vez de
+        // ocupar uma coluna própria: sozinho ele não diz de quanto, e o número
+        // sozinho obriga a mesa a fazer a comparação de cabeça, linha a linha.
+        // Sem um dos dois valores não há veredito — e a célula fica "-", nunca
+        // "Ok": uma linha que não deu para conferir marcada como conferida some
+        // do que há para olhar.
+        n2(f.interno) || '-', n2(f.vcp_liq) || '-',
+        (f.diferenca == null ? '-' : n2(f.diferenca) + (f.veredito ? ' ' + vered(f.veredito) : ''))
       ];
     });
     if (dt) dt.destroy();
@@ -513,10 +533,16 @@
       data: data, scrollX: true, autoWidth: true, orderCellsTop: true, deferRender: true, pageLength: 25, order: [],
       dom: "rt<'d-md-flex justify-content-between align-items-center mt-2'ip>",
       columnDefs: [{ orderable: false, targets: [0, 1] }, { className: 'text-center', targets: '_all' },
-                   // +1 em todos: a coluna LOB entrou no índice 4 e empurrou
-                   // a tabela inteira para a direita. Alvo de columnDefs que
-                   // fica para trás alinha a coluna errada, sem erro nenhum.
-                   { className: 'vcp-num', targets: [7, 8, 10, 11, 12, 13, 14, 15, 16] }],
+                   // Os alvos são recontados a cada coluna nova: LOB entrou no
+                   // índice 4 e os dois Indexadores nos 11 e 14, empurrando a
+                   // tabela para a direita. Alvo que fica para trás alinha a
+                   // coluna errada, sem erro nenhum.
+                   //  7 VBR · 8 %Amort · 10 Notional · 12 Juros P · 13 Diff ·
+                   // 15 Juros C · 16 Diff · 17 Fator P · 18 Fator C
+                   //  7 VBR · 8 %Amort · 10 Notional · 12 Juros P · 13 Diff ·
+                   // 15 Juros C · 16 Diff · 17 Fator P · 18 Fator C ·
+                   // 19 Internal Settlement · 20 VCP Settlement · 21 Diferença
+                   { className: 'vcp-num', targets: [7, 8, 10, 12, 13, 15, 16, 17, 18, 19, 20, 21] }],
       language: { paginate: { first: '<i class="ti ti-chevrons-left"></i>', previous: '<i class="ti ti-chevron-left"></i>', next: '<i class="ti ti-chevron-right"></i>', last: '<i class="ti ti-chevrons-right"></i>' } },
       buttons: [{ extend: 'collection', text: '<i class="ti ti-download me-1"></i> Export', className: 'btn btn-sm btn-info bg-gradient dropdown-toggle', autoClose: true,
         buttons: [

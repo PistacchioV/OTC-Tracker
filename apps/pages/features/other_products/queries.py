@@ -37,10 +37,19 @@ def _R():
 # sai do elo de equity — Operations B3 → Latam Desk Position → OTM, o mesmo do
 # Settlement Advice. Um nome de coluna que cita UMA das duas fontes descreve
 # metade das linhas.
+# Os dois indexadores vêm ao lado dos juros de cada perna, e são os MESMOS da
+# tabela de cima (`PARTE / Indexador` e `CONTRAPARTE / Indexador`): sem eles,
+# conferir um Juros Parte exigia voltar à outra tabela para lembrar de que curva
+# ele é — e as duas pernas têm colunas de nome igual (`Diff B3` duas vezes), o
+# que torna a leitura de olho ainda mais fácil de errar.
 COLUNAS_FATORES = ['Internal ID', 'LOB', 'Código do Contrato', 'Contraparte', 'VBR',
                    '% Amortização do Fluxo', 'Tipo Amortização', 'Notional Amortizado',
-                   'Juros Parte', 'Diff B3', 'Juros Contraparte', 'Diff B3',
-                   'Fator Parte', 'Fator Contraparte']
+                   'Indexador Parte', 'Juros Parte', 'Diff B3',
+                   'Indexador Contraparte', 'Juros Contraparte', 'Diff B3',
+                   'Fator Parte', 'Fator Contraparte',
+                   # A conferência da linha: o que o interno diz que liquida
+                   # contra o que a B3 vai liquidar com o fator que mandamos.
+                   'Internal Settlement', 'VCP Settlement', 'Diferença']
 
 
 def _by_cetip_athena(R, ref):
@@ -55,7 +64,12 @@ def _by_cetip_athena(R, ref):
 
 
 def _curvas_otm(R, ref):
-    """{Trade Id → (Σ recebimentos, Σ pagamentos em módulo)} do OTM do dia."""
+    """{Trade Id → (Σ recebimentos, Σ pagamentos em módulo)} do OTM do dia.
+
+    O caixa LÍQUIDO do trade é `pos − neg` — o SUMIF do Internal ID sobre a
+    coluna Amount, que é de onde sai o `Internal Settlement` da tabela. Fica
+    aqui e não num segundo laço porque é o MESMO agrupamento: duas leituras do
+    mesmo arquivo acabariam discordando no dia em que uma delas mudasse."""
     _jp, otm = R._otm_load(ref)
     out = {}
     for rec in (otm or []):
@@ -321,5 +335,17 @@ def vcp_factor_rows(ref, rows=None, ci=None):
                 'checker': salvo.get('checker', ''), 'files': salvo.get('files') or [],
                 'missing': faltam, 'source_date': dref_iso or ''}
         item.update(calc)
+        # A conferência: o interno (SUMIF do OTM pelo Internal ID) contra o que
+        # a B3 liquidaria com os fatores desta linha. Sem Internal ID não há
+        # SUMIF — e `None` é diferente de zero, que seria "não liquidou nada".
+        par = curvas.get(internal_id.upper()) if internal_id else None
+        interno = (par[0] - par[1]) if par else None
+        vcp_liq = domain.liquidacao_vcp(
+            calc.get('vcp_p'), calc.get('vcp_c'), calc.get('fator_p'), calc.get('fator_c'),
+            calc.get('vbr'), calc.get('juros_p'), calc.get('juros_c'),
+            calc.get('diff_p'), calc.get('diff_c'))
+        dif, veredito = domain.diferenca_liquidacao(interno, vcp_liq)
+        item.update({'interno': interno, 'vcp_liq': vcp_liq,
+                     'diferenca': dif, 'veredito': veredito})
         out.append(item)
     return out
