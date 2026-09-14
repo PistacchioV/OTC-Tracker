@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """O catalogo de cards do New Deals Monitor — toda pasta que alguem GRAVA tem
-card, e todo card tem lugar na tela.
+card, e todo card tem lugar na tela (§454).
 
 O Monitor nao recebe uma lista de produtos: ele VARRE o `cache/new deals/`
 inteiro e agrupa pelos dois primeiros niveis do caminho. Quem diz que produto

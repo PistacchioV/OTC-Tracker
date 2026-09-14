@@ -19257,3 +19257,67 @@ veio (`_conf_src`).
 `check_mgt_conf.py` prende a família, o eixo, as colunas do Anexo I, a
 Parte A fixa, o Generate por entidade e o save na pasta do tipo.
 
+
+## §454 — As operações de DCE apareciam no New Deals Monitor, no grupo *Others* e cobradas como Registration (2026-09-14)
+
+**O relato.** "As operações de DCE, que já estão na Intrag DCE Swap e Option,
+estão também no New Deals Monitor." A frase é ambígua de propósito — pode ser
+"não deviam estar" ou "estão no lugar errado" —, e a resposta só apareceu
+depois de olhar como o Monitor decide o que desenhar.
+
+**O Monitor não tem lista de produto.** O `_ndm_monitor_snapshot`
+(`deals_monitor/queries.py`) **varre** o `NEW_DEALS_CACHE_ROOT` inteiro e
+deriva o `pkey` de cada arquivo-dia como os dois primeiros níveis NÃO
+NUMÉRICOS do caminho relativo (`Intrag/DCE Option`, `NDF/Vanilla`…). O
+catálogo — `_NDM_CARDS`, no `domain.py` — é só quem RECLAMA cada pkey. O que
+sobra vira um card genérico `extra-<pkey>`, com `url: None`, desenhado no
+grupo *Others* do rodapé.
+
+**As duas telas de DCE sempre gravaram nesse cache** (`Intrag/DCE Option` e
+`Intrag/DCE Swap`, pelo `intrag/infra/persistence.py`) e nunca tiveram entrada
+no catálogo. Então elas SEMPRE apareceram no Monitor, e nos três lugares
+errados ao mesmo tempo: fora da coluna Intrag, sem "Open page", e — no e-mail
+diário de pendências — como **Registration**, porque o único teste que separa
+a zona é `key.startswith('intrag-')` e a chave genérica começa com `extra-`.
+Cobrança de DCE misturada com registro na B3, todo dia, sem erro nenhum.
+Medido em 04/09: `extra-intrag-dce-option | url=None | 2 {'New': 2}`.
+
+**O `Intrag/Swap` tinha o defeito IRMÃO, pelo outro lado.** Como o servidor não
+tinha o card, o JS do template INVENTAVA um `intrag-swap` zerado, "In
+development", na zona Intrag. Com arquivo na pasta, o mesmo produto apareceria
+DUAS vezes na mesma tela: o placeholder zerado na coluna certa e o número real
+no *Others*.
+
+**A correção.** Os três entram no `_NDM_CARDS` (com `url` e `dirs`), no
+`_NDM_TAXONOMY` (`('Option', 'DCE')` e `('Swap', 'DCE')` — o DCE É a
+sub-variante do mesmo produto) e nos `GROUPS` do `new-deals-monitor.html`; o
+bloco que fabricava card no JS saiu, com o comentário dizendo por quê: quem diz
+que card existe é o `_NDM_CARDS`, página sem card é card que falta lá. Depois:
+`intrag-dce-option | url=/intrag-dce-option`, e o e-mail passa a dizer
+`Intrag | Option | DCE | 2 New`.
+
+**Os cards de DCE não declaram `les` de propósito.** A entidade do Intrag sai
+do portfolio code (`_ndm_deal_le`) e nenhuma das duas telas o traz nessa
+grafia — o DCE Option carrega o código do extrato (`GCCN`) e o DCE Swap vem da
+planilha e não tem o campo. As duas cairiam no default `ATA` do
+`_ndm_deal_le`, que existe para o NDF/Option do Intrag e está certo lá. Sem a
+chave `les`, o card não desenha subitem nenhum — melhor do que desenhar um
+LAW/ATA inventado.
+
+**Escopo.** DCE NDF e DCE DFW estão no menu mas não gravam arquivo-dia no
+`cache/new deals/`: nunca apareceram no Monitor e continuam fora.
+
+**O e-mail.** `_send_ndm_pending_email` não filtra nada — ele renderiza
+exatamente os blocos de `_ndm_pending_blocks`. Então o DCE sempre esteve no
+e-mail; o que mudou foi o bloco em que ele cai. Como qualquer card, só produz
+linha enquanto não está 100% `Success`/`Ok`, e sem nenhuma pendência a rotina
+devolve `'empty'` e não envia.
+
+`check_ndm_cards.py` prende as sete coisas que quebram sem erro: todo
+`*_CACHE_DIR` da Intrag reclamado por um card (lido das constantes da própria
+vertical, não de uma lista repetida); nenhum `dirs` apontando para pasta que
+ninguém escreve (o "rótulo de tela nunca vira caminho" do §453); paridade
+`_NDM_CARDS` × `_NDM_TAXONOMY` nos dois sentidos; todo card de Intrag com
+chave `intrag-` (o teste da zona do e-mail); todo `intrag-*` presente nos
+`GROUPS` e nenhum desconhecido no front; nenhum card fabricado no JS; e todo
+`url` com template existente.
