@@ -81,6 +81,25 @@ c2 = domain.calcular(base, {'juros_c': '12000', 'tipo': ''})
 check('editado vence e refaz o fator', (c2['juros_c'], c2['fator_c'], c2['manual']), (12000.0, 1.0122, ['juros_c']))
 c3 = domain.calcular(dict(base, tipo='Na Data de Vencimento'))
 check('no vencimento o fluxo nao amortiza', (c3['amortizado'], c3['juros_c']), (0.0, 345000.0))
+# A PROVA REAL: o fator arredondado, aplicado de volta ao VBR, tem de
+# reproduzir o caixa do interno. A ordem e SEMPRE Parte - Contraparte (visao
+# banco), seja qual for a perna que tem fator: montada como "VCP menos a
+# outra", toda linha de VCP na CONTRAPARTE saia com o sinal invertido e a
+# Diferenca dava o DOBRO do caixa, marcando Check em todas.
+_fc = domain.fator(11700.0, 200.0, 1000000.0)
+check('prova real, VCP na CONTRAPARTE: volta ao caixa interno (+5000)',
+      round(domain.liquidacao_vcp(False, True, None, _fc, 1000000.0, 16700.0, 11700.0, 200.0, None), 2), 5000.0)
+check('prova real, caixa NEGATIVO: o sinal e preservado (banco paga)',
+      round(domain.liquidacao_vcp(False, True, None, domain.fator(16700.0, 200.0, 1000000.0),
+                                  1000000.0, 11700.0, 16700.0, 200.0, None), 2), -5000.0)
+check('prova real, VCP na PARTE: mesma ordem, mesmo caixa',
+      round(domain.liquidacao_vcp(True, False, domain.fator(16700.0, 200.0, 1000000.0), None,
+                                  1000000.0, 16700.0, 11700.0, None, 200.0), 2), 5000.0)
+check('sem perna VCP nao ha o que conferir', domain.liquidacao_vcp(False, False, None, None, 1e6, 1.0, 1.0, 0.0, 0.0), None)
+check('veredito vazio NAO e Ok: sem um dos dois lados nao se afirma nada',
+      domain.diferenca_liquidacao(None, 5000.0), (None, ''))
+check('dez reais e o corte', (domain.diferenca_liquidacao(5000.0, 4990.01)[1], domain.diferenca_liquidacao(5000.0, 4989.99)[1]),
+      ('Ok', 'Check'))
 check('linha para o arquivo no formato do Accrual',
       domain.linha_para_arquivo('21C', '73760.00-9', 'DI', '73760.10-2', 'VCP', None, 1.0119)[9:], ['', '1.01190000'])
 check('problemas: sem perna VCP', domain.problemas_para_envio({'vcp_p': False, 'vcp_c': False, 'conta_p': 'x'}), ['no VCP leg'])
@@ -178,6 +197,12 @@ try:
     check('a conta fecha: amortizado, juros, diff, fator VCP',
           (f1['amortizado'], f1['juros_p'], f1['juros_c'], f1['diff_p'], f1['diff_c'], f1['fator_c'], f1['fator_p']),
           (333300.0, 16700.0, 11700.0, 200.0, None, 1.0119, None))
+    # Ponta a ponta: o OTM diz +350.000 / -345.000 pelo Internal ID, o caixa e
+    # 5.000, e o fator da Contraparte aplicado ao VBR tem de chegar la. O que
+    # sobra e so o arredondamento da 8a casa — e e ele que a coluna mede.
+    check('prova real da linha: o fator reproduz o caixa interno',
+          (f1['interno'], round(f1['vcp_liq'], 2), round(f1['diferenca'], 2), f1['veredito']),
+          (5000.0, 5000.0, 0.0, 'Ok'))
     check('a primeira tabela recebe o fator SO da perna VCP',
           (linhas['21C00035804'][cols.index('PARTE / Fator')], linhas['21C00035804'][cols.index('CONTRAPARTE/ Fator')]),
           ('-', '1.01190000'))
@@ -186,6 +211,8 @@ try:
     check('sem OTM as curvas caem nas colunas do Athena', (f2['curva_p'], f2['curva_c']), (9000.0, 4000.0))
     check('sem evento no DFLUXO: amortizacao 0 e `fluxo` em missing',
           (f2['pct'], f2['amortizado'], 'fluxo' in f2['missing']), (0.0, 0.0, True))
+    check('sem OTM nao ha SUMIF: interno None e veredito VAZIO, nunca Ok',
+          (f2['interno'], f2['veredito']), (None, ''))
     check('perna VCP e a Parte: fator com a diff da Contraparte (B3 5000 - JP 4000)',
           (f2['vcp_p'], f2['diff_c'], f2['fator_p']), (True, 1000.0, round((9000.0 + 1000.0) / 500000.0 + 1, 8)))
 
