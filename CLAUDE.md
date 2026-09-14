@@ -771,19 +771,27 @@ São **46**: `currency-base`, `interbook-ndf`, `commodities-b3`,
   da mesa faz. Mês não publicado NÃO vem na série e é erro com o mês, nunca
   o anterior. No pré-preenchimento, evento do DFLUXO sem Taxa Amortização é
   **0%**, não lacuna.
-- **Swap Calculator › Extract: a memória de cálculo é FÓRMULA, não valor**
+- **Swap Calculator › Export: a memória de cálculo é FÓRMULA, não valor**
   (§455, `features/tools/infra/memoria_xlsx.py`): toda célula derivada do
   .xlsx é fórmula de Excel encadeada até as entradas, e os dias do índice vão
   inteiros numa aba por ponta (o fator do dia escrito sobre a taxa daquele
   dia, com o `ROUND(...,8)` do padrão B3/CETIP quando a tela o pede) — a aba
   principal REFERENCIA a célula do acumulado. Mexer na conta aqui sem mexer no
   motor entrega uma memória que não explica o número que a mesa mandou:
-  `check_tools_memoria.py` recalcula a planilha e cobra o motor. O `<form>` da
-  tela tem `action` EXPLÍCITO — o botão troca o destino por `formaction`, e
-  sem ele o Calculate seguinte baixaria uma planilha. O documento é do BANCO:
-  timbre em A1, nada do sistema que o gerou (nem no `docProps/app.xml`), e
-  nome `Memória de Cálculo - CETIP ID - contraparte - data`, com segmento
-  vazio sumindo.
+  `check_tools_memoria.py` recalcula a planilha e cobra o motor. **Memória de
+  liquidação não tem valor FUTURO**: cada ponta fecha na linha do que ela
+  liquida ali — juros no fluxo intermediário, valor da ponta no vencimento —,
+  e há um diferencial só. O `<form>` da tela tem `action` EXPLÍCITO — o botão
+  troca o destino por `formaction`, e sem ele o Calculate seguinte baixaria
+  uma planilha; ele é `submit` de verdade (baixa sem JS) e o `tools.js` só
+  intercepta para DESLIGAR o spinner, porque navegação que baixa arquivo não
+  emite evento nenhum. O documento é do BANCO: timbre em A1, nada do sistema
+  que o gerou (nem no `docProps/app.xml`), e nome `Memória de Cálculo - CETIP
+  ID - contraparte - data`, com segmento vazio sumindo. Ele se lê como
+  DOCUMENTO: valores à ESQUERDA, timbre ancorado com deslocamento em EMU
+  (`add_image(img, 'A1')` cola no canto e esconde a imagem), e texto
+  EXECUTIVO — sem linguagem de conversa nem de aula, com a parte devedora
+  NOMEADA. O guarda varre o texto das abas e recusa as frases proibidas.
 - **Intrag DCE Swap: a unidade é o DEAL e a linha é traduzida no servidor**
   (§448). A planilha do dropzone traz duas tabelas (pernas e fluxos)
   ligadas pelo Deal Name; o arquivo `Intrag-DCE-Swap-AAAAMMDD.txt` é UMA
@@ -833,6 +841,14 @@ São **46**: `currency-base`, `interbook-ndf`, `commodities-b3`,
   da contraparte DIFERENTE da parte (`is_intragroup`), não "conta do
   grupo": o omnibus 73760.10-2 é do Banco e ali o swap é de cliente. Valor
   que não resolve é `None`, nunca zero.
+- **As duas formas de NÃO amortizar por fluxo caem em `At Maturity`** (§456,
+  `platform/swap_flows.base_da_amortizacao`): `Na Data de Vencimento` e **`Sem
+  Troca de Amortização`**. As outras duas bases descrevem uma PARCELA, e
+  escolhê-las num contrato que não amortiza faz a tela AFIRMAR um cronograma
+  que ele não tem — era o Swap Calculator abrindo como "parcela constante
+  sobre o original" um swap marcado `Sem Troca` no Live Position. Número
+  nenhum muda (`amortiza_no_fluxo` já zera o percentual nos dois casos); o que
+  muda é o que a tela diz. A mesma função responde ao fator VCP.
 - **Perna interna não gera aviso** (`_ops_is_internal_cpty` pelo `le-spn` +
   `_pc_is_internal_counterparty`, nunca "começa com BANCO"): fica no Trade
   Level e no Summary, sai do Advice e do TED — o e-mail de TED do NDF faz a

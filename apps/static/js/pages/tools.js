@@ -18,6 +18,7 @@
   // ── i18n dos textos montados em JS ────────────────────────────────────────
   var _TRANS = {
     en: { show: 'Show', entries: 'entries', all: 'All', columns: 'Columns', export: 'Export',
+          exporting: 'Exporting…', exportFail: 'Could not build the calculation memo',
           clear: 'Clear Filters', blank: 'blank = empty cells',
           reading: 'Reading the file…', imported: 'quotes read', newDays: 'new dates',
           updated: 'updated', reloading: 'Reloading…', sendFail: 'could not send the file',
@@ -41,6 +42,7 @@
                     ni_inicial: 'initial index number', preco_inicial: 'initial price',
                     ativa: 'Receiving leg', passiva: 'Paying leg' } },
     br: { show: 'Mostrar', entries: 'linhas', all: 'Todas', columns: 'Colunas', export: 'Exportar',
+          exporting: 'Exportando…', exportFail: 'Não foi possível gerar a memória de cálculo',
           clear: 'Limpar Filtros', blank: 'blank = células vazias',
           reading: 'Lendo o arquivo…', imported: 'cotações lidas', newDays: 'datas novas',
           updated: 'atualizadas', reloading: 'Recarregando…', sendFail: 'não foi possível enviar o arquivo',
@@ -64,6 +66,7 @@
                     ni_inicial: 'número-índice inicial', preco_inicial: 'preço inicial',
                     ativa: 'Ponta ativa', passiva: 'Ponta passiva' } },
     es: { show: 'Mostrar', entries: 'filas', all: 'Todas', columns: 'Columnas', export: 'Exportar',
+          exporting: 'Exportando…', exportFail: 'No se pudo generar la memoria de cálculo',
           clear: 'Limpiar Filtros', blank: 'blank = celdas vacías',
           reading: 'Leyendo el archivo…', imported: 'cotizaciones leídas', newDays: 'fechas nuevas',
           updated: 'actualizadas', reloading: 'Recargando…', sendFail: 'no se pudo enviar el archivo',
@@ -642,4 +645,64 @@
         .then(function () { b.disabled = false; });
     });
   });
+  // ── Export: a memória de cálculo em Excel ────────────────────────────────
+  // O botão é um `submit` de verdade, com `formaction`: sem este bloco ele
+  // baixa do mesmo jeito. O fetch existe por UM motivo — haver um fim. Uma
+  // navegação que resulta em download não emite evento nenhum no documento,
+  // então um spinner ligado no clique ficaria girando para sempre, e um
+  // spinner que ninguém desliga é pior do que spinner nenhum. Com o corpo na
+  // mão sabemos exatamente quando o arquivo terminou de chegar.
+  (function () {
+    var btn = document.getElementById('tl-export');
+    if (!btn || !btn.form || !window.fetch || !window.URL || !URL.createObjectURL) return;
+    var form = btn.form, ocupado = false;
+
+    function nomeDoCabecalho(cd) {
+      // O Werkzeug manda os dois: o RFC 5987 com os acentos e o ASCII de
+      // reserva. Sem ler o cabeçalho o arquivo salvaria com o nome da ROTA.
+      var m = /filename\*=UTF-8''([^;]+)/i.exec(cd || '');
+      if (m) { try { return decodeURIComponent(m[1]); } catch (e) { /* cai no ASCII */ } }
+      m = /filename="?([^";]+)"?/i.exec(cd || '');
+      return m ? m[1] : 'memoria.xlsx';
+    }
+
+    btn.addEventListener('click', function (ev) {
+      ev.preventDefault();
+      if (ocupado) return;
+      ocupado = true;
+      var antes = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>'
+        + t('exporting');
+      function terminar() { ocupado = false; btn.disabled = false; btn.innerHTML = antes; }
+      fetch(btn.getAttribute('formaction'), {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        body: new FormData(form)
+      })
+        .then(function (r) {
+          if (!r.ok) {
+            return r.json().catch(function () { return {}; }).then(function (j) {
+              throw new Error(j.error || ('HTTP ' + r.status));
+            });
+          }
+          var cd = r.headers.get('Content-Disposition') || '';
+          return r.blob().then(function (b) { return { blob: b, nome: nomeDoCabecalho(cd) }; });
+        })
+        .then(function (res) {
+          var url = URL.createObjectURL(res.blob), a = document.createElement('a');
+          a.href = url; a.download = res.nome;
+          document.body.appendChild(a); a.click(); a.remove();
+          // revogar na mesma volta cancela o download no Firefox
+          setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+          terminar();
+        })
+        .catch(function (e) {
+          terminar();
+          var msg = String((e && e.message) || e);
+          if (window.Swal) Swal.fire({ icon: 'error', title: t('exportFail'), text: msg });
+          else alert(t('exportFail') + ': ' + msg);
+        });
+    });
+  })();
 })();
