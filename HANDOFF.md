@@ -19322,9 +19322,9 @@ chave `intrag-` (o teste da zona do e-mail); todo `intrag-*` presente nos
 `GROUPS` e nenhum desconhecido no front; nenhum card fabricado no JS; e todo
 `url` com template existente.
 
-## §455 — Swap Calculator › Extract: a memória de cálculo em Excel, com as fórmulas e os dias do índice (2026-09-14)
+## §455 — Swap Calculator › Export: a memória de cálculo em Excel, com as fórmulas e os dias do índice (2026-09-14)
 
-**O pedido.** "No Swap Calculator tem que ter um botão de extract, em Excel
+**O pedido.** "No Swap Calculator tem que ter um botão de export, em Excel
 apenas. Ao extrair será uma memória de cálculo, então tem que conter fórmulas
 dos cálculos para chegar no valor de liquidação, os dados dos dias de DI por
 exemplo evidenciados. Inserir o logo do JPMorgan no topo à esquerda, e não
@@ -19395,6 +19395,43 @@ cache: um visualizador que não calcula mostra célula vazia. É o preço de
 entregar a conta em vez do retrato dela, e o Excel e o LibreOffice recalculam
 ao abrir.
 
+**Memória de liquidação não tem valor FUTURO.** Cada ponta fecha em UMA linha,
+a do que ela liquida naquele fluxo: no fluxo intermediário o JURO (a correção
+e a variação cambial ficam no principal, que segue para o período seguinte);
+no vencimento o VALOR da ponta, porque ali o principal liquida de verdade — e
+aí o rótulo é "Valor da ponta na liquidação", não "valor futuro", que
+descreveria como projeção um número que aconteceu. A primeira versão mostrava
+os dois lados e um diferencial para cada, espelhando o comparativo da tela:
+isso transforma a memória de UMA liquidação num comparativo de bases, com
+metade dos números descrevendo o que não aconteceu. Agora há um diferencial
+só — o ajuste bruto.
+
+**O spinner e o porquê do fetch.** O botão é um `submit` de verdade e baixa o
+arquivo com o JavaScript fora do ar. O `tools.js` intercepta o clique por UM
+motivo: haver um FIM. Uma navegação que resulta em download não emite evento
+nenhum no documento, então um spinner ligado no clique giraria para sempre — e
+spinner que ninguém desliga é pior do que spinner nenhum. Com o POST por
+`fetch` o corpo chega inteiro, o blob vira um `<a download>` e o botão volta
+ao normal nos TRÊS caminhos (sucesso, erro do servidor, falha de rede). O nome
+do arquivo sai do `Content-Disposition` — sem lê-lo o blob salvaria com o nome
+da ROTA. Daí também a única mudança no servidor: conta que não fecha volta em
+JSON 422 quando quem pede é o fetch (a tela diz o que faltou sem recarregar e
+perder o formulário) e continua devolvendo a TELA para quem não tem JS.
+
+**A planilha se lê como DOCUMENTO, não como tabela.** Três coisas que vieram
+da primeira leitura da mesa: a coluna de valores é alinhada à ESQUERDA (à
+direita, misturando texto e número, o nome da contraparte descolava do rótulo
+e cada linha começava num ponto diferente); o timbre é ancorado com
+deslocamento em EMU (`OneCellAnchor` com `colOff`/`rowOff`) sobre um cabeçalho
+de duas linhas com altura própria — `add_image(img, 'A1')` cola o canto da
+imagem no canto da célula, sem margem, e ali ele ficava escondido atrás da
+moldura; e o texto é EXECUTIVO, porque o arquivo vai para o cliente e para a
+auditoria. Nada de linguagem de conversa ("troca de mãos", "quem paga", "o que
+a ponta recebe menos o que ela paga") nem de aula ("110% do CDI a 14% dá
+15,5031%"): cada nota diz a ORIGEM do número em uma linha, e a parte devedora
+é NOMEADA — "Banco J.P. Morgan" ou a contraparte —, não descrita como uma das
+pontas. O guarda varre o texto de todas as abas e recusa as frases proibidas.
+
 `check_tools_memoria.py` prende isso pelo único jeito que prova o ponto:
 traz um avaliador mínimo (as quatro operações, potência, `IF`/`AND`/`MIN`/
 `ABS`/`ROUND`, comparações e referências entre abas, com data virando serial),
@@ -19402,3 +19439,34 @@ traz um avaliador mínimo (as quatro operações, potência, `IF`/`AND`/`MIN`/
 alíquota, prazo, os dois fatores acumulados, os juros de cada ponta, a
 amortização e o fator cambial. Um export que copiasse números passaria por
 engano num teste de texto; aqui ele não fecha a conta.
+
+## §456 — Swap Calculator: `Sem Troca de Amortização` abria como "parcela constante sobre o original" (2026-09-14)
+
+**O relato.** O contrato 26B01956578 aparece no Live Position › Swap Cashflow
+como **Sem Troca de Amortização**, e o Swap Calculator, preenchido pelo mesmo
+B3 ID, mostrava *On the original notional — constant instalment*.
+
+**A conta estava certa; a afirmação, não.** `swap_flows.base_da_amortizacao`
+devolvia `SOBRE_ORIGINAL` para `Sem Troca de Amortização`, com o argumento de
+que é o default histórico da tela e de que, com o percentual em zero, a base
+não muda número nenhum. Não muda mesmo — `amortiza_no_fluxo` já respondia
+`False` para esse tipo e o `p_amort` do evento sai `'0'`, então nem o
+pré-preenchimento nem o fator VCP (`other_products/domain.py`, que zera o
+amortizado pelo mesmo teste) usavam a base para coisa alguma. O que a base faz
+é ESCREVER na tela o cronograma do contrato, e ali ela afirmava uma parcela
+constante sobre o notional original num swap que não amortiza nunca.
+
+**A correção.** `Sem Troca de Amortização` passa a cair em **At Maturity**,
+junto com `Na Data de Vencimento`. É o mesmo argumento que já valia para a
+outra — "as outras duas descrevem uma PARCELA, e dizer 'sobre o valor
+original' num contrato que só amortiza no fim afirma um cronograma que ele não
+tem" — e vale aqui com mais força: este não amortiza em fluxo nenhum, o
+principal volta inteiro no encerramento, que é exatamente o que `At Maturity`
+diz. Nenhum número muda em lugar nenhum; muda o que a tela afirma.
+
+**O cadastro não mudou.** O de-para `swap-amortizacao` continua traduzindo os
+códigos da B3 (`0`/`1`/`3`/`4`) para o texto; quem interpreta o TEXTO é o
+motor, e é lá que estava a resposta errada. `check_tools.py` fixava a resposta
+antiga em uma asserção — foi atualizada na mesma mudança, e ganhou a asserção
+que diz por que a troca é segura: nenhuma das duas amortiza no fluxo, e com
+percentual zero o valor amortizado é zero nas duas bases.

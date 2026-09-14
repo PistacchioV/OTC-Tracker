@@ -199,16 +199,21 @@ def tools_swap_calculator_extract():
     envelhece. O botão é o mesmo `<form>` da tela com `formaction`: zero
     JavaScript, e o que se exporta é, por construção, o que está na tela.
 
-    Conta que não fecha NÃO vira um download quebrado: a tela volta com a
-    mensagem, pela mesma rota do `Calculate` — por isso o formulário declara
-    `action` explícito, senão o Calculate seguinte postaria aqui.
+    Conta que não fecha NÃO vira um download quebrado. Pelo fetch do botão
+    (que é quem desliga o spinner) o motivo volta em JSON, para a tela dizer o
+    que faltou sem perder o formulário preenchido; sem JavaScript o mesmo POST
+    devolve a TELA com a mensagem, pela mesma rota do `Calculate` — por isso o
+    formulário declara `action` explícito, senão o Calculate seguinte postaria
+    aqui.
     """
     r = _auth_page()
     if r:
         return r
     try:
         conteudo, nome = queries.memoria_de_calculo(request.form)
-    except _ERROS_DE_TELA:
+    except _ERROS_DE_TELA as exc:
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'success': False, 'error': str(exc)}), 422
         return tools_swap_calculator()
     return send_file(io.BytesIO(conteudo), as_attachment=True, download_name=nome,
                      mimetype='application/vnd.openxmlformats-officedocument'

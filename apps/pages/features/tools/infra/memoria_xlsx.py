@@ -51,7 +51,14 @@ from apps.pages.precificador import contagem, liquidacao
 LOGO = os.path.normpath(os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
     '..', '..', '..', '..', 'static', 'images', 'LogoJPMorgan-email.png'))
-LOGO_W, LOGO_H = 168, 35
+# O wordmark ocupa as DUAS linhas do cabeçalho, com folga em volta: ancorado
+# rente ao canto de A1 ele encostava na borda da célula e ficava escondido
+# atrás da moldura no Excel. A âncora leva deslocamento em pixels (EMU), que é
+# a única forma de centrá-lo verticalmente no bloco — `add_image(img, 'A1')`
+# cola o canto superior esquerdo no canto da célula, sem margem nenhuma.
+LOGO_W, LOGO_H = 190, 39
+LOGO_ESQ, LOGO_TOPO = 14, 17
+ALTURA_L1, ALTURA_L2 = 30, 24
 
 ABA = 'Memória de Cálculo'
 ABA_DIARIA = {liquidacao.ATIVA: 'Apuração diária - Ativa',
@@ -86,9 +93,9 @@ REGIME_PT = {contagem.COMPOSTO: 'Composto — (1 + i) ^ τ',
              contagem.SIMPLES: 'Simples — 1 + i · τ'}
 
 BASE_AMORT_PT = {
-    liquidacao.SOBRE_ORIGINAL: 'sobre o notional original — parcela constante',
-    liquidacao.SOBRE_REMANESCENTE: 'sobre o saldo remanescente — parcela decrescente',
-    liquidacao.AT_MATURITY: 'no vencimento — o principal inteiro no fim',
+    liquidacao.SOBRE_ORIGINAL: 'sobre o notional original (parcela constante)',
+    liquidacao.SOBRE_REMANESCENTE: 'sobre o saldo remanescente (parcela decrescente)',
+    liquidacao.AT_MATURITY: 'no vencimento (principal integral no encerramento)',
 }
 
 
@@ -119,7 +126,10 @@ class _Folha(object):
         self.F_NOTA = Font(name='Calibri', size=9, italic=True, color=MUDO)
         self.FILL_SECAO = PatternFill('solid', fgColor=NAVY)
         self.FILL_DESTAQUE = PatternFill('solid', fgColor=CINZA)
-        self.DIR = Alignment(horizontal='right')
+        # Documento se lê da esquerda para a direita, e a coluna de valores
+        # mistura texto com número: alinhada à direita, o nome da contraparte
+        # descolava do rótulo e cada linha começava num ponto diferente. Tudo
+        # à esquerda é o que dá a coluna única que a vista espera.
         self.ESQ = Alignment(horizontal='left', vertical='center')
 
     def secao(self, texto):
@@ -141,7 +151,7 @@ class _Folha(object):
         a.font = self.F_FORTE if destaque else self.F_ROTULO
         b = ws.cell(row=ln, column=2, value=valor)
         b.font = self.F_FORTE if destaque else self.F_VALOR
-        b.alignment = self.DIR
+        b.alignment = self.ESQ
         if fmt:
             b.number_format = fmt
         if complemento is not None:
@@ -293,7 +303,7 @@ def _aba_diaria(wb, ponta, titulo, percentual, arredondar):
 
 # ── o bloco de uma ponta ────────────────────────────────────────────────────
 
-def _bloco_ponta(f, p, entrada, vbr, diaria, titulo):
+def _bloco_ponta(f, p, entrada, vbr, diaria, titulo, so_juros):
     """As entradas da ponta, o fator que elas produzem e o que ele vale em
     reais — nesta ordem, que é a da conta.
 
@@ -307,7 +317,7 @@ def _bloco_ponta(f, p, entrada, vbr, diaria, titulo):
     f.campo('Índice', INDICE_PT.get(idx, idx))
     if idx in liquidacao.DECLARAM_MOEDA:
         f.campo('Moeda do fluxo', p.moeda,
-                nota='quanto — liquida em reais, sem conversão' if p.quanto else None)
+                nota='quanto: liquida em reais, sem conversão' if p.quanto else None)
     if p.ativo:
         f.campo('Ativo', p.ativo)
     if p.tenor and idx in liquidacao.COM_FIXING:
@@ -319,7 +329,7 @@ def _bloco_ponta(f, p, entrada, vbr, diaria, titulo):
                        else 'Taxa contratada (% a.a.)', entrada.taxa, PCT_FMT)
     if idx == liquidacao.CDI:
         f.campo('Percentual do CDI', '=' + diaria['pct'], PCT_FMT,
-                nota='incide na taxa DIÁRIA: 110% do CDI a 14% dá 15,5031%, não 15,40%')
+                nota='aplicado à taxa diária')
 
     tau = None
     if p.convencao:
@@ -333,7 +343,7 @@ def _bloco_ponta(f, p, entrada, vbr, diaria, titulo):
                           nota='dias da contagem ÷ base do ano')
         else:
             tau = f.campo('τ — fração de ano', p.fracao_de_ano, FX_FMT,
-                          nota='ACT/ACT ISDA: cada trecho de ano dividido pelo tamanho real dele')
+                          nota='ACT/ACT ISDA: cada trecho de ano sobre o tamanho real do ano')
 
     cap = _cap(taxa, p.regime, tau) if taxa and tau else None
     if idx == liquidacao.CDI:
@@ -362,8 +372,8 @@ def _bloco_ponta(f, p, entrada, vbr, diaria, titulo):
 
     fator_idx = f.campo(
         'Fator do índice', formula if formula else p.fator_do_indice, FATOR_FMT,
-        nota=('informado na tela' if idx == liquidacao.FATOR else
-              'sem taxa: a perna rende só a variação cambial' if idx == liquidacao.MOEDA
+        nota=('informado' if idx == liquidacao.FATOR else
+              'sem taxa contratada; rende a variação cambial' if idx == liquidacao.MOEDA
               else None))
 
     if p.ptax_inicial and p.ptax_final:
@@ -385,7 +395,7 @@ def _bloco_ponta(f, p, entrada, vbr, diaria, titulo):
         n1 = f.campo('Número-índice final (IPCA)', p.ni_final, '#,##0.000000',
                      complemento=(p.mes_ni_final + ' · IBGE') if p.mes_ni_final else 'informado')
         corr = f.campo('Fator de correção monetária', '={}/{}'.format(n1, n0), FATOR_FMT,
-                       nota='número-índice final ÷ inicial — fica no PRINCIPAL, não nos juros')
+                       nota='número-índice final ÷ inicial; aplicado ao principal')
     else:
         corr = f.campo('Fator de correção monetária', p.fator_correcao, FATOR_FMT,
                        nota='sem correção de principal nesta ponta' if p.fator_correcao == 1.0
@@ -393,14 +403,24 @@ def _bloco_ponta(f, p, entrada, vbr, diaria, titulo):
 
     fator = f.campo('Fator acumulado da ponta', '={}*{}*{}'.format(fx, corr, fator_idx),
                     FATOR_FMT, nota='fator cambial × correção × fator do índice')
-    valor = f.campo('Valor futuro (R$)', '={}*{}'.format(vbr, fator), MOEDA_FMT,
-                    nota='notional remanescente × fator acumulado')
-    juros = f.campo('Juros do período (R$)',
-                    '={}*{}*{}*({}-1)'.format(vbr, fx, corr, fator_idx), MOEDA_FMT,
-                    nota='só o que a TAXA rendeu, sobre o principal já corrigido')
+    # A ponta fecha em UMA linha: o que ELA liquida neste fluxo. Num fluxo
+    # intermediário é o juro — a correção e a variação cambial ficam no
+    # principal, que segue para o período seguinte; no vencimento é o valor
+    # da ponta inteiro. Mostrar os dois lados transformaria a memória de UMA
+    # liquidação num comparativo de bases, e metade dos números não teria
+    # acontecido: valor futuro num fluxo que não liquida principal é uma
+    # projeção, e memória de liquidação não projeta.
+    if so_juros:
+        liquidado = f.campo(
+            'Juros do período (R$)', '={}*{}*{}*({}-1)'.format(vbr, fx, corr, fator_idx),
+            MOEDA_FMT, nota='juros da taxa sobre o principal corrigido')
+    else:
+        liquidado = f.campo(
+            'Valor da ponta na liquidação (R$)', '={}*{}'.format(vbr, fator), MOEDA_FMT,
+            nota='notional remanescente × fator acumulado')
     if p.contagem_vale_para_spread:
-        f.nota('O produto diário do CDI é sempre 252; a contagem escolhida capitaliza o spread.')
-    return {'fator': fator, 'valor': valor, 'juros': juros}
+        f.nota('Produto diário do CDI em base 252; a contagem escolhida capitaliza o spread.')
+    return {'fator': fator, 'liquidado': liquidado}
 
 
 # ── o documento ─────────────────────────────────────────────────────────────
@@ -413,12 +433,20 @@ def _timbre(ws, titulo, subtitulo):
     porque o Pillow não subiu — troca o arquivo inteiro por um arquivo
     nenhum."""
     Alignment, Border, Font, PatternFill, Side = _fontes()
-    ws.row_dimensions[1].height = 42
+    ws.row_dimensions[1].height = ALTURA_L1
+    ws.row_dimensions[2].height = ALTURA_L2
     try:
         from openpyxl.drawing.image import Image as _Img
+        from openpyxl.drawing.spreadsheet_drawing import AnchorMarker, OneCellAnchor
+        from openpyxl.drawing.xdr import XDRPositiveSize2D
+        from openpyxl.utils.units import pixels_to_EMU
         img = _Img(LOGO)
         img.width, img.height = LOGO_W, LOGO_H
-        ws.add_image(img, 'A1')
+        img.anchor = OneCellAnchor(
+            _from=AnchorMarker(col=0, row=0, colOff=pixels_to_EMU(LOGO_ESQ),
+                               rowOff=pixels_to_EMU(LOGO_TOPO)),
+            ext=XDRPositiveSize2D(pixels_to_EMU(LOGO_W), pixels_to_EMU(LOGO_H)))
+        ws.add_image(img)
     except Exception as exc:                                # noqa: BLE001
         import logging
         logging.getLogger('otc_tracker').warning(
@@ -426,10 +454,11 @@ def _timbre(ws, titulo, subtitulo):
     ws.merge_cells('B1:D1')
     c = ws.cell(row=1, column=2, value=titulo)
     c.font = Font(name='Calibri', size=16, bold=True, color=NAVY)
-    c.alignment = Alignment(horizontal='left', vertical='center')
+    c.alignment = Alignment(horizontal='left', vertical='bottom')
     ws.merge_cells('B2:D2')
     c = ws.cell(row=2, column=2, value=subtitulo)
     c.font = Font(name='Calibri', size=10, color=MUDO)
+    c.alignment = Alignment(horizontal='left', vertical='top')
 
 
 def _selar(conteudo):
@@ -490,7 +519,7 @@ def construir(r, pontas, cetip_id='', contraparte='', calendario='ANBIMA',
     f.campo('CETIP ID', cetip_id or '—')
     f.campo('Contraparte', contraparte or '—')
     dop = f.campo('Data da operação', _data(r.data_operacao), DATA_FMT,
-                  nota='conta o prazo do IR')
+                  nota='base do prazo para o IR')
     ini = f.campo('Início do fluxo', _data(r.inicio), DATA_FMT)
     fim = f.campo('Fim do fluxo — liquidação', _data(r.fim), DATA_FMT)
     f.campo('Vencimento do swap', _data(r.vencimento) if r.vencimento else '—',
@@ -498,13 +527,13 @@ def construir(r, pontas, cetip_id='', contraparte='', calendario='ANBIMA',
     f.campo('Calendário', calendario)
     f.campo('Dias corridos do fluxo', '={}-{}'.format(fim, ini), INT_FMT)
     f.campo('Dias úteis do fluxo', r.dias_uteis, INT_FMT,
-            nota='pelo calendário {}'.format(calendario))
+            nota='calendário {}'.format(calendario))
 
     f.secao('O principal (R$)')
     original = f.campo('Notional original', r.nocional_original, MOEDA_FMT,
-                       nota='o valor registrado, só para calcular a amortização sobre ele')
+                       nota='valor registrado; base de cálculo da amortização')
     vbr = f.campo('Notional remanescente', r.nocional, MOEDA_FMT, destaque=True,
-                  nota='a base que rende — multiplica o fator das DUAS pontas')
+                  nota='base de cálculo das duas pontas')
     pct_am = f.campo('Amortização no fim do fluxo', r.percentual_amortizacao, PCT_FMT)
     f.campo('A amortização incide', BASE_AMORT_PT.get(r.base_amortizacao, r.base_amortizacao))
     referencia = (vbr if r.base_amortizacao in (liquidacao.SOBRE_REMANESCENTE,
@@ -512,31 +541,31 @@ def construir(r, pontas, cetip_id='', contraparte='', calendario='ANBIMA',
     amortizado = f.campo(
         'Valor amortizado', '=IF({p}<=0,0,MIN({s},{ref}*{p}))'.format(p=pct_am, s=vbr,
                                                                      ref=referencia),
-        MOEDA_FMT, nota='acontece no FIM do fluxo: não entra no fator deste período')
+        MOEDA_FMT, nota='apurada no encerramento do fluxo; não integra o fator do período')
     f.campo('Saldo do fluxo seguinte', '={}-{}'.format(vbr, amortizado), MOEDA_FMT)
 
     a = _bloco_ponta(f, r.ativa, pontas[liquidacao.ATIVA], vbr,
-                     diaria.get(liquidacao.ATIVA), 'Ponta ativa — quem recebe o índice')
+                     diaria.get(liquidacao.ATIVA), 'Ponta ativa (recebedora)',
+                     r.so_juros)
     p_ = _bloco_ponta(f, r.passiva, pontas[liquidacao.PASSIVA], vbr,
-                      diaria.get(liquidacao.PASSIVA), 'Ponta passiva — quem paga o índice')
+                      diaria.get(liquidacao.PASSIVA), 'Ponta passiva (pagadora)',
+                      r.so_juros)
 
     f.secao('Apuração do ajuste (R$)')
-    ja = f.campo('Juros da ponta ativa', '=' + a['juros'], MOEDA_FMT)
-    jp = f.campo('Juros da ponta passiva', '=' + p_['juros'], MOEDA_FMT)
-    dif_juros = f.campo('Diferencial de juros', '={}-{}'.format(ja, jp), MOEDA_FMT)
-    va = f.campo('Valor futuro da ponta ativa', '=' + a['valor'], MOEDA_FMT)
-    vp = f.campo('Valor futuro da ponta passiva', '=' + p_['valor'], MOEDA_FMT)
-    dif_vf = f.campo('Diferencial de valor futuro', '={}-{}'.format(va, vp), MOEDA_FMT)
     f.campo('Base da liquidação',
-            'Fluxo intermediário — liquida só o diferencial de juros' if r.so_juros
-            else 'Liquidação final — liquida o valor futuro das duas pontas',
-            nota='o principal é nocional: num fluxo intermediário ele não troca de mãos')
-    bruto = f.campo('Ajuste bruto', '={}'.format(dif_juros if r.so_juros else dif_vf),
-                    MOEDA_FMT)
+            'Fluxo intermediário: liquida o diferencial de juros' if r.so_juros
+            else 'Liquidação final: liquida o valor das duas pontas',
+            nota='principal nocional; sem liquidação de principal em fluxo intermediário'
+            if r.so_juros else 'o principal liquida neste fluxo')
+    rotulo = 'Juros da ponta {}' if r.so_juros else 'Ponta {} na liquidação'
+    la = f.campo(rotulo.format('ativa'), '=' + a['liquidado'], MOEDA_FMT)
+    lp = f.campo(rotulo.format('passiva'), '=' + p_['liquidado'], MOEDA_FMT)
+    bruto = f.campo('Ajuste bruto', '={}-{}'.format(la, lp), MOEDA_FMT,
+                    nota='ponta ativa menos ponta passiva')
     prazo = f.campo('Prazo desde a data da operação (dias)',
                     '={}-{}'.format(fim, dop), INT_FMT)
     retem = f.campo('Retém IR na fonte', bool(reter_ir),
-                    nota='a retenção é da fonte PAGADORA: só quando o banco paga')
+                    nota='retenção pela fonte pagadora')
     aliquota = f.campo(
         'Alíquota de IR',
         '=IF(AND({r},{b}<0),IF({p}<=180,0.225,IF({p}<=360,0.2,IF({p}<=720,0.175,0.15))),0)'
@@ -545,19 +574,19 @@ def construir(r, pontas, cetip_id='', contraparte='', calendario='ANBIMA',
     ir = f.campo('IR retido', '=ABS({})*{}'.format(bruto, aliquota), MOEDA_FMT)
     f.campo('Ajuste líquido', '=IF({b}<0,{b}+{i},{b}-{i})'.format(b=bruto, i=ir),
             MOEDA_FMT, destaque=True)
-    f.campo('Quem paga',
-            'A ponta passiva paga a ponta ativa.' if r.quem_recebe == liquidacao.ATIVA
-            else 'A ponta ativa paga a ponta passiva.')
+    f.campo('Parte devedora',
+            'Banco J.P. Morgan' if r.banco_paga else (contraparte or 'Contraparte'),
+            nota='parte com resultado negativo no fluxo')
 
     f.pular()
-    f.nota('O principal do swap é nocional: não troca de mãos. Só a diferença entre as duas '
-           'pontas liquida, e paga quem tem o resultado negativo.')
+    f.nota('Principal nocional: não há liquidação de principal. Liquida-se o diferencial '
+           'entre as pontas, devido pela parte com resultado negativo.')
     if diaria:
-        f.nota('O fator do índice vem da aba de apuração diária, dia a dia; '
-               + ('o fator diário do DI é arredondado na 8ª casa (padrão B3/CETIP).'
+        f.nota('Fator do índice apurado dia a dia na aba de apuração diária; '
+               + ('fator diário do DI arredondado na 8ª casa, padrão B3/CETIP.'
                   if arredondar_di else
-                  'o fator diário do DI corre com precisão cheia, sem arredondamento.'))
-    f.nota('As células em fórmula recalculam ao abrir: trocar uma entrada refaz a liquidação.')
+                  'fator diário do DI em precisão cheia, sem arredondamento.'))
+    f.nota('As células em fórmula recalculam na abertura do arquivo.')
     f.nota('Emitido em {:%d/%m/%Y}.'.format(emitido_em or date.today()))
 
     ws.freeze_panes = 'A4'

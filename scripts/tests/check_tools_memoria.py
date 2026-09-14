@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""check_tools_memoria.py — Swap Calculator > Extract: a memoria de calculo em
+"""check_tools_memoria.py — Swap Calculator > Export: a memoria de calculo em
 .xlsx (HANDOFF §455).
 
 O arquivo nao e um retrato do resultado: e a CONTA. Cada celula derivada e uma
@@ -26,7 +26,13 @@ neste teste por engano, entao o que se prende aqui e o RECALCULO:
      caracteres que o Windows recusa;
   6. a rota e POST (o que se exporta e o formulario), exige sessao, e conta que
      nao fecha volta para a TELA com a mensagem em vez de baixar um arquivo
-     quebrado. Por isso o `<form>` declara `action` explicito.
+     quebrado — em JSON quando quem pede e o fetch do botao, que e quem
+     desliga o spinner. Por isso o `<form>` declara `action` explicito;
+  7. memoria de LIQUIDACAO nao tem valor FUTURO: cada ponta fecha em UMA
+     linha, a do que ela liquida naquele fluxo — juros no intermediario,
+     valor da ponta no vencimento. Mostrar os dois lados transformaria a
+     memoria de uma liquidacao num comparativo de bases, com metade dos
+     numeros descrevendo o que nao aconteceu.
 
 Nada sai da maquina: a serie do CDI e um stub e os fixings de moeda sao
 digitados.
@@ -222,6 +228,21 @@ perto('juros da ponta ativa', avaliar(wb, mx.ABA, 'B%d' % linhas_juros[0]),
       r.ativa.juros, 1e-6)
 perto('juros da ponta passiva', avaliar(wb, mx.ABA, 'B%d' % linhas_juros[1]),
       r.passiva.juros, 1e-6)
+
+# Este fluxo termina ANTES do vencimento: liquida o diferencial de juros, e o
+# principal segue para o periodo seguinte. O valor futuro das pontas nao
+# aconteceu — nao e "outra forma de ver", e uma projecao, e memoria de
+# liquidacao nao projeta.
+check('fluxo intermediario: a memoria nao fala em valor futuro', r.so_juros, True)
+rotulos = [ws.cell(row=ln, column=1).value for ln in range(1, ws.max_row + 1)]
+check('   nenhuma linha de valor futuro',
+      [x for x in rotulos if x and 'futuro' in str(x).lower()], [])
+check('   e cada ponta fecha em UMA linha, a do que ela liquida',
+      (len(linhas_juros), 'Valor da ponta na liquidação (R$)' in rotulos), (2, False))
+# Um diferencial so: as duas linhas de ponta vao direto ao Ajuste bruto. A
+# linha 'Diferencial de ...' era a segunda base aparecendo de novo.
+check('   com um diferencial so — o ajuste bruto',
+      [x for x in rotulos if x and str(x).startswith('Diferencial')], [])
 perto('o valor amortizado sai do MIN, nao copiado',
       avaliar(wb, mx.ABA, por_rotulo(ws, 'Valor amortizado')), r.valor_amortizado, 1e-6)
 perto('e o saldo do fluxo seguinte',
@@ -363,6 +384,28 @@ perto('o fator da perna de equity e a razao dos precos',
 perto('   e o liquido fecha', avaliar(wb6, mx.ABA, por_rotulo(ws6, 'Ajuste líquido')),
       r6.ajuste_liquido, 1e-6)
 
+print('\n== 4d. a liquidacao FINAL: a ponta inteira, e nada de valor futuro ==')
+# No vencimento o principal liquida, entao o que a ponta entrega E o valor
+# dela. O rotulo muda junto: "valor futuro" descreveria o mesmo numero como
+# uma projecao de um fluxo que ainda nao aconteceu — e aqui ele aconteceu.
+final = dict(FORM)
+final['fim'] = final['vencimento'] = '2026-03-02'
+wb7 = openpyxl.load_workbook(io.BytesIO(queries.memoria_de_calculo(final)[0]))
+ws7, r7 = wb7[mx.ABA], queries.liquidar(final)['r']
+check('o fluxo que fecha no vencimento liquida as duas pontas', r7.so_juros, False)
+rotulos7 = [ws7.cell(row=ln, column=1).value for ln in range(1, ws7.max_row + 1)]
+check('   e nem aqui a palavra "futuro" aparece',
+      [x for x in rotulos7 if x and 'futuro' in str(x).lower()], [])
+check('   a ponta fecha na linha do valor liquidado',
+      (len([x for x in rotulos7 if x == 'Valor da ponta na liquidação (R$)']),
+       'Juros do período (R$)' in rotulos7), (2, False))
+linhas7 = [ln for ln in range(1, ws7.max_row + 1)
+           if ws7.cell(row=ln, column=1).value == 'Valor da ponta na liquidação (R$)']
+perto('   valor da ponta ativa', avaliar(wb7, mx.ABA, 'B%d' % linhas7[0]),
+      r7.ativa.valor, 1e-6)
+perto('   e o liquido fecha', avaliar(wb7, mx.ABA, por_rotulo(ws7, 'Ajuste líquido')),
+      r7.ajuste_liquido, 1e-6)
+
 # ─────────────────────────────────────────────────────────────────────────────
 print('\n== 5. o documento e do banco ==')
 z = zipfile.ZipFile(io.BytesIO(conteudo))
@@ -402,28 +445,94 @@ check('   como anexo, e com o nome acentuado em RFC 5987',
       disp.startswith('attachment;') and 'Mem%C3%B3ria%20de%20C%C3%A1lculo' in disp, True)
 check('   e o corpo e um .xlsx de verdade', resp.data[:2], b'PK')
 
-# Conta que nao fecha nao baixa arquivo quebrado: volta a TELA com o motivo.
+# Conta que nao fecha nao baixa arquivo quebrado. Sem JavaScript volta a TELA
+# com o motivo; pelo fetch do botao volta em JSON — e e o JSON que permite
+# dizer o que faltou SEM recarregar a pagina e perder o formulario.
 quebrado = dict(FORM); quebrado['fim'] = '2025-08-01'      # fim antes do inicio
 erro = c.post('/tools/swap-calculator/extract', data=quebrado)
 check('conta que nao fecha volta a tela, nao um arquivo',
       (erro.status_code, erro.headers.get('Content-Type', '').startswith('text/html')),
       (200, True))
+erro_js = c.post('/tools/swap-calculator/extract', data=quebrado,
+                 headers={'X-Requested-With': 'XMLHttpRequest'})
+check('   e pelo fetch volta em JSON, com o motivo',
+      (erro_js.status_code, erro_js.get_json().get('success'),
+       bool(erro_js.get_json().get('error'))), (422, False, True))
 
 html = io.open(os.path.join(ROOT, 'apps/templates/pages/tools-swap-calculator.html'),
                encoding='utf-8').read()
-check('o botao Extract sai do mesmo formulario, por formaction',
+check('o botao Export sai do mesmo formulario, por formaction',
       'tools_swap_calculator_extract' in html and 'formaction=' in html, True)
 # Sem o `action` explicito a tela passaria a postar na rota do arquivo depois
-# do primeiro Extract, e o Calculate seguinte baixaria uma planilha.
+# do primeiro Export, e o Calculate seguinte baixaria uma planilha.
 check('e o formulario declara action explicito',
       "action=\"{{ url_for('pages_blueprint.tools_swap_calculator') }}\"" in html, True)
 check('o rotulo nasce em ingles e traduz por data-lang',
-      'data-lang="tl-extract">Extract<' in html, True)
+      'data-lang="tl-export">Export<' in html, True)
+# `submit` de verdade: o download funciona com o JS fora do ar, e o fetch so
+# acrescenta o fim do spinner.
+check('   e o botao continua sendo um submit, nao um type=button',
+      'type="submit" id="tl-export"' in html, True)
 import json                                                             # noqa: E402
 for lang in ('en', 'br', 'es'):
     d = json.load(io.open(os.path.join(ROOT, 'apps/static/data/translations/%s.json' % lang),
                           encoding='utf-8'))
-    check('   %s traduz o tl-extract' % lang, bool(d.get('tl-extract')), True)
+    check('   %s traduz o tl-export' % lang, bool(d.get('tl-export')), True)
+    check('   e o tl-extract antigo saiu de %s' % lang, 'tl-extract' in d, False)
+
+print('\n== 7. o spinner: quem liga desliga ==')
+js = io.open(os.path.join(ROOT, 'apps/static/js/pages/tools.js'), encoding='utf-8').read()
+check('o clique troca o botao por um spinner',
+      "spinner-border spinner-border-sm" in js and "t('exporting')" in js, True)
+# Navegacao que baixa arquivo nao emite evento nenhum: sem o corpo na mao o
+# spinner giraria para sempre. Por isso o POST vai por fetch.
+check('e o fim vem do fetch — sucesso, erro e falha de rede, os tres',
+      js.count('terminar()') >= 3, True)
+check('o nome do arquivo sai do Content-Disposition, nao da rota',
+      "filename\\*=UTF-8''" in js, True)
+# O mapa local e o que o I18nManager nao alcanca: ele traduz no load, e este
+# texto nasce depois (§2).
+_MARCAS = ['    en: { show:', '    br: { show:', '    es: { show:', '  };']
+for i, lang in enumerate(('en', 'br', 'es')):
+    bloco = js.split(_MARCAS[i], 1)[1].split(_MARCAS[i + 1], 1)[0]
+    check('   %s tem exporting e exportFail no _TRANS' % lang,
+          ('exporting:' in bloco, 'exportFail:' in bloco), (True, True))
+
+print('\n== 8. o documento se le como documento ==')
+# Alinhado a direita, a coluna de valores mistura texto com numero e cada linha
+# comeca num ponto diferente — o nome da contraparte descola do rotulo. Numa
+# planilha de LEITURA, a coluna unica e o que a vista espera.
+desalinhadas = [ln for ln in range(4, ws.max_row + 1)
+                if ws.cell(row=ln, column=2).value is not None
+                and ws.cell(row=ln, column=2).alignment.horizontal != 'left']
+check('todo valor alinhado a esquerda', desalinhadas, [])
+
+# Ancorado rente ao canto de A1 o wordmark encostava na moldura da celula e
+# ficava escondido. A ancora com deslocamento (EMU) e a unica forma de dar
+# margem e centra-lo no bloco de duas linhas do cabecalho.
+img = (ws._images or [None])[0]
+check('o timbre entra na planilha', img is not None, True)
+if img is not None:
+    check('   com folga em volta, nao colado no canto da celula',
+          (img.anchor._from.colOff > 0, img.anchor._from.rowOff > 0), (True, True))
+    check('   e o cabecalho tem altura para ele',
+          (ws.row_dimensions[1].height or 0) + (ws.row_dimensions[2].height or 0) >= 50, True)
+
+# O documento vai para o cliente e para a auditoria: nada de linguagem de
+# conversa nem de aula. O leitor sabe o que e um swap.
+texto = []
+for aba in wb.sheetnames:
+    for linha in wb[aba].iter_rows():
+        for cel in linha:
+            if isinstance(cel.value, str) and not cel.value.startswith('='):
+                texto.append(cel.value)
+tudo = ' | '.join(texto).lower()
+for frase in ('troca de mãos', 'quem paga', 'quem recebe', 'nao troca', 'o que a ponta',
+              'acontece no', 'so o que a taxa', 'da 15,5031'):
+    check('nada de %r no documento' % frase, frase in tudo, False)
+check('a parte devedora e nomeada',
+      ws[por_rotulo(ws, 'Parte devedora')].value,
+      'Banco J.P. Morgan' if r.banco_paga else FORM['counterparty'])
 
 cdi.serie = _serie_real
 print('\n' + ('TUDO OK' if not falhas else 'FALHAS: %d' % len(falhas)))

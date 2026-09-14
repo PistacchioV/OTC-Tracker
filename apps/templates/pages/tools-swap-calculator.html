@@ -262,11 +262,15 @@
                         </button>
                         {# Export é info (§7). Sai do MESMO formulário, por `formaction`:
                            o que vai para o arquivo é o que está nos campos, sem uma
-                           segunda fonte de verdade para divergir da tela. #}
-                        <button type="submit" class="btn btn-sm btn-info bg-gradient btn-toolbar-all"
+                           segunda fonte de verdade para divergir da tela. Continua
+                           sendo um `submit` de verdade: sem JS ele baixa do mesmo
+                           jeito — o `tools.js` só intercepta para haver um FIM
+                           (navegação que baixa arquivo não emite evento nenhum, e
+                           um spinner que ninguém desliga é pior do que nenhum). #}
+                        <button type="submit" id="tl-export" class="btn btn-sm btn-info bg-gradient btn-toolbar-all"
                                 formaction="{{ url_for('pages_blueprint.tools_swap_calculator_extract') }}"
                                 title="Calculation memo in Excel, with the formulas and the daily index fixings">
-                            <i class="ti ti-file-spreadsheet me-1"></i><span data-lang="tl-extract">Extract</span>
+                            <i class="ti ti-file-spreadsheet me-1"></i><span data-lang="tl-export">Export</span>
                         </button>
                     </div>
                 </div>

@@ -74,8 +74,8 @@ def base_da_amortizacao(texto):
 
         Sobre Valor Base Original      → base = original
         Sobre Valor Base Remanescente  → base = remanescente
-        Na Data de Vencimento          → só amortiza no fim; no fluxo, nada
-        Sem Troca de Amortização       → não amortiza
+        Na Data de Vencimento          → At Maturity; no fluxo, nada
+        Sem Troca de Amortização       → At Maturity; nunca amortiza
 
     Por isso a pergunta "qual base" e a pergunta "amortiza aqui?" são duas
     funções: colapsá-las faria um swap que amortiza só no vencimento cair na
@@ -97,9 +97,16 @@ def base_da_amortizacao(texto):
         # nada de qualquer jeito (`amortiza_no_fluxo` responde isso).
         return liquidacao.AT_MATURITY
     if 'sem troca' in t:
-        # Não amortiza nunca: aqui o original é o default histórico da tela, e
-        # com o percentual em zero ele não muda número nenhum.
-        return liquidacao.SOBRE_ORIGINAL
+        # Contrato que NUNCA amortiza: o principal volta inteiro no fim, que é
+        # o que `At Maturity` diz. Respondia `Sobre Valor Base Original` — o
+        # default histórico da tela — com o argumento de que o percentual é
+        # zero e a base não muda número nenhum. Não muda mesmo; muda o que a
+        # tela AFIRMA, e é esse o ponto: o Swap Calculator abria um contrato
+        # marcado "Sem Troca de Amortização" no Live Position dizendo "sobre o
+        # notional original — parcela constante", um cronograma de parcelas que
+        # aquele swap não tem. É o mesmo argumento que já valia para `Na Data
+        # de Vencimento`, e ele vale aqui com mais força ainda.
+        return liquidacao.AT_MATURITY
     return None
 
 

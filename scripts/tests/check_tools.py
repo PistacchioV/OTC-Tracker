@@ -318,14 +318,23 @@ check('a base da amortizacao sai do texto do tipo',
        domain.base_da_amortizacao('SOBRE O SALDO REMANESCENTE'),
        domain.base_da_amortizacao('QUALQUER OUTRA COISA')),
       (liquidacao.SOBRE_ORIGINAL, liquidacao.SOBRE_REMANESCENTE, None))
-# `Na Data de Vencimento` tem base PROPRIA: as outras duas descrevem uma
-# PARCELA, e dizer "sobre o valor original" num contrato que so amortiza no fim
-# afirma um cronograma que ele nao tem. `Sem Troca` continua no original — la o
-# percentual e zero e a base nao muda numero nenhum.
-check('Na Data de Vencimento vira At Maturity, Sem Troca nao',
+# As duas formas de NAO amortizar por fluxo caem na base PROPRIA (At Maturity):
+# as outras duas descrevem uma PARCELA, e dizer "sobre o valor original" num
+# contrato que nunca amortiza afirma um cronograma que ele nao tem. O numero e
+# o mesmo (o percentual e zero nos dois casos) — o que muda e o que a tela
+# AFIRMA, e era o Swap Calculator dizendo "parcela constante" sobre um swap
+# marcado "Sem Troca de Amortizacao" no Live Position.
+check('as duas formas de nao amortizar por fluxo viram At Maturity',
       (domain.base_da_amortizacao('NA DATA DE VENCIMENTO'),
        domain.base_da_amortizacao('SEM TROCA DE AMORTIZACAO')),
-      (liquidacao.AT_MATURITY, liquidacao.SOBRE_ORIGINAL))
+      (liquidacao.AT_MATURITY, liquidacao.AT_MATURITY))
+# E a base nao inventa amortizacao onde nao ha: o percentual do evento continua
+# zero, entao o valor amortizado e zero nas duas.
+check('   e nenhuma delas amortiza no fluxo',
+      (domain.amortiza_no_fluxo('NA DATA DE VENCIMENTO'),
+       domain.amortiza_no_fluxo('SEM TROCA DE AMORTIZACAO'),
+       liquidacao.amortizar(10000000.0, 8000000.0, 0.0, liquidacao.AT_MATURITY)),
+      (False, False, 0.0))
 # A 100% as tres bases dao o mesmo numero — e por isso a escolha e sobre o que
 # a tela AFIRMA, nao sobre a conta.
 check('At Maturity amortiza o SALDO, nao uma fracao do original',
