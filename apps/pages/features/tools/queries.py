@@ -9,6 +9,7 @@ import os
 from datetime import date, datetime, timedelta
 
 from apps.pages.features.tools import domain
+from apps.pages.features.tools.infra import memoria_xlsx
 from apps.pages.platform import swap_flows as _sf
 from apps.pages.precificador import (calendario, cdi, contagem, euribor, liquidacao,
                                      renda_fixa, sofr, term_sofr)
@@ -250,12 +251,17 @@ def calcular_renda_fixa(form):
 
 def liquidar(form):
     cal_nome = form.get('calendario') or 'ANBIMA'
+    # As duas pontas de ENTRADA voltam no resultado porque a memória de cálculo
+    # precisa do que foi CONTRATADO: o `PontaLiquidada` guarda o fator, não a
+    # taxa nem o percentual do CDI que o produziram.
+    pontas = {liquidacao.ATIVA: domain.ponta_do_form(form, 'ativa'),
+              liquidacao.PASSIVA: domain.ponta_do_form(form, 'passiva')}
     resultado = liquidacao.liquidar(
         data_operacao=para_data(form.get('data_operacao') or ''),
         inicio=para_data(form.get('inicio') or ''), fim=para_data(form.get('fim') or ''),
         nocional=domain.numero_do_form(form, 'nocional', 'remaining notional'),
-        ponta_ativa=domain.ponta_do_form(form, 'ativa'),
-        ponta_passiva=domain.ponta_do_form(form, 'passiva'),
+        ponta_ativa=pontas[liquidacao.ATIVA],
+        ponta_passiva=pontas[liquidacao.PASSIVA],
         vencimento=domain.texto_data(form, 'vencimento'),
         base_ajuste=form.get('base_ajuste') or liquidacao.BASE_AUTOMATICA,
         nocional_original=domain.numero_do_form(form, 'nocional_original', 'original notional', 0.0),
@@ -264,8 +270,30 @@ def liquidar(form):
         calendario=obter_calendario(cal_nome),
         arredondar_di=domain.ligado(form, 'arredondar_di'),
         reter_ir=domain.ligado(form, 'reter_ir'))
-    return {'r': resultado,
+    return {'r': resultado, 'pontas': pontas,
             'comparacao': contagens_lado_a_lado(resultado.inicio, resultado.fim, cal_nome)}
+
+
+def memoria_de_calculo(form):
+    """A memória de cálculo do que a tela acabou de mostrar — `(bytes, nome)`.
+
+    Refaz a conta pela MESMA função da tela, em vez de guardar o resultado
+    entre os dois requests: resultado de swap carregado na sessão morre com o
+    processo e volta divergente do formulário que foi editado depois de
+    calcular. Recalcular é barato — a série do CDI do período já está no memo
+    — e o arquivo sai, por construção, igual ao que a tela mostra para o mesmo
+    formulário.
+    """
+    calculo = liquidar(form)
+    r = calculo['r']
+    conteudo = memoria_xlsx.construir(
+        r, calculo['pontas'],
+        cetip_id=str(form.get('b3_id') or '').strip(),
+        contraparte=str(form.get('counterparty') or '').strip(),
+        calendario=form.get('calendario') or 'ANBIMA',
+        reter_ir=domain.ligado(form, 'reter_ir'),
+        arredondar_di=domain.ligado(form, 'arredondar_di'))
+    return conteudo, domain.nome_memoria(form.get('b3_id'), form.get('counterparty'), r.fim)
 
 
 def contagens_lado_a_lado(inicio, fim, cal_nome='ANBIMA'):
