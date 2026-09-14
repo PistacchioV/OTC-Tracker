@@ -16,7 +16,7 @@ mais apertada, rotulo com CSS proprio e botoes de TEXTO — e ainda redesenhava 
 moldura do `modal-content` na propria pagina, o que faz o mesmo modal ter dois
 contornos no tema escuro.
 
-Este script NAO exige que os 52 estejam no padrao: oito arquivos ainda estao
+Este script NAO exige que os 52 estejam no padrao: dois arquivos ainda estao
 fora, e alguns sao telas de demonstracao do tema comprado. Ele PRENDE A LISTA:
 um modal novo fora do padrao falha, e um dos oito que for corrigido tambem falha
 — pedindo que saia da lista. E assim que a divida para de crescer sem obrigar a
@@ -44,11 +44,6 @@ def check(label, got, exp):
 # Tire-o daqui. Nasceu um novo fora do padrao? Ele aparece e o teste falha.
 FORA_DO_PADRAO = {
     'pages/calendar.html': 1,                 # tela de demonstracao do tema
-    'pages/other-products-option-settlement-advice.html': 1,
-    'pages/other-products-swap-settlement-advice.html': 1,
-    'pages/reconciliation-comitente.html': 1,
-    'pages/reconciliation-fxo.html': 1,
-    'pages/users-roles.html': 1,
     'partials/topbar.html': 1,
 }
 
@@ -91,6 +86,33 @@ for trecho, rotulo in [
 # E a pagina nao pode voltar a redesenhar a moldura por conta propria.
 check('  e a pagina nao redesenha o modal-content',
       re.search(r'#mcEditModal\s+\.modal-content\s*\{', trk) is None, True)
+
+print('\n== o Upload Document do Electronic Inventory segue o padrao ==')
+# Ele tinha rotulo com peso proprio, metricas de botao reescritas no rodape e
+# repintava o `.modal-content` sob o id do modal -- o que vence o alfa de vidro
+# do streamflow.css E o solido do `sf-reduced`, e fazia dele o unico modal opaco
+# do app. O bloco extra do lote e montado em JS, entao o rotulo se confere la.
+ei = io.open(os.path.join(TPL, 'pages', 'electronic-inventory.html'),
+             encoding='utf-8').read()
+eijs = io.open(os.path.join(ROOT, 'apps', 'static', 'js', 'pages',
+                            'electronic-inventory.js'), encoding='utf-8').read()
+for trecho, rotulo in [
+        ('modal-content liquid-glass', 'a moldura e a da casa'),
+        ('modal-header py-2', 'o cabecalho tem altura'),
+        ('modal-title fs-6', 'o titulo e fs-6'),
+        ('row g-3', 'a grade e g-3'),
+        ('form-label fs-xs text-muted mb-1', 'o rotulo e o padrao'),
+        ('modal-footer py-2', 'o rodape tem altura'),
+        ('btn btn-sm btn-danger" data-bs-dismiss="modal"', 'o descartar e o icone vermelho'),
+        ('btn btn-sm btn-success', 'o gravar e o icone verde')]:
+    check('  ' + rotulo, trecho in ei, True)
+check('  o bloco extra do lote usa o mesmo rotulo',
+      'form-label fs-xs text-muted mb-1' in eijs and 'form-label fw-semibold' not in eijs, True)
+# As duas reescritas que o desalinhavam, cada uma pelo seu motivo.
+check('  e a pagina nao repinta o modal-content',
+      re.search(r'#eiUploadModal\s+\.modal-content', ei) is None, True)
+check('  nem reescreve as metricas do botao do rodape',
+      re.search(r'#eiUploadModal\s+\.modal-footer\s+\.btn\s*\{', ei) is None, True)
 
 print('\n' + ('FALHOU: ' + ', '.join(fails) if fails else 'TUDO OK'))
 sys.exit(1 if fails else 0)

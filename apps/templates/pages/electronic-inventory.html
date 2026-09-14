@@ -154,17 +154,10 @@
     #ei-page .ei-status-dot.off { background: #d0a02a; box-shadow: 0 0 0 3px rgba(208,160,42,.15); }
     #ei-page .ei-status-dot.slow { background: #2997ff; box-shadow: 0 0 0 3px rgba(41,151,255,.15); }
 
-    /* Upload modal — liquid-glass panel less translucent (more readable) than
-       the shared component default, scoped to this modal only. The backdrop
-       blur do tema fica ATIVO: o kill-switch que o desligava mirava uma
-       lentidão cuja causa real era o bug do reduced-motion (diálogo preso em
-       opacity 0), já corrigido na raiz em _modal.scss. */
-    #eiUploadModal .modal-content.liquid-glass {
-        background: rgba(255, 255, 255, 0.92) !important;
-    }
-    [data-bs-theme=dark] #eiUploadModal .modal-content.liquid-glass {
-        background: rgba(26, 29, 35, 0.94) !important;
-    }
+    /* O painel do modal é o `.modal-content.liquid-glass` da casa, e a página
+       NÃO o repinta: o alfa de vidro mora no `streamflow.css` (§34) e é lá que
+       o `sf-reduced` o torna sólido. Um `background` daqui, sob `#eiUploadModal`,
+       vence os dois pela especificidade do id — era o único modal opaco do app. */
 
     /* Confirmations folder navigator (left rail) ----------------------- */
     #ei-page .ei-fold-tree { margin-top: .25rem; }
@@ -252,24 +245,18 @@
     #ei-page .ei-doc-row { animation: eiRowIn .22s var(--ei-ease) both; }
     @keyframes eiRowIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 
-    /* The global .btn-primary rule hard-codes padding/font-size, while .btn-sm
-       only redefines the --ins-btn-* variables — so btn-sm alone cannot shrink a
-       primary button. Restate the small metrics for this footer (higher
-       specificity wins; no !important needed). */
-    #eiUploadModal .modal-footer .btn {
-        padding: 0.3125rem 0.9rem;
-        font-size: 0.775rem;
-    }
-
-    /* Calendar icon inside the Date picker field. */
-    #eiUploadModal #eiUpDate {
+    /* Calendar icon inside the Date picker field — o campo fixo e os dos
+       blocos extras do lote, que nasciam sem ele. */
+    #eiUploadModal #eiUpDate,
+    #eiUploadModal .ei-up-date {
         padding-right: 2.1rem;
         background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236c757d' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='18' rx='2'/%3E%3Cline x1='16' y1='2' x2='16' y2='6'/%3E%3Cline x1='8' y1='2' x2='8' y2='6'/%3E%3Cline x1='3' y1='10' x2='21' y2='10'/%3E%3C/svg%3E");
         background-repeat: no-repeat;
         background-position: right 0.7rem center;
         background-size: 16px 16px;
     }
-    [data-bs-theme=dark] #eiUploadModal #eiUpDate {
+    [data-bs-theme=dark] #eiUploadModal #eiUpDate,
+    [data-bs-theme=dark] #eiUploadModal .ei-up-date {
         background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23adb5bd' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='18' rx='2'/%3E%3Cline x1='16' y1='2' x2='16' y2='6'/%3E%3Cline x1='8' y1='2' x2='8' y2='6'/%3E%3Cline x1='3' y1='10' x2='21' y2='10'/%3E%3C/svg%3E");
     }
 
@@ -431,12 +418,12 @@
                 <div class="modal-body">
                     <div class="row g-3">
                         <div class="col-md-6">
-                            <label class="form-label fw-semibold">Counterparty</label>
+                            <label class="form-label fs-xs text-muted mb-1">Counterparty</label>
                             <input type="text" class="form-control" id="eiUpClient" placeholder="Counterparty name" readonly>
                             <div class="form-text">Selected on the left. Folders are created automatically if missing.</div>
                         </div>
                         <div class="col-md-3">
-                            <label class="form-label fw-semibold">Document Type</label>
+                            <label class="form-label fs-xs text-muted mb-1">Document Type</label>
                             <select class="form-select" id="eiUpType">
                                 <option value="Confirmations">Confirmations</option>
                                 <option value="SSI">SSI</option>
@@ -444,21 +431,21 @@
                             </select>
                         </div>
                         <div class="col-md-3">
-                            <label class="form-label fw-semibold">Date</label>
+                            <label class="form-label fs-xs text-muted mb-1">Date</label>
                             <input type="text" class="form-control" id="eiUpDate" placeholder="dd/mm/yyyy" autocomplete="off">
                         </div>
 
                         <div class="col-md-6 d-none" id="eiUpSubtypeWrap">
                             <!-- Label + options swap with Document Type (Transactional
                                  agreements vs. Confirmations by product). -->
-                            <label class="form-label fw-semibold" id="eiUpSubtypeLabel">Transactional Type</label>
+                            <label class="form-label fs-xs text-muted mb-1" id="eiUpSubtypeLabel">Transactional Type</label>
                             <select class="form-select" id="eiUpSubtype">
                                 <option value="">— Select —</option>
                             </select>
                         </div>
 
                         <div class="col-12">
-                            <label class="form-label fw-semibold">File</label>
+                            <label class="form-label fs-xs text-muted mb-1">File</label>
                             <div class="ei-drop border border-dashed rounded-3 p-4 text-center" id="eiDrop"
                                  style="cursor:pointer;">
                                 <button type="button" class="btn btn-sm btn-danger rounded-circle ei-drop-clear d-none"
