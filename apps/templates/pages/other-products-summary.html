@@ -176,7 +176,7 @@
     background: var(--ins-tertiary-bg, #eef0f4); color: var(--ins-secondary-color, #6e6e73);
 }
 .ops-recon-badge.is-ok    { background: rgba(34,197,94,.16);  color: #16a34a; }
-.ops-recon-badge.is-check { background: rgba(245,158,11,.18); color: #b45309; }
+.ops-recon-badge.is-check { background: rgba(239,68,68,.16);  color: #dc2626; }
 .ops-recon-grid {
     border-top: 1px dashed var(--ops-hairline); padding-top: .55rem;
     display: grid; row-gap: .18rem;
@@ -201,7 +201,7 @@
    propriedade: box-shadow NÃO se soma entre regras — a última declaração vence a
    lista inteira, e sem a variável a luz apagaria o anel (§181). */
 .ops-recon              { --ops-ring: 0 0 0 0 rgba(0, 0, 0, 0); }
-.ops-recon.is-unmatched { --ops-ring: inset 0 0 0 1px rgba(245, 158, 11, .5); }
+.ops-recon.is-unmatched { --ops-ring: inset 0 0 0 1px rgba(239, 68, 68, .5); }
 
 .ops-recon--total { background: linear-gradient(135deg, #0066cc 0%, #34369b 100%); border: 0; }
 .ops-recon--total .ops-widget__title,
@@ -215,22 +215,31 @@
 .ops-recon--total .ops-recon-grid { border-top-color: rgba(255,255,255,.28); }
 .ops-recon--total .ops-recon-badge { background: rgba(255,255,255,.2); color: #fff; }
 .ops-recon--total .ops-widget__icon { background: rgba(255,255,255,.18); color: #fff; }
-.ops-recon--total.is-unmatched { --ops-ring: inset 0 0 0 2px rgba(245, 158, 11, .9); }
+.ops-recon--total.is-unmatched { --ops-ring: inset 0 0 0 2px rgba(239, 68, 68, .9); }
 
-/* Luz de fundo por estado (§181): verde bateu, âmbar verificar. O tema CLARO
-   pesa mais que o escuro — no claro o halo compete com o fundo branco. */
-.ops-recon.is-ok    { --ops-glow:  22, 163,  74; }
-.ops-recon.is-check { --ops-glow: 245, 158,  11; }
-.ops-recon.is-ok,
-.ops-recon.is-check {
+/* Luz de fundo por estado (§181, §464): verde bateu, VERMELHO verificar — o
+   estado aqui é binário, ao contrário da escala de progresso do New Deals
+   Monitor. O tema CLARO pesa mais que o escuro: no claro o halo compete com o
+   fundo branco.
+   O prefixo `#ops-page` NÃO é enfeite: `.ops-widget` casa com o seletor
+   ESTRUTURAL do tema (`div[class*="-widget"]:not([class*="__"]):not(.row)`,
+   especificidade 0,3,1), que também declara `box-shadow` e carrega DEPOIS do
+   `extra_css` da página. Sem o id (1,2,0 contra 0,3,1) a luz era calculada e
+   descartada: a classe entrava no card, o `--ops-glow` resolvia certo e o
+   `box-shadow` computado continuava o cinza do tema — as luzes simplesmente
+   não existiam nesta tela. É o mesmo `#ndm-page` do Monitor. */
+#ops-page .ops-recon.is-ok    { --ops-glow:  22, 163,  74; }
+#ops-page .ops-recon.is-check { --ops-glow: 220,  38,  38; }
+#ops-page .ops-recon.is-ok,
+#ops-page .ops-recon.is-check {
     border-color: rgba(var(--ops-glow), .42);
     box-shadow: var(--ops-ring),
                 0 2px 6px  rgba(var(--ops-glow), .20),
                 0 10px 24px rgba(var(--ops-glow), .34),
                 0 22px 50px rgba(var(--ops-glow), .22);
 }
-[data-bs-theme=dark] .ops-recon.is-ok,
-[data-bs-theme=dark] .ops-recon.is-check {
+[data-bs-theme=dark] #ops-page .ops-recon.is-ok,
+[data-bs-theme=dark] #ops-page .ops-recon.is-check {
     border-color: rgba(var(--ops-glow), .36);
     box-shadow: var(--ops-ring),
                 0 2px 6px  rgba(var(--ops-glow), .15),
@@ -238,15 +247,15 @@
                 0 22px 50px rgba(var(--ops-glow), .16);
 }
 @media (hover: hover) and (pointer: fine) {
-    .ops-recon.is-ok:hover, .ops-recon.is-check:hover {
+    #ops-page .ops-recon.is-ok:hover, #ops-page .ops-recon.is-check:hover {
         border-color: rgba(var(--ops-glow), .52);
         box-shadow: var(--ops-ring),
                     0 4px 10px rgba(var(--ops-glow), .24),
                     0 18px 38px rgba(var(--ops-glow), .38),
                     0 34px 70px rgba(var(--ops-glow), .24);
     }
-    [data-bs-theme=dark] .ops-recon.is-ok:hover,
-    [data-bs-theme=dark] .ops-recon.is-check:hover {
+    [data-bs-theme=dark] #ops-page .ops-recon.is-ok:hover,
+    [data-bs-theme=dark] #ops-page .ops-recon.is-check:hover {
         border-color: rgba(var(--ops-glow), .44);
         box-shadow: var(--ops-ring),
                     0 4px 10px rgba(var(--ops-glow), .18),
@@ -866,10 +875,10 @@ document.addEventListener('DOMContentLoaded', function () {
     // ── Cards de reconciliação: B3 × Interno, por família + Total ────────────
     //  Três estados, não dois:
     //    OK      — contagem E valor batem
-    //    Check   — há divergência (luz âmbar)
+    //    Check   — há divergência (luz VERMELHA)
     //    —       — a família ainda não tem lado interno (Option, NDF Comm, COE).
     //              Traço CINZA, sem luz: não há divergência, há conta que ainda
-    //              não é feita. Pintar de âmbar leria como erro de dado.
+    //              não é feita. Pintar de vermelho leria como erro de dado.
     function setRecon(recon) {
         recon = recon || {};
         document.querySelectorAll('.ops-recon').forEach(function (card) {
