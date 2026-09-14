@@ -104,21 +104,28 @@ def juros_do_fator(fator_, vbr):
 def liquidacao_vcp(vcp_p, vcp_c, fator_p, fator_c, vbr, juros_p, juros_c, diff_p, diff_c):
     """O que a B3 liquidaria com os fatores desta linha, ou `None`.
 
-    O caixa do swap é a DIFERENÇA entre as duas pernas, e cada uma entra pela
-    fonte que a B3 vai usar:
+    É a PROVA REAL do fator: aplicado de volta ao VBR, ele tem de reproduzir o
+    caixa que o interno (OTM) diz que o swap liquida. O que a coluna mede, no
+    fim, é o ARREDONDAMENTO — o fator vai à B3 com 8 casas e multiplica um VBR
+    de milhões —, mais qualquer perna que não fechou (sem fluxo, sem curva,
+    lado trocado). Por isso cada perna entra pela fonte que a B3 vai usar:
 
-      - perna VCP → `(fator − 1) × VBR`, o fator que estamos mandando;
+      - perna VCP → `(fator − 1) × VBR`, com o fator JÁ arredondado, que é o
+        que sai no `VCP_*.TXT`. Usar o fator cheio tornaria a conta uma
+        tautologia: daria zero sempre, inclusive no dia em que a 8ª casa
+        custasse dinheiro de verdade;
       - perna CALCULADA → o juro que a **B3** calcula, que é o nosso mais a
         diff (`diff_b3 = valor da B3 − valor JP`, então `juros + diff` é o
-        valor da B3). Usar o nosso aqui compararia o interno com o interno e a
-        coluna nunca acusaria nada. Sem a diff, vale o nosso — a alternativa
-        seria não responder, e a linha ainda diz alguma coisa.
+        valor da B3). É o que faz a diff se CANCELAR — ela já entrou no fator
+        da perna VCP —, e é justamente esse cancelamento que leva a conta de
+        volta ao caixa interno. Com o nosso valor aqui a diff sobraria na
+        subtração e toda linha com divergência B3 acusaria falso.
 
-    Três desenhos, e é o do meio que a mesa citou explicitamente:
-
-      VCP × calculada   →  juros do fator − juro da B3 na outra
-      calculada × VCP   →  o mesmo, espelhado
-      VCP × VCP         →  uma menos a outra, as duas pelo fator
+    A ORDEM é a do `Internal Settlement`, contra quem esta coluna é comparada:
+    **Parte menos Contraparte**, seja qual for a perna que tem fator. Montar
+    "VCP menos a outra" inverte o sinal em toda linha cuja perna VCP é a
+    Contraparte — o módulo bate, a diferença sai como o DOBRO do caixa e a
+    linha marca `Check` sempre.
 
     Sem perna VCP nenhuma não há o que conferir (a linha não vai para o
     arquivo de PU/Fator), e a resposta é `None`."""
@@ -127,17 +134,13 @@ def liquidacao_vcp(vcp_p, vcp_c, fator_p, fator_c, vbr, juros_p, juros_c, diff_p
             return None
         return juros_ + (diff_ or 0.0)
 
-    if vcp_p and vcp_c:
-        a, b = juros_do_fator(fator_p, vbr), juros_do_fator(fator_c, vbr)
-    elif vcp_p:
-        a, b = juros_do_fator(fator_p, vbr), da_b3(juros_c, diff_c)
-    elif vcp_c:
-        a, b = juros_do_fator(fator_c, vbr), da_b3(juros_p, diff_p)
-    else:
+    if not (vcp_p or vcp_c):
         return None
-    if a is None or b is None:
+    parte = juros_do_fator(fator_p, vbr) if vcp_p else da_b3(juros_p, diff_p)
+    cpty = juros_do_fator(fator_c, vbr) if vcp_c else da_b3(juros_c, diff_c)
+    if parte is None or cpty is None:
         return None
-    return a - b
+    return parte - cpty
 
 
 def diferenca_liquidacao(interno, vcp):
