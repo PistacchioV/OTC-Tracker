@@ -339,7 +339,10 @@
         'swap-equities':      'ti-arrows-exchange',
         'swap-cem':           'ti-building-bank',
         'intrag-ndf':         'ti-building',
-        'intrag-option':      'ti-briefcase'
+        'intrag-option':      'ti-briefcase',
+        'intrag-swap':        'ti-arrows-exchange',
+        'intrag-dce-option':  'ti-file-invoice',
+        'intrag-dce-swap':    'ti-file-invoice'
     };
     // Ordem canônica de exibição dos status (demais entram no fim, cor neutra)
     // O ciclo inteiro da confirmação numa ordem só: o documento (New →
@@ -462,10 +465,10 @@
           intrag: ['intrag-ndf'] },
         { key: 'ndm-grp-options', label: 'Options',
           b3: ['opt-commodities', 'opt-fxo', 'opt-equity'],
-          intrag: ['intrag-option'] },
+          intrag: ['intrag-option', 'intrag-dce-option'] },
         { key: 'ndm-grp-swaps',   label: 'Swaps',
           b3: ['swap-equities', 'swap-cem'],
-          intrag: ['intrag-swap'] }
+          intrag: ['intrag-swap', 'intrag-dce-swap'] }
     ];
 
     // Cards de Confirmations por família de produto (só produtos com lógica de
@@ -481,11 +484,12 @@
         cards.forEach(function (c) { byKey[c.key] = c; });
         var confByKey = {};
         (confCards || []).forEach(function (c) { confByKey[c.key] = c; });
-        // Card ainda sem desenvolvimento no catálogo do servidor (Intrag Swap)
-        if (!byKey['intrag-swap']) {
-            byKey['intrag-swap'] = { key: 'intrag-swap', label: 'Intrag Swap', url: null,
-                                     soon: true, total: 0, statuses: {} };
-        }
+        // Nenhum card é inventado aqui. O 'intrag-swap' nascia deste bloco como
+        // "In development" porque o catálogo do servidor não o tinha — e, com
+        // arquivo na pasta `Intrag/Swap`, o MESMO produto aparecia duas vezes:
+        // zerado na zona Intrag (este placeholder) e com o número real no grupo
+        // Others (o card genérico "e etc"). Quem diz que cards existem é o
+        // `_NDM_CARDS`; página sem card é card que falta lá, não aqui.
         var used = {};
         function pick(keys) {
             return keys.filter(function (k) { return byKey[k]; })

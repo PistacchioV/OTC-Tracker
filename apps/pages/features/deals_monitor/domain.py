@@ -18,6 +18,20 @@ _NDM_CARDS = [
     {'key': 'swap-cem',           'label': 'Swap CEM',            'url': None, 'soon': True,              'dirs': ('Swap/CEM',),                                 'les': ('JPM', 'LAW')},
     {'key': 'intrag-ndf',         'label': 'Intrag NDF',          'url': '/intrag-ndf',                   'dirs': ('Intrag/NDF',),                               'les': ('LAW', 'ATA')},
     {'key': 'intrag-option',      'label': 'Intrag Option',       'url': '/intrag-option',                'dirs': ('Intrag/Option',),                            'les': ('LAW', 'ATA')},
+    {'key': 'intrag-swap',        'label': 'Intrag Swap',         'url': '/intrag-swap',                  'dirs': ('Intrag/Swap',),                              'les': ('LAW', 'ATA')},
+    # As duas telas de DCE gravam arquivo-dia no MESMO cache (`Intrag/DCE
+    # Option`, `Intrag/DCE Swap`), entao elas sempre entraram na varredura do
+    # Monitor — so que sem entrada aqui caiam no card generico "e etc", que a
+    # tela desenha no grupo *Others* do rodape, sem link para a pagina, e que o
+    # e-mail de pendencias classificava como **Registration** (a chave
+    # `extra-...` nao comeca com `intrag-`): cobranca de DCE misturada com
+    # registro na B3. Elas nao declaram `les` de proposito — a entidade do
+    # Intrag sai do portfolio code (`_ndm_deal_le`), e nenhuma das duas o traz
+    # nessa grafia (o DCE Option carrega o codigo do extrato, tipo `GCCN`; o DCE
+    # Swap vem da planilha e nao tem o campo). Sem a chave, o card nao desenha
+    # subitem nenhum, em vez de desenhar um LAW/ATA inventado.
+    {'key': 'intrag-dce-option',  'label': 'Intrag DCE Option',   'url': '/intrag-dce-option',            'dirs': ('Intrag/DCE Option',)},
+    {'key': 'intrag-dce-swap',    'label': 'Intrag DCE Swap',     'url': '/intrag-dce-swap',              'dirs': ('Intrag/DCE Swap',)},
 ]
 
 _NDM_JPM_RE = re.compile(r'J\.?P\.?\s*MORGAN', re.IGNORECASE)
@@ -68,6 +82,9 @@ _NDM_TAXONOMY = {
     'intrag-ndf':         ('NDF', '—'),
     'intrag-option':      ('Option', '—'),
     'intrag-swap':        ('Swap', '—'),
+    # O DCE, ao contrario, TEM sub-variante: e o outro fluxo do mesmo produto.
+    'intrag-dce-option':  ('Option', 'DCE'),
+    'intrag-dce-swap':    ('Swap', 'DCE'),
 }
 
 _NDM_TYPE_ORDER = ['Registration', 'Confirmation', 'Intrag']
