@@ -19743,3 +19743,57 @@ sem `name` convivendo com o `swapchar-table` da mesma tela. O guarda não a vê:
 as duas chamadas moram em arquivos diferentes (a segunda no
 `live-position-swap-characteristics.js`, compartilhado por cinco páginas), e a
 conferência do item 3 é por ARQUIVO.
+
+---
+
+## §464 — As luzes dos cards de reconciliação eram calculadas e descartadas (2026-09-14)
+
+Os quatro/cinco cards do topo do **NDF Summary** e do **Other Products
+Summary** tinham perdido a luz de fundo que diz se a família bateu. O CSS
+estava inteiro, comentado e correto; o JS aplicava as classes no mesmo ponto em
+que escreve o badge. Só que a luz nunca chegava à tela.
+
+**A cascata.** O card é `.ops-widget .ops-recon`, e `ops-widget` casa com o
+seletor ESTRUTURAL do tema (`streamflow.css` §23.1):
+
+```css
+div[class*="-widget"]:not([class*="__"]):not(.row) { … box-shadow: var(--vr-card-shadow); }
+```
+
+Especificidade **0,3,1**, contra **0,2,0** de `.ops-recon.is-ok` — e ainda por
+cima o `streamflow.css` carrega DEPOIS do `extra_css` da página. O tema vencia
+nos dois critérios. Medido na tela, com o app de pé:
+
+- a classe ESTAVA no card (`ops-widget ops-recon is-ok`);
+- o `--ops-glow` resolvia certo (`22, 163, 74`);
+- e o `box-shadow` computado era o cinza-azulado do tema, **idêntico nos três
+  estados** — `is-ok`, `is-check` e neutro davam a mesma string.
+
+É a armadilha que o §7 do CLAUDE.md já descrevia em outras palavras ("o
+`extra_css` da página carrega ANTES do tema e perde"), aqui na forma mais
+traiçoeira: nada some da tela, o card continua bonito, e só falta a informação.
+
+**A correção** é a que o New Deals Monitor já usava e que ninguém tinha
+transportado: prefixar o estado com o id da página (`#ops-page`, como o
+`#ndm-page` de lá) — 1,2,0 contra 0,3,1, o id resolve a disputa. Dez seletores
+em cada tela.
+
+**A cor do Check passou de âmbar para VERMELHO** a pedido da mesa: no Monitor as
+luzes são uma ESCALA de progresso (vermelho → âmbar → verde, conforme as
+operações saem do New), e ali o âmbar é um degrau do meio. Aqui o estado é
+BINÁRIO — bateu ou não bateu —, e um degrau do meio sem meio confunde. Ficaram
+as duas cores da mesma família Tailwind já usada no arquivo: green-600
+(`22,163,74`) e red-600 (`220,38,38`), com o badge acompanhando
+(`rgba(239,68,68,.16)` / `#dc2626`) e o anel do `is-unmatched` junto.
+
+**O terceiro estado do Other Products continua sem luz**, de propósito: Option,
+NDF Commodities e COE ainda não têm lado interno, e o card mostra `n/a` cinza.
+Não há divergência ali — há conta que ainda não é feita, e pintá-la de vermelho
+leria como erro de dado.
+
+Provado nos dois temas depois da correção: `is-ok` computa
+`rgba(22,163,74,…)` e `is-check` computa `rgba(220,38,38,…)`. Um detalhe de
+medição que custou uma passada: o widget do tema tem `transition: box-shadow
+0.3s`, então ler o `box-shadow` computado logo depois de trocar a classe devolve
+a cor ANTIGA, no meio da transição — é preciso esperar a transição fechar antes
+de acreditar no valor.
