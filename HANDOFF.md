@@ -19471,6 +19471,10 @@ antiga em uma asserção — foi atualizada na mesma mudança, e ganhou a asser�
 que diz por que a troca é segura: nenhuma das duas amortiza no fluxo, e com
 percentual zero o valor amortizado é zero nas duas bases.
 
+> **Superado pelo §458**: `At Maturity` ainda afirma que o principal volta
+> inteiro no encerramento. O `Sem Troca de Amortização` ganhou base própria
+> (`liquidacao.SEM_TROCA`), que não amortiza em evento nenhum.
+
 ## §457 — Termo de moeda: duas operações, duas moedas, uma confirmação só — e uma operação sumindo (2026-09-14)
 
 **O relato.** "Na geração de confirmações, quando tem por exemplo de FWD Start,
