@@ -3307,6 +3307,17 @@ def _ds_handle(name, raw, delete_path, ref, processed, skipped):
         log.warning("[ds] process failed for %s:\n%s", name, traceback.format_exc())
         skipped.append(name)
         return
+    # Arquivo que entra inteiro e sai ZERADO é a falha silenciosa deste card: o
+    # card devolve "0 of 5000 line(s)" e nada mais, e as cinco telas que leem
+    # este JSON ficam vazias sem uma linha em lugar nenhum. As causas não dão
+    # erro (header noutra linha, coluna renomeada, filtro de conta/tipo, ou a
+    # Reference date fora das datas do arquivo), então o aviso sai em WARNING —
+    # é o nível que aparece no log da instância — e o
+    # `scripts/diag_daily_settlement.py` diz qual das causas foi.
+    if total and not recs:
+        log.warning('[ds] %s (%s): 0 de %d linha(s) guardadas na data %s — '
+                    'rode scripts/diag_daily_settlement.py para ver qual filtro/coluna '
+                    'derrubou tudo', name, spec['key'], total, ref.strftime('%d/%m/%Y'))
     _ds_write(jp, recs, name, spec, total, processed, delete_path)
     if spec.get('latam'):                              # guarda também o arquivo de origem
         _latam_write_meta(jp, ref.strftime('%H:%M:%S'), name)

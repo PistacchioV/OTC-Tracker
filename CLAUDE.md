@@ -747,6 +747,20 @@ São **45**: `currency-base`, `interbook-ndf`, `commodities-b3`,
   ANTIGAS ficam invisíveis para sempre no Confirmations Monitor, sem erro
   nenhum — foi o que aconteceu com o `NDF VANILLA` de MGT. Mercadoria e FXO são
   sempre JPM (`_MC_JPM_SOURCES`); razão social do `le-spn`.
+- **O Monitor não recebe lista de produto: ele VARRE o `cache/new deals/`**
+  e agrupa pelos dois primeiros níveis não numéricos do caminho (§454). Quem
+  diz que um produto EXISTE é o `_NDM_CARDS` (`deals_monitor/domain.py`); o
+  pkey sem card vira o genérico `extra-<pkey>`, que desenha no grupo *Others*
+  do rodapé, sem link de página, e cuja chave **não começa com `intrag-`** —
+  então o e-mail de pendências o classifica como **Registration** (o único
+  teste de zona é o prefixo da chave). Foi o que aconteceu com as duas telas
+  de DCE, que gravam dia no mesmo cache desde sempre. Card novo mexe em
+  `_NDM_CARDS`, `_NDM_TAXONOMY` e nos `GROUPS` do
+  `new-deals-monitor.html`; **o front nunca fabrica card** (o `intrag-swap`
+  nascia de um placeholder no JS e o mesmo produto aparecia duas vezes na
+  tela). `les` só se a entidade sair mesmo do portfolio code — sem a chave, o
+  card não desenha subitem, em vez de desenhar um LAW/ATA inventado.
+  `check_ndm_cards.py`.
 
 - **Swap Calculator, perna IPCA: o fixing M-1/M-2 busca o número-índice
   FINAL no IBGE** (`precificador/ipca.py`, tabela 1737 variável 2266, §449):

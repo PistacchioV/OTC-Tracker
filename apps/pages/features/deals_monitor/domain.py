@@ -19,7 +19,7 @@ _NDM_CARDS = [
     {'key': 'intrag-ndf',         'label': 'Intrag NDF',          'url': '/intrag-ndf',                   'dirs': ('Intrag/NDF',),                               'les': ('LAW', 'ATA')},
     {'key': 'intrag-option',      'label': 'Intrag Option',       'url': '/intrag-option',                'dirs': ('Intrag/Option',),                            'les': ('LAW', 'ATA')},
     {'key': 'intrag-swap',        'label': 'Intrag Swap',         'url': '/intrag-swap',                  'dirs': ('Intrag/Swap',),                              'les': ('LAW', 'ATA')},
-    # As duas telas de DCE gravam arquivo-dia no MESMO cache (`Intrag/DCE
+    # As duas telas de DCE gravam arquivo-dia no MESMO cache (§454) (`Intrag/DCE
     # Option`, `Intrag/DCE Swap`), entao elas sempre entraram na varredura do
     # Monitor — so que sem entrada aqui caiam no card generico "e etc", que a
     # tela desenha no grupo *Others* do rodape, sem link para a pagina, e que o
