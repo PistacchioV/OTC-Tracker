@@ -788,8 +788,42 @@ def _ops_opt_trade_rows(settle_ref):
 #  Do OTM saem os três valores do aviso, e a regra é a que a mesa usa:
 #  **Curva Banco = os fluxos positivos, Curva Cliente = os negativos, Resultado
 #  Bruto = a soma dos dois.**
+#  Os prefixos vivem no cadastro `equity-leg-prefix` (§6), não aqui: a tupla
+#  fixa conhecia dois e o OTM já trazia um terceiro (`270RI`), que
+#  `_ops_eq_trade_key` não reconhecia — a linha era descartada ANTES de
+#  agrupar, e o aviso saía com o nome curto da B3 e os valores em branco, sem
+#  erro nenhum. Esta tupla é só a SEMENTE (e o que vale quando o cadastro não
+#  responde).
 _OPS_EQ_LEG_PREFIX = (('CLEARING_TRD_ID_INT', '270WI'),
-                      ('CLEARING_TRD_ID_CLNT', '270WC'))
+                      ('CLEARING_TRD_ID_CLNT', '270WC'),
+                      ('CLEARING_TRD_ID_INT', '270RI'))
+_OPS_EQ_LEG_COLUNA = {'internal': 'CLEARING_TRD_ID_INT', 'client': 'CLEARING_TRD_ID_CLNT'}
+
+
+def _ops_eq_leg_prefixes():
+    """[(coluna de clearing do Latam, prefixo do Trade Id)] do cadastro
+    `equity-leg-prefix`, do prefixo MAIS LONGO para o mais curto.
+
+    O comprimento decide porque `_ops_eq_trade_key` devolve o PRIMEIRO que casa:
+    um prefixo que é começo de outro roubaria a linha pela ordem de cadastro, e
+    o Trade Id iria para a perna errada — que é pior do que ir para nenhuma.
+
+    Cadastro vazio ou ilegível cai na semente: sem ela, uma falha de leitura
+    apagaria o elo de equity inteiro (nome curto da B3 e valores em branco em
+    toda linha) em vez de manter o que sempre funcionou."""
+    from apps.pages import routes
+    out = []
+    try:
+        for r in routes._mapping_rows('equity-leg-prefix'):
+            pref = str(r.get('PREFIX', '') or '').strip().upper()
+            col = _OPS_EQ_LEG_COLUNA.get(routes._fcst_norm(r.get('LEG', '')).strip())
+            if pref and col:
+                out.append((col, pref))
+    except Exception:                                       # noqa: BLE001
+        log.warning('[equity-link] cadastro equity-leg-prefix ilegível — valendo a '
+                    'semente %s', [p for _c, p in _OPS_EQ_LEG_PREFIX], exc_info=True)
+        out = []
+    return sorted(out or _OPS_EQ_LEG_PREFIX, key=lambda cp: -len(cp[1]))
 
 
 def _ops_eq_ref_key(v):
@@ -810,7 +844,7 @@ def _ops_eq_trade_key(trade_id):
     identificador de outra família não pode casar por acidente com um `Deal_Ref`
     que não é dele."""
     s = str(trade_id or '').strip().upper()
-    for _col, pref in _OPS_EQ_LEG_PREFIX:
+    for _col, pref in _ops_eq_leg_prefixes():
         if s.startswith(pref):
             return pref, _ops_eq_ref_key(s[len(pref):])
     return None, ''
@@ -839,7 +873,7 @@ def _latam_equity_b3_index():
         deal_ref = _ops_eq_ref_key(rec.get('Deal_Ref', ''))
         if not deal_ref:
             continue
-        for col, pref in _OPS_EQ_LEG_PREFIX:
+        for col, pref in _ops_eq_leg_prefixes():
             b3 = str(rec.get(col, '') or '').strip().upper()
             if b3:
                 idx.setdefault(b3, (deal_ref, pref, rec))

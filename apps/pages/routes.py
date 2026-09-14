@@ -6680,6 +6680,25 @@ def _vcp_collect(ref):
             # então o segundo passo nunca devolve o titular dela por engano.
             acct_dig = _acc_digits(cpty_conta)
             name = by_acct.get(acct_dig, '') if acct_dig else ''
+            # Conta PRÓPRIA de entidade nossa (Atacama, Lawton, MGT): ela não
+            # está no `B3 ACCOUNT` do Reference Data e NÃO TEM CNPJ na linha —
+            # numa conta própria não há cliente a identificar, então a coluna do
+            # documento vem vazia e os dois passos da cascata morriam sem nada
+            # dizendo por quê. Quem sabe o nome é o `b3-accounts`, que lista
+            # justamente as contas B3 das nossas entidades com a razão social do
+            # Reference Data ao lado (o Nome Simplificado da B3 é apelido de 20
+            # caracteres e não endereça documento nenhum).
+            #
+            # Vem DEPOIS do Reference Data e ANTES do CNPJ de propósito: a conta
+            # de terceiro cadastrada continua vencendo, e o CNPJ segue sendo a
+            # resposta da omnibus, onde a conta não identifica ninguém.
+            #
+            # E NUNCA na guarda-chuva: lá o `b3-accounts` guarda o titular da
+            # conta (o Banco), não o cliente da linha — sem este teste a
+            # omnibus passava a responder 'BANCO J.P. MORGAN S.A.' para todo
+            # contrato, por cima do CNPJ que identifica o cliente de verdade.
+            if not name and acct_dig and not _b3_is_omnibus(cpty_conta):
+                name = _b3_account_refdata_name(cpty_conta)
             if not name:
                 name = by_taxid.get(_acc_digits(cpty_cnpj), '')
             rows_out.append([name, contrato, parte_conta, parte_ix, '',
@@ -11130,6 +11149,18 @@ def _commodities_b3_upgrade(rows):
     return _commodities_b3_quote_defaults(rows)
 
 
+# Prefixo do Trade Id do OTM × perna do Latam Desk Position (cadastro
+# `equity-leg-prefix`). `Internal` é a nossa entidade (CLEARING_TRD_ID_INT),
+# `Client` é o cliente externo (CLEARING_TRD_ID_CLNT) — a LETRA final do
+# prefixo é que diz qual, e é por isso que `270RI` nasce como Internal.
+_MAP_EQ_LEG_OPTIONS = ('Internal', 'Client')
+_MAP_EQ_LEG_SEED = (
+    {'PREFIX': '270WI', 'LEG': 'Internal', 'NOTES': 'Perna da nossa entidade'},
+    {'PREFIX': '270WC', 'LEG': 'Client', 'NOTES': 'Perna do cliente externo'},
+    {'PREFIX': '270RI', 'LEG': 'Internal', 'NOTES': 'Perna da nossa entidade'},
+)
+
+
 _MAPPING_DEFS = {
     # Aba movida do Index B3 — edita o MESMO BaseMoeda.json que os previews de
     # NDF já leem para o código de moeda (CODIGO DE CADASTRO). Absorveu o antigo
@@ -11659,6 +11690,31 @@ _MAPPING_DEFS = {
         ],
         'seed': list(_MAP_OPB3_SEED),
         'upgrade': _opb3_events_upgrade,
+    },
+    # O elo de EQUITY: qual prefixo de Trade Id do OTM pertence a qual perna do
+    # Latam Desk Position. Um `Deal_Ref` cobre DUAS operações — a contra o
+    # cliente externo e a contra a nossa entidade —, e o relatório traz os dois
+    # identificadores da B3 na mesma linha; o prefixo é o que diz qual é qual.
+    #
+    # Isto era uma tupla fixa no `settlement.py` com dois prefixos, e a terceira
+    # variação (`270RI`) simplesmente não casava: `_ops_eq_trade_key` devolvia
+    # `(None, '')`, a linha do OTM era descartada ANTES de agrupar, e o
+    # Settlement Advice saía com o nome curto da B3 (a NOSSA perna) e as três
+    # colunas de valor em branco. Nada disso dava erro. Prefixo novo agora se
+    # cadastra aqui, sem deploy.
+    #
+    # O prefixo MAIS LONGO vence, como em todo casamento por token do projeto:
+    # um prefixo que é começo de outro não pode roubar a linha por ordem de
+    # cadastro.
+    'equity-leg-prefix': {
+        'label': 'Equity Legs — Trade Id Prefix',
+        'columns': [
+            {'key': 'PREFIX', 'label': 'Trade Id prefix (OTM)'},
+            {'key': 'LEG', 'label': 'Leg', 'type': 'select',
+             'options': list(_MAP_EQ_LEG_OPTIONS)},
+            {'key': 'NOTES', 'label': 'Notes'},
+        ],
+        'seed': list(_MAP_EQ_LEG_SEED),
     },
     # IR do swap, parte 1: as EXCEÇÕES por cliente, testadas antes de tudo. Vêm
     # do IF encadeado da planilha de avisos — bancos e as duas entidades JPM.

@@ -498,7 +498,11 @@
         pill(f.status),
         esc(f.internal_id || f.athena_id || '') + miss, esc(f.lob || ''), esc(f.contrato), esc(f.contraparte),
         cell('vbr', n2(f.vbr)), cell('pct', n4(f.pct)), cell('tipo', f.tipo), cell('amortizado', n2(f.amortizado)),
-        cell('juros_p', n2(f.juros_p)), cell('diff_p', n2(f.diff_p)), cell('juros_c', n2(f.juros_c)), cell('diff_c', n2(f.diff_c)),
+        // As duas Diff B3 saem "-" quando não há número, como as colunas de
+        // Fator: célula vazia se lê como "faltou digitar", e aqui a ausência é
+        // a resposta — é a perna que não tem diferença a comparar.
+        cell('juros_p', n2(f.juros_p)), cell('diff_p', n2(f.diff_p) || '-'),
+        cell('juros_c', n2(f.juros_c)), cell('diff_c', n2(f.diff_c) || '-'),
         // o fator só existe na perna VCP; a calculada (e a VCP sem número) sai "-"
         cell('fator_p', (f.vcp_p && f.fator_p != null) ? f8(f.fator_p) : '-'),
         cell('fator_c', (f.vcp_c && f.fator_c != null) ? f8(f.fator_c) : '-')

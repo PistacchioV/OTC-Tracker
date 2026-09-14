@@ -536,7 +536,7 @@ escolhido, os outros dois se preenchem). **`file`** aponta para um JSON já
 existente (o `swap-index` edita o mesmo `SwapIndex.json` do Index Results —
 declare as colunas extras, senão o POST as derruba).
 
-São **45**: `currency-base`, `interbook-ndf`, `commodities-b3`,
+São **46**: `currency-base`, `interbook-ndf`, `commodities-b3`,
 `publisher-ndf`, `le-accronym`, `le-spn`, `bank-name`, `fxo-conv-rate`,
 `ndf-pdf-cpty`, `swap-curves`, `cetip-files`, `api-links`,
 `manual-conf-validation`, `manual-conf-sla`, `fxo-internal-cpty`,
@@ -545,7 +545,7 @@ São **45**: `currency-base`, `interbook-ndf`, `commodities-b3`,
 `ndfc-advice-split`, `tools-swap-index`, `opb3-msg-asset`,
 `swap-funcionalidade`, `swap-amortizacao`, `swap-code-labels`,
 `quotes-equity`, `quotes-commodity`, `mt300`, `settlement-exception`,
-`gdt-codes`, os sete `dce-*` e os quatro `cgd-*`.
+`gdt-codes`, `equity-leg-prefix`, os sete `dce-*` e os quatro `cgd-*`.
 
 ### Regras fáceis de quebrar pela tela
 

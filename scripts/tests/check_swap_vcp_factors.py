@@ -10,8 +10,8 @@ O que se prende, e por que cada coisa nao daria erro sozinha:
      Eventos) - juros JP na perna CALCULADA; fator VCP = (juros + diff da
      outra perna) / VBR + 1 na 8a casa. Um sinal trocado na diff faz a B3
      liquidar o dobro do desvio em vez de zero;
-  2. as FONTES: Athena ID pelo CETIP ID do Swap Athena; curvas do OTM pelo
-     Athena ID (+ = Parte, - = Contraparte) e, sem OTM, as colunas do Athena;
+  2. as FONTES: Internal ID pelo CETIP ID do Swap Athena (CEM) ou pelo elo de
+     equity (EDG); curvas do OTM pelo Internal ID (+ = Parte, - = Contraparte) e, sem OTM, as colunas do Athena;
      VBR da posicao; sem evento no DFLUXO a amortizacao e 0 e `fluxo` vai em
      `missing` — nunca um numero inventado;
   3. a EDICAO: o campo editado vence o calculado e os derivados sao refeitos
@@ -165,14 +165,16 @@ R._create_notification = lambda *a, **k: _notifs.append(a)
 try:
     pay = queries.vcp_payload(REF)
     cols = pay['columns']
-    check('Athena ID entre Contraparte e Codigo do Contrato', cols[:3], ['Contraparte', 'Athena ID', 'Código do Contrato'])
+    check('Internal ID entre Contraparte e Codigo do Contrato', cols[:3], ['Contraparte', 'Internal ID', 'Código do Contrato'])
     linhas = {r[2]: r for r in pay['rows']}
-    check('o Athena ID vem do Swap Athena pelo CETIP ID', linhas['21C00035804'][1], 'K-001')
+    # CEM: o Internal ID e o Kapital ID do Swap Athena. Em EDG o Athena nao tem
+    # a operacao e ele sai do elo de equity (Latam -> OTM) — ver check_ops_trade_equity.
+    check('CEM: o Internal ID vem do Swap Athena pelo CETIP ID', linhas['21C00035804'][1], 'K-001')
     fat = {f['contrato']: f for f in pay['factors']}
     f1 = fat['21C00035804']
     check('VBR da posicao, LOB do identificador', (f1['vbr'], f1['lob']), (1000000.0, 'CEM'))
     check('% e tipo do DFLUXO do dia (a regra do Swap Calculator)', (f1['pct'], f1['tipo']), (33.33, 'Sobre Valor Base Original'))
-    check('curvas do OTM pelo Athena ID', (f1['curva_p'], f1['curva_c']), (350000.0, 345000.0))
+    check('curvas do OTM pelo Internal ID', (f1['curva_p'], f1['curva_c']), (350000.0, 345000.0))
     check('a conta fecha: amortizado, juros, diff, fator VCP',
           (f1['amortizado'], f1['juros_p'], f1['juros_c'], f1['diff_p'], f1['diff_c'], f1['fator_c'], f1['fator_p']),
           (333300.0, 16700.0, 11700.0, 200.0, None, 1.0119, None))
