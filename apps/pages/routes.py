@@ -3441,7 +3441,7 @@ _ops_swap_trade_rows = _pf_settle._ops_swap_trade_rows
 _ops_recon = _pf_settle._ops_recon
 _ops_ndfc_trade_rows = _pf_settle._ops_ndfc_trade_rows
 _ops_opt_trade_rows = _pf_settle._ops_opt_trade_rows
-_OPS_EQ_LEG_PREFIX = _pf_settle._OPS_EQ_LEG_PREFIX
+_OPS_EQ_PREFIXOS = _pf_settle._OPS_EQ_PREFIXOS
 _ops_eq_ref_key = _pf_settle._ops_eq_ref_key
 _ops_eq_trade_key = _pf_settle._ops_eq_trade_key
 _latam_equity_b3_index = _pf_settle._latam_equity_b3_index
@@ -11149,48 +11149,22 @@ def _commodities_b3_upgrade(rows):
     return _commodities_b3_quote_defaults(rows)
 
 
-# Prefixo do Trade Id do OTM × perna do Latam Desk Position (cadastro
-# `equity-leg-prefix`). `Internal` é a nossa entidade (CLEARING_TRD_ID_INT),
-# `Client` é o cliente externo (CLEARING_TRD_ID_CLNT).
+# Os prefixos de Trade Id do OTM que o elo de equity sabe DESCARTAR para
+# chegar ao `Deal_Ref` do Latam Desk Position (cadastro `equity-leg-prefix`).
 #
-# A LETRA FINAL do prefixo NÃO decide: `270RI` é de CLIENTE, e cliente externo
-# aparece com RI. A simetria `WI`=internal / `WC`=client é coincidência dos
-# dois primeiros — foi lida como mnemônico e o `270RI` nasceu errado. Perna
-# trocada não deixa a célula em branco: ela mostra a contraparte da OUTRA
-# ponta, com valor, sem nada indicando a troca.
-_MAP_EQ_LEG_OPTIONS = ('Internal', 'Client')
+# O prefixo NÃO diz a perna — quem diz é o `Cpty SPN` da própria linha do OTM
+# (`_ops_is_internal_cpty`). A coluna `LEG` que este cadastro teve por uma
+# versão nasceu de ler `WI`/`WC` como mnemônico de internal/client; é
+# coincidência dos dois primeiros, `270RI` é de cliente, e uma coluna que
+# decide a perna errada é pior que prefixo nenhum — a linha exibe a contraparte
+# da OUTRA ponta, com valor, sem nada indicando a troca. Ela saiu; o que fica é
+# a lista do que se descarta. Valor de `LEG` que sobrou em arquivo gravado é
+# ignorado na leitura e some na primeira gravação da tela.
 _MAP_EQ_LEG_SEED = (
-    {'PREFIX': '270WI', 'LEG': 'Internal', 'NOTES': 'Perna da nossa entidade'},
-    {'PREFIX': '270WC', 'LEG': 'Client', 'NOTES': 'Perna do cliente externo'},
-    {'PREFIX': '270RI', 'LEG': 'Client', 'NOTES': 'Perna do cliente externo'},
+    {'PREFIX': '270WI', 'NOTES': ''},
+    {'PREFIX': '270WC', 'NOTES': ''},
+    {'PREFIX': '270RI', 'NOTES': ''},
 )
-# A linha EXATA que o seed errado gravou. O `upgrade` só corrige o que ainda
-# está idêntica a ela: mexeu na tela (outro LEG, outra nota), é decisão da
-# mesa e fica como está. Sem esse recorte, a correção viraria uma regra
-# permanente brigando com quem editar o cadastro depois.
-_MAP_EQ_LEG_SEED_RUIM = {'PREFIX': '270RI', 'LEG': 'Internal',
-                         'NOTES': 'Perna da nossa entidade'}
-
-
-def _equity_leg_prefix_upgrade(rows):
-    """Corrige na LEITURA o `270RI` que o primeiro seed gravou como Internal.
-
-    O seed só roda quando o arquivo NÃO existe (§6), então a instância que já
-    abriu a tela — ou que só carregou um Settlement Advice, porque é a leitura
-    que semeia — ficaria com a perna trocada para sempre. É o caso que o
-    `upgrade` existe para resolver.
-
-    Corrige UMA linha e só quando ela ainda é a do seed errado, letra por
-    letra. É uma correção de estreia, não uma regra."""
-    for r in rows:
-        if isinstance(r, dict) and all(
-                str(r.get(k, '') or '').strip() == v
-                for k, v in _MAP_EQ_LEG_SEED_RUIM.items()):
-            r['LEG'] = 'Client'
-            r['NOTES'] = 'Perna do cliente externo'
-            log.warning('[equity-link] cadastro equity-leg-prefix: 270RI corrigido de '
-                        'Internal para Client na leitura (o primeiro seed saiu errado)')
-    return rows
 
 
 _MAPPING_DEFS = {
@@ -11742,12 +11716,9 @@ _MAPPING_DEFS = {
         'label': 'Equity Legs — Trade Id Prefix',
         'columns': [
             {'key': 'PREFIX', 'label': 'Trade Id prefix (OTM)'},
-            {'key': 'LEG', 'label': 'Leg', 'type': 'select',
-             'options': list(_MAP_EQ_LEG_OPTIONS)},
             {'key': 'NOTES', 'label': 'Notes'},
         ],
         'seed': list(_MAP_EQ_LEG_SEED),
-        'upgrade': _equity_leg_prefix_upgrade,
     },
     # IR do swap, parte 1: as EXCEÇÕES por cliente, testadas antes de tudo. Vêm
     # do IF encadeado da planilha de avisos — bancos e as duas entidades JPM.

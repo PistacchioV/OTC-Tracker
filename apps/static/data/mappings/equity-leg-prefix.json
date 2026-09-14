@@ -1,17 +1,14 @@
 [
   {
     "PREFIX": "270WI",
-    "LEG": "Internal",
-    "NOTES": "Perna da nossa entidade"
+    "NOTES": ""
   },
   {
     "PREFIX": "270WC",
-    "LEG": "Client",
-    "NOTES": "Perna do cliente externo"
+    "NOTES": ""
   },
   {
     "PREFIX": "270RI",
-    "LEG": "Client",
-    "NOTES": "Perna do cliente externo"
+    "NOTES": ""
   }
 ]

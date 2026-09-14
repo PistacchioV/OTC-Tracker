@@ -91,8 +91,11 @@ def _stub(conf='', otm_suffix=None):
     # o índice do Latam roda de verdade sobre a fixture: é ele que decide a
     # forma da chave (Título em maiúscula), e um teste que o pulasse não veria
     # um de-para que casa com a grafia errada.
+    # O 2º item é a PERNA (`True` = interna), não mais o prefixo do Trade Id:
+    # o prefixo não diz de que lado a linha está — quem diz é o `Cpty SPN` da
+    # linha do OTM. Aqui o Título está na coluna do CLIENTE, então `False`.
     R._latam_equity_b3_index = PS._latam_equity_b3_index = lambda: {
-        str(r['CLEARING_TRD_ID_CLNT']).upper(): (R._ops_eq_ref_key(r['Deal_Ref']), '270WC', r)
+        str(r['CLEARING_TRD_ID_CLNT']).upper(): (R._ops_eq_ref_key(r['Deal_Ref']), False, r)
         for r in LATAM}
 
 
