@@ -228,9 +228,21 @@ check('   marcada como interna (o selo da tela e o corte da TED saem daqui)',
 check('   e o cliente NAO vem marcado',
       any(r.get('internal') for r in resumo if r['counterparty'] != 'ATACAMA FUNDO DE INVESTIMENTO'),
       False)
-check('   mas fica de fora do Settlement Advice, que e o documento',
+# Ela CONSTA no Settlement Advice -- a pagina e a visao de liquidacao do dia, e
+# tirar a linha de la escondia metade do par (a mesa via o swap contra o cliente
+# e nao via a perna da ATACAMA do mesmo negocio). O que ela NAO faz e virar
+# DOCUMENTO: nao se manda aviso para si mesmo. O corte esta no
+# `_swadv_email_rows`, o unico lugar por onde o aviso impresso e o e-mail passam.
+check('   e CONSTA no Settlement Advice, que e a visao do dia',
       sorted(r['counterparty'] for r in aviso),
-      ['RENNER CORRETORA LTDA', 'SAFRA CORRETORA LTDA', 'SUZANO SA'])
+      ['ATACAMA FUNDO DE INVESTIMENTO', 'RENNER CORRETORA LTDA',
+       'SAFRA CORRETORA LTDA', 'SUZANO SA'])
+check('   marcada para nao virar documento',
+      [r['counterparty'] for r in aviso if r.get('no_advice')],
+      ['ATACAMA FUNDO DE INVESTIMENTO'])
+check('   e o cliente NAO vem marcado',
+      any(r.get('no_advice') for r in aviso
+          if r['counterparty'] != 'ATACAMA FUNDO DE INVESTIMENTO'), False)
 
 print('\n== 6. as tres colunas de valor do aviso ==')
 adv = {r['counterparty']: r for r in aviso}

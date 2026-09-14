@@ -155,6 +155,9 @@
     Sent:      'text-bg-primary',
     Generated: 'text-bg-success',
     New:       'text-bg-info',
+    // Perna interna: a linha liquida e aparece, mas não vira documento — não
+    // se manda aviso para si mesmo. Cinza porque não é uma etapa do ciclo.
+    'No advice': 'text-bg-secondary',
   };
   function statusCell(st) {
     var cls = STATUS_PILL[st];

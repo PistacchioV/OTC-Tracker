@@ -520,7 +520,13 @@ def api_swap_settlement_advice_data():
     # Status por linha, do MESMO overlay do Settlement Summary: o contrato herda
     # o estado da linha de aviso a que pertence (contraparte × LOB × produto).
     _p, meta = _R()._opssum_meta_load(ref)
-    statuses = [_R()._opssum_status(meta, r['counterparty'], r.get('lob', ''), 'SWAP') for r in items]
+    # A perna interna CONSTA na tela e não vira documento — e o Status é onde
+    # isso se diz. Com o ciclo normal (New → Generated → Sent) ela pareceria um
+    # aviso que ninguém gerou, e alguém iria atrás do porquê; `No advice` responde
+    # antes da pergunta. Ver `_swadv_collect`.
+    statuses = ['No advice' if r.get('no_advice')
+                else _R()._opssum_status(meta, r['counterparty'], r.get('lob', ''), 'SWAP')
+                for r in items]
     return jsonify({'success': True, 'columns': _R()._SWADV_COLUMNS,
                     'rows': [r['cells'] for r in items], 'statuses': statuses,
                     'widgets': {'total': len(items)},

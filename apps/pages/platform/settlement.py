@@ -1201,9 +1201,11 @@ def _opssum_rows(trade_rows, ref):
         # de LIQUIDAÇÃO do dia — a perna interna liquida, o dinheiro se move e o
         # total tem de fechar com o Trade Level; cortá-la daqui fazia a operação
         # da entidade nossa (a ATACAMA do par) sumir da tela sem uma palavra.
-        # O que não sai é o AVISO: `_swadv_collect` continua pulando a linha
-        # marcada, e o e-mail de TED também, porque não se transfere dinheiro
-        # para si mesmo. A marca vem de quem monta a linha
+        # O que não sai é o AVISO: a linha marcada consta no Settlement Advice
+        # (é liquidação de verdade) e é cortada no `_swadv_email_rows`, o único
+        # lugar por onde o documento e o e-mail passam; o e-mail de TED também
+        # a corta, porque não se transfere dinheiro para si mesmo. A marca vem
+        # de quem monta a linha
         # (`_ops_is_internal_cpty`): repetir o teste aqui criaria uma segunda
         # resposta para a pergunta.
         key = (cpty, str(r.get('lob', '') or ''), str(r.get('product', '') or ''))
