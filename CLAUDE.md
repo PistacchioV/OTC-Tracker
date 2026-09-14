@@ -780,7 +780,10 @@ São **46**: `currency-base`, `interbook-ndf`, `commodities-b3`,
   principal (`fator_correcao`, como o `fator_cambial`), é o que a planilha
   da mesa faz. Mês não publicado NÃO vem na série e é erro com o mês, nunca
   o anterior. No pré-preenchimento, evento do DFLUXO sem Taxa Amortização é
-  **0%**, não lacuna.
+  **0%**, não lacuna — e a **taxa contratada que a posição não traz também
+  nasce 0%**, fora da lista do que "não deu para puxar" (§458, fora do CDI
+  também): o motor já lia branco como 0,0, e sinalizar em vermelho pedia que
+  se digitasse à mão o zero que a conta assumia.
 - **Swap Calculator › Export: a memória de cálculo é FÓRMULA, não valor**
   (§455, `features/tools/infra/memoria_xlsx.py`): toda célula derivada do
   .xlsx é fórmula de Excel encadeada até as entradas, e os dias do índice vão
@@ -851,14 +854,19 @@ São **46**: `currency-base`, `interbook-ndf`, `commodities-b3`,
   da contraparte DIFERENTE da parte (`is_intragroup`), não "conta do
   grupo": o omnibus 73760.10-2 é do Banco e ali o swap é de cliente. Valor
   que não resolve é `None`, nunca zero.
-- **As duas formas de NÃO amortizar por fluxo caem em `At Maturity`** (§456,
-  `platform/swap_flows.base_da_amortizacao`): `Na Data de Vencimento` e **`Sem
-  Troca de Amortização`**. As outras duas bases descrevem uma PARCELA, e
-  escolhê-las num contrato que não amortiza faz a tela AFIRMAR um cronograma
-  que ele não tem — era o Swap Calculator abrindo como "parcela constante
-  sobre o original" um swap marcado `Sem Troca` no Live Position. Número
-  nenhum muda (`amortiza_no_fluxo` já zera o percentual nos dois casos); o que
-  muda é o que a tela diz. A mesma função responde ao fator VCP.
+- **NÃO amortizar tem duas formas, e cada uma tem a SUA base** (§456/§458,
+  `platform/swap_flows.base_da_amortizacao`): `Na Data de Vencimento` → **At
+  Maturity** (o principal volta no encerramento) e `Sem Troca de Amortização`
+  → **Sem Troca** (`liquidacao.SEM_TROCA`, o notional nunca amortiza). As
+  outras duas bases descrevem uma PARCELA, e escolher qualquer base errada
+  faz a tela AFIRMAR um cronograma que o contrato não tem — era o Swap
+  Calculator abrindo como "parcela constante sobre o original" um swap
+  marcado `Sem Troca` no Live Position, e depois como devolução no
+  vencimento. Número nenhum muda (`amortiza_no_fluxo` já zera o percentual
+  nos dois casos); o que muda é o que a tela diz. No `Sem Troca` a BASE vence
+  o percentual — `amortizar()` devolve zero ANTES de olhar para ele, senão um
+  `100` esquecido no campo devolveria o principal inteiro num swap que não
+  devolve nada. A mesma função responde ao fator VCP.
 - **No Swap VCP a `Diferença` É o veredito** (§459): o valor sai DENTRO do
   badge (verde/amarelo), como o batimento do Accrual Swap colore o fator
   registrado — não há badge de texto ao lado. Sem veredito não há cor.

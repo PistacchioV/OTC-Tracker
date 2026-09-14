@@ -187,18 +187,21 @@ for i, (accent, titulo, lead, bullets) in enumerate(PILARES):
         y += 0.50
 
 # ── Cobertura dos processos de OTC Derivatives ───────────────────────────────
-# Comparação pedida pela mesa: quanto do universo de 124 pontos de processo
+# Comparação pedida pela mesa: quanto do universo de 160 pontos de processo
 # cada ferramenta automatiza — o OTC Tracker (target e o já entregue) contra o
 # que a tech já desenvolveu (Cockpit, Inoa, Cockpit + AEVO + Registration).
 # Tracker nas cores da marca, stack legada em cinza — a barra é a comparação,
-# não decoração. Os números vêm dos quadros da mesa (ago/2026).
+# não decoração. Os números são INFORMADOS pela mesa (revisão de 14/09/2026,
+# universo de 160 pontos) e NÃO saem das matrizes da página 2, que ainda estão
+# na contagem antiga de 124 — enquanto os quadros novos não chegarem, as duas
+# páginas contam universos diferentes.
 GRAY_BAR = '9AA3B8'
 COBERTURA = [
-    ('OTC Tracker — Target',          87.10, A2),
-    ('OTC Tracker — Today',           27.42, A1),
-    ('Inoa',                          14.52, GRAY_BAR),
-    ('Cockpit + AEVO + Registration', 12.10, GRAY_BAR),
-    ('Cockpit',                        8.06, GRAY_BAR),
+    ('OTC Tracker — Target',          85.63, A2),
+    ('OTC Tracker — Today',           30.00, A1),
+    ('Inoa',                          16.88, GRAY_BAR),
+    ('Cockpit + AEVO + Registration',  9.38, GRAY_BAR),
+    ('Cockpit',                        6.06, GRAY_BAR),
 ]
 COV_Y, COV_H = 5.22, 0.78
 COV_LBL_W = 1.75                     # bloco do rótulo à esquerda
@@ -222,7 +225,7 @@ for i, (nome, pct, accent) in enumerate(COBERTURA):
         ('%.2f%%' % pct, 8.5, True, RGBColor.from_string(accent), None, None, 1.0),
     ])
 textbox(0.92, COV_Y + 0.585, 11.5, 0.18, [
-    ('The % is the share of the 124-point OTC Derivatives process universe each tool '
+    ('The % is the share of the 160-point OTC Derivatives process universe each tool '
      'automates end-to-end (or nearly so) — everything outside it is still a manual process.',
      7.5, False, INK_FAINT, None, None, 1.0),
 ])

@@ -535,19 +535,19 @@
             '</div>' +
             '<div class="row g-3">' +
                 '<div class="col-md-3">' +
-                    '<label class="form-label fw-semibold">Document Type</label>' +
+                    '<label class="form-label fs-xs text-muted mb-1">Document Type</label>' +
                     '<select class="form-select ei-up-type">' + typeOptionsHtml() + '</select>' +
                 '</div>' +
                 '<div class="col-md-3">' +
-                    '<label class="form-label fw-semibold">Date</label>' +
+                    '<label class="form-label fs-xs text-muted mb-1">Date</label>' +
                     '<input type="text" class="form-control ei-up-date" placeholder="dd/mm/yyyy" autocomplete="off">' +
                 '</div>' +
                 '<div class="col-md-6 d-none ei-up-sub-wrap">' +
-                    '<label class="form-label fw-semibold ei-up-sub-label">Transactional Type</label>' +
+                    '<label class="form-label fs-xs text-muted mb-1 ei-up-sub-label">Transactional Type</label>' +
                     '<select class="form-select ei-up-sub"></select>' +
                 '</div>' +
                 '<div class="col-12">' +
-                    '<label class="form-label fw-semibold">File</label>' +
+                    '<label class="form-label fs-xs text-muted mb-1">File</label>' +
                     '<div class="ei-drop ei-up-drop border border-dashed rounded-3 p-4 text-center" style="cursor:pointer;">' +
                         '<button type="button" class="btn btn-sm btn-danger rounded-circle ei-drop-clear d-none ei-up-clear" title="Remove attached file"><i class="ti ti-x"></i></button>' +
                         '<i class="ti ti-file-upload fs-1 text-muted d-block mb-1"></i>' +
