@@ -4814,8 +4814,18 @@ def _swadv_collect(ref):
         # Perna interna não recebe aviso — o documento é endereçado ao cliente, e
         # a entidade nossa produziria um aviso para nós mesmos. Mesma regra e
         # mesma função do Trade Level; só para equity, pelo mesmo motivo de lá.
-        if eq and _ops_is_internal_cpty(cliente, eq.get('spn', '')):
-            continue
+        #
+        # Mas ela CONSTA na página: a linha é uma liquidação de verdade, e tirá-la
+        # da tela escondia metade do par — a mesa via o swap contra o cliente e
+        # não via a perna da ATACAMA do mesmo negócio. Era o que acontecia até
+        # aqui, e com um agravante: enquanto o elo de equity não resolvia, a
+        # contraparte chegava como o nome CURTO da B3 (`INTRAGATACAMAFDO`), que
+        # não casa com o `le-spn` — a linha passava pelo filtro e aparecia. Com o
+        # elo resolvendo o nome, ela passou a casar e sumiu. O sumiço foi efeito
+        # de uma correção, não decisão de ninguém.
+        #
+        # O que a marca corta é o DOCUMENTO (`_swadv_email_rows`), não a linha.
+        no_advice = bool(eq) and _ops_is_internal_cpty(cliente, eq.get('spn', ''))
         op_dt = pos.get('op') or eq.get('trade_date')
         # Vencimento do aviso = a data da LIQUIDAÇÃO. É esta parcela que está
         # sendo paga hoje; o vencimento do swap só interessa quando os dois
@@ -4873,6 +4883,7 @@ def _swadv_collect(ref):
                 _ops_fmt_amt(liq),
             ],
             'counterparty': cliente,
+            'no_advice': no_advice,
             'lob': _fcst_lob(_opb3_tipo_for(rec, tipo_maps)) or '',
             'legal': _cell(arow, ai, 'Owner Legal Entity'),
             'spn': ref_rec.get('spn', '') or _cell(arow, ai, 'SPN'),
@@ -4945,6 +4956,11 @@ def _swadv_email_rows(ref):
 
     out = []
     for r in _swadv_items(ref):
+        # Perna interna não vira documento: não se avisa a si mesmo. A linha
+        # está na tela (é liquidação de verdade), e o corte é aqui — no único
+        # lugar por onde o aviso impresso e o e-mail passam.
+        if r.get('no_advice'):
+            continue
         c = r['cells']
         out.append(dict(r, cells=[
             c[2],                                   # Número de Contrato
@@ -6511,6 +6527,27 @@ def _vcp_refdata_maps():
     return by_acct, by_taxid
 
 
+def _vcp_cnpj_by_account(account):
+    """CPF/CNPJ da entidade dona de uma conta PRÓPRIA, pelo Reference Data.
+
+    O caminho é o mesmo do nome, um passo mais longe: `b3-accounts` diz de quem
+    é a conta (com a razão social como ela está no Reference Data) e o Reference
+    Data dá o documento dela. Numa conta própria não há cliente a identificar,
+    então a coluna do documento vem VAZIA do arquivo de eventos — e a célula
+    ficava em branco com a conta ali do lado dizendo de quem era.
+
+    `''` quando a conta não é nossa ou a entidade não tem cadastro: em branco é
+    o lado seguro, e o documento errado num aviso de liquidação não é."""
+    nome = _b3_account_refdata_name(account)
+    if not nome:
+        return ''
+    alvo = _fcst_norm(nome)
+    for rec in _refdata_records():
+        if _fcst_norm(rec.get('COUNTERPARTY', '')) == alvo:
+            return str(rec.get('TAX ID', '') or '').strip()
+    return ''
+
+
 def _vcp_events_map(ref):
     """{contract-digits → leg dict} from the Events file JSON (eventos-swap-jpm):
     PARTE / Indexador and the CONTRAPARTE account / CPF-CNPJ / Indexador, resolved
@@ -6701,6 +6738,13 @@ def _vcp_collect(ref):
                 name = _b3_account_refdata_name(cpty_conta)
             if not name:
                 name = by_taxid.get(_acc_digits(cpty_cnpj), '')
+            # E o DOCUMENTO pela mesma porta: conta própria não traz CPF/CNPJ no
+            # arquivo de eventos (não há cliente a identificar), e a célula saía
+            # vazia tendo a conta ao lado. A guarda-chuva fica de fora pelo mesmo
+            # motivo de sempre — lá o documento da linha é o do CLIENTE, e o da
+            # conta seria o do titular do guarda-chuva.
+            if not cpty_cnpj and acct_dig and not _b3_is_omnibus(cpty_conta):
+                cpty_cnpj = _vcp_cnpj_by_account(cpty_conta)
             rows_out.append([name, contrato, parte_conta, parte_ix, '',
                              cpty_conta, cpty_cnpj, cpty_ix, ''])
     # Sort by Contraparte A→Z (accent-insensitive); rows with no name go last.

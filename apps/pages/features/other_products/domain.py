@@ -83,6 +83,75 @@ def fator(juros_vcp, diff_outra, vbr):
     return round((juros_vcp + (diff_outra or 0.0)) / vbr + 1.0, 8)
 
 
+# Acima disto a linha pede conferência. É tolerância de ARREDONDAMENTO: o fator
+# vai à B3 com 8 casas e multiplica um VBR de milhões, então centavos de
+# diferença são esperados e não dizem nada. Dez reais é o corte que a mesa usa.
+TOLERANCIA_LIQUIDACAO = 10.0
+
+
+def juros_do_fator(fator_, vbr):
+    """Quanto de JUROS o fator rende sobre o VBR: `(fator − 1) × VBR`.
+
+    É o que a B3 vai calcular com o fator que mandamos — o fator carrega
+    principal + juros, e aqui só interessa a parte de juros, que é o que
+    liquida. `None` sem fator ou sem VBR: zero afirmaria "não rendeu nada", e
+    quem lê a coluna não distinguiria isso de "não deu para calcular"."""
+    if fator_ is None or not vbr:
+        return None
+    return (fator_ - 1.0) * vbr
+
+
+def liquidacao_vcp(vcp_p, vcp_c, fator_p, fator_c, vbr, juros_p, juros_c, diff_p, diff_c):
+    """O que a B3 liquidaria com os fatores desta linha, ou `None`.
+
+    O caixa do swap é a DIFERENÇA entre as duas pernas, e cada uma entra pela
+    fonte que a B3 vai usar:
+
+      - perna VCP → `(fator − 1) × VBR`, o fator que estamos mandando;
+      - perna CALCULADA → o juro que a **B3** calcula, que é o nosso mais a
+        diff (`diff_b3 = valor da B3 − valor JP`, então `juros + diff` é o
+        valor da B3). Usar o nosso aqui compararia o interno com o interno e a
+        coluna nunca acusaria nada. Sem a diff, vale o nosso — a alternativa
+        seria não responder, e a linha ainda diz alguma coisa.
+
+    Três desenhos, e é o do meio que a mesa citou explicitamente:
+
+      VCP × calculada   →  juros do fator − juro da B3 na outra
+      calculada × VCP   →  o mesmo, espelhado
+      VCP × VCP         →  uma menos a outra, as duas pelo fator
+
+    Sem perna VCP nenhuma não há o que conferir (a linha não vai para o
+    arquivo de PU/Fator), e a resposta é `None`."""
+    def da_b3(juros_, diff_):
+        if juros_ is None:
+            return None
+        return juros_ + (diff_ or 0.0)
+
+    if vcp_p and vcp_c:
+        a, b = juros_do_fator(fator_p, vbr), juros_do_fator(fator_c, vbr)
+    elif vcp_p:
+        a, b = juros_do_fator(fator_p, vbr), da_b3(juros_c, diff_c)
+    elif vcp_c:
+        a, b = juros_do_fator(fator_c, vbr), da_b3(juros_p, diff_p)
+    else:
+        return None
+    if a is None or b is None:
+        return None
+    return a - b
+
+
+def diferenca_liquidacao(interno, vcp):
+    """(diferença, veredito) entre o caixa interno e o do fator.
+
+    O veredito é `''` quando não dá para comparar — e isso NÃO é `Ok`. Uma
+    linha sem um dos dois valores marcada como conferida é a pior saída
+    possível aqui: ela some do que a mesa tem para olhar."""
+    if interno is None or vcp is None:
+        return None, ''
+    d = interno - vcp
+    return d, ('Ok' if abs(d) < TOLERANCIA_LIQUIDACAO else 'Check')
+
+
 def calcular(base, overrides=None):
     """As colunas da tabela de fatores a partir dos INSUMOS (`base`) e do que a
     mesa editou (`overrides`, campo → valor; o editado vence, campo a campo).
