@@ -697,6 +697,16 @@ São **46**: `currency-base`, `interbook-ndf`, `commodities-b3`,
   Bootstrap de mesma especificidade vence a da página mesmo com `!important`,
   e o `background: … !important` do `.card` apaga `background-image` (cartão
   com gradiente vai no `streamflow.css`).
+- **Estado visual de widget seu (`is-ok`/`is-check`) leva PREFIXO DE ID**
+  (`#ops-page .ops-recon.is-ok`, como o `#ndm-page` do New Deals Monitor) —
+  §464. Classe que termina em `-widget` casa com o seletor ESTRUTURAL do tema
+  (`div[class*="-widget"]:not([class*="__"]):not(.row)`, §23.1 do
+  `streamflow.css`), que declara `box-shadow` com especificidade **0,3,1** e
+  carrega DEPOIS do `extra_css`: a regra da página (0,2,0) perde pelos dois
+  critérios. Nada some, o cartão continua bonito e só falta a informação — a
+  classe ESTÁ no elemento e o token resolve certo. Medir o `box-shadow`
+  computado exige esperar a `transition` do tema (~0,3 s): lido na hora, ele
+  devolve a cor ANTIGA no meio da animação e a sonda mente.
 - **`backdrop-filter` cria contexto de empilhamento**: `z-index` vai no
   WRAPPER, nunca no menu; o `.wrapper` fica sem `z-index`.
 - **Dentro de uma raiz de backdrop o desfoque do filho não amostra nada**:
