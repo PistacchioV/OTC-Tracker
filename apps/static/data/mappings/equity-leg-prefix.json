@@ -11,7 +11,7 @@
   },
   {
     "PREFIX": "270RI",
-    "LEG": "Internal",
-    "NOTES": "Perna da nossa entidade"
+    "LEG": "Client",
+    "NOTES": "Perna do cliente externo"
   }
 ]
