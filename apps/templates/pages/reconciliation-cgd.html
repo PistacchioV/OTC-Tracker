@@ -375,15 +375,21 @@
             order: [],
             language: { emptyTable: t('empty') }
         });
-        $('#cgd-table thead .cgd-filters input').off('keyup change').on('keyup change', function () {
-            var i = parseInt($(this).data('col'), 10);
-            var v = String(this.value || '');
-            if (v.trim().toLowerCase() === 'blank') {
-                table.column(i).search('^\\s*$', true, false).draw();
-            } else {
-                table.column(i).search(v).draw();
-            }
-        });
+        // Com `scrollX` a delegação é no CONTAINER da tabela (§462): o DataTables
+        // CLONA o cabeçalho para o topo rolante e é no CLONE que a pessoa digita
+        // — `#cgd-table thead` alcança só o original, que fica sob o clone e nem
+        // recebe o clique. O evento não chegava, e filtrar por coluna aqui nunca
+        // fez nada, sem erro nenhum no console.
+        $(table.table().container()).off('keyup.cgd change.cgd')
+            .on('keyup.cgd change.cgd', '.cgd-filters input', function () {
+                var i = parseInt($(this).data('col'), 10);
+                var v = String(this.value || '');
+                if (v.trim().toLowerCase() === 'blank') {
+                    table.column(i).search('^\\s*$', true, false).draw();
+                } else {
+                    table.column(i).search(v).draw();
+                }
+            });
         table.columns.adjust();
         setTimeout(function () { table.columns.adjust().draw(false); }, 150);
         $(window).off('resize.cgd').on('resize.cgd', function () { table.columns.adjust(); });
@@ -525,7 +531,9 @@
     });
 
     $('#cgd-clear').on('click', function () {
-        $('#cgd-table thead .cgd-filters input').val('');
+        // As DUAS cópias do cabeçalho: o clone do `scrollX` é o que se vê (§462).
+        var $cab = table ? $(table.table().container()) : $('#cgd-table');
+        $cab.find('.cgd-filters input').val('');
         bucket = '';
         $('#cgd-kpis .cgd-kpi').removeClass('cgd-on');
         if (table) { table.search('').columns().search(''); }

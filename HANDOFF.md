@@ -19561,3 +19561,185 @@ some do que há para olhar, que é a mesma regra do §452.
 
 O export não muda: o DataTables já tira o HTML dos badges, e agora o que sobra
 é o número limpo em vez de `1.234,56 Check`.
+
+## §460 — Electronic Inventory: o Upload Document era o único modal opaco do app (2026-09-14)
+
+O modal de upload seguia o padrão da casa na moldura, no cabeçalho e no rodapé,
+e destoava em três reescritas que a própria página fazia por cima do componente
+compartilhado — cada uma invisível até alguém abrir os dois modais lado a lado.
+
+A primeira era a que mais pesava. A página repintava o painel:
+
+```css
+#eiUploadModal .modal-content.liquid-glass { background: rgba(255,255,255,.92) !important; }
+```
+
+O alfa de vidro (48%) mora no `streamflow.css` §34, e é **lá também** que o
+`sf-reduced` troca o painel por cor SÓLIDA nas máquinas do JPM. Um `background`
+sob `#eiUploadModal` é um id contra uma classe: vence os dois. O resultado era
+um modal que não era vidro em tema nenhum **e** que escapava do modo de efeitos
+reduzidos — o único assim no app. O comentário que justificava a regra falava
+de legibilidade e de um kill-switch de blur que já tinha sido corrigido na
+raiz; a regra tinha sobrevivido ao motivo.
+
+As outras duas: os rótulos vinham `form-label fw-semibold` (escuros, em
+negrito) em vez do `fs-xs text-muted mb-1` do `/mapping` — cinco no template e
+quatro no bloco extra do lote, que nasce em JS —, e o rodapé reescrevia padding
+e font-size do botão alegando que `.btn-primary` fixa as métricas. Não fixa em
+CSS nenhum do tema, e o rodapé nem tem botão primário: são os dois de ícone,
+que o `.btn-sm` já dimensiona. Regra órfã.
+
+De quebra, o ícone de calendário do campo Date existia só para `#eiUpDate`: do
+segundo documento do lote em diante o campo nascia sem ele.
+
+O `check_modal_standard.py` ganhou o bloco do Electronic Inventory ao lado do
+Track Confirmations, prendendo também as duas reescritas para que não voltem, e
+o rótulo do bloco extra é conferido no `.js`, que é onde ele nasce. A lista
+`FORA_DO_PADRAO` perdeu cinco páginas já corrigidas (as duas de settlement
+advice, as duas recons e o `users-roles`) — era o próprio teste pedindo que
+saíssem dela, e é o que o deixava vermelho desde antes.
+
+## §461 — Settlement Summary e Trade Level: Export pela metade e arquivo com nome de id (2026-09-14)
+
+Os quatro cards das duas telas de Summary (NDF e Other Products) tinham um
+Export escrito à mão, com **só CSV e Copy**. O padrão da casa é Copy · CSV ·
+Excel · Print · PDF pelos DataTables Buttons, terminando no Advanced Export —
+a mesma correção que o Track Confirmations recebeu, e pelo mesmo motivo: um CSV
+próprio diverge do resto do app no primeiro acento, porque ninguém lembra de
+mexer nos dois.
+
+E o nome do arquivo era o **id da `<table>`**: `ops-summary-table.csv`,
+`ops-trade-table.csv`. Não diz nem de que tela nem de que dia é o arquivo, e os
+dois cards da mesma página baixavam nomes que só diferiam no meio do id. Agora
+é o do documento, com a data de referência da tela no formato com que o
+Advanced Export carimba os dele:
+
+```
+NDF Summary - Settlement Summary - 20260914.csv
+Other Products Summary - Trade Level - 20260914.xlsx
+```
+
+O exportador próprio existia por uma razão real, e ela foi preservada: a coluna
+Observation do Summary e as linhas do Add row são `<input>`, e o texto de um
+`<input>` é vazio — pelo caminho normal do Buttons a coluna sairia em branco.
+Isso virou um `format.body` que lê o `value` do campo, como o
+`formatExportData` do New Deals; linha fora da página, que não tem nó no DOM,
+cai para o dado do modelo sem HTML.
+
+O Advanced Export vai **sem `daily`**, e a seção de intervalo nasce
+desabilitada dizendo por quê: o `/data` destas telas devolve o payload do dia
+(widgets, recon, as duas tabelas) e não a lista de `columns` que o
+empilhamento de dias lê. Habilitar o intervalo é mudança de servidor. O recorte
+de colunas e linhas, que é a outra metade do Advanced Export, vale desde já.
+
+**Sobra registrada:** toda tela do app que usa o Export padrão com a linha de
+filtro do §7 escreve uma linha EM BRANCO entre o cabeçalho e os dados — o
+`headerStructure` do Buttons traz as duas linhas do `<thead>`, e a segunda não
+tem título. Conferido no Track Confirmations: mesmo `headerStructure` de duas
+linhas. É comportamento de casa, não destas telas; o exportador próprio daqui é
+que não o tinha, então na prática ele APARECE nestas duas. Corrigir é uma
+mudança única para o app inteiro.
+
+## §462 — Swap VCP: a linha de filtro da tabela de fatores ia para o cabeçalho escondido (2026-09-14)
+
+Digitar na linha de filtro por coluna da tabela de fatores não fazia nada. Sem
+erro no console, sem linha no log: os campos aceitavam texto e a tabela ficava
+igual.
+
+A tabela é `scrollX: true`. Com `scrollX`, o DataTables **clona** o `<thead>`
+para o topo rolante e esconde o original dentro do corpo — e o clone perde o id
+da tabela, o mesmo detalhe que o §7 já registrava na regra de centralização. A
+delegação estava em `jQuery('#vcp-factors thead')`, que é justamente o original
+ESCONDIDO: os campos em que a mesa digita são os do clone, e o `keyup` nunca
+chegava ao handler. Medido na tela antes de mexer: 40 inputs de filtro no
+container, 20 no original oculto e 20 no clone.
+
+A tabela de cima da mesma página não tem o problema, e é o que fazia o defeito
+parecer impossível: ela é `scrollX: false` **de propósito** (cabeçalho e corpo
+numa tabela só, que nunca desalinha), então ali não há clone e
+`#swapchar-table thead` é o cabeçalho de verdade. A delegação agora é no
+`dt.table().container()`, que cobre os dois casos — é o mesmo caminho pelo qual
+as tabelas do Settlement Summary funcionam, delegando no card que contém o
+clone.
+
+Junto veio o **Clear filters** que faltava. O botão do card de cima limpa os
+chips e a linha de filtro da PRIMEIRA tabela; a segunda não tinha como limpar a
+não ser apagando campo a campo. O novo limpa as duas cópias do cabeçalho (clone
+e original) e a busca de cada coluna, e é `onclick` e não `addEventListener`
+porque `buildFactors` roda a cada troca de data — com o segundo, os handlers se
+empilhariam pela vida da página.
+
+**Sobra registrada:** o `otcExportAdvanced('#vcp-factors')` desta tela é
+chamado sem `name`, então as duas tabelas do card nomeiam o arquivo igual (o
+`defaultName` é o título da página). É a mesma colisão do §461, ainda em pé.
+
+---
+
+## §463 — A mesma linha de filtro morta na Recon CGD, e o guarda que faltava (2026-09-14)
+
+O §461 e o §462 saíram sem guarda: nada impedia a próxima tela de escrever o
+próprio CSV nem de ligar o filtro no `thead` de uma tabela `scrollX`. Ao
+escrever o guarda, a varredura encontrou a segunda vítima do §462 — e ela
+estava em produção desde sempre.
+
+**A Recon CGD (`reconciliation-cgd.html`).** A tabela é `scrollX: true` e o
+filtro era ligado assim, logo depois do `.DataTable()`:
+
+```js
+$('#cgd-table thead .cgd-filters input').off('keyup change').on('keyup change', …)
+```
+
+Como no Swap VCP, `#cgd-table thead` alcança só o cabeçalho ORIGINAL. Medido
+na tela, com o app de pé:
+
+- 7 inputs casam com `#cgd-table thead .cgd-filters input`; 14 existem no
+  container — o `scrollX` clonou a linha inteira;
+- `document.elementFromPoint` sobre o campo devolve **o CLONE**, nunca o
+  original: o original fica debaixo do clone, e a pessoa não consegue sequer
+  clicar nele;
+- ou seja: **os 7 campos ligados são exatamente os 7 que ninguém alcança.**
+  Filtrar por coluna nessa tela nunca funcionou, sem uma linha no console.
+
+O Clear Filters tinha o mesmo endereço (`$('#cgd-table thead …').val('')`) e
+limpava só a cópia escondida — o que passava despercebido porque o `desenha()`
+destrói e recria a DataTable, e o clone renascia do original já limpo.
+
+A correção é a do §462: delegação no `table.table().container()`, que cobre as
+duas cópias, e o Clear Filters varrendo o container. Provado depois: digitar no
+campo do clone deixa `column(1).search()` em `'ACME'`, e o Clear zera a busca e
+os 14 campos.
+
+**O guarda: `scripts/tests/check_export_padrao.py`.** Quatro conferências sobre
+`apps/templates/pages/*.html` e `apps/static/js/pages/*.js`:
+
+1. **CSV escrito à mão** numa página que tem DataTable (o Buttons estava ali do
+   lado). O `mapping.html` se isenta sozinho — não tem DataTable nenhuma, tem
+   paginação própria, e não há Buttons para chamar.
+2. **Filtro ligado em `#tabela thead` com `scrollX: true`.** Esta é a única sem
+   lista de exceção, de propósito: as outras três são dívida de estilo, esta é
+   um bug silencioso. Junto, confere que as duas telas já corrigidas (VCP e
+   CGD) delegam no container e limpam as duas cópias.
+3. **Nome do arquivo**: página que chama `otcExportAdvanced` mais de uma vez
+   precisa de `name` por chamada. Mais as quatro marcas do §461 nas duas telas
+   de Summary (tela + card, `AAAAMMDD`, os cinco itens, o `format.body`).
+4. **Os cinco itens do menu** (Copy · CSV · Excel · Print · PDF).
+
+Como o `check_modal_standard`, os itens 1, 3 e 4 **prendem a LISTA** em vez de
+exigir o app inteiro no padrão: tela nova fora do padrão falha, e tela da lista
+que for corrigida também falha, pedindo que saia dela.
+
+**O que a lista revelou.** A reclamação do Trade Level não era um caso isolado:
+**quinze telas** têm o menu de Export pela metade. Nove JS de página (as três
+Live Position, `ndf-cockpit`, `ndf-other-publisher`, `operations-b3`,
+`otm-settlements`, `latamdeskposition`, `cognos`) oferecem só Copy · CSV ·
+Excel — sem Print e sem PDF; quatro telas de Intrag e o Swap VCP não têm PDF; e
+o `reconciliation-fxo` tem Csv e Copy PRÓPRIOS (item 1) convivendo com o
+Advanced Export. O `index-b3-results` exporta QUATRO tabelas e as quatro baixam
+com o título da página. Nada disso foi corrigido aqui — está registrado na
+lista do guarda para não crescer, e é trabalho de uma passada própria.
+
+**Sobra registrada:** a do §462 continua em pé — o `otcExportAdvanced('#vcp-factors')`
+sem `name` convivendo com o `swapchar-table` da mesma tela. O guarda não a vê:
+as duas chamadas moram em arquivos diferentes (a segunda no
+`live-position-swap-characteristics.js`, compartilhado por cinco páginas), e a
+conferência do item 3 é por ARQUIVO.

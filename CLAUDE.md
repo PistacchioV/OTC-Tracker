@@ -633,6 +633,16 @@ São **46**: `currency-base`, `interbook-ndf`, `commodities-b3`,
   `.DataTable()` com `orderCellsTop: true` (no `initComplete` ela fica no
   `<thead>` escondido do corpo rolável). Centralização dos inputs vem do
   `visual-refresh.css`. `blank` sozinho no campo casa célula vazia.
+  **Com `scrollX` a delegação é no CONTAINER da tabela**
+  (`dt.table().container()`), nunca em `#tabela thead` (§462): o `scrollX`
+  CLONA o cabeçalho para o topo rolante e esconde o original, e é no clone que
+  a pessoa digita — `#tabela thead` alcança só o original escondido (o clone
+  perde o id, como na regra de centralização acima). O evento não chega e
+  digitar não faz nada, sem erro nenhum. Tabela `scrollX: false` não tem clone
+  e funciona dos dois jeitos — o container cobre os dois casos. E **quem tem
+  linha de filtro tem Clear Filters** alcançando as DUAS cópias do cabeçalho.
+  `check_export_padrao.py` recusa `#tabela thead` em página `scrollX` **sem
+  lista de exceção**: é bug silencioso, não dívida de estilo.
 - **Botões de ação: squircle 32×32** travado nos DOIS eixos, `padding:0`,
   `border-radius:10px !important`, ícone Tabler `1rem` (nunca `.fs-13`),
   tooltip colorido delegado no primeiro hover (os `<td>` são reescritos a cada
@@ -646,7 +656,19 @@ São **46**: `currency-base`, `interbook-ndf`, `commodities-b3`,
   Mapping/refresh success, Clear Filters outline-secondary. Export termina no
   **Advanced Export** (`otcExportAdvanced('#t', { daily: '<endpoint que a
   própria página consulta>' })`, `exact=1` + confere `source_date`, dia sem
-  arquivo é pulado, teto 60 s/dia — §304).
+  arquivo é pulado, teto 60 s/dia — §304). **Export próprio não existe**: um
+  CSV escrito à mão diverge do resto do app no primeiro acento (§461). Célula
+  editável sai pelo VALUE do campo, num `format.body` (o texto de um `<input>`
+  é vazio, e a coluna sairia em branco) — modelo em `formatExportData`.
+  **O nome do arquivo é o do DOCUMENTO** — tela, card quando há mais de um, e a
+  data de referência em `AAAAMMDD`, que é como o Advanced Export carimba os
+  dele —, nunca o id da `<table>`: `ops-summary-table.csv` não diz nem de que
+  tela nem de que dia é. Página com duas tabelas passa `name` explícito, senão
+  as duas baixam o mesmo nome (o `defaultName` é o título da página).
+  `check_export_padrao.py` prende as três coisas, no estilo do
+  `check_modal_standard`: a LISTA de quem já está fora (quinze telas com o menu
+  pela metade, o `reconciliation-fxo` com Csv/Copy próprios, o
+  `index-b3-results` com quatro tabelas e um nome só) não pode crescer.
 - **Alinhamento com `scrollX` são TRÊS coisas**: `columns.adjust()` depois de
   todo draw (+ passe atrasado 150 ms + `resize`); `autoWidth: true`; regras de
   `th` repetidas nos clones com `white-space: normal`.
@@ -1122,7 +1144,7 @@ São **46**: `currency-base`, `interbook-ndf`, `commodities-b3`,
 `apps/static/data/db/` é gitignorado: bancos não vêm no pull. Telas vazias
 depois de um pull são migração não rodada, não bug.
 
-### `scripts/tests/` (120 scripts)
+### `scripts/tests/` (134 scripts)
 
 Autocontidos, sem framework, `ok`/`FAIL` por asserção, saída 0/1, sem tocar
 dado real (tmp, stubs de Outlook/SMTP). O
