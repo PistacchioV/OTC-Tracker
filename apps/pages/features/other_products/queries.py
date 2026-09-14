@@ -5,7 +5,8 @@ O que a tela mostra sai de SEIS fontes que não se conhecem, todas do dia da
 liquidação (`ref`), e cada uma responde por uma chave:
 
     Operations B3 ─AVISO DE INEXISTENCIA DE PU─> os contratos (`_vcp_collect`)
-         │ Título = CETIP ID ─> Swap Athena ──> Athena ID (Kapital ID)
+         │ Título = CETIP ID ─> Swap Athena ──> Internal ID (Kapital ID, só CEM;
+         │                                        em EDG ele vem do elo de equity)
          │                         └─ Kapital ID = Trade Id ─> OTM ──> as CURVAS
          │                                         (+ = Parte/JP recebe, − = Contraparte)
          ├─ Título = Código do Contrato ─> Swap Eventos ──> Valor Juros / Fator de
@@ -107,15 +108,15 @@ def _by_contract_events(R, ref):
 
 
 def vcp_payload(ref):
-    """O payload da página: as linhas de sempre (`_vcp_collect`) com o Athena
+    """O payload da página: as linhas de sempre (`_vcp_collect`) com o Internal
     ID entre Contraparte e Código do Contrato e os fatores preenchidos, mais
     `statuses` (a esteira, por linha) e `factors` (a segunda tabela)."""
     R = _R()
     base = R._vcp_collect(ref)
     cols = list(base.get('columns') or [])
     rows = [list(r) for r in (base.get('rows') or [])]
-    if 'Athena ID' not in cols:
-        cols.insert(1, 'Athena ID')
+    if 'Internal ID' not in cols:
+        cols.insert(1, 'Internal ID')
         for r in rows:
             r.insert(1, '')
     ci = {c: i for i, c in enumerate(cols)}
@@ -125,7 +126,7 @@ def vcp_payload(ref):
     for r in rows:
         f = by_ct.get(str(r[ci['Código do Contrato']] or '').strip().upper())
         if f:
-            r[ci['Athena ID']] = f['athena_id']
+            r[ci['Internal ID']] = f['internal_id']
             # "-" onde não há fator: a perna calculada e a VCP que ainda não
             # resolveu. Célula vazia parecia um valor que faltou digitar.
             r[ci['PARTE / Fator']] = (_f8(f['fator_p'])
@@ -213,8 +214,8 @@ def vcp_factor_rows(ref, rows=None, ci=None):
         base = R._vcp_collect(ref)
         cols = list(base.get('columns') or [])
         rows = [list(r) for r in (base.get('rows') or [])]
-        if 'Athena ID' not in cols:
-            cols.insert(1, 'Athena ID')
+        if 'Internal ID' not in cols:
+            cols.insert(1, 'Internal ID')
             for r in rows:
                 r.insert(1, '')
         ci = {c: i for i, c in enumerate(cols)}
@@ -274,7 +275,7 @@ def vcp_factor_rows(ref, rows=None, ci=None):
         faltam = []
         if not internal_id:
             faltam.append('internal_id')
-        # as curvas: o OTM pelo Athena ID; sem linha lá, as colunas do próprio Athena
+        # as curvas: o OTM pelo Internal ID; sem linha lá, as colunas do próprio Athena
         curva_p = curva_c = None
         if athena_id and athena_id.upper() in curvas:
             curva_p, curva_c = curvas[athena_id.upper()]
