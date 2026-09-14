@@ -31,7 +31,12 @@ def _R():
     return routes
 
 
-COLUNAS_FATORES = ['Athena ID', 'Código do Contrato', 'Contraparte', 'VBR',
+# `Internal ID` e não `Athena ID`: em CEM ele É o Kapital ID do Swap Athena, mas
+# em EDG o Athena não tem a operação (o relatório é só de CEM) e o identificador
+# sai do elo de equity — Operations B3 → Latam Desk Position → OTM, o mesmo do
+# Settlement Advice. Um nome de coluna que cita UMA das duas fontes descreve
+# metade das linhas.
+COLUNAS_FATORES = ['Internal ID', 'LOB', 'Código do Contrato', 'Contraparte', 'VBR',
                    '% Amortização do Fluxo', 'Tipo Amortização', 'Notional Amortizado',
                    'Juros Parte', 'Diff B3', 'Juros Contraparte', 'Diff B3',
                    'Fator Parte', 'Fator Contraparte']
@@ -227,6 +232,22 @@ def vcp_factor_rows(ref, rows=None, ci=None):
         i = ci.get(nome)
         return str(r[i] or '').strip() if i is not None and i < len(r) else ''
 
+    # PREGUIÇOSO: montar o elo custa ler o último Latam Desk Position e o OTM do
+    # dia, e a maioria das páginas não tem uma linha de EDG sequer. Lido no
+    # máximo uma vez por chamada — o `_ops_equity_link` ainda tem o cache de
+    # request, mas aqui a questão é não tocar nos dois arquivos à toa.
+    _eq_memo = {}
+
+    def _eqlink():
+        if 'v' not in _eq_memo:
+            try:
+                _eq_memo['v'] = R._ops_equity_link(ref) or {}
+            except Exception:                               # noqa: BLE001
+                R.log.warning('[swap-vcp] elo de equity indisponível — o Internal ID '
+                              'das linhas de EDG fica vazio', exc_info=True)
+                _eq_memo['v'] = {}
+        return _eq_memo['v']
+
     out = []
     for r in rows:
         contrato = cel(r, 'Código do Contrato')
@@ -234,12 +255,25 @@ def vcp_factor_rows(ref, rows=None, ci=None):
             continue
         key = contrato.upper()
         arow = by_cetip.get(key)
-        athena_id = str(arow[ai['Kapital ID']] if arow and 'Kapital ID' in ai else '').strip()
         pos = posicoes.get(_sf.norm(contrato).replace(' ', '')) or {}
         ev = eventos.get(key) or {}
+        ident = pos.get('identificador', '')
+        lob = R._accrual_lob(ident) or 'CEM'
+        # O Internal ID depende da LOB, porque as duas LOBs vivem em sistemas
+        # diferentes: CEM está no Swap Athena (Kapital ID pelo CETIP ID) e EDG
+        # NÃO está — o relatório do Athena é só de CEM, e é por isso que a
+        # coluna saía vazia em toda linha de equity. Para EDG o identificador
+        # vem do MESMO elo que o Settlement Advice usa (`_ops_equity_link`:
+        # Operations B3 → Latam Desk Position → OTM), chaveado pelo Título da
+        # B3, que aqui é o Código do Contrato.
+        if lob == 'EDG':
+            internal_id = str((_eqlink().get(key) or {}).get('internal_id', '') or '').strip()
+        else:
+            internal_id = str(arow[ai['Kapital ID']] if arow and 'Kapital ID' in ai else '').strip()
+        athena_id = internal_id            # nome antigo do campo, preservado
         faltam = []
-        if not athena_id:
-            faltam.append('athena_id')
+        if not internal_id:
+            faltam.append('internal_id')
         # as curvas: o OTM pelo Athena ID; sem linha lá, as colunas do próprio Athena
         curva_p = curva_c = None
         if athena_id and athena_id.upper() in curvas:
@@ -255,8 +289,6 @@ def vcp_factor_rows(ref, rows=None, ci=None):
         if vbr is None:
             faltam.append('vbr')
         original = pos.get('valor_inicial') or pos.get('valor_base') or domain.num(ev.get('Valor Base'))
-        ident = pos.get('identificador', '')
-        lob = R._accrual_lob(ident) or 'CEM'
         tipo_pos = pos.get('tipo_amort', '')
         amort = None
         try:
@@ -277,7 +309,8 @@ def vcp_factor_rows(ref, rows=None, ci=None):
             'b3_fator_p': ev.get('PARTE / Fator de Juros'), 'b3_fator_c': ev.get('CONTRAPARTE / Fator de Juros'),
             'idx_p': cel(r, 'PARTE / Indexador'), 'idx_c': cel(r, 'CONTRAPARTE / Indexador'),
         }, salvo.get('overrides'))
-        item = {'contrato': contrato, 'athena_id': athena_id, 'contraparte': cel(r, 'Contraparte'),
+        item = {'contrato': contrato, 'internal_id': internal_id, 'athena_id': athena_id,
+                'contraparte': cel(r, 'Contraparte'),
                 'conta_p': cel(r, 'PARTE / Conta'), 'conta_c': cel(r, 'CONTRAPARTE / Conta'),
                 'idx_p': cel(r, 'PARTE / Indexador'), 'idx_c': cel(r, 'CONTRAPARTE / Indexador'),
                 'lob': lob, 'curva_p': curva_p, 'curva_c': curva_c,

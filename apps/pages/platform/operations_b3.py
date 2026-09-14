@@ -121,7 +121,28 @@ def _opb3_settle_rows(ref):
     if not data:
         return []
     rules = _opb3_event_rules()
-    return [r for r in data if _opb3_settle_ok(r, rules)]
+    out = [r for r in data if _opb3_settle_ok(r, rules)]
+    # O dia TEM linhas e o cadastro comeu todas: daqui para a frente o NDF
+    # Summary, o Other Products, os dois avisos e a mensageria ficam vazios, e
+    # nenhum deles tem como distinguir isso de "não houve liquidação" — todos
+    # recebem a mesma lista vazia e desistem em silêncio.
+    #
+    # A causa quase sempre é a precedência que o cadastro tem de propósito:
+    # CADASTRAR um Consider é o que LIGA a lista branca daquele Tipo Título.
+    # Antes da primeira linha de OPC, todo OPC passava; depois dela, passa só a
+    # combinação cadastrada — e um Tipo Operação escrito de outro jeito não casa
+    # nada. Quem registra um evento novo espera ver MAIS, e vê menos.
+    #
+    # WARNING porque é o nível que aparece no log da instância, e uma vez por
+    # request (o `@_req_cached` guarda o resultado por `ref`).
+    if not out:
+        log.warning('[opb3] %s: as %d linha(s) do dia foram TODAS descartadas pelo '
+                    'cadastro opb3-events (%d Consider, %d Disregard) — o Settlement '
+                    'Summary, o Other Products, os avisos e a mensageria ficam vazios. '
+                    'Rode scripts/diag_settlement_advice.py %s para ver qual regra '
+                    'derrubou o quê', ref.strftime('%d/%m/%Y'), len(data),
+                    len(rules[0]), len(rules[1]), ref.strftime('%Y-%m-%d'))
+    return out
 
 _OPB3_COLUMNS = [
     'Conta', 'Tipo Operação', 'C/V', 'Título', 'Tipo Título', 'Tipo de Regime', 'Data Vencimento',
