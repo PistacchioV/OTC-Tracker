@@ -371,6 +371,13 @@
                 </div>
                 <div class="d-flex align-items-center gap-2 btn-toolbar-all">
                     <div class="vcpExportWrapper"></div>
+                    <!-- O Clear filters do card de cima limpa os chips E a linha de
+                         filtro da PRIMEIRA tabela; esta tem a linha de filtro dela e
+                         não tinha como limpar, coluna por coluna, a não ser apagando
+                         campo a campo. Mesmo estilo e mesma posição do outro card. -->
+                    <button class="btn btn-sm btn-soft-secondary" type="button" id="vcpClearFilters">
+                        <i class="ti ti-filter-off me-1"></i><span data-lang="sc-clear-filters">Clear filters</span>
+                    </button>
                 </div>
             </div>
             <div class="table-responsive">
@@ -568,11 +575,30 @@
     if (wrap) { wrap.innerHTML = ''; dt.buttons().container().appendTo(wrap); }
     if (window.otcExportAdvanced) window.otcExportAdvanced('#vcp-factors');
     if (window.otcCellCopy) window.otcCellCopy('#vcp-factors', { skip: [0, 1] });
-    jQuery('#vcp-factors thead').off('keyup.vcp change.vcp').on('keyup.vcp change.vcp', 'tr.sc-th-filter input', function () {
+    // A delegação é no CONTAINER da tabela, não no `#vcp-factors thead`. Esta
+    // tabela é `scrollX`, e aí o DataTables CLONA o cabeçalho para o topo
+    // rolante e esconde o original — os campos em que a pessoa digita são os do
+    // clone, que `#vcp-factors thead` não alcança (ele é o original escondido,
+    // e o clone perde o id da tabela). O evento nunca chegava: digitar na linha
+    // de filtro não fazia nada, sem erro nenhum. A de cima funciona porque
+    // aquela tabela é `scrollX: false` de propósito — cabeçalho e corpo numa
+    // tabela só, sem clone. O container cobre os dois.
+    jQuery(dt.table().container()).off('keyup.vcp change.vcp').on('keyup.vcp change.vcp', 'tr.sc-th-filter input', function () {
       var col = +this.getAttribute('data-col');
       this.classList.toggle('sc-has-val', !!this.value);
       if (dt.column(col).search() !== this.value) dt.column(col).search(this.value).draw();
     });
+    // Limpar: os campos das DUAS cópias do cabeçalho (o clone e o original
+    // escondido) mais a busca de cada coluna. `onclick` e não `addEventListener`
+    // porque `buildFactors` roda a cada troca de data — com o segundo, os
+    // handlers se empilhariam pela vida da página.
+    var vcpClr = document.getElementById('vcpClearFilters');
+    if (vcpClr) vcpClr.onclick = function () {
+      jQuery(dt.table().container()).find('tr.sc-th-filter input').each(function () {
+        this.value = ''; this.classList.remove('sc-has-val');
+      });
+      dt.columns().search('').draw();
+    };
     dt.columns.adjust();
     if (window.applyTranslations) { try { window.applyTranslations(); } catch (e) {} }
   }
