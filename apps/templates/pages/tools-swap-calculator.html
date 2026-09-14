@@ -147,6 +147,10 @@
                 <div class="col-4 tl-field">
                     <label for="{{ lado }}_preco_final" data-lang="tl-price-final">Final price</label>
                     <input class="form-control form-control-sm" id="{{ lado }}_preco_final" name="{{ lado }}_preco_final" value="{{ f[lado ~ '_preco_final'] }}" inputmode="decimal" data-format="price">
+                    <!-- De que pregão é o fechamento que entrou — ou por que não
+                         entrou. Mesmo papel da nota da PTAX: preço sem procedência
+                         é um número que ninguém consegue conferir. -->
+                    <p class="tl-help" id="{{ lado }}_preco_nota"></p>
                 </div>
                 <div class="col-12 tl-field">
                     <label for="{{ lado }}_moeda_equity" data-lang="tl-quote-currency">Quote currency</label>
