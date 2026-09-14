@@ -72,6 +72,34 @@ def fx8(valor):
     return inteiro + '.' + (dec + '0000')[:4] if len(dec) < 4 else inteiro + '.' + dec
 
 
+# Windows recusa estes no nome do arquivo, e o `/` da data é um deles: a data
+# da liquidação sai com hífen. Caracteres de controle vão junto — um `\n` colado
+# de uma célula partiria o cabeçalho HTTP.
+_PROIBIDOS_NO_NOME = '\\/:*?"<>|'
+
+
+def nome_memoria(cetip_id, contraparte, quando, extensao='.xlsx'):
+    """`Memória de Cálculo - <CETIP ID> - <contraparte> - <liquidação>.xlsx`.
+
+    O que não veio não vira um traço solto: o segmento VAZIO some, em vez de
+    entregar um `Memória de Cálculo -  -  - 30-06-2026.xlsx` para o arquivo do
+    cliente. E o nome é o do DOCUMENTO, não o do contrato interno: é assim que
+    ele chega ao e-mail da contraparte."""
+    def limpo(texto):
+        t = ''.join(' ' if c in _PROIBIDOS_NO_NOME or ord(c) < 32 else c
+                    for c in str(texto or ''))
+        return ' '.join(t.split())
+
+    partes = ['Memória de Cálculo']
+    for bruto in (cetip_id, contraparte):
+        t = limpo(bruto)
+        if t:
+            partes.append(t)
+    if quando is not None:
+        partes.append('{:%d-%m-%Y}'.format(quando))
+    return ' - '.join(partes) + extensao
+
+
 def ligado(valores, campo):
     return str(valores.get(campo) or '').lower() in ('1', 'on', 'true')
 

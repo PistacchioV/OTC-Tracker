@@ -771,6 +771,19 @@ São **46**: `currency-base`, `interbook-ndf`, `commodities-b3`,
   da mesa faz. Mês não publicado NÃO vem na série e é erro com o mês, nunca
   o anterior. No pré-preenchimento, evento do DFLUXO sem Taxa Amortização é
   **0%**, não lacuna.
+- **Swap Calculator › Extract: a memória de cálculo é FÓRMULA, não valor**
+  (§455, `features/tools/infra/memoria_xlsx.py`): toda célula derivada do
+  .xlsx é fórmula de Excel encadeada até as entradas, e os dias do índice vão
+  inteiros numa aba por ponta (o fator do dia escrito sobre a taxa daquele
+  dia, com o `ROUND(...,8)` do padrão B3/CETIP quando a tela o pede) — a aba
+  principal REFERENCIA a célula do acumulado. Mexer na conta aqui sem mexer no
+  motor entrega uma memória que não explica o número que a mesa mandou:
+  `check_tools_memoria.py` recalcula a planilha e cobra o motor. O `<form>` da
+  tela tem `action` EXPLÍCITO — o botão troca o destino por `formaction`, e
+  sem ele o Calculate seguinte baixaria uma planilha. O documento é do BANCO:
+  timbre em A1, nada do sistema que o gerou (nem no `docProps/app.xml`), e
+  nome `Memória de Cálculo - CETIP ID - contraparte - data`, com segmento
+  vazio sumindo.
 - **Intrag DCE Swap: a unidade é o DEAL e a linha é traduzida no servidor**
   (§448). A planilha do dropzone traz duas tabelas (pernas e fluxos)
   ligadas pelo Deal Name; o arquivo `Intrag-DCE-Swap-AAAAMMDD.txt` é UMA

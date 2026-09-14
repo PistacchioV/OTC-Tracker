@@ -10,8 +10,8 @@ import csv
 import io
 from datetime import date, datetime, timedelta
 
-from flask import (Response, jsonify, redirect, render_template, request, session,
-                   url_for)
+from flask import (Response, jsonify, redirect, render_template, request, send_file,
+                   session, url_for)
 
 from apps.pages import blueprint
 from apps.pages.features.tools import commands, domain, queries
@@ -187,6 +187,32 @@ def tools_swap_calculator():
                         ctx['form'][lado + '_ni_inicial'] = '{:.6f}'.format(p.ni_inicial)
                     ctx['ipca_meses'][lado] = (p.mes_ni_inicial, p.mes_ni_final)
     return render_template('pages/tools-swap-calculator.html', segment='tools-swap-calculator', **ctx)
+
+
+@blueprint.route('/tools/swap-calculator/extract', methods=['POST'])
+def tools_swap_calculator_extract():
+    """A memória de cálculo do formulário, em .xlsx.
+
+    POST porque o que se exporta é o FORMULÁRIO — a conta não vive no
+    servidor entre dois requests, e pôr trinta campos de swap numa query
+    string estouraria o limite do IE/proxy e ainda deixaria um link que
+    envelhece. O botão é o mesmo `<form>` da tela com `formaction`: zero
+    JavaScript, e o que se exporta é, por construção, o que está na tela.
+
+    Conta que não fecha NÃO vira um download quebrado: a tela volta com a
+    mensagem, pela mesma rota do `Calculate` — por isso o formulário declara
+    `action` explícito, senão o Calculate seguinte postaria aqui.
+    """
+    r = _auth_page()
+    if r:
+        return r
+    try:
+        conteudo, nome = queries.memoria_de_calculo(request.form)
+    except _ERROS_DE_TELA:
+        return tools_swap_calculator()
+    return send_file(io.BytesIO(conteudo), as_attachment=True, download_name=nome,
+                     mimetype='application/vnd.openxmlformats-officedocument'
+                              '.spreadsheetml.sheet')
 
 
 @blueprint.route('/api/tools/swap-calculator/prefill')

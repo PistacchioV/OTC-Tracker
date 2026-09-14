@@ -19321,3 +19321,84 @@ ninguém escreve (o "rótulo de tela nunca vira caminho" do §453); paridade
 chave `intrag-` (o teste da zona do e-mail); todo `intrag-*` presente nos
 `GROUPS` e nenhum desconhecido no front; nenhum card fabricado no JS; e todo
 `url` com template existente.
+
+## §455 — Swap Calculator › Extract: a memória de cálculo em Excel, com as fórmulas e os dias do índice (2026-09-14)
+
+**O pedido.** "No Swap Calculator tem que ter um botão de extract, em Excel
+apenas. Ao extrair será uma memória de cálculo, então tem que conter fórmulas
+dos cálculos para chegar no valor de liquidação, os dados dos dias de DI por
+exemplo evidenciados. Inserir o logo do JPMorgan no topo à esquerda, e não
+conter referências ao OTC Tracker. O nome deverá ser `Memória de Cálculo -
+cetip id - nome da contraparte - data da liquidação`."
+
+**O que distingue uma memória de um export.** Um export copia o que a tela
+mostra; uma memória mostra **como se chegou lá**. Por isso toda célula
+derivada do arquivo é uma FÓRMULA de Excel de verdade, encadeada até as
+entradas — o fixing do DI de cada dia, a taxa contratada, as datas, o
+notional. Quem recebe clica no ajuste líquido, manda rastrear precedentes e
+desce até a taxa que o Banco Central publicou naquele dia; e pode trocar uma
+entrada e ver o número andar. Um arquivo de valores prontos responde "quanto";
+este responde "por quê", que é a pergunta que volta da contraparte que
+contesta.
+
+**Os dias do índice vão inteiros, numa aba por ponta.** `Apuração diária -
+Ativa` / `- Passiva`, uma linha por dia útil publicado, com o fator de CADA
+dia escrito como conta sobre a taxa daquele dia e o acumulado como o produto
+da linha anterior pela atual. O CDI capitaliza `(1 + DI)^(1/252)` — com
+`ROUND(...;8)` quando a tela pede o padrão B3/CETIP, que é o mesmo
+arredondamento do motor — e o SOFR corre linearmente sobre os dias CORRIDOS
+até o próximo dia útil, com o `n` saindo da subtração das próprias datas (o
+fixing de sexta remunerando três dias fica visível na planilha, não numa regra
+escondida). A aba principal **referencia a célula** do acumulado: mexer num
+dia refaz a liquidação inteira.
+
+**Os três fatores ficam separados de propósito** (índice, câmbio, correção do
+IPCA), porque só o primeiro vira juros: a variação cambial e a correção ficam
+no principal, que num fluxo intermediário não troca de mãos. Somá-los num
+fator único daria o mesmo valor futuro e juros errados — é o mesmo desenho do
+`PontaLiquidada.juros` (§449).
+
+**Onde o código mora.** `features/tools/infra/memoria_xlsx.py` escreve o
+workbook; `queries.memoria_de_calculo(form)` refaz a conta pela MESMA função
+da tela (`liquidar`) e devolve `(bytes, nome)`; `domain.nome_memoria` monta o
+nome do arquivo. O `liquidar` passou a devolver também as pontas de ENTRADA:
+o `PontaLiquidada` guarda o fator, não a taxa nem o percentual do CDI que o
+produziram, e sem eles a memória mostraria o fator sem dizer de que taxa veio.
+
+**A rota é POST e o `<form>` ganhou `action` explícito.** O que se exporta é o
+FORMULÁRIO — a conta não vive no servidor entre dois requests, e trinta campos
+de swap numa query string estouram o limite do proxy e ainda deixam um link
+que envelhece. O botão é o mesmo `<form>` da tela com `formaction`: zero
+JavaScript, e o arquivo é, por construção, o que está na tela. Sem o `action`
+explícito, porém, o primeiro Extract deixaria a página postando na rota do
+arquivo, e o **Calculate seguinte baixaria uma planilha em vez de recalcular**.
+Conta que não fecha não vira download quebrado: a tela volta com a mensagem.
+
+**O documento é do banco.** Timbre do J.P. Morgan em A1 (o wordmark já
+recortado do e-mail — a arte de 400x400 tem ~80px de transparência que
+empurraria o cabeçalho para baixo), e nenhuma linha sobre o sistema que o
+gerou, nem no conteúdo nem nas propriedades. Inclusive o `docProps/app.xml`, o
+único lugar que o `wb.properties` não alcança e onde o openpyxl se anuncia: o
+zip é reescrito com `<Application>Microsoft Excel</Application>`. Logo que não
+carrega **não derruba a memória** — sai sem timbre, com o motivo no log; o
+contrário trocaria o arquivo inteiro por arquivo nenhum.
+
+**O nome.** `Memória de Cálculo - <CETIP ID> - <contraparte> - <dd-mm-aaaa>`,
+com a data da LIQUIDAÇÃO (o fim do fluxo). Segmento que não veio **some**, em
+vez de virar um traço solto no arquivo do cliente; o que o Windows recusa
+(`\/:*?"<>|`, o `/` da data entre eles) e os caracteres de controle viram
+espaço — um `\n` colado de uma célula partiria o cabeçalho HTTP do download,
+que sai em RFC 5987 por causa dos acentos.
+
+**O que o Excel mostra até abrir.** O openpyxl grava a fórmula sem valor em
+cache: um visualizador que não calcula mostra célula vazia. É o preço de
+entregar a conta em vez do retrato dela, e o Excel e o LibreOffice recalculam
+ao abrir.
+
+`check_tools_memoria.py` prende isso pelo único jeito que prova o ponto:
+traz um avaliador mínimo (as quatro operações, potência, `IF`/`AND`/`MIN`/
+`ABS`/`ROUND`, comparações e referências entre abas, com data virando serial),
+**recalcula a planilha** e compara com o motor — ajuste líquido, bruto, IR,
+alíquota, prazo, os dois fatores acumulados, os juros de cada ponta, a
+amortização e o fator cambial. Um export que copiasse números passaria por
+engano num teste de texto; aqui ele não fecha a conta.
