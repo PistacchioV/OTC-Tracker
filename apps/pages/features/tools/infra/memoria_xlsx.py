@@ -96,6 +96,7 @@ BASE_AMORT_PT = {
     liquidacao.SOBRE_ORIGINAL: 'sobre o notional original (parcela constante)',
     liquidacao.SOBRE_REMANESCENTE: 'sobre o saldo remanescente (parcela decrescente)',
     liquidacao.AT_MATURITY: 'no vencimento (principal integral no encerramento)',
+    liquidacao.SEM_TROCA: 'não se aplica — contrato sem troca de amortização',
 }
 
 
@@ -536,12 +537,18 @@ def construir(r, pontas, cetip_id='', contraparte='', calendario='ANBIMA',
                   nota='base de cálculo das duas pontas')
     pct_am = f.campo('Amortização no fim do fluxo', r.percentual_amortizacao, PCT_FMT)
     f.campo('A amortização incide', BASE_AMORT_PT.get(r.base_amortizacao, r.base_amortizacao))
-    referencia = (vbr if r.base_amortizacao in (liquidacao.SOBRE_REMANESCENTE,
-                                                liquidacao.AT_MATURITY) else original)
-    amortizado = f.campo(
-        'Valor amortizado', '=IF({p}<=0,0,MIN({s},{ref}*{p}))'.format(p=pct_am, s=vbr,
-                                                                     ref=referencia),
-        MOEDA_FMT, nota='apurada no encerramento do fluxo; não integra o fator do período')
+    # A base VENCE o percentual no `Sem Troca`: o contrato não amortiza em fluxo
+    # nenhum, e uma fórmula de MIN ali prometeria uma conta que o motor não faz.
+    if r.base_amortizacao == liquidacao.SEM_TROCA:
+        amortizado = f.campo('Valor amortizado', 0.0, MOEDA_FMT,
+                             nota='contrato sem troca de amortização')
+    else:
+        referencia = (vbr if r.base_amortizacao in (liquidacao.SOBRE_REMANESCENTE,
+                                                    liquidacao.AT_MATURITY) else original)
+        amortizado = f.campo(
+            'Valor amortizado', '=IF({p}<=0,0,MIN({s},{ref}*{p}))'.format(p=pct_am, s=vbr,
+                                                                         ref=referencia),
+            MOEDA_FMT, nota='apurada no encerramento do fluxo; não integra o fator do período')
     f.campo('Saldo do fluxo seguinte', '={}-{}'.format(vbr, amortizado), MOEDA_FMT)
 
     a = _bloco_ponta(f, r.ativa, pontas[liquidacao.ATIVA], vbr,

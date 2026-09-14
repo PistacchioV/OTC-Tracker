@@ -329,6 +329,18 @@ try:
           ("class=\"sc-th-filter\"" in html and 'sc-col-filter" data-col=' in html
            and 'vcp-th-filter' not in html), True)
     check('a tabela de baixo so tem Edit', "data-act=\"send\"" in html.split('#vcp-factors')[-1], False)
+    # A Diferenca E o veredito: o VALOR sai dentro do badge (verde/amarelo), como
+    # o batimento do Accrual Swap colore o fator registrado. O badge de texto ao
+    # lado do numero dizia duas vezes a mesma coisa e roubava a largura da
+    # coluna. Sem veredito NAO ha cor — linha que nao deu para conferir pintada
+    # de verde some do que ha para olhar.
+    check('a Diferenca e um badge com o valor dentro',
+          ('difBadge(f.diferenca, f.veredito)' in html
+           and 'text-bg-success' in html and 'text-bg-warning' in html), True)
+    check('   e nao ha mais badge de TEXTO ao lado do numero',
+          ("rounded-pill ms-1" in html, 'function vered(' in html), (False, False))
+    check('   sem veredito a celula sai sem cor',
+          'if (!veredito) return esc(txt);' in html, True)
     check('e o duplo clique da tabela de cima abre o preview',
           "on('dblclick', '#swapchar-table tbody tr'" in html, True)
 finally:

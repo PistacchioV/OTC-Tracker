@@ -153,11 +153,21 @@ SOBRE_REMANESCENTE = 'remanescente'
 #  PARCELA, e escolher "sobre o valor original" num bullet faz a tela afirmar
 #  um cronograma de amortização que aquele contrato não tem.
 AT_MATURITY = 'vencimento'
+#  `Sem Troca de Amortização` NÃO é o At Maturity. As três bases acima
+#  descrevem QUANDO e SOBRE O QUÊ o principal é amortizado; esta diz que ele
+#  não é amortizado NUNCA — não há evento de amortização em fluxo nenhum, nem
+#  no vencimento. Ela existe como opção própria porque cair no At Maturity faz
+#  a tela afirmar uma devolução de principal no encerramento que o contrato não
+#  tem, e cair no `Sobre Valor Base Original` afirma um cronograma de parcelas.
+#  É a resposta do código 4 do cadastro `swap-amortizacao`, e é a mais comum
+#  nos swaps da mesa.
+SEM_TROCA = 'sem_troca'
 
 BASES_AMORTIZACAO = [
     (SOBRE_ORIGINAL, 'On the original notional — constant instalment'),
     (SOBRE_REMANESCENTE, 'On the remaining balance — decreasing instalment'),
     (AT_MATURITY, 'At maturity — the whole principal at the end'),
+    (SEM_TROCA, 'No amortisation exchange — the notional never amortises'),
 ]
 
 
@@ -171,7 +181,14 @@ def amortizar(nocional_original, saldo, percentual, base=SOBRE_ORIGINAL):
     `AT_MATURITY` calcula sobre o SALDO: o que volta no vencimento é o que
     ainda está de pé, não uma fração do valor registrado — num contrato que já
     amortizou antes, o original é maior que o saldo e a conta pelo original
-    seria aparada pelo `min` só por sorte."""
+    seria aparada pelo `min` só por sorte.
+
+    `SEM_TROCA` é zero, e o percentual não é lido: o contrato não amortiza em
+    fluxo nenhum. A base VENCE o percentual aqui de propósito — um `100` que
+    tenha sobrado no campo (do fluxo anterior, do pré-preenchimento de um
+    bullet) devolveria o principal inteiro num swap que não devolve nada."""
+    if base == SEM_TROCA:
+        return 0.0
     if percentual <= 0:
         return 0.0
     referencia = saldo if base in (SOBRE_REMANESCENTE, AT_MATURITY) else nocional_original

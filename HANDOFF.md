@@ -19470,3 +19470,90 @@ motor, e é lá que estava a resposta errada. `check_tools.py` fixava a resposta
 antiga em uma asserção — foi atualizada na mesma mudança, e ganhou a asserção
 que diz por que a troca é segura: nenhuma das duas amortiza no fluxo, e com
 percentual zero o valor amortizado é zero nas duas bases.
+
+## §457 — Termo de moeda: duas operações, duas moedas, uma confirmação só — e uma operação sumindo (2026-09-14)
+
+**O relato.** "Na geração de confirmações, quando tem por exemplo de FWD Start,
+e tem duas operações de FWD Start da mesma contraparte, porém 1 de EUR e 1 de
+USD, não está gerando duas confirmações e não está gerando uma confirmação com
+duas linhas também. Uma das operações está sumindo."
+
+**São TRÊS lugares guardando o mesmo eixo, e um deles guardava outro.** A
+confirmação do termo de moeda é segregada por contraparte × **Moeda Base** ×
+família (`_conf_segregate` com `merc_fn=_conf_fwdstart_moeda`), e a Moeda Base
+é a moeda ESTRANGEIRA do par: a Quantity Currency quando ela não é o real,
+senão a Other Quantity Currency (a Moeda Cotada do documento é fixa em BRL,
+cláusula 3.d). A esteira, porém, gravava em `Moeda` a
+`QuantityCurrency` crua (`_mc_save_from_deal`). As duas leituras divergem
+exatamente no caso comum do deal **cotado em BRL**: a segregação diz EUR e
+USD, a esteira diz BRL nas duas.
+
+**E é a esteira que monta o card do Monitor.** O item do Monitor é
+Cliente × Produto × LOB × **Moeda** × Data — com BRL nos dois, as duas
+operações viram UM card. Clicando em Generate, o `_mc_generate_url` procura,
+entre os grupos do New Deals, o primeiro que compartilhe QUALQUER chave com o
+card: achava o grupo de EUR (ou o de USD, pela ordem alfabética) e abria o
+documento daquele. O outro deal não estava no grupo, não entrava no Anexo I, e
+não havia segundo card para gerar o dele. Nem duas confirmações, nem uma com
+duas linhas: uma operação sumia, sem erro nenhum.
+
+**A correção, na origem.** `_mc_moeda_do_ativo` passa a responder pelo eixo de
+cada produto — a mercadoria nas commodities, a **Moeda Base pela mesma função
+da segregação** (`_conf_fwdstart_moeda`) nos termos de moeda, e a cadeia de
+sempre no resto. Uma função só decide "qual é o ativo desta confirmação", e é
+a mesma dos dois lados. Moeda Base vazia cai na cadeia antiga: eixo em branco
+junta no Monitor tudo que estiver vazio.
+
+**E uma trava para o que já está no banco.** `_mc_save_from_deal` não
+sobrescreve linha existente (de propósito: um amend não pode apagar o
+'Conferido OTC'), então as linhas gravadas antes seguem com BRL e continuarão
+juntando duas moedas num card. Para elas, o `_mc_generate_url` deixou de
+devolver "o primeiro grupo que casar" e passa a devolver **o grupo da LINHA
+CLICADA** (o `Trade ID` da row), com um WARNING no log quando o card cobre mais
+de um documento — nomeando os grupos e pedindo o backfill. O pior caso deixa de
+ser "uma operação some" e passa a ser "duas idas ao Generate, uma por linha".
+
+`check_fwdstart_conf.py` §9 prende o caso REAL — dois deals cotados em BRL, um
+com EUR e outro com USD do outro lado: o eixo da esteira batendo com o da
+segregação, os dois grupos, e o Generate de cada linha abrindo o SEU documento.
+
+---
+
+## §458 — Swap Calculator: `Sem Troca de Amortização` é uma base própria, e taxa vazia é 0% (2026-09-14)
+
+**`Sem Troca` não é `At Maturity`.** O §456 tirou o `Sem Troca de Amortização`
+do `Sobre Valor Base Original` e o pôs no At Maturity — melhor, e ainda errado:
+o At Maturity afirma que o principal inteiro volta no encerramento, e um
+contrato sem troca de amortização não tem evento de amortização **nenhum**, nem
+no vencimento. Agora ele tem base própria (`liquidacao.SEM_TROCA`, a quarta
+opção do seletor), e `amortizar()` devolve zero nela **ignorando o percentual**:
+um `100` que tenha sobrado no campo — do fluxo anterior, do pré-preenchimento
+de um bullet — devolveria o principal inteiro num swap que não devolve nada. A
+base vence o percentual, e é o único lugar do motor em que isso acontece.
+
+**Taxa contratada vazia é 0%, não lacuna.** O pré-preenchimento deixava o campo
+`Contracted rate or spread` em branco e o marcava em vermelho quando a posição
+não trazia a célula — e o motor já lia campo em branco como 0,0
+(`taxa_do_form(..., 0.0)`). Ou seja: a tela pedia que a mesa digitasse à mão,
+em toda perna sem spread, um zero que o cálculo já assumia. Agora o campo nasce
+`0.0000` nos dois lugares (o spread do CDI e a taxa dos demais índices) e sai
+da lista de "não deu para puxar". É o mesmo princípio do evento do DFLUXO sem
+Taxa Amortização (§449): célula vazia é a resposta, não a ausência dela.
+
+## §459 — Swap VCP: a Diferença virou o próprio veredito (2026-09-14)
+
+A coluna `Diferença` imprimia o número e, ao lado, um badge escrito `Ok` ou
+`Check`. Duas coisas dizendo a mesma coisa, e o badge de texto ainda roubava a
+largura de uma coluna numérica. Agora o **valor sai dentro do badge**, verde
+quando fecha e amarelo quando não — o mesmo desenho do batimento do Accrual
+Swap, onde o fator registrado colore a própria célula em vez de ganhar um
+rótulo ao lado. Varrer a coluna inteira passou a ser uma olhada só.
+
+O veredito não se perde: ele vai no `title` do badge, com a tolerância escrita
+por extenso (`Ok — dentro da tolerância de R$ 10,00`). E **sem veredito não há
+cor**: linha sem um dos dois lados (sem OTM, sem perna VCP) sai com o número
+cru ou `-`, nunca verde — linha que não deu para conferir pintada de conferida
+some do que há para olhar, que é a mesma regra do §452.
+
+O export não muda: o DataTables já tira o HTML dos badges, e agora o que sobra
+é o número limpo em vez de `1.234,56 Check`.

@@ -55,6 +55,7 @@ from apps.pages import routes as R
 # página chama `_conf_cgd_lookup` por DENTRO do módulo, então o espião entra
 # nos dois lugares — o alias do routes cobre o chamador da feature.
 from apps.pages.platform import confirmations as PC                        # noqa: E402
+from apps.pages.platform import manual_confirmation as MCP                # noqa: E402
 
 fails = []
 
@@ -77,7 +78,8 @@ DEAL = {
 }
 
 
-def run(deals, path='/api/new-deals/ndf-fwdstart/confirmations?date=2026-08-05'):
+def run(deals, path='/api/new-deals/ndf-fwdstart/confirmations?date=2026-08-05',
+        depois=None):
     """Monta o dia e devolve (grupos, html_do_documento_do_1o_grupo)."""
     from apps import create_app
     from apps.config import DebugConfig
@@ -102,6 +104,10 @@ def run(deals, path='/api/new-deals/ndf-fwdstart/confirmations?date=2026-08-05')
         html = ''
         if groups and groups[0].get('url'):
             html = cl.get(groups[0]['url']).data.decode('utf-8')
+        if depois is not None:
+            # o gancho roda ANTES do finally: o que ele testa (o Generate do
+            # Monitor) precisa do arquivo-dia ainda montado
+            depois(groups)
         return groups, html
     finally:
         cfg['dir'], PC._conf_cgd_lookup = real
@@ -166,6 +172,62 @@ check('moedas diferentes = grupos diferentes',
       sorted(g['mercadoria'] for g in g2), ['EUR', 'USD'])
 # O link que a tela publica tem de abrir: mesmo eixo dos dois lados.
 check('o link do grupo abre o documento (nao 404)', bool(html) and 'ANEXO' in html, True)
+
+print('\n== 9. o eixo da moeda tambem na ESTEIRA (o card do Monitor) ==')
+# O caso real: duas operacoes de termo da MESMA contraparte, uma em EUR e outra
+# em USD, as duas COTADAS EM BRL. A segregacao das confirmacoes separa pela
+# Moeda Base (EUR x USD) — mas a esteira gravava a `QuantityCurrency`, que e BRL
+# nas duas. Com a mesma Moeda, as duas linhas caem no MESMO card do Monitor, e o
+# Generate abria o documento de UMA delas: a outra sumia, sem segunda
+# confirmacao e sem segunda linha na primeira.
+EUR = dict(DEAL, Deal='DE', B3_ID='BE', QuantityCurrency='BRL', OtherQuantityCurrency='EUR')
+USD = dict(DEAL, Deal='DU', B3_ID='BU', QuantityCurrency='BRL', OtherQuantityCurrency='USD')
+
+
+def _first_de(deal):
+    def first(*nomes):
+        for n in nomes:
+            v = str(deal.get(n, '') or '').strip()
+            if v:
+                return v
+        return ''
+    return first
+
+
+check('deal cotado em BRL: a esteira grava a Moeda BASE, nao a cotada',
+      (MCP._mc_moeda_do_ativo(EUR, 'NDF FWD START', _first_de(EUR)),
+       MCP._mc_moeda_do_ativo(USD, 'NDF FWD START', _first_de(USD))),
+      ('EUR', 'USD'))
+check('   que e exatamente o eixo da segregacao',
+      (PC._conf_fwdstart_moeda(EUR), PC._conf_fwdstart_moeda(USD)), ('EUR', 'USD'))
+# Nas commodities o eixo continua sendo a mercadoria, e no resto a moeda do deal.
+check('   e o eixo das commodities nao muda',
+      MCP._mc_moeda_do_ativo({'Commodities': 'OLEO'}, 'NDF COMM',
+                             _first_de({'Commodities': 'OLEO'})), 'OLEO')
+
+
+def _generate(groups):
+    check('as duas moedas sao dois grupos', sorted(g['mercadoria'] for g in groups),
+          ['EUR', 'USD'])
+    # O card antigo (gravado antes da correcao) traz as chaves das DUAS
+    # operacoes. O Generate abre o documento da LINHA CLICADA — nao o do
+    # primeiro grupo, que era o que fazia a outra operacao sumir.
+    ambas = ['BE', 'BU']
+    # A `Data Operação` da linha e o que diz em QUE arquivo-dia do New Deals a
+    # operacao esta — e o day-file do fixture e o de 05/08/2026.
+    linha_eur = {'Produto': 'NDF FWD START', 'LOB': 'CEM', 'Legal Entity': 'BANCO J.P MORGAN S.A',
+                 'Data Operação': '05/08/2026', 'Trade ID': 'BE', 'Cliente': 'SUZANO SA'}
+    linha_usd = dict(linha_eur, **{'Trade ID': 'BU'})
+    u_eur, _m1 = R._mc_generate_url(linha_eur, ambas)
+    u_usd, _m2 = R._mc_generate_url(linha_usd, ambas)
+    check('   Generate da linha de EUR abre o documento de EUR',
+          'mercadoria=EUR' in u_eur, True)
+    check('   Generate da linha de USD abre o de USD (nao o primeiro grupo)',
+          'mercadoria=USD' in u_usd, True)
+    check('   e os dois sao documentos DIFERENTES', u_eur != u_usd, True)
+
+
+run([EUR, USD], depois=_generate)
 
 print('\n== 7. o PDF sai do MESMO HTML do .doc ==')
 # As rotas de confirmação moram em features/confirmation desde a extração; o

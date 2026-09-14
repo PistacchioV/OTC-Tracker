@@ -310,22 +310,25 @@ def montar_ponta(regra, pct, taxa, sinal, nome_classe, cotacao_inicial,
     campos['convencao'] = str(regra.get('DAY COUNT', '') or '').strip() or conv
     campos['regime'] = str(regra.get('REGIME', '') or '').strip() or reg
     # No CDI as duas colunas da posição entram em campos DIFERENTES: o
-    # `Percentual` no percentual e a `Taxa` (com o `Sinal Taxa`) no spread. A
-    # perna sem spread deixa o campo vazio — zero afirmaria um spread de zero,
-    # e vazio é o que a posição de fato traz.
+    # `Percentual` no percentual e a `Taxa` (com o `Sinal Taxa`) no spread.
+    #
+    # Célula de taxa VAZIA é **0%**, não lacuna — nos dois campos. É o que a
+    # perna sem spread de fato vale, e é o que o motor já calculava: o
+    # `taxa_do_form` lê campo em branco como 0,0. Deixar o campo vazio e
+    # marcá-lo em vermelho pedia que a mesa digitasse à mão um zero que o
+    # cálculo já assumia, em toda perna sem spread — o mesmo caso do evento do
+    # DFLUXO sem Taxa Amortização (§449). Agora a tela mostra o número que vai
+    # ser usado.
     if idx == liquidacao.CDI:
         if pct is None:
             faltando.append('percentual')
         else:
             campos['percentual'] = '{:.4f}'.format(pct)
-        campos['taxa'] = '' if taxa is None else '{:.4f}'.format(taxa * sinal)
+        campos['taxa'] = '{:.4f}'.format(taxa * sinal if taxa is not None else 0.0)
     else:
         valor = 0.0 if idx in (liquidacao.MOEDA, liquidacao.FATOR) else (
-            (taxa * sinal) if taxa is not None else None)
-        if valor is None:
-            faltando.append('taxa')
-        else:
-            campos['taxa'] = '{:.4f}'.format(valor)
+            (taxa * sinal) if taxa is not None else 0.0)
+        campos['taxa'] = '{:.4f}'.format(valor)
     # a moeda, onde o índice declara uma
     if idx in liquidacao.DECLARAM_MOEDA:
         moeda = str(regra.get('CURRENCY', '') or '').strip().upper() \

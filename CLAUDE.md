@@ -739,6 +739,16 @@ São **46**: `currency-base`, `interbook-ndf`, `commodities-b3`,
   confirmação quando a LE é MGT (`_generic_nd_mc_source`) e nasce `Pending
   OTC`; o do BANCO segue sem esteira. O FWD Start do BANCO deixou de listar
   os de MGT, e o Generate do Monitor escolhe o editor pela Legal Entity.
+- **O eixo do ATIVO da confirmação é UM, e vale nos TRÊS lugares** (§457):
+  a segregação dos grupos (`_conf_segregate`), a escolha do grupo na geração
+  (`_conf_pick_eligible`) e a coluna `Moeda` da ESTEIRA, que é quem monta o
+  card do Monitor. No termo de moeda ele é a **Moeda Base** (a estrangeira do
+  par), e quem responde é `_conf_fwdstart_moeda`, pelo `_mc_moeda_do_ativo` —
+  ler a `QuantityCurrency` crua ali fazia duas operações da mesma contraparte
+  em moedas diferentes, **cotadas em BRL**, caírem num card só; o Generate
+  abria o documento de uma e a outra sumia. Para a linha antiga que já está no
+  banco com o eixo velho, o `_mc_generate_url` devolve o grupo da LINHA
+  CLICADA (não o primeiro que casar) e loga um aviso.
 - Só produtos de `_MC_CONFIRMATION_SOURCES` geram documento na esteira;
   `_mc_save_from_deal` é chamado de dentro de `_pc_save_from_deal` e **não
   retroage** — quem recupera o passado é o `backfill_manual_confirmations.py`,
@@ -849,6 +859,9 @@ São **46**: `currency-base`, `interbook-ndf`, `commodities-b3`,
   sobre o original" um swap marcado `Sem Troca` no Live Position. Número
   nenhum muda (`amortiza_no_fluxo` já zera o percentual nos dois casos); o que
   muda é o que a tela diz. A mesma função responde ao fator VCP.
+- **No Swap VCP a `Diferença` É o veredito** (§459): o valor sai DENTRO do
+  badge (verde/amarelo), como o batimento do Accrual Swap colore o fator
+  registrado — não há badge de texto ao lado. Sem veredito não há cor.
 - **Perna interna não gera aviso** (`_ops_is_internal_cpty` pelo `le-spn` +
   `_pc_is_internal_counterparty`, nunca "começa com BANCO"): fica no Trade
   Level e no Summary, sai do Advice e do TED — o e-mail de TED do NDF faz a

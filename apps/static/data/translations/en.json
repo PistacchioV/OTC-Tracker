@@ -2142,6 +2142,7 @@
   "tl-am-original": "On the original notional — constant instalment",
   "tl-am-remanescente": "On the remaining balance — decreasing instalment",
   "tl-am-vencimento": "At maturity — the whole principal at the end",
+  "tl-am-sem_troca": "No amortisation exchange — the notional never amortises",
   "tl-amort-on": "Amortisation applies on",
   "tl-amortisation": "Amortisation at flow end (%)",
   "tl-amortisation-s": "Amortisation",
