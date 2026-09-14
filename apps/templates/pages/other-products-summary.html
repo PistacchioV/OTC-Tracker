@@ -4,6 +4,7 @@
 
 {% block extra_css %}
 <link href="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.css" rel="stylesheet" type="text/css" />
 <link href="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.css" rel="stylesheet" />
 <link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet" type="text/css" />
 <style>
@@ -416,7 +417,7 @@
                             <i class="ti ti-printer me-1"></i><span data-lang="ops-print-advice">Print Advice</span>
                         </button>
                         <button type="button" class="btn btn-sm btn-primary bg-gradient ops-add"><i class="ti ti-plus me-1"></i><span data-lang="ops-add-row">Add row</span></button>
-                        <div class="dropdown"><button type="button" class="btn btn-sm btn-info bg-gradient dropdown-toggle ops-export" data-bs-toggle="dropdown"><i class="ti ti-download me-1"></i><span data-lang="map-export">Export</span></button><ul class="dropdown-menu"><li><a class="dropdown-item ops-export-csv" href="#"><i class="ti ti-file-type-csv me-1"></i> CSV</a></li><li><a class="dropdown-item ops-export-copy" href="#"><i class="ti ti-copy me-1"></i> Copy</a></li></ul></div>
+                        <div class="dropdown"><button type="button" class="btn btn-sm btn-info bg-gradient dropdown-toggle ops-export" data-bs-toggle="dropdown"><i class="ti ti-download me-1"></i><span data-lang="map-export">Export</span></button><ul class="dropdown-menu" id="ops-summary-table-export-menu"><li><a class="dropdown-item ops-export-item" data-btn="copy" href="#"><i class="ti ti-copy me-1"></i> Copy</a></li><li><a class="dropdown-item ops-export-item" data-btn="csv" href="#"><i class="ti ti-file-type-csv me-1"></i> CSV</a></li><li><a class="dropdown-item ops-export-item" data-btn="excel" href="#"><i class="ti ti-file-spreadsheet me-1"></i> Excel</a></li><li><a class="dropdown-item ops-export-item" data-btn="print" href="#"><i class="ti ti-printer me-1"></i> Print</a></li><li><a class="dropdown-item ops-export-item" data-btn="pdf" href="#"><i class="ti ti-file-text me-1"></i> PDF</a></li></ul></div>
                         <button type="button" class="btn btn-sm btn-soft-primary ops-colvis"><i class="ti ti-columns me-1"></i><span data-lang="ops-colvis">Columns</span></button>
                         <button type="button" class="btn btn-sm btn-danger bg-gradient ops-del" disabled><i class="ti ti-trash me-1"></i><span data-lang="ops-del">Delete</span></button>
                     </div>
@@ -487,7 +488,7 @@
                             <label class="form-label mb-0 fs-xs text-muted" data-lang="ops-entries">entries</label>
                         </div>
                         <button type="button" class="btn btn-sm btn-primary bg-gradient ops-add"><i class="ti ti-plus me-1"></i><span data-lang="ops-add-row">Add row</span></button>
-                        <div class="dropdown"><button type="button" class="btn btn-sm btn-info bg-gradient dropdown-toggle ops-export" data-bs-toggle="dropdown"><i class="ti ti-download me-1"></i><span data-lang="map-export">Export</span></button><ul class="dropdown-menu"><li><a class="dropdown-item ops-export-csv" href="#"><i class="ti ti-file-type-csv me-1"></i> CSV</a></li><li><a class="dropdown-item ops-export-copy" href="#"><i class="ti ti-copy me-1"></i> Copy</a></li></ul></div>
+                        <div class="dropdown"><button type="button" class="btn btn-sm btn-info bg-gradient dropdown-toggle ops-export" data-bs-toggle="dropdown"><i class="ti ti-download me-1"></i><span data-lang="map-export">Export</span></button><ul class="dropdown-menu" id="ops-trade-table-export-menu"><li><a class="dropdown-item ops-export-item" data-btn="copy" href="#"><i class="ti ti-copy me-1"></i> Copy</a></li><li><a class="dropdown-item ops-export-item" data-btn="csv" href="#"><i class="ti ti-file-type-csv me-1"></i> CSV</a></li><li><a class="dropdown-item ops-export-item" data-btn="excel" href="#"><i class="ti ti-file-spreadsheet me-1"></i> Excel</a></li><li><a class="dropdown-item ops-export-item" data-btn="print" href="#"><i class="ti ti-printer me-1"></i> Print</a></li><li><a class="dropdown-item ops-export-item" data-btn="pdf" href="#"><i class="ti ti-file-text me-1"></i> PDF</a></li></ul></div>
                         <button type="button" class="btn btn-sm btn-soft-primary ops-colvis"><i class="ti ti-columns me-1"></i><span data-lang="ops-colvis">Columns</span></button>
                         <button type="button" class="btn btn-sm btn-danger bg-gradient ops-del" disabled><i class="ti ti-trash me-1"></i><span data-lang="ops-del">Delete</span></button>
                     </div>
@@ -568,6 +569,29 @@
 <script src="{{ config.ASSETS_ROOT }}/plugins/jquery/jquery.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.buttons.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/jszip.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/pdfmake.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/vfs_fonts.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.html5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.print.min.js"></script>
+<script>
+// Registro sincrono do JSZip (mesmo snippet do New Deals e do Track
+// Confirmations): o buttons.html5 expoe $.fn.dataTable.Buttons.jszip() e
+// precisa da referencia antes de qualquer $(document).ready() — sem isso o
+// item Excel nasce desabilitado.
+(function () {
+    var jz = (typeof JSZip !== 'undefined') ? JSZip : undefined;
+    if (!jz) return;
+    window.JSZip = jz;
+    if (typeof $ !== 'undefined' && $.fn.dataTable &&
+        $.fn.dataTable.Buttons && typeof $.fn.dataTable.Buttons.jszip === 'function') {
+        $.fn.dataTable.Buttons.jszip(jz);
+    }
+})();
+</script>
+<script src="{{ config.ASSETS_ROOT }}/js/export-advanced.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/moment.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.js"></script>
 <!-- O disclaimer do blocker dos avisos, compartilhado com as três telas de
@@ -642,6 +666,18 @@ document.addEventListener('DOMContentLoaded', function () {
         return row;
     }
 
+    // ── Nome dos arquivos de Export ─────────────────────────────────────────
+    // Sao duas tabelas na mesma pagina, entao o nome diz as duas coisas: a tela
+    // e o card. A data sai do campo da tela (dd/mm/aaaa) em AAAAMMDD, que e o
+    // formato com que o Advanced Export carimba os arquivos dele.
+    var EXPORT_PAGE = 'Other Products Summary';
+    var EXPORT_CARD = { 'ops-summary-table': 'Settlement Summary', 'ops-trade-table': 'Trade Level' };
+    function refDateFlat() {
+        var el = document.getElementById('ops-ref-date');
+        var m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(((el && el.value) || '').trim());
+        return m ? m[3] + m[2] + m[1] : '';
+    }
+
     // ── Per-table setup ─────────────────────────────────────────────────────
     // `orderCols` = índice (ou LISTA de índices) das colunas que abrem ordenadas
     // A→Z, na ordem de precedência. Omitido, a tabela abre na ordem em que o
@@ -664,45 +700,64 @@ document.addEventListener('DOMContentLoaded', function () {
         // Selecao de celula + Ctrl+C — padrao New Deals (checkbox e Actions fora)
         if (window.otcCellCopy) otcCellCopy('#' + id, { skip: [0, 1] });
 
-        // Export do que esta NA TELA (filtros aplicados) — celulas com <input>
-        // saem pelo value, como na copia de celula.
-        function opsMatrix() {
-            // indices das colunas visiveis de dado (pula checkbox e Actions);
-            // com coluna oculta o td some do DOM, entao o caminho seguro e
-            // sempre via dt.cell(row, coluna).node()
-            var cols = [];
-            dt.columns(':visible').every(function () {
-                if (this.index() > 1) cols.push(this.index());
-            });
-            var out = [cols.map(function (i) { return $(dt.column(i).header()).text().trim(); })];
-            dt.rows({ search: 'applied', order: 'applied' }).every(function () {
-                var rIdx = this.index();
-                out.push(cols.map(function (i) {
-                    var node = dt.cell(rIdx, i).node();
-                    if (!node) return '';
-                    var inp = node.querySelector('select, input:not([type=checkbox])');
-                    return inp ? (inp.value || '') : (node.textContent || '').trim();
-                }));
-            });
-            return out;
+        // ── Export ──────────────────────────────────────────────────────
+        // O padrao da casa (§7): Copy · CSV · Excel · Print · PDF pelos
+        // DataTables Buttons, terminando no Advanced Export. Aqui viviam um CSV
+        // e um Copy escritos a mao — e um CSV proprio diverge do resto do app no
+        // primeiro acento, porque ninguem lembra de mexer nos dois.
+        //
+        // Exporta o que esta NA TELA: filtros e ordenacao aplicados, so as
+        // colunas visiveis, checkbox e Actions fora. Celula EDITAVEL sai pelo
+        // VALUE do campo — a Observation do Summary e as linhas do Add row sao
+        // <input>, e o texto de um <input> e vazio: era a razao de ser do
+        // exportador proprio, e ela cabe num formatter.
+        function opsExportCell(data, row, column, node) {
+            if (node) {
+                var inp = node.querySelector('select, input:not([type=checkbox])');
+                if (inp) return inp.value || '';
+                return (node.textContent || '').trim();
+            }
+            // Linha fora da pagina nao tem no no DOM: cai para o dado do modelo,
+            // sem HTML, senao o arquivo sai em branco tirando a pagina atual.
+            return (data == null ? '' : String(data)).replace(/<[^>]*>/g, '').trim();
         }
-        $toolbar.find('.ops-export-csv').on('click', function (e) {
+        var expOpts = {
+            columns: function (idx) { return idx > 1 && dt.column(idx).visible(); },
+            modifier: { search: 'applied', order: 'applied', page: 'all' },
+            format: { body: opsExportCell }
+        };
+        // O nome do arquivo e o do DOCUMENTO — pagina, card e a data de
+        // referencia da tela, no formato do Advanced Export (` - AAAAMMDD`).
+        // Baixava `ops-summary-table.csv`: o id da <table>, que nao diz nem de
+        // que tela nem de que dia o arquivo e.
+        var expBase = EXPORT_PAGE + ' - ' + (EXPORT_CARD[id] || id);
+        function expName() {
+            var d = refDateFlat();
+            return expBase + (d ? ' - ' + d : '');
+        }
+        // O `;` e o BOM do CSV vem do export antigo: e o que faz o Excel pt-BR
+        // abrir o arquivo com as colunas separadas e os acentos vivos.
+        new $.fn.dataTable.Buttons(dt, { buttons: [
+            { extend: 'copyHtml5',  name: 'copy',  exportOptions: expOpts, title: expName },
+            { extend: 'csvHtml5',   name: 'csv',   exportOptions: expOpts, filename: expName,
+              fieldSeparator: ';', bom: true },
+            { extend: 'excelHtml5', name: 'excel', exportOptions: expOpts, filename: expName },
+            { extend: 'print',      name: 'print', exportOptions: expOpts, title: expName },
+            { extend: 'pdfHtml5',   name: 'pdf',   exportOptions: expOpts, filename: expName,
+              orientation: 'landscape', pageSize: 'A4' }
+        ] });
+        $toolbar.find('.ops-export-item').on('click', function (e) {
             e.preventDefault();
-            var csv = opsMatrix().map(function (l) {
-                return l.map(function (v) { return '"' + String(v).replace(/"/g, '""') + '"'; }).join(';');
-            }).join('\r\n');
-            var blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
-            var link = document.createElement('a');
-            link.href = URL.createObjectURL(blob);
-            link.download = id + '.csv';
-            link.click();
-            URL.revokeObjectURL(link.href);
+            dt.button($(this).data('btn') + ':name').trigger();
         });
-        $toolbar.find('.ops-export-copy').on('click', function (e) {
-            e.preventDefault();
-            var txt = opsMatrix().map(function (l) { return l.join('\t'); }).join('\n');
-            (window.otcCopyText ? otcCopyText(txt) : navigator.clipboard.writeText(txt))
-                .then(function () { if (window.Swal) Swal.fire({ icon: 'success', title: 'Copied', timer: 1100, showConfirmButton: false }); });
+        // O item Advanced entra no <ul> desta pagina (o menu e markup daqui, nao
+        // a collection do Buttons). Sem `daily`: a secao de intervalo nasce
+        // desabilitada dizendo por que — o /data destas telas devolve o payload
+        // do dia (widgets, recon, as duas tabelas) e nao a lista de `columns`
+        // que o empilhamento de dias le. O recorte de colunas e linhas, que e a
+        // outra metade do Advanced Export, vale desde ja.
+        if (window.otcExportAdvanced) otcExportAdvanced('#' + id, {
+            menu: '#' + id + '-export-menu', name: expBase, skip: [0, 1]
         });
         var $delBtn = $toolbar.find('.ops-del');
 
