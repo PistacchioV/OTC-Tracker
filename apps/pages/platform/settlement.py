@@ -773,64 +773,64 @@ def _ops_opt_trade_rows(settle_ref):
 #  A rota que substitui o Athena para equity tem três paradas:
 #
 #      Operations B3  --Título-->  Latam Desk Position  --Deal_Ref-->  OTM Settlements
-#                                  CLEARING_TRD_ID_INT                 270WI<Deal_Ref>
-#                                  CLEARING_TRD_ID_CLNT                270WC<Deal_Ref>
+#                                  CLEARING_TRD_ID_INT                 <prefixo><Deal_Ref>
+#                                  CLEARING_TRD_ID_CLNT
 #
-#  O mesmo `Deal_Ref` cobre DUAS operações — a de contra o cliente externo e a de
-#  contra a nossa entidade (Safra × Atacama) —, e é por isso que o relatório traz
-#  os dois identificadores da B3 na mesma linha. Qual das duas pernas é a do
-#  Título em mãos sai de QUAL COLUNA casou: `CLEARING_TRD_ID_INT` é a perna
-#  interna e leva ao Trade Id `270WI…`; `CLEARING_TRD_ID_CLNT` é a do cliente e
-#  leva ao `270WC…`. Partir do Título (e não do OTM) é o que mantém a operação em
-#  UMA linha: montar uma família própria a partir do OTM criava uma segunda linha
-#  para o mesmo trade, ao lado da que o Operations B3 já produzia.
+#  O mesmo `Deal_Ref` cobre DUAS operações — a contra o cliente externo e a
+#  contra a nossa entidade (Safra × Atacama) —, e é por isso que o relatório
+#  traz os dois identificadores da B3 na mesma linha: o `CLEARING_TRD_ID_CLNT`
+#  é o CETIP ID do cliente externo e o `CLEARING_TRD_ID_INT` é o interno.
+#  Partir do Título (e não do OTM) é o que mantém a operação em UMA linha:
+#  montar uma família própria a partir do OTM criava uma segunda linha para o
+#  mesmo trade, ao lado da que o Operations B3 já produzia.
+#
+#  **Quem diz se a linha do OTM é a interna ou a do cliente é o `Cpty SPN`,
+#  não o prefixo do Trade Id.** O prefixo (`270WI`, `270WC`, `270RI`…) serve
+#  só para chegar ao `Deal_Ref`: tirado ele, o que sobra é o número que o
+#  Latam guarda. Lê-lo como se dissesse a perna foi o erro que deixou o aviso
+#  sem cliente e sem valores — `270RI` é de cliente, e a simetria
+#  `WI`=interna / `WC`=cliente é coincidência dos dois primeiros. A pergunta
+#  "esta contraparte é nossa?" já tem UMA resposta no app
+#  (`_ops_is_internal_cpty`: cadastro `le-spn` por SPN e o Reference Data com
+#  `ECONOMIC GROUP = INTERNAL`), e é ela que vale aqui também — uma segunda
+#  definição divergiria da primeira no primeiro caso difícil.
 #
 #  Do OTM saem os três valores do aviso, e a regra é a que a mesa usa:
 #  **Curva Banco = os fluxos positivos, Curva Cliente = os negativos, Resultado
 #  Bruto = a soma dos dois.**
-#  Os prefixos vivem no cadastro `equity-leg-prefix` (§6), não aqui: a tupla
-#  fixa conhecia dois e o OTM já trazia um terceiro (`270RI`), que
-#  `_ops_eq_trade_key` não reconhecia — a linha era descartada ANTES de
-#  agrupar, e o aviso saía com o nome curto da B3 e os valores em branco, sem
-#  erro nenhum. Esta tupla é só a SEMENTE (e o que vale quando o cadastro não
-#  responde).
 #
-#  E a LETRA FINAL do prefixo NÃO diz a perna: `270RI` é de CLIENTE externo,
-#  não interna. A simetria `WI`=internal / `WC`=client é coincidência dos dois
-#  primeiros, e ler o prefixo como se fosse mnemônico põe o Trade Id na perna
-#  ERRADA — o que é pior do que em nenhuma: a linha exibe a contraparte da
-#  outra ponta, com valor, sem nada indicando a troca. Quem responde é o
-#  cadastro, e só ele.
-_OPS_EQ_LEG_PREFIX = (('CLEARING_TRD_ID_INT', '270WI'),
-                      ('CLEARING_TRD_ID_CLNT', '270WC'),
-                      ('CLEARING_TRD_ID_CLNT', '270RI'))
-_OPS_EQ_LEG_COLUNA = {'internal': 'CLEARING_TRD_ID_INT', 'client': 'CLEARING_TRD_ID_CLNT'}
+#  Os prefixos vivem no cadastro `equity-leg-prefix` (§6) e não aqui: a tupla
+#  fixa conhecia dois e o OTM já trazia um terceiro, que `_ops_eq_trade_key`
+#  não reconhecia — a linha era descartada ANTES de agrupar. Esta tupla é só a
+#  SEMENTE, e o que vale quando o cadastro não responde.
+_OPS_EQ_PREFIXOS = ('270WI', '270WC', '270RI')
+_LATAM_COL_CLNT = 'CLEARING_TRD_ID_CLNT'
+_LATAM_COL_INT = 'CLEARING_TRD_ID_INT'
 
 
-def _ops_eq_leg_prefixes():
-    """[(coluna de clearing do Latam, prefixo do Trade Id)] do cadastro
-    `equity-leg-prefix`, do prefixo MAIS LONGO para o mais curto.
+def _ops_eq_prefixos():
+    """Prefixos de Trade Id do cadastro `equity-leg-prefix`, do MAIS LONGO para
+    o mais curto.
 
-    O comprimento decide porque `_ops_eq_trade_key` devolve o PRIMEIRO que casa:
-    um prefixo que é começo de outro roubaria a linha pela ordem de cadastro, e
-    o Trade Id iria para a perna errada — que é pior do que ir para nenhuma.
+    O comprimento decide porque `_ops_eq_trade_key` para no primeiro que casa:
+    um prefixo que é começo de outro deixaria no `Deal_Ref` um pedaço do
+    prefixo maior, e a chave não casaria nada.
 
-    Cadastro vazio ou ilegível cai na semente: sem ela, uma falha de leitura
+    Cadastro vazio ou ilegível cai na semente — sem ela, uma falha de leitura
     apagaria o elo de equity inteiro (nome curto da B3 e valores em branco em
-    toda linha) em vez de manter o que sempre funcionou."""
+    TODA linha) em vez de manter o que sempre funcionou."""
     from apps.pages import routes
     out = []
     try:
         for r in routes._mapping_rows('equity-leg-prefix'):
             pref = str(r.get('PREFIX', '') or '').strip().upper()
-            col = _OPS_EQ_LEG_COLUNA.get(routes._fcst_norm(r.get('LEG', '')).strip())
-            if pref and col:
-                out.append((col, pref))
+            if pref:
+                out.append(pref)
     except Exception:                                       # noqa: BLE001
         log.warning('[equity-link] cadastro equity-leg-prefix ilegível — valendo a '
-                    'semente %s', [p for _c, p in _OPS_EQ_LEG_PREFIX], exc_info=True)
+                    'semente %s', list(_OPS_EQ_PREFIXOS), exc_info=True)
         out = []
-    return sorted(out or _OPS_EQ_LEG_PREFIX, key=lambda cp: -len(cp[1]))
+    return sorted(out or _OPS_EQ_PREFIXOS, key=len, reverse=True)
 
 
 def _ops_eq_ref_key(v):
@@ -844,21 +844,22 @@ def _ops_eq_ref_key(v):
 
 
 def _ops_eq_trade_key(trade_id):
-    """`270WI0012345` → `('270WI', '12345')`; `(None, '')` fora do padrão.
+    """Trade Id do OTM → o `Deal_Ref` que o Latam guarda (`''` fora do padrão).
 
-    O prefixo faz parte da resposta: ele é o que diz QUAL perna do `Deal_Ref` é
-    aquele Trade Id. Trade Id sem um dos prefixos conhecidos não vira chave — o
-    identificador de outra família não pode casar por acidente com um `Deal_Ref`
-    que não é dele."""
+    `270WI0012345` → `'12345'`. O prefixo é DESCARTADO: ele não diz a perna
+    (quem diz é o `Cpty SPN` da própria linha do OTM), só atrapalha o
+    casamento. Trade Id sem um dos prefixos conhecidos não vira chave — o
+    identificador de outra família não pode casar por acidente com um
+    `Deal_Ref` que não é dele."""
     s = str(trade_id or '').strip().upper()
-    for _col, pref in _ops_eq_leg_prefixes():
+    for pref in _ops_eq_prefixos():
         if s.startswith(pref):
-            return pref, _ops_eq_ref_key(s[len(pref):])
-    return None, ''
+            return _ops_eq_ref_key(s[len(pref):])
+    return ''
 
 
 def _latam_equity_b3_index():
-    """{Título da B3 → (Deal_Ref, prefixo do Trade Id, linha do Latam)}.
+    """{Título da B3 → (Deal_Ref, é a perna INTERNA?, linha do Latam)}.
 
     Lê o ÚLTIMO Latam Desk Position disponível, não o da data de liquidação: o
     relatório não é diário e a própria página abre no último JSON que existe
@@ -866,10 +867,11 @@ def _latam_equity_b3_index():
     dia sem posição nova e a linha sairia sem nome e sem valor, sem que nada na
     tela dissesse por quê.
 
-    As DUAS colunas de clearing entram, cada uma apontando para o seu prefixo de
-    Trade Id — é isso que distingue a perna interna da perna do cliente sem
-    precisar adivinhar. Primeiro registro vence: o relatório repete a linha por
-    vencimento, e os identificadores são do trade, não da parcela."""
+    As DUAS colunas de clearing entram, e é a COLUNA que diz de que lado o
+    Título está: `CLEARING_TRD_ID_CLNT` guarda o CETIP ID do cliente externo,
+    `CLEARING_TRD_ID_INT` o interno. Primeiro registro vence: o relatório
+    repete a linha por vencimento, e os identificadores são do trade, não da
+    parcela."""
     from apps.pages import routes
     ref = routes._latam_latest_ref()
     if ref is None:
@@ -880,10 +882,10 @@ def _latam_equity_b3_index():
         deal_ref = _ops_eq_ref_key(rec.get('Deal_Ref', ''))
         if not deal_ref:
             continue
-        for col, pref in _ops_eq_leg_prefixes():
+        for col, interna in ((_LATAM_COL_INT, True), (_LATAM_COL_CLNT, False)):
             b3 = str(rec.get(col, '') or '').strip().upper()
             if b3:
-                idx.setdefault(b3, (deal_ref, pref, rec))
+                idx.setdefault(b3, (deal_ref, interna, rec))
     return idx
 
 
@@ -907,15 +909,18 @@ def _ops_equity_link(ref):
     if not otm:
         return {}
 
-    # Agrupa o OTM por (prefixo, Deal_Ref) — o Trade Id é a identidade do trade e
-    # o arquivo traz uma linha por FLUXO de caixa.
+    # Agrupa o OTM por (Deal_Ref, Trade Id) — o Trade Id é a identidade do
+    # trade e o arquivo traz uma linha por FLUXO de caixa. Os DOIS Trade Ids do
+    # mesmo Deal_Ref (a perna interna e a do cliente) caem em grupos separados
+    # aqui, e é o `Cpty SPN` que dirá qual é qual.
     grupos = {}
     for rec in otm:
-        pref, chave = _ops_eq_trade_key(rec.get('Trade Id', ''))
-        if not pref or not chave:
+        chave = _ops_eq_trade_key(rec.get('Trade Id', ''))
+        if not chave:
             continue
-        g = grupos.setdefault((pref, chave), {
-            'trade_id': str(rec.get('Trade Id', '') or '').strip(),
+        tid = str(rec.get('Trade Id', '') or '').strip()
+        g = grupos.setdefault((chave, tid.upper()), {
+            'trade_id': tid, 'ref': chave,
             'pos': 0.0, 'neg': 0.0, 'tem_valor': False,
             'spn': '', 'name': '', 'legal': '', 'underlying': ''})
         amt = routes._conf_to_float(rec.get('Amount'))
@@ -933,9 +938,27 @@ def _ops_equity_link(ref):
             if not g[chave_g]:
                 g[chave_g] = str(rec.get(campo, '') or '').strip()
 
+    # Agora a PERNA de cada grupo, pelo `Cpty SPN` — não pelo prefixo do Trade
+    # Id. `{Deal_Ref: {interna?: grupo}}`. Dois grupos do mesmo Deal_Ref caindo
+    # no mesmo lado é dado estranho (duas pernas de cliente para o mesmo
+    # negócio): o primeiro fica e o log diz, em vez de um deles sumir calado.
+    por_ref = {}
+    for g in grupos.values():
+        interna = _ops_is_internal_cpty(g['name'], g['spn'])
+        lados = por_ref.setdefault(g['ref'], {})
+        if interna in lados:
+            log.warning('[equity-link] Deal_Ref %s tem DOIS Trade Ids do mesmo lado '
+                        '(%s: %s e %s) — vale o primeiro', g['ref'],
+                        'interna' if interna else 'cliente',
+                        lados[interna]['trade_id'], g['trade_id'])
+            continue
+        lados[interna] = g
+
     out = {}
-    for b3, (deal_ref, pref, rec_lt) in latam.items():
-        g = grupos.get((pref, deal_ref))
+    for b3, (deal_ref, interna, rec_lt) in latam.items():
+        # A coluna em que o Título estava diz o LADO; o `Cpty SPN` do OTM diz
+        # o lado de cada grupo. O elo é o encontro dos dois.
+        g = (por_ref.get(deal_ref) or {}).get(interna)
         if not g:
             continue
         # O nome vem do REFERENCE DATA pelo Cpty SPN (`_otm_cpty_name`: cadastro
