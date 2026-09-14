@@ -40,7 +40,8 @@ from apps.pages import manual_conf as _mc_mod
 # das confirmacoes vem depois no routes.py) — sao os MESMOS objetos.
 from apps.pages.platform.confirmations import (
     _conf_ndfcomm_groups, _conf_optcomm_groups, _conf_optfxo_groups,
-    _conf_fwdstart_groups, _conf_mgt_groups, _CONF_FAMILY_TEMPLATES,
+    _conf_fwdstart_groups, _conf_mgt_groups, _conf_fwdstart_moeda,
+    _CONF_FAMILY_TEMPLATES,
     _CONF_OPT_FAMILY_TEMPLATES, _CONF_FXO_FAMILY_TEMPLATES,
     _CONF_FWDSTART_FAMILY_TEMPLATES, _CONF_MGT_FAMILY_TEMPLATES,
 )
@@ -67,9 +68,34 @@ _MC_CONFIRMATION_SOURCES = {'NDF COMM', 'OPTION COMM', 'OPTION', 'NDF FWD START'
 # CEM, que é o que sempre foi.
 _COMMODITY_SOURCES = {'NDF COMM', 'OPTION COMM', 'UNWIND NDF COMM', 'UNWIND OPTION COMM'}
 
+# Os produtos de TERMO DE MOEDA, cuja confirmação é segregada pela **Moeda
+# Base** — a moeda estrangeira do par. O eixo da esteira TEM de ser o mesmo da
+# segregação (`_conf_fwdstart_moeda`), senão o Monitor junta num card só duas
+# operações que geram documentos DIFERENTES.
+_MC_MOEDA_BASE_SOURCES = {'NDF FWD START', 'NDF VANILLA'}
+
 
 def _lob_for_source(source):
     return 'COMMODITY' if _mc_mod.upper_norm(source) in _COMMODITY_SOURCES else 'CEM'
+
+
+def _mc_moeda_do_ativo(deal, source, first):
+    """O ATIVO da confirmação: a commodity, a Moeda Base ou a moeda do deal.
+
+    `first(*nomes)` é o leitor do `_mc_save_from_deal` — a primeira coluna não
+    vazia. O termo de moeda é o caso especial: quem responde é a mesma função
+    que segrega as confirmações, e não uma leitura própria que possa divergir
+    dela. Moeda Base vazia (deal sem as colunas de moeda) cai na cadeia
+    antiga, porque um eixo em branco junta no Monitor tudo que estiver vazio.
+    """
+    src = _mc_mod.upper_norm(source)
+    if src in ('NDF COMM', 'OPTION COMM'):
+        return first('Commodities', 'UnderlyingAsset')
+    if src in _MC_MOEDA_BASE_SOURCES:
+        base = str(_conf_fwdstart_moeda(deal) or '').strip().upper()
+        if base:
+            return base
+    return first('QuantityCurrency', 'StrikeCurrency', 'PremiumCCY', 'Currency')
 
 
 # Produtos que a mesa booka SEMPRE no Banco J.P. Morgan — os que não trazem o
@@ -192,9 +218,18 @@ def _mc_save_from_deal(deal, source, trade_number=None):
             # commodity (é ela que distingue OLEO de PLATTS no mesmo dia e
             # acha o PDF exato); no câmbio, a moeda. A cadeia evita um ramo
             # por página, que envelheceria a cada coluna nova.
-            'Moeda': (first('Commodities', 'UnderlyingAsset')
-                      if source in ('NDF COMM', 'OPTION COMM')
-                      else first('QuantityCurrency', 'StrikeCurrency', 'PremiumCCY', 'Currency')),
+            #
+            # No TERMO DE MOEDA a moeda é a **Moeda Base** — a estrangeira do
+            # par —, e ela vem da MESMA função que segrega as confirmações
+            # (`_conf_fwdstart_moeda`), não da `QuantityCurrency`. As duas
+            # divergem justamente no caso comum do deal cotado em BRL: a
+            # QuantityCurrency é BRL e a Moeda Base é o EUR/USD do outro lado.
+            # Com BRL na esteira, duas operações da mesma contraparte em moedas
+            # diferentes caíam no MESMO card do Monitor — e o Generate, que
+            # devolve o grupo do New Deals que casa com as chaves do card,
+            # abria o documento de UMA delas. A outra sumia: nem segunda
+            # confirmação, nem segunda linha na primeira.
+            'Moeda': _mc_moeda_do_ativo(deal, source, first),
             'Notional': first('Notional', 'TotalNotional'),
             'Notional Amount CCY': _mc_notional_ccy(
                 deal, source, first('Notional', 'TotalNotional')),
@@ -828,20 +863,42 @@ def _mc_generate_url(row, keys):
     # o grupo do New Deals guarda os dois, então o cruzamento não precisa saber
     # qual é qual.
     procurados = {str(k).strip().upper() for k in keys if str(k or '').strip()}
-    procurados.add(str(row.get('Trade ID', '') or '').strip().upper())
+    meu = str(row.get('Trade ID', '') or '').strip().upper()
+    procurados.add(meu)
     procurados.discard('')
-    for g in grupos:
-        if not procurados & {str(t).strip().upper() for t in (g.get('trades') or ())}:
-            continue
-        if g['family'] not in templates:
-            return '', ('A família {} ainda não tem template de documento neste '
-                        'produto.'.format(g['family']))
-        return (templates[g['family']][1] + '?date=' + ref.strftime('%Y-%m-%d') +
-                '&acronym=' + quote(g['acronym']) +
-                '&mercadoria=' + quote(g['mercadoria'])), ''
-    return '', ('Nenhuma operação dessa confirmação foi encontrada no arquivo-dia '
-                'de {} do New Deals. Verifique se a data da operação da linha é a '
-                'mesma da importação.'.format(ref.strftime('%d/%m/%Y')))
+    # Um card do Monitor pode cobrir MAIS DE UM grupo do New Deals — foi o que
+    # acontecia com duas operações de termo em moedas diferentes na mesma
+    # contraparte, enquanto a esteira guardava a moeda cotada no lugar da Moeda
+    # Base. A causa está corrigida na gravação, mas linha antiga segue no banco
+    # com o eixo velho: aqui vale a regra de que o Generate abre o documento da
+    # LINHA CLICADA, não o do primeiro grupo que casar — e o log diz quando o
+    # card cobre mais de um documento, que é uma condição para alguém olhar,
+    # não para sumir em silêncio.
+    casam = [g for g in grupos
+             if procurados & {str(t).strip().upper() for t in (g.get('trades') or ())}]
+    if not casam:
+        return '', ('Nenhuma operação dessa confirmação foi encontrada no arquivo-dia '
+                    'de {} do New Deals. Verifique se a data da operação da linha é a '
+                    'mesma da importação.'.format(ref.strftime('%d/%m/%Y')))
+    escolhido = casam[0]
+    if meu:
+        for g in casam:
+            if meu in {str(t).strip().upper() for t in (g.get('trades') or ())}:
+                escolhido = g
+                break
+    if len(casam) > 1:
+        log.warning('[manual-conf] o card %s × %s cobre %d confirmações diferentes '
+                    '(%s) — abrindo a da linha %s. Linha antiga com o eixo de moeda '
+                    'desatualizado: rode o backfill.',
+                    row.get('Cliente', ''), row.get('Produto', ''), len(casam),
+                    ', '.join('{}×{}'.format(g['acronym'], g['mercadoria']) for g in casam),
+                    meu or '(sem Trade ID)')
+    if escolhido['family'] not in templates:
+        return '', ('A família {} ainda não tem template de documento neste '
+                    'produto.'.format(escolhido['family']))
+    return (templates[escolhido['family']][1] + '?date=' + ref.strftime('%Y-%m-%d') +
+            '&acronym=' + quote(escolhido['acronym']) +
+            '&mercadoria=' + quote(escolhido['mercadoria'])), ''
 
 
 def _mc_pc_sync(rows):

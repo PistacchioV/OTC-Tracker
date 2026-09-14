@@ -466,11 +466,22 @@
   function n2(v) { return (v == null || v === '') ? '' : Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
   function n4(v) { return (v == null || v === '') ? '' : Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 }); }
   function f8(v) { return (v == null || v === '') ? '' : Number(v).toFixed(8); }
-  // Ok/Check da coluna Diferença: badge, como o Status — é um veredito, não um
-  // valor, e em texto puro ele se perderia numa linha de dezoito números.
-  function vered(v) {
-    var cls = v === 'Check' ? 'text-bg-warning' : 'text-bg-success';
-    return '<span class="badge ' + cls + ' bg-gradient rounded-pill ms-1">' + esc(v) + '</span>';
+  // A Diferença É o veredito: o VALOR sai dentro do badge, verde quando fecha e
+  // amarelo quando não — o mesmo desenho do batimento do Accrual Swap, onde o
+  // fator registrado colore a própria célula. O badge de texto ao lado do
+  // número dizia duas vezes a mesma coisa e roubava a largura da coluna; com a
+  // cor no número, varrer a coluna inteira é uma olhada só. O veredito segue
+  // legível no title, que é o que o badge deixou de escrever.
+  function difBadge(v, veredito) {
+    if (v == null) return '-';
+    var txt = n2(v);
+    if (!veredito) return esc(txt);   // sem os dois lados não há veredito
+    var ok = veredito !== 'Check';
+    return '<span class="badge rounded-pill bg-gradient ' +
+      (ok ? 'text-bg-success' : 'text-bg-warning') + '" title="' +
+      esc(ok ? 'Ok — dentro da tolerância de R$ 10,00'
+             : 'Check — diferença acima da tolerância de R$ 10,00') +
+      '">' + esc(txt) + '</span>';
   }
   function pill(st) {
     var cls = { Sent: 'text-bg-primary', New: 'text-bg-info' }[st] || 'text-bg-secondary';
@@ -518,14 +529,14 @@
         // o fator só existe na perna VCP; a calculada (e a VCP sem número) sai "-"
         cell('fator_p', (f.vcp_p && f.fator_p != null) ? f8(f.fator_p) : '-'),
         cell('fator_c', (f.vcp_c && f.fator_c != null) ? f8(f.fator_c) : '-'),
-        // A conferência da linha. O veredito acompanha a Diferença em vez de
-        // ocupar uma coluna própria: sozinho ele não diz de quanto, e o número
-        // sozinho obriga a mesa a fazer a comparação de cabeça, linha a linha.
-        // Sem um dos dois valores não há veredito — e a célula fica "-", nunca
-        // "Ok": uma linha que não deu para conferir marcada como conferida some
-        // do que há para olhar.
+        // A conferência da linha. O veredito COLORE a Diferença em vez de
+        // ocupar uma coluna própria (ou um badge ao lado): sozinho ele não diz
+        // de quanto, e o número sozinho obriga a mesa a fazer a comparação de
+        // cabeça, linha a linha. Sem um dos dois valores não há veredito — e a
+        // célula fica "-" ou sem cor, nunca verde: uma linha que não deu para
+        // conferir marcada como conferida some do que há para olhar.
         n2(f.interno) || '-', n2(f.vcp_liq) || '-',
-        (f.diferenca == null ? '-' : n2(f.diferenca) + (f.veredito ? ' ' + vered(f.veredito) : ''))
+        difBadge(f.diferenca, f.veredito)
       ];
     });
     if (dt) dt.destroy();

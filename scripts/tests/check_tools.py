@@ -289,13 +289,22 @@ check('sem regra, o indice fica vazio e sinalizado',
 # excludentes ele entrava pela metade sem nada dizer isso.
 campos, faltando = domain.montar_ponta(cl(REGRAS, 'DI'), 1.10, None, 1.0, '', None)
 check('o CDI leva o PERCENTUAL no campo dele', campos['percentual'], '1.1000')
-check('e sem spread o campo fica VAZIO, nao zero', campos['taxa'], '')
+# Celula de taxa vazia e 0%, nao lacuna: e o que a perna sem spread vale, e e
+# o que o motor ja calculava (`taxa_do_form` le campo em branco como 0,0).
+# Vazio + vermelho pedia que a mesa digitasse a mao um zero que a conta ja
+# assumia, em toda perna sem spread.
+check('e sem spread o campo vem ZERO, nao vazio',
+      (campos['taxa'], 'taxa' in faltando), ('0.0000', False))
 campos, _f = domain.montar_ponta(cl(REGRAS, 'DI'), 1.00, 0.0107, 1.0, '', None)
 check('com spread, os dois convivem',
       (campos['percentual'], campos['taxa']), ('1.0000', '0.0107'))
 check('e o sinal da posicao inverte o spread',
       domain.montar_ponta(cl(REGRAS, 'DI'), 1.00, 0.0107, -1.0, '', None)[0]['taxa'], '-0.0107')
 campos, faltando = domain.montar_ponta(cl(REGRAS, 'PREFIXADO 252D'), None, 0.14, 1.0, '', None)
+check('e fora do CDI tambem: taxa ausente e 0%, sem sinalizacao',
+      (domain.montar_ponta(cl(REGRAS, 'PREFIXADO 252D'), None, None, 1.0, '', None)[0]['taxa'],
+       'taxa' in domain.montar_ponta(cl(REGRAS, 'PREFIXADO 252D'), None, None, 1.0, '', None)[1]),
+      ('0.0000', False))
 check('o pre leva a taxa e a contagem do cadastro',
       (campos['taxa'], campos['convencao'], campos['regime']),
       ('0.1400', 'du_252', 'composto'))
@@ -324,17 +333,28 @@ check('a base da amortizacao sai do texto do tipo',
 # o mesmo (o percentual e zero nos dois casos) — o que muda e o que a tela
 # AFIRMA, e era o Swap Calculator dizendo "parcela constante" sobre um swap
 # marcado "Sem Troca de Amortizacao" no Live Position.
-check('as duas formas de nao amortizar por fluxo viram At Maturity',
+# As duas nao amortizam por fluxo, mas nao sao a MESMA coisa: `Na Data de
+# Vencimento` devolve o principal no encerramento (At Maturity) e `Sem Troca de
+# Amortizacao` nao amortiza NUNCA, nem la. Cada uma na sua base — juntar as
+# duas no At Maturity faz a tela afirmar uma devolucao de principal que o
+# contrato sem troca nao tem, e juntar no original afirma um cronograma.
+check('cada forma de nao amortizar tem a SUA base',
       (domain.base_da_amortizacao('NA DATA DE VENCIMENTO'),
        domain.base_da_amortizacao('SEM TROCA DE AMORTIZACAO')),
-      (liquidacao.AT_MATURITY, liquidacao.AT_MATURITY))
-# E a base nao inventa amortizacao onde nao ha: o percentual do evento continua
-# zero, entao o valor amortizado e zero nas duas.
+      (liquidacao.AT_MATURITY, liquidacao.SEM_TROCA))
 check('   e nenhuma delas amortiza no fluxo',
       (domain.amortiza_no_fluxo('NA DATA DE VENCIMENTO'),
-       domain.amortiza_no_fluxo('SEM TROCA DE AMORTIZACAO'),
-       liquidacao.amortizar(10000000.0, 8000000.0, 0.0, liquidacao.AT_MATURITY)),
-      (False, False, 0.0))
+       domain.amortiza_no_fluxo('SEM TROCA DE AMORTIZACAO')), (False, False))
+# No `Sem Troca` a BASE vence o percentual: um 100 que tenha sobrado no campo
+# devolveria o principal inteiro num swap que nao devolve nada.
+check('   e o Sem Troca e zero mesmo com percentual cheio',
+      (liquidacao.amortizar(10000000.0, 8000000.0, 1.0, liquidacao.SEM_TROCA),
+       liquidacao.amortizar(10000000.0, 8000000.0, 0.5, liquidacao.SEM_TROCA)),
+      (0.0, 0.0))
+check('   e a opcao existe na tela, com as outras tres',
+      [b for b, _r in liquidacao.BASES_AMORTIZACAO],
+      [liquidacao.SOBRE_ORIGINAL, liquidacao.SOBRE_REMANESCENTE,
+       liquidacao.AT_MATURITY, liquidacao.SEM_TROCA])
 # A 100% as tres bases dao o mesmo numero — e por isso a escolha e sobre o que
 # a tela AFIRMA, nao sobre a conta.
 check('At Maturity amortiza o SALDO, nao uma fracao do original',

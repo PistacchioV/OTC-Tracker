@@ -75,7 +75,7 @@ def base_da_amortizacao(texto):
         Sobre Valor Base Original      → base = original
         Sobre Valor Base Remanescente  → base = remanescente
         Na Data de Vencimento          → At Maturity; no fluxo, nada
-        Sem Troca de Amortização       → At Maturity; nunca amortiza
+        Sem Troca de Amortização       → Sem Troca; não amortiza nunca
 
     Por isso a pergunta "qual base" e a pergunta "amortiza aqui?" são duas
     funções: colapsá-las faria um swap que amortiza só no vencimento cair na
@@ -105,8 +105,11 @@ def base_da_amortizacao(texto):
         # marcado "Sem Troca de Amortização" no Live Position dizendo "sobre o
         # notional original — parcela constante", um cronograma de parcelas que
         # aquele swap não tem. É o mesmo argumento que já valia para `Na Data
-        # de Vencimento`, e ele vale aqui com mais força ainda.
-        return liquidacao.AT_MATURITY
+        # de Vencimento`, e ele vale aqui com mais força ainda — só que o At
+        # Maturity também não serve: ele afirma a devolução do principal no
+        # encerramento, e este contrato não tem evento de amortização NENHUM.
+        # Por isso a base própria (`SEM_TROCA`), que é zero em todo fluxo.
+        return liquidacao.SEM_TROCA
     return None
 
 

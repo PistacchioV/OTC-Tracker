@@ -2142,6 +2142,7 @@
   "tl-am-original": "Sobre o valor original — parcela constante",
   "tl-am-remanescente": "Sobre o saldo remanescente — parcela decrescente",
   "tl-am-vencimento": "No vencimento — o principal inteiro no fim",
+  "tl-am-sem_troca": "Sem troca de amortização — o notional não amortiza nunca",
   "tl-amort-on": "Amortização incide sobre",
   "tl-amortisation": "Amortização no fim do fluxo (%)",
   "tl-amortisation-s": "Amortização",

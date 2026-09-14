@@ -2142,6 +2142,7 @@
   "tl-am-original": "Sobre el valor original — cuota constante",
   "tl-am-remanescente": "Sobre el saldo remanente — cuota decreciente",
   "tl-am-vencimento": "Al vencimiento — el principal entero al final",
+  "tl-am-sem_troca": "Sin canje de amortización — el nocional nunca amortiza",
   "tl-amort-on": "La amortización incide sobre",
   "tl-amortisation": "Amortización al fin del flujo (%)",
   "tl-amortisation-s": "Amortización",
