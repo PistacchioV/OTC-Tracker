@@ -1404,21 +1404,40 @@ document.addEventListener('click', function (e) {
             opts = { method: 'POST', headers: { 'Content-Type': 'application/json' },
                      body: JSON.stringify(iso ? { date: iso } : {}) };
         }
+        // A resposta que NÃO é JSON tem de dizer o que veio. Desde o §449 o
+        // servidor responde JSON até no 500, mas o que ele NÃO alcança chega
+        // aqui em HTML — o 413 do MAX_CONTENT_LENGTH (arquivo grande demais)
+        // é o caso, e o Flask não escreve uma linha de log para ele. Lendo
+        // isso com `r.json()` direto, o SyntaxError caía no mesmo `catch` da
+        // queda de rede e a tela dizia "Network error" para as duas coisas:
+        // o usuário via um erro de rede que não existiu e o log não tinha nada.
         fetch('/api/control-panel/daily-settlement-save', opts)
-            .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
+            .then(function (r) {
+                return r.text().then(function (txt) {
+                    try { return { ok: r.ok, body: JSON.parse(txt) }; }
+                    catch (e) { return { ok: false, status: r.status, raw: txt }; }
+                });
+            })
             .then(function (res) {
                 if (res.ok && res.body && res.body.success !== false) {
                     Swal.fire({ icon: 'success', title: t('cp-done-title', 'Routine completed'),
                                 html: buildDsMessage(res.body), confirmButtonColor: '#0066cc' });
                     files = []; render();
+                } else if (res.raw !== undefined) {
+                    var crua = String(res.raw).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+                    Swal.fire({ icon: 'error', title: t('cp-err-title', 'Routine failed'),
+                                html: 'HTTP ' + res.status + ' — ' + _cpEsc(crua.slice(0, 300) || '(resposta vazia)'),
+                                confirmButtonColor: '#0066cc' });
                 } else {
                     Swal.fire({ icon: 'warning', title: t('cp-nofiles-title', 'No files found'),
                                 html: (res.body && res.body.error) || t('cp-err-msg', 'An error occurred.'), confirmButtonColor: '#0066cc' });
                 }
             })
-            .catch(function () {
+            .catch(function (err) {
                 Swal.fire({ icon: 'error', title: t('cp-err-title', 'Routine failed'),
-                            html: t('cp-err-net', 'Network error.'), confirmButtonColor: '#0066cc' });
+                            html: t('cp-err-net', 'Network error.') + '<br><span class="text-muted">' +
+                                  _cpEsc(String((err && err.message) || err)) + '</span>',
+                            confirmButtonColor: '#0066cc' });
             })
             .finally(function () {
                 saveBtn.disabled = false;
