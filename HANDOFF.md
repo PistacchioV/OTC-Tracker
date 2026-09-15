@@ -19797,3 +19797,167 @@ medição que custou uma passada: o widget do tema tem `transition: box-shadow
 0.3s`, então ler o `box-shadow` computado logo depois de trocar a classe devolve
 a cor ANTIGA, no meio da transição — é preciso esperar a transição fechar antes
 de acreditar no valor.
+
+## §465 — Reference Data: a conta B3 entrava sem formato e não casava com a da B3 (2026-09-15)
+
+O campo **B3 Account** do Reference Data aceitava qualquer texto. A conta tem
+formato fixo — `00000.00-0`, oito dígitos com ponto e traço — e o cadastro a
+compara como TEXTO em três perguntas diferentes: o `b3-accounts` (é conta
+interna? é omnibus?), o Participante do header do arquivo TER e a decisão de
+conta própria. Digitada sem a pontuação, a conta simplesmente não casa com a
+que vem no arquivo da B3, e nada na tela diz por quê.
+
+O campo só existe no **modal de edição** (`#rd-b3account`) — a coluna 12 da
+grade é texto puro —, então o modal é a única porta e a máscara ali cobre todas
+as entradas. Ela roda em três momentos: ao digitar, ao ABRIR o modal (uma conta
+já gravada sem formato se normaliza ao passar pela tela) e no Save. O
+`.toUpperCase()` que havia no Save saiu: numa conta só de dígitos ele não fazia
+nada, e mantinha a impressão de que havia letra ali.
+
+`maskB3Account` fica ao lado do `maskCNPJ`, que é a mesma ideia.
+
+## §466 — Swap Calculator: a taxa fixa vinha da posição como Simple (2026-09-15)
+
+Escolhendo `Fixed — annual rate` (`pre`) numa tela em branco, o Compounding já
+nascia **Compound**. Mas quando a perna era pré-preenchida a partir de uma
+posição do Live Position, vinha **Simple** — e ninguém entendia por que o mesmo
+indexador se comportava diferente.
+
+A origem não é a tela: é o cadastro **`tools-swap-index`** (§6), o de-para
+curva da posição → indexador do Swap Calculator. As linhas semeadas de curva
+pré (`PREFIXADO 360D`, `PRE LINEAR 360D`, `PREFIXADO 365D`) traziam
+`REGIME: simples`, e o `montar_ponta` só repete o que o cadastro manda.
+
+Corrigir o `seed` não bastava: **`seed` só roda quando o arquivo não existe**
+(§6), então quem já tem o cadastro — que é todo mundo — continuaria com
+`simples` para sempre. Por isso a correção vai no `upgrade`, que roda a cada
+leitura: toda linha com `INDEX == 'pre'` sai como `composto`.
+
+O trade-off assumido, e ele é real: **o cadastro deixou de poder guardar
+`Simple` numa curva pré**. O `PRE LINEAR 360D` é, pelo nome, linear — se a mesa
+precisar dele assim, o `upgrade` tem de estreitar para as três curvas semeadas
+em vez de olhar só o `INDEX`.
+
+Os literais `'pre'` e `'composto'` entram como string no `routes.py` de
+propósito: ele não importa o precificador, e são os mesmos literais que o
+`seed` e as `options` da coluna já usam.
+
+## §467 — Swap Calculator › Export: a memória chegava à mesa sem um número — duas vezes (2026-09-15)
+
+A memória de cálculo saía com os rótulos e as entradas no lugar e **todas as
+células derivadas em branco** — τ, os fatores acumulados, os juros, a alíquota,
+o IR, o ajuste líquido, e a aba diária inteira do SOFR (`Dias corridos (n)`,
+`Fator do dia`, `Fator acumulado`).
+
+**A causa.** O openpyxl grava fórmula com o cache VAZIO (`<f>…</f><v></v>`), e
+quem abre o arquivo **sem recalcular** mostra a célula vazia: o Modo de
+Exibição Protegido (todo arquivo baixado pelo navegador entra nele), o painel
+de visualização, o Excel Online, o preview do anexo no Outlook. O
+`fullCalcOnLoad` não alcança — ele manda recalcular na ABERTURA, e nenhum
+desses leitores calcula. Não era do SOFR: era de toda célula de fórmula, dos
+dez indexadores.
+
+A saída não é trocar fórmula por valor — o arquivo existe para explicar a
+conta, e o §455 é sobre isso. É levar as DUAS coisas. O cache sai da PRÓPRIA
+fórmula, por um avaliador mínimo no módulo (`_cache_das_formulas`: resolve as
+referências, inclusive entre abas, e calcula o que o Excel calcularia), e é
+injetado no zip pelo `_selar`, na mesma reescrita que já tirava a assinatura da
+biblioteca do `docProps/app.xml`. Escrito à mão seria a planilha afirmando um
+número que a fórmula não dá.
+
+**E aí veio a segunda.** A correção passou na dev e a mesa, depois de pull e
+restart, recebeu o arquivo **exatamente igual**. O openpyxl tem DOIS
+serializadores de XML e troca conforme o ambiente: com `lxml` usa o escritor
+incremental, que abre a tag antes de saber se vem conteúdo e a fecha logo
+depois (`<v></v>`); **sem `lxml`** cai no ElementTree, que serializa elemento
+vazio como `<v />`. O injetor casava com `<v></v>` literal. `lxml` não está no
+requirements — a máquina de desenvolvimento o tinha por dependência
+transitiva, a instância não. Com ele bloqueado, as 269 fórmulas do CDI e as 398
+do SOFR saíam todas sem valor; com o injetor indiferente à grafia, nenhuma.
+
+Declarar `lxml` no requirements resolveria o sintoma e deixaria a armadilha de
+pé — o arquivo continuaria dependendo de uma biblioteca instalada para levar os
+próprios números.
+
+**O guarda tinha o mesmo vício, e é o que explica ele ter passado:** ele gera e
+lê no ambiente de quem o chama, então provava o serializador da máquina e não o
+código. A seção 9b do `check_tools_memoria.py` escreve as quatro grafias à mão.
+
+## §468 — Settlement Advice de swap: a tela e o documento do cliente liam fontes diferentes (2026-09-15)
+
+O **Trade Level** já tirava o seu Settlement do **OTM Settlements** — o arquivo
+do fluxo de caixa que de fato liquida. O **Settlement Advice** lia `Owner
+curve`, `Counterparty curve` e `BRL Net Amount` do **Swap Athena**, e só caía
+para o OTM quando não havia linha nenhuma da Athena (o caso de equity, porque
+aquele relatório é só de CEM).
+
+Consequência: a MESMA operação no MESMO dia saía com um número na tela e outro
+no documento que vai ao cliente — e o lado que o cliente confere era justamente
+o que não vinha do arquivo que liquida.
+
+**A ponte sempre existiu e o Trade Level já a usava**: o `Kapital ID` da linha
+da Athena É o `Trade Id` do OTM. Em equity o caminho continua sendo o elo
+Latam → OTM (§227/§229).
+
+A regra do SINAL não é nova — é a que o elo de equity e o Kapital Hybrids já
+aplicavam ao ler arquivo de fluxo: Curva Banco = Σ positivos, Curva Cliente =
+Σ negativos, Resultado Bruto = a soma. Estava escrita em três lugares e passou
+a estar em um, `_ops_otm_por_trade` na platform, de onde as duas telas leem.
+
+Duas decisões que não são detalhe:
+
+**A fonte é da LINHA INTEIRA, nunca coluna a coluna.** Se o OTM tem o trade, as
+três colunas vêm dele; se não tem, as três vêm da Athena. Escolher por coluna
+imprimiria avisos em que Curva Banco + Curva Cliente não fecha com o Resultado
+Bruto, que é o primeiro lugar onde o cliente olha.
+
+**Trade sem NENHUM `Amount` legível não entra no índice.** Lido como zero, o
+aviso afirmaria `0.00` para uma liquidação cujo valor não foi lido, e ninguém
+iria atrás.
+
+Achado de passagem, não corrigido: `_mtm_parse_num` lê formato US (vírgula =
+milhar) e `_swapchar_value_num` aceita vírgula decimal sem milhar — nenhum dos
+dois entende `1.000,00` nem `1.234.567,89`. Se o arquivo da Athena chegar em BR
+com separador de milhar, todo valor acima de mil é lido errado e em silêncio.
+Depois desta mudança a Athena é só o plano B, então o alcance diminuiu.
+
+## §469 — Swap Calculator: o spread do SOFR multiplicava o fator em vez de somar à taxa (2026-09-15)
+
+A mesa trouxe o swap da SABESP (`24L01786664`, fluxo de 16/03 a 15/09/2026,
+US$ 17,5 mi, SOFR + 1,84% contra DI + 0,547%): a curva passiva dava
+**R$ 2.531.750,71** na planilha da mesa e **R$ 2.547.506,75** no Swap
+Calculator. O CDI batia.
+
+**São duas diferenças, e só a primeira é nossa.**
+
+*A grande, R$ 15.756.* "Compounded SOFR + spread" é a mesma figura do Term SOFR
+e da EURIBOR: a taxa anualizada da janela soma ao spread e as duas capitalizam
+UMA vez. Os dois já faziam `capitalizar(índice + spread)`; só o SOFR composto
+fazia `fator_composto × (1 + spread·τ)`. **O motor discordava de si mesmo.**
+Multiplicar os fatores acrescenta o termo cruzado `sofr · spread · τ²`, que não
+existe em contrato nenhum — e não é arredondamento: neste swap ele sozinho
+valia os R$ 15,7 mil. Com a soma, o motor devolve R$ 2.531.750,35; os 36
+centavos que sobram são o arredondamento da taxa exibida na planilha.
+
+O **CDI é o caso DIFERENTE e continua multiplicativo de propósito**: lá o
+percentual incide na taxa DIÁRIA e o spread é uma capitalização à parte, que é
+como a B3 apura. Era o que já batia com a mesa. `check_tools.py` §2 prende os
+dois lados da distinção — nenhum teste prendia a composição do spread, que é
+como isto passou.
+
+*A pequena, R$ 83.* O sistema interno mostra **3,65894%** de SOFR composto
+contra os **3,65876%** da planilha e do motor. Testado com a série real do NY
+Fed: nosso número bate **dígito a dígito com a razão do SOFR Index oficial**
+(`compor_por_indice`, `I(15/09)/I(16/03)`), e o do sistema não sai de lookback,
+shift, arredondamento do fator diário (7 a 10 casas) nem de outra base de
+anualização. Fica em aberto com o time do sistema; imitá-lo aqui seria a
+ferramenta se afastando do índice publicado.
+
+Quando alguém trouxer a próxima divergência de casa decimal no SOFR, **o teste
+é o SOFR Index**: ele é público, é do próprio NY Fed e não depende de convenção
+nenhuma.
+
+A memória de cálculo acompanhou o motor (§455: uma memória que não explica o
+número que a mesa mandou é pior do que não ter o arquivo). A aba ganhou a linha
+`SOFR composto (% a.a.)`, DERIVADA por fórmula do fator acumulado da aba diária
+— nunca um número copiado —, e o fator do índice virou `(1 + (SOFR + spread)·τ)`.
