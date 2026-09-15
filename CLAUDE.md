@@ -595,7 +595,11 @@ São **46**: `currency-base`, `interbook-ndf`, `commodities-b3`,
   `Exact` vence `Contains`, token mais longo vence; VCP resolve pelo `Nome
   Tipo/Classe`, que é a SEGUNDA pergunta em toda curva; sem linha o índice fica
   em branco e a nota DIZ o que a posição trazia; `INDEX` tem de ser do motor
-  (`liquidacao.INDEXADORES`). O `Código Identificador` da posição NÃO é chave
+  (`liquidacao.INDEXADORES`). **Curva `pre` sai sempre `composto`** (§466): o
+  seed trazia `simples` nas três curvas pré e a perna pré-preenchida nascia
+  Simple enquanto a tela em branco nascia Compound — e seed só roda quando o
+  arquivo não existe, então quem conserta o cadastro de quem já o tem é o
+  `upgrade`. O `Código Identificador` da posição NÃO é chave
   (guarda a LOB); quem casa o DFLUXO é o `Código do contrato` (§427). O período
   de cada fluxo é do servidor (`p_inicio`/`p_fim`), candidato não anterior ao
   fim é descartado.
@@ -817,7 +821,7 @@ São **46**: `currency-base`, `interbook-ndf`, `commodities-b3`,
   também): o motor já lia branco como 0,0, e sinalizar em vermelho pedia que
   se digitasse à mão o zero que a conta assumia.
 - **Swap Calculator, perna SOFR: o spread SOMA à taxa composta, não
-  multiplica o fator** (`liquidacao.py`, o ramo do `SOFR`): "Compounded SOFR +
+  multiplica o fator** (§469, `liquidacao.py`, o ramo do `SOFR`): "Compounded SOFR +
   spread" é a mesma figura do Term SOFR e da EURIBOR, que já faziam
   `capitalizar(índice + spread)` — só o SOFR multiplicava
   `fator_composto × (1+spread·τ)`, acrescentando o termo cruzado
@@ -846,7 +850,7 @@ São **46**: `currency-base`, `interbook-ndf`, `commodities-b3`,
   recalcular na ABERTURA, e nenhum desses leitores calcula). O cache sai da
   PRÓPRIA fórmula, por um avaliador no módulo (`_cache_das_formulas`,
   injetado no zip pelo `_selar`) — escrito à mão seria a planilha afirmando um
-  número que a fórmula não dá. **E o `<v>` vazio não tem grafia única**: o
+  número que a fórmula não dá. **E o `<v>` vazio não tem grafia única** (§467): o
   openpyxl troca de serializador conforme o ambiente — com `lxml` (que NÃO está
   no requirements) o escritor incremental fecha a tag, `<v></v>`; sem ele o
   ElementTree serializa vazio como `<v />`. Casar com uma só devolve, na
@@ -907,7 +911,8 @@ São **46**: `currency-base`, `interbook-ndf`, `commodities-b3`,
   mesmo elo é o plano B da opção de equity (`_optadv_collect`, chave Título
   MAIÚSCULO, resolvido uma vez por linha).
 - **As três colunas de valor do Settlement Advice de swap saem do OTM
-  Settlements; o Swap Athena é o PLANO B** (`_ops_otm_por_trade`, na platform):
+  Settlements; o Swap Athena é o PLANO B** (§468, `_ops_otm_por_trade`, na
+  platform):
   o OTM é o arquivo do fluxo de caixa que de fato liquida, e é dele que o Trade
   Level já tirava o seu Settlement — enquanto o aviso lia as curvas do Athena, a
   MESMA operação no MESMO dia saía com um número na tela e outro no documento
