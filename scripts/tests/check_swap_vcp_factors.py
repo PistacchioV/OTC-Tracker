@@ -117,7 +117,15 @@ check('   cashflow no mesmo tipo nao amortiza (a regra nao vaza)',
 # o mesmo codigo que o Swap Characteristics traduz na coluna Tipo de Contrato.
 check('tipo de contrato: o codigo e o texto',
       [_sf.tipo_de_contrato(v) for v in ('02', '2', '2.0', 'Bullet', '01', '1', 'Cashflow')],
-      ['bullet', 'bullet', 'bullet', 'bullet', 'cashflow', 'cashflow', 'cashflow'])
+      ['Bullet', 'Bullet', 'Bullet', 'Bullet', 'Cashflow', 'Cashflow', 'Cashflow'])
+# UMA funcao para a pergunta, nao duas. A Tools ja tinha a dela ('Bullet') e a
+# da platform nasceu em minusculas: duas respostas para a mesma coisa e como a
+# comparacao `== 'Bullet'` do Swap Calculator passa a ser sempre falsa sem
+# ninguem ver. A da Tools virou ALIAS.
+from apps.pages.features.tools import domain as _tdom                 # noqa: E402
+check('   e a Tools responde pela MESMA funcao, nunca por uma copia',
+      [_tdom.tipo_de_contrato(v) for v in ('02', '01', 'x')],
+      [_sf.tipo_de_contrato(v) for v in ('02', '01', 'x')])
 check('   e o que nao responde e LACUNA, nunca cashflow',
       [_sf.tipo_de_contrato(v) for v in ('', None, '  ', '7')], ['', '', '', ''])
 # A PROVA REAL: o fator arredondado, aplicado de volta ao VBR, tem de

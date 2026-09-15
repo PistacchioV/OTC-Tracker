@@ -20350,3 +20350,21 @@ quem fica memorizada é a saída boa. Com todas servindo o login, o erro nomeia
 cada uma e **nada fica memorizado** — a próxima chamada recomeça limpa. O
 `obter` cru (quem baixa planilha, PDF) segue devolvendo bytes sem julgar o
 corpo: ali um `<html` pode ser o próprio dado.
+
+**Duas funções para a mesma pergunta** (2026-09-15, rescaldo do §470/§473). Ao
+dar ao Swap VCP o `Tipo de Contrato`, escrevi um `tipo_de_contrato` na platform
+devolvendo `'bullet'`/`'cashflow'` — e a Tools **já tinha o dela**, devolvendo
+`'Bullet'`/`'Cashflow'`, que é o que o `swap_prefill` compara para escolher a
+base do ajuste. Duas funções com o mesmo nome e a mesma pergunta, respostas
+diferentes: é assim que uma comparação passa a ser sempre falsa sem ninguém ver.
+
+A da PLATFORM ficou canônica (quem pergunta são as duas telas — o Swap
+Calculator para a base do ajuste e o Swap VCP para a amortização do bullet), com
+a convenção ANTIGA (`'Bullet'`), e a da Tools virou ALIAS. O guarda cobra que as
+duas respondam o MESMO, para a cópia não voltar.
+
+**E o `prefill` passou a dizer o que houve.** "Could not read the swap position"
+era tudo que a mesa via para QUALQUER exceção — contrato fora do arquivo, fonte
+de índice fora do ar, coluna estranha —, e o relato chegava sem nada por onde
+começar. A mensagem leva agora `tipo: motivo` e o traceback inteiro vai para o
+log (§4, o desenho do `_handle_api_exception`).
