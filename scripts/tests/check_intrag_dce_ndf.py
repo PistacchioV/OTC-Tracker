@@ -217,6 +217,35 @@ check('o Delete aponta para a familia dce-ndf',
 check('o menu de Export esta COMPLETO (o molde tinha meio menu)',
       all(("extend:'" + b) in HTML for b in ('copy', 'csv', 'excel', 'print', 'pdf')))
 
+# ── o FILTRO INTELIGENTE ────────────────────────────────────────────────────
+# Duas coisas vinham do molde e nao se percebia na tela, so no resultado vazio:
+#
+# 1. o mapa de TIPOS era o da Option ('Strike Price', 'Fixing Date', 'Premium'…)
+#    e nenhum daqueles rotulos existe aqui, entao TODA coluna caia em 'text' e o
+#    filtro perdia datas e numeros;
+# 2. a coluna que COMANDA o fetch era `SF_COLS[3]` — na Option o Trade Date e a
+#    4a coluna; aqui a 4a e Participant Position. O chip de data (inclusive o
+#    padrao de hoje, que ABRE a tela) filtrava a coluna errada.
+#
+# Por isso ela e achada pelo RÓTULO (`isDate`), nunca por indice fixo.
+TIPOS = dict(re.findall(r"'([^']+)':'(\w+)'", re.search(r'var DCE_TYPES = \{(.*?)\};', HTML, re.S).group(1)))
+check('os tipos do filtro sao os ROTULOS do NDF, nao os da Option',
+      (sorted(k for k, t in TIPOS.items() if t == 'date'),
+       sorted(k for k, t in TIPOS.items() if t == 'number')),
+      (['Maturity Date', 'Start Date', 'Trade Date'],
+       ['Asian NDF Average Rate', 'Forward Rate', 'Notional', 'Quantity', 'Transaction Price']))
+check('   e todo rotulo tipado EXISTE entre as colunas',
+      sorted(set(TIPOS) - set(cols)), [])
+check('a coluna que comanda o fetch e achada pelo rotulo, nunca por indice fixo',
+      ('var SF_TRADE_DATE = SF_COLS.filter(function(c){return c.isDate;})[0]' in HTML,
+       'SF_COLS[3]' in HTML), (True, False))
+check('   e o rotulo marcado como isDate e o Trade Date',
+      "if(lbl==='Trade Date') c.isDate=true;" in HTML)
+# O indice herdado apontava para ca — a asserção existe para dizer POR QUE o
+# `SF_COLS[3]` não serve, e não só que ele saiu.
+check('   (a 4a coluna do NDF e Participant Position, nao Trade Date)',
+      (cols[3], cols[11]), ('Participant Position', 'Trade Date'))
+
 print('\n== 5. as rotas e o resto do wiring ==')
 regras = {str(r) for r in app.url_map.iter_rules()}
 for rota in ('/api/intrag/dce-ndf', '/api/intrag/dce-ndf/import-api',

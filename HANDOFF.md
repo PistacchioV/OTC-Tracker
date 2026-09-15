@@ -20268,3 +20268,22 @@ cadastrada para `Intrag DCE` × NDF, ela vence o fallback inteiro.
 
 O arquivo enviado segue o padrão das irmãs: `Intrag-DCE-NDF-AAAAMMDD.txt`, `;`
 como separador, na mesma pasta e com a mesma regra de nome com sufixo `(n)`.
+
+**O filtro inteligente vinha do molde** (2026-09-15, mesma rodada). A mesa abriu
+a tela e ele não trazia as colunas da tabela. Duas coisas, e nenhuma delas dava
+erro — só resultado vazio:
+
+* **o mapa de TIPOS era o da Option** (`Strike Price`, `Fixing Date`,
+  `Premium`…). Nenhum daqueles rótulos existe no NDF, então TODA coluna caía em
+  `text`: o filtro perdia as três datas e os cinco números, e buscar por valor
+  ou por intervalo não achava nada;
+* **a coluna que COMANDA o fetch era `SF_COLS[3]`** — na Option o Trade Date é a
+  4ª coluna e o índice fixo bastava. No NDF a 4ª é **Participant Position**, e o
+  Trade Date é a 12ª. O chip de data filtrava a coluna errada, **inclusive o
+  chip padrão de hoje, que é o que ABRE a tela**: a página nascia filtrando
+  Participant Position por uma data.
+
+Agora ela é achada pelo RÓTULO (`isDate`), nunca por índice fixo, e o guarda
+cobra as duas coisas — os tipos existindo entre as colunas e o índice fixo fora
+do arquivo. É a mesma família de defeito do Trade Date do send (§473): índice
+herdado de um molde cujas colunas são outras não acusa nada, só responde errado.
