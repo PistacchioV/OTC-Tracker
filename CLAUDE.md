@@ -890,6 +890,22 @@ São **46**: `currency-base`, `interbook-ndf`, `commodities-b3`,
   (Operations B3 → Latam → OTM), Type trocado pelo subjacente por cadeia; o
   mesmo elo é o plano B da opção de equity (`_optadv_collect`, chave Título
   MAIÚSCULO, resolvido uma vez por linha).
+- **As três colunas de valor do Settlement Advice de swap saem do OTM
+  Settlements; o Swap Athena é o PLANO B** (`_ops_otm_por_trade`, na platform):
+  o OTM é o arquivo do fluxo de caixa que de fato liquida, e é dele que o Trade
+  Level já tirava o seu Settlement — enquanto o aviso lia as curvas do Athena, a
+  MESMA operação no MESMO dia saía com um número na tela e outro no documento
+  que vai ao cliente. A ponte até a linha do OTM é o **`Kapital ID` do Athena,
+  que é o `Trade Id` de lá**, e em equity o `internal_id` do elo Latam → OTM
+  (o Swap Athena é só de CEM). A regra do SINAL é a mesma dos outros dois
+  lugares que leem arquivo de fluxo (o elo de equity e o Kapital Hybrids):
+  Curva Banco = Σ positivos, Curva Cliente = Σ negativos, Resultado Bruto = a
+  soma. **A escolha da fonte é da LINHA INTEIRA, nunca coluna a coluna** — é o
+  que garante `Curva Banco + Curva Cliente = Resultado Bruto` no papel, que é o
+  primeiro lugar onde o cliente olha. Trade sem NENHUM `Amount` legível não
+  entra no índice: a ausência tem de poder ser distinguida do zero.
+  `check_ops_trade_equity.py` §6 prende os dois lados (OTM e o plano B) e a
+  soma de cada linha.
 - **Swap VCP: o fator da perna VCP é `(juros + diff B3 da OUTRA perna) ÷
   VBR + 1`, na 8ª casa** (§452, `other_products/domain.py`): juros = |curva
   do OTM pelo Athena ID| − notional amortizado (VBR × % do DFLUXO do dia,
