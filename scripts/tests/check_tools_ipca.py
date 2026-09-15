@@ -246,7 +246,21 @@ check('sem tipo no evento vale o da posição, e a taxa vazia segue 0%',
       (x['p_amort'], x['p_base_amort']), ('0', liquidacao.SOBRE_REMANESCENTE))
 x = {'tipo_amort': 'Sobre Valor Base Original', 'taxa_amort': 33.33}
 queries._amortizacao_do_evento(x, '')
-check('com taxa, a taxa', x['p_amort'], '33.3300')
+check('com taxa, a taxa', x['p_amort'], '33.33000')
+# CINCO casas, nao quatro. O percentual multiplica um notional de centenas de
+# milhoes e a 5a casa vale dinheiro: no swap da COMGAS, com notional original de
+# R$ 282.791.204,68, `0,7246%` amortiza R$ 2.049.105,07 e `0,72464%` amortiza
+# R$ 2.049.218,19 -- e e o segundo que a planilha da mesa traz. O
+# arredondamento aqui nao era exibicao: era o numero que ia para o campo e para
+# o calculo.
+x = {'tipo_amort': 'Sobre Valor Base Original', 'taxa_amort': 0.72464}
+queries._amortizacao_do_evento(x, '')
+check('a taxa de amortizacao vai com CINCO casas', x['p_amort'], '0.72464')
+_ORIG = 282791204.68
+perto('   e a 5a casa vale R$ 113 num notional de R$ 282,8 mi',
+      _ORIG * float(x['p_amort']) / 100.0, 2049218.19, 0.01)
+perto('   com quatro, o valor amortizado era outro',
+      _ORIG * 0.007246, 2049105.07, 0.01)
 x = {'tipo_amort': 'Na Data de Vencimento', 'taxa_amort': 33.33}
 queries._amortizacao_do_evento(x, '')
 check('no vencimento o fluxo não amortiza mesmo com taxa', x['p_amort'], '0')

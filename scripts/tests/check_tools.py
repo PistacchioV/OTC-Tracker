@@ -945,6 +945,18 @@ check('os dois fixings de moeda usam o formato fx',
 check('e o resultado mostra as casas que o fixing tem', 'p.ptax_inicial | tl_fx' in _html, True)
 _js = ler('apps/static/js/pages/tools.js')
 check('o JS formata fx com 4 a 8 casas, sem arredondar a 4', 'fx: { min: 4, max: 8 }' in _js, True)
+# ── e a TAXA DE AMORTIZACAO vai com 5, pelo mesmo motivo ───────────────────
+# Ela multiplica o notional, entao a 5a casa vale dinheiro: num original de
+# R$ 282,8 mi, `0,7246%` e `0,72464%` sao R$ 113 de diferenca no amortizado. O
+# servidor mandava 5 e o blur do `pct` (4 casas) arredondava de volta -- o campo
+# nao e exibicao, e o que o calculo le. Os DOIS lados tem de andar juntos.
+check('o campo de amortizacao usa o formato de 5 casas',
+      'id="amortizacao" name="amortizacao" value="{{ form.amortizacao }}" inputmode="decimal" data-format="pct5"' in _html, True)
+check('o JS tem o pct5 e ele nao se confunde com o pct de 4',
+      ('pct5: 5' in _js, 'pct: 4' in _js), (True, True))
+check('   e o sufixo % vale para a familia pct inteira, nao so o literal',
+      ".indexOf('pct') === 0" in _js, True)
+
 check('nenhum prefill de fixing sobra com 6 casas fixas',
       "'{:.6f}'.format(cotacao_inicial)\n" in ler('apps/pages/features/tools/domain.py').split("campos['ptax_inicial']")[1][:60], False)
 

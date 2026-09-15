@@ -68,6 +68,11 @@ ABA_DIARIA = {liquidacao.ATIVA: 'Apuração diária - Ativa',
 MOEDA_FMT = '#,##0.00'
 FATOR_FMT = '0.0000000000'
 PCT_FMT = '0.0000%'
+# A taxa de AMORTIZAÇÃO vai com uma casa a mais: ela multiplica o notional, e a
+# 5ª casa vale dinheiro (num VBR de R$ 282,8 mi são R$ 113). A memória mostra a
+# mesma precisão do campo da tela — senão o documento arredonda o número que a
+# conta usou e a planilha deixa de explicar o próprio valor amortizado.
+PCT_AMORT_FMT = '0.00000%'
 DATA_FMT = 'DD/MM/YYYY'
 INT_FMT = '0'
 FX_FMT = '0.00000000'
@@ -709,7 +714,7 @@ def construir(r, pontas, cetip_id='', contraparte='', calendario='ANBIMA',
                        nota='valor registrado; base de cálculo da amortização')
     vbr = f.campo('Notional remanescente', r.nocional, MOEDA_FMT, destaque=True,
                   nota='base de cálculo das duas pontas')
-    pct_am = f.campo('Amortização no fim do fluxo', r.percentual_amortizacao, PCT_FMT)
+    pct_am = f.campo('Amortização no fim do fluxo', r.percentual_amortizacao, PCT_AMORT_FMT)
     f.campo('A amortização incide', BASE_AMORT_PT.get(r.base_amortizacao, r.base_amortizacao))
     # A base VENCE o percentual no `Sem Troca`: o contrato não amortiza em fluxo
     # nenhum, e uma fórmula de MIN ali prometeria uma conta que o motor não faz.

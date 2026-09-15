@@ -325,7 +325,12 @@ def amortizacao_do_evento(x, tipo_amort_posicao):
         # é a resposta — o fluxo não amortiza.
         x['p_amort'] = '0'
     elif x['taxa_amort'] is not None:
-        x['p_amort'] = '{:.4f}'.format(x['taxa_amort'])
+        # CINCO casas, não quatro. O percentual de amortização multiplica um
+        # notional de centenas de milhões, e a 5ª casa vale dinheiro: num VBR
+        # de R$ 282,8 mi, `0,7246%` contra `0,72464%` são R$ 113 de diferença no
+        # valor amortizado. O arredondamento aqui não era exibição — era o
+        # número que ia para o campo e para o cálculo.
+        x['p_amort'] = '{:.5f}'.format(x['taxa_amort'])
     else:
         # O evento existe no DFLUXO e a `Taxa Amortização` dele está vazia:
         # num contrato que amortiza por fluxo, a célula em branco é o fluxo
