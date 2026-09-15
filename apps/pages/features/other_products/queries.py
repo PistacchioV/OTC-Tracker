@@ -316,9 +316,17 @@ def vcp_factor_rows(ref, rows=None, ci=None):
         else:
             pct, tipo, base_amort = '0', tipo_pos, ''
             faltam.append('fluxo')
+        # BULLET no VENCIMENTO amortiza 100% — quem aplica é o `domain`; aqui
+        # só se responde o FATO, com as duas fontes que a posição tem: o `Tipo
+        # de Contrato` (o mesmo código que o Swap Characteristics traduz) e a
+        # `Data Vencimento`. Sem o vencimento na conta, um bullet que aparecesse
+        # numa data que não é a dele amortizaria o principal cedo.
+        bullet_venc = (pos.get('tipo_contrato') == 'bullet'
+                       and pos.get('vencimento') == ref_iso)
         salvo = salvos.get(key) or {}
         calc = domain.calcular({
             'vbr': vbr, 'original': original, 'pct': pct, 'tipo': tipo, 'base_amort': base_amort,
+            'bullet_vencimento': bullet_venc,
             'curva_p': curva_p, 'curva_c': curva_c,
             'b3_juros_p': ev.get('PARTE / Valor Juros'), 'b3_juros_c': ev.get('CONTRAPARTE / Valor Juros'),
             'b3_fator_p': ev.get('PARTE / Fator de Juros'), 'b3_fator_c': ev.get('CONTRAPARTE / Fator de Juros'),
