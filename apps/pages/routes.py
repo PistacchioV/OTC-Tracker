@@ -11017,13 +11017,22 @@ _TOOLS_SWAP_INDEX_LEGADO = {'cdi_percentual': 'cdi', 'cdi_spread': 'cdi'}
 def _tools_swap_index_upgrade(rows):
     """Traduz na LEITURA os `INDEX` de um seed anterior. Só toca no que casa
     com a tabela de legado — código desconhecido fica como está, para a ponta
-    sair sinalizada em vez de virar um índice chutado."""
+    sair sinalizada em vez de virar um índice chutado.
+
+    E força COMPOSTO em toda curva `pre`: taxa fixa da mesa capitaliza, e o
+    seed antigo trazia `simples` nas curvas de 360/365 dias. A contagem de
+    dias NÃO é tocada (360 continua 360) — o que muda é só o regime. Roda na
+    leitura porque seed só roda quando o arquivo não existe: quem já tinha o
+    cadastro em disco continuaria abrindo o Swap Calculator em Simple para
+    sempre."""
     for r in rows:
         if not isinstance(r, dict):
             continue
         novo = _TOOLS_SWAP_INDEX_LEGADO.get(str(r.get('INDEX') or '').strip())
         if novo:
             r['INDEX'] = novo
+        if str(r.get('INDEX') or '').strip() == 'pre':
+            r['REGIME'] = 'composto'
     return rows
 
 
@@ -12101,11 +12110,11 @@ _MAPPING_DEFS = {
             {'MATCH': 'PREFIXADO 252D', 'MODE': 'Exact', 'INDEX': 'pre', 'CURRENCY': '',
              'DAY COUNT': 'du_252', 'REGIME': 'composto', 'TENOR': ''},
             {'MATCH': 'PREFIXADO 360D', 'MODE': 'Exact', 'INDEX': 'pre', 'CURRENCY': '',
-             'DAY COUNT': 'act_360', 'REGIME': 'simples', 'TENOR': ''},
+             'DAY COUNT': 'act_360', 'REGIME': 'composto', 'TENOR': ''},
             {'MATCH': 'PRE LINEAR 360D', 'MODE': 'Exact', 'INDEX': 'pre', 'CURRENCY': '',
-             'DAY COUNT': 'act_360', 'REGIME': 'simples', 'TENOR': ''},
+             'DAY COUNT': 'act_360', 'REGIME': 'composto', 'TENOR': ''},
             {'MATCH': 'PREFIXADO 365D', 'MODE': 'Exact', 'INDEX': 'pre', 'CURRENCY': '',
-             'DAY COUNT': 'act_365', 'REGIME': 'simples', 'TENOR': ''},
+             'DAY COUNT': 'act_365', 'REGIME': 'composto', 'TENOR': ''},
             {'MATCH': 'PREFIXADO', 'MODE': 'Contains', 'INDEX': 'pre', 'CURRENCY': '',
              'DAY COUNT': '', 'REGIME': '', 'TENOR': ''},
             {'MATCH': 'IPCA', 'MODE': 'Contains', 'INDEX': 'ipca', 'CURRENCY': '',

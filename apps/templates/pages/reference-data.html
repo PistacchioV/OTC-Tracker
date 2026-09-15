@@ -575,7 +575,7 @@
           </div>
           <div class="col-md-4">
             <label class="form-label form-label-sm mb-1">B3 Account</label>
-            <input type="text" class="form-control form-control-sm" id="rd-b3account" value="73760.10-2">
+            <input type="text" class="form-control form-control-sm" id="rd-b3account" value="73760.10-2" placeholder="00000.00-0" maxlength="10" inputmode="numeric">
           </div>
           <div class="col-md-4">
             <label class="form-label form-label-sm mb-1">Commodities Acronym</label>
@@ -662,6 +662,15 @@ $(document).ready(function () {
         v = v.replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3');
         v = v.replace(/\.(\d{3})(\d)/, '.$1/$2');
         v = v.replace(/(\d{4})(\d)/, '$1-$2');
+        return v;
+    }
+
+    /* Conta B3 é sempre 00000.00-0 (8 dígitos): o cadastro compara texto, e
+       uma conta digitada sem ponto/traço não casa com a do arquivo da B3. */
+    function maskB3Account(v) {
+        v = String(v == null ? '' : v).replace(/\D/g, '').slice(0, 8);
+        v = v.replace(/^(\d{5})(\d)/, '$1.$2');
+        v = v.replace(/^(\d{5})\.(\d{2})(\d)/, '$1.$2-$3');
         return v;
     }
 
@@ -1936,6 +1945,7 @@ $(document).ready(function () {
         this.value = maskCNPJ(this.value);
     });
     $(document).on('input', '#rd-taxid', function() { this.value = maskCNPJ(this.value); });
+    $(document).on('input', '#rd-b3account', function() { this.value = maskB3Account(this.value); });
 
     /* ── Select-all checkbox ─────────────────────────────────────────── */
     $(document).on('change', '#rd-select-all', function() {
@@ -1978,7 +1988,7 @@ $(document).ready(function () {
         $('#rd-spn').val(cells[9] || '');
         $('#rd-casid').val(cells[10] || '');
         $('#rd-ucn').val(cells[11] || '');
-        $('#rd-b3account').val(cells[12] || '73760.10-2');
+        $('#rd-b3account').val(maskB3Account(cells[12] || '73760.10-2'));
         $('#rd-commacr').val(cells[13] || '');
         $('#rd-fxacr').val(cells[14] || '');
         bootstrap.Modal.getOrCreateInstance(rdModalEl).show();
@@ -2191,7 +2201,7 @@ $(document).ready(function () {
             'SPN':                  $('#rd-spn').val().toUpperCase(),
             'CASID':                $('#rd-casid').val().toUpperCase(),
             'UCN':                  $('#rd-ucn').val().toUpperCase(),
-            'B3 ACCOUNT':           $('#rd-b3account').val().toUpperCase(),
+            'B3 ACCOUNT':           maskB3Account($('#rd-b3account').val()),
             'COMMODITIES ACCRONYM': $('#rd-commacr').val().toUpperCase(),
             'FX CASH ACCRONYM':     $('#rd-fxacr').val().toUpperCase()
         };
