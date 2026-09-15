@@ -52,6 +52,8 @@ from apps.pages import routes as R                                    # noqa: E4
 from apps.pages.platform import pu_fator as PF                        # noqa: E402
 from apps.pages.features.other_products import domain, queries, commands   # noqa: E402
 from apps.pages.json_to_duckdb import nomes_unicos                    # noqa: E402
+from apps.pages.platform import swap_flows as _sf                     # noqa: E402
+from apps.pages.precificador import liquidacao                        # noqa: E402
 
 REF = datetime(2026, 9, 8)
 TMP = tempfile.mkdtemp(prefix='vcp-fat-')
@@ -81,6 +83,43 @@ c2 = domain.calcular(base, {'juros_c': '12000', 'tipo': ''})
 check('editado vence e refaz o fator', (c2['juros_c'], c2['fator_c'], c2['manual']), (12000.0, 1.0122, ['juros_c']))
 c3 = domain.calcular(dict(base, tipo='Na Data de Vencimento'))
 check('no vencimento o fluxo nao amortiza', (c3['amortizado'], c3['juros_c']), (0.0, 345000.0))
+
+# ── BULLET: o unico fluxo E o vencimento, e la o principal volta inteiro ────
+# `Na Data de Vencimento` responde 0% no fluxo -- regra escrita para os
+# intermediarios de um CASHFLOW. No bullet nao ha intermediario: com 0% o
+# `juros = |curva| - 0` carrega o PRINCIPAL junto, e o fator sai com um 1,0
+# inteiro a mais. Foi o que a mesa viu na tela: VBR 9.836.872,00 com curva de
+# 13.475.844,69 dando fator 2,369 -- o arquivo de PU mandaria a B3 liquidar o
+# dobro. Com os 100%, 1,369.
+_VBR, _CURVA = 9836872.00, 13475844.69
+_bullet = {'vbr': _VBR, 'original': _VBR, 'tipo': 'Na Data de Vencimento',
+           'curva_p': _CURVA, 'curva_c': 0.0, 'b3_juros_p': '', 'b3_juros_c': '',
+           'b3_fator_p': '', 'b3_fator_c': '', 'idx_p': 'VCP', 'idx_c': 'PREFIXADO 252D'}
+_sem = domain.calcular(dict(_bullet, pct='0', base_amort=''))
+_com = domain.calcular(dict(_bullet, pct='0', bullet_vencimento=True))
+check('bullet com 0%: o principal entra no fator (o defeito)',
+      (round(_sem['amortizado'], 2), round(_sem['fator_p'], 8)), (0.0, 2.36993189))
+check('bullet com 100% At Maturity: amortiza o SALDO inteiro',
+      (round(_com['amortizado'], 2), round(_com['juros_p'], 2)), (_VBR, 3638972.69))
+check('   e o fator perde exatamente o 1,0 do principal',
+      round(_sem['fator_p'] - _com['fator_p'], 8), 1.0)
+check('   At Maturity calcula sobre o SALDO, nao sobre o original',
+      domain.notional_amortizado(800000.0, 1000000.0, 100.0, liquidacao.AT_MATURITY), 800000.0)
+check('   e o 100% vem do domain: o DFLUXO segue respondendo 0%',
+      (_com['pct'], _com['base_amort']), (100.0, liquidacao.AT_MATURITY))
+# Um CASHFLOW no mesmo tipo continua sem amortizar no fluxo intermediario: a
+# regra nova nao pode vazar para quem ela nao descreve.
+_cash = domain.calcular(dict(_bullet, pct='0'))
+check('   cashflow no mesmo tipo nao amortiza (a regra nao vaza)',
+      (_cash['amortizado'], round(_cash['fator_p'], 8)), (0.0, 2.36993189))
+
+# O de-para do Tipo de Contrato da posicao (02 = bullet, 01 = cashflow), que e
+# o mesmo codigo que o Swap Characteristics traduz na coluna Tipo de Contrato.
+check('tipo de contrato: o codigo e o texto',
+      [_sf.tipo_de_contrato(v) for v in ('02', '2', '2.0', 'Bullet', '01', '1', 'Cashflow')],
+      ['bullet', 'bullet', 'bullet', 'bullet', 'cashflow', 'cashflow', 'cashflow'])
+check('   e o que nao responde e LACUNA, nunca cashflow',
+      [_sf.tipo_de_contrato(v) for v in ('', None, '  ', '7')], ['', '', '', ''])
 # A PROVA REAL: o fator arredondado, aplicado de volta ao VBR, tem de
 # reproduzir o caixa do interno. A ordem e SEMPRE Parte - Contraparte (visao
 # banco), seja qual for a perna que tem fator: montada como "VCP menos a

@@ -113,6 +113,32 @@ def base_da_amortizacao(texto):
     return None
 
 
+def tipo_de_contrato(texto):
+    """`Tipo de Contrato` da posição → `'bullet'`, `'cashflow'` ou `''`.
+
+    O arquivo traz o CÓDIGO (`02` = bullet, `01` = cashflow), que é o mesmo que
+    a tela de Swap Characteristics traduz na coluna Tipo de Contrato. Vale
+    também o texto já traduzido, porque a posição às vezes chega pela leitura
+    por NOME de coluna (arquivo estreito) em vez da posicional.
+
+    Fora desses dois, `''` — e isso é lacuna, não "cashflow". Um bullet lido
+    como cashflow não amortiza no vencimento e o fator sai com o principal
+    inteiro dentro dele."""
+    t = norm(texto)
+    if not t:
+        return ''
+    if 'bullet' in t:
+        return 'bullet'
+    if 'cashflow' in t or 'cash flow' in t:
+        return 'cashflow'
+    d = t.replace('.0', '').strip().lstrip('0')
+    if d == '2':
+        return 'bullet'
+    if d == '1':
+        return 'cashflow'
+    return ''
+
+
 def amortiza_no_fluxo(texto):
     """O fluxo amortiza? `Na Data de Vencimento` e `Sem Troca de Amortização`
     dizem que não — e é resposta, não lacuna."""
@@ -300,7 +326,8 @@ def posicoes_swap(ref):
     """{contrato normalizado → dict} da POSIÇÃO de swap mais recente até `ref`
     (andando para trás como o `_swap_day_path`): o que o VCP precisa por
     contrato — VBR (`Valor Base Remanescente`), valor base e inicial, `Tipo de
-    amortização` e o `Código Identificador` (a LOB). Uma leitura para a tela
+    amortização`, o `Tipo de Contrato` (bullet/cashflow) com a `Data
+    Vencimento` ao lado, e o `Código Identificador` (a LOB). Uma leitura para a tela
     inteira, nunca uma por linha. Vazio sem arquivo."""
     R = _R()
     path, dref = R._swap_day_path(ref, '73760_{}_DPOSICAO-SWAP.json')
@@ -319,14 +346,18 @@ def posicoes_swap(ref):
             item = {'contrato': str(contrato or '').strip(), 'identificador': str(ident or '').strip(),
                     'tipo_amort': '', 'remanescente': numero_da_posicao(row.get('Valor Base Remanescente', '')),
                     'valor_base': numero_da_posicao(row.get('Valor base', '')),
-                    'valor_inicial': numero_da_posicao(row.get('Valor base inicial', ''))}
+                    'valor_inicial': numero_da_posicao(row.get('Valor base inicial', '')),
+                    'tipo_contrato': tipo_de_contrato(row.get('Tipo de Contrato', '')),
+                    'vencimento': iso(row.get('Data Vencimento', ''))}
         else:
             item = {'contrato': celula(vals, POS['contrato']),
                     'identificador': celula(vals, POS['identificador']),
                     'tipo_amort': R._swapchar_amort_text(celula(vals, POS['tipo_amort'])),
                     'remanescente': numero_da_posicao(celula(vals, POS['remanescente'])),
                     'valor_base': numero_da_posicao(celula(vals, POS['valor_base'])),
-                    'valor_inicial': numero_da_posicao(celula(vals, POS['valor_inicial']))}
+                    'valor_inicial': numero_da_posicao(celula(vals, POS['valor_inicial'])),
+                    'tipo_contrato': tipo_de_contrato(celula(vals, POS['tipo_contrato'])),
+                    'vencimento': iso(celula(vals, POS['vencimento']))}
         chave = norm(item['contrato']).replace(' ', '')
         if chave:
             out.setdefault(chave, item)

@@ -175,7 +175,27 @@ def calcular(base, overrides=None):
     pct = pega('pct', num(base.get('pct')))
     tipo = pega('tipo', base.get('tipo') or '')
     base_amort = _sf.base_da_amortizacao(tipo) or base.get('base_amort') or ''
-    if _sf.amortiza_no_fluxo(tipo) is False:
+    # BULLET no VENCIMENTO: o principal volta INTEIRO, e é o único fluxo que
+    # existe. `Na Data de Vencimento` responde "neste fluxo não amortiza"
+    # (`amortiza_no_fluxo`) — regra certa, escrita para os fluxos
+    # INTERMEDIÁRIOS de um cashflow. No bullet não há intermediário: com 0% o
+    # `juros = |curva| − 0` carrega o principal junto com os juros e o fator sai
+    # com um 1,0 inteiro a mais. Num VBR de 9,8 mi com curva de 13,5 mi ele
+    # virava 2,369 em vez de 1,369, e o `VCP_*.TXT` mandaria a B3 liquidar o
+    # dobro.
+    #
+    # Quem sabe que o contrato é bullet é a POSIÇÃO (`Tipo de Contrato`, o mesmo
+    # código que o Swap Characteristics traduz), e quem sabe que hoje é o
+    # vencimento é a `Data Vencimento` dela: as duas perguntas chegam aqui
+    # respondidas, porque o domain é puro e não lê arquivo.
+    bullet_venc = bool(base.get('bullet_vencimento'))
+    if bullet_venc:
+        pct = pega('pct', 100.0)
+        # At Maturity calcula sobre o SALDO — o que ainda está de pé. Num
+        # contrato que já amortizou antes, o original é maior e a conta pelo
+        # original só não erra por causa do `min`.
+        base_amort = base_amort or liquidacao.AT_MATURITY
+    if _sf.amortiza_no_fluxo(tipo) is False and not bullet_venc:
         amort_calc = 0.0
     else:
         amort_calc = notional_amortizado(vbr, num(base.get('original')), pct, base_amort)

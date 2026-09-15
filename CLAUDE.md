@@ -952,6 +952,20 @@ São **46**: `currency-base`, `interbook-ndf`, `commodities-b3`,
   o percentual — `amortizar()` devolve zero ANTES de olhar para ele, senão um
   `100` esquecido no campo devolveria o principal inteiro num swap que não
   devolve nada. A mesma função responde ao fator VCP.
+- **Swap VCP: BULLET no vencimento amortiza 100%** (§470,
+  `other_products/domain.calcular`): `Na Data de Vencimento` responde "neste
+  FLUXO não amortiza" (`amortiza_no_fluxo`) — regra certa, escrita para os
+  fluxos INTERMEDIÁRIOS de um cashflow. No bullet não há intermediário: o único
+  fluxo é o vencimento, e com 0% o `juros = |curva| − 0` carrega o PRINCIPAL
+  junto com os juros. O fator sai com um **1,0 inteiro a mais** (VBR 9,8 mi com
+  curva de 13,5 mi virava 2,369 em vez de 1,369) e o `VCP_*.TXT` manda a B3
+  liquidar o dobro. Quem diz que o contrato é bullet é a POSIÇÃO (`Tipo de
+  Contrato`, `02` = bullet e `01` = cashflow — o mesmo código que o Swap
+  Characteristics traduz na coluna), e quem diz que hoje é o vencimento é a
+  `Data Vencimento` dela; as duas chegam ao `domain` RESPONDIDAS, porque ele é
+  puro. A base é **At Maturity**, que calcula sobre o SALDO — num contrato que
+  já amortizou antes, o original é maior e a conta pelo original só não erra
+  pelo `min`. Tipo de Contrato que não responde é LACUNA, nunca "cashflow".
 - **No Swap VCP a `Diferença` É o veredito** (§459): o valor sai DENTRO do
   badge (verde/amarelo), como o batimento do Accrual Swap colore o fator
   registrado — não há badge de texto ao lado. Sem veredito não há cor.

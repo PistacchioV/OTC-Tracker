@@ -19961,3 +19961,60 @@ A memória de cálculo acompanhou o motor (§455: uma memória que não explica 
 número que a mesa mandou é pior do que não ter o arquivo). A aba ganhou a linha
 `SOFR composto (% a.a.)`, DERIVADA por fórmula do fator acumulado da aba diária
 — nunca um número copiado —, e o fator do índice virou `(1 + (SOFR + spread)·τ)`.
+
+## §470 — Swap VCP: o swap bullet entrava no fator com o principal dentro (2026-09-15)
+
+A mesa olhou a tabela de fatores e viu um fator de **2,369** num contrato de
+VBR R$ 9.836.872,00. Multiplicando os dois dá mais de R$ 23 mi, e a pergunta
+foi direta: o fator, o VCP Settlement e o check estão errados?
+
+**Duas coisas, e só uma era defeito.**
+
+*O `VBR × fator` dando 23 mi está certo.* O fator é de **PU**: ele carrega
+principal **+** juros, e é isso que a B3 aplica ao notional. O que liquida é
+`(fator − 1) × VBR`, que é a coluna VCP Settlement. Na outra linha da tela isso
+fechava ao centavo — `(1,94043603 − 1) × 1.230.500,00 = 1.157.206,53`. E a
+coluna **Diferença** é, por construção, só o arredondamento da 8ª casa: o fator
+leva `juros_p + diff_c`, a perna calculada entra com `juros_c + diff_c`, a diff
+se cancela e sobra o caixa interno. Num VBR de 9,8 mi isso é no máximo ~R$ 0,05.
+Por isso R$ 0,01 e R$ 0,09, e não milhares — o check estava funcionando.
+
+*O defeito estava um passo antes, na AMORTIZAÇÃO.* `Na Data de Vencimento`
+responde 0% no fluxo (`amortiza_no_fluxo`), e isso é certo — para os fluxos
+INTERMEDIÁRIOS de um cashflow, que só pagam juros. **No bullet não há
+intermediário**: o único fluxo é o vencimento, e ali o principal volta inteiro.
+Com 0%, `juros = |curva| − 0` carregava o principal junto, e o fator saía com um
+**1,0 inteiro a mais** — o `VCP_*.TXT` mandaria a B3 liquidar o dobro. Os
+números da tela: curva de R$ 13.475.844,69 sobre VBR de R$ 9.836.872,00 dando
+fator 2,36993189; com os 100%, juros de R$ 3.638.972,69 e fator 1,36993189.
+
+Nada na tela acusava, porque todas as outras colunas fecham entre si: o fator
+inflado reproduz o VCP Settlement inflado, e a Diferença continua em centavos.
+A conta era internamente coerente e externamente errada.
+
+**Onde a resposta mora.** Quem sabe que o contrato é bullet é a POSIÇÃO —
+`Tipo de Contrato`, índice 0 do DPOSICAO-SWAP, `02` = bullet e `01` = cashflow,
+o MESMO código que o Swap Characteristics traduz na coluna. Quem sabe que hoje
+é o vencimento é a `Data Vencimento` da mesma linha. As duas passaram a sair do
+`posicoes_swap`, e chegam ao `domain.calcular` **respondidas** (`bullet_venc`):
+o domain é puro e não lê arquivo.
+
+A base é **At Maturity**, não "sobre o original": `amortizar()` a calcula sobre
+o SALDO, que é o que ainda está de pé. Num contrato que já amortizou antes, o
+original é maior que o saldo e a conta pelo original só não erra por causa do
+`min` — sorte, não regra.
+
+**O vencimento entra na condição de propósito.** "É bullet" sozinho amortizaria
+o principal em qualquer data em que o contrato aparecesse na tela — um evento de
+prêmio, por exemplo. O bullet liquida uma vez e é no vencimento; é essa a
+pergunta que se faz.
+
+`tipo_de_contrato()` aceita o código e o texto já traduzido (a posição às vezes
+chega pela leitura por NOME de coluna, no arquivo estreito), e **o que não
+responde é `''` — lacuna, nunca "cashflow"**. Um bullet lido como cashflow é
+exatamente o defeito que esta seção corrige.
+
+`check_swap_vcp_factors.py` §1 prende os dois lados com os números da tela: o
+fator com 0% (o defeito), o fator com os 100%, que a diferença entre os dois é
+**exatamente 1,0**, e que um cashflow do mesmo tipo continua sem amortizar no
+fluxo intermediário — a regra nova não pode vazar para quem ela não descreve.
