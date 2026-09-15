@@ -152,7 +152,8 @@ def is_available():
 # da linha do New Deals.
 
 _MAPPINGS_DIR = data_write("mappings")
-API_LINKS_FILE = mapping_file("api-links", _MAPPINGS_DIR)
+MAPPING_KEY = "api-links"
+API_LINKS_FILE = mapping_file(MAPPING_KEY, _MAPPINGS_DIR)
 
 USE_NEW_DEALS = "New Deals"
 USE_UNWINDS = "Unwinds"
@@ -171,6 +172,13 @@ def _use_key(value):
 def _api_link_rows():
     # DB-first (fase 3): o cadastro sai do `db/mappings/api-links.db`, com o
     # JSON como canal de emergencia dentro do proprio `dataset_rows`.
+    #
+    # E daqui, NAO do `_mapping_rows`: este leitor e o seam dos testes (eles
+    # redirecionam o `API_LINKS_FILE` para um tmp) e nao pode depender de um
+    # contexto de app. A consequencia e que o `upgrade` do cadastro nao alcanca
+    # quem le por aqui — linha ACRESCENTADA ao seed so chega a uma instalacao
+    # que ja tem o arquivo depois de passar pela tela `/mapping`. Por isso cada
+    # rotina carrega o proprio fallback: e ele que responde nesse meio-tempo.
     try:
         from apps.pages import duck_read
         rows = duck_read.dataset_rows(API_LINKS_FILE)
@@ -200,6 +208,43 @@ def registered_link(usage, product=None):
         if not row_p and generic is None:
             generic = url
     return (generic, None) if generic else (None, None)
+
+
+def registered_links(usage, product=None):
+    """TODAS as URLs cadastradas para esse uso/produto, na ordem do cadastro.
+
+    Irmã do `registered_link`, com a MESMA precedência — as linhas do PRODUTO
+    ganham das genéricas, e o curinga só entra quando o produto pedido não tem
+    endereço próprio —, mas devolvendo a lista inteira: o extrato do Intrag DCE
+    NDF não é um relatório, são SEIS (um por portfólio/carteira), e a página
+    importa todos numa passada.
+
+    URL repetida entra UMA vez: o cadastro é da mesa e pode ter a mesma linha
+    duas vezes, e baixar o mesmo relatório de novo é só tempo de rede — a
+    ordem da primeira ocorrência é preservada.
+    """
+    want, want_p = _use_key(usage), _use_key(product)
+    do_produto, genericas, vistas = [], [], set()
+    for row in _api_link_rows():
+        if _use_key(row.get("USE")) != want:
+            continue
+        url = str(row.get("URL") or "").strip()
+        if not url or url in vistas:
+            continue
+        row_p = _use_key(row.get("PRODUCT"))
+        if row_p and row_p == want_p:
+            vistas.add(url)
+            do_produto.append(url)
+        elif not row_p:
+            genericas.append(url)
+    if do_produto:
+        return do_produto
+    saida, vistas = [], set()
+    for url in genericas:
+        if url not in vistas:
+            vistas.add(url)
+            saida.append(url)
+    return saida
 
 
 def build_url(template, product=None, date=None, force_product=True):

@@ -30,6 +30,7 @@ var PAGE_URL = {
     'Control Panel': '/control-panel', 'Accrual': '/accrual-swap', 'MtM': '/mtm-swap',
     'Intrag Option': '/intrag-option', 'Intrag NDF': '/intrag-ndf',
     'Intrag DCE Option': '/intrag-dce-option',
+    'Intrag DCE NDF': '/intrag-dce-ndf',
     'Intrag DCE Swap': '/intrag-dce-swap',
     'Swap VCP': '/other-products-swap-vcp',
     'Intrag Swap': '/intrag-swap',

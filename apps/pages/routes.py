@@ -10904,6 +10904,31 @@ _API_LINKS_SEED = (
      'URL': ('http://169.19.201.153:8080/bob-reports/YYYY-MM-DD/GEM/Reports/'
              'ITAU/ITAUDataExtract_FXO/ITAUDataExtractor_FXOption'),
      'NOTES': 'Extrato de FX Option do ITAU — Import da página Intrag DCE Option'},
+    # Intrag DCE › NDF: o extrato de termo NÃO é um relatório, são CINCO — um
+    # por portfólio/carteira, em hosts diferentes —, e o Import da página passa
+    # por todos numa clicada (`athena_api.registered_links`). É por isso que
+    # este uso × produto aceita VÁRIAS linhas: tirar uma daqui é deixar de
+    # importar aquela carteira, e é na tela que isso se decide.
+    {'SOURCE': 'Bob Report', 'USE': 'Intrag DCE', 'PRODUCT': 'NDF',
+     'URL': ('http://169.81.175.217:8080/bob-reports/YYYY-MM-DD/GEM/Reports/ITAU/ITAUD'
+             'ataExtract_FXCash_LN_FX_FLOW_LAWTON_OFF_FXC/ITAUDataExtractor_NDF'),
+     'NOTES': 'Extrato de termo do ITAU (LN FX Flow — Lawton Off) — Import da página Intrag DCE NDF'},
+    {'SOURCE': 'Bob Report', 'USE': 'Intrag DCE', 'PRODUCT': 'NDF',
+     'URL': ('http://169.19.201.93:8080/bob-reports/YYYY-MM-DD/GEM/Reports/ITAU/ITAUDa'
+             'taExtract_FXCash_CLIENT_FX_LAWTON_OFF_FXC/ITAUDataExtractor_NDF'),
+     'NOTES': 'Extrato de termo do ITAU (Client FX — Lawton Off) — Import da página Intrag DCE NDF'},
+    {'SOURCE': 'Bob Report', 'USE': 'Intrag DCE', 'PRODUCT': 'NDF',
+     'URL': ('http://169.81.175.217:8080/bob-reports/YYYY-MM-DD/GEM/Reports/ITAU/ITAUD'
+             'ataExtract_FXCash_CETE_LAWTON_OFF_FXC/ITAUDataExtractor_NDF'),
+     'NOTES': 'Extrato de termo do ITAU (CETE — Lawton Off) — Import da página Intrag DCE NDF'},
+    {'SOURCE': 'Bob Report', 'USE': 'Intrag DCE', 'PRODUCT': 'NDF',
+     'URL': ('http://169.19.201.93:8080/bob-reports/YYYY-MM-DD/GEM/Reports/ITAU/ITAUDa'
+             'taExtract_FXCash_GC_ONS_NDF_BJPM_FXC/ITAUDataExtractor_NDF'),
+     'NOTES': 'Extrato de termo do ITAU (GC ONS NDF — BJPM) — Import da página Intrag DCE NDF'},
+    {'SOURCE': 'Bob Report', 'USE': 'Intrag DCE', 'PRODUCT': 'NDF',
+     'URL': ('http://169.19.201.153:8080/bob-reports/YYYY-MM-DD/GEM/Reports/ITAU/ITAUD'
+             'ataExtract_FXCash_GC_ONS_NDF_LAWTON_FXC/ITAUDataExtractor_NDF'),
+     'NOTES': 'Extrato de termo do ITAU (GC ONS NDF — Lawton) — Import da página Intrag DCE NDF'},
 )
 
 

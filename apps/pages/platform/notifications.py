@@ -64,6 +64,7 @@ _NOTIF_PAGE_URL = {
     'Accrual': '/accrual-swap', 'MtM': '/mtm-swap', 'Intrag Option': '/intrag-option',
     'Intrag NDF': '/intrag-ndf', 'Intrag Swap': '/intrag-swap',
     'Intrag DCE Option': '/intrag-dce-option',
+    'Intrag DCE NDF': '/intrag-dce-ndf',
     'Intrag DCE Swap': '/intrag-dce-swap',
     'Swap VCP': '/other-products-swap-vcp',
     'Reconciliation': '/reconciliation-payrec',

@@ -886,6 +886,17 @@ São **46**: `currency-base`, `interbook-ndf`, `commodities-b3`,
   (`add_image(img, 'A1')` cola no canto e esconde a imagem), e texto
   EXECUTIVO — sem linguagem de conversa nem de aula, com a parte devedora
   NOMEADA. O guarda varre o texto das abas e recusa as frases proibidas.
+- **Intrag DCE NDF: o extrato são CINCO relatórios, não um** (§473): um por
+  portfólio/carteira, em hosts diferentes, e o Import passa por todos numa
+  clicada (`athena_api.registered_links`, plural, com a mesma precedência do
+  singular e URL repetida entrando uma vez). **Relatório que falha não derruba
+  os outros** — volta em `failed` com o motivo, e só quando NENHUM responde é
+  erro. O `_api_link_rows` lê DB-first e **não passa pelo `_mapping_rows`**: o
+  `upgrade` do cadastro não alcança quem importa, então linha nova no seed só
+  chega à rotina depois de alguém salvar na tela `/mapping` — é por isso que
+  cada rotina carrega o próprio fallback (o desta traz as cinco carteiras).
+  Trade Date é a **12ª** coluna de dado (na Option é a 4ª) e o mapping casa por
+  `NDF - TERMO`, não por `OPCAO`.
 - **Intrag DCE Swap: a unidade é o DEAL e a linha é traduzida no servidor**
   (§448). A planilha do dropzone traz duas tabelas (pernas e fluxos)
   ligadas pelo Deal Name; o arquivo `Intrag-DCE-Swap-AAAAMMDD.txt` é UMA

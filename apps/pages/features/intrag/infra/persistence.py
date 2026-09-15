@@ -36,6 +36,11 @@ INTRAG_DCE_OPT_CACHE_DIR = os.path.normpath(os.path.join(
 ))
 
 
+INTRAG_DCE_NDF_CACHE_DIR = os.path.normpath(os.path.join(
+    _R().data_dir(), "cache", "new deals", "Intrag", "DCE NDF"
+))
+
+
 INTRAG_NDF_SEND_DIR = os.path.join(
     _R().Config.SHARED_DRIVE_ROOT, 'Confirmation', 'Derivativos', 'OTC Tracker', 'Intrag')
 

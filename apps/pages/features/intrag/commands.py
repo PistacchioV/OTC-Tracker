@@ -564,6 +564,153 @@ def _dce_opt_import(ref_date=None, sid='', actor_name=''):
             'date_max': (chaves[-1][:4] + '-' + chaves[-1][4:6] + '-' + chaves[-1][6:]) if chaves else ''}
 
 
+# ── DCE NDF — o import dos SEIS relatórios ──────────────────────────────────
+_DCE_NDF_API_PRODUCT = 'NDF'
+# As CINCO carteiras, para quando o cadastro ainda não responde. O `seed` só
+# escreve o arquivo numa instalação NOVA (§6) e o `upgrade` não alcança quem lê
+# pelo `_api_link_rows` (que é DB-first, o seam dos testes): numa instância que
+# já tem o `api-links.json`, as linhas novas do seed aparecem na tela `/mapping`
+# e não chegam aqui até alguém salvar por lá. Sem este fallback o Import
+# simplesmente não traria nada, e o cadastro é que tem de ser a resposta — não a
+# ausência dela. Editar/remover uma carteira continua sendo pela tela: havendo
+# QUALQUER linha cadastrada para `Intrag DCE` × NDF, ela vence este fallback
+# inteiro.
+_DCE_NDF_URL_FALLBACK = (
+    'http://169.81.175.217:8080/bob-reports/YYYY-MM-DD/GEM/Reports/ITAU'
+    '/ITAUDataExtract_FXCash_LN_FX_FLOW_LAWTON_OFF_FXC/ITAUDataExtractor_NDF',
+    'http://169.19.201.93:8080/bob-reports/YYYY-MM-DD/GEM/Reports/ITAU/'
+    'ITAUDataExtract_FXCash_CLIENT_FX_LAWTON_OFF_FXC/ITAUDataExtractor_NDF',
+    'http://169.81.175.217:8080/bob-reports/YYYY-MM-DD/GEM/Reports/ITAU'
+    '/ITAUDataExtract_FXCash_CETE_LAWTON_OFF_FXC/ITAUDataExtractor_NDF',
+    'http://169.19.201.93:8080/bob-reports/YYYY-MM-DD/GEM/Reports/ITAU/'
+    'ITAUDataExtract_FXCash_GC_ONS_NDF_BJPM_FXC/ITAUDataExtractor_NDF',
+    'http://169.19.201.153:8080/bob-reports/YYYY-MM-DD/GEM/Reports/ITAU'
+    '/ITAUDataExtract_FXCash_GC_ONS_NDF_LAWTON_FXC/ITAUDataExtractor_NDF',
+)
+
+
+def _dce_ndf_urls(ref_dt):
+    """Os endereços do dia, TODOS os do cadastro `api-links` (`Intrag DCE` × NDF).
+
+    O extrato de NDF não é um relatório, são seis — um por portfólio/carteira,
+    em hosts diferentes. Como na Recon FXO e no DCE Option, a data vive no
+    CAMINHO (`AAAA-MM-DD`) e a substituição é do placeholder, sem reescrever
+    query string nenhuma."""
+    urls = []
+    try:
+        from apps.pages import athena_api
+        urls = athena_api.registered_links(_DCE_API_USE, _DCE_NDF_API_PRODUCT)
+    except Exception as exc:                       # pragma: no cover - defensivo
+        _R().log.debug('[INTRAG DCE NDF] cadastro api-links indisponível: %s', exc)
+    if not urls:
+        urls = list(_DCE_NDF_URL_FALLBACK)
+    return [re.sub(r'yyyy[-/. ]?mm[-/. ]?dd', ref_dt.strftime('%Y-%m-%d'), u, flags=re.I)
+            for u in urls]
+
+
+def _dce_ndf_import(ref_date=None, sid='', actor_name=''):
+    """Baixa os SEIS extratos DCE de termo e os materializa nos arquivos-dia da
+    página Intrag › DCE › NDF.
+
+    Um relatório que falha NÃO derruba o import: as seis carteiras moram em
+    hosts diferentes, e um host fora do ar não pode fazer as outras cinco
+    deixarem de entrar. O que falhou volta em `failed`, com o motivo, para a
+    tela dizer — silenciar isso seria a mesa achando que importou o dia inteiro.
+
+    O `ref_date` é a data do CAMINHO do bob-report; cada linha vai para o
+    arquivo-dia do PRÓPRIO Trade Date, que é a chave que a tela e o send usam. O
+    re-import upserta pela chave `_deal` (Trade ID) preservando status, maker,
+    checker e o Intrag ID já mapeado: importar de novo não desfaz esteira.
+    """
+    ref_dt = _R()._api_ref_date(ref_date)
+    urls = _dce_ndf_urls(ref_dt)
+    try:
+        from apps.pages import athena_api
+        session = athena_api.build_session()
+        espera = (athena_api.CONNECT_TIMEOUT, athena_api.REPORT_TIMEOUT)
+    except Exception:
+        import requests
+        session = requests.Session()
+        session.trust_env = False
+        espera = 180
+
+    rows, unknown, falhas, lidos = [], [], [], 0
+    for url in urls:
+        try:
+            resp = session.get(url, timeout=espera)
+            resp.raise_for_status()
+            try:
+                text = resp.content.decode('utf-8-sig')
+            except UnicodeDecodeError:
+                text = resp.content.decode('latin-1')
+            parciais, desconhecidos = domain._dce_ndf_parse_report(text)
+        except Exception as exc:                            # noqa: BLE001
+            _R().log.warning('[INTRAG DCE NDF] relatório falhou (%s): %s', url, exc)
+            falhas.append({'url': url, 'error': str(exc)})
+            continue
+        lidos += 1
+        rows.extend(parciais)
+        for h in desconhecidos:
+            if h not in unknown:
+                unknown.append(h)
+    if unknown:
+        _R().log.warning('[INTRAG DCE NDF] colunas do extrato fora do mapa (ignoradas): %s',
+                         ', '.join(unknown))
+    if not lidos:
+        raise RuntimeError('none of the {} registered bob-report links answered'.format(len(urls)))
+
+    groups, skipped = {}, 0
+    for row in rows:
+        deal_id = row.get('trade_id') or ''
+        if not deal_id:
+            skipped += 1
+            continue
+        td = _R()._parse_date_any(row.get('trade_date')) or ref_dt
+        entry = dict(row)
+        entry['_deal'] = deal_id
+        entry['_client'] = row.get('counterparty') or ''
+        entry['status'], entry['maker'], entry['checker'] = 'New', '', ''
+        groups.setdefault(td.strftime('%Y%m%d'), {'ref': td, 'rows': []})['rows'].append(entry)
+
+    imported = 0
+    for key, grp in groups.items():
+        ref = grp['ref']
+        dir_path = os.path.join(persistence.INTRAG_DCE_NDF_CACHE_DIR,
+                                ref.strftime('%Y'), ref.strftime('%m'))
+        os.makedirs(dir_path, exist_ok=True)
+        file_path = os.path.join(dir_path, key + '_intrag_dce_ndf.json')
+        with _R()._cache_lock:
+            entries = []
+            if _store.exists(file_path):
+                try:
+                    entries = _store.read(file_path)
+                    if not isinstance(entries, list):
+                        entries = []
+                except (json.JSONDecodeError, ValueError):
+                    entries = []
+            for entry in grp['rows']:
+                idx = next((i for i, e in enumerate(entries)
+                            if e.get('_deal') == entry['_deal']), None)
+                if idx is not None:
+                    for k in ('status', 'maker', 'checker', 'intrag_id'):
+                        if entries[idx].get(k):
+                            entry[k] = entries[idx][k]
+                    entries[idx] = entry
+                else:
+                    entries.append(entry)
+                imported += 1
+            _R()._atomic_write_json(file_path, entries)
+        _R().log.info('[INTRAG DCE NDF] Imported %d row(s) → %s', len(grp['rows']), file_path)
+
+    chaves = sorted(groups)
+    return {'success': True, 'imported': imported, 'files': len(groups),
+            'skipped': skipped, 'unknown_headers': unknown,
+            'reports': len(urls), 'reports_read': lidos, 'failed': falhas,
+            'ref_date': ref_dt.strftime('%Y-%m-%d'),
+            'date_min': (chaves[0][:4] + '-' + chaves[0][4:6] + '-' + chaves[0][6:]) if chaves else '',
+            'date_max': (chaves[-1][:4] + '-' + chaves[-1][4:6] + '-' + chaves[-1][6:]) if chaves else ''}
+
+
 def _intrag_run_mapping(deals, match_col, match_val, b3_col, finder):
     """Map each requested deal's B3 ID → Intrag ID via the export CSV, persist the
     intrag_id onto the matching JSON entry (loaded rows only). Returns (results, err)."""
@@ -689,6 +836,7 @@ _INTRAG_DELETE_FAMILIES = {
     'option':   queries._find_intrag_opt_entry,
     'swap':     queries._find_intrag_swap_entry,
     'dce-opt':  queries._find_intrag_dce_opt_entry,
+    'dce-ndf':  queries._find_intrag_dce_ndf_entry,
     'dce-swap': queries._find_intrag_dce_swap_entry,
 }
 
