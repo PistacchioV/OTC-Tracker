@@ -20168,3 +20168,49 @@ deixa de explicar o próprio valor amortizado.
 É o mesmo defeito do §439 (o fixing de moeda que o blur cortava na 4ª casa), em
 outro campo — e, como lá, o que denuncia é a conta não fechar com a mesa, nunca
 um erro.
+
+## §472 — Live Position › Swap Characteristics: o arquivo tinha 170 colunas e a tela mostrava até a 146 (2026-09-15)
+
+O layout da tela (`_SWAPCHAR_LABELS`) foi escrito até o **`Código
+Identificador`** — 146 colunas. A posição (DPOSICAO-SWAP) tem **170**, e as 24
+seguintes estavam sendo lidas e descartadas. Entre elas, as duas que a mesa
+pediu: **`Data de Fixing IPCA (Parte)`** e **`(Contraparte)`**, FE e FF.
+
+Os 146 primeiros rótulos eram **idênticos** ao `_B3_SWAP_HEADERS['swap_position']`
+— duas listas para a mesma coisa. Recopiar a cauda faria a terceira: a cauda
+passou a SAIR do próprio cabeçalho, que é a fonte do arquivo. Listas paralelas
+que envelhecem separadas desalinham uma leitura POSICIONAL sem erro nenhum, que
+é o pior jeito de errar aqui.
+
+Do `Código Identificador` para a direita a tela mostra o arquivo INTEIRO, na
+ordem dele — que é como a mesa lê a planilha de origem.
+
+**`Data de Fixing IPCA` se chama Data e NÃO é data.** O arquivo traz `1` ou
+`2`: a defasagem em meses do número-índice (M-1 / M-2, §449). Pelo nome ela
+cairia no ramo `date` do `_swapchar_coltype` → `_fcst_parse_date`, que não
+entende `2` e devolveria o texto cru — a coluna pareceria dado sujo em vez de
+responder o que responde. Ganhou tipo próprio (`ipca_fix`) que escreve **M-1** /
+**M-2**, a mesma linguagem do campo do Swap Calculator: a tela que ORIGINA o
+pré-preenchimento tem de falar como a tela que o recebe. Valor fora de `1`/`2`
+volta CRU — inventar um `M-0` esconderia arquivo estranho.
+
+**E o Swap Calculator passou a puxá-la.** `montar_ponta` preenchia o
+`ni_inicial` da perna IPCA e deixava o FIXING em branco: a mesa escolhia o mês à
+mão em toda operação de IPCA direto, e errar o mês troca o número-índice
+inteiro. Agora ele sai da posição (`POS['fixing_ipca'] = (160, 161)`); sem
+resposta, a lacuna é SINALIZADA em vez de assumir M-1 — um mês errado não parece
+errado, porque o número-índice do mês vizinho é tão plausível quanto o certo.
+Só vale para o IPCA DIRETO: no VCP quem responde é o `Nome Tipo/Classe` (§6), e
+`montar_ponta` só chega ali com o índice já classificado pelo cadastro.
+
+**A armadilha do caminho** (§3, e custou a metade do tempo): o de-para
+`{'1': ipca.M1, '2': ipca.M2}` nasceu como dicionário de MÓDULO em
+`features/tools/domain.py`. Esse arquivo é importado pela CAUDA do `routes.py`,
+e ali o `precificador.ipca` ainda está a meio caminho: o `ipca.M1` no corpo do
+módulo levantava `AttributeError`, o módulo saía do `sys.modules` e era
+REIMPORTADO — registrando as rotas duas vezes no mesmo blueprint. O sintoma
+aparece a quilômetros da causa, na subida do app:
+`AssertionError: View function mapping is overwriting an existing endpoint
+function: pages_blueprint.csp_report`. Virou FUNÇÃO, com a busca atrasada
+dentro dela. Nenhum guarda pega isso por leitura — quem pegou foi o
+`check_tools_ipca`, que sobe o app DEPOIS de importar a feature.

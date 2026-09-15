@@ -110,6 +110,26 @@ def texto_data(valores, campo):
     return para_data(v) if v else None
 
 
+def fixing_da_posicao(valor):
+    """`Data de Fixing IPCA` da posição → o fixing do motor, ou `''`.
+
+    A coluna se chama Data e traz `1` ou `2`: é a DEFASAGEM em meses do
+    número-índice final, contada da liquidação do fluxo (§449). Qualquer outra
+    coisa não vira fixing — o `.0` cai porque a planilha grava o inteiro como
+    float.
+
+    É FUNÇÃO e não um dicionário de módulo de propósito: ler `ipca.M1` no corpo
+    do módulo quebra este arquivo quando ele é importado pela CAUDA do
+    `routes.py` (o `ipca` ainda está a meio caminho ali), e um módulo de feature
+    que estoura no import sai do `sys.modules` e é reimportado — registrando as
+    rotas duas vezes no mesmo blueprint. O sintoma é um `overwriting an existing
+    endpoint` a quilômetros daqui. §3: a busca atrasada mora DENTRO da função."""
+    s = str(valor or '').strip()
+    if s.endswith('.0'):
+        s = s[:-2]
+    return {'1': ipca.M1, '2': ipca.M2}.get(s, '')
+
+
 def fixing_ipca(texto):
     """'' (números digitados), 'm1' ou 'm2' — qualquer outra coisa é erro
     de formulário, não um fixing presumido."""
@@ -280,7 +300,7 @@ def tenor_do_texto(texto, padrao=None):
 
 
 def montar_ponta(regra, pct, taxa, sinal, nome_classe, cotacao_inicial,
-                 deslocamento=None):
+                 deslocamento=None, fixing_ipca_posicao=None):
     """Os campos de UMA ponta do formulário a partir das células da posição.
 
     Devolve ``(campos, faltando)``: os campos prontos para o formulário e a
@@ -290,7 +310,7 @@ def montar_ponta(regra, pct, taxa, sinal, nome_classe, cotacao_inicial,
     campos = {'indexador': '', 'taxa': '', 'percentual': '', 'convencao': '', 'regime': '',
               'moeda': '', 'tenor': '', 'taxa_indice': '', 'ptax_inicial': '',
               'ptax_final': '', 'ptax_offset': '', 'ni_inicial': '', 'preco_inicial': '',
-              'preco_final': '', 'ativo': ''}
+              'preco_final': '', 'ativo': '', 'ipca_fixing': ''}
     faltando = []
     if not regra:
         return campos, ['indexador']
@@ -362,6 +382,23 @@ def montar_ponta(regra, pct, taxa, sinal, nome_classe, cotacao_inicial,
             campos['ni_inicial'] = '{:.6f}'.format(cotacao_inicial)
         else:
             faltando.append('ni_inicial')
+        # A DEFASAGEM do número-índice final (M-1 / M-2) sai da própria posição:
+        # `Data de Fixing IPCA (Parte/Contraparte)`, que se chama Data e traz
+        # `1` ou `2`. Sem ela a mesa escolhia o fixing à mão em toda operação de
+        # IPCA direto, e errar o mês troca o número-índice inteiro.
+        #
+        # Só vale para o IPCA DIRETO. No VCP a coluna não responde — lá quem diz
+        # o índice é o `Nome Tipo/Classe`, que é a segunda pergunta de toda
+        # curva (§6) —, e `montar_ponta` só chega aqui com o índice já
+        # classificado como IPCA pelo cadastro.
+        fix = fixing_da_posicao(fixing_ipca_posicao)
+        if fix:
+            campos['ipca_fixing'] = fix
+        else:
+            # Lacuna de verdade: a tela deixa em branco e SINALIZA, em vez de
+            # assumir M-1. Um mês errado não parece errado — o número-índice do
+            # mês vizinho é tão plausível quanto o certo.
+            faltando.append('ipca_fixing')
     elif idx == liquidacao.EQUITY:
         # O TICKER, não o rótulo do Bloomberg: é ele que o `quotes-equity`
         # conhece, e é dele que sai o fechamento do fixing.

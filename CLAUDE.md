@@ -899,6 +899,15 @@ São **46**: `currency-base`, `interbook-ndf`, `commodities-b3`,
 - `live-position-swap-characteristics.js` serve cinco páginas por `data-api`;
   contrato: ids `swapchar-page`/`swapchar-table` — renomear deixa a página em
   branco. Acréscimos são aditivos/opt-in.
+- **Do `Código Identificador` para a direita, o Swap Characteristics mostra o
+  arquivo INTEIRO** (§472): a tela parava na coluna 146 e a posição tem 170. A
+  cauda do `_SWAPCHAR_LABELS` SAI do `_B3_SWAP_HEADERS` — os 146 primeiros já
+  eram idênticos, e duas listas para a mesma leitura POSICIONAL desalinham sem
+  erro nenhum. **`Data de Fixing IPCA` se chama Data e não é data**: traz `1`/`2`
+  (a defasagem M-1/M-2, §449) e tem tipo próprio (`ipca_fix`) — pelo nome cairia
+  no `_fcst_parse_date`. É de lá que o Swap Calculator pré-preenche o fixing da
+  perna de IPCA **direto** (no VCP quem responde é o `Nome Tipo/Classe`); sem
+  resposta a lacuna é SINALIZADA, nunca M-1 presumido.
 - **Andam até dez dias úteis para trás** quando falta arquivo
   (`_opt_dposicao_path`/`_swap_day_path`), sinalizando a data LIDA. O Edit
   manda `source_date` com `exact=True` e roda sob `_cache_lock`.
