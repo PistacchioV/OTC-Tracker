@@ -20214,3 +20214,57 @@ aparece a quilômetros da causa, na subida do app:
 function: pages_blueprint.csp_report`. Virou FUNÇÃO, com a busca atrasada
 dentro dela. Nenhum guarda pega isso por leitura — quem pegou foi o
 `check_tools_ipca`, que sobe o app DEPOIS de importar a feature.
+
+## §473 — Intrag › DCE › NDF: a página, e o extrato que são CINCO relatórios (2026-09-15)
+
+A quinta página da Intrag existia como ESQUELETO desde 04/09 ("o layout do
+relatório ainda não foi especificado"). A mesa trouxe o layout — 30 colunas —
+e os endereços, e a página foi construída no desenho da irmã Option: import do
+bob-report → editar (Pending) → aprovar (Approved, maker ≠ checker) → mapear
+(Success) → enviar. Sem o dropzone, que é do DCE Swap (a planilha da Athena).
+
+**O que muda em relação às irmãs, e é a decisão de arquitetura desta página: o
+extrato não é UM relatório, são CINCO** — um por portfólio/carteira (LN FX
+Flow, Client FX, CETE, GC ONS BJPM, GC ONS Lawton), em três hosts diferentes —,
+e o Import passa por todos numa clicada. Daí `athena_api.registered_links`
+(plural), irmã do `registered_link` com a MESMA precedência (as linhas do
+PRODUTO ganham das genéricas, o curinga só entra quando o produto não tem
+endereço próprio) e URL repetida entrando uma vez só — o cadastro é da mesa e
+pode ter a mesma linha duas vezes (a lista que a mesa entregou tinha: seis
+endereços, cinco distintos).
+
+**Um relatório que falha NÃO derruba o import.** As carteiras moram em hosts
+diferentes, e um host fora do ar não pode fazer as outras quatro deixarem de
+entrar. O que falhou volta em `failed`, com o motivo, e o aviso do sino diz
+`lidos/total`. Se NENHUM responder, aí sim é erro — um import vazio que se
+anuncia como sucesso é a mesa achando que o dia entrou.
+
+**A armadilha do cadastro, que vale para todo mundo:** o `_api_link_rows` do
+`athena_api` lê **DB-first**, direto do dataset — não pelo `_mapping_rows`. Ele
+é o seam dos testes (que redirecionam o `API_LINKS_FILE` para um tmp) e não
+pode depender de contexto de app. A consequência é que o `upgrade` do cadastro
+**não alcança quem importa**: numa instância que já tem o `api-links.json`, uma
+linha ACRESCENTADA ao seed aparece na tela `/mapping` e não chega à rotina até
+alguém salvar por lá. Não é novo — vale para toda linha de seed desde sempre —,
+só ficou visível com cinco endereços de uma vez. Por isso cada rotina carrega o
+próprio fallback, e o desta traz as CINCO carteiras: havendo QUALQUER linha
+cadastrada para `Intrag DCE` × NDF, ela vence o fallback inteiro.
+
+**Detalhes que o molde da Option traria errados**, e que o guarda prende:
+
+* **o Trade Date é a 12ª coluna de dado, não a 4ª.** É por ele que as linhas se
+  agrupam num arquivo por data — índice herdado escreveria o dia errado no nome
+  do arquivo e no caminho, sem erro nenhum;
+* **o mapping casa por `NDF - TERMO`**, o critério da página Intrag › NDF, não
+  pelo `OPCAO` da Option: herdado, o mapping não casaria NADA e a tela diria
+  "nenhum Intrag ID" para um CSV que tem todos eles;
+* **os três campos de data do modal** são Start/Trade/Maturity (10, 11, 12);
+* **`Data de Fixing`… não** — aqui a armadilha é `TYPE (FORM)`, que o
+  normalizador de cabeçalho resolve para `TYPE FORM`;
+* **o menu de Export saiu COMPLETO.** A Option está na lista de quem tem meio
+  menu (sem PDF) — legado dela, não desta. O `check_export_padrao` recusa a
+  lista crescer, e foi ele que cobrou: tela nova entra no padrão, senão a lista
+  de exceções cresce a cada página criada.
+
+O arquivo enviado segue o padrão das irmãs: `Intrag-DCE-NDF-AAAAMMDD.txt`, `;`
+como separador, na mesma pasta e com a mesma regra de nome com sufixo `(n)`.

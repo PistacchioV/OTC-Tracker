@@ -31,6 +31,7 @@ _NDM_CARDS = [
     # Swap vem da planilha e nao tem o campo). Sem a chave, o card nao desenha
     # subitem nenhum, em vez de desenhar um LAW/ATA inventado.
     {'key': 'intrag-dce-option',  'label': 'Intrag DCE Option',   'url': '/intrag-dce-option',            'dirs': ('Intrag/DCE Option',)},
+    {'key': 'intrag-dce-ndf',     'label': 'Intrag DCE NDF',      'url': '/intrag-dce-ndf',               'dirs': ('Intrag/DCE NDF',)},
     {'key': 'intrag-dce-swap',    'label': 'Intrag DCE Swap',     'url': '/intrag-dce-swap',              'dirs': ('Intrag/DCE Swap',)},
 ]
 
@@ -84,6 +85,7 @@ _NDM_TAXONOMY = {
     'intrag-swap':        ('Swap', '—'),
     # O DCE, ao contrario, TEM sub-variante: e o outro fluxo do mesmo produto.
     'intrag-dce-option':  ('Option', 'DCE'),
+    'intrag-dce-ndf':     ('NDF', 'DCE'),
     'intrag-dce-swap':    ('Swap', 'DCE'),
 }
 

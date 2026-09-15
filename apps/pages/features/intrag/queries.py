@@ -141,6 +141,41 @@ def _find_intrag_dce_opt_entry(deal_id, trade_date):
     return None, None, None
 
 
+def _find_intrag_dce_ndf_entry(deal_id, trade_date):
+    """Locate an Intrag DCE NDF entry by deal id (= Trade ID do extrato),
+    with the optional trade date narrowing the daily file."""
+    if not deal_id:
+        return None, None, None
+    ref = _R()._parse_date_any(trade_date) if trade_date else None
+    candidate_files = []
+    if ref is not None:
+        fp = os.path.join(persistence.INTRAG_DCE_NDF_CACHE_DIR, ref.strftime('%Y'), ref.strftime('%m'),
+                          ref.strftime('%Y%m%d') + '_intrag_dce_ndf.json')
+        if _store.isfile(fp):
+            candidate_files.append(fp)
+    if not candidate_files and _store.isdir(persistence.INTRAG_DCE_NDF_CACHE_DIR):
+        for root, _, files in _store.walk(persistence.INTRAG_DCE_NDF_CACHE_DIR):
+            for fname in files:
+                if fname.endswith('_intrag_dce_ndf.json'):
+                    candidate_files.append(os.path.join(root, fname))
+    for fp in candidate_files:
+        try:
+            # DB-only (fase 3). O `day_records` remonta a lista pelo `_seq`, na
+            # ordem do arquivo — e é ela que o `idx` devolvido endereça —, e
+            # devolve objetos NOVOS a cada chamada (o memo guarda os `_raw`),
+            # então o chamador pode alterar a entrada e gravar.
+            from apps.pages import duck_read
+            entries = duck_read.day_records(fp)
+            if not isinstance(entries, list):
+                continue
+        except (json.JSONDecodeError, ValueError, OSError):
+            continue
+        idx = next((i for i, e in enumerate(entries) if e.get('_deal') == deal_id), None)
+        if idx is not None:
+            return fp, entries, idx
+    return None, None, None
+
+
 def _intrag_find_export_csv():
     """Most recent Boletas*.csv in the Return folder, or None."""
     try:

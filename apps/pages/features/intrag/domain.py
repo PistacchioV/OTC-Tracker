@@ -121,7 +121,7 @@ def _dce_norm_header(name):
     return re.sub(r'\s+', ' ', s).strip()
 
 
-def _dce_parse_report(text):
+def _dce_parse_report(text, mapa=None, campos=None):
     """Linhas do extrato DCE de FX Option → (rows, unknown_headers).
 
     A primeira linha é o CABEÇALHO e é ela que dá o significado de cada
@@ -135,14 +135,15 @@ def _dce_parse_report(text):
         return [], []
     header_line = lines[0]
     sep = ';' if header_line.count(';') >= header_line.count('|') else '|'
+    mapa = _DCE_OPT_HEADER_MAP if mapa is None else mapa
+    campos = _DCE_OPT_FIELDS if campos is None else campos
     headers = [_dce_norm_header(h) for h in header_line.split(sep)]
-    unknown = [h for h in headers if h and h not in _DCE_OPT_HEADER_MAP]
-    idx_to_key = {i: _DCE_OPT_HEADER_MAP[h]
-                  for i, h in enumerate(headers) if h in _DCE_OPT_HEADER_MAP}
+    unknown = [h for h in headers if h and h not in mapa]
+    idx_to_key = {i: mapa[h] for i, h in enumerate(headers) if h in mapa}
     rows = []
     for ln in lines[1:]:
         cells = ln.split(sep)
-        row = {k: '' for k in _DCE_OPT_FIELDS}
+        row = {k: '' for k in campos}
         for i, cell in enumerate(cells):
             k = idx_to_key.get(i)
             if k and not row[k]:
@@ -150,6 +151,65 @@ def _dce_parse_report(text):
         if any(row.values()):
             rows.append(row)
     return rows, unknown
+
+
+# ── DCE NDF — o extrato de termo, em SEIS relatórios ────────────────────────
+# O bob-report de NDF não é um: são seis (um por portfólio/carteira — LAWTON
+# OFF, CLIENT FX, CETE, GC ONS BJPM, GC ONS LAWTON…), em hosts diferentes. Os
+# seis têm o MESMO cabeçalho e o import passa por todos numa clicada
+# (`registered_links`, no `athena_api`): é por isso que o cadastro `api-links`
+# aceita várias linhas para `Intrag DCE` × `NDF` em vez de uma.
+#
+# Como no Option, o casamento é por NOME de coluna normalizado e nunca por
+# posição — coluna nova no extrato não desloca nada, só sai em `unknown`.
+_DCE_NDF_FIELDS = (
+    'ndf_contract_type', 'trade_id', 'portfolio_code', 'participant_position',
+    'client_taxid', 'counterparty', 'counterparty_taxid',
+    'counterparty_collateral_basket', 'party_collateral_basket', 'notional',
+    'start_date', 'trade_date', 'maturity_date', 'reference_currency',
+    'reference_exchange', 'commodity', 'type_form', 'quantity', 'trading_unit',
+    'transaction_price', 'quoted_currency', 'maturity_month_year',
+    'quote_for_adjustment', 'forward_rate', 'asian_ndf_average_rate',
+    'information_source', 'fixing', 'adjustment_type', 'remarks', 'limits',
+)
+
+_DCE_NDF_HEADER_MAP = {
+    'NDF CONTRACT TYPE': 'ndf_contract_type',
+    'TRADE ID': 'trade_id',
+    'PORTFOLIO CODE': 'portfolio_code',
+    'PARTICIPANT POSITION': 'participant_position',
+    'CLIENT CPF CNPJ': 'client_taxid',
+    'COUNTERPARTY': 'counterparty',
+    'COUNTERPARTY CPF CNPJ': 'counterparty_taxid',
+    'COUNTERPARTY COLLATERAL BASKET': 'counterparty_collateral_basket',
+    'PARTY COLLATERAL BASKET': 'party_collateral_basket',
+    'NOTIONAL': 'notional',
+    'START DATE': 'start_date',
+    'TRADE DATE': 'trade_date',
+    'MATURITY DATE': 'maturity_date',
+    'REFERENCE CURRENCY': 'reference_currency',
+    'REFERENCE EXCHANGE': 'reference_exchange',
+    'COMMODITY': 'commodity',
+    'TYPE FORM': 'type_form',
+    'QUANTITY': 'quantity',
+    'TRADING UNIT': 'trading_unit',
+    'TRANSACTION PRICE': 'transaction_price',
+    'QUOTED CURRENCY': 'quoted_currency',
+    'MATURITY MONTH AND YEAR': 'maturity_month_year',
+    'QUOTE FOR ADJUSTMENT': 'quote_for_adjustment',
+    'FORWARD RATE': 'forward_rate',
+    'ASIAN NDF AVERAGE RATE': 'asian_ndf_average_rate',
+    'INFORMATION SOURCE': 'information_source',
+    'FIXING': 'fixing',
+    'ADJUSTMENT TYPE': 'adjustment_type',
+    'REMARKS': 'remarks',
+    'LIMITS': 'limits',
+}
+
+
+def _dce_ndf_parse_report(text):
+    """O extrato DCE de NDF → (rows, unknown_headers). Ver `_dce_parse_report`."""
+    return _dce_parse_report(text, _DCE_NDF_HEADER_MAP, _DCE_NDF_FIELDS)
 
 
 # ── DCE Swap — as duas tabelas do extrato de swap (características e fluxos) ─
