@@ -830,7 +830,14 @@ São **46**: `currency-base`, `interbook-ndf`, `commodities-b3`,
   recalcular na ABERTURA, e nenhum desses leitores calcula). O cache sai da
   PRÓPRIA fórmula, por um avaliador no módulo (`_cache_das_formulas`,
   injetado no zip pelo `_selar`) — escrito à mão seria a planilha afirmando um
-  número que a fórmula não dá. Mexer na conta aqui sem mexer no
+  número que a fórmula não dá. **E o `<v>` vazio não tem grafia única**: o
+  openpyxl troca de serializador conforme o ambiente — com `lxml` (que NÃO está
+  no requirements) o escritor incremental fecha a tag, `<v></v>`; sem ele o
+  ElementTree serializa vazio como `<v />`. Casar com uma só devolve, na
+  máquina que tem a outra, o arquivo EXATAMENTE como saía antes, sem um valor e
+  sem erro nenhum — foi a correção passando na dev e não na instância. O teste
+  que só gera e lê não vê isso (ele roda no ambiente de quem o chama): o guarda
+  escreve as DUAS grafias à mão (§9b). Mexer na conta aqui sem mexer no
   motor entrega uma memória que não explica o número que a mesa mandou:
   `check_tools_memoria.py` recalcula a planilha e cobra o motor. **Memória de
   liquidação não tem valor FUTURO**: cada ponta fecha na linha do que ela

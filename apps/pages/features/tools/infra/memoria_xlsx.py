@@ -588,17 +588,28 @@ def _desescapar(texto):
     return texto
 
 
-def _injetar_cache(xml, valores):
-    """Preenche o `<v></v>` vazio que o openpyxl deixa em cada fórmula."""
-    padrao = re.compile(r'(<c r="([A-Z]+[0-9]+)"[^>]*>(?:<f[^>]*>.*?</f>|<f[^>]*/>))<v></v>')
+# O `<v>` vazio que o openpyxl deixa em cada fórmula NÃO tem grafia única: a
+# biblioteca troca de serializador conforme o que está instalado. Com `lxml` ela
+# escreve pelo escritor incremental, que abre a tag antes de saber se vem
+# conteúdo e fecha logo depois (`<v></v>`); sem `lxml` cai no ElementTree, que
+# serializa elemento vazio como `<v />`. Casar só com uma das duas formas faz o
+# arquivo sair EXATAMENTE como saía antes na máquina que tem o outro
+# serializador — sem um valor, e sem erro nenhum para denunciar. `lxml` não está
+# no requirements: a instância do time é justamente a que não o tem.
+_CELULA_FORMULA = re.compile(
+    r'(<c r="([A-Z]{1,3}[0-9]{1,7})"[^>]*>(?:<f[^>]*>.*?</f>|<f[^>]*/>))'
+    r'(?:<v\s*/>|<v[^>]*>[^<]*</v>)?')
 
+
+def _injetar_cache(xml, valores):
+    """Grava em cada fórmula o valor apurado, seja qual for o serializador."""
     def troca(m):
         v = valores.get(m.group(2))
         if v is None:
             return m.group(0)
         return '{}<v>{}</v>'.format(m.group(1), repr(float(v)) if v % 1 else '%d' % v)
 
-    return padrao.sub(troca, xml)
+    return _CELULA_FORMULA.sub(troca, xml)
 
 
 def _selar(conteudo, cache=None):

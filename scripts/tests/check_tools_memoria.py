@@ -573,6 +573,32 @@ for indice, bytes_ in (('CDI', conteudo), ('SOFR', conteudo_us),
     check('%s: nenhuma formula sem valor gravado (de %d)' % (indice, total), vazias[:5], [])
     check('   e o valor gravado e o da formula', divergentes[:5], [])
 
+# ── 9b. e chega em QUALQUER maquina, nao so nesta ──────────────────────────
+# A secao acima passa ou falha conforme o que esta instalado no ambiente que a
+# roda, e nao percebe: o openpyxl troca de serializador de XML conforme tenha
+# ou nao o `lxml`. Com ele, o escritor incremental abre e fecha a tag do cache
+# (`<v></v>`); sem ele, o ElementTree serializa o elemento vazio como `<v />`.
+# Um injetor que case so com uma das grafias devolve, na maquina que tem a
+# outra, o arquivo EXATAMENTE como saia antes — sem um valor e sem erro nenhum.
+# `lxml` nao esta no requirements, entao a maquina do desenvolvedor e a da
+# instancia do time caem em lados diferentes disso. Aqui as duas grafias sao
+# escritas a mao e cobradas, para o guarda nao depender do que o ambiente tem.
+print('\n== 9b. o valor entra nas DUAS grafias do cache vazio ==')
+MOLDE = ('<row r="5"><c r="A5" s="4" t="inlineStr"><is><t>rotulo</t></is></c>'
+         '<c r="B5" s="6"><f>A1*2</f>%s</c></row>')
+for apelido, vazio in (('lxml (<v></v>)', '<v></v>'),
+                       ('ElementTree (<v />)', '<v />'),
+                       ('ElementTree sem espaco (<v/>)', '<v/>'),
+                       ('sem cache nenhum', '')):
+    saida = mx._injetar_cache(MOLDE % vazio, {'B5': 42.5})
+    check('%s: a formula sai com o valor' % apelido,
+          '<f>A1*2</f><v>42.5</v>' in saida, True)
+    check('   e o rotulo ao lado fica intacto', '<t>rotulo</t>' in saida, True)
+check('inteiro sai sem casa decimal',
+      '<v>7</v>' in mx._injetar_cache(MOLDE % '<v />', {'B5': 7.0}), True)
+check('celula que o cache nao conhece fica como estava',
+      mx._injetar_cache(MOLDE % '<v />', {}), MOLDE % '<v />')
+
 cdi.serie = _serie_real
 print('\n' + ('TUDO OK' if not falhas else 'FALHAS: %d' % len(falhas)))
 for f in falhas:
