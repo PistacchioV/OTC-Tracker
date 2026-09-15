@@ -20147,3 +20147,24 @@ a planilha recalculada deixou de bater com ele. Ela ganhou as duas linhas
 `(juros_a + devolvido_a) − (juros_p + devolvido_p)` — **mas só quando as duas
 devoluções DIFEREM**: num fluxo sem amortização, ou com as duas pontas em
 reais, seriam duas linhas dizendo zero.
+
+**A taxa de amortização parava na 4ª casa** (2026-09-15, mesma rodada). Sobrava
+R$ 113 no valor amortizado do mesmo swap — a tela dizia R$ 2.049.105,07 e a
+planilha R$ 2.049.218,19 — e a causa eram DOIS arredondamentos em série, os
+dois no caminho do dado e nenhum deles de exibição:
+
+* `amortizacao_do_evento` gravava `'{:.4f}'.format(taxa_amort)`: o percentual do
+  DFLUXO chegava ao campo já arredondado;
+* e mesmo mandando 5, o blur do `data-format="pct"` (4 casas, `tools.js`)
+  reescreveria o campo com 4 — e é o campo que o cálculo lê.
+
+Os dois lados tinham de andar juntos: `'{:.5f}'` no servidor e um `pct5` de 5
+casas no JS, com o sufixo `%` passando a valer para a FAMÍLIA `pct*` e não para
+o literal. `0,7246%` × R$ 282.791.204,68 = R$ 2.049.105,07; `0,72464%` =
+R$ 2.049.218,19, ao centavo a planilha. A memória mostra a mesma precisão do
+campo (`PCT_AMORT_FMT`): um documento que arredonda o número que a conta usou
+deixa de explicar o próprio valor amortizado.
+
+É o mesmo defeito do §439 (o fixing de moeda que o blur cortava na 4ª casa), em
+outro campo — e, como lá, o que denuncia é a conta não fechar com a mesa, nunca
+um erro.

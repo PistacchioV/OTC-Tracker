@@ -823,7 +823,12 @@ São **46**: `currency-base`, `interbook-ndf`, `commodities-b3`,
   sempre. Num DI × IPCA de VBR 254 mi amortizando 0,72% eram R$ 391,8 mil
   separando a tela da planilha; no VENCIMENTO nada muda, porque ali o valor de
   cada ponta já carrega o principal inteiro. Mês não publicado NÃO vem na série
-  e é erro com o mês, nunca o anterior. No pré-preenchimento, evento do DFLUXO sem Taxa Amortização é
+  e é erro com o mês, nunca o anterior. A **taxa de amortização vai com CINCO
+  casas** (§471, `'{:.5f}'` no `amortizacao_do_evento` + `pct5` no `tools.js`):
+  ela multiplica o notional, e num original de R$ 282,8 mi a 5ª casa vale
+  R$ 113 no amortizado — os dois lados andam juntos, porque o blur do `pct` de
+  4 casas reescrevia o campo e é o campo que o cálculo lê (o defeito do §439,
+  em outro campo). No pré-preenchimento, evento do DFLUXO sem Taxa Amortização é
   **0%**, não lacuna — e a **taxa contratada que a posição não traz também
   nasce 0%**, fora da lista do que "não deu para puxar" (§458, fora do CDI
   também): o motor já lia branco como 0,0, e sinalizar em vermelho pedia que

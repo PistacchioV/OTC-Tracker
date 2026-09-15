@@ -100,7 +100,13 @@
   // `fx` é o fixing de moeda: a PTAX sai com 4 casas, mas a mesa digita a
   // cotação com até 8 — e o blur não pode arredondar o que o cálculo vai
   // usar. Mínimo 4, máximo 8, sem zeros inventados (§439).
-  var CASAS = { money: 2, pct: 4, rate: 8, price: 4, fx: { min: 4, max: 8 }, index: 6, int: 0 };
+  // `pct5` é a taxa de AMORTIZAÇÃO: ela multiplica um notional de centenas de
+  // milhões e a 5ª casa vale dinheiro (num VBR de R$ 282,8 mi, `0,7246%` contra
+  // `0,72464%` são R$ 113). Com o `pct` de 4 casas o blur arredondava de volta
+  // o que o servidor mandava com 5 — o campo não é só exibição, é o que o
+  // cálculo lê.
+  var CASAS = { money: 2, pct: 4, pct5: 5, rate: 8, price: 4,
+                fx: { min: 4, max: 8 }, index: 6, int: 0 };
   function ler(texto) {
     var s = String(texto || '').replace(/%/g, '').replace(/\s/g, '').trim();
     if (!s) return null;
@@ -127,7 +133,9 @@
     if (casas === undefined) return;
     var v = ler(el.value);
     if (v === null) return;                   // vazio ou ilegível: o servidor explica
-    el.value = escrever(v, casas) + (el.getAttribute('data-format') === 'pct' ? ' %' : '');
+    // O sufixo é de toda a família `pct*`, não do literal 'pct'.
+    var pct = String(el.getAttribute('data-format') || '').indexOf('pct') === 0;
+    el.value = escrever(v, casas) + (pct ? ' %' : '');
   }
   page.querySelectorAll('[data-format]').forEach(function (el) {
     el.addEventListener('blur', function () { formatar(el); });
