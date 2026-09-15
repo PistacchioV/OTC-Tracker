@@ -20101,3 +20101,49 @@ só a TELA (`jurosCell`) — o valor calculado segue `None` no servidor, e é el
 que decide se há `diff` e se a linha tem fator. Trocar o `None` no servidor
 faria a perna sem fluxo voltar a gerar uma diff fantasma, que é o defeito da
 segunda rodada.
+
+## §471 — Swap Calculator: o fluxo que AMORTIZA não liquidava o principal que sai (2026-09-15)
+
+A mesa trouxe o swap da COMGAS (`22K00986065`, fluxo de 17/08 a 15/09/2026, DI
+99,30% contra IPCA + 5,7448%, VBR R$ 254.102.150,34 amortizando 0,72%): a
+planilha fechava em **R$ 883.058,17** e a tela mostrava **R$ 1.274.901,89**.
+
+Os JUROS das duas pontas batiam ao centavo — R$ 2.619.772,00 e
+R$ 1.344.870,12. A diferença inteira, **R$ 391.843,70**, era a amortização.
+
+**A causa.** O motor calcula UMA amortização (`amortizar`), sem correção, e ela
+nunca entrava na apuração: no fluxo intermediário o bruto era
+`juros_ativa − juros_passiva`, e ponto. Isso é CERTO num swap em que as duas
+pernas são nominais em reais — as duas devolvem o mesmo número e ele se cancela
+na subtração. Foi por isso que ficou de fora desde sempre sem ninguém reparar.
+
+Na perna IPCA o principal é CORRIGIDO. O que sai dela hoje é
+`amortizado × NI_fim/NI_início`; da perna DI sai o `amortizado` seco. O fator
+implícito da planilha (2.441.061,89 ÷ 2.049.218,19 = **1,191216**) é exatamente
+7.633,23 ÷ 6.407,93 — o número-índice do contrato contra o de 08/2026.
+
+`PontaLiquidada.amortizacao_devolvida(amortizado)` = `amortizado × fator_cambial
+× fator_correcao`, e o bruto do fluxo intermediário passou a ser
+`(juros + devolvido)` de cada ponta. Com isso o motor devolve R$ 883.058,17.
+
+**Isto NÃO contradiz o §449** ("só o cupom é juros; a correção fica no
+principal") — refina. A correção fica no principal **que CARREGA** para o fluxo
+seguinte. A parte do principal que AMORTIZA sai do swap hoje, e sai corrigida:
+é caixa que liquida agora, não saldo que segue.
+
+A perna em MOEDA entra pela mesma porta (`fator_cambial`), por construção — o
+`fator_correcao` foi modelado "como o `fator_cambial`" desde o §449, e
+separá-los aqui seria dizer que a mesma estrutura tem duas regras. Não há
+planilha da mesa para o caso cambial com amortização; se aparecer uma que
+discorde, é aqui que se olha.
+
+No VENCIMENTO nada muda: ali a base é `ativa.valor − passiva.valor`, e o valor
+de cada ponta já carrega o principal inteiro.
+
+A memória de cálculo acompanhou (§455) e o guarda foi quem cobrou: três seções
+do `check_tools_memoria` caíram no mesmo instante em que o motor mudou, porque
+a planilha recalculada deixou de bater com ele. Ela ganhou as duas linhas
+`Amortização devolvida pela ponta ...` e o Ajuste bruto virou
+`(juros_a + devolvido_a) − (juros_p + devolvido_p)` — **mas só quando as duas
+devoluções DIFEREM**: num fluxo sem amortização, ou com as duas pontas em
+reais, seriam duas linhas dizendo zero.

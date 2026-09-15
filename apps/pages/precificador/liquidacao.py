@@ -297,6 +297,26 @@ class PontaLiquidada:
         return (self.nocional * self.fator_cambial * self.fator_correcao
                 * (self.fator_do_indice - 1.0))
 
+    def amortizacao_devolvida(self, amortizado):
+        """O principal que SAI do swap nesta perna hoje, em reais.
+
+        A amortização é UMA só — o percentual do fluxo sobre o notional —, mas
+        o que cada perna entrega por ela não é o mesmo número: a perna IPCA
+        devolve o principal CORRIGIDO e a perna em moeda estrangeira devolve o
+        principal convertido pelo fixing do fim. Num swap em que as duas pernas
+        são nominais em reais os dois valores são iguais e se cancelam na
+        subtração — foi por isso que a amortização ficou fora da apuração até
+        aqui sem ninguém reparar.
+
+        No fluxo que amortiza, a parte do principal que sai do swap HOJE é caixa
+        que liquida, e é a diferença entre o que cada perna entrega que fecha
+        com a mesa: num swap DI × IPCA de VBR 254 mi amortizando 0,72%, a perna
+        IPCA devolvia R$ 2.441.061,89 contra os R$ 2.049.218,19 da perna DI, e
+        os R$ 391.843,70 de diferença eram exatamente o que separava a tela da
+        planilha. A parte do principal que NÃO amortiza continua fora: ela segue
+        corrigida para o fluxo seguinte, que é a regra do §449."""
+        return (amortizado or 0.0) * self.fator_cambial * self.fator_correcao
+
     @property
     def efeito_cambial(self):
         """O que a moeda fez com o principal —
@@ -574,6 +594,10 @@ class ResultadoLiquidacao:
     ir: float
     ajuste_liquido: float
     banco_paga: bool
+    # O principal que cada perna devolve no fluxo que amortiza — iguais (e sem
+    # efeito) quando as duas são nominais em reais. Ver `amortizacao_devolvida`.
+    amortizacao_da_ativa: float = 0.0
+    amortizacao_da_passiva: float = 0.0
 
     @property
     def diferenca_de_fator(self):
@@ -629,7 +653,15 @@ def liquidar(data_operacao, inicio, fim, nocional, ponta_ativa, ponta_passiva,
     dv = para_data(vencimento) if vencimento else None
     base = base_de_ajuste(d1, dv, base_ajuste)
     juros_ativa, juros_passiva = ativa.juros, passiva.juros
-    bruto = (juros_ativa - juros_passiva if base == BASE_JUROS
+    # No fluxo intermediário liquida o diferencial de JUROS **mais** o
+    # diferencial do principal que amortiza hoje: ele sai do swap agora, e cada
+    # perna o entrega pelo seu próprio valor (corrigido no IPCA, convertido na
+    # perna em moeda). Em duas pernas nominais em reais os dois são iguais e a
+    # parcela some sozinha. No vencimento não entra: ali o valor de cada ponta
+    # já carrega o principal inteiro.
+    am_ativa = ativa.amortizacao_devolvida(amortizado)
+    am_passiva = passiva.amortizacao_devolvida(amortizado)
+    bruto = ((juros_ativa + am_ativa) - (juros_passiva + am_passiva) if base == BASE_JUROS
              else ativa.valor - passiva.valor)
     dias_operacao = (d1 - dop).days
     # a retenção é da FONTE PAGADORA: o banco só retém quando é ele quem paga
@@ -642,6 +674,7 @@ def liquidar(data_operacao, inicio, fim, nocional, ponta_ativa, ponta_passiva,
         juros_da_ativa=juros_ativa, juros_da_passiva=juros_passiva, nocional=float(nocional),
         nocional_original=original, percentual_amortizacao=percentual_amortizacao,
         base_amortizacao=base_amortizacao, valor_amortizado=amortizado,
+        amortizacao_da_ativa=am_ativa, amortizacao_da_passiva=am_passiva,
         saldo_seguinte=nocional - amortizado, ativa=ativa, passiva=passiva,
         ajuste_bruto=bruto, quem_recebe=ATIVA if bruto > 0 else PASSIVA,
         dias_corridos=(d1 - d0).days, dias_uteis=cal.dias_uteis(d0, d1),

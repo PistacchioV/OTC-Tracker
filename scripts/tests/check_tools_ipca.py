@@ -43,6 +43,14 @@ def check(rotulo, obtido, esperado):
         falhas.append(rotulo)
 
 
+def perto(rotulo, obtido, esperado, tol=1e-6):
+    ok = obtido is not None and abs(obtido - esperado) <= tol
+    print(('  ok  ' if ok else ' FAIL ') + rotulo +
+          ('' if ok else '\n        got=%r\n        exp=%r' % (obtido, esperado)))
+    if not ok:
+        falhas.append(rotulo)
+
+
 from apps.pages.precificador import ipca, liquidacao, rede            # noqa: E402
 from apps.pages.features.tools import domain, queries                 # noqa: E402
 
@@ -242,6 +250,39 @@ check('com taxa, a taxa', x['p_amort'], '33.3300')
 x = {'tipo_amort': 'Na Data de Vencimento', 'taxa_amort': 33.33}
 queries._amortizacao_do_evento(x, '')
 check('no vencimento o fluxo não amortiza mesmo com taxa', x['p_amort'], '0')
+
+# ── o fluxo que AMORTIZA: o principal que sai hoje tambem liquida ──────────
+# Ate aqui a amortizacao ficava inteiramente fora da apuracao, e num swap de
+# duas pernas nominais em reais isso e certo: as duas devolvem o MESMO numero e
+# ele se cancela na subtracao. Na perna IPCA o principal e CORRIGIDO, entao ela
+# devolve `amortizado x NI_fim/NI_inicio` contra o `amortizado` seco da perna
+# DI, e a diferenca e caixa de verdade.
+#
+# Os numeros sao os do swap da COMGAS (22K00986065, fluxo de 17/08 a 15/09/2026,
+# DI 99,30% contra IPCA + 5,7448%): a planilha da mesa fechava em R$ 883.058,17
+# e a tela mostrava R$ 1.274.901,89 -- os R$ 391.843,70 de diferenca eram
+# exatamente a diferenca entre as duas amortizacoes.
+print('\n== o fluxo que amortiza ==')
+_AM, _NI0, _NI1 = 2049218.19, 6407.93, 7633.23
+_corr = _NI1 / _NI0
+_ativa = liquidacao.PontaLiquidada(
+    descricao=('', {}), fator=1.0, valor=0.0, indexador=liquidacao.CDI, nocional=1.0)
+_passiva = liquidacao.PontaLiquidada(
+    descricao=('', {}), fator=1.0, valor=0.0, indexador=liquidacao.IPCA, nocional=1.0,
+    fator_correcao=_corr)
+perto('a ponta nominal devolve o principal seco',
+      _ativa.amortizacao_devolvida(_AM), _AM, 1e-6)
+perto('a ponta IPCA devolve o principal CORRIGIDO',
+      _passiva.amortizacao_devolvida(_AM), _AM * _corr, 1e-6)
+perto('   e a diferenca entre as duas e o que liquida',
+      _passiva.amortizacao_devolvida(_AM) - _ativa.amortizacao_devolvida(_AM),
+      391843.70, 0.05)
+check('sem amortizacao no fluxo a parcela some sozinha',
+      (_ativa.amortizacao_devolvida(0.0), _passiva.amortizacao_devolvida(0.0)), (0.0, 0.0))
+_nominal = liquidacao.PontaLiquidada(
+    descricao=('', {}), fator=1.0, valor=0.0, indexador=liquidacao.PRE, nocional=1.0)
+check('e em duas pontas nominais os dois valores sao iguais: nada muda',
+      _nominal.amortizacao_devolvida(_AM) == _ativa.amortizacao_devolvida(_AM), True)
 
 rede.obter_json = _obter_original
 print()

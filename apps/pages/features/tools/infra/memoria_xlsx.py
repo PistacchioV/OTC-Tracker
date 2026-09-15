@@ -434,7 +434,7 @@ def _bloco_ponta(f, p, entrada, vbr, diaria, titulo, so_juros):
             nota='notional remanescente × fator acumulado')
     if p.contagem_vale_para_spread:
         f.nota('Produto diário do CDI em base 252; a contagem escolhida capitaliza o spread.')
-    return {'fator': fator, 'liquidado': liquidado}
+    return {'fator': fator, 'liquidado': liquidado, 'fx': fx, 'correcao': corr}
 
 
 # ── o documento ─────────────────────────────────────────────────────────────
@@ -741,8 +741,26 @@ def construir(r, pontas, cetip_id='', contraparte='', calendario='ANBIMA',
     rotulo = 'Juros da ponta {}' if r.so_juros else 'Ponta {} na liquidação'
     la = f.campo(rotulo.format('ativa'), '=' + a['liquidado'], MOEDA_FMT)
     lp = f.campo(rotulo.format('passiva'), '=' + p_['liquidado'], MOEDA_FMT)
-    bruto = f.campo('Ajuste bruto', '={}-{}'.format(la, lp), MOEDA_FMT,
-                    nota='ponta ativa menos ponta passiva')
+    # No fluxo que AMORTIZA, o principal que sai hoje também liquida — e cada
+    # ponta o entrega pelo SEU valor: corrigido na perna IPCA, convertido na
+    # perna em moeda. Em duas pontas nominais em reais os dois são iguais e a
+    # parcela se cancela, e é por isso que ela pôde ficar de fora até aqui. A
+    # planilha só mostra as linhas quando elas MUDAM alguma coisa: num fluxo sem
+    # amortização, ou com as duas pontas em reais, elas seriam duas linhas
+    # dizendo zero (ver `amortizacao_devolvida` no motor).
+    mostra_am = r.so_juros and abs(r.amortizacao_da_ativa - r.amortizacao_da_passiva) > 0.005
+    if mostra_am:
+        aa = f.campo('Amortização devolvida pela ponta ativa',
+                     '={}*{}*{}'.format(amortizado, a['fx'], a['correcao']), MOEDA_FMT,
+                     nota='principal que sai do swap nesta ponta')
+        ap = f.campo('Amortização devolvida pela ponta passiva',
+                     '={}*{}*{}'.format(amortizado, p_['fx'], p_['correcao']), MOEDA_FMT,
+                     nota='principal que sai do swap nesta ponta')
+        bruto = f.campo('Ajuste bruto', '=({}+{})-({}+{})'.format(la, aa, lp, ap), MOEDA_FMT,
+                        nota='ponta ativa menos ponta passiva, juros e principal devolvido')
+    else:
+        bruto = f.campo('Ajuste bruto', '={}-{}'.format(la, lp), MOEDA_FMT,
+                        nota='ponta ativa menos ponta passiva')
     prazo = f.campo('Prazo desde a data da operação (dias)',
                     '={}-{}'.format(fim, dop), INT_FMT)
     retem = f.campo('Retém IR na fonte', bool(reter_ir),
