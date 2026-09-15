@@ -187,6 +187,62 @@ except rede.ErroRede as exc:
 check('e o memo é limpo', _q._route_ok['name'], None)
 
 # ─────────────────────────────────────────────────────────────────────────────
+print('== 5b. a pagina de SIGN-ON e uma saida que FALHOU ==')
+# O SSO corporativo responde **200, com conteudo** — e o conteudo e a pagina de
+# login. Sem esta pergunta o laco dava a saida por boa, MEMORIZAVA a rota e
+# devolvia o HTML; o erro so aparecia depois, no json.loads, e as saidas
+# seguintes (WinHTTP com auto-logon, WinInet) nunca eram tentadas porque a
+# primeira "deu certo". Pior: a rota ficava memorizada e toda chamada seguinte
+# ia nela primeiro. E o que fazia a ferramenta parar de alcancar o BCB DEPOIS
+# DE UM RESTART — o memo nasce vazio, a corrida e refeita, e basta o proxy que
+# serve o sign-on ganhar dela uma vez para ficar.
+_LOGIN = b'<html><body>Please sign on</body></html>'
+_DADO = b'[{"data":"17/08/2026","valor":"13.90"}]'
+_tent_orig, _umacom_orig = rede._tentativas, rede._uma_com
+
+
+def _cenario(respostas):
+    _q._route_ok['name'] = None
+    pedidas = []
+    rede._tentativas = lambda: [(n, ('com', n)) for n in respostas]
+
+    def _uc(alvo, nome, url, cab, timeout):
+        pedidas.append(nome)
+        return respostas[nome]
+
+    rede._uma_com = _uc
+    try:
+        return rede.obter_json('https://api.bcb.gov.br/x'), pedidas, None
+    except rede.ErroRede as exc:
+        return None, pedidas, str(exc)
+
+
+try:
+    dado, pedidas, erro = _cenario({'proxy-sso': _LOGIN, 'winhttp': _DADO})
+    check('a saida do sign-on e DESCARTADA e a fila continua', pedidas,
+          ['proxy-sso', 'winhttp'])
+    check('   e o dado da saida seguinte volta', dado, [{'data': '17/08/2026', 'valor': '13.90'}])
+    check('   quem fica memorizada e a BOA, nunca a do sign-on',
+          _q._route_ok['name'], 'winhttp')
+    dado, pedidas, erro = _cenario({'proxy-sso': _LOGIN, 'winhttp': _LOGIN})
+    check('todas servindo o sign-on e ErroRede, nao HTML devolvido como dado',
+          (dado, 'sign-on page' in (erro or '')), (None, True))
+    check('   a mensagem nomeia CADA saida que respondeu o login',
+          all(n in (erro or '') for n in ('proxy-sso', 'winhttp')), True)
+    check('   e nada fica memorizado: a proxima chamada recomeca limpa',
+          _q._route_ok['name'], None)
+    # `obter` cru (sem exigir_json) NAO julga o corpo: quem baixa planilha ou
+    # PDF recebe bytes, e um `<html` ali pode ser o proprio dado.
+    _q._route_ok['name'] = None
+    rede._tentativas = lambda: [('so-html', ('com', 'so-html'))]
+    rede._uma_com = lambda *a, **k: _LOGIN
+    check('o `obter` cru segue devolvendo os bytes, sem julgar o corpo',
+          rede.obter('https://x'), _LOGIN)
+finally:
+    rede._tentativas, rede._uma_com = _tent_orig, _umacom_orig
+    _q._route_ok['name'] = None
+
+# ─────────────────────────────────────────────────────────────────────────────
 print('== 6. o proxy do WinHTTP ==')
 _qp = _q.QUOTES_PROXY
 _q.QUOTES_PROXY = 'http://proxy.jpmchase.net:9443/'

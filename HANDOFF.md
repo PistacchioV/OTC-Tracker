@@ -20287,3 +20287,66 @@ Agora ela é achada pelo RÓTULO (`isDate`), nunca por índice fixo, e o guarda
 cobra as duas coisas — os tipos existindo entre as colunas e o índice fixo fora
 do arquivo. É a mesma família de defeito do Trade Date do send (§473): índice
 herdado de um molde cujas colunas são outras não acusa nada, só responde errado.
+
+## §474 — Registro de NDF: o notional perdia os centavos e a taxa, duas casas (2026-09-15)
+
+A mesa olhou o arquivo de registro do NDF Vanilla: **notional sempre inteiro** e
+**strike com seis casas decimais**. Dois defeitos distintos no mesmo
+campo-a-campo, e nenhum deles mudava a LARGURA da linha — o arquivo saía válido,
+com o número errado, e nada acusava.
+
+**O notional (campo 16, `9(14)V9(2)`, posições 98-113).** O gerador fazia
+`int(round(float(notional))).rjust(14,'0') + '00'`: ele não truncava, ele
+**ARREDONDAVA**, e colava dois zeros no lugar dos centavos. R$ 980.000,50 ia
+para a B3 como 980.000,00 e R$ 5.158.000,75 como **5.158.001,00** — um valor que
+não é o do deal. Agora o campo sai pelo `_znum(notional, 14, 2)`, que é o mesmo
+helper das outras casas decimais do arquivo.
+
+**A taxa a termo (campo 18, `9(12)V9(8)`, posições 124-143).** O `Inverse
+Decimals` do cadastro `currency-base` arredondava a taxa ANTES de ela entrar no
+campo: numa moeda cadastrada com 6, as duas últimas posições saíam sempre `00` e
+a B3 recebia menos precisão do que o campo comporta. O cadastro segue valendo
+onde descreve o que a mesa VÊ e o que o 1/taxa vira na tela; o que mudou é só o
+ARQUIVO, que tem lugar para oito e passa a usá-lo.
+
+Vale para as três páginas que passam por este gerador — **Vanilla, FWD Start e
+Other Publisher**. O NDF **Commodities** tem gerador próprio (`_ndf_comm_ter_lines`)
+e ficou como estava: ali o campo é uma QUANTIDADE, e se ela também deve levar
+centavos é pergunta para a mesa, não dedução daqui.
+
+**Sobre o guarda**, e é o ponto que vale guardar: o `check_fi_ter` não congela
+bytes — ele REIMPLEMENTA o gerador e compara as duas linhas. Isso prova que os
+dois CONCORDAM, e os dois concordavam no defeito: a porta do teste tinha a mesma
+conta. Corrigir só o módulo fazia o teste falhar; corrigir os dois fazia o teste
+passar sem provar nada. Por isso o teste ganhou asserções que medem os DÍGITOS
+nas posições que o manual declara — é isso que prende a especificação, e não o
+acordo entre duas cópias da mesma ideia.
+
+## §475 — Tools: a página de sign-on era memorizada como uma saída boa (2026-09-15)
+
+Depois de uma atualização (e do restart que ela obriga), o Swap Calculator
+passou a responder `could not fetch BCB series 4389: unreadable answer … (the
+answer was HTML, not JSON — a sign-on page?)` em toda conta com perna de CDI.
+
+**A causa é a memória de rotas, e o restart é parte dela.** O `rede.obter`
+percorre as saídas em ordem (as do `requests`, depois o WinHTTP com auto-logon e
+o WinInet da macro, §450) e MEMORIZA a primeira que responde, para as chamadas
+seguintes irem direto nela. Mas a página de sign-on do SSO responde **200, com
+conteúdo** — não é `_RouteError` nenhum. Então o laço a dava por boa, gravava
+aquela saída no `_route_ok` e devolvia o HTML; o erro só aparecia depois, no
+`json.loads`, longe dali. Consequências, nessa ordem:
+
+* as saídas seguintes — **as que funcionariam** — nunca eram tentadas, porque a
+  primeira "deu certo";
+* e a rota ruim ficava memorizada, então toda chamada seguinte ia nela primeiro.
+
+Por isso "começou depois da atualização": o `_route_ok` nasce vazio a cada
+processo, o restart refez a corrida, e bastou o proxy que serve o sign-on ganhar
+dela uma vez para ficar até o próximo restart.
+
+`obter_json` passa a pedir `exigir_json=True`, e aí **uma resposta que é a
+página de login é uma saída que FALHOU**: ela é descartada, a fila continua, e
+quem fica memorizada é a saída boa. Com todas servindo o login, o erro nomeia
+cada uma e **nada fica memorizado** — a próxima chamada recomeça limpa. O
+`obter` cru (quem baixa planilha, PDF) segue devolvendo bytes sem julgar o
+corpo: ali um `<html` pode ser o próprio dado.

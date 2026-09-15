@@ -207,8 +207,29 @@ def _tentativas():
     return fila
 
 
-def obter(url, cabecalho=None, timeout=TIMEOUT):
-    """GET que devolve bytes, tentando as saídas em ordem."""
+def parece_sign_on(conteudo):
+    """O corpo é uma página de LOGIN em vez do dado?
+
+    O sintoma clássico do SSO corporativo: a saída responde **200, com
+    conteúdo**, e o conteúdo é a página de autenticação. Não é erro de rede
+    nenhum — por isso ela precisa ser reconhecida pelo que veio, não pelo
+    status."""
+    return b'<html' in (conteudo or b'')[:400].lower()
+
+
+def obter(url, cabecalho=None, timeout=TIMEOUT, exigir_json=False):
+    """GET que devolve bytes, tentando as saídas em ordem.
+
+    `exigir_json`: a página de SIGN-ON é uma saída que FALHOU, não uma que
+    respondeu. Ela volta 200 com conteúdo, então sem esta pergunta o laço a
+    dava por boa, MEMORIZAVA a rota (`_route_ok`) e devolvia o HTML — o erro só
+    aparecia depois, no `json.loads`, e as saídas seguintes (o WinHTTP com
+    auto-logon e o WinInet da macro, §450) nunca eram tentadas porque a
+    primeira "deu certo". Pior: a rota ficava memorizada, e toda chamada
+    seguinte ia nela primeiro. É o que fazia a ferramenta parar de alcançar o
+    BCB DEPOIS DE UM RESTART — o memo nasce vazio, a corrida é refeita e basta
+    o proxy que serve o sign-on ganhar dela uma vez para ficar.
+    """
     cab = _cabecalho(cabecalho)
     tentativas = []
     for nome, (tipo, alvo) in _tentativas():
@@ -224,6 +245,8 @@ def obter(url, cabecalho=None, timeout=TIMEOUT):
                         s.close()
                     except Exception:               # noqa: BLE001
                         pass
+            if exigir_json and parece_sign_on(conteudo):
+                raise _q._RouteError('answered with a sign-on page, not JSON')
         except _q._RouteError as exc:
             tentativas.append('{}: {}'.format(nome, exc))
             log.warning('[tools] %s por %s falhou: %s', url, nome, exc)
@@ -241,13 +264,17 @@ def obter(url, cabecalho=None, timeout=TIMEOUT):
 
 def obter_json(url, cabecalho=None, timeout=TIMEOUT):
     import json
-    bruto = obter(url, dict(cabecalho or {}, Accept='application/json'), timeout)
+    # `exigir_json`: uma saída que responde a página de login não respondeu —
+    # ela é DESCARTADA e a fila continua, em vez de ser memorizada como boa.
+    bruto = obter(url, dict(cabecalho or {}, Accept='application/json'), timeout,
+                  exigir_json=True)
     try:
         return json.loads(bruto.decode('utf-8'))
     except ValueError as exc:
         pista = ''
-        if b'<html' in bruto[:400].lower():
-            # sintoma clássico de SSO: a página de login em vez do JSON
+        if parece_sign_on(bruto):
+            # TODAS as saídas responderam a página de login: aqui o texto é o
+            # que resta a dizer, e ele nomeia o sintoma para quem lê o log.
             pista = ' (the answer was HTML, not JSON — a sign-on page?)'
         raise ErroRede('unreadable answer from {url}: {motivo}{pista}',
                        url=url, motivo=str(exc), pista=pista) from exc
