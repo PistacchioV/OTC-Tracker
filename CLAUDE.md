@@ -973,8 +973,12 @@ São **46**: `currency-base`, `interbook-ndf`, `commodities-b3`,
   pernas, o que é certo num cashflow; na perna sem curva ele dava `−principal`,
   e como a `diff_b3` é `B3 menos o nosso`, o principal voltava SOMADO ao fator
   da perna VCP — os 100% entravam por uma porta e saíam pela outra, e o fator
-  ficava idêntico ao de antes. Com uma perna em `None` o VCP Settlement e a
-  Diferença saem sem veredito, de propósito: o verde anterior era falso.
+  ficava idêntico ao de antes. **E a prova real compara CAIXA BRUTO**: cada
+  perna entra como `juros + amortizado`, e a perna sem fluxo entra como ZERO —
+  a mesma leitura que o `interno` faz do OTM. Montar só os juros funcionava no
+  cashflow porque as duas pernas amortizam a mesma parcela e o principal se
+  cancela; no bullet só uma amortiza, o principal sobrava e a linha ficava sem
+  veredito.
 - **No Swap VCP a `Diferença` É o veredito** (§459): o valor sai DENTRO do
   badge (verde/amarelo), como o batimento do Accrual Swap colore o fator
   registrado — não há badge de texto ao lado. Sem veredito não há cor.

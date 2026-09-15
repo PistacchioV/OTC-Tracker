@@ -362,7 +362,7 @@ def vcp_factor_rows(ref, rows=None, ci=None):
         vcp_liq = domain.liquidacao_vcp(
             calc.get('vcp_p'), calc.get('vcp_c'), calc.get('fator_p'), calc.get('fator_c'),
             calc.get('vbr'), calc.get('juros_p'), calc.get('juros_c'),
-            calc.get('diff_p'), calc.get('diff_c'))
+            calc.get('diff_p'), calc.get('diff_c'), calc.get('amortizado'))
         dif, veredito = domain.diferenca_liquidacao(interno, vcp_liq)
         item.update({'interno': interno, 'vcp_liq': vcp_liq,
                      'diferenca': dif, 'veredito': veredito})

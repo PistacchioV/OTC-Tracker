@@ -120,7 +120,8 @@ def juros_do_fator(fator_, vbr):
     return (fator_ - 1.0) * vbr
 
 
-def liquidacao_vcp(vcp_p, vcp_c, fator_p, fator_c, vbr, juros_p, juros_c, diff_p, diff_c):
+def liquidacao_vcp(vcp_p, vcp_c, fator_p, fator_c, vbr, juros_p, juros_c, diff_p, diff_c,
+                   amortizado=0.0):
     """O que a B3 liquidaria com os fatores desta linha, ou `None`.
 
     É a PROVA REAL do fator: aplicado de volta ao VBR, ele tem de reproduzir o
@@ -148,15 +149,28 @@ def liquidacao_vcp(vcp_p, vcp_c, fator_p, fator_c, vbr, juros_p, juros_c, diff_p
 
     Sem perna VCP nenhuma não há o que conferir (a linha não vai para o
     arquivo de PU/Fator), e a resposta é `None`."""
-    def da_b3(juros_, diff_):
+    def bruto(vcp, fator_, juros_, diff_):
+        # Perna SEM fluxo no dia não tem caixa: zero. É a MESMA leitura que o
+        # `interno` faz do OTM, onde o lado sem lançamento soma zero — e é a
+        # simetria que torna a comparação um teste do fator, e não do arquivo.
         if juros_ is None:
+            return 0.0
+        j = juros_do_fator(fator_, vbr) if vcp else juros_ + (diff_ or 0.0)
+        if j is None:
             return None
-        return juros_ + (diff_ or 0.0)
+        # O caixa da perna é juros MAIS o que amortizou: o `interno` é o valor
+        # BRUTO do OTM, e montar só os juros de um lado compara coisas
+        # diferentes. Num cashflow as duas pernas amortizam e o principal se
+        # cancela na subtração — foi por isso que funcionou até aqui sem esta
+        # parcela. Num bullet só a perna com fluxo amortiza, e aí o principal
+        # sobra: a Diferença acusava o VBR inteiro, ou a linha ficava sem
+        # veredito nenhum.
+        return j + (amortizado or 0.0)
 
     if not (vcp_p or vcp_c):
         return None
-    parte = juros_do_fator(fator_p, vbr) if vcp_p else da_b3(juros_p, diff_p)
-    cpty = juros_do_fator(fator_c, vbr) if vcp_c else da_b3(juros_c, diff_c)
+    parte = bruto(vcp_p, fator_p, juros_p, diff_p)
+    cpty = bruto(vcp_c, fator_c, juros_c, diff_c)
     if parte is None or cpty is None:
         return None
     return parte - cpty
