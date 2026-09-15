@@ -394,6 +394,14 @@ da subida e NÃO liga o farol; os caminhos do espelho são dinâmicos.
 - **A tabela do sino é expurgada** (`_notif_purge_old`, thread `notif-purge` 3
   min após a subida e diária; `OTC_NOTIF_RETENTION_DAYS` = 90, `0` desliga).
   O poll filtra `created_at >= CURRENT_DATE` (sem `DATE()` na coluna).
+- **Mensagem de erro de API leva o MOTIVO, não só "não deu"** (§476): ela é a
+  única coisa que a mesa vê, e um `except Exception` que responde uma frase fixa
+  não distingue dado ausente de fonte fora do ar — o relato chega sem nada por
+  onde começar, e a investigação recomeça do zero a cada vez. `tipo: mensagem`
+  na resposta e o traceback inteiro no log, que é o desenho do
+  `_handle_api_exception`. Foi assim que o `Could not read the swap position`
+  do Swap Calculator, que resistiu a três tentativas de adivinhação, virou um
+  diagnóstico de dois minutos assim que passou a dizer o `ValueError`.
 - **Todo request tem um RASTRO de banco** (`database_access.DbTrace`, aberto
   no `before_request`): cada operação da camada entra com o NOME do banco,
   modo, segundos e categoria, e o `duck_read` anota queda para o JSON e cura.
@@ -908,7 +916,11 @@ São **46**: `currency-base`, `interbook-ndf`, `commodities-b3`,
   chega à rotina depois de alguém salvar na tela `/mapping` — é por isso que
   cada rotina carrega o próprio fallback (o desta traz as cinco carteiras).
   Trade Date é a **12ª** coluna de dado (na Option é a 4ª) e o mapping casa por
-  `NDF - TERMO`, não por `OPCAO`.
+  `NDF - TERMO`, não por `OPCAO`. **No filtro inteligente a coluna que comanda o
+  fetch se acha pelo RÓTULO (`isDate`), nunca por índice fixo**, e o mapa de
+  TIPOS é o dos rótulos da própria página: herdados do molde, o chip de data
+  filtrava Participant Position (inclusive o chip padrão de hoje, que ABRE a
+  tela) e toda coluna caía em `text`, perdendo datas e números.
 - **Intrag DCE Swap: a unidade é o DEAL e a linha é traduzida no servidor**
   (§448). A planilha do dropzone traz duas tabelas (pernas e fluxos)
   ligadas pelo Deal Name; o arquivo `Intrag-DCE-Swap-AAAAMMDD.txt` é UMA
