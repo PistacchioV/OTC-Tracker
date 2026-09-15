@@ -20018,3 +20018,53 @@ exatamente o defeito que esta seção corrige.
 fator com 0% (o defeito), o fator com os 100%, que a diferença entre os dois é
 **exatamente 1,0**, e que um cashflow do mesmo tipo continua sem amortizar no
 fluxo intermediário — a regra nova não pode vazar para quem ela não descreve.
+
+**A segunda rodada: os 100% entravam por uma porta e saíam pela outra**
+(2026-09-15). A mesa fez pull, reiniciou e o fator continuou o MESMO. Com a
+tela na frente deu para reproduzir os quatro números à mão, e a amortização
+estava entrando: Tipo Amortização `Na Data de Vencimento`, % 100,00, Notional
+Amortizado igual ao VBR.
+
+O problema era a linha seguinte. O `amortizado` é subtraído das DUAS pernas — o
+que é certo num cashflow, onde cada curva carrega o próprio principal. Aqui a
+perna `PREFIXADO 252D` **não tem curva no OTM**, e `juros = |0| − principal`
+dava `−9.836.872,00`: a planilha afirmando que uma perna sem caixa nenhum
+devolveu o principal. E a `diff_b3` fecha o ciclo — ela é `B3 menos o nosso`,
+então esse `−principal` voltava como `+principal` e entrava SOMADO no fator da
+perna VCP, que é o número que vai para a B3. O fator voltava a 2,36993189,
+idêntico ao de antes da correção, com todas as colunas coerentes entre si.
+
+**Perna sem fluxo no dia não amortizou nada.** `juros()` passa a devolver
+`None` — não deu para saber —, nunca zero e nunca `−amortizado`. Sem
+amortização no fluxo a perna zerada segue valendo 0,0, que é o que ela sempre
+valeu: aí não há principal para subtrair e a ausência não engana ninguém.
+
+Consequência assumida: com uma perna em `None` o **VCP Settlement e a Diferença
+saem como `-`, sem veredito**. É a regra do §452 (sem os dois lados não se
+afirma nada). O verde que estava lá era FALSO — reconciliava um fator que
+carregava o principal duas vezes contra um interno que também o carregava. Se a
+perna calculada deveria ter fluxo no OTM e não tem, agora a tela aponta em vez
+de esconder atrás de um check.
+
+**E o Tipo Amortização passou a DIZER por que** (pedido da mesa): num bullet ele
+sai como `Na Data de Vencimento` quando o arquivo deixa a célula em branco — que
+é o caso, porque o cronograma que a coluna descreve não existe num bullet.
+Vazia, ela lia como "não deu para puxar". Só quando o arquivo não respondeu:
+dado que contradiga o tipo de contrato é conflito para a mesa ver, não para o
+código apagar.
+
+**Por que o guarda da primeira rodada não pegou isto.** A fixture deixava o
+`Valor Juros` da B3 VAZIO na perna sem fluxo, e vazio já fazia `diff_b3`
+devolver `None` — o defeito não aparecia. A B3 manda `0,00`, não vazio. Com a
+fixture corrigida, o guarda reproduz a tela da mesa e REPROVA o código antigo
+(2,36993189 onde espera 1,36993189; `juros_c = −9.836.872,00` onde espera
+`None`) — conferido revertendo só o `juros()` e rodando.
+
+A lição é a mesma do §467, em outra roupa: um guarda que não reproduz o
+ambiente real passa e não prende nada. Aqui o que faltava não era biblioteca,
+era um `0,00` no lugar de um vazio.
+
+Outra coisa que a leitura por NOME de coluna escondia: o arquivo escreve `Data
+vencimento` com v minúsculo, e o `row.get('Data Vencimento')` da primeira
+rodada devolveria vazio no arquivo ESTREITO, deixando a regra do bullet sem
+rodar e sem erro. `por_nome()` compara pelo `norm`.

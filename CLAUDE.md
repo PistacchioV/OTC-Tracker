@@ -965,7 +965,16 @@ São **46**: `currency-base`, `interbook-ndf`, `commodities-b3`,
   `Data Vencimento` dela; as duas chegam ao `domain` RESPONDIDAS, porque ele é
   puro. A base é **At Maturity**, que calcula sobre o SALDO — num contrato que
   já amortizou antes, o original é maior e a conta pelo original só não erra
-  pelo `min`. Tipo de Contrato que não responde é LACUNA, nunca "cashflow".
+  pelo `min`. Tipo de Contrato que não responde é LACUNA, nunca "cashflow", e
+  num bullet o **Tipo Amortização sai como `Na Data de Vencimento`** quando o
+  arquivo deixa a célula vazia — ele DIZ por que a amortização é de 100%.
+  **E perna SEM fluxo no dia não amortizou nada** (§470, segunda rodada):
+  `juros()` devolve `None`, nunca `−amortizado`. O `amortizado` sai das DUAS
+  pernas, o que é certo num cashflow; na perna sem curva ele dava `−principal`,
+  e como a `diff_b3` é `B3 menos o nosso`, o principal voltava SOMADO ao fator
+  da perna VCP — os 100% entravam por uma porta e saíam pela outra, e o fator
+  ficava idêntico ao de antes. Com uma perna em `None` o VCP Settlement e a
+  Diferença saem sem veredito, de propósito: o verde anterior era falso.
 - **No Swap VCP a `Diferença` É o veredito** (§459): o valor sai DENTRO do
   badge (verde/amarelo), como o batimento do Accrual Swap colore o fator
   registrado — não há badge de texto ao lado. Sem veredito não há cor.

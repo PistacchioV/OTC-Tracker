@@ -323,6 +323,17 @@ def vcp_factor_rows(ref, rows=None, ci=None):
         # numa data que não é a dele amortizaria o principal cedo.
         bullet_venc = (pos.get('tipo_contrato') == 'bullet'
                        and pos.get('vencimento') == ref_iso)
+        # E num bullet o Tipo Amortização É `Na Data de Vencimento` — não é
+        # inferência, é a definição do contrato: ele paga uma vez, no fim. A
+        # posição costuma deixar a coluna em branco (o cronograma que ela
+        # descreve não existe aqui), e a tela mostrava a célula vazia, que lê
+        # como "não deu para puxar". Preenchido, o Tipo Amortização passa a
+        # DIZER por que a amortização é de 100%, em vez de o número aparecer
+        # sozinho. Só quando o arquivo não respondeu: dado do arquivo que
+        # contradiz o tipo de contrato é conflito para a mesa ver, não para o
+        # código apagar.
+        if pos.get('tipo_contrato') == 'bullet' and not str(tipo or '').strip():
+            tipo = 'Na Data de Vencimento'
         salvo = salvos.get(key) or {}
         calc = domain.calcular({
             'vbr': vbr, 'original': original, 'pct': pct, 'tipo': tipo, 'base_amort': base_amort,
