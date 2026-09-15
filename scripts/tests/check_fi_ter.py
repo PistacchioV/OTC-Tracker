@@ -120,11 +120,11 @@ def _legacy_generic_line(deal, is_fwd):
         notional_s = notional_s.replace('.', '')
     else:
         notional_s = notional_s.replace(',', '')
-    try:
-        qty_int = int(round(float(notional_s)))
-        qty_str = str(qty_int).rjust(14, '0') + '00'
-    except Exception:
-        qty_str = '0' * 16
+    # `9(14)V9(2)`: CATORZE inteiros e DOIS decimais, e os decimais sao os do
+    # notional. O `int(round(...)) + '00'` de antes nao truncava — ele
+    # ARREDONDAVA: 980.000,50 ia para a B3 como 980.000,00 (e 5.158.000,75 como
+    # 5.158.001,00), com a largura certa e nada acusando.
+    qty_str = _znum(notional_s or '0', 14, 2)
 
     fix_start = _d8(deal.get('FirstFixingDate', ''))
     fix_end   = _d8(deal.get('LastFixingDate', ''))
@@ -154,12 +154,11 @@ def _legacy_generic_line(deal, is_fwd):
         # montagem da linha, não da regra de cotação — quando a regra muda, ele
         # acompanha (ver check_weak_ccy_rate.py).
         rate_raw = R._fxo_num(_s(deal.get('Rate', '')))
-        _inv = R._mapping_ccy_maps()[2]
-        _leg = R._ndf_weak_leg(qty_ccy, oth_ccy)
-        if rate_raw and _leg in _inv:
-            rate_val = round(rate_raw, _inv[_leg])
-        else:
-            rate_val = rate_raw
+        # `9(12)V9(8)`: as OITO casas, sempre. O `Inverse Decimals` do cadastro
+        # arredondava a taxa antes — numa moeda cadastrada com 6, as duas
+        # ultimas posicoes saiam sempre `00` e a B3 recebia menos precisao do
+        # que o campo comporta.
+        rate_val = rate_raw
         taxa_termo   = _znum(rate_val if rate_val is not None else '0', 12, 8)
         cot_venc     = ' '
         pub = R._ndf_publisher_codes(publisher)
@@ -598,6 +597,29 @@ def main():
         check(name + ': linha == golden', legacy[1] == new[1],
               _first_diff(legacy[1], new[1]))
         check(name + ': largura 648', len(new[1]) == 648, str(len(new[1])))
+
+    # ── o notional leva os CENTAVOS e a taxa as OITO casas (15/09/2026) ────
+    # A mesa viu no registro de NDF Vanilla: notional sempre inteiro e strike
+    # com seis casas. Dois defeitos distintos, e nenhum mudava a LARGURA da
+    # linha — o arquivo saía válido, com o número errado.
+    #
+    # As asserções acima comparam a PORTA deste teste com o módulo: provam que
+    # os dois concordam. Estas medem os dígitos nas posições que o manual
+    # declara (campo 16 = 98-113, `9(14)V9(2)`; campo 18 = 124-143,
+    # `9(12)V9(8)`) — e é isso que prende a ESPECIFICAÇÃO, não só o acordo.
+    _dec = dict(GENERIC_DEALS[[k for k in GENERIC_DEALS
+                              if k.startswith('otherpublisher janela')][0]])
+    _dec['Rate'] = '5.12345678'                     # oito casas significativas
+    random.seed(11)
+    _reg = R._generic_ndf_ter_line(_dec, False)[1]
+    check('campo 16: o notional 980.000,50 leva os centavos',
+          _reg[97:113] == '0000000098000050', repr(_reg[97:113]))
+    check('   e NAO foi arredondado para 980.000,00 (o defeito ARREDONDAVA)',
+          _reg[97:113].endswith('50'), repr(_reg[97:113]))
+    check('campo 18: a taxa leva as OITO casas',
+          _reg[123:143] == '00000000000512345678', repr(_reg[123:143]))
+    check('   e as duas ultimas nao sao mais 00 por arredondamento do cadastro',
+          _reg[123:143].endswith('78'), repr(_reg[123:143]))
 
     # deal cancelado fica fora do arquivo, como antes
     canc = dict(GENERIC_DEALS['fwdstart fixing único (sem first fixing)'])

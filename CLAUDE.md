@@ -753,7 +753,13 @@ São **46**: `currency-base`, `interbook-ndf`, `commodities-b3`,
   `otc-fileupload.js`).
 - **Só `isCancelled` é cancelado** na Athena; `isDead` importa normalmente.
 - **A inversão da moeda fraca é do PAR** (`_ndf_weak_leg`), uma vez na
-  importação; o TER só arredonda pelo `INV DECIMALS`.
+  importação. O TER **não** arredonda mais pelo `INV DECIMALS` (§474): o
+  campo 18 é `9(12)V9(8)` e vai com as OITO casas, sempre — o cadastro segue
+  valendo no que a tela mostra. E o campo 16 é `9(14)V9(2)`: os dois decimais
+  são os do notional, não um `'00'` colado — o gerador ARREDONDAVA para
+  inteiro, e 5.158.000,75 ia à B3 como 5.158.001,00 sem mudar a largura da
+  linha. Vale para Vanilla, FWD Start e Other Publisher; o Commodities tem
+  gerador próprio e ficou como estava.
 - **A API nunca entrega a perna Lawton/MGT**: `_nd_lawton_mirror` e
   `_nd_mgt_mirror` sintetizam no envio, pareando por termos econômicos
   (`_nd_lawton_sig`), com `force_values` por linha para a conta do omnibus e

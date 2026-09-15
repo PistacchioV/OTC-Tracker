@@ -2339,11 +2339,11 @@ def _generic_ndf_ter_line(deal, is_fwd, page_url=None, participant_override=None
         notional_s = notional_s.replace('.', '')     # 5.158.000 — dois pontos só podem ser milhar
     else:
         notional_s = notional_s.replace(',', '')     # US, o formato que a aplicação grava
-    try:
-        qty_int = int(round(float(notional_s)))
-        qty_str = str(qty_int).rjust(14, '0') + '00'
-    except Exception:
-        qty_str = '0' * 16
+    # O campo é `9(14)V9(2)` — CATORZE inteiros e DOIS decimais —, e os dois
+    # decimais são os do notional, não um `'00'` fixo. Arredondar para inteiro e
+    # colar `00` fazia todo notional com centavos ir para a B3 truncado, e o
+    # arquivo saía com a largura certa: nada acusava.
+    qty_str = _znum(notional_s or '0', 14, 2)
 
     fix_start = _d8(deal.get('FirstFixingDate', ''))
     fix_end   = _d8(deal.get('LastFixingDate', ''))
@@ -2377,21 +2377,20 @@ def _generic_ndf_ter_line(deal, is_fwd, page_url=None, participant_override=None
     else:
         # O campo é a "Taxa a Termo (R$/Moeda)" e o Rate do deal JÁ está nessa
         # convenção — a inversão da moeda fraca é feita UMA vez, na importação
-        # (`_ndf_weak_leg`). Aqui só entram as casas do cadastro (Inverse
-        # Decimals), que é a precisão com que o 1/taxa vai para a B3.
+        # (`_ndf_weak_leg`). Este bloco não inverte de novo: enquanto invertia,
+        # e por QUANTITY CURRENCY, as duas condições eram complementares e o
+        # arquivo saía certo por compensação, mas a coluna Rate da tela, o
+        # contravalor do MT300 e a taxa do Intrag ficavam com o valor cru
+        # sempre que a moeda fraca era a do notional.
         #
-        # Este bloco invertia de novo, e por QUANTITY CURRENCY: como a
-        # importação olhava a outra perna, as duas condições eram
-        # complementares e o arquivo saía certo por compensação — mas a coluna
-        # Rate da tela, o contravalor do MT300 e a taxa do Intrag ficavam com o
-        # valor cru sempre que a moeda fraca era a do notional.
-        rate_raw = _fxo_num(_s(deal.get('Rate', '')))
-        _inv = routes._mapping_ccy_maps()[2]
-        _leg = _ndf_weak_leg(qty_ccy, oth_ccy)
-        if rate_raw and _leg in _inv:
-            rate_val = round(rate_raw, _inv[_leg])
-        else:
-            rate_val = rate_raw
+        # E vai com as OITO casas do `9(12)V9(8)`, SEMPRE (pedido da mesa,
+        # 15/09/2026). O `Inverse Decimals` do cadastro arredondava a taxa antes
+        # de ela entrar aqui: numa moeda cadastrada com 6, as duas últimas
+        # posições saíam sempre `00` e a B3 recebia menos precisão do que o
+        # campo comporta. O cadastro segue valendo onde descreve o que a mesa VÊ
+        # e o que o 1/taxa vira na tela; o que mudou é só o ARQUIVO, que tem
+        # lugar para oito e passa a usá-lo.
+        rate_val = _fxo_num(_s(deal.get('Rate', '')))
         taxa_termo   = _znum(rate_val if rate_val is not None else '0', 12, 8)
         cot_venc     = ' '
         pub = _ndf_publisher_codes(publisher)
