@@ -353,9 +353,21 @@ def _bloco_ponta(f, p, entrada, vbr, diaria, titulo, so_juros):
                             nota='produto dos fatores diários da aba de apuração')
         formula = '={}*{}'.format(acumulado, cap)
     elif idx == liquidacao.SOFR:
+        # O SOFR composto é "fixing + spread", como o Term SOFR e a EURIBOR: a
+        # taxa ANUALIZADA da janela soma ao spread e as duas capitalizam UMA
+        # vez. Por isso a memória mostra a anualização — sem ela a planilha
+        # traria um fator e um spread sem dizer como um vira o outro — e a
+        # deriva do fator acumulado da aba diária, nunca de um número copiado:
+        # mexer num dia do índice refaz a taxa e a liquidação inteira.
         acumulado = f.campo('Fator composto do SOFR', '=' + diaria['fator'], FATOR_FMT,
                             nota='produto dos fatores diários da aba de apuração')
-        formula = '={}*{}'.format(acumulado, cap)
+        janela = ((p.obs_fim - p.obs_inicio).days if (p.obs_inicio and p.obs_fim)
+                  else p.dias_corridos)
+        ref_janela = f.campo('Dias corridos da janela', janela, INT_FMT)
+        composta = f.campo('SOFR composto (% a.a.)',
+                           '=({}-1)*360/{}'.format(acumulado, ref_janela), PCT_FMT,
+                           nota='(fator − 1) × 360 ÷ dias corridos da janela')
+        formula = '=' + _cap('{}+{}'.format(composta, taxa), p.regime, tau)
     elif idx in liquidacao.COM_FIXING:
         fix = f.campo('Taxa do fixing (% a.a.)', p.taxa_do_fixing, PCT_FMT,
                       complemento=('fixada em {:%d/%m/%Y}'.format(p.data_fixing)

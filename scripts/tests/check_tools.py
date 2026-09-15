@@ -54,6 +54,14 @@ def check(rotulo, obtido, esperado):
         falhas.append(rotulo)
 
 
+def perto(rotulo, obtido, esperado, tol=1e-9):
+    ok = obtido is not None and abs(obtido - esperado) <= tol
+    print(('  ok  ' if ok else ' FAIL ') + rotulo +
+          ('' if ok else '\n        got=%r\n        exp=%r' % (obtido, esperado)))
+    if not ok:
+        falhas.append(rotulo)
+
+
 def ler(rel):
     return io.open(os.path.join(ROOT, rel), encoding='utf-8').read()
 
@@ -126,6 +134,45 @@ try:
 except Exception as exc:
     erro = type(exc).__name__
 check('lookback negativo e recusado', erro != '', True)
+
+# ── o spread do SOFR SOMA a taxa composta; nao multiplica o fator ───────────
+# "Compounded SOFR + spread" e a mesma figura do Term SOFR e da EURIBOR: a taxa
+# anualizada da janela soma ao spread e as duas capitalizam UMA vez. Multiplicar
+# o fator composto pelo fator do spread acrescenta o termo cruzado
+# `sofr * spread * tau^2`, que nao existe em contrato nenhum -- e nao e um
+# arredondamento: no swap da SABESP (24L01786664, 16/03 a 15/09/2026, US$ 17,5
+# mi a 3,65876% + 1,84%) ele sozinho valia R$ 15,7 mil, com a planilha da mesa e
+# o sistema do banco de um lado e o Swap Calculator do outro.
+#
+# O CDI e o caso DIFERENTE e segue multiplicativo de proposito: la o percentual
+# incide na taxa diaria e o spread e uma capitalizacao a parte, que e como a B3
+# apura. Este teste prende os dois lados da distincao.
+_TAXA, _SPREAD, _TAU = 0.0365876, 0.0184, 183 / 360.0
+_INI, _FIM = date(2026, 3, 16), date(2026, 9, 15)
+_serie_sofr = sofr.serie_sofr
+try:
+    # Serie CONSTANTE: a composicao devolve a propria taxa, e o que fica sob
+    # medicao e a composicao do SPREAD, nao a serie do NY Fed (nada sai daqui).
+    sofr.serie_sofr = lambda d0, d1, *a, **k: [
+        sofr.FixingSOFR(_INI + timedelta(n), _TAXA) for n in range(-40, 240)]
+    _p = liquidacao.liquidar_ponta(
+        liquidacao.Ponta(indexador=liquidacao.SOFR, taxa=_SPREAD,
+                         convencao=contagem.ACT_360, regime=contagem.SIMPLES,
+                         moeda=liquidacao.SEM_CONVERSAO),
+        17520667.46, _INI, _FIM)
+finally:
+    sofr.serie_sofr = _serie_sofr
+_composta = _p.taxa_do_fixing
+check('capitalizar dia a dia levanta a taxa acima da serie constante',
+      _TAXA < _composta < _TAXA * 1.02, True)
+perto('o fator do indice SOMA o spread a taxa composta',
+      _p.fator_do_indice, 1.0 + (_composta + _SPREAD) * _TAU, 1e-12)
+check('   e NAO multiplica os dois fatores',
+      abs(_p.fator_do_indice
+          - (1 + _composta * _TAU) * (1 + _SPREAD * _TAU)) > 1e-6, True)
+perto('   o termo cruzado descartado e sofr * spread * tau^2',
+      (1 + _composta * _TAU) * (1 + _SPREAD * _TAU) - _p.fator_do_indice,
+      _composta * _SPREAD * _TAU * _TAU, 1e-12)
 
 rf = renda_fixa.calcular(1000.0, date(2026, 1, 2), date(2026, 7, 2),
                          renda_fixa.PREFIXADO, 0.14, calendario=cal)
