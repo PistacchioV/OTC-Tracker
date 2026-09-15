@@ -445,7 +445,17 @@ def liquidar_ponta(ponta, nocional, inicio, fim, calendario=None, arredondar_di=
         composto = sofr.compor(sofr.serie_sofr(d0 - margem, d1 + timedelta(days=1)), d0, d1,
                                lookback=ponta.lookback, shift=ponta.shift,
                                calendario=calendario_sofr())
-        indice = composto.fator * capitalizar(ponta.taxa)
+        # O spread SOMA à taxa composta e as duas capitalizam UMA vez — a mesma
+        # composição do Term SOFR e da EURIBOR logo abaixo, que são a mesma
+        # figura ("fixing + spread"). Multiplicar os dois fatores acrescenta o
+        # termo cruzado `sofr · spread · τ²`, que não existe em contrato nenhum:
+        # num swap de meio ano a 3,66% + 1,84% sobre US$ 17,5 mi ele sozinho
+        # valia R$ 15,7 mil, e era a planilha da mesa e o sistema do banco
+        # discordando do Swap Calculator na terceira casa do resultado. O CDI é
+        # o caso diferente e continua multiplicativo de propósito (ver acima): lá
+        # o percentual incide na taxa DIÁRIA e o spread é uma capitalização à
+        # parte, que é como a B3 apura.
+        indice = capitalizar(composto.taxa_composta + ponta.taxa)
         return montar(
             indice,
             ('compounded SOFR of {sofr}% plus a {taxa}% spread over {dc} calendar days',

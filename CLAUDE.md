@@ -816,6 +816,22 @@ São **46**: `currency-base`, `interbook-ndf`, `commodities-b3`,
   nasce 0%**, fora da lista do que "não deu para puxar" (§458, fora do CDI
   também): o motor já lia branco como 0,0, e sinalizar em vermelho pedia que
   se digitasse à mão o zero que a conta assumia.
+- **Swap Calculator, perna SOFR: o spread SOMA à taxa composta, não
+  multiplica o fator** (`liquidacao.py`, o ramo do `SOFR`): "Compounded SOFR +
+  spread" é a mesma figura do Term SOFR e da EURIBOR, que já faziam
+  `capitalizar(índice + spread)` — só o SOFR multiplicava
+  `fator_composto × (1+spread·τ)`, acrescentando o termo cruzado
+  `sofr · spread · τ²`, que não existe em contrato nenhum. Não é
+  arredondamento: no swap da SABESP (16/03 a 15/09/2026, US$ 17,5 mi a 3,66% +
+  1,84%) ele sozinho valia **R$ 15,7 mil**, com a planilha da mesa e o sistema
+  do banco de um lado e a tela do outro. O **CDI é o caso diferente e segue
+  multiplicativo de propósito** (o percentual incide na taxa DIÁRIA e o spread
+  é capitalização à parte, que é como a B3 apura) — `check_tools.py` §2 prende
+  os dois lados. A **taxa composta do SOFR está certa e é conferível**: bate
+  dígito a dígito com a razão do SOFR Index publicado pelo NY Fed
+  (`compor_por_indice`), que é o teste a fazer quando alguém trouxer uma
+  divergência de casa decimal — lookback, shift e arredondamento do fator
+  diário mudam o número, e nenhum deles é "o certo" sem o contrato dizer.
 - **Swap Calculator › Export: a memória de cálculo é FÓRMULA, não valor**
   (§455, `features/tools/infra/memoria_xlsx.py`): toda célula derivada do
   .xlsx é fórmula de Excel encadeada até as entradas, e os dias do índice vão
