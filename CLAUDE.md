@@ -814,8 +814,16 @@ São **46**: `currency-base`, `interbook-ndf`, `commodities-b3`,
   inicial da posição, ou o digitado) e só cai para o IBGE em branco — M-2 do
   início dava o mês errado. **Só o cupom é juros**: a correção fica no
   principal (`fator_correcao`, como o `fator_cambial`), é o que a planilha
-  da mesa faz. Mês não publicado NÃO vem na série e é erro com o mês, nunca
-  o anterior. No pré-preenchimento, evento do DFLUXO sem Taxa Amortização é
+  da mesa faz — **mas a correção que fica no principal é a do que CARREGA**:
+  no fluxo que AMORTIZA, a parte do principal que sai hoje liquida CORRIGIDA
+  (§471, `PontaLiquidada.amortizacao_devolvida` = `amortizado × fator_cambial ×
+  fator_correcao`), e o bruto do fluxo intermediário é `(juros + devolvido)` de
+  cada ponta. Em duas pontas nominais em reais os dois devolvidos são iguais e
+  a parcela se cancela — foi por isso que ela pôde ficar fora da apuração desde
+  sempre. Num DI × IPCA de VBR 254 mi amortizando 0,72% eram R$ 391,8 mil
+  separando a tela da planilha; no VENCIMENTO nada muda, porque ali o valor de
+  cada ponta já carrega o principal inteiro. Mês não publicado NÃO vem na série
+  e é erro com o mês, nunca o anterior. No pré-preenchimento, evento do DFLUXO sem Taxa Amortização é
   **0%**, não lacuna — e a **taxa contratada que a posição não traz também
   nasce 0%**, fora da lista do que "não deu para puxar" (§458, fora do CDI
   também): o motor já lia branco como 0,0, e sinalizar em vermelho pedia que
