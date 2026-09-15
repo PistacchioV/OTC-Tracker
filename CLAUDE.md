@@ -821,7 +821,16 @@ São **46**: `currency-base`, `interbook-ndf`, `commodities-b3`,
   .xlsx é fórmula de Excel encadeada até as entradas, e os dias do índice vão
   inteiros numa aba por ponta (o fator do dia escrito sobre a taxa daquele
   dia, com o `ROUND(...,8)` do padrão B3/CETIP quando a tela o pede) — a aba
-  principal REFERENCIA a célula do acumulado. Mexer na conta aqui sem mexer no
+  principal REFERENCIA a célula do acumulado. **E fórmula vai com o VALOR
+  gravado junto**: o openpyxl escreve o cache vazio (`<f>…</f><v></v>`), e
+  quem abre sem recalcular — Modo de Exibição Protegido (todo arquivo baixado
+  pelo navegador entra nele), painel de visualização, Excel Online, preview do
+  anexo — mostra a célula EM BRANCO; era a memória inteira chegando sem um
+  número, com os rótulos no lugar (o `fullCalcOnLoad` não alcança: ele manda
+  recalcular na ABERTURA, e nenhum desses leitores calcula). O cache sai da
+  PRÓPRIA fórmula, por um avaliador no módulo (`_cache_das_formulas`,
+  injetado no zip pelo `_selar`) — escrito à mão seria a planilha afirmando um
+  número que a fórmula não dá. Mexer na conta aqui sem mexer no
   motor entrega uma memória que não explica o número que a mesa mandou:
   `check_tools_memoria.py` recalcula a planilha e cobra o motor. **Memória de
   liquidação não tem valor FUTURO**: cada ponta fecha na linha do que ela
