@@ -479,6 +479,14 @@
   // número dizia duas vezes a mesma coisa e roubava a largura da coluna; com a
   // cor no número, varrer a coluna inteira é uma olhada só. O veredito segue
   // legível no title, que é o que o badge deixou de escrever.
+  // Juros que nao se resolve sai 0.00, nao '-' (pedido da mesa, 15/09/2026).
+  // A perna sem fluxo no dia nao teve caixa, e e assim que a prova real ja a
+  // le (`liquidacao_vcp`: perna sem fluxo entra como zero, do mesmo jeito que
+  // o `interno` a le no OTM). O '-' dizia "nao deu para puxar" numa celula em
+  // que a resposta e conhecida. So a TELA: o valor calculado segue `None` no
+  // servidor, e e ele que decide se ha `diff` e se a linha tem fator.
+  function jurosCell(v) { return v == null ? n2(0) : n2(v); }
+
   function difBadge(v, veredito) {
     if (v == null) return '-';
     var txt = n2(v);
@@ -531,8 +539,8 @@
         // vêm no item): cada um ao lado do juro da SUA perna, para conferir a
         // linha sem voltar à outra tabela — as duas pernas têm colunas de nome
         // igual aqui (`Diff B3` duas vezes).
-        esc(f.idx_p || ''), cell('juros_p', n2(f.juros_p)), cell('diff_p', n2(f.diff_p) || '-'),
-        esc(f.idx_c || ''), cell('juros_c', n2(f.juros_c)), cell('diff_c', n2(f.diff_c) || '-'),
+        esc(f.idx_p || ''), cell('juros_p', jurosCell(f.juros_p)), cell('diff_p', n2(f.diff_p) || '-'),
+        esc(f.idx_c || ''), cell('juros_c', jurosCell(f.juros_c)), cell('diff_c', n2(f.diff_c) || '-'),
         // o fator só existe na perna VCP; a calculada (e a VCP sem número) sai "-"
         cell('fator_p', (f.vcp_p && f.fator_p != null) ? f8(f.fator_p) : '-'),
         cell('fator_c', (f.vcp_c && f.fator_c != null) ? f8(f.fator_c) : '-'),

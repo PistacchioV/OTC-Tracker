@@ -20068,3 +20068,36 @@ Outra coisa que a leitura por NOME de coluna escondia: o arquivo escreve `Data
 vencimento` com v minúsculo, e o `row.get('Data Vencimento')` da primeira
 rodada devolveria vazio no arquivo ESTREITO, deixando a regra do bullet sem
 rodar e sem erro. `por_nome()` compara pelo `norm`.
+
+**A terceira rodada: a prova real ficou sem os dois lados** (2026-09-15). Com a
+perna sem fluxo respondendo `None`, o VCP Settlement e a Diferença passaram a
+sair em `-`, e a mesa perdeu a conferência justo nas linhas recém-corrigidas.
+Eu tinha assumido isso como consequência aceitável — e estava errado.
+
+O `interno` é o caixa **BRUTO** do OTM: juros **mais** o principal que voltou. O
+`liquidacao_vcp` montava só os JUROS de cada perna. Num cashflow isso funciona
+porque as duas pernas amortizam a mesma parcela e o principal se cancela na
+subtração — foi por isso que a conta fechou desde o §452 sem ninguém reparar.
+Num bullet só a perna com fluxo amortiza, e o principal não tem com quem
+cancelar: sobrava o VBR inteiro.
+
+Agora cada perna entra pelo seu caixa BRUTO — `juros + amortizado` —, e a perna
+sem fluxo entra como **zero**, que é a mesma leitura que o `interno` faz do OTM
+(lado sem lançamento soma zero). É essa simetria que torna a comparação um teste
+do FATOR e não do arquivo. No cashflow nada muda: a parcela é a mesma nos dois
+lados e continua se cancelando.
+
+O bullet da mesa volta a conferir: interno R$ 13.475.844,69 contra
+R$ 13.475.844,65 do fator, **4 centavos** — que é exatamente o que a coluna
+existe para medir (8 casas multiplicando um VBR de milhões). O guarda cobra a
+ordem de grandeza e o veredito `Ok`, nunca a igualdade ao centavo: cravar o
+centavo tornaria o teste uma tautologia sobre o arredondamento em vez de uma
+prova do fator.
+
+E, a pedido da mesa, **juros que não se resolve sai `0.00` na tela, nunca
+`-`**: a perna sem fluxo no dia não teve caixa, e é assim que a prova real já a
+lê. O traço dizia "não deu para puxar" numa célula cuja resposta é conhecida. É
+só a TELA (`jurosCell`) — o valor calculado segue `None` no servidor, e é ele
+que decide se há `diff` e se a linha tem fator. Trocar o `None` no servidor
+faria a perna sem fluxo voltar a gerar uma diff fantasma, que é o defeito da
+segunda rodada.

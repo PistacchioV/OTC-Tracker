@@ -299,6 +299,20 @@ try:
           (f3['juros_c'], f3['diff_c']), (None, None))
     check('   e o principal nao volta pela diff para dentro do fator',
           f3['fator_p'] < 2.0, True)
+    # A PROVA REAL tambem tem de valer no bullet. O `interno` e o caixa BRUTO do
+    # OTM (juros + principal); montar so os juros de um lado compara coisas
+    # diferentes. Num cashflow as duas pernas amortizam e o principal se cancela
+    # na subtracao -- e por isso funcionava sem esta parcela. Num bullet so a
+    # perna com fluxo amortiza, e o principal sobrava: a linha ficava sem
+    # veredito e a mesa perdia a conferencia justo onde ela mais importa.
+    # O fator vai a B3 com 8 casas e multiplica um VBR de milhoes, entao o que
+    # sobra aqui sao centavos -- e e exatamente isso que a coluna mede. Cravar
+    # a igualdade ao centavo tornaria o teste uma tautologia sobre o
+    # arredondamento em vez de uma prova do fator.
+    check('   a prova real volta ao caixa do OTM, com principal e tudo',
+          (f3['interno'], round(f3['vcp_liq'], 0)), (13475844.69, 13475845.0))
+    check('   a Diferenca e so o arredondamento da 8a casa, e ela CONFERE',
+          (abs(f3['diferenca']) < 0.10, f3['veredito']), (True, 'Ok'))
 
     # ── 3. a edicao ─────────────────────────────────────────────────────────
     print('== 3. a edicao ==')
@@ -418,6 +432,10 @@ try:
     # lado do numero dizia duas vezes a mesma coisa e roubava a largura da
     # coluna. Sem veredito NAO ha cor — linha que nao deu para conferir pintada
     # de verde some do que ha para olhar.
+    check('juros que nao se resolve sai 0.00 na tela, nunca "-"',
+          ("function jurosCell(v) { return v == null ? n2(0) : n2(v); }" in html,
+           "cell('juros_p', jurosCell(f.juros_p))" in html,
+           "cell('juros_c', jurosCell(f.juros_c))" in html), (True, True, True))
     check('a Diferenca e um badge com o valor dentro',
           ('difBadge(f.diferenca, f.veredito)' in html
            and 'text-bg-success' in html and 'text-bg-warning' in html), True)
