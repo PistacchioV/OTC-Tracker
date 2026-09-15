@@ -666,10 +666,10 @@ $(document).ready(function() {
             if (o.data.imported && dMin && dMax) {
                 sfActive = sfActive.filter(function (f) { return !f.col.isDate; });
                 if (dMin === dMax) {
-                    sfAddFilter(SF_COLS[3], dMin, 'exact');
+                    sfAddFilter(SF_TRADE_DATE, dMin, 'exact');
                 } else {
-                    sfAddFilter(SF_COLS[3], dMin, 'from');
-                    sfAddFilter(SF_COLS[3], dMax, 'to');
+                    sfAddFilter(SF_TRADE_DATE, dMin, 'from');
+                    sfAddFilter(SF_TRADE_DATE, dMax, 'to');
                 }
                 document.getElementById('sfSearchBtn').click();
             }
@@ -693,7 +693,7 @@ $(document).ready(function() {
             var v = (this.value || '').trim();
             if (!/^\d{2}\/\d{2}\/\d{4}$/.test(v)) return;
             sfActive = sfActive.filter(function (f) { return !f.col.isDate; });
-            sfAddFilter(SF_COLS[3], v, 'exact');
+            sfAddFilter(SF_TRADE_DATE, v, 'exact');
             document.getElementById('sfSearchBtn').click();
         });
     })();
@@ -975,11 +975,15 @@ $(document).ready(function() {
     var sfInput=document.getElementById('sfInput'), sfDropdown=document.getElementById('sfDropdown'),
         sfChips=document.getElementById('sfChips'), sfWrapper=document.getElementById('sfWrapper'),
         sfActive=[], sfKbdIdx=-1;
+    // Os tipos são por RÓTULO, e os rótulos são os do NDF. O mapa herdado do
+    // molde era o da Option ('Strike Price', 'Fixing Date', 'Premium'…): nenhum
+    // deles existe aqui, então TODA coluna caía em 'text' e o filtro perdia as
+    // datas e os números — buscar por valor ou por intervalo não achava nada, e
+    // nada na tela dizia por quê.
     var DCE_TYPES = {
-        'Trade Date':'date','Maturity Date':'date','Premium Settlement Date':'date',
-        'Initial Verification Date':'date','Final Verification Date':'date','Fixing Date':'date',
-        'Strike Price':'number','Strike Price in BRL':'number','Unit Price':'number',
-        'Premium':'number','Base Value/Quantity':'number'
+        'Start Date':'date','Trade Date':'date','Maturity Date':'date',
+        'Notional':'number','Quantity':'number','Transaction Price':'number',
+        'Forward Rate':'number','Asian NDF Average Rate':'number'
     };
     var SF_COLS=DCE_COLS.map(function(lbl,i){
         var c={label:lbl,dtCol:i+4,type:(DCE_TYPES[lbl]||'text')};
@@ -989,6 +993,12 @@ $(document).ready(function() {
         return c;
     });
     SF_COLS.push({label:'Intrag ID', dtCol:3, type:'text'});   // extra column, searchable
+    // A coluna que COMANDA o fetch (o Trade Date decide o arquivo-dia lido no
+    // servidor), achada pelo RÓTULO e nunca por índice fixo: no molde da Option
+    // ela é a 4ª coluna e o índice fixo 3 bastava; aqui a 4ª é Participant
+    // Position, e o índice herdado fazia o chip de data filtrar a coluna
+    // errada — inclusive o chip padrão de hoje, que abre a tela.
+    var SF_TRADE_DATE = SF_COLS.filter(function(c){return c.isDate;})[0] || SF_COLS[0];
     function sfEsc(s){return String(s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
     function sfIsDateLike(s){return /^\d{1,2}[\/\-]\d/.test(s)||/^\d{4}[\/\-]/.test(s);}
     function sfToDate(s){
@@ -1121,7 +1131,7 @@ $(document).ready(function() {
     });
 
     // Default view: Trade Date = today, fetched from the server (like the sisters).
-    sfAddFilter(SF_COLS[3], _todayDmy());
+    sfAddFilter(SF_TRADE_DATE, _todayDmy());
     document.getElementById('sfSearchBtn').click();
 });
 </script>
