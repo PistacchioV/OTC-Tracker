@@ -652,8 +652,10 @@ def swap_prefill(b3_id):
         sinal = domain.sinal_da_posicao(_celula(vals, _POS['sinal'][k]))
         cot = domain.numero_da_posicao(_celula(vals, _POS['cupom_limpo'][k]))
         desloc = domain.numero_da_posicao(_celula(vals, _POS['data_cotacao'][k]))
-        campos, faltando = domain.montar_ponta(regra, pct, taxa, sinal, nome_classe, cot,
-                                               deslocamento=None if desloc is None else int(desloc))
+        campos, faltando = domain.montar_ponta(
+            regra, pct, taxa, sinal, nome_classe, cot,
+            deslocamento=None if desloc is None else int(desloc),
+            fixing_ipca_posicao=_celula(vals, _POS['fixing_ipca'][k]))
         campos['fonte'] = {'codigo': codigo, 'curva': nome_curva, 'classe': nome_classe}
         if not regra:
             # A tela já sinaliza (a nota vermelha da ponta escreve o mesmo),

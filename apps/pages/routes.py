@@ -3603,6 +3603,13 @@ def _swapchar_lob(identifier):
 def _swapchar_coltype(label):
     """Formatting class for a column: date | func | amort | value | text."""
     n = _fcst_norm(label)
+    # `Data de Fixing IPCA (Parte/Contraparte)` se chama Data e NÃO é data: o
+    # arquivo traz `1` ou `2`, a defasagem do número-índice (M-1 / M-2). Cai
+    # antes do ramo de data de propósito — pelo nome ela iria para o
+    # `_fcst_parse_date`, que não entende `2` e devolveria o texto cru, com a
+    # coluna parecendo dado sujo em vez de responder o que responde.
+    if 'fixing ipca' in n:
+        return 'ipca_fix'
     if n.startswith('data'):
         return 'date'
     if n == 'funcionalidade':
@@ -3619,6 +3626,13 @@ def _swapchar_coltype(label):
         return 'value'
     return 'text'
 
+
+# A lista acima foi escrita até o `Código Identificador` (146 colunas) e a
+# posição tem 170. As seguintes já existem, com os mesmos nomes, no cabeçalho da
+# B3 — e os 146 primeiros são IDÊNTICOS aos dele. Recopiá-las aqui criaria duas
+# listas para a mesma coisa, que envelhecem separadas e desalinham a leitura
+# POSICIONAL sem erro nenhum: a cauda sai do próprio cabeçalho, que é a fonte.
+_SWAPCHAR_LABELS += list(_B3_SWAP_HEADERS['swap_position'][len(_SWAPCHAR_LABELS):])
 
 _SWAPCHAR_TYPES = [_swapchar_coltype(l) for l in _SWAPCHAR_LABELS]
 
@@ -3949,6 +3963,19 @@ def _swapchar_is_xl_error(v):
         re.match(r'^#?(NULL!?|N/A|REF!|VALUE!|DIV/0!|NAME\?|NUM!)$', s))
 
 
+def _swapchar_ipca_fix_text(value):
+    """A defasagem do fixing do IPCA: `1` → `M-1`, `2` → `M-2`.
+
+    O número sozinho não diz de que ele é defasagem, e é a MESMA linguagem que o
+    Swap Calculator usa no campo de fixing (`ipca.M1`/`ipca.M2`) — a tela que
+    origina o pré-preenchimento tem de falar como a tela que o recebe. Valor
+    fora de `1`/`2` volta CRU: inventar um `M-0` esconderia arquivo estranho."""
+    s = str(value or '').strip()
+    if s.endswith('.0'):
+        s = s[:-2]
+    return 'M-{}'.format(s) if s in ('1', '2') else str(value)
+
+
 def _swapchar_fmt_cell(value, ctype):
     # Texto de ERRO do Excel ('#NULL!', 'NULL', '#N/A', …) vira VAZIO: é o
     # que a planilha deixa no lugar da fórmula quebrada no arquivo de origem
@@ -3968,6 +3995,8 @@ def _swapchar_fmt_cell(value, ctype):
         return _swapchar_amort_text(value)
     if ctype == 'sinal':
         return _swapchar_sinal_text(value)
+    if ctype == 'ipca_fix':
+        return _swapchar_ipca_fix_text(value)
     if ctype == 'indice':
         return _swapindex_name(value)
     if ctype == 'value':
@@ -3985,6 +4014,19 @@ _SWAPCHAR_DISPLAY_IDX = [
     44, 45, 46, 48, 49, 50, 52, 53, 54, 55, 56, 58, 60, 61, 62, 63, 64,  # AS..BM (skips AV,AZ,BF,BH)
     65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75,                          # BN..BX
     76, 77, 78, 79, 126, 127, 132, 133, 134, 144, 145,                   # BY,BZ,CA,CB,DW,DX,EC,ED,EE,EO,EP
+    # Do `Código Identificador` para a DIREITA, o arquivo inteiro (pedido da
+    # mesa, 15/09/2026). O layout da tela parava nele e as 24 colunas seguintes
+    # existiam na posição sem ninguém ver — entre elas o fixing do IPCA, que é o
+    # que o Swap Calculator precisa. A ORDEM é a do arquivo, que é como a mesa
+    # lê a planilha de origem.
+    146, 147, 148, 149,                                                  # EQ..ET
+    150, 151, 152, 153, 154,                                             # EU..EY  (Parte)
+    155, 156, 157, 158, 159,                                             # EZ..FD  (Contraparte)
+    # `Data de Fixing IPCA`: `1`/`2` exibidos M-1/M-2. Diz a defasagem do swap
+    # de IPCA DIRETO (no VCP quem responde é o Nome Tipo/Classe), e é daqui que
+    # o pré-preenchimento do Swap Calculator a puxa.
+    160, 161,                                                            # FE,FF
+    162, 163, 164, 165, 166, 167, 168, 169,                              # FG..FN
 ]
 _SWAPCHAR_DISPLAY_LABELS = [_SWAPCHAR_LABELS[i] for i in _SWAPCHAR_DISPLAY_IDX]
 # Flag columns shown as Sim/Não (01 = Não, 00 = Sim; empty stays empty).

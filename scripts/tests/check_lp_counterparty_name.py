@@ -159,6 +159,36 @@ finally:
     R.B3_JSON_ROOT = root_orig
     shutil.rmtree(tmp, ignore_errors=True)
 
+# ── as tres colunas do fim do arquivo (15/09/2026) ─────────────────────────
+# O layout da tela parava no `Codigo Identificador` (146 colunas) e a posicao
+# tem 170: as seguintes ja existiam no cabecalho da B3 e ninguem as mostrava. A
+# cauda do `_SWAPCHAR_LABELS` SAI do cabecalho em vez de ser recopiada -- duas
+# listas para a mesma coisa envelhecem separadas e desalinham a leitura
+# POSICIONAL sem erro nenhum, que e o pior jeito de errar aqui.
+print('\n== 5b. as colunas do fim do arquivo de posicao ==')
+check('a cauda dos rotulos sai do cabecalho da B3, sem segunda lista',
+      R._SWAPCHAR_LABELS == list(R._B3_SWAP_HEADERS['swap_position']), True)
+check('a Data de Cotacao Final - Termo vem LOGO APOS o Codigo Identificador',
+      (R._SWAPCHAR_LABELS[145], R._SWAPCHAR_LABELS[146]),
+      ('Código Identificador', 'Data de Cotação Final – Termo'))
+check('   e na TELA ela tambem vem logo depois',
+      R._SWAPCHAR_DISPLAY_IDX[R._SWAPCHAR_DISPLAY_IDX.index(145) + 1], 146)
+check('do Codigo Identificador em diante vem o arquivo INTEIRO, em ordem',
+      R._SWAPCHAR_DISPLAY_IDX[R._SWAPCHAR_DISPLAY_IDX.index(145):],
+      list(range(145, len(R._SWAPCHAR_LABELS))))
+check('o fixing do IPCA das duas pontas esta na tela',
+      [R._SWAPCHAR_LABELS[i] for i in (160, 161)],
+      ['Data de Fixing IPCA (Parte)', 'Data de Fixing IPCA (Contraparte)'])
+# A coluna se CHAMA Data e nao e data: o arquivo traz 1 ou 2, a defasagem do
+# numero-indice. Pelo nome ela cairia no `_fcst_parse_date`, que nao entende `2`
+# e devolveria o texto cru -- a coluna pareceria dado sujo em vez de responder.
+check('   e ela NAO e tratada como data, apesar do nome',
+      [R._SWAPCHAR_TYPES[i] for i in (146, 160, 161)], ['date', 'ipca_fix', 'ipca_fix'])
+check('   1 e 2 viram M-1 e M-2, a linguagem do Swap Calculator',
+      [R._swapchar_fmt_cell(v, 'ipca_fix') for v in ('1', '2', '2.0')], ['M-1', 'M-2', 'M-2'])
+check('   e o que nao e 1 nem 2 volta CRU, sem inventar M-0',
+      [R._swapchar_fmt_cell(v, 'ipca_fix') for v in ('', 'x', '7')], ['', 'x', '7'])
+
 print('\n== 6. o registro de quais colunas viram nome ==')
 check('NDF', R._LPNDF_CPTY_NAME_COLS, {'CPF/CNPJ da Contraparte'})
 check('Option', R._LPOPT_CPTY_NAME_COLS, {'CPF/CNPJ Cliente Contraparte'})

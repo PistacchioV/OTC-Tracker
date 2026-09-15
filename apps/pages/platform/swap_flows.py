@@ -41,6 +41,10 @@ POS = {
     # ponta 1 (Parte → ativa) / ponta 2 (Contraparte → passiva)
     'pct': (39, 49), 'indice': (40, 50), 'sinal': (42, 52), 'taxa': (43, 53),
     'nome_classe': (69, 74), 'cupom_limpo': (76, 78), 'data_cotacao': (77, 79),
+    # `Data de Fixing IPCA (Parte/Contraparte)` — FE/FF do arquivo. Chama-se
+    # Data e traz `1`/`2`: a defasagem em meses do número-índice (M-1/M-2), que
+    # o Swap Calculator usa na perna de IPCA DIRETO.
+    'fixing_ipca': (160, 161),
 }
 
 
