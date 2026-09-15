@@ -494,18 +494,9 @@ def _ops_swap_trade_rows(settle_ref):
     # CEM, e sem isto a linha de equity sai com o nome curto da B3 e sem valor.
     eqlink = _ops_equity_link(ref_dt)
 
-    _ojp, otm = routes._otm_load(ref_dt)
-    otm_by_trade, otm_spn_by_trade = {}, {}
-    for rec in (otm or []):
-        tid = str(rec.get('Trade Id', '') or '').strip().upper()
-        amt = routes._conf_to_float(rec.get('Amount'))
-        if tid and amt is not None:
-            otm_by_trade[tid] = otm_by_trade.get(tid, 0.0) + amt
-        # Cpty SPN: o identificador da contraparte na PRÓPRIA linha do fluxo. O
-        # primeiro não vazio vale — as várias linhas de um trade são do mesmo
-        # cliente, e uma delas vir sem SPN não pode apagar o nome.
-        if tid and routes._spn_key(rec.get('Cpty SPN', '')) and tid not in otm_spn_by_trade:
-            otm_spn_by_trade[tid] = str(rec.get('Cpty SPN', '') or '').strip()
+    porta = _ops_otm_por_trade(ref_dt)
+    otm_by_trade = {tid: g['pos'] + g['neg'] for tid, g in porta.items()}
+    otm_spn_by_trade = {tid: g['spn'] for tid, g in porta.items() if g['spn']}
 
     def _cell(row, idx_map, name):
         i = idx_map.get(name)
@@ -887,6 +878,45 @@ def _latam_equity_b3_index():
             if b3:
                 idx.setdefault(b3, (deal_ref, interna, rec))
     return idx
+
+
+@_req_cached
+def _ops_otm_por_trade(ref):
+    """`{Trade Id → {'pos', 'neg', 'spn'}}` do OTM Settlements do dia.
+
+    O arquivo traz uma linha por FLUXO de caixa, e a regra da mesa lê os fluxos
+    pelo SINAL: os positivos são a curva do BANCO, os negativos a do CLIENTE, e
+    a soma dos dois é o Resultado Bruto. É a mesma leitura que o Kapital Hybrids
+    faz do `BANCO_UPCOMING_PAYMENTS.csv` (`_SWAPHYB_COLUMNS`) e que o elo de
+    equity (`_ops_equity_link`) faz deste mesmo arquivo — escrita aqui uma vez
+    para o Trade Level e o Settlement Advice não poderem responder diferente
+    sobre a mesma operação no mesmo dia.
+
+    O `Cpty SPN` sai da PRÓPRIA linha do fluxo, primeiro não vazio: as várias
+    linhas de um trade são do mesmo cliente, e uma delas vir sem SPN não pode
+    apagar o que as outras já disseram.
+
+    Trade sem NENHUM `Amount` legível não entra — a ausência tem de poder ser
+    distinguida do zero, senão o aviso imprimiria `0.00` para uma liquidação
+    cujo valor não foi lido, e ninguém iria atrás."""
+    from apps.pages import routes
+    _jp, otm = routes._otm_load(ref)
+    saida = {}
+    for rec in (otm or []):
+        tid = str(rec.get('Trade Id', '') or '').strip().upper()
+        if not tid:
+            continue
+        amt = routes._conf_to_float(rec.get('Amount'))
+        if amt is None:
+            continue
+        g = saida.setdefault(tid, {'pos': 0.0, 'neg': 0.0, 'spn': ''})
+        if amt >= 0:
+            g['pos'] += amt
+        else:
+            g['neg'] += amt
+        if not g['spn'] and routes._spn_key(rec.get('Cpty SPN', '')):
+            g['spn'] = str(rec.get('Cpty SPN', '') or '').strip()
+    return saida
 
 
 @_req_cached

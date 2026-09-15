@@ -105,6 +105,8 @@ write_json(os.path.join(dia, 'operations-b3_20260810.json'), [
     opb3('B3-INT-111', 'PAGAMENTO DE DIF. DE JUROS', '130.000,00', 'INTRAGATACAMAFDO'),
     # Um swap de CEM de verdade, com linha no Athena -- tem de continuar igual.
     opb3('CEM-1', 'PAGAMENTO DE DIF. DE JUROS', '500,00', 'CLIENTE B3'),
+    # Outro de CEM, este SEM linha no OTM: e o caso em que o Athena responde.
+    opb3('CEM-2', 'PAGAMENTO DE DIF. DE JUROS', '700,00', 'CLIENTE B3'),
     # Uma equity cujo Latam NAO preenche as colunas de subjacente (o caso do
     # swap: o proprio instrumento e a acao). Sem a cadeia de fallback, esta
     # linha aparece com o Type em BRANCO mesmo tendo Internal ID e valor.
@@ -116,6 +118,10 @@ write_json(os.path.join(dia, 'br-onshore-settlements_20260810.json'), [
     {'CETIP ID': 'CEM-1', 'Kapital ID': 'K1', 'Owner Legal Entity': 'BANCO J.P. MORGAN',
      'CounterParty': 'SUZANO SA', 'SPN': '1', 'Owner curve': '900,00',
      'Counterparty curve': '-400,00', 'BRL Net Amount': '500,00',
+     'Direction': 'Counterparty receives'},
+    {'CETIP ID': 'CEM-2', 'Kapital ID': 'K2', 'Owner Legal Entity': 'BANCO J.P. MORGAN',
+     'CounterParty': 'VALE SA', 'SPN': '2', 'Owner curve': '1,000.00',
+     'Counterparty curve': '-300.00', 'BRL Net Amount': '700.00',
      'Direction': 'Counterparty receives'},
 ])
 
@@ -138,8 +144,12 @@ write_json(os.path.join(dia, 'otm-settlement_20260810.json'), [
     otm('270WC0012345', '-150000.00', '1808267', 'SAFRA TEXTO LIVRE'),
     # Perna INTERNA do mesmo Deal_Ref.
     otm('270WI0012345', '130000.00', '9911', 'ATACAMA'),
-    # O swap de CEM, chaveado pelo Kapital ID.
-    otm('K1', '500.00'),
+    # O swap de CEM, chaveado pelo Kapital ID. Duas linhas, uma por perna: e
+    # assim que o arquivo de fluxo de caixa traz um swap, e e o que deixa a
+    # regra do SINAL reconstruir as duas curvas. O `CEM-2` nao esta aqui de
+    # proposito -- e ele que prova o plano B.
+    otm('K1', '900.00'),
+    otm('K1', '-400.00'),
     # A equity sem subjacente em coluna nenhuma do OTM tambem.
     otm('270WC0000077', '1000.00', '5555', 'RENNER TEXTO LIVRE'),
 ])
@@ -167,8 +177,8 @@ by_b3 = {r['id_b3']: r for r in trade}
 
 print('\n== 1. uma linha por operacao, nao duas ==')
 check('os Titulos viram uma linha cada', sorted(by_b3),
-      ['B3-CLNT-222', 'B3-EQ-333', 'B3-INT-111', 'CEM-1'])
-check('   e nenhuma familia paralela duplica o trade', len(trade), 4)
+      ['B3-CLNT-222', 'B3-EQ-333', 'B3-INT-111', 'CEM-1', 'CEM-2'])
+check('   e nenhuma familia paralela duplica o trade', len(trade), 5)
 
 print('\n== 2. o que o Athena daria, vindo do Latam + OTM ==')
 cli = by_b3['B3-CLNT-222']
@@ -236,7 +246,7 @@ check('   e o cliente NAO vem marcado',
 check('   e CONSTA no Settlement Advice, que e a visao do dia',
       sorted(r['counterparty'] for r in aviso),
       ['ATACAMA FUNDO DE INVESTIMENTO', 'RENNER CORRETORA LTDA',
-       'SAFRA CORRETORA LTDA', 'SUZANO SA'])
+       'SAFRA CORRETORA LTDA', 'SUZANO SA', 'VALE SA'])
 check('   marcada para nao virar documento',
       [r['counterparty'] for r in aviso if r.get('no_advice')],
       ['ATACAMA FUNDO DE INVESTIMENTO'])
@@ -253,9 +263,34 @@ check('Resultado Bruto = a soma dos dois', eq['bruto'], -130000.0)
 check('   e as celulas impressas seguem os mesmos numeros',
       (eq['cells'][8], eq['cells'][10], eq['cells'][11]),
       ('20,000.00', '-150,000.00', '-130,000.00'))
+# O swap de CEM tambem sai do OTM -- e a mudanca. Enquanto o aviso lia o Swap
+# Athena e o Trade Level somava o OTM, a MESMA operacao no MESMO dia saia com um
+# numero na tela e outro no documento que vai ao cliente. A ponte ate a linha do
+# OTM e o `Kapital ID` do Athena, que e o `Trade Id` de la.
 cemadv = adv['SUZANO SA']
-check('o swap de CEM continua lendo as curvas do Athena',
-      (cemadv['cells'][8], cemadv['cells'][10]), ('900.00', '-400.00'))
+check('o swap de CEM sai do OTM, pela ponte do Kapital ID',
+      (cemadv['curva_banco'], cemadv['curva_cliente'], cemadv['bruto']),
+      (900.0, -400.0, 500.0))
+check('   e o Trade Level diz o MESMO numero',
+      cem['settlement'], cemadv['cells'][11])
+
+# O plano B. Sem o trade no OTM, o Athena responde -- e responde com o TEXTO do
+# arquivo, que e o que a pagina Swap Athena mostra.
+b = adv['VALE SA']
+check('sem linha no OTM, as tres colunas vem do Athena',
+      (b['cells'][8], b['cells'][10], b['cells'][11]),
+      ('1,000.00', '-300.00', '700.00'))
+check('   e os numeros crus acompanham',
+      (b['curva_banco'], b['curva_cliente'], b['bruto']), (1000.0, -300.0, 700.0))
+
+# A escolha e da LINHA INTEIRA: as duas curvas e o bruto de uma fonte so. E o
+# que garante que a soma impressa no aviso fecha, que e onde o cliente olha.
+for r in aviso:
+    if r['bruto'] is None:
+        continue
+    check('   %s: curva banco + curva cliente = bruto' % r['counterparty'],
+          round((r['curva_banco'] or 0) + (r['curva_cliente'] or 0), 2),
+          round(r['bruto'], 2))
 
 print('\n%s' % ('TUDO OK' if not fails else 'FALHAS (%d): %r' % (len(fails), fails)))
 sys.exit(1 if fails else 0)

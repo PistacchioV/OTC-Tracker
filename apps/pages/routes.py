@@ -3446,6 +3446,7 @@ _ops_eq_ref_key = _pf_settle._ops_eq_ref_key
 _ops_eq_trade_key = _pf_settle._ops_eq_trade_key
 _latam_equity_b3_index = _pf_settle._latam_equity_b3_index
 _ops_equity_link = _pf_settle._ops_equity_link
+_ops_otm_por_trade = _pf_settle._ops_otm_por_trade
 _latam_trade_dt = _pf_settle._latam_trade_dt
 _ops_le_name_keys = _pf_settle._ops_le_name_keys
 _ops_is_internal_cpty = _pf_settle._ops_is_internal_cpty
@@ -4784,10 +4785,24 @@ def _swadv_collect(ref):
             by_cetip.setdefault(cet, row)
 
     # Equity: o Swap Athena é só de CEM. Sem esta rota (Operations B3 → Latam →
-    # OTM) o aviso saía com o nome curto da B3 e com as três colunas de valor em
-    # branco — a MESMA função que o Trade Level usa, para o documento que vai ao
-    # cliente não poder discordar da tela.
+    # OTM) o aviso saía com o nome curto da B3 — a MESMA função que o Trade
+    # Level usa, para o documento que vai ao cliente não poder discordar da tela.
     eqlink = _ops_equity_link(ref)
+
+    # As TRÊS colunas de valor saem do OTM Settlements. É o arquivo do fluxo de
+    # caixa que de fato liquida, e é dele que o Trade Level já tira o seu
+    # Settlement: enquanto o aviso lia o Swap Athena, a mesma operação no mesmo
+    # dia saía com um número na tela e outro no documento que vai ao cliente —
+    # e quem confere é o cliente. A ponte até a linha do OTM é o `Kapital ID`
+    # do Athena (que é o `Trade Id` de lá) e, em equity, o `internal_id` do elo
+    # Latam → OTM, porque o Swap Athena é só de CEM e não tem essas operações.
+    #
+    # O Athena é o PLANO B, para o trade que o OTM não traz. A escolha é da
+    # LINHA INTEIRA, nunca coluna a coluna: as duas curvas e o bruto de uma
+    # fonte só é o que garante que Curva Banco + Curva Cliente = Resultado
+    # Bruto no papel. Misturar as fontes imprimiria um aviso cuja soma não
+    # fecha, que é o primeiro lugar onde o cliente olha.
+    otm_por_trade = _ops_otm_por_trade(ref)
 
     # O arquivo de EVENTOS deixou de ser lido aqui: Valor Base e os indexadores
     # passaram a sair da posição, que já é lida para as datas. Uma fonte a menos
@@ -4834,19 +4849,27 @@ def _swadv_collect(ref):
         venc_dt = ref.date()
         prazo = (venc_dt - op_dt).days if op_dt else None
 
-        # Em equity as três colunas de valor saem do OTM Settlements, com a regra
-        # da mesa: **Curva Banco = os fluxos positivos, Curva Cliente = os
-        # negativos, Resultado Bruto = a soma dos dois**. O Athena não tem essas
-        # operações, e o aviso saía com as três em branco.
-        curva_banco_n = (_mtm_parse_num(_cell(arow, ai, 'Owner curve')) if arow
-                         else eq.get('curva_banco'))
-        curva_cliente_n = (_mtm_parse_num(_cell(arow, ai, 'Counterparty curve')) if arow
-                           else eq.get('curva_cliente'))
-        bruto_txt = _cell(arow, ai, 'BRL Net Amount')
-        bruto = _mtm_parse_num(bruto_txt) if bruto_txt else None
-        if bruto is None and eq.get('settlement') is not None:
-            bruto = eq['settlement']
+        # As três colunas de valor, pela regra da mesa sobre os fluxos do OTM:
+        # **Curva Banco = os positivos, Curva Cliente = os negativos, Resultado
+        # Bruto = a soma dos dois** (ver o `otm_por_trade`, acima).
+        internal_id = (_cell(arow, ai, 'Kapital ID') if arow else '') or eq.get('internal_id', '')
+        otm_val = otm_por_trade.get(internal_id.strip().upper()) if internal_id else None
+        if otm_val:
+            curva_banco_n, curva_cliente_n = otm_val['pos'], otm_val['neg']
+            bruto = curva_banco_n + curva_cliente_n
+            cb_txt, cc_txt = _ops_fmt_amt(curva_banco_n), _ops_fmt_amt(curva_cliente_n)
             bruto_txt = _ops_fmt_amt(bruto)
+        else:
+            # Sem o trade no OTM, vale o Swap Athena — e o TEXTO do arquivo, não
+            # o número reformatado: é o que a página Swap Athena mostra, e
+            # reescrever a formatação faria as duas telas divergirem no
+            # separador sem nenhum motivo.
+            cb_txt = _cell(arow, ai, 'Owner curve')
+            cc_txt = _cell(arow, ai, 'Counterparty curve')
+            bruto_txt = _cell(arow, ai, 'BRL Net Amount')
+            curva_banco_n = _mtm_parse_num(cb_txt) if cb_txt else None
+            curva_cliente_n = _mtm_parse_num(cc_txt) if cc_txt else None
+            bruto = _mtm_parse_num(bruto_txt) if bruto_txt else None
         # A direção vem do texto do Athena (é o que a fórmula da planilha lê); o
         # sinal do Resultado Bruto só entra quando o texto falta, e assume a
         # mesma convenção do settlement — negativo é o banco pagando.
@@ -4874,9 +4897,9 @@ def _swadv_collect(ref):
                 '' if prazo is None else '{:,}'.format(prazo).replace(',', '.'),
                 _swapchar_fmt_value(pos.get('valor_base', '')),
                 pos.get('idx_banco', ''),
-                _cell(arow, ai, 'Owner curve') if arow else _ops_fmt_amt(curva_banco_n),
+                cb_txt,
                 pos.get('idx_cliente', ''),
-                _cell(arow, ai, 'Counterparty curve') if arow else _ops_fmt_amt(curva_cliente_n),
+                cc_txt,
                 bruto_txt,
                 _swadv_pct(rate),
                 _ops_fmt_amt(ir),
