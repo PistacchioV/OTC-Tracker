@@ -63,9 +63,28 @@ def notional_amortizado(vbr, original, pct, base):
 
 
 def juros(curva, amortizado):
-    """|curva da perna| menos o que amortizou: só o que é juros."""
+    """|curva da perna| menos o que amortizou: só o que é juros.
+
+    **Perna SEM fluxo no dia não amortizou nada.** Subtrair o principal de uma
+    curva zerada devolve `−principal`, que não é um juros negativo: é a
+    afirmação de que a perna pagou o principal de volta sem ter tido caixa
+    nenhum. E o estrago não para aí — a `diff_b3` da perna calculada é `B3
+    menos o nosso`, então esse `−principal` volta como `+principal` e entra
+    somado no fator da perna VCP, que é o número que vai para a B3.
+
+    Foi o que aconteceu no primeiro bullet corrigido (§470): os 100% do
+    vencimento entraram na perna VCP e saíram pela perna sem curva, e o fator
+    ficou exatamente o mesmo de antes — 2,36993189 em vez de 1,36993189, com
+    todas as colunas da tela coerentes entre si.
+
+    A resposta é `None` — não deu para saber —, nunca zero e nunca
+    `−amortizado`. Sem amortização no fluxo a perna zerada segue valendo 0,0,
+    que é o que ela sempre valeu: aí não há principal para subtrair e a
+    ausência não engana ninguém."""
     if curva is None:
         return None
+    if not curva:
+        return None if amortizado else 0.0
     return abs(curva) - (amortizado or 0.0)
 
 

@@ -113,6 +113,22 @@ def base_da_amortizacao(texto):
     return None
 
 
+def por_nome(row, nome):
+    """O valor da coluna `nome`, cego à CAIXA do cabeçalho.
+
+    O arquivo da B3 escreve `Data vencimento` com v minúsculo e `Tipo de
+    Contrato` com C maiúsculo, e a leitura por nome só existe para o arquivo
+    ESTREITO — onde não se pode contar com o índice. Um `row.get` com a grafia
+    errada devolve vazio e a regra do bullet simplesmente não roda, sem erro."""
+    if nome in row:
+        return row[nome]
+    alvo = norm(nome)
+    for k, v in row.items():
+        if norm(k) == alvo:
+            return v
+    return ''
+
+
 def tipo_de_contrato(texto):
     """`Tipo de Contrato` da posição → `'bullet'`, `'cashflow'` ou `''`.
 
@@ -347,8 +363,8 @@ def posicoes_swap(ref):
                     'tipo_amort': '', 'remanescente': numero_da_posicao(row.get('Valor Base Remanescente', '')),
                     'valor_base': numero_da_posicao(row.get('Valor base', '')),
                     'valor_inicial': numero_da_posicao(row.get('Valor base inicial', '')),
-                    'tipo_contrato': tipo_de_contrato(row.get('Tipo de Contrato', '')),
-                    'vencimento': iso(row.get('Data Vencimento', ''))}
+                    'tipo_contrato': tipo_de_contrato(por_nome(row, 'Tipo de Contrato')),
+                    'vencimento': iso(por_nome(row, 'Data vencimento'))}
         else:
             item = {'contrato': celula(vals, POS['contrato']),
                     'identificador': celula(vals, POS['identificador']),

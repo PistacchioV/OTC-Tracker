@@ -150,10 +150,14 @@ print('== 2. as fontes ==')
 _H = R._B3_SWAP_HEADERS['swap_position']
 
 
-def _pos(contrato, conta_cp, ix1, ix2, rem, base_v, ini, tipo_am='0', ident='CEM-2026-0001'):
+def _pos(contrato, conta_cp, ix1, ix2, rem, base_v, ini, tipo_am='0', ident='CEM-2026-0001',
+         tipo_contrato='', venc=''):
     vals = [''] * len(_H)
     vals[2], vals[7], vals[40], vals[50] = contrato, conta_cp, ix1, ix2
     vals[14], vals[15], vals[24], vals[38], vals[145] = base_v, rem, ini, tipo_am, ident
+    # 0 = `Tipo de Contrato` (02 bullet / 01 cashflow), 12 = `Data vencimento`:
+    # e o par que responde "amortiza 100% hoje?" (§470).
+    vals[0], vals[12] = tipo_contrato, venc
     return dict(zip(nomes_unicos(list(_H), chave=lambda s: s), vals))
 
 
@@ -182,6 +186,10 @@ def _escrever():
     w(os.path.join(ds, 'eventos-swap-jpm_20260908.json'), [
         _ev('21C00035804', '16900,00', '', '1,0169', '', 'DI', 'VCP'),
         _ev('24H02170822', '', '5000,00', '', '1,005', 'VCP', 'DI', conta='00041.00-1'),
+        # A B3 manda `0,00` na perna sem fluxo -- e nao vazio. E a diferenca
+        # entre reproduzir a instancia e nao reproduzir: com vazio a `diff_b3`
+        # ja devolvia None e o defeito nao aparecia.
+        _ev('26B00099001', '', '0,00', '', '', 'VCP', 'PREFIXADO 252D'),
     ])
     w(os.path.join(ds, 'br-onshore-settlements_20260908.json'), [
         {'CETIP ID': '21C00035804', 'Kapital ID': 'K-001', 'Owner Legal Entity': 'Bco J.P. Morgan S.A.',
@@ -190,14 +198,21 @@ def _escrever():
         {'CETIP ID': '24H02170822', 'Kapital ID': 'K-002', 'Owner Legal Entity': 'Bco J.P. Morgan S.A.',
          'CounterParty': 'OUTRA', 'SPN': '2', 'Owner curve': '9000.00', 'Counterparty curve': '4000.00',
          'BRL Net Amount': '5000.00', 'Direction': 'Counterparty receives'},
+        {'CETIP ID': '26B00099001', 'Kapital ID': 'K-003', 'Owner Legal Entity': 'Bco J.P. Morgan S.A.',
+         'CounterParty': 'SUZANO', 'SPN': '1', 'Owner curve': '13475844.69', 'Counterparty curve': '0.00',
+         'BRL Net Amount': '13475844.69', 'Direction': 'Counterparty receives'},
     ])
     w(os.path.join(ds, 'otm-settlement_20260908.json'), [
         {'Trade Id': 'K-001', 'Amount': '350000.00', 'Currency': 'BRL'},
         {'Trade Id': 'K-001', 'Amount': '-345000.00', 'Currency': 'BRL'},
+        {'Trade Id': 'K-003', 'Amount': '13475844.69', 'Currency': 'BRL'},
     ])                                                     # K-002 sem OTM: cai nas colunas do Athena
     w(os.path.join(b3, '73760_260908_DPOSICAO-SWAP.json'), [
         _pos('21C00035804', '73760.10-2', 'C03', 'C99', '1000000,00', '1000000,00', '1000000,00'),
         _pos('24H02170822', '00041.00-1', 'C99', 'C03', '500000,00', '500000,00', '500000,00', ident='EDG-2026-1'),
+        # BULLET vencendo HOJE (§470), com os numeros que a mesa trouxe da tela.
+        _pos('26B00099001', '73760.10-2', 'C03', 'C99', '9836872,00', '9836872,00', '9836872,00',
+             tipo_am='3', tipo_contrato='02', venc='08/09/2026'),
     ])
     w(os.path.join(b3, '73760_260908_DFLUXO.json'), [
         _flx('21C00035804', '08/09/2026', '33,3300'),
@@ -207,7 +222,7 @@ def _escrever():
 
 _escrever()
 OPS = [{'Tipo Operação': 'AVISO DE INEXISTENCIA DE PU', 'Título': c, 'Conta': '73760.00-9'}
-       for c in ('21C00035804', '24H02170822')]
+       for c in ('21C00035804', '24H02170822', '26B00099001')]
 real = (R.OTM_JSON_ROOT, R.B3_JSON_ROOT, R._opb3_load, R._vcp_refdata_maps, R.CONECTA_NEW_PATH,
         PF.ACCRUAL_SOURCE_ROOT, R.smtplib.SMTP if hasattr(R, 'smtplib') else None)
 R.OTM_JSON_ROOT = os.path.join(TMP, 'ds')
@@ -245,7 +260,7 @@ try:
     check('a primeira tabela recebe o fator SO da perna VCP',
           (linhas['21C00035804'][cols.index('PARTE / Fator')], linhas['21C00035804'][cols.index('CONTRAPARTE/ Fator')]),
           ('-', '1.01190000'))
-    check('status New nas duas tabelas', (pay['statuses'], f1['status']), (['New', 'New'], 'New'))
+    check('status New nas duas tabelas', (pay['statuses'], f1['status']), (['New', 'New', 'New'], 'New'))
     f2 = fat['24H02170822']
     check('sem OTM as curvas caem nas colunas do Athena', (f2['curva_p'], f2['curva_c']), (9000.0, 4000.0))
     check('sem evento no DFLUXO: amortizacao 0 e `fluxo` em missing',
@@ -254,6 +269,36 @@ try:
           (f2['interno'], f2['veredito']), (None, ''))
     check('perna VCP e a Parte: fator com a diff da Contraparte (B3 5000 - JP 4000)',
           (f2['vcp_p'], f2['diff_c'], f2['fator_p']), (True, 1000.0, round((9000.0 + 1000.0) / 500000.0 + 1, 8)))
+
+    # ── 2b. o BULLET, do arquivo de posicao ate o fator (§470) ──────────────
+    # A regra so serve se a POSICAO chegar ate ela: o `Tipo de Contrato` mora no
+    # indice 0 do DPOSICAO-SWAP e a `Data vencimento` no 12, e e o par que
+    # responde "amortiza 100% hoje?". Provar so o `domain.calcular` deixa a
+    # ligacao de fora — e e nela que uma correcao destas morre em silencio.
+    f3 = fat['26B00099001']
+    check('a posicao entrega bullet e o vencimento de hoje',
+          (f3['vbr'], round(f3['amortizado'], 2)), (9836872.0, 9836872.0))
+    check('   o principal sai dos juros', round(f3['juros_p'], 2), 3638972.69)
+    check('   e o fator perde o 1,0 que carregava o principal',
+          f3['fator_p'], round(3638972.69 / 9836872.0 + 1, 8))
+    check('   o DFLUXO segue respondendo 0%: os 100% sao do bullet',
+          (f3['pct'], f3['base_amort']), (100.0, 'vencimento'))
+    # A coluna Tipo Amortizacao DIZ por que a amortizacao e de 100%. A posicao
+    # deixa a celula em branco num bullet (o cronograma que ela descreve nao
+    # existe ali), e vazia ela lia como "nao deu para puxar".
+    check('   e o Tipo Amortizacao passa a dizer por que', f3['tipo'], 'Na Data de Vencimento')
+    check('   o cashflow nao e tocado', fat['21C00035804']['tipo'], 'Sobre Valor Base Original')
+    # O ESTRAGO que o primeiro bullet trouxe: a perna PREFIXADO nao tem curva no
+    # OTM, e subtrair dela o principal dava `juros = -9.836.872,00`. A `diff_b3`
+    # e `B3 menos o nosso`, entao esse `-principal` voltava como `+principal`
+    # somado no fator da perna VCP -- que e o numero que vai para a B3. Os 100%
+    # entravam por uma porta e saiam pela outra, e o fator ficava EXATAMENTE o
+    # mesmo de antes (2,36993189), com todas as colunas da tela coerentes entre
+    # si. Perna sem fluxo nao amortizou nada: a resposta e `None`.
+    check('   perna SEM curva nao amortiza: juros None, nunca -principal',
+          (f3['juros_c'], f3['diff_c']), (None, None))
+    check('   e o principal nao volta pela diff para dentro do fator',
+          f3['fator_p'] < 2.0, True)
 
     # ── 3. a edicao ─────────────────────────────────────────────────────────
     print('== 3. a edicao ==')
@@ -305,7 +350,7 @@ try:
     check('a evidencia foi copiada', os.path.isfile(os.path.join(PF.accrual_source_dir(datetime.now().strftime('%Y%m%d')), 'VCP_CLIENT.TXT')), True)
     pay2 = queries.vcp_payload(REF)
     check('enviado vira Sent nas duas tabelas', (pay2['statuses'], [f['status'] for f in pay2['factors']]),
-          (['Sent', 'Sent'], ['Sent', 'Sent']))
+          (['Sent', 'Sent', 'New'], ['Sent', 'Sent', 'New']))
     # O aviso tem rotulo PROPRIO: 'Accrual Sent' mandava para a pagina do
     # Accrual quem clicasse, e o arquivo nao e o de la. E o detalhe diz QUAIS
     # arquivos sairam — o nome separa o do cliente dos do intragrupo.
@@ -326,7 +371,7 @@ try:
         s['authenticated'] = True; s['user_sid'] = 'E3'; s['user_name'] = 'T'
         s['session_expires_at'] = (datetime.now(tz=timezone.utc) + timedelta(hours=8)).isoformat()
     d = cl.get('/api/other-products-swap-vcp/data?date=2026-09-08').get_json()
-    check('GET data traz factors e statuses', (len(d['factors']), d['statuses']), (2, ['Sent', 'Sent']))
+    check('GET data traz factors e statuses', (len(d['factors']), d['statuses']), (3, ['Sent', 'Sent', 'New']))
     r = cl.post('/api/other-products-swap-vcp/factors/edit', json={'date': '2026-09-08', 'contrato': '21C00035804', 'fields': {'fator_c': '1.02'}})
     check('POST edit', (r.status_code, r.get_json()['row']['fator_c'], r.get_json()['row']['status']), (200, 1.02, 'New'))
     r = cl.post('/api/other-products-swap-vcp/send', json={'date': '2026-09-08', 'contrato': '21C00035804'})
