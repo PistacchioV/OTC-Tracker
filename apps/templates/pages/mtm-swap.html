@@ -523,7 +523,7 @@ td .btn-sm.rounded-circle i { font-size: 1rem; }
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/vfs_fonts.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.html5.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.print.min.js"></script>
-<script src="{{ config.ASSETS_ROOT }}/js/export-advanced.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/export-advanced.js?v={{ asset_v('js/export-advanced.js') }}"></script>
 <script>
 // Register JSZip with DataTables Buttons (needed for the Excel export).
 (function () {

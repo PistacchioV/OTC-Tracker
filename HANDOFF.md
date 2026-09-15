@@ -20397,3 +20397,63 @@ Stub que não tem a FORMA do real não prende nada — a mesma lição do §467 
 serializador do openpyxl) em outra roupa. A fixture passou a formatar como o
 `_num` formata, e ganhou o caso acima de mil; conferido revertendo o parse, o
 guarda reproduz o `ValueError` da instância palavra por palavra.
+
+
+## §477 — Export para Excel: o `#NULL!` nunca esteve no dado (2026-09-15)
+
+Pedido: *"os relatórios anexos estão sendo gerados e vários trade ids estão
+saindo como #NULL!"* — o MtM CEM de 31/08 (coluna Código IF) e a posição de
+swap do Swap Characteristics (coluna Contrato), os dois abertos no Excel da
+mesa. Era a **quarta** rodada do mesmo sintoma: o §138 tratou o literal na
+importação do Pending Confirmation, o §383 pôs um `format.body` no Advanced
+Export, o §399 fez o coletor do Swap Characteristics engolir `#NULL!`/`NULL` —
+e os três estão na prod. Se o dado não tem `#NULL!` (o §399 já tinha notado que
+a dev não tem NULL nenhum) e o export limpa o literal, de onde ele sai?
+
+**Do Excel.** O `excelHtml5` do DataTables Buttons decide o TIPO da célula pelo
+texto: o que casa `/^-?\d+(\.\d+)?([eE]-?\d+)?$/` vira `<c t="n">`, número. Um
+contrato B3 tem a forma `AA` + letra + 8 dígitos (`26G53382860`, `21C00035804`,
+`24L01786664`) — e quando a letra é **E**, `26E04610365` casa como notação
+científica: 26 × 10^4610365. Isso não cabe em número nenhum; o Excel, ao abrir
+o `.xlsx`, mostra a célula como `#NULL!`. As outras letras são texto e saem
+certas — por isso "vários" e não "todos", e por isso ninguém desconfiou do
+tipo. O `format.body` não alcança: ele devolve o mesmo texto, e o tipo é
+decidido DEPOIS dele. O sanitizador do §383/§399 procurava um literal que só
+existe na tela de quem abre o arquivo.
+
+O mesmo caminho tem um segundo defeito, silencioso: o Excel guarda 15
+algarismos, e um ID de 16+ só de dígitos (sem zero à esquerda — esse o Buttons
+já respeita) chega com o fim zerado.
+
+**A correção é no `customize`** — a planilha pronta, antes do zip — e mora no
+`export-advanced.js` (`patchExcelIds`): embrulha o `action` do `excelHtml5`
+para encadear um `customize` que reescreve como `inlineStr` toda célula cujo
+`<v>` é `dígitos E dígitos` ou 16+ dígitos, e depois chama o `customize` da
+página se houver (a Recon FXO tem um, no PDF). Vale para todo `extend:
+'excel'`/`'excelHtml5'` da app, inclusive o botão temporário do Advanced
+Export. Dois cuidados que o guarda prende: o Buttons **copia o `action` na
+construção do botão**, então o patch tem de existir antes de qualquer `new
+Buttons(...)` — toda página que carrega o `buttons.html5` carrega o
+`export-advanced.js` logo depois (as duas que não carregavam, Support Center e
+Quotes, passaram a carregar); e o include leva `asset_v` (era o único JS
+compartilhado sem versão — o navegador do JPM seguraria o arquivo anterior e o
+"continua vindo" reapareceria, como no §170).
+
+`check_export_excel_ids.py` **executa o export de verdade**: Chromium do
+playwright, os plugins do próprio repo, o download capturado e o `sheet1.xml`
+lido do zip — `26E04610365` e um ID de 16 dígitos saem `inlineStr`; `1,234.56`,
+`42` e 15 dígitos seguem número; o `customize` da página roda uma vez e depois
+do patch; o `extend: 'excelHtml5'` passa pelo mesmo caminho; e, por template, a
+ordem de carga e o `asset_v`.
+
+**A parte de ambiente, que explica as três rodadas.** A dev é um macOS sem
+Excel; a instância e o Excel da mesa são Windows. O `#NULL!` só existe na tela
+do Excel — no DOM, no JSON, no banco e no `sheet1.xml` ele nunca apareceu, e
+cada rodada anterior procurou onde dava para olhar daqui. O que se testa na
+dev é o ARQUIVO; o que o Excel faz com ele se deduz do formato (e da
+documentação do Buttons). Os sanitizadores anteriores ficam: são inofensivos e
+cobrem o caso, real, de planilha de origem com fórmula quebrada.
+
+CSV e Copy continuam entregando o texto `26E04610365` — o que o Excel faz ao
+COLAR ou ao abrir um `.csv` é dele (Text Import com a coluna como Texto). O
+`.xlsx` é o formato que a mesa usa e o único em que o app decide o tipo.

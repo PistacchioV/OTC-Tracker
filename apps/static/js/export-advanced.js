@@ -58,6 +58,73 @@
 (function () {
     'use strict';
 
+    /* ── Excel: o ID que PARECE número (§477) ────────────────────────────────
+     * O excelHtml5 do Buttons grava como NÚMERO todo texto que casa
+     * /^-?\d+(\.\d+)?([eE]-?\d+)?$/ — e um contrato B3 no formato
+     * `26E04610365` casa: para o Excel isso é 26 × 10^4610365, que não cabe em
+     * número nenhum, e a célula abre como `#NULL!`. Só a letra E dispara
+     * (`26G…`, `21C…` são texto), então a mesma tela sai certa numa linha e
+     * quebrada na outra — e o dado NUNCA teve `#NULL!`: ele nasce dentro do
+     * Excel de quem abre o arquivo. Os sanitizadores de `#NULL!` das telas
+     * (o `format.body` do MtM, o `_swapchar_is_xl_error`) caçavam o literal no
+     * dado, onde ele não está.
+     *
+     * O mesmo caminho perde dígito: o Excel guarda 15 algarismos, e um ID de
+     * 16+ só de dígitos (sem zero à esquerda, que o Buttons já respeita) volta
+     * com o fim zerado — o `format.body` não alcança, porque o TIPO da célula
+     * é decidido pelo texto depois dele. Por isso a correção é no `customize`:
+     * a planilha pronta, antes do zip, com a célula reescrita como TEXTO
+     * (`inlineStr`) quando o `<v>` é um desses dois. Vale para todo botão
+     * `extend: 'excel'`/`'excelHtml5'` da app — inclusive o do Advanced
+     * Export e o de página que tem `customize` próprio (ele continua rodando,
+     * depois). Este arquivo carrega logo depois do `buttons.html5` em toda
+     * página que exporta (`check_export_excel_ids.py` cobra a ordem); o
+     * Buttons copia o `action` na construção do botão, então o patch tem de
+     * existir ANTES de qualquer `new Buttons(...)`. */
+    (function patchExcelIds() {
+        var DT = window.jQuery && jQuery.fn && jQuery.fn.dataTable;
+        var def = DT && DT.ext && DT.ext.buttons && DT.ext.buttons.excelHtml5;
+        if (!def || def._otcIdsPatched) return;
+        def._otcIdsPatched = true;
+        window.__otcExcelIdsPatched = true;  // sonda do check_export_excel_ids.py
+        var SCI  = /^-?\d+[eE][-+]?\d+$/;    // 26E04610365 — contrato, não 26×10^…
+        var LONG = /^-?\d{16,}$/;            // 16+ dígitos: o Excel zera do 16º em diante
+        function asText(xlsx) {
+            var sheet = xlsx && xlsx.xl && xlsx.xl.worksheets && xlsx.xl.worksheets['sheet1.xml'];
+            if (!sheet) return;
+            jQuery('row c', sheet).each(function () {
+                var c = this;
+                if (c.getAttribute('t') === 'inlineStr') return;
+                var v = c.getElementsByTagName('v')[0];
+                var txt = v ? v.textContent : '';
+                if (!(SCI.test(txt) || LONG.test(txt))) return;
+                var doc = c.ownerDocument;
+                var is = doc.createElement('is');
+                var t = doc.createElement('t');
+                t.setAttribute('xml:space', 'preserve');
+                t.appendChild(doc.createTextNode(txt));
+                is.appendChild(t);
+                c.removeChild(v);
+                c.appendChild(is);
+                c.setAttribute('t', 'inlineStr');
+                c.removeAttribute('s');          // o estilo numérico não faz sentido em texto
+            });
+        }
+        var action = def.action;
+        def.action = function (e, dt, button, config, cb) {
+            var user = config.customize;
+            if (!user || !user._otcIds) {
+                var wrapped = function (xlsx, cfg, api) {
+                    asText(xlsx);
+                    if (user) return user.call(this, xlsx, cfg, api);
+                };
+                wrapped._otcIds = true;
+                config.customize = wrapped;
+            }
+            return action.call(this, e, dt, button, config, cb);
+        };
+    })();
+
     var STYLE_ID = 'otc-expadv-style';
     var MODAL_ID = 'otcExpAdvModal';
     var BTN_NAME = 'otcadv';          // nome do botão temporário do Buttons

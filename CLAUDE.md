@@ -690,6 +690,19 @@ São **46**: `currency-base`, `interbook-ndf`, `commodities-b3`,
 - **Números** `#,##0.00` com `tabular-nums`; taxa NÃO é valor (Strike fica com
   as casas que tem); formatação só no `display`, sort pelo cru. **Status** é
   badge pill `bg-gradient`.
+- **Excel exportado: ID que parece número sai como TEXTO** (§477). O
+  `excelHtml5` do Buttons grava como número todo texto que casa
+  `^-?\d+(\.\d+)?([eE]-?\d+)?$`, e o contrato B3 `26E04610365` casa — para o
+  Excel é 26 × 10^4610365 e a célula abre como `#NULL!` (só a letra E
+  dispara; `26G…` é texto). O `#NULL!` NUNCA está no dado: nasce no Excel de
+  quem abre o arquivo, e por isso sanitizar o literal (MtM, Swap
+  Characteristics) não resolvia. O `patchExcelIds` do `export-advanced.js`
+  reescreve no `customize` a célula cujo `<v>` é `dígitos E dígitos` ou 16+
+  dígitos (o Excel guarda 15) como `inlineStr`; vale para todo `extend:
+  'excel'`, encadeando o `customize` da página. Por isso **toda página com
+  `buttons.html5` carrega o `export-advanced.js` DEPOIS dele e com
+  `asset_v`** — o Buttons copia o `action` na construção do botão.
+  `check_export_excel_ids.py` executa o export no Chromium e cobra os dois.
 - **Autocomplete nunca é `<datalist>`**: dropdown próprio abaixo do campo, mesma
   largura, `max-height` ~220px, item por `mousedown` (antes do `blur`),
   reemitindo `input`/`change` (`mapAttachDrop`, `.ar-ac-drop`).
@@ -1223,6 +1236,12 @@ São **46**: `currency-base`, `interbook-ndf`, `commodities-b3`,
 
 ## 9. Ambiente local e instância do time
 
+- **A dev é um macOS; a instância do time é Windows** (e o Excel da mesa
+  é o Windows também). Defeito que só existe no Windows não se VÊ aqui:
+  `win32com`/Outlook, o proxy 407, o `%LOCALAPPDATA%`, e o que o Excel faz
+  com a planilha exportada (§477: o `#NULL!` nasce ao abrir o `.xlsx`, não no
+  dado). Sem Excel na dev, o que se testa é o ARQUIVO (o `sheet1.xml` dentro
+  do zip), como faz o `check_export_excel_ids.py`.
 - **`awmpy` é interna do JPM** (não está no PyPI): fora da rede, stub mínimo
   no venv + `/dev-login` do DEV BYPASS.
 - **macOS: porta 5005.** `duckdb` e `flask-minify` obrigatórios.
@@ -1291,7 +1310,7 @@ São **46**: `currency-base`, `interbook-ndf`, `commodities-b3`,
 `apps/static/data/db/` é gitignorado: bancos não vêm no pull. Telas vazias
 depois de um pull são migração não rodada, não bug.
 
-### `scripts/tests/` (134 scripts)
+### `scripts/tests/` (135 scripts)
 
 Autocontidos, sem framework, `ok`/`FAIL` por asserção, saída 0/1, sem tocar
 dado real (tmp, stubs de Outlook/SMTP). O

@@ -1165,7 +1165,7 @@ $(document).ready(function() {
 </div>
 <!-- Item "Advanced" do menu Export. Vai no FIM do bloco de propósito: precisa
      da DataTable já inicializada. -->
-<script src="{{ config.ASSETS_ROOT }}/js/export-advanced.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/export-advanced.js?v={{ asset_v('js/export-advanced.js') }}"></script>
 <script>
     jQuery(function () {
         if (window.otcExportAdvanced) otcExportAdvanced('#intrag-dce-table');
