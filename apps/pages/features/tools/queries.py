@@ -437,6 +437,29 @@ def _ptax_do_fixing(moeda, fim_iso, deslocamento):
         return None, quando, str(exc)
 
 
+def _preco_da_celula(texto):
+    """O fechamento que o `fetch_ohlc` escreveu, de volta a número — ou `None`.
+
+    A linha vem FORMATADA para a tela (`'{:,.6f}'`, o `_num` do `quotes`), então
+    um papel acima de mil traz a vírgula de MILHAR: `float('7,656.979800')`
+    levanta `ValueError`, e levantava para FORA do prefill inteiro — o laço não
+    estava protegido, e a tela dizia "Could not read the swap position" numa
+    perna de equity cujo preço passou de 999,99. Abaixo disso a mesma conta
+    funcionava, e foi por isso que o defeito pareceu ser "de alguns contratos".
+    Foi o ^GSPC a 7.656,98.
+
+    `None` é "esta célula não tem preço", e o chamador segue para a linha
+    seguinte: célula ilegível não pode derrubar a busca do fechamento, muito
+    menos o pré-preenchimento da tela."""
+    s = str(texto or '').strip()
+    if not s:
+        return None
+    try:
+        return float(s.replace(',', ''))
+    except ValueError:
+        return None
+
+
 def _preco_do_fixing(ativo, fim_iso, deslocamento):
     """FECHAMENTO do papel no fixing: `fim` recuado `deslocamento` dias úteis.
 
@@ -483,15 +506,15 @@ def _preco_do_fixing(ativo, fim_iso, deslocamento):
     # As linhas vêm da mais recente para a mais antiga: a primeira com
     # fechamento é o último pregão até o fixing.
     for linha in linhas or []:
-        fecho = linha[2] if len(linha) > 2 else None
-        if fecho in (None, ''):
+        fecho = _preco_da_celula(linha[2] if len(linha) > 2 else None)
+        if fecho is None:
             continue
         try:
             dia = datetime.strptime(str(linha[0]), '%d/%m/%Y').date()
         except (ValueError, TypeError):
             continue
         if dia <= quando:
-            return float(fecho), dia, ''
+            return fecho, dia, ''
     return None, quando, 'no {} close up to {:%d/%m/%Y}'.format(simbolo, quando)
 
 

@@ -96,10 +96,22 @@ check('sem cotação inicial, o campo é sinalizado',
 print('\n== 5. o fechamento do pregão no fixing ==')
 # A série como o Yahoo devolve: mais recente primeiro. 12 e 13/09/2026 são
 # fim de semana — é o que faz o deslocamento ter de ser em dias ÚTEIS.
+#
+# As celulas sao STRINGS FORMATADAS, como o `fetch_ohlc` de verdade devolve
+# (`_num`, '{:,.6f}') — nao floats crus. A fixture antiga usava numeros, e por
+# isso nao via o defeito: acima de 999,99 o formato traz a virgula de MILHAR e
+# o `float('7,656.979800')` levantava, para FORA do prefill inteiro. A tela
+# dizia "Could not read the swap position" numa perna de equity cujo preco
+# passou de mil, e abaixo disso a mesma conta funcionava — parecia defeito "de
+# alguns contratos". Stub que nao tem a forma do real nao prende nada.
+def _cel(v, dec=6):
+    return '' if v is None else '{:,.{d}f}'.format(v, d=dec)
+
+
 SERIE = [
-    ['14/09/2026', 21.080000, 21.080000, 21.139998, 20.660000, 20.740000, 181000.0],
-    ['11/09/2026', 21.059999, 21.059999, 21.370001, 20.980000, 21.139998, 5439300.0],
-    ['10/09/2026', 20.959998, 20.959999, 21.180000, 20.110001, 20.120003, 4414200.0],
+    ['14/09/2026', _cel(21.080000), _cel(21.080000), _cel(21.139998), _cel(20.660000), _cel(20.740000), _cel(181000.0, 2)],
+    ['11/09/2026', _cel(21.059999), _cel(21.059999), _cel(21.370001), _cel(20.980000), _cel(21.139998), _cel(5439300.0, 2)],
+    ['10/09/2026', _cel(20.959998), _cel(20.959999), _cel(21.180000), _cel(20.110001), _cel(20.120003), _cel(4414200.0, 2)],
 ]
 _rows_real, _ohlc_real = R._mapping_rows, quotes.fetch_ohlc
 R._mapping_rows = lambda k: ([{'LABEL': 'FLRY3', 'SYMBOL': 'FLRY3.SA'}]
@@ -117,6 +129,21 @@ try:
           (20.959999, '2026-09-10'))
     v, quando, erro = queries._preco_do_fixing('FLRY3', '2026-09-14', 3)
     check('sem pregão até o fixing: vazio, com o motivo', (v, bool(erro)), (None, True))
+
+    # O indice acima de MIL: a celula vem '7,656.979800' e o `float` cru
+    # levantava dali para fora do prefill inteiro (o laco nao estava protegido).
+    quotes.fetch_ohlc = lambda sym, ini, fim: (
+        list(quotes.OHLC_COLUMNS),
+        [['14/09/2026', _cel(7656.979800), _cel(7656.979800), _cel(7700.0),
+          _cel(7600.0), _cel(7650.0), _cel(1234567.0, 2)]])
+    v, quando, erro = queries._preco_do_fixing('FLRY3', '2026-09-14', 0)
+    check('preço acima de mil (a vírgula de MILHAR) volta como número',
+          (v, erro), (7656.9798, ''))
+    check('   e a célula ilegível é pulada, nunca derruba a busca',
+          (queries._preco_da_celula('x'), queries._preco_da_celula(''),
+           queries._preco_da_celula('1,234,567.890000')),
+          (None, None, 1234567.89))
+    quotes.fetch_ohlc = lambda sym, ini, fim: (list(quotes.OHLC_COLUMNS), list(SERIE))
 
     print('\n== 6. o que não resolve fica vazio e DIZ o que falta ==')
     v, _q, erro = queries._preco_do_fixing('PETR4', '2026-09-14', 2)
