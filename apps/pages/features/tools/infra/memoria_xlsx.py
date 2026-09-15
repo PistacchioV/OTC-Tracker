@@ -41,6 +41,7 @@ abre o workbook, recalcula as fórmulas e compara com o resultado do motor.
 """
 import io
 import os
+import re
 from datetime import date, datetime
 
 from apps.pages.precificador import contagem, liquidacao
@@ -462,17 +463,164 @@ def _timbre(ws, titulo, subtitulo):
     c.alignment = Alignment(horizontal='left', vertical='top')
 
 
-def _selar(conteudo):
-    """Tira do arquivo a assinatura da BIBLIOTECA que o escreveu.
+# ── o valor calculado de cada fórmula ───────────────────────────────────────
+#
+# O openpyxl escreve a fórmula com o cache VAZIO (`<f>…</f><v></v>`), e quem
+# abre o arquivo sem recalcular — o Modo de Exibição Protegido do Excel (todo
+# arquivo baixado pelo navegador entra nele), o painel de visualização, o
+# Excel Online, o preview do anexo no Outlook — mostra a célula EM BRANCO. Era
+# a memória inteira chegando à mesa sem um número: os rótulos e as entradas
+# apareciam, e τ, os fatores, os juros, o IR e o ajuste líquido, que são
+# justamente o que o documento existe para mostrar, ficavam vazios. O
+# `fullCalcOnLoad` do workbook não alcança esse caso: ele manda recalcular na
+# ABERTURA, e nenhum desses leitores calcula.
+#
+# Então o arquivo leva as DUAS coisas: a fórmula (é o que faz a memória ser
+# auditável e refazer a conta quando a mesa mexe numa entrada) e o resultado
+# dela gravado como cache (é o que faz o número aparecer em qualquer leitor).
+# O cache não pode ser uma segunda conta escrita à mão — isso seria a planilha
+# afirmando um número que a fórmula não dá. Ele sai da PRÓPRIA fórmula, pelo
+# avaliador abaixo: as quatro operações, a potência, IF/AND/MIN/ABS/ROUND, as
+# comparações e as referências (com ou sem aba) são tudo o que este arquivo
+# usa. Data vira SERIAL, como no Excel — é por isso que `fim - início` dá os
+# dias corridos.
+_REF = re.compile(r"(?:'([^']+)'!)?(\$?[A-Z]{1,2}\$?[0-9]{1,6})")
+_EPOCA = datetime(1899, 12, 30)
+_FUNCOES = {'IF': lambda c, a, b: a if c else b, 'AND': lambda *a: all(a),
+            'OR': lambda *a: any(a), 'MIN': min, 'MAX': max, 'ABS': abs,
+            'ROUND': round, 'TRUE': True, 'FALSE': False}
+
+
+def _serial(v):
+    """Data → número de série do Excel; o resto passa como está."""
+    if isinstance(v, datetime):
+        return (v - _EPOCA).days
+    if isinstance(v, date):
+        return (datetime(v.year, v.month, v.day) - _EPOCA).days
+    return v
+
+
+def _valor_da_celula(wb, memo, aba, endereco, pilha=()):
+    chave = (aba, endereco.replace('$', ''))
+    if chave in memo:
+        return memo[chave]
+    if chave in pilha:
+        raise ValueError('referência circular em %r' % (chave,))
+    v = wb[aba][chave[1]].value
+    if isinstance(v, str) and v.startswith('='):
+        v = _avaliar(wb, memo, aba, v[1:], pilha + (chave,))
+    else:
+        v = _serial(v)
+    memo[chave] = v
+    return v
+
+
+def _avaliar(wb, memo, aba, expressao, pilha=()):
+    def troca(m):
+        return repr(_valor_da_celula(wb, memo, m.group(1) or aba, m.group(2), pilha))
+
+    py = _REF.sub(troca, expressao).replace('^', '**')
+    return eval(py, {'__builtins__': {}}, dict(_FUNCOES))       # noqa: S307
+
+
+def _cache_das_formulas(wb):
+    """`{(aba, 'B13'): valor}` para toda célula de fórmula do workbook.
+
+    As abas são percorridas de trás para a frente porque a principal
+    REFERENCIA o acumulado da aba diária: resolvidas as diárias primeiro, cada
+    linha delas só precisa da anterior, que já está no memo — em vez de uma
+    recursão tão funda quanto o número de dias do fluxo.
+
+    Fórmula que não dá para avaliar é PULADA, nunca inventada: a célula fica
+    como o openpyxl a escreveu (fórmula sem cache) e o Excel a recalcula na
+    abertura, que é o comportamento de hoje."""
+    memo, saida = {}, {}
+    for ws in reversed(wb.worksheets):
+        for linha in ws.iter_rows():
+            for c in linha:
+                if not (isinstance(c.value, str) and c.value.startswith('=')):
+                    continue
+                try:
+                    v = _valor_da_celula(wb, memo, ws.title, c.coordinate)
+                except Exception as exc:                # noqa: BLE001
+                    import logging
+                    logging.getLogger('otc_tracker').warning(
+                        '[memoria] fórmula não avaliada em %s!%s (%s): %s',
+                        ws.title, c.coordinate, c.value, exc)
+                    continue
+                if isinstance(v, (int, float)) and not isinstance(v, bool):
+                    saida[(ws.title, c.coordinate)] = v
+    return saida
+
+
+def _abas_por_arquivo(origem):
+    """Nome da aba → `xl/worksheets/sheetN.xml`, pelo par workbook + rels.
+
+    A ordem dos arquivos no pacote não é contrato: quem diz qual arquivo é
+    qual aba é o `r:id` do `workbook.xml` resolvido no `.rels`."""
+    wbxml = origem.read('xl/workbook.xml').decode('utf-8')
+    rels = origem.read('xl/_rels/workbook.xml.rels').decode('utf-8')
+    alvo = {}
+    # Os atributos do `<Relationship>` não vêm em ordem fixa (o openpyxl grava
+    # Type, Target e só então Id), então cada um se lê por conta própria.
+    for atributos in re.findall(r'<Relationship\b([^>]*)>', rels):
+        rid = re.search(r'\bId="([^"]*)"', atributos)
+        destino = re.search(r'\bTarget="([^"]*)"', atributos)
+        if rid and destino:
+            # Alvo ABSOLUTO no pacote (`/xl/worksheets/sheet1.xml`) já é o
+            # caminho da entrada do zip; o relativo é a partir de `xl/`.
+            caminho = destino.group(1)
+            alvo[rid.group(1)] = (caminho[1:] if caminho.startswith('/')
+                                  else 'xl/' + caminho)
+    saida = {}
+    for atributos in re.findall(r'<sheet\b([^>]*?)/?>', wbxml):
+        nome = re.search(r'\bname="([^"]*)"', atributos)
+        rid = re.search(r'\br:id="([^"]*)"', atributos)
+        if nome and rid and rid.group(1) in alvo:
+            saida[_desescapar(nome.group(1))] = alvo[rid.group(1)]
+    return saida
+
+
+def _desescapar(texto):
+    for de, para in (('&amp;', '&'), ('&lt;', '<'), ('&gt;', '>'),
+                     ('&quot;', '"'), ('&apos;', "'")):
+        texto = texto.replace(de, para)
+    return texto
+
+
+def _injetar_cache(xml, valores):
+    """Preenche o `<v></v>` vazio que o openpyxl deixa em cada fórmula."""
+    padrao = re.compile(r'(<c r="([A-Z]+[0-9]+)"[^>]*>(?:<f[^>]*>.*?</f>|<f[^>]*/>))<v></v>')
+
+    def troca(m):
+        v = valores.get(m.group(2))
+        if v is None:
+            return m.group(0)
+        return '{}<v>{}</v>'.format(m.group(1), repr(float(v)) if v % 1 else '%d' % v)
+
+    return padrao.sub(troca, xml)
+
+
+def _selar(conteudo, cache=None):
+    """Tira do arquivo a assinatura da BIBLIOTECA que o escreveu e grava o
+    cache das fórmulas.
 
     O `docProps/app.xml` do openpyxl se anuncia ("Microsoft Excel Compatible /
     Openpyxl 3.1.5") e esse é o único lugar do pacote que o `wb.properties` não
     alcança. O documento vai para o cliente e para a auditoria: o que ele diz
     de si mesmo é o banco e a data, não a pilha de software de quem o gerou.
     O zip é reescrito inteiro porque uma entrada de tamanho diferente
-    invalidaria o diretório central se fosse remendada no lugar."""
+    invalidaria o diretório central se fosse remendada no lugar — e é na mesma
+    reescrita que o `<v>` de cada fórmula recebe o valor calculado."""
     import zipfile
     origem = zipfile.ZipFile(io.BytesIO(conteudo))
+    por_arquivo = {}
+    if cache:
+        abas = _abas_por_arquivo(origem)
+        for (aba, endereco), valor in cache.items():
+            nome = abas.get(aba)
+            if nome:
+                por_arquivo.setdefault(nome, {})[endereco] = valor
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as saida:
         for nome in origem.namelist():
@@ -482,6 +630,9 @@ def _selar(conteudo):
                          b'<Properties xmlns="http://schemas.openxmlformats.org/'
                          b'officeDocument/2006/extended-properties">'
                          b'<Application>Microsoft Excel</Application></Properties>')
+            elif nome in por_arquivo:
+                dados = _injetar_cache(dados.decode('utf-8'),
+                                       por_arquivo[nome]).encode('utf-8')
             saida.writestr(nome, dados)
     return buf.getvalue()
 
@@ -593,7 +744,8 @@ def construir(r, pontas, cetip_id='', contraparte='', calendario='ANBIMA',
                + ('fator diário do DI arredondado na 8ª casa, padrão B3/CETIP.'
                   if arredondar_di else
                   'fator diário do DI em precisão cheia, sem arredondamento.'))
-    f.nota('As células em fórmula recalculam na abertura do arquivo.')
+    f.nota('As células em fórmula trazem o valor apurado e recalculam quando '
+           'uma entrada muda.')
     f.nota('Emitido em {:%d/%m/%Y}.'.format(emitido_em or date.today()))
 
     ws.freeze_panes = 'A4'
@@ -601,6 +753,7 @@ def construir(r, pontas, cetip_id='', contraparte='', calendario='ANBIMA',
     wb.properties.lastModifiedBy = 'J.P. Morgan'
     wb.properties.title = 'Memória de Cálculo'
     wb.properties.description = None
+    cache = _cache_das_formulas(wb)
     buf = io.BytesIO()
     wb.save(buf)
-    return _selar(buf.getvalue())
+    return _selar(buf.getvalue(), cache)

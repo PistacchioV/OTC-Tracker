@@ -358,7 +358,8 @@ print('\n== 4c. IPCA e equity: correcao no principal, preco no indice ==')
 infl = dict(FORM)
 infl.update({'ativa_indexador': liquidacao.IPCA, 'ativa_taxa': '6.5',
              'ativa_ni_inicial': '7000.00', 'ativa_ni_final': '7350.00'})
-wb5 = openpyxl.load_workbook(io.BytesIO(queries.memoria_de_calculo(infl)[0]))
+conteudo_infl = queries.memoria_de_calculo(infl)[0]
+wb5 = openpyxl.load_workbook(io.BytesIO(conteudo_infl))
 ws5, r5 = wb5[mx.ABA], queries.liquidar(infl)['r']
 perto('a correcao e o numero-indice final ÷ o inicial',
       avaliar(wb5, mx.ABA, por_rotulo(ws5, 'Fator de correção monetária')),
@@ -377,7 +378,8 @@ acao = dict(FORM)
 acao.update({'ativa_indexador': liquidacao.EQUITY, 'ativa_taxa': '0',
              'ativa_ativo': 'FLRY3', 'ativa_preco_inicial': '18.50',
              'ativa_preco_final': '21.20'})
-wb6 = openpyxl.load_workbook(io.BytesIO(queries.memoria_de_calculo(acao)[0]))
+conteudo_acao = queries.memoria_de_calculo(acao)[0]
+wb6 = openpyxl.load_workbook(io.BytesIO(conteudo_acao))
 ws6, r6 = wb6[mx.ABA], queries.liquidar(acao)['r']
 perto('o fator da perna de equity e a razao dos precos',
       avaliar(wb6, mx.ABA, por_rotulo(ws6, 'Fator do índice')), r6.ativa.fator_do_indice, 1e-12)
@@ -533,6 +535,43 @@ for frase in ('troca de mãos', 'quem paga', 'quem recebe', 'nao troca', 'o que 
 check('a parte devedora e nomeada',
       ws[por_rotulo(ws, 'Parte devedora')].value,
       'Banco J.P. Morgan' if r.banco_paga else FORM['counterparty'])
+
+# ─────────────────────────────────────────────────────────────────────────────
+print('\n== 9. o numero CHEGA: toda formula leva o valor gravado ==')
+# O openpyxl escreve a formula com o cache VAZIO, e quem abre o arquivo sem
+# recalcular — o Modo de Exibicao Protegido (todo arquivo baixado pelo
+# navegador entra nele), o painel de visualizacao, o Excel Online, o preview do
+# anexo no Outlook — mostra a celula EM BRANCO. Era a memoria inteira chegando
+# a mesa sem um numero: os rotulos e as entradas apareciam, e tau, os fatores,
+# os juros, o IR e o ajuste liquido ficavam vazios. O `fullCalcOnLoad` nao
+# alcanca esse caso: ele manda recalcular na ABERTURA, e nenhum desses leitores
+# calcula.
+#
+# O que se prende aqui e que o arquivo leva as DUAS coisas — a formula (secao 2
+# ja provou que ela e a conta do motor) e o resultado dela gravado — e que o
+# valor gravado e o da PROPRIA formula: um cache escrito a mao seria a planilha
+# afirmando um numero que a formula nao da, que e pior do que a celula vazia.
+for indice, bytes_ in (('CDI', conteudo), ('SOFR', conteudo_us),
+                       ('cambial', conteudo_fx), ('IPCA', conteudo_infl),
+                       ('equity', conteudo_acao), ('sem aba diaria', conteudo_cru)):
+    formulas = openpyxl.load_workbook(io.BytesIO(bytes_))
+    valores = openpyxl.load_workbook(io.BytesIO(bytes_), data_only=True)
+    vazias, divergentes, total = [], [], 0
+    for aba in formulas.sheetnames:
+        for linha in formulas[aba].iter_rows():
+            for cel in linha:
+                if not (isinstance(cel.value, str) and cel.value.startswith('=')):
+                    continue
+                total += 1
+                gravado = valores[aba][cel.coordinate].value
+                if gravado is None:
+                    vazias.append('%s!%s' % (aba, cel.coordinate))
+                    continue
+                esperado = avaliar(formulas, aba, cel.value[1:])
+                if abs(gravado - esperado) > max(1e-9, abs(esperado) * 1e-12):
+                    divergentes.append('%s!%s' % (aba, cel.coordinate))
+    check('%s: nenhuma formula sem valor gravado (de %d)' % (indice, total), vazias[:5], [])
+    check('   e o valor gravado e o da formula', divergentes[:5], [])
 
 cdi.serie = _serie_real
 print('\n' + ('TUDO OK' if not falhas else 'FALHAS: %d' % len(falhas)))
