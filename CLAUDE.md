@@ -855,6 +855,12 @@ São **46**: `currency-base`, `interbook-ndf`, `commodities-b3`,
   (`compor_por_indice`), que é o teste a fazer quando alguém trouxer uma
   divergência de casa decimal — lookback, shift e arredondamento do fator
   diário mudam o número, e nenhum deles é "o certo" sem o contrato dizer.
+- **A linha do `quotes.fetch_ohlc` vem FORMATADA para a tela** (`'{:,.6f}'`),
+  não em número: quem a lê para calcular parseia (`_preco_da_celula`), nunca
+  `float()` cru (§476). Acima de 999,99 entra a vírgula de MILHAR e o `float`
+  levanta — e levantava para FORA do `swap_prefill` inteiro, com a tela dizendo
+  "Could not read the swap position" numa perna de equity. Abaixo disso a mesma
+  conta funcionava, e o defeito parecia ser "de alguns contratos".
 - **Swap Calculator › Export: a memória de cálculo é FÓRMULA, não valor**
   (§455, `features/tools/infra/memoria_xlsx.py`): toda célula derivada do
   .xlsx é fórmula de Excel encadeada até as entradas, e os dias do índice vão

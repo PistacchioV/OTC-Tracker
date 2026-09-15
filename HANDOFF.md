@@ -20368,3 +20368,32 @@ era tudo que a mesa via para QUALQUER exceção — contrato fora do arquivo, fo
 de índice fora do ar, coluna estranha —, e o relato chegava sem nada por onde
 começar. A mensagem leva agora `tipo: motivo` e o traceback inteiro vai para o
 log (§4, o desenho do `_handle_api_exception`).
+
+## §476 — Swap Calculator: a perna de equity acima de MIL derrubava o prefill (2026-09-15)
+
+`Could not read the swap position` em alguns contratos — a mesa suspeitou dos
+bullets. Não eram. A mensagem melhorada trouxe a causa na hora:
+
+    [tools] prefill 22K00875932 falhou: could not convert string to float: '7,656.979800'
+
+`_preco_do_fixing` lê o fechamento do papel da linha do `quotes.fetch_ohlc` — e
+essa linha vem **FORMATADA para a tela** (`_num`, `'{:,.6f}'`). Um papel acima de
+mil traz a vírgula de MILHAR, e o `float('7,656.979800')` levanta `ValueError`.
+Era o `^GSPC` a 7.656,98.
+
+E o `try/except` daquela função envolve só a BUSCA, não o laço que percorre as
+linhas: a exceção subia por `_preco_do_fixing`, por `swap_prefill` e morria no
+`except Exception` do endpoint, que dizia "Could not read the swap position".
+Abaixo de 999,99 a mesma conta funcionava — por isso pareceu defeito "de alguns
+contratos", e por isso a suspeita caiu no bullet, que era só quem estava à mão.
+
+`_preco_da_celula` devolve `None` para célula que não é número, e o laço segue
+para a linha seguinte: célula ilegível não derruba a busca do fechamento, muito
+menos o pré-preenchimento inteiro.
+
+**Por que o guarda não pegou:** a fixture do `check_tools_equity` stubava o
+`fetch_ohlc` com **floats crus**, e a função real devolve strings formatadas.
+Stub que não tem a FORMA do real não prende nada — a mesma lição do §467 (o
+serializador do openpyxl) em outra roupa. A fixture passou a formatar como o
+`_num` formata, e ganhou o caso acima de mil; conferido revertendo o parse, o
+guarda reproduz o `ValueError` da instância palavra por palavra.
