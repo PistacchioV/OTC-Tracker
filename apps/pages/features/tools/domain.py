@@ -275,16 +275,14 @@ def sinal_da_posicao(v):
 def tipo_de_contrato(valor):
     """`Tipo de Contrato` da posição → 'Bullet' | 'Cashflow' | ''.
 
-    A B3 escreve `02` para bullet e `01` para cashflow, com zero à esquerda e
-    às vezes com cauda decimal do Excel — a mesma normalização do Live
-    Position, para as duas telas lerem o arquivo do mesmo jeito.
+    ALIAS da função da platform (`swap_flows.tipo_de_contrato`), que é quem
+    responde para as duas telas que perguntam — o Swap Calculator (a base do
+    ajuste) e o Swap VCP (a amortização do bullet no vencimento, §470). A cópia
+    daqui devolvia o mesmo, mas duas funções com a mesma pergunta divergem no
+    primeiro ajuste: bastou a da platform nascer em minúsculas para a
+    comparação `== 'Bullet'` passar a ser sempre falsa.
     """
-    v = str(valor or '').strip()
-    if v.endswith('.0'):
-        v = v[:-2]
-    if v.isdigit():
-        v = str(int(v))
-    return {'2': 'Bullet', '1': 'Cashflow'}.get(v, '')
+    return _sf.tipo_de_contrato(valor)
 
 
 def tenor_do_texto(texto, padrao=None):

@@ -235,8 +235,16 @@ def api_tools_swap_prefill():
     try:
         dados = queries.swap_prefill(b3_id)
     except Exception as exc:                                # noqa: BLE001
-        _R().log.error('[tools] prefill %s falhou: %s', b3_id, exc)
-        return jsonify({'success': False, 'error': 'Could not read the swap position.'}), 500
+        # A mensagem leva o MOTIVO, não só "não deu": ela é a única coisa que a
+        # mesa vê, e "Could not read the swap position" sozinho não distingue
+        # contrato fora do arquivo de fonte de índice fora do ar — a pessoa
+        # relata "não abre" e a investigação começa do zero. O traceback vai
+        # inteiro para o log, que é onde ele cabe (§4, `_handle_api_exception`).
+        import traceback as _tb
+        _R().log.error('[tools] prefill %s falhou:\n%s', b3_id, _tb.format_exc())
+        return jsonify({'success': False,
+                        'error': 'Could not read the swap position — {}: {}'.format(
+                            type(exc).__name__, exc)}), 500
     if not dados.get('found'):
         return jsonify({'success': False,
                         'error': '{} is not in the swap position of the last business day '

@@ -321,7 +321,7 @@ def vcp_factor_rows(ref, rows=None, ci=None):
         # de Contrato` (o mesmo código que o Swap Characteristics traduz) e a
         # `Data Vencimento`. Sem o vencimento na conta, um bullet que aparecesse
         # numa data que não é a dele amortizaria o principal cedo.
-        bullet_venc = (pos.get('tipo_contrato') == 'bullet'
+        bullet_venc = (pos.get('tipo_contrato') == 'Bullet'
                        and pos.get('vencimento') == ref_iso)
         # E num bullet o Tipo Amortização É `Na Data de Vencimento` — não é
         # inferência, é a definição do contrato: ele paga uma vez, no fim. A
@@ -332,7 +332,7 @@ def vcp_factor_rows(ref, rows=None, ci=None):
         # sozinho. Só quando o arquivo não respondeu: dado do arquivo que
         # contradiz o tipo de contrato é conflito para a mesa ver, não para o
         # código apagar.
-        if pos.get('tipo_contrato') == 'bullet' and not str(tipo or '').strip():
+        if pos.get('tipo_contrato') == 'Bullet' and not str(tipo or '').strip():
             tipo = 'Na Data de Vencimento'
         salvo = salvos.get(key) or {}
         calc = domain.calcular({

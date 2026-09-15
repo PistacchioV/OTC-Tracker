@@ -134,29 +134,32 @@ def por_nome(row, nome):
 
 
 def tipo_de_contrato(texto):
-    """`Tipo de Contrato` da posição → `'bullet'`, `'cashflow'` ou `''`.
+    """`Tipo de Contrato` da posição → `'Bullet'`, `'Cashflow'` ou `''`.
 
-    O arquivo traz o CÓDIGO (`02` = bullet, `01` = cashflow), que é o mesmo que
-    a tela de Swap Characteristics traduz na coluna Tipo de Contrato. Vale
-    também o texto já traduzido, porque a posição às vezes chega pela leitura
-    por NOME de coluna (arquivo estreito) em vez da posicional.
+    A B3 escreve `02` para bullet e `01` para cashflow, com zero à esquerda e às
+    vezes com a cauda decimal do Excel. Vale também o texto já traduzido, porque
+    a posição às vezes chega pela leitura por NOME de coluna (arquivo estreito)
+    em vez da posicional.
 
-    Fora desses dois, `''` — e isso é lacuna, não "cashflow". Um bullet lido
-    como cashflow não amortiza no vencimento e o fator sai com o principal
-    inteiro dentro dele."""
+    Fora desses dois, `''` — e isso é LACUNA, não "cashflow". Um bullet lido
+    como cashflow não amortiza no vencimento e o fator do Swap VCP sai com o
+    principal inteiro dentro dele (§470).
+
+    Mora aqui, e não na Tools, porque quem pergunta são as DUAS: o Swap
+    Calculator (a base do ajuste) e o Swap VCP (a amortização). A Tools a expõe
+    pelo nome antigo — duas funções com a mesma pergunta e respostas diferentes
+    (`'Bullet'` numa, `'bullet'` na outra) é como uma comparação passa a ser
+    sempre falsa sem ninguém ver.
+    """
     t = norm(texto)
     if not t:
         return ''
     if 'bullet' in t:
-        return 'bullet'
+        return 'Bullet'
     if 'cashflow' in t or 'cash flow' in t:
-        return 'cashflow'
+        return 'Cashflow'
     d = t.replace('.0', '').strip().lstrip('0')
-    if d == '2':
-        return 'bullet'
-    if d == '1':
-        return 'cashflow'
-    return ''
+    return {'2': 'Bullet', '1': 'Cashflow'}.get(d, '')
 
 
 def amortiza_no_fluxo(texto):
