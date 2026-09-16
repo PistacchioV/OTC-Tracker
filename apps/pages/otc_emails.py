@@ -1764,7 +1764,8 @@ def _swap_bullet_deal_ticket(d):
              _esc(d.get('Title') or 'Swap Vanilla') + '</td></tr>')
     rows += _swb_blank()
     rows += _swb_row([('Cliente', d.get('Client') or d.get('ClientDT', '')), (None, None), (None, None)])
-    rows += _swb_row([('SPN', d.get('SPN', '')), (None, None), (None, None)])
+    # A SPN é identificador INTERNO (é por ela que a contraparte se resolve no
+    # Reference Data) e não sai no e-mail para a contraparte.
     rows += _swb_row([('Inicio', _swb_date(d.get('StartDate'))), ('Funcionalidades', d.get('Functionality') or 'N/A'), ('Agenda de premios', 'Sim' if tem_premio else 'Não')])
     rows += _swb_row([('Vencimento', _swb_date(d.get('MaturityDate'))), ('Ativo VCP', d.get('VcpHolder', '')), ('Data de Pagamento do Premio', _swb_date(d.get('PremiumDate')) if tem_premio else 'N/A')])
     rows += _swb_row([('Valor Base', valor), ('Ativo Curva Vanilla', d.get('VanillaHolder', '')), ('Pagador do Premio', d.get('PremiumPayer') or ('N/A' if not tem_premio else ''))])

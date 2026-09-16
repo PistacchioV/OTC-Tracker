@@ -425,6 +425,7 @@ def main():
           and '15-set-2026' in h and '07-jun-2027' in h and '117,00% Spot' in h and '23.355,00' in h and 'Microsoft Corporation' in h)
     check('sem logo do OTC Tracker (só a marca do banco por CID)', 'otc' not in h.lower().replace('otc_derivatives', '').replace('brazil.otc', '') and 'cid:jpmwordmark' in h)
     check('casca larga (960) e nome do Reference Data dentro do DT', 'width:960px' in h and '>BANCO SAFRA S.A.<' in h)
+    check('a SPN (identificador interno) não sai no e-mail', '>SPN<' not in h and '281808' not in h)
     _idx_orig = otc_emails._build_cpdetails_index
     otc_emails._build_cpdetails_index = lambda: {'281808': {'CONTACTS': [
         {'email': 'conf@safra.com.br', 'rules': ['Confirmation Letter']},
