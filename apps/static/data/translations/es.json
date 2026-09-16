@@ -2422,6 +2422,7 @@
   "tl-withhold-help": "Tabla regresiva (registro Swap IR — Term Brackets) sobre el plazo contado desde la fecha de la operación, solo cuando la pata activa pierde — la retención es de la fuente pagadora, y es cuando el banco paga. Una contraparte en el registro Swap IR — Client Exceptions usa la tasa registrada, en ambas direcciones, como en el Settlement Advice.",
   "tl-curve-desc": "Descripción de la curva (Denominação)",
   "tl-curve-desc-help": "El texto de la curva VCP en Live Position › Swap Characteristics. Lo que dice y las características no — un multiplicador de la tasa, un spread, el conteo de días, el desplazamiento del fixing — se lee a los campos y se lista aquí; lo que no se pudo leer queda señalado para que lo revise.",
+  "tl-vcp-link": "¿Curva VCP? Agregue su descripción",
   "tl-rate-mult": "Multiplicador de la tasa (en blanco = ninguno)",
   "tl-rate-mult-help": "Multiplica la tasa anual antes de capitalizar — (3M SOFR + 0,75%) × 1,1765 es 1,1765 aquí. En CDI multiplica el spread; el % del CDI tiene campo propio.",
   "tl-rate-mult-s": "Multiplicador de la tasa",

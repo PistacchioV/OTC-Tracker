@@ -803,8 +803,13 @@ try:
             'regime': 'confirma'}, '0.5000'))
     check('   e o que nao deu para ler vai SINALIZADO', _den['passiva']['nao_lido'],
           ['tranche 2 x 0.5'])
+    check('a perna com Denominacao e marcada como VCP (a tela abre o bloco)',
+          (_den['ativa']['vcp'], _den['passiva']['vcp']), (True, True))
     vals[70] = vals[75] = ''
     _grava_pos()
+    _sem = queries.swap_prefill('26G53382860')
+    check('   e sem Denominacao, curva que nao e VCP, o bloco fica fechado',
+          (_sem['ativa']['vcp'], _sem['passiva']['vcp'], _sem['ativa']['descricao']), (False, False, ''))
 finally:
     R.B3_JSON_ROOT, R.OTM_JSON_ROOT = _b3_root, _otm_root
     R._mapping_rows = _map_rows

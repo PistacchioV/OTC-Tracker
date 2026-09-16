@@ -843,7 +843,9 @@ São **46**: `currency-base`, `interbook-ndf`, `commodities-b3`,
   operador vai para `nao_lido`, sinalizado; denominação nova = linha nova em
   `_REGRAS`, nunca um modelo. `domain.aplicar_descricao` é UMA função para o
   prefill e para o texto colado na tela (`/api/tools/swap-calculator/curve`);
-  a denominação VENCE a coluna quando divergem, guardando `anterior`. O
+  a denominação VENCE a coluna quando divergem, guardando `anterior`. Os dois
+  campos (descrição, multiplicador) só aparecem na perna VCP (`vcp` do
+  prefill, ou o link da tela). O
   `Ponta.multiplicador` incide na taxa ANUAL que capitaliza — `(1 + r·k)^τ`,
   nunca no fator — e a memória xlsx o põe DENTRO da capitalização. O IR do
   Swap Calculator vem de `RegraIR` (`queries.regra_ir_do_cliente`): a exceção

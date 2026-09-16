@@ -382,6 +382,15 @@ try:
     check('   e os campos novos existem nas duas pontas',
           all(x in html for x in ('id="ativa_descricao"', 'id="passiva_descricao"',
                                   'id="ativa_multiplicador"', 'id="passiva_multiplicador"')), True)
+    # O bloco so aparece na perna VCP: aberto onde ha descricao, fechado na outra
+    check('   o bloco VCP abre na perna com descricao e fica fechado na outra',
+          ('id="passiva_vcp" hidden' in html, 'id="ativa_vcp" hidden' in html,
+           'id="ativa_vcp_link" hidden' in html, 'id="passiva_vcp_link" hidden' in html),
+          (False, True, False, True))
+    vazio = c.get('/tools/swap-calculator').data.decode()
+    check('   na tela em branco os dois blocos ficam fechados, com o link para abrir',
+          ('id="ativa_vcp" hidden' in vazio, 'id="passiva_vcp" hidden' in vazio,
+           vazio.count('class="tl-vcp-toggle"')), (True, True, 2))
     FORM2 = dict(FORM, counterparty='YAZAKI DO BRASIL LTDA')
     r4 = queries.liquidar(FORM2)['r']
     check('contraparte fora das excecoes, banco recebendo: sem IR',
