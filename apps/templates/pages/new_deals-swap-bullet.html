@@ -83,10 +83,6 @@
   .btn-toolbar-all { font-size: 0.75rem !important; padding: 0.25rem 0.6rem !important; height: auto !important; line-height: 1.4 !important; white-space: nowrap !important; }
   #apiRefDate { width: 8.5rem; }
 
-  /* Preview dos arquivos. */
-  .swb-preview-line { font-family: monospace; font-size: .74rem; white-space: pre; overflow-x: auto; background: rgba(0,0,0,.04); border-radius: 8px; padding: 8px 10px; text-align: left; }
-  [data-bs-theme=dark] .swb-preview-line { background: rgba(255,255,255,.06); }
-  .swb-preview-tabs .nav-link { font-size: .78rem; padding: .3rem .7rem; }
   .swb-edit-grid label { font-size: .72rem; }
 </style>
 {% endblock extra_css %}
@@ -272,6 +268,7 @@
 <script src="{{ config.ASSETS_ROOT }}/js/pages/otc-fileupload.js?v={{ asset_v('js/pages/otc-fileupload.js') }}"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/export-advanced.js?v={{ asset_v('js/export-advanced.js') }}"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/file-preview.js?v={{ asset_v('js/file-preview.js') }}"></script>
 
 <script>
 // ── Contrato com o servidor (domain.SWB_COLUMNS, na ordem) ──────────────────
@@ -738,37 +735,15 @@ $(document).ready(function() {
                             icon: 'warning', confirmButtonText: 'OK', confirmButtonColor: '#dc3545' });
                 return;
             }
-            var files = o.data.files || [];
-            var tabs = files.map(function(f, i){
-                var label = (f.kind === 'swap' ? 'SWAP 0301' : 'Prêmio 0897') + ' · ' + f.le_pair;
-                return '<li class="nav-item"><a class="nav-link' + (i===0?' active':'') + '" data-bs-toggle="tab" href="#swbPv' + i + '">' + esc(label) + '</a></li>';
-            }).join('');
-            var panes = files.map(function(f, i){
-                var rows = (f.fields || []).map(function(x, j){
-                    var bg = j % 2 === 0 ? 'rgba(0,0,0,.03)' : 'transparent';
-                    var src = x.source ? '<span class="badge text-bg-light border ms-1" style="font-size:9px">' + esc(x.source) + '</span>' : '';
-                    var v = String(x.value == null ? '' : x.value);
-                    return '<tr style="background:' + bg + '"><td style="padding:2px 8px;white-space:nowrap;border:none;font-size:.78em;color:#888">' + esc(x.block) + '</td>' +
-                        '<td style="padding:2px 8px;white-space:nowrap;font-weight:500;border:none;font-size:0.8em">' + esc(x.seq) + '. ' + esc(x.field) + src + '</td>' +
-                        '<td style="padding:2px 8px;border:none;font-size:.75em;color:#888;white-space:nowrap">' + esc(x.format) + '</td>' +
-                        '<td style="padding:2px 8px;font-family:monospace;font-size:0.8em;border:none;word-break:break-all;text-align:left">' + (v.trim() !== '' ? esc(v) : '<span style="color:#aaa">&mdash;</span>') + '</td></tr>';
-                }).join('');
-                var raw = [f.header].concat(f.records || []).join('\n');
-                return '<div class="tab-pane' + (i===0?' show active':'') + '" id="swbPv' + i + '">' +
-                    '<div class="text-start fs-xs text-muted my-2"><b>' + esc(f.file_name) + '</b></div>' +
-                    '<div style="overflow-y:auto;max-height:42vh;border:1px solid rgba(0,0,0,.12);border-radius:6px">' +
-                    '<table style="width:100%;border-collapse:collapse;font-size:0.85em"><thead><tr style="background:#343a40;color:#fff;position:sticky;top:0">' +
-                    '<th style="padding:5px 8px;text-align:left;font-weight:600">Block</th>' +
-                    '<th style="padding:5px 8px;text-align:left;font-weight:600"><span data-lang="nd-preview-col-field">Field</span></th>' +
-                    '<th style="padding:5px 8px;text-align:left;font-weight:600">Format</th>' +
-                    '<th style="padding:5px 8px;text-align:left;font-weight:600"><span data-lang="nd-preview-col-value">Value</span></th></tr></thead>' +
-                    '<tbody>' + rows + '</tbody></table></div>' +
-                    '<div class="text-start fs-xs text-muted mt-2" data-lang="nd-swb-file-raw">Raw file</div>' +
-                    '<div class="swb-preview-line">' + esc(raw) + '</div></div>';
-            }).join('');
-            var html = '<div class="text-start fs-xs text-muted mb-2"><b>' + esc(e.Deal || e._id) + '</b> &nbsp;·&nbsp; ' + esc(e.Client || '') + ' &nbsp;·&nbsp; ' + esc(e.LE || '') + ' · ' + esc(e.LOB || '') + (e.B3ID ? ' &nbsp;·&nbsp; B3 ID ' + esc(e.B3ID) : '') + '</div>' +
-                '<ul class="nav nav-tabs swb-preview-tabs">' + tabs + '</ul><div class="tab-content">' + panes + '</div>';
-            Swal.fire({ title: t('nd-swb-preview-title', 'B3 file preview'), html: html, width: 1000, showCloseButton: true, showConfirmButton: false });
+            // O preview da casa (file-preview.js): uma aba por arquivo/visão.
+            otcFilePreview({
+                title: t('nd-swb-preview-title', 'B3 file preview'),
+                subtitle: [e.Deal || e._id, e.Client || '', e.LE || '', e.LOB || '', e.B3ID ? 'B3 ID ' + e.B3ID : ''].filter(Boolean).join(' \u00b7 '),
+                files: (o.data.files || []).map(function(f){
+                    return { label: (f.kind === 'swap' ? 'SWAP 0301' : 'Pr\u00eamio 0897') + ' \u00b7 ' + f.le_pair, file_name: f.file_name,
+                             fields: f.fields, header: f.header, records: f.records };
+                }), t: t
+            });
         }).catch(function(err){ Swal.fire({ title: 'Error', text: 'Request failed: ' + err.message, icon: 'error', confirmButtonText: 'OK', confirmButtonColor: '#dc3545' }); });
     }
     $('#swb-table tbody').on('dblclick', 'tr', function(e) {

@@ -335,6 +335,7 @@
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/select.bootstrap5.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/export-advanced.js?v={{ asset_v('js/export-advanced.js') }}"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/file-preview.js?v={{ asset_v('js/file-preview.js') }}"></script>
 
 <script>
 // ── Contratos com o servidor (domain._DCE_SWAP_LEG_FIELDS / _FLOW_FIELDS, na ordem) ──
@@ -661,25 +662,17 @@ $(document).ready(function() {
                 return;
             }
             var tpl = fiFieldsBySeq();
-            var rows = (o.data.fields || []).map(function(f, i) {
-                var bg = i % 2 === 0 ? 'rgba(0,0,0,.03)' : 'transparent';
-                var t = tpl[String(f.seq)] || {};
-                var name = t.field || f.field;
-                var src = t.source ? '<span class="badge text-bg-light border ms-1" style="font-size:9px">' + esc(t.source) + '</span>' : '';
-                return '<tr style="background:' + bg + '">' +
-                    '<td style="padding:3px 8px;white-space:nowrap;font-weight:500;border:none;font-size:0.82em">' + f.seq + '. ' + esc(name) + src + '</td>' +
-                    '<td style="padding:3px 8px;font-family:monospace;font-size:0.82em;border:none;word-break:break-all">' +
-                        (String(f.value).trim() !== '' ? esc(f.value) : '<span style="color:#aaa">&mdash;</span>') + '</td></tr>';
-            }).join('');
-            var html = '<div class="text-start fs-xs text-muted mb-2"><b>' + esc(dealId) + '</b> &nbsp;·&nbsp; ' + esc(o.data.file_name || '') + '</div>' +
-                '<div style="overflow-y:auto;max-height:52vh;border:1px solid rgba(0,0,0,.12);border-radius:6px">' +
-                '<table style="width:100%;border-collapse:collapse;font-size:0.85em"><thead><tr style="background:#343a40;color:#fff;position:sticky;top:0">' +
-                '<th style="padding:5px 8px;text-align:left;font-weight:600"><span data-lang="nd-preview-col-field">Field</span></th>' +
-                '<th style="padding:5px 8px;text-align:left;font-weight:600"><span data-lang="nd-preview-col-value">Value</span></th></tr></thead>' +
-                '<tbody>' + rows + '</tbody></table></div>' +
-                '<div class="dces-preview-line text-start mt-2">' + esc(o.data.line || '') + '</div>';
-            Swal.fire({ title: _t('intrag-dces-preview-title', 'Intrag file preview'), html: html, width: 900,
-                        showCloseButton: true, showConfirmButton: false });
+            // O preview da casa (file-preview.js): Bloco · Campo · Formato · Valor com a
+            // origem do cadastro, e a linha da Intrag embaixo.
+            var _fields = (o.data.fields || []).map(function(f){
+                var tf = tpl[String(f.seq)] || {};
+                return { seq: f.seq, field: tf.field || f.field, format: tf.format || '', source: tf.source || '', value: f.value };
+            });
+            otcFilePreview({
+                title: _t('intrag-dces-preview-title', 'Intrag file preview'), subtitle: dealId,
+                files: [{ label: 'Intrag', file_name: o.data.file_name || '', fields: _fields, records: [o.data.line || ''] }],
+                t: _t, width: 900
+            });
         }).catch(function(err){
             Swal.fire({ title: 'Error', text: 'Request failed: ' + err.message, icon: 'error', confirmButtonText: 'OK', confirmButtonColor: '#dc3545' });
         });

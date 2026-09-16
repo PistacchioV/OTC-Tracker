@@ -513,6 +513,7 @@ td .btn-sm.rounded-circle i { font-size: 1rem; }
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/table-std.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/file-preview.js?v={{ asset_v('js/file-preview.js') }}"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/moment.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.js"></script>
 <!-- DataTables Buttons (export model from the New Deals pages) -->
@@ -1307,40 +1308,18 @@ td .btn-sm.rounded-circle i { font-size: 1rem; }
                         text: t('acc-empty', 'No rows.'), confirmButtonColor: '#0066cc' });
             return;
         }
-        var cols  = recs[0].cols || [];
-        var multi = recs.length > 1;
-        var thead = '<tr style="background:#343a40;color:#fff;position:sticky;top:0">' +
-            '<th style="padding:5px 8px;text-align:left;font-weight:600;font-size:.78em">' + esc(t('acc-prev-field', 'Field')) + '</th>' +
-            recs.map(function (r, i) {
-                return '<th style="padding:5px 8px;text-align:left;font-weight:600;font-size:.78em;white-space:nowrap">' +
-                    (multi ? '#' + (i + 1) + ' ' : '') + esc(r.view || '') + '</th>';
-            }).join('') + '</tr>';
-        var tbody = cols.map(function (label, fi) {
-            var bg = fi % 2 === 0 ? '#f8f9fa' : '#fff';
-            var cells = recs.map(function (r) {
-                var raw = r.values[fi] == null ? '' : String(r.values[fi]);
-                var disp = (raw !== '' && raw.trim() === '')       // all-spaces padding → grey dots
-                    ? '<span style="color:#bbb">' + '·'.repeat(raw.length) + '</span>'
-                    : esc(raw);
-                return '<td style="padding:3px 8px;font-family:monospace;font-size:.8em;border:none;white-space:pre">' + disp + '</td>';
-            }).join('');
-            return '<tr style="background:' + bg + '">' +
-                '<td style="padding:3px 8px;white-space:nowrap;font-weight:500;color:#495057;border:none;font-size:.8em">' +
-                    (fi + 1) + '. ' + esc(label) + '</td>' + cells + '</tr>';
-        }).join('');
-        var html =
-            '<div style="font-size:.8em;color:#6c757d;margin-bottom:8px">' + esc(lob.name) + ' · ' +
-                recs.length + ' ' + t('acc-prev-records', 'record(s)') + '</div>' +
-            '<div style="overflow:auto;max-height:60vh;border:1px solid #dee2e6;border-radius:4px">' +
-            '<table style="border-collapse:collapse;width:100%">' +
-            '<thead>' + thead + '</thead><tbody>' + tbody + '</tbody></table></div>';
-        Swal.fire({
-            title: '<span style="font-size:1rem">' + t('mtm-rowprev-title', 'File preview') + ' — ' + esc(id) + '</span>',
-            html: html, width: (recs.length > 2 ? 760 : 600),
-            showConfirmButton: true, confirmButtonText: '<i class="ti ti-brand-telegram"></i>', confirmButtonColor: '#0066cc',
-            showCancelButton: true, cancelButtonText: '<i class="ti ti-x"></i>', cancelButtonColor: '#dc3545',
-            focusConfirm: false,
-            customClass: { htmlContainer: 'text-start', confirmButton: 'bg-gradient', cancelButton: 'bg-gradient' }
+        // O preview da casa (file-preview.js): uma aba por linha gerada (visão), os
+        // campos do cadastro e o arquivo cru (header + linha) embaixo.
+        var _files = recs.map(function (r, i) {
+            var fl = (r.cols || []).map(function (c, j) { return { name: c, value: r.values[j] }; });
+            var hdr = ((files || []).filter(function (f) { return f.filename === r.filename; })[0] || {}).header || '';
+            return { label: (recs.length > 1 ? '#' + (i + 1) + ' ' : '') + (r.view || ''), file_name: r.filename,
+                     fields: fl, header: hdr, records: [r.values.join('')] };
+        });
+        otcFilePreview({
+            title: t('mtm-rowprev-title', 'File preview') + ' \u2014 ' + id,
+            subtitle: lob.name + ' \u00b7 ' + recs.length + ' ' + t('acc-prev-records', 'record(s)'),
+            files: _files, t: t, width: 900, buttons: { send: true }
         }).then(function (res) {
             if (res.isConfirmed) downloadMtmFiles(files);
         });
