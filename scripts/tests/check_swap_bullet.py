@@ -365,6 +365,22 @@ def main():
     apagados, nao = commands.delete([{'deal_id': cli['_id'], 'trade_date': '2026-09-16'}])
     check('delete apaga do arquivo', apagados == 1 and not nao and queries.find(cli['_id'], '2026-09-16')[2] is None)
 
+    print('== 6c. Economic Affirmation (IF, D0) ==')
+    from apps.pages import otc_emails
+    hoje = datetime.now().strftime('%d/%m/%Y')
+    fi = dict(cli, TradeDate=datetime.now().strftime('%Y-%m-%d'), ClientAccount='74220005', ClientRefData='ok', Client='BANCO SAFRA S.A.')
+    omni = dict(fi, ClientAccount='73760205', ClientAccountNote='omnibus')
+    drafts = otc_emails.build_swap_bullet_affirmation_emails([fi, omni, dict(b2b, TradeDate=fi['TradeDate']), dict(fi, TradeDate='2026-01-02')])
+    check('um rascunho: só a IF com conta própria, na data; omnibus, B2B e outro dia ficam fora', len(drafts) == 1)
+    dr = drafts[0]
+    check('assunto no molde do e-mail da mesa', dr['subject'] == 'Confirmação da(s) Operação(ões) Fechada(s) em %s - BANCO SAFRA S.A. - SWAP' % hoje)
+    h = dr['html']
+    check('corpo: contas CETIP das duas pontas e o EDG no código identificador',
+          'Conta CETIP BANCO SAFRA S.A.' in h and '74220.00-5' in h and '73760.00-9' in h and 'incluir &quot;EDG&quot;' in h.replace('"', '&quot;'))
+    check('corpo: o Deal Ticket (blocos e valores do DT)',
+          'DEAL TICKET SWAP VCP' in h and 'Curva Vanilla' in h and 'MSFT US' in h and 'BRL 346.000,00' in h
+          and '15-set-2026' in h and '07-jun-2027' in h and '117,00% Spot' in h and '23.355,00' in h and 'Microsoft Corporation' in h)
+    check('sem logo do OTC Tracker (só a marca do banco por CID)', 'otc' not in h.lower().replace('otc_derivatives', '').replace('brazil.otc', '') and 'cid:jpmwordmark' in h)
     print('== 7. templates e cadastros ==')
     tpl = R._fi_tpl_cached('swap-registro-premio')
     check('swap-registro-premio na biblioteca, 3 blocos (6+9+4), ligado à página',

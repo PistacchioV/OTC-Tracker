@@ -20690,6 +20690,18 @@ do cadastro recalculados). `check_ops_trade_swap`, `check_payrec_run` e
   SPN não está no cadastro. A Descrição VCP passou a seguir os exemplos da
   mesa à letra (só na curva da PARTE, quando VCP) e o PU inicial é sempre
   1.00000000.
+- **Economic Affirmation (IF, D0)**, o mesmo botão e o mesmo lugar das páginas
+  de Options (ao lado do Show/entries, `.econAffBtn`) e o mesmo fluxo (POST
+  dos deals → rascunho `.eml` baixado, `X-Unsent`): um rascunho por
+  contraparte INSTITUIÇÃO FINANCEIRA com operação na data — conta CETIP
+  PRÓPRIA no Reference Data (o omnibus do Banco, o B2B e Lawton/JPM/Atacama
+  ficam fora, `otc_emails._swb_is_fi`). O corpo reproduz o **Deal Ticket**
+  da operação (blocos Curva VCP / Curva Vanilla / Informações, Informações
+  do Indicador, datas na grafia do DT `15-set-2026`), precedido das contas
+  CETIP das duas pontas e do pedido do "EDG" no código identificador, como
+  o e-mail que a mesa já manda; sai na casca padrão dos e-mails externos
+  (marca J.P. Morgan por CID, nada do OTC Tracker). Cc `brazil.otc.ops`;
+  `to` em branco para o Outlook do operador.
 - Ficou de fora, de propósito: Mapping B3 (o arquivo de retorno do swap não
   foi definido) e a entrada na esteira de confirmação/Pending Confirmation.
   E a **cópia do BANCO do template `swap-pagamento-final-v3` não ganha o

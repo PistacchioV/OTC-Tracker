@@ -181,6 +181,23 @@ def api_swap_bullet_delete():
     return jsonify({'success': True, 'deleted': apagados, 'not_found': nao})
 
 
+@blueprint.route('/api/new-deals/swap-bullet/economic-affirmation', methods=['POST'])
+def api_swap_bullet_economic_affirmation():
+    """Economic Affirmation do dia para as contrapartes INSTITUIÇÃO FINANCEIRA
+    (conta CETIP própria no Reference Data): um rascunho .eml por contraparte
+    com o Deal Ticket de cada operação — o mesmo desenho das páginas de
+    Commodities (Options e NDF)."""
+    err = _auth()
+    if err:
+        return err
+    from apps.pages import otc_emails
+    deals = (request.get_json(silent=True) or {}).get('deals', [])
+    drafts = otc_emails.build_swap_bullet_affirmation_emails(deals)
+    if not drafts:
+        return jsonify({'ok': True, 'count': 0})
+    return _R()._email_drafts_response(drafts)
+
+
 @blueprint.route('/api/new-deals/swap-bullet/refdata')
 def api_swap_bullet_refdata():
     """A contraparte do Reference Data pela SPN — o modal de edição consulta

@@ -188,6 +188,11 @@
                             <option value="200">200</option>
                         </select>
                         <label class="form-label mb-0" data-lang="b3-entries">entries</label>
+                        <!-- Ações de documento/e-mail ficam aqui, ao lado do seletor de linhas,
+                             como nas páginas de Options (a toolbar da tabela é do DataTables). -->
+                        <div class="d-flex flex-wrap align-items-center gap-2 ms-3">
+                            <div class="econAffBtn"></div>
+                        </div>
                         <span class="text-muted fs-xs ms-auto d-none d-lg-inline" data-lang="nd-swb-preview-hint">Double-click a row to preview the B3 files (SWAP 0301 + premium 0897).</span>
                     </div>
                 </div>
@@ -665,6 +670,62 @@ $(document).ready(function() {
             });
         }).catch(function(e){ _restore(); Swal.fire({ icon: 'error', title: 'Error', text: String(e) }); });
     }
+
+    // ── Economic Affirmation (IF, D0) — o mesmo botão e fluxo das páginas de Options ──
+    function _runEmailAction(btn, endpoint, emptyText) {
+        if (btn.dataset.running === '1') return;
+        btn.dataset.running = '1';
+        var prevHtml = btn.innerHTML;
+        btn.style.pointerEvents = 'none';
+        btn.innerHTML = '<i class="ti ti-loader-2 ti-spin me-1"></i>';
+        var _reset = function () { btn.dataset.running = ''; btn.style.pointerEvents = ''; btn.innerHTML = prevHtml; };
+        fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+               body: JSON.stringify({ deals: ENTRIES }) })
+        .then(function (r) { return _handleEmailResponse(r, emptyText); })
+        .then(function () { _reset(); })
+        .catch(function (err) { _reset(); Swal.fire({ title: t('swal-err-title', 'Error'), text: t('swal-request-failed', 'Request failed:') + ' ' + err.message, icon: 'error', confirmButtonText: t('swal-ok', 'OK'), confirmButtonColor: '#dc3545' }); });
+    }
+    // JSON = "nada a gerar" / erro; arquivo (.eml/.zip) = baixa e abre no Outlook do usuário (X-Unsent → rascunho).
+    function _handleEmailResponse(r, emptyText) {
+        var ct = (r.headers.get('Content-Type') || '');
+        if (ct.indexOf('application/json') !== -1) {
+            return r.json().then(function (res) {
+                if (res.ok && (res.count || 0) === 0) {
+                    Swal.fire({ title: t('swal-email-none-title', 'Nothing to Generate'), text: emptyText, icon: 'info', confirmButtonText: t('swal-ok', 'OK'), confirmButtonColor: '#0066cc' });
+                    return;
+                }
+                Swal.fire({ title: t('swal-err-title', 'Error'), text: res.error || res.message || t('swal-request-failed', 'Request failed:'), icon: 'error', confirmButtonText: t('swal-ok', 'OK'), confirmButtonColor: '#dc3545' });
+            });
+        }
+        var count = r.headers.get('X-Draft-Count') || '';
+        var cd = r.headers.get('Content-Disposition') || '';
+        var m = /filename="?([^"]+)"?/.exec(cd);
+        var fname = (m && m[1]) ? m[1] : 'otc_email_draft.eml';
+        return r.blob().then(function (blob) {
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a'); a.href = url; a.download = fname;
+            document.body.appendChild(a); a.click(); a.remove();
+            setTimeout(function () { URL.revokeObjectURL(url); }, 1500);
+            Swal.fire({ title: t('swal-email-ok-title', 'Drafts Downloaded'), text: count + ' ' + t('swal-email-ok-text', 'e-mail draft(s) downloaded. Open the file to edit in your Outlook.'),
+                        icon: 'success', confirmButtonText: t('swal-ok', 'OK'), confirmButtonColor: '#0066cc', timer: 4000, timerProgressBar: true });
+        });
+    }
+    (function () {
+        var econAffContainer = document.querySelector('.econAffBtn');
+        if (!econAffContainer || document.getElementById('econAffBtn')) return;
+        var econAffBtn = document.createElement('button');
+        econAffBtn.id = 'econAffBtn';
+        econAffBtn.className = 'btn btn-sm btn-soft-info bg-gradient btn-toolbar-all';
+        econAffBtn.setAttribute('type', 'button');
+        econAffBtn.setAttribute('data-bs-toggle', 'tooltip'); econAffBtn.setAttribute('data-bs-placement', 'bottom');
+        econAffBtn.setAttribute('data-bs-title', t('nd-btn-econaff', 'Economic Affirmation (IF, D0)'));
+        econAffBtn.innerHTML = '<i class="ti ti-mail-check me-1"></i><span data-lang="nd-btn-econaff">Econ. Affirmation</span>';
+        econAffContainer.appendChild(econAffBtn);
+        econAffBtn.addEventListener('click', function () {
+            _runEmailAction(this, '/api/new-deals/swap-bullet/economic-affirmation',
+                t('swal-econaff-none', 'No financial-institution operations traded today to affirm.'));
+        });
+    })();
 
     // ── Preview dos arquivos (duplo clique / botão) ─────────────────────────
     function previewDeal(dealId) {

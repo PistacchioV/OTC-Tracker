@@ -1654,6 +1654,166 @@ def _economic_affirmation_email(items, contraparte, b3_account, asset_label):
 
 
 # ──────────────────────────────────────────────────────────────────────────
+# Economic Affirmation — Swap Bullet (New Deals › Swap › Bullet)
+# ──────────────────────────────────────────────────────────────────────────
+# O swap contra INSTITUIÇÃO FINANCEIRA pede uma afirmação econômica no dia:
+# o e-mail reproduz o Deal Ticket (o mesmo layout que a contraparte mandou),
+# com as contas CETIP das duas pontas e o pedido do "EDG" no código
+# identificador. Sai na casca padrão dos e-mails externos (só a marca
+# J.P. Morgan — nada do OTC Tracker, que é interno). Um rascunho por
+# contraparte, um Deal Ticket por operação.
+_SWB_EXCLUDED_ACCOUNTS = {''.join(ch for ch in a if ch.isdigit()) for a in EXCLUDED_B3_AFFIRMATION} | {'73760205'}
+_SWB_MESES_PT = ('jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez')
+
+
+def _swb_date(iso):
+    """'2026-09-15' → '15-set-2026' (a grafia do Deal Ticket)."""
+    s = str(iso or '').strip()
+    try:
+        d = datetime.strptime(s[:10], '%Y-%m-%d')
+    except ValueError:
+        return s
+    return '%02d-%s-%04d' % (d.day, _SWB_MESES_PT[d.month - 1], d.year)
+
+
+def _swb_pct(v):
+    n = _num(v)
+    return (_br(n, 2) + '%') if n is not None else str(v or '')
+
+
+def _swb_acct(digits):
+    d = ''.join(ch for ch in str(digits or '') if ch.isdigit())
+    return '{}.{}-{}'.format(d[:5], d[5:7], d[7]) if len(d) == 8 else str(digits or '')
+
+
+def _swb_is_fi(deal):
+    """Contraparte é instituição financeira? Conta CETIP PRÓPRIA no Reference
+    Data (não é o omnibus do Banco, nem conta nossa, nem Lawton/JPM/Atacama)."""
+    if str(deal.get('LE', '') or '').upper() == 'ATACAMA' or 'ATACAMA' in str(deal.get('Pair', '') or '').upper():
+        return False
+    if str(deal.get('ClientRefData', '') or '').lower() != 'ok':
+        return False
+    acct = ''.join(ch for ch in str(deal.get('ClientAccount', '') or '') if ch.isdigit())
+    if not acct or acct in _SWB_EXCLUDED_ACCOUNTS or str(deal.get('ClientAccountNote', '') or '') == 'omnibus':
+        return False
+    name = str(deal.get('Client', '') or '').upper()
+    if _is_lawton(name) or _is_jpmorgan(name) or 'ATACAMA' in name:
+        return False
+    return True
+
+
+def build_swap_bullet_affirmation_emails(deals, ref_date=None):
+    """Um rascunho por contraparte IF com operação na data (`ref_date`,
+    default hoje, dd/mm/aaaa) — o Deal Ticket de cada operação no corpo."""
+    today = ref_date or _today_br()
+    eligible = [d for d in deals if isinstance(d, dict) and _date_br(d.get('TradeDate')) == today and _swb_is_fi(d)]
+    groups = {}
+    for d in eligible:
+        groups.setdefault((d.get('Client', ''), d.get('ClientAccount', '')), []).append(d)
+    return [_swap_bullet_affirmation_email(items, cli, acct, today) for (cli, acct), items in groups.items()]
+
+
+def _swb_row(cells):
+    """Uma linha do Deal Ticket: pares (rótulo, valor) em até três colunas."""
+    tds = ''
+    for lbl, val in cells:
+        if lbl is None:
+            tds += '<td colspan="2" style="padding:3px 8px;"></td>'
+            continue
+        tds += ('<td style="padding:3px 8px;font-size:11.5px;color:#4a4a4f;white-space:nowrap;">' + _esc(lbl) + '</td>'
+                '<td align="center" style="padding:3px 8px;font-size:11.5px;color:#1d1d1f;text-align:center;'
+                'border-bottom:1px solid #9a9aa0;min-width:120px;">' + _esc(val) + '</td>')
+    return '<tr>' + tds + '</tr>'
+
+
+def _swb_head(cells):
+    """A faixa azul-acinzentada que abre cada bloco do Deal Ticket."""
+    tds = ''
+    for txt in cells:
+        if txt is None:
+            tds += '<td colspan="2" style="padding:3px 8px;"></td>'
+        else:
+            tds += ('<td colspan="2" style="padding:4px 8px;font-size:11.5px;font-weight:700;color:#ffffff;'
+                    'background:#8fa9c9;">' + _esc(txt) + '</td>')
+    return '<tr>' + tds + '</tr>'
+
+
+def _swb_blank():
+    return '<tr><td colspan="6" style="padding:4px 0;font-size:0;line-height:4px;">&nbsp;</td></tr>'
+
+
+def _swap_bullet_deal_ticket(d):
+    """O Deal Ticket de UMA operação, no layout da planilha da mesa."""
+    vcp_a = str(d.get('CurveACategory', '') or '').upper() == 'VCP'
+    # Parte A é o Banco: a coluna "Curva VCP" do DT é a perna VCP, seja de quem for.
+    vcp = {k: d.get('CurveA' + k, '') for k in ('Pct', '', 'Sign', 'Rate', 'Cap', 'Floor')} if vcp_a else \
+          {k: d.get('CurveB' + k, '') for k in ('Pct', '', 'Sign', 'Rate', 'Cap', 'Floor')}
+    van = {k: d.get('CurveB' + k, '') for k in ('Pct', '', 'Sign', 'Rate', 'Cap', 'Floor')} if vcp_a else \
+          {k: d.get('CurveA' + k, '') for k in ('Pct', '', 'Sign', 'Rate', 'Cap', 'Floor')}
+    ccy = str(d.get('Currency', '') or 'BRL')
+    valor = ccy + ' ' + _br(_num(d.get('Notional')), 2)
+    premio = _br(_num(d.get('PremiumAmount')), 2) if _num(d.get('PremiumAmount')) else 'N/A'
+    tem_premio = str(d.get('PremiumSchedule', '') or '').strip().lower() in ('sim', 'yes', 's', 'y')
+    denoms = [str(d.get(k, '') or '').strip() for k in ('Denomination1', 'Denomination2', 'Denomination3')]
+    denoms = [x for x in denoms if x] or ['']
+    T = '<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;width:100%;border:1px solid #1d1d1f;font-family:' + _E_FONT + ';">'
+    rows = ''
+    rows += ('<tr><td colspan="6" style="padding:6px 8px;font-size:13px;font-weight:700;color:#ffffff;background:#6f8fb8;">DEAL TICKET SWAP VCP</td></tr>')
+    rows += ('<tr><td colspan="6" style="padding:5px 8px;font-size:12px;font-weight:700;color:#1d1d1f;background:#e9ecf1;">' +
+             _esc(d.get('Title') or 'Swap Vanilla') + '</td></tr>')
+    rows += _swb_blank()
+    rows += _swb_row([('Cliente', d.get('ClientDT') or d.get('Client', '')), (None, None), (None, None)])
+    rows += _swb_row([('SPN', d.get('SPN', '')), (None, None), (None, None)])
+    rows += _swb_row([('Inicio', _swb_date(d.get('StartDate'))), ('Funcionalidades', d.get('Functionality') or 'N/A'), ('Agenda de premios', 'Sim' if tem_premio else 'Não')])
+    rows += _swb_row([('Vencimento', _swb_date(d.get('MaturityDate'))), ('Ativo VCP', d.get('VcpHolder', '')), ('Data de Pagamento do Premio', _swb_date(d.get('PremiumDate')) if tem_premio else 'N/A')])
+    rows += _swb_row([('Valor Base', valor), ('Ativo Curva Vanilla', d.get('VanillaHolder', '')), ('Pagador do Premio', d.get('PremiumPayer') or ('N/A' if not tem_premio else ''))])
+    rows += _swb_row([(None, None), (None, None), ('Premio', premio if tem_premio else 'N/A')])
+    rows += _swb_blank()
+    rows += _swb_head(['Curva VCP', 'Curva Vanilla', 'Informações Curvas VCP'])
+    rows += _swb_row([('Percentual', _swb_pct(vcp['Pct'])), ('Percentual', _swb_pct(van['Pct'])), ('Preço Inicial(Cupom Limpo)', d.get('InitialPrice', ''))])
+    rows += _swb_row([('Categoria', 'VCP'), ('Categoria', 'JUROS'), ('Fonte de Informação', d.get('InfoSource', ''))])
+    rows += _swb_row([('Curva', vcp['']), ('Curva', van['']), ('Data de Cotação', _swb_date(d.get('QuoteDate')))])
+    rows += _swb_blank()
+    rows += _swb_row([('Sinal +/-', vcp['Sign'] or '+'), ('Sinal +/-', van['Sign'] or '+'), ('Denominação', denoms[0])])
+    extra = denoms[1:]
+    rows += _swb_row([('Juros', _swb_pct(vcp['Rate'])), ('Juros', _swb_pct(van['Rate'])), ('', extra[0]) if extra else (None, None)])
+    rows += _swb_row([('Lim Superior', (_swb_pct(vcp['Cap']) + ' Spot') if _num(vcp['Cap']) else '-'), (None, None), ('', extra[1]) if len(extra) > 1 else (None, None)])
+    rows += _swb_row([('Lim Inferior', (_swb_pct(vcp['Floor']) + ' Spot') if _num(vcp['Floor']) else '-'), (None, None), (None, None)])
+    rows += _swb_blank()
+    rows += ('<tr><td colspan="6" style="padding:3px 8px;font-size:11px;color:#4a4a4f;">OBS: Caso aplicável, colocar também no campo denominação as informações dos limitadores</td></tr>')
+    rows += _swb_blank()
+    rows += ('<tr><td colspan="6" style="padding:4px 8px;font-size:12px;font-weight:700;color:#1d1d1f;border-bottom:2px solid #1d1d1f;">Informações do Indicador</td></tr>')
+    rows += _swb_blank()
+    rows += _swb_row([('Categoria da Curva VCP', d.get('VcpCategory', '')), (None, None), (None, None)])
+    rows += _swb_row([('Código', d.get('VcpCode', '')), (None, None), (None, None)])
+    rows += _swb_row([('Curva VCP', d.get('VcpCurve', '')), (None, None), (None, None)])
+    rows += _swb_row([('Descrição da Curva VCP', d.get('VcpDescription', '')), (None, None), (None, None)])
+    rows += _swb_blank()
+    return T + rows + '</table>'
+
+
+def _swap_bullet_affirmation_email(items, contraparte, client_account, today):
+    intro = (_ep('Prezados Senhores,') +
+             _ep('Por gentileza, poderiam confirmar os dados da(s) operação(ões) abaixo:'))
+    accounts = _email_kv('Contas CETIP', [
+        ('Parte A', 'BANCO J.P. MORGAN S.A.'),
+        ('Conta CETIP ' + str(contraparte or ''), _swb_acct(client_account)),
+        ('Conta CETIP JP', JPM_B3_ACCOUNT),
+    ])
+    lob = str(items[0].get('LOB', '') or 'EDG')
+    obs = _ep('OBS: gentileza incluir "' + _esc(lob) + '" no campo código identificador.', muted=True)
+    gap = '<div style="height:16px;line-height:16px;font-size:0;">&nbsp;</div>'
+    body = accounts + gap + obs + gap.join(_swap_bullet_deal_ticket(d) for d in items)
+    html = _email_shell('Confirmação de Operação de Derivativo', today, intro, body)
+    return {
+        'subject': 'Confirmação da(s) Operação(ões) Fechada(s) em {} - {} - SWAP'.format(today, contraparte),
+        'html': html,
+        'cc': 'brazil.otc.ops@jpmorgan.com',
+        'to': '',
+    }
+
+
+# ──────────────────────────────────────────────────────────────────────────
 # Draft delivery — .eml download (works on the ACTING user's machine)
 # ──────────────────────────────────────────────────────────────────────────
 # The Flask app runs on a shared server, so server-side Outlook automation

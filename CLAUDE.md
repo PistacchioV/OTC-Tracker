@@ -857,7 +857,10 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   A contraparte é IDENTIFICADA pela SPN do DT (Client = `COUNTERPARTY` do
   Reference Data; o texto do DT fica em `ClientDT`; SPN fora do cadastro é
   lacuna; editar a SPN re-puxa o cadastro). A chave da linha é o `_id`
-  interno (oculto): Deal nasce em BRANCO e B3 ID é coluna própria. Dropzone, Import (dry-run → duplicatas → `/cache/batch`,
+  interno (oculto): Deal nasce em BRANCO e B3 ID é coluna própria. O
+  Economic Affirmation (IF, D0) reproduz o Deal Ticket no e-mail
+  (`otc_emails.build_swap_bullet_affirmation_emails`), só para contraparte
+  com conta CETIP própria. Dropzone, Import (dry-run → duplicatas → `/cache/batch`,
   substituída = `Amend`) e filtro inteligente (`/cache/search`,
   `_deal_matches`) são o MESMO molde das páginas de New Deals — não
   reinvente. `check_swap_bullet.py` compara os seis arquivos byte a byte
