@@ -1790,7 +1790,11 @@ def _swap_bullet_deal_ticket(d):
     rows += _swb_row([('Código', d.get('VcpCode', '')), (None, None), (None, None)])
     rows += _swb_row([('Curva VCP', d.get('VcpCurve', '')), (None, None), (None, None)])
     rows += _swb_row([('Descrição da Curva VCP', d.get('VcpDescription', '')), (None, None), (None, None)])
-    rows += _swb_blank()
+    # A linha que FECHA o Deal Ticket. O `border` da <table> não basta: o Word
+    # do Outlook desenha a borda por célula e, com o espaçador (font-size:0)
+    # como última linha, a de baixo sumia — o quadro saía aberto embaixo.
+    rows += ('<tr><td colspan="6" style="padding:4px 0 0 0;font-size:0;line-height:1px;'
+             'border-bottom:1px solid #1d1d1f;">&nbsp;</td></tr>')
     return T + rows + '</table>'
 
 
