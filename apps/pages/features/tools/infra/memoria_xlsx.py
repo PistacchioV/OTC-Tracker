@@ -322,9 +322,8 @@ def _bloco_ponta(f, p, entrada, vbr, diaria, titulo, so_juros):
     idx = p.indexador
     f.secao(titulo)
     f.campo('Índice', INDICE_PT.get(idx, idx))
-    if entrada.descricao_curva:
-        f.campo('Denominação da curva', entrada.descricao_curva,
-                nota='texto da posição B3; o que ela diz e as colunas não, entra abaixo')
+    # A Denominação da curva NÃO vai para a memória (pedido da mesa): o que
+    # ela diz já está nas linhas abaixo (spread, contagem, multiplicador).
     if idx in liquidacao.DECLARAM_MOEDA:
         f.campo('Moeda do fluxo', p.moeda,
                 nota='quanto: liquida em reais, sem conversão' if p.quanto else None)
@@ -342,14 +341,14 @@ def _bloco_ponta(f, p, entrada, vbr, diaria, titulo, so_juros):
                 nota='aplicado à taxa diária')
     # O multiplicador da denominação (§479) incide na taxa ANUAL antes de
     # capitalizar — (1 + r·k)^τ —, e por isso entra DENTRO da capitalização
-    # de cada fórmula abaixo, nunca sobre o fator pronto.
-    mult = None
-    if taxa is not None and abs(float(entrada.multiplicador or 1.0) - 1.0) > 1e-12:
-        mult = f.campo('Multiplicador da taxa', float(entrada.multiplicador), FATOR_FMT,
-                       nota='da denominação da curva: multiplica a taxa anual antes de capitalizar')
+    # de cada fórmula abaixo, nunca sobre o fator pronto. A LINHA dele fica
+    # logo acima do `Fator do índice` (pedido da mesa), depois das linhas do
+    # índice que as fórmulas já referenciam — então as fórmulas nascem com um
+    # marcador e a célula é resolvida na hora de escrever o fator.
+    tem_mult = taxa is not None and abs(float(entrada.multiplicador or 1.0) - 1.0) > 1e-12
 
     def _x(expr):
-        return '({})*{}'.format(expr, mult) if mult else expr
+        return '(' + expr + ')*{MULT}' if tem_mult else expr
 
     tau = None
     if p.convencao:
@@ -402,6 +401,11 @@ def _bloco_ponta(f, p, entrada, vbr, diaria, titulo, so_juros):
     else:                                   # pré, cambial e o cupom do IPCA
         formula = '=' + cap
 
+    if tem_mult:
+        mult = f.campo('Multiplicador da taxa', float(entrada.multiplicador), FATOR_FMT,
+                       nota='da denominação da curva: multiplica a taxa anual antes de capitalizar')
+        if formula:
+            formula = formula.replace('{MULT}', mult)
     fator_idx = f.campo(
         'Fator do índice', formula if formula else p.fator_do_indice, FATOR_FMT,
         nota=('informado' if idx == liquidacao.FATOR else

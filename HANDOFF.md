@@ -20543,8 +20543,12 @@ há descrição ou multiplicador.
 spread; o % do CDI tem o campo próprio); perna sem taxa (moeda, fator) o
 ignora; zero ou negativo é erro. O `PontaLiquidada` guarda o multiplicador e a
 descrição o diz ("the rate × 1.176500"). A memória `.xlsx` ganha a linha
-`Multiplicador da taxa` e o põe DENTRO da capitalização de cada fórmula, além
-da linha `Denominação da curva`; o teste recalcula a planilha e cobra o motor.
+`Multiplicador da taxa` — logo ACIMA do `Fator do índice`, a pedido da mesa,
+o que obriga as fórmulas a nascerem com um marcador `{MULT}` resolvido na hora
+de escrever o fator, porque as linhas do índice que elas referenciam vêm
+antes — e o põe DENTRO da capitalização de cada fórmula. A Denominação em si
+NÃO vai para a memória (pedido da mesa): o que ela diz já está nas linhas de
+spread, contagem e multiplicador; o teste recalcula a planilha e cobra o motor.
 
 **O que foi feito — o IR.** `liquidacao.RegraIR` leva ao motor a exceção por
 cliente e as faixas por prazo; `queries.regra_ir_do_cliente` a monta pelas
