@@ -618,12 +618,16 @@ try:
     r10 = queries.liquidar(FORM10)['r']
     wb10 = openpyxl.load_workbook(io.BytesIO(conteudo10))
     ws10 = wb10[mx.ABA]
-    check('a denominacao vai para a memoria', ws10[por_rotulo(ws10, 'Denominação da curva')].value,
-          '(PRE 14%)*1.1765 DU/252')
+    check('a denominacao NAO vai para a memoria (pedido da mesa)',
+          any(ws10.cell(row=ln, column=1).value == 'Denominação da curva' for ln in range(1, ws10.max_row + 1)),
+          False)
     check('o multiplicador e uma linha propria', ws10[por_rotulo(ws10, 'Multiplicador da taxa')].value, 1.1765)
+    check('   LOGO ACIMA do Fator do indice (pedido da mesa)',
+          int(por_rotulo(ws10, 'Fator do índice')[1:]) - int(por_rotulo(ws10, 'Multiplicador da taxa')[1:]), 1)
     formula10 = ws10[por_rotulo(ws10, 'Fator do índice')].value
-    check('   e entra DENTRO da capitalizacao, multiplicando a taxa',
-          formula10.startswith('=(1+((') and ')*$B$' in formula10, True)
+    check('   e entra DENTRO da capitalizacao, multiplicando a taxa (a celula resolvida, sem marcador)',
+          (formula10.startswith('=(1+((') and ')*' + por_rotulo(ws10, 'Multiplicador da taxa').replace('B', '$B$') in formula10,
+           '{MULT}' in formula10), (True, False))
     perto('   o fator recalculado e o do motor (1 + 0,14 x 1,1765)^tau',
           avaliar(wb10, mx.ABA, por_rotulo(ws10, 'Fator do índice')), r10.ativa.fator_do_indice, 1e-12)
     perto('   e o ajuste liquido tambem', avaliar(wb10, mx.ABA, por_rotulo(ws10, 'Ajuste líquido')),
