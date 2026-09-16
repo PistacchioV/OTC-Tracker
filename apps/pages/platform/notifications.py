@@ -66,6 +66,7 @@ _NOTIF_PAGE_URL = {
     'Intrag DCE Option': '/intrag-dce-option',
     'Intrag DCE NDF': '/intrag-dce-ndf',
     'Intrag DCE Swap': '/intrag-dce-swap',
+    'Swap Bullet': '/new_deals-swap-bullet',
     'Swap VCP': '/other-products-swap-vcp',
     'Reconciliation': '/reconciliation-payrec',
     'Pending Confirmation': '/pending-confirmation',

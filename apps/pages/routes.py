@@ -10996,6 +10996,23 @@ def _b3_account_type(value):
     return _B3_ACCOUNT_TYPE_ALIASES.get(txt, '')
 
 
+def _swap_code_labels_upgrade(rows):
+    """O `swap-code-labels` nasceu com Sinal Taxa e Sim/Não; a Adesão a Contrato
+    (campo 13 do 0301, Swap Bullet — §480) chegou depois. Seed só roda quando o
+    arquivo não existe, então quem já abriu a tela ganha as linhas aqui — sem
+    tocar no que a mesa editou nos outros FIELDs."""
+    rows = list(rows or [])
+    tem = {str(r.get('FIELD', '') or '').strip() for r in rows if isinstance(r, dict)}
+    if 'Ades\u00e3o' not in tem:
+        rows.extend([
+            {'FIELD': 'Ades\u00e3o', 'CODE': '0', 'LABEL': 'SEM ADESAO'},
+            {'FIELD': 'Ades\u00e3o', 'CODE': '1', 'LABEL': 'CGD'},
+            {'FIELD': 'Ades\u00e3o', 'CODE': '2', 'LABEL': 'CSA'},
+            {'FIELD': 'Ades\u00e3o', 'CODE': '3', 'LABEL': 'CGD/CSA'},
+        ])
+    return rows
+
+
 def _b3_accounts_upgrade(rows):
     """Formato antigo do `b3-omnibus-account` (só ACCOUNT + NOTES) → as contas
     B3 completas, e a grafia do tipo normalizada.
@@ -12323,7 +12340,7 @@ _MAPPING_DEFS = {
         'label': 'Swap — Sinal e Sim/N\u00e3o',
         'columns': [
             {'key': 'FIELD', 'label': 'Field', 'type': 'select',
-             'options': ['Sinal Taxa', 'Sim/N\u00e3o']},
+             'options': ['Sinal Taxa', 'Sim/N\u00e3o', 'Ades\u00e3o']},
             {'key': 'CODE', 'label': 'B3 Code'},
             {'key': 'LABEL', 'label': 'Text'},
         ],
@@ -12332,6 +12349,38 @@ _MAPPING_DEFS = {
             {'FIELD': 'Sinal Taxa', 'CODE': '1', 'LABEL': '-'},
             {'FIELD': 'Sim/N\u00e3o', 'CODE': '0', 'LABEL': 'Sim'},
             {'FIELD': 'Sim/N\u00e3o', 'CODE': '1', 'LABEL': 'N\u00e3o'},
+            # Adesão a Contrato (campo 13 do Registro de Contrato com Pagamento
+            # Final, §480): o Swap Bullet traduz o texto da coluna Adhesion por
+            # aqui. Quem já tem o cadastro ganha as linhas pelo `upgrade`.
+            {'FIELD': 'Ades\u00e3o', 'CODE': '0', 'LABEL': 'SEM ADESAO'},
+            {'FIELD': 'Ades\u00e3o', 'CODE': '1', 'LABEL': 'CGD'},
+            {'FIELD': 'Ades\u00e3o', 'CODE': '2', 'LABEL': 'CSA'},
+            {'FIELD': 'Ades\u00e3o', 'CODE': '3', 'LABEL': 'CGD/CSA'},
+        ],
+        'upgrade': _swap_code_labels_upgrade,
+    },
+    # ── New Deals › Swap › Bullet: a curva do Deal Ticket → `Curva X(03)` da B3 ──
+    # O DT escreve a curva por extenso ('PRÉ FIXADO BRL', 'CDI', 'MSFT US') e o
+    # registro 0301 pede o código do `IndexadoresSWAP.txt` (C99, C03, C00…).
+    # `Exact` vence `Contains`; entre os `Contains` vence o token mais longo.
+    # Categoria VCP sem linha própria cai na linha 'VCP' — é assim que cada
+    # ativo (MSFT US, SPX INDEX, VALE3) vira C00 sem uma linha por ativo.
+    'swap-bullet-curve': {
+        'label': 'Swap Bullet \u2014 Curve (Deal Ticket \u2192 B3)',
+        'columns': [
+            {'key': 'DT CURVE', 'label': 'Curve as written on the Deal Ticket'},
+            {'key': 'MATCH', 'label': 'Match', 'type': 'select', 'options': ['Exact', 'Contains']},
+            {'key': 'B3 CODE', 'label': 'B3 Code (Curva X(03))'},
+            {'key': 'NOTES', 'label': 'Notes'},
+        ],
+        'seed': [
+            {'DT CURVE': 'VCP', 'MATCH': 'Exact', 'B3 CODE': 'C00', 'NOTES': 'any VCP asset without its own row'},
+            {'DT CURVE': 'PR\u00c9 FIXADO BRL', 'MATCH': 'Exact', 'B3 CODE': 'C99', 'NOTES': 'PREFIXADO 252D'},
+            {'DT CURVE': 'PRE FIXADO', 'MATCH': 'Contains', 'B3 CODE': 'C99', 'NOTES': 'PREFIXADO 252D'},
+            {'DT CURVE': 'PREFIXADO', 'MATCH': 'Contains', 'B3 CODE': 'C99', 'NOTES': 'PREFIXADO 252D'},
+            {'DT CURVE': 'CDI', 'MATCH': 'Exact', 'B3 CODE': 'C03', 'NOTES': 'DI'},
+            {'DT CURVE': 'DI', 'MATCH': 'Exact', 'B3 CODE': 'C03', 'NOTES': 'DI'},
+            {'DT CURVE': 'SELIC', 'MATCH': 'Exact', 'B3 CODE': 'C01', 'NOTES': ''},
         ],
     },
     # Cotações: **Código do Ativo Subjacente** (o mesmo do Index B3) → o símbolo
@@ -14042,3 +14091,4 @@ from apps.pages.features.index_b3 import entrypoint as _f_index_b3              
 from apps.pages.features.daily_settlement import entrypoint as _f_daily_settlement# noqa: E402,F401
 from apps.pages.features.tools import entrypoint as _f_tools                      # noqa: E402,F401
 from apps.pages.features.new_deals import entrypoint as _f_new_deals              # noqa: E402,F401
+from apps.pages.features.swap_bullet import entrypoint as _f_swap_bullet          # noqa: E402,F401

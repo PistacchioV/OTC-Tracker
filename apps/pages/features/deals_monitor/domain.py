@@ -14,6 +14,7 @@ _NDM_CARDS = [
     {'key': 'opt-commodities',    'label': 'Commodities Options', 'url': '/new_deals-opt-commodities',    'dirs': ('Option/Commodities',),                       'les': ('JPM', 'LAW')},
     {'key': 'opt-fxo',            'label': 'FX Options',          'url': '/new_deals-opt-fxo',            'dirs': ('Option/FXO',),                               'les': ('JPM', 'LAW')},
     {'key': 'opt-equity',         'label': 'Equity Options',      'url': None, 'soon': True,              'dirs': ('Option/Equity', 'Option/Equities'),          'les': ('JPM', 'ATA')},
+    {'key': 'swap-bullet',        'label': 'Swap Bullet',         'url': '/new_deals-swap-bullet',        'dirs': ('Swap/Bullet',),                              'les': ('JPM', 'ATA')},
     {'key': 'swap-equities',      'label': 'Swap Equities',       'url': None, 'soon': True,              'dirs': ('Swap/Equities',),                            'les': ('JPM', 'ATA')},
     {'key': 'swap-cem',           'label': 'Swap CEM',            'url': None, 'soon': True,              'dirs': ('Swap/CEM',),                                 'les': ('JPM', 'LAW')},
     {'key': 'intrag-ndf',         'label': 'Intrag NDF',          'url': '/intrag-ndf',                   'dirs': ('Intrag/NDF',),                               'les': ('LAW', 'ATA')},
@@ -37,7 +38,7 @@ _NDM_CARDS = [
 
 _NDM_JPM_RE = re.compile(r'J\.?P\.?\s*MORGAN', re.IGNORECASE)
 
-_NDM_ATA_DIRS = {'Option/Equity', 'Option/Equities', 'Swap/Equities'}
+_NDM_ATA_DIRS = {'Option/Equity', 'Option/Equities', 'Swap/Equities', 'Swap/Bullet'}
 
 # As PASTAS das três páginas genéricas de NDF — sem espaço, que é como o
 # `_GENERIC_ND_PRODUCTS` as grava. `FWD Start` e `Other Publisher` (com espaço)
@@ -64,6 +65,10 @@ def _ndm_deal_le(pkey, d):
         if str(d.get('LE') or '').strip().upper() == 'MGT':
             return 'MGT'
         return 'LAW' if 'LAWTON' in cl.upper() else 'JPM'
+    # Swap Bullet: o B2B grava o deal Banco × Atacama com Client = 'Atacama'
+    # (o DT chega assim) — é a perna da entidade intragrupo.
+    if pkey in _NDM_ATA_DIRS and 'ATACAMA' in cl.upper():
+        return 'ATA'
     if _NDM_JPM_RE.search(cl):
         return 'ATA' if pkey in _NDM_ATA_DIRS else 'LAW'
     return 'JPM'
@@ -76,6 +81,7 @@ _NDM_TAXONOMY = {
     'opt-commodities':    ('Option', 'Commodities'),
     'opt-fxo':            ('Option', 'FX'),
     'opt-equity':         ('Option', 'Equity'),
+    'swap-bullet':        ('Swap', 'Bullet'),
     'swap-equities':      ('Swap', 'Equities'),
     'swap-cem':           ('Swap', 'CEM'),
     # Intrag não tem sub-variante: o tipo da linha já diz Intrag, e repetir a

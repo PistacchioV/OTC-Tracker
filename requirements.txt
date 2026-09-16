@@ -72,3 +72,4 @@ requests-negotiate-sspi>=0.5.2; sys_platform == "win32"
 # --- Production WSGI server (recommended) -------------------------------------
 gunicorn>=21.2; sys_platform != "win32"
 waitress>=2.1; sys_platform == "win32"
+pypdf>=4.0                # Deal Ticket em PDF (New Deals > Swap > Bullet)
