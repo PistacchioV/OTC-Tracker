@@ -20855,3 +20855,16 @@ exemplo, paridade com a página, mapeamento → Success + Intrag/PC/esteira com
 espiões, segregação, Close/Spot/sem cotação, documento e editor renderizados,
 XML, Generate do Monitor, rotas); `check_manual_conf` (sete produtos) e
 `check_mc_backfill` atualizados.
+
+**Os quadrados das Barreiras (16/09, segunda rodada).** No Word eles são
+FORMCHECKBOX — campo de formulário sem caractere: o estado (marcado ou não)
+vive no `<w:data>` binário do campo e só o Word desenha o quadrado. No
+navegador e no PDF não saía nada. Cada campo ganhou um ☒/☐ (U+2612/U+2610,
+decodificado do `wDef` do campo: 8 marcados, os "Não Aplicável", 8 vazios)
+dentro de `<![if !supportFields]>`, que o Word ignora e o resto mostra. As
+fontes Type 1 do reportlab não têm os glifos: `confirmation_pdfs._symbols`
+registra uma TrueType da máquina (Segoe UI Symbol no Windows, Arial Unicode
+no Mac; `_SYMBOL_FONT_CANDIDATES`) e sem nenhuma escreve `[X]`/`[  ]`.
+Fonte do documento: Times New Roman 12 (explícita em cada trecho; o estilo
+Normal diz Arial 12 mas nenhum trecho o usa); o PDF segue o gerador comum,
+Times 10,5 no corpo e 7,5 nas células.
