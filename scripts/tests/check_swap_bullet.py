@@ -171,6 +171,26 @@ def main():
     check('B2B: par JPM x ATACAMA, LE ATACAMA, Parte A = VCP', b2b['Pair'] == 'JPM x ATACAMA' and b2b['LE'] == 'ATACAMA' and b2b['CurveACategory'] == 'VCP'
           and b2b['CurveACap'] == '117' and b2b['CurveBCategory'] == 'JUROS' and b2b['PremiumPayer'] == 'Banco JP Morgan')
 
+    print('== 1b. o DT do GLD: sem Cap/Floor, preço em % do Spot, ano de dois dígitos ==')
+    from openpyxl import Workbook as _WB
+    wb2 = _WB(); w = wb2.active; w.title = 'DT'
+    _dt_sheet(w, 'Safra', 281808, 'Cliente', 'Banco JP Morgan', 'Cliente', 'INDICES INTERNACIONAIS')
+    w['B9'] = datetime(2026, 8, 14); w['B10'] = datetime(1931, 8, 18)         # o Excel leu '18-Aug-31' como 1931
+    w['B11'] = 'BRL 1.100.000,00'; w['H10'] = datetime(2026, 8, 17); w['H12'] = 184140
+    w['B18'] = 'GLD UP EQUITY'; w['G16'] = 'Preço Inicial(Cupom Limpo) - % do Spot'; w['H16'] = 1.5; w['H16'].number_format = '0.00%'
+    w['H18'] = datetime(1931, 8, 15); w['B22'] = None; w['H22'] = 'Preco in ativo - 1.5 Close 14-Aug-26'
+    w['B30'] = 10473; w['B31'] = 'GLD UP EQUITY'; w['B32'] = 'SPDR GOLD SHARES'
+    bb = io.BytesIO(); wb2.save(bb)
+    g2 = dt_reader.sheets_from_xlsx(bb.getvalue())[0][1]
+    gld = domain.deal_from_raw(domain.parse_dt_grid(g2), '2026-08-14')
+    check('Lim Superior/Inferior em branco não pegam a Denominação do bloco vizinho', gld['CurveBCap'] == '' and gld['CurveBFloor'] == '')
+    check("'Preço Inicial(Cupom Limpo) - % do Spot' é o Preço Inicial, em % na grade", gld['InitialPrice'] == '150%')
+    check('ano de dois dígitos lido pelo Excel como 1931 vira 2031', gld['MaturityDate'] == '2031-08-18' and gld['QuoteDate'] == '2031-08-15')
+    check('a 3ª linha da denominação fica na denominação', gld['Denomination3'] == 'Preco in ativo - 1.5 Close 14-Aug-26')
+    gld.update(ClientAccount='74220005', ClientRefData='ok', QuoteDateCode='01')
+    vg = domain.swap_record_values(gld, 'client', queries.own_accounts(), queries.codes_for(gld), '1111111111')
+    check('no arquivo, 150% é 150 no Cupom Limpo (9(08)v9(07)) e o PU segue 1.0; Cap/Floor em branco',
+          vg['55'] == '000001500000000' and vg['50'] == '0000000000000100000000' and vg['38'].strip() == '' and vg['39'].strip() == '')
     print('== 2. o DT em PDF chega ao mesmo deal ==')
     raw_pdf = domain.parse_dt_text(build_pdf_text())
     pdf = domain.deal_from_raw(raw_pdf, '2026-09-16')
@@ -404,6 +424,19 @@ def main():
           'DEAL TICKET SWAP VCP' in h and 'Curva Vanilla' in h and 'MSFT US' in h and 'BRL 346.000,00' in h
           and '15-set-2026' in h and '07-jun-2027' in h and '117,00% Spot' in h and '23.355,00' in h and 'Microsoft Corporation' in h)
     check('sem logo do OTC Tracker (só a marca do banco por CID)', 'otc' not in h.lower().replace('otc_derivatives', '').replace('brazil.otc', '') and 'cid:jpmwordmark' in h)
+    check('casca larga (960) e nome do Reference Data dentro do DT', 'width:960px' in h and '>BANCO SAFRA S.A.<' in h)
+    _idx_orig = otc_emails._build_cpdetails_index
+    otc_emails._build_cpdetails_index = lambda: {'281808': {'CONTACTS': [
+        {'email': 'conf@safra.com.br', 'rules': ['Confirmation Letter']},
+        {'email': 'liq@safra.com.br', 'rules': ['Settlement']},
+        {'email': 'conf2@safra.com.br', 'rules': ['Only for Confirmation']}]}}
+    try:
+        dr2 = otc_emails.build_swap_bullet_affirmation_emails([dict(fi, MaturityDate='1931-08-18', QuoteDate='1931-08-15')])[0]
+        check('destinatários = contatos de Confirmation da contraparte (Counterparty Details pela SPN)',
+              dr2['to'] == 'conf@safra.com.br; conf2@safra.com.br')
+        check('data 1931 de linha antiga sai como 2031 no e-mail', '18-ago-2031' in dr2['html'] and '15-ago-2031' in dr2['html'])
+    finally:
+        otc_emails._build_cpdetails_index = _idx_orig
     print('== 7. templates e cadastros ==')
     tpl = R._fi_tpl_cached('swap-registro-premio')
     check('swap-registro-premio na biblioteca, 3 blocos (6+9+4), ligado à página',
