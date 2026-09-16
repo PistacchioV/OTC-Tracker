@@ -337,6 +337,46 @@ def _ops_swap_pos_terms(ref):
     return out
 
 
+def _swap_ir_excecao(client):
+    """A exceção por CLIENTE do `swap-ir-client`: `(alíquota em fração, CLIENT
+    da linha que casou)`, ou `(None, '')` quando o cliente não está lá. Linha
+    que casa com RATE ilegível devolve `(None, <cliente>)` — casou, mas não dá
+    para afirmar a alíquota."""
+    from apps.pages import routes
+    cn = routes._fcst_norm(client).strip()
+    if not cn:
+        return None, ''
+    for row in routes._mapping_rows('swap-ir-client'):
+        pat = routes._fcst_norm(row.get('CLIENT', '')).strip()
+        if not pat:
+            continue
+        hit = cn.startswith(pat) if 'starts' in routes._fcst_norm(row.get('MATCH', '')) else cn == pat
+        if hit:
+            r = routes._conf_to_float(row.get('RATE'))
+            return (None if r is None else r / 100.0), str(row.get('CLIENT') or '')
+    return None, ''
+
+
+def _swap_ir_faixas():
+    """As faixas do `swap-ir-term`, em ordem: `[(até_dias, fração), …]`, a
+    linha sem limite por último como `(None, fração)`."""
+    from apps.pages import routes
+    brackets, catch_all = [], None
+    for row in routes._mapping_rows('swap-ir-term'):
+        rate = routes._conf_to_float(row.get('RATE'))
+        if rate is None:
+            continue
+        upto = routes._conf_to_float(row.get('UP TO DAYS'))
+        if upto is None:
+            catch_all = rate / 100.0
+        else:
+            brackets.append((upto, rate / 100.0))
+    faixas = sorted(brackets)
+    if catch_all is not None:
+        faixas.append((None, catch_all))
+    return faixas
+
+
 def _ops_swap_ir_rate(client, prazo_days, cpty_receives):
     """Alíquota de IR do swap em FRAÇÃO (0.15 = 15%), ou None quando não dá para
     afirmar. Porte da fórmula da planilha, na mesma ordem:
@@ -352,37 +392,28 @@ def _ops_swap_ir_rate(client, prazo_days, cpty_receives):
     A planilha tem um vão em 721 (`E12>721` deixa o prazo 721 exato sem resposta,
     devolvendo FALSE). A tabela por faixas fecha isso: acima da última faixa
     registrada vale a linha sem limite.
+
+    As duas perguntas (`_swap_ir_excecao`, `_swap_ir_faixas`) são funções
+    próprias porque o Swap Calculator faz as mesmas (§479) e monta com elas a
+    sua `RegraIR` — uma leitura do cadastro para as três telas.
     """
     from apps.pages import routes
-    cn = routes._fcst_norm(client).strip()
-    if not cn:
+    if not routes._fcst_norm(client).strip():
         return None
-    for row in routes._mapping_rows('swap-ir-client'):
-        pat = routes._fcst_norm(row.get('CLIENT', '')).strip()
-        if not pat:
-            continue
-        hit = cn.startswith(pat) if 'starts' in routes._fcst_norm(row.get('MATCH', '')) else cn == pat
-        if hit:
-            r = routes._conf_to_float(row.get('RATE'))
-            return None if r is None else r / 100.0
+    excecao, cliente = _swap_ir_excecao(client)
+    if cliente:
+        return excecao
     if cpty_receives is None:      # direção desconhecida ≠ "não é ela que recebe"
         return None
     if not cpty_receives:
         return 0.0
     if prazo_days is None:
         return None
-    brackets, catch_all = [], None
-    for row in routes._mapping_rows('swap-ir-term'):
-        rate = routes._conf_to_float(row.get('RATE'))
-        if rate is None:
-            continue
-        upto = routes._conf_to_float(row.get('UP TO DAYS'))
+    catch_all = None
+    for upto, rate in _swap_ir_faixas():
         if upto is None:
-            catch_all = rate / 100.0
-        else:
-            brackets.append((upto, rate / 100.0))
-    for upto, rate in sorted(brackets):
-        if prazo_days <= upto:
+            catch_all = rate
+        elif prazo_days <= upto:
             return rate
     return catch_all
 

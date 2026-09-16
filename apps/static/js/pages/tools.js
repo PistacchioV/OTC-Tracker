@@ -33,6 +33,9 @@
           flow: 'flow', pickId: 'Type a B3 ID first.', fromBase: 'from the imported base of',
           closeOf: 'close of',
           ipcaAuto: 'fetched from IBGE on Calculate',
+          descRead: 'From the curve description:', descNone: 'Nothing in the curve description changes the calculation.',
+          descConfirms: 'confirms the position', descDiffers: 'the position had', descApplied: 'applied',
+          descUnread: 'Not understood in the description — check by hand:',
           fields: { counterparty: 'Counterparty', data_operacao: 'Trade date', inicio: 'Flow start',
                     fim: 'Flow end', vencimento: 'Swap maturity', nocional: 'Remaining notional',
                     nocional_original: 'Original notional', amortizacao: 'Amortisation',
@@ -40,7 +43,9 @@
                     moeda: 'currency', tenor: 'tenor', percentual: '% of CDI',
                     base_ajuste: 'What settles', ptax_inicial: 'initial fixing',
                     ni_inicial: 'initial index number', preco_inicial: 'initial price',
-                    ativa: 'Receiving leg', passiva: 'Paying leg' } },
+                    ativa: 'Receiving leg', passiva: 'Paying leg', multiplicador: 'rate multiplier',
+                    convencao: 'day count', regime: 'compounding', ptax_offset: 'fixing offset',
+                    lookback: 'lookback', shift: 'observation shift' } },
     br: { show: 'Mostrar', entries: 'linhas', all: 'Todas', columns: 'Colunas', export: 'Exportar',
           exporting: 'Exportando…', exportFail: 'Não foi possível gerar a memória de cálculo',
           clear: 'Limpar Filtros', blank: 'blank = células vazias',
@@ -57,6 +62,9 @@
           flow: 'fluxo', pickId: 'Digite um B3 ID primeiro.', fromBase: 'da base importada de',
           closeOf: 'fechamento de',
           ipcaAuto: 'buscado no IBGE ao calcular',
+          descRead: 'Da descrição da curva:', descNone: 'Nada na descrição da curva muda o cálculo.',
+          descConfirms: 'confirma a posição', descDiffers: 'a posição trazia', descApplied: 'aplicado',
+          descUnread: 'Não entendido na descrição — confira à mão:',
           fields: { counterparty: 'Contraparte', data_operacao: 'Data da operação', inicio: 'Início do fluxo',
                     fim: 'Fim do fluxo', vencimento: 'Vencimento do swap', nocional: 'Notional remanescente',
                     nocional_original: 'Notional original', amortizacao: 'Amortização',
@@ -64,7 +72,9 @@
                     moeda: 'moeda', tenor: 'prazo', percentual: '% do CDI',
                     base_ajuste: 'O que liquida', ptax_inicial: 'fixing inicial',
                     ni_inicial: 'número-índice inicial', preco_inicial: 'preço inicial',
-                    ativa: 'Ponta ativa', passiva: 'Ponta passiva' } },
+                    ativa: 'Ponta ativa', passiva: 'Ponta passiva', multiplicador: 'multiplicador da taxa',
+                    convencao: 'contagem de dias', regime: 'capitalização', ptax_offset: 'deslocamento do fixing',
+                    lookback: 'lookback', shift: 'observation shift' } },
     es: { show: 'Mostrar', entries: 'filas', all: 'Todas', columns: 'Columnas', export: 'Exportar',
           exporting: 'Exportando…', exportFail: 'No se pudo generar la memoria de cálculo',
           clear: 'Limpiar Filtros', blank: 'blank = celdas vacías',
@@ -81,6 +91,9 @@
           flow: 'flujo', pickId: 'Escriba un B3 ID primero.', fromBase: 'de la base importada de',
           closeOf: 'cierre de',
           ipcaAuto: 'traído del IBGE al calcular',
+          descRead: 'De la descripción de la curva:', descNone: 'Nada en la descripción de la curva cambia el cálculo.',
+          descConfirms: 'confirma la posición', descDiffers: 'la posición traía', descApplied: 'aplicado',
+          descUnread: 'No entendido en la descripción — revise a mano:',
           fields: { counterparty: 'Contraparte', data_operacao: 'Fecha de la operación', inicio: 'Inicio del flujo',
                     fim: 'Fin del flujo', vencimento: 'Vencimiento del swap', nocional: 'Nocional remanente',
                     nocional_original: 'Nocional original', amortizacao: 'Amortización',
@@ -88,7 +101,9 @@
                     moeda: 'moneda', tenor: 'plazo', percentual: '% del CDI',
                     base_ajuste: 'Qué liquida', ptax_inicial: 'fixing inicial',
                     ni_inicial: 'número índice inicial', preco_inicial: 'precio inicial',
-                    ativa: 'Pata activa', passiva: 'Pata pasiva' } }
+                    ativa: 'Pata activa', passiva: 'Pata pasiva', multiplicador: 'multiplicador de la tasa',
+                    convencao: 'conteo de días', regime: 'capitalización', ptax_offset: 'desplazamiento del fixing',
+                    lookback: 'lookback', shift: 'observation shift' } }
   };
   function lang() {
     try { return localStorage.getItem('__OTC_TRACKER_LANG__') || 'en'; } catch (e) { return 'en'; }
@@ -105,8 +120,10 @@
   // `0,72464%` são R$ 113). Com o `pct` de 4 casas o blur arredondava de volta
   // o que o servidor mandava com 5 — o campo não é só exibição, é o que o
   // cálculo lê.
+  // `mult` é o multiplicador da taxa (§479): `1.1765` como está no contrato,
+  // sem zeros inventados e sem cortar casa.
   var CASAS = { money: 2, pct: 4, pct5: 5, rate: 8, price: 4,
-                fx: { min: 4, max: 8 }, index: 6, int: 0 };
+                fx: { min: 4, max: 8 }, index: 6, int: 0, mult: { min: 0, max: 8 } };
   function ler(texto) {
     var s = String(texto || '').replace(/%/g, '').replace(/\s/g, '').trim();
     if (!s) return null;
@@ -451,12 +468,71 @@
       var el = document.getElementById(id);
       var f = el && el.closest('.tl-field');
       if (!f) return;
-      f.classList.remove('tl-missing', 'tl-assumed');
+      f.classList.remove('tl-missing', 'tl-assumed', 'tl-derived');
       if (cls) f.classList.add(cls);
     }
     function clearMarks() {
-      page.querySelectorAll('.tl-missing, .tl-assumed').forEach(function (f) { f.classList.remove('tl-missing', 'tl-assumed'); });
+      page.querySelectorAll('.tl-missing, .tl-assumed, .tl-derived').forEach(function (f) { f.classList.remove('tl-missing', 'tl-assumed', 'tl-derived'); });
     }
+    function esc(s) {
+      return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; });
+    }
+    // ── a Denominação da curva: o que ela diz e as colunas não (§479) ──────
+    // Cada achado do servidor vem com o TRECHO de onde saiu e o estado
+    // (aplicado · confirma · divergente · info); o campo que a denominação
+    // preencheu fica marcado, e o que ficou sem leitura sai em aviso.
+    function notaDescricao(lado, p) {
+      var nota = document.getElementById(lado + '_descricao_nota');
+      if (!nota) return;
+      var itens = p.leitura || [], sobras = p.nao_lido || [];
+      itens.forEach(function (it) {
+        if (it.campo && (it.estado === 'aplicado' || it.estado === 'divergente')) mark(lado + '_' + it.campo, 'tl-derived');
+      });
+      var partes = itens.map(function (it) {
+        var s = esc(it.rotulo) + ' <strong>' + esc(it.valor) + '</strong>';
+        if (it.estado === 'confirma') s += ' (' + t('descConfirms') + ')';
+        else if (it.estado === 'divergente') s += ' (' + t('descDiffers') + ' ' + esc(it.anterior) + ')';
+        else if (it.estado === 'aplicado') s += ' (' + t('descApplied') + ')';
+        return s + ' <em>«' + esc(it.trecho) + '»</em>';
+      });
+      var html = '';
+      if (partes.length) html += '<strong>' + t('descRead') + '</strong> ' + partes.join(' · ');
+      else if (p.descricao) html += t('descNone');
+      if (sobras.length) html += (html ? '<br>' : '') + '<span class="tl-help--warn">' + t('descUnread') + ' <em>' + sobras.map(esc).join(' · ') + '</em></span>';
+      nota.innerHTML = html;
+      nota.hidden = !html;
+    }
+    // O texto colado ou corrigido na tela passa pela MESMA leitura do servidor
+    // que o pré-preenchimento usa — os campos atuais vão junto para a resposta
+    // dizer se cada achado preenche, confirma ou diverge do que está na tela.
+    var CAMPOS_DESC = ['indexador', 'taxa', 'percentual', 'convencao', 'regime', 'tenor', 'ptax_offset', 'multiplicador', 'lookback', 'shift'];
+    function lerDescricao(lado) {
+      var ta = document.getElementById(lado + '_descricao');
+      if (!ta) return;
+      var sel = document.getElementById(lado + '_indexador');
+      var q = ['text=' + encodeURIComponent((ta.value || '').trim())];
+      CAMPOS_DESC.forEach(function (k) {
+        var el = document.getElementById(lado + '_' + k);
+        if (k === 'taxa' && sel && sel.value === 'cdi') el = document.getElementById(lado + '_taxa_cdi') || el;
+        q.push(k + '=' + encodeURIComponent(el ? (el.value || '') : ''));
+      });
+      fetch('/api/tools/swap-calculator/curve?' + q.join('&'), { credentials: 'same-origin' })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (!d || !d.success) return;
+          (d.leitura || []).forEach(function (it) {
+            if (!it.campo || it.estado === 'info' || it.estado === 'confirma') return;
+            setVal(lado + '_' + it.campo, d[it.campo]);
+            if (it.campo === 'taxa') { var sp = document.getElementById(lado + '_taxa_cdi'); if (sp) { sp.value = d.taxa; formatar(sp); } }
+          });
+          notaDescricao(lado, d);
+        })
+        .catch(function () { /* offline: fica o que está nos campos */ });
+    }
+    ['ativa', 'passiva'].forEach(function (lado) {
+      var ta = document.getElementById(lado + '_descricao');
+      if (ta) ta.addEventListener('change', function () { lerDescricao(lado); });
+    });
     function say(html, cls) {
       if (!status) return;
       status.className = 'tl-note mt-2 ' + (cls || '');
@@ -496,7 +572,7 @@
         }
         ['taxa', 'percentual', 'convencao', 'regime', 'moeda', 'tenor', 'taxa_indice',
          'ptax_inicial', 'ptax_final', 'ptax_offset', 'ni_inicial', 'preco_inicial',
-         'preco_final', 'ativo']
+         'preco_final', 'ativo', 'multiplicador', 'descricao', 'lookback', 'shift']
           .forEach(function (k) { if (p[k] !== undefined && (p[k] !== '' || k === 'taxa')) setVal(lado + '_' + k, p[k]); });
         // O spread do CDI tem input PRÓPRIO (mesmo `name`, id diferente): sem
         // isto o campo visível da perna de CDI ficava com o valor anterior.
@@ -519,9 +595,11 @@
         var mo = document.getElementById(lado + '_moeda_equity');
         if (mo && p.moeda) mo.value = p.moeda;
         // os campos que a ponta não usa voltam ao vazio
-        ['ptax_inicial', 'ptax_final', 'ni_inicial', 'preco_inicial', 'preco_final', 'ativo'].forEach(function (k) {
+        ['ptax_inicial', 'ptax_final', 'ni_inicial', 'preco_inicial', 'preco_final', 'ativo',
+         'multiplicador', 'descricao'].forEach(function (k) {
           if (!p[k]) setVal(lado + '_' + k, '');
         });
+        notaDescricao(lado, p);
         // De que dia é a PTAX que entrou — ou por que ela não entrou. Sem isto
         // o campo de fixing é um número sem procedência.
         var nota = document.getElementById(lado + '_ptax_nota');

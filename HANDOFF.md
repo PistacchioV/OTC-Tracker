@@ -20457,3 +20457,107 @@ cobrem o caso, real, de planilha de origem com fórmula quebrada.
 CSV e Copy continuam entregando o texto `26E04610365` — o que o Excel faz ao
 COLAR ou ao abrir um `.csv` é dele (Text Import com a coluna como Texto). O
 `.xlsx` é o formato que a mesa usa e o único em que o app decide o tipo.
+
+
+## §478 — Swap Calculator: remanescente acima do original não é erro (2026-09-16)
+
+**O relato.** No Swap Calculator, um swap contra a YAZAKI (B3 ID `26F02737201`)
+com remanescente de R$ 45.514.445,48 e original de R$ 45.126.358,60 não
+calculava: a tela devolvia "the remaining notional cannot exceed the original
+notional". A mesa explicou o que o motor não sabia: alguns swaps têm
+**atualização de notional** — o principal é corrigido (pelo índice, ou por
+aditivo) e o saldo que rende passa do valor registrado na B3. Não é digitação
+errada; é o contrato.
+
+**A causa.** `liquidacao.liquidar` tratava `original < nocional` como dado que
+não fecha e levantava `ErroLiquidacao`, sem que nenhuma conta dependesse dessa
+ordem: o original é só a base da parcela `Sobre Valor Base Original`, e
+`amortizar()` já limita a parcela ao saldo (`min(saldo, ref × pct)`). A memória
+`.xlsx` faz a mesma conta em fórmula (`MIN(saldo, ref*pct)`), então também não
+tinha nada a proteger.
+
+**A correção.** A trava saiu, com o comentário dizendo por quê. Nada muda para
+o swap comum. `check_tools.py` ganhou a caracterização: remanescente maior que
+o original liquida; a parcela sobre o original continua sobre o ORIGINAL; as
+pontas rendem sobre o remanescente; a parcela nunca passa do saldo.
+
+
+## §479 — Swap Calculator: a Denominação da curva VCP e o IR pelo cadastro (2026-09-16)
+
+**O relato.** Os swaps com curva VCP trazem, no Live Position › Swap
+Characteristics, uma `Denominação` — o texto livre da curva — com informação
+que as características normais não têm. O exemplo da mesa, na ponta passiva de
+um swap DI × Term SOFR contra a YAZAKI:
+
+    TERM SOFR 3M - Fixings PTAX-Ask T-1 - Initial FX PTAX-V 15/Jun/26
+    - (3M SOFR + 0.75%)*1.1765 A/360
+
+O `*1.1765` (o gross-up de 15% de IR sobre a taxa) só existe ali: a posição diz
+"Term SOFR 3M, spread 0,75%", e sem o multiplicador a liquidação do Swap
+Calculator não batia com a planilha da mesa. A mesa pediu um campo de descrição
+da curva no Swap Calculator e "alguma lógica, com machine learning ou algo do
+gênero" que ache na descrição o que impacta a liquidação. E, na mesma sessão:
+o IR do Swap Calculator tem de considerar o cadastro **Swap IR — Client
+Exceptions**.
+
+**O que foi feito — a denominação.** Um interpretador de REGRAS, e não um
+modelo (`precificador/descricao_curva.py`): cada coisa que ele reconhece sai
+como `Achado` com o TRECHO exato de onde veio, e o que sobra do texto com
+número e operador volta em `nao_lido`, para a mesa conferir à mão. Foi escolha,
+não falta de alternativa: num número que multiplica o notional, uma resposta
+sem trecho e sem "não sei" é pior que a lacuna sinalizada — e a instância roda
+sem internet, sem GPU e sem biblioteca de ML. A tabela `_REGRAS` é o que cresce
+quando aparecer uma denominação nova. Hoje ela lê: o **multiplicador da taxa**
+(`)*1.1765`, `1.1765*(`, `%)*k`, `)/0.85`, `gross-up 15%`), o **spread**
+(`SOFR + 0.75%`, `CDI - 0.5%`), o **% do CDI** (`110% do CDI`, lido ANTES do
+spread porque o ` - ` da B3 é separador de cláusula), a **contagem** (`A/360`,
+`ACT/365`, `30/360`, `30E/360`, `BUS/252`, `ACT/ACT`, e `Exp/252`/`Lin/360`
+da planilha da mesa, que dizem também o regime), o **prazo do fixing** (`3M
+SOFR`, `EURIBOR 6M`), o **D-n da PTAX** (`PTAX-Ask T-1`), lookback e shift do
+SOFR composto; e, só como informação, a data do fixing inicial e o lado da
+PTAX. Um trecho é lido uma vez, um campo sai uma vez.
+
+`domain.aplicar_descricao` escreve os achados nos campos da ponta com um estado
+por achado: **aplicado** (a coluna não tinha), **confirma** (a coluna dizia o
+mesmo — `1,10` da posição e `110%` da denominação são o mesmo percentual),
+**divergente** (a coluna dizia outra coisa: a denominação VENCE, por ser o texto
+do contrato, e `anterior` guarda o que a coluna trazia para a tela mostrar os
+dois) e **info**. A MESMA função serve ao pré-preenchimento (a coluna
+`Denominação`, posições 70/75 do DPOSICAO-SWAP, lida antes das buscas de
+fixing, que dependem do prazo e do D-n que ela diz) e ao texto que a mesa cola
+na tela (`/api/tools/swap-calculator/curve`, disparado pelo `change` do campo).
+
+Na tela, cada ponta ganhou **Curve description (Denominação)** e **Rate
+multiplier**; o campo que a denominação preencheu leva a marca `◆` (a classe
+`tl-derived`, ao lado das já existentes `tl-missing` e `tl-assumed`), e a nota
+abaixo do texto lista os achados com o trecho de cada um e o que ficou sem
+leitura, em aviso.
+
+**No motor**, `Ponta.multiplicador` incide na taxa ANUAL que capitaliza —
+`(1 + r·k)^τ`, nunca `((1 + r)^τ)·k` —, em todo índice com taxa (no CDI, no
+spread; o % do CDI tem o campo próprio); perna sem taxa (moeda, fator) o
+ignora; zero ou negativo é erro. O `PontaLiquidada` guarda o multiplicador e a
+descrição o diz ("the rate × 1.176500"). A memória `.xlsx` ganha a linha
+`Multiplicador da taxa` e o põe DENTRO da capitalização de cada fórmula, além
+da linha `Denominação da curva`; o teste recalcula a planilha e cobra o motor.
+
+**O que foi feito — o IR.** `liquidacao.RegraIR` leva ao motor a exceção por
+cliente e as faixas por prazo; `queries.regra_ir_do_cliente` a monta pelas
+DUAS perguntas que a platform já fazia dentro do `_ops_swap_ir_rate` e que
+viraram funções próprias (`_swap_ir_excecao`, `_swap_ir_faixas`), para o Trade
+Level, o Settlement Advice e o Swap Calculator lerem o cadastro de um jeito só.
+A exceção por cliente VENCE a direção — a Overseas a 10% retém com o banco
+pagando ou recebendo, como no Trade Level; `BANCO…` e as entidades JPM a 0% são
+isenção. Fora da exceção vale o de sempre: só quando o banco paga, pelas faixas
+do `swap-ir-term` (prazo acima da última faixa sem linha "acima de todas" cai
+na tabela do motor — a lacuna do cadastro não pode virar 0%). O resultado diz a
+ORIGEM da alíquota (`origem_ir`: `cliente`/`prazo`) e a tela mostra "client
+exception (swap-ir-client)" no lugar dos dias; a memória escreve a exceção com
+a nota do cadastro, ou o `IF` aninhado com as faixas do cadastro.
+
+**Testes.** `check_tools_descricao.py` (novo, 89 checagens: interpretador,
+motor, `aplicar_descricao`, formulário, `RegraIR`, platform com cadastro
+stubado, endpoint e Calculate), `check_tools.py` §17 (o prefill lendo a coluna
+70/75) e `check_tools_memoria.py` §10 (o multiplicador em fórmula e a alíquota
+do cadastro recalculados). `check_ops_trade_swap`, `check_payrec_run` e
+`check_soc_layers` seguem verdes — a refatoração da platform não mudou resposta.

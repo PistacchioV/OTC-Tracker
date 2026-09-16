@@ -114,6 +114,11 @@
     border-color: var(--tl-warn) !important;
 }
 .tl-page .tl-assumed label::after { content: ' •'; color: var(--tl-warn); font-size: .9rem; line-height: 0; }
+/* o campo que veio da DENOMINAÇÃO da curva (§479): a leitura do texto, não a coluna */
+.tl-page .tl-derived .form-control, .tl-page .tl-derived .form-select { border-color: var(--tl-accent) !important; }
+.tl-page .tl-derived label::after { content: ' ◆'; color: var(--tl-accent); font-size: .7rem; line-height: 0; }
+.tl-page .tl-help--warn { color: var(--tl-warn); }
+.tl-page textarea.tl-curve-desc { font-size: .78rem; resize: vertical; }
 
 /* estatísticas e o número grande */
 .tl-page .tl-stats { display: grid; gap: .6rem; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }

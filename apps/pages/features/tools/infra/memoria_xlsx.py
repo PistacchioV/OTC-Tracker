@@ -322,6 +322,9 @@ def _bloco_ponta(f, p, entrada, vbr, diaria, titulo, so_juros):
     idx = p.indexador
     f.secao(titulo)
     f.campo('Índice', INDICE_PT.get(idx, idx))
+    if entrada.descricao_curva:
+        f.campo('Denominação da curva', entrada.descricao_curva,
+                nota='texto da posição B3; o que ela diz e as colunas não, entra abaixo')
     if idx in liquidacao.DECLARAM_MOEDA:
         f.campo('Moeda do fluxo', p.moeda,
                 nota='quanto: liquida em reais, sem conversão' if p.quanto else None)
@@ -337,6 +340,16 @@ def _bloco_ponta(f, p, entrada, vbr, diaria, titulo, so_juros):
     if idx == liquidacao.CDI:
         f.campo('Percentual do CDI', '=' + diaria['pct'], PCT_FMT,
                 nota='aplicado à taxa diária')
+    # O multiplicador da denominação (§479) incide na taxa ANUAL antes de
+    # capitalizar — (1 + r·k)^τ —, e por isso entra DENTRO da capitalização
+    # de cada fórmula abaixo, nunca sobre o fator pronto.
+    mult = None
+    if taxa is not None and abs(float(entrada.multiplicador or 1.0) - 1.0) > 1e-12:
+        mult = f.campo('Multiplicador da taxa', float(entrada.multiplicador), FATOR_FMT,
+                       nota='da denominação da curva: multiplica a taxa anual antes de capitalizar')
+
+    def _x(expr):
+        return '({})*{}'.format(expr, mult) if mult else expr
 
     tau = None
     if p.convencao:
@@ -352,7 +365,7 @@ def _bloco_ponta(f, p, entrada, vbr, diaria, titulo, so_juros):
             tau = f.campo('τ — fração de ano', p.fracao_de_ano, FX_FMT,
                           nota='ACT/ACT ISDA: cada trecho de ano sobre o tamanho real do ano')
 
-    cap = _cap(taxa, p.regime, tau) if taxa and tau else None
+    cap = _cap(_x(taxa), p.regime, tau) if taxa and tau else None
     if idx == liquidacao.CDI:
         acumulado = f.campo('Fator acumulado do CDI', '=' + diaria['fator'], FATOR_FMT,
                             nota='produto dos fatores diários da aba de apuração')
@@ -372,12 +385,12 @@ def _bloco_ponta(f, p, entrada, vbr, diaria, titulo, so_juros):
         composta = f.campo('SOFR composto (% a.a.)',
                            '=({}-1)*360/{}'.format(acumulado, ref_janela), PCT_FMT,
                            nota='(fator − 1) × 360 ÷ dias corridos da janela')
-        formula = '=' + _cap('{}+{}'.format(composta, taxa), p.regime, tau)
+        formula = '=' + _cap(_x('{}+{}'.format(composta, taxa)), p.regime, tau)
     elif idx in liquidacao.COM_FIXING:
         fix = f.campo('Taxa do fixing (% a.a.)', p.taxa_do_fixing, PCT_FMT,
                       complemento=('fixada em {:%d/%m/%Y}'.format(p.data_fixing)
                                    if p.data_fixing else None))
-        formula = '=' + _cap('{}+{}'.format(fix, taxa), p.regime, tau)
+        formula = '=' + _cap(_x('{}+{}'.format(fix, taxa)), p.regime, tau)
     elif idx == liquidacao.EQUITY:
         p0 = f.campo('Preço inicial', p.preco_inicial, '#,##0.0000')
         p1 = f.campo('Preço final', p.preco_final, '#,##0.0000')
@@ -665,8 +678,50 @@ def _selar(conteudo, cache=None):
     return buf.getvalue()
 
 
+_FAIXAS_IR_PADRAO = ((180, 0.225), (360, 0.20), (720, 0.175), (None, 0.15))
+
+
+def _faixas_ir(regra_ir):
+    """As faixas que o motor usou: as do cadastro `swap-ir-term` quando há,
+    senão a tabela do motor — na ordem, a sem limite por último."""
+    faixas = tuple(regra_ir.faixas) if (regra_ir is not None and regra_ir.faixas) \
+        else _FAIXAS_IR_PADRAO
+    limitadas = sorted((f for f in faixas if f[0] is not None), key=lambda x: x[0])
+    resto = [f[1] for f in faixas if f[0] is None]
+    return limitadas, (resto[0] if resto else None)
+
+
+def _se_faixas(prazo, limitadas, resto):
+    """O `IF` aninhado das faixas. Sem linha "acima de todas" no cadastro o
+    motor cai na tabela dele (`RegraIR.aliquota_por_prazo`), e a planilha faz
+    o mesmo — a lacuna do cadastro não vira 0%."""
+    if resto is None:
+        lim, res = _faixas_ir(None)
+        fim = _se_faixas(prazo, lim, res)
+    else:
+        fim = repr(resto)
+    for ate, taxa in reversed(limitadas):
+        fim = 'IF({p}<={a},{t},{f})'.format(p=prazo, a=int(ate), t=repr(taxa), f=fim)
+    return fim
+
+
+def _nota_faixas(limitadas, resto):
+    partes, antes = [], 0
+    for ate, taxa in limitadas:
+        partes.append(('até {}d {}'.format(int(ate), _pct_texto(taxa)) if not antes
+                       else '{}–{}d {}'.format(antes + 1, int(ate), _pct_texto(taxa))))
+        antes = int(ate)
+    partes.append('acima {}'.format(_pct_texto(resto)) if resto is not None
+                  else 'acima: tabela do motor')
+    return 'tabela regressiva (swap-ir-term): ' + ' · '.join(partes)
+
+
+def _pct_texto(fracao):
+    return ('{:.1f}%'.format(fracao * 100.0)).replace('.', ',')
+
+
 def construir(r, pontas, cetip_id='', contraparte='', calendario='ANBIMA',
-              reter_ir=True, arredondar_di=False, emitido_em=None):
+              reter_ir=True, arredondar_di=False, emitido_em=None, regra_ir=None):
     """O workbook da liquidação `r`, em bytes.
 
     `pontas` são as duas pontas de ENTRADA (`liquidacao.Ponta`), porque o
@@ -770,11 +825,21 @@ def construir(r, pontas, cetip_id='', contraparte='', calendario='ANBIMA',
                     '={}-{}'.format(fim, dop), INT_FMT)
     retem = f.campo('Retém IR na fonte', bool(reter_ir),
                     nota='retenção pela fonte pagadora')
-    aliquota = f.campo(
-        'Alíquota de IR',
-        '=IF(AND({r},{b}<0),IF({p}<=180,0.225,IF({p}<=360,0.2,IF({p}<=720,0.175,0.15))),0)'
-        .format(r=retem, b=bruto, p=prazo), '0.0%',
-        nota='tabela regressiva: até 180d 22,5% · 181–360d 20% · 361–720d 17,5% · acima 15%')
+    # A alíquota vem do CADASTRO (§479): a exceção por cliente do
+    # `swap-ir-client` vence a direção (a regra do Trade Level), senão as
+    # faixas do `swap-ir-term` só quando o banco paga.
+    if regra_ir is not None and regra_ir.excecao is not None:
+        aliquota = f.campo(
+            'Alíquota de IR', '=IF({r},{x},0)'.format(r=retem, x=repr(regra_ir.excecao)),
+            '0.0%', nota='exceção por cliente (cadastro swap-ir-client: {}); vale nas duas '
+                         'direções'.format(regra_ir.cliente or contraparte or '—'))
+    else:
+        limitadas, resto = _faixas_ir(regra_ir)
+        aliquota = f.campo(
+            'Alíquota de IR',
+            '=IF(AND({r},{b}<0),{t},0)'.format(r=retem, b=bruto,
+                                               t=_se_faixas(prazo, limitadas, resto)),
+            '0.0%', nota=_nota_faixas(limitadas, resto))
     ir = f.campo('IR retido', '=ABS({})*{}'.format(bruto, aliquota), MOEDA_FMT)
     f.campo('Ajuste líquido', '=IF({b}<0,{b}+{i},{b}-{i})'.format(b=bruto, i=ir),
             MOEDA_FMT, destaque=True)

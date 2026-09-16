@@ -11,6 +11,7 @@ from datetime import date, datetime, timedelta
 from apps.pages.features.tools import domain
 from apps.pages.features.tools.infra import memoria_xlsx
 from apps.pages.platform import swap_flows as _sf
+from apps.pages.platform import settlement as _st
 from apps.pages.precificador import (calendario, cdi, contagem, euribor, liquidacao,
                                      renda_fixa, sofr, term_sofr)
 from apps.pages.precificador.calendario import obter_calendario, para_data, soma_meses
@@ -256,6 +257,7 @@ def liquidar(form):
     # taxa nem o percentual do CDI que o produziram.
     pontas = {liquidacao.ATIVA: domain.ponta_do_form(form, 'ativa'),
               liquidacao.PASSIVA: domain.ponta_do_form(form, 'passiva')}
+    regra_ir = regra_ir_do_cliente(form.get('counterparty'))
     resultado = liquidacao.liquidar(
         data_operacao=para_data(form.get('data_operacao') or ''),
         inicio=para_data(form.get('inicio') or ''), fim=para_data(form.get('fim') or ''),
@@ -269,9 +271,25 @@ def liquidar(form):
         base_amortizacao=form.get('base_amortizacao') or liquidacao.SOBRE_ORIGINAL,
         calendario=obter_calendario(cal_nome),
         arredondar_di=domain.ligado(form, 'arredondar_di'),
-        reter_ir=domain.ligado(form, 'reter_ir'))
-    return {'r': resultado, 'pontas': pontas,
+        reter_ir=domain.ligado(form, 'reter_ir'), regra_ir=regra_ir)
+    return {'r': resultado, 'pontas': pontas, 'regra_ir': regra_ir,
             'comparacao': contagens_lado_a_lado(resultado.inicio, resultado.fim, cal_nome)}
+
+
+def regra_ir_do_cliente(counterparty):
+    """A alíquota cadastrada para a contraparte (`swap-ir-client`) e as faixas
+    do `swap-ir-term` — a MESMA leitura do Trade Level e do Settlement Advice,
+    pelas funções da platform (§479). Sem contraparte não há exceção, e as
+    faixas do cadastro valem do mesmo jeito."""
+    excecao, cliente = _st._swap_ir_excecao(counterparty or '')
+    return liquidacao.RegraIR(excecao=excecao, cliente=cliente,
+                              faixas=tuple(_st._swap_ir_faixas()))
+
+
+def ler_descricao(texto, atuais):
+    """A leitura de uma denominação digitada na tela sobre os campos ATUAIS da
+    ponta — a mesma função do pré-preenchimento, para a resposta ser a mesma."""
+    return domain.aplicar_descricao(dict(atuais), texto)
 
 
 def memoria_de_calculo(form):
@@ -292,7 +310,8 @@ def memoria_de_calculo(form):
         contraparte=str(form.get('counterparty') or '').strip(),
         calendario=form.get('calendario') or 'ANBIMA',
         reter_ir=domain.ligado(form, 'reter_ir'),
-        arredondar_di=domain.ligado(form, 'arredondar_di'))
+        arredondar_di=domain.ligado(form, 'arredondar_di'),
+        regra_ir=calculo['regra_ir'])
     return conteudo, domain.nome_memoria(form.get('b3_id'), form.get('counterparty'), r.fim)
 
 
@@ -680,6 +699,15 @@ def swap_prefill(b3_id):
             deslocamento=None if desloc is None else int(desloc),
             fixing_ipca_posicao=_celula(vals, _POS['fixing_ipca'][k]))
         campos['fonte'] = {'codigo': codigo, 'curva': nome_curva, 'classe': nome_classe}
+        # A `Denominação` da curva (VCP) diz o que as colunas não dizem — o
+        # multiplicador da taxa, o spread, a contagem, o D-n da PTAX (§479).
+        # Lida ANTES das buscas de fixing abaixo, que dependem do que ela diz.
+        domain.aplicar_descricao(campos, _celula(vals, _POS['denominacao'][k]), faltando)
+        if campos.get('ptax_offset'):
+            try:
+                desloc = int(float(campos['ptax_offset']))
+            except ValueError:
+                pass
         if not regra:
             # A tela já sinaliza (a nota vermelha da ponta escreve o mesmo),
             # mas o log é o que se lê quando a mesa relata "não puxou": ele

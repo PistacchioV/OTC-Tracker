@@ -41,6 +41,9 @@ POS = {
     # ponta 1 (Parte → ativa) / ponta 2 (Contraparte → passiva)
     'pct': (39, 49), 'indice': (40, 50), 'sinal': (42, 52), 'taxa': (43, 53),
     'nome_classe': (69, 74), 'cupom_limpo': (76, 78), 'data_cotacao': (77, 79),
+    # `Denominação` (Parte/Contraparte): o texto livre da curva VCP — o que as
+    # colunas não dizem, lido pelo Swap Calculator (§479).
+    'denominacao': (70, 75),
     # `Data de Fixing IPCA (Parte/Contraparte)` — FE/FF do arquivo. Chama-se
     # Data e traz `1`/`2`: a defasagem em meses do número-índice (M-1/M-2), que
     # o Swap Calculator usa na perna de IPCA DIRETO.

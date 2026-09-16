@@ -599,6 +599,59 @@ check('inteiro sai sem casa decimal',
 check('celula que o cache nao conhece fica como estava',
       mx._injetar_cache(MOLDE % '<v />', {}), MOLDE % '<v />')
 
+# ─────────────────────────────────────────────────────────────────────────────
+# A denominacao da curva (§479): o multiplicador entra DENTRO da capitalizacao
+# — (1 + r·k)^tau — e a planilha recalcula o mesmo fator do motor; e a aliquota
+# de IR sai do CADASTRO, com a excecao por cliente valendo nas duas direcoes.
+print('\n== 10. o multiplicador da denominacao e o IR do cadastro ==')
+from apps.pages import routes as R                                      # noqa: E402
+_map_rows = R._mapping_rows
+R._mapping_rows = lambda key: (
+    [{'CLIENT': 'J.P. MORGAN OVERSEAS CAPITAL LLC', 'MATCH': 'Exact', 'RATE': '10'}]
+    if key == 'swap-ir-client' else
+    [{'UP TO DAYS': '100', 'RATE': '30'}, {'UP TO DAYS': '', 'RATE': '12'}]
+    if key == 'swap-ir-term' else _map_rows(key))
+try:
+    FORM10 = dict(FORM, ativa_multiplicador='1.1765',
+                  ativa_descricao='(PRE 14%)*1.1765 DU/252', counterparty='J.P. MORGAN OVERSEAS CAPITAL LLC')
+    conteudo10, _ = queries.memoria_de_calculo(FORM10)
+    r10 = queries.liquidar(FORM10)['r']
+    wb10 = openpyxl.load_workbook(io.BytesIO(conteudo10))
+    ws10 = wb10[mx.ABA]
+    check('a denominacao vai para a memoria', ws10[por_rotulo(ws10, 'Denominação da curva')].value,
+          '(PRE 14%)*1.1765 DU/252')
+    check('o multiplicador e uma linha propria', ws10[por_rotulo(ws10, 'Multiplicador da taxa')].value, 1.1765)
+    formula10 = ws10[por_rotulo(ws10, 'Fator do índice')].value
+    check('   e entra DENTRO da capitalizacao, multiplicando a taxa',
+          formula10.startswith('=(1+((') and ')*$B$' in formula10, True)
+    perto('   o fator recalculado e o do motor (1 + 0,14 x 1,1765)^tau',
+          avaliar(wb10, mx.ABA, por_rotulo(ws10, 'Fator do índice')), r10.ativa.fator_do_indice, 1e-12)
+    perto('   e o ajuste liquido tambem', avaliar(wb10, mx.ABA, por_rotulo(ws10, 'Ajuste líquido')),
+          r10.ajuste_liquido, 1e-6)
+    check('a aliquota e a EXCECAO do cliente, nas duas direcoes',
+          (r10.origem_ir, r10.aliquota_ir), ('cliente', 0.10))
+    perto('   e a planilha a escreve', avaliar(wb10, mx.ABA, por_rotulo(ws10, 'Alíquota de IR')), 0.10, 1e-12)
+    _ln = int(por_rotulo(ws10, 'Alíquota de IR')[1:])
+    check('   dizendo de onde veio', 'swap-ir-client' in ' '.join(
+        str(ws10.cell(row=_ln, column=c).value or '') for c in range(1, 8)), True)
+    # sem excecao: as faixas do cadastro, em IF aninhado, so com o banco pagando
+    FORM11 = dict(FORM, counterparty='YAZAKI DO BRASIL LTDA', ativa_taxa='1')   # PRE a 1%: o banco paga
+    conteudo11, _ = queries.memoria_de_calculo(FORM11)
+    r11 = queries.liquidar(FORM11)['r']
+    wb11 = openpyxl.load_workbook(io.BytesIO(conteudo11))
+    ws11 = wb11[mx.ABA]
+    check('sem excecao, o banco pagando: a faixa do CADASTRO (182d → 12%)',
+          (r11.banco_paga, r11.origem_ir, r11.aliquota_ir), (True, 'prazo', 0.12))
+    perto('   e a planilha recalcula a mesma', avaliar(wb11, mx.ABA, por_rotulo(ws11, 'Alíquota de IR')),
+          r11.aliquota_ir, 1e-12)
+    check('   com as faixas do cadastro na formula', 'IF($B$' in ws11[por_rotulo(ws11, 'Alíquota de IR')].value
+          and '<=100,0.3,0.12' in ws11[por_rotulo(ws11, 'Alíquota de IR')].value, True)
+    check('   sem multiplicador nao ha linha dele',
+          any(ws11.cell(row=ln, column=1).value == 'Multiplicador da taxa' for ln in range(1, ws11.max_row + 1)),
+          False)
+finally:
+    R._mapping_rows = _map_rows
+
 cdi.serie = _serie_real
 print('\n' + ('TUDO OK' if not falhas else 'FALHAS: %d' % len(falhas)))
 for f in falhas:

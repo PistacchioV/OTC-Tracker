@@ -145,7 +145,7 @@ def _form_padrao_swap(hoje):
             lado + '_ni_final': '', lado + '_fator': '', lado + '_tenor': '3 month',
             lado + '_data_fixing': '', lado + '_taxa_indice': '', lado + '_lookback': '0',
             lado + '_shift': '0', lado + '_ativo': '', lado + '_preco_inicial': '',
-            lado + '_preco_final': '',
+            lado + '_preco_final': '', lado + '_multiplicador': '', lado + '_descricao': '',
         })
     return form
 
@@ -251,6 +251,23 @@ def api_tools_swap_prefill():
                                  '(Live Position › Swap Characteristics).'.format(b3_id)}), 404
     dados['success'] = True
     return jsonify(dados)
+
+
+@blueprint.route('/api/tools/swap-calculator/curve')
+def api_tools_swap_curve():
+    """O que a `Denominação` de uma curva diz sobre a ponta (§479) — para a
+    tela aplicar o que a mesa colou ou corrigiu no campo, pela MESMA leitura
+    do pré-preenchimento. Os campos atuais vão junto para a resposta dizer se
+    cada achado preenche, confirma ou diverge do que está na tela."""
+    r = _auth_api()
+    if r:
+        return r
+    chaves = ('indexador', 'taxa', 'percentual', 'convencao', 'regime', 'tenor',
+              'ptax_offset', 'multiplicador', 'lookback', 'shift')
+    atuais = {k: str(request.args.get(k) or '') for k in chaves}
+    campos = queries.ler_descricao(request.args.get('text') or '', atuais)
+    campos['success'] = True
+    return jsonify(campos)
 
 
 # ── SOFR Index ──────────────────────────────────────────────────────────────
