@@ -20902,3 +20902,30 @@ card mostra exatamente o que conta, toggle e Clear voltam às 12.
 
 Testes: `check_cgd_docs` (outcome por status, overview = contagem do
 outcome), `check_onboarding_api` (`_outcome` por linha, batendo com o módulo).
+
+## §483 — NDF cross com moeda fraca: o notional é o da PERNA FRACA (2026-09-16)
+
+A mesa viu um USD/CNH importado da API com o notional em USD. A regra da
+moeda fraca (§474, `_ndf_weak_leg`) é do PAR e já invertia o strike nos dois
+arranjos — 7,20 CNH por USD virava 0,1389 USD por CNH — mas o notional saía
+SEMPRE da `Quantity` da API, e a Athena pode bookar a Quantity na perna forte
+(Quantity = 1.000.000 USD, Other Quantity = 7.200.000 CNH). A linha ficava com
+o número de uma perna e a taxa da outra, e o contravalor não fechava.
+
+Agora `_ndf_deal_from_api` lê também a `OTHER QUANTITY` e, quando a perna
+fraca é a `Other Quantity Units` e a outra perna NÃO é BRL, o notional vem de
+lá: as moedas trocam de lugar (a fraca vira a `QuantityCurrency`, que é a
+Moeda de Referência do arquivo, campo 13), o sinal segue a convenção da
+Quantity, e a **direção VIRA** — comprar USD contra CNH é vender CNH, e o
+Papel (campo 6) é da moeda de referência. Os dois arranjos do mesmo trade
+gravam a mesma linha. Sem `Other Quantity` na resposta, fica como veio.
+
+**Contra BRL nada muda, de propósito** (resposta da mesa): CNH/BRL com a
+Quantity em BRL é o `IsBRRFixed`, um registro legítimo com as moedas
+trocadas pelo campo 55 — o notional fica onde a mesa bookou e só a taxa é
+invertida, como no §474. E a checagem de "só contra BRL" que se cogitou para
+a inversão foi DESCARTADA: o USD/CNH precisa da inversão.
+
+O Cockpit (`_ndfc_api_row`) separa as pernas por BRL (LC/FC) e não foi
+tocado. Teste: `check_weak_ccy_rate` §2b (os dois arranjos do USD/CNH, o
+CNH/BRL que fica, a resposta sem Other Quantity).

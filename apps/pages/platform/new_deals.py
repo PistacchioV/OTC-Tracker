@@ -22,6 +22,7 @@ ESTADO dos schedulers (`*_scheduler_started`, rebindado) mora AQUI.
 """
 import json
 import logging
+import math
 import os
 import random
 import re
@@ -1263,15 +1264,37 @@ def _ndf_deal_from_api(rec, sid, refmap_acr, today_dmy, refmap_spn=None):
     qty_ccy   = _fxo_ccy(get('QUANTITY CURRENCY'))
     other_ccy = _fxo_ccy(get('OTHER QUANTITY UNITS'))
     qty_v     = _fxo_num(get('QUANTITY'))
+    other_v   = _fxo_num(get('OTHER QUANTITY'))
     strike_v  = _fxo_num(get('STRIKE'))
+    direction = str(get('TYPE') or '').strip().upper()
     # Moedas fracas cotam invertido vs BRL: a API manda o strike como
     # Moeda/BRL (ex.: 3,33 MXN por BRL) — a página e os arquivos (Conecta,
     # Intrag) trabalham com BRL por unidade da moeda (0,30...), então o Rate
     # é gravado já invertido quando o PAR tem uma moeda fraca (flag Weak Ccy
     # do cadastro Currency Base), em qualquer das duas pernas — ver
     # `_ndf_weak_leg`.
-    if strike_v and _ndf_weak_leg(qty_ccy, other_ccy):
+    fraca = _ndf_weak_leg(qty_ccy, other_ccy)
+    if strike_v and fraca:
         strike_v = 1.0 / strike_v
+    # Par CROSS com moeda fraca (USD/CNH): o notional é o da PERNA FRACA, e a
+    # API pode tê-lo bookado na outra (Quantity = 1.000.000 USD, Other
+    # Quantity = 7.200.000 CNH). Ler só a Quantity gravava o notional em USD
+    # com o Rate em USD/CNH — número de uma perna, taxa da outra, e o
+    # contravalor não fechava. Aqui o notional vem da OTHER QUANTITY, as
+    # moedas trocam de lugar (a fraca vira a Quantity Currency, que é a Moeda
+    # de Referência do arquivo) e a direção VIRA, porque o Papel é da moeda de
+    # referência: comprar USD contra CNH é vender CNH. Só sem BRL no par: contra
+    # BRL o notional fica onde a mesa bookou (CNH/BRL com a Quantity em BRL é o
+    # `IsBRRFixed`, um registro legítimo com as moedas trocadas pelo campo 55).
+    if (fraca and fraca == other_ccy and qty_ccy != 'BRL'
+            and other_v is not None and other_v != 0):
+        qty_ccy, other_ccy = other_ccy, qty_ccy
+        # O sinal segue a convenção da Quantity (a direção viaja no campo
+        # Direction, não no sinal — e a API grava as duas pernas com sinais
+        # opostos).
+        qty_v = math.copysign(abs(other_v), qty_v) if qty_v else abs(other_v)
+        if direction in ('BUY', 'SELL'):
+            direction = 'SELL' if direction == 'BUY' else 'BUY'
     instr     = str(get('INSTRUMENT TYPE') or '').strip()
     publisher = str(get('PUBLISHER') or '').strip()
     # FX Pair comes with internal ccy codes ("USB/BRR") → ISO ("USD/BRL")
@@ -1314,7 +1337,7 @@ def _ndf_deal_from_api(rec, sid, refmap_acr, today_dmy, refmap_spn=None):
         'LastFixingDate':    last_fix,
         'Instrument':        instr,
         'TradeType':         trade_type,
-        'Direction':         str(get('TYPE') or '').strip().upper(),
+        'Direction':         direction,
         'FXPair':            fx_pair,
         'QuantityCurrency':  qty_ccy,
         'OtherQuantityCurrency': other_ccy,

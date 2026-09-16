@@ -113,6 +113,59 @@ try:
     check('USD/BRL não é invertido', abs(R._fxo_num(usd.get('Rate')) - 5.4321) < 1e-9,
           str(usd.get('Rate')))
 
+    # 2b ── par CROSS: o notional é o da PERNA FRACA ──────────────────────────
+    # USD/CNH com a API bookando a Quantity em USD: o notional tem de sair da
+    # Other Quantity (CNH), as moedas trocam de lugar e a direção vira —
+    # comprar USD contra CNH é vender CNH, e o Papel do arquivo é da Moeda de
+    # Referência. Lendo só a Quantity, a linha saía com 1.000.000 USD e o Rate
+    # em USD/CNH: número de uma perna, taxa da outra.
+    CROSS_STRIKE = 7.2                      # CNH por USD, como a API manda
+    cross = dict(_rec('USB', 'RMB'), Strike=CROSS_STRIKE, INSTRUMENT='USB/RMB',
+                 Quantity=1000000.0)
+    cross['Other Quantity'] = -7200000.0    # a API grava as pernas com sinais opostos
+    _, c = R._ndf_deal_from_api(cross, 'E930179', {}, '19/08/2026')
+    check('USD/CNH (Quantity em USD): o notional vem da Other Quantity, em CNH',
+          c.get('QuantityCurrency') == 'CNH' and c.get('OtherQuantityCurrency') == 'USD',
+          '{} / {}'.format(c.get('QuantityCurrency'), c.get('OtherQuantityCurrency')))
+    check('   e vale 7.200.000 com o sinal da Quantity', c.get('Notional') == '7,200,000.00',
+          str(c.get('Notional')))
+    check('   o Rate é USD por CNH (1/7,2)',
+          abs(R._fxo_num(c.get('Rate')) - 1.0 / CROSS_STRIKE) < 1e-8, str(c.get('Rate')))
+    check('   a direção VIRA: Buy USD é Sell CNH', c.get('Direction') == 'SELL',
+          str(c.get('Direction')))
+    check('   e não é BRL fixed', c.get('IsBRRFixed') == 'NO')
+    check('   notional × Rate devolve o USD da API',
+          abs(float(c.get('Notional').replace(',', '')) * R._fxo_num(c.get('Rate')) - 1000000.0) < 0.1)
+    # O mesmo trade bookado com a Quantity já em CNH: nada troca de perna.
+    cross2 = dict(_rec('RMB', 'USB'), Strike=CROSS_STRIKE, INSTRUMENT='USB/RMB',
+                  Quantity=7200000.0, Type='Sell')
+    cross2['Other Quantity'] = -1000000.0
+    _, c2 = R._ndf_deal_from_api(cross2, 'E930179', {}, '19/08/2026')
+    check('USD/CNH (Quantity em CNH): fica como bookado',
+          c2.get('QuantityCurrency') == 'CNH' and c2.get('Notional') == '7,200,000.00'
+          and c2.get('Direction') == 'SELL',
+          '{} {} {}'.format(c2.get('QuantityCurrency'), c2.get('Notional'), c2.get('Direction')))
+    check('   os dois arranjos gravam a MESMA linha (notional, moedas, Rate, direção)',
+          [c.get(k) for k in ('Notional', 'QuantityCurrency', 'OtherQuantityCurrency', 'Rate', 'Direction')]
+          == [c2.get(k) for k in ('Notional', 'QuantityCurrency', 'OtherQuantityCurrency', 'Rate', 'Direction')])
+    # Contra BRL nada muda: CNH/BRL com a Quantity em BRL é o IsBRRFixed, um
+    # registro legítimo com as moedas trocadas pelo campo 55.
+    brl = dict(_rec('BRR', 'RMB'))
+    brl['Other Quantity'] = -QTY
+    _, b = R._ndf_deal_from_api(brl, 'E930179', {}, '19/08/2026')
+    check('CNH/BRL com a Quantity em BRL: o notional FICA em BRL',
+          b.get('QuantityCurrency') == 'BRL' and b.get('Notional') == '35,000,000.00'
+          and b.get('IsBRRFixed') == 'YES' and b.get('Direction') == 'BUY',
+          '{} {} {} {}'.format(b.get('QuantityCurrency'), b.get('Notional'),
+                               b.get('IsBRRFixed'), b.get('Direction')))
+    # Sem Other Quantity na resposta não há o que puxar: fica como veio, em vez
+    # de gravar um notional vazio.
+    semq = dict(_rec('USB', 'RMB'), Strike=CROSS_STRIKE, Quantity=1000000.0)
+    _, sq = R._ndf_deal_from_api(semq, 'E930179', {}, '19/08/2026')
+    check('sem Other Quantity na API: fica como bookado',
+          sq.get('QuantityCurrency') == 'USD' and sq.get('Notional') == '1,000,000.00',
+          '{} {}'.format(sq.get('QuantityCurrency'), sq.get('Notional')))
+
     # 3 ── o arquivo TER não inverte de novo ─────────────────────────────────
     # A Taxa a Termo (R$/Moeda) ocupa 12 inteiros + 8 decimais; com 4 casas de
     # cadastro o 0,77179965 vai arredondado para 0,7718.
