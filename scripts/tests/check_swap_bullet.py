@@ -394,9 +394,15 @@ def main():
     nomes = sorted(x['filename'] for x in out['files'])
     check('seis arquivos: SWAP e PREMIO × Cliente/Banco/Atacama',
           nomes == ['PREMIO_ATACAMA.txt', 'PREMIO_BANCO.txt', 'PREMIO_CLIENTE.txt', 'SWAP_ATACAMA.txt', 'SWAP_BANCO.txt', 'SWAP_CLIENTE.txt'])
-    txt = io.open(os.path.join(R.CONECTA_NEW_PATH, 'SWAP_CLIENTE.txt'), encoding='utf-8').read().split('\n')
+    txt = io.open(os.path.join(R.CONECTA_NEW_PATH, 'SWAP_CLIENTE.txt'), encoding='cp1252').read().split('\n')
     check('SWAP_CLIENTE: header + 1 registro de 1927', len(txt) == 2 and txt[0].startswith('SWAP 00301JPMORGANBM') and len(txt[1]) == 1927)
-    ptxt = io.open(os.path.join(R.CONECTA_NEW_PATH, 'PREMIO_ATACAMA.txt'), encoding='utf-8').read().split('\n')
+    # O Conecta conta BYTES: o travessão da denominação VCP é 1 byte em
+    # cp1252 e 3 em utf-8 — gravado em utf-8 o registro do Banco (o que leva
+    # a Descrição) chegava à B3 com 1935 e era recusado.
+    raw = io.open(os.path.join(R.CONECTA_NEW_PATH, 'SWAP_BANCO.txt'), 'rb').read().split(b'\n')
+    check('SWAP_BANCO: registro de 1927 BYTES (cp1252) com o travessão em um byte',
+          len(raw) == 2 and len(raw[1]) == 1927 and b'\x96' in raw[1] and b'\xe2\x80\x93' not in raw[1])
+    ptxt = io.open(os.path.join(R.CONECTA_NEW_PATH, 'PREMIO_ATACAMA.txt'), encoding='cp1252').read().split('\n')
     check('PREMIO_ATACAMA: header INTRAGATACAMAFDO + registro + fluxo', len(ptxt) == 3 and 'INTRAGATACAMAFDO' in ptxt[0] and ptxt[1][50:52] == '01')
     _f, lst3, i3 = queries.find(cli['_id'], '2026-09-16')
     check('vira Sent com os arquivos anotados', lst3[i3]['Status'] == 'Sent' and 'SWAP_CLIENTE.txt' in lst3[i3]['SentFiles'])

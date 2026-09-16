@@ -20735,6 +20735,19 @@ do cadastro recalculados). `check_ops_trade_swap`, `check_payrec_run` e
   (servidor ou gerador do navegador) e quais botões o rodapé tem; o
   formato/origem entram pelos campos do bloco do template, casados por seq
   ou pela posição.
+- **O arquivo sai em cp1252, nunca em utf-8** (16/09, o primeiro envio real):
+  a B3 recusou o `SWAP_BANCO.TXT` com `Campo 126 conteúdo inválido` e a linha
+  de origem mostrava `â€“` onde a denominação VCP tem o travessão. O Conecta
+  lê o arquivo como ANSI, byte a byte: o `–` (U+2013) é UM byte em cp1252
+  (`0x96`, é como o Excel da mesa grava) e TRÊS em utf-8 — com quatro
+  travessões o registro do Banco (o que leva a Descrição) chegava com 1935
+  bytes em vez de 1927, e tudo à direita da Descrição saía deslocado. Os
+  outros geradores de TER gravam em utf-8 sem problema porque o conteúdo é
+  ASCII. `commands.FILE_ENCODING = 'cp1252'` com `errors='replace'` (o que
+  não cabe vira `?`, sem mudar a largura), e `deal_files` recusa registro
+  0301 fora de `SWAP_RECORD_LENGTH` (um template do File Interpreter
+  editado errado dava recusa silenciosa na B3). O teste lê os arquivos em
+  bytes e cobra os 1927 com o `0x96`.
 - Ficou de fora, de propósito: Mapping B3 (o arquivo de retorno do swap não
   foi definido) e a entrada na esteira de confirmação/Pending Confirmation.
   E a **cópia do BANCO do template `swap-pagamento-final-v3` não ganha o
