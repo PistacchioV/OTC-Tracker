@@ -20710,6 +20710,18 @@ do cadastro recalculados). `check_ops_trade_swap`, `check_payrec_run` e
   LE ATACAMA / par B2B, com o nome do cadastro e a conta própria do
   `b3-accounts`; SPN de cliente segue pelo Reference Data. O select LE do
   modal acompanha a resposta.
+- **O DT do GLD (sem Cap/Floor, preço em "% do Spot", ano de dois dígitos).**
+  Três coisas que o segundo DT real mostrou: (1) `Lim Superior` em branco
+  fazia a varredura à direita atravessar três blocos e pegar a 3ª linha da
+  Denominação ('Preco in ativo - 1.5 Close…') como Cap = −1,5 — agora a
+  primeira célula preenchida tem de estar a até 3 colunas do rótulo, senão o
+  rótulo está em branco; (2) o rótulo vem com sufixo ('Preço Inicial(Cupom
+  Limpo) - % do Spot') — todo rótulo que começa em `PRECOINICIAL` é o Preço
+  Inicial; na grade ele fica como veio (`150%`), e no arquivo é 150 no Cupom
+  Limpo (`000001500000000`), NUNCA 1,5 — o PU inicial já é o fixo 1.0; (3) o
+  Excel lê `15/ago/31` digitado como **1931** e a célula chega assim: ano
+  < 1990 ganha +100 no `parse_date` (um DT de derivativo não tem data antes
+  de 1990).
 - Ficou de fora, de propósito: Mapping B3 (o arquivo de retorno do swap não
   foi definido) e a entrada na esteira de confirmação/Pending Confirmation.
   E a **cópia do BANCO do template `swap-pagamento-final-v3` não ganha o

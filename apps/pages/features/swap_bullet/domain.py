@@ -258,9 +258,9 @@ def parse_date(text):
     """Data do DT → `date`. Aceita '15-Sep-26', '04/jun/27', '7-Jun-27',
     '15/09/2026', '2026-09-15', '20260915' e datetime/date. None se não lê."""
     if isinstance(text, datetime):
-        return text.date()
+        text = text.date()
     if isinstance(text, date):
-        return text
+        return _safe_date(text.year, text.month, text.day)
     s = str(text or '').strip().split(' ')[0].split('T')[0]
     if not s:
         return None
@@ -288,6 +288,10 @@ def parse_date(text):
 
 
 def _safe_date(y, mo, d):
+    # O Excel lê '15/ago/31' digitado como 1931 (dois dígitos 30-99 → 19xx) e
+    # a célula chega assim; um DT de derivativo não tem data antes de 1990.
+    if y is not None and y < 1990:
+        y += 100
     try:
         return date(y, mo, d)
     except (ValueError, TypeError):
@@ -331,6 +335,7 @@ _DT_LABELS = {
     'LIMINFERIOR': ('leg', 'Floor'),
     'LIMITEINFERIOR': ('leg', 'Floor'),
     'PRECOINICIALCUPOMLIMPO': ('info', 'InitialPrice'),
+    'PRECOINICIALCUPOMLIMPODOSPOT': ('info', 'InitialPrice'),
     'PRECOINICIAL': ('info', 'InitialPrice'),
     'FONTEDEINFORMACAO': ('info', 'InfoSource'),
     'DATADECOTACAO': ('info', 'QuoteDate'),
@@ -355,6 +360,8 @@ def _label_of(cell):
     n = n.rstrip(':')
     if n.startswith('SINAL'):
         n = 'SINAL'
+    if n.startswith('PRECOINICIAL'):
+        n = 'PRECOINICIAL'          # 'Preço Inicial(Cupom Limpo) - % do Spot' e variantes
     if n in _DT_LABELS:
         return _DT_LABELS[n]
     return None
@@ -459,7 +466,10 @@ def _value_right(row, ci):
     for cj in range(ci + 1, min(len(row), ci + 12)):
         v = str(row[cj] if row[cj] is not None else '').strip()
         if not v:
-            if out and cj - ci > 3:
+            # Rótulo sem valor nas 3 colunas seguintes é rótulo em BRANCO: a
+            # varredura não atravessa para o bloco vizinho ('Lim Superior'
+            # vazio pegava a 3ª linha da Denominação, três blocos à direita).
+            if out or cj - ci >= 3:
                 break
             continue
         if norm(v) in _DT_BLOCK_HEADERS or norm(v) in _DT_STOP_LABELS:
@@ -509,6 +519,8 @@ def parse_dt_text(text):
         n = norm(m.group(1))
         if n.startswith('SINAL'):
             n = 'SINAL'
+        if n.startswith('PRECOINICIAL'):
+            n = 'PRECOINICIAL'
         ln = line_of(m.start())
         if n == 'OBS' or n in _DT_STOP_LABELS:
             obs_lines.add(ln)

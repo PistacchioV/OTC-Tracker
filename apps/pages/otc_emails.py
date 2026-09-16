@@ -188,7 +188,7 @@ def _email_notice(html):
             '<span style="font-weight:700;">Importante:</span> ' + html + '</td></tr></table>')
 
 
-def _email_shell(title, ref_date, intro_html, body_html, footer_extra=''):
+def _email_shell(title, ref_date, intro_html, body_html, footer_extra='', width=640):
     """Corporate card: J.P. Morgan wordmark, Action-Blue accent, title, body, footer.
     `footer_extra`: linha adicional no fim da assinatura (ex.: a classificação
     "JPMC Internal Use Only" dos e-mails internos de mensageria)."""
@@ -216,8 +216,8 @@ def _email_shell(title, ref_date, intro_html, body_html, footer_extra=''):
         '<table role="presentation" cellpadding="0" cellspacing="0" width="100%" bgcolor="#f4f4f6" '
         'style="background:#f4f4f6;width:100%;">'
         '<tr><td align="center" bgcolor="#f4f4f6" style="padding:26px 12px;">'
-        '<table role="presentation" cellpadding="0" cellspacing="0" width="640" '
-        'style="width:640px;max-width:640px;background:#ffffff;border:1px solid #e6e6ea;border-radius:14px;'
+        '<table role="presentation" cellpadding="0" cellspacing="0" width="' + str(width) + '" '
+        'style="width:' + str(width) + 'px;max-width:' + str(width) + 'px;background:#ffffff;border:1px solid #e6e6ea;border-radius:14px;'
         'font-family:' + _E_FONT + ';">'
         # header
         '<tr><td style="padding:24px 34px 0;">'
@@ -1673,7 +1673,8 @@ def _swb_date(iso):
         d = datetime.strptime(s[:10], '%Y-%m-%d')
     except ValueError:
         return s
-    return '%02d-%s-%04d' % (d.day, _SWB_MESES_PT[d.month - 1], d.year)
+    ano = d.year + 100 if d.year < 1990 else d.year     # '15/ago/31' que o Excel leu como 1931
+    return '%02d-%s-%04d' % (d.day, _SWB_MESES_PT[d.month - 1], ano)
 
 
 def _swb_pct(v):
@@ -1721,8 +1722,8 @@ def _swb_row(cells):
             tds += '<td colspan="2" style="padding:3px 8px;"></td>'
             continue
         tds += ('<td style="padding:3px 8px;font-size:11.5px;color:#4a4a4f;white-space:nowrap;">' + _esc(lbl) + '</td>'
-                '<td align="center" style="padding:3px 8px;font-size:11.5px;color:#1d1d1f;text-align:center;'
-                'border-bottom:1px solid #9a9aa0;min-width:120px;">' + _esc(val) + '</td>')
+                '<td align="center" style="padding:3px 10px;font-size:11.5px;color:#1d1d1f;text-align:center;'
+                'border-bottom:1px solid #9a9aa0;min-width:150px;white-space:nowrap;">' + _esc(val) + '</td>')
     return '<tr>' + tds + '</tr>'
 
 
@@ -1762,7 +1763,7 @@ def _swap_bullet_deal_ticket(d):
     rows += ('<tr><td colspan="6" style="padding:5px 8px;font-size:12px;font-weight:700;color:#1d1d1f;background:#e9ecf1;">' +
              _esc(d.get('Title') or 'Swap Vanilla') + '</td></tr>')
     rows += _swb_blank()
-    rows += _swb_row([('Cliente', d.get('ClientDT') or d.get('Client', '')), (None, None), (None, None)])
+    rows += _swb_row([('Cliente', d.get('Client') or d.get('ClientDT', '')), (None, None), (None, None)])
     rows += _swb_row([('SPN', d.get('SPN', '')), (None, None), (None, None)])
     rows += _swb_row([('Inicio', _swb_date(d.get('StartDate'))), ('Funcionalidades', d.get('Functionality') or 'N/A'), ('Agenda de premios', 'Sim' if tem_premio else 'Não')])
     rows += _swb_row([('Vencimento', _swb_date(d.get('MaturityDate'))), ('Ativo VCP', d.get('VcpHolder', '')), ('Data de Pagamento do Premio', _swb_date(d.get('PremiumDate')) if tem_premio else 'N/A')])
@@ -1792,7 +1793,12 @@ def _swap_bullet_deal_ticket(d):
     return T + rows + '</table>'
 
 
+_SWB_CONTACT_KEYWORDS = ('confirmation',)      # Confirmation Letter · Only for Confirmation · Contact Confirmation
+
+
 def _swap_bullet_affirmation_email(items, contraparte, client_account, today):
+    cp = _build_cpdetails_index().get(_norm_spn(items[0].get('SPN')), {})
+    to_emails = '; '.join(_contacts_emails(cp, _SWB_CONTACT_KEYWORDS))
     intro = (_ep('Prezados Senhores,') +
              _ep('Por gentileza, poderiam confirmar os dados da(s) operação(ões) abaixo:'))
     accounts = _email_kv('Contas CETIP', [
@@ -1804,12 +1810,14 @@ def _swap_bullet_affirmation_email(items, contraparte, client_account, today):
     obs = _ep('OBS: gentileza incluir "' + _esc(lob) + '" no campo código identificador.', muted=True)
     gap = '<div style="height:16px;line-height:16px;font-size:0;">&nbsp;</div>'
     body = accounts + gap + obs + gap.join(_swap_bullet_deal_ticket(d) for d in items)
-    html = _email_shell('Confirmação de Operação de Derivativo', today, intro, body)
+    # 960 px: o Deal Ticket tem três colunas de rótulo/valor e na casca de
+    # 640 saía achatado, com valor quebrando em duas linhas.
+    html = _email_shell('Confirmação de Operação de Derivativo', today, intro, body, width=960)
     return {
         'subject': 'Confirmação da(s) Operação(ões) Fechada(s) em {} - {} - SWAP'.format(today, contraparte),
         'html': html,
         'cc': 'brazil.otc.ops@jpmorgan.com',
-        'to': '',
+        'to': to_emails,
     }
 
 
