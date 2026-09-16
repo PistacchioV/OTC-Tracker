@@ -486,6 +486,7 @@ td .btn-sm.rounded-circle i { font-size: 1rem; }
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/table-std.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/file-preview.js?v={{ asset_v('js/file-preview.js') }}"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/moment.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/daterangepicker/daterangepicker.js"></script>
 <!-- DataTables Buttons (export model from the New Deals pages) -->
@@ -1130,47 +1131,18 @@ td .btn-sm.rounded-circle i { font-size: 1rem; }
                         text: t('acc-prev-none', 'This swap has no VCP leg to update.'), confirmButtonColor: '#0066cc' });
             return;
         }
-        // Vertical layout: one ROW per field, one COLUMN per record.
-        var multi = recs.length > 1;
-        var thead = '<tr style="background:#343a40;color:#fff;position:sticky;top:0">' +
-            '<th style="padding:5px 8px;text-align:left;font-weight:600;font-size:.78em">' + esc(t('acc-prev-field', 'Field')) + '</th>' +
-            recs.map(function (r, i) {
-                return '<th style="padding:5px 8px;text-align:left;font-weight:600;font-size:.78em;white-space:nowrap">' +
-                    (multi ? '#' + (i + 1) + ' ' : '') + esc(r.view || '') + '</th>';
-            }).join('') + '</tr>';
-        // Lista de campos do cadastro (rótulos, ordem e Fixed padded); sem o
-        // spec, a lista fixa histórica.
-        var fieldsPer = recs.map(function (r) {
-            return accRecordFields(r) || ACC_REC_KEYS.map(function (k, i) {
-                return { name: ACC_REC_HEADERS[i], value: r[k] };
-            });
+        // O preview da casa (file-preview.js): uma aba por registro/visão, os campos
+        // do cadastro (rótulo, formato, origem) e a linha do arquivo embaixo.
+        var _blk = FI_SPEC && (FI_SPEC.blocks || []).filter(function (b) { return b.id === 'registro'; })[0];
+        var _files = recs.map(function (r, i) {
+            var fl = accRecordFields(r) || ACC_REC_KEYS.map(function (k, j) { return { name: ACC_REC_HEADERS[j], value: r[k] }; });
+            return { label: (recs.length > 1 ? '#' + (i + 1) + ' ' : '') + (r.view || ''), fields: fl,
+                     blockFields: _blk && _blk.fields, blockTitle: _blk && _blk.title, records: [accRecordLine(r)] };
         });
-        var tbody = fieldsPer[0].map(function (f0, fi) {
-            var bg = fi % 2 === 0 ? '#f8f9fa' : '#fff';
-            var cells = fieldsPer.map(function (fl) {
-                var raw = String(fl[fi].value == null ? '' : fl[fi].value);
-                var disp = (raw !== '' && raw.trim() === '')       // padding todo em branco → pontos cinza
-                    ? '<span style="color:#bbb">' + '·'.repeat(raw.length) + '</span>'
-                    : esc(raw);
-                return '<td style="padding:3px 8px;font-family:monospace;font-size:.8em;border:none;white-space:pre">' + disp + '</td>';
-            }).join('');
-            return '<tr style="background:' + bg + '">' +
-                '<td style="padding:3px 8px;white-space:nowrap;font-weight:500;color:#495057;border:none;font-size:.8em">' +
-                    (fi + 1) + '. ' + esc(f0.name) + '</td>' + cells + '</tr>';
-        }).join('');
-        var html =
-            '<div style="font-size:.8em;color:#6c757d;margin-bottom:8px">' + esc(lob.name) + ' · ' +
-                recs.length + ' ' + t('acc-prev-records', 'record(s)') + '</div>' +
-            '<div style="overflow:auto;max-height:60vh;border:1px solid #dee2e6;border-radius:4px">' +
-            '<table style="border-collapse:collapse;width:100%">' +
-            '<thead>' + thead + '</thead><tbody>' + tbody + '</tbody></table></div>';
-        Swal.fire({
-            title: '<span style="font-size:1rem">' + t('acc-prev-title', 'PU / Factor preview') + ' — ' + esc(codigoIf) + '</span>',
-            html: html, width: (recs.length > 2 ? 760 : 600),
-            showConfirmButton: true, confirmButtonText: '<i class="ti ti-brand-telegram"></i>', confirmButtonColor: '#0066cc',
-            showCancelButton: true, cancelButtonText: '<i class="ti ti-x"></i>', cancelButtonColor: '#dc3545',
-            focusConfirm: false,
-            customClass: { htmlContainer: 'text-start', confirmButton: 'bg-gradient', cancelButton: 'bg-gradient' }
+        otcFilePreview({
+            title: t('acc-prev-title', 'PU / Factor preview') + ' \u2014 ' + codigoIf,
+            subtitle: lob.name + ' \u00b7 ' + recs.length + ' ' + t('acc-prev-records', 'record(s)'),
+            files: _files, t: t, width: 900, buttons: { send: true }
         }).then(function (res) {
             if (res.isConfirmed) downloadAccrualFile(recs, codigoIf);
         });

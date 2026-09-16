@@ -2525,5 +2525,8 @@
   "nd-swb-col-maker": "Maker",
   "nd-swb-col-checker": "Checker",
   "nd-swb-col-clientdt": "Client (Deal Ticket)",
-  "nd-swb-col-le": "LE"
+  "nd-swb-col-le": "LE",
+  "nd-preview-col-block": "Block",
+  "nd-preview-col-format": "Format",
+  "nd-preview-records": "record(s)"
 }

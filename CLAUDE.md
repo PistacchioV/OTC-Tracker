@@ -703,6 +703,11 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   `buttons.html5` carrega o `export-advanced.js` DEPOIS dele e com
   `asset_v`** — o Buttons copia o `action` na construção do botão.
   `check_export_excel_ids.py` executa o export no Chromium e cobra os dois.
+- **Preview de arquivo é o `otcFilePreview` (`static/js/file-preview.js`)**
+  (§480): uma aba por arquivo/visão, tabela Bloco · Campo · Formato · Valor
+  com o badge da origem do cadastro e o arquivo cru embaixo. A página passa
+  `files` (campos do servidor ou do gerador do navegador + `blockFields` do
+  template) e os botões do rodapé; não desenha tabela própria.
 - **Autocomplete nunca é `<datalist>`**: dropdown próprio abaixo do campo, mesma
   largura, `max-height` ~220px, item por `mousedown` (antes do `blur`),
   reemitindo `input`/`change` (`mapAttachDrop`, `.ar-ac-drop`).

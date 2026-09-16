@@ -20722,6 +20722,19 @@ do cadastro recalculados). `check_ops_trade_swap`, `check_payrec_run` e
   Excel lê `15/ago/31` digitado como **1931** e a célula chega assim: ano
   < 1990 ganha +100 no `parse_date` (um DT de derivativo não tem data antes
   de 1990).
+- **O preview de arquivo virou um helper da casa** (`static/js/file-preview.js`,
+  `otcFilePreview`): o modelo que nasceu aqui — UMA aba por arquivo/visão,
+  a tabela Bloco · Campo · Formato · Valor com o badge da origem do cadastro
+  e o ARQUIVO CRU (header + registros) embaixo — passou para TODAS as
+  páginas que mostram o arquivo que vão gerar: as seis de New Deals (FXO,
+  Options e NDF de Commodities, Vanilla, FWD Start, Other Publisher — o
+  espelho MGT × Cliente e a visão Lawton × Banco viraram abas em vez de
+  terceira coluna; o banner do calendário e as linhas tipo 2 seguem),
+  Intrag DCE Swap, Accrual e MtM (uma aba por registro/visão, com o botão
+  de enviar/baixar de sempre). Cada página só diz de onde vêm os campos
+  (servidor ou gerador do navegador) e quais botões o rodapé tem; o
+  formato/origem entram pelos campos do bloco do template, casados por seq
+  ou pela posição.
 - Ficou de fora, de propósito: Mapping B3 (o arquivo de retorno do swap não
   foi definido) e a entrada na esteira de confirmação/Pending Confirmation.
   E a **cópia do BANCO do template `swap-pagamento-final-v3` não ganha o

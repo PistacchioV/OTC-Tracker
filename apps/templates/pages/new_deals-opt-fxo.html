@@ -4538,27 +4538,15 @@ $(document).ready(function() {
                 calBanner = '<div style="margin-bottom:10px;padding:7px 10px;background:#eef2ff;border:1px solid #c5d0f0;border-radius:4px;font-size:0.81em;line-height:1.8">&#128197;&nbsp;' + _cl + _st + _sk + _bz + '</div>';
             }
 
-            var rows = fields.map(function(f, i) {
-                var bg = i % 2 === 0 ? '#f8f9fa' : '#ffffff';
-                return '<tr style="background:' + bg + '">' +
-                    '<td style="padding:3px 8px;white-space:nowrap;font-weight:500;color:#495057;border:none;font-size:0.82em">' +
-                        (i + 1) + '. ' + f.name +
-                    '</td>' +
-                    '<td style="padding:3px 8px;font-family:monospace;font-size:0.82em;border:none;word-break:break-all">' +
-                        (f.value !== '' ? f.value : '<span style="color:#aaa">&mdash;</span>') +
-                    '</td>' +
-                '</tr>';
-            }).join('');
-
-            var tableHtml = calBanner +
-                '<div style="overflow-y:auto;max-height:58vh;border:1px solid #dee2e6;border-radius:4px">' +
-                '<table style="width:100%;border-collapse:collapse;font-size:0.85em">' +
-                '<thead><tr style="background:#343a40;color:#fff;position:sticky;top:0">' +
-                '<th style="padding:5px 8px;text-align:left;font-weight:600"><span data-lang="nd-preview-col-field">Field</span></th>' +
-                '<th style="padding:5px 8px;text-align:left;font-weight:600"><span data-lang="nd-preview-col-value">Value</span></th>' +
-                '</tr></thead>' +
-                '<tbody>' + rows + '</tbody>' +
-                '</table></div>';
+            // O preview da casa (file-preview.js): abas por arquivo, Bloco · Campo ·
+            // Formato · Valor com a origem do cadastro, e o arquivo cru embaixo.
+            var _pvBlk = fiBlock('registro', deal);
+            var _pvSpec = (typeof fiSpecFor === 'function') ? fiSpecFor(deal) : FI_SPEC;
+            var _pvPair = (window.FiTer ? FiTer.pairOpc(deal.Client) : '');
+            var _pvFiles = [{ label: 'B3 file' + (_pvPair ? ' · ' + _pvPair : ''), fields: fields,
+                              blockFields: _pvBlk && _pvBlk.fields, blockTitle: _pvBlk && _pvBlk.title,
+                              spec: _pvSpec && { file_type: _pvSpec.file_type, separator: _pvSpec.separator } }];
+            var _pvExtra = '';
 
             if (fixingRows && fixingRows.length > 0) {
                 var fxRows = fixingRows.map(function(r, i) {
@@ -4590,7 +4578,7 @@ $(document).ready(function() {
                         '<th style="padding:5px 8px;text-align:left;font-weight:600"><span data-lang="nd-preview-col-fx-date">Currency Fixing Date</span></th>' +
                         '<th style="padding:5px 8px;text-align:left;font-weight:600"><span data-lang="nd-preview-col-ref-qty">Quantidade de refer&ecirc;ncia</span></th>';
                 }
-                tableHtml +=
+                _pvExtra +=
                     '<div style="margin-top:14px;border:1px solid #dee2e6;border-radius:4px;overflow-x:auto">' +
                     '<table style="width:100%;border-collapse:collapse;font-size:0.85em">' +
                     '<thead><tr style="background:#495057;color:#fff">' +
@@ -4600,31 +4588,14 @@ $(document).ready(function() {
                     '</table></div>';
             }
 
-            Swal.fire({
-                title: '<span style="font-size:1rem">' + t('nd-preview-title', 'Preview') + ' &mdash; Deal ' + (deal.Deal || '') + '</span>',
-                html: tableHtml,
-                width: 760,
-                showConfirmButton: true,
-                confirmButtonText: '<i class="ti ti-download"></i>',
-                confirmButtonColor: '#6658dd',
-                showDenyButton: true,
-                denyButtonText: '<i class="ti ti-edit"></i>',
-                denyButtonColor: '#3abff8',
-                showCancelButton: true,
-                cancelButtonText: '<i class="ti ti-x"></i>',
-                cancelButtonColor: '#dc3545',
-                showCloseButton: true,
-                focusConfirm: false,
-                allowOutsideClick: true,
-                customClass: {
-                    htmlContainer: 'text-start',
-                    confirmButton: 'bg-gradient',
-                    denyButton: 'bg-gradient',
-                    cancelButton: 'bg-gradient'
-                },
-                didOpen: function() {
-                    applyTranslationsIn(Swal.getPopup());
-                }
+            _pvFiles[0].extraHtml = _pvExtra;
+            otcFilePreview({
+                title: t('nd-preview-title', 'Preview') + ' \u2014 Deal ' + (deal.Deal || ''),
+                subtitle: [deal.Client || '', deal.LE || ''].filter(Boolean).join(' \u00b7 '),
+                banner: calBanner,
+                files: _pvFiles, t: t,
+                buttons: { download: true, edit: true },
+                didOpen: function (popup) { applyTranslationsIn(popup); }
             }).then(function(result) {
                 if (result.isConfirmed) {
                     // Download do arquivo B3 na pasta Downloads do usuário —
@@ -5033,6 +5004,7 @@ $(document).ready(function() {
      DataTables Buttons que a página já montou, então nada aqui em cima muda.
      Vai no FIM do bloco de propósito: precisa da DataTable já inicializada. -->
 <script src="{{ config.ASSETS_ROOT }}/js/export-advanced.js?v={{ asset_v('js/export-advanced.js') }}"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/file-preview.js?v={{ asset_v('js/file-preview.js') }}"></script>
 <script>
     jQuery(function () {
         if (window.otcExportAdvanced) otcExportAdvanced('#deals-processing-table');
