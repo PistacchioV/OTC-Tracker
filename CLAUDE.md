@@ -835,6 +835,26 @@ São **46**: `currency-base`, `interbook-ndf`, `commodities-b3`,
   card não desenha subitem, em vez de desenhar um LAW/ATA inventado.
   `check_ndm_cards.py`.
 
+- **Swap Calculator: a `Denominação` da curva VCP é CONTRATO, e o IR sai do
+  CADASTRO** (§479). A posição traz nas colunas 70/75 o texto livre da curva
+  (`(3M SOFR + 0.75%)*1.1765 A/360`), e o `*1.1765` só existe ali. Quem o lê é
+  `precificador/descricao_curva.py` — interpretador de REGRAS, de propósito:
+  cada achado sai com o trecho de onde veio e o que sobra com número e
+  operador vai para `nao_lido`, sinalizado; denominação nova = linha nova em
+  `_REGRAS`, nunca um modelo. `domain.aplicar_descricao` é UMA função para o
+  prefill e para o texto colado na tela (`/api/tools/swap-calculator/curve`);
+  a denominação VENCE a coluna quando divergem, guardando `anterior`. O
+  `Ponta.multiplicador` incide na taxa ANUAL que capitaliza — `(1 + r·k)^τ`,
+  nunca no fator — e a memória xlsx o põe DENTRO da capitalização. O IR do
+  Swap Calculator vem de `RegraIR` (`queries.regra_ir_do_cliente`): a exceção
+  do `swap-ir-client` vence a direção (a regra do Trade Level, pelas mesmas
+  `_swap_ir_excecao`/`_swap_ir_faixas` da platform), fora dela as faixas do
+  `swap-ir-term` só com o banco pagando. `check_tools_descricao.py`.
+- **Swap Calculator: o remanescente PODE ser maior que o original** (§478).
+  Swap com atualização de notional (principal corrigido pelo índice ou por
+  aditivo) carrega um saldo acima do valor registrado, e o motor recusava a
+  conta como digitação errada. O original é só a base da parcela `Sobre Valor
+  Base Original`; `amortizar()` limita a parcela ao saldo. Não reponha a trava.
 - **Swap Calculator, perna IPCA: o fixing M-1/M-2 busca o número-índice
   FINAL no IBGE** (`precificador/ipca.py`, tabela 1737 variável 2266, §449):
   M-n contado da liquidação do fluxo. O INICIAL é do contrato (a cotação
@@ -1310,7 +1330,7 @@ São **46**: `currency-base`, `interbook-ndf`, `commodities-b3`,
 `apps/static/data/db/` é gitignorado: bancos não vêm no pull. Telas vazias
 depois de um pull são migração não rodada, não bug.
 
-### `scripts/tests/` (135 scripts)
+### `scripts/tests/` (136 scripts)
 
 Autocontidos, sem framework, `ok`/`FAIL` por asserção, saída 0/1, sem tocar
 dado real (tmp, stubs de Outlook/SMTP). O
