@@ -2523,5 +2523,7 @@
   "nd-swb-col-denomination3": "Denominação 3",
   "nd-swb-col-vcptext": "Texto VCP",
   "nd-swb-col-maker": "Maker",
-  "nd-swb-col-checker": "Checker"
+  "nd-swb-col-checker": "Checker",
+  "nd-swb-col-clientdt": "Cliente (Deal Ticket)",
+  "nd-swb-col-le": "LE"
 }

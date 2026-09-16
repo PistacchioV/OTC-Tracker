@@ -50,23 +50,65 @@ def api_swap_bullet_import():
     if f is None or not f.filename:
         return jsonify({'success': False, 'message': 'No file received'}), 400
     ref_dt = _R()._api_ref_date(request.form.get('trade_date'))
+    dry_run = (request.args.get('dry_run') in ('1', 'true', 'yes')
+               or request.form.get('dry_run') in ('1', 'true', 'yes'))
     try:
-        result = commands.import_upload(f.filename, f.read(), ref_dt, sid=session.get('user_sid', ''))
+        result = commands.import_upload(f.filename, f.read(), ref_dt, sid=session.get('user_sid', ''),
+                                        dry_run=dry_run)
     except ValueError as exc:
         return jsonify({'success': False, 'message': 'Could not read the file: ' + str(exc)}), 400
     except Exception as exc:                                # noqa: BLE001
         _R().log.error('[SWAP BULLET] import failed:\n%s', traceback.format_exc())
         return jsonify({'success': False, 'message': 'Import failed: %s: %s' % (type(exc).__name__, exc)}), 500
-    if not result.get('imported'):
+    if not result.get('deals'):
         return jsonify({'success': False,
                         'message': 'No Deal Ticket found — the file needs a sheet/page with '
                                    'Valor Base and Vencimento.',
                         'ignored': result.get('ignored', [])}), 400
-    _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
-                              'Deals Imported', PAGE,
-                              '%d deal(s) from %s' % (result['imported'], f.filename))
+    if not dry_run:
+        _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                                  'Deals Imported', PAGE,
+                                  '%d deal(s) from %s' % (result['imported'], f.filename))
     result['file'] = f.filename
     return jsonify(result)
+
+
+@blueprint.route('/api/new-deals/swap-bullet/cache/batch', methods=['POST'])
+def api_swap_bullet_batch():
+    """Grava os deals que a tela decidiu manter depois do dry-run (o passo 2
+    do Import das páginas de New Deals). Body: { deals: [...] }; deal com
+    `_replace: true` é duplicata que a mesa mandou substituir."""
+    err = _auth()
+    if err:
+        return err
+    payload = request.get_json(silent=True) or {}
+    deals = payload.get('deals')
+    if not isinstance(deals, list) or not deals:
+        return jsonify({'success': False, 'message': 'No deals provided'}), 400
+    try:
+        n = commands.persist_deals(deals, sid=session.get('user_sid', ''))
+    except Exception as exc:                                # noqa: BLE001
+        _R().log.error('[SWAP BULLET] batch failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'message': 'Save failed: %s: %s' % (type(exc).__name__, exc)}), 500
+    if n:
+        _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                                  'Deals Imported', PAGE, '%d deal(s) imported from Deal Ticket' % n)
+    return jsonify({'success': True, 'imported': n, 'deals': deals})
+
+
+@blueprint.route('/api/new-deals/swap-bullet/cache/search', methods=['POST'])
+def api_swap_bullet_search():
+    """A busca do filtro inteligente — o MESMO contrato das outras páginas de
+    New Deals: `filters` = [{field, type, value, mode}] avaliados pelo
+    `_deal_matches` sobre todos os arquivos-dia (uma abertura por banco)."""
+    err = _auth()
+    if err:
+        return err
+    filters = (request.get_json(silent=True) or {}).get('filters', [])
+    if not isinstance(filters, list):
+        filters = []
+    matched = [d for d in queries.entries() if _R()._deal_matches(d, filters)]
+    return jsonify({'success': True, 'deals': matched})
 
 
 @blueprint.route('/api/new-deals/swap-bullet/edit', methods=['POST'])
@@ -137,6 +179,48 @@ def api_swap_bullet_delete():
         _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
                                   'Deals Deleted', PAGE, '%d deal(s)' % apagados)
     return jsonify({'success': True, 'deleted': apagados, 'not_found': nao})
+
+
+@blueprint.route('/api/new-deals/swap-bullet/economic-affirmation', methods=['POST'])
+def api_swap_bullet_economic_affirmation():
+    """Economic Affirmation do dia para as contrapartes INSTITUIÇÃO FINANCEIRA
+    (conta CETIP própria no Reference Data): um rascunho .eml por contraparte
+    com o Deal Ticket de cada operação — o mesmo desenho das páginas de
+    Commodities (Options e NDF)."""
+    err = _auth()
+    if err:
+        return err
+    from apps.pages import otc_emails
+    deals = (request.get_json(silent=True) or {}).get('deals', [])
+    drafts = otc_emails.build_swap_bullet_affirmation_emails(deals)
+    if not drafts:
+        return jsonify({'ok': True, 'count': 0})
+    return _R()._email_drafts_response(drafts)
+
+
+@blueprint.route('/api/new-deals/swap-bullet/refdata')
+def api_swap_bullet_refdata():
+    """A contraparte do Reference Data pela SPN — o modal de edição consulta
+    ao sair do campo SPN para mostrar nome, conta B3 e CNPJ antes de gravar
+    (a gravação re-puxa de novo no servidor, que é quem manda)."""
+    err = _auth()
+    if err:
+        return err
+    spn = str(request.args.get('spn') or '').strip()
+    le = queries.le_by_spn(spn) if spn else None
+    if le:
+        # Entidade nossa (le-spn): nome e conta própria do cadastro; Atacama é o B2B.
+        return jsonify({'success': True, 'found': True, 'spn': spn, 'le': le['LE'],
+                        'client': le['NAME'] or le['LE'],
+                        'account': queries.own_accounts().get(le['LE'], ''), 'taxid': ''})
+    rec = queries.refdata_by_spn(spn) if spn else {}
+    if not rec:
+        return jsonify({'success': True, 'found': False, 'spn': spn})
+    import re as _re
+    return jsonify({'success': True, 'found': True, 'spn': spn, 'le': 'JPM',
+                    'client': str(rec.get('COUNTERPARTY', '') or '').strip(),
+                    'account': _re.sub(r'\D', '', str(rec.get('B3 ACCOUNT', '') or '')),
+                    'taxid': _re.sub(r'\D', '', str(rec.get('TAX ID', '') or ''))})
 
 
 @blueprint.route('/api/new-deals/swap-bullet/preview')

@@ -44,8 +44,8 @@ from datetime import date, datetime
 # a chave cego a caixa e espaço — 'Curve A Pct' ≡ 'CurveAPct').
 SWB_COLUMNS = (
     ('Type', 'Swap Type'),
-    ('Pair', 'Pair'),
     ('Client', 'Client'),
+    ('ClientDT', 'Client (Deal Ticket)'),
     ('SPN', 'SPN'),
     ('ClientAccount', 'Client B3 Account'),
     ('ClientTaxId', 'Client Tax ID'),
@@ -60,7 +60,6 @@ SWB_COLUMNS = (
     ('PremiumPayer', 'Premium Payer'),
     ('PremiumAmount', 'Premium Amount'),
     ('Reset', 'Reset'),
-    ('LOB', 'LOB'),
     ('VcpHolder', 'VCP Holder'),
     ('VanillaHolder', 'Vanilla Holder'),
     ('CurveACategory', 'Curve A Category'),
@@ -159,6 +158,29 @@ def code_by_label(rows, text, code_key='CODE', label_key='LABEL', width=2, field
         if t and t == toks:
             return code.zfill(width) if code.isdigit() else code
     return ''
+
+
+def spn_key(v):
+    """Só dígitos, sem zeros à frente e sem o rabo `.0` (a mesma régua do
+    `_spn_key` do routes — a SPN chega como texto, número ou planilha)."""
+    s = str(v or '').strip()
+    if s.endswith('.0'):
+        s = s[:-2]
+    return re.sub(r'\D', '', s).lstrip('0')
+
+
+def le_for_spn(rows, spn):
+    """A linha do cadastro `le-spn` (Legal Entity × SPN) cuja SPN casa — a
+    SPN de uma entidade NOSSA (ATACAMA, MGT, LAWTON, JPM) não está no
+    Reference Data, está aqui. → dict {LE, NAME, SPN} ou None."""
+    alvo = spn_key(spn)
+    if not alvo:
+        return None
+    for r in rows or []:
+        if spn_key(r.get('SPN', '')) == alvo and str(r.get('LE', '') or '').strip():
+            return {'LE': str(r.get('LE', '')).strip().upper(), 'NAME': str(r.get('NAME', '') or '').strip(),
+                    'SPN': str(r.get('SPN', '') or '').strip()}
+    return None
 
 
 def curve_code(rows, curve_name, category):
@@ -624,7 +646,8 @@ def deal_from_raw(raw, trade_date_iso, deal_id=None):
         a, b = van, vcp
         a_cat, b_cat = 'JUROS', 'VCP'
     client = g('Client')
-    pair = 'JPM x ATACAMA' if _ATACAMA_RE.search(client) else 'JPM x CLI'
+    is_ata = bool(_ATACAMA_RE.search(client))
+    pair = 'JPM x ATACAMA' if is_ata else 'JPM x CLI'
     notional_txt = g('Notional')
     ccy = ''
     mccy = re.search(r'\b([A-Z]{3})\b', strip_accents(notional_txt).upper())
@@ -641,8 +664,11 @@ def deal_from_raw(raw, trade_date_iso, deal_id=None):
         'Type': 'Pagamento Final',
         'Title': g('_title'),
         'Pair': pair,
-        'LE': 'JPM',
+        # LE da linha: JPM contra cliente; ATACAMA no B2B (a perna intragrupo,
+        # que gera o arquivo do Banco E o espelho da Atacama).
+        'LE': 'ATACAMA' if is_ata else 'JPM',
         'Client': client,
+        'ClientDT': client,
         'SPN': re.sub(r'\.0$', '', g('SPN')),
         'ClientAccount': '',
         'ClientTaxId': '',
@@ -692,7 +718,12 @@ def deal_from_raw(raw, trade_date_iso, deal_id=None):
     if prem_amt in (None, 0) and norm(prem_sched) not in ('SIM', 'YES', 'S', 'Y'):
         deal['PremiumSchedule'] = 'Não'
         deal['PremiumDate'] = deal['PremiumDate'] if deal['PremiumDate'] else ''
-    deal['Deal'] = deal_id or make_deal_id(deal)
+    # A chave da linha é um id INTERNO (hash do DT): o Deal Ticket não traz
+    # número de operação, então a coluna Deal nasce em BRANCO para a mesa
+    # preencher, e o B3 ID chega depois (Mapping / edição).
+    deal['_id'] = deal_id or make_deal_id(deal)
+    deal['Deal'] = ''
+    deal['B3ID'] = ''
     deal['VcpText'] = vcp_text(deal)
     return deal
 
@@ -705,8 +736,9 @@ def _sign(text):
 
 
 def make_deal_id(deal):
-    """Chave determinística do deal — o DT não traz número de operação. É o
-    que deixa reimportar o mesmo arquivo sem duplicar (upsert por `Deal`)."""
+    """Chave INTERNA determinística do deal — o DT não traz número de
+    operação. É o que deixa reimportar o mesmo arquivo sem duplicar (upsert
+    por `_id`); a coluna Deal é da mesa."""
     base = '|'.join(norm(deal.get(k, '')) for k in
                     ('Client', 'StartDate', 'MaturityDate', 'Notional', 'VcpCurve', 'Pair'))
     return 'SWB-' + hashlib.sha1(base.encode('utf-8')).hexdigest()[:8].upper()
@@ -808,9 +840,14 @@ def le_pair(view):
     return {'client': 'JPM x CLI', 'bank': 'JPM x ATACAMA', 'atacama': 'ATACAMA x JPM'}[view]
 
 
+def is_b2b(deal):
+    """O deal é o B2B Banco × Atacama? Pela LE da linha (ATACAMA) ou pelo par."""
+    return norm(deal.get('LE', '')) == 'ATACAMA' or 'ATACAMA' in norm(deal.get('Pair', ''))
+
+
 def views_of(deal):
     """As visões que o deal gera: cliente → ['client']; B2B → ['bank', 'atacama']."""
-    return ['bank', 'atacama'] if 'ATACAMA' in norm(deal.get('Pair', '')) else ['client']
+    return ['bank', 'atacama'] if is_b2b(deal) else ['client']
 
 
 def _curve(deal, side):
@@ -836,8 +873,10 @@ def swap_record_values(deal, view, accounts, codes, my_number):
     pelos cadastros (o `commands` os resolve; aqui só se posiciona).
 
     Regras da perna: só a curva JUROS leva Sinal e Juros; só a VCP leva PU
-    inicial, Tipo/Classe, Descrição, Cupom Limpo e Data de Cotação; o Cap/
-    Floor vai na curva em que o DT o declara (o bloco Curva VCP). O Titular
+    inicial (sempre 1.00000000), Tipo/Classe, Cupom Limpo e Data de Cotação;
+    a Descrição só vai na VCP quando ela é a curva da PARTE (a ponta ativa
+    da visão); o Cap/Floor vai na curva em que o DT o declara (o bloco
+    Curva VCP). O Titular
     do prêmio (107) é PARTE/CONTRAPARTE de quem paga; o Valor (108) sai
     zerado porque a agenda vai no 0897."""
     parte, contra = view_sides(deal, view, accounts)
@@ -885,17 +924,19 @@ def swap_record_values(deal, view, accounts, codes, my_number):
         vals[str(seq)] = _blank(w)
     # Se curva(s) = VCP: 47-49 Parte, 50-52 Contraparte; Cupom Limpo 53-54 / 55-56.
     price = parse_number(deal.get('InitialPrice'))
-    # "100% Spot" é FATOR no PU inicial (1.00000000) e percentual no Cupom
-    # Limpo (100.0000000) — é como os arquivos da mesa saem; um preço
-    # ('82.820000') vai igual nos dois.
-    pu = (price / 100.0) if (price is not None and '%' in str(deal.get('InitialPrice') or '')) else price
+    # PU inicial é SEMPRE 1.00000000 na perna VCP (regra da mesa); o Cupom
+    # Limpo leva o Preço Inicial do DT (100% Spot → 100.0000000).
     text = str(deal.get('VcpText') or '').strip() or vcp_text(deal)
     for base, cl_base, side in ((47, 53, parte), (50, 55, contra)):
         c = _curve(deal, side['curve'])
         if c['category'] == 'VCP':
-            vals[str(base)] = b3_num(pu, 14, 8) or _blank(22)
+            vals[str(base)] = b3_num(1, 14, 8)
             vals[str(base + 1)] = _digits(deal.get('VcpCode')).zfill(5)[-5:] if _digits(deal.get('VcpCode')) else _blank(5)
-            vals[str(base + 2)] = text[:320].ljust(320)
+            # A Descrição só vai na curva da PONTA ATIVA da visão — a Parte —
+            # e só quando ela é VCP. Contraparte com VCP fica em branco: é
+            # como os arquivos da mesa saem (Cliente e Atacama sem descrição,
+            # Banco com ela, porque ali o JPM carrega a VCP).
+            vals[str(base + 2)] = text[:320].ljust(320) if side is parte else _blank(320)
             vals[str(cl_base)] = b3_num(price, 8, 7) or _blank(15)
             vals[str(cl_base + 1)] = (str(deal.get('QuoteDateCode') or '').zfill(2)
                                       if str(deal.get('QuoteDateCode') or '').strip() else _blank(2))
@@ -1015,11 +1056,18 @@ def missing_for_send(deal, codes, accounts):
                           % (side, deal.get('Curve' + side, '')))
     if not accounts.get('JPM'):
         faltas.append('JPM own account (B3 Accounts)')
-    if 'ATACAMA' in norm(deal.get('Pair', '')):
+    if is_b2b(deal):
         if not accounts.get('ATACAMA'):
             faltas.append('ATACAMA own account (B3 Accounts)')
-    elif not _digits(deal.get('ClientAccount')):
-        faltas.append('Client B3 Account')
+    else:
+        # A contraparte é a do Reference Data pela SPN do DT: sem SPN, ou com
+        # SPN que o cadastro não tem, o nome e a conta não têm de onde vir.
+        if not _digits(deal.get('SPN')):
+            faltas.append('SPN (the Deal Ticket has no SPN)')
+        elif norm(deal.get('ClientRefData')) != 'OK':
+            faltas.append('SPN %s not found in Reference Data' % deal.get('SPN'))
+        if not _digits(deal.get('ClientAccount')):
+            faltas.append('Client B3 Account')
     vcp_side = 'A' if norm(deal.get('CurveACategory')) == 'VCP' else \
         ('B' if norm(deal.get('CurveBCategory')) == 'VCP' else '')
     if vcp_side:

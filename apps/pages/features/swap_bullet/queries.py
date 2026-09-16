@@ -43,7 +43,7 @@ def entries(date_str='', date_from='', date_to=''):
         _R()._day_prefetch(dias)
         for fp, _fname, mtime, size in dias:
             out.extend(_R()._day_json(fp, mtime, size))
-    return [e for e in out if isinstance(e, dict) and e.get('Deal')]
+    return [persistence.migrate(dict(e)) for e in out if isinstance(e, dict) and persistence.key_of(e)]
 
 
 def find(deal_id, trade_date=''):
@@ -70,7 +70,9 @@ def find(deal_id, trade_date=''):
         if not isinstance(lst, list):
             continue
         for i, e in enumerate(lst):
-            if isinstance(e, dict) and e.get('Deal') == deal_id:
+            if isinstance(e, dict) and persistence.key_of(e) == deal_id:
+                for x in lst:
+                    persistence.migrate(x)      # a lista volta para ser gravada: migra junto
                 return fp, lst, i
     if ref is not None:
         return find(deal_id, '')
@@ -100,6 +102,12 @@ def omnibus_account(le='JPM', kind='CLIENT 2'):
         if _R()._b3_account_type(row.get('ACCOUNT TYPE', '')) == kind:
             return re.sub(r'\D', '', str(row.get('ACCOUNT', '') or ''))
     return ''
+
+
+def le_by_spn(spn):
+    """SPN de entidade NOSSA pelo cadastro `le-spn` → {LE, NAME, SPN} ou None."""
+    from apps.pages.features.swap_bullet import domain
+    return domain.le_for_spn(_R()._mapping_rows('le-spn'), spn)
 
 
 def refdata_by_spn(spn):

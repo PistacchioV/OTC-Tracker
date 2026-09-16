@@ -3,6 +3,7 @@
 {% block title %}New Deals — Swap Bullet{% endblock title %}
 
 {% block extra_css %}
+<link href="{{ config.ASSETS_ROOT }}/plugins/dropzone/dropzone.css" rel="stylesheet" type="text/css"/>
 <link href="{{ config.ASSETS_ROOT }}/plugins/datatables/responsive.bootstrap5.min.css" rel="stylesheet" type="text/css" />
 <link href="{{ config.ASSETS_ROOT }}/plugins/datatables/select.bootstrap5.min.css" rel="stylesheet" type="text/css" />
 <link href="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.css" rel="stylesheet" type="text/css" />
@@ -14,32 +15,52 @@
   /* Status 'Sent' — o mesmo teal das outras telas de New Deals. */
   .badge.badge-sent { background-color: #17a2b8 !important; color: #fff !important; }
 
-  div.dt-button-collection {
-      opacity: 1 !important;
-      background-color: var(--ins-dropdown-bg, var(--ins-secondary-bg, #fff)) !important;
-      border: var(--ins-border-width, 1px) solid var(--ins-border-color, rgba(0,0,0,.1)) !important;
-      border-radius: var(--ins-dropdown-border-radius, 0.6875rem) !important;
-      box-shadow: 0 8px 24px rgba(0,0,0,.12) !important;
-  }
+  /* ── Dropzone — o MESMO bloco das páginas de New Deals (opt-fxo, ndf-comm) ── */
+  #myAwesomeDropzone.dropzone { max-width: 100% !important; margin-left: 0 !important; margin-right: 0 !important; }
+  #myAwesomeDropzone.dropzone { min-height: 0 !important; height: auto !important; padding: 4px 12px !important; }
+  #myAwesomeDropzone.dropzone .dz-message { margin: 0 !important; padding: 4px 0 !important; }
+  #myAwesomeDropzone.dropzone .dz-message .avatar-lg { height: 24px !important; width: 24px !important; margin-bottom: 2px !important; }
+  #myAwesomeDropzone.dropzone .dz-message .avatar-title { height: 24px !important; width: 24px !important; }
+  #myAwesomeDropzone.dropzone .dz-message .avatar-title i { font-size: 14px !important; }
+  #myAwesomeDropzone.dropzone .dz-message h4 { font-size: .82rem !important; margin-bottom: 1px !important; }
+  #myAwesomeDropzone.dropzone .dz-message p { font-size: .72rem !important; margin-bottom: 3px !important; }
+  #myAwesomeDropzone.dropzone .dz-message .btn { padding: 3px 10px !important; font-size: .74rem !important; }
+  #myAwesomeDropzone.dropzone { transition: border-color 180ms ease-out, background 180ms ease-out; }
+  #myAwesomeDropzone.dropzone:hover, #myAwesomeDropzone.dropzone.dz-drag-hover { border-color: #0066cc !important; background: rgba(0, 102, 204, 0.025) !important; }
+  .nd-upload-icon { background: rgba(0, 102, 204, 0.12) !important; color: #0066cc !important; }
+  .nd-deal-card { border-left: 3px solid #0066cc !important; }
+  .nd-filter-bar { background: var(--ins-secondary-bg, #f8f9fa); }
+
+  /* ── Smart filter widget (o mesmo das páginas de New Deals) ─────────── */
+  .smart-filter-wrapper { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; border: 1px solid rgba(0,0,0,0.08); border-radius: 0.6875rem; padding: 4px 8px; min-height: 38px; background: var(--ins-secondary-bg); cursor: text; transition: border-color 0.15s ease, box-shadow 0.15s ease; }
+  .smart-filter-wrapper:focus-within { border-color: #0066cc; box-shadow: 0 0 0 3px rgba(0,102,204,0.15); }
+  .smart-filter-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+  .smart-filter-chip { display: inline-flex; align-items: center; gap: 5px; background: #6c757d; color: #fff; border-radius: 50rem; padding: 2px 8px; font-size: 10px; font-weight: 500; white-space: nowrap; }
+  .smart-filter-chip .sf-chip-remove { cursor: pointer; opacity: .75; font-size: 13px; line-height: 1; margin-left: 2px; }
+  .smart-filter-chip .sf-chip-remove:hover { opacity: 1; }
+  .smart-filter-input { border: none; outline: none; flex: 1; min-width: 200px; font-size: 0.82rem; background: transparent; color: var(--ins-body-color); padding: 2px 0; }
+  .smart-filter-input::placeholder { color: var(--ins-secondary-color); }
+  .smart-filter-dropdown { position: absolute; top: calc(100% + 2px); left: 0; right: 0; z-index: 1055; background: var(--ins-secondary-bg); border: 1px solid var(--ins-border-color); border-radius: 6px; box-shadow: 0 6px 18px rgba(0,0,0,.25); max-height: 240px; overflow-y: auto; display: none; padding: 4px 0; }
+  .smart-filter-dropdown li { padding: 6px 12px; cursor: pointer; font-size: 0.81rem; display: flex; align-items: center; gap: 8px; list-style: none; color: var(--ins-body-color); }
+  .smart-filter-dropdown li:hover, .smart-filter-dropdown li.sf-kbd-active { background: var(--ins-tertiary-bg); }
+  .sf-type-badge { font-size: 9px; padding: 1px 5px; border-radius: 3px; text-transform: uppercase; font-weight: 600; color: #fff; opacity: .85; }
+  .sf-type-text   { background: #6c757d; }
+  .sf-type-date   { background: #0dcaf0; color: #000 !important; }
+  .sf-type-number { background: #198754; }
+
+  div.dt-button-collection { opacity: 1 !important; background-color: var(--ins-dropdown-bg, var(--ins-secondary-bg, #fff)) !important; border: var(--ins-border-width, 1px) solid var(--ins-border-color, rgba(0,0,0,.1)) !important; border-radius: var(--ins-dropdown-border-radius, 0.6875rem) !important; box-shadow: 0 8px 24px rgba(0,0,0,.12) !important; }
   div.dt-button-collection .dropdown-item { opacity: 1 !important; color: var(--ins-dropdown-link-color, var(--ins-body-color)) !important; }
 
   .card-body { padding: 5px; }
-  .table-responsive { overflow-x: auto; }
   .dt-scroll-head, .dataTables_scrollHead { padding-top: 8px; }
   .dt-scroll-body thead, .dataTables_scrollBody thead { display: none !important; }
   .dt-scroll-headInner table, .dataTables_scrollHeadInner table,
   .dt-scroll-body > table, .dataTables_scrollBody > table { table-layout: fixed !important; }
   /* Centralizada (§7): th .7rem, td .8rem; o clone do header do scrollX perde o
      id da tabela, por isso as mesmas regras com !important nos clones. */
-  #swb-table th {
-      white-space: normal; padding: 8px 10px; overflow: hidden; text-overflow: ellipsis;
-      text-align: center !important; vertical-align: middle !important; font-size: 0.7rem;
-  }
+  #swb-table th { white-space: normal; padding: 8px 10px; overflow: hidden; text-overflow: ellipsis; text-align: center !important; vertical-align: middle !important; font-size: 0.7rem; }
   .dt-scroll-head thead th, .dt-scroll-headInner thead th,
-  .dataTables_scrollHead thead th, .dataTables_scrollHeadInner thead th {
-      white-space: normal !important; overflow: hidden; text-overflow: ellipsis;
-      text-align: center !important; vertical-align: middle !important; font-size: 0.7rem !important;
-  }
+  .dataTables_scrollHead thead th, .dataTables_scrollHeadInner thead th { white-space: normal !important; overflow: hidden; text-overflow: ellipsis; text-align: center !important; vertical-align: middle !important; font-size: 0.7rem !important; }
   #swb-table td { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.8rem; text-align: center; vertical-align: middle; font-variant-numeric: tabular-nums; }
   #swb-table th, #swb-table td,
   #swb-table_wrapper .dt-scroll-head thead th, #swb-table_wrapper .dataTables_scrollHead thead th { width: 130px; min-width: 130px; }
@@ -49,32 +70,23 @@
   #swb-table_wrapper .dt-scroll-head thead th:nth-child(2), #swb-table_wrapper .dataTables_scrollHead thead th:nth-child(2) { width: 170px; min-width: 170px; }
   #swb-table th:nth-child(3), #swb-table td:nth-child(3),
   #swb-table_wrapper .dt-scroll-head thead th:nth-child(3), #swb-table_wrapper .dataTables_scrollHead thead th:nth-child(3) { width: 105px; min-width: 105px; }
-  #swb-table th:nth-child(4), #swb-table td:nth-child(4),
-  #swb-table_wrapper .dt-scroll-head thead th:nth-child(4), #swb-table_wrapper .dataTables_scrollHead thead th:nth-child(4) { width: 125px; min-width: 125px; }
-  .swb-filter-row th { padding: 4px 8px; border-top: 1px solid rgba(0,0,0,0.08); text-align: center; vertical-align: middle; }
+  #swb-table th:nth-child(4), #swb-table td:nth-child(4), #swb-table th:nth-child(5), #swb-table td:nth-child(5),
+  #swb-table_wrapper .dt-scroll-head thead th:nth-child(4), #swb-table_wrapper .dataTables_scrollHead thead th:nth-child(4),
+  #swb-table_wrapper .dt-scroll-head thead th:nth-child(5), #swb-table_wrapper .dataTables_scrollHead thead th:nth-child(5) { width: 90px; min-width: 90px; }
+  #swb-table th:nth-child(6), #swb-table td:nth-child(6),
+  #swb-table_wrapper .dt-scroll-head thead th:nth-child(6), #swb-table_wrapper .dataTables_scrollHead thead th:nth-child(6) { width: 125px; min-width: 125px; }
+  #swb-table th:nth-child(7), #swb-table td:nth-child(7),
+  #swb-table_wrapper .dt-scroll-head thead th:nth-child(7), #swb-table_wrapper .dataTables_scrollHead thead th:nth-child(7) { width: 120px; min-width: 120px; }
+  #swb-table th:nth-child(8), #swb-table td:nth-child(8),
+  #swb-table_wrapper .dt-scroll-head thead th:nth-child(8), #swb-table_wrapper .dataTables_scrollHead thead th:nth-child(8) { width: 110px; min-width: 110px; }
+  .column-search-input-bar th { padding: 4px 8px; border-top: 1px solid rgba(0,0,0,0.08); text-align: center; vertical-align: middle; }
   .btn-toolbar-all { font-size: 0.75rem !important; padding: 0.25rem 0.6rem !important; height: auto !important; line-height: 1.4 !important; white-space: nowrap !important; }
-
-  /* Dropzone do Deal Ticket. */
-  .swb-drop {
-      display: flex; align-items: center; gap: 10px; padding: 8px 12px; min-width: 360px;
-      border: 1.5px dashed rgba(74,132,155,.55); border-radius: 12px; background: rgba(74,132,155,.05);
-      cursor: pointer; text-align: left; transition: border-color .15s, background .15s, transform .08s;
-  }
-  .swb-drop:hover  { border-color: #4a849b; }
-  .swb-drop.is-drag { border-color: #0066cc; background: rgba(0,102,204,.05); }
-  .swb-drop__icon { flex: 0 0 auto; width: 32px; height: 32px; border-radius: 9px; display: grid; place-items: center; background: rgba(74,132,155,.14); color: #4a849b; font-size: 1.05rem; }
-  .swb-drop__title { font-size: .8rem; font-weight: 600; margin: 0; line-height: 1.2; }
-  .swb-drop__hint  { font-size: .7rem; color: #6c757d; margin: .1rem 0 0; }
-  .swb-drop:not(.is-busy) .swb-drop__spin { display: none !important; }
-  .swb-drop.is-busy { pointer-events: none; opacity: .85; }
-  .swb-drop.is-busy .swb-drop__glyph { display: none !important; }
-  [data-bs-theme=dark] .swb-drop { border-color: rgba(255,255,255,.14); }
+  #apiRefDate { width: 8.5rem; }
 
   /* Preview dos arquivos. */
   .swb-preview-line { font-family: monospace; font-size: .74rem; white-space: pre; overflow-x: auto; background: rgba(0,0,0,.04); border-radius: 8px; padding: 8px 10px; text-align: left; }
   [data-bs-theme=dark] .swb-preview-line { background: rgba(255,255,255,.06); }
   .swb-preview-tabs .nav-link { font-size: .78rem; padding: .3rem .7rem; }
-  .swb-lacuna { color: #dc3545; font-weight: 600; }
   .swb-edit-grid label { font-size: .72rem; }
 </style>
 {% endblock extra_css %}
@@ -91,8 +103,8 @@
         <div class="text-end">
             <ol class="breadcrumb m-0 py-0">
                 <li class="breadcrumb-item"><a href="/">OTC Tracker</a></li>
-                <li class="breadcrumb-item" data-lang="new-deals">New Deals</li>
-                <li class="breadcrumb-item" data-lang="nav-swap">Swap</li>
+                <li class="breadcrumb-item"><a href="javascript: void(0);" data-lang="new-deals">New Deals</a></li>
+                <li class="breadcrumb-item"><a href="javascript: void(0);" data-lang="nav-swap">Swap</a></li>
                 <li class="breadcrumb-item active" data-lang="nav-bullet">Bullet</li>
             </ol>
         </div>
@@ -100,82 +112,115 @@
 
     <div class="row">
         <div class="col-12">
-            <div class="card">
+            <div class="card nd-deal-card">
 
-                <!-- ── Smart filter bar ─────────────────────────────────────── -->
-                <div class="d-flex align-items-center gap-2 px-2 py-2 border-top border-bottom">
+                <!-- ── Dropzone (o mesmo das páginas de New Deals) ──────────── -->
+                <div class="card-body" style="padding: 10px;">
+                    <form action="/" class="dropzone" data-plugin="dropzone"
+                          data-previews-container="#file-previews"
+                          data-upload-preview-template="#uploadPreviewTemplate"
+                          id="myAwesomeDropzone" method="post">
+                        <div class="fallback">
+                            <input name="file" type="file"/>
+                        </div>
+                        <div class="dz-message needsclick">
+                            <div class="avatar-lg mx-auto mb-3">
+                                <span class="avatar-title nd-upload-icon rounded-circle">
+                                    <i class="fs-24 ti ti-cloud-upload"></i>
+                                </span>
+                            </div>
+                            <h4 class="mb-2" data-lang="nd-dropzone-title">Drop files here or click to upload.</h4>
+                            <p class="text-muted fst-italic mb-3" data-lang="nd-dropzone-hint">You can drag files here, or browse via the button below.</p>
+                            <button class="btn btn-sm shadow btn-default" type="button" data-lang="nd-browse">Browse</button>
+                        </div>
+                    </form>
+                    <div class="dropzone-previews mt-3" id="file-previews"></div>
+                    <div class="d-none" id="uploadPreviewTemplate">
+                        <div class="card mt-1 mb-0 border-dashed border">
+                            <div class="p-2">
+                                <div class="row align-items-center">
+                                    <div class="col-auto">
+                                        <div class="avatar-sm rounded bg-light d-flex align-items-center justify-content-center">
+                                            <i class="file-icon fs-24 text-muted ti ti-file"></i>
+                                        </div>
+                                    </div>
+                                    <div class="col ps-0">
+                                        <a class="fw-semibold" data-dz-name="" href="javascript:void(0);"></a>
+                                        <p class="mb-0 text-muted" data-dz-size=""></p>
+                                    </div>
+                                    <div class="col-auto">
+                                        <a class="btn btn-link btn-lg text-danger" data-dz-remove="" href="">
+                                            <i class="ti ti-x"></i>
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ── Filter + Search ──────────────────────────────────────── -->
+                <div class="d-flex align-items-center gap-2 px-2 py-2 border-top border-bottom nd-filter-bar">
                     <div class="flex-grow-1 position-relative">
-                        <div class="smart-filter-wrapper" id="sfWrapper">
+                        <div class="smart-filter-wrapper" id="smartFilter">
                             <div class="smart-filter-chips" id="sfChips"></div>
-                            <input type="text" class="smart-filter-input" id="sfInput" placeholder="Type to filter…" autocomplete="off">
+                            <input type="text" class="smart-filter-input" id="sfInput"
+                                   placeholder="Type a letter for text fields, or a number / date for value fields…"
+                                   autocomplete="off">
                             <ul class="smart-filter-dropdown mb-0 ps-0" id="sfDropdown"></ul>
                         </div>
                     </div>
                     <div>
-                        <button class="btn btn-secondary bg-gradient btn-toolbar-all" type="button" id="sfSearchBtn">
+                        <button class="btn btn-secondary bg-gradient btn-search" type="button" id="sfSearchBtn">
                             <i class="ti ti-search fs-xl me-1"></i> <span data-lang="b3-btn-search">Search</span>
                         </button>
                     </div>
                 </div>
 
+                <!-- ── Show/entries ─────────────────────────────────────────── -->
                 <div class="card-header">
                     <div class="d-flex align-items-center gap-2">
                         <label class="form-label mb-0" data-lang="b3-show">Show</label>
-                        <select class="form-select form-select-sm" style="width:80px;" data-table-rows>
-                            <option value="15">15</option><option value="25">25</option><option value="50">50</option><option value="100">100</option>
+                        <select class="form-select form-select-sm" style="width: 80px;" data-table-set-rows-per-page>
+                            <option value="50" selected>50</option>
+                            <option value="100">100</option>
+                            <option value="150">150</option>
+                            <option value="200">200</option>
                         </select>
                         <label class="form-label mb-0" data-lang="b3-entries">entries</label>
-                    </div>
-                </div>
-
-                <!-- ── Toolbar ──────────────────────────────────────────────── -->
-                <div class="card-header d-flex flex-wrap align-items-center gap-2 mb-3">
-                    <div id="swbColToggleWrap"></div>
-                    <button class="btn btn-sm btn-primary bg-gradient btn-toolbar-all" id="btnAddSwb"><i class="ti ti-plus me-1"></i>Add Row</button>
-                    <div id="swbExportWrap"></div>
-                    <button class="btn btn-sm btn-soft-info btn-toolbar-all d-none" id="btnPreviewSwb" type="button"><i class="ti ti-eye me-1"></i><span data-lang="nd-swb-btn-preview">Preview</span></button>
-                    <button class="btn btn-sm btn-danger bg-gradient btn-toolbar-all d-none" id="btnDelSwb"><i class="ti ti-trash me-1"></i> Delete</button>
-                    <button class="btn btn-sm btn-primary bg-gradient btn-toolbar-all d-none" id="btnSendSwb"><i class="ti ti-brand-telegram me-1"></i> Send</button>
-                    <button class="btn btn-sm btn-outline-secondary btn-toolbar-all" id="btnClearFilters" type="button"><i class="ti ti-filter-off me-1"></i> <span data-lang="btn-clear-filters">Clear Filters</span></button>
-                    <span class="text-muted fs-xs ms-auto d-none d-lg-inline" data-lang="nd-swb-preview-hint">Double-click a row to preview the B3 files (SWAP 0301 + premium 0897).</span>
-                </div>
-
-                <!-- ── Dropzone + Trade Date ────────────────────────────────── -->
-                <div class="card-header d-flex flex-wrap align-items-center gap-2">
-                    <div class="d-flex align-items-center gap-1">
-                        <label for="swbTradeDate" class="form-label fs-xs text-muted mb-0 me-1 text-nowrap" data-lang="nd-col-trade-date">Trade Date</label>
-                        <input type="text" id="swbTradeDate" class="form-control form-control-sm swb-date-w" style="width: 8.5rem;" placeholder="dd/mm/yyyy" autocomplete="off">
-                    </div>
-                    <div class="swb-drop" id="swbDrop" role="button" tabindex="0" aria-label="Upload Deal Ticket">
-                        <div class="swb-drop__icon">
-                            <i class="ti ti-upload swb-drop__glyph"></i>
-                            <i class="ti ti-loader-2 ti-spin swb-drop__spin"></i>
+                        <!-- Ações de documento/e-mail ficam aqui, ao lado do seletor de linhas,
+                             como nas páginas de Options (a toolbar da tabela é do DataTables). -->
+                        <div class="d-flex flex-wrap align-items-center gap-2 ms-3">
+                            <div class="econAffBtn"></div>
                         </div>
-                        <div>
-                            <p class="swb-drop__title" data-lang="nd-swb-drop-title">Drop the Deal Ticket here (.xlsx or .pdf), or click to browse</p>
-                            <p class="swb-drop__hint" data-lang="nd-swb-drop-hint">One deal per sheet/page — the client ticket and the B2B (Banco × Atacama) become two deals</p>
-                        </div>
-                        <input type="file" id="swbFile" accept=".xlsx,.xlsm,.pdf" hidden>
+                        <span class="text-muted fs-xs ms-auto d-none d-lg-inline" data-lang="nd-swb-preview-hint">Double-click a row to preview the B3 files (SWAP 0301 + premium 0897).</span>
                     </div>
                 </div>
 
-                <div class="card-body" style="padding-top:10px;">
-                    <div class="table-responsive">
+                <!-- ── Table (a toolbar nasce do `dom` do DataTables, como nas irmãs) ── -->
+                <div class="card-body" style="padding-top: 10px;">
+                    <div>
                         <table class="table table-striped dt-responsive align-middle mb-0" id="swb-table">
                             <thead class="thead-sm text-uppercase fs-xxs">
                                 <tr class="text-uppercase fs-xxs" id="swbHead">
-                                    <th style="width:50px;"><input class="form-check-input form-check-input-light fs-14 mt-0 swb-cb-all" type="checkbox" id="selectAll"></th>
+                                    <th class="ps-3" style="width:50px;"><input class="form-check-input form-check-input-light fs-14 mt-0" type="checkbox" id="selectAll"></th>
                                     <th data-lang="nd-col-actions">Actions</th>
                                     <th data-lang="nd-col-status">Status</th>
+                                    <th data-lang="nd-swb-col-le">LE</th>
+                                    <th data-lang="nd-swb-col-lob">LOB</th>
                                     <th data-lang="nd-col-deal">Deal</th>
+                                    <th data-lang="nd-col-b3-id">B3 ID</th>
                                     <th data-lang="nd-col-trade-date">Trade Date</th>
-                                    <!-- as colunas do deal entram por JS (SWB_COLS) -->
+                                    <!-- as colunas do deal entram por JS (SWB_COLS); a última é o _id (oculta) -->
                                 </tr>
-                                <tr class="swb-filter-row" id="swbFilter">
+                                <tr class="column-search-input-bar" id="column-search-inputs">
                                     <th></th><th></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Status"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Deal"></th>
-                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Trade Date"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Status" data-lang-placeholder="b3-status"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="LE"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="LOB"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Deal" data-lang-placeholder="col-deal"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="B3 ID" data-lang-placeholder="col-b3-id"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Trade Date" data-lang-placeholder="col-trade-date"></th>
                                 </tr>
                             </thead>
                             <tbody></tbody>
@@ -223,17 +268,19 @@
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.print.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.select.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/datatables/select.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/dropzone/dropzone-min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/pages/otc-fileupload.js?v={{ asset_v('js/pages/otc-fileupload.js') }}"></script>
 <script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
 <script src="{{ config.ASSETS_ROOT }}/js/export-advanced.js?v={{ asset_v('js/export-advanced.js') }}"></script>
 
 <script>
 // ── Contrato com o servidor (domain.SWB_COLUMNS, na ordem) ──────────────────
 var SWB_COLS = [
-    ['Type','Swap Type'],['Pair','Pair'],['Client','Client'],['SPN','SPN'],['ClientAccount','Client B3 Account'],
+    ['Type','Swap Type'],['Client','Client'],['ClientDT','Client (Deal Ticket)'],['SPN','SPN'],['ClientAccount','Client B3 Account'],
     ['ClientTaxId','Client Tax ID'],['StartDate','Start Date'],['MaturityDate','Maturity Date'],['Currency','Currency'],
     ['Notional','Notional'],['Adhesion','Adhesion'],['Functionality','Functionality'],['PremiumSchedule','Premium Schedule'],
     ['PremiumDate','Premium Date'],['PremiumPayer','Premium Payer'],['PremiumAmount','Premium Amount'],['Reset','Reset'],
-    ['LOB','LOB'],['VcpHolder','VCP Holder'],['VanillaHolder','Vanilla Holder'],
+    ['VcpHolder','VCP Holder'],['VanillaHolder','Vanilla Holder'],
     ['CurveACategory','Curve A Category'],['CurveAPct','Curve A Pct'],['CurveA','Curve A'],['CurveASign','Curve A Sign'],
     ['CurveARate','Curve A Rate'],['CurveACap','Curve A Cap'],['CurveAFloor','Curve A Floor'],
     ['CurveBCategory','Curve B Category'],['CurveBPct','Curve B Pct'],['CurveB','Curve B'],['CurveBSign','Curve B Sign'],
@@ -248,18 +295,19 @@ var SWB_DATE = { StartDate:1, MaturityDate:1, PremiumDate:1, QuoteDate:1 };
 var SWB_NUM  = { Notional:1, PremiumAmount:1, CurveAPct:1, CurveARate:1, CurveACap:1, CurveAFloor:1, CurveBPct:1, CurveBRate:1, CurveBCap:1, CurveBFloor:1 };
 var SWB_MONEY = { Notional:1, PremiumAmount:1 };
 var SWB_SELECT = {
-    Pair: ['JPM x CLI', 'JPM x ATACAMA'], Adhesion: ['CGD', 'CSA', 'CGD/CSA', 'SEM ADESAO'],
+    LE: ['JPM', 'ATACAMA'], Adhesion: ['CGD', 'CSA', 'CGD/CSA', 'SEM ADESAO'],
     PremiumSchedule: ['Sim', 'Não'], Reset: ['Não', 'Sim'], CurveACategory: ['JUROS', 'VCP'], CurveBCategory: ['JUROS', 'VCP'],
     CurveASign: ['+', '-'], CurveBSign: ['+', '-'], Currency: ['BRL', 'USD', 'EUR']
 };
 var SWB_READONLY = { Maker:1, Checker:1, Type:1 };
-// Colunas: [0]=checkbox [1]=actions [2]=Status [3]=Deal [4]=Trade Date [5..]=SWB_FIELDS.
-var C_OFF = 5, C_ID = 3, C_TD = 4, C_STATUS = 2;
+// Colunas: [0]=checkbox [1]=actions [2]=Status [3]=LE [4]=LOB [5]=Deal [6]=B3 ID [7]=Trade Date [8..]=SWB_FIELDS [último]=_id (oculta).
+var C_OFF = 8, C_DEAL = 5, C_B3 = 6, C_TD = 7, C_STATUS = 2, C_LE = 3, C_LOB = 4;
+var C_ID = C_OFF + SWB_COLS.length;   // a chave interna da linha, coluna escondida
 var ENTRIES = [], DEALS = {}, selected = new Set();
-var CURRENT_USER_SID = '{{ session.get("user_sid", "") }}';
 
 var STATUS_META = {
     'New':      { cls: 'bg-info text-white' },
+    'Amend':    { cls: 'text-bg-warning' },
     'Pending':  { cls: 'text-bg-warning' },
     'Approved': { cls: 'text-bg-secondary' },
     'Sent':     { cls: 'badge-sent' },
@@ -271,7 +319,7 @@ function statusBadge(status) {
     return '<span class="badge ' + m.cls + ' bg-gradient">' + esc(txt) + '</span>';
 }
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
-function _t(key, fallback) {
+function t(key, fallback) {
     try {
         var lang = localStorage.getItem('__OTC_TRACKER_LANG__') || 'en';
         var d = window.__OTC_TRANSLATIONS__ && window.__OTC_TRANSLATIONS__[lang];
@@ -282,6 +330,7 @@ function _t(key, fallback) {
 function _isoToDmy(s) { var m=String(s||'').match(/^(\d{4})-(\d{2})-(\d{2})/); return m?(m[3]+'/'+m[2]+'/'+m[1]):String(s||''); }
 function _dmyToIso(dmy) { var p=(dmy||'').trim().split('/'); if(p.length!==3||p[2].length!==4) return ''; return p[2]+'-'+p[1].padStart(2,'0')+'-'+p[0].padStart(2,'0'); }
 function _todayDmy() { var d = new Date(); return ('0'+d.getDate()).slice(-2)+'/'+('0'+(d.getMonth()+1)).slice(-2)+'/'+d.getFullYear(); }
+function _todayIso() { var d = new Date(); return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
 function fmtMoney(v) {
     var n = parseFloat(String(v||'').replace(/[^\d.\-]/g, ''));
     if (isNaN(n)) return v == null ? '' : String(v);
@@ -290,7 +339,7 @@ function fmtMoney(v) {
 
 // Cabeçalho montado a partir do contrato — a lista de colunas vive num lugar só.
 (function buildHead() {
-    var h = document.getElementById('swbHead'), f = document.getElementById('swbFilter');
+    var h = document.getElementById('swbHead'), f = document.getElementById('column-search-inputs');
     SWB_COLS.forEach(function (c) {
         var th = document.createElement('th'); th.setAttribute('data-lang', 'nd-swb-col-' + c[0].toLowerCase()); th.textContent = c[1];
         h.appendChild(th);
@@ -298,19 +347,9 @@ function fmtMoney(v) {
         tf.innerHTML = '<input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="' + esc(c[1]) + '">';
         f.appendChild(tf);
     });
+    var thId = document.createElement('th'); h.appendChild(thId);
+    var tfId = document.createElement('th'); f.appendChild(tfId);
 })();
-
-function _todayIso() { var d = new Date(); return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
-jQuery(function () {
-    // O `otcDateField` guarda o VALUE em Y-m-d (o que a API espera) e mostra
-    // dd/mm/aaaa no altInput — o valor pré-preenchido tem de ser ISO, senão o
-    // flatpickr lê '16/09/2026' como Y-m-d e o campo vira 01/01/2026.
-    var rd = document.getElementById('swbTradeDate');
-    if (rd) {
-        rd.value = _todayIso();
-        if (window.otcDateField) window.otcDateField(rd);
-    }
-});
 
 $(document).ready(function() {
     if (typeof JSZip !== 'undefined') {
@@ -327,6 +366,7 @@ $(document).ready(function() {
 
     var columnDefs = [
         { orderable: false, targets: [0, 1] },
+        { visible: false, targets: [C_ID] },
         { targets: C_STATUS, render: function(data, type){ return type === 'display' ? statusBadge(data) : (data || 'New'); } },
         { targets: C_TD, render: function(data, type){ return type === 'display' ? _isoToDmy(data) : (data || ''); } }
     ];
@@ -336,12 +376,27 @@ $(document).ready(function() {
         if (f === 'VcpText') columnDefs.push({ targets: i + C_OFF, render: function(d, type){ return type === 'display' && d ? '<span title="' + esc(d) + '">' + esc(String(d).slice(0, 40)) + (d.length > 40 ? '…' : '') + '</span>' : (d || ''); } });
     });
 
-    var dt = window.swbTable = $('#swb-table').DataTable({
-        responsive: false, scrollX: true, scrollY: '58vh', scrollCollapse: true, autoWidth: false, pageLength: 15,
+    var table = window.swbTable = $('#swb-table').DataTable({
+        responsive: false, scrollX: true, scrollY: '58vh', scrollCollapse: true, autoWidth: false, pageLength: 50,
         orderCellsTop: true, order: [],
         select: { style:'os', items:'cell', selector:'td:not(:nth-child(1)):not(:nth-child(2))' },
         columnDefs: columnDefs,
-        dom: "rt<'d-md-flex justify-content-between align-items-center mt-2'ip>",
+        // A MESMA toolbar das páginas de New Deals: Columns · Add Row · Export ·
+        // Trade Date · Import · Clear Filters · ações condicionais da seleção.
+        dom: "<'d-md-flex justify-content-between align-items-center my-2'" +
+            "<'btn-toolbar d-flex flex-wrap align-items-center'" +
+            "<'columnToggleWrapper me-2'>" +
+            "<'addRowBtn me-2'>" +
+            "B" +
+            "<'refDateWrap ms-2 d-flex align-items-center'>" +
+            "<'importBtn ms-2 me-2'>" +
+            "<'clearFiltersBtn me-2'>" +
+            "<'conditionalActions ms-2 d-flex align-items-center gap-2'>" +
+            ">" +
+            "<'ms-auto'>" +
+            ">" +
+            "<'row'<'col-sm-12'tr>>" +
+            "<'d-md-flex justify-content-between align-items-center mt-2'ip>",
         buttons: [{
             extend:'collection', text:'<i class="ti ti-download me-1"></i> Export',
             className:'btn btn-sm btn-info bg-gradient dropdown-toggle btn-toolbar-all', autoClose:true, fade:0,
@@ -361,7 +416,7 @@ $(document).ready(function() {
                 if(node) {
                     $(node).find('input[type="checkbox"]').prop('checked',!!(id&&selected.has(id)));
                     var st = d ? d[C_STATUS] : '';
-                    $(node).find('.btn-row-confirm').toggleClass('d-none', !(st==='New' || st==='Pending'));
+                    $(node).find('.btn-row-confirm').toggleClass('d-none', !(st==='New' || st==='Pending' || st==='Amend'));
                     $(node).find('.btn-row-send').toggleClass('d-none', !(st==='New' || st==='Approved'));
                 }
             });
@@ -370,38 +425,116 @@ $(document).ready(function() {
         },
         initComplete: function() {
             var api = this.api();
+
             // Filtro por coluna delegado no CONTAINER (§462): o scrollX clona o
             // cabeçalho e é no clone que a pessoa digita.
             var $c = $(api.table().container());
-            $c.on('click', '.swb-filter-row th, .swb-filter-row th input', function(e){ e.stopPropagation(); });
-            $c.on('keyup input change', '.swb-filter-row th input', function() {
+            $c.on('click', '.column-search-input-bar th, .column-search-input-bar th input', function(e){ e.stopPropagation(); });
+            $c.on('keyup input change', '.column-search-input-bar th input', function() {
                 var ci = $(this).closest('th').index();
                 if (api.column(ci).search() !== this.value) api.column(ci).search(this.value).draw();
             });
-            var ctw=document.getElementById('swbColToggleWrap');
-            if(ctw) {
-                var dd=document.createElement('div'); dd.className='dropdown';
-                var items=SWB_COLS.map(function(c,i){
+
+            // ── Columns ────────────────────────────────────────────────────
+            var columnToggleWrapper = document.querySelector('.columnToggleWrapper');
+            if (columnToggleWrapper) {
+                var dd = document.createElement('div'); dd.className = 'dropdown';
+                var items = SWB_COLS.map(function(c, i){
                     return '<li class="dropdown-item"><div class="form-check">' +
-                        '<input class="form-check-input form-check-input-light fs-14 mt-0 toggle-vis" type="checkbox" data-column="'+(i+C_OFF)+'" id="swbC'+i+'" checked>' +
-                        '<label class="form-check-label fw-medium" for="swbC'+i+'">'+esc(c[1])+'</label></div></li>';
+                        '<input class="form-check-input form-check-input-light fs-14 mt-0 toggle-vis" type="checkbox" data-column="' + (i + C_OFF) + '" id="colToggle' + i + '" checked>' +
+                        '<label class="form-check-label fw-medium" for="colToggle' + i + '">' + esc(c[1]) + '</label></div></li>';
                 }).join('');
-                dd.innerHTML='<button class="btn btn-sm btn-soft-primary dropdown-toggle btn-toolbar-all" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside"><i class="ti ti-columns me-1"></i> Columns</button>' +
-                    '<ul class="dropdown-menu" id="swbColMenu" style="max-height:60vh;overflow-y:auto;">'+items+'</ul>';
-                ctw.appendChild(dd);
-                document.getElementById('swbColMenu').addEventListener('change',function(e){
-                    if(e.target.classList.contains('toggle-vis')) dt.column(parseInt(e.target.dataset.column)).visible(e.target.checked);
+                dd.innerHTML = '<button class="btn btn-sm btn-soft-primary dropdown-toggle btn-toolbar-all" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside"><i class="ti ti-columns me-1"></i> Columns</button>' +
+                    '<ul class="dropdown-menu" id="columnToggleMenu" style="max-height:60vh;overflow-y:auto;">' + items + '</ul>';
+                columnToggleWrapper.appendChild(dd);
+                document.getElementById('columnToggleMenu').addEventListener('change', function(e){
+                    if (e.target.classList.contains('toggle-vis')) api.column(parseInt(e.target.dataset.column, 10)).visible(e.target.checked);
+                });
+                ['ClientDT','ClientTaxId','Reset','VcpHolder','VanillaHolder','Denomination2','Maker','Checker'].forEach(function(f){
+                    var i = SWB_FIELDS.indexOf(f); if (i >= 0) { api.column(i + C_OFF).visible(false); var cb = document.getElementById('colToggle' + i); if (cb) cb.checked = false; }
                 });
             }
-            // Colunas secundárias começam escondidas — a grade tem 53.
-            ['ClientTaxId','Reset','VcpHolder','VanillaHolder','Denomination2','Maker','Checker'].forEach(function(f){
-                var i = SWB_FIELDS.indexOf(f); if (i >= 0) { api.column(i + C_OFF).visible(false); var cb = document.getElementById('swbC' + i); if (cb) cb.checked = false; }
+
+            // ── Add Row ────────────────────────────────────────────────────
+            var btnContainer = document.querySelector('.addRowBtn');
+            if (btnContainer && !document.getElementById('addRow')) {
+                var btn = document.createElement('button');
+                btn.id = 'addRow';
+                btn.className = 'btn btn-sm btn-primary bg-gradient btn-toolbar-all btn-toolbar-addrow';
+                btn.textContent = 'Add Row +';
+                btn.setAttribute('type', 'button');
+                btn.setAttribute('data-bs-toggle', 'tooltip'); btn.setAttribute('data-bs-placement', 'bottom');
+                btn.setAttribute('data-bs-title', 'Add a new row'); btn.setAttribute('data-bs-custom-class', 'tooltip-primary');
+                btnContainer.appendChild(btn);
+                btn.addEventListener('click', function(){ openModal(null); });
+            }
+
+            // ── Trade Date do import (o Reference Date das irmãs) ──────────
+            var refDateWrap = document.querySelector('.refDateWrap');
+            if (refDateWrap && !document.getElementById('apiRefDate')) {
+                refDateWrap.innerHTML =
+                    '<label for="apiRefDate" class="form-label fs-xs text-muted mb-0 me-1 text-nowrap" data-lang="nd-col-trade-date">Trade Date</label>' +
+                    '<input type="text" id="apiRefDate" class="form-control form-control-sm" value="' + _todayDmy() + '" placeholder="dd/mm/yyyy" ' +
+                    'data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-title="Trade Date of the deals in the Deal Ticket (the day file they are saved to)" data-bs-custom-class="tooltip-teal">';
+                var _rdEl = document.getElementById('apiRefDate');
+                if (_rdEl && typeof flatpickr !== 'undefined') flatpickr(_rdEl, { dateFormat: 'd/m/Y', allowInput: true, disableMobile: true });
+                // Trocar a data já leva a tela para aquele dia — o filtro padrão
+                // é Trade Date = hoje, que esconderia o que foi importado.
+                if (_rdEl) _rdEl.addEventListener('change', function () { sfSetTradeDate(this.value); });
+            }
+
+            // ── Import (processa a fila do dropzone) ───────────────────────
+            var importBtnContainer = document.querySelector('.importBtn');
+            if (importBtnContainer && !document.getElementById('importBtn')) {
+                var importBtn = document.createElement('button');
+                importBtn.id = 'importBtn';
+                importBtn.className = 'btn btn-sm btn-warning bg-gradient btn-toolbar-all btn-toolbar-import';
+                importBtn.setAttribute('type', 'button');
+                importBtn.setAttribute('data-bs-toggle', 'tooltip'); importBtn.setAttribute('data-bs-placement', 'bottom');
+                importBtn.setAttribute('data-bs-title', 'Import the Deal Ticket(s) queued in the dropzone (.xlsx or .pdf)');
+                importBtn.setAttribute('data-bs-custom-class', 'tooltip-teal');
+                importBtn.innerHTML = '<i class="ti ti-upload me-1"></i> Import';
+                importBtnContainer.appendChild(importBtn);
+                importBtn.addEventListener('click', runImport);
+            }
+
+            // ── Clear Filters ──────────────────────────────────────────────
+            var clearFiltersContainer = document.querySelector('.clearFiltersBtn');
+            if (clearFiltersContainer && !document.getElementById('clearFiltersBtn')) {
+                var clearFiltersBtn = document.createElement('button');
+                clearFiltersBtn.id = 'clearFiltersBtn';
+                clearFiltersBtn.className = 'btn btn-sm btn-outline-secondary btn-toolbar-all';
+                clearFiltersBtn.setAttribute('type', 'button');
+                clearFiltersBtn.innerHTML = '<i class="ti ti-filter-off me-1"></i><span data-lang="btn-clear-filters">' + t('btn-clear-filters', 'Clear Filters') + '</span>';
+                clearFiltersContainer.appendChild(clearFiltersBtn);
+                clearFiltersBtn.addEventListener('click', function() {
+                    // As DUAS cópias do cabeçalho (original e clone do scrollX).
+                    $(api.table().container()).find('.column-search-input-bar th input').val('');
+                    api.columns().search('').draw();
+                    sfActive = []; sfRenderChips();
+                    var sfInputEl = document.getElementById('sfInput'); if (sfInputEl) sfInputEl.value = '';
+                });
+            }
+
+            // ── Ações da seleção: Preview · Send · Delete ──────────────────
+            var conditionalActions = document.querySelector('.conditionalActions');
+            if (conditionalActions) {
+                conditionalActions.innerHTML =
+                    '<button class="btn btn-sm btn-soft-info btn-toolbar-all d-none" id="btnPreviewSwb" type="button" data-table-preview-selected><i class="ti ti-eye me-1"></i><span data-lang="nd-swb-btn-preview">' + t('nd-swb-btn-preview', 'Preview') + '</span></button>' +
+                    '<button class="btn btn-sm btn-primary bg-gradient btn-toolbar-all d-none" id="btnSendSwb" type="button" data-table-send-selected><i class="ti ti-brand-telegram me-1"></i> Send</button>' +
+                    '<button class="btn btn-sm btn-danger bg-gradient btn-toolbar-all d-none" id="btnDelSwb" type="button" data-table-delete-selected><i class="ti ti-trash me-1"></i> Delete</button>';
+                document.getElementById('btnPreviewSwb').addEventListener('click', function(){ var ids = Array.from(selected); if (ids.length) previewDeal(ids[0]); });
+                document.getElementById('btnSendSwb').addEventListener('click', function(){ sendDeals(Array.from(selected)); });
+                document.getElementById('btnDelSwb').addEventListener('click', function(){ deleteDeals(Array.from(selected)); });
+            }
+
+            document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el){
+                if (window.bootstrap && !bootstrap.Tooltip.getInstance(el)) new bootstrap.Tooltip(el, { trigger: 'hover' });
             });
+            setTimeout(function(){ api.columns.adjust(); }, 150);
         }
     });
-    dt.buttons().container().appendTo('#swbExportWrap');
-    setTimeout(function() { dt.columns.adjust(); }, 150);
-    $(window).on('resize', function(){ dt.columns.adjust(); });
+    $(window).on('resize', function(){ table.columns.adjust(); });
 
     function _actionsCell() {
         return '<div class="d-flex justify-content-center gap-1">' +
@@ -417,90 +550,182 @@ $(document).ready(function() {
 
     function dealRow(e) {
         var row = ['<input class="form-check-input form-check-input-light fs-14 mt-0" type="checkbox" value="">',
-                   _actionsCell(), e.Status || 'New', e.Deal || '', e.TradeDate || ''];
+                   _actionsCell(), e.Status || 'New', e.LE || 'JPM', e.LOB || '', e.Deal || '', e.B3ID || '', e.TradeDate || ''];
         SWB_FIELDS.forEach(function(f){ row.push(e[f] != null ? String(e[f]) : ''); });
+        row.push(e._id || e.Deal || '');
         return row;
     }
     function renderAll() {
-        dt.clear(); DEALS = {};
-        ENTRIES.forEach(function(e){ if (!e || !e.Deal) return; DEALS[e.Deal] = e; dt.row.add(dealRow(e)); });
-        dt.draw();
-        setTimeout(function(){ dt.columns.adjust().draw(false); }, 100);
+        table.clear(); DEALS = {};
+        ENTRIES.forEach(function(e){ if (!e) return; var k = e._id || e.Deal; if (!k) return; e._id = k; DEALS[k] = e; table.row.add(dealRow(e)); });
+        table.draw(false);
+        setTimeout(function(){ table.columns.adjust(); }, 100);
     }
     function upsertEntry(e) {
-        var i = ENTRIES.findIndex(function(x){ return x && x.Deal === e.Deal; });
+        var i = ENTRIES.findIndex(function(x){ return x && (x._id || x.Deal) === (e._id || e.Deal); });
         if (i >= 0) ENTRIES[i] = e; else ENTRIES.push(e);
         renderAll();
     }
     function removeEntries(ids) {
         var set = {}; ids.forEach(function(x){ set[x]=1; });
-        ENTRIES = ENTRIES.filter(function(e){ return !(e && set[e.Deal]); });
+        ENTRIES = ENTRIES.filter(function(e){ return !(e && set[e._id || e.Deal]); });
         ids.forEach(function(x){ selected.delete(x); });
         renderAll();
     }
 
-    // ── Load: o chip de Trade Date comanda o fetch ─────────────────────────
-    var dateRanges = {};
-    function swbLoad(qs, colFilters) {
-        fetch('/api/new-deals/swap-bullet' + (qs ? '?'+qs : ''), { credentials: 'same-origin' })
-            .then(function(r){ return r.json(); })
-            .then(function(data){
-                ENTRIES = (data.success && data.entries) ? data.entries : [];
-                dt.columns().search('');
-                dateRanges = {};
-                (colFilters||[]).forEach(function(f){
-                    if (f.col.type === 'date') {
-                        var d = sfToDate(f.value);
-                        dateRanges[f.col.dtCol] = dateRanges[f.col.dtCol] || {from:null,to:null};
-                        if (f.mode === 'from') dateRanges[f.col.dtCol].from = d;
-                        else if (f.mode === 'to') dateRanges[f.col.dtCol].to = d;
-                        else { dateRanges[f.col.dtCol].from = d; dateRanges[f.col.dtCol].to = d; }
-                    } else { dt.column(f.col.dtCol).search(f.value); }
-                });
-                renderAll();
-            })
-            .catch(function(err){ console.error('[Swap Bullet] Load error:', err); });
+    // ── Trade Date do import: o campo mostra dd/mm/yyyy, o POST vai em ISO ──
+    function apiRefDate() {
+        var el = document.getElementById('apiRefDate');
+        var v = (el && el.value) || '';
+        var m = v.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+        return m ? (m[3] + '-' + m[2] + '-' + m[1]) : v;
+    }
+    function apiRefDateLabel() { var el = document.getElementById('apiRefDate'); return (el && el.value) || ''; }
+    function apiRefIsToday() { return apiRefDateLabel() === _todayDmy(); }
+
+    // ── Import: a fila do dropzone → dry-run → duplicatas → /cache/batch ──
+    function runImport() {
+        var importBtn = document.getElementById('importBtn');
+        var dz = window.myDropzone || ((typeof Dropzone !== 'undefined') ? Dropzone.forElement('#myAwesomeDropzone') : null);
+        var files = (dz && dz.files) ? dz.files.filter(function(f){ return /\.(xlsx|xlsm|pdf)$/i.test(f.name); }) : [];
+        if (!files.length) {
+            Swal.fire({ icon: 'info', title: 'Import', text: 'No file in the dropzone. Drop the Deal Ticket (.xlsx or .pdf) first.',
+                        confirmButtonText: t('swal-ok', 'OK'), confirmButtonColor: '#0066cc' });
+            return;
+        }
+        importBtn.disabled = true;
+        importBtn.innerHTML = '<i class="ti ti-loader-2 ti-spin me-1"></i> Importing...';
+        function _restore() { importBtn.disabled = false; importBtn.innerHTML = '<i class="ti ti-upload me-1"></i> Import'; }
+        function _escHtml(s) { return $('<div>').text(s == null ? '' : String(s)).html(); }
+        // 1) dry-run de cada arquivo: só parseia, devolve os deals
+        var parsed = [], ignored = [], missing = {}, errors = [];
+        var chain = Promise.resolve();
+        files.forEach(function(f){
+            chain = chain.then(function(){
+                var fd = new FormData();
+                fd.append('file', f);
+                fd.append('trade_date', apiRefDate());
+                fd.append('dry_run', '1');
+                return fetch('/api/new-deals/swap-bullet/import-file?dry_run=1', { method: 'POST', body: fd, credentials: 'same-origin' })
+                    .then(function(r){ return r.json(); })
+                    .then(function(res){
+                        if (!res || !res.success) { errors.push(f.name + ': ' + ((res && res.message) || t('swal-import-failed', 'Import failed'))); return; }
+                        parsed = parsed.concat(res.deals || []);
+                        ignored = ignored.concat((res.ignored || []).map(function(x){ return f.name + ' › ' + x; }));
+                        Object.keys(res.missing || {}).forEach(function(k){ missing[k] = res.missing[k]; });
+                    });
+            });
+        });
+        chain.then(function(){
+            if (!parsed.length) {
+                _restore();
+                Swal.fire({ icon: errors.length ? 'error' : 'info', title: t('swal-imported', 'Imported'),
+                            html: (errors.length ? _escHtml(errors.join('; ')) : '0 ' + t('swal-deals-imported', 'deal(s) imported.')) });
+                return;
+            }
+            // 2) duplicatas: Deal já na grade → substituir / pular / cancelar (como o FXO)
+            var dups = [], news = [];
+            parsed.forEach(function(d){ (DEALS[d._id] ? dups : news).push(d); });
+            function _saveAndRender(finalDeals) {
+                if (!finalDeals.length) { _restore(); if (dz) dz.removeAllFiles(true); return; }
+                fetch('/api/new-deals/swap-bullet/cache/batch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+                       body: JSON.stringify({ deals: finalDeals }) })
+                .then(function(r){ return r.json(); }).then(function(res){
+                    _restore();
+                    if (!res || !res.success) { Swal.fire({ icon: 'error', title: 'Error', text: (res && res.message) || t('swal-import-failed', 'Import failed') }); return; }
+                    if (dz) dz.removeAllFiles(true);
+                    if (window.fetchNotifications) window.fetchNotifications();
+                    // Import de outro dia: leva a tela para aquele dia antes de
+                    // mexer na tabela — o filtro padrão é Trade Date = hoje.
+                    if (!apiRefIsToday()) sfSetTradeDate(apiRefDateLabel()); else sfApply();
+                    var missKeys = Object.keys(missing).filter(function(k){ return finalDeals.some(function(d){ return d._id === k; }); });
+                    var extra = '';
+                    if (missKeys.length) {
+                        extra += '<div class="text-start mt-2 fs-xs"><b>Cannot be sent yet — fill in or register:</b><ul class="mb-0 ps-3">' +
+                            missKeys.map(function(k){ var dd = finalDeals.filter(function(d){ return d._id === k; })[0] || {}; return '<li><b>' + _escHtml((dd.Client || '') + (dd.Deal ? ' · ' + dd.Deal : '')) + '</b>: ' + _escHtml(missing[k].join('; ')) + '</li>'; }).join('') + '</ul></div>';
+                    }
+                    if (ignored.length) extra += '<div class="text-start mt-2 fs-xs text-muted">Ignored (not a Deal Ticket): ' + _escHtml(ignored.join(', ')) + '</div>';
+                    if (errors.length) extra += '<div class="text-start mt-2 fs-xs text-danger">' + _escHtml(errors.join('; ')) + '</div>';
+                    Swal.fire({ icon: missKeys.length || errors.length ? 'warning' : 'success', title: t('swal-imported', 'Imported'),
+                                html: (res.imported || 0) + ' ' + t('swal-deals-imported', 'deal(s) imported.') + extra, width: 640,
+                                showConfirmButton: !!(missKeys.length || errors.length || ignored.length), confirmButtonText: t('swal-ok', 'OK'), confirmButtonColor: '#198754',
+                                timer: (missKeys.length || errors.length || ignored.length) ? undefined : 2200 });
+                }).catch(function(e){ _restore(); Swal.fire({ icon: 'error', title: 'Error', text: String(e) }); });
+            }
+            if (!dups.length) { _saveAndRender(news); return; }
+            var listHtml = '<div style="max-height:240px;overflow:auto;text-align:left"><table style="width:100%;font-size:0.82rem;border-collapse:collapse">' +
+                '<thead><tr style="background:#f1f3f5"><th style="padding:4px 8px;text-align:left">Deal</th><th style="padding:4px 8px;text-align:left">Client</th></tr></thead><tbody>' +
+                dups.map(function(d){ return '<tr><td style="padding:3px 8px;border-top:1px solid #eee">' + _escHtml(d.Deal || d._id) + '</td><td style="padding:3px 8px;border-top:1px solid #eee">' + _escHtml(d.Client) + '</td></tr>'; }).join('') +
+                '</tbody></table></div>';
+            Swal.fire({
+                icon: 'warning', title: t('swal-fxo-dup-title', 'Duplicate deals'),
+                html: '<p>' + t('swal-fxo-dup-text', 'The following Deal + Client already exist in the table. Replace them?') + '</p>' + listHtml,
+                width: 620, showCancelButton: true, showDenyButton: true,
+                confirmButtonText: t('swal-fxo-dup-replace', 'Yes, replace'), denyButtonText: t('swal-fxo-dup-skip', 'No, skip duplicates'), cancelButtonText: t('swal-cancel', 'Cancel'),
+                confirmButtonColor: '#198754', denyButtonColor: '#6c757d', cancelButtonColor: '#dc3545'
+            }).then(function(result){
+                if (result.isConfirmed) _saveAndRender(news.concat(dups.map(function(d){ return $.extend({}, d, { _replace: true }); })));
+                else if (result.isDenied) _saveAndRender(news);
+                else _restore();
+            });
+        }).catch(function(e){ _restore(); Swal.fire({ icon: 'error', title: 'Error', text: String(e) }); });
     }
 
-    // ── Import: dropzone → /import-file ─────────────────────────────────────
-    var drop = document.getElementById('swbDrop'), fileInput = document.getElementById('swbFile');
-    function setBusy(b) { drop.classList.toggle('is-busy', b); }
-    function uploadFile(file) {
-        if (!file) return;
-        setBusy(true);
-        var fd = new FormData();
-        fd.append('file', file);
-        fd.append('trade_date', (document.getElementById('swbTradeDate').value || '').trim());
-        fetch('/api/new-deals/swap-bullet/import-file', { method: 'POST', body: fd, credentials: 'same-origin' })
-            .then(function(r){ return r.json().then(function(j){ return {ok:r.ok, data:j}; }); })
-            .then(function(o){
-                setBusy(false);
-                if (!o.ok || !o.data.success) {
-                    Swal.fire({ title: 'Import', text: o.data.message || 'Import failed.', icon: 'error', confirmButtonText: 'OK', confirmButtonColor: '#dc3545' });
+    // ── Economic Affirmation (IF, D0) — o mesmo botão e fluxo das páginas de Options ──
+    function _runEmailAction(btn, endpoint, emptyText) {
+        if (btn.dataset.running === '1') return;
+        btn.dataset.running = '1';
+        var prevHtml = btn.innerHTML;
+        btn.style.pointerEvents = 'none';
+        btn.innerHTML = '<i class="ti ti-loader-2 ti-spin me-1"></i>';
+        var _reset = function () { btn.dataset.running = ''; btn.style.pointerEvents = ''; btn.innerHTML = prevHtml; };
+        fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+               body: JSON.stringify({ deals: ENTRIES }) })
+        .then(function (r) { return _handleEmailResponse(r, emptyText); })
+        .then(function () { _reset(); })
+        .catch(function (err) { _reset(); Swal.fire({ title: t('swal-err-title', 'Error'), text: t('swal-request-failed', 'Request failed:') + ' ' + err.message, icon: 'error', confirmButtonText: t('swal-ok', 'OK'), confirmButtonColor: '#dc3545' }); });
+    }
+    // JSON = "nada a gerar" / erro; arquivo (.eml/.zip) = baixa e abre no Outlook do usuário (X-Unsent → rascunho).
+    function _handleEmailResponse(r, emptyText) {
+        var ct = (r.headers.get('Content-Type') || '');
+        if (ct.indexOf('application/json') !== -1) {
+            return r.json().then(function (res) {
+                if (res.ok && (res.count || 0) === 0) {
+                    Swal.fire({ title: t('swal-email-none-title', 'Nothing to Generate'), text: emptyText, icon: 'info', confirmButtonText: t('swal-ok', 'OK'), confirmButtonColor: '#0066cc' });
                     return;
                 }
-                if (window.fetchNotifications) window.fetchNotifications();
-                var msg = (o.data.imported || 0) + ' deal(s) imported with Trade Date ' + _isoToDmy(o.data.trade_date) + '.';
-                var extra = '';
-                var miss = o.data.missing || {};
-                var missKeys = Object.keys(miss);
-                if (missKeys.length) {
-                    extra += '<div class="text-start mt-2 fs-xs"><b>Cannot be sent yet — fill in or register:</b><ul class="mb-0 ps-3">' +
-                        missKeys.map(function(k){ return '<li><b>' + esc(k) + '</b>: ' + esc(miss[k].join('; ')) + '</li>'; }).join('') + '</ul></div>';
-                }
-                if (o.data.ignored && o.data.ignored.length) extra += '<div class="text-start mt-2 fs-xs text-muted">Ignored (not a Deal Ticket): ' + esc(o.data.ignored.join(', ')) + '</div>';
-                Swal.fire({ title: 'Import', html: esc(msg) + extra, icon: missKeys.length ? 'warning' : 'success', confirmButtonText: 'OK', confirmButtonColor: '#198754', width: 640 });
-                var dmy = _isoToDmy(o.data.trade_date);
-                if (dmy) { sfActive = sfActive.filter(function (f) { return !f.col.isDate; }); sfAddFilter(SF_TRADE_DATE, dmy, 'exact'); document.getElementById('sfSearchBtn').click(); }
-            })
-            .catch(function(err){ setBusy(false); Swal.fire({ title: 'Error', text: 'Request failed: ' + err.message, icon: 'error', confirmButtonText: 'OK', confirmButtonColor: '#dc3545' }); });
+                Swal.fire({ title: t('swal-err-title', 'Error'), text: res.error || res.message || t('swal-request-failed', 'Request failed:'), icon: 'error', confirmButtonText: t('swal-ok', 'OK'), confirmButtonColor: '#dc3545' });
+            });
+        }
+        var count = r.headers.get('X-Draft-Count') || '';
+        var cd = r.headers.get('Content-Disposition') || '';
+        var m = /filename="?([^"]+)"?/.exec(cd);
+        var fname = (m && m[1]) ? m[1] : 'otc_email_draft.eml';
+        return r.blob().then(function (blob) {
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a'); a.href = url; a.download = fname;
+            document.body.appendChild(a); a.click(); a.remove();
+            setTimeout(function () { URL.revokeObjectURL(url); }, 1500);
+            Swal.fire({ title: t('swal-email-ok-title', 'Drafts Downloaded'), text: count + ' ' + t('swal-email-ok-text', 'e-mail draft(s) downloaded. Open the file to edit in your Outlook.'),
+                        icon: 'success', confirmButtonText: t('swal-ok', 'OK'), confirmButtonColor: '#0066cc', timer: 4000, timerProgressBar: true });
+        });
     }
-    drop.addEventListener('click', function () { fileInput.click(); });
-    drop.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); } });
-    fileInput.addEventListener('change', function () { if (this.files && this.files[0]) uploadFile(this.files[0]); this.value = ''; });
-    ['dragenter', 'dragover'].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); e.stopPropagation(); drop.classList.add('is-drag'); }); });
-    ['dragleave', 'drop'].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); e.stopPropagation(); drop.classList.remove('is-drag'); }); });
-    drop.addEventListener('drop', function (e) { var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]; if (f) uploadFile(f); });
+    (function () {
+        var econAffContainer = document.querySelector('.econAffBtn');
+        if (!econAffContainer || document.getElementById('econAffBtn')) return;
+        var econAffBtn = document.createElement('button');
+        econAffBtn.id = 'econAffBtn';
+        econAffBtn.className = 'btn btn-sm btn-soft-info bg-gradient btn-toolbar-all';
+        econAffBtn.setAttribute('type', 'button');
+        econAffBtn.setAttribute('data-bs-toggle', 'tooltip'); econAffBtn.setAttribute('data-bs-placement', 'bottom');
+        econAffBtn.setAttribute('data-bs-title', t('nd-btn-econaff', 'Economic Affirmation (IF, D0)'));
+        econAffBtn.innerHTML = '<i class="ti ti-mail-check me-1"></i><span data-lang="nd-btn-econaff">Econ. Affirmation</span>';
+        econAffContainer.appendChild(econAffBtn);
+        econAffBtn.addEventListener('click', function () {
+            _runEmailAction(this, '/api/new-deals/swap-bullet/economic-affirmation',
+                t('swal-econaff-none', 'No financial-institution operations traded today to affirm.'));
+        });
+    })();
 
     // ── Preview dos arquivos (duplo clique / botão) ─────────────────────────
     function previewDeal(dealId) {
@@ -509,7 +734,7 @@ $(document).ready(function() {
         .then(function(r){ return r.json().then(function(j){ return {ok:r.ok, data:j}; }); })
         .then(function(o){
             if (!o.ok || !o.data.success) {
-                Swal.fire({ title: _t('nd-swb-preview-title', 'B3 file preview'), html: '<div class="text-start fs-sm">' + esc(o.data.message || 'Preview failed.').replace(/; /g, '<br>') + '</div>',
+                Swal.fire({ title: t('nd-swb-preview-title', 'B3 file preview'), html: '<div class="text-start fs-sm">' + esc(o.data.message || 'Preview failed.').replace(/; /g, '<br>') + '</div>',
                             icon: 'warning', confirmButtonText: 'OK', confirmButtonColor: '#dc3545' });
                 return;
             }
@@ -541,37 +766,34 @@ $(document).ready(function() {
                     '<div class="text-start fs-xs text-muted mt-2" data-lang="nd-swb-file-raw">Raw file</div>' +
                     '<div class="swb-preview-line">' + esc(raw) + '</div></div>';
             }).join('');
-            var html = '<div class="text-start fs-xs text-muted mb-2"><b>' + esc(dealId) + '</b> &nbsp;·&nbsp; ' + esc(e.Client || '') + ' &nbsp;·&nbsp; ' + esc(e.Pair || '') + '</div>' +
+            var html = '<div class="text-start fs-xs text-muted mb-2"><b>' + esc(e.Deal || e._id) + '</b> &nbsp;·&nbsp; ' + esc(e.Client || '') + ' &nbsp;·&nbsp; ' + esc(e.LE || '') + ' · ' + esc(e.LOB || '') + (e.B3ID ? ' &nbsp;·&nbsp; B3 ID ' + esc(e.B3ID) : '') + '</div>' +
                 '<ul class="nav nav-tabs swb-preview-tabs">' + tabs + '</ul><div class="tab-content">' + panes + '</div>';
-            Swal.fire({ title: _t('nd-swb-preview-title', 'B3 file preview'), html: html, width: 1000, showCloseButton: true, showConfirmButton: false });
+            Swal.fire({ title: t('nd-swb-preview-title', 'B3 file preview'), html: html, width: 1000, showCloseButton: true, showConfirmButton: false });
         }).catch(function(err){ Swal.fire({ title: 'Error', text: 'Request failed: ' + err.message, icon: 'error', confirmButtonText: 'OK', confirmButtonColor: '#dc3545' }); });
     }
     $('#swb-table tbody').on('dblclick', 'tr', function(e) {
         if ($(e.target).closest('td').index() <= 1) return;
-        var d = dt.row(this).data(); if (d) previewDeal(d[C_ID]);
-    });
-    document.getElementById('btnPreviewSwb').addEventListener('click', function(){
-        var ids = Array.from(selected); if (ids.length) previewDeal(ids[0]);
+        var d = table.row(this).data(); if (d) previewDeal(d[C_ID]);
     });
 
     // ── Seleção ─────────────────────────────────────────────────────────────
-    function toggleBulkBtns(show) {
-        ['btnDelSwb','btnSendSwb','btnPreviewSwb'].forEach(function(id){ var b=document.getElementById(id); if(b) b.classList.toggle('d-none',!show); });
+    function toggleActionButtons(show) {
+        $('[data-table-preview-selected],[data-table-send-selected],[data-table-delete-selected]').toggleClass('d-none', !show);
     }
     function syncSelectAll() {
         var total = Object.keys(DEALS).length, sel = selected.size;
-        $('.swb-cb-all').each(function(){ if(sel===0){this.checked=false;this.indeterminate=false;} else if(sel>=total){this.checked=true;this.indeterminate=false;} else{this.checked=false;this.indeterminate=true;} });
-        toggleBulkBtns(sel >= 1);
+        $('#selectAll').each(function(){ if(sel===0){this.checked=false;this.indeterminate=false;} else if(sel>=total){this.checked=true;this.indeterminate=false;} else{this.checked=false;this.indeterminate=true;} });
+        toggleActionButtons(sel >= 1);
     }
-    $('[data-table-rows]').on('change',function(){ dt.page.len(parseInt(this.value)).draw(); });
-    $('[data-table-rows]').val(String(dt.page.len()));
-    $(document).on('click','.swb-cb-all',function() {
+    $('[data-table-set-rows-per-page]').on('change',function(){ table.page.len(parseInt(this.value)).draw(); });
+    // Delegado (o clone do header do scrollX carrega o mesmo id).
+    $(document).on('click','#selectAll',function() {
         selected.clear();
-        if(this.checked) { dt.rows({ search: 'applied' }).every(function(){ var d=this.data(),id=d?d[C_ID]:null; if(id) selected.add(id); }); }
-        dt.draw(false);
+        if(this.checked) { table.rows({ search: 'applied', page: 'all' }).every(function(){ var d=this.data(),id=d?d[C_ID]:null; if(id) selected.add(id); }); }
+        table.draw(false);
     });
     $('#swb-table tbody').on('change','input[type="checkbox"]',function() {
-        var d=dt.row($(this).closest('tr')[0]).data(), id=d?d[C_ID]:null;
+        var d=table.row($(this).closest('tr')[0]).data(), id=d?d[C_ID]:null;
         if(id){ if(this.checked) selected.add(id); else selected.delete(id); }
         syncSelectAll();
     });
@@ -592,13 +814,12 @@ $(document).ready(function() {
             }).catch(function(err){ Swal.fire({ icon:'error', title:'Delete failed', text:String(err && err.message || err), confirmButtonColor:'#dc3545' }); });
         });
     }
-    document.getElementById('btnDelSwb').addEventListener('click', function(){ deleteDeals(Array.from(selected)); });
-    $(document).on('click','#swb-table tbody .btn-row-delete',function(e) { e.preventDefault(); var d = dt.row($(this).closest('tr')[0]).data(); if (d) deleteDeals([d[C_ID]]); });
+    $(document).on('click','#swb-table tbody .btn-row-delete',function(e) { e.preventDefault(); var d = table.row($(this).closest('tr')[0]).data(); if (d) deleteDeals([d[C_ID]]); });
 
-    // ── Confirm (New → Approved direto; Pending → Approved por OUTRO usuário) ──
+    // ── Confirm (New → Approved direto; Amend → Pending; Pending → Approved por OUTRO usuário) ──
     $(document).on('click','#swb-table tbody .btn-row-confirm',function(e) {
         e.preventDefault();
-        var d=dt.row($(this).closest('tr')[0]).data(); if(!d) return;
+        var d=table.row($(this).closest('tr')[0]).data(); if(!d) return;
         var id = d[C_ID];
         fetch('/api/new-deals/swap-bullet/confirm', { method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin',
             body: JSON.stringify({ deal_id: id, trade_date: (DEALS[id] && DEALS[id].TradeDate) || '' }) })
@@ -635,8 +856,7 @@ $(document).ready(function() {
             }).catch(function(err) { Swal.fire({ title: 'Error', text: 'Request failed: ' + err.message, icon: 'error', confirmButtonText: 'OK', confirmButtonColor: '#dc3545' }); });
         });
     }
-    $(document).on('click','#swb-table tbody .btn-row-send',function(e) { e.preventDefault(); var d=dt.row($(this).closest('tr')[0]).data(); if(d) sendDeals([d[C_ID]]); });
-    document.getElementById('btnSendSwb').addEventListener('click',function() { sendDeals(Array.from(selected)); });
+    $(document).on('click','#swb-table tbody .btn-row-send',function(e) { e.preventDefault(); var d=table.row($(this).closest('tr')[0]).data(); if(d) sendDeals([d[C_ID]]); });
 
     // ── Modal: editar / adicionar ───────────────────────────────────────────
     var modalEl = document.getElementById('swbModal');
@@ -655,11 +875,15 @@ $(document).ready(function() {
     function openModal(entry) {
         var isEdit = !!entry;
         modalEl.querySelector('.modal-title').innerHTML = isEdit
-            ? '<i class="ti ti-edit me-1"></i>' + _t('nd-swb-modal-edit', 'Edit Deal — Swap Bullet') + ' · ' + esc(entry.Deal)
-            : '<i class="ti ti-plus me-1"></i>' + _t('nd-swb-modal-add', 'Add Deal — Swap Bullet');
-        var e = entry || { Type: 'Pagamento Final', Pair: 'JPM x CLI', Currency: 'BRL', Adhesion: 'CGD', Functionality: 'N/A', PremiumSchedule: 'Não', Reset: 'Não', LOB: 'EDG',
+            ? '<i class="ti ti-edit me-1"></i>' + t('nd-swb-modal-edit', 'Edit Deal — Swap Bullet') + ' · ' + esc(entry.Deal || entry.Client || '')
+            : '<i class="ti ti-plus me-1"></i>' + t('nd-swb-modal-add', 'Add Deal — Swap Bullet');
+        var e = entry || { Type: 'Pagamento Final', LE: 'JPM', LOB: 'EDG', Currency: 'BRL', Adhesion: 'CGD', Functionality: 'N/A', PremiumSchedule: 'Não', Reset: 'Não', LOB: 'EDG',
                            CurveACategory: 'JUROS', CurveAPct: '100.00', CurveASign: '+', CurveARate: '0.0000', CurveBCategory: 'VCP', CurveBPct: '100.00', CurveBSign: '+', CurveBRate: '0.0000' };
-        var html = '<div class="col-md-2">' + '<label class="form-label fs-xs text-muted mb-1" data-lang="nd-col-trade-date">Trade Date</label><input type="text" class="form-control form-control-sm swb-date" id="swb-f-TradeDate" data-f="TradeDate" value="' + esc(isEdit ? _isoToDmy(e.TradeDate) : (document.getElementById('swbTradeDate').value || _todayIso())) + '" placeholder="dd/mm/aaaa" autocomplete="off"' + (isEdit ? ' readonly' : '') + '></div>';
+        var html = '<div class="col-md-2">' + '<label class="form-label fs-xs text-muted mb-1" data-lang="nd-col-trade-date">Trade Date</label><input type="text" class="form-control form-control-sm swb-date" id="swb-f-TradeDate" data-f="TradeDate" value="' + esc(isEdit ? _isoToDmy(e.TradeDate) : (apiRefDate() || _todayIso())) + '" placeholder="dd/mm/aaaa" autocomplete="off"' + (isEdit ? ' readonly' : '') + '></div>';
+        html += '<div class="col-md-2">' + fieldInput('LE', 'LE', e.LE || 'JPM') + '</div>' +
+                '<div class="col-md-2">' + fieldInput('LOB', 'LOB', e.LOB || '') + '</div>' +
+                '<div class="col-md-2">' + fieldInput('Deal', 'Deal', e.Deal || '') + '</div>' +
+                '<div class="col-md-2">' + fieldInput('B3ID', 'B3 ID', e.B3ID || '') + '</div>';
         SWB_COLS.forEach(function(c){
             var f = c[0]; if (f === 'Maker' || f === 'Checker') return;
             var w = (f === 'VcpText') ? 'col-12' : (f === 'VcpDescription' || f.indexOf('Denomination') === 0 || f === 'Client') ? 'col-md-4' : 'col-md-2';
@@ -667,7 +891,28 @@ $(document).ready(function() {
         });
         document.getElementById('swbEditGrid').innerHTML = html;
         if (window.otcDateField) document.querySelectorAll('#swbEditGrid input.swb-date:not([readonly])').forEach(function(el){ window.otcDateField(el); });
-        $(modalEl).data('dealId', isEdit ? entry.Deal : null);
+        // A contraparte é a do Reference Data pela SPN: digitou a SPN, puxa
+        // nome, conta B3 e CNPJ na hora (o servidor re-puxa ao gravar).
+        var spnEl = document.getElementById('swb-f-SPN');
+        if (spnEl) spnEl.addEventListener('change', function(){
+            var spn = this.value.trim(); if (!spn) return;
+            fetch('/api/new-deals/swap-bullet/refdata?spn=' + encodeURIComponent(spn), { credentials: 'same-origin' })
+            .then(function(r){ return r.json(); }).then(function(res){
+                var cli = document.getElementById('swb-f-Client'), acc = document.getElementById('swb-f-ClientAccount'), tax = document.getElementById('swb-f-ClientTaxId');
+                if (res && res.found) {
+                    var leEl = document.getElementById('swb-f-LE');
+                    if (leEl && res.le) leEl.value = res.le === 'ATACAMA' ? 'ATACAMA' : 'JPM';
+                    if (cli) cli.value = res.client || cli.value;
+                    if (acc) acc.value = res.account || '';
+                    if (tax) tax.value = res.account ? '' : (res.taxid || '');
+                    if (cli) cli.classList.remove('is-invalid');
+                } else {
+                    if (cli) cli.classList.add('is-invalid');
+                    Swal.fire({ icon: 'warning', title: 'SPN ' + spn, text: 'Not found in Reference Data nor in Legal Entity × SPN — register the counterparty first.', confirmButtonText: t('swal-ok', 'OK'), confirmButtonColor: '#dc3545' });
+                }
+            }).catch(function(){});
+        });
+        $(modalEl).data('dealId', isEdit ? (entry._id || entry.Deal) : null);
         bootstrap.Modal.getOrCreateInstance(modalEl).show();
     }
     function readModal() {
@@ -682,8 +927,7 @@ $(document).ready(function() {
         });
         return out;
     }
-    document.getElementById('btnAddSwb').addEventListener('click', function(){ openModal(null); });
-    $(document).on('click','#swb-table tbody .btn-row-edit',function(e) { e.preventDefault(); var d=dt.row($(this).closest('tr')[0]).data(); if(d && DEALS[d[C_ID]]) openModal(DEALS[d[C_ID]]); });
+    $(document).on('click','#swb-table tbody .btn-row-edit',function(e) { e.preventDefault(); var d=table.row($(this).closest('tr')[0]).data(); if(d && DEALS[d[C_ID]]) openModal(DEALS[d[C_ID]]); });
     document.getElementById('swbSaveBtn').addEventListener('click', function() {
         var dealId = $(modalEl).data('dealId') || null;
         var fields = readModal();
@@ -702,144 +946,155 @@ $(document).ready(function() {
     });
     $(modalEl).on('hidden.bs.modal', function(){ $(this).removeData('dealId'); document.getElementById('swbEditGrid').innerHTML=''; });
 
-    // ── Smart Filter (Trade Date comanda o fetch; o resto filtra a grade) ────
-    var sfInput=document.getElementById('sfInput'), sfDropdown=document.getElementById('sfDropdown'),
-        sfChips=document.getElementById('sfChips'), sfWrapper=document.getElementById('sfWrapper'),
-        sfActive=[], sfKbdIdx=-1;
-    var SF_COLS=SWB_COLS.map(function(c,i){ return {label:c[1], dtCol:i+C_OFF, type:(SWB_DATE[c[0]] ? 'date' : (SWB_NUM[c[0]] ? 'number' : 'text'))}; });
-    var SF_TRADE_DATE = {label:'Trade Date', dtCol:C_TD, type:'date', isDate:true};
-    SF_COLS.unshift(SF_TRADE_DATE);
-    SF_COLS.unshift({label:'Status', dtCol:C_STATUS, type:'text'});
-    SF_COLS.push({label:'Deal', dtCol:C_ID, type:'text'});
-    function sfIsDateLike(s){return /^\d{1,2}[\/\-]\d/.test(s)||/^\d{4}[\/\-]/.test(s);}
-    function sfToDate(s){
-        s=String(s||'').trim().split('T')[0].split(' ')[0]; if(!s) return null; var m;
-        if((m=s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/))) return new Date(+m[3],+m[2]-1,+m[1]);
-        if((m=s.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/))) return new Date(+m[1],+m[2]-1,+m[3]);
-        if((m=s.match(/^(\d{4})(\d{2})(\d{2})$/)))                 return new Date(+m[1],+m[2]-1,+m[3]);
-        return null;
-    }
-    var SF_RANGE_WORDS={en:{from:'FROM',to:'TO'},br:{from:'DE',to:'ATÉ'},es:{from:'DESDE',to:'HASTA'}};
-    function sfRangeWord(mode){var lang=localStorage.getItem('__OTC_TRACKER_LANG__')||'en';var m=SF_RANGE_WORDS[lang]||SF_RANGE_WORDS.en;return mode==='from'?m.from:m.to;}
-    function sfFilterKey(col,mode){return col.type==='date'?(col.dtCol+'|'+mode):String(col.dtCol);}
-    function sfDateCandidates(){
-        var out=[];
-        SF_COLS.filter(function(c){return c.type==='date';}).forEach(function(col){
-            var hasFrom=sfActive.some(function(f){return f.col.dtCol===col.dtCol&&f.mode==='from';});
-            var hasTo=sfActive.some(function(f){return f.col.dtCol===col.dtCol&&f.mode==='to';});
-            if(hasFrom&&!hasTo){out.push({col:col,mode:'to',label:sfRangeWord('to')+': '+col.label});}
-            else{out.push({col:col,mode:'from',label:sfRangeWord('from')+': '+col.label});out.push({col:col,mode:'exact',label:col.label});}
+    // ========================================================================
+    // SMART FILTER — o mesmo das páginas de New Deals, com as COLUNAS desta
+    // página: os chips viram `filters` [{field, type, value, mode}] e o
+    // servidor (`/cache/search`, `_deal_matches`) responde com os deals.
+    // ========================================================================
+    var SF_COLS = [
+        { label: 'Status',     type: 'text', dtCol: C_STATUS, field: 'Status' },
+        { label: 'LE',         type: 'text', dtCol: C_LE,     field: 'LE' },
+        { label: 'LOB',        type: 'text', dtCol: C_LOB,    field: 'LOB' },
+        { label: 'Deal',       type: 'text', dtCol: C_DEAL,   field: 'Deal' },
+        { label: 'B3 ID',      type: 'text', dtCol: C_B3,     field: 'B3ID' },
+        { label: 'Trade Date', type: 'date', dtCol: C_TD,     field: 'TradeDate' }
+    ];
+    SWB_COLS.forEach(function(c, i){
+        SF_COLS.push({ label: c[1], dtCol: i + C_OFF, field: c[0],
+                       type: SWB_DATE[c[0]] ? 'date' : (SWB_NUM[c[0]] ? 'number' : 'text') });
+    });
+    var sfActive = [];
+    var sfKbdIdx = -1;
+    var sfInput = document.getElementById('sfInput'), sfDropdown = document.getElementById('sfDropdown'),
+        sfChips = document.getElementById('sfChips'), sfWrapper = document.getElementById('smartFilter');
+
+    function sfIsDateLike(s) { return /^\d{1,2}[\/\-]\d/.test(s) || /^\d{4}[\/\-]/.test(s); }
+    var SF_RANGE_WORDS = { en: { from: 'FROM', to: 'TO' }, br: { from: 'DE', to: 'ATÉ' }, es: { from: 'DESDE', to: 'HASTA' } };
+    function sfRangeWord(mode) { var lang = localStorage.getItem('__OTC_TRACKER_LANG__') || 'en'; var m = SF_RANGE_WORDS[lang] || SF_RANGE_WORDS.en; return mode === 'from' ? m.from : m.to; }
+    function sfFilterKey(col, mode) { return col.type === 'date' ? (col.dtCol + '|' + mode) : (mode === 'not' ? col.dtCol + '|not' : String(col.dtCol)); }
+    function sfDateCandidates() {
+        var out = [];
+        SF_COLS.filter(function(c) { return c.type === 'date'; }).forEach(function(col) {
+            var hasFrom = sfActive.some(function(f) { return f.col.dtCol === col.dtCol && f.mode === 'from'; });
+            var hasTo   = sfActive.some(function(f) { return f.col.dtCol === col.dtCol && f.mode === 'to'; });
+            if (hasFrom && !hasTo) out.push({ col: col, mode: 'to', label: sfRangeWord('to') + ': ' + col.label });
+            else { out.push({ col: col, mode: 'from', label: sfRangeWord('from') + ': ' + col.label }); out.push({ col: col, mode: 'exact', label: col.label }); }
         });
-        out.sort(function(a,b){return (a.mode==='to'?0:1)-(b.mode==='to'?0:1);});
+        out.sort(function(a, b) { return (a.mode === 'to' ? 0 : 1) - (b.mode === 'to' ? 0 : 1); });
         return out;
     }
-    function sfCandidates(val){
-        if(!val) return [];
-        if(!/^\d/.test(val)) return SF_COLS.filter(function(c){return c.type==='text';}).map(function(c){return{col:c,mode:'text',label:c.label};});
-        if(sfIsDateLike(val)) return sfDateCandidates();
-        var out=[];
-        SF_COLS.forEach(function(c){ if(c.type==='number') out.push({col:c,mode:'number',label:c.label}); else if(c.type==='date') out.push({col:c,mode:'exact',label:c.label}); else out.push({col:c,mode:'text',label:c.label}); });
+    function sfCandidates(val) {
+        if (!val) return [];
+        if (!/^\d/.test(val)) return SF_COLS.filter(function(c) { return c.type === 'text'; }).map(function(c) { return { col: c, mode: 'text', label: c.label }; });
+        if (sfIsDateLike(val)) return sfDateCandidates();
+        var out = [];
+        SF_COLS.forEach(function(c) {
+            if (c.type === 'number') out.push({ col: c, mode: 'number', label: c.label });
+            else if (c.type === 'date') out.push({ col: c, mode: 'exact', label: c.label });
+        });
+        // Texto que começa com dígito (SPN, conta, código) também é candidato.
+        SF_COLS.filter(function(c) { return c.type === 'text' && /SPN|Account|Code|Deal|Tax/.test(c.label); }).forEach(function(c){ out.push({ col: c, mode: 'text', label: c.label }); });
         return out;
     }
     function sfRenderDropdown(val) {
-        sfDropdown.innerHTML=''; sfKbdIdx=-1;
-        var matches=sfCandidates(val);
-        if(!matches.length){sfDropdown.style.display='none';return;}
+        sfDropdown.innerHTML = ''; sfKbdIdx = -1;
+        var matches = sfCandidates(val);
+        if (!matches.length) { sfDropdown.style.display = 'none'; return; }
         matches.forEach(function(cand) {
-            var col=cand.col, li=document.createElement('li');
-            li.innerHTML='<span class="sf-type-badge sf-type-'+col.type+'">'+col.type+'</span><span>'+esc(cand.label)+'</span>';
-            li.addEventListener('mousedown',function(e){e.preventDefault();sfAddFilter(cand.col,sfInput.value.trim(),cand.mode);});
+            var col = cand.col, li = document.createElement('li');
+            var badgeCls = col.type === 'date' ? 'sf-type-date' : col.type === 'number' ? 'sf-type-number' : 'sf-type-text';
+            li.innerHTML = '<span class="sf-type-badge ' + badgeCls + '">' + col.type + '</span><span>' + esc(cand.label) + '</span>';
+            li.addEventListener('mousedown', function(e) { e.preventDefault(); sfAddFilter(cand.col, sfInput.value.trim(), cand.mode); });
             sfDropdown.appendChild(li);
         });
-        sfDropdown.style.display='block';
+        sfDropdown.style.display = 'block';
     }
-    function sfAddFilter(col,value,mode) {
-        if(!value) return;
-        mode = mode || (col.type==='date'?'exact':col.type);
-        if(col.type==='date'){
-            if(mode==='exact'){sfActive=sfActive.filter(function(f){return f.col.dtCol!==col.dtCol;});}
-            else{sfActive=sfActive.filter(function(f){return !(f.col.dtCol===col.dtCol&&(f.mode===mode||f.mode==='exact'));});}
-        } else { sfActive=sfActive.filter(function(f){return f.col.dtCol!==col.dtCol;}); }
-        sfActive.push({col:col,value:value,mode:mode,key:sfFilterKey(col,mode)}); sfInput.value=''; sfDropdown.style.display='none'; sfKbdIdx=-1;
+    function sfAddFilter(col, value, mode) {
+        if (!value) return;
+        mode = mode || (col.type === 'date' ? 'exact' : col.type);
+        if (col.type === 'date') {
+            if (mode === 'exact') sfActive = sfActive.filter(function(f) { return f.col.dtCol !== col.dtCol; });
+            else sfActive = sfActive.filter(function(f) { return !(f.col.dtCol === col.dtCol && (f.mode === mode || f.mode === 'exact')); });
+        } else {
+            sfActive = sfActive.filter(function(f) { return f.col.dtCol !== col.dtCol; });
+        }
+        sfActive.push({ col: col, value: value, mode: mode, key: sfFilterKey(col, mode) });
+        sfInput.value = ''; sfDropdown.style.display = 'none'; sfKbdIdx = -1;
         sfRenderChips(); sfInput.focus();
     }
-    function sfChipPrefix(f){ if(f.col.type==='date'&&(f.mode==='from'||f.mode==='to')) return sfRangeWord(f.mode)+' '+f.col.label.toUpperCase(); return f.col.label.toUpperCase(); }
+    function sfRemoveFilter(key) { sfActive = sfActive.filter(function(f) { return f.key !== key; }); sfRenderChips(); }
+    function sfChipPrefix(f) {
+        if (f.col.type === 'date' && (f.mode === 'from' || f.mode === 'to')) return sfRangeWord(f.mode) + ' ' + f.col.label.toUpperCase();
+        if (f.mode === 'not') return f.col.label.toUpperCase() + ' ≠';
+        return f.col.label.toUpperCase();
+    }
     function sfRenderChips() {
-        sfChips.innerHTML='';
+        sfChips.innerHTML = '';
         sfActive.forEach(function(f) {
-            var chip=document.createElement('span'); chip.className='smart-filter-chip';
-            chip.innerHTML='<strong>'+esc(sfChipPrefix(f))+':</strong>&nbsp;'+esc(f.value)+'<span class="sf-chip-remove">&#215;</span>';
-            chip.querySelector('.sf-chip-remove').addEventListener('click',function(){sfActive=sfActive.filter(function(x){return x.key!==f.key;});sfRenderChips();});
+            var chip = document.createElement('span'); chip.className = 'smart-filter-chip';
+            chip.innerHTML = '<strong>' + esc(sfChipPrefix(f)) + ':</strong>&nbsp;' + esc(f.value) + '<span class="sf-chip-remove" title="Remove filter">&#215;</span>';
+            chip.querySelector('.sf-chip-remove').addEventListener('click', function() { sfRemoveFilter(f.key); });
             sfChips.appendChild(chip);
         });
     }
-    $.fn.dataTable.ext.search.push(function(settings, rowData){
-        if(settings.nTable.id!=='swb-table') return true;
-        for(var k in dateRanges){
-            if(!dateRanges.hasOwnProperty(k)) continue;
-            var r=dateRanges[k], cell=sfToDate(rowData[+k]);
-            if(!cell) return false;
-            if(r.from&&cell<r.from) return false;
-            if(r.to&&cell>r.to) return false;
-        }
-        return true;
-    });
-    sfInput.addEventListener('input',function(){sfRenderDropdown(this.value.trim());});
-    sfInput.addEventListener('blur',function(){setTimeout(function(){sfDropdown.style.display='none';},160);});
-    sfInput.addEventListener('focus',function(){if(this.value.trim())sfRenderDropdown(this.value.trim());});
-    sfWrapper.addEventListener('click',function(){sfInput.focus();});
-    document.getElementById('sfSearchBtn').addEventListener('click',function(){
-        sfDropdown.style.display='none';
-        var dExact=sfActive.find(function(f){return f.col.isDate&&f.mode==='exact';});
-        var dFrom =sfActive.find(function(f){return f.col.isDate&&f.mode==='from';});
-        var dTo   =sfActive.find(function(f){return f.col.isDate&&f.mode==='to';});
-        var colChips=sfActive.filter(function(f){return !f.col.isDate&&f.col.dtCol>=0;});
-        var qs='';
-        if(dFrom||dTo){
-            var parts=[];
-            if(dFrom) parts.push('date_from='+encodeURIComponent(_dmyToIso(dFrom.value)));
-            if(dTo)   parts.push('date_to='+encodeURIComponent(_dmyToIso(dTo.value)));
-            qs=parts.join('&');
-        } else if(dExact){ qs='date='+encodeURIComponent(_dmyToIso(dExact.value)); }
-        swbLoad(qs,colChips);
-    });
-    document.getElementById('btnClearFilters').addEventListener('click',function(){
-        // As DUAS cópias do cabeçalho (original e clone do scrollX).
-        $(dt.table().container()).find('.swb-filter-row th input').val('');
-        dateRanges={}; sfActive=[]; sfChips.innerHTML=''; sfInput.value=''; sfDropdown.style.display='none';
-        dt.columns().search('').draw();
-    });
-    sfInput.addEventListener('keydown',function(e) {
-        var items=sfDropdown.querySelectorAll('li');
-        var dropdownOpen=sfDropdown.style.display!=='none'&&items.length;
-        if(e.key==='Backspace'&&!this.value&&sfActive.length){e.preventDefault();var last=sfActive[sfActive.length-1];sfActive=sfActive.filter(function(x){return x.key!==last.key;});sfRenderChips();return;}
-        if(e.key==='Enter'){
+    function sfApply() {
+        var filters = sfActive.map(function(f) { return { field: f.col.field, type: f.col.type, value: f.value, mode: f.mode }; })
+                              .filter(function(f) { return f.field; });
+        fetch('/api/new-deals/swap-bullet/cache/search', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+               body: JSON.stringify({ filters: filters }) })
+        .then(function(r) { return r.json(); })
+        .then(function(result) {
+            if (!result.success) { console.warn('Search failed:', result.message); return; }
+            selected.clear();
+            ENTRIES = result.deals || [];
+            renderAll();
+        })
+        .catch(function(err) { console.error('Search error:', err); });
+    }
+    sfInput.addEventListener('input', function() { sfRenderDropdown(this.value.trim()); });
+    sfInput.addEventListener('keydown', function(e) {
+        var items = sfDropdown.querySelectorAll('li');
+        var dropdownOpen = sfDropdown.style.display !== 'none' && items.length;
+        if (e.key === 'Backspace' && !this.value && sfActive.length) { e.preventDefault(); sfRemoveFilter(sfActive[sfActive.length - 1].key); return; }
+        if (e.key === 'Enter') {
             e.preventDefault();
-            if(dropdownOpen&&sfKbdIdx>=0&&items[sfKbdIdx]){items[sfKbdIdx].dispatchEvent(new MouseEvent('mousedown'));}
-            else{sfDropdown.style.display='none';document.getElementById('sfSearchBtn').click();}
+            if (dropdownOpen && sfKbdIdx >= 0 && items[sfKbdIdx]) items[sfKbdIdx].dispatchEvent(new MouseEvent('mousedown'));
+            else { sfDropdown.style.display = 'none'; document.getElementById('sfSearchBtn').click(); }
             return;
         }
-        if(!items.length) return;
-        if(e.key==='ArrowDown'){e.preventDefault();sfKbdIdx=Math.min(sfKbdIdx+1,items.length-1);}
-        else if(e.key==='ArrowUp'){e.preventDefault();sfKbdIdx=Math.max(sfKbdIdx-1,0);}
-        else if(e.key==='Escape'){sfDropdown.style.display='none';return;}
-        items.forEach(function(li,i){li.classList.toggle('sf-kbd-active',i===sfKbdIdx);});
+        if (!items.length) return;
+        if (e.key === 'ArrowDown') { e.preventDefault(); sfKbdIdx = Math.min(sfKbdIdx + 1, items.length - 1); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); sfKbdIdx = Math.max(sfKbdIdx - 1, 0); }
+        else if (e.key === 'Escape') { sfDropdown.style.display = 'none'; return; }
+        items.forEach(function(li, i) { li.classList.toggle('sf-kbd-active', i === sfKbdIdx); });
+        if (sfKbdIdx >= 0 && items[sfKbdIdx]) items[sfKbdIdx].scrollIntoView({ block: 'nearest' });
     });
-    (function () {
-        var refInput = document.getElementById('swbTradeDate'); if (!refInput) return;
-        refInput.addEventListener('change', function () {
-            var v = (this.value || '').trim();
-            if (/^\d{4}-\d{2}-\d{2}$/.test(v)) v = _isoToDmy(v);
-            if (!/^\d{2}\/\d{2}\/\d{4}$/.test(v)) return;
-            sfActive = sfActive.filter(function (f) { return !f.col.isDate; });
-            sfAddFilter(SF_TRADE_DATE, v, 'exact');
-            document.getElementById('sfSearchBtn').click();
-        });
-    })();
+    sfInput.addEventListener('blur', function() { setTimeout(function() { sfDropdown.style.display = 'none'; }, 160); });
+    sfInput.addEventListener('focus', function() { if (this.value.trim()) sfRenderDropdown(this.value.trim()); });
+    sfWrapper.addEventListener('click', function() { sfInput.focus(); });
 
-    // Default: Trade Date = hoje.
-    sfAddFilter(SF_TRADE_DATE, _todayDmy());
-    document.getElementById('sfSearchBtn').click();
+    /* Aponta o filtro de Trade Date para uma data dd/mm/yyyy e recarrega do
+       servidor — é o que o campo Trade Date e o Import usam. */
+    function sfSetTradeDate(dmy) {
+        if (!/^\d{2}\/\d{2}\/\d{4}$/.test(String(dmy || ''))) return;
+        var col = SF_COLS.filter(function(c) { return c.label === 'Trade Date'; })[0];
+        var key = sfFilterKey(col, 'exact');
+        sfActive = sfActive.filter(function(f) { return f.key !== key; });
+        sfActive.push({ col: col, value: dmy, mode: 'exact', key: key });
+        sfRenderChips(); sfApply();
+    }
+    // Default: Trade Date = ?tradedate= (deep-link do sino) senão hoje; e
+    // Status <> Success — o dia a dia é olhar o que ainda não processou.
+    (function() {
+        var qsTd = new URLSearchParams(window.location.search).get('tradedate');
+        var target = (qsTd && /^\d{4}-\d{2}-\d{2}$/.test(qsTd)) ? _isoToDmy(qsTd) : _todayDmy();
+        var tdCol = SF_COLS.filter(function(c) { return c.label === 'Trade Date'; })[0];
+        sfActive.push({ col: tdCol, value: target, mode: 'exact', key: sfFilterKey(tdCol, 'exact') });
+        var stCol = SF_COLS.filter(function(c) { return c.label === 'Status'; })[0];
+        sfActive.push({ col: stCol, value: 'Success', mode: 'not', key: sfFilterKey(stCol, 'not') });
+        sfRenderChips(); sfApply();
+    })();
+    document.getElementById('sfSearchBtn').addEventListener('click', function() { sfApply(); });
 
     if (window.otcExportAdvanced) otcExportAdvanced('#swb-table', { name: 'New Deals — Swap Bullet' });
 });

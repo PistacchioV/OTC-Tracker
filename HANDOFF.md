@@ -20617,14 +20617,18 @@ do cadastro recalculados). `check_ops_trade_swap`, `check_payrec_run` e
   travessão mantido, cortada em 320. Vive na coluna `VCP Text` (editável; em
   branco o arquivo recompõe).
 - **Os registros são byte a byte os exemplos da mesa** (o teste os carrega
-  VERBATIM), com duas divergências DE PROPÓSITO, declaradas no teste: o
-  **Cap vai só na perna em que o DT o declara** (a VCP) — os exemplos do
-  Banco e da Atacama traziam 117 também na perna JUROS; e a **Descrição vai
-  em toda perna VCP** — os exemplos só a traziam no arquivo do Banco. Os dois
-  casos são revisáveis na tela (`Curve * Cap`, `VCP Text`) e por Fixed na
-  variante do template. Outras leituras dos exemplos que viraram regra: só a
-  perna JUROS leva Sinal/Juros (a VCP fica em branco); `100% Spot` é FATOR no
-  PU inicial (`1.00000000`) e percentual no Cupom Limpo (`100.0000000`); a
+  VERBATIM), com uma divergência DE PROPÓSITO, declarada no teste: o **Cap
+  vai só na perna em que o DT o declara** (a VCP) — os exemplos do Banco e
+  da Atacama traziam 117 também na perna JUROS; revisável na tela
+  (`Curve * Cap`) e por Fixed na variante do template. A **Descrição VCP vai
+  só na curva da PARTE (a ponta ativa da visão), e só quando ela é VCP** —
+  regra da mesa confirmada na mesma tarde: no arquivo do Banco o JPM carrega
+  a VCP e a descrição sai no campo 49; no do Cliente e no da Atacama a Parte
+  está na JUROS e o registro vai sem descrição, mesmo com a contraparte na
+  VCP (a primeira versão punha a descrição em toda perna VCP). Outras
+  leituras dos exemplos que viraram regra: só a perna JUROS leva
+  Sinal/Juros (a VCP fica em branco); o **PU inicial é SEMPRE `1.00000000`**
+  na perna VCP e o Cupom Limpo leva o Preço Inicial (`100.0000000`); a
   Data de Cotação é o D-n em dias úteis ANBIMA até o vencimento (04/06 →
   07/06/2027 = `01`); Titular (107) = PARTE/CONTRAPARTE de quem paga o
   prêmio e Valor (108) zero (a agenda vai no 0897); `Código Identificador` é
@@ -20653,6 +20657,59 @@ do cadastro recalculados). `check_ops_trade_swap`, `check_payrec_run` e
   arquivos anotados em `SentFiles`), Preview por duplo clique/botão (uma aba
   por arquivo, campo a campo com o rótulo do template e a linha crua).
   Rótulo de notificação `Swap Bullet` nos três mapas; traduções `nd-swb-*`.
+- **Segunda rodada (mesmo dia): o molde das irmãs, e a contraparte pela
+  SPN.** A primeira versão tinha um dropzone próprio (upload imediato) e um
+  filtro inteligente que lia a grade no cliente. Passou para o MESMO modelo
+  das páginas de New Deals (opt-fxo, ndf-comm, opt-comm): o Dropzone da
+  casa com FILA (a fila é processada pelo botão **Import**, que faz o
+  `dry_run` de cada arquivo, confere as DUPLICATAS pelo Deal já na grade —
+  substituir / pular / cancelar — e grava pelo `/cache/batch`; duplicata
+  substituída sai como **Amend** quando a linha já tinha andado, e o Confirm
+  em Amend vai para Pending, como no FXO), o campo **Trade Date** ao lado do
+  Import (trocar a data leva a tela para aquele dia), a toolbar nascida do
+  `dom` do DataTables (Columns · Add Row · Export · Trade Date · Import ·
+  Clear Filters · ações da seleção) e o **filtro inteligente com as COLUNAS
+  DA PÁGINA** consultando o servidor (`/cache/search`, o mesmo
+  `_deal_matches` das irmãs), com os chips padrão Trade Date = hoje e Status
+  ≠ Success. A grade perdeu a coluna Pair e ganhou **LE** e **LOB** logo
+  depois de Status: LE = JPM contra cliente, ATACAMA no B2B (é dela que o
+  par sai). E a **contraparte é IDENTIFICADA pela SPN do DT**: o nome da
+  coluna Client é o `COUNTERPARTY` do Reference Data, o texto do DT
+  ('Safra') fica em `Client (Deal Ticket)`, e SPN ausente ou fora do
+  cadastro é LACUNA (o Send recusa).
+- **Terceira rodada (mesmo dia): Deal em branco, B3 ID, e a SPN que re-puxa
+  o cadastro.** O DT não traz número de operação, então a coluna **Deal
+  nasce em BRANCO** para a mesa preencher e entrou a coluna **B3 ID** (as
+  duas editáveis no modal e no filtro). A chave da linha virou um id INTERNO
+  (`_id`, o hash do DT, coluna oculta): é por ele que upsert, finder, Amend
+  e seleção casam — linha anterior sem `_id` responde pelo `Deal`
+  (`persistence.key_of`). E **editar a SPN re-puxa a contraparte**: o
+  `edit` descarta nome/conta/CNPJ que vieram pela SPN antiga e o `enrich`
+  consulta o Reference Data pela nova; o modal faz o mesmo ao vivo ao sair
+  do campo SPN (`/api/new-deals/swap-bullet/refdata`), avisando quando a
+  SPN não está no cadastro. A Descrição VCP passou a seguir os exemplos da
+  mesa à letra (só na curva da PARTE, quando VCP) e o PU inicial é sempre
+  1.00000000.
+- **Economic Affirmation (IF, D0)**, o mesmo botão e o mesmo lugar das páginas
+  de Options (ao lado do Show/entries, `.econAffBtn`) e o mesmo fluxo (POST
+  dos deals → rascunho `.eml` baixado, `X-Unsent`): um rascunho por
+  contraparte INSTITUIÇÃO FINANCEIRA com operação na data — conta CETIP
+  PRÓPRIA no Reference Data (o omnibus do Banco, o B2B e Lawton/JPM/Atacama
+  ficam fora, `otc_emails._swb_is_fi`). O corpo reproduz o **Deal Ticket**
+  da operação (blocos Curva VCP / Curva Vanilla / Informações, Informações
+  do Indicador, datas na grafia do DT `15-set-2026`), precedido das contas
+  CETIP das duas pontas e do pedido do "EDG" no código identificador, como
+  o e-mail que a mesa já manda; sai na casca padrão dos e-mails externos
+  (marca J.P. Morgan por CID, nada do OTC Tracker). Cc `brazil.otc.ops`;
+  `to` em branco para o Outlook do operador.
+- **SPN de entidade NOSSA vem do `le-spn`, não do Reference Data.** Digitar a
+  SPN da Atacama no modal dizia "não cadastrada": a busca só olhava o
+  Reference Data, e a SPN das nossas entidades mora no cadastro Legal
+  Entity × SPN. O `enrich`, o `/refdata` do modal e o `edit` consultam o
+  `le-spn` primeiro (`domain.le_for_spn`, por dígitos): SPN da ATACAMA vira
+  LE ATACAMA / par B2B, com o nome do cadastro e a conta própria do
+  `b3-accounts`; SPN de cliente segue pelo Reference Data. O select LE do
+  modal acompanha a resposta.
 - Ficou de fora, de propósito: Mapping B3 (o arquivo de retorno do swap não
   foi definido) e a entrada na esteira de confirmação/Pending Confirmation.
   E a **cópia do BANCO do template `swap-pagamento-final-v3` não ganha o

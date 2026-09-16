@@ -845,15 +845,27 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   e o novo `swap-bullet-curve` (curva do DT → `Curva X(03)`; a linha `VCP`
   apanha todo ativo VCP). Lacuna recusa o LOTE. A denominação da curva VCP
   é a fórmula do Excel da mesa (`domain.vcp_text`, coluna `VCP Text`). Só a
-  perna JUROS leva Sinal/Juros; só a VCP leva PU (`100% Spot` = fator
-  `1.00000000`), Tipo/Classe, Descrição, Cupom Limpo (`100.0000000`) e a
-  Data de Cotação em D-n ANBIMA; o Cap vai na perna em que o DT o declara.
+  perna JUROS leva Sinal/Juros; só a VCP leva PU (SEMPRE `1.00000000`),
+  Tipo/Classe, Cupom Limpo (`100.0000000`) e a Data de Cotação em D-n
+  ANBIMA; a **Descrição VCP só vai na curva da PARTE** (a ponta ativa da
+  visão) e só se ela é VCP — Banco com, Cliente e Atacama sem; o Cap vai na
+  perna em que o DT o declara.
   O prêmio vai no 0897 (template `swap-registro-premio`), Titular do 0301 é
   PARTE/CONTRAPARTE de quem paga, Papel/Titular do 0897 são a PONTA pela
   conta MENOR. B2B gera Banco + espelho da Atacama (Meu Número próprio); os
   quatro Meu Número nascem no import e o re-import os preserva.
-  `check_swap_bullet.py` compara os seis arquivos byte a byte com os
-  exemplos da mesa.
+  A contraparte é IDENTIFICADA pela SPN do DT (Client = `COUNTERPARTY` do
+  Reference Data; o texto do DT fica em `ClientDT`; SPN fora do cadastro é
+  lacuna; editar a SPN re-puxa o cadastro; SPN de entidade NOSSA responde
+  pelo `le-spn` — Atacama vira o B2B). A chave da linha é o `_id`
+  interno (oculto): Deal nasce em BRANCO e B3 ID é coluna própria. O
+  Economic Affirmation (IF, D0) reproduz o Deal Ticket no e-mail
+  (`otc_emails.build_swap_bullet_affirmation_emails`), só para contraparte
+  com conta CETIP própria. Dropzone, Import (dry-run → duplicatas → `/cache/batch`,
+  substituída = `Amend`) e filtro inteligente (`/cache/search`,
+  `_deal_matches`) são o MESMO molde das páginas de New Deals — não
+  reinvente. `check_swap_bullet.py` compara os seis arquivos byte a byte
+  com os exemplos da mesa.
 - **Swap Calculator: a `Denominação` da curva VCP é CONTRATO, e o IR sai do
   CADASTRO** (§479). A posição traz nas colunas 70/75 o texto livre da curva
   (`(3M SOFR + 0.75%)*1.1765 A/360`), e o `*1.1765` só existe ali. Quem o lê é

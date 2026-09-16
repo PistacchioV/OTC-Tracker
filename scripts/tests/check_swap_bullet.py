@@ -11,8 +11,8 @@ O que este script prende:
 3. a DENOMINAÇÃO da curva VCP é a da fórmula do Excel da mesa, byte a byte;
 4. os TRÊS registros do 0301 (Cliente, Banco, Atacama) são byte a byte os
    exemplos que a mesa mandou (Meu Número e data do header à parte), salvo
-   as posições onde a regra da página diverge do exemplo DE PROPÓSITO e o
-   teste diz quais (Cap só na perna VCP; Descrição em toda perna VCP);
+   a posição onde a regra da página diverge do exemplo DE PROPÓSITO e o
+   teste diz qual (Cap só na perna VCP);
 5. os três arquivos de PRÊMIO (0897) idem — Papel e Titular pela conta menor;
 6. o import grava no arquivo-dia da Trade Date, o re-import preserva a
    esteira e os Meu Número; o Send escreve os arquivos e vira Sent; deal com
@@ -165,10 +165,10 @@ def main():
     check('datas ISO, notional, prêmio', cli['StartDate'] == '2026-09-15' and cli['MaturityDate'] == '2027-06-07'
           and cli['Notional'] == '346000.00' and cli['PremiumAmount'] == '23355.00' and cli['PremiumDate'] == '2026-09-16'
           and cli['PremiumSchedule'] == 'Sim' and cli['PremiumPayer'] == 'Cliente' and cli['Currency'] == 'BRL')
-    check('par JPM x CLI e Deal determinístico', cli['Pair'] == 'JPM x CLI' and cli['Deal'].startswith('SWB-')
-          and domain.deal_from_raw(raw, '2026-09-16')['Deal'] == cli['Deal'])
+    check('par JPM x CLI, LE JPM, id interno determinístico, Deal e B3 ID em BRANCO', cli['Pair'] == 'JPM x CLI' and cli['LE'] == 'JPM' and cli['_id'].startswith('SWB-')
+          and domain.deal_from_raw(raw, '2026-09-16')['_id'] == cli['_id'] and cli['Deal'] == '' and cli['B3ID'] == '')
     b2b = domain.deal_from_raw(domain.parse_dt_grid(sheets[1][1]), '2026-09-16')
-    check('B2B: par JPM x ATACAMA, Parte A = VCP', b2b['Pair'] == 'JPM x ATACAMA' and b2b['CurveACategory'] == 'VCP'
+    check('B2B: par JPM x ATACAMA, LE ATACAMA, Parte A = VCP', b2b['Pair'] == 'JPM x ATACAMA' and b2b['LE'] == 'ATACAMA' and b2b['CurveACategory'] == 'VCP'
           and b2b['CurveACap'] == '117' and b2b['CurveBCategory'] == 'JUROS' and b2b['PremiumPayer'] == 'Banco JP Morgan')
 
     print('== 2. o DT em PDF chega ao mesmo deal ==')
@@ -220,21 +220,20 @@ def main():
     print('== 4. os três registros 0301 ==')
     accounts = queries.own_accounts()
     check('contas próprias do b3-accounts', accounts.get('JPM') == '73760009' and accounts.get('ATACAMA') == '85398005')
-    cli['ClientAccount'], cli['ClientTaxId'] = '74220005', ''
+    cli['ClientAccount'], cli['ClientTaxId'], cli['ClientRefData'] = '74220005', '', 'ok'
     for d in (cli, b2b):
         commands.enrich(d)
+    cli['ClientRefData'] = 'ok'          # o RefData da dev não tem a SPN 281808; a regra em si é testada abaixo
     check('Data de Cotação D-1 (04/06 → 07/06/2027)', cli['QuoteDateCode'] == '01' and b2b['QuoteDateCode'] == '01')
     codes = queries.codes_for(cli)
     check('códigos pelos cadastros', codes['functionality'] == '06' and codes['adhesion'] == '01' and codes['curveA'] == 'C99'
           and codes['curveB'] == 'C00' and codes['signA'] == '00' and codes['premium_schedule'] == '00' and codes['reset'] == '01')
     check('sem lacunas', domain.missing_for_send(cli, codes, accounts) == [] and domain.missing_for_send(b2b, queries.codes_for(b2b), accounts) == [])
-    # Onde a regra da página diverge dos exemplos DE PROPÓSITO:
-    #  * Cap só na perna em que o DT o declara (a VCP): o exemplo do Banco e o da
-    #    Atacama traziam 117 também na perna JUROS (campos 32/39, pos 670-685 /
-    #    727-742);
-    #  * Descrição em TODA perna VCP: os exemplos só a traziam no arquivo do Banco
-    #    (campo 52, pos 1152-1471, nos arquivos Cliente e Atacama).
-    MASK = {'client': [(1152, 1471)], 'bank': [(727, 742)], 'atacama': [(670, 685), (1152, 1471)]}
+    # Onde a regra da página diverge dos exemplos DE PROPÓSITO: o Cap vai só na
+    # perna em que o DT o declara (a VCP); o exemplo do Banco e o da Atacama
+    # traziam 117 também na perna JUROS (campos 32/39, pos 670-685 / 727-742).
+    # A Descrição segue os exemplos à letra: só na curva da PARTE quando é VCP.
+    MASK = {'client': [], 'bank': [(727, 742)], 'atacama': [(670, 685)]}
     for view, deal in (('client', cli), ('bank', b2b), ('atacama', b2b)):
         vals = domain.swap_record_values(deal, view, accounts, queries.codes_for(deal), MYNUM[view])
         linha = commands._build_blocks(commands.SWAP_FI_KEY, vals, view, deal)
@@ -245,10 +244,13 @@ def main():
             print('      1ª diferença na posição %d: got=%r exp=%r' % (pos, linha[pos-1:pos+30], EX[view][pos-1:pos+30]))
     # As divergências declaradas são as que a regra manda:
     vals = domain.swap_record_values(b2b, 'atacama', accounts, queries.codes_for(b2b), MYNUM['atacama'])
-    check('atacama: perna JUROS (Parte) sem Cap, perna VCP (Contraparte) com Descrição',
-          vals['32'].strip() == '' and vals['39'] == '0000011700000000' and vals['52'].startswith('MSFT US : Indices'))
+    check('atacama: perna JUROS (Parte) sem Cap e SEM descrição; contraparte VCP com PU 1.0 e sem descrição',
+          vals['32'].strip() == '' and vals['39'] == '0000011700000000' and vals['49'].strip() == ''
+          and vals['52'].strip() == '' and vals['50'] == '0000000000000100000000')
     vals = domain.swap_record_values(cli, 'client', accounts, codes, MYNUM['client'])
-    check('cliente: Descrição na perna VCP do cliente (52) e Titular = contraparte', vals['52'].startswith('MSFT US : Acoes') and vals['107'] == '01')
+    check('cliente: contraparte VCP sem descrição (só a ponta ativa a leva) e Titular = contraparte', vals['52'].strip() == '' and vals['107'] == '01')
+    vals = domain.swap_record_values(b2b, 'bank', accounts, queries.codes_for(b2b), MYNUM['bank'])
+    check('banco: JPM (Parte) na VCP leva a descrição (49) e PU 1.0', vals['49'].startswith('MSFT US : Indices') and vals['47'] == '0000000000000100000000')
     hdr = R._fi_build_line(commands.SWAP_FI_KEY, 'header', domain.swap_header_values('JPMORGANBM', '20260916'))
     check('header 0301', hdr == 'SWAP 00301JPMORGANBM          2026091600003')
 
@@ -270,25 +272,86 @@ def main():
     res = commands.import_upload('dt.xlsx', xlsx, datetime(2026, 9, 16), sid='A111111')
     check('dois deals importados, Recap ignorada', res['imported'] == 2 and res['ignored'] == ['Recap'])
     fp = persistence.day_path(datetime(2026, 9, 16))
-    fp2, lst, idx = queries.find(cli['Deal'], '2026-09-16')
+    fp2, lst, idx = queries.find(cli['_id'], '2026-09-16')
     check('finder acha o deal no dia', idx is not None and os.path.normpath(fp2) == os.path.normpath(fp))
     e = lst[idx]
     check('nasce New com os quatro Meu Número', e['Status'] == 'New' and all(len(e[k]) == 10 for k in ('MyNumber', 'MyNumberMirror', 'PremiumMyNumber', 'PremiumMyNumberMirror')))
-    lacuna_cli = res['missing'].get(cli['Deal'], [])
+    lacuna_cli = res['missing'].get(cli['_id'], [])
     check('cliente sem conta B3 no RefData da dev cai no omnibus (sem lacuna de conta)',
           e['ClientAccount'] in ('74220005', '73760205') and not any('Client B3 Account' in x for x in lacuna_cli))
+    check('SPN fora do Reference Data é LACUNA; o nome do DT fica em ClientDT',
+          (e.get('ClientRefData') == 'ok' or any('Reference Data' in x for x in lacuna_cli)) and e['ClientDT'] == 'Safra')
+    # A contraparte é a do Reference Data pela SPN: com cadastro, o nome vem de lá.
+    ref = R._refdata_records()
+    if ref:
+        rec = ref[0]
+        d2 = dict(cli, SPN=str(rec.get('SPN', '')), ClientAccount='', ClientTaxId='', ClientRefData='')
+        commands.enrich(d2)
+        check('enrich: Client = COUNTERPARTY do Reference Data pela SPN',
+              d2['Client'] == str(rec.get('COUNTERPARTY', '')).strip() and d2['ClientRefData'] == 'ok')
     nums = {k: e[k] for k in ('MyNumber', 'PremiumMyNumber')}
     e['Status'] = 'Approved'; e['Maker'] = 'A111111'
     R._atomic_write_json(fp2, lst); R._daycache_forget(fp2)
     commands.import_upload('dt.xlsx', xlsx, datetime(2026, 9, 16), sid='B222222')
-    _f, lst2, i2 = queries.find(cli['Deal'], '2026-09-16')
+    _f, lst2, i2 = queries.find(cli['_id'], '2026-09-16')
     check('re-import preserva Status e Meu Número', lst2[i2]['Status'] == 'Approved' and lst2[i2]['MyNumber'] == nums['MyNumber']
           and lst2[i2]['PremiumMyNumber'] == nums['PremiumMyNumber'])
-    check('sem duplicar', sum(1 for x in lst2 if x['Deal'] == cli['Deal']) == 1)
+    check('sem duplicar', sum(1 for x in lst2 if (x.get('_id') or x.get('Deal')) == cli['_id']) == 1)
+    if ref:
+        rec = ref[0]
+        d8 = commands.edit(cli['_id'], '2026-09-16', {'SPN': str(rec.get('SPN', ''))}, sid='E555555')
+        check('edit com SPN nova RE-PUXA o Reference Data (nome, conta, CNPJ)',
+              d8 is not None and d8['Client'] == str(rec.get('COUNTERPARTY', '')).strip() and d8['ClientRefData'] == 'ok' and d8['Status'] == 'Pending')
+        commands.edit(cli['_id'], '2026-09-16', {'SPN': '281808'}, sid='E555555')
+        _f, l9, i9 = queries.find(cli['_id'], '2026-09-16'); l9[i9].update(Status='Approved', Maker='A111111', ClientAccount='74220005'); R._atomic_write_json(_f, l9); R._daycache_forget(_f)
+    print('== 6a. SPN de entidade nossa (le-spn) ==')
+    check('le_for_spn casa por dígitos, ignorando zeros e .0',
+          domain.le_for_spn([{'LE': 'ATACAMA', 'NAME': 'ATACAMA FUNDO', 'SPN': '9632845.0'}], '09632845') == {'LE': 'ATACAMA', 'NAME': 'ATACAMA FUNDO', 'SPN': '9632845.0'}
+          and domain.le_for_spn([{'LE': 'ATACAMA', 'SPN': '1'}], '') is None)
+    _rows_orig = R._mapping_rows
+    def _rows_fake(key):
+        if key == 'le-spn':
+            return [{'LE': 'ATACAMA', 'NAME': 'ATACAMA MULTIMERCADO FI', 'SPN': '9632845', 'NOTES': ''}]
+        return _rows_orig(key)
+    R._mapping_rows = _rows_fake
+    try:
+        d9 = commands.edit(cli['_id'], '2026-09-16', {'SPN': '9632845'}, sid='E555555')
+        check('SPN da Atacama pelo le-spn: vira LE ATACAMA / B2B, nome e conta do cadastro',
+              d9 is not None and d9['LE'] == 'ATACAMA' and d9['Pair'] == 'JPM x ATACAMA' and d9['Client'] == 'ATACAMA MULTIMERCADO FI'
+              and d9['ClientAccount'] == '85398005' and d9['ClientRefData'] == 'ok')
+        check('B2B pelo le-spn não tem lacuna de SPN', not any('Reference Data' in x for x in domain.missing_for_send(d9, queries.codes_for(d9), accounts)))
+        commands.edit(cli['_id'], '2026-09-16', {'SPN': '281808'}, sid='E555555')
+        d10, _ = queries.find(cli['_id'], '2026-09-16')[1:], None
+        _f, l10, i10 = queries.find(cli['_id'], '2026-09-16')
+        check('SPN de cliente de volta: LE JPM, par cliente', l10[i10]['LE'] == 'JPM' and l10[i10]['Pair'] == 'JPM x CLI')
+        l10[i10].update(Status='Approved', Maker='A111111', ClientAccount='74220005'); R._atomic_write_json(_f, l10); R._daycache_forget(_f)
+    finally:
+        R._mapping_rows = _rows_orig
+    print('== 6b. dry-run + batch (duplicata → Amend) + search ==')
+    dry = commands.import_upload('dt.xlsx', xlsx, datetime(2026, 9, 16), sid='A111111', dry_run=True)
+    check('dry-run parseia e não grava', dry['dry_run'] and dry['imported'] == 0 and len(dry['deals']) == 2)
+    dup = dict(dry['deals'][0]); dup['_replace'] = True
+    n = commands.persist_deals([dup], sid='B222222')
+    _f, l4, i4 = queries.find(cli['_id'], '2026-09-16')
+    check('batch com _replace: Approved vira Amend, Meu Número preservado',
+          n == 1 and l4[i4]['Status'] == 'Amend' and l4[i4]['MyNumber'] == nums['MyNumber'])
+    d5, msg = commands.set_status(cli['_id'], '2026-09-16', 'Approved', sid='C333333')
+    check('Confirm em Amend vai para Pending (maker = quem confirmou)', d5 is not None and d5['Status'] == 'Pending' and d5['Maker'] == 'C333333')
+    d6, msg6 = commands.set_status(cli['_id'], '2026-09-16', 'Approved', sid='C333333')
+    check('Pending: maker não aprova o próprio', d6 is None and 'Maker' in msg6)
+    d7, _m = commands.set_status(cli['_id'], '2026-09-16', 'Approved', sid='D444444')
+    check('Pending → Approved por outro usuário', d7 is not None and d7['Status'] == 'Approved' and d7['Checker'] == 'D444444')
+    todos = queries.entries()
+    achou = [d for d in todos if R._deal_matches(d, [{'field': 'TradeDate', 'type': 'date', 'value': '16/09/2026', 'mode': 'exact'},
+                                                    {'field': 'Status', 'type': 'text', 'value': 'Success', 'mode': 'not'},
+                                                    {'field': 'Pair', 'type': 'text', 'value': 'atacama'}])]
+    check('search pelo contrato das irmãs (_deal_matches): Trade Date + Status ≠ Success + Pair', [d['_id'] for d in achou] == [b2b['_id']])
+    _f, l5, i5 = queries.find(cli['_id'], '2026-09-16'); l5[i5]['Status'] = 'Approved'; l5[i5]['Maker'] = 'A111111'
+    R._atomic_write_json(_f, l5); R._daycache_forget(_f)
     todos = queries.entries('2026-09-16')
-    check('leitura do dia devolve os dois', sorted(x['Deal'] for x in todos) == sorted([cli['Deal'], b2b['Deal']]))
+    check('leitura do dia devolve os dois', sorted((x.get('_id') or x.get('Deal')) for x in todos) == sorted([cli['_id'], b2b['_id']]))
     # Preview do B2B: 4 arquivos (swap + prêmio × Banco e Atacama).
-    _f, lstb, ib = queries.find(b2b['Deal'], '2026-09-16')
+    _f, lstb, ib = queries.find(b2b['_id'], '2026-09-16')
     files = commands.preview(lstb[ib])
     check('preview do B2B: 4 arquivos', [(f['kind'], f['view']) for f in files] ==
           [('swap', 'bank'), ('premium', 'bank'), ('swap', 'atacama'), ('premium', 'atacama')])
@@ -298,14 +361,16 @@ def main():
     lstb[ib]['Notional'] = ''
     R._atomic_write_json(_f, lstb); R._daycache_forget(_f)
     try:
-        commands.send([{'deal_id': cli['Deal'], 'trade_date': '2026-09-16'}, {'deal_id': b2b['Deal'], 'trade_date': '2026-09-16'}])
+        commands.send([{'deal_id': cli['_id'], 'trade_date': '2026-09-16'}, {'deal_id': b2b['_id'], 'trade_date': '2026-09-16'}])
         check('lote com lacuna recusa tudo', False)
     except ValueError as exc:
-        check('lote com lacuna recusa tudo dizendo qual', 'Notional' in str(exc) and b2b['Deal'] in str(exc))
+        check('lote com lacuna recusa tudo dizendo qual', 'Notional' in str(exc) and b2b['_id'] in str(exc))
     check('nada foi escrito', not os.path.isdir(R.CONECTA_NEW_PATH) or not os.listdir(R.CONECTA_NEW_PATH))
     lstb[ib]['Notional'] = '346000.00'
+    for x in lstb:
+        x['ClientRefData'] = 'ok'          # idem: a SPN do DT não está no RefData da dev
     R._atomic_write_json(_f, lstb); R._daycache_forget(_f)
-    out = commands.send([{'deal_id': cli['Deal'], 'trade_date': '2026-09-16'}, {'deal_id': b2b['Deal'], 'trade_date': '2026-09-16'}], sid='C333333')
+    out = commands.send([{'deal_id': cli['_id'], 'trade_date': '2026-09-16'}, {'deal_id': b2b['_id'], 'trade_date': '2026-09-16'}], sid='C333333')
     nomes = sorted(x['filename'] for x in out['files'])
     check('seis arquivos: SWAP e PREMIO × Cliente/Banco/Atacama',
           nomes == ['PREMIO_ATACAMA.txt', 'PREMIO_BANCO.txt', 'PREMIO_CLIENTE.txt', 'SWAP_ATACAMA.txt', 'SWAP_BANCO.txt', 'SWAP_CLIENTE.txt'])
@@ -313,16 +378,32 @@ def main():
     check('SWAP_CLIENTE: header + 1 registro de 1927', len(txt) == 2 and txt[0].startswith('SWAP 00301JPMORGANBM') and len(txt[1]) == 1927)
     ptxt = io.open(os.path.join(R.CONECTA_NEW_PATH, 'PREMIO_ATACAMA.txt'), encoding='utf-8').read().split('\n')
     check('PREMIO_ATACAMA: header INTRAGATACAMAFDO + registro + fluxo', len(ptxt) == 3 and 'INTRAGATACAMAFDO' in ptxt[0] and ptxt[1][50:52] == '01')
-    _f, lst3, i3 = queries.find(cli['Deal'], '2026-09-16')
+    _f, lst3, i3 = queries.find(cli['_id'], '2026-09-16')
     check('vira Sent com os arquivos anotados', lst3[i3]['Status'] == 'Sent' and 'SWAP_CLIENTE.txt' in lst3[i3]['SentFiles'])
     try:
-        commands.send([{'deal_id': cli['Deal'], 'trade_date': '2026-09-16'}])
+        commands.send([{'deal_id': cli['_id'], 'trade_date': '2026-09-16'}])
         check('Sent não reenvia', False)
     except ValueError as exc:
         check('Sent não reenvia', 'status Sent' in str(exc))
-    apagados, nao = commands.delete([{'deal_id': cli['Deal'], 'trade_date': '2026-09-16'}])
-    check('delete apaga do arquivo', apagados == 1 and not nao and queries.find(cli['Deal'], '2026-09-16')[2] is None)
+    apagados, nao = commands.delete([{'deal_id': cli['_id'], 'trade_date': '2026-09-16'}])
+    check('delete apaga do arquivo', apagados == 1 and not nao and queries.find(cli['_id'], '2026-09-16')[2] is None)
 
+    print('== 6c. Economic Affirmation (IF, D0) ==')
+    from apps.pages import otc_emails
+    hoje = datetime.now().strftime('%d/%m/%Y')
+    fi = dict(cli, TradeDate=datetime.now().strftime('%Y-%m-%d'), ClientAccount='74220005', ClientRefData='ok', Client='BANCO SAFRA S.A.')
+    omni = dict(fi, ClientAccount='73760205', ClientAccountNote='omnibus')
+    drafts = otc_emails.build_swap_bullet_affirmation_emails([fi, omni, dict(b2b, TradeDate=fi['TradeDate']), dict(fi, TradeDate='2026-01-02')])
+    check('um rascunho: só a IF com conta própria, na data; omnibus, B2B e outro dia ficam fora', len(drafts) == 1)
+    dr = drafts[0]
+    check('assunto no molde do e-mail da mesa', dr['subject'] == 'Confirmação da(s) Operação(ões) Fechada(s) em %s - BANCO SAFRA S.A. - SWAP' % hoje)
+    h = dr['html']
+    check('corpo: contas CETIP das duas pontas e o EDG no código identificador',
+          'Conta CETIP BANCO SAFRA S.A.' in h and '74220.00-5' in h and '73760.00-9' in h and 'incluir &quot;EDG&quot;' in h.replace('"', '&quot;'))
+    check('corpo: o Deal Ticket (blocos e valores do DT)',
+          'DEAL TICKET SWAP VCP' in h and 'Curva Vanilla' in h and 'MSFT US' in h and 'BRL 346.000,00' in h
+          and '15-set-2026' in h and '07-jun-2027' in h and '117,00% Spot' in h and '23.355,00' in h and 'Microsoft Corporation' in h)
+    check('sem logo do OTC Tracker (só a marca do banco por CID)', 'otc' not in h.lower().replace('otc_derivatives', '').replace('brazil.otc', '') and 'cid:jpmwordmark' in h)
     print('== 7. templates e cadastros ==')
     tpl = R._fi_tpl_cached('swap-registro-premio')
     check('swap-registro-premio na biblioteca, 3 blocos (6+9+4), ligado à página',
