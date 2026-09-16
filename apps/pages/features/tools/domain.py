@@ -8,7 +8,7 @@ import re
 import unicodedata
 
 from apps.pages.platform import swap_flows as _sf
-from apps.pages.precificador import contagem, ipca, liquidacao
+from apps.pages.precificador import contagem, descricao_curva, ipca, liquidacao
 from apps.pages.precificador.calendario import para_data
 from apps.pages.precificador.erros import ErroFerramenta
 
@@ -180,7 +180,12 @@ def ponta_do_form(form, prefixo):
         data_fixing=para_data(texto('data_fixing')) if texto('data_fixing') else None,
         taxa_indice=(taxa_do_form(form, campo('taxa_indice'), '{} leg fixing rate'.format(lado))
                      if texto('taxa_indice') else None),
-        lookback=int(texto('lookback') or 0), shift=int(texto('shift') or 0))
+        lookback=int(texto('lookback') or 0), shift=int(texto('shift') or 0),
+        # o multiplicador da denominação da curva (§479): em branco é 1
+        multiplicador=(numero_do_form(form, campo('multiplicador'),
+                                      '{} leg rate multiplier'.format(lado))
+                       if texto('multiplicador') else 1.0),
+        descricao_curva=texto('descricao'))
 
 
 # ── o pré-preenchimento pela posição de swap ────────────────────────────────
@@ -308,7 +313,8 @@ def montar_ponta(regra, pct, taxa, sinal, nome_classe, cotacao_inicial,
     campos = {'indexador': '', 'taxa': '', 'percentual': '', 'convencao': '', 'regime': '',
               'moeda': '', 'tenor': '', 'taxa_indice': '', 'ptax_inicial': '',
               'ptax_final': '', 'ptax_offset': '', 'ni_inicial': '', 'preco_inicial': '',
-              'preco_final': '', 'ativo': '', 'ipca_fixing': ''}
+              'preco_final': '', 'ativo': '', 'ipca_fixing': '', 'multiplicador': '',
+              'descricao': ''}
     faltando = []
     if not regra:
         return campos, ['indexador']
@@ -406,3 +412,76 @@ def montar_ponta(regra, pct, taxa, sinal, nome_classe, cotacao_inicial,
         else:
             faltando.append('preco_inicial')
     return campos, faltando
+
+
+# ── a Denominação da curva: o que ela diz e as colunas não (§479) ───────────
+
+def _mesmo_valor(a, b, percentual=False):
+    """Dois valores de campo dizem a mesma coisa? Número compara como número
+    (`0.7500` e `0,75`), o resto como texto normalizado. No % do CDI a posição
+    escreve `1,10` e a denominação `110%` — a mesma regra do `ponta_do_form`
+    (até 5 é fração) iguala os dois."""
+    sa, sb = str(a or '').strip(), str(b or '').strip()
+    try:
+        na, nb = decimal(sa, 'x'), decimal(sb, 'x')
+    except (ErroFormulario, ValueError):
+        return norm(sa) == norm(sb)
+    if percentual:
+        na, nb = (x * 100.0 if abs(x) <= 5 else x for x in (na, nb))
+    return abs(na - nb) < 1e-9
+
+
+# o que a denominação pode dizer, mas só faz sentido em certos índices: fora
+# deles a leitura é mostrada, não aplicada
+_SO_EM = {
+    descricao_curva.PERCENTUAL: {liquidacao.CDI},
+    descricao_curva.LOOKBACK: {liquidacao.SOFR},
+    descricao_curva.SHIFT: {liquidacao.SOFR},
+    descricao_curva.TENOR: set(liquidacao.COM_FIXING),
+    descricao_curva.PTAX_OFFSET: set(liquidacao.COM_MOEDA),
+}
+
+
+def aplicar_descricao(campos, texto, faltando=None):
+    """Lê a `Denominação` da curva e escreve nos campos da ponta o que ela diz.
+
+    A regra é UMA para o pré-preenchimento e para o texto que a mesa cola na
+    tela (`/api/tools/swap-calculator/curve`): cada achado vira um item de
+    `campos['leitura']` com o estado —
+
+      aplicado    o campo estava vazio (ou zerado) e a denominação o preencheu;
+      confirma    a coluna da posição já dizia o mesmo;
+      divergente  a coluna dizia OUTRA coisa: a denominação VENCE (é o texto do
+                  contrato), e `anterior` guarda o que a coluna trazia, para a
+                  tela mostrar os dois;
+      info        só informação (a data do fixing inicial, o lado da PTAX, um
+                  % do CDI numa ponta que não é CDI): mostrada, não aplicada.
+
+    `campos['nao_lido']` traz o que sobrou do texto com número e operador — o
+    que a mesa tem de conferir à mão. `faltando` perde o campo que a
+    denominação preencheu."""
+    leitura = descricao_curva.interpretar(texto)
+    campos['descricao'] = leitura.texto
+    campos['nao_lido'] = list(leitura.nao_lido)
+    itens = []
+    idx = str(campos.get('indexador') or '')
+    for a in leitura.achados:
+        item = {'campo': a.campo, 'valor': a.valor, 'trecho': a.trecho, 'rotulo': a.rotulo}
+        if a.campo is None or (a.campo in _SO_EM and idx not in _SO_EM[a.campo]):
+            item['estado'] = 'info'
+        else:
+            atual = str(campos.get(a.campo, '') or '').strip()
+            zerado = a.campo == descricao_curva.TAXA and _mesmo_valor(atual, '0')
+            if not atual or zerado:
+                item['estado'] = 'aplicado'
+            elif _mesmo_valor(atual, a.valor, percentual=a.campo == descricao_curva.PERCENTUAL):
+                item['estado'] = 'confirma'
+            else:
+                item['estado'] = 'divergente'
+                item['anterior'] = atual
+            campos[a.campo] = a.valor
+            if faltando is not None and a.campo in faltando:
+                faltando.remove(a.campo)
+        itens.append(item)
+    campos['leitura'] = itens
+    return campos

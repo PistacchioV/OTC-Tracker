@@ -225,6 +225,23 @@ sobre_orig = liquidacao.amortizar(100.0, 60.0, 0.10, liquidacao.SOBRE_ORIGINAL)
 sobre_rem = liquidacao.amortizar(100.0, 60.0, 0.10, liquidacao.SOBRE_REMANESCENTE)
 check('10% sobre o original x sobre o remanescente', (sobre_orig, sobre_rem), (10.0, 6.0))
 
+# Swap com ATUALIZACAO de notional: o remanescente pode ser MAIOR que o
+# original (principal corrigido pelo indice, reajustado por aditivo) e nao e
+# erro — a tela recusava a conta como se fosse digitacao. O original segue sendo
+# so a base da parcela `Sobre Valor Base Original`, e a parcela nunca passa do
+# saldo.
+atualizado = liquidar(1.10, 1.05, nocional_original=9_000_000.0,
+                      percentual_amortizacao=0.10, base_amortizacao=liquidacao.SOBRE_ORIGINAL)
+check('remanescente acima do original NAO e erro (notional atualizado)',
+      (atualizado.nocional, atualizado.nocional_original), (10_000_000.0, 9_000_000.0))
+check('e a parcela sobre o original continua sobre o ORIGINAL',
+      round(atualizado.valor_amortizado, 2), 900_000.0)
+check('as pontas rendem sobre o remanescente, nao sobre o original',
+      round(atualizado.ajuste_bruto, 2), round(10_000_000.0 * (1.10 - 1.05), 2))
+check('a parcela nunca passa do saldo',
+      liquidacao.amortizar(50_000_000.0, 10_000_000.0, 0.5, liquidacao.SOBRE_ORIGINAL),
+      10_000_000.0)
+
 # Equity e QUANTO: liquida em reais sem conversao, mesmo cotada em moeda.
 eq = liquidacao.liquidar(
     data_operacao=op, inicio=ini, fim=fim, nocional=1_000_000.0,
@@ -765,6 +782,29 @@ try:
     check('valor vazio e 400', R._athena_edit_cetip_id(dia, '0500070009249', '', '  ')[1], 400)
     check('dia sem arquivo e 404',
           R._athena_edit_cetip_id(datetime(2026, 1, 2), '0500070009249', '', 'X')[1], 404)
+
+    # ── a Denominacao da curva (§479): o que as colunas nao dizem ──────────
+    # As colunas 70/75 (Parte/Contraparte) trazem o texto livre da curva VCP;
+    # o prefill o le e escreve nos campos, dizendo de onde veio cada coisa.
+    vals[70] = '(PRE + 0.14%)*1.1765 DU/252'                         # Parte → ativa
+    vals[75] = 'DI - 110% do CDI + 0.5% Exp/252 - tranche 2 x 0.5'   # Contraparte → passiva
+    _grava_pos()
+    _den = queries.swap_prefill('26G53382860')
+    check('a denominacao da ativa poe o multiplicador na ponta',
+          (_den['ativa']['multiplicador'], _den['ativa']['descricao']),
+          ('1.17650000', '(PRE + 0.14%)*1.1765 DU/252'))
+    check('   o spread 0,14% CONFIRMA a coluna e a contagem tambem',
+          {it['campo']: it['estado'] for it in _den['ativa']['leitura']},
+          {'taxa': 'confirma', 'multiplicador': 'aplicado', 'convencao': 'confirma'})
+    check('na passiva o 110% confirma o 1,10 da coluna e o spread e aplicado',
+          ({it['campo']: it['estado'] for it in _den['passiva']['leitura']},
+           _den['passiva']['taxa']),
+          ({'percentual': 'confirma', 'taxa': 'aplicado', 'convencao': 'confirma',
+            'regime': 'confirma'}, '0.5000'))
+    check('   e o que nao deu para ler vai SINALIZADO', _den['passiva']['nao_lido'],
+          ['tranche 2 x 0.5'])
+    vals[70] = vals[75] = ''
+    _grava_pos()
 finally:
     R.B3_JSON_ROOT, R.OTM_JSON_ROOT = _b3_root, _otm_root
     R._mapping_rows = _map_rows

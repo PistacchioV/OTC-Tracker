@@ -33,10 +33,26 @@
                mesma tela, e não se sabe o que corrigir. #}
             <p class="tl-help text-danger" id="{{ lado }}_indice_nota" hidden></p>
         </div>
+        {# A `Denominação` da curva VCP (§479): o texto livre da posição, com o
+           que as colunas não têm — o multiplicador da taxa, o spread, a
+           contagem, o D-n da PTAX. O servidor a lê (regras, com o trecho de
+           cada achado) e escreve nos campos; o que sobra sem leitura é
+           sinalizado. Colar ou corrigir o texto aqui refaz a leitura. #}
+        <div class="col-12 tl-field">
+            <label for="{{ lado }}_descricao" data-lang="tl-curve-desc">Curve description (Denominação)</label>
+            <textarea class="form-control form-control-sm tl-curve-desc" id="{{ lado }}_descricao" name="{{ lado }}_descricao" rows="2" data-leg="{{ lado }}" placeholder="TERM SOFR 3M - Fixings PTAX-Ask T-1 - (3M SOFR + 0.75%)*1.1765 A/360">{{ f[lado ~ '_descricao'] }}</textarea>
+            <p class="tl-help" data-lang="tl-curve-desc-help">The VCP curve text from Live Position › Swap Characteristics. What it says and the characteristics do not — a multiplier on the rate, a spread, the day count, the fixing offset — is read into the fields and listed here; what could not be read is flagged for you to check.</p>
+            <p class="tl-help" id="{{ lado }}_descricao_nota" hidden></p>
+        </div>
         <div class="col-12 tl-field" data-leg="{{ lado }}" data-show-for="pre,cambio,sofr,term_sofr,euribor,ipca,equity">
             <label for="{{ lado }}_taxa" data-lang="tl-rate-or-spread">Contracted rate or spread</label>
             <input class="form-control form-control-sm" id="{{ lado }}_taxa" name="{{ lado }}_taxa" value="{{ f[lado ~ '_taxa'] }}" inputmode="decimal" data-format="pct">
             <p class="tl-help" data-lang="tl-rate-help">14 for 14% p.a. · 3.25 for a 3.25% coupon · 2 for a 2% spread</p>
+        </div>
+        <div class="col-12 tl-field" data-leg="{{ lado }}" data-show-for="pre,cdi,cambio,sofr,term_sofr,euribor,ipca,equity">
+            <label for="{{ lado }}_multiplicador" data-lang="tl-rate-mult">Rate multiplier (blank = none)</label>
+            <input class="form-control form-control-sm" id="{{ lado }}_multiplicador" name="{{ lado }}_multiplicador" value="{{ f[lado ~ '_multiplicador'] }}" inputmode="decimal" data-format="mult" placeholder="1">
+            <p class="tl-help" data-lang="tl-rate-mult-help">Multiplies the annual rate before it compounds — (3M SOFR + 0.75%) × 1.1765 is 1.1765 here. In CDI it multiplies the spread; the % of CDI has its own field.</p>
         </div>
 
         {# O CDI tem os DOIS campos, porque a posição traz os dois na mesma
@@ -219,6 +235,9 @@
     {% if p.convencao %}
     <div class="tl-kv"><span data-lang="tl-day-count">Day count</span><span>{{ tl_dc_name(p.convencao) }} · {{ p.dias_contados | tl_num }} <span data-lang="tl-days">days</span> · τ&nbsp;{{ '%.6f' | format(p.fracao_de_ano) }}</span></div>
     {% endif %}
+    {% if p.multiplicador and p.multiplicador != 1 %}
+    <div class="tl-kv"><span data-lang="tl-rate-mult-s">Rate multiplier</span><span>× {{ p.multiplicador | tl_fixed(6) }}</span></div>
+    {% endif %}
     {% if p.ptax_inicial %}
     <div class="tl-kv"><span><span data-lang="tl-fixing">Fixing</span> {{ p.moeda }}/BRL</span><span>{{ p.ptax_inicial | tl_fx }} → {{ p.ptax_final | tl_fx }}</span></div>
     <div class="tl-kv"><span data-lang="tl-index-fx">Index · FX</span><span>{{ p.fator_do_indice | tl_fixed(8) }} · {{ p.fator_cambial | tl_fixed(8) }}</span></div>
@@ -363,7 +382,7 @@
                         <label class="tl-check">
                             <input type="checkbox" name="reter_ir" value="1" class="form-check-input" {{ 'checked' if form.reter_ir }}>
                             <div><strong data-lang="tl-withhold-ir">Withhold income tax at source</strong>
-                                <span data-lang="tl-withhold-help">Regressive table on the term counted from the trade date. Only when the receiving leg loses — the withholding belongs to the paying source, and that is when the bank pays.</span></div>
+                                <span data-lang="tl-withhold-help">Regressive table (Swap IR — Term Brackets mapping) on the term counted from the trade date, only when the receiving leg loses — the withholding belongs to the paying source, and that is when the bank pays. A counterparty in the Swap IR — Client Exceptions mapping gets its registered rate instead, in both directions, as on the Settlement Advice.</span></div>
                         </label>
                         <label class="tl-check">
                             <input type="checkbox" name="arredondar_di" value="1" class="form-check-input" {{ 'checked' if form.arredondar_di }}>
@@ -387,7 +406,7 @@
                 <span class="tl-pill mt-2"><i class="ti {{ 'ti-refresh' if r.so_juros else 'ti-flag' }}"></i>{% if r.so_juros %}<span data-lang="tl-interim-flow">Interim flow — settles only the interest differential</span>{% else %}<span data-lang="tl-final-settlement">Final settlement — settles the future value of both legs</span>{% endif %}</span>
                 <div class="tl-stats mt-3">
                     <div class="tl-stat"><div class="tl-stat__label" data-lang="tl-gross-settlement">Gross settlement</div><div class="tl-stat__value">R$ {{ r.ajuste_bruto | tl_money(2) }}</div><div class="tl-stat__note"><span data-lang="tl-factor-diff">factor difference of</span> {{ r.diferenca_de_fator | tl_fixed(10) }}</div></div>
-                    <div class="tl-stat"><div class="tl-stat__label" data-lang="tl-ir-withheld">Income tax withheld</div><div class="tl-stat__value">R$ {{ r.ir | tl_money(2) }}</div><div class="tl-stat__note">{% if r.aliquota_ir %}<span data-lang="tl-rate">rate</span> {{ r.aliquota_ir | tl_pct(1) }} · {{ r.dias_da_operacao | tl_num }} <span data-lang="tl-days-of-trade">days of trade</span>{% else %}<span data-lang="tl-no-withholding">no withholding when the receiving leg wins</span>{% endif %}</div></div>
+                    <div class="tl-stat"><div class="tl-stat__label" data-lang="tl-ir-withheld">Income tax withheld</div><div class="tl-stat__value">R$ {{ r.ir | tl_money(2) }}</div><div class="tl-stat__note">{% if r.origem_ir == 'cliente' %}<span data-lang="tl-rate">rate</span> {{ r.aliquota_ir | tl_pct(1) }} · <span data-lang="tl-ir-client-exception">client exception (swap-ir-client)</span>{% elif r.aliquota_ir %}<span data-lang="tl-rate">rate</span> {{ r.aliquota_ir | tl_pct(1) }} · {{ r.dias_da_operacao | tl_num }} <span data-lang="tl-days-of-trade">days of trade</span>{% else %}<span data-lang="tl-no-withholding">no withholding when the receiving leg wins</span>{% endif %}</div></div>
                     <div class="tl-stat tl-stat--hi"><div class="tl-stat__label" data-lang="tl-remaining-notional-s">Remaining notional</div><div class="tl-stat__value">R$ {{ r.nocional | tl_money(2) }}</div><div class="tl-stat__note" data-lang="tl-base-both-legs">base of both legs</div></div>
                     <div class="tl-stat"><div class="tl-stat__label" data-lang="tl-balance-after">Balance after amortisation</div><div class="tl-stat__value">R$ {{ r.saldo_seguinte | tl_money(2) }}</div><div class="tl-stat__note">{% if r.valor_amortizado %}<span data-lang="tl-amortises">amortises</span> R$ {{ r.valor_amortizado | tl_money(2) }}{% else %}<span data-lang="tl-no-amortisation">no amortisation in this flow</span>{% endif %}</div></div>
                 </div>

@@ -220,6 +220,12 @@ class Ponta:
     taxa_indice: Optional[float] = None
     lookback: int = 0
     shift: int = 0
+    # A `Denominação` da curva VCP (§479): o multiplicador incide na taxa anual
+    # que capitaliza — `(3M SOFR + 0.75%)*1.1765` é 1,1765 aqui; no CDI, no
+    # spread (o % do CDI tem campo próprio). 1,0 = nenhum. O texto fica
+    # guardado para a memória de cálculo.
+    multiplicador: float = 1.0
+    descricao_curva: str = ''
 
 
 @dataclass(frozen=True)
@@ -270,6 +276,7 @@ class PontaLiquidada:
     # `VBR × correção × (cupom − 1)`, e somar a correção aos juros dava
     # 2,4 milhões a mais num fluxo de 1 bilhão.
     fator_correcao: float = 1.0
+    multiplicador: float = 1.0               # o da denominação da curva (§479)
     ptax_inicial: Optional[float] = None
     ptax_final: Optional[float] = None
     data_ptax_inicial: Optional[date] = None
@@ -396,8 +403,11 @@ def liquidar_ponta(ponta, nocional, inicio, fim, calendario=None, arredondar_di=
     tau = contagem.fracao(ponta.convencao, d0, d1, cal)
     fx, p0, p1, data_p0, data_p1 = _fator_cambial(ponta, d0, d1)
     sem_taxa = ponta.indexador in SEM_TAXA
+    mult = 1.0 if ponta.multiplicador is None else float(ponta.multiplicador)
+    if mult <= 0:
+        raise ErroLiquidacao('the rate multiplier must be positive')
     comum = dict(
-        indexador=ponta.indexador, nocional=nocional,
+        indexador=ponta.indexador, nocional=nocional, multiplicador=mult,
         convencao=None if sem_taxa else ponta.convencao,
         regime=None if sem_taxa else ponta.regime,
         dias_contados=None if sem_taxa else contagem.dias(ponta.convencao, d0, d1, cal),
@@ -409,10 +419,16 @@ def liquidar_ponta(ponta, nocional, inicio, fim, calendario=None, arredondar_di=
         data_ptax_inicial=data_p0, data_ptax_final=data_p1)
 
     def capitalizar(taxa):
-        return contagem.fator(taxa, ponta.convencao, ponta.regime, d0, d1, cal)
+        # O multiplicador da denominação incide na taxa ANUAL que capitaliza —
+        # `(fixing + spread) × 1,1765` —, nunca no fator: (1 + r·k)^τ, não
+        # ((1 + r)^τ)·k. É o gross-up de IR escrito no contrato (§479).
+        return contagem.fator(taxa * mult, ponta.convencao, ponta.regime, d0, d1, cal)
 
     def montar(indice, descricao, **extra):
         fator = fx * extra.get('fator_correcao', 1.0) * indice
+        if mult != 1.0 and not sem_taxa:
+            molde, valores = descricao
+            descricao = (molde + ', the rate × {mult}', dict(valores, mult=_numero(mult, 6)))
         return PontaLiquidada(fator=fator, valor=nocional * fator, fator_do_indice=indice,
                               descricao=descricao, **comum, **extra)
 
@@ -598,6 +614,10 @@ class ResultadoLiquidacao:
     # efeito) quando as duas são nominais em reais. Ver `amortizacao_devolvida`.
     amortizacao_da_ativa: float = 0.0
     amortizacao_da_passiva: float = 0.0
+    # De onde saiu a alíquota (§479): 'cliente' = exceção do `swap-ir-client`
+    # (e `cliente_ir` diz a linha), 'prazo' = tabela por prazo, '' = sem IR.
+    origem_ir: str = ''
+    cliente_ir: str = ''
 
     @property
     def diferenca_de_fator(self):
@@ -624,10 +644,36 @@ def base_de_ajuste(fim, vencimento, escolha=BASE_AUTOMATICA):
     return BASE_JUROS if para_data(fim) < para_data(vencimento) else BASE_VALOR_FUTURO
 
 
+@dataclass
+class RegraIR:
+    """A alíquota de IR que a MESA cadastra (§479), no lugar da tabela fixa.
+
+    `excecao` é a alíquota do cliente no `swap-ir-client` (fração; `None` = o
+    cliente não está lá) e VENCE a direção: é a mesma regra do Trade Level e
+    do Settlement Advice (`_ops_swap_ir_rate`, na platform), que responde
+    pela exceção antes de perguntar quem paga. `faixas` são as do
+    `swap-ir-term` — `(até_dias, alíquota)`, a de `None` valendo acima de
+    todas —; vazias, vale a tabela regressiva do motor. Prazo acima da última
+    faixa cadastrada sem linha "acima de todas" também cai na do motor: a
+    lacuna do cadastro não pode virar 0% de IR."""
+    excecao: Optional[float] = None
+    cliente: str = ''
+    faixas: tuple = ()
+
+    def aliquota_por_prazo(self, dias):
+        catch_all = None
+        for ate, taxa in sorted(self.faixas, key=lambda x: (x[0] is None, x[0] or 0)):
+            if ate is None:
+                catch_all = taxa
+            elif dias <= ate:
+                return taxa
+        return aliquota_ir(dias) if catch_all is None else catch_all
+
+
 def liquidar(data_operacao, inicio, fim, nocional, ponta_ativa, ponta_passiva,
              vencimento=None, base_ajuste=BASE_AUTOMATICA, nocional_original=None,
              percentual_amortizacao=0.0, base_amortizacao=SOBRE_ORIGINAL, calendario=None,
-             arredondar_di=False, reter_ir=True):
+             arredondar_di=False, reter_ir=True, regra_ir=None):
     """Ajuste a pagar entre as duas pontas no fim do fluxo."""
     cal = calendario or calendario_anbima()
     dop = para_data(data_operacao)
@@ -645,8 +691,11 @@ def liquidar(data_operacao, inicio, fim, nocional, ponta_ativa, ponta_passiva,
             'the settlement uses realised indices, not projections — the flow end cannot '
             'be after today ({hoje})', hoje='{:%d/%m/%Y}'.format(date.today()))
     original = float(nocional_original) if nocional_original else float(nocional)
-    if original < nocional:
-        raise ErroLiquidacao('the remaining notional cannot exceed the original notional')
+    # O remanescente PODE ser maior que o original: swap com atualização de
+    # notional (o principal corrigido pelo índice, ou reajustado por aditivo)
+    # carrega um saldo acima do valor registrado, e a tela recusava a conta
+    # como se fosse erro de digitação. O original é só a base da parcela
+    # `Sobre Valor Base Original`; `amortizar` já limita a parcela ao saldo.
     amortizado = amortizar(original, nocional, percentual_amortizacao, base_amortizacao)
     ativa = liquidar_ponta(ponta_ativa, nocional, d0, d1, cal, arredondar_di)
     passiva = liquidar_ponta(ponta_passiva, nocional, d0, d1, cal, arredondar_di)
@@ -664,9 +713,21 @@ def liquidar(data_operacao, inicio, fim, nocional, ponta_ativa, ponta_passiva,
     bruto = ((juros_ativa + am_ativa) - (juros_passiva + am_passiva) if base == BASE_JUROS
              else ativa.valor - passiva.valor)
     dias_operacao = (d1 - dop).days
-    # a retenção é da FONTE PAGADORA: o banco só retém quando é ele quem paga
+    # a retenção é da FONTE PAGADORA: o banco só retém quando é ele quem paga —
+    # salvo a exceção por CLIENTE do cadastro, que responde antes da direção
+    # (a ordem do `_ops_swap_ir_rate` da platform, §479).
     banco_paga = bruto < 0
-    pct_ir = aliquota_ir(dias_operacao) if (reter_ir and banco_paga) else 0.0
+    origem_ir, cliente_ir = '', ''
+    if not reter_ir:
+        pct_ir = 0.0
+    elif regra_ir is not None and regra_ir.excecao is not None:
+        pct_ir, origem_ir, cliente_ir = regra_ir.excecao, 'cliente', regra_ir.cliente
+    elif banco_paga:
+        pct_ir = (regra_ir.aliquota_por_prazo(dias_operacao) if regra_ir is not None
+                  else aliquota_ir(dias_operacao))
+        origem_ir = 'prazo'
+    else:
+        pct_ir = 0.0
     ir = abs(bruto) * pct_ir if pct_ir else 0.0
     liquido = (bruto + ir) if bruto < 0 else (bruto - ir)
     return ResultadoLiquidacao(
@@ -679,4 +740,5 @@ def liquidar(data_operacao, inicio, fim, nocional, ponta_ativa, ponta_passiva,
         ajuste_bruto=bruto, quem_recebe=ATIVA if bruto > 0 else PASSIVA,
         dias_corridos=(d1 - d0).days, dias_uteis=cal.dias_uteis(d0, d1),
         dias_da_operacao=dias_operacao, aliquota_ir=pct_ir, ir=ir, ajuste_liquido=liquido,
+        origem_ir=origem_ir, cliente_ir=cliente_ir,
         banco_paga=banco_paga)
