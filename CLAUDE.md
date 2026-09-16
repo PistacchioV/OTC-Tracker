@@ -845,9 +845,11 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   e o novo `swap-bullet-curve` (curva do DT → `Curva X(03)`; a linha `VCP`
   apanha todo ativo VCP). Lacuna recusa o LOTE. A denominação da curva VCP
   é a fórmula do Excel da mesa (`domain.vcp_text`, coluna `VCP Text`). Só a
-  perna JUROS leva Sinal/Juros; só a VCP leva PU (`100% Spot` = fator
-  `1.00000000`), Tipo/Classe, Descrição, Cupom Limpo (`100.0000000`) e a
-  Data de Cotação em D-n ANBIMA; o Cap vai na perna em que o DT o declara.
+  perna JUROS leva Sinal/Juros; só a VCP leva PU (SEMPRE `1.00000000`),
+  Tipo/Classe, Cupom Limpo (`100.0000000`) e a Data de Cotação em D-n
+  ANBIMA; a **Descrição VCP só vai na curva da PARTE** (a ponta ativa da
+  visão) e só se ela é VCP — Banco com, Cliente e Atacama sem; o Cap vai na
+  perna em que o DT o declara.
   O prêmio vai no 0897 (template `swap-registro-premio`), Titular do 0301 é
   PARTE/CONTRAPARTE de quem paga, Papel/Titular do 0897 são a PONTA pela
   conta MENOR. B2B gera Banco + espelho da Atacama (Meu Número próprio); os

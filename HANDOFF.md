@@ -20617,14 +20617,18 @@ do cadastro recalculados). `check_ops_trade_swap`, `check_payrec_run` e
   travessão mantido, cortada em 320. Vive na coluna `VCP Text` (editável; em
   branco o arquivo recompõe).
 - **Os registros são byte a byte os exemplos da mesa** (o teste os carrega
-  VERBATIM), com duas divergências DE PROPÓSITO, declaradas no teste: o
-  **Cap vai só na perna em que o DT o declara** (a VCP) — os exemplos do
-  Banco e da Atacama traziam 117 também na perna JUROS; e a **Descrição vai
-  em toda perna VCP** — os exemplos só a traziam no arquivo do Banco. Os dois
-  casos são revisáveis na tela (`Curve * Cap`, `VCP Text`) e por Fixed na
-  variante do template. Outras leituras dos exemplos que viraram regra: só a
-  perna JUROS leva Sinal/Juros (a VCP fica em branco); `100% Spot` é FATOR no
-  PU inicial (`1.00000000`) e percentual no Cupom Limpo (`100.0000000`); a
+  VERBATIM), com uma divergência DE PROPÓSITO, declarada no teste: o **Cap
+  vai só na perna em que o DT o declara** (a VCP) — os exemplos do Banco e
+  da Atacama traziam 117 também na perna JUROS; revisável na tela
+  (`Curve * Cap`) e por Fixed na variante do template. A **Descrição VCP vai
+  só na curva da PARTE (a ponta ativa da visão), e só quando ela é VCP** —
+  regra da mesa confirmada na mesma tarde: no arquivo do Banco o JPM carrega
+  a VCP e a descrição sai no campo 49; no do Cliente e no da Atacama a Parte
+  está na JUROS e o registro vai sem descrição, mesmo com a contraparte na
+  VCP (a primeira versão punha a descrição em toda perna VCP). Outras
+  leituras dos exemplos que viraram regra: só a perna JUROS leva
+  Sinal/Juros (a VCP fica em branco); o **PU inicial é SEMPRE `1.00000000`**
+  na perna VCP e o Cupom Limpo leva o Preço Inicial (`100.0000000`); a
   Data de Cotação é o D-n em dias úteis ANBIMA até o vencimento (04/06 →
   07/06/2027 = `01`); Titular (107) = PARTE/CONTRAPARTE de quem paga o
   prêmio e Valor (108) zero (a agenda vai no 0897); `Código Identificador` é

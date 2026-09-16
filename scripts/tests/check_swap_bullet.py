@@ -11,8 +11,8 @@ O que este script prende:
 3. a DENOMINAÇÃO da curva VCP é a da fórmula do Excel da mesa, byte a byte;
 4. os TRÊS registros do 0301 (Cliente, Banco, Atacama) são byte a byte os
    exemplos que a mesa mandou (Meu Número e data do header à parte), salvo
-   as posições onde a regra da página diverge do exemplo DE PROPÓSITO e o
-   teste diz quais (Cap só na perna VCP; Descrição em toda perna VCP);
+   a posição onde a regra da página diverge do exemplo DE PROPÓSITO e o
+   teste diz qual (Cap só na perna VCP);
 5. os três arquivos de PRÊMIO (0897) idem — Papel e Titular pela conta menor;
 6. o import grava no arquivo-dia da Trade Date, o re-import preserva a
    esteira e os Meu Número; o Send escreve os arquivos e vira Sent; deal com
@@ -229,13 +229,11 @@ def main():
     check('códigos pelos cadastros', codes['functionality'] == '06' and codes['adhesion'] == '01' and codes['curveA'] == 'C99'
           and codes['curveB'] == 'C00' and codes['signA'] == '00' and codes['premium_schedule'] == '00' and codes['reset'] == '01')
     check('sem lacunas', domain.missing_for_send(cli, codes, accounts) == [] and domain.missing_for_send(b2b, queries.codes_for(b2b), accounts) == [])
-    # Onde a regra da página diverge dos exemplos DE PROPÓSITO:
-    #  * Cap só na perna em que o DT o declara (a VCP): o exemplo do Banco e o da
-    #    Atacama traziam 117 também na perna JUROS (campos 32/39, pos 670-685 /
-    #    727-742);
-    #  * Descrição em TODA perna VCP: os exemplos só a traziam no arquivo do Banco
-    #    (campo 52, pos 1152-1471, nos arquivos Cliente e Atacama).
-    MASK = {'client': [(1152, 1471)], 'bank': [(727, 742)], 'atacama': [(670, 685), (1152, 1471)]}
+    # Onde a regra da página diverge dos exemplos DE PROPÓSITO: o Cap vai só na
+    # perna em que o DT o declara (a VCP); o exemplo do Banco e o da Atacama
+    # traziam 117 também na perna JUROS (campos 32/39, pos 670-685 / 727-742).
+    # A Descrição segue os exemplos à letra: só na curva da PARTE quando é VCP.
+    MASK = {'client': [], 'bank': [(727, 742)], 'atacama': [(670, 685)]}
     for view, deal in (('client', cli), ('bank', b2b), ('atacama', b2b)):
         vals = domain.swap_record_values(deal, view, accounts, queries.codes_for(deal), MYNUM[view])
         linha = commands._build_blocks(commands.SWAP_FI_KEY, vals, view, deal)
@@ -246,10 +244,13 @@ def main():
             print('      1ª diferença na posição %d: got=%r exp=%r' % (pos, linha[pos-1:pos+30], EX[view][pos-1:pos+30]))
     # As divergências declaradas são as que a regra manda:
     vals = domain.swap_record_values(b2b, 'atacama', accounts, queries.codes_for(b2b), MYNUM['atacama'])
-    check('atacama: perna JUROS (Parte) sem Cap, perna VCP (Contraparte) com Descrição',
-          vals['32'].strip() == '' and vals['39'] == '0000011700000000' and vals['52'].startswith('MSFT US : Indices'))
+    check('atacama: perna JUROS (Parte) sem Cap e SEM descrição; contraparte VCP com PU 1.0 e sem descrição',
+          vals['32'].strip() == '' and vals['39'] == '0000011700000000' and vals['49'].strip() == ''
+          and vals['52'].strip() == '' and vals['50'] == '0000000000000100000000')
     vals = domain.swap_record_values(cli, 'client', accounts, codes, MYNUM['client'])
-    check('cliente: Descrição na perna VCP do cliente (52) e Titular = contraparte', vals['52'].startswith('MSFT US : Acoes') and vals['107'] == '01')
+    check('cliente: contraparte VCP sem descrição (só a ponta ativa a leva) e Titular = contraparte', vals['52'].strip() == '' and vals['107'] == '01')
+    vals = domain.swap_record_values(b2b, 'bank', accounts, queries.codes_for(b2b), MYNUM['bank'])
+    check('banco: JPM (Parte) na VCP leva a descrição (49) e PU 1.0', vals['49'].startswith('MSFT US : Indices') and vals['47'] == '0000000000000100000000')
     hdr = R._fi_build_line(commands.SWAP_FI_KEY, 'header', domain.swap_header_values('JPMORGANBM', '20260916'))
     check('header 0301', hdr == 'SWAP 00301JPMORGANBM          2026091600003')
 

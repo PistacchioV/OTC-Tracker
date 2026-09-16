@@ -844,8 +844,10 @@ def swap_record_values(deal, view, accounts, codes, my_number):
     pelos cadastros (o `commands` os resolve; aqui só se posiciona).
 
     Regras da perna: só a curva JUROS leva Sinal e Juros; só a VCP leva PU
-    inicial, Tipo/Classe, Descrição, Cupom Limpo e Data de Cotação; o Cap/
-    Floor vai na curva em que o DT o declara (o bloco Curva VCP). O Titular
+    inicial (sempre 1.00000000), Tipo/Classe, Cupom Limpo e Data de Cotação;
+    a Descrição só vai na VCP quando ela é a curva da PARTE (a ponta ativa
+    da visão); o Cap/Floor vai na curva em que o DT o declara (o bloco
+    Curva VCP). O Titular
     do prêmio (107) é PARTE/CONTRAPARTE de quem paga; o Valor (108) sai
     zerado porque a agenda vai no 0897."""
     parte, contra = view_sides(deal, view, accounts)
@@ -893,17 +895,19 @@ def swap_record_values(deal, view, accounts, codes, my_number):
         vals[str(seq)] = _blank(w)
     # Se curva(s) = VCP: 47-49 Parte, 50-52 Contraparte; Cupom Limpo 53-54 / 55-56.
     price = parse_number(deal.get('InitialPrice'))
-    # "100% Spot" é FATOR no PU inicial (1.00000000) e percentual no Cupom
-    # Limpo (100.0000000) — é como os arquivos da mesa saem; um preço
-    # ('82.820000') vai igual nos dois.
-    pu = (price / 100.0) if (price is not None and '%' in str(deal.get('InitialPrice') or '')) else price
+    # PU inicial é SEMPRE 1.00000000 na perna VCP (regra da mesa); o Cupom
+    # Limpo leva o Preço Inicial do DT (100% Spot → 100.0000000).
     text = str(deal.get('VcpText') or '').strip() or vcp_text(deal)
     for base, cl_base, side in ((47, 53, parte), (50, 55, contra)):
         c = _curve(deal, side['curve'])
         if c['category'] == 'VCP':
-            vals[str(base)] = b3_num(pu, 14, 8) or _blank(22)
+            vals[str(base)] = b3_num(1, 14, 8)
             vals[str(base + 1)] = _digits(deal.get('VcpCode')).zfill(5)[-5:] if _digits(deal.get('VcpCode')) else _blank(5)
-            vals[str(base + 2)] = text[:320].ljust(320)
+            # A Descrição só vai na curva da PONTA ATIVA da visão — a Parte —
+            # e só quando ela é VCP. Contraparte com VCP fica em branco: é
+            # como os arquivos da mesa saem (Cliente e Atacama sem descrição,
+            # Banco com ela, porque ali o JPM carrega a VCP).
+            vals[str(base + 2)] = text[:320].ljust(320) if side is parte else _blank(320)
             vals[str(cl_base)] = b3_num(price, 8, 7) or _blank(15)
             vals[str(cl_base + 1)] = (str(deal.get('QuoteDateCode') or '').zfill(2)
                                       if str(deal.get('QuoteDateCode') or '').strip() else _blank(2))
