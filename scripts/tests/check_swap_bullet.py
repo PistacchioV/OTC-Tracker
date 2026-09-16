@@ -165,10 +165,10 @@ def main():
     check('datas ISO, notional, prêmio', cli['StartDate'] == '2026-09-15' and cli['MaturityDate'] == '2027-06-07'
           and cli['Notional'] == '346000.00' and cli['PremiumAmount'] == '23355.00' and cli['PremiumDate'] == '2026-09-16'
           and cli['PremiumSchedule'] == 'Sim' and cli['PremiumPayer'] == 'Cliente' and cli['Currency'] == 'BRL')
-    check('par JPM x CLI e Deal determinístico', cli['Pair'] == 'JPM x CLI' and cli['Deal'].startswith('SWB-')
+    check('par JPM x CLI, LE JPM e Deal determinístico', cli['Pair'] == 'JPM x CLI' and cli['LE'] == 'JPM' and cli['Deal'].startswith('SWB-')
           and domain.deal_from_raw(raw, '2026-09-16')['Deal'] == cli['Deal'])
     b2b = domain.deal_from_raw(domain.parse_dt_grid(sheets[1][1]), '2026-09-16')
-    check('B2B: par JPM x ATACAMA, Parte A = VCP', b2b['Pair'] == 'JPM x ATACAMA' and b2b['CurveACategory'] == 'VCP'
+    check('B2B: par JPM x ATACAMA, LE ATACAMA, Parte A = VCP', b2b['Pair'] == 'JPM x ATACAMA' and b2b['LE'] == 'ATACAMA' and b2b['CurveACategory'] == 'VCP'
           and b2b['CurveACap'] == '117' and b2b['CurveBCategory'] == 'JUROS' and b2b['PremiumPayer'] == 'Banco JP Morgan')
 
     print('== 2. o DT em PDF chega ao mesmo deal ==')
@@ -220,9 +220,10 @@ def main():
     print('== 4. os três registros 0301 ==')
     accounts = queries.own_accounts()
     check('contas próprias do b3-accounts', accounts.get('JPM') == '73760009' and accounts.get('ATACAMA') == '85398005')
-    cli['ClientAccount'], cli['ClientTaxId'] = '74220005', ''
+    cli['ClientAccount'], cli['ClientTaxId'], cli['ClientRefData'] = '74220005', '', 'ok'
     for d in (cli, b2b):
         commands.enrich(d)
+    cli['ClientRefData'] = 'ok'          # o RefData da dev não tem a SPN 281808; a regra em si é testada abaixo
     check('Data de Cotação D-1 (04/06 → 07/06/2027)', cli['QuoteDateCode'] == '01' and b2b['QuoteDateCode'] == '01')
     codes = queries.codes_for(cli)
     check('códigos pelos cadastros', codes['functionality'] == '06' and codes['adhesion'] == '01' and codes['curveA'] == 'C99'
@@ -277,6 +278,16 @@ def main():
     lacuna_cli = res['missing'].get(cli['Deal'], [])
     check('cliente sem conta B3 no RefData da dev cai no omnibus (sem lacuna de conta)',
           e['ClientAccount'] in ('74220005', '73760205') and not any('Client B3 Account' in x for x in lacuna_cli))
+    check('SPN fora do Reference Data é LACUNA; o nome do DT fica em ClientDT',
+          (e.get('ClientRefData') == 'ok' or any('Reference Data' in x for x in lacuna_cli)) and e['ClientDT'] == 'Safra')
+    # A contraparte é a do Reference Data pela SPN: com cadastro, o nome vem de lá.
+    ref = R._refdata_records()
+    if ref:
+        rec = ref[0]
+        d2 = dict(cli, SPN=str(rec.get('SPN', '')), ClientAccount='', ClientTaxId='', ClientRefData='')
+        commands.enrich(d2)
+        check('enrich: Client = COUNTERPARTY do Reference Data pela SPN',
+              d2['Client'] == str(rec.get('COUNTERPARTY', '')).strip() and d2['ClientRefData'] == 'ok')
     nums = {k: e[k] for k in ('MyNumber', 'PremiumMyNumber')}
     e['Status'] = 'Approved'; e['Maker'] = 'A111111'
     R._atomic_write_json(fp2, lst); R._daycache_forget(fp2)
@@ -285,6 +296,27 @@ def main():
     check('re-import preserva Status e Meu Número', lst2[i2]['Status'] == 'Approved' and lst2[i2]['MyNumber'] == nums['MyNumber']
           and lst2[i2]['PremiumMyNumber'] == nums['PremiumMyNumber'])
     check('sem duplicar', sum(1 for x in lst2 if x['Deal'] == cli['Deal']) == 1)
+    print('== 6b. dry-run + batch (duplicata → Amend) + search ==')
+    dry = commands.import_upload('dt.xlsx', xlsx, datetime(2026, 9, 16), sid='A111111', dry_run=True)
+    check('dry-run parseia e não grava', dry['dry_run'] and dry['imported'] == 0 and len(dry['deals']) == 2)
+    dup = dict(dry['deals'][0]); dup['_replace'] = True
+    n = commands.persist_deals([dup], sid='B222222')
+    _f, l4, i4 = queries.find(cli['Deal'], '2026-09-16')
+    check('batch com _replace: Approved vira Amend, Meu Número preservado',
+          n == 1 and l4[i4]['Status'] == 'Amend' and l4[i4]['MyNumber'] == nums['MyNumber'])
+    d5, msg = commands.set_status(cli['Deal'], '2026-09-16', 'Approved', sid='C333333')
+    check('Confirm em Amend vai para Pending (maker = quem confirmou)', d5 is not None and d5['Status'] == 'Pending' and d5['Maker'] == 'C333333')
+    d6, msg6 = commands.set_status(cli['Deal'], '2026-09-16', 'Approved', sid='C333333')
+    check('Pending: maker não aprova o próprio', d6 is None and 'Maker' in msg6)
+    d7, _m = commands.set_status(cli['Deal'], '2026-09-16', 'Approved', sid='D444444')
+    check('Pending → Approved por outro usuário', d7 is not None and d7['Status'] == 'Approved' and d7['Checker'] == 'D444444')
+    todos = queries.entries()
+    achou = [d for d in todos if R._deal_matches(d, [{'field': 'TradeDate', 'type': 'date', 'value': '16/09/2026', 'mode': 'exact'},
+                                                    {'field': 'Status', 'type': 'text', 'value': 'Success', 'mode': 'not'},
+                                                    {'field': 'Pair', 'type': 'text', 'value': 'atacama'}])]
+    check('search pelo contrato das irmãs (_deal_matches): Trade Date + Status ≠ Success + Pair', [d['Deal'] for d in achou] == [b2b['Deal']])
+    _f, l5, i5 = queries.find(cli['Deal'], '2026-09-16'); l5[i5]['Status'] = 'Approved'; l5[i5]['Maker'] = 'A111111'
+    R._atomic_write_json(_f, l5); R._daycache_forget(_f)
     todos = queries.entries('2026-09-16')
     check('leitura do dia devolve os dois', sorted(x['Deal'] for x in todos) == sorted([cli['Deal'], b2b['Deal']]))
     # Preview do B2B: 4 arquivos (swap + prêmio × Banco e Atacama).
@@ -304,6 +336,8 @@ def main():
         check('lote com lacuna recusa tudo dizendo qual', 'Notional' in str(exc) and b2b['Deal'] in str(exc))
     check('nada foi escrito', not os.path.isdir(R.CONECTA_NEW_PATH) or not os.listdir(R.CONECTA_NEW_PATH))
     lstb[ib]['Notional'] = '346000.00'
+    for x in lstb:
+        x['ClientRefData'] = 'ok'          # idem: a SPN do DT não está no RefData da dev
     R._atomic_write_json(_f, lstb); R._daycache_forget(_f)
     out = commands.send([{'deal_id': cli['Deal'], 'trade_date': '2026-09-16'}, {'deal_id': b2b['Deal'], 'trade_date': '2026-09-16'}], sid='C333333')
     nomes = sorted(x['filename'] for x in out['files'])

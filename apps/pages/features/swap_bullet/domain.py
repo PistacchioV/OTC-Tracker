@@ -44,8 +44,8 @@ from datetime import date, datetime
 # a chave cego a caixa e espaço — 'Curve A Pct' ≡ 'CurveAPct').
 SWB_COLUMNS = (
     ('Type', 'Swap Type'),
-    ('Pair', 'Pair'),
     ('Client', 'Client'),
+    ('ClientDT', 'Client (Deal Ticket)'),
     ('SPN', 'SPN'),
     ('ClientAccount', 'Client B3 Account'),
     ('ClientTaxId', 'Client Tax ID'),
@@ -60,7 +60,6 @@ SWB_COLUMNS = (
     ('PremiumPayer', 'Premium Payer'),
     ('PremiumAmount', 'Premium Amount'),
     ('Reset', 'Reset'),
-    ('LOB', 'LOB'),
     ('VcpHolder', 'VCP Holder'),
     ('VanillaHolder', 'Vanilla Holder'),
     ('CurveACategory', 'Curve A Category'),
@@ -624,7 +623,8 @@ def deal_from_raw(raw, trade_date_iso, deal_id=None):
         a, b = van, vcp
         a_cat, b_cat = 'JUROS', 'VCP'
     client = g('Client')
-    pair = 'JPM x ATACAMA' if _ATACAMA_RE.search(client) else 'JPM x CLI'
+    is_ata = bool(_ATACAMA_RE.search(client))
+    pair = 'JPM x ATACAMA' if is_ata else 'JPM x CLI'
     notional_txt = g('Notional')
     ccy = ''
     mccy = re.search(r'\b([A-Z]{3})\b', strip_accents(notional_txt).upper())
@@ -641,8 +641,11 @@ def deal_from_raw(raw, trade_date_iso, deal_id=None):
         'Type': 'Pagamento Final',
         'Title': g('_title'),
         'Pair': pair,
-        'LE': 'JPM',
+        # LE da linha: JPM contra cliente; ATACAMA no B2B (a perna intragrupo,
+        # que gera o arquivo do Banco E o espelho da Atacama).
+        'LE': 'ATACAMA' if is_ata else 'JPM',
         'Client': client,
+        'ClientDT': client,
         'SPN': re.sub(r'\.0$', '', g('SPN')),
         'ClientAccount': '',
         'ClientTaxId': '',
@@ -808,9 +811,14 @@ def le_pair(view):
     return {'client': 'JPM x CLI', 'bank': 'JPM x ATACAMA', 'atacama': 'ATACAMA x JPM'}[view]
 
 
+def is_b2b(deal):
+    """O deal é o B2B Banco × Atacama? Pela LE da linha (ATACAMA) ou pelo par."""
+    return norm(deal.get('LE', '')) == 'ATACAMA' or 'ATACAMA' in norm(deal.get('Pair', ''))
+
+
 def views_of(deal):
     """As visões que o deal gera: cliente → ['client']; B2B → ['bank', 'atacama']."""
-    return ['bank', 'atacama'] if 'ATACAMA' in norm(deal.get('Pair', '')) else ['client']
+    return ['bank', 'atacama'] if is_b2b(deal) else ['client']
 
 
 def _curve(deal, side):
@@ -1015,11 +1023,18 @@ def missing_for_send(deal, codes, accounts):
                           % (side, deal.get('Curve' + side, '')))
     if not accounts.get('JPM'):
         faltas.append('JPM own account (B3 Accounts)')
-    if 'ATACAMA' in norm(deal.get('Pair', '')):
+    if is_b2b(deal):
         if not accounts.get('ATACAMA'):
             faltas.append('ATACAMA own account (B3 Accounts)')
-    elif not _digits(deal.get('ClientAccount')):
-        faltas.append('Client B3 Account')
+    else:
+        # A contraparte é a do Reference Data pela SPN do DT: sem SPN, ou com
+        # SPN que o cadastro não tem, o nome e a conta não têm de onde vir.
+        if not _digits(deal.get('SPN')):
+            faltas.append('SPN (the Deal Ticket has no SPN)')
+        elif norm(deal.get('ClientRefData')) != 'OK':
+            faltas.append('SPN %s not found in Reference Data' % deal.get('SPN'))
+        if not _digits(deal.get('ClientAccount')):
+            faltas.append('Client B3 Account')
     vcp_side = 'A' if norm(deal.get('CurveACategory')) == 'VCP' else \
         ('B' if norm(deal.get('CurveBCategory')) == 'VCP' else '')
     if vcp_side:

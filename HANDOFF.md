@@ -20653,6 +20653,26 @@ do cadastro recalculados). `check_ops_trade_swap`, `check_payrec_run` e
   arquivos anotados em `SentFiles`), Preview por duplo clique/botão (uma aba
   por arquivo, campo a campo com o rótulo do template e a linha crua).
   Rótulo de notificação `Swap Bullet` nos três mapas; traduções `nd-swb-*`.
+- **Segunda rodada (mesmo dia): o molde das irmãs, e a contraparte pela
+  SPN.** A primeira versão tinha um dropzone próprio (upload imediato) e um
+  filtro inteligente que lia a grade no cliente. Passou para o MESMO modelo
+  das páginas de New Deals (opt-fxo, ndf-comm, opt-comm): o Dropzone da
+  casa com FILA (a fila é processada pelo botão **Import**, que faz o
+  `dry_run` de cada arquivo, confere as DUPLICATAS pelo Deal já na grade —
+  substituir / pular / cancelar — e grava pelo `/cache/batch`; duplicata
+  substituída sai como **Amend** quando a linha já tinha andado, e o Confirm
+  em Amend vai para Pending, como no FXO), o campo **Trade Date** ao lado do
+  Import (trocar a data leva a tela para aquele dia), a toolbar nascida do
+  `dom` do DataTables (Columns · Add Row · Export · Trade Date · Import ·
+  Clear Filters · ações da seleção) e o **filtro inteligente com as COLUNAS
+  DA PÁGINA** consultando o servidor (`/cache/search`, o mesmo
+  `_deal_matches` das irmãs), com os chips padrão Trade Date = hoje e Status
+  ≠ Success. A grade perdeu a coluna Pair e ganhou **LE** e **LOB** logo
+  depois de Status: LE = JPM contra cliente, ATACAMA no B2B (é dela que o
+  par sai). E a **contraparte é IDENTIFICADA pela SPN do DT**: o nome da
+  coluna Client é o `COUNTERPARTY` do Reference Data, o texto do DT
+  ('Safra') fica em `Client (Deal Ticket)`, e SPN ausente ou fora do
+  cadastro é LACUNA (o Send recusa).
 - Ficou de fora, de propósito: Mapping B3 (o arquivo de retorno do swap não
   foi definido) e a entrada na esteira de confirmação/Pending Confirmation.
   E a **cópia do BANCO do template `swap-pagamento-final-v3` não ganha o

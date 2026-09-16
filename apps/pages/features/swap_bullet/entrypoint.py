@@ -50,23 +50,65 @@ def api_swap_bullet_import():
     if f is None or not f.filename:
         return jsonify({'success': False, 'message': 'No file received'}), 400
     ref_dt = _R()._api_ref_date(request.form.get('trade_date'))
+    dry_run = (request.args.get('dry_run') in ('1', 'true', 'yes')
+               or request.form.get('dry_run') in ('1', 'true', 'yes'))
     try:
-        result = commands.import_upload(f.filename, f.read(), ref_dt, sid=session.get('user_sid', ''))
+        result = commands.import_upload(f.filename, f.read(), ref_dt, sid=session.get('user_sid', ''),
+                                        dry_run=dry_run)
     except ValueError as exc:
         return jsonify({'success': False, 'message': 'Could not read the file: ' + str(exc)}), 400
     except Exception as exc:                                # noqa: BLE001
         _R().log.error('[SWAP BULLET] import failed:\n%s', traceback.format_exc())
         return jsonify({'success': False, 'message': 'Import failed: %s: %s' % (type(exc).__name__, exc)}), 500
-    if not result.get('imported'):
+    if not result.get('deals'):
         return jsonify({'success': False,
                         'message': 'No Deal Ticket found — the file needs a sheet/page with '
                                    'Valor Base and Vencimento.',
                         'ignored': result.get('ignored', [])}), 400
-    _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
-                              'Deals Imported', PAGE,
-                              '%d deal(s) from %s' % (result['imported'], f.filename))
+    if not dry_run:
+        _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                                  'Deals Imported', PAGE,
+                                  '%d deal(s) from %s' % (result['imported'], f.filename))
     result['file'] = f.filename
     return jsonify(result)
+
+
+@blueprint.route('/api/new-deals/swap-bullet/cache/batch', methods=['POST'])
+def api_swap_bullet_batch():
+    """Grava os deals que a tela decidiu manter depois do dry-run (o passo 2
+    do Import das páginas de New Deals). Body: { deals: [...] }; deal com
+    `_replace: true` é duplicata que a mesa mandou substituir."""
+    err = _auth()
+    if err:
+        return err
+    payload = request.get_json(silent=True) or {}
+    deals = payload.get('deals')
+    if not isinstance(deals, list) or not deals:
+        return jsonify({'success': False, 'message': 'No deals provided'}), 400
+    try:
+        n = commands.persist_deals(deals, sid=session.get('user_sid', ''))
+    except Exception as exc:                                # noqa: BLE001
+        _R().log.error('[SWAP BULLET] batch failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'message': 'Save failed: %s: %s' % (type(exc).__name__, exc)}), 500
+    if n:
+        _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                                  'Deals Imported', PAGE, '%d deal(s) imported from Deal Ticket' % n)
+    return jsonify({'success': True, 'imported': n, 'deals': deals})
+
+
+@blueprint.route('/api/new-deals/swap-bullet/cache/search', methods=['POST'])
+def api_swap_bullet_search():
+    """A busca do filtro inteligente — o MESMO contrato das outras páginas de
+    New Deals: `filters` = [{field, type, value, mode}] avaliados pelo
+    `_deal_matches` sobre todos os arquivos-dia (uma abertura por banco)."""
+    err = _auth()
+    if err:
+        return err
+    filters = (request.get_json(silent=True) or {}).get('filters', [])
+    if not isinstance(filters, list):
+        filters = []
+    matched = [d for d in queries.entries() if _R()._deal_matches(d, filters)]
+    return jsonify({'success': True, 'deals': matched})
 
 
 @blueprint.route('/api/new-deals/swap-bullet/edit', methods=['POST'])

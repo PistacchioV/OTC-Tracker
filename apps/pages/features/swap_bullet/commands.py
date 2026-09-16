@@ -6,6 +6,7 @@ import random
 import re
 from datetime import datetime
 
+from apps.pages import data_store as _store
 from apps.pages.features.swap_bullet import domain, queries
 from apps.pages.features.swap_bullet.infra import dt_reader, persistence
 
@@ -31,10 +32,14 @@ def _rand10():
 
 # ── Import ───────────────────────────────────────────────────────────────────
 
-def import_upload(filename, data, ref_dt, sid=''):
+def import_upload(filename, data, ref_dt, sid='', dry_run=False):
     """O arquivo do dropzone → deals no arquivo-dia da Trade Date `ref_dt`.
     Devolve o resumo para a tela: quantos, quais, abas/páginas ignoradas e as
-    lacunas de cada deal (o que o Send recusaria)."""
+    lacunas de cada deal (o que o Send recusaria).
+
+    `dry_run` só PARSEIA e devolve os deals — é o primeiro passo do Import
+    das páginas de New Deals: a tela confere as duplicatas (Deal já na
+    grade) e pergunta se substitui, e só então grava pelo `persist_deals`."""
     kind, itens = dt_reader.read_upload(filename, data)
     trade_iso = ref_dt.strftime('%Y-%m-%d')
     deals, ignorados = [], []
@@ -53,13 +58,7 @@ def import_upload(filename, data, ref_dt, sid=''):
         deal['_sheet'] = title
         enrich(deal)
         deals.append(deal)
-    for d in deals:
-        d.setdefault('MyNumber', _rand10())
-        d.setdefault('MyNumberMirror', _rand10())
-        d.setdefault('PremiumMyNumber', _rand10())
-        d.setdefault('PremiumMyNumberMirror', _rand10())
-        d['ImportedBy'] = sid
-    imported = persistence.upsert(ref_dt, deals) if deals else 0
+    imported = 0 if dry_run else persist_deals(deals, sid=sid)
     lacunas = {}
     accounts = queries.own_accounts()
     for d in deals:
@@ -67,7 +66,47 @@ def import_upload(filename, data, ref_dt, sid=''):
         if faltas:
             lacunas[d['Deal']] = faltas
     return {'success': True, 'imported': imported, 'deals': deals, 'ignored': ignorados,
-            'missing': lacunas, 'trade_date': trade_iso, 'kind': kind}
+            'missing': lacunas, 'trade_date': trade_iso, 'kind': kind, 'dry_run': bool(dry_run)}
+
+
+def persist_deals(deals, sid=''):
+    """Grava os deals (já montados) nos arquivos-dia das suas Trade Dates,
+    dando os quatro Meu Número a quem ainda não tem. Deal marcado
+    `_replace` (a tela escolheu SUBSTITUIR uma duplicata) sai da esteira
+    como `Amend` quando a linha antiga já tinha andado — reimportar um DT
+    corrigido não pode manter um Approved/Sent que valia para o dado
+    antigo; New continua New. → quantidade gravada."""
+    por_dia = {}
+    for d in deals or []:
+        if not isinstance(d, dict) or not d.get('Deal'):
+            continue
+        d.setdefault('MyNumber', _rand10())
+        d.setdefault('MyNumberMirror', _rand10())
+        d.setdefault('PremiumMyNumber', _rand10())
+        d.setdefault('PremiumMyNumberMirror', _rand10())
+        d['ImportedBy'] = sid
+        replace = bool(d.pop('_replace', False))
+        ref = domain.parse_date(d.get('TradeDate')) or datetime.now().date()
+        ref_dt = datetime(ref.year, ref.month, ref.day)
+        d['TradeDate'] = ref_dt.strftime('%Y-%m-%d')
+        por_dia.setdefault(ref_dt, []).append((d, replace))
+    n = 0
+    for ref_dt, lst in por_dia.items():
+        novas = [d for d, _r in lst]
+        n += persistence.upsert(ref_dt, novas)
+        amend = [d['Deal'] for d, r in lst if r and (d.get('Status') or 'New') != 'New']
+        if amend:
+            with _R()._cache_lock:
+                fp = persistence.day_path(ref_dt)
+                entries = _store.read(fp) if _store.exists(fp) else []
+                mudou = False
+                for e in entries:
+                    if e.get('Deal') in amend and (e.get('Status') or 'New') != 'New':
+                        e['Status'] = 'Amend'; e['Checker'] = ''; mudou = True
+                if mudou:
+                    _R()._atomic_write_json(fp, entries)
+                    _R()._daycache_forget(fp)
+    return n
 
 
 def enrich(deal):
@@ -76,15 +115,22 @@ def enrich(deal):
     clientes do Banco + o Tax ID), e o código D-n da Data de Cotação (dias
     úteis ANBIMA até o vencimento). Só preenche o que está em branco — o que
     a mesa editou fica."""
-    if 'ATACAMA' not in domain.norm(deal.get('Pair', '')):
+    if not domain.is_b2b(deal):
+        # A contraparte é IDENTIFICADA pela SPN do DT (o nome no DT é um
+        # apelido — 'Safra'): quem responde nome, CNPJ e conta B3 é o
+        # Reference Data. Sem SPN, tenta o nome do DT como último recurso.
         rec = queries.refdata_by_spn(deal.get('SPN', '')) if deal.get('SPN') else {}
-        if not rec and deal.get('Client'):
-            alvo = domain.norm(deal.get('Client'))
+        if not rec and not deal.get('SPN') and deal.get('ClientDT'):
+            alvo = domain.norm(deal.get('ClientDT'))
             for r in _R()._refdata_records():
                 if domain.norm(r.get('COUNTERPARTY', '')) == alvo:
                     rec = r
                     break
+        deal['ClientRefData'] = 'ok' if rec else ''
         if rec:
+            nome = str(rec.get('COUNTERPARTY', '') or '').strip()
+            if nome:
+                deal['Client'] = nome
             if not deal.get('SPN'):
                 deal['SPN'] = re.sub(r'\.0$', '', str(rec.get('SPN', '') or ''))
             if not deal.get('ClientTaxId'):
@@ -94,8 +140,6 @@ def enrich(deal):
                 if acc:
                     deal['ClientAccount'] = acc
                     deal['ClientTaxId'] = ''        # conta própria do cliente: sem CNPJ no registro
-            if not deal.get('ClientName'):
-                deal['ClientName'] = str(rec.get('COUNTERPARTY', '') or '')
         if not deal.get('ClientAccount'):
             omni = queries.omnibus_account('JPM', 'CLIENT 2')
             if omni:
@@ -287,7 +331,7 @@ def send(items, sid='', download=False):
 # ── Edição / esteira ─────────────────────────────────────────────────────────
 
 EDITABLE = tuple(k for k in domain.SWB_FIELDS if k not in ('Maker', 'Checker')) + (
-    'TradeDate', 'Client', 'SPN')
+    'TradeDate', 'Client', 'SPN', 'LE', 'LOB')
 
 
 def edit(deal_id, trade_date, changes, sid=''):
@@ -309,9 +353,11 @@ def edit(deal_id, trade_date, changes, sid=''):
             if k in domain.SWB_DATE_FIELDS or k == 'TradeDate':
                 v = domain.iso(domain.parse_date(v)) if v else ''
             d[k] = v
-        if 'Pair' in changes or 'Client' in changes:
-            d['Pair'] = 'JPM x ATACAMA' if 'ATACAMA' in domain.norm(d.get('Client')) or \
-                'ATACAMA' in domain.norm(d.get('Pair')) else 'JPM x CLI'
+        if 'LE' in changes or 'Client' in changes:
+            if 'ATACAMA' in domain.norm(d.get('Client')):
+                d['LE'] = 'ATACAMA'
+            d['LE'] = 'ATACAMA' if domain.norm(d.get('LE')) == 'ATACAMA' else 'JPM'
+            d['Pair'] = 'JPM x ATACAMA' if d['LE'] == 'ATACAMA' else 'JPM x CLI'
         if 'QuoteDate' in changes or 'MaturityDate' in changes:
             d['QuoteDateCode'] = ''
         if not touched_text and (str(d.get('VcpText') or '').strip() == before_text.strip()
@@ -339,7 +385,11 @@ def add(fields, trade_date, sid=''):
             if k in domain.SWB_DATE_FIELDS:
                 v = domain.iso(domain.parse_date(v)) if v else ''
             d[k] = v
-    d['Pair'] = 'JPM x ATACAMA' if 'ATACAMA' in domain.norm(d.get('Client')) else 'JPM x CLI'
+    if 'ATACAMA' in domain.norm(d.get('Client')) or domain.norm(d.get('LE')) == 'ATACAMA':
+        d['LE'] = 'ATACAMA'
+    else:
+        d['LE'] = 'JPM'
+    d['Pair'] = 'JPM x ATACAMA' if d['LE'] == 'ATACAMA' else 'JPM x CLI'
     d['Deal'] = domain.make_deal_id(d)
     d['VcpText'] = str(fields.get('VcpText') or '').strip() or domain.vcp_text(d)
     d['QuoteDateCode'] = ''
@@ -360,6 +410,10 @@ def set_status(deal_id, trade_date, status, sid='', require_other_than_maker=Fal
             return None, 'Entry not found'
         d = lst[idx]
         cur = d.get('Status') or 'New'
+        if status == 'Approved' and cur == 'Amend':
+            # Amend parou aqui porque o DT reimportado mudou dado: alguém tem de
+            # olhar — vai para Pending, como no FXO.
+            status = 'Pending'
         if status == 'Approved':
             if cur not in ('New', 'Pending'):
                 return None, 'Only New or Pending entries can be approved.'
@@ -368,6 +422,9 @@ def set_status(deal_id, trade_date, status, sid='', require_other_than_maker=Fal
             d['Checker'] = sid if cur == 'Pending' else ''
             if cur == 'New':
                 d['Maker'] = sid
+        if status == 'Pending':
+            d['Maker'] = sid
+            d['Checker'] = ''
         d['Status'] = status
         _R()._atomic_write_json(fp, lst)
         _R()._daycache_forget(fp)

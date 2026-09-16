@@ -852,8 +852,13 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   PARTE/CONTRAPARTE de quem paga, Papel/Titular do 0897 são a PONTA pela
   conta MENOR. B2B gera Banco + espelho da Atacama (Meu Número próprio); os
   quatro Meu Número nascem no import e o re-import os preserva.
-  `check_swap_bullet.py` compara os seis arquivos byte a byte com os
-  exemplos da mesa.
+  A contraparte é IDENTIFICADA pela SPN do DT (Client = `COUNTERPARTY` do
+  Reference Data; o texto do DT fica em `ClientDT`; SPN fora do cadastro é
+  lacuna). Dropzone, Import (dry-run → duplicatas → `/cache/batch`,
+  substituída = `Amend`) e filtro inteligente (`/cache/search`,
+  `_deal_matches`) são o MESMO molde das páginas de New Deals — não
+  reinvente. `check_swap_bullet.py` compara os seis arquivos byte a byte
+  com os exemplos da mesa.
 - **Swap Calculator: a `Denominação` da curva VCP é CONTRATO, e o IR sai do
   CADASTRO** (§479). A posição traz nas colunas 70/75 o texto livre da curva
   (`(3M SOFR + 0.75%)*1.1765 A/360`), e o `*1.1765` só existe ali. Quem o lê é

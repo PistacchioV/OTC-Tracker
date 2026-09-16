@@ -19,8 +19,8 @@
       "url": "/new_deals-swap-bullet",
       "columns": [
         "Swap Type",
-        "Pair",
         "Client",
+        "Client (Deal Ticket)",
         "SPN",
         "Client B3 Account",
         "Client Tax ID",
@@ -67,7 +67,8 @@
         "Maker",
         "Checker",
         "Deal",
-        "Trade Date"
+        "Trade Date",
+        "LE"
       ]
     }
   ],
