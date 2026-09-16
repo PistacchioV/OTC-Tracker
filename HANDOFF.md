@@ -20570,3 +20570,93 @@ stubado, endpoint e Calculate), `check_tools.py` §17 (o prefill lendo a coluna
 70/75) e `check_tools_memoria.py` §10 (o multiplicador em fórmula e a alíquota
 do cadastro recalculados). `check_ops_trade_swap`, `check_payrec_run` e
 `check_soc_layers` seguem verdes — a refatoração da platform não mudou resposta.
+
+## §480 — New Deals › Swap › Bullet: o Deal Ticket vira o registro 0301 e a agenda de prêmio 0897 (2026-09-16)
+
+- A página `/new_deals-swap-bullet` (menu New Deals › Swap › Bullet, que era
+  um `#swapbullet` sem destino) nasceu de um **Deal Ticket** da mesa, não de
+  API: um `.xlsx` (uma aba por operação — a primeira contra o cliente, a
+  segunda o B2B Banco × Atacama; 'Recap' e o que não tem Valor Base +
+  Vencimento é ignorado) ou o mesmo DT em **PDF** (uma operação por página,
+  pypdf), solto no dropzone com a Trade Date escolhida. Vertical
+  `features/swap_bullet/` em desenho fino: `domain` puro (parser, deal,
+  registros), `commands` (import, enrich, arquivos, esteira), `queries`
+  (dia, finder, cadastros), `infra/dt_reader.py` + `infra/persistence.py`
+  (`cache/new deals/Swap/Bullet/AAAA/MM/AAAAMMDD_swapbullet.json`, card
+  `swap-bullet` do Monitor, com o B2B `Client = Atacama` contando como ATA).
+- **O DT tem duas pernas com os MESMOS rótulos** (Percentual, Categoria,
+  Curva, Sinal, Juros, Limites, no bloco *Curva VCP* e no *Curva Vanilla*).
+  No xlsx o parser separa pela COLUNA do cabeçalho do bloco; no PDF, pela
+  ORDEM (1ª = VCP, 2ª = Vanilla). E `Cliente`/`Premio` são rótulos E
+  respostas ('Ativo VCP | Cliente'): a célula imediata à direita é valor
+  mesmo que pareça rótulo; no PDF, um achado sem valor logo depois de outro
+  sem valor na mesma linha é o valor dele. A Denominação tem três linhas e
+  no PDF elas chegam coladas ao fim de outras ('Juros 0,00% Cupom Limpo
+  inicial em percentual'): o que sobra depois do número é a continuação, e
+  rótulo com inicial minúscula ('em percentual') é texto, não rótulo.
+- **Parte A = a NOSSA perna, Parte B = a contraparte**, decidido pelo `Ativo
+  VCP`/`Ativo Curva Vanilla` (quem é "ativo" numa curva a carrega). A grade e
+  o arquivo falam em A/B; VCP e Vanilla são só como o DT chega. Cliente
+  'Atacama' → par `JPM x ATACAMA` (o B2B), que gera DOIS arquivos: o do
+  Banco (Parte JPM) e o espelho da Atacama (Parte 85398005, curvas trocadas,
+  Titular invertido, Meu Número próprio — `MyNumberMirror`).
+- **De-para de texto → código é cadastro** (§2): a funcionalidade pelo
+  `swap-funcionalidade` (casamento por CONJUNTO de tokens sem 'de'/'com':
+  'Opção de Arrependimento' ≡ 'OPCAO ARREPENDIMENTO'), Sinal e Sim/Não pelo
+  `swap-code-labels`, que ganhou o FIELD **Adesão** (00 SEM ADESAO, 01 CGD,
+  02 CSA, 03 CGD/CSA) por seed + `upgrade`, e a curva do DT → `Curva X(03)`
+  pelo cadastro NOVO **`swap-bullet-curve`** (`PRÉ FIXADO BRL` → C99, CDI/DI
+  → C03, SELIC → C01, e a linha 'VCP' → C00 que apanha qualquer ativo VCP sem
+  linha própria). Código que não resolve é LACUNA: o import avisa, o preview
+  mostra e o Send recusa o LOTE inteiro dizendo o deal e o campo.
+- **A denominação da curva VCP é a fórmula do Excel da mesa**, portada em
+  `domain.vcp_text`: `{Curva} : {Proper(Categoria)} Código {Código} –
+  Descrição: {Descrição} – Preco Inicial: {Preço} – Fonte de informacao:
+  {Fonte} – Data de cotacao: {dd-mmm-aaaa em pt} - Cupom limpo = Strike -
+  {Denominação linha 3} - Denominação: {Denominação linha 1}`, acentos fora,
+  travessão mantido, cortada em 320. Vive na coluna `VCP Text` (editável; em
+  branco o arquivo recompõe).
+- **Os registros são byte a byte os exemplos da mesa** (o teste os carrega
+  VERBATIM), com duas divergências DE PROPÓSITO, declaradas no teste: o
+  **Cap vai só na perna em que o DT o declara** (a VCP) — os exemplos do
+  Banco e da Atacama traziam 117 também na perna JUROS; e a **Descrição vai
+  em toda perna VCP** — os exemplos só a traziam no arquivo do Banco. Os dois
+  casos são revisáveis na tela (`Curve * Cap`, `VCP Text`) e por Fixed na
+  variante do template. Outras leituras dos exemplos que viraram regra: só a
+  perna JUROS leva Sinal/Juros (a VCP fica em branco); `100% Spot` é FATOR no
+  PU inicial (`1.00000000`) e percentual no Cupom Limpo (`100.0000000`); a
+  Data de Cotação é o D-n em dias úteis ANBIMA até o vencimento (04/06 →
+  07/06/2027 = `01`); Titular (107) = PARTE/CONTRAPARTE de quem paga o
+  prêmio e Valor (108) zero (a agenda vai no 0897); `Código Identificador` é
+  a LOB alinhada à DIREITA nos 14; Adesão default CGD; Reset não.
+- **O 0897 (Registro de Prêmio) é template novo** na biblioteca do File
+  Interpreter (`swap-registro-premio`: header 6, registro 9, fluxo 4 campos,
+  52 posições), ligado à página como o `swap-pagamento-final-v3` (que ganhou
+  `linked_pages` + as colunas e a documentação de Source campo a campo). Meu
+  Número Reg. Contrato = o Meu Número do 0301 da mesma visão; **Papel e
+  Titular são a PONTA pela conta MENOR** (4.2.12): o cliente 74220005 paga e
+  sai `01`, o Banco 73760009 paga e sai `00` nas duas visões do B2B — e é o
+  que separa o Titular do 0897 (ponta) do Titular do 0301 (parte/contraparte).
+- Contas: Parte pelo `b3-accounts` (conta PRÓPRIA da LE); contraparte cliente
+  pelo `B3 ACCOUNT` do Reference Data pela SPN, e sem ele o **omnibus
+  CLIENT 2 do JPM + o Tax ID** no CPF/CNPJ Cliente Contraparte (marcado
+  `ClientAccountNote = omnibus`). Arquivos em `CONECTA_NEW_PATH`:
+  `SWAP_{CLIENTE,BANCO,ATACAMA}.txt` e `PREMIO_*.txt` (o `file_name` da
+  variante por par vence), header por LE (JPMORGANBM / INTRAGATACAMAFDO),
+  um arquivo por nome com todos os deals do lote; Meu Número nasce no import
+  e o re-import o preserva (com a esteira), então preview e arquivo mostram
+  o mesmo número.
+- Esteira no padrão New Deals: checkbox, Confirm (New → Approved direto,
+  quem confirma vira Maker; Pending → Approved por OUTRO usuário), Edit
+  (modal padrão com todos os campos; edição → Pending), Delete (a tela
+  remove DEPOIS do servidor), Send (New/Approved → Sent, com os nomes dos
+  arquivos anotados em `SentFiles`), Preview por duplo clique/botão (uma aba
+  por arquivo, campo a campo com o rótulo do template e a linha crua).
+  Rótulo de notificação `Swap Bullet` nos três mapas; traduções `nd-swb-*`.
+- Ficou de fora, de propósito: Mapping B3 (o arquivo de retorno do swap não
+  foi definido) e a entrada na esteira de confirmação/Pending Confirmation.
+  E a **cópia do BANCO do template `swap-pagamento-final-v3` não ganha o
+  `linked_pages` sozinha** na instância (a semeadura não sobrescreve o que
+  já existe): a geração não depende disso, mas para o File Interpreter
+  mostrar a página ligada é `data_store.write` do JSON versionado (como se
+  fez na dev) ou salvar o template pela tela.
