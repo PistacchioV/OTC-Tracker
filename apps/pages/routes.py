@@ -10523,6 +10523,15 @@ def _intrag_engine():
     return commands
 
 
+def _swap_bullet_engine():
+    """Gancho para a vertical Swap Bullet (features/swap_bullet): a segregação
+    das confirmações de Swap (platform/confirmations) lê os deals do dia por
+    aqui — platform não importa feature, e os entrypoints só são importados
+    no fim deste arquivo. Devolve o `commands` (`confirmation_deals`)."""
+    from apps.pages.features.swap_bullet import commands
+    return commands
+
+
 # ──────────────────────────────────────────────────────────────────────────
 # Horário de Brasília — mora em `platform/anbima.py` (fatia platform/); alias.
 # ──────────────────────────────────────────────────────────────────────────
@@ -13368,6 +13377,20 @@ _conf_mgt_family = _pf_conf._conf_mgt_family
 _conf_mgt_groups = _pf_conf._conf_mgt_groups
 _conf_pick_mgt = _pf_conf._conf_pick_mgt
 _conf_mgt_rows = _pf_conf._conf_mgt_rows
+# Swap Bullet — Swap com Opção de Arrependimento (§481)
+_CONF_SWAP_FAMILY_TEMPLATES = _pf_conf._CONF_SWAP_FAMILY_TEMPLATES
+_CONF_SWAP_FAMILY_LABEL = _pf_conf._CONF_SWAP_FAMILY_LABEL
+_CONF_SWAP_FAMILY_TYPE = _pf_conf._CONF_SWAP_FAMILY_TYPE
+_CONF_SWAP_PARTEA = _pf_conf._CONF_SWAP_PARTEA
+_CONF_SWAP_FIELDS = _pf_conf._CONF_SWAP_FIELDS
+_conf_load_swap = _pf_conf._conf_load_swap
+_conf_swap_family = _pf_conf._conf_swap_family
+_conf_swap_moeda = _pf_conf._conf_swap_moeda
+_conf_swap_groups = _pf_conf._conf_swap_groups
+_conf_pick_swap = _pf_conf._conf_pick_swap
+_conf_swap_close = _pf_conf._conf_swap_close
+_conf_swap_conf = _pf_conf._conf_swap_conf
+_conf_swap_xml = _pf_conf._conf_swap_xml
 
 
 

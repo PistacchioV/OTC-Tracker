@@ -1095,3 +1095,178 @@ def missing_for_send(deal, codes, accounts):
         if not str(deal.get('PremiumPayer') or '').strip():
             faltas.append('Premium Payer')
     return faltas
+
+
+# ── Depois do B3 ID: o que a operação REGISTRADA dispara ─────────────────────
+# O B3 ID chega pela edição da linha (a mesa copia do retorno da B3). Com ele
+# o deal é o `Success` das outras páginas de New Deals, e daí nascem:
+#   * no B2B (Banco × Atacama), a linha da **Intrag Swap** — a visão da
+#     ATACAMA (Parte Atacama, Contraparte Banco), na carteira dela;
+#   * contra cliente, a linha do **Pending Confirmation** e a da esteira de
+#     **Manual Confirmations** (Produto `SWAP` quando há Opção de
+#     Arrependimento, `SWAP CORPORATE` sem ela), chaveadas pelo B3 ID.
+# Aqui ficam só as regras; quem grava é o `commands`.
+
+# A carteira da ATACAMA na Intrag. O NDF e a Opção intragrupo usam a
+# INTRAGJP552 (o Lawton); o Monitor lê as duas (`deals_monitor/domain`).
+INTRAG_SWAP_PORTFOLIO = 'INTRAGJP633'
+
+# Os 36 campos da linha da Intrag Swap, na ORDEM das colunas da página
+# `/intrag-swap` (`ENTRY_FIELDS` do template) — é o contrato do arquivo
+# `Intrag-Swap-AAAAMMDD.txt` (`;` entre os valores).
+INTRAG_SWAP_FIELDS = (
+    'carteira', 'b3_id', 'start_date', 'maturity_date', 'base_value',
+    'funcionalidades', 'parte', 'curva_parte', 'contraparte', 'curva_contraparte',
+    'agenda_premios', 'premium_payment_date', 'premium_payer', 'premio',
+    'pct_1', 'ref_code_1', 'categoria_1', 'codigo_1', 'sinal_1', 'juros_1',
+    'lim_sup_1', 'lim_inf_1', 'quote_date_1', 'desc_vcp_1', 'preco_inicial_1',
+    'pct_2', 'ref_code_2', 'categoria_2', 'codigo_2', 'sinal_2', 'juros_2',
+    'lim_sup_2', 'lim_inf_2', 'quote_date_2', 'desc_vcp_2', 'preco_inicial_2',
+)
+
+_INTRAG_BANK_NAME = 'Banco JP Morgan'
+_INTRAG_ATACAMA_NAME = 'Atacama'
+
+
+def has_withdrawal_option(deal):
+    """A funcionalidade do DT é a Opção de Arrependimento?"""
+    return 'ARREPENDIMENTO' in norm(deal.get('Functionality', ''))
+
+
+def confirmation_source(deal):
+    """O Produto da esteira / Product Type do Pending Confirmation: `SWAP`
+    com Opção de Arrependimento, `SWAP CORPORATE` sem ela (regra da mesa)."""
+    return 'SWAP' if has_withdrawal_option(deal) else 'SWAP CORPORATE'
+
+
+def plain_num(v):
+    """Número como a Intrag o lê: sem separador de milhar, sem zeros à direita
+    ('346000.00' → '346000', '100.00' → '100', '0.0000' → '0'); '' se não é número."""
+    n = parse_number(v)
+    if n is None:
+        return ''
+    s = ('%.8f' % n).rstrip('0').rstrip('.')
+    return s or '0'
+
+
+def _functionality_text(deal):
+    txt = str(deal.get('Functionality') or '').strip()
+    return '' if norm(txt) in ('', 'NA', 'N', 'NAO', 'NENHUMA', 'NONE', 'SEM') else txt
+
+
+def intrag_swap_entry(deal, codes):
+    """A linha da Intrag Swap do B2B — a visão da ATACAMA: Parte = Atacama com
+    a perna DELA (a Curva B do deal, a contraparte do Banco), Contraparte =
+    Banco com a Curva A. Bloco 1 é a curva da Parte, bloco 2 a da
+    Contraparte; só a perna VCP leva Código (Tipo/Classe), Data de Cotação,
+    Descrição (a denominação e o ativo) e Preço Inicial. `codes` são os
+    códigos B3 das curvas (`queries.codes_for`)."""
+    prem = norm(deal.get('PremiumSchedule')) in ('SIM', 'YES', 'S', 'Y')
+
+    def leg(side):
+        c = _curve(deal, side)
+        vcp = c['category'] == 'VCP'
+        desc = '; '.join(x for x in (str(deal.get('Denomination1') or '').strip(),
+                                     str(deal.get('VcpCurve') or '').strip()) if x)
+        return {
+            'pct': plain_num(c['pct']),
+            'ref_code': str(codes.get('curve' + side) or ''),
+            'categoria': 'VCP' if vcp else str(c['name'] or '').strip().upper(),
+            'codigo': _digits(deal.get('VcpCode')) if vcp else '',
+            'sinal': 'Negativo' if str(c['sign'] or '+').strip() == '-' else 'Positivo',
+            'juros': plain_num(c['rate']) or '0',
+            'lim_sup': plain_num(c['cap']),
+            'lim_inf': plain_num(c['floor']),
+            'quote_date': iso(parse_date(deal.get('QuoteDate'))) if vcp else '',
+            'desc_vcp': desc if vcp else '',
+            'preco_inicial': str(deal.get('InitialPrice') or '').strip() if vcp else '',
+        }
+
+    parte, contra = leg('B'), leg('A')
+    entry = {
+        'carteira': INTRAG_SWAP_PORTFOLIO,
+        'b3_id': str(deal.get('B3ID') or '').strip(),
+        'start_date': iso(parse_date(deal.get('StartDate'))),
+        'maturity_date': iso(parse_date(deal.get('MaturityDate'))),
+        'base_value': plain_num(deal.get('Notional')),
+        'funcionalidades': _functionality_text(deal),
+        'parte': _INTRAG_ATACAMA_NAME,
+        'curva_parte': 'VCP' if parte['categoria'] == 'VCP' else 'Vanilla',
+        'contraparte': _INTRAG_BANK_NAME,
+        'curva_contraparte': 'VCP' if contra['categoria'] == 'VCP' else 'Vanilla',
+        'agenda_premios': 'Sim' if prem else 'Não',
+        'premium_payment_date': iso(parse_date(deal.get('PremiumDate'))) if prem else '',
+        'premium_payer': ((_INTRAG_BANK_NAME if _is_ours(deal.get('PremiumPayer', ''))
+                           else _INTRAG_ATACAMA_NAME) if prem else ''),
+        'premio': plain_num(deal.get('PremiumAmount')) if prem else '',
+    }
+    for n, lg in ((1, parte), (2, contra)):
+        for k, v in lg.items():
+            entry['%s_%d' % (k, n)] = v
+    entry.update({
+        '_deal': str(deal.get('_id') or deal.get('Deal') or ''),
+        '_client': str(deal.get('Client') or ''),
+        'status': 'New', 'maker': '', 'checker': '',
+    })
+    return entry
+
+
+# ── A confirmação (Swap com Opção de Arrependimento) ─────────────────────────
+# O que o documento precisa saber do deal e que a esteira não tem como
+# adivinhar: a perna que carrega o Fator Equities (a VCP) e como o Preço
+# Inicial se apura.
+#
+# **O Cupom Limpo diz de onde sai o Preço Inicial.** No DT ele é o campo
+# 'Preço Inicial (Cupom Limpo)' ('100.00% Spot', '150%') junto com a 3ª linha
+# da Denominação ('Preco in ativo Close 15-Sep-26'). Quando aparece **Close**,
+# o preço é o fechamento do ativo naquele dia — o app busca a cotação (Quotes)
+# e o Strike é o percentual sobre ela. Quando só diz **Spot**, o preço foi
+# acertado na hora e não há de onde puxar: Preço Inicial e Strike ficam em
+# BRANCO e o painel exige que a mesa os preencha antes de salvar.
+_CLOSE_RE = re.compile(r'\bCLOSE\b[\s:\-]*(\d{1,2}[-/ ][A-Za-z]{3,9}[-/ ]\d{2,4})?', re.I)
+
+
+def cupom_limpo(deal):
+    """{'mode': 'close'|'spot'|'', 'date': ISO|'', 'pct': float|None} — como o
+    Preço Inicial se apura (ver acima). `pct` é o percentual do Cupom Limpo
+    ('100.00% Spot' → 100.0; em branco → None)."""
+    txt = ' '.join(str(deal.get(k) or '') for k in ('InitialPrice', 'Denomination3', 'Denomination2'))
+    pct = parse_number(deal.get('InitialPrice'))
+    m = _CLOSE_RE.search(strip_accents(txt))
+    if m:
+        d = parse_date(m.group(1)) if m.group(1) else None
+        return {'mode': 'close', 'date': iso(d) if d else '', 'pct': pct}
+    if re.search(r'\bSPOT\b', strip_accents(txt), re.I):
+        return {'mode': 'spot', 'date': '', 'pct': pct}
+    return {'mode': '', 'date': '', 'pct': pct}
+
+
+def vcp_side(deal):
+    """'A' ou 'B': a perna que carrega o Fator Equities (a VCP); '' se nenhuma."""
+    if norm(deal.get('CurveACategory')) == 'VCP':
+        return 'A'
+    if norm(deal.get('CurveBCategory')) == 'VCP':
+        return 'B'
+    return ''
+
+
+def confirmation_deal(deal):
+    """O deal no formato que a segregação das confirmações e a esteira leem
+    (o das páginas de New Deals): `Deal`/`B3_ID` = o B3 ID (a chave da linha
+    da esteira), `SettlementDate` = vencimento, `TaxID` = CNPJ da contraparte,
+    `Status` = Success quando há B3 ID (registrado na B3 é o que Success
+    significa nas outras páginas), e o que só o swap sabe em `_conf_*`."""
+    b3 = str(deal.get('B3ID') or '').strip()
+    out = dict(deal)
+    out.update({
+        'Deal': b3, 'B3_ID': b3,
+        'SettlementDate': deal.get('MaturityDate', ''),
+        'TaxID': deal.get('ClientTaxId', ''),
+        'Status': 'Success' if b3 else (deal.get('Status') or 'New'),
+        'Acronym': str(deal.get('Client') or '').strip(),
+        '_conf_kind': confirmation_source(deal),
+        '_conf_vcp_side': vcp_side(deal),
+        '_conf_cupom': cupom_limpo(deal),
+        '_conf_withdrawal': has_withdrawal_option(deal),
+    })
+    return out

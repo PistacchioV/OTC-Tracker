@@ -23,6 +23,7 @@ O que este script prende:
 Roda em tmp: cache e pasta Conecta apontam para diretórios temporários.
 """
 import io
+import re
 import os
 import sys
 import tempfile
@@ -445,6 +446,177 @@ def main():
         check('data 1931 de linha antiga sai como 2031 no e-mail', '18-ago-2031' in dr2['html'] and '15-ago-2031' in dr2['html'])
     finally:
         otc_emails._build_cpdetails_index = _idx_orig
+    print('== 6d. B3 ID mapeado (§481): Intrag Swap no B2B; Pending Confirmation + esteira contra cliente ==')
+    # A linha da Intrag Swap é a visão da ATACAMA (Parte Atacama com a perna
+    # dela, Contraparte Banco) — os 36 campos no exemplo da mesa.
+    codes_b = queries.codes_for(b2b)
+    ent = domain.intrag_swap_entry(dict(b2b, B3ID='26F04329902'), codes_b)
+    linha = ';'.join(ent[k] for k in domain.INTRAG_SWAP_FIELDS)
+    esperado_intrag = ('INTRAGJP633;26F04329902;2026-09-15;2027-06-07;346000;Opção de Arrependimento;Atacama;Vanilla;'
+                       'Banco JP Morgan;VCP;Sim;2026-09-16;Banco JP Morgan;23355;100;C99;PRÉ FIXADO BRL;;Positivo;0;;;;;;'
+                       '100;C00;VCP;10615;Positivo;0;117;;2027-06-04;Quanto (ausencia variação cambial); MSFT US;100.00% Spot')
+    check('a linha da Intrag Swap (36 campos, visão da Atacama) é a do exemplo da mesa', linha == esperado_intrag)
+    if linha != esperado_intrag:
+        print('      got=%r' % linha)
+    _tpl = io.open(os.path.join(os.path.dirname(__file__), '..', '..', 'apps', 'templates', 'pages', 'intrag-swap.html'), encoding='utf-8').read()
+    _m = re.search(r'var ENTRY_FIELDS = \[(.*?)\];', _tpl, re.S)
+    _page_fields = tuple(re.findall(r"'([a-z0-9_]+)'", _m.group(1))) if _m else ()
+    check('os 36 campos são os da página /intrag-swap, na mesma ordem', _page_fields == domain.INTRAG_SWAP_FIELDS)
+    check('SWAP com Opção de Arrependimento; SWAP CORPORATE sem',
+          domain.confirmation_source(cli) == 'SWAP' and domain.confirmation_source(dict(cli, Functionality='N/A')) == 'SWAP CORPORATE')
+    from apps.pages.features.intrag.infra import persistence as IP
+    from apps.pages.features.intrag import queries as IQ
+    IP.INTRAG_SWAP_CACHE_DIR = os.path.join(tmp, 'intrag-swap')
+    d11 = commands.edit(b2b['_id'], '2026-09-16', {'B3ID': '26F04329902'}, sid='F666666')
+    check('B3 ID novo é MAPEAMENTO: Status Success (não Pending), com quem mapeou anotado',
+          d11 is not None and d11['Status'] == 'Success' and d11['MappedBy'] == 'F666666')
+    fp_i, ents_i, ii = IQ._find_intrag_swap_entry(b2b['_id'], '2026-09-15')
+    check('B2B com B3 ID → linha da Intrag Swap no arquivo-dia da Data Início, New, carteira da Atacama',
+          ii is not None and ents_i[ii]['b3_id'] == '26F04329902' and ents_i[ii]['carteira'] == 'INTRAGJP633'
+          and ents_i[ii]['status'] == 'New' and fp_i.endswith('20260915_intrag_swap.json') and ents_i[ii]['_client'] == b2b['Client'])
+    # Contra cliente: a mesma porta das outras páginas (o `_pc_save_from_deal`,
+    # que pula perna interna e chama a esteira).
+    calls = []
+    _pc_orig = R._pc_save_from_deal
+    R._pc_save_from_deal = lambda deal, pt, pending_status=None, trade_number=None, source=None: calls.append((deal, pt, pending_status, trade_number, source))
+    try:
+        commands.persist_deals([dict(cli, Status='Sent', ClientTaxId='58160789000128', ClientAccount='74220005')], sid='A111111')
+        d12 = commands.edit(cli['_id'], '2026-09-16', {'B3ID': '26F04329901'}, sid='F666666')
+    finally:
+        R._pc_save_from_deal = _pc_orig
+    check('cliente com B3 ID → Pending Confirmation: Product Type/source SWAP, Pending OTC, chave = B3 ID, LOB EDG',
+          d12 is not None and d12['Status'] == 'Success' and len(calls) == 1 and calls[0][1] == 'SWAP' and calls[0][2] == 'Pending OTC'
+          and calls[0][3] == '26F04329901' and calls[0][4] == 'SWAP' and calls[0][0]['Deal'] == '26F04329901'
+          and calls[0][0]['SettlementDate'] == '2027-06-07' and calls[0][0]['LOB'] == 'EDG' and calls[0][0]['TaxID'] == '58160789000128')
+    cdeal = calls[0][0]
+    from apps.pages import manual_conf as MC
+    _fr, _up = MC.find_row, MC.upsert_row
+    rows_mc = []
+    MC.find_row = lambda k: None
+    MC.upsert_row = lambda row: rows_mc.append(row)
+    try:
+        R._mc_save_from_deal(cdeal, 'SWAP', trade_number='26F04329901')
+    finally:
+        MC.find_row, MC.upsert_row = _fr, _up
+    row_mc = rows_mc[0] if rows_mc else {}
+    check('esteira: Produto SWAP, LOB do deal (EDG), Trade ID/Cetip ID = B3 ID, ativo = curva VCP, notional BRL, vencimento',
+          {'SWAP', 'SWAP CORPORATE'} <= R._MC_CONFIRMATION_SOURCES and row_mc.get('Produto') == 'SWAP' and row_mc.get('LOB') == 'EDG'
+          and row_mc.get('Trade ID') == '26F04329901' and row_mc.get('Cetip ID') == '26F04329901' and row_mc.get('Moeda') == 'MSFT US'
+          and row_mc.get('Notional Amount CCY') == 'BRL 346000.00' and row_mc.get('Data de vencimento') == '07/06/2027'
+          and R._lob_for_source('NDF COMM') == 'COMMODITY' and R._mc_conf_trade_keys([(cdeal, None)], 'swap-edg') == ['26F04329901'])
+
+    print('== 6e. a confirmação do swap: segregação, Cupom Limpo (Close → cotação; Spot → em branco), XML só em BRL ==')
+    ref16 = datetime(2026, 9, 16)
+    grupos, _st, _tot = R._conf_swap_groups(ref16)
+    check('um grupo contraparte × curva VCP × opcao-arrependimento, com o B3 ID; o B2B fica fora (é Intrag)',
+          len(grupos) == 1 and grupos[0]['mercadoria'] == 'MSFT US' and grupos[0]['family'] == 'opcao-arrependimento'
+          and '26F04329901' in grupos[0]['trades'] and grupos[0]['eligible'] == 1)
+    g = grupos[0]
+    picked = R._conf_pick_swap(ref16, g['acronym'], g['mercadoria'], 'opcao-arrependimento')
+    check('elegível = a operação com B3 ID', len(picked) == 1 and picked[0][0]['B3_ID'] == '26F04329901')
+    fake_close = lambda label, on, w: 500.25 if (label == 'MSFT US' and on == datetime(2026, 9, 15).date()) else None
+    w1 = []
+    conf = R._conf_swap_conf(picked[0][0], ref16, g['acronym'], g['mercadoria'], 'opcao-arrependimento', w1, fetch_close=fake_close)
+    check('Close 15-Sep-26: Preço Inicial = fechamento do dia, Strike = 100% dele, Cap 117% vira preço; Fator Equities na Parte B; Parte A Exponencial 252',
+          conf['b_preco_inicial'] == '500,2500' and conf['b_strike'] == '500,2500' and conf['b_lim_alta'] == '585,2925'
+          and conf['b_fator_equities'] == 'Aplicável' and conf['b_ativo'] == 'MSFT US - Microsoft Corporation'
+          and conf['b_dt_obs'] == '04/06/2027' and conf['b_bolsa'] == 'Bloomberg' and conf['b_repasse'] == 'Não'
+          and conf['a_forma_juros'] == 'Exponencial 252' and conf['a_fator_equities'] == 'Não aplicável' and conf['equities_side'] == 'B')
+    du = R._anbima_biz_diff(datetime(2026, 9, 15), datetime(2027, 6, 7))
+    check('3.1 e 3.2: nº = B3 ID, Valor Base, datas, prêmio (Parte B paga e tem o direito), dias corridos/úteis, juros pré 0% × Não Aplicável',
+          conf['num_conf'] == '26F04329901' and conf['valor_base'] == '346.000,00' and conf['dt_efetiva'] == '15/09/2026'
+          and conf['dt_venc'] == '07/06/2027' and conf['premio'] == 'R$ 23.355,00' and conf['devedor_premio'] == 'Parte B'
+          and conf['dt_premio'] == '16/09/2026' and conf['arrependimento'] == 'Sim' and conf['parte_arrependimento'] == 'Parte B'
+          and conf['dias_corridos'] == '265' and conf['dias_uteis'] == str(du) and conf['taxa_amort'] == '100%'
+          and conf['juros_pre_a'] == '0%' and conf['juros_pre_b'] == 'Não Aplicável'
+          and conf['parteb_cnpj'] == '58.160.789/0001-28' and conf['partea_nome'] == 'BANCO J.P. MORGAN S.A.')
+    spot = dict(picked[0][0]); spot['_conf_cupom'] = {'mode': 'spot', 'date': '', 'pct': 100.0}
+    w2 = []
+    c2 = R._conf_swap_conf(spot, ref16, g['acronym'], g['mercadoria'], 'opcao-arrependimento', w2, fetch_close=fake_close)
+    check('Spot: Preço Inicial e Strike em BRANCO, avisando que são obrigatórios',
+          c2['b_preco_inicial'] == '' and c2['b_strike'] == '' and any('obrigat' in x for x in w2))
+    w3 = []
+    c3 = R._conf_swap_conf(picked[0][0], ref16, g['acronym'], g['mercadoria'], 'opcao-arrependimento', w3, fetch_close=lambda *a: None)
+    check('Close sem cotação: em branco e avisando', c3['b_preco_inicial'] == '' and c3['b_strike'] == '' and any('em branco' in x for x in w3))
+    from flask import render_template as _rt
+    with app.test_request_context():
+        html_doc = _rt('confirmations/swap-edg-opcao-arrependimento.html', conf=conf, doc_only=True)
+        html_edit = _rt('confirmations/swap-edg-opcao-arrependimento.html', conf=conf)
+    check('documento (doc_only): nº, Partes, Valor Base, preços e datas no lugar do exemplo do Word; sem painel; utf-8',
+          '26F04329901' in html_doc and '346.000,00' in html_doc and html_doc.count('500,2500') == 2 and 'Microsoft Corporation' in html_doc
+          and '58.160.789/0001-28' in html_doc and 'id="editor-panel"' not in html_doc and 'BANCO SAFRA' not in html_doc
+          and '26I04036287' not in html_doc and '6.180.800,00' not in html_doc and '7.591,7000' not in html_doc and 'charset=utf-8' in html_doc)
+    check('editor: painel + script, obrigatórios marcados na perna do Fator Equities, save na rota do swap',
+          'id="editor-panel"' in html_edit and 'inp_b_strike' in html_edit and 'Strike (obrigatório)' in html_edit
+          and '/api/confirmation/swap-edg/save' in html_edit)
+    check('as fórmulas do Word (OMML) têm texto linear fora do Word — a imagem que não veio não fica quebrada',
+          'v:imagedata' not in html_doc and 'Fator Equities= 1+' in html_doc)
+    numero, xml, xw = R._conf_swap_xml(picked, 'MSFT US', ref16)
+    check('XML: tipoOperacao SWAP, numeroContrato = B3 ID, valor = notional em BRL, moeda e valor estrangeiro VAZIOS',
+          numero == '26F04329901' and '<tipoOperacao>SWAP</tipoOperacao>' in xml and '<valor>346000.00</valor>' in xml
+          and '<moedaEstrangeira></moedaEstrangeira>' in xml and '<valorEstrangeiro></valorEstrangeiro>' in xml
+          and '<cnpjCliente>58160789000128</cnpjCliente>' in xml and '<dataVencimento>20270607</dataVencimento>' in xml)
+    url, motivo = R._mc_generate_url({'Produto': 'SWAP', 'LOB': 'EDG', 'Data Operação': '16/09/2026',
+                                      'Trade ID': '26F04329901', 'Cliente': g['acronym'], 'Legal Entity': ''}, ['26F04329901'])
+    check('Generate do Monitor abre o editor de swap do grupo', url.startswith('/confirmation/swap-edg/opcao-arrependimento?date=2026-09-16'))
+    check('a família sem Opção de Arrependimento (corporate) não tem template — o Generate diz isso',
+          R._conf_swap_family({'_conf_kind': 'SWAP CORPORATE'}, None) == 'corporate' and 'corporate' not in R._CONF_SWAP_FAMILY_TEMPLATES)
+    rules_c = {str(r.rule) for r in app.url_map.iter_rules()}
+    check('rotas do editor de swap registradas', {'/confirmation/swap-edg/<family>', '/api/confirmation/swap-edg/save',
+                                                 '/api/confirmation/swap-edg/pdf', '/confirmation/swap-edg/validate',
+                                                 '/api/confirmation/swap-edg/validate'} <= rules_c)
+
+    print('== 6f. o editor e o save pela API (test client): Word + PDF + XML na pasta SWAP ==')
+    import json as _json
+    from urllib.parse import quote as _q
+    from datetime import timezone as _tz, timedelta as _td
+    from apps.pages.platform import confirmations as PC
+    _real = (PC._conf_swap_close, PC._conf_cgd_lookup, PC._conf_state_path, R._ei_resolve_client_dir,
+             R._conf_pc_set_fepweb, R._mc_stamp_generated, R._create_notification)
+    EI = os.path.join(tmp, 'ei'); stamped = []; fep = []
+    PC._conf_swap_close = fake_close
+    PC._conf_cgd_lookup = lambda first: '08 de agosto de 2008'
+    PC._conf_state_path = lambda ref, product='ndf-comm': os.path.join(tmp, 'conf-state-%s-%s.json' % (product, ref.strftime('%Y%m%d')))
+    R._ei_resolve_client_dir = lambda name, create=False: os.path.join(EI, name)
+    R._conf_pc_set_fepweb = lambda deals, num: fep.append((list(deals), num)) or 1
+    R._mc_stamp_generated = lambda picked, product, link='': stamped.append((product, len(picked), link))
+    R._create_notification = lambda *a, **k: None
+    try:
+        cl = app.test_client()
+        with cl.session_transaction() as ss:
+            ss['authenticated'] = True; ss['user_sid'] = 'T000000'; ss['user_name'] = 'T'
+            ss['session_expires_at'] = (datetime.now(tz=_tz.utc) + _td(hours=8)).isoformat()
+        page = cl.get('/confirmation/swap-edg/opcao-arrependimento?date=2026-09-16&acronym=%s&mercadoria=MSFT%%20US' % _q(g['acronym']))
+        hv = page.data.decode('utf-8')
+        check('GET do editor: 200 com o painel e o fechamento do Close', page.status_code == 200 and 'id="editor-panel"' in hv and '500,2500' in hv)
+        confj = _json.loads(re.search(r'id="conf-data">(.*?)</script>', hv, re.S).group(1))
+        fields = {k: confj.get(k, '') for k in R._CONF_SWAP_FIELDS}
+        body = {'family': 'opcao-arrependimento', 'date': '2026-09-16', 'acronym': g['acronym'], 'mercadoria': 'MSFT US', 'equities_side': 'b'}
+        r0 = cl.post('/api/confirmation/swap-edg/save', json=dict(body, fields=dict(fields, b_preco_inicial='', b_strike=''))).get_json()
+        check('save recusa Preço Inicial/Strike em branco na perna do Fator Equities (missing_price)',
+              not r0.get('success') and r0.get('error') == 'missing_price')
+        res = cl.post('/api/confirmation/swap-edg/save', json=dict(body, fields=fields)).get_json()
+        files = res.get('files') or []
+        check('salvou .doc + .pdf + .xml na pasta SWAP do cliente', res.get('success') and len(files) == 3
+              and all(os.sep + 'SWAP' + os.sep in f for f in files) and all(os.path.isfile(f) for f in files)
+              and files[0].endswith('.doc') and files[1].endswith('.pdf') and files[2].endswith('.xml'))
+        if not res.get('success'):
+            print('      ', res)
+        xml_txt = io.open(files[2], encoding='utf-8').read() if len(files) == 3 else ''
+        check('o XML gravado: SWAP, B3 ID, valor em BRL, estrangeiro vazio; FepWeb ID e esteira carimbados pelo B3 ID',
+              '<tipoOperacao>SWAP</tipoOperacao>' in xml_txt and '<valor>346000.00</valor>' in xml_txt and '<valorEstrangeiro></valorEstrangeiro>' in xml_txt
+              and fep == [(['26F04329901'], '26F04329901')] and stamped and stamped[-1][0] == 'swap-edg' and stamped[-1][1] == 1)
+        doc = io.open(files[0], encoding='utf-8').read() if files else ''
+        check('o .doc é o documento sem o painel, com os valores e o nome da contraparte na assinatura',
+              'id="editor-panel"' not in doc and '500,2500' in doc and '346.000,00' in doc and 'out_parteb_nome_assin">' + g['acronym'] in doc)
+        check('o PDF saiu do mesmo HTML (não vazio)', len(files) == 3 and os.path.getsize(files[1]) > 20000)
+        val = cl.get(res.get('validate_url') or '/x')
+        check('a janela de validação abre', val.status_code == 200)
+    finally:
+        (PC._conf_swap_close, PC._conf_cgd_lookup, PC._conf_state_path, R._ei_resolve_client_dir,
+         R._conf_pc_set_fepweb, R._mc_stamp_generated, R._create_notification) = _real
+    commands.delete([{'deal_id': cli['_id'], 'trade_date': '2026-09-16'}])
+
     print('== 7. templates e cadastros ==')
     tpl = R._fi_tpl_cached('swap-registro-premio')
     check('swap-registro-premio na biblioteca, 3 blocos (6+9+4), ligado à página',

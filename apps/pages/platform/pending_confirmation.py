@@ -727,7 +727,7 @@ def _pc_save_from_deal(deal, product_type, pending_status=None, trade_number=Non
         row = {c: '' for c in _PC_COLUMNS}
         row['Status'] = _pc_aging_band_label(aging)
         # A LOB acompanha o produto: mercadoria é COMMODITY, o resto é CEM.
-        row['LOB'] = routes._lob_for_source(source or product_type)
+        row['LOB'] = routes._lob_for_source(source or product_type, deal)
         row['SPN'] = str(deal.get('SPN', '') or '')
         row['Client'] = client
         row['Aging'] = str(aging) if aging is not None else ''

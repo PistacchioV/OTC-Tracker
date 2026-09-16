@@ -1,0 +1,69 @@
+{#- O painel de edição do documento de Swap (Swap com Opção de Arrependimento,
+    §481). Incluído pelo template do Word logo depois do <body>; no modo
+    doc_only (o .doc/PDF) nada disto sai. Cada input `inp_<k>` escreve no
+    `out_<k>` do documento (ver _swap-edg-script.html). -#}
+{% if not doc_only %}
+<div id="editor-panel">
+  <h1>⚙ Editor Swap — {{ conf.acronym }} · {{ conf.mercadoria }} · {{ conf.family_label }}</h1>
+  <p class="subtitle">Campos pré-preenchidos pela operação nº {{ conf.num_conf or '(sem B3 ID)' }} de {{ conf.data_neg }}. Revise, ajuste se preciso e salve o PDF.</p>
+  {% if conf.warnings %}
+  <div style="background:#4a3a1a;border:1px solid #aa8833;color:#ffd54f;border-radius:4px;padding:8px;font-size:8.5pt;margin-bottom:12px;">
+    {% for w in conf.warnings %}<div>⚠ {{ w }}</div>{% endfor %}
+  </div>
+  {% endif %}
+
+  <div class="section-header">Identificação do Documento</div>
+  <div class="field-group"><label>Nº da Confirmação (B3 ID)</label><input type="text" id="inp_num_conf" value="" oninput="update()"></div>
+  <div class="field-group"><label>Data do CGD (ex: 08 de agosto de 2008)</label><input type="text" id="inp_cgd_date" value="" oninput="update()"></div>
+
+  <div class="section-header">Partes</div>
+  <div class="field-group"><label>Nome da Parte A (JPMorgan)</label><input type="text" id="inp_partea_nome" value="" oninput="update()"></div>
+  <div class="field-group"><label>CNPJ da Parte A</label><input type="text" id="inp_partea_cnpj" value="" oninput="update()"></div>
+  <div class="field-group"><label>Nome da Parte B (Contraparte)</label><input type="text" id="inp_parteb_nome" value="" oninput="update()"></div>
+  <div class="field-group"><label>CNPJ da Parte B</label><input type="text" id="inp_parteb_cnpj" value="" oninput="update()"></div>
+
+  <div class="section-header">3.1 Dados Gerais</div>
+  <div class="field-group"><label>Data de Negociação (dd/mm/aaaa)</label><input type="text" id="inp_data_neg" value="" oninput="update()"></div>
+  <div class="field-group"><label>Valor Base (R$)</label><input type="text" id="inp_valor_base" value="" oninput="update()"></div>
+  <div class="field-group"><label>Data Efetiva</label><input type="text" id="inp_dt_efetiva" value="" oninput="update()"></div>
+  <div class="field-group"><label>Data de Vencimento</label><input type="text" id="inp_dt_venc" value="" oninput="update()"></div>
+  <div class="field-group"><label>Prêmio</label><input type="text" id="inp_premio" value="" oninput="update()"></div>
+  <div class="field-group"><label>Parte Devedora do Prêmio</label><input type="text" id="inp_devedor_premio" value="" oninput="update()"></div>
+  <div class="field-group"><label>Data de Pagamento do Prêmio</label><input type="text" id="inp_dt_premio" value="" oninput="update()"></div>
+  <div class="field-group"><label>Direito de Arrependimento (Sim/Não)</label><input type="text" id="inp_arrependimento" value="" oninput="update()"></div>
+  <div class="field-group"><label>Parte com Direito de Arrependimento</label><input type="text" id="inp_parte_arrependimento" value="" oninput="update()"></div>
+
+  <div class="section-header">3.2 Tabela de Fluxos de Caixa</div>
+  <div class="field-group"><label>Dias Corridos</label><input type="text" id="inp_dias_corridos" value="" oninput="update()"></div>
+  <div class="field-group"><label>Dias Úteis</label><input type="text" id="inp_dias_uteis" value="" oninput="update()"></div>
+  <div class="field-group"><label>Taxa de Amortização</label><input type="text" id="inp_taxa_amort" value="" oninput="update()"></div>
+  <div class="field-group"><label>Taxa de Juros Pré — Parte A</label><input type="text" id="inp_juros_pre_a" value="" oninput="update()"></div>
+  <div class="field-group"><label>Taxa de Juros Pré — Parte B</label><input type="text" id="inp_juros_pre_b" value="" oninput="update()"></div>
+
+  {% for side, titulo in (('a', '3.3 Parte A'), ('b', '3.4 Parte B')) %}
+  <div class="section-header">{{ titulo }}{% if conf.equities_side and conf.equities_side|lower == side %} — Fator Equities{% endif %}</div>
+  <div class="field-group"><label>Forma de Cálculo de Juros Pré</label><input type="text" id="inp_{{ side }}_forma_juros" value="" oninput="update()"></div>
+  <div class="field-group"><label>Fator Equities</label><input type="text" id="inp_{{ side }}_fator_equities" value="" oninput="update()"></div>
+  <div class="field-group"><label>Ativo Subjacente</label><input type="text" id="inp_{{ side }}_ativo" value="" oninput="update()"></div>
+  <div class="field-group"><label>Preço Inicial{% if conf.equities_side and conf.equities_side|lower == side %} (obrigatório){% endif %}</label><input type="text" id="inp_{{ side }}_preco_inicial" value="" oninput="update()"></div>
+  <div class="field-group"><label>Strike{% if conf.equities_side and conf.equities_side|lower == side %} (obrigatório){% endif %}</label><input type="text" id="inp_{{ side }}_strike" value="" oninput="update()"></div>
+  <div class="field-group"><label>Data de Observação do Fator Equities</label><input type="text" id="inp_{{ side }}_dt_obs" value="" oninput="update()"></div>
+  <div class="field-group"><label>Bolsa de Valores</label><input type="text" id="inp_{{ side }}_bolsa" value="" oninput="update()"></div>
+  <div class="field-group"><label>Repasse de Proventos</label><input type="text" id="inp_{{ side }}_repasse" value="" oninput="update()"></div>
+  <div class="field-group"><label>Limite de Alta</label><input type="text" id="inp_{{ side }}_lim_alta" value="" oninput="update()"></div>
+  <div class="field-group"><label>Limite de Baixa</label><input type="text" id="inp_{{ side }}_lim_baixa" value="" oninput="update()"></div>
+  {% endfor %}
+
+  <button class="btn-print" style="background:#1a3a6e" onclick="saveToInventory(this)">💾 Salvar Word + PDF no Inventory</button>
+  <div id="save-status" style="font-size:8pt;color:#9090b0;margin-top:6px;word-break:break-all;"></div>
+</div>
+
+<!-- Checklist + preview do PDF, sobre o editor (sem abrir aba nova) -->
+<div id="validate-overlay">
+  <div id="validate-bar">
+    <span>✓ Validação da confirmação</span>
+    <button type="button" onclick="closeValidate()">✕ Fechar e voltar ao documento</button>
+  </div>
+  <iframe id="validate-frame" title="Validação da confirmação"></iframe>
+</div>
+{% endif %}

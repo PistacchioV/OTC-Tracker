@@ -141,6 +141,15 @@ def _save_intrag_ndf_entry(deal):
     persistence._intrag_ndf_persist(entry, td)
 
 
+def _save_intrag_swap_entry(entry, start_dt=None):
+    """A linha da Intrag Swap que o Swap Bullet montou (o B2B com B3 ID, na
+    visão da Atacama — `swap_bullet.domain.intrag_swap_entry`) → o day-file
+    da Data Início. Aqui só se grava; a regra é de quem conhece o deal."""
+    if not isinstance(entry, dict) or not entry.get('_deal'):
+        raise ValueError('intrag swap entry without _deal')
+    persistence._intrag_swap_persist(dict(entry), start_dt)
+
+
 def _save_intrag_ndf_moeda_entry(deal):
     """NDF de moeda (Vanilla / Other Publisher contra o Lawton) → entrada na
     Intrag NDF no layout do arquivo "Instrucao NDF Moeda" (NDF - TERMO DE

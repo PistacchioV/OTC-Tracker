@@ -1302,3 +1302,220 @@ def api_conf_mgt_validate():
     # card de Confirmations do New Deals Monitor, que é onde ele já era
     # acompanhado; o que saiu foi só a linha no sino.
     return jsonify({'success': True, 'status': 'Success'})
+
+
+# ═════════════════════════ Swap Bullet (Swap com Opção de Arrependimento) ═══
+# O documento de UMA operação do Swap Bullet contra cliente com B3 ID (§481).
+# Mesmo ciclo do MGT: página pré-preenchida → save (Word + PDF + XML no
+# Inventory, pasta SWAP) → validação; a diferença é que não há Anexo I com N
+# linhas — os campos do documento vêm todos no `fields`.
+
+@blueprint.route('/confirmation/swap-edg/<family>')
+def confirmation_swap(family):
+    if not session.get('authenticated'):
+        return redirect(url_for('pages_blueprint.sign_in_page'))
+    if family not in _R()._CONF_SWAP_FAMILY_TEMPLATES:
+        return ('Família {} sem template de documento (opcao-arrependimento).'.format(family), 404)
+    ds = (request.args.get('date') or '').strip()
+    acr = (request.args.get('acronym') or '').strip()
+    merc = (request.args.get('mercadoria') or '').strip().upper()
+    try:
+        ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
+    except ValueError:
+        ref = datetime.now()
+    picked = _R()._conf_pick_swap(ref, acr, merc, family)
+    if not picked:
+        return ('Nenhuma operação elegível para essa confirmação '
+                '(contraparte {} × {} em {}).'.format(acr, merc, ref.strftime('%d/%m/%Y')), 404)
+    warnings = []
+    # O documento cobre UMA operação; o Nº pedido na URL escolhe qual, senão a
+    # primeira — e as demais ficam declaradas no aviso.
+    num = (request.args.get('num') or '').strip().upper()
+    deal = next((d for d, _s in picked if str(d.get('B3_ID') or '').strip().upper() == num), None) \
+        if num else None
+    deal = deal or picked[0][0]
+    outras = [str(d.get('B3_ID') or '') for d, _s in picked if d is not deal]
+    if outras:
+        warnings.append('O grupo tem {} operação(ões) além desta ({}) — cada uma sai num documento '
+                        'próprio: gere de novo trocando o Nº no painel.'.format(len(outras), ', '.join(outras)))
+    conf = _R()._conf_swap_conf(deal, ref, acr, merc, family, warnings)
+    return render_template(_R()._CONF_SWAP_FAMILY_TEMPLATES[family][0], conf=conf)
+
+@blueprint.route('/api/confirmation/swap-edg/save', methods=['POST'])
+def api_conf_swap_save():
+    """Salva a confirmação do swap (Word + PDF + XML) no Electronic Inventory,
+    na pasta do TIPO (SWAP), e grava o numeroContrato na coluna FepWeb ID."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    payload = request.get_json(silent=True) or {}
+    family = (payload.get('family') or 'opcao-arrependimento').strip()
+    if family not in _R()._CONF_SWAP_FAMILY_TEMPLATES:
+        return jsonify({'success': False, 'message': 'Template not available for this family yet.'}), 400
+    fields = payload.get('fields') or {}
+    if not str(fields.get('cgd_date') or '').strip():
+        return jsonify({'success': False, 'error': 'missing_cgd',
+                        'message': 'Data do CGD não cadastrada para esta contraparte. '
+                                   'Cadastre o CGD no Reference Data (ou preencha o campo '
+                                   'Data do CGD no painel) antes de salvar a confirmação.'}), 400
+    if not str(fields.get('num_conf') or '').strip():
+        return jsonify({'success': False, 'error': 'missing_num',
+                        'message': 'Nº da confirmação (B3 ID) em branco — a operação precisa estar '
+                                   'mapeada antes de o documento sair.'}), 400
+    # Preço Inicial e Strike da perna do Fator Equities são OBRIGATÓRIOS: a
+    # Spot eles são o valor acertado na hora, e um documento com a célula vazia
+    # afirmaria um swap sem preço. O painel recusa antes; aqui é a rede.
+    side = str(payload.get('equities_side') or fields.get('equities_side') or '').strip().lower()
+    if side in ('a', 'b'):
+        faltam = [lbl for k, lbl in (('preco_inicial', 'Preço Inicial'), ('strike', 'Strike'))
+                  if not str(fields.get('%s_%s' % (side, k)) or '').strip()
+                  or str(fields.get('%s_%s' % (side, k)) or '').strip().lower().startswith('não')]
+        if faltam:
+            return jsonify({'success': False, 'error': 'missing_price',
+                            'message': '{} da Parte {} em branco — preencha no painel antes de '
+                                       'salvar (Cupom Limpo a Spot: o valor do ativo, não o %).'
+                                       .format(' e '.join(faltam), side.upper())}), 400
+    acr = str(payload.get('acronym') or '').strip() or 'CONFIRMATION'
+    merc = str(payload.get('mercadoria') or '').strip()
+    conf = {k: str(fields.get(k) or '').strip() for k in _R()._CONF_SWAP_FIELDS}
+    conf.update({
+        'ref_date':     str(payload.get('date') or '').strip(),
+        'acronym':      acr, 'mercadoria': merc, 'family': family,
+        'family_label': _R()._CONF_SWAP_FAMILY_LABEL.get(family, family),
+        'equities_side': side.upper(),
+        'warnings':     [],
+    })
+    doc_html = render_template(_R()._CONF_SWAP_FAMILY_TEMPLATES[family][0], conf=conf, doc_only=True)
+    try:
+        from apps.pages.confirmation_pdfs import word_html_pdf
+        pdf_bytes = word_html_pdf(doc_html)
+    except ImportError:
+        return jsonify({'success': False,
+                        'message': 'reportlab is not installed — run pip install -r requirements.txt.'}), 500
+    except Exception:
+        _R().log.error('[conf] PDF build failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'message': 'PDF generation failed.'}), 500
+
+    ref = _R()._parse_date_any(payload.get('date')) or _R()._parse_date_any(conf['data_neg']) or datetime.now()
+    client_dir = _R()._ei_resolve_client_dir(conf['parteb_nome'] or acr, create=True)
+    dir_path = os.path.join(client_dir, 'Confirmations',
+                            ref.strftime('%Y'), _R()._ei_month_folder(ref.strftime('%m')),
+                            ref.strftime('%d'), _R()._mc_mod.TYPE_FOLDER[_R()._CONF_SWAP_FAMILY_TYPE[family]])
+    base = _R()._ei_sanitize('{} - SWAP - CONFIRMAÇÃO DE OPERAÇÃO DE DERIVATIVO nº {}'.format(acr, conf['num_conf']))
+    try:
+        os.makedirs(_R()._ei_long_path(dir_path), exist_ok=True)
+        candidate, n = base, 0
+        while _store.exists(_R()._ei_long_path(os.path.join(dir_path, candidate + '.doc'))) or \
+                _store.exists(_R()._ei_long_path(os.path.join(dir_path, candidate + '.pdf'))):
+            n += 1
+            candidate = '{} ({})'.format(base, n)
+        doc_path = os.path.join(dir_path, candidate + '.doc')
+        pdf_path = os.path.join(dir_path, candidate + '.pdf')
+        with open(_R()._ei_long_path(doc_path), 'w', encoding='utf-8') as fh:
+            fh.write(doc_html)
+        with open(_R()._ei_long_path(pdf_path), 'wb') as fh:
+            fh.write(pdf_bytes)
+
+        xml_files, numero_contrato, xml_warns, fep_updated = [], '', [], 0
+        # Só a operação DESTE documento entra no XML e nos carimbos.
+        num = conf['num_conf'].upper()
+        picked = [(d, s) for d, s in _R()._conf_pick_swap(ref, acr, merc, family)
+                  if str(d.get('B3_ID') or '').strip().upper() == num]
+        if picked:
+            numero_contrato, xml_str, xml_warns = _R()._conf_swap_xml(picked, merc, ref)
+            xcand, xn = candidate, 0
+            while _store.exists(_R()._ei_long_path(os.path.join(dir_path, xcand + '.xml'))):
+                xn += 1
+                xcand = '{} ({})'.format(candidate, xn)
+            xml_path = os.path.join(dir_path, xcand + '.xml')
+            with open(_R()._ei_long_path(xml_path), 'w', encoding='utf-8') as fh:
+                fh.write(xml_str)
+            xml_files.append(xml_path)
+            fep_updated = _R()._conf_pc_set_fepweb([d.get('B3_ID') for d, _s in picked], numero_contrato)
+        else:
+            xml_warns = ['XML não gerado: a operação {} não está mapeada (Success) no dia.'.format(num)]
+    except Exception as exc:
+        _R().log.error('[conf] save failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'message': 'Could not write to the Inventory share: ' + str(exc)}), 500
+
+    ref_state = _R()._parse_date_any(payload.get('date')) or ref
+    with _R()._cache_lock:
+        state = _R()._conf_state_load(ref_state, 'swap-edg')
+        state[_R()._conf_key(acr, merc, family)] = {
+            'status': 'Generated', 'doc': doc_path, 'pdf': pdf_path,
+            'saved_by': session.get('user_sid', ''),
+            'saved_at': datetime.now().strftime('%d/%m/%Y %H:%M:%S'),
+            'checks': {}, 'validated_by': '', 'validated_at': '',
+        }
+        _R()._conf_state_save(ref_state, state, 'swap-edg')
+    _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                              'Confirmation Saved', 'Swap Bullet',
+                              '{} · {} · nº {}'.format(acr, merc, conf['num_conf']))
+    validate_url = ('/confirmation/swap-edg/validate?date=' + ref_state.strftime('%Y-%m-%d')
+                    + '&acronym=' + _R().quote(acr) + '&mercadoria=' + _R().quote(merc)
+                    + '&family=' + _R().quote(family))
+    _R()._mc_stamp_generated(picked, 'swap-edg',
+                             link=_R()._mc_ei_link(conf['parteb_nome'] or acr, client_dir, pdf_path))
+    return jsonify({'success': True, 'files': [doc_path, pdf_path] + xml_files,
+                    'numero_contrato': numero_contrato, 'fepweb_updated': fep_updated,
+                    'warnings': xml_warns, 'validate_url': validate_url})
+
+@blueprint.route('/api/confirmation/swap-edg/pdf')
+def api_conf_swap_pdf():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    _ref, _key, entry, err = _R()._conf_state_entry_or_404(request.args, 'swap-edg')
+    if err:
+        return err
+    pdf_path = (entry or {}).get('pdf') or ''
+    if not pdf_path or not _store.isfile(pdf_path):
+        return ('PDF não encontrado no Inventory ({}).'.format(pdf_path), 404)
+    return send_file(pdf_path, mimetype='application/pdf', as_attachment=False,
+                     download_name=os.path.basename(pdf_path))
+
+@blueprint.route('/confirmation/swap-edg/validate')
+def confirmation_swap_validate():
+    if not session.get('authenticated'):
+        return redirect(url_for('pages_blueprint.sign_in_page'))
+    ref, _key, entry, err = _R()._conf_state_entry_or_404(request.args, 'swap-edg')
+    if err:
+        return err
+    acr = (request.args.get('acronym') or '').strip()
+    merc = (request.args.get('mercadoria') or '').strip().upper()
+    fam = (request.args.get('family') or 'opcao-arrependimento').strip()
+    qs = ('date=' + ref.strftime('%Y-%m-%d') + '&acronym=' + _R().quote(acr)
+          + '&mercadoria=' + _R().quote(merc) + '&family=' + _R().quote(fam))
+    return render_template('confirmations/validate.html',
+                           acronym=acr, mercadoria=merc, family=fam,
+                           ref_date=ref.strftime('%Y-%m-%d'),
+                           ref_date_disp=ref.strftime('%d/%m/%Y'),
+                           status=entry.get('status') or 'Generated',
+                           saved_by=entry.get('saved_by') or '',
+                           saved_at=entry.get('saved_at') or '',
+                           validated_by=entry.get('validated_by') or '',
+                           validated_at=entry.get('validated_at') or '',
+                           checks=entry.get('checks') or {},
+                           api_base='/api/confirmation/swap-edg',
+                           pdf_url='/api/confirmation/swap-edg/pdf?' + qs)
+
+@blueprint.route('/api/confirmation/swap-edg/validate', methods=['POST'])
+def api_conf_swap_validate():
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+    payload = request.get_json(silent=True) or {}
+    ref, key, entry, err = _R()._conf_state_entry_or_404(payload, 'swap-edg')
+    if err:
+        return jsonify({'success': False, 'message': err[0]}), err[1]
+    checks = payload.get('checks') or {}
+    if not checks or not all(bool(v) for v in checks.values()):
+        return jsonify({'success': False,
+                        'message': 'Todos os itens do checklist precisam ser confirmados.'}), 400
+    with _R()._cache_lock:
+        state = _R()._conf_state_load(ref, 'swap-edg')
+        entry = state.get(key) or entry
+        entry['status'] = 'Success'
+        entry['checks'] = {str(k): True for k in checks}
+        entry['validated_by'] = session.get('user_sid', '')
+        entry['validated_at'] = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+        state[key] = entry
+        _R()._conf_state_save(ref, state, 'swap-edg')
+    return jsonify({'success': True, 'status': 'Success'})

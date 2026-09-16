@@ -102,6 +102,13 @@ FAMILIES = {
     'Option FXO':         {'dir': ('Option', 'FXO'),         'source': 'OPTION',        'key': 'deal'},
     'NDF FWD Start':      {'generic': 'fwd-start',           'source': 'NDF FWD START', 'key': 'b3id'},
     'NDF Vanilla':        {'generic': 'vanilla',             'source': 'NDF VANILLA',   'key': 'deal'},
+    # Swap Bullet (§481): a MESMA pasta responde por dois sources, decididos
+    # por deal pela regra do mapeamento (`_swap_bullet_engine().confirmation_deal`
+    # → `_conf_kind`): SWAP com Opção de Arrependimento, SWAP CORPORATE sem.
+    # Cada família só grava os deals do SEU source; o B2B (Atacama) não é
+    # confirmação de cliente e fica de fora pelo `_pc_is_internal_counterparty`.
+    'Swap Bullet':        {'dir': ('Swap', 'Bullet'),        'source': 'SWAP',           'key': 'b3id', 'swap': True},
+    'Swap Bullet Corp':   {'dir': ('Swap', 'Bullet'),        'source': 'SWAP CORPORATE', 'key': 'b3id', 'swap': True},
 }
 
 
@@ -199,6 +206,14 @@ def main():
             if cfg.get('generic'):
                 deal_source = R._generic_nd_mc_source(cfg['generic'], deal)
                 if deal_source is None:
+                    fora_regra += 1
+                    continue
+            if cfg.get('swap'):
+                # O deal do Swap Bullet vem no formato da PÁGINA (B3ID, sem
+                # SettlementDate): o mesmo tradutor do mapeamento o põe no
+                # formato da esteira e diz o source dele.
+                deal = R._swap_bullet_engine().confirmation_deal(deal)
+                if deal.get('_conf_kind') != cfg['source']:
                     fora_regra += 1
                     continue
 

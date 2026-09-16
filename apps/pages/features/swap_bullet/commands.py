@@ -384,6 +384,7 @@ def edit(deal_id, trade_date, changes, sid=''):
         d = lst[idx]
         before_text = domain.vcp_text(d)
         spn_antes = str(d.get('SPN') or '').strip()
+        b3_antes = str(d.get('B3ID') or '').strip()
         touched_text = 'VcpText' in changes and str(changes.get('VcpText') or '').strip() != str(d.get('VcpText') or '').strip()
         for k, v in (changes or {}).items():
             if k not in EDITABLE:
@@ -418,12 +419,25 @@ def edit(deal_id, trade_date, changes, sid=''):
         if 'ClientAccount' in changes or 'SPN' in changes:
             pass
         enrich(d)
-        d['Status'] = 'Pending'
-        d['Maker'] = sid
-        d['Checker'] = ''
+        b3_novo = str(d.get('B3ID') or '').strip()
+        mapped = bool(b3_novo) and b3_novo != b3_antes
+        if mapped:
+            # B3 ID novo é o MAPEAMENTO da operação: o registro existe na B3, e
+            # isso é o `Success` das outras páginas de New Deals — não uma
+            # edição a aprovar. Maker/Checker ficam como estavam; quem mapeou
+            # fica anotado.
+            d['Status'] = 'Success'
+            d['MappedBy'] = sid
+            d['MappedAt'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        else:
+            d['Status'] = 'Pending'
+            d['Maker'] = sid
+            d['Checker'] = ''
         _R()._atomic_write_json(fp, lst)
         _R()._daycache_forget(fp)
-        return d
+    if mapped:
+        b3_mapped(d)
+    return d
 
 
 def add(fields, trade_date, sid=''):
@@ -450,8 +464,10 @@ def add(fields, trade_date, sid=''):
     enrich(d)
     d.update({'MyNumber': _rand10(), 'MyNumberMirror': _rand10(),
               'PremiumMyNumber': _rand10(), 'PremiumMyNumberMirror': _rand10(),
-              'Status': 'New', 'Maker': '', 'Checker': '', 'ImportedBy': sid})
+              'Status': 'Success' if d['B3ID'] else 'New', 'Maker': '', 'Checker': '', 'ImportedBy': sid})
     persistence.upsert(ref, [d])
+    if d['B3ID']:
+        b3_mapped(d)
     return d
 
 
@@ -512,3 +528,55 @@ def delete(items):
             _R()._atomic_write_json(fp, lst)
             _R()._daycache_forget(fp)
     return apagados, nao
+
+
+# ── Depois do B3 ID (§481) ───────────────────────────────────────────────────
+
+def b3_mapped(deal):
+    """O deal ganhou B3 ID. No B2B, a linha da **Intrag Swap** (a visão da
+    Atacama, na carteira dela); contra cliente, a linha do **Pending
+    Confirmation** e a da esteira de **Manual Confirmations** (Produto SWAP /
+    SWAP CORPORATE, chave = B3 ID, LOB do deal). Cada braço se protege: a
+    falha vai para o log com o traceback e não derruba a gravação da grade."""
+    import traceback
+    b3 = str(deal.get('B3ID') or '').strip()
+    if not b3:
+        return
+    try:
+        if domain.is_b2b(deal):
+            entry = domain.intrag_swap_entry(deal, queries.codes_for(deal))
+            start = domain.parse_date(deal.get('StartDate')) or domain.parse_date(deal.get('TradeDate'))
+            start_dt = datetime(start.year, start.month, start.day) if start else None
+            _R()._intrag_engine()._save_intrag_swap_entry(entry, start_dt)
+        else:
+            tipo = domain.confirmation_source(deal)
+            # A mesma porta das outras páginas: o `_pc_save_from_deal` pula a
+            # perna interna sozinho e é ele quem chama o `_mc_save_from_deal`.
+            _R()._pc_save_from_deal(confirmation_deal(deal), tipo, pending_status='Pending OTC',
+                                    trade_number=b3, source=tipo)
+    except Exception:                                       # noqa: BLE001
+        _R().log.warning('[SWAP BULLET] post-mapping flow failed for %s:\n%s', b3, traceback.format_exc())
+
+
+def confirmation_deal(deal):
+    """O deal no formato das confirmações (`domain.confirmation_deal`) com o
+    CNPJ da contraparte do Reference Data — o `enrich` o apaga da linha
+    quando o cliente tem conta B3 própria (não vai no registro), e o
+    documento e o XML precisam dele."""
+    out = domain.confirmation_deal(deal)
+    if not re.sub(r'\D', '', str(out.get('TaxID') or '')):
+        rec = queries.refdata_by_spn(deal.get('SPN', '')) if deal.get('SPN') else {}
+        out['TaxID'] = re.sub(r'\D', '', str((rec or {}).get('TAX ID', '') or ''))
+    return out
+
+
+def confirmation_deals(ref_dt):
+    """Os deals CONTRA CLIENTE do dia `ref_dt`, no formato das confirmações —
+    é o que a segregação das confirmações de Swap lê (`platform/confirmations`).
+    O B2B fica de fora: a confirmação do intragrupo é a linha da Intrag."""
+    out = []
+    for d in queries.entries(ref_dt.strftime('%Y-%m-%d')):
+        if domain.is_b2b(d):
+            continue
+        out.append(confirmation_deal(d))
+    return out

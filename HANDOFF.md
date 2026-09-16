@@ -20754,10 +20754,104 @@ do cadastro recalculados). `check_ops_trade_swap`, `check_payrec_run` e
   vazia some com o `_`), então deals de LOBs diferentes no mesmo lote saem
   em arquivos separados. O `file_name` cadastrado na variante do template
   segue vencendo.
-- Ficou de fora, de propósito: Mapping B3 (o arquivo de retorno do swap não
-  foi definido) e a entrada na esteira de confirmação/Pending Confirmation.
+- Ficou de fora, de propósito: Mapping B3 pelo arquivo de retorno (o layout
+  do retorno do swap não foi definido; o B3 ID entra pela edição da linha). A
+  entrada na esteira/Pending Confirmation e a Intrag são o §481.
   E a **cópia do BANCO do template `swap-pagamento-final-v3` não ganha o
   `linked_pages` sozinha** na instância (a semeadura não sobrescreve o que
   já existe): a geração não depende disso, mas para o File Interpreter
   mostrar a página ligada é `data_store.write` do JSON versionado (como se
   fez na dev) ou salvar o template pela tela.
+
+## §481 — Swap Bullet com B3 ID: Intrag Swap no B2B, esteira + Pending Confirmation e a confirmação com Opção de Arrependimento (2026-09-16)
+
+**Pedido.** Quando o deal do Swap Bullet for mapeado com o B3 ID, seguir o
+fluxo: no B2B a linha da **Intrag Swap** (não é DCE), contra cliente o
+**Track Confirmations** (SWAP quando há Opção de Arrependimento, senão SWAP
+CORPORATE) e o **Pending Confirmation**; o documento da confirmação é o Word
+que a mesa salvou em `confirmations/swap-edg-opcao-arrependimento.html`. No
+Cupom Limpo, "Close" puxa a cotação do ativo (Quotes) para Preço Inicial e
+Strike (o % sobre ela); "Spot" deixa os dois em branco e obrigatórios (o
+valor do ativo, não o %). No XML só o valor em BRL = notional; moeda e valor
+estrangeiro em branco.
+
+**O gatilho é o B3 ID novo na linha** (`commands.edit`, ou Add Row já com o
+B3 ID): é o `Success` das outras páginas — a operação existe na B3 — e por
+isso a edição NÃO vai para Pending (Maker/Checker ficam; `MappedBy`/`MappedAt`
+anotam quem mapeou). Daí `commands.b3_mapped(deal)`:
+
+- **B2B (Banco × Atacama) → Intrag Swap**, pela mesma porta do New Deals
+  (`routes._intrag_engine()._save_intrag_swap_entry`). A linha é a visão da
+  ATACAMA — Parte Atacama com a perna DELA (a Curva B do deal), Contraparte
+  Banco com a Curva A —, na carteira `INTRAGJP633` (a da Atacama; NDF e
+  Opção usam a INTRAGJP552 do Lawton), gravada no arquivo-dia da **Data
+  Início** (é por ela que a página `/intrag-swap` localiza a linha e agrupa o
+  envio). Os 36 campos (`domain.INTRAG_SWAP_FIELDS`, na ordem do
+  `ENTRY_FIELDS` da página — o teste prende a paridade) saem de
+  `domain.intrag_swap_entry(deal, codes)`: bloco 1 = curva da Parte, bloco 2
+  = da Contraparte; só a VCP leva Código (Tipo/Classe), Data de Cotação,
+  Descrição (`Denominação 1; curva`) e Preço Inicial; números sem milhar e
+  sem zeros à direita (`plain_num`); Sinal Positivo/Negativo; Pagador do
+  prêmio `Banco JP Morgan`/`Atacama`. O exemplo da mesa vinha com quatro `;`
+  a mais no fim (41 campos contra 36 do cabeçalho) — o arquivo segue o
+  cabeçalho. A persistência da Intrag virou uma função por produto sobre um
+  `_intrag_day_persist` comum (re-save preserva status/maker/checker e o
+  `intrag_id`).
+- **Contra cliente → `_pc_save_from_deal`** (que pula perna interna sozinho e
+  chama o `_mc_save_from_deal`): Product Type/source = `SWAP` ou `SWAP
+  CORPORATE` (`domain.confirmation_source`), Pending OTC, chave = B3 ID. O
+  deal vai no formato das páginas de New Deals (`domain.confirmation_deal`:
+  `Deal`/`B3_ID` = B3 ID, `SettlementDate`, `TaxID` do Reference Data — o
+  `enrich` o apaga da linha quando a conta é própria — e os `_conf_*`).
+  Na plataforma: `_MC_CONFIRMATION_SOURCES` ganhou os dois, a **LOB da
+  linha é a do deal** quando ele a traz (`_lob_for_source(source, deal)` —
+  `EDG`), o ativo (`Moeda`) é a **curva VCP** (o mesmo eixo da segregação),
+  o notional sai com `Currency`, e `_mc_conf_trade_keys` chaveia o produto
+  `swap-edg` pelo B3 ID. O backfill ganhou duas famílias na MESMA pasta
+  (`Swap/Bullet`), cada uma gravando só os deals do seu source pelo mesmo
+  tradutor do mapeamento (`check_mc_backfill` cobra a paridade).
+
+**A confirmação** (`platform/confirmations`, bloco Swap; rotas
+`/confirmation/swap-edg/<family>` + save/pdf/validate em
+`features/confirmation/entrypoint`): segregação contraparte × curva VCP ×
+família (`opcao-arrependimento` quando `_conf_kind == 'SWAP'`, senão
+`corporate`, que ainda não tem template — o Generate do Monitor diz isso), os
+deals do dia lidos pelo `routes._swap_bullet_engine().confirmation_deals`
+(contra cliente, B3 ID → Success). **Um documento cobre UMA operação**: o
+grupo com mais de uma elegível gera a primeira e avisa as outras (`?num=`
+escolhe). `_conf_swap_conf` monta os campos: Parte A fixa no Banco, 3.1
+(datas, Valor Base, prêmio com a Parte Devedora, Direito de Arrependimento e
+a Parte com o direito = quem PAGA o prêmio), 3.2 (dias corridos, dias úteis
+ANBIMA, amortização 100%, juros pré da perna JUROS e Não Aplicável na VCP),
+3.3/3.4 por Parte (Exponencial 252 na JUROS; na VCP Fator Equities Aplicável,
+ativo `curva - descrição`, Data de Observação = Data de Cotação, Bolsa = Fonte
+de Informação, limites em preço quando há fechamento). **Cupom Limpo**
+(`domain.cupom_limpo` lê o Preço Inicial + a 3ª linha da Denominação):
+`Close dd-mmm-aa` → `_conf_swap_close` busca o fechamento pelo símbolo do
+cadastro `quotes-equity` (rótulo = a curva VCP como está no DT), último
+pregão até a data; Preço Inicial = fechamento (4 casas), Strike = % do Cupom
+Limpo sobre ele; `Spot` → os dois em BRANCO, com aviso, e o painel e o save
+recusam sem eles (`missing_price`). Sem símbolo/cotação, idem, com o motivo.
+O save grava Word + PDF + XML na pasta `SWAP` do cliente no Inventory, XML
+com `tipoOperacao SWAP`, `numeroContrato` = B3 ID, `valor` = Valor Base e
+`moedaEstrangeira`/`valorEstrangeiro` VAZIOS (`_conf_swap_legs` + `ccy='BRL'`
+no `_conf_ndf_xml`), FepWeb ID nas linhas do PC pelo B3 ID, carimbo de
+geração na esteira (`swap-edg`) e a validação sobre o editor como no MGT.
+
+**O template** é o export do Word da mesa (utf-8 rotulado como cp1252 —
+o meta agora diz utf-8), com 44 `out_*` no lugar dos valores do exemplo
+(tabelas por coordenada célula a célula, cabeçalho e assinaturas por literal),
+o painel e o script em dois parciais (`_swap-edg-panel.html`,
+`_swap-edg-script.html`) incluídos pelo template e fora no `doc_only`. As
+**fórmulas das cláusulas 4 e 5 são OMML** (`<m:oMath>` num comentário
+condicional que só o Word lê) com uma imagem de fallback que não veio
+(`_files/`): fora do Word — navegador e PDF — elas saem como texto LINEAR
+extraído do OMML (`Fator Equities= 1+((Preço Final-Strike) / (Preço Inicial))`);
+no `.doc` o Word continua desenhando a fórmula. As referências à pasta
+`_files/` (header/footer, tema) saíram do `<head>`.
+
+Teste: `check_swap_bullet.py` §6d/§6e (linha da Intrag byte a byte com o
+exemplo, paridade com a página, mapeamento → Success + Intrag/PC/esteira com
+espiões, segregação, Close/Spot/sem cotação, documento e editor renderizados,
+XML, Generate do Monitor, rotas); `check_manual_conf` (sete produtos) e
+`check_mc_backfill` atualizados.

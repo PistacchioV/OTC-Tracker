@@ -45,13 +45,15 @@ INTRAG_NDF_SEND_DIR = os.path.join(
     _R().Config.SHARED_DRIVE_ROOT, 'Confirmation', 'Derivativos', 'OTC Tracker', 'Intrag')
 
 
-def _intrag_ndf_persist(entry, td):
-    """Append/update uma entrada no day-file da Intrag NDF (chave = _deal)."""
+def _intrag_day_persist(cache_dir, suffix, tag, entry, td):
+    """Append/update de UMA entrada no arquivo-dia de um produto da Intrag
+    (chave = `_deal`). A esteira da linha que já existe é PRESERVADA: só a
+    primeira gravação nasce 'New' — re-salvar não desfaz Pending/Approved/Sent
+    nem apaga o `intrag_id` do mapeamento."""
     ref = td or datetime.now()
-    dir_path = os.path.join(INTRAG_NDF_CACHE_DIR, ref.strftime('%Y'), ref.strftime('%m'))
+    dir_path = os.path.join(cache_dir, ref.strftime('%Y'), ref.strftime('%m'))
     os.makedirs(dir_path, exist_ok=True)
-    fname = ref.strftime('%Y%m%d') + '_intrag_ndf.json'
-    file_path = os.path.join(dir_path, fname)
+    file_path = os.path.join(dir_path, ref.strftime('%Y%m%d') + suffix)
 
     with _R()._cache_lock:
         if _store.exists(file_path):
@@ -71,11 +73,25 @@ def _intrag_ndf_persist(entry, td):
             entry['status']  = entries[idx].get('status') or 'New'
             entry['maker']   = entries[idx].get('maker', '')
             entry['checker'] = entries[idx].get('checker', '')
+            if entries[idx].get('intrag_id'):
+                entry['intrag_id'] = entries[idx]['intrag_id']
             entries[idx] = entry
         else:
             entries.append(entry)
         _R()._atomic_write_json(file_path, entries)
-    _R().log.info('[INTRAG NDF] Saved entry deal=%r → %s', deal_id, file_path)
+    _R().log.info('[%s] Saved entry deal=%r → %s', tag, deal_id, file_path)
+
+
+def _intrag_ndf_persist(entry, td):
+    """Append/update uma entrada no day-file da Intrag NDF (chave = _deal)."""
+    _intrag_day_persist(INTRAG_NDF_CACHE_DIR, '_intrag_ndf.json', 'INTRAG NDF', entry, td)
+
+
+def _intrag_swap_persist(entry, td):
+    """Append/update uma entrada no day-file da Intrag Swap (chave = _deal).
+    O dia é a **Data Início** do swap: é por ela que a página localiza a
+    linha (`trade_date` = Data Início no edit/approve) e agrupa o envio."""
+    _intrag_day_persist(INTRAG_SWAP_CACHE_DIR, '_intrag_swap.json', 'INTRAG SWAP', entry, td)
 
 
 INTRAG_DCE_SWAP_CACHE_DIR = os.path.normpath(os.path.join(
