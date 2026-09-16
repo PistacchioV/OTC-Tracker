@@ -20531,7 +20531,12 @@ Na tela, cada ponta ganhou **Curve description (Denominação)** e **Rate
 multiplier**; o campo que a denominação preencheu leva a marca `◆` (a classe
 `tl-derived`, ao lado das já existentes `tl-missing` e `tl-assumed`), e a nota
 abaixo do texto lista os achados com o trecho de cada um e o que ficou sem
-leitura, em aviso.
+leitura, em aviso. **O bloco só aparece na perna cuja curva É VCP** (pedido da
+mesa na mesma sessão: na perna comum ele só poluía): o prefill devolve `vcp`
+por ponta — curva VCP no `swap-index` ou Denominação preenchida — e o JS abre
+ou fecha; na tela em branco os dois ficam fechados, com o link "VCP curve?
+Add its description" para quem preenche à mão; no POST o servidor reabre onde
+há descrição ou multiplicador.
 
 **No motor**, `Ponta.multiplicador` incide na taxa ANUAL que capitaliza —
 `(1 + r·k)^τ`, nunca `((1 + r)^τ)·k` —, em todo índice com taxa (no CDI, no

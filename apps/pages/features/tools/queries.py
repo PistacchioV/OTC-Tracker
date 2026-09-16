@@ -703,6 +703,10 @@ def swap_prefill(b3_id):
         # multiplicador da taxa, o spread, a contagem, o D-n da PTAX (§479).
         # Lida ANTES das buscas de fixing abaixo, que dependem do que ela diz.
         domain.aplicar_descricao(campos, _celula(vals, _POS['denominacao'][k]), faltando)
+        # A tela só mostra descrição e multiplicador na perna cuja curva É
+        # VCP (pelo `swap-index`) ou que traz Denominação — na perna comum os
+        # dois campos só poluiriam.
+        campos['vcp'] = bool(campos.get('descricao')) or domain.norm(nome_curva) == 'vcp'
         if campos.get('ptax_offset'):
             try:
                 desloc = int(float(campos['ptax_offset']))

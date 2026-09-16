@@ -533,6 +533,22 @@
       var ta = document.getElementById(lado + '_descricao');
       if (ta) ta.addEventListener('change', function () { lerDescricao(lado); });
     });
+    // O bloco (descrição + multiplicador) só aparece na perna cuja curva É
+    // VCP: o prefill decide; quem preenche à mão abre pelo link.
+    function mostrarVcp(lado, on) {
+      var bloco = document.getElementById(lado + '_vcp'), link = document.getElementById(lado + '_vcp_link');
+      if (bloco) bloco.hidden = !on;
+      if (link) link.hidden = !!on;
+    }
+    page.querySelectorAll('a.tl-vcp-toggle').forEach(function (a) {
+      a.addEventListener('click', function (ev) {
+        ev.preventDefault();
+        var lado = a.getAttribute('data-leg');
+        mostrarVcp(lado, true);
+        var ta = document.getElementById(lado + '_descricao');
+        if (ta) ta.focus();
+      });
+    });
     function say(html, cls) {
       if (!status) return;
       status.className = 'tl-note mt-2 ' + (cls || '');
@@ -600,6 +616,7 @@
           if (!p[k]) setVal(lado + '_' + k, '');
         });
         notaDescricao(lado, p);
+        mostrarVcp(lado, !!(p.vcp || p.descricao || p.multiplicador));
         // De que dia é a PTAX que entrou — ou por que ela não entrou. Sem isto
         // o campo de fixing é um número sem procedência.
         var nota = document.getElementById(lado + '_ptax_nota');
