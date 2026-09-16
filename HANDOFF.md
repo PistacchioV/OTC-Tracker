@@ -20902,3 +20902,53 @@ card mostra exatamente o que conta, toggle e Clear voltam às 12.
 
 Testes: `check_cgd_docs` (outcome por status, overview = contagem do
 outcome), `check_onboarding_api` (`_outcome` por linha, batendo com o módulo).
+
+## §483 — NDF cross com moeda fraca: o notional é o da PERNA FRACA (2026-09-16)
+
+A mesa viu um USD/CNH importado da API com o notional em USD. A regra da
+moeda fraca (§474, `_ndf_weak_leg`) é do PAR e já invertia o strike nos dois
+arranjos — 7,20 CNH por USD virava 0,1389 USD por CNH — mas o notional saía
+SEMPRE da `Quantity` da API, e a Athena pode bookar a Quantity na perna forte
+(Quantity = 1.000.000 USD, Other Quantity = 7.200.000 CNH). A linha ficava com
+o número de uma perna e a taxa da outra, e o contravalor não fechava.
+
+Agora `_ndf_deal_from_api` lê também a `OTHER QUANTITY` e, quando a perna
+fraca é a `Other Quantity Units` e a outra perna NÃO é BRL, o notional vem de
+lá: as moedas trocam de lugar (a fraca vira a `QuantityCurrency`, que é a
+Moeda de Referência do arquivo, campo 13), o sinal segue a convenção da
+Quantity, e a **direção VIRA** — comprar USD contra CNH é vender CNH, e o
+Papel (campo 6) é da moeda de referência. Os dois arranjos do mesmo trade
+gravam a mesma linha. Sem `Other Quantity` na resposta, fica como veio.
+
+**Contra BRL nada muda, de propósito** (resposta da mesa): CNH/BRL com a
+Quantity em BRL é o `IsBRRFixed`, um registro legítimo com as moedas
+trocadas pelo campo 55 — o notional fica onde a mesa bookou e só a taxa é
+invertida, como no §474. E a checagem de "só contra BRL" que se cogitou para
+a inversão foi DESCARTADA: o USD/CNH precisa da inversão.
+
+O Cockpit (`_ndfc_api_row`) separa as pernas por BRL (LC/FC) e não foi
+tocado. Teste: `check_weak_ccy_rate` §2b (os dois arranjos do USD/CNH, o
+CNH/BRL que fica, a resposta sem Other Quantity).
+
+## §484 — Confirmação MGT: o Nº do Anexo I é o Athena ID e o título perde o "Nº" (2026-09-16)
+
+Dois pedidos da mesa sobre o documento da MGT (`ndf-mgt-strike-me.html`,
+§453), que reaproveita as linhas do FWD Start do BANCO:
+
+1. **A coluna Nº do Anexo I é o Athena ID** (o `Deal`), não o B3 ID. No
+   documento do BANCO o Nº segue sendo o B3 ID (a regra de "mapeia o retorno
+   da B3 primeiro", §? *O Nº é o B3 ID*); no da MGT é o Deal que identifica a
+   operação. `_conf_fwdstart_rows` ganhou `num_field` (padrão `B3_ID`) e
+   `_conf_mgt_rows` chama com `Deal` — uma linha, sem duplicar o builder. O
+   aviso de "sem B3 ID" só sai quando a coluna depende dele; sem Deal o aviso
+   diz Deal. As chaves da esteira (`_mc_conf_trade_keys`) não mudaram: já eram
+   Deal no Vanilla e B3 ID no FWD Start.
+2. **O título é só "CONFIRMAÇÃO DE OPERAÇÕES DE DERIVATIVOS"**: saiu o "Nº" e
+   o campo FORMTEXT que o seguia, e com ele o campo *Nº da Confirmação
+   (cabeçalho)* do painel do editor. O `num_conf` fica vazio no payload da
+   view MGT (o save continua aceitando o campo por paridade com o editor do
+   BANCO, que não mudou). Os laços do JS que preenchem/leem os campos do
+   cabeçalho já testavam a existência do `<input>`.
+
+Teste: `check_mgt_conf` §3 (Nº = Deal nas duas famílias, título sem Nº,
+painel sem o campo, rótulo do editor).

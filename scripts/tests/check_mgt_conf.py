@@ -139,12 +139,20 @@ try:
     check('Vanilla: Taxa Forward e o Rate', cv.get('taxaFwd'), '5,43210000')
     check('Vanilla: sem Data de Verificacao da Taxa Forward', cv.get('dtVerifFwd'), 'Não Aplicável')
     check('Vanilla: sem Pontos de Termo', cv.get('pontosTermo'), 'Não Aplicável')
-    check('Vanilla: No = B3 ID, Data Efetiva = Trade Date, vencimento', (cv.get('num'), cv.get('dtEfetiva'), cv.get('dtVenc')),
-          ('26G09999901', '05/08/2026', '05/11/2026'))
+    # O No do Anexo I e o ATHENA ID (o Deal), nao o B3 ID (§484) — o B3 ID fica
+    # no cabecalho, quando o grupo tem uma operacao so.
+    check('Vanilla: No = Athena ID, Data Efetiva = Trade Date, vencimento', (cv.get('num'), cv.get('dtEfetiva'), cv.get('dtVenc')),
+          ('V1', '05/08/2026', '05/11/2026'))
+    titulo = re.search(r'<h2[^>]*>(.*?)</h2>', hv, re.S).group(1)
+    titulo = re.sub(r'<[^>]+>', '', titulo).replace('\n', ' ')
+    check('o titulo nao leva "No" nem numero', titulo.strip(), 'CONFIRMAÇÃO DE OPERAÇÕES DE DERIVATIVOS')
+    check('   e o painel nao tem mais o campo do No do cabecalho', 'inp_num_conf' in hv, False)
+    check('o editor rotula a coluna como Athena ID', "label: 'Nº (Athena ID)'" in hv, True)
     hf = cl.get('/confirmation/ndf-mgt/fwd-start?date=2026-08-05&acronym=SUZANO&mercadoria=USD').data.decode('utf-8')
     cf = cells(hf)
     check('FWD Start: as tres colunas do forward start', (cf.get('pontosTermo'), cf.get('dtVerifFwd'), cf.get('taxaFwd')),
           ('0,0337', '30/07/2026', 'Não Aplicável'))
+    check('FWD Start MGT: No do Anexo I = Athena ID', cf.get('num'), 'F1')
     r404 = cl.get('/confirmation/ndf-mgt/strike-me?date=2026-08-05&acronym=SUZANO&mercadoria=USD')
     check('familia desconhecida e 404', r404.status_code, 404)
 
