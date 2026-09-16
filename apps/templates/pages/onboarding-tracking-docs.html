@@ -123,6 +123,7 @@
 #ob-docs .ob-stat {
     display: flex; align-items: center; gap: .75rem;
     padding: .85rem 1rem;
+    cursor: pointer; user-select: none;
     background: var(--vr-card-bg, var(--ins-secondary-bg));
     border: 1px solid var(--vr-card-border, var(--ins-border-color));
     border-radius: var(--vr-card-radius, 18px);
@@ -135,6 +136,15 @@
         box-shadow: var(--vr-card-shadow-hover, 0 18px 40px rgba(94, 92, 230, .14));
     }
     #ob-docs .ob-stat:hover .ob-stat__ico { transform: scale(1.1) rotate(-4deg); }
+}
+#ob-docs .ob-stat:active { transform: scale(.985); }
+/* O card ativo é o filtro que está valendo (o mesmo desenho do Track
+   Confirmations): sem a marca, clicar num card e esquecer deixa a tabela
+   parecendo a lista inteira quando não é. */
+#ob-docs .ob-stat.is-active {
+    border-color: var(--vr-accent-1, #0066cc);
+    box-shadow: 0 0 0 2px rgba(0, 102, 204, .18),
+                var(--vr-card-shadow-hover, 0 18px 40px rgba(94, 92, 230, .14));
 }
 #ob-docs .ob-stat__ico {
     width: 38px; height: 38px; flex: 0 0 auto; border-radius: 11px;
@@ -169,38 +179,41 @@
         </div>
     </div>
 
-{# A contagem por status — um card por número (veio do Overview). #}
+{# A contagem por status — um card por número (veio do Overview). Clicar
+   filtra a tabela pelo desfecho (`data-outcome`, o `_outcome` que vai junto
+   de cada linha); o Documents é a lista inteira. Mesma função dos cards do
+   Track Confirmations. #}
     <div class="row g-3 mb-3">
         <div class="col-6 col-md-4 col-xl">
-            <div class="ob-stat ob-stat--total">
+            <div class="ob-stat ob-stat--total" data-outcome="">
                 <span class="ob-stat__ico"><i class="ti ti-files"></i></span>
                 <div><div class="ob-stat__n" id="ob-total">0</div>
                      <div class="ob-stat__l" data-lang="ob-sum-total">Documents</div></div>
             </div>
         </div>
         <div class="col-6 col-md-4 col-xl">
-            <div class="ob-stat ob-stat--pending">
+            <div class="ob-stat ob-stat--pending" data-outcome="pending">
                 <span class="ob-stat__ico"><i class="ti ti-hourglass-high"></i></span>
                 <div><div class="ob-stat__n" id="ob-pending">0</div>
                      <div class="ob-stat__l" data-lang="ob-sum-pending">Pending</div></div>
             </div>
         </div>
         <div class="col-6 col-md-4 col-xl">
-            <div class="ob-stat ob-stat--active">
+            <div class="ob-stat ob-stat--active" data-outcome="active">
                 <span class="ob-stat__ico"><i class="ti ti-circle-check"></i></span>
                 <div><div class="ob-stat__n" id="ob-active">0</div>
                      <div class="ob-stat__l" data-lang="ob-sum-active">Active</div></div>
             </div>
         </div>
         <div class="col-6 col-md-4 col-xl">
-            <div class="ob-stat ob-stat--inactive">
+            <div class="ob-stat ob-stat--inactive" data-outcome="inactive">
                 <span class="ob-stat__ico"><i class="ti ti-circle-off"></i></span>
                 <div><div class="ob-stat__n" id="ob-inactive">0</div>
                      <div class="ob-stat__l" data-lang="ob-sum-inactive">Inactive</div></div>
             </div>
         </div>
         <div class="col-6 col-md-4 col-xl">
-            <div class="ob-stat ob-stat--cancel">
+            <div class="ob-stat ob-stat--cancel" data-outcome="cancelled">
                 <span class="ob-stat__ico"><i class="ti ti-ban"></i></span>
                 <div><div class="ob-stat__n" id="ob-cancelled">0</div>
                      <div class="ob-stat__l" data-lang="ob-sum-cancelled">Cancelled</div></div>
@@ -604,8 +617,41 @@
             td.push('<td' + ell + (ordem ? ' data-order="' + esc(ordem) + '"' : '') +
                     ' title="' + esc(v) + '">' + esc(v) + '</td>');
         });
-        return '<tr data-id="' + esc(r[IDCOL]) + '">' + td.join('') + '</tr>';
+        return '<tr data-id="' + esc(r[IDCOL]) + '" data-outcome="' + esc(r._outcome || '') + '">' +
+               td.join('') + '</tr>';
     }
+
+    // ── Filtro pelos cards ────────────────────────────────────────────────
+    // O card ativo restringe a tabela ao seu desfecho. Não é `column().search`
+    // sobre a coluna Status, como no Track Confirmations: lá o valor do card é
+    // o texto EXATO da célula; aqui o Status é texto livre do SharePoint
+    // (`Inactive`, `Inativo`, `CANCELADO`), e a regra que diz em que card cada
+    // linha cai mora no servidor (`_outcome`, a mesma que conta os números).
+    // Um regex por card aqui seria essa regra escrita duas vezes — e o card
+    // contaria um número enquanto a tabela filtrada mostrasse outro.
+    //
+    // O plugin é registrado UMA vez e pergunta pela tabela pelo id: o
+    // `desenha()` destrói e recria o DataTable a cada load, e um push por
+    // desenho empilharia filtros. Ele lê o `<tr>` porque a tabela nasce do
+    // DOM (o `data` do callback é o texto das células, sem o desfecho).
+    var activeOutcome = '';
+    $.fn.dataTable.ext.search.push(function (settings, data, idx) {
+        if (settings.nTable.id !== 'ob-table' || !activeOutcome) { return true; }
+        var tr = settings.aoData[idx] && settings.aoData[idx].nTr;
+        return !!tr && tr.getAttribute('data-outcome') === activeOutcome;
+    });
+    function applyOutcomeFilter() {
+        $('#ob-docs .ob-stat').removeClass('is-active')
+            .filter('[data-outcome="' + activeOutcome + '"]').addClass(activeOutcome ? 'is-active' : '');
+        if (table) { table.draw(); }
+    }
+    $(document).on('click', '#ob-docs .ob-stat', function () {
+        var o = $(this).attr('data-outcome') || '';
+        // Clicar de novo no mesmo card desliga o filtro — senão só o Clear
+        // Filters volta à lista inteira, e ninguém procura ali por isso.
+        activeOutcome = (activeOutcome === o) ? '' : o;
+        applyOutcomeFilter();
+    });
 
     function desenha() {
         if (table) { table.destroy(); }
@@ -884,7 +930,9 @@
     });
     $('#ob-clear').on('click', function () {
         $('#ob-head-filters input').val('');
-        if (table) { table.search('').columns().search('').draw(); }
+        activeOutcome = '';
+        if (table) { table.search('').columns().search(''); }
+        applyOutcomeFilter();
     });
     // O modal de New Request (partial) chama isto depois de gravar.
     window.obRequestSaved = function () { carrega(); };

@@ -520,13 +520,18 @@ check('   dizendo quais colunas esperava',
 # etapa sem carimbo em quem nunca começou. As duas leituras estão erradas, e a
 # segunda é pior: o documento morto envelhece para sempre no topo da fila,
 # empurrando para baixo o que alguém de fato tem de fazer.
-for st, ativo, fechado in (('Active', True, True), ('Inactive', False, True),
-                           ('INATIVO', False, True), ('Cancelado', False, True),
-                           ('Cancelled', False, True), ('Doc Transacional', False, False)):
+# `outcome` e o card em que a linha cai — UMA regra para contar (overview) e
+# para filtrar (o clique no card do Track Docs, via `_outcome` da linha).
+for st, ativo, fechado, card in (('Active', True, True, 'active'), ('Inactive', False, True, 'inactive'),
+                                 ('INATIVO', False, True, 'inactive'), ('Cancelado', False, True, 'cancelled'),
+                                 ('Cancelled', False, True, 'cancelled'), ('Doc Transacional', False, False, 'pending'),
+                                 ('', False, False, 'pending')):
     r = {'Status': st}
     check('%-16s is_active' % st, C.is_active(r), ativo)
     check('%-16s is_closed' % st, C.is_closed(r), fechado)
     check('%-16s sem etapa' % st, C.pending_stage(r)[0] is None, fechado)
+    check('%-16s outcome' % st, C.outcome(r), card)
+    check('%-16s outcome e um dos quatro' % st, C.outcome(r) in C.OUTCOMES, True)
 
 # E os quatro números do Overview FECHAM. Sem o `closed` explícito o painel
 # mostrava três que não somavam o total, e a diferença era justamente o que
@@ -546,6 +551,14 @@ check('overview: cancelados', ov['cancelled'], 1)
 check('overview: pendentes', ov['pending'], 2)
 check('overview: os números fecham',
       ov['pending'] + ov['active'] + ov['inactive'] + ov['cancelled'] == ov['total'], True)
+# E cada numero do overview e a contagem do `outcome` — o card e o filtro
+# respondem pela mesma regra, senao o card conta um numero e a tabela
+# filtrada mostra outro.
+_amostra = [{'Status': 'Active'}, {'Status': 'Active'}, {'Status': 'Inactive'},
+            {'Status': 'Cancelado'}, {'Status': 'Em Analise Legal'}, {'Status': 'Doc Transacional'}]
+for _card in C.OUTCOMES:
+    check('overview: %s = contagem do outcome' % _card, ov[_card],
+          sum(1 for r in _amostra if C.outcome(r) == _card))
 check('nenhum encerrado nas filas',
       [i['status'] for card in ov['cards'] for i in card['items']
        if C.is_closed({'Status': i['status']})], [])

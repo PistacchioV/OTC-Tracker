@@ -20868,3 +20868,37 @@ no Mac; `_SYMBOL_FONT_CANDIDATES`) e sem nenhuma escreve `[X]`/`[  ]`.
 Fonte do documento: Times New Roman 12 (explícita em cada trecho; o estilo
 Normal diz Arial 12 mas nenhum trecho o usa); o PDF segue o gerador comum,
 Times 10,5 no corpo e 7,5 nas células.
+
+## §482 — Track Docs: clicar no card filtra a tabela pelo desfecho (2026-09-16)
+
+Pedido: a mesma função dos cards do Track Confirmations (clicar em *Pending
+OTC* restringe a grade àquele status) na tela Track Docs do Onboarding, onde
+os cinco cards (Documents · Pending · Active · Inactive · Cancelled) eram só
+contagem.
+
+**A diferença é quem diz em que card a linha cai.** No Track Confirmations o
+valor do card é o texto EXATO da coluna Pending, e o filtro é um
+`column().search` com regex. No Track Docs o Status é texto livre do
+SharePoint (`Inactive`, `Inativo`, `CANCELADO`, `Cancelled`) e a regra que
+classifica mora em `cgd_docs` (`is_active` exato, porque `INACTIVE` contém
+`ACTIVE`; `is_closed` por pedaço; inativo × cancelado pela marca). Um regex
+por card no navegador seria essa regra escrita duas vezes, e o card contaria
+um número enquanto a tabela filtrada mostrasse outro no primeiro status novo
+que a lista trouxesse.
+
+Por isso a regra ganhou UM nome, `cgd_docs.outcome(row)` (`pending` ·
+`active` · `inactive` · `cancelled`, `OUTCOMES`), o `overview` passou a
+contar por ela (mesmos números de antes; `check_cgd_docs` prende que cada
+número do overview É a contagem do `outcome`), e o `with_stage` a manda junto
+da linha como `_outcome`, ao lado do `_stage`/`_closed` que já iam pelo mesmo
+motivo. Na tela cada card diz `data-outcome`, a `<tr>` carrega o seu, e o
+filtro é um `$.fn.dataTable.ext.search` registrado UMA vez (pergunta pela
+tabela pelo id — o `desenha()` destrói e recria o DataTable a cada load, e
+um push por desenho empilharia filtros) lendo o atributo do `<tr>` (a tabela
+nasce do DOM; o `data` do callback é só o texto das células). Clicar de novo
+desliga, o card ativo leva `is-active` (a moldura do Track Confirmations) e
+o Clear Filters zera os dois filtros. Provado no Chromium: 12 linhas, cada
+card mostra exatamente o que conta, toggle e Clear voltam às 12.
+
+Testes: `check_cgd_docs` (outcome por status, overview = contagem do
+outcome), `check_onboarding_api` (`_outcome` por linha, batendo com o módulo).

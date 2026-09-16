@@ -50,4 +50,8 @@ def with_stage(row):
     row['_stage'] = etapas[0] if etapas else ''
     row['_stage_derived'] = bool(derivada)
     row['_closed'] = bool(cgd_docs.is_closed(row))
+    # O card em que a linha cai (pending/active/inactive/cancelled): é o que o
+    # clique no card do Track Docs filtra. Vai daqui pela mesma razão do
+    # `_closed` — o Status é texto livre, e a regra tem UM dono.
+    row['_outcome'] = cgd_docs.outcome(row)
     return row

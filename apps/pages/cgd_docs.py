@@ -683,6 +683,31 @@ def is_closed(row):
     return any(m in v for m in CLOSED_MARKS)
 
 
+# Os quatro desfechos que os cards do Track Docs contam, na ordem em que a
+# tela os mostra. É a MESMA lista dos nomes do payload do `overview`.
+OUTCOMES = ('pending', 'active', 'inactive', 'cancelled')
+
+
+def outcome(row):
+    """Em qual dos quatro cards o documento cai: `pending`, `active`,
+    `inactive` ou `cancelled`.
+
+    É UMA regra para contar (o `overview`) e para filtrar (o clique no card do
+    Track Docs, que vai junto da linha como `_outcome`): o Status é texto
+    livre do SharePoint e uma cópia da regra no navegador — um regex por card
+    sobre a coluna — discordaria desta no primeiro `Inativo` que a lista
+    trouxesse, com o card contando um número e a tabela filtrada mostrando
+    outro. `INACTIVE` contém `ACTIVE`: o ativo é comparação EXATA e vem antes
+    do encerrado por pedaço.
+    """
+    if is_active(row):
+        return 'active'
+    if is_closed(row):
+        v = _norm(row.get('Status'))
+        return 'inactive' if ('INACTIV' in v or 'INATIV' in v) else 'cancelled'
+    return 'pending'
+
+
 def pending_stages(row):
     """`(etapas, derivadas?)` de um documento pendente — LISTA, porque Legal e
     OTC correm em paralelo: a solicitação recém-criada está nas duas filas ao
@@ -741,18 +766,21 @@ def overview(rows=None):
     cancelados = 0
     pendentes = 0
     for r in rows:
-        if is_active(r):
+        # Quem classifica é o `outcome` — a mesma resposta que vai junto da
+        # linha para o filtro dos cards do Track Docs. Encerrado sem ter
+        # concluído sai das filas e NÃO conta como ativo. O Inactive (valeu e
+        # deixou de valer) e o Cancelado (nunca chegou a valer) saem
+        # SEPARADOS: são desfechos diferentes, e o card de cada um existe
+        # para a diferença aparecer.
+        desfecho = outcome(r)
+        if desfecho == 'active':
             ativos += 1
             continue
-        # Encerrado sem ter concluído sai das filas e NÃO conta como ativo. O
-        # Inactive (valeu e deixou de valer) e o Cancelado (nunca chegou a
-        # valer) saem SEPARADOS: são desfechos diferentes, e o card de cada um
-        # existe para a diferença aparecer.
-        if is_closed(r):
-            if 'INACTIV' in _norm(r.get('Status')) or 'INATIV' in _norm(r.get('Status')):
-                inativos += 1
-            else:
-                cancelados += 1
+        if desfecho == 'inactive':
+            inativos += 1
+            continue
+        if desfecho == 'cancelled':
+            cancelados += 1
             continue
         etapas, derivada = pending_stages(r)
         pendentes += 1
