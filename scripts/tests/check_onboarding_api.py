@@ -137,6 +137,13 @@ check('a linha Active NAO esta encerrada por engano', linha_b['_closed'],
       bool(cgd_docs.is_closed(linha_b)))
 check('   e Active e encerrada de verdade', linha_b['_closed'], True)
 check('   entao ela nao tem etapa', linha_b['_stage'], '')
+# O desfecho (o card do Track Docs em que a linha cai) tambem vai junto: e o
+# que o clique no card filtra, e a regra e a MESMA que conta os numeros.
+check('a linha aberta cai no card Pending', linha_a['_outcome'], 'pending')
+check('   e a Active no card Active', linha_b['_outcome'], 'active')
+check('   os dois batem com o modulo',
+      [linha_a['_outcome'], linha_b['_outcome']],
+      [cgd_docs.outcome(linha_a), cgd_docs.outcome(linha_b)])
 
 print('\n== 5. save: cria, edita e o LOTE ==')
 st, d = jpost(c, '/api/onboarding/docs/save', {'values': {'Razão Social': 'NOVA LTDA'}})
