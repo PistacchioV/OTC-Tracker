@@ -1,0 +1,146 @@
+{#- O script do editor de Swap (§481): espelha os inputs do painel no documento,
+    salva no Inventory e abre a validação sobre a tela. Incluído antes do
+    </body> pelo template do Word; fora no modo doc_only. -#}
+{% if not doc_only %}
+<script type="application/json" id="conf-data">{{ conf | tojson }}</script>
+<script>
+var __CONF__ = JSON.parse(document.getElementById('conf-data').textContent || 'null');
+// Todos os campos que o documento escreve — o mesmo conjunto do servidor
+// (_CONF_SWAP_FIELDS): o save manda exatamente estes.
+var FIELDS = ['num_conf', 'cgd_date', 'partea_nome', 'partea_cnpj', 'parteb_nome', 'parteb_cnpj',
+  'data_neg', 'valor_base', 'dt_efetiva', 'dt_venc', 'premio', 'devedor_premio',
+  'dt_premio', 'arrependimento', 'parte_arrependimento', 'dias_corridos', 'dias_uteis',
+  'taxa_amort', 'juros_pre_a', 'juros_pre_b'];
+['a', 'b'].forEach(function (s) {
+  ['forma_juros', 'fator_equities', 'ativo', 'preco_inicial', 'strike', 'dt_obs', 'bolsa',
+   'repasse', 'lim_alta', 'lim_baixa'].forEach(function (k) { FIELDS.push(s + '_' + k); });
+});
+var EQ_SIDE = String((__CONF__ && __CONF__.equities_side) || '').toLowerCase();
+
+function update() {
+  FIELDS.forEach(function (k) {
+    var inp = document.getElementById('inp_' + k);
+    var out = document.getElementById('out_' + k);
+    if (inp && out) out.textContent = inp.value;
+  });
+  // as assinaturas espelham os nomes das duas Partes
+  var nomeA = document.getElementById('inp_partea_nome');
+  var assinA = document.getElementById('out_partea_nome_assin');
+  if (nomeA && assinA) assinA.textContent = nomeA.value;
+  var nomeB = document.getElementById('inp_parteb_nome');
+  var assinB = document.getElementById('out_parteb_nome_assin');
+  if (nomeB && assinB) assinB.textContent = nomeB.value;
+}
+
+function _vazio(v) {
+  var t = String(v || '').trim().toLowerCase();
+  return !t || t.indexOf('não') === 0 || t.indexOf('nao') === 0;
+}
+
+// ── Salvar Word + PDF no Electronic Inventory ───────────────
+function saveToInventory(btn) {
+  var st = document.getElementById('save-status');
+  var vals = {};
+  FIELDS.forEach(function (k) {
+    var inp = document.getElementById('inp_' + k);
+    vals[k] = inp ? inp.value : '';
+  });
+  function recusa(msg, id) {
+    st.style.color = '#ee6666';
+    st.textContent = '✖ ' + msg;
+    var el = document.getElementById(id);
+    if (el) { el.style.borderColor = '#ee6666'; el.focus(); }
+  }
+  if (!String(vals.num_conf || '').trim()) {
+    return recusa('Nº da confirmação (B3 ID) em branco — a operação precisa estar mapeada.', 'inp_num_conf');
+  }
+  if (!String(vals.cgd_date || '').trim()) {
+    return recusa('Data do CGD não cadastrada para esta contraparte. Cadastre o CGD no Reference Data '
+      + '(ou preencha o campo Data do CGD acima) antes de salvar.', 'inp_cgd_date');
+  }
+  // Preço Inicial e Strike da perna do Fator Equities são OBRIGATÓRIOS: a
+  // Spot eles são o VALOR do ativo acertado na hora (não o %), e o app não
+  // tem de onde puxar. O servidor recusa do mesmo jeito; aqui o aviso é
+  // imediato e o foco vai para o campo.
+  if (EQ_SIDE === 'a' || EQ_SIDE === 'b') {
+    if (_vazio(vals[EQ_SIDE + '_preco_inicial'])) {
+      return recusa('Preço Inicial da Parte ' + EQ_SIDE.toUpperCase() + ' em branco — informe o valor do ativo.',
+        'inp_' + EQ_SIDE + '_preco_inicial');
+    }
+    if (_vazio(vals[EQ_SIDE + '_strike'])) {
+      return recusa('Strike da Parte ' + EQ_SIDE.toUpperCase() + ' em branco — informe o valor (não o %).',
+        'inp_' + EQ_SIDE + '_strike');
+    }
+  }
+  btn.disabled = true; btn.textContent = '⏳ Salvando…';
+  st.textContent = '';
+  fetch('/api/confirmation/swap-edg/save', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      family: (__CONF__ && __CONF__.family) || 'opcao-arrependimento',
+      date: (__CONF__ && __CONF__.ref_date) || '',
+      acronym: (__CONF__ && __CONF__.acronym) || '',
+      mercadoria: (__CONF__ && __CONF__.mercadoria) || '',
+      equities_side: EQ_SIDE,
+      fields: vals
+    })
+  })
+  .then(function (r) { return r.json(); })
+  .then(function (res) {
+    btn.disabled = false; btn.textContent = '💾 Salvar Word + PDF no Inventory';
+    if (res.success) {
+      st.style.color = (res.warnings && res.warnings.length) ? '#ffd54f' : '#7ed6a2';
+      st.textContent = '✔ Salvo: ' + (res.files || []).join(' · ') +
+        (res.numero_contrato ? ' · contrato ' + res.numero_contrato : '') +
+        (res.fepweb_updated ? ' · FepWeb ID em ' + res.fepweb_updated + ' linha(s)' : '') +
+        ((res.warnings && res.warnings.length) ? ' · ⚠ ' + res.warnings.join(' | ') : '');
+      if (res.validate_url) openValidate(res.validate_url);
+    } else {
+      st.style.color = '#ee6666';
+      st.textContent = '✖ ' + (res.message || 'Falha ao salvar.');
+    }
+  })
+  .catch(function (e) {
+    btn.disabled = false; btn.textContent = '💾 Salvar Word + PDF no Inventory';
+    st.style.color = '#ee6666';
+    st.textContent = '✖ ' + e.message;
+  });
+}
+
+// ── Validação sobre o editor (o mesmo desenho do MGT) ────────
+function mcEsteiraKeys() {
+  var m = /[?&]mc_keys=([^&]*)/.exec(window.location.search);
+  return m ? decodeURIComponent(m[1].replace(/\+/g, ' ')) : '';
+}
+function openValidate(url) {
+  var keys = mcEsteiraKeys();
+  if (keys) url = '/manual-confirmation/validate?stage=OTC&keys=' + encodeURIComponent(keys);
+  var ov = document.getElementById('validate-overlay');
+  var fr = document.getElementById('validate-frame');
+  if (!ov || !fr) { window.open(url, '_blank'); return; }
+  fr.src = url;
+  ov.classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+function closeValidate() {
+  var ov = document.getElementById('validate-overlay');
+  var fr = document.getElementById('validate-frame');
+  if (ov) ov.classList.remove('open');
+  if (fr) fr.src = 'about:blank';
+  document.body.style.overflow = '';
+}
+document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeValidate(); });
+
+// Init — TODOS os campos vêm do servidor, inclusive os vazios: manter o
+// exemplo do Word (a data de outro cliente, o preço de outro ativo) faria a
+// confirmação sair com um valor plausível e errado.
+(function initFromConf() {
+  if (!__CONF__) return;
+  FIELDS.forEach(function (k) {
+    var inp = document.getElementById('inp_' + k);
+    if (inp) inp.value = __CONF__[k] == null ? '' : String(__CONF__[k]);
+  });
+  update();
+})();
+</script>
+{% endif %}

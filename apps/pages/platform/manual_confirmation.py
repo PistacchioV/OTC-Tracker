@@ -41,9 +41,11 @@ from apps.pages import manual_conf as _mc_mod
 from apps.pages.platform.confirmations import (
     _conf_ndfcomm_groups, _conf_optcomm_groups, _conf_optfxo_groups,
     _conf_fwdstart_groups, _conf_mgt_groups, _conf_fwdstart_moeda,
+    _conf_swap_groups,
     _CONF_FAMILY_TEMPLATES,
     _CONF_OPT_FAMILY_TEMPLATES, _CONF_FXO_FAMILY_TEMPLATES,
     _CONF_FWDSTART_FAMILY_TEMPLATES, _CONF_MGT_FAMILY_TEMPLATES,
+    _CONF_SWAP_FAMILY_TEMPLATES,
 )
 
 log = logging.getLogger('otc_tracker')
@@ -58,7 +60,13 @@ log = logging.getLogger('otc_tracker')
 # contra cliente: é o `_generic_nd_mc_source` do New Deals que manda esse
 # source, e só quando a LE do deal é MGT — o Vanilla do BANCO segue alimentando
 # o Pending Confirmation pela regra de prazo/assinatura e parando por aí.
-_MC_CONFIRMATION_SOURCES = {'NDF COMM', 'OPTION COMM', 'OPTION', 'NDF FWD START', 'NDF VANILLA'}
+# 'SWAP' e 'SWAP CORPORATE' entraram em 16/09/2026 (§481) pelo Swap Bullet:
+# a operação contra cliente com B3 ID entra na esteira (e no Pending
+# Confirmation) chaveada pelo B3 ID; o Produto é SWAP quando há Opção de
+# Arrependimento e SWAP CORPORATE sem ela — regra da mesa, e é o tipo que
+# escolhe a regra de validação e a pasta do Inventory.
+_MC_CONFIRMATION_SOURCES = {'NDF COMM', 'OPTION COMM', 'OPTION', 'NDF FWD START', 'NDF VANILLA',
+                            'SWAP', 'SWAP CORPORATE'}
 
 
 # LOB da linha espelhada. As duas telas gravavam 'CEM' para tudo, e a mesa de
@@ -75,7 +83,13 @@ _COMMODITY_SOURCES = {'NDF COMM', 'OPTION COMM', 'UNWIND NDF COMM', 'UNWIND OPTI
 _MC_MOEDA_BASE_SOURCES = {'NDF FWD START', 'NDF VANILLA'}
 
 
-def _lob_for_source(source):
+def _lob_for_source(source, deal=None):
+    """A LOB da linha espelhada. O deal que TRAZ a LOB (o Swap Bullet grava
+    'EDG', a do registro na B3) responde por ela; os demais caem na regra por
+    produto — mercadoria é COMMODITY, o resto CEM."""
+    lob = str((deal or {}).get('LOB') or '').strip().upper()
+    if lob:
+        return lob
     return 'COMMODITY' if _mc_mod.upper_norm(source) in _COMMODITY_SOURCES else 'CEM'
 
 
@@ -91,6 +105,10 @@ def _mc_moeda_do_ativo(deal, source, first):
     src = _mc_mod.upper_norm(source)
     if src in ('NDF COMM', 'OPTION COMM'):
         return first('Commodities', 'UnderlyingAsset')
+    if src in ('SWAP', 'SWAP CORPORATE'):
+        # O ativo do swap é a curva VCP (o papel/índice do Fator Equities) —
+        # o MESMO eixo da segregação das confirmações (`_conf_swap_moeda`).
+        return first('VcpCurve', 'Currency')
     if src in _MC_MOEDA_BASE_SOURCES:
         base = str(_conf_fwdstart_moeda(deal) or '').strip().upper()
         if base:
@@ -120,6 +138,8 @@ _MC_NOTIONAL_CCY_FIELD = {
     'OPTION':        'StrikeCurrency',
     'NDF FWD START': 'QuantityCurrency',
     'NDF VANILLA':   'QuantityCurrency',
+    'SWAP':          'Currency',
+    'SWAP CORPORATE': 'Currency',
 }
 
 
@@ -207,7 +227,7 @@ def _mc_save_from_deal(deal, source, trade_number=None):
             'Legal Entity': _mc_legal_entity(deal, source),
             'Cliente': str(deal.get('Client', '') or ''),
             'Produto': source,
-            'LOB': _lob_for_source(source),
+            'LOB': _lob_for_source(source, deal),
             'Trade ID': key,
             # O `Athena ID` saiu da esteira (repetia o Trade ID em quase todo
             # produto e vinha vazio no FWD Start), e por isso não é mais gravado:
@@ -255,7 +275,8 @@ def _mc_conf_trade_keys(picked, product):
         if product == 'ndf-mgt':
             field = 'B3_ID' if str((d or {}).get('_conf_src') or '') == 'fwd-start' else 'Deal'
         else:
-            field = 'B3_ID' if product == 'ndf-fwdstart' else 'Deal'
+            # O Swap Bullet também é chaveado pelo B3 ID (a linha nasce dele).
+            field = 'B3_ID' if product in ('ndf-fwdstart', 'swap-edg') else 'Deal'
         k = str((d or {}).get(field, '') or '').strip()
         if k:
             out.append(k)
@@ -805,6 +826,11 @@ _MC_GENERATE_PRODUCTS = {
     # Vanilla só gera documento quando é MGT contra cliente (§453); a linha da
     # esteira só existe nesse caso, então o gerador é o da família MGT.
     'NDF VANILLA':   (lambda ref: _conf_mgt_groups(ref),      lambda: _CONF_MGT_FAMILY_TEMPLATES),
+    # Swap Bullet (§481): SWAP é o com Opção de Arrependimento (tem documento);
+    # SWAP CORPORATE cai na mesma segregação, mas a família dele ainda não tem
+    # template — o Generate diz isso em vez de abrir a tela errada.
+    'SWAP':           (lambda ref: _conf_swap_groups(ref),     lambda: _CONF_SWAP_FAMILY_TEMPLATES),
+    'SWAP CORPORATE': (lambda ref: _conf_swap_groups(ref),     lambda: _CONF_SWAP_FAMILY_TEMPLATES),
 }
 # O FWD Start da JPMORGAN CHASE (MGT) contra cliente também sai pela família
 # MGT — o documento é outro. A linha da esteira diz a entidade na coluna Legal

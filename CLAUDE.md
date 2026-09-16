@@ -874,6 +874,19 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   Conecta conta BYTES, e o travessão `–` da denominação VCP é 1 byte em
   cp1252 e 3 em utf-8 — em utf-8 o registro passava de 1927 e a B3
   recusava (`Campo 126 conteúdo inválido`, com `â€“` na linha).
+  **O B3 ID novo na linha é o MAPEAMENTO** (§481): Status `Success` sem
+  passar por Pending, e `commands.b3_mapped` dispara — no B2B a linha da
+  **Intrag Swap** (visão da ATACAMA, carteira INTRAGJP633, arquivo-dia da
+  Data Início, 36 campos = `ENTRY_FIELDS` da página); contra cliente o
+  **Pending Confirmation + esteira** pela porta de sempre
+  (`_pc_save_from_deal`), Produto `SWAP` com Opção de Arrependimento e
+  `SWAP CORPORATE` sem, chave = B3 ID, LOB do deal (EDG), ativo = curva
+  VCP. A confirmação (`/confirmation/swap-edg/opcao-arrependimento`, um
+  documento por operação) lê o **Cupom Limpo**: `Close dd-mmm-aa` busca o
+  fechamento em Quotes (símbolo do `quotes-equity` pelo rótulo da curva) e
+  o Strike é o % sobre ele; `Spot` deixa Preço Inicial e Strike em BRANCO e
+  obrigatórios. XML só com o valor em BRL. Platform lê os deals do dia por
+  `routes._swap_bullet_engine()` (platform não importa feature).
 - **Swap Calculator: a `Denominação` da curva VCP é CONTRATO, e o IR sai do
   CADASTRO** (§479). A posição traz nas colunas 70/75 o texto livre da curva
   (`(3M SOFR + 0.75%)*1.1765 A/360`), e o `*1.1765` só existe ali. Quem o lê é

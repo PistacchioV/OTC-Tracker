@@ -484,8 +484,11 @@ from apps.pages import routes as R                                # noqa: E402
 # 'NDF VANILLA' entrou em 11/09/2026 (§453) SÓ para a JPMORGAN CHASE (MGT)
 # contra cliente — é o `_generic_nd_mc_source` que manda esse source, e só
 # quando a LE do deal é MGT.
-check('os cinco produtos', sorted(R._MC_CONFIRMATION_SOURCES),
-      ['NDF COMM', 'NDF FWD START', 'NDF VANILLA', 'OPTION', 'OPTION COMM'])
+# 'SWAP' e 'SWAP CORPORATE' entraram em 16/09/2026 (§481) pelo Swap Bullet
+# contra cliente com B3 ID: SWAP com Opção de Arrependimento, SWAP CORPORATE
+# sem ela (`swap_bullet.domain.confirmation_source`).
+check('os sete produtos', sorted(R._MC_CONFIRMATION_SOURCES),
+      ['NDF COMM', 'NDF FWD START', 'NDF VANILLA', 'OPTION', 'OPTION COMM', 'SWAP', 'SWAP CORPORATE'])
 # As três páginas genéricas de NDF gravam o MESMO Product Type: o recorte tem de
 # ser pelo `source`, senão Vanilla e Other Publisher entrariam junto.
 check('as três páginas de NDF gravam o mesmo Product Type',

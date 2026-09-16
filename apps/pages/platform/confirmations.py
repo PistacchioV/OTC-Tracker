@@ -1409,3 +1409,269 @@ def _conf_fwdstart_rows(picked, warnings):
                         'Faça o mapeamento do retorno da B3 antes de gerar a confirmação.'
                         .format(sem_b3))
     return rows
+
+
+# ==============================================================================
+# NEW DEALS — CONFIRMATIONS (Swap Bullet · Swap com Opção de Arrependimento)
+# ==============================================================================
+# A operação do Swap Bullet contra cliente que ganhou B3 ID (§481). Mesmo
+# desenho das outras famílias — segregação contraparte × ativo × família, ciclo
+# New → Generated → Success, Word + PDF + XML no Inventory na pasta do TIPO —
+# com três coisas próprias:
+#
+#   * **um documento cobre UMA operação** (o template da mesa é o do contrato,
+#     com o B3 ID no cabeçalho e uma linha na Tabela de Fluxos de Caixa). Um
+#     grupo com mais de uma operação elegível gera o documento da primeira e
+#     AVISA quais ficaram de fora — a mesa gera de novo trocando o Nº no painel.
+#   * **o Preço Inicial sai do Cupom Limpo** (`swap_bullet.domain.cupom_limpo`):
+#     'Close dd-mmm-aa' → o fechamento do ativo naquele dia, buscado nas
+#     Cotações (o símbolo é o do cadastro `quotes-equity`), e o Strike é o
+#     percentual do Cupom Limpo sobre ele; 'Spot' → os dois campos ficam em
+#     BRANCO e o painel exige que a mesa os preencha (o valor foi acertado na
+#     hora e não há de onde puxar). Sem cadastro ou sem cotação, o mesmo: em
+#     branco, com o motivo no aviso.
+#   * **o XML só tem o valor em BRL** (= o Valor Base): moedaEstrangeira e
+#     valorEstrangeiro vazios — o swap é registrado em reais.
+#
+# O eixo do ATIVO (`_conf_swap_moeda`) é a curva VCP, e é o MESMO que a esteira
+# grava em `Moeda` (`_mc_moeda_do_ativo`): um card do Monitor = um grupo aqui.
+
+_CONF_SWAP_FAMILY_TEMPLATES = {
+    'opcao-arrependimento': ('confirmations/swap-edg-opcao-arrependimento.html',
+                             '/confirmation/swap-edg/opcao-arrependimento'),
+}
+_CONF_SWAP_FAMILY_LABEL = {'opcao-arrependimento': 'Swap com Opção de Arrependimento',
+                           'corporate': 'Swap Corporate'}
+# A pasta do Electronic Inventory (= o tipo da confirmação) por família.
+_CONF_SWAP_FAMILY_TYPE = {'opcao-arrependimento': 'SWAP', 'corporate': 'SWAP CORPORATE'}
+_CONF_SWAP_PARTEA = _CONF_FWDSTART_PARTEA['JPM']
+_CONF_NA = 'Não aplicável'
+_CONF_NA_CAP = 'Não Aplicável'
+
+
+def _conf_load_swap(ref):
+    """Os deals do Swap Bullet contra cliente do dia, no formato das
+    confirmações (o B2B fica de fora: é linha da Intrag). Busca atrasada
+    no routes — platform não importa feature."""
+    from apps.pages import routes
+    try:
+        return routes._swap_bullet_engine().confirmation_deals(ref)
+    except Exception:
+        log.warning('[conf] swap bullet day load failed:\n%s', traceback.format_exc())
+        return []
+
+
+def _conf_swap_family(deal, subj):
+    return 'opcao-arrependimento' if str(deal.get('_conf_kind') or '') == 'SWAP' else 'corporate'
+
+
+def _conf_swap_moeda(deal):
+    return str(deal.get('VcpCurve') or deal.get('Currency') or '').strip().upper()
+
+
+def _conf_swap_groups(ref):
+    return _conf_segregate(_conf_load_swap(ref), _conf_swap_family, merc_fn=_conf_swap_moeda)
+
+
+def _conf_pick_swap(ref, acr, merc, family):
+    return _conf_pick_eligible(_conf_load_swap(ref), acr, merc, family,
+                               _conf_swap_family, merc_fn=_conf_swap_moeda)
+
+
+def _conf_swap_close(label, on_date, warnings):
+    """O fechamento do ativo `label` (a curva VCP, como está no DT) na data
+    `on_date` (date) — ou o último pregão ANTES dela, quando o dia não teve
+    negociação. None com o motivo em `warnings`: sem símbolo cadastrado em
+    /mapping › Quotes — Equity, ou a fonte não respondeu."""
+    from apps.pages import quotes, routes
+    label = str(label or '').strip()
+    try:
+        symbol = quotes.symbol_for(routes._mapping_rows('quotes-equity'), label)
+    except Exception:
+        symbol = ''
+    if not symbol:
+        warnings.append('O ativo "{}" não tem símbolo de mercado cadastrado em /mapping › Quotes — '
+                        'Equity: o Preço Inicial e o Strike ficaram em branco.'.format(label))
+        return None
+    try:
+        d1 = (on_date - timedelta(days=10)).strftime('%Y-%m-%d')
+        d2 = on_date.strftime('%Y-%m-%d')
+        _cols, rows = quotes.fetch_ohlc(symbol, d1, d2)
+    except Exception as exc:                                # noqa: BLE001
+        warnings.append('Não foi possível buscar o fechamento de {} ({}) em {}: {}'.format(
+            label, symbol, on_date.strftime('%d/%m/%Y'), exc))
+        return None
+    for r in rows:                      # do mais recente ao mais antigo
+        d = routes._parse_date_any(r[0])
+        if not d or d > on_date:
+            continue
+        close = _conf_to_float(r[2])
+        if close is not None:
+            if d != on_date:
+                warnings.append('{} sem pregão em {}: o Preço Inicial é o fechamento de {}.'.format(
+                    label, on_date.strftime('%d/%m/%Y'), d.strftime('%d/%m/%Y')))
+            return close
+    warnings.append('A fonte não trouxe fechamento de {} ({}) até {}.'.format(
+        label, symbol, on_date.strftime('%d/%m/%Y')))
+    return None
+
+
+def _conf_swap_pct(v):
+    """Taxa em % como o documento escreve: '0%', '10,5%'."""
+    n = _conf_to_float(v)
+    if n is None:
+        return str(v or '').strip()
+    s = ('%.4f' % n).rstrip('0').rstrip('.')
+    return (s or '0').replace('.', ',') + '%'
+
+
+def _conf_swap_side(deal, side, prices, warnings):
+    """Os campos das cláusulas 3.3/3.4 de UMA Parte (`side` 'A' = JPM, 'B' =
+    contraparte): a perna JUROS leva a forma de cálculo; a VCP leva o Fator
+    Equities com ativo, preços, data de observação e bolsa."""
+    from apps.pages import routes
+    vcp = str(deal.get('_conf_vcp_side') or '') == side
+    out = {'forma_juros': _CONF_NA, 'fator_equities': _CONF_NA, 'ativo': _CONF_NA,
+           'preco_inicial': _CONF_NA, 'strike': _CONF_NA, 'dt_obs': _CONF_NA, 'bolsa': _CONF_NA,
+           'repasse': _CONF_NA, 'lim_alta': _CONF_NA, 'lim_baixa': _CONF_NA}
+    if not vcp:
+        out['forma_juros'] = 'Exponencial 252'
+        return out
+    ativo = ' - '.join(x for x in (str(deal.get('VcpCurve') or '').strip(),
+                                   str(deal.get('VcpDescription') or '').strip()) if x)
+    out.update({
+        'fator_equities': 'Aplicável',
+        'ativo': ativo or _CONF_NA,
+        'preco_inicial': prices.get('preco_inicial', ''),
+        'strike': prices.get('strike', ''),
+        'dt_obs': _conf_fmt_date(deal.get('QuoteDate')) or _CONF_NA,
+        'bolsa': str(deal.get('InfoSource') or '').strip() or _CONF_NA,
+        'repasse': 'Não',
+    })
+    close = prices.get('_close')
+    for key, field in (('lim_alta', 'Curve%sCap' % side), ('lim_baixa', 'Curve%sFloor' % side)):
+        pct = _conf_to_float(deal.get(field))
+        if pct is None or not pct:
+            continue
+        # O DT declara o limite em % do Spot; com o fechamento em mãos vira
+        # preço, senão sai o percentual mesmo.
+        out[key] = _conf_fmt_num(close * pct / 100.0, dec=4) if close else _conf_swap_pct(pct) + ' do Preço Inicial'
+    return out
+
+
+def _conf_swap_conf(deal, ref, acr, merc, family, warnings, fetch_close=None):
+    """O `conf` do documento de UMA operação. `fetch_close(label, date,
+    warnings)` é a busca do fechamento (injetável nos testes)."""
+    from apps.pages import routes
+    fetch_close = fetch_close or _conf_swap_close
+    cupom = deal.get('_conf_cupom') or {}
+    vcp = str(deal.get('_conf_vcp_side') or '')
+    prices = {'preco_inicial': '', 'strike': '', '_close': None}
+    if vcp:
+        mode = str(cupom.get('mode') or '')
+        pct = cupom.get('pct')
+        if mode == 'close':
+            on = routes._parse_date_any(cupom.get('date') or deal.get('StartDate'))
+            close = fetch_close(deal.get('VcpCurve'), on, warnings) if on else None
+            if close is not None:
+                prices['_close'] = close
+                prices['preco_inicial'] = _conf_fmt_num(close, dec=4)
+                if pct is not None:
+                    prices['strike'] = _conf_fmt_num(close * pct / 100.0, dec=4)
+                else:
+                    warnings.append('Cupom Limpo sem percentual: o Strike ficou em branco.')
+            else:
+                warnings.append('Preço Inicial e Strike em branco — preencha no painel antes de salvar.')
+        elif mode == 'spot':
+            warnings.append('Cupom Limpo a Spot: o Preço Inicial e o Strike são o VALOR do ativo '
+                            'acertado na hora — preencha os dois no painel (obrigatórios).')
+        else:
+            warnings.append('Cupom Limpo não diz Close nem Spot: Preço Inicial e Strike em branco — '
+                            'preencha no painel.')
+    prem_amt = _conf_to_float(deal.get('PremiumAmount'))
+    tem_premio = bool(prem_amt) and str(deal.get('PremiumSchedule') or '').strip().lower() in ('sim', 'yes', 's', 'y')
+    payer_txt = str(deal.get('PremiumPayer') or '')
+    payer_ours = bool(re.search(r'J\.?\s*P\.?\s*MORGAN|\bJPM\b', payer_txt, re.I))
+    d_ini = routes._parse_date_any(deal.get('StartDate'))
+    d_fim = routes._parse_date_any(deal.get('MaturityDate'))
+    dias_corridos = (d_fim - d_ini).days if d_ini and d_fim else ''
+    dias_uteis = routes._anbima_biz_diff(datetime(d_ini.year, d_ini.month, d_ini.day),
+                                         datetime(d_fim.year, d_fim.month, d_fim.day)) if d_ini and d_fim else ''
+    juros = {}
+    for side in ('A', 'B'):
+        juros[side] = _CONF_NA_CAP if vcp == side else _conf_swap_pct(deal.get('Curve%sRate' % side) or 0)
+    cgd_txt = _conf_cgd_lookup(deal)
+    if not cgd_txt:
+        warnings.append('CGD não cadastrado no Reference Data — preencha no painel.')
+    b3 = str(deal.get('B3_ID') or '').strip()
+    if not b3:
+        warnings.append('Operação sem B3 ID — o Nº do cabeçalho sai vazio.')
+    trade_date = deal.get('TradeDate') or ref
+    conf = {
+        'ref_date':     ref.strftime('%Y-%m-%d'),
+        'num_conf':     b3,
+        'cgd_date':     cgd_txt,
+        'partea_nome':  _CONF_SWAP_PARTEA[0],
+        'partea_cnpj':  _CONF_SWAP_PARTEA[1],
+        'parteb_nome':  str(deal.get('Client') or '').strip(),
+        'parteb_cnpj':  _conf_fmt_cnpj(deal.get('TaxID')),
+        'data_neg':     _conf_fmt_date(trade_date),
+        'data_extenso': _conf_date_extenso(trade_date),
+        'valor_base':   _conf_fmt_num(str(deal.get('Notional') or '').replace('-', ''), dec=2),
+        'dt_efetiva':   _conf_fmt_date(deal.get('StartDate')),
+        'dt_venc':      _conf_fmt_date(deal.get('MaturityDate')),
+        'premio':       ('R$ ' + _conf_fmt_num(prem_amt, dec=2)) if tem_premio else _CONF_NA_CAP,
+        'devedor_premio': ('Parte A' if payer_ours else 'Parte B') if tem_premio else _CONF_NA_CAP,
+        'dt_premio':    _conf_fmt_date(deal.get('PremiumDate')) if tem_premio else _CONF_NA_CAP,
+        'arrependimento': 'Sim' if deal.get('_conf_withdrawal') else 'Não',
+        # Quem tem o direito é quem PAGA o prêmio (compra a opção): o cliente
+        # quase sempre. Sem prêmio, a Parte B — o painel deixa trocar.
+        'parte_arrependimento': ('Parte A' if (tem_premio and payer_ours) else 'Parte B')
+                                if deal.get('_conf_withdrawal') else _CONF_NA_CAP,
+        'dias_corridos': str(dias_corridos),
+        'dias_uteis':   str(dias_uteis),
+        'taxa_amort':   '100%',
+        'juros_pre_a':  juros['A'],
+        'juros_pre_b':  juros['B'],
+        'equities_side': vcp,
+        'cupom_mode':   str(cupom.get('mode') or ''),
+        'mercadoria':   merc,
+        'acronym':      acr,
+        'family':       family,
+        'family_label': _CONF_SWAP_FAMILY_LABEL.get(family, family),
+        'warnings':     warnings,
+    }
+    for side in ('A', 'B'):
+        for k, v in _conf_swap_side(deal, side, prices, warnings).items():
+            conf['%s_%s' % (side.lower(), k)] = v
+    return conf
+
+
+# Os campos do painel/documento que o save recebe da tela (tudo que o Jinja
+# escreve no documento, fora o que é derivado).
+_CONF_SWAP_FIELDS = (
+    'num_conf', 'cgd_date', 'partea_nome', 'partea_cnpj', 'parteb_nome', 'parteb_cnpj',
+    'data_neg', 'data_extenso', 'valor_base', 'dt_efetiva', 'dt_venc', 'premio', 'devedor_premio',
+    'dt_premio', 'arrependimento', 'parte_arrependimento', 'dias_corridos', 'dias_uteis',
+    'taxa_amort', 'juros_pre_a', 'juros_pre_b',
+) + tuple('%s_%s' % (s, k) for s in ('a', 'b')
+          for k in ('forma_juros', 'fator_equities', 'ativo', 'preco_inicial', 'strike', 'dt_obs',
+                    'bolsa', 'repasse', 'lim_alta', 'lim_baixa'))
+
+
+def _conf_swap_legs(deal, subj):
+    """As pernas do XML do swap: (valor estrangeiro, valor em BRL). O swap é
+    registrado em reais — só o Valor Base entra, e a perna estrangeira é
+    ZERO (o `_conf_ndf_xml` com `ccy='BRL'` a deixa vazia no XML)."""
+    notional = _conf_to_float(str(deal.get('Notional') or '').replace('-', ''))
+    if notional is None:
+        return None
+    return 0.0, notional
+
+
+def _conf_swap_xml(picked, merc, ref):
+    """(numeroContrato, xml, avisos) do swap: tipoOperacao SWAP, numeroContrato
+    = B3 ID (o `Deal` do formato das confirmações), valor = Valor Base em
+    BRL, moedaEstrangeira e valorEstrangeiro VAZIOS."""
+    return _conf_ndf_xml(picked, merc, ref, tipo='SWAP', prefixo='Swap_EDG',
+                         warn_no_spot=False, legs_fn=_conf_swap_legs, ccy='BRL')
