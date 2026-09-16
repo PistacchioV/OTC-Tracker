@@ -181,6 +181,25 @@ def api_swap_bullet_delete():
     return jsonify({'success': True, 'deleted': apagados, 'not_found': nao})
 
 
+@blueprint.route('/api/new-deals/swap-bullet/refdata')
+def api_swap_bullet_refdata():
+    """A contraparte do Reference Data pela SPN — o modal de edição consulta
+    ao sair do campo SPN para mostrar nome, conta B3 e CNPJ antes de gravar
+    (a gravação re-puxa de novo no servidor, que é quem manda)."""
+    err = _auth()
+    if err:
+        return err
+    spn = str(request.args.get('spn') or '').strip()
+    rec = queries.refdata_by_spn(spn) if spn else {}
+    if not rec:
+        return jsonify({'success': True, 'found': False, 'spn': spn})
+    import re as _re
+    return jsonify({'success': True, 'found': True, 'spn': spn,
+                    'client': str(rec.get('COUNTERPARTY', '') or '').strip(),
+                    'account': _re.sub(r'\D', '', str(rec.get('B3 ACCOUNT', '') or '')),
+                    'taxid': _re.sub(r'\D', '', str(rec.get('TAX ID', '') or ''))})
+
+
 @blueprint.route('/api/new-deals/swap-bullet/preview')
 def api_swap_bullet_preview():
     """Os arquivos de UM deal, por visão (cliente; ou Banco + Atacama no B2B),

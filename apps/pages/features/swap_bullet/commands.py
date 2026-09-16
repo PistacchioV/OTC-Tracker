@@ -64,7 +64,7 @@ def import_upload(filename, data, ref_dt, sid='', dry_run=False):
     for d in deals:
         faltas = domain.missing_for_send(d, queries.codes_for(d), accounts)
         if faltas:
-            lacunas[d['Deal']] = faltas
+            lacunas[d['_id']] = faltas
     return {'success': True, 'imported': imported, 'deals': deals, 'ignored': ignorados,
             'missing': lacunas, 'trade_date': trade_iso, 'kind': kind, 'dry_run': bool(dry_run)}
 
@@ -78,8 +78,10 @@ def persist_deals(deals, sid=''):
     antigo; New continua New. → quantidade gravada."""
     por_dia = {}
     for d in deals or []:
-        if not isinstance(d, dict) or not d.get('Deal'):
+        if not isinstance(d, dict):
             continue
+        if not d.get('_id'):
+            d['_id'] = domain.make_deal_id(d)
         d.setdefault('MyNumber', _rand10())
         d.setdefault('MyNumberMirror', _rand10())
         d.setdefault('PremiumMyNumber', _rand10())
@@ -94,14 +96,14 @@ def persist_deals(deals, sid=''):
     for ref_dt, lst in por_dia.items():
         novas = [d for d, _r in lst]
         n += persistence.upsert(ref_dt, novas)
-        amend = [d['Deal'] for d, r in lst if r and (d.get('Status') or 'New') != 'New']
+        amend = [d['_id'] for d, r in lst if r and (d.get('Status') or 'New') != 'New']
         if amend:
             with _R()._cache_lock:
                 fp = persistence.day_path(ref_dt)
                 entries = _store.read(fp) if _store.exists(fp) else []
                 mudou = False
                 for e in entries:
-                    if e.get('Deal') in amend and (e.get('Status') or 'New') != 'New':
+                    if persistence.key_of(e) in amend and (e.get('Status') or 'New') != 'New':
                         e['Status'] = 'Amend'; e['Checker'] = ''; mudou = True
                 if mudou:
                     _R()._atomic_write_json(fp, entries)
@@ -314,7 +316,7 @@ def send(items, sid='', download=False):
                 continue
             if fp in por_arquivo:
                 lst = por_arquivo[fp]
-                idx = next((i for i, e in enumerate(lst) if e.get('Deal') == deal_id), None)
+                idx = next((i for i, e in enumerate(lst) if persistence.key_of(e) == deal_id), None)
                 if idx is None:
                     continue
             lst[idx]['Status'] = 'Sent'
@@ -331,7 +333,7 @@ def send(items, sid='', download=False):
 # ── Edição / esteira ─────────────────────────────────────────────────────────
 
 EDITABLE = tuple(k for k in domain.SWB_FIELDS if k not in ('Maker', 'Checker')) + (
-    'TradeDate', 'Client', 'SPN', 'LE', 'LOB')
+    'TradeDate', 'Client', 'SPN', 'LE', 'LOB', 'Deal', 'B3ID')
 
 
 def edit(deal_id, trade_date, changes, sid=''):
@@ -345,6 +347,7 @@ def edit(deal_id, trade_date, changes, sid=''):
             return None
         d = lst[idx]
         before_text = domain.vcp_text(d)
+        spn_antes = str(d.get('SPN') or '').strip()
         touched_text = 'VcpText' in changes and str(changes.get('VcpText') or '').strip() != str(d.get('VcpText') or '').strip()
         for k, v in (changes or {}).items():
             if k not in EDITABLE:
@@ -360,6 +363,16 @@ def edit(deal_id, trade_date, changes, sid=''):
             d['Pair'] = 'JPM x ATACAMA' if d['LE'] == 'ATACAMA' else 'JPM x CLI'
         if 'QuoteDate' in changes or 'MaturityDate' in changes:
             d['QuoteDateCode'] = ''
+        if 'SPN' in changes and str(changes.get('SPN') or '').strip() != spn_antes:
+            # SPN nova = contraparte nova: o que veio do Reference Data pela
+            # SPN antiga (nome, conta B3, CNPJ) é descartado e o `enrich`
+            # abaixo puxa de novo pela nova.
+            d['ClientRefData'] = ''
+            d['ClientAccount'] = ''
+            d['ClientTaxId'] = ''
+            d.pop('ClientAccountNote', None)
+            if d.get('ClientDT'):
+                d['Client'] = d['ClientDT']
         if not touched_text and (str(d.get('VcpText') or '').strip() == before_text.strip()
                                  or not str(d.get('VcpText') or '').strip()):
             d['VcpText'] = ''
@@ -390,7 +403,9 @@ def add(fields, trade_date, sid=''):
     else:
         d['LE'] = 'JPM'
     d['Pair'] = 'JPM x ATACAMA' if d['LE'] == 'ATACAMA' else 'JPM x CLI'
-    d['Deal'] = domain.make_deal_id(d)
+    d['_id'] = domain.make_deal_id(d)
+    d['Deal'] = str(fields.get('Deal') or '').strip()
+    d['B3ID'] = str(fields.get('B3ID') or '').strip()
     d['VcpText'] = str(fields.get('VcpText') or '').strip() or domain.vcp_text(d)
     d['QuoteDateCode'] = ''
     enrich(d)
@@ -447,7 +462,7 @@ def delete(items):
                 continue
             if fp in por_arquivo:
                 lst = por_arquivo[fp]
-                idx = next((i for i, e in enumerate(lst) if e.get('Deal') == deal_id), None)
+                idx = next((i for i, e in enumerate(lst) if persistence.key_of(e) == deal_id), None)
                 if idx is None:
                     nao.append(deal_id)
                     continue

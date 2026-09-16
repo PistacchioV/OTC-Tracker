@@ -856,7 +856,8 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   quatro Meu Número nascem no import e o re-import os preserva.
   A contraparte é IDENTIFICADA pela SPN do DT (Client = `COUNTERPARTY` do
   Reference Data; o texto do DT fica em `ClientDT`; SPN fora do cadastro é
-  lacuna). Dropzone, Import (dry-run → duplicatas → `/cache/batch`,
+  lacuna; editar a SPN re-puxa o cadastro). A chave da linha é o `_id`
+  interno (oculto): Deal nasce em BRANCO e B3 ID é coluna própria. Dropzone, Import (dry-run → duplicatas → `/cache/batch`,
   substituída = `Amend`) e filtro inteligente (`/cache/search`,
   `_deal_matches`) são o MESMO molde das páginas de New Deals — não
   reinvente. `check_swap_bullet.py` compara os seis arquivos byte a byte

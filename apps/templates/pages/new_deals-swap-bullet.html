@@ -76,7 +76,9 @@
   #swb-table th:nth-child(6), #swb-table td:nth-child(6),
   #swb-table_wrapper .dt-scroll-head thead th:nth-child(6), #swb-table_wrapper .dataTables_scrollHead thead th:nth-child(6) { width: 125px; min-width: 125px; }
   #swb-table th:nth-child(7), #swb-table td:nth-child(7),
-  #swb-table_wrapper .dt-scroll-head thead th:nth-child(7), #swb-table_wrapper .dataTables_scrollHead thead th:nth-child(7) { width: 110px; min-width: 110px; }
+  #swb-table_wrapper .dt-scroll-head thead th:nth-child(7), #swb-table_wrapper .dataTables_scrollHead thead th:nth-child(7) { width: 120px; min-width: 120px; }
+  #swb-table th:nth-child(8), #swb-table td:nth-child(8),
+  #swb-table_wrapper .dt-scroll-head thead th:nth-child(8), #swb-table_wrapper .dataTables_scrollHead thead th:nth-child(8) { width: 110px; min-width: 110px; }
   .column-search-input-bar th { padding: 4px 8px; border-top: 1px solid rgba(0,0,0,0.08); text-align: center; vertical-align: middle; }
   .btn-toolbar-all { font-size: 0.75rem !important; padding: 0.25rem 0.6rem !important; height: auto !important; line-height: 1.4 !important; white-space: nowrap !important; }
   #apiRefDate { width: 8.5rem; }
@@ -202,8 +204,9 @@
                                     <th data-lang="nd-swb-col-le">LE</th>
                                     <th data-lang="nd-swb-col-lob">LOB</th>
                                     <th data-lang="nd-col-deal">Deal</th>
+                                    <th data-lang="nd-col-b3-id">B3 ID</th>
                                     <th data-lang="nd-col-trade-date">Trade Date</th>
-                                    <!-- as colunas do deal entram por JS (SWB_COLS) -->
+                                    <!-- as colunas do deal entram por JS (SWB_COLS); a última é o _id (oculta) -->
                                 </tr>
                                 <tr class="column-search-input-bar" id="column-search-inputs">
                                     <th></th><th></th>
@@ -211,6 +214,7 @@
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="LE"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="LOB"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Deal" data-lang-placeholder="col-deal"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="B3 ID" data-lang-placeholder="col-b3-id"></th>
                                     <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Trade Date" data-lang-placeholder="col-trade-date"></th>
                                 </tr>
                             </thead>
@@ -291,8 +295,9 @@ var SWB_SELECT = {
     CurveASign: ['+', '-'], CurveBSign: ['+', '-'], Currency: ['BRL', 'USD', 'EUR']
 };
 var SWB_READONLY = { Maker:1, Checker:1, Type:1 };
-// Colunas: [0]=checkbox [1]=actions [2]=Status [3]=LE [4]=LOB [5]=Deal [6]=Trade Date [7..]=SWB_FIELDS.
-var C_OFF = 7, C_ID = 5, C_TD = 6, C_STATUS = 2, C_LE = 3, C_LOB = 4;
+// Colunas: [0]=checkbox [1]=actions [2]=Status [3]=LE [4]=LOB [5]=Deal [6]=B3 ID [7]=Trade Date [8..]=SWB_FIELDS [último]=_id (oculta).
+var C_OFF = 8, C_DEAL = 5, C_B3 = 6, C_TD = 7, C_STATUS = 2, C_LE = 3, C_LOB = 4;
+var C_ID = C_OFF + SWB_COLS.length;   // a chave interna da linha, coluna escondida
 var ENTRIES = [], DEALS = {}, selected = new Set();
 
 var STATUS_META = {
@@ -337,6 +342,8 @@ function fmtMoney(v) {
         tf.innerHTML = '<input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="' + esc(c[1]) + '">';
         f.appendChild(tf);
     });
+    var thId = document.createElement('th'); h.appendChild(thId);
+    var tfId = document.createElement('th'); f.appendChild(tfId);
 })();
 
 $(document).ready(function() {
@@ -354,6 +361,7 @@ $(document).ready(function() {
 
     var columnDefs = [
         { orderable: false, targets: [0, 1] },
+        { visible: false, targets: [C_ID] },
         { targets: C_STATUS, render: function(data, type){ return type === 'display' ? statusBadge(data) : (data || 'New'); } },
         { targets: C_TD, render: function(data, type){ return type === 'display' ? _isoToDmy(data) : (data || ''); } }
     ];
@@ -537,24 +545,25 @@ $(document).ready(function() {
 
     function dealRow(e) {
         var row = ['<input class="form-check-input form-check-input-light fs-14 mt-0" type="checkbox" value="">',
-                   _actionsCell(), e.Status || 'New', e.LE || 'JPM', e.LOB || '', e.Deal || '', e.TradeDate || ''];
+                   _actionsCell(), e.Status || 'New', e.LE || 'JPM', e.LOB || '', e.Deal || '', e.B3ID || '', e.TradeDate || ''];
         SWB_FIELDS.forEach(function(f){ row.push(e[f] != null ? String(e[f]) : ''); });
+        row.push(e._id || e.Deal || '');
         return row;
     }
     function renderAll() {
         table.clear(); DEALS = {};
-        ENTRIES.forEach(function(e){ if (!e || !e.Deal) return; DEALS[e.Deal] = e; table.row.add(dealRow(e)); });
+        ENTRIES.forEach(function(e){ if (!e) return; var k = e._id || e.Deal; if (!k) return; e._id = k; DEALS[k] = e; table.row.add(dealRow(e)); });
         table.draw(false);
         setTimeout(function(){ table.columns.adjust(); }, 100);
     }
     function upsertEntry(e) {
-        var i = ENTRIES.findIndex(function(x){ return x && x.Deal === e.Deal; });
+        var i = ENTRIES.findIndex(function(x){ return x && (x._id || x.Deal) === (e._id || e.Deal); });
         if (i >= 0) ENTRIES[i] = e; else ENTRIES.push(e);
         renderAll();
     }
     function removeEntries(ids) {
         var set = {}; ids.forEach(function(x){ set[x]=1; });
-        ENTRIES = ENTRIES.filter(function(e){ return !(e && set[e.Deal]); });
+        ENTRIES = ENTRIES.filter(function(e){ return !(e && set[e._id || e.Deal]); });
         ids.forEach(function(x){ selected.delete(x); });
         renderAll();
     }
@@ -611,7 +620,7 @@ $(document).ready(function() {
             }
             // 2) duplicatas: Deal já na grade → substituir / pular / cancelar (como o FXO)
             var dups = [], news = [];
-            parsed.forEach(function(d){ (DEALS[d.Deal] ? dups : news).push(d); });
+            parsed.forEach(function(d){ (DEALS[d._id] ? dups : news).push(d); });
             function _saveAndRender(finalDeals) {
                 if (!finalDeals.length) { _restore(); if (dz) dz.removeAllFiles(true); return; }
                 fetch('/api/new-deals/swap-bullet/cache/batch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
@@ -624,11 +633,11 @@ $(document).ready(function() {
                     // Import de outro dia: leva a tela para aquele dia antes de
                     // mexer na tabela — o filtro padrão é Trade Date = hoje.
                     if (!apiRefIsToday()) sfSetTradeDate(apiRefDateLabel()); else sfApply();
-                    var missKeys = Object.keys(missing).filter(function(k){ return finalDeals.some(function(d){ return d.Deal === k; }); });
+                    var missKeys = Object.keys(missing).filter(function(k){ return finalDeals.some(function(d){ return d._id === k; }); });
                     var extra = '';
                     if (missKeys.length) {
                         extra += '<div class="text-start mt-2 fs-xs"><b>Cannot be sent yet — fill in or register:</b><ul class="mb-0 ps-3">' +
-                            missKeys.map(function(k){ return '<li><b>' + _escHtml(k) + '</b>: ' + _escHtml(missing[k].join('; ')) + '</li>'; }).join('') + '</ul></div>';
+                            missKeys.map(function(k){ var dd = finalDeals.filter(function(d){ return d._id === k; })[0] || {}; return '<li><b>' + _escHtml((dd.Client || '') + (dd.Deal ? ' · ' + dd.Deal : '')) + '</b>: ' + _escHtml(missing[k].join('; ')) + '</li>'; }).join('') + '</ul></div>';
                     }
                     if (ignored.length) extra += '<div class="text-start mt-2 fs-xs text-muted">Ignored (not a Deal Ticket): ' + _escHtml(ignored.join(', ')) + '</div>';
                     if (errors.length) extra += '<div class="text-start mt-2 fs-xs text-danger">' + _escHtml(errors.join('; ')) + '</div>';
@@ -641,7 +650,7 @@ $(document).ready(function() {
             if (!dups.length) { _saveAndRender(news); return; }
             var listHtml = '<div style="max-height:240px;overflow:auto;text-align:left"><table style="width:100%;font-size:0.82rem;border-collapse:collapse">' +
                 '<thead><tr style="background:#f1f3f5"><th style="padding:4px 8px;text-align:left">Deal</th><th style="padding:4px 8px;text-align:left">Client</th></tr></thead><tbody>' +
-                dups.map(function(d){ return '<tr><td style="padding:3px 8px;border-top:1px solid #eee">' + _escHtml(d.Deal) + '</td><td style="padding:3px 8px;border-top:1px solid #eee">' + _escHtml(d.Client) + '</td></tr>'; }).join('') +
+                dups.map(function(d){ return '<tr><td style="padding:3px 8px;border-top:1px solid #eee">' + _escHtml(d.Deal || d._id) + '</td><td style="padding:3px 8px;border-top:1px solid #eee">' + _escHtml(d.Client) + '</td></tr>'; }).join('') +
                 '</tbody></table></div>';
             Swal.fire({
                 icon: 'warning', title: t('swal-fxo-dup-title', 'Duplicate deals'),
@@ -696,7 +705,7 @@ $(document).ready(function() {
                     '<div class="text-start fs-xs text-muted mt-2" data-lang="nd-swb-file-raw">Raw file</div>' +
                     '<div class="swb-preview-line">' + esc(raw) + '</div></div>';
             }).join('');
-            var html = '<div class="text-start fs-xs text-muted mb-2"><b>' + esc(dealId) + '</b> &nbsp;·&nbsp; ' + esc(e.Client || '') + ' &nbsp;·&nbsp; ' + esc(e.LE || '') + ' · ' + esc(e.LOB || '') + '</div>' +
+            var html = '<div class="text-start fs-xs text-muted mb-2"><b>' + esc(e.Deal || e._id) + '</b> &nbsp;·&nbsp; ' + esc(e.Client || '') + ' &nbsp;·&nbsp; ' + esc(e.LE || '') + ' · ' + esc(e.LOB || '') + (e.B3ID ? ' &nbsp;·&nbsp; B3 ID ' + esc(e.B3ID) : '') + '</div>' +
                 '<ul class="nav nav-tabs swb-preview-tabs">' + tabs + '</ul><div class="tab-content">' + panes + '</div>';
             Swal.fire({ title: t('nd-swb-preview-title', 'B3 file preview'), html: html, width: 1000, showCloseButton: true, showConfirmButton: false });
         }).catch(function(err){ Swal.fire({ title: 'Error', text: 'Request failed: ' + err.message, icon: 'error', confirmButtonText: 'OK', confirmButtonColor: '#dc3545' }); });
@@ -805,13 +814,15 @@ $(document).ready(function() {
     function openModal(entry) {
         var isEdit = !!entry;
         modalEl.querySelector('.modal-title').innerHTML = isEdit
-            ? '<i class="ti ti-edit me-1"></i>' + t('nd-swb-modal-edit', 'Edit Deal — Swap Bullet') + ' · ' + esc(entry.Deal)
+            ? '<i class="ti ti-edit me-1"></i>' + t('nd-swb-modal-edit', 'Edit Deal — Swap Bullet') + ' · ' + esc(entry.Deal || entry.Client || '')
             : '<i class="ti ti-plus me-1"></i>' + t('nd-swb-modal-add', 'Add Deal — Swap Bullet');
         var e = entry || { Type: 'Pagamento Final', LE: 'JPM', LOB: 'EDG', Currency: 'BRL', Adhesion: 'CGD', Functionality: 'N/A', PremiumSchedule: 'Não', Reset: 'Não', LOB: 'EDG',
                            CurveACategory: 'JUROS', CurveAPct: '100.00', CurveASign: '+', CurveARate: '0.0000', CurveBCategory: 'VCP', CurveBPct: '100.00', CurveBSign: '+', CurveBRate: '0.0000' };
         var html = '<div class="col-md-2">' + '<label class="form-label fs-xs text-muted mb-1" data-lang="nd-col-trade-date">Trade Date</label><input type="text" class="form-control form-control-sm swb-date" id="swb-f-TradeDate" data-f="TradeDate" value="' + esc(isEdit ? _isoToDmy(e.TradeDate) : (apiRefDate() || _todayIso())) + '" placeholder="dd/mm/aaaa" autocomplete="off"' + (isEdit ? ' readonly' : '') + '></div>';
         html += '<div class="col-md-2">' + fieldInput('LE', 'LE', e.LE || 'JPM') + '</div>' +
-                '<div class="col-md-2">' + fieldInput('LOB', 'LOB', e.LOB || '') + '</div>';
+                '<div class="col-md-2">' + fieldInput('LOB', 'LOB', e.LOB || '') + '</div>' +
+                '<div class="col-md-2">' + fieldInput('Deal', 'Deal', e.Deal || '') + '</div>' +
+                '<div class="col-md-2">' + fieldInput('B3ID', 'B3 ID', e.B3ID || '') + '</div>';
         SWB_COLS.forEach(function(c){
             var f = c[0]; if (f === 'Maker' || f === 'Checker') return;
             var w = (f === 'VcpText') ? 'col-12' : (f === 'VcpDescription' || f.indexOf('Denomination') === 0 || f === 'Client') ? 'col-md-4' : 'col-md-2';
@@ -819,7 +830,26 @@ $(document).ready(function() {
         });
         document.getElementById('swbEditGrid').innerHTML = html;
         if (window.otcDateField) document.querySelectorAll('#swbEditGrid input.swb-date:not([readonly])').forEach(function(el){ window.otcDateField(el); });
-        $(modalEl).data('dealId', isEdit ? entry.Deal : null);
+        // A contraparte é a do Reference Data pela SPN: digitou a SPN, puxa
+        // nome, conta B3 e CNPJ na hora (o servidor re-puxa ao gravar).
+        var spnEl = document.getElementById('swb-f-SPN');
+        if (spnEl) spnEl.addEventListener('change', function(){
+            var spn = this.value.trim(); if (!spn) return;
+            fetch('/api/new-deals/swap-bullet/refdata?spn=' + encodeURIComponent(spn), { credentials: 'same-origin' })
+            .then(function(r){ return r.json(); }).then(function(res){
+                var cli = document.getElementById('swb-f-Client'), acc = document.getElementById('swb-f-ClientAccount'), tax = document.getElementById('swb-f-ClientTaxId');
+                if (res && res.found) {
+                    if (cli) cli.value = res.client || cli.value;
+                    if (acc) acc.value = res.account || '';
+                    if (tax) tax.value = res.account ? '' : (res.taxid || '');
+                    if (cli) cli.classList.remove('is-invalid');
+                } else {
+                    if (cli) cli.classList.add('is-invalid');
+                    Swal.fire({ icon: 'warning', title: 'SPN ' + spn, text: 'Not found in Reference Data — register the counterparty first.', confirmButtonText: t('swal-ok', 'OK'), confirmButtonColor: '#dc3545' });
+                }
+            }).catch(function(){});
+        });
+        $(modalEl).data('dealId', isEdit ? (entry._id || entry.Deal) : null);
         bootstrap.Modal.getOrCreateInstance(modalEl).show();
     }
     function readModal() {
@@ -862,7 +892,8 @@ $(document).ready(function() {
         { label: 'Status',     type: 'text', dtCol: C_STATUS, field: 'Status' },
         { label: 'LE',         type: 'text', dtCol: C_LE,     field: 'LE' },
         { label: 'LOB',        type: 'text', dtCol: C_LOB,    field: 'LOB' },
-        { label: 'Deal',       type: 'text', dtCol: C_ID,     field: 'Deal' },
+        { label: 'Deal',       type: 'text', dtCol: C_DEAL,   field: 'Deal' },
+        { label: 'B3 ID',      type: 'text', dtCol: C_B3,     field: 'B3ID' },
         { label: 'Trade Date', type: 'date', dtCol: C_TD,     field: 'TradeDate' }
     ];
     SWB_COLS.forEach(function(c, i){

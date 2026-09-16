@@ -20677,6 +20677,19 @@ do cadastro recalculados). `check_ops_trade_swap`, `check_payrec_run` e
   coluna Client é o `COUNTERPARTY` do Reference Data, o texto do DT
   ('Safra') fica em `Client (Deal Ticket)`, e SPN ausente ou fora do
   cadastro é LACUNA (o Send recusa).
+- **Terceira rodada (mesmo dia): Deal em branco, B3 ID, e a SPN que re-puxa
+  o cadastro.** O DT não traz número de operação, então a coluna **Deal
+  nasce em BRANCO** para a mesa preencher e entrou a coluna **B3 ID** (as
+  duas editáveis no modal e no filtro). A chave da linha virou um id INTERNO
+  (`_id`, o hash do DT, coluna oculta): é por ele que upsert, finder, Amend
+  e seleção casam — linha anterior sem `_id` responde pelo `Deal`
+  (`persistence.key_of`). E **editar a SPN re-puxa a contraparte**: o
+  `edit` descarta nome/conta/CNPJ que vieram pela SPN antiga e o `enrich`
+  consulta o Reference Data pela nova; o modal faz o mesmo ao vivo ao sair
+  do campo SPN (`/api/new-deals/swap-bullet/refdata`), avisando quando a
+  SPN não está no cadastro. A Descrição VCP passou a seguir os exemplos da
+  mesa à letra (só na curva da PARTE, quando VCP) e o PU inicial é sempre
+  1.00000000.
 - Ficou de fora, de propósito: Mapping B3 (o arquivo de retorno do swap não
   foi definido) e a entrada na esteira de confirmação/Pending Confirmation.
   E a **cópia do BANCO do template `swap-pagamento-final-v3` não ganha o

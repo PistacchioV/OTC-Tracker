@@ -695,7 +695,12 @@ def deal_from_raw(raw, trade_date_iso, deal_id=None):
     if prem_amt in (None, 0) and norm(prem_sched) not in ('SIM', 'YES', 'S', 'Y'):
         deal['PremiumSchedule'] = 'Não'
         deal['PremiumDate'] = deal['PremiumDate'] if deal['PremiumDate'] else ''
-    deal['Deal'] = deal_id or make_deal_id(deal)
+    # A chave da linha é um id INTERNO (hash do DT): o Deal Ticket não traz
+    # número de operação, então a coluna Deal nasce em BRANCO para a mesa
+    # preencher, e o B3 ID chega depois (Mapping / edição).
+    deal['_id'] = deal_id or make_deal_id(deal)
+    deal['Deal'] = ''
+    deal['B3ID'] = ''
     deal['VcpText'] = vcp_text(deal)
     return deal
 
@@ -708,8 +713,9 @@ def _sign(text):
 
 
 def make_deal_id(deal):
-    """Chave determinística do deal — o DT não traz número de operação. É o
-    que deixa reimportar o mesmo arquivo sem duplicar (upsert por `Deal`)."""
+    """Chave INTERNA determinística do deal — o DT não traz número de
+    operação. É o que deixa reimportar o mesmo arquivo sem duplicar (upsert
+    por `_id`); a coluna Deal é da mesa."""
     base = '|'.join(norm(deal.get(k, '')) for k in
                     ('Client', 'StartDate', 'MaturityDate', 'Notional', 'VcpCurve', 'Pair'))
     return 'SWB-' + hashlib.sha1(base.encode('utf-8')).hexdigest()[:8].upper()
