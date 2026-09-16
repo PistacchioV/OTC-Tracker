@@ -104,6 +104,12 @@ def omnibus_account(le='JPM', kind='CLIENT 2'):
     return ''
 
 
+def le_by_spn(spn):
+    """SPN de entidade NOSSA pelo cadastro `le-spn` → {LE, NAME, SPN} ou None."""
+    from apps.pages.features.swap_bullet import domain
+    return domain.le_for_spn(_R()._mapping_rows('le-spn'), spn)
+
+
 def refdata_by_spn(spn):
     """O registro do Reference Data da SPN (ou {})."""
     key = _R()._spn_key(spn)

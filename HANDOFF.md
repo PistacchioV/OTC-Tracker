@@ -20702,6 +20702,14 @@ do cadastro recalculados). `check_ops_trade_swap`, `check_payrec_run` e
   o e-mail que a mesa já manda; sai na casca padrão dos e-mails externos
   (marca J.P. Morgan por CID, nada do OTC Tracker). Cc `brazil.otc.ops`;
   `to` em branco para o Outlook do operador.
+- **SPN de entidade NOSSA vem do `le-spn`, não do Reference Data.** Digitar a
+  SPN da Atacama no modal dizia "não cadastrada": a busca só olhava o
+  Reference Data, e a SPN das nossas entidades mora no cadastro Legal
+  Entity × SPN. O `enrich`, o `/refdata` do modal e o `edit` consultam o
+  `le-spn` primeiro (`domain.le_for_spn`, por dígitos): SPN da ATACAMA vira
+  LE ATACAMA / par B2B, com o nome do cadastro e a conta própria do
+  `b3-accounts`; SPN de cliente segue pelo Reference Data. O select LE do
+  modal acompanha a resposta.
 - Ficou de fora, de propósito: Mapping B3 (o arquivo de retorno do swap não
   foi definido) e a entrada na esteira de confirmação/Pending Confirmation.
   E a **cópia do BANCO do template `swap-pagamento-final-v3` não ganha o

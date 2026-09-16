@@ -900,13 +900,15 @@ $(document).ready(function() {
             .then(function(r){ return r.json(); }).then(function(res){
                 var cli = document.getElementById('swb-f-Client'), acc = document.getElementById('swb-f-ClientAccount'), tax = document.getElementById('swb-f-ClientTaxId');
                 if (res && res.found) {
+                    var leEl = document.getElementById('swb-f-LE');
+                    if (leEl && res.le) leEl.value = res.le === 'ATACAMA' ? 'ATACAMA' : 'JPM';
                     if (cli) cli.value = res.client || cli.value;
                     if (acc) acc.value = res.account || '';
                     if (tax) tax.value = res.account ? '' : (res.taxid || '');
                     if (cli) cli.classList.remove('is-invalid');
                 } else {
                     if (cli) cli.classList.add('is-invalid');
-                    Swal.fire({ icon: 'warning', title: 'SPN ' + spn, text: 'Not found in Reference Data — register the counterparty first.', confirmButtonText: t('swal-ok', 'OK'), confirmButtonColor: '#dc3545' });
+                    Swal.fire({ icon: 'warning', title: 'SPN ' + spn, text: 'Not found in Reference Data nor in Legal Entity × SPN — register the counterparty first.', confirmButtonText: t('swal-ok', 'OK'), confirmButtonColor: '#dc3545' });
                 }
             }).catch(function(){});
         });

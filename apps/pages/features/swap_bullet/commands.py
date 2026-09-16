@@ -117,7 +117,21 @@ def enrich(deal):
     clientes do Banco + o Tax ID), e o código D-n da Data de Cotação (dias
     úteis ANBIMA até o vencimento). Só preenche o que está em branco — o que
     a mesa editou fica."""
-    if not domain.is_b2b(deal):
+    # SPN de entidade NOSSA (cadastro le-spn): a contraparte é a Atacama (o
+    # B2B), ou outra perna intragrupo — nome e conta vêm do cadastro, não do
+    # Reference Data, onde essa SPN nunca esteve.
+    le = queries.le_by_spn(deal.get('SPN', '')) if deal.get('SPN') else None
+    if le:
+        deal['LE'] = 'ATACAMA' if le['LE'] == 'ATACAMA' else deal.get('LE') or 'JPM'
+        deal['Pair'] = 'JPM x ATACAMA' if le['LE'] == 'ATACAMA' else 'JPM x CLI'
+        deal['Client'] = le['NAME'] or le['LE']
+        deal['ClientRefData'] = 'ok'
+        deal['ClientTaxId'] = ''
+        deal.pop('ClientAccountNote', None)
+        conta = queries.own_accounts().get(le['LE'], '')
+        if conta:
+            deal['ClientAccount'] = conta
+    if not le and not domain.is_b2b(deal):
         # A contraparte é IDENTIFICADA pela SPN do DT (o nome no DT é um
         # apelido — 'Safra'): quem responde nome, CNPJ e conta B3 é o
         # Reference Data. Sem SPN, tenta o nome do DT como último recurso.
@@ -373,6 +387,9 @@ def edit(deal_id, trade_date, changes, sid=''):
             d.pop('ClientAccountNote', None)
             if d.get('ClientDT'):
                 d['Client'] = d['ClientDT']
+            if 'LE' not in changes and 'ATACAMA' not in domain.norm(d.get('ClientDT')):
+                d['LE'] = 'JPM'
+                d['Pair'] = 'JPM x CLI'
         if not touched_text and (str(d.get('VcpText') or '').strip() == before_text.strip()
                                  or not str(d.get('VcpText') or '').strip()):
             d['VcpText'] = ''

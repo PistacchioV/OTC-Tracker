@@ -304,6 +304,29 @@ def main():
               d8 is not None and d8['Client'] == str(rec.get('COUNTERPARTY', '')).strip() and d8['ClientRefData'] == 'ok' and d8['Status'] == 'Pending')
         commands.edit(cli['_id'], '2026-09-16', {'SPN': '281808'}, sid='E555555')
         _f, l9, i9 = queries.find(cli['_id'], '2026-09-16'); l9[i9].update(Status='Approved', Maker='A111111', ClientAccount='74220005'); R._atomic_write_json(_f, l9); R._daycache_forget(_f)
+    print('== 6a. SPN de entidade nossa (le-spn) ==')
+    check('le_for_spn casa por dígitos, ignorando zeros e .0',
+          domain.le_for_spn([{'LE': 'ATACAMA', 'NAME': 'ATACAMA FUNDO', 'SPN': '9632845.0'}], '09632845') == {'LE': 'ATACAMA', 'NAME': 'ATACAMA FUNDO', 'SPN': '9632845.0'}
+          and domain.le_for_spn([{'LE': 'ATACAMA', 'SPN': '1'}], '') is None)
+    _rows_orig = R._mapping_rows
+    def _rows_fake(key):
+        if key == 'le-spn':
+            return [{'LE': 'ATACAMA', 'NAME': 'ATACAMA MULTIMERCADO FI', 'SPN': '9632845', 'NOTES': ''}]
+        return _rows_orig(key)
+    R._mapping_rows = _rows_fake
+    try:
+        d9 = commands.edit(cli['_id'], '2026-09-16', {'SPN': '9632845'}, sid='E555555')
+        check('SPN da Atacama pelo le-spn: vira LE ATACAMA / B2B, nome e conta do cadastro',
+              d9 is not None and d9['LE'] == 'ATACAMA' and d9['Pair'] == 'JPM x ATACAMA' and d9['Client'] == 'ATACAMA MULTIMERCADO FI'
+              and d9['ClientAccount'] == '85398005' and d9['ClientRefData'] == 'ok')
+        check('B2B pelo le-spn não tem lacuna de SPN', not any('Reference Data' in x for x in domain.missing_for_send(d9, queries.codes_for(d9), accounts)))
+        commands.edit(cli['_id'], '2026-09-16', {'SPN': '281808'}, sid='E555555')
+        d10, _ = queries.find(cli['_id'], '2026-09-16')[1:], None
+        _f, l10, i10 = queries.find(cli['_id'], '2026-09-16')
+        check('SPN de cliente de volta: LE JPM, par cliente', l10[i10]['LE'] == 'JPM' and l10[i10]['Pair'] == 'JPM x CLI')
+        l10[i10].update(Status='Approved', Maker='A111111', ClientAccount='74220005'); R._atomic_write_json(_f, l10); R._daycache_forget(_f)
+    finally:
+        R._mapping_rows = _rows_orig
     print('== 6b. dry-run + batch (duplicata → Amend) + search ==')
     dry = commands.import_upload('dt.xlsx', xlsx, datetime(2026, 9, 16), sid='A111111', dry_run=True)
     check('dry-run parseia e não grava', dry['dry_run'] and dry['imported'] == 0 and len(dry['deals']) == 2)

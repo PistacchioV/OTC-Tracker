@@ -207,11 +207,17 @@ def api_swap_bullet_refdata():
     if err:
         return err
     spn = str(request.args.get('spn') or '').strip()
+    le = queries.le_by_spn(spn) if spn else None
+    if le:
+        # Entidade nossa (le-spn): nome e conta própria do cadastro; Atacama é o B2B.
+        return jsonify({'success': True, 'found': True, 'spn': spn, 'le': le['LE'],
+                        'client': le['NAME'] or le['LE'],
+                        'account': queries.own_accounts().get(le['LE'], ''), 'taxid': ''})
     rec = queries.refdata_by_spn(spn) if spn else {}
     if not rec:
         return jsonify({'success': True, 'found': False, 'spn': spn})
     import re as _re
-    return jsonify({'success': True, 'found': True, 'spn': spn,
+    return jsonify({'success': True, 'found': True, 'spn': spn, 'le': 'JPM',
                     'client': str(rec.get('COUNTERPARTY', '') or '').strip(),
                     'account': _re.sub(r'\D', '', str(rec.get('B3 ACCOUNT', '') or '')),
                     'taxid': _re.sub(r'\D', '', str(rec.get('TAX ID', '') or ''))})

@@ -160,6 +160,29 @@ def code_by_label(rows, text, code_key='CODE', label_key='LABEL', width=2, field
     return ''
 
 
+def spn_key(v):
+    """Só dígitos, sem zeros à frente e sem o rabo `.0` (a mesma régua do
+    `_spn_key` do routes — a SPN chega como texto, número ou planilha)."""
+    s = str(v or '').strip()
+    if s.endswith('.0'):
+        s = s[:-2]
+    return re.sub(r'\D', '', s).lstrip('0')
+
+
+def le_for_spn(rows, spn):
+    """A linha do cadastro `le-spn` (Legal Entity × SPN) cuja SPN casa — a
+    SPN de uma entidade NOSSA (ATACAMA, MGT, LAWTON, JPM) não está no
+    Reference Data, está aqui. → dict {LE, NAME, SPN} ou None."""
+    alvo = spn_key(spn)
+    if not alvo:
+        return None
+    for r in rows or []:
+        if spn_key(r.get('SPN', '')) == alvo and str(r.get('LE', '') or '').strip():
+            return {'LE': str(r.get('LE', '')).strip().upper(), 'NAME': str(r.get('NAME', '') or '').strip(),
+                    'SPN': str(r.get('SPN', '') or '').strip()}
+    return None
+
+
 def curve_code(rows, curve_name, category):
     """`Curva X(03)` da B3 para a curva do DT, pelo cadastro `swap-bullet-curve`
     (DT CURVE × MATCH Exact/Contains → B3 CODE). Exact vence Contains; entre

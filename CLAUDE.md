@@ -856,7 +856,8 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   quatro Meu Número nascem no import e o re-import os preserva.
   A contraparte é IDENTIFICADA pela SPN do DT (Client = `COUNTERPARTY` do
   Reference Data; o texto do DT fica em `ClientDT`; SPN fora do cadastro é
-  lacuna; editar a SPN re-puxa o cadastro). A chave da linha é o `_id`
+  lacuna; editar a SPN re-puxa o cadastro; SPN de entidade NOSSA responde
+  pelo `le-spn` — Atacama vira o B2B). A chave da linha é o `_id`
   interno (oculto): Deal nasce em BRANCO e B3 ID é coluna própria. O
   Economic Affirmation (IF, D0) reproduz o Deal Ticket no e-mail
   (`otc_emails.build_swap_bullet_affirmation_emails`), só para contraparte
