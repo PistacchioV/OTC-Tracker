@@ -610,6 +610,19 @@ def main():
         check('o .doc é o documento sem o painel, com os valores e o nome da contraparte na assinatura',
               'id="editor-panel"' not in doc and '500,2500' in doc and '346.000,00' in doc and 'out_parteb_nome_assin">' + g['acronym'] in doc)
         check('o PDF saiu do mesmo HTML (não vazio)', len(files) == 3 and os.path.getsize(files[1]) > 20000)
+        # Os quadrados das Barreiras são FORMCHECKBOX do Word (sem glifo fora
+        # dele): o documento mostra ☒/☐ a quem não desenha campos, e o PDF os
+        # escreve na fonte de símbolos da máquina (ou [X]/[  ] sem ela).
+        check('o .doc traz os 16 quadrados: 8 marcados (os Não Aplicável) e 8 vazios, escondidos do Word',
+              doc.count('\u2612') == 8 and doc.count('\u2610') == 8 and doc.count('<![if !supportFields]>') == 16)
+        try:
+            from pypdf import PdfReader
+            pdf_txt = ''.join((pg.extract_text() or '') for pg in PdfReader(files[1]).pages)
+        except Exception as exc:                             # noqa: BLE001
+            pdf_txt = ''
+            print('      (pypdf indisponível: %s)' % exc)
+        check('o PDF desenha os quadrados (fonte de símbolos) ou escreve [X]/[  ]',
+              ('\u2612' in pdf_txt and '\u2610' in pdf_txt) or ('[X]' in pdf_txt and '[  ]' in pdf_txt))
         val = cl.get(res.get('validate_url') or '/x')
         check('a janela de validação abre', val.status_code == 200)
     finally:

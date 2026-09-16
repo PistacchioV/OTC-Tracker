@@ -8,6 +8,7 @@ Tabela de Referência (Anexo I) em página própria.
 Import é lazy no chamador: se o reportlab não estiver instalado, o save
 retorna erro claro em vez de derrubar o app.
 """
+import os
 import re
 from io import BytesIO
 
@@ -1159,6 +1160,59 @@ _FX_INLINE = {'b': 'b', 'strong': 'b', 'i': 'i', 'em': 'i', 'u': 'u',
 _FX_DROP = {'style', 'script', 'title', 'head', 'meta', 'link'}
 
 
+# ── Os quadrados dos campos de formulário do Word (☒ / ☐) ────────────────────
+# O Swap com Opção de Arrependimento (§481) marca Barreiras/Forma de
+# Verificação com FORMCHECKBOX; fora do Word o template mostra ☒/☐ (U+2612/
+# U+2610), que as fontes Type 1 do reportlab não têm — saía um quadrado preto.
+# Uma fonte TrueType da máquina responde por esses dois glifos (Segoe UI
+# Symbol no Windows da instância, Arial Unicode no Mac); sem nenhuma, o PDF
+# escreve [X] / [  ], que ainda diz o que está marcado.
+_SYMBOL_FONT_CANDIDATES = (
+    os.path.join(os.environ.get('WINDIR', r'C:\Windows'), 'Fonts', 'seguisym.ttf'),
+    os.path.join(os.environ.get('WINDIR', r'C:\Windows'), 'Fonts', 'ARIALUNI.TTF'),
+    '/System/Library/Fonts/Supplemental/Arial Unicode.ttf',
+    '/Library/Fonts/Arial Unicode.ttf',
+    '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+)
+_SYMBOL_FONT = {'name': None, 'tried': False}
+
+
+def _symbol_font():
+    """Nome da fonte registrada para ☒/☐, ou None. Tenta UMA vez por processo."""
+    if _SYMBOL_FONT['tried']:
+        return _SYMBOL_FONT['name']
+    _SYMBOL_FONT['tried'] = True
+    try:
+        from reportlab.pdfbase import pdfmetrics
+        from reportlab.pdfbase.ttfonts import TTFont
+    except ImportError:
+        return None
+    for path in _SYMBOL_FONT_CANDIDATES:
+        if not os.path.isfile(path):
+            continue
+        try:
+            font = TTFont('OtcSymbols', path)
+            if 0x2612 not in font.face.charToGlyph or 0x2610 not in font.face.charToGlyph:
+                continue
+            pdfmetrics.registerFont(font)
+            _SYMBOL_FONT['name'] = 'OtcSymbols'
+            break
+        except Exception:                                   # noqa: BLE001
+            continue
+    return _SYMBOL_FONT['name']
+
+
+def _symbols(text):
+    """☒/☐ no texto → na fonte de símbolos (ou [X]/[  ] sem ela)."""
+    if '\u2612' not in text and '\u2610' not in text:
+        return text
+    name = _symbol_font()
+    if name:
+        return (text.replace('\u2612', '<font name="%s">\u2612</font>' % name)
+                    .replace('\u2610', '<font name="%s">\u2610</font>' % name))
+    return text.replace('\u2612', '[X]').replace('\u2610', '[  ]')
+
+
 class _WordHtmlToFlowables(HTMLParser):
     """Converte o HTML do documento do Word em flowables do reportlab.
 
@@ -1296,7 +1350,7 @@ class _WordHtmlToFlowables(HTMLParser):
     def handle_data(self, data):
         if self.drop or not data:
             return
-        self.buf.append(_e(data))
+        self.buf.append(_symbols(_e(data)))
 
     # ── tabelas ─────────────────────────────────────────────────────────────
     def _table(self, t):
