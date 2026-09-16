@@ -1049,12 +1049,12 @@ def confirmation_mgt(family):
     partea_nome, partea_cnpj = _R()._CONF_MGT_PARTEA
 
     trade_date = first.get('TradeDate') or ref
+    # O título do documento MGT não leva "Nº" nem número (§484): o `num_conf`
+    # segue no payload por paridade com o editor do BANCO, mas nada o imprime.
+    # A coluna Nº do Anexo I é o Athena ID (o `Deal`), vindo de `_conf_mgt_rows`.
     conf = {
         'ref_date':     ref.strftime('%Y-%m-%d'),
-        # Nº do cabeçalho: o B3 ID quando o grupo tem UMA operação — com várias
-        # não há um número que represente o documento, e chutar o da primeira
-        # daria à confirmação o número de uma das operações que ela contém.
-        'num_conf':     rows[0]['num'] if len(rows) == 1 else '',
+        'num_conf':     '',
         'cgd_date':     cgd_txt,
         'partea_nome':  partea_nome,
         'partea_cnpj':  partea_cnpj,

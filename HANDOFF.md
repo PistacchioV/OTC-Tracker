@@ -20929,3 +20929,26 @@ a inversão foi DESCARTADA: o USD/CNH precisa da inversão.
 O Cockpit (`_ndfc_api_row`) separa as pernas por BRL (LC/FC) e não foi
 tocado. Teste: `check_weak_ccy_rate` §2b (os dois arranjos do USD/CNH, o
 CNH/BRL que fica, a resposta sem Other Quantity).
+
+## §484 — Confirmação MGT: o Nº do Anexo I é o Athena ID e o título perde o "Nº" (2026-09-16)
+
+Dois pedidos da mesa sobre o documento da MGT (`ndf-mgt-strike-me.html`,
+§453), que reaproveita as linhas do FWD Start do BANCO:
+
+1. **A coluna Nº do Anexo I é o Athena ID** (o `Deal`), não o B3 ID. No
+   documento do BANCO o Nº segue sendo o B3 ID (a regra de "mapeia o retorno
+   da B3 primeiro", §? *O Nº é o B3 ID*); no da MGT é o Deal que identifica a
+   operação. `_conf_fwdstart_rows` ganhou `num_field` (padrão `B3_ID`) e
+   `_conf_mgt_rows` chama com `Deal` — uma linha, sem duplicar o builder. O
+   aviso de "sem B3 ID" só sai quando a coluna depende dele; sem Deal o aviso
+   diz Deal. As chaves da esteira (`_mc_conf_trade_keys`) não mudaram: já eram
+   Deal no Vanilla e B3 ID no FWD Start.
+2. **O título é só "CONFIRMAÇÃO DE OPERAÇÕES DE DERIVATIVOS"**: saiu o "Nº" e
+   o campo FORMTEXT que o seguia, e com ele o campo *Nº da Confirmação
+   (cabeçalho)* do painel do editor. O `num_conf` fica vazio no payload da
+   view MGT (o save continua aceitando o campo por paridade com o editor do
+   BANCO, que não mudou). Os laços do JS que preenchem/leem os campos do
+   cabeçalho já testavam a existência do `<input>`.
+
+Teste: `check_mgt_conf` §3 (Nº = Deal nas duas famílias, título sem Nº,
+painel sem o campo, rótulo do editor).

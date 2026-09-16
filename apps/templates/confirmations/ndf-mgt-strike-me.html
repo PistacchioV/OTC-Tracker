@@ -2412,13 +2412,6 @@ table.MsoTableGrid
   </div>
   {% endif %}
 
-  <div class="section-header">Identificação do Documento</div>
-
-  <div class="field-group">
-    <label>Nº da Confirmação (cabeçalho)</label>
-    <input type="text" id="inp_num_conf" value="" oninput="update()">
-  </div>
-
   <div class="section-header">Contrato Global de Derivativos</div>
 
   <div class="field-group">
@@ -2486,13 +2479,7 @@ table.MsoTableGrid
 <div class="WordSection1">
 
 <h2 style="margin-right:-2.25pt"><span style="font-family:&quot;Times New Roman&quot;,serif">CONFIRMAÇÃO
-DE OPERAÇÕES DE DERIVATIVOS Nº <a name="Text2"></a></span><!--[if supportFields]><span
-style='mso-bookmark:Text2'></span><span style='mso-element:field-begin'></span><span
-style='mso-bookmark:Text2'><span style='font-family:"Times New Roman",serif'><span
-style='mso-spacerun:yes'> </span>FORMTEXT <span style='mso-element:field-separator'></span></span></span><![endif]--><span style="mso-bookmark:Text2"><span style="font-family:&quot;Times New Roman&quot;,serif"><span class="dyn" id="out_num_conf">{{ conf.num_conf }}</span><!--[if gte mso 9]><xml>
- <w:data>FFFFFFFF0000000014000500540065007800740032000000000000000000000000000000000000000000000000000000</w:data>
-</xml><![endif]--></span></span><!--[if supportFields]><span style='mso-bookmark:
-Text2'></span><span style='mso-element:field-end'></span><![endif]--><span style="mso-bookmark:Text2"></span><span style="font-family:&quot;Times New Roman&quot;,serif"><o:p></o:p></span></h2>
+DE OPERAÇÕES DE DERIVATIVOS<o:p></o:p></span></h2>
 
 <p class="MsoNormal" style="margin-right:-2.25pt;text-align:justify"><b><span style="mso-ansi-language:PT-BR"><o:p>&nbsp;</o:p></span></b></p>
 
@@ -4157,7 +4144,7 @@ var rows = (__CONF__ && __CONF__.rows && __CONF__.rows.length)
     ? JSON.parse(JSON.stringify(__CONF__.rows)) : [];
 
 var fields = [
-  { k: 'num',           label: 'Nº (B3 ID)' },
+  { k: 'num',           label: 'Nº (Athena ID)' },
   { k: 'comprador',     label: 'Comprador' },
   { k: 'moedaBase',     label: 'Moeda Base' },
   { k: 'premio',        label: 'Prêmio' },

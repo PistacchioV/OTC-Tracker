@@ -1338,7 +1338,10 @@ def _conf_mgt_rows(picked, warnings):
     Vanilla a Taxa Forward é a taxa contratada (o `Rate`, cláusula 4.2.l.1) e
     não há Data de Verificação da Taxa Forward nem Pontos de Termo — saem
     "Não Aplicável", declarados, não em branco."""
-    rows = _conf_fwdstart_rows(picked, warnings)
+    # O Nº do Anexo I é o **Athena ID** (o `Deal`), não o B3 ID (§484): é o
+    # número que identifica a operação para a MGT e o cliente neste documento
+    # — o B3 ID fica no cabeçalho, quando o grupo tem uma operação só.
+    rows = _conf_fwdstart_rows(picked, warnings, num_field='Deal')
     for (deal, _s), r in zip(picked, rows):
         if str(deal.get('_conf_src') or '') == 'vanilla':
             r['dtVerifFwd'] = 'Não Aplicável'
@@ -1349,8 +1352,12 @@ def _conf_mgt_rows(picked, warnings):
     return rows
 
 
-def _conf_fwdstart_rows(picked, warnings):
+def _conf_fwdstart_rows(picked, warnings, num_field='B3_ID'):
     """Linhas do Anexo I a partir dos deals escolhidos.
+
+    `num_field` é o campo do deal que vai na coluna Nº: o B3 ID no documento
+    do BANCO (o número que a B3 devolve depois do registro), o `Deal` (Athena
+    ID) no da MGT (§484). Faltando, a coluna sai vazia e o painel avisa.
 
     As três colunas que só existem neste documento:
       * **Pontos de Termo** = Strike Set Offset — os pontos que se somam ao
@@ -1371,8 +1378,8 @@ def _conf_fwdstart_rows(picked, warnings):
         taxa, tipo_taxa = _conf_fxo_conv_rate(moeda)
         if not taxa:
             sem_taxa.add(moeda or '(sem moeda)')
-        b3 = str(deal.get('B3_ID') or '').strip()
-        if not b3:
+        num = str(deal.get(num_field) or '').strip()
+        if not num:
             sem_b3 += 1
         d_ini = routes._parse_date_any(deal.get('FirstFixingDate'))
         d_fim = routes._parse_date_any(deal.get('LastFixingDate'))
@@ -1381,7 +1388,7 @@ def _conf_fwdstart_rows(picked, warnings):
         taxa_fwd = _conf_fmt_num(deal.get('Rate'), dec=8) if str(deal.get('Rate') or '').strip() \
             else 'Não Aplicável'
         rows.append({
-            'num':           b3,
+            'num':           num,
             'comprador':     'Parte B' if direction.startswith('S') else 'Parte A',
             'moedaBase':     moeda,
             # O termo de moeda a termo não paga prêmio; as três colunas existem
@@ -1404,10 +1411,13 @@ def _conf_fwdstart_rows(picked, warnings):
     if sem_taxa:
         warnings.append('Moeda {} sem Taxa de Conversão cadastrada (mapping FXO Conversion Rate) '
                         '— preencha as colunas no painel.'.format(', '.join(sorted(sem_taxa))))
-    if sem_b3:
+    if sem_b3 and num_field == 'B3_ID':
         warnings.append('{} operação(ões) sem B3 ID — a coluna Nº do Anexo I sai vazia. '
                         'Faça o mapeamento do retorno da B3 antes de gerar a confirmação.'
                         .format(sem_b3))
+    elif sem_b3:
+        warnings.append('{} operação(ões) sem Deal (Athena ID) — a coluna Nº do Anexo I '
+                        'sai vazia.'.format(sem_b3))
     return rows
 
 
