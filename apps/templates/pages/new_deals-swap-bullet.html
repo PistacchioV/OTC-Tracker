@@ -1,0 +1,847 @@
+{% extends "layouts/vertical.html" %}
+
+{% block title %}New Deals — Swap Bullet{% endblock title %}
+
+{% block extra_css %}
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/responsive.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/select.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet" type="text/css"/>
+<style>
+  @keyframes ti-spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
+  i.ti-spin, .ti-spin, i.ti-loader-2 { display: inline-block !important; animation: ti-spin 0.8s linear infinite !important; }
+
+  /* Status 'Sent' — o mesmo teal das outras telas de New Deals. */
+  .badge.badge-sent { background-color: #17a2b8 !important; color: #fff !important; }
+
+  div.dt-button-collection {
+      opacity: 1 !important;
+      background-color: var(--ins-dropdown-bg, var(--ins-secondary-bg, #fff)) !important;
+      border: var(--ins-border-width, 1px) solid var(--ins-border-color, rgba(0,0,0,.1)) !important;
+      border-radius: var(--ins-dropdown-border-radius, 0.6875rem) !important;
+      box-shadow: 0 8px 24px rgba(0,0,0,.12) !important;
+  }
+  div.dt-button-collection .dropdown-item { opacity: 1 !important; color: var(--ins-dropdown-link-color, var(--ins-body-color)) !important; }
+
+  .card-body { padding: 5px; }
+  .table-responsive { overflow-x: auto; }
+  .dt-scroll-head, .dataTables_scrollHead { padding-top: 8px; }
+  .dt-scroll-body thead, .dataTables_scrollBody thead { display: none !important; }
+  .dt-scroll-headInner table, .dataTables_scrollHeadInner table,
+  .dt-scroll-body > table, .dataTables_scrollBody > table { table-layout: fixed !important; }
+  /* Centralizada (§7): th .7rem, td .8rem; o clone do header do scrollX perde o
+     id da tabela, por isso as mesmas regras com !important nos clones. */
+  #swb-table th {
+      white-space: normal; padding: 8px 10px; overflow: hidden; text-overflow: ellipsis;
+      text-align: center !important; vertical-align: middle !important; font-size: 0.7rem;
+  }
+  .dt-scroll-head thead th, .dt-scroll-headInner thead th,
+  .dataTables_scrollHead thead th, .dataTables_scrollHeadInner thead th {
+      white-space: normal !important; overflow: hidden; text-overflow: ellipsis;
+      text-align: center !important; vertical-align: middle !important; font-size: 0.7rem !important;
+  }
+  #swb-table td { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.8rem; text-align: center; vertical-align: middle; font-variant-numeric: tabular-nums; }
+  #swb-table th, #swb-table td,
+  #swb-table_wrapper .dt-scroll-head thead th, #swb-table_wrapper .dataTables_scrollHead thead th { width: 130px; min-width: 130px; }
+  #swb-table th:nth-child(1), #swb-table td:nth-child(1),
+  #swb-table_wrapper .dt-scroll-head thead th:nth-child(1), #swb-table_wrapper .dataTables_scrollHead thead th:nth-child(1) { width: 50px; min-width: 50px; }
+  #swb-table th:nth-child(2), #swb-table td:nth-child(2),
+  #swb-table_wrapper .dt-scroll-head thead th:nth-child(2), #swb-table_wrapper .dataTables_scrollHead thead th:nth-child(2) { width: 170px; min-width: 170px; }
+  #swb-table th:nth-child(3), #swb-table td:nth-child(3),
+  #swb-table_wrapper .dt-scroll-head thead th:nth-child(3), #swb-table_wrapper .dataTables_scrollHead thead th:nth-child(3) { width: 105px; min-width: 105px; }
+  #swb-table th:nth-child(4), #swb-table td:nth-child(4),
+  #swb-table_wrapper .dt-scroll-head thead th:nth-child(4), #swb-table_wrapper .dataTables_scrollHead thead th:nth-child(4) { width: 125px; min-width: 125px; }
+  .swb-filter-row th { padding: 4px 8px; border-top: 1px solid rgba(0,0,0,0.08); text-align: center; vertical-align: middle; }
+  .btn-toolbar-all { font-size: 0.75rem !important; padding: 0.25rem 0.6rem !important; height: auto !important; line-height: 1.4 !important; white-space: nowrap !important; }
+
+  /* Dropzone do Deal Ticket. */
+  .swb-drop {
+      display: flex; align-items: center; gap: 10px; padding: 8px 12px; min-width: 360px;
+      border: 1.5px dashed rgba(74,132,155,.55); border-radius: 12px; background: rgba(74,132,155,.05);
+      cursor: pointer; text-align: left; transition: border-color .15s, background .15s, transform .08s;
+  }
+  .swb-drop:hover  { border-color: #4a849b; }
+  .swb-drop.is-drag { border-color: #0066cc; background: rgba(0,102,204,.05); }
+  .swb-drop__icon { flex: 0 0 auto; width: 32px; height: 32px; border-radius: 9px; display: grid; place-items: center; background: rgba(74,132,155,.14); color: #4a849b; font-size: 1.05rem; }
+  .swb-drop__title { font-size: .8rem; font-weight: 600; margin: 0; line-height: 1.2; }
+  .swb-drop__hint  { font-size: .7rem; color: #6c757d; margin: .1rem 0 0; }
+  .swb-drop:not(.is-busy) .swb-drop__spin { display: none !important; }
+  .swb-drop.is-busy { pointer-events: none; opacity: .85; }
+  .swb-drop.is-busy .swb-drop__glyph { display: none !important; }
+  [data-bs-theme=dark] .swb-drop { border-color: rgba(255,255,255,.14); }
+
+  /* Preview dos arquivos. */
+  .swb-preview-line { font-family: monospace; font-size: .74rem; white-space: pre; overflow-x: auto; background: rgba(0,0,0,.04); border-radius: 8px; padding: 8px 10px; text-align: left; }
+  [data-bs-theme=dark] .swb-preview-line { background: rgba(255,255,255,.06); }
+  .swb-preview-tabs .nav-link { font-size: .78rem; padding: .3rem .7rem; }
+  .swb-lacuna { color: #dc3545; font-weight: 600; }
+  .swb-edit-grid label { font-size: .72rem; }
+</style>
+{% endblock extra_css %}
+
+{% block page_content %}
+<div class="container-fluid" data-content="">
+    <div class="page-title-head d-flex align-items-center">
+        <div class="flex-grow-1">
+            <h4 class="fs-xl fw-bold m-0 d-flex align-items-center gap-2">
+                <i class="ti ti-target-arrow" style="color:#0066cc;font-size:22px;flex-shrink:0;"></i>
+                <span data-lang="nd-swb-title">New Deals — Swap Bullet</span>
+            </h4>
+        </div>
+        <div class="text-end">
+            <ol class="breadcrumb m-0 py-0">
+                <li class="breadcrumb-item"><a href="/">OTC Tracker</a></li>
+                <li class="breadcrumb-item" data-lang="new-deals">New Deals</li>
+                <li class="breadcrumb-item" data-lang="nav-swap">Swap</li>
+                <li class="breadcrumb-item active" data-lang="nav-bullet">Bullet</li>
+            </ol>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+
+                <!-- ── Smart filter bar ─────────────────────────────────────── -->
+                <div class="d-flex align-items-center gap-2 px-2 py-2 border-top border-bottom">
+                    <div class="flex-grow-1 position-relative">
+                        <div class="smart-filter-wrapper" id="sfWrapper">
+                            <div class="smart-filter-chips" id="sfChips"></div>
+                            <input type="text" class="smart-filter-input" id="sfInput" placeholder="Type to filter…" autocomplete="off">
+                            <ul class="smart-filter-dropdown mb-0 ps-0" id="sfDropdown"></ul>
+                        </div>
+                    </div>
+                    <div>
+                        <button class="btn btn-secondary bg-gradient btn-toolbar-all" type="button" id="sfSearchBtn">
+                            <i class="ti ti-search fs-xl me-1"></i> <span data-lang="b3-btn-search">Search</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="card-header">
+                    <div class="d-flex align-items-center gap-2">
+                        <label class="form-label mb-0" data-lang="b3-show">Show</label>
+                        <select class="form-select form-select-sm" style="width:80px;" data-table-rows>
+                            <option value="15">15</option><option value="25">25</option><option value="50">50</option><option value="100">100</option>
+                        </select>
+                        <label class="form-label mb-0" data-lang="b3-entries">entries</label>
+                    </div>
+                </div>
+
+                <!-- ── Toolbar ──────────────────────────────────────────────── -->
+                <div class="card-header d-flex flex-wrap align-items-center gap-2 mb-3">
+                    <div id="swbColToggleWrap"></div>
+                    <button class="btn btn-sm btn-primary bg-gradient btn-toolbar-all" id="btnAddSwb"><i class="ti ti-plus me-1"></i>Add Row</button>
+                    <div id="swbExportWrap"></div>
+                    <button class="btn btn-sm btn-soft-info btn-toolbar-all d-none" id="btnPreviewSwb" type="button"><i class="ti ti-eye me-1"></i><span data-lang="nd-swb-btn-preview">Preview</span></button>
+                    <button class="btn btn-sm btn-danger bg-gradient btn-toolbar-all d-none" id="btnDelSwb"><i class="ti ti-trash me-1"></i> Delete</button>
+                    <button class="btn btn-sm btn-primary bg-gradient btn-toolbar-all d-none" id="btnSendSwb"><i class="ti ti-brand-telegram me-1"></i> Send</button>
+                    <button class="btn btn-sm btn-outline-secondary btn-toolbar-all" id="btnClearFilters" type="button"><i class="ti ti-filter-off me-1"></i> <span data-lang="btn-clear-filters">Clear Filters</span></button>
+                    <span class="text-muted fs-xs ms-auto d-none d-lg-inline" data-lang="nd-swb-preview-hint">Double-click a row to preview the B3 files (SWAP 0301 + premium 0897).</span>
+                </div>
+
+                <!-- ── Dropzone + Trade Date ────────────────────────────────── -->
+                <div class="card-header d-flex flex-wrap align-items-center gap-2">
+                    <div class="d-flex align-items-center gap-1">
+                        <label for="swbTradeDate" class="form-label fs-xs text-muted mb-0 me-1 text-nowrap" data-lang="nd-col-trade-date">Trade Date</label>
+                        <input type="text" id="swbTradeDate" class="form-control form-control-sm swb-date-w" style="width: 8.5rem;" placeholder="dd/mm/yyyy" autocomplete="off">
+                    </div>
+                    <div class="swb-drop" id="swbDrop" role="button" tabindex="0" aria-label="Upload Deal Ticket">
+                        <div class="swb-drop__icon">
+                            <i class="ti ti-upload swb-drop__glyph"></i>
+                            <i class="ti ti-loader-2 ti-spin swb-drop__spin"></i>
+                        </div>
+                        <div>
+                            <p class="swb-drop__title" data-lang="nd-swb-drop-title">Drop the Deal Ticket here (.xlsx or .pdf), or click to browse</p>
+                            <p class="swb-drop__hint" data-lang="nd-swb-drop-hint">One deal per sheet/page — the client ticket and the B2B (Banco × Atacama) become two deals</p>
+                        </div>
+                        <input type="file" id="swbFile" accept=".xlsx,.xlsm,.pdf" hidden>
+                    </div>
+                </div>
+
+                <div class="card-body" style="padding-top:10px;">
+                    <div class="table-responsive">
+                        <table class="table table-striped dt-responsive align-middle mb-0" id="swb-table">
+                            <thead class="thead-sm text-uppercase fs-xxs">
+                                <tr class="text-uppercase fs-xxs" id="swbHead">
+                                    <th style="width:50px;"><input class="form-check-input form-check-input-light fs-14 mt-0 swb-cb-all" type="checkbox" id="selectAll"></th>
+                                    <th data-lang="nd-col-actions">Actions</th>
+                                    <th data-lang="nd-col-status">Status</th>
+                                    <th data-lang="nd-col-deal">Deal</th>
+                                    <th data-lang="nd-col-trade-date">Trade Date</th>
+                                    <!-- as colunas do deal entram por JS (SWB_COLS) -->
+                                </tr>
+                                <tr class="swb-filter-row" id="swbFilter">
+                                    <th></th><th></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Status"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Deal"></th>
+                                    <th><input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="Trade Date"></th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: editar / adicionar (padrão da casa, ver check_modal_standard) -->
+<div class="modal fade" id="swbModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content liquid-glass">
+      <div class="modal-header py-2">
+        <h5 class="modal-title fs-6"><i class="ti ti-edit me-1"></i><span data-lang="nd-swb-modal-edit">Edit Deal — Swap Bullet</span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-3 swb-edit-grid" id="swbEditGrid"></div>
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-sm btn-danger" data-bs-dismiss="modal" title="Cancel"><i class="ti ti-x"></i></button>
+        <button type="button" class="btn btn-sm btn-success" id="swbSaveBtn" title="Save"><i class="ti ti-device-floppy"></i></button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock page_content %}
+
+{% block extra_javascript %}
+<script src="{{ config.ASSETS_ROOT }}/plugins/jquery/jquery.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.responsive.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/responsive.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.buttons.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/jszip.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/pdfmake.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/vfs_fonts.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.html5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.print.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.select.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/select.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/export-advanced.js?v={{ asset_v('js/export-advanced.js') }}"></script>
+
+<script>
+// ── Contrato com o servidor (domain.SWB_COLUMNS, na ordem) ──────────────────
+var SWB_COLS = [
+    ['Type','Swap Type'],['Pair','Pair'],['Client','Client'],['SPN','SPN'],['ClientAccount','Client B3 Account'],
+    ['ClientTaxId','Client Tax ID'],['StartDate','Start Date'],['MaturityDate','Maturity Date'],['Currency','Currency'],
+    ['Notional','Notional'],['Adhesion','Adhesion'],['Functionality','Functionality'],['PremiumSchedule','Premium Schedule'],
+    ['PremiumDate','Premium Date'],['PremiumPayer','Premium Payer'],['PremiumAmount','Premium Amount'],['Reset','Reset'],
+    ['LOB','LOB'],['VcpHolder','VCP Holder'],['VanillaHolder','Vanilla Holder'],
+    ['CurveACategory','Curve A Category'],['CurveAPct','Curve A Pct'],['CurveA','Curve A'],['CurveASign','Curve A Sign'],
+    ['CurveARate','Curve A Rate'],['CurveACap','Curve A Cap'],['CurveAFloor','Curve A Floor'],
+    ['CurveBCategory','Curve B Category'],['CurveBPct','Curve B Pct'],['CurveB','Curve B'],['CurveBSign','Curve B Sign'],
+    ['CurveBRate','Curve B Rate'],['CurveBCap','Curve B Cap'],['CurveBFloor','Curve B Floor'],
+    ['VcpCurve','VCP Curve'],['VcpCode','VCP Code'],['VcpCategory','VCP Category'],['VcpDescription','VCP Description'],
+    ['InitialPrice','Initial Price'],['InfoSource','Info Source'],['QuoteDate','Quote Date'],['QuoteDateCode','Quote Date D-n'],
+    ['Denomination1','Denomination 1'],['Denomination2','Denomination 2'],['Denomination3','Denomination 3'],['VcpText','VCP Text'],
+    ['Maker','Maker'],['Checker','Checker']
+];
+var SWB_FIELDS = SWB_COLS.map(function(c){ return c[0]; });
+var SWB_DATE = { StartDate:1, MaturityDate:1, PremiumDate:1, QuoteDate:1 };
+var SWB_NUM  = { Notional:1, PremiumAmount:1, CurveAPct:1, CurveARate:1, CurveACap:1, CurveAFloor:1, CurveBPct:1, CurveBRate:1, CurveBCap:1, CurveBFloor:1 };
+var SWB_MONEY = { Notional:1, PremiumAmount:1 };
+var SWB_SELECT = {
+    Pair: ['JPM x CLI', 'JPM x ATACAMA'], Adhesion: ['CGD', 'CSA', 'CGD/CSA', 'SEM ADESAO'],
+    PremiumSchedule: ['Sim', 'Não'], Reset: ['Não', 'Sim'], CurveACategory: ['JUROS', 'VCP'], CurveBCategory: ['JUROS', 'VCP'],
+    CurveASign: ['+', '-'], CurveBSign: ['+', '-'], Currency: ['BRL', 'USD', 'EUR']
+};
+var SWB_READONLY = { Maker:1, Checker:1, Type:1 };
+// Colunas: [0]=checkbox [1]=actions [2]=Status [3]=Deal [4]=Trade Date [5..]=SWB_FIELDS.
+var C_OFF = 5, C_ID = 3, C_TD = 4, C_STATUS = 2;
+var ENTRIES = [], DEALS = {}, selected = new Set();
+var CURRENT_USER_SID = '{{ session.get("user_sid", "") }}';
+
+var STATUS_META = {
+    'New':      { cls: 'bg-info text-white' },
+    'Pending':  { cls: 'text-bg-warning' },
+    'Approved': { cls: 'text-bg-secondary' },
+    'Sent':     { cls: 'badge-sent' },
+    'Success':  { cls: 'text-bg-success' }
+};
+function statusBadge(status) {
+    var txt = (status == null ? '' : String(status)).replace(/<[^>]*>/g, '').trim() || 'New';
+    var m = STATUS_META[txt] || STATUS_META['New'];
+    return '<span class="badge ' + m.cls + ' bg-gradient">' + esc(txt) + '</span>';
+}
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+function _t(key, fallback) {
+    try {
+        var lang = localStorage.getItem('__OTC_TRACKER_LANG__') || 'en';
+        var d = window.__OTC_TRANSLATIONS__ && window.__OTC_TRANSLATIONS__[lang];
+        if (d && d[key]) return d[key];
+    } catch (e) {}
+    return fallback;
+}
+function _isoToDmy(s) { var m=String(s||'').match(/^(\d{4})-(\d{2})-(\d{2})/); return m?(m[3]+'/'+m[2]+'/'+m[1]):String(s||''); }
+function _dmyToIso(dmy) { var p=(dmy||'').trim().split('/'); if(p.length!==3||p[2].length!==4) return ''; return p[2]+'-'+p[1].padStart(2,'0')+'-'+p[0].padStart(2,'0'); }
+function _todayDmy() { var d = new Date(); return ('0'+d.getDate()).slice(-2)+'/'+('0'+(d.getMonth()+1)).slice(-2)+'/'+d.getFullYear(); }
+function fmtMoney(v) {
+    var n = parseFloat(String(v||'').replace(/[^\d.\-]/g, ''));
+    if (isNaN(n)) return v == null ? '' : String(v);
+    return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+// Cabeçalho montado a partir do contrato — a lista de colunas vive num lugar só.
+(function buildHead() {
+    var h = document.getElementById('swbHead'), f = document.getElementById('swbFilter');
+    SWB_COLS.forEach(function (c) {
+        var th = document.createElement('th'); th.setAttribute('data-lang', 'nd-swb-col-' + c[0].toLowerCase()); th.textContent = c[1];
+        h.appendChild(th);
+        var tf = document.createElement('th');
+        tf.innerHTML = '<input class="form-control form-control-sm bg-light-subtle border-light" type="text" placeholder="' + esc(c[1]) + '">';
+        f.appendChild(tf);
+    });
+})();
+
+function _todayIso() { var d = new Date(); return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
+jQuery(function () {
+    // O `otcDateField` guarda o VALUE em Y-m-d (o que a API espera) e mostra
+    // dd/mm/aaaa no altInput — o valor pré-preenchido tem de ser ISO, senão o
+    // flatpickr lê '16/09/2026' como Y-m-d e o campo vira 01/01/2026.
+    var rd = document.getElementById('swbTradeDate');
+    if (rd) {
+        rd.value = _todayIso();
+        if (window.otcDateField) window.otcDateField(rd);
+    }
+});
+
+$(document).ready(function() {
+    if (typeof JSZip !== 'undefined') {
+        window.JSZip = JSZip;
+        if ($.fn.dataTable && $.fn.dataTable.Buttons && typeof $.fn.dataTable.Buttons.jszip === 'function') $.fn.dataTable.Buttons.jszip(JSZip);
+    }
+    function fmtExport(data,row,col,node) {
+        if (node) { var inp=$(node).find('input[type!="checkbox"]'); if (inp.length) return inp.val()||''; }
+        return (data==null?'':String(data)).replace(/<[^>]*>/g,'').trim();
+    }
+    function range(a, b) { var o=[]; for (var i=a;i<=b;i++) o.push(i); return o; }
+    var EXPORT_COLS = range(2, C_OFF + SWB_FIELDS.length - 1);
+    var PAGINATE = { paginate: { first:'<i class="ti ti-chevrons-left"></i>', previous:'<i class="ti ti-chevron-left"></i>', next:'<i class="ti ti-chevron-right"></i>', last:'<i class="ti ti-chevrons-right"></i>' } };
+
+    var columnDefs = [
+        { orderable: false, targets: [0, 1] },
+        { targets: C_STATUS, render: function(data, type){ return type === 'display' ? statusBadge(data) : (data || 'New'); } },
+        { targets: C_TD, render: function(data, type){ return type === 'display' ? _isoToDmy(data) : (data || ''); } }
+    ];
+    SWB_FIELDS.forEach(function (f, i) {
+        if (SWB_DATE[f]) columnDefs.push({ targets: i + C_OFF, render: function(d, type){ return type === 'display' ? _isoToDmy(d) : (d || ''); } });
+        if (SWB_MONEY[f]) columnDefs.push({ targets: i + C_OFF, render: function(d, type){ return type === 'display' ? fmtMoney(d) : (d || ''); } });
+        if (f === 'VcpText') columnDefs.push({ targets: i + C_OFF, render: function(d, type){ return type === 'display' && d ? '<span title="' + esc(d) + '">' + esc(String(d).slice(0, 40)) + (d.length > 40 ? '…' : '') + '</span>' : (d || ''); } });
+    });
+
+    var dt = window.swbTable = $('#swb-table').DataTable({
+        responsive: false, scrollX: true, scrollY: '58vh', scrollCollapse: true, autoWidth: false, pageLength: 15,
+        orderCellsTop: true, order: [],
+        select: { style:'os', items:'cell', selector:'td:not(:nth-child(1)):not(:nth-child(2))' },
+        columnDefs: columnDefs,
+        dom: "rt<'d-md-flex justify-content-between align-items-center mt-2'ip>",
+        buttons: [{
+            extend:'collection', text:'<i class="ti ti-download me-1"></i> Export',
+            className:'btn btn-sm btn-info bg-gradient dropdown-toggle btn-toolbar-all', autoClose:true, fade:0,
+            buttons:[
+                {extend:'copy',  text:'<i class="ti ti-copy me-1"></i> Copy',  className:'dropdown-item', title:'New Deals — Swap Bullet', exportOptions:{columns:EXPORT_COLS,format:{body:fmtExport}}},
+                {extend:'csv',   text:'<i class="ti ti-file-type-csv me-1"></i> CSV',   className:'dropdown-item', bom:true, fieldSeparator:';', title:'New Deals — Swap Bullet', exportOptions:{columns:EXPORT_COLS,format:{body:fmtExport}}},
+                {extend:'excel', text:'<i class="ti ti-file-spreadsheet me-1"></i> Excel', className:'dropdown-item', title:'New Deals — Swap Bullet', exportOptions:{columns:EXPORT_COLS,format:{body:fmtExport}}},
+                {extend:'print', text:'<i class="ti ti-printer me-1"></i> Print', className:'dropdown-item', title:'New Deals — Swap Bullet', exportOptions:{columns:EXPORT_COLS,format:{body:fmtExport}}},
+                {extend:'pdf',   text:'<i class="ti ti-file-text me-1"></i> PDF',   className:'dropdown-item', title:'New Deals — Swap Bullet', orientation:'landscape', pageSize:'A3', exportOptions:{columns:EXPORT_COLS,format:{body:fmtExport}}}
+            ]
+        }],
+        language: PAGINATE,
+        drawCallback: function() {
+            var api = this.api();
+            api.rows().every(function() {
+                var d=this.data(), id=d?d[C_ID]:null, node=this.node();
+                if(node) {
+                    $(node).find('input[type="checkbox"]').prop('checked',!!(id&&selected.has(id)));
+                    var st = d ? d[C_STATUS] : '';
+                    $(node).find('.btn-row-confirm').toggleClass('d-none', !(st==='New' || st==='Pending'));
+                    $(node).find('.btn-row-send').toggleClass('d-none', !(st==='New' || st==='Approved'));
+                }
+            });
+            syncSelectAll();
+            setTimeout(function(){ api.columns.adjust(); }, 0);
+        },
+        initComplete: function() {
+            var api = this.api();
+            // Filtro por coluna delegado no CONTAINER (§462): o scrollX clona o
+            // cabeçalho e é no clone que a pessoa digita.
+            var $c = $(api.table().container());
+            $c.on('click', '.swb-filter-row th, .swb-filter-row th input', function(e){ e.stopPropagation(); });
+            $c.on('keyup input change', '.swb-filter-row th input', function() {
+                var ci = $(this).closest('th').index();
+                if (api.column(ci).search() !== this.value) api.column(ci).search(this.value).draw();
+            });
+            var ctw=document.getElementById('swbColToggleWrap');
+            if(ctw) {
+                var dd=document.createElement('div'); dd.className='dropdown';
+                var items=SWB_COLS.map(function(c,i){
+                    return '<li class="dropdown-item"><div class="form-check">' +
+                        '<input class="form-check-input form-check-input-light fs-14 mt-0 toggle-vis" type="checkbox" data-column="'+(i+C_OFF)+'" id="swbC'+i+'" checked>' +
+                        '<label class="form-check-label fw-medium" for="swbC'+i+'">'+esc(c[1])+'</label></div></li>';
+                }).join('');
+                dd.innerHTML='<button class="btn btn-sm btn-soft-primary dropdown-toggle btn-toolbar-all" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside"><i class="ti ti-columns me-1"></i> Columns</button>' +
+                    '<ul class="dropdown-menu" id="swbColMenu" style="max-height:60vh;overflow-y:auto;">'+items+'</ul>';
+                ctw.appendChild(dd);
+                document.getElementById('swbColMenu').addEventListener('change',function(e){
+                    if(e.target.classList.contains('toggle-vis')) dt.column(parseInt(e.target.dataset.column)).visible(e.target.checked);
+                });
+            }
+            // Colunas secundárias começam escondidas — a grade tem 53.
+            ['ClientTaxId','Reset','VcpHolder','VanillaHolder','Denomination2','Maker','Checker'].forEach(function(f){
+                var i = SWB_FIELDS.indexOf(f); if (i >= 0) { api.column(i + C_OFF).visible(false); var cb = document.getElementById('swbC' + i); if (cb) cb.checked = false; }
+            });
+        }
+    });
+    dt.buttons().container().appendTo('#swbExportWrap');
+    setTimeout(function() { dt.columns.adjust(); }, 150);
+    $(window).on('resize', function(){ dt.columns.adjust(); });
+
+    function _actionsCell() {
+        return '<div class="d-flex justify-content-center gap-1">' +
+            '<a class="btn btn-success btn-sm rounded-circle btn-row-confirm" href="#" data-bs-toggle="tooltip" data-bs-placement="auto" data-bs-title="Confirm" data-bs-custom-class="tooltip-success"><i class="ti ti-check"></i></a>' +
+            '<a class="btn btn-info btn-sm rounded-circle btn-row-edit" href="#" data-bs-toggle="tooltip" data-bs-placement="auto" data-bs-title="Edit" data-bs-custom-class="tooltip-info"><i class="ti ti-edit"></i></a>' +
+            '<a class="btn btn-danger btn-sm rounded-circle btn-row-delete" href="#" data-bs-toggle="tooltip" data-bs-placement="auto" data-bs-title="Delete" data-bs-custom-class="tooltip-danger"><i class="ti ti-trash"></i></a>' +
+            '<a class="btn btn-primary btn-sm rounded-circle btn-row-send" href="#" data-bs-toggle="tooltip" data-bs-placement="auto" data-bs-title="Send" data-bs-custom-class="tooltip-primary"><i class="ti ti-brand-telegram"></i></a></div>';
+    }
+    // Tooltip colorido no primeiro hover (os <td> são reescritos a cada redraw).
+    $('#swb-table tbody').on('mouseenter', '[data-bs-toggle="tooltip"]', function(){
+        if (window.bootstrap && !bootstrap.Tooltip.getInstance(this)) new bootstrap.Tooltip(this).show();
+    });
+
+    function dealRow(e) {
+        var row = ['<input class="form-check-input form-check-input-light fs-14 mt-0" type="checkbox" value="">',
+                   _actionsCell(), e.Status || 'New', e.Deal || '', e.TradeDate || ''];
+        SWB_FIELDS.forEach(function(f){ row.push(e[f] != null ? String(e[f]) : ''); });
+        return row;
+    }
+    function renderAll() {
+        dt.clear(); DEALS = {};
+        ENTRIES.forEach(function(e){ if (!e || !e.Deal) return; DEALS[e.Deal] = e; dt.row.add(dealRow(e)); });
+        dt.draw();
+        setTimeout(function(){ dt.columns.adjust().draw(false); }, 100);
+    }
+    function upsertEntry(e) {
+        var i = ENTRIES.findIndex(function(x){ return x && x.Deal === e.Deal; });
+        if (i >= 0) ENTRIES[i] = e; else ENTRIES.push(e);
+        renderAll();
+    }
+    function removeEntries(ids) {
+        var set = {}; ids.forEach(function(x){ set[x]=1; });
+        ENTRIES = ENTRIES.filter(function(e){ return !(e && set[e.Deal]); });
+        ids.forEach(function(x){ selected.delete(x); });
+        renderAll();
+    }
+
+    // ── Load: o chip de Trade Date comanda o fetch ─────────────────────────
+    var dateRanges = {};
+    function swbLoad(qs, colFilters) {
+        fetch('/api/new-deals/swap-bullet' + (qs ? '?'+qs : ''), { credentials: 'same-origin' })
+            .then(function(r){ return r.json(); })
+            .then(function(data){
+                ENTRIES = (data.success && data.entries) ? data.entries : [];
+                dt.columns().search('');
+                dateRanges = {};
+                (colFilters||[]).forEach(function(f){
+                    if (f.col.type === 'date') {
+                        var d = sfToDate(f.value);
+                        dateRanges[f.col.dtCol] = dateRanges[f.col.dtCol] || {from:null,to:null};
+                        if (f.mode === 'from') dateRanges[f.col.dtCol].from = d;
+                        else if (f.mode === 'to') dateRanges[f.col.dtCol].to = d;
+                        else { dateRanges[f.col.dtCol].from = d; dateRanges[f.col.dtCol].to = d; }
+                    } else { dt.column(f.col.dtCol).search(f.value); }
+                });
+                renderAll();
+            })
+            .catch(function(err){ console.error('[Swap Bullet] Load error:', err); });
+    }
+
+    // ── Import: dropzone → /import-file ─────────────────────────────────────
+    var drop = document.getElementById('swbDrop'), fileInput = document.getElementById('swbFile');
+    function setBusy(b) { drop.classList.toggle('is-busy', b); }
+    function uploadFile(file) {
+        if (!file) return;
+        setBusy(true);
+        var fd = new FormData();
+        fd.append('file', file);
+        fd.append('trade_date', (document.getElementById('swbTradeDate').value || '').trim());
+        fetch('/api/new-deals/swap-bullet/import-file', { method: 'POST', body: fd, credentials: 'same-origin' })
+            .then(function(r){ return r.json().then(function(j){ return {ok:r.ok, data:j}; }); })
+            .then(function(o){
+                setBusy(false);
+                if (!o.ok || !o.data.success) {
+                    Swal.fire({ title: 'Import', text: o.data.message || 'Import failed.', icon: 'error', confirmButtonText: 'OK', confirmButtonColor: '#dc3545' });
+                    return;
+                }
+                if (window.fetchNotifications) window.fetchNotifications();
+                var msg = (o.data.imported || 0) + ' deal(s) imported with Trade Date ' + _isoToDmy(o.data.trade_date) + '.';
+                var extra = '';
+                var miss = o.data.missing || {};
+                var missKeys = Object.keys(miss);
+                if (missKeys.length) {
+                    extra += '<div class="text-start mt-2 fs-xs"><b>Cannot be sent yet — fill in or register:</b><ul class="mb-0 ps-3">' +
+                        missKeys.map(function(k){ return '<li><b>' + esc(k) + '</b>: ' + esc(miss[k].join('; ')) + '</li>'; }).join('') + '</ul></div>';
+                }
+                if (o.data.ignored && o.data.ignored.length) extra += '<div class="text-start mt-2 fs-xs text-muted">Ignored (not a Deal Ticket): ' + esc(o.data.ignored.join(', ')) + '</div>';
+                Swal.fire({ title: 'Import', html: esc(msg) + extra, icon: missKeys.length ? 'warning' : 'success', confirmButtonText: 'OK', confirmButtonColor: '#198754', width: 640 });
+                var dmy = _isoToDmy(o.data.trade_date);
+                if (dmy) { sfActive = sfActive.filter(function (f) { return !f.col.isDate; }); sfAddFilter(SF_TRADE_DATE, dmy, 'exact'); document.getElementById('sfSearchBtn').click(); }
+            })
+            .catch(function(err){ setBusy(false); Swal.fire({ title: 'Error', text: 'Request failed: ' + err.message, icon: 'error', confirmButtonText: 'OK', confirmButtonColor: '#dc3545' }); });
+    }
+    drop.addEventListener('click', function () { fileInput.click(); });
+    drop.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); } });
+    fileInput.addEventListener('change', function () { if (this.files && this.files[0]) uploadFile(this.files[0]); this.value = ''; });
+    ['dragenter', 'dragover'].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); e.stopPropagation(); drop.classList.add('is-drag'); }); });
+    ['dragleave', 'drop'].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); e.stopPropagation(); drop.classList.remove('is-drag'); }); });
+    drop.addEventListener('drop', function (e) { var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]; if (f) uploadFile(f); });
+
+    // ── Preview dos arquivos (duplo clique / botão) ─────────────────────────
+    function previewDeal(dealId) {
+        var e = DEALS[dealId]; if (!e) return;
+        fetch('/api/new-deals/swap-bullet/preview?deal_id=' + encodeURIComponent(dealId) + '&trade_date=' + encodeURIComponent(e.TradeDate || ''), { credentials: 'same-origin' })
+        .then(function(r){ return r.json().then(function(j){ return {ok:r.ok, data:j}; }); })
+        .then(function(o){
+            if (!o.ok || !o.data.success) {
+                Swal.fire({ title: _t('nd-swb-preview-title', 'B3 file preview'), html: '<div class="text-start fs-sm">' + esc(o.data.message || 'Preview failed.').replace(/; /g, '<br>') + '</div>',
+                            icon: 'warning', confirmButtonText: 'OK', confirmButtonColor: '#dc3545' });
+                return;
+            }
+            var files = o.data.files || [];
+            var tabs = files.map(function(f, i){
+                var label = (f.kind === 'swap' ? 'SWAP 0301' : 'Prêmio 0897') + ' · ' + f.le_pair;
+                return '<li class="nav-item"><a class="nav-link' + (i===0?' active':'') + '" data-bs-toggle="tab" href="#swbPv' + i + '">' + esc(label) + '</a></li>';
+            }).join('');
+            var panes = files.map(function(f, i){
+                var rows = (f.fields || []).map(function(x, j){
+                    var bg = j % 2 === 0 ? 'rgba(0,0,0,.03)' : 'transparent';
+                    var src = x.source ? '<span class="badge text-bg-light border ms-1" style="font-size:9px">' + esc(x.source) + '</span>' : '';
+                    var v = String(x.value == null ? '' : x.value);
+                    return '<tr style="background:' + bg + '"><td style="padding:2px 8px;white-space:nowrap;border:none;font-size:.78em;color:#888">' + esc(x.block) + '</td>' +
+                        '<td style="padding:2px 8px;white-space:nowrap;font-weight:500;border:none;font-size:0.8em">' + esc(x.seq) + '. ' + esc(x.field) + src + '</td>' +
+                        '<td style="padding:2px 8px;border:none;font-size:.75em;color:#888;white-space:nowrap">' + esc(x.format) + '</td>' +
+                        '<td style="padding:2px 8px;font-family:monospace;font-size:0.8em;border:none;word-break:break-all;text-align:left">' + (v.trim() !== '' ? esc(v) : '<span style="color:#aaa">&mdash;</span>') + '</td></tr>';
+                }).join('');
+                var raw = [f.header].concat(f.records || []).join('\n');
+                return '<div class="tab-pane' + (i===0?' show active':'') + '" id="swbPv' + i + '">' +
+                    '<div class="text-start fs-xs text-muted my-2"><b>' + esc(f.file_name) + '</b></div>' +
+                    '<div style="overflow-y:auto;max-height:42vh;border:1px solid rgba(0,0,0,.12);border-radius:6px">' +
+                    '<table style="width:100%;border-collapse:collapse;font-size:0.85em"><thead><tr style="background:#343a40;color:#fff;position:sticky;top:0">' +
+                    '<th style="padding:5px 8px;text-align:left;font-weight:600">Block</th>' +
+                    '<th style="padding:5px 8px;text-align:left;font-weight:600"><span data-lang="nd-preview-col-field">Field</span></th>' +
+                    '<th style="padding:5px 8px;text-align:left;font-weight:600">Format</th>' +
+                    '<th style="padding:5px 8px;text-align:left;font-weight:600"><span data-lang="nd-preview-col-value">Value</span></th></tr></thead>' +
+                    '<tbody>' + rows + '</tbody></table></div>' +
+                    '<div class="text-start fs-xs text-muted mt-2" data-lang="nd-swb-file-raw">Raw file</div>' +
+                    '<div class="swb-preview-line">' + esc(raw) + '</div></div>';
+            }).join('');
+            var html = '<div class="text-start fs-xs text-muted mb-2"><b>' + esc(dealId) + '</b> &nbsp;·&nbsp; ' + esc(e.Client || '') + ' &nbsp;·&nbsp; ' + esc(e.Pair || '') + '</div>' +
+                '<ul class="nav nav-tabs swb-preview-tabs">' + tabs + '</ul><div class="tab-content">' + panes + '</div>';
+            Swal.fire({ title: _t('nd-swb-preview-title', 'B3 file preview'), html: html, width: 1000, showCloseButton: true, showConfirmButton: false });
+        }).catch(function(err){ Swal.fire({ title: 'Error', text: 'Request failed: ' + err.message, icon: 'error', confirmButtonText: 'OK', confirmButtonColor: '#dc3545' }); });
+    }
+    $('#swb-table tbody').on('dblclick', 'tr', function(e) {
+        if ($(e.target).closest('td').index() <= 1) return;
+        var d = dt.row(this).data(); if (d) previewDeal(d[C_ID]);
+    });
+    document.getElementById('btnPreviewSwb').addEventListener('click', function(){
+        var ids = Array.from(selected); if (ids.length) previewDeal(ids[0]);
+    });
+
+    // ── Seleção ─────────────────────────────────────────────────────────────
+    function toggleBulkBtns(show) {
+        ['btnDelSwb','btnSendSwb','btnPreviewSwb'].forEach(function(id){ var b=document.getElementById(id); if(b) b.classList.toggle('d-none',!show); });
+    }
+    function syncSelectAll() {
+        var total = Object.keys(DEALS).length, sel = selected.size;
+        $('.swb-cb-all').each(function(){ if(sel===0){this.checked=false;this.indeterminate=false;} else if(sel>=total){this.checked=true;this.indeterminate=false;} else{this.checked=false;this.indeterminate=true;} });
+        toggleBulkBtns(sel >= 1);
+    }
+    $('[data-table-rows]').on('change',function(){ dt.page.len(parseInt(this.value)).draw(); });
+    $('[data-table-rows]').val(String(dt.page.len()));
+    $(document).on('click','.swb-cb-all',function() {
+        selected.clear();
+        if(this.checked) { dt.rows({ search: 'applied' }).every(function(){ var d=this.data(),id=d?d[C_ID]:null; if(id) selected.add(id); }); }
+        dt.draw(false);
+    });
+    $('#swb-table tbody').on('change','input[type="checkbox"]',function() {
+        var d=dt.row($(this).closest('tr')[0]).data(), id=d?d[C_ID]:null;
+        if(id){ if(this.checked) selected.add(id); else selected.delete(id); }
+        syncSelectAll();
+    });
+
+    // ── Delete ──────────────────────────────────────────────────────────────
+    function deleteDeals(ids) {
+        if (!ids.length) return;
+        Swal.fire({ title:'Delete '+ids.length+' deal(s)?', text:'This action cannot be undone.', icon:'warning',
+            showCancelButton:true, confirmButtonText:'Yes, delete', cancelButtonText:'Cancel', confirmButtonColor:'#dc3545', cancelButtonColor:'#6c757d'
+        }).then(function(r){
+            if(!r.isConfirmed) return;
+            var items = ids.map(function(id){ return { deal_id: id, trade_date: (DEALS[id] && DEALS[id].TradeDate) || '' }; });
+            fetch('/api/new-deals/swap-bullet/delete', { method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin', body: JSON.stringify({ items: items }) })
+            .then(function(resp){ return resp.json(); }).then(function(res){
+                if (!res.success) { Swal.fire({ icon:'error', title:'Delete failed', text:res.message||'', confirmButtonColor:'#dc3545' }); return; }
+                removeEntries(ids);   // a tela remove DEPOIS do sucesso do servidor (§430)
+                if (window.fetchNotifications) window.fetchNotifications();
+            }).catch(function(err){ Swal.fire({ icon:'error', title:'Delete failed', text:String(err && err.message || err), confirmButtonColor:'#dc3545' }); });
+        });
+    }
+    document.getElementById('btnDelSwb').addEventListener('click', function(){ deleteDeals(Array.from(selected)); });
+    $(document).on('click','#swb-table tbody .btn-row-delete',function(e) { e.preventDefault(); var d = dt.row($(this).closest('tr')[0]).data(); if (d) deleteDeals([d[C_ID]]); });
+
+    // ── Confirm (New → Approved direto; Pending → Approved por OUTRO usuário) ──
+    $(document).on('click','#swb-table tbody .btn-row-confirm',function(e) {
+        e.preventDefault();
+        var d=dt.row($(this).closest('tr')[0]).data(); if(!d) return;
+        var id = d[C_ID];
+        fetch('/api/new-deals/swap-bullet/confirm', { method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin',
+            body: JSON.stringify({ deal_id: id, trade_date: (DEALS[id] && DEALS[id].TradeDate) || '' }) })
+        .then(function(resp){ return resp.json().then(function(j){ return {ok:resp.ok, data:j}; }); })
+        .then(function(o){
+            if(o.ok && o.data.success){ upsertEntry(o.data.entry); if (window.fetchNotifications) window.fetchNotifications(); }
+            else Swal.fire({ title:'Error', text:o.data.message||'Confirmation failed.', icon:'error', confirmButtonText:'OK', confirmButtonColor:'#dc3545' });
+        }).catch(function(err){ Swal.fire({ title:'Error', text:'Request failed: '+err.message, icon:'error', confirmButtonText:'OK', confirmButtonColor:'#dc3545' }); });
+    });
+
+    // ── Send (os arquivos são montados no servidor) ─────────────────────────
+    function sendDeals(ids) {
+        if (!ids.length) return;
+        var blocked = ids.filter(function(id){ var e=DEALS[id]; var s=(e&&e.Status)||'New'; return !(s==='New'||s==='Approved'); });
+        if (blocked.length) {
+            Swal.fire({ title: 'Cannot send', text: blocked.length + ' deal(s) are not in a sendable state — only New or Approved can be sent.', icon: 'warning', confirmButtonText: 'OK', confirmButtonColor: '#dc3545' });
+            return;
+        }
+        Swal.fire({ title: 'Send ' + ids.length + ' deal(s) to B3?', text: 'SWAP_*.txt (contract 0301) and PREMIO_*.txt (premium 0897, when applicable) are written to Batch Conecta › New.',
+            icon: 'question', showCancelButton: true, confirmButtonText: 'Yes, send', cancelButtonText: 'Cancel', confirmButtonColor: '#0d6efd', cancelButtonColor: '#6c757d'
+        }).then(function(r) {
+            if (!r.isConfirmed) return;
+            var items = ids.map(function(id){ return { deal_id: id, trade_date: (DEALS[id] && DEALS[id].TradeDate) || '' }; });
+            fetch('/api/new-deals/swap-bullet/send-conecta', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials:'same-origin', body: JSON.stringify({ items: items }) })
+            .then(function(resp){ return resp.json(); }).then(function(res) {
+                if (res.success) {
+                    ids.forEach(function(id){ if (DEALS[id]) DEALS[id].Status = 'Sent'; });
+                    selected.clear(); renderAll();
+                    if (window.fetchNotifications) window.fetchNotifications();
+                    Swal.fire({ title: 'Sent', html: '<div class="text-start fs-sm">' + (res.files||[]).map(function(f){ return esc(f.filename); }).join('<br>') + '</div>', icon: 'success', confirmButtonText: 'OK', confirmButtonColor: '#0d6efd' });
+                } else {
+                    Swal.fire({ title: 'Error', html: '<div class="text-start fs-sm">' + esc(res.message || 'File generation failed.').replace(/; /g, '<br>') + '</div>', icon: 'error', confirmButtonText: 'OK', confirmButtonColor: '#dc3545' });
+                }
+            }).catch(function(err) { Swal.fire({ title: 'Error', text: 'Request failed: ' + err.message, icon: 'error', confirmButtonText: 'OK', confirmButtonColor: '#dc3545' }); });
+        });
+    }
+    $(document).on('click','#swb-table tbody .btn-row-send',function(e) { e.preventDefault(); var d=dt.row($(this).closest('tr')[0]).data(); if(d) sendDeals([d[C_ID]]); });
+    document.getElementById('btnSendSwb').addEventListener('click',function() { sendDeals(Array.from(selected)); });
+
+    // ── Modal: editar / adicionar ───────────────────────────────────────────
+    var modalEl = document.getElementById('swbModal');
+    function fieldInput(f, label, value) {
+        var id = 'swb-f-' + f;
+        var lab = '<label class="form-label fs-xs text-muted mb-1" for="' + id + '" data-lang="nd-swb-col-' + f.toLowerCase() + '">' + esc(label) + '</label>';
+        if (SWB_SELECT[f]) {
+            var opts = SWB_SELECT[f].slice(); if (value && opts.indexOf(value) < 0) opts.unshift(value);
+            return lab + '<select class="form-select form-select-sm" id="' + id + '" data-f="' + f + '">' + opts.map(function(o){ return '<option' + (o===value?' selected':'') + '>' + esc(o) + '</option>'; }).join('') + '</select>';
+        }
+        if (f === 'VcpText') return lab + '<textarea class="form-control form-control-sm" id="' + id + '" data-f="' + f + '" rows="3" maxlength="320">' + esc(value) + '</textarea>';
+        var extra = SWB_DATE[f] ? ' placeholder="dd/mm/aaaa" autocomplete="off"' : '';
+        // Data: VALUE em ISO (é o que o otcDateField guarda; o altInput mostra dd/mm/aaaa).
+        return lab + '<input type="text" class="form-control form-control-sm' + (SWB_DATE[f] ? ' swb-date' : '') + '" id="' + id + '" data-f="' + f + '" value="' + esc(value) + '"' + extra + (SWB_READONLY[f] ? ' readonly' : '') + '>';
+    }
+    function openModal(entry) {
+        var isEdit = !!entry;
+        modalEl.querySelector('.modal-title').innerHTML = isEdit
+            ? '<i class="ti ti-edit me-1"></i>' + _t('nd-swb-modal-edit', 'Edit Deal — Swap Bullet') + ' · ' + esc(entry.Deal)
+            : '<i class="ti ti-plus me-1"></i>' + _t('nd-swb-modal-add', 'Add Deal — Swap Bullet');
+        var e = entry || { Type: 'Pagamento Final', Pair: 'JPM x CLI', Currency: 'BRL', Adhesion: 'CGD', Functionality: 'N/A', PremiumSchedule: 'Não', Reset: 'Não', LOB: 'EDG',
+                           CurveACategory: 'JUROS', CurveAPct: '100.00', CurveASign: '+', CurveARate: '0.0000', CurveBCategory: 'VCP', CurveBPct: '100.00', CurveBSign: '+', CurveBRate: '0.0000' };
+        var html = '<div class="col-md-2">' + '<label class="form-label fs-xs text-muted mb-1" data-lang="nd-col-trade-date">Trade Date</label><input type="text" class="form-control form-control-sm swb-date" id="swb-f-TradeDate" data-f="TradeDate" value="' + esc(isEdit ? _isoToDmy(e.TradeDate) : (document.getElementById('swbTradeDate').value || _todayIso())) + '" placeholder="dd/mm/aaaa" autocomplete="off"' + (isEdit ? ' readonly' : '') + '></div>';
+        SWB_COLS.forEach(function(c){
+            var f = c[0]; if (f === 'Maker' || f === 'Checker') return;
+            var w = (f === 'VcpText') ? 'col-12' : (f === 'VcpDescription' || f.indexOf('Denomination') === 0 || f === 'Client') ? 'col-md-4' : 'col-md-2';
+            html += '<div class="' + w + '">' + fieldInput(f, c[1], e[f] != null ? String(e[f]) : '') + '</div>';
+        });
+        document.getElementById('swbEditGrid').innerHTML = html;
+        if (window.otcDateField) document.querySelectorAll('#swbEditGrid input.swb-date:not([readonly])').forEach(function(el){ window.otcDateField(el); });
+        $(modalEl).data('dealId', isEdit ? entry.Deal : null);
+        bootstrap.Modal.getOrCreateInstance(modalEl).show();
+    }
+    function readModal() {
+        var out = {};
+        document.querySelectorAll('#swbEditGrid [data-f]').forEach(function(el){
+            var f = el.getAttribute('data-f'), v = (el.value || '').trim();
+            if (el.classList.contains('swb-date') || f === 'TradeDate') {
+                if (el._flatpickr && el._flatpickr.selectedDates[0]) { var d = el._flatpickr.selectedDates[0]; v = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
+                else v = /^\d{2}\/\d{2}\/\d{4}$/.test(v) ? _dmyToIso(v) : v;
+            }
+            out[f] = v;
+        });
+        return out;
+    }
+    document.getElementById('btnAddSwb').addEventListener('click', function(){ openModal(null); });
+    $(document).on('click','#swb-table tbody .btn-row-edit',function(e) { e.preventDefault(); var d=dt.row($(this).closest('tr')[0]).data(); if(d && DEALS[d[C_ID]]) openModal(DEALS[d[C_ID]]); });
+    document.getElementById('swbSaveBtn').addEventListener('click', function() {
+        var dealId = $(modalEl).data('dealId') || null;
+        var fields = readModal();
+        var url, payload;
+        if (dealId) { url = '/api/new-deals/swap-bullet/edit'; delete fields.TradeDate; payload = { deal_id: dealId, trade_date: (DEALS[dealId] && DEALS[dealId].TradeDate) || '', changes: fields }; }
+        else { url = '/api/new-deals/swap-bullet/add'; payload = { trade_date: fields.TradeDate, fields: fields }; }
+        fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin', body: JSON.stringify(payload) })
+        .then(function(resp){ return resp.json().then(function(j){ return {ok:resp.ok, data:j}; }); })
+        .then(function(o){
+            if (!o.ok || !o.data.success) { Swal.fire({ title:'Error', text:o.data.message||'Save failed.', icon:'error', confirmButtonText:'OK', confirmButtonColor:'#dc3545' }); return; }
+            if (o.data.entry) upsertEntry(o.data.entry);
+            bootstrap.Modal.getInstance(modalEl).hide();
+            if (window.fetchNotifications) window.fetchNotifications();
+        })
+        .catch(function(err){ Swal.fire({ title:'Error', text:'Request failed: '+err.message, icon:'error', confirmButtonText:'OK', confirmButtonColor:'#dc3545' }); });
+    });
+    $(modalEl).on('hidden.bs.modal', function(){ $(this).removeData('dealId'); document.getElementById('swbEditGrid').innerHTML=''; });
+
+    // ── Smart Filter (Trade Date comanda o fetch; o resto filtra a grade) ────
+    var sfInput=document.getElementById('sfInput'), sfDropdown=document.getElementById('sfDropdown'),
+        sfChips=document.getElementById('sfChips'), sfWrapper=document.getElementById('sfWrapper'),
+        sfActive=[], sfKbdIdx=-1;
+    var SF_COLS=SWB_COLS.map(function(c,i){ return {label:c[1], dtCol:i+C_OFF, type:(SWB_DATE[c[0]] ? 'date' : (SWB_NUM[c[0]] ? 'number' : 'text'))}; });
+    var SF_TRADE_DATE = {label:'Trade Date', dtCol:C_TD, type:'date', isDate:true};
+    SF_COLS.unshift(SF_TRADE_DATE);
+    SF_COLS.unshift({label:'Status', dtCol:C_STATUS, type:'text'});
+    SF_COLS.push({label:'Deal', dtCol:C_ID, type:'text'});
+    function sfIsDateLike(s){return /^\d{1,2}[\/\-]\d/.test(s)||/^\d{4}[\/\-]/.test(s);}
+    function sfToDate(s){
+        s=String(s||'').trim().split('T')[0].split(' ')[0]; if(!s) return null; var m;
+        if((m=s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/))) return new Date(+m[3],+m[2]-1,+m[1]);
+        if((m=s.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/))) return new Date(+m[1],+m[2]-1,+m[3]);
+        if((m=s.match(/^(\d{4})(\d{2})(\d{2})$/)))                 return new Date(+m[1],+m[2]-1,+m[3]);
+        return null;
+    }
+    var SF_RANGE_WORDS={en:{from:'FROM',to:'TO'},br:{from:'DE',to:'ATÉ'},es:{from:'DESDE',to:'HASTA'}};
+    function sfRangeWord(mode){var lang=localStorage.getItem('__OTC_TRACKER_LANG__')||'en';var m=SF_RANGE_WORDS[lang]||SF_RANGE_WORDS.en;return mode==='from'?m.from:m.to;}
+    function sfFilterKey(col,mode){return col.type==='date'?(col.dtCol+'|'+mode):String(col.dtCol);}
+    function sfDateCandidates(){
+        var out=[];
+        SF_COLS.filter(function(c){return c.type==='date';}).forEach(function(col){
+            var hasFrom=sfActive.some(function(f){return f.col.dtCol===col.dtCol&&f.mode==='from';});
+            var hasTo=sfActive.some(function(f){return f.col.dtCol===col.dtCol&&f.mode==='to';});
+            if(hasFrom&&!hasTo){out.push({col:col,mode:'to',label:sfRangeWord('to')+': '+col.label});}
+            else{out.push({col:col,mode:'from',label:sfRangeWord('from')+': '+col.label});out.push({col:col,mode:'exact',label:col.label});}
+        });
+        out.sort(function(a,b){return (a.mode==='to'?0:1)-(b.mode==='to'?0:1);});
+        return out;
+    }
+    function sfCandidates(val){
+        if(!val) return [];
+        if(!/^\d/.test(val)) return SF_COLS.filter(function(c){return c.type==='text';}).map(function(c){return{col:c,mode:'text',label:c.label};});
+        if(sfIsDateLike(val)) return sfDateCandidates();
+        var out=[];
+        SF_COLS.forEach(function(c){ if(c.type==='number') out.push({col:c,mode:'number',label:c.label}); else if(c.type==='date') out.push({col:c,mode:'exact',label:c.label}); else out.push({col:c,mode:'text',label:c.label}); });
+        return out;
+    }
+    function sfRenderDropdown(val) {
+        sfDropdown.innerHTML=''; sfKbdIdx=-1;
+        var matches=sfCandidates(val);
+        if(!matches.length){sfDropdown.style.display='none';return;}
+        matches.forEach(function(cand) {
+            var col=cand.col, li=document.createElement('li');
+            li.innerHTML='<span class="sf-type-badge sf-type-'+col.type+'">'+col.type+'</span><span>'+esc(cand.label)+'</span>';
+            li.addEventListener('mousedown',function(e){e.preventDefault();sfAddFilter(cand.col,sfInput.value.trim(),cand.mode);});
+            sfDropdown.appendChild(li);
+        });
+        sfDropdown.style.display='block';
+    }
+    function sfAddFilter(col,value,mode) {
+        if(!value) return;
+        mode = mode || (col.type==='date'?'exact':col.type);
+        if(col.type==='date'){
+            if(mode==='exact'){sfActive=sfActive.filter(function(f){return f.col.dtCol!==col.dtCol;});}
+            else{sfActive=sfActive.filter(function(f){return !(f.col.dtCol===col.dtCol&&(f.mode===mode||f.mode==='exact'));});}
+        } else { sfActive=sfActive.filter(function(f){return f.col.dtCol!==col.dtCol;}); }
+        sfActive.push({col:col,value:value,mode:mode,key:sfFilterKey(col,mode)}); sfInput.value=''; sfDropdown.style.display='none'; sfKbdIdx=-1;
+        sfRenderChips(); sfInput.focus();
+    }
+    function sfChipPrefix(f){ if(f.col.type==='date'&&(f.mode==='from'||f.mode==='to')) return sfRangeWord(f.mode)+' '+f.col.label.toUpperCase(); return f.col.label.toUpperCase(); }
+    function sfRenderChips() {
+        sfChips.innerHTML='';
+        sfActive.forEach(function(f) {
+            var chip=document.createElement('span'); chip.className='smart-filter-chip';
+            chip.innerHTML='<strong>'+esc(sfChipPrefix(f))+':</strong>&nbsp;'+esc(f.value)+'<span class="sf-chip-remove">&#215;</span>';
+            chip.querySelector('.sf-chip-remove').addEventListener('click',function(){sfActive=sfActive.filter(function(x){return x.key!==f.key;});sfRenderChips();});
+            sfChips.appendChild(chip);
+        });
+    }
+    $.fn.dataTable.ext.search.push(function(settings, rowData){
+        if(settings.nTable.id!=='swb-table') return true;
+        for(var k in dateRanges){
+            if(!dateRanges.hasOwnProperty(k)) continue;
+            var r=dateRanges[k], cell=sfToDate(rowData[+k]);
+            if(!cell) return false;
+            if(r.from&&cell<r.from) return false;
+            if(r.to&&cell>r.to) return false;
+        }
+        return true;
+    });
+    sfInput.addEventListener('input',function(){sfRenderDropdown(this.value.trim());});
+    sfInput.addEventListener('blur',function(){setTimeout(function(){sfDropdown.style.display='none';},160);});
+    sfInput.addEventListener('focus',function(){if(this.value.trim())sfRenderDropdown(this.value.trim());});
+    sfWrapper.addEventListener('click',function(){sfInput.focus();});
+    document.getElementById('sfSearchBtn').addEventListener('click',function(){
+        sfDropdown.style.display='none';
+        var dExact=sfActive.find(function(f){return f.col.isDate&&f.mode==='exact';});
+        var dFrom =sfActive.find(function(f){return f.col.isDate&&f.mode==='from';});
+        var dTo   =sfActive.find(function(f){return f.col.isDate&&f.mode==='to';});
+        var colChips=sfActive.filter(function(f){return !f.col.isDate&&f.col.dtCol>=0;});
+        var qs='';
+        if(dFrom||dTo){
+            var parts=[];
+            if(dFrom) parts.push('date_from='+encodeURIComponent(_dmyToIso(dFrom.value)));
+            if(dTo)   parts.push('date_to='+encodeURIComponent(_dmyToIso(dTo.value)));
+            qs=parts.join('&');
+        } else if(dExact){ qs='date='+encodeURIComponent(_dmyToIso(dExact.value)); }
+        swbLoad(qs,colChips);
+    });
+    document.getElementById('btnClearFilters').addEventListener('click',function(){
+        // As DUAS cópias do cabeçalho (original e clone do scrollX).
+        $(dt.table().container()).find('.swb-filter-row th input').val('');
+        dateRanges={}; sfActive=[]; sfChips.innerHTML=''; sfInput.value=''; sfDropdown.style.display='none';
+        dt.columns().search('').draw();
+    });
+    sfInput.addEventListener('keydown',function(e) {
+        var items=sfDropdown.querySelectorAll('li');
+        var dropdownOpen=sfDropdown.style.display!=='none'&&items.length;
+        if(e.key==='Backspace'&&!this.value&&sfActive.length){e.preventDefault();var last=sfActive[sfActive.length-1];sfActive=sfActive.filter(function(x){return x.key!==last.key;});sfRenderChips();return;}
+        if(e.key==='Enter'){
+            e.preventDefault();
+            if(dropdownOpen&&sfKbdIdx>=0&&items[sfKbdIdx]){items[sfKbdIdx].dispatchEvent(new MouseEvent('mousedown'));}
+            else{sfDropdown.style.display='none';document.getElementById('sfSearchBtn').click();}
+            return;
+        }
+        if(!items.length) return;
+        if(e.key==='ArrowDown'){e.preventDefault();sfKbdIdx=Math.min(sfKbdIdx+1,items.length-1);}
+        else if(e.key==='ArrowUp'){e.preventDefault();sfKbdIdx=Math.max(sfKbdIdx-1,0);}
+        else if(e.key==='Escape'){sfDropdown.style.display='none';return;}
+        items.forEach(function(li,i){li.classList.toggle('sf-kbd-active',i===sfKbdIdx);});
+    });
+    (function () {
+        var refInput = document.getElementById('swbTradeDate'); if (!refInput) return;
+        refInput.addEventListener('change', function () {
+            var v = (this.value || '').trim();
+            if (/^\d{4}-\d{2}-\d{2}$/.test(v)) v = _isoToDmy(v);
+            if (!/^\d{2}\/\d{2}\/\d{4}$/.test(v)) return;
+            sfActive = sfActive.filter(function (f) { return !f.col.isDate; });
+            sfAddFilter(SF_TRADE_DATE, v, 'exact');
+            document.getElementById('sfSearchBtn').click();
+        });
+    })();
+
+    // Default: Trade Date = hoje.
+    sfAddFilter(SF_TRADE_DATE, _todayDmy());
+    document.getElementById('sfSearchBtn').click();
+
+    if (window.otcExportAdvanced) otcExportAdvanced('#swb-table', { name: 'New Deals — Swap Bullet' });
+});
+</script>
+{% endblock extra_javascript %}

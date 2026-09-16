@@ -544,7 +544,7 @@ escolhido, os outros dois se preenchem). **`file`** aponta para um JSON já
 existente (o `swap-index` edita o mesmo `SwapIndex.json` do Index Results —
 declare as colunas extras, senão o POST as derruba).
 
-São **46**: `currency-base`, `interbook-ndf`, `commodities-b3`,
+São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities-b3`,
 `publisher-ndf`, `le-accronym`, `le-spn`, `bank-name`, `fxo-conv-rate`,
 `ndf-pdf-cpty`, `swap-curves`, `cetip-files`, `api-links`,
 `manual-conf-validation`, `manual-conf-sla`, `fxo-internal-cpty`,
@@ -835,6 +835,25 @@ São **46**: `currency-base`, `interbook-ndf`, `commodities-b3`,
   card não desenha subitem, em vez de desenhar um LAW/ATA inventado.
   `check_ndm_cards.py`.
 
+- **Swap Bullet (New Deals › Swap › Bullet) nasce do DEAL TICKET, não da
+  API** (§480, `features/swap_bullet/`): xlsx (uma aba por operação: cliente
+  e B2B Banco × Atacama) ou PDF no dropzone. **Parte A é a NOSSA perna e
+  Parte B a contraparte**, decididas pelo `Ativo VCP`; os rótulos das duas
+  curvas se repetem e o parser separa por COLUNA (xlsx) ou ORDEM (PDF), e
+  `Cliente`/`Premio` são rótulo E resposta. Texto → código é cadastro:
+  `swap-funcionalidade`, `swap-code-labels` (FIELD `Adesão`, por `upgrade`)
+  e o novo `swap-bullet-curve` (curva do DT → `Curva X(03)`; a linha `VCP`
+  apanha todo ativo VCP). Lacuna recusa o LOTE. A denominação da curva VCP
+  é a fórmula do Excel da mesa (`domain.vcp_text`, coluna `VCP Text`). Só a
+  perna JUROS leva Sinal/Juros; só a VCP leva PU (`100% Spot` = fator
+  `1.00000000`), Tipo/Classe, Descrição, Cupom Limpo (`100.0000000`) e a
+  Data de Cotação em D-n ANBIMA; o Cap vai na perna em que o DT o declara.
+  O prêmio vai no 0897 (template `swap-registro-premio`), Titular do 0301 é
+  PARTE/CONTRAPARTE de quem paga, Papel/Titular do 0897 são a PONTA pela
+  conta MENOR. B2B gera Banco + espelho da Atacama (Meu Número próprio); os
+  quatro Meu Número nascem no import e o re-import os preserva.
+  `check_swap_bullet.py` compara os seis arquivos byte a byte com os
+  exemplos da mesa.
 - **Swap Calculator: a `Denominação` da curva VCP é CONTRATO, e o IR sai do
   CADASTRO** (§479). A posição traz nas colunas 70/75 o texto livre da curva
   (`(3M SOFR + 0.75%)*1.1765 A/360`), e o `*1.1765` só existe ali. Quem o lê é
@@ -1332,7 +1351,7 @@ São **46**: `currency-base`, `interbook-ndf`, `commodities-b3`,
 `apps/static/data/db/` é gitignorado: bancos não vêm no pull. Telas vazias
 depois de um pull são migração não rodada, não bug.
 
-### `scripts/tests/` (136 scripts)
+### `scripts/tests/` (137 scripts)
 
 Autocontidos, sem framework, `ok`/`FAIL` por asserção, saída 0/1, sem tocar
 dado real (tmp, stubs de Outlook/SMTP). O

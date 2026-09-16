@@ -1,0 +1,403 @@
+# -*- coding: utf-8 -*-
+"""Escritas do Swap Bullet: importar o Deal Ticket, completar o deal com os
+cadastros, montar as linhas dos dois arquivos da B3 e gravá-los."""
+import os
+import random
+import re
+from datetime import datetime
+
+from apps.pages.features.swap_bullet import domain, queries
+from apps.pages.features.swap_bullet.infra import dt_reader, persistence
+
+
+def _R():
+    from apps.pages import routes
+    return routes
+
+
+SWAP_FI_KEY = 'swap-pagamento-final-v3'
+PREMIUM_FI_KEY = 'swap-registro-premio'
+PAGE_URL = '/new_deals-swap-bullet'
+
+# O nome padrão de cada arquivo por visão; o `file_name` da VARIANTE do
+# template (por par de pernas) vence quando cadastrado.
+SWAP_FILE_NAMES = {'client': 'SWAP_CLIENTE.txt', 'bank': 'SWAP_BANCO.txt', 'atacama': 'SWAP_ATACAMA.txt'}
+PREMIUM_FILE_NAMES = {'client': 'PREMIO_CLIENTE.txt', 'bank': 'PREMIO_BANCO.txt', 'atacama': 'PREMIO_ATACAMA.txt'}
+
+
+def _rand10():
+    return str(random.randint(1000000000, 9999999999))
+
+
+# ── Import ───────────────────────────────────────────────────────────────────
+
+def import_upload(filename, data, ref_dt, sid=''):
+    """O arquivo do dropzone → deals no arquivo-dia da Trade Date `ref_dt`.
+    Devolve o resumo para a tela: quantos, quais, abas/páginas ignoradas e as
+    lacunas de cada deal (o que o Send recusaria)."""
+    kind, itens = dt_reader.read_upload(filename, data)
+    trade_iso = ref_dt.strftime('%Y-%m-%d')
+    deals, ignorados = [], []
+    for title, payload in itens:
+        if kind == 'grid':
+            if not domain.is_dt_grid(payload):
+                ignorados.append(title)
+                continue
+            raw = domain.parse_dt_grid(payload)
+        else:
+            if 'VALORBASE' not in domain.norm(payload) or 'VENCIMENTO' not in domain.norm(payload):
+                ignorados.append(title)
+                continue
+            raw = domain.parse_dt_text(payload)
+        deal = domain.deal_from_raw(raw, trade_iso)
+        deal['_sheet'] = title
+        enrich(deal)
+        deals.append(deal)
+    for d in deals:
+        d.setdefault('MyNumber', _rand10())
+        d.setdefault('MyNumberMirror', _rand10())
+        d.setdefault('PremiumMyNumber', _rand10())
+        d.setdefault('PremiumMyNumberMirror', _rand10())
+        d['ImportedBy'] = sid
+    imported = persistence.upsert(ref_dt, deals) if deals else 0
+    lacunas = {}
+    accounts = queries.own_accounts()
+    for d in deals:
+        faltas = domain.missing_for_send(d, queries.codes_for(d), accounts)
+        if faltas:
+            lacunas[d['Deal']] = faltas
+    return {'success': True, 'imported': imported, 'deals': deals, 'ignored': ignorados,
+            'missing': lacunas, 'trade_date': trade_iso, 'kind': kind}
+
+
+def enrich(deal):
+    """Completa o deal com o que NÃO está no DT: a conta B3 e o CNPJ da
+    contraparte (Reference Data pela SPN; sem conta própria, o omnibus de
+    clientes do Banco + o Tax ID), e o código D-n da Data de Cotação (dias
+    úteis ANBIMA até o vencimento). Só preenche o que está em branco — o que
+    a mesa editou fica."""
+    if 'ATACAMA' not in domain.norm(deal.get('Pair', '')):
+        rec = queries.refdata_by_spn(deal.get('SPN', '')) if deal.get('SPN') else {}
+        if not rec and deal.get('Client'):
+            alvo = domain.norm(deal.get('Client'))
+            for r in _R()._refdata_records():
+                if domain.norm(r.get('COUNTERPARTY', '')) == alvo:
+                    rec = r
+                    break
+        if rec:
+            if not deal.get('SPN'):
+                deal['SPN'] = re.sub(r'\.0$', '', str(rec.get('SPN', '') or ''))
+            if not deal.get('ClientTaxId'):
+                deal['ClientTaxId'] = re.sub(r'\D', '', str(rec.get('TAX ID', '') or ''))
+            if not deal.get('ClientAccount'):
+                acc = re.sub(r'\D', '', str(rec.get('B3 ACCOUNT', '') or ''))
+                if acc:
+                    deal['ClientAccount'] = acc
+                    deal['ClientTaxId'] = ''        # conta própria do cliente: sem CNPJ no registro
+            if not deal.get('ClientName'):
+                deal['ClientName'] = str(rec.get('COUNTERPARTY', '') or '')
+        if not deal.get('ClientAccount'):
+            omni = queries.omnibus_account('JPM', 'CLIENT 2')
+            if omni:
+                deal['ClientAccount'] = omni
+                deal['ClientAccountNote'] = 'omnibus'
+    if not str(deal.get('QuoteDateCode') or '').strip():
+        q = domain.parse_date(deal.get('QuoteDate'))
+        m = domain.parse_date(deal.get('MaturityDate'))
+        if q and m:
+            n = _R()._anbima_biz_diff(datetime(q.year, q.month, q.day), datetime(m.year, m.month, m.day))
+            deal['QuoteDateCode'] = str(min(max(n, 0), 5)).zfill(2)
+    if not str(deal.get('VcpText') or '').strip():
+        deal['VcpText'] = domain.vcp_text(deal)
+    return deal
+
+
+# ── Os arquivos ──────────────────────────────────────────────────────────────
+
+def _today_ymd():
+    return datetime.now().strftime('%Y%m%d')
+
+
+def _participant(le):
+    nome = _R()._b3_participant_name(le)
+    if not nome:
+        raise ValueError('B3 Accounts: no Simplified Name registered for legal entity %r '
+                         '— register it at /mapping › B3 Accounts' % le)
+    return nome
+
+
+def _file_name(key, view, default):
+    try:
+        nome = _R()._fi_variant_file_name(key, PAGE_URL, domain.le_pair(view))
+    except Exception:                                   # noqa: BLE001
+        nome = ''
+    return nome or default
+
+
+def _build_blocks(key, values, view, deal, skip=('header',)):
+    """Concatena os blocos do template (menos o header) numa linha só — o
+    registro 0301 é UMA linha apresentada em 18 grupos; o 0897 tem o
+    registro e o fluxo como linhas separadas, então quem chama escolhe."""
+    parts = []
+    for b in queries.template_blocks(key):
+        if b.get('id') in skip:
+            continue
+        parts.append(_R()._fi_build_line(key, b['id'], values, page_url=PAGE_URL,
+                                         le_pair=domain.le_pair(view), deal=deal))
+    if not parts:
+        raise ValueError('file-interpreter template missing: ' + key)
+    return ''.join(parts)
+
+
+def deal_files(deal, view, today_ymd=None):
+    """Os arquivos de UMA visão do deal: [{kind, key, file_name, header,
+    records, fields}] — o 0301 sempre; o 0897 quando há agenda de prêmio.
+    `fields` é a lista [{seq, block, field, value}] para o preview. Levanta
+    ValueError com as lacunas."""
+    today_ymd = today_ymd or _today_ymd()
+    accounts = queries.own_accounts()
+    codes = queries.codes_for(deal)
+    faltas = domain.missing_for_send(deal, codes, accounts)
+    if faltas:
+        raise ValueError('missing: ' + '; '.join(faltas))
+    parte_le = 'ATACAMA' if view == 'atacama' else 'JPM'
+    participant = _participant(parte_le)
+    my_swap = deal.get('MyNumberMirror' if view == 'atacama' else 'MyNumber') or _rand10()
+    my_prem = deal.get('PremiumMyNumberMirror' if view == 'atacama' else 'PremiumMyNumber') or _rand10()
+    out = []
+    vals = domain.swap_record_values(deal, view, accounts, codes, my_swap)
+    hdr = domain.swap_header_values(participant, today_ymd)
+    header = _R()._fi_build_line(SWAP_FI_KEY, 'header', hdr, page_url=PAGE_URL,
+                                 le_pair=domain.le_pair(view), deal=deal)
+    record = _build_blocks(SWAP_FI_KEY, vals, view, deal)
+    out.append({'kind': 'swap', 'key': SWAP_FI_KEY, 'view': view, 'le_pair': domain.le_pair(view),
+                'file_name': _file_name(SWAP_FI_KEY, view, SWAP_FILE_NAMES[view]),
+                'header': header, 'records': [record],
+                'fields': _fields_of(SWAP_FI_KEY, {'header': hdr}, vals)})
+    if domain.premium_applies(deal):
+        h, reg, flow = domain.premium_values(deal, view, accounts, my_swap, my_prem, participant, today_ymd)
+        header_p = _R()._fi_build_line(PREMIUM_FI_KEY, 'header', h, page_url=PAGE_URL,
+                                       le_pair=domain.le_pair(view), deal=deal)
+        reg_line = _R()._fi_build_line(PREMIUM_FI_KEY, 'registro', reg, page_url=PAGE_URL,
+                                       le_pair=domain.le_pair(view), deal=deal)
+        flow_line = _R()._fi_build_line(PREMIUM_FI_KEY, 'fluxo', flow, page_url=PAGE_URL,
+                                        le_pair=domain.le_pair(view), deal=deal)
+        out.append({'kind': 'premium', 'key': PREMIUM_FI_KEY, 'view': view, 'le_pair': domain.le_pair(view),
+                    'file_name': _file_name(PREMIUM_FI_KEY, view, PREMIUM_FILE_NAMES[view]),
+                    'header': header_p, 'records': [reg_line, flow_line],
+                    'fields': _fields_of(PREMIUM_FI_KEY, {'header': h, 'registro': reg, 'fluxo': flow}, None)})
+    return out
+
+
+def _fields_of(key, per_block, record_vals):
+    """[{seq, block, field, value}] na ordem do template — rótulo do
+    cadastro, valor do gerador (o que o motor vai posicionar)."""
+    rows = []
+    for b in queries.template_blocks(key):
+        src = per_block.get(b.get('id'))
+        if src is None:
+            src = record_vals or {}
+        for f in b.get('fields') or []:
+            seq = str(f.get('seq', '')).strip()
+            rows.append({'seq': seq, 'block': b.get('title', ''), 'field': f.get('field', ''),
+                         'format': f.get('format', ''), 'position': f.get('position', ''),
+                         'source': f.get('source', ''),
+                         'value': str(src.get(seq, src.get(seq.lstrip('0') or '0', '')))})
+    return rows
+
+
+def preview(deal):
+    """Todos os arquivos de todas as visões do deal (sem gravar nada)."""
+    files = []
+    for view in domain.views_of(deal):
+        files.extend(deal_files(deal, view))
+    return files
+
+
+def send(items, sid='', download=False):
+    """Gera os arquivos dos deals selecionados (New/Approved) e vira Sent.
+    `items` = [{deal_id, trade_date}]. Um deal com lacuna recusa o LOTE
+    inteiro (nada sai pela metade). `download` devolve o conteúdo em vez de
+    gravar. → {'files': [...], 'count': n}"""
+    problemas, alvos, grupos = [], [], {}
+    today = _today_ymd()
+    for it in items or []:
+        deal_id = str((it or {}).get('deal_id') or '').strip()
+        td = str((it or {}).get('trade_date') or '').strip()
+        if not deal_id:
+            continue
+        fp, lst, idx = queries.find(deal_id, td)
+        if idx is None:
+            problemas.append(deal_id + ': not found')
+            continue
+        deal = lst[idx]
+        if (deal.get('Status') or 'New') not in domain.STATUS_SENDABLE:
+            problemas.append(deal_id + ': status ' + str(deal.get('Status') or 'New'))
+            continue
+        try:
+            for view in domain.views_of(deal):
+                for f in deal_files(deal, view, today):
+                    g = grupos.setdefault(f['file_name'], {'header': f['header'], 'records': [], 'count': 0})
+                    g['records'].extend(f['records'])
+                    g['count'] += 1 if f['kind'] == 'swap' else 0
+        except ValueError as exc:
+            problemas.append(deal_id + ': ' + str(exc))
+            continue
+        alvos.append((deal_id, deal.get('TradeDate') or td))
+    if problemas:
+        raise ValueError('Nothing sent — ' + '; '.join(problemas))
+    if not grupos:
+        raise ValueError('No valid rows provided')
+    gerados = []
+    if download:
+        for nome, g in grupos.items():
+            gerados.append({'filename': nome, 'count': g['count'],
+                            'content': '\n'.join([g['header']] + g['records'])})
+        return {'files': gerados, 'count': len(alvos)}
+    out_dir = _R().CONECTA_NEW_PATH
+    os.makedirs(out_dir, exist_ok=True)
+    with _R()._cache_lock:
+        for nome, g in grupos.items():
+            path = _R()._unique_filepath(out_dir, nome)
+            with open(path, 'w', encoding='utf-8') as fh:
+                fh.write('\n'.join([g['header']] + g['records']))
+            gerados.append({'filename': os.path.basename(path), 'count': g['count']})
+            _R().log.info('[SWAP BULLET] Wrote %s (%d record(s))', path, len(g['records']))
+        por_arquivo = {}
+        for deal_id, td in alvos:
+            fp, lst, idx = queries.find(deal_id, td)
+            if idx is None:
+                continue
+            if fp in por_arquivo:
+                lst = por_arquivo[fp]
+                idx = next((i for i, e in enumerate(lst) if e.get('Deal') == deal_id), None)
+                if idx is None:
+                    continue
+            lst[idx]['Status'] = 'Sent'
+            lst[idx]['SentAt'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            lst[idx]['SentBy'] = sid
+            lst[idx]['SentFiles'] = [x['filename'] for x in gerados]
+            por_arquivo[fp] = lst
+        for fp, lst in por_arquivo.items():
+            _R()._atomic_write_json(fp, lst)
+            _R()._daycache_forget(fp)
+    return {'files': gerados, 'count': len(alvos)}
+
+
+# ── Edição / esteira ─────────────────────────────────────────────────────────
+
+EDITABLE = tuple(k for k in domain.SWB_FIELDS if k not in ('Maker', 'Checker')) + (
+    'TradeDate', 'Client', 'SPN')
+
+
+def edit(deal_id, trade_date, changes, sid=''):
+    """Aplica `changes` (só chaves editáveis) → Pending, maker = sid. Datas
+    entram em ISO (a tela manda dd/mm/aaaa ou ISO). O `VcpText` é
+    recomposto quando algum insumo dele mudou e ele não foi editado à mão.
+    → o deal."""
+    with _R()._cache_lock:
+        fp, lst, idx = queries.find(deal_id, trade_date)
+        if idx is None:
+            return None
+        d = lst[idx]
+        before_text = domain.vcp_text(d)
+        touched_text = 'VcpText' in changes and str(changes.get('VcpText') or '').strip() != str(d.get('VcpText') or '').strip()
+        for k, v in (changes or {}).items():
+            if k not in EDITABLE:
+                continue
+            v = '' if v is None else str(v).strip()
+            if k in domain.SWB_DATE_FIELDS or k == 'TradeDate':
+                v = domain.iso(domain.parse_date(v)) if v else ''
+            d[k] = v
+        if 'Pair' in changes or 'Client' in changes:
+            d['Pair'] = 'JPM x ATACAMA' if 'ATACAMA' in domain.norm(d.get('Client')) or \
+                'ATACAMA' in domain.norm(d.get('Pair')) else 'JPM x CLI'
+        if 'QuoteDate' in changes or 'MaturityDate' in changes:
+            d['QuoteDateCode'] = ''
+        if not touched_text and (str(d.get('VcpText') or '').strip() == before_text.strip()
+                                 or not str(d.get('VcpText') or '').strip()):
+            d['VcpText'] = ''
+        if 'ClientAccount' in changes or 'SPN' in changes:
+            pass
+        enrich(d)
+        d['Status'] = 'Pending'
+        d['Maker'] = sid
+        d['Checker'] = ''
+        _R()._atomic_write_json(fp, lst)
+        _R()._daycache_forget(fp)
+        return d
+
+
+def add(fields, trade_date, sid=''):
+    """Deal digitado à mão (Add Row) → New no arquivo-dia da Trade Date."""
+    ref = _R()._api_ref_date(trade_date)
+    raw = {}
+    d = domain.deal_from_raw(raw, ref.strftime('%Y-%m-%d'))
+    for k, v in (fields or {}).items():
+        if k in EDITABLE and k != 'TradeDate':
+            v = '' if v is None else str(v).strip()
+            if k in domain.SWB_DATE_FIELDS:
+                v = domain.iso(domain.parse_date(v)) if v else ''
+            d[k] = v
+    d['Pair'] = 'JPM x ATACAMA' if 'ATACAMA' in domain.norm(d.get('Client')) else 'JPM x CLI'
+    d['Deal'] = domain.make_deal_id(d)
+    d['VcpText'] = str(fields.get('VcpText') or '').strip() or domain.vcp_text(d)
+    d['QuoteDateCode'] = ''
+    enrich(d)
+    d.update({'MyNumber': _rand10(), 'MyNumberMirror': _rand10(),
+              'PremiumMyNumber': _rand10(), 'PremiumMyNumberMirror': _rand10(),
+              'Status': 'New', 'Maker': '', 'Checker': '', 'ImportedBy': sid})
+    persistence.upsert(ref, [d])
+    return d
+
+
+def set_status(deal_id, trade_date, status, sid='', require_other_than_maker=False):
+    """Muda a esteira (Confirm: New → Approved direto; Pending → Approved com
+    maker ≠ checker). → (deal, erro)."""
+    with _R()._cache_lock:
+        fp, lst, idx = queries.find(deal_id, trade_date)
+        if idx is None:
+            return None, 'Entry not found'
+        d = lst[idx]
+        cur = d.get('Status') or 'New'
+        if status == 'Approved':
+            if cur not in ('New', 'Pending'):
+                return None, 'Only New or Pending entries can be approved.'
+            if cur == 'Pending' and d.get('Maker') and d['Maker'] == sid:
+                return None, 'Maker cannot approve their own change — a different user must check it.'
+            d['Checker'] = sid if cur == 'Pending' else ''
+            if cur == 'New':
+                d['Maker'] = sid
+        d['Status'] = status
+        _R()._atomic_write_json(fp, lst)
+        _R()._daycache_forget(fp)
+        return d, None
+
+
+def delete(items):
+    """Apaga deals ({deal_id, trade_date}) reagrupando por arquivo. →
+    (apagados, não achados)."""
+    apagados, nao = 0, []
+    por_arquivo = {}
+    with _R()._cache_lock:
+        for it in items or []:
+            deal_id = str((it or {}).get('deal_id') or '').strip()
+            if not deal_id:
+                continue
+            fp, lst, idx = queries.find(deal_id, str((it or {}).get('trade_date') or ''))
+            if fp is None:
+                nao.append(deal_id)
+                continue
+            if fp in por_arquivo:
+                lst = por_arquivo[fp]
+                idx = next((i for i, e in enumerate(lst) if e.get('Deal') == deal_id), None)
+                if idx is None:
+                    nao.append(deal_id)
+                    continue
+            lst.pop(idx)
+            por_arquivo[fp] = lst
+            apagados += 1
+        for fp, lst in por_arquivo.items():
+            _R()._atomic_write_json(fp, lst)
+            _R()._daycache_forget(fp)
+    return apagados, nao
