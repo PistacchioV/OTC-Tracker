@@ -22,8 +22,13 @@ PAGE_URL = '/new_deals-swap-bullet'
 
 # O nome padrão de cada arquivo por visão; o `file_name` da VARIANTE do
 # template (por par de pernas) vence quando cadastrado.
-SWAP_FILE_NAMES = {'client': 'SWAP_CLIENTE.txt', 'bank': 'SWAP_BANCO.txt', 'atacama': 'SWAP_ATACAMA.txt'}
-PREMIUM_FILE_NAMES = {'client': 'PREMIO_CLIENTE.txt', 'bank': 'PREMIO_BANCO.txt', 'atacama': 'PREMIO_ATACAMA.txt'}
+# O nome leva a LOB do deal (`{lob}` = 'EDG_'; vazio quando o deal não tem):
+# SWAP_EDG_CLIENTE.txt e PREMIO_SWAP_EDG_CLIENTE.txt. Deals de LOBs diferentes
+# no mesmo lote caem em arquivos diferentes — o `send` agrupa pelo nome.
+SWAP_FILE_NAMES = {'client': 'SWAP_{lob}CLIENTE.txt', 'bank': 'SWAP_{lob}BANCO.txt',
+                   'atacama': 'SWAP_{lob}ATACAMA.txt'}
+PREMIUM_FILE_NAMES = {'client': 'PREMIO_SWAP_{lob}CLIENTE.txt', 'bank': 'PREMIO_SWAP_{lob}BANCO.txt',
+                      'atacama': 'PREMIO_SWAP_{lob}ATACAMA.txt'}
 
 
 def _rand10():
@@ -186,12 +191,17 @@ def _participant(le):
     return nome
 
 
-def _file_name(key, view, default):
+def _file_name(key, view, default, deal=None):
+    """O `file_name` cadastrado na variante do par vence; senão o padrão da
+    visão com a LOB do deal no lugar de `{lob}`."""
     try:
         nome = _R()._fi_variant_file_name(key, PAGE_URL, domain.le_pair(view))
     except Exception:                                   # noqa: BLE001
         nome = ''
-    return nome or default
+    if nome:
+        return nome
+    lob = re.sub(r'[^A-Z0-9]', '', str((deal or {}).get('LOB') or '').upper())
+    return default.format(lob=lob + '_' if lob else '')
 
 
 # O Conecta lê o arquivo como ANSI (cp1252): cada caractere é UM byte — é o
@@ -239,7 +249,7 @@ def deal_files(deal, view, today_ymd=None):
         raise ValueError('0301 record has %d characters, the layout wants %d (check the '
                          'file-interpreter template %s)' % (len(record), domain.SWAP_RECORD_LENGTH, SWAP_FI_KEY))
     out.append({'kind': 'swap', 'key': SWAP_FI_KEY, 'view': view, 'le_pair': domain.le_pair(view),
-                'file_name': _file_name(SWAP_FI_KEY, view, SWAP_FILE_NAMES[view]),
+                'file_name': _file_name(SWAP_FI_KEY, view, SWAP_FILE_NAMES[view], deal),
                 'header': header, 'records': [record],
                 'fields': _fields_of(SWAP_FI_KEY, {'header': hdr}, vals)})
     if domain.premium_applies(deal):
@@ -251,7 +261,7 @@ def deal_files(deal, view, today_ymd=None):
         flow_line = _R()._fi_build_line(PREMIUM_FI_KEY, 'fluxo', flow, page_url=PAGE_URL,
                                         le_pair=domain.le_pair(view), deal=deal)
         out.append({'kind': 'premium', 'key': PREMIUM_FI_KEY, 'view': view, 'le_pair': domain.le_pair(view),
-                    'file_name': _file_name(PREMIUM_FI_KEY, view, PREMIUM_FILE_NAMES[view]),
+                    'file_name': _file_name(PREMIUM_FI_KEY, view, PREMIUM_FILE_NAMES[view], deal),
                     'header': header_p, 'records': [reg_line, flow_line],
                     'fields': _fields_of(PREMIUM_FI_KEY, {'header': h, 'registro': reg, 'fluxo': flow}, None)})
     return out

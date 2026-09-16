@@ -20748,6 +20748,12 @@ do cadastro recalculados). `check_ops_trade_swap`, `check_payrec_run` e
   0301 fora de `SWAP_RECORD_LENGTH` (um template do File Interpreter
   editado errado dava recusa silenciosa na B3). O teste lê os arquivos em
   bytes e cobra os 1927 com o `0x96`.
+- **O nome do arquivo leva a LOB** (16/09): `SWAP_EDG_CLIENTE.txt` /
+  `SWAP_EDG_BANCO.txt` / `SWAP_EDG_ATACAMA.txt` e `PREMIO_SWAP_EDG_*.txt`,
+  pedido da mesa — a LOB é a do deal (`{lob}` nos padrões do `commands`,
+  vazia some com o `_`), então deals de LOBs diferentes no mesmo lote saem
+  em arquivos separados. O `file_name` cadastrado na variante do template
+  segue vencendo.
 - Ficou de fora, de propósito: Mapping B3 (o arquivo de retorno do swap não
   foi definido) e a entrada na esteira de confirmação/Pending Confirmation.
   E a **cópia do BANCO do template `swap-pagamento-final-v3` não ganha o
