@@ -870,7 +870,10 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   substituída = `Amend`) e filtro inteligente (`/cache/search`,
   `_deal_matches`) são o MESMO molde das páginas de New Deals — não
   reinvente. `check_swap_bullet.py` compara os seis arquivos byte a byte
-  com os exemplos da mesa.
+  com os exemplos da mesa. **O arquivo é gravado em cp1252** (§480): o
+  Conecta conta BYTES, e o travessão `–` da denominação VCP é 1 byte em
+  cp1252 e 3 em utf-8 — em utf-8 o registro passava de 1927 e a B3
+  recusava (`Campo 126 conteúdo inválido`, com `â€“` na linha).
 - **Swap Calculator: a `Denominação` da curva VCP é CONTRATO, e o IR sai do
   CADASTRO** (§479). A posição traz nas colunas 70/75 o texto livre da curva
   (`(3M SOFR + 0.75%)*1.1765 A/360`), e o `*1.1765` só existe ali. Quem o lê é

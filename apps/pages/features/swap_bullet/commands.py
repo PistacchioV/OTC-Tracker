@@ -194,6 +194,11 @@ def _file_name(key, view, default):
     return nome or default
 
 
+# O Conecta lê o arquivo como ANSI (cp1252): cada caractere é UM byte — é o
+# que o Excel da mesa grava e o que mantém o registro em 1927 bytes.
+FILE_ENCODING = 'cp1252'
+
+
 def _build_blocks(key, values, view, deal, skip=('header',)):
     """Concatena os blocos do template (menos o header) numa linha só — o
     registro 0301 é UMA linha apresentada em 18 grupos; o 0897 tem o
@@ -230,6 +235,9 @@ def deal_files(deal, view, today_ymd=None):
     header = _R()._fi_build_line(SWAP_FI_KEY, 'header', hdr, page_url=PAGE_URL,
                                  le_pair=domain.le_pair(view), deal=deal)
     record = _build_blocks(SWAP_FI_KEY, vals, view, deal)
+    if len(record) != domain.SWAP_RECORD_LENGTH:
+        raise ValueError('0301 record has %d characters, the layout wants %d (check the '
+                         'file-interpreter template %s)' % (len(record), domain.SWAP_RECORD_LENGTH, SWAP_FI_KEY))
     out.append({'kind': 'swap', 'key': SWAP_FI_KEY, 'view': view, 'le_pair': domain.le_pair(view),
                 'file_name': _file_name(SWAP_FI_KEY, view, SWAP_FILE_NAMES[view]),
                 'header': header, 'records': [record],
@@ -319,7 +327,11 @@ def send(items, sid='', download=False):
     with _R()._cache_lock:
         for nome, g in grupos.items():
             path = _R()._unique_filepath(out_dir, nome)
-            with open(path, 'w', encoding='utf-8') as fh:
+            # cp1252 (o ANSI do Windows), NUNCA utf-8: o travessão (–) da
+            # denominação VCP é UM byte em cp1252 e TRÊS em utf-8 — o Conecta
+            # lê byte a byte, a linha passava de 1927 e a B3 recusava o
+            # registro ('Campo 126 conteúdo inválido') mostrando 'â€“'.
+            with open(path, 'w', encoding=FILE_ENCODING, errors='replace') as fh:
                 fh.write('\n'.join([g['header']] + g['records']))
             gerados.append({'filename': os.path.basename(path), 'count': g['count']})
             _R().log.info('[SWAP BULLET] Wrote %s (%d record(s))', path, len(g['records']))
