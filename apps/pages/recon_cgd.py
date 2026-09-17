@@ -438,7 +438,8 @@ def _subpasta(folder, nome):
     return None
 
 
-def baixar_fep_do_box(avisos, destino=None):
+def baixar_fep_do_box(avisos, destino=None, assunto=None, prefixo='fepweb-cgd-',
+                      aceita=None):
     """Salva o anexo `.xlsx` do e-mail MAIS RECENTE cujo assunto é o do FepWeb.
 
     Devolve `(caminho, descricao)` — a descrição é o assunto e a data do e-mail
@@ -446,9 +447,17 @@ def baixar_fep_do_box(avisos, destino=None):
     para ler, sempre com o motivo em `avisos`: uma recon que rodou sem um dos
     lados parece uma recon limpa.
 
+    `assunto`/`prefixo` servem a OUTRO relatório do FepWeb na mesma pasta (o
+    Conf. Matching lê o `(REPORT) FEPWeb - Operacoes D-4`): a pasta, a caixa e
+    a regra do mais recente são as mesmas, e uma segunda cópia desta função
+    envelheceria sozinha. `aceita(recebido)` escolhe ENTRE os que casam — o
+    relatório de uma janela de dias só serve a quem pede um dia dentro dela;
+    nenhum aceito, vale o mais recente, avisando.
+
     Windows-only (COM/MAPI). Fora do Windows levanta `EnvironmentError`, e quem
     chama cai para o arquivo em pasta.
     """
+    assunto = assunto or FEP_MAIL_SUBJECT
     try:
         import win32com.client as _w
         import pythoncom
@@ -475,7 +484,7 @@ def baixar_fep_do_box(avisos, destino=None):
         # abaixo é o que decide, e ele roda nos dois caminhos.
         try:
             itens = pasta.Items.Restrict(
-                '@SQL="%s" LIKE \'%%%s%%\'' % (_MAPI_SUBJECT, FEP_MAIL_SUBJECT))
+                '@SQL="%s" LIKE \'%%%s%%\'' % (_MAPI_SUBJECT, assunto))
         except Exception:
             itens = pasta.Items
         # Mais recente primeiro. O relatório é reemitido e a pasta acumula:
@@ -485,7 +494,24 @@ def baixar_fep_do_box(avisos, destino=None):
             itens.Sort('[ReceivedTime]', True)
         except Exception:
             _LOG.warning('[recon-cgd] não consegui ordenar a pasta por data')
-        alvo_assunto = _norm(FEP_MAIL_SUBJECT)
+        alvo_assunto = _norm(assunto)
+
+        def _salva(msg, at):
+            nome = str(at.FileName or '')
+            alvo = destino or os.path.join(
+                tempfile.gettempdir(), prefixo + os.path.basename(nome))
+            at.SaveAsFile(alvo)
+            recebido = ''
+            try:
+                recebido = msg.ReceivedTime.strftime('%d/%m/%Y %H:%M')
+            except Exception:
+                pass
+            desc = '{} — {} ({})'.format(nome, str(msg.Subject or '').strip(),
+                                         recebido or 's/ data')
+            _LOG.info('[recon-cgd] anexo do FepWeb: %s', desc)
+            return alvo, desc
+
+        mais_recente = None
         for i in range(1, itens.Count + 1):
             try:
                 msg = itens.Item(i)
@@ -494,25 +520,28 @@ def baixar_fep_do_box(avisos, destino=None):
                 anexos = msg.Attachments
                 for a in range(1, anexos.Count + 1):
                     at = anexos.Item(a)
-                    nome = str(at.FileName or '')
-                    if not nome.lower().endswith(_FEP_MAIL_EXT):
+                    if not str(at.FileName or '').lower().endswith(_FEP_MAIL_EXT):
                         continue          # assinatura, imagem embutida, .msg
-                    alvo = destino or os.path.join(
-                        tempfile.gettempdir(), 'fepweb-cgd-' + os.path.basename(nome))
-                    at.SaveAsFile(alvo)
-                    recebido = ''
+                    if aceita is None:
+                        return _salva(msg, at)
+                    if mais_recente is None:
+                        mais_recente = (msg, at)
+                    recebido = None
                     try:
-                        recebido = msg.ReceivedTime.strftime('%d/%m/%Y %H:%M')
+                        recebido = msg.ReceivedTime
                     except Exception:
                         pass
-                    desc = '{} — {} ({})'.format(nome, str(msg.Subject or '').strip(),
-                                                 recebido or 's/ data')
-                    _LOG.info('[recon-cgd] lista do FEP: %s', desc)
-                    return alvo, desc
+                    if recebido is not None and aceita(recebido):
+                        return _salva(msg, at)
+                    break                 # um anexo por e-mail; segue ao anterior
             except Exception:
                 _LOG.exception('[recon-cgd] falha lendo um item da pasta do FepWeb')
+        if mais_recente is not None:
+            avisos.append('Nenhum e-mail "{}" cobre a data pedida; usei o mais '
+                          'recente da pasta.'.format(assunto))
+            return _salva(*mais_recente)
         avisos.append('Nenhum e-mail com assunto "{}" e anexo .xlsx em {}.'
-                      .format(FEP_MAIL_SUBJECT, caminho_txt))
+                      .format(assunto, caminho_txt))
         return None, ''
     finally:
         try:

@@ -20997,3 +20997,67 @@ Teste: `check_weak_ccy_rate` §2b (a regra da perna, o USD/BRL da mesa nos
 dois arranjos, Pay/Rec decidindo a posição nos dois sentidos e calando quando
 não falam da moeda do notional, o CNH/BRL, o USD/CNH nos dois arranjos, a
 resposta sem Other Quantity).
+
+## §486 — Conf. Matching: o workflow Alteryx FepWeb × Athena vira tela de reconciliação (2026-09-17)
+
+**O que era.** O batimento diário entre o FepWeb (onde a confirmação do termo
+de moeda nasce) e a Athena (onde a operação foi bookada) rodava num workflow
+Alteryx sobre dois arquivos salvos à mão numa pasta (`FEPWeb - Operacoes
+D-4.xlsx` e `Athena.xlsx`), e o resultado saía em duas planilhas. Quem
+esquecesse de salvar o anexo do dia rodava o batimento da véspera sem erro
+nenhum.
+
+**O que é.** Reconciliations › **Conf. Matching** (`/reconciliation-conf-matching`),
+motor em `apps/pages/recon_conf_matching.py` + vertical
+`features/recon_conf_matching/` (o desenho da Recon de CGD). Reference date
+(default D-1 ANBIMA) + Run; cards por status; tabela com checkbox, Status,
+Actions (Edit habilita SÓ o comentário) e os outputs.
+
+- **FepWeb = o ANEXO do e-mail** `(REPORT) FEPWeb - Operacoes D-4` no box
+  compartilhado › Inbox › Automatico. A leitura do box é a MESMA função da
+  CGD: `recon_cgd.baixar_fep_do_box` ganhou `assunto`, `prefixo` e `aceita` —
+  o relatório cobre uma JANELA de dias, então para uma data antiga vale o
+  e-mail que a cobre (`recebido` em `(ref, ref+5]`); nenhum cobrindo, o mais
+  recente, avisando. Sem Outlook (dev) cai para a pasta do workflow
+  (`CONFMATCH_INPUT_ROOT`, pendurada no `SHARED_DRIVE_ROOT`).
+- **Athena = a API de NDF do New Deals** (`athena_api.fetch_ndf_trades`), com
+  os mesmos leitores do import (`_ndf_api_norm`, `_api_rec_is_cancelled`…).
+- **Join por contrato** (`contract_key`: caixa e `_`×`-`), os dois lados já no
+  trade date. `Missing FepWeb` / `Missing Athena` / `Duplicated` (contrato
+  repetido no FepWeb é UMA linha, com `FepWeb Count`).
+- **Nenhuma lista de cliente veio junto** (§6). As internas do Tool 11/71
+  (`LABAYSTR`, `FXECOM`…) saem de `interbook-ndf`, `le-accronym` e `ECONOMIC
+  GROUP = INTERNAL`; o `NDF` no End Counterparty é padrão de nome de book. A
+  lista de exceção do Tool 84 (`ADM`, `Cargill`…) é o `SIGNATURE TYPE` do
+  Reference Data. Cliente por CHAVE — CNPJ (sem o zero à esquerda: a planilha
+  entrega NÚMERO) no FepWeb, SPN na Athena —, então a limpeza de nome por
+  RegEx (Tools 37–40) não existe.
+- **O Pending Status é o da casa** (`_pc_signature_pending_status`), não uma
+  terceira cópia: prazo ≤ 60 dias → `Exception FepWeb`; `Internal` →
+  `Exception Digital Fep Web` (os dois `Ok`); Digital/Manual → `Pending`. O
+  workflow usava `< 60`; a regra da casa é `≤ 60`, e é ela que alimenta o
+  Pending Confirmation. Forward Start → `Manual Confirmation` (corre pela
+  esteira).
+- **Sem um dos lados o Run LEVANTA** com `tipo: mensagem` (§476): rodar só com
+  a Athena pintaria o dia inteiro de `Missing FepWeb`.
+- **Comentário é do TRADE** (desenho da Recon FXO): mora em
+  `recon-conf-matching-comments.json` (no armazém), reaplicado em toda
+  leitura; NÃO muda o Status.
+- As linhas são chaveadas pelo RÓTULO da coluna e o payload traz `columns` —
+  é o contrato do Advanced Export por intervalo.
+
+**Ficou de fora, de propósito:** o `Pending Update.xlsx` (Tool 28 — o app já
+alimenta a planilha) e os dois e-mails do workflow (Confirmações Manuais e
+MT300 Nestlé; o MT300 já é card do Control Panel). A regra "não é Cash Settled
+Forward e a Quantity é BRL → confirmação manual" também não veio: os literais
+de Instrument Type eram os do `Athena.xlsx`, não os da API, e desde o §485 a
+Quantity em BRL é arranjo de booking comum.
+
+**A conferir na instância** (na dev não há Outlook nem Athena): os nomes das
+colunas do relatório real (`Contrato`, `Data Operação`, `Status Operação`,
+`Nome Cliente`, `Tipo Operação`, `CPF/CNPJ Cliente` — casam por nome
+normalizado, e o Run diz qual faltou) e os campos da API (`Cetip ID`, `End
+Counterparty Description`).
+
+Teste: `check_conf_matching.py` (motor, armazém, o box de mentira com a CGD
+junto, as quatro rotas). `check_soc_layers` ganhou as rotas.

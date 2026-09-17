@@ -1,0 +1,722 @@
+{% extends "layouts/vertical.html" %}
+
+{# As colunas de DADO, na ordem da tela, UMA vez: o <thead> (estático, para o
+   I18nManager traduzir no load) e o JS saem desta lista. `name` é a chave da
+   linha — a mesma do `columns` do servidor. #}
+{% set CFM_COLS = [
+    {'name': 'Status', 'lang': 'cfm-c-status', 'cls': ''},
+    {'name': 'Comments', 'lang': 'cfm-c-comments', 'cls': 'cfm-comment'},
+    {'name': 'Pending Status', 'lang': 'cfm-c-pending', 'cls': ''},
+    {'name': 'Trade Date', 'lang': 'cfm-c-trade', 'cls': ''},
+    {'name': 'FepWeb ID', 'lang': 'cfm-c-fepid', 'cls': ''},
+    {'name': 'Athena ID', 'lang': 'cfm-c-athid', 'cls': ''},
+    {'name': 'FepWeb Client', 'lang': 'cfm-c-fepclient', 'cls': 'cfm-ell'},
+    {'name': 'Athena Client', 'lang': 'cfm-c-athclient', 'cls': 'cfm-ell'},
+    {'name': 'CNPJ', 'lang': 'cfm-c-cnpj', 'cls': ''},
+    {'name': 'SPN', 'lang': 'cfm-c-spn', 'cls': ''},
+    {'name': 'Signature Type', 'lang': 'cfm-c-sig', 'cls': ''},
+    {'name': 'Instrument Type', 'lang': 'cfm-c-instr', 'cls': ''},
+    {'name': 'Settlement Date', 'lang': 'cfm-c-settle', 'cls': ''},
+    {'name': 'Tenor', 'lang': 'cfm-c-tenor', 'cls': 'cfm-num'},
+    {'name': 'Quantity Ccy', 'lang': 'cfm-c-qccy', 'cls': ''},
+    {'name': 'Quantity', 'lang': 'cfm-c-qty', 'cls': 'cfm-num'},
+    {'name': 'Other Ccy', 'lang': 'cfm-c-occy', 'cls': ''},
+    {'name': 'Other Quantity', 'lang': 'cfm-c-oqty', 'cls': 'cfm-num'},
+    {'name': 'Strike', 'lang': 'cfm-c-strike', 'cls': 'cfm-num'},
+    {'name': 'Publisher', 'lang': 'cfm-c-publisher', 'cls': ''},
+    {'name': 'Cetip ID', 'lang': 'cfm-c-cetip', 'cls': ''},
+    {'name': 'End Counterparty', 'lang': 'cfm-c-endcp', 'cls': ''},
+    {'name': 'FepWeb Type', 'lang': 'cfm-c-feptype', 'cls': ''},
+    {'name': 'FepWeb Count', 'lang': 'cfm-c-fepcount', 'cls': 'cfm-num'}
+] %}
+
+{% block title %}Conf. Matching{% endblock title %}
+
+{% block extra_css %}
+<link href="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.css" rel="stylesheet" type="text/css" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<link href="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<style>
+/* ============================================================================
+   Conf. Matching — FepWeb × Athena.
+   Cards de contagem por status + tabela no padrão da casa (molde: Recon CGD).
+   Tokens --ins-*/--vr-*, nunca --bs-*.
+   ============================================================================ */
+#cfm-page { --cfm-ease: var(--vr-ease, cubic-bezier(0.22, 1, 0.36, 1)); }
+
+#cfm-page .cfm-panel {
+    background: var(--vr-card-bg, var(--ins-secondary-bg));
+    border: 1px solid var(--vr-card-border, var(--ins-border-color));
+    border-radius: var(--vr-card-radius, 18px);
+    box-shadow: var(--vr-card-shadow, 0 4px 14px rgba(15, 23, 42, .06));
+    padding: 1rem 1.1rem 1.15rem;
+}
+
+/* Os cards de contagem. Clicar num deles FILTRA a tabela pelo status. */
+#cfm-page .cfm-kpi {
+    background: var(--vr-card-bg, var(--ins-secondary-bg));
+    border: 1px solid var(--vr-card-border, var(--ins-border-color));
+    border-radius: var(--vr-card-radius, 18px);
+    box-shadow: var(--vr-card-shadow, 0 4px 14px rgba(15, 23, 42, .06));
+    padding: .9rem 1rem; height: 100%; cursor: pointer;
+    display: flex; align-items: center; gap: .75rem;
+    transition: box-shadow 240ms var(--cfm-ease), border-color 240ms var(--cfm-ease), transform 240ms var(--cfm-ease);
+}
+@media (hover: hover) and (pointer: fine) {
+    #cfm-page .cfm-kpi:hover { transform: translateY(-2px); border-color: rgba(0,102,204,.28);
+                               box-shadow: var(--vr-card-shadow-hover, 0 18px 40px rgba(94,92,230,.14)); }
+    #cfm-page .cfm-kpi:hover .cfm-kpi__ico { transform: scale(1.1) rotate(-4deg); }
+}
+#cfm-page .cfm-kpi.cfm-on { border-color: var(--vr-accent-1, #0066cc); box-shadow: 0 0 0 2px rgba(0,102,204,.16); }
+#cfm-page .cfm-kpi__ico {
+    width: 38px; height: 38px; flex: 0 0 auto; border-radius: 11px; color: #fff;
+    display: inline-flex; align-items: center; justify-content: center; font-size: 1.15rem;
+    background: var(--vr-grad, linear-gradient(100deg, #0066cc, #5e5ce6));
+    transition: transform 240ms var(--cfm-ease);
+}
+#cfm-page .cfm-k-mfep    .cfm-kpi__ico { background: linear-gradient(100deg, #b3261e, #ff453a); }
+#cfm-page .cfm-k-math    .cfm-kpi__ico { background: linear-gradient(100deg, #7c3aed, #d946ef); }
+#cfm-page .cfm-k-dup     .cfm-kpi__ico { background: linear-gradient(100deg, #b07500, #f7b84b); }
+#cfm-page .cfm-k-manual  .cfm-kpi__ico { background: linear-gradient(100deg, #0d7ea8, #4a849b); }
+#cfm-page .cfm-k-pending .cfm-kpi__ico { background: linear-gradient(100deg, #475569, #94a3b8); }
+#cfm-page .cfm-k-ok      .cfm-kpi__ico { background: linear-gradient(100deg, #1a7f37, #34c759); }
+/* o Total usa o gradiente da MARCA: os outros seis são cores de estado, ele é
+   o fechamento da conta */
+#cfm-page .cfm-k-total   .cfm-kpi__ico { background: var(--vr-grad); }
+#cfm-page .cfm-k-total {
+    border-color: color-mix(in oklab, var(--sf-blue) 42%, var(--vr-card-border));
+    box-shadow: var(--vr-card-shadow), 0 0 26px -8px color-mix(in oklab, var(--sf-blue) 70%, transparent);
+}
+#cfm-page .cfm-kpi__n { font-size: 1.4rem; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; color: var(--ins-body-color); }
+#cfm-page .cfm-kpi__l { font-size: .68rem; text-transform: uppercase; letter-spacing: .04em; color: var(--ins-secondary-color); }
+
+/* ── Data: `type="date"` INVISÍVEL por cima de um texto readonly em dd/mm/aaaa
+   (o nativo desenha no locale do sistema — mm/dd no Windows do JP). */
+#cfm-page .date-wrap { position: relative; width: 132px; }
+#cfm-page .date-wrap input[type=date] { position: absolute; inset: 0; opacity: 0; cursor: pointer; z-index: 2; }
+#cfm-page .date-wrap input[type=text] { pointer-events: none; padding-right: 28px; }
+#cfm-page .date-wrap-icon { position: absolute; right: 9px; top: 50%; transform: translateY(-50%);
+                            z-index: 1; font-size: 15px; pointer-events: none; color: var(--ins-secondary-color, #6c757d); }
+
+/* ── Tabela no padrão da casa. As regras do `th` valem para o CLONE que o
+   scrollX cria — o DataTables remove o id da tabela do cabeçalho. */
+#cfm-table thead th,
+.dt-scroll-head thead th,
+.dt-scroll-headInner thead th,
+.dataTables_scrollHeadInner thead th {
+    text-align: center !important; vertical-align: middle !important;
+    font-size: .7rem; white-space: normal;
+}
+#cfm-table tbody td { text-align: center; vertical-align: middle; font-size: .8rem; white-space: nowrap; }
+#cfm-table tbody td.cfm-ell { max-width: 280px; overflow: hidden; text-overflow: ellipsis; }
+#cfm-table tbody td.cfm-num { font-variant-numeric: tabular-nums; }
+#cfm-table thead .cfm-filters th,
+.dt-scroll-head thead .cfm-filters th,
+.dt-scroll-headInner thead .cfm-filters th,
+.dataTables_scrollHeadInner thead .cfm-filters th { padding: 4px 5px; }
+#cfm-table thead .cfm-filters input[type=text],
+.dt-scroll-head thead .cfm-filters input[type=text],
+.dt-scroll-headInner thead .cfm-filters input[type=text],
+.dataTables_scrollHeadInner thead .cfm-filters input[type=text] {
+    width: 100%; min-width: 4.5rem; font-size: 12px; height: 28px; padding: 2px 6px;
+    border: 1px solid var(--ins-border-color); border-radius: 6px;
+    background: var(--ins-secondary-bg); color: var(--ins-body-color);
+}
+/* A coluna Actions já nasce com a largura do par Save + Cancel: alargando só
+   na edição, o corpo desalinhava do cabeçalho clonado do scrollX. */
+#cfm-table td.cfm-acts { min-width: 84px; }
+#cfm-table td .badge { font-size: .68rem; font-weight: 700; padding: .28em .7em; }
+
+/* O comentário é texto livre e costuma ser longo: a célula corta com
+   reticências (o título no hover mostra o inteiro). */
+#cfm-table td.cfm-comment { max-width: 18rem; overflow: hidden; text-overflow: ellipsis; }
+#cfm-table td.cfm-comment input { font-size: .72rem; min-width: 14rem; }
+
+#cfm-page .btn-toolbar-all {
+    font-size: .75rem !important; padding: .25rem .6rem !important;
+    height: auto !important; line-height: 1.4 !important; white-space: nowrap !important;
+    transition: transform 140ms var(--cfm-ease), box-shadow 140ms var(--cfm-ease);
+}
+@media (hover: hover) and (pointer: fine) {
+    #cfm-page .btn-toolbar-all:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,.10); }
+}
+#cfm-page .btn-toolbar-all:active { transform: scale(.96) !important; }
+#cfm-page .cfm-cols-menu { max-height: 320px; overflow-y: auto; min-width: 14rem; font-size: .78rem; }
+#cfm-page .cfm-src { font-size: .7rem; color: var(--ins-secondary-color); }
+#cfm-page .cfm-src code { font-size: .68rem; }
+#cfm-page .cfm-warn {
+    background: #fff6e5; border: 1px solid #f2d9a8; color: #8a5b00;
+    border-radius: 10px; padding: .6rem .8rem; font-size: .74rem; margin-bottom: .8rem;
+}
+[data-bs-theme=dark] #cfm-page .cfm-warn { background: rgba(247,184,75,.12); border-color: rgba(247,184,75,.3); color: #f7b84b; }
+</style>
+{% endblock extra_css %}
+
+{% block page_content %}
+<div class="container-fluid" id="cfm-page">
+
+    <div class="page-title-head d-flex align-items-center mb-3">
+        <div class="flex-grow-1 d-flex align-items-center gap-2">
+            <i data-lucide="file-diff" style="width:20px;height:20px;flex-shrink:0;" class="text-primary me-1"></i>
+            <h4 class="mb-0 fw-semibold" data-lang="cfm-title">Conf. Matching</h4>
+            <span class="text-muted" style="font-size:.78rem;" data-lang="cfm-subtitle">FepWeb × Athena</span>
+        </div>
+    </div>
+
+    <div class="cfm-panel mb-3">
+        <div class="d-flex flex-wrap gap-2 align-items-center">
+            <div class="d-flex align-items-center gap-2">
+                <label class="form-label mb-0 fw-semibold" style="font-size:.75rem;" data-lang="cfm-lbl-date">Reference date:</label>
+                <div class="date-wrap">
+                    <input type="text" id="cfm-date-display" class="form-control form-control-sm" placeholder="DD/MM/YYYY" readonly>
+                    <i class="ti ti-calendar date-wrap-icon"></i>
+                    <input type="date" id="cfm-date">
+                </div>
+            </div>
+
+            {# Rodar o batimento é `btn-primary` com o ícone de PLAY, como nas
+               outras recons. #}
+            <button class="btn btn-sm btn-primary bg-gradient btn-toolbar-all" id="cfm-run">
+                <i class="ti ti-player-play me-1"></i><span data-lang="cfm-btn-run">Run</span>
+            </button>
+
+            <div class="dropdown">
+                <button class="btn btn-sm btn-soft-primary btn-toolbar-all dropdown-toggle" type="button"
+                        data-bs-toggle="dropdown" data-bs-auto-close="outside">
+                    <i class="ti ti-columns me-1"></i><span data-lang="cfm-btn-columns">Columns</span>
+                </button>
+                <div class="dropdown-menu p-2 cfm-cols-menu" id="cfm-cols-menu"></div>
+            </div>
+
+            <div class="dropdown">
+                <button class="btn btn-sm btn-info bg-gradient btn-toolbar-all dropdown-toggle"
+                        type="button" data-bs-toggle="dropdown">
+                    <i class="ti ti-download me-1"></i><span data-lang="cfm-btn-export">Export</span>
+                </button>
+                <ul class="dropdown-menu" id="cfm-export-menu">
+                    <li><a class="dropdown-item" href="#" data-exp="copy">Copy</a></li>
+                    <li><a class="dropdown-item" href="#" data-exp="csv">CSV</a></li>
+                    <li><a class="dropdown-item" href="#" data-exp="excel">Excel</a></li>
+                    <li><a class="dropdown-item" href="#" data-exp="print">Print</a></li>
+                    <li><a class="dropdown-item" href="#" data-exp="pdf">PDF</a></li>
+                </ul>
+            </div>
+
+            <button class="btn btn-sm btn-outline-secondary btn-toolbar-all" id="cfm-clear">
+                <i class="ti ti-filter-off me-1"></i><span data-lang="cfm-btn-clear">Clear Filters</span>
+            </button>
+
+            <div class="ms-auto cfm-src" id="cfm-src"></div>
+
+            <div class="d-flex align-items-center gap-2">
+                <span style="font-size:.72rem;" data-lang="cfm-show">Show</span>
+                <select id="cfm-len" class="form-select form-select-sm"
+                        style="width:auto;font-size:.75rem;height:31px;">
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                    <option value="150">150</option>
+                    <option value="200">200</option>
+                    <option value="-1">All</option>
+                </select>
+                <span style="font-size:.72rem;" data-lang="cfm-entries">entries</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-3" id="cfm-kpis"></div>
+
+    <div class="cfm-panel">
+        <div id="cfm-warnings"></div>
+        <div class="table-responsive">
+            <table id="cfm-table" class="table table-hover table-sm w-100 mb-0">
+                <thead>
+                    {# Posição na tabela: 0 = checkbox, 1 = Status, 2 = Actions, 3… = o resto. #}
+                    <tr>
+                        <th class="cfm-noexp"><input type="checkbox" id="cfmAll" class="form-check-input"></th>
+                        {% for c in CFM_COLS %}
+                        <th data-lang="{{ c.lang }}">{{ c.name }}</th>
+                        {% if loop.first %}<th class="cfm-noexp" data-lang="cfm-c-actions">Actions</th>{% endif %}
+                        {% endfor %}
+                    </tr>
+                    <tr class="cfm-filters">
+                        <th></th>
+                        {% for c in CFM_COLS %}
+                        <th><input type="text" data-col="{{ 1 if loop.first else loop.index0 + 2 }}" placeholder="{{ c.name }}"></th>
+                        {% if loop.first %}<th></th>{% endif %}
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock page_content %}
+
+{% block extra_javascript %}
+{# jQuery ANTES do DataTables: o `vendors.min.js` do tema não o expõe. #}
+<script src="{{ config.ASSETS_ROOT }}/plugins/jquery/jquery.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/dataTables.buttons.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.bootstrap5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/jszip.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/pdfmake.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/vfs_fonts.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.html5.min.js"></script>
+<script src="{{ config.ASSETS_ROOT }}/plugins/datatables/buttons.print.min.js"></script>
+<script>
+(function () {   // registro síncrono do JSZip — sem ele o Excel não faz nada
+    var jz = window.JSZip || window.jszip;
+    if (jz && window.jQuery && jQuery.fn.dataTable && jQuery.fn.dataTable.Buttons &&
+        typeof jQuery.fn.dataTable.Buttons.jszip === 'function') {
+        jQuery.fn.dataTable.Buttons.jszip(jz);
+    }
+})();
+</script>
+{# SweetAlert2 LOCAL: a instância do JPM roda sem internet. #}
+<script src="{{ config.ASSETS_ROOT }}/plugins/sweetalert2/sweetalert2.min.js"></script>
+{# DEPOIS do buttons.html5 e com asset_v: o patch do Excel (§477). #}
+<script src="{{ config.ASSETS_ROOT }}/js/export-advanced.js?v={{ asset_v('js/export-advanced.js') }}"></script>
+<script src="{{ config.ASSETS_ROOT }}/js/table-std.js"></script>
+<script>
+(function ($) {
+    'use strict';
+
+    var _TRANS = {
+        en: { total: 'Total', missing_fepweb: 'Missing FepWeb', missing_athena: 'Missing Athena',
+              duplicated: 'Duplicated', manual: 'Manual Confirmation', pending: 'Pending', ok: 'Ok',
+              actions: 'Actions', editComment: 'Edit comment', save: 'Save', cancel: 'Cancel',
+              commentPh: 'Comment on this operation', saveFail: 'Could not save the comment',
+              run: 'Running the reconciliation…',
+              runTxt: 'Reading the FepWeb report from the shared mailbox and the NDF trades from Athena.',
+              done: 'Reconciliation finished', runFail: 'Reconciliation failed',
+              empty: 'Nothing reconciled for this date yet — click Run.',
+              fep: 'FepWeb report', at: 'run at', ops: 'operation(s)',
+              cancelled: 'cancelled', internal: 'internal legs', otherDates: 'other dates' },
+        br: { total: 'Total', missing_fepweb: 'Falta no FepWeb', missing_athena: 'Falta na Athena',
+              duplicated: 'Duplicados', manual: 'Confirmação manual', pending: 'Pendentes', ok: 'Ok',
+              actions: 'Ações', editComment: 'Editar comentário', save: 'Salvar', cancel: 'Cancelar',
+              commentPh: 'Comentário sobre esta operação', saveFail: 'Não foi possível gravar o comentário',
+              run: 'Rodando o batimento…',
+              runTxt: 'Lendo o relatório do FepWeb no box compartilhado e os NDFs na Athena.',
+              done: 'Batimento concluído', runFail: 'O batimento falhou',
+              empty: 'Nada batido nesta data ainda — clique em Run.',
+              fep: 'Relatório do FepWeb', at: 'rodado em', ops: 'operação(ões)',
+              cancelled: 'canceladas', internal: 'pernas internas', otherDates: 'outras datas' },
+        es: { total: 'Total', missing_fepweb: 'Falta en FepWeb', missing_athena: 'Falta en Athena',
+              duplicated: 'Duplicados', manual: 'Confirmación manual', pending: 'Pendientes', ok: 'Ok',
+              actions: 'Acciones', editComment: 'Editar comentario', save: 'Guardar', cancel: 'Cancelar',
+              commentPh: 'Comentario sobre esta operación', saveFail: 'No se pudo guardar el comentario',
+              run: 'Ejecutando la conciliación…',
+              runTxt: 'Leyendo el informe de FepWeb en el buzón compartido y los NDF en Athena.',
+              done: 'Conciliación finalizada', runFail: 'La conciliación falló',
+              empty: 'Nada conciliado en esta fecha — haga clic en Run.',
+              fep: 'Informe de FepWeb', at: 'ejecutado', ops: 'operación(es)',
+              cancelled: 'canceladas', internal: 'piernas internas', otherDates: 'otras fechas' }
+    };
+    function lang() {
+        try { return localStorage.getItem('__OTC_TRACKER_LANG__') || 'en'; } catch (e) { return 'en'; }
+    }
+    function t(k) { return (_TRANS[lang()] || _TRANS.en)[k] || (_TRANS.en[k] || k); }
+    function esc(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+
+    var table = null, dados = [], bucket = '', editingKey = null;
+    var picked = {};                 // key → true: a seleção sobrevive ao redraw
+    var hidden = {};                 // rótulo → true: colunas escondidas
+
+    var COMMENT_COL = 'Comments';
+    // Status → card/badge. As chaves são as de `counts` do servidor.
+    var STATUS = {
+        'Missing FepWeb':      { key: 'missing_fepweb', badge: 'text-bg-danger' },
+        'Missing Athena':      { key: 'missing_athena', badge: 'text-bg-primary' },
+        'Duplicated':          { key: 'duplicated',     badge: 'text-bg-warning' },
+        'Manual Confirmation': { key: 'manual',         badge: 'text-bg-info' },
+        'Pending':             { key: 'pending',        badge: 'text-bg-secondary' },
+        'Ok':                  { key: 'ok',             badge: 'text-bg-success' }
+    };
+    var KPIS = [
+        { key: 'missing_fepweb', st: 'Missing FepWeb',      cls: 'cfm-k-mfep',    icon: 'ti-file-alert' },
+        { key: 'missing_athena', st: 'Missing Athena',      cls: 'cfm-k-math',    icon: 'ti-database-off' },
+        { key: 'duplicated',     st: 'Duplicated',          cls: 'cfm-k-dup',     icon: 'ti-copy' },
+        { key: 'manual',         st: 'Manual Confirmation', cls: 'cfm-k-manual',  icon: 'ti-writing-sign' },
+        { key: 'pending',        st: 'Pending',             cls: 'cfm-k-pending', icon: 'ti-clock-exclamation' },
+        { key: 'ok',             st: 'Ok',                  cls: 'cfm-k-ok',      icon: 'ti-circle-check' },
+        // O Total vem por ÚLTIMO, com a cor da marca, e é a SOMA dos cards
+        // acima — uma segunda contagem divergiria no primeiro caso de borda.
+        { key: 'total', cls: 'cfm-k-total', icon: 'ti-sum', soma: true }
+    ];
+
+    // As colunas de DADO, na ordem da tela: Status, [Actions], Comments e os
+    // outputs. `name` é a chave da linha (a mesma do `columns` do servidor).
+    var NUM2 = { 'Quantity': 1, 'Other Quantity': 1 };
+    var COLS = {{ CFM_COLS | tojson }};
+    // Posição na TABELA: 0 = checkbox, 1 = Status, 2 = Actions, 3… = o resto.
+    function colIndex(name) {
+        var i = -1;
+        COLS.forEach(function (c, k) { if (c.name === name) { i = k; } });
+        return i < 0 ? -1 : (i === 0 ? 1 : i + 2);
+    }
+    var IDX_ACTIONS = 2;
+
+    function fmt2(v) {
+        return (typeof v === 'number' && isFinite(v))
+            ? v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '';
+    }
+    // Taxa NÃO é valor: o Strike fica com as casas que tem.
+    function fmtRate(v) {
+        return (typeof v === 'number' && isFinite(v))
+            ? v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 8 }) : '';
+    }
+
+    function badge(st) {
+        var m = STATUS[st];
+        return '<span class="badge rounded-pill ' + (m ? m.badge : 'text-bg-secondary') +
+               ' bg-gradient">' + esc(st) + '</span>';
+    }
+
+    function actionsHtml(key, editando) {
+        if (!editando) {
+            return '<div class="d-flex justify-content-center gap-1">' +
+                '<button class="btn btn-info btn-sm ops-row-act" data-cfm-edit="' + esc(key) + '" ' +
+                'data-bs-toggle="tooltip" data-bs-custom-class="tooltip-info" data-bs-title="' +
+                esc(t('editComment')) + '"><i class="ti ti-edit"></i></button></div>';
+        }
+        return '<div class="d-flex justify-content-center gap-1">' +
+            '<button class="btn btn-success btn-sm ops-row-act" data-cfm-save="' + esc(key) + '" ' +
+            'data-bs-toggle="tooltip" data-bs-custom-class="tooltip-success" data-bs-title="' +
+            esc(t('save')) + '"><i class="ti ti-device-floppy"></i></button>' +
+            '<button class="btn btn-secondary btn-sm ops-row-act" data-cfm-cancel="' + esc(key) + '" ' +
+            'data-bs-toggle="tooltip" data-bs-custom-class="tooltip-secondary" data-bs-title="' +
+            esc(t('cancel')) + '"><i class="ti ti-x"></i></button></div>';
+    }
+
+    function dataCol(c) {
+        return {
+            data: function (r) { var v = r[c.name]; return v == null ? '' : v; },
+            className: c.cls || '', visible: !hidden[c.name],
+            render: function (v, type) {
+                if (type !== 'display') { return v; }
+                if (c.name === 'Status') { return badge(v); }
+                if (NUM2[c.name]) { return fmt2(v); }
+                if (c.name === 'Strike') { return fmtRate(v); }
+                if (c.cls === 'cfm-ell' || c.name === COMMENT_COL) {
+                    return '<span title="' + esc(v) + '">' + esc(v) + '</span>';
+                }
+                return esc(v);
+            }
+        };
+    }
+
+    function rowIndexOf(key) {
+        var achado = null;
+        if (!table) { return null; }
+        table.rows().every(function (i) {
+            if (achado === null && String(this.data().key) === String(key)) { achado = i; }
+        });
+        return achado;
+    }
+
+    // Redesenha as DUAS células da linha (Actions e Comments) sem `draw()`:
+    // um redraw tiraria a linha de debaixo do dedo de quem está editando.
+    function renderRow(key, editando) {
+        var i = rowIndexOf(key);
+        if (i === null) { return; }
+        var d = table.row(i).data();
+        $(table.cell(i, IDX_ACTIONS).node()).html(actionsHtml(key, editando));
+        var cel = table.cell(i, colIndex(COMMENT_COL));
+        if (editando) {
+            $(cel.node()).html('<input type="text" class="form-control form-control-sm cfm-comment-input" ' +
+                'placeholder="' + esc(t('commentPh')) + '" value="' + esc(d[COMMENT_COL] || '') + '">');
+            $(cel.node()).find('input').trigger('focus');
+        } else {
+            cel.invalidate('data');
+            $(cel.node()).html(cel.render('display'));
+        }
+    }
+
+    function desenha() {
+        var rows = bucket ? dados.filter(function (r) { return r.Status === bucket; }) : dados;
+        if (table) { table.destroy(); $('#cfm-table tbody').empty(); }
+        editingKey = null;
+
+        var columns = [{
+            data: null, orderable: false, searchable: false, className: 'cfm-noexp',
+            render: function (d, type, r) {
+                return type === 'display'
+                    ? '<input type="checkbox" class="form-check-input cfm-pick" value="' + esc(r.key) + '"' +
+                      (picked[r.key] ? ' checked' : '') + '>' : '';
+            }
+        }, dataCol(COLS[0]), {
+            data: null, orderable: false, searchable: false, className: 'cfm-noexp cfm-acts',
+            render: function (d, type, r) { return type === 'display' ? actionsHtml(r.key, false) : ''; }
+        }].concat(COLS.slice(1).map(dataCol));
+
+        // A linha de filtro é a 2ª do <thead> ANTES do `.DataTable()`, com
+        // `orderCellsTop` — no `initComplete` ela cairia no thead escondido.
+        table = $('#cfm-table').DataTable({
+            data: rows, columns: columns,
+            paging: true, pageLength: parseInt($('#cfm-len').val(), 10) || 50,
+            lengthChange: false, searching: true, info: true,
+            dom: "rt<'d-md-flex justify-content-between align-items-center mt-2'ip>",
+            orderCellsTop: true, scrollX: true, autoWidth: true,
+            order: [],                       // a ordem do servidor é a da gravidade
+            language: { emptyTable: t('empty') }
+        });
+        // Com `scrollX` a delegação é no CONTAINER da tabela (§462): é no CLONE
+        // do cabeçalho que a pessoa digita.
+        $(table.table().container()).off('keyup.cfm change.cfm')
+            .on('keyup.cfm change.cfm', '.cfm-filters input[type=text]', function () {
+                var i = parseInt($(this).data('col'), 10);
+                var v = String(this.value || '');
+                if (v.trim().toLowerCase() === 'blank') {
+                    table.column(i).search('^\\s*$', true, false).draw();
+                } else {
+                    table.column(i).search(v).draw();
+                }
+            })
+            .off('click.cfm').on('click.cfm', '#cfmAll', function () {
+                var on = this.checked;
+                table.rows({ search: 'applied' }).every(function () {
+                    var k = this.data().key;
+                    if (on) { picked[k] = true; } else { delete picked[k]; }
+                });
+                $('#cfm-table .cfm-pick').prop('checked', on);
+            });
+        table.on('draw.cfm', function () { table.columns.adjust(); });
+        table.columns.adjust();
+        setTimeout(function () { table.columns.adjust().draw(false); }, 150);
+        $(window).off('resize.cfm').on('resize.cfm', function () { table.columns.adjust(); });
+        if (window.otcCellCopy) { otcCellCopy('#cfm-table', { skip: [0, IDX_ACTIONS] }); }
+        botoes();
+        menuColunas();
+    }
+
+    function refFlat() { return String($('#cfm-date').val() || '').replace(/-/g, ''); }
+    // O nome do arquivo é o do DOCUMENTO: tela + data de referência AAAAMMDD.
+    function expName() { return 'Conf Matching ' + refFlat(); }
+
+    function botoes() {
+        var comuns = {
+            title: function () { return 'Conf. Matching ' + ($('#cfm-date-display').val() || ''); },
+            filename: expName,
+            exportOptions: {
+                columns: ':visible:not(.cfm-noexp)',
+                // Com linhas marcadas, exporta SÓ as marcadas; sem nenhuma, tudo
+                // o que os filtros deixam passar.
+                rows: function (idx, data) {
+                    return !Object.keys(picked).length || !!picked[data.key];
+                },
+                modifier: { page: 'all', search: 'applied', order: 'applied' }
+            }
+        };
+        new $.fn.dataTable.Buttons(table, { buttons: [
+            $.extend({ extend: 'copyHtml5', name: 'copy' }, comuns),
+            $.extend({ extend: 'csvHtml5', name: 'csv', fieldSeparator: ';', bom: true }, comuns),
+            $.extend({ extend: 'excelHtml5', name: 'excel' }, comuns),
+            $.extend({ extend: 'print', name: 'print' }, comuns),
+            $.extend({ extend: 'pdfHtml5', name: 'pdf', orientation: 'landscape', pageSize: 'A3' }, comuns)
+        ] });
+        $('#cfm-export-menu').off('click.cfm').on('click.cfm', 'a[data-exp]', function (e) {
+            e.preventDefault();
+            table.button($(this).data('exp') + ':name').trigger();
+        });
+        if (window.otcExportAdvanced) {
+            // O endpoint do intervalo é o MESMO que a tela consulta para um dia.
+            otcExportAdvanced('#cfm-table', {
+                name: 'Conf Matching', skip: [0, IDX_ACTIONS], menu: '#cfm-export-menu',
+                daily: { url: '/api/reconciliation-conf-matching/data', param: 'recon_date' }
+            });
+        }
+    }
+
+    function menuColunas() {
+        $('#cfm-cols-menu').html(COLS.map(function (c) {
+            return '<label class="dropdown-item d-flex align-items-center gap-2 mb-0">' +
+                '<input type="checkbox" class="form-check-input m-0" data-colname="' + esc(c.name) + '"' +
+                (hidden[c.name] ? '' : ' checked') + '> ' + esc(c.name) + '</label>';
+        }).join(''));
+    }
+    $(document).on('change', '#cfm-cols-menu input[data-colname]', function () {
+        var n = $(this).data('colname');
+        if (this.checked) { delete hidden[n]; } else { hidden[n] = true; }
+        if (table) { table.column(colIndex(n)).visible(this.checked); table.columns.adjust(); }
+    });
+
+    function kpis() {
+        // Os números saem das LINHAS que a tela tem — é o que se está vendo.
+        var counts = {};
+        dados.forEach(function (r) {
+            var m = STATUS[r.Status];
+            if (m) { counts[m.key] = (counts[m.key] || 0) + 1; }
+        });
+        $('#cfm-kpis').html(KPIS.map(function (k) {
+            var n = k.soma ? dados.length : (counts[k.key] || 0);
+            return '<div class="col-6 col-md-4 col-xl">' +
+                '<div class="cfm-kpi ' + k.cls + (!k.soma && bucket === k.st ? ' cfm-on' : '') +
+                  '" data-b="' + esc(k.soma ? '' : k.st) + '">' +
+                  '<span class="cfm-kpi__ico"><i class="ti ' + k.icon + '"></i></span>' +
+                  '<div><div class="cfm-kpi__n">' + esc(n) + '</div>' +
+                       '<div class="cfm-kpi__l">' + esc(t(k.key)) + '</div></div>' +
+                '</div></div>';
+        }).join(''));
+    }
+
+    function pinta(j) {
+        dados = j.rows || [];
+        picked = {};
+        kpis();
+        var fi = j.fep_info || {}, ai = j.athena_info || {};
+        $('#cfm-src').html(j.fep_file
+            ? '<div><i class="ti ti-mail"></i> ' + esc(t('fep')) + ': <code>' + esc(j.fep_file) + '</code></div>' +
+              '<div><i class="ti ti-table"></i> FepWeb: ' + esc(j.fep_count || 0) + ' ' + esc(t('ops')) +
+                  ' (' + esc(fi.canceladas || 0) + ' ' + esc(t('cancelled')) + ', ' +
+                  esc(fi.outras_datas || 0) + ' ' + esc(t('otherDates')) + ')' +
+              ' · Athena: ' + esc(j.athena_count || 0) + ' ' + esc(t('ops')) +
+                  ' (' + esc(ai.canceladas || 0) + ' ' + esc(t('cancelled')) + ', ' +
+                  esc(ai.internas || 0) + ' ' + esc(t('internal')) + ')</div>' +
+              (j.generated_at ? '<div>' + esc(t('at')) + ' ' + esc(j.generated_at) + '</div>' : '')
+            : '');
+        $('#cfm-warnings').html((j.warnings || []).length
+            ? '<div class="cfm-warn">' + (j.warnings || []).map(function (w) {
+                  return '<div>• ' + esc(w) + '</div>'; }).join('') + '</div>'
+            : '');
+        if (j.ref) {
+            $('#cfm-date').val(j.ref);
+            $('#cfm-date-display').val(j.ref_fmt || '');
+        }
+        desenha();
+    }
+
+    function carrega() {
+        var d = $('#cfm-date').val() || '';
+        fetch('/api/reconciliation-conf-matching/data' + (d ? '?recon_date=' + encodeURIComponent(d) : ''),
+              { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (j) { if (j && j.success) { pinta(j); } });
+    }
+
+    $('#cfm-run').on('click', function () {
+        var d = $('#cfm-date').val() || '';
+        if (window.Swal) {
+            Swal.fire({ title: t('run'), html: esc(t('runTxt')), allowOutsideClick: false,
+                        allowEscapeKey: false, showConfirmButton: false,
+                        didOpen: function () { Swal.showLoading(); } });
+        }
+        fetch('/reconciliation-conf-matching/run', {
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ recon_date: d })
+        }).then(function (r) { return r.json(); }).then(function (j) {
+            if (window.Swal) { Swal.close(); }
+            if (!j || !j.success) { throw new Error((j && j.error) || 'error'); }
+            bucket = '';
+            pinta(j);
+            if (window.Swal) {
+                Swal.fire({ icon: 'success', title: t('done'),
+                            html: esc((j.rows || []).length + ' · ' + (j.ref_fmt || '')),
+                            timer: 1600, showConfirmButton: false });
+            }
+        }).catch(function (e) {
+            if (window.Swal) {
+                // A mensagem leva o MOTIVO (§476): SSO, timeout, relatório ausente.
+                Swal.fire({ icon: 'error', title: t('runFail'), html: esc(String(e && e.message || e)),
+                            confirmButtonColor: '#0066cc' });
+            }
+        });
+    });
+
+    // ── Comentário: o Edit habilita SÓ a célula de comentário ───────────────
+    $(document).on('click', '[data-cfm-edit]', function () {
+        var key = $(this).attr('data-cfm-edit');
+        if (editingKey && editingKey !== key) { renderRow(editingKey, false); }
+        editingKey = key;
+        renderRow(key, true);
+    });
+    $(document).on('click', '[data-cfm-cancel]', function () {
+        var key = $(this).attr('data-cfm-cancel');
+        editingKey = null;
+        renderRow(key, false);
+    });
+    $(document).on('keydown', '.cfm-comment-input', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); $('[data-cfm-save]').first().trigger('click'); }
+        if (e.key === 'Escape') { e.preventDefault(); $('[data-cfm-cancel]').first().trigger('click'); }
+    });
+    $(document).on('click', '[data-cfm-save]', function () {
+        var key = $(this).attr('data-cfm-save');
+        var txt = String($('.cfm-comment-input').first().val() || '').trim();
+        var i = rowIndexOf(key);
+        if (i === null) { editingKey = null; return; }
+        fetch('/reconciliation-conf-matching/comment', {
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ key: key, comment: txt })
+        }).then(function (r) { return r.json(); }).then(function (j) {
+            if (!j || !j.success) { throw new Error((j && j.error) || ''); }
+            // A tela muda DEPOIS do sucesso do servidor, e com o texto que ELE gravou.
+            table.row(i).data()[COMMENT_COL] = j.comment;
+            editingKey = null;
+            renderRow(key, false);
+        }).catch(function (e) {
+            if (window.Swal) {
+                Swal.fire({ icon: 'error', title: t('saveFail'), html: esc(String(e && e.message || '')),
+                            confirmButtonColor: '#0066cc' });
+            }
+        });
+    });
+
+    $(document).on('change', '#cfm-table .cfm-pick', function () {
+        if (this.checked) { picked[this.value] = true; } else { delete picked[this.value]; }
+    });
+
+    // Tooltip colorido, DELEGADO no primeiro hover: os <td> são reescritos a
+    // cada redraw, e instanciar no load pegaria só a primeira página.
+    $(document).on('mouseenter', '#cfm-page [data-bs-toggle="tooltip"]', function () {
+        if (window.bootstrap && !bootstrap.Tooltip.getInstance(this)) {
+            new bootstrap.Tooltip(this, { trigger: 'hover' }).show();
+        }
+    });
+    $(document).on('click', '#cfm-page [data-bs-toggle="tooltip"]', function () {
+        var inst = window.bootstrap && bootstrap.Tooltip.getInstance(this);
+        if (inst) { inst.dispose(); }
+    });
+
+    // Clicar no card filtra a tabela; clicar de novo tira o filtro.
+    $(document).on('click', '#cfm-kpis .cfm-kpi', function () {
+        var b = String($(this).data('b') || '');
+        bucket = (bucket === b) ? '' : b;
+        kpis();
+        desenha();
+    });
+
+    $('#cfm-len').on('change', function () {
+        var n = parseInt(this.value, 10);
+        if (table) { table.page.len(n).draw(); }
+    });
+
+    $('#cfm-clear').on('click', function () {
+        // As DUAS cópias do cabeçalho: o clone do `scrollX` é o que se vê (§462).
+        var $cab = table ? $(table.table().container()) : $('#cfm-table');
+        $cab.find('.cfm-filters input').val('');
+        bucket = '';
+        if (table) { table.search('').columns().search(''); }
+        kpis();
+        desenha();
+    });
+
+    $('#cfm-date').on('change', function () {
+        // O texto é o que se lê; o nativo é só o calendário.
+        var v = this.value || '';
+        $('#cfm-date-display').val(v ? v.split('-').reverse().join('/') : '');
+        bucket = '';
+        carrega();
+    });
+
+    $(carrega);
+})(jQuery);
+</script>
+{% endblock extra_javascript %}
