@@ -8709,6 +8709,7 @@ _ndf_flat = _pf_nd._ndf_flat
 _fxo_internal_cpty_upgrade = _pf_nd._fxo_internal_cpty_upgrade
 _fxo_book_disregard_upgrade = _pf_nd._fxo_book_disregard_upgrade
 _ndf_weak_leg = _pf_nd._ndf_weak_leg
+_ndf_notional_leg = _pf_nd._ndf_notional_leg
 _ndf_le_from_location = _pf_nd._ndf_le_from_location
 _ndf_le_from_accronym = _pf_nd._ndf_le_from_accronym
 _ndf_le_accronyms = _pf_nd._ndf_le_accronyms

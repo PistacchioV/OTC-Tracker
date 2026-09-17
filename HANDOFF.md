@@ -20952,3 +20952,48 @@ Dois pedidos da mesa sobre o documento da MGT (`ndf-mgt-strike-me.html`,
 
 Teste: `check_mgt_conf` §3 (Nº = Deal nas duas famílias, título sem Nº,
 painel sem o campo, rótulo do editor).
+
+## §485 — NDF: o notional é SEMPRE o da moeda que não é BRL nem USD (2026-09-17)
+
+Um USD/BRL da API chegou à tela como **BRL Fixed**, com o notional em reais:
+a Athena tinha bookado a `Quantity` na perna do BRL (Quantity = 6.209.969,72
+BRR, Other Quantity = 1.207.484,05 USB). A regra do §483 (notional na perna
+fraca, só no cross) não alcançava o par contra BRL, que ficava como bookado —
+e a mesa disse que não deveria: **o notional do NDF é sempre o da moeda que
+não é BRL nem USD**. Com BRL no par, a outra perna (USD/BRL → USD, CNH/BRL →
+CNH); sem BRL, a que não é USD (USD/CNH → CNH). Isto SUBSTITUI o "contra BRL
+nada muda" do §483.
+
+`_ndf_notional_leg(qty_ccy, other_ccy)` responde `'qty'`/`'other'`/`None`
+(as duas iguais, ou nenhuma é BRL/USD — MXN/CLP fica como bookado), e o
+import move o notional para a `OTHER QUANTITY` quando a perna é a Other, com
+as moedas trocadas e o sinal da Quantity; sem Other Quantity na resposta,
+fica como veio. Consequência: `IsBRRFixed` deixa de nascer da API (a
+Quantity Currency nunca é BRL) — o campo 55 e a troca Moeda de Referência ×
+Cotada do arquivo só entram por edição manual.
+
+**A direção é da moeda do notional, e quem a diz são `Pay CCY`/`Rec CCY`**
+(segunda rodada, mesma data): recebemos a moeda do notional → compra;
+pagamos → venda. É a única leitura que não depende de saber a que perna o
+`Type` se refere — o registro da mesa vinha com `Type = Buy`, `Pay CCY = USB`,
+`Rec CCY = BRR`, e com o notional em USD isso é VENDA de USD. Sem os dois
+campos (ou sem a moeda do notional entre eles, ou iguais), fica o `Type`:
+virado quando o notional trocou de perna num par sem BRL (comprar USD contra
+CNH é vender CNH), sem virar no par contra BRL (o arquivo do BRL fixed sempre
+leu o `Type` contra a moeda estrangeira). Mover o notional para o USD num
+USD/BRL muda só o Valor Base (o USD) e o campo 55 (em branco).
+
+A inversão do Rate pela moeda fraca (`_ndf_weak_leg`) não mudou: é do par.
+
+Um ponto do registro da mesa, deixado aqui porque pode voltar: no JSON que
+ela mandou, `Quantity` 6.209.969,72 ÷ `Other Quantity` 1.207.484,05 = 5,1429 =
+Strike — pela aritmética a Quantity É o valor em BRL e a Other o USD, mas o
+rótulo dizia `Quantity Currency = USB`. A regra aqui confia nos RÓTULOS da
+API (`Quantity Currency`/`Other Quantity Units`), que é tudo o que o import
+tem; se a Athena rotular ao contrário do valor, o notional sai com o número
+da perna errada, e a tela é o lugar onde se vê.
+
+Teste: `check_weak_ccy_rate` §2b (a regra da perna, o USD/BRL da mesa nos
+dois arranjos, Pay/Rec decidindo a posição nos dois sentidos e calando quando
+não falam da moeda do notional, o CNH/BRL, o USD/CNH nos dois arranjos, a
+resposta sem Other Quantity).
