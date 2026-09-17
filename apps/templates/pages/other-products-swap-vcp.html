@@ -371,6 +371,13 @@
                 </div>
                 <div class="d-flex align-items-center gap-2 btn-toolbar-all">
                     <div class="vcpExportWrapper"></div>
+                    <!-- Email Validation: as linhas contra instituição financeira vão
+                         por e-mail para outro integrante do time conferir o fator; com
+                         Lawton/Atacama numa das pontas, o arquivo do fundo vai anexo.
+                         Age sobre as marcadas — sem nenhuma marcada, sobre a página. -->
+                    <button class="btn btn-sm btn-soft-primary" type="button" id="vcpEmailValidation">
+                        <i class="ti ti-mail-check me-1"></i><span data-lang="sc-vcp-email-validation">Email Validation</span>
+                    </button>
                     <!-- O Clear filters do card de cima limpa os chips E a linha de
                          filtro da PRIMEIRA tabela; esta tem a linha de filtro dela e
                          não tinha como limpar, coluna por coluna, a não ser apagando
@@ -470,6 +477,62 @@
   var KEYS = ['vbr', 'pct', 'tipo', 'amortizado', 'juros_p', 'diff_p', 'juros_c', 'diff_c', 'fator_p', 'fator_c'];
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (m) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]; }); }
+  // Os avisos do Email Validation saem por CÓDIGO no idioma do sistema: o servidor
+  // manda {code, params, error} e o texto de lá é só o fallback.
+  var _TRANS = {
+    en: { ev_title: 'Send validation e-mail?',
+          ev_text: '{n} contract(s) against financial institutions — {f} with an internal fund (Lawton/Atacama), whose view file goes attached.',
+          ev_done: 'Validation requested', ev_rows: '{n} contract(s) sent for validation.',
+          ev_attached: 'Attached', ev_skipped: '{n} client contract(s) left out.',
+          ev_tip_if: 'Financial institution — the factor needs validation',
+          ev_tip_fund: 'Financial institution + internal fund ({funds}) — validation with the fund file attached',
+          e_title: 'Not sent', e_request: 'Request failed',
+          e_no_rows: 'There is no contract to validate.',
+          e_no_if_rows: 'None of the {n} contract(s) is against a financial institution — nothing to validate.',
+          e_blocked: 'These contracts cannot be validated yet:',
+          e_fi_template: 'File Interpreter template missing/invalid — check /file-interpreter.' },
+    br: { ev_title: 'Enviar e-mail de validação?',
+          ev_text: '{n} contrato(s) contra instituição financeira — {f} com fundo interno (Lawton/Atacama), cujo arquivo da visão vai anexo.',
+          ev_done: 'Validação solicitada', ev_rows: '{n} contrato(s) enviados para validação.',
+          ev_attached: 'Anexo', ev_skipped: '{n} contrato(s) de cliente ficaram de fora.',
+          ev_tip_if: 'Instituição financeira — o fator precisa de validação',
+          ev_tip_fund: 'Instituição financeira + fundo interno ({funds}) — validação com o arquivo do fundo anexo',
+          e_title: 'Não enviado', e_request: 'Falha na requisição',
+          e_no_rows: 'Não há contrato para validar.',
+          e_no_if_rows: 'Nenhum dos {n} contrato(s) é contra instituição financeira — nada a validar.',
+          e_blocked: 'Estes contratos ainda não podem ser validados:',
+          e_fi_template: 'Template do File Interpreter ausente/inválido — confira o /file-interpreter.' },
+    es: { ev_title: '¿Enviar correo de validación?',
+          ev_text: '{n} contrato(s) contra instituciones financieras — {f} con fondo interno (Lawton/Atacama), cuyo archivo de la visión va adjunto.',
+          ev_done: 'Validación solicitada', ev_rows: '{n} contrato(s) enviados para validación.',
+          ev_attached: 'Adjunto', ev_skipped: '{n} contrato(s) de cliente quedaron fuera.',
+          ev_tip_if: 'Institución financiera — el factor necesita validación',
+          ev_tip_fund: 'Institución financiera + fondo interno ({funds}) — validación con el archivo del fondo adjunto',
+          e_title: 'No enviado', e_request: 'Falló la solicitud',
+          e_no_rows: 'No hay contrato para validar.',
+          e_no_if_rows: 'Ninguno de los {n} contrato(s) es contra una institución financiera — nada que validar.',
+          e_blocked: 'Estos contratos aún no se pueden validar:',
+          e_fi_template: 'Plantilla del File Interpreter ausente/inválida — revise /file-interpreter.' }
+  };
+  function lang() { try { return localStorage.getItem('__OTC_TRACKER_LANG__') || 'en'; } catch (e) { return 'en'; } }
+  function t(k, params) {
+    var tpl = (_TRANS[lang()] || _TRANS.en)[k] || _TRANS.en[k] || k;
+    return String(tpl).replace(/\{(\w+)\}/g, function (m, p) { return (params && params[p] != null) ? String(params[p]) : ''; });
+  }
+  function errText(d) {
+    var known = d && d.code && ((_TRANS[lang()] || {})['e_' + d.code] || _TRANS.en['e_' + d.code]);
+    var txt = known ? t('e_' + d.code, d.params) : String((d && d.error) || '');
+    return (d && d.problems) ? txt + '\n' + d.problems.join('\n') : txt;
+  }
+  // A marca ao lado da contraparte: a linha que PEDE validação (IF) e a que pede
+  // com o arquivo do fundo. Só ícone + title — o texto da célula (e o export)
+  // segue sendo o nome.
+  function valMark(v) {
+    if (!v || !v.scenario) return '';
+    var fund = v.scenario === 'if_fund';
+    return ' <i class="ti ' + (fund ? 'ti-mail-plus text-warning' : 'ti-mail-check text-primary') + '" title="' +
+      esc(fund ? t('ev_tip_fund', { funds: (v.funds || []).join(' / ') }) : t('ev_tip_if')) + '"></i>';
+  }
   function n2(v) { return (v == null || v === '') ? '' : Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
   function n4(v) { return (v == null || v === '') ? '' : Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 }); }
   function f8(v) { return (v == null || v === '') ? '' : Number(v).toFixed(8); }
@@ -530,7 +593,7 @@
         '<input type="checkbox" class="form-check-input vcp-row-check" data-i="' + i + '">',
         '<div class="d-flex justify-content-center gap-1"><a class="btn btn-info btn-sm sc-row-act vcp-act" data-i="' + i + '" href="#" title="Edit"><i class="ti ti-edit"></i></a></div>',
         pill(f.status),
-        esc(f.internal_id || f.athena_id || '') + miss, esc(f.lob || ''), esc(f.contrato), esc(f.contraparte),
+        esc(f.internal_id || f.athena_id || '') + miss, esc(f.lob || ''), esc(f.contrato), esc(f.contraparte) + valMark(f.validation),
         cell('vbr', n2(f.vbr)), cell('pct', n4(f.pct)), cell('tipo', f.tipo), cell('amortizado', n2(f.amortizado)),
         // As duas Diff B3 saem "-" quando não há número, como as colunas de
         // Fator: célula vazia se lê como "faltou digitar", e aqui a ausência é
@@ -683,6 +746,41 @@
   };
   var bulk = document.getElementById('vcpBulkSend');
   if (bulk) bulk.addEventListener('click', function () { send(selectedContracts()); });
+
+  // ── Email Validation ──
+  // Sobre as marcadas; sem nenhuma marcada, sobre a página inteira. A contagem
+  // do diálogo sai do `validation` de cada linha — o MESMO campo que o servidor
+  // filtra —, então o que a tela promete é o que o e-mail leva.
+  function emailValidation() {
+    var sel = selectedContracts();
+    var alvo = FACTORS.filter(function (f) { return !sel.length || sel.indexOf(f.contrato) >= 0; });
+    var ifs = alvo.filter(function (f) { return f.validation && f.validation.scenario; });
+    if (!ifs.length) {
+      Swal.fire({ title: t('e_title'), text: t(alvo.length ? 'e_no_if_rows' : 'e_no_rows', { n: alvo.length }),
+                  icon: 'info', confirmButtonText: 'OK', confirmButtonColor: '#0066cc' });
+      return;
+    }
+    var funds = ifs.filter(function (f) { return f.validation.scenario === 'if_fund'; }).length;
+    Swal.fire({ title: t('ev_title'), text: t('ev_text', { n: ifs.length, f: funds }),
+      icon: 'question', showCancelButton: true, confirmButtonText: '<i class="ti ti-mail-check"></i>', cancelButtonText: '<i class="ti ti-x"></i>',
+      confirmButtonColor: '#0066cc', cancelButtonColor: '#6c757d' })
+    .then(function (r) {
+      if (!r.isConfirmed) return;
+      postJSON('/api/other-products-swap-vcp/email-validation', { date: DATE, contracts: sel }).then(function (x) {
+        if (!x.ok || !x.d.success) {
+          Swal.fire({ title: t('e_title'), text: errText(x.d), icon: 'error', confirmButtonText: 'OK', confirmButtonColor: '#dc3545' });
+          return;
+        }
+        var html = esc(t('ev_rows', { n: (x.d.contracts || []).length })) +
+          ((x.d.attached || []).length ? '<div style="margin-top:8px;font-size:.85em"><b>' + esc(t('ev_attached')) + ':</b> <span style="font-family:monospace">' + esc(x.d.attached.join(', ')) + '</span></div>' : '') +
+          (x.d.skipped ? '<div style="margin-top:6px;font-size:.82em;color:#6c757d">' + esc(t('ev_skipped', { n: x.d.skipped })) + '</div>' : '');
+        if (window.fetchNotifications) window.fetchNotifications();
+        Swal.fire({ title: t('ev_done'), html: html, icon: 'success', confirmButtonText: 'OK', confirmButtonColor: '#0066cc' });
+      }).catch(function (e) { Swal.fire({ title: t('e_request'), text: e.message, icon: 'error', confirmButtonText: 'OK', confirmButtonColor: '#dc3545' }); });
+    });
+  }
+  var evBtn = document.getElementById('vcpEmailValidation');
+  if (evBtn) evBtn.addEventListener('click', emailValidation);
 
   // ── Edit (modal) ──
   var modalEl = document.getElementById('vcpModal');

@@ -24,6 +24,7 @@ from datetime import datetime
 
 from apps.pages.features.other_products import domain
 from apps.pages.features.other_products.infra import persistence
+from apps.pages.platform import email_validation as _ev
 from apps.pages.platform import swap_flows as _sf
 
 
@@ -366,5 +367,9 @@ def vcp_factor_rows(ref, rows=None, ci=None):
         dif, veredito = domain.diferenca_liquidacao(interno, vcp_liq)
         item.update({'interno': interno, 'vcp_liq': vcp_liq,
                      'diferenca': dif, 'veredito': veredito})
+        # O cenário do Email Validation ('' | 'if' | 'if_fund'), pela CONTA: a
+        # tela marca a linha que pede validação e o comando filtra pelo mesmo
+        # campo — uma resposta só para os dois.
+        item['validation'] = _ev.scenario(item['conta_p'], item['conta_c'])
         out.append(item)
     return out

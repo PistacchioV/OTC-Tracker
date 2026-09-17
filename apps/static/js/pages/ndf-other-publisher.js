@@ -23,12 +23,17 @@
   var DELETE_API = '/api/ndf-other-publisher/row/delete';
   var SEND_API = '/api/ndf-other-publisher/send';
   var PREVIEW_API = '/api/ndf-other-publisher/row/preview';
+  var VALIDATION_API = '/api/ndf-other-publisher/email-validation';
   var dt = null;
   var COLS = [];
   var CURRENT_ROWS = [];       // last-loaded rows (each: [...data..., status, maker, checker, id])
   var EDIT_ID = null;
+  var VALIDATION = {};         // id → {scenario, funds}: o cenário do Email Validation por linha
 
-  var LANG = (localStorage.getItem('language') || 'en').toLowerCase();
+  // A chave do I18nManager é `__OTC_TRACKER_LANG__`; `language` não é gravada por
+  // ninguém, e lendo só ela a tela saía sempre em inglês.
+  var LANG = 'en';
+  try { LANG = (localStorage.getItem('__OTC_TRACKER_LANG__') || localStorage.getItem('language') || 'en').toLowerCase(); } catch (e) {}
   var _TRANS = {
     en: { ok: 'OK', pending: 'Pending', newst: 'New', confirm: 'Confirm', edit: 'Edit', del: 'Delete',
           confirmed: 'Confirmed', saved: 'Saved', deleted: 'Deleted', err: 'Action failed.',
@@ -36,27 +41,82 @@
           yes: 'Yes, delete', cancel: 'Cancel',
           send: 'Send', sendTitle: 'Send to Conecta?',
           sendText: '{n} row(s) will be written to the Batch Conecta file.',
-          yesSend: 'Yes, send', sentOk: 'Sent' },
+          yesSend: 'Yes, send', sentOk: 'Sent',
+          evTitle: 'Send validation e-mail?',
+          evText: '{n} row(s) against financial institutions — {f} with an internal fund, whose view file goes attached.',
+          evYes: 'Yes, send', evDone: 'Validation requested', evRows: '{n} row(s) sent for validation.',
+          evAttached: 'Attached', evSkipped: '{n} client row(s) left out.',
+          evTipIf: 'Financial institution — the rate needs validation',
+          evTipFund: 'Financial institution + internal fund ({funds}) — validation with the fund file attached',
+          e_title: 'Not sent',
+          e_no_rows: 'There is no row to validate.',
+          e_no_if_rows: 'None of the {n} row(s) is against a financial institution — nothing to validate.',
+          e_rate_missing: 'TX PARIDADE missing/invalid: {ids}',
+          e_fi_template: 'File Interpreter template missing/invalid — check /file-interpreter.',
+          w_fund_without_file: 'No fund view file could be generated for: {ids} — submit that side manually.' },
     br: { ok: 'OK', pending: 'Pendente', newst: 'Novo', confirm: 'Confirmar', edit: 'Editar', del: 'Excluir',
           confirmed: 'Confirmado', saved: 'Salvo', deleted: 'Excluído', err: 'Falha na ação.',
           delTitle: 'Excluir linha?', delText: 'Esta linha será ocultada da página.',
           yes: 'Sim, excluir', cancel: 'Cancelar',
           send: 'Enviar', sendTitle: 'Enviar para o Conecta?',
           sendText: '{n} linha(s) serão gravadas no arquivo do Batch Conecta.',
-          yesSend: 'Sim, enviar', sentOk: 'Enviado' },
+          yesSend: 'Sim, enviar', sentOk: 'Enviado',
+          evTitle: 'Enviar e-mail de validação?',
+          evText: '{n} linha(s) contra instituição financeira — {f} com fundo interno, cujo arquivo da visão vai anexo.',
+          evYes: 'Sim, enviar', evDone: 'Validação solicitada', evRows: '{n} linha(s) enviadas para validação.',
+          evAttached: 'Anexo', evSkipped: '{n} linha(s) de cliente ficaram de fora.',
+          evTipIf: 'Instituição financeira — a taxa precisa de validação',
+          evTipFund: 'Instituição financeira + fundo interno ({funds}) — validação com o arquivo do fundo anexo',
+          e_title: 'Não enviado',
+          e_no_rows: 'Não há linha para validar.',
+          e_no_if_rows: 'Nenhuma das {n} linha(s) é contra instituição financeira — nada a validar.',
+          e_rate_missing: 'TX PARIDADE ausente/inválida: {ids}',
+          e_fi_template: 'Template do File Interpreter ausente/inválido — confira o /file-interpreter.',
+          w_fund_without_file: 'Não foi possível gerar o arquivo da visão do fundo para: {ids} — insira essa ponta manualmente.' },
     es: { ok: 'OK', pending: 'Pendiente', newst: 'Nuevo', confirm: 'Confirmar', edit: 'Editar', del: 'Eliminar',
           confirmed: 'Confirmado', saved: 'Guardado', deleted: 'Eliminado', err: 'Acción fallida.',
           delTitle: '¿Eliminar fila?', delText: 'Esta fila se ocultará de la página.',
           yes: 'Sí, eliminar', cancel: 'Cancelar',
           send: 'Enviar', sendTitle: '¿Enviar a Conecta?',
           sendText: '{n} fila(s) se escribirán en el archivo de Batch Conecta.',
-          yesSend: 'Sí, enviar', sentOk: 'Enviado' },
+          yesSend: 'Sí, enviar', sentOk: 'Enviado',
+          evTitle: '¿Enviar correo de validación?',
+          evText: '{n} fila(s) contra instituciones financieras — {f} con fondo interno, cuyo archivo de la visión va adjunto.',
+          evYes: 'Sí, enviar', evDone: 'Validación solicitada', evRows: '{n} fila(s) enviadas para validación.',
+          evAttached: 'Adjunto', evSkipped: '{n} fila(s) de cliente quedaron fuera.',
+          evTipIf: 'Institución financiera — la tasa necesita validación',
+          evTipFund: 'Institución financiera + fondo interno ({funds}) — validación con el archivo del fondo adjunto',
+          e_title: 'No enviado',
+          e_no_rows: 'No hay fila para validar.',
+          e_no_if_rows: 'Ninguna de las {n} fila(s) es contra una institución financiera — nada que validar.',
+          e_rate_missing: 'TX PARIDADE ausente/inválida: {ids}',
+          e_fi_template: 'Plantilla del File Interpreter ausente/inválida — revise /file-interpreter.',
+          w_fund_without_file: 'No se pudo generar el archivo de la visión del fondo para: {ids} — envíe ese lado manualmente.' },
   };
   function t(k) { return (_TRANS[LANG] || _TRANS.en)[k] || _TRANS.en[k]; }
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
     });
+  }
+  // Texto de servidor chega ESTRUTURADO — {code, params, text|error} — e é dito
+  // aqui no idioma de quem usa; o texto de lá é só o fallback.
+  function fill(tpl, params) {
+    return String(tpl).replace(/\{(\w+)\}/g, function (m, k) { return (params && params[k] != null) ? String(params[k]) : ''; });
+  }
+  function msgText(w, prefix) {
+    var tpl = (w && w.code) ? ((_TRANS[LANG] || {})[prefix + w.code] || _TRANS.en[prefix + w.code]) : '';
+    return tpl ? fill(tpl, w.params) : String((w && (w.text || w.error)) || t('err'));
+  }
+  // A marca ao lado do CLIENT: a linha que PEDE validação (IF) e a que pede com
+  // o arquivo do fundo. Só ícone + title — o texto da célula (e o export) segue
+  // sendo o nome.
+  function valMark(id) {
+    var v = VALIDATION[String(id)];
+    if (!v || !v.scenario) return '';
+    var fund = v.scenario === 'if_fund';
+    return ' <i class="ti ' + (fund ? 'ti-mail-plus text-warning' : 'ti-mail-check text-primary') + '" title="' +
+      esc(fund ? fill(t('evTipFund'), { funds: (v.funds || []).join(' / ') }) : t('evTipIf')) + '"></i>';
   }
   function setVal(id, v) { var el = document.getElementById(id); if (el) el.textContent = v; }
 
@@ -121,6 +181,7 @@
         if (!d || !d.success) return;
         setVal('nop-w-total', (d.widgets || {}).total || 0);
         setVal('nop-total-asof', d.ref_date_fmt || '—');
+        VALIDATION = d.validation || {};
         buildTable(d.columns || [], d.rows || []);
       })
       .catch(function () {});
@@ -149,7 +210,7 @@
       var m = metaOf(r);
       return ['<input type="checkbox" class="form-check-input nop-row-check" data-id="' + esc(m.id) + '">',
               actionsHtml(m.id), statusBadge(m.status)]
-        .concat(r.slice(0, COLS.length).map(function (v) { return esc(v); }));
+        .concat(r.slice(0, COLS.length).map(function (v, i) { return esc(v) + (i === 0 ? valMark(m.id) : ''); }));
     });
 
     if (dt) { dt.destroy(); }
@@ -244,6 +305,42 @@
           Swal.fire({ icon: 'error', title: 'OTM', text: (res.body && res.body.error) || t('err') });
         }
       }).catch(function () {});
+    });
+  }
+
+  // ── Email Validation ────────────────────────────────────────────────────────
+  // Sobre as marcadas; sem nenhuma marcada, sobre a página inteira. A contagem
+  // do diálogo sai do `validation` do payload — o MESMO que o servidor filtra.
+  function doEmailValidation() {
+    var sel = checkedIds();
+    var alvo = CURRENT_ROWS.map(function (r) { return String(metaOf(r).id); })
+      .filter(function (id) { return !sel.length || sel.indexOf(id) >= 0; });
+    var ifs = alvo.filter(function (id) { return VALIDATION[id] && VALIDATION[id].scenario; });
+    if (!ifs.length) {
+      Swal.fire({ icon: 'info', title: t('e_title'),
+                  text: fill(t(alvo.length ? 'e_no_if_rows' : 'e_no_rows'), { n: alvo.length }) });
+      return;
+    }
+    var funds = ifs.filter(function (id) { return VALIDATION[id].scenario === 'if_fund'; }).length;
+    Swal.fire({
+      icon: 'question', title: t('evTitle'), text: fill(t('evText'), { n: ifs.length, f: funds }),
+      showCancelButton: true, confirmButtonText: t('evYes'),
+      cancelButtonText: t('cancel'), confirmButtonColor: '#0066cc',
+    }).then(function (r) {
+      if (!r.isConfirmed) return;
+      postJSON(VALIDATION_API, { date: currentDate(), ids: sel }).then(function (res) {
+        var b = res.body || {};
+        if (!res.ok || !b.success) {
+          Swal.fire({ icon: 'error', title: t('e_title'), text: msgText(b, 'e_') });
+          return;
+        }
+        var html = esc(fill(t('evRows'), { n: (b.ids || []).length })) +
+          ((b.attached || []).length ? '<div style="margin-top:8px;font-size:.85em"><b>' + esc(t('evAttached')) + ':</b> <span style="font-family:monospace">' + esc(b.attached.join(', ')) + '</span></div>' : '') +
+          (b.skipped ? '<div style="margin-top:6px;font-size:.82em;color:#6c757d">' + esc(fill(t('evSkipped'), { n: b.skipped })) + '</div>' : '') +
+          (b.warnings || []).map(function (w) { return '<div style="margin-top:6px;font-size:.82em;color:#b26a00">' + esc(msgText(w, 'w_')) + '</div>'; }).join('');
+        if (window.fetchNotifications) window.fetchNotifications();
+        Swal.fire({ icon: 'success', title: t('evDone'), html: html });
+      }).catch(function (e) { Swal.fire({ icon: 'error', title: t('e_title'), text: String(e && e.message || e) }); });
     });
   }
 
@@ -439,6 +536,8 @@
     wirePreviewClose();
     var batch = document.getElementById('nopSendBatch');
     if (batch) batch.addEventListener('click', function () { doSend(checkedIds()); });
+    var ev = document.getElementById('nopEmailValidation');
+    if (ev) ev.addEventListener('click', doEmailValidation);
     wireDatePicker();
     load(page.getAttribute('data-ref-date'));
   });
