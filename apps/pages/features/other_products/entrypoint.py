@@ -984,3 +984,22 @@ def api_swap_vcp_send():
         _R().log.error('[swap-vcp] send failed:\n%s', traceback.format_exc())
         return jsonify({'success': False, 'error': 'Failed to write the batch files.'}), 500
     return jsonify(body), status
+
+
+@blueprint.route('/api/other-products-swap-vcp/email-validation', methods=['POST'])
+def api_swap_vcp_email_validation():
+    """Email Validation: as linhas contra instituição financeira vão por e-mail
+    para outro integrante do time conferir o fator; com Lawton/Atacama numa
+    das pontas, o arquivo da visão do fundo vai em anexo."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    try:
+        body, status = commands.vcp_email_validation(
+            _vcp_ref(p), p.get('contracts') or [], sid=session.get('user_sid', ''),
+            nome=session.get('user_name', ''))
+    except ValueError as exc:
+        _R().log.error('[swap-vcp] email validation failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'code': 'fi_template', 'params': {},
+                        'error': 'File Interpreter template missing/invalid: {}'.format(exc)}), 500
+    return jsonify(body), status

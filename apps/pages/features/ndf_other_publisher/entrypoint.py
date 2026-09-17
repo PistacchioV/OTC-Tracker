@@ -11,6 +11,7 @@ from flask import (jsonify, redirect, render_template, request,
                    session, url_for)
 
 from apps.pages import blueprint
+from apps.pages.features.ndf_other_publisher import commands, queries
 
 
 def _R():
@@ -36,6 +37,9 @@ def api_ndfop_data():
     except ValueError:
         ref = datetime.now()
     payload = _R()._ndfop_collect(ref)
+    # O cenário do Email Validation por linha ('' | 'if' | 'if_fund'): a tela
+    # marca quem pede validação e conta antes de perguntar.
+    payload['validation'] = queries.validation_by_id(payload.get('rows'))
     payload.update({'success': True, 'ref_date': ref.strftime('%Y-%m-%d'),
                     'ref_date_fmt': ref.strftime('%d/%m/%Y')})
     return jsonify(payload)
@@ -229,3 +233,27 @@ def api_ndfop_send():
     _R()._create_notification(sid, session.get('user_name', ''), 'Sent to B3', _R()._NOTIF_DS_OTHERPUB,
                          str(len(ids)) + ' row' + ('' if len(ids) == 1 else 's') + ' sent')
     return jsonify({'success': True, 'count': len(ids), 'files': files})
+
+
+@blueprint.route('/api/ndf-other-publisher/email-validation', methods=['POST'])
+def api_ndfop_email_validation():
+    """Email Validation: as linhas contra instituição financeira vão por e-mail
+    para outro integrante do time conferir a taxa; com o Lawton numa das
+    pontas, o TAXA_LAWTON vai em anexo."""
+    if not session.get('authenticated'):
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    p = request.get_json(silent=True) or {}
+    ds = str(p.get('date', '') or '').strip()
+    try:
+        ref = datetime.strptime(ds[:10], '%Y-%m-%d') if ds else datetime.now()
+    except ValueError:
+        ref = datetime.now()
+    try:
+        body, status = commands.email_validation(
+            ref, p.get('ids') or [], sid=session.get('user_sid', ''),
+            nome=session.get('user_name', ''))
+    except ValueError as exc:
+        _R().log.error('[ndf-other-publisher] email validation failed:\n%s', traceback.format_exc())
+        return jsonify({'success': False, 'code': 'fi_template', 'params': {},
+                        'error': '{}: {}'.format(_R()._NDFOP_FI_ERROR, exc)}), 500
+    return jsonify(body), status

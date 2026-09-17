@@ -21154,3 +21154,60 @@ especificidade — lá dentro segue o `1rem`). Medido: corte 12 → 0 nas recons
 Pending Confirmation e Recon FXO (em `.card`) idênticas. `?v=` do
 `streamflow.css` subiu para `20260917a`.
 
+---
+
+## §487 — Email Validation: Swap VCP e NDF Other Publisher pedem a conferência por e-mail quando a contraparte é IF (2026-09-17)
+
+**O pedido da mesa.** Contra instituição financeira o fator (Swap VCP) e a taxa
+de paridade (NDF Other Publisher) têm de CASAR na B3, e por isso outro
+integrante do time valida o número antes de ele ir. Com Lawton e/ou Atacama
+numa das pontas há mais um passo: quem valida insere na B3 a ponta do fundo, e
+precisa do arquivo dela. Até aqui isso era combinado por fora do sistema.
+
+**O que entrou.** Um botão **Email Validation** nas duas telas e um template de
+e-mail só (`email-template-email-validation.html`, cartão de 820px no padrão do
+Accrual Validation), com a tabela dos dados da página, a coluna `Scenario`
+(`IF` / `IF + LAWTON`) e, no cenário do fundo, o aviso e o anexo.
+
+- **Quem decide o cenário é a CONTA**, pelo `b3-accounts`
+  (`platform/email_validation.scenario`): guarda-chuva (`CLIENT 1/2`) é cliente
+  e fica de fora; conta própria de terceiro é `if`; conta de Lawton/Atacama em
+  qualquer das pontas é `if_fund`. É a mesma leitura que o `pu_fator` faz para
+  gerar a segunda visão, então cenário e anexo não discordam. Conta em branco
+  não é IF.
+- **O anexo sai do MESMO gerador do Send, em memória**: `VCP_<FUNDO>.TXT` pelo
+  `pu_fator.acc_swap_records` (só as visões de fundo — a do Banco não vai) e
+  `TAXA_LAWTON.txt` pelo `_ndfop_conecta_fields(swap=True)`. **Nada é escrito
+  no Batch Conecta e nenhum status muda**: pedir validação não é enviar, e um
+  arquivo a mais na pasta seria um envio que ninguém mandou. O Send continua
+  com o maker/checker de sempre.
+- O botão age sobre as linhas marcadas e, sem nenhuma marcada, sobre a página.
+  A tela conta antes de perguntar pelo `validation` que vem no payload — o
+  mesmo campo que o servidor filtra —, e marca a linha com um ícone ao lado da
+  contraparte (só ícone + title: o texto da célula e o export não mudam).
+- Linha de IF que não pode ir para o arquivo (fator VCP ausente / TX PARIDADE
+  inválida) recusa o pedido inteiro; página só de cliente devolve
+  `no_if_rows`. Todo aviso sai `{code, params}` e a tela diz pelo `_TRANS`
+  (en/br/es).
+- De `otc.tracker@jpmorgan.com` (`SHARED_MAILBOX`) para
+  `brazil.otc.ops@jpmorgan.com` (`CETIP_OTC_OPS_EMAIL`), **sem Cc** (pedido da
+  mesa — a primeira versão copiava quem clicou); envio em thread (SMTP fora
+  do ar não segura a resposta), aviso no sino com o rótulo da página.
+
+**O que o teste achou antes da mesa.** O Live Position de NDF entrega a conta do
+Lawton como `41007`, sem os zeros. Comparada como veio, não casa com o
+`00041.00-7` do cadastro nem com o prefixo `00041`: a linha do fundo saía como
+IF comum — sem o anexo, e sem erro nenhum. A conta agora é normalizada para os
+oito dígitos antes da pergunta (a mesma normalização do `_ndfop_acct8`).
+
+**De passagem.** O `ndf-other-publisher.js` lia o idioma de
+`localStorage['language']`, chave que ninguém grava — a tela saía sempre em
+inglês. Passou a ler `__OTC_TRACKER_LANG__` (com a antiga de fallback).
+
+**Limite conhecido.** O Other Publisher só sabe espelhar o Lawton (é o que o
+Send dele faz). Linha com a Atacama vai na tabela, sem anexo, e a resposta traz
+`warnings: fund_without_file` — o e-mail diz para inserir a ponta à mão.
+
+Rede: `check_email_validation.py` (novo), `check_swap_vcp_factors`,
+`check_soc_layers`, `check_notif_page_url`, `check_export_padrao`,
+`check_row_action_buttons`, `check_table_center` — todos verdes.

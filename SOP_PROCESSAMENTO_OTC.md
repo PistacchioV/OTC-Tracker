@@ -231,6 +231,12 @@ Concilia a posição de opções de câmbio registrada na CETIP (DPOSICAO) com a
 
 ![Conciliação — FXO](docs/sop-screenshots/reconciliation-fxo.png)
 
+#### Conciliação — Conf. Matching
+
+Confere se a **confirmação das operações de NDF do dia anterior foi gerada no FepWeb**: compara os contratos do relatório **(REPORT) FEPWeb - Operacoes D-4** (anexo do e-mail em *Inbox › Automatico* da caixa compartilhada, lido direto do e-mail) com as operações da API de NDF da Athena. Resultado por operação: **Missing FepWeb**, **Missing Athena**, **Duplicated** ou **Ok** — contraparte com *Signature Type = Internal* é Ok mesmo sem FepWeb, porque a confirmação não é gerada. A tela não trata de assinatura (isso é do Pending Confirmation). O operador roda o batimento pela manhã, trata as quebras e registra o tratamento no campo **Comments** da linha.
+
+![Conciliação — Conf. Matching](docs/sop-screenshots/reconciliation-conf-matching.png)
+
 ### Documentação (Documentation)
 
 #### Pending Confirmation

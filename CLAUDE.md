@@ -109,7 +109,7 @@ recusa subir se o `config.py` ficou para trás num pull (§9).
 | Camada | O que é |
 |---|---|
 | `apps/pages/routes.py` (~13,6 mil linhas) | casca e plataforma miúda: sessão/authz-endpoints, sino, `_MAPPING_DEFS`, leitores `_ndfc_*`/`_ndfsum_*`/`_ndfadv_*`, Daily Settlement `_ds_*`, wiring das features e os ALIASES (`_x = _pf_anbima._x`) |
-| `apps/pages/platform/` (17 módulos) | infra horizontal: `anbima`, `authz`, `db`, `dates`, `json_cache`, `mail`, `notifications` e os motores `settlement`, `confirmations`, `counterparty`, `forecast`, `electronic_inventory`, `manual_confirmation`, `file_interpreter`, `pending_confirmation`, `operations_b3`, `new_deals` |
+| `apps/pages/platform/` (18 módulos) | infra horizontal: `anbima`, `authz`, `db`, `dates`, `json_cache`, `mail`, `email_validation`, `notifications` e os motores `settlement`, `confirmations`, `counterparty`, `forecast`, `electronic_inventory`, `manual_confirmation`, `file_interpreter`, `pending_confirmation`, `operations_b3`, `new_deals` |
 | `apps/pages/features/<nome>/` (45 verticais) | `entrypoint.py` (rotas) · `commands.py` (escrita) · `queries.py` (leitura) · `domain.py` (regras puras) · `infra/` — todas em desenho fino; não existe mais `engine.py` |
 | `apps/pages/database_access.py` | a camada de banco: permit + lock de arquivo + farol de eventos (§4) |
 | `data_store.py` · `duck_read.py` · `json_to_duckdb.py` | o ARMAZÉM (o `DATA_DIR` como sistema de arquivos virtual sobre os DuckDB), a fachada de leitura com os nomes antigos, o motor de conversão (§4) |
@@ -1157,6 +1157,23 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 - **No Swap VCP a `Diferença` É o veredito** (§459): o valor sai DENTRO do
   badge (verde/amarelo), como o batimento do Accrual Swap colore o fator
   registrado — não há badge de texto ao lado. Sem veredito não há cor.
+- **Email Validation (Swap VCP e NDF Other Publisher): quem decide o cenário é
+  a CONTA, nunca o nome** (§487, `platform/email_validation.py`). Contra
+  cliente (guarda-chuva `CLIENT 1/2` do `b3-accounts`) só o Banco lança e não
+  há o que casar; contra INSTITUIÇÃO FINANCEIRA (conta própria de terceiro) o
+  lançamento é de duplo comando e outro integrante do time confere o fator/a
+  taxa — sai só a tabela (`if`); com **Lawton/Atacama numa das pontas**
+  (`if_fund`) sai a tabela MAIS o arquivo da visão do fundo, porque quem
+  valida é quem insere essa ponta na B3. O anexo é montado **em memória pelo
+  MESMO gerador do Send** (`pu_fator` / `_ndfop_conecta_fields(swap=True)`) e
+  **nada vai para o Batch Conecta nem muda status**: pedir validação não é
+  enviar. A conta é normalizada para os OITO dígitos antes da pergunta — o
+  Live Position de NDF entrega a do Lawton como `41007`, que não casa com o
+  `00041.00-7` do cadastro nem com o prefixo `00041`, e a linha do fundo
+  passava por IF comum, sem o anexo e sem erro. Conta em branco NÃO é IF. O
+  Other Publisher só sabe espelhar o Lawton: outro fundo vai sem anexo e volta
+  em `warnings` (`fund_without_file`). Sai de `otc.tracker@jpmorgan.com` para
+  `brazil.otc.ops@jpmorgan.com`, sem Cc. `check_email_validation.py`.
 - **Perna interna não gera aviso** (`_ops_is_internal_cpty` pelo `le-spn` +
   `_pc_is_internal_counterparty`, nunca "começa com BANCO"): fica no Trade
   Level e no Summary, sai do Advice e do TED — o e-mail de TED do NDF faz a
@@ -1435,7 +1452,7 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 `apps/static/data/db/` é gitignorado: bancos não vêm no pull. Telas vazias
 depois de um pull são migração não rodada, não bug.
 
-### `scripts/tests/` (138 scripts)
+### `scripts/tests/` (139 scripts)
 
 Autocontidos, sem framework, `ok`/`FAIL` por asserção, saída 0/1, sem tocar
 dado real (tmp, stubs de Outlook/SMTP). O
