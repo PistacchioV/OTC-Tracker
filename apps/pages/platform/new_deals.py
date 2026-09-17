@@ -1009,6 +1009,23 @@ def _ndf_weak_leg(qty_ccy, other_ccy):
     return pernas[0] if len(pernas) == 1 else None
 
 
+def _ndf_notional_leg(qty_ccy, other_ccy):
+    """Qual perna carrega o NOTIONAL do NDF: `'qty'` ou `'other'` (§485).
+
+    O notional é sempre o da moeda que não é BRL nem USD: com BRL no par, a
+    outra perna; sem BRL, a que não é USD. `None` quando a regra não decide
+    (as duas iguais, ou nenhuma das duas é BRL/USD — MXN/CLP fica como a mesa
+    bookou)."""
+    q = str(qty_ccy or '').strip().upper()
+    o = str(other_ccy or '').strip().upper()
+    if not q or not o or q == o:
+        return None
+    for pivo in ('BRL', 'USD'):
+        if pivo in (q, o):
+            return 'other' if q == pivo else 'qty'
+    return None
+
+
 def _ndf_le_from_location(loc):
     """Settlement Location da API → Legal Entity da página (mapping le-accronym).
     None quando não há linha cadastrada para aquela location."""
@@ -1276,25 +1293,39 @@ def _ndf_deal_from_api(rec, sid, refmap_acr, today_dmy, refmap_spn=None):
     fraca = _ndf_weak_leg(qty_ccy, other_ccy)
     if strike_v and fraca:
         strike_v = 1.0 / strike_v
-    # Par CROSS com moeda fraca (USD/CNH): o notional é o da PERNA FRACA, e a
-    # API pode tê-lo bookado na outra (Quantity = 1.000.000 USD, Other
-    # Quantity = 7.200.000 CNH). Ler só a Quantity gravava o notional em USD
-    # com o Rate em USD/CNH — número de uma perna, taxa da outra, e o
-    # contravalor não fechava. Aqui o notional vem da OTHER QUANTITY, as
-    # moedas trocam de lugar (a fraca vira a Quantity Currency, que é a Moeda
-    # de Referência do arquivo) e a direção VIRA, porque o Papel é da moeda de
-    # referência: comprar USD contra CNH é vender CNH. Só sem BRL no par: contra
-    # BRL o notional fica onde a mesa bookou (CNH/BRL com a Quantity em BRL é o
-    # `IsBRRFixed`, um registro legítimo com as moedas trocadas pelo campo 55).
-    if (fraca and fraca == other_ccy and qty_ccy != 'BRL'
-            and other_v is not None and other_v != 0):
+    # O NOTIONAL do NDF é sempre o da moeda que NÃO é BRL nem USD (§485): com
+    # BRL no par, a outra perna (USD/BRL → USD, CNH/BRL → CNH); sem BRL, a que
+    # não é USD (USD/CNH → CNH). A API pode ter bookado a Quantity em qualquer
+    # das duas (Quantity = 6.209.969,72 BRL, Other Quantity = 1.207.484,05 USD
+    # — e a tela saía "BRL Fixed" com o notional em reais), e ler só a Quantity
+    # gravava o número de uma perna com a taxa da outra. Quando a perna do
+    # notional é a Other, o valor vem da OTHER QUANTITY, as moedas trocam de
+    # lugar (a do notional vira a Quantity Currency, que é a Moeda de Referência
+    # do arquivo) e o sinal segue a convenção da Quantity. Sem Other Quantity
+    # na resposta, fica como veio. `IsBRRFixed` deixa de nascer da API por
+    # isso: a Quantity Currency nunca é BRL.
+    #
+    # A DIREÇÃO é da moeda do NOTIONAL, e quem a diz são `Pay CCY`/`Rec CCY`
+    # (§485): recebemos a moeda do notional → compra; pagamos → venda. É a
+    # única leitura que não depende de saber a que perna o `Type` se refere —
+    # e é o que faz o Papel do arquivo acompanhar a Moeda de Referência quando
+    # o notional troca de perna. Sem os dois campos (ou sem a moeda do
+    # notional entre eles), fica o `Type`, virado quando o notional muda de
+    # perna num par sem BRL (comprar USD contra CNH é vender CNH); no par
+    # contra BRL o `Type` sempre foi lido contra a moeda estrangeira e não
+    # vira.
+    perna = _ndf_notional_leg(qty_ccy, other_ccy)
+    trocou = False
+    if perna == 'other' and other_v is not None and other_v != 0:
         qty_ccy, other_ccy = other_ccy, qty_ccy
-        # O sinal segue a convenção da Quantity (a direção viaja no campo
-        # Direction, não no sinal — e a API grava as duas pernas com sinais
-        # opostos).
         qty_v = math.copysign(abs(other_v), qty_v) if qty_v else abs(other_v)
-        if direction in ('BUY', 'SELL'):
-            direction = 'SELL' if direction == 'BUY' else 'BUY'
+        trocou = True
+    pay_ccy = _fxo_ccy(get('PAY CCY'))
+    rec_ccy = _fxo_ccy(get('REC CCY'))
+    if pay_ccy and rec_ccy and pay_ccy != rec_ccy and qty_ccy in (pay_ccy, rec_ccy):
+        direction = 'BUY' if qty_ccy == rec_ccy else 'SELL'
+    elif trocou and 'BRL' not in (qty_ccy, other_ccy) and direction in ('BUY', 'SELL'):
+        direction = 'SELL' if direction == 'BUY' else 'BUY'
     instr     = str(get('INSTRUMENT TYPE') or '').strip()
     publisher = str(get('PUBLISHER') or '').strip()
     # FX Pair comes with internal ccy codes ("USB/BRR") → ISO ("USD/BRL")

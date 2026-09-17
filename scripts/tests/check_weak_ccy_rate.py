@@ -113,12 +113,76 @@ try:
     check('USD/BRL não é invertido', abs(R._fxo_num(usd.get('Rate')) - 5.4321) < 1e-9,
           str(usd.get('Rate')))
 
-    # 2b ── par CROSS: o notional é o da PERNA FRACA ──────────────────────────
-    # USD/CNH com a API bookando a Quantity em USD: o notional tem de sair da
-    # Other Quantity (CNH), as moedas trocam de lugar e a direção vira —
-    # comprar USD contra CNH é vender CNH, e o Papel do arquivo é da Moeda de
-    # Referência. Lendo só a Quantity, a linha saía com 1.000.000 USD e o Rate
-    # em USD/CNH: número de uma perna, taxa da outra.
+    # 2b ── o notional é SEMPRE o da moeda que não é BRL nem USD (§485) ──────
+    # Com BRL no par, a outra perna; sem BRL, a que não é USD. A API pode ter
+    # bookado a Quantity em qualquer das duas, e ler só a Quantity gravava o
+    # número de uma perna com a taxa da outra (o USD/BRL saía "BRL Fixed" com o
+    # notional em reais).
+    check('regra da perna: USD/BRL → USD (qty)', R._ndf_notional_leg('USD', 'BRL') == 'qty')
+    check('regra da perna: BRL/USD → USD (other)', R._ndf_notional_leg('BRL', 'USD') == 'other')
+    check('regra da perna: BRL/CNH → CNH (other)', R._ndf_notional_leg('BRL', 'CNH') == 'other')
+    check('regra da perna: USD/CNH → CNH (other)', R._ndf_notional_leg('USD', 'CNH') == 'other')
+    check('regra da perna: CNH/USD → CNH (qty)', R._ndf_notional_leg('CNH', 'USD') == 'qty')
+    check('regra da perna: MXN/CLP não decide', R._ndf_notional_leg('MXN', 'CLP') is None)
+    check('regra da perna: perna vazia não decide', R._ndf_notional_leg('USD', '') is None)
+
+    # O caso da mesa (17/09/2026): USD/BRL com a Quantity em BRL. O notional
+    # tem de ser o USD da Other Quantity, sem BRL fixed, e a direção NÃO vira
+    # (o Type é da moeda base, USD — é como o arquivo do BRL fixed sempre leu).
+    # Sem Pay/Rec CCY no registro, é o Type que responde.
+    usdbrl = dict(_rec('BRR', 'USB'), Strike=5.1429, INSTRUMENT='USB/BRR',
+                  Quantity=6209969.72)
+    usdbrl['Other Quantity'] = -1207484.04985514
+    _, ub = R._ndf_deal_from_api(usdbrl, 'E930179', {}, '19/08/2026')
+    check('USD/BRL (Quantity em BRL): o notional vem da Other Quantity, em USD',
+          ub.get('QuantityCurrency') == 'USD' and ub.get('OtherQuantityCurrency') == 'BRL',
+          '{} / {}'.format(ub.get('QuantityCurrency'), ub.get('OtherQuantityCurrency')))
+    check('   e vale 1.207.484,05', ub.get('Notional') == '1,207,484.05', str(ub.get('Notional')))
+    check('   NÃO é BRL fixed', ub.get('IsBRRFixed') == 'NO', str(ub.get('IsBRRFixed')))
+    check('   a direção fica (Buy = compra de USD)', ub.get('Direction') == 'BUY', str(ub.get('Direction')))
+    check('   o Rate segue como a API mandou (sem moeda fraca)',
+          abs(R._fxo_num(ub.get('Rate')) - 5.1429) < 1e-8, str(ub.get('Rate')))
+    check('   notional × Rate devolve o BRL da API',
+          abs(float(ub.get('Notional').replace(',', '')) * R._fxo_num(ub.get('Rate')) - 6209969.72) < 0.1)
+    # Com `Pay CCY`/`Rec CCY` no registro, são ELES que dizem a posição, pela
+    # moeda do NOTIONAL: pagamos USD → vendemos USD, mesmo com Type = Buy (o
+    # registro da mesa vinha assim: Type Buy, Pay USB, Rec BRR).
+    payrec = dict(usdbrl); payrec['Pay CCY'] = 'USB'; payrec['Rec CCY'] = 'BRR'
+    _, pr = R._ndf_deal_from_api(payrec, 'E930179', {}, '19/08/2026')
+    check('Pay USD / Rec BRL com notional em USD: VENDA (o Type Buy perde)',
+          pr.get('Direction') == 'SELL' and pr.get('QuantityCurrency') == 'USD', str(pr.get('Direction')))
+    payrec['Pay CCY'] = 'BRR'; payrec['Rec CCY'] = 'USB'
+    _, pr2 = R._ndf_deal_from_api(payrec, 'E930179', {}, '19/08/2026')
+    check('Pay BRL / Rec USD com notional em USD: COMPRA', pr2.get('Direction') == 'BUY', str(pr2.get('Direction')))
+    # Pay/Rec que não falam da moeda do notional (ou iguais) não decidem: Type.
+    payrec['Pay CCY'] = 'EUR'; payrec['Rec CCY'] = 'BRR'
+    _, pr3 = R._ndf_deal_from_api(payrec, 'E930179', {}, '19/08/2026')
+    check('Pay/Rec sem a moeda do notional: fica o Type', pr3.get('Direction') == 'BUY', str(pr3.get('Direction')))
+    # O mesmo trade com a Quantity já em USD: nada troca.
+    usdbrl2 = dict(_rec('USB', 'BRR'), Strike=5.1429, INSTRUMENT='USB/BRR', Quantity=1207484.05)
+    usdbrl2['Other Quantity'] = -6209969.72
+    _, ub2 = R._ndf_deal_from_api(usdbrl2, 'E930179', {}, '19/08/2026')
+    check('USD/BRL (Quantity em USD): fica como bookado',
+          [ub2.get(k) for k in ('QuantityCurrency', 'Notional', 'IsBRRFixed', 'Direction')]
+          == ['USD', '1,207,484.05', 'NO', 'BUY'],
+          str([ub2.get(k) for k in ('QuantityCurrency', 'Notional', 'IsBRRFixed', 'Direction')]))
+
+    # CNH/BRL com a Quantity em BRL: o notional vai para o CNH (a moeda que
+    # não é BRL), com a taxa invertida da moeda fraca — e a direção fica.
+    cnhbrl = dict(_rec('BRR', 'RMB'))
+    cnhbrl['Quantity'] = OTHER_API
+    cnhbrl['Other Quantity'] = -QTY
+    _, cb = R._ndf_deal_from_api(cnhbrl, 'E930179', {}, '19/08/2026')
+    check('CNH/BRL (Quantity em BRL): o notional vai para o CNH',
+          cb.get('QuantityCurrency') == 'CNH' and cb.get('Notional') == '35,000,000.00'
+          and cb.get('IsBRRFixed') == 'NO' and cb.get('Direction') == 'BUY',
+          '{} {} {} {}'.format(cb.get('QuantityCurrency'), cb.get('Notional'),
+                               cb.get('IsBRRFixed'), cb.get('Direction')))
+    check('   com o Rate em R$/CNH', abs(R._fxo_num(cb.get('Rate')) - STRIKE_APP) < 1e-8, str(cb.get('Rate')))
+
+    # Par SEM BRL: USD/CNH com a Quantity em USD → notional em CNH, Rate em
+    # USD por CNH (1/7,2) e a direção VIRA — comprar USD contra CNH é vender
+    # CNH, e o Papel do arquivo é da Moeda de Referência.
     CROSS_STRIKE = 7.2                      # CNH por USD, como a API manda
     cross = dict(_rec('USB', 'RMB'), Strike=CROSS_STRIKE, INSTRUMENT='USB/RMB',
                  Quantity=1000000.0)
@@ -136,6 +200,12 @@ try:
     check('   e não é BRL fixed', c.get('IsBRRFixed') == 'NO')
     check('   notional × Rate devolve o USD da API',
           abs(float(c.get('Notional').replace(',', '')) * R._fxo_num(c.get('Rate')) - 1000000.0) < 0.1)
+    # Com Pay/Rec, o cross também é decidido por eles, pela moeda do notional
+    # (CNH): recebemos CNH → compra de CNH, mesmo com Type = Buy (USD).
+    crosspr = dict(cross); crosspr['Pay CCY'] = 'USB'; crosspr['Rec CCY'] = 'RMB'
+    _, cpr = R._ndf_deal_from_api(crosspr, 'E930179', {}, '19/08/2026')
+    check('USD/CNH com Pay USD / Rec CNH: notional CNH e COMPRA de CNH',
+          cpr.get('QuantityCurrency') == 'CNH' and cpr.get('Direction') == 'BUY', str(cpr.get('Direction')))
     # O mesmo trade bookado com a Quantity já em CNH: nada troca de perna.
     cross2 = dict(_rec('RMB', 'USB'), Strike=CROSS_STRIKE, INSTRUMENT='USB/RMB',
                   Quantity=7200000.0, Type='Sell')
@@ -148,22 +218,12 @@ try:
     check('   os dois arranjos gravam a MESMA linha (notional, moedas, Rate, direção)',
           [c.get(k) for k in ('Notional', 'QuantityCurrency', 'OtherQuantityCurrency', 'Rate', 'Direction')]
           == [c2.get(k) for k in ('Notional', 'QuantityCurrency', 'OtherQuantityCurrency', 'Rate', 'Direction')])
-    # Contra BRL nada muda: CNH/BRL com a Quantity em BRL é o IsBRRFixed, um
-    # registro legítimo com as moedas trocadas pelo campo 55.
-    brl = dict(_rec('BRR', 'RMB'))
-    brl['Other Quantity'] = -QTY
-    _, b = R._ndf_deal_from_api(brl, 'E930179', {}, '19/08/2026')
-    check('CNH/BRL com a Quantity em BRL: o notional FICA em BRL',
-          b.get('QuantityCurrency') == 'BRL' and b.get('Notional') == '35,000,000.00'
-          and b.get('IsBRRFixed') == 'YES' and b.get('Direction') == 'BUY',
-          '{} {} {} {}'.format(b.get('QuantityCurrency'), b.get('Notional'),
-                               b.get('IsBRRFixed'), b.get('Direction')))
     # Sem Other Quantity na resposta não há o que puxar: fica como veio, em vez
     # de gravar um notional vazio.
-    semq = dict(_rec('USB', 'RMB'), Strike=CROSS_STRIKE, Quantity=1000000.0)
+    semq = dict(_rec('BRR', 'USB'), Strike=5.1429, Quantity=6209969.72)
     _, sq = R._ndf_deal_from_api(semq, 'E930179', {}, '19/08/2026')
     check('sem Other Quantity na API: fica como bookado',
-          sq.get('QuantityCurrency') == 'USD' and sq.get('Notional') == '1,000,000.00',
+          sq.get('QuantityCurrency') == 'BRL' and sq.get('Notional') == '6,209,969.72',
           '{} {}'.format(sq.get('QuantityCurrency'), sq.get('Notional')))
 
     # 3 ── o arquivo TER não inverte de novo ─────────────────────────────────
