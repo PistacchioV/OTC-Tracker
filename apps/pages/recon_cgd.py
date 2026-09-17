@@ -165,6 +165,42 @@ _SMTP_PORT = 25
 _FROM = 'brazil.otc.ops@jpmorgan.com'
 
 
+# ── Avisos ───────────────────────────────────────────────────────────────────
+
+class Aviso(str):
+    """Um aviso da recon: CÓDIGO + parâmetros, que é o que a TELA traduz.
+
+    O texto de servidor exibido pela tela vem estruturado (§2, i18n): uma frase
+    pronta sai sempre no idioma de quem a escreveu, e a mesa que usa o app em
+    inglês lia o aviso em português. O `str` que isto também é fica como o
+    texto do LOG e do e-mail (que é documento em português) e como fallback da
+    tela para um código que ela ainda não conhece.
+    """
+
+    def __new__(cls, code, text, **params):
+        o = super().__new__(cls, text)
+        o.code, o.params = code, params
+        return o
+
+
+def avisos_payload(avisos):
+    """A lista de avisos como vai no JSON: `{code, params, text}`. Aviso que
+    chegou como `str` cru (de fora, ou de cache antigo) segue só com o texto."""
+    out = []
+    for a in (avisos or []):
+        if isinstance(a, dict):
+            out.append(a)
+        else:
+            out.append({'code': getattr(a, 'code', ''), 'params': getattr(a, 'params', {}),
+                        'text': str(a)})
+    return out
+
+
+def avisos_texto(avisos):
+    """O inverso, para o e-mail: só o texto, venha o aviso como vier."""
+    return [(a.get('text', '') if isinstance(a, dict) else str(a)) for a in (avisos or [])]
+
+
 # ── Normalização ─────────────────────────────────────────────────────────────
 
 def _digits(v):
@@ -362,13 +398,14 @@ def ler_b3(dia, avisos):
     """
     path = caminho_b3(dia)
     if not _store.isfile(path):
-        avisos.append('Arquivo da B3 não encontrado: {}'.format(path))
+        avisos.append(Aviso('b3_missing', 'Arquivo da B3 não encontrado: {}'.format(path), path=path))
         return {}, path
 
     contas = {c.strip() for c in contas_proprias()}
     if not contas:
-        avisos.append('Cadastro `b3-accounts` sem conta PRÓPRIA (ACCOUNT TYPE = OWN): '
-                      'sem elas não há como saber quais linhas da B3 são nossas.')
+        avisos.append(Aviso('no_own_account',
+                            'Cadastro `b3-accounts` sem conta PRÓPRIA (ACCOUNT TYPE = OWN): '
+                            'sem elas não há como saber quais linhas da B3 são nossas.'))
         return {}, path
 
     part = _participantes()
@@ -395,9 +432,10 @@ def ler_b3(dia, avisos):
             achou.setdefault(_digits(cnpj), {'cnpj': cnpj, 'nome': razao or reg['Nome Contraparte']})
     if sem_cnpj and sem_cnpj != resolvidas:
         # Linha que some sem dizer nada vira "sumiu um cliente da recon".
-        avisos.append('{} linha(s) da B3 vieram sem CNPJ e {} foram resolvidas pelo '
-                      'cadastro `cgd-b3-participante`; as demais ficaram de fora.'
-                      .format(sem_cnpj, resolvidas))
+        avisos.append(Aviso('b3_no_cnpj',
+                            '{} linha(s) da B3 vieram sem CNPJ e {} foram resolvidas pelo '
+                            'cadastro `cgd-b3-participante`; as demais ficaram de fora.'
+                            .format(sem_cnpj, resolvidas), n=sem_cnpj, resolved=resolvidas))
     return achou, path
 
 
@@ -439,7 +477,7 @@ def _subpasta(folder, nome):
 
 
 def baixar_fep_do_box(avisos, destino=None, assunto=None, prefixo='fepweb-cgd-',
-                      aceita=None):
+                      aceita=None, extensoes=None):
     """Salva o anexo `.xlsx` do e-mail MAIS RECENTE cujo assunto é o do FepWeb.
 
     Devolve `(caminho, descricao)` — a descrição é o assunto e a data do e-mail
@@ -452,12 +490,16 @@ def baixar_fep_do_box(avisos, destino=None, assunto=None, prefixo='fepweb-cgd-',
     a regra do mais recente são as mesmas, e uma segunda cópia desta função
     envelheceria sozinha. `aceita(recebido)` escolhe ENTRE os que casam — o
     relatório de uma janela de dias só serve a quem pede um dia dentro dela;
-    nenhum aceito, vale o mais recente, avisando.
+    nenhum aceito, vale o mais recente, avisando. `extensoes` é de quem SABE ler
+    o formato: a lista da CGD é `.xlsx` e o openpyxl não abre outra coisa; o
+    relatório de operações chega como `.xls`, e filtrando só `.xlsx` a rotina via
+    o e-mail certo, descartava o anexo e dizia que não tinha achado e-mail.
 
     Windows-only (COM/MAPI). Fora do Windows levanta `EnvironmentError`, e quem
     chama cai para o arquivo em pasta.
     """
     assunto = assunto or FEP_MAIL_SUBJECT
+    extensoes = tuple(extensoes or _FEP_MAIL_EXT)
     try:
         import win32com.client as _w
         import pythoncom
@@ -474,8 +516,10 @@ def baixar_fep_do_box(avisos, destino=None, assunto=None, prefixo='fepweb-cgd-',
         for nome in FEP_MAIL_FOLDER:
             sub = _subpasta(pasta, nome)
             if sub is None:
-                avisos.append('Pasta do FepWeb não encontrada no box {}: {}'
-                              .format(FEP_MAILBOX, caminho_txt))
+                avisos.append(Aviso('box_folder_missing',
+                                    'Pasta do FepWeb não encontrada no box {}: {}'
+                                    .format(FEP_MAILBOX, caminho_txt),
+                                    mailbox=FEP_MAILBOX, folder=caminho_txt))
                 return None, ''
             pasta = sub
 
@@ -485,6 +529,14 @@ def baixar_fep_do_box(avisos, destino=None, assunto=None, prefixo='fepweb-cgd-',
         try:
             itens = pasta.Items.Restrict(
                 '@SQL="%s" LIKE \'%%%s%%\'' % (_MAPI_SUBJECT, assunto))
+        except Exception:
+            itens = pasta.Items
+        # O pré-filtro compara o texto CRU: um acento ou um espaço duplo no
+        # assunto real devolve ZERO itens sem erro, e o teste normalizado abaixo
+        # — que casaria — nem chega a rodar. Vazio, varre-se a pasta.
+        try:
+            if itens.Count == 0:
+                itens = pasta.Items
         except Exception:
             itens = pasta.Items
         # Mais recente primeiro. O relatório é reemitido e a pasta acumula:
@@ -520,7 +572,7 @@ def baixar_fep_do_box(avisos, destino=None, assunto=None, prefixo='fepweb-cgd-',
                 anexos = msg.Attachments
                 for a in range(1, anexos.Count + 1):
                     at = anexos.Item(a)
-                    if not str(at.FileName or '').lower().endswith(_FEP_MAIL_EXT):
+                    if not str(at.FileName or '').lower().endswith(extensoes):
                         continue          # assinatura, imagem embutida, .msg
                     if aceita is None:
                         return _salva(msg, at)
@@ -537,11 +589,14 @@ def baixar_fep_do_box(avisos, destino=None, assunto=None, prefixo='fepweb-cgd-',
             except Exception:
                 _LOG.exception('[recon-cgd] falha lendo um item da pasta do FepWeb')
         if mais_recente is not None:
-            avisos.append('Nenhum e-mail "{}" cobre a data pedida; usei o mais '
-                          'recente da pasta.'.format(assunto))
+            avisos.append(Aviso('box_no_covering',
+                                'Nenhum e-mail "{}" cobre a data pedida; usei o mais '
+                                'recente da pasta.'.format(assunto), subject=assunto))
             return _salva(*mais_recente)
-        avisos.append('Nenhum e-mail com assunto "{}" e anexo .xlsx em {}.'
-                      .format(assunto, caminho_txt))
+        avisos.append(Aviso('box_no_mail',
+                            'Nenhum e-mail com assunto "{}" e anexo {} em {}.'
+                            .format(assunto, '/'.join(extensoes), caminho_txt),
+                            subject=assunto, folder=caminho_txt, ext='/'.join(extensoes)))
         return None, ''
     finally:
         try:
@@ -568,13 +623,15 @@ def ler_fep(avisos, path=None):
         try:
             path, origem = baixar_fep_do_box(avisos)
         except EnvironmentError as e:
-            avisos.append(str(e))
+            avisos.append(Aviso('no_outlook', str(e)))
         if not path:
             path = os.path.join(CGD_INPUT_ROOT, FEP_XLSX)
-            avisos.append('Usei a lista em pasta ({}) em vez do anexo do e-mail.'
-                          .format(path))
+            avisos.append(Aviso('fep_from_folder',
+                                'Usei a lista em pasta ({}) em vez do anexo do e-mail.'
+                                .format(path), path=path))
     if not _store.isfile(path):
-        avisos.append('Lista do FEP não encontrada: {}'.format(path))
+        avisos.append(Aviso('fep_missing', 'Lista do FEP não encontrada: {}'.format(path),
+                            path=path))
         return {}, origem or path
     # `path` é o ARQUIVO, que o openpyxl abre; `rotulo` é o que o painel e o
     # e-mail MOSTRAM. Anexo salvo em temporário tem nome que não diz nada — o
@@ -583,7 +640,8 @@ def ler_fep(avisos, path=None):
     try:
         from openpyxl import load_workbook
     except Exception:
-        avisos.append('openpyxl não está instalado: sem ele não dá para ler a lista do FEP.')
+        avisos.append(Aviso('no_openpyxl', 'openpyxl não está instalado: sem ele não dá '
+                            'para ler a lista do FEP.'))
         return {}, rotulo
 
     wb = load_workbook(path, data_only=True, read_only=True)
@@ -591,14 +649,15 @@ def ler_fep(avisos, path=None):
     linhas = [list(r) for r in ws.iter_rows(values_only=True)]
     wb.close()
     if not linhas:
-        avisos.append('Lista do FEP está vazia.')
+        avisos.append(Aviso('fep_empty', 'Lista do FEP está vazia.'))
         return {}, rotulo
 
     idx = _col_idx(linhas[0])
     faltando = [k for k in ('cnpj', 'status') if k not in idx]
     if faltando:
-        avisos.append('A lista do FEP não tem as colunas {} — nada foi lido dela.'
-                      .format(', '.join(faltando)))
+        avisos.append(Aviso('fep_missing_cols',
+                            'A lista do FEP não tem as colunas {} — nada foi lido dela.'
+                            .format(', '.join(faltando)), cols=', '.join(faltando)))
         return {}, rotulo
 
     por_cnpj = {}
@@ -730,7 +789,7 @@ def executar(ref=None, fep_path=None):
         'rows': linhas,
         'counts': {k: len(buckets.get(k, [])) for k in
                    ('matched', 'pending_b3', 'pending_action', 'only_b3', 'justified')},
-        'warnings': avisos,
+        'warnings': avisos_payload(avisos),
     }
 
 
@@ -802,7 +861,7 @@ def montar_email(res):
         pending_action=_linha_faixa(b('pending_action'), 'pending_action'),
         justified=b('justified'),
         only_b3=b('only_b3'),
-        warnings=res.get('warnings', []),
+        warnings=avisos_texto(res.get('warnings', [])),
         current_year=datetime.now().year,
     )
     return 'CGD Matching - {}'.format(res.get('ref_fmt', '')), html

@@ -24,6 +24,10 @@ O que este teste protege é o que erra em SILÊNCIO quando quebra:
    janela de dias) e, sem nenhum, cai no mais recente avisando — e a Recon de
    CGD, que usa a mesma função, continua pegando o mais recente.
 9. **As rotas** existem, exigem sessão e o Run devolve `tipo: mensagem`.
+10. **O anexo real é `.xls`** (e `.xls` é só o nome: lê-se pelo CONTEÚDO), e o
+    relatório de um dia chega na NOITE dele — a janela começa no próprio dia.
+11. **A data do FepWeb é americana** (`mm/dd/aaaa`): `09/10` é 10 de setembro.
+12. **Aviso e erro vão com CÓDIGO**, e todo código tem tradução nas três línguas.
 
 Não toca em rede, Outlook nem dado real: tudo sintético, num tmp.
 """
@@ -125,7 +129,7 @@ def fep_xlsx(path):
     ws.append(['Digital (nome do FepWeb)', 1234567000188, 'D1', 'NDF', dia, 'Ativo'])
     ws.append(['Internal Sign', '22.222.222/0001-22', 'D2', 'NDF', dia, 'Ativo'])
     ws.append(['Manual', '33333333000133', 'D3', 'NDF', dia, 'Ativo'])
-    ws.append(['Só FepWeb', '33333333000133', 'F1', 'NDF', REF.strftime('%d/%m/%Y'), 'Ativo'])
+    ws.append(['Só FepWeb', '33333333000133', 'F1', 'NDF', REF.strftime('%m/%d/%Y'), 'Ativo'])   # texto: mm/dd
     ws.append(['Dup', 1234567000188, 'DUP', 'NDF', dia, 'Ativo'])
     ws.append(['Dup', 1234567000188, 'DUP', 'NDF', dia, 'Ativo'])
     ws.append(['Cancelada', 1234567000188, 'X1', 'NDF', dia, 'Cancelado'])
@@ -169,15 +173,20 @@ try:
     check('sem cadastro: o nome que veio da fonte',
           (por['D-10']['FepWeb Client'], por['D-10']['Athena Client']),
           ('Sem cadastro', 'SEMCADBR DESC'))
-    check('sem cadastro AVISA', any('Sem cadastro no Reference Data' in w for w in res['warnings']), True)
+    aviso = [w for w in res['warnings'] if w['code'] == 'no_refdata']
+    check('sem cadastro AVISA — com código, parâmetros e o texto de fallback',
+          (len(aviso), aviso[0]['params']['n'], 'Reference Data' in aviso[0]['text']), (1, 2, True))
     check('números crus (a tela formata)', (por['D1']['Quantity'], por['D1']['Strike'], por['D1']['Tenor']),
           (1000000.0, 5.158, 120))
 
     print('=== 3. Cortes ===')
-    check('FepWeb', res['fep_info'], {'lidas': 10, 'canceladas': 1, 'outras_datas': 1})
+    check('FepWeb', res['fep_info'], {'lidas': 10, 'canceladas': 1, 'outras_datas': 1, 'formato': 'xlsx'})
     check('Athena', res['athena_info'],
           {'lidas': 13, 'canceladas': 1, 'internas': 4, 'outras_datas': 1})
-    check('outro Trade Date AVISA', any('Trade Date diferente' in w for w in res['warnings']), True)
+    check('outro Trade Date AVISA', [w['params'] for w in res['warnings'] if w['code'] == 'other_trade_dates'],
+          [{'n': 1, 'date': '16/09/2026'}])
+    check('todo aviso da tela tem CÓDIGO (frase pronta não se traduz)',
+          [w for w in res['warnings'] if not w.get('code')], [])
     check('counts', res['counts'], {'missing_fepweb': 1, 'missing_athena': 1, 'duplicated': 1,
                                     'manual': 1, 'pending': 2, 'ok': 2})
     check('a ordem é a da gravidade', [r['Status'] for r in res['rows']],
@@ -188,8 +197,50 @@ try:
     try:
         M.executar(REF, fep_path=os.path.join(TMP, 'nao-existe.xlsx'), athena_records=ATHENA)
         check('FepWeb ausente levanta', False, True)
-    except RuntimeError as e:
-        check('FepWeb ausente levanta', 'não encontrado' in str(e), True)
+    except M.ReconErro as e:
+        check('FepWeb ausente levanta COM CÓDIGO', (e.code, sorted(e.params)),
+              ('fep_not_found', ['path', 'reasons', 'subject']))
+    try:
+        M.executar(REF, athena_records=ATHENA)          # sem Outlook e sem arquivo em pasta
+        check('sem box e sem pasta levanta', False, True)
+    except M.ReconErro as e:
+        check('e o erro leva o PORQUÊ do box', [r['code'] for r in e.params['reasons']],
+              ['no_outlook', 'report_from_folder'])
+
+    print('=== 4a. A data do FepWeb é AMERICANA (mm/dd/aaaa) ===')
+    check('09/10/2026 é 10 de SETEMBRO, não 9 de outubro', M.fep_date('09/10/2026'), date(2026, 9, 10))
+    check('com hora', M.fep_date('09/10/2026 22:49:14'), date(2026, 9, 10))
+    check('ano de dois dígitos', M.fep_date('9/10/26'), date(2026, 9, 10))
+    check('dd/mm impossível em mm/dd NÃO vira outro dia', M.fep_date('16/09/2026'), None)
+    check('célula que já é data não tem ambiguidade',
+          (M.fep_date(datetime(2026, 9, 10, 8, 0)), M.fep_date('2026-09-10'), M.fep_date(None)),
+          (date(2026, 9, 10), date(2026, 9, 10), None))
+    amb = os.path.join(TMP, 'amb.xls')
+    with open(amb, 'w', encoding='utf-8') as fh:
+        fh.write('<table><tr><th>Contrato</th><th>Data Operação</th></tr>'
+                 '<tr><td>A1</td><td>09/10/2026</td></tr><tr><td>A2</td><td>10/09/2026</td></tr></table>')
+    ra = M.executar(date(2026, 9, 10), fep_path=amb, athena_records=[])
+    check('o dia 10/09 casa só a linha de 09/10', [r['FepWeb ID'] for r in ra['rows']], ['A1'])
+
+    print('=== 4b. O anexo real é `.xls`, e `.xls` é só o nome ===')
+    html_xls = os.path.join(TMP, 'FEPWeb - Operacoes D-4.xls')
+    with open(html_xls, 'w', encoding='utf-8') as fh:
+        fh.write('<html><body><table><tr><th>Contrato</th><th>Data Operação</th>'
+                 '<th>Status Operação</th><th>CPF/CNPJ Cliente</th><th>Nome Cliente</th></tr>'
+                 '<tr><td>D1</td><td>09/16/2026 10:31:02</td><td>Ativo</td>'
+                 '<td>01.234.567/0001-88</td><td>Digital</td></tr>'
+                 '<tr><td>X9</td><td>09/16/2026</td><td>Cancelado</td><td></td><td></td></tr>'
+                 '</table></body></html>')
+    r2 = M.executar(REF, fep_path=html_xls, athena_records=ATHENA[:1])
+    check('tabela HTML com nome .xls é lida', (r2['fep_info']['formato'], r2['fep_count'],
+                                              r2['rows'][0]['Status'], r2['rows'][0]['FepWeb Client']),
+          ('html', 1, 'Pending', 'DIGITAL SA'))
+    os.makedirs(os.environ['CONFMATCH_INPUT_ROOT'], exist_ok=True)
+    shutil.copy(html_xls, os.path.join(os.environ['CONFMATCH_INPUT_ROOT'], 'FEPWeb - Operacoes D-4.xls'))
+    r3 = M.executar(REF, athena_records=ATHENA[:1])
+    check('sem Outlook, a pasta serve o .xls', (r3['fep_count'], [w['code'] for w in r3['warnings']]),
+          (1, ['no_outlook', 'report_from_folder']))
+    os.remove(os.path.join(os.environ['CONFMATCH_INPUT_ROOT'], 'FEPWeb - Operacoes D-4.xls'))
 
     def _api_fora(ref):
         raise ConnectionError('SSO recusado')
@@ -209,8 +260,8 @@ try:
     try:
         M.executar(REF, fep_path=ruim, athena_records=ATHENA)
         check('planilha sem as colunas levanta', False, True)
-    except RuntimeError as e:
-        check('planilha sem as colunas levanta', '"Contrato"' in str(e), True)
+    except M.ReconErro as e:
+        check('planilha sem as colunas levanta COM CÓDIGO', e.code, 'fep_no_columns')
 
     print('=== 5. Cache e comentário ===')
     M.salvar(res)
@@ -298,6 +349,7 @@ try:
     itens = [
         _Msg('RES: ' + OPS, datetime(2026, 9, 10, 7, 0), ['ops-0910.xlsx']),
         _Msg(OPS, datetime(2026, 9, 17, 7, 0), ['logo.png', 'ops-0917.xlsx']),
+        _Msg(OPS, datetime(2026, 9, 12, 19, 49), ['image001.png', 'FEPWeb - Operacoes D-4.xls']),
         _Msg(OPS, datetime(2026, 9, 3, 7, 0), ['ops-0903.xlsx']),
         _Msg('FEPWEB-CGD-ContratoGlobalDerivativos - SEM FILTRO DATAS',
              datetime(2026, 9, 17, 8, 0), ['cgd-0917.xlsx']),
@@ -319,17 +371,26 @@ try:
     def baixa(ref):
         av = []
         p, desc = CGD.baixar_fep_do_box(av, assunto=M.FEP_MAIL_SUBJECT, prefixo='t-ops-',
-                                        aceita=M._aceita_email(ref))
+                                        aceita=M._aceita_email(ref), extensoes=M.FEP_MAIL_EXT)
         return os.path.basename(p or ''), av
 
     check('D-1: o e-mail de hoje', baixa(date(2026, 9, 16)), ('t-ops-ops-0917.xlsx', []))
     check('data antiga: o e-mail que a COBRE', baixa(date(2026, 9, 8))[0], 't-ops-ops-0910.xlsx')
+    check('o relatório da NOITE do próprio dia serve, e o anexo é .xls',
+          baixa(date(2026, 9, 12)), ('t-ops-FEPWeb - Operacoes D-4.xls', []))
+    av = []
+    CGD.baixar_fep_do_box(av, assunto=M.FEP_MAIL_SUBJECT, aceita=M._aceita_email(date(2026, 9, 12)))
+    check('quem só lê .xlsx NÃO recebe o .xls', [a.code for a in av], ['box_no_covering'])
     nome, av = baixa(date(2026, 7, 1))
     check('nenhum cobre: o mais recente, AVISANDO', (nome, len(av)), ('t-ops-ops-0917.xlsx', 1))
     av = []
     p, desc = CGD.baixar_fep_do_box(av)
     check('a CGD segue lendo o relatório DELA', (os.path.basename(p), av), ('fepweb-cgd-cgd-0917.xlsx', []))
     check('e a descrição diz o e-mail lido', '17/09/2026 08:00' in desc, True)
+    # O pré-filtro do MAPI compara texto CRU: devolvendo ZERO sem erro (acento,
+    # espaço duplo no assunto real), a pasta inteira é varrida mesmo assim.
+    _Items.Restrict = lambda self, q: _Items()
+    check('pré-filtro vazio não esconde o e-mail', baixa(date(2026, 9, 16)), ('t-ops-ops-0917.xlsx', []))
     for m in ('win32com', 'win32com.client', 'pythoncom'):
         sys.modules.pop(m, None)
 
@@ -369,8 +430,12 @@ try:
         raise ConnectionError('SSO recusado')
     M.executar = _quebra
     r = c.post('/reconciliation-conf-matching/run', json={})
-    check('Run que falha diz tipo: mensagem', (r.status_code, r.get_json()['error']),
-          (500, 'ConnectionError: SSO recusado'))
+    check('Run que falha diz tipo: mensagem', (r.status_code, r.get_json()['error'], r.get_json()['error_code']),
+          (500, 'ConnectionError: SSO recusado', ''))
+    M.executar = lambda ref=None: M.executar_orig(ref, athena_records=ATHENA)
+    j = c.post('/reconciliation-conf-matching/run', json={}).get_json()
+    check('falha CONHECIDA vai com código e parâmetros', (j['error_code'], 'subject' in j['error_params']),
+          ('fep_not_found', True))
     M.executar = M.executar_orig
 
     r = c.post('/reconciliation-conf-matching/comment', json={'comment': 'x'})
@@ -384,6 +449,37 @@ try:
           (html.count('data-lang="cfm-c-'), '"name": "FepWeb Count"' in html),
           (len(M.COLUMNS) + 1, True))
     check('o menu lateral tem a entrada', 'href="/reconciliation-conf-matching"' in html, True)
+
+    print('=== 8. Todo aviso/erro que o servidor emite tem tradução nas TRÊS línguas ===')
+    # Texto de servidor vem ESTRUTURADO e a TELA o diz no idioma de quem usa. Um
+    # código novo sem entrada no `_TRANS` cai no fallback em português — sem
+    # erro nenhum, e só para quem usa o app em outro idioma.
+    import io as _io
+    import re as _re
+
+    def _codigos(fonte, classe):
+        txt = _io.open(os.path.join(ROOT, fonte), encoding='utf-8').read()
+        return set(_re.findall(classe + r"\(\s*'([a-z0-9_]+)'", txt))
+
+    def _chaves(pagina):
+        txt = _io.open(os.path.join(ROOT, 'apps/templates/pages', pagina), encoding='utf-8').read()
+        ini = txt.index('var _TRANS = {')
+        bloco = txt[ini:txt.index('};', ini)]
+        partes = _re.split(r"\n\s{8}(en|br|es): \{", bloco)
+        return {partes[i]: set(_re.findall(r"\b([we]_[a-z0-9_]+):", partes[i + 1]))
+                for i in range(1, len(partes), 2)}
+
+    box = {'box_folder_missing', 'box_no_covering', 'box_no_mail'}
+    av_cgd = _codigos('apps/pages/recon_cgd.py', 'Aviso')
+    av_cfm = _codigos('apps/pages/recon_conf_matching.py', r'_cgd\.Aviso') | box
+    er_cfm = _codigos('apps/pages/recon_conf_matching.py', 'ReconErro')
+    check('os motores emitem avisos com código', (len(av_cgd) >= 12, len(av_cfm) >= 9, len(er_cfm)), (True, True, 3))
+    for lg, chaves in _chaves('reconciliation-cgd.html').items():
+        check('CGD [%s]: nenhum aviso sem tradução' % lg, sorted('w_' + c for c in av_cgd if 'w_' + c not in chaves), [])
+    for lg, chaves in _chaves('reconciliation-conf-matching.html').items():
+        check('Conf. Matching [%s]: nenhum aviso/erro sem tradução' % lg,
+              sorted([('w_' + c) for c in av_cfm if 'w_' + c not in chaves] +
+                     [('e_' + c) for c in er_cfm if 'e_' + c not in chaves]), [])
 finally:
     shutil.rmtree(TMP, ignore_errors=True)
 

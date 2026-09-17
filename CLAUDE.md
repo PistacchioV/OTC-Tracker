@@ -78,7 +78,12 @@ OTC_SHARED_DRIVE_ROOT=/tmp/otc-share python scripts/tests/check_<nome>.py
   (`static/data/translations/{en,br,es}.json`). O `I18nManager` traduz UMA vez
   no load; o que o JS insere depois sai de um mapa `_TRANS` local com `t()`
   lendo `localStorage['__OTC_TRACKER_LANG__']`. Texto de servidor exibido pela
-  tela vem ESTRUTURADO (a lista, não a frase).
+  tela vem ESTRUTURADO (a lista, não a frase). **Vale para TODO aviso, erro e
+  alerta, em qualquer página** (regra do usuário, 17/09/2026): o servidor manda
+  `{code, params, text}` e a tela diz pelo `_TRANS` (`w_<code>`/`e_<code>`),
+  com o `text` só de fallback — modelo em `recon_cgd.Aviso`/`avisos_payload` e
+  `recon_conf_matching.ReconErro` (§486); título de `Swal` também passa pelo
+  `t()`. A dívida do resto do app está medida no HANDOFF §486.
 - **E-mail: cabeçalho é cor sólida + gradiente CSS, nunca imagem/VML** (o
   `<v:rect>` do Outlook pintava o banner na largura errada). VML só em botão de
   largura FIXA (`v:roundrect`); botão ganha altura com `height` +
@@ -1265,7 +1270,13 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   internas e exceção de assinatura saem de CADASTRO (`interbook-ndf`,
   `le-accronym`, `ECONOMIC GROUP`, `SIGNATURE TYPE`), nunca das listas do
   workflow; o Pending Status é `_pc_signature_pending_status` (≤ 60 dias, não
-  o `< 60` do Alteryx). Sem um dos lados o Run LEVANTA. Comentário é do trade
+  o `< 60` do Alteryx). **O anexo é `.xls`, e `.xls` é só o nome** (lê-se pelo
+  conteúdo, `_latam_read_rows`; a CGD segue só `.xlsx` — `extensoes` é de quem
+  sabe ler), e o relatório de um dia chega na NOITE dele: a janela do `aceita`
+  começa no próprio dia. **A `Data Operação` do FepWeb é AMERICANA
+  (`mm/dd/aaaa`)**: `fep_date` a lê e nunca cai para `dd/mm` — o `_parse_date`
+  da casa leria `09/10` como 9 de outubro, calado. Sem um dos lados o Run LEVANTA, com os avisos do box
+  em `reasons`. Comentário é do trade
   e não muda o Status. Linha chaveada pelo RÓTULO + `columns` no payload (o
   contrato do Advanced Export por intervalo).
 

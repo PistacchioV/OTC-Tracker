@@ -21061,3 +21061,56 @@ Counterparty Description`).
 
 Teste: `check_conf_matching.py` (motor, armazém, o box de mentira com a CGD
 junto, as quatro rotas). `check_soc_layers` ganhou as rotas.
+
+### §486 — segunda rodada, mesmo dia: "não achou o e-mail" com o e-mail na pasta
+
+A instância disse que não havia e-mail, e ele estava em Inbox › Automatico com
+o assunto certo. Três causas, nenhuma com erro:
+
+1. **O anexo é `.xls`** (`FEPWeb - Operacoes D-4.xls`) e o filtro de extensão
+   era o da CGD (`.xlsx`/`.xlsm`): a rotina ACHAVA o e-mail, descartava o anexo
+   e respondia "nenhum e-mail com anexo .xlsx". `baixar_fep_do_box` ganhou
+   `extensoes` — é de quem SABE ler o formato; a CGD segue só com `.xlsx`
+   (o openpyxl dela não abre outra coisa). E `.xls` é só o NOME: a leitura
+   passou a ser pelo CONTEÚDO, com o `_latam_read_rows` que o Latam Desk
+   Position já usa (BIFF via xlrd, xlsx, tabela HTML, texto). O formato lido
+   volta em `fep_info.formato`.
+2. **O relatório de um dia chega na NOITE dele** (16/09 19:49), e a janela do
+   `aceita` começava no dia SEGUINTE: de manhã, o único relatório que existe —
+   o que o workflow lia — ficava de fora e caía no fallback com um aviso que
+   mentia. Agora `ref <= recebido <= ref + 3`.
+3. **O pré-filtro `Restrict` compara texto CRU**: um acento ou espaço duplo no
+   assunto real devolve ZERO itens sem erro, e o teste normalizado nem roda.
+   Vazio, varre-se a pasta.
+
+4. **A `Data Operação` do FepWeb é AMERICANA (`mm/dd/aaaa`)** e o
+   `_parse_date` da casa tenta `dd/mm` primeiro: `09/10/2026` virava 9 de
+   outubro, e só dia > 12 caía certo, por acaso, no fallback. `fep_date` lê
+   `mm/dd` e NUNCA cai para `dd/mm` (devolve `None`); célula que já é data
+   (datetime, ISO, serial) não tem ambiguidade.
+
+E o erro `fep_not_found` passou a carregar os avisos do box (`reasons`): ele
+ENGOLIA o porquê, e "não achei" sem dizer se foi a pasta, o assunto ou o anexo
+não dá por onde começar (§476).
+
+**Aviso e erro com CÓDIGO (i18n).** As duas telas (CGD e Conf. Matching)
+mostravam a frase pronta do servidor, em português, para quem usa o app em
+inglês/espanhol — contra a regra do §2. `recon_cgd.Aviso` é um `str` (o texto
+do log e do e-mail, que é documento em português) com `.code`/`.params`;
+`avisos_payload` o leva ao JSON como `{code, params, text}` e a tela diz pelo
+`_TRANS` (`w_<code>`, `e_<code>`), com o `text` só de fallback — é também o que
+mantém legível o cache gravado antes. `ReconErro(code, **params)` faz o mesmo
+para a falha do Run que o motor conhece; SSO/timeout seguem `tipo: mensagem`.
+`check_conf_matching` §8 cobra tradução nas três línguas para TODO código que
+os dois motores emitem.
+
+**Levantamento do resto do app** (17/09/2026, só leitura): ~285 mensagens de
+alerta/erro fixas no front em 29 arquivos (16 sem `_TRANS` nenhum — as cinco
+telas de Intrag, Pending Confirmation, Index B3 Results; 10 com o mapa e
+`Swal` passando por fora dele; e os três Settlement Advice do Other Products
+fixos em PORTUGUÊS) e 79 frases prontas em português devolvidas em JSON em 13
+módulos (`platform/confirmations.py` 26, `other_products/entrypoint.py` 14,
+`confirmation/entrypoint.py` 12, `recon_comitente` 8, `manual_confirmation` 7),
+que chegam à tela por 100+ pontos que exibem `j.error`/`j.message` crus. É a
+dívida a pagar por família de tela, com o desenho acima.
+
