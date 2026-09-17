@@ -9,16 +9,19 @@ por padrão), três perguntas:
   * o contrato do FepWeb tem operação na Athena?      → senão `Missing Athena`
   * o contrato aparece mais de uma vez no FepWeb?     → `Duplicated`
 
-e, para o que casou, qual é a situação da ASSINATURA: `Ok` (nada a cobrar) ou
-`Pending` (assinatura a coletar), com o Pending Status ao lado.
+e NADA além disso: a pergunta desta tela é se a confirmação das operações de
+ontem foi GERADA no FepWeb. Achou, é `Ok` — a situação da assinatura é assunto
+do Pending Confirmation, e esta recon não conversa com ele. A única exceção ao
+"não achou" é o `SIGNATURE TYPE = Internal` do Reference Data: para essa
+contraparte a confirmação não é gerada, então não estar no FepWeb é o CERTO, e
+a linha é `Ok`.
 
 O que mudou em relação ao workflow, e por quê:
 
   * **O lado FepWeb é o ANEXO do e-mail** `(REPORT) FEPWeb - Operacoes D-4`
     (box compartilhado › Inbox › Automatico), e não um arquivo que alguém salva
-    numa pasta. A leitura do box é a MESMA função da Recon de CGD. Sem Outlook
-    (dev, servidor que não é Windows) cai para o arquivo na pasta do workflow,
-    avisando qual das duas fontes valeu.
+    numa pasta. A leitura do box é a MESMA função da Recon de CGD. Sem o
+    e-mail NÃO há plano B: o Run falha com o motivo.
   * **O lado Athena é a API de NDF do New Deals**, e não o `Athena.xlsx`.
   * **Cliente se identifica por CHAVE**: CPF/CNPJ no FepWeb, SPN na Athena, os
     dois contra o Reference Data. Por isso a limpeza de nome por RegEx do
@@ -28,11 +31,12 @@ O que mudou em relação ao workflow, e por quê:
     o import do New Deals usa — `interbook-ndf`, `le-accronym` e o `ECONOMIC
     GROUP = INTERNAL` do Reference Data —, e a lista de exceção do Tool 84
     (`ADM`, `Cargill`…) virou o `SIGNATURE TYPE` do Reference Data.
-  * **O Pending Status é o da casa** (`_pc_signature_pending_status`): é a
-    função que o New Deals e o Pending Confirmation já chamam. Uma terceira
-    cópia da regra daria uma terceira resposta para a mesma operação.
-  * **`Pending Update.xlsx` (Tool 28) não é gravada**: o OTC Tracker já alimenta
-    a planilha sozinho.
+  * **O ramo "Pending" do workflow (Tools 32–84, 28) não veio**: prazo, Pending
+    Status e a `Pending Update.xlsx` são do Pending Confirmation, que o OTC
+    Tracker já alimenta sozinho. A primeira versão desta tela classificava o
+    que casou em `Pending`/`Ok` pela assinatura, e uma operação com a
+    confirmação no FepWeb aparecia como pendência de uma recon que só pergunta
+    se ela está lá.
 
 Os dois e-mails do workflow (Confirmações Manuais e MT300) não são desta tela.
 """
@@ -42,7 +46,6 @@ import os
 import threading
 from datetime import date, datetime, timedelta
 
-from apps.config import Config
 from apps.pages import data_store as _store
 from apps.pages import recon_cgd as _cgd
 from apps.pages.data_paths import data_write
@@ -57,18 +60,12 @@ _COMMENTS_LOCK = threading.Lock()
 # O assunto casa por PEDAÇO e normalizado (ver `recon_cgd.baixar_fep_do_box`).
 FEP_MAIL_SUBJECT = os.getenv('CONFMATCH_FEP_MAIL_SUBJECT',
                              '(REPORT) FEPWeb - Operacoes D-4')
-# O plano B é a pasta de input do próprio workflow — é onde a mesa já salvava o
-# anexo à mão. Pende do `Config.SHARED_DRIVE_ROOT`, nunca de um `I:\` escrito.
-INPUT_ROOT = os.getenv(
-    'CONFMATCH_INPUT_ROOT',
-    os.path.join(Config.SHARED_DRIVE_ROOT, 'Confirmation', 'Derivativos', 'Movimento',
-                 'Pending Confirmation', 'Recon Fep Web x Athena'))
-# O anexo chega como `.xls` (e o workflow lia um `.xlsx` salvo à mão): valem os
-# dois, e quem decide COMO ler é o conteúdo, não o nome — relatório de sistema
-# web com nome `.xls` é, conforme o dia, BIFF de verdade, xlsx ou tabela HTML.
-FEP_FILES = tuple(x for x in os.getenv(
-    'CONFMATCH_FEP_FILES', 'FEPWeb - Operacoes D-4.xls|FEPWeb - Operacoes D-4.xlsx').split('|')
-    if x.strip())
+# NÃO há plano B em pasta (decisão da mesa): um arquivo salvo à mão é justamente
+# o que envelhece sem avisar — o batimento rodaria com o relatório de outro dia.
+# Sem o e-mail, o Run falha dizendo por quê.
+# O anexo chega como `.xls`, e quem decide COMO ler é o conteúdo, não o nome —
+# relatório de sistema web com nome `.xls` é, conforme o dia, BIFF de verdade,
+# xlsx ou tabela HTML.
 FEP_MAIL_EXT = ('.xls', '.xlsx', '.xlsm')
 # O relatório sai na NOITE do próprio dia e cobre os últimos dias (o "D-4" do
 # nome): o e-mail que serve a uma data é o mais recente recebido DELA em diante,
@@ -82,27 +79,21 @@ STATUS_FORA = 'CANCELADO'
 ST_MISSING_FEP = 'Missing FepWeb'
 ST_MISSING_ATH = 'Missing Athena'
 ST_DUPLICATED = 'Duplicated'
-ST_MANUAL = 'Manual Confirmation'
-ST_PENDING = 'Pending'
 ST_OK = 'Ok'
 # A ordem é a da gravidade, e é a da tabela e a dos cards.
-STATUS_ORDER = (ST_MISSING_FEP, ST_MISSING_ATH, ST_DUPLICATED, ST_MANUAL,
-                ST_PENDING, ST_OK)
+STATUS_ORDER = (ST_MISSING_FEP, ST_MISSING_ATH, ST_DUPLICATED, ST_OK)
 COUNT_KEYS = {ST_MISSING_FEP: 'missing_fepweb', ST_MISSING_ATH: 'missing_athena',
-              ST_DUPLICATED: 'duplicated', ST_MANUAL: 'manual',
-              ST_PENDING: 'pending', ST_OK: 'ok'}
-# O Forward Start não tem confirmação no FepWeb: ela é confeccionada à mão e
-# corre pela esteira (Confirmations Monitor) — é o ramo "Confirmações Manuais"
-# do workflow. Prazo e assinatura não têm o que dizer sobre ele.
-PS_MANUAL = 'Manual confirmation workflow'
+              ST_DUPLICATED: 'duplicated', ST_OK: 'ok'}
+# O SIGNATURE TYPE para o qual a confirmação NÃO é gerada (comparado sem caixa).
+SIG_NO_CONFIRMATION = 'internal'
 
 # As colunas da tela, na ordem, e as chaves de cada linha: o Advanced Export
 # por intervalo monta o arquivo de `columns` + `rows[coluna]` (o contrato da
 # Recon FXO). `key` fica FORA: é a chave do comentário, não um output.
 COMMENT_COLUMN = 'Comments'
-COLUMNS = ('Status', COMMENT_COLUMN, 'Pending Status', 'Trade Date', 'FepWeb ID',
+COLUMNS = ('Status', COMMENT_COLUMN, 'Trade Date', 'FepWeb ID',
            'Athena ID', 'FepWeb Client', 'Athena Client', 'CNPJ', 'SPN',
-           'Signature Type', 'Instrument Type', 'Settlement Date', 'Tenor',
+           'Signature Type', 'Instrument Type', 'Settlement Date',
            'Quantity Ccy', 'Quantity', 'Other Ccy', 'Other Quantity', 'Strike',
            'Publisher', 'Cetip ID', 'End Counterparty', 'FepWeb Type', 'FepWeb Count')
 
@@ -252,18 +243,11 @@ def ler_fep(ref, avisos, path=None):
                 aceita=_aceita_email(ref), extensoes=FEP_MAIL_EXT)
         except EnvironmentError as e:
             avisos.append(_cgd.Aviso('no_outlook', str(e)))
-        if not path:
-            candidatos = [os.path.join(INPUT_ROOT, f) for f in FEP_FILES]
-            path = next((c for c in candidatos if os.path.isfile(c)), candidatos[0])
-            avisos.append(_cgd.Aviso('report_from_folder',
-                                     'Usei o relatório em pasta ({}) em vez do anexo do e-mail.'
-                                     .format(path), path=path))
     rotulo = origem or path
-    if not os.path.isfile(path):
+    if not path or not os.path.isfile(path):
         raise ReconErro('fep_not_found',
-                        'Relatório do FepWeb não encontrado: nem o e-mail "{}" '
-                        'no box, nem o arquivo {}.'.format(FEP_MAIL_SUBJECT, path),
-                        subject=FEP_MAIL_SUBJECT, path=path,
+                        'Relatório do FepWeb não encontrado: o e-mail "{}" não foi lido '
+                        'do box.'.format(FEP_MAIL_SUBJECT), subject=FEP_MAIL_SUBJECT,
                         # O PORQUÊ do box vai junto: o erro engolia os avisos, e
                         # "não achei" sem dizer se foi a pasta, o assunto ou o
                         # anexo não dá por onde começar (§476).
@@ -314,11 +298,6 @@ def ler_fep(ref, avisos, path=None):
 
 
 # ── Lado Athena ──────────────────────────────────────────────────────────────
-
-def _is_fwd_start(instr):
-    # O mesmo teste do roteamento do New Deals (`_ndf_deal_from_api`).
-    return 'FORWARDSTART' in str(instr or '').upper().replace(' ', '')
-
 
 def _interna(R, norm, end_cp, desc, spn):
     """A perna é interna? As MESMAS perguntas do import do New Deals e do
@@ -406,12 +385,19 @@ def ler_athena(ref, avisos, records=None):
 
 # ── O batimento ──────────────────────────────────────────────────────────────
 
-def _assinatura(R, ath, rec):
-    """(Status, Pending Status) do lado da assinatura, para quem tem Athena."""
-    if _is_fwd_start(ath['instrument']):
-        return ST_MANUAL, PS_MANUAL
-    ps = R._pc_signature_pending_status(rec, ath['trade'], ath['settle'])
-    return (ST_OK if R._pc_is_ok_status(ps) else ST_PENDING), ps
+def _status(no_fep, na_athena, vezes_no_fep, rec):
+    """A pergunta é UMA: a confirmação está no FepWeb? Nos dois lados, `Ok`."""
+    if vezes_no_fep > 1:
+        return ST_DUPLICATED
+    if no_fep:
+        return ST_OK if na_athena else ST_MISSING_ATH
+    return ST_OK if _dispensa_confirmacao(rec) else ST_MISSING_FEP
+
+
+def _dispensa_confirmacao(rec):
+    """A contraparte assina por dentro: a confirmação não é gerada, e não estar
+    no FepWeb é o esperado."""
+    return str((rec or {}).get('SIGNATURE TYPE', '') or '').strip().lower() == SIG_NO_CONFIRMATION
 
 
 def executar(ref=None, fep_path=None, athena_records=None):
@@ -444,24 +430,14 @@ def executar(ref=None, fep_path=None, athena_records=None):
         if a and rec_a is None:
             sem_cadastro.add('SPN {}'.format(a['spn'] or '— (' + a['end_cp'] + ')'))
 
-        status, pending = '', ''
-        if a:
-            status, pending = _assinatura(R, a, rec)
-        if f and not a:
-            status = ST_MISSING_ATH
-        elif a and not f:
-            status = ST_MISSING_FEP
-        if f_list and len(f_list) > 1:
-            status = ST_DUPLICATED
+        status = _status(bool(f), bool(a), len(f_list or ()), rec)
 
-        tenor = (a['settle'] - a['trade']).days if (a and a['settle'] and a['trade']) else None
         tax = (rec_f or {}).get('TAX ID') or (f and _cgd._digits(f.get('cnpj'))) \
             or (rec_a or {}).get('TAX ID') or ''
         return {
             'key': (f['contrato'] if f else a['deal']),
             'Status': status,
             COMMENT_COLUMN: '',
-            'Pending Status': pending,
             'Trade Date': _cgd._fmt_date(dia),
             'FepWeb ID': f['contrato'] if f else '',
             'Athena ID': a['deal'] if a else '',
@@ -472,7 +448,6 @@ def executar(ref=None, fep_path=None, athena_records=None):
             'Signature Type': str(rec.get('SIGNATURE TYPE', '') or '').strip(),
             'Instrument Type': a['instrument'] if a else '',
             'Settlement Date': _cgd._fmt_date(a['settle']) if a else '',
-            'Tenor': tenor,
             'Quantity Ccy': a['qty_ccy'] if a else '',
             'Quantity': a['qty'] if a else None,
             'Other Ccy': a['other_ccy'] if a else '',
@@ -496,7 +471,7 @@ def executar(ref=None, fep_path=None, athena_records=None):
         lista = '; '.join(amostra[:8]) + ('…' if len(amostra) > 8 else '')
         avisos.append(_cgd.Aviso('no_refdata',
                                  'Sem cadastro no Reference Data ({}): {} — o cliente sai como '
-                                 'veio da fonte e a assinatura conta como não cadastrada.'
+                                 'veio da fonte e o Signature Type fica em branco.'
                                  .format(len(amostra), lista), n=len(amostra), sample=lista))
 
     ordem = {s: i for i, s in enumerate(STATUS_ORDER)}
@@ -584,6 +559,24 @@ def salvar(res):
     return path
 
 
+def _desenho_atual(res):
+    """Traz para o desenho de hoje o dia gravado quando a tela ainda
+    classificava a assinatura (`Pending`/`Manual Confirmation`, colunas `Pending
+    Status` e `Tenor`). Sem isto o dia antigo abre com badge cinza e os cards
+    não fecham com o Total. A regra é a mesma do `executar`."""
+    for r in (res.get('rows') or []):
+        r.pop('Pending Status', None)
+        r.pop('Tenor', None)
+        r['Status'] = _status(bool(r.get('FepWeb ID')), bool(r.get('Athena ID')),
+                              r.get('FepWeb Count') or 0,
+                              {'SIGNATURE TYPE': r.get('Signature Type')})
+    res['columns'] = list(COLUMNS)
+    res['counts'] = contar(res.get('rows') or [])
+    ordem = {s: i for i, s in enumerate(STATUS_ORDER)}
+    (res.get('rows') or []).sort(key=lambda r: ordem.get(r.get('Status'), 99))
+    return res
+
+
 def carregar(ref=None):
     """O resultado já rodado daquele dia (com os comentários de AGORA), ou
     `None`. Rodar é decisão de quem opera, não do carregamento da página."""
@@ -595,5 +588,6 @@ def carregar(ref=None):
         return None
     if not isinstance(res, dict):
         return None
+    _desenho_atual(res)
     aplicar_comentarios(res.get('rows') or [])
     return res

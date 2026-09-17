@@ -21114,3 +21114,43 @@ módulos (`platform/confirmations.py` 26, `other_products/entrypoint.py` 14,
 que chegam à tela por 100+ pontos que exibem `j.error`/`j.message` crus. É a
 dívida a pagar por família de tela, com o desenho acima.
 
+### §486 — terceira rodada, mesmo dia: a recon faz UMA pergunta
+
+A primeira versão trouxe o ramo "Pending" do workflow: o que casava era
+classificado em `Pending`/`Ok` pela regra de prazo e assinatura do Pending
+Confirmation, com as colunas `Pending Status` e `Tenor`. Resultado na mesa:
+operação COM a confirmação no FepWeb aparecendo como `Pending` ("Pending
+Digital Signature"), e contraparte `Internal` — para quem a confirmação nem é
+gerada — aparecendo como `Missing FepWeb`.
+
+A pergunta desta tela é só **"a confirmação das operações de ontem foi gerada
+no FepWeb?"**, e ela não conversa com o Pending Confirmation:
+
+- nos dois lados → `Ok`, sempre (assinatura é assunto de outra tela);
+- só na Athena → `Missing FepWeb`, **salvo `SIGNATURE TYPE = Internal`**, que é
+  `Ok` (não estar no FepWeb é o esperado);
+- só no FepWeb → `Missing Athena`; contrato repetido → `Duplicated`.
+
+Saíram `Pending`, `Manual Confirmation` (o Forward Start é tratado como
+qualquer NDF: achou, `Ok`), `Pending Status`, `Tenor` e as chamadas a
+`_pc_signature_pending_status`/`_pc_is_ok_status`. A regra mora numa função só
+(`_status`), que o `carregar` reaplica sobre o dia gravado no desenho antigo
+(`_desenho_atual`) — sem isso o dia de ontem abriria com badge cinza e cards que
+não fecham com o Total.
+
+**O plano B da pasta também saiu** (decisão da mesa): sem o e-mail o Run falha
+com `fep_not_found` + os motivos do box. Um arquivo salvo à mão é o que
+envelhece sem avisar. `CONFMATCH_INPUT_ROOT`/`FEP_FILES` não existem mais; na
+dev (sem Outlook) o Run sempre falha, e o motor se exercita pelo teste.
+
+**O cabeçalho da tabela saía CORTADO no topo** (checkbox e rótulo comidos), nas
+duas recons com painel próprio. Causa: o `app.css` do tema tem `.dt-container
+{ margin-top: -0.75rem }`, e o container mora dentro de um `.table-responsive`
+com `overflow: auto` — os 12px de cima são cortados. O §49 do `streamflow.css`
+já neutralizava isso, mas só dentro de `.card`, e o padrão da casa manda NÃO
+usar `.card` em widget próprio: toda tela com painel próprio nascia com o
+defeito. Corrigido na raiz (§49b), com a regra ANTES da do `.card` (mesma
+especificidade — lá dentro segue o `1rem`). Medido: corte 12 → 0 nas recons;
+Pending Confirmation e Recon FXO (em `.card`) idênticas. `?v=` do
+`streamflow.css` subiu para `20260917a`.
+

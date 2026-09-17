@@ -13,11 +13,12 @@ O que este teste protege é o que erra em SILÊNCIO quando quebra:
 3. **A chave do batimento** é cega a caixa e a `_` × `-`.
 4. **Cliente por CHAVE**: CPF/CNPJ (a planilha entrega NÚMERO, sem o zero à
    esquerda) e SPN, os dois contra o Reference Data.
-5. **A assinatura é a regra da casa** (`_pc_signature_pending_status`): prazo
-   curto e `Internal` → `Ok`; Digital/Manual → `Pending`; Forward Start →
-   `Manual Confirmation`.
+5. **A pergunta é UMA: a confirmação está no FepWeb?** Achou, é `Ok` — a
+   assinatura é assunto do Pending Confirmation, e esta recon não conversa com
+   ele. `SIGNATURE TYPE = Internal` sem FepWeb também é `Ok`: a confirmação não
+   é gerada. E o dia gravado no desenho antigo (`Pending`) abre no de hoje.
 6. **Sem um dos lados o Run FALHA com o motivo** — rodar só com a Athena
-   pintaria o dia inteiro de `Missing FepWeb`.
+   pintaria o dia inteiro de `Missing FepWeb`. NÃO há plano B em pasta.
 7. **O comentário é do TRADE**: sobrevive a um novo Run e aparece no cache que
    já estava gravado.
 8. **A leitura do box** escolhe o e-mail que COBRE a data (o relatório é uma
@@ -46,7 +47,6 @@ os.chdir(ROOT)
 TMP = tempfile.mkdtemp(prefix='conf-matching-')
 os.environ.setdefault('OTC_SHARED_DRIVE_ROOT', os.path.join(TMP, 'share'))
 os.environ['OTC_DISABLE_SCHEDULERS'] = '1'
-os.environ['CONFMATCH_INPUT_ROOT'] = os.path.join(TMP, 'input')
 
 from apps.pages import routes as R                               # noqa: E402
 from apps.pages import recon_cgd as CGD                          # noqa: E402
@@ -105,6 +105,7 @@ ATHENA = [
     ath('D2', 'ISIGNBR', '1002'),
     ath('D3', 'MANUALBR', '1003', settle=CURTO),
     ath('D4', 'MANUALBR', '1003'),                                  # só na Athena
+    ath('D13', 'ISIGNBR', '1002'),                                  # só na Athena, mas Internal
     ath('D5', 'DIGITALBR', '1001', isCancelled=True),               # cancelada
     ath('D6', 'BR ON - LN LAWTON NDF', ''),                         # book
     ath('D7', 'JPMBR', '9999'),                                     # ECONOMIC GROUP INTERNAL
@@ -146,25 +147,23 @@ try:
     print('=== 1. O batimento ===')
     res = M.executar(REF, fep_path=FEP, athena_records=ATHENA)
     por = {r['key']: r for r in res['rows']}
-    check('as chaves do dia', sorted(por), ['D-10', 'D1', 'D2', 'D3', 'D4', 'D8', 'DUP', 'F1'])
+    check('as chaves do dia', sorted(por), ['D-10', 'D1', 'D13', 'D2', 'D3', 'D4', 'D8', 'DUP', 'F1'])
     check('columns é o contrato do Advanced Export', res['columns'], list(M.COLUMNS))
     check('toda linha tem todas as colunas',
           [k for k, r in por.items() if any(c not in r for c in M.COLUMNS)], [])
+    check('nada do Pending Confirmation na tela',
+          [c for c in M.COLUMNS if c in ('Pending Status', 'Tenor')], [])
 
-    check('D1 digital, prazo longo', (por['D1']['Status'], por['D1']['Pending Status']),
-          ('Pending', 'Pending Digital Signature'))
-    check('D2 Internal não cobra assinatura', (por['D2']['Status'], por['D2']['Pending Status']),
-          ('Ok', 'Exception Digital Fep Web'))
-    check('D3 prazo curto', (por['D3']['Status'], por['D3']['Pending Status']),
-          ('Ok', 'Exception FepWeb'))
+    check('achou no FepWeb é Ok — digital, prazo longo', por['D1']['Status'], 'Ok')
+    check('achou no FepWeb é Ok — manual, prazo curto', por['D3']['Status'], 'Ok')
+    check('achou no FepWeb é Ok — Forward Start', por['D8']['Status'], 'Ok')
     check('D4 só na Athena', por['D4']['Status'], 'Missing FepWeb')
-    check('D4 ainda diz a assinatura', por['D4']['Pending Status'], 'Pending Original')
-    check('F1 só no FepWeb', (por['F1']['Status'], por['F1']['Pending Status']), ('Missing Athena', ''))
+    check('D13 só na Athena, mas Internal: não gera confirmação',
+          (por['D13']['Status'], por['D13']['FepWeb ID'], por['D13']['Signature Type']), ('Ok', '', 'Internal'))
+    check('F1 só no FepWeb', por['F1']['Status'], 'Missing Athena')
     check('DUP é UMA linha', (por['DUP']['Status'], por['DUP']['FepWeb Count']), ('Duplicated', 2))
-    check('D8 Forward Start', (por['D8']['Status'], por['D8']['Pending Status']),
-          ('Manual Confirmation', M.PS_MANUAL))
     check('D_10 × d-10 casam', (por['D-10']['FepWeb ID'], por['D-10']['Athena ID'], por['D-10']['Status']),
-          ('D-10', 'D-10', 'Pending'))
+          ('D-10', 'D-10', 'Ok'))
 
     print('=== 2. Cliente por chave ===')
     check('CNPJ numérico sem o zero acha o cadastro', por['D1']['FepWeb Client'], 'DIGITAL SA')
@@ -176,22 +175,19 @@ try:
     aviso = [w for w in res['warnings'] if w['code'] == 'no_refdata']
     check('sem cadastro AVISA — com código, parâmetros e o texto de fallback',
           (len(aviso), aviso[0]['params']['n'], 'Reference Data' in aviso[0]['text']), (1, 2, True))
-    check('números crus (a tela formata)', (por['D1']['Quantity'], por['D1']['Strike'], por['D1']['Tenor']),
-          (1000000.0, 5.158, 120))
+    check('números crus (a tela formata)', (por['D1']['Quantity'], por['D1']['Strike']), (1000000.0, 5.158))
 
     print('=== 3. Cortes ===')
     check('FepWeb', res['fep_info'], {'lidas': 10, 'canceladas': 1, 'outras_datas': 1, 'formato': 'xlsx'})
     check('Athena', res['athena_info'],
-          {'lidas': 13, 'canceladas': 1, 'internas': 4, 'outras_datas': 1})
+          {'lidas': 14, 'canceladas': 1, 'internas': 4, 'outras_datas': 1})
     check('outro Trade Date AVISA', [w['params'] for w in res['warnings'] if w['code'] == 'other_trade_dates'],
           [{'n': 1, 'date': '16/09/2026'}])
     check('todo aviso da tela tem CÓDIGO (frase pronta não se traduz)',
           [w for w in res['warnings'] if not w.get('code')], [])
-    check('counts', res['counts'], {'missing_fepweb': 1, 'missing_athena': 1, 'duplicated': 1,
-                                    'manual': 1, 'pending': 2, 'ok': 2})
+    check('counts', res['counts'], {'missing_fepweb': 1, 'missing_athena': 1, 'duplicated': 1, 'ok': 6})
     check('a ordem é a da gravidade', [r['Status'] for r in res['rows']],
-          ['Missing FepWeb', 'Missing Athena', 'Duplicated', 'Manual Confirmation',
-           'Pending', 'Pending', 'Ok', 'Ok'])
+          ['Missing FepWeb', 'Missing Athena', 'Duplicated'] + ['Ok'] * 6)
 
     print('=== 4. Sem um dos lados o Run falha com o motivo ===')
     try:
@@ -199,13 +195,13 @@ try:
         check('FepWeb ausente levanta', False, True)
     except M.ReconErro as e:
         check('FepWeb ausente levanta COM CÓDIGO', (e.code, sorted(e.params)),
-              ('fep_not_found', ['path', 'reasons', 'subject']))
+              ('fep_not_found', ['reasons', 'subject']))
     try:
-        M.executar(REF, athena_records=ATHENA)          # sem Outlook e sem arquivo em pasta
-        check('sem box e sem pasta levanta', False, True)
+        M.executar(REF, athena_records=ATHENA)          # sem Outlook
+        check('sem o e-mail levanta', False, True)
     except M.ReconErro as e:
-        check('e o erro leva o PORQUÊ do box', [r['code'] for r in e.params['reasons']],
-              ['no_outlook', 'report_from_folder'])
+        check('e o erro leva o PORQUÊ do box', [r['code'] for r in e.params['reasons']], ['no_outlook'])
+    check('NÃO há plano B em pasta', (hasattr(M, 'INPUT_ROOT'), hasattr(M, 'FEP_FILES')), (False, False))
 
     print('=== 4a. A data do FepWeb é AMERICANA (mm/dd/aaaa) ===')
     check('09/10/2026 é 10 de SETEMBRO, não 9 de outubro', M.fep_date('09/10/2026'), date(2026, 9, 10))
@@ -234,25 +230,7 @@ try:
     r2 = M.executar(REF, fep_path=html_xls, athena_records=ATHENA[:1])
     check('tabela HTML com nome .xls é lida', (r2['fep_info']['formato'], r2['fep_count'],
                                               r2['rows'][0]['Status'], r2['rows'][0]['FepWeb Client']),
-          ('html', 1, 'Pending', 'DIGITAL SA'))
-    os.makedirs(os.environ['CONFMATCH_INPUT_ROOT'], exist_ok=True)
-    shutil.copy(html_xls, os.path.join(os.environ['CONFMATCH_INPUT_ROOT'], 'FEPWeb - Operacoes D-4.xls'))
-    r3 = M.executar(REF, athena_records=ATHENA[:1])
-    check('sem Outlook, a pasta serve o .xls', (r3['fep_count'], [w['code'] for w in r3['warnings']]),
-          (1, ['no_outlook', 'report_from_folder']))
-    os.remove(os.path.join(os.environ['CONFMATCH_INPUT_ROOT'], 'FEPWeb - Operacoes D-4.xls'))
-
-    def _api_fora(ref):
-        raise ConnectionError('SSO recusado')
-    _orig_busca = M.buscar_athena
-    M.buscar_athena = _api_fora
-    try:
-        M.executar(REF, fep_path=FEP)
-        check('Athena fora levanta', False, True)
-    except ConnectionError as e:
-        check('Athena fora levanta', str(e), 'SSO recusado')
-    finally:
-        M.buscar_athena = _orig_busca
+          ('html', 1, 'Ok', 'DIGITAL SA'))
 
     from openpyxl import Workbook
     ruim = os.path.join(TMP, 'ruim.xlsx')
@@ -268,6 +246,19 @@ try:
     lido = M.carregar(REF.strftime('%Y-%m-%d'))
     check('o cache lê o que gravou', [r['key'] for r in lido['rows']], [r['key'] for r in res['rows']])
     check('dia que ninguém rodou é None', M.carregar('2020-01-02'), None)
+    velho = {'ref': '2026-09-15', 'columns': ['Status', 'Pending Status'], 'counts': {'pending': 2}, 'rows': [
+        {'key': 'V1', 'Status': 'Pending', 'Pending Status': 'Pending Digital Signature', 'Tenor': 90,
+         'FepWeb ID': 'V1', 'Athena ID': 'V1', 'FepWeb Count': 1, 'Signature Type': 'Digital'},
+        {'key': 'V2', 'Status': 'Missing FepWeb', 'Pending Status': 'Exception Digital Fep Web',
+         'FepWeb ID': '', 'Athena ID': 'V2', 'FepWeb Count': 0, 'Signature Type': 'Internal'},
+        {'key': 'V3', 'Status': 'Manual Confirmation', 'Pending Status': 'x',
+         'FepWeb ID': '', 'Athena ID': 'V3', 'FepWeb Count': 0, 'Signature Type': 'Manual'}]}
+    M.salvar(velho)
+    v = M.carregar('2026-09-15')
+    check('o dia gravado no desenho ANTIGO abre no de hoje',
+          ({r['key']: r['Status'] for r in v['rows']}, v['counts']['ok'], 'Pending Status' in v['rows'][0],
+           v['columns'] == list(M.COLUMNS)),
+          ({'V1': 'Ok', 'V2': 'Ok', 'V3': 'Missing FepWeb'}, 2, False, True))
     check('sem data, grava e lê no MESMO dia (D-1)',
           M._cache_path(None), M._cache_path(CGD.dia_util_anterior().strftime('%Y-%m-%d')))
 
@@ -419,7 +410,7 @@ try:
     j = c.get('/api/reconciliation-conf-matching/data?recon_date=2020-01-02').get_json()
     check('dia sem Run abre VAZIO, dizendo o dia', (j['empty'], j['ref_fmt'], j['rows']), (True, '02/01/2020', []))
     j = c.get('/api/reconciliation-conf-matching/data?recon_date=' + REF.strftime('%Y-%m-%d')).get_json()
-    check('dia rodado devolve as linhas e as colunas', (len(j['rows']), j['columns'][0]), (8, 'Status'))
+    check('dia rodado devolve as linhas e as colunas', (len(j['rows']), j['columns'][0]), (9, 'Status'))
 
     M.executar_orig = M.executar
     M.executar = lambda ref=None: M.executar_orig(ref, fep_path=FEP, athena_records=ATHENA)
@@ -473,13 +464,24 @@ try:
     av_cgd = _codigos('apps/pages/recon_cgd.py', 'Aviso')
     av_cfm = _codigos('apps/pages/recon_conf_matching.py', r'_cgd\.Aviso') | box
     er_cfm = _codigos('apps/pages/recon_conf_matching.py', 'ReconErro')
-    check('os motores emitem avisos com código', (len(av_cgd) >= 12, len(av_cfm) >= 9, len(er_cfm)), (True, True, 3))
+    check('os motores emitem avisos com código', (len(av_cgd) >= 12, len(av_cfm) >= 8, len(er_cfm)), (True, True, 3))
     for lg, chaves in _chaves('reconciliation-cgd.html').items():
         check('CGD [%s]: nenhum aviso sem tradução' % lg, sorted('w_' + c for c in av_cgd if 'w_' + c not in chaves), [])
     for lg, chaves in _chaves('reconciliation-conf-matching.html').items():
         check('Conf. Matching [%s]: nenhum aviso/erro sem tradução' % lg,
               sorted([('w_' + c) for c in av_cfm if 'w_' + c not in chaves] +
                      [('e_' + c) for c in er_cfm if 'e_' + c not in chaves]), [])
+
+    print('=== 9. O cabeçalho da tabela não é cortado em painel próprio (streamflow §49b) ===')
+    css = _io.open(os.path.join(ROOT, 'apps/static/css/streamflow.css'), encoding='utf-8').read()
+    raiz = css.find('.table-responsive > .dt-container { margin-top: 0; }')
+    check('o tema neutraliza o -0.75rem do .dt-container fora de .card', raiz > 0, True)
+    check('e a regra vem ANTES da do .card (mesma especificidade)',
+          0 < raiz < css.find('.card .dt-container {'), True)
+    for pg_ in ('reconciliation-conf-matching.html', 'reconciliation-cgd.html'):
+        txt = _io.open(os.path.join(ROOT, 'apps/templates/pages', pg_), encoding='utf-8').read()
+        check(pg_ + ' não remenda com padding-top na página',
+              bool(_re.search(r'\.table-responsive\s*\{[^}]*padding-top', txt)), False)
 finally:
     shutil.rmtree(TMP, ignore_errors=True)
 
