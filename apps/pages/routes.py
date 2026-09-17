@@ -14082,6 +14082,7 @@ from apps.pages.features.weekly_escalation import entrypoint as _f_weekly_esc   
 from apps.pages.features.recon_comitente import entrypoint as _f_recon_comitente  # noqa: E402,F401
 from apps.pages.features.recon_payrec import entrypoint as _f_recon_payrec        # noqa: E402,F401
 from apps.pages.features.recon_cgd import entrypoint as _f_recon_cgd              # noqa: E402,F401
+from apps.pages.features.recon_conf_matching import entrypoint as _f_recon_confmatch  # noqa: E402,F401
 from apps.pages.features.boxscan import entrypoint as _f_boxscan                  # noqa: E402,F401
 from apps.pages.features.sigcoll import entrypoint as _f_sigcoll                  # noqa: E402,F401
 from apps.pages.features.pcx import entrypoint as _f_pcx                          # noqa: E402,F401

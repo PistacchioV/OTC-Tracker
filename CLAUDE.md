@@ -105,13 +105,13 @@ recusa subir se o `config.py` ficou para trás num pull (§9).
 |---|---|
 | `apps/pages/routes.py` (~13,6 mil linhas) | casca e plataforma miúda: sessão/authz-endpoints, sino, `_MAPPING_DEFS`, leitores `_ndfc_*`/`_ndfsum_*`/`_ndfadv_*`, Daily Settlement `_ds_*`, wiring das features e os ALIASES (`_x = _pf_anbima._x`) |
 | `apps/pages/platform/` (17 módulos) | infra horizontal: `anbima`, `authz`, `db`, `dates`, `json_cache`, `mail`, `notifications` e os motores `settlement`, `confirmations`, `counterparty`, `forecast`, `electronic_inventory`, `manual_confirmation`, `file_interpreter`, `pending_confirmation`, `operations_b3`, `new_deals` |
-| `apps/pages/features/<nome>/` (44 verticais) | `entrypoint.py` (rotas) · `commands.py` (escrita) · `queries.py` (leitura) · `domain.py` (regras puras) · `infra/` — todas em desenho fino; não existe mais `engine.py` |
+| `apps/pages/features/<nome>/` (45 verticais) | `entrypoint.py` (rotas) · `commands.py` (escrita) · `queries.py` (leitura) · `domain.py` (regras puras) · `infra/` — todas em desenho fino; não existe mais `engine.py` |
 | `apps/pages/database_access.py` | a camada de banco: permit + lock de arquivo + farol de eventos (§4) |
 | `data_store.py` · `duck_read.py` · `json_to_duckdb.py` | o ARMAZÉM (o `DATA_DIR` como sistema de arquivos virtual sobre os DuckDB), a fachada de leitura com os nomes antigos, o motor de conversão (§4) |
 | `data_paths.py` · `request_cache.py` | caminhos de dado; `once_per_request`/`req_cached` |
 | `manual_conf.py` · `cgd_docs.py` · `otc_tickets.py` | donos dos bancos da esteira, do Onboarding e do store de tickets |
 | `athena_api.py` · `otc_boxparse.py` · `otc_boxscan.py` · `otc_emails.py` · `webpush.py` | Athena (SSO Kerberos), parser do recap, varredura do box, e-mails, push |
-| `recon_fxo.py` · `recon_cgd.py` · `recon_payrec.py` · `recon_comitente.py` | motores das recons |
+| `recon_fxo.py` · `recon_cgd.py` · `recon_payrec.py` · `recon_comitente.py` · `recon_conf_matching.py` | motores das recons |
 | `confirmation_pdfs.py` · `forecast_charts.py` · `quotes.py` · `precificador/` | PDFs em reportlab, gráficos, cotações, motor de mercado das Tools (puro, sem Flask) |
 
 Templates: `layouts/base.html` → `layouts/vertical.html` (o único layout) →
@@ -778,8 +778,21 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   A varredura do box não tem a proteção de propósito (paridade com
   `otc-fileupload.js`).
 - **Só `isCancelled` é cancelado** na Athena; `isDead` importa normalmente.
-- **A inversão da moeda fraca é do PAR** (`_ndf_weak_leg`), uma vez na
-  importação. O TER **não** arredonda mais pelo `INV DECIMALS` (§474): o
+- **O notional do NDF é SEMPRE o da moeda que não é BRL nem USD** (§485,
+  `_ndf_notional_leg`): com BRL no par, a outra perna (USD/BRL → USD, CNH/BRL
+  → CNH); sem BRL, a que não é USD (USD/CNH → CNH); nenhuma das duas BRL/USD
+  (MXN/CLP) fica como bookado. A Athena pode bookar a `Quantity` em qualquer
+  perna — o import move o notional para a `OTHER QUANTITY` quando a perna é a
+  Other, trocando as moedas; sem Other Quantity fica como veio. Por isso
+  `IsBRRFixed` não nasce mais da API. **A posição é da moeda do notional e
+  quem a diz são `Pay CCY`/`Rec CCY`** (recebemos → compra, pagamos → venda);
+  o `Type` é só fallback, virado quando o notional trocou de perna num par
+  sem BRL. Confia nos RÓTULOS da API: se `Quantity Currency` rotular ao
+  contrário do valor, o número sai da perna errada.
+- **A inversão da moeda fraca é do PAR** (`_ndf_weak_leg`, cadastro `Weak
+  Ccy` do `currency-base`), uma vez na importação, e NÃO exige BRL: exatamente
+  uma perna fraca inverte (USD/CNH inclusive); zero ou duas, não. O TER
+  **não** arredonda mais pelo `INV DECIMALS` (§474): o
   campo 18 é `9(12)V9(8)` e vai com as OITO casas, sempre — o cadastro segue
   valendo no que a tela mostra. E o campo 16 é `9(14)V9(2)`: os dois decimais
   são os do notional, não um `'00'` colado — o gerador ARREDONDAVA para
@@ -807,6 +820,10 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   confirmação quando a LE é MGT (`_generic_nd_mc_source`) e nasce `Pending
   OTC`; o do BANCO segue sem esteira. O FWD Start do BANCO deixou de listar
   os de MGT, e o Generate do Monitor escolhe o editor pela Legal Entity.
+  **No documento MGT o Nº do Anexo I é o Athena ID** (o `Deal`; §484,
+  `num_field` do `_conf_fwdstart_rows`) e o título é só "CONFIRMAÇÃO DE
+  OPERAÇÕES DE DERIVATIVOS", sem "Nº" nem número; no do BANCO o Nº segue
+  sendo o B3 ID. As chaves da esteira não mudam com isso.
 - **O eixo do ATIVO da confirmação é UM, e vale nos TRÊS lugares** (§457):
   a segregação dos grupos (`_conf_segregate`), a escolha do grupo na geração
   (`_conf_pick_eligible`) e a coluna `Moeda` da ESTEIRA, que é quem monta o
@@ -1240,6 +1257,17 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   (`baixar_fep_do_box`; `path` vence; sem Outlook cai para `CGD_INPUT_ROOT`
   avisando); contas nossas do `b3-accounts`; CNPJ por dígito; cache gravado
   com a data da POSIÇÃO.
+- **Conf. Matching** (FepWeb × Athena, §486): o FepWeb é o ANEXO do e-mail
+  `(REPORT) FEPWeb - Operacoes D-4` — lido pela MESMA `baixar_fep_do_box` da
+  CGD (`assunto` + `aceita`: o relatório é uma janela de dias, vale o e-mail
+  que COBRE a data; nenhum, o mais recente avisando) — e a Athena é a API de
+  NDF do New Deals. Cliente por CHAVE (CNPJ sem zero à esquerda × SPN);
+  internas e exceção de assinatura saem de CADASTRO (`interbook-ndf`,
+  `le-accronym`, `ECONOMIC GROUP`, `SIGNATURE TYPE`), nunca das listas do
+  workflow; o Pending Status é `_pc_signature_pending_status` (≤ 60 dias, não
+  o `< 60` do Alteryx). Sem um dos lados o Run LEVANTA. Comentário é do trade
+  e não muda o Status. Linha chaveada pelo RÓTULO + `columns` no payload (o
+  contrato do Advanced Export por intervalo).
 
 ### Onboarding (CGD)
 
@@ -1384,7 +1412,7 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 `apps/static/data/db/` é gitignorado: bancos não vêm no pull. Telas vazias
 depois de um pull são migração não rodada, não bug.
 
-### `scripts/tests/` (137 scripts)
+### `scripts/tests/` (138 scripts)
 
 Autocontidos, sem framework, `ok`/`FAIL` por asserção, saída 0/1, sem tocar
 dado real (tmp, stubs de Outlook/SMTP). O

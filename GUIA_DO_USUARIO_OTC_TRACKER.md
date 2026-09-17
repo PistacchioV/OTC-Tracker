@@ -1165,6 +1165,8 @@ A página são **três cartões verticais**, um por mesa da esteira:
 
 Os cinco fecham: **Documents = Pending + Active + Inactive + Cancelled**.
 
+**Clique num chip para filtrar a tabela** por aquele grupo — o mesmo gesto dos cards do Track Confirmations. O chip ativo ganha uma moldura azul; clicar nele de novo desliga o filtro, e **Documents** volta à lista inteira. O filtro do chip soma com as caixinhas do cabeçalho, e **Clear Filters** limpa os dois. O que cada chip mostra é exatamente o que ele conta: a regra que classifica a linha (Active é o `Status` exato; Inactive e Cancelado são os encerrados) é a mesma do contador.
+
 **A faixa cinza acima da barra de ferramentas** mostra **de onde os dados vieram** — o caminho do banco e quantas linhas ele tem. Se o banco ainda não foi criado, essa faixa fica **vermelha** dizendo isso e o comando que resolve.
 
 **As duas colunas que o sistema calcula:**
@@ -1180,7 +1182,7 @@ Os cinco fecham: **Documents = Pending + Active + Inactive + Cancelled**.
 
 **Passo a passo:**
 
-1. Filtre pelas caixinhas do cabeçalho — por **Status**, por **Razão Social**, por **Pending with**.
+1. Filtre pelas caixinhas do cabeçalho — por **Status**, por **Razão Social**, por **Pending with** — ou clique num **chip** do alto para ver só aquele grupo.
 2. Para corrigir um dado, clique em **Edit** na linha, altere e salve (4.9). O *Aging* não é editável: ele é calculado.
 3. **New Request** abre o formulário de abertura de solicitação (o mesmo do Overview — ver 10.1).
 4. **Delete** apaga uma linha.
