@@ -6,7 +6,6 @@
 {% set CFM_COLS = [
     {'name': 'Status', 'lang': 'cfm-c-status', 'cls': ''},
     {'name': 'Comments', 'lang': 'cfm-c-comments', 'cls': 'cfm-comment'},
-    {'name': 'Pending Status', 'lang': 'cfm-c-pending', 'cls': ''},
     {'name': 'Trade Date', 'lang': 'cfm-c-trade', 'cls': ''},
     {'name': 'FepWeb ID', 'lang': 'cfm-c-fepid', 'cls': ''},
     {'name': 'Athena ID', 'lang': 'cfm-c-athid', 'cls': ''},
@@ -17,7 +16,6 @@
     {'name': 'Signature Type', 'lang': 'cfm-c-sig', 'cls': ''},
     {'name': 'Instrument Type', 'lang': 'cfm-c-instr', 'cls': ''},
     {'name': 'Settlement Date', 'lang': 'cfm-c-settle', 'cls': ''},
-    {'name': 'Tenor', 'lang': 'cfm-c-tenor', 'cls': 'cfm-num'},
     {'name': 'Quantity Ccy', 'lang': 'cfm-c-qccy', 'cls': ''},
     {'name': 'Quantity', 'lang': 'cfm-c-qty', 'cls': 'cfm-num'},
     {'name': 'Other Ccy', 'lang': 'cfm-c-occy', 'cls': ''},
@@ -77,10 +75,8 @@
 #cfm-page .cfm-k-mfep    .cfm-kpi__ico { background: linear-gradient(100deg, #b3261e, #ff453a); }
 #cfm-page .cfm-k-math    .cfm-kpi__ico { background: linear-gradient(100deg, #7c3aed, #d946ef); }
 #cfm-page .cfm-k-dup     .cfm-kpi__ico { background: linear-gradient(100deg, #b07500, #f7b84b); }
-#cfm-page .cfm-k-manual  .cfm-kpi__ico { background: linear-gradient(100deg, #0d7ea8, #4a849b); }
-#cfm-page .cfm-k-pending .cfm-kpi__ico { background: linear-gradient(100deg, #475569, #94a3b8); }
 #cfm-page .cfm-k-ok      .cfm-kpi__ico { background: linear-gradient(100deg, #1a7f37, #34c759); }
-/* o Total usa o gradiente da MARCA: os outros seis são cores de estado, ele é
+/* o Total usa o gradiente da MARCA: os outros quatro são cores de estado, ele é
    o fechamento da conta */
 #cfm-page .cfm-k-total   .cfm-kpi__ico { background: var(--vr-grad); }
 #cfm-page .cfm-k-total {
@@ -285,7 +281,7 @@
 
     var _TRANS = {
         en: { total: 'Total', missing_fepweb: 'Missing FepWeb', missing_athena: 'Missing Athena',
-              duplicated: 'Duplicated', manual: 'Manual Confirmation', pending: 'Pending', ok: 'Ok',
+              duplicated: 'Duplicated', ok: 'Ok',
               actions: 'Actions', editComment: 'Edit comment', save: 'Save', cancel: 'Cancel',
               commentPh: 'Comment on this operation', saveFail: 'Could not save the comment',
               run: 'Running the reconciliation…',
@@ -295,20 +291,19 @@
               fep: 'FepWeb report', at: 'run at', ops: 'operation(s)',
               cancelled: 'cancelled', internal: 'internal legs', otherDates: 'other dates',
               w_no_outlook: "Outlook is not available on this server, so the mailbox could not be read.",
-              w_report_from_folder: "Used the report saved in the folder ({path}) instead of the e-mail attachment.",
               w_no_cnpj_col: "The FepWeb report has no \"CPF/CNPJ CLIENTE\" column: the FepWeb client shows the name from the report itself.",
               w_no_ops_for_date: "The FepWeb report ({file}) has no operation dated {date} — is the date outside its window?",
               w_other_trade_dates: "{n} operation(s) from the API came with a Trade Date other than {date} and were left out.",
-              w_no_refdata: "Not registered in Reference Data ({n}): {sample} — the client is shown as it came from the source and the signature counts as not registered.",
+              w_no_refdata: "Not registered in Reference Data ({n}): {sample} — the client is shown as it came from the source and the Signature Type stays blank.",
               w_box_folder_missing: "FepWeb folder not found in mailbox {mailbox}: {folder}",
               w_box_no_covering: "No \"{subject}\" e-mail covers the requested date; the most recent one in the folder was used.",
               w_box_no_mail: "No e-mail with subject \"{subject}\" and a {ext} attachment in {folder}.",
-              e_fep_not_found: "FepWeb report not found: neither the \"{subject}\" e-mail in the mailbox nor the file {path}.",
+              e_fep_not_found: "FepWeb report not found: the \"{subject}\" e-mail could not be read from the mailbox.",
               e_fep_no_columns: "The FepWeb report ({file}) has no \"Contrato\" and \"Data Operação\" columns — nothing was read from it.",
               e_athena_no_http: "The HTTP stack for the Athena API is not installed (requests).",
               why: "What the mailbox search said:" },
         br: { total: 'Total', missing_fepweb: 'Falta no FepWeb', missing_athena: 'Falta na Athena',
-              duplicated: 'Duplicados', manual: 'Confirmação manual', pending: 'Pendentes', ok: 'Ok',
+              duplicated: 'Duplicados', ok: 'Ok',
               actions: 'Ações', editComment: 'Editar comentário', save: 'Salvar', cancel: 'Cancelar',
               commentPh: 'Comentário sobre esta operação', saveFail: 'Não foi possível gravar o comentário',
               run: 'Rodando o batimento…',
@@ -318,20 +313,19 @@
               fep: 'Relatório do FepWeb', at: 'rodado em', ops: 'operação(ões)',
               cancelled: 'canceladas', internal: 'pernas internas', otherDates: 'outras datas',
               w_no_outlook: "O Outlook não está disponível neste servidor, então o box não pôde ser lido.",
-              w_report_from_folder: "Usei o relatório salvo em pasta ({path}) em vez do anexo do e-mail.",
               w_no_cnpj_col: "O relatório do FepWeb veio sem a coluna \"CPF/CNPJ CLIENTE\": o cliente do lado FepWeb sai pelo nome do próprio relatório.",
               w_no_ops_for_date: "O relatório do FepWeb ({file}) não traz nenhuma operação de {date} — a data está fora da janela dele?",
               w_other_trade_dates: "{n} operação(ões) da API vieram com Trade Date diferente de {date} e ficaram de fora.",
-              w_no_refdata: "Sem cadastro no Reference Data ({n}): {sample} — o cliente sai como veio da fonte e a assinatura conta como não cadastrada.",
+              w_no_refdata: "Sem cadastro no Reference Data ({n}): {sample} — o cliente sai como veio da fonte e o Signature Type fica em branco.",
               w_box_folder_missing: "Pasta do FepWeb não encontrada no box {mailbox}: {folder}",
               w_box_no_covering: "Nenhum e-mail \"{subject}\" cobre a data pedida; usei o mais recente da pasta.",
               w_box_no_mail: "Nenhum e-mail com assunto \"{subject}\" e anexo {ext} em {folder}.",
-              e_fep_not_found: "Relatório do FepWeb não encontrado: nem o e-mail \"{subject}\" no box, nem o arquivo {path}.",
+              e_fep_not_found: "Relatório do FepWeb não encontrado: o e-mail \"{subject}\" não foi lido do box.",
               e_fep_no_columns: "O relatório do FepWeb ({file}) não tem as colunas \"Contrato\" e \"Data Operação\" — nada foi lido dele.",
               e_athena_no_http: "A pilha HTTP da API da Athena não está instalada (requests).",
               why: "O que a busca no box disse:" },
         es: { total: 'Total', missing_fepweb: 'Falta en FepWeb', missing_athena: 'Falta en Athena',
-              duplicated: 'Duplicados', manual: 'Confirmación manual', pending: 'Pendientes', ok: 'Ok',
+              duplicated: 'Duplicados', ok: 'Ok',
               actions: 'Acciones', editComment: 'Editar comentario', save: 'Guardar', cancel: 'Cancelar',
               commentPh: 'Comentario sobre esta operación', saveFail: 'No se pudo guardar el comentario',
               run: 'Ejecutando la conciliación…',
@@ -341,15 +335,14 @@
               fep: 'Informe de FepWeb', at: 'ejecutado', ops: 'operación(es)',
               cancelled: 'canceladas', internal: 'piernas internas', otherDates: 'otras fechas',
               w_no_outlook: "Outlook no está disponible en este servidor, por lo que no se pudo leer el buzón.",
-              w_report_from_folder: "Se usó el informe guardado en la carpeta ({path}) en lugar del adjunto del correo.",
               w_no_cnpj_col: "El informe de FepWeb no trae la columna \"CPF/CNPJ CLIENTE\": el cliente del lado FepWeb muestra el nombre del propio informe.",
               w_no_ops_for_date: "El informe de FepWeb ({file}) no trae ninguna operación del {date} — ¿la fecha está fuera de su ventana?",
               w_other_trade_dates: "{n} operación(es) de la API llegaron con Trade Date distinto de {date} y quedaron fuera.",
-              w_no_refdata: "Sin registro en Reference Data ({n}): {sample} — el cliente se muestra como vino de la fuente y la firma cuenta como no registrada.",
+              w_no_refdata: "Sin registro en Reference Data ({n}): {sample} — el cliente se muestra como vino de la fuente y el Signature Type queda en blanco.",
               w_box_folder_missing: "Carpeta de FepWeb no encontrada en el buzón {mailbox}: {folder}",
               w_box_no_covering: "Ningún correo \"{subject}\" cubre la fecha pedida; se usó el más reciente de la carpeta.",
               w_box_no_mail: "Ningún correo con asunto \"{subject}\" y adjunto {ext} en {folder}.",
-              e_fep_not_found: "Informe de FepWeb no encontrado: ni el correo \"{subject}\" en el buzón ni el archivo {path}.",
+              e_fep_not_found: "Informe de FepWeb no encontrado: el correo \"{subject}\" no se pudo leer del buzón.",
               e_fep_no_columns: "El informe de FepWeb ({file}) no tiene las columnas \"Contrato\" y \"Data Operação\" — no se leyó nada.",
               e_athena_no_http: "La pila HTTP de la API de Athena no está instalada (requests).",
               why: "¿Qué dijo la búsqueda en el buzón?" }
@@ -390,16 +383,12 @@
         'Missing FepWeb':      { key: 'missing_fepweb', badge: 'text-bg-danger' },
         'Missing Athena':      { key: 'missing_athena', badge: 'text-bg-primary' },
         'Duplicated':          { key: 'duplicated',     badge: 'text-bg-warning' },
-        'Manual Confirmation': { key: 'manual',         badge: 'text-bg-info' },
-        'Pending':             { key: 'pending',        badge: 'text-bg-secondary' },
         'Ok':                  { key: 'ok',             badge: 'text-bg-success' }
     };
     var KPIS = [
         { key: 'missing_fepweb', st: 'Missing FepWeb',      cls: 'cfm-k-mfep',    icon: 'ti-file-alert' },
         { key: 'missing_athena', st: 'Missing Athena',      cls: 'cfm-k-math',    icon: 'ti-database-off' },
         { key: 'duplicated',     st: 'Duplicated',          cls: 'cfm-k-dup',     icon: 'ti-copy' },
-        { key: 'manual',         st: 'Manual Confirmation', cls: 'cfm-k-manual',  icon: 'ti-writing-sign' },
-        { key: 'pending',        st: 'Pending',             cls: 'cfm-k-pending', icon: 'ti-clock-exclamation' },
         { key: 'ok',             st: 'Ok',                  cls: 'cfm-k-ok',      icon: 'ti-circle-check' },
         // O Total vem por ÚLTIMO, com a cor da marca, e é a SOMA dos cards
         // acima — uma segunda contagem divergiria no primeiro caso de borda.

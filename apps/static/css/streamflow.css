@@ -2964,6 +2964,19 @@ table.dataTable.table-bordered td {
    medido no /mapping, folga de 16px com o corpo rolado. Margem fica FORA da
    área que rola, dá o mesmo respiro e não tem por onde vazar.
    ══════════════════════════════════════════════════════════════════════════ */
+/* 49b. FORA de `.card` — que é onde mora todo widget próprio (§7 do CLAUDE.md
+   manda não usar `.card`): o `app.css` do tema puxa o container do DataTables
+   12px para CIMA (`.dt-container { margin-top: -0.75rem }`), e dentro de um
+   `.table-responsive` (`overflow: auto`) esses 12px são CORTADOS — o checkbox e
+   a primeira linha do rótulo do cabeçalho saíam comidos (Conf. Matching e Recon
+   CGD, 17/09/2026). A regra de cima só alcançava `.card`, então cada tela com
+   painel próprio nascia com o defeito. Vem ANTES da regra do `.card` de
+   propósito: as duas têm a mesma especificidade, e lá dentro continua valendo
+   o `1rem`. O respiro é `margin-top` no `.table-responsive`, pelo mesmo motivo
+   do parágrafo acima (padding fica dentro da área que rola). */
+.table-responsive > .dt-container { margin-top: 0; }
+.table-responsive:has(> .dt-container) { margin-top: .5rem; }
+
 .card .table-responsive,
 .card-body > .table-responsive,
 .card .dt-container {

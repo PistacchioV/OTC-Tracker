@@ -726,6 +726,15 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 
 ### Layout e vidro
 
+- **Tabela em painel PRÓPRIO (fora de `.card`) tinha o topo do cabeçalho
+  CORTADO** (§486): o `app.css` do tema puxa o `.dt-container` 12px para cima e
+  o `.table-responsive` (`overflow:auto`) corta o checkbox e a primeira linha
+  do rótulo. Está resolvido NA RAIZ, no `streamflow.css` §49b
+  (`.table-responsive > .dt-container { margin-top: 0 }` + respiro em
+  `margin-top`, ANTES da regra do `.card`, que tem a mesma especificidade) —
+  tela nova não escreve nada, e **não se conserta com `padding-top` na página**
+  (padding fica dentro da área que rola, §49). Mexeu no `streamflow.css`, sobe
+  o `?v=` do `head-css.html`.
 - **Não use `.card` para widget seu** — o `extra_css` da página carrega ANTES
   do tema e perde. Padrão: `<div>` com classe própria (`.ndm-card`,
   `.fxo-widget`) com `--vr-card-*`/`--vr-grad`. Pela mesma ordem, classe
@@ -1262,23 +1271,26 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   (`baixar_fep_do_box`; `path` vence; sem Outlook cai para `CGD_INPUT_ROOT`
   avisando); contas nossas do `b3-accounts`; CNPJ por dígito; cache gravado
   com a data da POSIÇÃO.
-- **Conf. Matching** (FepWeb × Athena, §486): o FepWeb é o ANEXO do e-mail
-  `(REPORT) FEPWeb - Operacoes D-4` — lido pela MESMA `baixar_fep_do_box` da
-  CGD (`assunto` + `aceita`: o relatório é uma janela de dias, vale o e-mail
-  que COBRE a data; nenhum, o mais recente avisando) — e a Athena é a API de
-  NDF do New Deals. Cliente por CHAVE (CNPJ sem zero à esquerda × SPN);
-  internas e exceção de assinatura saem de CADASTRO (`interbook-ndf`,
-  `le-accronym`, `ECONOMIC GROUP`, `SIGNATURE TYPE`), nunca das listas do
-  workflow; o Pending Status é `_pc_signature_pending_status` (≤ 60 dias, não
-  o `< 60` do Alteryx). **O anexo é `.xls`, e `.xls` é só o nome** (lê-se pelo
-  conteúdo, `_latam_read_rows`; a CGD segue só `.xlsx` — `extensoes` é de quem
-  sabe ler), e o relatório de um dia chega na NOITE dele: a janela do `aceita`
-  começa no próprio dia. **A `Data Operação` do FepWeb é AMERICANA
-  (`mm/dd/aaaa`)**: `fep_date` a lê e nunca cai para `dd/mm` — o `_parse_date`
-  da casa leria `09/10` como 9 de outubro, calado. Sem um dos lados o Run LEVANTA, com os avisos do box
-  em `reasons`. Comentário é do trade
-  e não muda o Status. Linha chaveada pelo RÓTULO + `columns` no payload (o
-  contrato do Advanced Export por intervalo).
+- **Conf. Matching** (FepWeb × Athena, §486) faz UMA pergunta: a confirmação
+  das operações de ontem foi gerada no FepWeb? **Nos dois lados é `Ok`, sempre
+  — ela NÃO conversa com o Pending Confirmation** (sem prazo, sem Pending
+  Status: a primeira versão classificava a assinatura e uma operação que ESTAVA
+  no FepWeb saía `Pending`). Só na Athena é `Missing FepWeb`, **salvo
+  `SIGNATURE TYPE = Internal`**, que é `Ok`: a confirmação não é gerada. A
+  regra é uma função (`_status`), reaplicada no dia já gravado. O FepWeb é o
+  ANEXO do e-mail `(REPORT) FEPWeb - Operacoes D-4`, lido pela MESMA
+  `baixar_fep_do_box` da CGD (`assunto` + `aceita` + `extensoes`), e **não há
+  plano B em pasta**: sem o e-mail o Run LEVANTA, com os avisos do box em
+  `reasons`. **O anexo é `.xls`, e `.xls` é só o nome** (lê-se pelo conteúdo,
+  `_latam_read_rows`; a CGD segue só `.xlsx`); o relatório de um dia chega na
+  NOITE dele, então a janela do `aceita` começa no próprio dia; **a `Data
+  Operação` é AMERICANA (`mm/dd/aaaa`)** — `fep_date` nunca cai para `dd/mm`
+  (o `_parse_date` da casa leria `09/10` como 9 de outubro, calado). Athena é a
+  API de NDF do New Deals. Cliente por CHAVE (CNPJ sem zero à esquerda × SPN);
+  internas saem de CADASTRO (`interbook-ndf`, `le-accronym`, `ECONOMIC
+  GROUP`), nunca das listas do workflow. Comentário é do trade e não muda o
+  Status. Linha chaveada pelo RÓTULO + `columns` no payload (o contrato do
+  Advanced Export por intervalo).
 
 ### Onboarding (CGD)
 
