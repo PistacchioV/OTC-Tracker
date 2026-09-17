@@ -63,10 +63,18 @@ INPUT_ROOT = os.getenv(
     'CONFMATCH_INPUT_ROOT',
     os.path.join(Config.SHARED_DRIVE_ROOT, 'Confirmation', 'Derivativos', 'Movimento',
                  'Pending Confirmation', 'Recon Fep Web x Athena'))
-FEP_XLSX = os.getenv('CONFMATCH_FEP_XLSX', 'FEPWeb - Operacoes D-4.xlsx')
-# O relatório cobre uma JANELA de dias: o e-mail que serve a uma data é o que
-# chegou DEPOIS dela e dentro da janela. Em dias corridos, com folga.
-FEP_WINDOW_DAYS = 5
+# O anexo chega como `.xls` (e o workflow lia um `.xlsx` salvo à mão): valem os
+# dois, e quem decide COMO ler é o conteúdo, não o nome — relatório de sistema
+# web com nome `.xls` é, conforme o dia, BIFF de verdade, xlsx ou tabela HTML.
+FEP_FILES = tuple(x for x in os.getenv(
+    'CONFMATCH_FEP_FILES', 'FEPWeb - Operacoes D-4.xls|FEPWeb - Operacoes D-4.xlsx').split('|')
+    if x.strip())
+FEP_MAIL_EXT = ('.xls', '.xlsx', '.xlsm')
+# O relatório sai na NOITE do próprio dia e cobre os últimos dias (o "D-4" do
+# nome): o e-mail que serve a uma data é o mais recente recebido DELA em diante,
+# dentro da janela. Começando no dia seguinte, o relatório de ontem à noite —
+# o único que existe de manhã, e o que o workflow lia — ficava de fora.
+FEP_WINDOW_DAYS = 3
 
 STATUS_FORA = 'CANCELADO'
 
@@ -97,6 +105,16 @@ COLUMNS = ('Status', COMMENT_COLUMN, 'Pending Status', 'Trade Date', 'FepWeb ID'
            'Signature Type', 'Instrument Type', 'Settlement Date', 'Tenor',
            'Quantity Ccy', 'Quantity', 'Other Ccy', 'Other Quantity', 'Strike',
            'Publisher', 'Cetip ID', 'End Counterparty', 'FepWeb Type', 'FepWeb Count')
+
+
+class ReconErro(RuntimeError):
+    """Falha do Run que a tela sabe DIZER no idioma de quem usa: código +
+    parâmetros (o texto é o do log). O que não é isto — SSO recusado, timeout —
+    sobe como veio, e a tela mostra `tipo: mensagem` sob um título traduzido."""
+
+    def __init__(self, code, text, **params):
+        super().__init__(text)
+        self.code, self.params = code, params
 
 
 def _routes():
@@ -185,15 +203,37 @@ def _fep_header(linhas):
     return None, {}
 
 
+def fep_date(v):
+    """A `Data Operação` do FepWeb, que vem no formato AMERICANO (`mm/dd/aaaa`).
+
+    Tem leitor próprio porque o `_parse_date` da casa tenta `dd/mm` PRIMEIRO: com
+    ele `09/10/2026` é 9 de outubro, e só as datas com dia > 12 caíam certo — por
+    acaso, no fallback. O batimento de 10/09 perdia o dia inteiro para "outras
+    datas" sem erro nenhum. Célula que já é DATA (datetime do openpyxl, ISO do
+    xlrd, serial do Excel) não tem ambiguidade e segue pelo leitor de sempre.
+    """
+    if v is None or isinstance(v, (datetime, date)):
+        return _cgd._parse_date(v)
+    txt = str(v).strip().split(' ')[0].split('T')[0]
+    if '/' in txt:
+        for fmt in ('%m/%d/%Y', '%m/%d/%y'):
+            try:
+                return datetime.strptime(txt, fmt).date()
+            except ValueError:
+                continue
+        return None             # nunca cai para dd/mm: seria outro dia, calado
+    return _cgd._parse_date(txt)
+
+
 def _aceita_email(ref):
-    """O e-mail que cobre `ref`: chegou depois dela e dentro da janela."""
+    """O e-mail que cobre `ref`: chegou DELA em diante, dentro da janela."""
     def aceita(recebido):
         try:
             d = recebido.date() if hasattr(recebido, 'date') else recebido
             d = date(d.year, d.month, d.day)
         except Exception:
             return False
-        return ref < d <= ref + timedelta(days=FEP_WINDOW_DAYS)
+        return ref <= d <= ref + timedelta(days=FEP_WINDOW_DAYS)
     return aceita
 
 
@@ -209,33 +249,41 @@ def ler_fep(ref, avisos, path=None):
         try:
             path, origem = _cgd.baixar_fep_do_box(
                 avisos, assunto=FEP_MAIL_SUBJECT, prefixo='fepweb-ops-',
-                aceita=_aceita_email(ref))
+                aceita=_aceita_email(ref), extensoes=FEP_MAIL_EXT)
         except EnvironmentError as e:
-            avisos.append(str(e))
+            avisos.append(_cgd.Aviso('no_outlook', str(e)))
         if not path:
-            path = os.path.join(INPUT_ROOT, FEP_XLSX)
-            avisos.append('Usei o relatório em pasta ({}) em vez do anexo do e-mail.'
-                          .format(path))
+            candidatos = [os.path.join(INPUT_ROOT, f) for f in FEP_FILES]
+            path = next((c for c in candidatos if os.path.isfile(c)), candidatos[0])
+            avisos.append(_cgd.Aviso('report_from_folder',
+                                     'Usei o relatório em pasta ({}) em vez do anexo do e-mail.'
+                                     .format(path), path=path))
     rotulo = origem or path
     if not os.path.isfile(path):
-        raise RuntimeError('Relatório do FepWeb não encontrado: nem o e-mail "{}" '
-                           'no box, nem o arquivo {}.'.format(FEP_MAIL_SUBJECT, path))
-    from openpyxl import load_workbook
-    wb = load_workbook(path, data_only=True, read_only=True)
-    try:
-        ws = wb[wb.sheetnames[0]]
-        linhas = [list(r) for r in ws.iter_rows(values_only=True)]
-    finally:
-        wb.close()
+        raise ReconErro('fep_not_found',
+                        'Relatório do FepWeb não encontrado: nem o e-mail "{}" '
+                        'no box, nem o arquivo {}.'.format(FEP_MAIL_SUBJECT, path),
+                        subject=FEP_MAIL_SUBJECT, path=path,
+                        # O PORQUÊ do box vai junto: o erro engolia os avisos, e
+                        # "não achei" sem dizer se foi a pasta, o assunto ou o
+                        # anexo não dá por onde começar (§476).
+                        reasons=_cgd.avisos_payload(avisos))
+    # Pelo CONTEÚDO, com o leitor que o Latam Desk Position já usa: `.xls` binário
+    # (xlrd), xlsx, tabela HTML ou texto delimitado.
+    with open(path, 'rb') as fh:
+        raw = fh.read()
+    linhas, formato = _routes()._latam_read_rows(raw)
     n, idx = _fep_header(linhas)
     if n is None:
-        raise RuntimeError('O relatório do FepWeb ({}) não tem as colunas "Contrato" e '
-                           '"Data Operação" — nada foi lido dele.'.format(rotulo))
+        raise ReconErro('fep_no_columns',
+                        'O relatório do FepWeb ({}) não tem as colunas "Contrato" e '
+                        '"Data Operação" — nada foi lido dele.'.format(rotulo), file=rotulo)
     if 'cnpj' not in idx:
-        avisos.append('O relatório do FepWeb veio sem a coluna "CPF/CNPJ CLIENTE": '
-                      'o cliente do lado FepWeb sai pelo nome do próprio relatório.')
+        avisos.append(_cgd.Aviso('no_cnpj_col',
+                                 'O relatório do FepWeb veio sem a coluna "CPF/CNPJ CLIENTE": '
+                                 'o cliente do lado FepWeb sai pelo nome do próprio relatório.'))
 
-    info = {'lidas': 0, 'canceladas': 0, 'outras_datas': 0}
+    info = {'lidas': 0, 'canceladas': 0, 'outras_datas': 0, 'formato': formato}
     out = []
     for l in linhas[n + 1:]:
         def cel(k):
@@ -248,7 +296,7 @@ def ler_fep(ref, avisos, path=None):
         if _cgd._norm(cel('status')) == STATUS_FORA:
             info['canceladas'] += 1
             continue
-        dia = _cgd._parse_date(cel('data'))
+        dia = fep_date(cel('data'))
         if dia != ref:
             info['outras_datas'] += 1
             continue
@@ -257,8 +305,11 @@ def ler_fep(ref, avisos, path=None):
                     'cnpj': cel('cnpj'),
                     'tipo': str(cel('tipo') or '').strip()})
     if info['lidas'] and not out:
-        avisos.append('O relatório do FepWeb ({}) não traz nenhuma operação de {} — '
-                      'a data está fora da janela dele?'.format(rotulo, _cgd._fmt_date(ref)))
+        avisos.append(_cgd.Aviso('no_ops_for_date',
+                                 'O relatório do FepWeb ({}) não traz nenhuma operação de {} — '
+                                 'a data está fora da janela dele?'
+                                 .format(rotulo, _cgd._fmt_date(ref)),
+                                 file=rotulo, date=_cgd._fmt_date(ref)))
     return out, rotulo, info
 
 
@@ -291,7 +342,8 @@ def buscar_athena(ref):
     a tela precisa dizer se foi o SSO, o timeout ou a URL (§476)."""
     from apps.pages import athena_api
     if not athena_api.is_available():
-        raise RuntimeError('A pilha HTTP da API da Athena não está instalada (requests).')
+        raise ReconErro('athena_no_http',
+                        'A pilha HTTP da API da Athena não está instalada (requests).')
     payload = athena_api.fetch_ndf_trades(ref.strftime('%Y%m%d'))
     return athena_api.extract_records(payload)
 
@@ -344,8 +396,11 @@ def ler_athena(ref, avisos, records=None):
             'strike': _num(get('STRIKE')),
         })
     if info['outras_datas']:
-        avisos.append('{} operação(ões) da API vieram com Trade Date diferente de {} e '
-                      'ficaram de fora.'.format(info['outras_datas'], _cgd._fmt_date(ref)))
+        avisos.append(_cgd.Aviso('other_trade_dates',
+                                 '{} operação(ões) da API vieram com Trade Date diferente de {} '
+                                 'e ficaram de fora.'.format(info['outras_datas'],
+                                                             _cgd._fmt_date(ref)),
+                                 n=info['outras_datas'], date=_cgd._fmt_date(ref)))
     return out, info
 
 
@@ -387,7 +442,7 @@ def executar(ref=None, fep_path=None, athena_records=None):
         if f and rec_f is None and _tax_key(f.get('cnpj')):
             sem_cadastro.add('CNPJ {}'.format(_cgd._digits(f['cnpj']) or f['cnpj']))
         if a and rec_a is None:
-            sem_cadastro.add('SPN {}'.format(a['spn'] or '(vazio) — ' + a['end_cp']))
+            sem_cadastro.add('SPN {}'.format(a['spn'] or '— (' + a['end_cp'] + ')'))
 
         status, pending = '', ''
         if a:
@@ -438,10 +493,11 @@ def executar(ref=None, fep_path=None, athena_records=None):
 
     if sem_cadastro:
         amostra = sorted(sem_cadastro)
-        avisos.append('Sem cadastro no Reference Data ({}): {}{} — o cliente sai como veio '
-                      'da fonte e a assinatura conta como não cadastrada.'.format(
-                          len(amostra), '; '.join(amostra[:8]),
-                          '…' if len(amostra) > 8 else ''))
+        lista = '; '.join(amostra[:8]) + ('…' if len(amostra) > 8 else '')
+        avisos.append(_cgd.Aviso('no_refdata',
+                                 'Sem cadastro no Reference Data ({}): {} — o cliente sai como '
+                                 'veio da fonte e a assinatura conta como não cadastrada.'
+                                 .format(len(amostra), lista), n=len(amostra), sample=lista))
 
     ordem = {s: i for i, s in enumerate(STATUS_ORDER)}
     linhas.sort(key=lambda r: (ordem.get(r['Status'], 99),
@@ -457,7 +513,7 @@ def executar(ref=None, fep_path=None, athena_records=None):
         'fep_info': fep_info, 'athena_info': ath_info,
         'columns': list(COLUMNS),
         'rows': linhas, 'counts': contar(linhas),
-        'warnings': avisos,
+        'warnings': _cgd.avisos_payload(avisos),
     }
 
 

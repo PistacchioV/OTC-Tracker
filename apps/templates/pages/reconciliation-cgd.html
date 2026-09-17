@@ -283,7 +283,20 @@
               norec: 'No recipient configured for this report.',
               notrun: 'Nothing was reconciled for this date yet. Click Run first.',
               empty: 'Nothing reconciled for this date yet — click Run.',
-              src: 'B3 file', fep: 'FEP list', at: 'run at' },
+              src: 'B3 file', fep: 'FEP list', at: 'run at',
+              runFail: "Reconciliation failed",
+              w_b3_missing: "B3 file not found: {path}",
+              w_no_own_account: "The `b3-accounts` registry has no OWN account (ACCOUNT TYPE = OWN): without them there is no way to tell which B3 lines are ours.",
+              w_b3_no_cnpj: "{n} B3 line(s) came without a CNPJ and {resolved} were resolved by the `cgd-b3-participante` registry; the rest were left out.",
+              w_box_folder_missing: "FepWeb folder not found in mailbox {mailbox}: {folder}",
+              w_box_no_covering: "No \"{subject}\" e-mail covers the requested date; the most recent one in the folder was used.",
+              w_box_no_mail: "No e-mail with subject \"{subject}\" and a {ext} attachment in {folder}.",
+              w_no_outlook: "Outlook is not available on this server, so the mailbox could not be read.",
+              w_fep_from_folder: "Used the list saved in the folder ({path}) instead of the e-mail attachment.",
+              w_fep_missing: "FEP list not found: {path}",
+              w_no_openpyxl: "openpyxl is not installed: the FEP list cannot be read without it.",
+              w_fep_empty: "The FEP list is empty.",
+              w_fep_missing_cols: "The FEP list has no {cols} column(s) — nothing was read from it." },
         br: { total: 'Total', matched: 'Batidos', pending_b3: 'Pendente na B3', pending_action: 'Pendente de ação',
               only_b3: 'Só na B3', justified: 'Justificados', all: 'Todos',
               run: 'Rodando o batimento…', runTxt: 'Lendo a posição da B3 e a lista do FEP.',
@@ -291,7 +304,20 @@
               norec: 'Nenhum destinatário cadastrado para este relatório.',
               notrun: 'Nada foi batido nesta data ainda. Rode o batimento primeiro.',
               empty: 'Nada batido nesta data ainda — clique em Run.',
-              src: 'Arquivo da B3', fep: 'Lista do FEP', at: 'rodado em' },
+              src: 'Arquivo da B3', fep: 'Lista do FEP', at: 'rodado em',
+              runFail: "O batimento falhou",
+              w_b3_missing: "Arquivo da B3 não encontrado: {path}",
+              w_no_own_account: "Cadastro `b3-accounts` sem conta PRÓPRIA (ACCOUNT TYPE = OWN): sem elas não há como saber quais linhas da B3 são nossas.",
+              w_b3_no_cnpj: "{n} linha(s) da B3 vieram sem CNPJ e {resolved} foram resolvidas pelo cadastro `cgd-b3-participante`; as demais ficaram de fora.",
+              w_box_folder_missing: "Pasta do FepWeb não encontrada no box {mailbox}: {folder}",
+              w_box_no_covering: "Nenhum e-mail \"{subject}\" cobre a data pedida; usei o mais recente da pasta.",
+              w_box_no_mail: "Nenhum e-mail com assunto \"{subject}\" e anexo {ext} em {folder}.",
+              w_no_outlook: "O Outlook não está disponível neste servidor, então o box não pôde ser lido.",
+              w_fep_from_folder: "Usei a lista em pasta ({path}) em vez do anexo do e-mail.",
+              w_fep_missing: "Lista do FEP não encontrada: {path}",
+              w_no_openpyxl: "openpyxl não está instalado: sem ele não dá para ler a lista do FEP.",
+              w_fep_empty: "Lista do FEP está vazia.",
+              w_fep_missing_cols: "A lista do FEP não tem as colunas {cols} — nada foi lido dela." },
         es: { total: 'Total', matched: 'Conciliados', pending_b3: 'Pendiente en B3', pending_action: 'Pendiente de acción',
               only_b3: 'Solo en B3', justified: 'Justificados', all: 'Todos',
               run: 'Ejecutando la conciliación…', runTxt: 'Leyendo la posición de B3 y la lista del FEP.',
@@ -299,7 +325,20 @@
               norec: 'Ningún destinatario configurado para este informe.',
               notrun: 'Nada conciliado en esta fecha. Ejecute primero.',
               empty: 'Nada conciliado en esta fecha — haga clic en Run.',
-              src: 'Archivo de B3', fep: 'Lista del FEP', at: 'ejecutado' }
+              src: 'Archivo de B3', fep: 'Lista del FEP', at: 'ejecutado',
+              runFail: "La conciliación falló",
+              w_b3_missing: "Archivo de B3 no encontrado: {path}",
+              w_no_own_account: "El registro `b3-accounts` no tiene cuenta PROPIA (ACCOUNT TYPE = OWN): sin ellas no hay cómo saber qué líneas de B3 son nuestras.",
+              w_b3_no_cnpj: "{n} línea(s) de B3 llegaron sin CNPJ y {resolved} se resolvieron por el registro `cgd-b3-participante`; las demás quedaron fuera.",
+              w_box_folder_missing: "Carpeta de FepWeb no encontrada en el buzón {mailbox}: {folder}",
+              w_box_no_covering: "Ningún correo \"{subject}\" cubre la fecha pedida; se usó el más reciente de la carpeta.",
+              w_box_no_mail: "Ningún correo con asunto \"{subject}\" y adjunto {ext} en {folder}.",
+              w_no_outlook: "Outlook no está disponible en este servidor, por lo que no se pudo leer el buzón.",
+              w_fep_from_folder: "Se usó la lista guardada en la carpeta ({path}) en lugar del adjunto del correo.",
+              w_fep_missing: "Lista del FEP no encontrada: {path}",
+              w_no_openpyxl: "openpyxl no está instalado: sin él no se puede leer la lista del FEP.",
+              w_fep_empty: "La lista del FEP está vacía.",
+              w_fep_missing_cols: "La lista del FEP no tiene las columnas {cols} — no se leyó nada." }
     };
     function lang() {
         try { return localStorage.getItem('__OTC_TRACKER_LANG__') || 'en'; } catch (e) { return 'en'; }
@@ -309,6 +348,22 @@
         return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
             return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
         });
+    }
+
+
+    // Texto de servidor chega ESTRUTURADO — {code, params, text} — e é dito aqui,
+    // no idioma de quem usa. O `text` (português, o do log) é só o fallback do
+    // código que esta tela ainda não conhece e do cache gravado antes disto.
+    function fill(tpl, params) {
+        return String(tpl).replace(/\{(\w+)\}/g, function (m, k) {
+            return (params && params[k] != null) ? String(params[k]) : '';
+        });
+    }
+    function msgText(w, prefix) {
+        if (w == null) { return ''; }
+        if (typeof w === 'string') { return w; }
+        var tpl = w.code ? ((_TRANS[lang()] || {})[prefix + w.code] || _TRANS.en[prefix + w.code]) : '';
+        return tpl ? fill(tpl, w.params) : String(w.text || '');
     }
 
     var table = null, dados = [], bucket = '';
@@ -449,7 +504,7 @@
             : '');
         $('#cgd-warnings').html((j.warnings || []).length
             ? '<div class="cgd-warn">' + (j.warnings || []).map(function (w) {
-                  return '<div>• ' + esc(w) + '</div>'; }).join('') + '</div>'
+                  return '<div>• ' + esc(msgText(w, 'w_')) + '</div>'; }).join('') + '</div>'
             : '');
         if (j.ref) {
             $('#cgd-date').val(j.ref);
@@ -488,7 +543,7 @@
             }
         }).catch(function (e) {
             if (window.Swal) {
-                Swal.fire({ icon: 'error', title: 'Erro', html: esc(String(e && e.message || e)),
+                Swal.fire({ icon: 'error', title: t('runFail'), html: esc(String(e && e.message || e)),
                             confirmButtonColor: '#0066cc' });
             }
         });

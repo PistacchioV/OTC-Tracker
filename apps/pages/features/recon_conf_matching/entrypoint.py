@@ -42,7 +42,11 @@ def api_conf_matching_run():
         res = commands.run(ref)
     except Exception as exc:                                # noqa: BLE001
         R.log.exception('[conf-matching] falha ao rodar o batimento')
-        return jsonify({'success': False, 'error': domain.error_text(exc)}), 500
+        # Falha que o motor CONHECE vai com código + parâmetros (a tela diz no
+        # idioma de quem usa); o resto vai como `tipo: mensagem` (§476).
+        return jsonify({'success': False, 'error': domain.error_text(exc),
+                        'error_code': getattr(exc, 'code', ''),
+                        'error_params': getattr(exc, 'params', {})}), 500
     res['success'] = True
     return jsonify(res)
 

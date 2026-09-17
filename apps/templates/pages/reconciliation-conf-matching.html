@@ -293,7 +293,20 @@
               done: 'Reconciliation finished', runFail: 'Reconciliation failed',
               empty: 'Nothing reconciled for this date yet — click Run.',
               fep: 'FepWeb report', at: 'run at', ops: 'operation(s)',
-              cancelled: 'cancelled', internal: 'internal legs', otherDates: 'other dates' },
+              cancelled: 'cancelled', internal: 'internal legs', otherDates: 'other dates',
+              w_no_outlook: "Outlook is not available on this server, so the mailbox could not be read.",
+              w_report_from_folder: "Used the report saved in the folder ({path}) instead of the e-mail attachment.",
+              w_no_cnpj_col: "The FepWeb report has no \"CPF/CNPJ CLIENTE\" column: the FepWeb client shows the name from the report itself.",
+              w_no_ops_for_date: "The FepWeb report ({file}) has no operation dated {date} — is the date outside its window?",
+              w_other_trade_dates: "{n} operation(s) from the API came with a Trade Date other than {date} and were left out.",
+              w_no_refdata: "Not registered in Reference Data ({n}): {sample} — the client is shown as it came from the source and the signature counts as not registered.",
+              w_box_folder_missing: "FepWeb folder not found in mailbox {mailbox}: {folder}",
+              w_box_no_covering: "No \"{subject}\" e-mail covers the requested date; the most recent one in the folder was used.",
+              w_box_no_mail: "No e-mail with subject \"{subject}\" and a {ext} attachment in {folder}.",
+              e_fep_not_found: "FepWeb report not found: neither the \"{subject}\" e-mail in the mailbox nor the file {path}.",
+              e_fep_no_columns: "The FepWeb report ({file}) has no \"Contrato\" and \"Data Operação\" columns — nothing was read from it.",
+              e_athena_no_http: "The HTTP stack for the Athena API is not installed (requests).",
+              why: "What the mailbox search said:" },
         br: { total: 'Total', missing_fepweb: 'Falta no FepWeb', missing_athena: 'Falta na Athena',
               duplicated: 'Duplicados', manual: 'Confirmação manual', pending: 'Pendentes', ok: 'Ok',
               actions: 'Ações', editComment: 'Editar comentário', save: 'Salvar', cancel: 'Cancelar',
@@ -303,7 +316,20 @@
               done: 'Batimento concluído', runFail: 'O batimento falhou',
               empty: 'Nada batido nesta data ainda — clique em Run.',
               fep: 'Relatório do FepWeb', at: 'rodado em', ops: 'operação(ões)',
-              cancelled: 'canceladas', internal: 'pernas internas', otherDates: 'outras datas' },
+              cancelled: 'canceladas', internal: 'pernas internas', otherDates: 'outras datas',
+              w_no_outlook: "O Outlook não está disponível neste servidor, então o box não pôde ser lido.",
+              w_report_from_folder: "Usei o relatório salvo em pasta ({path}) em vez do anexo do e-mail.",
+              w_no_cnpj_col: "O relatório do FepWeb veio sem a coluna \"CPF/CNPJ CLIENTE\": o cliente do lado FepWeb sai pelo nome do próprio relatório.",
+              w_no_ops_for_date: "O relatório do FepWeb ({file}) não traz nenhuma operação de {date} — a data está fora da janela dele?",
+              w_other_trade_dates: "{n} operação(ões) da API vieram com Trade Date diferente de {date} e ficaram de fora.",
+              w_no_refdata: "Sem cadastro no Reference Data ({n}): {sample} — o cliente sai como veio da fonte e a assinatura conta como não cadastrada.",
+              w_box_folder_missing: "Pasta do FepWeb não encontrada no box {mailbox}: {folder}",
+              w_box_no_covering: "Nenhum e-mail \"{subject}\" cobre a data pedida; usei o mais recente da pasta.",
+              w_box_no_mail: "Nenhum e-mail com assunto \"{subject}\" e anexo {ext} em {folder}.",
+              e_fep_not_found: "Relatório do FepWeb não encontrado: nem o e-mail \"{subject}\" no box, nem o arquivo {path}.",
+              e_fep_no_columns: "O relatório do FepWeb ({file}) não tem as colunas \"Contrato\" e \"Data Operação\" — nada foi lido dele.",
+              e_athena_no_http: "A pilha HTTP da API da Athena não está instalada (requests).",
+              why: "O que a busca no box disse:" },
         es: { total: 'Total', missing_fepweb: 'Falta en FepWeb', missing_athena: 'Falta en Athena',
               duplicated: 'Duplicados', manual: 'Confirmación manual', pending: 'Pendientes', ok: 'Ok',
               actions: 'Acciones', editComment: 'Editar comentario', save: 'Guardar', cancel: 'Cancelar',
@@ -313,7 +339,20 @@
               done: 'Conciliación finalizada', runFail: 'La conciliación falló',
               empty: 'Nada conciliado en esta fecha — haga clic en Run.',
               fep: 'Informe de FepWeb', at: 'ejecutado', ops: 'operación(es)',
-              cancelled: 'canceladas', internal: 'piernas internas', otherDates: 'otras fechas' }
+              cancelled: 'canceladas', internal: 'piernas internas', otherDates: 'otras fechas',
+              w_no_outlook: "Outlook no está disponible en este servidor, por lo que no se pudo leer el buzón.",
+              w_report_from_folder: "Se usó el informe guardado en la carpeta ({path}) en lugar del adjunto del correo.",
+              w_no_cnpj_col: "El informe de FepWeb no trae la columna \"CPF/CNPJ CLIENTE\": el cliente del lado FepWeb muestra el nombre del propio informe.",
+              w_no_ops_for_date: "El informe de FepWeb ({file}) no trae ninguna operación del {date} — ¿la fecha está fuera de su ventana?",
+              w_other_trade_dates: "{n} operación(es) de la API llegaron con Trade Date distinto de {date} y quedaron fuera.",
+              w_no_refdata: "Sin registro en Reference Data ({n}): {sample} — el cliente se muestra como vino de la fuente y la firma cuenta como no registrada.",
+              w_box_folder_missing: "Carpeta de FepWeb no encontrada en el buzón {mailbox}: {folder}",
+              w_box_no_covering: "Ningún correo \"{subject}\" cubre la fecha pedida; se usó el más reciente de la carpeta.",
+              w_box_no_mail: "Ningún correo con asunto \"{subject}\" y adjunto {ext} en {folder}.",
+              e_fep_not_found: "Informe de FepWeb no encontrado: ni el correo \"{subject}\" en el buzón ni el archivo {path}.",
+              e_fep_no_columns: "El informe de FepWeb ({file}) no tiene las columnas \"Contrato\" y \"Data Operação\" — no se leyó nada.",
+              e_athena_no_http: "La pila HTTP de la API de Athena no está instalada (requests).",
+              why: "¿Qué dijo la búsqueda en el buzón?" }
     };
     function lang() {
         try { return localStorage.getItem('__OTC_TRACKER_LANG__') || 'en'; } catch (e) { return 'en'; }
@@ -323,6 +362,22 @@
         return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
             return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
         });
+    }
+
+
+    // Texto de servidor chega ESTRUTURADO — {code, params, text} — e é dito aqui,
+    // no idioma de quem usa. O `text` (português, o do log) é só o fallback do
+    // código que esta tela ainda não conhece e do cache gravado antes disto.
+    function fill(tpl, params) {
+        return String(tpl).replace(/\{(\w+)\}/g, function (m, k) {
+            return (params && params[k] != null) ? String(params[k]) : '';
+        });
+    }
+    function msgText(w, prefix) {
+        if (w == null) { return ''; }
+        if (typeof w === 'string') { return w; }
+        var tpl = w.code ? ((_TRANS[lang()] || {})[prefix + w.code] || _TRANS.en[prefix + w.code]) : '';
+        return tpl ? fill(tpl, w.params) : String(w.text || '');
     }
 
     var table = null, dados = [], bucket = '', editingKey = null;
@@ -583,7 +638,7 @@
             : '');
         $('#cfm-warnings').html((j.warnings || []).length
             ? '<div class="cfm-warn">' + (j.warnings || []).map(function (w) {
-                  return '<div>• ' + esc(w) + '</div>'; }).join('') + '</div>'
+                  return '<div>• ' + esc(msgText(w, 'w_')) + '</div>'; }).join('') + '</div>'
             : '');
         if (j.ref) {
             $('#cfm-date').val(j.ref);
@@ -613,7 +668,20 @@
             body: JSON.stringify({ recon_date: d })
         }).then(function (r) { return r.json(); }).then(function (j) {
             if (window.Swal) { Swal.close(); }
-            if (!j || !j.success) { throw new Error((j && j.error) || 'error'); }
+            if (!j || !j.success) {
+                // Falha CONHECIDA: dita aqui, com o porquê do box embaixo. O resto
+                // (SSO, timeout) é `tipo: mensagem` — técnico, e vai como veio.
+                var er = new Error((j && j.error) || 'error');
+                if (j && j.error_code) {
+                    var ps = j.error_params || {};
+                    er.html = esc(msgText({ code: j.error_code, params: ps, text: j.error }, 'e_')) +
+                        ((ps.reasons || []).length
+                            ? '<div class="text-start mt-2" style="font-size:.8rem;"><b>' + esc(t('why')) + '</b>' +
+                              ps.reasons.map(function (w) { return '<div>• ' + esc(msgText(w, 'w_')) + '</div>'; }).join('') + '</div>'
+                            : '');
+                }
+                throw er;
+            }
             bucket = '';
             pinta(j);
             if (window.Swal) {
@@ -624,7 +692,7 @@
         }).catch(function (e) {
             if (window.Swal) {
                 // A mensagem leva o MOTIVO (§476): SSO, timeout, relatório ausente.
-                Swal.fire({ icon: 'error', title: t('runFail'), html: esc(String(e && e.message || e)),
+                Swal.fire({ icon: 'error', title: t('runFail'), html: (e && e.html) || esc(String(e && e.message || e)),
                             confirmButtonColor: '#0066cc' });
             }
         });
