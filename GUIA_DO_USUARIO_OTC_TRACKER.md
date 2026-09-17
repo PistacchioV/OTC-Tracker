@@ -786,7 +786,7 @@ Nas três: escolha a data, filtre, confira, exporte. Os números do alto da *Cha
 
 **Menu › RECONCILIATIONS**
 
-São quatro batimentos, cada um comparando duas fontes que deveriam dizer a mesma coisa.
+São cinco batimentos, cada um comparando duas fontes que deveriam dizer a mesma coisa.
 
 ### 8.1. Comitente
 
@@ -892,6 +892,48 @@ São quatro batimentos, cada um comparando duas fontes que deveriam dizer a mesm
 6. **Export** baixa o que está na tela (4.6).
 
 > **Este batimento depende de quatro cadastros** editáveis na tela **Mapping** (capítulo 13.3): `cgd-stage`, `cgd-b3-participante`, `cgd-garantidor` e `cgd-conta-encerrada`. Se um deles estiver vazio, a tela **avisa** em vez de deixar linhas entrarem ou saírem em silêncio — por exemplo, a linha da B3 que vem sem CNPJ é resolvida pelo `cgd-b3-participante`, e a recon diz quantas saíram por falta de cadastro.
+
+### 8.5. Conf. Matching
+
+**Menu › Reconciliations › Conf. Matching**
+
+![Conf. Matching](docs/sop-screenshots/reconciliation-conf-matching.png)
+
+**Para que serve:** responde a **uma pergunta só** — *a confirmação das operações de NDF de ontem foi gerada no FepWeb?* Ela compara os **contratos do FepWeb** com as **operações bookadas na Athena** no mesmo dia. É o batimento que antes rodava no Alteryx.
+
+> **Esta tela não fala de assinatura.** Se a confirmação está no FepWeb, a linha é **Ok** — se ela já foi assinada ou não é assunto do **Pending Confirmation** (capítulo 9), e as duas telas não se misturam.
+
+**De onde sai cada lado:**
+
+| Lado | Fonte |
+|---|---|
+| **FepWeb** | O anexo do e-mail **(REPORT) FEPWeb - Operacoes D-4**, na pasta **Inbox › Automatico** da caixa compartilhada. O sistema lê o anexo direto do e-mail — **não existe arquivo em pasta como alternativa**: sem o e-mail, o Run para e diz por quê |
+| **Athena** | A API de NDF do New Deals, para o mesmo dia. Operações canceladas e pernas internas (books, outras entidades do grupo) ficam de fora |
+
+O relatório do FepWeb chega **na noite do próprio dia** e cobre os últimos dias: para a data de ontem, vale o e-mail de ontem à noite. O cliente é identificado pelo **CPF/CNPJ** no lado do FepWeb e pelo **SPN** no lado da Athena, os dois contra o **Reference Data**.
+
+> **Confira sempre de que e-mail saiu o relatório.** Depois do Run, o painel mostra o **nome do anexo, o assunto e a data** do e-mail lido, e quantas operações cada lado trouxe (com quantas canceladas, internas e de outras datas ficaram de fora).
+
+**Os cartões do alto** são as respostas possíveis. **Clique num cartão para filtrar a tabela** por aquele grupo:
+
+| Cartão | Significa |
+|---|---|
+| **MISSING FEPWEB** (vermelho) | A operação está na Athena e **não há confirmação no FepWeb** — é a quebra que esta tela existe para achar |
+| **MISSING ATHENA** (roxo) | O contrato está no FepWeb e a operação não apareceu na Athena naquele dia |
+| **DUPLICATED** (âmbar) | O mesmo contrato aparece **mais de uma vez** no FepWeb. A coluna *FepWeb Count* diz quantas |
+| **OK** (verde) | A confirmação está no FepWeb — ou a contraparte tem **Signature Type = Internal** no Reference Data, caso em que a confirmação **não é gerada** e não estar no FepWeb é o certo |
+| **TOTAL** | A soma dos quatro |
+
+**Passo a passo:**
+
+1. Confira a **Reference date** — por padrão, o **último dia útil**.
+2. Clique em **Run** (botão azul). O sistema busca o e-mail, consulta a Athena e grava o resultado do dia; ao reabrir a tela, ele já está lá.
+3. Comece pelos cartões **Missing FepWeb** e **Missing Athena**.
+4. Para anotar o que foi feito com uma linha, clique em **Edit** (o lápis): **só o campo Comments abre para edição**. *Enter* ou o disquete salva; *Esc* ou o X cancela. O comentário é da **operação**, não do dia: rodar de novo não apaga.
+5. **Columns** esconde e mostra colunas; os campos do cabeçalho filtram por coluna (digite `blank` para achar as vazias); **Clear Filters** limpa tudo.
+6. **Export** baixa o que está na tela (4.6). Com linhas **marcadas** na caixa de seleção, sai **só o que está marcado**.
+
+> **Se o Run falhar dizendo que não achou o relatório**, a própria mensagem lista o motivo: a pasta não existe, nenhum e-mail com aquele assunto, ou o e-mail não tem anexo de planilha. **Se aparecer o aviso "Sem cadastro no Reference Data"**, cadastre o CNPJ/SPN indicado: sem ele o sistema não sabe o Signature Type, e uma contraparte *Internal* sairia como *Missing FepWeb*.
 
 ---
 
