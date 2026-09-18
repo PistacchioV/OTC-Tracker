@@ -477,6 +477,7 @@ def editar(athena_id, ref_date='', fields=None, sid=''):
             return None
         if (lst[idx].get('Status') or '') == domain.STATUS_ENVIADO:
             raise ValueError('This unwind was already sent to B3')
+        liq_antes = lst[idx].get('SettlementDate')
         for k, v in (fields or {}).items():
             # `k in lst[idx]` de proposito: a tela manda as colunas da grade, e
             # campo que a linha nao tem nao se INVENTA aqui.
@@ -487,6 +488,13 @@ def editar(athena_id, ref_date='', fields=None, sid=''):
         lst[idx]['Checker'] = ''
         linha = dict(lst[idx])
         persistence.save(fp, lst)
+    # O Cockpit acompanha a edicao (o gatilho e o IMPORT, §488): sem isto a
+    # projecao ficaria com o valor VELHO e o IR do dia seria calculado sobre
+    # ele. Data de liquidacao mudada tira a linha do dia ANTIGO primeiro —
+    # senao o mesmo caixa ficaria nos dois dias. Fora do `_cache_lock`.
+    if str(liq_antes or '') != str(linha.get('SettlementDate') or ''):
+        cockpit_sem_a_recompra([{'AthenaID': alvo, 'SettlementDate': liq_antes}])
+    cockpit_da_recompra([linha])
     return linha
 
 
@@ -523,6 +531,7 @@ def delete(athena_id, ref_date=''):
         return False
     if (lst[idx].get('Status') or '') == domain.STATUS_ENVIADO:
         raise ValueError('This unwind was already sent to B3')
+    apagada = dict(lst[idx])
     with _R()._cache_lock:
         try:
             atual = _store.read(fp)
@@ -532,6 +541,10 @@ def delete(athena_id, ref_date=''):
             atual = lst
         atual = [e for e in atual if persistence.key_of(e) != str(athena_id or '').strip().upper()]
         persistence.save(fp, atual)
+    # A projecao do Cockpit sai junto: o import do Cockpit PRESERVA a recompra
+    # (`_ndfc_keep_unwinds`), entao nem o Run seguinte a apagaria — o caixa de
+    # uma recompra apagada sairia no Trade Level e no IR do dia para sempre.
+    cockpit_sem_a_recompra([apagada])
     return True
 
 
@@ -873,8 +886,9 @@ def _cockpit_rec(linha):
         'VL_FORWARD_RATE': str(linha.get('Strike') or ''),
         'VL_STRIKE_PRICE': str(linha.get('TerminationRate') or ''),
         'PUBLISHER': '',
-        # O imposto é CALCULADO pelo `_ndfc_apply_ir` com o dia inteiro montado
-        # (o piso de R$ 1,00 é por contraparte): aqui ele nasce vazio.
+        # O imposto é CALCULADO com o dia INTEIRO montado (o piso de R$ 1,00 é
+        # do balde do mês, por contraparte): aqui ele nasce vazio e quem o
+        # escreve é o `_ndfc_reapply_ir`, logo depois da gravação do dia.
         'VL_TAX_INCOME': '',
         'ID_DEAL': str(linha.get('NotificationID') or ''),
         '[PROD] Cockpit.SETTLEMENT': '{:.2f}'.format(valor),
@@ -921,8 +935,46 @@ def cockpit_da_recompra(linhas):
                     else:
                         data[idx] = rec
                 R._ndfc_save(jp, data)
+            # FORA do `_cache_lock` (ele não é reentrante e a cura do ledger
+            # trava por dentro): a recompra entra no dia com a coluna de
+            # imposto vazia, e é esta conta que a preenche — e que corrige o
+            # imposto das outras linhas da mesma contraparte, porque o piso de
+            # R$ 1,00 é do balde do mês e a recompra passou a somar nele.
+            R._ndfc_reapply_ir(ref)
         except Exception:                                   # noqa: BLE001
             R.log.warning('[UNWIND NDF FX] Cockpit de %s não recebeu a recompra:\n%s',
+                          iso, traceback.format_exc())
+
+
+def cockpit_sem_a_recompra(linhas):
+    """Tira do Cockpit as recompras de `linhas` e refaz o imposto do dia.
+
+    O gatilho da projeção é o IMPORT (§488), então a linha some do Cockpit
+    quando some da vertical — apagada, ou movida para outra data de
+    liquidação. Sem isto ela ficaria no dia para sempre: o import do Cockpit
+    PRESERVA o que está marcado com `_nc_unwind` (`_ndfc_keep_unwinds`), e
+    nem o Run a apagaria. O caixa fantasma sairia no Trade Level e no IR."""
+    R = _R()
+    por_dia = {}
+    for l in linhas or []:
+        dia = R._parse_date_any((l or {}).get('SettlementDate'))
+        if dia is None:
+            continue
+        alvo = COCKPIT_ID_PREFIX + str((l or {}).get('AthenaID') or '')
+        por_dia.setdefault(dia.strftime('%Y-%m-%d'), set()).add(alvo)
+    for iso, ids in por_dia.items():
+        try:
+            ref = R._parse_date_any(iso)
+            with R._cache_lock:
+                jp, data = R._ndfc_load(ref)
+                data = list(data or [])
+                resto = [d for d in data if str(d.get('_nc_id') or '') not in ids]
+                if len(resto) == len(data):
+                    continue
+                R._ndfc_save(jp, resto)
+            R._ndfc_reapply_ir(ref)
+        except Exception:                                   # noqa: BLE001
+            R.log.warning('[UNWIND NDF FX] Cockpit de %s não soltou a recompra:\n%s',
                           iso, traceback.format_exc())
 
 

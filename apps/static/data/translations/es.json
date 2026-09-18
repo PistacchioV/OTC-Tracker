@@ -2564,5 +2564,6 @@
   "cfm-c-cetip": "Cetip ID",
   "cfm-c-endcp": "End Counterparty",
   "cfm-c-feptype": "Tipo FepWeb",
-  "cfm-c-fepcount": "Cant. en FepWeb"
+  "cfm-c-fepcount": "Cant. en FepWeb",
+  "ndfsum-unwind": "Recompra"
 }

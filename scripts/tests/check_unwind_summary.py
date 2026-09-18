@@ -59,6 +59,10 @@ def main():
     persistence.cache_root = lambda: os.path.join(tmp, 'cache')
     persistence.cache_dir = lambda: os.path.join(tmp, 'cache', 'NDF', 'FX')
     commands._hoje = lambda: HOJE
+    # O IR mensal e ACUMULADO num ledger: sem redirecionar, este teste somaria
+    # as recompras da fixture ao imposto de verdade da maquina.
+    R._ndfsum_ir_ledger_path = lambda ref: os.path.join(
+        tmp, 'ledger', 'ndf-ir-ledger_' + ref.strftime('%Y%m') + '.json')
 
     # A recompra fica no arquivo-dia de ONTEM e liquida HOJE: e o caso que a
     # janela de busca existe para cobrir.

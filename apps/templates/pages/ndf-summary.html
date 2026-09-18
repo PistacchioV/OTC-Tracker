@@ -855,11 +855,18 @@ document.addEventListener('DOMContentLoaded', function () {
     // TRÊS estados, como todo veredito desta casa: OK, Check e "não há o que
     // conferir" (`null`) — a recompra não tem resgate na B3 do outro lado, e
     // pintá-la de Check mandaria a mesa procurar uma divergência que não existe.
-    function statusBadge(ok) {
-        if (ok === null || ok === undefined)
-            return '<span class="badge text-bg-secondary bg-gradient rounded-pill">—</span>';
-        return ok ? '<span class="badge text-bg-success bg-gradient rounded-pill">OK</span>'
-                  : '<span class="badge text-bg-danger bg-gradient rounded-pill">Check</span>';
+    // A RECOMPRA diz o NOME ao lado: o "—" sozinho responde "não há o que
+    // conferir", que também é o que uma linha comum sem o lado da B3 mostra —
+    // ele não diz que esta liquidação é uma antecipação. É a mesma marca do
+    // NDF Cockpit, e é por ela que a mesa separa as duas coisas na tela.
+    function statusBadge(ok, unwind) {
+        var b = (ok === null || ok === undefined)
+            ? '<span class="badge text-bg-secondary bg-gradient rounded-pill">—</span>'
+            : (ok ? '<span class="badge text-bg-success bg-gradient rounded-pill">OK</span>'
+                  : '<span class="badge text-bg-danger bg-gradient rounded-pill">Check</span>');
+        if (unwind) b += ' <span class="badge bg-secondary-subtle text-secondary bg-gradient rounded-pill">'
+                         + esc(t('ndfsum-unwind', 'Unwind')) + '</span>';
+        return b;
     }
     // Standard status pill for the Settlement Summary rows (New → Generated → Sent).
     function pill(text, cls) {
@@ -884,7 +891,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 : (r.ok ? '<i class="ti ti-check text-success fs-5 align-middle"></i>'
                         : '<i class="ti ti-x text-danger fs-5 align-middle"></i>');
             var diff = (r.diff !== '' ? esc(r.diff) + ' ' : '') + icon;
-            dtTrade.row.add([cb, actionsCell(), statusBadge(r.ok)]
+            dtTrade.row.add([cb, actionsCell(), statusBadge(r.ok, r.unwind)]
                 .concat((r.cells || []).map(esc)).concat([diff]));
         });
         dtTrade.draw();

@@ -20,13 +20,14 @@
 
   var dt = null;
   var COLS = [];               // current data columns (for the Add/Edit modal)
-  var CURRENT_ROWS = [];       // last-loaded rows (each: [...18 data..., status, maker, checker, id])
+  var CURRENT_ROWS = [];       // last-loaded rows (each: [...18 data..., status, maker, checker, id, unwind])
   var EDIT_ID = null;          // id of the row being edited (null → Add mode)
   var SELECTED = {};           // ids marcados (ver a seção de seleção em buildTable)
 
   var LANG = (localStorage.getItem('language') || 'en').toLowerCase();
   var _TRANS = {
-    en: { filterPh: 'Filter…', ok: 'OK', pending: 'Pending', newst: 'New', importing: 'Importing…',
+    en: { filterPh: 'Filter…', ok: 'OK', pending: 'Pending', newst: 'New', unwind: 'Unwind',
+          importing: 'Importing…',
           noFile: 'The Athena API did not answer.', imported: 'Imported', rows: 'row(s)', updated: 'Updated',
           loading: 'Loading the table…',
           edit: 'Edit', del: 'Delete', confirm: 'Confirm', addTitle: 'Add row', editTitle: 'Edit row',
@@ -36,7 +37,8 @@
           delSelTitle: 'Delete the selected rows?', delSelYes: 'Yes, delete',
           delSelText: 'selected row(s) will be removed from',
           delSelUndo: 'There is no undo — re-import to bring them back.', delSelDone: 'Rows deleted' },
-    br: { filterPh: 'Filtrar…', ok: 'OK', pending: 'Pendente', newst: 'Novo', importing: 'Importando…',
+    br: { filterPh: 'Filtrar…', ok: 'OK', pending: 'Pendente', newst: 'Novo', unwind: 'Recompra',
+          importing: 'Importando…',
           noFile: 'A API da Athena não respondeu.', imported: 'Importado', rows: 'linha(s)', updated: 'Atualizado',
           loading: 'Carregando a tabela…',
           edit: 'Editar', del: 'Excluir', confirm: 'Confirmar', addTitle: 'Adicionar linha', editTitle: 'Editar linha',
@@ -46,7 +48,8 @@
           delSelTitle: 'Excluir as linhas selecionadas?', delSelYes: 'Sim, excluir',
           delSelText: 'linha(s) selecionada(s) serão removidas de',
           delSelUndo: 'Não há desfazer — reimporte para trazê-las de volta.', delSelDone: 'Linhas excluídas' },
-    es: { filterPh: 'Filtrar…', ok: 'OK', pending: 'Pendiente', newst: 'Nuevo', importing: 'Importando…',
+    es: { filterPh: 'Filtrar…', ok: 'OK', pending: 'Pendiente', newst: 'Nuevo', unwind: 'Recompra',
+          importing: 'Importando…',
           noFile: 'La API de Athena no respondió.', imported: 'Importado', rows: 'fila(s)', updated: 'Actualizado',
           loading: 'Cargando la tabla…',
           edit: 'Editar', del: 'Eliminar', confirm: 'Confirmar', addTitle: 'Agregar fila', editTitle: 'Editar fila',
@@ -90,16 +93,26 @@
   }
 
   // Standard status badge (project format): OK=success, Pending=warning, New=info.
-  function statusBadge(status) {
+  // A RECOMPRA ganha uma segunda pilha ao lado: ela liquida caixa como as
+  // outras e ocupa as mesmas dezoito colunas, mas não vem da API e não tem
+  // resgate da B3 do outro lado — sem dizê-lo, a mesa não tem como saber qual
+  // das liquidações do dia é uma antecipação. Vai na coluna Status porque é a
+  // coluna que a pessoa lê primeiro, e porque o filtro dela passa a achar as
+  // recompras do dia pelo nome.
+  function statusBadge(status, unwind) {
     var s = String(status || 'OK').toLowerCase();
-    if (s === 'pending') return '<span class="badge text-bg-warning bg-gradient">' + esc(t('pending')) + '</span>';
-    if (s === 'new')     return '<span class="badge bg-info text-white bg-gradient">' + esc(t('newst')) + '</span>';
-    return '<span class="badge text-bg-success bg-gradient">' + esc(t('ok')) + '</span>';
+    var b = (s === 'pending') ? '<span class="badge text-bg-warning bg-gradient">' + esc(t('pending')) + '</span>'
+          : (s === 'new')     ? '<span class="badge bg-info text-white bg-gradient">' + esc(t('newst')) + '</span>'
+                              : '<span class="badge text-bg-success bg-gradient">' + esc(t('ok')) + '</span>';
+    if (unwind) b += ' <span class="badge bg-secondary-subtle text-secondary bg-gradient ndfc-unwind">'
+                     + esc(t('unwind')) + '</span>';
+    return b;
   }
 
   function metaOf(r) {
     var n = COLS.length;
-    return { status: r[n], maker: r[n + 1], checker: r[n + 2], id: r[n + 3] };
+    return { status: r[n], maker: r[n + 1], checker: r[n + 2], id: r[n + 3],
+             unwind: !!r[n + 4] };
   }
 
   // Action buttons — standard rounded-square format (global head-css) via btn-row-* classes.
@@ -134,7 +147,7 @@
     var data = rows.map(function (r) {
       var m = metaOf(r);
       return ['<input type="checkbox" class="form-check-input ndfc-row-check" data-id="' + esc(m.id) + '">',
-              actionsHtml(m.id), statusBadge(m.status)]
+              actionsHtml(m.id), statusBadge(m.status, m.unwind)]
         .concat(r.slice(0, COLS.length).map(function (v) { return cellHtml(v); }));
     });
 

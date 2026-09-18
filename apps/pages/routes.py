@@ -7930,6 +7930,51 @@ def _ndfc_apply_ir(ref, rows):
         rec['VL_TAX_INCOME'] = '{:.2f}'.format(fila.pop(0))
 
 
+def _ndfc_reapply_ir(ref):
+    """Recalcula o `VL_TAX_INCOME` do dia do Cockpit JÁ GRAVADO em disco.
+
+    O `_ndfc_apply_ir` roda dentro do import da API, que monta o dia inteiro
+    do zero. Quando o dia muda por FORA dele — hoje, a RECOMPRA, que a
+    vertical projeta no arquivo-dia da liquidação (§488) —, ninguém refaz a
+    conta: a recompra ficava no Cockpit com a coluna de imposto VAZIA até
+    alguém clicar Run, e o imposto das OUTRAS linhas da mesma contraparte
+    ficava velho junto, porque o piso de R$ 1,00 é do balde do MÊS e a
+    recompra entra nele.
+
+    A conta roda FORA do `_cache_lock`: ela cura o ledger do mês, que trava
+    por dentro, e o lock não é reentrante. O lock entra só para devolver os
+    valores ao arquivo, casando as linhas pelo `_nc_id`. Linha que sumiu nesse
+    meio-tempo é ignorada e linha que chegou depois fica sem imposto até a
+    próxima conta — quem a pôs lá é que a dispara.
+    """
+    try:
+        _jp, atuais = _ndfc_load(ref)
+    except Exception:                                       # noqa: BLE001
+        log.warning('[ndfc] não deu para reler o dia %s para recalcular o IR:\n%s',
+                    ref.strftime('%Y-%m-%d'), traceback.format_exc())
+        return
+    if not atuais:
+        return
+    linhas = [dict(r) for r in atuais]
+    _ndfc_apply_ir(ref, linhas)
+    novo = {str(r.get('_nc_id') or ''): str(r.get('VL_TAX_INCOME', '') or '')
+            for r in linhas if r.get('_nc_id')}
+    try:
+        with _cache_lock:
+            jp, data = _ndfc_load(ref)
+            mudou = False
+            for rec in (data or []):
+                rid = str(rec.get('_nc_id') or '')
+                if rid in novo and str(rec.get('VL_TAX_INCOME', '') or '') != novo[rid]:
+                    rec['VL_TAX_INCOME'] = novo[rid]
+                    mudou = True
+            if mudou:
+                _ndfc_save(jp, data)
+    except Exception:                                       # noqa: BLE001
+        log.warning('[ndfc] IR do dia %s não foi regravado:\n%s',
+                    ref.strftime('%Y-%m-%d'), traceback.format_exc())
+
+
 def _ndfc_import(ref=None):
     """Import do Cockpit: puxa do getTradesBySettle as operações de NDF que
     liquidam em `ref` (a data do picker; default hoje) e REESCREVE o JSON do dia
@@ -8294,8 +8339,15 @@ def _ndfc_collect(ref):
                 elif c in _NDFC_VALUE_COLS:
                     v = _swapchar_fmt_value(v)
                 row.append('' if v is None else v)
+            # A cauda de META vai DEPOIS das colunas de dado, e quem a lê conta
+            # do começo (`len(_NDFC_COLUMNS) + n`) — acrescentar aqui é aditivo.
+            # A marca da RECOMPRA é a quinta: a linha projetada pela vertical
+            # (§488) não vem da API e não tem resgate na B3, e sem dizê-lo a
+            # tela mostra dezoito colunas iguais às das outras — a mesa não tem
+            # como saber qual das liquidações do dia é uma antecipação.
             row += [rec.get('_nc_status', 'OK'), rec.get('_nc_maker', ''),
-                    rec.get('_nc_checker', ''), rec.get('_nc_id', '')]
+                    rec.get('_nc_checker', ''), rec.get('_nc_id', ''),
+                    '1' if rec.get('_nc_unwind') else '']
             rows_out.append(row)
             nm = str(rec.get('NM_COUNTERPARTY', '') or '').strip()
             if nm:

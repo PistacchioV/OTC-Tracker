@@ -649,7 +649,14 @@ def _opb3_internal_ter_map(ref):
     out = {}
     try:
         ci = {c: i for i, c in enumerate(routes._NDFC_COLUMNS)}
+        # A RECOMPRA projetada no dia (§488) fica de FORA: ela carrega o MESMO
+        # contrato da operação original e não tem resgate na B3 para bater —
+        # somada aqui, ela mudaria o lado JP de um contrato que a B3 informa
+        # sozinho, e o "Favor considerar" sairia com o valor errado.
+        i_unw = len(routes._NDFC_COLUMNS) + 4
         for row in routes._ndfc_collect(ref)['rows']:
+            if len(row) > i_unw and row[i_unw]:
+                continue
             b3 = str(row[ci['CD_CETIP_RETURN']] or '').strip().upper()
             if not b3 or b3 == routes._NDFC_MISSING_B3.upper():
                 continue
