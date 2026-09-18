@@ -176,6 +176,15 @@ def main():
         sem_cgd = dict(base, fields=dict(base['fields'], cgd_date=''))
         check('sem CGD o Save RECUSA', 'CGD' in (_erro(commands.termo_salvar, sem_cgd) or ''))
         check('sem operacao o Save RECUSA', (_erro(commands.termo_salvar, dict(base, rows=[])) or ''))
+        # O termo e ARQUIVADO na pasta da contraparte, como toda confirmacao
+        # desta casa. Sem contraparte nao ha pasta: antes, o acronimo caia num
+        # literal 'UNWIND' e o `create=True` fazia nascer uma pasta com esse
+        # nome no Inventory, ao lado das contrapartes de verdade.
+        sem_cpty = dict(base, acronym='',
+                        fields=dict(base['fields'], parteb_nome=''))
+        check('sem contraparte o Save RECUSA, em vez de inventar pasta',
+              'Counterparty' in (_erro(commands.termo_salvar, sem_cpty) or ''),
+              _erro(commands.termo_salvar, sem_cpty))
 
         # Grava de verdade: o Inventory e o `tmp`, e a linha da recompra
         # existe no arquivo-dia (o carimbo tem de achar as duas).
@@ -187,6 +196,12 @@ def main():
           all(os.path.isfile(p) for p in out['files']), out['files'])
     check('na pasta do TIPO da esteira',
           os.sep + 'TERMO DE RESILICAO' + os.sep in out['files'][0], out['files'][0])
+    # O caminho INTEIRO e o das confirmacoes de New Deals: a pasta da
+    # CONTRAPARTE, depois Confirmations/AAAA/mm. Month/dd/<TIPO>.
+    check('dentro da pasta da CONTRAPARTE, em Confirmations/AAAA/mm/dd',
+          (os.sep + 'Confirmations' + os.sep) in out['files'][0]
+          and out['files'][0].startswith(R._ei_resolve_client_dir(L1['Counterparty']) + os.sep),
+          out['files'][0])
     _fp, lst, idx = queries.find(L1['AthenaID'], HOJE.strftime('%Y-%m-%d'))
     check('a linha da recompra ficou carimbada com o PDF',
           idx is not None and lst[idx].get('TermoPdf') == out['pdf'])

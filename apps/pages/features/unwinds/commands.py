@@ -418,6 +418,61 @@ def marcar_enviadas(alvos, sid='', nomes=()):
     return enviadas
 
 
+def editar(athena_id, ref_date='', fields=None, sid=''):
+    """Edicao de linha -> `Pending`, com o editor como MAKER (4 olhos).
+
+    O mesmo desenho das paginas de Intrag: mexer na linha nao a manda para a
+    B3 sozinha — ela sai da fila de envio ate outro usuario conferir
+    (`aprovar`). Devolve a linha gravada, ou None se ela nao existe.
+
+    O ciclo inteiro (achar -> alterar -> gravar) roda sob o `_cache_lock`,
+    porque e read-modify-write: `queries.find` nao trava nada, e ler fora da
+    trava e gravar dentro reescreveria por cima do que entrou no meio.
+    """
+    alvo = str(athena_id or '').strip().upper()
+    with _R()._cache_lock:
+        fp, lst, idx = queries.find(alvo, ref_date)
+        if idx is None:
+            return None
+        if (lst[idx].get('Status') or '') == domain.STATUS_ENVIADO:
+            raise ValueError('This unwind was already sent to B3')
+        for k, v in (fields or {}).items():
+            # `k in lst[idx]` de proposito: a tela manda as colunas da grade, e
+            # campo que a linha nao tem nao se INVENTA aqui.
+            if k in lst[idx] and k not in domain.UNW_NAO_EDITAVEL:
+                lst[idx][k] = v
+        lst[idx]['Status'] = domain.STATUS_PENDENTE
+        lst[idx]['Maker'] = sid or ''
+        lst[idx]['Checker'] = ''
+        linha = dict(lst[idx])
+        persistence.save(fp, lst)
+    return linha
+
+
+def aprovar(athena_id, ref_date='', sid=''):
+    """`Pending` -> `Approved`, com maker != checker.
+
+    Levanta `ValueError` quando a linha nao esta `Pending` (nao ha o que
+    conferir) e `PermissionError` quando quem aprova e quem editou — e a trava
+    de quatro olhos, e sem ela a aprovacao nao afirma nada.
+    """
+    alvo = str(athena_id or '').strip().upper()
+    with _R()._cache_lock:
+        fp, lst, idx = queries.find(alvo, ref_date)
+        if idx is None:
+            return None
+        if (lst[idx].get('Status') or '') != domain.STATUS_PENDENTE:
+            raise ValueError('Only Pending unwinds can be approved')
+        if lst[idx].get('Maker') and lst[idx]['Maker'] == (sid or ''):
+            raise PermissionError('Maker cannot approve their own change — '
+                                  'a different user must check it')
+        lst[idx]['Status'] = domain.STATUS_APROVADO
+        lst[idx]['Checker'] = sid or ''
+        linha = dict(lst[idx])
+        persistence.save(fp, lst)
+    return linha
+
+
 def delete(athena_id, ref_date=''):
     """Remove a linha do arquivo-dia. Linha ja enviada NAO se apaga: o arquivo
     ja foi para a B3 e sumir com o rastro esconde o que precisa ser corrigido
@@ -520,8 +575,14 @@ def termo_conf(ref, acr, moeda, linhas, sid=''):
 
 
 def termo_salvar(payload, sid=''):
-    """Word + PDF do Termo no Electronic Inventory, na pasta do TIPO, e o
+    """Word + PDF do Termo na pasta da CONTRAPARTE do Electronic Inventory, e o
     carimbo do documento nas linhas da recompra.
+
+    O caminho é o MESMO das confirmações de New Deals, e de propósito:
+    `<Cliente>\Confirmations\AAAA\mm. Month\dd\<pasta do TIPO>`, com o
+    cliente resolvido pelo `_ei_resolve_client_dir` e a pasta do produto saindo
+    do `TYPE_FOLDER` (a pasta É o código do tipo). Escrito à mão aqui, ele
+    voltaria a divergir do upload manual da tela no primeiro ajuste.
 
     O documento sai PRIMEIRO e o PDF sai DELE (§139): uma segunda transcrição
     do texto é a forma conhecida de os dois divergirem sem ninguém notar."""
@@ -538,7 +599,7 @@ def termo_salvar(payload, sid=''):
         raise ValueError('Data do CGD não cadastrada para esta contraparte. Cadastre o CGD '
                          'no Reference Data (ou preencha o campo no painel) antes de salvar.')
 
-    acr = str(payload.get('acronym') or '').strip() or 'UNWIND'
+    acr = str(payload.get('acronym') or '').strip()
     moeda = str(payload.get('mercadoria') or '').strip().upper()
     conf = {
         'ref_date':     str(payload.get('date') or '').strip(),
@@ -560,15 +621,31 @@ def termo_salvar(payload, sid=''):
     pdf_bytes = word_html_pdf(doc_html)
 
     ref = _R()._parse_date_any(payload.get('date')) or _hoje()
-    client_dir = _R()._ei_resolve_client_dir(conf['parteb_nome'] or acr, create=True)
+    # A pasta é a da CONTRAPARTE, e sem contraparte não há pasta. O `acr` caía
+    # num literal 'UNWIND' quando a posição não resolvia o cliente (é o mesmo
+    # dia em que o B3 ID e a moeda saem em branco), e o `create=True` fazia
+    # nascer no Electronic Inventory uma pasta chamada UNWIND, ao lado das
+    # contrapartes — o documento ficava salvo, ninguém errava nada na tela, e
+    # ele não estava onde a mesa procura. Recusar aqui é a falha desejada.
+    cliente = conf['parteb_nome'] or acr
+    if not cliente:
+        raise ValueError('Counterparty unknown — the Termo is filed in the counterparty '
+                         'folder of the Electronic Inventory, and this unwind has none. '
+                         'Fill in Parte B in the panel (or fix the Live Position row) '
+                         'before saving.')
+    client_dir = _R()._ei_resolve_client_dir(cliente, create=True)
     dir_path = os.path.join(client_dir, 'Confirmations',
                             ref.strftime('%Y'), _R()._ei_month_folder(ref.strftime('%m')),
                             ref.strftime('%d'), _R()._mc_mod.TYPE_FOLDER[TERMO_TIPO])
+    # O prefixo do nome é o do padrão legado (contraparte × mercadoria); sem
+    # acrônimo, quem o abre é o nome da Parte B — nunca um segmento vazio, que
+    # deixaria o arquivo começando por ' - '.
+    prefixo = acr or cliente
     if len(rows) == 1 and str(rows[0].get('registroCetip') or '').strip():
         base = '{} - {} - TERMO DE RESILIÇÃO - {}'.format(
-            acr, moeda, str(rows[0]['registroCetip']).strip())
+            prefixo, moeda, str(rows[0]['registroCetip']).strip())
     else:
-        base = '{} - {} - TERMO DE RESILIÇÃO - {}'.format(acr, moeda, ref.strftime('%Y%m%d'))
+        base = '{} - {} - TERMO DE RESILIÇÃO - {}'.format(prefixo, moeda, ref.strftime('%Y%m%d'))
     base = _R()._ei_sanitize(base)
 
     os.makedirs(_R()._ei_long_path(dir_path), exist_ok=True)
@@ -585,7 +662,7 @@ def termo_salvar(payload, sid=''):
         fh.write(pdf_bytes)
     _R().log.info('[UNWIND NDF FX] Termo de Resilição -> %s', pdf_path)
 
-    link = _R()._mc_ei_link(conf['parteb_nome'] or acr, client_dir, pdf_path)
+    link = _R()._mc_ei_link(cliente, client_dir, pdf_path)
     termo_carimbar(conf['athena_ids'], conf['ref_date'], doc_path, pdf_path, link, sid)
     # A confirmação saiu: carimba a Data envio validação OTC na esteira e guarda
     # o endereço do PDF — é para lá que o botão Abrir do Monitor manda. O grupo

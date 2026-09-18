@@ -674,6 +674,17 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   redraw). Regra GLOBAL no `visual-refresh.css`; ordem Confirm `ti-check` →
   Edit `ti-edit` → Delete `ti-trash` → Send `ti-brand-telegram`; edição Save
   `ti-device-floppy` + Cancel `ti-x`. `check_row_action_buttons.py`.
+  **`d-none` esconde botão de linha — e só voltou a esconder em 18/09/2026**
+  (§497): a regra de FORMATO do `partials/head-css.html` declara `display:
+  inline-flex !important` nessas quinze classes, mesma especificidade do
+  `.d-none` do `app.css` e carregada DEPOIS dele, então todo
+  `toggleClass('d-none', …)` de botão de ação era mudo — o botão continuava na
+  tela e só o servidor recusava. O par `.btn-row-x.d-none` (0,2,0) no mesmo
+  arquivo resolve para o app inteiro; página nova não escreve nada.
+  **Editor inline acha a célula pela API (`table.cell(linha, coluna)`), nunca
+  pelo índice do `<td>`**: coluna escondida sai do DOM, e daí o i-ésimo `td`
+  deixa de ser o i-ésimo campo — o que se digita numa coluna é gravado no
+  campo de outra, calado.
 - **Toolbar** `mb-3` (o DataTables come a margem do irmão), `.btn-toolbar-all`;
   cores por função: Columns soft-primary, Add Row primary, Export info
   (**Copy · CSV · Excel · Print · PDF**, DataTables Buttons; CSV `;` + BOM;
@@ -1111,6 +1122,29 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   (`infra/email_file.py` — magic do CFB, cabeçalhos MIME), não pela extensão:
   o Outlook renomeia anexo e um `.msg` chega como `.txt` sem aviso. O assunto
   sai do arquivo quando ele o carrega; só o corpo solto cai para o nome.
+- **Os botões da linha são os QUATRO da casa** (§7): Confirm, Edit, Delete,
+  Send. O preview do arquivo da B3 é o **duplo clique** na linha e o Termo de
+  Resilição se gera no **Confirmations Monitor** — um olho e um documento na
+  coluna Actions eram dois caminhos a mais para onde já se chega. A **edição
+  segue o 4-olhos das páginas de Intrag**: salvar põe a linha em `Pending` e
+  marca o maker, `Approved` é outro usuário conferindo (o próprio é 403), e
+  **`Pending` não é enviável** — `STATUS_ENVIAVEL` é `Imported` (veio da
+  máquina, intocada) e `Approved` (mexida e conferida). O `Status` e o `Check`
+  ficam fora dos campos editáveis: um é estado da esteira, o outro é veredito
+  apurado.
+- **O `Status` é a PRIMEIRA coluna de dado**, logo depois das Actions: em
+  dezoito colunas, no fim da grade a resposta "esta linha já foi?" só aparece
+  depois de rolar a tabela inteira.
+- **O Termo de Resilição é arquivado na pasta da CONTRAPARTE**, pelo mesmo
+  caminho das confirmações de New Deals
+  (`<Cliente>\Confirmations\AAAA\mm. Month\dd\<pasta do TIPO>`, via
+  `_ei_resolve_client_dir`). **Sem contraparte o Save RECUSA**: o acrônimo caía
+  num literal `'UNWIND'` e o `create=True` fazia nascer uma pasta com esse nome
+  no Electronic Inventory, ao lado das contrapartes de verdade — o documento
+  ficava salvo, a tela não acusava nada, e ele não estava onde a mesa procura.
+- **Toda ação da página toca o sino** (Import, Box Scan, Edit, Confirm, Delete,
+  Send, Termo salvo), porque o arquivo-dia é da mesa inteira. A exceção é o
+  `dry_run` do Import: ali nada foi gravado, é a pergunta das duplicatas.
 - **A varredura roda sozinha a cada 30 min**, em laço PRÓPRIO da vertical
   (`unwinds/commands.scheduler_loop`, registrado no `routes.py` como
   `unwind-boxscan`) e não dentro do `features/boxscan`: **feature não importa

@@ -77,6 +77,13 @@ def api_unwinds_ndf_fx_import():
         _R().log.error('[UNWIND NDF FX] import failed:\n%s', traceback.format_exc())
         return jsonify({'success': False,
                         'message': 'Import failed: %s: %s' % (type(exc).__name__, exc)}), 500
+    # O `dry_run` é só a conferência de duplicatas do primeiro passo do Import:
+    # ali nada foi gravado, e avisar seria tocar o sino por uma pergunta.
+    if not dry_run and (out.get('rows') or []):
+        _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                                  'Deals Imported', PAGE,
+                                  '%d unwind%s imported' % (len(out['rows']),
+                                                            '' if len(out['rows']) == 1 else 's'))
     out['success'] = True
     return jsonify(out)
 
@@ -96,6 +103,11 @@ def api_unwinds_ndf_fx_scan():
         _R().log.error('[UNWIND NDF FX] box scan failed:\n%s', traceback.format_exc())
         return jsonify({'success': False,
                         'message': 'Box scan failed: %s: %s' % (type(exc).__name__, exc)}), 500
+    if out.get('rows'):
+        _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                                  'Deals Imported', PAGE,
+                                  'Outlook box: %d unwind%s' % (len(out['rows']),
+                                                                '' if len(out['rows']) == 1 else 's'))
     out['success'] = True
     return jsonify(out)
 
@@ -149,6 +161,64 @@ def api_unwinds_ndf_fx_send():
     return jsonify(out)
 
 
+@blueprint.route('/api/unwinds/ndf/fx/edit', methods=['POST'])
+def api_unwinds_ndf_fx_edit():
+    """Edição de linha → status `Pending` e o editor vira o maker (4 olhos).
+
+    O mesmo contrato das páginas de Intrag: mexer na linha NÃO a manda para a
+    B3 — ela sai da fila de envio até outro usuário conferir."""
+    err = _auth()
+    if err:
+        return err
+    payload = request.get_json(silent=True) or {}
+    aid = str(payload.get('athena_id') or '').strip()
+    if not aid:
+        return jsonify({'success': False, 'message': 'Missing athena_id'}), 400
+    try:
+        linha = commands.editar(aid, str(payload.get('date') or ''),
+                                payload.get('fields') or {},
+                                sid=session.get('user_sid', ''))
+    except ValueError as exc:
+        # O erro sai com CÓDIGO (§486): quem diz a frase é a tela, no idioma
+        # de quem está olhando; o `message` é só o fallback.
+        return jsonify({'success': False, 'code': 'unwind_already_sent',
+                        'message': str(exc)}), 409
+    if linha is None:
+        return jsonify({'success': False, 'code': 'unwind_not_found',
+                        'message': 'Entry not found'}), 404
+    _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                              'Deal Updated', PAGE, aid)
+    return jsonify({'success': True, 'status': linha.get('Status'), 'row': linha})
+
+
+@blueprint.route('/api/unwinds/ndf/fx/approve', methods=['POST'])
+def api_unwinds_ndf_fx_approve():
+    """`Pending` → `Approved`, com maker ≠ checker. Aprovar a própria edição é
+    403: sem isso a conferência não afirma nada."""
+    err = _auth()
+    if err:
+        return err
+    payload = request.get_json(silent=True) or {}
+    aid = str(payload.get('athena_id') or '').strip()
+    if not aid:
+        return jsonify({'success': False, 'message': 'Missing athena_id'}), 400
+    try:
+        linha = commands.aprovar(aid, str(payload.get('date') or ''),
+                                 sid=session.get('user_sid', ''))
+    except PermissionError as exc:
+        return jsonify({'success': False, 'code': 'unwind_maker_is_checker',
+                        'message': str(exc)}), 403
+    except ValueError as exc:
+        return jsonify({'success': False, 'code': 'unwind_only_pending',
+                        'message': str(exc)}), 400
+    if linha is None:
+        return jsonify({'success': False, 'code': 'unwind_not_found',
+                        'message': 'Entry not found'}), 404
+    _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                              'Status Updated', PAGE, aid + ' → Approved')
+    return jsonify({'success': True, 'status': linha.get('Status'), 'row': linha})
+
+
 @blueprint.route('/api/unwinds/ndf/fx/delete', methods=['POST'])
 def api_unwinds_ndf_fx_delete():
     err = _auth()
@@ -160,7 +230,14 @@ def api_unwinds_ndf_fx_delete():
     except ValueError as exc:
         return jsonify({'success': False, 'message': str(exc)}), 409
     if not apagou:
-        return jsonify({'success': False, 'message': 'Entry not found'}), 404
+        return jsonify({'success': False, 'code': 'unwind_not_found',
+                        'message': 'Entry not found'}), 404
+    # Apagar TAMBÉM avisa, como nas páginas de New Deals ('Deal Deleted'): o
+    # arquivo-dia é da mesa inteira, e a linha que sumiu sem rastro é a que
+    # ninguém consegue explicar depois.
+    _R()._create_notification(session.get('user_sid', ''), session.get('user_name', ''),
+                              'Deal Deleted', PAGE,
+                              str(payload.get('athena_id') or ''))
     return jsonify({'success': True})
 
 

@@ -47,17 +47,27 @@
   #unw-table_wrapper .dt-scroll-head thead th, #unw-table_wrapper .dataTables_scrollHead thead th { width: 130px; min-width: 130px; }
   #unw-table th:nth-child(1), #unw-table td:nth-child(1),
   #unw-table_wrapper .dt-scroll-head thead th:nth-child(1), #unw-table_wrapper .dataTables_scrollHead thead th:nth-child(1) { width: 50px; min-width: 50px; }
+  /* Ações: QUATRO squircles de 32px com `gap-1` entre eles são 140px de
+     conteúdo, e a coluna tinha 110 com `overflow:hidden` — o último botão
+     saía cortado ao meio, sem erro nenhum e sem barra de rolagem que
+     denunciasse. A largura aqui é a dos botões mais o respiro do `td`. */
   #unw-table th:nth-child(2), #unw-table td:nth-child(2),
-  #unw-table_wrapper .dt-scroll-head thead th:nth-child(2), #unw-table_wrapper .dataTables_scrollHead thead th:nth-child(2) { width: 110px; min-width: 110px; }
-  /* As colunas de IDENTIDADE (Athena ID, B3 ID, contraparte) são as que a
-     mesa lê para saber de que operação se trata: cortá-las obriga a abrir a
-     linha para descobrir o que já devia estar na grade. */
+  #unw-table_wrapper .dt-scroll-head thead th:nth-child(2), #unw-table_wrapper .dataTables_scrollHead thead th:nth-child(2) { width: 165px; min-width: 165px; }
+  /* [3] é o Status — a primeira coluna de dado, porque é ela que responde
+     "esta linha já foi?" (§7). Depois vêm as de IDENTIDADE (Athena ID, B3 ID,
+     contraparte), que são as que a mesa lê para saber de que operação se
+     trata: cortá-las obriga a abrir a linha para descobrir o que já devia
+     estar na grade. */
   #unw-table th:nth-child(3), #unw-table td:nth-child(3),
-  #unw-table_wrapper .dt-scroll-head thead th:nth-child(3), #unw-table_wrapper .dataTables_scrollHead thead th:nth-child(3) { width: 190px; min-width: 190px; }
+  #unw-table_wrapper .dt-scroll-head thead th:nth-child(3), #unw-table_wrapper .dataTables_scrollHead thead th:nth-child(3) { width: 110px; min-width: 110px; }
   #unw-table th:nth-child(4), #unw-table td:nth-child(4),
-  #unw-table_wrapper .dt-scroll-head thead th:nth-child(4), #unw-table_wrapper .dataTables_scrollHead thead th:nth-child(4) { width: 125px; min-width: 125px; }
+  #unw-table_wrapper .dt-scroll-head thead th:nth-child(4), #unw-table_wrapper .dataTables_scrollHead thead th:nth-child(4) { width: 190px; min-width: 190px; }
   #unw-table th:nth-child(5), #unw-table td:nth-child(5),
-  #unw-table_wrapper .dt-scroll-head thead th:nth-child(5), #unw-table_wrapper .dataTables_scrollHead thead th:nth-child(5) { width: 230px; min-width: 230px; text-align: left; padding-left: 10px; }
+  #unw-table_wrapper .dt-scroll-head thead th:nth-child(5), #unw-table_wrapper .dataTables_scrollHead thead th:nth-child(5) { width: 125px; min-width: 125px; }
+  #unw-table th:nth-child(6), #unw-table td:nth-child(6),
+  #unw-table_wrapper .dt-scroll-head thead th:nth-child(6), #unw-table_wrapper .dataTables_scrollHead thead th:nth-child(6) { width: 230px; min-width: 230px; text-align: left; padding-left: 10px; }
+  /* O campo da edição inline não pode esticar a coluna. */
+  #unw-table td .unw-edit { min-width: 0; width: 100%; font-size: 0.78rem; text-align: center; }
 
   /* Botões de ação: squircle 32×32 (a regra global vive no visual-refresh). */
   #unw-table td .btn-sm.rounded-circle { width: 32px; height: 32px; padding: 0 !important; border-radius: 10px !important; display: inline-flex; align-items: center; justify-content: center; }
@@ -197,12 +207,13 @@
 // O servidor manda `fields`/`labels` no GET e eles VENCEM esta cópia, que é
 // só o fallback para a primeira pintura (o mesmo desenho das páginas irmãs).
 var UNW_COLS = [
+    ['Status','Status'],
     ['AthenaID','Athena ID'],['Contract','B3 ID'],['Counterparty','Counterparty'],['TaxID','Tax ID'],
     ['Currency','Ccy'],['OriginalNotional','Original Notional'],['UnwoundNotional','Unwound Notional'],
     ['Strike','Strike'],['TerminationRate','Termination Rate'],['PreFWDRate','Pre FWD Rate'],['DU','DU'],
     ['Result','Result'],['Direction','Direction'],['SettlementDate','Settlement Date'],
     ['TradeDate','Trade Date'],['MaturityDate','Maturity Date'],['BRLFixed','BRL Fixed'],
-    ['Check','Check'],['Status','Status']
+    ['Check','Check']
 ];
 var UNW_FIELDS = UNW_COLS.map(function(c){ return c[0]; });
 var UNW_DATE  = { SettlementDate:1, TradeDate:1, MaturityDate:1 };
@@ -229,7 +240,13 @@ var _TRANS = {
         'w_unwind_ter_campo_vazio': 'A B3 field has no value',
         'w_unwind_ter_campo_invalido': 'A B3 field does not fit the layout',
         'w_unwind_archive_failed': 'Imported, but the e-mail could not be archived',
-        'w_unwind_unknown_table': 'The e-mail carries a table this page does not know'
+        'w_unwind_unknown_table': 'The e-mail carries a table this page does not know',
+        'unw_not_saved': 'Not saved',
+        'unw_not_confirmed': 'Not confirmed',
+        'e_unwind_already_sent': 'This unwind was already sent to B3',
+        'e_unwind_not_found': 'Entry not found',
+        'e_unwind_only_pending': 'Only Pending unwinds can be confirmed',
+        'e_unwind_maker_is_checker': 'You edited this row — a different user must confirm it'
     },
     br: {
         'w_unwind_no_contract': 'Nenhum contrato no Live Position para este Athena ID',
@@ -246,7 +263,13 @@ var _TRANS = {
         'w_unwind_ter_campo_vazio': 'Um campo do arquivo da B3 está sem valor',
         'w_unwind_ter_campo_invalido': 'Um campo do arquivo da B3 não cabe no layout',
         'w_unwind_archive_failed': 'Importado, mas o e-mail não pôde ser arquivado',
-        'w_unwind_unknown_table': 'O e-mail traz uma tabela que esta página não conhece'
+        'w_unwind_unknown_table': 'O e-mail traz uma tabela que esta página não conhece',
+        'unw_not_saved': 'Não foi salvo',
+        'unw_not_confirmed': 'Não foi confirmado',
+        'e_unwind_already_sent': 'Esta recompra já foi enviada à B3',
+        'e_unwind_not_found': 'Linha não encontrada',
+        'e_unwind_only_pending': 'Só recompras Pending podem ser confirmadas',
+        'e_unwind_maker_is_checker': 'Você editou esta linha — quem confirma tem de ser outro usuário'
     },
     es: {
         'w_unwind_no_contract': 'No se encontró contrato en el Live Position para este Athena ID',
@@ -263,7 +286,13 @@ var _TRANS = {
         'w_unwind_ter_campo_vazio': 'Un campo del archivo de la B3 está sin valor',
         'w_unwind_ter_campo_invalido': 'Un campo del archivo de la B3 no cabe en el layout',
         'w_unwind_archive_failed': 'Importado, pero el correo no pudo ser archivado',
-        'w_unwind_unknown_table': 'El correo trae una tabla que esta página no conoce'
+        'w_unwind_unknown_table': 'El correo trae una tabla que esta página no conoce',
+        'unw_not_saved': 'No se guardó',
+        'unw_not_confirmed': 'No se confirmó',
+        'e_unwind_already_sent': 'Esta recompra ya fue enviada a la B3',
+        'e_unwind_not_found': 'Línea no encontrada',
+        'e_unwind_only_pending': 'Solo las recompras Pending pueden confirmarse',
+        'e_unwind_maker_is_checker': 'Usted editó esta línea — quien confirma debe ser otro usuario'
     }
 };
 function _lang() { try { return localStorage.getItem('__OTC_TRACKER_LANG__') || 'en'; } catch (e) { return 'en'; } }
@@ -278,6 +307,12 @@ function t(key, fallback) {
 }
 // O aviso do servidor é {code, params, text}: a tela diz pelo código e só cai
 // no `text` quando o código é novo aqui.
+// O erro do servidor também chega por código (§486): `e_<code>`, com o
+// `message` só de fallback para o código que esta tela ainda não conhece.
+function erroTexto(res, padrao) {
+    if (!res) return padrao || '';
+    return t('e_' + (res.code || ''), res.message || padrao || '');
+}
 function avisoTexto(a) {
     if (!a) return '';
     if (typeof a === 'string') return t('w_' + a, a);
@@ -288,7 +323,10 @@ function _isoToDmy(s){var m=String(s||'').match(/^(\d{4})-(\d{2})-(\d{2})/);retu
 function _todayDmy(){var d=new Date();return ('0'+d.getDate()).slice(-2)+'/'+('0'+(d.getMonth()+1)).slice(-2)+'/'+d.getFullYear();}
 function fmtMoney(v){var n=parseFloat(String(v==null?'':v).replace(/[^\d.\-]/g,''));if(isNaN(n))return v==null?'':String(v);return n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});}
 
-var STATUS_META = { 'Imported': { cls: 'bg-info text-white' }, 'Sent': { cls: 'badge-sent' } };
+// Os quatro estados da linha. `Pending` é amarelo porque é o único que PEDE
+// alguma coisa de alguém: uma edição esperando o segundo par de olhos.
+var STATUS_META = { 'Imported': { cls: 'bg-info text-white' }, 'Pending': { cls: 'bg-warning text-dark' },
+                    'Approved': { cls: 'bg-success text-white' }, 'Sent': { cls: 'badge-sent' } };
 function statusBadge(status) {
     var txt = String(status == null ? '' : status).replace(/<[^>]*>/g, '').trim() || 'Imported';
     var m = STATUS_META[txt] || STATUS_META['Imported'];
@@ -379,7 +417,12 @@ $(document).ready(function () {
                 if (!node) return;
                 $(node).find('input[type="checkbox"]').prop('checked', !!(id && selected.has(id)));
                 var st = (ROWS[id] || {}).Status || 'Imported';
-                $(node).find('.btn-row-send').toggleClass('d-none', st !== 'Imported');
+                // `Pending` é o único que oferece o Confirm, e é o único que
+                // NÃO oferece o Send: edição sem segundo par de olhos não vai
+                // para a B3. Enviada não se edita nem se apaga.
+                $(node).find('.btn-row-approve').toggleClass('d-none', st !== 'Pending');
+                $(node).find('.btn-row-send').toggleClass('d-none', !(st === 'Imported' || st === 'Approved'));
+                $(node).find('.btn-row-edit').toggleClass('d-none', st === 'Sent');
                 $(node).find('.btn-row-delete').toggleClass('d-none', st === 'Sent');
             });
             syncSelectAll();
@@ -486,12 +529,21 @@ $(document).ready(function () {
         return m ? (m[3] + '-' + m[2] + '-' + m[1]) : v;
     }
 
+    // Os QUATRO botões padrão da casa, na ordem do §7: Confirm, Edit, Delete,
+    // Send. O olho e o documento saíram daqui — o preview é o DUPLO CLIQUE na
+    // linha (o texto acima da grade diz isso) e o Termo de Resilição se gera
+    // no Confirmations Monitor, que é onde vivem os documentos da esteira.
     function _actionsCell() {
         return '<div class="d-flex justify-content-center gap-1">' +
-            '<a class="btn btn-info btn-sm rounded-circle btn-row-preview" href="#" data-bs-toggle="tooltip" data-bs-placement="auto" data-bs-title="Preview the B3 file" data-bs-custom-class="tooltip-info"><i class="ti ti-eye"></i></a>' +
-            '<a class="btn btn-secondary btn-sm rounded-circle btn-row-termo" href="#" data-bs-toggle="tooltip" data-bs-placement="auto" data-bs-title="Termo de Resilição" data-bs-custom-class="tooltip-secondary"><i class="ti ti-file-text"></i></a>' +
-            '<a class="btn btn-primary btn-sm rounded-circle btn-row-send" href="#" data-bs-toggle="tooltip" data-bs-placement="auto" data-bs-title="Send" data-bs-custom-class="tooltip-primary"><i class="ti ti-brand-telegram"></i></a>' +
-            '<a class="btn btn-danger btn-sm rounded-circle btn-row-delete" href="#" data-bs-toggle="tooltip" data-bs-placement="auto" data-bs-title="Delete" data-bs-custom-class="tooltip-danger"><i class="ti ti-trash"></i></a></div>';
+            '<a class="btn btn-success btn-sm rounded-circle btn-row-approve d-none" href="#" data-bs-toggle="tooltip" data-bs-placement="auto" data-bs-title="Confirm" data-bs-custom-class="tooltip-success"><i class="ti ti-check"></i></a>' +
+            '<a class="btn btn-warning btn-sm rounded-circle btn-row-edit" href="#" data-bs-toggle="tooltip" data-bs-placement="auto" data-bs-title="Edit" data-bs-custom-class="tooltip-warning"><i class="ti ti-edit"></i></a>' +
+            '<a class="btn btn-danger btn-sm rounded-circle btn-row-delete" href="#" data-bs-toggle="tooltip" data-bs-placement="auto" data-bs-title="Delete" data-bs-custom-class="tooltip-danger"><i class="ti ti-trash"></i></a>' +
+            '<a class="btn btn-primary btn-sm rounded-circle btn-row-send" href="#" data-bs-toggle="tooltip" data-bs-placement="auto" data-bs-title="Send" data-bs-custom-class="tooltip-primary"><i class="ti ti-brand-telegram"></i></a></div>';
+    }
+    function _editCell() {
+        return '<div class="d-flex justify-content-center gap-1">' +
+            '<a class="btn btn-success btn-sm rounded-circle btn-row-save" href="#" data-bs-toggle="tooltip" data-bs-placement="auto" data-bs-title="Save" data-bs-custom-class="tooltip-success"><i class="ti ti-device-floppy"></i></a>' +
+            '<a class="btn btn-secondary btn-sm rounded-circle btn-row-cancel" href="#" data-bs-toggle="tooltip" data-bs-placement="auto" data-bs-title="Cancel" data-bs-custom-class="tooltip-secondary"><i class="ti ti-x"></i></a></div>';
     }
     // Tooltip colorido no primeiro hover (os <td> são reescritos a cada redraw).
     $('#unw-table tbody').on('mouseenter', '[data-bs-toggle="tooltip"]', function () {
@@ -700,9 +752,6 @@ $(document).ready(function () {
         if (this.checked) selected.add(id); else selected.delete(id);
         syncSelectAll();
     });
-    $('#unw-table tbody').on('click', '.btn-row-preview', function (e) {
-        e.preventDefault(); var d = table.row($(this).closest('tr')).data(); if (d) previewRow(d[C_KEY]);
-    });
     $('#unw-table tbody').on('click', '.btn-row-send', function (e) {
         e.preventDefault(); var d = table.row($(this).closest('tr')).data(); if (d) sendRows([d[C_KEY]]);
     });
@@ -710,18 +759,72 @@ $(document).ready(function () {
         e.preventDefault(); var d = table.row($(this).closest('tr')).data(); if (d) deleteRows([d[C_KEY]]);
     });
 
-    // O Termo de Resilição abre com a recompra da LINHA (o grupo contraparte ×
-    // moeda é o que a esteira gera; aqui a mesa pediu o documento desta).
-    $('#unw-table tbody').on('click', '.btn-row-termo', function (e) {
+    // ── Edição inline (4 olhos) ────────────────────────────────────────────
+    // Salvar põe a linha em `Pending` e marca o maker; quem confere é OUTRO
+    // usuário, pelo Confirm. O Status e o Check ficam de FORA dos campos: um
+    // é o estado da esteira e o outro é veredito apurado — nenhum dos dois se
+    // digita.
+    var NAO_EDITA = { Status: 1, Check: 1, AthenaID: 1 };
+    $('#unw-table tbody').on('click', '.btn-row-edit', function (e) {
+        e.preventDefault();
+        var tr = $(this).closest('tr'), d = table.row(tr).data();
+        if (!d) return;
+        var row = ROWS[d[C_KEY]] || {};
+        // A célula se acha pela API da tabela (`table.cell(linha, coluna)`), e
+        // NUNCA pelo índice do `<td>`: coluna escondida sai do DOM, e daí o
+        // i-ésimo `<td>` deixa de ser o i-ésimo campo. Esta tela nasce com
+        // Tax ID, Trade Date e Maturity Date ocultas — pelo índice do DOM, o
+        // que se digitasse em Ccy seria gravado no Tax ID, calado.
+        var ri = table.row(tr).index();
+        UNW_FIELDS.forEach(function (f, k) {
+            if (NAO_EDITA[f]) return;
+            var col = k + C_OFF;
+            if (!table.column(col).visible()) return;
+            var cel = table.cell(ri, col).node();
+            if (!cel) return;
+            $(cel).html('<input class="form-control form-control-sm unw-edit" data-f="' + f +
+                        '" value="' + esc(row[f] == null ? '' : row[f]) + '">');
+        });
+        tr.find('td').eq(1).html(_editCell());
+    });
+    $('#unw-table tbody').on('click', '.btn-row-cancel', function (e) { e.preventDefault(); load(); });
+    $('#unw-table tbody').on('click', '.btn-row-save', function (e) {
+        e.preventDefault();
+        var tr = $(this).closest('tr'), d = table.row(tr).data();
+        if (!d) return;
+        var fields = {};
+        tr.find('input.unw-edit').each(function () { fields[$(this).data('f')] = this.value; });
+        fetch('/api/unwinds/ndf/fx/edit', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                            credentials: 'same-origin',
+                                            body: JSON.stringify({ athena_id: d[C_KEY], date: refDateIso(), fields: fields }) })
+            .then(function (r) { return r.json(); })
+            .then(function (res) {
+                if (!res || !res.success) {
+                    Swal.fire({ icon: 'error', title: t('unw_not_saved', 'Not saved'),
+                                text: erroTexto(res, 'Edit failed'), confirmButtonColor: '#0066cc' });
+                    return;
+                }
+                load();
+            })
+            .catch(function (err) { Swal.fire({ icon: 'error', title: 'Error', text: String(err) }); });
+    });
+    $('#unw-table tbody').on('click', '.btn-row-approve', function (e) {
         e.preventDefault();
         var d = table.row($(this).closest('tr')).data();
         if (!d) return;
-        var row = ROWS[d[C_KEY]] || {};
-        var q = '?date=' + encodeURIComponent(refDateIso()) +
-                '&acronym=' + encodeURIComponent(row.ClientAcronym || row.Counterparty || '') +
-                '&mercadoria=' + encodeURIComponent(row.Currency || '') +
-                '&athena_id=' + encodeURIComponent(d[C_KEY]);
-        window.open('/confirmation/unwind/termo-resilicao' + q, '_blank');
+        fetch('/api/unwinds/ndf/fx/approve', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                               credentials: 'same-origin',
+                                               body: JSON.stringify({ athena_id: d[C_KEY], date: refDateIso() }) })
+            .then(function (r) { return r.json(); })
+            .then(function (res) {
+                if (!res || !res.success) {
+                    Swal.fire({ icon: 'warning', title: t('unw_not_confirmed', 'Not confirmed'),
+                                text: erroTexto(res, 'Confirm failed'), confirmButtonColor: '#0066cc' });
+                    return;
+                }
+                load();
+            })
+            .catch(function (err) { Swal.fire({ icon: 'error', title: 'Error', text: String(err) }); });
     });
 
     // Seleção de célula em TODA tabela (§7).

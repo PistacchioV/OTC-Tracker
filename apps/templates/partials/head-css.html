@@ -24,6 +24,22 @@
     display: inline-flex !important; align-items: center !important; justify-content: center !important;
     line-height: 1;
 }
+/* ...mas o `display: inline-flex !important` acima ANULAVA o `.d-none`, que é
+   como TODA página desta casa esconde um botão de linha que o status não
+   oferece (`toggleClass('d-none', ...)`). As duas regras têm a mesma
+   especificidade (0,1,0) e as duas são `!important`: quem vence é a que vem
+   depois, e esta folha carrega DEPOIS do `app.css`. O efeito era mudo — o
+   Confirm aparecia em linha que não tem o que confirmar, e clicar nele só
+   devolvia o erro do servidor. Aqui a lista é a mesma com `.d-none` (0,2,0),
+   que ganha dos dois lados. */
+.btn-row-edit.d-none, .btn-row-delete.d-none, .btn-row-confirm.d-none,
+.btn-row-send.d-none, .btn-row-approve.d-none,
+.acc-act-edit.d-none, .acc-act-send.d-none, .acc-act-del.d-none,
+.ops-row-del.d-none,
+.ar-confirm.d-none, .ar-edit.d-none, .ar-delete.d-none,
+.btn-rd-edit.d-none, .btn-rd-confirm.d-none, .btn-rd-delete.d-none {
+    display: none !important;
+}
 .btn-row-edit > i, .btn-row-delete > i, .btn-row-confirm > i, .btn-row-send > i, .btn-row-approve > i,
 .acc-act-edit > i, .acc-act-send > i, .acc-act-del > i, .ops-row-del > i,
 .ar-confirm > i, .ar-edit > i, .ar-delete > i,
