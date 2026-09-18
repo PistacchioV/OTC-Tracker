@@ -241,6 +241,25 @@ def notional_me(antes, depois, brl_fixed):
     return (unw / strike) if strike else None
 
 
+def liquidado_em_brl(linha):
+    """O valor LIQUIDADO da recompra em REAIS, pela linha da tela.
+
+    E o que vai no campo `valor` do XML do FepWeb (mesa, 18/09/2026), e o
+    `valorEstrangeiro` de la e ele DIVIDIDO pela taxa da recompra — a taxa a
+    que a antecipacao foi de fato feita, nao o strike do registro original.
+
+    Com o nocional fixo em reais o `Unwound Amount` do aviso JA vem em reais;
+    fora disso ele vem na moeda do contrato e se converte pela mesma taxa. Em
+    MODULO: o sinal da operacao e outra coluna do documento."""
+    unw = numero_flex((linha or {}).get('UnwoundAmount'))
+    if unw is None:
+        return None
+    if str((linha or {}).get('BRLFixed') or '').strip().upper() == 'YES':
+        return abs(unw)
+    taxa = numero_flex((linha or {}).get('TerminationRate'))
+    return abs(unw) * taxa if taxa else None
+
+
 def conferir_apuracao(antes, depois, brl_fixed=False, comprado=None):
     """Refaz o resultado a partir das parcelas e compara com o Input
     Termination Fee.
@@ -366,14 +385,36 @@ def comprado_na_posicao(pos):
     return None
 
 
-def saldo_da_posicao(pos):
-    """`Valor Base no registro` - `Valor Antecipado`, em moeda estrangeira.
-    Sem o valor base nao ha saldo (None); sem antecipado, o antecipado e zero
-    — posicao que nunca foi recomprada nao traz a coluna preenchida."""
-    base = numero_flex((pos or {}).get('Valor Base no registro'))
-    if base is None:
+def antecipado_da_posicao(pos):
+    """O `Valor Antecipado` da posicao: o acumulado JA recomprado deste
+    contrato, em moeda estrangeira, ANTES desta recompra.
+
+    Posicao que existe e nao traz a coluna preenchida nunca foi recomprada, e
+    ai o acumulado e ZERO. SEM posicao e **None**: nao saber quanto ja foi
+    recomprado nao e saber que nao foi nada — e a diferenca entre o Termo
+    declarar um saldo apurado e declarar um saldo presumido."""
+    if not pos:
         return None
-    return base - (numero_flex((pos or {}).get('Valor Antecipado')) or 0.0)
+    return numero_flex(pos.get('Valor Antecipado')) or 0.0
+
+
+def saldo_da_posicao(pos, original=None):
+    """O que ainda esta ABERTO no contrato antes desta recompra, em moeda
+    estrangeira: o nocional ORIGINAL menos o ja antecipado.
+
+    `original` e o nocional original do AVISO (o `Notional` do e-mail, na moeda
+    do contrato). Ele vem de fora porque e quem manda: o `Valor Base no
+    registro` da posicao e a base REGISTRADA, e quando ela nao acompanha o
+    original as duas leituras divergem — subtrair o `Valor Antecipado` de uma
+    base que ja desconta antecipacao desconta duas vezes, e o Termo declara o
+    contrato encerrado com saldo aberto. Sem o original, o `Valor Base no
+    registro` continua respondendo (e o que existia ate 18/09/2026)."""
+    base = original if original is not None else numero_flex(
+        (pos or {}).get('Valor Base no registro'))
+    antecipado = antecipado_da_posicao(pos)
+    if base is None or antecipado is None:
+        return None
+    return base - antecipado
 
 
 def notional_original_me(antes):
@@ -465,7 +506,7 @@ def contraparte_da_posicao(pos, omnibus=None):
     return nome, doc, None
 
 
-def dados_da_posicao(pos, omnibus=None):
+def dados_da_posicao(pos, omnibus=None, original=None):
     """O que a posicao entrega ao aviso E ao arquivo, com um AVISO por coisa
     que faltou — nenhuma delas se inventa.
 
@@ -484,7 +525,8 @@ def dados_da_posicao(pos, omnibus=None):
     conta_cpty = conta8((pos or {}).get('Codigo da Contraparte')) or None
     nome_cpty, taxid_cpty, aviso_cpty = contraparte_da_posicao(pos, omnibus)
     comprado = comprado_na_posicao(pos)
-    saldo = saldo_da_posicao(pos)
+    antecipado = antecipado_da_posicao(pos)
+    saldo = saldo_da_posicao(pos, original)
     for valor, code, texto in (
             (contrato, 'unwind_no_contract', 'The position has no B3 contract'),
             (moeda,    'unwind_no_currency', 'The position has no currency symbol'),
@@ -500,7 +542,8 @@ def dados_da_posicao(pos, omnibus=None):
     # uma falta que nao e dele. Quem o usa e a LINHA da tela, que leva o nome
     # para a esteira e para o Termo de Resilicao.
     return {'contrato': contrato, 'moeda': moeda, 'comprado': comprado,
-            'saldo': saldo, 'conta_parte': conta_parte, 'conta_contraparte': conta_cpty,
+            'saldo': saldo, 'antecipado': antecipado,
+            'conta_parte': conta_parte, 'conta_contraparte': conta_cpty,
             'nome_contraparte': nome_cpty, 'taxid_contraparte': taxid_cpty,
             'aviso_contraparte': aviso_cpty, 'avisos': avisos}
 
@@ -734,13 +777,13 @@ def valores_ter_0014(campos):
 # paginas irmas usam (a Intrag Unwind a fixa logo depois das Acoes).
 UNW_FIELDS = (
     'Status', 'AthenaID', 'Contract', 'Counterparty', 'TaxID', 'Currency',
-    'OriginalNotional', 'UnwoundNotional', 'Strike', 'TerminationRate',
+    'OriginalNotional', 'UnwoundBefore', 'UnwoundNotional', 'Strike', 'TerminationRate',
     'PreFWDRate', 'DU', 'Result', 'Direction', 'SettlementDate',
     'TradeDate', 'MaturityDate', 'BRLFixed', 'Check',
 )
 UNW_LABELS = (
     'Status', 'Athena ID', 'B3 ID', 'Counterparty', 'Tax ID', 'Ccy',
-    'Original Notional', 'Unwound Notional', 'Strike', 'Termination Rate',
+    'Original Notional', 'Unwound Before', 'Unwound Notional', 'Strike', 'Termination Rate',
     'Pre FWD Rate', 'DU', 'Result', 'Direction', 'Settlement Date',
     'Trade Date', 'Maturity Date', 'BRL Fixed', 'Check',
 )
@@ -781,7 +824,10 @@ def linha_da_recompra(rec, posicao, hoje, contrato=None, omnibus=None):
     quem o `domain` nao fala (ver `contraparte_da_posicao`)."""
     antes = dict((rec or {}).get('secoes', {}).get('before') or {})
     depois = dict((rec or {}).get('secoes', {}).get('after') or {})
-    pos = dados_da_posicao(posicao, omnibus)
+    # O nocional ORIGINAL sai do AVISO e entra no leitor da posicao: e dele,
+    # menos o `Valor Antecipado`, que sai o saldo aberto (ver `saldo_da_posicao`).
+    original = notional_original_me(antes)
+    pos = dados_da_posicao(posicao, omnibus, original)
     avisos = list((rec or {}).get('avisos') or []) + list(pos['avisos'])
     if pos.get('aviso_contraparte'):
         avisos.append(pos['aviso_contraparte'])
@@ -799,7 +845,13 @@ def linha_da_recompra(rec, posicao, hoje, contrato=None, omnibus=None):
         'Currency': pos['moeda'] or '',
         'NotionalCCY': antes.get('Notional CCY') or '',
         'BRLFixed': 'YES' if fixo else 'NO',
-        'OriginalNotional': notional_original_me(antes),
+        'OriginalNotional': original,
+        # O que ESTE contrato ja tinha recomprado antes de hoje, da posicao.
+        # Ele e coluna da tela (e editavel) porque e uma das TRES parcelas do
+        # Novo Valor Base do Termo de Resilicao — deixado so dentro do saldo,
+        # a mesa via o resultado sem ver de onde ele saiu, e nao tinha como
+        # corrigi-lo quando a posicao vinha atrasada.
+        'UnwoundBefore': pos['antecipado'],
         # O nocional recomprado NAO depende do lado da posicao: e o
         # `Unwound Amount` (dividido pelo strike no fixo em reais). Lendo-o
         # do resultado da conferencia, a coluna ficava VAZIA sempre que a
@@ -861,8 +913,8 @@ def _codigos(avisos):
 #                                no aviso de recompra
 #   Registro CETIP nº         -> o contrato na B3, que a ponte do identificador
 #                                achou na posição
-#   Resilição                 -> Total ou Parcial, pela comparação do
-#                                recomprado com o SALDO da posição
+#   Resilição                 -> Total ou Parcial: Total é o saldo ZERAR, o
+#                                mesmo número da última coluna
 #   Valor Base Liquidado      -> o nocional recomprado, em moeda ESTRANGEIRA
 #                                (é o campo 9 do TER 0014 — o mesmo número que
 #                                foi para a B3, e não o nocional original)
@@ -871,8 +923,14 @@ def _codigos(avisos):
 #   Pagador do Valor de Res.  -> Parte A (nós) ou Parte B (a contraparte), pelo
 #                                SINAL do resultado, nunca pelo `Direction` do
 #                                e-mail (§488)
-#   Novo Valor Base           -> o que sobra do saldo depois desta recompra;
-#                                na resilição TOTAL não se aplica
+#   Novo Valor Base           -> o que sobra do contrato depois desta recompra
+#                                (mesa, 18/09/2026): o nocional ORIGINAL, menos
+#                                o já recomprado que a posição mostra (`Valor
+#                                Antecipado`), menos o recomprado agora. As três
+#                                parcelas são colunas da tela — o documento tem
+#                                de ser conferível na grade, e corrigir a
+#                                posição ali tem de mudar o número daqui. Na
+#                                resilição TOTAL não se aplica
 #
 # Nada aqui se inventa: o que a recompra não responde sai VAZIO e entra nos
 # avisos — um documento assinado com um número plausível e errado é pior que um
@@ -902,17 +960,46 @@ def num_br(valor, casas=2):
     return s.replace(',', '\x00').replace('.', ',').replace('\x00', '.')
 
 
-def recompra_total(linha):
-    """A recompra encerra o contrato? True / False / **None** (não dá para
-    dizer, porque a posição não trouxe o saldo).
+def saldo_antes_da_recompra(linha):
+    """O saldo ABERTO do contrato ANTES desta recompra, pela linha da tela:
+    `Original Notional` menos o `Unwound Before` (o `Valor Antecipado` da
+    posicao). As duas sao colunas, e e por isso que a conta sai delas e nao do
+    `Balance` que o import calculou: corrigir a posicao na grade tem de mudar o
+    numero do documento. Linha antiga, gravada antes de as colunas existirem,
+    ainda responde pelo `Balance`."""
+    original = numero_flex((linha or {}).get('OriginalNotional'))
+    if original is None:
+        return numero_flex((linha or {}).get('Balance'))
+    return original - (numero_flex((linha or {}).get('UnwoundBefore')) or 0.0)
 
-    A resposta serve o Termo de Resilição (Total × Parcial) E a planilha da
-    Intrag (a Situação), e por isso mora numa função só."""
+
+def saldo_apos_a_recompra(linha):
+    """O que SOBRA do contrato depois desta recompra — o Novo Valor Base do
+    Termo de Resilicao (mesa, 18/09/2026):
+
+        nocional original - ja recomprado (Live Position) - recomprado agora
+
+    None quando falta uma das parcelas: um saldo que nao se sabe nao vira zero,
+    porque zero no Termo AFIRMA que o contrato foi encerrado."""
+    antes = saldo_antes_da_recompra(linha)
     recomprado = numero_flex((linha or {}).get('UnwoundNotional'))
-    saldo = numero_flex((linha or {}).get('Balance'))
-    if recomprado is None or saldo is None:
+    if antes is None or recomprado is None:
         return None
-    return recomprado >= saldo - TOL_SALDO
+    return antes - recomprado
+
+
+def recompra_total(linha):
+    """A recompra encerra o contrato? True / False / **None** (nao da para
+    dizer, porque falta uma das parcelas do saldo).
+
+    A resposta serve o Termo de Resilicao (Total x Parcial) E a planilha da
+    Intrag (a Situacao), e por isso mora numa funcao so — e sai do MESMO
+    numero que o Novo Valor Base, senao o documento pode dizer Total com saldo
+    aberto na coluna ao lado."""
+    resta = saldo_apos_a_recompra(linha)
+    if resta is None:
+        return None
+    return resta <= TOL_SALDO
 
 
 def termo_linha(linha):
@@ -927,15 +1014,27 @@ def termo_linha(linha):
                                'sai vazia'})
     moeda = str((linha or {}).get('Currency') or '').strip()
     recomprado = numero_flex((linha or {}).get('UnwoundNotional'))
-    saldo = numero_flex((linha or {}).get('Balance'))
     resultado = numero_flex((linha or {}).get('Result'))
     direcao = str((linha or {}).get('Direction') or '').strip().upper()
 
-    # Total x Parcial: o saldo da posição é o que ainda está aberto ANTES desta
-    # recompra. A pergunta é UMA (`recompra_total`) porque a resposta vai em
-    # dois lugares — a cláusula do Termo e a Situação da planilha da Intrag —,
-    # e duas leituras do mesmo saldo é como os dois documentos passariam a
-    # discordar sobre o contrato estar encerrado.
+    # Total x Parcial: a pergunta é UMA (`recompra_total`) porque a resposta vai
+    # em dois lugares — a cláusula do Termo e a Situação da planilha da Intrag
+    # —, e duas leituras do mesmo saldo é como os dois documentos passariam a
+    # discordar sobre o contrato estar encerrado. E é o MESMO número que vai na
+    # coluna Novo Valor Base: Total é o saldo zerar.
+    # Sem NENHUMA das duas — nem o ja recomprado da posicao, nem o saldo que o
+    # import calculou — a conta segue pelo nocional original, presumindo que
+    # nada foi recomprado antes. E o caso da posicao que nao resolveu, e ele
+    # sai DIZENDO isso: o documento e assinado, e um saldo presumido que ninguem
+    # avisou ser presumido e pior que um campo em branco.
+    if (numero_flex((linha or {}).get('UnwoundBefore')) is None
+            and numero_flex((linha or {}).get('Balance')) is None
+            and numero_flex((linha or {}).get('OriginalNotional')) is not None):
+        avisos.append({'code': 'unwind_termo_antecipado_presumido',
+                       'params': {'athena_id': athena_id},
+                       'text': 'A posição não respondeu quanto deste contrato já havia sido '
+                               'recomprado: o Novo Valor Base saiu do nocional original, '
+                               'presumindo zero. Confira antes de assinar.'})
     total = recompra_total(linha)
     if total is None:
         tipo, novo_base = '', ''
@@ -947,7 +1046,7 @@ def termo_linha(linha):
         tipo, novo_base = RESILICAO_TOTAL, NAO_APLICAVEL
     else:
         tipo = RESILICAO_PARCIAL
-        novo_base = '{} {}'.format(moeda, num_br(saldo - recomprado)).strip()
+        novo_base = '{} {}'.format(moeda, num_br(saldo_apos_a_recompra(linha))).strip()
 
     # O pagador é o SINAL do resultado: recebemos -> paga a Parte B.
     if direcao == 'RECEIVE':

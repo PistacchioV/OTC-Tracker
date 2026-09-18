@@ -1131,6 +1131,23 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   "não é fixo em reais", que é o caso que dá valor errado.
 - **O veredito da conferência tem TRÊS estados** (fecha / não fecha / não dá
   para conferir): "passou por omissão" não existe.
+- **O Novo Valor Base do Termo são TRÊS parcelas** (mesa, 18/09/2026): o
+  nocional **ORIGINAL** (o do aviso), menos o que a posição já mostra como
+  recomprado (`Valor Antecipado`), menos o recomprado agora. As três são
+  COLUNAS da tela — corrigir a posição na grade tem de mudar o número do
+  documento, e um saldo que só existe dentro do código não se confere. O
+  `Total × Parcial` sai do MESMO número (Total é ele zerar), senão o Termo diz
+  encerrado com saldo aberto na coluna ao lado. Sem posição nenhuma a conta
+  ainda sai, pelo original, presumindo zero — e DIZENDO que presumiu: o
+  documento é assinado.
+- **O Termo também gera o XML do FepWeb** (mesa, 18/09/2026), ao lado do `.doc`
+  e do `.pdf` e com o mesmo nome base, como toda confirmação da casa. `valor` é
+  o liquidado em **reais** e `valorEstrangeiro` é ele dividido pela **taxa da
+  recompra** — não pelo strike do registro, que é o que nomeia o Valor Base
+  Liquidado do Anexo I: os dois números do XML falam da liquidação, os do Anexo
+  falam do contrato. `tipoOperacao` é `NDF` (a operação resilida é um termo de
+  moeda) e **`tipoEvento` é `R`, de recompra** — com o `N` de novo o FepWeb
+  cadastraria o distrato como operação nova.
 - **Campo 13 do TER 0014 é PERCENTUAL ao ano** (13,75 → `1375000000`);
   **campo 14** é `1` com a taxa termo em BRL e a paridade USD/BRL fora dela —
   branco ali não é neutro. **Campo 9** é o valor RECOMPRADO em moeda

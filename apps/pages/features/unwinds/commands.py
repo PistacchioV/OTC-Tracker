@@ -301,7 +301,7 @@ def _campos(linha):
                    '' if linha.get('Comprado') is None
                    else ('COMPRADOR' if linha.get('Comprado') else 'VENDEDOR'),
                'Valor Base no registro': linha.get('OriginalNotional'),
-               'Valor Antecipado': '',
+               'Valor Antecipado': linha.get('UnwoundBefore'),
                'Codigo da Parte': linha.get('PartyAccount'),
                'Codigo da Contraparte': linha.get('CptyAccount')}
     campos, avisos = domain.campos_ter_0014(
@@ -725,7 +725,33 @@ def termo_salvar(payload, sid=''):
     # carimbar.
     picked = _R()._conf_pick_unwind(ref, acr, moeda, 'termo-resilicao')
     _R()._mc_stamp_generated(picked, 'unwind-termo', link=link)
-    return {'files': [doc_path, pdf_path], 'pdf': pdf_path, 'link': link,
+
+    # O XML do contrato (FepWeb), ao lado do .doc e do .pdf e com o MESMO nome
+    # base — os três arquivos da confirmação ficam juntos na listagem da pasta.
+    # É o mesmo desenho das confirmações de New Deals, e por isso o
+    # numeroContrato também vai para a coluna FepWeb ID do Pending
+    # Confirmation: sem ele, a recompra ficava sendo o único documento da casa
+    # que a mesa tinha de levar ao FepWeb à mão.
+    xml_files, numero_contrato, xml_warns = [], '', []
+    if picked:
+        numero_contrato, xml_str, xml_warns = _R()._conf_unwind_xml(picked, moeda, ref)
+        xcand, xn = candidate, 0
+        while _store.exists(_R()._ei_long_path(os.path.join(dir_path, xcand + '.xml'))):
+            xn += 1
+            xcand = '{} ({})'.format(candidate, xn)
+        xml_path = os.path.join(dir_path, xcand + '.xml')
+        with open(_R()._ei_long_path(xml_path), 'w', encoding='utf-8') as fh:
+            fh.write(xml_str)
+        xml_files.append(xml_path)
+        _R().log.info('[UNWIND NDF FX] XML do Termo -> %s', xml_path)
+        _R()._conf_pc_set_fepweb([d.get('Deal') for d, _s in picked], numero_contrato)
+    else:
+        # Sem grupo elegível não há de onde tirar valor, moeda e CNPJ: o
+        # documento sai e o XML fica faltando DIZENDO isso, em vez de sair com
+        # os campos em branco.
+        xml_warns = ['XML não gerado: nenhuma recompra elegível no grupo.']
+    return {'files': [doc_path, pdf_path] + xml_files, 'pdf': pdf_path, 'link': link,
+            'numero_contrato': numero_contrato, 'warnings': xml_warns,
             'esteira': len(picked)}
 
 
@@ -802,6 +828,12 @@ def confirmation_deal(linha, ref=None):
         'Currency':       str(linha.get('Currency') or ''),
         'QuantityCurrency': str(linha.get('Currency') or ''),
         'Notional':       linha.get('UnwoundNotional'),
+        # As duas parcelas do XML do FepWeb (mesa, 18/09/2026): o `valor` e o
+        # liquidado em REAIS e o `valorEstrangeiro` e ele dividido pela taxa da
+        # recompra. Elas viajam no deal porque quem monta o XML e a platform,
+        # que nao conhece o formato do aviso.
+        'UnwoundBRL':     domain.liquidado_em_brl(linha),
+        'TerminationRate': linha.get('TerminationRate'),
         'TradeDate':      ref.strftime('%Y-%m-%d'),
         'SettlementDate': str(linha.get('SettlementDate') or ''),
         # `Success` é o que a segregação das confirmações chama de ELEGÍVEL, e a

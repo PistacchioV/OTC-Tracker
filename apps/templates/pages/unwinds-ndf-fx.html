@@ -209,7 +209,8 @@
 var UNW_COLS = [
     ['Status','Status'],
     ['AthenaID','Athena ID'],['Contract','B3 ID'],['Counterparty','Counterparty'],['TaxID','Tax ID'],
-    ['Currency','Ccy'],['OriginalNotional','Original Notional'],['UnwoundNotional','Unwound Notional'],
+    ['Currency','Ccy'],['OriginalNotional','Original Notional'],
+    ['UnwoundBefore','Unwound Before'],['UnwoundNotional','Unwound Notional'],
     ['Strike','Strike'],['TerminationRate','Termination Rate'],['PreFWDRate','Pre FWD Rate'],['DU','DU'],
     ['Result','Result'],['Direction','Direction'],['SettlementDate','Settlement Date'],
     ['TradeDate','Trade Date'],['MaturityDate','Maturity Date'],['BRLFixed','BRL Fixed'],
@@ -217,7 +218,7 @@ var UNW_COLS = [
 ];
 var UNW_FIELDS = UNW_COLS.map(function(c){ return c[0]; });
 var UNW_DATE  = { SettlementDate:1, TradeDate:1, MaturityDate:1 };
-var UNW_MONEY = { OriginalNotional:1, UnwoundNotional:1, Result:1 };
+var UNW_MONEY = { OriginalNotional:1, UnwoundBefore:1, UnwoundNotional:1, Result:1 };
 // [0]=checkbox [1]=actions [2..]=UNW_FIELDS. A chave da linha é o Athena ID.
 var C_OFF = 2;
 var C_KEY = C_OFF + UNW_FIELDS.indexOf('AthenaID');

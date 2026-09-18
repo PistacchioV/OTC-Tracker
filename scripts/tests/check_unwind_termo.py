@@ -21,6 +21,7 @@ que este teste prende e o que o app DECIDE:
 
 Roda em tmp: cache, share e Inventory apontam para diretorios temporarios.
 """
+import io
 import os
 import re
 import sys
@@ -54,13 +55,19 @@ HOJE = date(2026, 9, 18)
 # Duas recompras da MESMA contraparte e moeda — um termo com duas linhas no
 # Anexo I. A primeira e parcial (recompra menor que o saldo) e a segunda zera
 # o que restava; na primeira o banco RECEBE e na segunda PAGA.
+# `UnwoundAmount`/`BRLFixed`/`TerminationRate` sao a amostra real do §488: o
+# nocional e fixo em reais, entao o `Unwound Amount` do aviso vem em BRL
+# (59.999,98 / 5,2039 = os 11.529,81 da planilha da mesa). Sao eles que o XML
+# do FepWeb le.
 L1 = {'AthenaID': 'STP-XE-10G5U5X-0-0', 'Contract': '26C03202688', 'Currency': 'USD',
       'Counterparty': 'COFCO INTERNATIONAL BRASIL SA', 'TaxID': '02.916.265/0001-60',
       'ClientAcronym': 'COFCO', 'UnwoundNotional': 11529.81, 'Balance': 587224.31,
+      'UnwoundAmount': '59,999.98', 'BRLFixed': 'YES', 'TerminationRate': 5.2000,
       'Result': 42.80, 'Direction': 'RECEIVE', 'PartyAccount': '73760009',
       'CptyAccount': '00041007', 'Status': 'Imported'}
 L2 = dict(L1, AthenaID='STP-XE-10G5U5X-0-1', Contract='26C03202689',
-          UnwoundNotional=144122.68, Balance=144122.68, Result=-9350.12, Direction='PAY')
+          UnwoundNotional=144122.68, Balance=144122.68, Result=-9350.12, Direction='PAY',
+          UnwoundAmount='750,000.00')
 
 
 def main():
@@ -102,10 +109,47 @@ def main():
     check('um centavo de diferenca ainda e resilicao TOTAL',
           domain.termo_linha(dict(L1, UnwoundNotional=587224.3049,
                                   Balance=587224.31))[0]['resilicao'] == domain.RESILICAO_TOTAL)
-    sem_saldo, av = domain.termo_linha(dict(L1, Balance=None))
+    sem_saldo, av = domain.termo_linha(dict(L1, Balance=None, OriginalNotional=None))
     check('SEM saldo nao se diz qual das duas e', sem_saldo['resilicao'] == '' and
           sem_saldo['novoValorBase'] == '')
     check('e avisa', any(a['code'] == 'unwind_termo_sem_saldo' for a in av))
+
+    print('\n== 3b. o Novo Valor Base sao TRES parcelas (mesa, 18/09/2026) ==')
+    # nocional ORIGINAL - ja recomprado que a posicao mostra - recomprado agora.
+    # O `Valor Antecipado` da posicao e a parcela do meio, e ela e uma COLUNA da
+    # tela: o numero do documento tem de ser conferivel na grade.
+    tres = dict(L1, OriginalNotional=587224.31, UnwoundBefore=155652.49,
+                UnwoundNotional=11529.81, Balance=None)
+    row3, _av3 = domain.termo_linha(tres)
+    check('o ja recomprado da posicao e descontado',
+          row3['novoValorBase'] == 'USD 420.042,01', row3['novoValorBase'])
+    check('e a resilicao continua PARCIAL', row3['resilicao'] == domain.RESILICAO_PARCIAL)
+    check('a conta pura devolve o numero', round(domain.saldo_apos_a_recompra(tres), 2) == 420042.01,
+          domain.saldo_apos_a_recompra(tres))
+    # O que zera as tres parcelas e TOTAL — e o Novo Valor Base nao se aplica.
+    zera = dict(tres, UnwoundNotional=431571.82)
+    check('zerar as tres parcelas e TOTAL',
+          domain.termo_linha(zera)[0]['resilicao'] == domain.RESILICAO_TOTAL and
+          domain.termo_linha(zera)[0]['novoValorBase'] == domain.NAO_APLICAVEL)
+    # A linha ANTIGA (gravada antes de as colunas existirem) ainda responde
+    # pelo `Balance` — sem isso o Termo de uma recompra do arquivo-dia de
+    # ontem sairia sem saldo nenhum.
+    antiga = {k: v for k, v in L1.items()}
+    check('linha antiga, sem as colunas novas, ainda sai pelo Balance',
+          domain.termo_linha(antiga)[0]['novoValorBase'] == 'USD 575.694,50',
+          domain.termo_linha(antiga)[0]['novoValorBase'])
+    # Posicao que nao resolveu: nem o ja recomprado nem o saldo. A conta sai do
+    # nocional original presumindo zero — e DIZ que presumiu.
+    presumido, avp = domain.termo_linha(dict(L1, Balance=None, OriginalNotional=78000.0,
+                                             UnwoundNotional=42227.42))
+    check('sem posicao, o saldo sai do original presumindo zero',
+          presumido['novoValorBase'] == 'USD 35.772,58', presumido['novoValorBase'])
+    check('e o documento AVISA que o valor e presumido',
+          any(a['code'] == 'unwind_termo_antecipado_presumido' for a in avp),
+          [a['code'] for a in avp])
+    check('com a posicao respondendo zero, nao ha aviso nenhum',
+          not any(a['code'] == 'unwind_termo_antecipado_presumido'
+                  for a in domain.termo_linha(tres)[1]))
 
     print('\n== 4. o pagador e o SINAL do resultado ==')
     check('recebemos -> paga a Parte B', rows[0]['pagador'] == domain.PAGADOR_PARTE_B)
@@ -191,8 +235,9 @@ def main():
         R._EI_ROOT = os.path.join(tmp, 'inventory')
         persistence.upsert(datetime(HOJE.year, HOJE.month, HOJE.day), [dict(L1), dict(L2)])
         out = commands.termo_salvar(base, sid='E930179')
-    check('o Save devolve os dois arquivos', len(out['files']) == 2)
-    check('o .doc e o .pdf existem no Inventory',
+    check('o Save devolve os TRES arquivos (.doc, .pdf e .xml)', len(out['files']) == 3,
+          out['files'])
+    check('os tres existem no Inventory',
           all(os.path.isfile(p) for p in out['files']), out['files'])
     check('na pasta do TIPO da esteira',
           os.sep + 'TERMO DE RESILICAO' + os.sep in out['files'][0], out['files'][0])
@@ -209,6 +254,38 @@ def main():
     _fp2, lst2, idx2 = queries.find(L2['AthenaID'], HOJE.strftime('%Y-%m-%d'))
     check('as DUAS linhas do termo foram carimbadas',
           idx2 is not None and lst2[idx2].get('TermoPdf') == out['pdf'])
+
+    print('\n== 8b. o XML do FepWeb sai junto ==')
+    # Ate 18/09/2026 a recompra era o unico documento da casa que saia sem o
+    # XML — a mesa tinha de leva-lo ao FepWeb a mao.
+    xmls = [f for f in out['files'] if f.endswith('.xml')]
+    check('o .xml esta na mesma pasta e com o mesmo nome base', len(xmls) == 1 and
+          os.path.splitext(xmls[0])[0] == os.path.splitext(out['pdf'])[0], xmls)
+    xml = io.open(xmls[0], encoding='utf-8').read() if xmls else ''
+    check('tipoOperacao e NDF (a operacao resilida e um termo de moeda)',
+          '<tipoOperacao>NDF</tipoOperacao>' in xml)
+    # O tipoEvento e R de RECOMPRA (mesa): com o 'N' de novo, o FepWeb
+    # cadastraria o distrato como uma operacao nova.
+    check('tipoEvento e R, de recompra', '<tipoEvento>R</tipoEvento>' in xml, xml)
+    # Regra da mesa: `valor` = o liquidado em REAIS; `valorEstrangeiro` = ele
+    # dividido pela TAXA DA RECOMPRA (nao pelo strike do registro, que e o que
+    # nomeia o Valor Base Liquidado do Anexo I).
+    check('valor = o liquidado em BRL das duas recompras',
+          '<valor>809999.98</valor>' in xml, xml)
+    check('valorEstrangeiro = ele dividido pela taxa da recompra',
+          '<valorEstrangeiro>155769.23</valorEstrangeiro>' in xml, xml)
+    check('a moeda estrangeira e a do grupo', '<moedaEstrangeira>' in xml
+          and '<moedaEstrangeira></moedaEstrangeira>' not in xml, xml)
+    check('o CNPJ do cliente vai sem pontuacao', '<cnpjCliente>02916265000160</cnpjCliente>' in xml)
+    check('e o Save devolve o numeroContrato', bool(out.get('numero_contrato')),
+          out.get('numero_contrato'))
+    # Sem a taxa da recompra nao ha perna estrangeira que se possa afirmar: a
+    # operacao fica de fora dos valores, AVISANDO.
+    from apps.pages.platform.confirmations import _conf_unwind_legs
+    check('sem taxa da recompra a perna fica de fora',
+          _conf_unwind_legs({'UnwoundBRL': 1000.0, 'TerminationRate': None}, '') is None)
+    check('e com ela a conta e BRL / taxa',
+          _conf_unwind_legs({'UnwoundBRL': 1040.0, 'TerminationRate': 5.2}, '') == (200.0, 1040.0))
 
     print('\n== 9. o grupo do termo e contraparte x moeda ==')
     grupo = queries.termo_grupo(HOJE.strftime('%Y-%m-%d'), 'COFCO', 'USD')

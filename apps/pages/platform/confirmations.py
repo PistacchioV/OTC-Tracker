@@ -676,7 +676,8 @@ def _conf_fx_legs(deal, subj):
 
 
 def _conf_ndf_xml(picked, merc, ref, tipo='NDF', prefixo='NDF_Comm',
-                  ccy_field='StrikeCurrency', warn_no_spot=True, legs_fn=None, ccy=None):
+                  ccy_field='StrikeCurrency', warn_no_spot=True, legs_fn=None, ccy=None,
+                  evento='N'):
     """(numero_contrato, xml_string, warnings) do grupo de deals da confirmação.
 
     valor            = Σ notional × strike ajustado × Spot FXRate
@@ -759,17 +760,23 @@ def _conf_ndf_xml(picked, merc, ref, tipo='NDF', prefixo='NDF_Comm',
 
     return numero, _conf_xml_doc(numero, tipo, valor, ccy_num,
                                  '' if is_brl else valor_estr, cnpj_cli,
-                                 trade_dt, venc), warnings
+                                 trade_dt, venc, evento), warnings
 
 
-def _conf_xml_doc(numero, tipo, valor, ccy_num, valor_estr, cnpj_cli, trade_dt, venc):
+def _conf_xml_doc(numero, tipo, valor, ccy_num, valor_estr, cnpj_cli, trade_dt, venc,
+                  evento='N'):
     """XML do contrato. `valor_estr` vazio (strike em BRL) sai como tag vazia,
-    igual aos campos que o FepWeb já recebe em branco."""
+    igual aos campos que o FepWeb já recebe em branco.
+
+    `evento` é o `tipoEvento`: **N** de novo, que é o que toda confirmação de
+    operação nova declara, e **R** de RECOMPRA no Termo de Resilição (mesa,
+    18/09/2026) — o FepWeb precisa distinguir o registro do distrato, e um
+    'N' ali cadastraria a resilição como uma operação nova."""
     return (
         '<contrato>\n'
         '  <numeroContrato>{numero}</numeroContrato>\n'
         '  <tipoOperacao>{tipo}</tipoOperacao>\n'
-        '  <tipoEvento>N</tipoEvento>\n'
+        '  <tipoEvento>{evento}</tipoEvento>\n'
         '  <valor>{valor:.2f}</valor>\n'
         '  <moedaEstrangeira>{ccy}</moedaEstrangeira>\n'
         '  <valorEstrangeiro>{valor_estr}</valorEstrangeiro>\n'
@@ -782,7 +789,7 @@ def _conf_xml_doc(numero, tipo, valor, ccy_num, valor_estr, cnpj_cli, trade_dt, 
         '  <dataOperacao>{dt_op}</dataOperacao>\n'
         '  <dataVencimento>{dt_venc}</dataVencimento>\n'
         '</contrato>\n'
-    ).format(numero=numero, tipo=tipo, valor=valor, ccy=ccy_num,
+    ).format(numero=numero, tipo=tipo, evento=evento, valor=valor, ccy=ccy_num,
              valor_estr=('{:.2f}'.format(valor_estr) if valor_estr != '' else ''),
              cnpj_banco=_CONF_CNPJ_BANCO, cnpj_cli=cnpj_cli,
              dt_op=trade_dt.strftime('%Y%m%d'),
@@ -1729,3 +1736,34 @@ def _conf_unwind_groups(ref):
 def _conf_pick_unwind(ref, acr, merc, family):
     return _conf_pick_eligible(_conf_load_unwind(ref), acr, merc, family,
                                _conf_unwind_family, merc_fn=_conf_unwind_moeda)
+
+
+def _conf_unwind_legs(deal, subj):
+    """As pernas do XML da recompra: (valor estrangeiro, valor em BRL).
+
+    Regra da mesa (18/09/2026): o `valor` é o LIQUIDADO em reais e o
+    `valorEstrangeiro` é ele dividido pela **taxa da recompra** — a taxa a que
+    a antecipação foi feita, e não o strike do registro original, que é o que
+    nomeia o Valor Base Liquidado do Anexo I. Os dois números do XML falam da
+    mesma liquidação, em duas moedas; os do Anexo falam do contrato.
+
+    Sem a taxa não há perna estrangeira que se possa afirmar — a operação fica
+    de fora do XML com aviso, como qualquer outra sem strike."""
+    brl = _conf_to_float(deal.get('UnwoundBRL'))
+    taxa = _conf_to_float(deal.get('TerminationRate'))
+    if brl is None or not taxa:
+        return None
+    return brl / taxa, brl
+
+
+def _conf_unwind_xml(picked, merc, ref):
+    """(numeroContrato, xml, avisos) do Termo de Resilição.
+
+    `tipoOperacao` é **NDF** (mesa): a operação resilida é um termo de moeda, e
+    é assim que a confirmação dela já se declara ao FepWeb. O `tipoEvento` é
+    **R**, de recompra — é o que separa o distrato do registro. A moeda vai
+    EXPLÍCITA — é a Moeda Base do grupo, o mesmo eixo do documento (§457) —
+    porque o deal da recompra não tem campo de moeda de strike."""
+    return _conf_ndf_xml(picked, merc, ref, tipo='NDF', prefixo='Termo_Resilicao',
+                         warn_no_spot=False, legs_fn=_conf_unwind_legs, ccy=merc,
+                         evento='R')
