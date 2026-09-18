@@ -179,5 +179,73 @@ check('a lista de recentes desempata pelo Deal',
       "d.get('_fdate', ''), d.get('Deal', '')" in _fn_src, True)
 
 shutil.rmtree(TMP, ignore_errors=True)
+print('\n== 7. quem conta como DEAL, e quem e a perna do banco ==')
+# Dois defeitos que tiravam operacao REAL de todos os contadores, do Top 5 e
+# do Deal Flow, sem nada acusar na tela.
+import re as _re
+
+_jpm_re = _re.compile(r'J\.?P\.?\s*MORGAN', _re.IGNORECASE)
+
+
+def _is_bank(d):
+    return bool(_jpm_re.search(d.get('Client') or ''))
+
+
+# (a) linha SEM `Deal`: o Swap Bullet nasce assim (§480) — a chave e o `_id`
+#     interno e o B3 ID e coluna propria. O painel mostrava `Swap Deals = 0`
+#     com as operacoes na tela ao lado.
+fp_swb = os.path.join(RAIZ, 'Swap', 'Bullet', '2026', '09', '20260917_swapbullet.json')
+R._atomic_write_json(fp_swb, [
+    {'_id': 'SWB-a1', 'Deal': '', 'B3ID': '26I04812345', 'Client': 'BANCO SAFRA S.A.',
+     'LE': 'JPM', 'Status': 'Sent', 'TradeDate': '17/09/2026'},
+    {'_id': 'SWB-a2', 'Deal': '', 'B3ID': '26I04812346', 'Client': 'ATACAMA FUNDO DE INVESTIMENTO',
+     'LE': 'ATACAMA', 'Status': 'Sent', 'TradeDate': '17/09/2026'},
+    {'_id': '', 'Deal': '', 'B3ID': '', 'Client': 'LINHA VAZIA', 'LE': 'JPM', 'Status': ''},
+])
+R._dash_file_memo.clear()
+st = S.stat(fp_swb)
+linhas = R._dash_file_deals(fp_swb, os.path.basename(fp_swb), st.st_mtime, st.st_size,
+                            datetime(2026, 9, 17), 'Swap Bullet', 'SWAP')
+check('linha sem Deal mas COM B3 ID conta', len(linhas), 2)
+check('e o B3 ID vai projetado (e o identificador de quem nao tem Deal)',
+      sorted(l.get('B3ID') for l in linhas), ['26I04812345', '26I04812346'])
+check('linha sem identificador nenhum continua fora',
+      [l for l in linhas if l.get('Client') == 'LINHA VAZIA'], [])
+check('o caminho classifica como SWAP',
+      R._type_from_product(R._product_from_path(fp_swb.replace(RAIZ, R.NEW_DEALS_CACHE_ROOT))), 'SWAP')
+
+# (b) `_is_bank`: a perna a descartar e a do J.P. MORGAN, nao "o nome tem
+#     banco". A regra antiga derrubava BANCO SAFRA, BANCO BRADESCO e BANCO
+#     SANTANDER — clientes de verdade.
+for nome in ('BANCO SAFRA S.A.', 'BANCO BRADESCO S.A.', 'BANCO SANTANDER (BRASIL) S.A.',
+             'ATACAMA FUNDO DE INVESTIMENTO', 'LAWTON FIF MULTIMERCADO'):
+    check('cliente de verdade NAO e a perna do banco: ' + nome,
+          _is_bank({'Client': nome}), False)
+for nome in ('BANCO J.P. MORGAN S/A', 'J.P. MORGAN', 'JP MORGAN', 'JPMORGAN CHASE BANK',
+             'banco j.p. morgan s/a'):
+    check('a perna do J.P. Morgan E descartada: ' + nome,
+          _is_bank({'Client': nome}), True)
+# A grafia real do arquivo da B3 leva ponto depois do P: era ela que o teste
+# cru por 'j.p morgan' NAO pegava, e por isso o 'banco' solto tinha virado o
+# unico que pegava a perna do banco.
+check("a grafia com ponto ('J.P.') era a que escapava dos literais antigos",
+      ('j.p morgan' in 'BANCO J.P. MORGAN S/A'.lower()
+       or 'jp morgan' in 'BANCO J.P. MORGAN S/A'.lower()
+       or 'jpmorgan' in 'BANCO J.P. MORGAN S/A'.lower()), False)
+
+# E o fonte tem de carregar as duas correcoes — este guarda varre o routes.py
+# para a regra nao voltar num refactor.
+_src = io.open(os.path.join(ROOT, 'apps', 'pages', 'routes.py'), encoding='utf-8').read()
+# Ate a proxima `def` do mesmo nivel: parar na primeira linha em branco cai
+# DENTRO do docstring, entre paragrafos.
+_corpo = _re.search(r'\n    def _is_bank\(d\):\n(.*?)\n    def ', _src, _re.DOTALL)
+check('o _is_bank do painel existe', bool(_corpo), True)
+if _corpo:
+    # A prosa do docstring CITA a regra velha para explicar o defeito; o que
+    # nao pode voltar e o teste em si, e ele mora depois das aspas triplas.
+    _codigo = _corpo.group(1).split('\"\"\"')[-1]
+    check("o corpo nao testa mais `'banco' in cl`", "'banco' in" in _codigo, False)
+    check('e usa o _jpm_re', '_jpm_re.search' in _codigo, True)
+
 print('\n' + ('FALHOU: ' + ', '.join(fails) if fails else 'TUDO OK'))
 sys.exit(1 if fails else 0)

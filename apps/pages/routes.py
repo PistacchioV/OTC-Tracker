@@ -1838,7 +1838,7 @@ _daycache_forget = _pf_jcache._daycache_forget
 # do deal no endpoint tem de entrar nesta tupla — `check_dashboard_walk.py` varre
 # a função por AST e recusa o que ficar de fora, porque a projeção silenciosa
 # devolveria `None` sem erro nenhum.
-_DASH_DEAL_FIELDS = ('Client', 'Commodities', 'Commodity', 'Deal', 'LE',
+_DASH_DEAL_FIELDS = ('B3ID', 'Client', 'Commodities', 'Commodity', 'Deal', 'LE',
                      'Status', 'TradeDate', 'UnderlyingAsset')
 
 _dash_file_memo = {}                    # caminho → (mtime, tamanho, [deals])
@@ -1962,7 +1962,16 @@ def _dash_file_deals(fp, fname, mtime, size, fdate, product, deal_type):
     saida = []
     fdate_txt = fdate.strftime('%Y-%m-%d')
     for d in (data if isinstance(data, list) else []):
-        if not isinstance(d, dict) or not (d.get('Deal') or '').strip():
+        # Linha sem IDENTIFICADOR nenhum é placeholder e não conta. O teste era
+        # só pelo `Deal`, e o Swap Bullet nasce com ele em BRANCO de propósito
+        # (§480: a chave é o `_id` interno e o B3 ID é coluna própria) — as
+        # duas operações que a mesa processou em 17/09/2026 eram invisíveis
+        # para o painel, que mostrava `Swap Deals = 0` com elas na tela ao
+        # lado. Produto novo que não use a coluna `Deal` entra sozinho.
+        if not isinstance(d, dict):
+            continue
+        if not ((d.get('Deal') or '').strip() or (d.get('B3ID') or '').strip()
+                or (d.get('_id') or '').strip()):
             continue
         # Cancelado via API não conta em nenhuma métrica.
         if str(d.get('Status') or '').strip() == 'Canceled':
@@ -2141,11 +2150,22 @@ def api_dashboard_stats():
     def _is_lawton(d):
         return 'lawton' in (d.get('Client') or '').lower()
 
-    def _is_bank(d):
-        cl = (d.get('Client') or '').lower()
-        return 'banco' in cl or 'j.p morgan' in cl or 'jp morgan' in cl or 'jpmorgan' in cl
-
     _jpm_re = re.compile(r'J\.?P\.?\s*MORGAN', re.IGNORECASE)
+
+    def _is_bank(d):
+        """Esta perna é a do Banco J.P. Morgan (o espelho a descartar)?
+
+        Pelo NOME do J.P. Morgan, nunca por `'banco' in cl`. A regra antiga
+        derrubava BANCO SAFRA, BANCO BRADESCO e BANCO SANTANDER — clientes de
+        verdade, que sumiam de TODOS os contadores e do Top 5 sem nada acusar.
+        É o mesmo engano que o `_ops_is_internal_cpty` já documenta na
+        platform, e a resposta é a mesma: o que se quer dizer com "banco" é o
+        banco DO GRUPO. O `_jpm_re` tolera a pontuação (`J.P. MORGAN`,
+        `JP MORGAN`, `JPMORGAN`), que era justamente o que fazia o teste cru
+        por `'j.p morgan'` não casar com `BANCO J.P. MORGAN S/A` — e por isso
+        o `'banco'` solto tinha virado o único que pegava a perna do banco.
+        """
+        return bool(_jpm_re.search(d.get('Client') or ''))
 
     def _gen_ndf_counted(d):
         """NDF Vanilla / Other Publisher / FWD Start: nos gráficos de
@@ -2224,6 +2244,13 @@ def api_dashboard_stats():
     pending_total = sum(1 for d in counted_deals if (d.get('Status') or '').strip() in pending_statuses)
 
     swap_total = len(swap_deals)
+
+    # As RECOMPRAS (unwinds) têm card próprio: elas não são registro novo, e
+    # somá-las ao card do produto faria o número querer dizer duas coisas. A
+    # contagem é da vertical (`cache/unwinds/`, fora da árvore de New Deals —
+    # §454), e vem por busca atrasada como as demais chamadas a feature.
+    from apps.pages.features.unwinds import queries as _unw_queries
+    _unw = _unw_queries.dashboard_counts(period, now)
 
     client_counts = Counter(
         (d.get('Client') or '').strip()
@@ -2320,7 +2347,7 @@ def api_dashboard_stats():
                            reverse=True)[:50]
     recent_deals = [
         {
-            'deal':    d.get('Deal', ''),
+            'deal':    d.get('Deal', '') or d.get('B3ID', '') or '',
             'client':  d.get('Client', ''),
             'date':    d.get('TradeDate', '') or d.get('_fdate', ''),
             'status':  d.get('Status', ''),
@@ -2335,7 +2362,11 @@ def api_dashboard_stats():
         'opt_total':     len(opt_deals),
         'pending_total': pending_total,
         'swap_total':    swap_total,
-        'total_deals':   len(counted_deals),
+        'unwind_total':  _unw['total'],
+        # Os quatro cards de produto somam o Total, e é assim que a mesa
+        # confere a tela: deixar a recompra fora do total faria a conta não
+        # fechar por um número que não está em lugar nenhum.
+        'total_deals':   len(counted_deals) + _unw['total'],
         'top5_clients':  top5_clients,
         'top5_products': top5_products,
         'top5_underlying': top5_underlying,
@@ -2346,6 +2377,7 @@ def api_dashboard_stats():
         'dist_opt':      len(optcomm_deals),
         'dist_fxo':      len(fxo_deals),
         'dist_swap':     len(swap_deals),
+        'dist_unwind':   _unw['total'],
         'monthly_opt':   monthly_opt,
         'monthly_ndf':   monthly_ndf,
         'monthly_ndf_vanilla':  monthly_ndf_vanilla,
@@ -2353,6 +2385,7 @@ def api_dashboard_stats():
         'monthly_ndf_fwdstart': monthly_ndf_fwdstart,
         'monthly_fxo':   monthly_fxo,
         'monthly_swap':  monthly_swap,
+        'monthly_unwind': _unw['monthly'],
         'recent_deals':  recent_deals,
     }))
 

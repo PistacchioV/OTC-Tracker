@@ -216,7 +216,7 @@ function liveProductColor(label, idx) {
 
 let pieChart = null, flowChart = null, clientsChart = null, productsChart = null, commoditiesChart = null;
 
-function buildPieChart(ndf, opt, fxo, swap, ndfVan, ndfOP, ndfFS) {
+function buildPieChart(ndf, opt, fxo, swap, ndfVan, ndfOP, ndfFS, unwind) {
     const ctx = document.getElementById('multi-pie-chart');
     if (!ctx) return;
     if (pieChart) pieChart.destroy();
@@ -224,10 +224,10 @@ function buildPieChart(ndf, opt, fxo, swap, ndfVan, ndfOP, ndfFS) {
         type: 'doughnut',
         plugins: [valueLabelPlugin],
         data: {
-            labels: ['NDF Commodities', 'NDF Vanilla', 'NDF Other Publisher', 'NDF FWD Start', 'Option Commodities', 'Option FXO', 'Swap'],
+            labels: ['NDF Commodities', 'NDF Vanilla', 'NDF Other Publisher', 'NDF FWD Start', 'Option Commodities', 'Option FXO', 'Swap', 'Unwinds'],
             datasets: [{
-                data: [ndf, ndfVan || 0, ndfOP || 0, ndfFS || 0, opt, fxo || 0, swap || 0],
-                backgroundColor: doughnutGradient([ins('chart-primary'), '#5e5ce6', '#8b5cf6', '#d946ef', ins('chart-secondary'), '#10b981', '#f59e0b'], 1, 0.55),
+                data: [ndf, ndfVan || 0, ndfOP || 0, ndfFS || 0, opt, fxo || 0, swap || 0, unwind || 0],
+                backgroundColor: doughnutGradient([ins('chart-primary'), '#5e5ce6', '#8b5cf6', '#d946ef', ins('chart-secondary'), '#10b981', '#f59e0b', '#ef4444'], 1, 0.55),
                 borderColor: isDark() ? 'rgba(30,41,59,0.6)' : '#fff',
                 borderWidth: 2,
                 hoverOffset: 8,
@@ -246,7 +246,7 @@ function buildPieChart(ndf, opt, fxo, swap, ndfVan, ndfOP, ndfFS) {
     });
 }
 
-function buildFlowChart(monthlyNdf, monthlyOpt, monthlyFxo, monthlySwap, monthlyNdfVan, monthlyNdfOP, monthlyNdfFS) {
+function buildFlowChart(monthlyNdf, monthlyOpt, monthlyFxo, monthlySwap, monthlyNdfVan, monthlyNdfOP, monthlyNdfFS, monthlyUnwind) {
     const ctx = document.getElementById('sales-analytics-chart');
     if (!ctx) return;
     if (flowChart) flowChart.destroy();
@@ -262,6 +262,7 @@ function buildFlowChart(monthlyNdf, monthlyOpt, monthlyFxo, monthlySwap, monthly
                 { type: 'bar', label: 'Option Commodities', data: monthlyOpt, backgroundColor: vGradient(ins('chart-secondary'), 1, 0.45), borderColor: 'transparent', stack: 'deals', barThickness: 26, borderRadius: stackEndRadius(6, 'bottom'), borderSkipped: false },
                 { type: 'bar', label: 'Option FXO', data: monthlyFxo || [], backgroundColor: vGradient('#10b981', 1, 0.45), borderColor: 'transparent', stack: 'deals', barThickness: 26, borderRadius: stackEndRadius(6, 'bottom'), borderSkipped: false },
                 { type: 'bar', label: 'Swap', data: monthlySwap || [], backgroundColor: vGradient('#f59e0b', 1, 0.45), borderColor: 'transparent', stack: 'deals', barThickness: 26, borderRadius: stackEndRadius(6, 'bottom'), borderSkipped: false },
+                { type: 'bar', label: 'Unwinds', data: monthlyUnwind || [], backgroundColor: vGradient('#ef4444', 1, 0.45), borderColor: 'transparent', stack: 'deals', barThickness: 26, borderRadius: stackEndRadius(6, 'bottom'), borderSkipped: false },
             ]
         },
         options: {
@@ -1064,16 +1065,19 @@ async function loadDashboard(period) {
         setText('dash-ndf-count', data.ndf_total);
         setText('dash-opt-count', data.opt_total);
         setText('dash-swap-count', data.swap_total ?? 0);
+        setText('dash-unwind-count', data.unwind_total ?? 0);
         setText('dash-total-count', data.total_deals);
 
         mostraCarregando(false);
         tenta('período', () => updatePeriodBadges(period));
         tenta('Deal Distribution', () =>
             buildPieChart(data.dist_ndf, data.dist_opt, data.dist_fxo, data.dist_swap,
-                          data.dist_ndf_vanilla, data.dist_ndf_otherpub, data.dist_ndf_fwdstart));
+                          data.dist_ndf_vanilla, data.dist_ndf_otherpub, data.dist_ndf_fwdstart,
+                          data.dist_unwind));
         tenta('Deal Flow Analytics', () =>
             buildFlowChart(data.monthly_ndf, data.monthly_opt, data.monthly_fxo, data.monthly_swap,
-                           data.monthly_ndf_vanilla, data.monthly_ndf_otherpub, data.monthly_ndf_fwdstart));
+                           data.monthly_ndf_vanilla, data.monthly_ndf_otherpub, data.monthly_ndf_fwdstart,
+                           data.monthly_unwind));
         tenta('Top 5 Clients', () => buildClientsChart(data.top5_clients));
         tenta('Top 5 Products', () => buildProductsChart(data.top5_products));
         tenta('Top 5 Underlying', () => buildCommoditiesChart(data.top5_underlying));
@@ -1102,9 +1106,11 @@ async function loadDashboard(period) {
 function rerenderCharts() {
     if (!_lastData) return;
     buildPieChart(_lastData.dist_ndf, _lastData.dist_opt, _lastData.dist_fxo, _lastData.dist_swap,
-                  _lastData.dist_ndf_vanilla, _lastData.dist_ndf_otherpub, _lastData.dist_ndf_fwdstart);
+                  _lastData.dist_ndf_vanilla, _lastData.dist_ndf_otherpub, _lastData.dist_ndf_fwdstart,
+                  _lastData.dist_unwind);
     buildFlowChart(_lastData.monthly_ndf, _lastData.monthly_opt, _lastData.monthly_fxo, _lastData.monthly_swap,
-                   _lastData.monthly_ndf_vanilla, _lastData.monthly_ndf_otherpub, _lastData.monthly_ndf_fwdstart);
+                   _lastData.monthly_ndf_vanilla, _lastData.monthly_ndf_otherpub, _lastData.monthly_ndf_fwdstart,
+                   _lastData.monthly_unwind);
     buildClientsChart(_lastData.top5_clients);
     buildProductsChart(_lastData.top5_products);
     buildCommoditiesChart(_lastData.top5_underlying);

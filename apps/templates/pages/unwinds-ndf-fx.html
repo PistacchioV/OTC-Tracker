@@ -105,7 +105,7 @@
                                 </span>
                             </div>
                             <h4 class="mb-2" data-lang="unw-dropzone-title">Drop the unwind notification here, or click to upload.</h4>
-                            <p class="text-muted fst-italic mb-3" data-lang="unw-dropzone-hint">Save the Athena e-mail as .htm / .html and drop it here. The box scan does this on its own every 30 minutes.</p>
+                            <p class="text-muted fst-italic mb-3" data-lang="unw-dropzone-hint">Save the Athena e-mail as .htm / .html and drop it here — or leave it empty and click Import to scan the Outlook box. The box scan also runs on its own every 30 minutes.</p>
                             <button class="btn btn-sm shadow btn-default" type="button" data-lang="nd-browse">Browse</button>
                         </div>
                     </form>
@@ -352,7 +352,6 @@ $(document).ready(function () {
             "<'columnToggleWrapper me-2'>" +
             "B" +
             "<'refDateWrap ms-2 d-flex align-items-center'>" +
-            "<'scanBtn ms-2'>" +
             "<'importBtn ms-2 me-2'>" +
             "<'clearFiltersBtn me-2'>" +
             "<'conditionalActions ms-2 d-flex align-items-center gap-2'>" +
@@ -423,31 +422,30 @@ $(document).ready(function () {
             if (refDateWrap && !document.getElementById('unwRefDate')) {
                 refDateWrap.innerHTML =
                     '<label for="unwRefDate" class="form-label fs-xs text-muted mb-0 me-1 text-nowrap" data-lang="b3-reference-date">Reference Date</label>' +
-                    '<input type="text" id="unwRefDate" class="form-control form-control-sm" style="width:130px" value="' + _todayDmy() + '" placeholder="dd/mm/yyyy">';
+                    '<input type="text" id="unwRefDate" class="form-control form-control-sm otc-datefield" style="width:130px" value="' + _todayDmy() + '" placeholder="dd/mm/yyyy">';
                 var el = document.getElementById('unwRefDate');
                 if (el && typeof flatpickr !== 'undefined') flatpickr(el, { dateFormat: 'd/m/Y', allowInput: true, disableMobile: true });
                 if (el) el.addEventListener('change', load);
             }
 
-            // ── Scan Box: roda a varredura AGORA (o automático é de 30/30) ──
-            var scanWrap = document.querySelector('.scanBtn');
-            if (scanWrap && !document.getElementById('scanBtn')) {
-                var sb = document.createElement('button');
-                sb.id = 'scanBtn'; sb.type = 'button';
-                sb.className = 'btn btn-sm btn-success bg-gradient btn-toolbar-all';
-                sb.innerHTML = '<i class="ti ti-mail-search me-1"></i><span data-lang="unw-btn-scan">Scan Box</span>';
-                scanWrap.appendChild(sb);
-                sb.addEventListener('click', runScan);
-            }
-
+            // ── Import: fila do dropzone ou, se ela estiver VAZIA, o box ──
+            // Um botão só, como no NDF/Opt Commodities: a varredura do box é a
+            // rota AUTOMÁTICA do mesmo Import, não uma ação à parte. Dois
+            // botões faziam a mesa escolher entre dois caminhos que levam ao
+            // mesmo lugar.
             var importWrap = document.querySelector('.importBtn');
             if (importWrap && !document.getElementById('importBtn')) {
                 var ib = document.createElement('button');
                 ib.id = 'importBtn'; ib.type = 'button';
                 ib.className = 'btn btn-sm btn-warning bg-gradient btn-toolbar-all btn-toolbar-import';
+                ib.setAttribute('data-bs-toggle', 'tooltip');
+                ib.setAttribute('data-bs-placement', 'bottom');
+                ib.setAttribute('data-bs-title', 'Process the e-mails in the dropzone (or scan the Outlook box if it is empty)');
+                ib.setAttribute('data-bs-custom-class', 'tooltip-teal');
                 ib.innerHTML = '<i class="ti ti-upload me-1"></i> Import';
                 importWrap.appendChild(ib);
                 ib.addEventListener('click', runImport);
+                if (window.bootstrap && !bootstrap.Tooltip.getInstance(ib)) new bootstrap.Tooltip(ib, { trigger: 'hover' });
             }
 
             var clearWrap = document.querySelector('.clearFiltersBtn');
@@ -528,15 +526,15 @@ $(document).ready(function () {
     }
     window.unwReload = load;
 
-    // ── Import: a fila do dropzone → dry-run → duplicatas → gravação ───────
+    // ── Import: a fila do dropzone; vazia, a varredura do box ─────────────
     function runImport() {
         var btn = document.getElementById('importBtn');
         var dz = window.myDropzone || ((typeof Dropzone !== 'undefined') ? Dropzone.forElement('#myAwesomeDropzone') : null);
         var files = (dz && dz.files) ? dz.files.filter(function (f) { return /\.(html?|txt)$/i.test(f.name); }) : [];
-        if (!files.length) {
-            Swal.fire({ icon: 'info', title: 'Import', text: 'No e-mail in the dropzone. Save the Athena notification as .htm and drop it here.', confirmButtonColor: '#0066cc' });
-            return;
-        }
+        // Dropzone vazia = rota automática (o mesmo desenho do NDF/Opt
+        // Commodities): varrer a caixa é o que o Import faz quando não lhe
+        // deram arquivo, não outro botão.
+        if (!files.length) { return runScan(); }
         btn.disabled = true;
         btn.innerHTML = '<i class="ti ti-loader-2 ti-spin me-1"></i> Importing...';
         function _restore() { btn.disabled = false; btn.innerHTML = '<i class="ti ti-upload me-1"></i> Import'; }
@@ -565,10 +563,10 @@ $(document).ready(function () {
     }
 
     function runScan() {
-        var btn = document.getElementById('scanBtn');
+        var btn = document.getElementById('importBtn');
         btn.disabled = true;
-        btn.innerHTML = '<i class="ti ti-loader-2 ti-spin me-1"></i> Scanning...';
-        function _restore() { btn.disabled = false; btn.innerHTML = '<i class="ti ti-mail-search me-1"></i> Scan Box'; }
+        btn.innerHTML = '<i class="ti ti-loader-2 ti-spin me-1"></i> Scanning box...';
+        function _restore() { btn.disabled = false; btn.innerHTML = '<i class="ti ti-upload me-1"></i> Import'; }
         fetch('/api/unwinds/ndf/fx/scan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
                                             body: JSON.stringify({ date: refDateIso() }) })
             .then(function (r) { return r.json(); })

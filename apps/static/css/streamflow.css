@@ -3181,3 +3181,44 @@ html.sf-reduced .page-title-head .flex-grow-1::before {
   box-shadow: 0 0 0 4px rgba(41, 197, 246, 0.25);
 }
 html.sf-reduced .content-page .card { animation: none; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   50. TOOLBAR: as duas coisas que toda tela de importação copiava à mão
+   ══════════════════════════════════════════════════════════════════════════
+   As duas regras abaixo viviam DENTRO do `<style>` de cada página, iguais em
+   seis delas. Quem escreveu a sétima usou as mesmas CLASSES e não copiou o
+   CSS: o botão Import saiu no laranja do `btn-warning` e o campo de data sem
+   o ícone, numa tela que a mesa lê ao lado das outras. Aqui elas valem para
+   quem usar a classe, e a sétima página não precisa lembrar de nada.
+
+   Esta camada carrega DEPOIS do `extra_css`, então as cópias que ainda estão
+   nas páginas continuam valendo (mesmo valor) e podem sair quando alguém
+   passar por elas. */
+
+/* 50a. Import — o teal da casa, sobre o `btn-warning` que a classe acompanha. */
+.btn-toolbar-import {
+  background-color: #4a849b !important;
+  border-color: #4a849b !important;
+}
+
+/* 50b. Campo de data da toolbar: ícone de calendário como background SVG.
+   O input é de TEXTO e não `type="date"` (§7 — o nativo desenha no locale do
+   sistema, e mm/dd no Windows do JP é um erro de data que não dá erro), então
+   o ícone do navegador não existe e o desenho é nosso.
+
+   Vale pela CLASSE e também pelo id `#apiRefDate`, que é como as páginas de
+   New Deals já o chamam — com `altInput` do flatpickr o campo VISÍVEL é um
+   segundo input, que herda a classe (`altInputClass`) mas não o id. */
+input.otc-datefield,
+input#apiRefDate {
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236c757d' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='5' width='16' height='16' rx='2'/%3E%3Cpath d='M16 3v4M8 3v4M4 11h16'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.6rem center;
+  background-size: 1rem 1rem;
+  padding-right: 2rem;
+  cursor: pointer;
+}
+[data-bs-theme="dark"] input.otc-datefield,
+[data-bs-theme="dark"] input#apiRefDate {
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23adb5bd' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='5' width='16' height='16' rx='2'/%3E%3Cpath d='M16 3v4M8 3v4M4 11h16'/%3E%3C/svg%3E");
+}

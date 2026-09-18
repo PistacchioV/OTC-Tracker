@@ -81,7 +81,11 @@ def main():
     from apps.pages.features.unwinds.infra import persistence
 
     tmp = tempfile.mkdtemp(prefix='otc-unw-')
-    persistence.cache_dir = lambda: os.path.join(tmp, 'cache')
+    # As DUAS portas, e a de baixo derivada da de cima como em produção: o
+    # painel varre pela `cache_root` e a gravação usa a `cache_dir`. Trocando
+    # só uma, o teste grava no tmp e CONTA a árvore real da máquina.
+    persistence.cache_root = lambda: os.path.join(tmp, 'cache')
+    persistence.cache_dir = lambda: os.path.join(tmp, 'cache', 'NDF', 'FX')
     R.CONECTA_NEW_PATH = os.path.join(tmp, 'conecta')
     COLUNAS = list(POS.keys())
     def _collect(rows):
@@ -206,7 +210,53 @@ def main():
         check(arq.split('/')[-1],
               ("'" + commands.PAGE + "'") in txt and '/unwinds/ndf/fx' in txt)
 
-    print('\n== 8. a pagina responde e as APIs tambem ==')
+    print('\n== 8. a recompra tem card proprio no painel ==')
+    # O painel varre `cache/new deals/`, e a recompra grava em `cache/unwinds/`:
+    # sem fonte propria ela simplesmente nao aparece. E o card e PROPRIO porque
+    # recompra nao e registro novo — somada ao card do produto, o numero passaria
+    # a querer dizer duas coisas.
+    #
+    # Mede pela DIFERENCA: as secoes acima ja deixaram linhas na arvore, e uma
+    # expectativa absoluta aqui passaria a depender da ordem delas.
+    from datetime import datetime as _dtm
+    hoje = _dtm(2026, 9, 10)
+    R._lpndf_collect = _collect([POS])
+    with app.test_request_context():
+        antes_all = queries.dashboard_counts('all', hoje)
+        antes_mes = queries.dashboard_counts('month', hoje)
+    commands.import_email(HTML.replace('STP-XE-10G5U5X-0-0', 'STP-ZZ-9999999-0-0'),
+                          'BRL NDF Unwind Notification_STP-ZZ-9999999-0-0_X',
+                          ref_dt=date(2026, 8, 20))
+    commands.import_email(HTML.replace('STP-XE-10G5U5X-0-0', 'STP-YY-8888888-0-0'),
+                          'BRL NDF Unwind Notification_STP-YY-8888888-0-0_X',
+                          ref_dt=date(2026, 9, 10))
+    with app.test_request_context():
+        todo = queries.dashboard_counts('all', hoje)
+        ano = queries.dashboard_counts('year', hoje)
+        mes = queries.dashboard_counts('month', hoje)
+    check('as duas novas entraram no periodo todo',
+          todo['total'] - antes_all['total'] == 2, (antes_all, todo))
+    check('mas so a de setembro entrou no MES',
+          mes['total'] - antes_mes['total'] == 1, (antes_mes, mes))
+    check('o ano pega as duas', ano['total'] == todo['total'], (ano, todo))
+    check('a serie mensal poe cada uma no seu mes',
+          (todo['monthly'][7] - antes_all['monthly'][7],
+           todo['monthly'][8] - antes_all['monthly'][8]) == (1, 1), todo['monthly'])
+    check('a serie mensal NAO muda com o periodo pedido',
+          mes['monthly'] == todo['monthly'])
+    # Uma recompra e UMA linha: nao ha perna espelhada a descartar, como no
+    # intragrupo de New Deals — o re-import da MESMA nao soma.
+    commands.import_email(HTML.replace('STP-XE-10G5U5X-0-0', 'STP-YY-8888888-0-0'),
+                          'BRL NDF Unwind Notification_STP-YY-8888888-0-0_X',
+                          ref_dt=date(2026, 9, 10))
+    with app.test_request_context():
+        denovo = queries.dashboard_counts('all', hoje)
+    check('re-import da mesma recompra nao soma de novo',
+          denovo['total'] == todo['total'], (todo, denovo))
+    check('e a arvore contada e a do tmp, nao a da maquina',
+          todo['total'] < 20, todo)
+
+    print('\n== 9. a pagina responde e as APIs tambem ==')
     R._lpndf_collect = _collect([POS])
     cl = app.test_client()
     with cl.session_transaction() as ss:
@@ -220,11 +270,21 @@ def main():
     corpo = pg.data.decode('utf-8')
     check('a pagina abre', pg.status_code == 200, pg.status_code)
     check('com a tabela e o dropzone', 'id="unw-table"' in corpo and 'myAwesomeDropzone' in corpo)
+    # UM botao de Import, e a varredura do box e a rota automatica dele quando
+    # a dropzone esta vazia — o mesmo desenho do NDF/Opt Commodities. Um
+    # 'Scan Box' proprio fazia a mesa escolher entre dois caminhos que levam
+    # ao mesmo lugar.
+    check('nao existe botao Scan Box separado', 'scanBtn' not in corpo)
+    check('e o Import cai no runScan com a dropzone vazia',
+          'if (!files.length) { return runScan(); }' in corpo)
     api = cl.get('/api/unwinds/ndf/fx?date=2026-09-10').get_json()
+    # A secao 8 deixou outra recompra neste mesmo dia: o que se prende aqui e
+    # que a linha ESTA na resposta, nao quantas ha no arquivo-dia.
     check('o GET devolve a linha e o contrato de colunas',
-          api.get('success') and len(api['entries']) == 1
+          api.get('success')
+          and 'STP-XE-10G5U5X-0-0' in [e.get('AthenaID') for e in api['entries']]
           and api['fields'] == list(domain.UNW_FIELDS)
-          and len(api['labels']) == len(domain.UNW_FIELDS))
+          and len(api['labels']) == len(domain.UNW_FIELDS), api.get('entries'))
     # O cabecalho e montado por JS a partir do UNW_COLS da pagina; o que se
     # prende aqui e que essa copia do contrato nao saiu da ordem do dominio.
     import re as _re
