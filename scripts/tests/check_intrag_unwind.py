@@ -47,8 +47,8 @@ L_LAWTON = {'AthenaID': 'STP-XE-10G5U5X-0-0', 'Contract': '00041252DLL', 'Curren
             'Balance': 5000000.0, 'Result': 0.0, 'Direction': 'RECEIVE',
             'PartyAccount': '73760009', 'CptyAccount': '00041007',
             'TradeDate': '2025-11-04', 'MaturityDate': '2026-09-16',
-            'SettlementDate': '2026-09-18', 'OriginalNotional': 3808000.0,
-            'Status': 'Sent'}
+            'SettlementDate': '2026-09-18', 'OriginalNotional': 5000000.0,
+            'UnwoundBefore': 0.0, 'Status': 'Sent'}
 # Contra cliente: nenhum fundo nas pontas — nao ha linha da Intrag.
 L_CLIENTE = dict(L_LAWTON, AthenaID='STP-CLI-1', CptyAccount='12345678',
                  Counterparty='COFCO INTERNATIONAL BRASIL SA')
@@ -107,7 +107,15 @@ def main():
     check('a regra vem do dominio da recompra, nao de uma segunda leitura',
           domain.recompra_total(L_LAWTON) is False and
           domain.recompra_total(dict(L_LAWTON, UnwoundNotional=5000000.0)) is True and
-          domain.recompra_total(dict(L_LAWTON, Balance=None)) is None)
+          domain.recompra_total(dict(L_LAWTON, Balance=None,
+                                     OriginalNotional=None)) is None)
+    # E o saldo sai das TRES parcelas (mesa, 18/09/2026): o que a posicao ja
+    # mostra como recomprado (`UnwoundBefore`) entra na conta, senao a Situacao
+    # diz Parcial num contrato que esta se encerrando.
+    check('o ja recomprado da posicao entra na conta',
+          domain.recompra_total(dict(L_LAWTON, UnwoundBefore=1192000.0)) is True and
+          domain.saldo_apos_a_recompra(dict(L_LAWTON, UnwoundBefore=1000000.0)) == 192000.0,
+          domain.saldo_apos_a_recompra(dict(L_LAWTON, UnwoundBefore=1000000.0)))
 
     print('\n== 3. o Sentido e na visao do FUNDO ==')
     check('credor', e['sentido'] == I.INTRAG_UNWIND_CREDOR)

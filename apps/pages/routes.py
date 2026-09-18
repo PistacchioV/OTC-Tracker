@@ -13601,6 +13601,7 @@ _CONF_UNWIND_FAMILY_TEMPLATES = _pf_conf._CONF_UNWIND_FAMILY_TEMPLATES
 _CONF_UNWIND_FAMILY_TYPE = _pf_conf._CONF_UNWIND_FAMILY_TYPE
 _conf_unwind_groups = _pf_conf._conf_unwind_groups
 _conf_pick_unwind = _pf_conf._conf_pick_unwind
+_conf_unwind_xml = _pf_conf._conf_unwind_xml
 _conf_fwdstart_partea = _pf_conf._conf_fwdstart_partea
 _conf_load_ndffwdstart = _pf_conf._conf_load_ndffwdstart
 _conf_fwdstart_family = _pf_conf._conf_fwdstart_family
