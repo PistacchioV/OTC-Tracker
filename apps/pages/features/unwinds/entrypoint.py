@@ -23,6 +23,10 @@ def _R():
 
 PAGE = commands.PAGE
 
+# O wiring do routes registra o scheduler com este nome (`_schedule_on_start`);
+# a feature nunca sobe thread no proprio import.
+start_scheduler = commands.start_scheduler
+
 
 def _auth():
     if not session.get('authenticated'):

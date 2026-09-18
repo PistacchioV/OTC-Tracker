@@ -1111,6 +1111,17 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   (`infra/email_file.py` — magic do CFB, cabeçalhos MIME), não pela extensão:
   o Outlook renomeia anexo e um `.msg` chega como `.txt` sem aviso. O assunto
   sai do arquivo quando ele o carrega; só o corpo solto cai para o nome.
+- **A varredura roda sozinha a cada 30 min**, em laço PRÓPRIO da vertical
+  (`unwinds/commands.scheduler_loop`, registrado no `routes.py` como
+  `unwind-boxscan`) e não dentro do `features/boxscan`: **feature não importa
+  feature** nesta casa — nenhuma das 49 importa, e é o `check_soc_layers` que
+  segura. O que as duas compartilham é o INTERVALO, a mesma
+  `BOX_SCAN_POLL_MIN`, para a mesa ter um botão só. A tela sempre prometeu os
+  30 minutos; até 18/09/2026 não havia laço nenhum registrado, e a recompra só
+  entrava no clique do Import. **Varredura vazia não toca o sino** (a caixa
+  está vazia quase sempre; um aviso a cada 30 min é o fim do sino), e e-mail
+  que o parser recusou vai para o log em WARNING mesmo sem linha nenhuma — ele
+  ficou no box.
 - **A varredura é no INBOX, o mesmo por onde entra o booking recap de NDF Comm
   e Opt Comm** (`scan_unwind_box` chama o `_connect_inbox` do
   `scan_new_deals_box`): o aviso do Athena chega na caixa de entrada, não na
@@ -1505,9 +1516,13 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   em volta da montagem INTEIRA do e-mail (o botão Run funciona e o automático
   morre em silêncio).
 - **Jobs rodam no horário do Brasil** (`_br_now`), com catch-up na subida
-  (`_ndm_pending_catch_up`, claim em disco). **Os três schedulers de
+  (`_ndm_pending_catch_up`, claim em disco). **Os quatro schedulers de
   importação só entre 08:00 e 20:00 BRT** (`IMPORT_POLL_WINDOW`; malformado =
-  sempre aberta com aviso), `continue` antes do `try`.
+  sempre aberta com aviso), `continue` antes do `try` — as duas APIs da Athena,
+  o box de commodities e o box da recompra. `check_import_window.py` §5 varre
+  os quatro por AST, pelo PAR (arquivo, função): dois deles se chamam
+  `scheduler_loop`, e chaveada só pelo nome a varredura perderia o segundo sem
+  falhar nada.
 - **Botão de e-mail precisa de endereço ABSOLUTO**: `_otc_app_url()` lê
   `OTC_TRACKER_URL` ou monta `http://<hostname>:APP_PORT` (`routes.APP_PORT`,
   `OTC_TRACKER_PORT`, padrão 8051 — UMA constante para os três lugares).
