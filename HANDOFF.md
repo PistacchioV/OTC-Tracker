@@ -21731,3 +21731,72 @@ compartilhado, o sino só quando entrou linha) e o `check_import_window.py` §5
 passou a varrer QUATRO laços, pelo PAR (arquivo, função) — dois deles se chamam
 `scheduler_loop`, e chaveada só pelo nome a varredura perdia o segundo sem
 falhar nada.
+
+## §497 — A página da recompra ganha os botões da casa, e o `d-none` volta a esconder botão de linha (2026-09-18)
+
+A coluna Actions da `/unwinds/ndf/fx` tinha um conjunto próprio — olho
+(preview), documento (Termo), Send e Delete — e os quatro não cabiam nos 110px
+da coluna: o último saía **cortado ao meio**, sem erro nenhum e sem barra de
+rolagem que denunciasse. Agora são os QUATRO da casa, na ordem do §7: Confirm
+`ti-check`, Edit `ti-edit`, Delete `ti-trash`, Send `ti-brand-telegram`, numa
+coluna de 165px. O olho e o documento saíram porque os dois caminhos já
+existiam: o preview do TER 0014 é o **duplo clique** na linha (o texto acima da
+grade sempre disse isso) e o Termo de Resilição se gera no **Confirmations
+Monitor**, que é onde vivem os documentos da esteira.
+
+**O `Status` passou a ser a primeira coluna de dado.** Ele era o DÉCIMO NONO
+campo: numa grade de dezoito colunas, a resposta "esta linha já foi?" só
+aparecia depois de rolar a tabela inteira, que é o mesmo que não estar lá. A
+ordem é a do `domain.UNW_FIELDS`, e a cópia da tela vai junto (o
+`check_unwind_page` compara as duas).
+
+**A edição é o 4-olhos das páginas de Intrag**, porte fiel: salvar põe a linha
+em `Pending` e marca o MAKER; `Approved` é outro usuário conferindo, e aprovar
+a própria edição é 403. `Pending` **não é enviável** — `STATUS_ENVIAVEL` passou
+a ser `Imported` (veio da máquina, intocada) e `Approved` (mexida e conferida).
+O `Status` e o `Check` ficam fora dos campos editáveis, e o servidor os ignora
+mesmo que a tela os mande: um é estado da esteira, o outro é veredito apurado.
+
+### Os dois defeitos que apareceram ao conferir no navegador
+
+**O `d-none` não escondia botão de ação em página nenhuma.** A regra de FORMATO
+do `partials/head-css.html` — a que trava o squircle das quinze classes
+`.btn-row-*`/`.acc-act-*`/`.ar-*`/`.btn-rd-*` — declara `display: inline-flex
+!important`. O `.d-none` do `app.css` é `display:none !important` com a MESMA
+especificidade (0,1,0), e a folha do `head-css` carrega depois: o `!important`
+que vem por último vence. Todo `toggleClass('d-none', …)` de botão de linha
+desta casa era, portanto, mudo — o Confirm aparecia em linha que não tem o que
+confirmar, e clicar nele só devolvia o erro do servidor. Está resolvido na
+RAIZ, no mesmo arquivo, com o par `.btn-row-x.d-none` (0,2,0), que ganha dos
+dois lados; nenhuma página precisa escrever nada.
+
+**O editor inline gravava no campo errado quando havia coluna escondida.** Ele
+casava o i-ésimo `<td>` com o i-ésimo campo, e o DataTables REMOVE do DOM a
+coluna invisível. Esta tela nasce com Tax ID, Trade Date e Maturity Date
+ocultas: o que se digitasse em `Ccy` seria gravado em `Tax ID`, e assim por
+diante, sem erro nenhum. A célula agora se acha pela API
+(`table.cell(linha, coluna)`), que é imune a isso.
+
+### O Termo na pasta da contraparte
+
+O Termo de Resilição **já** era arquivado como as confirmações de New Deals
+(`<Cliente>\Confirmations\AAAA\mm. Month\dd\<pasta do TIPO>` pelo
+`_ei_resolve_client_dir`), mas com um buraco: sem contraparte resolvida — que é
+o mesmo dia em que o B3 ID e a moeda saem em branco — o acrônimo caía num
+literal `'UNWIND'` e o `create=True` fazia NASCER uma pasta chamada UNWIND no
+Electronic Inventory, ao lado das contrapartes de verdade. O documento ficava
+salvo, a tela não acusava nada, e ele não estava onde a mesa procura. Agora o
+Save RECUSA dizendo o que falta, que é a falha desejada.
+
+### O sino
+
+Toda ação da página passou a avisar — Import, varredura do box, Edit, Confirm,
+Delete, Send e Termo salvo —, porque o arquivo-dia é da mesa inteira e a linha
+que muda sem rastro é a que ninguém consegue explicar depois. A única exceção é
+o `dry_run` do Import: ali nada foi gravado, é a pergunta das duplicatas do
+primeiro passo.
+
+Rede: `check_unwind_page.py` (seção 12 nova: os quatro botões, o Status
+primeiro, o 4-olhos ponta a ponta com dois clientes de teste, o Send recusando
+`Pending`, o erro por CÓDIGO e a cobertura do sino) e `check_unwind_termo.py`
+(o Save recusando sem contraparte e o caminho da pasta do cliente).

@@ -440,7 +440,95 @@ def main():
     check('e o delete remove a linha nao enviada', dele.get('success'))
     check('o dia ficou vazio', queries.entries('2026-09-12') == [])
 
-    print('\n== 12. a varredura do box roda sozinha ==')
+    print('\n== 12. os quatro botoes padrao e o 4-olhos da edicao ==')
+    # Os botoes da linha sao os da casa (§7): Confirm, Edit, Delete, Send. O
+    # olho e o documento saiam daqui — o preview e o DUPLO CLIQUE e o Termo de
+    # Resilicao se gera no Confirmations Monitor.
+    check('a linha tem os quatro botoes padrao',
+          all(c in corpo for c in ('btn-row-approve', 'btn-row-edit',
+                                   'btn-row-delete', 'btn-row-send')))
+    check('e nao tem mais o olho nem o documento',
+          'btn-row-preview' not in corpo and 'btn-row-termo' not in corpo)
+    check('o preview continua no duplo clique', "on('dblclick', 'tr'" in corpo)
+    # O Status e a PRIMEIRA coluna de dado: no fim de dezoito colunas a
+    # resposta "esta linha ja foi?" so aparece depois de rolar a grade toda.
+    check('o Status e a primeira coluna de dado', domain.UNW_FIELDS[0] == 'Status',
+          domain.UNW_FIELDS[0])
+
+    # Editar poe em Pending e marca o maker; quem confirma tem de ser OUTRO.
+    ed = cl.post('/api/unwinds/ndf/fx/edit',
+                 json={'athena_id': 'STP-XE-10G5U5X-0-0', 'date': '2026-09-11',
+                       'fields': {'SettlementDate': '2026-09-15', 'Check': 'OK',
+                                  'Status': 'Sent'}}).get_json()
+    check('a edicao grava e poe em Pending',
+          ed.get('success') and ed.get('status') == domain.STATUS_PENDENTE, ed)
+    _fp, _lst, _i = queries.find('STP-XE-10G5U5X-0-0', '2026-09-11')
+    linha = _lst[_i] if _i is not None else {}
+    check('o campo editado entrou', linha.get('SettlementDate') == '2026-09-15',
+          linha.get('SettlementDate'))
+    # O `Status` e o `Check` vao na mesma requisicao de proposito: um e estado
+    # da esteira e o outro e veredito apurado, e nenhum dos dois se digita.
+    check('o Status mandado pela tela nao vence o da esteira',
+          linha.get('Status') == domain.STATUS_PENDENTE, linha.get('Status'))
+    check('o veredito Check nao se edita', linha.get('Check') != 'OK', linha.get('Check'))
+    check('o maker ficou registrado', linha.get('Maker') == 'T000000', linha.get('Maker'))
+
+    # Pending NAO vai para a B3: e o gate inteiro.
+    check('recompra Pending nao e enviavel',
+          domain.STATUS_PENDENTE not in domain.STATUS_ENVIAVEL)
+    _err = _erro(commands.send,
+                 [{'athena_id': 'STP-XE-10G5U5X-0-0', 'ref_date': '2026-09-11'}], sid='T111111')
+    check('e o Send recusa dizendo o status', _err and 'Pending' in _err, _err)
+
+    mesmo = cl.post('/api/unwinds/ndf/fx/approve',
+                    json={'athena_id': 'STP-XE-10G5U5X-0-0', 'date': '2026-09-11'})
+    check('o proprio maker nao confirma', mesmo.status_code == 403, mesmo.status_code)
+    check('e o erro vai por CODIGO, nao por frase',
+          (mesmo.get_json() or {}).get('code') == 'unwind_maker_is_checker',
+          mesmo.get_json())
+
+    cl2 = app.test_client()
+    with cl2.session_transaction() as ss:
+        ss['authenticated'] = True
+        ss['user_sid'] = 'T999999'
+        ss['user_name'] = 'Outro'
+        ss['session_expires_at'] = (datetime.now(tz=timezone.utc) + timedelta(hours=8)).isoformat()
+    outro = cl2.post('/api/unwinds/ndf/fx/approve',
+                     json={'athena_id': 'STP-XE-10G5U5X-0-0', 'date': '2026-09-11'}).get_json()
+    check('outro usuario confirma', outro.get('success')
+          and outro.get('status') == domain.STATUS_APROVADO, outro)
+    _fp, _lst, _i = queries.find('STP-XE-10G5U5X-0-0', '2026-09-11')
+    check('e o checker ficou registrado',
+          _i is not None and _lst[_i].get('Checker') == 'T999999',
+          _i is not None and _lst[_i].get('Checker'))
+    check('confirmar de novo nao faz sentido e o diz',
+          cl2.post('/api/unwinds/ndf/fx/approve',
+                   json={'athena_id': 'STP-XE-10G5U5X-0-0', 'date': '2026-09-11'}).status_code == 400)
+    check('e Approved volta a ser enviavel',
+          domain.STATUS_APROVADO in domain.STATUS_ENVIAVEL)
+
+    # TODA acao da pagina toca o sino, que e onde a mesa ve o que os outros
+    # fizeram no arquivo-dia. O `dry_run` e a excecao de proposito: e a
+    # pergunta das duplicatas do primeiro passo do Import, e nada foi gravado.
+    avisos = []
+    _orig_notif = R._create_notification
+    R._create_notification = lambda *a, **k: avisos.append(a[2:4])
+    try:
+        cl.post('/api/unwinds/ndf/fx/import-file?dry_run=1',
+                data={'file': (io.BytesIO(HTML.encode('utf-8')), 'unwind.htm'),
+                      'date': '2026-09-16'}, content_type='multipart/form-data')
+        check('o dry_run do Import NAO avisa', avisos == [], avisos)
+        cl.post('/api/unwinds/ndf/fx/import-file',
+                data={'file': (io.BytesIO(HTML.encode('utf-8')), 'unwind.htm'),
+                      'date': '2026-09-16'}, content_type='multipart/form-data')
+        check('o Import avisa', avisos and avisos[-1] == ('Deals Imported', commands.PAGE), avisos)
+        cl.post('/api/unwinds/ndf/fx/delete',
+                json={'athena_id': 'STP-XE-10G5U5X-0-0', 'date': '2026-09-16'})
+        check('o Delete avisa', avisos and avisos[-1] == ('Deal Deleted', commands.PAGE), avisos)
+    finally:
+        R._create_notification = _orig_notif
+
+    print('\n== 13. a varredura do box roda sozinha ==')
     # A tela promete "also runs on its own every 30 minutes". Ate 18/09/2026 a
     # frase era falsa: nenhum laco estava registrado, e a recompra so entrava
     # no clique do Import — sem erro nenhum para denunciar isso.

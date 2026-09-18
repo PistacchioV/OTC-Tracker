@@ -640,23 +640,42 @@ def valores_ter_0014(campos):
 # As colunas da pagina `/unwinds/ndf/fx`. Os rotulos nascem em INGLES e a tela
 # os traduz pelo `data-lang`/`_TRANS` — aqui e so o par campo x rotulo, na
 # ordem em que a grade os mostra.
+# O `Status` vem PRIMEIRO: e a coluna que responde "esta linha ja foi?", e a
+# grade tem dezoito colunas — no fim dela a resposta so aparece depois de
+# rolar a tabela inteira, que e o mesmo que nao estar la. E a posicao que as
+# paginas irmas usam (a Intrag Unwind a fixa logo depois das Acoes).
 UNW_FIELDS = (
-    'AthenaID', 'Contract', 'Counterparty', 'TaxID', 'Currency',
+    'Status', 'AthenaID', 'Contract', 'Counterparty', 'TaxID', 'Currency',
     'OriginalNotional', 'UnwoundNotional', 'Strike', 'TerminationRate',
     'PreFWDRate', 'DU', 'Result', 'Direction', 'SettlementDate',
-    'TradeDate', 'MaturityDate', 'BRLFixed', 'Check', 'Status',
+    'TradeDate', 'MaturityDate', 'BRLFixed', 'Check',
 )
 UNW_LABELS = (
-    'Athena ID', 'B3 ID', 'Counterparty', 'Tax ID', 'Ccy',
+    'Status', 'Athena ID', 'B3 ID', 'Counterparty', 'Tax ID', 'Ccy',
     'Original Notional', 'Unwound Notional', 'Strike', 'Termination Rate',
     'Pre FWD Rate', 'DU', 'Result', 'Direction', 'Settlement Date',
-    'Trade Date', 'Maturity Date', 'BRL Fixed', 'Check', 'Status',
+    'Trade Date', 'Maturity Date', 'BRL Fixed', 'Check',
 )
 
 # O ciclo da linha. `Imported` e o que o box scan grava; `Sent` e depois de o
 # arquivo ir para o Batch Conecta.
+#
+# Entre os dois entra o 4-OLHOS da edicao, que e o mesmo das paginas de Intrag:
+# editar a linha a poe em `Pending` e marca o MAKER; `Approved` e outro usuario
+# conferindo. Uma linha `Pending` NAO e enviavel — edicao que ninguem conferiu
+# indo para a B3 e exatamente o que o gate existe para segurar —, e por isso o
+# `STATUS_ENVIAVEL` tem `Imported` (veio da maquina, intocada) e `Approved`
+# (mexida e conferida), nunca `Pending`.
 STATUS_NOVO, STATUS_ENVIADO = 'Imported', 'Sent'
-STATUS_ENVIAVEL = (STATUS_NOVO,)
+STATUS_PENDENTE, STATUS_APROVADO = 'Pending', 'Approved'
+STATUS_ENVIAVEL = (STATUS_NOVO, STATUS_APROVADO)
+
+# O que a edicao de linha NAO toca. A chave, porque e por ela que a linha se
+# acha; os dois veredictos, porque sao apurados e nao digitados; e o rastro do
+# 4-olhos — quem edita nao escreve o proprio carimbo de conferido.
+UNW_NAO_EDITAVEL = ('AthenaID', 'Check', 'Status', 'Maker', 'Checker',
+                    'MyNumber', 'SentFiles', 'SentAt', 'Warnings',
+                    'ImportedAt', 'PositionDate')
 
 # O veredito da conferencia, para a coluna `Check`. Tres estados, como o
 # `conferido` do `conferir_apuracao`: nao existe "deu certo por omissao".
