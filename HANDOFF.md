@@ -21910,3 +21910,65 @@ a mudança foi só ali. O `source_note` dos cinco templates de FWD Start
 acompanha — e, como todo template, só alcança o motor da instância pelo
 `scripts/import_file_interpreter_template.py` (§488); aqui ele é documentação
 do painel, porque o valor vem do gerador.
+
+## §500 — O gatilho da recompra passa a ser o IMPORT, e ela entra no NDF Cockpit (2026-09-18)
+
+A mesa importou uma recompra e não a achou em lugar nenhum: nem no Pending
+Confirmation, nem no Track, nem no Confirmations Monitor, nem no NDF Summary.
+Nada estava quebrado — era a decisão do §493, tomada dois dias antes: o gatilho
+de tudo era o **Send** para a B3, e o Summary ainda exigia que a recompra
+liquidasse na data de referência. A mesa reviu: **deve entrar assim que for
+importada**.
+
+O que mudou:
+
+* `import_email` chama a esteira (`esteira_da_recompra`, renomeada de
+  `esteira_from_send` porque o nome passou a mentir) e a projeção no Cockpit;
+* `confirmation_deal` devolve `Status: Success` sempre — é o que a segregação
+  das confirmações lê como ELEGÍVEL. Antes isso dependia de a linha estar
+  `Sent`, e o grupo aparecia no Monitor sem gerar documento;
+* `settlement_rows` deixou de filtrar por `Sent`: a recompra que liquida hoje é
+  caixa de hoje. O que ainda fica de fora é linha sem resultado ou sem direção
+  apurada — isso não é gatilho, é linha que ninguém sabe somar;
+* o **Send não refaz a esteira**: um segundo `_pc_save_from_deal` por cima
+  reabriria uma validação que o OTC já tivesse feito entre o import e o envio;
+* a **Intrag continua no Send**, e de propósito: ali a linha é INSTRUÇÃO ao
+  custodiante, não cobrança de documento.
+
+### A recompra no NDF Cockpit
+
+A mesa acompanha liquidação e imposto pelo Cockpit, e pediu a recompra lá. O
+IR já a incluía — o Cockpit e o Summary usam a MESMA função
+(`_ndfsum_ir_for_day`) e o MESMO ledger mensal, e o Summary é a autoridade que
+recalcula ao desenhar —, mas a LINHA não existia na tela.
+
+Agora a vertical PROJETA a recompra no arquivo-dia do Cockpit da sua data de
+LIQUIDAÇÃO, com `_nc_unwind` e `_nc_id = UNW-<athena id>` (reimportar atualiza
+a mesma linha). Duas travas seguram o desenho:
+
+* **o import do Cockpit preserva** essas linhas (`_ndfc_keep_unwinds`). Ele
+  monta o dia INTEIRO a partir do `getTradesBySettle`, onde a recompra não
+  existe: sem isso, o próximo Run do Cockpit apagaria a recompra do dia sem
+  erro nenhum e sem a tela dizer nada;
+* **o Summary as ignora** (`unw_ids` no `_ndfsum_collect`) e continua lendo a
+  recompra da vertical, que é quem sabe as duas coisas que a linha do Cockpit
+  não diz — que não há resgate da B3 para conferir e que ela fica fora do
+  aviso em lote. Lidas dos dois lados, o mesmo caixa sairia DUAS vezes no
+  Trade Level **e** no IR do dia, porque o ledger monta o dia inteiro de uma
+  vez (§423).
+
+### Um susto de higiene
+
+A primeira versão do teste da página gravou a projeção no Cockpit REAL da dev:
+o `_ndfc_json_path` sai do `DATA_DIR`, que aqui é o próprio checkout. Foram
+três dias com uma linha sintética cada, removidos depois de conferidos um a um.
+O teste agora redireciona `R._ndfc_json_path` para o tmp, como já fazia com o
+cache da recompra e com a pasta do Conecta. **Teste que passa a escrever num
+arquivo-dia novo precisa redirecionar o caminho DELE também** — a regra vale
+para cada caminho, não uma vez por teste.
+
+Rede: `check_unwind_page.py` (seção 13: a projeção, o reimport que não duplica
+e a preservação no reimport do Cockpit), `check_unwind_summary.py` (o gatilho
+novo, o caixa somado líquido de IR, as duas de R$ 0,56 cruzando o piso mensal e
+a recompra projetada NÃO entrando duas vezes) e `check_unwind_termo.py` (o
+elegível desde o import).

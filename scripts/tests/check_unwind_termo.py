@@ -226,8 +226,11 @@ def main():
           deal['TradeDate'] == HOJE.strftime('%Y-%m-%d'), deal['TradeDate'])
     check('o ativo da confirmacao e a moeda do contrato',
           deal['Currency'] == 'USD' and deal['QuantityCurrency'] == 'USD')
-    check('recompra ainda nao enviada NAO e elegivel', deal['Status'] == 'New')
-    check('depois do Send ela e', commands.confirmation_deal(
+    # ELEGIVEL DESDE O IMPORT (mesa, 18/09/2026, invertendo a decisao de dois
+    # dias antes): o Termo se gera com o que o aviso e a posicao ja
+    # responderam, sem esperar o arquivo da B3.
+    check('recompra recem-importada JA e elegivel', deal['Status'] == 'Success')
+    check('e depois do Send continua', commands.confirmation_deal(
         dict(L1, Status=domain.STATUS_ENVIADO), HOJE)['Status'] == 'Success')
     check('a entidade sai da CONTA', deal['LE'] == 'JPM', deal['LE'])
 
@@ -268,25 +271,25 @@ def main():
     check('mas nao desfaz o que a mesa editou',
           (mantida.get('MO'), mantida.get('FO')), ('REQUESTED', 'REQUESTED'))
 
-    print('\n== 11. o gatilho e o SEND, e a linha vai CARIMBADA ==')
+    print('\n== 11. o gatilho e o IMPORT, e a linha vai CARIMBADA ==')
     vistos = []
     R._pc_save_from_deal = lambda d, pt, **kw: vistos.append((d, pt, kw))
-    commands.esteira_from_send([dict(L1, Status=domain.STATUS_ENVIADO)], HOJE)
-    check('o Send manda a recompra para o Pending Confirmation', len(vistos) == 1)
+    commands.esteira_da_recompra([dict(L1)], HOJE)
+    check('o import manda a recompra para o Pending Confirmation', len(vistos) == 1)
     if vistos:
         d, pt, kw = vistos[0]
         check('com o Product Type UNWIND NDF', pt == 'UNWIND NDF', pt)
         check('e chaveada pelo Athena ID', kw.get('trade_number') == L1['AthenaID'])
         check('com o Status que a segregacao le como elegivel', d['Status'] == 'Success')
-    # Falha no espelho NAO derruba o envio: o arquivo ja foi para a B3.
+    # Falha no espelho NAO derruba o import: a linha ja esta no arquivo-dia.
     def _explode(*a, **k):
         raise RuntimeError('banco ocupado')
     R._pc_save_from_deal = _explode
     try:
-        commands.esteira_from_send([dict(L1, Status=domain.STATUS_ENVIADO)], HOJE)
-        check('falha no espelho nao derruba o Send', True)
+        commands.esteira_da_recompra([dict(L1)], HOJE)
+        check('falha no espelho nao derruba o import', True)
     except Exception as exc:                                # noqa: BLE001
-        check('falha no espelho nao derruba o Send', False, exc)
+        check('falha no espelho nao derruba o import', False, exc)
 
     print('\n== 12. a segregacao do Generate ve o grupo da recompra ==')
     R._pc_save_from_deal = lambda *a, **k: None

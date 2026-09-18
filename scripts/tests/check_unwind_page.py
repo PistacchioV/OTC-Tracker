@@ -97,6 +97,11 @@ def main():
     persistence.cache_root = lambda: os.path.join(tmp, 'cache')
     persistence.cache_dir = lambda: os.path.join(tmp, 'cache', 'NDF', 'FX')
     R.CONECTA_NEW_PATH = os.path.join(tmp, 'conecta')
+    # O import PROJETA a recompra no arquivo-dia do NDF Cockpit — e ele mora no
+    # DATA_DIR, que na dev é o próprio checkout. Sem redirecionar, este teste
+    # gravaria no Cockpit REAL da máquina, que é dado de verdade.
+    R._ndfc_json_path = lambda ref: os.path.join(
+        tmp, 'cockpit', ref.strftime('%Y%m%d') + '_ndf-cockpit.json')
     COLUNAS = list(POS.keys())
     def _collect(rows):
         return lambda ref: {'columns': COLUNAS, 'source_date': '2026-09-09',
@@ -528,7 +533,48 @@ def main():
     finally:
         R._create_notification = _orig_notif
 
-    print('\n== 13. a varredura do box roda sozinha ==')
+    print('\n== 13. a recompra projetada no NDF Cockpit ==')
+    # A mesa acompanha liquidacao e IR pelo Cockpit, e a recompra nao vem da
+    # API: a vertical a PROJETA no arquivo-dia do Cockpit da DATA DE
+    # LIQUIDACAO, marcada com `_nc_unwind`.
+    from apps.pages import data_store as _ds
+    jp_ck = R._ndfc_json_path(date(2026, 9, 10))
+    recs = _ds.read(jp_ck) if _ds.isfile(jp_ck) else []
+    unw = [r for r in recs if r.get('_nc_unwind')]
+    check('o import escreveu a recompra no dia do Cockpit', len(unw) == 1, len(recs))
+    if unw:
+        r = unw[0]
+        check('com o Athena ID no ID_SOURCE_DEAL',
+              r['ID_SOURCE_DEAL'] == 'STP-XE-10G5U5X-0-0', r['ID_SOURCE_DEAL'])
+        check('o contrato da B3 na coluna do CETIP',
+              r['CD_CETIP_RETURN'] == '26C03202688', r['CD_CETIP_RETURN'])
+        # RECEIVE e positivo, PAY e negativo — a convencao do Summary, e o sinal
+        # vem da direcao APURADA (o sinal do resultado), nunca do campo do
+        # e-mail (§488).
+        _lin = (queries.find('STP-XE-10G5U5X-0-0', '2026-09-10')[1] or [{}])
+        _dir = (_lin[queries.find('STP-XE-10G5U5X-0-0', '2026-09-10')[2]] or {}).get('Direction')
+        _neg = r['[PROD] Cockpit.SETTLEMENT'].startswith('-')
+        check('o caixa com o SINAL da direcao apurada',
+              _neg == (_dir == 'PAY'), (_dir, r['[PROD] Cockpit.SETTLEMENT']))
+        check('o IR nasce VAZIO (quem calcula e o dia inteiro montado)',
+              r['VL_TAX_INCOME'] == '', r['VL_TAX_INCOME'])
+        check('e a chave e derivada do Athena ID',
+              r['_nc_id'] == commands.COCKPIT_ID_PREFIX + 'STP-XE-10G5U5X-0-0', r['_nc_id'])
+    # Reimportar ATUALIZA a mesma linha — nao cria uma segunda.
+    commands.import_email(HTML, SUBJECT, ref_dt=HOJE)
+    recs2 = _ds.read(jp_ck) if _ds.isfile(jp_ck) else []
+    check('reimportar nao duplica a linha do Cockpit',
+          len([r for r in recs2 if r.get('_nc_unwind')]) == 1, len(recs2))
+    # E o import do COCKPIT preserva a recompra ao reescrever o dia: ele monta
+    # o dia inteiro a partir da API, onde a recompra nao existe.
+    do_zero = [{'ID_SOURCE_DEAL': 'OUTRO', '_nc_id': 'X1'}]
+    R._ndfc_keep_unwinds(date(2026, 9, 10), do_zero)
+    check('o reimport do Cockpit PRESERVA a recompra',
+          [r.get('_nc_id') for r in do_zero if r.get('_nc_unwind')]
+          == [commands.COCKPIT_ID_PREFIX + 'STP-XE-10G5U5X-0-0'],
+          [r.get('_nc_id') for r in do_zero])
+
+    print('\n== 14. a varredura do box roda sozinha ==')
     # A tela promete "also runs on its own every 30 minutes". Ate 18/09/2026 a
     # frase era falsa: nenhum laco estava registrado, e a recompra so entrava
     # no clique do Import — sem erro nenhum para denunciar isso.
