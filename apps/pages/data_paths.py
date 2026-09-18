@@ -47,6 +47,22 @@ def data_dir():
     return Config.DATA_DIR
 
 
+def unwinds_cache_root():
+    """A raiz dos arquivos-dia das RECOMPRAS: `cache/unwinds/`.
+
+    Mora aqui, e não dentro da vertical, porque DUAS partes precisam do mesmo
+    caminho: a recompra grava nele e o New Deals Monitor varre por ele. Escrito
+    dos dois lados, o dia em que a pasta mudasse de nome o Monitor pararia de
+    achar o produto e mostraria zero — sem erro nenhum, que é como a tela
+    afirma que não houve recompra num dia em que houve.
+
+    Ela fica FORA de `cache/new deals/` de propósito: o Monitor agrupa aquela
+    árvore pelos dois primeiros níveis do caminho (§454) e criaria um card
+    `extra-` sozinho, classificado como registro, sem ninguém ter pedido.
+    """
+    return os.path.normpath(os.path.join(Config.DATA_DIR, 'cache', 'unwinds'))
+
+
 def data_write(*parts):
     """O caminho para GRAVAR. Sempre em `DATA_DIR`, sem cair para o pacote."""
     return os.path.normpath(os.path.join(Config.DATA_DIR, *parts))

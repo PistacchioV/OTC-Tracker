@@ -3,12 +3,11 @@
 linha da tela com a posicao e gerar o arquivo da B3 (TER 0014)."""
 import os
 import random
-import re
 from datetime import datetime
 
 from apps.pages import data_store as _store
 from apps.pages.features.unwinds import domain, queries
-from apps.pages.features.unwinds.infra import notification_html, persistence
+from apps.pages.features.unwinds.infra import email_file, notification_html, persistence
 
 
 def _R():
@@ -72,15 +71,20 @@ def import_email(html, subject='', ref_dt=None, dry_run=False):
 
 
 def import_email_upload(filename, data, ref_dt=None, dry_run=False):
-    """O arquivo do dropzone (.htm/.html/.txt do corpo do e-mail). O assunto,
-    quando o arquivo nao o carrega, vem do NOME do arquivo — e onde o Outlook
-    o poe ao salvar, e e de la que saem os dois identificadores."""
+    """O arquivo do dropzone: `.msg`, `.eml` ou o corpo salvo como `.htm`.
+
+    Quem decide o formato e o CONTEUDO (`infra.email_file`), nao a extensao —
+    o mesmo que as paginas de New Deals fazem, e por isso elas nunca pediram
+    que se salvasse o e-mail antes.
+
+    O assunto sai do proprio arquivo quando ele o carrega (`.msg` e `.eml`);
+    so o corpo solto cai para o NOME do arquivo, que e onde o Outlook poe o
+    assunto ao salvar — e e de la que saem os dois identificadores."""
     nome = str(filename or '')
-    if not re.search(r'\.(html?|txt)$', nome, re.I):
-        raise ValueError('Drop the e-mail body as .htm, .html or .txt')
-    texto = data.decode('utf-8', 'replace') if isinstance(data, bytes) else str(data or '')
-    return import_email(texto, os.path.splitext(os.path.basename(nome))[0],
-                        ref_dt=ref_dt, dry_run=dry_run)
+    texto, assunto = email_file.ler(nome, data)
+    if not assunto:
+        assunto = os.path.splitext(os.path.basename(nome))[0]
+    return import_email(texto, assunto, ref_dt=ref_dt, dry_run=dry_run)
 
 
 def scan_box(ref_dt=None):

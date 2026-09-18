@@ -6,6 +6,11 @@ Flask, sem arquivo, sem rede.
 import os
 import re
 
+# As RECOMPRAS moram em `cache/unwinds/`, fora da árvore de New Deals, e o
+# pkey delas entra prefixado: sem isto um `NDF/FX` de lá cairia no mesmo balde
+# de um `NDF/FX` criado aqui — duas coisas diferentes somadas num card só.
+PREFIXO_UNWIND = 'Unwind/'
+
 _NDM_CARDS = [
     {'key': 'ndf-commodities',    'label': 'NDF Commodities',     'url': '/new_deals-ndf-commodities',    'dirs': ('NDF/Commodities',),                          'les': ('JPM', 'LAW')},
     {'key': 'ndf-fwdstart',       'label': 'NDF FWD Start',       'url': '/new_deals-ndf-fwdstart',       'dirs': ('NDF/FwdStart',),                             'les': ('JPM', 'MGT', 'LAW')},
@@ -17,6 +22,21 @@ _NDM_CARDS = [
     {'key': 'swap-bullet',        'label': 'Swap Bullet',         'url': '/new_deals-swap-bullet',        'dirs': ('Swap/Bullet',),                              'les': ('JPM', 'ATA')},
     {'key': 'swap-equities',      'label': 'Swap Equities',       'url': None, 'soon': True,              'dirs': ('Swap/Equities',),                            'les': ('JPM', 'ATA')},
     {'key': 'swap-cem',           'label': 'Swap CEM',            'url': None, 'soon': True,              'dirs': ('Swap/CEM',),                                 'les': ('JPM', 'LAW')},
+    # Recompra (unwind): registro na B3 como os demais desta coluna — o TER
+    # 0014 vai para o mesmo Batch Conecta —, e por isso a chave NÃO leva
+    # prefixo `intrag-`, que é o único teste de zona do e-mail.
+    #
+    # Sem `les` de propósito, pela mesma razão dos cards de DCE: a entidade da
+    # recompra é a da CONTA do campo 5, e quem traduz conta → LE é o cadastro
+    # `b3-accounts`. O `domain` é puro e não o lê; inventar a entidade pelo
+    # nome do cliente desenharia um JPM/LAW que ninguém afirmou.
+    #
+    # `done` é o estado FECHADO deste produto. Os demais fecham em `Success`
+    # (o B3 ID que volta), e a recompra ainda não tem esse retorno: ela acaba
+    # em `Sent`. Sem declarar isto, TODA recompra já enviada apareceria como
+    # pendência no aviso das 19h, todos os dias — o falso alarme diário é o
+    # jeito mais rápido de a mesa parar de ler o e-mail.
+    {'key': 'unwind-ndf-fx',      'label': 'Unwind NDF FX',       'url': '/unwinds/ndf/fx',               'dirs': (PREFIXO_UNWIND + 'NDF/FX',),                  'done': ('Sent',)},
     {'key': 'intrag-ndf',         'label': 'Intrag NDF',          'url': '/intrag-ndf',                   'dirs': ('Intrag/NDF',),                               'les': ('LAW', 'ATA')},
     {'key': 'intrag-option',      'label': 'Intrag Option',       'url': '/intrag-option',                'dirs': ('Intrag/Option',),                            'les': ('LAW', 'ATA')},
     {'key': 'intrag-swap',        'label': 'Intrag Swap',         'url': '/intrag-swap',                  'dirs': ('Intrag/Swap',),                              'les': ('LAW', 'ATA')},
@@ -84,6 +104,7 @@ _NDM_TAXONOMY = {
     'swap-bullet':        ('Swap', 'Bullet'),
     'swap-equities':      ('Swap', 'Equities'),
     'swap-cem':           ('Swap', 'CEM'),
+    'unwind-ndf-fx':      ('NDF', 'Unwind FX'),
     # Intrag não tem sub-variante: o tipo da linha já diz Intrag, e repetir a
     # palavra na coluna Detail não acrescenta nada.
     'intrag-ndf':         ('NDF', '—'),

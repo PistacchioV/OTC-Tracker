@@ -10,6 +10,7 @@ from datetime import timedelta
 from apps.pages.features.deals_monitor import domain
 from apps.pages.features.deals_monitor.infra import persistence
 from apps.pages import data_store as _store  # noqa: E402
+from apps.pages.data_paths import unwinds_cache_root  # noqa: E402
 
 
 def _R():
@@ -35,10 +36,18 @@ def _ndm_monitor_snapshot(ref):
     # (caminho sem os níveis de dígitos), contando por Status e LE.
     ref_date = ref.date() if hasattr(ref, 'date') else ref
     found, found_les = {}, {}
-    if _store.isdir(_R().NEW_DEALS_CACHE_ROOT):
-        _dias = list(_R()._day_files(
-                _R().NEW_DEALS_CACHE_ROOT, '.json',
-                desde=ref_date, ate=ref_date))
+
+    def _varre(raiz, prefixo=''):
+        """Conta por produto × status × LE os arquivos-dia de `raiz` na data.
+
+        `prefixo` entra no pkey para as árvores que NÃO são a de New Deals: as
+        recompras vivem em `cache/unwinds/` (fora dela de propósito, §454), e
+        sem o prefixo um `NDF/FX` de lá cairia no mesmo balde de um `NDF/FX`
+        que alguém criasse aqui — duas coisas diferentes somadas num card só,
+        sem nada acusar."""
+        if not _store.isdir(raiz):
+            return
+        _dias = list(_R()._day_files(raiz, '.json', desde=ref_date, ate=ref_date))
         # UMA abertura de banco para todos os dias enumerados, em vez de
         # uma por dia: eles são tabelas do MESMO banco do produto (§4).
         _R()._day_prefetch(_dias)
@@ -46,8 +55,8 @@ def _ndm_monitor_snapshot(ref):
             if fname[:8] != want:
                 continue
             root = os.path.dirname(fpath)
-            rel = os.path.relpath(root, _R().NEW_DEALS_CACHE_ROOT).replace('\\', '/')
-            pkey = '/'.join([p for p in rel.split('/') if not p.isdigit()][:2])
+            rel = os.path.relpath(root, raiz).replace('\\', '/')
+            pkey = prefixo + '/'.join([p for p in rel.split('/') if not p.isdigit()][:2])
             data = _R()._day_json(fpath, mtime, size)
             bucket = found.setdefault(pkey, _R().Counter())
             les    = found_les.setdefault(pkey, _R().Counter())
@@ -61,6 +70,12 @@ def _ndm_monitor_snapshot(ref):
                     bucket[st] += 1
                     les[domain._ndm_deal_le(pkey, d)] += 1
 
+    _varre(_R().NEW_DEALS_CACHE_ROOT)
+    # As RECOMPRAS: outra árvore, mesmo Monitor. O caminho vem do `data_paths`
+    # (a mesma porta que a vertical usa para gravar) e o prefixo do `domain`,
+    # que é quem o catálogo de cards declara em `dirs`.
+    _varre(unwinds_cache_root(), domain.PREFIXO_UNWIND)
+
     cards, claimed = [], set()
     for c in domain._NDM_CARDS:
         agg, agg_le = _R().Counter(), _R().Counter()
@@ -73,6 +88,9 @@ def _ndm_monitor_snapshot(ref):
             'key': c['key'], 'label': c['label'], 'url': c['url'],
             'soon': bool(c.get('soon')), 'total': sum(agg.values()),
             'statuses': dict(agg),
+            # Os estados FECHADOS deste produto, quando ele não fecha em
+            # `Success`/`Ok` — o aviso de pendências lê daqui.
+            'done': list(c.get('done') or ()),
             # Lista ordenada (não dict) para o front preservar a ordem dos LEs
             'les': [{'le': k, 'count': agg_le.get(k, 0)} for k in c.get('les', ())],
         })
@@ -221,8 +239,12 @@ def _ndm_pending_blocks(ref):
             # etapas depois do OTC, que `_conf_esteira_stages` traduz para
             # Ok): sem contá-lo aqui, confirmação já validada pelo OTC
             # continuaria aparecendo como ação pendente no e-mail.
+            # O card pode DECLARAR onde ele fecha (`done`): a recompra acaba
+            # em `Sent`, porque o B3 ID de volta ainda não existe para ela.
+            fechados = set(('success', 'ok'))
+            fechados.update(str(x).strip().lower() for x in (card.get('done') or ()))
             success = sum(int(v or 0) for k, v in statuses.items()
-                          if str(k).strip().lower() in ('success', 'ok'))
+                          if str(k).strip().lower() in fechados)
             pending = total - success
             if total <= 0 or pending <= 0:
                 continue
@@ -232,7 +254,7 @@ def _ndm_pending_blocks(ref):
             breakdown = ', '.join(
                 '{} {}'.format(v, str(k)[:1].upper() + str(k)[1:])
                 for k, v in statuses.items()
-                if str(k).strip().lower() not in ('success', 'ok') and v)
+                if str(k).strip().lower() not in fechados and v)
             by_type.setdefault(_z, []).append(
                 {'product': product, 'detail': detail, 'pending': pending,
                  'breakdown': breakdown, 'total': total, 'success': success})

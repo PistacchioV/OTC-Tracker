@@ -123,14 +123,28 @@ print('\n== 6. o front nao INVENTA card ==')
 # produto aparecer duas vezes: zerado na zona Intrag e com o numero no Others.
 check('nenhum card fabricado no JS', re.search(r"byKey\[[^\]]+\]\s*=\s*\{", TPL) is None, True)
 
-print('\n== 7. card com pagina aponta para um template que existe ==')
-paginas = os.path.join(ROOT, 'apps', 'templates', 'pages')
+print('\n== 7. card com pagina aponta para uma ROTA que existe ==')
+# Pelo `url_map`, e nao pelo nome do arquivo: o teste antigo montava
+# `pages/<url>.html`, que so vale para as paginas do CATCH-ALL. Pagina com
+# rota propria — a URL de tres segmentos da recompra, `/unwinds/ndf/fx` —
+# reprovava com o template ao lado, e a saida era renomear o arquivo para uma
+# convencao que a rota nao segue. A pergunta de verdade e se o link do card
+# leva a algum lugar, e quem responde isso e o `url_map`.
+from run import app                                                    # noqa: E402
+_rotas = {str(r.rule) for r in app.url_map.iter_rules()}
+check('o url_map foi lido', len(_rotas) > 50, True)
 for c in D._NDM_CARDS:
     if not c.get('url'):
         continue
-    alvo = c['url'].lstrip('/')
-    check('   %-20s -> %s.html' % (c['key'], alvo),
-          os.path.isfile(os.path.join(paginas, alvo + '.html')), True)
+    alvo = str(c['url'])
+    # O catch-all `/<template>` atende qualquer nome de um segmento so, entao
+    # nele o que se confere continua sendo o ARQUIVO.
+    if alvo.count('/') == 1 and '/<template>' in _rotas:
+        existe = os.path.isfile(os.path.join(
+            ROOT, 'apps', 'templates', 'pages', alvo.lstrip('/') + '.html'))
+        check('   %-20s -> pages%s.html (catch-all)' % (c['key'], alvo), existe, True)
+    else:
+        check('   %-20s -> rota %s' % (c['key'], alvo), alvo in _rotas, True)
 
 print('\n' + ('FALHOU: ' + ', '.join(fails) if fails else 'TUDO OK'))
 sys.exit(1 if fails else 0)

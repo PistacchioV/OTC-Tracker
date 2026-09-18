@@ -12,7 +12,7 @@ import json
 import os
 
 from apps.pages import data_store as _store
-from apps.pages.data_paths import data_dir
+from apps.pages.data_paths import unwinds_cache_root
 
 
 def _R():
@@ -24,7 +24,9 @@ SUFFIX = '_unwindndffx.json'
 
 
 def cache_root():
-    return os.path.normpath(os.path.join(data_dir(), 'cache', 'unwinds'))
+    # O caminho mora no `data_paths` porque o New Deals Monitor varre por ele
+    # tambem (§491): escrito dos dois lados, ele desliza sem erro nenhum.
+    return unwinds_cache_root()
 
 
 def cache_dir():
