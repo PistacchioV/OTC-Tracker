@@ -594,13 +594,14 @@ VALIDATION_SEED = (
      'FO': 'REQUESTED', 'NOTES': ''},
     {'PRODUCT': 'SWAP CORPORATE', 'LOB': '', 'OTC': 'REQUESTED', 'MO': 'REQUESTED',
      'FO': 'REQUESTED', 'NOTES': ''},
-    # Termo de resilição — o distrato da operação. Entra no caminho da maioria
-    # (OTC + MO). É SEED, não regra fixa: quem sabe se o FO valida o distrato de
-    # um produto é a mesa, e a resposta se corrige em um clique no /mapping. O
-    # que o seed não pode é deixar o tipo sem linha, porque aí ele cairia no
-    # DEFAULT_RULE sem ninguém ter decidido nada.
-    {'PRODUCT': 'TERMO DE RESILICAO', 'LOB': '', 'OTC': 'REQUESTED', 'MO': 'REQUESTED',
-     'FO': 'EXEMPT', 'NOTES': 'Termo de resilição (distrato)'},
+    # Termo de resilição — o distrato da operação. O trilho é **só OTC** (mesa,
+    # 18/09/2026): o distrato não reabre economia nenhuma, e o que o MO e o FO
+    # conferem é a economia da operação, que já passou por eles quando ela
+    # nasceu. Continua sendo SEED, não regra fixa — a resposta se corrige em um
+    # clique no /mapping —, e o que o seed não pode é deixar o tipo sem linha,
+    # porque aí ele cairia no DEFAULT_RULE (OTC + MO) sem ninguém ter decidido.
+    {'PRODUCT': 'TERMO DE RESILICAO', 'LOB': '', 'OTC': 'REQUESTED', 'MO': 'EXEMPT',
+     'FO': 'EXEMPT', 'NOTES': 'Termo de resilição (distrato) — só OTC valida'},
     # Aditamento / Aditivo / Reratificação: documentos que ALTERAM uma
     # confirmação já emitida. Entram no caminho da maioria (OTC + MO), como o
     # distrato. É SEED, não regra fixa — quem sabe se o FO valida a alteração de
@@ -670,6 +671,24 @@ def validation_upgrade(rows):
         if s['PRODUCT'].upper() not in com_linha:
             out.append(dict(s))
             com_linha.add(s['PRODUCT'].upper())
+
+    # 18/09/2026 — o Termo de Resilição passou a ser validado SÓ pelo OTC. O
+    # seed nasceu OTC + MO no dia anterior, e seed não alcança quem já tem o
+    # cadastro (§6): sem esta correção a instância seguiria mandando o distrato
+    # para o Pending MO, e a esteira nunca fecharia sozinha.
+    #
+    # Só mexe na linha que está EXATAMENTE como o seed antigo a deixou. Mesa
+    # que já editou decidiu alguma coisa, e decisão da mesa não se desfaz
+    # sozinha num upgrade — que é a razão de este bloco ser tão estreito.
+    for r in out:
+        if upper_norm(r.get('PRODUCT')) != 'TERMO DE RESILICAO':
+            continue
+        if str(r.get('LOB') or '').strip():
+            continue
+        if (upper_norm(r.get('OTC')) == 'REQUESTED'
+                and upper_norm(r.get('MO')) == 'REQUESTED'
+                and upper_norm(r.get('FO')) == 'EXEMPT'):
+            r['MO'] = 'EXEMPT'
     return out
 
 

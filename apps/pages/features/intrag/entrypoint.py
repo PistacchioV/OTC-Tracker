@@ -1172,6 +1172,22 @@ def api_intrag_delete(family):
     except Exception:
         _R().log.error('[intrag-delete] %s failed:\n%s', family, traceback.format_exc())
         return jsonify({'success': False, 'message': 'Delete failed'}), 500
+    # Apagar avisa, como o Send, o edit e o approve destas mesmas páginas: o
+    # arquivo-dia é da mesa inteira, e a linha que sumiu sem rastro é a que
+    # ninguém consegue explicar depois. Zero apagadas não avisa — pedir para
+    # apagar o que já não está lá não é acontecimento.
+    pagina = commands._INTRAG_DELETE_PAGES.get(family)
+    if apagadas and pagina:
+        _R()._create_notification(
+            session.get('user_sid', ''), session.get('user_name', ''),
+            'Deal Deleted', pagina,
+            str(apagadas) + ' row' + ('' if apagadas == 1 else 's') + ' deleted')
+    elif apagadas:
+        # Família que existe no mapa dos finders e falta no dos rótulos: o
+        # `check_intrag_unwind` cobra as duas listas, e aqui o aviso vai para o
+        # log em vez de derrubar com KeyError um Delete que JÁ apagou.
+        _R().log.warning('[intrag-delete] %s sem rótulo de sino: %d linha(s) '
+                         'apagada(s) sem avisar', family, apagadas)
     return jsonify({'success': True, 'deleted': apagadas, 'not_found': nao_achadas})
 
 

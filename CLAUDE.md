@@ -673,7 +673,11 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   tooltip colorido delegado no primeiro hover (os `<td>` são reescritos a cada
   redraw). Regra GLOBAL no `visual-refresh.css`; ordem Confirm `ti-check` →
   Edit `ti-edit` → Delete `ti-trash` → Send `ti-brand-telegram`; edição Save
-  `ti-device-floppy` + Cancel `ti-x`. `check_row_action_buttons.py`.
+  `ti-device-floppy` + Cancel `ti-x`. **A COR é semântica e o guarda varre TODA
+  página**: Confirm/Approve `btn-success`, Edit `btn-info`, Delete `btn-danger`,
+  Send `btn-primary`, Save `btn-success`, Cancel `btn-secondary` — duas telas
+  novas nasceram com o Edit em `btn-warning` e nada acusou, porque o guarda só
+  olhava as duas páginas de referência. `check_row_action_buttons.py`.
   **`d-none` esconde botão de linha — e só voltou a esconder em 18/09/2026**
   (§497): a regra de FORMATO do `partials/head-css.html` declara `display:
   inline-flex !important` nessas quinze classes, mesma especificidade do
@@ -1080,9 +1084,15 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 
 ### Unwinds (recompra) — Fase 1: NDF de moeda (§488)
 
-- **A ponte até o contrato são os 14 caracteres à DIREITA do Athena ID**: o
-  aviso traz `STP-XE-10G5U5X-0-0` e o `Código Identificador` do Live Position
-  traz `XE-10G5U5X-0-0`. O aviso NÃO se basta — moeda, lado da posição, contas
+- **A ponte até o contrato é o `Código Identificador` do Live Position, e ele
+  vem de DUAS formas**: TRUNCADO nos 14 da direita (o aviso traz
+  `STP-XE-10G5U5X-0-0` e a posição, `XE-10G5U5X-0-0`) ou INTEIRO
+  (`ATS-4T6-2W4YU86-0-0` nos dois lados). O casamento tenta a igualdade EXATA
+  primeiro e só depois compara os 14 da direita dos DOIS lados — truncando só o
+  lado do aviso, a posição que guarda o id inteiro nunca casava, e o import
+  saía sem contrato e sem contraparte com a linha bem ali na tela ao lado. A
+  exata vem antes porque a truncagem joga fora o prefixo, e dois ids diferentes
+  podem terminar igual. O aviso NÃO se basta — moeda, lado da posição, contas
   e contraparte só existem na posição.
 - **As contas saem da POSIÇÃO, não de cadastro**: a recompra é de operação já
   registrada, e `Codigo da Parte`/`Codigo da Contraparte` estão na linha como
@@ -1135,6 +1145,13 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 - **O `Status` é a PRIMEIRA coluna de dado**, logo depois das Actions: em
   dezoito colunas, no fim da grade a resposta "esta linha já foi?" só aparece
   depois de rolar a tabela inteira.
+- **O trilho de validação do Termo é SÓ OTC** (mesa, 18/09/2026): o distrato
+  não reabre economia nenhuma, e o que o MO e o FO conferem é a economia da
+  operação, que já passou por eles quando ela nasceu. É `VALIDATION_SEED`, e
+  seed não alcança quem já tem o cadastro (§6) — quem conserta a instância é o
+  `validation_upgrade`, e só a linha que ainda está EXATAMENTE como o seed
+  antigo a deixou: mesa que editou decidiu, e decisão da mesa não se desfaz
+  num upgrade.
 - **O Termo de Resilição é arquivado na pasta da CONTRAPARTE**, pelo mesmo
   caminho das confirmações de New Deals
   (`<Cliente>\Confirmations\AAAA\mm. Month\dd\<pasta do TIPO>`, via

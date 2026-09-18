@@ -21800,3 +21800,59 @@ Rede: `check_unwind_page.py` (seção 12 nova: os quatro botões, o Status
 primeiro, o 4-olhos ponta a ponta com dois clientes de teste, o Send recusando
 `Pending`, o erro por CÓDIGO e a cobertura do sino) e `check_unwind_termo.py`
 (o Save recusando sem contraparte e o caminho da pasta do cliente).
+
+## §498 — A ponte do Athena ID perdia a posição que guarda o id INTEIRO (2026-09-18)
+
+O import de uma recompra saiu sem **B3 ID e sem contraparte**, com a linha bem
+ali no Live Position NDF — e com seis avisos em cascata na tela ("No contract
+found", "carries no currency symbol", "balance could not be computed", as duas
+contas), todos filhos do mesmo silêncio: sem a linha da posição, nada do que
+vem dela existe.
+
+A causa é a ponte do §488. Ela truncava **só o lado do aviso** nos 14
+caracteres da direita e comparava com o `Código Identificador` da posição como
+ele está:
+
+```
+aviso    ATS-4T6-2W4YU86-0-0   →   T6-2W4YU86-0-0      (14 da direita)
+posição  ATS-4T6-2W4YU86-0-0                           (inteiro)
+```
+
+Nunca casaria. A amostra que deu origem à regra tinha a posição TRUNCADA
+(`STP-XE-10G5U5X-0-0` no aviso, `XE-10G5U5X-0-0` na posição) e a regra foi
+escrita para ela; o arquivo guarda as duas formas.
+
+O casamento agora é em duas passadas: **igualdade EXATA primeiro** e, só se ela
+não achar nada, os 14 da direita dos **dois** lados. A exata vem antes de
+propósito — a truncagem joga fora o prefixo, e dois ids diferentes podem
+terminar igual; escolher a linha errada é recomprar o contrato errado.
+
+Não dá para reproduzir na dev: a posição semeada aqui tem o `Código
+Identificador` VAZIO nas vinte linhas. O que prende a regra é o teste
+(`check_unwind_notification` §10, com o caso real do `ATS-4T6-2W4YU86-0-0` e o
+caso das duas linhas que terminam igual), e a prova é reimportar o aviso na
+instância.
+
+### No mesmo lote
+
+* **O trilho de validação do Termo de Resilição é SÓ OTC** (mesa): o distrato
+  não reabre economia nenhuma, e o que o MO e o FO conferem é a economia da
+  operação, que já passou por eles quando ela nasceu. Mudou o
+  `VALIDATION_SEED`, e como seed não alcança quem já tem o cadastro (§6) o
+  `validation_upgrade` corrige a linha existente — **só** a que ainda está
+  exatamente como o seed antigo a deixou (OTC + MO + FO isento). Mesa que já
+  editou decidiu, e decisão da mesa não se desfaz num upgrade.
+* **A cor do botão Edit voltou ao padrão** (`btn-info`). Duas telas novas — a
+  da recompra e a Intrag Unwind — nasceram com `btn-warning`, e nada acusou:
+  o `check_row_action_buttons` só olhava as duas páginas de referência. Ele
+  passou a varrer TODAS, cobrando a cor semântica de cada papel
+  (Confirm/Approve success, Edit info, Delete danger, Send primary, Save
+  success, Cancel secondary) — a cor é a única coisa que a mesa lê antes de
+  clicar.
+* **O Delete das sete famílias de Intrag passou a avisar no sino.** A rota é
+  uma só (`/api/intrag/<family>/delete`) e não notificava nada, enquanto o
+  Send, o edit e o approve das mesmas páginas sempre notificaram: a linha que
+  sumia do arquivo-dia não deixava rastro. O rótulo de cada família sai de um
+  mapa ao lado do dos finders, e o `check_intrag_unwind` cobra as mesmas
+  chaves nos dois — família num mapa e não no outro apagaria sem tocar o sino,
+  calada. Zero linhas apagadas não avisa.
