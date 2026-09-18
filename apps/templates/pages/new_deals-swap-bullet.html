@@ -471,7 +471,7 @@ $(document).ready(function() {
             if (refDateWrap && !document.getElementById('apiRefDate')) {
                 refDateWrap.innerHTML =
                     '<label for="apiRefDate" class="form-label fs-xs text-muted mb-0 me-1 text-nowrap" data-lang="nd-col-trade-date">Trade Date</label>' +
-                    '<input type="text" id="apiRefDate" class="form-control form-control-sm" value="' + _todayDmy() + '" placeholder="dd/mm/yyyy" ' +
+                    '<input type="text" id="apiRefDate" class="form-control form-control-sm otc-datefield" value="' + _todayDmy() + '" placeholder="dd/mm/yyyy" ' +
                     'data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-title="Trade Date of the deals in the Deal Ticket (the day file they are saved to)" data-bs-custom-class="tooltip-teal">';
                 var _rdEl = document.getElementById('apiRefDate');
                 if (_rdEl && typeof flatpickr !== 'undefined') flatpickr(_rdEl, { dateFormat: 'd/m/Y', allowInput: true, disableMobile: true });
