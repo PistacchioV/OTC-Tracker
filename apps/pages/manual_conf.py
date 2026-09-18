@@ -1058,6 +1058,26 @@ def delete_row(key):
         _delete_key(cat, key)
 
 
+def row_untouched(key):
+    """A linha da esteira ainda NAO foi tocada pela mesa?
+
+    "Tocada" e qualquer carimbo que so uma pessoa poe: o documento gerado, as
+    tres validacoes (com os seus time stamps), o callback e o envio ao cliente.
+    A pergunta existe para quem APAGA a operacao de origem: apagar a linha
+    junto e o certo enquanto ela e so uma pendencia aberta — e e destruir
+    registro de maker/checker depois que alguem assinou.
+
+    Linha que nao existe e "nao ha o que preservar" (True): quem pergunta
+    quer saber se pode seguir.
+    """
+    row = find_row(key)
+    if row is None:
+        return True
+    marcas = ['Data envio validação OTC', 'Data Callback', SENT_COLUMN]
+    marcas += [c for par in STAGE_COLUMNS.values() for c in par]
+    return not any(_filled(row, c) for c in marcas)
+
+
 def find_row(key):
     """A linha de um Trade ID, olhando os dois bancos."""
     k = str(key or '').strip()
@@ -1364,6 +1384,29 @@ def confirmation_type(produto, lob=''):
     return prod
 
 
+# O produto RECOMPRADO no rótulo do card, por Product Type da recompra. O
+# **tipo** do documento é um só para toda recompra — TERMO DE RESILICAO, venha
+# ela de termo, opção ou swap —, e é ele que escolhe a pasta e a regra de
+# validação; na FILA do Monitor, porém, três cards com o mesmo nome não dizem
+# qual operação cada um distrata (mesa, 18/09/2026). Isto é RÓTULO de tela, não
+# um de-para de negócio: o tipo continua sendo o que o cadastro e a pasta usam,
+# e cada fase nova da recompra acrescenta uma linha aqui junto com o seu
+# Product Type.
+_UNWIND_PRODUCT_LABEL = {'UNWIND NDF': 'NDF FX'}
+
+
+def confirmation_label(produto, lob=''):
+    """O nome que a TELA mostra para a confirmação: o tipo do documento e,
+    na recompra, o produto que foi recomprado (`TERMO DE RESILICAO NDF FX`).
+
+    Só rótulo. Quem resolve pasta, cadastro de validação e Confirmation Type
+    continua sendo o `confirmation_type` — juntar as duas coisas classificaria
+    a recompra num tipo que não existe em lugar nenhum."""
+    tipo = confirmation_type(produto, lob)
+    extra = _UNWIND_PRODUCT_LABEL.get(upper_norm(produto)) if tipo else ''
+    return '{} {}'.format(tipo, extra) if extra else tipo
+
+
 def confirmation_folder(row):
     """(cliente, caminho relativo da pasta) do documento daquela confirmação.
 
@@ -1454,7 +1497,7 @@ def _extra_card(stage, pending_value, rows, docs_for=None):
         item = grupos.get(gk)
         if item is None:
             item = {k: r.get(k, '') for k in MONITOR_FIELDS}
-            item['Tipo'] = confirmation_type(r.get('Produto'), r.get('LOB'))
+            item['Tipo'] = confirmation_label(r.get('Produto'), r.get('LOB'))
             item.update({'stage': stage, 'keys': [], 'trades': [], 'docs': []})
             if docs_for:
                 item['docs'] = docs_for(r) or []
@@ -1522,7 +1565,7 @@ def monitor_payload(docs_for=None):
                 # `Produto` continua CRU no item — é ele que resolve a pasta do
                 # Electronic Inventory em /docs. `Tipo` é o nome que a tela
                 # mostra, o mesmo do cadastro e do Confirmation Type do upload.
-                item['Tipo'] = confirmation_type(r.get('Produto'), r.get('LOB'))
+                item['Tipo'] = confirmation_label(r.get('Produto'), r.get('LOB'))
                 item.update({'stage': stage, 'keys': [], 'trades': [], 'docs': []})
                 # O prazo é da ETAPA do card (OTC D+3, MO D+4, FO D+6 do trade
                 # date). O item guarda a luz e os dias que faltam; a frase é

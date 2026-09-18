@@ -531,6 +531,15 @@ def delete(athena_id, ref_date=''):
         return False
     if (lst[idx].get('Status') or '') == domain.STATUS_ENVIADO:
         raise ValueError('This unwind was already sent to B3')
+    # A esteira nasce no import junto com a recompra e sai junto com ela — mas
+    # nao por cima de carimbo de mesa. Linha ja validada, ja com documento
+    # gerado ou ja enviada ao cliente e REGISTRO: apagar a recompra levaria
+    # embora o rastro de quem assinou, e o documento continuaria na pasta da
+    # contraparte sem nada que o explique.
+    if not _R()._mc_mod.row_untouched(str(athena_id or '').strip()):
+        raise ValueError('This unwind already has a signed trail entry (document generated, '
+                         'validated or sent to the client). Delete it on the Confirmations '
+                         'Monitor first, or keep the line.')
     apagada = dict(lst[idx])
     with _R()._cache_lock:
         try:
@@ -545,6 +554,10 @@ def delete(athena_id, ref_date=''):
     # (`_ndfc_keep_unwinds`), entao nem o Run seguinte a apagaria — o caixa de
     # uma recompra apagada sairia no Trade Level e no IR do dia para sempre.
     cockpit_sem_a_recompra([apagada])
+    # E a cobranca do documento: sem isto ficava um card de Pending OTC de uma
+    # recompra que nao existe mais, com o Generate respondendo "nenhuma
+    # operacao encontrada no arquivo-dia" para sempre.
+    esteira_sem_a_recompra([athena_id])
     return True
 
 
@@ -854,6 +867,65 @@ def confirmation_deals(ref_dt):
             for l in queries.entries(date_str=ref.strftime('%Y-%m-%d'))]
 
 
+def esteira_sem_a_recompra(athena_ids):
+    """Tira da esteira e do Pending Confirmation as recompras que sumiram.
+
+    O gatilho da esteira e o IMPORT (§488), entao a cobranca do documento nasce
+    com a recompra — e tem de morrer com ela. Sem isto ficava um card de
+    Pending OTC de uma operacao que nao existe mais em lugar nenhum, e o
+    Generate dele responde "nenhuma operacao encontrada no arquivo-dia" para
+    sempre: pendencia que nao fecha e que ninguem consegue resolver pela tela.
+
+    Quem chama ja conferiu que a linha esta INTOCADA (`row_untouched`): esta
+    funcao apaga, nao decide."""
+    R = _R()
+    for aid in athena_ids or []:
+        chave = str(aid or '').strip()
+        if not chave:
+            continue
+        try:
+            R._mc_mod.delete_row(chave)
+            R._pc_delete_trade_number(chave)
+        except Exception:                                   # noqa: BLE001
+            R.log.warning('[UNWIND NDF FX] esteira: %s nao saiu da fila:\n%s',
+                          chave, traceback.format_exc())
+
+
+def esteira_data_da_operacao(linha, ref):
+    """Reimportada noutro dia: leva a `Data Operacao` da esteira para o
+    arquivo-dia NOVO.
+
+    A linha da esteira guarda o dia em que a recompra entrou, e e por ela que o
+    Generate do Monitor a encontra de volta (`_mc_generate_url`). O
+    `_mc_save_from_deal` nunca sobrescreve linha existente — de proposito, para
+    um amend nao apagar o 'Conferido OTC' de ninguem —, entao uma recompra
+    reimportada noutro dia ficava apontando para o arquivo-dia antigo, onde ela
+    nao esta mais: o Generate responde 404 e a pendencia nao fecha.
+
+    So mexe na linha INTOCADA: mesa que ja carimbou decidiu com a data que
+    estava la, e mover o prazo dela por baixo seria reescrever a historia."""
+    R = _R()
+    chave = str((linha or {}).get('AthenaID') or '').strip()
+    if not chave:
+        return False
+    try:
+        mc = R._mc_mod
+        row = mc.find_row(chave)
+        if row is None or not mc.row_untouched(chave):
+            return False
+        nova = ref.strftime('%d/%m/%Y')
+        if str(row.get('Data Operação', '') or '').strip() == nova:
+            return False
+        row['Data Operação'] = nova
+        mc.upsert_row(row)
+        R.log.info('[UNWIND NDF FX] esteira: %s passou a apontar para o dia %s', chave, nova)
+        return True
+    except Exception:                                       # noqa: BLE001
+        R.log.warning('[UNWIND NDF FX] esteira: a data de %s nao foi atualizada:\n%s',
+                      chave, traceback.format_exc())
+        return False
+
+
 def esteira_da_recompra(linhas, ref=None):
     """Manda para o Pending Confirmation (e daí para a esteira) as recompras
     que acabaram de ser IMPORTADAS.
@@ -867,6 +939,11 @@ def esteira_da_recompra(linhas, ref=None):
             deal = confirmation_deal(l, ref)
             _R()._pc_save_from_deal(deal, MC_SOURCE, source=MC_SOURCE,
                                     trade_number=deal['Deal'])
+            # A linha que JA existia nao e reescrita pelo save (um amend nao
+            # pode apagar carimbo de ninguem), e por isso a data de quem
+            # reimportou noutro dia se acerta aqui.
+            esteira_data_da_operacao(l, ref or _R()._parse_date_any(
+                l.get('SettlementDate')) or _hoje())
         except Exception:                                   # noqa: BLE001
             _R().log.warning('[UNWIND NDF FX] esteira: %s ficou de fora — %s',
                              l.get('AthenaID'), traceback.format_exc())

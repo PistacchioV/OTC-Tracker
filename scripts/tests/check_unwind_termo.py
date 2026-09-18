@@ -80,6 +80,14 @@ def main():
     persistence.cache_root = lambda: os.path.join(tmp, 'cache')
     persistence.cache_dir = lambda: os.path.join(tmp, 'cache', 'NDF', 'FX')
     commands._hoje = lambda: HOJE
+    # A esteira e o Pending Confirmation de VERDADE ficam de fora: a secao 14
+    # grava e apaga linha neles.
+    from apps.pages import manual_conf as _mcdb
+    _mcdb._DB_DIR = os.path.join(tmp, 'mc-db')
+    os.makedirs(_mcdb._DB_DIR, exist_ok=True)
+    R._PC_DB_DIR = os.path.join(tmp, 'pc-db')
+    os.makedirs(R._PC_DB_DIR, exist_ok=True)
+    _pc_save_original = R._pc_save_from_deal
 
     print('\n== 1. as rotas existem ==')
     regras = {str(r) for r in app.url_map.iter_rules()}
@@ -103,7 +111,8 @@ def main():
     check('e o Novo Valor Base e o que sobra', rows[0]['novoValorBase'] == 'USD 575.694,50',
           rows[0]['novoValorBase'])
     check('recompra que zera o saldo e TOTAL', rows[1]['resilicao'] == domain.RESILICAO_TOTAL)
-    check('e no total nao ha Novo Valor Base', rows[1]['novoValorBase'] == domain.NAO_APLICAVEL)
+    check('e no total o Novo Valor Base e Zero (mesa)',
+          rows[1]['novoValorBase'] == domain.NOVO_BASE_ZERO, rows[1]['novoValorBase'])
     # O saldo e o recomprado vem de arredondamentos diferentes: a posicao
     # imprime duas casas e a conta da recompra nao.
     check('um centavo de diferenca ainda e resilicao TOTAL',
@@ -130,7 +139,7 @@ def main():
     zera = dict(tres, UnwoundNotional=431571.82)
     check('zerar as tres parcelas e TOTAL',
           domain.termo_linha(zera)[0]['resilicao'] == domain.RESILICAO_TOTAL and
-          domain.termo_linha(zera)[0]['novoValorBase'] == domain.NAO_APLICAVEL)
+          domain.termo_linha(zera)[0]['novoValorBase'] == domain.NOVO_BASE_ZERO)
     # A linha ANTIGA (gravada antes de as colunas existirem) ainda responde
     # pelo `Balance` — sem isso o Termo de uma recompra do arquivo-dia de
     # ontem sairia sem saldo nenhum.
@@ -396,6 +405,17 @@ def main():
     check('o Produto da esteira traduz para o TIPO do documento',
           _mc.confirmation_type(commands.MC_SOURCE, 'CEM') == 'TERMO DE RESILICAO',
           _mc.confirmation_type(commands.MC_SOURCE, 'CEM'))
+    # Na FILA do Monitor o card diz tambem o produto RECOMPRADO (mesa): o tipo
+    # e um so para termo, opcao e swap, e tres cards com o mesmo nome nao dizem
+    # qual operacao cada um distrata. E so ROTULO — a pasta e o cadastro de
+    # validacao continuam no tipo.
+    check('e o card do Monitor mostra o produto recomprado',
+          _mc.confirmation_label(commands.MC_SOURCE, 'CEM') == 'TERMO DE RESILICAO NDF FX',
+          _mc.confirmation_label(commands.MC_SOURCE, 'CEM'))
+    check('o rotulo NAO vira tipo (a pasta seguiria para um tipo inexistente)',
+          _mc.confirmation_label(commands.MC_SOURCE, 'CEM') not in _mc.CONFIRMATION_TYPES)
+    check('produto sem recompra nao ganha sufixo',
+          _mc.confirmation_label('NDF COMM', 'CEM') == _mc.confirmation_type('NDF COMM', 'CEM'))
     url, motivo = R._mc_generate_url(linha_esteira, [L1['AthenaID']])
     check('o Generate resolve a URL (nao devolve motivo)', bool(url) and not motivo, motivo)
     check('e ela e a do Termo de Resilicao, com contraparte e moeda',
@@ -408,6 +428,50 @@ def main():
                                   [L1['AthenaID']])
     check('dia sem a recompra recusa dizendo o motivo', not _u2 and 'arquivo-dia' in (_m2 or ''),
           (_u2, _m2))
+
+    print('\n== 14. a esteira acompanha a recompra (o orfao) ==')
+    # A cobranca do documento nasce no import junto com a recompra e tem de
+    # morrer com ela: sem isto ficava um card de Pending OTC de uma operacao
+    # que nao existe mais, e o Generate dele responde "nenhuma operacao
+    # encontrada no arquivo-dia" para sempre.
+    R._pc_save_from_deal = _pc_save_original
+    persistence.upsert(datetime(HOJE.year, HOJE.month, HOJE.day), [dict(L1)])
+    commands.esteira_da_recompra([dict(L1)], HOJE)
+    check('a recompra entrou na esteira', _mcdb.find_row(L1['AthenaID']) is not None)
+    def _no_pc(tn):
+        return any(str(r.get('Trade Number', '') or '').strip() == tn
+                   for cat in ('backlog', 'pending', 'ok')
+                   for r in R._pc_load_rows(cat))
+    check('e no Pending Confirmation', _no_pc(L1['AthenaID']))
+    # Reimportada NOUTRO dia: a linha aponta para o arquivo-dia novo, senao o
+    # Generate procura onde a recompra nao esta mais.
+    outro = date(2026, 9, 21)
+    commands.esteira_data_da_operacao(dict(L1), datetime(outro.year, outro.month, outro.day))
+    check('reimportada noutro dia, a Data Operacao acompanha',
+          (_mcdb.find_row(L1['AthenaID']) or {}).get('Data Operação') == '21/09/2026',
+          (_mcdb.find_row(L1['AthenaID']) or {}).get('Data Operação'))
+    # Mas nao por cima de carimbo: mesa que ja validou decidiu com a data que
+    # estava la.
+    _row = _mcdb.find_row(L1['AthenaID'])
+    _row['Conferido OTC'] = '19/09/2026'
+    _mcdb.upsert_row(_row)
+    commands.esteira_data_da_operacao(dict(L1), datetime(HOJE.year, HOJE.month, HOJE.day))
+    check('linha ja carimbada NAO tem a data mexida',
+          (_mcdb.find_row(L1['AthenaID']) or {}).get('Data Operação') == '21/09/2026')
+    # E o Delete: com carimbo ele RECUSA (apagar levaria o rastro de quem
+    # assinou); sem carimbo, a linha sai da esteira junto com a recompra.
+    check('com a esteira carimbada o Delete RECUSA',
+          'trail' in (_erro(commands.delete, L1['AthenaID'], HOJE.strftime('%Y-%m-%d')) or ''),
+          _erro(commands.delete, L1['AthenaID'], HOJE.strftime('%Y-%m-%d')))
+    check('e a recompra continua no arquivo-dia',
+          queries.find(L1['AthenaID'], HOJE.strftime('%Y-%m-%d'))[2] is not None)
+    _row = _mcdb.find_row(L1['AthenaID'])
+    _row['Conferido OTC'] = ''
+    _mcdb.upsert_row(_row)
+    check('sem carimbo o Delete passa',
+          commands.delete(L1['AthenaID'], HOJE.strftime('%Y-%m-%d')) is True)
+    check('e a linha sai da esteira junto', _mcdb.find_row(L1['AthenaID']) is None)
+    check('e do Pending Confirmation tambem', not _no_pc(L1['AthenaID']))
 
     print('\n' + ('tudo ok' if not FALHAS else 'FALHAS: ' + '; '.join(FALHAS)))
     return 1 if FALHAS else 0
