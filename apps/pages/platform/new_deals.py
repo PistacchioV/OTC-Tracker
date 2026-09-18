@@ -2369,8 +2369,14 @@ def _generic_ndf_ter_line(deal, is_fwd, page_url=None, participant_override=None
     settl_dt    = routes._parse_date_any(_s(deal.get('SettlementDate', '')))
     biz_diff    = routes._anbima_biz_diff(last_fix_dt, settl_dt)
 
+    # Data de Fixação (campo 36): a Strike Set Date avançada em UM dia útil
+    # ANBIMA (mesa, 18/09/2026). Ela avançava pelo VÃO de dias úteis entre a
+    # Last Fixing Date e a Settlement Date — a mesma conta dos campos 15/39 —,
+    # e num FWD Start de vencimento longo isso jogava o início do contrato
+    # semanas à frente da data em que o strike é fixado. O vão continua sendo
+    # do 15/39, que é onde ele descreve a cotação do vencimento.
     strike_set_dt = routes._parse_date_any(_s(deal.get('StrikeSetDate', '')))
-    fixacao_dt    = routes._anbima_add_biz(strike_set_dt, biz_diff) if strike_set_dt else None
+    fixacao_dt    = routes._anbima_add_biz(strike_set_dt, 1) if strike_set_dt else None
 
     # Fonte de Informação: coluna do mapping publisher-ndf (PTAX puro = 0,
     # demais feeders = 1). Boletim: no OP sai em branco; no FWD Start segue

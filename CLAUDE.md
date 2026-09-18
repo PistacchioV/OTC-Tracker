@@ -848,6 +848,14 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   omnibus 73760.20-5, que não identifica ninguém, e o documento sai do deal
   ORIGINAL (o espelho zera o `TaxID`, que é do campo 9 e é intragrupo). O
   preview do modal tem a cópia da regra (§445).
+- **A Data de Fixação do FWD Start (campo 36 do TER) é a Strike Set Date + UM
+  dia útil ANBIMA** (mesa, 18/09/2026). Ela avançava pelo VÃO de dias úteis
+  entre a Last Fixing Date e a Settlement Date — a mesma conta dos campos 15 e
+  39, que continuam com ele —, e num vencimento longo isso jogava o início do
+  contrato semanas à frente da data em que o strike é fixado. Mexer aqui mexe
+  em DOIS lugares: o gerador (`platform/new_deals.py`) e o espelho `_legacy_*`
+  do `check_fi_ter.py`, que é golden byte a byte — o teste aponta a posição
+  exata (233-240) quando eles divergem.
 - **Os textos da Parte A do FWD Start vivem no `routes.py`** de propósito (a
   grafia é a do documento assinado) — LE ausente deixa em branco com aviso e o
   Save recusa (`400 missing_partea`).
@@ -1094,6 +1102,18 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   exata vem antes porque a truncagem joga fora o prefixo, e dois ids diferentes
   podem terminar igual. O aviso NÃO se basta — moeda, lado da posição, contas
   e contraparte só existem na posição.
+- **Numa conta GUARDA-CHUVA o `Nome da Contraparte` da posição NÃO é a
+  contraparte** — é o titular da conta, que somos nós (`BANCO J.P. MORGAN
+  S/A`, a CLIENT 1). Quem identifica o cliente é o `CPF/CNPJ da Contraparte`,
+  e quem diz se a conta é guarda-chuva é o `b3-accounts` (`_b3_is_omnibus`,
+  pelo TIPO): a resposta chega PRONTA ao `domain`, que é puro. A coluna do
+  CPF/CNPJ carrega as duas coisas (o NOME quando o documento tem cadastro, o
+  documento quando não tem): sem cadastro o nome fica VAZIO avisando, nunca
+  cai no titular — afirmar o banco como cliente mandaria o Termo de Resilição
+  para a pasta do banco com ele como Parte B. O par nome × CNPJ se fecha no
+  `commands` pelo Reference Data. **O aviso da contraparte sai SEPARADO** dos
+  outros (`aviso_contraparte`): o TER 0014 identifica as duas pontas pelas
+  CONTAS, e misturado ele recusaria o arquivo por uma falta que não é dele.
 - **As contas saem da POSIÇÃO, não de cadastro**: a recompra é de operação já
   registrada, e `Codigo da Parte`/`Codigo da Contraparte` estão na linha como
   foram para a B3. É o que resolve, sem escolher, a divergência entre o RefData

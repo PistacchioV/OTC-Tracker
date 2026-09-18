@@ -564,7 +564,7 @@
           "description": "Para contrato Termo a Termo, data em que o contrato terá início e a apuração da Taxa a Termo.",
           "source": "Calculated",
           "source_detail": "Strike Set Date",
-          "source_note": "advanced by the ANBIMA business-day gap Last Fixing Date → Settlement Date; blank when empty"
+          "source_note": "advanced by ONE ANBIMA business day; blank when empty"
         },
         {
           "seq": "37",

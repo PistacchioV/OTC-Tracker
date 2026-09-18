@@ -227,6 +227,8 @@ var ENTRIES = [], ROWS = {}, selected = new Set();
 var _TRANS = {
     en: {
         'w_unwind_no_contract': 'No contract found in the Live Position for this Athena ID',
+        'w_unwind_no_counterparty': 'The position identifies no counterparty',
+        'w_unwind_cpty_not_registered': 'The counterparty document is not in the Reference Data — the umbrella account carries the bank as holder, so the client cannot be named',
         'w_unwind_position_unknown': 'The Live Position row could not be read',
         'w_unwind_no_currency': 'The position carries no currency symbol',
         'w_unwind_no_balance': 'The position balance could not be computed',
@@ -250,6 +252,8 @@ var _TRANS = {
     },
     br: {
         'w_unwind_no_contract': 'Nenhum contrato no Live Position para este Athena ID',
+        'w_unwind_no_counterparty': 'A posição não identifica a contraparte',
+        'w_unwind_cpty_not_registered': 'O CPF/CNPJ da contraparte não está no Reference Data — na conta guarda-chuva o titular é o banco, então o cliente não pode ser nomeado',
         'w_unwind_position_unknown': 'Não foi possível ler a linha do Live Position',
         'w_unwind_no_currency': 'A posição não traz o símbolo da moeda',
         'w_unwind_no_balance': 'Não foi possível apurar o saldo da posição',
@@ -273,6 +277,8 @@ var _TRANS = {
     },
     es: {
         'w_unwind_no_contract': 'No se encontró contrato en el Live Position para este Athena ID',
+        'w_unwind_no_counterparty': 'La posición no identifica la contraparte',
+        'w_unwind_cpty_not_registered': 'El CPF/CNPJ de la contraparte no está en el Reference Data — en la cuenta paraguas el titular es el banco, así que el cliente no puede nombrarse',
         'w_unwind_position_unknown': 'No se pudo leer la línea del Live Position',
         'w_unwind_no_currency': 'La posición no trae el símbolo de la moneda',
         'w_unwind_no_balance': 'No se pudo calcular el saldo de la posición',

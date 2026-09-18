@@ -21856,3 +21856,57 @@ instância.
   mapa ao lado do dos finders, e o `check_intrag_unwind` cobra as mesmas
   chaves nos dois — família num mapa e não no outro apagaria sem tocar o sino,
   calada. Zero linhas apagadas não avisa.
+
+## §499 — A contraparte da recompra saía como BANCO J.P. MORGAN, e a Data de Fixação do FWD Start virou D+1 útil (2026-09-18)
+
+### A contraparte: numa conta guarda-chuva, o nome da posição somos NÓS
+
+Com a ponte do §498 consertada, a recompra passou a achar o contrato — e veio
+com a contraparte **`BANCO J.P. MORGAN S/A`**. Está certo no arquivo e errado
+como resposta: a conta da contraparte é a **73760102**, uma CLIENT 1, e numa
+conta guarda-chuva o `Nome da Contraparte` é o TITULAR da conta, que somos nós.
+Quem identifica o cliente é o `CPF/CNPJ da Contraparte` — na mesma linha, ele
+diz `USINA ALTO ALEGRE S/A - ACUCAR E ALCOOL`.
+
+Não é uma regra nova: é a do `b3-accounts` que o §6 já descreve ("só CLIENT 1/2
+são omnibus, cliente por CNPJ; quem decide é o TIPO"). O que faltava era
+PERGUNTAR. Agora `contraparte_da_posicao(pos, omnibus)` recebe a resposta
+pronta (o `domain` é puro; quem chama o `_b3_is_omnibus` é o `commands`) e:
+
+* **guarda-chuva + nome** → o cliente é o do CPF/CNPJ;
+* **guarda-chuva + documento** (a coluna carrega as duas coisas, §8: nome
+  quando há cadastro, documento quando não há) → nome VAZIO e um aviso com o
+  documento. Cair no `Nome da Contraparte` aqui seria afirmar o banco como
+  cliente — o Termo de Resilição iria para a pasta do banco, com o banco como
+  Parte B;
+* **conta direta de terceiro** → o `Nome da Contraparte` é a contraparte
+  mesmo, e o comportamento é o de sempre. `omnibus=None` ("não deu para
+  perguntar") vale como conta direta.
+
+Duas consequências de desenho:
+
+* o par **nome × CNPJ** se fecha no `commands` (`_completar_contraparte`, pelo
+  `_refdata_by_name`): o Termo leva nome E CNPJ na Parte B, e as outras
+  confirmações desta casa tiram o CNPJ do mesmo `TaxID` da linha;
+* o **aviso da contraparte sai separado** dos outros (`aviso_contraparte`). O
+  TER 0014 identifica as duas pontas pelas CONTAS e não usa o nome: misturado
+  na lista, ele recusaria o arquivo da B3 por uma falta que não é dele — foi
+  o que o `check_unwind_ter_file` pegou na primeira tentativa.
+
+### A Data de Fixação do FWD Start
+
+O campo 36 do TER avançava a Strike Set Date pelo **vão de dias úteis entre a
+Last Fixing Date e a Settlement Date** — a mesma conta dos campos 15 e 39. Num
+FWD Start de vencimento longo isso joga o início do contrato semanas à frente
+da data em que o strike é fixado. Passou a ser **a Strike Set Date + UM dia
+útil ANBIMA** (mesa), e o vão continua sendo do 15/39, que é onde ele descreve
+a cotação do vencimento.
+
+Mexeu em dois lugares, e é assim de propósito: o gerador
+(`platform/new_deals.py`) e o espelho `_legacy_*` do `check_fi_ter.py`, que
+compara byte a byte com os goldens. O teste apontou a divergência na posição
+exata do campo (233-240) nos três cenários de FWD Start, que é o que prova que
+a mudança foi só ali. O `source_note` dos cinco templates de FWD Start
+acompanha — e, como todo template, só alcança o motor da instância pelo
+`scripts/import_file_interpreter_template.py` (§488); aqui ele é documentação
+do painel, porque o valor vem do gerador.
