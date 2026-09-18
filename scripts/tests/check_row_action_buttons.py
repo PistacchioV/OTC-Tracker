@@ -164,6 +164,24 @@ for f in fontes:
 check('nenhuma celula de acao usa ti-pencil / ti-circle-check', ruins, [])
 cinzas = [f for f in fontes if re.search(r'btn-default btn-icon btn-sm[^>]*>\s*<i class="ti ti-(?:eye|edit|check|trash)', read(f))]
 check('nenhum botao de linha e o btn-default btn-icon cinza', cinzas, [])
+# A COR de cada botao e semantica e vale no app inteiro: Confirm/Approve
+# success, Edit info, Delete danger, Send primary, Save success, Cancel
+# secondary. Duas telas novas nasceram com o Edit em `btn-warning` (laranja) e
+# nada acusou — o guarda so olhava as duas paginas de referencia. Agora ele
+# varre todas: a cor errada e a unica coisa que a mesa ve antes de clicar.
+CORES = {'confirm': 'btn-success', 'approve': 'btn-success', 'edit': 'btn-info',
+         'delete': 'btn-danger', 'send': 'btn-primary', 'save': 'btn-success',
+         'cancel': 'btn-secondary'}
+fora = []
+for f in fontes:
+    txt = read(f)
+    for m in re.finditer(r'class="btn (btn-[\w-]+) btn-sm[^"]*\bbtn-row-(\w+)\b', txt):
+        cor, papel = m.group(1), m.group(2)
+        esperada = CORES.get(papel)
+        if esperada and cor != esperada:
+            fora.append((os.path.basename(f), 'btn-row-' + papel, cor, esperada))
+check('a cor de cada botao de linha e a semantica, em TODA pagina', fora, [])
+
 # A referencia: a celula de acao do Intrag DCE Option.
 DCE = read('apps/templates/pages/intrag-dce-option.html')
 check('Intrag DCE Option: Edit/info ti-edit · Delete/danger ti-trash · Approve/success ti-check · Send/primary ti-brand-telegram',

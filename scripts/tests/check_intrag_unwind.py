@@ -148,6 +148,17 @@ def main():
         check('rota ' + r, r in regras)
     from apps.pages.features.intrag import commands as IC
     check('o delete generico conhece a familia', 'unwind' in IC._INTRAG_DELETE_FAMILIES)
+    # A rota do Delete e UMA para as sete paginas, e o rotulo do sino sai de um
+    # mapa ao lado do dos finders: familia que entra num e falta no outro apaga
+    # sem tocar o sino, calada.
+    check('as sete familias tem rotulo de sino',
+          set(IC._INTRAG_DELETE_PAGES) == set(IC._INTRAG_DELETE_FAMILIES),
+          set(IC._INTRAG_DELETE_FAMILIES) ^ set(IC._INTRAG_DELETE_PAGES))
+    from apps.pages.platform import notifications as _notif
+    faltando = [p for p in IC._INTRAG_DELETE_PAGES.values()
+                if p not in _notif._NOTIF_PAGE_URL]
+    check('e todo rotulo esta no mapa do sino (senao o clique nao vai a lugar nenhum)',
+          faltando == [], faltando)
 
     cells = [entry[f] for f in I.INTRAG_UNWIND_FIELDS]
     with app.test_client() as c:
@@ -173,6 +184,32 @@ def main():
     check('e a linha comeca pela carteira', conteudo.startswith('INTRAGJP552;'), conteudo[:40])
     check('a recompra virou Sent',
           (IQ._find_intrag_unwind_entry(L_LAWTON['AthenaID'], '18/09/2026')[1] or [{}])[0].get('status') == 'Sent')
+
+    print('\n== 6. o Delete avisa no sino ==')
+    avisos = []
+    _orig = R._create_notification
+    R._create_notification = lambda *a, **k: avisos.append(a[2:4])
+    try:
+        with app.test_client() as c:
+            with c.session_transaction() as sess:
+                sess['authenticated'] = True
+                sess['user_sid'] = 'E930179'
+                sess['user_name'] = 'Teste'
+                sess['session_expires_at'] = (datetime.now(timezone.utc)
+                                              + timedelta(hours=8)).isoformat()
+            vazio = c.post('/api/intrag/unwind/delete',
+                           json={'items': [{'deal_id': 'NAO-EXISTE',
+                                            'trade_date': '18/09/2026'}]}).get_json()
+            check('apagar o que nao existe nao avisa',
+                  (vazio or {}).get('deleted') == 0 and avisos == [], (vazio, avisos))
+            saiu = c.post('/api/intrag/unwind/delete',
+                          json={'items': [{'deal_id': L_LAWTON['AthenaID'],
+                                           'trade_date': '18/09/2026'}]}).get_json()
+            check('o Delete apaga', (saiu or {}).get('deleted') == 1, saiu)
+            check('e avisa com o rotulo da pagina',
+                  avisos == [('Deal Deleted', 'Intrag Unwind')], avisos)
+    finally:
+        R._create_notification = _orig
 
     print('\n' + ('tudo ok' if not FALHAS else 'FALHAS: ' + '; '.join(FALHAS)))
     return 1 if FALHAS else 0

@@ -126,6 +126,22 @@ check('sem linha -> (None, None)',
 check('posicao sem Contrato preenchido -> None, nao string vazia',
       domain.contrato_por_identificador([{'Codigo Identificador': 'XE-10G5U5X-0-0', 'Contrato': '  '}],
                                         'STP-XE-10G5U5X-0-0')[0], None)
+# A posicao guarda o `Codigo Identificador` de DUAS formas — truncado nos 14
+# (a amostra acima) e INTEIRO. Truncando so o lado do aviso, a segunda nunca
+# casava: o import saia sem contrato e sem contraparte, e as duas colunas em
+# branco na tela nao diziam por que (18/09/2026).
+INTEIRO = [{'Codigo Identificador': 'ATS-4T6-2W4YU86-0-0', 'Contrato': '25L04197478',
+            'Nome da Contraparte': 'USINA ALTO ALEGRE S/A - ACUCAR E ALCOOL'}]
+achou = domain.contrato_por_identificador(INTEIRO, 'ATS-4T6-2W4YU86-0-0')
+check('posicao com o Athena ID INTEIRO tambem casa', achou[0], '25L04197478')
+check('e devolve a linha (e dela que saem contraparte, moeda e contas)',
+      (achou[1] or {}).get('Nome da Contraparte'), 'USINA ALTO ALEGRE S/A - ACUCAR E ALCOOL')
+# A igualdade exata vem ANTES da truncagem: a truncagem joga fora o prefixo, e
+# escolher a linha errada e recomprar o contrato errado.
+DOIS = [{'Codigo Identificador': 'XXX-4T6-2W4YU86-0-0', 'Contrato': '99C99999999'},
+        {'Codigo Identificador': 'ATS-4T6-2W4YU86-0-0', 'Contrato': '25L04197478'}]
+check('com id inteiro dos dois lados, a igualdade EXATA vence a truncagem',
+      domain.contrato_por_identificador(DOIS, 'ATS-4T6-2W4YU86-0-0')[0], '25L04197478')
 
 print('\n== 11. a prova real: UMA formula, tres operacoes reais ==')
 # (rotulo, antes, depois, brl_fixed, banco comprado, resultado esperado, ME esperado)

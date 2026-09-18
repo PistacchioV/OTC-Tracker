@@ -867,6 +867,22 @@ _INTRAG_DELETE_FAMILIES = {
     'unwind':   queries._find_intrag_unwind_entry,
 }
 
+# O rotulo `page` do sino de cada familia — o mesmo que o Send, o edit e o
+# approve de cada pagina ja usam, e um dos que estao nos TRES mapas do §8.
+# Ele mora ao LADO do mapa dos finders de proposito: a rota do Delete e uma
+# so para as sete paginas, e familia que entra num mapa e falta no outro
+# apaga sem tocar o sino — que e exatamente o defeito que este mapa fecha.
+# `check_intrag_unwind.py` cobra as mesmas chaves nos dois.
+_INTRAG_DELETE_PAGES = {
+    'ndf':      'Intrag NDF',
+    'option':   'Intrag Option',
+    'swap':     'Intrag Swap',
+    'dce-opt':  'Intrag DCE Option',
+    'dce-ndf':  'Intrag DCE NDF',
+    'dce-swap': 'Intrag DCE Swap',
+    'unwind':   'Intrag Unwind',
+}
+
 
 def _intrag_delete_entries(family, items):
     """Apaga entradas de uma família de Intrag. → (apagadas, não achadas).

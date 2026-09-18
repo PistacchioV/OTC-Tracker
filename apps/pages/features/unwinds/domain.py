@@ -137,9 +137,16 @@ def parse_notification(tabelas, subject=''):
 # ==============================================================================
 # O aviso do Athena nao traz o contrato da B3, e o campo 8 do TER 0014
 # (`Contrato`) EXIGE ele. A ponte e o `Codigo Identificador` do Live Position
-# NDF: os 14 caracteres da DIREITA do Athena ID sao o que a posicao guarda
-# ('STP-XE-10G5U5X-0-0' -> 'XE-10G5U5X-0-0'), e a linha que casar responde pelo
-# `Contrato`.
+# NDF, e ele aparece de DUAS formas no arquivo de posicao:
+#
+#   * TRUNCADO nos 14 caracteres da direita — 'STP-XE-10G5U5X-0-0' no aviso e
+#     'XE-10G5U5X-0-0' na posicao (a amostra do §488);
+#   * INTEIRO — 'ATS-4T6-2W4YU86-0-0' nos dois lados (18/09/2026).
+#
+# Por isso o casamento tenta primeiro a igualdade EXATA e so depois compara as
+# duas pontas pelos 14 da direita. Truncando so o lado do aviso, a posicao que
+# guarda o id inteiro nunca casava: o import saia sem contrato e sem
+# contraparte, e as duas colunas em branco na tela nao diziam por que.
 IDENT_LEN = 14
 
 
@@ -154,14 +161,25 @@ def contrato_por_identificador(linhas, athena_id):
     """(contrato, posicao) da linha do Live Position NDF cujo `Codigo
     Identificador` casa com o Athena ID; (None, None) se nao houver.
 
-    Recebe as LINHAS (o dominio e puro). Casa sem caixa e sem branco. Duas
-    linhas com o mesmo identificador devolvem a PRIMEIRA e quem chama avisa:
-    escolher em silencio entre duas posicoes e recomprar a errada."""
-    alvo = identificador(athena_id).strip().upper()
-    if not alvo:
+    Recebe as LINHAS (o dominio e puro). Casa sem caixa e sem branco, em duas
+    passadas: a igualdade EXATA primeiro (a posicao que guarda o Athena ID
+    inteiro) e, so se ela nao achar nada, os 14 da direita dos DOIS lados (a
+    posicao que guarda o id truncado). A exata vem antes de proposito — a
+    truncagem joga fora o prefixo, e dois ids diferentes podem terminar igual.
+
+    Duas linhas com o mesmo identificador devolvem a PRIMEIRA e quem chama
+    avisa: escolher em silencio entre duas posicoes e recomprar a errada."""
+    cru = str(athena_id or '').strip().upper()
+    if not cru:
         return None, None
-    achadas = [l for l in (linhas or [])
-               if str(l.get('Codigo Identificador', '') or '').strip().upper() == alvo]
+
+    def _ident(l):
+        return str(l.get('Codigo Identificador', '') or '').strip().upper()
+
+    achadas = [l for l in (linhas or []) if _ident(l) == cru]
+    if not achadas:
+        alvo = identificador(cru)
+        achadas = [l for l in (linhas or []) if identificador(_ident(l)) == alvo]
     if not achadas:
         return None, None
     pos = achadas[0]

@@ -244,9 +244,29 @@ def main():
               _mc.confirmation_type(outro) == commands.TERMO_TIPO)
     check('o tipo tem gerador no Monitor',
           commands.TERMO_TIPO in R._pf_mc._MC_GENERATE_PRODUCTS)
+    linha_seed = next((l for l in _mc.VALIDATION_SEED
+                       if _mc.upper_norm(l.get('PRODUCT')) == commands.TERMO_TIPO), None)
     check('e a regra de validacao do tipo esta no cadastro (nao cai no default)',
-          any(_mc.upper_norm(l.get('PRODUCT')) == commands.TERMO_TIPO
-              for l in _mc.VALIDATION_SEED))
+          linha_seed is not None)
+    # O trilho do distrato e SO OTC (mesa, 18/09/2026): o MO e o FO conferem a
+    # economia da operacao, e ela ja passou por eles quando a operacao nasceu.
+    check('o trilho e so OTC — MO e FO isentos',
+          (linha_seed or {}).get('OTC') == 'REQUESTED'
+          and (linha_seed or {}).get('MO') == 'EXEMPT'
+          and (linha_seed or {}).get('FO') == 'EXEMPT', linha_seed)
+    # Seed nao alcanca quem ja tem o cadastro (§6): quem conserta a instancia e
+    # o upgrade, e so a linha que esta EXATAMENTE como o seed antigo a deixou.
+    velho = [{'PRODUCT': 'TERMO DE RESILICAO', 'LOB': '', 'OTC': 'REQUESTED',
+              'MO': 'REQUESTED', 'FO': 'EXEMPT', 'NOTES': ''}]
+    corrigida = next(l for l in _mc.validation_upgrade(velho)
+                     if _mc.upper_norm(l.get('PRODUCT')) == commands.TERMO_TIPO)
+    check('o upgrade corrige o cadastro que ja existe', corrigida.get('MO'), 'EXEMPT')
+    mesa = [{'PRODUCT': 'TERMO DE RESILICAO', 'LOB': '', 'OTC': 'REQUESTED',
+             'MO': 'REQUESTED', 'FO': 'REQUESTED', 'NOTES': 'a mesa decidiu'}]
+    mantida = next(l for l in _mc.validation_upgrade(mesa)
+                   if _mc.upper_norm(l.get('PRODUCT')) == commands.TERMO_TIPO)
+    check('mas nao desfaz o que a mesa editou',
+          (mantida.get('MO'), mantida.get('FO')), ('REQUESTED', 'REQUESTED'))
 
     print('\n== 11. o gatilho e o SEND, e a linha vai CARIMBADA ==')
     vistos = []
