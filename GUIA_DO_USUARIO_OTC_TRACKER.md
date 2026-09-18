@@ -148,7 +148,7 @@ O menu é em **níveis**: um item com **›** à direita tem submenu. Clicar nel
 | **PRODUCTS › New Deals › NDF** | FWD Start · Other Publisher · Vanilla · Commodities |
 | **PRODUCTS › New Deals › Options** | FXO · Commodities |
 | **PRODUCTS › New Deals › DCE** | Deliverable Forward · NDF · Option · Swap *(em construção)* |
-| **PRODUCTS › Unwinds** | Swap · NDF · Options · COE · DCE *(em construção)* |
+| **PRODUCTS › Unwinds** | **NDF › FX** · Swap · NDF Commodities · Options · COE · DCE *(só a de NDF › FX existe; as demais em construção)* |
 | **PRODUCTS › Intrag** | NDF · Option · Swap |
 | **PRODUCTS › Regulatory** | e-Financeira · WHT *(em construção)* |
 | **PRODUCTS** | Accrual Swap · MtM Swap |
@@ -520,6 +520,32 @@ Depois que a B3 devolve o arquivo de retorno:
 ### 5.9. Gerar a confirmação
 
 **A geração e a validação da confirmação acontecem no Confirmations Monitor**, e não aqui. As telas de New Deals não têm mais botão de confirmação: o ciclo inteiro do documento mora num lugar só. Ver o capítulo 9.3.
+
+### 5.10. Recompra (unwind) de NDF de moeda
+
+**Menu › PRODUCTS › Unwinds › NDF › FX**
+
+A recompra desfaz, no todo ou em parte, um termo de moeda que já está registrado na B3. O aviso vem por e-mail do Athena (*BRL NDF Unwind Notification*) durante o dia — não é o lote da manhã da liquidação normal.
+
+**A tela faz três coisas hoje:** importa o aviso, confere a conta e monta o arquivo da B3. O restante do ciclo (Termo de Resilição, arquivo da Intrag, esteira de confirmação e a entrada no Summary de NDF) **ainda não está pronto** e continua sendo feito por fora.
+
+A recompra aparece no **Monitor** (capítulo 5.1) como *Unwind NDF FX*, na coluna **B3 Registration**, junto dos demais produtos de NDF — é de lá que se vê, sem abrir a tela, se sobrou alguma recompra do dia para enviar. Ela some da pendência quando fica **Sent**.
+
+**Passo a passo:**
+
+1. Confira a **Reference Date** no alto — é o dia em que a recompra é gravada.
+2. **Arraste o e-mail direto do Outlook** para o dropzone. Serve `.msg`, `.eml` ou o corpo salvo como `.htm`; não precisa converter nada antes.
+3. Clique em **Import**. *Com a dropzone vazia, o Import varre a caixa sozinho* — é o mesmo botão para as duas coisas. A varredura automática também roda de 30 em 30 minutos, e cada e-mail importado é arquivado na pasta **Unwind**.
+4. Olhe a coluna **Check** da linha:
+   - **OK** (verde) — o resultado do e-mail bate com o recalculado;
+   - **NOK** (vermelho) — não bate. **Não envie**: passe o mouse no badge para ver o que divergiu;
+   - **–** (cinza) — não deu para conferir (faltou um valor no e-mail, ou a operação não foi encontrada no Live Position). Também não envie.
+5. **Duplo clique na linha** abre o arquivo da B3 campo a campo, com o texto cru embaixo. É aqui que se confere antes de mandar.
+6. Selecione a linha e clique em **Send** para gravar o arquivo no Batch Conecta. A linha vira **Sent** e deixa de poder ser apagada.
+
+**O que a tela preenche sozinha, e de onde:** o **B3 ID**, a **contraparte**, a **moeda** e as **contas** não vêm do e-mail — vêm da linha do Live Position da operação, achada pelos 14 últimos caracteres do Athena ID. Se a coluna **B3 ID** vier vazia, é porque a operação não foi encontrada lá: confira o *Código Identificador* no Live Position de NDF antes de qualquer outra coisa.
+
+> **Uma coisa que o e-mail erra.** Em contrato com nocional em reais (*BRL fixed*), o campo *Direction* do aviso pode dizer **PAY** numa recompra **a receber** — e os campos *Future Value*, *Present Value* e *Calculated Termination Fee* vêm errados junto. A tela usa o **Input Termination Fee** e decide a direção pelo sinal do resultado, então a coluna *Direction* dela pode discordar do e-mail. Quando isso acontece, **a tela está certa** e o aviso registra a divergência.
 
 ---
 
@@ -1748,7 +1774,7 @@ Descreve o sistema, os módulos e a quem pertence cada um. É um bom ponto de pa
 Estes itens aparecem no menu, mas a tela ainda não existe — clicar neles devolve "página não encontrada". Não é defeito do seu acesso:
 
 - **New Deals › DCE** — Deliverable Forward · NDF · Option · Swap
-- **Unwinds** — Swap (CEM · EDG) · NDF (FX · Commodities) · Options (FXO · Commodities · EDG) · COE · DCE (todos)
+- **Unwinds** — Swap (CEM · EDG) · NDF **Commodities** · Options (FXO · Commodities · EDG) · COE · DCE (todos). **NDF › FX já existe** (capítulo 5.10)
 - **Regulatory › e-Financeira** — Kapital · Athena NDF · Athena FXO · Pyramid
 - **Regulatory › WHT**
 
