@@ -195,25 +195,48 @@ def _fep_header(linhas):
 
 
 def fep_date(v):
-    """A `Data Operação` do FepWeb, que vem no formato AMERICANO (`mm/dd/aaaa`).
+    """A `Data Operação` do FepWeb, que vem no formato BRASILEIRO (`dd/mm/aaaa`).
 
-    Tem leitor próprio porque o `_parse_date` da casa tenta `dd/mm` PRIMEIRO: com
-    ele `09/10/2026` é 9 de outubro, e só as datas com dia > 12 caíam certo — por
-    acaso, no fallback. O batimento de 10/09 perdia o dia inteiro para "outras
-    datas" sem erro nenhum. Célula que já é DATA (datetime do openpyxl, ISO do
-    xlrd, serial do Excel) não tem ambiguidade e segue pelo leitor de sempre.
+    **O relatório mudou de formato em 18/09/2026** (a mesa): até então ele vinha
+    americano (`mm/dd/aaaa`), e era por isso que este leitor existia — o
+    `_parse_date` da casa tenta `dd/mm` primeiro e lia `09/10/2026` como 9 de
+    outubro. Hoje o leitor é o inverso: dd/mm, e **nunca** cai para mm/dd. As
+    duas leituras dão dias diferentes na mesma célula e só as datas com dia > 12
+    denunciam a troca; escolher no escuro é como o batimento de um dia inteiro
+    vira "outras datas" sem erro nenhum.
+
+    Célula que já é DATA (datetime do openpyxl, ISO do xlrd, serial do Excel)
+    não tem ambiguidade e segue pelo leitor de sempre.
     """
     if v is None or isinstance(v, (datetime, date)):
         return _cgd._parse_date(v)
     txt = str(v).strip().split(' ')[0].split('T')[0]
     if '/' in txt:
-        for fmt in ('%m/%d/%Y', '%m/%d/%y'):
+        for fmt in ('%d/%m/%Y', '%d/%m/%y'):
             try:
                 return datetime.strptime(txt, fmt).date()
             except ValueError:
                 continue
-        return None             # nunca cai para dd/mm: seria outro dia, calado
+        return None             # nunca cai para mm/dd: seria outro dia, calado
     return _cgd._parse_date(txt)
+
+
+def _parece_mmdd(v):
+    """A célula é uma data que só faz sentido lida como AMERICANA?
+
+    `09/13/2026` não é dd/mm nenhum, mas é 13 de setembro em mm/dd — é a
+    assinatura do relatório VELHO. Serve para o leitor dizer que o formato
+    voltou, em vez de devolver `None` e a operação sumir em 'outras datas'."""
+    txt = str(v or '').strip().split(' ')[0].split('T')[0]
+    if '/' not in txt:
+        return False
+    for fmt in ('%m/%d/%Y', '%m/%d/%y'):
+        try:
+            datetime.strptime(txt, fmt)
+            return True
+        except ValueError:
+            continue
+    return False
 
 
 def _aceita_email(ref):
@@ -267,7 +290,8 @@ def ler_fep(ref, avisos, path=None):
                                  'O relatório do FepWeb veio sem a coluna "CPF/CNPJ CLIENTE": '
                                  'o cliente do lado FepWeb sai pelo nome do próprio relatório.'))
 
-    info = {'lidas': 0, 'canceladas': 0, 'outras_datas': 0, 'formato': formato}
+    info = {'lidas': 0, 'canceladas': 0, 'outras_datas': 0, 'formato': formato,
+            'sem_data': 0, 'mmdd': 0}
     out = []
     for l in linhas[n + 1:]:
         def cel(k):
@@ -280,7 +304,17 @@ def ler_fep(ref, avisos, path=None):
         if _cgd._norm(cel('status')) == STATUS_FORA:
             info['canceladas'] += 1
             continue
-        dia = fep_date(cel('data'))
+        bruto = cel('data')
+        dia = fep_date(bruto)
+        if dia is None:
+            # Data que este leitor não entende NÃO é "outra data": é linha que
+            # ficou de fora sem ninguém saber. E se ela é mm/dd válida, o
+            # relatório voltou ao formato antigo — o aviso diz isso com todas
+            # as letras, porque a recon sairia cheia de `Missing FepWeb`.
+            info['sem_data'] += 1
+            if _parece_mmdd(bruto):
+                info['mmdd'] += 1
+            continue
         if dia != ref:
             info['outras_datas'] += 1
             continue
@@ -288,6 +322,19 @@ def ler_fep(ref, avisos, path=None):
                     'cliente': str(cel('cliente') or '').strip(),
                     'cnpj': cel('cnpj'),
                     'tipo': str(cel('tipo') or '').strip()})
+    if info['mmdd']:
+        avisos.append(_cgd.Aviso(
+            'fep_date_mmdd',
+            'O relatório do FepWeb ({}) traz {} data(s) no formato AMERICANO (mm/dd/aaaa); '
+            'a leitura é dd/mm/aaaa desde 18/09/2026. Essas linhas ficaram de fora — '
+            'confira o relatório antes de usar o resultado.'
+            .format(rotulo, info['mmdd']), file=rotulo, count=info['mmdd']))
+    elif info['sem_data']:
+        avisos.append(_cgd.Aviso(
+            'fep_date_ilegivel',
+            'O relatório do FepWeb ({}) traz {} linha(s) com a Data Operação ilegível — '
+            'elas ficaram de fora do batimento.'.format(rotulo, info['sem_data']),
+            file=rotulo, count=info['sem_data']))
     if info['lidas'] and not out:
         avisos.append(_cgd.Aviso('no_ops_for_date',
                                  'O relatório do FepWeb ({}) não traz nenhuma operação de {} — '
