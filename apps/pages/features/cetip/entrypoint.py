@@ -125,6 +125,8 @@ def api_cp_cetip_settlement():
     # mesmo tempo, que é o pior dos dois mundos: nada na tela, no e-mail ou no
     # retorno da rotina dizia que faltava o dia.
     json_falhou = []
+    # Anexos do e-mail de stage 1 (OTC Ops) — hoje só o cadastro de domínios.
+    ops_anexos = []
     for rule in queries._cetip_rules():
         rule_matched = False
         for name in files:
@@ -156,6 +158,14 @@ def api_cp_cetip_settlement():
                 # INDEXADORESSWAP_VCP → refresh the VCP indexer reference JSON.
                 if rule.get('vcp_update'):
                     persistence._cetip_update_vcp_json(dest_path)
+                # CADASTROCURVASMOEDASFEEDERDOMINIOS → atualiza a base de domínios.
+                if rule.get('dominio_update'):
+                    persistence._cetip_update_dominio_json(dest_path)
+                # Anexo do e-mail de stage 1 (OTC Ops). O caminho é o do arquivo
+                # JÁ SALVO no destino — nunca o da origem: é o que foi salvo que
+                # se confere, e a origem some no dia seguinte.
+                if rule.get('attach_ops'):
+                    ops_anexos.append(dest_path)
             except Exception as e:
                 errors.append({'file': name, 'type': rule['label'], 'error': str(e)})
                 continue
@@ -199,10 +209,14 @@ def api_cp_cetip_settlement():
                         'Products) will keep showing the previous day until this is '
                         'reprocessed.'.format(len(json_falhou),
                                               ', '.join(j['dest'] for j in json_falhou)))
+        if ops_anexos:
+            ops_msg += (' The <b>{}</b> file(s) listed as attachments go with this '
+                        'e-mail.'.format(len(ops_anexos)))
         mail_ops = mail._send_cetip_email(
             [_R().CETIP_OTC_OPS_EMAIL], [], 'CETIP Files Saved',
             'Hello,', ops_msg,
-            ref_fmt, saved, dest_folder=dest_dir, missing=missing)
+            ref_fmt, saved, dest_folder=dest_dir, missing=missing,
+            attachments=ops_anexos)
 
     msg = '<b>{}</b> file(s) saved.'.format(len(saved))
     if errors:
