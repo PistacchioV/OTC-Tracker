@@ -975,6 +975,23 @@ check('o botão do card leva o no_callback do item', 'data-nocb=' in MON, True)
 check('   e o clique com pendência avisa em vez de confirmar',
       ('noCbBlockTitle' in MON, 'noCbBlockText' in MON), (True, True))
 
+print('\n== 10c. a busca dos PDFs tem TRES estados ==')
+# "Ha PDF", "olhei e nao ha" e "NAO DEU para olhar". Os dois ultimos diziam a
+# mesma frase, e o do meio e o que troca o Validate por Generate: com o share
+# sem responder, a tela afirmava 'nenhum PDF na pasta' e deixava o Validate
+# verde ao lado — a mesa ia validar um documento que ninguem gerou.
+check('a tela tem a frase do "nao deu para olhar"', 'nocheck:' in MON, True)
+check('   nas tres linguas', MON.count('nocheck:'), 3)
+check('   e a falha da chamada NAO cai mais no "nenhum PDF"',
+      "els.forEach(function (el) { el.html(esc(t('nolink'))); })" in MON, False)
+check('`null` do servidor e lido como "nao deu para olhar"',
+      'docs === null' in MON, True)
+# E o lote vai FATIADO: com o share frio, um lote unico estourava o abort e a
+# pagina inteira caia no catch.
+check('a busca dos PDFs vai em fatias', 'var LOTE =' in MON, True)
+check('   e status de erro nao passa por resposta boa',
+      "throw new Error('HTTP ' + r.status)" in MON, True)
+
 print('\n== 11. o e-mail do reject ==')
 from apps.pages import otc_emails as E                            # noqa: E402
 d = E.build_mc_reject_email({'Trade ID': 'T9', 'Cliente': 'ACME S.A.', 'Produto': 'SWAP'},

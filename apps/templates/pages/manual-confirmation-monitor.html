@@ -432,6 +432,7 @@
               onlyDesk: 'Only {r} validates this stage',
               empty: 'Nothing pending at this stage.',
               nolink: 'no PDF in the confirmation folder',
+              nocheck: 'could not check the folder — the share did not answer',
               docsLoading: 'looking for the PDFs…',
               mailTip: 'open the internal recap e-mail in a new tab',
               noContractTip: 'no contract to validate yet',
@@ -460,6 +461,7 @@
               onlyDesk: 'Só o {r} valida esta etapa',
               empty: 'Nada pendente nesta etapa.',
               nolink: 'nenhum PDF na pasta da confirmação',
+              nocheck: 'não deu para olhar a pasta — o share não respondeu',
               docsLoading: 'procurando os PDFs…',
               mailTip: 'abrir o e-mail de recap interno em nova aba',
               noContractTip: 'ainda não há contrato para validar',
@@ -488,6 +490,7 @@
               onlyDesk: 'Solo el {r} valida esta etapa',
               empty: 'Nada pendiente en esta etapa.',
               nolink: 'ningún PDF en la carpeta de la confirmación',
+              nocheck: 'no se pudo revisar la carpeta — el share no respondió',
               docsLoading: 'buscando los PDFs…',
               mailTip: 'abrir el e-mail de recap interno en una nueva pestaña',
               noContractTip: 'aún no hay contrato para validar',
@@ -680,6 +683,10 @@
         // catch pinta sem o flag e o botão fica como está).
         function pinta(el, docs, checou) {
             var acts = el.closest('.mc-item__acts');
+            // `null` do servidor e "nao deu para olhar ESTE item" (a pasta nao
+            // respondeu, ou a linha levantou): vale o mesmo que a chamada ter
+            // falhado — a tela nao afirma nada e o botao fica como esta.
+            if (docs === null || docs === undefined) { checou = false; docs = []; }
             var temPdf = (docs || []).some(function (d) { return !d.email; });
             if (checou && !temPdf) {
                 var btn = acts.find('a.btn-success');
@@ -707,7 +714,12 @@
                        .attr({ title: t('noContractTip'), 'aria-disabled': 'true' });
                 }
             }
-            if (!docs || !docs.length) { el.html(esc(t('nolink'))); return; }
+            // TRES estados, e o do meio e o que faltava: ha PDF, olhei e nao ha,
+            // e NAO DEU para olhar. Os dois ultimos diziam a mesma frase — e o
+            // segundo ainda deixava o Validate verde, que e o botao de conferir
+            // um documento que ninguem sabe se existe. A mesa lia "nenhum PDF na
+            // pasta" e um Validate ao lado, e ia validar o que nao foi gerado.
+            if (!docs.length) { el.html(esc(t(checou ? 'nolink' : 'nocheck'))); return; }
             el.replaceWith('<div class="mc-docs">' + docs.map(function (d) {
                 if (d.email) {
                     // O recap interno é o ÚNICO chip clicável (abre em nova aba —
@@ -730,21 +742,48 @@
         // listagem por pasta, tudo pela rede): a página desistia e pintava
         // 'no PDF' com o servidor ainda procurando — "antes demorava mas
         // carregava, agora não aparece nada".
-        var ctl = ('AbortController' in window) ? new AbortController() : null;
-        var timer = ctl && setTimeout(function () { ctl.abort(); }, 90000);
-        fetch('/api/manual-confirmation/docs', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ items: itens }),
-            signal: ctl ? ctl.signal : undefined
-        })
-            .then(function (r) { return r.json(); })
-            .then(function (j) {
-                var listas = (j && j.docs) || [];
-                // A resposta vem na ORDEM em que os itens foram enviados.
-                els.forEach(function (el, i) { pinta(el, listas[i], true); });
+        // Em LOTES DE OITO, um de cada vez. O lote único era tudo-ou-nada: com
+        // o share frio, cada item que chega antes de a varredura da raiz
+        // terminar paga uma listagem da raiz inteira pela rede, e trinta cards
+        // passavam dos 90 s do abort — aí a página inteira caía no catch e
+        // dizia 'nenhum PDF na pasta' sobre pastas que ninguém chegou a abrir.
+        // Em fatias, os primeiros cards respondem na hora, a varredura da raiz
+        // fica quente para as seguintes, e uma fatia que falha leva só os oito
+        // dela. Em SÉRIE de propósito: em paralelo seriam seis idas ao share ao
+        // mesmo tempo, que é o que deixou de ser feito quando o GET por item
+        // virou lote.
+        var LOTE = 8;
+        function pede(inicio) {
+            if (inicio >= els.length) return;
+            var fatiaEls = els.slice(inicio, inicio + LOTE);
+            var ctl = ('AbortController' in window) ? new AbortController() : null;
+            var timer = ctl && setTimeout(function () { ctl.abort(); }, 90000);
+            fetch('/api/manual-confirmation/docs', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ items: itens.slice(inicio, inicio + LOTE) }),
+                signal: ctl ? ctl.signal : undefined
             })
-            .catch(function () { els.forEach(function (el) { el.html(esc(t('nolink'))); }); })
-            .finally(function () { if (timer) clearTimeout(timer); });
+                .then(function (r) {
+                    // Status de erro é "não deu para olhar", não "não há": o
+                    // 503 de banco ocupado e o 500 com o motivo são JSON, e
+                    // engolidos como resposta boa viravam 'nenhum PDF'.
+                    if (!r.ok) throw new Error('HTTP ' + r.status);
+                    return r.json();
+                })
+                .then(function (j) {
+                    var listas = (j && j.docs) || [];
+                    // A resposta vem na ORDEM em que os itens foram enviados.
+                    fatiaEls.forEach(function (el, i) { pinta(el, listas[i], true); });
+                })
+                .catch(function (err) {
+                    // O motivo no console: a mesa vê 'não deu para olhar' e quem
+                    // for investigar precisa saber se foi prazo, rede ou 500.
+                    if (window.console) console.warn('[monitor] docs: ' + ((err && err.message) || err));
+                    fatiaEls.forEach(function (el) { pinta(el, null, false); });
+                })
+                .finally(function () { if (timer) clearTimeout(timer); pede(inicio + LOTE); });
+        }
+        pede(0);
     }
 
     // O Validate riscado (sem contrato na pasta) não navega. Delegado: o

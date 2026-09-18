@@ -306,6 +306,32 @@ def main():
     check('que aponta para a rota do documento',
           R._CONF_UNWIND_FAMILY_TEMPLATES['termo-resilicao'][1] == commands.TERMO_URL)
 
+    print('\n== 13. o Generate do Monitor abre o Termo ==')
+    # A ponta que faltava: a segregacao ve o grupo (secao 12), mas quem o card
+    # do Monitor chama e o `_mc_generate_url`, e e ele que decide entre abrir o
+    # editor e devolver um 404 explicado. Sem esta secao, Produto sem tipo,
+    # tipo sem gerador ou Data Operacao fora do arquivo-dia passariam verdes
+    # ate alguem clicar no botao na instancia.
+    linha_esteira = {'Cliente': L1['Counterparty'], 'Produto': commands.MC_SOURCE,
+                     'LOB': 'CEM', 'Moeda': 'USD', 'Legal Entity': '',
+                     'Data Operação': HOJE.strftime('%d/%m/%Y'),
+                     'Trade ID': L1['AthenaID']}
+    check('o Produto da esteira traduz para o TIPO do documento',
+          _mc.confirmation_type(commands.MC_SOURCE, 'CEM') == 'TERMO DE RESILICAO',
+          _mc.confirmation_type(commands.MC_SOURCE, 'CEM'))
+    url, motivo = R._mc_generate_url(linha_esteira, [L1['AthenaID']])
+    check('o Generate resolve a URL (nao devolve motivo)', bool(url) and not motivo, motivo)
+    check('e ela e a do Termo de Resilicao, com contraparte e moeda',
+          url.startswith(commands.TERMO_URL + '?') and 'mercadoria=USD' in url
+          and 'acronym=' in url, url)
+    check('com a data do ARQUIVO-DIA', 'date=' + HOJE.strftime('%Y-%m-%d') in url, url)
+    # Data Operacao de um dia SEM recompra: o 404 tem de dizer por que, em vez
+    # de abrir o documento de outro dia.
+    _u2, _m2 = R._mc_generate_url(dict(linha_esteira, **{'Data Operação': '01/01/2026'}),
+                                  [L1['AthenaID']])
+    check('dia sem a recompra recusa dizendo o motivo', not _u2 and 'arquivo-dia' in (_m2 or ''),
+          (_u2, _m2))
+
     print('\n' + ('tudo ok' if not FALHAS else 'FALHAS: ' + '; '.join(FALHAS)))
     return 1 if FALHAS else 0
 
