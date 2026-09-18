@@ -236,14 +236,21 @@ def archive_email(entry_id):
 # para outro lugar — ou para lugar nenhum, calado.
 UNWIND_MAILBOX = os.getenv('OTC_UNWIND_MAILBOX', 'brazil.otc.ops@jpmorgan.com')
 
-# De onde varrer, a partir da caixa. Vazio = o Inbox (o padrao); aqui e a
-# subpasta das liquidacoes, resolvida pelo `resolve_folder` (raiz, depois
-# Inbox) — a arvore do Outlook nao distingue os dois niveis.
+# De onde varrer, a partir da caixa. VAZIO — e o padrao — e o INBOX, o MESMO
+# lugar por onde o booking recap de NDF Comm e Opt Comm entra (mesa,
+# 18/09/2026): o aviso de recompra do Athena cai na caixa de entrada, nao na
+# subpasta das liquidacoes, que era onde a primeira versao o procurava. Ali a
+# varredura nao achava nada e dizia "nenhum e-mail", que e como uma recompra
+# some sem erro nenhum.
+# Caminho preenchido e resolvido pelo `resolve_folder` (raiz, depois Inbox) —
+# a arvore do Outlook nao distingue os dois niveis.
 UNWIND_SOURCE_PATH = tuple(p for p in os.getenv(
-    'OTC_UNWIND_SOURCE_FOLDER', 'brazil_otc_settlements@jpmorgan.com').split('/') if p)
+    'OTC_UNWIND_SOURCE_FOLDER', '').split('/') if p)
 
-# Para onde o e-mail vai DEPOIS de importado: a pasta `Unwind`, irma da
-# origem dentro das liquidacoes.
+# Para onde o e-mail vai DEPOIS de importado: a pasta `Unwind`, dentro das
+# liquidacoes. O ARQUIVAMENTO nao acompanhou a varredura para o Inbox (mesa,
+# 18/09/2026): a recompra e lida na caixa de entrada, junto com todo o resto,
+# e guardada na pasta dela — que e o que separa o que ja entrou do que falta.
 UNWIND_ARCHIVE_PATH = tuple(p for p in os.getenv(
     'OTC_UNWIND_ARCHIVE_FOLDER',
     'brazil_otc_settlements@jpmorgan.com/Unwind').split('/') if p)
@@ -256,7 +263,11 @@ UNWIND_PRODUCT_KEYWORD = {'ndf': 'NDF'}
 
 
 def scan_unwind_box(product='ndf'):
-    """Varre a caixa das liquidacoes por avisos de recompra de um produto.
+    """Varre o Inbox da caixa por avisos de recompra de um produto.
+
+    E o MESMO lugar do `scan_new_deals_box` (NDF Comm e Opt Comm): o aviso do
+    Athena chega na caixa de entrada. O arquivamento, esse sim, e na pasta
+    `Unwind` das liquidacoes (`archive_unwind_email`).
 
     Devolve {'ok': True, 'emails': [{'entry_id','subject','html','received'}]}.
     NAO move nada: o e-mail so e arquivado depois de os dados entrarem, pelo
@@ -275,10 +286,17 @@ def scan_unwind_box(product='ndf'):
 
     pythoncom.CoInitialize()
     try:
-        _outlook, origem = resolve_folder(_w, UNWIND_MAILBOX, UNWIND_SOURCE_PATH)
-        if origem is None:
-            _outlook, raiz = _connect_mailbox(_w, UNWIND_MAILBOX)
-            origem = _child(raiz, 'Inbox') or raiz
+        if UNWIND_SOURCE_PATH:
+            _outlook, origem = resolve_folder(_w, UNWIND_MAILBOX, UNWIND_SOURCE_PATH)
+            if origem is None:
+                _outlook, raiz = _connect_mailbox(_w, UNWIND_MAILBOX)
+                origem = _child(raiz, 'Inbox') or raiz
+        else:
+            # Sem subpasta e o Inbox, pela MESMA porta do `scan_new_deals_box`.
+            # Passar a tupla vazia ao `resolve_folder` devolveria a RAIZ da
+            # caixa, que nao tem mensagem nenhuma: a varredura voltaria vazia,
+            # calada, em vez de ler a caixa de entrada.
+            _outlook, origem = _connect_inbox(_w, UNWIND_MAILBOX)
         restriction = '@SQL="%s" LIKE \'%%%s%%\'' % (_MAPI_SUBJECT, UNWIND_SUBJECT_ANCHOR)
         try:
             messages = origem.Items.Restrict(restriction)

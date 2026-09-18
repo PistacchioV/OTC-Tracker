@@ -1111,6 +1111,16 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   (`infra/email_file.py` — magic do CFB, cabeçalhos MIME), não pela extensão:
   o Outlook renomeia anexo e um `.msg` chega como `.txt` sem aviso. O assunto
   sai do arquivo quando ele o carrega; só o corpo solto cai para o nome.
+- **A varredura é no INBOX, o mesmo por onde entra o booking recap de NDF Comm
+  e Opt Comm** (`scan_unwind_box` chama o `_connect_inbox` do
+  `scan_new_deals_box`): o aviso do Athena chega na caixa de entrada, não na
+  subpasta das liquidações, que era onde a primeira versão o procurava — ali
+  ele voltava "nenhum e-mail", calado. **O ARQUIVAMENTO não acompanhou**: o
+  e-mail importado vai para a `Unwind` das liquidações
+  (`OTC_UNWIND_ARCHIVE_FOLDER`), que é o que separa o que já entrou do que
+  falta. `OTC_UNWIND_SOURCE_FOLDER` preenchida volta a varrer uma subpasta —
+  e **tupla vazia não se passa ao `resolve_folder`**: ele devolveria a RAIZ da
+  caixa, que não tem mensagem nenhuma.
 - **O box scan procura a pasta na RAIZ da caixa e depois no Inbox**
   (`resolve_folder`), dizendo no log por onde achou; a árvore do Outlook não
   distingue os dois níveis, e presumir um deles arquiva o e-mail numa pasta
