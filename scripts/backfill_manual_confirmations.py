@@ -109,13 +109,25 @@ FAMILIES = {
     # confirmação de cliente e fica de fora pelo `_pc_is_internal_counterparty`.
     'Swap Bullet':        {'dir': ('Swap', 'Bullet'),        'source': 'SWAP',           'key': 'b3id', 'swap': True},
     'Swap Bullet Corp':   {'dir': ('Swap', 'Bullet'),        'source': 'SWAP CORPORATE', 'key': 'b3id', 'swap': True},
+    # A RECOMPRA de termo de moeda (§488). A árvore dela fica FORA de
+    # `cache/new deals/` de propósito (o New Deals Monitor varre aquela pasta e
+    # criaria um card sozinho), então a família declara a raiz por FUNÇÃO — a
+    # mesma `data_paths.unwinds_cache_root()` que a gravação e o Monitor usam,
+    # nunca um caminho escrito de novo aqui.
+    'Unwind NDF FX':      {'root': 'unwinds', 'dir': ('NDF', 'FX'),
+                           'source': 'UNWIND NDF', 'key': 'deal'},
 }
 
 
 def family_root(cfg, R):
-    """A pasta da família: a do próprio gerador quando é página genérica."""
+    """A pasta da família: a do próprio gerador quando é página genérica, e a
+    raiz das recompras quando a família declara `root` — ela mora fora do
+    `cache/new deals/`."""
     if cfg.get('generic'):
         return R._GENERIC_ND_PRODUCTS[cfg['generic']]['dir']
+    if cfg.get('root') == 'unwinds':
+        from apps.pages.data_paths import unwinds_cache_root
+        return os.path.join(unwinds_cache_root(), *cfg['dir'])
     return os.path.join(CACHE_ROOT, *cfg['dir'])
 
 

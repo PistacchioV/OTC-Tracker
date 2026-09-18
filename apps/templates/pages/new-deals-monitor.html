@@ -342,6 +342,7 @@
         'intrag-ndf':         'ti-building',
         'intrag-option':      'ti-briefcase',
         'intrag-swap':        'ti-arrows-exchange',
+        'intrag-unwind':      'ti-rotate-2',
         'intrag-dce-option':  'ti-file-invoice',
         'intrag-dce-ndf':     'ti-file-invoice',
         'intrag-dce-swap':    'ti-file-invoice'
@@ -464,7 +465,7 @@
     var GROUPS = [
         { key: 'ndm-grp-ndf',     label: 'NDF',
           b3: ['ndf-commodities', 'ndf-fwdstart', 'ndf-otherpublisher', 'ndf-vanilla', 'unwind-ndf-fx'],
-          intrag: ['intrag-ndf'] },
+          intrag: ['intrag-ndf', 'intrag-unwind'] },
         { key: 'ndm-grp-options', label: 'Options',
           b3: ['opt-commodities', 'opt-fxo', 'opt-equity'],
           intrag: ['intrag-option', 'intrag-dce-option', 'intrag-dce-ndf'] },

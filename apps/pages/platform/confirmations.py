@@ -1685,3 +1685,47 @@ def _conf_swap_xml(picked, merc, ref):
     BRL, moedaEstrangeira e valorEstrangeiro VAZIOS."""
     return _conf_ndf_xml(picked, merc, ref, tipo='SWAP', prefixo='Swap_EDG',
                          warn_no_spot=False, legs_fn=_conf_swap_legs, ccy='BRL')
+
+
+# ── Recompra (unwind): o Termo de Resilição (§488, Fase 1) ───────────────────
+# O distrato da operação recomprada. Uma família só — o texto do Termo é o
+# mesmo para toda recompra de termo de moeda —, e o eixo do grupo é o de
+# sempre: contraparte × moeda (§457). O documento e o Save moram na vertical
+# (`features/unwinds`), que é a dona do dado; o que fica aqui é a SEGREGAÇÃO,
+# porque é ela que o Generate do Confirmations Monitor consulta.
+_CONF_UNWIND_FAMILY_TEMPLATES = {
+    'termo-resilicao': ('confirmations/termo-resilicao-unwind.html',
+                        '/confirmation/unwind/termo-resilicao'),
+}
+_CONF_UNWIND_FAMILY_LABEL = {'termo-resilicao': 'Termo de Resilição'}
+# A pasta do Electronic Inventory (= o tipo da confirmação).
+_CONF_UNWIND_FAMILY_TYPE = {'termo-resilicao': 'TERMO DE RESILICAO'}
+
+
+def _conf_load_unwind(ref):
+    """As recompras do dia no formato das confirmações. Busca atrasada no
+    routes — platform não importa feature."""
+    from apps.pages import routes
+    try:
+        return routes._unwind_engine().confirmation_deals(ref)
+    except Exception:
+        log.warning('[conf] unwind day load failed:\n%s', traceback.format_exc())
+        return []
+
+
+def _conf_unwind_family(deal, subj):
+    return 'termo-resilicao'
+
+
+def _conf_unwind_moeda(deal):
+    return str(deal.get('Currency') or '').strip().upper()
+
+
+def _conf_unwind_groups(ref):
+    return _conf_segregate(_conf_load_unwind(ref), _conf_unwind_family,
+                           merc_fn=_conf_unwind_moeda)
+
+
+def _conf_pick_unwind(ref, acr, merc, family):
+    return _conf_pick_eligible(_conf_load_unwind(ref), acr, merc, family,
+                               _conf_unwind_family, merc_fn=_conf_unwind_moeda)

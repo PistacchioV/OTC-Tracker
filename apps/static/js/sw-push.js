@@ -36,6 +36,7 @@ var PAGE_URL = {
     'Unwind NDF FX': '/unwinds/ndf/fx',
     'Swap VCP': '/other-products-swap-vcp',
     'Intrag Swap': '/intrag-swap',
+    'Intrag Unwind': '/intrag-unwind',
     'Support': '/tickets-list',
     'Other Products Summary': '/other-products-summary',
     'NDF Summary': '/ndf-summary',

@@ -553,3 +553,100 @@ def _dce_swap_apply_fixed(fields, tpl_fields):
         if 0 <= i < len(out):
             out[i] = str(f.get('source_detail', '') or '').strip()
     return out
+
+
+# ── Intrag — Unwind (a recompra na visão do fundo) ───────────────────────────
+# A planilha que a mesa manda à Intrag quando uma operação com o fundo numa das
+# pontas é recomprada. **Onze colunas, as MESMAS para todos os produtos**
+# (termo, opção e swap): o que muda de um para o outro é só a CARTEIRA — a do
+# Lawton ou a da Atacama (a mesa, 18/09/2026).
+#
+# Por isso o layout mora aqui, na Intrag, e não na vertical da recompra: quem
+# conhece a operação entrega os valores em forma de dado (datas como `date`,
+# valores como número, total/credor como sim-ou-não) e quem escreve a linha é
+# esta função. A recompra de opção e a de swap, quando existirem, entram pela
+# mesma porta sem reescrever de-para nenhum.
+INTRAG_UNWIND_FIELDS = (
+    'carteira', 'b3_id', 'data_inicio', 'data_vencimento', 'data_recompra',
+    'valor_base_original', 'valor_base_recomprado', 'situacao',
+    'data_liquidacao', 'sentido', 'valor_liquidacao',
+)
+
+# A carteira por fundo. As duas já viviam no código (a do Lawton no termo e na
+# opção da Intrag, a da Atacama no Swap Bullet); aqui elas ficam lado a lado,
+# que é como a regra se lê: a linha é a mesma, a carteira é que muda.
+INTRAG_CARTEIRAS = {'LAWTON': 'INTRAGJP552', 'ATACAMA': 'INTRAGJP633'}
+
+INTRAG_UNWIND_SIT_TOTAL = 'Recomprado Totalmente'
+INTRAG_UNWIND_SIT_PARCIAL = 'Recomprado Parcialmente'
+INTRAG_UNWIND_CREDOR = 'Credor'
+INTRAG_UNWIND_DEVEDOR = 'Devedor'
+
+
+def _intrag_data(d):
+    """dd/mm/aaaa, como a planilha da mesa. Valor que não é data volta como
+    texto — a mesa corrige na grade, e inventar uma data é pior."""
+    try:
+        return d.strftime('%d/%m/%Y')
+    except AttributeError:
+        return str(d or '').strip()
+
+
+def _intrag_valor(v):
+    """Número com duas casas e ponto decimal, como os demais arquivos da
+    Intrag. `None` fica em BRANCO: zero e 'não sei' não são a mesma coisa —
+    o Valor de Liquidação zero existe (recompra que não gera caixa)."""
+    if v is None or (isinstance(v, str) and not v.strip()):
+        return ''
+    try:
+        return '{:.2f}'.format(float(v))
+    except (TypeError, ValueError):
+        return str(v).strip()
+
+
+def intrag_unwind_entry(fundo, b3_id, data_inicio, data_vencimento, data_recompra,
+                        valor_base_original, valor_base_recomprado, total,
+                        data_liquidacao, credor, valor_liquidacao, deal='', client=''):
+    """A linha da Intrag para UMA recompra. -> (entry, avisos).
+
+    `total` e `credor` são de TRÊS estados (True/False/None): sem saber, a
+    célula fica em branco e avisa — a Situação e o Sentido dizem à Intrag o que
+    fazer com o contrato e de que lado lançar, e escrever um palpite ali é pior
+    que a célula vazia que a mesa preenche na grade.
+
+    `credor` é na VISÃO DO FUNDO, sempre: quem lança a ponta é ele."""
+    avisos = []
+    carteira = INTRAG_CARTEIRAS.get(str(fundo or '').strip().upper(), '')
+    if not carteira:
+        avisos.append({'code': 'intrag_unwind_sem_carteira',
+                       'params': {'fundo': str(fundo or '')},
+                       'text': 'Fundo %r sem carteira da Intrag — a coluna CARTEIRA fica '
+                               'em branco' % str(fundo or '')})
+    if total is None:
+        avisos.append({'code': 'intrag_unwind_sem_situacao', 'params': {},
+                       'text': 'Não deu para dizer se a recompra é total ou parcial — '
+                               'preencha a Situação na grade'})
+    if credor is None:
+        avisos.append({'code': 'intrag_unwind_sem_sentido', 'params': {},
+                       'text': 'Sem o sentido apurado, a coluna Sentido fica em branco'})
+    entry = {
+        'carteira':            carteira,
+        'b3_id':               str(b3_id or '').strip(),
+        'data_inicio':         _intrag_data(data_inicio),
+        'data_vencimento':     _intrag_data(data_vencimento),
+        'data_recompra':       _intrag_data(data_recompra),
+        'valor_base_original': _intrag_valor(valor_base_original),
+        'valor_base_recomprado': _intrag_valor(valor_base_recomprado),
+        'situacao':            '' if total is None else
+                               (INTRAG_UNWIND_SIT_TOTAL if total else INTRAG_UNWIND_SIT_PARCIAL),
+        'data_liquidacao':     _intrag_data(data_liquidacao),
+        'sentido':             '' if credor is None else
+                               (INTRAG_UNWIND_CREDOR if credor else INTRAG_UNWIND_DEVEDOR),
+        'valor_liquidacao':    _intrag_valor(valor_liquidacao),
+        '_deal':               str(deal or '').strip(),
+        '_client':             str(client or '').strip(),
+        'status':              'New',
+        'maker':               '',
+        'checker':             '',
+    }
+    return entry, avisos

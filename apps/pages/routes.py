@@ -1838,8 +1838,13 @@ _daycache_forget = _pf_jcache._daycache_forget
 # do deal no endpoint tem de entrar nesta tupla — `check_dashboard_walk.py` varre
 # a função por AST e recusa o que ficar de fora, porque a projeção silenciosa
 # devolveria `None` sem erro nenhum.
+# A `LOB` entra na projeção porque é ela que QUEBRA o Swap por mesa no gráfico
+# (EDG × CEM): a nomenclatura que a mesa usa já está no dado, e lê-la aqui evita
+# um de-para novo. Campo que não está nesta lista simplesmente não existe para o
+# painel — foi o que fez o Swap Bullet sair como 'Swap Bullet' (a pasta) em vez
+# de 'Swap EDG' na primeira versão da quebra.
 _DASH_DEAL_FIELDS = ('B3ID', 'Client', 'Commodities', 'Commodity', 'Deal', 'LE',
-                     'Status', 'TradeDate', 'UnderlyingAsset')
+                     'LOB', 'Status', 'TradeDate', 'UnderlyingAsset')
 
 _dash_file_memo = {}                    # caminho → (mtime, tamanho, [deals])
 _dash_memo_lock = threading.Lock()
@@ -2245,6 +2250,19 @@ def api_dashboard_stats():
 
     swap_total = len(swap_deals)
 
+    # A QUEBRA do Swap por MESA — a mesa pediu 'Swap EDG' e 'Swap CEM', e não um
+    # 'Swap' que soma as duas. Quem responde é a **LOB do próprio deal** (o Swap
+    # Bullet grava 'EDG', a do registro na B3), e não um de-para novo: a
+    # nomenclatura da mesa já está no dado. Deal sem LOB cai no segundo nível da
+    # pasta ('Swap Bullet'), que ainda diz de que produto a barra é.
+    def _swap_label(d):
+        lob = str(d.get('LOB') or '').strip().upper()
+        if lob:
+            return 'Swap ' + lob
+        return str(d.get('_product') or '').strip() or 'Swap'
+
+    dist_swap_products = Counter(_swap_label(d) for d in swap_deals)
+
     # As RECOMPRAS (unwinds) têm card próprio: elas não são registro novo, e
     # somá-las ao card do produto faria o número querer dizer duas coisas. A
     # contagem é da vertical (`cache/unwinds/`, fora da árvore de New Deals —
@@ -2292,6 +2310,7 @@ def api_dashboard_stats():
     monthly_ndf_vanilla  = [0] * 12
     monthly_ndf_otherpub = [0] * 12
     monthly_ndf_fwdstart = [0] * 12
+    monthly_swap_products = {}
     if _store.isdir(NEW_DEALS_CACHE_ROOT):
         # Segunda passada pela MESMA árvore — os contadores por mês são sempre do
         # ano inteiro e ignoram o período pedido. Ela usa o mesmo `_dash_scan_files`
@@ -2332,10 +2351,14 @@ def api_dashboard_stats():
             # genéricos (vanilla/other pub/fwd start) usam a regra de
             # pares LE × contraparte (_gen_ndf_counted).
             # O `Deal` vazio e o `Canceled` já foram descartados na leitura.
-            target[fdate.month - 1] += sum(
-                1 for d in _dash_file_deals(fp, fname, mtime, size, fdate, product, ptype)
-                if (_gen_ndf_counted(d) if gen_bucket else not _is_bank(d))
-            )
+            _do_mes = [d for d in _dash_file_deals(fp, fname, mtime, size, fdate, product, ptype)
+                       if (_gen_ndf_counted(d) if gen_bucket else not _is_bank(d))]
+            target[fdate.month - 1] += len(_do_mes)
+            if ptype == 'SWAP' and not is_fxo_file:
+                # A mesma quebra por mesa do total, na série do mês.
+                for d in _do_mes:
+                    monthly_swap_products.setdefault(
+                        _swap_label(d), [0] * 12)[fdate.month - 1] += 1
 
     # Recent deals: last 50 client rows sorted desc — frontend filters by product
     # A chave leva o Deal junto: `sorted` é estável, então sem ele o desempate
@@ -2386,6 +2409,14 @@ def api_dashboard_stats():
         'monthly_fxo':   monthly_fxo,
         'monthly_swap':  monthly_swap,
         'monthly_unwind': _unw['monthly'],
+        # As séries QUEBRADAS (a mesa, 18/09/2026): o Swap por mesa (EDG, CEM)
+        # e a recompra por produto (Unwind NDF FX…). Os dois totais acima
+        # continuam sendo a SOMA — o gráfico usa a quebra e os cards, o total.
+        'swap_products': [
+            {'label': l, 'total': dist_swap_products.get(l, 0),
+             'monthly': monthly_swap_products.get(l, [0] * 12)}
+            for l in sorted(set(dist_swap_products) | set(monthly_swap_products))],
+        'unwind_products': _unw.get('products') or [],
         'recent_deals':  recent_deals,
     }))
 
@@ -9956,6 +9987,35 @@ def _ndfsum_collect(ref):
                                          row[ci['VL_STRIKE_PRICE']]),
             })
 
+    # ── As RECOMPRAS que liquidam hoje (§488) ────────────────────────────────
+    # A recompra liquida caixa como qualquer termo do dia, e a mesa vê o dia
+    # inteiro numa tela só. Ela entra aqui — no Trade Level e no Summary — e
+    # NÃO no `email_trades`: o aviso de liquidação sai de manhã em lote e a
+    # recompra chega durante o dia (o e-mail dela é processo separado).
+    #
+    # Entrando em `raws` ANTES do bloco de IR, ela participa do imposto do dia
+    # pela mesma regra do piso mensal — que é o certo: o ledger é mensal, e a
+    # recompra da tarde tem de ver o que a liquidação da manhã reteve.
+    try:
+        for u in (_unwind_engine().settlement_rows(ref) or []):
+            trade.append({
+                'cells': [u['legal'], u['counterparty'], u['athena'], u['b3'],
+                          u['trade_date'], u['settle_date'],
+                          _swapchar_fmt_value('{:.2f}'.format(u['notional_fc'])),
+                          u['ccy'], u['fixing'],
+                          _swapchar_fmt_value('{:.2f}'.format(u['settlement'])),
+                          # A recompra não tem resgate na B3 para conferir: o
+                          # valor do lado de lá fica VAZIO e o veredito é
+                          # `None` — "não há o que conferir" não é "diverge".
+                          '', u['fixing'], ''],
+                'diff': '', 'ok': None, 'unwind': True,
+            })
+            u = dict(u)
+            u['_trade_idx'] = len(trade) - 1
+            raws.append(u)
+    except Exception:                                       # noqa: BLE001
+        log.warning('[ndfsum] recompras do dia ficaram de fora:\n%s', traceback.format_exc())
+
     # O IR é CALCULADO (regra do piso mensal, §423) e vence o VL_TAX_INCOME do
     # Cockpit: a API não o traz, e duas fontes para o mesmo imposto fariam o
     # aviso de um dia discordar do de outro. A célula do Trade Level mostra o
@@ -10063,7 +10123,10 @@ def _ndfsum_collect(ref):
                         and abs(a['b3_value'] - a['int_value']) <= _NDFSUM_TOL),
         }
 
-    return {'trade': trade, 'summary': summary, 'email_trades': raws, 'recon': recon}
+    # O aviso em lote é só das liquidações do Cockpit: a recompra tem processo
+    # de e-mail PRÓPRIO, que sai quando ela chega (§488).
+    return {'trade': trade, 'summary': summary, 'recon': recon,
+            'email_trades': [r for r in raws if not r.get('unwind')]}
 
 
 # TED release request (TEDs button on the Settlement Summary) — fixed recipients.
@@ -10566,6 +10629,16 @@ def _intrag_engine():
     `_maybe_save_intrag_fxo`) são todos de ESCRITA. O nome da função fica como
     está: ele é a fronteira que o New Deals conhece."""
     from apps.pages.features.intrag import commands
+    return commands
+
+
+def _unwind_engine():
+    """Gancho para a vertical das recompras (features/unwinds): a segregação
+    das confirmações do Termo de Resilição (platform/confirmations) lê as
+    recompras do dia por aqui — platform não importa feature, e os entrypoints
+    só são importados no fim deste arquivo. Devolve o `commands`
+    (`confirmation_deals`)."""
+    from apps.pages.features.unwinds import commands
     return commands
 
 
@@ -13430,6 +13503,10 @@ _conf_fxo_conv_rate = _pf_conf._conf_fxo_conv_rate
 _conf_fxo_generation_page = _pf_conf._conf_fxo_generation_page
 _CONF_FWDSTART_FAMILY_TEMPLATES = _pf_conf._CONF_FWDSTART_FAMILY_TEMPLATES
 _CONF_FWDSTART_PARTEA = _pf_conf._CONF_FWDSTART_PARTEA
+_CONF_UNWIND_FAMILY_TEMPLATES = _pf_conf._CONF_UNWIND_FAMILY_TEMPLATES
+_CONF_UNWIND_FAMILY_TYPE = _pf_conf._CONF_UNWIND_FAMILY_TYPE
+_conf_unwind_groups = _pf_conf._conf_unwind_groups
+_conf_pick_unwind = _pf_conf._conf_pick_unwind
 _conf_fwdstart_partea = _pf_conf._conf_fwdstart_partea
 _conf_load_ndffwdstart = _pf_conf._conf_load_ndffwdstart
 _conf_fwdstart_family = _pf_conf._conf_fwdstart_family

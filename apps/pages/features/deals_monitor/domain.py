@@ -51,6 +51,13 @@ _NDM_CARDS = [
     # nessa grafia (o DCE Option carrega o codigo do extrato, tipo `GCCN`; o DCE
     # Swap vem da planilha e nao tem o campo). Sem a chave, o card nao desenha
     # subitem nenhum, em vez de desenhar um LAW/ATA inventado.
+    # A RECOMPRA na visão do fundo (§488): a linha nasce no Send da recompra
+    # para a B3 e vai à Intrag na planilha de onze colunas. Não declara `les`
+    # pela mesma razão do DCE — a entidade do fundo está na CARTEIRA, e não
+    # numa coluna que o `_ndm_deal_le` saiba ler. E `done` é `Sent`: a Intrag
+    # não devolve id nenhum que faça a linha virar Success, e sem isto toda
+    # recompra já instruída ficaria pendente no aviso das 19h para sempre.
+    {'key': 'intrag-unwind',      'label': 'Intrag Unwind',       'url': '/intrag-unwind',                'dirs': ('Intrag/Unwind',),                            'done': ('Sent',)},
     {'key': 'intrag-dce-option',  'label': 'Intrag DCE Option',   'url': '/intrag-dce-option',            'dirs': ('Intrag/DCE Option',)},
     {'key': 'intrag-dce-ndf',     'label': 'Intrag DCE NDF',      'url': '/intrag-dce-ndf',               'dirs': ('Intrag/DCE NDF',)},
     {'key': 'intrag-dce-swap',    'label': 'Intrag DCE Swap',     'url': '/intrag-dce-swap',              'dirs': ('Intrag/DCE Swap',)},
@@ -110,6 +117,8 @@ _NDM_TAXONOMY = {
     'intrag-ndf':         ('NDF', '—'),
     'intrag-option':      ('Option', '—'),
     'intrag-swap':        ('Swap', '—'),
+    # A recompra TEM sub-variante: é o outro fluxo do mesmo produto, como o DCE.
+    'intrag-unwind':      ('NDF', 'Unwind'),
     # O DCE, ao contrario, TEM sub-variante: e o outro fluxo do mesmo produto.
     'intrag-dce-option':  ('Option', 'DCE'),
     'intrag-dce-ndf':     ('NDF', 'DCE'),

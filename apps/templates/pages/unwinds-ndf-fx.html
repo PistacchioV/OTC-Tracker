@@ -489,6 +489,7 @@ $(document).ready(function () {
     function _actionsCell() {
         return '<div class="d-flex justify-content-center gap-1">' +
             '<a class="btn btn-info btn-sm rounded-circle btn-row-preview" href="#" data-bs-toggle="tooltip" data-bs-placement="auto" data-bs-title="Preview the B3 file" data-bs-custom-class="tooltip-info"><i class="ti ti-eye"></i></a>' +
+            '<a class="btn btn-secondary btn-sm rounded-circle btn-row-termo" href="#" data-bs-toggle="tooltip" data-bs-placement="auto" data-bs-title="Termo de Resilição" data-bs-custom-class="tooltip-secondary"><i class="ti ti-file-text"></i></a>' +
             '<a class="btn btn-primary btn-sm rounded-circle btn-row-send" href="#" data-bs-toggle="tooltip" data-bs-placement="auto" data-bs-title="Send" data-bs-custom-class="tooltip-primary"><i class="ti ti-brand-telegram"></i></a>' +
             '<a class="btn btn-danger btn-sm rounded-circle btn-row-delete" href="#" data-bs-toggle="tooltip" data-bs-placement="auto" data-bs-title="Delete" data-bs-custom-class="tooltip-danger"><i class="ti ti-trash"></i></a></div>';
     }
@@ -707,6 +708,20 @@ $(document).ready(function () {
     });
     $('#unw-table tbody').on('click', '.btn-row-delete', function (e) {
         e.preventDefault(); var d = table.row($(this).closest('tr')).data(); if (d) deleteRows([d[C_KEY]]);
+    });
+
+    // O Termo de Resilição abre com a recompra da LINHA (o grupo contraparte ×
+    // moeda é o que a esteira gera; aqui a mesa pediu o documento desta).
+    $('#unw-table tbody').on('click', '.btn-row-termo', function (e) {
+        e.preventDefault();
+        var d = table.row($(this).closest('tr')).data();
+        if (!d) return;
+        var row = ROWS[d[C_KEY]] || {};
+        var q = '?date=' + encodeURIComponent(refDateIso()) +
+                '&acronym=' + encodeURIComponent(row.ClientAcronym || row.Counterparty || '') +
+                '&mercadoria=' + encodeURIComponent(row.Currency || '') +
+                '&athena_id=' + encodeURIComponent(d[C_KEY]);
+        window.open('/confirmation/unwind/termo-resilicao' + q, '_blank');
     });
 
     // Seleção de célula em TODA tabela (§7).

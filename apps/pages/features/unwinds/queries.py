@@ -110,7 +110,8 @@ def participant_name(le='BANCO'):
 
 
 def dashboard_counts(period, now):
-    """Quantas recompras o painel mostra: {'total': n, 'monthly': [12]}.
+    """Quantas recompras o painel mostra:
+    `{'total': n, 'monthly': [12], 'products': [{label, total, monthly}]}`.
 
     Varre `cache/unwinds/` INTEIRA — o card do painel e de recompra, nao de
     recompra de NDF de moeda: os produtos que vierem depois entram sozinhos,
@@ -132,9 +133,14 @@ def dashboard_counts(period, now):
     from apps.pages.features.unwinds.infra import persistence
 
     total, monthly = 0, [0] * 12
+    # A QUEBRA por produto (a mesa pediu 'Unwind NDF FX', não um 'Unwinds'
+    # genérico): o rótulo sai dos dois primeiros níveis do caminho, que é a
+    # mesma leitura que o New Deals Monitor faz da árvore (§454). Recompra de
+    # outro produto entra sozinha, sem cadastro nenhum.
+    por_produto = {}
     raiz = os.path.normpath(persistence.cache_root())
     if not _store.isdir(raiz):
-        return {'total': total, 'monthly': monthly}
+        return {'total': total, 'monthly': monthly, 'products': []}
     # UMA passada SEM poda ('all'), e o periodo aplicado no laco. O painel faz
     # duas passadas porque as duas compartilham o memo de arquivo-dia; aqui a
     # arvore e pequena, e varrer por 'year' perderia os anos anteriores no
@@ -154,14 +160,80 @@ def dashboard_counts(period, now):
                 if isinstance(e, dict) and str(e.get('AthenaID') or '').strip())
         if not n:
             continue
+        rotulo = _rotulo_do_caminho(raiz, fp)
+        p = por_produto.setdefault(rotulo, {'label': rotulo, 'total': 0, 'monthly': [0] * 12})
         if fdate.year == now.year:
             monthly[fdate.month - 1] += n
-        if period == 'month':
-            if fdate.year == now.year and fdate.month == now.month:
-                total += n
-        elif period == 'year':
-            if fdate.year == now.year:
-                total += n
-        else:
+            p['monthly'][fdate.month - 1] += n
+        no_periodo = (period == 'month' and fdate.year == now.year and fdate.month == now.month) \
+            or (period == 'year' and fdate.year == now.year) \
+            or period not in ('month', 'year')
+        if no_periodo:
             total += n
-    return {'total': total, 'monthly': monthly}
+            p['total'] += n
+    return {'total': total, 'monthly': monthly,
+            'products': sorted(por_produto.values(), key=lambda x: x['label'])}
+
+
+def _rotulo_do_caminho(raiz, fp):
+    """'…/unwinds/NDF/FX/2026/09/…json' -> 'Unwind NDF FX'.
+
+    Os dois primeiros níveis não numéricos, como o Monitor lê a árvore. Sem
+    nível nenhum (arquivo direto na raiz) o rótulo é só 'Unwind', que ainda diz
+    o que a barra é."""
+    import os as _os
+    rel = _os.path.relpath(fp, raiz).replace('\\', '/').split('/')
+    niveis = [p for p in rel[:-1] if not p.isdigit()][:2]
+    return ' '.join(['Unwind'] + niveis)
+
+
+# ── O Termo de Resilição ─────────────────────────────────────────────────────
+
+def _acr_da_linha(linha):
+    """Como a recompra se chama no agrupamento: o accronym do e-mail quando ele
+    veio, senão o nome da contraparte da posição. É o mesmo valor que a grade
+    mostra, e é o que vai na URL do documento."""
+    return (str((linha or {}).get('ClientAcronym') or '').strip()
+            or str((linha or {}).get('Counterparty') or '').strip())
+
+
+def termo_grupo(ref, acr='', moeda=''):
+    """As recompras de UMA contraparte (× moeda) na data — as linhas do Anexo I
+    do Termo de Resilição, na ordem em que a grade as mostra.
+
+    O eixo é o MESMO em toda parte (§457): contraparte × moeda. Duas recompras
+    da mesma contraparte em moedas diferentes são dois termos, porque o Valor
+    Base Liquidado de cada linha está na moeda do contrato — misturá-las num
+    documento só faria a mesa somar laranja com maçã.
+
+    Linha já resilida NÃO é filtrada aqui: reabrir o documento de um termo já
+    salvo é o caminho normal de corrigir um campo e salvar de novo."""
+    alvo = str(acr or '').strip().upper()
+    m = str(moeda or '').strip().upper()
+    out = []
+    for e in entries(date_str=str(ref or '')):
+        if alvo and alvo not in (_acr_da_linha(e).upper(),
+                                 str(e.get('Counterparty') or '').strip().upper()):
+            continue
+        if m and str(e.get('Currency') or '').strip().upper() != m:
+            continue
+        out.append(e)
+    return out
+
+
+def spn_por_taxid(taxid):
+    """O SPN do Reference Data pelo CPF/CNPJ da contraparte — a chave que o
+    `_conf_cgd_lookup` usa para achar o CGD.
+
+    A recompra não traz SPN: a posição entrega nome e documento (§488), e é
+    pelo documento que se chega ao cadastro. Sem casar, devolve '' e quem chama
+    avisa — o CGD em branco no documento é campo a preencher, nunca uma data
+    inventada."""
+    import re
+    d = re.sub(r'\D', '', str(taxid or ''))
+    if not d:
+        return ''
+    for rec in _R()._refdata_triples():
+        if re.sub(r'\D', '', str(rec.get('taxid') or '')) == d:
+            return str(rec.get('spn') or '').strip()
+    return ''
