@@ -21211,3 +21211,274 @@ Send dele faz). Linha com a Atacama vai na tabela, sem anexo, e a resposta traz
 Rede: `check_email_validation.py` (novo), `check_swap_vcp_factors`,
 `check_soc_layers`, `check_notif_page_url`, `check_export_padrao`,
 `check_row_action_buttons`, `check_table_center` — todos verdes.
+
+## §488 — Recompra (unwind) de NDF de moeda: do e-mail do Athena ao arquivo da B3 (2026-09-18)
+
+**O pedido da mesa.** Unwinds e new deals que chegam ad hoc (recompra de NDF e
+opção de commodities, FXO, swap CEM) não têm recebimento estruturado: alguém lê
+o e-mail, procura a operação e digita. A primeira ideia era um dropzone com
+PRINT e OCR; a conversa mostrou que **a fonte são TABELAS HTML no e-mail**, não
+imagem, e o OCR saiu do desenho antes de existir. A Fase 1 é a recompra de NDF
+de MOEDA, que é a mais estruturada: box scan de 30 em 30 minutos, Termo de
+Resilição e Intrag.
+
+**A ponte até o contrato são os 14 caracteres à direita do Athena ID.** O aviso
+traz `STP-XE-10G5U5X-0-0`; o `Código Identificador` do Live Position traz
+`XE-10G5U5X-0-0`, e é por ele que se acha o `Contrato` (o B3 ID). O aviso NÃO
+se basta: moeda, lado da posição, contas e contraparte só existem na posição, e
+todas chegam por essa mesma ponte.
+
+**As contas saem da POSIÇÃO, não do cadastro.** A recompra é de operação já
+registrada, então `Codigo da Parte` e `Codigo da Contraparte` estão na própria
+linha — do jeito que foram para a B3 no registro. Isso resolveu, sem escolher,
+uma divergência que existia entre dois cadastros: o RefData traz o omnibus
+`73760.10-2` no nome do banco e o `b3-accounts` traz a conta própria
+`73760.00-9`. A posição entrega a própria, que é a que todos os outros
+geradores de TER usam. Zero lookup, zero risco de divergir.
+
+**A conferência do resultado é UMA fórmula**, verificada contra três operações
+reais:
+
+```
+Nocional ME  = Unwound Amount            (contrato com nocional em ME)
+             = Unwound Amount / Strike   (contrato FIXO EM REAIS)
+Valor Futuro = Nocional ME × (Termination Rate − Strike) × sinal
+Resultado    = Valor Futuro / (1 + Pre FWD Rate)^(DU/252)
+```
+
+- O veredito tem **TRÊS estados** (`conferir_apuracao`): fecha, NÃO fecha, e
+  não dá para conferir (parcela ausente ou lado da posição não resolvido). Um
+  aviso sem parcela e um aviso errado não podem sair iguais, e "passou por
+  omissão" não existe.
+- **Só o `Input Termination Fee` é confiável.** No caso fixo em reais o e-mail
+  erra QUATRO campos: `Future Value`, `Present Value`,
+  `Calculated Termination Fee` e `Direction` — diz `−222,75` e `PAY` onde a
+  verdade é `+42,80` a receber. Por isso a **direção sai do SINAL do
+  resultado**, nunca do campo `Direction`; o campo do e-mail fica guardado e a
+  divergência vira aviso.
+- O marcador de fixo em reais é `Notional CCY ∈ (BRR, BRL)`. `BRL` entra junto
+  porque o dia em que o Athena mandar o ISO a regra não pode virar
+  silenciosamente "não é fixo em reais", que é o caso que dá valor errado.
+- Prova cruzada independente: o `Valor Antecipado` da posição (155.652,49) é a
+  soma das duas recompras convertidas (11.529,81 + 144.122,68), e o
+  `Valor Base no registro` (587.224,31) é `Notional / Strike`
+  (3.055.856,61 / 5,2039).
+
+**O arquivo é o TER 0014** (Antecipação de Contrato a Termo Sem CCP, §4.9.3 do
+manual `Enviar Arquivos` v.14/09/2026, pág. 730-732, 133 caracteres). O layout
+já existia no File Interpreter sob o nome da B3 — *antecipação* —, com todo
+`source` vazio e os metadados apontando para §4.10.3/pág. 648-650 de uma versão
+anterior. Os 27 campos foram preenchidos e os metadados corrigidos. As decisões
+que não se leem no layout:
+
+- **campo 9** em moeda ESTRANGEIRA e do valor RECOMPRADO, nunca do nocional
+  original: o mesmo contrato pode ser antecipado mais de uma vez, e o
+  `Valor Antecipado` da posição é a soma acumulada deste campo;
+- **campos 10 e 11** = HOJE (a B3 aceita até D+1 no 11, e a data da linha vence
+  quando a mesa a edita);
+- **campo 13** leva o `Pre FWD Rate` como PERCENTUAL ao ano (13,75 →
+  `1375000000`) — confirmado pela mesa contra a tela da B3. O exemplo do manual
+  (`0100000010`) serve às duas leituras e não decide nada;
+- **campo 14** = `1.00000000` (`000100000000`) quando a taxa termo é em BRL, e
+  a paridade USD/BRL quando não é (mercadoria com strike em USD). **Branco não
+  é neutro ali**: é fator ausente;
+- **campo 15** em brancos (decisão da mesa), **campo 16** = `000` sem média.
+
+**A visão do arquivo sai do cadastro, não de um de-para no código.** A conta do
+campo 5 responde pelo `_b3_account_le` (`b3-accounts`), que é o mesmo cadastro
+que a mensageria já consulta. Conta fora do cadastro RECUSA o arquivo dizendo
+qual — a parte de uma recompra tem de ser uma das nossas.
+
+**A página `/unwinds/ndf/fx` tem rota PRÓPRIA**: a URL tem três segmentos e o
+catch-all do `routes.py` só atende `/<template>`. Sem ela a tela responderia
+404 sem erro nenhum na subida. O arquivo-dia fica em `cache/unwinds/NDF/FX/`,
+**fora de `cache/new deals/`** — o Monitor varre aquela pasta e agrupa pelos
+dois primeiros níveis do caminho (§454), e um dia gravado lá viraria um card
+`extra-` no rodapé, classificado como Registration, sem ninguém ter pedido.
+
+**No box scan, a pasta é procurada na RAIZ da caixa e depois no Inbox**
+(`resolve_folder`), dizendo no log por onde achou, e só criando depois de as
+duas buscas falharem. A árvore do Outlook desenha os dois níveis do mesmo
+jeito: presumir um deles é arquivar o e-mail numa pasta nova e vazia com o nome
+da certa, e ninguém procura por ele. A caixa é a `brazil.otc.ops` — a
+`brazil_otc_settlements` está DENTRO dela, e apontar a caixa para o endereço
+das liquidações resolveria para outro lugar, calado.
+
+**Três coisas que só apareceram rodando contra o app**, e que os testes agora
+prendem:
+
+- **o `_lpndf_collect` devolve cada linha como LISTA posicional**, alinhada com
+  `columns`. Um stub de dicionários no teste deixava tudo verde e o primeiro
+  e-mail real morria em `'list' object has no attribute 'get'`. O stub agora
+  entra pela porta do `_lpndf_collect`, então a junção está sob teste;
+- **o motor do File Interpreter lê o BANCO, não o JSON do repositório.** O
+  `.json` versionado é a SEED e a semeadura da subida não sobrescreve o que o
+  banco tem (§434): o cadastro corrigido por commit não chega ao motor, e o
+  arquivo sai com o layout velho sem erro nenhum. Daí o
+  `scripts/import_file_interpreter_template.py`, que leva a seed ao banco e
+  PULA o template que a mesa editou na tela (`--force` para insistir).
+  **Rodar depois do pull**;
+- **o `check_notif_page_url` casa por LITERAL.** O rótulo do sino passado numa
+  constante (`PAGE`) passa verde com os três mapas vazios — o aviso aparece e o
+  clique não vai a lugar nenhum. As três entradas foram adicionadas à mão e o
+  `check_unwind_page` passou a cobrar as três.
+
+**O lado também não é a direção.** O primeiro `campos_ter_0014` derivava o lado
+da posição do sinal do resultado (`Direction` → COMPRADOR/VENDEDOR), e nesta
+amostra o banco está VENDIDO e RECEBE: o campo 6 saía `0` em vez de `1`. O lado
+vem da posição e fica GUARDADO na linha (`Comprado`); a direção é só o sinal.
+
+**O dropzone lê o e-mail como ele vem.** A primeira versão pedia o corpo
+salvo como `.htm` — uma etapa manual que as páginas de New Deals nunca
+pediram. Agora `infra/email_file.ler` aceita `.msg` (pelo `extract_msg`, o
+MESMO caminho do `/api/parse-msg-html`), `.eml` (MIME, com o corpo em
+quoted-printable e o assunto em RFC 2047 que o Outlook exporta) e o corpo
+solto. **Quem decide o formato é o CONTEÚDO, não a extensão** — o magic do
+Compound File Binary para o `.msg`, os cabeçalhos MIME para o `.eml`: o
+Outlook renomeia anexo e a mesa salva com o nome do assunto, e um `.msg` chega
+como `.txt` sem aviso. Arquivo sem extensão nenhuma também é lido. O assunto
+sai do próprio arquivo quando ele o carrega; só o corpo solto cai para o nome
+do arquivo, que é onde o Outlook o põe ao salvar.
+
+Rede: `check_unwind_notification.py` (26 seções), `check_unwind_ter_file.py`
+(8), `check_unwind_page.py` (10), `check_soc_layers`, `check_boxsched`,
+`check_fi_calc`, `check_fi_variants`, `check_notif_page_url` — todos verdes.
+
+**Falta na Fase 1:** Termo de Resilição (o template é HTML cru do Word), o
+arquivo da Intrag (Lawton `INTRAGJP552`, Atacama `INTRAGJP633`), Pending
+Confirmation + esteira, e a **liquidação entrando no Summary de NDF** — por
+e-mail SEPARADO do lote da manhã, porque a liquidação normal sai de manhã e a
+recompra sai quando chega, durante o dia.
+
+## §489 — O painel contava errado: duas regras tiravam operação REAL de todos os números (2026-09-18)
+
+**Como apareceu.** A mesa processou dois Swap Bullet em 17/09/2026 e o painel
+mostrava `Swap Deals = 0`, com as duas operações na tela ao lado. Não era um
+defeito — eram dois, e o segundo é muito mais largo que o swap.
+
+**1. O filtro por `Deal`.** O `_dash_file_deals` descartava toda linha sem a
+coluna `Deal`, e o **Swap Bullet nasce com ela em BRANCO de propósito** (§480:
+a chave é o `_id` interno e o B3 ID é coluna própria). Todas as linhas do
+produto eram invisíveis para o painel. A linha passa a contar quando carrega
+`Deal`, `B3ID` **ou** `_id`, e o `B3ID` entrou na projeção — é o identificador
+de quem não tem `Deal`, e o "Recent deals" mostrava célula vazia.
+
+**2. `_is_bank` era `'banco' in cl`.** Isso não derrubava a perna do banco:
+derrubava **BANCO SAFRA, BANCO BRADESCO e BANCO SANTANDER** — clientes de
+verdade, em TODOS os produtos, dos contadores, do Top 5 e do Deal Flow. É o
+mesmo engano que a platform já documenta no `_ops_is_internal_cpty`, com estes
+três nomes escritos lá.
+
+E o detalhe que fechava a armadilha: a grafia real do arquivo é
+`BANCO J.P. MORGAN S/A`, com ponto depois do P — que **não casa** com nenhum
+dos literais ao lado (`'j.p morgan'`, `'jp morgan'`, `'jpmorgan'`). O `'banco'`
+solto tinha virado o único que pegava a perna do banco, então tirá-lo sem mais
+nada quebraria a deduplicação do intragrupo. A resposta é o `_jpm_re`, que já
+estava na MESMA função para o `_gen_ndf_counted` e tolera as três grafias. Na
+dev, só esta correção levou o Swap de 159 para 161.
+
+**As recompras ganharam card próprio** (`dash-unwind-count`), com fatia no Deal
+Distribution e série no Deal Flow. A decisão foi da mesa, entre três opções:
+somadas ao card do produto, o número passaria a querer dizer duas coisas —
+registro novo e recompra — e não daria mais para separar os dois olhando a
+tela. Os QUATRO cards de produto somam o Total, que é como a mesa confere a
+tela. A contagem é da vertical (`features/unwinds/queries.dashboard_counts`) e
+varre `cache/unwinds/` inteira, então recompra de outro produto entra sozinha;
+ela reusa o `_dash_scan_files`/`_dash_dir_matters` do painel para a poda de
+período ser a MESMA das outras contagens. Uma recompra é UMA linha: não há
+perna espelhada a descartar.
+
+**O `?v=` do `dashboard.js` estava fixo em `20260729a`.** Sem subi-lo, o
+navegador da mesa serviria o arquivo em cache e o card novo ficaria em branco
+para sempre — com o Total já somando a recompra, a conta não fechando por um
+número que não está em lugar nenhum. É a mesma disciplina do `?v=` do CSS (§7),
+que o JS de página também precisa.
+
+**De passagem.** O botão *Scan Box* da página de recompra saiu: a varredura do
+box passa a ser a rota AUTOMÁTICA do Import quando a dropzone está vazia, que é
+o desenho do NDF/Opt Commodities (`processDropzone`). Dois botões faziam a mesa
+escolher entre dois caminhos que levam ao mesmo lugar.
+
+Rede: `check_dashboard_walk.py` §7 (novo — prende as duas regras e recusa o
+`'banco' in cl` voltar num refactor), `check_unwind_page.py` §8, e a bateria de
+tela (`check_table_center`, `check_export_padrao`,
+`check_row_action_buttons`).
+
+## §490 — Toolbar: o teal do Import e o ícone do campo de data eram padrão copiado à mão (2026-09-18)
+
+**O sintoma.** No Swap Bullet o Import saía no laranja do `btn-warning` e o
+Reference Date sem o ícone de calendário, numa tela que a mesa lê ao lado de
+seis outras onde os dois estão certos.
+
+**A causa.** As duas regras viviam DENTRO do `<style>` de cada página, iguais
+em seis delas. Quem escreveu a sétima usou as mesmas CLASSES e não copiou o
+CSS. A classe `.btn-toolbar-import` EXISTE para ser o padrão, e um padrão que
+mora copiado em cada página não é padrão — é uma convenção que só vale onde
+alguém lembrou de repetir.
+
+As duas passaram para o `streamflow.css` (§50), que carrega DEPOIS do
+`extra_css`: as cópias que ainda estão nas páginas continuam valendo (mesmo
+valor, `#4a849b`) e podem sair quando alguém passar por elas. Página nova não
+precisa lembrar de nada.
+
+O ícone vale pela classe `.otc-datefield` **e** pelo id `#apiRefDate`, que é
+como as páginas de New Deals já o chamam: com o `altInput` do flatpickr o campo
+VISÍVEL é um segundo input, que herda a classe (`altInputClass`) mas não o id —
+e é por isso que a regra precisa das duas portas. O `?v=` do `head-css.html`
+subiu junto (§7).
+
+## §491 — A recompra entra no New Deals Monitor (2026-09-18)
+
+**O pedido.** A recompra tinha página e arquivo, mas não aparecia no Monitor —
+a tela em que a mesa vê o que falta fazer no dia.
+
+**Por que ela não aparecia, e por que isso era de propósito.** O Monitor não
+recebe lista de produto: ele VARRE o `cache/new deals/` e agrupa pelos dois
+primeiros níveis do caminho (§454). O arquivo-dia da recompra mora em
+`cache/unwinds/`, FORA dessa árvore, justamente para não virar um card
+`extra-` no rodapé, sem link e classificado como registro (§488). Trazê-la
+para dentro era dar um card de VERDADE, não mudar a pasta.
+
+**O que entrou:**
+
+- **a varredura passou a aceitar mais de uma raiz** (`_varre(raiz, prefixo)`),
+  e o pkey das árvores que não são a de New Deals entra PREFIXADO
+  (`domain.PREFIXO_UNWIND = 'Unwind/'`). Sem o prefixo, um `NDF/FX` de lá
+  cairia no mesmo balde de um `NDF/FX` criado aqui — duas coisas diferentes
+  somadas num card só, sem nada acusar;
+- **o caminho mudou de casa**: `cache/unwinds/` passou a ser
+  `data_paths.unwinds_cache_root()`. Duas partes precisam dele — a recompra
+  grava, o Monitor varre —, e escrito dos dois lados o dia em que a pasta
+  mudasse de nome o Monitor mostraria zero, que é como a tela afirma que não
+  houve recompra num dia em que houve;
+- **o card declara onde FECHA** (`done`). Os demais produtos fecham em
+  `Success` (o B3 ID que volta); a recompra ainda não tem esse retorno e acaba
+  em `Sent`. Sem isto, TODA recompra já enviada apareceria como pendência no
+  aviso das 19h, todos os dias — e o falso alarme diário é o jeito mais rápido
+  de a mesa parar de ler o e-mail (é o mesmo defeito que o `status` minúsculo
+  do Intrag já tinha causado uma vez);
+- **sem `les`**, pela mesma razão dos cards de DCE: a entidade da recompra é a
+  da CONTA do campo 5, e quem traduz conta → LE é o cadastro `b3-accounts`. O
+  `domain` é puro e não o lê; inventar pelo nome do cliente desenharia um
+  JPM/LAW que ninguém afirmou.
+- A chave **não** leva prefixo `intrag-`: a recompra é registro na B3 (o TER
+  0014 vai para o mesmo Batch Conecta), e o prefixo é o único teste de zona do
+  e-mail. Ela entra na coluna **B3 Registration**, no grupo NDF.
+
+**E o guarda aprendeu a pergunta certa.** O §7 do `check_ndm_cards.py` montava
+`pages/<url>.html` para conferir que o link do card ia a algum lugar — o que
+só vale para as páginas do CATCH-ALL. A URL de três segmentos da recompra
+reprovava com o template ao lado, e a saída fácil seria renomear o arquivo
+para uma convenção que a rota não segue. Agora ele resolve pelo `url_map`, que
+é a pergunta de verdade, e mantém o teste de ARQUIVO só onde o catch-all é
+mesmo quem atende.
+
+Rede: `check_ndm_cards.py`, `check_unwind_page.py` §10 (o card, o snapshot com
+a linha do dia, a ausência do `extra-` e a pendência entrando e saindo pelo
+`done`), `check_soc_layers`, `check_daycache`.
+
+**De passagem.** A varredura do `check_unwind_page` por AST achou dois testes
+MEUS que passavam sem conferir nada: escritos com a assinatura do outro
+arquivo (`check(label, got, exp)` em vez de `check(nome, cond, extra)`), eles
+liam a MENSAGEM do erro como condição — verdes com qualquer erro que fosse
+levantado. Os dois passaram a comparar a mensagem.

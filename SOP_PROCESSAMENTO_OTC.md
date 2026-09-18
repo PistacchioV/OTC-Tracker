@@ -109,7 +109,7 @@ Gere o arquivo de registro (Process / Send batch), importe o retorno da câmara 
 
 #### Dashboard
 
-Tela inicial do operador. Consolida os KPIs do dia — número de deals de NDF, Opções, Swap e Total — além da distribuição por produto, do fluxo mensal de negócios, dos rankings Top 5 (clientes, produtos e ativos subjacentes), da posição viva por produto e do Settlement Forecast. É somente leitura e serve como ponto de partida diário.
+Tela inicial do operador. Consolida os KPIs do dia — número de deals de NDF, Opções, Swap, **Recompras (Unwinds)** e Total, sendo que os quatro primeiros somam o Total — além da distribuição por produto, do fluxo mensal de negócios, dos rankings Top 5 (clientes, produtos e ativos subjacentes), da posição viva por produto e do Settlement Forecast. É somente leitura e serve como ponto de partida diário.
 
 ![Dashboard](docs/sop-screenshots/dashboard.png)
 
@@ -316,6 +316,30 @@ Registro de novos negócios de Opção FX (FXO). Importa a planilha, mantém o c
 Registro de novos negócios de Opção de Commodities, com cache, geração Conecta e mapeamento B3.
 
 ![New Deals — Opção Commodities](docs/sop-screenshots/new_deals-opt-commodities.png)
+
+### Produtos — Recompras (Unwinds)
+
+#### Unwinds — NDF FX
+
+Recompra (antecipação) de termo de moeda já registrado na B3. O aviso do Athena
+(*BRL NDF Unwind Notification*) chega por e-mail durante o dia — processo
+SEPARADO do lote de liquidação da manhã. A tela importa o e-mail (arrastado do
+Outlook como `.msg`/`.eml`, ou pela varredura automática do box de 30 em 30
+minutos), casa a operação com o Live Position de NDF pelo identificador,
+**confere o resultado apurado** e monta o arquivo TER 0014 (antecipação de
+contrato a termo, 133 caracteres) para o Batch Conecta.
+
+A coluna **Check** é o veredito da conferência e tem três estados: **OK**,
+**NOK** (o valor do e-mail não bate com o recalculado) e **–** (não deu para
+conferir). **Só se envia com OK.**
+
+A recompra é acompanhada pelo **New Deals Monitor** (card *Unwind NDF FX*, na
+coluna B3 Registration, grupo NDF) e entra no aviso diário de pendências
+enquanto houver linha não enviada; o estado que a encerra é **Sent**.
+
+> **Em construção nesta fase:** Termo de Resilição, arquivo da Intrag, entrada
+> na esteira de confirmação e no Summary de NDF. Até que entrem, essas etapas
+> seguem por fora do sistema.
 
 ### Base de Dados & Administração (Data Base)
 

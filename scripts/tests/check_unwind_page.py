@@ -36,6 +36,16 @@ if os.name != 'nt' and not os.environ.get('OTC_SHARED_DRIVE_ROOT'):
 FALHAS = []
 
 
+def _erro(fn, *a, **k):
+    """A MENSAGEM do ValueError que `fn` levanta, ou None se ela nao levanta.
+    Recusa tem de dizer o motivo — e o motivo e o que se prende aqui."""
+    try:
+        fn(*a, **k)
+    except ValueError as exc:
+        return str(exc)
+    return None
+
+
 def check(nome, cond, extra=''):
     print(('  ok  ' if cond else ' FAIL ') + nome + (('  — ' + str(extra)) if (not cond and extra) else ''))
     if not cond:
@@ -210,7 +220,76 @@ def main():
         check(arq.split('/')[-1],
               ("'" + commands.PAGE + "'") in txt and '/unwinds/ndf/fx' in txt)
 
-    print('\n== 8. a recompra tem card proprio no painel ==')
+    print('\n== 8. o dropzone le .msg, .eml e o corpo solto ==')
+    # A mesa arrasta o e-mail do Outlook: pedir que ela o salvasse como HTML
+    # antes era uma etapa manual que as paginas de New Deals nao pedem. E quem
+    # decide o formato e o CONTEUDO, nao a extensao — o Outlook renomeia
+    # anexo, e um `.msg` chega como `.txt` sem aviso.
+    from apps.pages.features.unwinds.infra import email_file
+    import email.message as _emsg
+
+    eml = _emsg.EmailMessage()
+    eml['Subject'] = SUBJECT
+    eml['From'] = 'athena@jpmorgan.com'
+    eml.set_content('sem html')
+    eml.add_alternative(HTML, subtype='html')
+    bytes_eml = eml.as_bytes()
+
+    html_eml, assunto_eml = email_file.ler('qualquer-nome.eml', bytes_eml)
+    check('o .eml devolve o corpo HTML', 'Before Unwind' in html_eml)
+    check('e o ASSUNTO do proprio e-mail (nao o nome do arquivo)',
+          assunto_eml == SUBJECT, assunto_eml)
+    # Extensao errada nao muda nada: quem decide e o conteudo.
+    _h2, _a2 = email_file.ler('renomeado.txt', bytes_eml)
+    check('o mesmo .eml com extensao .txt continua sendo lido',
+          _a2 == SUBJECT and 'Before Unwind' in _h2)
+
+    # O .eml que o Outlook EXPORTA nao e o do EmailMessage acima: corpo em
+    # quoted-printable, assunto em RFC 2047 e headers DOBRADOS. E a unica
+    # forma que a mesa vai arrastar de verdade.
+    import quopri
+    outlook_eml = (
+        'Received: from mail.jpmorgan.com\r\n\tby EXCH01; Wed, 10 Sep 2026 09:14:02 -0300\r\n'
+        'MIME-Version: 1.0\r\n'
+        'Content-Type: text/html; charset="utf-8"\r\n'
+        'Content-Transfer-Encoding: quoted-printable\r\n'
+        'Subject: =?utf-8?Q?BRL_NDF_Unwind_Notification=5FSTP-XE-10G5U5X-0-0=5FE5VL-3ICSK0W?=\r\n'
+        'From: athena@jpmorgan.com\r\n\r\n'
+        + quopri.encodestring(HTML.encode('utf-8')).decode('ascii')
+    ).encode('utf-8')
+    h_out, a_out = email_file.ler('Mensagem do Outlook.eml', outlook_eml)
+    check('o .eml do Outlook: quoted-printable decodificado',
+          'Before Unwind' in h_out and 'Calculated' in h_out)
+    check('e o assunto RFC 2047 volta legivel', a_out == SUBJECT, a_out)
+    check('arquivo SEM extensao nenhuma tambem e lido',
+          email_file.ler('sem-extensao', outlook_eml)[1] == SUBJECT)
+
+    corpo, assunto_corpo = email_file.ler('unwind.htm', HTML.encode('utf-8'))
+    check('o corpo solto passa direto', 'Before Unwind' in corpo)
+    check('e nao inventa assunto (quem chama cai para o nome do arquivo)',
+          assunto_corpo == '', repr(assunto_corpo))
+
+    _vazio = _erro(email_file.ler, 'x.msg', b'')
+    check('arquivo vazio recusa dizendo o motivo',
+          _vazio == 'the file is empty', _vazio)
+    _grande = _erro(email_file.ler, 'x.msg',
+                    b'\xd0\xcf\x11\xe0' + b'0' * email_file.MAX_BYTES)
+    check('arquivo grande demais recusa antes de parsear',
+          _grande == 'file too large', _grande)
+    # `.msg` de verdade: o magic do Compound File Binary e o que o identifica.
+    check('lixo com o magic de .msg falha como .msg, nao como corpo HTML',
+          (_erro(email_file.ler, 'x.msg', b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1' + b'lixo') or '')
+          .startswith('could not read the .msg'))
+
+    # E o caminho inteiro pelo comando, que e o que a tela chama.
+    R._lpndf_collect = _collect([POS])
+    out_eml = commands.import_email_upload('seja-la-o-nome.eml', bytes_eml,
+                                           ref_dt=date(2026, 9, 10))
+    check('o import do .eml chega na mesma linha',
+          out_eml['rows'][0]['AthenaID'] == 'STP-XE-10G5U5X-0-0'
+          and out_eml['rows'][0]['Contract'] == '26C03202688')
+
+    print('\n== 9. a recompra tem card proprio no painel ==')
     # O painel varre `cache/new deals/`, e a recompra grava em `cache/unwinds/`:
     # sem fonte propria ela simplesmente nao aparece. E o card e PROPRIO porque
     # recompra nao e registro novo — somada ao card do produto, o numero passaria
@@ -256,7 +335,65 @@ def main():
     check('e a arvore contada e a do tmp, nao a da maquina',
           todo['total'] < 20, todo)
 
-    print('\n== 9. a pagina responde e as APIs tambem ==')
+    print('\n== 10. a recompra aparece no New Deals Monitor ==')
+    # O arquivo-dia mora FORA de `cache/new deals/` (§454), entao o Monitor so
+    # a ve se varrer a outra arvore — e com o pkey PREFIXADO, senao um `NDF/FX`
+    # de la cairia no mesmo balde de um `NDF/FX` criado aqui.
+    from apps.pages.features.deals_monitor import domain as NDM
+    from apps.pages.features.deals_monitor import queries as ndm_q
+
+    card = next((c for c in NDM._NDM_CARDS if c['key'] == 'unwind-ndf-fx'), None)
+    check('existe card para a recompra', bool(card))
+    check('e ele aponta para a pagina', (card or {}).get('url') == '/unwinds/ndf/fx')
+    check('a pasta do card leva o prefixo',
+          (card or {}).get('dirs') == (NDM.PREFIXO_UNWIND + 'NDF/FX',), (card or {}).get('dirs'))
+    check('a chave NAO e de Intrag (recompra e registro na B3)',
+          not (card or {}).get('key', '').startswith('intrag-'))
+    check('tem taxonomia (senao o e-mail parte o rotulo em duas palavras)',
+          NDM._NDM_TAXONOMY.get('unwind-ndf-fx') == ('NDF', 'Unwind FX'))
+    check('e esta num grupo do GROUPS da tela',
+          "'unwind-ndf-fx'" in io.open(os.path.join(
+              os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+              'apps', 'templates', 'pages', 'new-deals-monitor.html'),
+              encoding='utf-8').read())
+
+    # O snapshot de verdade, com a linha gravada no arquivo-dia.
+    from apps.pages.data_paths import unwinds_cache_root
+    import apps.pages.data_paths as _dp
+    _dp.unwinds_cache_root = persistence.cache_root
+    import apps.pages.features.deals_monitor.queries as _q
+    _q.unwinds_cache_root = persistence.cache_root
+    with app.test_request_context():
+        cards, _conf = ndm_q._ndm_monitor_snapshot(_dtm(2026, 9, 10))
+    c10 = next((c for c in cards if c['key'] == 'unwind-ndf-fx'), None)
+    check('o card conta a recompra do dia', bool(c10) and c10['total'] >= 1,
+          c10 and c10['total'])
+    _extras = [c['key'] for c in cards if c['key'].startswith('extra-') and 'ndf' in c['key']]
+    check('e NAO nasceu um card generico "extra-" ao lado', not _extras, _extras)
+
+    # A pendencia: `Sent` e o estado FECHADO desta recompra (o B3 ID de volta
+    # ainda nao existe para ela). Sem o `done`, toda recompra ja enviada
+    # apareceria no aviso das 19h todos os dias.
+    check('o card declara onde fecha', c10 and c10.get('done') == ['Sent'], c10 and c10.get('done'))
+    fp10, l10, i10 = queries.find('STP-XE-10G5U5X-0-0', '2026-09-10')
+    for e in l10:
+        e['Status'] = 'Sent'
+    persistence.save(fp10, l10)
+    with app.test_request_context():
+        blocos, _tot = ndm_q._ndm_pending_blocks(_dtm(2026, 9, 10))
+    pend = [r for b in blocos for r in b['rows'] if r['detail'] == 'Unwind FX']
+    check('recompra ENVIADA sai da pendencia do aviso', not pend, pend)
+    for e in l10:
+        e['Status'] = 'Imported'
+    persistence.save(fp10, l10)
+    with app.test_request_context():
+        blocos2, _t2 = ndm_q._ndm_pending_blocks(_dtm(2026, 9, 10))
+    pend2 = [(b['type'], r) for b in blocos2 for r in b['rows'] if r['detail'] == 'Unwind FX']
+    check('e recompra IMPORTADA entra', bool(pend2), pend2)
+    check('na zona Registration, nao na de Intrag',
+          pend2 and pend2[0][0] == 'Registration', pend2 and pend2[0][0])
+
+    print('\n== 11. a pagina responde e as APIs tambem ==')
     R._lpndf_collect = _collect([POS])
     cl = app.test_client()
     with cl.session_transaction() as ss:

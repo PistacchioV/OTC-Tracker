@@ -110,7 +110,7 @@ recusa subir se o `config.py` ficou para trás num pull (§9).
 |---|---|
 | `apps/pages/routes.py` (~13,6 mil linhas) | casca e plataforma miúda: sessão/authz-endpoints, sino, `_MAPPING_DEFS`, leitores `_ndfc_*`/`_ndfsum_*`/`_ndfadv_*`, Daily Settlement `_ds_*`, wiring das features e os ALIASES (`_x = _pf_anbima._x`) |
 | `apps/pages/platform/` (18 módulos) | infra horizontal: `anbima`, `authz`, `db`, `dates`, `json_cache`, `mail`, `email_validation`, `notifications` e os motores `settlement`, `confirmations`, `counterparty`, `forecast`, `electronic_inventory`, `manual_confirmation`, `file_interpreter`, `pending_confirmation`, `operations_b3`, `new_deals` |
-| `apps/pages/features/<nome>/` (45 verticais) | `entrypoint.py` (rotas) · `commands.py` (escrita) · `queries.py` (leitura) · `domain.py` (regras puras) · `infra/` — todas em desenho fino; não existe mais `engine.py` |
+| `apps/pages/features/<nome>/` (49 verticais) | `entrypoint.py` (rotas) · `commands.py` (escrita) · `queries.py` (leitura) · `domain.py` (regras puras) · `infra/` — todas em desenho fino; não existe mais `engine.py` |
 | `apps/pages/database_access.py` | a camada de banco: permit + lock de arquivo + farol de eventos (§4) |
 | `data_store.py` · `duck_read.py` · `json_to_duckdb.py` | o ARMAZÉM (o `DATA_DIR` como sistema de arquivos virtual sobre os DuckDB), a fachada de leitura com os nomes antigos, o motor de conversão (§4) |
 | `data_paths.py` · `request_cache.py` | caminhos de dado; `once_per_request`/`req_cached` |
@@ -670,7 +670,12 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   cores por função: Columns soft-primary, Add Row primary, Export info
   (**Copy · CSV · Excel · Print · PDF**, DataTables Buttons; CSV `;` + BOM;
   Excel exige o registro síncrono do JSZip), Import teal `#4a849b`,
-  Mapping/refresh success, Clear Filters outline-secondary. Export termina no
+  Mapping/refresh success, Clear Filters outline-secondary. **O teal do Import
+  e o ícone do campo de data moram no `streamflow.css` (§50)**, não copiados no
+  `<style>` de cada página: eram iguais em seis e faltavam na sétima, que saiu
+  com o Import laranja e a data sem ícone (§490). A classe é
+  `.btn-toolbar-import`; o ícone vale por `.otc-datefield` E por `#apiRefDate`
+  (com o `altInput` do flatpickr o campo visível herda a classe, não o id). Export termina no
   **Advanced Export** (`otcExportAdvanced('#t', { daily: '<endpoint que a
   própria página consulta>' })`, `exact=1` + confere `source_date`, dia sem
   arquivo é pulado, teto 60 s/dia — §304). **Export próprio não existe**: um
@@ -869,7 +874,14 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   nascia de um placeholder no JS e o mesmo produto aparecia duas vezes na
   tela). `les` só se a entidade sair mesmo do portfolio code — sem a chave, o
   card não desenha subitem, em vez de desenhar um LAW/ATA inventado.
-  `check_ndm_cards.py`.
+  **A varredura aceita MAIS DE UMA RAIZ** (§491): árvore fora do
+  `cache/new deals/` entra com o pkey PREFIXADO (`PREFIXO_UNWIND`), senão um
+  `NDF/FX` de lá soma no mesmo card de um `NDF/FX` daqui. E **o card pode
+  declarar onde FECHA** (`done`): quem não fecha em `Success` — a recompra
+  acaba em `Sent`, porque o B3 ID de volta ainda não existe para ela — ficaria
+  pendente no aviso das 19h para sempre. `check_ndm_cards.py`, cujo §7 resolve
+  o link do card pelo `url_map` e não pelo nome do arquivo (página com rota
+  própria não segue a convenção do catch-all).
 
 - **Swap Bullet (New Deals › Swap › Bullet) nasce do DEAL TICKET, não da
   API** (§480, `features/swap_bullet/`): xlsx (uma aba por operação: cliente
@@ -1046,6 +1058,74 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   porte do script da mesa — o teste compara byte a byte). Send/preview
   leem o arquivo-dia, nunca as células da tela; deal sem Pay+Rec recusa o
   lote. Os `Fixed` do template `intrag-dce-swap` vencem o gerador.
+
+### Unwinds (recompra) — Fase 1: NDF de moeda (§488)
+
+- **A ponte até o contrato são os 14 caracteres à DIREITA do Athena ID**: o
+  aviso traz `STP-XE-10G5U5X-0-0` e o `Código Identificador` do Live Position
+  traz `XE-10G5U5X-0-0`. O aviso NÃO se basta — moeda, lado da posição, contas
+  e contraparte só existem na posição.
+- **As contas saem da POSIÇÃO, não de cadastro**: a recompra é de operação já
+  registrada, e `Codigo da Parte`/`Codigo da Contraparte` estão na linha como
+  foram para a B3. É o que resolve, sem escolher, a divergência entre o RefData
+  (omnibus `73760.10-2` no nome do banco) e o `b3-accounts` (própria
+  `73760.00-9`).
+- **A direção é o SINAL do resultado, nunca o campo `Direction`**: na amostra
+  fixa em reais o e-mail diz `PAY` numa recompra a RECEBER, e erra também
+  `Future Value`, `Present Value` e `Calculated Termination Fee` — só o
+  `Input Termination Fee` é confiável. E **o LADO da posição não é a
+  direção**: o banco pode estar vendido e receber (era o campo 6 do TER saindo
+  invertido).
+- **Fixo em reais é `Notional CCY ∈ (BRR, BRL)`**: o `Unwound Amount` vem em
+  reais e se divide pelo strike — na B3 o contrato é em moeda estrangeira.
+  `BRL` entra junto para o dia em que o Athena mandar o ISO a regra não virar
+  "não é fixo em reais", que é o caso que dá valor errado.
+- **O veredito da conferência tem TRÊS estados** (fecha / não fecha / não dá
+  para conferir): "passou por omissão" não existe.
+- **Campo 13 do TER 0014 é PERCENTUAL ao ano** (13,75 → `1375000000`);
+  **campo 14** é `1` com a taxa termo em BRL e a paridade USD/BRL fora dela —
+  branco ali não é neutro. **Campo 9** é o valor RECOMPRADO em moeda
+  estrangeira, nunca o nocional original (o mesmo contrato antecipa mais de
+  uma vez, e o `Valor Antecipado` da posição é a soma deste campo).
+- **A visão do arquivo sai do `b3-accounts`** (`_b3_account_le` pela conta do
+  campo 5), nunca de um de-para no código; conta fora do cadastro RECUSA.
+- **O arquivo-dia fica em `cache/unwinds/`, FORA de `cache/new deals/`**: o
+  Monitor varre aquela árvore e criaria um card `extra-` sozinho (§454). O
+  caminho é `data_paths.unwinds_cache_root()` e não se escreve à mão em lugar
+  nenhum: a recompra grava por ele e o Monitor varre por ele (§491).
+- **Ela TEM card no Monitor** (`unwind-ndf-fx`, coluna B3 Registration, grupo
+  NDF): a chave não leva prefixo `intrag-` porque a recompra é registro na B3,
+  o card declara `done: ('Sent',)` — é onde ela fecha —, e não declara `les`,
+  porque a entidade sai da CONTA e quem a traduz é cadastro (§491).
+- **A rota da página é PRÓPRIA** (`/unwinds/ndf/fx`, três segmentos): o
+  catch-all só atende `/<template>`.
+- **O dropzone lê `.msg`, `.eml` e o corpo solto, pelo CONTEÚDO**
+  (`infra/email_file.py` — magic do CFB, cabeçalhos MIME), não pela extensão:
+  o Outlook renomeia anexo e um `.msg` chega como `.txt` sem aviso. O assunto
+  sai do arquivo quando ele o carrega; só o corpo solto cai para o nome.
+- **O box scan procura a pasta na RAIZ da caixa e depois no Inbox**
+  (`resolve_folder`), dizendo no log por onde achou; a árvore do Outlook não
+  distingue os dois níveis, e presumir um deles arquiva o e-mail numa pasta
+  nova e vazia com o nome da certa. A caixa é a `brazil.otc.ops` — a
+  `brazil_otc_settlements` está DENTRO dela.
+
+### Dashboard (o painel do `index.html`)
+
+- **Quem CONTA como deal é quem tem identificador — `Deal`, `B3ID` ou `_id`**
+  (§489). O teste era só pelo `Deal`, e o Swap Bullet nasce com ele em BRANCO
+  (§480): o produto inteiro era invisível, com `Swap Deals = 0` e as operações
+  na tela ao lado.
+- **`_is_bank` é o `_jpm_re`, NUNCA `'banco' in cl`** (§489, o mesmo engano que
+  o `_ops_is_internal_cpty` já documenta): a regra crua derrubava BANCO SAFRA,
+  BRADESCO e SANTANDER — clientes de verdade, em todos os produtos. E a grafia
+  real é `BANCO J.P. MORGAN S/A`, com ponto depois do P, que não casa com
+  `'j.p morgan'`: era por isso que o `'banco'` solto tinha virado o único que
+  pegava a perna do banco.
+- **Os QUATRO cards de produto somam o Total** (NDF, Options, Swap, Unwinds) —
+  é como a mesa confere a tela.
+- **O `?v=` do `dashboard.js` sobe quando ele muda**: é a mesma disciplina do
+  CSS (§7), e sem ela o navegador da mesa serve o arquivo antigo e o número
+  novo nasce em branco.
 
 ### Live Position (cinco telas, um JS)
 
@@ -1348,6 +1428,16 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   `_fi_calc_value` e espelho `FiTer.calc` (`check_fi_calc.py`); precedência
   `force_values` > Fixed > fórmula > gerador; spec relido a cada preview;
   Cotação para o Vencimento efetiva desloca as linhas tipo 2.
+- **Template corrigido no repositório NÃO alcança o motor** (§488): o `.json`
+  versionado é a SEED e a semeadura da subida não sobrescreve o que o banco
+  tem (§434). O motor segue lendo o layout velho, sem erro nenhum, e o arquivo
+  vai errado para a B3. Quem leva é
+  `scripts/import_file_interpreter_template.py` (pula o que a mesa editou na
+  tela; `--force` insiste), e ele roda DEPOIS do pull.
+- **Os layouts de RECOMPRA já existem sob o nome da B3 — *antecipação***:
+  `antecipacao-termo-multiclasses` (TER 0014, §4.9.3, 133 caracteres),
+  `swap-antecipacao` (cód. 0035, 99) e `antecipacao-opcao` (cód. 0036, 149).
+  Procurar por "unwind" não acha nenhum.
 
 ### Notificações, e-mail e schedulers
 
@@ -1439,6 +1529,7 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 | `backfill_manual_confirmations.py` | traz para a esteira o que foi mapeado antes dela (FWD Start pelo B3 ID; `--dry-run` lembra as chaves da passada). A família de página genérica tira a PASTA do `_GENERIC_ND_PRODUCTS` e o SOURCE do `_generic_nd_mc_source`, por deal — é o que faz o Vanilla entrar só no de MGT (§453) e o que impede o rótulo de tela (`NDF/FWD Start`) de virar caminho. Source de `_MC_CONFIRMATION_SOURCES` sem família aqui = operação antiga invisível para sempre no Monitor: `check_mc_backfill.py` |
 | os scripts que leem RefData/calendário/arquivos-dia (`create_counterparty_folders`, `create_cetip_folders`, `import_pending_confirmation`, `update_pending_confirmation_*`, `backfill_manual_confirmations`, `export_new_deals_excel`, `fix_cgd_economic_group`) | leem pelo ARMAZÉM e pelo `data_path` (§440): o `apps/static/data/*.json` do checkout é a seed, não o dado |
 | `import_cgd_sharepoint.py` · `import_cgd_auxiliar.py` | lista de CGDs e as três abas do `Auxiliar.xlsx` |
+| `import_file_interpreter_template.py [--key <k>] [--force] [--dry-run]` | leva ao BANCO um template do File Interpreter corrigido no repositório. O `.json` versionado é a SEED, e a semeadura da subida não sobrescreve o que o banco tem (§434/§488): sem este script o motor segue lendo o layout velho e o arquivo vai errado para a B3, sem erro nenhum. Template que o banco tem EDITADO (algum `source` preenchido) fica de fora sem `--force` |
 | `split_notifications_db.py --dry-run` | mostra o que a separação do sino vai copiar |
 | `dev_seed_positions.py` | só na DEV: reemite a última posição B3 numa data recente (`--from … --force`) |
 | `convert_json_to_duckdb.py` + `scripts/convert/` (40 fatias) | a IMPORTAÇÃO JSON → DuckDB (o cutover do §434 e o legado fora da janela), incremental por `_manifest`, `--meses` 12 por padrão (`0` = tudo), `--only/--force/--dry-run/--bloco`; reconverte sozinho o payload-objeto sem `__raw` |
@@ -1452,7 +1543,7 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 `apps/static/data/db/` é gitignorado: bancos não vêm no pull. Telas vazias
 depois de um pull são migração não rodada, não bug.
 
-### `scripts/tests/` (139 scripts)
+### `scripts/tests/` (142 scripts)
 
 Autocontidos, sem framework, `ok`/`FAIL` por asserção, saída 0/1, sem tocar
 dado real (tmp, stubs de Outlook/SMTP). O

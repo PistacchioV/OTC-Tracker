@@ -105,7 +105,7 @@
                                 </span>
                             </div>
                             <h4 class="mb-2" data-lang="unw-dropzone-title">Drop the unwind notification here, or click to upload.</h4>
-                            <p class="text-muted fst-italic mb-3" data-lang="unw-dropzone-hint">Save the Athena e-mail as .htm / .html and drop it here — or leave it empty and click Import to scan the Outlook box. The box scan also runs on its own every 30 minutes.</p>
+                            <p class="text-muted fst-italic mb-3" data-lang="unw-dropzone-hint">Drag the Athena e-mail straight from Outlook (.msg, .eml or .htm) — or leave it empty and click Import to scan the Outlook box. The box scan also runs on its own every 30 minutes.</p>
                             <button class="btn btn-sm shadow btn-default" type="button" data-lang="nd-browse">Browse</button>
                         </div>
                     </form>
@@ -530,7 +530,10 @@ $(document).ready(function () {
     function runImport() {
         var btn = document.getElementById('importBtn');
         var dz = window.myDropzone || ((typeof Dropzone !== 'undefined') ? Dropzone.forElement('#myAwesomeDropzone') : null);
-        var files = (dz && dz.files) ? dz.files.filter(function (f) { return /\.(html?|txt)$/i.test(f.name); }) : [];
+        // `.msg`, `.eml` e o corpo salvo como `.htm` — os mesmos formatos das
+        // páginas de New Deals. Quem decide de fato é o CONTEÚDO, no servidor
+        // (`infra/email_file.py`): a extensão aqui só evita mandar um .xlsx.
+        var files = (dz && dz.files) ? dz.files.filter(function (f) { return /\.(msg|eml|html?|txt)$/i.test(f.name); }) : [];
         // Dropzone vazia = rota automática (o mesmo desenho do NDF/Opt
         // Commodities): varrer a caixa é o que o Import faz quando não lhe
         // deram arquivo, não outro botão.
