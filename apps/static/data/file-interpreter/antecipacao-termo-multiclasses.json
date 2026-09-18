@@ -3,12 +3,12 @@
   "name": "Antecipação Termo Multiclasses (TER)",
   "system_id": "TER",
   "category": "NDF / Termo",
-  "manual_section": "4.10.3 Antecipação de Contrato a Termo Sem CCP",
-  "manual_pages": "648-650",
-  "manual_version": "10/08/2026",
-  "description": "Layout that lets the parties anticipate (early-terminate) Termo de Moedas contracts or other asset classes in the Termo module (Termo21).",
-  "file_name_rule": "",
-  "notes": "",
+  "manual_section": "4.9.3 Antecipação de Contrato a Termo Sem CCP",
+  "manual_pages": "730-732",
+  "manual_version": "14/09/2026",
+  "description": "Layout that lets the parties anticipate (early-terminate, 'recompra') Termo de Moedas contracts or other asset classes in the Termo module (Termo21), without CCP. Positional file: one header line (type 0), one 'Dados Fixos' line (type 1) per anticipation, and 'Dados Variáveis' lines (type 2) only for Asian-average contracts. It is the B3 side of the FX NDF unwind: the Athena 'BRL NDF Unwind Notification' e-mail is imported by the box scan, the contract (campo 8) is found in the Live Position by the last 14 characters of the Athena ID, and every other value is derived from the two tables of that e-mail plus the position row.",
+  "file_name_rule": "App writes UNWIND_{BANCO,LAWTON}.txt into the Batch Conecta upload folder; a numeric suffix is added when the name already exists.",
+  "notes": "Campo 9 (Valor Base a Antecipar) is the unwound notional in FOREIGN currency, never the original notional of the contract: the same contract can be anticipated more than once, and the position's 'Valor Antecipado' is the running sum of this very field. When the e-mail's 'Notional CCY' is BRR/BRL the contract is BRL-FIXED — registered at B3 in foreign currency — and the e-mail's 'Unwound Amount' comes in BRL: it must be divided by the Strike. Campo 13 (Taxa Juros) carries the e-mail's 'Pre FWD Rate' as a PERCENT per annum (13.75 → 1375000000), which is the convention of every other rate field in this manual ('a taxa de juros ou spread do ativo, sempre ao ano'); the 9(02) integer part is what fits a Brazilian rate and not a factor. Campo 14 is 1.00000000 whenever campo 12 is quoted in BRL (the file shows '000100000000'); it is only different from 1 when the forward rate is in another currency — a commodity struck in USD, where the USD/BRL parity goes here. Blank is NOT neutral there. Campo 15 (Liquidante) goes in blanks by the desk's decision. The 'Registro – Dados Variáveis' block only exists for contracts with an average (Asian): with no verification dates it is not written at all, and campo 16 is '000'. The consuming page is Unwinds · NDF FX (/unwinds/ndf/fx); it is linked here — and the status flips to active — when that page lands.",
   "file_type": "positional",
   "separator": null,
   "record_length": 133,
@@ -28,8 +28,8 @@
           "required": "SIM",
           "content": "TER",
           "description": "Tipo do Instrumento Financeiro",
-          "source": "",
-          "source_detail": "",
+          "source": "Fixed",
+          "source_detail": "TER",
           "source_note": ""
         },
         {
@@ -40,8 +40,8 @@
           "required": "SIM",
           "content": "0",
           "description": "Tipo de linha do Header = 0",
-          "source": "",
-          "source_detail": "",
+          "source": "Fixed",
+          "source_detail": "0",
           "source_note": ""
         },
         {
@@ -52,8 +52,8 @@
           "required": "SIM",
           "content": "0014",
           "description": "Código da operação de Antecipação do TER",
-          "source": "",
-          "source_detail": "",
+          "source": "Fixed",
+          "source_detail": "0014",
           "source_note": ""
         },
         {
@@ -64,9 +64,9 @@
           "required": "SIM",
           "content": "PARTICIPANTE",
           "description": "Nome Simplificado do Emissor",
-          "source": "",
-          "source_detail": "",
-          "source_note": ""
+          "source": "Fixed",
+          "source_detail": "JPMORGANBM",
+          "source_note": "Simplified Name of this view (seeded from b3-accounts)"
         },
         {
           "seq": "5",
@@ -76,9 +76,9 @@
           "required": "SIM",
           "content": "20230223",
           "description": "Data da operação.",
-          "source": "",
+          "source": "Calculated",
           "source_detail": "",
-          "source_note": ""
+          "source_note": "File generation date (today)"
         },
         {
           "seq": "6",
@@ -88,8 +88,8 @@
           "required": "SIM",
           "content": "00002",
           "description": "Versão de Layout.",
-          "source": "",
-          "source_detail": "",
+          "source": "Fixed",
+          "source_detail": "00002",
           "source_note": ""
         }
       ]
@@ -107,8 +107,8 @@
           "required": "SIM",
           "content": "TER",
           "description": "Tipo do Instrumento Financeiro",
-          "source": "",
-          "source_detail": "",
+          "source": "Fixed",
+          "source_detail": "TER",
           "source_note": ""
         },
         {
@@ -119,8 +119,8 @@
           "required": "SIM",
           "content": "1",
           "description": "Tipo Linha \"Dados Fixos\"",
-          "source": "",
-          "source_detail": "",
+          "source": "Fixed",
+          "source_detail": "1",
           "source_note": ""
         },
         {
@@ -131,8 +131,8 @@
           "required": "SIM",
           "content": "0014",
           "description": "Código da operação de Antecipação do TER",
-          "source": "",
-          "source_detail": "",
+          "source": "Fixed",
+          "source_detail": "0014",
           "source_note": ""
         },
         {
@@ -143,9 +143,9 @@
           "required": "SIM",
           "content": "1001000100",
           "description": "Código de controle atribuído pelo participante",
-          "source": "",
+          "source": "Calculated",
           "source_detail": "",
-          "source_note": ""
+          "source_note": "Own 10-digit control number, assigned on import and preserved on re-import"
         },
         {
           "seq": "5",
@@ -155,9 +155,9 @@
           "required": "SIM",
           "content": "55555005",
           "description": "Código da Instituição lançadora da operação.",
-          "source": "",
-          "source_detail": "",
-          "source_note": ""
+          "source": "Page",
+          "source_detail": "Codigo da Parte",
+          "source_note": "Live Position NDF row of the contract, normalised to 8 digits ('73760.00-9' -> 73760009). The unwind is of an already registered trade: this is the account that went to B3 at registration"
         },
         {
           "seq": "6",
@@ -167,9 +167,9 @@
           "required": "SIM",
           "content": "0 = Comprador ou, 1 = Vendedor",
           "description": "Posição do participante.",
-          "source": "",
-          "source_detail": "",
-          "source_note": ""
+          "source": "Page",
+          "source_detail": "Descricao da posicao do Participante",
+          "source_note": "COMPRADA -> 0, VENDIDA -> 1. From the position, never from the e-mail Direction field, which the BRL-fixed sample proved unreliable"
         },
         {
           "seq": "7",
@@ -179,9 +179,9 @@
           "required": "SIM",
           "content": "55555005",
           "description": "Código da contraparte na operação.",
-          "source": "",
-          "source_detail": "",
-          "source_note": ""
+          "source": "Page",
+          "source_detail": "Codigo da Contraparte",
+          "source_note": "Live Position NDF row, normalised to 8 digits ('41007' -> 00041007)"
         },
         {
           "seq": "8",
@@ -191,9 +191,9 @@
           "required": "SIM",
           "content": "23010001100",
           "description": "Código de identificação do contrato.",
-          "source": "",
-          "source_detail": "",
-          "source_note": ""
+          "source": "Page",
+          "source_detail": "Contrato",
+          "source_note": "B3 contract id of the Live Position row found by the last 14 characters of the e-mail Athena ID"
         },
         {
           "seq": "9",
@@ -203,9 +203,9 @@
           "required": "SIM",
           "content": "0000000000100050",
           "description": "Valor base a Antecipar. Não utilizar ',' (virgula) ou '.' (ponto)",
-          "source": "",
-          "source_detail": "",
-          "source_note": ""
+          "source": "Page",
+          "source_detail": "Unwound Amount",
+          "source_note": "Unwound notional in FOREIGN currency: the e-mail value as is, or divided by Strike when Notional CCY is BRR/BRL"
         },
         {
           "seq": "10",
@@ -215,9 +215,9 @@
           "required": "SIM",
           "content": "20230223",
           "description": "Data Antecipação.",
-          "source": "",
+          "source": "Calculated",
           "source_detail": "",
-          "source_note": ""
+          "source_note": "Today"
         },
         {
           "seq": "11",
@@ -227,9 +227,9 @@
           "required": "OPCIONAL",
           "content": "20230224",
           "description": "Data da liquidação da antecipação. Pode ser indicada até D+1 da data da antecipação. Se não informado, será considerado a Data da Antecipação.",
-          "source": "",
+          "source": "Calculated",
           "source_detail": "",
-          "source_note": ""
+          "source_note": "Today"
         },
         {
           "seq": "12",
@@ -239,9 +239,9 @@
           "required": "SIM",
           "content": "00000000000505000000 ou \"          505000000\"",
           "description": "Valor da cotação de reversão. Não utilizar ',' (virgula) ou '.' (ponto)",
-          "source": "",
-          "source_detail": "",
-          "source_note": ""
+          "source": "Page",
+          "source_detail": "Termination Rate",
+          "source_note": "After Unwind table"
         },
         {
           "seq": "13",
@@ -251,9 +251,9 @@
           "required": "SIM",
           "content": "0100000010",
           "description": "Valor da taxa de juros de reversão. Não utilizar ',' (virgula) ou '.' (ponto)",
-          "source": "",
-          "source_detail": "",
-          "source_note": ""
+          "source": "Page",
+          "source_detail": "Pre FWD Rate",
+          "source_note": "After Unwind table, percent per annum"
         },
         {
           "seq": "14",
@@ -263,9 +263,9 @@
           "required": "OPCIONAL, válido apenas para contratos cotados em ME (obrigatório nesse caso)",
           "content": "",
           "description": "Valor da cotação de reversão da moeda cotada. Não utilizar ',' (virgula) ou '.' (ponto).",
-          "source": "",
+          "source": "Calculated",
           "source_detail": "",
-          "source_note": ""
+          "source_note": "1.00000000 when campo 12 is in BRL; the USD/BRL parity otherwise"
         },
         {
           "seq": "15",
@@ -275,9 +275,9 @@
           "required": "OPCIONAL",
           "content": "55555005",
           "description": "Código do liquidante para o qual está sendo realizado o lançamento.",
-          "source": "",
+          "source": "Fixed",
           "source_detail": "",
-          "source_note": ""
+          "source_note": "Blank"
         },
         {
           "seq": "16",
@@ -287,9 +287,9 @@
           "required": "SIM, condicional ao contrato possuir média",
           "content": "",
           "description": "Quantidade de Datas de Verificação: Pode assumir valores até 999 eventos. Quando não houver datas, preencher com o valor: 000.",
-          "source": "",
-          "source_detail": "",
-          "source_note": ""
+          "source": "Fixed",
+          "source_detail": "000",
+          "source_note": "No average (vanilla). An Asian contract sends the count of verification dates and the type 2 lines"
         }
       ]
     },
@@ -306,8 +306,8 @@
           "required": "SIM",
           "content": "TER",
           "description": "Tipo do Instrumento Financeiro",
-          "source": "",
-          "source_detail": "",
+          "source": "Fixed",
+          "source_detail": "TER",
           "source_note": ""
         },
         {
@@ -318,8 +318,8 @@
           "required": "SIM",
           "content": "2",
           "description": "Tipo Linha \"Dados Variáveis\"",
-          "source": "",
-          "source_detail": "",
+          "source": "Fixed",
+          "source_detail": "2",
           "source_note": ""
         },
         {
@@ -330,8 +330,8 @@
           "required": "SIM",
           "content": "0014",
           "description": "Código da operação de Antecipação do TER",
-          "source": "",
-          "source_detail": "",
+          "source": "Fixed",
+          "source_detail": "0014",
           "source_note": ""
         },
         {
@@ -342,9 +342,9 @@
           "required": "SIM",
           "content": "20230224",
           "description": "Data de Verificação (Asiático).",
-          "source": "",
+          "source": "Calculated",
           "source_detail": "",
-          "source_note": ""
+          "source_note": "One row per verification date of the contract (Asian only)"
         },
         {
           "seq": "5",
@@ -354,9 +354,9 @@
           "required": "SIM",
           "content": "0000000000010050",
           "description": "Valor Referencia (Asiático com média Ponderada). Para contratos com média aritmética simples, preencher com zeros. Não utilizar ',' (virgula) ou '.' (ponto)",
-          "source": "",
-          "source_detail": "",
-          "source_note": ""
+          "source": "Fixed",
+          "source_detail": "0000000000000000",
+          "source_note": "Zeros (simple arithmetic average, no weighting)"
         }
       ]
     }
