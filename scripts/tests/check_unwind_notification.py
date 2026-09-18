@@ -143,6 +143,44 @@ DOIS = [{'Codigo Identificador': 'XXX-4T6-2W4YU86-0-0', 'Contrato': '99C99999999
 check('com id inteiro dos dois lados, a igualdade EXATA vence a truncagem',
       domain.contrato_por_identificador(DOIS, 'ATS-4T6-2W4YU86-0-0')[0], '25L04197478')
 
+print('\n== 10b. quem e a contraparte: o TIPO DA CONTA decide ==')
+# Numa conta GUARDA-CHUVA o `Nome da Contraparte` e o titular — que somos nos.
+# Lendo o nome, toda recompra contra cliente sai com a contraparte errada e o
+# Termo de Resilicao vai para a pasta do BANCO (18/09/2026).
+GUARDA = {'Nome da Contraparte': 'BANCO J.P. MORGAN S/A',
+          'CPF/CNPJ da Contraparte': 'USINA ALTO ALEGRE S/A - ACUCAR E ALCOOL'}
+check('guarda-chuva: o cliente e o do CPF/CNPJ, nao o titular',
+      domain.contraparte_da_posicao(GUARDA, omnibus=True)[0],
+      'USINA ALTO ALEGRE S/A - ACUCAR E ALCOOL')
+# A coluna do CPF/CNPJ carrega o DOCUMENTO quando ele nao tem cadastro (§8).
+SEM_CAD = {'Nome da Contraparte': 'BANCO J.P. MORGAN S/A',
+           'CPF/CNPJ da Contraparte': '02.916.265/0001-60'}
+nome, doc, aviso = domain.contraparte_da_posicao(SEM_CAD, omnibus=True)
+check('guarda-chuva sem cadastro: nome VAZIO, nunca o banco', nome, None)
+check('e o documento volta para quem for cadastrar', doc, '02.916.265/0001-60')
+check('avisando por codigo', (aviso or {}).get('code'), 'unwind_cpty_not_registered')
+# Conta DIRETA de terceiro: ali o nome da posicao e a contraparte mesmo.
+DIRETA = {'Nome da Contraparte': 'COFCO INTERNATIONAL BRASIL S.A.',
+          'CPF/CNPJ da Contraparte': '02.916.265/0001-60'}
+check('conta direta: o nome da posicao vale',
+      domain.contraparte_da_posicao(DIRETA, omnibus=False)[0],
+      'COFCO INTERNATIONAL BRASIL S.A.')
+check('e o documento vem junto',
+      domain.contraparte_da_posicao(DIRETA, omnibus=False)[1], '02.916.265/0001-60')
+check('sem a pergunta (None), o comportamento e o da conta direta',
+      domain.contraparte_da_posicao(DIRETA)[0], 'COFCO INTERNATIONAL BRASIL S.A.')
+check('documento e nome se distinguem pela LETRA',
+      (domain.parece_documento('02.916.265/0001-60'),
+       domain.parece_documento('3M DO BRASIL')), (True, False))
+# O aviso da contraparte NAO derruba o arquivo da B3: o TER 0014 identifica as
+# duas pontas pelas CONTAS, e o nome nao entra nele.
+check('o aviso da contraparte sai separado dos outros',
+      domain.dados_da_posicao({}, omnibus=True).get('aviso_contraparte', {}).get('code'),
+      'unwind_no_counterparty')
+check('e fora da lista que o arquivo confere',
+      [a['code'] for a in domain.dados_da_posicao({}, omnibus=True)['avisos']
+       if 'counterparty' in a['code'] and 'account' not in a['code']], [])
+
 print('\n== 11. a prova real: UMA formula, tres operacoes reais ==')
 # (rotulo, antes, depois, brl_fixed, banco comprado, resultado esperado, ME esperado)
 CASOS = [

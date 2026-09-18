@@ -70,13 +70,49 @@ def import_email(html, subject='', ref_dt=None, dry_run=False):
         raise ValueError('The e-mail carries no Athena ID')
     linhas, src = queries.position_rows(ref)
     contrato, posicao = domain.contrato_por_identificador(linhas, rec['athena_id'])
-    linha, avisos = domain.linha_da_recompra(rec, posicao, ref, contrato)
+    # Conta guarda-chuva? A resposta e do cadastro `b3-accounts` (pelo TIPO da
+    # conta) e o `domain` nao fala com cadastro — ela vai PRONTA. Numa
+    # guarda-chuva o `Nome da Contraparte` da posicao e o titular, que somos
+    # nos: quem identifica o cliente e o CPF/CNPJ.
+    omnibus = _R()._b3_is_omnibus((posicao or {}).get('Codigo da Contraparte'))
+    linha, avisos = domain.linha_da_recompra(rec, posicao, ref, contrato, omnibus=omnibus)
+    _completar_contraparte(linha)
     linha['MyNumber'] = _rand10()
     linha['ImportedAt'] = _R()._br_now().strftime('%Y-%m-%d %H:%M')
     linha['PositionDate'] = src
     if not dry_run:
         persistence.upsert(datetime(ref.year, ref.month, ref.day), [linha])
     return {'rows': [linha], 'warnings': avisos, 'source_date': src}
+
+
+def _completar_contraparte(linha):
+    """O CPF/CNPJ da contraparte, buscado no Reference Data pela razao social.
+
+    A posicao entrega UMA coluna com as duas coisas (§8): o NOME quando o
+    documento tem cadastro, o documento quando nao tem. O `domain` separa as
+    duas (e puro e nao le cadastro) e deixa o que faltar em branco; aqui se
+    fecha o par, que e o que o Termo de Resilicao precisa — a Parte B leva
+    nome E CNPJ, e as outras confirmacoes desta casa tiram o CNPJ do mesmo
+    `TaxID` da linha.
+
+    Sem cadastro, o `TaxID` fica vazio e o Termo pede o CNPJ no painel: e
+    melhor a mesa digitar uma vez do que o documento sair errado.
+    """
+    if not isinstance(linha, dict):
+        return linha
+    nome = str(linha.get('Counterparty') or '').strip()
+    if not nome or str(linha.get('TaxID') or '').strip():
+        return linha
+    try:
+        rec = _R()._refdata_by_name().get(_R()._pc_norm(nome)) or {}
+    except Exception:                                       # noqa: BLE001
+        _R().log.warning('[UNWIND NDF FX] Reference Data ilegivel ao buscar o CNPJ de %r:\n%s',
+                         nome, traceback.format_exc())
+        return linha
+    doc = str(rec.get('TAX ID') or '').strip()
+    if doc:
+        linha['TaxID'] = doc
+    return linha
 
 
 def import_email_upload(filename, data, ref_dt=None, dry_run=False):

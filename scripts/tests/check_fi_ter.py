@@ -105,8 +105,13 @@ def _legacy_generic_line(deal, is_fwd):
     settl_dt    = R._parse_date_any(_s(deal.get('SettlementDate', '')))
     biz_diff    = R._anbima_biz_diff(last_fix_dt, settl_dt)
 
+    # Data de Fixação (campo 36): a Strike Set Date avançada em UM dia útil
+    # ANBIMA (mesa, 18/09/2026). Antes ela avançava pelo `biz_diff` — o vão
+    # Last Fixing → Settlement —, que num vencimento longo jogava o início do
+    # contrato semanas à frente da data em que o strike é fixado. O `biz_diff`
+    # continua sendo dos campos 15 e 39.
     strike_set_dt = R._parse_date_any(_s(deal.get('StrikeSetDate', '')))
-    fixacao_dt    = R._anbima_add_biz(strike_set_dt, biz_diff) if strike_set_dt else None
+    fixacao_dt    = R._anbima_add_biz(strike_set_dt, 1) if strike_set_dt else None
 
     fonte_info = R._ndf_publisher_fonte_info(publisher)
     boletim    = ('3' if fonte_info.strip() == '0' else '1') if is_fwd else ' '

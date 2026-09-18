@@ -399,7 +399,73 @@ def conta8(valor):
     return d.zfill(8) if d else ''
 
 
-def dados_da_posicao(pos):
+def parece_documento(v):
+    """A celula e um CPF/CNPJ (cru ou mascarado) e nao um nome?
+
+    E a mesma pergunta do `_lp_is_taxid` da plataforma, escrita aqui porque o
+    `domain` e puro. O teste e a ausencia de LETRA: razao social com numero
+    (`3M DO BRASIL`) tem letra e nunca casa."""
+    t = str(v or '').strip()
+    if not t or any(ch not in '0123456789./- ' for ch in t):
+        return False
+    return 10 <= len(''.join(ch for ch in t if ch.isdigit())) <= 14
+
+
+def contraparte_da_posicao(pos, omnibus=None):
+    """(nome, documento, aviso) da contraparte da posicao.
+
+    **Numa conta GUARDA-CHUVA o `Nome da Contraparte` nao e a contraparte**:
+    ali esta o titular da conta, que e o proprio BANCO J.P. MORGAN S/A (a
+    conta CLIENT 1), e quem identifica o cliente e o `CPF/CNPJ da
+    Contraparte`. Na amostra de 18/09/2026 o `Nome da Contraparte` diz BANCO
+    J.P. MORGAN e o CPF/CNPJ diz USINA ALTO ALEGRE — lendo o nome, TODA
+    recompra contra cliente sai com a contraparte errada, e o Termo de
+    Resilicao vai para a pasta do banco com o banco como Parte B.
+
+    Quem responde se a conta e guarda-chuva e o cadastro `b3-accounts`
+    (`_b3_is_omnibus`, pelo TIPO da conta), e por isso a resposta chega PRONTA
+    em `omnibus` — o `domain` e puro. `None` e "nao deu para perguntar" e vale
+    como conta direta: sem a pergunta, o comportamento e o de antes.
+
+    A coluna do CPF/CNPJ carrega DUAS coisas (§8): o NOME quando o documento
+    tem cadastro no Reference Data, e o documento mascarado quando nao tem.
+    Dai os casos:
+
+      * guarda-chuva + NOME      -> o cliente e esse nome; o documento fica
+        para quem chama buscar no cadastro;
+      * guarda-chuva + DOCUMENTO -> o cliente nao esta cadastrado. Volta o
+        documento, o nome volta VAZIO e sai um AVISO: cair no `Nome da
+        Contraparte` seria afirmar o banco como cliente, que e o defeito que
+        esta funcao existe para nao cometer;
+      * conta direta             -> o `Nome da Contraparte` E a contraparte, e
+        a coluna do CPF/CNPJ so completa o documento (ou o nome, se a posicao
+        nao trouxer o titular).
+    """
+    cru = str((pos or {}).get('CPF/CNPJ da Contraparte', '') or '').strip()
+    nome_col = str((pos or {}).get('Nome da Contraparte', '') or '').strip() or None
+    doc = cru if parece_documento(cru) else None
+    nome_cnpj = None if (doc or not cru) else cru
+
+    if omnibus:
+        if nome_cnpj:
+            return nome_cnpj, None, None
+        if doc:
+            return None, doc, {
+                'code': 'unwind_cpty_not_registered', 'params': {'taxid': doc},
+                'text': 'The counterparty %s is not in the Reference Data — the umbrella '
+                        'account carries the bank as holder, so the client cannot be named'
+                        % doc}
+        return None, None, {'code': 'unwind_no_counterparty', 'params': {},
+                            'text': 'The umbrella position identifies no counterparty document'}
+
+    nome = nome_col or nome_cnpj
+    if not nome and not doc:
+        return None, None, {'code': 'unwind_no_counterparty', 'params': {},
+                            'text': 'The position identifies no counterparty'}
+    return nome, doc, None
+
+
+def dados_da_posicao(pos, omnibus=None):
     """O que a posicao entrega ao aviso E ao arquivo, com um AVISO por coisa
     que faltou — nenhuma delas se inventa.
 
@@ -416,8 +482,7 @@ def dados_da_posicao(pos):
     moeda = str((pos or {}).get('Simbolo da Moeda', '') or '').strip().upper() or None
     conta_parte = conta8((pos or {}).get('Codigo da Parte')) or None
     conta_cpty = conta8((pos or {}).get('Codigo da Contraparte')) or None
-    nome_cpty = str((pos or {}).get('Nome da Contraparte', '') or '').strip() or None
-    taxid_cpty = str((pos or {}).get('CPF/CNPJ da Contraparte', '') or '').strip() or None
+    nome_cpty, taxid_cpty, aviso_cpty = contraparte_da_posicao(pos, omnibus)
     comprado = comprado_na_posicao(pos)
     saldo = saldo_da_posicao(pos)
     for valor, code, texto in (
@@ -429,10 +494,15 @@ def dados_da_posicao(pos):
             (conta_cpty, 'unwind_no_counterparty_account', 'The position has no counterparty account')):
         if valor is None:
             avisos.append({'code': code, 'params': {}, 'text': texto})
+    # O aviso da contraparte sai SEPARADO dos outros: quem monta o arquivo da
+    # B3 (`campos_ter_0014`) nao precisa do nome dela — o TER 0014 identifica
+    # as duas pontas pelas CONTAS —, e misturado ele recusaria o arquivo por
+    # uma falta que nao e dele. Quem o usa e a LINHA da tela, que leva o nome
+    # para a esteira e para o Termo de Resilicao.
     return {'contrato': contrato, 'moeda': moeda, 'comprado': comprado,
             'saldo': saldo, 'conta_parte': conta_parte, 'conta_contraparte': conta_cpty,
             'nome_contraparte': nome_cpty, 'taxid_contraparte': taxid_cpty,
-            'avisos': avisos}
+            'aviso_contraparte': aviso_cpty, 'avisos': avisos}
 
 
 # ==============================================================================
@@ -700,17 +770,21 @@ UNW_NAO_EDITAVEL = ('AthenaID', 'Check', 'Status', 'Maker', 'Checker',
 CHECK_OK, CHECK_NOK, CHECK_NA = 'OK', 'NOK', '-'
 
 
-def linha_da_recompra(rec, posicao, hoje, contrato=None):
+def linha_da_recompra(rec, posicao, hoje, contrato=None, omnibus=None):
     """A linha da tela a partir do registro do e-mail (`parse_notification`) e
     da linha do Live Position. Devolve (linha, avisos).
 
     Nao decide nada sozinha: o que o e-mail nao responde e a posicao nao
     completa sai VAZIO e entra nos avisos. `contrato` sobrepoe o da posicao
-    (a ponte ja o achou pelo identificador)."""
+    (a ponte ja o achou pelo identificador), e `omnibus` diz se a conta da
+    contraparte e guarda-chuva — quem responde e o cadastro `b3-accounts`, com
+    quem o `domain` nao fala (ver `contraparte_da_posicao`)."""
     antes = dict((rec or {}).get('secoes', {}).get('before') or {})
     depois = dict((rec or {}).get('secoes', {}).get('after') or {})
-    pos = dados_da_posicao(posicao)
+    pos = dados_da_posicao(posicao, omnibus)
     avisos = list((rec or {}).get('avisos') or []) + list(pos['avisos'])
+    if pos.get('aviso_contraparte'):
+        avisos.append(pos['aviso_contraparte'])
     fixo = fixo_em_reais(antes)
     conf = conferir_apuracao(antes, depois, fixo, pos['comprado'])
     avisos.extend(conf['avisos'])
