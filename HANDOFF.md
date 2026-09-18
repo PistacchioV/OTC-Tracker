@@ -21647,3 +21647,25 @@ Rede: `check_unwind_termo.py` (novo, 12 seções), `check_unwind_summary.py`
 nova), `check_manual_conf` (a lista de sources virou oito), `check_mc_backfill`,
 `check_ndm_cards`, `check_notif_page_url`, `check_soc_layers`,
 `check_unwind_notification`, `check_unwind_ter_file`, `check_unwind_page`.
+
+## §494 — O relatório do FepWeb mudou de formato de data (2026-09-18)
+
+O `(REPORT) FEPWeb - Operacoes D-4` passou a trazer a **`Data Operação` em
+`dd/mm/aaaa`**. O `fep_date` do Conf Matching lia `mm/dd/aaaa` de propósito
+(§486) — ele existe justamente porque o `_parse_date` da casa tenta `dd/mm`
+primeiro —, e com o relatório novo a leitura ficou invertida: `16/09/2026` não
+é data nenhuma em mm/dd e voltava `None`, caindo em "outras datas". O
+batimento do dia inteiro sairia `Missing FepWeb`, com o arquivo certo na mão.
+
+A leitura virou `dd/mm` e **continua sem cair para o outro formato**: as duas
+dão dias diferentes na mesma célula, e só as datas com dia > 12 denunciam a
+troca. O que mudou além disso é que **a data ilegível deixou de ser "outra
+data"**: ela tem contador próprio (`sem_data`) e, quando a célula só faz
+sentido em `mm/dd` (`_parece_mmdd`), o Run avisa com todas as letras
+(`fep_date_mmdd`, nas três línguas) que o relatório voltou ao formato antigo.
+Sem isso, o dia em que o FepWeb desandar de novo o resultado seria uma recon
+cheia de quebra que na verdade não leu o arquivo — que é exatamente o defeito
+que este §494 conserta.
+
+Rede: `check_conf_matching.py` (a seção 4a virou brasileira, mais o caso do
+formato velho de volta e o contador novo no `fep_info`).

@@ -27,7 +27,10 @@ O que este teste protege é o que erra em SILÊNCIO quando quebra:
 9. **As rotas** existem, exigem sessão e o Run devolve `tipo: mensagem`.
 10. **O anexo real é `.xls`** (e `.xls` é só o nome: lê-se pelo CONTEÚDO), e o
     relatório de um dia chega na NOITE dele — a janela começa no próprio dia.
-11. **A data do FepWeb é americana** (`mm/dd/aaaa`): `09/10` é 10 de setembro.
+11. **A data do FepWeb é BRASILEIRA** (`dd/mm/aaaa`, desde 18/09/2026):
+    `09/10` é 9 de outubro, a leitura NUNCA cai para mm/dd, e a linha que só
+    faz sentido em mm/dd fica de fora AVISANDO — o formato velho de volta
+    esvaziaria o batimento sem erro nenhum.
 12. **Aviso e erro vão com CÓDIGO**, e todo código tem tradução nas três línguas.
 
 Não toca em rede, Outlook nem dado real: tudo sintético, num tmp.
@@ -130,7 +133,7 @@ def fep_xlsx(path):
     ws.append(['Digital (nome do FepWeb)', 1234567000188, 'D1', 'NDF', dia, 'Ativo'])
     ws.append(['Internal Sign', '22.222.222/0001-22', 'D2', 'NDF', dia, 'Ativo'])
     ws.append(['Manual', '33333333000133', 'D3', 'NDF', dia, 'Ativo'])
-    ws.append(['Só FepWeb', '33333333000133', 'F1', 'NDF', REF.strftime('%m/%d/%Y'), 'Ativo'])   # texto: mm/dd
+    ws.append(['Só FepWeb', '33333333000133', 'F1', 'NDF', REF.strftime('%d/%m/%Y'), 'Ativo'])   # texto: dd/mm
     ws.append(['Dup', 1234567000188, 'DUP', 'NDF', dia, 'Ativo'])
     ws.append(['Dup', 1234567000188, 'DUP', 'NDF', dia, 'Ativo'])
     ws.append(['Cancelada', 1234567000188, 'X1', 'NDF', dia, 'Cancelado'])
@@ -178,7 +181,8 @@ try:
     check('números crus (a tela formata)', (por['D1']['Quantity'], por['D1']['Strike']), (1000000.0, 5.158))
 
     print('=== 3. Cortes ===')
-    check('FepWeb', res['fep_info'], {'lidas': 10, 'canceladas': 1, 'outras_datas': 1, 'formato': 'xlsx'})
+    check('FepWeb', res['fep_info'], {'lidas': 10, 'canceladas': 1, 'outras_datas': 1,
+                                     'formato': 'xlsx', 'sem_data': 0, 'mmdd': 0})
     check('Athena', res['athena_info'],
           {'lidas': 14, 'canceladas': 1, 'internas': 4, 'outras_datas': 1})
     check('outro Trade Date AVISA', [w['params'] for w in res['warnings'] if w['code'] == 'other_trade_dates'],
@@ -203,11 +207,11 @@ try:
         check('e o erro leva o PORQUÊ do box', [r['code'] for r in e.params['reasons']], ['no_outlook'])
     check('NÃO há plano B em pasta', (hasattr(M, 'INPUT_ROOT'), hasattr(M, 'FEP_FILES')), (False, False))
 
-    print('=== 4a. A data do FepWeb é AMERICANA (mm/dd/aaaa) ===')
-    check('09/10/2026 é 10 de SETEMBRO, não 9 de outubro', M.fep_date('09/10/2026'), date(2026, 9, 10))
-    check('com hora', M.fep_date('09/10/2026 22:49:14'), date(2026, 9, 10))
-    check('ano de dois dígitos', M.fep_date('9/10/26'), date(2026, 9, 10))
-    check('dd/mm impossível em mm/dd NÃO vira outro dia', M.fep_date('16/09/2026'), None)
+    print('=== 4a. A data do FepWeb é BRASILEIRA (dd/mm/aaaa, desde 18/09/2026) ===')
+    check('09/10/2026 é 9 de OUTUBRO, não 10 de setembro', M.fep_date('09/10/2026'), date(2026, 10, 9))
+    check('com hora', M.fep_date('09/10/2026 22:49:14'), date(2026, 10, 9))
+    check('ano de dois dígitos', M.fep_date('9/10/26'), date(2026, 10, 9))
+    check('mm/dd impossível em dd/mm NÃO vira outro dia', M.fep_date('09/16/2026'), None)
     check('célula que já é data não tem ambiguidade',
           (M.fep_date(datetime(2026, 9, 10, 8, 0)), M.fep_date('2026-09-10'), M.fep_date(None)),
           (date(2026, 9, 10), date(2026, 9, 10), None))
@@ -216,16 +220,29 @@ try:
         fh.write('<table><tr><th>Contrato</th><th>Data Operação</th></tr>'
                  '<tr><td>A1</td><td>09/10/2026</td></tr><tr><td>A2</td><td>10/09/2026</td></tr></table>')
     ra = M.executar(date(2026, 9, 10), fep_path=amb, athena_records=[])
-    check('o dia 10/09 casa só a linha de 09/10', [r['FepWeb ID'] for r in ra['rows']], ['A1'])
+    check('o dia 10/09 casa só a linha de 10/09', [r['FepWeb ID'] for r in ra['rows']], ['A2'])
+
+    # O formato VELHO de volta: a linha fica de fora e a recon DIZ por quê. Sem
+    # o aviso, um relatório americano sairia inteiro como `Missing FepWeb` —
+    # uma recon que parece cheia de quebra e na verdade não leu o arquivo.
+    velho = os.path.join(TMP, 'velho.xls')
+    with open(velho, 'w', encoding='utf-8') as fh:
+        fh.write('<table><tr><th>Contrato</th><th>Data Operação</th></tr>'
+                 '<tr><td>V1</td><td>09/16/2026</td></tr></table>')
+    rv = M.executar(date(2026, 9, 16), fep_path=velho, athena_records=[])
+    codigos = [w['code'] for w in (rv.get('warnings') or [])]
+    check('o formato americano de volta vira AVISO', 'fep_date_mmdd' in codigos, True)
+    check('e a linha nao entra como "outra data"',
+          (rv['fep_info']['mmdd'], rv['fep_info']['outras_datas']), (1, 0))
 
     print('=== 4b. O anexo real é `.xls`, e `.xls` é só o nome ===')
     html_xls = os.path.join(TMP, 'FEPWeb - Operacoes D-4.xls')
     with open(html_xls, 'w', encoding='utf-8') as fh:
         fh.write('<html><body><table><tr><th>Contrato</th><th>Data Operação</th>'
                  '<th>Status Operação</th><th>CPF/CNPJ Cliente</th><th>Nome Cliente</th></tr>'
-                 '<tr><td>D1</td><td>09/16/2026 10:31:02</td><td>Ativo</td>'
+                 '<tr><td>D1</td><td>16/09/2026 10:31:02</td><td>Ativo</td>'
                  '<td>01.234.567/0001-88</td><td>Digital</td></tr>'
-                 '<tr><td>X9</td><td>09/16/2026</td><td>Cancelado</td><td></td><td></td></tr>'
+                 '<tr><td>X9</td><td>16/09/2026</td><td>Cancelado</td><td></td><td></td></tr>'
                  '</table></body></html>')
     r2 = M.executar(REF, fep_path=html_xls, athena_records=ATHENA[:1])
     check('tabela HTML com nome .xls é lida', (r2['fep_info']['formato'], r2['fep_count'],

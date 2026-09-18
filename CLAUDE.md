@@ -1389,8 +1389,12 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   `reasons`. **O anexo é `.xls`, e `.xls` é só o nome** (lê-se pelo conteúdo,
   `_latam_read_rows`; a CGD segue só `.xlsx`); o relatório de um dia chega na
   NOITE dele, então a janela do `aceita` começa no próprio dia; **a `Data
-  Operação` é AMERICANA (`mm/dd/aaaa`)** — `fep_date` nunca cai para `dd/mm`
-  (o `_parse_date` da casa leria `09/10` como 9 de outubro, calado). Athena é a
+  Operação` é BRASILEIRA (`dd/mm/aaaa`) desde 18/09/2026** — o relatório vinha
+  americano e MUDOU, e o `fep_date` nunca cai para o outro formato (as duas
+  leituras dão dias diferentes na mesma célula e só dia > 12 denuncia a troca).
+  Linha que só faz sentido em `mm/dd` fica de FORA avisando
+  (`fep_date_mmdd`), em vez de virar "outra data": o formato velho de volta
+  esvaziaria o batimento sem erro nenhum. Athena é a
   API de NDF do New Deals. Cliente por CHAVE (CNPJ sem zero à esquerda × SPN);
   internas saem de CADASTRO (`interbook-ndf`, `le-accronym`, `ECONOMIC
   GROUP`), nunca das listas do workflow. Comentário é do trade e não muda o
