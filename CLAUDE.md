@@ -1216,6 +1216,25 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   lendo a recompra da vertical, que é quem sabe que não há resgate da B3 para
   conferir. Lidas dos dois lados, o mesmo caixa sairia DUAS vezes no Trade
   Level e no IR do dia — o ledger monta o dia inteiro de uma vez (§423).
+- **A projeção RECALCULA o IR do DIA INTEIRO** (`_ndfc_reapply_ir`, §501):
+  quem escreve o `VL_TAX_INCOME` é o `_ndfc_apply_ir`, e ele só rodava DENTRO do
+  import da API — a recompra chegava à tela em que a mesa acompanha o acúmulo
+  do imposto com a célula vazia, e o IR das OUTRAS linhas da mesma contraparte
+  ficava velho, porque o piso de R$ 1,00 é do balde do MÊS e a recompra passou a
+  somar nele. É a MESMA função do Run (uma segunda implementação divergiria no
+  primeiro caso de borda), roda **FORA do `_cache_lock`** (a cura do ledger trava
+  por dentro, §432) e casa as linhas pelo `_nc_id`. **E a projeção acompanha a
+  vertical**: Delete e mudança da data de liquidação tiram a linha do dia antigo
+  — o `_ndfc_keep_unwinds` a preserva do Run, então sem isso ela ficaria lá para
+  sempre, com o caixa fantasma no Trade Level e no IR do dia.
+- **A recompra se DIZ recompra na tela**: a marca `Unwind` na coluna Status do
+  Cockpit e do Trade Level do Summary — a coluna Status porque é a primeira que
+  se lê e porque o filtro dela passa a achar as recompras do dia pelo nome. Ela
+  viaja na QUINTA posição da cauda de meta, depois do `_nc_id`, e a cauda é
+  ADITIVA (quem a lê conta do começo, `len(_NDFC_COLUMNS) + n`). Pela mesma
+  marca a recompra sai do `_opb3_internal_ter_map`: ela carrega o MESMO contrato
+  da original e não tem resgate da B3 para bater — somada ali, mudaria o lado JP
+  de um contrato que a B3 informa sozinha.
 - **O trilho de validação do Termo é SÓ OTC** (mesa, 18/09/2026): o distrato
   não reabre economia nenhuma, e o que o MO e o FO conferem é a economia da
   operação, que já passou por eles quando ela nasceu. É `VALIDATION_SEED`, e
@@ -1456,6 +1475,16 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
   do OTC, e não avisam no sino.
 - **Preencher a coluna de validação pela grade do Track é validar** (mesmas
   regras do `mark_validated`; a transição é vazio → data; lote tudo-ou-nada).
+- **"Não há PDF na pasta" tem TRÊS estados** (§502, a regra do §486): há PDF ·
+  olhei e não há · NÃO DEU para olhar. O `/api/manual-confirmation/docs` responde
+  `null` no item que levantou (guarda por item: um não derruba os outros) e a
+  tela tem frase própria nas três línguas, deixando o botão como está — o `catch`
+  do lote inteiro escrevia a frase do caso VERIFICADO e oferecia Validate ao
+  lado, e foi assim que se abriu a validação de um documento que ninguém gerou.
+  Status de erro não passa mais por resposta boa (o 503 de banco ocupado e o 500
+  com o motivo são JSON). E o lote vai **FATIADO, oito por vez EM SÉRIE**: a
+  primeira fatia aquece a varredura da raiz e uma fatia que falha leva só os oito
+  dela — em paralelo seriam seis idas simultâneas ao share.
 - **E-mail Subject se escreve sozinho** (`_mc_sync_email_subjects`): por Trade
   ID no nome do arquivo, ou recap ÚNICO na pasta; fora disso nada. Memo por
   (caminho, mtime, tamanho); grava só o que mudou, em lote.

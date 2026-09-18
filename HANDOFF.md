@@ -21972,3 +21972,179 @@ e a preservação no reimport do Cockpit), `check_unwind_summary.py` (o gatilho
 novo, o caixa somado líquido de IR, as duas de R$ 0,56 cruzando o piso mensal e
 a recompra projetada NÃO entrando duas vezes) e `check_unwind_termo.py` (o
 elegível desde o import).
+
+## §501 — A recompra entrava no Cockpit sem IR e sem se distinguir das outras liquidações (2026-09-18)
+
+O gatilho da projeção passou a ser o import (§500) e o imposto ficou de fora.
+Quem escreve o `VL_TAX_INCOME` é o `_ndfc_apply_ir`, e ele só roda DENTRO do
+import da API, que monta o dia inteiro do zero: a recompra chegava ao
+arquivo-dia do Cockpit com a célula vazia — e o Cockpit é justamente a tela
+onde a mesa acompanha o acúmulo do IR — e ficava assim até alguém clicar Run.
+
+Pior que a célula vazia: o imposto das OUTRAS linhas da mesma contraparte
+também ficava velho, porque o piso de R$ 1,00 é do balde do MÊS (§423) e a
+recompra passou a somar nele. Não dá para calcular só a linha nova; o dia
+inteiro tem de ser refeito.
+
+`_ndfc_reapply_ir(ref)` refaz a conta do dia JÁ GRAVADO pela MESMA função do
+Run — uma segunda implementação da regra divergiria no primeiro caso de borda
+—, roda **FORA do `_cache_lock`** (a cura do ledger trava por dentro e o lock
+não é reentrante, §432) e devolve os valores ao arquivo casando as linhas pelo
+`_nc_id`.
+
+### A projeção tem de acompanhar a vertical
+
+A outra metade do mesmo gatilho. Apagar a recompra e mover a data de
+liquidação deixavam a linha no Cockpit para sempre: o `_ndfc_keep_unwinds`
+PRESERVA o que está marcado com `_nc_unwind`, então nem o Run seguinte a
+apagaria, e o caixa fantasma sairia no Trade Level e no IR do dia. Editar a
+linha deixava o valor VELHO lá, que é a mesma coisa com outro número. Agora o
+Delete chama `cockpit_sem_a_recompra` e o Edit remove a projeção do dia antigo
+antes de reprojetar.
+
+### E ela não se distinguia de nada na tela
+
+Dezoito colunas iguais às das outras liquidações. A recompra ganha a marca
+**Unwind** na coluna Status do NDF Cockpit e no Trade Level do NDF Summary —
+na coluna Status porque é a primeira que se lê e porque o filtro dela passa a
+achar as recompras do dia pelo nome. A marca viaja na cauda de meta das linhas
+de exibição (a QUINTA, depois do `_nc_id`), que é aditiva: quem lê a cauda
+conta do começo (`len(_NDFC_COLUMNS) + n`).
+
+Pela mesma marca a recompra sai do `_opb3_internal_ter_map`: ela carrega o
+MESMO contrato da operação original e não tem resgate na B3 para bater —
+somada ali, mudaria o lado JP de um contrato que a B3 informa sozinha, e o
+"Favor considerar" sairia com o valor errado.
+
+### Higiene
+
+Os dois testes de recompra passaram a redirecionar o ledger de IR
+(`_ndfsum_ir_ledger_path`) para um tmp: sem isso eles somariam as fixtures ao
+acumulado de imposto de verdade da máquina. É a mesma lição do §500 — **cada
+caminho novo que um teste escreve precisa do SEU redirecionamento**.
+
+Rede: `check_unwind_page.py` §13 (IR calculado no import e a projeção que some
+com o Delete), `check_unwind_summary.py`.
+
+## §502 — O Monitor afirmava "nenhum PDF na pasta" sobre pastas que não chegou a abrir (2026-09-18)
+
+A mesa relatou um Termo de Resilição em **Validate** sem documento gerado e
+sem nada na pasta da confirmação. O defeito parecia ser da recompra, que está
+inteira: na dev o mesmo card mostra Generate e o `_mc_generate_url` abre o
+editor do Termo.
+
+O card do Pending OTC troca o Validate por Generate quando olha a pasta e não
+acha PDF, e quem responde isso é o `/api/manual-confirmation/docs`, num lote
+só com todos os cards da tela. Com o share frio, cada item que chega antes de
+a varredura da raiz terminar paga uma listagem da raiz inteira pela rede:
+trinta e tantos cards passam dos 90 s do abort, e a página inteira caía num
+`catch` que escrevia EXATAMENTE a frase do caso verificado ("nenhum PDF na
+pasta da confirmação") sem tocar no botão. O pior dos dois mundos — a tela
+AFIRMA que não há documento e oferece Validate ao lado.
+
+**Três estados, que é a regra desta casa para todo veredito** (§486): há PDF ·
+olhei e não há · NÃO DEU para olhar. O terceiro tem frase própria nas três
+línguas (`nocheck`), deixa o botão como está e manda o motivo para o console.
+Status de erro deixou de passar por resposta boa (o 503 de banco ocupado e o
+500 com o motivo são JSON, e engolidos viravam "nenhum PDF"), e `null` no
+lugar da lista é o servidor dizendo "este item eu não consegui olhar".
+
+O lote vai **FATIADO, oito por vez, em série**: os primeiros cards respondem
+na hora, a varredura da raiz fica quente para as seguintes, e uma fatia que
+falha leva só os oito dela. Em série de propósito — em paralelo seriam seis
+idas simultâneas ao share, que é o que deixou de ser feito quando o GET por
+item virou lote. No servidor, cada item ganhou guarda própria: um que levanta
+não derruba os outros sete.
+
+Rede: `check_manual_conf.py` §10c (os três estados e as fatias),
+`check_unwind_termo.py` §13 (o `_mc_generate_url` resolve a URL do Termo com
+contraparte e moeda, e um dia sem a recompra recusa DIZENDO o motivo).
+
+## §503 — O Novo Valor Base descontava a antecipação duas vezes, e o Termo saía sem o XML do FepWeb (2026-09-18)
+
+O Novo Valor Base do Anexo I saía do `Valor Base no registro` da posição menos
+o `Valor Antecipado`. Quando a base registrada JÁ desconta o que foi
+antecipado, a subtração acontece duas vezes: o saldo sai pequeno demais, a
+recompra parece encerrar o contrato e o Termo declara **Total / Não Aplicável**
+com saldo aberto. É o que a mesa recebeu num distrato de USD 489.000,00.
+
+A regra passa a ser a da mesa, e são **TRÊS parcelas**: o nocional ORIGINAL —
+o do aviso, o único que não desconta recompra nenhuma —, menos o já recomprado
+que a posição mostra, menos o recomprado agora. O `Total × Parcial` sai do
+MESMO número (Total é ele zerar): lidos de dois lugares, a cláusula e a coluna
+ao lado passariam a discordar sobre o contrato estar encerrado.
+
+As três parcelas viraram **COLUNAS da tela** — entrou `Unwound Before`, o
+`Valor Antecipado` da posição. O número de um documento assinado tem de ser
+conferível na grade, e corrigir a posição ali tem de mudar o Termo; dentro de
+um `Balance` que ninguém vê, a mesa via o resultado sem ver de onde ele saiu e
+sem ter como arrumá-lo.
+
+Sem posição nenhuma a conta agora sai pelo original presumindo zero de
+antecipação — antes o Termo ficava sem Resilição e sem Novo Valor Base — e sai
+DIZENDO que presumiu (`unwind_termo_antecipado_presumido`). E "a posição não
+respondeu" deixou de ser lido como "nada foi antecipado":
+`antecipado_da_posicao` devolve `None` sem posição e `0.0` com ela, que são
+coisas diferentes.
+
+### O XML do FepWeb
+
+Era o único documento desta casa que a mesa tinha de levar ao FepWeb à mão.
+Agora sai ao lado do `.doc` e do `.pdf`, com o mesmo nome base. Regra da mesa:
+`valor` é o liquidado em REAIS e `valorEstrangeiro` é ele dividido pela **taxa
+da recompra** — não pelo strike do registro, que é o que nomeia o Valor Base
+Liquidado do Anexo I: os dois números do XML falam da LIQUIDAÇÃO, os do Anexo
+falam do CONTRATO. `tipoOperacao` é `NDF` (a operação resilida é um termo de
+moeda) e **`tipoEvento` é `R`**, de recompra — com o `N` de novo o FepWeb
+cadastraria o distrato como operação nova. O `tipoEvento` virou parâmetro do
+`_conf_xml_doc`, com `'N'` de padrão: os outros documentos não mudam. O
+`numeroContrato` vai para a coluna FepWeb ID do Pending Confirmation pela
+porta de sempre.
+
+Rede: `check_unwind_termo.py` §3b (as três parcelas e o caso presumido) e §8b
+(o XML), `check_intrag_unwind.py`.
+
+## §504 — A esteira ficava com a cobrança de uma recompra que não existe mais (2026-09-18)
+
+O gatilho da esteira é o IMPORT (§500): a cobrança do Termo nasce junto com a
+recompra. Só que ela não morria junto. Apagar a recompra deixava a linha no
+Pending Confirmation e na esteira, e o card de Pending OTC respondia "nenhuma
+operação dessa confirmação foi encontrada no arquivo-dia" a cada clique no
+Generate — pendência que não fecha e que ninguém consegue resolver pela tela.
+Reimportar noutro dia dava no mesmo por outro caminho: o `_mc_save_from_deal`
+nunca sobrescreve linha existente (de propósito — um amend não pode apagar o
+"Conferido OTC" de ninguém), então a `Data Operação` seguia apontando para o
+arquivo-dia em que a recompra não está mais.
+
+O Delete agora tira a linha dos dois bancos (`esteira_sem_a_recompra`) e o
+import leva a `Data Operação` para o dia novo (`esteira_data_da_operacao`).
+**Nos dois casos, só enquanto a linha está INTOCADA**
+(`manual_conf.row_untouched`): documento gerado, validação de qualquer mesa,
+callback ou envio ao cliente são carimbo de gente, e linha carimbada é
+REGISTRO — apagá-la levaria o rastro de quem assinou e deixaria o documento na
+pasta da contraparte sem nada que o explique. Com carimbo o Delete RECUSA
+dizendo isso, e a data não se mexe: a mesa decidiu com a data que estava lá.
+
+Duas correções de leitura vieram junto:
+
+* **Novo Valor Base zero escreve `Zero`**, não "Não Aplicável" (mesa): o saldo
+  é um valor, e "não se aplica" deixa quem lê o Termo sem saber se ele acabou
+  ou se ninguém o calculou;
+* **o card do Monitor diz o produto RECOMPRADO** — `TERMO DE RESILICAO NDF FX`
+  (`manual_conf.confirmation_label`). O tipo do documento é um só para termo,
+  opção e swap, e na fila três cards com o mesmo nome não dizem qual operação
+  cada um distrata. É rótulo de TELA: pasta, cadastro de validação e
+  Confirmation Type continuam saindo do `confirmation_type`, senão a recompra
+  iria parar numa pasta de um tipo que não existe.
+
+### Higiene, de novo
+
+Os dois testes de recompra escreviam na esteira e no Pending Confirmation DE
+VERDADE desta máquina — é de lá que vinham as recompras fantasma que apareciam
+no Monitor da dev. Os dois bancos passam a apontar para um tmp. Com o §501,
+são três caminhos novos redirecionados em duas rodadas: **teste que grava num
+banco novo redireciona o banco novo**, e a conferência é olhar o dado real
+depois de rodar.
+
+Rede: `check_unwind_page.py` (o Delete que recusa a linha carimbada),
+`check_unwind_termo.py` §14 (o órfão).
