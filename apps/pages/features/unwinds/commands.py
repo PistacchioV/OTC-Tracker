@@ -82,6 +82,12 @@ def import_email(html, subject='', ref_dt=None, dry_run=False):
     linha['PositionDate'] = src
     if not dry_run:
         persistence.upsert(datetime(ref.year, ref.month, ref.day), [linha])
+        # A recompra entra na esteira JÁ NO IMPORT (mesa): Pending Confirmation,
+        # Track e Confirmations Monitor a mostram sem esperar o Send.
+        esteira_da_recompra([linha], ref)
+        # E no NDF Cockpit, que é a tela onde a mesa acompanha a liquidação e o
+        # imposto — o dia dela é o da LIQUIDAÇÃO, não o do import.
+        cockpit_da_recompra([linha])
     return {'rows': [linha], 'warnings': avisos, 'source_date': src}
 
 
@@ -412,11 +418,10 @@ def send(items, sid='', download=False, ref_date=''):
         gerados.append({'filename': os.path.basename(destino), 'count': g['count']})
         _R().log.info('[UNWIND NDF FX] Wrote %s (%d record(s))', destino, len(g['records']))
     enviadas = marcar_enviadas(alvos, sid, [g['filename'] for g in gerados])
-    # A recompra foi para a B3: o Termo de Resilição passa a ser devido, e é a
-    # esteira que cobra. As linhas vão CARIMBADAS (`Sent`) — é esse status que a
-    # segregação das confirmações lê como elegível.
-    esteira_from_send(enviadas)
-    # E a ponta do FUNDO, quando ele está no contrato: a Intrag é quem lança
+    # A esteira NÃO se refaz aqui: ela nasce no import (`esteira_da_recompra`),
+    # e um segundo `_pc_save_from_deal` por cima reabriria uma validação que o
+    # OTC já tivesse feito entre o import e o Send.
+    # A ponta do FUNDO, essa sim, sai no Send: a Intrag é quem lança
     # por ele, e a instrução sai na planilha de onze colunas da página
     # Intrag › Unwind.
     intrag_from_send(enviadas)
@@ -702,9 +707,9 @@ def termo_salvar(payload, sid=''):
     termo_carimbar(conf['athena_ids'], conf['ref_date'], doc_path, pdf_path, link, sid)
     # A confirmação saiu: carimba a Data envio validação OTC na esteira e guarda
     # o endereço do PDF — é para lá que o botão Abrir do Monitor manda. O grupo
-    # é o das recompras JÁ ENVIADAS (o `pick` só considera as `Sent`): termo
-    # gerado antes do Send não tem linha na esteira para carimbar, e é assim
-    # mesmo — a confirmação só é devida depois de a recompra ir para a B3.
+    # sai do `pick`, que lê as recompras do dia como ELEGÍVEIS desde o import
+    # (mesa): o termo gerado antes do Send já tem linha na esteira para
+    # carimbar.
     picked = _R()._conf_pick_unwind(ref, acr, moeda, 'termo-resilicao')
     _R()._mc_stamp_generated(picked, 'unwind-termo', link=link)
     return {'files': [doc_path, pdf_path], 'pdf': pdf_path, 'link': link,
@@ -748,10 +753,13 @@ def termo_carimbar(athena_ids, ref_date, doc_path, pdf_path, link='', sid=''):
 # cliente — perna interna, intragrupo — é aquela função, e responder isso aqui
 # criaria uma segunda resposta para a mesma pergunta.
 #
-# O gatilho é o **Send**, não o import: o documento só é devido depois de a
-# recompra ir para a B3. Antes disso ela ainda pode ser corrigida ou apagada, e
-# uma linha na esteira por uma recompra que não aconteceu é cobrança de
-# trabalho que não existe.
+# O gatilho é o **IMPORT** (mesa, 18/09/2026, invertendo a decisão de dois dias
+# antes): a recompra tem de aparecer no Pending Confirmation, no Track e no
+# Monitor assim que chega, e não depois de ir para a B3. O que se paga por
+# isso é que uma recompra corrigida ou apagada depois já deixou linha na
+# esteira — a correção é reimportar (o upsert refaz a linha pela mesma chave)
+# ou apagar nas duas pontas. A **Intrag continua no Send**, e de propósito: ali
+# a linha é INSTRUÇÃO ao custodiante, não cobrança de documento.
 # O Produto da esteira é o mesmo valor que o Pending Confirmation mostra no
 # Product Type — `UNWIND NDF` para a recompra de termo de moeda (decisão da
 # mesa: a tela classifica por PRODUTO RECOMPRADO). O TIPO do documento é um só
@@ -783,11 +791,12 @@ def confirmation_deal(linha, ref=None):
         'Notional':       linha.get('UnwoundNotional'),
         'TradeDate':      ref.strftime('%Y-%m-%d'),
         'SettlementDate': str(linha.get('SettlementDate') or ''),
-        # `Success` é o que a segregação das confirmações chama de elegível; na
-        # recompra isso é ter ido para a B3 (`Sent`). Enquanto ela está
-        # `Imported` o grupo existe no Monitor e não gera documento — o mesmo
-        # que acontece com um deal ainda não mapeado.
-        'Status':         'Success' if str(linha.get('Status') or '') == domain.STATUS_ENVIADO else 'New',
+        # `Success` é o que a segregação das confirmações chama de ELEGÍVEL, e a
+        # recompra é elegível desde o IMPORT (mesa): o Termo de Resilição se
+        # gera com o que o aviso e a posição já responderam, sem esperar o
+        # arquivo da B3. Antes isto era `Success` só com a linha `Sent`, e o
+        # grupo aparecia no Monitor sem gerar documento.
+        'Status':         'Success',
         '_unwind':        True,
     }
 
@@ -800,13 +809,14 @@ def confirmation_deals(ref_dt):
             for l in queries.entries(date_str=ref.strftime('%Y-%m-%d'))]
 
 
-def esteira_from_send(linhas, ref=None):
+def esteira_da_recompra(linhas, ref=None):
     """Manda para o Pending Confirmation (e daí para a esteira) as recompras
-    que acabaram de ir para a B3.
+    que acabaram de ser IMPORTADAS.
 
-    Falha aqui NÃO derruba o envio: o arquivo já foi gerado, e uma exceção no
-    espelho faria a tela dizer que o Send falhou depois de ele ter acontecido.
-    O que se perde é recuperável pelo `backfill_manual_confirmations.py`."""
+    Falha aqui NÃO derruba o import: a linha já está no arquivo-dia, e uma
+    exceção no espelho faria a tela dizer que o import falhou depois de ele ter
+    acontecido. O que se perde é recuperável pelo
+    `backfill_manual_confirmations.py`."""
     for l in linhas or []:
         try:
             deal = confirmation_deal(l, ref)
@@ -815,6 +825,105 @@ def esteira_from_send(linhas, ref=None):
         except Exception:                                   # noqa: BLE001
             _R().log.warning('[UNWIND NDF FX] esteira: %s ficou de fora — %s',
                              l.get('AthenaID'), traceback.format_exc())
+
+
+# ── A recompra no NDF Cockpit (a tela onde a mesa vê o IR) ───────────────────
+# A recompra liquida caixa como qualquer termo do dia, e é no Cockpit que a
+# mesa acompanha a liquidação e o imposto. A linha vai para o arquivo-dia do
+# Cockpit da DATA DE LIQUIDAÇÃO, marcada com `_nc_unwind`, e a marca serve a
+# duas coisas:
+#
+#   * o import do Cockpit PRESERVA essas linhas ao reescrever o dia (ele monta
+#     o dia inteiro do zero a partir da API — sem isso, o próximo Run apagaria
+#     a recompra sem erro nenhum);
+#   * o NDF Summary as IGNORA. O Summary continua lendo a recompra da vertical
+#     (`settlement_rows`), que é a autoridade: contar as duas somaria o mesmo
+#     caixa duas vezes no Trade Level E no IR do dia, porque o ledger monta o
+#     dia inteiro de uma vez (§423).
+#
+# O `_nc_id` sai do Athena ID: reimportar a mesma recompra ATUALIZA a linha do
+# Cockpit em vez de criar outra.
+COCKPIT_ID_PREFIX = 'UNW-'
+
+
+def _cockpit_rec(linha):
+    """A recompra no formato de registro do Cockpit (`_NDFC_COLUMNS`)."""
+    R = _R()
+    resultado = domain.numero_flex(linha.get('Result'))
+    direcao = str(linha.get('Direction') or '').strip().upper()
+    if resultado is None or direcao not in ('RECEIVE', 'PAY'):
+        return None
+    valor = abs(resultado) if direcao == 'RECEIVE' else -abs(resultado)
+    le = _visao(linha)
+    fc = abs(domain.numero_flex(linha.get('UnwoundNotional')) or 0.0)
+    return {
+        'LEGAL': (str(R._ndf_le_row(le).get('NAME', '') or '').strip() or le).upper(),
+        'NM_COUNTERPARTY': str(linha.get('Counterparty') or '').strip().upper(),
+        'ID_SOURCE_DEAL': str(linha.get('AthenaID') or ''),
+        'DT_DEAL': str(linha.get('TradeDate') or ''),
+        'CD_CETIP_RETURN': str(linha.get('Contract') or ''),
+        'DT_SETTLEMENT': str(linha.get('SettlementDate') or ''),
+        # A recompra é apurada em REAIS: a perna LC é o caixa e a FC é o
+        # nocional recomprado em moeda estrangeira, como nas demais linhas.
+        'CCY_NOTIONAL_LC': 'BRL', 'VL_NOTIONAL_LC': '{:.2f}'.format(abs(valor)),
+        'CCY_NOTIONAL_FC': str(linha.get('Currency') or ''),
+        'VL_NOTIONAL_FC': '{:.2f}'.format(fc),
+        # A taxa fechada no registro original e a taxa da recompra: são as duas
+        # que o aviso imprime, e ocupam as mesmas colunas do termo do dia.
+        'VL_FORWARD_RATE': str(linha.get('Strike') or ''),
+        'VL_STRIKE_PRICE': str(linha.get('TerminationRate') or ''),
+        'PUBLISHER': '',
+        # O imposto é CALCULADO pelo `_ndfc_apply_ir` com o dia inteiro montado
+        # (o piso de R$ 1,00 é por contraparte): aqui ele nasce vazio.
+        'VL_TAX_INCOME': '',
+        'ID_DEAL': str(linha.get('NotificationID') or ''),
+        '[PROD] Cockpit.SETTLEMENT': '{:.2f}'.format(valor),
+        'NB_BANK': '', 'CD_BRANCH': '', 'CD_BANK_ACCOUNT': '',
+        '_nc_fixing': str(linha.get('TerminationRate') or ''),
+        '_nc_id': COCKPIT_ID_PREFIX + str(linha.get('AthenaID') or ''),
+        '_nc_status': 'OK', '_nc_maker': '', '_nc_checker': '',
+        '_nc_unwind': True,
+    }
+
+
+def cockpit_da_recompra(linhas):
+    """Projeta as recompras no arquivo-dia do Cockpit da DATA DE LIQUIDAÇÃO.
+
+    Uma gravação por dia (as recompras de um import podem liquidar em dias
+    diferentes), read-modify-write sob o `_cache_lock` como todo arquivo-dia.
+    Falha aqui NÃO derruba o import: a linha já está no arquivo da recompra, e
+    o Summary a mostra de lá de qualquer forma."""
+    R = _R()
+    por_dia = {}
+    for l in linhas or []:
+        rec = _cockpit_rec(l)
+        if rec is None:
+            R.log.warning('[UNWIND NDF FX] %s fora do Cockpit: sem resultado ou sem '
+                          'direção apurada', (l or {}).get('AthenaID'))
+            continue
+        dia = R._parse_date_any(l.get('SettlementDate'))
+        if dia is None:
+            R.log.warning('[UNWIND NDF FX] %s fora do Cockpit: sem data de liquidação',
+                          (l or {}).get('AthenaID'))
+            continue
+        por_dia.setdefault(dia.strftime('%Y-%m-%d'), []).append(rec)
+    for iso, recs in por_dia.items():
+        try:
+            ref = R._parse_date_any(iso)
+            with R._cache_lock:
+                jp, data = R._ndfc_load(ref)
+                data = list(data or [])
+                for rec in recs:
+                    idx = next((i for i, d in enumerate(data)
+                                if str(d.get('_nc_id') or '') == rec['_nc_id']), None)
+                    if idx is None:
+                        data.append(rec)
+                    else:
+                        data[idx] = rec
+                R._ndfc_save(jp, data)
+        except Exception:                                   # noqa: BLE001
+            R.log.warning('[UNWIND NDF FX] Cockpit de %s não recebeu a recompra:\n%s',
+                          iso, traceback.format_exc())
 
 
 # ── A recompra na Intrag (a visão do fundo) ──────────────────────────────────
@@ -915,8 +1024,10 @@ SETTLEMENT_LOOKBACK_DIAS = 4
 def settlement_rows(ref):
     """As recompras que LIQUIDAM em `ref`, no formato das linhas do Summary.
 
-    Só as que foram para a B3 (`Sent`): enquanto a recompra está `Imported` ela
-    ainda pode mudar, e caixa previsto não é caixa.
+    Entram desde o IMPORT (mesa, 18/09/2026): a recompra que liquida hoje é
+    caixa de hoje, e esperar o arquivo da B3 deixava o Summary do dia sem ela.
+    O que ainda não tem resultado ou direção apurada continua de fora — isso
+    não é decisão de gatilho, é linha que ninguém sabe somar.
 
     O SINAL segue a convenção do Summary — negativo é o banco PAGANDO —, e quem
     o diz é a `Direction` apurada (o sinal do resultado), nunca o campo do
@@ -933,8 +1044,6 @@ def settlement_rows(ref):
                              date_to=alvo.strftime('%Y-%m-%d'))
     out = []
     for l in linhas:
-        if str(l.get('Status') or '') != domain.STATUS_ENVIADO:
-            continue
         liq = _R()._parse_date_any(l.get('SettlementDate'))
         try:
             liq = liq.date()

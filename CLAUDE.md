@@ -1165,6 +1165,23 @@ São **47**: `swap-bullet-curve`, `currency-base`, `interbook-ndf`, `commodities
 - **O `Status` é a PRIMEIRA coluna de dado**, logo depois das Actions: em
   dezoito colunas, no fim da grade a resposta "esta linha já foi?" só aparece
   depois de rolar a tabela inteira.
+- **O gatilho de tudo que vem depois é o IMPORT**, não o Send (mesa,
+  18/09/2026, invertendo a decisão de dois dias antes): Pending Confirmation,
+  esteira (Track + Monitor), NDF Cockpit e o Settlement Summary recebem a
+  recompra assim que ela chega. A recompra é **elegível** para o documento
+  desde aí (`confirmation_deal` devolve `Success`), e o que se paga é que uma
+  recompra corrigida ou apagada depois já deixou linha — a correção é
+  reimportar (o upsert refaz pela mesma chave). **A Intrag continua no SEND**:
+  ali a linha é INSTRUÇÃO ao custodiante, não cobrança de documento.
+- **A recompra é PROJETADA no arquivo-dia do NDF Cockpit** da sua data de
+  LIQUIDAÇÃO, marcada com `_nc_unwind` e chaveada por `UNW-<athena id>`. Duas
+  coisas seguram isso: o import do Cockpit **preserva** essas linhas
+  (`_ndfc_keep_unwinds`) — ele monta o dia inteiro a partir da API, onde a
+  recompra não existe, e sem isso o próximo Run a apagaria sem erro nenhum —,
+  e o **Summary as IGNORA** (`unw_ids` no `_ndfsum_collect`), porque continua
+  lendo a recompra da vertical, que é quem sabe que não há resgate da B3 para
+  conferir. Lidas dos dois lados, o mesmo caixa sairia DUAS vezes no Trade
+  Level e no IR do dia — o ledger monta o dia inteiro de uma vez (§423).
 - **O trilho de validação do Termo é SÓ OTC** (mesa, 18/09/2026): o distrato
   não reabre economia nenhuma, e o que o MO e o FO conferem é a economia da
   operação, que já passou por eles quando ela nasceu. É `VALIDATION_SEED`, e

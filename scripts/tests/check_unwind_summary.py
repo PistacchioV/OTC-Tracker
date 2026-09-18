@@ -4,9 +4,10 @@
 A recompra liquida caixa como qualquer termo do dia, e a mesa ve o dia inteiro
 numa tela so. O que este teste prende:
 
-  1. entram so as recompras que LIQUIDAM na data e que ja foram para a B3
-     (`Sent`) — caixa previsto nao e caixa —, e a janela nao e so o dia: a
-     recompra fica no arquivo-dia em que ENTROU e quem manda e a
+  1. entram as recompras que LIQUIDAM na data, DESDE O IMPORT (mesa,
+     18/09/2026: a recompra que liquida hoje e caixa de hoje, e esperar o
+     arquivo da B3 deixava o Summary do dia sem ela). A janela nao e so o dia:
+     a recompra fica no arquivo-dia em que ENTROU e quem manda e a
      `SettlementDate`;
   2. o SINAL segue a convencao do Summary (negativo = o banco paga) e sai da
      `Direction` APURADA, nunca do campo do e-mail; sem direcao, a recompra
@@ -62,7 +63,8 @@ def main():
     # A recompra fica no arquivo-dia de ONTEM e liquida HOJE: e o caso que a
     # janela de busca existe para cobrir.
     persistence.upsert(datetime(2026, 9, 17), [dict(BASE)])
-    # Uma ainda NAO enviada, liquidando hoje, e uma enviada que liquida OUTRO dia.
+    # Uma so IMPORTADA liquidando hoje (entra), uma enviada que liquida OUTRO
+    # dia (nao entra) e uma sem direcao apurada (nao entra).
     persistence.upsert(datetime(2026, 9, 18), [
         dict(BASE, AthenaID='STP-NEW', Status='Imported'),
         dict(BASE, AthenaID='STP-AMANHA', SettlementDate='2026-09-21'),
@@ -73,14 +75,18 @@ def main():
     rows = commands.settlement_rows(HOJE)
     ids = sorted(r['athena'] for r in rows)
     check('a recompra de ontem que liquida hoje entra', 'STP-XE-1' in ids, ids)
-    check('a que ainda nao foi para a B3 NAO entra', 'STP-NEW' not in ids, ids)
+    # O gatilho e o IMPORT: a recompra que liquida hoje entra mesmo sem ter ido
+    # para a B3. O que fica de fora nao e questao de status — e linha que
+    # ninguem sabe somar, ou que liquida noutro dia.
+    check('a ainda NAO enviada tambem entra (o gatilho e o import)',
+          'STP-NEW' in ids, ids)
     check('a que liquida em outro dia NAO entra', 'STP-AMANHA' not in ids, ids)
     check('a sem direcao apurada fica de fora (em vez de entrar com o sinal trocado)',
           'STP-SEMDIR' not in ids, ids)
-    check('e so ela', len(rows) == 1, len(rows))
+    check('e sao essas duas', len(rows) == 2, len(rows))
 
     print('\n== 2. o sinal segue a convencao do Summary ==')
-    r = rows[0]
+    r = next(x for x in rows if x['athena'] == 'STP-XE-1')
     check('PAY -> negativo (o banco paga)', r['settlement'] == -11144.00, r['settlement'])
     check('a linha vem marcada como recompra', r.get('unwind') is True)
     # O mesmo resultado com a direcao trocada muda so o SINAL.
@@ -95,10 +101,11 @@ def main():
     with app.test_request_context():
         out = R._ndfsum_collect(datetime(2026, 9, 18))
     unw = [t for t in out['trade'] if t.get('unwind')]
-    check('a recompra entrou no Trade Level', len(unw) == 1, len(unw))
+    check('as duas recompras entraram no Trade Level', len(unw) == 2, len(unw))
     if unw:
-        check('sem veredito (nao ha resgate da B3 para conferir)', unw[0]['ok'] is None)
-        check('e sem diferenca', unw[0]['diff'] == '')
+        check('sem veredito (nao ha resgate da B3 para conferir)',
+              all(u['ok'] is None for u in unw))
+        check('e sem diferenca', all(u['diff'] == '' for u in unw))
         cells = unw[0]['cells']
         check('a celula do lado da B3 fica VAZIA', cells[10] == '', cells[10])
         check('o Athena ID e o B3 ID estao na linha',
@@ -107,18 +114,47 @@ def main():
     check('a contraparte aparece no Summary', bool(cp), [s['counterparty'] for s in out['summary']])
     if cp:
         # O banco paga: o caixa entra na coluna Pay, com o valor da recompra.
-        check('com o caixa da recompra na coluna certa',
-              cp[0]['pay'] == '-11,144.00' and cp[0]['receive'] == '',
+        # As duas sao da MESMA contraparte e do mesmo lado: o Summary soma —
+        # 2 x 11.144,00 MENOS o IR retido das duas (R$ 0,56 cada), que e o que
+        # a secao 4 explica.
+        check('com o caixa das duas somado na coluna certa, liquido de IR',
+              cp[0]['pay'] == '-22,286.88' and cp[0]['receive'] == '',
               (cp[0]['receive'], cp[0]['pay']))
         check('e a direcao do grupo e PAY', cp[0]['direction'] == 'PAY', cp[0]['direction'])
     check('e NENHUMA delas vai no aviso em lote',
           not any(t.get('unwind') for t in out['email_trades']))
 
+    # A recompra tambem e PROJETADA no dia do Cockpit (a tela onde a mesa ve o
+    # IR). O Summary tem de IGNORAR essa linha: lida dos dois lados, o mesmo
+    # caixa sairia duas vezes no Trade Level e no IR do dia — o ledger monta o
+    # dia inteiro de uma vez (§423).
+    from apps.pages.features.unwinds import commands as _uc
+    projetada = _uc._cockpit_rec(dict(BASE))
+    _orig_load, _orig_collect = R._ndfc_load, R._ndfc_collect
+    R._ndfc_load = lambda ref: ('jp', [projetada])
+    R._ndfc_collect = lambda ref: {'rows': [
+        [projetada.get(c, '') for c in R._NDFC_COLUMNS]
+        + [projetada.get(k, '') for k in ('_nc_status', '_nc_maker', '_nc_checker', '_nc_id')]]}
+    try:
+        with app.test_request_context():
+            out_ck = R._ndfsum_collect(datetime(2026, 9, 18))
+    finally:
+        R._ndfc_load, R._ndfc_collect = _orig_load, _orig_collect
+    linhas_xe = [t for t in out_ck['trade'] if t['cells'][2] == 'STP-XE-1']
+    check('a recompra projetada no Cockpit NAO entra duas vezes',
+          len(linhas_xe) == 1, [t['cells'][2] for t in out_ck['trade']])
+    check('e a que ficou e a da vertical (sem veredito)',
+          linhas_xe and linhas_xe[0].get('unwind') is True and linhas_xe[0]['ok'] is None,
+          linhas_xe[0] if linhas_xe else None)
+
     print('\n== 4. o IR do dia enxerga a recompra ==')
     # O IR incide sobre o ganho do CLIENTE (o banco pagando): 0,005% de
-    # 11.144,00 = R$ 0,56, abaixo do piso de R$ 1,00 — não retém, acumula.
-    taxas = [t for t in out['trade'] if t.get('unwind')]  # a de hoje, R$ 0,56 de IR
-    check('abaixo do piso mensal nada e retido', all(t['cells'][12] == '' for t in taxas),
+    # 11.144,00 = R$ 0,56 por recompra. O piso de R$ 1,00 e MENSAL e ACUMULADO
+    # (§423): uma sozinha nao retem, as duas do dia somam 1,12 e cruzam o piso
+    # — e e por isso que as duas aparecem com os R$ 0,56 delas.
+    taxas = [t for t in out['trade'] if t.get('unwind')]
+    check('duas de R$ 0,56 cruzam o piso MENSAL e as duas retem',
+          [t['cells'][12] for t in taxas] == ['0.56', '0.56'],
           [t['cells'][12] for t in taxas])
     grande = dict(BASE, AthenaID='STP-BIG', Result=400000.0, Direction='PAY')
     persistence.upsert(datetime(2026, 9, 18), [grande])

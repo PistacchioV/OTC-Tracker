@@ -7856,6 +7856,31 @@ def _ndfc_rec_from_api(rec, refmap_acr, refmap_spn, stl=None):
     return out, None
 
 
+def _ndfc_keep_unwinds(ref, out):
+    """Reanexa a `out` as linhas de RECOMPRA que já estavam no dia do Cockpit.
+
+    Quem as põe lá é a vertical das recompras (`unwinds.commands`), no import
+    do aviso do Athena: elas não existem no `getTradesBySettle`, e o import do
+    Cockpit monta o dia inteiro a partir dele. Sem isto, todo Run do Cockpit
+    apagava a recompra do dia — o tipo de perda que não aparece na tela.
+
+    Linha cuja chave já veio da API não é reanexada: se um dia a recompra
+    passar a vir de lá, a da API é a boa."""
+    try:
+        _jp, atuais = _ndfc_load(ref)
+    except Exception:                                       # noqa: BLE001
+        log.warning('[ndfc] não deu para reler o dia para preservar as recompras:\n%s',
+                    traceback.format_exc())
+        return
+    vistos = {str(r.get('_nc_id') or '') for r in out}
+    guardadas = [r for r in (atuais or [])
+                 if r.get('_nc_unwind') and str(r.get('_nc_id') or '') not in vistos]
+    if guardadas:
+        out.extend(guardadas)
+        log.info('[ndfc] %d recompra(s) preservada(s) no dia %s',
+                 len(guardadas), ref.strftime('%Y-%m-%d'))
+
+
 def _ndfc_apply_ir(ref, rows):
     """Escreve o `VL_TAX_INCOME` de cada linha do dia, pela regra do §423.
 
@@ -7972,6 +7997,13 @@ def _ndfc_import(ref=None):
         log.warning('[ndfc] %d evento(s) sem `Spot` no getTradesBySettle de %s — o Fixing do '
                     'aviso sai vazio: %s', len(sem_spot), ref.strftime('%Y-%m-%d'),
                     ', '.join(sem_spot[:10]))
+    # As RECOMPRAS sobrevivem ao reimport (§488): elas não vêm da API — a
+    # vertical das recompras as projeta aqui no import do aviso do Athena —, e
+    # este laço monta o dia INTEIRO do zero. Sem preservá-las, o próximo Run do
+    # Cockpit apagaria a recompra do dia sem erro nenhum e sem a tela dizer
+    # nada. A chave é o `_nc_id` (`UNW-<athena id>`), então a recompra
+    # reimportada continua sendo UMA linha.
+    _ndfc_keep_unwinds(ref, out)
     # O imposto é CALCULADO (a API não o traz), pela mesma regra e pelas mesmas
     # funções do NDF Summary — ver `_ndfc_apply_ir`.
     _ndfc_apply_ir(ref, out)
@@ -9926,9 +9958,19 @@ def _ndfsum_collect(ref):
     _, _recs = _ndfc_load(ref)
     fix_by_id = {str(r.get('_nc_id', '') or ''): str(r.get('_nc_fixing', '') or '').strip()
                  for r in (_recs or [])}
+    # As RECOMPRAS que a vertical projeta no dia do Cockpit ficam de FORA daqui:
+    # elas entram logo abaixo, pela própria vertical (`settlement_rows`), que é
+    # a autoridade e sabe as duas coisas que a linha do Cockpit não diz — que
+    # não há resgate da B3 para conferir e que ela não vai no aviso em lote.
+    # Lidas dos dois lados, o mesmo caixa sairia DUAS vezes no Trade Level e no
+    # IR do dia, porque o ledger monta o dia inteiro de uma vez (§423).
+    unw_ids = {str(r.get('_nc_id', '') or '')
+               for r in (_recs or []) if r.get('_nc_unwind')}
     _i_id = len(_NDFC_COLUMNS) + 3                  # [.., _nc_status, _nc_maker, _nc_checker, _nc_id]
     trade, raws = [], []
     for row in _ndfc_collect(ref)['rows']:
+        if str(row[_i_id] or '') in unw_ids:
+            continue
         b3 = str(row[ci['CD_CETIP_RETURN']] or '').strip()
         if b3 == _NDFC_MISSING_B3:
             b3 = ''
